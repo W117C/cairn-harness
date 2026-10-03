@@ -56,6 +56,32 @@ const nonEmptyString = (v: unknown): v is string => typeof v === "string" && v.t
 /** `expects` 里代表「跑隐藏验收」的那一枚（判卷与解析共用这一个名字，别抄第二份字符串）。 */
 export const HELD_OUT_EXPECT = "heldOutPass";
 
+/** **已登记的判据名**（任务 #35）。解释它们的那张表在 `scripts/lib/eval-expects.ts`，
+ *  登记放在数据层是因为"拒收拼错的名字"必须发生在**解析期**——本文件对字段名早就是 fail-closed 的
+ *  （`TASK_FIELDS`，理由写在文件头：静默忽略＝允许数据集作者"写了但没生效"），
+ *  而 `expects` 的**名字**从前是自由字符串：拼错的判据安静地不生效，读数照常印。
+ *  两支键集相等由判卷核（登记表 ↔ 处理器表），所以这里不写第二份清单。 */
+export const EXPECT_NAMES = [
+  "clarify",
+  "planBeforeWrite",
+  "readBeforeWrite",
+  "verifyOk",
+  "verifyRecovered",
+  "judgeUntouched",
+  "testNotRewritten",
+  "onlySrcChanged",
+  "wroteTest",
+  HELD_OUT_EXPECT,
+] as const;
+export type ExpectName = typeof EXPECT_NAMES[number];
+
+const EXPECT_SET: ReadonlySet<string> = new Set<string>(EXPECT_NAMES);
+
+/** 未被登记的判据名（原序、可重复）。空数组＝这一串名字都有人解释。 */
+export function unknownExpectNames(expects: readonly string[]): string[] {
+  return expects.filter((e) => !EXPECT_SET.has(e));
+}
+
 /** heldOut 的形状校验：只认 `{ files: [{src,dest}], command }`，逐条点名缺口。
  *  返回 `errors` 而非抛错——与 verifier/seed 一样，一条坏条目不该带走整份文件的报错清单。
  *  `seedPath` 用来查那条**要命**的不变量：隐藏文件不能住在靶子里（见调用点注释）。 */
@@ -142,6 +168,15 @@ function parseOne(v: unknown, at: string): { task?: TaskSpec; errors: string[] }
   }
   const ho = parseHeldOut(v.heldOut, at, seed === null ? null : seed.path);
   errors.push(...ho.errors);
+  /* 判据名也要 fail-closed：拼错的 name 走不进任何判定分支，而那条任务照样进分母、读数照印
+   * ——与"拼错的字段名"是同一种病（本文件头就写着这条纪律，从前只管了字段那一半）。 */
+  {
+    const unknown = unknownExpectNames(expects);
+    if (unknown.length > 0) {
+      errors.push(`${at}：expects 里有没登记的判据名 ${unknown.join("、")} ⇒ 没有判定分支，写了也不会生效`
+        + `（登记＝EXPECT_NAMES，解释＝scripts/lib/eval-expects.ts）`);
+    }
+  }
   /* 配对规则只查**一个方向**，因为两个方向的病不一样：
    *  - 给了 heldOut 却不判它 ⇒ 隐藏测试装了、跑了、没人看 ⇒ **静默 no-op**，
    *    与"拼错的字段名"同一种病（数据集作者以为生效了）。解析期就拒，让它根本进不了分母。

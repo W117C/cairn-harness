@@ -1,0 +1,51 @@
+[probe promise-recall] 回取承诺的收口清单 + 最后一跳｜不进 gate-manifest，exit 1 = 缺陷还在或有承诺没判定
+扫描面：src/ 在盘 174 支（另有 0 支已跟踪但不在盘 ⇒ 本清单不覆盖）｜承诺面 10 处
+  ⚪ 运维面（console.* 实参位），不欠模型最后一跳，但仍进清单 src/agent/prune.ts:265 [writePruneAttachments]「[prune] 附件写失败（回取不可用，不阻断）:」
+  面 src/agent/ledger.ts:293 [project]「 lines; obs_recall available]」
+  ✅ src/agent/ledger.ts#project ⇒ capture.error=无｜提示发了=true｜obs_recall ok=true｜页内含原文凭证=true｜worker 可达=false（INJECTED_TOOLS.obs_recall）⇒ 这句只对主会话兑现
+      量法：把句子里点名的 id 真拿去调 obs_recall（shipped：ObservationLedger + createObservationRecallTool），看回来的页里有没有原文凭证
+  面 src/agent/orchestrator-join.ts:213 [renderJoinPayload]「 —— 对其中单个 agent_id 再调一次 wait_for_agents 即可取回其摘要」
+  ✅ src/agent/orchestrator-join.ts#renderJoinPayload ⇒ 点名工具=wait_for_agents｜单次 re-wait 拿到摘要=是（长度 424）｜worker 可达=false ⇒ 这句承诺只对主会话兑现（面板/worker 侧收到就是空话）
+      量法：shapeJoinRows（整批帽）→ renderJoinPayload → shapeJoinRows（单 agent 再走一次）+ tool-surface 声明表
+  面 src/agent/plugins/skills.ts:366 [skillRecallSuffix]「 [全文见 」
+  面 src/agent/plugins/skills.ts:366 [skillRecallSuffix]「，用 read_file 按这个相对路径取回]」
+  ✅ src/agent/plugins/skills.ts#skillRecallSuffix ⇒ 区内那案：递「.agent/plugins/proj-suite/skills/big/SKILL.md」⇒ 读得到（绝对地址？否）｜区外那案：不递地址且明说读不到（合格）｜尾注原文：[skill 正文超 5000 token，已截断]
+[正文已按预算截断；完整文件在工作区之外或不可解析，模型侧读不到，要通读请由用户打开]
+      量法：discoverPlugins（产品取 path 那一句）→ expandSkillInvocation（带真 workspace）→ 真 read_file
+  面 src/agent/prune.ts:162 [pruneRecallSuffix]「 [原文已存附件 」
+  面 src/agent/prune.ts:162 [pruneRecallSuffix]「，需要时 read_file 取回]」
+  ✅ src/agent/prune.ts#pruneRecallSuffix ⇒ exit=0｜  ✅ ③ 反向哨兵：拿绝对路径去调 read_file 必须被拒 — read_file: 只允许 workspace 相对路径，收到绝对路径: /var/folders/pc/fqvmbm / [probe prune-recall] 全绿：区外那案已改口成诚实话，附件仍在盘
+      量法：spawn scripts/probe-prune-recall.ts（既有复现器，本探针不重抄它的判据）
+  面 src/agent/solpi-runtime.ts:108 [candidate]「; 取全文 obs_recall id=」
+  ✅ src/agent/solpi-runtime.ts#candidate ⇒ 提示发了=true（id 已嵌在收据行里）｜obs_recall ok=true｜内含原文凭证=true｜worker 可达=false ⇒ 这句只对主会话兑现
+      量法：把句子里点名的 id 真拿去调 obs_recall（shipped：ObservationLedger + createObservationRecallTool），看回来的页里有没有原文凭证
+  面 src/main/agent-runner.ts:1857 [body]「 token（原文可从附件目录回取）」
+  ❌ src/main/agent-runner.ts#body ⇒ why=saved｜栏一（调用点形状）附件=0 条、占位=裸占位｜栏二（只给目录）附件=4 条、占位=读不到声明｜栏三（目录在工作区内）附件=4 条、占位=带可取路径 ⇒ 那句「原文可从附件目录回取」在此刻 **为假**：那一趟交的是裸占位，既没给地址也没给通道。假话在调用方那句括号里，不在 `computePrune`（它不给目录时交裸占位、目录不可证明时明说读不到，两种都不假装给通道）｜修法有两件：调用点要传 attachmentsDir，且要让工作区可证明——只补前者只会换成『读不到』那句
+      量法：computePrune 三栏：照调用点实参形状／只给目录／给目录且目录在工作区内——三栏之差就是那一格 0 的成因
+  面 src/tools/output-ring.ts:31 [WEB_CONTENT_TRUNCATION_HINT]「[下一步：这是页面正文，不是整站。#锚点不会改变取回的内容（片段不发往服务器，正文按同一位置截断）；」
+  ✅ src/tools/output-ring.ts#WEB_CONTENT_TRUNCATION_HINT ⇒ exit=0｜✅ ②：三次换锚点取回的正文与基准**逐字相同** ⇒ 提示里把锚点列成出路＝让模型白跑一轮 / ✅ ③：换 path 取回不同正文 ⇒ 取料真在按 URL 走，②的『相同』是片段无效造成的 / [probe web-anchor-claim] 三件事都成立 ⇒ 截断提示里『换一个更精确的 URL（锚点…）』是假出路，改法见第 309 页
+      量法：spawn scripts/probe-web-anchor-claim.ts（真起 loopback＋真 fetch：片段上不上线由服务器报，正文相同由三次请求比，换 path 必须不同当正控）
+  ✅ 判定归属表没有陈旧键
+  ⚪ #59 读数：模型可见承诺面 7 格（字面量 9 处），其中由 builder 发射 2 格 / 在调用方 inline 5 格
+      inline 那几格＝按 builder 调用收料会漏的：src/agent/ledger.ts#project | src/agent/orchestrator-join.ts#renderJoinPayload | src/agent/solpi-runtime.ts#candidate | src/main/agent-runner.ts#body | src/tools/output-ring.ts#WEB_CONTENT_TRUNCATION_HINT
+      builder 调用点 7 处，其中措辞网未收 7 处（`另有 N 条未列出` 那一族：属**省略量**而非**回取承诺**，不是缺陷）：src/agent/plugins/index.ts#triggerSkill | src/agent/plugins/skills.ts#expandSkillInvocation | src/agent/prune.ts#stub | src/tools/glob.ts#run | src/tools/grep.ts#truncateNote | src/tools/lsp.ts#capLspOutput | src/tools/read_file.ts#run
+  ✅ 自证：追加一次 builder 调用 ⇒ 该支调用点从 0 变 1（没变 = 结构网恒假）
+  ⚪ 半句话读数（结构版）：`byteCapNotice` 调用 2 处｜下一步给了空串的 0 处｜`truncationNotice`（不说少了多少的那支老文案）调用 0 处
+  ✅ 自证：追加一处 `byteCapNotice(1, 2, "")` ⇒ 调用点 0→1、空下一步 1（都要动才算有分辨力）
+  ✅ 自证：往内存里那份源码追加一句承诺 ⇒ 该支清单从 1 变 2（没变 = 这条判据恒假）
+  ✅ 反向：同形状进模型可见根 ⇒ 仍欠判定（是）；进 UI_ROOTS ⇒ 认成 UI 面（是）
+  ⚪ 能力断言证人面：面 46 处｜受众 {"model":44,"operator":2,"ui":0}｜模型可见 44 格 ⇒ 有证人 33／绑定 6／欠证人 0（帽 0，正贴线）／挑不出段 5（四态相加＝44）
+      绑定：src/agent/prune-batching.ts#thresholdKnobIsWired｜门槛拨到多低都不会多出落盘
+      绑定：src/agent/sidechat.ts#SIDECHAT_SYSTEM｜写向工具已从你的工具表摘除
+      绑定：src/agent/sidechat.ts#SIDECHAT_SYSTEM｜你的结论不会自动进入主会话
+      绑定：src/tools/impact-query.ts#unionNote｜清单仍是各份同名定义的并集
+      绑定：src/tools/output-ring.ts#WEB_CONTENT_TRUNCATION_HINT｜锚点不会改变取回的内容
+      绑定：src/tools/output-ring.ts#WEB_CONTENT_TRUNCATION_HINT｜本工具不会替你翻页
+      不可知（句里挑不出 ≥6 字连续中文，多半被插值切碎）：src/agent/plugins/hooks.ts#run｜
+      不可知（句里挑不出 ≥6 字连续中文，多半被插值切碎）：src/agent/sequencer.ts#resolvePluginRole｜
+      不可知（句里挑不出 ≥6 字连续中文，多半被插值切碎）：src/main/agent-runner.ts#handleAgentRun｜
+      不可知（句里挑不出 ≥6 字连续中文，多半被插值切碎）：src/main/scheduler.ts#scheduleTimeZoneNotes｜
+      不可知（句里挑不出 ≥6 字连续中文，多半被插值切碎）：src/providers/capabilities.ts#validateThinkingEffort｜
+  ✅ 绑定表逐条过三件事（那一格在欠证人清单里、符号在那句所在源文件里、符号在被指认判卷里）：坏 0 条
+  ✅ 能力断言的帽：现读 0 对帽 0（超出＝新加的无人判句子；低于＝补了证人没调帽）
+[probe promise-recall] 红 1 条 ⇒ 见上（要么是指向走不通的路，要么是新面没给判定）

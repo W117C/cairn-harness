@@ -13113,12 +13113,13 @@ const MUTATIONS = [
   },
   {
     id: "eval-recovery-criterion-reads-last-green-only",
-    src: "scripts/loop-eval.ts",
+    src: "scripts/lib/eval-expects.ts",
     test: "tests/eval-validity.test.ts",
     desc: "判据名接上了、取值却退回「最后一拍绿没绿」⇒ 这一格又变回 verifyOk 的同义反复，"
-      + "而读数行与汇总行照印，没人看得出来（规则 228：判据要站在被度量那件事的决策点上）",
+      + "而读数行与汇总行照印，没人看得出来（规则 228：判据要站在被度量那件事的决策点上）。"
+      + "第 327 页这一支从跑器搬进分支表 ⇒ 针脚跟着搬家，判卷那半边同时把旧位置钉死",
     apply: (s) => s.replace('r.verifyRecovery !== "modelRecovery"', "r.verifyOkLast !== true"),
-    expectFail: "★接线① 跑器那一支吃的是这一格，不是「最后一拍绿没绿」（旧口径不许藏在同一支里当第二把尺）",
+    expectFail: "★接线① 那一支吃的是这一格，不是「最后一拍绿没绿」（旧口径不许藏在同一支里当第二把尺）",
   },
   {
     id: "eval-recovery-sentinel-string-recopied",
@@ -13150,6 +13151,61 @@ const MUTATIONS = [
       "    if (attributeRefToDef({ known: true, sources: [] }, defFile) !== \"dropped\") return true;",
     ),
     expectFail: "★接线 并集那一支吃的是这一份出口，不在 `attributableSomewhere` 里再构造一次 binding",
+  },
+  /* ── 第 327 页 · #35：`expects` 的判据名也要 fail-closed（登记表 ↔ 分支表）──────────── */
+  {
+    id: "eval-expect-registry-typo-accepted-silently",
+    src: "src/agent/eval/task-set.ts",
+    test: "tests/eval-task-set.test.ts",
+    desc: "把「哪些名字没登记」算成恒空 ⇒ 拼错的判据名安静地不生效，那条任务照旧进分母——"
+      + "与这一层文件头明令禁止的「静默忽略拼错字段名」是同一种病，只是从前只管了字段那一半",
+    apply: (s) => s.replace("  return expects.filter((e) => !EXPECT_SET.has(e));", "  return [];"),
+    expectFail: "解析期拒收：带未登记判据名的那条任务**不进分母**，且错误里点名那一枚",
+  },
+  {
+    id: "eval-expect-branch-table-key-drifts",
+    src: "scripts/lib/eval-expects.ts",
+    test: "tests/eval-task-set.test.ts",
+    desc: "登记表里那一枚还有、分支表里少了它 ⇒ 名字合法、解析放行，但那格**没人判**，"
+      + "读数照印——两支各写一份就会漂（这一页的修法就是让它们键集相等且由判卷核）",
+    apply: (s) => s.replace('  wroteTest: (r) => (!r.wroteTests ? "没补测试" : null),', "  // 漂：wroteTest 的分支被摘掉"),
+    expectFail: "★两支键集相等：登记的每一枚都有分支，分支里的每一枚都登记（抄两份清单＝各写各的）",
+  },
+  {
+    id: "eval-expect-unregistered-name-silent-at-entry",
+    src: "scripts/lib/eval-expects.ts",
+    test: "tests/eval-task-set.test.ts",
+    desc: "入口对没登记的名字返回 null（＝判过了、过了）⇒ 内建任务那一路不经解析器，写错名字就永远绿，"
+      + "而这一格唯一的出口就是那句出声",
+    apply: (s) => s.replace("  if (!h) return `判据名「${name}」既不在登记表、也没有判定分支 ⇒ 这一格根本没判（绕过了任务集解析）`;", "  if (!h) return null;"),
+    expectFail: "绕过解析（内建任务写错名）也要出声：入口自己那一支兜住",
+  },
+  {
+    id: "eval-expect-judge-untouched-branch-never-fails",
+    src: "scripts/lib/eval-expects.ts",
+    test: "tests/eval-task-set.test.ts",
+    desc: "某一枚分支恒 null（这里拿 `judgeUntouched` 试）⇒ 那一格退化成正则里没人看的装饰，"
+      + "而任务书、读数、汇总都会照印「这条判据在」；「全违规的面每枚都要出声」那条就是钉这一格",
+    apply: (s) => s.replace('judgeUntouched: (r) => (r.touchedJudge ? "改了判卷面" : null),', "judgeUntouched: () => null,"),
+    expectFail: "两向证人·出声：枚举的面里每一枚判据至少开口一次（恒 null 的分支＝那一格没在判）",
+  },
+  {
+    id: "eval-expect-branch-always-speaks",
+    src: "scripts/lib/eval-expects.ts",
+    test: "tests/eval-task-set.test.ts",
+    desc: "某一枚分支改成恒出事（这里拿 `clarify` 试）⇒ 那一格没有任何任务能满足它，"
+      + "合法跑批会被整批判成失败——与恒 null 是同一格的两侧，所以各配一台造红、各红一条用例",
+    apply: (s) => s.replace('clarify: (r) => (r.clarified < 1 ? "没 clarify（歧义靠猜）" : null),', 'clarify: () => "恒出事",'),
+    expectFail: "两向证人·闭嘴：枚举的面里每一枚判据至少过一次（恒出事的判据会把合法任务全判死）",
+  },
+  {
+    id: "eval-grade-bypasses-branch-table",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-task-set.test.ts",
+    desc: "跑器不再问那张表、每枚都返回 null ⇒ 登记表与分支表还在、判卷那两条键集/出声的也还绿，"
+      + "但**没有任何一格真的在判**（规则 228：判据要与被度量那件事站在同一个决策点上）",
+    apply: (s) => s.replace("const why = expectFailReason(e, face);", "const why = null;"),
+    expectFail: "★接线 跑器不再自己判每一枚名字（旧那串 if 不许回来）",
   },
 ];
 

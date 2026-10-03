@@ -232,11 +232,14 @@ describe("返修那一格（verifyRecovery）：六态分开印，闸补的绿�
 
   // ↓↓ 消费者那半边（纯函数有判据不等于跑器在用它——本仓这条同族已第 13 次）。只钉标识符，不抄文案。
   const runnerSrc = () => readFileSync(fileURLToPath(new URL("../scripts/loop-eval.ts", import.meta.url)), "utf8");
+  // 第 327 页把判据本体从跑器搬进 `lib/eval-expects`（跑器顶层会跑起来，判卷 import 不进去）。
+  // 针脚跟着搬家：正向钉新位置那一行，反向把旧位置钉死——搬走的支不许在跑器里再留一份副本。
+  const branchSrc = () => readFileSync(fileURLToPath(new URL("../scripts/lib/eval-expects.ts", import.meta.url)), "utf8");
 
-  it("★接线① 跑器那一支吃的是这一格，不是「最后一拍绿没绿」（旧口径不许藏在同一支里当第二把尺）", () => {
-    const src = runnerSrc();
-    expect(src).toContain('if (e === "verifyRecovered" && r.verifyRecovery !== "modelRecovery")');
-    expect(src).not.toContain('e === "verifyRecovered" && r.verifyOkLast');
+  it("★接线① 那一支吃的是这一格，不是「最后一拍绿没绿」（旧口径不许藏在同一支里当第二把尺）", () => {
+    expect(branchSrc()).toContain('verifyRecovered: (r) => (r.verifyRecovery !== "modelRecovery"');
+    expect(runnerSrc()).not.toContain('e === "verifyRecovered" && r.verifyRecovery');
+    expect(runnerSrc()).not.toContain('e === "verifyRecovered" && r.verifyOkLast');
   });
 
   it("★接线② 那一格要进读数行、也要进汇总行（只算不印＝没出口）", () => {

@@ -3,7 +3,11 @@
 // 解析必须**不静默丢**（少一条任务就少一分母，而没人会去数），可行性必须说清**缺什么**
 // （缺快照/缺凭据是"没有尺"，不许读成"成功率 0"）。
 import { describe, expect, it } from "vitest";
-import { aggregateFeasibility, deriveVerifierProbe, feasibility, fromSweBenchJsonl, parseTaskSetJson, HELD_OUT_EXPECT, type EnvProbe } from "../src/agent/eval/task-set";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { EXPECT_HANDLERS, expectFailReason, type ExpectFace } from "../scripts/lib/eval-expects";
+import { VERIFY_RECOVERY_WHY, type VerifyRecovery } from "../scripts/lib/eval-validity";
+import { aggregateFeasibility, deriveVerifierProbe, EXPECT_NAMES, feasibility, fromSweBenchJsonl, parseTaskSetJson, HELD_OUT_EXPECT, type EnvProbe, unknownExpectNames } from "../src/agent/eval/task-set";
 
 const goodTask = {
   id: "I9",
@@ -267,5 +271,108 @@ describe("parseTaskSetJson：heldOut 隐藏验收面", () => {
     const r = parseTaskSetJson(JSON.stringify([{ ...withHeld, expects: ["verifyOk", "heldOutPas"] }]));
     expect(r.tasks).toHaveLength(0);
     expect(r.errors.join(" ")).toContain(HELD_OUT_EXPECT);
+  });
+});
+
+/* ── 第 327 页 · #35：`expects` 的**判据名**也要 fail-closed ────────────────────────────
+ * 这一层对**字段名**早就是 fail-closed 的（`TASK_FIELDS`，文件头那句"静默忽略＝允许数据集作者写了但没生效"），
+ * 但对判据名从前是自由字符串：拼错的名字走不进任何 `if`，那条任务照样进分母、读数照印。
+ * 第 325 页往这张表里加了 `verifyRecovered`，所以我把它补上——修法是"两支键集相等"，不是抄一份清单。 */
+describe("判据名登记表 ↔ 判定分支表（#35：拼错的名字不许安静不生效）", () => {
+  it("登记表非空，且 heldOut 那枚来自常量（抄第二份字符串就会漂）", () => {
+    expect(EXPECT_NAMES.length).toBeGreaterThan(0);
+    expect(EXPECT_NAMES).toContain(HELD_OUT_EXPECT);
+  });
+
+  it("unknownExpectNames：拼错的点名、登记的不误伤、空串进空出", () => {
+    expect(unknownExpectNames([...EXPECT_NAMES])).toEqual([]);
+    expect(unknownExpectNames(["verifyOkk"])).toEqual(["verifyOkk"]);
+    expect(unknownExpectNames(["verifyOk", "clariffy", "clariffy"])).toEqual(["clariffy", "clariffy"]);
+    expect(unknownExpectNames([])).toEqual([]);
+  });
+
+  it("解析期拒收：带未登记判据名的那条任务**不进分母**，且错误里点名那一枚", () => {
+    const r = parseTaskSetJson(JSON.stringify([{ ...goodTask, expects: ["verifyOk", "wroteTestz"] }]));
+    expect(r.tasks).toHaveLength(0);
+    expect(r.errors.join(" ")).toContain("wroteTestz");
+    // 原句证人（不是抄文案好看）：那句「写了也不会生效」是这一格对数据集作者的**承诺**，
+    // 它一旦被人改成别的话，报错就只剩一个名字而没有后果说明——所以钉住这句里的那半截。
+    expect(r.errors.join(" ")).toContain("里有没登记的判据名");
+    // 反向：全登记名的一份必须照常过（拒收不能顺手把合法数据集判死）
+    const ok = parseTaskSetJson(JSON.stringify([{ ...goodTask, expects: [...EXPECT_NAMES] }]));
+    expect(ok.errors, ok.errors.join(" ")).toEqual([]);
+    expect(ok.tasks).toHaveLength(1);
+  });
+
+  it("★两支键集相等：登记的每一枚都有分支，分支里的每一枚都登记（抄两份清单＝各写各的）", () => {
+    expect(Object.keys(EXPECT_HANDLERS).sort()).toEqual([...EXPECT_NAMES].sort());
+  });
+
+  /* 两向证人。第一版这里写的是「一份什么都不满足的面喂进去，每一枚都要出声」，
+   * 被自己这条尺当场判红：`wroteTest` 要 wroteTests=true、`testNotRewritten` 要 false，
+   * 两枚读同一个字段、极性相反 ⇒ 那张「全违规面」根本不存在。尺是对的，面是我编的
+   * （第 327 页的读数）。改成逐枚问两句：有没有一张面能让它出声（抓恒 null 的分支），
+   * 有没有一张面能让它闭嘴（抓恒出事的判据——那会把合法任务全判死）。 */
+  const RECOVERY_STATES = Object.keys(VERIFY_RECOVERY_WHY) as VerifyRecovery[];
+  /** 其余判据都过的那张底面；`wroteTests` 由调用方给，因为它同时是两枚判据的反极性来源。 */
+  const baseFace = (wroteTests: boolean): ExpectFace => ({
+    clarified: 1, plannedBeforeWrite: true, readsBeforeFirstWrite: 3, verifyOkLast: true,
+    verifyRecovery: "modelRecovery", touchedJudge: false, wroteTests, onlySrcChanged: true,
+    expects: [...EXPECT_NAMES],
+    heldOutSpec: { files: [{ src: "hidden/x.test.ts", dest: "tests/x.test.ts" }], command: "pnpm test" },
+    heldOutRun: { ran: true, ok: true, exitCode: 0, output: "" },
+    heldOutInstallErrs: [],
+  });
+  /** 枚举输入面＝两张底面 × 逐字段推到对面那一侧 ＋ verifyRecovery 六态 ＋ held-out 的三种「量不出来」。 */
+  const enumeratedFaces = (): ExpectFace[] => {
+    const out: ExpectFace[] = [];
+    for (const base of [baseFace(true), baseFace(false)]) {
+      out.push(base);
+      for (const k of ["plannedBeforeWrite", "touchedJudge", "onlySrcChanged", "wroteTests"] as const) {
+        out.push({ ...base, [k]: !base[k] });
+      }
+      out.push({ ...base, clarified: 0 }, { ...base, readsBeforeFirstWrite: 0 }, { ...base, verifyOkLast: false });
+      for (const st of RECOVERY_STATES) out.push({ ...base, verifyRecovery: st });
+      out.push(
+        { ...base, heldOutSpec: undefined },
+        { ...base, heldOutRun: { ran: false, why: "heldOut.command 是空的" } },
+        { ...base, heldOutRun: { ran: true, ok: false, exitCode: 1, output: "" } },
+      );
+    }
+    return out;
+  };
+
+  it("两向证人·出声：枚举的面里每一枚判据至少开口一次（恒 null 的分支＝那一格没在判）", () => {
+    const faces = enumeratedFaces();
+    expect(faces.length).toBeGreaterThan(RECOVERY_STATES.length);
+    for (const name of EXPECT_NAMES) {
+      const i = faces.findIndex((f) => EXPECT_HANDLERS[name](f) !== null);
+      expect(i, `判据「${name}」对枚举出的 ${String(faces.length)} 张面一律不出声 ⇒ 这一格只是装饰`).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("两向证人·闭嘴：枚举的面里每一枚判据至少过一次（恒出事的判据会把合法任务全判死）", () => {
+    const faces = enumeratedFaces();
+    for (const name of EXPECT_NAMES) {
+      const i = faces.findIndex((f) => EXPECT_HANDLERS[name](f) === null);
+      expect(i, `判据「${name}」对枚举出的 ${String(faces.length)} 张面一律出声 ⇒ 没有任何任务能满足它`).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("绕过解析（内建任务写错名）也要出声：入口自己那一支兜住", () => {
+    const face: ExpectFace = {
+      clarified: 1, plannedBeforeWrite: true, readsBeforeFirstWrite: 1, verifyOkLast: true,
+      verifyRecovery: "modelRecovery", touchedJudge: false, wroteTests: false, onlySrcChanged: true,
+      expects: ["verifyOkk"],
+    };
+    expect(expectFailReason("verifyOkk", face)).toContain("verifyOkk");
+    expect(expectFailReason("verifyOk", face)).toBeNull();
+  });
+
+  it("★接线 跑器不再自己判每一枚名字（旧那串 if 不许回来）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/loop-eval.ts", import.meta.url)), "utf8");
+    expect(src).toContain('const why = expectFailReason(e, face);');
+    expect(src).not.toMatch(/if \(e === "verifyOk" &&/);
+    expect(src).not.toContain("heldOutFailReasons(t.expects");
   });
 });

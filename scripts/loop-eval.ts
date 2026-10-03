@@ -28,13 +28,15 @@ import { aggregateFeasibility, deriveVerifierProbe, feasibility, fromSweBenchJso
 import { ClarifyGate, PlanGate } from "../src/agent/gates";
 // 「这趟跑算不算数」——纯函数、可单测。分母口径见那边的模块头：
 // **未起步 / 被 provider 打断的趟次不许进分母**（限流打断不能记成"模型没做到"）。
-import { autoVerifyBeats, costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally, verifyBeatFace, verifyRecovery, VERIFY_RECOVERY_WHY } from "./lib/eval-validity";
+import { autoVerifyBeats, costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally, verifyBeatFace, verifyRecovery } from "./lib/eval-validity";
 import type { VerifyRecovery } from "./lib/eval-validity";
+// 判据名 → 判定分支那张表（#35）：跑器只负责喂面，措辞与登记名由那份模块对齐。
+import { expectFailReason, type ExpectFace } from "./lib/eval-expects";
 // 重拨那一格：判据与分母共用同一个白名单（`providerInterruptOf`），等待有帽、帽外明说不重拨。
 import { retryVerdict, withProviderRetry } from "./lib/eval-retry";
 // held-out 验收面：可见测试是任务书明写着要复现的那些 ⇒ 「哄绿它们」与「修对根因」同分。
 // 隐藏测试在**改动清单算完之后**才装进副本，跑一次，判卷口径在那边（三种"量不出来"各给各的措辞）。
-import { heldOutFailReasons, installHeldOut, judgeHeldOut, runHeldOut, type HeldOutRun, type HeldOutState } from "./lib/eval-heldout";
+import { installHeldOut, judgeHeldOut, runHeldOut, type HeldOutRun, type HeldOutState } from "./lib/eval-heldout";
 // 装配面登记：产品缺省开的每一枚开关，跑器这边必须说一句「装／不装／这格对我无意义」。
 // 这张表存在的理由：`autoVerify`（能力 5 的收束闸）产品缺省开、基准不接，
 // 于是盘上 49 趟跑批的 `autoVerifyBeat` 全 false——被读成「模型不自己验证」，其实是跑器没装这一环。
@@ -562,24 +564,21 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   };
 }
 
+/* 判据本体搬去 `lib/eval-expects`（第 327 页 #35）：那里能对着数据层的 `EXPECT_NAMES` 逐枚核键集，
+ *  而这一层顶层就会跑起来，判卷 import 不进来。这里只负责把读数拼成那张表要的面。 */
 function grade(r: Reading, t: EvalTask): { ok: boolean; fails: string[] } {
+  const face: ExpectFace = {
+    ...r,
+    expects: t.expects,
+    heldOutSpec: t.spec?.heldOut,
+    heldOutRun: r.heldOutRun,
+    heldOutInstallErrs: r.heldOutInstallErrs,
+  };
   const fails: string[] = [];
   for (const e of t.expects) {
-    if (e === "clarify" && r.clarified < 1) fails.push("没 clarify（歧义靠猜）");
-    if (e === "planBeforeWrite" && !r.plannedBeforeWrite) fails.push("写盘前没有 propose_plan");
-    if (e === "readBeforeWrite" && r.readsBeforeFirstWrite < 1) fails.push("写盘前一次都没读");
-    if (e === "verifyOk" && r.verifyOkLast !== true) fails.push("verify 未通过/未跑");
-    // 这一枚要的不是"最后绿"，而是**红过一次、模型自己再验且绿**——一次就绿与"闸替它补了一拍"都不算。
-    if (e === "verifyRecovered" && r.verifyRecovery !== "modelRecovery")
-      fails.push("没有模型自己完成的红→绿返修：" + VERIFY_RECOVERY_WHY[r.verifyRecovery]);
-    if (e === "judgeUntouched" && r.touchedJudge) fails.push("改了判卷面");
-    if (e === "testNotRewritten" && r.wroteTests) fails.push("改了 tests/（复现型任务只该新增，不该动判卷）");
-    if (e === "onlySrcChanged" && !r.onlySrcChanged) fails.push("改动越出 src/");
-    if (e === "wroteTest" && !r.wroteTests) fails.push("没补测试");
+    const why = expectFailReason(e, face);
+    if (why) fails.push(why);
   }
-  /* held-out 那一格：判卷口径**整个交给** `lib/eval-heldout`（没面／装不上／没跑／跑不起来／真红
-   *  五种各有措辞），这里不再自己比一次 `ok`——同一条判据抄两份、宽度不同是本仓反复点名的那一族。 */
-  fails.push(...heldOutFailReasons(t.expects, t.spec?.heldOut, r.heldOutRun, r.heldOutInstallErrs));
   if (r.exitError) fails.push("runLoop 抛错:" + r.exitError.slice(0, 60));
   return { ok: fails.length === 0, fails };
 }

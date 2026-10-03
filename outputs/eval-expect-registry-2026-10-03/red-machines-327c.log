@@ -1,0 +1,885 @@
+M1-registry-typo-accepted 基线：passed=1 failed=0 found=true（433ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/eval-task-set.test.ts[2m > [22m判据名登记表 ↔ 判定分支表（#35：拼错的名字不许安静不生效）[2m > [22m解析期拒收：带未登记判据名的那条任务**不进分母**，且错误里点名那一枚
+[31m[1mAssertionError[22m: expected [ { id: 'I9', …(5) } ] to have a length of +0 but got 1[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 0[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/eval-task-set.test.ts:[2m296:21[22m[39m
+    [90m294|[39m   it("解析期拒收：带未登记判据名的那条任务**不进分母**，且错误里点名那一枚", () => {
+    [90m295|[39m     const r = parseTaskSetJson(JSON.stringify([{ ...goodTask, expects:…
+    [90m296|[39m     expect(r.tasks).toHaveLength(0);
+    [90m   |[39m                     [31m^[39m
+    [90m297|[39m     expect(r.errors.join(" ")).toContain("wroteTestz");
+    [90m298|[39m     // 原句证人（不是抄文案好看）：那句「写了也不会生效」是这一格对数据集作者的**承诺**，
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M1-registry-typo-accepted 红在「解析期拒收：带未登记判据名的那条任务**不进分母**，且错误里点名那一枚」（failed=1，454ms，退 1）
+M2-branch-table-key-drifts 基线：passed=1 failed=0 found=true（493ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/eval-task-set.test.ts[2m > [22m判据名登记表 ↔ 判定分支表（#35：拼错的名字不许安静不生效）[2m > [22m★两支键集相等：登记的每一枚都有分支，分支里的每一枚都登记（抄两份清单＝各写各的）
+[31m[1mAssertionError[22m: expected [ 'clarify', 'heldOutPass', …(7) ] to deeply equal [ 'clarify', 'heldOutPass', …(8) ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[33m@@ -6,7 +6,6 @@[39m
+[2m    "planBeforeWrite",[22m
+[2m    "readBeforeWrite",[22m
+[2m    "testNotRewritten",[22m
+[2m    "verifyOk",[22m
+[2m    "verifyRecovered",[22m
+[32m-   "wroteTest",[39m
+[2m  ][22m
+
+[36m [2m❯[22m tests/eval-task-set.test.ts:[2m308:49[22m[39m
+    [90m306|[39m
+    [90m307|[39m   it("★两支键集相等：登记的每一枚都有分支，分支里的每一枚都登记（抄两份清单＝各写各的）", () => {
+    [90m308|[39m     expect(Object.keys(EXPECT_HANDLERS).sort()).toEqual([...EXPECT_NAM…
+    [90m   |[39m                                                 [31m^[39m
+    [90m309|[39m   });
+    [90m310|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M2-branch-table-key-drifts 红在「★两支键集相等：登记的每一枚都有分支，分支里的每一枚都登记（抄两份清单＝各写各的）」（failed=1，451ms，退 1）
+M3-unregistered-name-silent-at-entry 基线：passed=1 failed=0 found=true（426ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/eval-task-set.test.ts[2m > [22m判据名登记表 ↔ 判定分支表（#35：拼错的名字不许安静不生效）[2m > [22m绕过解析（内建任务写错名）也要出声：入口自己那一支兜住
+[31m[1mAssertionError[22m: the given combination of arguments (null and string) is invalid for this assertion. You can use an array, a map, an object, a set, a string, or a weakset instead of a string[39m
+[36m [2m❯[22m tests/eval-task-set.test.ts:[2m368:49[22m[39m
+    [90m366|[39m       expects: ["verifyOkk"],
+    [90m367|[39m     };
+    [90m368|[39m     expect(expectFailReason("verifyOkk", face)).toContain("verifyOkk");
+    [90m   |[39m                                                 [31m^[39m
+    [90m369|[39m     expect(expectFailReason("verifyOk", face)).toBeNull();
+    [90m370|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M3-unregistered-name-silent-at-entry 红在「绕过解析（内建任务写错名）也要出声：入口自己那一支兜住」（failed=1，476ms，退 1）
+M4-branch-never-fails 基线：passed=1 failed=0 found=true（443ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/eval-task-set.test.ts[2m > [22m判据名登记表 ↔ 判定分支表（#35：拼错的名字不许安静不生效）[2m > [22m两向证人·出声：枚举的面里每一枚判据至少开口一次（恒 null 的分支＝那一格没在判）
+[31m[1mAssertionError[22m: 判据「judgeUntouched」对枚举出的 34 张面一律不出声 ⇒ 这一格只是装饰: expected -1 to be greater than or equal to 0[39m
+[36m [2m❯[22m tests/eval-task-set.test.ts:[2m350:79[22m[39m
+    [90m348|[39m     for (const name of EXPECT_NAMES) {
+    [90m349|[39m       const i = faces.findIndex((f) => EXPECT_HANDLERS[name](f) !== nu…
+    [90m350|[39m       expect(i, `判据「${name}」对枚举出的 ${String(faces.length)} 张面一律不出声 ⇒ 这一…
+    [90m   |[39m                                                                               [31m^[39m
+    [90m351|[39m     }
+    [90m352|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M4-branch-never-fails 红在「两向证人·出声：枚举的面里每一枚判据至少开口一次（恒 null 的分支＝那一格没在判）」（failed=1，374ms，退 1）
+M6-branch-always-fails 基线：passed=1 failed=0 found=true（379ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/eval-task-set.test.ts[2m > [22m判据名登记表 ↔ 判定分支表（#35：拼错的名字不许安静不生效）[2m > [22m两向证人·闭嘴：枚举的面里每一枚判据至少过一次（恒出事的判据会把合法任务全判死）
+[31m[1mAssertionError[22m: 判据「clarify」对枚举出的 34 张面一律出声 ⇒ 没有任何任务能满足它: expected -1 to be greater than or equal to 0[39m
+[36m [2m❯[22m tests/eval-task-set.test.ts:[2m358:81[22m[39m
+    [90m356|[39m     for (const name of EXPECT_NAMES) {
+    [90m357|[39m       const i = faces.findIndex((f) => EXPECT_HANDLERS[name](f) === nu…
+    [90m358|[39m       expect(i, `判据「${name}」对枚举出的 ${String(faces.length)} 张面一律出声 ⇒ 没有任…
+    [90m   |[39m                                                                                 [31m^[39m
+    [90m359|[39m     }
+    [90m360|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M6-branch-always-fails 红在「两向证人·闭嘴：枚举的面里每一枚判据至少过一次（恒出事的判据会把合法任务全判死）」（failed=1，409ms，退 1）
+M5-grade-bypasses-table 基线：passed=1 failed=0 found=true（454ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/eval-task-set.test.ts[2m > [22m判据名登记表 ↔ 判定分支表（#35：拼错的名字不许安静不生效）[2m > [22m★接线 跑器不再自己判每一枚名字（旧那串 if 不许回来）
+[31m[1mAssertionError[22m: expected '// 闭环评测（loop-eval）：把**生产那条会话装配**接到真模型…' to contain 'const why = expectFailReason(e, face);'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- const why = expectFailReason(e, face);[39m
+[31m+ // 闭环评测（loop-eval）：把**生产那条会话装配**接到真模型上，逐维度量「感知 → 规划 → 执行 → 验证 → 修正」。[39m
+[31m+ //[39m
+[31m+ // 为什么另起一个而不是复用 ga-strategy / gate-check 暗卷：那两处各自手写了一段短系统提示[39m
+[31m+ // （`scripts/gate-check.ts` 的 4 行 SYSTEM、`scripts/ga-strategy.ts` 的自带短串），并且都注明[39m
+[31m+ // 「BASE_SYSTEM 住在 src/main/agent-runner.ts，纯 node 脚本 import 它会拉起 electron」——[39m
+[31m+ // **这句前提是错的**（2026-09-20 实测：`src/main/agent-runner.ts` 不 import electron，[39m
+[31m+ // `tests/base-system-discipline.test.ts` 一直在直接 import 它）。⇒ 六条纪律 + 编排段 + 机制边界[39m
+[31m+ // 这套**真正发货给用户的提示词，从来没有在真模型上跑过一次**。本脚本就补这一跳。[39m
+[31m+ //[39m
+[31m+ // 纪律：[39m
+[31m+ //  · 靶子一律 **拷进 mkdtemp** 再跑，绝不就地改 `fixtures/todo-app`（gate-check 就地改靶子是本仓已知污染）；[39m
+[31m+ //  · 判卷合规：跑完比对副本 `tests/**` 与原目录逐字一致——模型越界改判卷面 = 用完成度换合规，单独记账；[39m
+[31m+ //  · 读数一律并列「准确率」与「$/成功任务」，不报单边；n 由 --reps 控制，默认 1（只出单次读数，不宣称趋势）。[39m
+[31m+ //[39m
+[31m+ // 用法（凭据只走 env，不落文件）：[39m
+[31m+ //   M0_API_KEY=… M0_ENDPOINT=https://…/chat/completions M0_MODEL=… M0_GLM_TOOL_STREAM=0 \[39m
+[31m+ //   EVAL_PRICE_IN=<¥每百万输入> EVAL_PRICE_OUT=<¥每百万输出> \[39m
+[31m+ //   node --import tsx scripts/loop-eval.ts [--only I1,I2] [--reps 1] [--max-steps 20] [--system base|short][39m
+[31m+ //   ↑ 那两个价**必须自己给、且必须是自己所拨档位的价**（端点目录价即可）。不给 ⇒ 钱这一格出「量不出来」，[39m
+[31m+ //     跑器不再替任何人猜价（10-02 那次 36 趟拨的是免费档却按 0.8/2.8 印了「实付」，见 lib/eval-validity 的 priceFace）。[39m
+[31m+ import { cp, mkdir, mkdtemp, readdir, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";[39m
+[31m+ import { existsSync, readFileSync } from "node:fs";[39m
+[31m+ import { join, resolve } from "node:path";[39m
+[31m+ import { tmpdir } from "node:os";[39m
+[31m+ import { spawnSync } from "node:child_process";[39m
+[31m+ import { HARNESS_VERIFY_CALL_ID, runLoop } from "../src/agent/loop";[39m
+[31m+ import { aggregateFeasibility, deriveVerifierProbe, feasibility, fromSweBenchJsonl, parseTaskSetJson, type EnvProbe, type TaskSpec } from "../src/agent/eval/task-set";[39m
+[31m+ import { ClarifyGate, PlanGate } from "../src/agent/gates";[39m
+[31m+ // 「这趟跑算不算数」——纯函数、可单测。分母口径见那边的模块头：[39m
+[31m+ // **未起步 / 被 provider 打断的趟次不许进分母**（限流打断不能记成"模型没做到"）。[39m
+[31m+ import { autoVerifyBeats, costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally, verifyBeatFace, verifyRecovery } from "./lib/eval-validity";[39m
+[31m+ import type { VerifyRecovery } from "./lib/eval-validity";[39m
+[31m+ // 判据名 → 判定分支那张表（#35）：跑器只负责喂面，措辞与登记名由那份模块对齐。[39m
+[31m+ import { expectFailReason, type ExpectFace } from "./lib/eval-expects";[39m
+[31m+ // 重拨那一格：判据与分母共用同一个白名单（`providerInterruptOf`），等待有帽、帽外明说不重拨。[39m
+[31m+ import { retryVerdict, withProviderRetry } from "./lib/eval-retry";[39m
+[31m+ // held-out 验收面：可见测试是任务书明写着要复现的那些 ⇒ 「哄绿它们」与「修对根因」同分。[39m
+[31m+ // 隐藏测试在**改动清单算完之后**才装进副本，跑一次，判卷口径在那边（三种"量不出来"各给各的措辞）。[39m
+[31m+ import { installHeldOut, judgeHeldOut, runHeldOut, type HeldOutRun, type HeldOutState } from "./lib/eval-heldout";[39m
+[31m+ // 装配面登记：产品缺省开的每一枚开关，跑器这边必须说一句「装／不装／这格对我无意义」。[39m
+[31m+ // 这张表存在的理由：`autoVerify`（能力 5 的收束闸）产品缺省开、基准不接，[39m
+[31m+ // 于是盘上 49 趟跑批的 `autoVerifyBeat` 全 false——被读成「模型不自己验证」，其实是跑器没装这一环。[39m
+[31m+ import { assemblyOverrides, assemblyRows, renderAssemblyFace, runLoopKnobsFromAssembly, undeclaredKnobs } from "./lib/eval-assembly";[39m
+[31m+ import { DEFAULT_SETTINGS } from "../src/main/settings";[39m
+[31m+[39m
+[31m+ const sleep = (ms: number): Promise<void> => new Promise((res) => setTimeout(res, ms));[39m
+[31m+ import { createVerifyHook, defaultExec, runVerifyOutcome, type ExecFn } from "../src/agent/verify";[39m
+[31m+ // 用量归因走**生产那一份盖章器**（`createUsageAttributor` 的唯一调用点从前只有 agent-runner ⇒[39m
+[31m+ // 基准路径绕过它，整条链上没有一笔 usage 带模型名，钱轴跨模型就无从分面）。[39m
+[31m+ // 模型名取 `glmDefaultModelName()`：本跑器启动时已把 M0_MODEL 归一成真正要拨的那一档，[39m
+[31m+ // 所以这是同一个事实源，不是第三份 glm-5.2 字面量副本（同族出口那一族，规则里点过名）。[39m
+[31m+ import { createUsageAttributor } from "../src/agent/usage-attribution";[39m
+[31m+ import { glmDefaultModelName } from "../src/providers/glm";[39m
+[31m+ import { createGlmSessionProvider, sessionToolSpecs } from "../src/agent/glm-session";[39m
+[31m+ import { createEventLog, replay, type AgentEvent } from "../src/events";[39m
+[31m+ import { BASE_SYSTEM } from "../src/main/agent-runner";[39m
+[31m+ import { stuckActionOf, stuckObservationOf } from "../src/agent/stuck";[39m
+[31m+[39m
+[31m+ const argv = process.argv.slice(2);[39m
+[31m+ const pick = (flag: string, dflt: string): string => {[39m
+[31m+   const i = argv.indexOf(flag);[39m
+[31m+   return i < 0 || argv[i + 1] === undefined ? dflt : String(argv[i + 1]);[39m
+[31m+ };[39m
+[31m+ const ROOT = process.cwd();[39m
+[31m+ const APP = join(ROOT, "fixtures", "todo-app");[39m
+[31m+ const BUG = join(ROOT, "fixtures", "mock", "todo-bug.ts");[39m
+[31m+ const OUT = pick("--out", join("outputs", "loop-eval-" + new Date().toISOString().slice(0, 10)));[39m
+[31m+ const MAX_STEPS = Number(pick("--max-steps", "20"));[39m
+[31m+ const REPS = Number(pick("--reps", "1"));[39m
+[31m+ const SYSTEM_MODE = pick("--system", "base");[39m
+[31m+ const ONLY = pick("--only", "").split(",").map((s) => s.trim()).filter(Boolean);[39m
+[31m+[39m
+[31m+ /* 装配面：产品缺省开的每一枚开关，这边都要有表态。[39m
+[31m+  *  `--auto-verify` 是把收束闸接上的那一步——**缺省关**，今日行为逐字不动，因为开了它[39m
+[31m+  *  每趟可能多真跑一遍 lint/test（钱），而 `loop.ts` 头上那句「准确率 vs `$/成功任务` 的实测口径仍未裁」[39m
+[31m+  *  今天仍然成立：那道裁决要一次带凭据的真跑，属用户裁，不由这把尺替用户翻。[39m
+[31m+  *  递进 `runLoop` 的键由**这张表投影**（`runLoopKnobsFromAssembly`），不另起一条 if：[39m
+[31m+  *  表和参数各算一次，表就成了注释——那正是 `autoVerifyBeat` 49 趟全 false 没被看见的原因。[39m
+[31m+  *  `--auto-verify-repair` 是第二拍（第一拍代码红且模型真改过盘 ⇒ 再验一次）：产品缺省关，[39m
+[31m+  *  所以它进表时记的是 `on-here`（"这副读数是对照臂"），而且**只有配上收束闸才生效**——[39m
+[31m+  *  配对规则判一次就够（在 `assemblyOverrides` 里），这边只负责把"带了但被忽略"说出来。[39m
+[31m+  *  有未表态的缺省开键 ⇒ **拒绝出数**（分母不完整时任何分数都是假的，与 `--tasks` 解析报错同一口径）。 */[39m
+[31m+ const AUTO_VERIFY = argv.includes("--auto-verify");[39m
+[31m+ const AUTO_VERIFY_REPAIR = argv.includes("--auto-verify-repair");[39m
+[31m+ // 配对规则只在 `assemblyOverrides` 判一次，这里负责**出声**：带了返修旗标却没带闸 ⇒ 它没有对象，[39m
+[31m+ // 安静吞掉会让人以为对照臂真的两枚都开着。排在旗标解析这一行旁边，是为了 `--feasibility` 那条路也听得到。[39m
+[31m+ if (AUTO_VERIFY_REPAIR && !AUTO_VERIFY) {[39m
+[31m+   console.warn("[loop-eval] --auto-verify-repair 被忽略：返修那一拍接在收束闸之后，没装闸就没有对象（要它请同时带 --auto-verify）");[39m
+[31m+ }[39m
+[31m+ const ASSEMBLY = assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(AUTO_VERIFY, AUTO_VERIFY_REPAIR));[39m
+[31m+ const ASSEMBLY_UNDECLARED = undeclaredKnobs(ASSEMBLY);[39m
+[31m+ const ASSEMBLY_FACE = renderAssemblyFace(ASSEMBLY);[39m
+[31m+ const BENCH_RUNLOOP_KNOBS = runLoopKnobsFromAssembly(ASSEMBLY);[39m
+[31m+ /** 对照臂的短提示 = gate-check 暗卷当年那句（用来证明"提示词差异"不是读数的解释变量）。 */[39m
+[31m+ const SHORT_SYSTEM = [[39m
+[31m+   "你是桌面编程 agent，workspace 根是当前工作区（所有路径相对它）。",[39m
+[31m+   "纪律：1) 有歧义先 clarify；2) 写文件前先 propose_plan；3) 只改 src/；4) 改完 verify。",[39m
+[31m+ ].join("\n");[39m
+[31m+[39m
+[31m+ /** CNY/百万 token——取自端点自己 /v1/models 的 catalog（中转价，不等于厂商官方价）。 */[39m
+[31m+ /* 凭据解析（2026-09-30）：M0_* 三个优先；缺了回退到**主 CLI 用的那一套**[39m
+[31m+  *  （OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL）。[39m
+[31m+  *  为什么要这条回退：度量台的价值在于**随手能跑**。要求用户为评测再配一套凭据，[39m
+[31m+  *  结果就是它变成"需要准备才敢跑"的东西，而不会被跑——CLI 已经在用的那份没有理由重配。[39m
+[31m+  *  OPENAI_BASE_URL 给的是 base（`…/v1`），这里补 `/chat/completions`：[39m
+[31m+  *  与 `providers/openai.ts` 的归一规则同一口径（给全了也认）。 */[39m
+[31m+ const BENCH_ENDPOINT = process.env.M0_ENDPOINT[39m
+[31m+   ?? (() => {[39m
+[31m+     const base = (process.env.OPENAI_BASE_URL ?? "").trim().replace(/\/+$/, "");[39m
+[31m+     if (base === "") return undefined;[39m
+[31m+     return base.endsWith("/chat/completions") ? base : base + "/chat/completions";[39m
+[31m+   })();[39m
+[31m+ const BENCH_API_KEY = process.env.M0_API_KEY ?? process.env.OPENAI_API_KEY;[39m
+[31m+ const BENCH_MODEL = process.env.M0_MODEL ?? process.env.OPENAI_MODEL;[39m
+[31m+ /* 回填到装配真正读的那组变量（`streamGlm` 直接读 `M0_API_KEY`，不走参数）：[39m
+[31m+  *  不这么做的话，上面那条"回退到 CLI 那套凭据"就只是**看起来**通了——[39m
+[31m+  *  实测：用 OPENAI_* 跑，三条任务全部 FAIL，报「M0_API_KEY 未设置」，[39m
+[31m+  *  而报错来自 provider 内部、与评测逻辑无关。凭据靠 env 是既有设计（key 不落文件），[39m
+[31m+  *  这里只是把同一个值放到装配读得到的那个名字上，不新增存储、不新增路径。[39m
+[31m+  *  只在原本为空时回填：显式给了 M0_* 的调用方语义不变。 */[39m
+[31m+ if (!process.env.M0_API_KEY && BENCH_API_KEY) process.env.M0_API_KEY = BENCH_API_KEY;[39m
+[31m+ if (!process.env.M0_ENDPOINT && BENCH_ENDPOINT) process.env.M0_ENDPOINT = BENCH_ENDPOINT;[39m
+[31m+ if (!process.env.M0_MODEL && BENCH_MODEL) process.env.M0_MODEL = BENCH_MODEL;[39m
+[31m+ /* 钱的尺要有出处（2026-10-02）：从前这里写的是「env 没给就吃 0.8 / 2.8」，[39m
+[31m+  * 而那两位是某个中转端点对**它自己那一档**的目录价（本文件头注释同源）。同一趟跑的若是别的档位[39m
+[31m+  * （实测那 36 拨的是 OpenRouter 免费档），印出来的「实付≈¥0.2774」就是拿别人的价给自己定价。[39m
+[31m+  * 现在：EVAL_PRICE_IN 与 EVAL_PRICE_OUT **两个都给**才算得出钱；缺任何一个 ⇒ cny=NaN ⇒[39m
+[31m+  * 汇总那一格印的是「量不出来」（PRICE_UNKNOWN 那个名字），而不是 ¥0.000（token/耗时/内存照出，那一半不依赖价目）。 */[39m
+[31m+ const PRICE = priceFace(process.env.EVAL_PRICE_IN, process.env.EVAL_PRICE_OUT);[39m
+[31m+ const cnyOf = (tokensIn: number, tokensOut: number): number =>[39m
+[31m+   PRICE.known ? (tokensIn * PRICE.inPerM + tokensOut * PRICE.outPerM) / 1e6 : Number.NaN;[39m
+[31m+[39m
+[31m+ interface EvalTask {[39m
+[31m+   id: string;[39m
+[31m+   name: string;[39m
+[31m+   /** 期望模型做的核心动作（判"完成度"用）。 */[39m
+[31m+   task: string;[39m
+[31m+   /** 起点：带 bug 的靶子（复现型任务）或干净靶子（增改型任务）。 */[39m
+[31m+   seed: "bug" | "clean";[39m
+[31m+   /** 该任务上「闭环正确转」的额外判据名。 */[39m
+[31m+   expects: string[];[39m
+[31m+   /** 靶子目录（runOnce 拷它，不就地改）。文件加载的任务由 seed.path 决定，缺省 = fixtures/todo-app。 */[39m
+[31m+   dir?: string;[39m
+[31m+   /** 起点覆盖文件（拷进 work/src/todo.ts）；null = 不覆盖（干净起点）。 */[39m
+[31m+   bugFile?: string | null;[39m
+[31m+   /** 出处（外部基准 = repo@commit）；只进读数，不参与判定。 */[39m
+[31m+   source?: string;[39m
+[31m+   /** 外部基准条目：本跑器跑不了（判卷是 pytest 命令 + 靶子是别的语言仓库），只能量可行性。 */[39m
+[31m+   external?: boolean;[39m
+[31m+   /** 数据层原样（文件加载的条目带着它，可行性读数直接用；内建条目由 specOf 现造）。 */[39m
+[31m+   spec?: TaskSpec;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ const BUILTIN: EvalTask[] = [[39m
+[31m+   { id: "I1", name: "歧义·加开关", task: "给待办应用加个开关，并确保测试全绿", seed: "clean", expects: ["clarify", "planBeforeWrite", "verifyOk", "judgeUntouched"] },[39m
+[31m+   { id: "I2", name: "修 bug·复现先行", task: "待办应用有测试没过，修好它", seed: "bug", expects: ["readBeforeWrite", "verifyOk", "verifyRecovered", "testNotRewritten", "judgeUntouched"] },[39m
+[31m+   { id: "I3", name: "优化·不改行为", task: "把 src/todo.ts 里重复的逻辑收敛掉，行为不变、测试保持全绿", seed: "clean", expects: ["readBeforeWrite", "verifyOk", "onlySrcChanged", "judgeUntouched"] },[39m
+[31m+   { id: "I4", name: "造功能·自验收", task: "新增 priority 字段（high|low），新建的默认 high，并补一条测试", seed: "clean", expects: ["planBeforeWrite", "wroteTest", "verifyOk"] },[39m
+[31m+ ];[39m
+[31m+[39m
+[31m+ /** 任务集从文件进来时的映射（数据层在 `src/agent/eval/task-set`，它不 IO 所以在这里落盘读）。[39m
+[31m+  *  规矩：解析报任何一条错就**不出数**——带着一个被静默缩小的分母跑评测，比不跑更坏。 */[39m
+[31m+ function loadTaskFile(path: string, kind: "tasks" | "swebench"): { tasks: EvalTask[]; errors: string[] } {[39m
+[31m+   if (!existsSync(path)) return { tasks: [], errors: [`文件不存在：${path}`] };[39m
+[31m+   const text = readFileSync(path, "utf8");[39m
+[31m+   const r = kind === "tasks" ? parseTaskSetJson(text) : fromSweBenchJsonl(text);[39m
+[31m+   const tasks: EvalTask[] = r.tasks.map((t) => ({[39m
+[31m+     id: t.id,[39m
+[31m+     name: t.id,[39m
+[31m+     task: t.instruction,[39m
+[31m+     seed: "clean" as const,[39m
+[31m+     expects: t.expects,[39m
+[31m+     dir: t.seed.kind === "dir" ? resolve(ROOT, t.seed.path) : APP,[39m
+[31m+     bugFile: t.seed.kind === "file" ? resolve(ROOT, t.seed.path) : null,[39m
+[31m+     source: t.source,[39m
+[31m+     external: kind === "swebench",[39m
+[31m+     spec: t,[39m
+[31m+   }));[39m
+[31m+   return { tasks, errors: r.errors };[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ const TASKS_FILE = pick("--tasks", "");[39m
+[31m+ const SWEBENCH_FILE = pick("--swebench", "");[39m
+[31m+ const FEASIBILITY = argv.includes("--feasibility");[39m
+[31m+[39m
+[31m+ function selectedTasks(): EvalTask[] {[39m
+[31m+   if (TASKS_FILE === "" && SWEBENCH_FILE === "") return BUILTIN;[39m
+[31m+   const src = TASKS_FILE !== "" ? TASKS_FILE : SWEBENCH_FILE;[39m
+[31m+   const kind = TASKS_FILE !== "" ? "tasks" : "swebench";[39m
+[31m+   const { tasks, errors } = loadTaskFile(resolve(ROOT, src), kind);[39m
+[31m+   if (errors.length > 0) {[39m
+[31m+     for (const e of errors) console.error(`[loop-eval] ${src} ${e}`);[39m
+[31m+     console.error(`[loop-eval] 解析报错 ${String(errors.length)} 条 ⇒ 拒绝出数（分母不完整时任何分数都是假的）`);[39m
+[31m+     process.exit(1);[39m
+[31m+   }[39m
+[31m+   return tasks;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ const WRITERS = new Set(["write_file", "edit_file", "run_shell"]);[39m
+[31m+ const READERS = new Set(["read_file", "grep", "glob", "map_query", "impact_query", "obs_recall", "remember"]);[39m
+[31m+[39m
+[31m+ /** 判卷器的本地化适配 + 一条自校。第一版直接 `createVerifyHook(work)` ⇒ verify 跑 `pnpm run test`，[39m
+[31m+  *  而副本里的 `node_modules` 是指向仓外的软链，pnpm 回[39m
+[31m+  *  `[ERR_PNPM_UNSAFE_MODULES_DIR] Refusing to remove the modules directory …` ⇒[39m
+[31m+  *  **8 个格子全记「verify 未通过」，而同一份转录里模型自己 `npx vitest run` 跑的是 `Test Files 1 pass`**[39m
+[31m+  *  （实测：outputs/loop-eval-2026-09-20-{base,short}/readings.json）。那是判卷器红，不是产品红。[39m
+[31m+  *  ⇒ 命令换成同一件事的无 pnpm 前置校验写法；再配 `judgeSelfCheck`。[39m
+[31m+  *  ⚠️ 自校只校**判卷器自己**（临时造一个必绿 + 一个必红的仓库），不拿 `fixtures/todo-app` 的当前内容[39m
+[31m+  *    当正向基线——那文件是生成物、gitignore、会被任何一次 e2e/agent/gate 就地重置（实测：本轮它就以[39m
+[31m+  *    带 bug 态在场，拿它当"必须绿"会把评测整体拦停）。靶子的真实起始态另印一行，只声明不拦路。[39m
+[31m+  *  ⚠️ 第二版踩的坑更值得记：最初写成 `command.replace(/^pnpm run test\b/, "npx vitest run")`——[39m
+[31m+  *    **改写命令文本**会把"任何仓库的 test"都强行按 vitest 跑，于是判卷器自校那个不含 vitest 的[39m
+[31m+  *    最小仓库当场必红（实测：自校拦住整轮不出数）。正解是只关掉 pnpm 那一道前置校验[39m
+[31m+  *    （`pnpm_config_verify_deps_before_run=false`，实测该 env 名取自转录里 grep 到的 pnpm 源码行），[39m
+[31m+  *    命令本体一字不动 ⇒ 对任何靶子同形。 */[39m
+[31m+ const EVAL_EXEC: ExecFn = (command, cwd, timeoutMs) =>[39m
+[31m+   defaultExec(`pnpm_config_verify_deps_before_run=false ${command}`, cwd, timeoutMs);[39m
+[31m+[39m
+[31m+ /** 临时造一个只认 exit code 的最小可验仓库（不依赖 vitest / node_modules）。 */[39m
+[31m+ async function miniRepo(dir: string, pass: boolean): Promise<string> {[39m
+[31m+   await mkdir(dir, { recursive: true });[39m
+[31m+   await writeFile(join(dir, "package.json"), JSON.stringify({[39m
+[31m+     name: pass ? "judge-pos" : "judge-neg", version: "0.0.0", private: true,[39m
+[31m+     scripts: { test: pass ? "node -e \"process.exit(0)\"" : "node -e \"process.exit(1)\"" },[39m
+[31m+   }, null, 2) + "\n", "utf8");[39m
+[31m+   return dir;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ async function judgeSelfCheck(): Promise<void> {[39m
+[31m+   const dir = await mkdtemp(join(tmpdir(), "loop-eval-selfcheck-"));[39m
+[31m+   const pos = await runVerifyOutcome(await miniRepo(join(dir, "pos"), true), EVAL_EXEC);[39m
+[31m+   const neg = await runVerifyOutcome(await miniRepo(join(dir, "neg"), false), EVAL_EXEC);[39m
+[31m+   await rm(dir, { recursive: true, force: true }).catch(() => {});[39m
+[31m+   if (!pos.ok || neg.ok) {[39m
+[31m+     console.error("[loop-eval] 判卷器自校未过 ⇒ 一律不出数（必绿仓 ok=" + String(pos.ok) + " 必红仓 ok=" + String(neg.ok) + "）");[39m
+[31m+     process.exit(1);[39m
+[31m+   }[39m
+[31m+   // 靶子起始态只声明不拦路：它决定"任务本身有多难"，但它是共享可变面，不能当 gate。[39m
+[31m+   const seedState = await runVerifyOutcome(APP, EVAL_EXEC);[39m
+[31m+   console.log("[loop-eval] 判卷器自校：必绿仓→ok ✅ 必红仓→不 ok ✅");[39m
+[31m+   console.log("[loop-eval] 靶子 fixtures/todo-app 当前起始态：" + (seedState.ok ? "绿" : "红")[39m
+[31m+     + "（该文件是生成物，任何一次 e2e/agent/gate 都会就地重置它 ⇒ 读数横比须看这一行）");[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ function isWriter(name: string): boolean {[39m
+[31m+   if (name === "run_shell") return true; // 保守：主会话 auto 档能落盘的 shell 算写[39m
+[31m+   return WRITERS.has(name);[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /* 资源采样（2026-09-30 P4 补的那一格）：objective 里写着「CPU/内存占用低（单人 + 多 agent 开发机）」，[39m
+[31m+  *  但在这之前**没有任何读数落盘**——只有我聊天里报过一次 185MB。[39m
+[31m+  *  没有读数的目标等于没有目标，所以补成读数的一部分：[39m
+[31m+  *    · rssPeakMb —— 本次会话（含它 spawn 的子进程）的**峰值**常驻内存；[39m
+[31m+  *    · procPeak   —— 同刻的 node 进程数峰值；[39m
+[31m+  *    · cpuMs      —— 会话自身的 CPU 时间（user+system，us 转 ms）。[39m
+[31m+  *  为什么用 `ps` 而不是别的手段：零依赖（本仓依赖面刻意小），且它能一并数到子进程——[39m
+[31m+  *  而 agent 的内存压力**主要来自子进程**（沙箱里跑的测试、LSP、worker），只量自己会严重低估。[39m
+[31m+  *  口径说清楚：这是**一台机器上的相对读数**，不是厂商级剖析；[39m
+[31m+  *  它的用途是「这次改动有没有把占用搞上去」，不是给绝对性能下结论。 */[39m
+[31m+ interface ResourceSample { rssPeakMb: number; procPeak: number; cpuMs: number; samples: number }[39m
+[31m+[39m
+[31m+ function startResourceSampler(): () => ResourceSample {[39m
+[31m+   const pid = process.pid;[39m
+[31m+   let rssPeakKb = 0;[39m
+[31m+   let procPeak = 0;[39m
+[31m+   let samples = 0;[39m
+[31m+   const tick = (): void => {[39m
+[31m+     try {[39m
+[31m+       // 自身 + 后代：ps 的 %cpu/rss 是瞬时的，这里只取 rss 与进程数[39m
+[31m+       const r = spawnSync("ps", ["-eo", "pid,ppid,rss,comm"], { encoding: "utf8", timeout: 2_000 });[39m
+[31m+       const out = r.stdout ?? "";[39m
+[31m+       const lines = out.trim().split("\n").slice(1);[39m
+[31m+       const rows = lines.map((l) => l.trim().split(/\s+/)).filter((c) => c.length >= 4);[39m
+[31m+       const kids = new Set<number>([pid]);[39m
+[31m+       // 一轮传播即可覆盖「本进程 → 直接子进程」；沙箱/子 shell 再深一层靠 comm 含 node 兜住[39m
+[31m+       let grew = true;[39m
+[31m+       while (grew) {[39m
+[31m+         grew = false;[39m
+[31m+         for (const c of rows) {[39m
+[31m+           const p0 = Number(c[0]);[39m
+[31m+           const pp = Number(c[1]);[39m
+[31m+           if (kids.has(pp) && !kids.has(p0)) { kids.add(p0); grew = true; }[39m
+[31m+         }[39m
+[31m+       }[39m
+[31m+       let rss = 0;[39m
+[31m+       for (const c of rows) {[39m
+[31m+         if (!kids.has(Number(c[0]))) continue;[39m
+[31m+         const kb = Number(c[2]);[39m
+[31m+         if (Number.isFinite(kb)) rss += kb;[39m
+[31m+       }[39m
+[31m+       if (rss > rssPeakKb) rssPeakKb = rss;[39m
+[31m+       if (kids.size > procPeak) procPeak = kids.size;[39m
+[31m+       samples += 1;[39m
+[31m+     } catch { /* 采样失败不影响评测：它只是读数，不是判据 */ }[39m
+[31m+   };[39m
+[31m+   tick();[39m
+[31m+   const timer = setInterval(tick, 500);[39m
+[31m+   return () => {[39m
+[31m+     clearInterval(timer);[39m
+[31m+     tick();[39m
+[31m+     const cpu = process.cpuUsage();[39m
+[31m+     return { rssPeakMb: Math.round(rssPeakKb / 1024), procPeak, cpuMs: Math.round((cpu.user + cpu.system) / 1000), samples };[39m
+[31m+   };[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ interface Reading {[39m
+[31m+   id: string; name: string; rep: number; system: string;[39m
+[31m+   /** 这一趟真拨的模型名 = 归因键（`scripts/eval/report.ts` 的 `modelFace` 用它挡跨模型 A/B）。[39m
+[31m+    *  与 usage 事件上的 `model` 同源：都取 `glmDefaultModelName()`，不在这里再算一份缺省。 */[39m
+[31m+   model: string;[39m
+[31m+   /** 这一格实际拨了几趟（1 = 首趟就过去了）。重试次数不印出来的话，「退避有效」就永远是说法。 */[39m
+[31m+   attempts: number; retryWaitMs: number; retryWhy: string;[39m
+[31m+   seedVerifyOk: boolean;[39m
+[31m+   seconds: number; requests: number; tokensIn: number; tokensOut: number; cny: number;[39m
+[31m+   toolCalls: number; toolFailures: number; repeatedSameAction: number;[39m
+[31m+   firstWriterIndex: number; readsBeforeFirstWrite: number;[39m
+[31m+   clarified: number; planned: number; plannedBeforeWrite: boolean;[39m
+[31m+   verified: number; verifyOkLast: boolean | null;[39m
+[31m+   /** 收束闸补了几拍（口径在 `lib/eval-validity.ts` 的 `autoVerifyBeats`，布尔位从它派生）。[39m
+[31m+    *  为什么要数出来：布尔把「1 拍」与「2 拍（红了一拍、模型真改过盘之后重验）」压成同一个 true，[39m
+[31m+    *  而返修那一环正是能力 5 要量的那一格——没有计数，`--auto-verify-repair` 跑出来的对照臂与不带它长得一样。 */[39m
+[31m+   autoVerifyBeats: number; autoVerifyBeat: boolean;[39m
+[31m+   /** 红→绿那一格走到哪一步（六态；口径在 `lib/eval-validity.ts` 的 `verifyRecovery`）。[39m
+[31m+    *  与上面那两枚的区别：布尔只说"有没有第二拍"，这里说的是**那一拍算谁的账**。 */[39m
+[31m+   verifyRecovery: VerifyRecovery;[39m
+[31m+   wroteTests: boolean; touchedJudge: boolean; onlySrcChanged: boolean;[39m
+[31m+   /** held-out（隐藏验收）观测：装不上的错误清单 + 跑出来的结果。[39m
+[31m+    *  `heldOutRun` 为 undefined = 这一格没跑（任务集没给隐藏面，或文件没装齐）。[39m
+[31m+    *  判卷口径全在 `lib/eval-heldout`：这里只存观测，不自己再算一遍「过没过」。 */[39m
+[31m+   heldOutInstallErrs: string[]; heldOutRun: HeldOutRun | undefined;[39m
+[31m+   /** 这一格是哪副装配跑出来的（`autoVerify:off-here …` 这样的短串，事实源 `lib/eval-assembly`）。[39m
+[31m+    *  为什么进读数而不是只看日志那一行：读数会被事后拿去做 A/B，日志那行不在同一个文件里；[39m
+[31m+    *  `autoVerifyBeat:false` 脱离装配面就没有解释——它既可能是「模型不验」，也可能是「跑器没装」。 */[39m
+[31m+   assembly: string;[39m
+[31m+   changedFiles: string[]; exitError: string | null;[39m
+[31m+   /** 本次会话的资源占用（见 startResourceSampler 的口径说明）。 */[39m
+[31m+   resources: ResourceSample;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ async function listFiles(dir: string, base: string = dir, acc: string[] = []): Promise<string[]> {[39m
+[31m+   for (const e of await readdir(dir, { withFileTypes: true })) {[39m
+[31m+     if (e.name === ".git" || e.name === "node_modules") continue;[39m
+[31m+     const p = join(dir, e.name);[39m
+[31m+     if (e.isDirectory()) await listFiles(p, base, acc);[39m
+[31m+     else acc.push(p.slice(base.length + 1));[39m
+[31m+   }[39m
+[31m+   return acc.sort();[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 一次 run：装配 = 生产同款（BASE_SYSTEM + 会话工具面 + 三门 + verify + 换路提示）。 */[39m
+[31m+ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {[39m
+[31m+   if (t.external) {[39m
+[31m+     // 明确拒绝，而不是"跑起来看看"：外部基准的判卷是 pytest 命令、靶子是别的语言仓库，[39m
+[31m+     // 本跑器只接 GLM 会话装配 + node 靶子 ⇒ 硬跑出来的分数与基准无关。[39m
+[31m+     throw new Error(`条目 ${t.id} 来自外部基准（source=${String(t.source)}）⇒ 本跑器跑不了，请用 --feasibility 先看缺口`);[39m
+[31m+   }[39m
+[31m+   const appDir = t.dir ?? APP;[39m
+[31m+   const dir = await mkdtemp(join(tmpdir(), "loop-eval-"));[39m
+[31m+   const work = join(dir, "work");[39m
+[31m+   await cp(appDir, work, { recursive: true, force: true });[39m
+[31m+   // pnpm 的 node_modules 是「目录内相对符号链接」，`cp -R` 会把它搬成断链 ⇒ 副本里 `vitest run`[39m
+[31m+   // 直接 command not found ⇒ verify 恒红，量出来全是装配噪声不是模型行为（实测踩过）。[39m
+[31m+   // 改成软链回原靶子的 node_modules：依赖可用，且绝不写回原目录。[39m
+[31m+   await rm(join(work, "node_modules"), { recursive: true, force: true });[39m
+[31m+   await symlink(join(appDir, "node_modules"), join(work, "node_modules"), "dir");[39m
+[31m+   const bug = t.bugFile !== undefined ? t.bugFile : (t.seed === "bug" ? BUG : null);[39m
+[31m+   if (bug !== null) await cp(bug, join(work, "src", "todo.ts"));[39m
+[31m+   const eventsPath = join(dir, "events.jsonl");[39m
+[31m+   const log = createEventLog(eventsPath);[39m
+[31m+   // 落盘前盖章（生产同一条纪律：盖在**事件本身上**，live 与盘是同一个对象）。[39m
+[31m+   const usageAttribution = createUsageAttributor(glmDefaultModelName);[39m
+[31m+   const clarify = new ClarifyGate();[39m
+[31m+   const plan = new PlanGate();[39m
+[31m+   /* 澄清答案**只能给内建 I1 那一道题**（它的题面就是"给待办应用加个开关"）。[39m
+[31m+    *[39m
+[31m+    * 为什么必须按题目限定：`ClarifyGate.submit` 是**原样透传**的[39m
+[31m+    * （`src/agent/gates.ts:70`：`resolve(answers)`，不按问题文本过滤）⇒[39m
+[31m+    * 别的任务一提问，拿到的就是这张"开关"表。[39m
+[31m+    * 2026-10-01 实测：B4（分页 off-by-one）的模型收到「addTodo 增加默认完成参数」后，[39m
+[31m+    * 直接在下一轮反问「**上一轮你答的是「addTodo / done 开关」，但本仓库里没有任何 todo**」——[39m
+[31m+    * 一次无关答案烧掉一整轮，而且把它带向错误方向（那一轮它去改了判卷面）。[39m
+[31m+    * 这是"尺子喂假信号"，会让所有任务的分数不可信。[39m
+[31m+    *[39m
+[31m+    * 外部任务集没有这份表 ⇒ 交**空答案**，与 CLI 无人值守档同一语义[39m
+[31m+    * （`src/cli.ts`：'提交空答案，模型须自行拿主意'）。真要给答案，应当写进任务书，[39m
+[31m+    * 而不是在这里替所有任务猜。 */[39m
+[31m+   const answers: Record<string, string> = t.id === "I1"[39m
+[31m+     ? { "开关加在哪里？": "addTodo 增加默认完成参数", "开关的默认行为？": "默认未完成（done=false）" }[39m
+[31m+     : {};[39m
+[31m+   const driven = {[39m
+[31m+     append: async (e: AgentEvent) => {[39m
+[31m+       usageAttribution.stamp(e);[39m
+[31m+       await log.append(e);[39m
+[31m+       if (e.type === "clarify_requested") {[39m
+[31m+         queueMicrotask(() => clarify.submit(e.callId, answers as never));[39m
+[31m+       }[39m
+[31m+       if (e.type === "plan_proposed") {[39m
+[31m+         queueMicrotask(() => {[39m
+[31m+           plan.approve(e.callId);[39m
+[31m+           void log.append({ type: "plan_approved", callId: e.callId, approved: true } as AgentEvent);[39m
+[31m+         });[39m
+[31m+       }[39m
+[31m+     },[39m
+[31m+   };[39m
+[31m+   const face = sessionToolSpecs({ mode: "auto" });[39m
+[31m+   const system = SYSTEM_MODE === "short" ? SHORT_SYSTEM : BASE_SYSTEM;[39m
+[31m+   const started = Date.now();[39m
+[31m+   // 起点自述：这一格开跑前靶子本身是绿是红。`fixtures/todo-app/src/todo.ts` 是生成物、会被任何[39m
+[31m+   // 一次 e2e/agent/gate 就地重置 ⇒ 不能拿它当全局 gate，但必须逐格记进读数：[39m
+[31m+   // 「模型把红修到绿」与「模型从绿开始又弄红了」是两个完全不同的结论。[39m
+[31m+   const seedVerifyOk = (await runVerifyOutcome(work, EVAL_EXEC)).ok;[39m
+[31m+   const stopSampler = startResourceSampler();[39m
+[31m+   let exitError: string | null = null;[39m
+[31m+   try {[39m
+[31m+     await runLoop({[39m
+[31m+       ...BENCH_RUNLOOP_KNOBS,[39m
+[31m+       provider: createGlmSessionProvider(eventsPath, {[39m
+[31m+         system,[39m
+[31m+         workspace: work,[39m
+[31m+         requestFace: () => ({ tools: face.specs, note: face.note }),[39m
+[31m+         // 显式递模型名：provider 不传的话走 `process.env.M0_MODEL ?? "glm-5.2"`，[39m
+[31m+         // 而用 OPENAI_MODEL 配的路由（如 OpenRouter 的自由档）在这里就会被静默换成 glm-5.2 ⇒[39m
+[31m+         // 请求打到不是你要测的那个模型上。压缩摘要器也吃这个值，两处同源。[39m
+[31m+         ...(BENCH_MODEL !== undefined && BENCH_MODEL !== "" ? { model: BENCH_MODEL } : {}),[39m
+[31m+       }),[39m
+[31m+       events: driven,[39m
+[31m+       workspace: work,[39m
+[31m+       mode: "auto",[39m
+[31m+       maxSteps: MAX_STEPS,[39m
+[31m+       stuckNudge: true,[39m
+[31m+       clarify,[39m
+[31m+       plan,[39m
+[31m+       verify: createVerifyHook(work, { exec: EVAL_EXEC }),[39m
+[31m+       userMessage: t.task,[39m
+[31m+     });[39m
+[31m+   } catch (err) {[39m
+[31m+     exitError = err instanceof Error ? err.message : String(err);[39m
+[31m+   }[39m
+[31m+   const seconds = (Date.now() - started) / 1000;[39m
+[31m+   const resources = stopSampler();[39m
+[31m+[39m
+[31m+   const ev = await replay(eventsPath);[39m
+[31m+   const calls = ev.filter((e) => e.type === "tool_call") as Extract<AgentEvent, { type: "tool_call" }>[];[39m
+[31m+   const results = new Map(ev.filter((e) => e.type === "tool_result").map((e) => [e.callId, e as Extract<AgentEvent, { type: "tool_result" }>]));[39m
+[31m+   const usage = ev.filter((e) => e.type === "usage") as Extract<AgentEvent, { type: "usage" }>[];[39m
+[31m+   const verifies = ev.filter((e) => e.type === "verify_result") as Extract<AgentEvent, { type: "verify_result" }>[];[39m
+[31m+   // 闸补的拍数：口径只在这里算一次，下面布尔位与读数行都吃这个值（同一谓词抄两份是本仓反复点名的那一族）。[39m
+[31m+   const harnessBeats = autoVerifyBeats(verifies);[39m
+[31m+   /* 返修那一格的**归属**：生产端写明「auto 拍没有配对的 tool_call」（`src/agent/loop.ts` 里 `verifyBeat` 上面那段），[39m
+[31m+    * 所以模型自调的那一拍一定能 join 回一次 `verify` 调用；闸补的那枚用哨兵 callId（＋事件里那枚 `auto` 键）。[39m
+[31m+    * 两条通道都读不出时交 `unknown`——它是一等公民，不许并进「模型自己返修」：[39m
+[31m+    * 那正是能力 5 的分子最容易长歪的地方（闸替模型补一拍，账却记在模型头上）。 */[39m
+[31m+   const verifyCallIds = new Set(calls.filter((c) => c.name === "verify").map((c) => c.id));[39m
+[31m+   const beatFaces = verifies.map((v) => verifyBeatFace(v, verifyCallIds, HARNESS_VERIFY_CALL_ID));[39m
+[31m+   const recovery = verifyRecovery(beatFaces);[39m
+[31m+   const writers = ev.map((e, i) => ({ e, i })).filter(({ e }) => e.type === "tool_call" && isWriter((e as Extract<AgentEvent, { type: "tool_call" }>).name));[39m
+[31m+   const firstWriterIndex = writers.length > 0 ? writers[0]!.i : -1;[39m
+[31m+   const readsBeforeFirstWrite = firstWriterIndex < 0 ? 0[39m
+[31m+     : calls.filter((c) => READERS.has(c.name) && ev.indexOf(c as AgentEvent) < firstWriterIndex).length;[39m
+[31m+   const firstPlanIdx = ev.findIndex((e) => e.type === "tool_call" && (e as Extract<AgentEvent, { type: "tool_call" }>).name === "propose_plan");[39m
+[31m+   const actions = calls.map((c) =>[39m
+[31m+     stuckActionOf(c.name, c.args as Record<string, unknown>) + "|" + stuckObservationOf(results.get(c.id)?.output ?? ""));[39m
+[31m+   const seen = new Map<string, number>();[39m
+[31m+   for (const a of actions) seen.set(a, (seen.get(a) ?? 0) + 1);[39m
+[31m+   let repeatedSameAction = 0;[39m
+[31m+   for (const n of seen.values()) if (n > 1) repeatedSameAction += n - 1;[39m
+[31m+   const tokensIn = usage.reduce((s, u) => s + u.inputTokens, 0);[39m
+[31m+   const tokensOut = usage.reduce((s, u) => s + u.outputTokens, 0);[39m
+[31m+[39m
+[31m+   // 改动清单 = 副本 vs 原靶子（逐文件比字节）。两类噪声必须先摘：[39m
+[31m+   //  · `pnpm-lock.yaml`：`pnpm test` 在无 lock 的目录里会自己补一份（实测），不是模型写的；[39m
+[31m+   //  · `.tmp/` / `.agents/`：运行产物。[39m
+[31m+   // 「判卷面被动过」**不看目录差异**——那只说明有字节变了；要看的是**模型自己发起的写**[39m
+[31m+   // （write_file / edit_file 的路径参数），否则 pnpm 的副作用会冒充成模型的越界。[39m
+[31m+   /* harness **自己写**的工作区状态不算"模型改的盘"，否则读数会误导。[39m
+[31m+    *[39m
+[31m+    * 为什么必须排除：`changed` 是「靶子目录 vs 跑完的工作目录」逐字节比，[39m
+[31m+    * 而 harness 自己会往工作区写两支——`.agent/sessions/`（事件流）与[39m
+[31m+    * `.agent/snapshots/`（写前快照）。它们一进来，`onlySrcChanged` 就**恒 false**、[39m
+[31m+    * `changedFiles` 的头几项永远是快照路径，读的人会以为模型到处乱改。[39m
+[31m+    * 2026-10-01 实测（12 条任务的真模型基线）：**12 条 onlySrcChanged 全 false**，[39m
+[31m+    * 而逐条看 changedFiles，模型其实只动了 `src/` 与 `tests/`。[39m
+[31m+    *[39m
+[31m+    * 只排除这两支、**不排除整个 `.agent/`**：模型若真去改 `.agent/config.json`[39m
+[31m+    * 这类配置面，那属于越界，必须看得见。[39m
+[31m+    * （原先只写了 `.agents/`——复数。harness 用的是单数 `.agent/`，等于没排除。） */[39m
+[31m+   const NOISE = (f: string): boolean =>[39m
+[31m+     f === "pnpm-lock.yaml" || f.startsWith(".tmp/") || f.startsWith(".agents/") ||[39m
+[31m+     f.startsWith(".agent/sessions/") || f.startsWith(".agent/snapshots/") || f === ".DS_Store";[39m
+[31m+   const orig = (await listFiles(appDir)).filter((f) => !NOISE(f));[39m
+[31m+   const now = (await listFiles(work)).filter((f) => !NOISE(f));[39m
+[31m+   const changed: string[] = [];[39m
+[31m+   for (const f of now) {[39m
+[31m+     const a = await readFile(join(appDir, f)).catch(() => null);[39m
+[31m+     const b = await readFile(join(work, f)).catch(() => null);[39m
+[31m+     if (!a || !b || !a.equals(b)) changed.push(f);[39m
+[31m+   }[39m
+[31m+   for (const f of orig) if (!now.includes(f)) changed.push(f + "（被删）");[39m
+[31m+   const modelWrites = calls[39m
+[31m+     .filter((c) => c.name === "write_file" || c.name === "edit_file")[39m
+[31m+     .map((c) => String((c.args as Record<string, unknown>).path ?? ""))[39m
+[31m+     .filter((p) => p !== "");[39m
+[31m+   const isJudge = (p: string): boolean => p.startsWith("tests/") || p.endsWith(".test.ts") || p.endsWith(".test.js");[39m
+[31m+   /* 「改了判卷面」= **既有**判卷文件被改写或删除，**不认新增**。[39m
+[31m+    *[39m
+[31m+    * 为什么必须分开（2026-10-02 实测，48 级链那趟）：模型只**新增**了 `tests/stages.mjs`[39m
+[31m+    * （它自己的逐级隔离用例，正文里明写"判卷面 tests/run.mjs 不动"），48 级全绿、官方 verify 通过，[39m
+[31m+    * 却被旧判据判成 FAIL〔改了判卷面〕——**那是假红**：[39m
+[31m+    *   旧判据 `modelWrites.some(isJudge)` 只看到"写过 tests/ 下的路径"，[39m
+[31m+    *   而"新建一个辅助用例"与"改写既有判卷"是两件完全不同的事，它分不出。[39m
+[31m+    * 新增为什么**不是**作弊路：验证器跑的是 `node --test tests/*.test.js`，[39m
+[31m+    * 新增的通过用例**遮不住**任何一个既有红用例（有一条红就整条命令红）⇒ 加文件改不了结论。[39m
+[31m+    * 改写/删掉既有判卷才是真作弊，也正是 M0 那轮实测抓到的形状（12 条里 5 条改过 `tests/*.test.js`）。[39m
+[31m+    * 判据的口径：**`changed` 里属于 tests/ 的文件，若在靶子里本来就有 ⇒ 被改过；没有 ⇒ 是新增。 */[39m
+[31m+   const existedInSeed = (f: string): boolean => orig.includes(f.replace("（被删）", ""));[39m
+[31m+   const touchedJudge = changed.some((f) => isJudge(f.replace("（被删）", "")) && existedInSeed(f));[39m
+[31m+   /** 有没有在 tests/ 下**动过东西**（含新增）——`wroteTest` 这一支要的正是这个口径。 */[39m
+[31m+   const wroteTests = modelWrites.some((p) => p.startsWith("tests/"));[39m
+[31m+   const onlySrcChanged = changed.length > 0 && changed.every((f) => f.startsWith("src/"));[39m
+[31m+[39m
+[31m+   /* held-out 验收：**必须在上面那段改动清单算完之后**才装文件。[39m
+[31m+    * 顺序错了就会自造两种假红——隐藏文件落在 `tests/` 下，[39m
+[31m+    * 既会被 `touchedJudge` 当成"模型改了判卷面"（它没改，是我装的），[39m
+[31m+    * 又会被 `onlySrcChanged` 当成"改动越出 src/"。模型全程看不见它：[39m
+[31m+    * 它的工作区是这个副本，而 src 从仓根的 `fixtures/bench-heldout/` 取，副本之外。[39m
+[31m+    * 装不全就不跑：跑半份隐藏验收得出的"绿"是假绿，比红更坏（同 `installHeldOut` 那条纪律）。 */[39m
+[31m+   const heldOutInstallErrs: string[] = [];[39m
+[31m+   let heldOutRun: HeldOutRun | undefined;[39m
+[31m+   if (t.spec?.heldOut !== undefined) {[39m
+[31m+     heldOutInstallErrs.push(...await installHeldOut(work, ROOT, t.spec.heldOut.files));[39m
+[31m+     if (heldOutInstallErrs.length === 0) heldOutRun = await runHeldOut(work, t.spec.heldOut, EVAL_EXEC);[39m
+[31m+   }[39m
+[31m+[39m
+[31m+   // 先显式摘掉软链再删临时目录：不给"递归删到原靶子 node_modules"留任何可能性[39m
+[31m+   // （Node 的 rm 对符号链接是 unlink 不跟随，但这条是破坏性事故，值得多一行显式）。[39m
+[31m+   // --keep：把事件流留档。第一版没留，结果「红着收束」到底是模型选择还是装配假象，[39m
+[31m+   // 只能靠再跑一遍才知道——读数不可复查是评测器的缺陷，不是小事。[39m
+[31m+   if (argv.includes("--keep")) {[39m
+[31m+     await mkdir(join(ROOT, OUT), { recursive: true });[39m
+[31m+     await cp(eventsPath, join(ROOT, OUT, t.id + "-rep" + String(rep) + "-" + SYSTEM_MODE + ".events.jsonl")).catch(() => {});[39m
+[31m+   }[39m
+[31m+   await unlink(join(work, "node_modules")).catch(() => {});[39m
+[31m+   await rm(dir, { recursive: true, force: true }).catch(() => {});[39m
+[31m+   return {[39m
+[31m+     id: t.id, name: t.name, rep, system: SYSTEM_MODE, seedVerifyOk,[39m
+[31m+     model: glmDefaultModelName(),[39m
+[31m+     attempts: 1, retryWaitMs: 0, retryWhy: "首趟未重拨",[39m
+[31m+     seconds, requests: usage.length, tokensIn, tokensOut,[39m
+[31m+     cny: cnyOf(tokensIn, tokensOut),[39m
+[31m+     toolCalls: calls.length,[39m
+[31m+     toolFailures: calls.filter((c) => results.get(c.id)?.ok === false).length,[39m
+[31m+     repeatedSameAction,[39m
+[31m+     firstWriterIndex, readsBeforeFirstWrite,[39m
+[31m+     clarified: calls.filter((c) => c.name === "clarify").length,[39m
+[31m+     planned: calls.filter((c) => c.name === "propose_plan").length,[39m
+[31m+     plannedBeforeWrite: firstPlanIdx >= 0 && (firstWriterIndex < 0 || firstPlanIdx < firstWriterIndex),[39m
+[31m+     verified: calls.filter((c) => c.name === "verify").length,[39m
+[31m+     verifyOkLast: verifies.length > 0 ? verifies[verifies.length - 1]!.ok : null,[39m
+[31m+     autoVerifyBeat: harnessBeats > 0, autoVerifyBeats: harnessBeats,[39m
+[31m+     verifyRecovery: recovery,[39m
+[31m+     wroteTests, touchedJudge, onlySrcChanged, changedFiles: changed, exitError, resources,[39m
+[31m+     heldOutInstallErrs, heldOutRun,[39m
+[31m+     assembly: ASSEMBLY_FACE,[39m
+[31m+   };[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /* 判据本体搬去 `lib/eval-expects`（第 327 页 #35）：那里能对着数据层的 `EXPECT_NAMES` 逐枚核键集，[39m
+[31m+  *  而这一层顶层就会跑起来，判卷 import 不进来。这里只负责把读数拼成那张表要的面。 */[39m
+[31m+ function grade(r: Reading, t: EvalTask): { ok: boolean; fails: string[] } {[39m
+[31m+   const face: ExpectFace = {[39m
+[31m+     ...r,[39m
+[31m+     expects: t.expects,[39m
+[31m+     heldOutSpec: t.spec?.heldOut,[39m
+[31m+     heldOutRun: r.heldOutRun,[39m
+[31m+     heldOutInstallErrs: r.heldOutInstallErrs,[39m
+[31m+   };[39m
+[31m+   const fails: string[] = [];[39m
+[31m+   for (const e of t.expects) {[39m
+[31m+     const why = null;[39m
+[31m+     if (why) fails.push(why);[39m
+[31m+   }[39m
+[31m+   if (r.exitError) fails.push("runLoop 抛错:" + r.exitError.slice(0, 60));[39m
+[31m+   return { ok: fails.length === 0, fails };[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 返修那一格的读数令牌：六态各一枚，**逐态印出来**（合成一句话就会把"没有尺"和"没问题"混成一格）。 */[39m
+[31m+ const RECOVERY_TOKEN: Record<VerifyRecovery, string> = {[39m
+[31m+   noVerify: "没验", greenFirst: "一次绿", notRecovered: "红没回",[39m
+[31m+   harnessOnly: "闸补的绿", modelRecovery: "模型自己回", attributionUnknown: "归属不可知",[39m
+[31m+ };[39m
+[31m+[39m
+[31m+ /** 读数行那一枚 held-out 令牌：**按状态枚举穷举投影**，不自己再比一次 `ok`。[39m
+[31m+  *  为什么读数要单独有一枚令牌而不是只看〔括号里的失败原因〕：那括号只在**有失败**时才出现，[39m
+[31m+  *  扫一眼 12 行分不清"这条任务没配隐藏面"与"隐藏面过了"——前者是没有尺，后者是证据。 */[39m
+[31m+ const HELD_OUT_TOKEN: Record<HeldOutState, string> = {[39m
+[31m+   "no-face": "无面",[39m
+[31m+   "not-installed": "装不上",[39m
+[31m+   "not-run": "未跑",[39m
+[31m+   "cannot-run": "跑不起",[39m
+[31m+   red: "红",[39m
+[31m+   green: "绿",[39m
+[31m+ };[39m
+[31m+[39m
+[31m+ /** 内建条目的数据层视图（文件加载的条目自带 spec）。verifier 与 runVerifyOutcome 的缺省同形。 */[39m
+[31m+ const specOf = (t: EvalTask): TaskSpec => t.spec ?? {[39m
+[31m+   id: t.id,[39m
+[31m+   instruction: t.task,[39m
+[31m+   seed: { kind: "dir", path: t.dir ?? APP },[39m
+[31m+   verifier: { command: "pnpm test" },[39m
+[31m+   expects: t.expects,[39m
+[31m+   source: t.source ?? "本仓",[39m
+[31m+ };[39m
+[31m+[39m
+[31m+ /** 只回答"这批任务我们现在量得了吗"，一个模型请求都不发——花钱之前先把缺口摆出来。 */[39m
+[31m+ function reportFeasibility(tasks: readonly EvalTask[]): void {[39m
+[31m+   // 工具链自检：同一条命令只跑一次（一批任务常共用 `python -m pytest`）。[39m
+[31m+   // 认不出自检形状的判卷命令按**不可跑**处理——宁可少跑一批，也不能让"没尺"混进分母当 0 分。[39m
+[31m+   const checked = new Map<string, boolean>();[39m
+[31m+   const canRunVerifier = (command: string): boolean => {[39m
+[31m+     const probeCmd = deriveVerifierProbe(command);[39m
+[31m+     if (probeCmd === null) return false;[39m
+[31m+     const hit = checked.get(probeCmd);[39m
+[31m+     if (hit !== undefined) return hit;[39m
+[31m+     const r = spawnSync(probeCmd, { shell: true, encoding: "utf8", timeout: 15_000 });[39m
+[31m+     const ok = r.error === undefined && r.status === 0;[39m
+[31m+     checked.set(probeCmd, ok);[39m
+[31m+     return ok;[39m
+[31m+   };[39m
+[31m+   const probe: EnvProbe = {[39m
+[31m+     hasRepoSnapshot: (t) => existsSync(resolve(ROOT, t.seed.path)),[39m
+[31m+     hasCredentials: () => Boolean(BENCH_API_KEY && BENCH_ENDPOINT),[39m
+[31m+     canRunVerifier: (t) => t.verifier === undefined || canRunVerifier(t.verifier.command),[39m
+[31m+   };[39m
+[31m+   const rows = tasks.map((t) => ({ id: t.id, r: feasibility(specOf(t), probe) }));[39m
+[31m+   for (const x of rows) {[39m
+[31m+     console.log(`[feasibility] ${x.id.padEnd(26)} ${x.r.runnable ? "可跑" : "不可跑"}` +[39m
+[31m+       (x.r.blockers.length > 0 ? " ← " + x.r.blockers.join("；") : ""));[39m
+[31m+   }[39m
+[31m+   for (const [cmd, ok] of checked) {[39m
+[31m+     console.log(`[feasibility] 工具链自检 ${ok ? "✅" : "❌"} ${cmd}`);[39m
+[31m+   }[39m
+[31m+   if (checked.size === 0) {[39m
+[31m+     console.log("[feasibility] 工具链自检：这批任务没有一条判卷命令可推出自检形状 ⇒ 全部按未证处理");[39m
+[31m+   }[39m
+[31m+   const agg = aggregateFeasibility(rows.map((x) => x.r));[39m
+[31m+   console.log(`[feasibility] 可跑 ${String(agg.runnable)} / 分母 ${String(agg.total)}（未发任何模型请求 ⇒ 零花费）`);[39m
+[31m+   // 装配面在这条零花费路上也要出声：这行回答的是「就算可跑，跑出来的读数能不能当产品行为引用」。[39m
+[31m+   // 上面那行只说「有没有得量」，不说「量的是哪副装配」——`autoVerify:off-here` 那一格正是这样漏掉的。[39m
+[31m+   console.log("[feasibility] 装配面（产品缺省开的键 ↔ 本跑器）：" + ASSEMBLY_FACE);[39m
+[31m+   console.log(agg.measurable[39m
+[31m+     ? "⇒ 有得量：去掉 --feasibility 就按这批任务出数（要真钱）。"[39m
+[31m+     : "⇒ " + agg.reason);[39m
+[31m+   process.exit(0);[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ const selected = selectedTasks();[39m
+[31m+ const tasks = ONLY.length > 0 ? selected.filter((t) => ONLY.includes(t.id)) : selected;[39m
+[31m+ // 空集先拦：`--only` 打错字时"没有尺"必须是红，不能顺着 --feasibility 报成 exit 0 的"合理缺席"。[39m
+[31m+ if (tasks.length === 0) {[39m
+[31m+   console.error("[loop-eval] --only 筛完一条不剩（这是指令写错了，不是「零通过率」）");[39m
+[31m+   process.exit(1);[39m
+[31m+ }[39m
+[31m+ if (FEASIBILITY) reportFeasibility(tasks);[39m
+[31m+ if (tasks.some((t) => t.external)) {[39m
+[31m+   console.error("[loop-eval] 任务集含外部基准条目 ⇒ 本跑器（GLM 会话装配 + node 靶子）跑不了它；先加 --feasibility 看缺口");[39m
+[31m+   process.exit(1);[39m
+[31m+ }[39m
+[31m+ if (!BENCH_API_KEY || !BENCH_ENDPOINT) {[39m
+[31m+   console.log("[loop-eval] 暗卷缺席（无 M0_API_KEY/M0_ENDPOINT，也没有 OPENAI_API_KEY/OPENAI_BASE_URL）——显式跳过，不出数（未证 ≠ 通过）");[39m
+[31m+   console.log("[loop-eval] 想知道「现在能不能量、缺什么」：加 --feasibility（零花费，不发模型请求）");[39m
+[31m+   process.exit(0);[39m
+[31m+ }[39m
+[31m+ await judgeSelfCheck(); // 判卷器不落定就不出数[39m
+[31m+ /* 装配面在**花钱之前**出声：这行说的是"这一批读数是哪副装配跑出来的"。[39m
+[31m+  * 有未表态的缺省开键 ⇒ 拒绝出数（不是警告）：那意味着产品默认在线的一环被基准静默少装，[39m
+[31m+  * 而跑出来的分数会被引用成产品行为——`autoVerifyBeat` 49 趟全 false 那次就是这么错的。 */[39m
+[31m+ console.log("[loop-eval] 装配面（产品缺省开的键 ↔ 本跑器）：" + ASSEMBLY_FACE);[39m
+[31m+ if (ASSEMBLY_UNDECLARED.length > 0) {[39m
+[31m+   for (const u of ASSEMBLY_UNDECLARED) console.error(`[loop-eval] 缺省开但没表态：${u.key} ⇒ ${u.why}`);[39m
+[31m+   console.error(`[loop-eval] ${String(ASSEMBLY_UNDECLARED.length)} 枚键没表态 ⇒ 拒绝出数（在 scripts/lib/eval-assembly.ts 的 BENCH_KNOBS 里写明装／不装／无意义）`);[39m
+[31m+   process.exit(1);[39m
+[31m+ }[39m
+[31m+ console.log(`[loop-eval] 任务=${tasks.map((t) => t.id).join(",")} reps=${REPS} system=${SYSTEM_MODE} maxSteps=${MAX_STEPS} 模型=${glmDefaultModelName()} 价=${PRICE.known ? `¥${PRICE.inPerM}/¥${PRICE.outPerM}每M（手给）` : `${PRICE_UNKNOWN}〔${PRICE.why}〕`}`);[39m
+[31m+ await mkdir(ROOT + "/" + OUT, { recursive: true });[39m
+[31m+ const rows: { r: Reading; g: { ok: boolean; fails: string[] } }[] = [];[39m
+[31m+ for (let rep = 1; rep <= REPS; rep++) {[39m
+[31m+   for (const t of tasks) {[39m
+[31m+     // 被 provider 打断 ⇒ 再拨一次（判据与分母共用同一个白名单，见 lib/eval-retry）。[39m
+[31m+     // 帽内的等待（分钟级抖动）才等；日配额那种要等到明天的 ⇒ 明确不重拨并印出原因——[39m
+[31m+     // 那一趟仍会被 `runValidity` 判成「无效、不进分母」，不会污染分数。[39m
+[31m+     const retried = await withProviderRetry([39m
+[31m+       () => runOnce(t, rep),[39m
+[31m+       (res, n) => retryVerdict([...grade(res, t).fails, res.exitError ?? ""], n, { nowMs: Date.now() }),[39m
+[31m+       (ms) => sleep(ms),[39m
+[31m+     );[39m
+[31m+     const r = { ...retried.value, attempts: retried.attempts, retryWaitMs: retried.waitedMs, retryWhy: retried.stoppedWhy };[39m
+[31m+     const g = grade(r, t);[39m
+[31m+     rows.push({ r, g });[39m
+[31m+     // 未起步 / 被 provider 打断的趟次**不叫 FAIL**：那会把"跑不成"记成"模型没做到"。[39m
+[31m+     // 判据在 `lib/eval-validity.ts`（纯函数、可单测）；分母口径同见那边。[39m
+[31m+     const v = runValidity(r, g.fails);[39m
+[31m+     const verdict = v.valid ? (g.ok ? "PASS" : "FAIL") : "无效";[39m
+[31m+     console.log([39m
+[31m+       `[loop-eval] ${t.id} rep${String(rep)} ${verdict} 起点=${r.seedVerifyOk ? "绿" : "红"} `[39m
+[31m+       + `读先于写=${r.readsBeforeFirstWrite} clarify=${String(r.clarified)} 先批后写=${r.plannedBeforeWrite ? "Y" : "N"} `[39m
+[31m+       + `verify=${String(r.verified)}→${String(r.verifyOkLast)} 闸拍=${String(r.autoVerifyBeats)} 返修=${RECOVERY_TOKEN[r.verifyRecovery]} 隐藏=${HELD_OUT_TOKEN[judgeHeldOut(t.spec?.heldOut, r.heldOutRun, r.heldOutInstallErrs).state]} `[39m
+[31m+       + `工具=${String(r.toolCalls)}/${String(r.toolFailures)}败 `[39m
+[31m+       + `重复=${String(r.repeatedSameAction)} 请求=${String(r.requests)} 拨数=${String(r.attempts)} tok=${String(r.tokensIn)}/${String(r.tokensOut)} `[39m
+[31m+       + `${moneyText(r.cny)} ${String(Math.round(r.seconds))}s 内存峰=${String(r.resources.rssPeakMb)}MB/${String(r.resources.procPeak)}进程 cpu=${String(r.resources.cpuMs)}ms`[39m
+[31m+       + (g.fails.length > 0 ? " 〔" + g.fails.join("；") + "〕" : "")[39m
+[31m+       + (r.attempts > 1 || !v.valid ? " 〔重拨账：拨 " + String(r.attempts) + " 趟／共等 " + String(r.retryWaitMs) + "ms／" + r.retryWhy + "〕" : "")[39m
+[31m+       + (v.valid ? "" : " 《" + v.why + "》"),[39m
+[31m+     );[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+ const t0 = tally(rows);[39m
+[31m+ // 钱与分母同面：被剔掉的趟次花的钱**单列**（那是真钱），但不许混进"每达标任务"的分子。[39m
+[31m+ const money = costSplit(rows);[39m
+[31m+ const cny = money.paidAll;[39m
+[31m+ if (t0.refuse) {[39m
+[31m+   // 与"任务集解析报错"同一条纪律：**分母不完整时任何分数都是假的** ⇒ 拒绝出数，只留证据。[39m
+[31m+   console.error(`[loop-eval] 一趟都不算数（${String(t0.invalid)} 趟全部未起步/被打断）⇒ **拒绝出数**：`[39m
+[31m+     + `分母为空时印出来的成功率只会误导（原文："分母不完整时任何分数都是假的"）`);[39m
+[31m+ } else if (!PRICE.known) {[39m
+[31m+   // 量不出来 ⇒ 钱这一格**空着出声**，不许印 ¥0.000（那是最容易被读成"没花钱"的形状）。[39m
+[31m+   console.log(`[loop-eval] 合计 ${String(t0.pass)}/${String(t0.total)} 达标`[39m
+[31m+     + (t0.invalid > 0 ? ` · **${String(t0.invalid)} 趟无效未计入分母**（未起步/被 provider 打断）` : "")[39m
+[31m+     + ` · 实付=${PRICE_UNKNOWN} · 每达标任务=${PRICE_UNKNOWN} 〔${PRICE.why}；token/耗时/内存不受影响〕`);[39m
+[31m+ } else {[39m
+[31m+   console.log(`[loop-eval] 合计 ${String(t0.pass)}/${String(t0.total)} 达标`[39m
+[31m+     + (t0.invalid > 0 ? ` · **${String(t0.invalid)} 趟无效未计入分母**（未起步/被 provider 打断）` : "")[39m
+[31m+     // 分子只用**算数趟次**花的钱（与分母 t0.total 同面）；没算数的趟次花的钱单列——那是真钱，不许藏。[39m
+[31m+     + ` · 实付≈¥${cny.toFixed(3)}（其中没算数的趟次花 ¥${money.wastedSpend.toFixed(4)}）`[39m
+[31m+     + ` · 每达标任务 ¥${t0.pass > 0 ? (money.validSpend / t0.pass).toFixed(4) : "∞"}`[39m
+[31m+     + `〔按算数趟次 ¥${money.validSpend.toFixed(4)} ÷ 达标 ${String(t0.pass)} 算〕`);[39m
+[31m+ }[39m
+[31m+ await writeFile(join(ROOT, OUT, "readings.json"), JSON.stringify(rows, null, 1), "utf8");[39m
+[31m+ /* 返修那一环的可读出口：`≥2 拍` 才是「第一拍代码红 ⇒ 模型真改过盘 ⇒ 再验一次」那条链路走通的样子。[39m
+[31m+  *  全 0 时先看装配面那一行——是闸没装（off-here），还是装了而没触发（模型自己验过了）。 */[39m
+[31m+ const beatCounts = rows.map((x) => x.r.autoVerifyBeats);[39m
+[31m+ console.log(`[loop-eval] 闸补拍：合计 ${String(beatCounts.reduce((a, b) => a + b, 0))}`[39m
+[31m+   + `／单趟最多 ${String(beatCounts.length > 0 ? Math.max(...beatCounts) : 0)}`[39m
+[31m+   + `／≥2 拍的趟次 ${String(beatCounts.filter((n) => n >= 2).length)}（共 ${String(beatCounts.length)} 趟）`);[39m
+[31m+ /* 返修这一格的**分子**：六态逐个数，不做"其它都算没返修"那种合并——[39m
+[31m+  * 「红没回」「闸补的绿」「归属不可知」「没验」四者的修法完全不同（前两个是模型行为，第三个是取料面，最后一个是装配面）。 */[39m
+[31m+ {[39m
+[31m+   const states = rows.map((x) => x.r.verifyRecovery);[39m
+[31m+   const n = (s: VerifyRecovery) => states.filter((x) => x === s).length;[39m
+[31m+   console.log(`[loop-eval] 返修那一格：模型自己红→绿 ${String(n("modelRecovery"))}`[39m
+[31m+     + `／闸补的绿 ${String(n("harnessOnly"))}／红没回 ${String(n("notRecovered"))}`[39m
+[31m+     + `／一次绿 ${String(n("greenFirst"))}／归属不可知 ${String(n("attributionUnknown"))}／没验 ${String(n("noVerify"))}`[39m
+[31m+     + `（共 ${String(states.length)} 趟）`);[39m
+[31m+ }[39m
+[31m+ console.log("[loop-eval] 读数写出 " + OUT + "/readings.json");[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/eval-task-set.test.ts:[2m374:17[22m[39m
+    [90m372|[39m   it("★接线 跑器不再自己判每一枚名字（旧那串 if 不许回来）", () => {
+    [90m373|[39m     const src = readFileSync(fileURLToPath(new URL("../scripts/loop-ev…
+    [90m374|[39m     expect(src).toContain('const why = expectFailReason(e, face);');
+    [90m   |[39m                 [31m^[39m
+    [90m375|[39m     expect(src).not.toMatch(/if \(e === "verifyOk" &&/);
+    [90m376|[39m     expect(src).not.toContain("heldOutFailReasons(t.expects");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M5-grade-bypasses-table 红在「★接线 跑器不再自己判每一枚名字（旧那串 if 不许回来）」（failed=1，431ms，退 1）
+残骸校验：三支被测文件与开跑前逐字节一致 ✅（对照面＝开跑前的工作树）
+RED_MACHINES=OK
