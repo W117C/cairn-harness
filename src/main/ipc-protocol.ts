@@ -158,8 +158,10 @@ export interface AgentApi {
   /** goal 模式：给某个会话设定/改设目标（轮次上限 + 美元上限），或 `clear:true` 清除。
    *  不发 = 会话不自动续跑。`clamped` 回条 = 入参被钳制过的字段点名（不静默改用户的预算）。 */
   setGoal(req: { sessionId?: string; objective?: string; maxTurns?: number; maxUsd?: number; clear?: boolean }): Promise<{ ok: boolean; error?: string; clamped?: string[] }>;
-  /** P3（审查）：取消当前交互 run——信号沿 runLoop 轮界/门等待/长驻工具透传。 */
-  runCancel(): Promise<{ ok: boolean; error?: string }>;
+  /** P3（审查）：取消当前交互 run——信号沿 runLoop 轮界/门等待/长驻工具透传。
+   *  M3-5：补可选 sessionId 走会话级取消（kernel-host cancel(sessionId)，T2 per-session controller）；
+   *  缺省无参 = 兼容旧调用（host 侧 fail-visible：{ok:false,"会话不在运行"}）。 */
+  runCancel(sessionId?: string): Promise<{ ok: boolean; error?: string }>;
   /** M1d 手动压缩入口（M1e 起 preload 暴露：token 面板按钮）。 */
   compact?(): Promise<CompactResponse>;
   onEvent(cb: (e: AgentEvent) => void): () => void;

@@ -63,8 +63,12 @@ const wired: Partial<Record<InvokeChannel, (...args: unknown[]) => unknown>> = {
   run: (req) => host.run(req as never),
   decide: (askId, approved, scope) => host.decide(askId as string, approved as boolean, scope as never),
   // channels 表（T2）钉的键是 runCancel；KernelHost 方法名是 cancel（brief 快照里写 cancel 与表不符——映射类型红线拦下）。
-  // renderer 侧会话级 runCancel(sessionId) 由 T5 接线（ipc-protocol 可选参）——现渲染层不传 id，
-  // host.cancel 的 T1 语义仍是 M2 取消缝（取消当前交互 run），T2 落 per-session controller。
+  // M3-5 接线：renderer 打断按钮真实传 sessionId（ipc-protocol runCancel(sessionId?) 可选参，preload
+  // 程序化桥自动透传）⇒ 会话级取消（T2 per-session controller）。渲染层不传 ⇒ undefined 直进
+  // host.cancel ⇒ {ok:false,"会话不在运行"} 的 fail-visible 语义保留（兼容无参调用）。
+  // cast 定案（typecheck 实测 TS2345）：wired 表形参是 (...args: unknown[]) 的上下文 unknown，
+  // host.cancel 形参必选 string ⇒ 直传必红；此洗参是 wired 表房式（同 decide/createSession），
+  // 非 T5 遗留——传参语义已是真实可选参透传，cast 只发生在类型面。
   runCancel: (sessionId) => host.cancel(sessionId as string),
   listSessions: () => host.listSessions(),
   // createSession 首参 M3 起是工作区（原 name 槽位被 M3 接口接管）；渲染层现不传 ⇒ 缺省 activeWorkspace
