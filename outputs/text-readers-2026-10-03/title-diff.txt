@@ -1,0 +1,19 @@
+两棵树 vitest list 的 title 级对照（原始清单不入库；取料命令见页内）：
+旧＝.worktrees/gate-mutate-328 @ 4254a84 →     3915 行
+新＝.worktrees/gate-mutate-329 临时 detach 22c440d →     3929 行
+只在新树（＋14 条，全在 tests/text-readers.test.ts）：
+  ＋ tests/text-readers.test.ts > findReadCallSites：只数代码里的调用，不数字符串与注释里的字面 > ★合成源码字符串里的假调用不算（第 328 页现读：全文正则量出 403 处，其中 27 处躺在夹具正文里）
+  ＋ tests/text-readers.test.ts > findReadCallSites：只数代码里的调用，不数字符串与注释里的字面 > 代码里的三种写法都数到，且各归一种动态／字面形状
+  ＋ tests/text-readers.test.ts > findReadCallSites：只数代码里的调用，不数字符串与注释里的字面 > 但模板串插值里的真调用要算——整段跳过会把这一格吞掉
+  ＋ tests/text-readers.test.ts > findReadCallSites：只数代码里的调用，不数字符串与注释里的字面 > 注释里的那一句也不算读取者（行注释与块注释两种）
+  ＋ tests/text-readers.test.ts > readersOf：清单只收「仓内源码面 + 盘上真有那份文件 + 不是自己」 > 仓外面（node_modules／临时盘）、指不到盘上文件的字面量、判卷读自己——三种都不进清单
+  ＋ tests/text-readers.test.ts > readersOf：清单只收「仓内源码面 + 盘上真有那份文件 + 不是自己」 > 同一份文件被多份判卷读 ⇒ 逐份列出，不压成一个数
+  ＋ tests/text-readers.test.ts > 四态归位：字面量／运行期路径／形状不认识 > ../ 的基准是判卷自己所在目录，不是仓根（逃出纳名目录时rel 为空、不进清单）
+  ＋ tests/text-readers.test.ts > 四态归位：字面量／运行期路径／形状不认识 > 字面量能定出仓内 rel：join(REPO|ROOT, …) 与 new URL(…) 两种写法同一目标
+  ＋ tests/text-readers.test.ts > 四态归位：字面量／运行期路径／形状不认识 > 真的切不出第一个参数时才进「形状不认识」，而且三态相加＝分母
+  ＋ tests/text-readers.test.ts > 四态归位：字面量／运行期路径／形状不认识 > 运行期路径的每一子形状分开印，且绝不并进「形状不认识」（帽是 0，混一次就永远红）
+  ＋ tests/text-readers.test.ts > 汇总行：四态不许并进一句话（读不到与没有要分得开） > 汇总把三态各自印出来，且带那句同句自检
+  ＋ tests/text-readers.test.ts > 汇总行：四态不许并进一句话（读不到与没有要分得开） > 空语料不许读成「0 处调用所以一切正常」——分母那格要印 0（不藏）
+  ＋ tests/text-readers.test.ts > 真表现读与接线 > ★接线 CLI 吃的是代码态扫描器与那张帽，不是全文正则（旧写法不许回来）
+  ＋ tests/text-readers.test.ts > 真表现读与接线 > ★第 327 页那次事故，这把尺当时就该指出来：读 `scripts/loop-eval.ts` 文本的判卷里必须有 eval-heldout 与 eval-validity
+只在旧树（−0 条）：0 条
