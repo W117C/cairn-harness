@@ -1260,6 +1260,15 @@ const MUTATIONS = [
     apply: (s) => s.replace("const drafted = await writeDraftFromFailedSession({", 'const drafted = await Promise.resolve({ skipped: "stub" }); if (false) await writeDraftFromFailedSession({'),
     expectFail: "⑥ runSessionEndDistill 跑一条失败会话 ⇒ fixtures/gym/drafts/<会话 id> 真出现",
   },
+  // ---- 能力 5 的假完成：goal 的证据取料只认父流（worker 子流的 verify_result 带 agent_id 落同一份 JSONL）----
+  {
+    id: "goal-evidence-keeps-worker-beats",
+    src: "src/agent/goal.ts",
+    test: "tests/goal-evidence-attribution.test.ts",
+    desc: "证据取料退回合并主流 ⇒ worker 的绿拍替父会话宣布 verified（说了＝验了那种假绿），worker 的红拍又替它判 failed",
+    apply: (s) => s.replace("evidence: workerVerificationEvidence(parentWindow),", "evidence: workerVerificationEvidence(window),"),
+    expectFail: "只有 worker 验绿过 ⇒ 父会话证据是 absent，判据不许收 done（这就是假完成那一格）",
+  },
   {
     id: "budget-unpriced-tokens-swallowed",
     src: "src/agent/orchestrator-join.ts",

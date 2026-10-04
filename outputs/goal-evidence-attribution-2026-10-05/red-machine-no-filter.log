@@ -1,0 +1,51 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/Cairn/deepseek harness[39m
+
+ [31m❯[39m tests/goal-evidence-attribution.test.ts [2m([22m[2m5 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[32m 5[2mms[22m[39m
+   [31m❯[39m projectGoal 的证据取料：只认父流那一拍 [2m(5)[22m
+[31m     [31m×[31m 只有 worker 验绿过 ⇒ 父会话证据是 absent，判据不许收 done（这就是假完成那一格）[39m[32m 3[2mms[22m[39m
+     [32m✓[39m 父流自己验绿 ⇒ verified 且判据收 done（零回归：这条改动不许把真绿也滤掉）[32m 0[2mms[22m[39m
+     [32m✓[39m 父验之后父又写盘 ⇒ stale（次序判据不在这次改动范围内，不许被顺手洗成 verified）[32m 0[2mms[22m[39m
+[31m     [31m×[31m worker 红拍也不许替父会话判 failed（同一道闸的另一极性）[39m[32m 1[2mms[22m[39m
+     [32m✓[39m 反向半边：worker 自己那份流（每条都带 agent_id）进共用判据仍出 verified[32m 0[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/goal-evidence-attribution.test.ts[2m > [22mprojectGoal 的证据取料：只认父流那一拍[2m > [22m只有 worker 验绿过 ⇒ 父会话证据是 absent，判据不许收 done（这就是假完成那一格）
+[31m[1mAssertionError[22m: expected 'verified' to be 'absent' // Object.is equality[39m
+
+Expected: [32m"absent"[39m
+Received: [31m"verified"[39m
+
+[36m [2m❯[22m tests/goal-evidence-attribution.test.ts:[2m44:28[22m[39m
+    [90m 42|[39m       verifyBeat("v1", true, "agent-7"), // worker 子流的自动拍
+    [90m 43|[39m     ]);
+    [90m 44|[39m     expect(view?.evidence).toBe("absent");
+    [90m   |[39m                            [31m^[39m
+    [90m 45|[39m     expect(view?.wrote).toBe(true); // 写过盘这件事仍算（worker 真改了东西）
+    [90m 46|[39m     expect(decision(String(view?.evidence), Boolean(view?.wrote)).kind…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/goal-evidence-attribution.test.ts[2m > [22mprojectGoal 的证据取料：只认父流那一拍[2m > [22mworker 红拍也不许替父会话判 failed（同一道闸的另一极性）
+[31m[1mAssertionError[22m: expected 'failed' to be 'absent' // Object.is equality[39m
+
+Expected: [32m"absent"[39m
+Received: [31m"failed"[39m
+
+[36m [2m❯[22m tests/goal-evidence-attribution.test.ts:[2m62:28[22m[39m
+    [90m 60|[39m   it("worker 红拍也不许替父会话判 failed（同一道闸的另一极性）", () => {
+    [90m 61|[39m     const view = projectGoal([G(), ...writePair("w1"), verifyBeat("v1"…
+    [90m 62|[39m     expect(view?.evidence).toBe("absent");
+    [90m   |[39m                            [31m^[39m
+    [90m 63|[39m   });
+    [90m 64|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m3 passed[39m[22m[90m (5)[39m
+[2m   Start at [22m 02:08:39
+[2m   Duration [22m 277ms[2m (transform 81%, import 17%, tests 2%, worker 1%)[22m
+

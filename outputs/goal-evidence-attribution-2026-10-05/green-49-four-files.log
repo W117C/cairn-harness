@@ -1,0 +1,34 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/Cairn/deepseek harness[39m
+
+[90mstdout[2m | tests/goal-continue.test.ts[2m > [22m[2mgoal 模式端到端（真入口，缺省零行为）[2m > [22m[2m设了目标但这一轮没写盘也没验证 ⇒ 立刻停，并落一条写明理由的 goal_stopped（读答型目标不烧钱）
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/goal-continue.test.ts[2m > [22m[2mgoal 模式端到端（真入口，缺省零行为）[2m > [22m[2m没人应答（管道/CI）同样不续跑：与「定时任务」分成两支，判据是**同一句停机理由**
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/goal-continue.test.ts[2m > [22m[2mgoal 模式端到端（真入口，缺省零行为）[2m > [22m[2m没人应答（管道/CI）同样不续跑：与「定时任务」分成两支，判据是**同一句停机理由**
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/goal-continue.test.ts[2m > [22m[2mgoal 模式端到端（真入口，缺省零行为）[2m > [22m[2m停过的目标不会因用户再发一条而自动复活：停止是终态，要再跑得改设目标
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/goal-continue.test.ts[2m > [22m[2mgoal 模式端到端（真入口，缺省零行为）[2m > [22m[2m停过的目标不会因用户再发一条而自动复活：停止是终态，要再跑得改设目标
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/goal-continue.test.ts[2m > [22m[2mgoal 模式端到端（真入口，缺省零行为）[2m > [22m[2m轮次上限到点必停：只跑到 maxTurns 轮，且最后一轮仍是 goal 代发的（origin 记着是谁发的）
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/goal-continue.test.ts[2m > [22m[2mgoal 美元闸端到端：模型名也算得出钱，并且真的拦下续跑[2m > [22m[2m设 $0.05 上限 × 一轮 200k/20k 用量 ⇒ goal_stopped 点名美元上限（不被轮次/无产出理由顶包）
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ [32m✓[39m tests/goal-continue.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 49[2mms[22m[39m
+ [32m✓[39m tests/goal-stop-decision.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/goal-drift.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/goal-evidence-attribution.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m      Tests [22m [1m[32m49 passed[39m[22m[90m (49)[39m
+[2m   Start at [22m 02:08:28
+[2m   Duration [22m 913ms[2m (transform 60%, import 30%, tests 9%, worker 1%)[22m
+

@@ -13125,6 +13125,17 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 6. **一处刻意不做（带代价，不是遗漏）**：子代理建议的第二支接线（bench 跑完红轨迹也自动落草稿，`scripts/loop-eval.ts` 约 4 行）**不接**——bench 每红一趟就在 `fixtures/gym/drafts/` 撒未跟踪目录，会直接污染隔壁会话的 hunk 归属读数，而配套要改的 `.gitignore` 此刻在别人手里（未提交）。登记为 `#101`，等 `.gitignore`／`loop-eval.ts` 腾出手再谈，且谈之前要先量「一趟撒几个」。
 7. **量纲与没跑**：本轮跑的是三支判卷（44 条）＋ `node --check` 变异表；**没跑**全量核心判卷、`head-cert` 认证、`mutate-verify` 真杀（两条新锚点等落库后在干净树逐条杀）。本页不宣布任何「绿了」。
 
+## 2026-10-04 · 第 383 页：能力 5 的「假完成」补上一道闸——worker 的绿拍不再替父会话宣布 verified（四处消费者里漏掉的那一支）
+
+这一格来自第 381 页那支护闭环的子代理（`outputs/verify-loop-audit-2026-10-05/report.md:1` 第 4 节），主线程复核后施工。
+
+1. **缺陷形状**：worker 子流的 `verify_result` 带着 `agent_id` 落进**同一份**会话 JSONL。同一件事在四处消费者那里都要过滤（`src/agent/context.ts` 的投影、`tool-choice.ts` 的销账、`prune.ts`、`compaction.ts`），共用谓词就是 `hasWorkerAttribution` 那一份，注释里还专门写了「别再各写一份」——而 `projectGoal` 是唯一没滤的那一支（`src/agent/goal.ts`）。后果不是「读数偏一点」：**父会话一个字没验，只要有个 worker 验绿过，goal 判据就直接 `done` 收场**（＝能力 5 最忌的「说了＝验了」）；反极性同样错——worker 的红拍会替父会话判 `failed`，把续跑方向也带错。
+2. **改法只有一行**：证据取料改成 `window.filter((e) => !hasWorkerAttribution(e))`（判据本体一个字没动，`workerVerificationEvidence` 的次序判据、环境拍不记账那三条本来就对）。**`wrote` 刻意仍看合并面**：worker 真写过盘就不许把目标判成「压根没产出」而停掉——那是反方向的假阴，两种错不同源所以分开处理。worker 自己的四态不受影响：那条走 `orchestrator.ts` 吃未装饰的 `w.events`，不经这里。
+3. **判卷写三向**（新支 `tests/goal-evidence-attribution.test.ts` 5 条）：①只滤父流（缺陷格：worker 绿 ⇒ 父证据 `absent`，且续跑判据不许收 `done`）；②零回归（父流自己验绿 ⇒ `verified` 且收 `done`）；③次序判据没被顺手洗掉（父验后父又写 ⇒ `stale`）；④反极性（worker 红 ⇒ 仍 `absent`）；⑤**反向半边**——worker 自己那份每条都带 `agent_id` 的流直接进共用判据仍要出 `verified`。第⑤条是防「把过滤塞进 `workerVerificationEvidence` 里面」那种"更彻底"的修法：那样 worker 四态会集体塌成 `absent`，supervisor 跟着说谎，比原来的洞更大。
+4. **读数**（取料目录 `outputs/goal-evidence-attribution-2026-10-05`）：改后连跑 goal 面四支＝`Test Files 4 passed (4)`、`Tests 49 passed (49)`、`EXIT=0`（`green-49-four-files.log`，18:08）；造红一台（把过滤摘回 HEAD 的取料）＝`Tests 2 failed | 3 passed (5)`、`EXIT=1`，红的正是①与④两条**不同**用例，②③⑤照绿（`red-machine-no-filter.log`）；复原 `cp` 备份后 `cmp` 逐字节一致。本笔同带锚点 `goal-evidence-keeps-worker-beats`。
+5. **这一格与 `#93` 的分工要说清**：同一份报告里最响的那条是「verify 的 `skipped` 被 loop 记成代码红」，那一格**没动**（要同笔改 loop 的 `verifyBeat` 三态，且与本笔不同面）；更要紧的那条「`trustedRepo` 恒 false 且无用户可达入口 ⇒ 缺省开着的 autoVerify 从未真跑」是**授权形状**问题，已拟选项与代价待裁决，不在本线程自己拍。
+6. **量纲与没跑**：本轮跑四支判卷（49 条）＋一支造红；**没跑**全量核心判卷、认证、`mutate-verify` 真杀（三条新锚点等落库后在干净树逐条杀）。本页不宣布任何「绿了」。
+
 
 
 

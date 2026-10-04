@@ -6,6 +6,7 @@
 // 主会话、worker、级联三处说的必须是同一件事，否则又是一份第二事实源。
 import type { AgentEvent, WorkerEvidence } from "../events";
 import { clampToTokenBudget } from "./text-budget";
+import { hasWorkerAttribution } from "./context";
 import { hasSessionWrites, workerVerificationEvidence } from "./worker-report";
 import { GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, traceGoal } from "./goal-trace";
 import { bucketsSpendUsd, priceForModel, roundUsd } from "./orchestrator-join";
@@ -240,10 +241,16 @@ export function projectGoal(events: AgentEvent[]): GoalView | null {
   const trace = traceGoal(events);
   if (trace === null) return null;
   const window = events.slice(trace.at + 1);
+  // 证据只认**父流**那一拍：worker 的 verify_result 带 agent_id 落进同一份 JSONL，不滤就等于
+  // 让 worker 替父会话宣布 verified——而父会话此后可能一个字都没验过（能力 5 最忌的假绿）。
+  // 同一条归因谓词四处消费者都在用（context 投影／tool-choice 销账／prune／compaction），
+  // 这一处是漏的那一支；`wrote` 刻意仍看合并面：worker 真写过盘就不许把目标判成「压根没产出」，
+  // 那是反方向的假阴。worker 自己那份证据走 orchestrator 那条（吃未装饰的 w.events），不经这里。
+  const parentWindow = window.filter((e) => !hasWorkerAttribution(e));
   return {
     spec: trace.spec,
     turn: trace.turn,
-    evidence: workerVerificationEvidence(window),
+    evidence: workerVerificationEvidence(parentWindow),
     wrote: hasSessionWrites(window),
     truncated: lastTurnWasTruncated(window),
     stopped: trace.stopped,
