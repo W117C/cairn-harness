@@ -13577,6 +13577,16 @@ const MUTATIONS = [
     apply: (s) => s.replace("\\d{4}-\\d{2}-\\d{2}(?:-\\d{4})?)/gu", "\\d{4}-\\d{2}-\\d{2})/gu"),
     expectFail: "两种形状各钉一条：普通 `outputs/<主题>-<date>/` 与 `head-cert-<rev>-<date>-<HHMM>`",
   },
+  // ---- 2026-10-05：R2 的「一致性判据」随判卷同笔配的锚点 ----
+  {
+    id: "engines-floor-below-feature-requirement",
+    src: "package.json",
+    test: "tests/engines-consistency.test.ts",
+    desc: "engines.node 的下限调回低于 import.meta.dirname 的要求（20.11）⇒ 在**声明支持**的区间上"
+      + "取 `.dirname` 会得 undefined 并当场 TypeError。评审 §2.3 R2 的原形状（当时 `>=20.3.0`）",
+    apply: (s) => s.replace('"node": ">=20.11.0 <25"', '"node": ">=20.3.0 <25"'),
+    expectFail: "真仓：下限覆盖全部已用特性（缺口为 0）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
@@ -13805,7 +13815,17 @@ function headStateOf(rel) {
  *  「没红在期望用例上——可能误伤无关用例」，把人的注意力引向「expectFail 写错了」这个假因。
  *  本会话内实踩两次，故就地判出来。transpileModule 只报语法诊断（不做类型检查）——
  *  突变体本来就允许类型层面的取巧（`if (false)` 之类）。 */
-function mutantSyntaxProblem(mutated) {
+function mutantSyntaxProblem(mutated, rel = "") {
+  /* **`.json` 不归 TS 解析器管**（2026-10-05 实测）：`package.json` 的顶层 `{ "node": ">=20.11.0 <25" }`
+   *  在 TS/JS 里被读成**块语句 + 标签语句**，于是 `>=20.11.0 <25` 报 `';' expected`——
+   *  而那份文件本身完全合法。后果不是"少抓一个错"，是**本仓被门管着的文件（package.json）
+   *  根本没法配锚点**：每次加一条就说"改法把源文件改坏"，把人引向"我的 replace 写错了"这个假因。
+   *  JSON 的正确检查是 `JSON.parse`——不是"跳过"：真把 JSON 改坏了照样在这儿拦住。 */
+  if (rel.endsWith(".json")) {
+    try { JSON.parse(mutated); return null; } catch (e) {
+      return "改法致 JSON 非法（测试会红在装载阶段，不算分辨力证据）：" + (e instanceof Error ? e.message : String(e));
+    }
+  }
   const diags = ts.transpileModule(mutated, {
     reportDiagnostics: true,
     compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext, allowJs: true },
@@ -13924,7 +13944,7 @@ function verifyEntry(m) {
     // ② 注入突变
     const mutated = m.apply(original);
     if (mutated === original) return red("no-effect", "突变未生效（锚点可能已失效）");
-    const syntax = mutantSyntaxProblem(mutated);
+    const syntax = mutantSyntaxProblem(mutated, m.src);
     if (syntax !== null) return red("syntax", syntax);
     inFlight.mutated = true; // 从这一行起，盘上的源文件是**改过**的内容
     writeFileSync(srcAbs, mutated);
@@ -14195,7 +14215,7 @@ if (plan.mode === "check-needles") {
       continue;
     }
     if (out === src) continue; // 未生效 = 针脚失效，上面已报
-    const p = mutantSyntaxProblem(out);
+    const p = mutantSyntaxProblem(out, m.src);
     if (p !== null) syntaxBad.push([m.id, p]);
   }
   for (const [id, why] of syntaxBad) console.log(`  ❌ ${id} — ${why}`);
