@@ -17,13 +17,13 @@ import type { Provider, ModelOutput } from "../src/providers";
 import type { Tool } from "../src/tools/base";
 import { writeDraftFromFailedSession, draftDirFor } from "../src/agent/gym/draft";
 import { failureDigestFromEvents, runSessionEndDistill } from "../src/agent/memory/distill";
-import { replay } from "../src/events";
+import { replay, type VerifyCause } from "../src/events";
 
 const user = (content: string): AgentEvent => ({ type: "user_message", content });
 const call = (id: string, name: string, path?: string): AgentEvent =>
   ({ type: "tool_call", id, name, args: path === undefined ? {} : { path } });
 const result = (callId: string, ok: boolean, output = ""): AgentEvent => ({ type: "tool_result", callId, ok, output });
-const verify = (ok: boolean, attempt = 1, maxAttempts = 3, cause?: string): AgentEvent =>
+const verify = (ok: boolean, attempt = 1, maxAttempts = 3, cause?: VerifyCause): AgentEvent =>
   ({ type: "verify_result", callId: "v" + String(attempt), ok, attempt, maxAttempts, results: [], ...(cause ? { cause } : {}) });
 
 /** 一条**真失败**的轨迹：写坏一次 + 验证到上限仍红（cause=code ⇒ 归模型，不是环境红）。 */
