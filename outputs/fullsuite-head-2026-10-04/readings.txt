@@ -1,0 +1,82 @@
+DSH 全量核心判卷 · 现 HEAD 取证读数
+生成：2026-10-04（本目录 outputs/fullsuite-head-2026-10-04/）
+性质：只取证，未改任何生产代码。
+
+============================================================
+0. 在哪儿跑的（隔离方式）
+============================================================
+主树 /Users/ze/Downloads/Cairn/deepseek harness —— 全程未在其中改文件、未 checkout/reset/stash/clean、未提交。
+分离树：/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/agent-fullsuite-9099989e
+  建法：git -C <主树> worktree add --detach <该树> HEAD（建时 HEAD＝9099989e）
+  node_modules 用 cp -al 硬链接复制（根 + fixtures/todo-app），未重新安装。
+  树内只做过两件对本树自身的动作：git checkout --detach 到现 tip、把日志写进该树 .run/。
+  跑完按指示 worktree remove --force 回收（产物先复制到本目录）。
+
+注意：主树 HEAD 在我这一趟里被隔壁推进了三次：
+  9099989e（我建树时）→ a09a3086 → 7f1b4d40 → f91217dc（我写完读数时现读）
+所以我测了两笔，都列在下面；两笔的失败集合完全一致。
+
+============================================================
+1. 退出码（每条都是 `cmd > log 2>&1; echo EXIT=$?` 直接取，不接管道）
+============================================================
+【A 组：分离树 @ a09a3086】
+  node --import tsx scripts/typecheck.ts                                   → TYPECHECK_EXIT=0
+  node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts  → VITEST_EXIT=1
+
+【B 组：同一棵分离树 checkout 到 7f1b4d40（我起跑时的现 tip）】
+  node --import tsx scripts/typecheck.ts                                   → TYPECHECK_EXIT=0
+  node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts  → VITEST_EXIT=1
+
+【C 组：三条红文件的定点复跑（@ a09a3086，验证不是偶发）】
+  vitest run … tests/memory-runner.test.ts tests/scratch-tree-naming.test.ts tests/head-cert-deps.test.ts
+                                                                           → RERUN_EXIT=1
+
+============================================================
+2. vitest 汇总（剥 ANSI 后的原文行；剥法 sed -E 's/\x1b\[[0-9;]*[a-zA-Z]//g'）
+============================================================
+【A 组 @ a09a3086】
+   Test Files  3 failed | 298 passed (301)
+        Tests  4 failed | 4243 passed (4247)
+     Duration  206.99s (tests 88%, import 10%, transform 2%)
+
+【B 组 @ 7f1b4d40】
+   Test Files  3 failed | 298 passed (301)
+        Tests  4 failed | 4244 passed (4248)
+     Duration  207.40s (tests 88%, import 10%, transform 2%)
+
+【C 组 定点复跑（只那 3 支文件）】
+   Test Files  3 failed (3)
+        Tests  4 failed | 126 passed (130)
+     Duration  4.71s (tests 87%, transform 10%, import 3%)
+
+两笔全量都是 3 支文件红 / 4 条用例红，且是**同样那 4 条**（逐条标题见 failures.txt）。
+A→B 用例总数 4247→4248：7f1b4d40 那笔给 base-system-discipline 加了 1 条守卫用例，它绿。
+
+============================================================
+3. 耗时
+============================================================
+  A 组全量：起 2026-10-04T20:38:11+0800，止 20:41:39，墙钟 208s（vitest 自报 Duration 206.99s）
+  B 组全量：起 20:54:21，止 20:57:49，墙钟 208s（vitest 自报 Duration 207.40s）
+  typecheck @ a09a3086：起 20:37:55，止 20:38:01 ⇒ 6s
+  typecheck @ 7f1b4d40：退出码 0，输出 1 行；这一趟我只记了退出码与输出、**没单独掐墙钟**（没拿到就不编）。
+
+============================================================
+4. 取料一致性核对
+============================================================
+  HEAD 里 tests/*.test.ts 共 301 支（git ls-files tests | grep '\.test\.ts$'，分离树 @ HEAD）。
+  vitest 报到的文件也是 301 支，两边逐条比对：0 支没跑、0 支多跑。
+  ⇒ 「3 failed | 298 passed (301)」这个分母是 HEAD 全量面，没有被 include 面裁掉。
+  （主树索引里是 303 支，多的 2 支是隔壁已 `git add` 未提交的 tests/repo-hygiene-check.test.ts、
+    tests/security-merge-gate.test.ts —— 不在 HEAD，故不进本读数。）
+
+============================================================
+5. 明确没测到的（不当 0、不当绿）
+============================================================
+  · 23 道门（scripts/gate-check.ts）：本任务没要求跑，**我没跑**，不引用任何门的数。
+  · mutate-verify / head-cert：没跑。
+  · A 组起跑前的「并发判卷套数」我**没有现读**（只补了 B 组一趟的起中间采样，见
+    probe-concurrency-during-runB.txt：判卷套数=1，且那一套的 cwd 就是我这棵树）。
+    ⇒ 按本仓口径，这两趟的 Duration/墙钟属于「并发没钉死」的读数，别当安静态基准引用；
+      但**失败集合本身**不受影响：C 组独占定点复跑同 4 条红，两笔全量同 4 条红。
+  · 现 tip f91217dc 我**没重跑全量**。现读它相对 7f1b4d40 只动 PROGRESS.md + outputs/ 取料
+    （无 src/tests/scripts/fixtures）， judged 面与我测的那一笔逐字节相同 —— 但那是 diff 出来的，不是跑出来的。

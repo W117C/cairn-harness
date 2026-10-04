@@ -1,0 +1,15 @@
+留档 json=/Users/ze/Downloads/Cairn/deepseek harness/outputs/suite-refresh-2026-10-03/suite-quiet.json
+rows=3980  缺省帽=30000（缺省＝config 里的 testTimeout=30000ms）
+not-resolved 条数=10
+  tests/cli-surface.test.ts  ·  「bin/m0.mjs 在盘上且带 shebang（npm bin 的硬要求）」  ← 标题不在那份判卷里
+  tests/cli-surface.test.ts  ·  「package.json 的 bin 指向它（装上才有 m0 这个命令）」  ← 标题不在那份判卷里
+  tests/cli-surface.test.ts  ·  「支一：没有可用摘要器 ⇒ exit 1 + 点名 M0_API_KEY，且会话日志一个字节没动」  ← 标题不在那份判卷里
+  tests/glm-tool-stream-switch.test.ts  ·  「M0_GLM_TOOL_STREAM=0：body 不再带该字段，其余字段逐字不变」  ← 标题不在那份判卷里
+  tests/impact-persistence.test.ts  ·  「⑩ impactIndexDirFor：cacheDir 的兄弟目录（生产 = ~/.m0-agent-loop/impact-index，与拍板同区）」  ← 标题不在那份判卷里
+  tests/impact.test.ts  ·  「⑱defaultImpactCacheDir 缺省 = 应用数据目录 ~/.m0-agent-loop/impact-tags」  ← 标题不在那份判卷里
+  tests/provider-keys.test.ts  ·  「env 并存（injectStoredProviderKey）：M0_API_KEY 已在 = env 优先零行为；不在 = 注入已存 key」  ← 标题不在那份判卷里
+  tests/typecheck-triage.test.ts  ·  「全在未跟踪草稿：tracked 空、scratch 列出该文件，并明说 HEAD 类型干净」  ← 标题不在那份判卷里
+  tests/typecheck-triage.test.ts  ·  「零报错不打任何归因行；git 不可用时（空集）一律按 HEAD 内报（保守）」  ← 标题不在那份判卷里
+  tests/usage-attribution.test.ts  ·  「注入真拨模型 ⇒ 落 glmDefaultModelName 那一档，且跟着 M0_MODEL 走（不是写死的名字）」  ← 标题不在那份判卷里
+cell.notResolved=10  cell.total=3980  state=ok
+cell.notResolvedWhy=[{"file":"tests/cli-surface.test.ts","why":"标题不在那份判卷里"},{"file":"tests/cli-surface.test.ts","why":"标题不在那份判卷里"},{"file":"tests/cli-surface.test.ts","why":"标题不在那份判卷里"}]

@@ -1,0 +1,23 @@
+cwd=/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/agent-fullsuite-9099989e
+mainRoot=/Users/ze/Downloads/Cairn/deepseek harness
+registry rows=5
+  /Users/ze/Downloads/Cairn/deepseek harness  head=7f1b4d401519
+  /Users/ze/Downloads/Cairn/deepseek harness/.qoder/worktrees/agent-general-purpose-7f5785bb  head=9099989e2497
+  /Users/ze/Downloads/Cairn/deepseek harness/.qoder/worktrees/agent-general-purpose-ebe989c9  head=9099989e2497
+  /Users/ze/Downloads/Cairn/deepseek harness/.worktrees/agent-fullsuite-9099989e  head=a09a30860355 (detached)
+  /Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-c7f2ea0f  head=c7f2ea0f435d (detached)
+
+--- 现读全表（含我这棵探针树） ---
+断言①取料派生对：mine=4 underRoot=2 ⇒ FAIL
+  mine 有 / underRoot 没有：["/Users/ze/Downloads/Cairn/deepseek harness/.qoder/worktrees/agent-general-purpose-7f5785bb","/Users/ze/Downloads/Cairn/deepseek harness/.qoder/worktrees/agent-general-purpose-ebe989c9"]
+断言②三类不一致：findings=3 ⇒ FAIL
+  [no-sha-name] 暂存树 agent-general-purpose-7f5785bb 的名字没编码提交（约定是 verify-<sha>）⇒ 回收时无法从名字认出它钉在哪一笔
+  [no-sha-name] 暂存树 agent-general-purpose-ebe989c9 的名字没编码提交（约定是 verify-<sha>）⇒ 回收时无法从名字认出它钉在哪一笔
+  [no-sha-name] 暂存树 agent-fullsuite-9099989e 的名字没编码提交（约定是 verify-<sha>）⇒ 回收时无法从名字认出它钉在哪一笔
+
+--- 排除我这棵探针树（= 只留别的会话的树） ---
+断言①取料派生对：mine=3 underRoot=1 ⇒ FAIL
+  mine 有 / underRoot 没有：["/Users/ze/Downloads/Cairn/deepseek harness/.qoder/worktrees/agent-general-purpose-7f5785bb","/Users/ze/Downloads/Cairn/deepseek harness/.qoder/worktrees/agent-general-purpose-ebe989c9"]
+断言②三类不一致：findings=2 ⇒ FAIL
+  [no-sha-name] 暂存树 agent-general-purpose-7f5785bb 的名字没编码提交（约定是 verify-<sha>）⇒ 回收时无法从名字认出它钉在哪一笔
+  [no-sha-name] 暂存树 agent-general-purpose-ebe989c9 的名字没编码提交（约定是 verify-<sha>）⇒ 回收时无法从名字认出它钉在哪一笔

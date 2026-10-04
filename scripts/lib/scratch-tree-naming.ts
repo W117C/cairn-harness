@@ -19,7 +19,12 @@ export interface NamingFinding {
   detail: string;
 }
 
-const NAME_OF_DIR = /^verify-([0-9a-f]{7,40})$/u;
+/** 允许出现在暂存根下的「名字里带提交号」前缀。加 `head-cert` 不是放宽，是补一格漏：
+ *  认证自己的默认树名 `head-cert-<sha7>` 由 `scripts/head-cert.ts` 的 `TREE` 那行产出，它同样编码了提交号，
+ *  而 10-04 认证第一趟实测：判卷在认证树里跑 ⇒ 这把尺把**认证自己那棵树**读成「名字没编码提交」⇒
+ *  认证永远不可能全绿（尺咬的是自己的车，不是别人的货）。下一棵同类名前缀要加就一起加，
+ *  但「带不带 sha」这一判据不动——`name-not-head` 那格对所有前缀一视同仁，说谎的名字照样响。 */
+const NAME_OF_DIR = /^(?:verify|head-cert)-([0-9a-f]{7,40})$/u;
 
 const base = (p: string): string => p.replace(/[/\\]+$/u, "").split(/[/\\]/u).pop() ?? p;
 
@@ -40,7 +45,7 @@ export function checkScratchTreeNaming(root: string, trees: readonly ScratchTree
     const name = base(t.path);
     const m = NAME_OF_DIR.exec(name);
     if (m === null) {
-      out.push({ kind: "no-sha-name", detail: `暂存树 ${name} 的名字没编码提交（约定是 verify-<sha>）⇒ 回收时无法从名字认出它钉在哪一笔` });
+      out.push({ kind: "no-sha-name", detail: `暂存树 ${name} 的名字没编码提交（约定是 verify-<sha>／head-cert-<sha>）⇒ 回收时无法从名字认出它钉在哪一笔` });
       continue;
     }
     const prefix = (m[1] ?? "").toLowerCase();

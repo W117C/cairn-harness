@@ -1,0 +1,16 @@
+cwd=/Users/ze/Downloads/Cairn/deepseek harness
+mainRoot=/Users/ze/Downloads/Cairn/deepseek harness
+registry rows=3
+  /Users/ze/Downloads/Cairn/deepseek harness  head=c15220dd2405
+  /Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-a6a8762  head=a6a87627b452 (detached)
+  /Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-c7f2ea0f  head=c7f2ea0f435d (detached)
+
+--- 现读全表（含我这棵探针树） ---
+断言①取料派生对：mine=2 underRoot=2 ⇒ PASS
+  mine 有 / underRoot 没有：[]
+断言②三类不一致：findings=0 ⇒ PASS
+
+--- 排除我这棵探针树（= 只留别的会话的树） ---
+断言①取料派生对：mine=2 underRoot=2 ⇒ PASS
+  mine 有 / underRoot 没有：[]
+断言②三类不一致：findings=0 ⇒ PASS

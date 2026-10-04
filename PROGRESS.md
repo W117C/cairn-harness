@@ -12694,6 +12694,69 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 
 
 
+## 2026-10-04 · 第 372 页：认证第一趟真跑了（225s／4269 条／4 条红／4 道门红）——**五条红里三条是我的账**，逐条归因入档，两条只登记不抢隔壁的文件
+
+1. **这一趟本身是读数，不是结论**：`scripts/head-cert.ts` 默认参数、自建自回收 `.worktrees/head-cert-a6a8762`，
+   `Test Files 4 failed | 299 passed (303)｜Tests 4 failed | 4265 passed (4269)｜exit=1`，门 `绿 18/22，红 4`，
+   `TREE=a6a8762 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔`，`本趟墙钟 225.31s`，`4269 条里 0 条用时 ≥ 有效预算 80%`
+   （汇总原文 `outputs/cert-first-run-2026-10-04/cert-summary.txt`）。第 371 页说"三条障碍清了"是真的——它们确实不再红；
+   但**清掉旧障碍不等于绿**，这一趟把以前被那些红盖住的下一层翻出来 5 条。逐条取证与修法写在
+   `outputs/cert-first-run-2026-10-04/red-attribution.md`。
+2. **我的账①（尺咬了认证自己的车）**：`scratch-tree-naming` 红话逐字是
+   `暂存树 head-cert-a6a8762 的名字没编码提交（约定是 verify-<sha>）`。命名尺的白名单只有 `verify-`，
+   而认证自己的默认树名（`scripts/head-cert.ts:48` 产的 `head-cert-<sha7>`）同样带提交号
+   ⇒ **只要判卷在认证树里跑，认证就永远不可能全绿**。修：前缀补 `head-cert`，而 `name-not-head` 对所有前缀一视同仁
+   （放宽的是名字形状，不是"不许说谎"）；判卷补三条合成用例（相符⇒不许多报／说谎⇒照样响／少了 sha 那段⇒仍响），
+   现读 `Tests 10 passed (10)`（从前 7 条，`scratch-tree-naming-after.txt`）。
+3. **我的账②（证人没跟页同笔）**：D-11 红话点名 `outputs/fullsuite-head-2026-10-04/` 一件工件都没入库，
+   而第 371 页引用了它。本笔把那 10 件一并入库，入库前先改掉两支探针的 **import 深度**
+   （`../scripts/…` ⇒ `../../scripts/…`；从 `outputs/<目录>/` 出去要两级——这条我这个会话里第二次踩，
+   第 368 页记过一回）⇒ 探针在主树跑通（退 0，`probe-*-postfix.txt`）。
+   顺带如实记一处尺的陈旧：红话把页号写成「第 307 页」而那句话实在第 371 页（`PROGRESS.md:12691`）
+   ⇒ 第 350 页那条「整本台账被读成一页」的分页缺陷在 HEAD 仍未修，而 `scripts/docs-check.ts` 脏着（在隔壁手里），我只登记。
+4. **我的账③（在飞 API 上写探针＝给自己埋一枚危险码）**：`evidence-typecheck` 红话
+   `危险码 13 条／帽 12 条｜涨了 1 个文件：outputs/d11-page-seam-2026-10-04/probe-citation.mts`。
+   真因：那支探针引 `ABBREV_REF_RE`，而这个导出**只在工作树有、HEAD 没有**（`scripts/docs-check.ts:244` 是隔壁在飞的新格子）
+   ⇒ TS2305 被算进危险码，而帽只准调低。修：撤掉引用在飞导出的那半句（省略式那半的当时读数留在同目录
+   `probe-citation.txt`，等导出进 HEAD 再重跑），门回到 `✅ 12 条／帽 12 条`、全量报错 117→116（`evidence-typecheck-after.txt`）。
+   **帽没抬、豁免没加、别人的尺没动。**
+5. **我造成的两条回归（都归同一件事：改了语义却没同步读旧语义的面）**：
+   ① `tests/plugins-skills.test.ts:63` 钉的是「超预算⇒后面整条丢」，第 370 页我把它改成「装不动就降级成只列名字」，
+   同一条短条目现在保住了 ⇒ 那条旧断言红；② `mutate-needles-check` 三条锚点针脚全部落在被我搬走的旧写法上
+   （`routing-truncation-marker-hides-count`／`routing-dropped-counts-listed-not-missing`／
+   `skill-routing-ignores-disable-model-invocation`）⇒ **锚点绿着但杀不动任何东西**，这是最坏的一种"看起来有守卫"。
+   我在第 370 页报的「89/89 绿」不假，但它只覆盖我自己新写的那两支判卷——**改完被测面只跑"自己动过的判卷文件"，
+   这条老毛病又中了一次**，代价是一趟 225s 的认证。锚点改指已备料：三对新针脚逐字来自现读，
+   当场验过「各只命中 1 次／产出变了／语法合法」（检查形状照抄门里 `mutantSyntaxProblem` 那把尺，见
+   `probe-anchor-repoint.mts` ⇒ `anchor-repoint-readings.txt`），但 `scripts/mutate-verify.mjs` 正被隔壁的
+   M0→CAIRN 改名占着（现读 `8 insertions/8 deletions`，命中 3008/3824/6238/7495/13148，与我这三处 546/554/3178 不同行），
+   ⇒ **贴不上就不贴**，改法与验证顺序写在 `outputs/cert-first-run-2026-10-04/anchor-repoint.md`，登记 `#50` 债上加一根。
+6. **两条我没修的，不是因为懒**：`plugins-skills` 那条断言与 `memory-check` 门 G6 在我动手前**已经被另一路在飞写入改好了**
+   （判卷改成新语义并撤掉零消费者的 `skillListHas`；门侧把这条判据抽成单源 `scripts/lib/source-literals.ts`＋新增 G6b 自证）。
+   归属我只能写到"另一路在飞写入"这一格——文件盘上没有可证的痕迹。这一格对我个人是一记反手：
+   第 371 页我手抄那段抽字面量的正则**就是"第二份派生"**，而仓里早就有的做法是抽成单源；
+   `tests/head-cert-deps.test.ts:1272` 那条 `expected 2 to be +0` 是老账 `#39`（判卷把留档 json 当分母，2 条名字在这台机器取不到成因，
+   探针现读见 `probe-notresolved-postfix.txt`），而该判卷与 `scripts/lib/head-cert-deps.ts` 都脏着 ⇒ 只登记。
+7. **并行只读取证三路回来了，各开一格新账**（详见各自报告，都在 `outputs/*-2026-10-04/`）：
+   能力 1（影响面／代码地图）判定**通了**——写后回注、`impact_query` 读端、地图进 system 块三处都有接线证人，
+   薄点是提示层零背书与 `persistIndex` 少传（`outputs/impact-map-wiring-2026-10-04/verdict.md`）；
+   能力 10（从失败轨迹学习）判定**接线通了、闭环无证人**——摘掉 `distill.ts:202`／`agent-runner.ts:1872`／`inject.ts:267`
+   任一条，全树无尺变红，`lessons-round-ab` 零断言且不在门表 ⇒ **`#75`**；
+   能力 7/8（可回滚）判定 **D7 快照有写无读**——全 `src` 零 reader（负控已验），"可回滚"目前只是"写了没还"
+   ⇒ **`#76`，且它是下一个施工点**：`snapshot.ts` 等相关文件全干净，不碰在飞的 `loop/orchestrator/agent-runner`。
+   这两格我没直接照单施工——子代理的数是取料面读数，动工前自己复验一遍（`#76` 的第一步就是自己 grep 证一次"零 reader"）。
+8. **量纲与没跑**：本笔动 4 支文件（`scripts/lib/scratch-tree-naming.ts`、`tests/scratch-tree-naming.test.ts`、
+   `outputs/d11-page-seam-2026-10-04/probe-citation.mts`、`outputs/fullsuite-head-2026-10-04/probe-{notresolved,scratch-naming}.mts` 两支探针的深度）
+   ＋台账＋`outputs/cert-first-run-2026-10-04/` 十件。跑的是秒级：一支判卷（10 条）、三道门（`evidence-typecheck-check`、
+   `mutate-verify --check-needles`、`typecheck`）、两支探针；**没跑**全量核心判卷、**没重跑认证**（修完再认证是下一页的事）、
+   **没跑** `mutate-verify` 表（在飞）。`typecheck` 主树现读 `TC_EXIT=0`——第 371 页那 1 档已在隔壁改动里消掉，这是现读不是推断。
+   一条机器面残账照写：我起的认证 stdout（`/tmp/dsh-headcert-a6a8762.log`）在这轮之后从 `/tmp` 消失了，
+   工具自己的 `summary.txt` 还在，本页所有数字取的是后者（设计本就落两处，不靠 stdout 的尾）。
+   `#39`／`#57`–`#66`／`#68` 照旧，`#67` 待对齐，`#69`／`#71` 备妥，`#70`／`#72` 待办，`#73` 半落，`#74` 新增，
+   **`#75`／`#76`／`#77`（改语义那笔必先跑"读旧语义的判卷＋锚点"——候选机械法：按锚点表 `test` 字段反查）新增**。本页不宣布任何「绿了」。
+
+
+
 
 
 

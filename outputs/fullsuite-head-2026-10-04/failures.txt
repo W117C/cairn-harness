@@ -1,0 +1,66 @@
+DSH 全量核心判卷 · 当前 HEAD 的逐条失败清单
+测的笔：a09a3086 与 7f1b4d40（两笔失败集合完全一致）；下面每条都在**两笔里各红一次**，并在 C 组定点复跑里第三次红。
+总条数：3 支判卷文件 / 4 条用例。原文见 raw-vitest-a09a3086.log、raw-vitest-7f1b4d40.log。
+
+------------------------------------------------------------
+[1] tests/head-cert-deps.test.ts  （115 条里红 1）
+    用例：贴帽读数：suiteRows／budgetFromTestSource／timingNearCapCell／timingCell（第 262 页）
+          > 真机整表：把留档的那一次全量 json 喂进去，档位计数与逐行重数必须同分母
+    位置：tests/head-cert-deps.test.ts:1272
+    报错：AssertionError: 取不到成因的条数必须是 0（现读见 realdata.log）；不是 0 就先修取料，
+          别把名单当准: expected 2 to be +0
+    要点：判卷把留档 outputs/suite-refresh-2026-10-03/suite-quiet.json（3980 行，取料树 e8a8ed5）
+          按 `it()` 标题回源码取显式预算，有 2 条标题在现源码里查不到 ⇒ notResolved=2。
+          我这趟用判卷自己那套 helper 现读复算了这两条的名字（probe-notresolved.txt）：
+            · tests/typecheck-triage.test.ts ·「全在未跟踪草稿：tracked 空、scratch 列出该文件，并明说 HEAD 类型干净」← 标题不在那份判卷里
+            · tests/typecheck-triage.test.ts ·「零报错不打任何归因行；git 不可用时（空集）一律按 HEAD 内报（保守）」← 标题不在那份判卷里
+          即：留档之后有人改了这两条 `it()` 标题 ⇒ 尺按标题取不到成因。取料没坏（rows=3980、state=ok、
+          total 与逐行重数同分母），红的是「标题漂移必须响」这一格在做它该做的事。
+
+------------------------------------------------------------
+[2] tests/memory-runner.test.ts  （8 条里红 1）
+    用例：压缩接缝（任务9） > 压缩器不触记忆文件（canary 逐字不变）+ 代码路径无 fs/记忆目录引用
+    位置：tests/memory-runner.test.ts:178
+    报错：AssertionError: expected '// 阈值摘要压缩（agent-plan §7.3 V1 定稿）：触发双条…'
+          not to contain '.agent'
+    要点：这条断言读 src/agent/compaction.ts 全文，要求里面**不出现** `.agent` 这个子串
+          （意图是「压缩代码路径不许碰记忆目录」）。HEAD 那份 compaction.ts 里该子串出现 2 次，
+          两处都是 `who(e.agent_id)`（第 552、561 行）——worker 归属那条功能带的字段名，
+          `.agent` 只是 `e.agent_id` 里的巧合子串，不是目录引用。
+          引入它的那一笔现读＝d0ffe15e（第 359 页「Tried & Rejected」）。
+          同一用例前面的 canary 断言（174/175 行，记忆文件逐字不变）是**过的**：红只在字符串扫描那三行里。
+
+------------------------------------------------------------
+[3] tests/scratch-tree-naming.test.ts  （7 条里红 2，其一）
+    用例：真仓面：注册表里的暂存树名字都没说谎
+          > 取料派生对：问的是共享注册表、且主树根下那批一棵都不许漏（暂存树为 0 是合法态，不当红也不当绿证）
+    位置：tests/scratch-tree-naming.test.ts:68
+    报错：A 组 expected [ …(6) ] to deeply equal [ …(4) ]；B 组 expected [ …(4) ] to deeply equal [ …(2) ]
+          （两边数不同，是因为隔壁这半小时里回收了两棵 verify-* 树 —— 见下面「这条红跟着注册表漂」）
+    要点：`mine`（scratchTreesUnder 收主树根底下**所有**子树）与 `underRoot`（只收 `.worktrees/` 下的）
+          做集合相等。差的那 2 棵固定是 `.qoder/worktrees/agent-general-purpose-7f5785bb` 与
+          `…-ebe989c9`（别的会话建的树，落在 `.worktrees/` 之外）。我这棵探针树在 `.worktrees/` 里，
+          两边都收，**不参与这个差**（probe-scratch-naming.txt：排除我这棵之后仍然 mine=3 / underRoot=1，照样红）。
+
+------------------------------------------------------------
+[4] tests/scratch-tree-naming.test.ts  （其二）
+    用例：真仓面：注册表里的暂存树名字都没说谎
+          > 三类不一致都必须为 0，且报出来时要点名是哪棵树
+    位置：tests/scratch-tree-naming.test.ts:73
+    报错：AssertionError: 暂存树 agent-general-purpose-7f5785bb 的名字没编码提交（约定是 verify-<sha>）
+          …；暂存树 agent-general-purpose-ebe989c9 …；暂存树 agent-fullsuite-9099989e …
+          : expected [ { kind: 'no-sha-name', …(1) }, …(2) ] to deeply equal []
+    要点：3 条 no-sha-name findings，报错原文逐条点了树名：
+          2 条来自别的会话的 `.qoder/worktrees/agent-general-purpose-*`，
+          1 条来自**我这把尺自己的树**（按指示起名 `agent-fullsuite-<sha>`，不合 `verify-<sha>` 约定）。
+          排除我这棵（probe-scratch-naming.txt）⇒ findings=2，仍红 ⇒ 我这棵只是第 3 条噪声，不是这一条红的原因。
+
+------------------------------------------------------------
+跨条事实
+------------------------------------------------------------
+· 4 条都在**两笔 HEAD** 里各红一次，C 组独占定点复跑第三次同样红 ⇒ 不是偶发、不是超时类抖动。
+· 两条 scratch-tree-naming 的红**跟着共享 worktree 注册表漂**（同一条断言在 20 分钟内读数从
+  6/4 变成 4/2，判卷与被测代码一个字节没动）。判卷文件头注释自己写明它取的是「共享状态」
+  （`git worktree list` 从任何一棵树问都返回同一张表）。
+· 判卷文件本身的归属现读见 live-status.txt：head-cert-deps.test.ts 与其 lib 都是 ` M`（在飞），
+  memory-runner/compaction、scratch-tree-naming/scratch-tree-naming 两组都 CLEAN。

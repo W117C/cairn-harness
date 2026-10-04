@@ -1,0 +1,12 @@
+=== time ===
+2026-10-04T20:55:32+0800
+=== judge-run sets (distinct pgid matching 'run --config tests/vitest.config.ts') ===
+       1
+--- detail ---
+41966 41966 /bin/zsh -c { source '/Users/ze/.qoder/shell-snapshots/snapshot-zsh-1791103349121-p7cnfb.sh' 2>/dev/null || true; } && export PATH="${__QODER_BASH_P
+41969 41966 /bin/zsh -c { source '/Users/ze/.qoder/shell-snapshots/snapshot-zsh-1791103349121-p7cnfb.sh' 2>/dev/null || true; } && export PATH="${__QODER_BASH_P
+41970 41966 node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts
+=== other-tree node/tsx activity (44306) ===
+  PID  PGID COMMAND
+=== my cwd check for each vitest pid ===
+pgid=41966 cwd=/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/agent-fullsuite-9099989e

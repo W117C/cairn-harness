@@ -1,0 +1,43 @@
+# 现读归属证据（生成时间 2026-10-04T21:00:29+0800）
+
+## 主树 HEAD（现读）
+f91217dcd33e8a8cbe9e0221a6f5a235dfff3947
+f91217dc
+
+## git worktree list（现读，共享注册表＝scratch-tree-naming 两条红的取料面）
+/Users/ze/Downloads/Cairn/deepseek harness                                                 f91217dc [zcode]
+/Users/ze/Downloads/Cairn/deepseek harness/.qoder/worktrees/agent-general-purpose-7f5785bb 9099989e [worktree-agent-general-purpose-7f5785bb]
+/Users/ze/Downloads/Cairn/deepseek harness/.qoder/worktrees/agent-general-purpose-ebe989c9 9099989e [worktree-agent-general-purpose-ebe989c9]
+/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/agent-fullsuite-9099989e             7f1b4d40 (detached HEAD)
+/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-c7f2ea0f                      c7f2ea0f (detached HEAD)
+
+## 逐文件 git status --porcelain（空＝该文件在 HEAD 且工作树干净）
+tests/head-cert-deps.test.ts                             :: [ M tests/head-cert-deps.test.ts]
+scripts/lib/head-cert-deps.ts                            :: [ M scripts/lib/head-cert-deps.ts]
+tests/typecheck-triage.test.ts                           :: [CLEAN]
+outputs/suite-refresh-2026-10-03/suite-quiet.json        :: [CLEAN]
+tests/memory-runner.test.ts                              :: [CLEAN]
+src/agent/compaction.ts                                  :: [CLEAN]
+tests/scratch-tree-naming.test.ts                        :: [CLEAN]
+scripts/lib/scratch-tree-naming.ts                       :: [CLEAN]
+
+## 引入 .agent 子串的那一笔
+d0ffe15e 2026-10-04 第 359 页：换到产品面第一笔——压缩摘要里从此有一段由 harness 确定性拼的「Tried & Rejected
+HEAD 那份 compaction.ts 里 '.agent' 子串出现次数：2
+命中行：
+552:      push(withReason(label + " " + verb + (tags.length > 0 ? "（" + tags.join("；") + "）" : "") + who(e.agent_i
+561:        push(withReason("verify「" + oneLine(r.command, 60) + "」红（" + tags.join("，") + "）" + who(e.agent_
+
+## 我测的两笔与现 tip 的关系
+9099989e -> a09a3086：PROGRESS.md 
+a09a3086 -> 7f1b4d40：
+PROGRESS.md
+src/agent/system-prompt.ts
+tests/base-system-discipline.test.ts
+7f1b4d40 -> 现 tip：
+PROGRESS.md
+outputs/skill-routing-capacity-2026-10-04/docscheck-precommit.txt
+outputs/skill-routing-capacity-2026-10-04/probe.mts
+outputs/skill-routing-capacity-2026-10-04/readings.txt
+outputs/skill-routing-capacity-2026-10-04/variants.mts
+outputs/skill-routing-capacity-2026-10-04/variants.txt

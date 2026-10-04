@@ -1,0 +1,11 @@
+=== time ===
+2026-10-04T20:55:18+0800
+=== my run B pid(s) ===
+pid=41966 cwd=/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/agent-fullsuite-9099989e
+pid=41969 cwd=/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/agent-fullsuite-9099989e
+pid=41970 cwd=/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/agent-fullsuite-9099989e
+=== full pgrep -fl vitest ===
+41966 /bin/zsh -c { source '/Users/ze/.qoder/shell-snapshots/snapshot-zsh-1791103349121-p7cnfb.sh' 2>/dev/null || true; } && export PATH="${__QODER_BASH_PATH_PREFIX:+$__QODER_BASH_PATH_PREFIX:}$PATH" 
+41969 /bin/zsh -c { source '/Users/ze/.qoder/shell-snapshots/snapshot-zsh-1791103349121-p7cnfb.sh' 2>/dev/null || true; } && export PATH="${__QODER_BASH_PATH_PREFIX:+$__QODER_BASH_PATH_PREFIX:}$PATH" 
+41970 node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts
+45773 /Users/ze/.hermes/node/bin/node --experimental-import-meta-resolve --require /Users/ze/Downloads/Cairn/deepseek harness/.worktrees/agent-fullsuite-9099989e/node_modules/.pnpm/vitest@5.0.0_@types

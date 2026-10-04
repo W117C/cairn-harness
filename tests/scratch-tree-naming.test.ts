@@ -47,6 +47,24 @@ describe("合成面：三类不一致各响一次，一致的不出声", () => {
     expect(r.map((f) => f.kind)).toEqual(["no-sha-name"]);
   });
 
+  // 10-04 认证第一趟实测：判卷在认证树里跑，这把尺把认证自己的默认树名 `head-cert-<sha7>` 读成
+  // 「名字没编码提交」⇒ 认证永远不可能全绿。补的是漏，不是松：下面两条一条验"不许多报"、一条验"说谎照样响"。
+  it("认证自己的树（head-cert-<sha>）带着提交号 ⇒ 一条都不许多报", () => {
+    const r = checkScratchTreeNaming(R, [{ path: join(R, ".worktrees", "head-cert-abc1234"), head: H }]);
+    expect(r).toEqual([]);
+  });
+
+  it("换前缀不关判据：head-cert 的名字与实际 HEAD 不符 ⇒ 照样响 name-not-head", () => {
+    const r = checkScratchTreeNaming(R, [{ path: join(R, ".worktrees", "head-cert-abc1234"), head: "9".repeat(40) }]);
+    expect(r.map((f) => f.kind)).toEqual(["name-not-head"]);
+    expect(r[0]!.detail).toContain("名字在说谎");
+  });
+
+  it("认证树少了提交号那段 ⇒ 仍响（前缀放行不等于整名放行）", () => {
+    const r = checkScratchTreeNaming(R, [{ path: join(R, ".worktrees", "head-cert"), head: H }]);
+    expect(r.map((f) => f.kind)).toEqual(["no-sha-name"]);
+  });
+
   it("两棵树钉在同一个提交 ⇒ 响（同一 HEAD 该复用一棵，别留多份像两个证据面）", () => {
     const r = checkScratchTreeNaming(R, [
       { path: join(R, ".worktrees", "verify-abc1234"), head: H },

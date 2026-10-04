@@ -1,0 +1,7 @@
+留档 json=/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/agent-fullsuite-9099989e/outputs/suite-refresh-2026-10-03/suite-quiet.json
+rows=3980  缺省帽=30000（缺省＝config 里的 testTimeout=30000ms）
+not-resolved 条数=2
+  tests/typecheck-triage.test.ts  ·  「全在未跟踪草稿：tracked 空、scratch 列出该文件，并明说 HEAD 类型干净」  ← 标题不在那份判卷里
+  tests/typecheck-triage.test.ts  ·  「零报错不打任何归因行；git 不可用时（空集）一律按 HEAD 内报（保守）」  ← 标题不在那份判卷里
+cell.notResolved=2  cell.total=3980  state=ok
+cell.notResolvedWhy=[{"file":"tests/typecheck-triage.test.ts","why":"标题不在那份判卷里"},{"file":"tests/typecheck-triage.test.ts","why":"标题不在那份判卷里"}]
