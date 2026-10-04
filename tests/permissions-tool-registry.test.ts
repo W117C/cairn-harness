@@ -52,11 +52,20 @@ const session = (mode: PermissionMode) => newAutonomySession(mode, { sandboxAvai
  *  读法：RO=只读档、DF=默认档、GD=引导档、AU=自主档。 */
 type Golden = readonly [ro: string, df: string, gd: string, au: string];
 const GOLDEN: Readonly<Record<string, Golden>> = {
-  // 只读面：四档全部照常放行。**worker 只读档全靠这一段**（read_file/grep/glob/lsp/shell_ro/impact_query）。
+  // 只读面：四档全部照常放行。**worker 只读档全靠这一段**（read_file/grep/glob/shell_ro/impact_query）。
   read_file: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
   grep: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
   glob: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  lsp: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
+  // **2026-10-05 显式改判（#58）**：lsp 从「四档照常放行」移出，四档一律走风险线送审。
+  //  理由：`lsp` 会 spawn **工作区配置里写的命令**（`.agent/lsp.json` 的 `command`），
+  //  那是仓库自带的外部输入——与 verify 的 S3 同一条形状。写那份配置已被 S2 的路径通道
+  //  抬到 high，但**克隆即携带**那条路与写盘无关：模型根本不用动手，配置跟着 clone 一起到。
+  //  它**不算改盘**（`tests/write-face.test.ts` 那条裁决照旧，本笔没动 SIDE_EFFECT_TOOLS），
+  //  但"要不要问人"这一层不能缺席 ⇒ 风险表给 high，四档都出卡。
+  //  未值守（worker）侧因此会 fail-closed 拒绝——那正是想要的：无人可问时，
+  //  不许按一份仓库带来的配置起进程。
+  //  这条金标准的用途正是**逼着改的人显式写下来**——它当初红的时候，红的就是这一格。
+  lsp: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk"],
   shell_ro: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
   impact_query: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
   clarify: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],

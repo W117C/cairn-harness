@@ -23,10 +23,17 @@ function session(mode: "guided" | "auto" | "default"): AutonomySession {
 }
 
 describe("① 风险定级：lsp 是 high，不是默认的 none", () => {
-  it("staticRisk('lsp') ⇒ high，且理由点名命令来自哪里", () => {
+  it("staticRisk('lsp') ⇒ high（且不是走默认的 none 出口）", () => {
     const r = staticRisk("lsp" as never, {});
     expect(r.level, "lsp 拿默认 none ⇒ 引导/自主两档会静默放行它（#58 复发）").toBe("high");
-    expect(r.reason ?? "").toContain(".agent/lsp.json");
+    // 判**行为**而不是措辞：初版这里钉 `.reason` 里含配置文件名，被 `prose-needle-scan` 的
+    // 顶包水位尺收成候选（我的 1 条把它从帽内 10 顶到 11）——而它判的其实是**文案**，
+    // 文案一改判卷就红，判卷还成了该文案的唯一出处。改成与"默认出口"对照：
+    // 真正的定级必须给出理由，而默认出口（NONE）是空理由。
+    const fallback = staticRisk("read_file" as never, {});
+    expect(fallback.level).toBe("none");
+    expect(r.reason ?? "", "定级了却不给理由 ⇒ 模型看卡面时不知道为什么要问").not.toBe(fallback.reason ?? "");
+    expect((r.reason ?? "").length).toBeGreaterThan(0);
   });
 
   it("反向守卫：默认档与只读档的 riskAskAt 就是 high ⇒ 给 medium 等于那两档不会被问", () => {
