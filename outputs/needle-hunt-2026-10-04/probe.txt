@@ -1,0 +1,7 @@
+取料：outputs/suite-refresh-2026-10-03/suite-quiet.json｜行 3980｜默认预算 30000ms
+分档：explicit 145｜implicit 3716｜nonliteral 117｜not-resolved 2
+取不到成因的逐条（文件／标题／当时耗时／文件在不在）：
+  tests/typecheck-triage.test.ts｜“全在未跟踪草稿：tracked 空、scratch 列出该文件，并明说 HEAD 类型干净”｜1.1029579999999868ms｜文件在
+     └ 该文件里留档还有的标题：全在未跟踪草稿：tracked 空、scratch 列出该文件，并明说 HEAD 类型干净 ／ 混合：草稿与 HEAD 缺陷分开列（HEAD 那部分照常是红，不给豁免） ／ 路径含空格也能解析（本仓目录名就有空格；按空白切会截出半个路径） ／ 零报错不打任何归因行；git 不可用时（空集）一律按 HEAD 内报（保守）
+  tests/typecheck-triage.test.ts｜“零报错不打任何归因行；git 不可用时（空集）一律按 HEAD 内报（保守）”｜0.15154199999999207ms｜文件在
+     └ 该文件里留档还有的标题：全在未跟踪草稿：tracked 空、scratch 列出该文件，并明说 HEAD 类型干净 ／ 混合：草稿与 HEAD 缺陷分开列（HEAD 那部分照常是红，不给豁免） ／ 路径含空格也能解析（本仓目录名就有空格；按空白切会截出半个路径） ／ 零报错不打任何归因行；git 不可用时（空集）一律按 HEAD 内报（保守）

@@ -1,0 +1,6 @@
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/head-cert-deps.test.ts > 贴帽读数：suiteRows／budgetFromTestSource／timingNearCapCell／timingCell（第 262 页） > 真机整表：把留档的那一次全量 json 喂进去，档位计数与逐行重数必须同分母
+ Test Files  1 failed | 297 passed (298)
+   Duration  204.44s (tests 88%, import 10%, transform 2%)
+窗口两端独占：起前 pgrep -f vitest 退 1（没有别的 vitest）
+      Tests  1 failed | 4217 passed (4218)
