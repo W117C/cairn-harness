@@ -1240,6 +1240,17 @@ const MUTATIONS = [
     apply: (s) => s.replace("    ...(requestModel !== undefined ? { requestModel } : {}),\n", ""),
     expectFail: "per-run 指定强档",
   },
+  // ---- #84（plan 半）：方案门读的是**盘上事实**，不是内存布尔 ----
+  // 摘掉 run 入口那次播种，门就退回「每条用户消息从全 false 重武装」：未批准的方案跨不出本轮，
+  // 而 propose_plan 给模型的回执原文写的是「写禁保持（存在未批准 plan）」——承诺与行为再次分叉。
+  {
+    id: "plan-pending-drops-at-next-run",
+    src: "src/main/agent-runner.ts",
+    test: "tests/plan-persist-cross-run.test.ts",
+    desc: "run 入口不播种 ⇒ 第一轮被拒/没人批的方案，第二轮写面敞开（那句话只在 run 内为真，换个 turn 就翻脸）",
+    apply: (s) => s.replace("if (opts.sessionId) seedPendingPlanFromEvents(await replay(opts.logPath)", "if (opts.sessionId) void (await replay(opts.logPath)"),
+    expectFail: "第一轮方案被拒 ⇒ 第二轮（新 run）写盘仍被方案门挡住，盘上不留痕",
+  },
   {
     id: "budget-unpriced-tokens-swallowed",
     src: "src/agent/orchestrator-join.ts",

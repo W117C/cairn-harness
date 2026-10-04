@@ -88,6 +88,8 @@ export {
   markPlanProposed,
   approvePlan,
   resetPlanState,
+  planPendingFromEvents,
+  seedPendingPlanFromEvents,
   type PlanState,
 } from "./plan-state";
 

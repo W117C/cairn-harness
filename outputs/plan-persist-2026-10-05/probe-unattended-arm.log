@@ -1,0 +1,5 @@
+5ms user_message
+6ms tool_call
+7ms tool_result:ok=false
+7ms assistant_message
+RESULT 8ms {"ok":true}

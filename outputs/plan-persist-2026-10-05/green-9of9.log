@@ -1,0 +1,16 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/Cairn/deepseek harness[39m
+
+[90mstdout[2m | tests/plan-persist-cross-run.test.ts[2m > [22m[2m② 生产入口连跑两轮：未批准的方案跨得过硬切换[2m > [22m[2m第一轮方案被拒 ⇒ 第二轮（新 run）写盘仍被方案门挡住，盘上不留痕
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/plan-persist-cross-run.test.ts[2m > [22m[2m② 生产入口连跑两轮：未批准的方案跨得过硬切换[2m > [22m[2m第一轮方案获批 ⇒ 第二轮答话的是无人值守闸，方案门闭嘴（播种不许把批准过的会话锁死）
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ [32m✓[39m tests/plan-persist-cross-run.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m9 passed[39m[22m[90m (9)[39m
+[2m   Start at [22m 01:56:09
+[2m   Duration [22m 685ms[2m (transform 68%, import 28%, tests 4%)[22m
+

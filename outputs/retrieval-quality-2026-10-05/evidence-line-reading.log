@@ -1,0 +1,42 @@
+evidence 引用逐枚核（HEAD 那份，只读、零建图）｜题数=14
+
+L01  src/permissions/autonomy.ts:435  ⇒ 命中，"isKnownToolName" 确在第 435 行
+L02  src/agent/verify.ts:101  ⇒ "ESCALATE_REPEAT_ATTEMPT" 实际在第 106 行（偏移 5）；声称的第 101 行是「*  模型只会连续收到「超时」并烧光 verify 额度。 */」
+L02  src/events/index.ts:141-149  ⇒ 引用后没有可取的 ASCII 符号名（中文说明／纯锚点）⇒ 不计漂
+L03  src/agent/no-progress.ts:179  ⇒ 命中，"noProgressLadder" 确在第 179 行
+L03  src/agent/loop.ts:297  ⇒ 引用后没有可取的 ASCII 符号名（中文说明／纯锚点）⇒ 不计漂
+L04  src/agent/usage-attribution.ts:25  ⇒ 命中，"createUsageAttributor" 确在第 25 行
+L04  src/main/agent-runner.ts:1599  ⇒ 引用后没有可取的 ASCII 符号名（中文说明／纯锚点）⇒ 不计漂
+L05  src/agent/tool-surface.ts:20-53  ⇒ 命中，"INJECTED_TOOLS" 落在声称的区间 20-53 内
+L06  src/tools/snapshot.ts:28  ⇒ 引用后没有可取的 ASCII 符号名（中文说明／纯锚点）⇒ 不计漂
+L07  src/tools/apply_patch.ts:198-200  ⇒ "hunk" 实际在第 1 行（偏移 -197）；声称的第 198 行是「if (f.op === "rename") {」
+L08  src/main/scheduler.ts:42  ⇒ 命中，"DEFAULT_CONCURRENCY_CAP" 确在第 42 行
+L08  src/main/agent-runner.ts:1143  ⇒ "serveScheduler" 实际在第 1150 行（偏移 7）；声称的第 1143 行是「scheduler?.stop();」
+L09  src/agent/memory/inject.ts:27  ⇒ "MEMORY_TOKEN_BUDGET_DEFAULT" 实际在第 28 行（偏移 1）；声称的第 27 行是「空行」
+L10  src/agent/map/rank.ts:52  ⇒ "buildGraph" 实际在第 77 行（偏移 25）；声称的第 52 行是「/** 对话中提到的标识符（×10）。 */」
+L11  src/agent/no-progress.ts:179  ⇒ 引用后没有可取的 ASCII 符号名（中文说明／纯锚点）⇒ 不计漂
+L11  src/agent/loop.ts:297  ⇒ 引用后没有可取的 ASCII 符号名（中文说明／纯锚点）⇒ 不计漂
+L12  src/main/settings.ts:134  ⇒ 命中，"autoVerify" 确在第 134 行
+L12  src/agent/loop.ts:573  ⇒ 引用后没有可取的 ASCII 符号名（中文说明／纯锚点）⇒ 不计漂
+L13  src/main/sandbox.ts:49  ⇒ 命中，"deny" 确在第 49 行
+L14  src/agent/model-surface.ts:17-145  ⇒ "planSurfaceBudget" 实际在第 15 行（偏移 -2）；声称的第 17 行是「// `MODEL_SURFACE_TOTAL_CHAR_LIMIT` 的文档都」
+
+---- 引用=20｜命中=7｜**漂=6**｜符号在该文件不存在=0｜无法核=7
+
+★ 人工复认（本尺的第一版读数不许直接进帽——自动取词会挑错符号，也会漏掉引用后没有符号的那几条）：
+  自动报的 6 条里：真漂 5 条 ＋ 假漂 1 条。
+    真漂：L02 verify.ts:101→106(+5)｜L08 agent-runner.ts:1143→1150(+7)｜L09 inject.ts:27(空行)→28(+1)
+           ｜L10 rank.ts:52→77(+25)｜L14 model-surface.ts 声称区间 17-145 而定义实为 167
+    假漂 1：L07 apply_patch.ts:198-200 —— 自动取词取到散文里的 `hunk`；声称行第 198 行确实是 `if (f.op === "rename")`。
+  自动量不到、手工补核的 2 条：
+    L03/L11 的 `src/agent/loop.ts:297` 引用后没有符号名 ⇒ 落成「无法核」；297 行是注释，调用实为 304(+7)；
+    L10 那句 `…:52 buildGraph / :164 personalizedPageRank` 的第二枚是**裸行号**、本尺不解析；实为 231(+67)。
+  ⇒ 进账口径：**7 枚引用已漂**（自动 5＋手工 2），落在 14 题里的 **7 题**上
+     （L02、L03 与 L11 同指那一枚 loop.ts:297、L08、L09、L10 两枚、L14）；
+     另有 1 条候选是**假漂**（L07），0 条指向不存在的文件。
+
+读数用途：这是「检索尺的真值面有没有观测者」那一格的**存量登记**分母（本仓帽只准调低）。
+口径提醒：漂的计数随任何一次编辑浮动，所以这一维**建议只登记不拦**——把它做成阻断维
+  就会逼「改代码前先改 fixture」，那是过拟合的另一种写法。真要拦的是文件级存在性与
+  哨兵/负控形状（语义变了才是真变了），而 `absent` 那一格例外：符号在文件里根本没有了，
+  那说明真值题在指一件不存在的事，它比行号漂更该出声。

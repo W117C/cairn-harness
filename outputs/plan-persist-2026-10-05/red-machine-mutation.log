@@ -1,0 +1,65 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/Cairn/deepseek harness[39m
+
+[90mstdout[2m | tests/plan-persist-cross-run.test.ts[2m > [22m[2m② 生产入口连跑两轮：未批准的方案跨得过硬切换[2m > [22m[2m第一轮方案被拒 ⇒ 第二轮（新 run）写盘仍被方案门挡住，盘上不留痕
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/plan-persist-cross-run.test.ts[2m > [22m[2m② 生产入口连跑两轮：未批准的方案跨得过硬切换[2m > [22m[2m第一轮方案获批 ⇒ 第二轮答话的是无人值守闸，方案门闭嘴（播种不许把批准过的会话锁死）
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ [31m❯[39m tests/plan-persist-cross-run.test.ts [2m([22m[2m9 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[32m 30[2mms[22m[39m
+   [32m✓[39m ① planPendingFromEvents：盘上那条事实怎么投影成门布尔 [2m(5)[22m
+     [32m✓[39m 提交了、没有任何决议 ⇒ 有待决方案（这就是「没人答」那一格）[32m 1[2mms[22m[39m
+     [32m✓[39m 批准后不再算待决；**拒绝仍算待决**（回执那句「写禁保持」不许换个 run 就翻脸）[32m 0[2mms[22m[39m
+     [32m✓[39m 交错：c1 拒、c2 批 ⇒ 不留待决；c1 批、c2 只提交 ⇒ 留 c2[32m 0[2mms[22m[39m
+     [32m✓[39m 没有 plan 事件 ⇒ false（零行为：负控，防这把尺恒真）[32m 0[2mms[22m[39m
+     [32m✓[39m 播种只喂事实：没待决就一个字节不改，有待决才把门武装上[32m 1[2mms[22m[39m
+   [31m❯[39m ② 生产入口连跑两轮：未批准的方案跨得过硬切换 [2m(4)[22m
+[31m     [31m×[31m 第一轮方案被拒 ⇒ 第二轮（新 run）写盘仍被方案门挡住，盘上不留痕[39m[32m 18[2mms[22m[39m
+     [32m✓[39m 第一轮方案获批 ⇒ 第二轮答话的是无人值守闸，方案门闭嘴（播种不许把批准过的会话锁死）[32m 5[2mms[22m[39m
+     [32m✓[39m 会话里从来没有过方案 ⇒ 第二轮同样是无人值守闸答话，方案门不许出声（零回归证人）[32m 3[2mms[22m[39m
+[31m     [31m×[31m 接线：runAgent 入口真的去读了盘上那份事实（不是只写了个纯函数）[39m[32m 2[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/plan-persist-cross-run.test.ts[2m > [22m② 生产入口连跑两轮：未批准的方案跨得过硬切换[2m > [22m第一轮方案被拒 ⇒ 第二轮（新 run）写盘仍被方案门挡住，盘上不留痕
+[31m[1mAssertionError[22m: expected '[permission denied] write_file 在 auto…' to contain '方案门'[39m
+
+Expected: [32m"方案门"[39m
+Received: [31m"[permission denied] write_file 在 auto 档下被门拒绝（无人值守 fail-closed：审批请求自动拒绝）"[39m
+
+[36m [2m❯[22m tests/plan-persist-cross-run.test.ts:[2m157:27[22m[39m
+    [90m155|[39m     const second = await runSecondTurn("s-rejected");
+    [90m156|[39m     expect(second.ok).toBe(false);
+    [90m157|[39m     expect(second.output).toContain("方案门");
+    [90m   |[39m                           [31m^[39m
+    [90m158|[39m     await expect(access(join(workspace, "x-second-turn.ts"))).rejects.…
+    [90m159|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/plan-persist-cross-run.test.ts[2m > [22m② 生产入口连跑两轮：未批准的方案跨得过硬切换[2m > [22m接线：runAgent 入口真的去读了盘上那份事实（不是只写了个纯函数）
+[31m[1mAssertionError[22m: run 入口没把播种接到 replay 上: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m tests/plan-persist-cross-run.test.ts:[2m176:108[22m[39m
+    [90m174|[39m   it("接线：runAgent 入口真的去读了盘上那份事实（不是只写了个纯函数）", () => {
+    [90m175|[39m     const src = readFileSync(join(process.cwd(), "src", "main", "agent…
+    [90m176|[39m     expect(/seedPendingPlanFromEvents\(await replay\(opts\.logPath\)/u…
+    [90m   |[39m                                                                                                            [31m^[39m
+    [90m177|[39m   });
+    [90m178|[39m });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m7 passed[39m[22m[90m (9)[39m
+[2m   Start at [22m 01:56:50
+[2m   Duration [22m 728ms[2m (transform 69%, import 26%, tests 5%)[22m
+

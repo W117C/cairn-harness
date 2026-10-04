@@ -48,7 +48,7 @@ import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, goalWindowSpend, par
 // 这里只做「读事件流 → 问它 → 印一行」。**不新增事件类型**——沿用本仓既有先例
 // （goal 的两态就是靠 user_message.origin 承载的），新增一种事件会让重放契约多一个分支。
 import { assistantTurnsFromEvents, goalDriftCell, goalDriftFindings } from "../agent/goal-drift";
-import { checkPermission, enterPlanRunScope, getPlanState, planGateBlocks, sideEffectDecisionTable, type PermissionMode } from "../permissions";
+import { checkPermission, enterPlanRunScope, getPlanState, planGateBlocks, seedPendingPlanFromEvents, sideEffectDecisionTable, type PermissionMode } from "../permissions";
 import {
   evaluate,
   isNetworkCommandCall,
@@ -1612,6 +1612,12 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // M1e 会话模式：sessionId 在场 = 会话列表里的既有会话，append（JSONL 即会话，重放无损）；
     // 无 sessionId = 旧行为（每轮新日志，e2e/ipc-check 等脚本路径字节不变）。
     if (!opts.sessionId) await rm(opts.logPath, { force: true });
+    // #84（plan 半）：方案门的「存在未批准方案」读**盘上事实**，不读内存布尔。
+    // 旧形状：markPlanProposed() 只改 run 级 ALS，而本行上方那句 enterPlanRunScope 每条用户消息
+    // 都从全 false 重武装 ⇒ propose_plan 给模型的回执「写禁保持（存在未批准 plan）」只在本轮为真，
+    // 换个 turn 写面就敞开（不是"重启才丢"，是"下一条消息就丢"）。
+    // 取料只在会话 run 上做：无 sessionId 那条通道盘上那份刚被 rm 掉，读了也是空（省一次空读盘）。
+    if (opts.sessionId) seedPendingPlanFromEvents(await replay(opts.logPath).catch(() => [] as AgentEvent[]));
     lastLogPath = opts.logPath; // 无 sessionId 的调用（headless / 旧通道）才用它兜底压缩对象
     log = createEventLog(opts.logPath);
     if (solpiEnabled({ requestMetering: opts.requestMetering, observationPack: opts.observationPack,

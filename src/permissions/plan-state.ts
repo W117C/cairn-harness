@@ -4,6 +4,7 @@
 // 于是「先批后写」对 spawn 出来的 worker 直接失效（better-harness 评审 C6，本人复验成立）。
 // 状态在这里、判据在这里，任何执行体读到的都是同一份活事实；漏接线的可能性从结构上消掉。
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { AgentEvent } from "../events";
 
 export interface PlanState {
   /** plan 模式（用户武装）：本轮无论模型是否自愿提交方案，未获批即写禁。
@@ -75,4 +76,35 @@ export function resetPlanState(): void {
  *  所以 worker / 级联 / 主会话读到的是同一件事，且调用方忘不掉接线——忘不掉才是修法。 */
 export function planGateLive(): boolean {
   return planGateBlocks(currentPlanState());
+}
+
+/** 盘上那条「存在未批准方案」的事实（#84）。
+ *  口径与压缩面那份「当前 plan」逐字同源（`compaction.ts` 的 keepFirstSet 取的是**最后一组**
+ *  plan_proposed/plan_approved）：**最新一次提交管账**，更早的那条已被它顶掉。
+ *  为什么不能用「所有未结算提案的集合」：那样一条被拒的旧提案会把后来**已获批**的新方案也一起锁死
+ *  ——批准了解锁不了，会话死锁。这条判卷（交错那一格）就是当场把它抓出来的。
+ *  **拒绝算欠**：propose_plan 给模型的回执原文是「方案被拒绝：写禁保持（存在未批准 plan），
+ *  请修订后重新 propose_plan」，跨 run 也得是这一句；否则那句话只在本轮为真，换个 turn 就翻脸。
+ *  纯函数、不碰盘：取料（replay）由调用方做——与 `projectGoal` 同一条不变量：门读事件流，
+ *  不留第二份会话态。 */
+export function planPendingFromEvents(events: readonly AgentEvent[]): boolean {
+  let lastCallId = "";
+  let settled = false;
+  for (const e of events) {
+    if (e.type === "plan_proposed") {
+      lastCallId = e.callId;
+      settled = false;
+    } else if (e.type === "plan_approved" && e.approved && e.callId === lastCallId) {
+      settled = true;
+    }
+  }
+  return lastCallId !== "" && !settled;
+}
+
+/** 用盘上事实武装当前 run 的方案门：没有任何待决方案时**一个字节都不改**（零回归面）。
+ *  只喂事实、不复算闸——判据仍是 `planGateBlocks` 那一份。返回是否播种（给判卷与审计）。 */
+export function seedPendingPlanFromEvents(events: readonly AgentEvent[]): boolean {
+  if (!planPendingFromEvents(events)) return false;
+  setPlanState({ ...currentPlanState(), proposed: true, approved: false });
+  return true;
 }
