@@ -18,7 +18,7 @@ const USAGE = { inputTokens: 100_000, outputTokens: 10_000 };
 /** 真拨那一档折出来的钱（对照基准）。 */
 const usdOf = (name: string): number | null => spentUsdFor(priceForModel(name), USAGE)?.usd ?? null;
 
-const envBackup = { M0A_PROVIDER: process.env.M0A_PROVIDER, M0_MODEL: process.env.M0_MODEL };
+const envBackup = { M0A_PROVIDER: process.env.M0A_PROVIDER, CAIRN_MODEL: process.env.CAIRN_MODEL };
 afterEach(() => {
   for (const [k, v] of Object.entries(envBackup)) {
     if (v === undefined) delete process.env[k];
@@ -85,7 +85,10 @@ describe("接线：两道闸共用同一份派生，且不许再抄第三份解�
       /const model = budgetPriceKeyOf\(args\.runModel\);/);
     expect(t, "run 的解析没递进 goalNextTurn ⇒ 那一支永远只能读设置盘").toMatch(
       /goalNextTurn\(\{[^}]*runModel: modelSelection/);
-    expect(t, "run 的解析没递进编排器 ⇒ 同上").toMatch(/orchestratorExtras\(a\.sandbox, a\.runModel\)/);
+    // 放宽成 `[^)]*`：2026-10-05 S3 信任闸给这一处加了第三个实参（trustedRepo），
+    // 原写法把把**整个实参表**钉死，于是加一个与本断言无关的参数就红。
+    // 原意是「runModel 这一档必须递进编排器」⇒ 前两个实参仍逐字钉住，尾部允许追加。
+    expect(t, "run 的解析没递进编排器 ⇒ 同上").toMatch(/orchestratorExtras\(a\.sandbox, a\.runModel[^)]*\)/);
     expect(t, "逐请求指定的模型没进 buildSessionOrchestrator ⇒ 会话闸看不到本 run 真拨的档").toMatch(
       /\.\.\.\(opts\.modelSelection \? \{ runModel: opts\.modelSelection \} : \{\}\)/);
     // 反向：把闸的键退回设置盘字段（旧写法）必须当场红，而不是靠人记得。
