@@ -7,10 +7,14 @@
 // 至少需要三样东西：两次**同配置**运行给出的**噪声带**、一次改动后的读数、以及
 // **同一批任务**这个前提（任务集换了，分母就换了，横比无意义）。
 //
-// 本模块只做这三件事，不碰跑法（跑法在 `scripts/loop-eval.ts`，是既有的尺，改了就没法横比）：
+// 本模块只做这几件事，不碰跑法（跑法在 `scripts/loop-eval.ts`，是既有的尺，改了就没法横比）：
 //   ① 读 `readings.json`（形状 = `{r, g}[]`，由 loop-eval 写出），口径不对就**出声**而不是静默跳过；
 //   ② 算**噪声带**：同配置两次运行的逐指标绝对差；
-//   ③ 判：改动后的读数相对基线，**逐指标**落在噪声带内还是带外，方向是改善还是退化。
+//   ③ 判：改动后的读数相对基线，**逐指标**落在噪声带内还是带外，方向是改善还是退化；
+//   ④ **跨指标合取闸**（`outcomeGate`）：结果类（成功率/达标数）超带退化 ⇒ 整表**禁止读作改善**，
+//      成本类那几项「变好」只是副作用（事办砸了当然省钱）；
+//   ⑤ **身份闸**（`identityOf`）：读数缺 `headSha`／`ranAt`／`model` 任一 ⇒ 归因面不许印成可比读数，
+//      只当量级。
 //
 // 诚实标注（这条比结论本身重要）：**两点噪声带是弱证据**。
 // 它只能挡住"改动幅度比机器抖动还小"这种假改善，挡不住系统性偏差；
@@ -22,6 +26,10 @@ export interface Row {
   id: string;
   /** 这一趟真拨的模型名（归因键）。缺省空串＝读数来自没有这个键的存量语料 ⇒ 判不出，不是判成同面。 */
   model: string;
+  /** 这一趟跑在哪个 rev 上（身份键之一）。空串＝跑器没盖章 ⇒ 身份闸咬。 */
+  headSha: string;
+  /** 这一趟的时刻，ISO-8601 字符串（身份键之一）。空串＝身份闸咬。 */
+  ranAt: string;
   tokensIn: number;
   tokensOut: number;
   seconds: number;
@@ -50,6 +58,13 @@ const LOWER_IS_BETTER: ReadonlySet<keyof Totals> = new Set([
   "tokensIn", "tokensOut", "seconds", "rssPeakMb", "toolFailures", "repeats",
 ]);
 const HIGHER_IS_BETTER: ReadonlySet<keyof Totals> = new Set(["passed", "successRate"]);
+
+/** **结果类指标**（「成功率／达标数」这一族，即"事情办成了没有"）。
+ *
+ *  它就是上面那张方向表里「越大越好」的那一侧——复用而不是另立一份名单：
+ *  两处各存一份就会各自漂移，而闸判错方向比没有闸更坏（本模块的整条理由）。
+ *  闸的判据因此建在**指标语义**上，不建在指标名的字符串匹配上。 */
+const OUTCOME_METRICS: ReadonlySet<keyof Totals> = HIGHER_IS_BETTER;
 
 /** 参与对账的指标（顺序即打印顺序）。`tasks` 不参与——它是前提不是结果，见 `compare` 的护栏。 */
 export const METRICS: readonly (keyof Totals)[] = [
@@ -82,6 +97,14 @@ function num(v: unknown, what: string): number {
     throw new Error(`读数形状不对：${what} 不是有限数（实读 ${JSON.stringify(v)}）`);
   }
   return v;
+}
+
+/** 身份键的取值：**非空字符串才算有**。缺键、空串、类型不对 ⇒ 一律空串（＝缺章）。
+ *
+ *  这里不抛，是因为存量语料本来就没这些键——本模块要的是「读得动 + 大声说没身份」，
+ *  不是「读不动」。放宽方向只有一个：不许把缺章读成有章。 */
+function identityStr(v: unknown): string {
+  return typeof v === "string" && v !== "" ? v : "";
 }
 
 /** 解析一份 `readings.json`。
@@ -117,6 +140,9 @@ export function parseReadings(text: string, label = "readings"): Row[] {
     return {
       id,
       model: typeof rr["model"] === "string" ? rr["model"] : "",
+      // 身份键取 `r` 内层，兼容盖在 `{r, g}` 记录外层的写法（写侧最终落哪一层由 #63 定）。
+      headSha: identityStr(rr["headSha"] ?? rec["headSha"]),
+      ranAt: identityStr(rr["ranAt"] ?? rec["ranAt"]),
       tokensIn: num(rr["tokensIn"], `${label}[${String(i)}].r.tokensIn`),
       tokensOut: num(rr["tokensOut"], `${label}[${String(i)}].r.tokensOut`),
       seconds: num(rr["seconds"], `${label}[${String(i)}].r.seconds`),
@@ -186,6 +212,47 @@ export function renderModelFace(f: ModelFace): string {
     "两臂拨的不是同一个模型（或同一臂内混了档）⇒ 逐指标差值里混着模型本身的差，不许当改动效果。";
 }
 
+/** **身份闸**（2026-10-05 补）。为什么它排在归因面前头：一份读数不知道自己跑在哪个 rev、
+ *  哪一时刻，就**连「这是同一次改动的读数」这个前提都没证**——此时哪怕模型档名齐了，
+ *  下面的表也只能当量级看。盘上现读的 readings.json 全部没有这三个键，所以这道闸**今天一定会咬**，
+ *  这是设计意图不是事故（写侧该往哪盖、盖什么键，交 `scripts/loop-eval.ts` 那一头，见 #63）。 */
+export const IDENTITY_KEYS = ["headSha", "ranAt", "model"] as const;
+export type IdentityKey = (typeof IDENTITY_KEYS)[number];
+
+export interface IdentityRuling {
+  /** true 只在**三个键每一行都非空**时成立；任一行缺任一键 ⇒ false（fail-closed，不取「多数有就算」）。 */
+  ok: boolean;
+  /** 缺过的键（按 IDENTITY_KEYS 顺序去重）——空数组当且仅当 `ok`。 */
+  missing: IdentityKey[];
+  /** 逐键的缺章行数（分母 = `rows`）。修的人要靠这个数知道要去盖章还是去换读数。 */
+  counts: Record<IdentityKey, number>;
+  rows: number;
+}
+
+/** 三键里任一缺章就咬。传进来的应当是**两侧全部**行（与 `modelFace` 同面）。 */
+export function identityOf(rows: readonly Row[]): IdentityRuling {
+  const counts: Record<IdentityKey, number> = { headSha: 0, ranAt: 0, model: 0 };
+  for (const r of rows) {
+    for (const k of IDENTITY_KEYS) if (r[k] === "") counts[k] += 1;
+  }
+  const missing = IDENTITY_KEYS.filter((k) => counts[k] > 0);
+  return { ok: missing.length === 0, missing, counts, rows: rows.length };
+}
+
+/** 身份闸的固定出口文案（判卷钉逐字；改这一句要同批改判卷）。 */
+export const IDENTITY_SENTENCE = "读数无身份键 ⇒ 只能当量级，不能当结论";
+
+/** 身份面：咬与不咬**两态不同形**。不咬也要印——「没人被挡」这件事得看得见。 */
+export function renderIdentityFace(id: IdentityRuling): string {
+  if (id.ok) {
+    return `读数身份面：✅ 三个身份键齐（headSha／ranAt／model，共 ${String(id.rows)} 行）——差值可以归因给这次改动。`;
+  }
+  const detail = id.missing.map((k) => `${k} 缺 ${String(id.counts[k])}/${String(id.rows)} 行`).join("；");
+  return `读数身份面：❌ **${IDENTITY_SENTENCE}**（${detail}）。` +
+    "rev／时刻／档名任一没盖章 ⇒ 这份读数不知道自己是谁跑的、什么时候跑的。" +
+    "下面那行模型归因面连同整张表，都只按量级读，不按可比读数读。";
+}
+
 /** **噪声带**：同配置两次运行的逐指标绝对差。
  *
  *  它回答的是"什么都不改，两次跑能差多少"。改动幅度落在这个带里 ⇒ 判不出好坏。
@@ -245,6 +312,42 @@ export function compare(
   return { sameTaskSet, baselineTasks: [...baselineTasks], candidateTasks: [...candidateTasks], lines };
 }
 
+/** **跨指标合取闸**：逐指标各判各的，正是这张表最大的误读面。
+ *
+ *  实跑为证（2026-10-05，离线取仓内既有语料）：基线 `outputs/eval-base-a|b`（同配置两次，12 条）、
+ *  候选 `outputs/bench-reps3-2026-10-02` ⇒ **5 项超带 = 3 项 ★改善（输入 token／输出 token／墙钟）
+ *  ＋ 2 项退化，其中成功率从 70.8% 崩到 5.6%**。一次「跑废了」能被这张表印成「改动有效」——
+ *  省下来的钱是**没干活**省下来的，不是效果。
+ *
+ *  闸的判据建在**已经算出来的指标语义**上（`OUTCOME_METRICS` = 方向表里「越大越好」那一侧），
+ *  不靠指标名的字符串匹配。写成纯函数，由 `renderReport` 调用，判卷直接测它。 */
+export interface OutcomeRuling {
+  /** true ⇒ 本表禁止读作改善：不许出现任何「★改善」。 */
+  blocked: boolean;
+  /** 超带且方向为差的结果类指标（闸就是被它们咬住的）。 */
+  degraded: (keyof Totals)[];
+  /** 因为闸而不许印成改善的超带项（成本类那一族）。 */
+  suppressed: (keyof Totals)[];
+}
+
+export function outcomeGate(cmp: Comparison): OutcomeRuling {
+  const beyond = cmp.lines.filter((l) => l.verdict === "beyond-noise");
+  const degraded = beyond
+    .filter((l) => OUTCOME_METRICS.has(l.metric) && l.assessment === "worse")
+    .map((l) => l.metric);
+  const blocked = degraded.length > 0;
+  return {
+    blocked,
+    degraded,
+    suppressed: blocked ? beyond.filter((l) => l.assessment === "better").map((l) => l.metric) : [],
+  };
+}
+
+/** 合取闸的固定出口文案（判卷钉逐字；改这一句要同批改判卷）。 */
+export const GATE_SENTENCE = "⇒ 本表禁止读作改善；成本类超带只是副作用";
+/** 闸咬住时，成本那一格的判定列改印这个——**不含**「★改善」三个字。 */
+const BETTER_UNDER_GATE = "副作用（禁读改善）";
+
 /** 单份读数的取值（多个基线文件取逐指标均值，让"噪声带"有个中心）。 */
 export function meanTotals(all: readonly Totals[]): Totals {
   if (all.length === 0) throw new Error("meanTotals：空数组");
@@ -280,8 +383,10 @@ function fmt(metric: keyof Totals, v: number): string {
   return String(Math.round(v));
 }
 
-/** 渲染成人看的对照表。`band` 未知时**明说判不出**，不给假结论。 */
+/** 渲染成人看的对照表。`band` 未知时**明说判不出**，不给假结论；
+ *  结果类超带退化时**整表禁止读作改善**（`outcomeGate`）。 */
 export function renderReport(cmp: Comparison, bandSource: string): string {
+  const gate = outcomeGate(cmp);
   const out: string[] = [];
   out.push(`噪声带来源：${bandSource}`);
   if (!cmp.sameTaskSet) {
@@ -297,7 +402,8 @@ export function renderReport(cmp: Comparison, bandSource: string): string {
   for (const l of cmp.lines) {
     const bandTxt = l.band === null ? "不可得" : fmt(l.metric, l.band);
     const verdictTxt =
-      l.verdict === "unknown" ? "判不出" : l.verdict === "within-noise" ? "带内" : l.assessment === "better" ? "★改善" : "⚠退化";
+      l.verdict === "unknown" ? "判不出" : l.verdict === "within-noise" ? "带内"
+        : l.assessment === "better" ? (gate.blocked ? BETTER_UNDER_GATE : "★改善") : "⚠退化";
     out.push(
       `${LABEL[l.metric].padEnd(12)}  ${fmt(l.metric, l.baseline).padStart(10)}  ${fmt(l.metric, l.candidate).padStart(10)}  ` +
         `${fmt(l.metric, l.delta).padStart(9)}  ${bandTxt.padStart(9)}  ${verdictTxt}`,
@@ -309,6 +415,13 @@ export function renderReport(cmp: Comparison, bandSource: string): string {
     out.push("⚠ 噪声带不可得（只给了一份基线）⇒ **判不出改动的效果**。请把同一配置多跑一份喂 --baseline。");
   } else if (beyond.length === 0) {
     out.push("结论：所有指标都在噪声带内 ⇒ **这次改动没有可观测效果**（别声称变好了）。");
+  } else if (gate.blocked) {
+    // 那句禁止的话排在任何「省了多少钱」之前，且退化项照常印——闸只挡误读，不挡证据。
+    out.push(`❌ ${gate.degraded.map((m) => LABEL[m]).join("、")} 超带退化 ${GATE_SENTENCE}`);
+    out.push(
+      `   闸挡下的超带项：${gate.suppressed.map((m) => LABEL[m]).join("、") || "无"}` +
+        "——活儿没办成当然省 token 与时间，那是副作用，不许写成效果。",
+    );
   } else {
     const better = beyond.filter((l) => l.assessment === "better");
     const worse = beyond.filter((l) => l.assessment === "worse");
@@ -320,7 +433,30 @@ export function renderReport(cmp: Comparison, bandSource: string): string {
   out.push("");
   out.push("读法：噪声带 = **同配置两次运行**的差。改动幅度落在带内 ⇒ 判不出好坏，不许当成功。");
   out.push("      两点样本是弱证据：要下结论请提高 --reps 并多喂几份 --baseline。");
+  out.push("      合取闸：结果类（成功率/达标数）超带退化 ⇒ 成本类再漂亮也不构成「改善」。");
   return out.join("\n");
+}
+
+/** 出口码：调用方**不读文本**也要能区分四种面。0 之外一律出声，不静默降级。
+ *
+ *  与既有的 `2`（用法错）分开，别挤在一起。任务集不一致那格今天**不占码**——它已有整表作废的
+ *  文本面，而闸的码要留给「表可比但结论被禁」这一族；把两族混进一个码，调用方就分不出该修什么。 */
+export function exitCodeOf(identity: IdentityRuling, gate: OutcomeRuling): number {
+  if (!identity.ok && gate.blocked) return 5;
+  if (!identity.ok) return 3;
+  if (gate.blocked) return 4;
+  return 0;
+}
+
+/** 出口码那一行的逐字说明（也是给人看的汇总面）。 */
+export function renderExitFace(code: number): string {
+  const why: Record<number, string> = {
+    0: "表可信（身份齐、无结果类超带退化）",
+    3: "身份闸咬住：读数无身份键，整表只当量级",
+    4: "合取闸咬住：结果类超带退化，本表禁止读作改善",
+    5: "两道闸都咬：既无身份键，结果类又超带退化",
+  };
+  return `〔出口码 ${String(code)}：${why[code] ?? "未知码"}｜0=可信 3=身份闸 4=合取闸 5=两道都咬；用法错=2〕`;
 }
 
 /** 从 argv 取一个可重复的 flag（`--baseline a --baseline b`）。 */
@@ -359,6 +495,14 @@ if (process.argv[1] !== undefined && process.argv[1].endsWith("report.ts")) {
   );
   // 归因面打在表**之前**：两臂不同档时，下面那张表的差值里没有一行能归因给改动。
   const face = modelFace(baseRows.flat(), candRows.flat());
+  // 身份闸打在归因面**之前**：连 rev／时刻都没盖章的读数，档名再齐也只能当量级——
+  // 这一行必须**先**印，否则下一行的「同一档 ✅」会被读成可比读数（那正是本闸要挡的）。
+  const identity = identityOf([...baseRows.flat(), ...candRows.flat()]);
+  process.stdout.write(renderIdentityFace(identity) + "\n");
   process.stdout.write(renderModelFace(face) + "\n\n");
   process.stdout.write(renderReport(cmp, bandSource) + "\n");
+  // 出口码落在两道闸上：调用方不必 parse 文本就能分清「可信 / 只有量级 / 禁止读作改善」。
+  const code = exitCodeOf(identity, outcomeGate(cmp));
+  process.stdout.write(renderExitFace(code) + "\n");
+  process.exit(code);
 }

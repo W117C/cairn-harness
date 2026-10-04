@@ -1,0 +1,33 @@
+--- a/scripts/docs-check.ts
++++ b/scripts/docs-check.ts
+@@ -460,10 +460,20 @@
+  *  「台账任何一页点名的证人都要追得到」，所以宽度跟着换，实现不换）。 */
+ export const CREDENTIAL_HEAD = (head: string): boolean => head.includes("凭证");
+ export const ANY_PAGE_HEAD = (): boolean => true;
++/** 分页点的**唯一一份**谓词（#61②，机制与代价见台账第 350／351 页）。两条规矩：
++ *  ⑴ h3 一律算缝——这是既有口径，D-9 的分母（段数与可比对读数）就是按它量的，这一笔不收窄它；
++ *  ⑵ h2 只在它是**页标题**时算缝——台账从第 308 页起（引入提交 `92cc196d`，2026-10-03）把页标题写成了 `## `，
++ *  而从前这里只认 `^### ` ⇒ 最后一道 h3 之后的两千多行**一个分页点都没有**，几十条 `## 20xx-…·第 N 页`
++ *  被并进同一条伪页（key＝「第 307 页」，几十页的 refs／numbers／shas 全挂在它身上）；
++ *  D-9（读数回查）与 D-11（证人回查）都以**页**为单位 ⇒ 这些页共用一个分母＝跨页顶包，
++ *  「未点名页」那一格（帽 0）还被合并掩盖成 0。
++ *  ⚠️ 判据要与被度量方**共用决策点**：页标题的形状是写页那一侧的约定，读页这一侧不许再抄第二份——
++ *  凡要问「这是不是一页的抬头」都吃这支 `PAGE_HEAD_RE`（剥抬头标记那一行跟着认 2～3 级，别按级别各写一遍）。 */
++export const PAGE_HEAD_RE = /^(?:### |## 20\d\d-\d\d-\d\d · 第 \d+ 页)/u;
+ 
+ export function ledgerPages(text: string, headFilter: (head: string) => boolean = CREDENTIAL_HEAD): CredPage[] {
+   const lines = text.split("\n");
+-  const heads = lines.map((l, i) => [l, i] as const).filter(([l]) => /^### /u.test(l));
++  const heads = lines.map((l, i) => [l, i] as const).filter(([l]) => PAGE_HEAD_RE.test(l));
+   const out: CredPage[] = [];
+   heads.forEach(([head, start], n) => {
+     if (!headFilter(head)) return;
+@@ -481,7 +491,7 @@
+     const key = /第 \d+ 页/u.exec(head)?.[0] ?? head.slice(0, 16);
+     // 页提到的提交号：段体内所有 7～40 位 hex token（含 `本笔（\`sha\`）`、`@\`sha\``、`TREE=<sha>` 各种写法）。
+     const shas = [...new Set([...body.matchAll(/\b([0-9a-f]{7,40})\b/gu)].map((m) => m[1]!.slice(0, 7)))].sort();
+-    out.push({ key, title: head.replace(/^### /u, ""), dirs, numbers: [...numbers].sort(), shas, refs: ledgerWitnessRefs(body) });
++    out.push({ key, title: head.replace(/^#{2,3} /u, ""), dirs, numbers: [...numbers].sort(), shas, refs: ledgerWitnessRefs(body) });
+   });
+   return out;
+ }

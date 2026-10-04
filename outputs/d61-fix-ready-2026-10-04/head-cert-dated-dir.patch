@@ -1,0 +1,19 @@
+--- a/scripts/docs-check.ts
++++ b/scripts/docs-check.ts
+@@ -184,8 +184,14 @@
+ /** dated 目录名（`<主题>-YYYY-MM-DD`）的**唯一一份**形状。第 285 页：`ledgerWitnessRefs` 刚写出来时自己抄了一遍
+  *  这个正则，于是锚点 `cred-dir-date-pattern-month-locked` 的针脚从 1 处变 2 处（`--check-needles` 当场报『待复认』），
+  *  而 `replace` 只改第一处 ⇒ 那条锚点会咬到新写的这一支上、把 D-9 那一支放过去（规则 217/255：针脚跟着实现走，
+- *  两处同字面量就是两处会各自漂的决策点）。取值域只在一处决定，两个消费者共用同一支正则。 */
+-const DATED_DIR_RE = /outputs\/([A-Za-z0-9._-]+-\d{4}-\d{2}-\d{2})/gu;
++ *  两处同字面量就是两处会各自漂的决策点）。取值域只在一处决定，两个消费者共用同一支正则。
++ *  #61①（机制与现读见台账第 350 页）：日期段后面再允许可选的 `-HHMM`——`scripts/head-cert.ts` 自己产出的凭证目录名
++ *  形状就是 `head-cert-<rev7>-<YYYY-MM-DD>-<HHMM>`（时刻取自 `scripts/lib/head-cert-provenance.ts` 的 `provenanceStamp`），
++ *  而旧形状止于日期且**没有右边界** ⇒ 贪婪回溯把时刻那四位留在捕获外，`ledgerWitnessRefs` 见后续字符不是 `/`
++ *  就走「目录点名」那一支，最终 ref＝截断名＋`/`＝一个从来没存在过的目录 ⇒ 台账里写成全名的合法引用一律被判成假红。
++ *  ⚠️ 新加的这一组**必须是非捕获** `(?:…)`：下面 `WITNESS_REF` 从本支的 `.source` 派生（不在这里第二次写日期），
++ *  而 `ledgerWitnessRefs` 按 `m[1]`＝目录、`m[2]`＝文件名取值——多一枚捕获组就是把它的分组号整体往后挪了一格。 */
++const DATED_DIR_RE = /outputs\/([A-Za-z0-9._-]+-\d{4}-\d{2}-\d{2}(?:-\d{4})?)/gu;
+ /** 在 dated 目录之外再吃一层「目录里的文件名」；形状从 `DATED_DIR_RE` 派生，不在这里第二次写日期。 */
+ const WITNESS_REF = new RegExp(DATED_DIR_RE.source + "(\\/[^\\s`]*)?", "g");
+ /** 中文散文里点名之后紧跟的标点要把路径切断（真机形状：`…/01-xxx.md`后面直接跟。」）。 */

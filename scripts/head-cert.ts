@@ -25,6 +25,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFi
 import { dirname, join, resolve } from "node:path";
 
 import { certGateCell, certGatePlan, certGateVerdict, certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, certTreeReclaim, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, defaultTimeoutFromConfig, depDirs, gitInflightArgs, headGateTableIntegrity, mainRootFromCommonDir, missingDeclaredDeps, parseCertGateRows, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, suiteRows, timingCell, timingNearCapCell, unknownCertArgs, wallClockCell } from "./lib/head-cert-deps";
+import { needsNodeModules } from "./lib/subrepo-dep-need";
 import { acquireToolLock } from "./lib/tool-lock";
 import { citableOf, provenanceDoc, provenancePath, provenanceStamp } from "./lib/head-cert-provenance";
 import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
@@ -198,9 +199,24 @@ const subDirs = depDirs((rel) => {
   }
 }).filter((d) => d !== "");
 const subMissing: string[] = [];
+let subNoDep = 0;
 for (const d of subDirs) {
   const into = join(treeAbs, d, "node_modules");
   if (existsSync(into)) continue;
+  /* 先问这个子包**自己声明了几项依赖**：`fixtures/bench/bench-*` 那 15 个靶子的 dependencies 与 devDependencies
+   *  各 0 项（脚本是 `node --test tests/*.test.js`，依赖从仓根解析），本来就不需要自己的 `node_modules`。
+   *  把它们并进「补不齐」＝给那 15 个目录发一张免罪符，将来真由代码回归造成的判卷红会被这句话预先解释成环境问题。
+   *  读不到 package.json 就交空串：`needsNodeModules` 对「说不清」回 true（fail-closed，不许免罪）。 */
+  let subPkg = "";
+  try {
+    subPkg = readFileSync(join(treeAbs, d, "package.json"), "utf8");
+  } catch {
+    subPkg = "";
+  }
+  if (!needsNodeModules(subPkg)) {
+    subNoDep += 1;
+    continue;
+  }
   const from = join(MAIN, d, "node_modules");
   if (!existsSync(from)) {
     subMissing.push(d);
@@ -211,6 +227,7 @@ for (const d of subDirs) {
   say(`  硬链接子仓库依赖 ${d}/node_modules ← 主树 exit=${String(linked.status)}`);
   if (linked.status !== 0) subMissing.push(d);
 }
+if (subNoDep > 0) say(`  零依赖子仓库 ${String(subNoDep)} 个（不需要 node_modules，不计入补齐面）`);
 if (subMissing.length > 0) {
   say(`⚠️ 这些靶子仓库的依赖补不齐：${subMissing.join("、")} ⇒ 在其中真跑命令的判卷红**不可归因于代码**`);
 }

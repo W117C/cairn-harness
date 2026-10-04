@@ -30,25 +30,38 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   compare,
+  exitCodeOf,
+  GATE_SENTENCE,
+  IDENTITY_SENTENCE,
+  identityOf,
   meanTotals,
   modelFace,
   noiseBand,
+  outcomeGate,
   parseReadings,
+  renderExitFace,
+  renderIdentityFace,
   renderModelFace,
   renderReport,
   taskIds,
   totalsOf,
+  type Comparison,
+  type IdentityRuling,
+  type OutcomeRuling,
   type Row,
   type Totals,
 } from "../scripts/eval/report";
 
-/** 造一份 loop-eval 形状的 readings（`{r, g}[]`）。 */
+/** 造一份 loop-eval 形状的 readings（`{r, g}[]`）。身份键（headSha／ranAt／model）**只在上游显式给了
+ *  才写进去**——不给就是"存量语料"那一档，身份闸必须咬。 */
 function readings(rows: Array<Partial<Row> & { id: string }>): string {
   return JSON.stringify(
     rows.map((r) => ({
       r: {
         id: r.id,
         ...(r.model !== undefined ? { model: r.model } : {}),
+        ...(r.headSha !== undefined ? { headSha: r.headSha } : {}),
+        ...(r.ranAt !== undefined ? { ranAt: r.ranAt } : {}),
         tokensIn: r.tokensIn ?? 1000,
         tokensOut: r.tokensOut ?? 100,
         seconds: r.seconds ?? 10,
@@ -241,7 +254,8 @@ describe("meanTotals：多份基线取均值", () => {
 // 本仓 09-26 已有一次跨臂池化的教训（九条臂的读数不能横着比），那条是散文，这一条是闸。
 describe("模型归因面：跨模型的差值不许当改动的效果", () => {
   const r = (model: string, over: Partial<Row> = {}): Row => ({
-    id: "A", model, tokensIn: 1000, tokensOut: 100, seconds: 10,
+    id: "A", model, headSha: "1111111", ranAt: "2026-10-05T00:00:00Z",
+    tokensIn: 1000, tokensOut: 100, seconds: 10,
     rssPeakMb: 100, toolFailures: 0, repeats: 0, ok: true, ...over,
   });
 
@@ -290,5 +304,217 @@ describe("模型归因面：跨模型的差值不许当改动的效果", () => {
     const face = src.indexOf("modelFace(baseRows.flat(), candRows.flat())");
     expect(face, "跑器没把两侧所有行交给归因面 ⇒ 同一臂内混档就看不见").toBeGreaterThan(-1);
     expect(src.indexOf("renderModelFace(face)")).toBeLessThan(src.indexOf("renderReport(cmp, bandSource)"));
+  });
+});
+
+// ── 合取闸（2026-10-05 补）────────────────────────────────────────────────────────
+// 为什么这道闸比"再一个判定"要紧：**逐指标各判各的**正是这张表唯一的误读面。
+// 2026-10-05 离线实跑（基线 outputs/eval-base-a ↔ eval-base-b 同配置两次、候选
+// outputs/bench-reps3-2026-10-02）：5 项超带 = 3 项 ★改善（输入 token／输出 token／墙钟）
+// ＋ 2 项退化，其中成功率 70.8% ⇒ 5.6%。一次跑废了，表把它印成"改动有效"。
+// 判据建在**指标语义**（方向表里"越大越好"那一侧＝结果类）上，不建在指标名的字符串匹配上。
+describe("跨指标合取闸：结果类超带退化 ⇒ 整表禁止读作改善", () => {
+  const band = T({ successRate: 0.09, passed: 1, tokensIn: 100, tokensOut: 10, seconds: 2 });
+
+  /** 合成态①：成功率崩了，成本同时"降"——就是实跑那次反转的形状。 */
+  const collapsed: Comparison = compare(
+    T({ successRate: 0.75, passed: 9, tokensIn: 2000, tokensOut: 200, seconds: 20 }),
+    T({ successRate: 0.083, passed: 1, tokensIn: 1200, tokensOut: 120, seconds: 12 }),
+    band, ["A", "B"], ["A", "B"],
+  );
+  /** 合成态②：成功率同档（差在带内），成本同样"降"——闸**不该**咬。 */
+  const flatOutcome = compare(
+    T({ successRate: 0.5, passed: 6, tokensIn: 2000, tokensOut: 200, seconds: 20 }),
+    T({ successRate: 0.55, passed: 6, tokensIn: 1200, tokensOut: 120, seconds: 12 }),
+    band, ["A", "B"], ["A", "B"],
+  );
+  /** 合成态③：成功率超带改善，成本同样"降"——照旧允许改善。 */
+  const betterOutcome = compare(
+    T({ successRate: 0.5, passed: 6, tokensIn: 2000, tokensOut: 200, seconds: 20 }),
+    T({ successRate: 0.75, passed: 9, tokensIn: 1200, tokensOut: 120, seconds: 12 }),
+    band, ["A", "B"], ["A", "B"],
+  );
+
+  it("合成态① ⇒ blocked=true，退化项与被关闭的改善项都点得出名字", () => {
+    const g = outcomeGate(collapsed);
+    expect(g.blocked).toBe(true);
+    expect(g.degraded).toEqual(["successRate", "passed"]);
+    expect(g.suppressed).toEqual(["tokensIn", "tokensOut", "seconds"]);
+  });
+
+  it("★ 合成态① 的表不许出现「★改善」，且必须印那句禁止读作改善", () => {
+    const txt = renderReport(collapsed, "test");
+    expect(txt, "闸没咬住 ⇒ 跑废了照样被读成变好").toContain(GATE_SENTENCE);
+    expect(txt).toContain("超带退化");
+    expect(txt, "任何一格都不许印成改善").not.toContain("★改善");
+    // 闸只挡误读，不挡证据：退化那一格必须照常印，不许顺着"禁止改善"把退化也藏了
+    expect(txt).toContain("⚠退化");
+    expect(txt).toContain("副作用（禁读改善）");
+    // 那句结论行的旧形（"改善 3 项"）不许再出现
+    expect(txt).not.toContain("改善 3 项");
+  });
+
+  it("★ 合成态②③ ⇒ 成功率同档/改善时「★改善」照旧允许（防闸写反）", () => {
+    for (const cmp of [flatOutcome, betterOutcome]) {
+      const g = outcomeGate(cmp);
+      expect(g.blocked, "结果类没超带退化就不该咬").toBe(false);
+      expect(g.degraded).toEqual([]);
+      const txt = renderReport(cmp, "test");
+      expect(txt, "闸写反 ⇒ 正常的改善也被禁掉，表就没用了").toContain("★改善");
+      expect(txt).not.toContain(GATE_SENTENCE);
+      expect(txt).toContain("超出噪声带");
+    }
+  });
+
+  it("★ 两态不同形：同一个成本改善，结果档一崩一稳 ⇒ 输出必须分叉", () => {
+    const bad = renderReport(collapsed, "test");
+    const good = renderReport(betterOutcome, "test");
+    expect(bad).not.toBe(good);
+    expect(bad.includes("★改善")).toBe(false);
+    expect(good.includes("★改善")).toBe(true);
+    expect(bad.includes(GATE_SENTENCE)).toBe(true);
+    expect(good.includes(GATE_SENTENCE)).toBe(false);
+  });
+
+  it("带内的成功率下滑不触发闸（噪声就是噪声，不许借闸把成本改善也判成退化）", () => {
+    const cmp = compare(
+      T({ successRate: 0.75, passed: 9, tokensIn: 2000 }),
+      T({ successRate: 0.68, passed: 8, tokensIn: 1200 }),
+      band, ["A", "B"], ["A", "B"],
+    );
+    expect(outcomeGate(cmp).blocked).toBe(false);
+    expect(renderReport(cmp, "test")).toContain("★改善");
+  });
+
+  it("闸只看结果类：成本类（工具失败／内存／重复动作）超带退化 ⇒ 不咬", () => {
+    const cmp = compare(
+      T({ successRate: 0.75, passed: 9, toolFailures: 0, repeats: 0 }),
+      T({ successRate: 0.75, passed: 9, toolFailures: 9, repeats: 9 }),
+      T({ successRate: 0.09, passed: 1, tokensIn: 100, tokensOut: 10, seconds: 2, toolFailures: 1, repeats: 1 }),
+      ["A", "B"], ["A", "B"],
+    );
+    expect(outcomeGate(cmp).blocked, "闸的判据是「事情办成了没有」，不是「任何指标变差」").toBe(false);
+    expect(outcomeGate(cmp).degraded).toEqual([]);
+  });
+
+  it("噪声带不可得 ⇒ 没有超带可言 ⇒ 闸不咬（也不印改善，那格本来就是判不出）", () => {
+    const cmp = compare(T({}), T({ tokensIn: 900, successRate: 0 }), null, ["A"], ["A"]);
+    expect(outcomeGate(cmp).blocked).toBe(false);
+    expect(renderReport(cmp, "test")).not.toContain("★改善");
+  });
+});
+
+// ── 身份闸（2026-10-05 补）────────────────────────────────────────────────────────
+// 盘上现读的 readings.json **全部**没有 headSha／ranAt／model ⇒ 这道闸今天一定会咬，
+// 这是设计意图：那份 2026-10-01 16:25 的冒烟读数至今在冒充"最新读数"，而它连自己是谁跑的都不知道。
+describe("身份闸：读数缺 headSha／ranAt／model 任一 ⇒ 只当量级", () => {
+  const r = (over: Partial<Row> = {}): Row => ({
+    id: "A", model: "glm-5.2", headSha: "abc1234", ranAt: "2026-10-05T00:00:00Z",
+    tokensIn: 1000, tokensOut: 100, seconds: 10,
+    rssPeakMb: 100, toolFailures: 0, repeats: 0, ok: true, ...over,
+  });
+
+  it("★(c) 缺 model 键 ⇒ 走身份闸那一支，且那句逐字印出来", () => {
+    const id = identityOf([r({ model: "" })]);
+    expect(id.ok).toBe(false);
+    expect(id.missing).toEqual(["model"]);
+    expect(id.counts.model).toBe(1);
+    expect(renderIdentityFace(id)).toContain(IDENTITY_SENTENCE);
+  });
+
+  it("★(d) 三键齐 ⇒ 不走那一支（防闸写反：不能把有身份的读数也一律降级）", () => {
+    const id = identityOf([r(), r({ id: "B" })]);
+    expect(id.ok).toBe(true);
+    expect(id.missing).toEqual([]);
+    const txt = renderIdentityFace(id);
+    expect(txt).not.toContain(IDENTITY_SENTENCE);
+    expect(txt).toContain("✅");
+    expect(txt).not.toBe(renderIdentityFace(identityOf([r({ model: "" })])));
+  });
+
+  it("headSha 单独缺、ranAt 单独缺 ⇒ 各咬一次（任一即咬，不是三个都缺才咬）", () => {
+    expect(identityOf([r({ headSha: "" })]).missing).toEqual(["headSha"]);
+    expect(identityOf([r({ ranAt: "" })]).missing).toEqual(["ranAt"]);
+    expect(identityOf([r({ headSha: "" })]).ok).toBe(false);
+    expect(identityOf([r({ ranAt: "" })]).ok).toBe(false);
+  });
+
+  it("只有一行缺也算咬，且逐键计数指得到行数（修的人要知道去盖哪个章）", () => {
+    const id = identityOf([r(), r(), r({ ranAt: "" })]);
+    expect(id.ok).toBe(false);
+    expect(id.rows).toBe(3);
+    expect(id.counts).toEqual({ headSha: 0, ranAt: 1, model: 0 });
+    expect(renderIdentityFace(id)).toContain("ranAt 缺 1/3 行");
+  });
+
+  it("parseReadings：存量形状（三键全无）⇒ 空串而不抛，身份闸咬", () => {
+    const rows = parseReadings(readings([{ id: "A" }, { id: "B" }]));
+    expect(rows[0]?.headSha).toBe("");
+    expect(rows[0]?.ranAt).toBe("");
+    expect(identityOf(rows).missing).toEqual(["headSha", "ranAt", "model"]);
+    // 同一份文本盖上章之后就换档：证明走的是真解析，不是写死的空串
+    const stamped = parseReadings(readings([
+      { id: "A", model: "glm-5.2", headSha: "abc1234", ranAt: "2026-10-05T00:00:00Z" },
+    ]));
+    expect(identityOf(stamped).ok).toBe(true);
+  });
+
+  /** 手写一条完整读数（`readings()` 造的是 `r` 内层；这两支要测**外层**盖章与类型不对的章）。 */
+  const rawRow = (rInner: Record<string, unknown>): string => JSON.stringify([
+    { r: { id: "A", tokensIn: 1000, tokensOut: 100, seconds: 10, toolFailures: 0, repeatedSameAction: 0, ...rInner }, g: { ok: true } },
+  ]);
+
+  it("身份键也可以盖在 `{r, g}` 记录外层（写侧最终落哪一层由 #63 定，取料两侧都认）", () => {
+    const outer = parseReadings(JSON.stringify([
+      {
+        headSha: "abc1234", ranAt: "2026-10-05T00:00:00Z",
+        r: { id: "A", model: "glm-5.2", tokensIn: 1000, tokensOut: 100, seconds: 10, toolFailures: 0, repeatedSameAction: 0 },
+        g: { ok: true },
+      },
+    ]));
+    expect(outer[0]?.headSha).toBe("abc1234");
+    expect(outer[0]?.ranAt).toBe("2026-10-05T00:00:00Z");
+    expect(identityOf(outer).ok).toBe(true);
+  });
+
+  it("非字符串的身份键 ⇒ 当缺章（fail-closed，绝不把类型不对读成有身份）", () => {
+    const numeric = parseReadings(rawRow({
+      model: "glm-5.2", headSha: 1234, ranAt: 1759593600000,
+    }));
+    expect(numeric[0]?.headSha).toBe("");
+    expect(identityOf(numeric).missing).toEqual(["headSha", "ranAt"]);
+  });
+});
+
+describe("出口码：调用方不读文本也要分得出是哪道闸咬的", () => {
+  const idOk: IdentityRuling = { ok: true, missing: [], counts: { headSha: 0, ranAt: 0, model: 0 }, rows: 3 };
+  const idBite: IdentityRuling = { ok: false, missing: ["model"], counts: { headSha: 0, ranAt: 0, model: 3 }, rows: 3 };
+  const noGate: OutcomeRuling = { blocked: false, degraded: [], suppressed: [] };
+  const gated: OutcomeRuling = { blocked: true, degraded: ["successRate"], suppressed: ["tokensIn"] };
+
+  it("四态各一个码：0 可信／3 身份闸／4 合取闸／5 两道都咬", () => {
+    expect(exitCodeOf(idOk, noGate)).toBe(0);
+    expect(exitCodeOf(idBite, noGate)).toBe(3);
+    expect(exitCodeOf(idOk, gated)).toBe(4);
+    expect(exitCodeOf(idBite, gated)).toBe(5);
+  });
+
+  it("汇总面把码说成话，且四个码各有各的说明（不许都写成「警告」）", () => {
+    const faces = [0, 3, 4, 5].map((c) => renderExitFace(c));
+    expect(new Set(faces).size, "出口码说明同形 ⇒ 调用方读不出原因").toBe(4);
+    expect(faces[1]).toContain("身份闸");
+    expect(faces[2]).toContain("禁止读作改善");
+  });
+
+  it("接线：两道闸都真的落到出口码，且身份面打在归因面之前、出口码打在表之后", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/eval/report.ts", import.meta.url)), "utf8");
+    // 闸写在纯函数里，还得被渲染层/CLI 接上——不接上就是"算出来却不印"那一族
+    expect(src, "合取闸没被 renderReport 调用 ⇒ 表照旧说谎").toContain("const gate = outcomeGate(cmp);");
+    expect(src).toContain("process.stdout.write(renderIdentityFace(identity)");
+    expect(src).toContain("exitCodeOf(identity, outcomeGate(cmp))");
+    expect(src.indexOf("renderIdentityFace(identity)"), "身份面排在归因面之后 ⇒「同一档 ✅」先被读走")
+      .toBeLessThan(src.indexOf("renderModelFace(face)"));
+    expect(src.indexOf("process.exit(code)"), "码算出来却不退出 ⇒ 调用方只能 parse 文本")
+      .toBeGreaterThan(src.indexOf("process.stdout.write(renderReport("));
   });
 });
