@@ -1,0 +1,26 @@
+diff --git a/src/main/agent-runner.ts b/src/main/agent-runner.ts
+index 89de6b0a..0162e06a 100644
+--- a/src/main/agent-runner.ts
++++ b/src/main/agent-runner.ts
+@@ -66,7 +66,7 @@ import {
+   type PermissionRule,
+   type ToolResultWithAudit,
+ } from "../permissions";
+-import { globalPermissionsPath, savePermissionRules } from "../permissions/rules";
++import { alwaysRulesPath, globalPermissionsPath, savePermissionRules } from "../permissions/rules";
+ import { type ProviderKind } from "./settings";
+ import { getLastWorkspace, setRunWorkspace } from "./runner-workspace";
+ import { createSession, pathOf, readSessionEvents, sessionExists, createSidechatSession, listSidechatSessions, readSidechatEvents, sidechatDir, sidechatEventsPath, type SessionInfo } from "./sessions";
+@@ -761,7 +761,11 @@ export function pluginToolSpecsFromRuntime(rt: PluginToolSource | null): Session
+ 
+ /** always scope 批准落库为 allow 条目（项目规则库，原子写）；拒绝永不生成规则。 */
+ async function persistAlwaysRule(workspace: string, name: string, args: Record<string, unknown>): Promise<void> {
+-  const path = join(workspace, ".agent", "permissions.json");
++  // #57（2026-10-05）：授权记录落**独立且被 git 忽略**的那一份，不写回受跟踪的 permissions.json。
++  // 理由：受跟踪那份里可能有人写的项目策略（该随仓库走），而"这台机器上某人点过一次总是允许"
++  // 是授权记录、属于机器——写在一起就等于谁 clone 谁继承。读侧由 loadPermissionRules 透明并入，
++  // 所以批准过的规则照样生效（那一半已入库，见 src/permissions/rules.ts 的 ALWAYS_RULES_FILE）。
++  const path = alwaysRulesPath(workspace);
+   try {
+     const existing = loadPermissionRules(path);
+     const rule: PermissionRule =
