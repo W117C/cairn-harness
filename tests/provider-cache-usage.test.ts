@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import { createEventLog, replay, type AgentEvent, type UsageEvent } from "../src/events";
 import type { ProviderMessage } from "../src/providers";
 import { streamAnthropic } from "../src/providers/anthropic";
+import { streamGemini } from "../src/providers/gemini";
 import { streamOpenAI } from "../src/providers/openai";
 
 const USER: ProviderMessage[] = [{ role: "user", content: "hi" }];
@@ -124,6 +125,36 @@ describe("openai 兼容面缓存透出", () => {
     const u = usageOf(await collect(streamOpenAI(USER, {
       apiKey: "test",
       fetchImpl: stubFetch(chunk('{"prompt_tokens":12,"completion_tokens":3}')),
+    })));
+    expect(u).toEqual({ type: "usage", inputTokens: 12, outputTokens: 3 });
+  });
+});
+
+describe("gemini 面缓存透出（2026-10-05 第 387 页补齐——**此前这条判卷只覆盖 2/3**）", () => {
+  // 这一节存在本身是一条读数：原判卷只钉了 anthropic 与 openai，**gemini 不在其中**，
+  // 而 gemini 的缓存分块此前连字段都没声明（`cachedContentTokenCount` 整个没读）。
+  const chunk = (usageJson: string): string[] => [
+    `data: {"candidates":[{"content":{"parts":[{"text":"嗨"}]}}],"usageMetadata":${usageJson}}`,
+  ];
+
+  it("cachedContentTokenCount 透出为 cacheReadInputTokens，且 inputTokens **不加**缓存量", async () => {
+    const u = usageOf(await collect(streamGemini(USER, {
+      apiKey: "test",
+      fetchImpl: stubFetch(chunk('{"promptTokenCount":9500,"candidatesTokenCount":7,"cachedContentTokenCount":8000}')),
+    })));
+    // **这一条是与 anthropic 那节正相对的那格**：Gemini 的 `promptTokenCount` **含**缓存
+    // （官方原文：when `cached_content` is set, this also includes the number of tokens in the
+    // cached content），所以这里必须逐字等于 9500——若照 anthropic 那边再加一次 8000，
+    // 成本会被**多算**一个缓存量级。两个方向相反的适配器靠这两条判卷钉在一起。
+    expect(u.inputTokens, "gemini 的 promptTokenCount 含缓存 ⇒ 不许再加").toBe(9500);
+    expect(u.cacheReadInputTokens).toBe(8000);
+    expect(u.cacheWriteInputTokens, "Gemini 的 usageMetadata 不报写桶：不得凭空补 0").toBeUndefined();
+  });
+
+  it("无缓存上报 ⇒ 事件形状与旧一致（零回归：缺报 ≠ 命中为零）", async () => {
+    const u = usageOf(await collect(streamGemini(USER, {
+      apiKey: "test",
+      fetchImpl: stubFetch(chunk('{"promptTokenCount":12,"candidatesTokenCount":3}')),
     })));
     expect(u).toEqual({ type: "usage", inputTokens: 12, outputTokens: 3 });
   });

@@ -13587,6 +13587,16 @@ const MUTATIONS = [
     apply: (s) => s.replace('"node": ">=20.11.0 <25"', '"node": ">=20.3.0 <25"'),
     expectFail: "真仓：下限覆盖全部已用特性（缺口为 0）",
   },
+  // ---- 2026-10-05：三适配器缓存口径一致性随判卷同笔配的锚点 ----
+  {
+    id: "gemini-cache-block-dropped-again",
+    src: "src/providers/gemini.ts",
+    test: "tests/provider-cache-usage.test.ts",
+    desc: "Gemini 的缓存命中分块又不透出 ⇒ 命中段被按**全价输入**计入本地成本，而 Google 实际是"
+      + "打折收的（隐式缓存对 2.5+ 默认开着）。第 387 页的原形状：这条判卷当时只覆盖 2/3 适配器",
+    apply: (s) => s.replace("        ...(cacheRead !== null ? { cacheReadInputTokens: cacheRead } : {}),\n", ""),
+    expectFail: "cachedContentTokenCount 透出为 cacheReadInputTokens，且 inputTokens **不加**缓存量",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

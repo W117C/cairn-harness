@@ -44,6 +44,14 @@ interface GeminiChunk {
     candidatesTokenCount?: number;
     thoughtsTokenCount?: number;
     totalTokenCount?: number;
+    /** 本次请求命中**隐式缓存**的那部分输入 token 数（2026-10-05 第 387 页补）。
+     *  为什么必须读它：Gemini 2.5+ 的**隐式缓存默认开着**（官方原文：enabled by default for all
+     *  Gemini 2.5 and newer models；there is nothing you need to do in order to enable this），
+     *  所以不发 `cachedContent` 也会命中。而 `promptTokenCount` **含**缓存那一部分
+     *  （官方原文：when `cached_content` is set, this also includes the number of tokens in the
+     *  cached content）⇒ 不读这个分块，本地按 token 算的成本就把命中段按**全价输入**计了，
+     *  而 Google 实际是打折收的（官方原文：we automatically pass on cost savings）。 */
+    cachedContentTokenCount?: number;
   };
   error?: { code?: number; message?: string; status?: string };
 }
@@ -170,6 +178,8 @@ export async function* streamGemini(
   let callId = "gemini-a";
   let inputTokens: number | null = null;
   let outputTokens: number | null = null;
+  /** 缓存命中分块：**缺报时不落 0**（与 anthropic/openai 两侧同一条规矩：缺报 ≠ 命中为零）。 */
+  let cacheRead: number | null = null;
   let callSeq = 0;
   // finishReason 随候选块到达（中间 chunk 常是 null）：记最后一个非空的。
   let finishReason: string | null | undefined;
@@ -211,6 +221,7 @@ export async function* streamGemini(
           const u = chunk.usageMetadata;
           inputTokens = u.promptTokenCount ?? inputTokens;
           outputTokens = (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0) || outputTokens;
+          cacheRead = u.cachedContentTokenCount ?? cacheRead;
         }
         const cand = chunk.candidates?.[0];
         if (cand?.finishReason) finishReason = cand.finishReason;
@@ -233,8 +244,15 @@ export async function* streamGemini(
         }
       }
     }
-    if (inputTokens !== null || outputTokens !== null) {
-      yield { type: "usage", inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 };
+    if (inputTokens !== null || outputTokens !== null || cacheRead !== null) {
+      yield {
+        type: "usage",
+        // 口径与另两个适配器**同一个**：`inputTokens` 含缓存总量，分块是其中的一部分
+        // （所以这里**不加**——`promptTokenCount` 本来就含，与 anthropic 那边「不含、要加」正相反）。
+        inputTokens: inputTokens ?? 0,
+        outputTokens: outputTokens ?? 0,
+        ...(cacheRead !== null ? { cacheReadInputTokens: cacheRead } : {}),
+      };
     }
     // 流正常收尾，但停止读数说这一轮没说完（MAX_TOKENS＝篇幅不够 / SAFETY 家族＝被拦）。
     // candidates[0].finishReason 与 promptFeedback.blockReason 互斥到值：谁在场用谁。

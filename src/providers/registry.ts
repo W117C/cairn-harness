@@ -124,8 +124,11 @@ export interface ToWorkerModelOptions {
   /** 测试注入点（各适配器 fetchImpl；缺省全局 fetch）。 */
   fetchImpl?: typeof fetch;
   /** A1 写侧缓存断点：目前**只有 Anthropic 有语义**（显式 cache_control）。
-   *  OpenAI/GLM 是自动前缀缓存（无写侧标记，收益受排布约束），Gemini 要另建 cachedContent
-   *  资源——两者都不吃这个开关，传了也是零行为。 */
+   *  OpenAI/GLM 是自动前缀缓存（无写侧标记，收益受排布约束）；**Gemini 也是自动的**——
+   *  2026-10-05 第 387 页订正：原文写「Gemini 要另建 cachedContent 资源」，而官方现行文档写的是
+   *  「隐式缓存对 Gemini 2.5 及更新的模型**默认开着**，无需做任何事就能命中」，`cachedContent`
+   *  只是**显式缓存**那条路（可自控缓存什么、有保证的折扣）。三家的读侧分块都读得到了
+   *  （见 `usage.ts` 侧的 `cacheReadInputTokens`）；这个开关仍旧只对 Anthropic 有行为。 */
   promptCache?: boolean;
 }
 
