@@ -1,0 +1,19 @@
+A＝第一版：自建的 h3 臂（缺陷在这里）  ：凭证页 89 段｜可比对读数 397｜红 65｜未点名 0｜弱证 1｜红里的读数值 41 个
+C＝只加 h2 缝（单变量）                    ：凭证页 109 段｜可比对读数 329｜红 8｜未点名 6｜弱证 1｜红里的读数值 5 个
+B＝只按页标题切（两件事都改，仅第三读数）    ：凭证页 109 段｜可比对读数 329｜红 8｜未点名 6｜弱证 1｜红里的读数值 5 个
+
+C-A：新增红 -57 条｜未点名 6｜弱证 0｜分母 -68｜新失败的读数值 0 个＝
+
+B-A：新增红 -57 条｜未点名 6｜弱证 0｜分母 -68｜新失败的读数值 0 个＝
+C 的红落在 6 个页 key：第 267 页、第 279 页、第 290 页、第 318 页、第 326 页、第 265 页
+
+C 臂逐条红话术（原样，未改写）：
+  [D-9] PROGRESS.md｜第 267 页（2026-10-01 · 第 267 页补 凭证：本笔（）里的读数「0.47」在它点名的取料面里找不到原文：cred-face-coverage-2026-10-01、cred-unnamed-dirs-2026-10-01/dir-hunt.log、head-cert-wallclock-2026-10-01
+  [D-9] PROGRESS.md｜第 279 页（2026-10-01 · 第 279 页补 凭证：本笔（）里的读数「3436」在它点名的取料面里找不到原文：doc-line-citations-2026-10-01、prose-scan-feed-276-2026-10-01/h7-drift-head-276.log、split-aged-face-278-2026-10-01/head-cert-8689734.log
+  [D-9] PROGRESS.md｜第 290 页（2026-10-01 · 第 290 页补⑴ · 裁决 ）里的读数「92」在它点名的取料面里找不到原文：head-face-cjk-290-2026-10-01/needles-check-2.log、head-face-cjk-290-2026-10-01/vitest-docs-check-1.log、impact-accuracy-probe-2026-09-29、impact-accuracy-probe-2026-09-29/impact-accuracy.mts、landing-1c40df7-2026-09-30/head-cert-summary.txt、scratch-scope-census-2026-09-30/readings.md、witness-face-widen-290b-2026-10-01、witness-face-widen-290b-2026-10-01/docs-check-after-page.log、witness-face-widen-290b-2026-10-01/evidence-check-290b.log、witness-face-widen-290b-2026-10-01/legacy-12-never-committed.log、witness-face-widen-290b-2026-10-01/typecheck-290b.log
+  [D-9] PROGRESS.md｜第 318 页（2026-10-03 · 第 318 页补 凭证（1/1）里的读数「1361」在它点名的取料面里找不到原文：pair-row-exemption-2026-10-03/head-cert-82a5015.log、suite-refresh-2026-10-03
+  [D-9] PROGRESS.md｜第 318 页（2026-10-03 · 第 318 页补 凭证（1/1）里的读数「288」在它点名的取料面里找不到原文：pair-row-exemption-2026-10-03/head-cert-82a5015.log、suite-refresh-2026-10-03
+  [D-9] PROGRESS.md｜第 318 页（2026-10-03 · 第 318 页补 凭证（1/1）里的读数「3980」在它点名的取料面里找不到原文：pair-row-exemption-2026-10-03/head-cert-82a5015.log、suite-refresh-2026-10-03
+  [D-9] PROGRESS.md｜凭证页未点名取料目录 2 页 > 帽 0（CRED_UNNAMED_PAGE_CAP，只准调低）⇒ 这是**可行动**那一态：既没点名 outputs/<主题>-YYYY-MM-DD/、又没进 UNSOURCED_CRED_PAGES 登记。新写的凭证页必须点名，工件确实没入库的要在登记表里写理由。最近的几页：第 326 页、第 328 页
+  [D-9] PROGRESS.md｜弱证 1 对 > 帽 0（CRED_WEAK_WITNESS_CAP，只准调低）⇒ 这些数在页点名的面里确有原文，可那几行出自**别的一趟**：第 265 页｜读数 102←cred-face-coverage-2026-10-01/triage-flips.log（那一趟＝2b3763f）。修法只有两种：页里把被引用那一趟的提交号写出来，或把本页自己那趟的日志入库。
+C 臂未点名页 key：第 326 页、第 328 页
