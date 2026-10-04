@@ -200,6 +200,18 @@ export function staticRisk(tool: ToolName, args: Record<string, unknown>): RiskF
   if ((tool as string) === "web_fetch" || (tool as string) === "web_search") {
     return { level: "high", reason: "出网取内容（外部不可信输入，SSRF 面）" };
   }
+  // lsp（#58，2026-10-05）：这个工具会 **spawn 工作区配置里写的命令**（`.agent/lsp.json` 的
+  // `command`），与 verify 的 S3 是同一条形状——**仓库自带的外部输入**。
+  // 它不改盘（`tests/write-face.test.ts` 那条「lsp 不该被算成改盘」的既有裁决仍然成立，
+  // 所以本笔**不**把它塞进 `SIDE_EFFECT_TOOLS`——那会把它变成写向、受方案门挡，是另一件事）。
+  // 但"要不要问人"这一层不能缺席：写入 `.agent/lsp.json` 已被 S2 的路径通道抬到 high，
+  // 而**克隆即携带**那条路与写盘无关（模型根本不用动手，配置跟着 clone 一起到），
+  // 任何一次 lsp 调用就会按那份配置起进程。
+  // 给 high 而不是 medium：默认档与只读档的 `riskAskAt` 就是 high（同 web_fetch 那段的论证），
+  // medium 在那两档等于不会被问。
+  if ((tool as string) === "lsp") {
+    return { level: "high", reason: "启动工作区配置里的语言服务器（命令来自 .agent/lsp.json，属外部输入）" };
+  }
   if (!hasThreatTableSurface(tool)) return NONE;
   const command = typeof args.command === "string" ? args.command : "";
   if (command.trim() === "") return NONE;

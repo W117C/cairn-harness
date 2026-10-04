@@ -513,7 +513,7 @@ export function withSkillAllowNote(tool: string, reason: string): string {
 /** `web_fetch` 在这个字面量联合里而不在 `TOOL_NAMES` 里：静态注册表（M2 起 10 工具，
  *  `tools-check.ts` 判据）不含它，M2a 起的运行时注入先例不碰它。`name as ToolName` 与
  *  `staticRisk` 里 `(tool as string) === "web_fetch"` 是同一处类型缝的两面。 */
-type GatedName = "write_file" | "edit_file" | "apply_patch" | "run_shell" | "web_fetch" | "web_search" | "diagnose";
+type GatedName = "write_file" | "edit_file" | "apply_patch" | "run_shell" | "web_fetch" | "web_search" | "diagnose" | "lsp";
 
 function gatedTool(name: GatedName, original: Tool, beforeExecute?: () => Promise<ToolResult | null>): Tool {
   return {
@@ -1015,6 +1015,9 @@ export function installAppTools(opts: { automation?: boolean; omitTools?: readon
   // 模型一旦发出这个名字就会真落盘）——这正是 M7 审计点名的「新工具族静默绕过写禁」形状。
   TOOLS.apply_patch = gatedTool("apply_patch", TOOLS.apply_patch);
   TOOLS.run_shell = gatedTool("run_shell", TOOLS.run_shell);
+  // #58：lsp 会 spawn 工作区配置里的命令（`.agent/lsp.json`，外部输入）——同 S3 那条形状。
+  // 风险等级由 `src/permissions/risk.ts` 给（high），四档都出卡；不改盘，故不动 SIDE_EFFECT_TOOLS。
+  TOOLS.lsp = gatedTool("lsp", TOOLS.lsp);
   // web_fetch：出网取内容。**走 gatedTool 而不是裸挂**——SSRF 判据在工具内，但"要不要问人"
   // 在权限层，两处都要有：`gatedTool` 负责四档出审批卡 + 非交互 fail-closed，并把 scope
   // 钉成 `once`（`wantsNetwork` 那一条，见 `isNetworkCommandCall` 的注释：没有它，
