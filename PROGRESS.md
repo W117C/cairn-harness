@@ -12954,6 +12954,60 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 
 
 
+## 2026-10-04 · 第 378 页：把第 377 页那句"簇的形状"做成根因清单——CLI 那批红的是**装载失败**，而 autonomy 那 18 条不是判卷过期：**HEAD 上写 git 钩子／`.env`／`.agent` 是直通放行**
+
+1. **取证面**：在干净树 `.worktrees/verify-d825553`（HEAD＝我第 377 页那一笔）只跑两支最集中的判卷
+   ⇒ `Tests 56 failed | 54 passed (110)`（原文 `outputs/cert-second-run-2026-10-04/triage-cli-surface-autonomy-raw.log`，
+   断言签名去重后 `triage-assert-signatures.txt`）。两支文件就占掉全量 85 条里的 56 条，所以先啃这两支。
+2. **CLI 那一簇（38＋5＋1＋1）根因是装载，不是行为**：签名里成批出现
+   `node:internal/modules/cjs/loader:1433…`（Cannot find module）与 `expected '…' to contain 'M0_API_KEY…'`。
+   这些用例 spawn 的入口是**已经改名的旧路径**（`bin/m0.mjs → bin/cairn.mjs` 在 `7d19ec4f` 落的），
+   于是标题「m0 CLI：产品面存在且可执行」那一格现在红在**根本没起来**上。
+   ⇒ 修法两种形状：判卷跟着改名走（38 处别人的判卷，我不碰），或留一个旧名 shim（代价＝多一个入口面）。
+   **这是 `#82` 第一簇的可执行根因，不再只是"看起来像改名"。**
+3. **autonomy 那一簇要单独喊——这是能力 7 的真缺陷，不是判卷过期**：18 条红话的形状是
+   `guided 档 write_file .git/hooks/pre-commit ⇒ 送审（不是 approve 直通）`／观测 `expected 'approve' not to be 'approve'`，
+   覆盖 `.git/hooks/pre-commit`、`sub/.git/hooks/post-commit`、`.git/config`、`.agent/lsp.json`、`.agent/config.json`、
+   `.npmrc`、`.env` 七个目标 × guided/auto 两档；另有两条 `expected 'none' to be 'high'`（风险根本没抬起来）。
+   下这句结论前我把实现面读了一遍：`src/permissions/risk.ts:147` 的 `PATH_TOOL_NAMES` 含 `write_file`、
+   `:183` 有"文件面路径通道"分支、`src/permissions/autonomy.ts:315` 的 `collectRisk` 确实调 `staticRisk`
+   ⇒ **缺口在这之后的某一层**（我读到 L3 那条 `chain.verdict === "allow"` 只对 `critical` 强制审批，
+   但**没有继续往下定位到能交差的那一行**——隔壁此刻正握着这一路：他刚落那笔的标题逐字是
+   「S3 接线补完：宿主拿到真正的信任决策入口」，我插进去只会撞车）。
+   ⇒ 开 **`#85`（P0，安全地板）**：判卷已经写好等着，红着的就是证据；这条与既有裁决
+   「全局 deny 是不可放宽的地板」直接相关——**现在的 HEAD 上，模型写 git 钩子不需要任何人点头。**
+4. **三路并行取证回来，各定一格**（报告都入库）：
+   ① `#73` 第二半判「**A 类能接**」：run 起点取料首选 `opts.message`（`src/main/agent-runner.ts:1327`），
+   清单冻结拍在 `:1715`（台账第 368 页记的 `1707` 已漂——这条我核过），硬耦合针脚
+   `scripts/mutate-verify.mjs:4839` 必须同笔；六个无参调用判卷不吃红（缺省 `""` 一丢就六处齐红）。
+   **B 类（逐请求排序）要等**：`glm-session.ts` 与 `tests/session-tools.test.ts` 在隔壁手里，
+   而那支端到端判卷的 `toContain` 因为预置消息自带同一串而**没有分辨力**（先记不修）。
+   报告 `outputs/skill-routing-query-wiring-2026-10-04/verdict.md`。
+   ② 长程状态判「goal 半守／plan 半守」：goal 只落事件流、**没有压缩回注点**（skill 有——
+   `src/agent/plugins/index.ts:456` 那种；goal 侧探针零命中并配了负控），靠 `src/agent/compaction.ts:214`
+   裸护全部 `user_message` 被动存活，而原文只带 ≤400 token；plan 的门布尔只在内存
+   （`src/permissions/plan-state.ts:26`），全仓没有一处从事件流重建它 ⇒ 重启即丢 ⇒ 开 **`#84`**。
+   **顺带一条纪律的实证**：这里我原本照抄报告写的 `src/agent/plan-state.ts:26`，`docs-check` D-10 当场报
+   「HEAD 里没有这个文件」⇒ 子代理给的 `file:line` 有假路径，**尺比记性可靠**，落库前必须逐条现读。
+   `#69` 也补一条新证据：撞帽抛出后 `runAgent` 只有 `finally` 没有 `catch` ⇒ 不落 `goal_stopped`，芯片仍显示「续跑中」。
+   报告 `outputs/longrun-goal-plan-face-2026-10-04/verdict.md`。
+   ③ 评估面判「能跑 3 项／外部基准只通了 SWE-bench 的解析层」，**其中一格值得我下次先自己复验**：
+   报告说同一 HEAD 两臂跑出 `9/12` 与 `10/12`（`outputs/bench-head-d0ffe15e-b*` 那批留档），
+   差一条靶 ⇒ 若属实，**任何"改完涨了几分"的结论在这把尺上都读不出来**（臂间噪声 ≥ 一条靶）。
+   另外失败轨迹目前只朝"尺子"回流（5 处，含 held-out 与判卷假红修复），**朝回归样本回流为 0**
+   （`gym-draft` 通路齐、盘上零草稿）。报告 `outputs/eval-harness-face-2026-10-04/verdict.md`；
+   这三条都是它的读数，我没自己复验，所以只登记不据此施工。
+5. **量纲与没跑**：这轮跑的是两支判卷（110 条，在隔离树）＋读码定位；**没跑**全量（第 377 页刚跑过两趟）、
+   认证、`typecheck`、`mutate-verify`。树：`.worktrees/verify-971f3b5f` 与 `.worktrees/verify-d825553`
+   都是本轮取证树，结案即回收；`.worktrees/verify-c7f2ea0f` 继续留着等 `#69`／`#71` 的文件让位。
+   `#39`／`#57`–`#66`／`#68` 照旧，`#67` 待对齐，`#69`／`#71` 备妥，`#70`／`#72` 待办，
+   `#73` 半落（第二半取证完毕、A 类可接），`#74`–`#78` 照旧，`#79` 等文件让位，`#80` 等裁决，
+   `#81` 等作者补证人，`#82` 已有根因清单（第 2、3 条），`#83` 照第 377 页，
+   **`#84`（长程状态回注）／`#85`（P0 安全地板）新增**。
+   本页不宣布任何「绿了」——HEAD 上仍有 77 条红，其中 18 条在安全面。
+
+
+
 
 
 

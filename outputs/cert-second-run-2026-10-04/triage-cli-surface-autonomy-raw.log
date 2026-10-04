@@ -1,0 +1,1325 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-d825553[39m
+
+[m0] 需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[m0] 用法：m0 <任务描述>（-h 看全部选项）
+ [31m❯[39m tests/cli-surface.test.ts [2m([22m[2m66 tests[22m[2m | [22m[31m38 failed[39m[2m)[22m[33m 1078[2mms[22m[39m
+   [31m❯[39m m0 CLI：产品面存在且可执行 [2m(3)[22m
+[31m     [31m×[31m bin/m0.mjs 在盘上且带 shebang（npm bin 的硬要求）[39m[32m 7[2mms[22m[39m
+[31m     [31m×[31m package.json 的 bin 指向它（装上才有 m0 这个命令）[39m[32m 1[2mms[22m[39m
+[31m     [31m×[31m 真跑：--help 打印用法并 exit 0（走真 bin shim，不是 import src）[39m[32m 33[2mms[22m[39m
+   [31m❯[39m m0 CLI：退出码 0 / 1 / 2（照 scripts/gym-run.ts 的口径） [2m(4)[22m
+[31m     [31m×[31m 缺任务描述 ⇒ exit 2 且说清怎么用[39m[32m 32[2mms[22m[39m
+[31m     [31m×[31m flag 给了却没带值 ⇒ exit 2（静默按缺省跑会让打错的 flag 假装生效）[39m[32m 30[2mms[22m[39m
+[31m     [31m×[31m 未知 --mode ⇒ exit 2 且列出合法档位[39m[32m 31[2mms[22m[39m
+[31m     [31m×[31m 位置参数超过两个 ⇒ exit 2（不猜哪个是工作区）[39m[32m 31[2mms[22m[39m
+   [31m❯[39m m0 CLI：--model 自由档位 [2m(4)[22m
+[31m     [31m×[31m --help 里列出这个 flag（没进 help 的选项等于不存在）[39m[32m 32[2mms[22m[39m
+[31m     [31m×[31m 给了 flag 没给值 ⇒ exit 2（与 --mode 同一条口径）[39m[32m 31[2mms[22m[39m
+[31m     [31m×[31m 模型名是取值不是位置参数：不会被当成工作区或任务（漏登记进 VALUE_FLAGS 的后果）[39m[32m 29[2mms[22m[39m
+[31m     [31m×[31m --provider demo 下点名模型 ⇒ exit 2（demo 不拨号，静默忽略等于换掉用户意图）[39m[32m 29[2mms[22m[39m
+   [31m❯[39m m0 CLI：--ctx-window（只配 --model，申报自由档位的真实窗口） [2m(4)[22m
+[31m     [31m×[31m --help 里列出这个 flag（没进 help 的选项等于不存在）[39m[32m 30[2mms[22m[39m
+[31m     [31m×[31m 没有 --model 却给了 --ctx-window ⇒ exit 2（表内档位的窗口由档位表说了算，不接受申报）[39m[32m 31[2mms[22m[39m
+[31m     [31m×[31m 非正整数 ⇒ exit 2（窗口是 token 数，0/负数/小数都不成）[39m[32m 26[2mms[22m[39m
+[31m     [31m×[31m 取值型 flag：窗口值不会被当成位置参数（漏登记进 VALUE_FLAGS 的后果）[39m[32m 32[2mms[22m[39m
+   [31m❯[39m m0 CLI：缺 key 时 fail-closed，不静默换一家也不落 demo [2m(3)[22m
+[31m     [31m×[31m 一个 key 都没配 ⇒ exit 2，且**没有**默默跑 demo[39m[32m 31[2mms[22m[39m
+[31m     [31m×[31m 提示里点名了要设哪个环境变量，含 DeepSeek 那条 OpenAI 兼容通道[39m[32m 28[2mms[22m[39m
+     [32m✓[39m 配置错不打「用法」行（那行会把人引到 argv 上去，而该配的是环境变量）[32m 29[2mms[22m[39m
+   [31m❯[39m m0 CLI：默认档位是 fail-closed 的那一档 [2m(4)[22m
+[31m     [31m×[31m 支一：不给 --mode ⇒ 写工具被门拒（auto 必须显式 opt-in，不是缺省）[39m[32m 27[2mms[22m[39m
+[31m     [31m×[31m 支二：只多给一个 --mode auto ⇒ 同一拍写得下去（否则支一钉的是「CLI 根本不会写」）[39m[32m 29[2mms[22m[39m
+     [32m✓[39m 启动时自检沙箱，不可用就明说（不假装有沙箱）[32m 1[2mms[22m[39m
+     [32m✓[39m 退出时收掉 tracked 子进程（killAllTrackedChildren 的天然调用方就是这里）[32m 1[2mms[22m[39m
+   [32m✓[39m m0 CLI：审批门在没人能答时 fail-closed [2m(3)[22m
+     [32m✓[39m stdin 非 TTY 时门按 unattended 收束，不等那个 60s 超时[32m 0[2mms[22m[39m
+     [32m✓[39m rl.question 的 throw 被吞掉并转成拒绝（不许冒进工具执行）[32m 0[2mms[22m[39m
+     [32m✓[39m 不再自建 AskGate 实例（自建一个 = 两扇门，模型问的那道和人能答的那道会分叉）[32m 0[2mms[22m[39m
+   [31m❯[39m m0 CLI：走应用壳（handleAgentRun），不裸调 runAgent [2m(4)[22m
+[31m     [31m×[31m 支一：盘上 planRequiredByDefault=true ⇒ 写禁真的挡住了写（只可能来自 handleAgentRun 那一层）[39m[32m 30[2mms[22m[39m
+[31m     [31m×[31m 支二：只把那一个键去掉 ⇒ 同一拍同一份剧本写下去了（否则支一钉的是「CLI 什么也不干」）[39m[32m 29[2mms[22m[39m
+     [32m✓[39m --model 自由档走 modelSelection 槽：那一档不在档位表里，过不了信封校验[32m 0[2mms[22m[39m
+     [32m✓[39m automation_* 五个工具不装：定时任务是长驻进程语义，CLI 是一次性进程[32m 1[2mms[22m[39m
+   [31m❯[39m m0 CLI：--goal / --session / --compact 三条真入口在 argv 上 [2m(10)[22m
+[31m     [31m×[31m 三个 flag 都进了 help（没进 help 的选项等于不存在）[39m[32m 28[2mms[22m[39m
+[31m     [31m×[31m 闸值单独给 ⇒ exit 2（--max-turns 没有 --goal 就是没落在任何东西上）[39m[32m 28[2mms[22m[39m
+[31m     [31m×[31m --max-turns 非正整数 ⇒ exit 2（静默忽略 = 上限假装生效）[39m[32m 28[2mms[22m[39m
+[31m     [31m×[31m --goal 与 --log 互斥（两份日志分叉 = 设了但不生效的目标）[39m[32m 30[2mms[22m[39m
+[31m     [31m×[31m 拒 --goal 与 --log 同行时，理由与出路要跟着拒一起给（后半句是给模型的下一步）[39m[32m 28[2mms[22m[39m
+[31m     [31m×[31m 那道 goal/log 闸不许吃掉单边写法：只给 --goal 或只给 --log 都要放行到后面那道闸[39m[32m 29[2mms[22m[39m
+[31m     [31m×[31m --workspace 与位置参数同时给 ⇒ 拒，拒因说清「二者只能取一」[39m[32m 31[2mms[22m[39m
+[31m     [31m×[31m 工作区的两种合法形状各自放行（无条件拒会把 `m0 <目录> <任务>` 这条主路杀掉）[39m[32m 29[2mms[22m[39m
+[31m     [31m×[31m --compact 没指会话 ⇒ exit 2（压缩一条刚编出来的 id 一定报「会话不存在」）[39m[32m 29[2mms[22m[39m
+[31m     [31m×[31m 非法会话名 ⇒ exit 2（会话名会拼成文件路径）[39m[32m 28[2mms[22m[39m
+   [32m✓[39m m0 CLI：Ctrl-C 走 handleRunCancel（截断事件流 = 转录对不上账） [2m(1)[22m
+     [32m✓[39m 第一次请 run 收束、第二次才硬退——硬退那一支必须整个在 `cancelling` 守卫里[32m 1[2mms[22m[39m
+   [31m❯[39m m0 CLI：clarify / propose_plan 两扇门在真跑里都收得住（不悬挂） [2m(5)[22m
+     [32m✓[39m 非交互真跑一遍门流程：进程正常收束（status 不是 null），不是被 timeout 杀掉的[32m 31[2mms[22m[39m
+[31m     [31m×[31m 澄清门非交互时提交**空答案**——不编造答案，但也不悬挂[39m[32m 0[2mms[22m[39m
+[31m     [31m×[31m 方案门非交互时 fail-closed 拒绝，且**写禁因此真的挡住了写**（不只是嘴上说说）[39m[32m 0[2mms[22m[39m
+[31m     [31m×[31m 方案门的决议经 agent-runner 的真入口落到日志里（plan_approved 全仓只有 handlePlanDecide 一个写点）[39m[32m 0[2mms[22m[39m
+     [32m✓[39m 同一行只渲染一遍：行为层无相邻重复行，结构层渲染器只接一个出口[32m 1[2mms[22m[39m
+   [32m✓[39m renderEvent：事件 → stdout（全仓第一份渲染器） [2m(6)[22m
+     [32m✓[39m 工具调用带名字与参数摘要（write_file 只报路径，不刷正文）[32m 0[2mms[22m[39m
+     [32m✓[39m run_shell 的参数摘要取命令首行[32m 0[2mms[22m[39m
+     [32m✓[39m 成功 / 失败分色可辨（NO_COLOR 下也靠 ✓ / ✗ 区分）[32m 0[2mms[22m[39m
+     [32m✓[39m 多行输出压成首行（整块刷屏反而看不见发生了什么）[32m 0[2mms[22m[39m
+     [32m✓[39m 空 assistant_message 不打空行[32m 0[2mms[22m[39m
+     [32m✓[39m 不进 stdout 的事件返回 null（它们在 JSONL 里，需要时 replay）[32m 0[2mms[22m[39m
+   [32m✓[39m renderEvent：worker diff 整块落地，不被首行压缩吃掉 [2m(3)[22m
+     [32m✓[39m stat 与 patch 都在（压首行的话模型改了什么就彻底看不见了）[32m 0[2mms[22m[39m
+     [32m✓[39m 老兜底形状（callId 是 `diff-<agent>`，无 spawn id 的内部 worker）同样整块打[32m 0[2mms[22m[39m
+     [32m✓[39m 普通的 tool_result 仍然压首行（这条豁免只对 diff-* 生效，否则整个渲染面就成刷屏了）[32m 0[2mms[22m[39m
+   [32m✓[39m renderEvent：worker 生命周期与目标事件上屏（看不见 = 等于没发生过多 agent 编排） [2m(8)[22m
+     [32m✓[39m 派出 worker 报 id / 档位 / 任务[32m 0[2mms[22m[39m
+     [32m✓[39m 终态分色可辨：done 是绿的，failed / cancelled 是红的[32m 0[2mms[22m[39m
+     [32m✓[39m worker 报告整块打，过程消息压首行（结论要看得见，流水不必）[32m 0[2mms[22m[39m
+     [32m✓[39m worker 终态回传带上机器凭据：证据四态 + 价格标签（散文自述不算证据）[32m 0[2mms[22m[39m
+     [32m✓[39m 价格不可知时**不**印 $0.00（把不可知记成免费 = 这轮没花钱的假证据）[32m 0[2mms[22m[39m
+     [32m✓[39m 影响面报告：半径 0 也要看得见（那正是「改它没人调用」）[32m 0[2mms[22m[39m
+     [32m✓[39m 目标设定与停止都要上屏（停止理由是用户唯一能查到的「为什么不跑了」）[32m 0[2mms[22m[39m
+     [32m✓[39m 美元闸关着时（max_usd = 0）不印一个假的 $0 上限[32m 0[2mms[22m[39m
+   [31m❯[39m m0 CLI：--compact 要摘要模型，没它就 fail-closed（不许静默截断） [2m(4)[22m
+[31m     [31m×[31m 支一：没有可用摘要器 ⇒ exit 1 + 点名 M0_API_KEY，且会话日志一个字节没动[39m[32m 39[2mms[22m[39m
+[31m     [31m×[31m 支二：摘要器在（演示档）⇒ exit 0，会话末尾多一条 compaction[39m[32m 35[2mms[22m[39m
+[31m     [31m×[31m help 不再承诺「不跑模型」，改说清要哪把 key（缺陷本体就是这句假话）[39m[32m 31[2mms[22m[39m
+[31m     [31m×[31m --compact 缺 --session ⇒ exit 2（不编一个会话 id 出来再报「不存在」）[39m[32m 36[2mms[22m[39m
+ [31m❯[39m tests/autonomy.test.ts [2m([22m[2m44 tests[22m[2m | [22m[31m18 failed[39m[2m)[22m[32m 23[2mms[22m[39m
+   [32m✓[39m 评估管线：四层各自短路（任务 1） [2m(5)[22m
+     [32m✓[39m L1 deny 规则短路：auto 档也拦[32m 3[2mms[22m[39m
+     [32m✓[39m L2 ask 规则短路：auto 档也送审[32m 2[2mms[22m[39m
+     [32m✓[39m L3 档位短路：default 档副作用送审 / read-only 档拒绝[32m 0[2mms[22m[39m
+     [32m✓[39m L4 风险短路：auto 档 critical 仍被拦[32m 0[2mms[22m[39m
+     [32m✓[39m 先命中先短路：deny 规则压过档位与风险层之外的一切放行路径[32m 0[2mms[22m[39m
+   [32m✓[39m 纯函数（任务 1） [2m(1)[22m
+     [32m✓[39m 同一输入两次调用结果一致，且不改动 session[32m 1[2mms[22m[39m
+   [32m✓[39m 风险三通道（任务 3） [2m(5)[22m
+     [32m✓[39m 静态通道：curl|bash critical → 审批[32m 0[2mms[22m[39m
+     [32m✓[39m 模型通道：requires_approval 标记 → 任何档位审批（含读类工具）[32m 0[2mms[22m[39m
+     [32m✓[39m 沙箱通道：沙箱降级 + 副作用工具 → 审批（未接线 null 不触发）[32m 1[2mms[22m[39m
+     [32m✓[39m 三通道取 max：critical 压过一切；auto 档网络类 medium 也送审[32m 0[2mms[22m[39m
+     [32m✓[39m allow 规则也批不掉 critical（任何档位强制审批）[32m 0[2mms[22m[39m
+   [32m✓[39m scope 三档（任务 4） [2m(3)[22m
+     [32m✓[39m session_kind：第二次同类调用不再问（source=session_scope + 审计键）[32m 0[2mms[22m[39m
+     [32m✓[39m 网络类命令不吃 scope 放行（强制 once，出网审计）[32m 0[2mms[22m[39m
+     [32m✓[39m 拒绝永不自动生成规则：evaluate 对 deny/ask 路径零副作用（规则数组不变）[32m 0[2mms[22m[39m
+   [32m✓[39m 断路器（任务 5） [2m(2)[22m
+     [32m✓[39m 第 51 次降级：50 次 scope 自动放行后，下一次送审且直至会话重开[32m 1[2mms[22m[39m
+     [32m✓[39m critical 连拒 3 次 → 降档提示[32m 0[2mms[22m[39m
+   [32m✓[39m 只读档工具表摘除（任务 1） [2m(1)[22m
+     [32m✓[39m read-only 档工具表不含 write_file/run_shell；其余档完整[32m 3[2mms[22m[39m
+   [31m❯[39m 文件面路径风险通道（S2 路径侧） [2m(27)[22m
+[31m     [31m×[31m guided 档 write_file .git/hooks/pre-commit ⇒ 送审（不是 approve 直通）[39m[32m 3[2mms[22m[39m
+[31m     [31m×[31m guided 档 write_file sub/.git/hooks/post-commit ⇒ 送审（不是 approve 直通）[39m[32m 0[2mms[22m[39m
+[31m     [31m×[31m guided 档 write_file .git/config ⇒ 送审（不是 approve 直通）[39m[32m 0[2mms[22m[39m
+[31m     [31m×[31m guided 档 write_file .agent/lsp.json ⇒ 送审（不是 approve 直通）[39m[32m 0[2mms[22m[39m
+[31m     [31m×[31m guided 档 write_file .agent/config.json ⇒ 送审（不是 approve 直通）[39m[32m 0[2mms[22m[39m
+[31m     [31m×[31m guided 档 write_file .npmrc ⇒ 送审（不是 approve 直通）[39m[32m 0[2mms[22m[39m
+[31m     [31m×[31m guided 档 write_file .env ⇒ 送审（不是 approve 直通）[39m[32m 0[2mms[22m[39m
+[31m     [31m×[31m auto 档 write_file .git/hooks/pre-commit ⇒ 送审（不是 approve 直通）[39m[32m 0[2mms[22m[39m
+[31m     [31m×[31m auto 档 write_file sub/.git/hooks/post-commit ⇒ 送审（不是 approve 直通）[39m[32m 0[2mms[22m[39m
+[31m     [31m×[31m auto 档 write_file .git/config ⇒ 送审（不是 approve 直通）[39m[32m 0[2mms[22m[39m
+[31m     [31m×[31m auto 档 write_file .agent/lsp.json ⇒ 送审（不是 approve 直通）[39m[32m 0[2mms[22m[39m
+[31m     [31m×[31m auto 档 write_file .agent/config.json ⇒ 送审（不是 approve 直通）[39m[32m 0[2mms[22m[39m
+[31m     [31m×[31m auto 档 write_file .npmrc ⇒ 送审（不是 approve 直通）[39m[32m 0[2mms[22m[39m
+[31m     [31m×[31m auto 档 write_file .env ⇒ 送审（不是 approve 直通）[39m[32m 0[2mms[22m[39m
+     [32m✓[39m default 档 write_file .git/hooks/pre-commit ⇒ 送审（不是 approve 直通）[32m 0[2mms[22m[39m
+     [32m✓[39m default 档 write_file sub/.git/hooks/post-commit ⇒ 送审（不是 approve 直通）[32m 0[2mms[22m[39m
+     [32m✓[39m default 档 write_file .git/config ⇒ 送审（不是 approve 直通）[32m 0[2mms[22m[39m
+     [32m✓[39m default 档 write_file .agent/lsp.json ⇒ 送审（不是 approve 直通）[32m 0[2mms[22m[39m
+     [32m✓[39m default 档 write_file .agent/config.json ⇒ 送审（不是 approve 直通）[32m 0[2mms[22m[39m
+     [32m✓[39m default 档 write_file .npmrc ⇒ 送审（不是 approve 直通）[32m 0[2mms[22m[39m
+     [32m✓[39m default 档 write_file .env ⇒ 送审（不是 approve 直通）[32m 0[2mms[22m[39m
+[31m     [31m×[31m 风险等级与 shell 面同目标对齐：都是 high，层复用 L4-risk（不新增判据层）[39m[32m 3[2mms[22m[39m
+[31m     [31m×[31m apply_patch 批量形态也拦：路径只在 patch 正文里，没有 path 键[39m[32m 0[2mms[22m[39m
+[31m     [31m×[31m 反斜杠形态不绕过（Windows 入参）：归一后再判[39m[32m 0[2mms[22m[39m
+[31m     [31m×[31m edit_file 命中敏感路径抬到 high（严于它平时的 medium），未命中仍是 medium[39m[32m 0[2mms[22m[39m
+     [32m✓[39m 普通路径零行为变更：write_file/apply_patch/read_file/grep 仍按原判定放行[32m 0[2mms[22m[39m
+     [32m✓[39m 名字里带敏感词但不是真落点的路径不误伤（submodule 式路径仍放行）[32m 0[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 56 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22mguided 档 write_file .git/hooks/pre-commit ⇒ 送审（不是 approve 直通）
+[31m[1mAssertionError[22m: guided .git/hooks/pre-commit 被放行: expected 'approve' not to be 'approve' // Object.is equality[39m
+[36m [2m❯[22m tests/autonomy.test.ts:[2m252:54[22m[39m
+    [90m250|[39m       it(`${mode} 档 write_file ${path} ⇒ 送审（不是 approve 直通）`, () => {
+    [90m251|[39m         const d = evaluate("write_file", { path, content: "x" }, sessi…
+    [90m252|[39m         expect(d.verdict, `${mode} ${path} 被放行`).not.toBe("approve");
+    [90m   |[39m                                                      [31m^[39m
+    [90m253|[39m       });
+    [90m254|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22mguided 档 write_file sub/.git/hooks/post-commit ⇒ 送审（不是 approve 直通）
+[31m[1mAssertionError[22m: guided sub/.git/hooks/post-commit 被放行: expected 'approve' not to be 'approve' // Object.is equality[39m
+[36m [2m❯[22m tests/autonomy.test.ts:[2m252:54[22m[39m
+    [90m250|[39m       it(`${mode} 档 write_file ${path} ⇒ 送审（不是 approve 直通）`, () => {
+    [90m251|[39m         const d = evaluate("write_file", { path, content: "x" }, sessi…
+    [90m252|[39m         expect(d.verdict, `${mode} ${path} 被放行`).not.toBe("approve");
+    [90m   |[39m                                                      [31m^[39m
+    [90m253|[39m       });
+    [90m254|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22mguided 档 write_file .git/config ⇒ 送审（不是 approve 直通）
+[31m[1mAssertionError[22m: guided .git/config 被放行: expected 'approve' not to be 'approve' // Object.is equality[39m
+[36m [2m❯[22m tests/autonomy.test.ts:[2m252:54[22m[39m
+    [90m250|[39m       it(`${mode} 档 write_file ${path} ⇒ 送审（不是 approve 直通）`, () => {
+    [90m251|[39m         const d = evaluate("write_file", { path, content: "x" }, sessi…
+    [90m252|[39m         expect(d.verdict, `${mode} ${path} 被放行`).not.toBe("approve");
+    [90m   |[39m                                                      [31m^[39m
+    [90m253|[39m       });
+    [90m254|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22mguided 档 write_file .agent/lsp.json ⇒ 送审（不是 approve 直通）
+[31m[1mAssertionError[22m: guided .agent/lsp.json 被放行: expected 'approve' not to be 'approve' // Object.is equality[39m
+[36m [2m❯[22m tests/autonomy.test.ts:[2m252:54[22m[39m
+    [90m250|[39m       it(`${mode} 档 write_file ${path} ⇒ 送审（不是 approve 直通）`, () => {
+    [90m251|[39m         const d = evaluate("write_file", { path, content: "x" }, sessi…
+    [90m252|[39m         expect(d.verdict, `${mode} ${path} 被放行`).not.toBe("approve");
+    [90m   |[39m                                                      [31m^[39m
+    [90m253|[39m       });
+    [90m254|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22mguided 档 write_file .agent/config.json ⇒ 送审（不是 approve 直通）
+[31m[1mAssertionError[22m: guided .agent/config.json 被放行: expected 'approve' not to be 'approve' // Object.is equality[39m
+[36m [2m❯[22m tests/autonomy.test.ts:[2m252:54[22m[39m
+    [90m250|[39m       it(`${mode} 档 write_file ${path} ⇒ 送审（不是 approve 直通）`, () => {
+    [90m251|[39m         const d = evaluate("write_file", { path, content: "x" }, sessi…
+    [90m252|[39m         expect(d.verdict, `${mode} ${path} 被放行`).not.toBe("approve");
+    [90m   |[39m                                                      [31m^[39m
+    [90m253|[39m       });
+    [90m254|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22mguided 档 write_file .npmrc ⇒ 送审（不是 approve 直通）
+[31m[1mAssertionError[22m: guided .npmrc 被放行: expected 'approve' not to be 'approve' // Object.is equality[39m
+[36m [2m❯[22m tests/autonomy.test.ts:[2m252:54[22m[39m
+    [90m250|[39m       it(`${mode} 档 write_file ${path} ⇒ 送审（不是 approve 直通）`, () => {
+    [90m251|[39m         const d = evaluate("write_file", { path, content: "x" }, sessi…
+    [90m252|[39m         expect(d.verdict, `${mode} ${path} 被放行`).not.toBe("approve");
+    [90m   |[39m                                                      [31m^[39m
+    [90m253|[39m       });
+    [90m254|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22mguided 档 write_file .env ⇒ 送审（不是 approve 直通）
+[31m[1mAssertionError[22m: guided .env 被放行: expected 'approve' not to be 'approve' // Object.is equality[39m
+[36m [2m❯[22m tests/autonomy.test.ts:[2m252:54[22m[39m
+    [90m250|[39m       it(`${mode} 档 write_file ${path} ⇒ 送审（不是 approve 直通）`, () => {
+    [90m251|[39m         const d = evaluate("write_file", { path, content: "x" }, sessi…
+    [90m252|[39m         expect(d.verdict, `${mode} ${path} 被放行`).not.toBe("approve");
+    [90m   |[39m                                                      [31m^[39m
+    [90m253|[39m       });
+    [90m254|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22mauto 档 write_file .git/hooks/pre-commit ⇒ 送审（不是 approve 直通）
+[31m[1mAssertionError[22m: auto .git/hooks/pre-commit 被放行: expected 'approve' not to be 'approve' // Object.is equality[39m
+[36m [2m❯[22m tests/autonomy.test.ts:[2m252:54[22m[39m
+    [90m250|[39m       it(`${mode} 档 write_file ${path} ⇒ 送审（不是 approve 直通）`, () => {
+    [90m251|[39m         const d = evaluate("write_file", { path, content: "x" }, sessi…
+    [90m252|[39m         expect(d.verdict, `${mode} ${path} 被放行`).not.toBe("approve");
+    [90m   |[39m                                                      [31m^[39m
+    [90m253|[39m       });
+    [90m254|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22mauto 档 write_file sub/.git/hooks/post-commit ⇒ 送审（不是 approve 直通）
+[31m[1mAssertionError[22m: auto sub/.git/hooks/post-commit 被放行: expected 'approve' not to be 'approve' // Object.is equality[39m
+[36m [2m❯[22m tests/autonomy.test.ts:[2m252:54[22m[39m
+    [90m250|[39m       it(`${mode} 档 write_file ${path} ⇒ 送审（不是 approve 直通）`, () => {
+    [90m251|[39m         const d = evaluate("write_file", { path, content: "x" }, sessi…
+    [90m252|[39m         expect(d.verdict, `${mode} ${path} 被放行`).not.toBe("approve");
+    [90m   |[39m                                                      [31m^[39m
+    [90m253|[39m       });
+    [90m254|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22mauto 档 write_file .git/config ⇒ 送审（不是 approve 直通）
+[31m[1mAssertionError[22m: auto .git/config 被放行: expected 'approve' not to be 'approve' // Object.is equality[39m
+[36m [2m❯[22m tests/autonomy.test.ts:[2m252:54[22m[39m
+    [90m250|[39m       it(`${mode} 档 write_file ${path} ⇒ 送审（不是 approve 直通）`, () => {
+    [90m251|[39m         const d = evaluate("write_file", { path, content: "x" }, sessi…
+    [90m252|[39m         expect(d.verdict, `${mode} ${path} 被放行`).not.toBe("approve");
+    [90m   |[39m                                                      [31m^[39m
+    [90m253|[39m       });
+    [90m254|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22mauto 档 write_file .agent/lsp.json ⇒ 送审（不是 approve 直通）
+[31m[1mAssertionError[22m: auto .agent/lsp.json 被放行: expected 'approve' not to be 'approve' // Object.is equality[39m
+[36m [2m❯[22m tests/autonomy.test.ts:[2m252:54[22m[39m
+    [90m250|[39m       it(`${mode} 档 write_file ${path} ⇒ 送审（不是 approve 直通）`, () => {
+    [90m251|[39m         const d = evaluate("write_file", { path, content: "x" }, sessi…
+    [90m252|[39m         expect(d.verdict, `${mode} ${path} 被放行`).not.toBe("approve");
+    [90m   |[39m                                                      [31m^[39m
+    [90m253|[39m       });
+    [90m254|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22mauto 档 write_file .agent/config.json ⇒ 送审（不是 approve 直通）
+[31m[1mAssertionError[22m: auto .agent/config.json 被放行: expected 'approve' not to be 'approve' // Object.is equality[39m
+[36m [2m❯[22m tests/autonomy.test.ts:[2m252:54[22m[39m
+    [90m250|[39m       it(`${mode} 档 write_file ${path} ⇒ 送审（不是 approve 直通）`, () => {
+    [90m251|[39m         const d = evaluate("write_file", { path, content: "x" }, sessi…
+    [90m252|[39m         expect(d.verdict, `${mode} ${path} 被放行`).not.toBe("approve");
+    [90m   |[39m                                                      [31m^[39m
+    [90m253|[39m       });
+    [90m254|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22mauto 档 write_file .npmrc ⇒ 送审（不是 approve 直通）
+[31m[1mAssertionError[22m: auto .npmrc 被放行: expected 'approve' not to be 'approve' // Object.is equality[39m
+[36m [2m❯[22m tests/autonomy.test.ts:[2m252:54[22m[39m
+    [90m250|[39m       it(`${mode} 档 write_file ${path} ⇒ 送审（不是 approve 直通）`, () => {
+    [90m251|[39m         const d = evaluate("write_file", { path, content: "x" }, sessi…
+    [90m252|[39m         expect(d.verdict, `${mode} ${path} 被放行`).not.toBe("approve");
+    [90m   |[39m                                                      [31m^[39m
+    [90m253|[39m       });
+    [90m254|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22mauto 档 write_file .env ⇒ 送审（不是 approve 直通）
+[31m[1mAssertionError[22m: auto .env 被放行: expected 'approve' not to be 'approve' // Object.is equality[39m
+[36m [2m❯[22m tests/autonomy.test.ts:[2m252:54[22m[39m
+    [90m250|[39m       it(`${mode} 档 write_file ${path} ⇒ 送审（不是 approve 直通）`, () => {
+    [90m251|[39m         const d = evaluate("write_file", { path, content: "x" }, sessi…
+    [90m252|[39m         expect(d.verdict, `${mode} ${path} 被放行`).not.toBe("approve");
+    [90m   |[39m                                                      [31m^[39m
+    [90m253|[39m       });
+    [90m254|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22m风险等级与 shell 面同目标对齐：都是 high，层复用 L4-risk（不新增判据层）
+[31m[1mAssertionError[22m: expected 'none' to be 'high' // Object.is equality[39m
+
+Expected: [32m"high"[39m
+Received: [31m"none"[39m
+
+[36m [2m❯[22m tests/autonomy.test.ts:[2m260:23[22m[39m
+    [90m258|[39m     const f = evaluate("write_file", { path: ".git/hooks/pre-commit", …
+    [90m259|[39m     const s = evaluate("run_shell", { command: "echo hi >> .git/hooks/…
+    [90m260|[39m     expect(riskOf(f)).toBe("high");
+    [90m   |[39m                       [31m^[39m
+    [90m261|[39m     expect(riskOf(s)).toBe("high");
+    [90m262|[39m     // 两边同走既有风险层：gate-audit.test.ts 的 GATE_LAYERS 穷尽断言因此不必改。
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22mapply_patch 批量形态也拦：路径只在 patch 正文里，没有 path 键
+[31m[1mAssertionError[22m: expected 'approve' not to be 'approve' // Object.is equality[39m
+[36m [2m❯[22m tests/autonomy.test.ts:[2m273:27[22m[39m
+    [90m271|[39m       session({ mode: "auto" }),
+    [90m272|[39m     );
+    [90m273|[39m     expect(d.verdict).not.toBe("approve");
+    [90m   |[39m                           [31m^[39m
+    [90m274|[39m     expect(riskOf(d)).toBe("high");
+    [90m275|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22m反斜杠形态不绕过（Windows 入参）：归一后再判
+[31m[1mAssertionError[22m: expected 'approve' not to be 'approve' // Object.is equality[39m
+[36m [2m❯[22m tests/autonomy.test.ts:[2m279:27[22m[39m
+    [90m277|[39m   it("反斜杠形态不绕过（Windows 入参）：归一后再判", () => {
+    [90m278|[39m     const d = evaluate("write_file", { path: ".git\\hooks\\pre-commit"…
+    [90m279|[39m     expect(d.verdict).not.toBe("approve");
+    [90m   |[39m                           [31m^[39m
+    [90m280|[39m   });
+    [90m281|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/autonomy.test.ts[2m > [22m文件面路径风险通道（S2 路径侧）[2m > [22medit_file 命中敏感路径抬到 high（严于它平时的 medium），未命中仍是 medium
+[31m[1mAssertionError[22m: expected 'medium' to be 'high' // Object.is equality[39m
+
+Expected: [32m"high"[39m
+Received: [31m"medium"[39m
+
+[36m [2m❯[22m tests/autonomy.test.ts:[2m283:95[22m[39m
+    [90m281|[39m
+    [90m282|[39m   it("edit_file 命中敏感路径抬到 high（严于它平时的 medium），未命中仍是 medium", () => {
+    [90m283|[39m     expect(riskOf(evaluate("edit_file", { path: ".git/config" }, sessi…
+    [90m   |[39m                                                                                               [31m^[39m
+    [90m284|[39m     expect(riskOf(evaluate("edit_file", { path: "src/index.ts" }, sess…
+    [90m285|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：产品面存在且可执行[2m > [22mbin/m0.mjs 在盘上且带 shebang（npm bin 的硬要求）
+[31m[1mAssertionError[22m: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m39:29[22m[39m
+    [90m 37|[39m describe("m0 CLI：产品面存在且可执行", () => {
+    [90m 38|[39m   it("bin/m0.mjs 在盘上且带 shebang（npm bin 的硬要求）", () => {
+    [90m 39|[39m     expect(existsSync(BIN)).toBe(true);
+    [90m   |[39m                             [31m^[39m
+    [90m 40|[39m     expect(readFileSync(BIN, "utf8").startsWith("#!/usr/bin/env node")…
+    [90m 41|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：产品面存在且可执行[2m > [22mpackage.json 的 bin 指向它（装上才有 m0 这个命令）
+[31m[1mAssertionError[22m: expected undefined to be './bin/m0.mjs' // Object.is equality[39m
+
+[32m- Expected:[39m
+"./bin/m0.mjs"
+
+[31m+ Received:[39m
+undefined
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m45:25[22m[39m
+    [90m 43|[39m   it("package.json 的 bin 指向它（装上才有 m0 这个命令）", () => {
+    [90m 44|[39m     const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "u…
+    [90m 45|[39m     expect(pkg.bin?.m0).toBe("./bin/m0.mjs");
+    [90m   |[39m                         [31m^[39m
+    [90m 46|[39m   });
+    [90m 47|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：产品面存在且可执行[2m > [22m真跑：--help 打印用法并 exit 0（走真 bin shim，不是 import src）
+[31m[1mAssertionError[22m: expected 1 to be +0 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 0[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m50:22[22m[39m
+    [90m 48|[39m   it("真跑：--help 打印用法并 exit 0（走真 bin shim，不是 import src）", () => {
+    [90m 49|[39m     const r = runCli(["--help"]);
+    [90m 50|[39m     expect(r.status).toBe(0);
+    [90m   |[39m                      [31m^[39m
+    [90m 51|[39m     expect(r.out).toContain("用法：");
+    [90m 52|[39m     expect(r.out).toContain("--mode");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：退出码 0 / 1 / 2（照 scripts/gym-run.ts 的口径）[2m > [22m缺任务描述 ⇒ exit 2 且说清怎么用
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m59:22[22m[39m
+    [90m 57|[39m   it("缺任务描述 ⇒ exit 2 且说清怎么用", () => {
+    [90m 58|[39m     const r = runCli([]);
+    [90m 59|[39m     expect(r.status).toBe(2);
+    [90m   |[39m                      [31m^[39m
+    [90m 60|[39m     expect(r.out).toContain("任务描述");
+    [90m 61|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：退出码 0 / 1 / 2（照 scripts/gym-run.ts 的口径）[2m > [22mflag 给了却没带值 ⇒ exit 2（静默按缺省跑会让打错的 flag 假装生效）
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m65:22[22m[39m
+    [90m 63|[39m   it("flag 给了却没带值 ⇒ exit 2（静默按缺省跑会让打错的 flag 假装生效）", () => {
+    [90m 64|[39m     const r = runCli(["--mode"]);
+    [90m 65|[39m     expect(r.status).toBe(2);
+    [90m   |[39m                      [31m^[39m
+    [90m 66|[39m     expect(r.out).toContain("--mode 需要一个值");
+    [90m 67|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：退出码 0 / 1 / 2（照 scripts/gym-run.ts 的口径）[2m > [22m未知 --mode ⇒ exit 2 且列出合法档位
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m71:22[22m[39m
+    [90m 69|[39m   it("未知 --mode ⇒ exit 2 且列出合法档位", () => {
+    [90m 70|[39m     const r = runCli(["--mode", "bogus", "做点事"]);
+    [90m 71|[39m     expect(r.status).toBe(2);
+    [90m   |[39m                      [31m^[39m
+    [90m 72|[39m     expect(r.out).toContain("未知 --mode");
+    [90m 73|[39m     expect(r.out).toContain("read-only");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：退出码 0 / 1 / 2（照 scripts/gym-run.ts 的口径）[2m > [22m位置参数超过两个 ⇒ exit 2（不猜哪个是工作区）
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m78:22[22m[39m
+    [90m 76|[39m   it("位置参数超过两个 ⇒ exit 2（不猜哪个是工作区）", () => {
+    [90m 77|[39m     const r = runCli(["a", "b", "c"]);
+    [90m 78|[39m     expect(r.status).toBe(2);
+    [90m   |[39m                      [31m^[39m
+    [90m 79|[39m     expect(r.out).toContain("位置参数最多两个");
+    [90m 80|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--model 自由档位[2m > [22m--help 里列出这个 flag（没进 help 的选项等于不存在）
+[31m[1mAssertionError[22m: expected 'node:internal/modules/cjs/loader:1433…' to contain '--model'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- --model[39m
+[31m+ node:internal/modules/cjs/loader:1433[39m
+[31m+   throw err;[39m
+[31m+   ^[39m
+[31m+[39m
+[31m+ Error: Cannot find module '/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-d825553/bin/m0.mjs'[39m
+[31m+     at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)[39m
+[31m+     at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)[39m
+[31m+     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)[39m
+[31m+     at Function._load (node:internal/modules/cjs/loader:1216:25)[39m
+[31m+     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)[39m
+[31m+     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)[39m
+[31m+     at node:internal/main/run_main_module:36:49 {[39m
+[31m+   code: 'MODULE_NOT_FOUND',[39m
+[31m+   requireStack: [][39m
+[31m+ }[39m
+[31m+[39m
+[31m+ Node.js v22.23.2[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m85:36[22m[39m
+    [90m 83|[39m describe("m0 CLI：--model 自由档位", () => {
+    [90m 84|[39m   it("--help 里列出这个 flag（没进 help 的选项等于不存在）", () => {
+    [90m 85|[39m     expect(runCli(["--help"]).out).toContain("--model");
+    [90m   |[39m                                    [31m^[39m
+    [90m 86|[39m   });
+    [90m 87|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--model 自由档位[2m > [22m给了 flag 没给值 ⇒ exit 2（与 --mode 同一条口径）
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m90:22[22m[39m
+    [90m 88|[39m   it("给了 flag 没给值 ⇒ exit 2（与 --mode 同一条口径）", () => {
+    [90m 89|[39m     const r = runCli(["--model", "--mode", "read-only", "做点事"]);
+    [90m 90|[39m     expect(r.status).toBe(2);
+    [90m   |[39m                      [31m^[39m
+    [90m 91|[39m     expect(r.out).toContain("--model 需要一个值");
+    [90m 92|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--model 自由档位[2m > [22m模型名是取值不是位置参数：不会被当成工作区或任务（漏登记进 VALUE_FLAGS 的后果）
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m98:22[22m[39m
+    [90m 96|[39m     // 就说明 --model 的值确实被当成 flag 取值吃掉了。
+    [90m 97|[39m     const r = runCli(["--model", "stealth/space-bunny-alpha", "做点事"]);
+    [90m 98|[39m     expect(r.status).toBe(2);
+    [90m   |[39m                      [31m^[39m
+    [90m 99|[39m     expect(r.out).not.toContain("位置参数最多两个");
+    [90m100|[39m     expect(r.out).toContain("没有配置任何 provider 的 API key");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--model 自由档位[2m > [22m--provider demo 下点名模型 ⇒ exit 2（demo 不拨号，静默忽略等于换掉用户意图）
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m105:22[22m[39m
+    [90m103|[39m   it("--provider demo 下点名模型 ⇒ exit 2（demo 不拨号，静默忽略等于换掉用户意图）", () => {
+    [90m104|[39m     const r = runCli(["--provider", "demo", "--model", "stealth/space-…
+    [90m105|[39m     expect(r.status).toBe(2);
+    [90m   |[39m                      [31m^[39m
+    [90m106|[39m     expect(r.out).toContain("不匹配");
+    [90m107|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--ctx-window（只配 --model，申报自由档位的真实窗口）[2m > [22m--help 里列出这个 flag（没进 help 的选项等于不存在）
+[31m[1mAssertionError[22m: expected 'node:internal/modules/cjs/loader:1433…' to contain '--ctx-window'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- --ctx-window[39m
+[31m+ node:internal/modules/cjs/loader:1433[39m
+[31m+   throw err;[39m
+[31m+   ^[39m
+[31m+[39m
+[31m+ Error: Cannot find module '/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-d825553/bin/m0.mjs'[39m
+[31m+     at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)[39m
+[31m+     at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)[39m
+[31m+     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)[39m
+[31m+     at Function._load (node:internal/modules/cjs/loader:1216:25)[39m
+[31m+     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)[39m
+[31m+     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)[39m
+[31m+     at node:internal/main/run_main_module:36:49 {[39m
+[31m+   code: 'MODULE_NOT_FOUND',[39m
+[31m+   requireStack: [][39m
+[31m+ }[39m
+[31m+[39m
+[31m+ Node.js v22.23.2[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m112:36[22m[39m
+    [90m110|[39m describe("m0 CLI：--ctx-window（只配 --model，申报自由档位的真实窗口）", () => {
+    [90m111|[39m   it("--help 里列出这个 flag（没进 help 的选项等于不存在）", () => {
+    [90m112|[39m     expect(runCli(["--help"]).out).toContain("--ctx-window");
+    [90m   |[39m                                    [31m^[39m
+    [90m113|[39m   });
+    [90m114|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--ctx-window（只配 --model，申报自由档位的真实窗口）[2m > [22m没有 --model 却给了 --ctx-window ⇒ exit 2（表内档位的窗口由档位表说了算，不接受申报）
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m117:22[22m[39m
+    [90m115|[39m   it("没有 --model 却给了 --ctx-window ⇒ exit 2（表内档位的窗口由档位表说了算，不接受申报）", () …
+    [90m116|[39m     const r = runCli(["--provider", "demo", "--ctx-window", "32768", "…
+    [90m117|[39m     expect(r.status).toBe(2);
+    [90m   |[39m                      [31m^[39m
+    [90m118|[39m     expect(r.out).toContain("--ctx-window");
+    [90m119|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--ctx-window（只配 --model，申报自由档位的真实窗口）[2m > [22m非正整数 ⇒ exit 2（窗口是 token 数，0/负数/小数都不成）
+[31m[1mAssertionError[22m: --ctx-window 0 应当被拒: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m127:52[22m[39m
+    [90m125|[39m     for (const bad of ["0", "-1", "32768.5", "abc"]) {
+    [90m126|[39m       const r = runCli(["--provider", "openai", "--model", "stealth/sm…
+    [90m127|[39m       expect(r.status, `--ctx-window ${bad} 应当被拒`).toBe(2);
+    [90m   |[39m                                                    [31m^[39m
+    [90m128|[39m       expect(r.out).toContain("--ctx-window");
+    [90m129|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--ctx-window（只配 --model，申报自由档位的真实窗口）[2m > [22m取值型 flag：窗口值不会被当成位置参数（漏登记进 VALUE_FLAGS 的后果）
+[31m[1mAssertionError[22m: expected 'node:internal/modules/cjs/loader:1433…' to contain '未配置 API key'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 未配置 API key[39m
+[31m+ node:internal/modules/cjs/loader:1433[39m
+[31m+   throw err;[39m
+[31m+   ^[39m
+[31m+[39m
+[31m+ Error: Cannot find module '/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-d825553/bin/m0.mjs'[39m
+[31m+     at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)[39m
+[31m+     at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)[39m
+[31m+     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)[39m
+[31m+     at Function._load (node:internal/modules/cjs/loader:1216:25)[39m
+[31m+     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)[39m
+[31m+     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)[39m
+[31m+     at node:internal/main/run_main_module:36:49 {[39m
+[31m+   code: 'MODULE_NOT_FOUND',[39m
+[31m+   requireStack: [][39m
+[31m+ }[39m
+[31m+[39m
+[31m+ Node.js v22.23.2[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m141:19[22m[39m
+    [90m139|[39m     // 取值、配对、正整数三关都过了，且 32768 没被当成位置参数。
+    [90m140|[39m     expect(r.out).not.toContain("位置参数最多两个");
+    [90m141|[39m     expect(r.out).toContain("未配置 API key");
+    [90m   |[39m                   [31m^[39m
+    [90m142|[39m   });
+    [90m143|[39m });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：缺 key 时 fail-closed，不静默换一家也不落 demo[2m > [22m一个 key 都没配 ⇒ exit 2，且**没有**默默跑 demo
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m148:22[22m[39m
+    [90m146|[39m   it("一个 key 都没配 ⇒ exit 2，且**没有**默默跑 demo", () => {
+    [90m147|[39m     const r = runCli(["做点事"]);
+    [90m148|[39m     expect(r.status).toBe(2);
+    [90m   |[39m                      [31m^[39m
+    [90m149|[39m     expect(r.out).toContain("没有配置任何 provider 的 API key");
+    [90m150|[39m     // 关键：不能出现「跑完了」这类仿佛真跑过的输出，也不能说自己在 demo 档
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：缺 key 时 fail-closed，不静默换一家也不落 demo[2m > [22m提示里点名了要设哪个环境变量，含 DeepSeek 那条 OpenAI 兼容通道
+[31m[1mAssertionError[22m: expected 'node:internal/modules/cjs/loader:1433…' to contain 'M0_API_KEY'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- M0_API_KEY[39m
+[31m+ node:internal/modules/cjs/loader:1433[39m
+[31m+   throw err;[39m
+[31m+   ^[39m
+[31m+[39m
+[31m+ Error: Cannot find module '/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-d825553/bin/m0.mjs'[39m
+[31m+     at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)[39m
+[31m+     at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)[39m
+[31m+     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)[39m
+[31m+     at Function._load (node:internal/modules/cjs/loader:1216:25)[39m
+[31m+     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)[39m
+[31m+     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)[39m
+[31m+     at node:internal/main/run_main_module:36:49 {[39m
+[31m+   code: 'MODULE_NOT_FOUND',[39m
+[31m+   requireStack: [][39m
+[31m+ }[39m
+[31m+[39m
+[31m+ Node.js v22.23.2[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m156:19[22m[39m
+    [90m154|[39m   it("提示里点名了要设哪个环境变量，含 DeepSeek 那条 OpenAI 兼容通道", () => {
+    [90m155|[39m     const r = runCli(["做点事"]);
+    [90m156|[39m     expect(r.out).toContain("M0_API_KEY");
+    [90m   |[39m                   [31m^[39m
+    [90m157|[39m     expect(r.out).toContain("OPENAI_BASE_URL=https://api.deepseek.com/…
+    [90m158|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：默认档位是 fail-closed 的那一档[2m > [22m支一：不给 --mode ⇒ 写工具被门拒（auto 必须显式 opt-in，不是缺省）
+[31m[1mAssertionError[22m: 这一拍根本没进权限门 ⇒ 这条判卷没有分辨力: expected 'node:internal/modules/cjs/loader:1433…' to contain 'permission denied'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- permission denied[39m
+[31m+ node:internal/modules/cjs/loader:1433[39m
+[31m+   throw err;[39m
+[31m+   ^[39m
+[31m+[39m
+[31m+ Error: Cannot find module '/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-d825553/bin/m0.mjs'[39m
+[31m+     at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)[39m
+[31m+     at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)[39m
+[31m+     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)[39m
+[31m+     at Function._load (node:internal/modules/cjs/loader:1216:25)[39m
+[31m+     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)[39m
+[31m+     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)[39m
+[31m+     at node:internal/main/run_main_module:36:49 {[39m
+[31m+   code: 'MODULE_NOT_FOUND',[39m
+[31m+   requireStack: [][39m
+[31m+ }[39m
+[31m+[39m
+[31m+ Node.js v22.23.2[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m211:43[22m[39m
+    [90m209|[39m   it("支一：不给 --mode ⇒ 写工具被门拒（auto 必须显式 opt-in，不是缺省）", () => {
+    [90m210|[39m     const { out, written } = runWriteScript();
+    [90m211|[39m     expect(out, "这一拍根本没进权限门 ⇒ 这条判卷没有分辨力").toContain("permission denied…
+    [90m   |[39m                                           [31m^[39m
+    [90m212|[39m     expect(out).toContain("在 default 档下");
+    [90m213|[39m     expect(written, `缺省档居然把文件写下去了：${out}`).toBe(false);
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：默认档位是 fail-closed 的那一档[2m > [22m支二：只多给一个 --mode auto ⇒ 同一拍写得下去（否则支一钉的是「CLI 根本不会写」）
+[31m[1mAssertionError[22m: auto 档下没写下去 ⇒ 这一拍的失败与缺省档无关：node:internal/modules/cjs/loader:1433
+  throw err;
+  ^
+
+Error: Cannot find module '/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-d825553/bin/m0.mjs'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)
+    at Function._load (node:internal/modules/cjs/loader:1216:25)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v22.23.2
+: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m218:58[22m[39m
+    [90m216|[39m   it("支二：只多给一个 --mode auto ⇒ 同一拍写得下去（否则支一钉的是「CLI 根本不会写」）", () => {
+    [90m217|[39m     const { out, written } = runWriteScript({ mode: "auto" });
+    [90m218|[39m     expect(written, `auto 档下没写下去 ⇒ 这一拍的失败与缺省档无关：${out}`).toBe(true);
+    [90m   |[39m                                                          [31m^[39m
+    [90m219|[39m     expect(out).not.toContain("permission denied");
+    [90m220|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：走应用壳（handleAgentRun），不裸调 runAgent[2m > [22m支一：盘上 planRequiredByDefault=true ⇒ 写禁真的挡住了写（只可能来自 handleAgentRun 那一层）
+[31m[1mAssertionError[22m: 这一拍根本没跑到权限门 ⇒ 这条判卷没有分辨力: expected 'node:internal/modules/cjs/loader:1433…' to contain '方案门：先批后写'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 方案门：先批后写[39m
+[31m+ node:internal/modules/cjs/loader:1433[39m
+[31m+   throw err;[39m
+[31m+   ^[39m
+[31m+[39m
+[31m+ Error: Cannot find module '/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-d825553/bin/m0.mjs'[39m
+[31m+     at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)[39m
+[31m+     at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)[39m
+[31m+     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)[39m
+[31m+     at Function._load (node:internal/modules/cjs/loader:1216:25)[39m
+[31m+     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)[39m
+[31m+     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)[39m
+[31m+     at node:internal/main/run_main_module:36:49 {[39m
+[31m+   code: 'MODULE_NOT_FOUND',[39m
+[31m+   requireStack: [][39m
+[31m+ }[39m
+[31m+[39m
+[31m+ Node.js v22.23.2[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m291:44[22m[39m
+    [90m289|[39m   it("支一：盘上 planRequiredByDefault=true ⇒ 写禁真的挡住了写（只可能来自 handleAgentRun…
+    [90m290|[39m     const { out, ws, written, logInWorkspace } = runWriteScript({ mode…
+    [90m291|[39m     expect(out, "这一拍根本没跑到权限门 ⇒ 这条判卷没有分辨力").toContain("方案门：先批后写");
+    [90m   |[39m                                            [31m^[39m
+    [90m292|[39m     // 只打印拒绝不够：那正是把门做成纯 UI 时的样子。盘上必须没有那个文件。
+    [90m293|[39m     expect(written, `方案门拒绝了却把文件写进了工作区：${out}`).toBe(false);
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[38/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：走应用壳（handleAgentRun），不裸调 runAgent[2m > [22m支二：只把那一个键去掉 ⇒ 同一拍同一份剧本写下去了（否则支一钉的是「CLI 什么也不干」）
+[31m[1mAssertionError[22m: auto 档下没写下去，这一拍的失败与 plan 门无关：node:internal/modules/cjs/loader:1433
+  throw err;
+  ^
+
+Error: Cannot find module '/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-d825553/bin/m0.mjs'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)
+    at Function._load (node:internal/modules/cjs/loader:1216:25)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v22.23.2
+: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m301:60[22m[39m
+    [90m299|[39m   it("支二：只把那一个键去掉 ⇒ 同一拍同一份剧本写下去了（否则支一钉的是「CLI 什么也不干」）", () => {
+    [90m300|[39m     const { out, ws, written } = runWriteScript({ mode: "auto", planRe…
+    [90m301|[39m     expect(written, `auto 档下没写下去，这一拍的失败与 plan 门无关：${out}`).toBe(true);
+    [90m   |[39m                                                            [31m^[39m
+    [90m302|[39m     expect(readFileSync(join(ws, "payload.txt"), "utf8")).toBe("写下来了\n…
+    [90m303|[39m     // 对照组的反面：这一拍没有门拦它 ⇒ 没有那句拒绝。这两支只差一个维度，结论却换人。
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--goal / --session / --compact 三条真入口在 argv 上[2m > [22m三个 flag 都进了 help（没进 help 的选项等于不存在）
+[31m[1mAssertionError[22m: expected 'node:internal/modules/cjs/loader:1433…' to contain '--goal'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- --goal[39m
+[31m+ node:internal/modules/cjs/loader:1433[39m
+[31m+   throw err;[39m
+[31m+   ^[39m
+[31m+[39m
+[31m+ Error: Cannot find module '/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-d825553/bin/m0.mjs'[39m
+[31m+     at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)[39m
+[31m+     at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)[39m
+[31m+     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)[39m
+[31m+     at Function._load (node:internal/modules/cjs/loader:1216:25)[39m
+[31m+     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)[39m
+[31m+     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)[39m
+[31m+     at node:internal/main/run_main_module:36:49 {[39m
+[31m+   code: 'MODULE_NOT_FOUND',[39m
+[31m+   requireStack: [][39m
+[31m+ }[39m
+[31m+[39m
+[31m+ Node.js v22.23.2[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m327:20[22m[39m
+    [90m325|[39m
+    [90m326|[39m   it("三个 flag 都进了 help（没进 help 的选项等于不存在）", () => {
+    [90m327|[39m     expect(help()).toContain("--goal");
+    [90m   |[39m                    [31m^[39m
+    [90m328|[39m     expect(help()).toContain("--session");
+    [90m329|[39m     expect(help()).toContain("--compact");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[40/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--goal / --session / --compact 三条真入口在 argv 上[2m > [22m闸值单独给 ⇒ exit 2（--max-turns 没有 --goal 就是没落在任何东西上）
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m334:22[22m[39m
+    [90m332|[39m   it("闸值单独给 ⇒ exit 2（--max-turns 没有 --goal 就是没落在任何东西上）", () => {
+    [90m333|[39m     const r = runCli(["--provider", "demo", "--max-turns", "5", "做点事"]…
+    [90m334|[39m     expect(r.status).toBe(2);
+    [90m   |[39m                      [31m^[39m
+    [90m335|[39m     expect(r.out).toContain("需要一个 --goal");
+    [90m336|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[41/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--goal / --session / --compact 三条真入口在 argv 上[2m > [22m--max-turns 非正整数 ⇒ exit 2（静默忽略 = 上限假装生效）
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m340:22[22m[39m
+    [90m338|[39m   it("--max-turns 非正整数 ⇒ exit 2（静默忽略 = 上限假装生效）", () => {
+    [90m339|[39m     const r = runCli(["--provider", "demo", "--goal", "把测试修绿", "--max-…
+    [90m340|[39m     expect(r.status).toBe(2);
+    [90m   |[39m                      [31m^[39m
+    [90m341|[39m     expect(r.out).toContain("--max-turns 要正整数");
+    [90m342|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[42/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--goal / --session / --compact 三条真入口在 argv 上[2m > [22m--goal 与 --log 互斥（两份日志分叉 = 设了但不生效的目标）
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m346:22[22m[39m
+    [90m344|[39m   it("--goal 与 --log 互斥（两份日志分叉 = 设了但不生效的目标）", () => {
+    [90m345|[39m     const r = runCli(["--provider", "demo", "--goal", "把测试修绿", "--log"…
+    [90m346|[39m     expect(r.status).toBe(2);
+    [90m   |[39m                      [31m^[39m
+    [90m347|[39m     expect(r.out).toContain("--log 与 --goal 不能同时给");
+    [90m348|[39m   }, 15_000); // 真起 CLI 子进程：安静态 2.39s（第 262 页）
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[43/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--goal / --session / --compact 三条真入口在 argv 上[2m > [22m拒 --goal 与 --log 同行时，理由与出路要跟着拒一起给（后半句是给模型的下一步）
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m354:25[22m[39m
+    [90m352|[39m   it("拒 --goal 与 --log 同行时，理由与出路要跟着拒一起给（后半句是给模型的下一步）", () => {
+    [90m353|[39m     const both = runCli(["--provider", "demo", "--goal", "把测试修绿", "--l…
+    [90m354|[39m     expect(both.status).toBe(2);
+    [90m   |[39m                         [31m^[39m
+    [90m355|[39m     expect(both.out).toContain("目标只能挂在会话上");
+    [90m356|[39m     expect(both.out, "拒因必须给出路，否则模型只剩试错").toContain("去掉 --log");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[44/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--goal / --session / --compact 三条真入口在 argv 上[2m > [22m那道 goal/log 闸不许吃掉单边写法：只给 --goal 或只给 --log 都要放行到后面那道闸
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m363:29[22m[39m
+    [90m361|[39m     // 所以「喊出来的是 serve 那句」就等于「goal/log 这句没拦住」。缺省任务描述那一支会更早喊，别用。
+    [90m362|[39m     const goalOnly = runCli(["--goal", "把测试修绿", "--serve", "做点事"]);
+    [90m363|[39m     expect(goalOnly.status).toBe(2);
+    [90m   |[39m                             [31m^[39m
+    [90m364|[39m     expect(goalOnly.out, "只给 --goal 也被拦＝这道闸把 goal 这一档整个吃掉了").not.toCon…
+    [90m365|[39m     expect(goalOnly.out).toContain("--serve 是常驻调度模式");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[45/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--goal / --session / --compact 三条真入口在 argv 上[2m > [22m--workspace 与位置参数同时给 ⇒ 拒，拒因说清「二者只能取一」
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m375:25[22m[39m
+    [90m373|[39m   it("--workspace 与位置参数同时给 ⇒ 拒，拒因说清「二者只能取一」", () => {
+    [90m374|[39m     const both = runCli(["--workspace", "wsA", "wsB", "做点事"]);
+    [90m375|[39m     expect(both.status).toBe(2);
+    [90m   |[39m                         [31m^[39m
+    [90m376|[39m     expect(both.out).toContain("--workspace 与位置参数重复给工作区，二者只能取一");
+    [90m377|[39m   }, 15_000); // 一次 spawn
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[46/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--goal / --session / --compact 三条真入口在 argv 上[2m > [22m工作区的两种合法形状各自放行（无条件拒会把 `m0 <目录> <任务>` 这条主路杀掉）
+[31m[1mAssertionError[22m: expected 'node:internal/modules/cjs/loader:1433…' to contain '--max-turns 需要一个 --goal'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- --max-turns 需要一个 --goal[39m
+[31m+ node:internal/modules/cjs/loader:1433[39m
+[31m+   throw err;[39m
+[31m+   ^[39m
+[31m+[39m
+[31m+ Error: Cannot find module '/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-d825553/bin/m0.mjs'[39m
+[31m+     at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)[39m
+[31m+     at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)[39m
+[31m+     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)[39m
+[31m+     at Function._load (node:internal/modules/cjs/loader:1216:25)[39m
+[31m+     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)[39m
+[31m+     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)[39m
+[31m+     at node:internal/main/run_main_module:36:49 {[39m
+[31m+   code: 'MODULE_NOT_FOUND',[39m
+[31m+   requireStack: [][39m
+[31m+ }[39m
+[31m+[39m
+[31m+ Node.js v22.23.2[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m382:26[22m[39m
+    [90m380|[39m     const flagOnly = runCli(["--workspace", "wsA", "做点事", "--max-turns…
+    [90m381|[39m     expect(flagOnly.out, "只给 --workspace 也被拒＝flag 形状没了").not.toContain…
+    [90m382|[39m     expect(flagOnly.out).toContain("--max-turns 需要一个 --goal");
+    [90m   |[39m                          [31m^[39m
+    [90m383|[39m     const positionalOnly = runCli(["wsA", "做点事", "--max-turns", "0"]);
+    [90m384|[39m     expect(positionalOnly.out, "只给两个位置参数也被拒＝主路没了").not.toContain("二者只能…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[47/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--goal / --session / --compact 三条真入口在 argv 上[2m > [22m--compact 没指会话 ⇒ exit 2（压缩一条刚编出来的 id 一定报「会话不存在」）
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m390:22[22m[39m
+    [90m388|[39m   it("--compact 没指会话 ⇒ exit 2（压缩一条刚编出来的 id 一定报「会话不存在」）", () => {
+    [90m389|[39m     const r = runCli(["--provider", "demo", "--compact"]);
+    [90m390|[39m     expect(r.status).toBe(2);
+    [90m   |[39m                      [31m^[39m
+    [90m391|[39m     expect(r.out).toContain("--compact 要指一条已有会话");
+    [90m392|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[48/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--goal / --session / --compact 三条真入口在 argv 上[2m > [22m非法会话名 ⇒ exit 2（会话名会拼成文件路径）
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m396:22[22m[39m
+    [90m394|[39m   it("非法会话名 ⇒ exit 2（会话名会拼成文件路径）", () => {
+    [90m395|[39m     const r = runCli(["--provider", "demo", "--session", "a/b", "做点事"]…
+    [90m396|[39m     expect(r.status).toBe(2);
+    [90m   |[39m                      [31m^[39m
+    [90m397|[39m     expect(r.out).toContain("--session 非法会话名");
+    [90m398|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[49/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：clarify / propose_plan 两扇门在真跑里都收得住（不悬挂）[2m > [22m澄清门非交互时提交**空答案**——不编造答案，但也不悬挂
+[31m[1mAssertionError[22m: expected 'node:internal/modules/cjs/loader:1433…' to contain '模型要澄清'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 模型要澄清[39m
+[31m+ node:internal/modules/cjs/loader:1433[39m
+[31m+   throw err;[39m
+[31m+   ^[39m
+[31m+[39m
+[31m+ Error: Cannot find module '/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-d825553/bin/m0.mjs'[39m
+[31m+     at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)[39m
+[31m+     at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)[39m
+[31m+     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)[39m
+[31m+     at Function._load (node:internal/modules/cjs/loader:1216:25)[39m
+[31m+     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)[39m
+[31m+     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)[39m
+[31m+     at node:internal/main/run_main_module:36:49 {[39m
+[31m+   code: 'MODULE_NOT_FOUND',[39m
+[31m+   requireStack: [][39m
+[31m+ }[39m
+[31m+[39m
+[31m+ Node.js v22.23.2[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m486:17[22m[39m
+    [90m484|[39m     // `{}` 是 clarify 工具收到的 tool_result：空 map = 「没人答」。编造答案才是这里唯一真危险的事。
+    [90m485|[39m     const { out } = gateFlow();
+    [90m486|[39m     expect(out).toContain("模型要澄清");
+    [90m   |[39m                 [31m^[39m
+    [90m487|[39m     expect(out).toContain("提交空答案");
+    [90m488|[39m     expect(out).toMatch(/✓\s*\{\}/);
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[50/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：clarify / propose_plan 两扇门在真跑里都收得住（不悬挂）[2m > [22m方案门非交互时 fail-closed 拒绝，且**写禁因此真的挡住了写**（不只是嘴上说说）
+[31m[1mAssertionError[22m: expected 'node:internal/modules/cjs/loader:1433…' to contain '方案待批'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 方案待批[39m
+[31m+ node:internal/modules/cjs/loader:1433[39m
+[31m+   throw err;[39m
+[31m+   ^[39m
+[31m+[39m
+[31m+ Error: Cannot find module '/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-d825553/bin/m0.mjs'[39m
+[31m+     at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)[39m
+[31m+     at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)[39m
+[31m+     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)[39m
+[31m+     at Function._load (node:internal/modules/cjs/loader:1216:25)[39m
+[31m+     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)[39m
+[31m+     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)[39m
+[31m+     at node:internal/main/run_main_module:36:49 {[39m
+[31m+   code: 'MODULE_NOT_FOUND',[39m
+[31m+   requireStack: [][39m
+[31m+ }[39m
+[31m+[39m
+[31m+ Node.js v22.23.2[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m493:17[22m[39m
+    [90m491|[39m   it("方案门非交互时 fail-closed 拒绝，且**写禁因此真的挡住了写**（不只是嘴上说说）", () => {
+    [90m492|[39m     const { out, ws } = gateFlow();
+    [90m493|[39m     expect(out).toContain("方案待批");
+    [90m   |[39m                 [31m^[39m
+    [90m494|[39m     expect(out).toContain("fail-closed 拒绝");
+    [90m495|[39m     expect(out).toContain("方案被拒绝");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[51/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：clarify / propose_plan 两扇门在真跑里都收得住（不悬挂）[2m > [22m方案门的决议经 agent-runner 的真入口落到日志里（plan_approved 全仓只有 handlePlanDecide 一个写点）
+[31m[1mError[22m: ENOENT: no such file or directory, scandir '/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/m0-gate-gFlW2z/.agent/sessions'[39m
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m511:19[22m[39m
+    [90m509|[39m     const { ws } = gateFlow();
+    [90m510|[39m     const log = join(ws, ".agent", "sessions");
+    [90m511|[39m     const files = readdirSync(log).filter((f) => f.endsWith(".jsonl"));
+    [90m   |[39m                   [31m^[39m
+    [90m512|[39m     expect(files, "工作区里没有会话日志 ⇒ 这一轮根本没落盘").toHaveLength(1);
+    [90m513|[39m     const types = readFileSync(join(log, files[0]!), "utf8").split("\n…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[52/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--compact 要摘要模型，没它就 fail-closed（不许静默截断）[2m > [22m支一：没有可用摘要器 ⇒ exit 1 + 点名 M0_API_KEY，且会话日志一个字节没动
+[31m[1mAssertionError[22m: expected 'node:internal/modules/cjs/loader:1433…' to contain 'M0_API_KEY'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- M0_API_KEY[39m
+[31m+ node:internal/modules/cjs/loader:1433[39m
+[31m+   throw err;[39m
+[31m+   ^[39m
+[31m+[39m
+[31m+ Error: Cannot find module '/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-d825553/bin/m0.mjs'[39m
+[31m+     at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)[39m
+[31m+     at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)[39m
+[31m+     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)[39m
+[31m+     at Function._load (node:internal/modules/cjs/loader:1216:25)[39m
+[31m+     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)[39m
+[31m+     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)[39m
+[31m+     at node:internal/main/run_main_module:36:49 {[39m
+[31m+   code: 'MODULE_NOT_FOUND',[39m
+[31m+   requireStack: [][39m
+[31m+ }[39m
+[31m+[39m
+[31m+ Node.js v22.23.2[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m725:19[22m[39m
+    [90m723|[39m     });
+    [90m724|[39m     expect(r.status).toBe(1);
+    [90m725|[39m     expect(r.out).toContain("M0_API_KEY");
+    [90m   |[39m                   [31m^[39m
+    [90m726|[39m     expect(r.out).toContain("压缩失败");
+    [90m727|[39m     expect(typesOnDisk(), "拒绝时也落了 compaction = 静默压缩").not.toContain("c…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[53/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--compact 要摘要模型，没它就 fail-closed（不许静默截断）[2m > [22m支二：摘要器在（演示档）⇒ exit 0，会话末尾多一条 compaction
+[31m[1mAssertionError[22m: run 失败诊断：node:internal/modules/cjs/loader:1433
+  throw err;
+  ^
+
+Error: Cannot find module '/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-d825553/bin/m0.mjs'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)
+    at Function._load (node:internal/modules/cjs/loader:1216:25)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v22.23.2
+: expected 1 to be +0 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 0[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m737:43[22m[39m
+    [90m735|[39m       noKeys: false, env: { OPENAI_API_KEY: PRESENT_IN_ENV, M1D_COMPAC…
+    [90m736|[39m     });
+    [90m737|[39m     expect(r.status, "run 失败诊断：" + r.out).toBe(0);
+    [90m   |[39m                                           [31m^[39m
+    [90m738|[39m     expect(r.out).toContain("已压缩会话");
+    [90m739|[39m     expect(typesOnDisk()).toContain("compaction");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[54/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--compact 要摘要模型，没它就 fail-closed（不许静默截断）[2m > [22mhelp 不再承诺「不跑模型」，改说清要哪把 key（缺陷本体就是这句假话）
+[31m[1mAssertionError[22m: expected 1 to be +0 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 0[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m744:22[22m[39m
+    [90m742|[39m   it("help 不再承诺「不跑模型」，改说清要哪把 key（缺陷本体就是这句假话）", () => {
+    [90m743|[39m     const r = runCli(["--help"]);
+    [90m744|[39m     expect(r.status).toBe(0);
+    [90m   |[39m                      [31m^[39m
+    [90m745|[39m     // 收**选项表里那一行**（`^\s+--compact\s`），不是用法示例那行——示例行本来就没承诺什么，
+    [90m746|[39m     // 拿它当判据的话，这句断言恒真，等于没钉。
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[55/56]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--compact 要摘要模型，没它就 fail-closed（不许静默截断）[2m > [22m--compact 缺 --session ⇒ exit 2（不编一个会话 id 出来再报「不存在」）
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m754:22[22m[39m
+    [90m752|[39m   it("--compact 缺 --session ⇒ exit 2（不编一个会话 id 出来再报「不存在」）", () => {
+    [90m753|[39m     const r = runCli(["--workspace", ws, "--compact"], { noKeys: false…
+    [90m754|[39m     expect(r.status).toBe(2);
+    [90m   |[39m                      [31m^[39m
+    [90m755|[39m     expect(r.out).toContain("--session");
+    [90m756|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[56/56]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m2 failed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[31m56 failed[39m[22m[2m | [22m[1m[32m54 passed[39m[22m[90m (110)[39m
+[2m   Start at [22m 00:46:58
+[2m   Duration [22m 2.75s[2m (transform 44%, tests 43%, import 13%)[22m
+
