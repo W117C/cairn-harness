@@ -13517,7 +13517,7 @@ const MUTATIONS = [
     desc: "摘掉 lsp 的风险定级 ⇒ 它拿默认 none，引导/自主两档直接放行 —— 而 lsp 会 spawn"
       + "工作区配置里的命令（.agent/lsp.json，属外部输入）。#58 的原形状",
     apply: (s) => s.replace('if ((tool as string) === "lsp") {', "if (false) {"),
-    expectFail: "staticRisk('lsp') ⇒ high，且理由点名命令来自哪里",
+    expectFail: "staticRisk('lsp') ⇒ high（且不是走默认的 none 出口）",
   },
   {
     id: "readings-baseline-overwritten",
