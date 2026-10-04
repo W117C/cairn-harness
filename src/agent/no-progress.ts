@@ -174,8 +174,16 @@ export interface NoProgressVerdict {
 const RANK: Record<NoProgressAction, number> = { silent: 0, note: 1, directive: 2, escalate: 3 };
 
 /** 把三只信号（`stuck.ts` 的 action-shaped + 本模块的 R1/R3）合成一只阶梯。
- *  分级是**按测量给的**，不是按直觉：R1 在真实语料上绿跑零误报 ⇒ 允许 escalate；
- *  R3 在真实语料上零触发（既没证明有用也没证明无害）⇒ 只到 note，等标分够再说。 */
+ *  分级是**按测量给的**，不是按直觉。
+ *
+ *  ⚠️ **R1 的许可依据（2026-10-05 第 384 页改准）**：原文写「R1 在真实语料上绿跑零误报
+ *  ⇒ 允许 escalate」——那句话**撑不住这个许可**。第 363 页的复算：**R1 在生产口径 0/107 趟触发**，
+ *  而「零误报」与「从未触发」在读数上**长得一模一样**（零误报可以来自很准，也可以来自根本没出声）。
+ *  冻结语料里那条 `real-red-verify-stagnation` 是**录制**，能证明"实现没坏"，不能证明
+ *  "生产路径上它会响"。⇒ 这一档的许可是**空的**，不是因为 R1 错，而是因为**还没有能区分
+ *  两种零的语料**。真要把许可做实，缺的是一份**真模型跑出来的**正样本（属花钱的评测轮）。
+ *  兄弟规则 R3 写的是「零触发（既没证明有用也没证明无害）⇒ 只到 note」——**同一条推理，
+ *  两套待遇**；本页只把依据写诚实，**不动行为**（降 note 需要上面那份正样本才能做对）。 */
 export function noProgressLadder(signals: {
   stuck: StuckVerdict;
   stagnation: ReturnType<typeof detectVerifyStagnation>;
