@@ -12508,6 +12508,7 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 6. **#64 处置：结案**。判卷现在 7 条全绿；同族尾巴留一句：这次钉的是"未跟踪不得进分母"，没钉分母数值（见第 3 条的理由）。
 7. **门与量纲（同轮声明）**：本笔 **1 支判卷文件**＋新取料目录 `outputs/face-by-relation-2026-10-04/`（探针／读数／造红逐字各一份）；`typecheck` 报错仍只有 `tests/autonomy.test.ts`（别人在飞，非本笔因果）；docs-check 提交前红＝本笔未入库工件（提交即归零那一支）。**没跑**：全量核心判卷、认证（`#39` 照旧）、`mutate-verify`（在别人手里 ⇒ `#50` 锚点债候选再加一条：`untrackedOnDisk` 的差集方向）。本页不宣布任何「绿了」。
 
+
 ## 2026-10-04 · 第 355 页：#39 从「两条红」缩到「一条」，而剩下这条我把那 2 条的名字跑出来了——红因不是取料坏了，是两处 `it()` 标题在留档之后改了名
 
 1. **现读推进**：`tests/mutate-needles-check.test.ts` 不再在飞，且在干净 HEAD 树里复跑为**绿**；全量面（同一棵树、起前 `pgrep -f vitest` 退 1＝没人跑判卷）＝**298 文件／4218 条／1 红**，唯一那条是 `tests/head-cert-deps.test.ts > 真机整表：把留档的那一次全量 json 喂进去，档位计数与逐行重数必须同分母`。⇒ #39 的欠账从"两条不知道谁的判卷红"变成"一条已知机制的留档过期红"。
@@ -12539,10 +12540,15 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 6. **两个我自己的疏忽（都当场收掉，写下来免得别人以为工具链很顺）**：① **`Write` 把判卷写到了仓库外的 `/Users/ze/ze/Downloads/tmp-skip.ts`**（路径多拼了一层）。我先 `find` 看清那棵树里只有我刚写的那一个文件，才删文件＋`rmdir` 两级空目录（`rmdir` 非空即失败，这是我特意选的而不是 `rm -rf`）；之后 `/Users/ze/ze` 已不存在，仓内一切未受影响。② 上面第 4 条我差点把第二次跑的读数写成"7/9"——那是我手边另一个数（`agents-command-face` 是 9 条）串了行；本页落笔前重读 `two-faces.txt` 才确认两态都是 7/7。
 7. **门与量纲（同轮声明）**：本笔 **2 支新文件**＋`outputs/scratch-tree-naming-2026-10-04/`（两态读数、`typecheck` 归因）；`typecheck` 退 2 且报错只有 `tests/autonomy.test.ts`（别人在飞，非本笔因果）；docs-check 提交前红＝本笔未入库工件。**没跑**全量/认证/`mutate-verify` ⇒ `#50` 锚点债候选再加一条（`checkScratchTreeNaming` 的前缀比较，把它改成"完全相等"则 `verify-<短前缀>` 全族会红）。⇒ **`#52` 结案名字那一半**；"回收谁点头删哪棵"仍归 `head-cert` 的既有格（那里已覆盖），本仓从此对"验证树"这件事有两把互不掩盖的尺。`#39`／`#57`–`#63` 照旧。本页不宣布任何「绿了」。
 
+## 2026-10-04 · 第 358 页：今天这 5 把尺到底有没有牙——手工变异矩阵（10 台全被杀），而这一页同时是"加尺"这条线的收口：**用户令「不要过拟合」，下一步转产品能力**
 
-
-
-
-
+1. **为什么当场手工跑**：`scripts/mutate-verify.mjs` 在别人手里（现读 ` M`），既不能登记锚点也不能跑整张表；而"新落的尺有没有牙"这件事只有改源码+跑判卷能答。取料面＝干净 HEAD 树 `.worktrees/verify-c7f2ea0f`（HEAD `c7f2ea0f`，开跑前 `status` 0 行），主树 164 条在飞一个字没碰；每台改完立刻单条 `git -C <绝对路径> checkout -- <file>` 还原并回读该树状态（逐台 0 行、末态 0 行）。读数逐字在 `outputs/new-ruler-mutation-matrix-2026-10-04/`（`mutate.mts`／`readings.txt`／`rows.json`／`run.log`／`docscheck-precommit.txt`）。
+2. **基线先跑**（否则"红 0 条"与"什么都没跑起来"长得一样）：5 支判卷未变异 `passed` ＝ 12／9／7／45／7，`failed` 全 0，摘要行全在。
+3. **矩阵**（台／方向／杀死／独有红用例数；方向 blind＝尺变哑、polarity＝反极性、cap＝松一格、wiring＝生产端绕过这把尺）：
+   `C1` subrepo-dep-need cap 杀 独有3｜`C2` 同尺 **wiring**（`head-cert.ts` 里把 guard 短路）杀 独有2｜`C3` agents-command-face blind 杀 独有1｜`C4` 同尺 blind（取不到包名当"知道"）杀 独有1｜`C5` scratch-tree-naming polarity 杀 独有3｜`C6` 同尺 cap（`>1`→`>2`）杀 **独有0**｜`C7` outcomeGate polarity 杀 独有1（那条正是「防闸写反」的反向哨兵）｜`C8` outcomeGate **wiring**（渲染端自给一副恒不拦的裁决）杀 独有1（「两道闸都落到出口码」那条接线证人）｜`C9` suppressed 写死空 杀 **独有0**｜`C10` `untrackedOnDisk` 写死 `[]` 杀 独有1。**落地 10 台、杀死 10、存活 0。**
+4. **两条真读数，不是好消息**：① 只有 `C2`／`C8` 这两台**接线突变**被杀 ⇒ 今天 5 把尺里只有 2 把钉住了"生产端真的吃这个决策函数"，另 3 把钉的是纯函数自己；② `C6`／`C9` 各自只点红 1 条，而那一条同时也在 `C5`／`C7` 的红面里（实测 `C6.red ⊆ C5.red` ＝ true）⇒ 这不是变异存活，是**用例按整表输出断言、一条用例覆盖多格**。它的后果落在 `#50`：这两台将来登记锚点时 `expectFail` 会与别的锚点**共用同一条用例**，两条锚点互为顶包候选——要分开就得先补"只有它看得见"的用例，否则明确写共用。
+5. **消费者面现读**（谁在调这 5 把尺）：`needsNodeModules` 有生产端（`scripts/head-cert.ts:216`）；`outcomeGate` 的生产端是同文件 `renderReport`／`exitCodeOf`；`checkAgentsCommandFace`（`scripts/lib/agents-command-face.ts`）与 `checkScratchTreeNaming`（`scripts/lib/scratch-tree-naming.ts`）**只有判卷在调**，`scripts/gate-manifest.ts` 现读 23 条门里没有指向它们的门 ⇒ 这两把尺拦的时机是"全量判卷／认证"，不是提交前秒级门。这一句要说准：它们不是"没闸"，是"闸在后面"。
+6. **量纲**：本跑＝单文件判卷 15 次（变异态 10 台合计 4517ms，最快 400／最慢 511ms；基线 5 支合计 2318ms），不是门、不是全量、不是整张变异表。**一处自己的疏忽**：第一次算合计用时得到 `NaN`——我拿只含 `{id, red}` 的投影数组去求和，`ms` 压根不在里面；改回从 `rows.json` 逐字段取才是上面那个 4517ms（同族老毛病：读数来自我自己写坏的那句命令）。
+7. **方向**：用户这一句「不要过拟合」我按字面执行——**不再新增尺／锚点／变异矩阵**，`#50` 的债就停在这 10 条实测候选上（等 `mutate-verify.mjs` 空出来一次性登记，不再单独开页）；`#39`／`#57`–`#65` 照旧，`#61`–`#63` 仍卡在别人的在飞文件上。本页之后我的工作面转到 `src/` 的**能力**本身（执行-验证-修正闭环、补丁精度、上下文与记忆），那才是这份台账该服务的对象。**没跑**：`typecheck`（本笔不动任何 `.ts` 生产／判卷文件）、全量、认证、`mutate-verify`。本页不宣布任何「绿了」。
 
 

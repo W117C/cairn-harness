@@ -1,0 +1,86 @@
+取料面：树=/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-c7f2ea0f  HEAD=c7f2ea0f
+开跑前该树 status 行数=0（必须 0，否则我在别人的在飞面上动刀）
+
+== 基线：未变异先跑一次，证明每支判卷确实在执行 ==
+tests/subrepo-dep-need.test.ts ⇒ exit=0 摘要行=有 passed=12 failed=0 用时=631ms
+tests/agents-command-face.test.ts ⇒ exit=0 摘要行=有 passed=9 failed=0 用时=383ms
+tests/scratch-tree-naming.test.ts ⇒ exit=0 摘要行=有 passed=7 failed=0 用时=409ms
+tests/eval-report.test.ts ⇒ exit=0 摘要行=有 passed=45 failed=0 用时=434ms
+tests/projection-invariant.test.ts ⇒ exit=0 摘要行=有 passed=7 failed=0 用时=461ms
+
+C1 subrepo-dep-need [cap] scripts/lib/subrepo-dep-need.ts ⇒ exit=1 摘要行=有 passed=9 failed=3 杀死=是 用时=495ms
+      红：× dependencies 与 devDependencies 都是空对象 ⇒ 计数 0、不需要 node_modules
+      红：× 两个字段压根没写（bench-* 靶子的真实形状）⇒ 同样 0、false（不许把「没写」读成「说不清」）
+      红：× fixtures/bench/bench-bugfix-async 的 package.json 现在就是零依赖 ⇒ false（谁给它加了依赖，这条当场红）
+      红：FAIL  tests/subrepo-dep-need.test.ts > declaredDepCount／needsNodeModules：两态各钉一次 > dependencies 与 devDependencies 都是空对象 ⇒ 计数 0、不需要 node_modules
+      红：FAIL  tests/subrepo-dep-need.test.ts > declaredDepCount／needsNodeModules：两态各钉一次 > 两个字段压根没写（bench-* 靶子的真实形状）⇒ 同样 0、false（不许把「没写」读成「说不清」）
+      红：FAIL  tests/subrepo-dep-need.test.ts > 真仓事实源（现读，不写死读数） > fixtures/bench/bench-bugfix-async 的 package.json 现在就是零依赖 ⇒ false（谁给它加了依赖，这条当场红）
+      为什么这台该红：把「恰好 0 项 ⇒ 不需要」松成「0 项也算需要」＝免罪符那一档重新发不出去，零依赖靶子又混进补齐面
+      汇总行： Test Files  1 failed (1) ⏎       Tests  3 failed | 9 passed (12) ⏎ ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯ ⏎ AssertionError: expected true to be false // Object.is equality
+C2 subrepo-dep-need [wiring] scripts/head-cert.ts ⇒ exit=1 摘要行=有 passed=10 failed=2 杀死=是 用时=449ms
+      红：× 零依赖那一支只计数并收尾，不 push；两处 push 都在需要依赖的那两支之后
+      红：× 有牙（前半）：把 guard 的谓词写死成恒假，上面那条接线证人当场红
+      红：FAIL  tests/subrepo-dep-need.test.ts > 接线：head-cert 用这把尺决定谁进「补不齐」那句话 > 零依赖那一支只计数并收尾，不 push；两处 push 都在需要依赖的那两支之后
+      红：FAIL  tests/subrepo-dep-need.test.ts > 接线：head-cert 用这把尺决定谁进「补不齐」那句话 > 有牙（前半）：把 guard 的谓词写死成恒假，上面那条接线证人当场红
+      为什么这台该红：生产端把这把尺短路＝算出来不接。这是对「接线钉用源码文本」的**外部**验证：判卷自己在用例里跑的变异与它自己的正则共享决策点，算不出这个证据
+      汇总行： Test Files  1 failed (1) ⏎       Tests  2 failed | 10 passed (12) ⏎ ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯ ⏎ AssertionError: 零依赖那一支的 guard 认不出来: expected null not to be null
+C3 agents-command-face [blind] scripts/lib/agents-command-face.ts ⇒ exit=1 摘要行=有 passed=8 failed=1 杀死=是 用时=495ms
+      红：× 改名只改一处 ⇒ filter-name 必须响（这条就是本尺存在的理由）
+      红：FAIL  tests/agents-command-face.test.ts > 合成面：两态各红一次（新尺必须先证明自己有分辨力） > 改名只改一处 ⇒ filter-name 必须响（这条就是本尺存在的理由）
+      为什么这台该红：撤掉 filter 名对账 ⇒ 本尺存在的理由（改名只改一处）整格变哑
+      汇总行： Test Files  1 failed (1) ⏎       Tests  1 failed | 8 passed (9) ⏎ ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯ ⏎ AssertionError: expected [] to deeply equal [ 'filter-name' ]
+C4 agents-command-face [blind] scripts/lib/agents-command-face.ts ⇒ exit=1 摘要行=有 passed=8 failed=1 杀死=是 用时=412ms
+      红：× 取不到 desktop 包名 ⇒ 不许静默通过（说不清就是未检，不是绿）
+      红：FAIL  tests/agents-command-face.test.ts > 合成面：两态各红一次（新尺必须先证明自己有分辨力） > 取不到 desktop 包名 ⇒ 不许静默通过（说不清就是未检，不是绿）
+      为什么这台该红：取不到包名时当作「知道且等于」⇒「说不清＝未检、不许当通过」那一格静默
+      汇总行： Test Files  1 failed (1) ⏎       Tests  1 failed | 8 passed (9) ⏎ ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯ ⏎ AssertionError: expected [ 'filter-name' ] to include 'desktop-pkg-missing'
+C5 scratch-tree-naming [polarity] scripts/lib/scratch-tree-naming.ts ⇒ exit=1 摘要行=有 passed=3 failed=4 杀死=是 用时=511ms
+      红：× 名字与 HEAD 相符 ⇒ 一条都不许多报（主树与暂存根外的树不参与）
+      红：× 名字承诺的 sha 不是这棵树的 HEAD ⇒ 必须响
+      红：× 两棵树钉在同一个提交 ⇒ 响（同一 HEAD 该复用一棵，别留多份像两个证据面）
+      红：× 三类不一致都必须为 0，且报出来时要点名是哪棵树
+      红：FAIL  tests/scratch-tree-naming.test.ts > 合成面：三类不一致各响一次，一致的不出声 > 名字与 HEAD 相符 ⇒ 一条都不许多报（主树与暂存根外的树不参与）
+      红：FAIL  tests/scratch-tree-naming.test.ts > 合成面：三类不一致各响一次，一致的不出声 > 名字承诺的 sha 不是这棵树的 HEAD ⇒ 必须响
+      红：FAIL  tests/scratch-tree-naming.test.ts > 合成面：三类不一致各响一次，一致的不出声 > 两棵树钉在同一个提交 ⇒ 响（同一 HEAD 该复用一棵，别留多份像两个证据面）
+      红：FAIL  tests/scratch-tree-naming.test.ts > 真仓面：注册表里的暂存树名字都没说谎 > 三类不一致都必须为 0，且报出来时要点名是哪棵树
+      为什么这台该红：反极性：名字对的响、名字说谎的闭嘴——两态各钉一次的话这条必须同时红两条用例
+      汇总行： Test Files  1 failed (1) ⏎       Tests  4 failed | 3 passed (7) ⏎ ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯ ⏎ AssertionError: expected [ { kind: 'name-not-head', …(1) } ] to deeply equal []
+C6 scratch-tree-naming [cap] scripts/lib/scratch-tree-naming.ts ⇒ exit=1 摘要行=有 passed=6 failed=1 杀死=是 用时=400ms
+      红：× 两棵树钉在同一个提交 ⇒ 响（同一 HEAD 该复用一棵，别留多份像两个证据面）
+      红：FAIL  tests/scratch-tree-naming.test.ts > 合成面：三类不一致各响一次，一致的不出声 > 两棵树钉在同一个提交 ⇒ 响（同一 HEAD 该复用一棵，别留多份像两个证据面）
+      为什么这台该红：重复 HEAD 那档松一格 ⇒ 两棵树钉同一笔不再出声
+      汇总行： Test Files  1 failed (1) ⏎       Tests  1 failed | 6 passed (7) ⏎ ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯ ⏎ AssertionError: expected [] to deeply equal [ 'duplicate-head' ]
+C7 eval-report outcomeGate [polarity] scripts/eval/report.ts ⇒ exit=1 摘要行=有 passed=41 failed=4 杀死=是 用时=422ms
+      红：× 合成态① ⇒ blocked=true，退化项与被关闭的改善项都点得出名字
+      红：× ★ 合成态① 的表不许出现「★改善」，且必须印那句禁止读作改善
+      红：× ★ 合成态②③ ⇒ 成功率同档/改善时「★改善」照旧允许（防闸写反）
+      红：× ★ 两态不同形：同一个成本改善，结果档一崩一稳 ⇒ 输出必须分叉
+      红：FAIL  tests/eval-report.test.ts > 跨指标合取闸：结果类超带退化 ⇒ 整表禁止读作改善 > 合成态① ⇒ blocked=true，退化项与被关闭的改善项都点得出名字
+      红：FAIL  tests/eval-report.test.ts > 跨指标合取闸：结果类超带退化 ⇒ 整表禁止读作改善 > ★ 合成态① 的表不许出现「★改善」，且必须印那句禁止读作改善
+      红：FAIL  tests/eval-report.test.ts > 跨指标合取闸：结果类超带退化 ⇒ 整表禁止读作改善 > ★ 合成态②③ ⇒ 成功率同档/改善时「★改善」照旧允许（防闸写反）
+      红：FAIL  tests/eval-report.test.ts > 跨指标合取闸：结果类超带退化 ⇒ 整表禁止读作改善 > ★ 两态不同形：同一个成本改善，结果档一崩一稳 ⇒ 输出必须分叉
+      为什么这台该红：闸被「结果变好」咬住 ⇒ 成功率塌了照样印 ★改善（本尺要拦的正是这个）
+      汇总行： Test Files  1 failed (1) ⏎       Tests  4 failed | 41 passed (45) ⏎ ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯ ⏎ AssertionError: expected false to be true // Object.is equality
+C8 eval-report outcomeGate [wiring] scripts/eval/report.ts ⇒ exit=1 摘要行=有 passed=42 failed=3 杀死=是 用时=447ms
+      红：× ★ 合成态① 的表不许出现「★改善」，且必须印那句禁止读作改善
+      红：× ★ 两态不同形：同一个成本改善，结果档一崩一稳 ⇒ 输出必须分叉
+      红：× 接线：两道闸都真的落到出口码，且身份面打在归因面之前、出口码打在表之后
+      红：FAIL  tests/eval-report.test.ts > 跨指标合取闸：结果类超带退化 ⇒ 整表禁止读作改善 > ★ 合成态① 的表不许出现「★改善」，且必须印那句禁止读作改善
+      红：FAIL  tests/eval-report.test.ts > 跨指标合取闸：结果类超带退化 ⇒ 整表禁止读作改善 > ★ 两态不同形：同一个成本改善，结果档一崩一稳 ⇒ 输出必须分叉
+      红：FAIL  tests/eval-report.test.ts > 出口码：调用方不读文本也要分得出是哪道闸咬的 > 接线：两道闸都真的落到出口码，且身份面打在归因面之前、出口码打在表之后
+      为什么这台该红：渲染端不吃这个决策函数、自己给一副恒不拦的裁决 ⇒ 语义突变全红而接线突变全绿就是本格的洞
+      汇总行： Test Files  1 failed (1) ⏎       Tests  3 failed | 42 passed (45) ⏎ ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯ ⏎ AssertionError: 闸没咬住 ⇒ 跑废了照样被读成变好: expected '噪声带来源：test\n任务集一致（2 条）✅\n\n指标        …' to contain '⇒ 本表禁止读作改善；成本类超带只是副作用'
+C9 eval-report outcomeGate [blind] scripts/eval/report.ts ⇒ exit=1 摘要行=有 passed=44 failed=1 杀死=是 用时=427ms
+      红：× 合成态① ⇒ blocked=true，退化项与被关闭的改善项都点得出名字
+      红：FAIL  tests/eval-report.test.ts > 跨指标合取闸：结果类超带退化 ⇒ 整表禁止读作改善 > 合成态① ⇒ blocked=true，退化项与被关闭的改善项都点得出名字
+      为什么这台该红：闸咬住时不再登记被压下来的成本项 ⇒ 那一格回到印「★改善」
+      汇总行： Test Files  1 failed (1) ⏎       Tests  1 failed | 44 passed (45) ⏎ ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯ ⏎ AssertionError: expected [] to deeply equal [ 'tokensIn', 'tokensOut', 'seconds' ]
+C10 projection-invariant 分母 [blind] tests/projection-invariant.test.ts ⇒ exit=1 摘要行=有 passed=6 failed=1 杀死=是 用时=459ms
+      红：× 每个含 tool_call 的语料文件过真投影：孤儿 0 且悬空 0（两条合取）
+      红：FAIL  tests/projection-invariant.test.ts > 真语料回归（tracked 面）：孤儿必须 0，且分母自己出声 > 每个含 tool_call 的语料文件过真投影：孤儿 0 且悬空 0（两条合取）
+      为什么这台该红：差集写死成空 ⇒ git 看不见的语料再混进盘也不响（#64 那一格本来就是这台造红逼出来的）
+      汇总行： Test Files  1 failed (1) ⏎       Tests  1 failed | 6 passed (7) ⏎ ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯ ⏎ AssertionError: expected [] to deeply equal [ Array(1) ]
+
+== 收口 ==
+末态该树 status 行数=0（必须 0）
+落地 10 台，杀死 10，存活/未跑 0
