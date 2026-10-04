@@ -12757,6 +12757,48 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 
 
 
+## 2026-10-04 · 第 373 页：把第 372 页欠的两根指针接上——三条锚点改指落库、判卷侧删掉我手抄的第二份正则；同一趟针脚体检又翻出 7 条阻断，其中 **4 条是别人「保全入库」的直接后果**（只登记）
+
+1. **这一笔只改指针，不改语义**：第 372 页备好的三对针脚（`routing-truncation-marker-hides-count`／
+   `routing-dropped-counts-listed-not-missing`／`skill-routing-ignores-disable-model-invocation`）贴上
+   `scripts/mutate-verify.mjs`，`expectFail` 一字未动（门本轮报的 `killer 指针失效 0（HEAD 侧 3）` 里不含这三条 ⇒
+   两条 killer 标题还在原处）。改完现读：这三条**已从 `阻断` 名单里消失**（`outputs/anchor-repoint-2026-10-04/needles-after-repoint.txt`）。
+   语义变异方向与原来同向：标记里有字但没数字／`dropped` 从"没列出的条数"翻成"列出的条数"／清单不做 `modelInvocable` 过滤。
+2. **判卷侧的第二份派生删了**：第 371 页我手抄了一遍抽字面量的正则，隔壁随后把同一判据抽成单源
+   （`scripts/lib/source-literals.ts`）并只改了门侧 ⇒ 于是"门与判卷各一份"这件事**只剩判卷这一份是我抄的**，
+   这正是第 372 页第 6 条我自己认的那一記反手。本笔把 `tests/memory-runner.test.ts` 改成
+   `memorySurfaceHits(src)` + `stringLiterals(src).length > 5`（引同一只谓词，覆盖面与门不可能再漂）。
+3. **同一把尺现读 `阻断 7`，剩下这些不是我造的**（逐条原文在同名文件里）：
+   ⑴ 三条针脚被"保全入库"搬走——`verify-repeat-never-detected`／`verify-repeat-compares-first-line-only`
+   都指 `const repeat = digest === lastVerifyDigest;`，而现读那行已是 `const repeat = redactedDigest === lastVerifyDigest;`
+   （`src/agent/loop.ts:293`，脱敏副本换进了比对）；`verify-timeout-not-threaded-to-exec` 指 `verify.ts` 的
+   `exec(command, repoDir, timeoutMs)` ⇒ 门自己点名的搬走者是 `c15220dd` 与 `7d19ec4f`（两笔"被遗弃的在飞改动"直接入库）。
+   ⑵ 一条 `钉在飞文本`（`glm-default-name-ignores-env`：锚点行已入库、`src/providers/glm.ts` 的实现还没）——
+   门给的话就是**不要把针脚改成 HEAD 里的旧写法**，所以我不动它。
+   ⑶ 三条 `killer 指针失效（HEAD 侧）`：`CAIRN_GLM_TOOL_STREAM=0…`／`…跟着 CAIRN_MODEL 走…`／
+   `…cairn <目录> <任务>…` 这三条标题在判卷文件里还没有——M0→CAIRN 改名只走了一半（表先改、判卷后改），
+   于是 HEAD 上这三条锚点此刻**等价空操作**。这一格是隔壁那路改名的下半场，我不去改别人的判卷标题。
+   ⇒ 登记 **`#78`**，并写明一条可机械化的候选（并进 `#77`）：**"保全入库"这类笔在 commit 前应先跑一次
+   `--check-needles`**，否则被搬走的针脚与只改一半的标题会静默进 HEAD，门红要等到下一趟认证才被人发现。
+4. **`#78` 里有一小段现在就能做，且值得做**：⑵⑶ 归别人，但⑴那两条 loop 的锚点守的是**能力 5 最中间那一格**
+   （同一条验证结论连红 ⇒ 判定"没在进步"），而 `src/agent/loop.ts` 现在**干净**（隔壁已入库）⇒
+   改指只是把针脚挪到 `redactedDigest === lastVerifyDigest`，不需要动任何人的判卷与实现。留作本线程下一笔。
+5. **第五路并行取证回来（成本可观测，`outputs/cost-observability-2026-10-04/verdict.md`）：判定"半格"，
+   最狠的一格是钱恒 null**——生产 `beginRequest` 从不递单价（`src/providers/openai.ts:163` 只传两参）
+   ⇒ 计量里的 `cost` 永远是 null，而**唯一断 `cost` 的用例自己灌价**（`tests/metering.test.ts:38`）
+   ⇒ 这就是本仓记过好几次的"用例存在、标题承诺了、但取料是自己喂的"零分辨力形状。token 面是齐的
+   （21 组／46 项可点名读数）。⇒ 登记 **`#79`**：递价 + 同笔接一条"真从生产调用点流到 cost 字段"的证人（不灌价），
+   锚点跟着同笔。这个数我按规矩**没照单施工**——动工前先自己复验那两个 `file:line`（隔壁在飞的 `openai.ts` 状态也要现读）。
+6. **量纲与没跑（这一笔尤其要说清）**：动 2 支文件（`scripts/mutate-verify.mjs` 三对针脚、
+   `tests/memory-runner.test.ts` 改引单源）＋台账＋`outputs/anchor-repoint-2026-10-04/` 一件读数。
+   **没跑**：`tests/memory-runner.test.ts` 本身（隔壁正在跑全量核心判卷，`pgrep` 现读到 pid 77404——
+   两套同跑会串 `/tmp/m1e-default-settings.json` 那个跨用例共享文件，出来的红既不能算代码缺陷也不能算"锚点杀得干净"），
+   三条锚点的**真杀**（`mutate-verify <id>`）同样等窗，认证**没重跑**，`typecheck` 也没跑（同理，避免污染隔壁的门耗时）。
+   所以这一笔的状态是**"指针已接、尚未验杀"**——不是"修好了"。`#39`／`#57`–`#66`／`#68` 照旧，`#67` 待对齐，
+   `#69`／`#71` 备妥，`#70`／`#72` 待办，`#73` 半落，`#74`–`#77` 照第 372 页，**`#78`／`#79` 新增**。本页不宣布任何「绿了」。
+
+
+
 
 
 

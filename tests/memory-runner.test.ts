@@ -9,6 +9,7 @@ import { projectContext } from "../src/agent/context";
 import { DEFAULT_COMPACTION_CONFIG, createMockSummarizer, runCompaction } from "../src/agent/compaction";
 import { createMockProvider } from "../src/providers/mock";
 import { createEventLog, type AgentEvent } from "../src/events";
+import { memorySurfaceHits, stringLiterals } from "../scripts/lib/source-literals";
 import { remember } from "../src/tools/remember";
 
 let ws: string;
@@ -174,19 +175,15 @@ describe("压缩接缝（任务9）", () => {
     expect(readFileSync(join(ws, ".agent", "memory", "MEMORY.md"), "utf8")).toBe("canary-项目层\n");
     expect((await readTextOrNull(join(home, "MEMORY.md"))) ?? "").toBe("canary-全局层\n");
     const src = readFileSync(join(process.cwd(), "src", "agent", "compaction.ts"), "utf8");
-    // 这三条扫的是**字符串字面量**，不是整份源码文本（2026-10-04 修正）。
+    // 扫的是**字符串字面量面**，不是整份源码文本（2026-10-04 修正，判据单源在 `scripts/lib/source-literals.ts`）。
     // 原写法 `expect(src).not.toContain(".agent")` 被一次无关的属性访问撞红：
     // `who(e.agent_id)` 里 "e.agent" 就含子串 ".agent" ⇒ 尺红得理直气壮，而代码一行都没碰记忆目录。
-    // 收紧到字面量之后覆盖面没缩：真要读记忆目录必须写 `".agent"`（路径拼接的段就是字面量），
-    // 真要 import fs 必须写 `"node:fs..."`——两者都是字面量；而注释/变量名里的巧合子串不再误伤。
-    // 上面两条行为断言（canary 文件逐字未变）仍在，它才是"没碰"的正证；这一组只是代理。
-    const literals = [...src.matchAll(/(["'`])((?:\\.|(?!\1)[\s\S])*)\1/g)].map((m) => m[2] ?? "");
-    const joined = literals.join("\n");
-    expect(joined).not.toMatch(/node:fs(^|[^\w])/u);
-    expect(joined).not.toMatch(/(^|[^.\w])fs\/promises/u);
-    expect(joined).not.toContain(".agent");
-    expect(joined).not.toContain("MEMORY.md");
+    // 这里刻意**引那只共享谓词而不是再抄一份正则**：第 371 页我第一次修时手抄了一份，
+    // 于是同一判据在门侧与判卷侧各有一份实现，门侧漏同步就出现"判卷绿、门红"（认证第一趟实测）——
+    // 覆盖面与门完全同源，两边不可能再漂；上面两条行为断言（canary 文件逐字未变）才是"没碰"的正证，这一组只是代理。
+    const hits = memorySurfaceHits(src);
+    expect(hits, "字面量面命中：" + hits.join("、")).toEqual([]);
     // 反向自证：字面量清单不是空的（尺没退化成"永远不匹配"）——今天这个文件里确有字面量。
-    expect(literals.length).toBeGreaterThan(5);
+    expect(stringLiterals(src).length).toBeGreaterThan(5);
   });
 });

@@ -547,7 +547,8 @@ const MUTATIONS = [
     src: "src/agent/plugins/skills.ts",
     test: "tests/plugin-role-discoverability.test.ts",
     desc: "标记只说「已截断」不说少几条 ⇒ 模型分不清少 1 条还是少 40 条，也就不会改用更窄的问法",
-    apply: (s) => s.replace(" 字符，已截断：另有 \" + String(dropped) + \" 条未列出]", " 字符，已截断]"),
+    // 10-04 第 370 页把标记改成「两个数都在」（dropped／nameOnly），针脚跟着搬：仍是"标记里有字但没数字"。
+    apply: (s) => s.replace('if (dropped > 0) parts.push("另有 " + String(dropped) + " 条未列出");', 'if (dropped > 0) parts.push("条目未全列出");'),
     expectFail: "超限 ⇒ dropped 恰等于没列出的条目数（两处取法互查），且标记里的数字与它一致",
   },
   {
@@ -555,7 +556,7 @@ const MUTATIONS = [
     src: "src/agent/plugins/skills.ts",
     test: "tests/plugin-role-discoverability.test.ts",
     desc: "dropped 误算成「列出的条数」⇒ 字段与文案各说一套，面板与模型拿到的都是反数",
-    apply: (s) => s.replace("  const dropped = lines.length - kept;", "  const dropped = kept;"),
+    apply: (s) => s.replace("  const droppedCount = Math.max(0, total - listed);", "  const droppedCount = listed;"),
     expectFail: "超限 ⇒ dropped 恰等于没列出的条目数（两处取法互查），且标记里的数字与它一致",
   },
   // ---- 模型自己撤 worker（cancel_agents）：规格面 / 回执分母 / 整批拒 / 文案点名真工具 ----
@@ -3179,7 +3180,8 @@ const MUTATIONS = [
     src: "src/agent/plugins/skills.ts",
     test: "tests/skill-invocation-faces.test.ts",
     desc: "清单不做过滤 ⇒ 声明了「只能用户触发」的 skill 仍每轮占用模型上下文并诱导自动触发（白付 token + 违背插件作者意愿）",
-    apply: (s) => s.replace("  const lines = [...skills.filter(modelInvocable).map(skillRoutingLine), ...extraLines];", "  const lines = [...skills.map(skillRoutingLine), ...extraLines];"),
+    // 10-04 第 370 页把「一次拼好全部行」改成「先过滤、再各拼完整行／名字行」，针脚跟着搬到那一次过滤上。
+    apply: (s) => s.replace("  const invocable = skills.filter(modelInvocable);", "  const invocable = skills;"),
     expectFail: "disable-model-invocation 的 skill 不进清单；不声明的照常进（布尔与字符串两种写法同效）",
   },
   {
