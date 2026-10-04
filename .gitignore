@@ -12,6 +12,14 @@ node_modules/
 *.key
 *.pem
 .agent/memory/
+# #57（2026-10-05）：always-allow 的**授权记录**落在这一份，与有意跟踪的
+# .agent/permissions.json（策展过的项目策略）分开。授权属于机器不属于仓库——
+# 写在被跟踪那份里就等于谁 clone 谁继承那一次授权。
+.agent/permissions.always.json
+# 桌面端（apps/desktop）首启工作区默认落仓库根（S2 ①：不得回落 $HOME）⇒ 会话 JSONL 写进
+# <repo>/.agent/sessions/。这是运行产物，与 .agent/memory/ 同理不进 git；.agent/permissions.json
+# 仍是有意跟踪的（见上），所以只忽略 sessions/ 这一支，不整体忽略 .agent/。
+.agent/sessions/
 # 靶子源码是运行产物：每个消费方（e2e/ipc/gate/autonomy/compaction 与相关测试）都从
 # fixtures/mock/todo-bug.ts 重置它，跑完留下的状态不该进 git。
 fixtures/todo-app/src/todo.ts
@@ -37,3 +45,6 @@ docs/facts/
 *.mutbak
 .worktrees/
 .superpowers/
+
+# vitest JSON reporter 产物（本仓零消费者；2026-10-03 实测 .vitest/json/output.json 无人读）
+.vitest/

@@ -91,6 +91,13 @@ export function loadPermissionRules(projectPath?: string, globalPath?: string): 
   if (projectPath) {
     const raw = readIfExists(projectPath);
     if (raw !== null) rules.push(...parsePermissionsFile(raw, projectPath).map((r) => ({ ...r, layer: "project" as const })));
+    // #57：同目录的 always-allow 那份**透明并入**（同为 project 层，排在被跟踪那份之后）。
+    // 为什么放读侧而不是让每个调用方自己多传一个参数：写入端搬走文件之后，若读侧漏一处，
+    // 症状是"批准过的总是允许下次不生效"——那是**静默失效**，比记错更坏。
+    // 收在一处，任何调用方（含将来新增的）都不可能忘。文件不存在＝零行为（现读全仓都没有这个文件）。
+    const alwaysPath = join(dirname(projectPath), ALWAYS_RULES_FILE);
+    const alwaysRaw = readIfExists(alwaysPath);
+    if (alwaysRaw !== null) rules.push(...parsePermissionsFile(alwaysRaw, alwaysPath).map((r) => ({ ...r, layer: "project" as const })));
   }
   return rules;
 }
@@ -101,6 +108,22 @@ function readIfExists(path: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** always-allow 的落点文件名（#57，2026-10-05）——与受版本控制的 `permissions.json` **分开**。
+ *
+ *  为什么必须分开：`<workspace>/.agent/permissions.json` 在本仓是**有意跟踪**的（它是策展过的
+ *  项目策略，该随仓库走）。但「某人在这台机器上点过一次总是允许」是**授权记录**，属于机器、
+ *  不属于仓库——写在同一个文件里就等于随仓库分发：谁 clone，谁就继承那一次授权。
+ *  这条与 S4 是同一族的两半：S4 修的是「谁放宽了谁」不可判，这一条修的是「授权跟着仓库跑」。
+ *
+ *  单独一个文件而不是改名整体迁移：`permissions.json` 里可能有**人写**的项目策略，
+ *  那些该继续被跟踪；只有**程序写**的那部分搬走。判卷钉的是"程序写的一律不落进被跟踪那份"。 */
+export const ALWAYS_RULES_FILE = "permissions.always.json";
+
+/** always-allow 的落点：`<workspace>/.agent/permissions.always.json`（**必须**在 `.gitignore` 里）。 */
+export function alwaysRulesPath(workspace: string): string {
+  return join(workspace, ".agent", ALWAYS_RULES_FILE);
 }
 
 /** 全局层占位路径：<appData>/permissions.json（M1d 接设置页）。 */
