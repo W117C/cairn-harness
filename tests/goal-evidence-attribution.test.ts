@@ -23,7 +23,7 @@ const writePair = (id: string, agentId?: string): AgentEvent[] => [
   { type: "tool_result", callId: id, ok: true, output: "written", ...(agentId ? { agent_id: agentId } : {}) },
 ];
 const verifyBeat = (id: string, ok: boolean, agentId?: string): AgentEvent =>
-  ({ type: "verify_result", callId: id, auto: true, ok, results: [], ...(agentId ? { agent_id: agentId } : {}) });
+  ({ type: "verify_result", callId: id, auto: true, ok, attempt: 1, maxAttempts: 3, results: [], ...(agentId ? { agent_id: agentId } : {}) });
 
 const decision = (evidence: string, wrote: boolean) => goalStopDecision({
   turn: 2,
