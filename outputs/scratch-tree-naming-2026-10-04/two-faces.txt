@@ -1,0 +1,6 @@
+主树面（AGENTS 为 cairn 态）：
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+干净 HEAD 树内跑同一份判卷（验派生不依赖 cwd）：
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
