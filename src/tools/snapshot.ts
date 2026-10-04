@@ -46,7 +46,12 @@ export async function snapshotBeforeOverwrite(
   }
 }
 
-/** 写给模型看的那一句：路径要出现在 tool_result 正文里，模型才知道自己能把它读回来。 */
+/** 写给模型看的那一句：路径要出现在 tool_result 正文里，模型才知道自己有这份原件可取。
+ *  2026-10-04 实测补上"怎么取才不丢"：`read_file` 的交付是**按行**拼的，末行换行不保留、
+ *  单行超 2000 字符会被切、超 50 KiB 会被切、二进制直接拒读——拿它读完再 `write_file` 写回，
+ *  在最简单的文本文件上都会差一个字节（而 git diff 会显示整行变了）。所以这里说的是"复制"，
+ *  不是"读出来再写回去"；快照本身是按字节抄的（`copyFile`），丢只丢在读回来这一刀。 */
 export function snapshotNote(snapshotId: string): string {
-  return "｜覆盖前原件已存 " + snapshotId;
+  return "｜覆盖前原件已存 " + snapshotId
+    + "（按字节抄的；要逐字节取回请复制该文件——read_file 的交付不保留末行换行、并有行/字节帽，别用它转写复原）";
 }

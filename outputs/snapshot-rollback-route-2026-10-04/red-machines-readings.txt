@@ -1,0 +1,4 @@
+M1 回执退回旧文案（只给路径不出声） ⇒ 红 2 条／绿 5 条；复原逐字节一致=true
+M3 摘掉二进制拒读闸 ⇒ 红 1 条／绿 6 条；复原逐字节一致=true
+M4 把单行帽抬到不切（假装长行读得全） ⇒ 红 1 条／绿 6 条；复原逐字节一致=true
+残骸：M src/tools/snapshot.ts | ?? outputs/snapshot-rollback-route-2026-10-04/ | ?? tests/snapshot-rollback-route.test.ts
