@@ -1,0 +1,17 @@
+  38 tests/cli-surface.test.ts
+  18 tests/autonomy.test.ts
+   5 tests/cli-fork-replay.test.ts
+   2 tests/worker-evidence-parent-context.test.ts
+   2 tests/mutate-verify-gates.test.ts
+   1 tests/write-line-delta.test.ts
+   1 tests/runner-gates.test.ts
+   1 tests/prose-needle-scan.test.ts
+   1 tests/mutate-anchor-titles.test.ts
+   1 tests/lsp.test.ts
+   1 tests/loop.test.ts
+   1 tests/head-cert-deps.test.ts
+   1 tests/docs-check.test.ts
+   1 tests/compact-wiring.test.ts
+   1 tests/cli-plan-auto.test.ts
+   1 tests/cli-exit-code.test.ts
+   1 tests/budget-price-key.test.ts

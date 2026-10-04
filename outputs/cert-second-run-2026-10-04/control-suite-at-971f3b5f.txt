@@ -1,0 +1,4 @@
+⎯⎯⎯⎯⎯⎯ Failed Tests 85 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  20 failed | 288 passed (308)
+      Tests  85 failed | 4277 passed (4362)
+   Duration  205.01s (tests 86%, import 12%, transform 2%)
