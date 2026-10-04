@@ -29,6 +29,14 @@ function session(init: Partial<AutonomySession> = {}): AutonomySession {
   return s;
 }
 
+/** `EvaluateDecision` 是联合型，`deny` 分支没有 `risk` 字段——而 deny 本身就是更严的结果。
+ *  下面那组 S2 判卷断言问的是「命中敏感路径时风险被抬到 high」，问的不是 deny 分支；
+ *  真出现 deny 时这里返回 "deny" 而不是 undefined，让断言当场红，不静默读成 undefined。
+ *  （这一支文件是被遗弃的在飞改动，入库前只补这只收窄，断言原意一字未动。） */
+function riskOf(d: ReturnType<typeof evaluate>) {
+  return d.verdict === "deny" ? ("deny" as const) : d.risk;
+}
+
 const rule = (r: Partial<PermissionRule>): PermissionRule => ({
   behavior: r.behavior ?? "allow",
   tool: r.tool ?? "run_shell",
@@ -213,5 +221,82 @@ describe("只读档工具表摘除（任务 1）", () => {
     expect(ro).toContain("read_file");
     expect(toolTableFor("default")).toContain("write_file");
     expect(toolTableFor("auto")).toContain("run_shell");
+  });
+});
+
+// 文件面路径风险通道（审查 S2 的路径侧：写向工具没有与 shell 面 redirectOnto 对应的通道）。
+// 根因是**同一目标两种口径**：`echo hi >> ~/.zshrc` 走 shell 面命中威胁表 risk=high 被送审，
+// 而 write_file/edit_file/apply_patch 指向同一目标时 staticRisk 一律 NONE。
+// 范围判定的前置事实（用例钉住，别让范围在将来被悄悄读大）：工作区**外**的目标由
+// `src/tools/base.ts` 的 `resolveInWorkspace`（拒绝对路径 + 拒 `..` 越界）与
+// `assertRealContainment`（软链穿透）在**工具层**挡掉，不靠本表；本表堵的是**工作区内**
+// 真正可达、且会被自动执行或事后外送的落点。
+describe("文件面路径风险通道（S2 路径侧）", () => {
+  // 工作区内、**会被自动执行或事后外送**的落点：git hook 与 core.hooksPath、宿主待 spawn
+  // 的 lsp.json / 待执行的 verify config.json、以及凭证面。
+  const EXEC_SURFACE = [
+    ".git/hooks/pre-commit",
+    "sub/.git/hooks/post-commit",
+    ".git/config",
+    ".agent/lsp.json",
+    ".agent/config.json",
+    ".npmrc",
+    ".env",
+  ];
+  // 四档全拦：风险线最低的是 guided(medium)，这条表给的是 high ⇒ `risk >= riskAskAt`
+  // 在四档都成立（read-only 另有一道更早的 L0-hard 摘除，这里不重复断言）。
+  for (const mode of ["guided", "auto", "default"] as const) {
+    for (const path of EXEC_SURFACE) {
+      it(`${mode} 档 write_file ${path} ⇒ 送审（不是 approve 直通）`, () => {
+        const d = evaluate("write_file", { path, content: "x" }, session({ mode }));
+        expect(d.verdict, `${mode} ${path} 被放行`).not.toBe("approve");
+      });
+    }
+  }
+
+  it("风险等级与 shell 面同目标对齐：都是 high，层复用 L4-risk（不新增判据层）", () => {
+    const f = evaluate("write_file", { path: ".git/hooks/pre-commit", content: "x" }, session({ mode: "guided" }));
+    const s = evaluate("run_shell", { command: "echo hi >> .git/hooks/pre-commit" }, session({ mode: "guided" }));
+    expect(riskOf(f)).toBe("high");
+    expect(riskOf(s)).toBe("high");
+    // 两边同走既有风险层：gate-audit.test.ts 的 GATE_LAYERS 穷尽断言因此不必改。
+    expect(f.layer).toBe("L4-risk");
+    expect(s.layer).toBe("L4-risk");
+  });
+
+  it("apply_patch 批量形态也拦：路径只在 patch 正文里，没有 path 键", () => {
+    const d = evaluate(
+      "apply_patch",
+      { patch: "--- a/.git/hooks/post-commit\n+++ b/.git/hooks/post-commit\n+#!/bin/sh\n+x\n" },
+      session({ mode: "auto" }),
+    );
+    expect(d.verdict).not.toBe("approve");
+    expect(riskOf(d)).toBe("high");
+  });
+
+  it("反斜杠形态不绕过（Windows 入参）：归一后再判", () => {
+    const d = evaluate("write_file", { path: ".git\\hooks\\pre-commit", content: "x" }, session({ mode: "auto" }));
+    expect(d.verdict).not.toBe("approve");
+  });
+
+  it("edit_file 命中敏感路径抬到 high（严于它平时的 medium），未命中仍是 medium", () => {
+    expect(riskOf(evaluate("edit_file", { path: ".git/config" }, session({ mode: "auto" })))).toBe("high");
+    expect(riskOf(evaluate("edit_file", { path: "src/index.ts" }, session({ mode: "auto" })))).toBe("medium");
+  });
+
+  // 反向验证的另一半：这条通道**只在命中时抬**，不抬高文件工具的基线。若有人给它补一个
+  // 常规 medium（或把表扩到普通路径），下面三条立刻红——guided/auto 两档每次写向都被拦
+  // 是远超本条要堵的口子的行为变更。
+  it("普通路径零行为变更：write_file/apply_patch/read_file/grep 仍按原判定放行", () => {
+    expect(evaluate("write_file", { path: "src/index.ts", content: "x" }, session({ mode: "guided" })).verdict).toBe("approve");
+    expect(riskOf(evaluate("write_file", { path: "src/index.ts", content: "x" }, session({ mode: "auto" })))).toBe("none");
+    expect(evaluate("apply_patch", { patch: "--- a/src/a.ts\n+++ b/src/a.ts\n+x\n" }, session({ mode: "auto" })).verdict).toBe("approve");
+    expect(evaluate("read_file", { path: "src/index.ts" }, session({ mode: "auto" })).verdict).toBe("approve");
+    expect(evaluate("grep", { pattern: "x", path: "src" }, session({ mode: "auto" })).verdict).toBe("approve");
+  });
+
+  it("名字里带敏感词但不是真落点的路径不误伤（submodule 式路径仍放行）", () => {
+    expect(evaluate("write_file", { path: "src/hooks.ts", content: "x" }, session({ mode: "auto" })).verdict).toBe("approve");
+    expect(evaluate("write_file", { path: "docs/environment.md", content: "x" }, session({ mode: "auto" })).verdict).toBe("approve");
   });
 });

@@ -44,6 +44,10 @@ import { frozenJudgePathSet } from "../frozen";
 import { createEventLog, replay } from "../events";
 // goal 模式：判据与投影全在纯函数面（src/agent/goal.ts），这里只做「读事件流 → 问它 → 落流 → 起下一轮」。
 import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, goalWindowSpend, parseGoalSpec, projectGoal } from "../agent/goal";
+// 目标漂移读数（能力 4「长任务不遗忘」的真读数）：判据全在 src/agent/goal-drift.ts 那个纯模块里，
+// 这里只做「读事件流 → 问它 → 印一行」。**不新增事件类型**——沿用本仓既有先例
+// （goal 的两态就是靠 user_message.origin 承载的），新增一种事件会让重放契约多一个分支。
+import { assistantTurnsFromEvents, goalDriftCell, goalDriftFindings } from "../agent/goal-drift";
 import { checkPermission, enterPlanRunScope, getPlanState, planGateBlocks, sideEffectDecisionTable, type PermissionMode } from "../permissions";
 import {
   evaluate,
@@ -277,7 +281,7 @@ export function resolveRunModel(
     forcedKind: providerKindFromEnv(process.env.M0A_PROVIDER),
     configuredKind: settings.provider,
     settingsModel: settings.model,
-    legacyEnvModel: process.env.M0_MODEL,
+    legacyEnvModel: process.env.CAIRN_MODEL,
     ...(requestModel !== undefined ? { requestModel } : {}),
   });
 }
@@ -314,7 +318,7 @@ export function mainUsageModelOf(selection: MainModelSelection): string {
 
 /** M3c 编排器扩展接线（agentRoleFor / workerSummarizer / budget）：runAgent 与会话重派共用同一口径。
  *  - agentRoleFor：插件 agent 角色解析（stages[].role = "plugin-name:agent-name"，§9.6/§9.11-4）；
- *  - workerSummarizer：worker 压缩摘要器（§7.5 同一 runCompaction 链；GLM 暗卷需 M0_API_KEY）；
+ *  - workerSummarizer：worker 压缩摘要器（§7.5 同一 runCompaction 链；GLM 暗卷需 CAIRN_API_KEY）；
  *  - budget：会话成本闸（§4.4.8 maxBudgetUsd；0 = off 零行为）。 */
 async function orchestratorExtras(sandbox: SandboxStatus | null = null, runModel?: MainModelSelection): Promise<
   Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache" | "impactAnalysis" | "workerVerify" | "workerHooks">
@@ -325,7 +329,7 @@ async function orchestratorExtras(sandbox: SandboxStatus | null = null, runModel
     // §9.10「worker 继承主会话插件启用集」：worker 的工具调用过同一套钩子，视图按 worker 档降权限。
     // 闭包取 currentPluginRuntime()（本函数在装载前就被展开，装载完成后才真正被调）。
     workerHooks: (mode: "read" | "write") => currentPluginRuntime()?.hooks.forWorkerMode(mode) ?? null,
-    ...(process.env.M0_API_KEY ? { workerSummarizer: createGlmSummarizer() } : {}),
+    ...(process.env.CAIRN_API_KEY ? { workerSummarizer: createGlmSummarizer() } : {}),
     // 会话成本底线（§4.4.8）：maxUsd = 0 ⇒ 整闸不接（缺省零行为）。单价留给价表兜底，
     // 所以这里必须把**当前真拨的那个模型**一起递下去——只递 maxUsd 会让闸在最常见配置下估不出价，
     // 而递设置盘字段会在「留空」与「per-run 指定档位」两种合法配置下和实付分叉（`budgetPriceKeyOf`）。
@@ -770,7 +774,7 @@ async function persistAlwaysRule(workspace: string, name: string, args: Record<s
 
 
 // ---- M1d：/compact 手动入口（压缩必出卡，走 BUILTIN_PROMPTS 内置模板）----
-// 摘要器：M0_API_KEY 在场 → GLM 暗卷；缺 key 且 M1D_COMPACTION_DEMO=1 → 冻结 mock（演示通道，
+// 摘要器：CAIRN_API_KEY 在场 → GLM 暗卷；缺 key 且 M1D_COMPACTION_DEMO=1 → 冻结 mock（演示通道，
 // M1a M0A_MOCK_DELTA 同族先例）；否则 fail-closed 报错，绝不静默压缩。
 // 演示通道同时收小 tail 预算（演示会话只有十几条事件，默认预算会把全部事件留在 tail 内无可压缩）。
 const DEMO_SUMMARY = [
@@ -821,12 +825,12 @@ export async function compactSessionLog(
   // 原先是本函数自己 run 一次，而自动压缩档没人发 ⇒ `PreCompact(auto)` 的 matcher 永不命中；
   // 两处各发又会变成 SessionEnd 那种双生产者。trigger 取 §9.5 表里的枚举值 manual/auto。
   const demo = process.env.M1D_COMPACTION_DEMO === "1";
-  const summarizer = process.env.M0_API_KEY
+  const summarizer = process.env.CAIRN_API_KEY
     ? createGlmSummarizer()
     : demo
       ? createMockSummarizer(DEMO_SUMMARY)
       : undefined;
-  if (!summarizer) return { ok: false, error: "无 M0_API_KEY，手动压缩不可用（fail-closed，不静默压缩）" };
+  if (!summarizer) return { ok: false, error: "无 CAIRN_API_KEY，手动压缩不可用（fail-closed，不静默压缩）" };
   const outcome = await runCompaction({
     events,
     trigger: "manual",
@@ -1950,6 +1954,24 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     for (const n of injectedToolNames) delete table[n];
     setCurrentPluginRuntime(null);
   }
+  // 目标漂移读数（能力 4「长任务不遗忘」的真读数，此前这个模块**零生产消费者**：
+  // 只有 tests/goal-drift.test.ts 引用它，于是「长任务会不会改口」永远只有单测证据、没有运行证据）。
+  //
+  // 为什么印 stderr 而**不落事件流**：落流就得新增一种事件类型，而事件流是重放契约
+  // （每条都要能 replay 往返，新增类型会让旧日志重放多一个分支）；而这条读数是
+  // **事后观测**，不驱动任何决策、不影响这一轮的行为。真要让它可回放，正确做法是下一波
+  // 把它并进既有的 `goal_stopped` 那类事件，而不是现在偷加一个类型。
+  //
+  // 取料口径与被判对象**同一份**（`assistantTurnsFromEvents` 从事件流重组），不另拼一套
+  // ——「同一条判据各抄一份」是本仓最忌的一种腐坏。
+  try {
+    const drift = goalDriftFindings(assistantTurnsFromEvents(await replay(opts.logPath)));
+    if (drift.length > 0) console.warn("[goal-drift] " + goalDriftCell(drift));
+  } catch (err) {
+    // 读数失败不许影响主流程（它只是观测），但也不许静默：这一格取不到就是「没量到」，
+    // 静默会把「没量到」读成「没漂移」——本仓反复点名的同一族坑。
+    console.warn("[goal-drift] 读数失败（这一格未检，不等于没有漂移）: " + (err instanceof Error ? err.message : String(err)));
+  }
   return await replay(opts.logPath);
 }
 
@@ -2590,18 +2612,18 @@ function sidechatDemoScript(): ReturnType<typeof scriptedSidechatModel> {
   return scriptedSidechatModel(script);
 }
 
-/** 选模型：M0_API_KEY 在场 → GLM（createSidechatProvider 缺省）；演示通道 → 脚本；否则 fail-closed。 */
+/** 选模型：CAIRN_API_KEY 在场 → GLM（createSidechatProvider 缺省）；演示通道 → 脚本；否则 fail-closed。 */
 function resolveSidechatModel(explicit?: SidechatModel): { model?: SidechatModel; error?: string } {
   if (explicit) return { model: explicit };
-  if (process.env.M0_API_KEY) return {}; // 缺省 = GLM 暗卷
+  if (process.env.CAIRN_API_KEY) return {}; // 缺省 = GLM 暗卷
   if (process.env.M2F_SIDECHAT_DEMO === "1") return { model: sidechatDemoScript() };
-  return { error: "无 M0_API_KEY：sidechat 真实模型不可用（fail-closed，可注入脚本模型）" };
+  return { error: "无 CAIRN_API_KEY：sidechat 真实模型不可用（fail-closed，可注入脚本模型）" };
 }
 
 /** M2g §7.5：sidechat 自身历史压缩用的摘要器（与主会话**同一实现**，参数独立配置）。
- *  M0_API_KEY → GLM；演示通道 → 冻结 mock；都没有 → undefined（走既有 overflow 紧急截断）。 */
+ *  CAIRN_API_KEY → GLM；演示通道 → 冻结 mock；都没有 → undefined（走既有 overflow 紧急截断）。 */
 function resolveSidechatSummarizer(): ReturnType<typeof createGlmSummarizer> | undefined {
-  if (process.env.M0_API_KEY) return createGlmSummarizer();
+  if (process.env.CAIRN_API_KEY) return createGlmSummarizer();
   if (process.env.M2F_SIDECHAT_DEMO === "1") {
     return createMockSummarizer("## Objective\n- 旁路会话自身历史压缩（演示通道，冻结摘要）。\n");
   }

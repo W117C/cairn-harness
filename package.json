@@ -1,13 +1,13 @@
 {
-  "name": "m0-agent-loop",
+  "name": "cairn-harness",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "bin": {
-    "m0": "./bin/m0.mjs"
+    "cairn": "./bin/cairn.mjs"
   },
   "engines": {
-    "node": ">=20.3.0"
+    "node": ">=20.3.0 <25"
   },
   "scripts": {
     "gates": "node --import tsx scripts/gates.ts",
@@ -43,6 +43,7 @@
     "replay-determinism-check": "node --import tsx scripts/replay-determinism-check.ts",
     "no-progress-check": "node --import tsx scripts/no-progress-check.ts",
     "web-fetch-check": "node --import tsx scripts/web-fetch-check.ts",
+    "repo-hygiene-check": "node --import tsx scripts/repo-hygiene-check.ts",
     "cost-per-progress-check": "node --import tsx scripts/cost-per-progress-check.ts",
     "desktop-boundary-check": "node --import tsx scripts/desktop-boundary-check.ts",
     "head-import-check": "node --import tsx scripts/head-import-face.ts",

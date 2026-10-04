@@ -5,7 +5,7 @@ import { access, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
 import { createOutputRing } from "../tools/output-ring";
-import { sanitizedEnv, spawnTracked } from "../tools/process";
+import { killGroup, sanitizedEnv, spawnTracked } from "../tools/process";
 import type { VerifyCause, VerifyCommandResult } from "../events";
 
 /** 包管理器**自己那一行**的命名空间错误码（pnpm 打成 `[ERR_PNPM_XXX] msg`）。
@@ -87,7 +87,7 @@ export interface VerifyOutcome {
   results: VerifyCommandResult[];
 }
 
-export type ExecFn = (command: string, cwd: string, timeoutMs?: number) => Promise<VerifyCommandResult>;
+export type ExecFn = (command: string, cwd: string, timeoutMs?: number, signal?: AbortSignal) => Promise<VerifyCommandResult>;
 
 const OUTPUT_LIMIT = 32 * 1024;
 /** verify 缺省超时：npm 侧脚本 60s 够用（e2e / gym 都跑在这条上，不动它 = 零回归）。 */
@@ -107,15 +107,23 @@ export const ESCALATE_REPEAT_ATTEMPT = 3;
  *  截断走同一只头尾环：这里比 run_shell 更需要尾部——`N failed`、失败用例名、stack 末行
  *  全在输出的最后几行，而这正是 failureDigest 回注给模型去修的全部依据。只留头部时
  *  模型拿到的是 "RUN v5.0.0" 加一串 ✓ 行，改无可改，只能把 3 次 verify 额度白烧完。 */
-export const defaultExec: ExecFn = (command, cwd, timeoutMs = DEFAULT_VERIFY_TIMEOUT_MS) => {
+export const defaultExec: ExecFn = (command, cwd, timeoutMs = DEFAULT_VERIFY_TIMEOUT_MS, signal?: AbortSignal) => {
   return new Promise<VerifyCommandResult>((settle) => {
     const ring = createOutputRing(OUTPUT_LIMIT);
     let timedOut = false;
     let settled = false;
     const collect = (chunk: Buffer): void => ring.push(chunk);
+    const onAbort = (): void => {
+      if (settled) return;
+      settled = true;
+      handle.dispose();
+      killGroup(handle.child);
+      settle({ command, ok: false, output: "[verify] 取消信号生效，verify 命令已中止", cause: "not-run", exitCode: null });
+    };
     const finish = (code: number | null): void => {
       if (settled) return;
       settled = true;
+      signal?.removeEventListener("abort", onAbort);
       handle.dispose();
       let output = ring.read();
       if (timedOut) output += "\n[error: verify 命令超时（" + String(Math.round(timeoutMs / 1000)) + "s），已强制终止——命令确实跑完过吗？范围太大就先跑单条测试]";
@@ -147,12 +155,15 @@ export const defaultExec: ExecFn = (command, cwd, timeoutMs = DEFAULT_VERIFY_TIM
     handle.child.on("error", (err) => {
       if (settled) return;
       settled = true;
+      signal?.removeEventListener("abort", onAbort);
       handle.dispose();
       // 连 shell 都没起来：这台机器上没有能跑这条命令的东西。归 `toolchain-missing`
       // （该值的口径因此从"退出码 127"加宽到"127 或根本起不来"，已按裁决记进 judgment-layer §9.1）。
       settle({ command, ok: false, output: "verify exec: " + err.message, cause: "toolchain-missing", exitCode: null });
     });
     handle.child.on("close", (code) => finish(code));
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
   });
 };
 
@@ -284,7 +295,7 @@ export function verifyCommands(config: VerifyConfig): string[] {
 }
 
 /** 执行一轮 verify：逐条跑 lint/test 命令，全绿才 ok。 */
-export async function runVerifyOutcome(repoDir: string, exec: ExecFn = defaultExec): Promise<VerifyOutcome> {
+export async function runVerifyOutcome(repoDir: string, exec: ExecFn = defaultExec, signal?: AbortSignal): Promise<VerifyOutcome> {
   const { config, source } = await loadVerifyConfig(repoDir);
   const commands = verifyCommands(config);
   if (commands.length === 0) {
@@ -307,7 +318,18 @@ export async function runVerifyOutcome(repoDir: string, exec: ExecFn = defaultEx
   const results: VerifyCommandResult[] = [];
   const timeoutMs = config.timeoutMs ?? DEFAULT_VERIFY_TIMEOUT_MS;
   for (const command of commands) {
-    results.push(await exec(command, repoDir, timeoutMs));
+    try {
+      results.push(await exec(command, repoDir, timeoutMs, signal));
+    } catch (err) {
+      // 钩子/执行器抛错也要留一条结构化结果：否则前面已跑完的证据被吞，审计面只剩一句文案。
+      results.push({
+        command,
+        ok: false,
+        output: "verify exec: " + (err instanceof Error ? err.message : String(err)),
+        cause: "hook-error",
+        exitCode: null,
+      });
+    }
   }
   return { ok: results.every((r) => r.ok), results };
 }
@@ -318,7 +340,7 @@ export interface VerifyHook {
   /** 目标仓库有没有可验面（verify 命令非空）。false ⇒ harness 的自动验证拍整段跳过：
    *  没东西可验还回注「未找到 verify 配置」= 白烧一轮模型调用。缺省视为有面。 */
   surface?(): Promise<boolean>;
-  run(): Promise<VerifyOutcome>;
+  run(signal?: AbortSignal): Promise<VerifyOutcome>;
 }
 
 /** 面向 gate-check / agent-runner 的标准钩子：目标仓库 + 可注入执行器（沙箱路径传沙箱 exec）。 */
@@ -331,7 +353,7 @@ export function createVerifyHook(repoDir: string, opts: { maxAttempts?: number; 
       // 而它其实能验（M5 交付物 1 的另一半：补上的面要真的被跑到，不能只躺在配置里）。
       return verifyCommands(config).length > 0;
     },
-    run: () => runVerifyOutcome(repoDir, opts.exec),
+    run: (signal?: AbortSignal) => runVerifyOutcome(repoDir, opts.exec, signal),
   };
 }
 
