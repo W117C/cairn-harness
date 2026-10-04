@@ -57,13 +57,22 @@ export function rootScriptInvocations(md: string): string[] {
   return [...out].sort();
 }
 
-/** 反引号里、像仓内路径的记法：含 `/`、无空白、无占位符、不以 `node_modules` 开头。 */
+/** 反引号里、像**仓内**路径的记法：含 `/`、无空白、无占位符、不以 `node_modules` 开头。
+ *
+ *  **2026-10-05 修正一处假阳性**：`~/.dsh`、`~/.zshrc` 这类家目录记法天然**不在本仓树里**，
+ *  而旧实现只按「含 `/`」收 ⇒ 一律判 `path-missing`。这条判据要守的是「AGENTS.md 点名的
+ *  **仓内**路径要真存在」（防止改名只改一处、文档指向不存在的脚本），家目录不在它的面上：
+ *  要求 `~/.dsh` 在仓库里存在是把尺量错了对象——它会逼着人把家目录路径从文档里删掉，
+ *  而那正是读者需要的信息。
+ *  排除家目录记法**不会**掏空这条判据：真正的仓内漂移（`bin/m0.mjs` 改名后文档没跟上）
+ *  仍然照收，判卷里有一条反向守卫钉着这件事。 */
 export function mentionedPaths(md: string): string[] {
   const out = new Set<string>();
   for (const m of md.matchAll(/`([^`\s]+)`/gu)) {
     const tok = (m[1] ?? "").replace(/^\.\/+/u, "");
     if (!tok.includes("/") || PLACEHOLDER.test(tok)) continue;
     if (tok.startsWith("node_modules/")) continue;
+    if (tok.startsWith("~/") || tok === "~") continue; // 家目录不是仓内路径（见上方注释）
     if (tok.includes("=") || tok.includes("--")) continue; // 参数形状不是路径
     out.add(tok.replace(/\/+$/u, "") === "" ? tok : tok.replace(/\/+$/u, ""));
   }

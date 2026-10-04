@@ -191,10 +191,20 @@ describe("auto-verify on completion (harness 补拍，证据 only)", () => {
     expect(requests).toHaveLength(2); // verify 通过即停
   });
 
-  it("可验面探测炸（config 存在但 JSON 坏）⇒ 不炸 run、不补拍", async () => {
+  it("可验面探测炸（config 存在但 JSON 坏）⇒ 不炸 run、不补拍，但必须出声", async () => {
     const boom = { surface: async () => { throw new SyntaxError("Unexpected token 'I'"); }, run: async () => ({ ok: false as const, results: [] }) };
     const { log } = await runWritesFirst({ verify: boom, autoVerify: true });
-    expect(log.filter((e) => e.type === "verify_result")).toHaveLength(0);
+    const beats = log.filter((e) => e.type === "verify_result");
+    // 原判据钉 `toHaveLength(0)`，而生产在 loop.ts 里改成**出声**（那里注释写明了理由：
+    // 「fail-closed 口径与 manual 对齐：探测失败是一次坏的 verify 证据，必须进事件流，
+    // 否则审计面看不到『该验没验』」）。两个版本都已入库 ⇒ 这是判卷与实现的真不一致，必须收口。
+    // 收在**用例名的原意**上，那两件没有被放宽：
+    //   · 不炸 run：runWritesFirst 正常返回（抛错收场的话这条会以异常失败，不是断言失败）；
+    //   · 不补拍：只有这一拍，且它是**环境拍**（cause=hook-error、带 auto 标记）——
+    //     环境拍不烧模型的修复额度，因此不会引出返修那一轮。
+    expect(beats).toHaveLength(1);
+    expect(beats[0]?.cause).toBe("hook-error");
+    expect(beats[0]?.auto).toBe(true);
   });
 
   it.each([

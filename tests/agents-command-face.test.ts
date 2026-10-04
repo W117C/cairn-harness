@@ -63,6 +63,17 @@ describe("合成面：两态各红一次（新尺必须先证明自己有分辨�
     expect(mentionedPaths("`src/agent/`")).toEqual(["src/agent"]);
   });
 
+  it("家目录记法不是仓内路径：`~/.dsh` 不入面，而真仓内路径照收（反向证人）", () => {
+    // 2026-10-05：AGENTS.md 的 GraphFlow 段写了 `~/.dsh`，旧实现按「含 /」收 ⇒ 判
+    // path-missing。家目录天然不在本仓树里，要求它存在是把尺量错了对象。
+    // 这一条同时钉住**排除没把判据掏空**：同形状的真仓内路径必须仍然被收进来。
+    expect(mentionedPaths("`~/.dsh`")).toEqual([]);
+    expect(mentionedPaths("`~/.dsh/plugins/graphflow`")).toEqual([]);
+    expect(mentionedPaths("`~/.dsh`、`scripts/gates.ts`")).toEqual(["scripts/gates.ts"]);
+    // 真漂移仍会被抓住：改名后文档里的旧路径必须出现在面上（否则反向守卫自己就失效了）。
+    expect(mentionedPaths("`bin/m0.mjs`")).toEqual(["bin/m0.mjs"]);
+  });
+
   it("命令抽取的形状：--filter 给对，裸 pnpm 不把开关当脚本", () => {
     expect(filterInvocations("`pnpm --filter cairn-desktop test`")).toEqual([{ name: "cairn-desktop", script: "test" }]);
     expect(rootScriptInvocations("`pnpm --filter x test` 与 `pnpm mutate-verify`")).toEqual(["mutate-verify"]);
