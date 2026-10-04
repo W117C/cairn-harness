@@ -1,0 +1,21 @@
+tests/autonomy.test.ts(252,14): error TS2339: Property 'risk' does not exist on type 'EvaluateDecision'.
+  Property 'risk' does not exist on type '{ verdict: "deny"; reason: string; layer: "L0-hard" | "L1-deny" | "L2-ask-rule" | "L3-rule" | "L3-scope" | "L3-mode" | "L4-critical" | "L4-risk" | "L4-mcp-unannotated" | "L4-network" | "L4-pass" | "X-distill"; }'.
+tests/autonomy.test.ts(253,14): error TS2339: Property 'risk' does not exist on type 'EvaluateDecision'.
+  Property 'risk' does not exist on type '{ verdict: "deny"; reason: string; layer: "L0-hard" | "L1-deny" | "L2-ask-rule" | "L3-rule" | "L3-scope" | "L3-mode" | "L4-critical" | "L4-risk" | "L4-mcp-unannotated" | "L4-network" | "L4-pass" | "X-distill"; }'.
+tests/autonomy.test.ts(266,14): error TS2339: Property 'risk' does not exist on type 'EvaluateDecision'.
+  Property 'risk' does not exist on type '{ verdict: "deny"; reason: string; layer: "L0-hard" | "L1-deny" | "L2-ask-rule" | "L3-rule" | "L3-scope" | "L3-mode" | "L4-critical" | "L4-risk" | "L4-mcp-unannotated" | "L4-network" | "L4-pass" | "X-distill"; }'.
+tests/autonomy.test.ts(275,86): error TS2339: Property 'risk' does not exist on type 'EvaluateDecision'.
+  Property 'risk' does not exist on type '{ verdict: "deny"; reason: string; layer: "L0-hard" | "L1-deny" | "L2-ask-rule" | "L3-rule" | "L3-scope" | "L3-mode" | "L4-critical" | "L4-risk" | "L4-mcp-unannotated" | "L4-network" | "L4-pass" | "X-distill"; }'.
+tests/autonomy.test.ts(276,87): error TS2339: Property 'risk' does not exist on type 'EvaluateDecision'.
+  Property 'risk' does not exist on type '{ verdict: "deny"; reason: string; layer: "L0-hard" | "L1-deny" | "L2-ask-rule" | "L3-rule" | "L3-scope" | "L3-mode" | "L4-critical" | "L4-risk" | "L4-mcp-unannotated" | "L4-network" | "L4-pass" | "X-distill"; }'.
+tests/autonomy.test.ts(284,102): error TS2339: Property 'risk' does not exist on type 'EvaluateDecision'.
+  Property 'risk' does not exist on type '{ verdict: "deny"; reason: string; layer: "L0-hard" | "L1-deny" | "L2-ask-rule" | "L3-rule" | "L3-scope" | "L3-mode" | "L4-critical" | "L4-risk" | "L4-mcp-unannotated" | "L4-network" | "L4-pass" | "X-distill"; }'.
+tests/compaction-tried-rejected.test.ts(28,3): error TS2352: Conversion of type '{ type: "verify_result"; callId: string; ok: false; attempt: number; maxAttempts: number; results: Record<string, unknown>[]; }' to type 'AgentEvent' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type '{ type: "verify_result"; callId: string; ok: false; attempt: number; maxAttempts: number; results: Record<string, unknown>[]; }' is not comparable to type 'VerifyResultEvent & { ts?: number | undefined; }'.
+    Type '{ type: "verify_result"; callId: string; ok: false; attempt: number; maxAttempts: number; results: Record<string, unknown>[]; }' is not comparable to type 'VerifyResultEvent'.
+      Types of property 'results' are incompatible.
+        Type 'Record<string, unknown>[]' is not comparable to type 'VerifyCommandResult[]'.
+          Type 'Record<string, unknown>' is missing the following properties from type 'VerifyCommandResult': command, ok, output
+[typecheck] 报错文件归因：HEAD 内 0／在飞改动中的 tracked 1／未跟踪草稿 1／工作树状态取不到 0（四档相加＝2，与分母 2 不等就是归因坏了）
+[typecheck] ⚠️ 未跟踪草稿（不属 HEAD 回归，属在飞改动）: tests/compaction-tried-rejected.test.ts
+[typecheck] ⚠️ tracked 但工作树脏（分不清是 HEAD 缺陷还是隔壁未提交的 hunk ⇒ 要证 HEAD 请开干净 worktree；这一格只归因、不豁免）: tests/autonomy.test.ts

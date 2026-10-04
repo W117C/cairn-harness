@@ -1,0 +1,17 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/Cairn/deepseek harness[39m
+
+ [32m✓[39m tests/hook-precompact-producer.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 55[2mms[22m[39m
+ [32m✓[39m tests/context-auto-verify-note.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/context-signals.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/context-dangling-tool-call.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/shape-doc-cap.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m5 passed[39m[22m[90m (5)[39m
+[2m      Tests [22m [1m[32m35 passed[39m[22m[90m (35)[39m
+[2m   Start at [22m 18:25:41
+[2m   Duration [22m 1.45s[2m (transform 62%, import 29%, tests 8%, worker 1%)[22m
+
+[2m    Isolate [22m [33m5 workers spawned[39m[2m · ~77ms startup each (spawn + environment, per file)[22m
+[2m            [22m [2mat least ~308ms faster with [22m[33misolate: false[39m[2m — reuses workers across files instead of one per file[22m
+

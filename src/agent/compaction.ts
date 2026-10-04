@@ -3,8 +3,9 @@
 // 事件流永不删改；调用方 append 进日志即完成一次压缩（压缩必出卡，不静默）。
 // 事件 id = 1-based 行号（M1a 定稿，append-only 永不漂移）。
 import type { AgentEvent, CompactionEvent, CompactionUsage } from "../events";
+import { isEnvVerifyCause } from "../events";
 import { eventIdAt, excludedIds, hasWorkerAttribution, projectContext, type ContextMessage } from "./context";
-import { classifyResult, shapeResult, summaryTruncate } from "./shape";
+import { classifyResult, shapeLog, shapeResult, summaryTruncate } from "./shape";
 import { setTimeout as delay } from "node:timers/promises";
 import { deriveBoundaries, snapToProgressBoundary, economicGate, type EconomicState } from "./economics";
 
@@ -478,6 +479,113 @@ function applyFilesFallback(text: string, compressedEvents: AgentEvent[]): strin
   );
 }
 
+// ---- 「试过且没走通」的确定性兜底 ----
+// 压缩把被摘事件永久移出投影，而「这条路我已经走过、它红了」在六段模板里没有对应段：
+// 它能不能活下来取决于模型写不写。这一段由 harness 从结构化字段（exitCode／timedOut／blockedBy／
+// verify 的 command 与 cause）直接拼，不回去匹配散文——文案面早被证明是第二个注入面。
+/** 条数与每条正文的帽。这一段**不计入** `summaryCapTokens`（调用点在超帽闸之后）：
+ *  让硬塞的事实把压缩判成"太长所以别压"，等于用失忆换格式，方向反了。净增长仍由膨胀闸兜。 */
+export const TRIED_REJECTED_CAPS = { bullets: 10, lineChars: 120 };
+
+/** 压成一行并按帽截断：失败正文常是整段日志，接手者要的是开头那条判定。 */
+function oneLine(s: string, max: number): string {
+  const flat = s.replace(/\s+/gu, " ").trim();
+  return flat.length > max ? flat.slice(0, max) + "…" : flat;
+}
+
+/** 这一次调用「是什么」：run_shell 给命令原文，文件类给 path，再退到第一个标量实参。 */
+function callTargetOf(args: Record<string, unknown>): string {
+  const cmd = args.command;
+  if (typeof cmd === "string" && cmd !== "") return oneLine(cmd, TRIED_REJECTED_CAPS.lineChars);
+  const p = args.path;
+  if (typeof p === "string" && p !== "") return p;
+  for (const [k, v] of Object.entries(args)) {
+    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+      return k + "=" + oneLine(String(v), 40);
+    }
+  }
+  return "（无参数）";
+}
+
+/** 失败正文里最该带下来的那一句走 `shape.ts` 那份共用规则（run_shell／verify ⇒ 错误行优先＋尾部保留）。
+ *  log 类**只取「[错误行]」那一节**，没有错误行就宁可不留正文：真语料实测那种情况下带上来的是
+ *  `ls` 的目录列表，它替不了「为什么没走通」，却要和接手者抢同一段注意力——退出码那格才是证据。 */
+function reasonOf(toolName: string, args: Record<string, unknown>, output: string): string {
+  const max = TRIED_REJECTED_CAPS.lineChars;
+  const kind = classifyResult(toolName, args, output);
+  if (kind !== "log") return oneLine(shapeResult(kind, output, max), max);
+  if (output.length <= max) return oneLine(output, max);
+  const shaped = shapeLog(output, max);
+  if (!shaped.startsWith("[错误行]")) return "";
+  return oneLine((shaped.slice("[错误行]".length).split("\n[尾部]")[0] ?? ""), max);
+}
+
+/** 清单本体：顺序＝事件顺序，逐字相同的条目并成 `×N`（"同一个错又撞了一遍"正是最该带下来的信号）。
+ *  环境成因的红必须标出来，否则接手者会把它读成"此路不通"而绕开一条其实没真试过的好路。 */
+export function extractTriedRejected(events: readonly AgentEvent[]): string[] {
+  const calls = new Map<string, { name: string; args: Record<string, unknown> }>();
+  const plans = new Map<string, string>();
+  for (const e of events) {
+    if (e.type === "tool_call") calls.set(e.id, { name: e.name, args: e.args });
+    else if (e.type === "plan_proposed") {
+      plans.set(e.callId, oneLine(JSON.stringify(e.plan), TRIED_REJECTED_CAPS.lineChars));
+    }
+  }
+  const counts = new Map<string, number>();
+  const order: string[] = [];
+  const push = (b: string): void => {
+    const n = (counts.get(b) ?? 0) + 1;
+    counts.set(b, n);
+    if (n === 1) order.push(b);
+  };
+  const who = (id?: string): string => (id ? "〔worker:" + id + "〕" : "");
+  /** 有正文才挂「：正文」；没有就只留结构化那半（宁缺不编）。 */
+  const withReason = (head: string, reason: string): string => (reason === "" ? head : head + "：" + reason);
+  for (const e of events) {
+    if (e.type === "tool_result" && !e.ok) {
+      const c = calls.get(e.callId);
+      const label = (c?.name ?? "（工具名不在压缩范围内）") + " " + (c ? callTargetOf(c.args) : e.callId);
+      const verb = e.blockedBy ? "未执行（被 " + e.blockedBy + " 拦）" : "失败";
+      const tags: string[] = [];
+      if (e.timedOut === true) tags.push("超时强杀");
+      else if (e.exitCode !== undefined) tags.push(e.exitCode === null ? "进程没起来/被强杀" : "退出码 " + String(e.exitCode));
+      push(withReason(label + " " + verb + (tags.length > 0 ? "（" + tags.join("；") + "）" : "") + who(e.agent_id), reasonOf(c?.name ?? "generic", c?.args ?? {}, e.output)));
+    } else if (e.type === "verify_result" && !e.ok) {
+      for (const r of e.results) {
+        if (r.ok) continue;
+        const tags = ["第 " + String(e.attempt) + "/" + String(e.maxAttempts) + " 次"];
+        if (e.auto === true) tags.push("harness 补拍");
+        if (r.cause !== undefined) {
+          tags.push(isEnvVerifyCause(r.cause) ? "归因 " + r.cause + "（环境成因，别当此路不通）" : "归因 " + r.cause);
+        }
+        push(withReason("verify「" + oneLine(r.command, 60) + "」红（" + tags.join("，") + "）" + who(e.agent_id), reasonOf("verify", {}, r.output)));
+      }
+    } else if (e.type === "plan_approved" && !e.approved) {
+      push("plan 提案被用户拒绝：" + (plans.get(e.callId) ?? "（提案原文不在压缩范围内）"));
+    }
+  }
+  const shown = order.slice(0, TRIED_REJECTED_CAPS.bullets);
+  const out = shown.map((b) => {
+    const n = counts.get(b) ?? 1;
+    return (n > 1 ? "×" + String(n) + " " : "") + b;
+  });
+  const rest = order.length - shown.length;
+  if (rest > 0) out.push("（压缩范围内另有 " + String(rest) + " 条未列）");
+  return out;
+}
+
+/** 成品那一段；没有可报的 ⇒ 空串（调用方据此不插空段，别给摘要添噪声）。 */
+export function triedRejectedNote(events: readonly AgentEvent[]): string {
+  const bullets = extractTriedRejected(events);
+  if (bullets.length === 0) return "";
+  return "\n\n## Tried & Rejected\n（harness 按事件流结构化字段列出，非模型转述）\n" + bullets.map((b) => "- " + b).join("\n");
+}
+
+function applyTriedRejectedFallback(text: string, compressedEvents: readonly AgentEvent[]): string {
+  if (/##\s*Tried & Rejected/i.test(text)) return text; // 模型自己写了这一段 ⇒ 不覆盖它
+  return text + triedRejectedNote(compressedEvents);
+}
+
 // ---- 摘要器 ----
 export interface SummarizerInput {
   signal?: AbortSignal;
@@ -563,6 +671,7 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
   if (args.trigger === "overflow") {
     const t = selectTruncation(events, ctx);
     if (!t) return { ok: false, kind: "failed", why: "overflow 截断：无可安全摘除的事件" };
+    const droppedSet = new Set(t.compressedIds);
     const event: CompactionEvent = {
       type: "compaction",
       trigger: "overflow",
@@ -570,7 +679,9 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
       compressed_event_ids: t.compressedIds,
       summary:
         "[overflow 紧急截断] 已按半分截断摘除 " + t.compressedIds.length + " 条最旧事件（原子单元整丢、最近 typed 用户消息未动）。" +
-        "本条为降级兜底标记，非模型摘要；原始事件仍在事件流中。",
+        "本条为降级兜底标记，非模型摘要；原始事件仍在事件流中。" +
+        // 紧急截断恰恰发生在长任务快撑不住的时候：这一段在这里比在常规摘要里更贵。
+        triedRejectedNote(events.filter((_, i) => droppedSet.has(eventIdAt(i)))),
       summary_offset: t.offset,
       tokens_before: tokensBefore,
       tokens_after: 0,
@@ -658,7 +769,7 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
         trigger: args.trigger,
         reason: args.reason,
         compressed_event_ids: cut.compressedIds,
-        summary: text,
+        summary: applyTriedRejectedFallback(text, compressedEvents),
         summary_offset: cut.offset,
         tokens_before: tokensBefore,
         tokens_after: 0,

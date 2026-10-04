@@ -1,0 +1,14 @@
+帽现读：bullets=10 lineChars=120 summaryCapTokens=4096
+语料文件=40｜解析失败=0｜会插入那一段的=5｜零失败（一段都不插）的=35
+段长：max=1071 中位=0 合计=2199
+条目数：max=6 中位=0｜撞到条数帽的文件=0
+与既有摘要同框：同文件 compaction 摘要字符 max=0｜粗估（段长＋既有摘要）越过帽的文件数=0
+最长样本：fixtures/no-progress/real-red-verify-stagnation.events.jsonl 事件=332 失败面=6 条目=6 段长=1071 既有摘要=无
+最长样本：fixtures/no-progress/synth-progress-not-stagnation.events.jsonl 事件=7 失败面=4 条目=4 段长=341 既有摘要=无
+最长样本：fixtures/goal-drift/real-long-run-B12b.events.jsonl 事件=198 失败面=1 条目=1 段长=315 既有摘要=无
+--- 逐字样例（fixtures/goal-drift/real-long-run-B12b.events.jsonl）---
+
+
+## Tried & Rejected
+（harness 按事件流结构化字段列出，非模型转述）
+- run_shell ls -la && cat package.json 2>/dev/null && echo "---VERIFY---" && cat .agent/verify.json 2>/dev/null; ls .agent 2>/dev/nu… 失败（退出码 1）：[尾部] drwxr-xr-x@ 22 ze staff 704 Oct 1 18:19 tests { "name": "long-horizon", "private": true, "type": "module", "scri …[…
