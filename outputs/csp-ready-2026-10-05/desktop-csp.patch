@@ -1,0 +1,32 @@
+--- a/apps/desktop/src/renderer/index.html
++++ b/apps/desktop/src/renderer/index.html
+@@ -1,5 +1,14 @@
+ <!doctype html>
+ <html lang="zh-CN">
+-  <head><meta charset="UTF-8" /><title>m0</title></head>
++  <head>
++    <meta charset="UTF-8" />
++    <!-- 内容安全策略（2026-10-05 补；评审 §7 的覆盖缺口「renderer 未见 CSP」）。
++         收紧了什么：脚本只许同源（打掉注入进来的外链/内联脚本）、不许 object/embed、
++         不许改 base-uri、不许表单外发、不许被嵌进别人的 frame。
++         刻意留的一处松：style-src 带 'unsafe-inline' —— React 的行内 style **属性**
++         归它管，去掉会把界面样式打掉。这是「按现状可达的最严」，不是「理论上最严」。-->
++    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" />
++    <title>m0</title>
++  </head>
+   <body><div id="root"></div><script type="module" src="./main.tsx"></script></body>
+ </html>
+--- a/apps/desktop/src/main/index.ts
++++ b/apps/desktop/src/main/index.ts
+@@ -173,7 +173,10 @@
+     width: 1200,
+     height: 800,
+     titleBarStyle: "hiddenInset",
+-    webPreferences: { preload: join(distElectron, "preload.cjs"), contextIsolation: true, nodeIntegration: false },
++    // sandbox（2026-10-05 补）：preload 只 import electron（沙箱允许）＋两个被 esbuild 打进包的
++    // 本地模块 ⇒ 开沙箱不需要它多要任何权限。开着之后渲染进程被关进 OS 级沙箱：
++    // 即使渲染面被 XSS 突破也拿不到 Node 能力——与 contextIsolation / nodeIntegration 是三层。
++    webPreferences: { preload: join(distElectron, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true },
+   });
+   if (process.env.VITE_DEV_SERVER_URL) void win.loadURL(process.env.VITE_DEV_SERVER_URL);
+   else void win.loadFile(join(distElectron, "..", "dist", "index.html"));
