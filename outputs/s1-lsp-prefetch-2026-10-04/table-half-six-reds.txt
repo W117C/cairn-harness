@@ -1,0 +1,60 @@
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/permissions-tool-registry.test.ts > M7 · 工具名登记册 > B1 · 零回归：26 个既有工具名在四档下的 evaluate 裁决逐格不变（改前实测金标准）
+AssertionError: lsp @ read-only: expected 'deny/L0-hard' to be 'approve/L4-pass' // Object.is equality
+
+Expected: "approve/L4-pass"
+Received: "deny/L0-hard"
+
+ ❯ tests/permissions-tool-registry.test.ts:117:64
+    115|       PERMISSION_MODES.forEach((mode, i) => {
+    116|         const d = evaluate(asTool(name), {}, session(mode));
+    117|         expect(`${d.verdict}/${d.layer}`, `${name} @ ${mode}`).toBe(ex…
+       |                                                                ^
+    118|       });
+    119|     }
+ ❯ tests/permissions-tool-registry.test.ts:115:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  tests/permissions-tool-registry.test.ts > M7 · 工具名登记册 > B2 · 零回归：gate() 对既有工具名的裁决逐格不变（含只读 worker 的工具面）
+AssertionError: lsp @ read-only 非交互: expected 'deny' to be 'allow' // Object.is equality
+
+Expected: "allow"
+Received: "deny"
+
+ ❯ tests/permissions-tool-registry.test.ts:137:74
+    135|         // 非交互是生产实况（loop 的 opts.interactive ?? false，5 个 runLoop 调用点无一…
+    136|         const expected = EXPECT[name]?.[mode] ?? "allow";
+    137|         expect(gate(mode, asTool(name), false), `${name} @ ${mode} 非交互…
+       |                                                                          ^
+    138|       }
+    139|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  tests/prompt-surface-check.test.ts > 工具描述也是模型可见文本（第 176 页） > 参数描述面取料：每把工具的参数 prose 都在面里，嵌套那几份只有递归读得到
+AssertionError: 只读档参数描述面数（现读 16＝M2 后不变：它没有 write_file/edit_file/apply_patch）: expected 11 to be 16 // Object.is equality
+
+- Expected
++ Received
+
+- 16
++ 11
+
+ ❯ tests/prompt-surface-check.test.ts:254:102
+    252|     // 这一格必须**精确**：只读到 183 的那一版（不递归）就是靠它露馅的；放宽成「≥ 某个数」之后
+    253|     // 「少走一族参数」仍然绿（规则 222）。改规格的人跟着改这一格。
+    254|     expect(perMode.get("read-only"), "只读档参数描述面数（现读 16＝M2 后不变：它没有 write…
+       |                                                                                                      ^
+    255|     expect(perMode.get("default"), "缺省档参数描述面数（现读 62＝第 179 页两把写向模板 + M2…
+    256|     for (const m of ["guided", "auto"]) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/write-face.test.ts > mayHaveWrittenDisk：写向判据的唯一事实源 > 只读工具（读文件/搜索/地图/等待/方案）⇒ false；`remember` 只写记忆区，不改被验的代码 ⇒ false
+AssertionError: lsp 不该被算成改盘: expected true to be false // Object.is equality
+
+- Expected
++ Received
+

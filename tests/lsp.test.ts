@@ -1,6 +1,7 @@
 // M2a LSP 框架测试：stub server（fixtures/lsp/stub-server.mjs）+ 六操作 + 生命周期 + 诊断回流。
 // 坑：stub 用 plain node 跑（fixtures 不进 tsc），workspace 每用例独立，收尾 closeAllLspClients。
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,6 +13,8 @@ import {
   isLspBroken,
   loadLspConfig,
   lsp,
+  lspPrefetchEnabled,
+  prefetchLsp,
 } from "../src/tools/lsp";
 import type { ToolContext } from "../src/tools";
 
@@ -206,5 +209,81 @@ describe("诊断回流（M2a 任务 6）", () => {
     expect(res.ok).toBe(true);
     // 断言面 = 「不追加 <diagnostics> 后缀」。D7 覆盖前快照那句尾巴是另一件事，允许出现但不许在这里当诊断混进来。
     expect(res.output.replace(/｜覆盖前原件已存 \.agent\/snapshots\/[^\s]+$/, "")).toBe("已替换 a.ts（1 处，+1 −1 行）");
+  });
+});
+
+// S1（评审 2026-10-03）：read_file 那一脚 prefetchLsp 会走到 spawn(工作区 .agent/lsp.json 里的 command)。
+// 这里的证据形状是"留痕"：把一个**会写文件的脚本**当语言服务器——文件出现＝真 spawn 过。
+describe("S1：预热默认关，且不吞掉显式开启", () => {
+  /** 造一个"命令会留痕"的工作区：marker 出现即证明 spawn 发生了。 */
+  async function markerWs(): Promise<{ root: string; marker: string; target: string }> {
+    const root = await mkdtemp(join(tmpdir(), "m2a-lsp-s1-"));
+    await mkdir(join(root, ".agent"), { recursive: true });
+    const marker = join(root, "spawned.marker");
+    const evil = join(root, "trace-server.mjs");
+    await writeFile(evil, 'import { appendFileSync } from "node:fs";\nappendFileSync(' + JSON.stringify(marker) + ', "x");\nsetTimeout(() => process.exit(0), 50);\n', "utf8");
+    await writeFile(join(root, ".agent", "lsp.json"), JSON.stringify({
+      lsp: { trace: { command: "node", args: [evil], extensions: [".ts"] } },
+    }), "utf8");
+    const target = join(root, "a.ts");
+    await writeFile(target, "export const a = 1;\n", "utf8");
+    return { root, marker, target };
+  }
+
+  const waitFor = async (p: string, ms = 3000): Promise<boolean> => {
+    const until = Date.now() + ms;
+    while (Date.now() < until) {
+      if (existsSync(p)) return true;
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    return existsSync(p);
+  };
+
+  it("缺省不预热：返回 skipped-prefetch-off，且 spawn 没发生（marker 不存在）", async () => {
+    const { root, marker, target } = await markerWs();
+    try {
+      expect(prefetchLsp(root, target)).toBe("skipped-prefetch-off");
+      expect(await waitFor(marker, 300)).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("显式开启（参数）确实预热：started，且 marker 出现——开关不是死代码", async () => {
+    const { root, marker, target } = await markerWs();
+    try {
+      expect(prefetchLsp(root, target, true)).toBe("started");
+      expect(await waitFor(marker)).toBe(true);
+    } finally {
+      await closeAllLspClients();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("谓词只认字面 1：缺省 false／0 与 true 都不算开启（宽松真值会把默认关写成默认开）", () => {
+    expect(lspPrefetchEnabled({})).toBe(false);
+    expect(lspPrefetchEnabled({ CAIRN_LSP_PREFETCH: "1" })).toBe(true);
+    expect(lspPrefetchEnabled({ CAIRN_LSP_PREFETCH: "0" })).toBe(false);
+    expect(lspPrefetchEnabled({ CAIRN_LSP_PREFETCH: "true" })).toBe(false);
+    expect(lspPrefetchEnabled({ CAIRN_LSP_PREFETCH: "" })).toBe(false);
+  });
+
+  it("另外两个不 spawn 的出口各自有声（配置坏 / 没有匹配的 server）", async () => {
+    const root = await mkdtemp(join(tmpdir(), "m2a-lsp-s1-"));
+    try {
+      await mkdir(join(root, ".agent"), { recursive: true });
+      await writeFile(join(root, ".agent", "lsp.json"), JSON.stringify({ lsp: false }), "utf8");
+      expect(prefetchLsp(root, join(root, "a.ts"), true)).toBe("skipped-no-config");
+      const marker = join(root, "m2");
+      const evil = join(root, "t.mjs");
+      await writeFile(evil, 'import { appendFileSync } from "node:fs";\nappendFileSync(' + JSON.stringify(marker) + ', "x");\nsetTimeout(() => process.exit(0), 50);\n', "utf8");
+      await writeFile(join(root, ".agent", "lsp.json"), JSON.stringify({
+        lsp: { only: { command: "node", args: [evil], extensions: [".md"] } },
+      }), "utf8");
+      expect(prefetchLsp(root, join(root, "a.ts"), true)).toBe("skipped-no-server");
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

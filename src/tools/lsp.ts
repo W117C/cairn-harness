@@ -474,17 +474,34 @@ export async function collectDiagnostics(root: string, absPath: string, timeoutM
   }
 }
 
-/** read 命中源码文件时的后台预热：懒启动对应 server（尽力而为，静默失败）。 */
-export function prefetchLsp(root: string, absPath: string): void {
+/** 预热开关（评审 S1）：**默认关**。理由要说足——`read_file` 是连只读档都放行的工具，而它这一脚
+ *  经 `getLspClient` → `startClient` → `spawn(工作区 .agent/lsp.json 里写的 command)`：
+ *  「读一个文件」会在零提示下执行**仓库带来的可执行文件**。关掉之后，LSP 只在显式调用 `lsp` 工具时启动
+ *  （那一侧的档位判定见 `src/permissions/autonomy.ts` 的写向表）。要恢复这层便利＝显式设
+ *  `CAIRN_LSP_PREFETCH=1`，这是宿主的决定，不是工作区配置文件能自己决定的。 */
+export const LSP_PREFETCH_ENV = "CAIRN_LSP_PREFETCH";
+
+export function lspPrefetchEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  return env[LSP_PREFETCH_ENV] === "1";
+}
+
+/** 预热的去向（返回它不是为了好看：判卷要能在**不 mock spawn** 的情况下断「这一脚没发出去」）。 */
+export type LspPrefetchOutcome = "skipped-prefetch-off" | "skipped-no-config" | "skipped-no-server" | "started";
+
+/** read 命中源码文件时的后台预热：懒启动对应 server（尽力而为，静默失败，且默认不启动）。 */
+export function prefetchLsp(root: string, absPath: string, enabled = lspPrefetchEnabled()): LspPrefetchOutcome {
+  if (!enabled) return "skipped-prefetch-off";
+  let cfg: ReturnType<typeof loadLspConfig>;
   try {
-    const cfg = loadLspConfig(root);
-    if (!cfg.enabled) return;
-    const serverId = pickServerForFile(cfg, absPath);
-    if (!serverId) return;
-    void getLspClient(root, cfg, serverId).catch(() => {});
+    cfg = loadLspConfig(root);
   } catch {
-    /* 配置坏不阻塞 read */
+    return "skipped-no-config"; // 配置坏不阻塞 read（旧实现同样吞掉）
   }
+  if (!cfg.enabled) return "skipped-no-config";
+  const serverId = pickServerForFile(cfg, absPath);
+  if (!serverId) return "skipped-no-server";
+  void getLspClient(root, cfg, serverId).catch(() => {});
+  return "started";
 }
 
 // ---- lsp 工具：单工具六操作，对外 1-based 行列 ----
