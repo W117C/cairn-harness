@@ -12799,6 +12799,41 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 
 
 
+## 2026-10-04 · 第 374 页：`#78` 里"现在就能做"那一小段做完了——三条被"保全入库"搬走的针脚改指回现读形状，`阻断` 7 ⇒ 4（剩 4 条全在隔壁那半场改名里）
+
+1. **改指针，不改语义，也不动别人的判卷与实现**（三对针脚逐字来自现读）：
+   `verify-repeat-never-detected` 与 `verify-repeat-compares-first-line-only` 从
+   `const repeat = digest === lastVerifyDigest;` 挪到 **`const repeat = redactedDigest === lastVerifyDigest;`**
+   （`src/agent/loop.ts:293`：隔壁把比对换成脱敏副本 ⇒ 两条锚点同时悬空）；第二条的变异体也跟着换侧
+   （`redactedDigest.split("\n")[0] === (lastVerifyDigest ?? "").split("\n")[0]`），守的还是"按首行判重 ⇒
+   命令没变就被当成结果没变"。`verify-timeout-not-threaded-to-exec` 从 `exec(command, repoDir, timeoutMs)` 挪到
+   `exec(command, repoDir, timeoutMs, signal)`（`src/agent/verify.ts:325`，多出来的 `signal` 是可中断那一路接的），
+   变异体改成 `exec(command, repoDir, undefined, signal)` ⇒ 仍是"算出了超时却没传给执行器"，
+   期望变红的仍是「语言探测档自带 300s：冷编译 cargo/go 不该被 60s 掐死」。三条 `expectFail` 一字未动。
+2. **为什么这三条归我动、那四条不归**：判据只有一条——**被锚定的实现是否已进 HEAD，且该文件现在干净**。
+   `loop.ts`／`verify.ts` 都满足（`git status --porcelain` 现读为空），改指是恢复既有守卫，不需要任何人让位；
+   而 `glm-default-name-ignores-env`（钉在飞文本：锚点行入库了、`src/providers/glm.ts` 的实现还没）与三条
+   CAIRN 标题失效（`glm-tool-stream-switch-ignored`／`orchestrator-spawned-usage-model-dropped`／
+   `cli-workspace-dup-guard-eats-legal-shapes`＝表改了、判卷里那条标题还没）都在隔壁 M0→CAIRN 的下半场里，
+   门自己写着「不要把针脚改成 HEAD 里的旧写法」，我照办 ⇒ **`#78` 收一半，另一半记在隔壁名下**（不是我的债，但门会替我盯着）。
+3. **现读对照**（`outputs/anchor-repoint-2026-10-04/needles-after-repoint-2.txt`）：第 373 页那笔之后 `阻断 7`，
+   本笔之后 **`阻断 4`**；`待复认 1／未覆盖 1／逐行式 5／未入库面 0／killer 指针失效 0（HEAD 侧 3）` 与上一趟同数。
+   针脚命中唯一性当场核过（`grep -cF` 对 `const repeat = redactedDigest === lastVerifyDigest;` ⇒ 1），
+   没留"两处同串只改第一处"那种隐患；三条 `apply` 的产出合法性走的是门内同一把尺的形状
+   （`ts.transpileModule`＋`reportDiagnostics`，第 372 页为锚点备料时就是这么预检的）。
+4. **没杀就不说杀了**：这六条（第 373 页三条＋本笔三条）的**真杀**——`mutate-verify <id>`，要改源文件、
+   必须在干净 detached 树里逐条跑——**一条都没跑**。隔壁正在跑全量核心判卷（`pgrep` 现读 3 个进程挂着
+   `vitest.mjs run --config tests`），两套同跑会串 `/tmp/m1e-default-settings.json` 那个跨用例共享文件，
+   出来的红既不能算代码缺陷，也不能反过来当成"锚点杀得干净"的证据（**那是假绿方向**，本仓为此付过一次账）。
+   等窗的第一件事：六条逐条杀 ⇒ 重跑认证 ⇒ 读数进下一页。
+5. **量纲**：本笔动 1 支文件（`scripts/mutate-verify.mjs` 三处 hunk）＋台账＋1 件读数；跑的是秒级
+   `--check-needles`（≈14s，一道门，不是全量、不是整张表）。**没跑**：全量、认证、`typecheck`、任何判卷（都在等窗）。
+   `#39`／`#57`–`#66`／`#68` 照旧，`#67` 待对齐，`#69`／`#71` 备妥，`#70`／`#72` 待办，`#73` 半落，
+   `#74`–`#77` 照旧，`#78` 收一半（另一半在隔壁手里），`#79`（钱恒 null：递价＋同笔接线证人＋锚点）新增。
+   本页不宣布任何「绿了」。
+
+
+
 
 
 

@@ -2024,7 +2024,7 @@ const MUTATIONS = [
     src: "src/agent/loop.ts",
     test: "tests/verify.test.ts",
     desc: "去重的相等判定被摘掉 ⇒ 每一拍都重发整段失败日志（省 token 这件事根本没发生）",
-    apply: (s) => s.replace("const repeat = digest === lastVerifyDigest;", "const repeat = false;"),
+    apply: (s) => s.replace("const repeat = redactedDigest === lastVerifyDigest;", "const repeat = false;"),
     expectFail: "第 2 拍与第 1 拍逐字相同：改注一行提示，不重发失败正文",
   },
   {
@@ -2041,8 +2041,8 @@ const MUTATIONS = [
     test: "tests/verify.test.ts",
     desc: "按首行（=命令名）判重 ⇒ 命令没变就被当成「结果没变」，后续真正不同的错误输出被误判为重复而永不注入",
     apply: (s) => s.replace(
-      "const repeat = digest === lastVerifyDigest;",
-      'const repeat = digest.split("\\n")[0] === (lastVerifyDigest ?? "").split("\\n")[0];',
+      "const repeat = redactedDigest === lastVerifyDigest;",
+      'const repeat = redactedDigest.split("\\n")[0] === (lastVerifyDigest ?? "").split("\\n")[0];',
     ),
     expectFail: "第 3 拍输出变了 ⇒ 全文照常注入（去重不是「只注入一次」）",
   },
@@ -2115,7 +2115,7 @@ const MUTATIONS = [
     src: "src/agent/verify.ts",
     test: "tests/verify-probe.test.ts",
     desc: "算出了超时却没传给执行器 ⇒ 语言探测档的 300s 只是纸面配置，冷编译照旧被 60s 掐死",
-    apply: (s) => s.replace("results.push(await exec(command, repoDir, timeoutMs));", "results.push(await exec(command, repoDir));"),
+    apply: (s) => s.replace("results.push(await exec(command, repoDir, timeoutMs, signal));", "results.push(await exec(command, repoDir, undefined, signal));"),
     expectFail: "语言探测档自带 300s：冷编译 cargo/go 不该被 60s 掐死",
   },
   {
