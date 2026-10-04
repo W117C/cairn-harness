@@ -79,18 +79,37 @@ export async function installHeldOut(
  *  （它只有几条断言，2000 字足够定位；不限的话一条超时命令能灌进几十万字）。 */
 export const HELDOUT_OUTPUT_CAP = 2000;
 
-/** 输出帽的尾段预算：TAP 的 `# pass / # fail` 汇总在**结尾**，只掐头会把最该看的那两行吃掉
- *  （10-02 实测：判卷想数"隐藏套件里还有几条绿"，读到的却是被截断的中段）。 */
+/** 输出帽的尾段预算：给「最该读的那几行」留的**尾巴**。
+ *  ⚠️ 前提随 Node 大版本变过（2026-10-02 实测，Node v24.19.0）：`node --test` 非 TTY 下的默认 reporter
+ *  从 TAP（`# pass N`，汇总在**结尾**）变成了 spec（`ℹ pass N`，汇总在**中段**、失败明细之前）。
+ *  所以光「保头保尾」**保不住**它：TAP 那一支靠尾段活着，spec 那一支落在中段，两边都不保险
+ *  （spec 下每条用例行约 45 字，隐藏套件超过约 35 条汇总就会滑出头段而尾段只剩堆栈；
+ *  当前 B1 8 条 / B2 7 条远未到那个量级，但这只是碰巧，不是保证）。
+ *  ⇒ 汇总行改为**另行捞回**，见下面的 `HELDOUT_SUMMARY_LINE` 与 `capHeldOutOutput`。 */
 const HELDOUT_TAIL_KEEP = 400;
 
-/** 有界化一段输出：**保头 + 保尾**，中段省略并写明省了多少字。
+/** 汇总行长什么样：`# tests 8` / `ℹ pass 5` 这一族。两种 reporter 的前缀都收。
+ *  为什么值得单独认一条：它是「绿了几条、红了几条」的唯一来源，而这条摘要的位置随 reporter 变
+ *  （TAP 在结尾、spec 在中段）——只靠「保头保尾」是碰运气保住的，不是保出来的。 */
+const HELDOUT_SUMMARY_LINE = /^(?:#|ℹ) [a-z_]+ [\d.]+$/;
+
+/** 有界化一段输出：**保头 + 保尾 + 捞回汇总行**，中段省略并写明省了多少字。
  *  为什么必须限：整条 held-out 结果会进 readings.json（一条超时命令能灌几十万字）；
- *  为什么不能只保头：`# fail 3` 在尾巴上，那是判卷和人都要读的一行。 */
+ *  为什么不能只保头：失败条数那一行（TAP 的 `# fail 3` / spec 的 `ℹ fail 3`）是人要先读的一行；
+ *  为什么还要捞：spec 那一支的汇总在中段（10-02 实测 Node v24.19.0），落进被省掉的那段时，
+ *  「隐藏套件还剩几条绿」会在读数里凭空消失——判据读不到就判不了，不是「没红」。 */
 export function capHeldOutOutput(text: string, cap: number = HELDOUT_OUTPUT_CAP): string {
   if (text.length <= cap) return text;
   const tail = Math.min(HELDOUT_TAIL_KEEP, Math.floor(cap / 2));
-  const head = cap - tail;
-  return text.slice(0, head) + "\n…[有界性：中段省略 " + String(text.length - cap) + " 字]…\n" + text.slice(-tail);
+  const elision = "\n…[有界性：中段省略 " + String(text.length - cap) + " 字]…\n";
+  const summary = text.split("\n").filter((l) => HELDOUT_SUMMARY_LINE.test(l));
+  // 头段**倒扣**着算：尾段、省略标记、捞回段都先占预算 ⇒ 帽才是真的帽，不是只保住了头尾就完事。
+  const rescued = summary.length === 0 ? "" : "\n" + summary.join("\n") + "\n";
+  const head = Math.max(0, cap - tail - elision.length - rescued.length);
+  const kept = text.slice(0, head) + elision + text.slice(-tail);
+  // 已经在保留区里的那几行不重复贴；只贴**真正丢了**的，没丢时一个字节都不动（严格 no-op）。
+  const lost = summary.filter((l) => !kept.includes(l));
+  return lost.length === 0 ? kept : kept + "\n…[以下汇总行原在被省掉的中段]…\n" + lost.join("\n") + "\n";
 }
 
 /** 跑 held-out 命令。`exec` 注入点与 verify 同一只（判卷用假 exec，真跑用 defaultExec）。 */

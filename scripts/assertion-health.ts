@@ -113,7 +113,7 @@ export function scanAssertionHealth(file: string, src: string): ScanHit[] {
  * H-1：析取式弱断言（AST 级，纯函数，可单测）。
  *
  * 为什么这算弱断言：断言条件里出现 `A || B`，只要任一项成立整条断言就成立。
- * 若其中一项是「前置条件不满足」（如 `!kf.has(4)`、`!process.env.M0_API_KEY`），
+ * 若其中一项是「前置条件不满足」（如 `!kf.has(4)`、`!process.env.CAIRN_API_KEY`），
  * 那么条件不满足时这条断言**恒真、什么也没测**——比字面恒真式更隐蔽：
  * 旧的恒真式扫描（只认把 true 直接写在 `||` 右侧这种字面写法）对它们完全无感。
  *

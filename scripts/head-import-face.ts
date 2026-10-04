@@ -1,6 +1,6 @@
 /** HEAD 的 import 面自洽检查：**只问 HEAD，不问盘**，也不需要第二棵认证树。
  *
- * 立尺的实测（2026-09-27，第 131 页）：`cb70297`「产品面：把 core-only 的内核接成一条真能用的 m0 命令」
+ * 立尺的实测（2026-09-27，第 131 页）：`cb70297`「产品面：把 core-only 的内核接成一条真能用的 cairn 命令」
  * 把**消费者**提交了、把它新建的模块留下了未跟踪状态 ⇒ HEAD 里 5 个相对模块悬空
  * （`src/main/{provider-runtime,run-request,run-attachments}.ts`、`src/providers/capabilities.ts`
  * ＋ `glm-session` 少一个 `SessionTransport` 导出），干净树 `head-cert` 跑出

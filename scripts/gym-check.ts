@@ -200,10 +200,10 @@ check(longest >= 8, `B1d 靶场含长时程 case（最长 ${String(longest)} 轮
   }
 }
 
-// B3 暗卷缺席：无 M0_API_KEY 显式打印跳过并计数，不计入 pass（未证 ≠ 通过）
-console.log("[gym-check] B3 暗卷（真实 GLM，有 M0_API_KEY 才跑）");
-if (!process.env.M0_API_KEY) {
-  console.log("  暗卷跳过（无 M0_API_KEY）——缺席显式打印，不计入 pass");
+// B3 暗卷缺席：无 CAIRN_API_KEY 显式打印跳过并计数，不计入 pass（未证 ≠ 通过）
+console.log("[gym-check] B3 暗卷（真实 GLM，有 CAIRN_API_KEY 才跑）");
+if (!process.env.CAIRN_API_KEY) {
+  console.log("  暗卷跳过（无 CAIRN_API_KEY）——缺席显式打印，不计入 pass");
   console.log("UNVERIFIED=1"); // 跳过 ≠ 通过，上浮到门禁汇总
 } else {
   const c = loaded[0];

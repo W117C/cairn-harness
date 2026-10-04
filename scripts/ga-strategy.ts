@@ -1,7 +1,7 @@
 // G-A 编排策略对照（spec §7 G-A，最小档 1 case × 3 策略，真模型）。
 // 三条策略只差「调度面」：单人 / 先并行只读调研再自己动手 / 整目标交给受限 supervise 循环。
 // 用法（凭据一律走环境变量，不落任何文件）：
-//   M0A_PROVIDER=glm M0_API_KEY=… M0_MODEL=… M0_ENDPOINT=https://…/chat/completions M0_GLM_TOOL_STREAM=0 \
+//   M0A_PROVIDER=glm CAIRN_API_KEY=… CAIRN_MODEL=… CAIRN_ENDPOINT=https://…/chat/completions CAIRN_GLM_TOOL_STREAM=0 \
 //   node --import tsx scripts/ga-strategy.ts [--case <id>] [--arms solo,fanout,supervise] \
 //     [--max-steps 12] [--max-requests 60] [--out outputs/ga-strategy-<date>]
 // 口径备案（读数时必须带着）：
@@ -213,8 +213,8 @@ const index = await loadGymIndex(GYM);
 const entry = index.cases.find((x) => x.id === caseId);
 if (!entry) { console.error("[ga] 无此 case: " + caseId); process.exit(1); }
 const gcase = await loadCase(GYM, entry);
-if (!process.env.M0_API_KEY || !process.env.M0_ENDPOINT) {
-  console.log("[ga] 暗卷缺席（无 M0_API_KEY / M0_ENDPOINT）——显式跳过，不出数（未证 ≠ 通过）");
+if (!process.env.CAIRN_API_KEY || !process.env.CAIRN_ENDPOINT) {
+  console.log("[ga] 暗卷缺席（无 CAIRN_API_KEY / CAIRN_ENDPOINT）——显式跳过，不出数（未证 ≠ 通过）");
   process.exit(0);
 }
 console.log(`[ga] case=${caseId} 臂=${arms.join("/")} maxSteps=${maxSteps} 请求帽=${maxRequests}`);

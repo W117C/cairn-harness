@@ -16,7 +16,7 @@ import { SHELL_FAMILY } from "../../src/permissions/risk";
 export function corpusRoots(): string[] {
   // `Application Support` 是**一个**目录名：写成两个段会拼出 `Application/Support`，
   // 那个目录永不存在 ⇒ 真会话那支静默恒为 missingRoots，所有 replay 读数只剩合成语料。
-  return ["outputs", join(homedir(), "Library", "Application Support", "m0-agent-loop", "sessions")];
+  return ["outputs", join(homedir(), "Library", "Application Support", "cairn-harness", "sessions")];
 }
 
 /**

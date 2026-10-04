@@ -318,10 +318,10 @@ async function main(): Promise<void> {
     });
 
     console.log("[compaction-check] 任务 6：暗卷（真实 GLM）");
-    if (!process.env.M0_API_KEY) {
+    if (!process.env.CAIRN_API_KEY) {
       // H2（审查 P1-16）：暗卷跳过必须计入未证——unverified 恒空 = 永远 UNVERIFIED=0 = 系统性低报。
-      unverified.push("任务 6 暗卷：真实 GLM 摘要（无 M0_API_KEY，跳过）");
-      console.log("  暗卷跳过（无 M0_API_KEY）");
+      unverified.push("任务 6 暗卷：真实 GLM 摘要（无 CAIRN_API_KEY，跳过）");
+      console.log("  暗卷跳过（无 CAIRN_API_KEY）");
     } else {
       await check("暗卷：真实 GLM 摘要非空、未膨胀、最小进度达标", async () => {
         const events: AgentEvent[] = [user("任务：" + GOAL_KEYWORD)];

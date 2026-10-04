@@ -49,8 +49,8 @@ if (forkEventId && !caseId) {
   process.exit(1);
 }
 
-if (model === "real" && !process.env.M0_API_KEY) {
-  console.log("[gym-run] 暗卷缺席（无 M0_API_KEY）——显式打印跳过，不计入 pass（未证 ≠ 通过）");
+if (model === "real" && !process.env.CAIRN_API_KEY) {
+  console.log("[gym-run] 暗卷缺席（无 CAIRN_API_KEY）——显式打印跳过，不计入 pass（未证 ≠ 通过）");
   process.exit(0);
 }
 

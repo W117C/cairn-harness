@@ -1,7 +1,7 @@
 // provider:check —— GLM 真连验收（联网）。断言：
 //   ①真实流式调用收到 ≥2 个 delta   ②usage 的 input/output 均 > 0
 //   ③带 tools 的请求能解析出至少一个 tool_call   ④事件落 JSONL 重放逐字一致。
-// 环境缺 M0_API_KEY → 记 UNVERIFIED=1（联网验收被阻塞，见 BLOCKED.md），
+// 环境缺 CAIRN_API_KEY → 记 UNVERIFIED=1（联网验收被阻塞，见 BLOCKED.md），
 // 默认 exit 0 但由 gates 汇总为「未证，不得宣称全绿」；DSH_STRICT_UNVERIFIED=1
 // 或 --strict-unverified 时判红（CI / 有凭据环境）。绝不伪造 delta。
 import { mkdtemp, rm } from "node:fs/promises";
@@ -29,15 +29,15 @@ function assert(cond: boolean, label: string): void {
   }
 }
 
-if (!process.env.M0_API_KEY) {
-  console.error("[provider:check] M0_API_KEY 未设置 —— 真连验收被阻塞（BLOCKED.md 已备案）。");
-  unverified.push("GLM 真连 ①②③④：缺 M0_API_KEY → 未证（非跳过即通过）");
+if (!process.env.CAIRN_API_KEY) {
+  console.error("[provider:check] CAIRN_API_KEY 未设置 —— 真连验收被阻塞（BLOCKED.md 已备案）。");
+  unverified.push("GLM 真连 ①②③④：缺 CAIRN_API_KEY → 未证（非跳过即通过）");
 } else {
   const dir = await mkdtemp(join(tmpdir(), "m1a-provider-check-"));
   try {
     const logPath = join(dir, "glm-events.jsonl");
     const log = createEventLog(logPath);
-    // 端点/模型/key 均由 glm.ts 从环境变量读取（M0_ENDPOINT / M0_MODEL / M0_API_KEY）
+    // 端点/模型/key 均由 glm.ts 从环境变量读取（CAIRN_ENDPOINT / CAIRN_MODEL / CAIRN_API_KEY）
 
     console.log("[provider:check] 调用①：纯文本流式（无 tools，stream=true + 默认模型）");
     const events1: AgentEvent[] = [];

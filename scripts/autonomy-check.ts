@@ -346,8 +346,8 @@ console.log("[autonomy-check] 拒绝不生成规则（集成面）");
 }
 
 // ---- 任务 7：暗卷（有 key 才跑）----
-if (!process.env.M0_API_KEY) {
-  console.log("[autonomy-check] 暗卷跳过（无 M0_API_KEY）");
+if (!process.env.CAIRN_API_KEY) {
+  console.log("[autonomy-check] 暗卷跳过（无 CAIRN_API_KEY）");
   console.log("UNVERIFIED=1"); // H2（审查 P1-16）：跳过 ≠ 通过，上浮到门禁汇总
 } else {
   console.log("[autonomy-check] 任务 7 暗卷：真实 GLM requires_approval 约定");

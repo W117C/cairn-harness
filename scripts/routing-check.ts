@@ -112,9 +112,9 @@ console.log("[routing-check] A 编排器接入（routing_decision / pin / 老路
 
 {
   // A5（审查 S3-13）：路由分支的 model 是档位表合成的真实 provider spec，旧 fail-closed 条件
-  // `!model && !M0_API_KEY` 在 routing=true 下永不成立 —— 无凭据也照派 worker，第一跳 401
+  // `!model && !CAIRN_API_KEY` 在 routing=true 下永不成立 —— 无凭据也照派 worker，第一跳 401
   // 才死（白烧一轮 + 占并发预算 + 留一条必败 worker 记录）。现在无注入模型且无凭据当场拒。
-  if (!process.env.M0_API_KEY) {
+  if (!process.env.CAIRN_API_KEY) {
     const p = join(work, "a5.jsonl");
     const { orch, events } = newOrch(p, { routing: true }); // 故意不给 modelFor：真实凭据缺失
     const r = await orch.spawn({ mode: "read", task: "无凭据路由 spawn" }, { callId: "r-a5" });
@@ -123,7 +123,7 @@ console.log("[routing-check] A 编排器接入（routing_decision / pin / 老路
     check(events.filter((e) => e.type === "routing_decision").length === 0, "A5c 拒绝路径零 routing_decision 孤儿事件（决策事件与 spawn 一对一）");
     await orch.waitAll(2_000);
   } else {
-    console.log("  — A5 跳过：环境有 M0_API_KEY，路由路径本应放行（未证，不计入 pass）");
+    console.log("  — A5 跳过：环境有 CAIRN_API_KEY，路由路径本应放行（未证，不计入 pass）");
   }
 }
 
