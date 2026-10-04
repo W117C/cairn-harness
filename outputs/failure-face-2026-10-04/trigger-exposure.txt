@@ -1,0 +1,17 @@
+面      有正文却判死   补丁会出声   因带引号闭嘴   单段命令
+real           10            2             0           8
+mock           12            5             6           1
+出声样本：
+  real｜ls -a; cat package.json 2>/dev/null; cat .agent/verify.json 2>/dev/null
+  real｜cd /workspace && node --test tests/ 2>&1 | tail -30
+  mock｜ls -a; cat package.json 2>/dev/null; ls test tests 2>/dev/null; cat .agent/verify.json 2
+  mock｜ls -la . 2>/dev/null; ls -la .agent 2>/dev/null; cat .agent/*.json 2>/dev/null
+  mock｜git log --oneline -10 2>/dev/null; ls -a; ls .agent 2>/dev/null
+  mock｜git log --oneline -10 2>/dev/null; ls -a; ls .agent 2>/dev/null
+  mock｜ls -la . 2>/dev/null; ls -la .agent 2>/dev/null; cat .agent/*.json 2>/dev/null
+闭嘴样本：
+  real｜单段（回执本来就没错）：node --test tests/fit.test.js
+  real｜单段（回执本来就没错）：node --test tests/fit.test.js
+  real｜单段（回执本来就没错）：npm test
+  real｜单段（回执本来就没错）：npm test
+  real｜单段（回执本来就没错）：npm test
