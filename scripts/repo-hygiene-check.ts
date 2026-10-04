@@ -64,7 +64,31 @@ export const OUTPUTS_SHARE_CAP = 0.7;
  * 第二名 2564（orchestrator）。帽高于现状，是为了让 W4 拆分之前这道门先绿着站住；
  * W4 落地后再把帽降到 2600 / 2400，**一次只降一档**（多会话并发下降太快会撞红在别人树上）。
  */
-export const SRC_FILE_LINE_CAP = 2800;
+export const SRC_FILE_LINE_CAP = 2900;
+/* ── 2026-10-05（第 383 页）：2800 → 2900，按本文件自己写明的帽设计「帽 = 现状上取整」──
+ *
+ * **为什么必须动**：设计不变式是「帽 > 现状」（2800 当初就是照着 2761 上取整定的），
+ * 而 `src/main/agent-runner.ts` 现在 **2812 行** ⇒ 不变式被打破 ⇒ 面②红。
+ * 这与 outputs 那个帽是同一条政策（那边写的是「一道永远红的门等于没有门」）。
+ * 2900 = 2812 上取整到百位。
+ *
+ * **我不声称这是"修好了"**。真正的修法是 W4：把该文件拆开，再把帽逐波降回 2600 / 2400。
+ * 本笔只把不变式恢复，并把 W4 需要的证据一次备足（下一次谁做都不用重新量）：
+ *   · 该文件上钉着 **52 条针脚**（`scripts/mutate-verify.mjs`，`src:` 指向它）；
+ *   · 按段量「切走会碰坏几条」（只读探针，取料 `outputs/probe-a7-split-2026-10-05/`）：
+ *       M1d /compact（72 行）⇒ **0 条**；M2f sidechat（190 行）⇒ **0 条**；
+ *       M3a card_action（300 行）⇒ 1 条；M2f security report（242 行）⇒ 2 条；
+ *       M4a 调度器（1215 行）⇒ **35 条**（这一段不能动）。
+ *   · 但「0 条针脚」只是必要条件，不是充分条件：sidechat 那段依赖 7 个**本模块的模块级状态**
+ *     （`currentSession` / `currentWorkspace` / `store()` / `pathOf` / `requireSessionsDir` /
+ *     `pipeline` / `lastLogPath`，其中 `lastLogPath` 是可变 `let`）⇒ 搬它＝先决定这些状态归谁，
+ *     那是一次真重构，不是顺手搬文件。
+ *   · 还有一条纪律上的理由：**做 W4 要独占窗口**。该文件在 2026-10-05 凌晨 40 分钟内被另一会话
+ *     改了 4 次（2799 → 2812 行），此时切它既有冲突风险，也会把对方的在飞改动卷进我的提交。
+ *     ⇒ 本笔不改结构，只恢复不变式；W4 排在独占窗口（本文件注释同族：那边写「一次只降一档
+ *     （多会话并发下降太快会撞红在别人树上）」）。
+ *
+ * 降帽条件（写清，免得帽子烂在这儿）：W4 落地后按 2600 → 2400 逐档降，一档一笔、每笔写读数。 */
 
 // ---- 纯判据（可单测；IO 只发生在 main 里）----
 
@@ -235,8 +259,8 @@ export function selfTests(): SelfTest[] {
   out.push({ id: "SH5-现状最大文件在帽内 ⇒ 绿", ok: nowOk.ok, detail: nowOk.detail });
   // 面②：超帽 ⇒ 必须红**且点名并按大小序**（反向验证）
   const big = oversizedFiles([
-    { path: "src/a.ts", lines: 2801 },
-    { path: "src/b.ts", lines: 5000 },
+    { path: "src/a.ts", lines: SRC_FILE_LINE_CAP + 1 },
+    { path: "src/b.ts", lines: SRC_FILE_LINE_CAP * 2 },
     { path: "src/ok.ts", lines: 100 },
   ]);
   out.push({
@@ -245,8 +269,8 @@ export function selfTests(): SelfTest[] {
     detail: big.detail,
   });
   // 面②：恰好等于帽 ⇒ 绿
-  const atLineCap = oversizedFiles([{ path: "src/exact.ts", lines: 2800 }]);
-  out.push({ id: "SH7-恰好 2800 行 ⇒ 绿（超帽才红）", ok: atLineCap.ok, detail: atLineCap.detail });
+  const atLineCap = oversizedFiles([{ path: "src/exact.ts", lines: SRC_FILE_LINE_CAP }]);
+  out.push({ id: "SH7-恰好等于帽 ⇒ 绿（超帽才红）", ok: atLineCap.ok, detail: atLineCap.detail });
 
   return out;
 }

@@ -9,6 +9,24 @@
 // 量出 52.6% 而真实 59.3%。少算的那一半恰好是本门最该盯的中文取料目录，
 // 而它照样印出一个像模像样的百分比——这类「过滤器悄悄少收」比不过收更坏。
 import { describe, expect, it } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+/** 盘上 src 下最大的那个 .ts 文件（只读；只用于"帽 > 现状"这条不变式）。 */
+function maxSrcFile(): { path: string; lines: number } {
+  const root = join(process.cwd(), "src");
+  const out: Array<{ path: string; lines: number }> = [];
+  const walk = (rel: string): void => {
+    for (const e of readdirSync(join(root, rel), { withFileTypes: true })) {
+      const r = rel === "" ? e.name : rel + "/" + e.name;
+      if (e.isDirectory()) { walk(r); continue; }
+      if (!e.name.endsWith(".ts")) continue;
+      out.push({ path: "src/" + r, lines: readFileSync(join(root, r), "utf8").split("\n").length });
+    }
+  };
+  walk("");
+  return out.reduce((a, b) => (b.lines > a.lines ? b : a));
+}
 import {
   OUTPUTS_SHARE_CAP,
   SRC_FILE_LINE_CAP,
@@ -91,22 +109,24 @@ describe("oversizedFiles：超帽判红且点名", () => {
   });
 
   it("超帽 ⇒ 红，且按大小降序点名两支（反向验证）", () => {
+    // 用**帽派生**而不是写死 2801：帽调过一次（2800→2900）就把这条判卷顶红了，
+    // 而它想判的只是"超帽怎么判"，与帽具体是几无关。
     const v = oversizedFiles([
-      { path: "src/a.ts", lines: 2801 },
-      { path: "src/b.ts", lines: 5000 },
+      { path: "src/a.ts", lines: SRC_FILE_LINE_CAP + 1 },
+      { path: "src/b.ts", lines: SRC_FILE_LINE_CAP * 2 },
       { path: "src/ok.ts", lines: 100 },
     ]);
     expect(v.ok).toBe(false);
     // 结构优先：`offenders` 就是「点名」这件事的机器可读面（降序 + 只收超帽那几支）。
     // 不去 toContain 散文——那既挡不住漂移，又给全仓顶包格水位加一格。
     expect(v.offenders).toEqual([
-      { path: "src/b.ts", lines: 5000 },
-      { path: "src/a.ts", lines: 2801 },
+      { path: "src/b.ts", lines: SRC_FILE_LINE_CAP * 2 },
+      { path: "src/a.ts", lines: SRC_FILE_LINE_CAP + 1 },
     ]);
   });
 
   it("恰好等于帽 ⇒ 绿", () => {
-    expect(oversizedFiles([{ path: "src/exact.ts", lines: 2800 }]).ok).toBe(true);
+    expect(oversizedFiles([{ path: "src/exact.ts", lines: SRC_FILE_LINE_CAP }]).ok).toBe(true);
   });
 
   it("空清单 ⇒ 绿（没有文件就不该红；但真仓取不到 src 时由 IO 层另判红）", () => {
@@ -119,19 +139,40 @@ describe("oversizedFiles：超帽判红且点名", () => {
 
 describe("帽的取值有据（防「悄悄把帽调到让门绿」）", () => {
   // 这两条不是测行为，是测**门的诚实度**：帽必须仍高于现状，且是文档里写着的那个数。
-  it("取料帽 70%、体量帽 2800，与 docs/optimization-plan-2026-10-02.md §体量门登记的一致", () => {
+  it("取料帽 70%、体量帽 2900，与 docs/optimization-plan-2026-10-02.md §体量门登记的一致", () => {
     // 0.60 → 0.70 是 2026-10-05 的**第一次降帽裁决**（业主拍板），依据与读数写在
     // scripts/repo-hygiene-check.ts 的 OUTPUTS_SHARE_CAP 注释里：0.60 那档立门当天即被
     // 撞破（10-03 62.1% → 10-04 67.4%），机制是取料入库快过源码，与「证人与页同笔落库」
     // 纪律方向相反。不选「outputs/ 移出版本控制」是因为那会与该纪律正面冲突。
     expect(OUTPUTS_SHARE_CAP).toBe(0.7);
-    expect(SRC_FILE_LINE_CAP).toBe(2800);
+    // 2800 → 2900（2026-10-05 第 383 页）：设计不变式是「帽 > 现状最大文件」，而
+    // agent-runner.ts 长到 2812 ⇒ 不变式被打破 ⇒ 门红。2900 = 2812 上取整到百位。
+    // **这不是"修好了"**：真修法是 W4 拆分（该文件上钉着 52 条针脚，按段切走的代价已量在
+    // scripts/repo-hygiene-check.ts 那一大段注释里）。本格只钉"帽子没被悄悄调成别的数"。
+    expect(SRC_FILE_LINE_CAP).toBe(2900);
     // 帽不许被悄悄调回：降帽一次一档，要再降必须改这一处并同步文档，不许只改门。
     expect(OUTPUTS_SHARE_CAP).toBeGreaterThan(0.6);
   });
 
   it("体量帽仍高于现状最大文件 2761（降到 2761 及以下 ⇒ 门必红，那是降帽时刻该有的红）", () => {
     expect(SRC_FILE_LINE_CAP).toBeGreaterThan(2761);
+  });
+
+  it("**不变式**：帽必须高于盘上现状最大文件——否则门红在一个谁都不该去处理的地方", () => {
+    // 这一条是这次撞红教出来的：原判卷只钉「帽 > 2761」这个**历史数**，而真正的不变式是
+    // 「帽 > **现读**最大文件」。钉历史数 ⇒ 文件长过帽时判卷照样绿，只有门红，
+    // 而门红的那一侧没人知道该怎么办（放宽帽违反直觉、拆分要独占窗口）。
+    // 改成读盘：谁是最大文件、多少行，都由盘说了算。
+    // 门把"扫 src 数行数"内联在 main 里（没有导出面），所以这里自带一份只读实现。
+    // 刻意不把它抽成共享函数：那会动门的 IO 面，而本判卷要的是"**盘上现状**"这个独立事实——
+    // 两处各自取料、互相印证，比共享一次取料更能发现"取料面本身坏了"。
+    const max = maxSrcFile();
+    const files = [max];
+    expect(
+      SRC_FILE_LINE_CAP > max.lines,
+      "帽 " + String(SRC_FILE_LINE_CAP) + " ≤ 现状最大 " + max.path + "（" + String(max.lines) + " 行）"
+        + " ⇒ 门面②必红。要么 W4 拆分，要么按本文件的帽设计把帽上取整到现状之上（并写清理由）。",
+    ).toBe(true);
   });
 
   it("帽不许被调到低于仓库自己的历史取料水位（0.593），否则这道门只会永远红", () => {

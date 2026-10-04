@@ -1,0 +1,20 @@
+解析出针脚总数: 1073 ｜指向 agent-runner.ts: 52
+  M1d /compact（72 行）⇒ 被切走的针脚 0/52 条
+  M1d+M2f 两段（314 行）⇒ 被切走的针脚 2/52 条
+      · manual-compact-push-only-never-persisted
+      · manual-compacts-last-run-instead-of-open-session
+  M2f security report（242 行）⇒ 被切走的针脚 2/52 条
+      · manual-compact-push-only-never-persisted
+      · manual-compacts-last-run-instead-of-open-session
+  M4a 调度器（1215 行）⇒ 被切走的针脚 35/52 条
+      · goal-budget-key-from-settings-field
+      · plan-pending-drops-at-next-run
+      · goal-gate-call-site-bypassed
+      · goal-lag-count-not-passed-at-call-site
+      · verify-exec-sandbox-bypassed
+      · verify-exec-reports-internal-command
+      · prompt-command-refused-silent
+      · user-skill-face-never-dispatched
+  M3a card_action（300 行）⇒ 被切走的针脚 1/52 条
+      · recovery-orchestrator-unreachable-after-restart
+  M2f sidechat（190 行）⇒ 被切走的针脚 0/52 条
