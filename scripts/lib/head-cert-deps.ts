@@ -95,8 +95,15 @@ export function headGateTableIntegrity(manifestSrc: string | null, pkgJsonText: 
  * 为什么要有这一层（2026-09-27 实测，第一次在干净 HEAD 上跑全量判卷）：
  * `head-cert` 只把**根** `node_modules` 硬链接进隔离树，而 `fixtures/todo-app` 这类**靶子仓库**
  * 是被判卷拿去真跑命令的（`gated-tools` 的 run_shell、`runner-gates` 的 verify 拍都在它里面执行）。
- * 它的 `node_modules` 由 `.gitignore` 排除 ⇒ 干净树里没有 ⇒ 那两条判卷在 HEAD 上**必红**，
- * 而红的是环境不是代码（规则 87/103/227 那一族在"整表"面上的形状：不分开记，HEAD 的账就永远说不清）。
+ * 它的 `node_modules` 由 `.gitignore` 排除 ⇒ 干净树里没有 ⇒ 补依赖是**必要**条件。
+ *
+ * **但补依赖不是充分条件，别把这段读成"装完就好"**（2026-10-05 第 379 页改正归因，登记 #62）：
+ * 原文把"那两条判卷在 HEAD 上必红"整个归因给 `node_modules`。实测**真因是另一个**——
+ * `fixtures/todo-app/src/todo.ts` 也是 gitignore 掉的**生成物**（各消费方从
+ * `fixtures/mock/todo-bug.ts` 重置它；`.gitignore` 里写着"跑完留下的状态不该进 git"），
+ * 干净树里同样没有。即：这个靶子仓有**两个"盘上才有"的输入——依赖树与生成物**，
+ * 而本函数只补前者。谁要判"干净树上这条判卷该不该红"，必须两个都看；
+ * **只看声明了几项依赖，就会把"生成物没重置"读成"依赖没补齐"**——归因错，修法跟着错。
  *
  * 取料＝盘上目录树，由调用方注入 `list`（本层不碰盘，与同文件其余纯函数同纪律）；
  * **不写死 `fixtures/todo-app` 这个名字**——别人再加一个靶子仓库时自动跟上（挂现状不挂手抄表）。 */
