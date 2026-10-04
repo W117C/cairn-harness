@@ -174,8 +174,19 @@ describe("压缩接缝（任务9）", () => {
     expect(readFileSync(join(ws, ".agent", "memory", "MEMORY.md"), "utf8")).toBe("canary-项目层\n");
     expect((await readTextOrNull(join(home, "MEMORY.md"))) ?? "").toBe("canary-全局层\n");
     const src = readFileSync(join(process.cwd(), "src", "agent", "compaction.ts"), "utf8");
-    expect(src).not.toContain("node:fs");
-    expect(src).not.toContain(".agent");
-    expect(src).not.toContain("MEMORY.md");
+    // 这三条扫的是**字符串字面量**，不是整份源码文本（2026-10-04 修正）。
+    // 原写法 `expect(src).not.toContain(".agent")` 被一次无关的属性访问撞红：
+    // `who(e.agent_id)` 里 "e.agent" 就含子串 ".agent" ⇒ 尺红得理直气壮，而代码一行都没碰记忆目录。
+    // 收紧到字面量之后覆盖面没缩：真要读记忆目录必须写 `".agent"`（路径拼接的段就是字面量），
+    // 真要 import fs 必须写 `"node:fs..."`——两者都是字面量；而注释/变量名里的巧合子串不再误伤。
+    // 上面两条行为断言（canary 文件逐字未变）仍在，它才是"没碰"的正证；这一组只是代理。
+    const literals = [...src.matchAll(/(["'`])((?:\\.|(?!\1)[\s\S])*)\1/g)].map((m) => m[2] ?? "");
+    const joined = literals.join("\n");
+    expect(joined).not.toMatch(/node:fs(^|[^\w])/u);
+    expect(joined).not.toMatch(/(^|[^.\w])fs\/promises/u);
+    expect(joined).not.toContain(".agent");
+    expect(joined).not.toContain("MEMORY.md");
+    // 反向自证：字面量清单不是空的（尺没退化成"永远不匹配"）——今天这个文件里确有字面量。
+    expect(literals.length).toBeGreaterThan(5);
   });
 });

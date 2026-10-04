@@ -1,0 +1,76 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/Cairn/deepseek harness[39m
+
+ [32m✓[39m tests/memory-runner.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [31m❯[39m tests/scratch-tree-naming.test.ts [2m([22m[2m7 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[32m 22[2mms[22m[39m
+   [32m✓[39m 合成面：三类不一致各响一次，一致的不出声 [2m(4)[22m
+     [32m✓[39m 名字与 HEAD 相符 ⇒ 一条都不许多报（主树与暂存根外的树不参与）[32m 2[2mms[22m[39m
+     [32m✓[39m 名字承诺的 sha 不是这棵树的 HEAD ⇒ 必须响[32m 0[2mms[22m[39m
+     [32m✓[39m 目录名里根本没有 sha ⇒ 响（约定是 verify-<sha>）[32m 0[2mms[22m[39m
+     [32m✓[39m 两棵树钉在同一个提交 ⇒ 响（同一 HEAD 该复用一棵，别留多份像两个证据面）[32m 0[2mms[22m[39m
+   [31m❯[39m 真仓面：注册表里的暂存树名字都没说谎 [2m(3)[22m
+[31m     [31m×[31m 取料派生对：问的是共享注册表、且主树根下那批一棵都不许漏（暂存树为 0 是合法态，不当红也不当绿证）[39m[32m 3[2mms[22m[39m
+[31m     [31m×[31m 三类不一致都必须为 0，且报出来时要点名是哪棵树[39m[32m 2[2mms[22m[39m
+     [32m✓[39m porcelain 解析与 git 自己给的分母同数（少一条就是解析漏了某种形状）[32m 13[2mms[22m[39m
+ [32m✓[39m tests/head-cert-deps.test.ts [2m([22m[2m121 tests[22m[2m)[22m[33m 3646[2mms[22m[39m
+   [32m✓[39m certLevel：半把尺不许冒充认证（第 119 页，起因是第 116/117 页我自己踩的那盏假灯） [2m(6)[22m
+     [33m[2m✓[22m[39m 真跑：`--skip-test` 不带 `--why` ⇒ 脚本 exit 2，且不建 worktree[33m 634[2mms[22m[39m
+   [32m✓[39m 接线：真跑 head-cert——占不到锁就不许动树 [2m(7)[22m
+     [33m[2m✓[22m[39m 锁被活人占着 ⇒ exit 2、点名是谁、**没走到切树**，并且不替别人删锁[33m 568[2mms[22m[39m
+     [33m[2m✓[22m[39m 反向哨兵：没有锁文件 ⇒ 不许以「锁面不存在」为由拒跑，照常走到切树那一步[33m 576[2mms[22m[39m
+     [33m[2m✓[22m[39m 陈旧锁（pid 已死）⇒ 出声回收并**继续**：不先摘旧锁，抢占那次 link 必 EEXIST＝陈旧锁永远回收不了[33m 578[2mms[22m[39m
+     [33m[2m✓[22m[39m 锁文件读不出 ⇒ exit 2、点名是哪把锁，也不许冒领「被别人占走」那一支的措辞[33m 568[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/scratch-tree-naming.test.ts[2m > [22m真仓面：注册表里的暂存树名字都没说谎[2m > [22m取料派生对：问的是共享注册表、且主树根下那批一棵都不许漏（暂存树为 0 是合法态，不当红也不当绿证）
+[31m[1mAssertionError[22m: expected [ …(2) ] to deeply equal [ Array(1) ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  [[22m
+[31m+   "/Users/ze/Downloads/Cairn/deepseek harness/.qoder/worktrees/agent-general-purpose-ebe989c9",[39m
+[2m    "/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-c7f2ea0f",[22m
+[2m  ][22m
+
+[36m [2m❯[22m tests/scratch-tree-naming.test.ts:[2m68:53[22m[39m
+    [90m 66|[39m     expect(rows.some((r) => resolve(r.path) === mainRoot)).toBe(true);
+    [90m 67|[39m     const underRoot = rows.filter((r) => resolve(r.path).startsWith(ma…
+    [90m 68|[39m     expect(mine.map((m) => resolve(m.path)).sort()).toEqual(underRoot.…
+    [90m   |[39m                                                     [31m^[39m
+    [90m 69|[39m   });
+    [90m 70|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/scratch-tree-naming.test.ts[2m > [22m真仓面：注册表里的暂存树名字都没说谎[2m > [22m三类不一致都必须为 0，且报出来时要点名是哪棵树
+[31m[1mAssertionError[22m: 暂存树 agent-general-purpose-ebe989c9 的名字没编码提交（约定是 verify-<sha>）⇒ 回收时无法从名字认出它钉在哪一笔: expected [ { kind: 'no-sha-name', …(1) } ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   {[39m
+[31m+     "detail": "暂存树 agent-general-purpose-ebe989c9 的名字没编码提交（约定是 verify-<sha>）⇒ 回收时无法从名字认出它钉在哪一笔",[39m
+[31m+     "kind": "no-sha-name",[39m
+[31m+   },[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/scratch-tree-naming.test.ts:[2m73:63[22m[39m
+    [90m 71|[39m   it("三类不一致都必须为 0，且报出来时要点名是哪棵树", () => {
+    [90m 72|[39m     const findings = checkScratchTreeNaming(mainRoot, rows);
+    [90m 73|[39m     expect(findings, findings.map((f) => f.detail).join("；")).toEqual(…
+    [90m   |[39m                                                               [31m^[39m
+    [90m 74|[39m   });
+    [90m 75|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m2 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m134 passed[39m[22m[90m (136)[39m
+[2m   Start at [22m 22:12:38
+[2m   Duration [22m 4.37s[2m (tests 89%, transform 7%, import 3%)[22m
+

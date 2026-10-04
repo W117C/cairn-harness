@@ -12683,6 +12683,15 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 5. **过程里两处按纪律回退，没走捷径**：① 我一开始把角色行改成"超预算时先占位"，撞上既有判卷 `plugin-role-discoverability:157`（它钉的是"合并预算、同一个数"这套语义）⇒ **改我的实现去迁就它**，不改别人的判卷；② 第一版留了一行算错的 `const dropped = …`（自相矛盾的残骸）与一个只加不读的计数器 ⇒ 删干净。造红两台各红独有用例：M1 摘降级档 ⇒ 红 2 条（正是钉这一档的两条）；M3 摘排序 ⇒ 红 1 条（钉相关性的那条）；两台都 `cmp` 逐字节复原、残骸 0。typecheck：主树 6 条报错**全在** `tests/autonomy.test.ts`（隔壁正在改 `risk.ts`/`autonomy.test.ts`，工作面数字），我动的两支文件 0 报错。
 6. **剩下的两格按序登记**：**#74** —— 406 条这个量级下，靠"塞进静态清单"永远到不了可用（11/406），真正要的是**按需检索工具**（`find_skills(query) → 名单`）＋清单只留"本机有 N 条，先查再用"这一行；`#73` 的 query 接线等 `src/main/agent-runner.ts` 让出（补丁形状已在这页写清：`routingList(query)` ⇒ `buildSkillRoutingList(skills, roleLines, query)`，一行）。**没跑**：全量核心判卷（第 369 页那 4 红之外没重跑）、认证、`mutate-verify`（`scripts/mutate-verify.mjs` 在飞 ⇒ `#50` 债新增两根候选锚点：`nameOnly` 那一档、`routingRelevance` 的名字 3 倍权重）。`#39`／`#57`–`#66`／`#68` 照旧，`#67` 待对齐，`#69`／`#71` 备妥，`#70`／`#72` 待办，`#73` 半落（等接线），`#74` 新增。本页不宣布任何「绿了」。
 
+## 2026-10-04 · 第 371 页：那条真回归是**尺读错面**，不是代码坏——压缩 canary 扫整份源码文本找 `.agent`，被 `who(e.agent_id)` 的属性访问撞红；收紧到字符串字面量并两台造红证明没改松
+
+1. **现象与真因**：`tests/memory-runner.test.ts:178` 的 `expect(src).not.toContain(".agent")` 红了（`src`＝`src/agent/compaction.ts` 的源码文本）。肇事文本是 `push(... + who(e.agent_id), ...)` ——`"e.agent"` 里含子串 `.agent`。⇒ 代码一行都没碰记忆目录，红是**取料面太松**造成的：那条尺想钉的是"别去读记忆目录/别 import fs"，用的却是"整份源码里不许出现这三个字符"。与第 350 页「尺从第 308 页起把整本台账读成一页」同族：**判据的扫描面对不上它要证明的那一格**。
+2. **怎么改的（收紧形式，不放松语义）**：三条源码断言改成只看**字符串字面量**——真要读记忆目录必须写 `".agent"`（路径拼接的段就是字面量），真要碰 fs 必须写 `"node:fs…"`，两者都还是字面量 ⇒ 覆盖面不缩；注释与变量名里的巧合子串不再误伤。行为面那两条（canary 文件逐字未变）原样保留，它才是"没碰"的正证，源码扫描只是代理。另加一条**自证**：`literals.length > 5`——防这把尺退化成"永远匹配不到"（那条形状本仓吃过：恒真判据）。
+3. **两台造红证明没改松**：M1 往 `compaction.ts` 注入 `const __probeLeak = ".agent/memory";` ⇒ 该用例红（`red-mutation-M1-pathliteral.txt`）；M2 注入 `import "node:fs/promises";` ⇒ 也红（`red-mutation-M2-fsimport.txt`）。两台都按备份 `cmp` 逐字节复原、`git status --porcelain -- src/agent/compaction.ts` 空（残骸 0）。收紧后该文件 **8/8 绿**。
+4. **另一条红是我自己造的机器面**：`scratch-tree-naming` 那 2 条读的是共享 `git worktree list`，红在**我并行派子代理时建的 `.qoder/worktrees/agent-*`**（注册表外、且会随并发数自己变——第 369 页那条"两趟读数 6/4→4/2"就是它）。逐棵验"独有内容＝0"（那棵树里只有我自己两张已入库补丁贴出来的面）后回收 ⇒ 相关三支判卷 **15/15 绿**（`trio-after-tree-cleanup.txt`）。**教训**：并行子代理的树要在结案前一起清，否则机器的脏算到仓头上；子代理自己建的那棵（全量取证）已随手回收，它的产物在 `outputs/fullsuite-head-2026-10-04/`。
+5. **现在的账面**：#39 那条"卡在别人手里的判卷红"里，`head-cert-deps` 与 `scratch-tree-naming` 现在都绿，`memory-runner` 被本页修掉 ⇒ 三条都不再是障碍；剩 `typecheck` 工作面 1 档仍在 `tests/autonomy.test.ts`（隔壁在改 `EvaluateDecision.risk`，**HEAD 内 0 报错**，工具自己的归因行就写着"tracked 但工作树脏"）⇒ 认证必须在干净树跑，本页落库后即跑，读数进下一页，不在此宣布。
+6. **量纲与没跑**：本笔动一支判卷文件（`tests/memory-runner.test.ts`，尺的形式）＋台账＋`outputs/canary-tighten-2026-10-04/` 六件；跑的是秒级判卷（8 条 → 15 条）与一次 `typecheck`，不是门不是全量。**没跑**：全量核心判卷、认证（本页之后跑）、`mutate-verify`（`scripts/mutate-verify.mjs` 在飞 ⇒ `#50` 债新增一根候选锚点：把这条 canary 退回"整份文本扫描" ⇒ 收紧后新增的自证/回归用例必红）。`#39`／`#57`–`#66`／`#68` 照旧，`#67` 待对齐，`#69`／`#71` 备妥，`#70`／`#72` 待办，`#73` 半落，`#74` 新增。本页不宣布任何「绿了」。
+
 
 
 
