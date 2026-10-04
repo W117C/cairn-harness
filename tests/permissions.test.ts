@@ -1,7 +1,10 @@
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { approvePlan, checkPermission, gate, getPlanState, markPlanProposed, resetPlanState, runWithPlanScope } from "../src/permissions";
 import { evaluate, isSideEffectTool, newAutonomySession } from "../src/permissions/autonomy";
-import { judgeChain, type PermissionRule } from "../src/permissions/rules";
+import { judgeChain, loadPermissionRules, savePermissionRules, type PermissionRule } from "../src/permissions/rules";
 import { hasThreatTableSurface, RISK_ORDER, staticRisk } from "../src/permissions/risk";
 import type { ToolName } from "../src/tools/base";
 
@@ -133,6 +136,86 @@ describe("规则链 deny 短路（P0-2 回归）", () => {
     ];
     expect(judgeChain(r3, "run_shell", "git push origin main").verdict).toBe("allow");
     expect(judgeChain(r3, "run_shell", "git push --force").verdict).toBe("deny");
+  });
+});
+
+// S4（业主 2026-10-04 裁决：全局层的 deny 是不可被放宽的地板）。立案时的实测形状记在
+// `outputs/s4-permission-floor-2026-10-04/readings.md`：deny「git push」＋allow「git push --force」
+// 判成 allow，且两条顺序对调仍是 allow——赢的是「段内最长前缀」，不是「哪一层」。
+describe("全局层的 deny 是地板（S4）", () => {
+  const gr = (behavior: PermissionRule["behavior"], pattern: string, layer: "global" | "project"): PermissionRule => ({
+    behavior, tool: "run_shell", pattern, scope: "always", layer, id: `${behavior}:${pattern}@${layer}`,
+  });
+
+  it("全局 deny「git push」压过项目层更长的 allow「git push --force」", () => {
+    const v = judgeChain([gr("deny", "git push", "global"), gr("allow", "git push --force", "project")], "run_shell", "git push --force origin main");
+    expect(v.verdict).toBe("deny");
+    // 卡面要说得出是哪一条拦的：点名必须落在那条全局 deny 上，不是 allow 那条。
+    expect("ruleId" in v ? v.ruleId : "").toBe("deny:git push@global");
+  });
+
+  it("顺序对调仍压过（放宽的成因是长度，不是数组顺序）", () => {
+    const v = judgeChain([gr("allow", "git push --force", "project"), gr("deny", "git push", "global")], "run_shell", "git push --force origin main");
+    expect(v.verdict).toBe("deny");
+  });
+
+  it("裁决接受的代价也钉住：项目层那条更细的 allow 一起失效", () => {
+    // 这不是顺手做严——是「全局禁 push」这句话的语义。将来有人想把它当 bug 修，会先红在这里。
+    const v = judgeChain([gr("deny", "git push", "global"), gr("allow", "git push --force-with-lease", "project")], "run_shell", "git push --force-with-lease origin main");
+    expect(v.verdict).toBe("deny");
+  });
+
+  it("方向只此一条：项目层内部（deny 短、allow 长）仍按最长前缀，地板不越界", () => {
+    const v = judgeChain([gr("deny", "git push", "project"), gr("allow", "git push --force", "project")], "run_shell", "git push --force origin main");
+    expect(v.verdict).toBe("allow");
+  });
+
+  it("不带层归属的规则不触发地板（手写/单条面的老形状）", () => {
+    const plain: PermissionRule[] = [
+      { behavior: "deny", tool: "run_shell", pattern: "git push", scope: "always", id: "d" },
+      { behavior: "allow", tool: "run_shell", pattern: "git push --force", scope: "always", id: "a" },
+    ];
+    expect(judgeChain(plain, "run_shell", "git push --force origin main").verdict).toBe("allow");
+  });
+
+  it("全局层的 deny 被降成 ask 时不再当地板（头部词不认得／同意范围外，交回用户而不是强拒）", () => {
+    // headUnknown 那一支把 deny 就地降 ask；降完它就不是 deny 了，地板必须跟着失效——
+    // 否则「认不出包装器就强拒」会绕过本来设计的 ask 通道。
+    const v = judgeChain([gr("deny", "git push", "global"), gr("allow", "git push --force", "project")], "run_shell", "setsid git push --force origin main");
+    expect(v.verdict).toBe("ask");
+  });
+});
+
+describe("层归属：加载面盖章、落盘剥掉", () => {
+  it("两份文件合并后各带自己的 layer，且全局那条仍在前面", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "dsh-perm-floor-"));
+    try {
+      const globalPath = join(dir, "global.json");
+      const projectPath = join(dir, "project.json");
+      await writeFile(globalPath, JSON.stringify({ rules: [{ behavior: "deny", tool: "run_shell", pattern: "git push", scope: "always" }] }));
+      await writeFile(projectPath, JSON.stringify({ rules: [{ behavior: "allow", tool: "run_shell", pattern: "git push --force", scope: "always" }] }));
+      const merged = loadPermissionRules(projectPath, globalPath);
+      expect(merged.map((r) => r.layer)).toEqual(["global", "project"]);
+      // 生产侧真正拿到的这一份，地板才成立（前五条钉的是 judgeChain 收到带层数组；这里钉的是层从哪来）
+      expect(judgeChain(merged, "run_shell", "git push --force origin main").verdict).toBe("deny");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("写出去的文件里没有 layer 键——仓内那份不能自称全局层", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "dsh-perm-floor-"));
+    try {
+      const path = join(dir, "permissions.json");
+      await savePermissionRules(path, [{ behavior: "allow", tool: "run_shell", pattern: "git push --force", scope: "always", id: "a", layer: "project" }]);
+      const raw = await readFile(path, "utf8");
+      expect(raw.includes("layer")).toBe(false);
+      // 回读时归属由「读的是哪个路径」决定：同一份内容当全局层读就盖 global，当项目层读就盖 project。
+      expect(loadPermissionRules(undefined, path)[0]?.layer).toBe("global");
+      expect(loadPermissionRules(path, undefined)[0]?.layer).toBe("project");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 

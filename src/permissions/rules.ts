@@ -18,7 +18,14 @@ export interface PermissionRule {
   scope: "always";
   /** 审计 id：加载/落库时生成（behavior:tool[:pattern]#序号）。 */
   id?: string;
+  /** 这条规则来自哪一层，**只在加载面存在**：`loadPermissionRules` 盖章、`savePermissionRules` 剥掉。
+   *  为什么不入库（S4 的地板要用它当判据）：文件内容是可以被仓库作者写的——把 `layer` 当成盘上事实，
+   *  等于让仓内那份 `.agent/permissions.json` 自称"我是全局层"。归属只能由"这次读的是哪个路径"决定。 */
+  layer?: RuleLayer;
 }
+
+/** 规则来源层。`global` ＝ 用户自己机器上那份；`project` ＝ 随仓库分发的那份。 */
+export type RuleLayer = "global" | "project";
 
 export interface PermissionsFile {
   rules: PermissionRule[];
@@ -67,17 +74,23 @@ export function parsePermissionsFile(raw: string, origin: string): PermissionRul
   });
 }
 
-/** 两层加载：全局层在前、项目层在后（合并成并集；优先序 deny>ask>allow 与最长前缀
- * 使项目层只能收紧不可放宽全局层）。任一层解析失败 → 整体抛错拒载。 */
+/** 两层加载：全局层在前、项目层在后，**合并成并集并给每条盖上层归属**。任一层解析失败 → 整体抛错拒载。
+ *
+ *  合并面为什么必须带层：段内的赢家是「最长前缀那条」，行为优先序只在等长时生效——所以
+ *  「谁放宽了谁」光看合并后的数组是**答不出来**的（S4 的实测形状：deny「git push」＋allow
+ *  「git push --force」⇒ allow，且与两条的先后顺序无关）。有了层归属，`matchSegment` 才谈得上
+ *  地板：全局层的 deny 命中即压过任何 allow（业主 2026-10-04 裁决）。
+ *  旧注释写的「优先序 deny>ask>allow 与最长前缀使项目层只能收紧」是错的，且错了很多轮没人抓到
+ *  ——因为此前没有任何一格判「这条 allow 来自哪一层」。 */
 export function loadPermissionRules(projectPath?: string, globalPath?: string): PermissionRule[] {
   const rules: PermissionRule[] = [];
   if (globalPath) {
     const raw = readIfExists(globalPath);
-    if (raw !== null) rules.push(...parsePermissionsFile(raw, globalPath));
+    if (raw !== null) rules.push(...parsePermissionsFile(raw, globalPath).map((r) => ({ ...r, layer: "global" as const })));
   }
   if (projectPath) {
     const raw = readIfExists(projectPath);
-    if (raw !== null) rules.push(...parsePermissionsFile(raw, projectPath));
+    if (raw !== null) rules.push(...parsePermissionsFile(raw, projectPath).map((r) => ({ ...r, layer: "project" as const })));
   }
   return rules;
 }
@@ -109,7 +122,11 @@ export async function savePermissionRules(path: string, rules: PermissionRule[])
   } catch {
     // 目录清理失败不阻塞主写入
   }
-  const payload: PermissionsFile = { rules };
+  // 落盘前剥掉 `layer`：归属是「这次读了哪个路径」的事实，不是文件内容。留着它＝仓内那份
+  // `.agent/permissions.json` 可以自称全局层，而全局层这一侧现在带着地板权（deny 压过 allow）。
+  const payload: PermissionsFile = {
+    rules: rules.map(({ behavior, tool, pattern, scope, id }) => ({ behavior, tool, ...(pattern === undefined ? {} : { pattern }), scope, ...(id === undefined ? {} : { id }) })),
+  };
   await writeFileAtomic(path, JSON.stringify(payload, null, 2) + "\n"); // rename 原子：目标文件要么旧内容要么新内容，永不出现半个文件
 }
 
@@ -202,11 +219,19 @@ function matchSegment(rules: PermissionRule[], segment: string): RuleHit | null 
     if (len < 0) continue;
     const headUnknown = beyond && rule.behavior === "deny";
     const effective: PermissionRule = gap || headUnknown ? { ...rule, behavior: "ask" } : rule;
-    if (
+    // 地板（业主 2026-10-04 裁决，S4）：**全局层的 deny 一旦命中，就压过任何 allow**，不管那条
+    // allow 的前缀更长还是更短。没有这条时，赢家单纯是「段内最长前缀」，于是仓内一份
+    // `.agent/permissions.json` 里的 allow「git push --force」就能把用户自己下的 deny「git push」放宽
+    // （实测：顺序对调也是 allow ⇒ 放宽不来自顺序，来自长度）。
+    // 方向只此一条：项目层的 deny **不**获得同等优先权——它既不能替全局层放行，也不能替全局层强加；
+    // 其余一切仍是「段内最长前缀者胜，等长时 deny>ask>allow」。
+    const floor = effective.behavior === "deny" && effective.layer === "global";
+    const bestFloor = best !== null && best.rule.behavior === "deny" && best.rule.layer === "global";
+    const longerOrTiedBetter =
       best === null ||
       len > best.prefixLen ||
-      (len === best.prefixLen && BEHAVIOR_RANK[effective.behavior] < BEHAVIOR_RANK[best.rule.behavior])
-    ) {
+      (len === best.prefixLen && BEHAVIOR_RANK[effective.behavior] < BEHAVIOR_RANK[best.rule.behavior]);
+    if (best === null || (floor && !bestFloor) || (floor === bestFloor && longerOrTiedBetter)) {
       best = {
         rule: effective,
         prefixLen: len,
