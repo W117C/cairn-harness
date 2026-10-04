@@ -903,7 +903,7 @@ export function ceilingBreaches(r: {
     multi: multi.over
       ? "❌ 水位上涨：顶包候选 " + String(multi.total) + "（已提交 " + String(r.committedMultiCopy) +
         " ＋ 在飞 " + String(r.inFlightMultiCopy) + "）> 登记的 " + String(cap.multiCopy) +
-        "（树＝" + r.scope + "；只准下调，降法见任务 #20。两半都算账——在飞那半不是豁免，只是「谁把它推上去的」这条解释）"
+        "（树＝" + r.scope + "；只准下调，降法见第 327 页的先例：把抄生产文案的那条断言改成派生断言（共用生产的拼法），帽字不动。两半都算账——在飞那半不是豁免，只是「谁把它推上去的」这条解释）"
       : "",
     bare: bare.over
       ? "❌ 针脚是个裸名字的顶包格 " + String(bare.total) + "（已提交 " + String(r.bareName.length) +
