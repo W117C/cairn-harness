@@ -66,6 +66,9 @@
 - 不动模型可见文案，不动权限面（`run_shell`/verify 仍走同一道闸）。
 - 与 `#66` 的关系：`#66` 问"红之后要不要再给一轮"，`#69` 问的是"连第一轮都没跑"。**`#69` 在前**——
   撞帽的 run 越多，`#66` 越量不到东西（这一句就是本会话在 `--max-steps 30` 那档撞上的墙）。
+- **worker 侧同修，且 `#66` 的作用域比想象更小**（现读，HEAD 面行号）：`src/agent/orchestrator.ts:1866` 只递
+  `verify + autoVerify: true`，整支文件里没有 `autoVerifyRepair` 这个字 ⇒ 翻了默认也只管主会话；
+  而 worker 用 `maxSteps: w.maxTurns`（`:1860`）撞同一个帽——本补丁在 `runLoop` 内部，主会话与 worker 两条路一起被修。
 
 ## 5. 已经验过的部分（不是"应该能过"，是跑过了）
 
