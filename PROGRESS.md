@@ -13039,6 +13039,42 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 
 
 
+## 2026-10-04 · 第 380 页：`#73` 第二半的 A 类落地——相关性排序从纯函数一路接到生产调用点（装配面与接线面各钉一层，针脚同笔改指）；顺手更正第 378 页 CLI 那簇的"下一步"
+
+1. **接的是什么**：第 370 页我只落了纯函数侧（`buildSkillRoutingList(skills, extra, query)` 会按相关性排），
+   但**没人传 `query`** ⇒ 生产上那条清单仍按发现序截断，"排序"是纸面能力。这一笔接三段：
+   `src/agent/plugins/index.ts` 的 `routingList(query = "")` 把参数递下去；
+   `src/main/agent-runner.ts` 的调用点传 **`promptText`（本轮任务文本）**；
+   锚点 `routing-list-hides-plugin-roles` 的针脚**同笔**改指新形状（不同笔＝HEAD 上空操作，规则 217）。
+   顺手去掉一处旧浪费：那行从前把同一份清单**调了两遍**（`rt.routingList().text !== "" ? rt.routingList().text`），现在只算一次。
+2. **两层判卷**（新文件 `tests/skill-routing-query-wiring.test.ts`，都真起 `PluginRuntime`，不把纯函数再测第二遍）：
+   ① 装配面：三条描述各长到 ~520 字符的 skill（任一完整行占掉预算大半）⇒
+   问「迁移到 postgres」与问「生成周报」**必须给出不同的清单**，且被问到的那条排在另一条完整行之前
+   （另一条只剩"只列名字"也算排得靠后）；再加账闭合 `dropped + nameOnly + 完整行数 == 3` 与帽不变。
+   **反向守卫**：`routingList("")` 与不命中任何词的 query ⇒ 逐字等于从前（不许把无关的跑也 reorder）。
+   ② 接线面：`agent-runner.ts` 里必须是 `rt.routingList(promptText)`，旧形状 `rt.routingList().text` 一回来就红
+   ——这层只能钉形状，页上就说它只钉"调用位有参数"，行为证据在①。
+   踩到的一次假绿值得记：我第一版夹具漏了 `.claude-plugin/plugin.json` ⇒ `skills()` 是 0 条，
+   而"两份清单不同"那条断言在空清单上**照样不红**；是分母那条（`skills().length === 3`）把它抓住了（规则 74）。
+3. **读数**（`outputs/skill-routing-query-wiring-2026-10-04/`）：三支判卷合跑 `Tests 28 passed (28)`；
+   `plugins-check` 42 ✅／0 ❌／1 未证（那条未证是既有的 §9.11 实仓插件免改加载，不是本笔带来的）；
+   `typecheck` 0 报错；`--check-needles` 报 **`钉在飞文本 1`**——就是本笔改指的 `routing-list-hides-plugin-roles`，
+   预期读数，落库即归零（把针脚改回 HEAD 的旧写法是禁止项）。
+4. **更正第 378 页第 2 条的"下一步"**：CLI 那 38 条我判成"判卷 spawn 了已改名的旧入口"，
+   这条现在**已由隔壁落地解决**（`931bae3d 第三批保全：M0→CAIRN 改名的最后四个下游`）。
+   主树现读同两支判卷 `Tests 110 passed (110)`（`main-tree-cli-autonomy-110-passed.txt`）
+   ⇒ 我 16:44 在隔离树读到的 85 红**不是环境假红，而是当时那个 sha 的真红**；红堆此后被隔壁逐批清掉。
+   所以：`#82` 第一簇关掉；但**页上的旧读数不许当现读引用**——下一件事是用一次新的认证取新数，
+   既不沿用 16:44 的 85，也不沿用隔壁提交标题里的"最后 3 红"。
+5. **量纲与没跑**：本笔动 3 支生产/表文件＋1 支新判卷＋台账＋5 件读数；跑的是秒级到分钟级：三支判卷、一道门、
+   `typecheck`、`--check-needles`。**没跑**：全量核心判卷、认证（下一页跑）、`mutate-verify` 真杀
+   （本笔那条针脚要等落库后在干净树逐条杀）。`#39`／`#57`–`#66`／`#68` 照旧，`#67` 待对齐，`#69`／`#71` 备妥，
+   `#70`／`#72` 待办，**`#73` A 类已落、B 类等 `src/agent/glm-session.ts` 让位**，`#74`–`#78` 照旧，
+   `#79` 等文件让位，`#80` 等裁决，`#81` 等作者补证人，`#82` 第一簇已由隔壁解（第二簇＝`#85` 等落库），
+   `#83`／`#84`／`#86` 照旧，`#85` 状态不变（S2 文件面路径通道仍未入库）。本页不宣布任何「绿了」。
+
+
+
 
 
 

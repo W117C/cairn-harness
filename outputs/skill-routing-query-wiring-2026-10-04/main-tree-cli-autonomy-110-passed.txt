@@ -1,0 +1,55 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/Cairn/deepseek harness[39m
+
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+ [32m✓[39m tests/cli-surface.test.ts [2m([22m[2m66 tests[22m[2m)[22m[33m 15261[2mms[22m[39m
+   [32m✓[39m cairn CLI：产品面存在且可执行 [2m(3)[22m
+     [33m[2m✓[22m[39m 真跑：--help 打印用法并 exit 0（走真 bin shim，不是 import src）[33m 382[2mms[22m[39m
+   [32m✓[39m cairn CLI：退出码 0 / 1 / 2（照 scripts/gym-run.ts 的口径） [2m(4)[22m
+     [33m[2m✓[22m[39m 缺任务描述 ⇒ exit 2 且说清怎么用[33m 410[2mms[22m[39m
+     [33m[2m✓[22m[39m flag 给了却没带值 ⇒ exit 2（静默按缺省跑会让打错的 flag 假装生效）[33m 318[2mms[22m[39m
+     [33m[2m✓[22m[39m 未知 --mode ⇒ exit 2 且列出合法档位[33m 329[2mms[22m[39m
+     [33m[2m✓[22m[39m 位置参数超过两个 ⇒ exit 2（不猜哪个是工作区）[33m 358[2mms[22m[39m
+   [32m✓[39m cairn CLI：--model 自由档位 [2m(4)[22m
+     [33m[2m✓[22m[39m --help 里列出这个 flag（没进 help 的选项等于不存在）[33m 610[2mms[22m[39m
+     [33m[2m✓[22m[39m 给了 flag 没给值 ⇒ exit 2（与 --mode 同一条口径）[33m 302[2mms[22m[39m
+     [33m[2m✓[22m[39m 模型名是取值不是位置参数：不会被当成工作区或任务（漏登记进 VALUE_FLAGS 的后果）[33m 371[2mms[22m[39m
+     [33m[2m✓[22m[39m --provider demo 下点名模型 ⇒ exit 2（demo 不拨号，静默忽略等于换掉用户意图）[33m 661[2mms[22m[39m
+   [32m✓[39m cairn CLI：--ctx-window（只配 --model，申报自由档位的真实窗口） [2m(4)[22m
+     [33m[2m✓[22m[39m --help 里列出这个 flag（没进 help 的选项等于不存在）[33m 365[2mms[22m[39m
+     [33m[2m✓[22m[39m 没有 --model 却给了 --ctx-window ⇒ exit 2（表内档位的窗口由档位表说了算，不接受申报）[33m 343[2mms[22m[39m
+     [33m[2m✓[22m[39m 非正整数 ⇒ exit 2（窗口是 token 数，0/负数/小数都不成）[33m 1454[2mms[22m[39m
+     [33m[2m✓[22m[39m 取值型 flag：窗口值不会被当成位置参数（漏登记进 VALUE_FLAGS 的后果）[33m 372[2mms[22m[39m
+   [32m✓[39m cairn CLI：缺 key 时 fail-closed，不静默换一家也不落 demo [2m(3)[22m
+     [33m[2m✓[22m[39m 一个 key 都没配 ⇒ exit 2，且**没有**默默跑 demo[33m 341[2mms[22m[39m
+     [33m[2m✓[22m[39m 提示里点名了要设哪个环境变量，含 DeepSeek 那条 OpenAI 兼容通道[33m 375[2mms[22m[39m
+     [33m[2m✓[22m[39m 配置错不打「用法」行（那行会把人引到 argv 上去，而该配的是环境变量）[33m 310[2mms[22m[39m
+   [32m✓[39m cairn CLI：默认档位是 fail-closed 的那一档 [2m(4)[22m
+     [33m[2m✓[22m[39m 支一：不给 --mode ⇒ 写工具被门拒（auto 必须显式 opt-in，不是缺省）[33m 383[2mms[22m[39m
+     [33m[2m✓[22m[39m 支二：只多给一个 --mode auto ⇒ 同一拍写得下去（否则支一钉的是「CLI 根本不会写」）[33m 414[2mms[22m[39m
+   [32m✓[39m cairn CLI：走应用壳（handleAgentRun），不裸调 runAgent [2m(4)[22m
+     [33m[2m✓[22m[39m 支一：盘上 planRequiredByDefault=true ⇒ 写禁真的挡住了写（只可能来自 handleAgentRun 那一层）[33m 348[2mms[22m[39m
+     [33m[2m✓[22m[39m 支二：只把那一个键去掉 ⇒ 同一拍同一份剧本写下去了（否则支一钉的是「CLI 什么也不干」）[33m 367[2mms[22m[39m
+   [32m✓[39m cairn CLI：--goal / --session / --compact 三条真入口在 argv 上 [2m(10)[22m
+     [33m[2m✓[22m[39m 三个 flag 都进了 help（没进 help 的选项等于不存在）[33m 1074[2mms[22m[39m
+     [33m[2m✓[22m[39m 拒 --goal 与 --log 同行时，理由与出路要跟着拒一起给（后半句是给模型的下一步）[33m 356[2mms[22m[39m
+     [33m[2m✓[22m[39m 那道 goal/log 闸不许吃掉单边写法：只给 --goal 或只给 --log 都要放行到后面那道闸[33m 652[2mms[22m[39m
+     [33m[2m✓[22m[39m --workspace 与位置参数同时给 ⇒ 拒，拒因说清「二者只能取一」[33m 324[2mms[22m[39m
+     [33m[2m✓[22m[39m 工作区的两种合法形状各自放行（无条件拒会把 `cairn <目录> <任务>` 这条主路杀掉）[33m 682[2mms[22m[39m
+     [33m[2m✓[22m[39m --compact 没指会话 ⇒ exit 2（压缩一条刚编出来的 id 一定报「会话不存在」）[33m 375[2mms[22m[39m
+     [33m[2m✓[22m[39m 非法会话名 ⇒ exit 2（会话名会拼成文件路径）[33m 366[2mms[22m[39m
+   [32m✓[39m cairn CLI：clarify / propose_plan 两扇门在真跑里都收得住（不悬挂） [2m(5)[22m
+     [33m[2m✓[22m[39m 非交互真跑一遍门流程：进程正常收束（status 不是 null），不是被 timeout 杀掉的[33m 365[2mms[22m[39m
+   [32m✓[39m cairn CLI：--compact 要摘要模型，没它就 fail-closed（不许静默截断） [2m(4)[22m
+     [33m[2m✓[22m[39m 支一：没有可用摘要器 ⇒ exit 1 + 点名 CAIRN_API_KEY，且会话日志一个字节没动[33m 341[2mms[22m[39m
+     [33m[2m✓[22m[39m 支二：摘要器在（演示档）⇒ exit 0，会话末尾多一条 compaction[33m 357[2mms[22m[39m
+     [33m[2m✓[22m[39m help 不再承诺「不跑模型」，改说清要哪把 key（缺陷本体就是这句假话）[33m 319[2mms[22m[39m
+     [33m[2m✓[22m[39m --compact 缺 --session ⇒ exit 2（不编一个会话 id 出来再报「不存在」）[33m 333[2mms[22m[39m
+ [32m✓[39m tests/autonomy.test.ts [2m([22m[2m44 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m2 passed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[32m110 passed[39m[22m[90m (110)[39m
+[2m   Start at [22m 01:05:13
+[2m   Duration [22m 16.71s[2m (tests 93%, transform 5%, import 3%)[22m
+

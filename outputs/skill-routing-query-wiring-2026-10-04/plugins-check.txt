@@ -1,0 +1,67 @@
+== M2e plugins-check ==
+-- A 容器与发现（三级作用域 / 超集 / 隔离 / 拒载）--
+  ✅ A1 用户级作用域发现（user/plugins）
+  ✅ A2 项目级作用域发现（.agent/plugins）
+  ✅ A3 散装 skill 免包装加载（无 manifest = 独立 skill）
+  ✅ A4 manifest 超集：未知顶层字段收录
+  ✅ A5 项目级插件首次加载 = pending（信任卡数据源）
+  ✅ A6 坏 manifest 隔离报错（面板可见）
+  ✅ A7 含 index.js 的包拒载 + 警告
+  ✅ A8 坏插件不影响其他插件加载
+  ✅ A9 未知字段只警告不阻断（警告面在场）
+-- B skill（1536 截断 / 触发全文 / 重挂预算）--
+  ✅ B1 清单超 1536 字符被截断（len=1390）
+[memory] 会话结束沉淀: {"kind":"no_content"}
+  ✅ B2 触发后全文进上下文（tool_result 携带 SKILL.md 全文）
+  ✅ B2a 无参数触发 ⇒ 正文不留裸 $ARGUMENTS（按 CC 语义换空串）
+[memory] 会话结束沉淀: {"kind":"no_content"}
+  ✅ B2b 模型经 skill 工具下的 args 真的走到替换器（规格面与执行面那条参数通道没断）
+  ✅ B3 触发记录未被压缩 → 不重挂（无重复注入）
+  ✅ B4 触发记录被压缩 → 最近激活 skill 重挂
+  ✅ B5 压缩重挂不超过预算（合计 25000 token，实测 47）
+  ✅ B6 单 skill 前 5000 token 截断（含 marker 计入预算）
+-- C hook（exit2 阻断 / JSON 放行 / 超时强杀）--
+[memory] 会话结束沉淀: {"kind":"no_content"}
+  ✅ C1 exit 2 真的阻断该次工具调用（stderr 为阻断原因）
+  ✅ C2 stdout JSON decision 放行 + PostToolUse 上下文回注 tool_result 尾部
+  ✅ C3 超时 hook 非阻塞（loop 继续，工具照常走注册表查表）
+  ✅ C4 超时 hook 确实等待了 timeout 窗口（1s，总耗时 1390ms）
+  ✅ C5 超时被强杀（SIGKILL @1s，实测 1001ms，error=hook 超时被强杀（插件 echo-suite，PreToolUse））
+  ✅ C6 SessionStart/UserPromptSubmit 上下文经组装层注入（system 位）
+-- C9 prompt 命令（/plugin:cmd → 渲染后的用户消息正文）--
+  ✅ C9a 受信用户级插件的 commands/wave.md 进命令表（不是只有 counts.commands 数字）
+  ✅ C9b /plugin:cmd 渲染成用户消息正文（$ARGUMENTS 已替换、markdown 换行已剥）
+  ✅ C9c 非命令输入逐字不变（零行为）
+-- C10 插件 .lsp.json → LSP 运行时注册表 --
+  ✅ C10a 受信插件的 .lsp.json 注册进运行时（scoped id）
+  ✅ C10b ${PLUGIN_ROOT} 展开成插件根下的真实路径
+  ✅ C10c 面板口径：声明数 = 已注册数（只看声明数就是「装载即陈列」的撒谎法）
+  ✅ C10d shutdown 摘干净（不留跨会话残留）
+-- D 信任门（未信任只列出 / 信任后生效）--
+[memory] 会话结束沉淀: {"kind":"no_content"}
+  ✅ D1 未信任时 hook 不执行（read_file 正常走工具，返回其真实输出）
+  ✅ D2 未信任时 MCP 不连接（statuses 空）
+  ✅ D3 未信任插件在加载清单里「只列出」（pending）
+[memory] 会话结束沉淀: {"kind":"no_content"}
+  ✅ D4 信任后同样样本开始生效（exit2 hook 在 loop 真实阻断）
+  ✅ D5 信任决议持久化（新实例直读）
+-- E MCP（scoped 名 / call 回传 / 权限门）--
+  ✅ E1 tools/list 进注册表且名字为 scoped 形态（mcp__plugin_<p>_<s>__<t>）
+  ✅ E2 tools/call 结果回传（stub server 透传）
+[memory] 会话结束沉淀: {"kind":"no_content"}
+  ✅ E3 MCP 工具经统一注册表真实执行（事件流回传 echo: 你好）
+[memory] 会话结束沉淀: {"kind":"no_content"}
+  ✅ E4 权限门对 MCP 工具同样生效（deny 规则命中 scoped 名）
+[memory] 会话结束沉淀: {"kind":"no_content"}
+  ✅ E5 MCP 无注解 → 按写处理：自主档不自动执行、stub 未被调用、拒绝原因指明「MCP 无注解」（§11.7.2 fail-closed）
+  ✅ E6 只读档放行带 readOnlyHint 注解的 MCP 工具（注解经 tools/list 抵达权限门）
+  ✅ E6b 只读档拒无注解 MCP 工具并指明白名单依据（与 E6 成对，排除「读档全放行」）
+-- F 暗卷（真实 CC 插件免改加载 · 断言型）--
+  ⚠️  暗卷克隆 anthropics-skills 内容不完整（疑似网络截断），重试一次
+  ⚠️  暗卷克隆 anthropics-skills 重试后仍不完整 → 该源不参与
+  ⚠️  暗卷**未证**：联网拉取 anthropics/skills 与 claude-plugins-community 未全部成功
+
+未证项（连网/凭据限制，未跑到的断言——不等于通过）：
+  ⚠️  §9.11-1/2 实仓插件免改加载：存在源不可达或截断重试仍不完整 → 未证（非跳过即通过）
+UNVERIFIED=1
+plugins-check: 42 ✅ / 0 ❌ / 1 未证

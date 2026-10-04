@@ -4836,7 +4836,7 @@ const MUTATIONS = [
     src: "src/agent/plugins/index.ts",
     test: "tests/plugin-role-discoverability.test.ts",
     desc: "清单不收角色 ⇒ stages[].role 能吃的名字没有任何地方可见，「自定义子智能体」退化成猜谜，唯一反馈是 spawn 被拒",
-    apply: (s) => s.replace("return buildSkillRoutingList(this.skills(), roleLines);", "return buildSkillRoutingList(this.skills());"),
+    apply: (s) => s.replace("return buildSkillRoutingList(this.skills(), roleLines, query);", "return buildSkillRoutingList(this.skills(), [], query);"),
     expectFail: "受信的 plugin:agent 进清单，且写明这是 stages[].role 能吃的名字",
   },
   // ---- 高熵候选的边界（security/scan.ts，2026-09-22）----

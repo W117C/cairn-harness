@@ -1712,7 +1712,11 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
         console.warn("[hooks] UserPromptSubmit 失败:", err instanceof Error ? err.message : String(err));
       }
     }
-    const skillsRouting = rt && rt.routingList().text !== "" ? rt.routingList().text : null;
+    // #73 第二半（A 类）：把这一轮的任务文本递进去 ⇒ 超预算时先按相关性排，而不是按发现序整条丢。
+    //  从前这里调了两次 `routingList()`（同一份清单算两遍，且第二遍的返回值可能与第一遍不同——
+    //  清单本身是纯的，但"算两遍"是白付的钱），现在只算一次。
+    const skillsRoutingText = rt ? rt.routingList(promptText).text : "";
+    const skillsRouting = skillsRoutingText !== "" ? skillsRoutingText : null;
     // One resolved registry selection is reused by the main turn and session-end distillation.
     const providerSettings = await store().get();
     const modelSelection = opts.modelSelection ?? resolveRunModel(providerSettings);
