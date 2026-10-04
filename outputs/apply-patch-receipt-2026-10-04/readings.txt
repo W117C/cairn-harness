@@ -1,0 +1,91 @@
+读数记录 · apply_patch 截断定位回执（2026-10-04）
+==================================================
+树：`.qoder/worktrees/agent-general-purpose-7f5785bb`（基线 HEAD `9099989e`，本笔未提交）
+取数面：本树工作区（`src/tools/patch-parse.ts` 带本笔改动；新判卷 `tests/apply-patch-truncation-receipt.test.ts`）
+node_modules：本树没有，用了一条符号链接 → 主检出 `<repo>/node_modules`（`.gitignore` 覆盖，不入本笔）
+
+退出码一律显式取：`cmd > /tmp/x.log 2>&1; echo EXIT=$?`（不接管道，不读管道尾的 `$?`）。
+汇总行一律先剥 ANSI 再解析：`import {vitestSummary, stripAnsi} from "scripts/lib/vitest-summary.ts"`
+（仓里现成那一份，没有另抄正则）。`vitestSummary` 的 `found:false` 与「0 failed」是两种读数，这里全部 `found:true`。
+
+--------------------------------------------------------------------------------
+T1 本笔判卷单跑（11 条）
+命令 node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/apply-patch-truncation-receipt.test.ts
+日志 /tmp/judge-final3.log
+退出 EXIT=0
+汇总 {"found":true,"failed":0,"passed":11}
+对照：改动之前既有那支 `tests/apply-patch.test.ts` 单独跑 ⇒ /tmp/apt-base.log EXIT=0，28 passed (28)
+      ——本笔没为了让它绿而改它一个字。
+
+T2 typecheck
+命令 node --import tsx scripts/typecheck.ts
+日志 /tmp/tc-final.log
+退出 EXIT=0
+读数 typecheck: tsc --noEmit 通过（0 条报错）✅
+
+T3 apply_patch 家族既有判卷（10 支，先 grep 找齐"读这个回执/吃 patch-parse"的那批，不只跑自己那支）
+命令 node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts \
+        tests/apply-patch.test.ts tests/apply-patch-truncation-receipt.test.ts tests/diagnose.test.ts \
+        tests/write-face.test.ts tests/prompt-surface-check.test.ts tests/permissions-tool-registry.test.ts \
+        tests/cli-fork-replay.test.ts tests/diff-review.test.ts tests/glm.test.ts tests/line-delta.test.ts
+     （找法：`grep -l "apply_patch|parsePatch|patch-parse" tests/**/*.ts` ⇒ 6 支命中；
+       另把 `fork-cli` 的 `diffSummary` 取料面（cli-fork-replay）、`parsePatchLines` 同族（diff-review）、
+       工具规格面（glm／prompt-surface-check／permissions-tool-registry／write-face）与"补丁 vs 整写"那把尺
+       （line-delta）一并拉进来，共 10 支）
+日志 /tmp/family-final.log
+退出 EXIT=0
+汇总 {"found":true,"failed":0,"passed":151}
+     Test Files  10 passed (10)
+
+--------------------------------------------------------------------------------
+T3′ 撞面实录（本笔**唯一**撞上的既有判卷：`tests/promise-recall-inventory.test.ts`，帽 `CLAIM_UNWITNESSED_CAP = 0`）
+① 判卷文件仍是**未跟踪新件**时（本树工作区态）：
+   命令 node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts \
+          tests/promise-recall-inventory.test.ts tests/apply-patch-truncation-receipt.test.ts
+   日志 /tmp/pri-untracked.log   退出 EXIT=1   汇总 {"found":true,"failed":1,"passed":45}
+   红条 `真仓那一趟：分母非零、存量在帽内、四态相加＝分母`
+   点名 `src/tools/patch-parse.ts#formatTruncationGuidance｜这一步还没跟盘上的内容对照`
+        —— 就是回执新写的那句（含标记词 `不会` ⇒ 这把尺把它收成一个能力断言面）；它的证人面只吃
+           **git 已跟踪**的 `tests/**`，未跟踪的判卷对它不存在 ⇒ 读成"没人判过"。
+② 只 `git add tests/apply-patch-truncation-receipt.test.ts`（模拟落库态，索引随即可撤）：
+   同一命令 ⇒ /tmp/pri-tracked.log 退出 **EXIT=0** 汇总 {"found":true,"failed":0,"passed":46}
+③ 注释微调后复跑（`tests/promise-recall-inventory` + 本笔判卷 + `tests/apply-patch.test.ts`）：
+   /tmp/after-comment.log 退出 EXIT=0 汇总 {"found":true,"failed":0,"passed":74}
+⇒ 处置：没有动那把尺、没有动它的帽、没有加豁免；改的是**我这侧的两件**——
+   (a) 判卷里那句断言从半句换成整段连续中文逐字（`这一步还没跟盘上的内容对照`／`改行号不会有用`），
+       因为尺按 ≥6 字整段配对（`claimWitnessRuns`），半句顶不了证人；
+   (b) 落库时实现＋判卷**同笔**且先 `git add`（否则这条判卷在门里就是红的，见 how-to-land.md 第 1 步）。
+
+--------------------------------------------------------------------------------
+T4 全量核心判卷（302 支，本笔改动的**因果分离**在这里做）
+A) 工作区面（判卷未跟踪）：/tmp/full-suite.log
+   命令 node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts
+   退出 FULL_EXIT=1   汇总 {"found":true,"failed":7,"passed":4251}（4258）  Duration 193.65s
+   红 7 条：gated-tools／head-cert-deps／memory-runner／runner-gates／scratch-tree-naming×2
+            + **promise-recall-inventory**（＝T3′ 那一格）
+B) 落库态（判卷与工件都 `git add`，随即 `git reset` 撤回）：/tmp/full-suite-landed.log
+   退出 FULL_EXIT=1   汇总 {"found":true,"failed":6,"passed":4252}（4258）  Duration 182.18s
+   红 6 条：gated-tools／head-cert-deps／memory-runner／runner-gates／scratch-tree-naming×2
+C) **摘掉本笔**的对照批（同一批 7 支文件，`src/tools/patch-parse.ts` 退回 HEAD 面、新判卷移出树外）：
+   /tmp/baseline-6.log  退出 EXIT=1  汇总 {"found":true,"failed":6,"passed":194}
+   ⇒ 与 B) 同名单同数（同批 7 支里本笔在场时是 7 红＝/tmp/withmine-6.log {"failed":7,"passed":193}，
+     多出来的那一条正是 promise-recall，判卷一跟踪它自己好）。
+   对照跑完用 `cp` 复原本笔两面，`cmp` 逐字节一致（复原后重跑判卷 11/11 绿）。
+⇒ 结论：**本笔在落库态没有给全量新增任何一条红**；剩下 6 条是这台机器的态，不是代码的态——
+   `gated-tools`／`runner-gates` 打的是 `fixtures/todo-app` 靶子那半条 `verify_result`；
+   `head-cert-deps` 那条把留档 json 与本机 `git worktree list` 对分母（＝台账 `#39` 那顶过期基准的帽）；
+   `memory-runner` 是压缩 canary；`scratch-tree-naming` 两条点名的就是本会话这两棵
+   `.qoder/worktrees/agent-general-purpose-*` 隔离树没进共享注册表（回收本树后它们自然消）。
+   这 6 条本笔没有一条能修，也不该由本笔修——落库前请按 how-to-land.md 第 2 步与隔壁对表。
+
+--------------------------------------------------------------------------------
+T5 分辨力自检（5 台造红，逐条读数见 red-mutations.txt）
+  M1 谓词取反（`fileCount > fileSeq` ⇒ `>=`）      exit=1 红 1 条 {①留档形状}                    396ms 复原 cmp=OK
+  M2 符号位取反（`over = false`）                   exit=1 红 1 条 {⑤实收比声明多}                397ms 复原 cmp=OK
+  M3 取料写错（`declaredAt` 取段表头行）            exit=1 红 2 条 {②结构化字段,⑥一行都没收到}    391ms 复原 cmp=OK
+  M4 计数帽收紧一格（`TAIL_SNIPPET_CAP 100→20`）    exit=1 红 1 条 {⑦回执有界}                    418ms 复原 cmp=OK
+  M5 摘掉接线（抛错不带读数）                       exit=1 红 8 条 ①②③④⑤⑥⑦⑨，反向守卫⑧⑩⑪全绿  399ms 复原 cmp=OK
+  五台签名互不相同，没有两台红在同一条用例上；终检 `cmp` 备份与树面逐字节一致。
+
+T6 没跑的（不宣布）：`pnpm mutate-verify`（只测 HEAD，本笔未提交）、`scripts/head-cert.ts` 认证、
+   desktop 那套（`pnpm --filter … test`）、真模型 A/B。本页只到"秒级判卷 + typecheck + 全量对照"。

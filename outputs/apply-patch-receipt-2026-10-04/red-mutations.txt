@@ -1,0 +1,70 @@
+分辨力自检 · apply_patch 截断定位（2026-10-04，隔离 worktree `agent-general-purpose-7f5785bb`）
+================================================================================
+
+口径
+----
+判卷文件：`tests/apply-patch-truncation-receipt.test.ts`（11 条，2 describe；定稿面（含最后一次注释对齐）上 5 台**全部复跑过一遍**，下面的读数就是这一遍的）
+被测文件：`src/tools/patch-parse.ts`（每台只改它一处）
+命令：`node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/apply-patch-truncation-receipt.test.ts`
+退出码显式取（`… > /tmp/mut-<台>.log 2>&1` 之后读 `$?`，不接管道）。
+汇总行一律先剥 ANSI 再解析：走仓里现成的 `scripts/lib/vitest-summary.ts` 的 `vitestSummary()/stripAnsi()`，
+没有另抄正则。
+用时＝单台改坏到跑完一次判卷的墙钟（perl Time::HiRes，含 vitest 冷启动）。
+每台跑完立刻 `cp` 备份复原，并 `cmp` 逐字节校验（下面每台都写着 `复原 cmp=OK`）。
+驱动脚本：`/tmp/mut-run.sh`（一次性，不入仓；改法本身逐条抄在本文件里，可复现）。
+
+基线（改坏之前）
+----------------
+    EXIT=0   {"found":true,"failed":0,"passed":11}     11/11 绿
+    既有那支 `tests/apply-patch.test.ts` 同跑：EXIT=0，{"failed":0,"passed":39}（28 旧 + 11 新）
+
+--------------------------------------------------------------------------------
+台  M1 —— 谓词取反（"其余段没查"那一格该不该出声）
+改法 `src/tools/patch-parse.ts:196`  `const rest = t.fileCount > t.fileSeq ?` → `t.fileCount >= t.fileSeq ?`
+     （单段补丁从此也会许愿一句"本笔共 1 段，其后 0 段本轮还没查到"）
+读数 exit=1  wall=412ms  {"found":true,"failed":1,"passed":10}  复原 cmp=OK
+红在 ①留档形状（尾部被截）⇒ 既有那句逐字保留，其后追加定位与下一步   —— 唯一命中：它的 `not.toContain("本轮还没查到")`
+     其余 10 条全绿（含三条反向守卫）
+
+台  M2 —— 符号位判据取反（多算那一侧被当成少抄）
+改法 `src/tools/patch-parse.ts:191`  `const over = t.deltaOld < 0 || t.deltaNew < 0;` → `const over = false;`
+     （永远走"补行"那条下一步，不再走"核对声明数字"那条）
+读数 exit=1  wall=332ms  {"found":true,"failed":1,"passed":10}  复原 cmp=OK
+红在 ⑤实收比声明多 ⇒ 说「多算」并换成核对声明的下一步，绝不劝人补行   —— 唯一命中：
+     它同时丢掉了 `toContain("核对 @@ 的四个数字与正文边界")` 与两条负断言（`not.toContain("少抄")`／
+     `not.toContain("不能把 @@ 的声明数字改小")`）三条各红一次，全在同一条用例里
+     ①②③④⑥⑦⑧⑨⑩⑪ 全绿（正数差的那些条本来就该走"补行"分支 ⇒ 这台只能由"多算"那一格抓到）
+
+台  M3 —— 取料写错（把段表头行号当 `@@` 行号）
+改法 `src/tools/patch-parse.ts:155`  `declaredAt: hunk.declaredAt,` → `declaredAt: file.headerLine,`
+读数 exit=1  wall=333ms  {"found":true,"failed":2,"passed":9}   复原 cmp=OK
+红在 ②结构化字段（判卷钉字段，不钉文案拼法）   —— `declaredAt: 4` 读成 1
+     ⑥正文一行都没收到 ⇒ 指到 @@ 的下一行，不编造边界 —— "第 5 行起"被算成"第 2 行起"
+     其余 9 条绿（①只钉 `（补丁第 4 行）` 那句**原句**里的行号，它来自抛错点而不是这个字段 ⇒
+     这一格说明为什么必须有一条钉结构化字段的用例：光钉文案，字段错一半是抓不到的）
+
+台  M4 —— 计数帽收紧一格（回执正文截断帽 100 → 20 字符）
+改法 `src/tools/patch-parse.ts:118`  `const TAIL_SNIPPET_CAP = 100;` → `= 20;`
+读数 exit=1  wall=335ms  {"found":true,"failed":1,"passed":10}  复原 cmp=OK
+红在 ⑦回执自己有界：5000 字符的正文行也裁到 100 字符   —— 唯一命中：`run.length >= 90`（"裁而不是丢"那一半）
+     其余 10 条绿（其它 fixture 的正文行都短于 20 字符 ⇒ 帽动了对它们无痕，这正是把帽单独钉一条的用意）
+
+台  M5（附加·摘实现＝kill switch）—— 抽掉接线，回执退回从前那句计数差
+改法 `src/tools/patch-parse.ts:352`  删掉抛错时的第三个实参 `patchTruncation(raw, f, h, {…}),`
+读数 exit=1  wall=335ms  {"found":true,"failed":8,"passed":3}   复原 cmp=OK
+红在 ①②③④⑤⑥⑦⑨ 八条（①留档形状 ②结构化字段 ③中段截 ④丢前导标记 ⑤多算 ⑥一行没收到 ⑦有界
+     ⑨截断补丁经工具面）
+绿在 ⑧⑩⑪ 三条反向守卫 —— 摘掉实现后它们**照样绿**，这就是"反向守卫不是恒真"的正证：
+     它们钉的是"该闭嘴的场合闭嘴"，与实现装没装无关；而 8 条定位类用例整批倒下，说明接线确实被钉住了。
+
+--------------------------------------------------------------------------------
+签名对照（每台各红在不同用例上，没有两台同集）
+  M1 = {①}          M2 = {⑤}       M3 = {②,⑥}      M4 = {⑦}      M5 = {①②③④⑤⑥⑦⑨}
+  独有格：M1→①的负断言、M2→⑤、M3→⑥、M4→⑦、M5→③④⑨（中段截／前导标记／工具面只有摘掉整条接线才红）
+  ⇒ 没有"两台红在同一条用例"的情形：①同时被 M1/M5 命中，但 M1 只命中①、M5 命中八条，签名不同；
+    ②⑦同理。任一台的改法都被**它独有的那一格**区分开。
+
+终检
+  `cmp /tmp/patch-parse.orig.ts src/tools/patch-parse.ts` → 退 0（逐字节一致）
+  `git status --porcelain` → 只剩 ` M src/tools/patch-parse.ts`（本笔真实改动）+ `?? tests/apply-patch-truncation-receipt.test.ts`
+  复原后重跑判卷 → EXIT=0，{"found":true,"failed":0,"passed":11}
