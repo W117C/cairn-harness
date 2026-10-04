@@ -1,0 +1,8 @@
+取料面：冻结 7 份 ＋ outputs 100 份＝107 份
+①「这一跑写过盘」（自动验证拍的门闩）：今日口径 106 份｜source 档 106 份｜source∪deps 档 106 份
+   收窄后从「写过」翻成「没写」的 = 0 份（这些跑不再白付一拍验证）
+   含「首词未登记」命令的跑 = 0 份
+   shell 成功结果共 342 条，窄口径形状分布（前 12 项）：
+   meta:227 source-head:node:58 readonly-cmd:24 unknown-head:cd:16 unknown-head:find:6 source-head:sed:5 pkg-mutate:pnpm:2 unknown-head:for:1 unknown-head:trim()":1 source-head:rm:1 source-head:awk:1
+②R1 验证停滞报数：今日口径=2 份｜窄口径(source)=0 份
+③假绿暴露面（绿拍之后只跑了未登记首词命令，窄口径下不再判 stale）= 0 份

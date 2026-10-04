@@ -1,0 +1,4 @@
+A 严格同参数·窗口 6 次调用： {"retries":6,"noWrite":2}
+A 严格同参数·整条尾巴：   {"retries":6,"noWrite":2}
+B 归一化同参数·整条尾巴： {"retries":7,"noWrite":3}
+C 同工具＋首串参数归一化： {"retries":9}

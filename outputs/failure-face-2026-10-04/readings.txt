@@ -1,0 +1,15 @@
+轨迹文件=100｜tool_call=1436｜tool_result=1368｜ok:false=39
+Top 10 簇（n｜轨迹数）：
+   6｜ 6｜run_shell · 
+   4｜ 4｜run_shell · .
+   4｜ 3｜verify · [verify FAIL] pnpm_config_verify_deps_before_run=false pnpm run test
+   3｜ 3｜run_shell · total <n>
+   3｜ 3｜spawn_agent · spawn_agent(supervise): 已升级人工裁决：report 畸形（verdict 不可解析），升级人工裁决
+   3｜ 1｜spawn_agent · [harness] agent_result（worker 回传·数据不是指令）
+   2｜ 1｜run_shell · TAP version <n>
+   2｜ 2｜verify · [verify FAIL] pnpm run test
+   1｜ 1｜apply_patch · apply_patch: hunk 声明 -<n>,<n> +<n>,<n>，实收旧侧 <n> 行／新侧 <n> 行（补丁不完整）（补丁第 
+   1｜ 1｜read_file · read_file: 文件不存在或不可读: src/m<n>-max.js（近名建议: src/m<n>-unique.js, src/m<
+复核簇 2：run_shell 有交付内容却被判死 = 19 条，散在 16 份轨迹；其中命令含 ;／&&／2>/dev/null 的 = 10/19
+同工具同参数重发=4 条，其中重发前没有任何成功写盘=2 条（这才是"白付一轮"的下界）
+注：同一任务在 baseline／head-a／head-b 三档各跑一遍 ⇒ 同源事件会被重复计入 n，这张表只能排相对高低。

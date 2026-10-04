@@ -1,0 +1,74 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-c7f2ea0f[39m
+
+ [31m❯[39m tests/shell-family-cause.test.ts [2m([22m[2m16 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[32m 39[2mms[22m[39m
+   [32m✓[39m annotateExecCause：该贴的三类各贴各的，代码红与绿拍一个字都不许多 [2m(6)[22m
+     [32m✓[39m 127 与包管理器错误码两类各贴一句，普通代码红不贴[32m 1[2mms[22m[39m
+     [32m✓[39m 成功回执不贴：`pnpm install` 正文里有错误码行也不能说命令没跑成[32m 0[2mms[22m[39m
+     [32m✓[39m 超时不重复贴——两条出口自己那行 `[error: … 超时 …]` 已经说了同一件事[32m 0[2mms[22m[39m
+     [32m✓[39m 没有退出码 ⇒ 贴「被取消或被信号杀掉」那一句，且幂等（两条 exec 出口共用同一句）[32m 0[2mms[22m[39m
+     [32m✓[39m 幂等：同一条结果先后过两层出口（worker 缺省出口就是 run_shell）只贴一遍[32m 0[2mms[22m[39m
+     [32m✓[39m 贴的句子必含「不是代码失败」——这句的存在理由就是拦住模型照着环境红改代码[32m 0[2mms[22m[39m
+   [31m❯[39m run_shell 真 spawn：模型看到的 output 里真的带着这一句 [2m(5)[22m
+     [32m✓[39m 跑一条不在 PATH 里的命令 ⇒ 点名 127 与『这不是代码失败』[32m 6[2mms[22m[39m
+     [32m✓[39m 跑一条打印 pnpm 自有错误码行的命令 ⇒ 贴包管理器那句[32m 3[2mms[22m[39m
+[31m     [31m×[31m 控制组：普通 `exit 3` 的输出逐字不变（防上面两条变成恒真）[39m[32m 7[2mms[22m[39m
+[31m     [31m×[31m 分段提示只在无引号的复合命令上有：带引号时闭嘴（一条假线索比没线索贵）[39m[32m 9[2mms[22m[39m
+     [32m✓[39m 成功命令即便正文里带着 ERR_PNPM 那行也不贴（归因只在失败支上）[32m 4[2mms[22m[39m
+   [32m✓[39m worker shell 两层出口：注入的沙箱出口有人贴，缺省出口不叠第二层 [2m(3)[22m
+     [32m✓[39m shell_ro 走注入出口 ⇒ 127 这一类照样贴（摘掉 worker 这层接线就红）[32m 0[2mms[22m[39m
+     [32m✓[39m shell_rw 是同一层接线（同族只硬化一支 = 那一支静默不一致）[32m 0[2mms[22m[39m
+     [32m✓[39m 缺省出口 bareShell 走 run_shell ⇒ worker 这层不许叠第二句（真 spawn，数 note 出现次数）[32m 2[2mms[22m[39m
+   [32m✓[39m 四个出口的接线各有证人（同一判据四份副本、宽度各不同 = 本仓第十三族） [2m(2)[22m
+     [32m✓[39m 主会话沙箱出口、worker 两条出口、run_shell 直连——三处都真的调了同一只归因函数[32m 2[2mms[22m[39m
+     [32m✓[39m 反向确认：把归因从某一支摘掉，上面那条接线证人就红（不是恒真正则）[32m 0[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/shell-family-cause.test.ts[2m > [22mrun_shell 真 spawn：模型看到的 output 里真的带着这一句[2m > [22m控制组：普通 `exit 3` 的输出逐字不变（防上面两条变成恒真）
+[31m[1mAssertionError[22m: expected 'boom\n\n[exit code: 3]' to be 'boom\n\n[exit code: 3]\n[分段] 这条命令有 2 …' // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  boom[22m
+
+[2m  [exit code: 3][22m
+[32m- [分段] 这条命令有 2 段；非零码来自最后执行的那一段："exit 3"。此前的正文已照常交付——要定位就单独重跑那一段，别整条重来。[39m
+
+[36m [2m❯[22m tests/shell-family-cause.test.ts:[2m98:22[22m[39m
+    [90m 96|[39m     // 这一格钉的是「归因不改变既有回执」，所以逐字比、不放宽成 toContain。
+    [90m 97|[39m     // 2026-10-04：复合命令且有正文时，回执多一行「分段」提示（bash 的 `$?` 只反映最后执行的那一段）。
+    [90m 98|[39m     expect(r.output).toBe('boom\n\n[exit code: 3]\n[分段] 这条命令有 2 段；非零码来…
+    [90m   |[39m                      [31m^[39m
+    [90m 99|[39m   });
+    [90m100|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/shell-family-cause.test.ts[2m > [22mrun_shell 真 spawn：模型看到的 output 里真的带着这一句[2m > [22m分段提示只在无引号的复合命令上有：带引号时闭嘴（一条假线索比没线索贵）
+[31m[1mAssertionError[22m: expected 'boom\n[exit code: 3]' to contain '[分段]'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [7m[分段[27m][39m
+[31m+ boom[39m
+[31m+ [7m[exit code: 3[27m][39m
+
+[36m [2m❯[22m tests/shell-family-cause.test.ts:[2m105:26[22m[39m
+    [90m103|[39m     expect(quoted.output).not.toContain("[分段]");
+    [90m104|[39m     const plain = await run_shell.run({ command: "printf boom; exit 3"…
+    [90m105|[39m     expect(plain.output).toContain("[分段]");
+    [90m   |[39m                          [31m^[39m
+    [90m106|[39m   });
+    [90m107|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m14 passed[39m[22m[90m (16)[39m
+[2m   Start at [22m 19:50:13
+[2m   Duration [22m 477ms[2m (transform 73%, import 17%, tests 10%, worker 1%)[22m
+

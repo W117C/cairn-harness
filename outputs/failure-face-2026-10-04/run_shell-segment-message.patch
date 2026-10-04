@@ -1,0 +1,48 @@
+diff --git a/src/tools/run_shell.ts b/src/tools/run_shell.ts
+index 7f3b5404..533df8f5 100644
+--- a/src/tools/run_shell.ts
++++ b/src/tools/run_shell.ts
+@@ -32,7 +32,21 @@ export const run_shell: Tool = {
+         // 模型就是照着一句假话决定「再等一下」还是「换路」（verify／ripgrep 那两支本来就是插值的）。
+         if (timedOut) output += "\n[error: run_shell 超时（" + String(SHELL_TIMEOUT_MS / 1000) + "s），已强制终止]";
+         if (cancelled) output += "\n[error: run_shell 随会话取消终止]";
+-        if (code !== 0 && !timedOut && !cancelled) output += `\n[exit code: ${String(code)}]`;
++        if (code !== 0 && !timedOut && !cancelled) {
++          output += `\n[exit code: ${String(code)}]`;
++          // bash 的 `$?` 只反映**最后执行的那一段**：`a; b` 里 a 的正文早已交付、b 没命中也算整条死；
++          // `a && b` 中途红则后面的段根本没跑。旧文案只报一个码 ⇒ 模型分不清「整条失败」与「末尾那一段没命中」，
++          // 于是整条重跑（现读 100 份留档轨迹：`run_shell` 的失败里 19/39 条正文有内容却被判死，其中 10 条命令
++          // 含 `;`／`&&`／`2>/dev/null`；「同参数重发且中间没写盘」2–3 条就是它的账单）。
++          // 只补文案，**不动 `ok`**：`annotateExecCause`、事件面与 worker 证据四态都按 ok 记账，改语义是另一笔。
++          const segs = command.split(/[;\n]|&&|\|\|/).map((s) => s.trim()).filter((s) => s !== "");
++          // 命令里只要出现过引号／反引号，分隔符就可能落在字符串字面量内（`bash -c "a; b"`），
++          // 那样切出来的「末尾段」是假的 ⇒ 宁可不说话，也不给模型一条指错的线索。
++          const splittable = !/["'`]/.test(command);
++          if (splittable && segs.length > 1 && ring.read().trim() !== "") {
++            output += `\n[分段] 这条命令有 ${String(segs.length)} 段；非零码来自最后执行的那一段："${(segs[segs.length - 1] ?? "").slice(0, 120)}"。此前的正文已照常交付——要定位就单独重跑那一段，别整条重来。`;
++          }
++        }
+         const res: ToolResult = {
+           ok: code === 0 && !timedOut && !cancelled,
+           output: output.replace(/\n+$/, ""),
+diff --git a/tests/shell-family-cause.test.ts b/tests/shell-family-cause.test.ts
+index 03bcbd4f..ce80e050 100644
+--- a/tests/shell-family-cause.test.ts
++++ b/tests/shell-family-cause.test.ts
+@@ -94,7 +94,15 @@ describe("run_shell 真 spawn：模型看到的 output 里真的带着这一句"
+     expect(r.ok).toBe(false);
+     // 期望值来自现跑真机而不是推理：`echo` 自带换行 ＋ 出口那句以 `\n` 起头 ⇒ 中间是两个换行。
+     // 这一格钉的是「归因不改变既有回执」，所以逐字比、不放宽成 toContain。
+-    expect(r.output).toBe("boom\n\n[exit code: 3]");
++    // 2026-10-04：复合命令且有正文时，回执多一行「分段」提示（bash 的 `$?` 只反映最后执行的那一段）。
++    expect(r.output).toBe('boom\n\n[exit code: 3]\n[分段] 这条命令有 2 段；非零码来自最后执行的那一段："exit 3"。此前的正文已照常交付——要定位就单独重跑那一段，别整条重来。');
++  });
++
++  it("分段提示只在无引号的复合命令上有：带引号时闭嘴（一条假线索比没线索贵）", async () => {
++    const quoted = await run_shell.run({ command: `bash -c "printf boom; exit 3"` }, ctx());
++    expect(quoted.output).not.toContain("[分段]");
++    const plain = await run_shell.run({ command: "printf boom; exit 3" }, ctx());
++    expect(plain.output).toContain("[分段]");
+   });
+ 
+   it("成功命令即便正文里带着 ERR_PNPM 那行也不贴（归因只在失败支上）", async () => {

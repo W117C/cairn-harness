@@ -1,0 +1,5 @@
+取料面：冻结语料 7 份 ＋ outputs 轨迹 100 份＝共 107 份
+R1 报数：离线清单=2 份｜生产口径=0 份｜读数不一致的轨迹=2 份
+含「离线清单没登记却按生产算落盘」动作的轨迹=87 份（漂移可达性前提）
+  差 fixtures/no-progress/real-red-verify-stagnation.events.jsonl｜离线=true 生产=false
+  差 outputs/loop-eval-2026-09-20-base/I2-rep1-base.events.jsonl｜离线=true 生产=false

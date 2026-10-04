@@ -1,0 +1,10 @@
+命中 3 条，来自 3 份轨迹
+=== outputs/ga-strategy-2026-09-20/supervise.events.jsonl
+args: {"max_turns":3,"mode":"supervise","task":"目标：修复订单计价三处 bug，使 `node tests/run.mjs` 全部断言通过。\n\n背景（自包含）：本仓库是 gym case \"order-pricing-triple-fix\"。`tests/run.mjs` 是冻结的判卷文件（绝对不许改动一个字），规则以它为准。三个源文件各有一处缺陷。\n\n涉及文件与验收口径（期望值全部来自 tests/run.mjs）：\n1. `src/cart.js` 的 `subtotal(items)`：BUG＝只累加单价漏乘数量。修成按 `it.pric
+out: spawn_agent(supervise): 已升级人工裁决：report 畸形（verdict 不可解析），升级人工裁决
+=== outputs/ga-strategy-2026-09-20-rep2/supervise.events.jsonl
+args: {"max_turns":3,"mode":"supervise","task":"目标：修复 `src/` 下三处计价缺陷，使 `node tests/run.mjs` 全绿。`tests/run.mjs` 是冻结判卷文件，一个字都不许改。\n\n规则依据（全部来自 tests/run.mjs 的断言，不得凭 bug 猜规则）：\n1. `src/cart.js` 的 `subtotal(items)`：现在是 `sum += it.price`（漏乘数量），应改为 `sum += it.price * it.qty`。判卷期望：[{price:12.5,qty:2},{price:4,qt
+out: spawn_agent(supervise): 已升级人工裁决：report 畸形（verdict 不可解析），升级人工裁决
+=== outputs/ga-strategy-2026-09-20-rep3/supervise.events.jsonl
+args: {"mode":"supervise","resources":["src/cart.js","src/totals.js","src/shipping.js"],"stages":[{"gate":false,"role":"实现","task":"读三个源文件，按规格精确修复三处 bug（见任务书）"},{"gate":true,"role":"验证","task":"运行 node tests/run.mjs，全绿则通过；任何断言失败视为未通过"},{"gate":true,"role":"修复循环","task":"仅当上一阶段仍有失败断言时：按失败项对照规格修正源文件并重跑 node
+out: spawn_agent(supervise): 已升级人工裁决：report 畸形（verdict 不可解析），升级人工裁决
