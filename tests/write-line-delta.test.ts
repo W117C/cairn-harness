@@ -1,6 +1,17 @@
 // 写盘摘要里的行增减（能力 2「改动范围最小 / 补丁级 diff」的可度量面）。
 // 旧口径只报字节数与处数：整份重写丢掉 20 行，输出上看不出来——要等测试炸。
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { snapshotNote } from "../src/tools/snapshot.js";
+
+/** 剥掉「覆盖前原件已存 …」那句尾巴：它属于快照面，不是本条判卷要判的东西。
+ *  标记从**生产函数**派生，不在这里抄第二份文案——2026-10-05 修：原写法把正则写死成
+ *  `…/snapshots/[^\s]+$`，而后缀里后来加了带空格的说明（`4d52a16c`）⇒ 剥不掉、两支判卷同时红。
+ *  派生之后文案再改判卷自动跟上。 */
+function stripSnapshotNote(text: string): string {
+  const marker = snapshotNote("\u0000").split("\u0000")[0] ?? "";
+  const esc = marker.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return text.replace(new RegExp(esc + "[\\s\\S]*$", "u"), "");
+}
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -79,7 +90,7 @@ describe("写盘摘要报行增减", () => {
     expect(before.size).toBeGreaterThan(256 * 1024);
     const out = await run(write_file, { path: "huge.ts", content: "tiny\n" });
     // 这条量的是「大文件不统计行增减时不许冒充新建」——D7 的快照尾巴与它无关，先剥掉再比。
-    expect(out.replace(/｜覆盖前原件已存 \.agent\/snapshots\/[^\s]+$/, ""))
+    expect(stripSnapshotNote(out))
       .toBe(`已写入 huge.ts（${String(Buffer.byteLength("tiny\n", "utf8"))} 字节）`);
     expect(out).not.toContain("新建");
   });

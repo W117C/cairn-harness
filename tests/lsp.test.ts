@@ -1,6 +1,17 @@
 // M2a LSP 框架测试：stub server（fixtures/lsp/stub-server.mjs）+ 六操作 + 生命周期 + 诊断回流。
 // 坑：stub 用 plain node 跑（fixtures 不进 tsc），workspace 每用例独立，收尾 closeAllLspClients。
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { snapshotNote } from "../src/tools/snapshot.js";
+
+/** 剥掉「覆盖前原件已存 …」那句尾巴：它属于快照面，不是本条判卷要判的东西。
+ *  标记从**生产函数**派生，不在这里抄第二份文案——2026-10-05 修：原写法把正则写死成
+ *  `…/snapshots/[^\s]+$`，而后缀里后来加了带空格的说明（`4d52a16c`）⇒ 剥不掉、两支判卷同时红。
+ *  派生之后文案再改判卷自动跟上。 */
+function stripSnapshotNote(text: string): string {
+  const marker = snapshotNote("\u0000").split("\u0000")[0] ?? "";
+  const esc = marker.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return text.replace(new RegExp(esc + "[\\s\\S]*$", "u"), "");
+}
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -208,7 +219,7 @@ describe("诊断回流（M2a 任务 6）", () => {
     const res = await edit_file.run({ path: "a.ts", old_string: "hello", new_string: "bonjour" }, { workspace: ws });
     expect(res.ok).toBe(true);
     // 断言面 = 「不追加 <diagnostics> 后缀」。D7 覆盖前快照那句尾巴是另一件事，允许出现但不许在这里当诊断混进来。
-    expect(res.output.replace(/｜覆盖前原件已存 \.agent\/snapshots\/[^\s]+$/, "")).toBe("已替换 a.ts（1 处，+1 −1 行）");
+    expect(stripSnapshotNote(res.output)).toBe("已替换 a.ts（1 处，+1 −1 行）");
   });
 });
 
