@@ -1,0 +1,6 @@
+趟次=131｜字段可用面：verified 131/changedFiles 131/autoVerifyBeats 37
+两格都可判的趟=131｜其中写过盘的=96
+★ 开关唯一可能有对象的总体：写过盘且从没自调 verify 的趟 = 6（占可判趟的 5%、占写过盘趟的 6%）
+  名单（前 20，带出处）：B2-feature-export@bench-baseline-2026-10-04、B12-long-horizon@bench-baseline-2026-10-04、B2-feature-export@bench-head-d0ffe15e-a、B2-feature-export@bench-head-d0ffe15e-b、B12-long-horizon@bench-head-d0ffe15e-b、B4-bugfix-pagination@bench-reps3-2026-10-02
+同一批里 harness 补拍真的响过的趟=0／可判 37 趟
+读法：分母小、且这批留档的装配大多没装收束闸 ⇒ 这两个数都只是**下界**，不是发生率本身。

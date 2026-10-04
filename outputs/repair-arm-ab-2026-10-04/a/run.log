@@ -1,0 +1,8 @@
+[loop-eval] 判卷器自校：必绿仓→ok ✅ 必红仓→不 ok ✅
+[loop-eval] 靶子 fixtures/todo-app 当前起始态：红（该文件是生成物，任何一次 e2e/agent/gate 都会就地重置它 ⇒ 读数横比须看这一行）
+[loop-eval] 装配面（产品缺省开的键 ↔ 本跑器）：autoMemory:off-here autoVerify:same impactAnalysis:off-here promptCache:off-here subagentTools:same
+[loop-eval] 任务=B1-bugfix-crossfile,B2-feature-export,B3-refactor-callsite,B4-bugfix-pagination,B5-bugfix-async,B6-feature-flag,B7-feature-csv,B8-feature-memo,B9-refactor-rename,B10-refactor-dedupe,B11-refactor-signature,B12-long-horizon reps=1 system=base maxSteps=30 模型=mimo-v2.6-flash 价=价不可知〔没给 EVAL_PRICE_IN / EVAL_PRICE_OUT ⇒ 钱按「不可知」处理（不再静默吃缺省价）〕
+[loop-eval] B1-bugfix-crossfile rep1 FAIL 起点=红 读先于写=0 clarify=0 先批后写=N verify=0→null 闸拍=0 返修=没验 隐藏=红 工具=36/1败 重复=0 请求=30 拨数=1 tok=577134/3414 价不可知 319s 内存峰=193MB/9进程 cpu=3392ms 〔verify 未通过/未跑；held-out 没过（可见测试绿了但隐藏验收不认 ⇒ 大概率是特殊分支，不是根因）〔exit=1〕；runLoop 抛错:agent loop 超过 maxSteps=30，强制中止〕
+[loop-eval] B2-feature-export rep1 FAIL 起点=红 读先于写=2 clarify=0 先批后写=Y verify=2→false 闸拍=0 返修=红没回 隐藏=红 工具=31/2败 重复=0 请求=30 拨数=1 tok=267100/2916 价不可知 106s 内存峰=86MB/5进程 cpu=4466ms 〔verify 未通过/未跑；held-out 没过（可见测试绿了但隐藏验收不认 ⇒ 大概率是特殊分支，不是根因）〔exit=1〕；runLoop 抛错:agent loop 超过 maxSteps=30，强制中止〕
+[loop-eval] B3-refactor-callsite rep1 PASS 起点=红 读先于写=7 clarify=0 先批后写=N verify=1→true 闸拍=0 返修=一次绿 隐藏=无面 工具=12/0败 重复=0 请求=5 拨数=1 tok=28646/750 价不可知 43s 内存峰=183MB/6进程 cpu=4768ms
+[loop-eval] B4-bugfix-pagination rep1 FAIL 起点=红 读先于写=5 clarify=0 先批后写=N verify=1→true 闸拍=0 返修=一次绿 隐藏=无面 工具=12/0败 重复=0 请求=7 拨数=1 tok=41590/768 价不可知 46s 内存峰=194MB/5进程 cpu=5101ms 〔改了判卷面〕

@@ -1,0 +1,26 @@
+readings.json: 趟次=12｜字段可用面=verifyOkLast 12/12 verifyRecovery 12/12 autoVerifyBeats 12/12 assembly 12/12 seedVerifyOk 12/12 cny 12/12
+readings.json: 趟次=12｜字段可用面=verifyOkLast 12/12 verifyRecovery 12/12 autoVerifyBeats 12/12 assembly 12/12 seedVerifyOk 12/12 cny 12/12
+单变量自证：A 装配「autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same」
+            B 装配「autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same」
+  ⚠️ 差别不止返修那一枚 ⇒ 整组读数只能当两副不同装配的并列，不能当 A/B
+配对分母=12｜只在 A=0｜只在 B=0
+逐对（A→B）：
+  B1-bugfix-crossfile      A=过 B=过｜闸拍 A=0 B=0｜req 8→8 入token 47690→47794 出token 650→719 秒 38→35
+  B10-refactor-dedupe      A=过 B=红｜闸拍 A=0 B=0｜req 5→7 入token 28559→42034 出token 809→1112 秒 29→29
+  B11-refactor-signature   A=过 B=过｜闸拍 A=0 B=0｜req 9→8 入token 52800→47594 出token 910→788 秒 49→43
+  B12-long-horizon         A=过 B=红｜闸拍 A=0 B=0｜req 11→30 入token 80901→216228 出token 6267→2385 秒 95→107
+  B2-feature-export        A=红 B=红｜闸拍 A=0 B=0｜req 30→30 入token 240418→226319 出token 1991→2093 秒 146→94
+  B3-refactor-callsite     A=过 B=过｜闸拍 A=0 B=0｜req 6→5 入token 34806→28671 出token 733→767 秒 24→21
+  B4-bugfix-pagination     A=红 B=过｜闸拍 A=0 B=0｜req 7→7 入token 43846→40180 出token 810→535 秒 33→35
+  B5-bugfix-async          A=过 B=过｜闸拍 A=0 B=0｜req 4→4 入token 23091→23088 出token 476→478 秒 17→22
+  B6-feature-flag          A=过 B=过｜闸拍 A=0 B=0｜req 5→4 入token 28284→21913 出token 483→265 秒 27→22
+  B7-feature-csv           A=过 B=过｜闸拍 A=0 B=0｜req 10→6 入token 60592→35960 出token 770→562 秒 40→25
+  B8-feature-memo          A=过 B=过｜闸拍 A=0 B=0｜req 3→4 入token 15935→21925 出token 492→486 秒 21→18
+  B9-refactor-rename       A=过 B=过｜闸拍 A=0 B=0｜req 9→6 入token 54544→35204 出token 681→645 秒 51→19
+结局四象限：返修救回=1｜返修反坏=2｜两臂都过=8｜两臂都红=1
+机制核验：≥2 拍（返修真给了）A=0 B=0｜verifyRecovery 分布 A[greenFirst=11 noVerify=1] B[greenFirst=10 noVerify=2]
+⚠️ 分辨力=无：B 臂一次返修都没发生 ⇒ 这组读数**测不到**『翻默认有没有用』，只能说明这批任务没走到『闸拍出代码红』那一格。
+   下一步不是改口径，是换一个会走到那一格的题面（第 360 页列的那 7 趟就是候选）。
+成本（同一配对分母）：请求 A=107 B=119（Δ12）｜入 token A=711466 B=786910｜出 token A=15072 B=10835｜墙钟 A=9.5min B=7.8min
+钱：这一格无从判（env 里没有 EVAL_PRICE_IN/EVAL_PRICE_OUT ⇒ cny=NaN），所以只报 token 与请求数，不编一个价。
+退出异常：A=1 [B2-feature-export：agent loop 超过 maxSteps=30，强制中止]｜B=2 [B12-long-horizon：agent loop 超过 maxSteps=30，强制中止 / B2-feature-export：agent loop 超过 maxSteps=30，强制中止]
