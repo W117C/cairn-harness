@@ -13109,6 +13109,22 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 8. **量纲与没跑**：本轮跑的是**单支判卷**（9 条，主树）＋四臂探针；**没跑**全量核心判卷、`head-cert` 认证、`mutate-verify` 真杀（新锚点要等落库后在干净树逐条杀）。凭证与认证读数另起一页。
 9. **状态一句话**：`#39`／`#57`–`#66`／`#68` 照旧（`#62`／`#63` 隔壁已收），`#67` 待对齐，`#69` 半备妥＋半待并，`#70`／`#72` 待办，`#73` A 类已落、B 类等规格面让位，`#74`–`#78` 照旧，`#79` 等文件让位，`#80` 等裁决，`#81` 等作者补证人，`#82` 第二簇＝`#85` 等落库，`#83`／`#86` 照旧，**`#84` plan 半已落、goal 半在隔壁**，`#87`–`#100` 新增（多数前置＝别人的面让位）。本页不宣布任何「绿了」。
 
+## 2026-10-04 · 第 382 页：能力 10 落盘那一跳接通——「从失败轨迹学习」不再是零读数（`#10` 那一格第一次有生产者）；并记一条读数纪律：判卷文件名**编错不会报错**
+
+这一笔是并行子代理做完实现与判卷、主线程复核后并入的（它的活全部留在隔离 worktree，主树那 160+ 项别人在飞改动一行未碰）。
+
+1. **现读更正：台账那条「`gym-draft` 通路齐、盘上零草稿」的因由是缺接线，不是登记口径、也不是生成缺陷。**
+   三个取料面各自核过：`draftFromEvents`／`renderDraft` 全仓**零生产调用方**，唯一入口是手工 CLI `scripts/gym-draft.ts`，而它**不在 `package.json`**（HEAD 只有 `gym-check`）、缺省 dry-run、要 `--apply` 才写盘；两棵树（子代理 worktree 与主树）都无 `fixtures/gym/drafts`、全仓 0 份 `DRAFT.md`、`git log --all --diff-filter=A -- fixtures/gym/drafts` 为空；`.gitignore` 不含 drafts ⇒ 排除「被忽略了所以看不见」。另配一支**哨兵**（证明尺不是恒 0）：把一条真失败轨迹喂给 CLI `--apply` ⇒ 盘上真出 3 个文件，`--check` 退 1 并点名缺 `repo`/`negative`/`expect`。`gym-check` 的 A4 那一格此前**刻意不判红**，所以这条洞在门上是安静的。
+2. **改了什么**：`src/agent/gym/draft.ts` 新增 `writeDraftFromFailedSession`（触发条件＝父流最后一次 verify 红**且非环境红**，复用唯一谓词 `isEnvVerifyCause`，不在这里再造一份「什么算环境红」；落点沿用 `draftDirFor`；**已存在不覆盖不堆叠**；`DRAFT.md` 钉入 `failureDigestFromEvents` 原文，点名失败原因）；`GymDraft` 多带一个 `verifyCause`（与 `verifyOk` 同一拍取，避免第二份「取最后一次」的派生）；`src/agent/memory/distill.ts` 在 `writeLessons` 同一格接上这一跳（同样不经模型、跳过原因静默——成功轮与「工作区没有靶场」是绝大多数，每轮都 emit 会淹事件流；这一跳挂了不改沉淀结局，与 `writeLessons` 同一取舍）；`package.json` 补 `gym-draft` 入口。
+3. **判卷两层**（新增 `tests/gym-draft-wiring.test.ts` 8 条）：①真落盘且 DRAFT.md 点名失败原因；②同一条轨迹跑两次不堆叠也不盖掉人已补过的件；③③b 两条反向证人（成功轮不落、`cause=timeout` 那种环境红也不落）；④工作区没有靶场 ⇒ 不撒文件（产品跑在别人的仓里不该留东西）；⑤取不到会话 id ⇒ 不产（证据指针要指得出哪条会话）；⑥⑦ 走**生产入口** `runSessionEndDistill` 的正反两半（真红会话 ⇒ 草稿真出现；同一条顺利会话 ⇒ 一个都不落）。
+4. **读数（取料目录 `outputs/gym-draft-wiring-2026-10-05`，两份原文都在里面）**：
+   - 主线程复核（并入主树后现跑）＝`Test Files 3 passed (3)`、`Tests 44 passed (44)`、`EXIT=0`，原文 `main-thread-rerun-44.log`（18:04，三支：`tests/distill.test.ts`／`tests/gym-draft-wiring.test.ts`／`tests/gym-draft.test.ts`）。
+   - 造红一台（**主线程重跑**，用本笔锚点 `gym-draft-hop-dropped-from-distill` 那条 `apply` 原样注入：把 distill 那一跳换成 stub）＝`Tests 1 failed | 7 passed (8)`、`EXIT=1`，红的正是⑥那条接线条；原文 `red-machine-stub-hop.log`。复原＝`cp` 备份后 `cmp` 逐字节一致。
+   - **子代理自己那三份日志已不在盘上**（`/tmp/wt-*` 被清），它报的「先红 `7 failed | 1 passed`」与「stub 自检只有⑥红」这两条因此是**不可回查的转述**——主线程重跑那两台就是为了让页上的每个数都有原文可引（第 5 条那条纪律的同一格）。
+5. **一条读数纪律（我自己刚踩的，写下来而不是「下次注意」）**：第一次复核我点了三支判卷，其中一支文件名是我**凭记忆编的**（`tests/memory-distill.test.ts` 并不存在，真名是 `tests/distill.test.ts`）——vitest 对「要跑的文件不存在」**不报错**：`EXIT=0`、`Test Files 2 passed (2)`，看汇总行会读成「跑过了」。所以从今天起，说「这几支绿了」之前要**逐条 `[ -f ]` 核过文件名**，且核对 `Test Files` 的括号里那个总数等于我点名的支数；这一格与「计数探针先证退出码再数输出」同族，都是**坏命令被读成 0／被读成过**。
+6. **一处刻意不做（带代价，不是遗漏）**：子代理建议的第二支接线（bench 跑完红轨迹也自动落草稿，`scripts/loop-eval.ts` 约 4 行）**不接**——bench 每红一趟就在 `fixtures/gym/drafts/` 撒未跟踪目录，会直接污染隔壁会话的 hunk 归属读数，而配套要改的 `.gitignore` 此刻在别人手里（未提交）。登记为 `#101`，等 `.gitignore`／`loop-eval.ts` 腾出手再谈，且谈之前要先量「一趟撒几个」。
+7. **量纲与没跑**：本轮跑的是三支判卷（44 条）＋ `node --check` 变异表；**没跑**全量核心判卷、`head-cert` 认证、`mutate-verify` 真杀（两条新锚点等落库后在干净树逐条杀）。本页不宣布任何「绿了」。
+
 
 
 

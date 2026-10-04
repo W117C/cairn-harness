@@ -8,8 +8,10 @@ import { projectContext } from "../context";
 import type { Provider, ProviderMessage } from "../../providers";
 import type { Tool, ToolContext } from "../../tools/base";
 import type { GateMeta } from "../../permissions/autonomy";
-import { LESSON_MEMORY_TYPE, distillLessons } from "./lessons";
+import { LESSON_MEMORY_TYPE, distillLessons, sessionOf } from "./lessons";
 import { projectMemoryDir, writeTopic } from "./store";
+// 能力 10 的落盘那一跳（失败轨迹 → 靶场草稿）；纯取料在 gym/draft，本模块只负责在会话结束时递上 events 与证据。
+import { writeDraftFromFailedSession } from "../gym/draft";
 
 /** 沉淀指令（§6.5 雏形：四类型检查 + skip 纪律 + 唯一写入口）。 */
 export const DISTILL_INSTRUCTION = [
@@ -200,6 +202,21 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
      正是「不许凭空总结」要的那一支。放在之后的话，一轮 provider 异常（failed 结局）就会
      把已经算好的证据一起带走。失败不改变下面的结局（见 writeLessons 的取舍注释）。 */
   await writeLessons({ events, logPath: opts.logPath, workspace: opts.workspace, emit: opts.emit });
+  /* 能力 10 的另一半（2026-10-05 接通）：失败轨迹 ⇒ 靶场草稿。此前 `renderDraft` 只有手工 CLI
+     （`scripts/gym-draft.ts`，缺省 dry run + 要 `--apply`）会调，判卷/bench 跑完一片红而
+     `fixtures/gym/drafts/` 恒为 0 条。放在 `writeLessons` 同一格：同样**不经模型**的确定性落盘，
+     且此刻 events / digest / workspace 都已在手。跳过原因静默（成功轮与「工作区没有靶场」是绝大多数，
+     每轮都 emit 会把事件流淹掉），只有真写失败才出声；这一跳挂了也不改下面的结局（同 writeLessons 的取舍）。 */
+  try {
+    const drafted = await writeDraftFromFailedSession({
+      events, caseId: sessionOf(opts.logPath), digest, workspace: opts.workspace,
+    });
+    if (drafted.skipped === "write-error") {
+      await opts.emit({ type: "tool_result", callId: "", ok: false, output: "[gym] 失败轨迹草稿写入失败: " + drafted.why });
+    }
+  } catch (err) {
+    await opts.emit({ type: "tool_result", callId: "", ok: false, output: "[gym] 失败轨迹草稿异常: " + (err instanceof Error ? err.message : String(err)) });
+  }
   const instruction = digest.length > 0 ? digest + "\n\n" + DISTILL_INSTRUCTION : DISTILL_INSTRUCTION;
   /* 真 session provider 以事件日志为唯一事实源（`stream(_messages,_tools)` 明确忽略入参），
    * 所以「只在内存塞一条指令」是发不出去的——那正是本模块长期存在的缺口（见 DistillOptions

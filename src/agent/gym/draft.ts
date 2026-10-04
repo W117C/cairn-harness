@@ -10,7 +10,9 @@
 //  - `negative.json`（已知错误解，A2 反例控制）要的是"看着像修好了但尺子判失败"的人造解，自动生成＝编数；
 //  - sha256 冻结登记必须人做——改判据＝作弊是本仓第一纪律。
 // 因此本模块只产 task.md / 候选 expect / 一份缺件清单，且**验证未知时不产 expect.json**（不猜一个 false 冒充判据）。
-import type { AgentEvent } from "../../events";
+import { isEnvVerifyCause, type AgentEvent, type VerifyCause } from "../../events";
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 /** 只有这两个工具会真的改盘（run_shell 的改动无法从事件里归因到文件）。 */
 export const DRAFT_WRITE_TOOLS: ReadonlySet<string> = new Set(["write_file", "edit_file"]);
@@ -28,6 +30,9 @@ export interface GymDraft {
   workerWrites: number;
   /** 最后一次 verify 的结果；null = 这条会话压根没验过。 */
   verifyOk: boolean | null;
+  /** 与 `verifyOk` **同一拍**的归因（最后一次父流 verify 的 cause；没验过则 null）。
+   *  带着它而不是让消费方各扫一遍事件：`verifyOk` 的「取最后一次」规则只允许有一份。 */
+  verifyCause: VerifyCause | null;
   verifyAttempts: number;
   toolCalls: number;
   /** **父流**里没有结果的工具调用笔数：会话中途被切断 / 结果没落盘都长这样。
@@ -48,7 +53,7 @@ export function draftFromEvents(events: readonly AgentEvent[]): GymDraft {
   const pending = new Map<string, number>();
   const written = new Set<string>();
   let failedWrites = 0, workerWrites = 0, toolCalls = 0, verifyAttempts = 0, hadError = false;
-  let verifyOk: boolean | null = null;
+  let verifyOk: boolean | null = null, verifyCause: VerifyCause | null = null;
   for (const e of events) {
     switch (e.type) {
       case "user_message":
@@ -84,6 +89,7 @@ export function draftFromEvents(events: readonly AgentEvent[]): GymDraft {
         if (e.agent_id !== undefined) break;
         verifyAttempts++;
         verifyOk = e.ok; // 取最后一次：case 问的是"这条链最终验过了吗"
+        verifyCause = e.cause ?? null; // 与 verifyOk 同一拍：归因也只能取最后一次，两处规则必须同一条
         break;
       case "error":
         hadError = true;
@@ -116,6 +122,7 @@ export function draftFromEvents(events: readonly AgentEvent[]): GymDraft {
     failedWrites,
     workerWrites,
     verifyOk,
+    verifyCause,
     verifyAttempts,
     toolCalls,
     unansweredCalls,
@@ -175,4 +182,72 @@ export function promoteBlockers(relPaths: readonly string[]): string[] {
       : "expect.json：既没有判据也没有候选集");
   }
   return out;
+}
+
+/* ============================== 落盘那一跳（能力 10 的接线端） ==============================
+ * 上面 `renderDraft` 是纯函数，而它在 HEAD 上的**唯一**调用方是手工 CLI `scripts/gym-draft.ts`
+ * （缺省 dry run，要 `--apply` 才写盘，也不在 `package.json` 的脚本表里）⇒ 判卷/bench 每跑一片红，
+ * `fixtures/gym/drafts/` 仍是 0 条（2026-10-05 现读：worktree 与主树两侧都无该目录，
+ * `find` 全仓 0 份 `DRAFT.md`，`git log --all --diff-filter=A -- fixtures/gym/drafts` 空）。
+ * 本函数把「一条已经跑完的失败会话」变成盘上的草稿，触发条件三条，每条都有理由：
+ *  ① **失败 = 最后一次父流验证红，且不是环境红**（`verifyOk`/`verifyCause` 走本模块既有的「取最后一次」
+ *    规则，环境红由 `src/events` 里唯一那只 `isEnvVerifyCause` 判）：这里不再另写一份「什么算失败」的表。
+ *    环境红（runner 缺失/超时/被取消）该修环境，把它固化成 case 就是编尺子；验绿的轮次压根不是失败。
+ *  ② 工作区得**自带靶场**（`fixtures/gym/index.json` 在场）：产品跑在别人的仓里不该往人家目录撒文件；
+ *  ③ **已存在即不覆盖、不堆叠**：草稿是给人的收件箱，人可能已经往里补了 `repo/` 与 `negative.json`。
+ * 本文件头那三条纪律在这里原样成立：写的还是 task.md / DRAFT.md / expect.candidate.json 那三份，
+ * `loadCase` 只认 expect.json，所以自动落盘的草稿永远跑不进判据面，sha256 冻结仍是人的动作。 */
+
+/** 没落盘的原因（`null` = 真落盘了）。每一格都要有名字：调用方与判卷都靠它分「不该写」与「写坏了」。 */
+export type DraftSkipReason = "not-a-failure" | "no-session-id" | "no-gym-workspace" | "already-drafted" | "write-error";
+
+export interface DraftWriteOutcome {
+  /** 落点目录；未落盘为 null。 */
+  dir: string | null;
+  /** 实际写出的文件名；未落盘为空数组。 */
+  files: string[];
+  skipped: DraftSkipReason | null;
+  /** `write-error` 时的原文——写失败要能被读出来，不能只留一个枚举值。 */
+  why: string;
+}
+
+export async function writeDraftFromFailedSession(opts: {
+  events: readonly AgentEvent[];
+  /** 会话 id：事件里不带 session，唯一出处是日志文件名（由调用方按 `sessionOf` 那条规则取）。 */
+  caseId: string;
+  /** 失败证据**原文**（`failureDigestFromEvents` 的产出），写进 DRAFT.md 供人核对；空串视为上游没给出证据 ⇒ 不产。 */
+  digest: string;
+  /** 工作区根：只有它自带靶场才落盘（见上面第 ② 条）。 */
+  workspace: string;
+}): Promise<DraftWriteOutcome> {
+  const none = (skipped: DraftSkipReason, why = ""): DraftWriteOutcome => ({ dir: null, files: [], skipped, why });
+  const d = draftFromEvents(opts.events);
+  // 「这条真的失败了吗」复用两处**既有**裁决，不在这里立第三份表：
+  //  · `draftFromEvents` 的「取最后一次父流 verify」规则（验绿 = 这次没失败；压根没验过 = 拿不到判据，
+  //    与本文件头「验证未知时不产 expect.json」是同一条纪律的另一半）；
+  //  · `isEnvVerifyCause`（src/events 里唯一那只环境谓词）——环境红该修环境，把它固化成 case 就是编尺子。
+  // `digest` 只当**证据原文**用（DRAFT.md 里那段），不再兼任触发条件：它对环境红也会出声，口径不同。
+  const red = d.verifyOk === false && !(d.verifyCause !== null && isEnvVerifyCause(d.verifyCause));
+  if (!red || opts.digest.trim() === "") return none("not-a-failure");
+  if (opts.caseId === "") return none("no-session-id"); // 指不出「哪条会话」的草稿没有证据价值
+  const gymRoot = join(opts.workspace, "fixtures", "gym");
+  const index = await stat(join(gymRoot, "index.json")).catch(() => null);
+  if (index === null || !index.isFile()) return none("no-gym-workspace");
+  const dir = draftDirFor(gymRoot, opts.caseId); // 沿用既有落点规则：cases/ 之外、按会话 id 一目录
+  if (await stat(dir).then((s) => s.isDirectory()).catch(() => false)) return none("already-drafted");
+  const files = renderDraft(d, opts.caseId);
+  // 「点名失败原因」= 把**同一份**证据原文钉进 DRAFT.md，而不是在这里再总结一遍——
+  // 两处各写一遍迟早漂（本仓反复踩的那一格）。
+  const draftMd = files["DRAFT.md"] + "\n## 为什么固化这条（失败证据原文，出自 `failureDigestFromEvents`）\n" + opts.digest.trim() + "\n";
+  try {
+    await mkdir(dir, { recursive: true });
+    for (const [name, text] of Object.entries(files)) {
+      await writeFile(join(dir, name), name === "DRAFT.md" ? draftMd : text, "utf8");
+    }
+  } catch (err) {
+    // 半份草稿比没有草稿更坏：人对着缺件的收件箱会读成「上游没跑过」。清掉自己造的半成品，读数保持 0。
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+    return none("write-error", err instanceof Error ? err.message : String(err));
+  }
+  return { dir, files: Object.keys(files), skipped: null, why: "" };
 }

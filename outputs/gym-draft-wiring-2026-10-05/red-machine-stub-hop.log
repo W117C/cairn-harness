@@ -1,0 +1,36 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/Cairn/deepseek harness[39m
+
+ [31m❯[39m tests/gym-draft-wiring.test.ts [2m([22m[2m8 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 12[2mms[22m[39m
+   [32m✓[39m writeDraftFromFailedSession（失败轨迹 ⇒ 盘上草稿） [2m(6)[22m
+     [32m✓[39m ① 喂一条失败轨迹产物：草稿真落盘，且 DRAFT.md 点名失败原因[32m 3[2mms[22m[39m
+     [32m✓[39m ② 同一条轨迹跑两次 ⇒ 不重复堆草稿，也不盖掉人已补过的件[32m 2[2mms[22m[39m
+     [32m✓[39m ③ 反向证人：非失败轨迹不落草稿（成功轮不产尺子素材）[32m 1[2mms[22m[39m
+     [32m✓[39m ③b 反向证人：只有环境红的轨迹也不产（cause=timeout 不是模型的失败）[32m 0[2mms[22m[39m
+     [32m✓[39m ④ 工作区没有靶场（fixtures/gym/index.json 缺席）⇒ 不落草稿：产品跑在别人的仓里不该撒文件[32m 0[2mms[22m[39m
+     [32m✓[39m ⑤ 会话 id 取不到（证据指针要求指得出哪条会话）⇒ 不产[32m 0[2mms[22m[39m
+   [31m❯[39m 接线：会话结束沉淀轮真的会走这一跳 [2m(2)[22m
+[31m     [31m×[31m ⑥ runSessionEndDistill 跑一条失败会话 ⇒ fixtures/gym/drafts/<会话 id> 真出现[39m[32m 4[2mms[22m[39m
+     [32m✓[39m ⑦ 反向半边：同一条**顺利**会话经同一入口 ⇒ 一个草稿都不落[32m 1[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/gym-draft-wiring.test.ts[2m > [22m接线：会话结束沉淀轮真的会走这一跳[2m > [22m⑥ runSessionEndDistill 跑一条失败会话 ⇒ fixtures/gym/drafts/<会话 id> 真出现
+[31m[1mError[22m: ENOENT: no such file or directory, scandir '/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/gymdraft-wire-hntt6n/fixtures/gym/drafts'[39m
+[36m [2m❯[22m listDrafts tests/gym-draft-wiring.test.ts:[2m73:11[22m[39m
+    [90m 71|[39m
+    [90m 72|[39m async function listDrafts(ws: string): Promise<string[]> {
+    [90m 73|[39m   return (await readdir(join(ws, "fixtures", "gym", "drafts"), { withF…
+    [90m   |[39m           [31m^[39m
+    [90m 74|[39m }
+    [90m 75|[39m
+[90m [2m❯[22m tests/gym-draft-wiring.test.ts:[2m164:12[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m7 passed[39m[22m[90m (8)[39m
+[2m   Start at [22m 02:06:09
+[2m   Duration [22m 285ms[2m (transform 78%, import 16%, tests 5%, worker 1%)[22m
+

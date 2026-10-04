@@ -1251,6 +1251,15 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (opts.sessionId) seedPendingPlanFromEvents(await replay(opts.logPath)", "if (opts.sessionId) void (await replay(opts.logPath)"),
     expectFail: "第一轮方案被拒 ⇒ 第二轮（新 run）写盘仍被方案门挡住，盘上不留痕",
   },
+  // ---- 能力 10 落盘那一跳：失败轨迹 ⇒ 靶场草稿（此前只有手工 CLI 会调，盘上恒 0 条）----
+  {
+    id: "gym-draft-hop-dropped-from-distill",
+    src: "src/agent/memory/distill.ts",
+    test: "tests/gym-draft-wiring.test.ts",
+    desc: "沉淀轮里这一跳换成 stub ⇒ 红轨迹永远不进靶场：草稿面只剩手工 CLI，「从失败轨迹学习」又回到零读数",
+    apply: (s) => s.replace("const drafted = await writeDraftFromFailedSession({", 'const drafted = await Promise.resolve({ skipped: "stub" }); if (false) await writeDraftFromFailedSession({'),
+    expectFail: "⑥ runSessionEndDistill 跑一条失败会话 ⇒ fixtures/gym/drafts/<会话 id> 真出现",
+  },
   {
     id: "budget-unpriced-tokens-swallowed",
     src: "src/agent/orchestrator-join.ts",
