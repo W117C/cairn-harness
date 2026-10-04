@@ -13528,6 +13528,34 @@ const MUTATIONS = [
     apply: (s) => s.replace("  if (!ops.exists(readingsPath)) return null;", "  return null;"),
     expectFail: "有旧读数 ⇒ 真调一次 rename，且目标名带树号与时刻戳（冒号点号已换成横线）",
   },
+  // ---- 2026-10-05 补：#50 的欠账里、台账点过名的那几条候选 ----
+  {
+    id: "spawn-agent-counted-as-disk-write",
+    src: "src/agent/write-face.ts",
+    test: "tests/write-face.test.ts",
+    desc: "摘掉 `NOT_THIS_WORKSPACE` 那道排除 ⇒ 派生 worker / 快照 / 进程这类"
+      + "「写的是别处」的工具被算成改了**本工作区**的盘，方案门与收束闸因此对它们误判",
+    apply: (s) => s.replace("  return isWriteCall(tool) && !NOT_THIS_WORKSPACE.has(tool);", "  return isWriteCall(tool);"),
+    expectFail: "派生 worker 本身不改盘（它写的是自己那块 worktree）⇒ false",
+  },
+  {
+    id: "scratch-tree-prefix-becomes-exact",
+    src: "scripts/lib/scratch-tree-naming.ts",
+    test: "tests/scratch-tree-naming.test.ts",
+    desc: "把名字里的 sha 前缀比较从 `startsWith` 改成完全相等 ⇒ `verify-<sha7>`／"
+      + "`head-cert-<sha7>` 这一整族（本仓实际使用的短前缀形状）全被判成「名字在说谎」",
+    apply: (s) => s.replace("    if (!head.toLowerCase().startsWith(prefix)) {", "    if (head.toLowerCase() !== prefix) {"),
+    expectFail: "名字与 HEAD 相符 ⇒ 一条都不许多报（主树与暂存根外的树不参与）",
+  },
+  {
+    id: "trim-token-keeps-trailing-punct",
+    src: "scripts/lib/agents-command-face.ts",
+    test: "tests/agents-command-face.test.ts",
+    desc: "收尾标点不再剥掉 ⇒ `pnpm --filter x test` 那条命令的脚本名被抽成 `test\``（\S+ 把反引号"
+      + "一起吃进来），而根 scripts 里当然没有这个名字 ⇒ 一道本来该绿的尺永远喊「脚本不存在」",
+    apply: (s) => s.replace("const trimToken = (s: string): string => s.replace(/[`'\"),;:。，；]+$/gu, \"\");", "const trimToken = (s: string): string => s;"),
+    expectFail: "命令抽取的形状：--filter 给对，裸 pnpm 不把开关当脚本",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
