@@ -7,7 +7,7 @@
     "cairn": "./bin/cairn.mjs"
   },
   "engines": {
-    "node": ">=20.3.0 <25"
+    "node": ">=20.11.0 <25"
   },
   "scripts": {
     "gates": "node --import tsx scripts/gates.ts",

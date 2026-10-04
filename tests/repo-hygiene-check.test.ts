@@ -119,13 +119,24 @@ describe("oversizedFiles：超帽判红且点名", () => {
 
 describe("帽的取值有据（防「悄悄把帽调到让门绿」）", () => {
   // 这两条不是测行为，是测**门的诚实度**：帽必须仍高于现状，且是文档里写着的那个数。
-  it("取料帽 60%、体量帽 2800，与 docs/optimization-plan-2026-10-02.md 登记的一致", () => {
-    expect(OUTPUTS_SHARE_CAP).toBe(0.6);
+  it("取料帽 70%、体量帽 2800，与 docs/optimization-plan-2026-10-02.md §体量门登记的一致", () => {
+    // 0.60 → 0.70 是 2026-10-05 的**第一次降帽裁决**（业主拍板），依据与读数写在
+    // scripts/repo-hygiene-check.ts 的 OUTPUTS_SHARE_CAP 注释里：0.60 那档立门当天即被
+    // 撞破（10-03 62.1% → 10-04 67.4%），机制是取料入库快过源码，与「证人与页同笔落库」
+    // 纪律方向相反。不选「outputs/ 移出版本控制」是因为那会与该纪律正面冲突。
+    expect(OUTPUTS_SHARE_CAP).toBe(0.7);
     expect(SRC_FILE_LINE_CAP).toBe(2800);
+    // 帽不许被悄悄调回：降帽一次一档，要再降必须改这一处并同步文档，不许只改门。
+    expect(OUTPUTS_SHARE_CAP).toBeGreaterThan(0.6);
   });
 
   it("体量帽仍高于现状最大文件 2761（降到 2761 及以下 ⇒ 门必红，那是降帽时刻该有的红）", () => {
     expect(SRC_FILE_LINE_CAP).toBeGreaterThan(2761);
+  });
+
+  it("帽不许被调到低于仓库自己的历史取料水位（0.593），否则这道门只会永远红", () => {
+    // 2443/2443*0 … 精确算：1449/2443 = 0.5931（立门当天的实测）。
+    expect(OUTPUTS_SHARE_CAP).toBeGreaterThanOrEqual(1449 / 2443);
   });
 });
 

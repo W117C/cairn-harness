@@ -37,8 +37,25 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
  * 实测 2026-10-02：1449 / 2443 = 59.3% ⇒ 帽取 0.60。
  * 这个帽只封**新增**：本门不追溯、不删历史取料（那是别的会话的证据）。
  * 换句话说它判的是「占比还在不在涨」，不是「过去该不该提交这些」。
+ *
+ * ── 2026-10-05 第一次降帽裁决（业主拍板「降帽到 70% 并补进认证面」）──
+ * 0.60 这一档**立门当天即被撞破**，此后一路涨：
+ *   2026-10-03 评审实测 1699 / 2735 = 62.1%；
+ *   2026-10-04 晚 实测 2279 / 3380 = 67.4%；
+ *   2026-10-05 00:0x 现读 2287 / 3388 = 67.5%。
+ * 机制不是"某天写坏了一笔"：110 笔提交里 62 笔动 `outputs/`、新增 299 个文件
+ * （2026-10-03 台账读数）——**取料入库速度本来就快过源码**，而本仓的纪律是
+ * 「证人与页同笔落库」，两者方向相反。
+ *
+ * 为什么降帽而不是把 `outputs/` 移出版本控制：后者会与那条纪律正面冲突——
+ * 本仓全部凭证页都靠 `outputs/` 随仓库走，移出去就没有"页与证人同笔"这回事了。
+ * 降帽只是**承认现实并保住门还能响**；真正的治理（取料按天归档、只留里程碑）
+ * 是另一件事，不在本次裁决内。
+ *
+ * 降帽纪律照旧：**一次一档、只准调高不许调低**、每档写清降到多少与现读是多少。
+ * 下一档 0.75 的条件是：先有一轮把取料占比真正压下来的治理，否则只会再撞一次。
  */
-export const OUTPUTS_SHARE_CAP = 0.6;
+export const OUTPUTS_SHARE_CAP = 0.7;
 
 /**
  * ② 面：src 下单个 .ts 文件的行数帽。
@@ -154,12 +171,25 @@ export interface SelfTest {
 export function selfTests(): SelfTest[] {
   const out: SelfTest[] = [];
 
-  // 面①：现状绿
-  const nowGreen = outputsShareVerdict({ total: 2443, outputs: 1449, rest: 994 });
+  // 面①：一条**明确在帽内**的读数 ⇒ 绿。
+  // 原稿这里写的是 {2443, 1449}（2026-10-02 的实测）却命名为「现状」，而"现状"每天都在动
+  // ⇒ 单测全绿而门本体红，是一次**假绿**（2026-10-03 评审 G2）。现改为两件事分开：
+  //   · 这一格只验「判据能转绿」，用一条与任何时点无关的合成读数；
+  //   · 历史里程碑另立一格 SH1b，按它自己的名字归档，不再冒充现状。
+  // 若哪天帽被降到 0.59 以下，SH1b 会红——那是**该红**的信号：帽已经压到仓库自己的历史水位
+  // 之下，必须同时处理存量取料，不能只靠这道门追新增。
+  const underCap = outputsShareVerdict({ total: 1000, outputs: 500, rest: 500 });
   out.push({
-    id: "SH1-现状占比在帽内⇒绿",
-    ok: nowGreen.ok && nowGreen.share > 0.59 && nowGreen.share < 0.60,
-    detail: nowGreen.detail,
+    id: "SH1-明确在帽内的读数⇒绿（合成，不用任何时点的真值）",
+    ok: underCap.ok,
+    detail: underCap.detail,
+  });
+  // 面①：2026-10-02 立门时的实测（历史里程碑，非现状）
+  const milestone = outputsShareVerdict({ total: 2443, outputs: 1449, rest: 994 });
+  out.push({
+    id: "SH1b-2026-10-02 立门读数（历史里程碑）仍在当前帽内",
+    ok: milestone.ok && milestone.share > 0.59 && milestone.share < 0.60,
+    detail: milestone.detail,
   });
   // 面①：占比涨过帽 ⇒ 必须红（反向验证）
   const grew = outputsShareVerdict({ total: 1000, outputs: 900, rest: 100 });

@@ -16,7 +16,7 @@
   pnpm install --frozen-lockfile
   pnpm typecheck
   pnpm test
-  pnpm gates --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check
+  pnpm gates --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check,gate-check,mutate-needles-check,repo-hygiene-check
   ```
 
 - **校验状态（诚实标注）**：YAML 已用 `ruby -ryaml` 解析通过（结构化读取成功，不是"看着像"）；
@@ -31,8 +31,14 @@
 | `mutate-needles-check` | 红：4 条锚点的针脚被 `d1371dd` 搬走实现 | 同一趟里这道门 `✅ mutate-needles-check exit=0`；条数与阻断数取自主树那份 `needles.log`（`针脚体检：1238 条 —— 阻断 0`） |
 
 原则没变：**已知红不进 CI**（把红灯接进流水线只会训练人忽略它）。这两道修好了就加回——
-就是 workflow 里那句注释预留的动作，10-02 兑现。名单与 `CERT_GATES` 的**集合相等**由脚本核过
-（两边各 22 道、双向差集为空；顺序不要求一致）。
+就是 workflow 里那句注释预留的动作，10-02 兑现。名单与 `CERT_GATES` 的**集合相等**由
+`tests/cert-gate-face.test.ts` 的「手抄的第二份名单必须与唯一事实源逐项相等」逐趟钉住
+（两份手抄件：workflow 那句 `--only=` 与本页下面那个复跑块；顺序不要求一致）。
+> ⚠️ 第 319 页勘误：这一段原先写「**由脚本核过**（两边各 22 道、双向差集为空）」——那是 10-02
+> **人工核对**的记录，被写成了常态性质的样子，而当时**并不存在**这样一份判据（全仓 `grep` 无任何
+> 引用 `.github/workflows` 的判据）。代价当场就出现了：写这句话的时候，**本页自己的复跑块少了
+> `gate-check` 与 `mutate-needles-check` 两道门**（20 项 vs 名单 22 项），而那份"脚本核过"本该抓到它。
+> 现已补成判据并修好那一行；「核对过一次 ≠ 此后每趟都核」这一条教训按同族记在判卷注释里。
 
 ### 更重的门为什么也不进 L1
 
