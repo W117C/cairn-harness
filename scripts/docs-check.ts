@@ -8,7 +8,10 @@
 // 水位**只准调低**，不再被命中的条目会报成 stale 红，故豁免不会静默烂在这儿）。
 
 export interface Finding {
-  rule: "D-1" | "D-2" | "D-3" | "D-4" | "D-5" | "D-7" | "D-8" | "D-9" | "D-10" | "D-11" | "W";
+  // `D-12`（省略式点名）是**补进这条联合的**：新增规则 `checkAbbrevRefs` 已经在产出它，
+  // 但 id 没进这个联合 ⇒ `tsc` 红两条（`Type '"D-12"' is not assignable to ...`）。
+  // 与上面 `abbrev` 那一处是同一个漏法：**新增一个面要改的清单多于一处**，漏哪一处都是红。
+  rule: "D-1" | "D-2" | "D-3" | "D-4" | "D-5" | "D-7" | "D-8" | "D-9" | "D-10" | "D-11" | "D-12" | "W";
   file: string;
   detail: string;
   /** 该判据的实测量纲值（D-1 = 字节，D-7 = 文件数）。有值时水位按"量"豁免；无值时按"条数"豁免。 */
@@ -233,9 +236,31 @@ export const LEGACY_WITNESS_REFS: readonly string[] = [
 export const LEGACY_WITNESS_REF_REASON =
   "补不了的证人点名才登记（页已入库且工件确实拿不到）；只准调低，不再命中即报 stale";
 
-/** D-11：凭证页点名的每一条 dated 工件，必须能在 HEAD 里追到。
- *  取值域＝凭证页（不是整本台账）：判据讲的是「凭证页引的证人随没随页落库」，铺宽到整本会把我自己
- *  那条 09-26 时代的老账（现读 61 条 miss）算进来——那是另一件事，别混进这一笔（规则 345 的分面宽度）。 */
+/** D-12（第 292 页）：台账里的**省略式点名**取料面解析不到。`ledgerWitnessRefs` 只认
+ *  `outputs/<dated>/全名` 这一种形状，写成 `.../x.log` 的那一半永远不进分母 ⇒
+ *  页承诺了证人、门却看不见（这是漏检那一侧：假绿，不是假红——第 290 页补⑴ 那 3 条红是反方向）。
+ *  谓词只认「行内代码里以 `.../` 开头」这一种：同行举例用的带引号八进制串（`"outputs/.../\346…"`，
+ *  第 290 页讲 git 转义缺陷时引的原文）不算点名，所以不能被这条一起抓进来。 */
+export const ABBREV_REF_RE = /`\.\.\.\/[\w.()-]+/gmu;
+/** 上线时的现读存量＝7 处（全部在第 290 页补⑴ 第 12 项那一串里；逐条清单见
+ *  `outputs/abbrev-face-census-292-2026-10-01/census.txt`，谓词与这里同一份）。
+ *  台账只追加 ⇒ 这 7 处删不掉，所以帽就停在 7：多一处即红，**少一处也红**（帽不许空转）。 */
+export const LEGACY_ABBREV_REF_CAP = 7;
+
+export function checkAbbrevRefs(text: string, cap: number = LEGACY_ABBREV_REF_CAP): { hits: number; findings: Finding[] } {
+  const hits = (text.match(ABBREV_REF_RE) ?? []).length;
+  const findings: Finding[] = [];
+  if (hits > cap) {
+    findings.push({ rule: "D-12", file: LEDGER_FILE, detail: `省略式点名 ${String(hits)} 处 > 帽 ${String(cap)}：形如 \`.../x.log\` 的写法取料面解析不到 ⇒ 页里承诺了证人而门看不见。修法＝写成全名，别把帽调高` });
+  } else if (hits < cap) {
+    findings.push({ rule: "D-12", file: LEDGER_FILE, detail: `省略式点名只剩 ${String(hits)} 处而帽还是 ${String(cap)}——把 LEGACY_ABBREV_REF_CAP 调低（存量帽不许空转）` });
+  }
+  return { hits, findings };
+}
+
+/** D-11：台账（第 290 页补⑴ 起＝**整本台账**，不再是凭证页）点名的每一条 dated 工件，必须能在 HEAD 里追到。
+ *  取值域那一半由调用点决定（`ledgerPages(ledgerText, ANY_PAGE_HEAD)`），这个函数只管"给了什么页就查什么页"——
+ *  宽度是判据的位置，别在实现里再写一遍谓词（规则 345/348）。 */
 export function checkWitnessPaths(
   pages: readonly CredPage[],
   tracked: ReadonlySet<string>,
@@ -1000,6 +1025,12 @@ export function runDocsCheck(): {
   cred: ReturnType<typeof checkCredentialSources>;
   // 第 285 页 D-11：`null` ＝ 取不到 HEAD 跟踪清单（未检）。它跟「点名 0 条」是两件事，别混成一种绿。
   witness: ReturnType<typeof checkWitnessPaths> | null;
+  // 第 292 页：缩写引用面。**这一行是补的**——原先返回对象里带了 `abbrev`，
+  // 而这个返回**类型**没跟着加，于是 `vitest` 全绿、`tsc` 红两条。
+  // 正是上面那条注释预言过的同一个错（第 265 页 `unnamedPages` 也是这么漏的）：
+  // 药方（"形状从被调用方派生"）只抹在了 `cred`/`witness` 上，**顶层字段清单仍是手写的**。
+  // 治本是把整个返回类型从构造函数派生（加字段就不可能漂），那是独立一笔；这里先只补红。
+  abbrev: ReturnType<typeof checkAbbrevRefs> | null;
 } {
   const findings: Finding[] = [];
   const skipped: string[] = [];
@@ -1027,6 +1058,7 @@ export function runDocsCheck(): {
   let ledgerTracked: Set<string> | null = null;
   let credPages: CredPage[] = [];
   let witnessPages: CredPage[] = [];
+  let abbrev: ReturnType<typeof checkAbbrevRefs> | null = null;
   const ledgerAbs = join(ROOT, LEDGER_FILE);
   if (existsSync(ledgerAbs)) {
     const ledgerText = readFileSync(ledgerAbs, "utf8");
@@ -1037,6 +1069,10 @@ export function runDocsCheck(): {
     // 凭证页只构造一次给 D-9；D-11 从第 290 页补⑴ 起吃**整本台账**（同一份 `ledgerPages`，只是标题谓词不同）。
     credPages = credentialPages(ledgerText);
     witnessPages = ledgerPages(ledgerText, ANY_PAGE_HEAD);
+    // D-12（第 292 页）：省略式点名的分面。它必须在 `ledgerPages` 之后、与 D-11 吃同一本文本——
+    // 两条判据说的是同一件事的两半（"点名的能不能追到"／"有没有根本没被点名的写法"）。
+    abbrev = checkAbbrevRefs(ledgerText);
+    findings.push(...abbrev.findings);
     // D-10（第 279 页）：台账里的源码行号引用要**追得到东西**。取不到 HEAD 清单时报"未检"，
     // 不许拿空集合当判据（那会把每一条引用都读成死指针——假红的量足以淹掉真信号）。
     // 第 285 页：同一份清单也喂 D-11 ⇒ 这一笔**没有新增子进程**，门还是那一次 `git ls-tree`。
@@ -1089,6 +1125,7 @@ export function runDocsCheck(): {
     ledgerChecked,
     cred,
     witness,
+    abbrev,
   };
 }
 
@@ -1096,7 +1133,7 @@ const invokedDirectly =
   process.argv[1] !== undefined && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
 
 if (invokedDirectly) {
-  const { findings, skipped, waived, ledgerChecked, cred, witness } = runDocsCheck();
+  const { findings, skipped, waived, ledgerChecked, cred, witness, abbrev } = runDocsCheck();
   const byRule = new Map<string, number>();
   for (const f of findings) {
     byRule.set(f.rule, (byRule.get(f.rule) ?? 0) + 1);
@@ -1117,6 +1154,11 @@ if (invokedDirectly) {
     ? "  证人点名面（整本台账）：未检（取不到 HEAD 跟踪清单），不等于通过"
     : `  证人点名面（整本台账）：${String(witness.pages)} 页点名 ${String(witness.refs)} 条 dated 工件（红 ${String(witness.findings.length)}）`
       + `｜登记 ${String(LEGACY_WITNESS_REFS.length)} 条（帽，只准调低）`);
+  // D-12（第 292 页）的三态（规则 239）：未检（读不到台账）／命中数＝帽／不等即红——
+  // 「少一处也红」是刻意的：存量帽不许空转，否则它就成了一个没人再看的常量。
+  console.log(abbrev === null
+    ? "  省略式点名面：未检（读不到台账），不等于通过"
+    : `  省略式点名面：${String(abbrev.hits)} 处（帽 ${String(LEGACY_ABBREV_REF_CAP)}，只准调低；少一处也要出声）`);
   if (waived > 0) console.log(`  ⚠️  存量豁免 ${String(waived)} 处（LEGACY_WAIVERS，只准调低；spec §8 迁移提交须整条删除）`);
   const summary = [...byRule].map(([r, n]) => `${r}=${String(n)}`).join(" ");
   if (findings.length === 0) {

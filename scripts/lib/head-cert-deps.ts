@@ -406,6 +406,124 @@ export function certGatePlan(
   return plan.length === 0 ? { state: "broken", plan: [] } : { state: "ok", plan };
 }
 
+/* ── 手抄第二份名单的对账（第 319 页）。
+ *  病灶不是"CI 跑不跑"，而是**同一张名单在仓里有三份**：`CERT_GATES`（唯一事实源）、
+ *  `.github/workflows/verify.yml` 那句 `--only=`、以及 `scripts/ci/README.md` 的可粘贴复跑块。
+ *  本仓没有 git remote ⇒ workflow 至今没跑过，漂了也没人会看到；而 `scripts/ci/README.md`
+ *  当时的原话是「名单与 `CERT_GATES` 的**集合相等**由脚本核过」——那是一次**人工核对**的记录，
+ *  写成了常态性质的样子：**核对过一次 ≠ 此后每趟都核**。实测证据（第 319 页）：
+ *  写这句的时候 README 自己的复跑块已经缺 `gate-check` 与 `mutate-needles-check` 两道
+ *  （20 项 vs 名单 22 项），而这正是那份"脚本核过"会当场抓到的东西。
+ *  ⇒ 把它从散文变成判据（`tests/cert-gate-face.test.ts`），并**扫全部手抄份**而不是只扫 workflow。 */
+
+/** 一处 `--only=` 名单（行号用于点名，避免只报"有一份漂了"）。 */
+export interface OnlyList { line: number; names: string[] }
+
+/** 从任意文本里抽出**所有付得起名字的** `--only=` 名单，按行号升序。
+ *
+ *  两个刻意选择，都是为了不把"没量到"读成"没漂"（规则 261/262 那一族）：
+ *  ① **至少 2 项才算一份名单**。散文里的那句「快门面 `pnpm gates --only=…`（= `CERT_GATES` 那 22 道）」
+ *     是在**引用**这个机制，不是第二份可粘贴的清单；把它算进来只会制造假红，
+ *     而按"第一处命中"取料会让真正的清单被省略号那一处顶掉（实测：按首处取会抽到 0 项）。
+ *  ② 一份都抽不到 ⇒ **null**（取不到），不返回空数组——空数组会被读成"没有漂"。
+ *     这也是 `certGatePlan` 的同一条纪律：读不到与没有问题不许同形。 */
+export function onlyListsIn(text: string | null): OnlyList[] | null {
+  if (text === null) return null;
+  const out: OnlyList[] = [];
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    for (const m of lines[i]!.matchAll(/--only=([A-Za-z0-9:,_-]+)/gu)) {
+      const names = m[1]!.split(",").map((s) => s.trim()).filter((s) => s !== "");
+      if (names.length >= 2) out.push({ line: i + 1, names });
+    }
+  }
+  return out.length === 0 ? null : out;
+}
+
+/** 一份手抄名单与唯一事实源的差异。
+ *
+ *  ⚠️ 两侧**都为空**时返回 `same:false`。理由是本仓那条"空尺"纪律（判卷里有一条用例专门钉它）：
+ *  两侧都没有名字时 `missing` 与 `extra` 同时为空，**按集合论它是"相等"，按这条尺它是"什么也没量到"**
+ *  ——后者才是最危险的形状：一把恒空的尺会把每一次漂移都判成对齐。
+ *  实现时先写成"两个差集都空即相等"，被 `tests/cert-gate-face.test.ts` 的两侧用例当场抓住；留着这段注释。 */
+export function onlyListDiff(
+  hand: readonly string[],
+  source: readonly string[],
+): { same: boolean; missing: string[]; extra: string[] } {
+  const a = new Set(hand);
+  const b = new Set(source);
+  const missing = source.filter((n) => !a.has(n));
+  const extra = hand.filter((n) => !b.has(n));
+  const empty = hand.length === 0 || source.length === 0;
+  return { same: !empty && missing.length === 0 && extra.length === 0, missing, extra };
+}
+
+/* ── 留档自述的那棵树（第 319 页，路 B）。
+ *  贴帽读数那一格的病灶是**混合口径**：留档 json 来自某一棵树，而预算却按脚下的工作树取
+ *  ⇒ 任何一次合法改名都会让那一条"查不到预算"（`notResolved` 涨），于是这道门靠"人肉换取料"
+ *  在 2026-10-03 一天里被对齐了三次（10-02 语料 → `9dd1e8a` → `e8a8ed5`），而每次改名都会再犯。
+ *  正确口径不是"再换一份语料"，而是**按留档自己那棵树解析**——生产侧本来就这么做
+ *  （`scripts/head-cert.ts` 的 `readTest` 读的是 `TREE`，判卷里有用例逐字钉着这一点），
+ *  所以旧口径连生产语义都没有忠实复现。
+ *  于是需要"留档自述的那棵树"这一个取料：从留档同目录的存证文本里读，而不是在判卷里写死一个 sha
+ *  （写死的话，下次换留档时这个常数会静默指错树，那正是本格要消灭的假绿）。 */
+
+/** 从留档同目录的存证文本里读它是在哪棵树上跑的。
+ *
+ *  两种实测形状都认：`readings.md` 里那句「checkout 到 `<sha>`」，
+ *  以及跑那趟留下的日志里 vitest 自己那句「Preparing worktree (detached HEAD <sha>)」。
+ *
+ *  **要求众数唯一**：一份日志里可能出现多个 rev（同一趟建过几棵树）。此时一律返回 null——
+ *  "不确定"必须与"确定"同形地报出来，静默挑一个等于让读数悄悄指向别的树（规则 261/262 那一族）。
+ *  读不到同样返回 null，**不许**折成默认 HEAD 或空串。 */
+export function archiveRevFromProvenance(texts: readonly (string | null)[]): string | null {
+  const shapes = [/checkout 到\s*`?([0-9a-f]{7,40})`?/u, /detached HEAD\s+([0-9a-f]{7,40})/u];
+  const seen = new Set<string>();
+  for (const t of texts) {
+    if (t === null) continue;
+    for (const re of shapes) for (const m of t.matchAll(new RegExp(re.source, "gu"))) seen.add(m[1]!);
+  }
+  if (seen.size !== 1) return null;
+  return [...seen][0]!;
+}
+
+/** 懒回落的口径（第 319 页路 B）：**盘上那一份优先，只有这份文件里一个留档标题都取不到时才读留档那棵树。**
+ *
+ *  为什么懒而不是全量按 rev 取：全量实测 5.07s（286 次 `git show`）会顶穿这一格的缺省 5000ms 预算；
+ *  而懒回落只在真发生漂移时才付代价（实测漂 4 条 ⇒ 1 次 `git show`）。
+ *  为什么"两侧拼接"而不是"盘上找不到就整份换成留档版"：`budgetFromTestSource` 是按**标题**定位的，
+ *  拼接让盘上命中的那些仍走现态（读数更贴近今天），只有盘上确实没有的那个标题才由留档那一份补上。
+ *
+ *  `needsRev` 要交回调用方：**有漂移却回落不可用**（留档自述的树读不出来）时必须能判"这一格没量到"，
+ *  否则"回落静默失效"会和平地变成绿。 */
+export function archivedBudgetReader(
+  rows: readonly SuiteRow[],
+  disk: (rel: string) => string,
+  atRev: (rel: string) => string,
+): { readTest: (rel: string) => string | null; needsRev: readonly string[] } {
+  const needsRev = new Set<string>();
+  for (const r of rows) {
+    const t = disk(r.file);
+    /* 判"要不要回落"必须用**同一只谓词**（`budgetFromTestSource`），不能另写一个"标题在不在文本里"：
+     *  后者会把 `it.each`／插值／拼接那 116 条**非字面量标题**（它们按设计就不在源码里出现）
+     *  一并算成漂移 —— 实测那么写的 `needsRev` 是 24 份文件、白付 24 次 `git show`（≈15s），
+     *  而真漂移只有 1 份。这正是本仓"同一判据不许各抄一份"那条纪律在取料面上的形态。 */
+    if (t === "") continue; // 整份文件取不到：那是另一档，由 `notResolved` 如实报出来
+    if (budgetFromTestSource(t, r.title).kind === "not-resolved") needsRev.add(r.file);
+  }
+  const revCache = new Map<string, string>();
+  const readTest = (rel: string): string | null => {
+    const t = disk(rel);
+    if (!needsRev.has(rel)) return t === "" ? null : t;
+    /* 按**文件**记忆化：一条留档 json 里同一个文件会出现很多次（实测那份真漂移的文件占 31 条），
+     *  不记忆的话同一个 `git show` 会被敲 31 遍。 */
+    if (!revCache.has(rel)) revCache.set(rel, atRev(rel));
+    const old = revCache.get(rel) ?? "";
+    return old === "" ? (t === "" ? null : t) : `${t}\n${old}`;
+  };
+  return { readTest, needsRev: [...needsRev] };
+}
+
 /* ── 贴帽读数（第 262 页，任务 #8）。
  *  动因是实测：认证 `bd5ec44` 第一趟两条用例报 `Test timed out in 5000ms`（`tests/mutate-shards.test.ts:400`、
  *  `tests/mutate-verify-gates.test.ts:1781`），把它们**隔离复跑**是 205/205 全绿 ⇒ 那是容量红不是代码红，

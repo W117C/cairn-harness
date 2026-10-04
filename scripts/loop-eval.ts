@@ -13,7 +13,7 @@
 //  · 读数一律并列「准确率」与「$/成功任务」，不报单边；n 由 --reps 控制，默认 1（只出单次读数，不宣称趋势）。
 //
 // 用法（凭据只走 env，不落文件）：
-//   M0_API_KEY=… M0_ENDPOINT=https://…/chat/completions M0_MODEL=… M0_GLM_TOOL_STREAM=0 \
+//   CAIRN_API_KEY=… CAIRN_ENDPOINT=https://…/chat/completions CAIRN_MODEL=… CAIRN_GLM_TOOL_STREAM=0 \
 //   EVAL_PRICE_IN=<¥每百万输入> EVAL_PRICE_OUT=<¥每百万输出> \
 //   node --import tsx scripts/loop-eval.ts [--only I1,I2] [--reps 1] [--max-steps 20] [--system base|short]
 //   ↑ 那两个价**必须自己给、且必须是自己所拨档位的价**（端点目录价即可）。不给 ⇒ 钱这一格出「量不出来」，
@@ -47,7 +47,7 @@ const sleep = (ms: number): Promise<void> => new Promise((res) => setTimeout(res
 import { createVerifyHook, defaultExec, runVerifyOutcome, type ExecFn } from "../src/agent/verify";
 // 用量归因走**生产那一份盖章器**（`createUsageAttributor` 的唯一调用点从前只有 agent-runner ⇒
 // 基准路径绕过它，整条链上没有一笔 usage 带模型名，钱轴跨模型就无从分面）。
-// 模型名取 `glmDefaultModelName()`：本跑器启动时已把 M0_MODEL 归一成真正要拨的那一档，
+// 模型名取 `glmDefaultModelName()`：本跑器启动时已把 CAIRN_MODEL 归一成真正要拨的那一档，
 // 所以这是同一个事实源，不是第三份 glm-5.2 字面量副本（同族出口那一族，规则里点过名）。
 import { createUsageAttributor } from "../src/agent/usage-attribution";
 import { glmDefaultModelName } from "../src/providers/glm";
@@ -98,29 +98,29 @@ const SHORT_SYSTEM = [
 ].join("\n");
 
 /** CNY/百万 token——取自端点自己 /v1/models 的 catalog（中转价，不等于厂商官方价）。 */
-/* 凭据解析（2026-09-30）：M0_* 三个优先；缺了回退到**主 CLI 用的那一套**
+/* 凭据解析（2026-09-30）：CAIRN_* 三个优先；缺了回退到**主 CLI 用的那一套**
  *  （OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL）。
  *  为什么要这条回退：度量台的价值在于**随手能跑**。要求用户为评测再配一套凭据，
  *  结果就是它变成"需要准备才敢跑"的东西，而不会被跑——CLI 已经在用的那份没有理由重配。
  *  OPENAI_BASE_URL 给的是 base（`…/v1`），这里补 `/chat/completions`：
  *  与 `providers/openai.ts` 的归一规则同一口径（给全了也认）。 */
-const BENCH_ENDPOINT = process.env.M0_ENDPOINT
+const BENCH_ENDPOINT = process.env.CAIRN_ENDPOINT
   ?? (() => {
     const base = (process.env.OPENAI_BASE_URL ?? "").trim().replace(/\/+$/, "");
     if (base === "") return undefined;
     return base.endsWith("/chat/completions") ? base : base + "/chat/completions";
   })();
-const BENCH_API_KEY = process.env.M0_API_KEY ?? process.env.OPENAI_API_KEY;
-const BENCH_MODEL = process.env.M0_MODEL ?? process.env.OPENAI_MODEL;
-/* 回填到装配真正读的那组变量（`streamGlm` 直接读 `M0_API_KEY`，不走参数）：
+const BENCH_API_KEY = process.env.CAIRN_API_KEY ?? process.env.OPENAI_API_KEY;
+const BENCH_MODEL = process.env.CAIRN_MODEL ?? process.env.OPENAI_MODEL;
+/* 回填到装配真正读的那组变量（`streamGlm` 直接读 `CAIRN_API_KEY`，不走参数）：
  *  不这么做的话，上面那条"回退到 CLI 那套凭据"就只是**看起来**通了——
- *  实测：用 OPENAI_* 跑，三条任务全部 FAIL，报「M0_API_KEY 未设置」，
+ *  实测：用 OPENAI_* 跑，三条任务全部 FAIL，报「CAIRN_API_KEY 未设置」，
  *  而报错来自 provider 内部、与评测逻辑无关。凭据靠 env 是既有设计（key 不落文件），
  *  这里只是把同一个值放到装配读得到的那个名字上，不新增存储、不新增路径。
- *  只在原本为空时回填：显式给了 M0_* 的调用方语义不变。 */
-if (!process.env.M0_API_KEY && BENCH_API_KEY) process.env.M0_API_KEY = BENCH_API_KEY;
-if (!process.env.M0_ENDPOINT && BENCH_ENDPOINT) process.env.M0_ENDPOINT = BENCH_ENDPOINT;
-if (!process.env.M0_MODEL && BENCH_MODEL) process.env.M0_MODEL = BENCH_MODEL;
+ *  只在原本为空时回填：显式给了 CAIRN_* 的调用方语义不变。 */
+if (!process.env.CAIRN_API_KEY && BENCH_API_KEY) process.env.CAIRN_API_KEY = BENCH_API_KEY;
+if (!process.env.CAIRN_ENDPOINT && BENCH_ENDPOINT) process.env.CAIRN_ENDPOINT = BENCH_ENDPOINT;
+if (!process.env.CAIRN_MODEL && BENCH_MODEL) process.env.CAIRN_MODEL = BENCH_MODEL;
 /* 钱的尺要有出处（2026-10-02）：从前这里写的是「env 没给就吃 0.8 / 2.8」，
  * 而那两位是某个中转端点对**它自己那一档**的目录价（本文件头注释同源）。同一趟跑的若是别的档位
  * （实测那 36 拨的是 OpenRouter 免费档），印出来的「实付≈¥0.2774」就是拿别人的价给自己定价。
@@ -418,7 +418,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
         system,
         workspace: work,
         requestFace: () => ({ tools: face.specs, note: face.note }),
-        // 显式递模型名：provider 不传的话走 `process.env.M0_MODEL ?? "glm-5.2"`，
+        // 显式递模型名：provider 不传的话走 `process.env.CAIRN_MODEL ?? "glm-5.2"`，
         // 而用 OPENAI_MODEL 配的路由（如 OpenRouter 的自由档）在这里就会被静默换成 glm-5.2 ⇒
         // 请求打到不是你要测的那个模型上。压缩摘要器也吃这个值，两处同源。
         ...(BENCH_MODEL !== undefined && BENCH_MODEL !== "" ? { model: BENCH_MODEL } : {}),
@@ -666,7 +666,7 @@ if (tasks.some((t) => t.external)) {
   process.exit(1);
 }
 if (!BENCH_API_KEY || !BENCH_ENDPOINT) {
-  console.log("[loop-eval] 暗卷缺席（无 M0_API_KEY/M0_ENDPOINT，也没有 OPENAI_API_KEY/OPENAI_BASE_URL）——显式跳过，不出数（未证 ≠ 通过）");
+  console.log("[loop-eval] 暗卷缺席（无 CAIRN_API_KEY/CAIRN_ENDPOINT，也没有 OPENAI_API_KEY/OPENAI_BASE_URL）——显式跳过，不出数（未证 ≠ 通过）");
   console.log("[loop-eval] 想知道「现在能不能量、缺什么」：加 --feasibility（零花费，不发模型请求）");
   process.exit(0);
 }

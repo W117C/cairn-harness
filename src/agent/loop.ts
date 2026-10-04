@@ -127,9 +127,9 @@ function redactValue(v: unknown): unknown {
   return v;
 }
 
-/** tool_call 落盘用：args 的字符串叶子过脱敏，其余字段逐字带走。 */
-function redactToolCallForLog(e: Extract<AgentEvent, { type: "tool_call" }>): AgentEvent {
-  return { ...e, args: redactValue(e.args) as Record<string, unknown> };
+/** 所有事件共用落盘/投影脱敏面：字符串叶子逐段过 `redactSecrets`，结构保持不变。 */
+function redactEventForLog(e: AgentEvent): AgentEvent {
+  return redactValue(e) as AgentEvent;
 }
 
 /** verify 面落盘用：命令与输出各自过脱敏，其余字段（ok / exitCode / cause）不是文本，原样带走。
@@ -155,10 +155,12 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   const { workspace, userMessage, userMessageSkill, userMessageOrigin } = opts;
   const seen: AgentEvent[] = [];
   // Persist first: failed writes must not become model-visible history.
+  // 落盘与投影用同一份脱敏副本（`seen`）；工具执行面照原件执行。
   const events: EventLog = {
     async append(event) {
-      await opts.events.append(event);
-      seen.push(event);
+      const safe = redactEventForLog(event);
+      await opts.events.append(safe);
+      seen.push(safe);
     },
   };
   const mode = opts.mode ?? "default";
@@ -211,7 +213,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     let outcome: VerifyOutcome;
     let hookError: string | null = null;
     try {
-      outcome = await (opts.verify as VerifyHook).run();
+      outcome = await (opts.verify as VerifyHook).run(opts.signal);
     } catch (err) {
       hookError = err instanceof Error ? err.message : String(err);
       outcome = { ok: false, results: [] };
@@ -287,8 +289,9 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       ? "[verify] 这一拍因 harness 侧原因没跑成（cause=" + String(cause) + "）——不是代码失败，"
         + "修复额度未消耗。下面原文供参考：\n"
       : "";
-    const repeat = digest === lastVerifyDigest;
-    lastVerifyDigest = digest;
+    const redactedDigest = redactSecrets(digest).text;
+    const repeat = redactedDigest === lastVerifyDigest;
+    lastVerifyDigest = redactedDigest;
     // M10②：无进展阶梯——**`no-progress.ts` 的唯一生产消费者**（此前它全树零消费者，只在门里跑；
     // 判据写好了没人用，等于模型的"原地打转"没有任何观察者）。
     // 接**在这里**（verify 的手动拍）而不是通用工具块：verify 调用在本文件上面就被拦下并 `continue`，
@@ -319,9 +322,8 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       callId,
       ok: false,
       // 同一拍验证的**第二份**原文在下面这行（failureDigest 把 results 整段拼进来）。
-      // verify_result 那份脱敏了而这份不脱敏，等于掩码留在门里、钥匙落在门口。
-      // 脱敏只发生在落盘面：`lastVerifyDigest` 的「逐字相同」比的是内存里的原值，
-      // 重复注入的判定不受影响；模型同轮看到的也还是原值（同 runAgent 工具面那条口径）。
+      // verify_result 与这份 tool_result 都走同一个落盘/投影脱敏 choke-point：
+      // 不会让门里掩码、门口放行。`lastVerifyDigest` 的比对仍用同一脱敏副本，口径一致。
       output: redactSecrets(envPreface + (repeat ? repeatDigestNote(outcome, attempt) : digest) + noProgressNote).text,
     });
     return "continue";
@@ -370,7 +372,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     for await (const output of streamFn(projectContext(seen))) {
       // 落盘的那一份与执行用的那一份必须分开：args 只在落盘面脱敏，执行面照原样拿
       // （模型自己写的凭据原样执行，不要在这里把它改成一个掩码路径）。
-      await events.append(output.type === "tool_call" ? redactToolCallForLog(output) : output);
+      await events.append(output); // append 内统一脱敏，落盘与投影同副本
       if (output.type !== "tool_call") continue; // assistant_message / delta / usage：继续
 
       sawToolCall = true;
@@ -587,6 +589,18 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         } catch (err) {
           hasSurface = false;
           console.warn("[verify] 可验面探测失败，跳过自动验证拍:", err instanceof Error ? err.message : String(err));
+          // fail-closed 口径与 manual 对齐：探测失败是一次坏的 verify 证据，必须进事件流，
+          // 否则审计面看不到「该验没验」。cause=hook-error 属环境拍，不烧模型修复额度。
+          await events.append({
+            type: "verify_result",
+            callId: HARNESS_VERIFY_CALL_ID,
+            ok: false,
+            attempt: chargedAttempts + 1,
+            maxAttempts: maxVerify,
+            results: [{ command: "(verify surface)", ok: false, output: err instanceof Error ? err.message : String(err), cause: "hook-error", exitCode: null }],
+            cause: "hook-error",
+            auto: true,
+          });
         }
         if (hasSurface) {
           const beat = await verifyBeat(HARNESS_VERIFY_CALL_ID, true);
