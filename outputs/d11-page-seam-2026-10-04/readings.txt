@@ -1,0 +1,18 @@
+标题面：h3 455 条｜h2 112 条
+页标题：h3 形 317 条｜h2 形 76 条（第一条 h2 页标题在 PROGRESS.md 第 10193 行）
+尺的最后一道 h3 在第 10175 行；台账共 12436 行 ⇒ 其后 2261 行**没有分页点**
+ledgerPages(整本) 返回 455 页；credentialPages 返回 89 页
+点名 head-cert 那族的页：1 页
+  key=第 307 页｜refs=109｜numbers=71｜shas=75
+
+—— 引用形状逐个喂 ledgerWitnessRefs（看尺解析出什么 ref）——
+输入  汇总落盘 `outputs/head-cert-55ce164-2026-10-04-0402/provenance.md`
+  → refs = ["outputs/head-cert-55ce164-2026-10-04/"]
+输入  汇总落盘 `outputs/cert-window-2026-10-04/headcert4-summary.txt`
+  → refs = ["outputs/cert-window-2026-10-04/headcert4-summary.txt"]
+输入  上游产出目录名带 HHMM：`head-cert-55ce164-2026-10-04-0402/provenance.md`
+  → refs = []
+输入  上游产出目录名带 HHMM：`…/head-cert-55ce164-2026-10-04-0402/provenance.md`
+  → refs = []
+输入  上游产出 `head-cert-<rev7>-<YYYY-MM-DD>-<HHMM>/provenance.md`
+  → refs = []

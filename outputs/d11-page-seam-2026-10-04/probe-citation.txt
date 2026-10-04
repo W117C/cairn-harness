@@ -1,0 +1,16 @@
+句子 原件在 `head-cert-55ce164-2026-10-04-0402/provenance.md`（`git ls-tree -r --name-only HEAD | grep head-cert-55ce164`）
+  D-11 refs = []
+  D-12 省略式命中 = 0
+
+句子 原件在 `outputs/head-cert-55ce164-2026-10-04-0402/provenance.md`
+  D-11 refs = ["outputs/head-cert-55ce164-2026-10-04/"]
+  D-12 省略式命中 = 0
+
+句子 原件见 `…/head-cert-55ce164-2026-10-04-0402/provenance.md`
+  D-11 refs = []
+  D-12 省略式命中 = 0
+
+句子 原件见 `.../head-cert-55ce164-2026-10-04-0402/provenance.md`
+  D-11 refs = []
+  D-12 省略式命中 = 1
+
