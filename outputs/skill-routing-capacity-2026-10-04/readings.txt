@@ -1,0 +1,19 @@
+取料：SKILL.md 命中 1044 份｜进模型可见清单 1044 条（disable-model-invocation 0 条、无 description 14 条）
+清单全长 206167 字符｜预算帽 1536 字符
+装配结果：truncated=true｜模型看得见 3 条｜被截掉 1041 条 ⇒ 可见率 0%
+保留的是输入序的前 3 条（截断按**发现序**丢尾巴，与"这条任务需不需要它"无关）
+头 6 条被截掉的（示例，说明丢的是谁）：
+   ✗ /qoder-marketplace:dogfood
+   ✗ /qoder-marketplace:electron
+   ✗ /qoder-marketplace:slack
+   ✗ /qoder-marketplace:vercel-sandbox
+   ✗ /qoder-marketplace:agent-browser
+   ✗ /qoder-marketplace:karpathy-guidelines
+尾 6 条被截掉的：
+   ✗ /qoderapp-bundler:qoder-context-knowledge-plan
+   ✗ /qoderapp-bundler:qoder-context-knowledge-plan
+   ✗ /dsh-commit-credential-pipeline
+   ✗ /dsh-page-handoff-pathspec-commit
+   ✗ /dsh-scale-landing-with-anchors
+   ✗ /dsh-verification-harness-cluster
+全列出需要的预算：206167 字符＝帽的 134.2 倍
