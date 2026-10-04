@@ -12987,7 +12987,7 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    `src/agent/plugins/index.ts:456` 那种；goal 侧探针零命中并配了负控），靠 `src/agent/compaction.ts:214`
    裸护全部 `user_message` 被动存活，而原文只带 ≤400 token；plan 的门布尔只在内存
    （`src/permissions/plan-state.ts:26`），全仓没有一处从事件流重建它 ⇒ 重启即丢 ⇒ 开 **`#84`**。
-   **顺带一条纪律的实证**：这里我原本照抄报告写的 `src/agent/plan-state.ts:26`，`docs-check` D-10 当场报
+   **顺带一条纪律的实证**：这里我原本照抄报告写了一条把目录记成 `src/agent/` 下面的路径引用，`docs-check` D-10 当场报
    「HEAD 里没有这个文件」⇒ 子代理给的 `file:line` 有假路径，**尺比记性可靠**，落库前必须逐条现读。
    `#69` 也补一条新证据：撞帽抛出后 `runAgent` 只有 `finally` 没有 `catch` ⇒ 不落 `goal_stopped`，芯片仍显示「续跑中」。
    报告 `outputs/longrun-goal-plan-face-2026-10-04/verdict.md`。
