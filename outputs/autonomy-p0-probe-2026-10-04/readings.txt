@@ -1,0 +1,23 @@
+default  .git/hooks/pre-commit      verdict=ask     layer=L3-mode     risk=high
+default  sub/.git/hooks/post-commit verdict=ask     layer=L3-mode     risk=high
+default  .git/config                verdict=ask     layer=L3-mode     risk=high
+default  .agent/lsp.json            verdict=ask     layer=L3-mode     risk=high
+default  .agent/config.json         verdict=ask     layer=L3-mode     risk=high
+default  .npmrc                     verdict=ask     layer=L3-mode     risk=high
+default  .env                       verdict=ask     layer=L3-mode     risk=high
+guided   .git/hooks/pre-commit      verdict=ask     layer=L4-risk     risk=high
+guided   sub/.git/hooks/post-commit verdict=ask     layer=L4-risk     risk=high
+guided   .git/config                verdict=ask     layer=L4-risk     risk=high
+guided   .agent/lsp.json            verdict=ask     layer=L4-risk     risk=high
+guided   .agent/config.json         verdict=ask     layer=L4-risk     risk=high
+guided   .npmrc                     verdict=ask     layer=L4-risk     risk=high
+guided   .env                       verdict=ask     layer=L4-risk     risk=high
+auto     .git/hooks/pre-commit      verdict=ask     layer=L4-risk     risk=high
+auto     sub/.git/hooks/post-commit verdict=ask     layer=L4-risk     risk=high
+auto     .git/config                verdict=ask     layer=L4-risk     risk=high
+auto     .agent/lsp.json            verdict=ask     layer=L4-risk     risk=high
+auto     .agent/config.json         verdict=ask     layer=L4-risk     risk=high
+auto     .npmrc                     verdict=ask     layer=L4-risk     risk=high
+auto     .env                       verdict=ask     layer=L4-risk     risk=high
+正控 run_shell ⇒ verdict=ask layer=L4-risk risk=high
+正控 普通写 ⇒ verdict=approve layer=L4-pass risk=none

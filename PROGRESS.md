@@ -13008,6 +13008,37 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 
 
 
+## 2026-10-04 · 第 379 页：**更正第 378 页第 3 条——我把取料面读错了**；S2 文件面路径通道不是"没实现"，是**已写好、没落库**（探针现读 21/21 送审）
+
+1. **错在哪**：第 378 页我写「实现面 `risk.ts` 的表与分支看着齐 ⇒ 缺口在后面某层」。那句是拿**工作树**的文件读出来的，
+   而我讨论的对象是 **HEAD**。现读证据：`git show "HEAD:src/permissions/risk.ts" | grep -c SENSITIVE_PATH_SEGMENTS` ⇒ **0**；
+   `git status --porcelain -- src/permissions/` ⇒ `M risk.ts`＋`M command-shape.ts`，diff 是 **＋69／＋60 行**，
+   加进去的正是 `SENSITIVE_PATH_SEGMENTS` 那张表、`pathSurface`、`pathRisk`，以及 `staticRisk` 顶部那条
+   `PATH_TOOL_NAMES.has(tool) || tool === "apply_patch"` 分支。⇒ **实现躺在别人的工作树里，HEAD 上没有**；
+   第 378 页那句"18 条判卷红着等实现"因此要说得更准：**等的不是实现，是那一次提交**。
+2. **探针把这件事钉成读数**（`outputs/autonomy-p0-probe-2026-10-04/probe-evaluate.ts` ⇒ `readings.txt`）：
+   会话造法**照判卷那一份**（`newAutonomySession(mode, {rules: [], sandboxAvailable: null, sessionScopes: new Set()})`
+   ＋`planBlocked: () => false`），免得拿一份不合法的 session 读出一个假结论。结果：
+   三档（default/guided/auto）× 七个敏感目标（git 钩子两处、`.git/config`、`.agent/lsp.json`、`.agent/config.json`、`.npmrc`、`.env`）
+   ＝ **21/21 全 `ask`**，`risk=high`，层分别是 `L3-mode`（default）与 `L4-risk`（guided/auto）。
+   两条正控：① 同目标走 shell 面（`echo hi >> .git/hooks/pre-commit`）也是 `ask / L4-risk / high` ⇒ 两边口径一致了；
+   ② 普通写 `src/a.ts` 仍是 `approve / L4-pass / risk=none` ⇒ 这条修复**没有**顺手把每一次写都拦下来
+   （判卷注释里点名的"给 `write_file` 补个 medium 基线"那种过度反应，被这条正控挡在门外）。
+3. **所以 `#85` 换了性质**：从"能力 7 的设计缺口"改成"提交面"——要落的是别人手里那一笔
+   （`risk.ts` 与 `command-shape.ts` 是一起的，拆开进我的笔就等于替别人的半成品定家）。
+   **我不动那两个文件、不替谁 commit。**HEAD 上这 18 条安全面红在落库前仍然成立，页上照记。
+4. **我这条错本身值得留一行**（这是同一族的第二次，只是换了载体）：本仓早就记过
+   「同一计数在脏主树与干净 HEAD 树有两个真值 ⇒ 出口必须带面」，我这次栽在**文字断言**上——
+   页里写"实现面在哪"没说是哪一份。登记 **`#86`**（机械化候选）：讲某文件行为的句子要求注明 `HEAD` 或 `工作树`，
+   可以并进 `docs-check` 那条"引用能否解析到 HEAD 的行"——那条尺管得到行号，管不到我读的是哪一份。
+5. **量纲与没跑**：跑了一支一次性探针（毫秒级）＋三次 git 现读；**没跑**判卷（隔壁仍在飞，`pgrep` 现读 2 个进程挂着全量），
+   **没动** `src/permissions/`。`#39`／`#57`–`#66`／`#68` 照旧，`#67` 待对齐，`#69`／`#71` 备妥，`#70`／`#72` 待办，
+   `#73` 半落（A 类可接），`#74`–`#78` 照旧，`#79` 等文件让位，`#80` 等裁决，`#81` 等作者补证人，
+   `#82` 有根因清单，`#83` 照第 377 页，`#84` 长程状态待做，`#85` 改判为"等落库"，**`#86` 新增（文字断言要带取料面）**。
+   本页不宣布任何「绿了」。
+
+
+
 
 
 
