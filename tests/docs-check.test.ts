@@ -1003,3 +1003,30 @@ describe("HEAD 取料面必须吃得到中文文件名（第 290 页：`git ls-t
     expect(checkWitnessPaths(pages, escapedOnly, []).findings.length).toBe(1);
   });
 });
+
+describe("#61 的一半：认证产物那种 `<名字>-<日期>-<HHMM>` 目录，全名要引得到", () => {
+  // 本仓自己的认证产物目录就长 `head-cert-<sha7>-<日期>-<HHMM>`，而旧正则止于日期
+  // ⇒ 只吃到日期那段、把 `-HHMM` 留在窗外 ⇒ 台账里**写不得这种全名**（写了自己点名的取料面
+  // 就解析不到）。这一格钉的是"写得进去"，且钉住**不截断**（截断正是原缺陷）。
+  it("带 -HHMM 后缀的目录被整段收下（不截断）", () => {
+    const refs = ledgerWitnessRefs("见 `outputs/head-cert-513d4d7-2026-10-04-1739/summary.txt`。");
+    expect(refs).toEqual(["outputs/head-cert-513d4d7-2026-10-04-1739/summary.txt"]);
+  });
+
+  it("目录名单独出现（结尾斜杠）也收整段", () => {
+    expect(ledgerWitnessRefs("取料在 `outputs/head-cert-8a82df1-2026-10-04-1748/`。"))
+      .toEqual(["outputs/head-cert-8a82df1-2026-10-04-1748/"]);
+  });
+
+  it("反向守卫：不带 -HHMM 的老形状一字不变（扩张不许把老面改掉）", () => {
+    expect(ledgerWitnessRefs("`outputs/cert-window-2026-10-04/headcert4-summary.txt`"))
+      .toEqual(["outputs/cert-window-2026-10-04/headcert4-summary.txt"]);
+    expect(ledgerWitnessRefs("`outputs/claims-no-needle-2026-10-03/`"))
+      .toEqual(["outputs/claims-no-needle-2026-10-03/"]);
+  });
+
+  it("反向守卫：截断过的那一段绝不出现在结果里（否则就是原来那条缺陷）", () => {
+    const refs = ledgerWitnessRefs("`outputs/head-cert-513d4d7-2026-10-04-1739/provenance.md`");
+    expect(refs.some((r) => r.includes("2026-10-04/provenance.md"))).toBe(false);
+  });
+});
