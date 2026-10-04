@@ -71,7 +71,7 @@ async function run(opts: { repair: boolean; test: string; secondWrite: string })
   const seen: AgentEvent[] = [];
   const res = await handleAgentRun(
     { message: "让验证通过", mode: "auto" },
-    { workspace: ws, logPath: join(home, "events.jsonl"), unattended: true, onEvent: (e) => { seen.push(e); } },
+    { workspace: ws, logPath: join(home, "events.jsonl"), unattended: true, trustedRepo: true, onEvent: (e) => { seen.push(e); } },
   );
   expect(res.ok, JSON.stringify(res)).toBe(true);
   return { events: seen, ws };

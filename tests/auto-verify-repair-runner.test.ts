@@ -65,7 +65,7 @@ async function runViaProduction(settingsRaw: Record<string, unknown>): Promise<A
   const seen: AgentEvent[] = [];
   const res = await handleAgentRun(
     { message: "修那个失败的测试", mode: "auto" },
-    { workspace: ws, logPath: join(home, "events.jsonl"), unattended: true, onEvent: (e) => { seen.push(e); } },
+    { workspace: ws, logPath: join(home, "events.jsonl"), unattended: true, trustedRepo: true, onEvent: (e) => { seen.push(e); } },
   );
   expect(res.ok, JSON.stringify(res)).toBe(true);
   // 前置自检：写盘真成功过。少了它，"一拍"可以是"根本没写"（那条假绿的形状本仓栽过两次）。

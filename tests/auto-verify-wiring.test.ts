@@ -5,7 +5,9 @@
 // "这条已生效"只到**装配完成**——实测 `pnpm e2e` 日志里那一拍出现 0 次。
 //
 // 本文件把链拆成三格量。②那一格修正了一个我此前写进文档的误判：
-//   ① 直接 `runAgent({autoVerify:true})` ⇒ 那一拍**会**发生（真跑了配置里的命令）；
+//   ① 直接 `runAgent({autoVerify:true, trustedRepo:true})` ⇒ 那一拍**会**发生（真跑了配置里的命令）；
+//      `trustedRepo` 是 S3 信任闸（2026-10-05）：verify 命令来自仓库自带文件，本用例拥有这个 fixture，
+//      所以自己断言可信；产品路径缺省即拒绝，缺这一位自动补拍整段跳过。
 //   ② 走生产入口 `handleAgentRun` + 无人值守 + 没有批条 ⇒ 先被权限门拒写，
 //      `wroteThisRun` 为假 ⇒ 那一拍**正确地**不补。我先前把它读成"生产入口那条路从不触发"的缺陷，
 //      错了；那条误判同时说明"e2e 里 0 次出现"也不是缺陷证据（剧本自己调了 verify ⇒ 让位）。
@@ -81,7 +83,8 @@ afterEach(async () => {
 describe("能力 5 收束闸的装配链（runAgent 直调 vs 生产入口）", () => {
   it("① 直接 runAgent(autoVerify:true) ⇒ 那一拍真发生：落 verify_result{auto:true} 且真跑了配置里的命令", async () => {
     vi.stubEnv("M3A_MAIN_SCRIPT", scriptPath);
-    const events = await runAgent({
+    const events = await runAgent({      // S3 信任闸：本用例拥有这个 fixture，自行断言可信（产品路径缺省即拒绝）。
+      trustedRepo: true,
       workspace: dir,
       logPath: join(dir, `events-${String(seq++)}.jsonl`),
       message: "改一下 target",
@@ -122,7 +125,7 @@ describe("能力 5 收束闸的装配链（runAgent 直调 vs 生产入口）", 
       "utf8",
     );
     await settings({ provider: "demo", safeMode: "off" }); // 无 autoVerify 键 ⇒ 吃到缺省开（裁决 6）
-    const events = await runViaIpc();
+    const events = await runViaIpc({ trustedRepo: true }); // S3：本目录是本用例现搭的 fixture，自行断言可信
     const results = events.filter((e) => e.type === "tool_result");
     expect(results.length).toBeGreaterThan(0);
     expect(results.every((e) => e.ok === true), JSON.stringify(results)).toBe(true);
@@ -150,7 +153,8 @@ describe("能力 5 收束闸的装配链（runAgent 直调 vs 生产入口）", 
   it("③a 代价上界：仓库没有可验面时零行为（这条不许被翻默认顺带打开）", async () => {
     await rm(join(dir, ".agent/config.json"), { force: true });
     vi.stubEnv("M3A_MAIN_SCRIPT", scriptPath);
-    const events = await runAgent({
+    const events = await runAgent({      // S3 信任闸：本用例拥有这个 fixture，自行断言可信（产品路径缺省即拒绝）。
+      trustedRepo: true,
       workspace: dir,
       logPath: join(dir, `events-${String(seq++)}.jsonl`),
       message: "改一下 target",
@@ -164,7 +168,8 @@ describe("能力 5 收束闸的装配链（runAgent 直调 vs 生产入口）", 
   it("③b 至多一拍：模型自调过 verify 就让位（那一拍不补第二次）", async () => {
     await script([WRITE, { type: "tool_call", id: "v1", name: "verify", args: {} }, TEXT]);
     vi.stubEnv("M3A_MAIN_SCRIPT", scriptPath);
-    const events = await runAgent({
+    const events = await runAgent({      // S3 信任闸：本用例拥有这个 fixture，自行断言可信（产品路径缺省即拒绝）。
+      trustedRepo: true,
       workspace: dir,
       logPath: join(dir, `events-${String(seq++)}.jsonl`),
       message: "改一下 target",

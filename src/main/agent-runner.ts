@@ -320,7 +320,7 @@ export function mainUsageModelOf(selection: MainModelSelection): string {
  *  - agentRoleFor：插件 agent 角色解析（stages[].role = "plugin-name:agent-name"，§9.6/§9.11-4）；
  *  - workerSummarizer：worker 压缩摘要器（§7.5 同一 runCompaction 链；GLM 暗卷需 CAIRN_API_KEY）；
  *  - budget：会话成本闸（§4.4.8 maxBudgetUsd；0 = off 零行为）。 */
-async function orchestratorExtras(sandbox: SandboxStatus | null = null, runModel?: MainModelSelection): Promise<
+async function orchestratorExtras(sandbox: SandboxStatus | null = null, runModel?: MainModelSelection, trustedRepo: boolean = false): Promise<
   Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache" | "impactAnalysis" | "workerVerify" | "workerHooks">
 > {
   const s = await store().get();
@@ -341,7 +341,7 @@ async function orchestratorExtras(sandbox: SandboxStatus | null = null, runModel
     // exec 走沙箱版：worker 的 verify 命令同样来自目标仓库的 .agent/config.json（外部输入）。
     // 缺省（设置关）= 整段不接线，worker 的 runLoop 与今日逐字同形。
     ...(s.autoVerify
-      ? { workerVerify: (repoDir: string) => createVerifyHook(repoDir, { exec: verifyExec(sandbox) }) }
+      ? { workerVerify: (repoDir: string) => createVerifyHook(repoDir, { exec: verifyExec(sandbox), trustedRepo: trustedRepo }) }
       : {}),
     // M5b 步骤 9：routingBandit 开关同时开启路由与学习状态持久化（bandit 蕴含 routing——
     // 无路由则无档位决策可学）。状态文件在 .agent/ 系统区（同 permissions.json 口径）。
@@ -397,6 +397,8 @@ async function buildSessionOrchestrator(a: {
   modelFor?: OrchestratorOptions["modelFor"];
   /** 本 run 已解析的模型选择（逐请求指定的档位在这里）；缺省 = 按 env + 设置盘现算（同一把纯函数）。 */
   runModel?: MainModelSelection;
+  /** S3 信任闸：透传给 worker 那条 verify 接缝，缺省即拒绝。 */
+  trustedRepo?: boolean;
 }): Promise<Orchestrator> {
   const s = await store().get();
   const workerShell = workerShellRunnerFor(a.sandbox);
@@ -412,7 +414,7 @@ async function buildSessionOrchestrator(a: {
     // B1 语义合并闸：影响面开启时，spawn 的写租约判定多问一层「波及集相交」——
     // 两个 worker 各改各的文件（glob 不相交）但改动波及同一批调用点，合并时同样会打架。
     ...(s.impactAnalysis ? { semanticLease: (globs: string[]) => affectedFilesOf(a.workspace, globs) } : {}),
-    ...(await orchestratorExtras(a.sandbox, a.runModel)), // M3c：插件角色 / worker 压缩摘要器 / 成本闸 / W4a worker 收束闸
+    ...(await orchestratorExtras(a.sandbox, a.runModel, a.trustedRepo ?? false)), // M3c：插件角色 / worker 压缩摘要器 / 成本闸 / W4a worker 收束闸
     ...(a.modelFor ? { modelFor: a.modelFor } : {}),
   });
 }
@@ -442,6 +444,7 @@ async function ensureSessionOrchestrator(): Promise<Orchestrator | null> {
     },
     sandbox: sandboxState,
     rules: loadPermissionRules(join(workspace, ".agent", "permissions.json"), globalPermissionsPath()),
+  
   });
   activeOrchestrator = orch;
   return orch;
@@ -1316,6 +1319,10 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
    *  **只从 settings 取，不留 override 槽**：`handleAgentRun` 的两个产品调用者从不传它，
    *  留 `over.X ??` 就是给一条永远走不到的左半边钉锚点（同 `impactAnalysis` 那一族的做法）。 */
   autoVerifyRepair?: boolean;
+  /** S3 信任闸：这个工作区的 verify 命令可否被自动补拍执行。
+   *  **缺省 false**——verify 命令 100% 来自仓库自带文件（.agent/config.json / package.json /
+   *  Makefile 探测），而那条执行路径上没有权限判定。自建 fixture / 自有仓库的调用方**显式**传 true。 */
+  trustedRepo?: boolean;
   workspace: string;
   message: string;
   mode: PermissionMode;
@@ -1639,6 +1646,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       emit: pipeline,
       sandbox: opts.sandbox ?? null,
       rules,
+      trustedRepo: opts.trustedRepo ?? false, // S3 信任闸：缺省即拒绝，worker 那条 verify 路径同口径
       ...(demoModelFor ? { modelFor: demoModelFor } : {}),
       // 成本闸的价键跟着**这个 run 真拨的那一档**走（逐请求指定的模型只在调用手里，重派路径没有）。
       ...(opts.modelSelection ? { runModel: opts.modelSelection } : {}),
@@ -1805,7 +1813,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
             ...(opts.unattended ? { timeoutMs: UNATTENDED_GATE_WAIT_MS } : {}),
           }),
       },
-      verify: createVerifyHook(opts.workspace, { exec: verifyExec(opts.sandbox ?? null) }),
+      verify: createVerifyHook(opts.workspace, { exec: verifyExec(opts.sandbox ?? null), trustedRepo: opts.trustedRepo ?? false }),
       ...(rt ? { hooks: rt.hooks } : {}),
     });
     // M2e：Stop（一轮 agent 收束）——fire-and-forget，失败只告警。
@@ -1985,6 +1993,9 @@ export interface RunOverrides
   /** M1e：会话模式 —— run 追加到该会话（不 rm 日志），消息落该会话 JSONL。 */
   sessionId?: string;
   onEvent?: (e: AgentEvent) => void;
+  /** S3 信任闸：本 run 的工作区 verify 命令可否被自动补拍执行。**缺省即拒绝**——
+   *  verify 命令 100% 来自仓库自带文件，而那条执行路径上没有权限判定。 */
+  trustedRepo?: boolean;
   /** M4a 无人值守：unattended 审批门（立即拒绝 fail-closed）+ 跳过会话尾沉淀。 */
   unattended?: boolean;
   /** plan 模式 runtime override（同 actionFusion / autoVerify 口径）：缺省取 settings.planRequiredByDefault。 */
@@ -2110,6 +2121,7 @@ export async function handleAgentRun(
         ...(over.signal ? { signal: over.signal } : {}),
         actionFusion: over.actionFusion ?? (await store().get()).actionFusion,
         autoVerify: over.autoVerify ?? (await store().get()).autoVerify,
+        trustedRepo: over.trustedRepo ?? false, // S3 信任闸：IPC 路径缺省同样拒绝
         // 这一段会话有没有武装长任务目标：CLI 在 `--goal` 时显式传（它在 run 之前就把
         // `goal_set` 写进日志了），goal 续跑轮由 `goalTurn` 在场推定。只喂 refine_goal 的挂/摘。
         goalArmed: over.goalArmed ?? goalTurn !== undefined,

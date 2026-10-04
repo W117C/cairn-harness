@@ -30,7 +30,8 @@ async function script(calls: unknown[]) {
 }
 async function run(calls: unknown[] = [writeCall()], opts: Partial<RunOptions> = {}) {
   await script(calls);
-  return runAgent({ workspace: dir, logPath: join(dir, `events-${seq++}.jsonl`), message: "local write", mode: "auto", unattended: true, actionFusion: true, ...opts });
+  return runAgent({      // S3 信任闸：本用例拥有这个 fixture，自行断言可信（产品路径缺省即拒绝）。
+      trustedRepo: true, workspace: dir, logPath: join(dir, `events-${seq++}.jsonl`), message: "local write", mode: "auto", unattended: true, actionFusion: true, ...opts });
 }
 async function absent(name: string) {
   await expect(readFile(join(dir, name), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
