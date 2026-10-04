@@ -365,6 +365,8 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     });
   }
 
+  /** 撞帽位（#69）：步数已尽而模型仍在调工具 ⇒ 让这一段也走一次收束闸，再落回循环外那条 throw。 */
+  let capReached = false;
   for (let step = 0; step < maxSteps; step++) {
     if (opts.signal?.aborted) return; // M3a：取消信号于轮界收束（终态由编排器分类：cancelled）
     currentStep = step;
@@ -570,6 +572,14 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         wroteSinceVerifyBeat = true; // M10②：判据的另一位——两拍同签名红之间**有过成功的写**就算在换路子试
       }
     }
+    // #69：最后一步模型**仍在调工具**时，也让收束闸有机会留下证据——
+    // 从前这一段只在模型自己不再调工具时才走到，于是撞帽的 run 一条 verify 证据都没有
+    // （真模型面实测 5/43≈12% 整趟被帽砍掉）。这里只把"该收束了"这件事说给它听，
+    // **不动**下面那一整段的判定与形状：撞帽路与收束路走同一份口径。
+    if (step === maxSteps - 1 && sawToolCall) {
+      capReached = true;
+      sawToolCall = false;
+    }
     if (!sawToolCall) {
       // ---- 能力 5 收束闸：写过盘却从未自调 verify ⇒ harness 补一拍验证，别把「说了」当「验了」----
       // 旧行为：只有模型自己调 verify 才会验证（提示词写着「修改完成后调用 verify」，纯靠自觉），
@@ -613,7 +623,8 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           }
         }
       }
-      return; // 模型认为任务结束（纯文本轮 / 事件源耗尽）
+      if (!capReached) return; // 模型认为任务结束（纯文本轮 / 事件源耗尽）；撞帽则落回循环外那条 throw
+      // 撞帽路：证据已在上面落流，这里**不吞掉失败**——继续往下走，由循环外那句抛。
     }
   }
   throw new Error(`agent loop 超过 maxSteps=${String(maxSteps)}，强制中止`);
