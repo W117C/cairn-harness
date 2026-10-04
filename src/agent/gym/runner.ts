@@ -1,7 +1,7 @@
 // M5a 反事实回放跑器（§m5-proposal 步骤 3）：
 //   模式① 从头跑：task.md → 新会话 → runLoop → verify → score
 //   模式② 分叉重跑：forkSession 从事件点派生 → 续跑 → verify → score（同一段历史，换个策略会怎样）
-// 模型注入：scripted（明卷，确定性，剧本 = case 内 script.jsonl 冻结）/ real（暗卷 GLM，需 M0_API_KEY）。
+// 模型注入：scripted（明卷，确定性，剧本 = case 内 script.jsonl 冻结）/ real（暗卷 GLM，需 CAIRN_API_KEY）。
 // 临时目录纪律：mkdtemp 后必须 realpath（macOS /tmp 实为 /private/tmp）。
 import { cp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -75,8 +75,14 @@ function createRealSessionProvider(
   workspace: string,
   system: string,
   transport?: typeof streamGlm,
+  /** 这一 run 要摘掉的工具名（能力族）。**不传 = 逐字保持原行为**（缺省走 `sessionToolSpecs({mode:"auto"})`）。
+   *  存在的唯一理由：P1-b 的 A/B 要「同一批 case、同一模型、只换工具面」，而面是这条路上唯一可换的变量。 */
+  omitTools?: readonly string[],
 ): Provider {
-  const face = sessionToolSpecs({ mode: "auto" });
+  const face = sessionToolSpecs({
+    mode: "auto",
+    ...(omitTools && omitTools.length > 0 ? { omitTools } : {}),
+  });
   return createGlmSessionProvider(eventsPath, {
     system,
     workspace,
@@ -136,6 +142,10 @@ export interface RunCaseOptions {
   system?: string;
   /** 暗卷 transport 注入点（单测用；缺省 = 真出网 `streamGlm`）。 */
   transport?: typeof streamGlm;
+  /** 这一 run 要摘掉的工具名（`sessionToolSpecs` 的 `omitTools` 同名同义）。
+   *  **不传 = 逐字不变**（零回归支）。只有 `real` 档认它——`scripted` 的面是剧本写死的，
+   *  `probe` 档走自己的装配基线，两者的面都不是这条参数能换的，传了会被静默忽略 ⇒ 明确不传。 */
+  omitTools?: readonly string[];
 }
 
 /** 模式① 从头跑：task.md → 新会话 → 跑 loop → 跑 verify。 */
@@ -153,7 +163,7 @@ export async function runCase(c: GymCase, opts: RunCaseOptions): Promise<GymCase
   const provider = probe
     ? probe.provider
     : opts.model === "real"
-      ? createRealSessionProvider(eventsPath, workDir, opts.system ?? GYM_PROBE_SYSTEM, opts.transport)
+      ? createRealSessionProvider(eventsPath, workDir, opts.system ?? GYM_PROBE_SYSTEM, opts.transport, opts.omitTools)
       : createGymScriptedProvider(scriptPath!);
   await runLoop({
     provider,

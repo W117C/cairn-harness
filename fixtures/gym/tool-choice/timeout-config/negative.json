@@ -1,0 +1,9 @@
+{
+  "reason": "只加一句注释说“这里要换算”但没真换算 ⇒ verify 必失败——证明判卷对「注释不算修复」有牙齿",
+  "changes": [
+    {
+      "path": "src/timeout.js",
+      "content": "// gym tool-choice case: timeout-config（错误解法）\n// TODO: 这里应该把秒换算成毫秒\nexport const DEFAULTS = { timeoutMs: 30_000, retries: 2 };\n\nexport function resolveTimeout(flat) {\n  const raw = flat.timeout;\n  if (raw === undefined || raw === null || raw === '') return DEFAULTS.timeoutMs;\n  return Number(raw);\n}\n\nexport function writeTimeout(flat, timeoutMs) {\n  return { ...flat, timeout: String(timeoutMs) };\n}\n"
+    }
+  ]
+}

@@ -88,6 +88,37 @@ describe("run attachment boundary", () => {
     expect((await validateRunAttachments(Array.from({ length: 33 }, () => ({ path: "note.txt", kind: "file", explicit: true })), root))).toMatchObject({ ok: false });
     expect((await validateRunAttachments(Array.from({ length: 5 }, () => ({ path: "x".repeat(4096), kind: "file", explicit: true })), root))).toMatchObject({ ok: false });
   });
+
+  // 入口那道闸限的是**路径总字符**（MAX_TOTAL_PATH_CHARS=16384），管不到绕过它的调用方：
+  // worker / gym / 脚本 / 单测都直接构造 provider。没有 provider 侧那道闸时，一个超长字符串
+  // 会一路走到最终硬闸才炸，报成 `[context_budget_exceeded] final estimated input N`——
+  // 把「参数写错了」报成「上下文装不下」，是最难查的一类假象。
+  it("provider 层对绕过入口的 attachmentContext fail-closed（不静默截断）", async () => {
+    const { ATTACHMENT_CONTEXT_CHAR_LIMIT, createGlmSessionProvider } = await import("../src/agent/glm-session");
+    const dir = await mkdtemp(join(process.env.PI_SCRATCH_DIR!, "attn-ctx-"));
+    try {
+      // 恰好等于帽：放行（边界本身也要有判据，否则「> 还是 >=」是猜的）。
+      expect(() => createGlmSessionProvider(join(dir, "ok.jsonl"), {
+        map: false, workspace: dir,
+        attachmentContext: "x".repeat(ATTACHMENT_CONTEXT_CHAR_LIMIT),
+      })).not.toThrow();
+      // 超一字符：抛，且错里带得出两个数字。
+      let msg = "";
+      try {
+        createGlmSessionProvider(join(dir, "too-big.jsonl"), {
+          map: false, workspace: dir,
+          attachmentContext: "x".repeat(ATTACHMENT_CONTEXT_CHAR_LIMIT + 1),
+        });
+      } catch (e) { msg = e instanceof Error ? e.message : String(e); }
+      expect(msg).toContain("attachment_context_too_large");
+      expect(msg).toContain(String(ATTACHMENT_CONTEXT_CHAR_LIMIT + 1));
+      expect(msg).toContain(String(ATTACHMENT_CONTEXT_CHAR_LIMIT));
+      // **不截断**：超限不许变成「安静地少几个附件」——残缺清单与「工作区真没别的附件」同形。
+      expect(msg).not.toContain("truncated");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 async function realPath(path: string): Promise<string> {

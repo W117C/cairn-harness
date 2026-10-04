@@ -13,6 +13,7 @@ import { REMEMBER_DESCRIPTION } from "../tools/remember";
 import { computePrune, writePruneAttachments } from "./prune";
 import { basename, dirname, join } from "node:path";
 import { createMapBuilder, mapInjectText, mapUnavailableText, type MapBuilder } from "./map/build";
+import { MAP_TOKENS_DEFAULT } from "./map/render";
 import { AUTOMATION_TOOL_NAMES, automationToolSpecs } from "./automation-surface";
 import { strandsWorkersOnSpawn } from "./tool-surface";
 import { makeMentionedRe, makePathishRe } from "./context-signals";
@@ -32,7 +33,7 @@ import {
 import type { SolpiRuntime } from "./solpi-runtime";
 import type { RequestMeter } from "./metering";
 import { deriveProgressBoundaries } from "./economics";
-import { planSurfaceBudget } from "./model-surface";
+import { planSurfaceBudget, surfaceSpecChars } from "./model-surface";
 import { serializeLayer } from "./prefix-churn";
 import { amortizedCompactionConfig, measureHeadSurvival, type HeadSurvivalReading } from "./compaction-cost";
 import { freshSavings, shouldApplyPrune } from "./prune-batching";
@@ -445,6 +446,11 @@ export const OPTIONAL_TOOL_NAMES = {
    *  「未启用——工作区 .agent/lsp.json 缺少 lsp 配置」（lsp.ts:602）⇒ 挂着它只有成本没有能力。 */
   lspTools: ["lsp"],
 } as const;
+/** 附件引用块（`opts.attachmentContext`）的字符上限。生产产物来自
+ *  `formatAttachmentContext()`（`src/main/run-attachments.ts`），入口限路径总字符 16,384、
+ *  每附件一行包装，产物约 17.4k ⇒ 这里留约 1.9 倍余量，只为拦住**绕过入口**的无界输入。 */
+export const ATTACHMENT_CONTEXT_CHAR_LIMIT = 32_768;
+
 /** 运行时注入的工具（插件 skill / MCP server 工具）的模型可见规格。
  *  MCP 侧 parameters 直接是 server 的 inputSchema 原文——不翻译、不裁剪，避免两套 schema 漂移。 */
 export interface SessionPluginTool {
@@ -536,7 +542,7 @@ export function createGlmSummarizer(
   label = "GLM",
 ): Summarizer {
   return async (input: SummarizerInput): Promise<SummarizerOutput> => {
-    const modelName = model && model !== "" ? model : (process.env.M0_MODEL ?? "glm-5.2");
+    const modelName = model && model !== "" ? model : (process.env.CAIRN_MODEL ?? "glm-5.2");
     const msgs: GlmMessage[] = [
       { role: "system", content: input.system },
       {
@@ -564,7 +570,7 @@ export function createGlmSummarizer(
 
 export interface GlmSessionCompaction {
   config?: Partial<CompactionConfig>;
-  /** 缺省 = 显式 transport，或 legacy M0_API_KEY + GLM。 */
+  /** 缺省 = 显式 transport，或 legacy CAIRN_API_KEY + GLM。 */
   summarizer?: Summarizer;
   /** system prompt / 工具 schema / 记忆注入开销字符数（触发估算全量计入，§7.3(a)）。 */
   overhead?: AssemblyOverhead;
@@ -665,7 +671,7 @@ export function createGlmSessionProvider(
       hookContext?: string;
       deriveRemount?: (events: AgentEvent[]) => string | null;
     };
-    /** 真实通道模型名（缺省 = provider 层读 M0_MODEL env；settings.model 在场时优先）。 */
+    /** 真实通道模型名（缺省 = provider 层读 CAIRN_MODEL env；settings.model 在场时优先）。 */
     model?: string;
     /** 调用方**已经解析好**的模型窗口（如 `--model` 自由档位合成 spec 上的那个）。
      *  `opts.model` 那条查表的路只认得表内模型；自由档位的名字按定义不在表里，查表恒为 undefined ⇒
@@ -684,6 +690,21 @@ export function createGlmSessionProvider(
 ): Provider {
   let round = 0; // 注入轮次（地图每 N 轮重算用）
   // 压缩重写代价的实测状态：跨请求才量得出「头部还剩多少可缓存」，故放 provider 级
+  // 附件引用块的长度闸（fail-closed，越界直接抛，不静默截断）。
+  // 为什么 provider 层要再闸一道：入口 `validateRunAttachments` 限的是**路径总字符**（16,384，
+  // `src/main/run-attachments.ts`），渲染后的块还要加每行的「- kind: path=」包装与头尾两行
+  // ⇒ 实测产物约 17.4k 字符。那道闸管的是**用户输入**，管不到**直接构造 provider 的调用方**
+  // （worker / gym / 脚本 / 单测都是这条路）。少了这道闸，一个超长字符串会一路走到最终硬闸
+  // 才炸，报出来的是 `[context_budget_exceeded] final estimated input N`——把一个「参数写错了」
+  // 报成「上下文装不下」，是最难查的一类假象。
+  // 选 fail-closed 而非截断：截断出来的附件清单是**残缺的**，模型会以为工作区里就那几个附件
+  // （与「工作区真的没有别的附件」同形）；抛错至少让调用方知道自己写错了。
+  if (opts.attachmentContext !== undefined && opts.attachmentContext.length > ATTACHMENT_CONTEXT_CHAR_LIMIT) {
+    throw new Error(
+      `[attachment_context_too_large] ${String(opts.attachmentContext.length)} 字符 > 帽 ${String(ATTACHMENT_CONTEXT_CHAR_LIMIT)}` +
+      "（入口的 validateRunAttachments 限路径总字符 16384，正常产物约 17.4k；这顶帽是给绕过入口的调用方兜底的）",
+    );
+  }
   // （turnGenerator 每次 stream() 都是新的生成器，函数内局部变量留不住）。
   let prevRequestLayer = "";
   let headSurvival: HeadSurvivalReading | null = null;
@@ -702,7 +723,7 @@ export function createGlmSessionProvider(
     const merged: CompactionConfig = { ...withModelBudget(DEFAULT_COMPACTION_CONFIG, window), ...opts.compaction?.config };
     return typeof window === "number" ? { ...merged, inputLimit: Math.min(merged.inputLimit, window) } : merged;
   };
-  const defaultSummarizer = opts.transport || process.env.M0_API_KEY
+  const defaultSummarizer = opts.transport || process.env.CAIRN_API_KEY
     ? createGlmSummarizer(opts.model, opts.solpi?.meter, opts.transport, opts.transportLabel)
     : undefined;
   const coordinator = opts.compaction
@@ -808,6 +829,70 @@ export function createGlmSessionProvider(
   // 故忽略入参沿用构造时的 opts（gate-check 暗卷路径冻结依赖此契约）。
   let successfulRequests = 0, requestsAtBoundary = 0, lastBoundaryCount = 0;
   const boundarySamples: number[] = [];
+  /** P0 装配账：本 provider 实例内的**请求序号**。与 `successfulRequests` 分开是硬要求——后者
+   *  只在请求成功 yield 之后才 ++，拿它当序号会让每个失败请求都重复出现同一个号，而「本 run 首
+   *  请求」这个采样条件也会跟着错位。 */
+  let attemptSeq = 0;
+  /** 上一次**记录过**的工具面签名（精确：名字按数组序拼接）。用精确签名而不是「长度+首尾」：
+   *  中途换掉/摘掉一把工具时长度可能不变，而那正是本事件要看见的形状（评审 A1/R6）。 */
+  let lastFaceSignature: string | null = null;
+
+  /** P0 装配账落流：**观测 only + fail-open**。
+   *  写盘失败绝不打断模型请求——本事件每 run 首轮必过，而压缩事件是偶发的；把一个没有
+   *  try/catch 的写盘接在这里，等于给每个 run 新加一个单点故障（评审 C4）。
+   *  与压缩那支的另一处差别：这里**不 close** 句柄，交给 `createEventLog` 的有界缓存
+   *  （`LOG_HANDLE_MAX=32`）持有——照抄 `finally close()` 会让每次 append 变成
+   *  open+stat+读尾，把观测变成热路径开销（评审 C5）。 */
+  const recordSurfaceAccount = async (
+    attempt: number,
+    declared: readonly GlmToolSpec[],
+    surface: ReturnType<typeof planSurfaceBudget>,
+    volatile: { memoryChars: number; skillsBlockChars: number; mapChars: number; attachmentContextChars: number },
+  ): Promise<void> => {
+    try {
+      const signature = declared.map((s) => s.function.name).join("|");
+      const faceChanged = lastFaceSignature !== null && lastFaceSignature !== signature;
+      lastFaceSignature = signature;
+      // 采样（评审 G4）：首请求 ∪ 面变了 ∪ 任何降配。面在 run 中途通常不变，全量落流会让日志
+      // 线性膨胀却零增益；而「面变小」（run 中途摘 skill）恰恰只在面变化这一支里才看得见——
+      // 旧版把这一问委托给 PC1–PC4，但那些判据只跑在 `prefix-churn-check` 的合成驱动器上，
+      // 全仓没有一条读真实会话的逐轮面变化。
+      if (attempt !== 1 && !faceChanged && !(surface.account.overChars > 0)) return;
+      // 易变侧四项一律照实记，缺项记 0 —— **不因为「可能不准」就省掉不记**：
+      // 省掉的话「降配梯看不见的那一半」就彻底没有观测面，而这正是本字段存在的理由。
+      // 口径（压缩前快照、非上界、skills 块压缩后可能变大）写在 `events/index.ts` 的字段注释里。
+      const volatileChars =
+        volatile.memoryChars + volatile.skillsBlockChars + volatile.mapChars + volatile.attachmentContextChars;
+      await appendSurfaceAccount({
+        type: "surface_account",
+        attemptSeq: attempt,
+        declaredToolCount: declared.length,
+        declaredToolSpecChars: surface.account.toolSpecChars,
+        sentToolCount: surface.specs.length,
+        sentToolSpecChars: surfaceSpecChars(surface.specs),
+        baseSystemChars: opts.system?.length ?? 0,
+        volatileChars,
+        memoryChars: volatile.memoryChars,
+        skillsBlockChars: volatile.skillsBlockChars,
+        mapChars: volatile.mapChars,
+        attachmentContextChars: volatile.attachmentContextChars,
+        limitChars: surface.account.limitChars,
+        overChars: surface.account.overChars,
+        shortened: [...surface.shortened],
+        dropped: [...surface.dropped],
+        unresolvable: surface.unresolvable,
+        prefixStableChars: surface.prefixStableChars,
+        faceChanged,
+      });
+    } catch (error) {
+      // fail-visible：观测面的失败要出得来，但只出到 stderr，不升级成模型请求的失败。
+      console.warn("[surface_account] 装配账落流失败（本轮请求继续）:", error);
+    }
+  };
+  const appendSurfaceAccount = async (event: AgentEvent): Promise<void> => {
+    if (opts.emit) return opts.emit(event);
+    await createEventLog(logPath).append(event);
+  };
   return {
     stream(_messages, _tools, call): AsyncIterable<ModelOutput> {
       return turnGenerator(call);
@@ -815,28 +900,21 @@ export function createGlmSessionProvider(
   };
   async function* turnGenerator(call?: ProviderCall): AsyncGenerator<ModelOutput> {
       call?.signal?.throwIfAborted();
+      const attempt = ++attemptSeq;
       let { events, history } = await assemble();
       // 逐请求工具面：给了 requestFace 就每轮现算（run 中途激活的 skill 下一轮就不再出现在清单里），
       // 否则沿用构造时那份。整轮只用这一个 `tools`——散落着读 opts.tools 会出现同轮两种口径。
       let compactedThisRound = false;
       const face = opts.requestFace?.();
       const declaredTools = face ? face.tools : opts.tools;
-      // 模型面总预算（每请求固定成本）。落这一层而不是工具表面那一层，理由有二：
-      // ① 这里同时握有 system 文本与**最终**工具表——预算要按真实要发出去的字节判；
-      // ② 每一条装配路径都过这里（主会话 / worker / 靶场 / 探针 / 暗卷都从本 provider 走），
-      //   接在 `sessionToolSpecs` 上则会漏掉直接传 `tools:` 的调用方。
-      const surface = declaredTools && declaredTools.length > 0
-        ? planSurfaceBudget({
-            specs: declaredTools,
-            systemChars: opts.system?.length ?? 0,
-            coreNames: CORE_SURFACE_TOOL_NAMES,
-          })
-        : null;
-      const tools = surface ? surface.specs : declaredTools;
       const liveNote = face?.note;
-      // 降配说明单独成块，不搭 `liveNote` 那条便车：`liveNote` 经 `pluginContext` 进 skills 块，
-      // 而没有插件/技能的会话根本没有那一块——接在那儿就是「生产者在、消费者不在」。
-      const surfaceNoteText = surface?.note ?? "";
+
+      // ── 易变侧四块（记忆 / skills 块 / 符号地图 / 附件引用）────────────────────────────────
+      // **为什么必须排在降配计划之前**：P0 装配账要把它们记进去（`surface_account` 的
+      // `volatileChars` 及四个分项），而降配按构造排在压缩之前 ⇒ 事件必须在压缩前落流。
+      // 这四块与降配**互不依赖**（谁都不读谁的结果），所以整段上移是纯重排，不改任何判定。
+      // 口径钉死在事件定义里（`events/index.ts` 的 `volatileChars`）：记的是这一刻的快照，
+      // 压缩那一轮它们会被重建（skills 块甚至可能因为新增重挂资格而变大）⇒ 既不是上界也不是实发值。
 
       // M2d 固定回注（§8.1.5/§8.1.9）：每轮组装重读两层记忆并重注（压缩后自然重注）。
       // 出口在 `buildMemoryInjectionSafe` 那一道（第 315 页）：这里从前是自己的 catch ＋ `console.debug`
@@ -859,6 +937,11 @@ export function createGlmSessionProvider(
             // 整句问话进地图：词面检索吃的是自然语言，`mentionedIdents` 那份标识符切片接不上中文。
             queryText: lastUserContent(events),
             maxInputTokens: 128_000,
+            // **预算显式写死，不靠缺省**：`clampBudget(undefined, …)` 返回的是
+            // `MAP_TOKENS_DEFAULT`（1024），而 `MAP_TOKENS_MAX`（4096）是**上限**不是缺省——
+            // 只读常量表很容易把 4096 当成生产实际值（2026-10-03 实测复核：`clampBudget(undefined, 128_000) === 1024`）。
+            // 这里点明缺省是什么，是为了「将来调预算」必须动这一行，而不是被一个没人注意的默认值悄悄改掉。
+            budgetTokens: MAP_TOKENS_DEFAULT,
             nowRound: round++,
           });
           return mapInjectText(built);
@@ -871,6 +954,51 @@ export function createGlmSessionProvider(
         }
       };
       let mapText = await buildMapText(history);
+      const attachmentContextChars = opts.attachmentContext?.length ?? 0;
+
+      // 模型面总预算（每请求固定成本）。落这一层而不是工具表面那一层，理由有二：
+      // ① 这里同时握有 system 文本与**最终**工具表——预算要按真实要发出去的字节判；
+      // ② 每一条装配路径都过这里（主会话 / worker / 靶场 / 探针 / 暗卷都从本 provider 走），
+      //   接在 `sessionToolSpecs` 上则会漏掉直接传 `tools:` 的调用方。
+      // ⚠️ **不传 `volatileChars` 是有意的**：传了会让降配梯开始为「易变侧太大」而丢工具，而它丢工具
+      // 解决不了记忆/skills 块的问题（那是渐进披露的地盘），只会误伤工具面。
+      // 另有一个解不开的循环：压缩那侧的开销估算要消费**降配后**的 tools ⇒ 降配必须排在压缩前，
+      // 而压缩会重建易变侧 ⇒ 真值要到降配之后才知道。所以易变侧只进**观测**（本事件），不进**判定**。
+      const surface = declaredTools && declaredTools.length > 0
+        ? planSurfaceBudget({
+            specs: declaredTools,
+            systemChars: opts.system?.length ?? 0,
+            coreNames: CORE_SURFACE_TOOL_NAMES,
+          })
+        : null;
+      const tools = surface ? surface.specs : declaredTools;
+      // 降配说明单独成块，不搭 `liveNote` 那条便车：`liveNote` 经 `pluginContext` 进 skills 块，
+      // 而没有插件/技能的会话根本没有那一块——接在那儿就是「生产者在、消费者不在」。
+      const surfaceNoteText = surface?.note ?? "";
+      // P0 装配账：**在模型请求发出前**落流（所以序号叫 attempt，不是 request）。
+      //
+      // 落点约束：必须在压缩块之前——`compaction.test.ts:481` 断言 `compaction` 是会话日志最后一条，
+      // 而同文件 `:490-497` 更狠，它**拿数组下标当事件 id**，任何多落的一条都会让两向断言同时错位。
+      // （`compact-wiring.test.ts` / `hook-precompact-producer.test.ts` 也断言同一件事，但它们走
+      //   `runCompaction` 而不是本函数，实际不经这里。）
+      //
+      // ⚠️ **本落点与 `tests/final-budget.test.ts:20` 的契约在唯一一个组合上互斥**：
+      // 那条判据要求「最终硬闸拦下时盘上一个字节都不许多」，而本事件排在硬闸之前 ⇒
+      // **有工具面 + 硬闸拦下**时盘上会留一条账。今天不冲突**只因那条判据的用例不传工具面**
+      // （`surface === null` ⇒ 根本不产账）。这是个**先于 P0 就埋下的地雷**，不是 P0 引入的。
+      //
+      // **取舍：判据赢。** fail-closed 的语义是「这轮没发生」，让观测去改盘就是让它改写了一件事。
+      // 硬闸抛的 `[context_budget_exceeded] final estimated input N; available M` 已经带足了诊断信息，
+      // 不需要靠盘上多一条事件来解释为什么失败。⇒ 将来若真出现那个组合，**该动的是本事件的落点**
+      // （挪到硬闸通过之后），**不是放宽那条判据**。
+      // `tests/surface-account.test.ts` 的「硬闸拦下：有工具面时盘上留一条账」把今天这个真值钉住了，
+      // 有人给 `final-budget.test.ts` 补上工具面时，那条守卫会当场红并指向这里。
+      if (surface) await recordSurfaceAccount(attempt, declaredTools ?? [], surface, {
+        memoryChars,
+        skillsBlockChars: skillsBlock?.length ?? 0,
+        mapChars: mapText?.length ?? 0,
+        attachmentContextChars,
+      });
       // M1d 触发检查：估算含 system/tools/记忆全量开销；B（硬兜底）→ overflow 紧急截断
       if (coordinator && opts.compaction) {
         const factor = calibrateFactor(events);

@@ -1,0 +1,582 @@
+{
+  "root": "/Users/ze/.dsh/sessions",
+  "sessions": 73,
+  "sessionsUnreadable": [],
+  "sessionsWithHeaders": 72,
+  "requestsWithHeader": 135,
+  "malformedHeaders": 0,
+  "capChars": 24000,
+  "toolCount": {
+    "min": 10,
+    "p50": 60,
+    "p90": 83,
+    "max": 115
+  },
+  "toolChars": {
+    "min": 5792,
+    "p50": 52716,
+    "p90": 67598,
+    "max": 86776
+  },
+  "requestsOverCapOnToolsAlone": 117,
+  "overCapExamples": [
+    {
+      "toolCount": 83,
+      "toolChars": 67598,
+      "model": "cn:deepseek-v4.1-flash"
+    },
+    {
+      "toolCount": 37,
+      "toolChars": 29952,
+      "model": "cn:deepseek-v4.1-flash"
+    },
+    {
+      "toolCount": 60,
+      "toolChars": 52716,
+      "model": "cn:deepseek-v4.1-flash"
+    },
+    {
+      "toolCount": 54,
+      "toolChars": 44283,
+      "model": "cn:deepseek-v4.1-flash"
+    },
+    {
+      "toolCount": 54,
+      "toolChars": 44283,
+      "model": "cn:deepseek-v4.1-flash"
+    }
+  ],
+  "declaredUniverseSize": 124,
+  "declaredUniverse": [
+    {
+      "name": "interrupt_agent",
+      "requests": 135
+    },
+    {
+      "name": "list_agents",
+      "requests": 135
+    },
+    {
+      "name": "send_message",
+      "requests": 135
+    },
+    {
+      "name": "subagent",
+      "requests": 117
+    },
+    {
+      "name": "ask_user_question",
+      "requests": 117
+    },
+    {
+      "name": "bash",
+      "requests": 117
+    },
+    {
+      "name": "create_goal",
+      "requests": 117
+    },
+    {
+      "name": "edit",
+      "requests": 117
+    },
+    {
+      "name": "exit_plan_mode",
+      "requests": 117
+    },
+    {
+      "name": "get_goal",
+      "requests": 117
+    },
+    {
+      "name": "glob",
+      "requests": 117
+    },
+    {
+      "name": "grep",
+      "requests": 117
+    },
+    {
+      "name": "job_kill",
+      "requests": 117
+    },
+    {
+      "name": "job_list",
+      "requests": 117
+    },
+    {
+      "name": "job_output",
+      "requests": 117
+    },
+    {
+      "name": "load_workspace_dependencies",
+      "requests": 117
+    },
+    {
+      "name": "present",
+      "requests": 117
+    },
+    {
+      "name": "read",
+      "requests": 117
+    },
+    {
+      "name": "read_image",
+      "requests": 117
+    },
+    {
+      "name": "skill",
+      "requests": 117
+    },
+    {
+      "name": "subagent_fork",
+      "requests": 117
+    },
+    {
+      "name": "todo_write",
+      "requests": 117
+    },
+    {
+      "name": "update_goal",
+      "requests": 117
+    },
+    {
+      "name": "web_fetch",
+      "requests": 117
+    },
+    {
+      "name": "web_search",
+      "requests": 117
+    },
+    {
+      "name": "workflow",
+      "requests": 117
+    },
+    {
+      "name": "write",
+      "requests": 117
+    },
+    {
+      "name": "spawn_teammate",
+      "requests": 116
+    },
+    {
+      "name": "team_task_create",
+      "requests": 116
+    },
+    {
+      "name": "team_task_get",
+      "requests": 116
+    },
+    {
+      "name": "team_task_list",
+      "requests": 116
+    },
+    {
+      "name": "team_task_update",
+      "requests": 116
+    },
+    {
+      "name": "wait_agent",
+      "requests": 116
+    },
+    {
+      "name": "mnemon_document_create",
+      "requests": 107
+    },
+    {
+      "name": "mnemon_document_search",
+      "requests": 107
+    },
+    {
+      "name": "mnemon_runtime_memory",
+      "requests": 107
+    },
+    {
+      "name": "mnemon_subagent_result",
+      "requests": 107
+    },
+    {
+      "name": "mnemon_document_manage",
+      "requests": 90
+    },
+    {
+      "name": "mnemon_forget",
+      "requests": 90
+    },
+    {
+      "name": "mnemon_link",
+      "requests": 90
+    },
+    {
+      "name": "mnemon_memory_bodies",
+      "requests": 90
+    },
+    {
+      "name": "mnemon_memory_body_create",
+      "requests": 90
+    },
+    {
+      "name": "mnemon_memory_body_merge",
+      "requests": 90
+    },
+    {
+      "name": "mnemon_memory_body_update",
+      "requests": 90
+    },
+    {
+      "name": "mnemon_recall",
+      "requests": 90
+    },
+    {
+      "name": "mnemon_related",
+      "requests": 90
+    },
+    {
+      "name": "mnemon_remember",
+      "requests": 90
+    },
+    {
+      "name": "mnemon_status",
+      "requests": 90
+    },
+    {
+      "name": "mnemon_view_action",
+      "requests": 90
+    },
+    {
+      "name": "mnemon_view_route",
+      "requests": 90
+    },
+    {
+      "name": "schedule_create",
+      "requests": 80
+    },
+    {
+      "name": "schedule_delete",
+      "requests": 80
+    },
+    {
+      "name": "schedule_list",
+      "requests": 80
+    },
+    {
+      "name": "schedule_update",
+      "requests": 80
+    },
+    {
+      "name": "list_subagent_models",
+      "requests": 72
+    },
+    {
+      "name": "advanced_search",
+      "requests": 66
+    },
+    {
+      "name": "free_search_test",
+      "requests": 66
+    },
+    {
+      "name": "get_expert_team",
+      "requests": 66
+    },
+    {
+      "name": "list_expert_teams",
+      "requests": 66
+    },
+    {
+      "name": "list_experts",
+      "requests": 66
+    },
+    {
+      "name": "multi_search",
+      "requests": 66
+    },
+    {
+      "name": "platform_search",
+      "requests": 66
+    },
+    {
+      "name": "render_ui",
+      "requests": 66
+    },
+    {
+      "name": "sidebar_open",
+      "requests": 66
+    },
+    {
+      "name": "summon_expert_team",
+      "requests": 66
+    },
+    {
+      "name": "univer_api",
+      "requests": 66
+    },
+    {
+      "name": "univer_compile_svg",
+      "requests": 66
+    },
+    {
+      "name": "univer_execute",
+      "requests": 66
+    },
+    {
+      "name": "univer_export",
+      "requests": 66
+    },
+    {
+      "name": "univer_import",
+      "requests": 66
+    },
+    {
+      "name": "univer_inspect",
+      "requests": 66
+    },
+    {
+      "name": "univer_lint",
+      "requests": 66
+    },
+    {
+      "name": "univer_new",
+      "requests": 66
+    },
+    {
+      "name": "univer_print_pdf",
+      "requests": 66
+    },
+    {
+      "name": "univer_resources",
+      "requests": 66
+    },
+    {
+      "name": "univer_screenshot",
+      "requests": 66
+    },
+    {
+      "name": "univer_status",
+      "requests": 66
+    },
+    {
+      "name": "univer_unit",
+      "requests": 66
+    },
+    {
+      "name": "univer_worktree",
+      "requests": 66
+    },
+    {
+      "name": "validate_dsh_ui",
+      "requests": 66
+    },
+    {
+      "name": "code_review",
+      "requests": 65
+    },
+    {
+      "name": "summon_expert",
+      "requests": 65
+    },
+    {
+      "name": "summon_experts",
+      "requests": 65
+    },
+    {
+      "name": "acp_cache",
+      "requests": 3
+    },
+    {
+      "name": "acp_status",
+      "requests": 3
+    },
+    {
+      "name": "compress",
+      "requests": 3
+    },
+    {
+      "name": "decompress",
+      "requests": 3
+    },
+    {
+      "name": "search_context",
+      "requests": 3
+    },
+    {
+      "name": "ego_auth_flush",
+      "requests": 3
+    },
+    {
+      "name": "ego_captcha",
+      "requests": 3
+    },
+    {
+      "name": "ego_cdp",
+      "requests": 3
+    },
+    {
+      "name": "ego_check",
+      "requests": 3
+    },
+    {
+      "name": "ego_cli",
+      "requests": 3
+    },
+    {
+      "name": "ego_click",
+      "requests": 3
+    },
+    {
+      "name": "ego_dialog",
+      "requests": 3
+    },
+    {
+      "name": "ego_doctor",
+      "requests": 3
+    },
+    {
+      "name": "ego_download",
+      "requests": 3
+    },
+    {
+      "name": "ego_drag",
+      "requests": 3
+    },
+    {
+      "name": "ego_fill",
+      "requests": 3
+    },
+    {
+      "name": "ego_help",
+      "requests": 3
+    },
+    {
+      "name": "ego_hover",
+      "requests": 3
+    },
+    {
+      "name": "ego_http",
+      "requests": 3
+    },
+    {
+      "name": "ego_js",
+      "requests": 3
+    },
+    {
+      "name": "ego_key",
+      "requests": 3
+    },
+    {
+      "name": "ego_login_import",
+      "requests": 3
+    },
+    {
+      "name": "ego_navigate",
+      "requests": 3
+    },
+    {
+      "name": "ego_page_info",
+      "requests": 3
+    },
+    {
+      "name": "ego_read_element",
+      "requests": 3
+    },
+    {
+      "name": "ego_screenshot",
+      "requests": 3
+    },
+    {
+      "name": "ego_script",
+      "requests": 3
+    },
+    {
+      "name": "ego_scroll",
+      "requests": 3
+    },
+    {
+      "name": "ego_select",
+      "requests": 3
+    },
+    {
+      "name": "ego_snapshot",
+      "requests": 3
+    },
+    {
+      "name": "ego_space_close",
+      "requests": 3
+    },
+    {
+      "name": "ego_space_open",
+      "requests": 3
+    },
+    {
+      "name": "ego_status",
+      "requests": 3
+    },
+    {
+      "name": "ego_upload",
+      "requests": 3
+    },
+    {
+      "name": "ego_wait",
+      "requests": 3
+    },
+    {
+      "name": "ego_wait_for_response",
+      "requests": 3
+    },
+    {
+      "name": "ego_wait_for_selector",
+      "requests": 3
+    },
+    {
+      "name": "ego_wait_for_url",
+      "requests": 3
+    },
+    {
+      "name": "cordis_inspect_list",
+      "requests": 3
+    },
+    {
+      "name": "cordis_inspect_query",
+      "requests": 3
+    },
+    {
+      "name": "plugin_manager",
+      "requests": 3
+    }
+  ],
+  "sessionsWithVaryingFace": [
+    {
+      "path": "/Users/ze/.dsh/sessions/--Users-ze-Documents-deepseek-harness-default-workspace--/session-03ee6227-5b50-4312-83ac-daba8c2071b9/session.v4.jsonl.zstd",
+      "isSubagent": false,
+      "requests": 7,
+      "min": 37,
+      "max": 115,
+      "changed": true
+    },
+    {
+      "path": "/Users/ze/.dsh/sessions/--Users-ze-Documents-deepseek-harness-default-workspace--/session-55e86aac-cf0a-44d1-bc0d-fef1b2302c40/session.v4.jsonl.zstd",
+      "isSubagent": false,
+      "requests": 4,
+      "min": 82,
+      "max": 115,
+      "changed": true
+    },
+    {
+      "path": "/Users/ze/.dsh/sessions/--Users-ze-Downloads-deepseek~0020harness--/92b1c911-bc28-4140-94c8-789b3e3d2b54/session.v4.jsonl.zstd",
+      "isSubagent": true,
+      "requests": 20,
+      "min": 10,
+      "max": 60,
+      "changed": true
+    },
+    {
+      "path": "/Users/ze/.dsh/sessions/--Users-ze-Downloads-deepseek~0020harness--/session-52a124a5-0d5a-47df-af2f-fbf89882a678/session.v4.jsonl.zstd",
+      "isSubagent": false,
+      "requests": 20,
+      "min": 36,
+      "max": 81,
+      "changed": true
+    }
+  ]
+}

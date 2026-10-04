@@ -1,0 +1,8 @@
+{
+  "mustPassVerify": true,
+  "mustChangeFiles": ["src/timeout.js"],
+  "mustNotChangeFiles": ["tests/run.mjs"],
+  "maxTurns": 10,
+  "expectTools": ["edit_file", "write_file", "apply_patch"],
+  "forbidTools": ["run_shell"]
+}

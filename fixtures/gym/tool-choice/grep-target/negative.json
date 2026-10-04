@@ -1,0 +1,9 @@
+{
+  "reason": "只在 total() 上方加一句注释说明「这里要分段」，实现仍按单档算 ⇒ 跨档三条断言必红 —— 证明判卷对「注释不算修复」有牙齿",
+  "changes": [
+    {
+      "path": "src/pricing.js",
+      "content": "// gym tool-choice case: grep-target（错误解法：只加注释）\n// TODO: total() 这里应该分段累加，目前整单都按最终档位算\nexport const TIERS = [\n  { maxKg: 1, perKg: 18 },\n  { maxKg: 5, perKg: 15 },\n  { maxKg: 20, perKg: 12 },\n];\n\nexport function tierOf(kg) {\n  return TIERS.find((t) => kg <= t.maxKg);\n}\n\nexport function total(kg) {\n  const t = tierOf(kg);\n  if (!t) return Infinity;\n  return kg * t.perKg;\n}\n"
+    }
+  ]
+}

@@ -8,13 +8,22 @@ const ROOT = join(import.meta.dirname, "..");
 const EVENTS = "src/events/index.ts";
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 
-/** 事件类型注册表（append 时拒未知类型的那一份）。 */
+/** 事件类型注册表（append 时拒未知类型的那一份）。
+ *
+ *  `KNOWN_TYPES` 在 2026-10-03 由 `new Set([...])` 改成 `Record<AgentEvent["type"], true>`
+ *  （漏登记一个联合成员变成编译期错误）。取料口跟着改，两侧都 **fail-loud**：
+ *  找不到声明、或声明不是对象字面量，都当场抛——绝不静默返回空数组，那会让
+ *  `tests/stream-redaction.test.ts` 的「未表态类型」判据在零长度上假绿。 */
 export function knownTypes(): string[] {
   const src = read(EVENTS);
-  const start = src.indexOf("const KNOWN_TYPES = new Set([");
+  const start = src.indexOf("const KNOWN_TYPES");
   if (start < 0) throw new Error(`${EVENTS} 里找不到 KNOWN_TYPES —— 改名了要同步这张闸`);
-  const body = src.slice(start, src.indexOf("]);", start));
-  return [...body.matchAll(/^\s*"([a-z_]+)",$/gm)].map((m) => m[1] as string);
+  const open = src.indexOf("{", start);
+  const close = open < 0 ? -1 : src.indexOf("};", open);
+  if (open < 0 || close < 0) {
+    throw new Error(`${EVENTS} 里 KNOWN_TYPES 不是对象字面量 —— 换了写法要同步这张闸`);
+  }
+  return [...src.slice(open, close).matchAll(/^\s*([a-z_]+): true,$/gm)].map((m) => m[1] as string);
 }
 
 /** 联合类型里的成员名 → 各自声明的 `type` 字面量。 */

@@ -118,6 +118,11 @@ export const USER_AUTHORED_TEXT_TYPES: readonly AgentEvent["type"][] = [
 export const PROSE_FREE_TYPES: readonly AgentEvent["type"][] = [
   "usage", "session_meta", "plan_approved", "approval_resolved", "agent_status",
   "routing_decision", "impact_report", "turn_truncated",
+  // P0 装配账：字段是工具名（标识符，与 tool_call.name 同口径：那条也只扫 args）、计数、
+  // 布尔与字节数。工具名来自插件/MCP 服务器，但它承载不了任何凭据——把它扫掉只会让
+  // 「省了谁」这条读数失去分辨力。**这是一次显式表态，别顺手改成扫描路径**：
+  // 改的话要同步 tests/stream-redaction.test.ts 的 SAMPLES。
+  "surface_account",
 ];
 
 function scanStringLeaves(v: unknown): unknown {

@@ -7,9 +7,41 @@ import { dirname, isAbsolute, join, relative } from "node:path";
 
 export interface GymExpect {
   mustPassVerify: boolean;
+  /**
+   * 必改文件：**最终状态与原始不同**才算「改了」。
+   *
+   *  ⚠️ **与题面必须逐条对账，否则是自造矛盾**（2026-10-04 同一晚连踩两次，`generated-file` case）：
+   *  · 第一版把题目**要求重跑生成**的 `src/routes.generated.js` 写进 `mustNotChangeFiles`
+   *    ⇒ 评分（`score.ts:36-37`：`forbidden.filter(f => changedFiles.includes(f))`）必然判「禁改文件动了」
+   *    ⇒ **题目构造上无解**，实测 score=0 而模型每一步都做对了。
+   *  · `mustNotChangeFiles` 判的是**结果**，不是**手段**；`forbidTools` 判的是**手段**。
+   *    一条约束能在两者里选，就不要在两处都写——两处写的版本必然有一处和题面打架。
+   *
+   *  识别信号：**`score=0` 且逐条看事件流发现模型每一步都合理** ⇒ 错在 expect.json，不在模型。
+   */
   mustChangeFiles: string[];
   mustNotChangeFiles: string[];
   maxTurns?: number;
+  /** **可选**（2026-10-04 P0-c 新增）：本 case 的「该调哪些工具」——命中其中任一即算选对。
+   *  可选而不是必填，是为了**不动任何冻结 case**：`fixtures/gym/cases/**` 全在
+   *  `scripts/frozen-sha256.json` 里，加必填字段等于让全部既有 case 立刻变红。
+   *  没声明时读数一律 `null`（分母为 0），**不许**退回「默认全对」——那正是
+   *  `tool-choice.ts` 开头点名的同款陷阱（代理量被当准确率读）。 */
+  expectTools?: string[];
+  /** **可选**：本 case 绝不该调的工具。命中任何一件即记一次漏拦。
+   *
+   *  ⚠️ **硬约束：禁令不得与题目的必需路径相交**（2026-10-04 实测踩到，代价是整条 case 作废）。
+   *  真实事故：`generated-file` case 的题面要求「改模板后跑 case fixture 里的生成脚本重跑生成」，
+   *  而那一步**只能用 `run_shell`**；第一版却把 `run_shell` 写进了 `forbidTools`
+   *  ⇒ **题目在构造上无解**，实测 4/4 `score=0` 且 `漏拦率=1`。逐条读事件流才发现：
+   *  读模板、读生成脚本、grep 判卷期望值、改模板、跑生成——**每一步都做对了**，
+   *  唯一被禁的那一步正是题目要求的那一步。
+   *
+   *  ⇒ 写禁令前的自问：**完成本题非用它不可吗？** 是 ⇒ 不能禁。
+   *  「别走捷径」这类约束优先用 `mustNotChangeFiles` 承担（它判的是**结果**，
+   *  而 `forbidTools` 判的是**手段**，手段禁令最容易和必需路径打架）。
+   *  识别信号：**`score=0` 与 `漏拦率=1` 同时出现**，先怀疑禁令本身，而不是先怀疑模型。 */
+  forbidTools?: string[];
 }
 
 export interface GymChange {

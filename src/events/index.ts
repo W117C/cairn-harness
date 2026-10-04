@@ -554,6 +554,77 @@ export interface TurnTruncatedEvent {
   agent_id?: string;
 }
 
+/** P0（2026-10-03）：每轮模型面装配账，**观测 only**——只记 `planSurfaceBudget` 已经算出来的
+ *  那份账，不参与任何判定、不进模型上下文（见 `context.ts` 的忽略名单与 `sidechat.ts` 的
+ *  `return null` 分组）。
+ *
+ *  存在理由：这份账此前每请求都算、算完即丢——于是「真实面多大、有没有触发降配梯、省了谁」
+ *  在整个工程里没有任何一处可回放，属本仓点名的「事件流外私有状态 = 设计错误」缺陷族。
+ *
+ *  **两个基必须分开读**（技术评审 F6）：`declared*` 是 `planSurfaceBudget` 的**入参**那一份
+ *  （`account` 在降配**之前**算，见 `model-surface.ts` 的 `planSurfaceBudget`），`sent*` 才是真正
+ *  发出去的。未降配时两者相等，降配时 `declared > sent`。混读会把送出面读成声明面——而 24k 帽下
+ *  送出面恒 ≤ 约 6.7k token，这会直接读反「有没有越过 10k token 触发线」这个结论。
+ *
+ *  工具名（`shortened` / `dropped`）按标识符对待、**不脱敏**（登记在 `PROSE_FREE_TYPES`）：与
+ *  `tool_call.name` 同一口径（`SCANNED_TEXT_PATHS.tool_call` 只声明 `["args"]`）。名字来自
+ *  插件/MCP 服务器，但它们进不了任何凭据——把它扫掉只会让读数分不清「省了谁」。 */
+export interface SurfaceAccountEvent {
+  type: "surface_account";
+  /** 本 provider 实例内的**请求序号**（1-based）。**不等于**成功请求数：本条在模型请求**发出前**
+   *  记录，被最终装配硬闸拦下（`[context_budget_exceeded]`）时仍留一条 ⇒ 叫 attempt 不叫 request。 */
+  attemptSeq: number;
+  /** 声明面：`planSurfaceBudget` 入参那一份。 */
+  declaredToolCount: number;
+  declaredToolSpecChars: number;
+  /** 送出面：降配梯走完真正发出去的那一份。 */
+  sentToolCount: number;
+  sentToolSpecChars: number;
+  /** 基础系统提示（`opts.system`）的字符数。**不含** memory / skills / 符号地图 / 附件——
+   *  那些由 `composeTurnMessages` 作为另外的 system 块推入；`volatileChars` 及其分项单独记。 */
+  baseSystemChars: number;
+  /** 易变侧四块字符数合计（记忆 + skills 块 + 符号地图 + 附件引用）。
+   *
+   *  **为什么单列**：降配梯（`planSurfaceBudget`）的口径只有「system + 工具」——生产调用点
+   *  `glm-session.ts` 不传 `volatileChars`，`accountModelSurface` 落到 0。
+   *  于是这四个数是**唯一**能看到「降配梯看不见的那一半」的入口：不记就等于那部分开销无观测面。
+   *
+   *  ⚠️ **口径钉死：这是「降配计划那一刻」的快照，不是实际发出值。** 降配按构造排在压缩之前
+   *  （三条判据断言 `compaction` 必须是会话日志最后一条：compaction.test.ts / compact-wiring.test.ts /
+   *  hook-precompact-producer.test.ts）⇒ 观测事件不能排在压缩之后。压缩那一轮这些块会被重建：
+   *  · 记忆：每轮重读，与压缩无关 ⇒ 准。
+   *  · 符号地图：按 `history.length ≤ 2` 重判 ⇒ 可能变。
+   *  · skills 块：**可能变大**——重挂只认已被 `compaction` 事件摘掉的激活记录
+   *    （`plugins/index.ts:466-470`），压缩后新增的摘除集合会让更多 skill 具备重挂资格。
+   *  所以它既不是上界也不是实发值；压缩那一轮的实发口径以 compaction 预算自己的
+   *  `AssemblyOverhead` 为准。**照实记，绝不因为「可能不准」就省掉不记。** */
+  volatileChars: number;
+  /** 记忆注入块字符数（`MemoryInjection.charsCurrent`，token 预算 `MEMORY_TOKEN_BUDGET_DEFAULT`）。 */
+  memoryChars: number;
+  /** skills 块字符数（路由清单 + hook 上下文 + 摘除说明 + 压缩后重挂，`pluginContext()` 产出）。 */
+  skillsBlockChars: number;
+  /** 符号地图字符数（`mapInjectText()` 产出；首轮才注入，未注入记 0）。 */
+  mapChars: number;
+  /** 附件引用块字符数（`formatAttachmentContext()`，每附件一行路径、不含内容）。 */
+  attachmentContextChars: number;
+  limitChars: number;
+  /** 超出帽子的字符数（降配**前**口径）。>0 即降配梯被触发。 */
+  overChars: number;
+  /** 被压描述的工具名（数组序）。**未发生为空数组，不省略**——空数组 = 确定没降配，
+   *  与「旧版本没记这个字段」必须分得开。 */
+  shortened: string[];
+  /** 被整条丢弃的工具名（丢弃序 = 从尾向前）。 */
+  dropped: string[];
+  /** 降配梯走完仍超帽（core 不被自动砍，报红交人裁决）。 */
+  unresolvable: boolean;
+  /** 与未降配版逐字符比对的「仍可缓存前缀字符数」——梯级 A 的缓存代价。 */
+  prefixStableChars: number;
+  /** 本请求的工具面是否与上一次**记录**相比变了（含面**变小**：run 中途 skill 摘除 / 权限档收紧
+   *  会走 `requestFace` 逐请求现算）。采样条件之一，落进事件里是为了让「为什么这一轮被记录」
+   *  可回放、可审计。 */
+  faceChanged: boolean;
+}
+
 export type AgentEvent = (
   | UserMessageEvent
   | AssistantMessageEvent
@@ -584,41 +655,52 @@ export type AgentEvent = (
   | GoalSetEvent
   | GoalStoppedEvent
   | TurnTruncatedEvent
+  | SurfaceAccountEvent
   | RunErrorEvent
 ) & { /** M2 §3.5：事件真值时间戳（毫秒）。core 自 8361657 起在落盘处统一盖戳——写调用方同一对象，live 与盘同式（tests/events.test.ts 三用例钉死），新事件恒在场；旧 JSONL 缺席，读侧按可选兼容（投影留空不造假）。 */ ts?: number };
 
-const KNOWN_TYPES = new Set([
-  "user_message",
-  "assistant_message",
-  "assistant_delta",
-  "tool_call",
-  "tool_result",
-  "usage",
-  "session_meta",
-  "clarify_requested",
-  "plan_proposed",
-  "plan_approved",
-  "verify_result",
-  "compaction",
-  "security_report",
-  "impact_report",
-  "agent_spawned",
-  "agent_status",
-  "agent_message",
-  "agent_result",
-  "approval_requested",
-  "approval_resolved",
-  "card_action",
-  "diff_comment",
-  "routing_decision",
-  "automation_triggered",
-  "automation_skipped",
-  "automation_completed",
-  "goal_set",
-  "goal_stopped",
-  "turn_truncated",
-  "error",
-]);
+/** 已登记的事件类型（`append` 拒未知类型的那一份事实源）。
+ *
+ *  **为什么是 `Record<AgentEvent["type"], true>` 而不是 `Set`**：漏登记会变成**编译期**错误
+ *  （缺键 ⇒ TS2741），而不是等到某个真实会话第一次 `append` 时才在运行期抛。旧形状下
+ *  「联合加了成员、名单忘了加」在整条自动化路径上**没有任何一处会红**——两张手写名单之间
+ *  没有机器判据（`tests/event-registry.ts` 的 `unionTypes()` 全仓零消费者，那张闸 2026-10 复核
+ *  时已不存在）。改名/换写法时必须同步 `tests/event-registry.ts` 的 `knownTypes()` 取料口。
+ *
+ *  运行时查找用 `Object.hasOwn` 而不是 `in`：`in` 会顺原型链把 `toString` 这类名字认成已登记。 */
+const KNOWN_TYPES: Record<AgentEvent["type"], true> = {
+  user_message: true,
+  assistant_message: true,
+  assistant_delta: true,
+  tool_call: true,
+  tool_result: true,
+  usage: true,
+  session_meta: true,
+  clarify_requested: true,
+  plan_proposed: true,
+  plan_approved: true,
+  verify_result: true,
+  compaction: true,
+  security_report: true,
+  impact_report: true,
+  agent_spawned: true,
+  agent_status: true,
+  agent_message: true,
+  agent_result: true,
+  approval_requested: true,
+  approval_resolved: true,
+  card_action: true,
+  diff_comment: true,
+  routing_decision: true,
+  automation_triggered: true,
+  automation_skipped: true,
+  automation_completed: true,
+  goal_set: true,
+  goal_stopped: true,
+  turn_truncated: true,
+  surface_account: true,
+  error: true,
+};
 
 // ---- A1（P0-A）：事件落盘常驻文件句柄 ----
 // 旧实现 appendFile 每事件 open+write+close（实测 1,930 µs/事件）；createEventLog().append 被
@@ -743,7 +825,7 @@ export function createEventLog(path: string): EventLog {
   let cur: FileHandle | null = null;
   return {
     async append(event) {
-      if (!event || typeof event.type !== "string" || !KNOWN_TYPES.has(event.type)) {
+      if (!event || typeof event.type !== "string" || !Object.hasOwn(KNOWN_TYPES, event.type)) {
         throw new Error(`未知事件类型: ${JSON.stringify((event as { type?: unknown })?.type)}`);
       }
       // A8（审查）：轻量 payload 校验——{"type":"tool_result"} 缺 output 会一路流进
@@ -977,7 +1059,7 @@ async function replayIncrementalInner(path: string): Promise<AgentEvent[]> {
   cached.events.push(...fresh);
   cached.offset += consumed;
   cached.line += done;
-  cached.tailBad = fresh.length > 0 ? [] : [...cached.tailBad, ...bad];
+  cached.tailBad = fresh.length > 0 ? [...bad] : [...cached.tailBad, ...bad];
   return cached.events.slice();
 }
 

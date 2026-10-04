@@ -1,0 +1,3 @@
+[ga] case=sum-clamp 臂=solo maxSteps=12 请求帽=60
+[ga] solo      score=1 verify=ok 请求=4 tokens=17164（主 16861/303｜worker 0/0） $=价表无此模型名（mimo-v2.6-flash） spawn=0 wait=0 工具=4 写而不验=1 7s
+[ga] 报告写出 outputs/ga-solo-t1-2026-10-04/sum-clamp-rep3/report.md

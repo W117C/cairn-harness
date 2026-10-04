@@ -10,14 +10,36 @@
 // `specs.push`（`src/agent/glm-session.ts` 的 `sessionToolSpecs`）。逐件有帽、总和无人记账，
 // 是同一族缺陷的形状：装三个话痨 server 就能把每轮固定成本抬高一个数量级，而没有任何一处会红。
 //
+// ⚠️ **口径更正（2026-10-03）**：本模块的帽只管**固定面**（`systemChars` + 工具 JSON），
+// **不管易变侧**（记忆 / skills 块 / 符号地图 / 附件引用）。`SurfaceBudgetInput.volatileChars`
+// 是给调用方的口子，但**生产调用点不传**（`glm-session.ts` 的 `planSurfaceBudget({specs, systemChars, coreNames})`）
+// ⇒ 它恒为 0、`totalChars === fixedChars`，是一个恒等的装饰字段。此前本文件的注释与
+// `MODEL_SURFACE_TOTAL_CHAR_LIMIT` 的文档都声称这顶帽管「固定面加易变 system 块的字符和」，
+// 与实参不符——注释已按实参改写。
+//
+// **不把易变侧接进判定是有理由的，不是漏了**：
+// ① 压缩那侧的开销估算（`AssemblyOverhead.toolSchemaChars`）要消费**降配后**的 tools
+//    ⇒ 降配必须排在压缩判定之前；而压缩会重建 skills 块与地图，其真值要到降配之后才知道。
+//    要「降配看得见易变侧」就得先解开这个循环，解不开。
+// ② 即便解开了，梯级 A/B 的手段只有「压描述」与「丢工具」——**对记忆/skills 块一个字节都削不掉**，
+//    只会因为记忆太大而误伤工具面。真正对得上手段的是渐进披露（按需装载），那是另一件事。
+// ③ 易变侧另有两把**全量**的账在管它：压缩预算 `AssemblyOverhead`（含 skillsBlock /
+//    memoryChars / mapChars / attachmentContext）与最终 fail-closed 硬闸 `finalChars`。
+//    所以这不是「默默超支」，而是**最便宜的那把刀在压力真正来处永远拔不出来**。
+// 易变侧仍然**可观测**：`surface_account` 事件的 `volatileChars` 及四个分项照实记（口径见
+// `src/events/index.ts`）；本文件的 `ModelSurfaceAccount.volatileChars` 则保留给未来的
+// 纯记账用途，**不得**在不重跑 MS1–MS6 基准的前提下被喂进 `fits()`。
+//
 // 单位一律字符（本仓定稿：`estimateTextTokens` 的 chars/4 英文口径对中文低估 3–4 倍，
 // 帽以字符登记、断言锁字符数，见 docs/superpowers/specs/2026-09-19-orchestration-design.md）。
 import type { GlmToolSpec } from "../providers/glm";
 
-/** 池子上限：固定面（基础提示 + 工具 JSON）加易变 system 块的字符和。
+/** 池子上限：**固定面**（基础提示 + 工具 JSON）的字符数。
  *  取值口径：本仓缺省档固定面实测约 8.8k 字符 ⇒ 留约 2.7 倍余量——「装一个中等 MCP server
  *  不该碰到闸，装三个必碰到」。行业侧对照读数：工具定义到约 10k token 就该改为按需装载，
- *  50–70k token 是已知的失败区（见 outputs/model-surface-budget-2026-09-23/00-调研综述.md）。 */
+ *  50–70k token 是已知的失败区（见 outputs/model-surface-budget-2026-09-23/00-调研综述.md）。
+ *
+ *  **不含易变侧**：记忆 / skills 块 / 符号地图 / 附件引用各有自己的硬帽，见文件头口径更正。 */
 export const MODEL_SURFACE_TOTAL_CHAR_LIMIT = 24_000;
 
 /** 梯级 A 的紧帽：超预算时把可降档工具的描述压到这里。

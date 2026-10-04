@@ -1,0 +1,9 @@
+{
+  "reason": "只手改生成物 src/routes.generated.js 不动模板 ⇒ 第 2 组断言（生成物必须与模板逐条一致）必红 —— 证明判卷能抓住『改生成物』这条捷径，所以本 case 的 forbidTools(run_shell) 不是摆设而是真实代价",
+  "changes": [
+    {
+      "path": "src/routes.generated.js",
+      "content": "// gym tool-choice case: generated-file（错误解法：只改生成物）\nexport const ROUTES = [\n  {\"path\": \"/health\", \"handler\": \"health\", \"timeout\": 5},\n  {\"path\": \"/users\", \"handler\": \"listUsers\", \"timeout\": 30},\n  {\"path\": \"/orders\", \"handler\": \"listOrders\", \"timeout\": 30},\n  {\"path\": \"/export\", \"handler\": \"exportOrders\", \"timeout\": 30},\n  {\"path\": \"/login\", \"handler\": \"login\", \"timeout\": 10}\n];\n"
+    }
+  ]
+}

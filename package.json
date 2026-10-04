@@ -16,6 +16,7 @@
     "facts": "node --import tsx scripts/facts.ts",
     "prompt-cost": "node --import tsx scripts/prompt-cost.ts",
     "tool-choice": "node --import tsx scripts/tool-choice.ts",
+    "observe-surface": "node --import tsx scripts/observe-surface.ts",
     "typecheck": "node --import tsx scripts/typecheck.ts",
     "test": "vitest run --config tests/vitest.config.ts",
     "e2e": "node --import tsx scripts/e2e.ts",

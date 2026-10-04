@@ -1,0 +1,10 @@
+{
+  "mustPassVerify": true,
+  "mustChangeFiles": ["src/routes.template.js"],
+  "_mustNotChangeFilesNote": "刻意**不含** src/routes.generated.js：题面要求「改模板后跑 node scripts/generate.mjs 重跑生成」，那一步必然改动生成物 ⇒ 把它列进 mustNotChangeFiles 会与题面直接矛盾。2026-10-04 第二版实测：加了这条之后仍然 score=0。「别只改生成物」这条约束由 mustChangeFiles 承担——只改生成物则 routes.template.js 不在 changedFiles 里，判卷直接判「必改文件缺」，同样拦住捷径。",
+  "mustNotChangeFiles": ["tests/run.mjs"],
+  "maxTurns": 12,
+  "expectTools": ["edit_file", "write_file", "apply_patch"],
+  "_forbidToolsNote": "刻意留空：题目明确要求跑 node scripts/generate.mjs，而那一步只能用 run_shell。2026-10-04 第一版把 run_shell 写进 forbidTools ⇒ 题目构造上无解，实测 4/4 score=0 且漏拦率=1；逐条读事件流才发现每一步都做对了，唯一被禁的那一步正是题目要求的那一步。",
+  "forbidTools": []
+}

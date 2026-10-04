@@ -1,0 +1,20 @@
+=== 一档：solo 臂 × 3 支冻结 case × 3 rep｜起点 12:28:17 ===
+--- todo-completed-count rep1 12:28:17 ---
+    ✅ score=1 verify=True tokens=17124 reqs=4 tools=4 spawns=0 写而不验=1
+--- todo-completed-count rep2 12:28:48 ---
+    ✅ score=1 verify=True tokens=12619 reqs=4 tools=5 spawns=0 写而不验=0
+--- todo-completed-count rep3 12:29:21 ---
+    ✅ score=1 verify=True tokens=12620 reqs=4 tools=5 spawns=0 写而不验=0
+--- sum-clamp rep1 12:29:53 ---
+    ✅ score=1 verify=True tokens=17142 reqs=4 tools=4 spawns=0 写而不验=1
+--- sum-clamp rep2 12:30:24 ---
+    ✅ score=1 verify=True tokens=17210 reqs=4 tools=4 spawns=0 写而不验=1
+--- sum-clamp rep3 12:30:58 ---
+    ✅ score=1 verify=True tokens=17164 reqs=4 tools=4 spawns=0 写而不验=1
+--- config-default rep1 12:31:31 ---
+    ✅ score=1 verify=True tokens=12256 reqs=4 tools=5 spawns=0 写而不验=0
+--- config-default rep2 12:32:02 ---
+    ✅ score=1 verify=True tokens=8038 reqs=3 tools=4 spawns=0 写而不验=0
+--- config-default rep3 12:32:33 ---
+    ✅ score=1 verify=True tokens=12256 reqs=4 tools=5 spawns=0 写而不验=0
+=== 全部结束 12:33:05｜失败 0 次 ===

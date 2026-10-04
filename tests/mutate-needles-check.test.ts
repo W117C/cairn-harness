@@ -195,7 +195,20 @@ describe("针脚红的归属（needleMoveCauseSuffix）", () => {
       { id: "unknown-tool-silently-dropped", srcRel: "src/agent/plugins/skills.ts", hits: 0, needle: 'out.unknown.push(behavior + ":" + item);' },
       run,
     );
-    expect(c?.sha).toBe("1f16bea");
+    // ⚠️ 2026-10-04 修：原先写死 `expect(c?.sha).toBe("1f16bea")`，那把判据绑死在
+    // **git 短 sha 的长度**上。`needleMoveCause` 用的是 `git log --format=%h`，长度由 git
+    // 按仓库对象数自动缩放（2026-10-03 本仓是 7 位，2026-10-04 已是 8 位）——
+    // 于是判据在一个 commit 都没变的情况下自己变红了。这不是它想抓的缺陷。
+    //
+    // **修法不是把期望值改长**，那只是把同一根绳子再拉长一次；改成
+    // 「返回的短 sha 必须是那个 commit **完整 sha 的前缀**」：
+    //   · 仍然精确 —— 指向别的 commit 一律红（7 位十六进制前缀在实践中唯一确定一个 commit）；
+    //   · 与缩写长度无关 —— git 给几位都能过；
+    //   · 判据的原意（这条针脚是被 1f16bea 那一笔搬走的，主题含 121）一个字没松。
+    const full = run(["rev-parse", "--verify", "1f16bea^{commit}"])?.trim() ?? "";
+    expect(full.length).toBe(40);                       // 先确认那笔确实在库里（不是查无此笔也算过）
+    expect(c?.sha, "没查到成因").toBeTruthy();
+    expect(full.startsWith(c!.sha!), `短 sha ${String(c?.sha)} 不是 ${full} 的前缀`).toBe(true);
     expect(c?.subject).toContain("121");
   });
 

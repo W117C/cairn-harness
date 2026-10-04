@@ -1,0 +1,17 @@
+== A/B：同一 case、同一模型，只换工具面 ==
+  跑 full 臂…
+  跑 pruned 臂…
+
+  臂            score  轮数  tokens  选对        漏拦        实际工具
+  full            1     6   24579  1            null         edit_file、propose_plan、read_file、run_shell、verify
+  pruned          1     6   17708  1            null         edit_file、propose_plan、read_file、run_shell、verify
+
+  选对率差 = 0
+  漏拦率差 = null（有一侧分母 0）
+  token 差 = -6871（pruned − full；负数＝pruned 更省）
+
+  ⚠️ n=1/臂 时的读法限制（别读过头）：
+    · 正确率在实测里会 0↔1 跳（同模型同 case 同臂），所以 score 差不携带信息；
+    · 选对率在多数 case 上饱和为 1（模型清一色 edit_file），也不携带信息；
+    · **只有 token 差与轮数差是连续量**，「更便宜」这类结论只能建立在它们上面；
+    · 要谈正确性，得先让基准稳定（同 case 重复跑多次看方差），再把 n 提上去。

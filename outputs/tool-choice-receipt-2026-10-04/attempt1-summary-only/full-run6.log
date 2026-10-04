@@ -1,0 +1,8 @@
+== 工具选择读数（单臂 full｜case grep-target）==
+  正确性 score=1｜轮数 7｜tokens 31699
+  实际调用的工具：edit_file、propose_plan、read_file、run_shell、verify
+  期望工具（expectTools）：edit_file
+  漏拦（forbidTools）：（本 case 未声明 ⇒ 不计）
+  选对率 = 1　（命中/声明该调的 case 数）
+  漏拦率 = null（分母 0，未证）　（**case 级**：这次跑违没违规）
+  调用级 = null（分母 0，未证）　（被禁工具件数/总调用数——**这一格会随轮数变，别当成违规率读**）

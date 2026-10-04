@@ -1,0 +1,358 @@
+{
+  "root": "/Users/ze/.dsh/sessions",
+  "sessions": 73,
+  "sessionsUnreadable": [],
+  "sessionsPartial": [],
+  "framesTotal": 15094,
+  "framesFailedTotal": 0,
+  "sessionsWithToolCalls": 60,
+  "sessionsMain": 18,
+  "sessionsSubagent": 42,
+  "totalToolCalls": 6494,
+  "distinctToolsEverUsed": 54,
+  "perSessionDistinct": {
+    "allMedian": 4,
+    "mainMin": 1,
+    "mainMedian": 7,
+    "mainMax": 24,
+    "subagentMedian": 3
+  },
+  "concentration": {
+    "50": 1,
+    "80": 3,
+    "90": 5,
+    "100": 54
+  },
+  "coverage": {
+    "top5": 90.82229750538959,
+    "top10": 93.9636587619341,
+    "top20": 97.44379427163535,
+    "top30": 99.16846319679705
+  },
+  "tools": [
+    {
+      "name": "bash",
+      "calls": 4357,
+      "sessions": 42,
+      "subagentSessions": 25
+    },
+    {
+      "name": "read",
+      "calls": 656,
+      "sessions": 37,
+      "subagentSessions": 23
+    },
+    {
+      "name": "edit",
+      "calls": 561,
+      "sessions": 12,
+      "subagentSessions": 2
+    },
+    {
+      "name": "job_output",
+      "calls": 212,
+      "sessions": 9,
+      "subagentSessions": 4
+    },
+    {
+      "name": "write",
+      "calls": 112,
+      "sessions": 12,
+      "subagentSessions": 3
+    },
+    {
+      "name": "todo_write",
+      "calls": 47,
+      "sessions": 11,
+      "subagentSessions": 1
+    },
+    {
+      "name": "subagent",
+      "calls": 42,
+      "sessions": 8,
+      "subagentSessions": 2
+    },
+    {
+      "name": "present",
+      "calls": 42,
+      "sessions": 8,
+      "subagentSessions": 1
+    },
+    {
+      "name": "validate_dsh_ui",
+      "calls": 40,
+      "sessions": 17,
+      "subagentSessions": 8
+    },
+    {
+      "name": "web_fetch",
+      "calls": 33,
+      "sessions": 5,
+      "subagentSessions": 3
+    },
+    {
+      "name": "wait_agent",
+      "calls": 31,
+      "sessions": 5,
+      "subagentSessions": 1
+    },
+    {
+      "name": "list_agents",
+      "calls": 30,
+      "sessions": 8,
+      "subagentSessions": 1
+    },
+    {
+      "name": "grep",
+      "calls": 28,
+      "sessions": 10,
+      "subagentSessions": 4
+    },
+    {
+      "name": "team_task_update",
+      "calls": 24,
+      "sessions": 12,
+      "subagentSessions": 12
+    },
+    {
+      "name": "mnemon_subagent_result",
+      "calls": 21,
+      "sessions": 14,
+      "subagentSessions": 14
+    },
+    {
+      "name": "team_task_list",
+      "calls": 21,
+      "sessions": 13,
+      "subagentSessions": 9
+    },
+    {
+      "name": "send_message",
+      "calls": 21,
+      "sessions": 18,
+      "subagentSessions": 16
+    },
+    {
+      "name": "cordis_inspect_query",
+      "calls": 18,
+      "sessions": 2,
+      "subagentSessions": 0
+    },
+    {
+      "name": "mnemon_document_search",
+      "calls": 16,
+      "sessions": 16,
+      "subagentSessions": 16
+    },
+    {
+      "name": "job_kill",
+      "calls": 16,
+      "sessions": 8,
+      "subagentSessions": 1
+    },
+    {
+      "name": "mnemon_document_create",
+      "calls": 15,
+      "sessions": 12,
+      "subagentSessions": 11
+    },
+    {
+      "name": "team_task_get",
+      "calls": 15,
+      "sessions": 10,
+      "subagentSessions": 10
+    },
+    {
+      "name": "compress",
+      "calls": 14,
+      "sessions": 3,
+      "subagentSessions": 1
+    },
+    {
+      "name": "advanced_search",
+      "calls": 13,
+      "sessions": 2,
+      "subagentSessions": 1
+    },
+    {
+      "name": "ask_user_question",
+      "calls": 12,
+      "sessions": 10,
+      "subagentSessions": 2
+    },
+    {
+      "name": "spawn_teammate",
+      "calls": 12,
+      "sessions": 2,
+      "subagentSessions": 1
+    },
+    {
+      "name": "web_search",
+      "calls": 11,
+      "sessions": 6,
+      "subagentSessions": 1
+    },
+    {
+      "name": "mnemon_runtime_memory",
+      "calls": 8,
+      "sessions": 4,
+      "subagentSessions": 0
+    },
+    {
+      "name": "team_task_create",
+      "calls": 6,
+      "sessions": 2,
+      "subagentSessions": 1
+    },
+    {
+      "name": "get_goal",
+      "calls": 6,
+      "sessions": 2,
+      "subagentSessions": 1
+    },
+    {
+      "name": "update_goal",
+      "calls": 6,
+      "sessions": 2,
+      "subagentSessions": 1
+    },
+    {
+      "name": "create_goal",
+      "calls": 5,
+      "sessions": 3,
+      "subagentSessions": 1
+    },
+    {
+      "name": "job_list",
+      "calls": 4,
+      "sessions": 3,
+      "subagentSessions": 0
+    },
+    {
+      "name": "get_expert_team",
+      "calls": 4,
+      "sessions": 3,
+      "subagentSessions": 0
+    },
+    {
+      "name": "summon_expert_team",
+      "calls": 4,
+      "sessions": 3,
+      "subagentSessions": 0
+    },
+    {
+      "name": "glob",
+      "calls": 3,
+      "sessions": 3,
+      "subagentSessions": 0
+    },
+    {
+      "name": "render_ui",
+      "calls": 3,
+      "sessions": 3,
+      "subagentSessions": 1
+    },
+    {
+      "name": "skill",
+      "calls": 2,
+      "sessions": 2,
+      "subagentSessions": 0
+    },
+    {
+      "name": "list_subagent_models",
+      "calls": 2,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "cordis_inspect_list",
+      "calls": 2,
+      "sessions": 2,
+      "subagentSessions": 0
+    },
+    {
+      "name": "plugin_manager",
+      "calls": 2,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "list_expert_teams",
+      "calls": 2,
+      "sessions": 2,
+      "subagentSessions": 1
+    },
+    {
+      "name": "earson",
+      "calls": 2,
+      "sessions": 2,
+      "subagentSessions": 1
+    },
+    {
+      "name": "search_context",
+      "calls": 2,
+      "sessions": 2,
+      "subagentSessions": 1
+    },
+    {
+      "name": "platform_search",
+      "calls": 2,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "acp_status",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "acp_cache",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "ego_status",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "ego_space_open",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "ego_doctor",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "sidebar_open",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "multi_search",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 1
+    },
+    {
+      "name": "exit_plan_mode",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "code_review",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    }
+  ]
+}

@@ -1,0 +1,337 @@
+{
+  "root": "/Users/ze/.dsh/sessions",
+  "sessions": 73,
+  "requests": 135,
+  "unmappedToolEntries": 0,
+  "capChars": 24000,
+  "alwaysPresentCount": 3,
+  "scenarios": [
+    {
+      "key": "core=仓库口径（app 名多半匹配不上）",
+      "label": "仓库 core 口径：`isCoreSurfaceTool()` 直接问 app 层名字（预期多半落空）",
+      "coreSize": 3,
+      "requestsDroppingAnything": 117,
+      "requestsShortening": 117,
+      "requestsUnresolvable": 0,
+      "droppedPerRequest": {
+        "min": 5,
+        "p50": 39,
+        "p90": 49,
+        "max": 84
+      },
+      "distinctDropped": 86,
+      "droppedUsedToolCount": 36,
+      "droppedCallMassPct": 22.143517092700954,
+      "topDropped": [
+        {
+          "name": "write",
+          "times": 117,
+          "calls": 112,
+          "sessions": 12
+        },
+        {
+          "name": "workflow",
+          "times": 117,
+          "calls": null,
+          "sessions": null
+        },
+        {
+          "name": "web_search",
+          "times": 117,
+          "calls": 11,
+          "sessions": 6
+        },
+        {
+          "name": "update_goal",
+          "times": 117,
+          "calls": 6,
+          "sessions": 2
+        },
+        {
+          "name": "todo_write",
+          "times": 99,
+          "calls": 47,
+          "sessions": 11
+        },
+        {
+          "name": "wait_agent",
+          "times": 98,
+          "calls": 31,
+          "sessions": 5
+        },
+        {
+          "name": "subagent_fork",
+          "times": 90,
+          "calls": null,
+          "sessions": null
+        },
+        {
+          "name": "subagent",
+          "times": 90,
+          "calls": 42,
+          "sessions": 8
+        },
+        {
+          "name": "send_message",
+          "times": 90,
+          "calls": 21,
+          "sessions": 18
+        },
+        {
+          "name": "read_image",
+          "times": 90,
+          "calls": null,
+          "sessions": null
+        },
+        {
+          "name": "read",
+          "times": 90,
+          "calls": 656,
+          "sessions": 37
+        },
+        {
+          "name": "present",
+          "times": 90,
+          "calls": 42,
+          "sessions": 8
+        },
+        {
+          "name": "mnemon_view_route",
+          "times": 90,
+          "calls": null,
+          "sessions": null
+        },
+        {
+          "name": "mnemon_view_action",
+          "times": 90,
+          "calls": null,
+          "sessions": null
+        },
+        {
+          "name": "mnemon_subagent_result",
+          "times": 78,
+          "calls": 21,
+          "sessions": 14
+        }
+      ]
+    },
+    {
+      "key": "core=数据驱动（每份请求都在）",
+      "label": "数据驱动 core：出现在**每一份**请求里的工具不许被砍",
+      "coreSize": 3,
+      "requestsDroppingAnything": 117,
+      "requestsShortening": 117,
+      "requestsUnresolvable": 0,
+      "droppedPerRequest": {
+        "min": 6,
+        "p50": 40,
+        "p90": 49,
+        "max": 83
+      },
+      "distinctDropped": 85,
+      "droppedUsedToolCount": 37,
+      "droppedCallMassPct": 22.34370187865722,
+      "topDropped": [
+        {
+          "name": "write",
+          "times": 117,
+          "calls": 112,
+          "sessions": 12
+        },
+        {
+          "name": "workflow",
+          "times": 117,
+          "calls": null,
+          "sessions": null
+        },
+        {
+          "name": "web_search",
+          "times": 117,
+          "calls": 11,
+          "sessions": 6
+        },
+        {
+          "name": "web_fetch",
+          "times": 117,
+          "calls": 33,
+          "sessions": 5
+        },
+        {
+          "name": "update_goal",
+          "times": 117,
+          "calls": 6,
+          "sessions": 2
+        },
+        {
+          "name": "todo_write",
+          "times": 99,
+          "calls": 47,
+          "sessions": 11
+        },
+        {
+          "name": "wait_agent",
+          "times": 98,
+          "calls": 31,
+          "sessions": 5
+        },
+        {
+          "name": "subagent_fork",
+          "times": 90,
+          "calls": null,
+          "sessions": null
+        },
+        {
+          "name": "subagent",
+          "times": 90,
+          "calls": 42,
+          "sessions": 8
+        },
+        {
+          "name": "read_image",
+          "times": 90,
+          "calls": null,
+          "sessions": null
+        },
+        {
+          "name": "read",
+          "times": 90,
+          "calls": 656,
+          "sessions": 37
+        },
+        {
+          "name": "present",
+          "times": 90,
+          "calls": 42,
+          "sessions": 8
+        },
+        {
+          "name": "mnemon_view_route",
+          "times": 90,
+          "calls": null,
+          "sessions": null
+        },
+        {
+          "name": "mnemon_view_action",
+          "times": 90,
+          "calls": null,
+          "sessions": null
+        },
+        {
+          "name": "mnemon_subagent_result",
+          "times": 78,
+          "calls": 21,
+          "sessions": 14
+        }
+      ]
+    },
+    {
+      "key": "core=∅（最坏）",
+      "label": "最坏情况：没有任何 core 保护，全部可丢",
+      "coreSize": 0,
+      "requestsDroppingAnything": 117,
+      "requestsShortening": 117,
+      "requestsUnresolvable": 0,
+      "droppedPerRequest": {
+        "min": 6,
+        "p50": 40,
+        "p90": 50,
+        "max": 84
+      },
+      "distinctDropped": 86,
+      "droppedUsedToolCount": 39,
+      "droppedCallMassPct": 23.12904219279335,
+      "topDropped": [
+        {
+          "name": "write",
+          "times": 117,
+          "calls": 112,
+          "sessions": 12
+        },
+        {
+          "name": "workflow",
+          "times": 117,
+          "calls": null,
+          "sessions": null
+        },
+        {
+          "name": "web_search",
+          "times": 117,
+          "calls": 11,
+          "sessions": 6
+        },
+        {
+          "name": "web_fetch",
+          "times": 117,
+          "calls": 33,
+          "sessions": 5
+        },
+        {
+          "name": "update_goal",
+          "times": 117,
+          "calls": 6,
+          "sessions": 2
+        },
+        {
+          "name": "todo_write",
+          "times": 99,
+          "calls": 47,
+          "sessions": 11
+        },
+        {
+          "name": "wait_agent",
+          "times": 98,
+          "calls": 31,
+          "sessions": 5
+        },
+        {
+          "name": "subagent_fork",
+          "times": 90,
+          "calls": null,
+          "sessions": null
+        },
+        {
+          "name": "subagent",
+          "times": 90,
+          "calls": 42,
+          "sessions": 8
+        },
+        {
+          "name": "send_message",
+          "times": 90,
+          "calls": 21,
+          "sessions": 18
+        },
+        {
+          "name": "read_image",
+          "times": 90,
+          "calls": null,
+          "sessions": null
+        },
+        {
+          "name": "read",
+          "times": 90,
+          "calls": 656,
+          "sessions": 37
+        },
+        {
+          "name": "present",
+          "times": 90,
+          "calls": 42,
+          "sessions": 8
+        },
+        {
+          "name": "mnemon_view_route",
+          "times": 90,
+          "calls": null,
+          "sessions": null
+        },
+        {
+          "name": "mnemon_view_action",
+          "times": 78,
+          "calls": null,
+          "sessions": null
+        }
+      ]
+    }
+  ]
+}

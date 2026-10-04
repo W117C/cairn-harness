@@ -1,0 +1,53 @@
+{
+  "caseId": "config-default",
+  "arms": [
+    {
+      "arm": "solo",
+      "score": 1,
+      "verifyOk": true,
+      "changedFiles": [
+        ".agent/snapshots/1791088357410--call_4e44af6c9099464a815d2591/src/config.js",
+        ".gitignore",
+        "src/config.js"
+      ],
+      "requests": 4,
+      "toolCalls": 5,
+      "byToolName": {
+        "read_file": {
+          "calls": 2,
+          "failures": 0
+        },
+        "edit_file": {
+          "calls": 1,
+          "failures": 0
+        },
+        "run_shell": {
+          "calls": 1,
+          "failures": 0
+        },
+        "verify": {
+          "calls": 1,
+          "failures": 0
+        }
+      },
+      "spawns": 0,
+      "waitCalls": 0,
+      "workerTerminals": {},
+      "writeSessionsWithoutVerifyPass": 0,
+      "verifyPasses": 1,
+      "approvals": 0,
+      "tokens": {
+        "mainIn": 12127,
+        "mainOut": 129,
+        "workerIn": 0,
+        "workerOut": 0
+      },
+      "usd": null,
+      "priceModel": "mimo-v2.6-flash",
+      "seconds": 6.627,
+      "capped": false,
+      "error": null,
+      "eventsPath": "/Users/ze/Downloads/Cairn/deepseek harness/outputs/ga-solo-t1-2026-10-04/config-default-rep3/solo.events.jsonl"
+    }
+  ]
+}

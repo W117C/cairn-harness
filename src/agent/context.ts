@@ -315,6 +315,9 @@ export function projectContext(
     }
     // clarify_requested / plan_proposed / plan_approved / usage / session_meta：
     // 语义已在 tool_result / 卡片侧，模型上下文不需要（与既有 buildGlmHistory 口径一致）
+    // surface_account（P0 装配账）**显式**归在这里，不靠「上面没写分支」的落空：
+    // 它一旦进模型面，就会改写可缓存前缀（`cacheableFace` = 首条 system + tools，见 prefix-churn.ts），
+    // 那是缓存命中率的账，不是观测量该付的代价。
   });
   flushDeltas();
   injectOnce(); // offset 越过全部事件（tail 为空）时补注
