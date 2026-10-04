@@ -42,6 +42,8 @@ describe("三门 IPC 接线（runAgent + card_action 处理函数）", () => {
         message: "给待办应用加个开关",
         mode: "auto",
         logPath,
+        // S3 信任闸：本用例跑的是仓内 fixture（APP），自行断言可信；产品路径缺省即拒绝。
+        trustedRepo: true,
         onEvent: (e) => {
           seen.push(e);
           // 驱动方 = UI 卡片动作：看到事件即经 IPC 处理函数回传（queueMicrotask 解耦）

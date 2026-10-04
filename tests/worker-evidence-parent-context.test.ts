@@ -102,7 +102,9 @@ async function spawnWriteWorker(test: string): Promise<{ events: AgentEvent[]; r
   const seen: AgentEvent[] = [];
   const run = await handleAgentRun(
     { message: "派 worker 写示例配置", mode: "auto" },
-    { workspace: repo, logPath: join(home, "events.jsonl"), unattended: true, onEvent: (e) => { seen.push(e); } },
+    // S3 信任闸：本用例现搭 repo 这个 fixture，自行断言可信（否则 worker 的 verify 拍被闸跳过，
+    // `verified` 字段根本不出现——那正是这条判卷要判的东西）。
+    { workspace: repo, logPath: join(home, "events.jsonl"), unattended: true, trustedRepo: true, onEvent: (e) => { seen.push(e); } },
   );
   expect(run.ok, JSON.stringify(run)).toBe(true);
   // worker 终态是**异步**落到主流上的：主 run 收口时合成回执可能还没到，而 0 条看起来跟
@@ -195,7 +197,9 @@ describe("worker 的验证证据落到主模型看得见的那条正文（能力
       const seen: AgentEvent[] = [];
       const run = await handleAgentRun(
         { message: "派只读 worker 看一眼", mode: "auto" },
-        { workspace: repo, logPath: join(home, "events.jsonl"), unattended: true, onEvent: (e) => { seen.push(e); } },
+        // S3 信任闸：本用例现搭 repo 这个 fixture，自行断言可信（否则 worker 的 verify 拍被闸跳过，
+    // `verified` 字段根本不出现——那正是这条判卷要判的东西）。
+    { workspace: repo, logPath: join(home, "events.jsonl"), unattended: true, trustedRepo: true, onEvent: (e) => { seen.push(e); } },
       );
       expect(run.ok, JSON.stringify(run)).toBe(true);
       const deadline = Date.now() + 30_000;
