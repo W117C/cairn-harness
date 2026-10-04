@@ -1,0 +1,2 @@
+[31m[1mAssertionError[22m: 有 1 条 git 看不见的 .jsonl 语料混进盘 ⇒ 干净树与脏树会读出两把不同的尺：fixtures/todo-app/.agent/snapshots/9999999999999--probe/probe.jsonl: expected [ Array(1) ] to deeply equal [][39m
+

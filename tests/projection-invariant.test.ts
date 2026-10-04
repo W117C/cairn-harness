@@ -14,6 +14,7 @@
  *  而各家 provider 受不受这一维**未证**——拿一条前提不成立的判据去钉，就是假锚点（撤针在此署名）。
  */
 import { describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentEvent } from "../src/events";
@@ -135,7 +136,11 @@ describe("出口闸：无主回执降级成 user（不吐孤儿、也不丢内�
 });
 
 describe("真语料回归（tracked 面）：孤儿必须 0，且分母自己出声", () => {
-  function trackedEventFiles(): string[] {
+  /* 分母取 **git 跟踪面**（第 354 页）。从前这里叫 `trackedEventFiles`、取的却是盘：运行期残留
+     （`.agent/snapshots/`、`node_modules/`、未跟踪草稿）只要长成 `.jsonl` 就会**静默进分母**，
+     而这条判卷自己承诺的是「分母出声」——一把靠"盘上此刻恰好没有那种形状"才成立的尺不是尺。
+     两面的差（盘有、跟踪没有）现在必须为 0 **且要点名是谁**，否则那不叫排除、叫没看见。 */
+  function diskJsonlFiles(): string[] {
     const out: string[] = [];
     const walk = (d: string): void => {
       let names: string[];
@@ -149,11 +154,30 @@ describe("真语料回归（tracked 面）：孤儿必须 0，且分母自己出
       }
     };
     walk("fixtures");
-    return out;
+    return out.sort();
+  }
+  function trackedJsonlFiles(): string[] {
+    const raw = execFileSync("git", ["ls-files", "-z", "--", "fixtures"], { encoding: "utf8" });
+    return raw.split("\0").filter((p) => p.endsWith(".jsonl")).sort();
+  }
+  function untrackedOnDisk(disk: readonly string[], tracked: readonly string[]): string[] {
+    const seen = new Set(tracked);
+    return disk.filter((p) => !seen.has(p));
   }
 
   it("每个含 tool_call 的语料文件过真投影：孤儿 0 且悬空 0（两条合取）", () => {
-    const files = trackedEventFiles();
+    // 两态各钉一次（第 354 页）：先证明这把新尺咬得住，再拿它去量真语料
+    expect(untrackedOnDisk(["fixtures/a.jsonl"], ["fixtures/a.jsonl"])).toEqual([]);
+    expect(untrackedOnDisk(["fixtures/x/.agent/snapshots/1--c/a.jsonl"], ["fixtures/a.jsonl"])).toEqual([
+      "fixtures/x/.agent/snapshots/1--c/a.jsonl",
+    ]);
+    const tracked = trackedJsonlFiles();
+    const leaked = untrackedOnDisk(diskJsonlFiles(), tracked);
+    expect(
+      leaked,
+      `有 ${String(leaked.length)} 条 git 看不见的 .jsonl 语料混进盘 ⇒ 干净树与脏树会读出两把不同的尺：${leaked.slice(0, 5).join("、")}`,
+    ).toEqual([]);
+    const files = tracked;
     expect(files.length, "取料面读到 0 个文件 ⇒ 没有尺，不是通过").toBeGreaterThanOrEqual(30);
     let withCalls = 0, orphanTotal = 0, danglingTotal = 0;
     const bad: string[] = [];

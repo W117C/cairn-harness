@@ -12494,6 +12494,20 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 6. **立案两条**：**#62**——`scripts/lib/head-cert-deps.ts:96-102` 的注释把 todo-app 在干净树必红归因给 `node_modules`，实测真因是 gitignore 掉的生成物 `src/todo.ts`（见第 4 条）；判据要看「脚本引用的 bin 能否解析／输入是否有生成物」，而不是只看「声明了几项依赖」。该文件在飞，等它空出来一起改，本笔只改了 `head-cert.ts` 里能安全改的那一半。**#63**——写侧三件：`scripts/loop-eval.ts:424` 只在 `BENCH_MODEL` 非空时写 `model`、不写 `headSha`／`ranAt`；`:737` 覆盖式写唯一一份 `outputs/bench/readings.json`（跑一次就把 10-01 那份 3 行冒烟基线换掉）；`package.json:52` 写死 `--tasks fixtures/bench/tasks.json` 而 `pick()`（`scripts/loop-eval.ts:60-63`）取**首个** ⇒ 三份长任务清单在全仓**没有任何消费者**。前两个文件都在飞，本笔不动。
 7. **门与量纲（同轮声明）**：本笔动 4 支既有文件（`scripts/head-cert.ts`、`scripts/eval/report.ts`、`tests/eval-report.test.ts`、`fixtures/bench/README.md`）＋新建 3 支判卷/库（`scripts/lib/subrepo-dep-need.ts`、`tests/subrepo-dep-need.test.ts`、`tests/bench-corpus-parity.test.ts`）；取料面两份新档（`outputs/runtime-residue-face-2026-10-04/recount.mts`／`recount.txt`／`todoapp-clean-tree-npm-test.txt`）＋**#61 的 ready-to-apply 草案五件**（`outputs/d61-fix-ready-2026-10-04/`：两份统一 diff、判卷片段、落地清单、以及一支"先验该文件是否仍在飞才许 apply"的门）。验证：新判卷 80 条全绿、`typecheck` 退 2 且报错只剩 `tests/autonomy.test.ts`（6 条，别人在飞，非本笔因果）、docs-check 提交前红＝本笔未入库工件——**三份前读日志同笔归档**在 `outputs/parallel-closeout-2026-10-04/`（`docscheck-preflight.txt`／`typecheck-after-fix.txt`／`three-judges.txt`）。**没跑**：全量核心判卷、认证（`#39` 差的仍是 HEAD 上那两条红）、`mutate-verify`（在别人手里 ⇒ **#50 的锚点债再加三条候选**：`declaredDepCount` 的两面之和、`outcomeGate` 的退化方向、parity 判卷的双向等式）。⇒ 本页第一次同时是"落了三簇代码"和"撤了自己八处读数"；两件事都是同一条纪律的形状：**说了没证、证了没归档，都算错**。
 
+## 2026-10-04 · 第 354 页：#64 我没留成"以后再说"——那条自称 tracked 面的判卷取的其实是盘；改成跟踪面之后，往残留形状里插一条 `.jsonl` 它当场咬住
+
+1. **起念**：第 353 页我登记 #64 时写的是「当前贡献 0，一旦落进 `*.jsonl` 就直接喂分母」。但回看那段代码：函数叫 `trackedEventFiles`、describe 写着「真语料回归（**tracked 面**）」，实现却是 `readdirSync` 走盘。⇒ 这不是"未来的风险"，是**尺自称的面与它实际取的面不一致**——本仓最恨的那一族的又一形态（承诺与实现对不上）。看见了不修，就是我自己在写「文档称已施工、代码不存在」的镜像。
+2. **改动（只动一支判卷，生产代码零改动）**：`tests/projection-invariant.test.ts` 的分母改为 `git ls-files -z -- fixtures` 里以 `.jsonl` 结尾的跟踪集；盘走那一路**留着但只用来对账**——「盘有、跟踪没有」必须为 0，且不为 0 时点名前 5 条。另加两态合成断言各钉一次（相等⇒空集；残留形状⇒点名为唯一出口），防的是"把排除写成没看见"。
+3. **现读两棵树**（`outputs/face-by-relation-2026-10-04/readings.txt`）：主树（脏，164 项在飞）跟踪面 40／盘面 40／漏 0；干净 HEAD 树 40／40／0。⇒ **两面今天恰好重合**，这条改动不改变任何现有读数（那条 `≥30` 的 floor 原样保留），改的只是"下一次残留长成 `.jsonl` 时会静默进分母"这一件事。不钉"分母必须＝40"：语料会长，钉死就是下一处要改的存量（本仓的帽只许对**可行动**那一侧设）。
+4. **造红验证（新尺必须有牙）**：在 `fixtures/todo-app/.agent/snapshots/9999999999999--probe/probe.jsonl`——正是 git 看不见、门也看不见的那张面——插一条，判卷当场退 1，逐字话术已归档（`outputs/face-by-relation-2026-10-04/teeth-red-message.txt`）：「有 1 条 git 看不见的 .jsonl 语料混进盘 ⇒ 干净树与脏树会读出两把不同的尺：…probe.jsonl」。拔除后回退 0，快照条目 712→712、`git status --porcelain -- fixtures` 空 ⇒ **没在主树留痕**。
+5. **我这一段自己铸错的三格（写下来，别再传）**：
+   ① 第一次数主树跟踪面用了 `git ls-files -z | tr -d '\n' | grep -o …`，读出 **1**；换成 `git ls-files -- fixtures | grep -c '\.jsonl$'` 读 **40**。那 39 的差不是事实差，是我**把 NUL 分隔压成一行**——`-z` 是给解析用的，不是给 `tr` 用的（与 #61 边上那条「中文路径在默认输出里被转义」同族）。当场重取，没把 1 当读数出口。
+   ② 我把改后的判卷 `cp` 进验证树跑、跑完 `rm`——那支文件在验证树的 HEAD 里是**已跟踪**的，于是 `rm` 制造了一次删除（`D tests/projection-invariant.test.ts`）。当场单独一条 `git -C <绝对路径> checkout -- <该文件>` 复原，并回读该树 `status --porcelain` 行数＝0。⇒ **往别的树里放同名已跟踪文件再删，等于替那棵树做一次删除动作**；双树对照要么只比对面自己算（像 `readings.txt` 那样），要么先确认目标树该路径未跟踪。
+   ③ 取造红消息时我写的 `grep -aoE "…[^]*?…"` 括号不配对，命令直接报 `brackets not balanced`——这次错**出声了**，我按规矩换 `grep -a -m1 -A1` 重取到逐字，没有把"没取到"读成"没印"。
+   ④ **本页自己的一次 Edit 事故（差点把上一页写成缺尾）**：我用 Edit 追加本页时，old_string 取的是上一页第 7 条的**前半句**，于是那一句的尾巴（「**没跑**：全量核心判卷…都算错。」）被**挪到了本页末尾**——文件里字没丢，但**归属串了页**，读者会把第 353 页的量纲声明当成第 354 页的。是 `git diff --numstat` 读出 `15 1`（我预期纯追加＝`n 0`）才暴露的：按行 `cmp` 新旧两版那一行，长度 1448→1007，差的那 441 字节就是被搬走的尾巴。修回去之后 diff 复原为**纯追加（删除数 0）**——本段落笔时实测 `14 0`；`grep -c "本页第一次同时是"`＝1。⇒ 收一条：**「Edit 成功」不等于落点正确**；追加台账之后除了看门，还要看那一笔的 **删除数是否为 0**（不为 0 就是把旧字改了/搬了）。
+6. **#64 处置：结案**。判卷现在 7 条全绿；同族尾巴留一句：这次钉的是"未跟踪不得进分母"，没钉分母数值（见第 3 条的理由）。
+7. **门与量纲（同轮声明）**：本笔 **1 支判卷文件**＋新取料目录 `outputs/face-by-relation-2026-10-04/`（探针／读数／造红逐字各一份）；`typecheck` 报错仍只有 `tests/autonomy.test.ts`（别人在飞，非本笔因果）；docs-check 提交前红＝本笔未入库工件（提交即归零那一支）。**没跑**：全量核心判卷、认证（`#39` 照旧）、`mutate-verify`（在别人手里 ⇒ `#50` 锚点债候选再加一条：`untrackedOnDisk` 的差集方向）。本页不宣布任何「绿了」。
+
 
 
 
