@@ -1,0 +1,2 @@
+e9726ed369bb06b7ae4e8e06e4eb65dd45f239e1d86e04fdb27d572c078774af  fixtures/no-progress/synth-red-repeat-readonly-shell.events.jsonl
+643257dc8942d39289d6f1c5fb341473fb5dbb5e6cd6cbdef8429720d59c5de3  fixtures/no-progress/synth-red-repeat-shell-write.events.jsonl

@@ -1,0 +1,8 @@
+  ✅ NP0-语料表与目录一致 — 目录 9 份 / 表内 9 条
+  ✅ NP1-该报的都报了且指得出名 — fire 样本 2 条：没报 0、规则名不对 0、报了没指名 0
+  ✅ NP2-合法长跑一条都不报 — silent 样本 7 条：误报 0 条 ⇒ 语料上的经验误报率 0%
+  ✅ NP3-归一化两头都有反例 — 同结论无写⇒报=true、同结论有写⇒不报=true、换文件同款报错⇒不报=true
+  ✅ NP4-阶梯分级按测量给 — 停滞+抖动=escalate、只有 action-shaped=directive、只有往返（真实语料上零触发，未证明无害）=note、全静=silent
+  ❌ NP5-语料 sha256 与冻结表逐字一致 — 语料 9 份｜冻结表核对 9 份：不在表上或哈希对不上 2 [synth-red-repeat-readonly-shell.events.jsonl,synth-red-repeat-shell-write.events.jsonl]
+     为什么要有这条：带标签语料就是判卷标准：翻一个 label 或改一份事件文件，NP1/NP2 立刻能从「永远红」被改成「永远绿」。本仓对 gym 靶面用的是同一只手（`gym-check` A3），但那只手只走 fixtures/gym ⇒ 这里自己钉一份
+[no-progress-check] ❌ 1 条不过
