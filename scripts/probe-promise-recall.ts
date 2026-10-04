@@ -851,6 +851,21 @@ function hopWebAnchorClaim(): Verdict {
   };
 }
 
+/** 第 376 页：`snapshotNote` 那句「要逐字节取回请复制该文件」由复现器判——
+ *  复制必须逐字节复原（含末行换行与超长行），而 `read_file` 转写必须**不**等于原件（反证，否则这句提示是装饰）。 */
+function hopSnapshotNote(): Verdict {
+  const r = spawnSync(process.execPath, ["--import", "tsx", join(ROOT, "scripts", "probe-snapshot-copy-restore.ts")], {
+    cwd: ROOT,
+    encoding: "utf8",
+  });
+  const tail = String(r.stdout ?? "").trim().split("\n").slice(-3).join(" / ");
+  return {
+    ok: r.status === 0,
+    how: "spawn scripts/probe-snapshot-copy-restore.ts（真起 write_file 覆盖 ⇒ 复制快照回写比字节 ⇒ 同一份快照再经 read_file 交付比不等）",
+    detail: `exit=${String(r.status)}｜${tail.slice(0, 190)}`,
+  };
+}
+
 const RECALL_HOW = "把句子里点名的 id 真拿去调 obs_recall（shipped：ObservationLedger + createObservationRecallTool），看回来的页里有没有原文凭证";
 
 /** 造一份"够归档"的授权输出（>10KB 且含失败信号行，收据支要拿它做引文）。 */
@@ -947,6 +962,9 @@ export const RUNNERS: Readonly<Record<string, string>> = {
   // 第 309 页：`web_fetch`/`web-search` 共用的那句截断提示（措辞含「取回」⇒ 被本清单收成一个面）。
   // 这一面欠的判定不是"能不能回取"，而是**它给的出路做不做得到**——由复现器三件事量。
   "src/tools/output-ring.ts#WEB_CONTENT_TRUNCATION_HINT": "hopWebAnchorClaim",
+  // 第 376 页：D7 快照回执新加的那半句「要逐字节取回请复制该文件」。措辞含「取回」⇒ 这一面必须有人判，
+  // 而它欠的判定与 web 那一格同族：不是"能不能取回"，是**它给的出路做不做得到**（复制逐字节／read_file 转写不等）。
+  "src/tools/snapshot.ts#snapshotNote": "hopSnapshotNote",
 };
 
 /** 判定名的花名册：**登记一个不存在的名字，等于这一面没人判过**。
@@ -954,7 +972,7 @@ export const RUNNERS: Readonly<Record<string, string>> = {
  *  登记表看着齐全、实际顶包（规则 366 那一族：指针失效比缺指针更难发现）。
  *  现在名字表在这里列一次，`isKnownRunner` 与判卷 `tests/promise-recall-inventory.test.ts` 共用它。 */
 const RUNNER_NAMES: readonly string[] = [
-  "hopSkill", "hopJoinPayload", "hopMapDemo", "hopLedgerRecall", "hopSolpiReceipt", "hopWebAnchorClaim", "hopPruneStub",
+  "hopSkill", "hopJoinPayload", "hopMapDemo", "hopLedgerRecall", "hopSolpiReceipt", "hopWebAnchorClaim", "hopSnapshotNote", "hopPruneStub",
 ];
 
 export function isKnownRunner(name: string): boolean {
@@ -976,7 +994,8 @@ export function runnerVerdict(name: string, workspace: string): Promise<Verdict>
         : name === "hopLedgerRecall" ? hopLedgerRecall()
           : name === "hopSolpiReceipt" ? hopSolpiReceipt()
             : name === "hopWebAnchorClaim" ? Promise.resolve(hopWebAnchorClaim())
-              : Promise.resolve(hopPruneStub());
+              : name === "hopSnapshotNote" ? Promise.resolve(hopSnapshotNote())
+                : Promise.resolve(hopPruneStub());
 }
 
 function loadSrcFiles(): { files: { path: string; text: string }[]; missingOnDisk: string[] } {
