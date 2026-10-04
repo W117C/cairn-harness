@@ -1,0 +1,18 @@
+cap = 1536  len = 109  truncated = true
+---- text ----
+- /a:one — 短描述
+- /a:two
+- /b:three
+- /loose — 散装
+[清单超 1536 字符，已截断：2 条只列了名字（描述未展开：要判断该不该用，先点名调用或读它的 SKILL.md）]
+---- end ----
+skillListHas(text, '/loose — 散装') = true
+write_file .git/hooks/pre-commit [guided]      {"verdict":"ask","layer":"L4-risk","reason":"风险≥medium 送审（引导档）","risk":"high","riskReasons":["敏感路径（.git/hooks/）：持久化执行面/凭证面，文件面路径通道"]}
+write_file .git/hooks/pre-commit [auto]        {"verdict":"ask","layer":"L4-risk","reason":"风险≥high 送审（自主档）","risk":"high","riskReasons":["敏感路径（.git/hooks/）：持久化执行面/凭证面，文件面路径通道"]}
+write_file .git/hooks/pre-commit [default]     {"verdict":"ask","layer":"L3-mode","reason":"默认档逐次审批","risk":"high","riskReasons":["敏感路径（.git/hooks/）：持久化执行面/凭证面，文件面路径通道"]}
+run_shell >> .git/hooks/pre-commit [guided]    {"verdict":"ask","layer":"L4-risk","reason":"风险≥medium 送审（引导档）","risk":"high","riskReasons":["重定向写入执行/凭证面（git 钩子、ssh、shell 启动文件、调度表）（静态威胁表：系统修改/high）"]}
+apply_patch 批量 [auto]                          {"verdict":"ask","layer":"L4-risk","reason":"风险≥high 送审（自主档）","risk":"high","riskReasons":["敏感路径（.git/hooks/）：持久化执行面/凭证面，文件面路径通道"]}
+edit_file .git/config [auto]                   {"verdict":"ask","layer":"L4-risk","reason":"风险≥high 送审（自主档）","risk":"high","riskReasons":["敏感路径（.git/config）：持久化执行面/凭证面，文件面路径通道"]}
+edit_file src/index.ts [auto]                  {"verdict":"approve","layer":"L4-pass","risk":"medium"}
+write_file src/index.ts [auto]                 {"verdict":"approve","layer":"L4-pass","risk":"none"}
+write_file src/index.ts [guided]               {"verdict":"approve","layer":"L4-pass","risk":"none"}

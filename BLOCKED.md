@@ -1,8 +1,23 @@
 # Blocked
 
-The requested desktop layer removal is complete. No desktop blocker is tracked in this core-only checkout.
+The desktop layer removal of 2026-09-27 (`69fbb0d`) was followed by a reintroduced desktop shell
+under `apps/desktop/` on 2026-10-02 (M1 slices), so this file's "core-only" premise had stopped holding;
+doc alignment landed in README.md / docs/CODE-WIKI.md / docs/DOCS-MAP.md / docs/README.md.
 
-The remaining verification surface is the agent/core test and headless-check surface. Any future desktop work must start from a new explicit design and implementation decision.
+[`docs/adr/0001-core-only-vs-desktop.md`](docs/adr/0001-core-only-vs-desktop.md) — status **Accepted
+(scope decision)**, closed 2026-10-04: **the desktop layer is not a v1 delivery surface** (decision D1,
+option A). Consequences, stated precisely so nobody reads them backwards:
+
+- v1's delivery surface is core-only again, **but `apps/desktop/` still exists in the tree and is still
+  being committed to**. "Not a v1 delivery surface" is a scope ruling, not a claim of absence.
+- The desktop defects recorded in the 2026-10-03 technical review (unwired invoke channels, desktop
+  outside the root gates / CI / cert surface) **remain true as defects** — they are merely off the v1
+  acceptance surface. Do not read "moved out of scope" as "fixed".
+- Consequently, no desktop item blocks v1 sign-off. Desktop work that is already in flight is not in
+  conflict with this ruling.
+
+The remaining verification surface is the agent/core test and headless-check surface; note `apps/desktop`
+is not scanned by any root gate or CI.
 
 ## 2026-09-30 · `tests/map-self-report.test.ts:95` 判据依赖 checkout 路径深度（未改代码，待换判据）
 

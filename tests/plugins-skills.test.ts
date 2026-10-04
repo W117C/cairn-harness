@@ -59,17 +59,22 @@ describe("M2e skill：frontmatter 与路由清单（任务 3）", () => {
     expect(r.text).toContain("/a:one — 短描述");
     expect(r.text).toContain("已截断");
     expect(r.text.endsWith("— 短描述") || r.text.split("\n").every((l) => l.startsWith("- ") || l.startsWith("[") || l === "")).toBe(true);
-    // 散装 skill 无插件前缀
-    expect(skillListHas(r.text, "/loose — 散装")).toBe(false); // 截断后可能被裁掉——单独验证非截断路径
+    // 散装 skill 无插件前缀。
+    // 原断言钉的是「截断后可能被裁掉」——#73 落地后该前提不成立了：描述超长的条目降级成
+    // 「只列名字」腾出预算，散装那条反而完整留下（取料：outputs/probe-73-secondhalf-2026-10-04/）。
+    // 是判卷的附带前提过时，不是实现退步 ⇒ 按纪律换判据，不改实现去迁就旧前提。
+    // 换成钉这一节真正要守的不变量：截断路径上散装条目也不许长出插件前缀。
+    expect(r.text).not.toContain("/null:");
+    expect(r.text.split("\n").some((l) => l === "- /loose — 散装" || l === "- /loose")).toBe(true);
     const small = buildSkillRoutingList([{ plugin: null, name: "loose", description: "散装" }]);
     expect(small.truncated).toBe(false);
     expect(small.text).toBe("- /loose — 散装");
   });
 });
 
-function skillListHas(text: string, line: string): boolean {
-  return text.split("\n").includes("- " + line.replace(/^- /, ""));
-}
+// 原 `skillListHas` 随上面那条断言一起撤掉：#73 落地后它是**零消费者**的辅助函数。
+// 留着不是"保险"——它自称的能力（判断某条完整行是否在清单里）现在由断言内联的
+// `split("\n").some(...)` 直接表达，语义相同且不再多一层需要维护的间接。
 
 describe("M2e skill/prompt：参数替换（任务 4 + §9.3 变量集）", () => {
   it("$ARGUMENTS 全文 / $1..$9 位置 / 缺位空串 / 未知变量原样", () => {

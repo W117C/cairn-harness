@@ -28,6 +28,7 @@ import { projectContext } from "../src/agent/context";
 import { DEFAULT_COMPACTION_CONFIG, createMockSummarizer, runCompaction } from "../src/agent/compaction";
 import { createMockProvider } from "../src/providers/mock";
 import { createEventLog, type AgentEvent } from "../src/events";
+import { memorySurfaceHits, stringLiterals } from "./lib/source-literals";
 
 let failures = 0;
 function check(cond: boolean, label: string, detail = ""): void {
@@ -260,7 +261,13 @@ async function main(): Promise<void> {
   const canaryAfter = await readFile(join(ws, ".agent", "memory", "MEMORY.md"), "utf8");
   check(canaryBefore === canaryAfter, "G5 压缩器不触记忆文件（canary 逐字不变）");
   const compactionSrc = await readFile(join(process.cwd(), "src", "agent", "compaction.ts"), "utf8");
-  check(!compactionSrc.includes("node:fs") && !compactionSrc.includes(".agent") && !compactionSrc.includes("MEMORY.md"), "G6 压缩器代码路径无 fs/记忆目录引用（静态）");
+  // G6 扫的是**字符串字面量面**，不是整份源码文本（2026-10-04 修正——判卷当天已改，门侧这次才跟上）。
+  // 原写法扫整份文本，被 `who(e.agent_id)` 里的巧合子串 ".agent" 撞红，而压缩器一行都没碰记忆目录。
+  // 判据的单源是 scripts/lib/source-literals.ts（覆盖面论证写在那里），判卷侧引用同一只谓词。
+  const memHits = memorySurfaceHits(compactionSrc);
+  check(memHits.length === 0, "G6 压缩器代码路径无 fs/记忆目录引用（静态）" + (memHits.length ? `——命中 ${memHits.join("、")}` : ""));
+  // 反向自证：字面量清单非空（尺没退化成「永远不匹配」）。
+  check(stringLiterals(compactionSrc).length > 5, "G6b 字面量抽取非空（尺没退化成恒绿）");
 
   await rm(ws, { recursive: true, force: true });
   await rm(ws2, { recursive: true, force: true });
