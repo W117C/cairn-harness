@@ -82,10 +82,17 @@ if (landedRev !== null) {
 
 // 门面对账：`scripts/**` 里盘上与 HEAD 不一致的那些，哪些是**门本体**。
 const dirtyScripts = git(["diff", "HEAD", "--name-only", "-z", "--", "scripts"]).split("\0").filter((s) => s !== "");
-const face = gateFaceDiff(dirtyScripts, GATES);
-console.log(`[commit-surface] 门面对账：scripts 面差异 ${String(dirtyScripts.length)} 支 ⇒ 门本体 ${String(face.gates.length)}（${face.gates.join("、") || "无"}）｜非门 ${String(face.other.length)}`);
+// HEAD 侧的 scripts 面（这道格的分母）：取不到就是空集 ⇒ 所有门都会落进 absentInHead，
+// 而不是被默认为"HEAD 里都有"（本尺不许把取不到读成没漂）。
+const headScripts = new Set(git(["ls-tree", "-r", "--name-only", "-z", "HEAD", "--", "scripts"]).split("\0").filter((s) => s !== ""));
+const face = gateFaceDiff(dirtyScripts, GATES, headScripts);
+console.log(`[commit-surface] 门面对账：scripts 面差异 ${String(dirtyScripts.length)} 支 ⇒ 门本体 ${String(face.gates.length)}（${face.gates.join("、") || "无"}）｜非门 ${String(face.other.length)}｜HEAD 里没这门 ${String(face.absentInHead.length)}（${face.absentInHead.join("、") || "无"}）`);
 if (face.gates.length > 0) {
   console.log("  ⇒ 这些门的**打印面此刻不等于 HEAD 那把尺**：引它们的读数要写明取在哪棵树（第 337 页补实测：差一条规则而退码相同）");
+}
+if (face.absentInHead.length > 0) {
+  console.log("  ⇒ 这几支在 HEAD 里**根本不存在**（多来自未入库的新暂存面）：它们不是「漂了」，是这道门还没入库——"
+    + "在干净 HEAD 树里跑它们会直接 ERR_MODULE_NOT_FOUND，那既不是门的红也不是仓的缺陷，是我的取料面错了（第 345 页）。");
 }
 // 只读时不因别人在飞而红：门本体差异是**邻接会话的状态**，不是我的失败。要它阻断属裁决（#49 里写明）。
 process.exit(0);

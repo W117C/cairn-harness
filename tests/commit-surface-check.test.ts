@@ -71,24 +71,60 @@ describe("landedGap：只数那一笔动过的路径", () => {
   });
 });
 
-describe("gateFaceDiff：门本体面与其余 scripts 面分开", () => {
-  it("基名等于门名 ⇒ 进门那一档；`.mjs` 也认", () => {
-    const r = gateFaceDiff(["scripts/docs-check.ts", "scripts/mutate-verify.mjs"], ["docs-check", "mutate-verify"]);
+describe("gateFaceDiff：门本体面分三档（HEAD 里有／HEAD 里没这支／非门）", () => {
+  const HEAD = (ps: string[]) => new Set(ps);
+  it("基名等于门名且 HEAD 里有 ⇒ 进门那一档；`.mjs` 也认", () => {
+    const r = gateFaceDiff(
+      ["scripts/docs-check.ts", "scripts/mutate-verify.mjs"],
+      ["docs-check", "mutate-verify"],
+      HEAD(["scripts/docs-check.ts", "scripts/mutate-verify.mjs"]),
+    );
     expect(r.gates).toEqual(["scripts/docs-check.ts", "scripts/mutate-verify.mjs"]);
+    expect(r.absentInHead).toEqual([]);
     expect(r.other).toEqual([]);
   });
-  it("不是门的差异单列，不撑大门那一档（否则一次注释改动都会喊门在飞）", () => {
-    const r = gateFaceDiff(["scripts/lib/commit-surface.ts"], ["docs-check"]);
+  it("**HEAD 里没这门 ⇒ 单列，不混进「门在飞」**（第 345 页：混起来会让人以为 HEAD 有一道红门，而在干净树里跑它是 ERR_MODULE_NOT_FOUND）", () => {
+    const r = gateFaceDiff(["scripts/repo-hygiene-check.ts"], ["repo-hygiene-check"], HEAD([]));
+    expect(r.absentInHead).toEqual(["scripts/repo-hygiene-check.ts"]);
     expect(r.gates).toEqual([]);
+  });
+  it("同一支门在 HEAD 里有／没有 ⇒ 两档各一条，且**两半互斥**（同一份输入换 head 面，门的归属必须变）", () => {
+    const p = "scripts/next-page.ts";
+    const inHead = gateFaceDiff([p], ["next-page"], HEAD([p]));
+    const notInHead = gateFaceDiff([p], ["next-page"], HEAD([]));
+    expect(inHead.gates).toEqual([p]);
+    expect(inHead.absentInHead).toEqual([]);
+    expect(notInHead.gates).toEqual([]);
+    expect(notInHead.absentInHead).toEqual([p]);
+  });
+  it("不是门的差异单列，不撑大门那一档（否则一次注释改动都会喊门在飞）", () => {
+    const r = gateFaceDiff(["scripts/lib/commit-surface.ts"], ["docs-check"], HEAD(["scripts/lib/commit-surface.ts"]));
+    expect(r.gates).toEqual([]);
+    expect(r.absentInHead).toEqual([]);
     expect(r.other).toEqual(["scripts/lib/commit-surface.ts"]);
+  });
+  it("非门且 HEAD 里也没有 ⇒ 仍进 other（HEAD 面只管门的分档，不许把非门挪进 absentInHead 造出第二份账）", () => {
+    const r = gateFaceDiff(["scripts/probe-new.ts"], ["docs-check"], HEAD([]));
+    expect(r.other).toEqual(["scripts/probe-new.ts"]);
+    expect(r.absentInHead).toEqual([]);
   });
   it("真仓事实源：GATES 里的名字确实能匹配到 `scripts/<名字>.ts` 那一族（名单没被换成手抄件）", () => {
     expect(GATES.length).toBeGreaterThan(20);
-    const r = gateFaceDiff(["scripts/docs-check.ts"], GATES);
+    const r = gateFaceDiff(["scripts/docs-check.ts"], GATES, HEAD(["scripts/docs-check.ts"]));
     expect(r.gates).toEqual(["scripts/docs-check.ts"]);
   });
-  it("空清单 ⇒ 两档都空（不许凭空报出「门在飞」）", () => {
-    expect(gateFaceDiff([], GATES)).toEqual({ gates: [], other: [] });
+  it("空清单 ⇒ 三档都空（不许凭空报出「门在飞」）", () => {
+    expect(gateFaceDiff([], GATES, HEAD([]))).toEqual({ gates: [], absentInHead: [], other: [] });
+  });
+  it("分母守恒：三档相加＝去重后的输入条数；且**基名命中**这条旧行为原样钉住（根目录下的同名件也算门）", () => {
+    const input = ["scripts/docs-check.ts", "scripts/repo-hygiene-check.ts", "scripts/lib/x.ts", "docs-check.ts"];
+    const r = gateFaceDiff(input, ["docs-check", "repo-hygiene-check"], HEAD(["scripts/docs-check.ts"]));
+    // 分档按**基名**（`gateFaceDiff` 一直如此）：`docs-check.ts` 也算门名命中，但它不在 HEAD 那一份里
+    // ⇒ 进 absentInHead。这一格顺手把旧行为钉住，免得将来有人改成按全路径匹配时静默换口径。
+    expect(r.gates).toEqual(["scripts/docs-check.ts"]);
+    expect(r.absentInHead).toEqual(["docs-check.ts", "scripts/repo-hygiene-check.ts"]);
+    expect(r.other).toEqual(["scripts/lib/x.ts"]);
+    expect(r.gates.length + r.absentInHead.length + r.other.length).toBe(new Set(input).size);
   });
 });
 
@@ -105,10 +141,15 @@ describe("CLI 的接线（读源文，不 import 有取料与写动作的那支�
     expect(cliSrc).toMatch(/ls-files", "-s", "-z"/u);
     expect(cliSrc).toMatch(/diff-tree[^"]*", "--no-commit-id", "--name-only", "-r", "-z"/u);
   });
-  it("门清单吃 `GATES`，不手抄第二份", () => {
+  it("门清单吃 `GATES`，不手抄第二份；且 HEAD 面是**取来的**、不是默认「HEAD 里都有」", () => {
     expect(cliSrc).toMatch(/import \{ GATES \} from "\.\/gate-manifest\.js";/u);
-    expect(cliSrc).toMatch(/gateFaceDiff\(dirtyScripts, GATES\)/u);
+    expect(cliSrc).toMatch(/gateFaceDiff\(dirtyScripts, GATES, headScripts\)/u);
+    expect(cliSrc).toMatch(/ls-tree", "-r", "--name-only", "-z", "HEAD", "--", "scripts"/u);
     expect(cliSrc).not.toMatch(/const GATE_NAMES\s*=\s*\[/u);
+  });
+  it("「HEAD 里没这门」那一档要真的出声（不然后一格又靠人记得）", () => {
+    expect(cliSrc).toMatch(/face\.absentInHead\.length > 0/u);
+    expect(cliSrc).toMatch(/还没入库/u);
   });
   it("缺省只读；写动作只在显式 `--sync` 分支里，且作用域是「该笔动过 ∩ index 落后」", () => {
     expect(cliSrc).toMatch(/const doSync = flag\("sync"\) !== null;/u);

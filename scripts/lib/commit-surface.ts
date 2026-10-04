@@ -56,16 +56,37 @@ export function landedGap(revTouched: readonly string[], report: DriftReport): s
 
 /** #49：门本体面里「盘上与 HEAD 不一致」的那些。`gateNames` 取自 `GATES`（**不手抄第二份门清单**——
  *  第 317 页那笔的全部教训就是手抄件会漂），匹配规则是「文件基名＝门名」，其余 scripts 面差异单列成 `other`。 */
-export function gateFaceDiff(dirtyScripts: readonly string[], gateNames: readonly string[]): { gates: string[]; other: string[] } {
+/** 门本体面分三档，**不是两档**（第 345 页的教训形状：我在干净 HEAD 树里跑了一支只存在于暂存面的门，
+ *  拿到 `ERR_MODULE_NOT_FOUND`，还把这件事读成了「仓的缺陷」）：
+ *   · `gates`＝HEAD 里有这道门、盘上也改了 ⇒ 打印面 ≠ HEAD 那把尺，读数要写明取在哪棵树；
+ *   · `absentInHead`＝盘上有、HEAD 里**根本没有这支文件** ⇒ 它不是"漂了"，是**这道门还没入库**，
+ *     HEAD 侧不存在这道门的任何读数（把它并进 `gates` 会让人以为 HEAD 有一道红了/在飞的红门）；
+ *   · `other`＝非门。
+ *  `headScripts` 是必填的：拿不到 HEAD 的 scripts 面时，本尺宁可不要这一格，也不许把"取不到"
+ *  读成"全都在 HEAD"（与 `onlyListsIn` 返回 null 同一口径）。 */
+export interface GateFace {
+  gates: string[];
+  absentInHead: string[];
+  other: string[];
+}
+
+export function gateFaceDiff(dirtyScripts: readonly string[], gateNames: readonly string[], headScripts: ReadonlySet<string>): GateFace {
   const names = new Set(gateNames);
   const gates: string[] = [];
+  const absentInHead: string[] = [];
   const other: string[] = [];
   for (const p of new Set(dirtyScripts)) {
     const base = p.split("/").pop() ?? p;
     const stem = base.replace(/\.mjs$/, "").replace(/\.ts$/, "");
-    (names.has(stem) ? gates : other).push(p);
+    if (!names.has(stem)) {
+      other.push(p);
+    } else if (headScripts.has(p)) {
+      gates.push(p);
+    } else {
+      absentInHead.push(p);
+    }
   }
-  return { gates: gates.sort(), other: other.sort() };
+  return { gates: gates.sort(), absentInHead: absentInHead.sort(), other: other.sort() };
 }
 
 /** 汇总行：四态相加＝分母（少一格就是量法坏了，规则 248/261 那一族）。 */
