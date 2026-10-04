@@ -13556,6 +13556,27 @@ const MUTATIONS = [
     apply: (s) => s.replace("const trimToken = (s: string): string => s.replace(/[`'\"),;:。，；]+$/gu, \"\");", "const trimToken = (s: string): string => s;"),
     expectFail: "命令抽取的形状：--filter 给对，裸 pnpm 不把开关当脚本",
   },
+  // ---- 2026-10-05：#61 第二半（台账分页 + dated 目录名）随判卷同笔配的锚点 ----
+  {
+    id: "ledger-page-seam-back-to-h3-only",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "分页缝退回只认 `^### ` ⇒ 第 308 页起那几十条 `## … 第 N 页` 整段落进上一条 h3 的体里，"
+      + "key 还顶着别人的页号（第 350 页现读：一把伪页挂着 118 条 refs，谁的读数都能在别人的面里找到归宿）",
+    apply: (s) => s.replace('export const PAGE_HEAD_RE = /^(?:### |## 20\\d\\d-\\d\\d-\\d\\d · 第 \\d+ 页)/u;', 'export const PAGE_HEAD_RE = /^### /u;'),
+    expectFail: "h2 两页 ⇒ 两条页（从前只认 `^### ` 时它们整段落进别人的体里，key 还是上一条 h3 的）",
+  },
+  {
+    id: "dated-dir-hhmm-truncated-again",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "dated 目录名的 `-HHMM` 又不要了 ⇒ `head-cert-<rev>-<date>-<HHMM>` 被截断成不含时刻的目录，"
+      + "那种目录根本不在盘上 ⇒ 读数退成「取不到」（而红的条数照旧 0，是**假绿**形状，第 349 页那条）",
+    // 针脚必须比 `(?:-\d{4})?` 长：那个片段在本文件里命中 2 处（正则一处 ＋ 讲它的注释一处），
+    // 单用它就落进「待复认」那一档——本仓的自指族（规则 236），实测当场复现。
+    apply: (s) => s.replace("\\d{4}-\\d{2}-\\d{2}(?:-\\d{4})?)/gu", "\\d{4}-\\d{2}-\\d{2})/gu"),
+    expectFail: "两种形状各钉一条：普通 `outputs/<主题>-<date>/` 与 `head-cert-<rev>-<date>-<HHMM>`",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
