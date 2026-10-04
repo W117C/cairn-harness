@@ -16,6 +16,16 @@ describe("BASE_SYSTEM 纪律面", () => {
     expect(BASE_SYSTEM).not.toContain("7)");
   });
 
+  // 身份行不写产品旧名、也不把交付面说成桌面壳：业主裁决「桌面不作 v1 交付面」，而交付面就是
+  // electron-free 的 agent 本体。为什么值得钉：这句是模型每轮第一眼看的东西，把它读成"我做的是桌面
+  // 应用"就会在改核心时替 UI 让路；而旧品牌串正在被逐笔改名（`bin/`、env 名），没有守卫就会漂回来。
+  it("身份行没有旧品牌串、也不自称桌面（交付面是 agent 本体）", () => {
+    const head = BASE_SYSTEM.split("\n")[0] ?? "";
+    expect(head.length).toBeGreaterThan(0);
+    expect(head).not.toContain("M0");
+    expect(head).not.toContain("桌面");
+  });
+
   it("先红后绿写进纪律：修 bug 必须先有跑到红的复现，没红过不得宣称修好（能力 5 的正面）", () => {
     const r4 = rule(4);
     expect(r4).toContain("复现");
