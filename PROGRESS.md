@@ -12614,6 +12614,14 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 5. **为什么这一步不由我做**：`scripts/gym-draft.ts:48` 明写「新文件登记进 `scripts/frozen-sha256.json`……**这三步永远是人的动作**」——冻结判据是本仓第一纪律里唯一必须由人做的那一步。两串 sha 我算好了（`n71-new-fixture-sha.txt`，`e9726ed3…774af`／`643257dc…c5de3`），但把它们抄进冻结表＝替业主签"认这几行事件是标准"。**主树一个字节都没动**：这一簇的四支撑卷文件（`src/agent/no-progress.ts`／`scripts/no-progress-check.ts`／`tests/no-progress.test.ts`／`scripts/frozen-sha256.json`）现读全部干净 ⇒ 卡住它的不是隔壁，是裁决。落地手册与顺序写在 `outputs/failure-face-2026-10-04/n71-how-to-land.md`（含"五件事同笔、拆半必留中间态"那一条）。
 6. **同一天另两件仍在等**：`#69` 的 loop 补丁与 `run_shell` 分段回执（impl+judge）分别等 `src/agent/loop.ts`／`src/tools/run_shell.ts` 让出——刚才现读：`loop.ts`／`orchestrator.ts`／`run_shell.ts`／`scripts/loop-eval.ts` 四支全 ` M`，`src/` 脏 30／175。**没跑**：全量核心判卷、认证、`mutate-verify`（`scripts/mutate-verify.mjs` 在飞 ⇒ `#50` 债新增一根候选：摘掉 `mayHaveWrittenDisk` 迁移 ⇒ ③那一条判别对照必红）。`#39`／`#57`–`#65` 照旧，`#67` 待对齐，`#68`／`#70` 待办，`#71` 备妥等判。本页不宣布任何「绿了」。
 
+## 2026-10-04 · 第 365 页：三张「待落工件」逐一对着**隔壁的在飞面**验过还贴得上（不是只对着 HEAD）；另记一条否定读数省一次白挖
+
+1. **为什么要做这一步**：备妥的补丁如果只在它诞生那一刻的面成立，下一个拿到干净树的人要重新验一遍——那是把这页的工作重做。所以拿 `git apply --check`（**只读，不写盘**）把三张补丁按在主树**当前在飞的工作面**上：`outputs/cap-hit-verify-gap-2026-10-04/loop.patch`、`outputs/failure-face-2026-10-04/run_shell-segment-message.patch`、`outputs/failure-face-2026-10-04/n71-ready-cluster.patch` ⇒ **三张全 `APPLIES-to-在飞面`**（`patch-applicability.txt`）。读数只说明"贴得上"，**不说明可以现在贴**：`src/tools/run_shell.ts` 与 `src/agent/loop.ts` 仍各带着隔壁未提交的 hunk，用 pathspec 提交就会把别人的行吞进我这笔。
+2. **一条否定读数（写下来是为了省下一次白挖）**：`mayHaveWrittenDisk` 把 `ls`／`find`／`npx vitest run`／`pnpm run test` 这类**没被证明只读**的 shell 命令一律按写盘管（那份只读白名单只有 12 个命令名＋10 个 git 只读子命令，`src/agent/worker-shell-tools.ts:10-17`）。我顺着这条去查 `src/agent/memory/lessons.ts:197` 的教训来源③会不会因此被 shell 噪音灌满 ⇒ **不会**：③筛的是"同工具同参数逐字重复 ≥N 次"，`run_shell` 逐字重复恰恰是第 363 页第 2 条那 2–3 条"白付一轮"的形状，是**真信号**；`read_file` 重读仍被排除在写向之外（那正是 2026-10-01 实测后写下的收窄理由）。⇒ 这一格没有缺陷，别再照"写向判据过宽"去猜它。
+3. **同一条过宽判据的另两个消费者，量过之后也都不用动**：`wroteThisRun`（能力 5 自动拍的门闩）与 `stale` 判定——第 363 页第 6 条那张三档口径表给的是**省下 0 拍、假绿暴露 0 份**，窄判据在这批面上没有回报。⇒ 悬着的只剩 R1 那一格（`#71`），而它等的是裁决不是工作量。
+4. **现在的堵点（现读，非推断）**：`src/agent/loop.ts`／`src/agent/orchestrator.ts`／`src/tools/run_shell.ts`／`scripts/loop-eval.ts` 四支全 ` M`，`src/` 脏 30／175；干净且能立刻落的只有 `#71` 那簇的四支撑卷文件（`src/agent/no-progress.ts`／`scripts/no-progress-check.ts`／`tests/no-progress.test.ts`／`scripts/frozen-sha256.json`），它卡在"翻 label 与冻结登记该谁做"。**没跑**：全量核心判卷、认证、`mutate-verify`（`scripts/mutate-verify.mjs` 在飞）；`typecheck` 本笔无生产码改动。`#39`／`#57`–`#65` 照旧，`#67` 待对齐，`#68`／`#70`／`#71` 待办。本页不宣布任何「绿了」。
+
+
 
 
 
