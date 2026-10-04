@@ -131,34 +131,110 @@ export function skillRoutingLine(s: RoutingSkillInput): string {
 
 export interface RoutingListResult {
   text: string;
-  /** true = 超 1536 字符被截断（截在完整行尾 + 标记行）。 */
+  /** true = 这份清单**不是原样全列**：有条目被降级成"只列名字"，或被整条丢掉。
+   *  （从前它是"被截断了"，今天多了一档 ⇒ 含义跟着变成"不完整"，判卷 B1 钉的就是这个位。） */
   truncated: boolean;
-  /** 因超预算而**没列出来**的条目数（skill 行与角色行合并在同一份预算里数）。
-   *  0 = 全列出了。这个数字同时进标记行给模型看：只说"已截断"，模型分不清少 1 条还是少 40 条。 */
+  /** 因超预算而**整条没列出来**的条目数（skill 行与角色行合并在同一份预算里数）。
+   *  0 = 全都列出了（可能仍有只列名字的档，看 `nameOnly`）。这个数字进标记行给模型看：
+   *  只说"已截断"，模型分不清少 1 条还是少 400 条。 */
   dropped: number;
+  /** 以「只列名字」进清单的条目数（名字可见、描述未展开）。0 = 没有降级。 */
+  nameOnly: number;
 }
 
-/** 截断标记：条目数写在里面（与 `RoutingListResult.dropped` 同一个数）。 */
-const routingTruncationMarker = (dropped: number): string =>
-  "\n[清单超 " + String(SKILL_ROUTING_CHAR_LIMIT) + " 字符，已截断：另有 " + String(dropped) + " 条未列出]";
+/** 截断标记：两个数都写在里面（与 `RoutingListResult` 同源）。 */
+const routingTruncationMarker = (dropped: number, nameOnly: number): string => {
+  const parts: string[] = [];
+  if (nameOnly > 0) parts.push(String(nameOnly) + " 条只列了名字（描述未展开：要判断该不该用，先点名调用或读它的 SKILL.md）");
+  if (dropped > 0) parts.push("另有 " + String(dropped) + " 条未列出");
+  return "\n[清单超 " + String(SKILL_ROUTING_CHAR_LIMIT) + " 字符，已截断：" + parts.join("；") + "]";
+};
 
-/** 渐进披露路由清单：可模型触发的 skill 的 name + description(+when_to_use)；超 1536 字符截断。
- *  `extraLines` = 同样「模型按名调用」但来源不是 skill 的条目（插件 agent 角色名，§4.4.7 的
- *  `stages[].role`）。它们共用**同一份预算与同一套截断规则**：另起一段清单就是两套口径，
- *  而「被截掉的那一条恰好是模型唯一需要知道的」正是最难查的那种静默失效。 */
-export function buildSkillRoutingList(skills: RoutingSkillInput[], extraLines: readonly string[] = []): RoutingListResult {
-  const lines = [...skills.filter(modelInvocable).map(skillRoutingLine), ...extraLines];
-  const text = lines.join("\n");
-  if (text.length <= SKILL_ROUTING_CHAR_LIMIT) return { text, truncated: false, dropped: 0 };
-  // 标记自己占的位数随数字变，所以先按上界（全都剩不下）预留，再用真实数字拼：
-  // 真实 dropped ≤ 条目总数 ⇒ 位数不超过预留值，`text.length <= 上限` 这条断言才恒成立。
-  const budget = SKILL_ROUTING_CHAR_LIMIT - routingTruncationMarker(lines.length).length;
-  let cut = text.slice(0, Math.max(0, budget));
-  const lastLineEnd = cut.lastIndexOf("\n");
-  if (lastLineEnd > 0) cut = cut.slice(0, lastLineEnd); // 截在完整行尾，不出半个条目
-  const kept = cut === "" ? 0 : cut.split("\n").length;
-  const dropped = lines.length - kept;
-  return { text: cut + routingTruncationMarker(dropped), truncated: true, dropped };
+/** 预算预留：按"最坏的那版标记"扣（两个数都取条目总数那个量级的位数），
+ *  这样贪心填出来的文本 ≤ 上限这条不变量与真实数字无关——真实数 ≤ 预留数用的位数。 */
+const markerReserve = (count: number): number => routingTruncationMarker(count, count).length;
+
+/** 查询分词：拉丁词（≥2 字符）＋ 汉字二元组。汉字不能整段当一个词——
+ *  「修 svg 渲染」与「渲染svg」要能互相命中，整段比对会让中文查询几乎召不回东西。 */
+export function routingQueryTokens(text: string): Set<string> {
+  const out = new Set<string>();
+  const lower = text.toLowerCase();
+  for (const m of lower.matchAll(/[a-z0-9][a-z0-9._+-]{1,}/g)) out.add(m[0]!);
+  for (const run of lower.match(/[一-鿿]+/g) ?? []) {
+    for (let i = 0; i + 1 < run.length; i++) out.add(run.slice(i, i + 2));
+    if (run.length === 1) out.add(run);
+  }
+  return out;
+}
+
+/** 一条 skill 与本轮任务的相关度（纯函数、无盘无进程）：命中查询词的**种数**，名字里命中记 3 倍。
+ *  打分口径故意朴素——这是"帽内该先给谁看"的排序，不是检索器评测；真要精准召回该走 (b) 那步
+ *  （把 query 接进调用方，见台账第 369 页的归属说明）。 */
+export function routingRelevance(query: Set<string>, s: RoutingSkillInput): number {
+  if (query.size === 0) return 0;
+  const name = skillInvokeName(s).toLowerCase();
+  const desc = (s.description + " " + (typeof s.frontmatter?.["when_to_use"] === "string" ? (s.frontmatter["when_to_use"] as string) : "")).toLowerCase();
+  let score = 0;
+  for (const t of query) {
+    if (name.includes(t)) score += 3;
+    else if (desc.includes(t)) score += 1;
+  }
+  return score;
+}
+
+/** 渐进披露路由清单：可模型触发的 skill 的 name + description(+when_to_use)；超预算**不整条丢**——
+ *  先按原样（完整行）从最相关的往下填，填不动的降级成"只列名字"继续填，最后才丢。
+ *  `extraLines` = 同样「模型按名调用」但来源不是 skill 的条目（插件与用户自定义 agent 的角色名，
+ *  §4.4.7 的 `stages[].role` 认的就是这个 invoke 名）。它们与 skill **共用同一份预算与同一套截断规则**：
+ *  另起一段清单就是两套口径，而"被截掉的那条恰好是模型唯一需要知道的"是最难查的静默失效。
+ *  为什么加这一档（2026-10-04 现读，台账第 368 页）：真实安装量下去重 406 条 skill、平均一行 193 字符，
+ *  1536 的帽只装得下 **3 条＝1%**，而装不下的部分从前按**发现序**整条丢掉——与本轮任务相关性无关。
+ *  只列名字一行 ~37 字符 ⇒ 同一预算能让 40+ 条至少"可见"，模型知道有这东西、能点名调用。
+ *  零回归面：全都装得下时（今天绝大多数安装）输出与从前**逐字相同**；`query` 缺省时顺序也与从前相同。 */
+export function buildSkillRoutingList(skills: RoutingSkillInput[], extraLines: readonly string[] = [], query: string = ""): RoutingListResult {
+  const invocable = skills.filter(modelInvocable);
+  const fullLines = invocable.map(skillRoutingLine);
+  const nameLines = invocable.map((s) => "- " + skillInvokeName(s));
+  const all = [...fullLines, ...extraLines];
+  if (all.join("\n").length <= SKILL_ROUTING_CHAR_LIMIT) return { text: all.join("\n"), truncated: false, dropped: 0, nameOnly: 0 };
+
+  // 超预算才动顺序：按相关性排 skill，角色行留在尾部但**优先保完整行**（数量小、且丢了会直接让
+  // pipeline 的 role 变成猜——那是比"看不见某条 skill"更贵的失效）。
+  const qt = routingQueryTokens(query);
+  const order = fullLines
+    .map((line, i) => ({ line, name: nameLines[i]!, score: qt.size === 0 ? 0 : routingRelevance(qt, invocable[i]!), idx: i }))
+    .map((e, i) => (qt.size === 0 ? { ...e, score: -i } : e))
+    .sort((a, b) => b.score - a.score || a.idx - b.idx);
+  const roleEntries = extraLines.map((line, i) => ({ line, name: line, score: -1 - i, idx: -1 }));
+
+  const budget = SKILL_ROUTING_CHAR_LIMIT;
+  const chosen: string[] = [];
+  let nameOnly = 0;
+  const push = (text: string): boolean => {
+    const next = chosen.length === 0 ? text : "\n" + text;
+    const used = chosen.join("\n").length + next.length + markerReserve(order.length + roleEntries.length);
+    if (used > budget) return false;
+    chosen.push(text);
+    return true;
+  };
+  for (const e of order) {
+    // 装得下完整行就用完整行；装不下**不是丢掉**，而是降级成只列名字再试一次——
+    // "有这条"本身就是模型能不能想起去点名调用的分水岭。
+    if (push(e.line)) continue;
+    if (push(e.name)) nameOnly++;
+  }
+  // 角色行仍在 skill 之后、同一份预算里数（`plugin-role-discoverability` 钉着这套合并语义）：
+  // 它们一样会进 `dropped`，不另开口径。
+  for (const r of roleEntries) push(r.line);
+  const listed = chosen.length;
+  const total = order.length + roleEntries.length;
+  const droppedCount = Math.max(0, total - listed);
+  return {
+    text: chosen.join("\n") + routingTruncationMarker(droppedCount, nameOnly),
+    truncated: true,
+    dropped: droppedCount,
+    nameOnly,
+  };
 }
 
 /**

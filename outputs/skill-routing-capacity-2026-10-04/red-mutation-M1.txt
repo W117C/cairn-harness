@@ -1,0 +1,54 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/Cairn/deepseek harness[39m
+
+ [31m❯[39m tests/skill-routing-tiering.test.ts [2m([22m[2m10 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[32m 19[2mms[22m[39m
+   [32m✓[39m 零回归面（装得下就一字不改） [2m(2)[22m
+     [32m✓[39m 小清单：输出与从前逐字相同，且没有降级标记[32m 1[2mms[22m[39m
+     [32m✓[39m 缺省 query（调用方还没接线的今天）⇒ skill 之间顺序与从前一致，不重排[32m 0[2mms[22m[39m
+   [31m❯[39m 超预算那一档 [2m(5)[22m
+[31m     [31m×[31m 40 条长描述：不整条丢——降级成只列名字继续填，且预算不变量成立[39m[32m 3[2mms[22m[39m
+[31m     [31m×[31m 标记行里两个数都出声（少 1 条与少 40 条不能让模型读成同一句）[39m[32m 5[2mms[22m[39m
+     [32m✓[39m 极端输入不外抛：单条超长描述／空描述／500 条[32m 5[2mms[22m[39m
+     [32m✓[39m 反向守卫：disable-model-invocation 的条目连名字都不该出现[32m 1[2mms[22m[39m
+     [32m✓[39m 合并语义没被降级档破坏：角色行与 skill 同一份预算、同一个 dropped 口径[32m 0[2mms[22m[39m
+   [32m✓[39m 相关性排序（检索式的这一半，query 由调用方给） [2m(3)[22m
+     [32m✓[39m 命中查询词的那条拿完整行——哪怕它在发现序里排最后[32m 0[2mms[22m[39m
+     [32m✓[39m 中文查询召得回（分词走二元组，不是整段比对）[32m 0[2mms[22m[39m
+     [32m✓[39m 名字命中比描述命中更重（同名不同描述时别把不相关的那条顶上来）[32m 0[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/skill-routing-tiering.test.ts[2m > [22m超预算那一档[2m > [22m40 条长描述：不整条丢——降级成只列名字继续填，且预算不变量成立
+[31m[1mAssertionError[22m: expected 0 to be greater than 0[39m
+[36m [2m❯[22m tests/skill-routing-tiering.test.ts:[2m43:24[22m[39m
+    [90m 41|[39m     expect(r.text.length).toBeLessThanOrEqual(SKILL_ROUTING_CHAR_LIMIT…
+    [90m 42|[39m     expect(r.truncated).toBe(true);
+    [90m 43|[39m     expect(r.nameOnly).toBeGreaterThan(0);
+    [90m   |[39m                        [31m^[39m
+    [90m 44|[39m     const lines = r.text.split("\n");
+    [90m 45|[39m     const listed = lines.filter((l) => l.startsWith("- ")).length;
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/skill-routing-tiering.test.ts[2m > [22m超预算那一档[2m > [22m标记行里两个数都出声（少 1 条与少 40 条不能让模型读成同一句）
+[31m[1mAssertionError[22m: expected '[清单超 1536 字符，已截断：另有 34 条未列出]' to contain '0 条只列了名字'[39m
+
+Expected: [32m"0 条只列了名字"[39m
+Received: [31m"[清单超 1536 字符，已截断：另有 34 条未列出]"[39m
+
+[36m [2m❯[22m tests/skill-routing-tiering.test.ts:[2m55:20[22m[39m
+    [90m 53|[39m     const r = buildSkillRoutingList(mk(40, "d".repeat(200)));
+    [90m 54|[39m     const marker = r.text.split("\n").find((l) => l.startsWith("[清单超")…
+    [90m 55|[39m     expect(marker).toContain(String(r.nameOnly) + " 条只列了名字");
+    [90m   |[39m                    [31m^[39m
+    [90m 56|[39m     expect(marker).toContain("另有 " + String(r.dropped) + " 条未列出");
+    [90m 57|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m8 passed[39m[22m[90m (10)[39m
+[2m   Start at [22m 22:03:19
+[2m   Duration [22m 313ms[2m (transform 64%, import 17%, tests 14%, worker 4%)[22m
+

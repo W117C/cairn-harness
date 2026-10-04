@@ -1,0 +1,25 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/Cairn/deepseek harness[39m
+
+ [32m✓[39m tests/plugin-role-discoverability.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 50[2mms[22m[39m
+ [32m✓[39m tests/promise-recall-inventory.test.ts [2m([22m[2m35 tests[22m[2m)[22m[33m 3227[2mms[22m[39m
+   [32m✓[39m 能力断言的证人面：一句都不曾被点过才算欠（第 311 页） [2m(16)[22m
+     [33m[2m✓[22m[39m 真仓那一趟：分母非零、存量在帽内、四态相加＝分母（这条尺不许恒红也不许空载）[33m 816[2mms[22m[39m
+     [32m✓[39m 绑定通道：证人用了另一套词时，靠**执行端符号 + 点名用例**配对（第 314/317 页） [2m(7)[22m
+       [33m[2m✓[22m[39m 缺第四件：符号在那份判卷里**有**、但不在被点名的那条用例**体内** ⇒ 仍算欠证人（旧口径放得过的形状）[33m 352[2mms[22m[39m
+       [33m[2m✓[22m[39m 反向对照：把通道关掉（空表），现读那两条就得回到欠证人 ⇒ 上一条不是恒真[33m 618[2mms[22m[39m
+     [33m[2m✓[22m[39m 反向对照：往真仓那份源码里凭空加一句无人判的能力断言 ⇒ 帽当场被顶破（证明上一条不是恒真）[33m 891[2mms[22m[39m
+ [32m✓[39m tests/skill-user-invocation.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 205[2mms[22m[39m
+ [32m✓[39m tests/user-agent-roles.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 91[2mms[22m[39m
+ [32m✓[39m tests/skill-invocation-faces.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 67[2mms[22m[39m
+ [32m✓[39m tests/skill-routing-tiering.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m6 passed[39m[22m[90m (6)[39m
+[2m      Tests [22m [1m[32m89 passed[39m[22m[90m (89)[39m
+[2m   Start at [22m 22:00:57
+[2m   Duration [22m 9.02s[2m (tests 44%, import 35%, transform 21%)[22m
+
+[2m     Import [22m [33m174 modules were evaluated 256 times[39m[2m · 2.90s total, 35% of tracked time[22m
+[2m            [22m [2m~930ms faster with [22m[33misolate: false[39m[2m — shared modules are evaluated once per worker instead of once per file[22m
+[2m            [22m [2mlearn more: https://vitest.dev/guide/improving-performance#test-isolation[22m
+

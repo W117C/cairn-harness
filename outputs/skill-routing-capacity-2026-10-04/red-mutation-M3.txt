@@ -1,0 +1,42 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/Cairn/deepseek harness[39m
+
+ [31m❯[39m tests/skill-routing-tiering.test.ts [2m([22m[2m10 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 20[2mms[22m[39m
+   [32m✓[39m 零回归面（装得下就一字不改） [2m(2)[22m
+     [32m✓[39m 小清单：输出与从前逐字相同，且没有降级标记[32m 2[2mms[22m[39m
+     [32m✓[39m 缺省 query（调用方还没接线的今天）⇒ skill 之间顺序与从前一致，不重排[32m 0[2mms[22m[39m
+   [32m✓[39m 超预算那一档 [2m(5)[22m
+     [32m✓[39m 40 条长描述：不整条丢——降级成只列名字继续填，且预算不变量成立[32m 0[2mms[22m[39m
+     [32m✓[39m 标记行里两个数都出声（少 1 条与少 40 条不能让模型读成同一句）[32m 1[2mms[22m[39m
+     [32m✓[39m 极端输入不外抛：单条超长描述／空描述／500 条[32m 5[2mms[22m[39m
+     [32m✓[39m 反向守卫：disable-model-invocation 的条目连名字都不该出现[32m 0[2mms[22m[39m
+     [32m✓[39m 合并语义没被降级档破坏：角色行与 skill 同一份预算、同一个 dropped 口径[32m 0[2mms[22m[39m
+   [31m❯[39m 相关性排序（检索式的这一半，query 由调用方给） [2m(3)[22m
+[31m     [31m×[31m 命中查询词的那条拿完整行——哪怕它在发现序里排最后[39m[32m 4[2mms[22m[39m
+     [32m✓[39m 中文查询召得回（分词走二元组，不是整段比对）[32m 4[2mms[22m[39m
+     [32m✓[39m 名字命中比描述命中更重（同名不同描述时别把不相关的那条顶上来）[32m 0[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/skill-routing-tiering.test.ts[2m > [22m相关性排序（检索式的这一半，query 由调用方给）[2m > [22m命中查询词的那条拿完整行——哪怕它在发现序里排最后
+[31m[1mAssertionError[22m: expected '- /p0:s0 — 通用描述通用描述通用描述通用描述通用描述通用描述通用…' to contain '/svg:render'[39m
+
+Expected: [32m"/svg:render"[39m
+Received: [31m"- /p0:s0 — 通用描述通用描述通用描述通用描述通用描述通用描述通用描述通用描述通用描述通用描述通用描述通用描述"[39m
+
+[36m [2m❯[22m tests/skill-routing-tiering.test.ts:[2m90:19[22m[39m
+    [90m 88|[39m     const r = buildSkillRoutingList(skills, [], "帮我把图表渲染成 svg");
+    [90m 89|[39m     const first = r.text.split("\n")[0]!;
+    [90m 90|[39m     expect(first).toContain("/svg:render");
+    [90m   |[39m                   [31m^[39m
+    [90m 91|[39m     expect(first).toContain("viewBox"); // 完整行，不是降级
+    [90m 92|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m9 passed[39m[22m[90m (10)[39m
+[2m   Start at [22m 22:04:50
+[2m   Duration [22m 248ms[2m (transform 63%, tests 18%, import 16%, worker 3%)[22m
+
