@@ -12,10 +12,13 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AgentEvent } from "../src/events";
+import type { AgentEvent, SecurityFinding, SecuritySeverity } from "../src/events";
 import { createEventLog, replay } from "../src/events";
 import { runAgent, initSettingsStore, shouldRunSecurityReport } from "../src/main/agent-runner";
 import { DEFAULT_SETTINGS } from "../src/main/settings";
+// H 段（合并准入闸，2026-10-02 增补）：判据与卡面全在纯模块里，生产与本门共用同一份。
+import { parseLlmFindings } from "../src/agent/security/llm-review";
+import { MERGE_BLOCKING_SEVERITIES, mergeGateVerdict } from "../src/agent/security/merge-gate";
 import {
   DANGER_CATEGORIES,
   buildSecurityReport,
@@ -89,7 +92,7 @@ async function runWithMode(tag: string, safeMode: "off" | "report"): Promise<Age
   const prev = process.env.M1C_AUTONOMY_SCRIPT;
   process.env.M1C_AUTONOMY_SCRIPT = scriptPath;
   try {
-    await runAgent({ workspace: ws, message: "写入样例并验证", mode: "auto", logPath, sandbox: null });
+    await runAgent({ workspace: ws, message: "写入样例并验证", mode: "auto", logPath, sandbox: null, trustedRepo: true });
   } finally {
     if (prev === undefined) delete process.env.M1C_AUTONOMY_SCRIPT;
     else process.env.M1C_AUTONOMY_SCRIPT = prev;
@@ -241,6 +244,63 @@ try {
   assert(back.length === 1 && back[0]?.type === "security_report", "security_report 事件 append/replay 往返无损");
 } finally {
   await rm(work, { recursive: true, force: true }).catch(() => {});
+}
+
+// ── H · 合并准入闸（2026-10-02 增补）────────────────────────────────────────────
+// 立项动因：普查实测 `llmReviewDiff` 是「静态扫描漏了、LLM 补上」这条**唯一**兜底路径，
+// 而本门此前 `llm` / `gate` / `merge` / `blocking` 各出现 0 次 ⇒ 43 条安全断言**不覆盖**合入门。
+// 后果具体到一句话：把 `high` 从闸的过滤器里删掉，全仓一条断言都不会红。
+//
+// 零花费、零凭据：`llmReviewDiff` 的**输出解析段**（`parseLlmFindings`）是纯函数，
+// 不拨号；`llmReviewDiff` 本体要 CAIRN_API_KEY，但本门只验「解析出来的 severity 能不能挡住合并」，
+// 那正是无凭据也能钉死的一格。真拨号那一段仍按 BYOK 缺席显式 skipped（不在本门范围）。
+console.log("[security-check] H · 合并准入闸：LLM 补出的高危能不能真的挡住合并");
+{
+  const llmRaw = (severity: string): string =>
+    JSON.stringify([{ severity, path: "src/risky.ts", line: 12, title: "硬编码密钥", description: "d" }]);
+
+  // H1 链路：LLM 说 high ⇒ parse 保住 severity ⇒ 闸拒。
+  const highParsed = parseLlmFindings(llmRaw("high"), 0);
+  assert(highParsed.length === 1 && highParsed[0]?.severity === "high", "H1 LLM 报 high ⇒ 解析后仍是 high（severity 没被悄悄降级）");
+  assert(!mergeGateVerdict(highParsed).allow, "H2 闸：high 挡住合并（合并权永远在人）");
+
+  // H3 两档都要挡——只钉 high 会让 critical 那档成为未检格。
+  assert(!mergeGateVerdict(parseLlmFindings(llmRaw("critical"), 0)).allow, "H3 闸：critical 同样挡住合并");
+
+  // H4 低档不挡：gate 不是「零告警才能合并」，否则实践中等于关掉。
+  assert(mergeGateVerdict(parseLlmFindings(llmRaw("medium"), 0)).allow, "H4 medium 不挡（闸只拦 high|critical）");
+
+  // H5 force 是逐次的人确认，且必须留下痕迹（三态，不是两态）。
+  const forced = mergeGateVerdict(parseLlmFindings(llmRaw("high"), 0), { force: true });
+  assert(forced.allow && forced.forced === true, "H5 force=true ⇒ 放行但留 forced 痕迹（人确认这条路有证人）");
+  assert(!mergeGateVerdict(parseLlmFindings(llmRaw("high"), 0)).allow, "H5b force 只对当次生效（另一次调用仍然拒）");
+
+  // H6 漏报那一侧：非法 severity 不许被「宽容地」归一成 low 去绕过闸。
+  for (const bad of ["HIGH", "blocker", ""]) {
+    assert(parseLlmFindings(llmRaw(bad), 0).length === 0, "H6 severity=" + JSON.stringify(bad) + " ⇒ 整条丢弃，不归一成 low 绕过闸");
+  }
+
+  // H7 反向验证（本格的分辨力自证）：造一份「去掉 high 的闸」，
+  // 证明 H2 那条断言对「high 挡不挡」这件事**真的敏感**——判不出红的判据是摆设。
+  // 两半都要断： crippled 闸**放行**（说明缺口真实存在），而真闸**不放行**（说明 H2 不是恒真）。
+  {
+    const crippled = MERGE_BLOCKING_SEVERITIES.filter((s) => s !== "high");
+    // 注：`crippled` 的元素类型被 TS 收窄成 `"low"|"medium"|"critical"`（因为 filter 的回调
+    // 做了 `s !== "high"` 的字面量收窄），拿它去 `includes(f.severity)` 会报类型不兼容。
+    // 这里显式放宽回 SecuritySeverity——反向验证要量的正是「**去掉 high 之后会怎样**」，
+    // 收窄掉的恰恰是我们要检验的那一档。
+    const crippledSevs: readonly SecuritySeverity[] = crippled;
+    const crippledAllows = (fs: readonly SecurityFinding[]): boolean =>
+      fs.filter((f) => crippledSevs.includes(f.severity)).length === 0;
+    assert(crippledAllows(highParsed), "H7 反向验证：去掉 high 的闸会放行 ⇒ H2 确实在测这一格（缺口真实）");
+    // H7b：把上面那句注释里的**另一半**真正断出来——「真闸不放行」。
+    // 原写法 `!crippledAllows(highParsed) === false` 只是把 H7 再断言一遍（等价于 assert(true)）⇒
+    // **恒真**：注释说它验"真闸不放行"，实际一次都没碰真闸（2026-10-02 审查当场指出）。
+    // 恒真式在本仓算红（"让门说的话等于门测的事"）；修法是真调 `mergeGateVerdict`，
+    // 并且与 H7 合成**一对**：两边只有同时成立（crippled 放行 ∧ 真闸拒）才说明判据有分辨力。
+    assert(crippledAllows(highParsed) && !mergeGateVerdict(highParsed).allow,
+      "H7b 真闸不放行、而『去掉 high』会放行 ⇒ 两面互为对照，H2 不是恒真（判据有分辨力）");
+  }
 }
 
 console.log(
