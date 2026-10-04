@@ -13481,6 +13481,53 @@ const MUTATIONS = [
     apply: (s) => s.replace("      必跑：${m.judge}", "      要跑：${m.judge}"),
     expectFail: "★两栏的名单前缀不同字，且第二栏另给一行可直接粘贴的整串",
   },
+  // ---- 2026-10-05 补：#50 的锚点债，先还「本轮新落的代码」这几条 ----
+  // 为什么新代码要当场配锚点：本仓对 #50 的定义就是「改了实现没补锚点＝这条判据其实没人守」。
+  // 本轮新落的四处（#69 撞帽取证、#57 授权落点、#58 lsp 定级、#63 读数归档）各自配一条。
+  {
+    id: "cap-path-skips-verify-beat",
+    src: "src/agent/loop.ts",
+    test: "tests/loop-cap-verify-beat.test.ts",
+    desc: "撞帽路不再补那一拍 ⇒ 被帽砍掉的 run 又回到「一条 verify 证据都没有」。#69 的原形状"
+      + "（真模型面实测 5/43≈12% 整趟跑废，且这批恰是写得最多、最可能失败的那一批）",
+    apply: (s) => s.replace("      if (!capReached) return;", "      return;"),
+    expectFail: "撞帽 + 写过盘 + 开闸 ⇒ 恰一拍 auto 证据落流，且 run 照旧抛错（帽没被藏起来）",
+  },
+  {
+    id: "cap-forcing-removed",
+    src: "src/agent/loop.ts",
+    test: "tests/loop-cap-verify-beat.test.ts",
+    desc: "最后一步不再把「该收束了」说给收束闸听 ⇒ 那一整段又只在模型**自己停手**时才走到，"
+      + "撞帽路重新变成取证盲区。与上一条是同一缺陷的两个必要条件，缺任一个都不响",
+    apply: (s) => s.replace("if (step === maxSteps - 1 && sawToolCall) {", "if (false && sawToolCall) {"),
+    expectFail: "撞帽 + 写过盘 + 开闸 ⇒ 恰一拍 auto 证据落流，且 run 照旧抛错（帽没被藏起来）",
+  },
+  {
+    id: "always-rule-written-to-tracked-file",
+    src: "src/main/agent-runner.ts",
+    test: "tests/d57-write-face.test.ts",
+    desc: "授权记录写回**被 git 跟踪**的 permissions.json ⇒ 谁 clone 谁继承那一次授权（#57 的原形状）",
+    apply: (s) => s.replace("const path = alwaysRulesPath(workspace);", 'const path = join(workspace, ".agent", "permissions.json");'),
+    expectFail: "落点是 alwaysRulesPath(workspace)，不是受跟踪的 permissions.json",
+  },
+  {
+    id: "lsp-risk-level-dropped",
+    src: "src/permissions/risk.ts",
+    test: "tests/lsp-permission-gate.test.ts",
+    desc: "摘掉 lsp 的风险定级 ⇒ 它拿默认 none，引导/自主两档直接放行 —— 而 lsp 会 spawn"
+      + "工作区配置里的命令（.agent/lsp.json，属外部输入）。#58 的原形状",
+    apply: (s) => s.replace('if ((tool as string) === "lsp") {', "if (false) {"),
+    expectFail: "staticRisk('lsp') ⇒ high，且理由点名命令来自哪里",
+  },
+  {
+    id: "readings-baseline-overwritten",
+    src: "scripts/lib/readings-archive.ts",
+    test: "tests/loop-eval-invocation-face.test.ts",
+    desc: "归档掏空 ⇒ 覆盖 readings.json 之前不再存旧的，跑一次就把上一版基线顶掉"
+      + "（10-01 那份三行冒烟基线就是这么没的）。#63 的原形状",
+    apply: (s) => s.replace("  if (!ops.exists(readingsPath)) return null;", "  return null;"),
+    expectFail: "有旧读数 ⇒ 真调一次 rename，且目标名带树号与时刻戳（冒号点号已换成横线）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
