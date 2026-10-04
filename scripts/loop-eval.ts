@@ -19,7 +19,7 @@
 //   ↑ 那两个价**必须自己给、且必须是自己所拨档位的价**（端点目录价即可）。不给 ⇒ 钱这一格出「量不出来」，
 //     跑器不再替任何人猜价（10-02 那次 36 趟拨的是免费档却按 0.8/2.8 印了「实付」，见 lib/eval-validity 的 priceFace）。
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -34,6 +34,7 @@ import type { VerifyRecovery } from "./lib/eval-validity";
 import { expectFailReason, type ExpectFace } from "./lib/eval-expects";
 // 重拨那一格：判据与分母共用同一个白名单（`providerInterruptOf`），等待有帽、帽外明说不重拨。
 import { retryVerdict, withProviderRetry } from "./lib/eval-retry";
+import { archiveExistingReadings } from "./lib/readings-archive";
 // held-out 验收面：可见测试是任务书明写着要复现的那些 ⇒ 「哄绿它们」与「修对根因」同分。
 // 隐藏测试在**改动清单算完之后**才装进副本，跑一次，判卷口径在那边（三种"量不出来"各给各的措辞）。
 import { installHeldOut, judgeHeldOut, runHeldOut, type HeldOutRun, type HeldOutState } from "./lib/eval-heldout";
@@ -734,7 +735,47 @@ if (t0.refuse) {
     + ` · 每达标任务 ¥${t0.pass > 0 ? (money.validSpend / t0.pass).toFixed(4) : "∞"}`
     + `〔按算数趟次 ¥${money.validSpend.toFixed(4)} ÷ 达标 ${String(t0.pass)} 算〕`);
 }
-await writeFile(join(ROOT, OUT, "readings.json"), JSON.stringify(rows, null, 1), "utf8");
+/* ---- 调用面落盘（#63／#68，2026-10-05 第 379 页）----
+ * 为什么非有不可：读数行只记结果，**不记"这一趟是怎么跑的"** ⇒ 同样的 `readings.json`，
+ * `--max-steps 30` 与 `--max-steps 50` 长得一模一样，`--reps 1` 与 `--reps 3` 也分不出。
+ * 而 #69 那批"撞帽 run"正是靠调用面才认得出来（第 362 页就是拿 30/50 两档才量出暴露面的）；
+ * 老留档连"跑了几步"都回查不到，等于那份产物不可复现。
+ * `dirty` 一并记：同一棵树脏着跑与干净着跑是两种读数（本仓为这一条栽过多次）。 */
+const headSha = ((): string => {
+  try {
+    const r = spawnSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" });
+    return r.status === 0 ? r.stdout.trim() : "unknown";
+  } catch { return "unknown"; }
+})();
+const dirtyCount = ((): number => {
+  try {
+    const r = spawnSync("git", ["status", "--porcelain"], { cwd: ROOT, encoding: "utf8" });
+    return r.status === 0 ? r.stdout.split("\n").filter((l) => l.trim() !== "").length : -1;
+  } catch { return -1; }
+})();
+await writeFile(join(ROOT, OUT, "run.json"), JSON.stringify({
+  headSha,
+  // -1 = 取不到（不是"干净"）：取不到时印 -1，绝不用 0 冒充干净树。
+  dirty: dirtyCount,
+  ranAt: new Date().toISOString(),
+  maxSteps: MAX_STEPS, reps: REPS, system: SYSTEM_MODE,
+  // 模型名**总是记**（#63）：原先只在 BENCH_MODEL 非空时进读数行，于是"用缺省模型跑的"
+  // 那一趟回查不到自己拨的是哪一档——而缺省恰恰是最常见的那一档。
+  model: (BENCH_MODEL !== undefined && BENCH_MODEL !== "") ? BENCH_MODEL : glmDefaultModelName(),
+  tasks: tasks.map((t) => t.id),
+}, null, 1), "utf8");
+const readingsPath = join(ROOT, OUT, "readings.json");
+// 基线不覆盖（#63）：原先每次直写同一份，跑一次就把上一份顶掉——10-01 那份三行冒烟基线
+// 就是这样没的。归档判据抽在 `./lib/readings-archive`（带注入 IO ⇒ 判卷喂真行为，
+// 而不是扫源码里有没有那句话；第一版就是栽在后者上）。
+const archived = archiveExistingReadings({
+  dir: join(ROOT, OUT), readingsPath, headSha, nowIso: new Date().toISOString(),
+  ops: { exists: existsSync, rename: renameSync },
+});
+if (archived !== null) {
+  console.log("[loop-eval] 上一份 readings.json 已归档（不顶掉别人的基线）：" + archived.replace(ROOT + "/", ""));
+}
+await writeFile(readingsPath, JSON.stringify(rows, null, 1), "utf8");
 /* 返修那一环的可读出口：`≥2 拍` 才是「第一拍代码红 ⇒ 模型真改过盘 ⇒ 再验一次」那条链路走通的样子。
  *  全 0 时先看装配面那一行——是闸没装（off-here），还是装了而没触发（模型自己验过了）。 */
 const beatCounts = rows.map((x) => x.r.autoVerifyBeats);
