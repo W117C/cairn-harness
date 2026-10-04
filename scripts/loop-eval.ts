@@ -430,7 +430,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
       stuckNudge: true,
       clarify,
       plan,
-      verify: createVerifyHook(work, { exec: EVAL_EXEC }),
+      verify: createVerifyHook(work, { exec: EVAL_EXEC, trustedRepo: true }),
       userMessage: t.task,
     });
   } catch (err) {

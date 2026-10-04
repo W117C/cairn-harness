@@ -221,11 +221,14 @@ describe("M5 · 类型面探测本身", () => {
 
   it("只有 tsconfig 的仓库**有**可验面 ⇒ harness 不会整段跳过 verify（surface 认这一面）", async () => {
     await repo({ "tsconfig.json": "{}" }, true);
-    const hook = createVerifyHook(dir);
+    // `trustedRepo: true` 是**本用例自己的断言**，不是默认值：这一格问的是「类型面算不算可验面」，
+    // 不是「该不该信任」。信任闸（S3，第 373 页）落库后 surface() 多了这道问，所以自建 fixture
+    // 必须显式声明自己可信——否则「有可验面」与「授权执行」两件事会被混成一件。
+    const hook = createVerifyHook(dir, { trustedRepo: true });
     expect(await hook.surface?.()).toBe(true);
     await rm(dir, { recursive: true, force: true });
     await repo({ "README.md": "hi\n" }, false);
-    expect(await createVerifyHook(dir).surface?.()).toBe(false);
+    expect(await createVerifyHook(dir, { trustedRepo: true }).surface?.()).toBe(false);
   });
 
   it("D · 类型面缺工具链归 toolchain-missing 而**不是** code（即不扣模型额度）", async () => {

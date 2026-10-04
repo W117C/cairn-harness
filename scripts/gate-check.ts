@@ -5,7 +5,7 @@
 //     「含歧义任务 → clarify → plan → 批准 → 写 → verify 通过」
 //     断言事件序列依次含 clarify_requested、plan_proposed、tool_call(write_file)、verify_result(ok)
 //   暗卷（任务 6，有 key 才跑）：真实 GLM 跑同一任务，断言模型至少各调一次 clarify 与 propose_plan；
-//     无 key → 退出码 0 并打印「暗卷跳过（无 M0_API_KEY）」
+//     无 key → 退出码 0 并打印「暗卷跳过（无 CAIRN_API_KEY）」
 // 任一断言失败 → 退出码非 0。
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { vitestSummary } from "./lib/vitest-summary";
@@ -184,7 +184,7 @@ assert(baseline.failed === 1 && !baseline.ok, "靶子开工状态 = 1 failed（�
     mode: "auto",
     clarify: clarifyGate,
     plan: planGate,
-    verify: createVerifyHook(APP),
+    verify: createVerifyHook(APP, { trustedRepo: true }),
     userMessage: "给待办应用加个开关",
   });
 
@@ -220,8 +220,8 @@ assert(baseline.failed === 1 && !baseline.ok, "靶子开工状态 = 1 failed（�
 }
 
 // ---- 任务 6：暗卷（有 key 才跑）----
-if (!process.env.M0_API_KEY) {
-  console.log("[gate-check] 暗卷跳过（无 M0_API_KEY）");
+if (!process.env.CAIRN_API_KEY) {
+  console.log("[gate-check] 暗卷跳过（无 CAIRN_API_KEY）");
   console.log("UNVERIFIED=1"); // H2（审查 P1-16）：跳过 ≠ 通过，上浮到门禁汇总
 } else {
   console.log("[gate-check] 任务 6 暗卷：真实 GLM 跑同一任务");
@@ -245,7 +245,7 @@ if (!process.env.M0_API_KEY) {
     mode: "auto",
     clarify: darkClarity,
     plan: darkPlan,
-    verify: createVerifyHook(APP),
+    verify: createVerifyHook(APP, { trustedRepo: true }),
     maxSteps: 60,
     userMessage: "给待办应用加个开关，并确保测试全绿",
   });

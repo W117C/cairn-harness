@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { createOutputRing } from "../tools/output-ring";
 import { killGroup, sanitizedEnv, spawnTracked } from "../tools/process";
 import type { VerifyCause, VerifyCommandResult } from "../events";
+import { verifyTrustDecision, type VerifyTrustDecision } from "./verify-trust";
 
 /** 包管理器**自己那一行**的命名空间错误码（pnpm 打成 `[ERR_PNPM_XXX] msg`）。
  *  锚在行首：这串必须由 pnpm 自己打印才算环境判定——被被测脚本*引用*在正文里的同样文字不算。
@@ -85,6 +86,9 @@ export interface VerifyConfig {
 export interface VerifyOutcome {
   ok: boolean;
   results: VerifyCommandResult[];
+  /** 非空＝这一轮**没有真的跑**任何命令，原因已说清（信任闸拒绝）。
+   *  调用方必须把它与「跑了但红」分开处理：前者不是失败证据，不该烧模型的修复额度。 */
+  skipped?: string;
 }
 
 export type ExecFn = (command: string, cwd: string, timeoutMs?: number, signal?: AbortSignal) => Promise<VerifyCommandResult>;
@@ -343,17 +347,52 @@ export interface VerifyHook {
   run(signal?: AbortSignal): Promise<VerifyOutcome>;
 }
 
-/** 面向 gate-check / agent-runner 的标准钩子：目标仓库 + 可注入执行器（沙箱路径传沙箱 exec）。 */
-export function createVerifyHook(repoDir: string, opts: { maxAttempts?: number; exec?: ExecFn } = {}): VerifyHook {
+/** 面向 gate-check / agent-runner 的标准钩子：目标仓库 + 可注入执行器（沙箱路径传沙箱 exec）。
+ *
+ *  **信任闸（审查 S3，2026-10-05）**：`opts.trustedRepo` 缺省 **false**，即"调用方没有断言这个
+ *  仓库的 verify 命令可信"。缺省即拒绝是刻意的：这条执行路径上**一次权限判定都没有**，而命令
+ *  100% 来自仓库自带文件（`.agent/config.json` / `package.json` scripts / Makefile 探测）。
+ *  克隆即携带 ⇒ 模型改任意文件 ⇒ 收束闸自动补拍 ⇒ 任意命令执行，且绕开 shell 威胁表与网络审批。
+ *
+ *  两级的处置刻意不同：
+ *   · `surface()` 返回 **false** ⇒ 自动补拍**整段跳过**。不假绿（没声称验过）、不假红（不是失败
+ *     证据）、不烧模型修复额度。这条就是攻击路径本身，关掉它即止血。
+ *   · `run()` 返回 `skipped` + 理由 ⇒ 手工 `/verify` 这条**用户主动发起**的路，如实告诉用户
+ *     「命令来自仓库、未授权」，而不是伪装成一条 verify 失败。
+ *
+ *  自己拥有该仓库的调用方（gym / gate-check / 基准 / 判卷，跑的都是仓内 fixture）显式传
+ *  `trustedRepo: true`——那是**调用方的断言**，不是默认。 */
+export function createVerifyHook(repoDir: string, opts: { maxAttempts?: number; exec?: ExecFn; trustedRepo?: boolean } = {}): VerifyHook {
+  const trusted = opts.trustedRepo ?? false;
+  /** 把命令来源折成信任闸认得的 provenance：`loadVerifyConfig` 的两个来源都是仓库自带文件。 */
+  const trustOf = async (): Promise<VerifyTrustDecision> => {
+    const { config, source } = await loadVerifyConfig(repoDir);
+    const commands = verifyCommands(config);
+    return verifyTrustDecision({
+      provenance: source === "config" ? "repo-config" : source === "probed" ? "repo-probed" : "host",
+      commands,
+      trusted,
+    });
+  };
   return {
     maxAttempts: opts.maxAttempts,
     surface: async () => {
       const { config } = await loadVerifyConfig(repoDir);
       // 类型面也算「有可验面」：只有 tsconfig 的仓库此前被判成没面 ⇒ harness 整段跳过 verify，
       // 而它其实能验（M5 交付物 1 的另一半：补上的面要真的被跑到，不能只躺在配置里）。
-      return verifyCommands(config).length > 0;
+      if (verifyCommands(config).length === 0) return false;
+      const d = await trustOf();
+      if (!d.run) {
+        console.warn(d.reason);
+        return false; // fail-closed：宁可这一拍不验，也不执行未经授权的仓库命令
+      }
+      return true;
     },
-    run: (signal?: AbortSignal) => runVerifyOutcome(repoDir, opts.exec, signal),
+    run: async (signal?: AbortSignal) => {
+      const d = await trustOf();
+      if (!d.run) return { ok: false, results: [], skipped: d.reason };
+      return runVerifyOutcome(repoDir, opts.exec, signal);
+    },
   };
 }
 
