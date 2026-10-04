@@ -180,6 +180,16 @@ function loadTaskFile(path: string, kind: "tasks" | "swebench"): { tasks: EvalTa
   return { tasks, errors: r.errors };
 }
 
+/** 重复给同一个旗标时**出声并作废**（#63c）。
+ *  原行为是 `argv.indexOf(flag)` 取**首个**，第二个静默丢掉——于是"我传了两份清单"
+ *  这句话在读数上没有任何痕迹，跑出来的是第一份。这类"悄悄只听一个"正是本仓反复登记的形状。
+ *  只对 `--tasks` 出声：别的旗标重复的语义（后者胜）历史上没被用过，不去改它们。 */
+const repeatedTasks = argv.filter((a) => a === "--tasks").length > 1;
+if (repeatedTasks) {
+  console.error("[loop-eval] ❌ `--tasks` 给了不止一次：本跑器一次只吃一份清单（同一趟里多次给会静默只用第一份）。"
+    + "要跑多份就分几次跑，或把它们合成一份清单文件——本次拒绝出数，见 #63c。");
+  process.exit(2);
+}
 const TASKS_FILE = pick("--tasks", "");
 const SWEBENCH_FILE = pick("--swebench", "");
 const FEASIBILITY = argv.includes("--feasibility");

@@ -97,6 +97,10 @@ pnpm eval-report --baseline outputs/bench-a/readings.json \
   要下结论请提高 `--reps`，并把同一配置的多份读数都喂给 `--baseline`。
 - **真模型跑有成本**：全套 15 条会烧真 token。改完先 `--only` 冒烟，再全量。
 - **一键只喂到一份清单**：`package.json` 的 `bench` 写死 `--tasks fixtures/bench/tasks.json`，而
-  `scripts/loop-eval.ts` 的 `pick()` 取**首个** `--tasks` ⇒ 命令行追加无效，
-  `tasks-long30.json`／`tasks-chain32.json`／`tasks-chain48.json` 在全仓没有消费者（本轮只登记、不修）。
+  `scripts/loop-eval.ts` 的 `pick()` 取**首个** `--tasks` ⇒ 命令行追加无效。
+  **2026-10-05 已修（#63c），两半都收口**：
+  ① 三份长清单各有了消费者——`bench:long30`／`bench:chain32`／`bench:chain48`
+  （`max-steps` 分别 35／40／55，按链路长度给，不必手动传）；
+  ② 重复给 `--tasks` 现在**出声并拒绝出数**（exit 2），不再静默只听第一份。
+  判卷 `tests/bench-task-consumers.test.ts`（脚本↔清单双向配平 ＋ 真起进程判守卫）。
 - **任务集换了就不能横比**：`eval-report` 会检查任务 id 集合，不一致直接把结论标为作废（分母变了）。
