@@ -1,0 +1,28 @@
+diff --git a/src/agent/loop.ts b/src/agent/loop.ts
+index 40f2b2da..265ef79e 100644
+--- a/src/agent/loop.ts
++++ b/src/agent/loop.ts
+@@ -602,5 +602,23 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
+       return; // 模型认为任务结束（纯文本轮 / 事件源耗尽）
+     }
+   }
++  // 撞步数帽 ≠ 验过了。收束闸住在上面「这一轮没有工具调用」那条支路里，而被帽砍掉的 run
++  // 恰恰是最长、最容易失败的那一批：今天它们抛出去的那句话背后一条验证证据都没有，
++  // 审计面分不出「没验」与「验过且红」。撞帽前补同一拍——条件与常规闸逐字相同，至多一拍。
++  if (opts.verify && opts.autoVerify === true && wroteThisRun && verifyAttempts === 0 && autoBeats < 1) {
++    let capHasSurface = true;
++    try {
++      capHasSurface = (await opts.verify.surface?.()) !== false;
++    } catch {
++      capHasSurface = false; // 探测坏掉 ⇒ 不补拍（与常规闸的 fail-closed 同口径），也别把下面那次抛盖掉
++    }
++    if (capHasSurface) {
++      try {
++        await verifyBeat(HARNESS_VERIFY_CALL_ID, true);
++      } catch {
++        /* 补拍自己炸了不改变"撞帽"这个终态：抛的还是下面原来那句 */
++      }
++    }
++  }
+   throw new Error(`agent loop 超过 maxSteps=${String(maxSteps)}，强制中止`);
+ }

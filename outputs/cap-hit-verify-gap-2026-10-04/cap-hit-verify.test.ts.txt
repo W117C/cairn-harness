@@ -1,0 +1,105 @@
+// `#69`：撞 `maxSteps` 的那条路会不会留下"验过/没验过"的证据。
+// 现场（本会话现读，HEAD 面行号）：收束闸整段住在 `src/agent/loop.ts` 的 `if (!sawToolCall)` 支路里，
+// 而步数用尽是从循环外面抛出去（HEAD 面 `:605`）⇒ 被帽砍掉的 run **永远走不到闸**，
+// 而那批 run 恰恰是写得最多、最可能失败的。今天 `grep "超过 maxSteps" tests` 命中 0，这一格没有尺。
+// 本文件钉的是补拍之后的形状；补丁未落地时第 1 条必然红——那是它的失败前置，不是写错了断言。
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { runLoop } from "../src/agent/loop";
+import type { VerifyHook } from "../src/agent/verify";
+import type { AgentEvent } from "../src/events";
+import type { ModelOutput, ProviderMessage } from "../src/providers";
+
+const dirs: string[] = [];
+afterEach(async () => {
+  for (const d of dirs.splice(0)) await rm(d, { recursive: true, force: true }).catch(() => {});
+});
+
+/** 每轮都只发一个工具调用 ⇒ 这个 run 永远不会"收束"，只能被步数帽砍掉。 */
+async function driveCap(toolName: "write_file" | "read_file", hook: VerifyHook, opts: { autoVerify?: boolean; maxSteps?: number }): Promise<AgentEvent[]> {
+  const home = await mkdtemp(join(tmpdir(), "cap-hit-"));
+  dirs.push(home);
+  const log: AgentEvent[] = [];
+  let turn = 0;
+  await runLoop({
+    workspace: home,
+    userMessage: "把这件事做完",
+    mode: "auto",
+    interactive: true,
+    events: { async append(e: AgentEvent) { log.push(e); } },
+    tools: {
+      [toolName]: {
+        name: toolName,
+        async run(): Promise<{ ok: boolean; output: string }> {
+          return { ok: true, output: toolName === "write_file" ? "written" : "contents" };
+        },
+      },
+      verify: {
+        name: "verify",
+        async run(): Promise<{ ok: boolean; output: string }> { return { ok: true, output: "green" }; },
+      },
+    } as never,
+    verify: hook,
+    ...(opts.autoVerify === undefined ? {} : { autoVerify: opts.autoVerify }),
+    maxSteps: opts.maxSteps ?? 3,
+    provider: {
+      async *stream(_messages: ProviderMessage[]): AsyncGenerator<ModelOutput, void, void> {
+        turn++;
+        yield { type: "tool_call", id: "t" + String(turn), name: toolName, args: { path: "src/a.ts", content: "x" } } as ModelOutput;
+      },
+    } as never,
+  }).catch((err: unknown) => {
+    const m = err instanceof Error ? err.message : String(err);
+    if (!m.includes("maxSteps")) throw err;
+    return null;
+  });
+  return log;
+}
+
+function sequenceHook(seq: boolean[]): { hook: VerifyHook; calls: () => number } {
+  let i = 0;
+  const hook: VerifyHook = {
+    async run() {
+      const ok = seq[Math.min(i, seq.length - 1)] ?? false;
+      i++;
+      return { ok, results: [{ command: "pnpm test", ok, output: ok ? "all green" : "FAIL: 1 failed" }] };
+    },
+  };
+  return { hook, calls: () => i };
+}
+
+const autoBeats = (log: AgentEvent[]): AgentEvent[] =>
+  log.filter((e) => e.type === "verify_result" && e.auto === true);
+
+describe("撞步数帽时的收束验证（#69）", () => {
+  it("正例：写过盘 + 被帽砍掉 + 装了闸 ⇒ 抛之前必须留下一条 auto 拍（今天这条该红——那就是本工单的失败前置）", async () => {
+    const { hook, calls } = sequenceHook([true]);
+    const log = await driveCap("write_file", hook, { autoVerify: true });
+    expect(calls(), "补拍压根没跑 ⇒ 撞帽的 run 还是零证据收场").toBe(1);
+    expect(autoBeats(log)).toHaveLength(1);
+  });
+
+  it("反向哨兵：没装闸 ⇒ 撞帽时也不许多跑一次 verify（补拍受同一个开关管，不是常开后门）", async () => {
+    const { hook, calls } = sequenceHook([true]);
+    const log = await driveCap("write_file", hook, { autoVerify: false });
+    expect(calls()).toBe(0);
+    expect(autoBeats(log)).toHaveLength(0);
+  });
+
+  it("没写过盘 ⇒ 不补（抛出去的那句背后本来就没有需要证据的改动）", async () => {
+    const { hook, calls } = sequenceHook([true]);
+    const log = await driveCap("read_file", hook, { autoVerify: true });
+    expect(calls()).toBe(0);
+    expect(autoBeats(log)).toHaveLength(0);
+  });
+
+  it("零可验面 ⇒ 连探测都不许变成一次真跑（与常规闸的『无面零行为』同一口径）", async () => {
+    const { hook, calls } = sequenceHook([true]);
+    const surfaced = { ...hook, surface: async () => false } as VerifyHook;
+    const log = await driveCap("write_file", surfaced, { autoVerify: true });
+    expect(calls(), "没面还去跑命令 ⇒ 白烧一次 verify 的墙钟").toBe(0);
+    expect(autoBeats(log)).toHaveLength(0);
+  });
+});

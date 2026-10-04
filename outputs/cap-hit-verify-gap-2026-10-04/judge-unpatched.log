@@ -1,0 +1,37 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-c7f2ea0f[39m
+
+ [31m❯[39m tests/cap-hit-verify.test.ts [2m([22m[2m4 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 15[2mms[22m[39m
+   [31m❯[39m 撞步数帽时的收束验证（#69） [2m(4)[22m
+[31m     [31m×[31m 正例：写过盘 + 被帽砍掉 + 装了闸 ⇒ 抛之前必须留下一条 auto 拍（今天这条该红——那就是本工单的失败前置）[39m[32m 10[2mms[22m[39m
+     [32m✓[39m 反向哨兵：没装闸 ⇒ 撞帽时也不许多跑一次 verify（补拍受同一个开关管，不是常开后门）[32m 2[2mms[22m[39m
+     [32m✓[39m 没写过盘 ⇒ 不补（抛出去的那句背后本来就没有需要证据的改动）[32m 1[2mms[22m[39m
+     [32m✓[39m 零可验面 ⇒ 连探测都不许变成一次真跑（与常规闸的『无面零行为』同一口径）[32m 1[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/cap-hit-verify.test.ts[2m > [22m撞步数帽时的收束验证（#69）[2m > [22m正例：写过盘 + 被帽砍掉 + 装了闸 ⇒ 抛之前必须留下一条 auto 拍（今天这条该红——那就是本工单的失败前置）
+[31m[1mAssertionError[22m: 补拍压根没跑 ⇒ 撞帽的 run 还是零证据收场: expected +0 to be 1 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 1[39m
+[31m+ 0[39m
+
+[36m [2m❯[22m tests/cap-hit-verify.test.ts:[2m80:49[22m[39m
+    [90m 78|[39m     const { hook, calls } = sequenceHook([true]);
+    [90m 79|[39m     const log = await driveCap("write_file", hook, { autoVerify: true …
+    [90m 80|[39m     expect(calls(), "补拍压根没跑 ⇒ 撞帽的 run 还是零证据收场").toBe(1);
+    [90m   |[39m                                                 [31m^[39m
+    [90m 81|[39m     expect(autoBeats(log)).toHaveLength(1);
+    [90m 82|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m3 passed[39m[22m[90m (4)[39m
+[2m   Start at [22m 19:15:13
+[2m   Duration [22m 713ms[2m (transform 76%, import 21%, tests 3%)[22m
+
