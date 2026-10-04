@@ -1,0 +1,14 @@
+留档文件=30 份｜趟次行=119
+字段可用面（有／无）：autoVerifyBeat 119/0｜verifyOkLast 119/0｜verifyRecovery 25/94｜model 25/94｜cny 119/0｜changedFiles 119/0
+对照臂跑过没有：autoVerifyRepair 出现 0 次 ⇒ 净收益无据，本表只给暴露面与成本上界（哨兵：这句是我 grep 来的，不是推的）
+—— 暴露面（翻默认才会碰到的那一档）——
+有 verifyOkLast 的趟=119（另 0 趟这一格无从判，不计入分子也不计入分母）
+结束时仍是红的趟=40（占比 34%）｜其中确认写过盘的=7、changedFiles 格不存在的=0
+见过 harness 自动拍（autoVerifyBeat=true）的趟=0
+新 schema 里「红过」的趟（verifyRecovery ≠ 一次就绿／没跑过）=0
+—— 成本上界 ——
+每趟均值：请求=7.90 输入 token=55351 输出 token=2398 墙钟=54.0s
+单价可读的趟=94（其余 cny=null ⇒ 单价未知）｜每趟均值 ¥0.0058｜每趟均值请求=7.55 ⇒ 一轮 ≈ ¥0.00077｜翻默认最坏新增＝「红过」那 40 趟各多 1 轮 ≈ ¥0.0308（口径：一轮＝整趟均价 ÷ 每趟请求数。返修轮带着同样的上下文，所以这是读大不读小）
+最坏新增请求数=40（现有总请求 940 的 4%）
+真模型那一臂的最小实验面（只挑翻默认才会碰到的任务 id）：13 个：B1-bugfix-crossfile、B10-refactor-dedupe、B11-refactor-signature、B12-long-horizon、B2-feature-export、B3-refactor-callsite、B4-bugfix-pagination、B5-bugfix-async、B6-feature-flag、B7-feature-csv、B8-feature-memo、B9-refactor-rename、I2
+更窄的一档——红过**且确认写过盘**的趟（这一档才是返修轮真正会落到的地方）：7 趟／去重后 7 个：B12-long-horizon（bench-baseline-2026-10-04）、B2-feature-export（bench-baseline-2026-10-04）、B2-feature-export（bench-head-d0ffe15e-a）、B2-feature-export（bench-reps3-2026-10-02）、B4-bugfix-pagination（bench-reps3-2026-10-02）、I2（loop-eval-2026-09-20-base）、I2（loop-eval-2026-09-20-short）
