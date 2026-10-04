@@ -1,4 +1,4 @@
-// m0 CLI 的产品面契约（§阶段 B）。
+// cairn CLI 的产品面契约（§阶段 B）。
 //
 // 这组只钉**从外面能观测到的东西**：退出码、stderr 上可操作的提示、落盘的日志。
 // 渲染器 `renderEvent` 是纯函数，直接单测；审批门的接线用结构断言 + 真跑一次非交互路径。
@@ -15,13 +15,13 @@ import { renderEvent } from "../src/cli";
 import type { AgentEvent } from "../src/events";
 
 const ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-const BIN = join(ROOT, "bin", "m0.mjs");
+const BIN = join(ROOT, "bin", "cairn.mjs");
 
 /** 真跑 CLI。`noKeys` 抹掉全部 provider key，让 provider 推断走「一个都没配」那一支。 */
 function runCli(args: string[], opts: { noKeys?: boolean; env?: Record<string, string>; timeout?: number } = {}): { status: number | null; out: string } {
   const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1", ...opts.env };
   if (opts.noKeys !== false) {
-    for (const k of ["M0_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"]) delete env[k];
+    for (const k of ["CAIRN_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"]) delete env[k];
     delete env.M0A_PROVIDER;
   }
   const r = spawnSync(process.execPath, [BIN, ...args], {
@@ -34,15 +34,15 @@ function runCli(args: string[], opts: { noKeys?: boolean; env?: Record<string, s
   return { status: r.status, out: (r.stdout ?? "") + (r.stderr ?? "") };
 }
 
-describe("m0 CLI：产品面存在且可执行", () => {
-  it("bin/m0.mjs 在盘上且带 shebang（npm bin 的硬要求）", () => {
+describe("cairn CLI：产品面存在且可执行", () => {
+  it("bin/cairn.mjs 在盘上且带 shebang（npm bin 的硬要求）", () => {
     expect(existsSync(BIN)).toBe(true);
     expect(readFileSync(BIN, "utf8").startsWith("#!/usr/bin/env node")).toBe(true);
   });
 
-  it("package.json 的 bin 指向它（装上才有 m0 这个命令）", () => {
+  it("package.json 的 bin 指向它（装上才有 cairn 这个命令）", () => {
     const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { bin?: Record<string, string> };
-    expect(pkg.bin?.m0).toBe("./bin/m0.mjs");
+    expect(pkg.bin?.cairn).toBe("./bin/cairn.mjs");
   });
 
   it("真跑：--help 打印用法并 exit 0（走真 bin shim，不是 import src）", () => {
@@ -53,7 +53,7 @@ describe("m0 CLI：产品面存在且可执行", () => {
   });
 });
 
-describe("m0 CLI：退出码 0 / 1 / 2（照 scripts/gym-run.ts 的口径）", () => {
+describe("cairn CLI：退出码 0 / 1 / 2（照 scripts/gym-run.ts 的口径）", () => {
   it("缺任务描述 ⇒ exit 2 且说清怎么用", () => {
     const r = runCli([]);
     expect(r.status).toBe(2);
@@ -80,7 +80,7 @@ describe("m0 CLI：退出码 0 / 1 / 2（照 scripts/gym-run.ts 的口径）", (
   });
 });
 
-describe("m0 CLI：--model 自由档位", () => {
+describe("cairn CLI：--model 自由档位", () => {
   it("--help 里列出这个 flag（没进 help 的选项等于不存在）", () => {
     expect(runCli(["--help"]).out).toContain("--model");
   });
@@ -107,7 +107,7 @@ describe("m0 CLI：--model 自由档位", () => {
   });
 });
 
-describe("m0 CLI：--ctx-window（只配 --model，申报自由档位的真实窗口）", () => {
+describe("cairn CLI：--ctx-window（只配 --model，申报自由档位的真实窗口）", () => {
   it("--help 里列出这个 flag（没进 help 的选项等于不存在）", () => {
     expect(runCli(["--help"]).out).toContain("--ctx-window");
   });
@@ -142,7 +142,7 @@ describe("m0 CLI：--ctx-window（只配 --model，申报自由档位的真实�
   });
 });
 
-describe("m0 CLI：缺 key 时 fail-closed，不静默换一家也不落 demo", () => {
+describe("cairn CLI：缺 key 时 fail-closed，不静默换一家也不落 demo", () => {
   it("一个 key 都没配 ⇒ exit 2，且**没有**默默跑 demo", () => {
     const r = runCli(["做点事"]);
     expect(r.status).toBe(2);
@@ -153,12 +153,12 @@ describe("m0 CLI：缺 key 时 fail-closed，不静默换一家也不落 demo", 
 
   it("提示里点名了要设哪个环境变量，含 DeepSeek 那条 OpenAI 兼容通道", () => {
     const r = runCli(["做点事"]);
-    expect(r.out).toContain("M0_API_KEY");
+    expect(r.out).toContain("CAIRN_API_KEY");
     expect(r.out).toContain("OPENAI_BASE_URL=https://api.deepseek.com/v1");
   });
 
   it("配置错不打「用法」行（那行会把人引到 argv 上去，而该配的是环境变量）", () => {
-    expect(runCli(["做点事"]).out).not.toContain("用法：m0");
+    expect(runCli(["做点事"]).out).not.toContain("用法：cairn");
   });
 });
 
@@ -184,7 +184,7 @@ function writeScript(ws: string): string {
 function runWriteScript(
   opts: { mode?: string | null; planRequired?: boolean } = {},
 ): { out: string; ws: string; written: boolean; logInWorkspace: boolean } {
-  const ws = mkdtempSync(join(tmpdir(), "m0-shell-"));
+  const ws = mkdtempSync(join(tmpdir(), "cairn-shell-"));
   const script = writeScript(ws);
   // 应用壳要用的那份盘面：settings 与 sessions 都在**工作区**里，不是 /tmp。
   mkdirSync(join(ws, ".agent", "sessions"), { recursive: true });
@@ -201,7 +201,7 @@ function runWriteScript(
   return { out: r.out, ws, written: existsSync(join(ws, "payload.txt")), logInWorkspace: r.out.includes(join(ws, ".agent", "sessions")) };
 }
 
-describe("m0 CLI：默认档位是 fail-closed 的那一档", () => {
+describe("cairn CLI：默认档位是 fail-closed 的那一档", () => {
   /* 原来这条读源码（`pick("--mode") ?? "default"`），可 `--mode` 到底进没进裁决只有真跑能答。
      判据用「同一个剧本、同一个工作区，只差 argv 里有没有 --mode」：
      缺省那一次写必须落不下去（fail-closed），显式 `--mode auto` 那一次必须写得下去。
@@ -233,7 +233,7 @@ describe("m0 CLI：默认档位是 fail-closed 的那一档", () => {
   });
 });
 
-describe("m0 CLI：审批门在没人能答时 fail-closed", () => {
+describe("cairn CLI：审批门在没人能答时 fail-closed", () => {
   // 这条钉的是实测过的真缺陷：stdin 非 TTY 时 createInterface 立刻 EOF，
   // rl.question 随后**抛异常**，那个 throw 从 notify 冒进工具执行里，
   // 被 loop 记成「工具失败：readline was closed」——一次没人应答的审批，
@@ -279,7 +279,7 @@ describe("m0 CLI：审批门在没人能答时 fail-closed", () => {
    就只可能发生在走了应用壳的那条路上：裸调 runAgent 时这个键无人问，写一定落盘。
    同样地，`initSettingsStore` 若没接工作区路径，`store()` 会静默回落 `/tmp/m1e-default-settings.json`
    （settings-handlers.ts:40）⇒ 支一立刻翻成支二。顺序错位也一并被这格钉住。 */
-describe("m0 CLI：走应用壳（handleAgentRun），不裸调 runAgent", () => {
+describe("cairn CLI：走应用壳（handleAgentRun），不裸调 runAgent", () => {
   // 下面两条仍读源码：它们钉的是「槽有没有被显式写出来」，而那两面（modelSelection 过信封校验、
   // automation 工具的 installed 幂等守卫）没有等价的产品面观察。已删掉的是**顺序断言**——
   // 「壳四件按序」的可观测后果就是上面那对支一/支二（store 未初始化 ⇒ 静默回落 /tmp ⇒ 支一翻成支二），
@@ -320,7 +320,7 @@ describe("m0 CLI：走应用壳（handleAgentRun），不裸调 runAgent", () =>
   });
 });
 
-describe("m0 CLI：--goal / --session / --compact 三条真入口在 argv 上", () => {
+describe("cairn CLI：--goal / --session / --compact 三条真入口在 argv 上", () => {
   const help = (): string => runCli(["--help"]).out;
 
   it("三个 flag 都进了 help（没进 help 的选项等于不存在）", () => {
@@ -376,7 +376,7 @@ describe("m0 CLI：--goal / --session / --compact 三条真入口在 argv 上", 
     expect(both.out).toContain("--workspace 与位置参数重复给工作区，二者只能取一");
   }, 15_000); // 一次 spawn
 
-  it("工作区的两种合法形状各自放行（无条件拒会把 `m0 <目录> <任务>` 这条主路杀掉）", () => {
+  it("工作区的两种合法形状各自放行（无条件拒会把 `cairn <目录> <任务>` 这条主路杀掉）", () => {
     const flagOnly = runCli(["--workspace", "wsA", "做点事", "--max-turns", "0"]);
     expect(flagOnly.out, "只给 --workspace 也被拒＝flag 形状没了").not.toContain("二者只能取一");
     expect(flagOnly.out).toContain("--max-turns 需要一个 --goal");
@@ -428,7 +428,7 @@ function stripComments(s: string): string {
   return out;
 }
 
-describe("m0 CLI：Ctrl-C 走 handleRunCancel（截断事件流 = 转录对不上账）", () => {
+describe("cairn CLI：Ctrl-C 走 handleRunCancel（截断事件流 = 转录对不上账）", () => {
   it("第一次请 run 收束、第二次才硬退——硬退那一支必须整个在 `cancelling` 守卫里", () => {
     const src = readFileSync(join(ROOT, "src", "cli.ts"), "utf8");
     const from = src.indexOf('process.on("SIGINT"');
@@ -458,13 +458,13 @@ describe("m0 CLI：Ctrl-C 走 handleRunCancel（截断事件流 = 转录对不�
    handlePlanDecide）零调用者，模型一发问就卡在 `await waiting` 永久悬挂。下面的用例用仓库自带的
    M1B_GATE_FLOW 剧本真跑一遍——它是免网的（provider=demo 读 fixture），且剧本第一步就是 clarify、
    第二步就是 propose_plan，正好是原来必挂的那两步。 */
-describe("m0 CLI：clarify / propose_plan 两扇门在真跑里都收得住（不悬挂）", () => {
+describe("cairn CLI：clarify / propose_plan 两扇门在真跑里都收得住（不悬挂）", () => {
   // 一次真跑喂三条断言：整轮门流程要几秒，拆成三次 spawn 是白烧。
   // 挂死时 spawnSync 的 timeout 会 SIGKILL ⇒ status 必为 null，所以「没挂死」是可否证的，不是「跑得慢」。
   let cached: { status: number | null; out: string; ws: string } | undefined;
   const gateFlow = (): { status: number | null; out: string; ws: string } => {
     cached ??= (() => {
-      const ws = mkdtempSync(join(tmpdir(), "m0-gate-"));
+      const ws = mkdtempSync(join(tmpdir(), "cairn-gate-"));
       const r = runCli(["--workspace", ws, "--provider", "demo", "--mode", "default", "走一遍门流程"], {
         env: { M1B_GATE_FLOW: "1" },
         timeout: 60_000,
@@ -688,22 +688,22 @@ describe("renderEvent：worker 生命周期与目标事件上屏（看不见 = �
 
 // ---- S-3：`--compact` 真的会调模型，help 原文那句「不跑模型」是假的 ----
 // 缺陷形状是**文档比代码乐观**：help 写着不跑模型 ⇒ 用户以为不用配 key，真跑被挡在门外
-// 却不知道自己缺什么。修法是让 help 兑现真话（要 M0_API_KEY）+ 补 README，不是把代码改成
+// 却不知道自己缺什么。修法是让 help 兑现真话（要 CAIRN_API_KEY）+ 补 README，不是把代码改成
 // 假装不调模型（那只是把谎言从一处挪到另一处，还顺手放开了 --model 的校验）。
 // 判卷是**对比支**：同一个命令、只差「有没有摘要器」一个维度，结论从「拒绝且盘上一个字节没动」
 // 换成「压了并落一条 compaction」。两支都断言，不靠「跑一次看看」——只钉一支的话，
 // 把它整段删掉也照样绿。
-describe("m0 CLI：--compact 要摘要模型，没它就 fail-closed（不许静默截断）", () => {
+describe("cairn CLI：--compact 要摘要模型，没它就 fail-closed（不许静默截断）", () => {
   const SESSION = "compact-probe";
   // 「env 里有把 key」的占位值：值本身零语义（子进程只判非空），形状刻意不模仿任何家的凭据。
-  const PRESENT_IN_ENV = "m0-unused-placeholder";
+  const PRESENT_IN_ENV = "cairn-unused-placeholder";
   let ws = "";
   const logOf = (): string => join(ws, ".agent", "sessions", `${SESSION}.jsonl`);
   const typesOnDisk = (): string[] =>
     readFileSync(logOf(), "utf8").split("\n").filter(Boolean).map((l) => (JSON.parse(l) as { type: string }).type);
 
   beforeEach(() => {
-    ws = mkdtempSync(join(tmpdir(), "m0-compact-"));
+    ws = mkdtempSync(join(tmpdir(), "cairn-compact-"));
     mkdirSync(join(ws, ".agent", "sessions"), { recursive: true });
     writeFileSync(
       logOf(),
@@ -714,15 +714,15 @@ describe("m0 CLI：--compact 要摘要模型，没它就 fail-closed（不许静
   });
   afterEach(() => rmSync(ws, { recursive: true, force: true }));
 
-  // 支一：provider 解析得过（OPENAI_API_KEY 在），但**没有摘要器**——M0_API_KEY 缺、演示档也没开。
+  // 支一：provider 解析得过（OPENAI_API_KEY 在），但**没有摘要器**——CAIRN_API_KEY 缺、演示档也没开。
   // 这一支钉的是「不许静默压」：把长历史悄悄砍掉，用户以为省了上下文，实际是不可逆的信息损失。
-  it("支一：没有可用摘要器 ⇒ exit 1 + 点名 M0_API_KEY，且会话日志一个字节没动", () => {
+  it("支一：没有可用摘要器 ⇒ exit 1 + 点名 CAIRN_API_KEY，且会话日志一个字节没动", () => {
     const before = readFileSync(logOf(), "utf8");
     const r = runCli(["--workspace", ws, "--session", SESSION, "--compact"], {
       noKeys: false, env: { OPENAI_API_KEY: PRESENT_IN_ENV, M1D_COMPACTION_DEMO: "0" },
     });
     expect(r.status).toBe(1);
-    expect(r.out).toContain("M0_API_KEY");
+    expect(r.out).toContain("CAIRN_API_KEY");
     expect(r.out).toContain("压缩失败");
     expect(typesOnDisk(), "拒绝时也落了 compaction = 静默压缩").not.toContain("compaction");
     expect(readFileSync(logOf(), "utf8")).toBe(before);
@@ -746,7 +746,7 @@ describe("m0 CLI：--compact 要摘要模型，没它就 fail-closed（不许静
     // 拿它当判据的话，这句断言恒真，等于没钉。
     const line = r.out.split("\n").find((l) => /^\s+--compact\s/.test(l)) ?? "";
     expect(line).not.toContain("不跑模型");
-    expect(line).toContain("M0_API_KEY");
+    expect(line).toContain("CAIRN_API_KEY");
   });
 
   it("--compact 缺 --session ⇒ exit 2（不编一个会话 id 出来再报「不存在」）", () => {

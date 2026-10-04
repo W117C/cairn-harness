@@ -8,7 +8,7 @@ import { glmToolStreamFlag, streamGlm, GLM_ENDPOINT } from "../src/providers/glm
 import type { GlmMessage } from "../src/providers/glm";
 import type { AgentEvent } from "../src/events";
 
-const ENV_KEY = "M0_GLM_TOOL_STREAM";
+const ENV_KEY = "CAIRN_GLM_TOOL_STREAM";
 const saved = process.env[ENV_KEY];
 afterEach(() => {
   if (saved === undefined) delete process.env[ENV_KEY];
@@ -61,7 +61,7 @@ describe("tool_stream 开关（外发请求体面）", () => {
     expect(c.body()["tool_stream"]).toBe(true);
   });
 
-  it("M0_GLM_TOOL_STREAM=0：body 不再带该字段，其余字段逐字不变", async () => {
+  it("CAIRN_GLM_TOOL_STREAM=0：body 不再带该字段，其余字段逐字不变", async () => {
     delete process.env[ENV_KEY];
     const withFlag = captureBody();
     await drain(streamGlm(msgs, { apiKey: "k", endpoint: GLM_ENDPOINT, fetchImpl: withFlag.fetchImpl }));

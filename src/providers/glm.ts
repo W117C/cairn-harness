@@ -2,7 +2,7 @@
 // 实测（2026-09-09）：端点 /api/paas/v4/chat/completions；鉴权 Authorization: Bearer <key>；
 // stream:true 走 SSE，增量在 choices[0].delta.content，最后一个 chunk 带 finish_reason 与 usage；
 // 工具调用流式要额外 tool_stream:true，delta 里有 tool_calls（按 index 跨块累积 arguments）。
-// key 只从环境变量 M0_API_KEY 读，模型从 M0_MODEL 读（缺省 glm-5.2）；key 不落文件、不进日志。
+// key 只从环境变量 CAIRN_API_KEY 读，模型从 CAIRN_MODEL 读（缺省 glm-5.2）；key 不落文件、不进日志。
 // 历史签名保持不变（scripts/provider-check.ts、scripts/autonomy-check.ts、tests/glm.test.ts 冻结消费方）。
 import { streamOpenAI, type OpenAiOptions } from "./openai";
 import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
@@ -16,7 +16,7 @@ export const GLM_DEFAULT_MODEL = "glm-5.2";
 
 /** `streamGlm(messages, {})`（= `defaultWorkerModel`，未走档位路由的 worker 那条）真实会用的模型名。 */
 export function glmDefaultModelName(): string {
-  return process.env.M0_MODEL ?? GLM_DEFAULT_MODEL;
+  return process.env.CAIRN_MODEL ?? GLM_DEFAULT_MODEL;
 }
 
 export type GlmMessage = ProviderMessage;
@@ -28,11 +28,11 @@ export interface GlmToolSpec {
 }
 
 export interface GlmOptions {
-  /** 缺省读 process.env.M0_API_KEY。 */
+  /** 缺省读 process.env.CAIRN_API_KEY。 */
   apiKey?: string;
-  /** 缺省读 process.env.M0_MODEL ?? "glm-5.2"。 */
+  /** 缺省读 process.env.CAIRN_MODEL ?? "glm-5.2"。 */
   model?: string;
-  /** 缺省读 process.env.M0_ENDPOINT ?? 智谱 OpenAI 兼容端点。 */
+  /** 缺省读 process.env.CAIRN_ENDPOINT ?? 智谱 OpenAI 兼容端点。 */
   endpoint?: string;
   /** 反向验证开关：false = 非流式（整段回复只算 1 个 delta），缺省 true。 */
   stream?: boolean;
@@ -51,7 +51,7 @@ export function glmToolStreamFlag(
   env: Record<string, string | undefined> = process.env,
 ): { tool_stream: true } | undefined {
   if (stream === false) return undefined;
-  const raw = env.M0_GLM_TOOL_STREAM;
+  const raw = env.CAIRN_GLM_TOOL_STREAM;
   const off = typeof raw === "string" && ["0", "false", "off"].includes(raw.trim().toLowerCase());
   return off ? undefined : { tool_stream: true };
 }
@@ -59,14 +59,14 @@ export function glmToolStreamFlag(
 function toOpenAiOptions(opts: GlmOptions): OpenAiOptions {
   return {
     apiKey: opts.apiKey,
-    apiKeyEnv: "M0_API_KEY",
+    apiKeyEnv: "CAIRN_API_KEY",
     model: opts.model,
-    modelEnv: "M0_MODEL",
+    modelEnv: "CAIRN_MODEL",
     defaultModel: GLM_DEFAULT_MODEL,
     baseURL: opts.endpoint,
-    baseURLEnv: "M0_ENDPOINT",
+    baseURLEnv: "CAIRN_ENDPOINT",
     defaultBaseURL: GLM_ENDPOINT,
-    // GLM 特有：工具调用流式要额外打开 tool_stream（可由 M0_GLM_TOOL_STREAM=0 关，见上）
+    // GLM 特有：工具调用流式要额外打开 tool_stream（可由 CAIRN_GLM_TOOL_STREAM=0 关，见上）
     extraBody: glmToolStreamFlag(opts.stream),
     stream: opts.stream,
     label: "GLM",

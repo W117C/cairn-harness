@@ -39,7 +39,7 @@ const spawned = (agentId: string, usageModel?: string, model?: string): AgentEve
 
 const SCRIPTED_ENVS = ["M3A_MAIN_SCRIPT", "M3A_AGENTS_DEMO", "M1B_GATE_FLOW", "M1C_AUTONOMY_SCRIPT", "M2A_LSP_DEMO"];
 const envBackup: Record<string, string | undefined> = {};
-for (const k of [...SCRIPTED_ENVS, "M0A_PROVIDER", "M0_MODEL"]) envBackup[k] = process.env[k];
+for (const k of [...SCRIPTED_ENVS, "M0A_PROVIDER", "CAIRN_MODEL"]) envBackup[k] = process.env[k];
 afterEach(() => {
   for (const [k, v] of Object.entries(envBackup)) {
     if (v === undefined) delete process.env[k];
@@ -256,9 +256,9 @@ describe("真编排器：agent_spawned 上的归因键随「拨不拨号」分�
   /** 非剧本 worker 面：空生成器 ⇒ `isScriptedModel` 认不出（它只认 `scripted === true` 这个自述标）。 */
   const silentRealModel = (): unknown => Object.assign(async function* () { /* 不吐输出，跑完即停 */ }, {});
 
-  it("注入真拨模型 ⇒ 落 glmDefaultModelName 那一档，且跟着 M0_MODEL 走（不是写死的名字）", async () => {
+  it("注入真拨模型 ⇒ 落 glmDefaultModelName 那一档，且跟着 CAIRN_MODEL 走（不是写死的名字）", async () => {
     clearScripted();
-    delete process.env.M0_MODEL;
+    delete process.env.CAIRN_MODEL;
     const { orch, events } = makeOrch(silentRealModel);
     await orch.spawn({ mode: "read", task: "调研 a.ts" } as SpawnArgs, { callId: "c1" });
     const [first] = spawnedOf(events);
@@ -266,7 +266,7 @@ describe("真编排器：agent_spawned 上的归因键随「拨不拨号」分�
     expect(first?.usage_model).toBe("glm-5.2");
     await orch.cancelAll();
 
-    process.env.M0_MODEL = WORKER; // 真拨的缺省档换了 ⇒ 归因键跟着换
+    process.env.CAIRN_MODEL = WORKER; // 真拨的缺省档换了 ⇒ 归因键跟着换
     const second = makeOrch(silentRealModel);
     await second.orch.spawn({ mode: "read", task: "调研 b.ts" } as SpawnArgs, { callId: "c2" });
     expect(spawnedOf(second.events)[0]?.usage_model).toBe(WORKER);
@@ -275,7 +275,7 @@ describe("真编排器：agent_spawned 上的归因键随「拨不拨号」分�
 
   it("注入带自述名的模型 ⇒ 键用真名，且折价随它换档（旧实现两档注入给出同一个数）", async () => {
     clearScripted();
-    delete process.env.M0_MODEL;
+    delete process.env.CAIRN_MODEL;
     const named = (name: string): unknown => Object.assign(async function* () { /* 拨号替身 */ }, { usageName: name });
     for (const name of [WORKER, DECLARED_ONLY]) {
       const run = makeOrch(() => named(name));
@@ -284,14 +284,14 @@ describe("真编排器：agent_spawned 上的归因键随「拨不拨号」分�
       await run.orch.cancelAll();
     }
     // 只比"名字对"不够：`modelFor` 注入时 `routedSpec` 是 null，旧实现退回 `glmDefaultModelName()`，
-    // 而测试环境里 M0_MODEL 恰好可以等于那个名字 ⇒ 名字对上、档位其实错。所以必须比"两档给出两个不同的数"。
+    // 而测试环境里 CAIRN_MODEL 恰好可以等于那个名字 ⇒ 名字对上、档位其实错。所以必须比"两档给出两个不同的数"。
     expect(usdOf(WORKER)).not.toEqual(usdOf(DECLARED_ONLY));
     expect(usdOf(DECLARED_ONLY)).not.toEqual(usdOf(MAIN));
   });
 
   it("反向哨兵：注入方没自述 ⇒ 仍落 harness 缺省档（那一格是诚实的替身语义，不许顺手改成静默丢归因）", async () => {
     clearScripted();
-    process.env.M0_MODEL = DECLARED_ONLY;
+    process.env.CAIRN_MODEL = DECLARED_ONLY;
     const run = makeOrch(silentRealModel);
     await run.orch.spawn({ mode: "read", task: "调研 z.ts" } as SpawnArgs, { callId: "z1" });
     expect(spawnedOf(run.events)[0]?.usage_model).toBe(DECLARED_ONLY);
