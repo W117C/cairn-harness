@@ -23,7 +23,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { planDecisionFor } from "../src/cli";
 
 const ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-const BIN = join(ROOT, "bin", "m0.mjs");
+const BIN = join(ROOT, "bin", "cairn.mjs");
 
 describe("planDecisionFor：方案门的档位判据（纯函数，逐格穷举）", () => {
   it("★ auto 档 ⇒ 批准（这是缺陷那一格：旧写法在管道里恒判拒绝，不看档位）", () => {
@@ -59,7 +59,7 @@ afterEach(() => {
 });
 
 function makeWorkspace(): string {
-  const ws = mkdtempSync(join(tmpdir(), "m0-plan-auto-"));
+  const ws = mkdtempSync(join(tmpdir(), "cairn-plan-auto-"));
   dirs.push(ws);
   mkdirSync(join(ws, "src"), { recursive: true });
   mkdirSync(join(ws, "tests"), { recursive: true });
@@ -77,7 +77,7 @@ function makeWorkspace(): string {
 
 function runCli(ws: string, mode: string): { status: number | null; out: string } {
   const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1" };
-  for (const k of ["M0_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"]) delete env[k];
+  for (const k of ["CAIRN_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"]) delete env[k];
   const r = spawnSync(process.execPath, [
     BIN, "--provider", "demo", "--mode", mode, "--workspace", ws, "fix the failing test",
   ], { cwd: ROOT, encoding: "utf8", env, input: "", timeout: 180_000, killSignal: "SIGKILL" });

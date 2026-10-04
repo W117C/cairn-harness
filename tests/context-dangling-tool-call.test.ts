@@ -1,5 +1,5 @@
 // 半截会话续用时的孤儿 tool_call（真实现场量出来的）。
-// 动因：全机唯一一条真·持久化会话（`~/Library/Application Support/m0-agent-loop/sessions/会话 2026-09-10 03:13.jsonl`）
+// 动因：全机唯一一条真·持久化会话（`~/Library/Application Support/cairn-harness/sessions/会话 2026-09-10 03:13.jsonl`）
 // 逐字以 `{id:"c3",name:"run_shell",args:{command:"pnpm test"}}` 收尾——那次进程切在工具调用中途，
 // 盘上没有它的 tool_result。而 `projectContext` 是"一条 tool_call 推一条 assistant.tool_calls、
 // 一条 tool_result 推一条 role:tool"的逐事件投影（投影里 tool_call / tool_result 两个分支；坐标不写死行号——该文件是并发会话热点，写死即漂移磁铁）⇒

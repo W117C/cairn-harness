@@ -474,7 +474,7 @@ describe("glm-session 压缩接线", () => {
       for await (const _e of provider.stream([], [])) {
         void _e;
       }
-    }).rejects.toThrow(/M0_API_KEY/);
+    }).rejects.toThrow(/CAIRN_API_KEY/);
     expect(calls).toEqual(["summarize"]);
     const after = await replay(logPath);
     const last = after[after.length - 1];

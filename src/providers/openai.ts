@@ -167,7 +167,7 @@ export async function* streamOpenAI(
     const input = tokenCount(u.prompt_tokens), read = tokenCount(u.prompt_tokens_details?.cached_tokens);
     // OpenAI/GLM do not report a disjoint cache-write bucket. Do not invent zero.
     const write = tokenCount(u.cache_creation_input_tokens);
-    meterUsage = { inputTokens: input !== null && read !== null && write !== null && input >= read + write ? input - read - write : null,
+    meterUsage = { inputTokens: input !== null ? Math.max(0, input - (read ?? 0) - (write ?? 0)) : null,
       outputTokens: tokenCount(u.completion_tokens), cacheReadInputTokens: read, cacheWriteInputTokens: write };
   };
   try {
@@ -338,7 +338,9 @@ export async function* streamOpenAI(
         void reader2.cancel().catch(() => {});
         const cancelled = call?.signal?.aborted === true;
         // 不可重放的失败（协议级：帧损坏 / 非 5xx 的 error 帧）立刻抛，不拿它去打转。
-        const retryable = err instanceof StreamFailure ? err.retryable : true; // 未知形状按可重放（网络抖动那一类）
+        // stall 守卫触发也不重放：重放会把静默窗当网络抖动再烧一遍全长超时。
+        const stalledByGuard = est.guard.stalled();
+        const retryable = stalledByGuard ? false : err instanceof StreamFailure ? err.retryable : true; // 未知形状按可重放（网络抖动那一类）
         if (emitted || attempt >= STREAM_ATTEMPTS || cancelled || !retryable) throw err;
         const delay = backoffMs(attempt, 300, 2_000, Math.random);
         console.warn(

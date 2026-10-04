@@ -46,6 +46,58 @@ const ASSIGN_RE = /^[A-Za-z_][A-Za-z0-9_]*=/;
 const DURATION_RE = /^\d+(?:\.\d+)?[smhd]?$|^\d+:\d+(?::\d+(?:[.,]\d+)?)?$/;
 const MAX_PAYLOAD_DEPTH = 3; // 载荷递归上限：越界只少跳一层（少判一次），绝不无限展开
 
+/** 找与 `(` 匹配的 `)` 下标；引号/转义内不算。找不到返回 -1。 */
+function matchCloseParen(text: string, from: number): number {
+  let depth = 1;
+  let quote: "'" | '"' | null = null;
+  for (let i = from; i < text.length; i++) {
+    const ch = text[i]!;
+    if (quote === "'") { if (ch === "'") quote = null; continue; }
+    if (quote === '"') {
+      if (ch === '"') quote = null;
+      else if (ch === "\\") i++;
+      continue;
+    }
+    if (ch === "'" || ch === '"') { quote = ch; continue; }
+    if (ch === "\\") { i++; continue; }
+    if (ch === "(") depth++;
+    else if (ch === ")") { depth--; if (depth === 0) return i; }
+  }
+  return -1;
+}
+
+/** 提取 `$(...)` / `` `...` `` / `<(...)` / `>(...)` 载荷。单引号内的不展开（ shell 单引号阻止替换 ）。 */
+function substitutionPayloads(text: string): string[] {
+  const out: string[] = [];
+  let quote: "'" | '"' | null = null;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!;
+    if (quote === "'") { if (ch === "'") quote = null; continue; }
+    if (quote === '"') {
+      if (ch === '"') { quote = null; continue; }
+      if (ch === "\\") { i++; continue; }
+      // 双引号内仍可能出现 $(...) / `...` / <(...)：不 skip，放行到下面提取。
+    }
+    if (!quote && (ch === "'" || ch === '"')) { quote = ch; continue; }
+    if (ch === "\\") { i++; continue; }
+    if (text.startsWith("$(", i)) {
+      const end = matchCloseParen(text, i + 2);
+      if (end > i + 2) { out.push(text.slice(i + 2, end)); i = end; }
+      continue;
+    }
+    if ((ch === "<" || ch === ">") && text[i + 1] === "(") {
+      const end = matchCloseParen(text, i + 2);
+      if (end > i + 2) { out.push(text.slice(i + 2, end)); i = end; }
+      continue;
+    }
+    if (ch === "`") {
+      const end = text.indexOf("`", i + 1);
+      if (end > i + 1) { out.push(text.slice(i + 1, end)); i = end; }
+    }
+  }
+  return out;
+}
+
 export interface Invocation {
   /** 有效二进制名（已取路径基名：`/usr/bin/git` → `git`）。 */
   bin: string;
@@ -181,6 +233,14 @@ export function invocations(text: string, depth = 0): Invocation[] {
     seen.add(key);
     out.push(inv);
   };
+  // 命令/进程替换载荷：`echo $(git push --force)` 的真正执行面不在外层 token 里。
+  if (depth < MAX_PAYLOAD_DEPTH) {
+    for (const payload of substitutionPayloads(text)) {
+      for (const seg of splitPayload(payload)) {
+        for (const inner of invocations(seg, depth + 1)) push(inner);
+      }
+    }
+  }
   for (const at of startOffsets(tokens)) {
     const rest = tokens.slice(at);
     if (rest.length === 0) continue;

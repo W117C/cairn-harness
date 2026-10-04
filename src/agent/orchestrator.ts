@@ -57,6 +57,8 @@ import {
   changeSetRefs,
 } from "./security/scan";
 import { llmReviewDiff } from "./security/llm-review";
+// 合并准入闸的判据与卡面（纯模块；生产与判卷共用同一份，见该文件头的「为什么单开一支」）。
+import { mergeGateMessage, mergeGateVerdict } from "./security/merge-gate";
 import {
   branchForAgent,
   commitAndMerge,
@@ -591,7 +593,7 @@ export class Orchestrator {
     // 模型可用性 fail-closed。审查 S3-13 两处修正：
     // ① 注入模型（modelFor：checks 的脚本/mock、demo 面）优先于档位合成——旧实现路由分支
     //    直接吃 toWorkerModel(spec)，使注入的确定性模型在 routing=true 时被忽略。
-    // ② 路由分支合成的是「真实 provider 模型的 spec」，旧条件 `!model && !M0_API_KEY`
+    // ② 路由分支合成的是「真实 provider 模型的 spec」，旧条件 `!model && !CAIRN_API_KEY`
     //    在 routeDecision 非空时永不成立 → 无凭据也照派 worker，第一跳 401 才死
     //    （白烧一轮 + 占并发预算 + 留一条必败 worker 记录）。现在同样要求凭据。
     const routedSpec = !this.opts.modelFor && routeDecision ? resolveModel(DEFAULT_MODEL_TABLE, routeDecision.picked) : null;
@@ -600,15 +602,15 @@ export class Orchestrator {
       : routedSpec
         ? toWorkerModel(routedSpec, this.opts.promptCache === true ? { promptCache: true } : {})
         : undefined;
-    if (!model && !process.env.M0_API_KEY) {
-      return { ok: false, output: "spawn_agent: 无可用模型（无 M0_API_KEY 且未接 modelFor；fail-closed 不造必败 worker）" };
+    if (!model && !process.env.CAIRN_API_KEY) {
+      return { ok: false, output: "spawn_agent: 无可用模型（无 CAIRN_API_KEY 且未接 modelFor；fail-closed 不造必败 worker）" };
     }
-    if (routeDecision && !this.opts.modelFor && !process.env.M0_API_KEY) {
-      return { ok: false, output: "spawn_agent: 路由路径需要 M0_API_KEY（无注入模型且无凭据；fail-closed 不造必败 worker）" };
+    if (routeDecision && !this.opts.modelFor && !process.env.CAIRN_API_KEY) {
+      return { ok: false, output: "spawn_agent: 路由路径需要 CAIRN_API_KEY（无注入模型且无凭据；fail-closed 不造必败 worker）" };
     }
     // W3②「价格标签」：worker 的钱此前只喂 bandit（rewardBandit 里算完即丢），派工时模型看不到单价、
     // 收队时看不到花了多少、终态里也没有机器可读的花费。档位以路由决策为准；没路由时 worker 走
-    // `defaultWorkerModel`（= streamGlm 的 M0_MODEL ?? glm-5.2），按**真实模型名**反查档位表。
+    // `defaultWorkerModel`（= streamGlm 的 CAIRN_MODEL ?? glm-5.2），按**真实模型名**反查档位表。
     // 冻结剧本（scriptedWorkerModel 自带 scripted 标）不拨号不付钱 ⇒ price=null：宁可说「价格未知」，
     // 也不拿 $0 冒充实付（把不可知记成免费是本仓点名的假绿形状）。
     let price: WorkerPrice | null = null;
@@ -2293,12 +2295,12 @@ export class Orchestrator {
     }
     if (!w.terminalResolved) return { ok: false, error: "worker 尚未收敛（done 后才可合并）" };
     if (this.safeMode === "gate") {
-      const blocking = w.lastFindings.filter((f) => f.severity === "critical" || f.severity === "high");
-      if (blocking.length > 0 && opts.force !== true) {
-        const msg =
-          "gate：存在 critical|high findings " + String(blocking.length) + " 条（" +
-          blocking.slice(0, 3).map((f) => f.path + ":" + String(f.line) + " " + f.title).join("；") +
-          "）——合并卡红标，需二次确认（force=true「仍要合并」；合并权永远在人）";
+      // 判据与卡面文案搬去 security/merge-gate.ts（2026-10-02）：那一格原先是内联过滤器，
+      // 结果「LLM 补出来的高危能不能挡住合并」全仓没有证人——把 high 从这行删掉，
+      // 3754 条断言一条都不红。现在判卷与生产共用同一份纯函数（不抄第二份）。
+      const verdict = mergeGateVerdict(w.lastFindings, opts);
+      if (!verdict.allow) {
+        const msg = mergeGateMessage(verdict.blocking);
         await this.opts.emit({ type: "tool_result", callId: this.receiptCallId(w, "merge"), agent_id: agentId, ok: false, output: "[gate] " + msg } as AgentEvent);
         return { ok: false, error: msg };
       }

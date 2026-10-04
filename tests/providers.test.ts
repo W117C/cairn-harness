@@ -258,12 +258,12 @@ describe("M5b/M6 provider 档位表", () => {
 
   it("toWorkerModel 构造不拨号；glm 无 key 时调用才失败（fail-closed）", async () => {
     const wm = toWorkerModel(resolveModel(DEFAULT_MODEL_TABLE, "glm-standard"));
-    // 构造本身零副作用：不会因为缺少 M0_API_KEY 而抛
+    // 构造本身零副作用：不会因为缺少 CAIRN_API_KEY 而抛
     expect(typeof wm).toBe("function");
     // 调用（消费流）时缺 key → 同步抛错（streamOpenAI 在 fetch 前校验 key），不静默降级
     await expect(async () => {
       for await (const _e of wm(USER, [])) void _e;
-    }).rejects.toThrow(/M0_API_KEY/);
+    }).rejects.toThrow(/CAIRN_API_KEY/);
   });
 
   it("toWorkerModel 按 provider 路由：anthropic 格式 SSE 只被 anthropic 适配器消化（路由判别）", async () => {

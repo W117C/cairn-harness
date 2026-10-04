@@ -24,7 +24,7 @@ const OFF: SandboxStatus = { available: false, reason: "sandbox_apply: Operation
  *  `vitest run …`，且自己不带 node_modules，正是这条改写最初要服务的那个形状）。 */
 const VITEST_WS = fileURLToPath(new URL("../fixtures/todo-app", import.meta.url));
 /** 反面：真声明用别的 runner 的工作区（`node --test`）——本轮实测到的那个假红就是它。 */
-const NO_VITEST_WS = mkdtempSync(join(tmpdir(), "m0-novitest-"));
+const NO_VITEST_WS = mkdtempSync(join(tmpdir(), "cairn-novitest-"));
 writeFileSync(join(NO_VITEST_WS, "package.json"), JSON.stringify({
   name: "cart-demo", private: true, type: "module",
   scripts: { test: "node --test tests/*.test.js" },
@@ -127,7 +127,7 @@ describe("沙箱 pnpm 映射收成一份", () => {
     // 且被 gitignore），所以「装没装」不是一个稳定可判的量；它自己声明的 test 脚本才是。
     expect(mapSandboxTestCommandForWorkspace("pnpm test", VITEST_WS)).toContain("vitest");
     // 没有 package.json 的目录 ⇒ 不改写（保守那一边）
-    const bare = mkdtempSync(join(tmpdir(), "m0-bare-"));
+    const bare = mkdtempSync(join(tmpdir(), "cairn-bare-"));
     try {
       expect(mapSandboxTestCommandForWorkspace("pnpm test", bare)).toBe("pnpm test");
     } finally {

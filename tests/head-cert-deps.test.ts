@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { budgetFromTestSource, certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, certTreeReclaim, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, defaultTimeoutFromConfig, depDirs, gitInflightArgs, headGateTableIntegrity, installedDeps, mainRootFromCommonDir, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, suiteRows, timingCell, timingNearCapCell, unknownCertArgs, VITEST_DEFAULT_TIMEOUT_MS, wallClockCell } from "../scripts/lib/head-cert-deps";
+import { budgetFromTestSource, archivedBudgetReader, archiveRevFromProvenance, certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, certTreeReclaim, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, defaultTimeoutFromConfig, depDirs, gitInflightArgs, headGateTableIntegrity, installedDeps, mainRootFromCommonDir, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, suiteRows, timingCell, timingNearCapCell, unknownCertArgs, VITEST_DEFAULT_TIMEOUT_MS, wallClockCell } from "../scripts/lib/head-cert-deps";
 import type { SuiteRow } from "../scripts/lib/head-cert-deps";
 import { acquireToolLock, decideToolLock, lockAgeCap, parseToolLock, shouldReleaseLock, toolLockPath } from "../scripts/lib/tool-lock";
 
@@ -1243,33 +1243,84 @@ describe("贴帽读数：suiteRows／budgetFromTestSource／timingNearCapCell／
     // 入档的是**热的那一趟**（冷树那一趟的读数留在同目录 `suite-cold-first-run.log`，免得下一个人以为 225s 是冷树能跑出来的）。
     // ⚠️ 刷新必须等独占窗口：隔壁在连发单文件击杀时跑出来的时长是脏的，那份 json 一旦当"quiet"入档，
     // 此后每次认证都在读一个假基准。
+    //
+    // ══ 第 319 页：口径从"换语料"改成"按留档自己那棵树解析"（路 B）
+    //
+    // 旧口径是**混合**的：标题取自这份留档 json，而预算按**脚下工作树**取 ⇒ "标题漂移"必然反复发生。
+    // 实测这条treadmill：10-02 语料（第 313 页改名 ⇒ `notResolved=1`）→ 换 `9dd1e8a` →
+    // 同日 `b4b4db3`（第 317 页「绑定通道三件加到五件」）有意改了 4 条标题 ⇒ `notResolved=4` →
+    // 又换 `e8a8ed5`。**一天之内靠人肉换取料对齐三次**，而红每次都会再回来——那正是"一道永远红的门"。
+    //
+    // 判据错在哪：**生产侧本来就不这么取预算**。`scripts/head-cert.ts` 的 `readTest` 读的是 `TREE`
+    // （被认证的那棵树，本文件下面"接线"那条用例逐字钉着这行），因为留档与它那棵树才是同一个时点的快照。
+    // 判卷侧读工作树 ⇒ 连生产语义都没复现，才把"仓库在往前走"读成了"这道门红了"。
+    //
+    // 修法与纪律：**断言一格未动**（`notResolved===0` 仍在，且"盘上与留档树都找不到"时照样红），
+    // 只把取料口径改成"先读盘、只有这份文件里**一个留档标题都取不到**时才回落到留档那棵树"。
+    // 为什么是**懒**回落而不是全量按 rev 取：全量实测 5.07s（286 次 `git show`）会顶穿本格的
+    // 缺省 5000ms 预算；懒回落只在真发生漂移时才付代价（本次＝1 次 `git show`）。
+    // 未选"改留档"：留档是那一天的证据，`readings.md` 明写不许改，AGENTS.md 同禁。
     const jsonPath = join(repoRoot, "outputs/suite-refresh-2026-10-03/suite-quiet.json");
     const rows = suiteRows(readFileSync(jsonPath, "utf8"), repoRoot + "/");
     expect(rows).not.toBeNull();
     const all = rows ?? [];
     expect(all.length).toBeGreaterThan(3000);
+
+    /* 留档自述的那棵树：把同目录的存证文本都喂进去（`readings.md` 与跑那趟留下的日志），
+       众数不唯一或一份都读不到 ⇒ 返回 null ⇒ 回落关闭，本格按旧口径读数并如实变红（不折成 HEAD）。 */
+    const archiveDir = dirname(jsonPath);
+    const provenance = ["readings.md", ...readdirSync(archiveDir).filter((f) => f.endsWith(".log"))]
+      .map((f) => join(archiveDir, f))
+      .filter((p) => existsSync(p))
+      .sort()
+      .map((p) => readFileSync(p, "utf8"));
+    const archiveRev = archiveRevFromProvenance(provenance);
+
+    /** 每个文件先读盘；**标题在盘上一个都取不到**的文件才去留档树取那一份（懒回落）。 */
+    const diskText = new Map<string, string>();
+    const readDisk = (rel: string): string => {
+      if (!diskText.has(rel)) {
+        try { diskText.set(rel, readFileSync(join(repoRoot, rel), "utf8")); } catch { diskText.set(rel, ""); }
+      }
+      return diskText.get(rel) ?? "";
+    };
+    const revText = (rel: string): string => {
+      if (archiveRev === null) return "";
+      try {
+        return execFileSync("git", ["show", `${archiveRev}:${rel}`], { cwd: repoRoot, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+      } catch { return ""; }
+    };
+    const { readTest, needsRev } = archivedBudgetReader(all, readDisk, revText);
+    /* 有漂移却回落不可用 ⇒ 本格**没量到**，不许判绿。没有这一条，"回落静默失效"会和平地变成绿。 */
+    if (needsRev.length > 0) {
+      expect(
+        archiveRev,
+        `有 ${String(needsRev.length)} 份文件里的留档标题在盘上取不到，而留档自述的那棵树读不出来`
+          + `（读不到＝回落不可用，本格没量到）；涉及：${needsRev.slice(0, 3).join("、")}`,
+      ).not.toBeNull();
+    }
+
     const cell = timingNearCapCell(all, {
       defaultBudget: defaultTimeoutFromConfig(readFileSync(join(repoRoot, "tests/vitest.config.ts"), "utf8")),
-      readTest: (rel) => {
-        try { return readFileSync(join(repoRoot, rel), "utf8"); } catch { return null; }
-      },
+      readTest,
     });
     expect(cell.state).toBe("ok");
     expect(cell.total).toBe(all.length);
     const recount = { explicit: 0, implicit: 0, nonliteral: 0, "not-resolved": 0 };
-    const textCache = new Map<string, string>();
     const defBudget = defaultTimeoutFromConfig(readFileSync(join(repoRoot, "tests/vitest.config.ts"), "utf8"));
     let maxRatio = 0;
     for (const r of all) {
-      if (!textCache.has(r.file)) textCache.set(r.file, readFileSync(join(repoRoot, r.file), "utf8"));
-      const l = budgetFromTestSource(textCache.get(r.file) ?? "", r.title);
+      const l = budgetFromTestSource(readTest(r.file) ?? "", r.title);
       recount[l.kind] += 1;
       const eff = l.kind === "explicit" ? l.ms : defBudget.ms;
       if (eff > 0) maxRatio = Math.max(maxRatio, r.ms / eff);
     }
     expect(cell.implicit).toBe(recount.implicit);
     expect(cell.nonliteral).toBe(recount.nonliteral);
-    expect(cell.notResolved, `取不到成因的条数必须是 0（现读见 realdata.log）；不是 0 就先修取料，别把名单当准`).toBe(0);
+    expect(
+      cell.notResolved,
+      `取不到成因的条数必须是 0；不是 0 就先修取料，别把名单当准。成因点名：${cell.notResolvedWhy.map((w) => `${w.file}（${w.why}）`).join("；")}`,
+    ).toBe(0);
     expect(recount.explicit).toBeGreaterThan(0);
     for (const n of cell.near) expect(n.ratio).toBeGreaterThanOrEqual(0.8);
     // 余量那一档在真机上必须有数、且第一名就是独立重数出来的最大占比（同分母证人）。
@@ -1400,5 +1451,81 @@ describe("认证树回收：判据与执行分开（10-02）", () => {
     const exitLine = src.split("\n").find((l) => l.startsWith("const code = "));
     expect(exitLine).not.toContain("reclaim");
     expect(exitLine).not.toContain("remove");
+  });
+});
+
+/* 第 319 页路 B：贴帽那一格的取料口径（混合口径 → 按留档自述的树懒回落）。
+   病灶与实测过程写在「真机整表」那条的注释里；这里钉的是两个纯函数，
+   理由是本仓那条纪律：**判据的取料口径本身也要有证人**，否则"回落静默失效"会和平地变成绿。 */
+describe("贴帽取料口径：留档自述的树 + 懒回落", () => {
+  const row = (file: string, title: string): SuiteRow => ({ file, title, full: title, ms: 1 });
+  /* 夹具必须写成**真形状**：判据是"按标题找到字面量、再认下面那行收尾"，
+     单行 `it("x", () => {});` 的收尾不在行首 ⇒ 会被判"收尾形状认不出"而落进 not-resolved。
+     写成一行会让下面"盘上齐"那条量错东西（量到的是我的夹具不真，不是口径）。 */
+  const resolved = (title: string): string => `it("${title}", () => {\n});`;
+
+  it("两种存证形状都认：readings.md 那句与 vitest 那句（实测两份留档各是其中一种）", () => {
+    expect(archiveRevFromProvenance(["仓/树：`.worktrees/gate-head-cert`，checkout 到 `9dd1e8a`（第 314 页）"])).toBe("9dd1e8a");
+    expect(archiveRevFromProvenance([null, "Preparing worktree (detached HEAD e8a8ed5)"])).toBe("e8a8ed5");
+    expect(archiveRevFromProvenance([])).toBeNull();
+    expect(archiveRevFromProvenance([null, "没有任何树号的日志"])).toBeNull();
+  });
+
+  it("众数不唯一 ⇒ null（不许静默挑一个：那会让读数悄悄指向别的树）", () => {
+    expect(archiveRevFromProvenance(["detached HEAD aaaaaaa", "detached HEAD bbbbbbb"])).toBeNull();
+    // 同一棵树重复出现不算冲突——日志里建过几棵树是常态（实测旧留档里同一 sha 出现 6 次）。
+    expect(archiveRevFromProvenance(["detached HEAD ccccccc", "detached HEAD ccccccc"])).toBe("ccccccc");
+  });
+
+  it("盘上取得到 ⇒ 一次都不去读留档树（懒：常态零代价；实测全部命中也只要 191ms）", () => {
+    let atRevCalls = 0;
+    const disk = (rel: string): string => (rel === "tests/a.test.ts" ? resolved("标题甲") : "");
+    const { readTest, needsRev } = archivedBudgetReader(
+      [row("tests/a.test.ts", "标题甲")],
+      disk,
+      () => { atRevCalls += 1; return ""; },
+    );
+    expect(needsRev).toEqual([]);
+    expect(readTest("tests/a.test.ts")).toBe(resolved("标题甲"));
+    expect(atRevCalls, "没有漂移却去读了留档树＝常态代价被抬起来").toBe(0);
+  });
+
+  it("盘上真缺那个标题 ⇒ 用留档那一份补上（盘上命中的仍走盘上那一份）", () => {
+    const disk = (_rel: string): string => resolved("新标题乙");
+    const { readTest, needsRev } = archivedBudgetReader(
+      [row("tests/a.test.ts", "旧标题乙")],
+      disk,
+      () => resolved("旧标题乙"),
+    );
+    expect(needsRev, "盘上没有那个标题却没被标记＝回落根本不会触发").toEqual(["tests/a.test.ts"]);
+    const text = readTest("tests/a.test.ts") ?? "";
+    expect(text).toContain("新标题乙");
+    expect(text, "留档那一份没被接上＝改名后仍取不到预算").toContain("旧标题乙");
+  });
+
+  it("非字面量标题（it.each／插值）**不算漂移**：那是设计如此，不该白付 git show", () => {
+    // 实测踩过：用"标题在不在文本里"当谓词，会把 116 条非字面量标题算成漂移 ⇒ needsRev 24 份、
+    // 白付 24 次 `git show`（≈15s），而真漂移只有 1 份。谓词必须与判据同一只。
+    let atRevCalls = 0;
+    const disk = (_rel: string): string => 'for (const c of CASES) it(`${c.name} ⇒ ok`, () => {\n});';
+    const { needsRev } = archivedBudgetReader(
+      [row("tests/a.test.ts", "甲 ⇒ ok")],
+      disk,
+      () => { atRevCalls += 1; return ""; },
+    );
+    expect(needsRev, "模板标题被算成漂移").toEqual([]);
+    expect(atRevCalls).toBe(0);
+  });
+
+  it("回落也只对真缺的那一份生效：别的文件一次都不读留档树（分母不许被放大）", () => {
+    const touched: string[] = [];
+    const disk = (rel: string): string => (rel === "tests/drift.test.ts" ? resolved("新") : resolved("齐"));
+    const { needsRev } = archivedBudgetReader(
+      [row("tests/drift.test.ts", "旧"), row("tests/ok.test.ts", "齐")],
+      disk,
+      (rel) => { touched.push(rel); return ""; },
+    );
+    expect(needsRev).toEqual(["tests/drift.test.ts"]);
+    expect(touched, "取料面被放大到所有文件＝懒回落退化回全量按 rev 取").toEqual([]);
   });
 });

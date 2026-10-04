@@ -99,8 +99,8 @@ const DONE: ModelOutput[] = [{ type: "assistant_message", content: "## 结论\n-
 
 describe("spawn 处的窗口接线", () => {
   it("路由选中 strong 档 ⇒ handle 带该档 ctxWindow（无需 registry 二次查名）", async () => {
-    const key = process.env.M0_API_KEY;
-    process.env.M0_API_KEY = "test-key";
+    const key = process.env.CAIRN_API_KEY;
+    process.env.CAIRN_API_KEY = "test-key";
     try {
       // 真凭据缺失时 toWorkerModel 会发起真实请求：这里把出网掐成即时失败，零外呼
       vi.stubGlobal("fetch", vi.fn(async () => {
@@ -112,8 +112,8 @@ describe("spawn 处的窗口接线", () => {
       expect(firstHandle(orch)?.modelCtxWindow).toBe(256_000);
       await orch.cancelAll();
     } finally {
-      if (key === undefined) delete process.env.M0_API_KEY;
-      else process.env.M0_API_KEY = key;
+      if (key === undefined) delete process.env.CAIRN_API_KEY;
+      else process.env.CAIRN_API_KEY = key;
     }
   }, 15_000);
 

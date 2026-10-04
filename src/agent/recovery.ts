@@ -1,12 +1,12 @@
 // M3c 崩溃恢复（agent-plan §4.4.9）：重启重开会话 → 扫描无终态事件的 worker →
 // failed(reason=interrupted) + 恢复卡（重派 = 按原 spawn 参数再 spawn，全新 agent_id；V1 无热恢复）。
 // 纯投影层：扫描是纯函数（事件 → 无终态 worker 清单）；落流与重派由调用方（会话重开 / card_action）执行。
-import { AGENT_PERMISSION_MODES } from "../events";
+import { AGENT_PERMISSION_MODES, type AgentMode, type AgentPermissionMode } from "../events";
 import type { AgentEvent, AgentSpawnedEvent } from "../events";
 
 /** 重派参数（原 spawn 参数；depends_on 不随重派——崩溃后依赖链已断，重派环为独立 spawn）。 */
 export interface RespawnArgs {
-  mode: "read" | "write";
+  mode: AgentMode;
   task: string;
   resources?: string[];
   max_turns?: number;
@@ -15,6 +15,15 @@ export interface RespawnArgs {
   /** 原角色名（缺席 = 当初没带角色面）。重派必须带它：角色决定工具剔除面与提示词面，
    *  丢了就等于**换了一张角色面重跑**，而用户看到的只是「按原参数重派」。 */
   role?: string;
+  /** M3b write mode：worktree 与基线必须随重派带走，否则 diff 对比到的基线不是 spawn 时那根。 */
+  worktree?: string;
+  base_commit?: string;
+  /** 真实拨过的模型名（价格/审计归因用；缺席=当初不落）。 */
+  usage_model?: string;
+  /** 越界请求的原档（若当初有越界，恢复卡应如实带原请求，由重派路径再裁一次）。 */
+  permission_mode_requested?: AgentPermissionMode;
+  /** 档位越界警告（审批卡/恢复卡如实复述）。 */
+  tier_warning?: string;
 }
 
 export interface InterruptedWorker {
@@ -64,6 +73,8 @@ export function interruptedWorkers(events: readonly AgentEvent[]): InterruptedWo
   for (const e of events) {
     if (e.type === "agent_spawned") spawned.set(e.agent_id, e);
     else if (e.type === "agent_status" && TERMINAL_STATUSES.has(e.status)) dead.add(e.agent_id);
+    // agent_result 是终态载荷；崩溃窗口可能只落 result、status 未落，漏认会让已交付 worker 被重派。
+    else if (e.type === "agent_result" && (e.status === "done" || e.status === "failed")) dead.add(e.agent_id);
   }
   const out: InterruptedWorker[] = [];
   for (const [agentId, spawnedEvent] of spawned) {
@@ -75,12 +86,17 @@ export function interruptedWorkers(events: readonly AgentEvent[]): InterruptedWo
 /** agent_spawned → 重派 SpawnArgs（纯函数；恢复的「重派」= 全新 agent_id 重新 spawn，§4.4.9）。 */
 export function respawnArgsFrom(spawned: AgentSpawnedEvent): RespawnArgs {
   return {
-    mode: spawned.mode === "write" ? "write" : "read",
+    mode: spawned.mode,
     task: spawned.task,
     ...(spawned.resources !== undefined && spawned.resources.length > 0 ? { resources: spawned.resources } : {}),
     ...(spawned.max_turns !== undefined ? { max_turns: spawned.max_turns } : {}),
     ...(spawned.permission_mode !== undefined ? { tier: spawned.permission_mode } : {}),
     ...(spawned.model !== undefined ? { model: spawned.model } : {}),
     ...(spawned.role !== undefined ? { role: spawned.role } : {}),
+    ...(spawned.worktree !== undefined ? { worktree: spawned.worktree } : {}),
+    ...(spawned.base_commit !== undefined ? { base_commit: spawned.base_commit } : {}),
+    ...(spawned.usage_model !== undefined ? { usage_model: spawned.usage_model } : {}),
+    ...(spawned.permission_mode_requested !== undefined ? { permission_mode_requested: spawned.permission_mode_requested } : {}),
+    ...(spawned.tier_warning !== undefined ? { tier_warning: spawned.tier_warning } : {}),
   };
 }

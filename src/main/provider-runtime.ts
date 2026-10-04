@@ -62,7 +62,7 @@ function defaultModelFor(provider: EnvKeyedProvider): ModelSpec {
   return model;
 }
 
-function legacyModel(raw: string, source: "settings.model" | "M0_MODEL"): ModelSpec {
+function legacyModel(raw: string, source: "settings.model" | "CAIRN_MODEL"): ModelSpec {
   const spec = findSpecByNameOrId(DEFAULT_MODEL_TABLE, raw);
   if (!spec) {
     throw new Error(`${source} 未登记到模型表: ${JSON.stringify(raw)}`);
@@ -151,7 +151,7 @@ export function resolveMainModel(input: ResolveMainModelInput): MainModelSelecti
     ? input.settingsModel
     : provider === "glm" ? input.legacyEnvModel : undefined;
   if (requested !== undefined && requested !== "") {
-    const spec = legacyModel(requested, provider === "glm" && input.settingsModel === "" ? "M0_MODEL" : "settings.model");
+    const spec = legacyModel(requested, provider === "glm" && input.settingsModel === "" ? "CAIRN_MODEL" : "settings.model");
     if (spec.provider !== provider) {
       throw new Error(`模型 ${spec.id} (${spec.provider}) 与 provider=${provider} 不匹配`);
     }

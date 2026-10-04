@@ -28,6 +28,8 @@ const SNIPPET_CAP = 240;
 export interface SearchConfig {
   /** URL 模板，必须含 `{query}` 占位符（替换时做 URL 编码）。 */
   endpoint: string;
+  /** 显式允许 loopback/私网搜索端点（本地 SearXNG 等）。默认 false：私网/回环端点仍走 SSRF 闸拒绝。 */
+  allowLocalEndpoint?: boolean;
 }
 
 /** 读 `.agent/config.json` 的 `search.endpoint`。三种结果分开：
@@ -48,7 +50,9 @@ export function loadSearchConfig(workspace: string): SearchConfig | null {
   if (typeof s !== "object" || s === null) return null;
   const endpoint = (s as { endpoint?: unknown }).endpoint;
   if (typeof endpoint !== "string" || endpoint.trim() === "" || !endpoint.includes("{query}")) return null;
-  return { endpoint: endpoint.trim() };
+  const allowRaw = (s as { allowLocalEndpoint?: unknown }).allowLocalEndpoint;
+  if (allowRaw !== undefined && typeof allowRaw !== "boolean") return null;
+  return { endpoint: endpoint.trim(), ...(allowRaw === true ? { allowLocalEndpoint: true } : {}) };
 }
 
 export interface SearchResult {
@@ -139,8 +143,12 @@ export function makeWebSearch(deps: WebSearchDeps = {}): Tool {
       const target = cfg.endpoint.replaceAll("{query}", encodeURIComponent(query));
       const guard = stallGuard(STALL_MS, "web_search");
       try {
-        // 替换后才断言：注入的 query 只可能落在 path/query 上，主机的判定与 web_fetch 同一份闸。
-        const u = await assertPublicUrl(target, resolve, "web_search");
+        // 默认走 SSRF 闸；显式 `allowLocalEndpoint: true` 才跳过私网/回环判定，
+        // 并仍要求 http(s) 与 {query} 已替换——本地端点也属于「检索端点」，不许静默降级成 file/data。
+        const u = cfg.allowLocalEndpoint === true ? new URL(target) : await assertPublicUrl(target, resolve, "web_search");
+        if (u.protocol !== "http:" && u.protocol !== "https:") {
+          return { ok: false, output: `web_search: endpoint 协议必须是 http(s)，当前是 ${u.protocol}` };
+        }
         const res = await doFetch(u.href, {
           redirect: "manual",
           signal: guard.signal,

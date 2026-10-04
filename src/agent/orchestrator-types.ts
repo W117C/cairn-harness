@@ -21,6 +21,12 @@ export interface SpawnArgs {
   model?: unknown;
   max_turns?: unknown;
   tier?: unknown;
+  /** M3b 恢复重派需带走的基线字段（raw 形态；spawn 内逐项校验）。 */
+  worktree?: unknown;
+  base_commit?: unknown;
+  usage_model?: unknown;
+  permission_mode_requested?: unknown;
+  tier_warning?: unknown;
   /** M5c supervise：{ maxStages?, forbidden? }（受限循环参数；goal=task，budget=会话成本闸）。 */
   supervise?: unknown;
   /**
@@ -191,7 +197,7 @@ export interface OrchestratorOptions {
    *  缺省 undefined = 零行为（只有既有 glob 租约求交，spawn 流程与事件字节完全不变）。
    *  抛错 = 记 warn 并降级为「仅 glob 判定」——语义闸是额外探测器，不得把 spawn 炸掉。 */
   semanticLease?: (resources: string[]) => Promise<string[]>;
-  /** worker 模型解析（演示/验收通道注入脚本模型）；缺省 = GLM 暗卷（需 M0_API_KEY）。 */
+  /** worker 模型解析（演示/验收通道注入脚本模型）；缺省 = GLM 暗卷（需 CAIRN_API_KEY）。 */
   modelFor?: (args: SpawnArgs) => WorkerModel | undefined;
   /** A1 写侧 prompt 缓存断点（路由分支合成的真实 provider 模型才吃）。
    *  目前只有 Anthropic 有语义（显式 cache_control 打在静态段：末个 tool + system 首块）；

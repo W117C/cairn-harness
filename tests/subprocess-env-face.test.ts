@@ -2,7 +2,7 @@
 //  ① 白名单被抄了两份且**已经漂了**：`src/tools/process.ts` 的 ENV_ALLOW 有 TERM，
 //     `src/agent/plugins/hooks.ts` 那份没有 ⇒ 插件 hook 起的子进程天生少一个规格点名要传的变量。
 //  ② `spawnTracked` 的 `env` 是**可选参数**，缺省 = `spawn(..., {env: undefined})` = 继承 process.env
-//     ——而主进程把 BYOK key 解密后正写在 process.env.M0_API_KEY 里。今天四个调用点都记得传，
+//     ——而主进程把 BYOK key 解密后正写在 process.env.CAIRN_API_KEY 里。今天四个调用点都记得传，
 //     但"记得传"正是本仓点名的"规矩只有生产者守、出口无观测者"那一类：第 5 个点一忘就漏。
 import { describe, expect, it } from "vitest";
 import { killGroup, sanitizedEnv, spawnTracked } from "../src/tools/process";
@@ -60,26 +60,26 @@ describe("env 白名单只允许有一份事实源（§11.2 子进程白名单�
 
 describe("spawnTracked 的 env 缺省必须 fail-closed（不传 ≠ 继承主进程）", () => {
   it("省略 env 时，子进程看不到主进程里的 BYOK 明文键", async () => {
-    // 产品真实形态：agent-runner 把 BYOK key 解密后放进 process.env.M0_API_KEY
-    process.env.M0_API_KEY = "sk-DshProbeByokShouldNotReachChild0123456";
+    // 产品真实形态：agent-runner 把 BYOK key 解密后放进 process.env.CAIRN_API_KEY
+    process.env.CAIRN_API_KEY = "sk-DshProbeByokShouldNotReachChild0123456";
     try {
       const env = await childEnv({});
-      expect(env.M0_API_KEY).toBeUndefined();
-      expect(Object.keys(env)).not.toContain("M0_API_KEY");
+      expect(env.CAIRN_API_KEY).toBeUndefined();
+      expect(Object.keys(env)).not.toContain("CAIRN_API_KEY");
     } finally {
-      delete process.env.M0_API_KEY;
+      delete process.env.CAIRN_API_KEY;
     }
   });
 
   it("显式传 sanitizedEnv() 的既有路径逐字不变（反向钉：白名单仍在、密钥仍不在）", async () => {
-    process.env.M0_API_KEY = "sk-DshProbeByokShouldNotReachChild654321";
+    process.env.CAIRN_API_KEY = "sk-DshProbeByokShouldNotReachChild654321";
     try {
       const env = await childEnv({ env: sanitizedEnv() });
-      expect(env.M0_API_KEY).toBeUndefined();
+      expect(env.CAIRN_API_KEY).toBeUndefined();
       expect(env.PATH).toBeDefined();
       expect(env.HOME).toBeDefined();
     } finally {
-      delete process.env.M0_API_KEY;
+      delete process.env.CAIRN_API_KEY;
     }
   });
 });

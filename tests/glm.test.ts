@@ -98,6 +98,6 @@ describe("GLM provider（离线解析验证，stub fetch，不联网）", () => 
       for await (const _e of streamGlm([{ role: "user", content: "hi" }], { apiKey: "" })) {
         void _e;
       }
-    }).rejects.toThrow(/M0_API_KEY/);
+    }).rejects.toThrow(/CAIRN_API_KEY/);
   });
 });

@@ -2,7 +2,7 @@
 //
 // P1-1 env 消毒：模型写的命令（run_shell）、verify 脚本、LSP server 都以子进程形态运行。
 //   `spawn` 不传 env = 继承 process.env，而主进程会把 BYOK key 解密后写进
-//   process.env.M0_API_KEY（agent-runner.ts），于是子进程里一条 `env` / `printenv`
+//   process.env.CAIRN_API_KEY（agent-runner.ts），于是子进程里一条 `env` / `printenv`
 //   就能把明文 key 读出来，经 tool_result 落进事件流再回传给模型。
 //   沙箱路径早已消毒（sandboxEnv），本模块把同一套消毒推广到**所有**子进程。
 //

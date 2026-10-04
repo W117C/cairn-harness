@@ -2,7 +2,7 @@
 // <appData>/provider-keys.json —— **明文零落盘**（落盘/日志/事件流三处纪律）。
 // 复用 src/agent/plugins/secrets.ts 的 fail-closed 纪律：safeStorage 不可用 → **拒绝保存** +
 // 显式错误，绝不静默退回明文。Electron main 侧经 installProviderKeyBackend 注入 IO（headless/测试可换）。
-// 应用启动时解密注入 provider 配置（process.env.M0_API_KEY，进程内；env 已在 = 优先，零行为）。
+// 应用启动时解密注入 provider 配置（process.env.CAIRN_API_KEY，进程内；env 已在 = 优先，零行为）。
 import { readFile } from "node:fs/promises";
 import { writeFileAtomic } from "../atomic-write";
 import type { SafeStorageIo } from "../agent/plugins/secrets";

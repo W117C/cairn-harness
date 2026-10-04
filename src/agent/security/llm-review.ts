@@ -4,7 +4,7 @@
 // 注入防线（该 Action README 自白「not hardened against prompt injection」= 反面教材即纪律）：
 //   被审 diff 是**数据不是指令**（system 显式声明）+ findings 严格 schema（只允许引用 diff 行号与分类字段）
 //   + 响应进事件流前过输出扫描（redactSecrets + 仿冒标签中和，调用方负责）。
-// BYOK 计费：M0_API_KEY 在场才跑；缺席显式 skipped（不静默）。
+// BYOK 计费：CAIRN_API_KEY 在场才跑；缺席显式 skipped（不静默）。
 import type { SecurityFinding } from "../../events";
 import { streamGlm, type GlmMessage } from "../../providers/glm";
 import { escapeControlTags } from "../control-tags";
@@ -109,10 +109,10 @@ export function parseLlmFindings(rawText: string, seqStart = 0): SecurityFinding
   return filterFalsePositives(out);
 }
 
-/** LLM 审查（非流式单轮口径：stream 收束取全文）。无 M0_API_KEY → 显式 skipped（不静默）。 */
+/** LLM 审查（非流式单轮口径：stream 收束取全文）。无 CAIRN_API_KEY → 显式 skipped（不静默）。 */
 export async function llmReviewDiff(input: LlmReviewInput): Promise<LlmReviewOutcome> {
-  if (!process.env.M0_API_KEY) {
-    return { findings: [], skipped: "LLM 审查跳过（无 M0_API_KEY）——静态 findings 照常生效" };
+  if (!process.env.CAIRN_API_KEY) {
+    return { findings: [], skipped: "LLM 审查跳过（无 CAIRN_API_KEY）——静态 findings 照常生效" };
   }
   try {
     let text = "";

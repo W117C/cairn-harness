@@ -47,6 +47,17 @@ function fakeExec(result: { ok: boolean; output: string; exitCode: number | null
   );
 }
 
+/** 隐藏套件汇总行里的「绿了几条」——**不认 reporter 的排版，只认那两个前缀**。
+ *  动因（2026-10-02 实测，Node v24.19.0）：`node --test` 在非 TTY 下的默认 reporter 随大版本变过，
+ *  v22 及以前是 TAP 的 `# pass 5`，v24 起是 spec 的 `ℹ pass 5`。原先这里直接断言 `toContain("# pass")`，
+ *  等于把尺子绑死在环境的一个默认值上 ⇒ 换台机器、升个大版本，同一份代码同一份判据就翻红
+ *  （实测连干净 HEAD 树 4e0a7de 在认证树里也是红的，而 CI 钉在 Node 22 所以一直没现形）。
+ *  现在只解析「前缀 + pass + 计数」三件事：TAP 与 spec 都命中，判的还是「隐藏套件里还剩几条绿」这件真事。 */
+function heldOutGreenCount(output: string): number | null {
+  const m = /(?:^|\n)\s*(?:#|ℹ) pass (\d+)/.exec(output);
+  return m === null ? null : Number(m[1]);
+}
+
 describe("heldOutDestProblem：隐藏文件只能落在副本内", () => {
   it("副本内的相对路径放行", () => {
     expect(heldOutDestProblem("tests/checkout.held.test.js")).toBeNull();
@@ -164,6 +175,26 @@ describe("runHeldOut：只认退出码那一套，归因共用 verify 那一只"
     expect(capped.startsWith("MMMM")).toBe(true);
     expect(capped.endsWith("# pass 5\n# fail 3")).toBe(true);
     expect(capped.length).toBeLessThan(body.length);
+  });
+
+  // 汇总行的位置随 reporter 走（10-02 实测 Node v24.19.0）：TAP 在**结尾**、spec 在**中段**。
+  // 「保头保尾」只对前一支有保证；后一支落进被掐掉的中段时，「还剩几条绿」就从读数里消失了
+  // ——判据读不到不是「没红」，是判不了。这一条钉的就是那个捞回。
+  it("汇总行落在中段（spec 那一支）也要捞得回来，且捞回来仍受帽约束", () => {
+    const middle =
+      "x".repeat(HELDOUT_OUTPUT_CAP) + "\nℹ tests 60\nℹ pass 58\nℹ fail 2\n" + "y".repeat(HELDOUT_OUTPUT_CAP);
+    const capped = capHeldOutOutput(middle);
+    expect(capped).toContain("ℹ pass 58");
+    expect(capped).toContain("ℹ fail 2");
+    expect(capped.length).toBeLessThanOrEqual(HELDOUT_OUTPUT_CAP + 80);
+    // TAP 那一支同样：前缀不同，捞回这件事一样做。
+    expect(capHeldOutOutput(middle.replace(/ℹ /g, "# "))).toContain("# pass 58");
+  });
+
+  it("汇总行本来就还在保留区里 ⇒ 一个字节都不许多贴（捞回不是无脑追加）", () => {
+    const tailHeld = "z".repeat(HELDOUT_OUTPUT_CAP) + "\n# pass 5\n# fail 3";
+    expect(capHeldOutOutput(tailHeld)).not.toContain("原在被省掉的中段");
+    expect(capHeldOutOutput(tailHeld).endsWith("# pass 5\n# fail 3")).toBe(true);
   });
 
   it("没超帽的文字一个字节都不许动（有界化不是改写）", () => {
@@ -289,10 +320,22 @@ export function checkoutTotal(lines, couponPercent) {
     expect(held.ran && held.ok).toBe(false);
     // 而且不是"整份红"：隐藏套件里那些与折扣无关的回归用例必须还在绿着，
     // 否则这份尺量的就只是"文件能不能加载"，不是"是不是根因"。
+    // 判的是"绿的那几条还在"这件事本身，不是某种 reporter 怎么排版（理由见 heldOutGreenCount）。
+    // 取不到汇总行 ⇒ 读数里就没有"还剩几条绿"可判 ⇒ 当不可知，不当通过。
     if (held.ran) {
-      expect(held.output).toContain("# pass");
-      expect(held.output).toMatch(/# pass [1-9]/);
+      const green = heldOutGreenCount(held.output);
+      expect(green, "held-out 输出里取不到 pass 汇总行（reporter 形态又变了？）").not.toBeNull();
+      expect(green).toBeGreaterThan(0);
     }
+  });
+
+  // 这一条不靠真机：把两种 reporter 的汇总行各喂一次，确保换大版本不会把这格尺子改红。
+  // （`#` = TAP：v22 及以前的非 TTY 默认；`ℹ` = spec：v24 起。两者都必须读得出同一个数。）
+  it("汇总行两种排版读出来是同一个数（TAP 的 `#` 与 spec 的 `ℹ`）", () => {
+    expect(heldOutGreenCount("ℹ tests 8\nℹ suites 0\nℹ pass 5\nℹ fail 3\n")).toBe(5);
+    expect(heldOutGreenCount("# tests 8\n# suites 0\n# pass 5\n# fail 3\n")).toBe(5);
+    expect(heldOutGreenCount("整份红，没有任何汇总行\n")).toBeNull();
+    expect(heldOutGreenCount("ℹ pass 0\n")).toBe(0);
   });
 });
 

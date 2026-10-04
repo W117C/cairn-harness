@@ -7,7 +7,7 @@
 //   ① 工具表必须透传（旧实现传 undefined）      ② 系统提示必须进 messages（旧实现只发裸 task）
 //   ③ 一次调用 = 一轮，第二轮必须还能要到新迭代器（旧实现第二轮拿到耗尽生成器）
 //   ④ 历史逐轮增长（「执行 → 验证 → 修正」回流的物理前提；断在第二轮就永远看不到自己上一轮干了什么）
-// 全程离线：transport 是注入的假件，不碰网络、不需要 M0_API_KEY。
+// 全程离线：transport 是注入的假件，不碰网络、不需要 CAIRN_API_KEY。
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadCase, loadGymIndex } from "../src/agent/gym/case";

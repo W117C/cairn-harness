@@ -15,7 +15,7 @@ describe("析取式弱断言扫描 scanDisjunctions（H-1）", () => {
   });
 
   it("检出 && 内嵌套的 ||（旧的字面恒真式扫描漏网形态）", () => {
-    const src = 'check(rep !== undefined && (rep.llm_reviewed === true || !process.env.M0_API_KEY), "K5b");\n';
+    const src = 'check(rep !== undefined && (rep.llm_reviewed === true || !process.env.CAIRN_API_KEY), "K5b");\n';
     const hits = scanDisjunctions("t.ts", src);
     expect(hits).toHaveLength(1);
     expect(hits[0]!.text).toContain("||");

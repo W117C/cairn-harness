@@ -20,8 +20,8 @@ import type { WorkerModel } from "../src/agent/worker-model";
 
 let work: string;
 let logPath: string;
-const savedModelEnv = process.env.M0_MODEL;
-const savedKeyEnv = process.env.M0_API_KEY;
+const savedModelEnv = process.env.CAIRN_MODEL;
+const savedKeyEnv = process.env.CAIRN_API_KEY;
 
 beforeEach(async () => {
   work = await mkdtemp(join(tmpdir(), "w3-spent-"));
@@ -30,10 +30,10 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  if (savedModelEnv === undefined) delete process.env.M0_MODEL;
-  else process.env.M0_MODEL = savedModelEnv;
-  if (savedKeyEnv === undefined) delete process.env.M0_API_KEY;
-  else process.env.M0_API_KEY = savedKeyEnv;
+  if (savedModelEnv === undefined) delete process.env.CAIRN_MODEL;
+  else process.env.CAIRN_MODEL = savedModelEnv;
+  if (savedKeyEnv === undefined) delete process.env.CAIRN_API_KEY;
+  else process.env.CAIRN_API_KEY = savedKeyEnv;
   await rm(work, { recursive: true, force: true }).catch(() => {});
 });
 
@@ -84,8 +84,8 @@ describe("W3② 价格档位的反查（单一事实源 = 档位表）", () => {
   });
 
   it("glmDefaultModelName 与 streamGlm 真实拨号用的模型名逐字相等（防第四份 env 副本漂移）", async () => {
-    process.env.M0_MODEL = "sentinel-model-xyz";
-    process.env.M0_API_KEY = "test-key-not-dialing"; // 只过 key 存在性闸；fetchImpl 已注入，不外拨
+    process.env.CAIRN_MODEL = "sentinel-model-xyz";
+    process.env.CAIRN_API_KEY = "test-key-not-dialing"; // 只过 key 存在性闸；fetchImpl 已注入，不外拨
     expect(glmDefaultModelName()).toBe("sentinel-model-xyz");
     let sent = "";
     const fetchImpl = (async (_url: string, init?: RequestInit) => {
@@ -168,7 +168,7 @@ describe("W3② 三个面真的接上（spawn 回执 / agent_result / wait 行�
   }, 15_000);
 
   it("真实 provider 路径：回执带单价、终态带 spent_usd 与标定态、收队行带同一笔钱", async () => {
-    process.env.M0_MODEL = "glm-5.2";
+    process.env.CAIRN_MODEL = "glm-5.2";
     const { orch, events } = makeOrch(realishModel(DONE_SCRIPT));
     const r = await orch.spawn({ mode: "read", task: "调研" }, { callId: "s1" });
     const receipt = JSON.parse(r.output) as { price?: string };

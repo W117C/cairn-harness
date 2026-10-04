@@ -5,7 +5,7 @@
 //   ① `--mode default` 在管道里：写盘被方案门拒、工作区一个字节没动、退出码 0，
 //      终端台词还是「任务完成」；
 //   ② demo 通道：`read_file` 与 `run_shell` 都 ok=false，退出码 0。
-// 任何把 m0 接进脚本 / CI 的人，都会把这两例读成成功。
+// 任何把 cairn 接进脚本 / CI 的人，都会把这两例读成成功。
 //
 // 这组钉两半：
 //   A. `runFailed` 纯函数五个输入的边界（含**反向对照**：全 0 必须不判红，
@@ -20,7 +20,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { runFailed } from "../src/cli";
 
 const ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-const BIN = join(ROOT, "bin", "m0.mjs");
+const BIN = join(ROOT, "bin", "cairn.mjs");
 
 /** 五个计数器全零 = 这一轮什么都没出错 ⇒ 必须放行。 */
 const CLEAN = { errorEvents: 0, verifyRed: false, gateBlocks: 0, deniedPlans: 0, plainToolFailures: 0 };
@@ -69,10 +69,10 @@ describe("runFailed：退出码判据（纯函数，五个输入各自能单独�
 
 describe("真跑 bin：demo 通道的退出码（零凭据、离线、确定性）", () => {
   it("剧本里有失败的工具调用 ⇒ exit 1，不再报成成功", () => {
-    const ws = mkdtempSync(join(tmpdir(), "m0-exitcode-"));
+    const ws = mkdtempSync(join(tmpdir(), "cairn-exitcode-"));
     dirs.push(ws);
     const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1" };
-    for (const k of ["M0_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"]) delete env[k];
+    for (const k of ["CAIRN_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"]) delete env[k];
     const r = spawnSync(process.execPath, [BIN, "--provider", "demo", "--mode", "auto", "--workspace", ws, "任意任务"], {
       cwd: ROOT,
       encoding: "utf8",

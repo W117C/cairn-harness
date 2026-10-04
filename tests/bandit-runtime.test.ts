@@ -55,7 +55,7 @@ function makeOrch(over: { banditPath?: string; model?: (a: SpawnArgs) => ReturnT
     },
     // bandit 要求 routing 同时开启（无路由则无档位决策可学）
     ...(over.banditPath ? { routing: true, banditStatePath: over.banditPath } : {}),
-    // 注入脚本模型：绕开 M0_API_KEY 的 fail-closed，routeDecision 仍正常计算与落流
+    // 注入脚本模型：绕开 CAIRN_API_KEY 的 fail-closed，routeDecision 仍正常计算与落流
     ...(over.model ? { modelFor: over.model } : {}),
   });
   return { orch, events };

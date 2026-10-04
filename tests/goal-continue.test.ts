@@ -125,7 +125,7 @@ describe("goal 模式端到端（真入口，缺省零行为）", () => {
   });
 
   it("没人应答（管道/CI）同样不续跑：与「定时任务」分成两支，判据是**同一句停机理由**", async () => {
-    // 这条钉的是 CLI 那条真实路径：`m0 --goal …` 在管道里跑，CLI 不传 `unattended`
+    // 这条钉的是 CLI 那条真实路径：`cairn --goal …` 在管道里跑，CLI 不传 `unattended`
     // （那个槽会连带关掉会话尾沉淀，cli.ts 刻意不翻），只传 `noAnswerer`。
     // 漏了它就是 README 承诺的「stdin 是管道不会自动续跑」落空：闸只认 `over.unattended`
     // ⇒ 门全被拒、判据对「证据 failed」是 continue ⇒ 一路烧到轮次闸且没有一轮可能成功。

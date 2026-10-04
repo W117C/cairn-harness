@@ -47,7 +47,7 @@ export const run_shell: Tool = {
         settle(cancelled ? res : annotateExecCause(res, { timedOut, exitCode: code }));
       };
       // env 消毒：spawn 不传 env 会继承 process.env，而主进程把 BYOK key 写进了
-      // process.env.M0_API_KEY —— 一条 `env` 就能把明文 key 读进事件流（P1-1）。
+      // process.env.CAIRN_API_KEY —— 一条 `env` 就能把明文 key 读进事件流（P1-1）。
       const handle = spawnTracked("bash", ["-c", command], {
         cwd: ctx.workspace,
         env: sanitizedEnv(),

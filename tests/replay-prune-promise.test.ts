@@ -18,7 +18,7 @@ import {
 } from "../scripts/replay/prune-promise";
 import { pruneRecallSuffix } from "../src/agent/prune";
 
-const ABS = "/Users/ze/Library/Application Support/m0-agent-loop/sessions/prune-attachments/s1-ab-cd.txt";
+const ABS = "/Users/ze/Library/Application Support/cairn-harness/sessions/prune-attachments/s1-ab-cd.txt";
 /** 与 `src/agent/prune.ts` 拼的那半句同形（占位符 + 换行 + 一句路径提示）。 */
 const stub = (path: string): string => "[已裁剪：原文过长]\n[原文已存附件 " + path + "，需要时 read_file 取回]";
 

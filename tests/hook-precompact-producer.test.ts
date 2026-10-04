@@ -158,7 +158,7 @@ describe("PreCompact 发点在 runCompaction（三条压缩路径的唯一必经
 
 describe("自动档经 glm-session 接到生产者（provider 是唯一发起方）", () => {
   it("组装前触发的压缩发出 PreCompact(auto)，且只发一次", async () => {
-    useEnv("M0_API_KEY", undefined); // 压缩后仍要调模型 → 无 key 在此抛错（抛错在压缩之后 = 接线生效）
+    useEnv("CAIRN_API_KEY", undefined); // 压缩后仍要调模型 → 无 key 在此抛错（抛错在压缩之后 = 接线生效）
     dir = await mkdtemp(join(tmpdir(), "dsh-precompact-auto-"));
     const logPath = join(dir, "events.jsonl");
     const log = createEventLog(logPath);
@@ -177,7 +177,7 @@ describe("自动档经 glm-session 接到生产者（provider 是唯一发起方
     });
     await expect(async () => {
       for await (const _e of provider.stream([], [])) void _e;
-    }).rejects.toThrow(/M0_API_KEY/);
+    }).rejects.toThrow(/CAIRN_API_KEY/);
     expect(fired).toEqual(["auto"]);
   });
 });
@@ -212,7 +212,7 @@ describe("手动档真跑钩子引擎（不注入 exec：matcher 与「只发一
 
   it("matcher=manual 的那条恰好跑一次，matcher=auto 的那条不跑", async () => {
     useEnv("M1D_COMPACTION_DEMO", "1"); // 无 key 时的显式演示档：mock 摘要器
-    useEnv("M0_API_KEY", undefined);
+    useEnv("CAIRN_API_KEY", undefined);
     const logPath = await bigLog();
     const script = await appendScript(dir!, "touch.cjs");
     const hit = join(dir!, "hit-manual");
@@ -234,7 +234,7 @@ describe("手动档真跑钩子引擎（不注入 exec：matcher 与「只发一
 
   it("无钩子引擎时零行为（不因为接线就凭空造一次 run）", async () => {
     useEnv("M1D_COMPACTION_DEMO", "1");
-    useEnv("M0_API_KEY", undefined);
+    useEnv("CAIRN_API_KEY", undefined);
     const logPath = await bigLog();
     const res = await compactSessionLog(logPath);
     expect(res.ok, res.error ?? "").toBe(true);

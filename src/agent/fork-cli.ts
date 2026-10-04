@@ -1,4 +1,4 @@
-// M8：`m0 --fork` / `m0 --replay` 的纯逻辑层（CLI 只做接线与交互）。
+// M8：`cairn --fork` / `cairn --replay` 的纯逻辑层（CLI 只做接线与交互）。
 // 为什么单独成文件：分叉点算术与回放渲染都要能被离线判卷逐条钉（cli.ts 是入口壳，进去就起全流程）。
 // 事件溯源本身早就支持分叉（`forkSession`，gym 在跑）——缺的只是**入口**；这一层提供入口要的三件事：
 //   ① 轮次 → 分叉事件点（`--from <轮次>` 的口径）；② 新会话命名；③ 决策链的可读渲染（含 gate 判定）。
@@ -74,7 +74,7 @@ function diffSummary(output: string): string {
   }
 }
 
-/** 决策链回放（`m0 --replay`）。一行一事件，序号与 `forkSession` 的 eventId 同源（`#N` = 第 N 条）——
+/** 决策链回放（`cairn --replay`）。一行一事件，序号与 `forkSession` 的 eventId 同源（`#N` = 第 N 条）——
  *  看准了"当时为什么这么干"就能直接拿这个号去 `--fork --from`。
  *  未知类型不静默丢：打 `（<type>：本行不做摘要）`，回放里看不见 = 没有。 */
 export function formatReplay(events: readonly AgentEvent[]): string {

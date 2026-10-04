@@ -133,7 +133,7 @@ export async function scanSourceFiles(workspace: string, maxFiles = MAX_FILES_DE
 
 // ---- tags 磁盘缓存（应用数据目录）----
 export function defaultTagsCacheDir(): string {
-  return process.env.M2B_TAGS_DIR ?? join(homedir(), ".m0-agent-loop", "symbol-map-tags");
+  return process.env.M2B_TAGS_DIR ?? join(homedir(), ".cairn-harness", "symbol-map-tags");
 }
 
 function cacheFileFor(dir: string, abs: string): string {

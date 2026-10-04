@@ -51,7 +51,7 @@ describe("taskKey / armOfPath", () => {
 
   it("躺在语料根（`outputs`/`sessions`）下的文件**没有臂** ⇒ 显式标 `(无臂)`，不许拿根名当实验条件", () => {
     expect(armOfPath("outputs/solo.events.jsonl")).toBe("(无臂)");
-    expect(armOfPath("/Library/Application Support/m0-agent-loop/sessions/会话 x.jsonl")).toBe("(无臂)");
+    expect(armOfPath("/Library/Application Support/cairn-harness/sessions/会话 x.jsonl")).toBe("(无臂)");
     expect(armOfPath("/x/loop-eval-v2-short/I1-rep1-short.events.jsonl")).toBe("loop-eval-v2-short");
   });
 });

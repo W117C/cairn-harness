@@ -142,15 +142,15 @@ it("provider=glm 且无 key：显式失败，不静默回落 mock", async () => 
   dir = await mkdtemp(join(tmpdir(), "provider-mode-"));
   initSettingsStore(join(dir, "settings.json"));
   vi.stubEnv("M0A_PROVIDER", ""); // 空串 = 不用 env 覆盖，走 settings
-  const saved = process.env.M0_API_KEY;
-  delete process.env.M0_API_KEY;
+  const saved = process.env.CAIRN_API_KEY;
+  delete process.env.CAIRN_API_KEY;
   try {
     await setSettings({ provider: "glm" });
     await expect(
       runAgent({ workspace: dir, message: "hi", mode: "read-only", logPath: join(dir, "events.jsonl") }),
-    ).rejects.toThrow(/M0_API_KEY/);
+    ).rejects.toThrow(/CAIRN_API_KEY/);
   } finally {
-    if (saved !== undefined) process.env.M0_API_KEY = saved;
+    if (saved !== undefined) process.env.CAIRN_API_KEY = saved;
   }
 });
 
@@ -198,7 +198,7 @@ it("请求带 workspace：工具在该工作区执行（不是内置靶子）", 
   await writeFile(join(ws, "only-here.txt"), "WORKSPACE_BOUND_SENTINEL");
   initSettingsStore(join(dir, "settings.json"));
   vi.stubEnv("M0A_PROVIDER", "glm");
-  vi.stubEnv("M0_API_KEY", "offline-test-key");
+  vi.stubEnv("CAIRN_API_KEY", "offline-test-key");
   await setSettings({ autoMemory: false }); // 关掉会话尾沉淀，避免多打一次模型请求
   const bodies: Array<{ messages?: Array<Record<string, unknown>>; tools?: Array<{ function: { name: string } }> }> = [];
   vi.stubGlobal(
@@ -283,7 +283,7 @@ it("真实受信插件（磁盘 echo-suite）：skill 路由与压缩重挂真�
 
   initSettingsStore(join(dir, "settings.json"));
   vi.stubEnv("M0A_PROVIDER", "glm");
-  vi.stubEnv("M0_API_KEY", "offline-test-key");
+  vi.stubEnv("CAIRN_API_KEY", "offline-test-key");
   vi.stubEnv("M2E_TRUST_FILE", trustFile);
   vi.stubEnv("M2E_PLUGIN_DATA", pluginDataRoot);
   await setSettings({ autoMemory: false });
@@ -320,7 +320,7 @@ it("带 sessionId 的 IPC run 写进会话 JSONL 并跨轮追加（不是临时�
   initSettingsStore(join(dir, "settings.json"));
   initSessionsDir(sessionsRoot);
   vi.stubEnv("M0A_PROVIDER", "glm");
-  vi.stubEnv("M0_API_KEY", "offline-test-key");
+  vi.stubEnv("CAIRN_API_KEY", "offline-test-key");
   vi.stubGlobal(
     "fetch",
     vi.fn(async () =>
@@ -353,7 +353,7 @@ it("production settings forward C2/D flags and reopen private reports across two
   initSessionsDir(sessionsRoot);
   await setSettings({ evidenceReceipts: true, economicCompaction: true, requestMetering: true, autoMemory: false });
   vi.stubEnv("M0A_PROVIDER", "glm");
-  vi.stubEnv("M0_API_KEY", "offline-test-key");
+  vi.stubEnv("CAIRN_API_KEY", "offline-test-key");
   const bodies: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init: RequestInit) => {
     bodies.push(String(init.body));
@@ -403,7 +403,7 @@ async function packSends(observationPack: boolean): Promise<string[]> {
   initSessionsDir(sessionsRoot);
   await setSettings({ provider: "glm", autoMemory: false, observationPack });
   vi.stubEnv("M0A_PROVIDER", ""); // 让 settings 说话（env 覆盖会绕开被测的那一行）
-  vi.stubEnv("M0_API_KEY", "offline-test-key");
+  vi.stubEnv("CAIRN_API_KEY", "offline-test-key");
   await writeFile(join(ws, "small.txt"), "SMALL\n");
   const bodies: string[] = [];
   // SolpiRuntime 是**每轮 run 一个实例**（`sends` 不跨 run 累积——实测：把三次发送摊到三个 run 里，

@@ -60,7 +60,7 @@ export interface ImpactNameSource {
   bindings: ImpactNameBinding[];
 }
 
-/** 索引目录：cacheDir 的兄弟目录（生产 = ~/.m0-agent-loop/impact-tags → ~/.m0-agent-loop/impact-index，
+/** 索引目录：cacheDir 的兄弟目录（生产 = ~/.cairn-harness/impact-tags → ~/.cairn-harness/impact-index，
  *  与既有 impact-tags 缓存同区；测试给 tmp cacheDir ⇒ 索引也落 tmp，不碰用户主目录）。 */
 export function impactIndexDirFor(cacheDir: string): string {
   return join(dirname(cacheDir), "impact-index");

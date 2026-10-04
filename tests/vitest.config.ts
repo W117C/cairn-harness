@@ -14,7 +14,7 @@ mkdirSync(process.env.PI_SCRATCH_DIR, { recursive: true });
 
 // M7 影响面缓存目录同理。`impactAnalysis` 2026-09-27 翻成缺省开之后，`handleAgentRun` 造的
 // 缺省钩子会走进 11 个本来只跑 agent 的用例（原来只有 impact-runner-wiring 走得到），
-// 而 `defaultImpactCacheDir()` 的兜底是 `~/.m0-agent-loop/impact-tags` —— 一次 `pnpm test`
+// 而 `defaultImpactCacheDir()` 的兜底是 `~/.cairn-harness/impact-tags` —— 一次 `pnpm test`
 // 就往用户真实应用数据目录里写建图缓存。测试数据绝不落工作区，也绝不落用户的家目录。
 if (!process.env.M7_IMPACT_TAGS_DIR) process.env.M7_IMPACT_TAGS_DIR = join(tmpdir(), "dsh-impact-tags");
 mkdirSync(process.env.M7_IMPACT_TAGS_DIR, { recursive: true });

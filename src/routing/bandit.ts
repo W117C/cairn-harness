@@ -139,6 +139,30 @@ export function newBanditState(seed: number): BanditState {
   return { seed, rngState: createRng(seed), posteriors: {} };
 }
 
+/** 一条 posterior 的形状校验（**逐条**，不是只查 `posteriors` 是不是对象）。
+ *
+ *  为什么必须逐条（2026-10-02 实测出来的挂死）：旧校验只到「posteriors 是个非 null 对象」为止，
+ *  于是 `{"alpha":"oops"}` / `{"beta":2}` 这类**条目内部畸形**被原样放行。
+ *  而 `selectArm` → `sampleBeta` → `sampleGamma(p.alpha, …)`：
+ *  `shape` 是字符串时 `shape - 1/3` 得 NaN，判据 `Math.log(u3) < …NaN…` **恒为 false**
+ *  ⇒ 拒绝采样那个 `for(;;)` **永不退出**。实测：喂一份 alpha 是字符串的状态，
+ *  `selectArm` 挂死 >3s 被强杀（同一份畸形里 alpha 为 null / 负数则返回，不挂）。
+ *
+ *  也就是说：这份守卫的**文档承诺**（上一行「损坏/畸形 ⇒ onCorrupt 显式告警」）
+ *  在条目这一层**没兑现**。这里补上，让实现与承诺一致。
+ *  取「有限且 > 0」：Gamma 采样的形状参数必须为正；`update` 产出的 alpha/beta
+ *  恒 ≥ 1（冷启动 2，reward∈[0,1]），所以这条不会误伤任何**由本仓写出**的状态。 */
+function isValidPosterior(v: unknown): boolean {
+  if (typeof v !== "object" || v === null) return false;
+  const p = v as { alpha?: unknown; beta?: unknown };
+  return isPositiveFinite(p.alpha) && isPositiveFinite(p.beta);
+}
+
+/** 「有限且 > 0 的数」——两个形状参数用的是同一条口径，单独命名一次。 */
+function isPositiveFinite(x: unknown): boolean {
+  return typeof x === "number" && Number.isFinite(x) && x > 0;
+}
+
 /** 读取；文件缺失 = 首启无历史（正常新播种）；文件存在但损坏/畸形 = 学习历史无痕丢失，
  *  必须经 onCorrupt 显式告警（P2 审查：旧实现两者同路静默重播种，违背 fail-visible 纪律）。 */
 export async function loadBanditState(path: string, onCorrupt?: (reason: string) => void): Promise<BanditState> {
@@ -146,6 +170,12 @@ export async function loadBanditState(path: string, onCorrupt?: (reason: string)
     const raw = JSON.parse(await readFile(path, "utf8")) as BanditState;
     if (typeof raw.seed !== "number" || typeof raw.rngState?.a !== "number" || typeof raw.posteriors !== "object" || raw.posteriors === null) {
       throw new Error("bandit 状态损坏：字段缺失/畸形");
+    }
+    // 逐条查 posterior：坏条目点名报出来，别让畸形流到采样器里变成挂死。
+    for (const [key, val] of Object.entries(raw.posteriors)) {
+      if (!isValidPosterior(val)) {
+        throw new Error("bandit 状态损坏：posteriors 条目「" + key + "」的 alpha/beta 不是正的有限数");
+      }
     }
     return raw;
   } catch (err) {

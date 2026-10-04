@@ -12,17 +12,17 @@ let ws = "";
 afterEach(async () => { if (ws) await rm(ws, { recursive: true, force: true }); });
 
 async function newCtx(): Promise<ToolContext> {
-  ws = await mkdtemp(join(tmpdir(), "m0-tools-"));
+  ws = await mkdtemp(join(tmpdir(), "cairn-tools-"));
   return { workspace: ws };
 }
 
 describe("read_file", () => {
   it("正常：读回文件内容", async () => {
     const ctx = await newCtx();
-    await writeFile(join(ws, "a.txt"), "hello m0", "utf8");
+    await writeFile(join(ws, "a.txt"), "hello cairn", "utf8");
     const res = await read_file.run({ path: "a.txt" }, ctx);
     expect(res.ok).toBe(true);
-    expect(res.output).toBe("hello m0");
+    expect(res.output).toBe("hello cairn");
   });
 
   it("超限：50KB 上限截断并附一行提示（M2a 起行截断 2000 先接管单行超长）", async () => {

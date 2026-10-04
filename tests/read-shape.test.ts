@@ -101,8 +101,8 @@ describe("read_file 整形（M2a 任务 3）", () => {
 
   it("正常文本读取行为不变（M0 回归）", async () => {
     const ctx = await newCtx();
-    await writeFile(join(ws, "a.txt"), "hello m0", "utf8");
+    await writeFile(join(ws, "a.txt"), "hello cairn", "utf8");
     const res = await read_file.run({ path: "a.txt" }, ctx);
-    expect(res.output).toBe("hello m0");
+    expect(res.output).toBe("hello cairn");
   });
 });

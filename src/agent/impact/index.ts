@@ -1,7 +1,7 @@
 // 影响面层（M7）：对目标仓库 js/ts/jsx 抽跨文件调用边（def/ref 双端点），
 // 支持向上（谁调用我）/向下（我调用谁）查询。复用 map 层的 grammar 初始化与
 // tags 模式（`fileSymbols`：tags＋imports 两个出口 + {mtime,size} 磁盘缓存），不重写 tree-sitter。
-// 缓存只写应用数据目录（~/.m0-agent-loop/impact-tags），绝不写进用户仓库。
+// 缓存只写应用数据目录（~/.cairn-harness/impact-tags），绝不写进用户仓库。
 // 与 map 的差异：map 静默降级（ok:false）；影响面是「改代码护栏」，grammar
 // 环境级失败必须 fail-loud（ImpactUnavailableError，文案含 unavailable）。
 import { createHash } from "node:crypto";
@@ -99,7 +99,7 @@ export const IMPACT_MAX_FILES_CEILING = MAX_FILES_CEILING;
 // ---- tags 磁盘缓存（同 map/build.ts 模式：{mtimeMs,size} 指纹；缓存只在 cacheDir 内）----
 
 export function defaultImpactCacheDir(): string {
-  return process.env.M7_IMPACT_TAGS_DIR ?? join(homedir(), ".m0-agent-loop", "impact-tags");
+  return process.env.M7_IMPACT_TAGS_DIR ?? join(homedir(), ".cairn-harness", "impact-tags");
 }
 
 function cacheFileFor(dir: string, abs: string): string {

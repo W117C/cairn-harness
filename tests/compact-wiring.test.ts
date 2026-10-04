@@ -50,7 +50,7 @@ afterEach(async () => {
 /** 演示档：无 key 时显式走 mock 摘要器（零真钱、可复现）。 */
 function demoMode(): void {
   useEnv("M1D_COMPACTION_DEMO", "1");
-  useEnv("M0_API_KEY", undefined);
+  useEnv("CAIRN_API_KEY", undefined);
 }
 
 async function twoSessions(): Promise<{ a: string; b: string }> {
@@ -94,13 +94,13 @@ describe("手动压缩的产品路径（handleCompact）", () => {
 
   it("既无 API key 也无演示档 ⇒ fail-closed 明说不可用，不静默造一条压缩", async () => {
     useEnv("M1D_COMPACTION_DEMO", undefined);
-    useEnv("M0_API_KEY", undefined);
+    useEnv("CAIRN_API_KEY", undefined);
     const { a } = await twoSessions();
     const before = await readFile(pathOf(dir!, a), "utf8");
 
     const res = await handleCompact({ sessionId: a });
     expect(res.ok).toBe(false);
-    expect(res.error ?? "").toContain("M0_API_KEY");
+    expect(res.error ?? "").toContain("CAIRN_API_KEY");
     expect(await readFile(pathOf(dir!, a), "utf8"), "拒绝就得一个字都不写").toBe(before);
   });
 

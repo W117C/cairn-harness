@@ -159,14 +159,14 @@ describe("影响面·增量与缓存", () => {
     expect(entries.every((f) => f.endsWith(".json"))).toBe(true);
   });
 
-  it("⑱defaultImpactCacheDir 缺省 = 应用数据目录 ~/.m0-agent-loop/impact-tags", () => {
+  it("⑱defaultImpactCacheDir 缺省 = 应用数据目录 ~/.cairn-harness/impact-tags", () => {
     // 测「缺省」的前提是那个环境变量**不存在**。而 vitest.config.ts 现在会把它兜到临时目录
     // （免得整轮测试往用户家目录写建图缓存），所以这里要临时摘掉再摘回来——
-    // 只 delete 不还原，会把兜底一并带走，同进程里排在后面的文件又落回 ~/.m0-agent-loop。
+    // 只 delete 不还原，会把兜底一并带走，同进程里排在后面的文件又落回 ~/.cairn-harness。
     const base = process.env.M7_IMPACT_TAGS_DIR;
     delete process.env.M7_IMPACT_TAGS_DIR;
     try {
-      expect(defaultImpactCacheDir()).toBe(join(homedir(), ".m0-agent-loop", "impact-tags"));
+      expect(defaultImpactCacheDir()).toBe(join(homedir(), ".cairn-harness", "impact-tags"));
     } finally {
       if (base !== undefined) process.env.M7_IMPACT_TAGS_DIR = base;
     }
@@ -184,11 +184,11 @@ describe("影响面·增量与缓存", () => {
   });
 
   // ⑱⑲ 摘/改这个变量只为测「没设」与「设了」两条路径；摘完还原是 F-1 补的。漏还原的破绽
-  // 就钉在这里：变量没了 ⇒ 兜底回 ~/.m0-agent-loop，排在后面的影响面建图就把缓存写进用户
+  // 就钉在这里：变量没了 ⇒ 兜底回 ~/.cairn-harness，排在后面的影响面建图就把缓存写进用户
   // 家目录（正是 vitest.config.ts 设临时目录要防的事）。取「不是家目录」而不是「等于临时
   // 目录」：临时路径由 config 决定，钉死它会把这格变成对 config 的复述。
   it("⑱⑲ 摘过变量之后，缓存目录仍是临时目录、没回落到家目录", () => {
-    expect(defaultImpactCacheDir()).not.toBe(join(homedir(), ".m0-agent-loop", "impact-tags"));
+    expect(defaultImpactCacheDir()).not.toBe(join(homedir(), ".cairn-harness", "impact-tags"));
   });
 
   it("⑳确定性：两次独立构建的边集 JSON 逐字相同", async () => {

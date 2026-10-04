@@ -334,7 +334,7 @@ export function feasibility(task: TaskSpec, probe: EnvProbe): Feasibility {
     blockers.push(`判卷命令在本机跑不起来（工具链缺失：${task.verifier.command}）⇒ 属未证，不许计成 0 分`);
   }
   if (!probe.hasCredentials()) {
-    blockers.push("缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过");
+    blockers.push("缺模型凭据（CAIRN_API_KEY / CAIRN_ENDPOINT）⇒ 跑不了真模型，属未证不是通过");
   }
   return { runnable: blockers.length === 0, blockers };
 }

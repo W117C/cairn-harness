@@ -31,7 +31,7 @@ const impactTagsBase: string | undefined = process.env.M7_IMPACT_TAGS_DIR;
 afterEach(async () => {
   // 还原而不是删掉：vitest.config.ts 把它兜到临时目录（`impactAnalysis` 缺省开之后，
   // 十来个只跑 agent 的用例也会走建图），`delete` 会把那个兜底一并摘掉，
-  // 于是同进程里排在后面的文件又落回 `~/.m0-agent-loop/impact-tags`。
+  // 于是同进程里排在后面的文件又落回 `~/.cairn-harness/impact-tags`。
   if (impactTagsBase === undefined) delete process.env.M7_IMPACT_TAGS_DIR;
   else process.env.M7_IMPACT_TAGS_DIR = impactTagsBase;
   for (const d of dirs) await rm(d, { recursive: true, force: true });

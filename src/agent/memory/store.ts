@@ -34,7 +34,7 @@ export function initMemoryHome(dir: string): void {
 export function globalMemoryDir(): string {
   if (process.env.M2D_MEMORY_HOME) return process.env.M2D_MEMORY_HOME;
   if (memoryHomeOverride) return memoryHomeOverride;
-  return join(homedir(), ".config", "m0-agent", "memory");
+  return join(homedir(), ".config", "cairn", "memory");
 }
 
 export function projectAgentDir(workspace: string): string {

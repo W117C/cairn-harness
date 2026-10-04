@@ -1,4 +1,4 @@
-// m0 CLI —— 这个 harness 的**唯一产品面**（core-only 迁移之后）。
+// Cairn CLI —— 这个 harness 的**唯一产品面**（core-only 迁移之后）。
 //
 // 定位：接线层，不是发明层。CLI 干的事只有四件：
 //   ① 解析 argv（用法错误 exit 2，照 scripts/gym-run.ts:26 的 pick() 口径）
@@ -204,7 +204,7 @@ function parseArgs(): Options | "help" {
   // `--replay` 也免给任务（它只读日志）——但复用它自己的 pick 会让「--replay 缺值」在这里
   // 先撞成一句含混的用法错；用 argv.includes 放行、把缺值留给下面那处 pick 去点名。
   if ((message === undefined || message === "") && !compact && !argv.includes("--replay")) {
-    throw new UsageError("需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact / --replay 不用给）");
+    throw new UsageError("需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）");
   }
 
   // provider 的三个原始 flag **只收不解析**：解析推迟到 main() 里 replay 分支之后。
@@ -402,7 +402,7 @@ function resolveProviderSelection(flagProvider: string | undefined, flagModel?: 
       .join(" / ");
     throw new ConfigError(
       `没有配置任何 provider 的 API key（查过：${names}）。\n` +
-      "  设一个再跑，例如：export M0_API_KEY=<你的 key>\n" +
+      "  设一个再跑，例如：export CAIRN_API_KEY=<你的 key>\n" +
       "  DeepSeek 走 OpenAI 兼容通道：export OPENAI_BASE_URL=https://api.deepseek.com/v1\n" +
       "  只想看演示（预录剧本，不调真模型）：加 --provider demo",
     );
@@ -524,7 +524,7 @@ function promptForApproval(
       },
     );
   } catch {
-    process.stderr.write(paint(YELLOW, `[m0] 拒绝 ${req.tool}：stdin 已关闭，交互审批不可用\n`));
+    process.stderr.write(paint(YELLOW, `[cairn] 拒绝 ${req.tool}：stdin 已关闭，交互审批不可用\n`));
     handleAgentDecide(req.askId, false);
   }
 }
@@ -544,7 +544,7 @@ function decidePlan(approved: boolean, callId: string): void {
   // fire-and-forget 没问题——propose_plan 挂的是 waitApproval，decide 只是解挂它。
   // 但落盘那一 await 可能抛，而没人接的 promise 拒绝会直接打崩进程。
   handlePlanDecide(approved, callId).catch((err: unknown) => {
-    process.stderr.write(paint(RED, `[m0] 方案决议落盘失败：${err instanceof Error ? err.message : String(err)}\n`));
+    process.stderr.write(paint(RED, `[cairn] 方案决议落盘失败：${err instanceof Error ? err.message : String(err)}\n`));
   });
 }
 
@@ -604,7 +604,7 @@ function promptForPlan(
     // 与 promptForApproval 同一个坑：rl 已 close 时 question 直接 throw，
     // 不吞掉就会冒进工具执行，被 loop 记成「工具失败」——一次没人应答的方案审批，
     // 在日志里伪装成模型写盘失败。
-    process.stderr.write(paint(YELLOW, "[m0] 拒绝方案：stdin 已关闭，交互审批不可用\n"));
+    process.stderr.write(paint(YELLOW, "[cairn] 拒绝方案：stdin 已关闭，交互审批不可用\n"));
     decidePlan(false, callId);
   }
 }
@@ -624,7 +624,7 @@ function promptForPlan(
 function submitClarify(callId: string, answers: ClarifyAnswerMap): void {
   const ok = handleClarifySubmit(callId, answers);
   if (!ok) {
-    process.stderr.write(paint(YELLOW, `[m0] 澄清 ${callId} 无人等待（run 已推进），提交丢弃\n`));
+    process.stderr.write(paint(YELLOW, `[cairn] 澄清 ${callId} 无人等待（run 已推进），提交丢弃\n`));
   }
 }
 
@@ -682,7 +682,7 @@ function promptForClarify(
         if (!isClosed()) askNext();
       });
     } catch {
-      process.stderr.write(paint(YELLOW, "[m0] 澄清提交空答案：stdin 已关闭，交互提问不可用\n"));
+      process.stderr.write(paint(YELLOW, "[cairn] 澄清提交空答案：stdin 已关闭，交互提问不可用\n"));
       submitClarify(callId, answers);
     }
   };
@@ -722,7 +722,7 @@ async function reviewWorkerDiffs(
   for (const c of cands) {
     const st = spawnSync("git", ["-C", c.worktree, "status", "--porcelain", "-z"], { encoding: "utf8" });
     if (st.status !== 0) {
-      process.stdout.write(paint(DIM, `\n[m0] worker ${c.agentId}：worktree 已不在（${c.worktree}）——跳过审阅\n`));
+      process.stdout.write(paint(DIM, `\n[cairn] worker ${c.agentId}：worktree 已不在（${c.worktree}）——跳过审阅\n`));
       continue;
     }
     const files = parsePorcelainZ(st.stdout ?? "");
@@ -739,7 +739,7 @@ async function reviewWorkerDiffs(
     };
     if (!tty) {
       process.stdout.write(
-        paint(YELLOW, `\n[m0] 有 1 份待合并的 worker diff（${c.agentId}，${String(files.length)} 个文件）——非交互不弹审阅（合并永远是人决定的事）。\n`),
+        paint(YELLOW, `\n[cairn] 有 1 份待合并的 worker diff（${c.agentId}，${String(files.length)} 个文件）——非交互不弹审阅（合并永远是人决定的事）。\n`),
       );
       manualHint();
       continue;
@@ -751,7 +751,7 @@ async function reviewWorkerDiffs(
       const p = rest.join("\t");
       if (p !== "") counts.set(p, ` +${a ?? "?"} −${r ?? "?"}`);
     }
-    process.stdout.write(`\n[m0] 待审阅：worker ${c.agentId}（${firstLine(c.task, 80)}）\n`);
+    process.stdout.write(`\n[cairn] 待审阅：worker ${c.agentId}（${firstLine(c.task, 80)}）\n`);
     files.forEach((f, i) => {
       const label = f.code.includes("?") || f.code.startsWith("A") ? "新增" : f.code.includes("D") ? "删除" : "修改";
       const from = f.from !== undefined ? `（改名自 ${f.from}）` : "";
@@ -811,15 +811,15 @@ async function reviewWorkerDiffs(
 // ---- 主流程 ----
 
 function printHelp(): void {
-  process.stdout.write(`m0 —— 可重放的 agent harness（core-only）
+  process.stdout.write(`Cairn —— 可重放的 agent harness（core-only）
 
 用法：
-  m0 <任务描述>                  在当前工作区跑一轮
-  m0 --workspace <目录> <任务>   在指定工作区跑一轮
-  m0 --session <id> <任务>       接着已有会话跑（不抹掉之前的转录）
-  m0 --session <id> --compact    手动压缩那条会话后退出
-  m0 --fork <id> --from <n> <任务>  分叉：保留前 n 轮（含），新任务作为第 n+1 轮跑在**新会话** <id>-f<n> 上
-  m0 --replay <id>               只读回放这条会话的决策链（不跑模型）
+  cairn <任务描述>                  在当前工作区跑一轮
+  cairn --workspace <目录> <任务>   在指定工作区跑一轮
+  cairn --session <id> <任务>       接着已有会话跑（不抹掉之前的转录）
+  cairn --session <id> --compact    手动压缩那条会话后退出
+  cairn --fork <id> --from <n> <任务>  分叉：保留前 n 轮（含），新任务作为第 n+1 轮跑在**新会话** <id>-f<n> 上
+  cairn --replay <id>               只读回放这条会话的决策链（不跑模型）
 
 选项：
   --mode <档>          read-only | default | guided | auto（默认 default = 逐次审批）
@@ -839,7 +839,7 @@ function printHelp(): void {
   --serve               常驻调度模式：启动定时任务调度器（tick 60s，补跑 7 天），不跑单次会话
   --max-turns <n>      目标轮次上限（配 --goal）
   --max-usd <n>        目标花费上限 USD（配 --goal；表里查不到价的模型上这道闸会明写自己没生效）
-  --compact            用摘要模型压缩 --session 那条会话后退出（需 M0_API_KEY：不配就 fail-closed 拒，不静默截断）
+  --compact            用摘要模型压缩 --session 那条会话后退出（需 CAIRN_API_KEY：不配就 fail-closed 拒，不静默截断）
   --log <路径>         事件日志落盘位置（与 --goal / --session 互斥，见下）
   --unattended         无人值守：一切审批 fail-closed 拒绝（不给交互门）
   --auto-verify        收束前补一拍验证（模型没自调 verify 时）
@@ -859,9 +859,9 @@ async function main(): Promise<number> {
     opts = parseArgs();
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(paint(RED, `[m0] ${msg}\n`));
+    process.stderr.write(paint(RED, `[cairn] ${msg}\n`));
     if (err instanceof UsageError) {
-      process.stderr.write("[m0] 用法：m0 <任务描述>（-h 看全部选项）\n");
+      process.stderr.write("[cairn] 用法：cairn <任务描述>（-h 看全部选项）\n");
     }
     return EXIT_USAGE;
   }
@@ -878,10 +878,10 @@ async function main(): Promise<number> {
       events = await replay(path);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        process.stderr.write(paint(RED, `[m0] 会话不存在：${opts.replayId}（看了 ${path}）\n`));
+        process.stderr.write(paint(RED, `[cairn] 会话不存在：${opts.replayId}（看了 ${path}）\n`));
         return EXIT_FAILED;
       }
-      process.stderr.write(paint(RED, `[m0] 读日志失败：${err instanceof Error ? err.message : String(err)}\n`));
+      process.stderr.write(paint(RED, `[cairn] 读日志失败：${err instanceof Error ? err.message : String(err)}\n`));
       return EXIT_FAILED;
     }
     process.stdout.write(formatReplay(events) + "\n");
@@ -898,7 +898,7 @@ async function main(): Promise<number> {
     provider = resolveProviderSelection(opts.providerFlag ?? undefined, opts.modelFlag ?? undefined, opts.ctxWindowFlag ?? undefined);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(paint(RED, `[m0] ${msg}\n`));
+    process.stderr.write(paint(RED, `[cairn] ${msg}\n`));
     return EXIT_USAGE;
   }
 
@@ -909,17 +909,17 @@ async function main(): Promise<number> {
   initSessionsDir(join(opts.workspace, ".agent", "sessions"));
   const sandbox: SandboxStatus = await initSandbox();
   if (!sandbox.available) {
-    process.stderr.write(paint(YELLOW, `[m0] 沙箱不可用（${sandbox.reason ?? "未自检通过"}）——run_shell 将不过 Seatbelt\n`));
+    process.stderr.write(paint(YELLOW, `[cairn] 沙箱不可用（${sandbox.reason ?? "未自检通过"}）——run_shell 将不过 Seatbelt\n`));
   }
 
   // ---- M4 路线图：`--serve` 常驻调度（调度器真入口；第 258 页记录的二选一决策与理由）----
   // 放在应用壳之后：触发的会话（handleAgentRun）依赖 settings/sessions/沙箱这三样先就位。
   if (opts.serve) {
     const handle = await serveScheduler({ workspace: opts.workspace });
-    process.stdout.write(paint(GREEN, `[m0] 调度器已启动（workspace ${opts.workspace}；tick 60s，补跑 7 天，并发闸 ≤2；Ctrl-C 退出）\n`));
+    process.stdout.write(paint(GREEN, `[cairn] 调度器已启动（workspace ${opts.workspace}；tick 60s，补跑 7 天，并发闸 ≤2；Ctrl-C 退出）\n`));
     process.on("SIGINT", () => {
       handle.stop();
-      process.stdout.write("\n[m0] 调度器已停止\n");
+      process.stdout.write("\n[cairn] 调度器已停止\n");
       process.exit(0);
     });
     await new Promise<never>(() => {}); // 常驻：调度器的 interval 持有事件循环，此处显式挂起
@@ -937,25 +937,25 @@ async function main(): Promise<number> {
       srcEvents = await replay(srcPath);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        process.stderr.write(paint(RED, `[m0] 源会话不存在：${opts.fork.source}（看了 ${srcPath}）\n`));
+        process.stderr.write(paint(RED, `[cairn] 源会话不存在：${opts.fork.source}（看了 ${srcPath}）\n`));
         return EXIT_FAILED;
       }
-      process.stderr.write(paint(RED, `[m0] 读源会话失败：${err instanceof Error ? err.message : String(err)}\n`));
+      process.stderr.write(paint(RED, `[cairn] 读源会话失败：${err instanceof Error ? err.message : String(err)}\n`));
       return EXIT_FAILED;
     }
     const point = forkPointOf(srcEvents, opts.fork.round);
     if ("error" in point) {
-      process.stderr.write(paint(RED, `[m0] 分叉点非法：${point.error}\n`));
+      process.stderr.write(paint(RED, `[cairn] 分叉点非法：${point.error}\n`));
       return EXIT_USAGE;
     }
     const newId = forkSessionName(opts.fork.source, opts.fork.round);
     if (!isValidSessionName(newId)) {
-      process.stderr.write(paint(RED, `[m0] 分叉出的会话名非法（多半过长）：${newId}\n`));
+      process.stderr.write(paint(RED, `[cairn] 分叉出的会话名非法（多半过长）：${newId}\n`));
       return EXIT_USAGE;
     }
     const target = pathOf(sessionsDir, newId);
     if (existsSync(target)) {
-      process.stderr.write(paint(RED, `[m0] 目标会话已存在：${newId}（换 --from 或先删掉它；**不覆盖**既有转录）\n`));
+      process.stderr.write(paint(RED, `[cairn] 目标会话已存在：${newId}（换 --from 或先删掉它；**不覆盖**既有转录）\n`));
       return EXIT_USAGE;
     }
     // forkSession 写的一定是 `<dir>/events.jsonl`，而 CLI 的会话文件命名是 `<id>.jsonl`——
@@ -967,7 +967,7 @@ async function main(): Promise<number> {
     process.stderr.write(
       paint(
         DIM,
-        `[m0] 已分叉：${opts.fork.source} 前 ${String(opts.fork.round)} 轮（共 ${String(point.totalRounds)} 轮）→ 新会话 ${newId}；原会话只读未动\n`,
+        `[cairn] 已分叉：${opts.fork.source} 前 ${String(opts.fork.round)} 轮（共 ${String(point.totalRounds)} 轮）→ 新会话 ${newId}；原会话只读未动\n`,
       ),
     );
     opts = { ...opts, sessionId: newId, logPath: target };
@@ -979,7 +979,7 @@ async function main(): Promise<number> {
   const interactive = process.stdin.isTTY === true;
   const unattended = opts.unattended || !interactive;
   if (!opts.unattended && !interactive) {
-    process.stderr.write(paint(YELLOW, "[m0] stdin 非交互（管道 / CI）——审批一律 fail-closed 拒绝；需要审批请在终端里跑，或显式 --mode auto\n"));
+    process.stderr.write(paint(YELLOW, "[cairn] stdin 非交互（管道 / CI）——审批一律 fail-closed 拒绝；需要审批请在终端里跑，或显式 --mode auto\n"));
   }
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -1054,14 +1054,14 @@ async function main(): Promise<number> {
     try {
       const r = await handleCompact({ sessionId: opts.sessionId });
       if (!r.ok) {
-        process.stderr.write(paint(RED, `[m0] 压缩失败：${r.error ?? "未知原因"}\n`));
+        process.stderr.write(paint(RED, `[cairn] 压缩失败：${r.error ?? "未知原因"}\n`));
         return EXIT_FAILED;
       }
       process.stdout.write(paint(DIM, `已压缩会话 ${opts.sessionId}（${opts.logPath}）\n`));
       return EXIT_OK;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(paint(RED, `[m0] 压缩失败：${msg}\n`));
+      process.stderr.write(paint(RED, `[cairn] 压缩失败：${msg}\n`));
       return EXIT_FAILED;
     } finally {
       rl.close();
@@ -1080,11 +1080,11 @@ async function main(): Promise<number> {
         ...(opts.goal.maxUsd === undefined ? {} : { maxUsd: opts.goal.maxUsd }),
       });
       if (!g.ok) {
-        process.stderr.write(paint(RED, `[m0] 目标未设：${g.error ?? "未知原因"}\n`));
+        process.stderr.write(paint(RED, `[cairn] 目标未设：${g.error ?? "未知原因"}\n`));
         return EXIT_USAGE;
       }
       for (const c of g.clamped ?? []) {
-        process.stderr.write(paint(YELLOW, `[m0] 目标参数已收敛：${c}\n`));
+        process.stderr.write(paint(YELLOW, `[cairn] 目标参数已收敛：${c}\n`));
       }
     }
 
@@ -1106,7 +1106,7 @@ async function main(): Promise<number> {
         // agent-runner.ts:1611），「stdin 非 TTY」不该顺手把那件也关了——那是另一件事。
         ...(opts.unattended ? { unattended: true as const } : {}),
         // 但「这场 run 没有人能应答」本身必须另透一路（noAnswerer）。goal 续跑闸只认
-        // `over.unattended`（agent-runner.ts:1818），于是管道里 `m0 --goal …` 会一路自动续跑到
+        // `over.unattended`（agent-runner.ts:1818），于是管道里 `cairn --goal …` 会一路自动续跑到
         // 轮次闸（≤25 轮 + 兜底 2）——而这条路上三扇门全 fail-closed 拒 ⇒ 写不了盘、验不出绿
         // ⇒ 没有任何一轮可能成功。叠上 `--model` 表外模型时 `--max-usd` 还因 `spentUsd === null`
         // 整道惰掉（goal.ts:116）⇒ 连美元顶都没有。这与 README「stdin 是管道不会自动续跑」
@@ -1125,7 +1125,7 @@ async function main(): Promise<number> {
       },
     );
     if (!r.ok) {
-      process.stderr.write(paint(RED, `[m0] 运行失败：${r.error ?? "未知原因"}\n`));
+      process.stderr.write(paint(RED, `[cairn] 运行失败：${r.error ?? "未知原因"}\n`));
       tally.errorEvents += 1;
     }
     // M8 增量：跑完后的 worker diff 逐文件审阅（TTY 才弹；被 Ctrl-C 取消的轮次不弹）
@@ -1133,12 +1133,12 @@ async function main(): Promise<number> {
       try {
         await reviewWorkerDiffs(rl, () => rlClosed, opts);
       } catch (err) {
-        process.stderr.write(paint(YELLOW, `[m0] diff 审阅出错（不影响已跑完的这一轮）：${err instanceof Error ? err.message : String(err)}\n`));
+        process.stderr.write(paint(YELLOW, `[cairn] diff 审阅出错（不影响已跑完的这一轮）：${err instanceof Error ? err.message : String(err)}\n`));
       }
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(paint(RED, `[m0] 运行失败：${msg}\n`));
+    process.stderr.write(paint(RED, `[cairn] 运行失败：${msg}\n`));
     return EXIT_FAILED;
   } finally {
     // 抛错退出时那一段已收到的正文照样该打出来——它正是判断「模型走到哪一步」的唯一线索。
@@ -1166,7 +1166,7 @@ process.on("SIGINT", () => {
   cancelling = true;
   const r = handleRunCancel();
   process.stderr.write(
-    paint(YELLOW, r.ok ? "\n[m0] 已请求停止，等这一轮收束（再按一次 Ctrl-C 硬退）…\n" : `\n[m0] ${r.error ?? "无活动 run"}\n`),
+    paint(YELLOW, r.ok ? "\n[cairn] 已请求停止，等这一轮收束（再按一次 Ctrl-C 硬退）…\n" : `\n[cairn] ${r.error ?? "无活动 run"}\n`),
   );
 });
 

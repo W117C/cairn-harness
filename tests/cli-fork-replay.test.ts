@@ -20,14 +20,14 @@ import { forkPointOf, forkSessionName, formatReplay } from "../src/agent/fork-cl
 import { isValidSessionName } from "../src/main/sessions";
 
 const ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-const BIN = join(ROOT, "bin", "m0.mjs");
+const BIN = join(ROOT, "bin", "cairn.mjs");
 
 const dirs: string[] = [];
 afterEach(() => {
   while (dirs.length > 0) rmSync(dirs.pop()!, { recursive: true, force: true });
 });
 const mkws = (): string => {
-  const ws = mkdtempSync(join(tmpdir(), "m0-fork-"));
+  const ws = mkdtempSync(join(tmpdir(), "cairn-fork-"));
   dirs.push(ws);
   return ws;
 };
@@ -36,7 +36,7 @@ const sha = (p: string): string => createHash("sha256").update(readFileSync(p)).
 /** 无凭据、无网络的子进程环境（照 tests/cli-exit-code.test.ts 的口径）。 */
 const cleanEnv = (): NodeJS.ProcessEnv => {
   const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1" };
-  for (const k of ["M0_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"]) delete env[k];
+  for (const k of ["CAIRN_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"]) delete env[k];
   return env;
 };
 

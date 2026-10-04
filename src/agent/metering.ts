@@ -44,9 +44,17 @@ function normalize(values: Partial<MeterUsage> = {}): MeterUsage {
 }
 export function meteredCost(usage: MeterUsage, prices: MeterPrices): number | null {
   const u = normalize(usage), p = normalize(prices);
-  // Even an unreported cache bucket must not silently be priced at zero.
-  if (usageKeys.some((key) => u[key] === null || p[key] === null)) return null;
-  const cost = usageKeys.reduce((sum, key) => sum + u[key]! * p[key]! / 1_000_000, 0);
+  // 未上报的缓存桶不按 $0 计价；但调用方没给缓存价格时，不应把 input/output 的成本也锁死。
+  // 同样：整块 usage 未上报时不能记成 cost=0。
+  if (!usageKeys.some((key) => u[key] !== null)) return null;
+  if (!usageKeys.some((key) => p[key] !== null)) return null;
+  let cost = 0;
+  for (const key of usageKeys) {
+    const n = u[key], price = p[key];
+    if (n === null && price === null) continue;
+    if (n === null || price === null) return null;
+    cost += n * price / 1_000_000;
+  }
   return Number.isFinite(cost) ? cost : null;
 }
 export interface MeterTotals {

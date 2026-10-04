@@ -208,8 +208,8 @@ describe("影响面·索引持久化", () => {
     expect(a.fingerprints.map((f) => f.rel)).toEqual([...MINI_FILES].sort());
   });
 
-  it("⑩ impactIndexDirFor：cacheDir 的兄弟目录（生产 = ~/.m0-agent-loop/impact-index，与拍板同区）", () => {
-    expect(impactIndexDirFor("/home/u/.m0-agent-loop/impact-tags")).toBe("/home/u/.m0-agent-loop/impact-index");
+  it("⑩ impactIndexDirFor：cacheDir 的兄弟目录（生产 = ~/.cairn-harness/impact-index，与拍板同区）", () => {
+    expect(impactIndexDirFor("/home/u/.cairn-harness/impact-tags")).toBe("/home/u/.cairn-harness/impact-index");
     expect(impactIndexDirFor("/tmp/cache-x")).toBe("/tmp/impact-index");
   });
 });

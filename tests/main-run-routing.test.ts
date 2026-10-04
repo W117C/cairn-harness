@@ -64,7 +64,7 @@ beforeEach(async () => {
     sessionMetadataPath: join(root, "session-metadata.json"),
   });
   vi.stubEnv("M0A_PROVIDER", "");
-  vi.stubEnv("M0_MODEL", "");
+  vi.stubEnv("CAIRN_MODEL", "");
 });
 
 afterEach(async () => {

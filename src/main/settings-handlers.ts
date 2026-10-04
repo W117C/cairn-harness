@@ -86,7 +86,7 @@ export async function providerInfo(): Promise<ProviderInfo> {
     forcedKind: providerKindFromEnv(process.env.M0A_PROVIDER),
     configuredKind: await host.resolveProviderKind(),
     settingsModel: settings.model,
-    legacyEnvModel: process.env.M0_MODEL,
+    legacyEnvModel: process.env.CAIRN_MODEL,
   });
   return buildProviderInfo(selection);
 }

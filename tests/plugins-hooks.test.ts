@@ -218,7 +218,7 @@ describe("M2e hook env 构造（消毒面）", () => {
     expect(env.PLUGIN_ROOT).toBe("/p");
     expect(env.PLUGIN_DATA).toBe("/pd");
     expect(env.PROJECT_DIR).toBe("/w");
-    expect(env.M0_API_KEY).toBeUndefined();
+    expect(env.CAIRN_API_KEY).toBeUndefined();
     expect(env.PATH).toBeDefined();
   });
 });

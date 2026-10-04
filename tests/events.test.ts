@@ -10,7 +10,7 @@ afterEach(async () => { if (dir) await rm(dir, { recursive: true, force: true })
 
 describe("事件流", () => {
   it("写 3 条 → replay 回 3 条且顺序一致", async () => {
-    dir = await mkdtemp(join(tmpdir(), "m0-events-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-events-"));
     const logPath = join(dir, "events.jsonl");
     const log = createEventLog(logPath);
     const written = [
@@ -28,7 +28,7 @@ describe("事件流", () => {
   });
 
   it("append-only：replay 之后继续追加只增不改", async () => {
-    dir = await mkdtemp(join(tmpdir(), "m0-events-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-events-"));
     const logPath = join(dir, "events.jsonl");
     const log = createEventLog(logPath);
     await log.append({ type: "user_message", content: "a" });
@@ -40,7 +40,7 @@ describe("事件流", () => {
   });
 
   it("未知事件类型被拒绝（防坏日志）", async () => {
-    dir = await mkdtemp(join(tmpdir(), "m0-events-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-events-"));
     const log = createEventLog(join(dir, "events.jsonl"));
     await expect(log.append({ type: "bogus" } as never)).rejects.toThrow(/未知事件类型/);
   });
@@ -110,7 +110,7 @@ describe("事件流", () => {
 // assemble 同时在飞，旁路提问的设计前提就是主会话在跑）。修前实测返回 11 条且两路同一数组。
 describe("replayIncremental 并发与缓存边界（S1-2 回归）", () => {
   it("两路并发读同一日志不产生重复事件，且不交出缓存数组本体", async () => {
-    dir = await mkdtemp(join(tmpdir(), "m0-incremental-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-incremental-"));
     const logPath = join(dir, "events.jsonl");
     const log = createEventLog(logPath);
     const um = (t: string): AgentEvent => ({ type: "user_message", content: t } as AgentEvent);
@@ -134,7 +134,7 @@ describe("replayIncremental 并发与缓存边界（S1-2 回归）", () => {
 // 行号取事件）。本用例锁边界：尾部坏行可容且 id 语义不变；中段坏行显式失败，不静默错位。
 describe("replay 坏行容错边界（S1-4 回归）", () => {
   it("尾部半写行可容：前缀完整、untilEventId 仍按行号成立", async () => {
-    dir = await mkdtemp(join(tmpdir(), "m0-tailbad-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-tailbad-"));
     const logPath = join(dir, "events.jsonl");
     const log = createEventLog(logPath);
     for (let i = 1; i <= 3; i++) await log.append({ type: "user_message", content: "m" + String(i) } as AgentEvent);
@@ -149,7 +149,7 @@ describe("replay 坏行容错边界（S1-4 回归）", () => {
   });
 
   it("中段坏行不静默跳过：显式失败（跳过会让之后每个 id 错位一格）", async () => {
-    dir = await mkdtemp(join(tmpdir(), "m0-midbad-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-midbad-"));
     const logPath = join(dir, "events.jsonl");
     const log = createEventLog(logPath);
     await log.append({ type: "user_message", content: "m1" } as AgentEvent);
@@ -170,7 +170,7 @@ describe("replayIncremental 与 replay 同判（P1-2 契约分叉回归）", () 
   const um = (t: string): AgentEvent => ({ type: "user_message", content: t } as AgentEvent);
 
   it("首访即「坏行 + 其后好行」→ 增量与全量同样显式失败，且不留半份缓存", async () => {
-    dir = await mkdtemp(join(tmpdir(), "m0-inc-mid-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-inc-mid-"));
     const logPath = join(dir, "events.jsonl");
     await writeFile(logPath, '{"type":"user_message","content":"m1"}\n{ 坏行\n{"type":"user_message","content":"m2"}\n', "utf8");
     await expect(replay(logPath)).rejects.toThrow(/非尾部坏行/);
@@ -179,7 +179,7 @@ describe("replayIncremental 与 replay 同判（P1-2 契约分叉回归）", () 
   });
 
   it("尾坏当时可容、其后一旦追加新事件即转非尾部 → 两入口同判必炸", async () => {
-    dir = await mkdtemp(join(tmpdir(), "m0-inc-tail-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-inc-tail-"));
     const logPath = join(dir, "events.jsonl");
     const log = createEventLog(logPath);
     for (let i = 1; i <= 3; i++) await log.append(um("m" + String(i)));
@@ -204,7 +204,7 @@ describe("replayIncremental 与 replay 同判（P1-2 契约分叉回归）", () 
   });
 
   it("坏行始终在尾部（无后续事件）→ 两入口一致降级，不误判成损坏", async () => {
-    dir = await mkdtemp(join(tmpdir(), "m0-inc-puretail-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-inc-puretail-"));
     const logPath = join(dir, "events.jsonl");
     const log = createEventLog(logPath);
     for (let i = 1; i <= 2; i++) await log.append(um("m" + String(i)));
@@ -214,6 +214,26 @@ describe("replayIncremental 与 replay 同判（P1-2 契约分叉回归）", () 
     expect(inc.map((e) => (e as { content?: string }).content)).toEqual(["m1", "m2"]);
     expect(await replay(logPath)).toHaveLength(2); // 同一裁决
   });
+
+  it("好行+尾坏同批入缓存后，坏行也不得被永久豁免", async () => {
+    dir = await mkdtemp(join(tmpdir(), "cairn-inc-tail-samebatch-"));
+    const logPath = join(dir, "events.jsonl");
+    const log = createEventLog(logPath);
+    await log.append(um("m1"));
+    expect(await replayIncremental(logPath)).toHaveLength(1);
+
+    // 第二批同时落「一条好行」和「其后的完整坏行」：坏行当时在尾部，可容。
+    await appendFile(logPath, '{"type":"user_message","content":"m2"}\n{ 坏行\n', "utf8");
+    expect(await replayIncremental(logPath)).toHaveLength(2);
+
+    // 再追加好行：上一批那条坏行已离开尾部，增量必须和全量一样抛。
+    await appendFile(logPath, '{"type":"user_message","content":"m3"}\n', "utf8");
+    await expect(replay(logPath)).rejects.toThrow(/非尾部坏行/);
+    const inc = await replayIncremental(logPath).catch((e: unknown) => e);
+    expect(inc).toBeInstanceOf(Error);
+    expect(String((inc as Error).message)).toMatch(/非尾部坏行/);
+    expect(String((inc as Error).message)).toMatch(/第 3 行/);
+  });
 });
 
 // A1（P0-A）：事件落盘改常驻 FileHandle——锁住四条边界：大量顺序写、rm 重建（inode 校验）、
@@ -222,7 +242,7 @@ describe("A1 常驻句柄（事件落盘）", () => {
   const um = (t: string): AgentEvent => ({ type: "user_message", content: t } as AgentEvent);
 
   it("(a) 连续 append 200 条 → replay 200 条且逐条深相等", async () => {
-    dir = await mkdtemp(join(tmpdir(), "m0-handle-a-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-handle-a-"));
     const logPath = join(dir, "events.jsonl");
     const log = createEventLog(logPath);
     const written: AgentEvent[] = [];
@@ -237,7 +257,7 @@ describe("A1 常驻句柄（事件落盘）", () => {
   });
 
   it("(b) rm 后重建：新句柄写到新 inode（不写进已 unlink 的旧 inode）", async () => {
-    dir = await mkdtemp(join(tmpdir(), "m0-handle-b-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-handle-b-"));
     const logPath = join(dir, "events.jsonl");
     const first = createEventLog(logPath);
     await first.append(um("旧"));
@@ -251,7 +271,7 @@ describe("A1 常驻句柄（事件落盘）", () => {
   });
 
   it("(c) 同实例并发写 50 条：无半行、无重复、每行合法 JSON", async () => {
-    dir = await mkdtemp(join(tmpdir(), "m0-handle-c-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-handle-c-"));
     const logPath = join(dir, "events.jsonl");
     const log = createEventLog(logPath);
     await Promise.all(Array.from({ length: 50 }, (_, i) => log.append(um("c" + String(i)))));
@@ -265,7 +285,7 @@ describe("A1 常驻句柄（事件落盘）", () => {
   });
 
   it("(e) X1：句柄被有界缓存挤出后，同一实例后续 append 仍成功（每次核对缓存引用）", async () => {
-    dir = await mkdtemp(join(tmpdir(), "m0-handle-e-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-handle-e-"));
     const mainPath = join(dir, "main.jsonl");
     const main = createEventLog(mainPath);
     await main.append(um("before"));
@@ -281,7 +301,7 @@ describe("A1 常驻句柄（事件落盘）", () => {
   });
 
   it("(d) 40 个不同 path 各 append 1 条（超 LOG_HANDLE_MAX=32，淘汰后仍可用）", async () => {
-    dir = await mkdtemp(join(tmpdir(), "m0-handle-d-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-handle-d-"));
     const paths = Array.from({ length: 40 }, (_, i) => join(dir, "e" + String(i) + ".jsonl"));
     for (let i = 0; i < paths.length; i++) {
       await createEventLog(paths[i]!).append(um("p" + String(i)));
@@ -301,7 +321,7 @@ describe("A1 常驻句柄（事件落盘）", () => {
 // 只有 automation 那批真的写了，其余全是 undefined：**可选字段当默认行为，就等于没有行为**。
 describe("落盘时钟戳", () => {
   it("producer 没写 ts 也要有：每条落盘事件都带数字 ts", async () => {
-    dir = await mkdtemp(join(tmpdir(), "m0-ts-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-ts-"));
     const logPath = join(dir, "events.jsonl");
     const log = createEventLog(logPath);
     const before = Date.now();
@@ -319,7 +339,7 @@ describe("落盘时钟戳", () => {
   });
 
   it("producer 自带的 ts 不被改写（automation 那批本来就自己盖，覆盖会把它们的语义洗掉）", async () => {
-    dir = await mkdtemp(join(tmpdir(), "m0-ts-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-ts-"));
     const logPath = join(dir, "events.jsonl");
     await createEventLog(logPath).append({ type: "error", message: "boom", ts: 1_700_000_000_000 });
     const e = (await replay(logPath))[0] as { ts?: number };
@@ -327,7 +347,7 @@ describe("落盘时钟戳", () => {
   });
 
   it("ts 单调不减（同毫秒允许相等，不允许倒退——倒退会让一次工具执行算出负耗时）", async () => {
-    dir = await mkdtemp(join(tmpdir(), "m0-ts-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-ts-"));
     const logPath = join(dir, "events.jsonl");
     const log = createEventLog(logPath);
     for (let i = 0; i < 20; i++) await log.append({ type: "user_message", content: "m" + String(i) });
@@ -341,7 +361,7 @@ describe("落盘时钟戳", () => {
     // `ipc:check` 的「丢弃内存态 → 重放等价」与 `schedule-check` 的「append→replay 逐字无损」
     // 都要求 live 与盘逐字相等。四个断言凑不齐时，该撤的是最新那条（它把 ts 变成"只存在于盘上"
     // 的观测字段），不是那两条重的审计面——重放分叉正是评审里 P1 级的问题。
-    dir = await mkdtemp(join(tmpdir(), "m0-ts-"));
+    dir = await mkdtemp(join(tmpdir(), "cairn-ts-"));
     const logPath = join(dir, "events.jsonl");
     const live = { type: "user_message", content: "a" } as AgentEvent;
     await createEventLog(logPath).append(live);

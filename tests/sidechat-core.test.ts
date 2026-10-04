@@ -5,7 +5,7 @@
 // 本文件只恢复不依赖 `src/renderer/projections` 的那批（15 条）：只读白名单、独立 JSONL 归属（主会话字节不变）、
 // 20 轮窗口/摘要投影、worker 归因剔除、@path 工作区 fail-closed、/promote 脱敏·私钥拒·控制标签转义·空源事件拒、
 // 预算压缩。不重建：token 归因分解 3 条与 promote 徽标 2 段（其实现随渲染层删除，理由写在原地）。
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -166,6 +166,47 @@ describe("M2f @ 引用", () => {
     expect(extractAtRefs("看看 @note.md 和 @/etc/passwd")).toEqual(["note.md", "/etc/passwd"]);
     expect(readAtRef(d, "note.md")?.content).toContain("引用内容");
     expect(readAtRef(d, "/etc/passwd")).toBeNull(); // 工作区外拒读
+  });
+
+  // 这一条是 2026-10-02 普查补的：上面那条只钉了**词法**那一层（`../` 与绝对路径），
+  // 而 `readAtRef` 真正的外泄面是「工作区内软链指向 ~/.ssh/id_rsa」——
+  // 词法包含挡不住它（路径看起来就在工作区内），当时全仓**没有一条用例造过软链**。
+  //
+  // 实测取证（不是推断）：把 `readAtRef` 里那道文件类型闸去掉，本用例会拿到
+  // `"SECRET-KEY-MATERIAL\n"`；闸在时返回 null。⇒ 这道闸是承重的，而它此前无人守。
+  it("工作区内的软链指向工作区外 ⇒ 拒读（软链逃逸 fail-closed）", async () => {
+    const d = await mkTmp();
+    const outside = await mkTmp();
+    await writeFile(join(outside, "id_rsa"), "SECRET-KEY-MATERIAL", "utf8");
+    // 目标在**工作区内**（词法检查过得去），真实落点在**工作区外**——这正是词法闸漏掉的那一种。
+    await symlink(join(outside, "id_rsa"), join(d, "innocent.txt"));
+    expect(readAtRef(d, "innocent.txt")).toBeNull();
+  });
+
+  it("软链指向工作区内的普通文件同样拒（sidechat 不收任何软链，不问落点）", async () => {
+    const d = await mkTmp();
+    await writeFile(join(d, "real.md"), "真实内容", "utf8");
+    await symlink(join(d, "real.md"), join(d, "alias.md"));
+    // 这条比上一条更严：即使落点在工作区内也拒。理由是 sidechat 的 @ 引用只该读用户指名的
+    // 真实文件；放行软链等于让「看起来在工作区内」成为绕过审阅的万能钥匙。
+    expect(readAtRef(d, "alias.md")).toBeNull();
+    expect(readAtRef(d, "real.md")?.content).toContain("真实内容"); // 对照：真文件照常读
+  });
+
+  // 第三种形状，也是**唯一一种前两道闸都挡不住**的：软链在**父目录**上。
+  // `lstatSync("ws/sub/passwd")` 跟穿父目录软链 ⇒ 拿到的是普通文件 ⇒ 「软链/非常规文件」那道闸放行；
+  // 词法包含也放行（`sub/passwd` 看起来就在工作区内）。**只有 realpath 落点那一道能挡**。
+  //
+  // 实测取证：删掉 realpath 那一道，本用例会拿到 `"PASSWD-CONTENT\n"`；
+  // 而删掉前两道里的任何一道，本用例仍然全绿 ⇒ 它是那道闸**唯一**的证人。
+  it("父目录是软链（ws/sub → 工作区外）⇒ 拒读（只有 realpath 落点那道闸挡得住）", async () => {
+    const d = await mkTmp();
+    const outside = await mkTmp();
+    await writeFile(join(outside, "passwd"), "PASSWD-CONTENT", "utf8");
+    await symlink(outside, join(d, "sub"), "dir");
+    // 前置自证：这条路径在词法层与文件类型层都「看起来合法」，否则本用例是恒真。
+    expect(readAtRef(d, "sub")).toBeNull(); // 目录本身仍按非常规文件拒（对照组）
+    expect(readAtRef(d, "sub/passwd")).toBeNull();
   });
 });
 

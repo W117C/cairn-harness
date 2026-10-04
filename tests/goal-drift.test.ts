@@ -7,9 +7,46 @@
 //   · 精度：实现层措辞（"把 clamp 改为 sum" / "only change this line"）一条都不许报
 //     —— 这条比正向更重要：把干活读成改口，读数就成了噪声。
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { assistantTurnsFromEvents, goalDriftCell, goalDriftFindings } from "../src/agent/goal-drift";
+
+describe("接线面：goal-drift 不是孤儿模块（2026-10-02 接进 runAgent 收束路径）", () => {
+  // 动因：全树 import 扫描实测 `src/agent/goal-drift.ts` 在 `src/` 内**零消费者**，
+  // 门里也没有人消费它（只有本文件引用）⇒ 能力 4「长任务不遗忘」的真读数
+  // 永远只有单测证据、没有任何运行证据。这条断言钉住那半条接线。
+  //
+  // 为什么按**文本**钉而不是 import 图扫描：本仓记忆规则 79——按行的正则判据会把注释里的
+  // 示例当代码，而 AST 扫一遍 2761 行文件的 import 图成本远高于它挡住的回归。
+  // 这里刻意只认 `import {` 那一行（真 import），不认注释里出现的函数名。
+  const runner = readFileSync(resolve(import.meta.dirname, "../src/main/agent-runner.ts"), "utf8");
+  // 判据调用点只找一次：后两条用例都要它的位置，魔法串抄两遍只会让两处各自漂。
+  const driftCallIdx = runner.indexOf("goalDriftFindings(assistantTurnsFromEvents(");
+
+  it("agent-runner 真 import 了 goal-drift 的判据（不是抄第二份）", () => {
+    const imp = runner.match(/^import \{[^}]*\} from "\.\.\/agent\/goal-drift";$/m);
+    expect(imp, "agent-runner 必须 import goal-drift 的现成判据").not.toBeNull();
+    // 三件都要：重组、取命中、读数措辞。少任一件都说明有支路在另拼一套。
+    expect(imp?.[0]).toContain("assistantTurnsFromEvents");
+    expect(imp?.[0]).toContain("goalDriftFindings");
+    expect(imp?.[0]).toContain("goalDriftCell");
+  });
+
+  it("读数点落在 runAgent 的收束路径上（runLoop 跑完之后、返回事件之前）", () => {
+    expect(driftCallIdx, "runAgent 里必须真调一次判据").toBeGreaterThan(-1);
+    // 收束在runLoop 之后：调用点必须在 runLoop 调用点之后
+    const loopIdx = runner.lastIndexOf("runLoop(");
+    expect(loopIdx).toBeGreaterThan(-1);
+    expect(driftCallIdx).toBeGreaterThan(loopIdx);
+  });
+
+  it("取不到读数时必须出声，不许静默（静默会把「没量到」读成「没漂移」）", () => {
+    expect(driftCallIdx).toBeGreaterThan(-1);
+    const seg = runner.slice(driftCallIdx - 400, driftCallIdx + 800);
+    expect(seg).toContain("catch");
+    expect(seg).toContain("console.warn");
+  });
+});
 import type { AgentEvent } from "../src/events";
 
 const ROOT = process.cwd();

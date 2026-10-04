@@ -1,5 +1,5 @@
 // M0 复盘 P1-1 / P1-2 回归：
-//  P1-1 —— 子进程曾继承 process.env，而主进程把 BYOK key 写进 process.env.M0_API_KEY，
+//  P1-1 —— 子进程曾继承 process.env，而主进程把 BYOK key 写进 process.env.CAIRN_API_KEY，
 //          模型写的命令一条 `env` 就能把明文 key 读进事件流。
 //  P1-2 —— 超时只 kill 直接子进程（bash），孙进程（pnpm/tsc）留孤儿；且孙进程持有 stdout 时
 //          'close' 永不触发 → 调用方的 Promise 永久挂起。
@@ -11,17 +11,17 @@ import { killGroup, sanitizedEnv, spawnTracked } from "../src/tools/process";
 
 describe("sanitizedEnv（P1-1）", () => {
   it("剥除密钥类变量，只留白名单", () => {
-    process.env.M0_API_KEY = "should-be-stripped";
+    process.env.CAIRN_API_KEY = "should-be-stripped";
     process.env.SOME_PASSWORD = "x";
     try {
       const env = sanitizedEnv();
-      expect(env.M0_API_KEY).toBeUndefined();
+      expect(env.CAIRN_API_KEY).toBeUndefined();
       expect(env.SOME_PASSWORD).toBeUndefined();
       expect(env.PATH).toBeDefined();
       expect(env.HOME).toBeDefined();
       expect(env.NODE_ENV).toBeUndefined();
     } finally {
-      delete process.env.M0_API_KEY;
+      delete process.env.CAIRN_API_KEY;
       delete process.env.SOME_PASSWORD;
     }
   });
@@ -31,11 +31,11 @@ describe("sanitizedEnv（P1-1）", () => {
   });
 
   it("密钥读不进子进程（端到端）", async () => {
-    process.env.M0_API_KEY = "SUPER-SECRET-KEY";
+    process.env.CAIRN_API_KEY = "SUPER-SECRET-KEY";
     try {
       const out = await new Promise<string>((resolve) => {
         let buf = "";
-        const h = spawnTracked("bash", ["-c", "echo KEY=[$M0_API_KEY]"], {
+        const h = spawnTracked("bash", ["-c", "echo KEY=[$CAIRN_API_KEY]"], {
           cwd: process.cwd(),
           env: sanitizedEnv(),
           timeoutMs: 10_000,
@@ -47,7 +47,7 @@ describe("sanitizedEnv（P1-1）", () => {
       expect(out).not.toContain("SUPER-SECRET-KEY");
       expect(out.trim()).toBe("KEY=[]");
     } finally {
-      delete process.env.M0_API_KEY;
+      delete process.env.CAIRN_API_KEY;
     }
   });
 });

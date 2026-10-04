@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { CERT_GATES, CERT_GATE_EXCLUDED, GATES } from "../scripts/gate-manifest";
-import { certGateCell, certGatePlan, certGateVerdict, parseCertGateRows } from "../scripts/lib/head-cert-deps";
+import { certGateCell, certGatePlan, certGateVerdict, onlyListDiff, onlyListsIn, parseCertGateRows } from "../scripts/lib/head-cert-deps";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const MANIFEST = read("../scripts/gate-manifest.ts");
@@ -200,5 +200,74 @@ describe("预算与注释实测成对：改单价必须同时改两处", () => {
        那是我从旧页面上记来的话，现读一量就是 0；留个 6 等于给这条判卷预先开了 6 个空位。
        计数类不留余量（新闸门存量水位法那条），所以帽钉 0，涨了就是有人新买入一道没量单价的门。 */
     expect(withBudgetNoReading.length, "没配实测读数的预算：" + withBudgetNoReading.join("、")).toBeLessThanOrEqual(0);
+  });
+});
+
+/* 手抄第二份名单的对账（第 319 页）。
+ *
+ * 为什么这一格必须有判据，而不是靠那句散文：`scripts/ci/README.md` 原先写的是
+ * 「名单与 `CERT_GATES` 的**集合相等**由脚本核过（两边各 22 道、双向差集为空）」——
+ * 那是一次**人工核对**的记录（10-02 那一刻确实相等），却被写成了常态性质的样子。
+ * 核对过一次 ≠ 此后每趟都核：实测（第 319 页）写这句话时，**README 自己的可粘贴复跑块已经缺两道门**
+ * （`gate-check` 与 `mutate-needles-check`，20 项 vs 名单 22 项）——正是那份"脚本核过"会当场抓到的东西。
+ * 而本仓没有 git remote ⇒ workflow 至今没真跑过，这类漂移没有任何人会看到。
+ *
+ * 取料面刻意是**仓里真实存在的那两份手抄件**（不是合成的样本）：
+ * 合成样本只能证明解析器会认字，证明不了"此刻这两份是对的"。 */
+describe("手抄的第二份名单必须与唯一事实源逐项相等（第 319 页）", () => {
+  /** 仓里两份手抄件：CI 真正会跑的那一串、以及给人粘贴的那一串。 */
+  const HAND_COPIED: readonly { label: string; text: string }[] = [
+    { label: "工作流的 --only", text: read("../.github/workflows/verify.yml") },
+    { label: "CI 说明页的复跑块", text: read("../scripts/ci/README.md") },
+  ];
+  const SOURCE_NAMES = CERT_GATES.map((g) => g.name);
+
+  it("两份手抄件里的每一份名单都与 CERT_GATES 集合相等，且一份都不许少", () => {
+    for (const h of HAND_COPIED) {
+      const lists = onlyListsIn(h.text);
+      // 抽不到 ≠ 没漂：这一格要是恒空，下面那个循环就一次都不跑（空尺也绿）。
+      expect(lists, h.label + " 里一份名单都抽不到 ⇒ 这一格没量到，不是「没漂」").not.toBeNull();
+      expect((lists ?? []).length, h.label + " 的手抄件数量为 0＝尺没落在任何东西上").toBeGreaterThan(0);
+      for (const one of lists ?? []) {
+        const d = onlyListDiff(one.names, SOURCE_NAMES);
+        expect(
+          d.same,
+          h.label + " 第 " + String(one.line) + " 行与门面不相等：缺 " + d.missing.join("、")
+            + (d.extra.length > 0 ? "；多 " + d.extra.join("、") : "")
+            + "（手抄份与 CERT_GATES 只准集合相等，顺序不限）",
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("三态分开：取不到 / 只有省略号的散文 / 真名单，三者不许同形", () => {
+    // 散文里的 `--only=…` 是在**引用**这个机制（它就是上面那份说明白），不是第二份可粘贴清单。
+    expect(onlyListsIn(null)).toBeNull();
+    expect(onlyListsIn("快门面 pnpm gates --only=…（逐道点名在 workflow 里）")).toBeNull();
+    expect(onlyListsIn("pnpm gates --only=docs-check,security-check")).toEqual([
+      { line: 1, names: ["docs-check", "security-check"] },
+    ]);
+    // 省略号那一处在前、真名单在后时，必须抽到真名单而不是被首处顶掉。
+    const both = "引用：--only=…\n\n实跑：--only=docs-check,security-check,prune-check";
+    expect(onlyListsIn(both)).toEqual([{ line: 3, names: ["docs-check", "security-check", "prune-check"] }]);
+  });
+
+  it("这条判据有牙：从工作流正文里摘掉一道门，对齐必须当场失败", () => {
+    const wf = read("../.github/workflows/verify.yml");
+    const first = (onlyListsIn(wf) ?? [])[0];
+    expect(first, "工作流里那份名单抽不出来 ⇒ 有牙这一条没东西可咬").toBeDefined();
+    const dropped = first!.names[0]!;
+    const mutated = wf.replace("--only=" + first!.names.join(","), "--only=" + first!.names.slice(1).join(","));
+    expect(mutated, "替换打了个空＝下面那半证的不是这条判据").not.toBe(wf);
+    const after = (onlyListsIn(mutated) ?? [])[0]!;
+    expect(after.names).not.toContain(dropped);
+    expect(onlyListDiff(after.names, SOURCE_NAMES).same, "少一道门却仍判对齐＝这条判据是恒真的").toBe(false);
+  });
+
+  it("差异函数自己有牙：空对空不算对齐（一把什么也没量到的尺没有分辨力）", () => {
+    expect(onlyListDiff([], []).same, "两侧皆空被判对齐＝恒真式").toBe(false);
+    expect(onlyListDiff(["a"], []).same).toBe(false);
+    expect(onlyListDiff([], ["a"]).same).toBe(false);
+    expect(onlyListDiff(["b", "a"], ["a", "b"]).same, "顺序不同不算漂（只准集合相等）").toBe(true);
   });
 });

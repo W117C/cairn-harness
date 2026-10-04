@@ -213,9 +213,9 @@ describe("端到端接线：开关 → 编排器 → 分派 → worker 真实请
       });
       return new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } });
     }));
-    const saved: Record<string, string | undefined> = { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY, M0_API_KEY: process.env.M0_API_KEY };
+    const saved: Record<string, string | undefined> = { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY, CAIRN_API_KEY: process.env.CAIRN_API_KEY };
     process.env.ANTHROPIC_API_KEY = "test-key";
-    process.env.M0_API_KEY = "test-key";
+    process.env.CAIRN_API_KEY = "test-key";
     try {
       const orch = new Orchestrator({
         logPath,

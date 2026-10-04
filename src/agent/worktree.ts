@@ -42,7 +42,7 @@ interface GitRun {
 function gitRun(cwd: string, args: string[]): Promise<GitRun> {
   return new Promise((settle) => {
     // D1（审查 P1-9）：env 消毒——git 会在工作区仓库执行 .git/hooks/*，不消毒等于把
-    // process.env.M0_API_KEY（BYOK 明文）交给克隆来的任意 hook 脚本。
+    // process.env.CAIRN_API_KEY（BYOK 明文）交给克隆来的任意 hook 脚本。
     const child = spawn("git", args, { cwd, env: sanitizedEnv() });
     // A7（审查）：输出累积设字节上限——worktreeDiff 大变更集可产出数百 MB 全驻内存；超限杀进程。
     const OUTPUT_CAP_BYTES = 32 * 1024 * 1024;

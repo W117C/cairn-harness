@@ -129,29 +129,29 @@ describe("provider key（safeStorage，明文零落盘）", () => {
     expect(validateProviderKeyStore("nope").ok).toBe(false);
   });
 
-  it("env 并存（injectStoredProviderKey）：M0_API_KEY 已在 = env 优先零行为；不在 = 注入已存 key", async () => {
+  it("env 并存（injectStoredProviderKey）：CAIRN_API_KEY 已在 = env 优先零行为；不在 = 注入已存 key", async () => {
     // import 放用例内控制 process.env 时序；injectStoredProviderKey 已抽到 provider-key-inject
     // 轻模块（原经 agent-runner 导入：依赖链含 MCP SDK/LSP 约 20s，确定性击穿 5s 超时）。
     const { injectStoredProviderKey } = await import("../src/main/provider-key-inject");
-    const saved = process.env.M0_API_KEY;
+    const saved = process.env.CAIRN_API_KEY;
     try {
-      delete process.env.M0_API_KEY;
+      delete process.env.CAIRN_API_KEY;
       installProviderKeyBackend(makeFakeSafeStorage(), storePath);
       // 未存 key → 不注入
       expect(await injectStoredProviderKey()).toBe(false);
-      expect(process.env.M0_API_KEY).toBeUndefined();
+      expect(process.env.CAIRN_API_KEY).toBeUndefined();
       await putProviderKey("glm", FAKE_KEY);
       // 存了 key 且 env 空 → 注入（进程内，不落日志/事件流）
       expect(await injectStoredProviderKey()).toBe(true);
-      expect(process.env.M0_API_KEY).toBe(FAKE_KEY);
-      delete process.env.M0_API_KEY;
+      expect(process.env.CAIRN_API_KEY).toBe(FAKE_KEY);
+      delete process.env.CAIRN_API_KEY;
       // env 已在 → env 优先，零行为（不覆盖 env）
-      process.env.M0_API_KEY = "env-path-key";
+      process.env.CAIRN_API_KEY = "env-path-key";
       expect(await injectStoredProviderKey()).toBe(false);
-      expect(process.env.M0_API_KEY).toBe("env-path-key");
+      expect(process.env.CAIRN_API_KEY).toBe("env-path-key");
     } finally {
-      if (saved === undefined) delete process.env.M0_API_KEY;
-      else process.env.M0_API_KEY = saved;
+      if (saved === undefined) delete process.env.CAIRN_API_KEY;
+      else process.env.CAIRN_API_KEY = saved;
     }
   });
 
@@ -183,31 +183,31 @@ describe("provider key（safeStorage，明文零落盘）", () => {
       async delete(p) { return mem.delete(p); },
       async storedProviders() { return [...mem.keys()]; },
     };
-    const savedGlm = process.env.M0_API_KEY;
+    const savedGlm = process.env.CAIRN_API_KEY;
     const savedAnthropic = process.env.ANTHROPIC_API_KEY;
     setProviderKeyBackend(backend);
     try {
-      delete process.env.M0_API_KEY;
+      delete process.env.CAIRN_API_KEY;
       delete process.env.ANTHROPIC_API_KEY;
       // 缺省 = 四家存储白名单；每家写进自己的 env，不能只激活 glm。
       expect(await injectStoredProviderKey()).toBe(true);
-      expect(process.env.M0_API_KEY).toBe("byok-probe-glm-0123456789");
+      expect(process.env.CAIRN_API_KEY).toBe("byok-probe-glm-0123456789");
       expect(process.env.ANTHROPIC_API_KEY).toBe("byok-probe-anthropic-0123456789");
-      // 按清单调用：每家写到自己那个 env 名（envKeyOf 决定，不是 M0_API_KEY 一把筐）
-      delete process.env.M0_API_KEY;
+      // 按清单调用：每家写到自己那个 env 名（envKeyOf 决定，不是 CAIRN_API_KEY 一把筐）
+      delete process.env.CAIRN_API_KEY;
       expect(await injectStoredProviderKey(["glm", "anthropic"])).toBe(true);
-      expect(process.env.M0_API_KEY).toBe("byok-probe-glm-0123456789");
+      expect(process.env.CAIRN_API_KEY).toBe("byok-probe-glm-0123456789");
       expect(process.env.ANTHROPIC_API_KEY).toBe("byok-probe-anthropic-0123456789");
       // env 优先是**逐家**判断：glm 已在不覆盖，anthropic 撤掉后仍会注入
-      process.env.M0_API_KEY = "env-path-key";
+      process.env.CAIRN_API_KEY = "env-path-key";
       delete process.env.ANTHROPIC_API_KEY;
       expect(await injectStoredProviderKey(["glm", "anthropic"])).toBe(true);
-      expect(process.env.M0_API_KEY).toBe("env-path-key");
+      expect(process.env.CAIRN_API_KEY).toBe("env-path-key");
       expect(process.env.ANTHROPIC_API_KEY).toBe("byok-probe-anthropic-0123456789");
     } finally {
       setProviderKeyBackend(null);
-      if (savedGlm === undefined) delete process.env.M0_API_KEY;
-      else process.env.M0_API_KEY = savedGlm;
+      if (savedGlm === undefined) delete process.env.CAIRN_API_KEY;
+      else process.env.CAIRN_API_KEY = savedGlm;
       if (savedAnthropic === undefined) delete process.env.ANTHROPIC_API_KEY;
       else process.env.ANTHROPIC_API_KEY = savedAnthropic;
     }

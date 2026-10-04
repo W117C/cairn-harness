@@ -22,7 +22,7 @@ it("UI cancellation settles the distillation approval immediately without writin
   dir = await mkdtemp(join(tmpdir(), "distill-approval-cancel-"));
   initSettingsStore(join(dir, "settings.json"));
   vi.stubEnv("M0A_PROVIDER", "glm");
-  vi.stubEnv("M0_API_KEY", "offline-test-key");
+  vi.stubEnv("CAIRN_API_KEY", "offline-test-key");
   const write = vi.spyOn(remember, "run");
   let requests = 0;
   vi.stubGlobal("fetch", vi.fn(async () => {
@@ -58,7 +58,7 @@ it("distillation consumes session history and its instruction with only remember
   dir = await mkdtemp(join(tmpdir(), "session-distill-"));
   initSettingsStore(join(dir, "settings.json"));
   vi.stubEnv("M0A_PROVIDER", "glm");
-  vi.stubEnv("M0_API_KEY", "offline-test-key");
+  vi.stubEnv("CAIRN_API_KEY", "offline-test-key");
   const requests: Array<{ messages: Array<{ role: string; content: string }>; tools: Array<{ function: { name: string } }> }> = [];
   const signals: Array<AbortSignal | null | undefined> = [];
   vi.stubGlobal("fetch", vi.fn(async (_url, init: RequestInit) => {
@@ -106,7 +106,7 @@ it("沉淀指令真的进到请求里（走真 session provider 这条路）", a
   dir = await mkdtemp(join(tmpdir(), "session-distill-instruction-"));
   initSettingsStore(join(dir, "settings.json"));
   vi.stubEnv("M0A_PROVIDER", "glm");
-  vi.stubEnv("M0_API_KEY", "offline-test-key");
+  vi.stubEnv("CAIRN_API_KEY", "offline-test-key");
   const requests: Array<{ messages: Array<{ role: string; content: unknown }> }> = [];
   vi.stubGlobal("fetch", vi.fn(async (_url, init: RequestInit) => {
     requests.push(JSON.parse(String(init.body)) as { messages: Array<{ role: string; content: unknown }> });
@@ -134,7 +134,7 @@ it("沉淀轮的请求与主会话共享同一个前缀（system 同形 + 工具
   dir = await mkdtemp(join(tmpdir(), "session-distill-prefix-"));
   initSettingsStore(join(dir, "settings.json"));
   vi.stubEnv("M0A_PROVIDER", "glm");
-  vi.stubEnv("M0_API_KEY", "offline-test-key");
+  vi.stubEnv("CAIRN_API_KEY", "offline-test-key");
   const requests: Array<Record<string, unknown>> = [];
   vi.stubGlobal("fetch", vi.fn(async (_url, init: RequestInit) => {
     requests.push(JSON.parse(String(init.body)) as Record<string, unknown>);
@@ -159,7 +159,7 @@ it("production GLM run restores history and sends tool feedback in a fresh reque
   dir = await mkdtemp(join(tmpdir(), "session-wiring-"));
   initSettingsStore(join(dir, "settings.json"));
   vi.stubEnv("M0A_PROVIDER", "glm");
-  vi.stubEnv("M0_API_KEY", "offline-test-key");
+  vi.stubEnv("CAIRN_API_KEY", "offline-test-key");
   await writeFile(join(dir, "input.txt"), "WORKSPACE_FEEDBACK");
   const logPath = join(dir, "session.jsonl");
   const log = createEventLog(logPath);
@@ -203,7 +203,7 @@ it("UI cancellation reaches the request even when the caller supplies a signal",
   dir = await mkdtemp(join(tmpdir(), "session-cancel-"));
   initSettingsStore(join(dir, "settings.json"));
   vi.stubEnv("M0A_PROVIDER", "glm");
-  vi.stubEnv("M0_API_KEY", "offline-test-key");
+  vi.stubEnv("CAIRN_API_KEY", "offline-test-key");
   const caller = new AbortController();
   let requestAborted = false;
   let cancelAccepted = false;
@@ -229,7 +229,7 @@ it.each([false, true])("production GLM compaction publishes only completed summa
   dir = await mkdtemp(join(tmpdir(), "session-compact-"));
   initSettingsStore(join(dir, "settings.json"));
   vi.stubEnv("M0A_PROVIDER", "glm");
-  vi.stubEnv("M0_API_KEY", "offline-test-key");
+  vi.stubEnv("CAIRN_API_KEY", "offline-test-key");
   const logPath = join(dir, "session.jsonl");
   const log = createEventLog(logPath);
   await log.append({ type: "user_message", content: "ORIGINAL_TASK" });
