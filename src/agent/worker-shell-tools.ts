@@ -91,8 +91,11 @@ export function isReadOnlyShellCommand(command: string): { ok: boolean; why?: st
  *  宿主（agent-runner）有沙箱时注入沙箱版，判据与主会话 run_shell 那道门同一口径。 */
 export type WorkerShellRunner = (command: string, ctx: ToolContext) => Promise<ToolResult>;
 
-/** 缺省出口：裸 run_shell（不过沙箱）。宿主没注入时用它，与本模块迁移前的行为逐字一致。 */
-const bareShell: WorkerShellRunner = async (command, ctx) => await run_shell.run({ command }, ctx);
+/** 缺省出口：裸 run_shell（不过沙箱），与本模块迁移前的行为逐字一致。
+ *  唯一的加项是 `snapshot: false`：worker 的 worktree 天然可回滚（§10.10），而 #99 之后
+ *  run_shell 会对重定向目标拍覆盖前快照——不关掉就会往 worktree 的 `.agent/snapshots/**`
+ *  里堆脏文件，正是 worker-tool-table 给 write_file/edit_file 传 false 的那条同一笔账。 */
+const bareShell: WorkerShellRunner = async (command, ctx) => await run_shell.run({ command }, { ...ctx, snapshot: false });
 
 /** worker 只读 bash 工具：静态过滤（fail-closed 拒绝）→ 执行出口。 */
 export function makeShellRo(run: WorkerShellRunner = bareShell): Tool {

@@ -2,6 +2,7 @@ import { type Tool, type ToolResult } from "./base.js";
 import { annotateExecCause } from "../agent/verify.js";
 import { killGroup, sanitizedEnv, spawnTracked } from "./process.js";
 import { createOutputRing } from "./output-ring.js";
+import { shellRedirectReceipt, snapshotShellRedirects } from "./snapshot.js";
 
 // 输出上限 32KB；只在 ctx.workspace 下执行；超时 60s 强杀。
 // 超限后的「头 + 尾环」截断在 output-ring（与 verify 共用——两处都得留住尾部结论）。
@@ -15,6 +16,13 @@ export const run_shell: Tool = {
     if (typeof command !== "string" || command.trim().length === 0) {
       throw new Error("run_shell: command 参数必须是非空字符串");
     }
+    // #99：重定向覆写在**跑之前**留一份原件——三个内容写工具一直有这一格，`> file` 这一面绕得开它。
+    // 排在 spawn 之前是有意的：先拍后跑，拍不到的那一条只在回执里点名，命令照跑（不改审批语义）。
+    // 这里唯一的「拒」是 `.agent/` 那条既有地板（assertNotAgentArea 抛出 ⇒ 命令根本没 spawn）。
+    const plan = await snapshotShellRedirects(ctx.workspace, command, {
+      callId: ctx.callId,
+      enabled: ctx.snapshot !== false, // worker 写侧显式关掉（worktree 天然可回滚），与三个内容写工具同口径
+    });
     return await new Promise<ToolResult>((settle) => {
       const ring = createOutputRing(SHELL_OUTPUT_LIMIT);
       let timedOut = false;
@@ -33,6 +41,8 @@ export const run_shell: Tool = {
         if (timedOut) output += "\n[error: run_shell 超时（" + String(SHELL_TIMEOUT_MS / 1000) + "s），已强制终止]";
         if (cancelled) output += "\n[error: run_shell 随会话取消终止]";
         if (code !== 0 && !timedOut && !cancelled) output += `\n[exit code: ${String(code)}]`;
+        // 快照事实排在最后：命令自己的输出与结论是模型第一眼要看的，这一句是「这次覆写能不能回滚」。
+        output += shellRedirectReceipt(plan);
         const res: ToolResult = {
           ok: code === 0 && !timedOut && !cancelled,
           output: output.replace(/\n+$/, ""),
@@ -40,6 +50,9 @@ export const run_shell: Tool = {
           // 取消这一支不走 annotateExecCause，所以两个字段必须由本处自己写，否则下游又要回去匹配文案。
           exitCode: cancelled ? null : code,
           timedOut,
+          // 结构化字段只装得下一条 ⇒ 取第一条（与 apply_patch 多文件那一刀同口径），
+          // 全部路径都在正文那行 [覆盖前快照] 里，事件流的读者按正文取证。
+          ...(plan.ids.length > 0 ? { snapshotId: plan.ids[0]! } : {}),
         };
         // 归因走 verify 那一只谓词（`classifyVerifyFailure`，同正则同枚举）：127 与「包管理器自身报错」
         // 这两类「命令根本没跑成」对模型必须点名，否则它会照着一条环境红去改本来正确的代码

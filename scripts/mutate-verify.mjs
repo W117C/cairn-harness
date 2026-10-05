@@ -1294,6 +1294,31 @@ const MUTATIONS = [
     apply: (s) => s.replace("outcome.skipped !== undefined) return outcome.skipped;", "outcome.skipped !== undefined) return undefined;"),
     expectFail: "拒因原样回注给模型：那声 tool_result 带的就是 run() 给的 skipped 原文，且没有「无详细输出」占位",
   },
+  // ---- #99：shell 重定向覆写也要留覆盖前原件（此前只有 write_file/edit_file/apply_patch 三个写点拍）----
+  {
+    id: "shell-redirect-snapshot-hop-wrong-input",
+    src: "src/tools/run_shell.ts",
+    test: "tests/shell-redirect-snapshot.test.ts",
+    desc: "送进快照那一跳的入参换成空串 ⇒ 认不出任何写目标：一条 `> file` 照样覆写盘上原件，且连「未快照」都不出声",
+    apply: (s) => s.replace("const plan = await snapshotShellRedirects(ctx.workspace, command, {", 'const plan = await snapshotShellRedirects(ctx.workspace, "", {'),
+    expectFail: "① `> 已有文件`：跑完后 .agent/snapshots 里真有一份原件，且逐字节等于覆盖前的内容",
+  },
+  {
+    id: "shell-redirect-receipt-not-attached",
+    src: "src/tools/run_shell.ts",
+    test: "tests/shell-redirect-snapshot.test.ts",
+    desc: "回执不接 ⇒ 快照缺位变成静默：模型以为一切覆写都可回滚（本仓点名的「护栏缺位却不出声」）",
+    apply: (s) => s.replace("        output += shellRedirectReceipt(plan);", ""),
+    expectFail: "③ 写目标认不出（变量拼接）⇒ 回执点名「未快照」，不许静默",
+  },
+  {
+    id: "shell-redirect-append-op-unhandled",
+    src: "src/tools/snapshot.ts",
+    test: "tests/shell-redirect-snapshot.test.ts",
+    desc: "操作符表里去掉 `>>` ⇒ 追加覆写不拍原件：`>>` 一样毁掉文件内容（「只有 `>` 才危险」是错觉）",
+    apply: (s) => s.replace("const REDIRECT_OP = /^(?:\\d+)?(?:&>>|&>|>>|>\\||>)(.*)$/;", "const REDIRECT_OP = /^(?:\\d+)?(?:&>>|&>|>\\||>)(.*)$/;"),
+    expectFail: "⑨ `>>` 追加同样不可回滚 ⇒ 已有文件也留原件",
+  },
   {
     id: "budget-unpriced-tokens-swallowed",
     src: "src/agent/orchestrator-join.ts",
