@@ -7,7 +7,14 @@ import { join } from "node:path";
 import { createOutputRing } from "../tools/output-ring";
 import { killGroup, sanitizedEnv, spawnTracked } from "../tools/process";
 import type { VerifyCause, VerifyCommandResult } from "../events";
-import { verifyTrustDecision, type VerifyTrustDecision } from "./verify-trust";
+import {
+  verifySurfaceFingerprint,
+  verifyTrustDecision,
+  type VerifyProvenance,
+  type VerifyTrustDecision,
+  type VerifyTrustRequest,
+  type VerifyTrustResolver,
+} from "./verify-trust";
 
 /** 包管理器**自己那一行**的命名空间错误码（pnpm 打成 `[ERR_PNPM_XXX] msg`）。
  *  锚在行首：这串必须由 pnpm 自己打印才算环境判定——被被测脚本*引用*在正文里的同样文字不算。
@@ -357,25 +364,56 @@ export interface VerifyHook {
  *  100% 来自仓库自带文件（`.agent/config.json` / `package.json` scripts / Makefile 探测）。
  *  克隆即携带 ⇒ 模型改任意文件 ⇒ 收束闸自动补拍 ⇒ 任意命令执行，且绕开 shell 威胁表与网络审批。
  *
- *  两级的处置刻意不同：
+ *  两级处置刻意不同：
  *   · `surface()` 返回 **false** ⇒ 自动补拍**整段跳过**。不假绿（没声称验过）、不假红（不是失败
  *     证据）、不烧模型修复额度。这条就是攻击路径本身，关掉它即止血。
  *   · `run()` 返回 `skipped` + 理由 ⇒ 手工 `/verify` 这条**用户主动发起**的路，如实告诉用户
  *     「命令来自仓库、未授权」，而不是伪装成一条 verify 失败。
  *
- *  自己拥有该仓库的调用方（gym / gate-check / 基准 / 判卷，跑的都是仓内 fixture）显式传
- *  `trustedRepo: true`——那是**调用方的断言**，不是默认。 */
-export function createVerifyHook(repoDir: string, opts: { maxAttempts?: number; exec?: ExecFn; trustedRepo?: boolean } = {}): VerifyHook {
+ *  「缺省 false」不等于「永远 false」——`opts.trustResolver` 是那一环的缺口（2026-10-05 接线）：
+ *  生产装配点把它组成「查现成那份信任表（键 = (repoDir, verify 面内容)），查不到就问人」。
+ *  三层优先级，一层比一层窄，绝不叠加解释：
+ *   ⑴ `trustedRepo: true` = **调用方的显式断言**（gym / gate-check / 基准 / 判卷跑的都是仓内 fixture）
+ *      ⇒ 直接用，不查表也不发卡。这条通道不能变成缺省，否则又回到「没人授权却跑了」。
+ *   ⑵ 有 resolver 且表里已有这一 (目录, 面内容) 的批准 ⇒ 免问（业主批准的形状：首问一次，同指纹之后免问）。
+ *   ⑶ 有 resolver 而表里没有 ⇒ 经 resolver 问人；拿到批准才跑，且**由 resolver 把这次决定登记进表**。
+ *  resolver 缺席（老调用点、判卷里只给 exec 的那几条）⇒ 逐字维持今日行为：缺省即拒。
+ *  这一层**不自己判定「什么算有人答」**：无人值守不悬卡、取消收束、持久化失败出声，全在实现那一侧。 */
+export function createVerifyHook(
+  repoDir: string,
+  opts: {
+    maxAttempts?: number;
+    exec?: ExecFn;
+    trustedRepo?: boolean;
+    trustResolver?: VerifyTrustResolver;
+  } = {},
+): VerifyHook {
   const trusted = opts.trustedRepo ?? false;
+  const resolver = opts.trustResolver ?? null;
+  /** 本钩子实例里「已经问过而没批」的那些面（键 = 面内容指纹）。
+   *  为什么需要它：一次自动拍会判两遍信任（`surface()` 一次、`run()` 一次），没有它就是一张同样的卡
+   *  发两遍、两次 60s 悬等。为什么它**不是**第二份信任事实源：这里只存「这一场 run 问过了」，
+   *  不存「可不可信」——免问一律读表（`resolver.isTrusted`），生命周期 = 一个钩子实例 = 一次 run，
+   *  而且只记否不记是：批准过的那次由表负责（写不进表就下次再问，绝不靠这份内存冒充已授权——
+   *  于是「批准但落盘失败」这一场后续几拍按已问过处理，缺的那一拍 fail-closed 拒）。 */
+  const alreadyAsked = new Set<string>();
   /** 把命令来源折成信任闸认得的 provenance：`loadVerifyConfig` 的两个来源都是仓库自带文件。 */
-  const trustOf = async (): Promise<VerifyTrustDecision> => {
+  const trustOf = async (signal?: AbortSignal): Promise<VerifyTrustDecision> => {
     const { config, source } = await loadVerifyConfig(repoDir);
     const commands = verifyCommands(config);
-    return verifyTrustDecision({
-      provenance: source === "config" ? "repo-config" : source === "probed" ? "repo-probed" : "host",
-      commands,
-      trusted,
-    });
+    const provenance: VerifyProvenance =
+      source === "config" ? "repo-config" : source === "probed" ? "repo-probed" : "host";
+    if (trusted) return verifyTrustDecision({ provenance, commands, trusted: true });
+    // 空面根本没有可验东西，不是信任问题（`surface()` 那层另有专门的判据）⇒ 不查表也不问人。
+    if (commands.length === 0) return verifyTrustDecision({ provenance, commands, trusted: false });
+    if (resolver === null) return verifyTrustDecision({ provenance, commands, trusted: false });
+    const fingerprint = verifySurfaceFingerprint(config, provenance);
+    const req: VerifyTrustRequest = { repoDir, fingerprint, commands, provenance, ...(signal ? { signal } : {}) };
+    if (await resolver.isTrusted(req)) return verifyTrustDecision({ provenance, commands, trusted: true });
+    if (alreadyAsked.has(fingerprint)) return verifyTrustDecision({ provenance, commands, trusted: false });
+    alreadyAsked.add(fingerprint);
+    const granted = await resolver.requestTrust(req);
+    return verifyTrustDecision({ provenance, commands, trusted: granted });
   };
   return {
     maxAttempts: opts.maxAttempts,
@@ -392,7 +430,7 @@ export function createVerifyHook(repoDir: string, opts: { maxAttempts?: number; 
       return true;
     },
     run: async (signal?: AbortSignal) => {
-      const d = await trustOf();
+      const d = await trustOf(signal);
       if (!d.run) return { ok: false, results: [], skipped: d.reason };
       return runVerifyOutcome(repoDir, opts.exec, signal);
     },

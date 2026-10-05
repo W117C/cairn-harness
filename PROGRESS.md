@@ -13305,6 +13305,78 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    **没跑**：全量核心判卷、认证本体（**这一页不宣布任何「绿了」**——终局 head-cert 在落库之后单独起一趟）。
    提交纪律：本页与代码逐笔 pathspec 提交，`git diff --numstat` 删除数逐笔核过为 0（纯追加／纯增）。
 
+## 2026-10-05 · 第 392 页：能力 5 断掉的那条链接上了——verify 信任门＝「面内容指纹＋首次问人」，生产装配不再吃常量 `false`；四簇同笔 ＋ 15 根锚点
+
+取料目录：`outputs/verify-loop-closure-2026-10-05/merge-and-duplicates.md`（本笔的并回面、两处同题两作的取舍依据、
+15 根锚点的针脚表与「刻意不写的锚点」都登记在那里；下面的读数全部本轮现取，工件只作出处）。
+
+1. **A 组｜这一环为什么是断的（现读）**：`src/main/agent-runner.ts` 三个装配点传的是常量
+   `trustedRepo: opts.trustedRepo ?? false`，生产入口没有任何一条路能把它置真 ⇒ `createVerifyHook` 的
+   `surface()` 恒 false ⇒ **缺省开着的自动验证拍整段跳过**，48 份归档轨迹里 `verify_result{auto:true}` **0 条**。
+   判据早就立住了（S3 那只纯函数），缺的是**问人**那一环。业主 2026-10-05 明文裁决形状＝
+   「**(仓目录, verify 面内容) → 现成那把信任表 ＋ 首次经审批卡问人**」。落地四件：
+   ⑴ 纯判据补齐：`verifySurfaceFingerprint(config, provenance)` 吃**解析后**的命令面（键序／缩进／换行不算内容变化，
+   改一条命令或换来源算），`verifyTrustKey` 带域标签 `#verify`（`src/agent/verify-trust.ts`）；
+   ⑵ 门侧接线：`src/main/verify-trust-gate.ts` 复用 `AskGate` 那条审批通道与 `TrustStore` 那个类，
+   **只有人明确批准才写条目**——拒／超时／没门／无人值守一律什么都不写（把「没人答」写成 `declined` 等于替用户做一个
+   他没做过的决定，且那一格会永久免问：下次真想批也无处批）；落盘失败这一拍照跑但出声，内存不冒充已授权；
+   ⑶ 免问读**盘上那份文件**，不读进程内存（每次 run 全新实例）；同场同一面只问一次（`src/agent/verify.ts:413`
+   那份「只记否不记是」的去重），所以自动拍的 `surface()`＋`run()` 不出两张同样的卡；
+   ⑷ 装配点不再传常量（`src/main/agent-runner.ts:1948`），信任表路径由 `src/agent/plugins/index.ts:93`
+   `trustFilePathOf` **单点算出**——一把表两个门（插件 hook/MCP 与仓库自带验证命令），路径算第二遍就是开第二份事实源。
+   **worker 侧不继承父会话的批准**（谁的执行体谁被问），且本笔刻意不加继承通道，这条口径写死在判卷 ⑥ 两格里。
+
+2. **B 组｜`#102` 计数读归因**：`skipped` 那第三结局此前在两个消费者眼里仍是「红」。两处都改成调用
+   `src/events` 里那**一只** `isEnvVerifyCause`，不另立 cause 清单：`src/cli.ts` 的收尾计数分三档
+   （红／被拒／环境，判据在 `src/cli.ts:159` 的 `runFailed` 与出口 `src/cli.ts:1222`），
+   `src/agent/tool-choice.ts` 的账分成 `verifyFailures`／`verifyBlocked`／`verifyEnv` 且打印面分三档。
+   **退出码契约逐字保留**（被拒／环境拍仍 exit 1）——理由与另一种修法开成 `#102b` 等业主，见本节末。
+
+3. **C 组｜定时五件按需挂载**：判据＝盘上 `<workspace>/.agent/schedules/automations.json` 有 ≥1 条
+   **调度器装载器认得**的任务（复用 `loadAutomationsFile`，不发明设置项）**或**本进程起过调度器（单调真值）；
+   算完写回两面**共用**的那一个字段 ⇒ 同进同退。闩在 `src/main/agent-runner.ts:1585`
+   （`return installed ? installedAutomation : automationArmedOnce;`）：第一场判假就定终身，
+   不许出现「能调看不见」那半张脸。省下的字节是现读：整面 10,801 → 8,320（−2,481），五件合计 2,482 < 帽 2,600 ⇒ **帽没动**。
+
+4. **D 组｜`#90` 评估身份键与逐靶配对**：`scripts/loop-eval.ts` 往**逐条读数**盖 `headSha／ranAt／maxSteps／reps／arm`
+   （不只盖 `run.json` 旁证；`ranAt` 一趟只读一次钟），`scripts/eval/report.ts` 补配对面：同面两趟成对、
+   逐靶 `pass@k` 与 `pass^k` 分开取、任一身份键缺章落 **unknown-face** 并逐字出声
+   （`unknown-face 读数不参与同面配对`），配对新增键从 `IDENTITY_KEYS` **派生**而非再抄一份
+   （`scripts/eval/report.ts:300`；把派生退回硬抄且漏基三枚 ⇒ 锚点 `eval-run-identity-keys-rehardcoded` 红）。
+   这一格的动机是第 390/391 页那个数：**同一装配跑两遍，12 靶里 3 个自己翻面** ⇒ 没有逐靶配对就分不出「多拿下 1 靶」与噪声底。
+
+5. **两处「同题两作」——重复派工付的账，和取舍依据（不是运气）**：压缩后我按「仍在跑」的记录重派了 A 与 B，
+   结果两簇**各回来一份完整实现**。A 取带键域标签＋路径单点化那份（无标签时 `TrustStore.hit` 那条**明文备案的裸路径兼容**
+   可以顺带免掉「执行仓库自带命令」那一问）；B 取保留退出码契约那份（同一因在两路上会异果：手动拍另有一条
+   `tool_result{ok:false}` 走 `plainToolFailures`——改不改属裁决不属施工）。
+   **形状**：重派前没有现读「哪棵树里已经有这支的在飞工作」⇒ 两份实现丢弃一份。按「重复疏忽要搬进工具」那条，
+   正解是让派工面自己记下这一格（派工前先 `git worktree list` ＋逐棵问「这题有没有人已经在做」），登记为 `#106`。
+
+6. **本轮读数（取料面逐条标清）**：脏主树——`node --import tsx scripts/typecheck.ts` **exit=0**（0 条 `error TS`）；
+   并回的 5 支配卷 ＋ 13 支邻卷合跑 `Test Files 18 passed (18)｜Tests 314 passed (314)｜Duration 18.95s｜exit=0`；
+   `--check-needles` 落库前 **1462 条 —— 阻断 28（＝未入库面 15 ＋ 钉在飞文本 13，本笔全部，落库后应归零）
+   ｜待复认 2｜未覆盖 1｜逐行式 5｜killer 指针失效 0**（0 那一格＝15 个期望标题在判卷里逐字找得到，含 `it.each` 展开那一支）。
+   干净 HEAD 树（隔壁认证，`8aec599b`，**在我并回之前**）：`Test Files 332 passed (332)｜Tests 4626 passed (4626)｜exit=0`，
+   23 道门全绿、超预算 1、墙钟 276.94s。本轮新增用例按逐档原始数计 Δ＝**+72**（新三文件 21＋21＋16，
+   既有两支 `eval-report` 45→56 与 `loop-eval-invocation-face` 7→10）⇒ 下一趟认证总数应落到 **4698**，对不上就点名哪笔没进。
+
+7. **门替我抓到的 5 条类型红（形状值得记）**：C 组判卷把说明文字写在 `toBe(false, "…")` 的**第二参**上，
+   `toBe` 只收 1 个实参 ⇒ TS2554 五条；子代理报的是「scoped tsc EXIT=0」——它跑那把尺比本仓这道门窄，
+   而 vitest 不做类型检查所以 16 条照样绿。**「scoped 绿」不等于门绿**，交笔前跑门自己那一遍。
+
+8. **等裁决与下一格（无主语状态不许出现，逐条给归属）**：
+   `#102b`＝环境／被拒拍到底要不要翻 CLI 退出码（两法与代价在工件里）；`#106`＝派工前查重机械化；
+   `#107`＝runner 级 **worker 侧** `trustResolver` 与 `unattended` 传参**此刻无可杀锚点**（问「生产行变了这条用例会红吗」
+   答不出「会」就不配当 killer）⇒ 补 runner 级 worker 那一格之后才配第三根 A 组针脚。
+
+9. **污染声明（我认在自己头上）**：03:39 那趟 `typecheck` 与隔壁第一趟认证（`.worktrees/head-cert-final`）并排跑，
+   它们的**门耗时读数**被我这笔 CPU 污染过；那趟汇总里 `sandbox:check 1815ms > 1700ms` 那条「超预算」
+   在我并排之前从未出现，读数要按「同分母不同温」打折看。第二趟（`8aec599b`）与我无重叠。
+
+10. **未证（本页不宣布任何「绿了」）**：全量核心判卷与 `head-cert` 本体**还没在本笔之上跑过**；
+    15 根新锚点**还没在干净树逐条杀过**。下一趟动作固定三件：落库 → 干净 detached 树逐条杀这 15 根 ＋ `--check-needles`
+    期望阻断归零 → `head-cert` 取终态读数并按第 6 节那个 Δ 核对总数。
+
 ## 2026-10-05 · 第 392 页：终局认证 —— 门面 23/23 全绿、全量 4626/4626 全绿、两端独占；**头一趟是被我自己起的树名挡下的**
 
 契约 E13 的验收读数。三条独立复核过的事实，凭证在盘上（`outputs/head-cert-8aec599-2026-10-05-0345/`＋

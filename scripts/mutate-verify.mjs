@@ -13695,6 +13695,151 @@ const MUTATIONS = [
     apply: (s) => s.replace("        ...(cacheRead !== null ? { cacheReadInputTokens: cacheRead } : {}),\n", ""),
     expectFail: "cachedContentTokenCount 透出为 cacheReadInputTokens，且 inputTokens **不加**缓存量",
   },
+  /* ---- 2026-10-05 第 391 页：四簇同笔配的锚点 ----
+   * A 组 = verify 信任门（S3 接线那一半，业主裁决「(仓目录, 面内容指纹) → 现成那把信任表 ＋ 首次问人」）；
+   * B 组 = #102 计数读归因；C 组 = 定时五件按需挂载；D 组 = #90 评估身份键与逐靶配对。 */
+  {
+    id: "verify-trust-table-never-consulted",
+    src: "src/agent/verify.ts",
+    test: "tests/verify-trust-fingerprint.test.ts",
+    desc: "免问那一环不查表（把 `isTrusted` 的结果扔掉）⇒ 批过的面第二次仍然问，而没门／无人值守那条路直接判无面"
+      + "：**自动验证拍回到「永远不跑」**，正是本笔要接上的那一环",
+    apply: (s) => s.replace(`if (await resolver.isTrusted(req)) return verifyTrustDecision({ provenance, commands, trusted: true });`,
+      `if (false) return verifyTrustDecision({ provenance, commands, trusted: true });`),
+    expectFail: "批准过一次之后，全新钩子＋全新信任表实例读同一份文件 ⇒ 零新卡且仍然真跑",
+  },
+  {
+    id: "verify-face-asked-twice-per-beat",
+    src: "src/agent/verify.ts",
+    test: "tests/verify-trust-fingerprint.test.ts",
+    desc: "同场去重没了 ⇒ 一次自动拍判两遍信任（`surface()` ＋ `run()`）：出两张同样的卡、悬两次 60s，"
+      + "人在第一张上说了「不」还会被再问一次",
+    apply: (s) => s.replace(`if (alreadyAsked.has(fingerprint)) return verifyTrustDecision({ provenance, commands, trusted: false });`,
+      `if (false) return verifyTrustDecision({ provenance, commands, trusted: false });`),
+    expectFail: "同一次 run 里同一面只问一次：自动拍的 surface() + run() 不出两张同样的卡",
+  },
+  {
+    id: "verify-fingerprint-blind-to-test-bucket",
+    src: "src/agent/verify-trust.ts",
+    test: "tests/verify-trust-fingerprint.test.ts",
+    desc: "指纹的 test 桶又被省掉 ⇒「先批 pnpm test、再把 test 换成 curl|sh」换不出新键，免问会替**新命令面**背书"
+      + "（S3 立闸要堵的那条路原样复活）",
+    apply: (s) => s.replace(`    test: config.test ?? [],`, `    test: [],`),
+    expectFail: "改过 test 命令之后同目录再问一次，且新面没批过就跑不起来",
+  },
+  {
+    id: "verify-trust-key-tag-dropped",
+    src: "src/agent/verify-trust.ts",
+    test: "tests/verify-trust-fingerprint.test.ts",
+    desc: "键域标签没了 ⇒ verify 的条目与插件信任的历史**裸路径**条目落进同一键域，"
+      + "一条给插件历史留的兼容记录能顺带免掉「执行仓库自带命令」那一问",
+    apply: (s) => s.replace(`  return repoDir + VERIFY_TRUST_KEY_TAG;`, `  return repoDir;`),
+    expectFail: "旧版插件信任留下的**裸路径**条目顶不掉这一门（键域标签不是装饰）",
+  },
+  {
+    id: "trust-file-path-recomputed-at-call-site",
+    src: "src/agent/plugins/index.ts",
+    test: "tests/verify-trust-fingerprint.test.ts",
+    desc: "显式 `trustFile` 覆盖被丢掉、路径在调用点重写 ⇒ 设了 M2E_TRUST_FILE 的那场 run 把决议写到别处，"
+      + "判卷／CI／桌面读的那一份永远零条目（一把表两个门的前提就是路径只算一次）",
+    apply: (s) => s.replace(`  return opts.trustFile ?? join(opts.pluginDataRoot, PLUGIN_TRUST_FILE_NAME);`,
+      `  return join(opts.pluginDataRoot, PLUGIN_TRUST_FILE_NAME);`),
+    expectFail: "那张批准落在**插件信任那一份文件**里（一把表两个门；没有 M2E_TRUST_FILE 时走 pluginDataRoot）",
+  },
+  {
+    id: "verify-card-non-approval-grants",
+    src: "src/main/verify-trust-gate.ts",
+    test: "tests/verify-trust-fingerprint.test.ts",
+    desc: "卡的非批准结局被当成批准 ⇒ 拒／超时都放行并记账，信任闸退化成「走过一张卡」的仪式",
+    apply: (s) => s.replace(`      if (r.outcome !== "approved") return false;`, `      if (false) return false;`),
+    expectFail: "首次那张卡被拒 ⇒ 那一拍不发生（不假绿也不假红）、命令没跑、条目没写",
+  },
+  {
+    id: "verify-unattended-emits-a-card",
+    src: "src/main/verify-trust-gate.ts",
+    test: "tests/verify-trust-fingerprint.test.ts",
+    desc: "无人值守那半边闸被摘 ⇒ 在没人能答的通道上悬一张 60s 的卡（定时任务／CI／非 TTY 都吃到悬等），"
+      + "且这条判卷用的是「门被配成可答的交互门」那一形——门自己那支 unattended 顶不住配错",
+    apply: (s) => s.replace(`      if (deps.askGate === null || deps.unattended === true) return false;`,
+      `      if (deps.askGate === null) return false;`),
+    expectFail: "无人值守那道闸住在这一门里：门被配成可答的交互门也不发卡、不悬等、不记账",
+  },
+  {
+    id: "runner-leaves-verify-trust-unwired",
+    src: "src/main/agent-runner.ts",
+    test: "tests/verify-trust-fingerprint.test.ts",
+    desc: "生产装配又不递 resolver ⇒ 回到 `trustedRepo` 恒 false 那个今日形态：缺省开着的自动验证拍一次都不跑"
+      + "（48 份留档 0 条），而这一格只有跑到 runner 的判卷看得见",
+    apply: (s) => s.replace(`trustResolver: verifyTrust, // 生产那一半`, `trustResolver: undefined, // 生产那一半`),
+    expectFail: "首次那张卡被批准 ⇒ 那一拍真发生且仓库自带的命令真跑（常量 false 时代永远到不了这里）",
+  },
+  {
+    id: "cli-verify-beat-charged-before-cause",
+    src: "src/cli.ts",
+    test: "tests/verify-count-by-cause.test.ts",
+    desc: "事件那一站又不看归因、把每一拍红着的 verify 一律塞进代码红档 ⇒ 环境拍与拒拍一起算在模型头上，"
+      + "收尾那句「红 X」重新变成假数（#102 的原始缺陷形状）",
+    apply: (s) => s.replace(`if (e.type === "verify_result" && !e.ok) tallyVerifyBeat(verifyBeats, e.cause);`,
+      `if (e.type === "verify_result" && !e.ok) tallyVerifyBeat(verifyBeats, "code");`),
+    expectFail: "CLI：skipped 拍不置红，只加被拒档",
+  },
+  {
+    id: "cli-cause-classification-rehardcoded",
+    src: "src/cli.ts",
+    test: "tests/verify-count-by-cause.test.ts",
+    desc: "分档谓词从共用的 `isEnvVerifyCause` 换成自抄的「cause 等于 code」⇒ 未归因（cause 缺席）被读成环境拍，"
+      + "而 `src/events` 那张表以后多一枚环境 cause 也不会被这里认到（两份真值，规则 236 的形状）",
+    apply: (s) => s.replace(`  if (!isEnvVerifyCause(cause)) {`, `  if (cause === "code") {`),
+    expectFail: "未归因（cause 缺席）按 code 算——两处都不许把它当成环境拍",
+  },
+  {
+    id: "tool-choice-blocked-bucket-collapsed",
+    src: "src/agent/tool-choice.ts",
+    test: "tests/verify-count-by-cause.test.ts",
+    desc: "被拒那一档并掉 ⇒ 工具选择账上「模型自己该改的」与「人没批的」又混成一条，"
+      + "读那屏数的人无从知道红是怎么来的",
+    apply: (s) => s.replace(`        else if (e.cause === "skipped") out.verifyBlocked++;`,
+      `        else if (false) out.verifyBlocked++;`),
+    expectFail: "tool-choice：skipped 拍不进 verifyFailures，只加 verifyBlocked",
+  },
+  {
+    id: "automation-face-latch-removed",
+    src: "src/main/agent-runner.ts",
+    test: "tests/automation-mount-conditional.test.ts",
+    desc: "「执行面定终身」那把闩被摘 ⇒ 第一场判假、第二场盘上冒出任务就翻真，而说明书面早已定档"
+      + " ⇒ 出现「能调看不见」那半张脸（两面不同步是工具面那组缺陷的原形状）",
+    apply: (s) => s.replace(`  return installed ? installedAutomation : automationArmedOnce;`, `  return automationArmedOnce;`),
+    expectFail: "第一场假 ⇒ 执行面定终身：第二场盘上有了任务也不许翻（不抛、不「看得见调不到」）",
+  },
+  {
+    id: "automation-judgement-blind-to-disk",
+    src: "src/main/agent-runner.ts",
+    test: "tests/automation-mount-conditional.test.ts",
+    desc: "盘上那份任务清单不再参与判据 ⇒ 定时五件的说明书对**没有任何任务**的仓也常驻每轮静态字节"
+      + "（这一格住的正是成本纪律，不是便利）",
+    apply: (s) => s.replace(`  if (!automationArmedOnce && await automationsScheduled(workspace)) automationArmedOnce = true;`,
+      `  if (!automationArmedOnce && false) automationArmedOnce = true;`),
+    expectFail: "盘上有任务：判据真 ⇒ 面上五件按 AUTOMATION_TOOLS 声明序齐全",
+  },
+  {
+    id: "eval-run-identity-keys-rehardcoded",
+    src: "scripts/eval/report.ts",
+    test: "tests/eval-report.test.ts",
+    desc: "配对那一层的身份键再从字面量抄一遍、且漏掉身份闸那三枚 ⇒ headSha 缺章的读数照样成对，"
+      + "「不同提交的读数互相当同分母」那条老路复活（#90 的动因；派生式没了就是两份表）",
+    apply: (s) => s.replace(`export const RUN_IDENTITY_KEYS = [...IDENTITY_KEYS, ...PAIR_EXTRA_IDENTITY_KEYS] as const;`,
+      `export const RUN_IDENTITY_KEYS = ["maxSteps", "reps", "arm"] as const;`),
+    expectFail: "★ 缺任一身份键 ⇒ 落进 unknown-face、绝不并进任何可比面",
+  },
+  {
+    id: "eval-rows-not-stamped-with-identity",
+    src: "scripts/loop-eval.ts",
+    test: "tests/loop-eval-invocation-face.test.ts",
+    desc: "身份章只盖 run.json 旁证、逐条读数不盖 ⇒ 报告读到的是「有旁证的空身份行」，"
+      + "整批落进 unknown-face，配对那一格等于没接上写侧",
+    apply: (s) => s.replace(`  r: { ...x.r, headSha, ranAt, maxSteps: MAX_STEPS, reps: REPS, arm: ARM },`, `  r: { ...x.r },`),
+    expectFail: "写 readings.json 时逐条盖 headSha／ranAt／maxSteps／reps／arm（不是只盖 run.json 那一份旁证）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
