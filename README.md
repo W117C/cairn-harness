@@ -1,23 +1,38 @@
-# m0 — 可重放的 agent harness
+# Cairn — 可重放的 agent harness
 
 一个事件溯源（event-sourced）的 agent 内核：每一步都落成 JSONL 事件，因此**同一份日志可以被重放、分叉、审计**。
-没有 UI、没有 Electron、没有构建步骤——克隆下来 `npm install` 完就有一条 `m0` 命令。
+内核侧没有构建步骤——克隆下来 `npm install` 完就有一条 `cairn` 命令；
+桌面壳是另一条路，`apps/desktop/` 下走 Electron + Vite，需要单独构建（见「这个仓库是什么」）。
 
 ```sh
-git clone <this-repo> && cd m0-agent-loop
+git clone <this-repo> && cd cairn-harness
 npm install                       # CLI 走 tsx 通道（devDependency），必须装齐才能跑
 export OPENAI_API_KEY=<你的 key>
-./bin/m0.mjs "把 tests 里失败的那个用例修好"
+./bin/cairn.mjs "把 tests 里失败的那个用例修好"
 ```
 
-> 本包是 `"private": true`，**不经 npm 分发**：没有 `npm install -g m0` 这条路。上面是克隆仓库后的用法——
+> 本包是 `"private": true`，**不经 npm 分发**：没有 `npm install -g cairn` 这条路。上面是克隆仓库后的用法——
 > tsx 在 devDependencies 里，源码经 tsx 通道直接跑。
 
 ---
 
+## 安装
+
+本包不发布 npm（`private: true`），装法是克隆仓库后跑安装脚本：
+
+```sh
+git clone <this-repo> && cd cairn-harness
+./scripts/install.sh        # 按 package.json 的 engines 判 Node 版本；pnpm 在则 pnpm install，否则 npm install
+./bin/cairn.mjs --doctor    # 环境自检：Node / 凭据在位 / 沙箱 / 工作区可写（不回显密钥值）
+./bin/cairn.mjs --version   # 打印版本（cairn <version>）
+```
+
+版本与受众裁决见 `docs/adr/0002-v1-audience-b1-internal-beta.md`（B1 内测先行，交付面只做 CLI；
+B2 扩受众清单留门 `docs/b2-checklist.md`）。变更史见 `CHANGELOG.md`。
+
 ## 快速开始
 
-需要 Node 20.3+（`AbortSignal.any` 的下限，`package.json` 的 `engines` 已声明）与 pnpm。仓库根目录：
+需要 Node ≥20.11 且 <25（以 `package.json` 的 `engines` 为准）与 pnpm。仓库根目录：
 
 ```sh
 pnpm install
@@ -35,7 +50,7 @@ pnpm bench            # 拿真模型跑一套固定任务，出「成功率 / to
 ```
 
 `pnpm bench` 用的是**主 CLI 同一套凭据**：`OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`，
-或 `M0_API_KEY` / `M0_ENDPOINT` / `M0_MODEL`（前者优先）。凭据一律走环境变量，不落文件——
+或 `CAIRN_API_KEY` / `CAIRN_ENDPOINT` / `CAIRN_MODEL`（前者优先）。凭据一律走环境变量，不落文件——
 和主 CLI 同一条规矩：
 
 ```sh
@@ -62,16 +77,16 @@ pnpm bench -- --only B1-bugfix-crossfile
 
 ```sh
 # 在当前工作区
-./bin/m0.mjs "你的任务"
+./bin/cairn.mjs "你的任务"
 
 # 在别的工作区
-./bin/m0.mjs --workspace ~/code/some-repo "把失败的测试修好"
+./bin/cairn.mjs --workspace ~/code/some-repo "把失败的测试修好"
 
 # 接着上一次那条会话跑（不抹掉之前的转录）
-./bin/m0.mjs --session cli-1756289123456 "接着刚才那个往下做"
+./bin/cairn.mjs --session cli-1756289123456 "接着刚才那个往下做"
 
 # 装成命令（npm link；本包未发布，见上）
-npx m0 --help
+npx cairn --help
 ```
 
 ### 零凭据试一下：`--provider demo`（**读之前先看这段**）
@@ -79,7 +94,7 @@ npx m0 --help
 没有 API key 也能看一遍完整流程——它跑的是**预录剧本**，不拨号、不花钱：
 
 ```sh
-./bin/m0.mjs --provider demo --mode auto --workspace /tmp/m0-demo "随便写点什么"
+./bin/cairn.mjs --provider demo --mode auto --workspace /tmp/cairn-demo "随便写点什么"
 ```
 
 **这个通道有三件事必须说在前面**，否则很容易把它读成产品能力：
@@ -100,7 +115,7 @@ npx m0 --help
 `--goal` 给这轮挂一个目标，判据不达标就自动再跑一轮，直到达标、撞轮次/美元上限、或者证据红到没救：
 
 ```sh
-./bin/m0.mjs --goal "把 tests 全跑绿" --max-turns 8 --max-usd 0.5 "修掉失败的那些用例"
+./bin/cairn.mjs --goal "把 tests 全跑绿" --max-turns 8 --max-usd 0.5 "修掉失败的那些用例"
 ```
 
 目标与停止理由都落在事件日志里（`goal_set` / `goal_stopped`），终端上也会打出来——
@@ -114,11 +129,11 @@ stdin 是管道）**不会自动续跑**——那条路上审批一律 fail-clos
 ### 手动压缩一条会话
 
 ```sh
-./bin/m0.mjs --session cli-1756289123456 --compact
+./bin/cairn.mjs --session cli-1756289123456 --compact
 ```
 
 把一条已有会话的历史压成一段摘要，压完退出。**这条命令会调模型**（摘要器
-`createGlmSummarizer` 走 GLM），所以要 `M0_API_KEY`；没有 key 时它 fail-closed 拒绝并退出 1，
+`createGlmSummarizer` 走 GLM），所以要 `CAIRN_API_KEY`；没有 key 时它 fail-closed 拒绝并退出 1，
 **不会静默截断**历史——把长会话悄悄砍掉比报错糟得多。
 
 边界：只能指一条**已有**会话（缺 `--session` 直接 exit 2，不编一个 id 出来再报「不存在」）；
@@ -130,7 +145,7 @@ key 从环境变量读，**缺 key 会明确报错退出，不会静默换一家
 
 | provider | 环境变量 |
 |---|---|
-| `glm` | `M0_API_KEY` |
+| `glm` | `CAIRN_API_KEY` |
 | `openai` | `OPENAI_API_KEY` |
 | `anthropic` | `ANTHROPIC_API_KEY` |
 | `gemini` | `GEMINI_API_KEY` |
@@ -141,7 +156,7 @@ key 从环境变量读，**缺 key 会明确报错退出，不会静默换一家
 ```sh
 export OPENAI_BASE_URL=https://api.deepseek.com/v1
 export OPENAI_API_KEY=<deepseek key>
-npx m0 "..."
+npx cairn "..."
 ```
 
 `OPENAI_BASE_URL` 给到 `/v1` 这一层就行，缺 `/chat/completions` 会自动补；已经带全的写法也照样认。
@@ -152,7 +167,7 @@ npx m0 "..."
 ```sh
 export OPENAI_BASE_URL=https://openrouter.ai/api/v1
 export OPENAI_API_KEY=<key>
-npx m0 --provider openai --model stealth/space-bunny-alpha "..."
+npx cairn --provider openai --model stealth/space-bunny-alpha "..."
 ```
 
 `--model` 是显式 opt-in：它不进档位表，因此**不参与 bandit 路由**；预算闸查不到它的价时按既有口径惰掉并明写，
@@ -160,7 +175,7 @@ npx m0 --provider openai --model stealth/space-bunny-alpha "..."
 高估会撞远端 400。指向小窗或网关模型时用 `--ctx-window <n>` 申报真实窗口（只配 `--model` 用）：
 
 ```sh
-npx m0 --provider openai --model some/small-model --ctx-window 32768 "..."
+npx cairn --provider openai --model some/small-model --ctx-window 32768 "..."
 ```
 
 没给 `--provider` 时按上表顺序找第一个配了 key 的；一个都没配 ⇒ exit 2 并告诉你要设哪个变量。
@@ -194,7 +209,7 @@ npx m0 --provider openai --model some/small-model --ctx-window 32768 "..."
 （它不是缺省档），既然整轮写操作都已获授权，方案门再按「没人能答 ⇒ 拒」收束就自相矛盾——
 模型提交方案 → 当场被拒 → 写禁不解除 → 连读工具都进不去，最后什么都没做成。
 实测代价：管道里用 `auto` 建一个文件，两次方案被自动拒、约 32k token 白烧，
-模型还反过来建议用户「去 git 面板点批准」——而 core-only 树里没有那个面板。
+模型还反过来建议用户「去 git 面板点批准」——而 CLI 通道里没有那个面板。
 现在 `auto` 档**当场批准**，并把「批准依据是命令行授权、不是有人看过了」印在 stderr 上，
 免得把一次策略放行读成一次人工审阅。`default` / `guided` 一字未改，仍是 fail-closed。
 
@@ -325,8 +340,11 @@ worker 要联网只能回主会话发。
 ## 这个仓库是什么
 
 内核质量很高、**产品面刚补上**的一棵树：strict 零报错，fail-closed 是设计意图而非事后补丁，
-变异测试的判红标准很硬。桌面层已按明确要求移除（无 Electron / renderer / preload），
-剩下的 electron-free 应用服务在 `src/main/`。
+变异测试的判红标准很硬。桌面层曾于 2026-09-27（`69fbb0d`）整体移除，2026-10-02 起以 M1 切片
+重新入库于 `apps/desktop/`（Electron + React + Vite），目前仍是早期形态：39 个 invoke 通道
+只接了 6 个，事件投影只覆盖 30 个事件类型中的 4 个，且**未进任何根门或 CI**。
+存废与受众的裁决见 [docs/adr/0001-core-only-vs-desktop.md](docs/adr/0001-core-only-vs-desktop.md)。
+内核侧保持 electron-free，应用服务在 `src/main/`。
 
 - `src/agent/` — 事件循环、编排、worker、压缩、判卷层
 - `src/events/` — append-only 事件流 + 重放 / 分叉
@@ -334,6 +352,7 @@ worker 要联网只能回主会话发。
 - `src/permissions/` — 权限策略
 - `src/providers/` — provider 适配器与模型注册表
 - `src/main/` — electron-free 的应用服务（装配根）
+- `apps/desktop/` — 桌面壳（Electron + React + Vite；独立构建与测试，不进根门）
 - `scripts/` — headless 闸（`pnpm gates` 全跑，清单在 `scripts/gate-manifest.ts`，即事实源）
 
 开发规则见 [AGENTS.md](AGENTS.md)；架构说明见 [docs/CODE-WIKI.md](docs/CODE-WIKI.md)。

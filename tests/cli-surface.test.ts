@@ -17,13 +17,15 @@ import type { AgentEvent } from "../src/events";
 const ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const BIN = join(ROOT, "bin", "cairn.mjs");
 
-/** 真跑 CLI。`noKeys` 抹掉全部 provider key，让 provider 推断走「一个都没配」那一支。 */
-function runCli(args: string[], opts: { noKeys?: boolean; env?: Record<string, string>; timeout?: number } = {}): { status: number | null; out: string } {
+/** 真跑 CLI。`noKeys` 抹掉全部 provider key，让 provider 推断走「一个都没配」那一支；
+ *  `keys` 在抹完**之后**注入假 key（值是探针，专测「报在位但值绝不入报告」）。 */
+function runCli(args: string[], opts: { noKeys?: boolean; env?: Record<string, string>; keys?: Record<string, string>; timeout?: number } = {}): { status: number | null; out: string } {
   const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1", ...opts.env };
   if (opts.noKeys !== false) {
     for (const k of ["CAIRN_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"]) delete env[k];
     delete env.M0A_PROVIDER;
   }
+  Object.assign(env, opts.keys ?? {});
   const r = spawnSync(process.execPath, [BIN, ...args], {
     cwd: ROOT,
     encoding: "utf8",
@@ -50,6 +52,27 @@ describe("cairn CLI：产品面存在且可执行", () => {
     expect(r.status).toBe(0);
     expect(r.out).toContain("用法：");
     expect(r.out).toContain("--mode");
+    expect(r.out).toContain("--version");
+    expect(r.out).toContain("--doctor");
+  });
+
+  it("真跑：--version 打印 cairn <version>，与 package.json 同源（单一事实源），exit 0", () => {
+    const r = runCli(["--version"]);
+    expect(r.status).toBe(0);
+    const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { version: string };
+    expect(r.out.trim()).toBe("cairn " + pkg.version);
+  });
+
+  it("真跑：--doctor 逐项报告＋总档；假 key 只报在位、值绝不出现；本机 node 满足 engines ⇒ exit 0", () => {
+    // 探针值刻意不带任何真实 key 的形态（Mimosa 会把 sk- 前缀当真凭据拦）——
+    // 它只要「在 env 里有、在报告里没有」就够钉死脱敏。
+    const PROBE = "probe-key-value-NOT-A-REAL-CREDENTIAL";
+    const r = runCli(["--doctor"], { noKeys: true, keys: { OPENAI_API_KEY: PROBE } });
+    expect(r.status).toBe(0);
+    expect(r.out).toContain("✓ node");
+    expect(r.out).toContain("OPENAI_API_KEY 在位");
+    expect(r.out).toContain("总档：");
+    expect(r.out).not.toContain(PROBE);
   });
 });
 

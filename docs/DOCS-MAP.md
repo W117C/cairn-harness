@@ -1,6 +1,6 @@
 # Documentation map
 
-This is a core-only checkout. Desktop plans, UI acceptance reports, renderer references, and Electron packaging documents are intentionally absent.
+This checkout is core-first. The desktop shell lives in `apps/desktop/` (reintroduced 2026-10-02; see `adr/0001-core-only-vs-desktop.md`); root gates do not scan `apps/`.
 
 | Area | Location |
 |---|---|

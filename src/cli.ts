@@ -18,7 +18,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { argsDigest, firstLine, forkPointOf, forkSessionName, formatReplay } from "./agent/fork-cli";
@@ -51,6 +51,7 @@ import { initSessionsDir } from "./main/session-handlers";
 import { initSettingsStore } from "./main/settings-handlers";
 import { isValidSessionName, pathOf } from "./main/sessions";
 import type { SandboxStatus } from "./main/sandbox";
+import { renderDoctor, runDoctor } from "./main/doctor";
 import { providerKindFromEnv, resolveMainModel, type MainModelSelection } from "./main/provider-runtime";
 import type { ProviderKind } from "./main/settings";
 import { envKeyOf } from "./providers/env-keys";
@@ -179,6 +180,11 @@ export function runFailed(input: {
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
+// 版本号单一事实源（spec：2026-10-06-productization-b1 §1#5）——`--version` 读这里，
+// 不抄第二份；判卷（cli-surface）钉住「与 package.json 同源」。
+const PKG = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { version: string };
+const PKG_VERSION = PKG.version;
+
 const PERMISSION_MODES: readonly PermissionMode[] = ["read-only", "default", "guided", "auto"];
 
 // ---- 退出码（照 scripts/gym-run.ts：2 = 用法错，1 = 跑了但没成，0 = 成）----
@@ -237,7 +243,11 @@ interface Options {
   serve: boolean;
 }
 
-function parseArgs(): Options | "help" {
+function parseArgs(): Options | "help" | "version" | "doctor" {
+  // 这两个旗标不看其余 argv：给了就分派后退出（--version 打一行；--doctor 只做环境自检，
+  // 不跑模型也不要求任务描述）。放在 --help 之前，免得被后面的用法校验拦下。
+  if (argv.includes("--version")) return "version";
+  if (argv.includes("--doctor")) return "doctor";
   if (argv.includes("--help") || argv.includes("-h")) return "help";
 
   const modeRaw = pick("--mode") ?? "default";
@@ -905,6 +915,8 @@ function printHelp(): void {
   --log <路径>         事件日志落盘位置（与 --goal / --session 互斥，见下）
   --unattended         无人值守：一切审批 fail-closed 拒绝（不给交互门）
   --auto-verify        收束前补一拍验证（模型没自调 verify 时）
+  --version            打印版本（cairn <version>）后退出
+  --doctor             环境自检（Node/凭据在位/沙箱/工作区可写；不回显密钥值）后退出
   -h, --help           本帮助
 
 退出码：0 成功 / 1 跑完但失败 / 2 用法错
@@ -916,7 +928,7 @@ provider 的 key 从环境变量读（见 README）。缺 key 会明确报错退
 }
 
 async function main(): Promise<number> {
-  let opts: Options | "help";
+  let opts: Options | "help" | "version" | "doctor";
   try {
     opts = parseArgs();
   } catch (err) {
@@ -930,6 +942,21 @@ async function main(): Promise<number> {
   if (opts === "help") {
     printHelp();
     return EXIT_OK;
+  }
+  if (opts === "version") {
+    process.stdout.write(`cairn ${PKG_VERSION}\n`);
+    return EXIT_OK;
+  }
+  // ---- 产品化 B1：`--doctor` 环境自检（不跑模型、不落日志）----
+  // 工作区只认写得对的 --workspace <值>，其余一律按 cwd——doctor 本身不该因为 argv 另有毛病而炸，
+  // 所以不走 pick()（它对缺值抛 UsageError）。
+  if (opts === "doctor") {
+    const wsIdx = argv.indexOf("--workspace");
+    const wsFlag = wsIdx >= 0 ? argv[wsIdx + 1] : undefined;
+    const ws = wsFlag !== undefined && !wsFlag.startsWith("--") ? wsFlag : process.cwd();
+    const report = await runDoctor(ws);
+    process.stdout.write(renderDoctor(report));
+    return report.exitCode;
   }
 
   // ---- M8：`--replay` 只读日志打决策链（不搭壳、不起沙箱、不跑模型）----
