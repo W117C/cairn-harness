@@ -435,6 +435,27 @@ describe("⑦生产装配：runAgent 不再吃常量 false（缺省开着的自�
     expect((await rig.entries()).trusted.length).toBe(1);
   });
 
+  it("指定了 M2E_TRUST_FILE ⇒ 决议只写进那一份，不在缺省派生路径上再落一份（路径只算一次）", async () => {
+    // 这一格钉的是 `trustFilePathOf` 里 `opts.trustFile ?? …` 那半边：把它摘掉，
+    // 插件门与 verify 门会一起回到缺省派生路径，而判卷／CI／桌面读的是 M2E_TRUST_FILE 那一份
+    // ⇒ 场上悄悄出现第二份信任事实源（裁决原话「不许第二份」的具体形状）。
+    const gate = new AskGate({ timeoutMs: 1_000, notify: (req) => { rig.cards.push(req); gate.decide(req.askId, true); } });
+    await runAgent({
+      workspace: repo,
+      logPath: join(rig.dir, `events-${String(seq++)}.jsonl`),
+      message: "改一下 target",
+      mode: "auto",
+      autoVerify: true,
+      askGate: gate,
+      sandbox: null,
+    });
+    expect((await rig.entries()).trusted, "M2E_TRUST_FILE 那一份没有条目 ⇒ 路径在调用点被重写了一遍").toEqual([
+      verifyTrustKey(repo) + "@" + (await rig.fingerprintOf(repo)),
+    ]);
+    const derived = JSON.parse(await readFile(join(rig.dir, "plugin-data", "plugin-trust.json"), "utf8").catch(() => "{}")) as { trusted?: string[] };
+    expect(derived.trusted ?? [], "同一份决议不该在缺省派生路径上再落一份（两份文件＝两份事实源）").toEqual([]);
+  });
+
   it("那张批准落在**插件信任那一份文件**里（一把表两个门；没有 M2E_TRUST_FILE 时走 pluginDataRoot）", async () => {
     vi.stubEnv("M2E_TRUST_FILE", ""); // 空串 = pluginRuntimeOpts 不收这个键 ⇒ 回到缺省派生
     const gate = new AskGate({ timeoutMs: 1_000, notify: (req) => { rig.cards.push(req); gate.decide(req.askId, true); } });

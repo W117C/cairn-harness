@@ -200,6 +200,18 @@ describe("④ 判据同源：两个面的归档必须由那一只谓词说了算
     }
   });
 
+  it("CLI 事件那一站的调用点把 cause **原样透传**（写死任何一枚都算接线断了）", () => {
+    // 为什么这一格只能用剥注释后的代码文本：`tallyVerifyBeat` 那只纯函数在判卷里被直接喂 cause，
+    // 而 CLI 的调用点住在交互事件泵里（`runCli` 内部），从判卷够不到——**行为侧够不到的格子要由接线证人守着**，
+    // 不许假装它已被行为判卷覆盖（本仓的「第 4 形态」：用例存在≠那一支被喂到）。
+    const src = codeOf("src/cli.ts");
+    const calls = [...src.matchAll(/tallyVerifyBeat\(\s*verifyBeats\s*,\s*([^)]+?)\)/g)].map((m) => m[1]!.trim());
+    expect(calls.length, "CLI 里没有 tallyVerifyBeat 的调用点了 ⇒ 分档根本没接进收尾账").toBeGreaterThan(0);
+    for (const arg of calls) {
+      expect(arg, "调用点把 cause 写死成字面量 ⇒ 归因又被抹平，环境／被拒拍重新长得像代码红").toBe("e.cause");
+    }
+  });
+
   it("喂 ok:false 的拍进事件面：被拒／环境必须**不**计数（行为侧的反向，不是只钉字符串）", () => {
     // 这条与上一条配对：上一条是"写法没了"，这一条是"没了之后确实不数"。
     // 把 `!isEnvVerifyCause(...)` 那半边摘掉（退回旧写法）⇒ 这里立刻红。

@@ -13377,6 +13377,75 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
     15 根新锚点**还没在干净树逐条杀过**。下一趟动作固定三件：落库 → 干净 detached 树逐条杀这 15 根 ＋ `--check-needles`
     期望阻断归零 → `head-cert` 取终态读数并按第 6 节那个 Δ 核对总数。
 
+## 2026-10-05 · 第 393 页：干净树杀锚点——15 根里 4 根存活，追到底只有一个是「守卫多余」，另三个是我把 killer 指错了位；顺带量出一个真洞（写侧 `unknown` 哨兵被读成有身份）
+
+取料面＝认证树 `.worktrees/verify-2462e89`（`HEAD=2462e89d`，`node_modules` 由主树 `cp -al` 硬链而来）。
+逐条串行跑法：`node scripts/mutate-verify.mjs <15 个 id>`，读数 `> /tmp/merge-391/kill15.log 2>&1; echo KILL_EXIT=$?`。
+两份原始日志已随本页入库：`outputs/verify-loop-closure-2026-10-05/kill-anchors-2462e89.log`（15 根逐条杀／活与秒数）
+与 `outputs/verify-loop-closure-2026-10-05/needles-pre393.log`（落库前那遍针脚体检的汇总行）。
+
+1. **读数**：11 根被杀（每条 2.3–2.7s／2 拍），**4 根存活** ⇒ `REDKINDS=survived:4`、`KILL_EXIT=1`。
+   存活名单：`trust-file-path-recomputed-at-call-site`／`cli-verify-beat-charged-before-cause`／
+   `automation-face-latch-removed`／`eval-run-identity-keys-rehardcoded`。
+   **存活先分两类（规则 233）**：「实现搬家」与「判卷零分辨力」修法相反——这四条都不是搬家，但**成因各不相同**，
+   逐条追完才知道有三种不同的修法。
+
+2. **① 我把 killer 指到了分辨不出来的那一条用例上（两根属这类）**：
+   `trust-file-path` 那条锚点原本钉的期望是「那张批准落在插件信任那一份文件里」，而**那条用例开头就把
+   `M2E_TRUST_FILE` 置空串**（它测的正是「没有 env 时走缺省派生」）——把 `opts.trustFile ?? …` 那半边摘掉，
+   对它逐字同形 ⇒ 恒绿不是判卷没分辨力，是**我挑的观察者看不见这一维**。补的那一条才配当 killer：
+   `指定了 M2E_TRUST_FILE ⇒ 决议只写进那一份，不在缺省派生路径上再落一份（路径只算一次）`——
+   两态各钉一次（正向读 M2E_TRUST_FILE 那份有 1 条，反向读缺省派生那份 0 条）。
+   `eval-run-identity-keys` 同理：原期望「缺任一身份键」喂的是**六枚全缺**的存量行，硬抄那三枚新键也一样缺章 ⇒ 同形；
+   补的是「**只缺一枚基三键（headSha）而其余五枚齐**」那一格——只有派生式（`RUN_IDENTITY_KEYS` 由 `IDENTITY_KEYS` 展开）
+   才把这一行排除，硬抄必并进来。**改法不是把针脚迁就 HEAD，而是给那一格补一个真看得见的观测者。**
+
+3. **② 两道闸同拦一件事，摘一道必存活（规则 226，存活≠守卫多余）**：`automation-face-latch-removed` 摘的是
+   await **之后**那次重读（`return installed ? installedAutomation : automationArmedOnce;`），而 await **之前**
+   还有一条早退（`if (installed) return installedAutomation;`）——第二场进来时先撞上早退，摘掉的那一行根本走不到。
+   这两道不是冗余：早退守「同场不许翻面」，重读守「并发那一场在中途把执行面装了，规格面只能跟它」。
+   所以锚点改法＝**两道一起摘**（这才是「那一格没了」的形状），并在 desc 里写清「摘单道存活是预期」，
+   免得下一个人把它读成判卷坏了去松针脚。
+
+4. **③ 行为侧够不到的格子，接线证人要说得出「为什么只能这样钉」**：`cli-verify-beat-charged-before-cause`
+   摘的是 CLI 事件泵里那一处调用的**入参**（`tallyVerifyBeat(verifyBeats, e.cause)` → 写死 `"code"`），
+   而判卷喂 `tallyVerifyBeat` 是直接调纯函数，走不到那一站 ⇒ 存活。补的用例读**剥注释后的 `src/cli.ts` 文本**，
+   枚举起所有 `tallyVerifyBeat(verifyBeats, <arg>)` 调用并要求 `<arg>` 逐字是 `e.cause`
+   （写死任何一枚 cause 字面量都红；注释不参与，这是 `tests/cli-surface.test.ts` 那次的教训）。
+   用例正文里明写「行为侧够不到 ⇒ 由接线证人守，不许假装已被行为判卷覆盖」——这条界限比用例本身更要紧。
+
+5. **顺着第 2 条追下去量到一个真洞（不是测试问题，是读数问题）**：写侧 `scripts/loop-eval.ts:759` 在
+   `git rev-parse HEAD` 失败时落的是**字面量 `unknown`**（#63 留下的哨兵），而读侧 `identityStr` 的口径是
+   「非空字符串就算有」⇒ **两趟各自取不到 sha 的读数，在 #90 新配的配对面里长得同一枚 sha**——
+   不同代码被并成同分母，正是 #90 要堵的那条路换了个名字复活；`model` 那枚历史上也落 `unknown`，同一形状。
+   修法收在**唯一的取值口径**里：`isUnidentified(v)＝v===""||v.toLowerCase()==="unknown"`，
+   `identityStr` 与 `model` 的解析都改吃它（两枚键、一处判据，不另立第二份）。
+   两态各钉一次：哨兵行落 unknown-face（`headSha`／`model` 各试一枚，大小写都收）＋真 sha 真档名照旧算有身份。
+   新锚点 `eval-unknown-sentinel-read-as-identity` 与这条修法同笔。
+
+6. **本轮读数（脏主树，取料面逐条标清）**：`Test Files 4 passed (4)｜Tests 113 passed (113)｜exit=0`
+   （四支＝`eval-report` 56→**59**、`verify-trust-fingerprint` 21→**22**、`verify-count-by-cause` 21→**22**、
+   `loop-eval-invocation-face` 10）；`typecheck` **exit=0**。
+   针脚体检（脏主树，落库前）：**1463 条 —— 阻断 4，待复认 2，未覆盖 1，逐行式 5，未入库面 0，钉在飞文本 1，
+   killer 指针失效 0（其中 HEAD 侧 3）**——那 3 就是第 2/4 节新加的三条用例标题在 HEAD 里还不存在，落库即归零。
+   ⚠ 点名一处「我点了但不存在的文件」：同一条命令里我还点了 `tests/eval-identity-and-flip.test.ts`，
+   vitest 对不存在的名字**静默忽略且退 0**，是括号里的 `(4)` 与点名支数 5 不相等暴露的——这条纪律又一次先于读数救了结论。
+
+7. **第三份 #90（同题三作，`#106` 的形状再次复现）**：本笔写完才发现压缩前那批还有一支 #90 成品落在
+   `.qoder/worktrees/agent-general-purpose-6ad1f717`（第三种形状：抽出 `scripts/lib/eval-flip.ts` 纯函数模块
+   ＋ 25 格判卷 ＋ 章盖在记录外层）。**没有并回**，理由与 A/B 两组同一条：已并回那支的判卷＋锚点已在本仓口径下验完，
+   第三支带来的新面（外层盖章／臂间配对）与已落地的内层键形状互斥，两法并存就是两份事实源。
+   它独有的两条结论我**收成了工单**而不是一起落：
+   `#108`＝「逐靶翻转 ≥1 时净值不许出口」（它给了 `blocked` 语义，本仓现在只**印** flips 不拦结论——加不加拦是裁决不是施工）；
+   `#109`＝`bench`／`bench:long30`／`bench:chain32`／`bench:chain48` **四条都不带 `--keep`** ⇒ 每趟 `events.jsonl`
+   随临时目录删除，`gym-draft`（只吃 events.jsonl）**从基准失败轨迹拿不到料**（能力 10 的一条断料，代价实测：
+   留档每臂 12 份 ≈0.2 MB，`--reps 6` ≈1.2 MB，且会吃 `repo-hygiene-check` 那条 outputs 占比帽 ⇒ 不是免费开关）。
+
+8. **未证与下一趟**：本页只证到「四根存活的成因＋各自的修法有观测者」。终局读数仍未取：
+   干净树重杀这 **16** 根（15 根原样 ＋ 1 根新哨兵锚点，其中 `automation-face-latch-removed` 是改过改法的那一根）、
+   `--check-needles` 在 HEAD 树期望**阻断 0／钉在飞文本 0／killer 指针失效 0**、`head-cert` 全量认证
+   （按第 392 页那个 Δ 核对：4626 ＋ 新三文件 58 ＋ 既有两支增 14 ＋ 本笔再增 5 ＝ 期望 **4703**）。**这一页不宣布任何「绿了」。**
+
 ## 2026-10-05 · 第 392 页：终局认证 —— 门面 23/23 全绿、全量 4626/4626 全绿、两端独占；**头一趟是被我自己起的树名挡下的**
 
 契约 E13 的验收读数。三条独立复核过的事实，凭证在盘上（`outputs/head-cert-8aec599-2026-10-05-0345/`＋

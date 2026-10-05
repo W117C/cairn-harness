@@ -13744,7 +13744,7 @@ const MUTATIONS = [
       + "判卷／CI／桌面读的那一份永远零条目（一把表两个门的前提就是路径只算一次）",
     apply: (s) => s.replace(`  return opts.trustFile ?? join(opts.pluginDataRoot, PLUGIN_TRUST_FILE_NAME);`,
       `  return join(opts.pluginDataRoot, PLUGIN_TRUST_FILE_NAME);`),
-    expectFail: "那张批准落在**插件信任那一份文件**里（一把表两个门；没有 M2E_TRUST_FILE 时走 pluginDataRoot）",
+    expectFail: "指定了 M2E_TRUST_FILE ⇒ 决议只写进那一份，不在缺省派生路径上再落一份（路径只算一次）",
   },
   {
     id: "verify-card-non-approval-grants",
@@ -13781,7 +13781,7 @@ const MUTATIONS = [
       + "收尾那句「红 X」重新变成假数（#102 的原始缺陷形状）",
     apply: (s) => s.replace(`if (e.type === "verify_result" && !e.ok) tallyVerifyBeat(verifyBeats, e.cause);`,
       `if (e.type === "verify_result" && !e.ok) tallyVerifyBeat(verifyBeats, "code");`),
-    expectFail: "CLI：skipped 拍不置红，只加被拒档",
+    expectFail: "CLI 事件那一站的调用点把 cause **原样透传**（写死任何一枚都算接线断了）",
   },
   {
     id: "cli-cause-classification-rehardcoded",
@@ -13806,9 +13806,12 @@ const MUTATIONS = [
     id: "automation-face-latch-removed",
     src: "src/main/agent-runner.ts",
     test: "tests/automation-mount-conditional.test.ts",
-    desc: "「执行面定终身」那把闩被摘 ⇒ 第一场判假、第二场盘上冒出任务就翻真，而说明书面早已定档"
-      + " ⇒ 出现「能调看不见」那半张脸（两面不同步是工具面那组缺陷的原形状）",
-    apply: (s) => s.replace(`  return installed ? installedAutomation : automationArmedOnce;`, `  return automationArmedOnce;`),
+    desc: "「执行面定终身」那把闩被摘 ⇒ 第一场判假、第二场盘上有了任务就翻真，而说明书面早已定档"
+      + " ⇒ 出现「能调看不见」那半张脸。这一格是**两道闸同拦一件事**（规则 226）：await 之前一条早退、"
+      + "await 之后一次重读（并发那一场在中途装了执行面时只能跟它），**摘掉任一道另一道都还守着**——"
+      + "实测单摘一道变异存活，所以这条改法必须两道一起摘才是「那一格没了」的形状（存活不等于守卫多余）。",
+    apply: (s) => s.replace("  if (installed) return installedAutomation;\n", "")
+      .replace(`  return installed ? installedAutomation : automationArmedOnce;`, `  return automationArmedOnce;`),
     expectFail: "第一场假 ⇒ 执行面定终身：第二场盘上有了任务也不许翻（不抛、不「看得见调不到」）",
   },
   {
@@ -13829,7 +13832,7 @@ const MUTATIONS = [
       + "「不同提交的读数互相当同分母」那条老路复活（#90 的动因；派生式没了就是两份表）",
     apply: (s) => s.replace(`export const RUN_IDENTITY_KEYS = [...IDENTITY_KEYS, ...PAIR_EXTRA_IDENTITY_KEYS] as const;`,
       `export const RUN_IDENTITY_KEYS = ["maxSteps", "reps", "arm"] as const;`),
-    expectFail: "★ 缺任一身份键 ⇒ 落进 unknown-face、绝不并进任何可比面",
+    expectFail: "★ 只缺一枚**基三键**（headSha）而其余五枚齐 ⇒ 仍落 unknown-face（配对键必须从身份闸那三枚派生）",
   },
   {
     id: "eval-rows-not-stamped-with-identity",
@@ -13839,6 +13842,16 @@ const MUTATIONS = [
       + "整批落进 unknown-face，配对那一格等于没接上写侧",
     apply: (s) => s.replace(`  r: { ...x.r, headSha, ranAt, maxSteps: MAX_STEPS, reps: REPS, arm: ARM },`, `  r: { ...x.r },`),
     expectFail: "写 readings.json 时逐条盖 headSha／ranAt／maxSteps／reps／arm（不是只盖 run.json 那一份旁证）",
+  },
+  {
+    id: "eval-unknown-sentinel-read-as-identity",
+    src: "scripts/eval/report.ts",
+    test: "tests/eval-report.test.ts",
+    desc: "读侧不再收「取不到」哨兵 ⇒ headSha 与 model 上那枚字面量 unknown 被读成有身份，"
+      + "两趟「各自取不到 sha」的读数于是并成同一枚 sha ⇒ **不同代码被当成同分母**（#63 那枚哨兵在 #90 新面里的复活形状）",
+    apply: (s) => s.replace(`  return typeof v === "string" && !isUnidentified(v) ? v : "";`,
+      `  return typeof v === "string" && v !== "" ? v : "";`),
+    expectFail: "★ 写侧那枚 unknown 哨兵在读侧仍算缺章（headSha／model 两枚都试）",
   },
 ];
 

@@ -108,12 +108,19 @@ function num(v: unknown, what: string): number {
   return v;
 }
 
-/** 身份键的取值：**非空字符串才算有**。缺键、空串、类型不对 ⇒ 一律空串（＝缺章）。
+/** 身份取值的**唯一**口径：空串**与写侧那枚「取不到」哨兵**都算缺章；缺键、类型不对也一律缺章。
  *
- *  这里不抛，是因为存量语料本来就没这些键——本模块要的是「读得动 + 大声说没身份」，
- *  不是「读不动」。放宽方向只有一个：不许把缺章读成有章。 */
+ *  为什么要专门收 `unknown`（第 393 页现读）：`scripts/loop-eval.ts` 的 `headSha` 在 git 取不到 HEAD 时
+ *  写的就是字面量 `"unknown"`（#63 留的哨兵），而档名缺省时历史上也落 `"unknown"`。
+ *  不收成缺章的话，配对层会把这些行读成「两趟同一枚 sha」⇒ **不同代码被并成同分母**，
+ *  正是 #90 要堵的那条路换了个名字复活。放宽方向只有一个：不许把缺章读成有章。
+ *  这里不抛，是因为存量语料本来就没这些键——本模块要的是「读得动 + 大声说没身份」，不是「读不动」。 */
+export function isUnidentified(v: string): boolean {
+  return v === "" || v.toLowerCase() === "unknown";
+}
+
 function identityStr(v: unknown): string {
-  return typeof v === "string" && v !== "" ? v : "";
+  return typeof v === "string" && !isUnidentified(v) ? v : "";
 }
 
 /** 数值型身份键（`maxSteps`／`reps`／`rep`）：**有限数取字符串、非空串原样、其余一律空串（＝缺章）**。
@@ -158,7 +165,7 @@ export function parseReadings(text: string, label = "readings"): Row[] {
     const res = (rr["resources"] ?? {}) as Record<string, unknown>;
     return {
       id,
-      model: typeof rr["model"] === "string" ? rr["model"] : "",
+      model: typeof rr["model"] === "string" && !isUnidentified(rr["model"]) ? rr["model"] : "",
       // 身份键取 `r` 内层，兼容盖在 `{r, g}` 记录外层的写法（写侧最终落哪一层由 #63 定）。
       headSha: identityStr(rr["headSha"] ?? rec["headSha"]),
       ranAt: identityStr(rr["ranAt"] ?? rec["ranAt"]),

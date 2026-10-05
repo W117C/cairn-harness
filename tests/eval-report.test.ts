@@ -592,6 +592,43 @@ describe("indexFaces：同面才配对，缺身份的不进分母（unknown-face
     expect(idx.unknownIds).toEqual(["A"]);
   });
 
+  it("★ 只缺一枚**基三键**（headSha）而其余五枚齐 ⇒ 仍落 unknown-face（配对键必须从身份闸那三枚派生）", () => {
+    // 这一格钉的是「派生式」而不是「六枚硬抄」：配对层若把自己那三枚新键当成身份的全部，
+    // 少一枚 headSha 的行就会被读成有身份 ⇒ 两个不同提交的读数并成同分母（#90 的原始缺陷形状）。
+    const rows = parseReadings(readings([
+      { id: "A", ...FACE, ranAt: "2026-10-05T00:00:00Z" },
+      { id: "B", ...FACE, headSha: "", ranAt: "2026-10-05T01:00:00Z" },
+    ]));
+    const idx = indexFaces(rows);
+    expect(idx.unknown, "缺 headSha 的那一行没被排除 ⇒ 配对层少认一枚基三键").toBe(1);
+    expect(idx.unknownIds).toEqual(["B"]);
+    expect(identityOf(rows.filter((r) => r.id === "B")).missing, "身份闸与配对层对同一行的判定必须同向").toContain("headSha");
+    expect(idx.faces.length, "有身份那一侧还要真留一格（不许把两条一起排除掉蒙成「都缺章」）").toBe(1);
+  });
+
+  it("★ 写侧那枚 unknown 哨兵在读侧仍算缺章（headSha／model 两枚都试）", () => {
+    // 现读来源：scripts/loop-eval.ts 的 headSha 在 git 取不到时写的就是字面量 "unknown"（#63 留的）。
+    // 不收口 ⇒ 两趟「取不到 sha」的读数长得同一枚 sha，配对把它们当同分母（不同代码并成一面）。
+    const rows = parseReadings(readings([
+      { id: "A", ...FACE, headSha: "unknown", ranAt: "2026-10-05T00:00:00Z" },
+      { id: "B", ...FACE, model: "UNKNOWN", ranAt: "2026-10-05T01:00:00Z" },
+    ]));
+    expect(rows[0]?.headSha, "哨兵 unknown 被读成了一枚真 sha").toBe("");
+    expect(rows[1]?.model, "哨兵 UNKNOWN 被读成了一枚真档名").toBe("");
+    expect(identityOf(rows).missing).toEqual(["headSha", "model"]);
+    const idx = indexFaces(rows);
+    expect(idx.faces.length, "两行都带着取不到的哨兵 ⇒ 谁也不许并进可比面").toBe(0);
+    expect(idx.unknown).toBe(2);
+  });
+
+  it("正半边：真 sha 与真档名照旧算有身份（哨兵口径不许把有章读成没章）", () => {
+    const rows = parseReadings(readings([{ id: "A", ...FACE, ranAt: "2026-10-05T00:00:00Z" }]));
+    expect(rows[0]?.headSha).toBe(FACE.headSha);
+    expect(rows[0]?.model).toBe(FACE.model);
+    expect(identityOf(rows).ok).toBe(true);
+    expect(indexFaces(rows).unknown).toBe(0);
+  });
+
   it("★ 混堆：有身份的配对、缺身份的排除且**出声**（unknown-face 那一格印得出来）", () => {
     const idx = indexFaces(parseReadings(readings([
       { id: "A", ...FACE, ranAt: "2026-10-05T00:00:00Z", ok: true },

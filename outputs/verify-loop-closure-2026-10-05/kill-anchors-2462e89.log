@@ -1,0 +1,35 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-2462e89.lock）
+变异验证：15 条
+✅ verify-trust-table-never-consulted — 免问那一环不查表（把 `isTrusted` 的结果扔掉）⇒ 批过的面第二次仍然问，而没门／无人值守那条路直接判无面：**自动验证拍回到「永远不跑」**，正是本笔要接上的那一环 ｜本机实测 2.3s／2 拍
+✅ verify-face-asked-twice-per-beat — 同场去重没了 ⇒ 一次自动拍判两遍信任（`surface()` ＋ `run()`）：出两张同样的卡、悬两次 60s，人在第一张上说了「不」还会被再问一次 ｜本机实测 2.7s／2 拍
+✅ verify-fingerprint-blind-to-test-bucket — 指纹的 test 桶又被省掉 ⇒「先批 pnpm test、再把 test 换成 curl|sh」换不出新键，免问会替**新命令面**背书（S3 立闸要堵的那条路原样复活） ｜本机实测 2.3s／2 拍
+✅ verify-trust-key-tag-dropped — 键域标签没了 ⇒ verify 的条目与插件信任的历史**裸路径**条目落进同一键域，一条给插件历史留的兼容记录能顺带免掉「执行仓库自带命令」那一问 ｜本机实测 2.3s／2 拍
+❌ trust-file-path-recomputed-at-call-site — 显式 `trustFile` 覆盖被丢掉、路径在调用点重写 ⇒ 设了 M2E_TRUST_FILE 的那场 run 把决议写到别处，判卷／CI／桌面读的那一份永远零条目（一把表两个门的前提就是路径只算一次） ｜本机实测 2.5s／2 拍
+   变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）
+  ↳ 指针接线预检：针脚长在函数「trustFilePathOf」里，而「那张批准落在**插件信任那一份文件**里（一把表两个门；没有 M2E_TRUST_FILE 时走 pluginDataRoot）」那条用例体一次没提它⇒ 先排「指针指向不会红的那条」（规则 325 那一次就是这个形状），再谈判卷无分辨力；用例若确实从上游入口打进来，这一句忽略即可（静态代理会误喊，实测假疑空 680/1123）
+✅ verify-card-non-approval-grants — 卡的非批准结局被当成批准 ⇒ 拒／超时都放行并记账，信任闸退化成「走过一张卡」的仪式 ｜本机实测 2.4s／2 拍
+✅ verify-unattended-emits-a-card — 无人值守那半边闸被摘 ⇒ 在没人能答的通道上悬一张 60s 的卡（定时任务／CI／非 TTY 都吃到悬等），且这条判卷用的是「门被配成可答的交互门」那一形——门自己那支 unattended 顶不住配错 ｜本机实测 2.4s／2 拍
+✅ runner-leaves-verify-trust-unwired — 生产装配又不递 resolver ⇒ 回到 `trustedRepo` 恒 false 那个今日形态：缺省开着的自动验证拍一次都不跑（48 份留档 0 条），而这一格只有跑到 runner 的判卷看得见 ｜本机实测 2.3s／2 拍
+❌ cli-verify-beat-charged-before-cause — 事件那一站又不看归因、把每一拍红着的 verify 一律塞进代码红档 ⇒ 环境拍与拒拍一起算在模型头上，收尾那句「红 X」重新变成假数（#102 的原始缺陷形状） ｜本机实测 2.3s／2 拍
+   变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）
+  ↳ 指针接线预检：针脚长在函数「if」里，而「CLI：skipped 拍不置红，只加被拒档」那条用例体一次没提它⇒ 先排「指针指向不会红的那条」（规则 325 那一次就是这个形状），再谈判卷无分辨力；用例若确实从上游入口打进来，这一句忽略即可（静态代理会误喊，实测假疑空 680/1123）
+  ↳ 出口计数：函数「if」里有 7 条 return ⇒ 存活时先问「判卷喂到了第几支」，补一条能让那一支走到的输入（规则 329）；**别撤锚点、别改针脚**——撤掉就是把那支出口重新变回没人守
+✅ cli-cause-classification-rehardcoded — 分档谓词从共用的 `isEnvVerifyCause` 换成自抄的「cause 等于 code」⇒ 未归因（cause 缺席）被读成环境拍，而 `src/events` 那张表以后多一枚环境 cause 也不会被这里认到（两份真值，规则 236 的形状） ｜本机实测 2.5s／2 拍
+✅ tool-choice-blocked-bucket-collapsed — 被拒那一档并掉 ⇒ 工具选择账上「模型自己该改的」与「人没批的」又混成一条，读那屏数的人无从知道红是怎么来的 ｜本机实测 2.7s／2 拍
+❌ automation-face-latch-removed — 「执行面定终身」那把闩被摘 ⇒ 第一场判假、第二场盘上冒出任务就翻真，而说明书面早已定档 ⇒ 出现「能调看不见」那半张脸（两面不同步是工具面那组缺陷的原形状） ｜本机实测 2.6s／2 拍
+   变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）
+  ↳ 指针接线预检：针脚长在函数「installTimeAutomationFace」里，而「第一场假 ⇒ 执行面定终身：第二场盘上有了任务也不许翻（不抛、不「看得见调不到」）」那条用例体一次没提它⇒ 先排「指针指向不会红的那条」（规则 325 那一次就是这个形状），再谈判卷无分辨力；用例若确实从上游入口打进来，这一句忽略即可（静态代理会误喊，实测假疑空 680/1123）
+  ↳ 出口计数：函数「installTimeAutomationFace」里有 3 条 return ⇒ 存活时先问「判卷喂到了第几支」，补一条能让那一支走到的输入（规则 329）；**别撤锚点、别改针脚**——撤掉就是把那支出口重新变回没人守
+✅ automation-judgement-blind-to-disk — 盘上那份任务清单不再参与判据 ⇒ 定时五件的说明书对**没有任何任务**的仓也常驻每轮静态字节（这一格住的正是成本纪律，不是便利） ｜本机实测 2.7s／2 拍
+❌ eval-run-identity-keys-rehardcoded — 配对那一层的身份键再从字面量抄一遍、且漏掉身份闸那三枚 ⇒ headSha 缺章的读数照样成对，「不同提交的读数互相当同分母」那条老路复活（#90 的动因；派生式没了就是两份表） ｜本机实测 1.0s／2 拍
+   变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）
+✅ eval-rows-not-stamped-with-identity — 身份章只盖 run.json 旁证、逐条读数不盖 ⇒ 报告读到的是「有旁证的空身份行」，整批落进 unknown-face，配对那一格等于没接上写侧 ｜本机实测 0.8s／2 拍
+
+4 条判红（按类别分开数，修法各不同——见上一行起的分类名单）
+  ❌ 判红 4 条，按类别分开（修法各不同，混成一句会把人指错方向）：survived 4
+  ❌ 判红·变异存活（测试仍全绿 ⇒ 该不变量没有观测者）（4 条）：trust-file-path-recomputed-at-call-site cli-verify-beat-charged-before-cause automation-face-latch-removed eval-run-identity-keys-rehardcoded
+REDKINDS=survived:4,misattributed:0,baseline-red:0,no-effect:0,syntax:0,restore-mismatch:0,vacuous:0
+[mutate-verify] 本次耗时 35.4s · 跑了 15/15 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 30 次／15 条（每条次数分布 2×15）· 单次中位 第1次 1.2s／第2次 1.2s· 最贵一条 verify-face-asked-twice-per-beat 2.7s
+跑法单价：selector 30 拍·中位 1.17s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-2462e89.lock）
