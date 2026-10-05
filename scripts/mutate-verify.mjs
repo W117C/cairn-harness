@@ -1319,6 +1319,32 @@ const MUTATIONS = [
     apply: (s) => s.replace("const REDIRECT_OP = /^(?:\\d+)?(?:&>>|&>|>>|>\\||>)(.*)$/;", "const REDIRECT_OP = /^(?:\\d+)?(?:&>>|&>|>\\||>)(.*)$/;"),
     expectFail: "⑨ `>>` 追加同样不可回滚 ⇒ 已有文件也留原件",
   },
+  // ---- #97：用户自定义子代理的 CC 连字符字段名必须被那一份投影读到（此前 `allowed-tools` 落进未知键被丢）----
+  {
+    id: "role-alias-allow-not-read",
+    src: "src/agent/sequencer.ts",
+    test: "tests/role-field-aliases.test.ts",
+    desc: "别名退回只认驼峰 ⇒ CC 写法的白名单被当未知键丢弃，角色**按默认面**跑＝静默比声明更宽的工具面",
+    apply: (s) => s.replace('  const tools = readToolListField(fm, "tools", "allowed-tools", "intersect", warnings);', '  const tools = parseToolList(fm.tools);'),
+    expectFail: "真跑起来：模型每轮拿到的规格面恰好是声明的那两把，且比默认面只缩不涨",
+  },
+  {
+    id: "role-field-conflict-silent",
+    src: "src/agent/sequencer.ts",
+    test: "tests/role-field-aliases.test.ts",
+    desc: "两种写法值不同却不自称相等 ⇒ 静默择一（本仓唯一允许的收法是保守面交集＋点名，不然是「看着生效实际另一份在跑」）",
+    apply: (s) => s.replace("  const same = primary.length === aliased.length && primary.every((x) => aliased.includes(x));", "  const same = true;"),
+    expectFail: "tools 与 allowed-tools 值不同：警告点名两个键与两个值，并按保守面（交集）收",
+  },
+  // ---- 能力 8/10 的诚实性：run 抛异常也要落一条 goal_stopped（否则芯片继续显示「续跑中」）----
+  {
+    id: "goal-stopped-not-emitted-on-throw",
+    src: "src/main/agent-runner.ts",
+    test: "tests/goal-stopped-on-throw.test.ts",
+    desc: "catch 里的补记录摘掉 ⇒ 异常收场不落 goal_stopped：事件流与渲染层一起说「还在跑」，而那条 run 已经死了",
+    apply: (s) => s.replace("try { await emitGoalStoppedOnThrow(opts.logPath, opts.sessionId, err); }", "try { void 0; }"),
+    expectFail: "run 中途抛 ⇒ 盘上恰有一条点名异常的 goal_stopped，投影读得到 stopped",
+  },
   {
     id: "budget-unpriced-tokens-swallowed",
     src: "src/agent/orchestrator-join.ts",

@@ -13190,6 +13190,26 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
 6. **没做／边界**：`sed -i`／`tee`／`dd of=`／脚本内 `open(w)` 一律不认（要按二进制建一张选项表＝新解析，不是这一笔）；多目标只把第一条放进结构化字段（与 `apply_patch` 同口径，没扩 `ToolResult`/events）；**只留原件，没做还原那一半**——回滚目前仍是「人拿着 snapshot_id 自己复制回去」（那条路线第 380 页已验过并写进回执）。
 7. **量纲与没跑**：本轮跑六支判卷（80 条）＋一次针脚体检；**没跑**全量核心判卷、认证、`mutate-verify` 真杀。本页不宣布任何「绿了」。
 
+## 2026-10-04 · 第 389 页：并回两支子代理成品——`#97`（自定义子代理吃得住 CC 字段名）与 `#69` 另一半（run 抛异常也落 `goal_stopped`）；三根针脚同笔
+
+两簇各自独立（各自判卷、各自针脚），同笔入库是因为都只有「主线程复跑」这一份新读数可引。**本笔是两件事，不是一件事的两半**——分列如下。
+
+### A · `#97` 用户自定义子代理的字段名（`src/agent/sequencer.ts` ＋ `tests/role-field-aliases.test.ts` 16 格）
+1. **缺陷**：用户在 `~/.dsh/agents/x.md` 放一份角色定义，执行端只认仓内驼峰键；CC 生态写的 `allowed-tools` **恰落进「未知键 ⇒ 警告后丢弃」**那一支 ⇒ 文件看着生效、实际按**默认面**跑。这是最坏的一种静默：**给了比声明更大的工具面**（安全语义，不是便利问题）。
+2. **取料现读**（子代理列的账，主线程复核）：真正读这些键的**本来就只有一份投影**（`sequencer.ts` 的 tools/disallowedTools 与 isolation/maxTurns/model），单发与链两条路都经 `resolveStageRole → resolvePluginRole` 落到同一处 ⇒ 修法就在这一处加别名读，**没有新增第三个读点**（第 1 格判卷钉的就是「装载侧只透传、别名只有一处」）。
+3. **口径三条**：①两种写法同时出现且值不同 ⇒ 按**保守面（交集）**收＋**点名两个键与两个值**；交集为空不许退回默认面而不吭声（那正是本笔要修的静默扩权）；②下划线笔误（`allowed_tools`）**不做**别名——照点名不采纳，免得把拼错变成生效；③`permission-mode` 本仓没有对应格子 ⇒ 「忽略＋点名」，**不进产物**，不假装映射到某个档位。
+4. 读数：子代理侧先红 `11 failed | 5 passed`（`EXIT=1`）→ 实现后 `16 passed`（`EXIT=0`）；主线程并入后复跑＝本支＋`plugin-role-discoverability`＋`user-agent-roles`＋`goal-continue` 四支 `Tests 54 passed (54)`、`EXIT=0`（18:41）。两根针脚：`role-alias-allow-not-read`（别名退回只认驼峰 ⇒ 静默扩权那格红）、`role-field-conflict-silent`（冲突自称相等 ⇒ 择一那格红）。
+
+### B · `#69` 另一半：抛异常收场也要落 `goal_stopped`（`src/main/agent-runner.ts` ＋ `tests/goal-stopped-on-throw.test.ts` 3 格）
+5. **缺陷**：`runAgent` 只有 `finally` 没有 `catch` ⇒ run 中途抛死时不落 `goal_stopped`，事件流与芯片继续显示「续跑中」，而那条 run 已经没了。这与「不可知不许当免费」同族：**把没在发生的事报成在发生**。
+6. **实现形状**：补 `catch`，先 `await emitGoalStoppedOnThrow(...)`（外面再套一层 try——补记录失败只 `console.warn`，**绝不换掉原异常**，末尾照旧 `throw err`），`finally` 一字未动；理由句点名「run 中途抛错／没走到续跑判据」＋原异常 message，且走既有唯一出口 `emitGoalEvent`（带 session_id）；`replay` ENOENT ⇒ 空表、`view===null || stopped!==null` ⇒ **逐字零行为**。顺手一处硬化：`reason` 落盘前过 `scanStreamEvent`——`SCANNED_TEXT_PATHS` 本就把 `goal_stopped.reason` 列为待扫，而这条写入点不经 loop 那份 `redactEventForLog`，异常原文是外部文本。
+7. 读数：子代理侧先红 `1 failed | 2 passed`（红点正是 `stops.length` 期望 1 实得 0）→ 实现后 3 passed → 分辨力自检（摘掉「已停过就不许再落」那道守卫 ⇒ 只有第 3 格红，三格彼此独立）→ 逐字节复原；主线程并入后复跑 3 passed、`EXIT=0`（18:43）。针脚 `goal-stopped-not-emitted-on-throw`（把补记录换成 `void 0` ⇒ 第 1 格红）。
+8. **两处已知未做（写清，不留白）**：①取消（`AbortError`）也走这条 `catch`，理由会写成「run 中途抛错」——没加 `signal.aborted` 特判（宁可少改）；要把「用户按停止」与「异常」分列两条理由，属另一裁决，登记 **`#104`**。②run 正常跑完而 `goalNextTurn` 自己抛 ⇒ 仍不落 `goal_stopped`（那一步不在 `runAgent` 内），登记 **`#105`**。`handleAgentRun` 最外层 catch（信封／附件 pre-flight 拒）**刻意不落**——不给没起跑的会话凭空写停。
+
+### 合并与状态
+9. **合并过程本身有一格要记**：B 簇的补丁在 `agent-runner.ts` 的 import 处与本笔 `#84` 那行撞上（`git apply --3way` 报 UU）。**没有丢任何一边**——冲突块手工并成「`scanStreamEvent` 那份 import ＋带 `seedPendingPlanFromEvents` 的那一行」，随后 `grep -c '^<<<<<<<'` 取到 **0** 才继续（判据：标记清零，不是「看起来对了」）。
+10. **量纲与没跑**：本轮跑两支判卷（16＋3）＋四支邻卷（54 条）；**没跑**全量核心判卷、认证、`mutate-verify` 真杀（本笔三根＋前几笔共 9 根新针脚，都等落库后在干净树逐条杀）。`#69` 至此两半都齐。本页不宣布任何「绿了」。
+
 
 
 

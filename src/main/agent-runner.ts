@@ -48,6 +48,9 @@ import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, goalWindowSpend, par
 // 这里只做「读事件流 → 问它 → 印一行」。**不新增事件类型**——沿用本仓既有先例
 // （goal 的两态就是靠 user_message.origin 承载的），新增一种事件会让重放契约多一个分支。
 import { assistantTurnsFromEvents, goalDriftCell, goalDriftFindings } from "../agent/goal-drift";
+// 落流前的文本扫描表（`goal_stopped.reason` 已在表上）：异常原文是外部文本，而这条写入点不经
+// loop 那份 redactEventForLog，扫它就得取这张现成的表，不在这里再抄一遍「哪个字段该擦」。
+import { scanStreamEvent } from "../agent/worker-projection";
 import { checkPermission, enterPlanRunScope, getPlanState, planGateBlocks, seedPendingPlanFromEvents, sideEffectDecisionTable, type PermissionMode } from "../permissions";
 import {
   evaluate,
@@ -1942,6 +1945,19 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     } catch (err) {
       console.warn("[memory] 沉淀轮失败:", err instanceof Error ? err.message : String(err));
     }
+  } catch (err) {
+    // 抛出去之前先把「这一场不会再自动续跑了」落进事件流：`runAgent` 原先只有 finally、没有 catch，
+    // 而 goal 的停止理由一律由 runAgent **外面**的续跑判据（goalNextTurn）写——异常一冒头就跳过了它，
+    // 于是芯片继续显示「续跑中」，而这条 run 已经死了（界面上报了一件没发生的事）。
+    // 三条边界：① 只在真武装着、且还没停的目标上补（没设过目标 ⇒ 逐字零行为，已停 ⇒ 不落第二条洗掉原理由）；
+    // ② 补记录自己失败也不许把原异常换掉——只出声，err 照旧往外抛，`handleAgentRun` 的既有收场路径不变；
+    // ③ 下面 finally 的清理语义一个字节都不动。
+    try { await emitGoalStoppedOnThrow(opts.logPath, opts.sessionId, err); }
+    catch (inner) {
+      console.warn("[goal] 异常收场的 goal_stopped 落盘失败（这一格的「不跑了」没上屏，不等于发生了）:",
+        inner instanceof Error ? inner.message : String(inner));
+    }
+    throw err;
   } finally {
     parentFinished = true;
     // Same queue as retained orchestrator pipeline, so no close/write race.
@@ -2189,6 +2205,27 @@ export async function handleAgentRun(
 async function emitGoalEvent(logPath: string, sessionId: string | undefined, ev: AgentEvent): Promise<void> {
   await createEventLog(logPath).append(ev);
   hooks.onEvent?.(sessionId !== undefined ? ({ ...ev, session_id: sessionId } as AgentEvent) : ev);
+}
+
+/** run 中途抛错时补的那一条 `goal_stopped`（异常收场也是「不跑了」，也得让用户看得见）。
+ *  为什么必须有它：续跑判据 `goalNextTurn` 长在 `handleAgentRun` 的圈里、在 `runAgent` **外面**，
+ *  异常一冒头就整圈跳过它 ⇒ 盘上一条停止都没有，而芯片读的是 `projectGoal` 投影 ⇒ 界面继续说「续跑中」，
+ *  实际那条 run 已经死了（把没发生的事报成在发生，与「不可知不许当免费」同一条纪律）。
+ *  停没停一律现读投影（与被量的对象同一个函数），不在这里另算一份「我觉得它停了」。 */
+async function emitGoalStoppedOnThrow(logPath: string, sessionId: string | undefined, err: unknown): Promise<void> {
+  // 会话日志一行都没落过 ⇒ replay 会 ENOENT。那是「这一场没有目标」，不是文件错误（同 handleGoalSet 的口径）。
+  const events = await replay(logPath).catch((e: unknown) => {
+    if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return [] as AgentEvent[];
+    throw e;
+  });
+  const view = projectGoal(events);
+  if (view === null || view.stopped !== null) return; // 没设过目标 / 已经停过 ⇒ 逐字零行为
+  const reason =
+    "run 中途抛错，没走到续跑判据 ⇒ goal 自动续跑已停（这一轮不会再跑，界面上不许再显示「续跑中」）：" +
+    (err instanceof Error ? err.message : String(err));
+  await emitGoalEvent(logPath, sessionId, scanStreamEvent(
+    { type: "goal_stopped", reason, turn: view.turn, evidence: view.evidence },
+  ));
 }
 
 /** goal 模式：一次 run 收束后问判据「还要不要再跑一轮」。返回 null = 不再续（没设目标 / 已停 / 被取消）。

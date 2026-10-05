@@ -104,8 +104,16 @@ export interface ResolvedPluginRole {
   warnings: string[];
 }
 
-/** CC 安全约束（§9.6 照抄）：插件 agent 不支持 hooks / mcpServers / permissionMode → 忽略 + 警告。 */
-const PLUGIN_UNSUPPORTED_KEYS = ["hooks", "mcpServers", "permissionMode"] as const;
+/** CC 安全约束（§9.6 照抄）：插件 agent 不支持 hooks / mcpServers / permissionMode → 忽略 + 警告。
+ *  `permission-mode`（连字符写法，CC 文档里 agents/*.md 用的那个）与驼峰同属这一件：**只登记不兑现**。
+ *  把它并进未知键那一条会丢掉「为什么这里更严」，把它当已生效则是拿用户的配置文件写假承诺。 */
+const PLUGIN_UNSUPPORTED_KEYS = ["hooks", "mcpServers", "permissionMode", "permission-mode"] as const;
+/** 没有对应档位的那两件的补充说明（警告必须回答「那它映射到什么」，只说「已忽略」等于让人猜）。 */
+function unsupportedNote(key: string): string {
+  return key === "permissionMode" || key === "permission-mode"
+    ? "：本仓没有对应的权限档 ⇒ 不映射任何东西（worker 的权限面只由 spawn 的 mode 与权限层决定）"
+    : "";
+}
 /** §9.6 里 CC 有、我们**执行端还没有面**的字段。不是安全问题，是「采纳未落地」——
  *  同样必须警告：装载收下、执行端不读而不吭声，就是把假承诺写进用户的配置文件里。 */
 const PLUGIN_UNIMPLEMENTED_KEYS = ["effort", "skills", "memory", "background"] as const;
@@ -114,13 +122,56 @@ const PLUGIN_UNIMPLEMENTED_KEYS = ["effort", "skills", "memory", "background"] a
 export const PLUGIN_ROLE_CONSUMED_KEYS =
   ["name", "description", "isolation", "tools", "disallowedTools", "maxTurns", "model"] as const;
 
+/** Claude Code 生态在 agents/*.md 里写的是**连字符**名，而本仓执行端读的是驼峰名。
+ *  别名读只落在这一份投影里（`resolvePluginRole` 是角色 frontmatter 的唯一读者：单发路径
+ *  orchestrator.ts:357 与链路径 orchestrator.ts:1008 都经 `resolveStageRole` 到这里，
+ *  plugins/discover.ts:128 与 roles/user-agents.ts:83 只透传 frontmatter）⇒ 一处生效、处处生效。
+ *  为什么必须读它而不是继续警告后丢弃：`allowed-tools` 从前落进「未知键」，用户照 CC 写法放的
+ *  文件"看着生效、实际按默认面跑"——静默拿到比声明**更大**的工具面，比少一个字段严重得多。
+ *  ⚠️ 名单只给连字符别名：下划线笔误（`disallowed_tools`）仍走未知键那条警告，不许顺手放宽。 */
+export const ROLE_FIELD_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  "allowed-tools": "tools",
+  "disallowed-tools": "disallowedTools",
+});
+
+/** 一份文件里同时写了正名与别名且值不同 ⇒ 不许静默取其一（本仓口径 fail-visible）。
+ *  合并方向恒「宁紧勿松」：白名单取**交集**（放大任何一份都是扩权），剔除面取**并集**（少剔一把也是扩权）。
+ *  两份同值（CC 文件里两种写法并存但同义）不是冲突，不出声——否则每个正常文件都在喊。
+ *  交集为空那一格必须点名：它落不进白名单（缺省 = 默认面，比两份申报都宽），沉默就是本笔要修的洞。 */
+function readToolListField(
+  fm: Record<string, unknown>,
+  canonical: string,
+  alias: string,
+  merge: "intersect" | "union",
+  warnings: string[],
+): string[] {
+  const primary = parseToolList(fm[canonical]);
+  const aliased = parseToolList(fm[alias]);
+  if (fm[canonical] === undefined) return aliased;
+  if (fm[alias] === undefined) return primary;
+  const same = primary.length === aliased.length && primary.every((x) => aliased.includes(x));
+  if (same) return primary;
+  const merged = merge === "intersect"
+    ? primary.filter((x) => aliased.includes(x))
+    : [...primary, ...aliased.filter((x) => !primary.includes(x))];
+  warnings.push(
+    "插件 agent frontmatter 同时写了 " + canonical + " 与 " + alias + " 且值不同 ⇒ 不静默择一：" +
+    (merge === "intersect" ? "按交集收窄（只缩不涨）" : "按并集剔除（宁多拦不漏拦）") + "，" +
+    canonical + "=[" + primary.join(",") + "] " + alias + "=[" + aliased.join(",") + "] 合并后=[" + merged.join(",") + "]" +
+    (merged.length === 0 && merge === "intersect"
+      ? "；交集为空 ⇒ 这一格白名单不落地、本轮按默认面跑（比两份申报都宽），必须先删掉一种写法再派活"
+      : "；要指定别的请删掉其中一种写法"),
+  );
+  return merged;
+}
+
 /** 插件角色 frontmatter → stage 运行参数（纯函数；未知字段忽略不阻断）。 */
 export function resolvePluginRole(def: PluginAgentRoleDef): ResolvedPluginRole {
   const fm = def.frontmatter ?? {};
   const warnings: string[] = [];
   for (const key of PLUGIN_UNSUPPORTED_KEYS) {
     if (fm[key] !== undefined) {
-      warnings.push("插件 agent frontmatter." + key + " 不支持（CC 安全约束照抄 §9.6），已忽略");
+      warnings.push("插件 agent frontmatter." + key + " 不支持（CC 安全约束照抄 §9.6），已忽略" + unsupportedNote(key));
     }
   }
   for (const key of PLUGIN_UNIMPLEMENTED_KEYS) {
@@ -130,7 +181,8 @@ export function resolvePluginRole(def: PluginAgentRoleDef): ResolvedPluginRole {
   }
   // 未知键也吭一声：`disallowed_tools` 这种下划线笔误，若不吭声就是「申报了工具面、
   // 实际按默认面跑」——权限面静默变宽，比少一个字段严重得多。
-  const known = new Set<string>([...PLUGIN_ROLE_CONSUMED_KEYS, ...PLUGIN_UNSUPPORTED_KEYS, ...PLUGIN_UNIMPLEMENTED_KEYS]);
+  // 别名键在这里只算「已知」，**不参与**这份放宽：能落地的写法仍然是那一份投影。
+  const known = new Set<string>([...PLUGIN_ROLE_CONSUMED_KEYS, ...PLUGIN_UNSUPPORTED_KEYS, ...PLUGIN_UNIMPLEMENTED_KEYS, ...Object.keys(ROLE_FIELD_ALIASES)]);
   for (const key of Object.keys(fm)) {
     if (!known.has(key)) {
       warnings.push("插件 agent frontmatter." + key + " 不认识，已忽略（合法键：" + PLUGIN_ROLE_CONSUMED_KEYS.join("/") + "）");
@@ -140,8 +192,8 @@ export function resolvePluginRole(def: PluginAgentRoleDef): ResolvedPluginRole {
   if (isolation !== "" && isolation !== "worktree") {
     warnings.push("插件 agent frontmatter.isolation 仅支持 worktree（§9.6），" + isolation + " 已忽略");
   }
-  const tools = parseToolList(fm.tools);
-  const disallowedTools = parseToolList(fm.disallowedTools);
+  const tools = readToolListField(fm, "tools", "allowed-tools", "intersect", warnings);
+  const disallowedTools = readToolListField(fm, "disallowedTools", "disallowed-tools", "union", warnings);
   const maxTurns = typeof fm.maxTurns === "number" && Number.isInteger(fm.maxTurns) && fm.maxTurns >= 1 && fm.maxTurns <= 200 ? fm.maxTurns : undefined;
   const model = typeof fm.model === "string" && fm.model !== "" ? fm.model : undefined;
   // isolation: worktree（唯一合法值）→ write mode（与 §4.4.5 天然同构）；无 isolation = read mode
