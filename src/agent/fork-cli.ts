@@ -15,11 +15,29 @@ export function firstLine(text: string, max = 100): string {
   return line.length > max ? line.slice(0, max) + "…" : line;
 }
 
-/** args 摘要：write_file 那种大 payload 只报键名与路径，不把正文刷到终端。 */
+/** args 摘要：write_file 那种大 payload 只报键名与路径，不把正文刷到终端。
+ *
+ *  第三支（第 400 页补）：**既没有 path／file_path 也没有 command** 的那些卡——最常见的是新落的
+ *  verify 信任门 `{repoDir, fingerprint, commands}`——此前只印键名，人在终端上看到的是
+ *  「（repoDir, fingerprint, commands）」：**批的是哪个仓、要执行哪几条命令，一个字都没露**。
+ *  高风险确认做成了仪式。这里按**白名单**取值：只有语义上就是给人看的键才印值，其余仍回到键名
+ *  （未列出的键可能带凭据或大 payload，默认不刷终端）。 */
+const DIGEST_SHOWN_KEYS = ["repoDir", "commands", "url", "name", "pattern", "query"] as const;
+
 export function argsDigest(args: Record<string, unknown>): string {
   const path = args.path ?? args.file_path;
   if (typeof path === "string") return path;
   if (typeof args.command === "string") return firstLine(args.command);
+  const shown: string[] = [];
+  for (const key of DIGEST_SHOWN_KEYS) {
+    const v = args[key];
+    if (typeof v === "string" && v !== "") shown.push(`${key}=${firstLine(v, 80)}`);
+    else if (Array.isArray(v) && v.length > 0) {
+      const items = v.slice(0, 3).map((x) => firstLine(typeof x === "string" ? x : JSON.stringify(x), 60));
+      shown.push(`${key}=[${items.join(" ; ")}${v.length > 3 ? ` ; +${String(v.length - 3)} 条` : ""}]`);
+    }
+  }
+  if (shown.length > 0) return shown.join(" ");
   const keys = Object.keys(args);
   return keys.length === 0 ? "" : `（${keys.join(", ")}）`;
 }

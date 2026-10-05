@@ -13880,6 +13880,25 @@ const MUTATIONS = [
     expectFail: "⑥b 门自身那一格（负）：hasAnswerer 判假 ⇒ 不 notify、当场拒、pending 归零",
   },
   {
+    id: "card-args-digest-drops-trust-values",
+    src: "src/agent/fork-cli.ts",
+    test: "tests/card-args-digest.test.ts",
+    desc: "白名单被清空 ⇒ verify 信任卡在终端上又只印「（repoDir, fingerprint, commands）」——"
+      + "人看不到批的是哪个仓、哪几条命令，高风险确认退化成仪式（第 400 页现读的原始缺陷）",
+    apply: (s) => s.replace(`const DIGEST_SHOWN_KEYS = ["repoDir", "commands", "url", "name", "pattern", "query"] as const;`,
+      `const DIGEST_SHOWN_KEYS: readonly string[] = [];`),
+    expectFail: "verify 信任卡的 args ⇒ 摘要点得出仓目录，也点得出要跑的命令（不是一串键名）",
+  },
+  {
+    id: "card-args-digest-dumps-any-key",
+    src: "src/agent/fork-cli.ts",
+    test: "tests/card-args-digest.test.ts",
+    desc: "取值改成遍历**全部**键 ⇒ 「看得见」换成「什么都刷终端」：带凭据的 args（token／apiKey）"
+      + "会被印到屏幕上、进录屏、进日志。白名单的意义就是这两支之间的界线",
+    apply: (s) => s.replace("  for (const key of DIGEST_SHOWN_KEYS) {", "  for (const key of Object.keys(args)) {"),
+    expectFail: "正半边：不在白名单上的键（凭据形状）不许被顺手印出来",
+  },
+  {
     id: "eval-unknown-sentinel-read-as-identity",
     src: "scripts/eval/report.ts",
     test: "tests/eval-report.test.ts",
