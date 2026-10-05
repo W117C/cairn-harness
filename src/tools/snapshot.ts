@@ -3,7 +3,10 @@
 //
 // 只堵一条路径：「agent 把用户未提交的工作覆盖掉了」。不做全量影子 git（§10.10 定稿），
 // write worker 另有 worktree 天然可回滚；本模块服务的是**直写用户真实工作区**的主会话。
-// 位置是方案书定稿的 `.agent/snapshots/`——代价是它会出现在用户仓库的 git status 里（已记档）。
+// 位置是方案书定稿的 `.agent/snapshots/`。原先记档的代价是「它会出现在用户仓库的 git status 里」——
+// #100（2026-10-05 业主拍板 C2）把它加进了 .gitignore：按字节抄的原件可能带着被覆盖文件里的凭据，
+// 而外泄通道是 commit 不是 copy。**仍在的代价**说清楚：明文第二副本留在本地盘上，没有帽也没有 TTL
+// （那一半留给 #56 与帽/TTL，别把「已忽略」读成「已管住」）。判卷 tests/snapshot-dir-not-distributed.test.ts。
 import { copyFile, mkdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 

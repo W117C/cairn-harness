@@ -25,6 +25,11 @@ node_modules/
 fixtures/todo-app/src/todo.ts
 # 同上：D7 覆盖前快照（§10.4）落在工作区内的 .agent/snapshots/，这些门就地改靶子 ⇒ 每次跑都留一份
 fixtures/todo-app/.agent/
+# #100（2026-10-05，业主拍板 C2）：**根级**那支快照此前被漏掉——覆盖前原件是**按字节抄**的，其中可能
+# 含被覆盖文件里的凭据，而原件本来就在盘上、外泄通道是 commit 而不是 copy。口径与 .agent/memory/、
+# .agent/sessions/ 同族（运行产物＋机器本地状态）。⚠️ 这只掐掉「随仓库分发」，不解「明文第二副本无帽
+# 堆积」——那一半留给帽/TTL 与仍待裁的 #56。判卷见 tests/snapshot-dir-not-distributed.test.ts。
+.agent/snapshots/
 
 # M3b：write worker worktree（.agents/wt-<agent_id>，合并控制塔管理）
 .agents/
