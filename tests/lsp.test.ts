@@ -21,6 +21,7 @@ import {
   collectDiagnostics,
   closeAllLspClients,
   getLspClient,
+  setLspTrustedRepos,
   isLspBroken,
   loadLspConfig,
   lsp,
@@ -35,6 +36,8 @@ const STUB = fileURLToPath(new URL("../fixtures/lsp/stub-server.mjs", import.met
 let ws = "";
 afterEach(async () => {
   await closeAllLspClients();
+  // 断言集合是**模块级**状态：不清会让下一个用例继承上一个工作区的归属（那正是"宽授权"）。
+  setLspTrustedRepos([]);
   if (ws) await rm(ws, { recursive: true, force: true });
 });
 
@@ -52,6 +55,11 @@ async function newCtx(config?: object): Promise<ToolContext> {
     ),
     "utf8",
   );
+  // #58 第二半：本判卷自建的 tmp 工作区**由本判卷拥有**，其 `.agent/lsp.json` 的 command
+  // 是仓内 fixture（`fixtures/lsp/stub-server.mjs`），不是仓库自带的外部输入。
+  // 用调用方断言显式声明，与 S3 信任闸的 `trustedRepo: true` 同一口径（断言，不是缺省）。
+  // 不这么做的话本判卷会撞上新信任门而红——而那个红是**判卷没声明归属**，不是门错了。
+  setLspTrustedRepos([ws]);
   return { workspace: ws };
 }
 
@@ -238,6 +246,8 @@ describe("S1：预热默认关，且不吞掉显式开启", () => {
     }), "utf8");
     const target = join(root, "a.ts");
     await writeFile(target, "export const a = 1;\n", "utf8");
+    // 同上：本判卷拥有这个 tmp 工作区，command 是本判卷写的 trace 脚本（#58 第二半的调用方断言）。
+    setLspTrustedRepos([root]);
     return { root, marker, target };
   }
 

@@ -248,7 +248,10 @@ describe("④ 真·未知键仍要警告（这波只放宽连字符别名）", (
       expect(r.warnings, key + " 不该被静默吃").toHaveLength(1);
       expect(r.warnings[0]).toContain(key);
       expect(r.warnings[0]).toContain("不认识");
-      expect((r as Record<string, unknown>)[field], key + " 不许被当成那条正名采纳").toBeUndefined();
+      // 经 `unknown` 过一次：`ResolvedPluginRole` 没有索引签名，TS2352 不许直接断言成
+      // `Record<string, unknown>`（这一格要读的是 frontmatter 键有没有被当成正名采纳，
+      // 那是「键不在类型里」的场合，不是「类型错了」）。只加标注，不改断言对象。
+      expect((r as unknown as Record<string, unknown>)[field], key + " 不许被当成那条正名采纳").toBeUndefined();
     }
   });
 

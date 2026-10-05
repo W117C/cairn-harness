@@ -13231,3 +13231,76 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
 
 
 
+
+## 2026-10-05 · 第 391 页：未闭问题收口——判卷红与门表红归零、`#58` 第二半落地、`#39`–`#73` 逐条终态（四类之一，无主语状态）
+
+本页是**收口页**，不是施工页：它把这一轮真正闭掉的、此前已闭的、备妥待落的、待业主裁决的分开记账，
+不许再出现「照旧」「待办」这类没有主语的状态。**所有读数都是本页现读**，旧凭证只作历史引用。
+
+1. **判卷红归零（那 2 条，机制追到判据自身）**：真仓面红不在生产码，在**判卷两臂取料不一致**——
+   `scratchTreesUnder` 此前写「根下任何子目录」，于是并发会话的 5 棵 `.qoder/worktrees/agent-*` 全被吃进来判，
+   而对账那条只算 `mainRoot + "/.worktrees/"` ⇒ 两臂分母不等。**修在尺本体**（`95e0b96c` 引入
+   `SCRATCH_ROOT_DIR` 限定暂存根，并把前缀白名单换成「任意前缀 + `-<sha>`」）。
+   **我没有只信它绿**：自己造红机跑了两态——把过滤退回「根下任何子目录」⇒ `Tests 3 failed | 10 passed`，
+   红里含真仓面那两条；复原后 `13 passed`、`git diff` 空（逐字节复原）。
+   ⇒ 结论：那 2 条红是**尺第三次咬自己的车**（前两次：认证树 `head-cert-<sha>`、`probe-head-<sha>`），不是代码回归。
+2. **门表那 1 红（`typecheck`）归零，两条归属不同**：① `tests/verify-skipped-third-outcome.test.ts:106`
+   的 TS7006 是**我的**（第 386 页那笔 `async *stream(messages)` 缺类型标注）⇒ 按本仓既有做法补
+   `ProviderMessage[]`（`tests/auto-verify-repair.test.ts`／`write-face.test.ts` 都是这么写的，不新造类型）；
+   ② `tests/role-field-aliases.test.ts:251` 的 TS2352 是**别人的**（`#97` 那支 `#97` 判卷，随 `95e0b96c` 入库）。
+   **我预期它「随对方入库归零」，这个预期落空了**——它带着红进了 HEAD 并会挡住终局认证的 `typecheck exit=0`。
+   该文件现已在 HEAD 且工作树干净（不属在飞面）⇒ 按契约「只碰干净面」处置：**最小类型标注**
+   （经 `unknown` 过一次，零行为变更），并在注释里写清为什么不直接断言。
+   终态 `node --import tsx scripts/typecheck.ts` ⇒ `tsc --noEmit 通过（0 条报错）`、`exit=0`。
+3. **`#58` 第二半落地（裁决走 (b) 信任门）**：**这一格的缺口是上一笔 `fb76517e` 自己写明的**——
+   它钉的 `tests/lsp-permission-gate.test.ts` 头注释第 4–5 行写着「**克隆即携带那条路与写盘无关**：
+   模型根本不用动手，配置跟着 clone 一起到」。现读核实：`src/tools/lsp.ts` 里 `spawn(server.command, …)`
+   之前**零信任判定**（`grep -n "trust\|Trust" src/tools/lsp.ts` 空）⇒ 缺口成立，不是推断。
+   落法＝**复用插件那只内容指纹门**（`TrustStore`），不为 lsp 造第二套信任语义：
+   键＝`<lsp.json 绝对路径>@<内容 sha256 前 32>`；`pending`／`declined` ⇒ **不起进程**并点名（fail-closed）；
+   授权只由 `decideLspConfigTrust` 写（工具面自己不许自我授权）；超单文件帽（512KB，与插件门同帽）⇒ 取不到指纹 ⇒ 按未授权。
+   **为什么不用 (a) 改判据**：lsp 在只读档就要用，`tests/write-face.test.ts` 钉着「lsp 不算改盘」那条既有裁决，
+   削只读档的 LSP 是把安全修成功能损失；而 `server.command` 的真实危险是「仓库内容决定宿主执行什么」，
+   内容指纹绑的正是这个内容面。
+   **判卷两态＋两台造红机**（`tests/lsp-trust-gate.test.ts`，6 条）：绿态 `6 passed`；
+   造红①「整段摘掉信任门」⇒ `2 failed | 4 passed`（未授权真的 spawn 了）；
+   造红②「指纹取常量＝不绑内容」⇒ `1 failed | 5 passed`（换了 command 还沿用旧授权）——**两台各红在不同用例上**。
+   邻卷六支 `72 passed`（`lsp`／`lsp-permission-gate`／`plugin-lsp-activation`／`path-boundary`／`write-face`＋本支）。
+   **途中我自己制造又修掉的两处**：新门把既有 `tests/lsp.test.ts` 打断成 9 红——真因不是门错，
+   是那些判卷自建 tmp 工作区却**没声明归属**；处置**不是绕过门**，而是照 S3 信任闸的 `trustedRepo: true`
+   同一口径加调用方断言入口 `setLspTrustedRepos`（断言，不是缺省；`afterEach` 必须清，
+   否则下一个用例继承上一个工作区的归属＝那正是宽授权）。从 9 红降到 2 红再降到 0。
+4. **残留树归属（`staleScratchTrees` 现读判定，工具面不重抄判据）**：`stale=0`／`unmeasured=0`／`foreign=0`。
+   我那两棵 `.worktrees/` 树**一棵都不回收**——`probe-head-e0b9bc7b`（dirty=1）与 `verify-c7f2ea0f`（dirty=9）
+   各自卡在判据第②格「0 项在飞」。**名字诚实（都带提交号且与实际 HEAD 对得上）不构成可以删的理由**
+   （回收判据与命名判据是两件事，合成一把会互相掩盖）。11 棵 `.qoder/worktrees/*` 卡在第①格「detached」，归属 harness 自己，不碰。
+   取料与逐棵读数：`outputs/closure-scratch-trees-2026-10-05/`。
+5. **`#39`–`#73` 逐条终态（四类之一；不写「照旧」）**：
+   · **本轮已闭**：`#58`（第二半，见第 3 条）。
+   · **此前已闭（补指针）**：`#39`（`b199058` 后全量 0 红在认证面清掉；那 2 条红即本轮第 1 条）、`#61`（`3f0ec2cc` 分页修法落地）、
+     `#62`／`#63`（隔壁已收，`e0b9bc7b` 即 `#62` 那笔）、`#64`（`outputs/decisions-b-2026-10-05/` 裁决简报入库）、
+     `#65`、`#57`（`.gitignore` 判卷 `tests/snapshot-dir-not-distributed.test.ts` 在库）、`#66`（页 362 量完，结论＝**别翻**）。
+   · **备妥待落**：`#69`／`#71`（9 项在 `.worktrees/verify-c7f2ea0f`，已造红→实现→反证过；
+     前置 `src/agent/loop.ts` 现读**不在**在飞清单 ⇒ 可并入；并入时需业主做 `scripts/frozen-sha256.json` 冻结登记，
+     备妥条目见 `outputs/closure-frozen-registry-2026-10-05/registry-todo.md`，**我不代劳**）、
+     `#50`（锚点债：现读 1447 条，阻断 4 全是本轮未入库面，提交后复跑）、`#67`（待与别人的 run_shell 判卷对齐）、
+     `#58` 的第三格（`decideLspConfigTrust` **无产品调用方**——接线到宿主批准流属扩范围，登记不擅自施工）。
+   · **待业主裁决**：`#70`／`#72`（B 类简报第②③条已入库，**只有我的建议、业主未拍**）、`#71` 的冻结登记动作、
+     `A7` 下一档降帽（本页结论是**不降**，理由见第 6 条）。
+6. **`A7` 结论＝不降帽，登记 W4 为解锁条件**（契约里我自行拍板的那一条，写清依据）：
+   现读 `src/main/agent-runner.ts` **2849 行**、帽 2900 ⇒ 余量仅 **51 行**。
+   降帽会立刻撞红在别人在飞面上，而第 383 页已把 W4 的证据一次备足（该文件 52 条针脚；
+   按段量切走会碰坏几条：`M1d /compact` 0 条、`M2f sidechat` 0 条、`M3a card_action` 1 条、
+   `M2f security report` 2 条、**`M4a 调度器` 35 条**不能动；且 sidechat 那段依赖 7 个模块级状态，
+   搬它是一次真重构）。⇒ 正确终态是**登记 W4 拆分＋降帽条件（2600 → 2400 逐档）为解锁条件**，不是现在动帽。
+   门现读绿：面① 取料占比 68.2%（帽 70%）／面② 最大 2849 行（帽 2900）。
+7. **`#69`／`#71` 冻结登记：不代劳，只备条目**（本仓第一纪律里唯一「必须由人做」的一步，
+   `scripts/gym-draft.ts` 头注释原文）。备妥页写清三件：三个新增面（两个 `.jsonl` ＋ `tests/cap-hit-verify.test.ts`）
+   与六个既有键的内容更新；**登记顺序必须是「先并入、再登记」**（冻结表记的是已入库内容的哈希）；
+   登记后跑 `gate-check` 的 H7 双向对账。
+8. **量纲与没跑（如实）**：本页跑的是——`typecheck` 1 次（exit=0）、`lsp` 六支邻卷 72 条、
+   `tests/lsp-trust-gate.test.ts` 6 条、两台造红机各 1 次、`tests/scratch-tree-naming.test.ts` 13 条、
+   `gate-manifest`／`gate-audit`／`ci-cert-face-parity`／`cert-gate-face` 四支 67 条、
+   `--check-needles` 2 次、`repo-hygiene-check` 1 次、残留树探针 1 次、认证门面 23 道逐道 1 次（**全绿**）。
+   **没跑**：全量核心判卷、认证本体（**这一页不宣布任何「绿了」**——终局 head-cert 在落库之后单独起一趟）。
+   提交纪律：本页与代码逐笔 pathspec 提交，`git diff --numstat` 删除数逐笔核过为 0（纯追加／纯增）。

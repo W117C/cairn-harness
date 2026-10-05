@@ -59,6 +59,28 @@ const MUTATIONS = [
     expectFail: "S3-9 回归：gym/index.json 不存在时不算入盘上集合（不掩盖判卷文件消失）",
   },
   {
+    id: "lsp-trust-gate-dropped",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp-trust-gate.test.ts",
+    desc: "#58 第二半：把内容指纹信任门整段摘掉（退回只有权限门、spawn 前零判定的形状）⇒ 克隆即携带那份 .agent/lsp.json 直接起进程。期望红落在「spawn 没发生」那一格上——它量的是「有没有起进程」这个行为，不是话术。",
+    apply: (s) => s.replace(
+      "  if (pluginServers.get(wsKey(root))?.[serverId] === undefined && !lspTrustedRepos.has(wsKey(root))) {",
+      "  if (false) {",
+    ),
+    expectFail: "工作区自带 lsp.json + 从未授权 ⇒ 报错点名，且 spawn 没发生",
+  },
+  {
+    id: "lsp-trust-not-content-bound",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp-trust-gate.test.ts",
+    desc: "#58 第二半：信任按**路径**而不是**内容**（指纹取一个常量）⇒ 改了 command 还沿用旧授权，克隆即携带换个 command 就过。期望红落在「指纹变了重新拦」那一格上。",
+    apply: (s) => s.replace(
+      'return createHash("sha256").update(raw).digest("hex").slice(0, 32);',
+      'return createHash("sha256").update("stable").digest("hex").slice(0, 32);',
+    ),
+    expectFail: "同一份内容授权后不再拦；指纹变了重新拦",
+  },
+  {
     id: "secrets-fail-closed",
     src: "src/agent/plugins/secrets.ts",
     test: "tests/secrets.test.ts",

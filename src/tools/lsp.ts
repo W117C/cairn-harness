@@ -5,10 +5,13 @@
 // 对外一律 1-based 行列，内部转 LSP 的 0-based。
 import { readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
+import { statSync as stat } from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";
-import { extname, relative, resolve, sep } from "node:path";
+import { createHash } from "node:crypto";
+import { extname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { killGroup, sanitizedEnv } from "./process.js";
+import { TrustStore, type TrustState } from "../agent/plugins/trust";
 import {
   createProtocolConnection,
   StreamMessageReader,
@@ -65,6 +68,84 @@ export interface LspConfig {
 const pluginServers = new Map<string, Record<string, LspServerConfig>>();
 
 const wsKey = (workspace: string): string => resolve(workspace);
+
+/* ---- #58 第二半（2026-10-05）：`.agent/lsp.json` 的 command 进**内容指纹信任门** ----
+ * 上一笔（`fb76517e`）把 lsp 抬成 high 风险并包了 gatedTool，堵的是「模型自己动手改那份配置」与
+ * 「每一次 lsp 调用都出卡」。**克隆即携带那条路它堵不住**：模型根本不用动手，配置跟着 clone 一起到，
+ * 而任何一次 lsp 调用就按它起进程（现读 `startClient` 里 `spawn(server.command, …)` 之前零信任判定）。
+ * 这与 S3 的 verify 信任闸**同源**（见 `src/agent/verify.ts` 的 `createVerifyHook` 信任闸那段），口径刻意一致。
+ *
+ * 为什么是「指纹信任门」而不是「再抬一次风险等级」：
+ * · 风险等级管的是「这次调用要不要问人」，而 lsp 在只读档就要用（`tests/write-face.test.ts`
+ *   钉着「lsp 不算改盘」那条裁决，`fb76517e` 特意没有推翻它）——把只读档的 LSP 削掉不是修法。
+ * · `server.command` 的真实危险是**仓库内容决定宿主执行什么**，而内容指纹绑的正是这个内容面。
+ *   复用插件那只门（`TrustStore`）＝不为 lsp 造第二套信任语义。
+ *
+ * 口径四条：
+ * ① 键＝`<lsp.json 绝对路径>@<内容指纹>`——**按文件内容**而不是按 workspace 目录：
+ *    同一份 lsp.json 改了 command 就是新内容 ⇒ 重新出卡（这正是要拦的那件事）。
+ * ② 未记录 ⇒ pending ⇒ 拒绝起进程并点名（fail-closed；未授权不在自动面里执行）。
+ * ③ 指纹取不到（文件读不到／超单文件帽）⇒ 按 pending 处理，**不静默放行**。
+ * ④ **调用方断言**：自己拥有该仓库的调用方（判卷／gym／基准，跑的都是仓内 fixture）经
+ *    `setLspTrustedRepos` 显式声明——那是**调用方的断言，不是缺省**，与 `trustedRepo` 同一口径。
+ *    它不是例外分支（那等于开后门），而是与 ①② 同一层级的第三个信任来源。
+ */
+
+/** lsp 信任条目的键。与插件门同一套 `<abs>@<fp>` 形状，但**存在各自的文件里**——
+ * lsp 的信任不该顺带授予插件，反之亦然（两面是两个执行面）。导出供判卷核对条目形状。 */
+export const lspTrustKey = (absConfig: string, fp: string): string => absConfig + "@" + fp;
+
+/** 宿主可注入的信任存储（缺省＝工作区内的 `.agent/lsp-trust.json`，与插件那份同目录、不同文件）。 */
+let lspTrustFile: string | null = null;
+
+/** 调用方断言的「这个工作区我拥有」集合（按解析后的 workspace 键）。 */
+const lspTrustedRepos = new Set<string>();
+
+/** 宿主装配时指定 lsp 信任文件；不调就用缺省。 */
+export function setLspTrustFile(file: string | null): void {
+  lspTrustFile = file;
+}
+
+/** 调用方断言：这个工作区由我拥有，其 `.agent/lsp.json` 的 command 可直接执行（与 `trustedRepo` 同一口径）。
+ * 判卷与基准用它；**产品路径不调它**——产品路径要么经用户授权（`decideLspConfigTrust`），要么被拦。 */
+export function setLspTrustedRepos(paths: Iterable<string>): void {
+  lspTrustedRepos.clear();
+  for (const p of paths) lspTrustedRepos.add(resolve(p));
+}
+
+const defaultLspTrustFile = (root: string): string => join(root, ".agent", "lsp-trust.json");
+
+/** 单文件内容指纹（截到 32 位，与插件门同形）。读不到或超单文件帽 ⇒ 空串（＝取不到，调用方按 fail-closed 处理）。 */
+const lspContentFingerprint = (absConfig: string): string => {
+  let raw: string;
+  let size: number;
+  try {
+    raw = readFileSync(absConfig, "utf8");
+    size = stat(absConfig).size;
+  } catch {
+    return "";
+  }
+  if (size > 512 * 1024) return ""; // 与插件门 FP_MAX_FILE_BYTES 同帽：撑过帽的内容不进指纹
+  return createHash("sha256").update(raw).digest("hex").slice(0, 32);
+};
+
+/** 这份 lsp.json 的信任状态。**取不到指纹一律 pending**（fail-closed）。 */
+export async function lspConfigTrustState(root: string): Promise<{ state: TrustState; fp: string; absConfig: string }> {
+  const absConfig = resolve(root, ".agent", "lsp.json");
+  const fp = lspContentFingerprint(absConfig);
+  if (fp === "") return { state: "pending", fp: "", absConfig };
+  const store = new TrustStore(lspTrustFile ?? defaultLspTrustFile(root));
+  return { state: await store.status(absConfig, fp), fp, absConfig };
+}
+
+/** 授权决议（宿主在用户批准后调用）。**只有这里能写信任条目**——工具面自己不许自我授权。
+ * 取不到指纹就不写（fail-closed：下回仍出卡，而不是留下一个绑不住内容的宽授权）。 */
+export async function decideLspConfigTrust(root: string, trusted: boolean): Promise<void> {
+  const t = await lspConfigTrustState(root);
+  if (t.fp === "") return;
+  const store = new TrustStore(lspTrustFile ?? defaultLspTrustFile(root));
+  await store.decide(t.absConfig, trusted, t.fp);
+}
 
 /** 登记插件服务器；返回被拒的 id（同扩展已被占，或 id 撞了宿主的）。 */
 export function registerPluginLspServers(workspace: string, servers: Record<string, LspServerConfig>): { accepted: string[]; refused: string[] } {
@@ -315,6 +396,22 @@ export async function getLspClient(root: string, cfg: LspConfig, serverId: strin
   if (!server) throw new ToolError('lsp: 未配置服务器 "' + serverId + '"');
   if (broken.has(key)) {
     throw new ToolError('lsp: 服务器 "' + serverId + '" 启动失败已标记不可用（broken），不再重试');
+  }
+  // #58 第二半：起进程**之前**先过内容指纹信任门。放在 `getLspClient` 而不是 `startClient` 内部，
+  // 是因为它是唯一的起进程入口，而这里能拿到 `serverId` 出点名的话术。
+  // fail-closed：pending（首次见到这份配置／内容变了）与 declined 都**不起进程**。
+  // 两个不参与本门的面（各自有主，刻意不是"顺带放行"）：
+  //  · 插件贡献的服务器——它们的激活权归插件那只门（口径 ① 已写明总开关归宿主）；
+  //  · 调用方断言拥有的工作区（`setLspTrustedRepos`）——判卷／基准跑的是仓内 fixture。
+  if (pluginServers.get(wsKey(root))?.[serverId] === undefined && !lspTrustedRepos.has(wsKey(root))) {
+    const trust = await lspConfigTrustState(root);
+    if (trust.state !== "trusted") {
+      throw new ToolError(
+        "lsp: 已跳过——服务器 \"" + serverId + "\" 的命令来自工作区 .agent/lsp.json，属仓库自带内容，"
+        + "未经授权不在自动面里执行（授权后按内容指纹记住，改了内容会重新问）。"
+        + "要验的话，二选一：① 自己在会话里批准这份配置；② 告诉我要用哪条命令，我把它作为宿主配置接进来。",
+      );
+    }
   }
   if (!clients.has(key)) {
     const starting = startClient(root, server, key);

@@ -23,6 +23,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runLoop } from "../src/agent/loop";
+import type { ProviderMessage } from "../src/providers";
 import {
   createVerifyHook,
   failureDigest,
@@ -85,7 +86,7 @@ async function runAutoBeat(opts: { hook: VerifyHook; repair: boolean }): Promise
   log: AgentEvent[]; requests: number; hookCalls: number;
 }> {
   const log: AgentEvent[] = [];
-  const requests: unknown[][] = [];
+  const requests: ProviderMessage[][] = [];
   let hookCalls = 0;
   await runLoop({
     workspace: "/tmp",
@@ -103,7 +104,7 @@ async function runAutoBeat(opts: { hook: VerifyHook; repair: boolean }): Promise
     autoVerify: true,
     ...(opts.repair ? { autoVerifyRepair: true } : {}),
     provider: {
-      async *stream(messages) {
+      async *stream(messages: ProviderMessage[]) {
         requests.push(messages);
         const n = requests.length;
         yield n === 1

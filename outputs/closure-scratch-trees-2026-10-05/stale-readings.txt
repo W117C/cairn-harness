@@ -1,0 +1,19 @@
+stale = 0
+unmeasured = 0
+foreign = 0
+--- 全部树逐棵读数（归属判定用：谁在飞、谁不是暂存根下的）---
+branch /Users/ze/Downloads/Cairn/deepseek harness  head=95e0b96  dirty=91
+branch .qoder/worktrees/agent-general-purpose-06773eec  head=95e0b96  dirty=0
+branch .qoder/worktrees/agent-general-purpose-07475095  head=f01c448  dirty=4
+branch .qoder/worktrees/agent-general-purpose-2d126352  head=f01c448  dirty=3
+branch .qoder/worktrees/agent-general-purpose-6343e288  head=95e0b96  dirty=0
+branch .qoder/worktrees/agent-general-purpose-6ad1f717  head=95e0b96  dirty=0
+branch .qoder/worktrees/agent-general-purpose-8d9922a1  head=95e0b96  dirty=0
+branch .qoder/worktrees/agent-general-purpose-a1320c34  head=f01c448  dirty=2
+branch .qoder/worktrees/agent-general-purpose-a1d1112f  head=513d4d7  dirty=2
+branch .qoder/worktrees/agent-general-purpose-a5ad4370  head=95e0b96  dirty=0
+branch .qoder/worktrees/agent-general-purpose-dfe4a4d2  head=513d4d7  dirty=4
+branch .qoder/worktrees/agent-general-purpose-e300d437  head=95e0b96  dirty=0
+branch .qoder/worktrees/agent-general-purpose-ee2b5204  head=32afe0e  dirty=4
+det   .worktrees/probe-head-e0b9bc7b  head=e0b9bc7  dirty=1
+det   .worktrees/verify-c7f2ea0f  head=c7f2ea0  dirty=9
