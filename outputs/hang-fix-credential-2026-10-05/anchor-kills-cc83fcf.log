@@ -1,0 +1,13 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-cc83fcf.lock）
+变异验证：5 条
+✅ ask-gate-unattended-fail-closed — unattended 不立即拒绝而是进 60s 等待（fail-closed 退回等待） ｜本机实测 30.8s／2 拍
+✅ ask-gate-unattended-notify — unattended 仍调用 notify（弹审批 UI，与「无人在场」矛盾） ｜本机实测 0.7s／2 拍
+✅ noanswerer-not-routed-to-ask-gate — 管道形状（cli 在非 TTY 那一路只翻 noAnswerer，刻意不翻 unattended——后者会连带关掉会话尾沉淀）又不被路由到无人值守那只门 ⇒ 每条写向等满 60s 看门狗才收束；同一个槽在 goal 续跑闸那里早就两值同判，只有这一行漏了 ｜本机实测 22.2s／2 拍
+✅ prod-ask-gate-not-handed-an-answerer-probe — 生产那只交互门不再被递「有没有应答人」这把判据 ⇒ 没注册 onAsk 的调用方（把 handleAgentRun 当库直接调）回到「卡片被静默丢弃、写向挂在 timer 上」那个形状 ｜本机实测 22.0s／2 拍
+✅ unarmed-ask-request-still-pends — 门内那半句「卡送不出去也算无人值守」被摘 ⇒ hasAnswerer 判假也照样进 pending 挂满 timer（判据给了、不接＝等于没给）。两条件刻意合在**同一条分支**里：分开写会让 notifyOutcome 那句在同一文件出现两次，把既有锚点 ask-gate-unattended-notify 的针脚从唯一命中弄成两处待复认（第 397 页实测 2→3）。反向半边（判真时照旧送卡并等到决议）住在同文件的 ⑥c——那一格钉的是「这一闸不许把所有审批都变成拒」 ｜本机实测 3.0s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 79.4s · 跑了 5/5 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 10 次／5 条（每条次数分布 2×5）· 单次中位 第1次 1.0s／第2次 21.0s· 最贵一条 ask-gate-unattended-fail-closed 30.8s
+跑法单价：selector 10 拍·中位 1.17s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-cc83fcf.lock）
