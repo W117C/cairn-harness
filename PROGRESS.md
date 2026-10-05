@@ -13553,3 +13553,33 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
 4. **量纲与没跑（如实）**：五趟 head-cert、两趟工作树面全量、两台造红机、`--check-needles`（阻断 0）、
    `docs-check`（受检项全绿）。**没跑** `mutate-verify` 真杀——新增两根锚点已入表、针脚体检全绿，
    但**真杀未跑**（该门量 HEAD 且重 exec 到一次性 worktree，本轮不冒险）。**不宣布任何未跑的绿**。
+
+## 2026-10-05 · 第 396 页：`.serena/` 进 `.gitignore`（59M 索引缓存＋health-check 日志，untracked-but-not-ignored）＋三层判卷
+
+1. **现象（现读，不是推断）**：`git check-ignore -v .serena/project.yml` **不命中** ⇒ `.serena/` 是
+   untracked-but-not-ignored：`git status` 看得见、`git add -A` 会扫走。盘上 **59M**，两支 pkl 各约 68MB／19MB。
+   `.agents/`、`.workbuddy-ai/`、`.qoder/` 都被忽略，**`.serena/` 被漏掉**——同类同族漏一条，
+   而本仓第 387 页刚为这一族下过 C2 裁决（快照随仓库分发）。外泄通道是 **commit 而不是 copy**。
+2. **修法＝同族口径**：`.gitignore` 补一行 `.serena/`，注释写清**为什么**（59M／哪几支／哪条命令证过）
+   与**不解什么**（只掐「随仓库分发」；明文缓存无帽堆积留给 serena 侧）。
+   与 `.agent/memory/`、`.agent/sessions/`、`.agent/snapshots/` 同一句式，没有新概念。
+3. **判卷 `tests/serena-dir-not-distributed.test.ts` 三层**（形状照 `#100` 那支，不重抄其判据）：
+   ① 行为——`git check-ignore` 真判忽略且回指 `.gitignore`，**缓存与日志两支各判一次**
+   （只判 `project.yml` 的话，「只忽略那一个文件」也能骗过）；
+   ② 反向证人——`.agent/permissions.json` 与 `AGENTS.md` **必须仍不被忽略**（钉修法没走过头）；
+   ③ 分辨力证人——两个刻意不在忽略面的路径必须判「未忽略」。
+   **这一支刻意不用读文本那一型断言**（`toContain(".serena/")`）：我刚写的那段注释本身含这个字符串，
+   散文会把文本断言顶包——**那正是本仓第 387 页撞过的形状，写的时候就得躲开**。
+4. **三台造红机各红在不同格上**（绿态 `3 passed`）：
+   ① 删掉 `.serena/` 那行、**注释留着** ⇒ 只有 ① 红（②③ 照绿）⇒ 证明注释顶包被挡住了；
+   ② 改成只忽略 `.serena/project.yml` ⇒ ① 红，报错原文点名**日志那一支**漏了
+   （缓存那支被 `.serena/project.local.yml` 自带的 `.serena/.gitignore` 顺带覆盖到，所以先响的是日志）；
+   ③ 走过头成整体忽略 `.agent/` ⇒ 只有 ② 红。三台复原后 `git diff` 空（逐字节一致）。
+   邻卷回归：本支＋`snapshot-dir-not-distributed`＋`repo-hygiene-check` 共 **36 条全绿**。
+5. **两门现读**：`repo-hygiene-check` 两面全绿（取料 68.2%／帽 70%；最大 2963 行／帽 3000）；
+   `typecheck exit=0（0 报错）`。
+6. **顺带记一件同轮查清的事（写准，别读反了）**：`.serena/` 被忽略**不影响工具可用**——
+   serena 的数据仍在本地盘、索引照常；被掐掉的只有「随仓库分发」。但它确实会让
+   `git status` 少列一个 59M 的未跟踪面（本仓 `outputs/` 占 68.2% 的取料帽与 `.serena/` 无关，不混算）。
+7. **量纲与没跑（如实）**：本轮跑三支判卷（3＋36 条）、三台造红机、两道门。
+   **没跑**全量核心判卷、认证、`mutate-verify` 真杀。本页不宣布任何「绿了」。

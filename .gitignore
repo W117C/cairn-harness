@@ -53,3 +53,14 @@ docs/facts/
 
 # vitest JSON reporter 产物（本仓零消费者；2026-10-03 实测 .vitest/json/output.json 无人读）
 .vitest/
+
+# Serena（语义检索＋LSP 代码理解工具）的项目级数据：LSP 符号索引缓存、日志、health-check 记录。
+# 与 `.agents/`、`.workbuddy-ai/`、`.qoder/` 同族口径——都是**AI 工具的运行时产物**，不是源码。
+# 动手理由（现读，不是推断）：本机盘上 `.serena/` **59M**，其中 `cache/typescript/*.pkl` 两支合计 88MB 量级，
+# 而 `git check-ignore -v .serena/project.yml` **不命中** ⇒ 它是 untracked-but-not-ignored：
+# `git status` 看得见、`git add -A` 会扫走。外泄通道是 commit 而不是 copy。
+# 口径与 `.agent/memory/`、`.agent/sessions/`、`.agent/snapshots/` 那一族相同：
+# **只掐掉「随仓库分发」这一条通路**；工具本身照常用，数据仍在本地盘。
+# ⚠️ 这不解「明文缓存无帽堆积」——`cache/` 会随会话增长（现读已 59M），
+#    回收与上限是 serena 侧的事（`serena project index` 的重建面），留给工具侧自己管。
+.serena/
