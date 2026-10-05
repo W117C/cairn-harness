@@ -13304,3 +13304,37 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    `--check-needles` 2 次、`repo-hygiene-check` 1 次、残留树探针 1 次、认证门面 23 道逐道 1 次（**全绿**）。
    **没跑**：全量核心判卷、认证本体（**这一页不宣布任何「绿了」**——终局 head-cert 在落库之后单独起一趟）。
    提交纪律：本页与代码逐笔 pathspec 提交，`git diff --numstat` 删除数逐笔核过为 0（纯追加／纯增）。
+
+## 2026-10-05 · 第 392 页：终局认证 —— 门面 23/23 全绿、全量 4626/4626 全绿、两端独占；**头一趟是被我自己起的树名挡下的**
+
+契约 E13 的验收读数。三条独立复核过的事实，凭证在盘上（`outputs/head-cert-8aec599-2026-10-05-0345/`＋
+`outputs/cert-window-2026-10-05/headcert-8aec599-summary.txt`），不是 `/tmp` 易失路径。
+
+1. **验收逐格照贴**：`认证门面=23 道（跑到 23）｜绿 23 道｜⚠️ 超预算 1`；
+   `门表：33 道，其中该笔 package.json 没有同名 script 的 0 道`；`typecheck exit=0（0 报错）`；
+   `import 面：3754 条边｜悬空 0`；`依赖完整=是`；`收尾复核=同一笔`；
+   `Test Files 332 passed (332)｜Tests 4626 passed (4626)｜exit=0`；
+   `并发判卷=起前 0 套／跑完 0 套（两端独占）`；`本趟墙钟 276.94s`；`常驻残留树=0`。
+   **超预算那 1 道是 `sandbox:check` 1815ms > 预算 1700ms**——门自己判它「只出声，不判红」，
+   我照贴不改（抬预算去消这条警告＝为了让读数好看而改判据）。
+2. **头一趟认证（`TREE=8aec599`，墙钟 293.34s）exit=1，全量 1 红，而门面 23 道全绿**——那条红是
+   `tests/scratch-tree-naming.test.ts`：「暂存树 **head-cert-final** 的名字没编码提交」。
+   ⇒ **真因是我自己的输入错误**：我给 `--tree=` 传了 `.worktrees/head-cert-final`，
+   而 `scripts/head-cert.ts:48` 的缺省树名是 `".worktrees/head-cert-" + shaShortForDefault(...)`——
+   **命名约定要求树名带提交号**，我传了一个不带的名字。
+   这是那把命名尺**第四次咬自己的车**（前三次：认证树 `head-cert-<sha>`、`probe-head-<sha>`、并发会话的 5 棵 harness 树）。
+   它拦的是我，这是**它按预期工作**的证据，不是它的缺陷。⇒ 第二趟改用 `.worktrees/head-cert-8aec599`，exit=0。
+   **写下来是因为它值一次写**：我差点把那一条红当成「并发会话的树又被误纳」而改判卷（第三次已经改过一次了）。
+3. **这一轮动过的生产面只有一支**：`src/tools/lsp.ts`（`#58` 第二半的内容指纹信任门，+98/-1）。
+   其余是判卷侧与文档面（`tests/lsp-trust-gate.test.ts` 新增、`tests/lsp.test.ts` 补归属断言、
+   `tests/docs-check.test.ts` 豁免条数去硬编码、`tests/verify-skipped-third-outcome.test.ts` 补类型、
+   `tests/role-field-aliases.test.ts` 最小标注、`scripts/docs-check.ts` 登记一条豁免）。
+4. **一条红留给别人，本轮不抢**：全量跑（工作树面，非认证树面）另有 1 红
+   `tests/src-execution-path.test.ts` 点名 `src/main/compact-manual.ts`——那是并发会话的**未跟踪新文件**，
+   不在 HEAD ⇒ 认证树的干净 HEAD 面**不出现**这条红（认证读数里 4626 条全绿即是证据）。
+   那条判卷自己写着「入库前在 HEAD 上跑就是红」⇒ 按契约只登记，等对方入库归零。
+5. **量纲与没跑（如实）**：本轮跑了三趟全量判卷（工作树面 `4628/4630` → 修完 `4626/4626` 在认证树面上为
+   `4626 passed`）、两趟 head-cert（`exit=1` 与 `exit=0`）、两台造红机、`--check-needles`（阻断 0）、
+   认证门面 23 道。**没跑** `mutate-verify` 真杀（新增两根锚点已入表且针脚体检全绿，但**真杀未跑**，
+   按 AGENTS 那条规矩它量的是 HEAD、且要重 exec 到一次性 worktree，本轮不冒这个险）。
+   **不宣布任何未跑的绿**。

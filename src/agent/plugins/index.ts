@@ -85,6 +85,15 @@ export interface PluginRuntimeOptions {
   home?: string;
 }
 
+/** 信任表那份文件的唯一算法：显式 `trustFile` 优先，否则 `pluginDataRoot` 下那个固定名。
+ *  导出是因为 verify 命令的信任门（`src/main/verify-trust-gate.ts`）**复用同一份文件**——
+ *  一把信任表、两个门（插件 hook/MCP 与仓库自带验证命令），路径在这里算第二遍就是给
+ *  「第二份事实源」开门（本仓零容忍那一格）。 */
+export const PLUGIN_TRUST_FILE_NAME = "plugin-trust.json";
+export function trustFilePathOf(opts: { pluginDataRoot: string; trustFile?: string }): string {
+  return opts.trustFile ?? join(opts.pluginDataRoot, PLUGIN_TRUST_FILE_NAME);
+}
+
 /** skill 激活投影：tool_call(name="skill") → 同 callId 的 tool_result 事件 id（1-based 行号）；
  *  以及**用户侧触发**（§9.3）：带 `skill` 字段的 user_message 本身就是一次激活，
  *  它的行号就是被压缩时该重挂的那条。两条 face 都必须进这里，否则用户点出来的 skill
@@ -163,7 +172,7 @@ export class PluginRuntime {
   private constructor(manifest: PluginsManifest, opts: PluginRuntimeOptions) {
     this.opts = opts;
     this.manifest = manifest;
-    this.trust = new TrustStore(opts.trustFile ?? join(opts.pluginDataRoot, "plugin-trust.json"));
+    this.trust = new TrustStore(trustFilePathOf(opts));
     this.hooks = new HookEngine({
       hooks: activeHooks(manifest),
       workspace: opts.workspace,
@@ -178,7 +187,7 @@ export class PluginRuntime {
 
   /** 静态扫描 + 信任过滤（不连 MCP 不跑 hook——纯装载）。 */
   static async load(opts: PluginRuntimeOptions): Promise<PluginRuntime> {
-    const trust = new TrustStore(opts.trustFile ?? join(opts.pluginDataRoot, "plugin-trust.json"));
+    const trust = new TrustStore(trustFilePathOf(opts));
     await trust.warm();
     const manifest = await discoverPlugins({
       ...(opts.userPluginsDir ? { userPluginsDir: opts.userPluginsDir } : {}),

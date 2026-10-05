@@ -97,10 +97,15 @@ import { AskGate } from "./ask-gate";
 import type { LicenseState } from "./license";
 import type { AskOutcomePayload, AskPayload, RunRequest, SidechatPanelSnapshot } from "./ipc-protocol";
 import { annotateNetworkDenial, buildSandboxProfile, checkSandbox, networkProfileFor, runInSandbox, type SandboxStatus } from "./sandbox";
-import { PluginRuntime, setCurrentPluginRuntime, currentPluginRuntime, expandPromptCommand, expandSkillInvocation, commandInvokeName, skillInvokeName, type PluginPanelSnapshot } from "../agent/plugins";
+import { PluginRuntime, trustFilePathOf, setCurrentPluginRuntime, currentPluginRuntime, expandPromptCommand, expandSkillInvocation, commandInvokeName, skillInvokeName, type PluginPanelSnapshot } from "../agent/plugins";
+// `TrustStore` 从**实现文件**取，不从 `../agent/plugins` 取：那边是 `export { … } from "./trust"`
+// 的再导出（只对外可见、不进本地作用域，本文件上面 BASE_SYSTEM 那次搬迁踩过同一个坑）。
+import { TrustStore } from "../agent/plugins/trust";
+import { createVerifyTrustGate } from "./verify-trust-gate";
+import type { VerifyTrustResolver } from "../agent/verify-trust";
 import type { HookEngine } from "../agent/plugins/hooks";
 import type { McpToolInfo } from "../agent/plugins/mcp";
-import { normalizeHistoryFilter, Scheduler, type ScheduleSnapshot, type TriggerExecutor } from "./scheduler";
+import { normalizeHistoryFilter, Scheduler, loadAutomationsFile, type ScheduleSnapshot, type TriggerExecutor } from "./scheduler";
 import { validateAutomation, isUnattendedTier } from "./automations";
 import {
   runSidechatTurn,
@@ -322,8 +327,14 @@ export function mainUsageModelOf(selection: MainModelSelection): string {
 /** M3c 编排器扩展接线（agentRoleFor / workerSummarizer / budget）：runAgent 与会话重派共用同一口径。
  *  - agentRoleFor：插件 agent 角色解析（stages[].role = "plugin-name:agent-name"，§9.6/§9.11-4）；
  *  - workerSummarizer：worker 压缩摘要器（§7.5 同一 runCompaction 链；GLM 暗卷需 CAIRN_API_KEY）；
- *  - budget：会话成本闸（§4.4.8 maxBudgetUsd；0 = off 零行为）。 */
-async function orchestratorExtras(sandbox: SandboxStatus | null = null, runModel?: MainModelSelection, trustedRepo: boolean = false): Promise<
+ *  - budget：会话成本闸（§4.4.8 maxBudgetUsd；0 = off 零行为）。
+ *  第三参收成一张对象：S3 信任闸那两个面（调用方断言 + 生产问人）必须**一起**递到 worker 那条接缝，
+ *  分成两个位置参数就会有人只递一个（本仓「同一谓词两份副本」那一族）。 */
+async function orchestratorExtras(
+  sandbox: SandboxStatus | null = null,
+  runModel?: MainModelSelection,
+  trust: { trustedRepo: boolean; verifyTrust: VerifyTrustResolver | null } = { trustedRepo: false, verifyTrust: null },
+): Promise<
   Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache" | "impactAnalysis" | "workerVerify" | "workerHooks">
 > {
   const s = await store().get();
@@ -343,8 +354,19 @@ async function orchestratorExtras(sandbox: SandboxStatus | null = null, runModel
     // （那行字面就是「写过盘但没自测时，收尾前补跑一遍检查」，worker 合并前正是这一刻）。
     // exec 走沙箱版：worker 的 verify 命令同样来自目标仓库的 .agent/config.json（外部输入）。
     // 缺省（设置关）= 整段不接线，worker 的 runLoop 与今日逐字同形。
+    // S3 信任闸（2026-10-05 接线）：worker 拿的是**同一个 resolver**，但 resolver 的键第一维是
+    // `repoDir`——write worker 跑在自己的 worktree 里（`orchestrator.ts:1853` 递的就是那个目录），
+    // 于是父会话批过的那条批准**顶不掉 worker 的那一问**（谁的执行体谁被问）。
+    // 本笔刻意**不**给 worker 加继承通道：仓里没有「worker 沿用父决议」的现成口径（worker 的审批走
+    // 编排器的 approval_requested 事件面，不是 appAskGate），要接那条得另开一笔。
     ...(s.autoVerify
-      ? { workerVerify: (repoDir: string) => createVerifyHook(repoDir, { exec: verifyExec(sandbox), trustedRepo: trustedRepo }) }
+      ? {
+          workerVerify: (repoDir: string) => createVerifyHook(repoDir, {
+            exec: verifyExec(sandbox),
+            trustedRepo: trust.trustedRepo,
+            ...(trust.verifyTrust ? { trustResolver: trust.verifyTrust } : {}),
+          }),
+        }
       : {}),
     // M5b 步骤 9：routingBandit 开关同时开启路由与学习状态持久化（bandit 蕴含 routing——
     // 无路由则无档位决策可学）。状态文件在 .agent/ 系统区（同 permissions.json 口径）。
@@ -400,8 +422,13 @@ async function buildSessionOrchestrator(a: {
   modelFor?: OrchestratorOptions["modelFor"];
   /** 本 run 已解析的模型选择（逐请求指定的档位在这里）；缺省 = 按 env + 设置盘现算（同一把纯函数）。 */
   runModel?: MainModelSelection;
-  /** S3 信任闸：透传给 worker 那条 verify 接缝，缺省即拒绝。 */
+  /** S3 信任闸（调用方断言那一层）：true = 这个仓的命令由**调用方**担保（判卷/脚本/自有靶子），
+   *  不经信任表也不发审批卡。缺省 false。 */
   trustedRepo?: boolean;
+  /** S3 信任闸的生产接线（本场 run 的「查表 + 首问」组合口）。null = 没有可问的门
+   *  （恢复路径 / 非交互装配）⇒ worker 那条 verify 保持 fail-closed 拒绝，与今日逐字同形。
+   *  注意它**不是**「父会话批过就给 worker 免问」的通道：键的第一维是 worker 自己的 repoDir。 */
+  verifyTrust?: VerifyTrustResolver | null;
 }): Promise<Orchestrator> {
   const s = await store().get();
   const workerShell = workerShellRunnerFor(a.sandbox);
@@ -417,7 +444,7 @@ async function buildSessionOrchestrator(a: {
     // B1 语义合并闸：影响面开启时，spawn 的写租约判定多问一层「波及集相交」——
     // 两个 worker 各改各的文件（glob 不相交）但改动波及同一批调用点，合并时同样会打架。
     ...(s.impactAnalysis ? { semanticLease: (globs: string[]) => affectedFilesOf(a.workspace, globs) } : {}),
-    ...(await orchestratorExtras(a.sandbox, a.runModel, a.trustedRepo ?? false)), // M3c：插件角色 / worker 压缩摘要器 / 成本闸 / W4a worker 收束闸
+    ...(await orchestratorExtras(a.sandbox, a.runModel, { trustedRepo: a.trustedRepo ?? false, verifyTrust: a.verifyTrust ?? null })), // M3c：插件角色 / worker 压缩摘要器 / 成本闸 / W4a worker 收束闸
     ...(a.modelFor ? { modelFor: a.modelFor } : {}),
   });
 }
@@ -1102,6 +1129,15 @@ const appAskGate = new AskGate({
 // 主时间线落流 = 当前会话 append（有则落）+ UI 推送；journal 始终留账（双轨之二）。
 let scheduler: Scheduler | null = null;
 let scheduleCapCache = 2;
+/** 本进程**有没有起过**调度器（只置真、永不回退；`stopScheduler` 也不清）。
+ *  为什么不直接读 `getScheduler() !== null`：那个槽会随 stop 变 null，而它喂的是执行面
+ *  `installAppTools`（只让第一个调用赢）——一场判假、下一场判真就是「模型看得见却调不到」
+ *  （或反过来那句），正是本仓点名的失败形状。这里要的是**单调**真值：起过就永远算用得上。 */
+let schedulerEverInitialized = false;
+/** 定时任务的数据目录：调度器装载与挂载判据读**同一个式子**（两份字面量迟早漂）。 */
+export function scheduleDataDir(workspace: string): string {
+  return join(workspace, ".agent", "schedules");
+}
 
 /** shell / 验收脚本初始化调度器（幂等）。 */
 export function initScheduler(opts: {
@@ -1112,6 +1148,9 @@ export function initScheduler(opts: {
   jitterMs?: () => number;
   cap?: number;
 }): void {
+  // 单调真值先置（下面那句 `if (scheduler) return` 的幂等路径也要认）：这一句之后
+  // `installTimeAutomationFace` 在本进程余生都判真，五件的说明书就一直在两面挂着。
+  schedulerEverInitialized = true;
   if (scheduler) return;
   if (opts.cap !== undefined) scheduleCapCache = opts.cap;
   const ws = opts.workspace ?? WORKSPACE;
@@ -1150,6 +1189,8 @@ export async function startScheduler(): Promise<void> {
 }
 
 export function stopScheduler(): void {
+  // 只停计时器：**不**清 `schedulerEverInitialized`——那是单调挂载判据，清了就会「第一场判真装了执行面、
+  // 后一场判假摘掉说明书」= 调得到却看不见（本仓点名的另一半失败形状）。
   scheduler?.stop();
 }
 
@@ -1158,12 +1199,16 @@ export function stopScheduler(): void {
  *  触发执行器已在 initScheduler 内接 `makeScheduledExecutor`（触发 = 全新会话的真实代码路径）。
  *  停止交给 CLI 的 SIGINT 处理（返回的 stop 即 stopScheduler）。 */
 export async function serveScheduler(opts: { workspace: string }): Promise<{ stop: () => void }> {
-  installAppTools({ automation: true });
+  // 顺序改了（原先 installAppTools 在前）：先 initScheduler 置上单调真值，再由**同一个判据**
+  // 决定执行面——常驻服务当然是「用得上」，判据在这里给真，与规格面（runAgent 读同一个函数）同源。
+  // 万一这个进程里已有一场 run 把执行面定终身成"摘"，这一句只能跟它而不是抛：
+  // `installAppTools` 只让第一个调用赢，而 M-2 那条判卷不许 false→true 补装（那正是分家那一步）。
   initScheduler({
-    dataDir: join(opts.workspace, ".agent", "schedules"),
+    dataDir: scheduleDataDir(opts.workspace),
     sessionsDir: join(opts.workspace, ".agent", "sessions"),
     workspace: opts.workspace,
   });
+  installAppTools({ automation: await installTimeAutomationFace(opts.workspace, undefined) });
   await startScheduler();
   return { stop: () => stopScheduler() };
 }
@@ -1329,9 +1374,14 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
    *  **只从 settings 取，不留 override 槽**：`handleAgentRun` 的两个产品调用者从不传它，
    *  留 `over.X ??` 就是给一条永远走不到的左半边钉锚点（同 `impactAnalysis` 那一族的做法）。 */
   autoVerifyRepair?: boolean;
-  /** S3 信任闸：这个工作区的 verify 命令可否被自动补拍执行。
+  /** S3 信任闸（调用方断言那一层）：true = **这个调用方**担保这批命令，不经信任表也不发审批卡。
    *  **缺省 false**——verify 命令 100% 来自仓库自带文件（.agent/config.json / package.json /
-   *  Makefile 探测），而那条执行路径上没有权限判定。自建 fixture / 自有仓库的调用方**显式**传 true。 */
+   *  Makefile 探测），而那条执行路径上没有权限判定。自建 fixture / 自有仓库的调用方（判卷、
+   *  gate-check、基准）显式传 true。
+   *  2026-10-05 起 false **不再是终态**：生产路径改走「按 (repoDir, verify 面内容) 查那把现成的
+   *  信任表，查不到就经审批卡问人，批准才跑并登记」（装配点在 runAgent 里，判卷
+   *  `tests/verify-trust-fingerprint.test.ts`）。IPC 白名单里没有这个键、也不该有：
+   *  它不是一个「用户可以从界面打开的开关」，而是一次一问的决议。 */
   trustedRepo?: boolean;
   workspace: string;
   message: string;
@@ -1367,7 +1417,9 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
   /** 装不装 M4a 那五个 `automation_*` 定时任务工具。**执行面是进程级的**（`installAppTools`
    *  只让第一个调用赢），所以同一进程里各场 run 必须给同一个值；给成异值会在
    *  `installAppTools` 当场抛，而不是让规格面（这槽每场重算）与执行面悄悄分家。
-   *  缺省 true = 装（长驻服务语义）。一次性进程传 false。 */
+   *  缺省（不传）= 由 `installTimeAutomationFace` 按**盘上事实**判：本工作区有任务清单、或本进程
+   *  起过调度器 ⇒ 装，否则摘（省实测 2,482 字符/轮）。`runAgent` 会把判据写回本槽再喂两面，
+   *  所以调用方看到的与两面吃的是同一个值。一次性进程显式传 false（优先级高于盘上事实）。 */
   automationTools?: boolean;
 }
 
@@ -1497,6 +1549,42 @@ function searchConfigured(workspace: string): boolean {
   }
 }
 
+/** 该工作区盘上有没有**已落盘的定时任务**（`<workspace>/.agent/schedules/automations.json`）。
+ *  口径与 `searchConfigured` 同形：判据复用被度量方自己的装载器（`loadAutomationsFile`），
+ *  不再抄第二份谓词——文件不存在 / 空 / 坏 JSON / 条目全无效，装载器给的就是空清单 ⇒ 判假。
+ *  为什么读盘而不是读设置：五件要 `initScheduler` 才有意义（tick 60s / 补跑 7 天 / 并发闸 ≤2），
+ *  而"这个工作区排过任务"是这件事唯一能在盘上核对的事实；它也让摘除**自动可逆**——
+ *  一旦有人（UI 或 `--serve`）落下第一条任务，下一场 run 就自己挂回来，不需要新发明一个设置项。 */
+export async function automationsScheduled(workspace: string): Promise<boolean> {
+  const { tasks } = await loadAutomationsFile(join(scheduleDataDir(workspace), "automations.json"))
+    .catch(() => ({ tasks: [], warnings: [] })); // 装载器自己已 fail-closed，这里只兜路径异常
+  return tasks.length > 0;
+}
+
+/** 上面那条的累积闸门：一旦判真就永不回退（缺省假 = 还没出现过任何"用得上"的证据）。 */
+let automationArmedOnce = false;
+
+/** 定时五件挂不挂的**进程级**判据（与 `installTimeAutoMemory` 同一纪律：执行面只装一次，
+ *  所以喂给它的值必须第一场就是定稿；异值由 `installAppTools` 的守卫当场拒，不给分家留缝）。
+ *
+ *  四条读数按优先级：
+ *   1. 执行面已定终身 ⇒ 跟它（一场不许翻面——`false→true` 会让模型看得见却调不到，
+ *      `true→false` 会让模型调得到却看不见，两边都是本仓点名的形状）；
+ *   2. 调用方明说一次性进程（CLI 的 `automationTools: false`）⇒ 摘，且盘上事实不许顶翻它
+ *      （tests/cli-surface.test.ts 钉的那格）；
+ *   3. 本进程起过调度器（单调）⇒ 挂；
+ *   4. 盘上有任务清单 ⇒ 挂。
+ *  第 3/4 条走 `automationArmedOnce` 的**只累积**闸门：还没装执行面的那几场里任何一场判真，
+ *  就永久留真（与 `omittedForever` 那条"只累积不回退"的口径同形）。 */
+export async function installTimeAutomationFace(workspace: string, explicit: boolean | undefined): Promise<boolean> {
+  if (installed) return installedAutomation;
+  if (explicit === false) return false;
+  if (schedulerEverInitialized) automationArmedOnce = true;
+  if (!automationArmedOnce && await automationsScheduled(workspace)) automationArmedOnce = true;
+  // await 之后重读一次：并发的另一场可能就在这中间把执行面装了（那时规格面只能跟它）
+  return installed ? installedAutomation : automationArmedOnce;
+}
+
 /** 进程级「自动记忆」判据：**首次读到的值定终身**，之后不再重读。
  *
  *  为什么必须缓存（2026-09-30 实测踩到）：settings 能在同一进程里变（`setSettings` 是 IPC/测试
@@ -1560,6 +1648,13 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   // 后续几场若算出不同的值（工作区换了、设置改了、目标武装了），执行面保持不变而规格面按新值
   // 重算 ⇒ 模型看得见却调不到（本仓点名的失败形状）。所以执行面吃的是**累积**判据：
   // 只要这个进程里**任何一场**需要某把工具，它就留着；只有从来没有哪一场需要，才真的摘。
+  // 定时五件同一条纪律：判据是**盘上事实 + 进程级单调**（见 installTimeAutomationFace），算完
+  // 写回 `opts.automationTools` 这**一个**字段——下面那句（执行面）与 faceArgs（规格面）读的都是
+  // 它，两面同源。写成第三把局部开关就会有人只翻一头（tests/automation-tool-surface.test.ts
+  // 那支钉的正是"两面吃同一个字段"）。摘掉省的是实测 2,482 字符/轮（每轮固定面约 21.6%）。
+  // 位置有讲究：放在 installTimeOmitTools/installAppTools **之前**——那两句之间不许插 await，
+  // 否则并发两场首跑会在"算出 omit 名单"与"喂给执行面"之间让出事件循环（守卫会撞自己的车）。
+  opts.automationTools = await installTimeAutomationFace(opts.workspace, opts.automationTools);
   const omitTools = installTimeOmitTools({
     goal: opts.goalArmed !== true,
     memory: !memoOn,
@@ -1652,6 +1747,19 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       return task;
     };
     sessionObj.emit = pipeline; // H3 D-2：写在 scope 的会话对象上（交互 run 的全局指向同一对象）
+    // S3 信任闸的**生产接线**（2026-10-05；此前这两处装配点吃的是常量 `trustedRepo ?? false`，
+    // 而生产入口没有任何地方能把它置真 ⇒ `surface()` 恒 false ⇒ 缺省开着的 autoVerify 从未真跑，
+    // 48 份日志里 `verify_result{auto:true}` 0 条——「执行-验证-修正」断在第三环）。
+    // 现在的形状：按 (repoDir, verify 面内容指纹) 查**那把现成的信任表**（与插件信任同一个
+    // `TrustStore`、同一份文件，路径由 `trustFilePathOf` 单点算出，不在这里再抄一遍），
+    // 查不到就经本场 run 的审批门（`appAskGate` 那条通道）发一张卡；批准才跑并把决定登记进表，
+    // 拒／超时／取消／无人值守一律维持 fail-closed。门缺席（非交互）时连卡都不发。
+    // 一场 run 一个实例 ⇒ 「同一面在一次 run 里只问一次」的去重与决议同生命周期（见 verify.ts 那只 Set）。
+    const verifyTrust = createVerifyTrustGate({
+      trustStore: new TrustStore(trustFilePathOf(pluginRuntimeOpts(opts.workspace))),
+      askGate: sessionObj.askGate,
+      ...(opts.unattended ? { unattended: true } : {}),
+    });
     // M3a：会话级编排器（worker 子流落主流 JSONL；父 turn 收束后编排器存活，审批/取消路由不断）
     let demoModelFor: ((args: SpawnArgs) => WorkerModel | undefined) | undefined;
     if (process.env.M3A_AGENTS_DEMO === "1") demoModelFor = await loadDemoWorkerModels();
@@ -1662,7 +1770,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       emit: pipeline,
       sandbox: opts.sandbox ?? null,
       rules,
-      trustedRepo: opts.trustedRepo ?? false, // S3 信任闸：缺省即拒绝，worker 那条 verify 路径同口径
+      trustedRepo: opts.trustedRepo ?? false, // 调用方断言那一层（判卷/脚本）；问人这条路走 verifyTrust
+      verifyTrust, // worker 那条 verify 路径同口径，但 worker 的键是自己的 worktree 目录 ⇒ 不继承父决议
       ...(demoModelFor ? { modelFor: demoModelFor } : {}),
       // 成本闸的价键跟着**这个 run 真拨的那一档**走（逐请求指定的模型只在调用手里，重派路径没有）。
       ...(opts.modelSelection ? { runModel: opts.modelSelection } : {}),
@@ -1833,7 +1942,11 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
             ...(opts.unattended ? { timeoutMs: UNATTENDED_GATE_WAIT_MS } : {}),
           }),
       },
-      verify: createVerifyHook(opts.workspace, { exec: verifyExec(opts.sandbox ?? null), trustedRepo: opts.trustedRepo ?? false }),
+      verify: createVerifyHook(opts.workspace, {
+        exec: verifyExec(opts.sandbox ?? null),
+        trustedRepo: opts.trustedRepo ?? false, // 调用方断言那一层优先；缺省 false 不等于「永远 false」——
+        trustResolver: verifyTrust, // 生产那一半：查信任表，查不到经审批卡问人（S3，2026-10-05 接线）
+      }),
       ...(rt ? { hooks: rt.hooks } : {}),
     });
     // M2e：Stop（一轮 agent 收束）——fire-and-forget，失败只告警。
@@ -2049,9 +2162,10 @@ export interface RunOverrides
    *  `validateRunRequestEnvelope`（run-request.ts:48）只收已登记的 id。两边都对，所以自由档只能走这里。
    *  缺省 = 走 `resolveRunModel(settings, req.model)`，与本槽存在前逐字相同。 */
   modelSelection?: MainModelSelection;
-  /** 装不装 `automation_*` 五件（长驻服务语义）。**不是 settings 开关**——scheduler 初始化与
-   *  tick 是进程级的，settings 存一个「装不装工具」既管不住也没法表达（进程已起来了）。
-   *  判据只有一个：调用方是不是长驻进程。缺省 true。 */
+  /** 装不装 `automation_*` 五件。**不是 settings 开关**——scheduler 初始化与 tick 是进程级的，
+   *  settings 存一个「装不装工具」既管不住也没法表达（进程已起来了）。
+   *  这一槽只翻「强制摘」那一头（一次性进程）；不传 = 交给 `installTimeAutomationFace`
+   *  按盘上事实判（本工作区有没有任务清单 / 本进程起过调度器），见 `RunOptions.automationTools`。 */
   automationTools?: boolean;
   /** 这条 run 现场**没有人能应答**（stdin 非 TTY / 管道 / CI）。
    *
@@ -2154,7 +2268,7 @@ export async function handleAgentRun(
         ...(over.signal ? { signal: over.signal } : {}),
         actionFusion: over.actionFusion ?? (await store().get()).actionFusion,
         autoVerify: over.autoVerify ?? (await store().get()).autoVerify,
-        trustedRepo: over.trustedRepo ?? false, // S3 信任闸：IPC 路径缺省同样拒绝
+        trustedRepo: over.trustedRepo ?? false, // S3：IPC 路径不置位 = 不走调用方断言，交给 runAgent 里的「查表 + 首问」（不是缺省即永远拒绝）
         // 这一段会话有没有武装长任务目标：CLI 在 `--goal` 时显式传（它在 run 之前就把
         // `goal_set` 写进日志了），goal 续跑轮由 `goalTurn` 在场推定。只喂 refine_goal 的挂/摘。
         goalArmed: over.goalArmed ?? goalTurn !== undefined,

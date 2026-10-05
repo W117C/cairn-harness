@@ -9,7 +9,7 @@ import { stuckActionOf, stuckObservationOf } from "./stuck";
 import { mayHaveWrittenDisk } from "./write-face";
 import { hasWorkerAttribution } from "./context";
 import { parseScopedToolName } from "./plugins/mcp";
-import type { AgentEvent, ToolCallEvent } from "../events";
+import { isEnvVerifyCause, type AgentEvent, type ToolCallEvent } from "../events";
 
 export const WAIT_TOOL_NAME = "wait_for_agents";
 
@@ -45,7 +45,14 @@ export interface SessionCounts {
   verifySelfCalls: number;
   verifyAutoBeats: number;
   verifyPasses: number;
+  /** 代码红（判据 = `!isEnvVerifyCause(cause)`，含未归因——口径「cause 缺席 ⇒ 按 code 算」）。
+   *  #102 之前这一档吃的是「任何 ok:false」，于是被拒／环境那两拍也记在这里。 */
   verifyFailures: number;
+  /** 被拒那一拍（`cause === "skipped"`：有面未授权，命令一条都没执行）——分档只是计数，
+   *  红/不红的界仍由 `src/events` 里那只 `isEnvVerifyCause` 判，这里不另立 cause 清单。 */
+  verifyBlocked: number;
+  /** 其余环境红（toolchain-missing / timeout / no-surface / hook-error / pkg-manager / not-run）。 */
+  verifyEnv: number;
   writeSessions: 0 | 1;
   /** 写过盘却没有任何一次 verify 通过 ⇒「说了但没验」，W4c 假完成率的现成分子 */
   writeSessionsWithoutVerifyPass: 0 | 1;
@@ -81,7 +88,12 @@ export interface ToolChoiceReadings {
     selfCalls: number;
     autoBeats: number;
     passes: number;
+    /** 代码红（含未归因）。#102 起被拒／环境两拍不再进这一格。 */
     failures: number;
+    /** 被拒那一拍数（`cause === "skipped"`：有面未授权，命令一条都没执行）。 */
+    blocked: number;
+    /** 其余环境红那一拍数（工具链缺失／超时／无可验面／钩子抛错／包管理器／没跑完）。 */
+    env: number;
     writeSessions: number;
     /** 写过盘却没有任何一次**主会话** verify 通过（说了但没验），W4c 假完成率的现成分子。
      *  worker 侧的验证证据由 agent_id 摘掉（withAgentId 已覆盖 verify_result）——
@@ -108,6 +120,7 @@ export function projectSession(events: readonly AgentEvent[]): SessionCounts {
     userTurns: 0, toolCalls: 0, workerCalls: 0, repeats: 0, repeatOver: 0,
     spawns: 0, results: 0, waitCalls: 0, spawnSessions: 0, spawnSessionsWithoutWait: 0,
     verifySelfCalls: 0, verifyAutoBeats: 0, verifyPasses: 0, verifyFailures: 0,
+    verifyBlocked: 0, verifyEnv: 0,
     writeSessions: 0, writeSessionsWithoutVerifyPass: 0,
     skillCalls: 0, mcpCalls: 0, runErrors: 0, byToolName: {},
   };
@@ -138,7 +151,15 @@ export function projectSession(events: readonly AgentEvent[]): SessionCounts {
         if (e.ok) {
           out.verifyPasses++;
           if (!hasWorkerAttribution(e)) mainVerifyPass = true;
-        } else out.verifyFailures++;
+        }
+        // 红那一档只收代码红（#102）。判据是 `src/events` 里那一只 `isEnvVerifyCause`——与
+        // worker-report / loop / 沉淀四处出口同一份表，这里不抄第二份 cause 清单。
+        // 被拒／环境拍在事件流里与代码红**同形**（都是 ok:false），分开靠的是 `cause`：
+        // 那一拍一条命令都没执行（被拒）或压根跑不了（环境），记进 `failures` 就是给
+        // 看这屏数的人一个假的红计数（读数不驱动闸，但闸外的人只读得到它）。
+        else if (!isEnvVerifyCause(e.cause)) out.verifyFailures++;
+        else if (e.cause === "skipped") out.verifyBlocked++;
+        else out.verifyEnv++;
         if (e.auto === true) out.verifyAutoBeats++;
         break;
       case "tool_call": {
@@ -204,6 +225,8 @@ export function projectToolChoice(sessions: readonly (readonly AgentEvent[])[]):
     a.verifyAutoBeats += c.verifyAutoBeats;
     a.verifyPasses += c.verifyPasses;
     a.verifyFailures += c.verifyFailures;
+    a.verifyBlocked += c.verifyBlocked;
+    a.verifyEnv += c.verifyEnv;
     a.writeSessions += c.writeSessions;
     a.writeSessionsWithoutVerifyPass += c.writeSessionsWithoutVerifyPass;
     a.skillCalls += c.skillCalls;
@@ -241,6 +264,8 @@ export function projectToolChoice(sessions: readonly (readonly AgentEvent[])[]):
       autoBeats: a.verifyAutoBeats,
       passes: a.verifyPasses,
       failures: a.verifyFailures,
+      blocked: a.verifyBlocked,
+      env: a.verifyEnv,
       writeSessions: a.writeSessions,
       writeSessionsWithoutVerifyPass: a.writeSessionsWithoutVerifyPass,
     },
@@ -270,8 +295,12 @@ export function formatToolChoice(r: ToolChoiceReadings): string {
     " · 收队调用 " + String(o.waitCalls) + " · 派过 worker 的会话 " + String(o.spawnSessions) +
     " → 其中没调过收队工具的 " + String(o.spawnSessionsWithoutWait) + " ← W1a 是否真被用起来就读这行");
   const v = r.verification;
+  // 三种结局分开设（#102）：这一屏的受众就是「读这些数的人」，被拒与环境拍混进 `failures`
+  // 时他们看到的红数是假的（判据仍只有 `isEnvVerifyCause` 那一只，分档不进第二份表）。
   lines.push("  验证            自调 " + String(v.selfCalls) + " · 自动拍 " + String(v.autoBeats) +
-    " · 通过 " + String(v.passes) + " · 失败 " + String(v.failures) +
+    " · 通过 " + String(v.passes) + " · 失败 " + String(v.failures) + "（代码红）" +
+    " · 被拒 " + String(v.blocked) + "（有面未授权，命令一条都没执行）" +
+    " · 环境 " + String(v.env) + "（工具链缺失／超时／无可验面／钩子抛错／包管理器／没跑完）" +
     " · 写过盘的会话 " + String(v.writeSessions) + " → 其中没有任何一次通过的 " + String(v.writeSessionsWithoutVerifyPass) + "（假完成率分子）");
   lines.push("  插件            skill 调用 " + String(r.plugins.skillCalls) + " · MCP 调用 " + String(r.plugins.mcpCalls) +
     " · run_error " + String(r.runErrors));
