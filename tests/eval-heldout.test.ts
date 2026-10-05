@@ -466,9 +466,10 @@ describe("loop-eval 的 held-out 接线", () => {
     // 取 `retainStagedRuns` 的调用点当删除点证人（摘掉那一行＝每趟留一个临时目录，本仓量过磁盘面）。
     const cleanup = evalSrc.indexOf("await retainStagedRuns(", install);
     // 光有调用点不算过：调用体里必须真的两分支各删一次（被重拨替掉的那几趟 ＋ 留下读数那一趟）。
+    // 边界用**代码标识**而不是注释文字：`assertion-health-scan` 的棘轮管的正是这一格（改注释＝改掉取料面）。
     const helper = evalSrc.slice(
       evalSrc.indexOf("async function retainStagedRuns"),
-      evalSrc.indexOf("/** 一次 run"));
+      evalSrc.indexOf("async function runOnce("));
     const removals = (helper.match(/await rm\(/gu) ?? []).length;
     expect(removals).toBeGreaterThanOrEqual(2);
     expect(judge).toBeGreaterThan(-1);

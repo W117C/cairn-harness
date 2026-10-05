@@ -85,26 +85,35 @@ const ARM = pick("--arm", SYSTEM_MODE);
 const ONLY = pick("--only", "").split(",").map((s) => s.trim()).filter(Boolean);
 
 /* 装配面：产品缺省开的每一枚开关，这边都要有表态。
- *  `--auto-verify` 是把收束闸接上的那一步——**缺省关**，今日行为逐字不动，因为开了它
- *  每趟可能多真跑一遍 lint/test（钱），而 `loop.ts` 头上那句「准确率 vs `$/成功任务` 的实测口径仍未裁」
- *  今天仍然成立：那道裁决要一次带凭据的真跑，属用户裁，不由这把尺替用户翻。
+ *  `autoVerify`（能力 5 的收束闸）**缺省就装**——业主裁决（2026-10-05 第 403 页「先不花钱，只补装配那一半」）
+ *  翻的是**装配**这一半：基准与产品同档，`autoVerifyBeat` 那一列从此不再结构性地恒 false。
+ *  对照臂反过来写：`--no-auto-verify` 摘掉这一环。两臂的读数靠 `ASSEMBLY_FACE` 自带身份，不必猜。
+ *  「装了闸之后再花一轮钱值不值」仍**没授权**：那一臂要一次带凭据的真跑，归用户裁，不由这把尺替用户翻。
  *  递进 `runLoop` 的键由**这张表投影**（`runLoopKnobsFromAssembly`），不另起一条 if：
  *  表和参数各算一次，表就成了注释——那正是 `autoVerifyBeat` 49 趟全 false 没被看见的原因。
  *  `--auto-verify-repair` 是第二拍（第一拍代码红且模型真改过盘 ⇒ 再验一次）：产品缺省关，
- *  所以它进表时记的是 `on-here`（"这副读数是对照臂"），而且**只有配上收束闸才生效**——
+ *  所以它进表时记的是 `on-here`（"这副读数是对照臂"），而**有没有对象只看闸在不在**——
  *  配对规则判一次就够（在 `assemblyOverrides` 里），这边只负责把"带了但被忽略"说出来。
  *  有未表态的缺省开键 ⇒ **拒绝出数**（分母不完整时任何分数都是假的，与 `--tasks` 解析报错同一口径）。 */
 const AUTO_VERIFY = argv.includes("--auto-verify");
 const AUTO_VERIFY_REPAIR = argv.includes("--auto-verify-repair");
-// 配对规则只在 `assemblyOverrides` 判一次，这里负责**出声**：带了返修旗标却没带闸 ⇒ 它没有对象，
-// 安静吞掉会让人以为对照臂真的两枚都开着。排在旗标解析这一行旁边，是为了 `--feasibility` 那条路也听得到。
-if (AUTO_VERIFY_REPAIR && !AUTO_VERIFY) {
-  console.warn("[loop-eval] --auto-verify-repair 被忽略：返修那一拍接在收束闸之后，没装闸就没有对象（要它请同时带 --auto-verify）");
+const NO_AUTO_VERIFY = argv.includes("--no-auto-verify");
+// 同时带「装」与「摘」两枚 ⇒ 拒跑，而不是让后一枚赢：那会把两副装配混进同一趟读数，
+// 而这张表唯一在防的就是"读数不知道自己跑在哪副装配上"。
+if (AUTO_VERIFY && NO_AUTO_VERIFY) {
+  console.error("[loop-eval] --auto-verify 与 --no-auto-verify 互相矛盾 ⇒ 不出数（要缺省那副就两枚都别带）");
+  process.exit(2);
 }
-const ASSEMBLY = assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(AUTO_VERIFY, AUTO_VERIFY_REPAIR));
+const ASSEMBLY = assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(AUTO_VERIFY, AUTO_VERIFY_REPAIR, NO_AUTO_VERIFY));
 const ASSEMBLY_UNDECLARED = undeclaredKnobs(ASSEMBLY);
 const ASSEMBLY_FACE = renderAssemblyFace(ASSEMBLY);
 const BENCH_RUNLOOP_KNOBS = runLoopKnobsFromAssembly(ASSEMBLY);
+// 配对规则的**出声**：带了返修旗标而这张表里却没有它 ⇒ 这一趟没装闸，它没有对象。
+// 判据取表而不是在这里重算一遍布尔（重算＝第二份配对逻辑，宽度迟早不同）。
+// 排在旗标解析这一段旁边，是为了 `--feasibility` 那条路也听得到。
+if (AUTO_VERIFY_REPAIR && !ASSEMBLY.some((r) => r.key === "autoVerifyRepair")) {
+  console.warn("[loop-eval] --auto-verify-repair 被忽略：返修那一拍接在收束闸之后，这一趟没装闸（--no-auto-verify）就没有对象");
+}
 /** 对照臂的短提示 = gate-check 暗卷当年那句（用来证明"提示词差异"不是读数的解释变量）。 */
 const SHORT_SYSTEM = [
   "你是桌面编程 agent，workspace 根是当前工作区（所有路径相对它）。",

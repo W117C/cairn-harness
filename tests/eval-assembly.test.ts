@@ -25,10 +25,13 @@ import {
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 
-/** 产品缺省态那副装配（不带旗标）——本文件里"缺省"一律指这一副。 */
+/** 产品缺省态那副装配（不带旗标）——本文件里"缺省"一律指这一副。
+ *  2026-10-05 起这一副**就是**产品同档（业主裁决「先不花钱，只补装配那一半」）。 */
 const PLAIN = assemblyRows(DEFAULT_SETTINGS);
-/** 带 `--auto-verify` 那副。 */
+/** 显式带 `--auto-verify` 那副（与缺省同义，旧写法保留）。 */
 const FLAGGED = assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(true));
+/** 摘闸那副＝对照臂（`--no-auto-verify`）。 */
+const UNARMED = assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(false, false, true));
 
 const faceOf = (rows: readonly AssemblyRow[], key: string): string | undefined =>
   rows.find((r) => r.key === key)?.face;
@@ -83,9 +86,14 @@ describe("表 → 递进 runLoop 的参数：不许各算一次", () => {
   /* 「A＝B」必配「A≠旧值」：两态**各**钉一条，且它们对同一个输入给不同输出。
    * 只钉带旗标那一副的话，把投影写成恒 `{ autoVerify: true }` 也是绿的——
    * 那正是"表当注释、参数自己再算一遍"的分叉形状。 */
-  it("缺省那副：表说没装 ⇒ runLoop 收不到 autoVerify（今日行为逐字不动）", () => {
-    expect(faceOf(PLAIN, "autoVerify")).toBe("off-here");
-    expect(runLoopKnobsFromAssembly(PLAIN)).toEqual({});
+  it("缺省那副：闸与产品同档 ⇒ 递出去的参数里真装着 autoVerify（2026-10-05 补的装配裁决）", () => {
+    expect(faceOf(PLAIN, "autoVerify")).toBe("same");
+    expect(runLoopKnobsFromAssembly(PLAIN)).toEqual({ autoVerify: true });
+  });
+
+  it("摘闸那副（--no-auto-verify）：表说没装 ⇒ runLoop 收不到 autoVerify（对照臂的真形状）", () => {
+    expect(faceOf(UNARMED, "autoVerify")).toBe("off-here");
+    expect(runLoopKnobsFromAssembly(UNARMED)).toEqual({});
   });
 
   it("带 --auto-verify 那副：表改口成 same ⇒ 递出去的参数里真装着 autoVerify", () => {
@@ -95,19 +103,25 @@ describe("表 → 递进 runLoop 的参数：不许各算一次", () => {
 
   it("旗标只改一枚的表态，其余四枚不许跟着翻", () => {
     for (const key of ["autoMemory", "impactAnalysis", "promptCache", "subagentTools"]) {
-      expect(faceOf(FLAGGED, key)).toBe(faceOf(PLAIN, key));
+      expect(faceOf(UNARMED, key)).toBe(faceOf(PLAIN, key));
     }
+    // 而那一枚**确实**翻了：否则"只改一枚"是空话，把 --no-auto-verify 写成没作用也照样绿
+    expect(faceOf(UNARMED, "autoVerify")).not.toBe(faceOf(PLAIN, "autoVerify"));
   });
 
   /* 反方向那一格：产品缺省**关**的键被旗标装上时，也必须进表，记成 `on-here`。
    * 只数 off-here 的表会对这个方向沉默——而「对照臂被读成产品缺省态」是同一枚硬币的反面。 */
-  it("缺省关而这一趟装了 ⇒ 进表记 on-here（两枚旗标都在时才成立）", () => {
+  it("缺省关而这一趟装了 ⇒ 进表记 on-here（看的是闸在不在，不是旗标带没带）", () => {
     const both = assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(true, true));
     expect(faceOf(both, "autoVerifyRepair")).toBe("on-here");
     expect(renderAssemblyFace(both)).toContain("autoVerifyRepair:on-here");
-    // 只带返修、不带闸 ⇒ 它没有对象，不进表（配对规则只在 assemblyOverrides 判一次）
-    expect(assemblyOverrides(false, true)).toEqual({});
-    expect(faceOf(assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(false, true)), "autoVerifyRepair")).toBeUndefined();
+    // 只带返修也成立：闸现在缺省就装，所以它有对象（配对规则只在 assemblyOverrides 判一次）
+    expect(Object.keys(assemblyOverrides(false, true))).toContain("autoVerifyRepair");
+    // 而摘闸那副带上返修 ⇒ 它没有对象：表里只留「闸被摘了」这一格，返修那格不许出现
+    const unarmedRepair = assemblyOverrides(false, true, true);
+    expect(Object.keys(unarmedRepair)).not.toContain("autoVerifyRepair");
+    expect(unarmedRepair.autoVerify?.face).toBe("off-here");
+    expect(faceOf(assemblyRows(DEFAULT_SETTINGS, undefined, unarmedRepair), "autoVerifyRepair")).toBeUndefined();
   });
 
   /* 投影也吃这条配对：表自相矛盾（说有返修、没有闸）时宁可不装（fail-closed），
@@ -130,14 +144,14 @@ describe("表 → 递进 runLoop 的参数：不许各算一次", () => {
   });
 
   /* 少装的那一列是**数出来的**：这格的存在理由就是「基准比产品少装了 N 枚」要能印出来。
-   * 4 → 3 这一格差值同时钉住「表里的缺省态」和「改口只影响一枚」——
-   * 把 `BENCH_KNOBS.autoVerify.face` 从 off-here 抄成 same，这里立刻红。 */
-  it("少装计数：缺省四枚、带旗标三枚，且差的就是 autoVerify 那一枚", () => {
+   * 3 ↔ 4 这一格差值同时钉住「表里的缺省态」和「改口只影响一枚」——
+   * 把 `BENCH_KNOBS.autoVerify.face` 从 same 抄回 off-here（＝裁决被悄悄撤回），这里立刻红。 */
+  it("少装计数：缺省三枚、摘闸那副四枚，且差的正是 autoVerify 那一枚", () => {
     expect(missingKnobs(PLAIN).map((r) => r.key)).toEqual([
-      "autoMemory", "autoVerify", "impactAnalysis", "promptCache",
-    ]);
-    expect(missingKnobs(FLAGGED).map((r) => r.key)).toEqual([
       "autoMemory", "impactAnalysis", "promptCache",
+    ]);
+    expect(missingKnobs(UNARMED).map((r) => r.key)).toEqual([
+      "autoMemory", "autoVerify", "impactAnalysis", "promptCache",
     ]);
   });
 });
@@ -146,10 +160,15 @@ describe("装配面的读数形状", () => {
   it("渲染串逐枚带 key:face，顺序稳定（同一副装配两次要一模一样）", () => {
     const once = renderAssemblyFace(PLAIN);
     expect(once.split(" ")).toHaveLength(PLAIN.length);
-    expect(once).toContain("autoVerify:off-here");
+    expect(once).toContain("autoVerify:same");
     expect(once).toContain("subagentTools:same");
+    // 反方向那一副也要渲染得出来：这格的存在理由是"读数自带它跑在哪副装配上"，两臂都得有身份
+    expect(renderAssemblyFace(UNARMED)).toContain("autoVerify:off-here");
     expect(renderAssemblyFace(assemblyRows(DEFAULT_SETTINGS))).toBe(once);
-    expect(renderAssemblyFace(FLAGGED)).not.toBe(once);
+    // 两臂要分得开：缺省那副 vs 摘闸那副。而 `--auto-verify` 现在与缺省同义，
+    // 所以它的渲染串**必须**等于缺省那副——不等的说法就是「旧写法会偷偷改行为」。
+    expect(renderAssemblyFace(UNARMED)).not.toBe(once);
+    expect(renderAssemblyFace(FLAGGED)).toBe(once);
   });
 
   it("空表渲染成空串，不是一枚分隔符", () => {
@@ -163,7 +182,21 @@ describe("loop-eval 的装配接线", () => {
   /* 钉整条调用连入参，不钉函数名：只写 `assemblyRows` 的话，
    * 「算了但没把 overrides 递进去」这一变异会存活——那恰好是本案的原始形状。 */
   it("缺省表与旗标改口是同一条调用算出来的", () => {
-    expect(evalSrc).toContain("assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(AUTO_VERIFY, AUTO_VERIFY_REPAIR))");
+    expect(evalSrc).toContain("assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(AUTO_VERIFY, AUTO_VERIFY_REPAIR, NO_AUTO_VERIFY))");
+  });
+
+  /* 两枚矛盾的旗标（一边说装、一边说摘）不许"后一枚赢"：那会把两副装配混进同一趟读数，
+   * 而这张表唯一在防的就是"读数不知道自己跑在哪副装配上"。拒跑的起点必须在花费之前。 */
+  it("两枚矛盾的旗标一起带 ⇒ 拒跑退 2，且排在第一趟跑批之前", () => {
+    const guard = evalSrc.indexOf("AUTO_VERIFY && NO_AUTO_VERIFY");
+    const header = evalSrc.indexOf("[loop-eval] 任务=");
+    expect(guard).toBeGreaterThan(-1);
+    expect(header).toBeGreaterThan(guard);
+    expect(evalSrc.slice(guard, guard + 300)).toContain("process.exit(2)");
+  });
+
+  it("摘闸旗标真的解析进这次调用：三枚旗标不许只吃前两枚", () => {
+    expect(evalSrc).toContain('const NO_AUTO_VERIFY = argv.includes("--no-auto-verify");');
   });
 
   it("递给 runLoop 的是投影结果，不是第二个 if", () => {

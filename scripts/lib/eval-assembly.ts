@@ -5,7 +5,7 @@
 // maxSteps/stuckNudge/clarify/plan/verify/userMessage）。最要紧的那枚是 `autoVerify`——
 // `src/agent/loop.ts:573` 的「能力 5 收束闸」：写过盘而模型自始至终没自调 verify ⇒ harness 在收束前
 // 补一拍验证。产品缺省开（`DEFAULT_SETTINGS.autoVerify = true`，用户裁决 09-23），
-// CLI 要 `--auto-verify`，基准**不接**。后果不是"少一个功能"，而是**读数说谎**：
+// CLI 要 `--auto-verify`，基准**当时不接**。后果不是"少一个功能"，而是**读数说谎**：
 // 盘上 49 趟真模型跑批（bench-reps3 36 趟 + eval-long30 1 趟 + eval-baseline-1 12 趟）里
 // `autoVerifyBeat` **全是 false** ⇒ 这一列被读成「模型从不自己验证」，
 // 而真实原因是「跑器没把这一环装上」。这就是本仓反复立案的「两头断」 newest 一例：
@@ -15,8 +15,10 @@
 //  - 产品**缺省为真**的每一枚键都必须在 `BENCH_KNOBS` 里有表态；
 //  - 没表态 ⇒ face="undeclared" ⇒ 判卷红。今后谁翻一个缺省（`impactAnalysis` 09-27 就翻过一次），
 //    基准必须当场说一句"我装/我不装/这格对我无意义"，不能再静默少装一环；
-//  - 本模块**不打开任何东西**：它只把差值印出来。要不要按产品的样子跑，是 `--auto-verify` 那一步，
-//    而那一步花真钱、且 `loop.ts` 注释里那句「准确率 vs `$/成功任务` 的实测口径仍未裁」至今成立 ⇒ 归用户裁。
+//  - 表**就是**跑器递出去的参数：`runLoopKnobsFromAssembly` 单向投影（表 → 参数，不许反过来各算一次）。
+//    业主裁决（2026-10-05 第 403 页）「先不花钱，只补装配那一半」⇒ `autoVerify` 缺省记 `same`＝与产品同档，
+//    要拿「没装闸」那一臂用 `--no-auto-verify`。**花的钱与装配是两格裁决**：这一半翻的是缺省装配，
+//    而「装了闸之后返修值不值」那一臂仍要一次带凭据的真跑，那一步没授权，不由这把尺替用户翻。
 
 /** 跑器对一枚键的表态。五个取值是**互斥**的，不许并成"大概差不多"：
  *  - `same`           基准也装着这一环（读数可与生产行为对齐引用）；
@@ -44,8 +46,8 @@ export interface AssemblyRow {
 /** 缺省表态（2026-10-02 现读）。逐条都带**接线点**，不是形容词。 */
 export const BENCH_KNOBS: Readonly<Record<string, BenchDeclaration>> = {
   autoVerify: {
-    face: "off-here",
-    why: "收束闸在 loop.ts:573，要 runLoop 收到 autoVerify:true 才走；基准没递 ⇒ 带 --auto-verify 才与产品同档",
+    face: "same",
+    why: "收束闸在 loop.ts:573，要 runLoop 收到 autoVerify:true 才走；缺省装配已补上与产品同档（2026-10-05 业主裁决：只补装配、不授权花钱），摘掉它＝带 --no-auto-verify 拿对照臂",
   },
   impactAnalysis: {
     face: "off-here",
@@ -65,7 +67,7 @@ export const BENCH_KNOBS: Readonly<Record<string, BenchDeclaration>> = {
   },
 };
 
-/** 跑器可以按命令行**改口**的键（只有真接了的才许改口，见 loop-eval 的 `--auto-verify`）。 */
+/** 跑器可以按命令行**改口**的键（只有真接了的才许改口，见 `assemblyOverrides` 与 loop-eval 的三枚旗标）。 */
 export type KnobOverrides = Readonly<Record<string, BenchDeclaration>>;
 
 /** 行集＝**缺省为真的键 ∪ 被旗标改过口的键**。
@@ -111,15 +113,28 @@ export function renderAssemblyFace(rows: readonly AssemblyRow[]): string {
   return rows.map((r) => `${r.key}:${r.face}`).join(" ");
 }
 
-/** 命令行 → 表态。今天有两枚能改口：`--auto-verify`（收束闸）与 `--auto-verify-repair`（红了一拍之后再要一轮）。
- *  为什么单独成函数（而不是跑器里内联三元）：这样「带不带旗标 ⇒ 表怎么说」能在**零花费**下判；
+/** 命令行 → 表态。今天有三枚旗标能改口：`--no-auto-verify`（**摘掉**缺省装着的闸＝对照臂）、
+ *  `--auto-verify`（显式说装，与缺省同义，留着是为了旧写法与脚本不必一起改）、
+ *  `--auto-verify-repair`（红了一拍之后再要一轮：产品缺省关，装了就是"这副读数不是产品缺省态"）。
+ *  为什么单独成函数（而不是跑器里内联三元）：这样「带哪枚旗标 ⇒ 表怎么说」能在**零花费**下判；
  *  真跑一趟量收益要花真钱，而那一步归用户裁。
- *  配对规则只在这里判一次：返修那一枚**没有收束闸就没有对象**（产品同形——`agent-runner.ts:1764` 要两个都为真才递），
- *  所以只带 `--auto-verify-repair` 时它不进表，跑器那边只负责把"被忽略"说出来，不再自己判一遍。 */
-export function assemblyOverrides(autoVerify: boolean, autoVerifyRepair: boolean = false): KnobOverrides {
+ *  配对规则只在这里判一次：返修那一枚**没有闸就没有对象**。闸现在缺省就装，
+ *  所以"有没有对象"只看 `--no-auto-verify` 这一枚——跑器那边只负责把"被忽略"说出来，不再自己判一遍。 */
+export function assemblyOverrides(
+  autoVerify: boolean,
+  autoVerifyRepair: boolean = false,
+  noAutoVerify: boolean = false,
+): KnobOverrides {
   const out: Record<string, BenchDeclaration> = {};
-  if (autoVerify) out.autoVerify = { face: "same", why: "本趟带 --auto-verify ⇒ 收束闸与产品同档" };
-  if (autoVerify && autoVerifyRepair) {
+  if (noAutoVerify) {
+    out.autoVerify = {
+      face: "off-here",
+      why: "本趟带 --no-auto-verify ⇒ 把缺省装着的收束闸摘掉；这一臂是对照臂，读数不许引用成产品缺省态",
+    };
+  } else if (autoVerify) {
+    out.autoVerify = { face: "same", why: "本趟显式带 --auto-verify ⇒ 与缺省同档（旧写法保留，不改行为）" };
+  }
+  if (!noAutoVerify && autoVerifyRepair) {
     out.autoVerifyRepair = {
       face: "on-here",
       why: "产品缺省关（settings 的 autoVerifyRepair=false），本趟带 --auto-verify-repair ⇒ 这副读数是对照臂，不是产品缺省态",

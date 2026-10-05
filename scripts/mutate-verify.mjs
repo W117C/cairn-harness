@@ -11751,19 +11751,28 @@ const MUTATIONS = [
     ),
     expectFail: "导出一半也不认模板里的假源码（那一侧的后果是假绿：缺失符号被读成存在）",
   },
-  /* ---- 基准装配面（2026-10-02，能力 5 那一格的**测量有效性**）----
+  /* ---- 基准装配面（2026-10-02 立项，能力 5 那一格的**测量有效性**；2026-10-06 第 407 页补装配裁决那一半）----
    * 动因：`scripts/loop-eval.ts` 自称「装配 = 生产同款」，实际递给 runLoop 的参数里
    * 一枚产品缺省开的开关都没有 ⇒ 盘上 49 趟跑批的 `autoVerifyBeat` 全是 false，
-   * 被读成「模型从不自己验证」。这 11 条钉的是**表态表与真参数不许分叉**：
-   * 表说装了 ⇒ 参数里得真装着；表没表态 ⇒ 不许出数。 */
+   * 被读成「模型从不自己验证」。这 14 条钉的是**表态表与真参数不许分叉**：
+   * 表说装了 ⇒ 参数里得真装着；表没表态 ⇒ 不许出数；缺省那副**就是**产品同档（业主 2026-10-05 裁决）。 */
+  {
+    id: "asm-default-face-not-same",
+    src: "scripts/lib/eval-assembly.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "把 `BENCH_KNOBS.autoVerify` 的缺省表态从 `same` 抄回 `off-here` ⇒ 业主那半裁决（只补装配、不授权花钱）" +
+      "被静默撤回：跑器照旧不装闸，而 `autoVerifyBeat:false` 又会在新留档里被读成「模型不自己验证」",
+    apply: (s) => s.replace('    face: "same",\n    why: "收束闸在 loop.ts:573', '    face: "off-here",\n    why: "收束闸在 loop.ts:573'),
+    expectFail: "缺省那副：闸与产品同档 ⇒ 递出去的参数里真装着 autoVerify（2026-10-05 补的装配裁决）",
+  },
   {
     id: "asm-projection-always-on",
     src: "scripts/lib/eval-assembly.ts",
     test: "tests/eval-assembly.test.ts",
-    desc: "投影不看 face 只要键名对就装 ⇒ 缺省那副也会给 runLoop 塞 autoVerify，" +
-      "「基准今天少装了」这一格被抹平，而它正是本表存在的理由",
+    desc: "投影不看 face 只要键名对就装 ⇒ 摘闸那副（对照臂）也会给 runLoop 塞 autoVerify，" +
+      "「两臂的读数长得一样」正是这一族最贵的形状：下一次裁决要的就是这两副的差值",
     apply: (s) => s.replace('r.key === key && (r.face === "same" || r.face === "on-here")', 'r.key === key'),
-    expectFail: "缺省那副：表说没装 ⇒ runLoop 收不到 autoVerify（今日行为逐字不动）",
+    expectFail: "摘闸那副（--no-auto-verify）：表说没装 ⇒ runLoop 收不到 autoVerify（对照臂的真形状）",
   },
   {
     id: "asm-projection-never-on",
@@ -11799,10 +11808,10 @@ const MUTATIONS = [
     id: "asm-override-flag-ignored",
     src: "scripts/lib/eval-assembly.ts",
     test: "tests/eval-assembly.test.ts",
-    desc: "`--auto-verify` 进了命令行却不改口 ⇒ 旗标成了装饰，带它跑出来的读数与不带它一模一样，" +
+    desc: "`--no-auto-verify` 进了命令行却不改口 ⇒ 对照臂成了装饰：带它跑出来的读数与不带它一模一样，" +
       "而下一次裁决「准确率 vs 每成功任务花多少」要的就是这两副对照",
-    apply: (s) => s.replace("  if (autoVerify) out.autoVerify =", "  if (false) out.autoVerify ="),
-    expectFail: "少装计数：缺省四枚、带旗标三枚，且差的就是 autoVerify 那一枚",
+    apply: (s) => s.replace("  if (noAutoVerify) {", "  if (false) {"),
+    expectFail: "少装计数：缺省三枚、摘闸那副四枚，且差的正是 autoVerify 那一枚",
   },
   {
     id: "asm-face-render-dropped",
@@ -11823,10 +11832,31 @@ const MUTATIONS = [
     desc: "算了 overrides 却没递进 assemblyRows（第三个实参写没）⇒ 旗标改了口而表没跟上；" +
       "本仓「算出来不接」那一族在这里的形状是少一个入参",
     apply: (s) => s.replace(
-      "assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(AUTO_VERIFY, AUTO_VERIFY_REPAIR))",
+      "assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(AUTO_VERIFY, AUTO_VERIFY_REPAIR, NO_AUTO_VERIFY))",
       "assemblyRows(DEFAULT_SETTINGS)",
     ),
     expectFail: "缺省表与旗标改口是同一条调用算出来的",
+  },
+  {
+    id: "asm-conflict-flag-refusal-dropped",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "两枚互相矛盾的旗标（--auto-verify 与 --no-auto-verify）不再拒跑 ⇒ 后一枚悄悄赢，" +
+      "两副装配混进同一趟读数，而这张表唯一在防的就是「读数不知道自己跑在哪副装配上」",
+    apply: (s) => s.replace("if (AUTO_VERIFY && NO_AUTO_VERIFY) {", "if (false) {"),
+    expectFail: "两枚矛盾的旗标一起带 ⇒ 拒跑退 2，且排在第一趟跑批之前",
+  },
+  {
+    id: "asm-no-auto-verify-flag-unparsed",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "命令行里的 --no-auto-verify 没被解析（常量 false 顶上去）⇒ 用户说了摘闸、跑器照旧装着，" +
+      "对照臂在命令行上不存在了而读数行仍写着 autoVerify:same",
+    apply: (s) => s.replace(
+      'const NO_AUTO_VERIFY = argv.includes("--no-auto-verify");',
+      "const NO_AUTO_VERIFY = false;",
+    ),
+    expectFail: "摘闸旗标真的解析进这次调用：三枚旗标不许只吃前两枚",
   },
   {
     id: "asm-eval-runloop-knob-not-spread",
@@ -11872,10 +11902,10 @@ const MUTATIONS = [
     id: "asm-pairing-rule-dropped",
     src: "scripts/lib/eval-assembly.ts",
     test: "tests/eval-assembly.test.ts",
-    desc: "只带返修旗标也把它写进表 ⇒ 读数行上一枚没人承诺过的 `on-here`，而闸根本没装——" +
-      "产品那条配对（两个都为真才递）在这里被单方面放宽",
-    apply: (s) => s.replace("  if (autoVerify && autoVerifyRepair) {", "  if (autoVerifyRepair) {"),
-    expectFail: "缺省关而这一趟装了 ⇒ 进表记 on-here（两枚旗标都在时才成立）",
+    desc: "摘闸那一副也把它写进表 ⇒ 读数行上一枚没人承诺过的 `on-here`，而闸根本没装——" +
+      "配对从「闸在不在」被放宽成「旗标带没带」，而缺省装了闸以后这两者已经不是一个东西",
+    apply: (s) => s.replace("  if (!noAutoVerify && autoVerifyRepair) {", "  if (autoVerifyRepair) {"),
+    expectFail: "缺省关而这一趟装了 ⇒ 进表记 on-here（看的是闸在不在，不是旗标带没带）",
   },
   {
     id: "asm-projection-pairing-failopen",
@@ -13952,7 +13982,7 @@ const MUTATIONS = [
     test: "tests/failed-trace-keep.test.ts",
     desc: "留档名 ⇄ 草稿 id 的剥后缀规则被 import 断开 ⇒ 取料口自己再写一遍（两份规则迟早漂，"
       + "漂的结果是「留了档但草稿永远认不出它」这种静默不响应）。"
-      + "killer 换过一次（第 405 页）：原来指的那条「基准那种 .events.jsonl 剥干净」直接 import lib 调 `caseIdOfTrace`，"
+      + "killer 换过一次（第 406 页）：原来指的那条「基准那种 .events.jsonl 剥干净」直接 import lib 调 `caseIdOfTrace`，"
       + "**不经过被改的文件** ⇒ 摘掉 gym-draft 的 import 它照样绿（规则 325 那一型：指针指向不会红的那条）；"
       + "改指真 spawn 那份脚本的那条——共用规则断线的可观测后果就是它跑不起来",
     apply: (s) => s.replace(`import { caseIdOfTrace, TRACE_SUFFIX } from "./lib/failed-trace-keep";\n`, ""),
