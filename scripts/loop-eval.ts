@@ -69,11 +69,6 @@ const OUT = pick("--out", join("outputs", "loop-eval-" + new Date().toISOString(
 const MAX_STEPS = Number(pick("--max-steps", "20"));
 const REPS = Number(pick("--reps", "1"));
 const SYSTEM_MODE = pick("--system", "base");
-/* 臂名（A/B 的那一副臂）。缺省落到 `SYSTEM_MODE`——同一份事实源，不另立第二处定义臂：
- * 存量跑法用 `--system` 区分 base/short，那本来就是在换臂；显式 `--arm` 只在其之上再贴一个更响的名字
- * （比如同一 system 下跑两副提示词变体）。它和 `reps`／`maxSteps` 一起进每条读数的身份键（#90），
- * 于是盘上两副不同臂的读数不再能假装同分母。 */
-const ARM = pick("--arm", SYSTEM_MODE);
 const ONLY = pick("--only", "").split(",").map((s) => s.trim()).filter(Boolean);
 
 /* 装配面：产品缺省开的每一枚开关，这边都要有表态。
@@ -768,15 +763,12 @@ const dirtyCount = ((): number => {
     return r.status === 0 ? r.stdout.split("\n").filter((l) => l.trim() !== "").length : -1;
   } catch { return -1; }
 })();
-// 一趟只读一次钟：run.json 的时刻与盖进每条读数的 ranAt 身份键取**同一个**值，
-// 省得两处各 `new Date()` 漂出两个时刻、事后对账对不上（#90 把 ranAt 变成逐条身份键之后尤其要紧）。
-const ranAt = new Date().toISOString();
 await writeFile(join(ROOT, OUT, "run.json"), JSON.stringify({
   headSha,
   // -1 = 取不到（不是"干净"）：取不到时印 -1，绝不用 0 冒充干净树。
   dirty: dirtyCount,
-  ranAt,
-  maxSteps: MAX_STEPS, reps: REPS, system: SYSTEM_MODE, arm: ARM,
+  ranAt: new Date().toISOString(),
+  maxSteps: MAX_STEPS, reps: REPS, system: SYSTEM_MODE,
   // 模型名**总是记**（#63）：原先只在 BENCH_MODEL 非空时进读数行，于是"用缺省模型跑的"
   // 那一趟回查不到自己拨的是哪一档——而缺省恰恰是最常见的那一档。
   model: (BENCH_MODEL !== undefined && BENCH_MODEL !== "") ? BENCH_MODEL : glmDefaultModelName(),
@@ -793,13 +785,7 @@ const archived = archiveExistingReadings({
 if (archived !== null) {
   console.log("[loop-eval] 上一份 readings.json 已归档（不顶掉别人的基线）：" + archived.replace(ROOT + "/", ""));
 }
-/* 身份键落进**每条**读数（#90）：`run.json` 只有一份、而 `scripts/eval/report.ts` 的对账面是逐条读读数；
- * 两副不同臂／不同帽／不同 reps 的读数混进同一堆时，配对要先认得各自的脸，否则「同分母」是猜出来的。
- * 全部取**同一趟已算好**的 headSha／ranAt／MAX_STEPS／REPS／ARM——不另取第二处事实源；`r.rep` 本来就在每条读数里。 */
-await writeFile(readingsPath, JSON.stringify(rows.map((x) => ({
-  ...x,
-  r: { ...x.r, headSha, ranAt, maxSteps: MAX_STEPS, reps: REPS, arm: ARM },
-})), null, 1), "utf8");
+await writeFile(readingsPath, JSON.stringify(rows, null, 1), "utf8");
 /* 返修那一环的可读出口：`≥2 拍` 才是「第一拍代码红 ⇒ 模型真改过盘 ⇒ 再验一次」那条链路走通的样子。
  *  全 0 时先看装配面那一行——是闸没装（off-here），还是装了而没触发（模型自己验过了）。 */
 const beatCounts = rows.map((x) => x.r.autoVerifyBeats);

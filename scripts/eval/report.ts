@@ -38,15 +38,6 @@ export interface Row {
   repeats: number;
   /** 该条任务这一轮是否达标（跑器的判卷结果）。 */
   ok: boolean;
-  /** 这一行是第几次重复（`r.rep`，1..reps）。pass^k／pass@k 要把同一靶子的多次重复并起来 ⇒ 缺它就只能按「每靶一行」退化处理。
-   *  缺省 undefined（存量语料没这格）＝这行的重复序号**未知**，不许当成 0/1 蒙进 pass^k 的分母。 */
-  rep?: string;
-  /** 跑这一趟用的步数帽（`--max-steps`，身份键之一）。空串＝没盖章（存量语料）。 */
-  maxSteps?: string;
-  /** 这一趟声明的重复次数（`--reps`，身份键之一）。空串＝没盖章。**与 `repeats`（重复动作指标）不是一回事**。 */
-  reps?: string;
-  /** 这一趟属于哪一副臂（A/B 的臂名；缺省由跑器落到 `--system`，见 `loop-eval.ts` 的 `ARM`）。空串＝没盖章。 */
-  arm?: string;
 }
 
 /** 一份读数文件的汇总。 */
@@ -116,16 +107,6 @@ function identityStr(v: unknown): string {
   return typeof v === "string" && v !== "" ? v : "";
 }
 
-/** 数值型身份键（`maxSteps`／`reps`／`rep`）：**有限数取字符串、非空串原样、其余一律空串（＝缺章）**。
- *
- *  为什么不是 `identityStr`：跑器把帽/次数写成数字（`maxSteps: 20`），存量语料根本没这格（undefined）。
- *  两者必须分得开——把「20」读成「有身份」而把「undefined」读成「0/空」正是本条要防的：
- *  缺章要**可见地缺**，不许用 0 冒充一个合法的帽值。 */
-function identityNum(v: unknown): string {
-  if (typeof v === "number" && Number.isFinite(v)) return String(v);
-  return identityStr(v);
-}
-
 /** 解析一份 `readings.json`。
  *
  *  形状**必须**是 loop-eval 写的那一种（`{r, g}[]`），不认识的形状**直接抛**：
@@ -169,11 +150,6 @@ export function parseReadings(text: string, label = "readings"): Row[] {
       toolFailures: num(rr["toolFailures"], `${label}[${String(i)}].r.toolFailures`),
       repeats: num(rr["repeatedSameAction"], `${label}[${String(i)}].r.repeatedSameAction`),
       ok: gOk,
-      // 逐靶配对（#90）需要的四枚身份/序号键：内层 `r` 优先，兼容盖在 `{r, g}` 外层的写法（与 headSha/ranAt 同规则）。
-      rep: identityNum(rr["rep"] ?? rec["rep"]),
-      maxSteps: identityNum(rr["maxSteps"] ?? rec["maxSteps"]),
-      reps: identityNum(rr["reps"] ?? rec["reps"]),
-      arm: identityStr(rr["arm"] ?? rec["arm"]),
     };
   });
 }
@@ -275,171 +251,6 @@ export function renderIdentityFace(id: IdentityRuling): string {
   return `读数身份面：❌ **${IDENTITY_SENTENCE}**（${detail}）。` +
     "rev／时刻／档名任一没盖章 ⇒ 这份读数不知道自己是谁跑的、什么时候跑的。" +
     "下面那行模型归因面连同整张表，都只按量级读，不按可比读数读。";
-}
-
-/* ───────────────── 逐靶配对面（ledger #90，2026-10-05 补）─────────────────
- * 为什么身份闸之上还要这一格：身份闸只回答"这份读数有没有盖章"，**没回答**"盖了同一枚章的两趟，
- * 逐靶到底哪几个翻红了"。本仓 2026-10-05 实测：同一装配跑两遍，12 个靶子里有 3 个翻面（单趟翻面率
- * 8–25%）。没有「靶子 id ↔ 每趟成败」的逐靶配对，就分不出「真的多拿下 1 个靶」与「噪声底」——
- * 一把 1 靶的增益本该看得见，此前看不见。这一格**只做配对**，上面任何一张表、闸门、出口码都不改。
- *
- * 三条口径：
- *   ⑴ **面（face）**＝除 ranAt 之外的全部身份键（headSha／model／maxSteps／reps／arm）。同一面＝同一批分母；
- *      ranAt 是**区分同面内不同趟**的键，不进面签名（否则同配置跑两遍就永远配不成对，而噪声带正需要它两遍）。
- *   ⑵ **unknown-face**：任一身份键缺失 ⇒ 这条读数连自己是谁跑的都判不出，单独成条、**不参与**任何同面配对，
- *      且在报告里**逐字出声**（本仓"取不到 ≠ 没问题"那条：缺章绝不并进可比组里蒙读数，也不许用 0/空冒充有）。
- *   ⑶ 每靶在某趟的成败＝该趟内这一靶各次重复的 **pass^k**（次次过才算绿）；翻转＝同一面里两趟这一值不同。 */
-
-/** 构成「面」的身份键（同分母签名）——`ranAt` 有意不在内（见 ⑵ 上方的 ⑴）。 */
-export const PAIR_FACE_KEYS = ["headSha", "model", "maxSteps", "reps", "arm"] as const;
-/** 定位「一趟 run」所需的全部身份键＝面键＋ranAt。任一缺失 ⇒ 这条读数落进 unknown-face。 */
-export const RUN_IDENTITY_KEYS = ["headSha", "ranAt", "model", "maxSteps", "reps", "arm"] as const;
-
-/** 取一条读数的某一枚身份键值：缺省（undefined／空串）一律收成空串＝缺章。
- *  取值口径复用 `parseReadings` 里的 `identityStr`／`identityNum`（那里已把数值键转成字符串），
- *  这里只判"有没有"——不在配对这一层再抄一份"什么算缺章"。 */
-function identVal(row: Row, key: (typeof RUN_IDENTITY_KEYS)[number]): string {
-  return (row[key] ?? "") as string;
-}
-
-/** 一条读数的「面签名」；任一**面键**缺章 ⇒ null（＝判不出面）。 */
-export function faceKeyOf(row: Row): string | null {
-  const vals = PAIR_FACE_KEYS.map((k) => identVal(row, k));
-  if (vals.some((v) => v === "")) return null;
-  return PAIR_FACE_KEYS.map((k, i) => `${k}=${String(vals[i])}`).join("|");
-}
-
-/** 一条读数的「趟签名」（面＋ranAt）；任一身份键缺章 ⇒ null（＝unknown-face）。 */
-export function runKeyOf(row: Row): string | null {
-  const vals = RUN_IDENTITY_KEYS.map((k) => identVal(row, k));
-  if (vals.some((v) => v === "")) return null;
-  return RUN_IDENTITY_KEYS.map((k, i) => `${k}=${String(vals[i])}`).join("|");
-}
-
-/** 每靶的重复观测：pass@k＝至少一次过，pass^k＝次次过；k＝这一靶在这批行里出现的次数。 */
-export interface TargetReps {
-  target: string;
-  k: number;
-  passAtK: boolean;
-  passTopK: boolean;
-}
-
-/** 逐靶 pass@k／pass^k（按靶 id 排序，稳定输出）。一个靶在 2 次重复里过 1 次 ⇒ pass@2=true 而 pass^2=false，
- *  这两个数**必须能分别取到**——只报其一就会把"抖一次也过"读成"稳过"。 */
-export function passK(rows: readonly Row[]): TargetReps[] {
-  const oks = new Map<string, boolean[]>();
-  for (const r of rows) {
-    const list = oks.get(r.id);
-    if (list) list.push(r.ok);
-    else oks.set(r.id, [r.ok]);
-  }
-  return [...oks.entries()]
-    .map(([target, list]) => ({
-      target,
-      k: list.length,
-      passAtK: list.some((x) => x),
-      passTopK: list.every((x) => x),
-    }))
-    .sort((a, b) => a.target.localeCompare(b.target));
-}
-
-/** 一批行里「每靶一趟成败」＝pass^k（各次重复全过才绿）。翻面对账用它把多重复的一趟压成每靶一个值。 */
-function runOutcomeByTarget(rows: readonly Row[]): Map<string, boolean> {
-  const m = new Map<string, boolean>();
-  for (const r of rows) m.set(r.id, m.has(r.id) ? (m.get(r.id) ?? false) && r.ok : r.ok);
-  return m;
-}
-
-/** 两个 run 之间的逐靶成败翻转。只对**两边都出现**的靶计数（单边靶没有"同一靶对同一靶"可言，不进分母）。 */
-export interface FlipRuling {
-  /** 两边都有、且 pass^k 不同的靶数。 */
-  flips: number;
-  /** 参与比较的靶数（两边交集）。 */
-  compared: number;
-  /** 翻红的靶 id（排序）。 */
-  flipped: string[];
-}
-
-export function targetFlips(a: readonly Row[], b: readonly Row[]): FlipRuling {
-  const ao = runOutcomeByTarget(a);
-  const bo = runOutcomeByTarget(b);
-  const both = [...ao.keys()].filter((id) => bo.has(id)).sort();
-  const flipped = both.filter((id) => ao.get(id) !== bo.get(id));
-  return { flips: flipped.length, compared: both.length, flipped };
-}
-
-/** 一个面：签名相同的一堆趟。`paired` 只在**同面 ≥2 趟**时为真——这才谈得上同分母翻转/噪声底。 */
-export interface FacePair {
-  face: string;
-  ranAts: string[];
-  paired: boolean;
-  /** 最早两趟之间的翻转数；paired=false 时恒 0（没得比）。 */
-  flips: number;
-  compared: number;
-  flipped: string[];
-}
-
-/** 配对总表。`faces` 是**有身份**的组；`unknown` 是缺身份、被排除在配对之外的读数（单独出声，不并进任何面）。 */
-export interface FaceIndex {
-  faces: FacePair[];
-  unknown: number;
-  unknownIds: string[];
-}
-
-export function indexFaces(rows: readonly Row[]): FaceIndex {
-  const unknownIds: string[] = [];
-  // face → ranAt → rows[]：先用趟签名判"这条有没有身份"，落进面后再按 ranAt 分成同面内的不同趟。
-  const byFace = new Map<string, Map<string, Row[]>>();
-  for (const r of rows) {
-    if (runKeyOf(r) === null) {
-      unknownIds.push(r.id);
-      continue;
-    }
-    const face = faceKeyOf(r) ?? ""; // runKey 非空 ⇒ 面键必齐全 ⇒ 这里的 null 分支不可达，仅类型兜底
-    const runs = byFace.get(face) ?? new Map<string, Row[]>();
-    const list = runs.get(r.ranAt);
-    if (list) list.push(r);
-    else runs.set(r.ranAt, [r]);
-    byFace.set(face, runs);
-  }
-  const faces: FacePair[] = [];
-  for (const [face, runs] of [...byFace.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-    const ranAts = [...runs.keys()].sort();
-    const paired = ranAts.length >= 2;
-    const t = paired
-      ? targetFlips(runs.get(ranAts[0]!) ?? [], runs.get(ranAts[1]!) ?? [])
-      : { flips: 0, compared: 0, flipped: [] as string[] };
-    faces.push({ face, ranAts, paired, flips: t.flips, compared: t.compared, flipped: t.flipped });
-  }
-  return { faces, unknown: unknownIds.length, unknownIds };
-}
-
-/** unknown-face 那一格的逐字句（判卷钉这一句；改它要同批改判卷）。 */
-export const UNKNOWN_FACE_SENTENCE = "unknown-face 读数不参与同面配对";
-
-/** 单个面的配对行。`flips:` 这个数字就是"这一面里翻了几个靶"——同面两趟时才有意义。 */
-export function renderFacePair(f: FacePair): string {
-  const head = `面【${f.face}】：同面 ${String(f.ranAts.length)} 趟`;
-  if (!f.paired) return `${head} ⇒ 只 1 趟，无从配对（噪声带要同面两趟以上；这一面不比翻转）`;
-  return (
-    `${head}（${f.ranAts.join(" / ")}）⇒ 逐靶比较 ${String(f.compared)} 个共同靶，flips: ${String(f.flips)}` +
-    `（翻转靶：${f.flipped.join("、") || "无"}）`
-  );
-}
-
-/** 配对面总表。`unknown > 0` 时那句必须**出声**——否则"少了几条没身份的读数"就成了静默出口，
- *  而那正是本条缺陷的原始形状（两副不同形状的读数被当成同分母一起比）。 */
-export function renderPairing(idx: FaceIndex): string {
-  const out: string[] = ["── 逐靶配对面（同面才比，缺身份的不进分母）──"];
-  if (idx.faces.length === 0) out.push("  没有任何**有身份**的读数可配对。");
-  for (const f of idx.faces) out.push("  " + renderFacePair(f));
-  out.push(
-    idx.unknown > 0
-      ? `  ⚠ ${UNKNOWN_FACE_SENTENCE}：${String(idx.unknown)} 条缺身份键（headSha／ranAt／model／maxSteps／reps／arm 任一）` +
-          "——取不到＝未证，绝不并进上面任一可比面里蒙读数。"
-      : `  ${UNKNOWN_FACE_SENTENCE}：0 条（全部读数都盖齐了身份键）✅`,
-  );
-  return out.join("\n");
 }
 
 /** **噪声带**：同配置两次运行的逐指标绝对差。
@@ -689,9 +500,6 @@ if (process.argv[1] !== undefined && process.argv[1].endsWith("report.ts")) {
   const identity = identityOf([...baseRows.flat(), ...candRows.flat()]);
   process.stdout.write(renderIdentityFace(identity) + "\n");
   process.stdout.write(renderModelFace(face) + "\n\n");
-  // 逐靶配对面：身份闸说"有没有盖章"，这一格说"盖同一枚章的两趟逐靶翻了几个"（#90）。
-  // 两侧**全部**行一起进配对，缺身份的那几条会被单独成条并出声，不并进可比面。
-  process.stdout.write(renderPairing(indexFaces([...baseRows.flat(), ...candRows.flat()])) + "\n\n");
   process.stdout.write(renderReport(cmp, bandSource) + "\n");
   // 出口码落在两道闸上：调用方不必 parse 文本就能分清「可信 / 只有量级 / 禁止读作改善」。
   const code = exitCodeOf(identity, outcomeGate(cmp));

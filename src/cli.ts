@@ -57,7 +57,6 @@ import { envKeyOf } from "./providers/env-keys";
 import { killAllTrackedChildren } from "./tools/process";
 import {
   forkSession,
-  isEnvVerifyCause,
   mergeAssistantDeltas,
   replay,
   type AgentEvent,
@@ -66,7 +65,6 @@ import {
   type ClarifyQuestion,
   type PlanProposal,
   type ToolResultEvent,
-  type VerifyCause,
 } from "./events";
 import { GATE_VERDICTS, type PermissionMode } from "./permissions";
 
@@ -92,50 +90,6 @@ function gateDenied(e: ToolResultEvent): boolean {
   return e.gate !== undefined && BLOCKING_VERDICTS.has(e.gate.verdict);
 }
 
-/** 验证拍的三档计数（#102）。只有"哪一档"这一件事，没有别的判据。 */
-export interface VerifyBeatTally {
-  /** 代码红（含未归因——口径 `cause` 缺席 ⇒ 按 `code` 算，与 `isEnvVerifyCause` 注释同一句） */
-  codeBeats: number;
-  /** 被拒（`cause === "skipped"`：有面未授权，那一拍**一条命令都没执行**） */
-  blockedBeats: number;
-  /** 其余环境红（`toolchain-missing` / `timeout` / `no-surface` / `hook-error` / `pkg-manager` / `not-run`） */
-  envBeats: number;
-}
-
-/** 一拍「红着的验证」进哪一档（判据只有一只，见下面那行 `isEnvVerifyCause`）。
- *
- *  为什么这里必须有分档而不是继续 `!e.ok ⇒ 红`：那条拍上「被拒」与「代码红」在**事件流里是同一个形状**
- *  （`ok:false`），只有 `cause` 分得开。不分档的后果就是工单 #102 那一格——被拒那一拍在终端与门禁
- *  读数里长得跟"你的代码跑红了"一样，而它压根没跑到代码。
- *  「红／被拒／环境」为什么是**三档而不是两档**（被拒并进环境）：`skipped` 与 `no-surface` 在
- *  `ENV_VERIFY_CAUSE_SET` 里是分开两格的，分开的理由是下一步动作不同（去授权 vs 去配一条可验面）。
- *  读数因此也得说三档，否则这一格里"是闸没放行"的信息又被糊回"机器不行"那一坨。
- *  ⚠️ 分档**不是第二份真值**：红/不红的界只由 `src/events` 里那只 `isEnvVerifyCause` 判
- *  （`worker-report`／`loop`／`distill`／`lessons`／`compaction`／`gym`／两个 replay 面吃的同一只），
- *  这里不进任何 cause 清单；档内再分「被拒／其余环境」只是给 already-not-red 的那两拍贴标签。 */
-export function tallyVerifyBeat(tally: VerifyBeatTally, cause: VerifyCause | undefined): void {
-  if (!isEnvVerifyCause(cause)) {
-    tally.codeBeats += 1;
-    return;
-  }
-  if (cause === "skipped") {
-    tally.blockedBeats += 1;
-    return;
-  }
-  tally.envBeats += 1;
-}
-
-/** 三档的印面（#102 那条「别让分档信息只活在内存里」）。一拍都没红 ⇒ 返回 null 不打这一行：
- *  「没跑过验证」与「跑过且全绿」都不该看见一句关于红的读数——那会是一个假的 0 分母。 */
-export function formatVerifyBeats(t: VerifyBeatTally): string | null {
-  const total = t.codeBeats + t.blockedBeats + t.envBeats;
-  if (total === 0) return null;
-  return "[cairn] 验证未通过 " + String(total) + " 拍：红 " + String(t.codeBeats) + "（代码）"
-    + " · 被拒 " + String(t.blockedBeats) + "（有面未授权，那一拍没执行任何命令）"
-    + " · 环境 " + String(t.envBeats) + "（工具链缺失／超时／无可验面／钩子抛错／包管理器／没跑完）"
-    + " ⇒ 这一轮没拿到通过的验证";
-}
-
 /** 本轮退出码的判据（纯函数，可单测）。
  *
  *  为什么要把「门拒了」算成失败：README 把退出码 1 定义成「跑完了但有失败
@@ -146,32 +100,16 @@ export function formatVerifyBeats(t: VerifyBeatTally): string | null {
  *
  *  两个信号都来自**事件流**，不是猜模型有没有说「完成」：
  *  ① 门拒绝：`plan_proposed` 之后结算成 rejected（那一轮的写禁没解除），或 tool_result 带负向 gate；
- *  ② 真失败：`error` 事件 / verify 红 / 非记账类 tool_result ok=false。
- *
- *  #102 之后 verify 那一格分成三档（`tallyVerifyBeat`）：**分档只改读数，不改退出码契约**——
- *  被拒／环境拍仍然让本轮 exit 1，理由是这两条：
- *  ① 对用户/CI 说的这句话是"这一轮没拿到通过的验证"，它确实没拿到，改成 exit 0 就是另一种骗人；
- *  ② 手动 verify 那一拍在事件流里**还配一条** `tool_result{ok:false}`（loop 的注入通道），它已经走
- *    `plainToolFailures` 置红了；自动拍（harness 补的那拍）没有配对的 tool_result，只由 verify 这一格
- *    驱动。只摘 `verifyRed` 会让「手动拍 exit 1 / 自动拍 exit 0」两条同因异果——那比原缺陷更难解释。
- *  想裁"被拒/环境该不该让 CI 失败"是另一个工单，需要的是 README 那句退出码定义一起改。
- *  两个新槽是**可选参数**：既有调用点与 `tests/cli-exit-code.test.ts` 那份五字段形状逐字不动。 */
+ *  ② 真失败：`error` 事件 / verify 红 / 非记账类 tool_result ok=false。 */
 export function runFailed(input: {
   errorEvents: number;
-  /** 代码红（判据 = `!isEnvVerifyCause(cause)`）：README 里那句「验证红」原本指的就是它。 */
   verifyRed: boolean;
-  /** 被拒那一拍数（`cause === "skipped"`）。见上面那段：这一档照旧置红，只是读数分得出来。 */
-  verifyBlockedBeats?: number;
-  /** 其余环境红那一拍数（toolchain-missing / timeout / no-surface / hook-error / pkg-manager / not-run）。 */
-  verifyEnvBeats?: number;
   gateBlocks: number;
   deniedPlans: number;
   plainToolFailures: number;
 }): boolean {
   return input.errorEvents > 0
     || input.verifyRed
-    || (input.verifyBlockedBeats ?? 0) > 0
-    || (input.verifyEnvBeats ?? 0) > 0
     || input.gateBlocks > 0
     || input.deniedPlans > 0
     || input.plainToolFailures > 0;
@@ -1050,10 +988,8 @@ async function main(): Promise<number> {
 
   // 事件流是唯一的事实出口：goal 事件（handleGoalSet 走 emitGoalEvent）、worker 事件、
   // diff 借道的那条 tool_result 全都从这里上来，所以渲染只接一次。
-  // 退出码的计数器全从事件流取（判据是纯函数 runFailed）——不猜模型说了什么。
-  // verify 那一格按归因分三档计数（`tallyVerifyBeat`，#102）：判据仍只有 `isEnvVerifyCause` 那一只。
-  const tally = { errorEvents: 0, gateBlocks: 0, deniedPlans: 0, plainToolFailures: 0 };
-  const verifyBeats: VerifyBeatTally = { codeBeats: 0, blockedBeats: 0, envBeats: 0 };
+  // 退出码的五个计数器全从事件流取（判据是纯函数 runFailed）——不猜模型说了什么。
+  const tally = { errorEvents: 0, verifyRed: false, gateBlocks: 0, deniedPlans: 0, plainToolFailures: 0 };
   const pendingPlanIds = new Set<string>();
   // 真实 provider 的一轮只发 assistant_delta，聚合的 assistant_message 是 mock/demo 通道才有的东西
   //（见 agent-runner 里那几处脚本化 emit）。renderEvent 只认后者 ⇒ 不在这里攒起来的话，
@@ -1094,8 +1030,7 @@ async function main(): Promise<number> {
     const line = renderEvent(e);
     if (line !== null) process.stdout.write(line + "\n");
     if (e.type === "error") tally.errorEvents += 1;
-    // 红着的验证按归因分档（#102）：被拒那一拍不再长得像「你的代码跑红了」。
-    if (e.type === "verify_result" && !e.ok) tallyVerifyBeat(verifyBeats, e.cause);
+    if (e.type === "verify_result" && !e.ok) tally.verifyRed = true;
     if (e.type === "tool_result") {
       if (gateDenied(e)) tally.gateBlocks += 1;
       // 会话末记账轮的失败不算本轮的（X- 层），其余 ok=false 一律算。
@@ -1214,19 +1149,8 @@ async function main(): Promise<number> {
     killAllTrackedChildren();
   }
 
-  // 分档必须印得出来（#102）：只存在内存里的话，用户看到的还是上一行那句「✗ 验证失败」，
-  // 而那句在三种结局（代码红／有面未授权／机器跑不了）上是同一个形状——假读数就是这么留下的。
-  const verifyReadout = formatVerifyBeats(verifyBeats);
-  if (verifyReadout !== null) process.stdout.write(paint(YELLOW, verifyReadout) + "\n");
   process.stdout.write(paint(DIM, `\n事件日志：${opts.logPath}\n`));
-  return runFailed({
-    ...tally,
-    // 三档各自进退出码：红那一格仍是 README 那句「验证红」，被拒／环境两档按上面那段说明照旧置 1，
-    // 但印面已经把三种结局分开了。
-    verifyRed: verifyBeats.codeBeats > 0,
-    verifyBlockedBeats: verifyBeats.blockedBeats,
-    verifyEnvBeats: verifyBeats.envBeats,
-  }) ? EXIT_FAILED : EXIT_OK;
+  return runFailed(tally) ? EXIT_FAILED : EXIT_OK;
 }
 
 // Ctrl-C：先让 run 自己收束（handleRunCancel 触达 interactiveRunAbort ⇒ 轮界收束、门等待按拒结算、

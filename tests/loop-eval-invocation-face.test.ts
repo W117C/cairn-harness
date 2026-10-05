@@ -22,7 +22,7 @@ describe("run.json 的调用面（#68）", () => {
     expect(i, "没有落盘 run.json ⇒ 读数仍不可复现（#68 复发）").toBeGreaterThan(-1);
     // 键在 `"run.json"` 之后（对象字面量是 writeFile 的第二个实参）⇒ 向后切，不是向前。
     const block = src.slice(i, i + 1400);
-    for (const key of ["headSha", "dirty", "ranAt", "maxSteps", "reps", "system", "arm", "model", "tasks"]) {
+    for (const key of ["headSha", "dirty", "ranAt", "maxSteps", "reps", "system", "model", "tasks"]) {
       // 键可能是**简写属性**（`headSha,`）或 `key:` 形态，两种都算记了——
       // 初版只认 `key:`，于是把 `headSha,` 判成"少了这一格"（判据比事实严，是假红）。
       expect(block, "run.json 少了 " + key + " 这一格").toMatch(new RegExp("(^|[\\s{])" + key + "\\s*[,:]", "u"));
@@ -89,40 +89,5 @@ describe("基线不覆盖（#63）：判**行为**，不判「源码里有没有
   it("接线面：脚本必须真的调用这只函数（否则抽出来的纯函数没人用，缺陷照旧）", () => {
     expect(src).toContain("archiveExistingReadings({");
     expect(src).not.toContain('join(ROOT, OUT, "readings-" + headSha.slice(0, 7)');
-  });
-});
-
-// #90：身份**进每条读数**，而不只是 run.json 那一份旁证。
-// 缺陷的原始形状：读数行只记结果、不记"这一趟是怎么跑的" ⇒ 两副不同臂／不同帽／不同 reps 的读数
-// 混进同一堆，`scripts/eval/report.ts` 的对账面就只能猜"是不是同分母"。配对要先认得各自的脸。
-describe("身份键落进每条读数（#90）", () => {
-  it("写 readings.json 时逐条盖 headSha／ranAt／maxSteps／reps／arm（不是只盖 run.json 那一份旁证）", () => {
-    // 钉的是**写 readings 那一行**里对每条 `r` 的盖章，不是 run.json 的对象字面量（后者只有一份）。
-    const i = src.indexOf('writeFile(readingsPath');
-    expect(i, "找不到写 readings.json 的那一步").toBeGreaterThan(-1);
-    const block = src.slice(i, i + 700);
-    expect(block, "读数没逐条 map ⇒ 身份只落在旁证、配对仍看不见每条的脸").toContain("rows.map(");
-    for (const key of ["headSha", "ranAt", "maxSteps", "reps", "arm"]) {
-      expect(block, "readings 每条没盖 " + key).toContain(key);
-    }
-    // 值全部复用同一趟已算好的量，不另起第二处事实源：帽/次数取 MAX_STEPS/REPS，臂取 ARM。
-    expect(block).toMatch(/maxSteps:\s*MAX_STEPS/u);
-    expect(block).toMatch(/reps:\s*REPS/u);
-    expect(block).toMatch(/arm:\s*ARM\b/u);
-  });
-
-  it("arm 缺省落到 SYSTEM_MODE（同一份事实源，不另立第二处定义臂）", () => {
-    expect(src).toMatch(/const ARM = pick\("--arm",\s*SYSTEM_MODE\)/u);
-    // run.json 也记 arm（旁证与逐条读数是同一趟的那张脸）
-    const j = src.indexOf('"run.json"');
-    expect(src.slice(j, j + 700)).toMatch(/arm:\s*ARM\b/u);
-  });
-
-  it("一趟只读一次钟：run.json 的 ranAt 与逐条读数的 ranAt 取同一个常量（不留两处各 new Date 漂出两值）", () => {
-    expect(src, "ranAt 必须是一个 hoist 出来的常量").toMatch(/const ranAt = new Date\(\)\.toISOString\(\)/u);
-    const j = src.indexOf('"run.json"');
-    // run.json 里用的是简写属性 `ranAt,` 而不是又调一次 new Date
-    expect(src.slice(j, j + 700)).toMatch(/(^|[\s{])ranAt\s*,/u);
-    expect(src.slice(j, j + 700), "run.json 里二次读钟 ⇒ 与逐条读数的 ranAt 对不上").not.toMatch(/ranAt:\s*new Date\(\)/u);
   });
 });
