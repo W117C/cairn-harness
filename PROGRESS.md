@@ -13593,8 +13593,8 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    链路现读：`src/agent/loop.ts:496 await tool.run(...)` → `src/main/agent-runner.ts:575 s.askGate.request(...)`
    → `src/main/ask-gate.ts:75` 那个 promise，只被 `decide()`／**60_000ms 看门狗**／`ctx.signal` 三者之一叫醒。
    实测完整收束是 `60010ms verdict:"timeout"` ⇒ **不是死锁（class a 排除），是装配缺口（class b）**：
-   `agent-runner.ts:1123` 送卡走 `hooks.onAsk?.()`——**可选注入**，`setAppHooks` 没注册就静默丢弃；
-   而 `:2300` 那一行只看 `over.unattended` 决定用哪只门，**不看同一份 overrides 里已有的 `noAnswerer`**（`:2183`）。
+   `src/main/agent-runner.ts:1123` 送卡走 `hooks.onAsk?.()`——**可选注入**，`setAppHooks` 没注册就静默丢弃；
+   而 `src/main/agent-runner.ts:2300` 那一行只看 `over.unattended` 决定用哪只门，**不看同一份 overrides 里已有的 `noAnswerer`**（`:2183`）。
    于是「管道形状」（cli 在非 TTY 那一路只翻 `noAnswerer`，刻意不翻 `unattended`——后者会连带关掉会话尾沉淀，
    `tests/goal-continue.test.ts:129-165` 把这条理由钉着）拿到的是交互面那只门：卡送不出去，写向挂在 timer 上。
 2. **我此前两条读数作废（写进台账免得下一个人拿来排除审批通道）**：
@@ -13604,7 +13604,7 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    还有一条**触发因**顺带量到：`sandboxState` 缺省 `{available:false, reason:"尚未自检"}` 被 `src/permissions/risk.ts:244`
    读成 degraded ⇒ 自主档写向出 `ask/L4-risk`；`initSandbox()` 之后同一次写 144ms 自动放行。
 3. **修法两处（不新增词汇：`AskOutcomeReason` 那三档、`layer × verdict` 的分母都不动）**：
-   ⑴ `agent-runner.ts:2300` 路由改成 `over.unattended || over.noAnswerer === true`——与下一行 `goalNextTurn` 同一条判据；
+   ⑴ `src/main/agent-runner.ts:2300` 路由改成 `over.unattended || over.noAnswerer === true`——与下一行 `goalNextTurn` 同一条判据；
    ⑵ `AskGate` 新增 `hasAnswerer?: () => boolean`，**没人可送＝当场按 `unattended` 拒收束**（fail-closed 方向，
    绝不反过来放行），`appAskGate` 递 `() => hooks.onAsk !== undefined`（**当场读**而不是构造时读一次：壳可以后注册也可以取消注册）。
    两条件刻意合进**同一条分支**：见第 5 节——分开写会把别人那把尺弄钝。
@@ -13640,3 +13640,35 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    桌面那半（`apps/desktop` 的 `approval-e2e`）我没跑也不该在这棵脏树上跑。下一趟固定三件：
    落库 → 新 HEAD 的 detached 树逐条杀这 3 根 ＋ 复核 `ask-gate-unattended-fail-closed`／`ask-gate-unattended-notify`
    两根被本笔改过的老锚点 → `head-cert` 取终态并按「总数 = 上一笔 4703 ＋ 本笔 8」核对。
+
+## 2026-10-05 · 第 398 页：凭证——`cc83fcf` 认证读数（唯一那道红是我自己那两行裸文件名引用）＋5 根锚点全杀；预测总数分毫不差
+
+取料面（逐条带面，不混算）：认证＝隔离树 `.worktrees/head-cert-cc83fcf`（`TREE=cc83fcf185f3…`，`DIRTY_JUDGED=0`，
+`收尾复核=同一笔`，`认证树锁=本进程持有`）；锚点真杀＝另一棵 detached 树 `.worktrees/verify-cc83fcf`（跑完已回收，
+回收前核过 0 项在飞）；`docs-check` 的绿读数＝**主树工作树**（修正后），不是认证树那一次。
+可引用读数已落盘并随本页入库：`outputs/head-cert-cc83fcf-2026-10-05-1118/provenance.md`。
+
+1. **认证读数**：`认证门面=23 道（跑到 23）｜绿 22｜❌ 红 1｜⚠️ 超预算 0`；
+   `Test Files 1 failed | 336 passed (337)｜Tests 1 failed | 4713 passed (4714)｜exit=1`；
+   `并发判卷=起前 0 套／跑完 0 套（两端独占）`；`本趟墙钟 268.25s`。
+2. **那道红是红的什么（不猜，跑给自己看）**：`❌ docs-check exit=1 948ms（预算 1300ms）`，
+   两条 D-10：我第 397 页里写了裸文件名 `agent-runner.ts:1123`、`agent-runner.ts:2300`（没带目录，读者无从定位）。
+   **不是尺太严，是我引用写错形**——同一页其余引用都带了目录，只有这两处漏。修法＝补齐 `src/main/` 前缀（本笔），
+   不豁免、不动尺；改完 `node --import tsx scripts/docs-check.ts` **exit=0**（`受检项全绿（另有 3 项未检，见上）`，
+   那 3 项未检是 `STATE.md` 不存在的既有形状，不等于通过）。
+3. **上一笔那个预测又对上了**：第 397 页写「总数 = 4703 ＋ 本笔 8」——实际 `4714`。
+   逐笔原始数：`b25a1540` 认证 4703 → 之后新增两份判卷文件（并发会话的 `serena-dir-not-distributed` 3 条 ＋
+   我的 `write-hang-repro` 8 条）⇒ `4703 + 11 = 4714`，文件面 `335 + 2 = 337` 也对得上。
+   比"照抄上一个总数再加减"更硬的是这条：**增量能落到具体两支新文件上**（取料＝`git diff --numstat b25a1540..HEAD -- 'tests/**'`）。
+4. **锚点真杀（本笔 3 根 ＋ 被本笔改过的 2 根老锚点，共 5 根）**：
+   `✅ noanswerer-not-routed-to-ask-gate`、`✅ prod-ask-gate-not-handed-an-answerer-probe`、`✅ unarmed-ask-request-still-pends`、
+   `✅ ask-gate-unattended-fail-closed`、`✅ ask-gate-unattended-notify` ⇒ `全部变异被正确杀死（断言非恒真）`，
+   `本次耗时 79.4s · 跑了 5/5 条`，`KILL_EXIT=0`。
+   后两根是**被我这笔改过针脚/条件**的老锚点：它们仍会红，说明"实现换了形状之后尺还在守同一件事"，
+   而不是我把它们迁成了空操作。同一棵树上的 `--check-needles`：**1466 条 —— 阻断 0｜待复认 2｜未覆盖 1｜逐行式 5｜killer 指针失效 0**。
+5. **撞窗如实**：本笔的 5 根真杀与那趟认证，与两支在飞子代理（`#93` loop 归因、`#99` 就地覆写快照）同段时间进行——
+   它们各自的提示词写了「跑前 `pgrep`，非空就不跑」，我没有它们的读数可核，所以**它们的门耗时/墙钟类数字我不引用**；
+   我自己的认证读数有 `并发判卷=起前 0 套／跑完 0 套` 这一格证人（两端独占），才敢引用 `268.25s`。
+6. **本页之后还欠一次终局认证**：`cc83fcf` 那道红已由本笔修掉，但"这笔绿了"这句话只能由**修好之后的 HEAD**
+   上的认证来说——本笔落库后重跑 `head-cert`，读数（含 23/23、超预算数、总数与文件数）另开一页记。
+   在那之前，第 397/398 页所有说法按「未认证」读。
