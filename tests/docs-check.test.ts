@@ -390,20 +390,24 @@ describe("D-5 台账 sha 面：三档分开印（可达／不可达／读不到�
   });
 
   it("豁免只挡名单里那三个；名单里不再命中的那条要报 stale 红（不许静默留着）", () => {
-    expect(Object.keys(LEDGER_NON_REV).length).toBe(3);
-    const text = Object.keys(LEDGER_NON_REV).map((s) => `判卷 sha256 三件套（${s}…）`).join("\n");
+    // 条数**跟着表走**，不写死某个数字：豁免表是逐条带理由增删的（只准调低、不再命中即报 stale），
+    // 把条数钉成 3 等于让「新增一条合法豁免」必须来改判卷——那是判据与判卷的虚假耦合，
+    // 而且会让下一个人以为「豁免表应该永远是三条」。本格要问的是**逐条机制**，不是某条目的数量。
+    const waived = Object.keys(LEDGER_NON_REV);
+    expect(waived.length, "豁免表空了 ⇒ 那条 stale 机制就没人验了").toBeGreaterThan(0);
+    const text = waived.map((s) => `判卷 sha256 三件套（${s}…）`).join("\n");
     expect(ledgerRevFace(text, resolver([])).findings).toEqual([]);
     const stale = ledgerRevFace("第 1 页 凭证 @cccc333\n", resolver(["cccc333"]));
     // 断言**不抄生产那句句子**（规则 302：抄成品句＝判卷与被度量者一起改才响，`prose-needle-scan` 会把这种
     // 形状数成"顶包候选"——本笔就被它按帽挡过一次）。这里只问结构事实：每个被豁免的 sha 各出一条红、
     // 且红落在台账面上；措辞归生产端自己钉（本文件里只留一处措辞证人）。
-    for (const sha of Object.keys(LEDGER_NON_REV)) {
+    for (const sha of waived) {
       const hits = stale.findings.filter((f) => f.detail.includes(sha));
       expect(hits.length, `${sha} 不再在场，该有一条点名它的红`).toBe(1);
       expect(hits[0]?.rule).toBe("D-5");
       expect(hits[0]?.file).toBe(LEDGER_FILE);
     }
-    expect(stale.findings.length, "红数恰等于豁免条数（多一条就是把别的格也算进来了）").toBe(3);
+    expect(stale.findings.length, "红数恰等于豁免条数（多一条就是把别的格也算进来了）").toBe(waived.length);
   });
 
   it("git 读不到（或行数对不上）⇒ 记未检并带着分母，不记通过（规则 261）", () => {
