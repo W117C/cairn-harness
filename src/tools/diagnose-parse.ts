@@ -65,7 +65,7 @@ export function parseDiagnostics(text: string, cap: number = DIAGNOSTIC_ENTRY_CA
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i] ?? "";
 
-    const mFail = RE_VITEST_FAIL.exec(line);
+    const mFail = line.match(RE_VITEST_FAIL);
     if (mFail !== null) {
       const body = mFail[1]!.trim();
       const sep = body.indexOf(" > ");
@@ -84,7 +84,7 @@ export function parseDiagnostics(text: string, cap: number = DIAGNOSTIC_ENTRY_CA
       }
     }
     if (failWatch > 0) {
-      const mLoc = RE_LOC.exec(line);
+      const mLoc = line.match(RE_LOC);
       if (mLoc !== null) {
         if (pendingFail !== null && mLoc[1] === pendingFail.file) {
           pendingFail.line = Number(mLoc[2]);
@@ -96,7 +96,7 @@ export function parseDiagnostics(text: string, cap: number = DIAGNOSTIC_ENTRY_CA
       if (failWatch === 0) pendingFail = null;
     }
 
-    const mTsc = RE_TSC.exec(line);
+    const mTsc = line.match(RE_TSC);
     if (mTsc !== null && looksLikePath(mTsc[1]!)) {
       push({
         file: mTsc[1]!,
@@ -110,18 +110,18 @@ export function parseDiagnostics(text: string, cap: number = DIAGNOSTIC_ENTRY_CA
       continue;
     }
 
-    const mUnix = RE_UNIX.exec(line);
+    const mUnix = line.match(RE_UNIX);
     if (mUnix !== null && looksLikePath(mUnix[1]!)) {
       let rest = (mUnix[4] ?? "").trim();
       let severity: "error" | "warning" = "error"; // 无 severity 记号的格式（ruff 等）只在失败行上产条目 ⇒ 按 error
-      const sev = /^(error|warning|note)\b:?\s*/i.exec(rest);
+      const sev = rest.match(/^(error|warning|note)\b:?\s*/i);
       if (sev !== null) {
         if (sev[1]!.toLowerCase() === "note") continue; // note 是补充说明（gcc 的候选提示等），不是可执行条目
         severity = sev[1]!.toLowerCase() as "error" | "warning";
         rest = rest.slice(sev[0].length);
       }
       let rule: string | undefined;
-      const rb = /\[([^[\]]{1,60})\]\s*$/.exec(rest);
+      const rb = rest.match(/\[([^[\]]{1,60})\]\s*$/);
       if (rb !== null) {
         rule = rb[1];
         rest = rest.slice(0, rb.index).trim();
@@ -138,7 +138,7 @@ export function parseDiagnostics(text: string, cap: number = DIAGNOSTIC_ENTRY_CA
       continue;
     }
 
-    const row = RE_STYLE_ROW.exec(line);
+    const row = line.match(RE_STYLE_ROW);
     if (row !== null && styleFile !== null) {
       push({
         file: styleFile,

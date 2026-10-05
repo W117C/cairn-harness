@@ -295,7 +295,7 @@ function mask(secret: string): string {
 function lineFindings(path: string, line: string, lineNo: number, entropy: EntropyOptions): SecurityFinding[] {
   const out: SecurityFinding[] = [];
   for (const p of SECRET_PATTERNS) {
-    const m = p.re.exec(line);
+    const m = line.match(p.re);
     if (m) {
       out.push({
         ruleId: p.ruleId,
@@ -440,7 +440,7 @@ export function redactSecrets(text: string, opts: ScanOptions = {}): RedactResul
     for (const f of hits) {
       findings.push(f);
       // 用掩码替换原文中的密钥字面量（按规则重新定位，避免描述串误替换）
-      // 必须**全局**匹配：旧实现只取 `p.re.exec(line)` 的首个匹配，
+      // 必须**全局**匹配：旧实现只取每行首个匹配，
       // 同一行出现两个同模式密钥时第二个原样留在文本里 → 明文外泄（M0 复盘 E-2）。
       for (const p of SECRET_PATTERNS) {
         const re = new RegExp(p.re.source, p.re.flags.includes("g") ? p.re.flags : p.re.flags + "g");

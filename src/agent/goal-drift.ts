@@ -66,8 +66,7 @@ export function goalDriftFindings(turns: readonly string[]): GoalDriftFinding[] 
   const out: GoalDriftFinding[] = [];
   turns.forEach((text, turn) => {
     for (const r of RULES) {
-      r.re.lastIndex = 0;
-      const m = r.re.exec(text);
+      const m = text.match(r.re);
       if (m === null) continue;
       out.push({ turn, rule: r.rule, why: r.why, quote: m[0].replace(/\s+/gu, " ").slice(0, 200) });
     }

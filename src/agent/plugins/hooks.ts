@@ -307,7 +307,7 @@ function defaultExec(): HookExecFn {
 
 /** 解析不了 → null（装载期出声；执行期按「跑」处理，见 hookIfMatches）。 */
 export function parseHookIf(expr: string): { tool: string; prefix: string | null } | null {
-  const m = /^([A-Za-z0-9_:.-]+)(?:\((.*)\))?$/.exec(expr.trim());
+  const m = expr.trim().match(/^([A-Za-z0-9_:.-]+)(?:\((.*)\))?$/);
   const rawTool = m?.[1];
   if (rawTool === undefined || rawTool === "") return null;
   const inner = m?.[2];

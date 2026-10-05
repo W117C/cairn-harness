@@ -271,7 +271,7 @@ export function parsePatch(text: string): PatchFile[] {
       continue;
     }
 
-    const hm = HUNK_RE.exec(line);
+    const hm = line.match(HUNK_RE);
     if (hm !== null) {
       if (cur === null) throw new PatchParseError("出现 @@ 行但不在某个 `diff --git` 段内", i + 1);
       hunk = {
@@ -291,7 +291,7 @@ export function parsePatch(text: string): PatchFile[] {
     if (line.startsWith("Binary files")) {
       if (cur !== null) {
         cur.op = "binary";
-        const m = /^Binary files a\/(.*) and b\/.* differ$/.exec(line);
+        const m = line.match(/^Binary files a\/(.*) and b\/.* differ$/);
         if (m !== null) cur.path = pathOf("a/", m[1]) ?? cur.path;
       }
       hunk = null;
@@ -305,7 +305,7 @@ export function parsePatch(text: string): PatchFile[] {
     if (line.startsWith("rename from ") || line.startsWith("rename to ")) {
       if (cur !== null) {
         cur.op = "rename";
-        const m = /^rename to (.*)$/.exec(line);
+        const m = line.match(/^rename to (.*)$/);
         if (m !== null) cur.path = pathOf("b/", m[1]) ?? cur.path;
       }
       continue;

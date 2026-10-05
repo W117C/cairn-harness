@@ -98,7 +98,7 @@ export function scopedToolName(plugin: string, server: string, tool: string): st
 
 /** 从 scoped 名反解（bare 名永不命中 matcher 的依据面）。 */
 export function parseScopedToolName(name: string): { plugin: string; server: string; tool: string } | null {
-  const m = /^mcp__plugin_(.+)_(.+)__(.+)$/.exec(name);
+  const m = name.match(/^mcp__plugin_(.+)_(.+)__(.+)$/);
   if (!m) return null;
   return { plugin: m[1]!, server: m[2]!, tool: m[3]! };
 }

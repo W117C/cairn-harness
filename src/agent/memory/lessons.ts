@@ -233,7 +233,7 @@ export interface LessonDigest {
 }
 
 export function parseLessonDigest(body: string): LessonDigest | null {
-  const ev = new RegExp("^" + EVIDENCE_LINE_PREFIX + "(.*)$", "mu").exec(body);
+  const ev = body.match(new RegExp("^" + EVIDENCE_LINE_PREFIX + "(.*)$", "mu"));
   if (ev === null) return null; // 无证据指针 ⇒ 这条不合格，注入侧直接不收
   const evidence = (ev[1] ?? "").trim();
   // 指针**在而行内为空**（手写/半截落盘的 `evidence-line:`）同样是"无出处"。
@@ -241,7 +241,7 @@ export function parseLessonDigest(body: string): LessonDigest | null {
   // 而三个生产调用点都把注入异常**静默吞掉**，后果不是"这一条不注入"，是整段 LESSONS（含同批合格条目）消失。
   // 不合格的形状在这道**共用门**里一次判掉，注入侧的 `continue` 才真的等于"无出处不收"。
   if (evidence === "") return null;
-  const se = new RegExp("^" + SESSION_LINE_PREFIX + "(.*)$", "mu").exec(body);
+  const se = body.match(new RegExp("^" + SESSION_LINE_PREFIX + "(.*)$", "mu"));
   const headline = (body.split("\n")[0] ?? "").trim();
   if (headline === "") return null;
   return { headline, evidence, session: (se?.[1] ?? "").trim() };

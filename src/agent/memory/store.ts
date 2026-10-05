@@ -73,11 +73,11 @@ export interface TopicMeta {
 
 /** 解析 topic 文件：头部 --- 块取 key: value，其余为正文。无 frontmatter → 全文视为正文。 */
 export function parseTopicDoc(raw: string): { meta: Partial<TopicMeta>; body: string } {
-  const m = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(raw);
+  const m = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!m) return { meta: {}, body: raw };
   const meta: Record<string, string> = {};
   for (const line of m[1].split("\n")) {
-    const kv = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(line);
+    const kv = line.match(/^([A-Za-z_][\w-]*):\s*(.*)$/);
     if (kv) meta[kv[1]] = kv[2].trim();
   }
   return { meta, body: m[2] };

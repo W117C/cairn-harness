@@ -114,7 +114,7 @@ export function redirectWriteTargets(command: string): string[] {
   const seen = new Set<string>();
   const collect = (tokens: string[]): void => {
     for (let i = 0; i < tokens.length; i++) {
-      const m = REDIRECT_OP.exec(tokens[i]!);
+      const m = tokens[i]!.match(REDIRECT_OP);
       if (m === null) continue;
       const operand = m[1] === "" ? tokens[i + 1] ?? "" : m[1]!;
       if (operand === "" || NOT_A_FILE_TARGET.test(operand)) continue;

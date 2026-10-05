@@ -229,7 +229,7 @@ export type ProseVerdict = "pass" | "fail" | "unspecified";
 /** 从结构化报告解析 verdict 行（/^verdict\s*[:：]\s*(pass|fail)$/im；锚定行首防正文误伤）。
  *  捕获组归一小写（verdict: PASS 与 pass 同义——大小写不敏感匹配的语义闭环）。 */
 export function parseVerdict(report: string): ProseVerdict {
-  const m = /(^|\n)[ \t]*(?:[*_-]*\s*)?verdict(?:[*_-]*)?[ \t]*[:：][ \t]*(pass|fail)\b/im.exec(report);
+  const m = report.match(/(^|\n)[ \t]*(?:[*_-]*\s*)?verdict(?:[*_-]*)?[ \t]*[:：][ \t]*(pass|fail)\b/im);
   if (!m) return "unspecified";
   return m[2]!.toLowerCase() === "pass" ? "pass" : "fail";
 }

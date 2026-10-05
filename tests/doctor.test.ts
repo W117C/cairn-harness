@@ -14,6 +14,7 @@ import {
   verdictOf,
   type DoctorFacts,
 } from "../src/main/doctor";
+import { PROVIDER_ENV_KEYS } from "../src/providers/env-keys";
 import { DEFAULT_MODEL_TABLE, specsByTier } from "../src/providers/registry";
 
 const RANGE = parseEngines(">=20.11.0 <25")!;
@@ -82,7 +83,7 @@ describe("collectDoctorChecks（六项固定清单，spec §2）", () => {
   it("keys：部分在位 ⇒ detail 点名缺省将拨谁（按 ENV_KEYED_PROVIDERS 表序第一个在位的）", () => {
     const keys = collectDoctorChecks(facts()).find((x) => x.id === "keys")!;
     expect(keys.ok).toBe(true);
-    expect(keys.detail).toContain("CAIRN_API_KEY");
+    expect(keys.detail).toContain(PROVIDER_ENV_KEYS.glm);
   });
 
   it("node：版本不满足 ⇒ fatal（唯一 exit 1 项）；engines 解析失败 ⇒ 同样 fatal", () => {
@@ -110,7 +111,7 @@ describe("collectDoctorChecks（六项固定清单，spec §2）", () => {
     const t = collectDoctorChecks(facts()).find((x) => x.id === "tiers")!;
     expect(t.ok).toBe(true);
     expect(t.fatal).toBe(false);
-    expect(t.detail).toContain("cheap " + TIER_COUNTS.cheap);
+    expect(t.detail).toContain(" 条（cheap " + TIER_COUNTS.cheap + " / standard " + TIER_COUNTS.standard + " / strong " + TIER_COUNTS.strong);
   });
 });
 
@@ -137,7 +138,7 @@ describe("runDoctor（IO 壳，tmpdir 真工作区）", () => {
     try {
       const r = await runDoctor(ws, { sandbox: { available: true } });
       expect(r.checks.find((c) => c.id === "workspace")!.ok).toBe(true);
-      expect(r.checks.find((c) => c.id === "search")!.detail).toContain("未配");
+      expect(r.checks.find((c) => c.id === "search")!.detail).toContain("search.endpoint 未配");
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }
@@ -152,7 +153,7 @@ describe("runDoctor（IO 壳，tmpdir 真工作区）", () => {
       const search = r.checks.find((c) => c.id === "search")!;
       expect(search.ok).toBe(false);
       expect(search.fatal).toBe(false);
-      expect(search.detail).toContain("解析失败");
+      expect(search.detail).toContain("config.json 存在但解析失败");
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }

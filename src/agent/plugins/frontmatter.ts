@@ -58,7 +58,7 @@ export function parseFrontmatter(text: string): ParsedMarkdown {
   let lastTop: string | null = null;
   for (const line of rawFm.split("\n")) {
     if (line.trim() === "" || line.trim().startsWith("#")) continue;
-    const nested = /^\s{2,}([^:]+):\s?(.*)$/.exec(line);
+    const nested = line.match(/^\s{2,}([^:]+):\s?(.*)$/);
     if (nested && lastTop !== null) {
       const nestedKey = safeKey(nested[1]);
       if (nestedKey === null) continue;
@@ -72,7 +72,7 @@ export function parseFrontmatter(text: string): ParsedMarkdown {
       }
       continue;
     }
-    const top = /^([^:\s][^:]*):\s?(.*)$/.exec(line);
+    const top = line.match(/^([^:\s][^:]*):\s?(.*)$/);
     if (!top) continue;
     const key = safeKey(top[1]);
     if (key === null) continue;

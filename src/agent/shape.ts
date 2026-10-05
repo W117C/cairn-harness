@@ -57,9 +57,10 @@ export function shapeLog(output: string, maxChars: number): string {
   if (output.length <= maxChars) return output;
   const lines = output.split("\n");
   const errs: string[] = [];
-  ERROR_LINE.lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = ERROR_LINE.exec(output)) !== null && errs.length < 10) errs.push(m[2].slice(0, 300));
+  for (const m of output.matchAll(ERROR_LINE)) {
+    if (errs.length >= 10) break;
+    errs.push(m[2].slice(0, 300));
+  }
   const tailCount = Math.max(5, Math.floor(maxChars / 80));
   const tail = lines.slice(-tailCount).join("\n");
   const head = errs.length > 0 ? "[错误行]\n" + errs.join("\n") + "\n[尾部]\n" : "[尾部]\n";

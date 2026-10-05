@@ -98,7 +98,7 @@ interface Section {
 /** 段名取自 header 的首个方括号词（"[ARCHITECTURE 大纲（…）]" → "ARCHITECTURE"），
  *  省略提示用它点名——不另立第二事实源，header 改了名字跟着改。 */
 function sectionLabel(header: string): string {
-  const m = /^\[([^\s（]+)/u.exec(header);
+  const m = header.match(/^\[([^\s（]+)/u);
   return m !== null ? m[1]! : header;
 }
 
