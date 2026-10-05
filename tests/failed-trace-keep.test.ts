@@ -308,7 +308,7 @@ describe("接线：既有那个取料口真吃得下这份留档（spawn 真脚�
     return { code: r.status, out: (r.stdout ?? "") + (r.stderr ?? "") };
   };
 
-  it("留档文件 → `gym-draft --out <目录> --apply` ⇒ 草稿三件真落盘（闭环走通，不是打印一句话）", async () => {
+  it("留档文件交给 gym-draft：--out <目录> --apply ⇒ 草稿三件真落盘（闭环走通，不是打印一句话）", async () => {
     const { root, tmp } = await fixture();
     const src = await writeSource(tmp, FAILING);
     const kept = await keep({ root, sourcePath: src, caseId: "N71-rep1-base" });

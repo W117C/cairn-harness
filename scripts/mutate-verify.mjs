@@ -13951,9 +13951,12 @@ const MUTATIONS = [
     src: "scripts/gym-draft.ts",
     test: "tests/failed-trace-keep.test.ts",
     desc: "留档名 ⇄ 草稿 id 的剥后缀规则被 import 断开 ⇒ 取料口自己再写一遍（两份规则迟早漂，"
-      + "漂的结果是「留了档但草稿永远认不出它」这种静默不响应）",
+      + "漂的结果是「留了档但草稿永远认不出它」这种静默不响应）。"
+      + "killer 换过一次（第 405 页）：原来指的那条「基准那种 .events.jsonl 剥干净」直接 import lib 调 `caseIdOfTrace`，"
+      + "**不经过被改的文件** ⇒ 摘掉 gym-draft 的 import 它照样绿（规则 325 那一型：指针指向不会红的那条）；"
+      + "改指真 spawn 那份脚本的那条——共用规则断线的可观测后果就是它跑不起来",
     apply: (s) => s.replace(`import { caseIdOfTrace, TRACE_SUFFIX } from "./lib/failed-trace-keep";\n`, ""),
-    expectFail: "基准那种 `.events.jsonl` 剥干净，旧的 `--keep` 单后缀也认",
+    expectFail: "留档文件交给 gym-draft：--out <目录> --apply ⇒ 草稿三件真落盘（闭环走通，不是打印一句话）",
   },
 ];
 
