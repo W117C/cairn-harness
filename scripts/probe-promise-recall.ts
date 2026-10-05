@@ -73,7 +73,7 @@ export interface MarkedSite {
    * - `model`：在模型可见根内，且不挂在终端写入（`console.*`／`process.stdout|stderr.write`）的实参链上
    *   ⇒ 欠一次"照那句做一遍"（或"那句话有证人"）；
    * - `operator`：字面量往上整条 parent 链里遇到终端写入调用 ⇒ 给运维/使用者看；
-   * - `ui`：落在 `UI_ROOTS` 里 ⇒ 给人看（HEAD-only 验跑会扫到桌面层，见那条注释）。
+   * - `ui`：落在 `UI_ROOTS` 里 ⇒ 给人看（**今天这两枚根在 HEAD 上不存在**，见 `UI_ROOTS` 那条注释与台账 `#110`）。
    * 后两态仍进清单（不许静默消失），只是不判可达性。
    */
   audience: "model" | "operator" | "ui";
@@ -83,9 +83,13 @@ export interface MarkedSite {
 export type PromiseSite = MarkedSite;
 
 /**
- * 「给人看」的那两面：AGENTS.md 的 scope 段点名为桌面层（本仓 core-only 迁 removing 的就是它们），
- * HEAD-only 验跑时它们仍在盘上（实测 `src/renderer/app.js:1091` 那句「全文见安全报告卡」是 UI 文案）。
- * 判据若不排它会红在一句给人看的话上＝断言越界（规则 60）；但**不删读料**，仍列成 ⚪ 态。
+ * 「给人看」的那两面（**今天这两枚根在 HEAD 上都不存在**——2026-10-05 现读：桌面层已迁到
+ * `apps/desktop/src/renderer|preload`，而根门按 AGENTS.md 的约定根本不扫 `apps/`）。
+ * 所以这一支今天是一条**走不到的**排除路径，不是"UI 面已被排除在有界判据之外"的证人：
+ * 真正的 UI 承诺面（含审批卡的披露形状）目前**零证人**，这一格登记为台账 `#110`（要不要把桌面纳进
+ * 承诺网属范围裁决——"桌面不作 v1 交付面"是既有裁决，不由这把尺单方面翻）。
+ * 分支保留的理由只有两条：迁回来的历史形状仍要成立；以及若 `#110` 判"要扫"，判据不用再写一遍。
+ * 判据若不排这类根，会红在一句给人看的话上＝断言越界（规则 60）；但**不删读料**，仍列成 ⚪ 态。
  */
 export const UI_ROOTS: readonly string[] = ["src/renderer/", "src/preload/"];
 
