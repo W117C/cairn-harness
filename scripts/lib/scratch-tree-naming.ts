@@ -19,21 +19,32 @@ export interface NamingFinding {
   detail: string;
 }
 
-/** 允许出现在暂存根下的「名字里带提交号」前缀。加 `head-cert` 不是放宽，是补一格漏：
- *  认证自己的默认树名 `head-cert-<sha7>` 由 `scripts/head-cert.ts` 的 `TREE` 那行产出，它同样编码了提交号，
- *  而 10-04 认证第一趟实测：判卷在认证树里跑 ⇒ 这把尺把**认证自己那棵树**读成「名字没编码提交」⇒
- *  认证永远不可能全绿（尺咬的是自己的车，不是别人的货）。下一棵同类名前缀要加就一起加，
- *  但「带不带 sha」这一判据不动——`name-not-head` 那格对所有前缀一视同仁，说谎的名字照样响。 */
-const NAME_OF_DIR = /^(?:verify|head-cert)-([0-9a-f]{7,40})$/u;
+/** 暂存根：这把尺只管这一层底下的树（判据的 docstring 一直是这么写的，此前实现漏了这一格）。
+ *  别处的树（主树、隔壁、以及 harness 自己管的 `.qoder/worktrees/agent-*`）归各自的 owner 命名，
+ *  硬纳进来只会让尺咬到自己车上——2026-10-05 实测：并行子代理一开，六棵 harness 树全报 `no-sha-name`，
+ *  而那批树的名字里根本没有本仓约定可言（它们由 harness 建、也由 harness 收）。 */
+export const SCRATCH_ROOT_DIR = ".worktrees";
+
+/** 允许出现在暂存根下的「名字里带提交号」的写法：**任意前缀 ＋ `-<sha>`**。
+ *  前两版这里是一张前缀白名单（`verify` ⇒ 再加 `head-cert`），加一个是补一格漏：认证自己的默认树名
+ *  `head-cert-<sha7>` 由 `scripts/head-cert.ts` 的 `TREE` 那行产出，同样编码了提交号，
+ *  而 10-04 认证第一趟实测：判卷在认证树里跑 ⇒ 尺把**认证自己那棵树**读成「名字没编码提交」⇒ 认证永远不可能全绿。
+ *  10-05 同一形状第三次出现（复跑对照树起名 `probe-head-<sha>`，也是钉在某个提交上的诚实名字）⇒ 白名单这条路的
+ *  成本已经高于收益。**判据本身一点没放宽**：名字里那串 sha 必须与这棵树实际 checkout 的提交对得上
+ *  （`name-not-head` 对所有前缀一视同仁，说谎的名字照样响；不带 sha 的名字照样响）。 */
+const NAME_OF_DIR = /^(?:[A-Za-z0-9._-]+?)-([0-9a-f]{7,40})$/u;
 
 const base = (p: string): string => p.replace(/[/\\]+$/u, "").split(/[/\\]/u).pop() ?? p;
 
-/** 只看暂存根底下的树；主树与别处的树不归这把尺管（它们没有 `verify-` 这个约定）。 */
+/** 只看**暂存根（`<root>/.worktrees/`）底下的树；主树与别处的树不归这把尺管（它们没有这个约定）。
+ *  此前实现写的是"根下任何子目录"，于是 harness 建的 `.qoder/worktrees/*` 也被纳进来判——
+ *  那不是放宽判据，是把尺伸到了别人的归属面上。 */
 export function scratchTreesUnder(root: string, trees: readonly ScratchTree[], canonical: (p: string) => string = (p) => p): ScratchTree[] {
   const r = canonical(root).replace(/[/\\]+$/u, "");
+  const under = r + "/" + SCRATCH_ROOT_DIR + "/";
   return trees.filter((t) => {
     const p = canonical(t.path).replace(/[/\\]+$/u, "");
-    return p.startsWith(r + "/") && base(p) !== base(r);
+    return p.startsWith(under);
   });
 }
 
@@ -45,7 +56,7 @@ export function checkScratchTreeNaming(root: string, trees: readonly ScratchTree
     const name = base(t.path);
     const m = NAME_OF_DIR.exec(name);
     if (m === null) {
-      out.push({ kind: "no-sha-name", detail: `暂存树 ${name} 的名字没编码提交（约定是 verify-<sha>／head-cert-<sha>）⇒ 回收时无法从名字认出它钉在哪一笔` });
+      out.push({ kind: "no-sha-name", detail: `暂存树 ${name} 的名字没编码提交（约定是 <前缀>-<sha>）⇒ 回收时无法从名字认出它钉在哪一笔` });
       continue;
     }
     const prefix = (m[1] ?? "").toLowerCase();
