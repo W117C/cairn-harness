@@ -13377,7 +13377,7 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
     15 根新锚点**还没在干净树逐条杀过**。下一趟动作固定三件：落库 → 干净 detached 树逐条杀这 15 根 ＋ `--check-needles`
     期望阻断归零 → `head-cert` 取终态读数并按第 6 节那个 Δ 核对总数。
 
-## 2026-10-05 · 第 393 页：干净树杀锚点——15 根里 4 根存活，追到底只有一个是「守卫多余」，另三个是我把 killer 指错了位；顺带量出一个真洞（写侧 `unknown` 哨兵被读成有身份）
+## 2026-10-05 · 第 394 页：干净树杀锚点——15 根里 4 根存活，追到底只有一个是「守卫多余」，另三个是我把 killer 指错了位；顺带量出一个真洞（写侧 `unknown` 哨兵被读成有身份）
 
 取料面＝认证树 `.worktrees/verify-2462e89`（`HEAD=2462e89d`，`node_modules` 由主树 `cp -al` 硬链而来）。
 逐条串行跑法：`node scripts/mutate-verify.mjs <15 个 id>`，读数 `> /tmp/merge-391/kill15.log 2>&1; echo KILL_EXIT=$?`。
@@ -13583,3 +13583,60 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    `git status` 少列一个 59M 的未跟踪面（本仓 `outputs/` 占 68.2% 的取料帽与 `.serena/` 无关，不混算）。
 7. **量纲与没跑（如实）**：本轮跑三支判卷（3＋36 条）、三台造红机、两道门。
    **没跑**全量核心判卷、认证、`mutate-verify` 真杀。本页不宣布任何「绿了」。
+
+## 2026-10-05 · 第 397 页：#96 写向悬挂收到根——「等人答」其实从没送到人手上（class b 装配缺口，不是死锁）；两处修 ＋ 3 根新锚点；另有两页更正（我的一页号撞了别人、我的改动把别人的针脚弄钝）
+
+取料面：诊断树 `.qoder/worktrees/agent-general-purpose-884875e8`（HEAD `2efeb197`，`git diff --name-only c4ccf4da HEAD -- src tests` **为空**
+⇒ 与我的基线逐字同形），原始读数与探针在 `outputs/write-hang-repro-2026-10-05/`（README ＋ `probe-96.mts` ＋ 9 臂日志）。
+
+1. **症状与真相**：`unattended:false` ＋ `mode:auto` 的写向停在 `tool_call` 之后、再也没有 `tool_result`。
+   链路现读：`src/agent/loop.ts:496 await tool.run(...)` → `src/main/agent-runner.ts:575 s.askGate.request(...)`
+   → `src/main/ask-gate.ts:75` 那个 promise，只被 `decide()`／**60_000ms 看门狗**／`ctx.signal` 三者之一叫醒。
+   实测完整收束是 `60010ms verdict:"timeout"` ⇒ **不是死锁（class a 排除），是装配缺口（class b）**：
+   `agent-runner.ts:1123` 送卡走 `hooks.onAsk?.()`——**可选注入**，`setAppHooks` 没注册就静默丢弃；
+   而 `:2300` 那一行只看 `over.unattended` 决定用哪只门，**不看同一份 overrides 里已有的 `noAnswerer`**（`:2183`）。
+   于是「管道形状」（cli 在非 TTY 那一路只翻 `noAnswerer`，刻意不翻 `unattended`——后者会连带关掉会话尾沉淀，
+   `tests/goal-continue.test.ts:129-165` 把这条理由钉着）拿到的是交互面那只门：卡送不出去，写向挂在 timer 上。
+2. **我此前两条读数作废（写进台账免得下一个人拿来排除审批通道）**：
+   ① 「注入一个立刻批准的门也没打印 ASK」——**不成立**：`RunOverrides` 根本没有 `askGate` 这个键，
+   探针注入的门被丢弃（探针臂 F 计数器命中 **0** 次），打印的卡出自 `appAskGate`；
+   ② 「没打印 ASK ⇒ 不是审批门」——**同一事实读了两遍**：没打印＝没人注册应答人，那正是门的形状，不是反证。
+   还有一条**触发因**顺带量到：`sandboxState` 缺省 `{available:false, reason:"尚未自检"}` 被 `src/permissions/risk.ts:244`
+   读成 degraded ⇒ 自主档写向出 `ask/L4-risk`；`initSandbox()` 之后同一次写 144ms 自动放行。
+3. **修法两处（不新增词汇：`AskOutcomeReason` 那三档、`layer × verdict` 的分母都不动）**：
+   ⑴ `agent-runner.ts:2300` 路由改成 `over.unattended || over.noAnswerer === true`——与下一行 `goalNextTurn` 同一条判据；
+   ⑵ `AskGate` 新增 `hasAnswerer?: () => boolean`，**没人可送＝当场按 `unattended` 拒收束**（fail-closed 方向，
+   绝不反过来放行），`appAskGate` 递 `() => hooks.onAsk !== undefined`（**当场读**而不是构造时读一次：壳可以后注册也可以取消注册）。
+   两条件刻意合进**同一条分支**：见第 5 节——分开写会把别人那把尺弄钝。
+4. **判卷 `tests/write-hang-repro.test.ts`（8 条，全部有界）**：① 纯 `evaluate` 三态（`false` 出卡／`null``true` 放行）；
+   ② 真实 `handleAgentRun`：卡到达那一刻 `tool_call` 在流上而 `tool_result` 不在，答完即出；
+   ③ 装配口对照（`runAgent` 收注入、`handleAgentRun` 不收，注入的门计数器 0 次）；④ 无人值守基线 <5s；
+   ⑤⑥ 修法两格（⑤ 管道形状、⑥ **生产装配那只门**没注册应答人）；⑥b/⑥c 门自身两格（负／正——
+   正半边钉的是「这一闸不许把所有审批都变成拒」）。
+   **为什么 ⑤⑥ 要各钉一格**：上一笔四根存活里有一根正是"观察者与被测维度不同处"；这一笔若只测门（⑥b），
+   把装配点那一句（⑥／`:2293`）摘掉它照样绿——三根锚点各配一个只有它会红的用例。
+5. **两处自我更正（都不是别人发现的，是门发现的）**：
+   ① **一页一号撞面**：我的「干净树杀锚点」那页与并发会话的「更正夹带暂存内容」页都编成 393，
+   而对方已跳到 395 ⇒ 我把自己的页重编为 **394**（只动自己的 header 与 `src/` 里那一处指向自己的页号引用，不碰别人的行）。
+   形状记下来：**并发仓里页号不是自增计数器，落笔前要现读 `grep -n "^## " PROGRESS.md | tail`。**
+   ② **我把别人的针脚弄钝了**：新加的「没人可送」分支照抄了 `notifyOutcome(…, "unattended")` 那一句，
+   使 `ask-gate-unattended-notify` 的针脚从唯一命中退成两处（`--check-needles` 的 待复认 **2→3**）。
+   先合分支消掉重复句（待复认回 2），再发现 `ask-gate-unattended-fail-closed` 的针脚 `if (this.opts.unattended) {`
+   已**不在源文件里**（存活三分类之外的第四态＝被锚定的实现换了形状）⇒ 同笔把它的 apply 迁到新条件，
+   期望用例不动。**改的是针脚跟随搬家，不是放宽判据**——区别写在锚点 desc 里。
+6. **上一笔那个预测兑现了**：第 394 页写的 Δ 校验（4626 ＋ 58 ＋ 14 ＋ 5 ＝ **4703**）——我在 `2efeb197` 上跑的认证
+   读数正是 `Tests 2 failed | 4701 passed (4703)`：**总数分毫不差**，而那 2 条红是并发会话在飞的体量帽那一格
+   （`repo-hygiene-check` 判卷钉死 2900、同一笔把源里改成 3000），对方随后以「不钉数值、只钉『帽 > 盘上现读最大文件』」
+   收口（`b25a1540`／第 395 页认证 **4703/4703 exit=0**）。⇒ 这条不是我的红，也不是我的绿：**归因按 sha 与取料面走**。
+7. **本轮读数（脏主树，逐条带面）**：`typecheck exit=0`；
+   `tests/write-hang-repro` ＋ `ask-gate` ＋ `gated-tools` ＋ `goal-continue` 合跑 **4 files / 40 tests passed / exit=0**；
+   并回前那遍 8 支邻卷（含 `cli-exit-code`／`auto-verify-wiring`／`verify-trust-fingerprint`／`automation-mount-conditional`）
+   **91 passed / exit=0**；`--check-needles` **1466 条：阻断 6（未入库面 3 ＋ 钉在飞文本 3，全是本笔）｜待复认 2｜未覆盖 1｜逐行式 5｜killer 指针失效 0**。
+   ⚠ 一条取料纪律当场又救了一次：第一次跑判卷时我把日志写到不存在的 `/tmp/hangfix/`，
+   **重定向失败让整条命令退 1**——那不是判卷红，是命令没跑；目录先建、退出码分清是谁的，这两件事在同一条命令里都要做。
+8. **在飞的不是我的面**：`#93`（`src/agent/loop.ts` 的 verify 归因计数）与 `#99` 另一半（`sed -i`／`tee` 就地覆写的快照）
+   两支子代理仍在各自隔离树里跑 ⇒ 本页一字未动 `loop.ts`／`run_shell.ts`／`snapshot.ts`。
+9. **未证（本页不宣布任何「绿了」）**：3 根新锚点**没在干净树真杀过**；本笔之上的全量判卷与 `head-cert` **没跑**；
+   桌面那半（`apps/desktop` 的 `approval-e2e`）我没跑也不该在这棵脏树上跑。下一趟固定三件：
+   落库 → 新 HEAD 的 detached 树逐条杀这 3 根 ＋ 复核 `ask-gate-unattended-fail-closed`／`ask-gate-unattended-notify`
+   两根被本笔改过的老锚点 → `head-cert` 取终态并按「总数 = 上一笔 4703 ＋ 本笔 8」核对。

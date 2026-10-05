@@ -1,0 +1,4 @@
+EVENT 5ms user_message
+EVENT 6ms tool_call
+ASK 7ms tool=write_file askId=ask-1 risk=high reason=风险≥high 送审（自主档）
+STALLED 8002ms 最后事件=tool_call 臂=B-hookonly（无回执）

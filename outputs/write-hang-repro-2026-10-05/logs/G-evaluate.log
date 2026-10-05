@@ -1,0 +1,6 @@
+evaluate mode=default sandboxAvailable=false => verdict=ask layer=L3-mode risk=high reason=默认档逐次审批
+evaluate mode=default sandboxAvailable=null => verdict=ask layer=L3-mode risk=none reason=默认档逐次审批
+evaluate mode=default sandboxAvailable=true => verdict=ask layer=L3-mode risk=none reason=默认档逐次审批
+evaluate mode=auto sandboxAvailable=false => verdict=ask layer=L4-risk risk=high reason=风险≥high 送审（自主档）
+evaluate mode=auto sandboxAvailable=null => verdict=approve layer=L4-pass risk=none reason=-
+evaluate mode=auto sandboxAvailable=true => verdict=approve layer=L4-pass risk=none reason=-

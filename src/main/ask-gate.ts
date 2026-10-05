@@ -34,6 +34,11 @@ export interface AskGateOptions {
   /** M4a 无人值守（§11.7.6/§12.2.4）：一切审批请求 fail-closed **立即拒绝**，不进 60s 等待；
    *  拒绝原因落流（notifyOutcome reason="unattended"）。自主档任务的自动放行不经过本门，不受影响。 */
   unattended?: boolean;
+  /** #96：这张卡**有没有人送得到**。返回 false ⇒ 当场按拒收束，不进 60s 等待。
+   *   为什么单独一格：`notify` 是一条可选的注入式钩子（`hooks.onAsk?.()`），没注册就静默丢弃——
+   *   于是「等人答」变成「等一个永远不会来的答案」，写向工具的回执挂在卡上，整场 run 停在那一格。
+   *   拒绝理由沿用既有的 `unattended`，不新增词汇（`layer × verdict` 的分母不许多一档）。 */
+  hasAnswerer?: () => boolean;
 }
 
 export class AskGate {
@@ -58,8 +63,11 @@ export class AskGate {
     ctx: { reason?: string; risk?: RiskLevel; riskReasons?: string[]; signal?: AbortSignal } = {},
   ): Promise<AskOutcomeResult> {
     const askId = "ask-" + String(++this.seq);
-    if (this.opts.unattended) {
-      // 无人值守：不进 pending、不挂 timer——审批请求即刻拒绝并落流（§12.2.4 fail-closed）
+    if (this.opts.unattended || (this.opts.hasAnswerer && !this.opts.hasAnswerer())) {
+      // 无人值守：**以及卡压根送不出去**（#96）——两种都不进 pending、不挂 timer，审批请求即刻拒绝并落流
+      // （§12.2.4 fail-closed）。为什么合在一条分支里：两处都是「不新增词汇」的同一条收束（reason=unattended），
+      // 而分开两条会让 `notifyOutcome` 那句在文件里出现两次——既有锚点 `ask-gate-unattended-notify` 的针脚
+      // 当场从"唯一命中"退成"两处待复认"（本笔实测：待复认 2→3，我把别人的尺弄钝了）。
       this.opts.notifyOutcome?.(askId, "rejected", "unattended");
       return Promise.resolve({ outcome: "rejected", scope: "once", reason: "unattended" });
     }

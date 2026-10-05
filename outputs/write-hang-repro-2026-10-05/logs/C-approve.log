@@ -1,0 +1,11 @@
+EVENT 5ms user_message
+EVENT 7ms tool_call
+ASK 7ms tool=write_file askId=ask-1 risk=high reason=风险≥high 送审（自主档）
+ASK_OUTCOME 7ms approved/user
+EVENT 174ms impact_report
+EVENT 174ms tool_result:ok=true:gate={"layer":"L4-risk","mode":"auto","risk":"high","verdict":"approved","scope":"once"}:blockedBy=-
+EVENT 174ms assistant_message
+EVENT 177ms tool_result:ok=false:gate={"layer":"X-distill","verdict":"denied"}:blockedBy=-
+EVENT 177ms assistant_message
+[memory] 会话结束沉淀: {"kind":"no_content"}
+RESULT 178ms {"ok":true}

@@ -1,0 +1,8 @@
+EVENT 5ms user_message
+EVENT 7ms tool_call
+EVENT 60010ms tool_result:ok=false:gate={"layer":"L4-risk","mode":"auto","risk":"high","verdict":"timeout"}:blockedBy=-
+EVENT 60010ms assistant_message
+EVENT 60012ms tool_result:ok=false:gate={"layer":"X-distill","verdict":"denied"}:blockedBy=-
+EVENT 60012ms assistant_message
+[memory] 会话结束沉淀: {"kind":"no_content"}
+RESULT 60013ms {"ok":true}

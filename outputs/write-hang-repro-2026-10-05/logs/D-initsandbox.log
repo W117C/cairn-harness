@@ -1,0 +1,10 @@
+INIT_SANDBOX 13ms available=true reason=
+EVENT 19ms user_message
+EVENT 20ms tool_call
+EVENT 144ms impact_report
+EVENT 144ms tool_result:ok=true:gate={"layer":"L4-pass","mode":"auto","risk":"none","verdict":"auto-approved"}:blockedBy=-
+EVENT 144ms assistant_message
+EVENT 146ms tool_result:ok=false:gate={"layer":"X-distill","verdict":"denied"}:blockedBy=-
+EVENT 146ms assistant_message
+[memory] 会话结束沉淀: {"kind":"no_content"}
+RESULT 147ms {"ok":true}

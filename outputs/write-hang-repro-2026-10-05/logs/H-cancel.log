@@ -1,0 +1,7 @@
+EVENT 8ms user_message
+EVENT 10ms tool_call
+CANCEL 2003ms {"ok":true}
+EVENT 2004ms tool_result:ok=false:gate={"layer":"L4-risk","mode":"auto","risk":"high","verdict":"rejected"}:blockedBy=-
+EVENT 2004ms assistant_message
+[memory] 会话结束沉淀: {"kind":"failed","why":"This operation was aborted"}
+RESULT 2008ms {"ok":true}

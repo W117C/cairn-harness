@@ -1122,6 +1122,10 @@ export function installAppTools(opts: { automation?: boolean; omitTools?: readon
 const appAskGate = new AskGate({
   notify: (req) => hooks.onAsk?.(req),
   notifyOutcome: (askId, outcome, reason) => hooks.onAskOutcome?.({ askId, outcome, reason }),
+  // #96：`onAsk` 是可选注入（`setAppHooks` 只 `Object.assign`）。没注册时 `notify` 那一句会静默丢弃，
+  // 而这一等只有 60s 看门狗会叫醒它——写向工具的回执挂在一张送不出去的书面上，整场 run 停在原地。
+  // 判据取"当场读得到钩子"而不是"构造时读到过"：壳可以在第一场 run 之后才注册（也才取消注册）。
+  hasAnswerer: () => hooks.onAsk !== undefined,
 });
 
 // ---- M4a：定时任务调度器接线（§12.2）——初始化 / IPC handlers / 触发执行器 ----
@@ -2290,7 +2294,10 @@ export async function handleAgentRun(
           // JSONL 落盘内容不变（pipeline 已 append 原事件）；无 sessionId 的旧脚本路径不带标记。
           hooks.onEvent?.(sessionId !== undefined ? ({ ...e, session_id: sessionId } as AgentEvent) : e);
         },
-        askGate: over.unattended ? unattendedAskGate : appAskGate,
+        // #96：`noAnswerer`（cli.ts 在非 TTY 那一路翻的槽）以前只喂 goal 续跑闸，这一行不认它
+        // ⇒ 管道形状照样拿交互面那只门去"等人答"，而没有任何人会答：每条写向停 60s。
+        // 两个槽现在同向（与下一行 goalNextTurn 的 `unattended || noAnswerer` 同一把判据）。
+        askGate: over.unattended || over.noAnswerer === true ? unattendedAskGate : appAskGate,
         sandbox: sandboxState,
       });
       const next = await goalNextTurn({ logPath, sessionId, unattended: over.unattended === true || over.noAnswerer === true, aborted: () => over.signal?.aborted === true, runModel: modelSelection });

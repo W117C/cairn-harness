@@ -1,0 +1,5 @@
+EVENT 6ms user_message
+EVENT 7ms tool_call
+EVENT 8ms tool_result:ok=false:gate={"layer":"L4-risk","mode":"auto","risk":"high","verdict":"unattended"}:blockedBy=-
+EVENT 9ms assistant_message
+RESULT 10ms {"ok":true}

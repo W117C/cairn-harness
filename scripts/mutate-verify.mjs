@@ -117,7 +117,7 @@ const MUTATIONS = [
     src: "src/main/ask-gate.ts",
     test: "tests/ask-gate.test.ts",
     desc: "unattended 不立即拒绝而是进 60s 等待（fail-closed 退回等待）",
-    apply: (s) => s.replace("if (this.opts.unattended) {", "if (false) {"),
+    apply: (s) => s.replace("if (this.opts.unattended || (this.opts.hasAnswerer && !this.opts.hasAnswerer())) {", "if (false) {"),
     expectFail: "M4a unattended：无人值守立即拒绝（fail-closed 不等 60s），落流 reason=unattended",
   },
   {
@@ -13842,6 +13842,42 @@ const MUTATIONS = [
       + "整批落进 unknown-face，配对那一格等于没接上写侧",
     apply: (s) => s.replace(`  r: { ...x.r, headSha, ranAt, maxSteps: MAX_STEPS, reps: REPS, arm: ARM },`, `  r: { ...x.r },`),
     expectFail: "写 readings.json 时逐条盖 headSha／ranAt／maxSteps／reps／arm（不是只盖 run.json 那一份旁证）",
+  },
+  /* ---- 2026-10-05 第 397 页：#96 写向悬挂的修法（装配点两格 ＋ 门内一格）----
+   * 为什么三根而不是两根：同一件事有三处各自可回归的写法——noAnswerer 的路由、生产那只门递不递
+   * 「有没有应答人」这把判据、门内那一句当场拒的分支。摘掉任一处，另两处仍在，但**红的是不同用例**
+   * （每格的观察者只有对应那一处会不见）。上一笔的四根存活里有一根正是"观察者与被测维度不同处"，
+   * 这次每根先问一遍「生产行变了，这条用例会红吗」。 */
+  {
+    id: "noanswerer-not-routed-to-ask-gate",
+    src: "src/main/agent-runner.ts",
+    test: "tests/write-hang-repro.test.ts",
+    desc: "管道形状（cli 在非 TTY 那一路只翻 noAnswerer，刻意不翻 unattended——后者会连带关掉会话尾沉淀）"
+      + "又不被路由到无人值守那只门 ⇒ 每条写向等满 60s 看门狗才收束；同一个槽在 goal 续跑闸那里早就两值同判，只有这一行漏了",
+    apply: (s) => s.replace("askGate: over.unattended || over.noAnswerer === true ? unattendedAskGate : appAskGate,",
+      "askGate: over.unattended ? unattendedAskGate : appAskGate,"),
+    expectFail: "⑤ 管道形状（只给 noAnswerer，不给 unattended）⇒ 不出卡、当场按无人值守拒收束，不等 60s",
+  },
+  {
+    id: "prod-ask-gate-not-handed-an-answerer-probe",
+    src: "src/main/agent-runner.ts",
+    test: "tests/write-hang-repro.test.ts",
+    desc: "生产那只交互门不再被递「有没有应答人」这把判据 ⇒ 没注册 onAsk 的调用方（把 handleAgentRun 当库直接调）"
+      + "回到「卡片被静默丢弃、写向挂在 timer 上」那个形状",
+    apply: (s) => s.replace("  hasAnswerer: () => hooks.onAsk !== undefined,\n", ""),
+    expectFail: "⑥ 生产装配的交互门没注册应答人 ⇒ run 当场收束（这条钉的是装配点那一句，不是门自己）",
+  },
+  {
+    id: "unarmed-ask-request-still-pends",
+    src: "src/main/ask-gate.ts",
+    test: "tests/write-hang-repro.test.ts",
+    desc: "门内那半句「卡送不出去也算无人值守」被摘 ⇒ hasAnswerer 判假也照样进 pending 挂满 timer"
+      + "（判据给了、不接＝等于没给）。两条件刻意合在**同一条分支**里：分开写会让 notifyOutcome 那句在同一文件出现两次，"
+      + "把既有锚点 ask-gate-unattended-notify 的针脚从唯一命中弄成两处待复认（第 397 页实测 2→3）。"
+      + "反向半边（判真时照旧送卡并等到决议）住在同文件的 ⑥c——那一格钉的是「这一闸不许把所有审批都变成拒」",
+    apply: (s) => s.replace("this.opts.unattended || (this.opts.hasAnswerer && !this.opts.hasAnswerer())",
+      "this.opts.unattended"),
+    expectFail: "⑥b 门自身那一格（负）：hasAnswerer 判假 ⇒ 不 notify、当场拒、pending 归零",
   },
   {
     id: "eval-unknown-sentinel-read-as-identity",

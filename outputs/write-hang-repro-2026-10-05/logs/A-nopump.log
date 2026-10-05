@@ -1,0 +1,3 @@
+EVENT 7ms user_message
+EVENT 8ms tool_call
+STALLED 8000ms 最后事件=tool_call 臂=A-nopump（无回执）
