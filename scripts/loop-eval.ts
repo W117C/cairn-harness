@@ -35,6 +35,10 @@ import { expectFailReason, type ExpectFace } from "./lib/eval-expects";
 // 重拨那一格：判据与分母共用同一个白名单（`providerInterruptOf`），等待有帽、帽外明说不重拨。
 import { retryVerdict, withProviderRetry } from "./lib/eval-retry";
 import { archiveExistingReadings } from "./lib/readings-archive";
+// 失败轨迹留档（#109）：基准每 FAIL 一趟就把那份 `events.jsonl` 收进有帽的 dated 目录，
+// 让 `scripts/gym-draft.ts`（能力 10「从失败轨迹中学习」既有的那一支取料口）吃得到它。
+import { keepFailedTrace, traceKeepLine, TRACE_COUNT_CAP, TRACE_FILE_BYTES_CAP, TRACE_TOTAL_BYTES_CAP } from "./lib/failed-trace-keep";
+import type { TraceKeepOutcome } from "./lib/failed-trace-keep";
 // held-out 验收面：可见测试是任务书明写着要复现的那些 ⇒ 「哄绿它们」与「修对根因」同分。
 // 隐藏测试在**改动清单算完之后**才装进副本，跑一次，判卷口径在那边（三种"量不出来"各给各的措辞）。
 import { installHeldOut, judgeHeldOut, runHeldOut, type HeldOutRun, type HeldOutState } from "./lib/eval-heldout";
@@ -69,6 +73,10 @@ const OUT = pick("--out", join("outputs", "loop-eval-" + new Date().toISOString(
 const MAX_STEPS = Number(pick("--max-steps", "20"));
 const REPS = Number(pick("--reps", "1"));
 const SYSTEM_MODE = pick("--system", "base");
+/* `--keep` = 全量档（每一趟都留）。失败那一侧的留档**不靠它**（#109）：
+ * bench 那四支脚本从不传 `--keep`，于是红轨迹跟着 mkdtemp 目录一起没，能力 10 在基准这一侧永远拿不到输入。
+ * 现在 FAIL 默认有档、其余没有；`--keep` 在场时那一趟已经在产物目录根留下全量 ⇒ 不写第二份。 */
+const KEEP_ALL = argv.includes("--keep");
 /* 臂名（A/B 的那一副臂）。缺省落到 `SYSTEM_MODE`——同一份事实源，不另立第二处定义臂：
  * 存量跑法用 `--system` 区分 base/short，那本来就是在换臂；显式 `--arm` 只在其之上再贴一个更响的名字
  * （比如同一 system 下跑两副提示词变体）。它和 `reps`／`maxSteps` 一起进每条读数的身份键（#90），
@@ -363,6 +371,41 @@ async function listFiles(dir: string, base: string = dir, acc: string[] = []): P
   return acc.sort();
 }
 
+/* 临时目录**不在 runOnce 里删**（#109）。
+ * 为什么这一跳必须挪到调用方：「这趟算不算失败」的那份裁决是 `grade()` + `runValidity()` 汇成的
+ * `verdict`，而它长在**主循环**里（重拨后的那份读数才是被印出来的那一趟）。runOnce 里先删目录，
+ * 就等于在裁决之前把证据烧掉——盘上留下的只有 readings.json 那行结论，转录没了 ⇒
+ * `scripts/gym-draft.ts`（能力 10 既有的取料口）吃不到输入，bench 每跑一片红都学不到东西。
+ * 现在 runOnce 把位置交出来，主循环按它自己已经印出来的那个 verdict 决定留哪一份，**留完立刻删**：
+ * 临时目录的寿命只比原来长几行，不因为"没人收"而在 /tmp 里堆一辈子。 */
+interface StagedRun {
+  /** `I2-rep1-base`：与 `--keep` 的文件名同一份写法，留档与归档两头认得同一个靶。 */
+  key: string;
+  eventsPath: string;
+  dir: string;
+}
+const STAGED: StagedRun[] = [];
+
+/** 收掉这一行（一个靶子 × 一个 rep）留下的临时目录。
+ *  只有**印出来是 FAIL** 的那一趟留一份转录；被重拨替掉的那几趟直接删——它们的账已经在那行
+ *  「重拨账」里说清了，再留档就是给同一个靶堆两份互相矛盾的输入。
+ *  `keepFailedTrace` 自己不吃异常（每一格 IO 都带回话），所以这里不需要 try/finally。 */
+async function retainStagedRuns(staged: readonly StagedRun[], verdict: string, keeps: TraceKeepOutcome[]): Promise<void> {
+  const last = staged[staged.length - 1];
+  for (const s of staged) {
+    if (s === last) continue;
+    await rm(s.dir, { recursive: true, force: true }).catch(() => {});
+  }
+  if (last === undefined) return;
+  /* 每一行都递一次（含 PASS 与「无效」）：留不留的闸在 `keepFailedTrace` 里，吃的就是这里传过去的
+   *  verdict——「绿的那趟不留」因此在那行读数里有自己的格子，而不是靠"目录里恰好没文件"被人读成没接上。 */
+  keeps.push(await keepFailedTrace({
+    verdict, root: ROOT, out: OUT, day: ranAt.slice(0, 10),
+    sourcePath: last.eventsPath, caseId: last.key, keepAll: KEEP_ALL,
+  }));
+  await rm(last.dir, { recursive: true, force: true }).catch(() => {});
+}
+
 /** 一次 run：装配 = 生产同款（BASE_SYSTEM + 会话工具面 + 三门 + verify + 换路提示）。 */
 async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   if (t.external) {
@@ -551,12 +594,14 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   // （Node 的 rm 对符号链接是 unlink 不跟随，但这条是破坏性事故，值得多一行显式）。
   // --keep：把事件流留档。第一版没留，结果「红着收束」到底是模型选择还是装配假象，
   // 只能靠再跑一遍才知道——读数不可复查是评测器的缺陷，不是小事。
-  if (argv.includes("--keep")) {
+  if (KEEP_ALL) {
     await mkdir(join(ROOT, OUT), { recursive: true });
     await cp(eventsPath, join(ROOT, OUT, t.id + "-rep" + String(rep) + "-" + SYSTEM_MODE + ".events.jsonl")).catch(() => {});
   }
   await unlink(join(work, "node_modules")).catch(() => {});
-  await rm(dir, { recursive: true, force: true }).catch(() => {});
+  /* 目录本身**不在这里删**（#109，见 `StagedRun` 上面那段）：删在这儿就是在「这趟算不算 FAIL」
+   * 之前烧掉证据。把位置交给主循环，由它按自己印出来的那个 verdict 决定留不留，留完立刻收。 */
+  STAGED.push({ key: t.id + "-rep" + String(rep) + "-" + SYSTEM_MODE, eventsPath, dir });
   return {
     id: t.id, name: t.name, rep, system: SYSTEM_MODE, seedVerifyOk,
     model: glmDefaultModelName(),
@@ -698,9 +743,15 @@ if (ASSEMBLY_UNDECLARED.length > 0) {
 }
 console.log(`[loop-eval] 任务=${tasks.map((t) => t.id).join(",")} reps=${REPS} system=${SYSTEM_MODE} maxSteps=${MAX_STEPS} 模型=${glmDefaultModelName()} 价=${PRICE.known ? `¥${PRICE.inPerM}/¥${PRICE.outPerM}每M（手给）` : `${PRICE_UNKNOWN}〔${PRICE.why}〕`}`);
 await mkdir(ROOT + "/" + OUT, { recursive: true });
+// 一趟只读一次钟：run.json 的时刻、盖进每条读数的 ranAt 身份键（#90）、以及失败轨迹留档那个
+// dated 目录的名字，三者取**同一个**值——省得多处各 `new Date()` 漂出两个时刻、事后对账对不上。
+const ranAt = new Date().toISOString();
 const rows: { r: Reading; g: { ok: boolean; fails: string[] } }[] = [];
+const traceKeeps: TraceKeepOutcome[] = [];
 for (let rep = 1; rep <= REPS; rep++) {
   for (const t of tasks) {
+    // 本趟新造的临时目录从这一格往后都归主循环收（见 `STAGED` 上面那段：判断 FAIL 要等 grade()）。
+    const stagedMark = STAGED.length;
     // 被 provider 打断 ⇒ 再拨一次（判据与分母共用同一个白名单，见 lib/eval-retry）。
     // 帽内的等待（分钟级抖动）才等；日配额那种要等到明天的 ⇒ 明确不重拨并印出原因——
     // 那一趟仍会被 `runValidity` 判成「无效、不进分母」，不会污染分数。
@@ -727,7 +778,19 @@ for (let rep = 1; rep <= REPS; rep++) {
       + (r.attempts > 1 || !v.valid ? " 〔重拨账：拨 " + String(r.attempts) + " 趟／共等 " + String(r.retryWaitMs) + "ms／" + r.retryWhy + "〕" : "")
       + (v.valid ? "" : " 《" + v.why + "》"),
     );
+    /* 失败轨迹留档那一跳（#109）：**选择面只有这一处**，递给留档器的就是上面刚印出来的那个 verdict——
+     * 跑器自己算的 per-target 成败（`grade()` 那张判据表 + `runValidity()` 的分母口径）。
+     * 这里不另写一份"什么算失败"，`keepFailedTrace` 那边也不重算：它只认 `FAILED_VERDICT` 这一枚令牌。
+     * 「无效」那几趟（未起步/被 provider 打断）因此不会留档——那几趟没跑到模型做事，
+     * 固化出来的尺子量的是限流器而不是 agent。 */
+    await retainStagedRuns(STAGED.splice(stagedMark), verdict, traceKeeps);
   }
+}
+/* 兜底：跑到这里 STAGED 应当已经空了（每一行都自己收）。还有剩 ⇒ 是上面某条路没收到，
+ * 出声并收掉，不让临时目录在 /tmp 里长驻——「取不到 ≠ 没问题」，「没剩」也要有人证。 */
+if (STAGED.length > 0) {
+  console.error(`[loop-eval] 有 ${String(STAGED.length)} 个临时目录没被逐行收掉 ⇒ 当场清掉（这一格的形状说明留档那一步漏了分支）`);
+  for (const s of STAGED.splice(0)) await rm(s.dir, { recursive: true, force: true }).catch(() => {});
 }
 const t0 = tally(rows);
 // 钱与分母同面：被剔掉的趟次花的钱**单列**（那是真钱），但不许混进"每达标任务"的分子。
@@ -768,9 +831,8 @@ const dirtyCount = ((): number => {
     return r.status === 0 ? r.stdout.split("\n").filter((l) => l.trim() !== "").length : -1;
   } catch { return -1; }
 })();
-// 一趟只读一次钟：run.json 的时刻与盖进每条读数的 ranAt 身份键取**同一个**值，
-// 省得两处各 `new Date()` 漂出两个时刻、事后对账对不上（#90 把 ranAt 变成逐条身份键之后尤其要紧）。
-const ranAt = new Date().toISOString();
+// `ranAt` 在跑批开始那一格就已读过钟（见上面 `const ranAt`），这里复用同一个值：
+// run.json 的时刻、逐条读数的身份键、留档目录的日期名是**同一趟**的那一张脸。
 await writeFile(join(ROOT, OUT, "run.json"), JSON.stringify({
   headSha,
   // -1 = 取不到（不是"干净"）：取不到时印 -1，绝不用 0 冒充干净树。
@@ -817,3 +879,10 @@ console.log(`[loop-eval] 闸补拍：合计 ${String(beatCounts.reduce((a, b) =>
     + `（共 ${String(states.length)} 趟）`);
 }
 console.log("[loop-eval] 读数写出 " + OUT + "/readings.json");
+/* 失败轨迹留档那一行**永远印**（一条都没留也印）：
+ * 「本次没有 FAIL 趟次」与「留档这一跳没接」在盘上长得一模一样，而后者正是 #109 沉默了四百页的形状。
+ * 帽的三个数（条数／单条字节／目录总字节）与丢弃计数一起出——被帽挡掉的那几趟必须有名字。 */
+console.log(traceKeepLine({
+  root: ROOT, out: OUT, day: ranAt.slice(0, 10), outcomes: traceKeeps,
+  countCap: TRACE_COUNT_CAP, fileBytesCap: TRACE_FILE_BYTES_CAP, totalBytesCap: TRACE_TOTAL_BYTES_CAP,
+}));

@@ -462,9 +462,15 @@ describe("loop-eval 的 held-out 接线", () => {
     const install = evalSrc.indexOf("await installHeldOut(");
     const judge = evalSrc.indexOf("const touchedJudge");
     const onlySrc = evalSrc.indexOf("const onlySrcChanged");
-    // 取"装完之后第一次出现的 rm(dir"：`judgeSelfCheck` 里也有一条 rm，
-    // 拿全文件第一条会把"删除在装之前"读成事实（10-02 第一版就这么假红过一次）。
-    const cleanup = evalSrc.indexOf("await rm(dir,", install);
+    // 「装完之后才删副本」这条不变量没变，变的只是**删除点**：留档器要先读那份转录，副本不能在半路被删。
+    // 取 `retainStagedRuns` 的调用点当删除点证人（摘掉那一行＝每趟留一个临时目录，本仓量过磁盘面）。
+    const cleanup = evalSrc.indexOf("await retainStagedRuns(", install);
+    // 光有调用点不算过：调用体里必须真的两分支各删一次（被重拨替掉的那几趟 ＋ 留下读数那一趟）。
+    const helper = evalSrc.slice(
+      evalSrc.indexOf("async function retainStagedRuns"),
+      evalSrc.indexOf("/** 一次 run"));
+    const removals = (helper.match(/await rm\(/gu) ?? []).length;
+    expect(removals).toBeGreaterThanOrEqual(2);
     expect(judge).toBeGreaterThan(-1);
     expect(onlySrc).toBeGreaterThan(-1);
     expect(install).toBeGreaterThan(onlySrc);

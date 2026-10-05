@@ -13908,6 +13908,53 @@ const MUTATIONS = [
       `  return typeof v === "string" && v !== "" ? v : "";`),
     expectFail: "★ 写侧那枚 unknown 哨兵在读侧仍算缺章（headSha／model 两枚都试）",
   },
+  /* ---- 2026-10-06 第 404 页：#109 基准失败轨迹 ⇒ 学习环输入（留档器三顶帽 ＋ 跑器接线 ＋ 名字同源）---- */
+  {
+    id: "keep-archives-non-failure-runs",
+    src: "scripts/lib/failed-trace-keep.ts",
+    test: "tests/failed-trace-keep.test.ts",
+    desc: "「这一行算不算失败」那道闸被摘 ⇒ 绿的那趟也留档：目录从「只有失败」变成「全都要」，"
+      + "既撞 repo-hygiene 的 outputs 占比帽，又把学习环的输入混进噪声（留档小的原因是**裁决**，不是帽）",
+    apply: (s) => s.replace(`    return none("not-a-failure", "这一行的裁决是「" + i.verdict + "」⇒ 不是失败，不留档");\n`, ""),
+    expectFail: "verdict=「PASS」⇒ skipped=not-a-failure，且连 failures/ 目录都不该被造出来",
+  },
+  {
+    id: "keep-count-cap-silent-drop",
+    src: "scripts/lib/failed-trace-keep.ts",
+    test: "tests/failed-trace-keep.test.ts",
+    desc: "条数帽那一格被摘 ⇒ 超帽那几条**静默不写**（本仓点名的形状：少写了没人说），"
+      + "而那行读数也就再也说不出「丢弃合计」",
+    apply: (s) => s.replace(`    return none("count-cap", `, `    return none("unused-count-cap", `),
+    expectFail: "4 条 FAIL / 帽 2 ⇒ 盘上恰好 2 份，读数里「超条数帽 2」与「丢弃合计 2」都在",
+  },
+  {
+    id: "keep-total-bytes-cap-silent-drop",
+    src: "scripts/lib/failed-trace-keep.ts",
+    test: "tests/failed-trace-keep.test.ts",
+    desc: "目录总字节帽被摘 ⇒ 一条跑飞的转录能把留档目录写到无界（留档走的是有人量的那棵树，"
+      + "不拦就是把 70% 占比帽交出去）",
+    apply: (s) => s.replace(`    return none("total-bytes-cap", `, `    return none("unused-total-bytes-cap", `),
+    expectFail: "目录总字节帽：第二条放不进去 ⇒ 点名「超目录总帽 1」而不是少写一条没人说",
+  },
+  {
+    id: "bench-passes-hardcoded-verdict-to-keeper",
+    src: "scripts/loop-eval.ts",
+    test: "tests/failed-trace-keep.test.ts",
+    desc: "跑器把每行自己的裁决递给付费留档器这一接线被改回**写死一个值** ⇒ 留档器逻辑全对、"
+      + "盘上一份都不落（或全落），而读数仍然说「这一跳走了」——第 4 形态（用例在标题里承诺了≠正文在判）",
+    apply: (s) => s.replace(`    await retainStagedRuns(STAGED.splice(stagedMark), verdict, traceKeeps);`,
+      `    await retainStagedRuns(STAGED.splice(stagedMark), "PASS", traceKeeps);`),
+    expectFail: "跑器每行都递 verdict 给留档器，且临时目录不再在 runOnce 里就地删",
+  },
+  {
+    id: "trace-name-rule-second-source",
+    src: "scripts/gym-draft.ts",
+    test: "tests/failed-trace-keep.test.ts",
+    desc: "留档名 ⇄ 草稿 id 的剥后缀规则被 import 断开 ⇒ 取料口自己再写一遍（两份规则迟早漂，"
+      + "漂的结果是「留了档但草稿永远认不出它」这种静默不响应）",
+    apply: (s) => s.replace(`import { caseIdOfTrace, TRACE_SUFFIX } from "./lib/failed-trace-keep";\n`, ""),
+    expectFail: "基准那种 `.events.jsonl` 剥干净，旧的 `--keep` 单后缀也认",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
