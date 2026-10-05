@@ -87,7 +87,10 @@ export interface VerifyOutcome {
   ok: boolean;
   results: VerifyCommandResult[];
   /** 非空＝这一轮**没有真的跑**任何命令，原因已说清（信任闸拒绝）。
-   *  调用方必须把它与「跑了但红」分开处理：前者不是失败证据，不该烧模型的修复额度。 */
+   *  调用方必须把它与「跑了但红」分开处理：前者不是失败证据，不该烧模型的修复额度。
+   *  这份处置住在**本文件下面那两只映射**里（`verifyOutcomeCause` ⇒ `cause:"skipped"`、
+   *  `failureDigest` ⇒ 那句拒因原样回注），而不是在 loop 里再判一遍「什么算跳过」——
+   *  同一谓词两份副本迟早漂，那是本仓第十三族点过名的形状。 */
   skipped?: string;
 }
 
@@ -396,16 +399,24 @@ export function createVerifyHook(repoDir: string, opts: { maxAttempts?: number; 
   };
 }
 
-/** 一拍 verify 的归因：钩子抛错优先（那条路 results 为空），否则取首个失败命令的 cause。
- *  `ok` ⇒ undefined；cause 缺席 ⇒ 下游按 `"code"` 算（零行为，老会话流照旧）。 */
+/** 一拍 verify 的归因：**被拒**优先（那一拍什么都没跑），其次钩子抛错（那条路 results 为空），
+ *  否则取首个失败命令的 cause。
+ *  `ok` ⇒ undefined；cause 缺席 ⇒ 下游按 `"code"` 算（零行为，老会话流照旧）。
+ *  `skipped` 那一格为什么必须在这里给出、不许留给调用方各判一遍：空 results 在旧形状下**取不到 cause**
+ *  ⇒ `isEnvVerifyCause(undefined)=false` ⇒ 一条「压根没跑」被四处出口（修复额度 / 返修那一拍 / 升档与
+ *  bandit 的证据位 / 沉淀）一致记成「跑过且红」。归因就是那条闭环唯一的分岔口。 */
 export function verifyOutcomeCause(outcome: VerifyOutcome, hookError: string | null): VerifyCause | undefined {
   if (outcome.ok) return undefined;
+  if (outcome.skipped !== undefined) return "skipped";
   if (hookError !== null) return "hook-error";
   return outcome.results.find((r) => !r.ok)?.cause;
 }
 
-/** 失败摘要：注入同轮给模型继续修的错误输出。 */
+/** 失败摘要：注入同轮给模型继续修的错误输出。
+ *  被拒那一拍回注的是**那句拒因本身**（要模型做什么它自己说：走 run_shell 或让用户授权）——
+ *  落到下面那句「无详细输出」就是往上下文塞一条**没有红字的红**，模型只会照着它改本来正确的代码。 */
 export function failureDigest(outcome: VerifyOutcome): string {
+  if (outcome.skipped !== undefined) return outcome.skipped;
   const failed = outcome.results.filter((r) => !r.ok);
   if (failed.length === 0) return "verify 失败（无详细输出）";
   return failed.map((r) => `[verify FAIL] ${r.command}\n${r.output}`).join("\n\n");

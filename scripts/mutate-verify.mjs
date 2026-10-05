@@ -1269,6 +1269,31 @@ const MUTATIONS = [
     apply: (s) => s.replace("evidence: workerVerificationEvidence(parentWindow),", "evidence: workerVerificationEvidence(window),"),
     expectFail: "只有 worker 验绿过 ⇒ 父会话证据是 absent，判据不许收 done（这就是假完成那一格）",
   },
+  // ---- 能力 5 的诚实性：验证「被拒」不是「跑了且红」（skipped 是第三结局，不是 code 红）----
+  {
+    id: "verify-skipped-cause-collapsed-to-no-surface",
+    src: "src/agent/verify.ts",
+    test: "tests/verify-skipped-third-outcome.test.ts",
+    desc: "把 skipped 折进 no-surface ⇒ 分格没了（没面 vs 有面未授权是两件事），归因不再指认真正的拒因",
+    apply: (s) => s.replace('outcome.skipped !== undefined) return "skipped";', 'outcome.skipped !== undefined) return "no-surface";'),
+    expectFail: "skipped 非空 ⇒ 归因给的是「没跑成」那一格且它进环境类，而不是 cause 缺席（缺席＝下游一律按 code 记账）",
+  },
+  {
+    id: "verify-skipped-not-in-env-cause-set",
+    src: "src/events/index.ts",
+    test: "tests/verify-skipped-third-outcome.test.ts",
+    desc: "skipped 不进 ENV_VERIFY_CAUSE_SET ⇒ 下游（额度／证据／返修）仍把它当代码红：烧一次修复额度并注入没有红字的红",
+    apply: (s) => s.replace('"pkg-manager", "not-run", "skipped",', '"pkg-manager", "not-run",'),
+    expectFail: "被拒那一拍不记 failed、不烧修复额度：执行器一次未叫、attempt 停在 1,1、goal 证据是 absent 不是 failed",
+  },
+  {
+    id: "verify-skipped-reason-not-echoed",
+    src: "src/agent/verify.ts",
+    test: "tests/verify-skipped-third-outcome.test.ts",
+    desc: "拒因不回注 ⇒ 模型看到的是「verify 失败（无详细输出）」，于是去改本来正确的代码（这一格与归因分两处，各钉一次）",
+    apply: (s) => s.replace("outcome.skipped !== undefined) return outcome.skipped;", "outcome.skipped !== undefined) return undefined;"),
+    expectFail: "拒因原样回注给模型：那声 tool_result 带的就是 run() 给的 skipped 原文，且没有「无详细输出」占位",
+  },
   {
     id: "budget-unpriced-tokens-swallowed",
     src: "src/agent/orchestrator-join.ts",

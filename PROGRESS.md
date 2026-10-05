@@ -13155,6 +13155,18 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
 5. **一份选型取证回来了（不施工，须人拍板）**：快照明文那一格（`#100`）。关键现读：**`.agent/snapshots/` 没有被 `.gitignore` 忽略**（`git check-ignore` 不命中，而 `.agent/memory/`、`.agent/sessions/` 都命中），所以那条通路是「**会随提交外泄**」级而不是「本地多一份」级；同时盘上根级快照目录当前 0 文件、靶子那支 749 份跑本仓自己的 `redactSecrets` 命中 0 ⇒ **是一条通路，不是一起事故**。子代理推荐 C2（补一行 `.gitignore` ＋照 `#57` 先例配一支读 `.gitignore` 的判卷），并列出 A（快照过脱敏＝把「按字节取回」那条昨天刚钉的承诺变成概率真）／B（命中凭据就拒拍＝那一格不可回滚，且推向 `snapshot:false`）／C1（挪私有目录＝`resolveInWorkspace` 会拒越界，`read_file` 再也读不到快照）各自的代价。**为什么我不动手**：它同时触碰安全语义、已钉的模型可见承诺、以及那张被两支判卷硬编码的忽略面；而 `.gitignore` 此刻在主树是别人的未提交改动。全文在 `outputs/snapshot-secret-options-2026-10-05/report.md:1`。
 6. **量纲与没跑**：本轮跑两支判卷（24 条）；**没跑**全量核心判卷、认证（`f01c448f` 那一趟的红已在隔壁的帽更正里结掉，但**本页不拿它当绿证**——下一条动作就是在含本笔的新 HEAD 上重认）。本页不宣布任何「绿了」。
 
+## 2026-10-04 · 第 386 页：`#93` 落一半——验证「被拒」从此是第三结局，不再被记成「跑了且红」；同笔带三根针脚
+
+子代理实现＋判卷，主线程并入后连邻卷复跑（这是第 383 页第 5 条里那句「没动的格子」，现在动了）。
+
+1. **缺陷**：`src/agent/verify.ts` 在没批准／无验面时返回 `{ok:false, results:[], skipped}`，而 **`skipped` 此前全仓零消费者**；下游只看 `ok:false` 且把「`cause` 缺席」当作 code（`src/events/index.ts` 那条口径），于是一次**压根没跑**被记成「跑了且红」：烧掉 1/3 修复额度、往上下文注入一句**没有红字的红**（「verify 失败（无详细输出）」）教模型去改本来正确的代码、证据落 `failed` ⇒ goal 永远 continue。这与本仓铁律「不可知不许当免费」同源。
+2. **改法（行为只有 4 行，其余是注释；`loop.ts` 一字未动）**：判据只住在两只映射里——`verifyOutcomeCause` 认 `skipped` 为 `"skipped"`、`failureDigest` 把拒因**原样**回注；`VerifyCause` 多一个 `"skipped"` 成员并**进 `ENV_VERIFY_CAUSE_SET`**（与 `no-surface` 刻意分格：那格＝没有验面，这格＝有面未授权）。所有读 cause 的下游（`worker-report`／`distill`／`lessons`／`compaction`／`gym/draft`／`goal.ts→projectGoal`／两个 replay 面）经唯一谓词自动吃到这一格 ⇒ **没有第二份「什么算跳过」**。
+3. **判卷 `tests/verify-skipped-third-outcome.test.ts` 八格**（含真仓面 `createVerifyHook` 的未授权克隆）：归因分格、拒因回注、**同形反证**（`results` 为空但**没有** `skipped` 那条路——钩子抛错——两只映射一律不改；缺这一格前两条就是恒真）、被拒不记 failed／不烧额度／证据 `absent`、返修那一支不启动、零回归证人（真跑且红照旧驱动返修）、环境红（`toolchain-missing`）不推进 attempt 也不顶掉先前绿证的位置。
+4. **读数**：子代理侧先红 `6 failed`（`EXIT=1`）→ 实现后 `8 passed (8)`（`EXIT=0`）；主线程并入后连邻卷复跑＝`Test Files 4 passed (4)`、`Tests 63 passed (63)`、`EXIT=0`（本笔＋`verify-cause`／`verify`／`verify-multiface` 三支邻居，18:31 取，原文在 `/tmp/dsh-verify-skipped-main.log`——**这条出处是易失的**，认证那一趟会把总结数落进 `outputs/head-cert-*`）。三根针脚（`verify-skipped-cause-collapsed-to-no-surface`／`verify-skipped-not-in-env-cause-set`／`verify-skipped-reason-not-echoed`）同笔入库，各自钉一只映射／那条集合成员，**期望红落在三条不同用例上**。
+5. **两条「还没跟改」登记**：**`#102`** 两处只数 `ok:false`、不看 cause 的计数面（`src/cli.ts:1033` 的 `verifyRed`、`src/agent/tool-choice.ts:135` 的 `verifyFailures`）仍会把被拒计入红——都是计数／渲染面，不驱动闸，但读数偏；**`#103`** `tests/verify-multiface.test.ts` 那条**标题**写着「ENV 集合就是六类非 code」，第七类进来后标题过期（判卷不红），那是别人的尺，只记不改。另：`src/agent/context.ts` 的 `autoVerifyNote` 从 `e.results` 重建摘要、看不见 `skipped`——现读生产不可达（未授权时 `surface()` 先 false 整段跳过），留作下一笔。
+6. **用户裁决已到手（明文，两条都拍定了）**：① 信任门走**「repoDir＋verify 面内容指纹，首次经审批卡问人」**——能力 5 那一环从此第一次真能跑；② 快照明文走 **C2：`.gitignore` 补一行 ＋ 照 `#57` 先例配一支读 `.gitignore` 的判卷**，A／B／C1 不做（代价与不诚实点逐条在 `outputs/snapshot-secret-options-2026-10-05/report.md:1`）。`.gitignore` 现读已让位（干净），两笔各自成簇紧随本笔。
+7. **量纲与没跑**：本轮跑四支判卷（63 条）；**没跑**全量、认证、`mutate-verify` 真杀（三根新针脚等落库后在干净树逐条杀）。本页不宣布任何「绿了」。
+
 
 
 

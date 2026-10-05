@@ -136,7 +136,11 @@ export interface PlanApprovedEvent { type: "plan_approved"; callId: string; appr
  * `timeout`=`timedOut` 布尔、`toolchain-missing`=退出码 127 或 shell 自身起不来、
  * `no-surface`=`(none)` 哨兵命令、`hook-error`=钩子抛错那条 catch、`pkg-manager`=包管理器
  * 在自己那行打出的命名空间错误码（唯一被观测到的环境红类，见 outputs/verify-cause-denominator-2026-09-23.md）、
- * `not-run`=**进程没有退出码**（`timedOut:false` 而 `exitCode:null`：会话取消、或被信号杀掉）——第 219 页 #42 的普查把它从缺省 `code` 里分了出来。
+ * `not-run`=**进程没有退出码**（`timedOut:false` 而 `exitCode:null`：会话取消、或被信号杀掉）——第 219 页 #42 的普查把它从缺省 `code` 里分了出来、
+ * `skipped`=`VerifyOutcome.skipped` 非空（信任闸拒了这批仓库自带的命令，`results` 因此是空的）——与 `not-run` 同一族的孪生：
+ * 那一拍**一条命令都没执行**，却被记成「跑了且红」，于是白烧一次修复额度、驱动一次返修、把 goal 证据钉死在 `failed`。
+ * 它必须与 `no-surface` 分开：那格说的是「压根没有可验面」（人去配一条），这一格说的是「有面但没授权」（人去授权，
+ * 或模型自己走 run_shell 那条有审批与威胁表的路）。合成一格就丢掉了下一步该做什么。
  */
 export type VerifyCause =
   | "code"
@@ -145,13 +149,15 @@ export type VerifyCause =
   | "no-surface"
   | "hook-error"
   | "pkg-manager"
-  | "not-run";
+  | "not-run"
+  | "skipped";
 
 /** 环境成因集：这几类红**不是模型的代码错了**，不得记在模型账上（不烧修复额度 / 不喂升档与 bandit / 不进沉淀）。
  *  `not-run` 名字叫 ENV 却在这里：三处消费者要的那句语义是「别照它改代码」，不是"是环境问题"——
- *  取消与被信号杀同样**没有一次真实的执行结果**可归因给模型（第 219 页第 3 条现读）。 */
+ *  取消与被信号杀同样**没有一次真实的执行结果**可归因给模型（第 219 页第 3 条现读）。
+ *  `skipped` 同理进表：被拒的那一拍没有执行过任何东西，它对代码对错的证明力与一条没跑完的命令完全相等＝零。 */
 const ENV_VERIFY_CAUSE_SET: ReadonlySet<VerifyCause> = new Set<VerifyCause>([
-  "timeout", "toolchain-missing", "no-surface", "hook-error", "pkg-manager", "not-run",
+  "timeout", "toolchain-missing", "no-surface", "hook-error", "pkg-manager", "not-run", "skipped",
 ]);
 
 /** 唯一谓词（三个出口共用一只，别各写一份 `=== "timeout" || …` 的表）：缺席 = 未归因 = 按 code 算。 */
