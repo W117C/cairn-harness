@@ -291,15 +291,18 @@ function parseNodeTestTap(text: string, lines: readonly string[]): ParsedResults
 
 /* ── pytest（SWE-bench 的判卷就是它：`python -m pytest -rA <ids>`）────────────────────────── */
 
-const PYTEST_STATUS = "PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS";
+/** 逐名行的**状态位**取「一个大写开头的词」而不是「已知六个词」：拿已知词表去当门，
+ *  不认识的词就整行不匹配 ⇒ 那条结果从面上消失，只剩「读到的条数少了」这一句间接话术。
+ *  状态不认识是要**点名**的（见 `record`），不是要装作没看见——这是本模块的第三态口径。 */
+const PYTEST_STATUS_TOKEN = "[A-Z][A-Za-z_]*";
 /** 逐名行的两种形状：verbose 的 `nodeid PASSED [ 33%]`，和 `-rA` 短汇总的 `FAILED nodeid - 原因`
  *  （跳过那条写成 `SKIPPED [1] nodeid: 原因`，所以状态词后面允许一段 `[..]`）。 */
 const PYTEST_VERBOSE = new RegExp(
-  "^(?<nodeid>\\S+::\\S+) (?<status>" + PYTEST_STATUS + ")(?:\\s+\\[\\s*\\d+%\\])?\\s*$",
+  "^(?<nodeid>\\S+::\\S+) (?<status>" + PYTEST_STATUS_TOKEN + ")(?:\\s+\\[\\s*\\d+%\\])?\\s*$",
   "u",
 );
 const PYTEST_SUMMARY = new RegExp(
-  "^(?<status>" + PYTEST_STATUS + ")(?:\\s+\\[[^\\]]*\\])? (?<nodeid>\\S+)(?:\\s+- .*)?$",
+  "^(?<status>" + PYTEST_STATUS_TOKEN + ")(?:\\s+\\[[^\\]]*\\])? (?<nodeid>\\S+)(?:\\s+- .*)?$",
   "u",
 );
 const PYTEST_SESSION = /^=+ test session starts =+$/u;
@@ -333,7 +336,14 @@ function parsePytest(text: string, lines: readonly string[]): ParsedResults {
 
   const record = (nodeid: string, statusWord: string): void => {
     const outcome = PYTEST_STATUS_OUTCOME[statusWord] ?? "unknown";
-    if (outcome === "unknown") { reasons.push(`状态词「${statusWord}」不认识（行：${snippet(nodeid)}）⇒ 它没算进任何一列`); return; }
+    if (outcome === "unknown") {
+      // 认不出状态词也要把这条**留在逐名面里**（挂 unknown 桶），只出声不落账是不够的：
+      // 不落账的话它接着会被上面那句「一条逐名也没读到」再报一次——同一行两个相反的 diagnosis，
+      // 而 collected 与逐名计数的对账也跟着失真（我们确实读到了这一行，只是没法归类）。
+      reasons.push(`状态词「${statusWord}」不认识（行：${snippet(nodeid)}）⇒ 它没算进任何一列`);
+      if (!seen.has(nodeid)) seen.set(nodeid, { name: nodeid, file: nodeid.includes("::") ? nodeid.split("::")[0] : nodeid, outcome: "unknown" });
+      return;
+    }
     const file = nodeid.includes("::") ? nodeid.split("::")[0] : nodeid;
     const prev = seen.get(nodeid);
     if (prev === undefined) { seen.set(nodeid, { name: nodeid, file, outcome }); return; }

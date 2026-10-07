@@ -176,6 +176,9 @@ describe("parseTestResults：vitest JSON 的逐名与状态", () => {
     expect(p.complete).toBe(false);
     expect(p.reasons.join("；")).toContain("flaky-ish");
     expect(p.reasons.join("；")).toContain("怪的");
+    // 整句承诺一起钉（ promise-recall 的证人面认的是这句连续中文，不是关键词）：
+    // 状态不认识的那条既不该被算进绿，也不该被算进红——它必须显式落在「不认识」那一格。
+    expect(p.reasons.join("；")).toContain("它既没算进绿也没算进红");
     expect(p.counts.passed + p.counts.failed).toBe(1); // 那条没进任何桶，但也没被冒充成红
   });
 
@@ -305,6 +308,17 @@ describe("parseTestResults：pytest（SWE-bench 的判卷就是它）", () => {
     expect(p.reasons.join("；")).toContain("collected 30 条");
   });
 
+  it("pytest 的状态词不认识 ⇒ 那条既不进绿也不进红，并点名是哪一行", () => {
+    const p = parseTestResults(pytestDoc({ [F2P_ID]: "XFAILISH" },
+      "============================== 1 passed in 0.12s ==============================="));
+    expect(p.format).toBe("pytest");
+    expect(p.complete).toBe(false);
+    expect(p.reasons.join("；")).toContain("XFAILISH");
+    // 整句承诺一起钉：不认识的桶不许被并进「红」，也不许被并进「绿」
+    expect(p.reasons.join("；")).toContain("它没算进任何一列");
+    expect(p.tests.filter((t) => t.outcome === "unknown").map((t) => t.name)).toEqual([F2P_ID]);
+  });
+
   it("收集期的 ERROR（nodeid 没有 :: 段）⇒ 说清那个文件里不会有逐名行", () => {
     const p = parseTestResults([
       "==================================== ERRORS =====================================",
@@ -316,6 +330,9 @@ describe("parseTestResults：pytest（SWE-bench 的判卷就是它）", () => {
     expect(p.format).toBe("pytest");
     expect(p.complete).toBe(false);
     expect(p.reasons.join("；")).toContain("没有 :: 段");
+    // 整句承诺一起钉：收集期的那条是**文件**，它不是「某个用例失败」，而是「这个文件里没有逐名行」——
+    // 把两种红混成一种，模型就会去改一个并不存在 failing 的用例。
+    expect(p.reasons.join("；")).toContain("它里面的用例不会有逐名行");
     expect(p.tests.filter((t) => t.outcome === "failed").map((t) => t.name)).toEqual(["tests/test_foo.py"]);
   });
 
@@ -365,6 +382,18 @@ describe("judgeNamedSets：FAIL_TO_PASS 全绿 且 PASS_TO_PASS 一条不许坏"
     expect(v.notGreen).toEqual([]);
     expect(v.broken).toEqual([]);
     expect(v.unmatched).toEqual([]);
+  });
+
+  it("读到的全对上、但逐名面派生不完整 ⇒ unreadable：不许把「没读全」报成「过」", () => {
+    const notComplete = parseTestResults(PYTEST_GREEN.replace("3 passed in 0.12s", "9 passed in 0.12s"));
+    expect(notComplete.complete).toBe(false); // 前提：这一份在解析侧就已经不完整
+    const v = judgeNamedSets(notComplete, SPEC);
+    expect(v.state).toBe("unreadable");
+    expect(v.notGreen).toEqual([]);
+    expect(v.broken).toEqual([]);
+    expect(v.unmatched).toEqual([]); // 与「对不上号」那一格分开：这里名字全对上了，缺的是料本身
+    // 整句承诺一起钉（promise-recall 的证人面认这一串连续中文，不是关键词）
+    expect(v.reasons.join("；")).toContain("但逐名面派生不完整");
   });
 
   it("该转绿的没绿 ⇒ fail 并点名那一枚 id（退出码那种同形读数给不出这一行）", () => {
