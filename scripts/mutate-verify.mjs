@@ -14797,6 +14797,36 @@ const unverifiedRows = [
     id: r.m.id,
     cls: typeof r.unloadable === "string" ? "judge-unloadable" : r.stopped === true ? "budget-stopped" : "judge-in-flight",
   })),
+  /* 第 417 页（能力 7）：判卷面冻结闸的批量形态。原先只读 `args.path`，而 apply_patch 的路径躺在
+   * `args.patch` 正文里 ⇒ 同一张冻结表下 write_file 写不动判卷文件、apply_patch 写得动。
+   * 三根针各盯这一格的一个死法：不接（算出来不并）、只判第一条（第二位整笔溜过）、读不到折成读得到。 */
+  {
+    id: "judge-patch-targets-not-merged",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/judge-frozen-gate.test.ts",
+    desc: "算出来不接：补丁正文解析出的目标清单有了，返回的那格却不并入 ⇒ 批量目标对这条闸整条不可见"
+      + "（就是 2026-10-08 修掉的那个洞本身）。针脚只钉「合并」那一位，不钉整条分支——分支还在、值不接才是这格的形状",
+    apply: (s) => s.replace(`      targets: [...targets, ...parsed.targets],`, `      targets,`),
+    expectFail: "⑩ 多文件补丁里有一条命中冻结表 ⇒ deny，理由点名的就是那一条路径",
+  },
+  {
+    id: "judge-patch-second-target-not-judged",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/judge-frozen-gate.test.ts",
+    desc: "批量形态退回「只判第一条」⇒ 冻结文件排在补丁第二位就整笔落盘（多文件补丁正是绕过单路径取料的天然形状）。"
+      + "与上一根各红一条：那根摘料、这根截断循环，同一个 ⑩ 对两种死法都不分辨的话这格就是恒真",
+    apply: (s) => s.replace(`    for (const target of targets.targets) {`, `    for (const target of targets.targets.slice(0, 1)) {`),
+    expectFail: "⑫ 冻结文件排在补丁第二位（后面还有）与中间位 ⇒ 仍逐条判到它并 deny",
+  },
+  {
+    id: "judge-patch-unreadable-folds-to-safe",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/judge-frozen-gate.test.ts",
+    desc: "「读不到要写哪些文件」折成「要写的文件都安全」⇒ 畸形补丁不用交代目标就能写判卷面，"
+      + "等于给同一道绕过留第二道门。这一格摘掉后 ⑩／⑫ 照样绿（它们本来就走可读那条路），只有出声 deny 那两条红",
+    apply: (s) => s.replace(`    if (targets.unreadable) {`, `    if (false && targets.unreadable) {`),
+    expectFail: "⑬ 畸形补丁：读不出要写哪些文件 ⇒ 出声 deny，不许静默放行",
+  },
 ];
 const unv = unverifiedCell(unverifiedRows);
 const unverifiedTotal = unv.total;

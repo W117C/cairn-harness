@@ -7,6 +7,8 @@
 // （调用方经 note* helper 更新）——同一输入两次调用结果一致。
 import { FROZEN_TABLE_REL } from "../frozen";
 import { TOOL_NAMES, type ToolName } from "../tools/base";
+// 判卷闸的补丁取料：与 `apply_patch` 工具层共用同一个解析器（同一个决策点，不在闸里再解析一遍 diff）。
+import { parsePatch, type PatchFile } from "../tools/patch-parse";
 import type { PermissionMode } from "./index";
 import { isKnownToolName, isMcpScopedName } from "./tool-registry";
 // 方案门的活判据。直接从 plan-state 拿（不能拿 ./index——index 正 re-export 本文件的符号）。
@@ -291,16 +293,93 @@ export function isWriteCall(tool: string, mcp?: McpGrade): boolean {
 /** 空判卷面（缺省值）：共享一个实例，省掉每次 new Set 的分配。 */
 const NO_JUDGE_SURFACE: ReadonlySet<string> = new Set<string>();
 
-/** 调用参数里的目标路径 → 工作区相对的 posix 串。
- *  返回 null = 不归本闸管：非字符串 / 空 / 绝对路径 / 带 `..`（那些落在工作区外，
+/** 目标路径（`path` 键或补丁里的段路径）→ 工作区相对的 posix 键。
+ *  返回 null = **不归本闸管**：非字符串 / 空 / 绝对路径 / 带 `..`（那些落在工作区外，
  *  冻结表的键是工作区相对路径，拿它们去查集合只会得到假阴性——不如显式不判，
- *  越界写另有路径校验那一层管）。 */
-function judgeTargetPathOf(args: Record<string, unknown>): string | null {
-  const p = args.path;
-  if (typeof p !== "string" || p === "") return null;
-  const rel = p.split("\\").join("/").replace(/^\.\//, "");
-  if (rel.startsWith("/") || rel.split("/").includes("..")) return null;
+ *  越界写另有路径校验那一层管）。
+ *  两个取料面（`args.path` 与 `parsePatch` 的逐段路径）共用这一格：同一件事两套归一写法
+ *  迟早漂成两套口径（本仓点名的「同族出口策略副本」）。 */
+function relTargetKeyOf(raw: unknown): string | null {
+  if (typeof raw !== "string" || raw === "") return null;
+  const rel = raw.split("\\").join("/").replace(/^\.\//, "");
+  if (rel === "" || rel.startsWith("/") || rel.split("/").includes("..")) return null;
   return rel;
+}
+
+/** 单路径那一格（`write_file` / `edit_file` 与所有走 `path` 键的写向调用）：口径逐字不变。 */
+function judgeTargetPathOf(args: Record<string, unknown>): string | null {
+  return relTargetKeyOf(args.path);
+}
+
+/** 一次写向调用要落的**全部**目标路径，外加「这一格的取料是否失败」。
+ *  形状取自本闸实测到的缺口：`apply_patch` 的参数键是 `args.patch`——一份统一 diff 全文，
+ *  路径躺在正文的 `--- a/x` / `+++ b/x` 里（`src/tools/apply_patch.ts:168`）。只读 `args.path`
+ *  ⇒ 它对这条闸整条不可见：**同一张冻结表下 `write_file` 写不动判卷文件、`apply_patch` 写得动**。
+ *  `unreadable` 必须单独成一格，不许折进「targets 为空」再当成放行：**读不出这次要写哪些文件**
+ *  不等于**要写的文件都安全**（同 `src/frozen.ts` 表解析失败显式抛、`src/providers/catalog.ts`
+ *  认不出形状就抛那条成文口径——认不出时必须说出「认不出」）。 */
+interface JudgeTargets {
+  /** 工作区相对 posix 键；批量形态（apply_patch）逐段一条，可能多条。 */
+  targets: string[];
+  /** 取料失败 ⇒ 调用方必须 fail-closed（deny），不许静默放行。 */
+  unreadable: boolean;
+  /** 失败时点名读不出的是哪一格（畸形 / 没有任何段 / 段有内容却没有目标路径）。 */
+  why?: string;
+}
+
+/** 补丁正文 → **每一个**被改文件的路径（逐条，不许只看第一条：多文件补丁正是绕过单路径取料
+ *  的天然形状——第一条落在别处、冻结文件排在第二位就能整笔溜过去）。
+ *  路径口径的归一**在这一层**做完，不在调用点各削一次：`parsePatch` 已经剥掉 `--- a/` / `+++ b/`
+ *  前缀与成对引号，并把 `/dev/null` 折成 op（create / delete）而不是当路径留着
+ *  （`src/tools/patch-parse.ts` 的 `pathOf`）；剩下接住的就是 `relTargetKeyOf` 那一格——
+ *  工作区外目标按既有口径不归本闸管，段里连目标都没有才算读不出。 */
+function patchTargetsOf(patch: string): { targets: string[]; unreadable: boolean; why?: string } {
+  let files: PatchFile[];
+  try {
+    files = parsePatch(patch);
+  } catch (e) {
+    // 畸形补丁（半截 hunk、表头不在段内）在工具层也会被拒，但那条回执走的是执行侧：
+    // 解析不开就是「读不出要写谁」，判卷闸不能等到执行再出声。
+    return { targets: [], unreadable: true, why: e instanceof Error ? e.message : String(e) };
+  }
+  if (files.length === 0) {
+    return { targets: [], unreadable: true, why: "补丁里没有任何 `diff --git` 段（空补丁或全是噪声行）" };
+  }
+  const targets: string[] = [];
+  const blind: string[] = [];
+  for (const f of files) {
+    const key = relTargetKeyOf(f.path);
+    if (key !== null) {
+      targets.push(key);
+      continue;
+    }
+    // 只有「带内容 hunk 却没有可识别目标」的段才算读不出。两格刻意不合并：
+    //  · 绝对路径 / 带 `..` 的段是**认得出但落在工作区外**，与 `args.path` 那格同口径（越界另有校验层）；
+    //  · 纯模式变更 / 删除 / 改名 / 二进制那几类段 `apply_patch` 自己不落盘（`apply_patch.ts:190-205`
+    //    逐类拒绝或跳过），把它们也算成读不出会误伤合法补丁。
+    if (f.path.trim() === "" && f.hunks.length > 0) {
+      blind.push(`补丁第 ${String(f.headerLine)} 行的段有内容改动，却没有可识别的目标路径`);
+    }
+  }
+  if (blind.length > 0) return { targets, unreadable: true, why: blind.join("；") };
+  return { targets, unreadable: false };
+}
+
+/** 判卷闸的取料面：这一调用要写的**所有**目标路径（原来只有一条 `args.path`，于是批量形态整条不可见）。 */
+function judgeTargetsOf(tool: string, args: Record<string, unknown>): JudgeTargets {
+  const one = judgeTargetPathOf(args);
+  const targets = one === null ? [] : [one];
+  // 只认 `apply_patch` 这一个参数契约（`args.patch` = diff 全文）。`patch` 不是字符串时
+  // 工具层自己先拒（`apply_patch.ts:169`），这一次调用根本没有可落的目标，此处不编「读不出」。
+  if (tool === "apply_patch" && typeof args.patch === "string") {
+    const parsed = patchTargetsOf(args.patch);
+    return {
+      targets: [...targets, ...parsed.targets],
+      unreadable: parsed.unreadable,
+      ...(parsed.why !== undefined ? { why: parsed.why } : {}),
+    };
+  }
+  return { targets, unreadable: false };
 }
 
 function collectRisk(
@@ -368,9 +447,26 @@ export function evaluate(
   // 放在 deny/ask/allow 之前与只读档、方案门同层，理由是同一条：**规则库不许复活被硬闸摘掉的动作**。
   // 真模型评测实测到模型会改 `tests/todo.test.ts`（`BASE_SYSTEM` 纪律 6 明文禁止却没拦住），
   // ⇒ 判卷面的完整性不能靠提示词自觉。
+  // 取料走 `judgeTargetsOf`（一次调用的**全部**目标）：闸原先只读 `args.path`，而 `apply_patch`
+  // 的路径在 `args.patch` 正文里 ⇒ 同一张表下 write_file 写不动、apply_patch 写得动（2026-10-08 修）。
   if (s.frozenJudgePaths.size > 0 && isWriteCall(tool, grade)) {
-    const target = judgeTargetPathOf(args);
-    if (target !== null && s.frozenJudgePaths.has(target)) {
+    const targets = judgeTargetsOf(tool, args);
+    if (targets.unreadable) {
+      // 取不出目标 ⇒ 这条闸**没法判**。没法判不许折成判通过：把「读不到目标」读成「目标安全」，
+      // 等于给绕过留第二道门（畸形补丁＝不用交代目标就能写）。成文口径：认不出必须说出「认不出」。
+      return {
+        verdict: "deny",
+        layer: "L0-hard",
+        reason:
+          `判卷面冻结闸没法判：认不出这条补丁要写哪些文件（${targets.why ?? "取料失败"}）` +
+          "⇒ 无法确认它不落在冻结判卷文件上，按 fail-closed 拒绝（「读不到目标」不等于「目标安全」）。" +
+          "请把 diff 补成每段都带 `--- a/<路径>` / `+++ b/<路径>` 的完整 `diff --git` 段，或改用 write_file / edit_file 显式给 path；" +
+          "判据有缺陷请写 BLOCKED.md 要求换判据，不许改代码去绕",
+      };
+    }
+    // 逐条判，不是只判第一条（批量形态一次可落多处）。
+    for (const target of targets.targets) {
+      if (!s.frozenJudgePaths.has(target)) continue;
       return {
         verdict: "deny",
         layer: "L0-hard",

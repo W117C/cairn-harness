@@ -217,3 +217,105 @@ describe("判卷面硬闸在 worker 面（并行写路径不得少一道闸）",
     }
   }, 120_000);
 });
+
+/* apply_patch 那一面（⑩–⑯，2026-10-08 补；编号接续 ⑦⑧⑨ 那条「按写入次序编号」的既有约定）。
+   动因是本闸取料面的实测缺口：`apply_patch` 登在 `SIDE_EFFECT_TOOLS` 里（`autonomy.ts:213-229`）
+   ⇒ `isWriteCall` 为真，但闸原先只读 `args.path`，而它的参数键是 `args.patch`——一份统一 diff 全文，
+   目标路径躺在正文的 `--- a/x` / `+++ b/x` 里 ⇒ 取料返回 null ⇒ **整条闸直接放行**。
+   净效果：同一张冻结表下 `write_file` 写不动判卷文件、`apply_patch` 写得动（比提示词纪律更快失效的那一格）。
+
+   两条纪律：
+   ① 断言全部打在**生产谓词 `evaluate`** 上，判卷里一次都不自己解析 diff——本仓成文口径是「判据与
+      生产端共用同一个决策点」，这里再解析一遍就是给这一格建第二个真相（改了取料它也绿）。
+   ② 「命中 ⇒ deny」每条都配一条**同形状不命中 ⇒ 不 deny** 的反向哨兵（⑪⑮⑯）：只有正向断言时，
+      把闸改成恒真也照样全绿。 */
+describe("判卷面硬闸的批量形态（apply_patch：目标路径在补丁正文里）", () => {
+  const OTHER = "src/other.ts";
+  const THIRD = "src/third.ts";
+  /** 一段能真落盘的 git diff：带 `diff --git` 表头与 `--- a/` / `+++ b/`（前缀归一是生产侧的事）。 */
+  const seg = (p: string): string => `diff --git a/${p} b/${p}\n--- a/${p}\n+++ b/${p}\n@@ -1 +1 @@\n-x\n+y\n`;
+  /** 武装态会话：自主档 + 一条 allow 规则（② 的口径——规则库不许复活被硬闸摘掉的写）。 */
+  const armed = (frozen: readonly string[]) =>
+    newAutonomySession("auto", { rules: rules([allowWrite]), frozenJudgePaths: new Set(frozen) });
+
+  it("⑩ 多文件补丁里有一条命中冻结表 ⇒ deny，理由点名的就是那一条路径", () => {
+    const d = evaluate("apply_patch", { patch: seg(JUDGE) + seg(OTHER) }, armed([JUDGE]));
+    const why = denyReason(d);
+    expect(d.layer, "必须是硬闸那一层，不是某条 deny 规则顺手接住").toBe("L0-hard");
+    expect(why).toContain("判卷文件冻结");
+    expect(why).toContain(JUDGE);
+    expect(why, "理由不许把整份补丁抄成嫌疑清单：点名的得是命中的那一条").not.toContain(OTHER);
+  });
+
+  // 反向哨兵（A≠旧值）：同形状、表里没有这一条 ⇒ 不 deny。摘掉这条，⑩ 与⑫ 就会被恒真实现顶包。
+  it("⑪ 同形状的补丁、冻结表里没有这些文件 ⇒ 不 deny（闸不是恒真）", () => {
+    const d = evaluate("apply_patch", { patch: seg(OTHER) + seg(THIRD) }, armed([JUDGE]));
+    expect(d.verdict).not.toBe("deny");
+  });
+
+  // 专门盯「只看第一条」那种修法：把取料退回 `targets[0]` 只有这一条会红。
+  it("⑫ 冻结文件排在补丁第二位（后面还有）与中间位 ⇒ 仍逐条判到它并 deny", () => {
+    for (const patch of [seg(OTHER) + seg(JUDGE), seg(OTHER) + seg(JUDGE) + seg(THIRD)]) {
+      const d = evaluate("apply_patch", { patch }, armed([JUDGE]));
+      const why = denyReason(d);
+      expect(why, "命中的是第二条，理由必须点名它").toContain(JUDGE);
+      expect(why).not.toContain(OTHER);
+    }
+  });
+
+  it("⑬ 畸形补丁：读不出要写哪些文件 ⇒ 出声 deny，不许静默放行", () => {
+    // `--- /+++` 表头不在任何 `diff --git` 段内 ⇒ 生产侧解析器抛 ⇒ 闸拿不到目标清单。
+    const d = evaluate("apply_patch", { patch: `--- a/${JUDGE}\n+++ b/${JUDGE}\n+x\n` }, armed([JUDGE]));
+    const why = denyReason(d);
+    // 收的是**本闸自己那句的开头**，不是光一个「认不出」：那个词在仓里有 11 处生产者（prose-needle
+    // 尺当场把我顶包出来），换掉任何一句别的「认不出」这条断言照样绿。
+    expect(why, "读不出目标必须点名本闸这句，不许折成「目标安全」").toContain("判卷面冻结闸没法判");
+    expect(why).toContain("BLOCKED.md");
+    expect(d.layer).toBe("L0-hard");
+  });
+
+  it("⑭ 解不出文件的补丁（空串／全是噪声／段有内容却没有目标路径）同样出声 deny", () => {
+    for (const patch of [
+      "",
+      "随手抄的几句说明，压根不是 diff\n",
+      `diff --git a/x b/x\n@@ -1 +1 @@\n-x\n+y\n`,
+    ]) {
+      const d = evaluate("apply_patch", { patch }, armed([JUDGE]));
+      expect(d.verdict, JSON.stringify(patch)).toBe("deny");
+      expect(denyReason(d), JSON.stringify(patch)).toContain("判卷面冻结闸没法判");
+    }
+  });
+
+  it("⑮ 真表同口径：现读 scripts/frozen-sha256.json 的键，补丁写它一样 deny、未入表的不 deny", () => {
+    // 这一条判的是**键的词汇对不对**：注入集用判卷自己造的串，归一写错时正反向会一起错；
+    // 换成生产装载的那张表，`a/` 前缀没剥掉、或 `/dev/null` 被当成路径，就当场红。
+    const set = [...frozenJudgePathSet(ROOT)];
+    const real = "fixtures/todo-app/tests/todo.test.ts";
+    expect(new Set(set).has(real), "事实源里这一条必须在（否则本用例是空的）").toBe(true);
+    expect(denyReason(evaluate("apply_patch", { patch: seg(OTHER) + seg(real) }, armed(set)))).toContain(real);
+    expect(evaluate("apply_patch", { patch: seg(OTHER) }, armed(set)).verdict).not.toBe("deny");
+  });
+
+  // 老那一格不许变（要求 5）：`args.path` 的口径逐字不动，包括「越界不归本闸管」那格。
+  it("⑯ write_file / edit_file 的 args.path 行为一字不变；越界目标仍不归本闸管", () => {
+    const s = armed([JUDGE]);
+    expect(denyReason(evaluate("write_file", { path: JUDGE, content: "x" }, s))).toContain(`判卷文件冻结：${JUDGE}`);
+    expect(denyReason(evaluate("edit_file", { path: "./" + JUDGE, old_string: "a", new_string: "b" }, s))).toContain(`判卷文件冻结：${JUDGE}`);
+    // ⑥ 那三条口径不许被顺手改宽／改窄。
+    expect(evaluate("write_file", { path: "../" + JUDGE }, s).verdict).not.toBe("deny");
+    expect(evaluate("write_file", { path: "/etc/" + JUDGE }, s).verdict).not.toBe("deny");
+    expect(evaluate("run_shell", { command: `sed -i '' 's/a/b/' ${JUDGE}` }, s).verdict).not.toBe("deny");
+    // 补丁里的越界目标与 `args.path` 同口径：认得出、但不归本闸管（不是「读不出」）。
+    expect(evaluate("apply_patch", { patch: seg("../" + JUDGE) }, s).verdict).not.toBe("deny");
+  });
+
+  it("⑰ 缺省零行为的批量版：工作区没声明判卷面 ⇒ 畸形补丁也不由这条闸拦下", () => {
+    // 静态棘轮 C6 钉的是 `frozenJudgePaths.size > 0` 这条前置**不许改成无条件**：用户自己的仓库
+    // 没有这张表 ⇒ 整条闸不存在，畸形补丁归工具层自己的回执管（把它拦在这里是越权加闸）。
+    const s = newAutonomySession("auto", { rules: rules([allowWrite]) });
+    expect(s.frozenJudgePaths.size).toBe(0);
+    expect(evaluate("apply_patch", { patch: "没有 diff 段\n" }, s).verdict).not.toBe("deny");
+    expect(evaluate("apply_patch", { patch: seg(JUDGE) }, s).verdict).not.toBe("deny");
+  });
+});
+
