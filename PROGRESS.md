@@ -14126,3 +14126,26 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    故差异只可能在 `node_modules/`——**这一条是推断，没做字节级前后对照**。
 8. **本笔的性质**：它不产出新能力，产出的是**一条会喊的不变量**。前三笔里唯一让我不敢放手的就是
    "一个会删目录的面被我挂进了判卷"，而它能潜伏这么久，正是基线里那条"两条复跑面零断言"的真实代价。
+
+## 2026-10-08 · 第 413 页凭证（1/1）：`6020f99` 认证读数——门面 23/23 全绿、超预算 0、全量 4774/4775，唯一那条红是**共享 HEAD 的常驻红**（别人的豁免留在工作树里）
+
+1. **被认证的提交与树形**：`6020f999`（上一笔 `46cde6b7`）。认证在独立树 `.worktrees/head-cert-6020f99` 里跑，脚本跑完自回收（汇总行原文：`已回收认证树 .worktrees/head-cert-6020f99（exit=0）`）；逐条日志在 `/tmp/dsh-head-cert-6020f99/`（`summary.txt` 不靠 stdout 的尾巴），本笔把 `outputs/head-cert-6020f99-2026-10-07-1636/` 里那两份一起带上库——`provenance.md`（认证自生成，含时间量可引用的两端独占判据行）与 `cluster-readings.md`（本页引用、而 provenance 没覆盖的那几格原文：本簇两份新判卷、针脚体检两态、命名尺复算、体量帽，逐格标了取料面）——引用了就要入得了库。
+
+2. **针脚体检两态**（同一把尺跑两遍，用来互相印证归因）：脏主树 `1476 条｜阻断 2｜exit=1`；干净树跑了两棵（`gate-mutate-verify@46cde6b` 与 `verify-6020f99@6020f99`）都是 `1476 条｜阻断 0｜待复认 2｜未覆盖 1｜逐行式 5｜钉在飞文本 0｜killer 指针失效 0（HEAD 侧 0）｜exit=0`。脏树那 2 条阻断是隔壁在飞，不是针脚坏了，现读取证：`goal-stopped-flag-ignored` 的针脚 `if (view === null || view.stopped !== null) return null;` 在 `git show HEAD:src/main/agent-runner.ts` 里逐字命中 1 处、在当前工作树 0 处；`cascade-ladder-cross-provider` 的 `DEFAULT_MODEL_TABLE.filter((s) => s.provider === picked.prov` 在 `git show HEAD:src/agent/orchestrator.ts` 命中 1 处、工作树 0 处 ⇒ 实现正在被人搬走，按第 408 页口径不代修、不动别人的判卷。
+
+3. **锚点这一格是空的，不是绿**：本笔的派生名单原文 `改动面派生：rev=46cde6b7 → 变更文件 7 个 ⇒ 选中锚点 0/1476 条`——那 7 个文件都不是任一锚点的两面之一，而 `scripts/mutate-verify.mjs` 此刻在别人手里在飞（第 411 页 §4 写了为什么这一簇的保护落在 `tests/` 而不是门表）⇒ **本笔没有新锚点可杀**，「尺与针脚同笔」这格没有东西可交。
+
+4. **head-cert 汇总逐格**（原文，不改写）：`认证门面=23 道（跑到 23）｜绿 23 道｜⚠️ 超预算 0`；`TREE=6020f99 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-6020f99.lock）`；`Test Files 1 failed | 341 passed (342)｜Tests 1 failed | 4774 passed (4775)｜exit=1（退出码直接取，不接管道）`；`并发判卷=起前 0 套／跑完 0 套（两端独占）`；`本趟墙钟 274.93s（同一进程 hrtime 实测·口径＝起跑→汇总那一行）`；`HEADCERT_EXIT=1`。贴帽读数：4775 条里 0 条用时 ≥ 有效预算 80%。
+
+5. **条数核对式（右边是推算，如实标出来）**：`4775 = 4761 + 14`，14 是本笔新增的两份判卷——`tests/lessons-recurrence.test.ts` 11 条＋`tests/replay-faces.test.ts` 3 条（主树实跑 `Test Files 2 passed (2)｜Tests 14 passed (14)｜exit 0`，`tests/replay-faces.test.ts` 三条里最慢那条 1867ms）。**4761 这个基数没有现读值**：上一笔在 HEAD 侧的 Tests 条数没留档，而第 408 页那句 `4840/4842` 取在主树脏面（含别人未提交的判卷文件），不能当 HEAD 的分母。谁要把这格钉成现读，就跑：`git worktree add --detach .worktrees/base-46cde6b 46cde6b7` → `cp -al <仓根>/node_modules` → `node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts`，取 `Tests` 那一行。**本页不声称这一步做过。**
+
+6. **那条红的归因（本页最要紧的一格，两半分开算）**：红的是 `tests/scratch-tree-naming.test.ts > 真仓面：注册表里的暂存树名字都没说谎`。**我自己那一半**：本笔一开始我多开了一棵复认树 `.worktrees/verify-6020f99`，与 head-cert 自建的 `.worktrees/head-cert-6020f99` 钉在同一笔上，于是尺的第二条读数（`2 棵暂存树钉在同一个提交 6020f99957dd`）是我造成的——当场回收我那棵。**摘掉自己那一半之后复算**：在干净 HEAD 树里单跑同一份判卷 ⇒ 仍 `1 failed | 12 passed`，剩下唯一一条是 `暂存树 gate-mutate-verify 的名字没编码提交（约定是 <前缀>-<sha>）`。根因现读：豁免 `gate-*` 工具树那 4 行只在 `scripts/lib/scratch-tree-naming.ts` 的**未提交工作树**里（判据已入库、兜底留在别人手里）⇒ 这条红**对所有会话都在 HEAD 上**，那笔豁免落库之前 head-cert 谁都认证不了（第 5.5 步「闸二」那个形状，本仓成文的那句「别人把判据提交了、兜底留在工作树 ⇒ 共享 HEAD 常驻红」第一次由我自己撞实）。本页只具名登记，不动别人的文件。
+
+7. **顺手量到的两格工具面事实（登记，不改）**：
+   ① `mutate-verify --changed-since=<rev>` 在派生取到 0 条时，`scripts/mutate-verify.mjs` 里 `const requested = targets.length ? MUTATIONS.filter(...) : MUTATIONS` 那一支把「0 条」读成「无限制」而**升级成整表跑**；而同一趟头一句印的是 `ℹ️ 选中 0 条：…⇒ 这**不是**「整表验过了」`——**读数与行为相反**，于是「按改动面省时」这个用法在这一格里反而最贵（整表 ≈25 分钟）。我在 `493/1476` 处主动砍掉：这 493 条**全部判已杀死（0 条真变异存活）**，日志里唯一一条 ❌（`finish-throw-orphans-terminal-waiters`）自陈「突变这一拍选中 未取到（收尾行没读到＝取料坏）⇒ 不许当成绿也不许当成红」，它是被我一刀砍出来的第三态，既不是红也不是绿。开一条工单（拟号 `#112`）：派生为空应停下来退 0 并点名「无事可做」，而不是接管整表；这条不改，因为我砍的那一刀本身就是它该喊而没喊的证人。
+   ② 那把命名尺的口径留一句给后人：它把「同一 HEAD 两棵树」判红是对的，而我这两棵来历不同（一棵我自己开的复认树、一棵认证自建树）⇒ 正确的形状是让认证**复用**我已有的那棵（`head-cert --tree=`），不是多开一棵。下次复认与认证同笔时按这个顺序做，省一棵树也省一次假红。
+
+8. **刻意未做的格子**（写在纸上，免得下游读成已做）：`pnpm bench`／真模型的任何读数——本笔零花费，钱那一格照旧空着；`tests/replay-faces.test.ts` 里那条 `orphanFail=0` 语料相关断言没在「无 `outputs/**/*.jsonl`」的检出上跑过（第 411 页 §7 那句未证照旧）；第 410 页（`--bandit`／`--cascade`）的代码仍留在共享树里等热文件窗口——顺带量了一格：`src/main/agent-runner.ts` 当前工作树 3107 行、体量帽 3100（主树 repo-hygiene 门因此红），HEAD 侧 2970 行（绿），也是隔壁在飞，不代修；残留锁 `.git/dsh-tool-locks/mutate-verify-judge-411-412.lock` 未删（持有进程已死，而仓里 10-02／10-03 各有一条同款 stale judge 锁在前——删共享锁面是比留痕更大的动作，等它的机器自己收）。
+
+9. **docs-check 与页号取料（两态都写，且不抄这把尺的活计数）**：本页加进台账后、落库之前实测 `node --import tsx scripts/docs-check.ts` ⇒ `exit=1`，违规两类各一条，**两条都指向本页**：D-11 说本页点名的 dated 目录还没有工件进 HEAD（尺自己的话：「证人要与页同笔落库；这一格若由本笔未提交的工件造成，提交即归零，别当成旧账登记掉」）⇒ 本笔把 `provenance.md`（认证自生成）与 `cluster-readings.md`（provenance 没覆盖的那几格原文：本簇两份新判卷、针脚体检两态、命名尺复算、体量帽，逐格标了取料面是主树脏面还是干净树）一起入库；D-9 的第一版抓的是页里读数 `14` 与 `2` 在点名的取料面里找不到原文——那两格确实不在 `provenance.md` 里，因为它们的取料面是主树那两次实跑，**修法是补取料面而不是改措辞**（`cluster-readings.md` 里逐字带着命令行与原文）。第二版 D-9 改抓一个**会随本页自己改动而跳的数**（同一把尺的活计数），于是本页定一条口径写在这里：**不把 docs-check 自己的计数抄进页**——那等于让页去追一把会因为页的存在而动起来的尺，正是本仓「尺咬自己的车」那一族的第四种形态；这一格的原文落在同目录 `docscheck-precommit.txt`（落库前那一趟的原样输出），谁要复算就跑上面那条命令。页号：本页占 **413**，取自加页之前那一趟 docs-check 的「下一个未占用页号」格；**没有**用 `scripts/next-page.ts`——它只认 `###` 型页标题而本台账是 `##` 型，第 409 页已把那条缺陷具名登记（正则收 `#{2,3}` 与配套判卷仍待做）。落库后这一把尺该归零，**本页不预先声称它绿**：复跑由下一笔或任何人做，读数是他们的。
+
