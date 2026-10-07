@@ -4,7 +4,7 @@
 // read-only 拒副作用 / default 询问（UI 批准才执行）/ auto 放行；沙箱不可用时写工具强制逐条审批。
 import { readFileSync, existsSync } from "node:fs";
 import { rm, readdir, mkdir, realpath } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -97,7 +97,7 @@ import { AskGate } from "./ask-gate";
 import type { LicenseState } from "./license";
 import type { AskOutcomePayload, AskPayload, RunRequest, SidechatPanelSnapshot } from "./ipc-protocol";
 import { annotateNetworkDenial, buildSandboxProfile, checkSandbox, networkProfileFor, runInSandbox, type SandboxStatus } from "./sandbox";
-import { PluginRuntime, trustFilePathOf, setCurrentPluginRuntime, currentPluginRuntime, expandPromptCommand, expandSkillInvocation, commandInvokeName, skillInvokeName, type PluginPanelSnapshot } from "../agent/plugins";
+import { PluginRuntime, trustFilePathOf, pluginDataRootOf, setCurrentPluginRuntime, currentPluginRuntime, expandPromptCommand, expandSkillInvocation, commandInvokeName, skillInvokeName, type PluginPanelSnapshot } from "../agent/plugins";
 // `TrustStore` 从**实现文件**取，不从 `../agent/plugins` 取：那边是 `export { … } from "./trust"`
 // 的再导出（只对外可见、不进本地作用域，本文件上面 BASE_SYSTEM 那次搬迁踩过同一个坑）。
 import { TrustStore } from "../agent/plugins/trust";
@@ -2713,7 +2713,7 @@ function pluginRuntimeOpts(workspace: string): Omit<Parameters<typeof PluginRunt
     projectPluginsDir: join(workspace, ".agent", "plugins"),
     ...(process.env.M2E_LOOSE_SKILLS ? { looseRoots: [process.env.M2E_LOOSE_SKILLS] } : {}),
     workspace,
-    pluginDataRoot: process.env.M2E_PLUGIN_DATA ?? join(tmpdir(), "m2e-plugin-data"),
+    pluginDataRoot: pluginDataRootOf(process.env, homedir()),
     ...(process.env.M2E_TRUST_FILE ? { trustFile: process.env.M2E_TRUST_FILE } : {}),
   };
 }

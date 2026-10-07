@@ -94,6 +94,27 @@ export function trustFilePathOf(opts: { pluginDataRoot: string; trustFile?: stri
   return opts.trustFile ?? join(opts.pluginDataRoot, PLUGIN_TRUST_FILE_NAME);
 }
 
+/** 插件数据根的缺省目录名（与信任表同顶的那个子目录）。 */
+export const PLUGIN_DATA_DIR_NAME = "plugin-data";
+
+/** 缺省数据根 = 用户级 `<home>/.config/cairn/plugin-data`（与 `agent/memory/store.ts` 的全局层同顶）。
+ *  从前缺省是 `<os.tmpdir()>/m2e-plugin-data`，两格代价不在「重启就好」的量纲上：
+ *  ① 这一顶同时放着**信任表**（verify 命令的信任门走同一个 `trustFilePathOf`）与插件 userConfig
+ *     （含 safeStorage 里的敏感值）⇒ 系统清 tmp 就把已批准的决议和配置无声擦掉，也没人备份；
+ *  ② tmp 世界可写的平台上（Linux CI、共享 runner）目录名固定可猜 ⇒ 本机其他用户预建
+ *     `<tmp>/m2e-plugin-data/plugin-trust.json` 即把 pending 写成 trusted，钩子/MCP/verify 全部免审批激活。
+ *  `home` 由参数进来（同 `PluginRuntimeOptions.home` 的口径）：判卷不许读真家目录。 */
+export function defaultPluginDataRoot(home: string): string {
+  return join(home, ".config", "cairn", PLUGIN_DATA_DIR_NAME);
+}
+
+/** 数据根的唯一决议：显式 `M2E_PLUGIN_DATA` 优先，空串按「没给」处理（与旧的 truthy 判定同义）。
+ *  纯函数（env 与 home 都从参数进）是为了这一格能被秒级判卷直接问，而不是只在装配面间接可见。 */
+export function pluginDataRootOf(env: NodeJS.ProcessEnv, home: string): string {
+  const explicit = env.M2E_PLUGIN_DATA;
+  return explicit ? explicit : defaultPluginDataRoot(home);
+}
+
 /** skill 激活投影：tool_call(name="skill") → 同 callId 的 tool_result 事件 id（1-based 行号）；
  *  以及**用户侧触发**（§9.3）：带 `skill` 字段的 user_message 本身就是一次激活，
  *  它的行号就是被压缩时该重挂的那条。两条 face 都必须进这里，否则用户点出来的 skill

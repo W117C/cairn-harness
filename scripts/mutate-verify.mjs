@@ -14107,6 +14107,43 @@ const MUTATIONS = [
     apply: (s) => s.replace(`const SCRIPTED = scriptedEq !== undefined ? scriptedEq.slice("--scripted=".length) : pick("--scripted", "");`, `const SCRIPTED = pick("--scripted", "");`),
     expectFail: "等号写法也要认，剧本缺文件时出声退 1——静默改用真会话等于在花用户的钱",
   },
+  {
+    id: "plugin-data-root-assembly-falls-back-to-tmp",
+    src: "src/main/agent-runner.ts",
+    test: "tests/plugin-data-root-durable.test.ts",
+    desc: "装配面退回「缺省落 os.tmpdir()」⇒ 信任表与插件 userConfig 一起回到会被回收、"
+      + "且在共享 runner 上目录名固定可猜的那一顶（别的本机用户预建 plugin-trust.json 即免审批激活）。"
+      + "纯函数那条判卷分辨不出这个：它只问取值式，不问谁在用它",
+    apply: (s) => s.replace(`    pluginDataRoot: pluginDataRootOf(process.env, homedir()),`, `    pluginDataRoot: process.env.M2E_PLUGIN_DATA ?? join(tmpdir(), "m2e-plugin-data"),`),
+    expectFail: "⑦ 那一条接的是 pluginDataRootOf 连入参，且同一行不再出现临时区",
+  },
+  {
+    id: "plugin-data-root-env-override-ignored",
+    src: "src/agent/plugins/index.ts",
+    test: "tests/plugin-data-root-durable.test.ts",
+    desc: "算出来不接的反面：显式 `M2E_PLUGIN_DATA` 被新缺省顶掉 ⇒ 测试隔离与桌面 userData "
+      + "注入同时失效，决议会写进用户真实家目录（判卷自己就撞这一格）",
+    apply: (s) => s.replace(`  return explicit ? explicit : defaultPluginDataRoot(home);`, `  return defaultPluginDataRoot(home);`),
+    expectFail: "③ 显式 M2E_PLUGIN_DATA 优先，且原样返回（老行为一字不动）",
+  },
+  {
+    id: "plugin-data-root-empty-env-used-as-path",
+    src: "src/agent/plugins/index.ts",
+    test: "tests/plugin-data-root-durable.test.ts",
+    desc: "把 truthy 判定改成 `??` ⇒ 空串被当成路径用（数据根变成相对落点），"
+      + "「设了个空值」与「没设」在旧语义里同义，这一改把它们分成了两种落点",
+    apply: (s) => s.replace(`  return explicit ? explicit : defaultPluginDataRoot(home);`, `  return explicit ?? defaultPluginDataRoot(home);`),
+    expectFail: "④ 空串按「没给」处理，回落到用户级缺省（不许把空 env 当路径）",
+  },
+  {
+    id: "plugin-data-root-default-dir-dropped",
+    src: "src/agent/plugins/index.ts",
+    test: "tests/plugin-data-root-durable.test.ts",
+    desc: "缺省根少一层目录名 ⇒ 信任表与别的应用数据混在同一顶，且与 memory 全局层的同顶口径断开"
+      + "（两处各算一遍路径就是这个洞的形状）",
+    apply: (s) => s.replace(`  return join(home, ".config", "cairn", PLUGIN_DATA_DIR_NAME);`, `  return join(home, ".config", "cairn");`),
+    expectFail: "① 缺省 = 用户级 .config/cairn/plugin-data（与 memory 全局层同顶，不是各算一遍）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
