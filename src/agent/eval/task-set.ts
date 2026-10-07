@@ -8,7 +8,15 @@
  *     所以这里的规矩是「要么收进 tasks，要么进 errors 并点名行号/字段」，没有第三种出口。
  *   - 可行性（缺仓库快照 / 缺凭据）与"跑出来是红的"必须是两种不同的读数：
  *     前者是**没有尺**，后者才是失败。混起来就会把"0/529 可跑"读成"模型 0 分"。
+ *
+ *  2026-10-08 补的那一格：SWE-bench 的判卷从前只有那句把两列拼在一起的 `python -m pytest`，
+ *  于是「该转绿的没绿」与「该保住的坏了」在退出码上同形。逐名规格现在跟 `command` **同笔产出**
+ *  （`TaskSpec.judge`），读它与判它的是 `./test-results`（它零 IO，取料由跑器喂字符串）。
+ *  `command` 那句逐字没动 —— `feasibility`／`deriveVerifierProbe`／`scripts/loop-eval.ts` 三个读者
+ *  都按它取料，动它是另一件事（而且会把已经校准过的读数换面）。
  */
+
+import { namedSetProblems } from "./test-results";
 
 export interface TaskSeed {
   /** dir = 一个工作目录快照；file = 单文件靶子（本仓 loop-eval 的既有形态）。 */
@@ -34,6 +42,11 @@ export interface TaskSpec {
   verifier?: { command: string };
   /** 隐藏验收面。给了它、`expects` 里就必须有 `heldOutPass`，否则解析报错（见 parseOne 的配对规则）。 */
   heldOut?: TaskHeldOut;
+  /** 逐名判卷规格（SWE-bench 的 FAIL_TO_PASS／PASS_TO_PASS 两列）。
+   *  它不是 `verifier.command` 的替代品而是**同一件事的第二半**：command 只回答「退出码是不是 0」，
+   *  这一枚回答「哪条该转绿、哪条不许坏」。读它的是 `./test-results` 的 `judgeNamedSets`；
+   *  列子为空／重叠这类形状问题在解析期就按 `namedSetProblems` 拒收（与 heldOut 同一个 fail-closed 口径）。 */
+  judge?: { failToPass: string[]; passToPass: string[] };
   /** 额外判据名（由跑器解释，如 verifyOk / judgeUntouched / heldOutPass）。 */
   expects: string[];
   /** 出处：本仓任务集写来源标签，外部基准写 `repo@commit`。 */
@@ -46,7 +59,7 @@ export interface ParseResult {
 }
 
 /** 认识哪些字段：拼错的字段名必须报错——静默忽略它，等于允许数据集作者"写了但没生效"。 */
-const TASK_FIELDS = new Set(["id", "instruction", "seed", "verifier", "heldOut", "expects", "source"]);
+const TASK_FIELDS = new Set(["id", "instruction", "seed", "verifier", "heldOut", "judge", "expects", "source"]);
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
@@ -129,6 +142,30 @@ function parseHeldOut(v: unknown, at: string, seedPath: string | null): { heldOu
   return { heldOut: { files, command: String(v.command) }, errors };
 }
 
+/** 逐名规格的解析：形状在这里管（两列都得是「非空字符串数组」），语义交给共用谓词。
+ *  「没给」与「给坏了」照旧分开（heldOut 那一格的教训：把缺省判成畸形会让整批出不了数）；
+ *  而空数组／重复／两列重叠这类**写了但自相矛盾**的形状，走 `./test-results` 的 `namedSetProblems`
+ *  ——裁决器用的就是那一支，这里再抄一份清单迟早漂。 */
+function parseJudge(v: unknown, at: string): { judge?: TaskSpec["judge"]; errors: string[] } {
+  // 这行故意不写成与上面 parseHeldOut 那格逐字相同：锚点 heldout-absent-spec-treated-as-broken
+  // 按整行字面定位 parseHeldOut，同文件出现两份同字面量 ⇒ replace 只改第一处，那条锚点改到谁不确定。
+  if (v === undefined) return { errors: [] as string[] };
+  if (!isRecord(v)) return { errors: [`${at}：judge 必须是 { failToPass, passToPass }`] };
+  const errors: string[] = [];
+  for (const k of Object.keys(v)) {
+    if (k !== "failToPass" && k !== "passToPass") errors.push(`${at}：judge 认不出的字段「${k}」`);
+  }
+  const failToPass = strArray(v.failToPass);
+  const passToPass = strArray(v.passToPass);
+  if (failToPass === null) errors.push(`${at}：judge.failToPass 必须是非空字符串数组（没有这列就没人知道该转绿什么）`);
+  if (passToPass === null) errors.push(`${at}：judge.passToPass 必须是非空字符串数组（缺这一列＝半份判卷；一列都没有请整条不写 judge）`);
+  if (failToPass !== null && passToPass !== null) {
+    errors.push(...namedSetProblems({ failToPass, passToPass }).map((r) => `${at}：judge ${r}`));
+  }
+  if (errors.length > 0) return { errors };
+  return { judge: { failToPass: failToPass as string[], passToPass: passToPass as string[] }, errors };
+}
+
 function parseOne(v: unknown, at: string): { task?: TaskSpec; errors: string[] } {
   if (!isRecord(v)) return { errors: [`${at}：任务必须是对象`] };
   const errors: string[] = [];
@@ -168,6 +205,8 @@ function parseOne(v: unknown, at: string): { task?: TaskSpec; errors: string[] }
   }
   const ho = parseHeldOut(v.heldOut, at, seed === null ? null : seed.path);
   errors.push(...ho.errors);
+  const jd = parseJudge(v.judge, at);
+  errors.push(...jd.errors);
   /* 判据名也要 fail-closed：拼错的 name 走不进任何判定分支，而那条任务照样进分母、读数照印
    * ——与"拼错的字段名"是同一种病（本文件头就写着这条纪律，从前只管了字段那一半）。 */
   {
@@ -194,6 +233,7 @@ function parseOne(v: unknown, at: string): { task?: TaskSpec; errors: string[] }
       id, instruction, seed,
       ...(verifier !== undefined ? { verifier } : {}),
       ...(ho.heldOut !== undefined ? { heldOut: ho.heldOut } : {}),
+      ...(jd.judge !== undefined ? { judge: jd.judge } : {}),
       expects,
       source: String(source),
     },
@@ -280,6 +320,11 @@ export function fromSweBenchJsonl(text: string): ParseResult {
       // 跑器一条都不执行 ⇒ 拆出来的隐藏面没有消费者（"生产者有、观察者无"是本仓反复踩的那一族）。
       // 等真接进外部靶子执行时再拆，届时 dest/command 的形状要跟那边的测试框架对齐，不是现在猜。
       verifier: { command: ["python", "-m", "pytest", "-rA", ...failToPass, ...passToPass].join(" ") },
+      // 同一份取料（上面那两列，fail-closed 之后才走到这儿）**同时**登记成逐名规格：
+      // 那句 command 只能回答「退出码是不是 0」，而基准问的是「哪条该转绿、哪条不许坏」。
+      // 逐名面由 `./test-results` 的 `judgeNamedSets` 判 —— 两列在这里必须是**同一个来源**，
+      // 所以在别处再拼一份清单就是给自己埋第二份会漂的账。
+      judge: { failToPass, passToPass },
       expects: ["verifyOk", "judgeUntouched"],
       source: `${repo}@${commit}`,
     });

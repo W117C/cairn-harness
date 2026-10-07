@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { EXPECT_HANDLERS, expectFailReason, type ExpectFace } from "../scripts/lib/eval-expects";
 import { VERIFY_RECOVERY_WHY, type VerifyRecovery } from "../scripts/lib/eval-validity";
+import { namedSetProblems } from "../src/agent/eval/test-results";
 import { aggregateFeasibility, deriveVerifierProbe, EXPECT_NAMES, feasibility, fromSweBenchJsonl, parseTaskSetJson, HELD_OUT_EXPECT, type EnvProbe, unknownExpectNames } from "../src/agent/eval/task-set";
 
 const goodTask = {
@@ -62,10 +63,30 @@ describe("fromSweBenchJsonl：外部基准实例 → TaskSpec", () => {
     expect(r.errors).toEqual([]);
     expect(r.tasks[0]!.id).toBe("sympy__sympy-20322");
     expect(r.tasks[0]!.instruction).toContain("__pow__");
-    expect(r.tasks[0]!.verifier?.command).toContain("test_pow");
-    // PASS_TO_PASS 也进命令：基准的判卷是"坏的要过 + 好的不许坏"两半，少一半就是假绿
-    expect(r.tasks[0]!.verifier?.command).toContain("test_add");
+    // 那句拼接命令从前由两条 toContain 判（同文件里近乎恒真：只要串里出现这两个词就绿，
+    // 顺序错、参数漏一枚、-rA 掉了都读不出来）。现在整串逐字钉住——它是 `judge` 那一格的孪生出口。
+    expect(r.tasks[0]!.verifier?.command).toBe(
+      "python -m pytest -rA sympy/core/tests/test_expr.py::test_pow sympy/core/tests/test_expr.py::test_add",
+    );
+    // 同一份取料的**第二半**：逐名规格两列都在，且逐字等于源里的 FAIL_TO_PASS／PASS_TO_PASS。
+    expect(r.tasks[0]!.judge).toEqual({
+      failToPass: ["sympy/core/tests/test_expr.py::test_pow"],
+      passToPass: ["sympy/core/tests/test_expr.py::test_add"],
+    });
+    // A≠旧值：两列不是同一份清单抄两遍（抄两遍的话这一格就永远不会红）
+    expect(r.tasks[0]!.judge!.failToPass).not.toEqual(r.tasks[0]!.judge!.passToPass);
     expect(r.tasks[0]!.source).toBe("sympy/sympy@a1b2c3d");
+  });
+
+  it("PASS_TO_PASS 是空数组的一份：命令少一枚 id，judge.passToPass 也照实是空（不编一份保住清单出来）", () => {
+    const r = fromSweBenchJsonl(JSON.stringify({ ...instance, PASS_TO_PASS: [] }) + "\n");
+    expect(r.errors).toEqual([]);
+    expect(r.tasks[0]!.judge).toEqual({ failToPass: ["sympy/core/tests/test_expr.py::test_pow"], passToPass: [] });
+    expect(r.tasks[0]!.verifier?.command).toBe("python -m pytest -rA sympy/core/tests/test_expr.py::test_pow");
+    // A≠旧值：与两列齐全那份比，command 与 judge 都少了那一枚（不是"照常绿"）
+    const both = fromSweBenchJsonl(JSON.stringify(instance) + "\n").tasks[0]!;
+    expect(r.tasks[0]!.verifier?.command).not.toBe(both.verifier?.command);
+    expect(r.tasks[0]!.judge!.passToPass).not.toEqual(both.judge!.passToPass);
   });
 
   it("坏 JSON 行只作废那一行并带行号，其余行照常解析（逐行容错）", () => {
@@ -82,6 +103,9 @@ describe("fromSweBenchJsonl：外部基准实例 → TaskSpec", () => {
     const r = fromSweBenchJsonl(JSON.stringify(noJudge));
     expect(r.tasks).toHaveLength(0);
     expect(r.errors.join(" ")).toContain("FAIL_TO_PASS");
+    // 负样那一态：整条被拒 ⇒ 也就没有 judge。这条钉的是"没第二条出口"——
+    // 不许有人为了留住条目给它补一个空规格（空 failToPass 会把这一格退化成"没坏就算过"）。
+    expect(r.tasks.map((t) => t.judge ?? null)).toEqual([]);
   });
 
   it("FAIL_TO_PASS 是空数组也算没有判卷（只查 PASS_TO_PASS 会静默变成'没坏就算过'）", () => {
@@ -271,6 +295,74 @@ describe("parseTaskSetJson：heldOut 隐藏验收面", () => {
     const r = parseTaskSetJson(JSON.stringify([{ ...withHeld, expects: ["verifyOk", "heldOutPas"] }]));
     expect(r.tasks).toHaveLength(0);
     expect(r.errors.join(" ")).toContain(HELD_OUT_EXPECT);
+  });
+});
+
+/* ── 第 412 页 · `judge` 逐名规格：SWE-bench 那两列在**本仓任务集**这一路也要能写 ─────────────
+ * 上面那条 `fromSweBenchJsonl` 的接线证明外部语料那条路会产出 judge；这一格管另一件事：
+ * 手写任务集里给了 judge 就得**逐字落地**，给坏了就得**点名拒收**——与 heldOut／verifier 同一个口径。
+ * 语义检查（空列／重复／两列重叠）不在这里再写一遍规则，而是复用裁决器那支 `namedSetProblems`
+ * （本仓成文：判卷不许自己再算一遍取料，生产侧只留一份判据）。 */
+describe("parseTaskSetJson：judge 逐名规格", () => {
+  const judge = { failToPass: ["tests/checkout.test.ts::券后过线免运费"], passToPass: ["tests/checkout.test.ts::原价未过线收运费"] };
+  const withJudge = { ...goodTask, judge };
+
+  it("合法一份：两列逐字落地，且与 verifier.command 各是各的（一个答退出码、一个答逐名）", () => {
+    const r = parseTaskSetJson(JSON.stringify([withJudge]));
+    expect(r.errors, r.errors.join(" ")).toEqual([]);
+    expect(r.tasks[0]!.judge).toEqual(judge);
+    expect(r.tasks[0]!.verifier).toEqual({ command: "pnpm test" });
+  });
+
+  it("没给 judge ⇒ 字段缺省且零报错（多数内建任务没有逐名规格；heldOut 那次把缺省判成畸形，整批出不了数）", () => {
+    const r = parseTaskSetJson(JSON.stringify([goodTask]));
+    expect(r.errors).toEqual([]);
+    expect(r.tasks[0]!.judge).toBeUndefined();
+  });
+
+  it("子字段拼错（failToPasc）⇒ 点名认不出，不许静默忽略成「写了但没生效」", () => {
+    const r = parseTaskSetJson(JSON.stringify([{ ...withJudge, judge: { failToPasc: judge.failToPass, passToPass: judge.passToPass } }]));
+    expect(r.tasks).toHaveLength(0);
+    expect(r.errors.join(" ")).toContain("failToPasc");
+  });
+
+  it("judge 不是对象 ⇒ 说出它必须是什么形状", () => {
+    const r = parseTaskSetJson(JSON.stringify([{ ...withJudge, judge: ["a", "b"] }]));
+    expect(r.tasks).toHaveLength(0);
+    expect(r.errors.join(" ")).toContain("failToPass");
+  });
+
+  it("passToPass 整列没给 ⇒ 拒收（少一半就是半份判卷，SWE-bench 的病正长这样）", () => {
+    const r = parseTaskSetJson(JSON.stringify([{ ...withJudge, judge: { failToPass: judge.failToPass } }]));
+    expect(r.tasks).toHaveLength(0);
+    expect(r.errors.join(" ")).toContain("passToPass");
+  });
+
+  it("语义问题只有**一份**判据：解析期报的句子就是 namedSetProblems 的输出（抄第二份迟早漂）", () => {
+    const bad = { failToPass: ["a", "a"], passToPass: ["a"] };
+    const problems = namedSetProblems(bad);
+    expect(problems.length).toBeGreaterThanOrEqual(2); // 重复 ＋ 两列重叠
+    const r = parseTaskSetJson(JSON.stringify([{ ...goodTask, judge: bad }]));
+    expect(r.tasks).toHaveLength(0);
+    for (const p of problems) expect(r.errors.join(" ")).toContain(p);
+    // A≠旧值：两列干净的那份必须一条问题也没有（否则上面那条拒收是恒红）
+    expect(namedSetProblems(judge)).toEqual([]);
+    const ok = parseTaskSetJson(JSON.stringify([{ ...goodTask, judge }]));
+    expect(ok.errors, ok.errors.join(" ")).toEqual([]);
+    expect(ok.tasks[0]!.judge).toEqual(judge);
+  });
+
+  it("failToPass 为空数组 ⇒ 拒收：这一格会退化成只查「好的不许坏」", () => {
+    const r = parseTaskSetJson(JSON.stringify([{ ...goodTask, judge: { failToPass: [], passToPass: ["a"] } }]));
+    expect(r.tasks).toHaveLength(0);
+    expect(r.errors.join(" ")).toContain("failToPass 为空");
+  });
+
+  it("★接线：judge 已登记进 TASK_FIELDS ⇒ 认它、也仍然认不出拼错的老字段", () => {
+    const r = parseTaskSetJson(JSON.stringify([withJudge]));
+    expect(r.errors, r.errors.join(" ")).toEqual([]);
+    const typo = parseTaskSetJson(JSON.stringify([{ ...withJudge, juege: judge }]));
+    expect(typo.errors.join(" ")).toContain("juege");
   });
 });
 
