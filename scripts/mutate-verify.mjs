@@ -7646,7 +7646,7 @@ const MUTATIONS = [
     desc: "只在汇总里印一行、不进退出码 ⇒ 进了门表也永远不会因为树被切走而红（「出声」不等于「闸住」，规则 210 那一族）",
     // 针脚随实现搬家（第 426 页 #14 把式子抽进 lib）：这一根改钉**调用点那一跳**——作废那一维没交进
     // 共用判决的输入时，lib 那头写得再对也白对。lib 那一头由 cert-exit-code-drift-dim-dropped 各红一条。
-    apply: (s) => s.replace(`    treeDrifted: drift !== null,`, `    treeDrifted: false,`),
+    apply: (s) => s.replace(`  treeDrifted: drift !== null,`, `  treeDrifted: false,`),
     expectFail: "作废必须改退出码：只印一行而门照绿 ⇒ 这道门永远不会因为树被切走而红",
   },
   // ── 第 156 页 · head-cert 的「并发判卷」读数：撞窗的红要门里就有归因方向

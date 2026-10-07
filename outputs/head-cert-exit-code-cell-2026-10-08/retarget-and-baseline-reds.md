@@ -55,3 +55,29 @@ REDKINDS=survived:0,misattributed:0,baseline-red:2,no-effect:0,syntax:0,restore-
 
 归属：`tests/head-cert-deps.test.ts` +11/−2、`tests/cert-gate-face.test.ts` +4/−1 全部是本簇（两文件开工前现读干净）；
 `scripts/mutate-verify.mjs` 工作树 +41/−8 里含隔壁 `d13-*` 那 37 行、`PROGRESS.md` +1/−1 是隔壁那处改名 ⇒ 这两处仍走临时 index。
+
+## 5. 第二次复认（补正之后）逮到的第三格：针脚缩进差两格 ⇒ 空操作
+
+派生复认在补正后的 HEAD 上跑 `--changed-since=08c081e5`：`变更文件 5 个 ⇒ 选中锚点 118/1496 条`，**117 杀／1 判红**，
+而那条判红的类别**不是**存活也不是 baseline-red：
+
+```text
+❌ head-cert-drift-not-in-exit-code — …
+  ❌ 判红·突变未生效（针脚不在源文件里）⇒ 空操作（1 条）：head-cert-drift-not-in-exit-code
+REDKINDS=survived:0,misattributed:0,baseline-red:0,no-effect:1,syntax:0,restore-mismatch:0,vacuous:0
+```
+
+现读成因：我搬家时把针脚写成 `    treeDrifted: drift !== null,`（四个空格），而盘上那一行是
+`  treeDrifted: drift !== null,`（两个空格——对象字面量在函数体内，缩进本来就比调用点浅一级）。
+`JSON.stringify` 逐字比过：四空格写法命中 **0**，两空格写法命中 **1**。⇒ 这条锚点**跑起来了但什么都没改**，
+是「空操作」那一类，而不是「变异存活」——分类不同修法就不同：存活要补判卷，空操作只要把针脚写回盘上真写法。
+
+**两处静默值得一提**（都属 `#15` 那一族，本轮只登记不顺手改）：
+
+1. 落库前后 `--check-needles` 报的是 `阻断 7｜钉在飞文本 4｜逐行式 5｜killer 指针失效 0`——它**没有**把这条 0 命中针脚喊出来。
+   本轮只登记现象：**为什么**静态那一遍看不见（是否落进「逐行式 apply」的按结构豁免，还是根本不查 `apply` 里字面量的命中率）没有实测，
+   留给 `#15` 一起量——把猜想写成成因就是本仓点名的「尺给自洽假结论」。**这一格只有真跑一次才知道**。
+2. 同簇的判卷 `expect(src).toContain("treeDrifted: drift !== null,")` 用的是**不带缩进**的子串，所以它绿——
+   判卷与针脚对同一段文字用了两种取料口径，一个能过、一个空转。方向不是把判卷也改成带缩进（那会跟着排版漂），
+   而是针脚必须逐字取自盘上那一行（本仓既有口径：命令与路径从事实源取，不凭记忆补形状）。
+
