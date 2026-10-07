@@ -13,7 +13,7 @@
 //   提炼 → 写盘 → 回注 → 读回，逐字对照。测不到的那一半在上面写明，不拿"注入块在"冒充"行为变了"。
 //
 // 跑法：`node --import tsx scripts/replay/lessons-round-ab.ts`
-import { mkdtemp, readdir, readFile, rm, mkdir } from "node:fs/promises";
+import { cp, mkdtemp, readdir, readFile, rm, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +28,8 @@ import type { AgentEvent } from "../../src/events";
 import type { Provider, ProviderMessage } from "../../src/providers";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+/** 靶子工作区：本面**只读**它（见下「隔离运行工作区」）——它是判卷面，不是本面的运行目录。 */
+const TARGET = join(ROOT, "fixtures", "todo-app");
 const FROZEN = join(ROOT, "fixtures", "mock", "todo-fix.jsonl");
 const BUGGY = join(ROOT, "fixtures", "mock", "todo-bug.ts");
 
@@ -86,17 +88,39 @@ const logB = join(root, "round-b.jsonl");
 const globalRoot = join(root, "global");
 const scriptA = await failingScript(root);
 
+// ---- 隔离运行工作区（本次运行专属，跑完回收）----
+// 从前这面把**靶子** `TARGET` 当自己的运行工作区：往它的 `.agent/memory` 写教训、拿 `write_file`
+// 覆盖它的 `src/todo.ts`、把覆盖前快照落进它的 `.agent/snapshots/`，收尾再 `rm -rf` 掉它整份记忆目录
+// ——那次删掉的可能是**先于它存在**的、属于别的会话的记忆（实测发生过，事后靠备份还原）。
+// `runLoop` 的 workspace 是**参数**（`src/agent/loop.ts:154` 起）⇒ 这些「动靶子」的行为全是本面
+// 自己选的，不是必须的。现在改成：在 `.tmp/` 下建一份本次运行专属的目录（`mkdtemp` 带随机后缀
+// ⇒ 并发的两次跑互不踩），只拷靶子**需要**的那几件进去，此后所有读写都落在它里面，收尾只删它。
+// vitest 解析：不整拷 `node_modules`。实测 `pnpm test` 在 `.tmp/` 下靠向上解析仍能拿到根
+// `node_modules` 的 vitest（`pnpm run` 会把祖先各级 `node_modules/.bin` 加进 PATH）⇒ 无需符号链接。
+await mkdir(join(ROOT, ".tmp"), { recursive: true });
+const ISO = await mkdtemp(join(ROOT, ".tmp", "lessons-round-ab-"));
+await mkdir(join(ISO, "tests"), { recursive: true });
+await mkdir(join(ISO, "src"), { recursive: true });
+await cp(join(TARGET, "package.json"), join(ISO, "package.json"));
+await cp(join(TARGET, "tests", "todo.test.ts"), join(ISO, "tests", "todo.test.ts"));
+await cp(join(TARGET, "src", "todo.ts"), join(ISO, "src", "todo.ts"));
+/** 运行工作区：本面所有读写都落在这。反向验证只要把**这一行**改成 `= TARGET`，
+ *  整面就回到「动靶子」的老行为（判卷里那条整树哈希不变量会因此变红）；回收照旧只动 `ISO`。 */
+const WS = ISO;
+
 console.log("=== 口径声明 ===");
 console.log("冻结剧本 fixtures/mock/todo-fix.jsonl 是**一次成功**的回合 ⇒ 0 红 ⇒ 按硬门提炼 0 条。");
 console.log("轮 A 改用同形状的**失败**剧本（就地生成，不碰冻结 fixture）。");
 console.log("「模型读懂教训并改了动作」在 mock 靶上不可达（provider 忽略 messages，runLoop 无注入口）——本面只测可达的一半。");
+console.log("本面只在**自己的隔离工作区**里读写，跑完整目录回收；靶子 fixtures/todo-app 全程只读。");
+console.log("[隔离] 隔离工作区（跑完回收）= " + ISO);
 console.log("");
 
 // ---- 轮 A：失败的剧本 ----
 console.log("=== 轮 A（失败剧本，空记忆）===");
-const eventsA = await oneRound("A", logA, join(ROOT, "fixtures", "todo-app"), scriptA);
+const eventsA = await oneRound("A", logA, WS, scriptA);
 
-const injA = await buildMemoryInjection({ workspace: join(ROOT, "fixtures", "todo-app"), globalRoot });
+const injA = await buildMemoryInjection({ workspace: WS, globalRoot });
 console.log("[A] 注入块 project=" + (injA.project === null ? "null" : String(injA.project.length) + " 字符")
   + "｜tokens=" + String(injA.tokens) + "｜教训行 "
   + String((injA.project ?? "").split("\n").filter((l) => l.includes("〔证据:")).length) + " 条（基线应为 0）");
@@ -127,7 +151,7 @@ console.log("");
 
 // ---- 轮 B：把教训写进工作区记忆，再跑同一剧本 ----
 console.log("=== 轮 B（工作区已写入轮 A 的教训）===");
-const ws = join(ROOT, "fixtures", "todo-app");
+const ws = WS;
 const pmd = projectMemoryDir(ws);
 await mkdir(pmd, { recursive: true });
 for (const l of lessons) await writeTopic(pmd, l.topic, "feedback", l.body, new Date().toISOString());
@@ -174,11 +198,14 @@ const { createHash } = await import("node:crypto");
 const frozenNow = createHash("sha256").update(await readFile(FROZEN)).digest("hex");
 console.log("  fixtures/mock/todo-fix.jsonl sha256 = " + frozenNow.slice(0, 16) + "…（该文件本轮只读）");
 
-// 清理：靶子工作区里的记忆撤掉，别给下一轮留残迹
-await rm(pmd, { recursive: true, force: true });
+// 清理：只删**本次的隔离工作区**与临时日志目录——靶子 fixtures/todo-app 一个字节都没动过。
+await rm(ISO, { recursive: true, force: true });
 await rm(root, { recursive: true, force: true });
 console.log("");
 console.log("=== 诚实声明 ===");
+console.log("隔离口径：本面只在自己的隔离工作区（<ROOT>/.tmp/lessons-round-ab-<随机>/）里读写教训、");
+console.log("  覆盖 src/todo.ts、落快照，跑完整目录回收；靶子 fixtures/todo-app 全程只读");
+console.log("  （判卷 tests/replay-faces.test.ts 对该树跑前跑后递归哈希，断言逐字节相同）。");
 console.log("本面证到的：真失败轨迹 ⇒ **正确的零**（单拍偶发失败不成教训），两轮事件流逐字同形。");
 console.log("本面**没**证到的：非零产出的端到端那一跳。这轮 A 的失败脚本造不出够格的一拍（见上），");
 console.log("所以「提炼 ⇒ 写盘 ⇒ 回注逐字含出处」那一支在本靶子上是空的——它由 tests/memory-lessons.test.ts");

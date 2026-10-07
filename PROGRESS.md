@@ -13972,3 +13972,157 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
 9. **量纲与没跑（如实）**：本轮没跑全量核心判卷、没跑认证、没跑本笔 3 根新锚点的真杀。
    **未证**：新 HEAD 的认证在第 408 页补；在那之前第 404—407 页所有"绿"字都按「未认证」读。
    `#66` 花钱那一臂、`#70`（提示面教模型 verify）与 `#72` 单源化仍等业主，不在本笔。
+
+<!-- 本四页由外部的编排 agent（Raven，跑在业主的 TUI 会话里）在业主逐轮批准下写成。
+     作者与仓库内会话不同源，故各页的「我」指该编排者；所有读数都标了是第一手复跑还是子代理实跑输出。 -->
+
+**写作前置（页号与一把尺的缺陷）**：本四页占 **409／410／411／412**。
+取号时按仓规跑了 `node --import tsx scripts/next-page.ts`，它给出 **308**——而**第 308 页 2026-10-03 就在本台账里**（三处）。
+根因已定位，不是猜测：`scripts/lib/page-claim.ts` 的 `pageNumbersIn` 只认 `^### … · 第 N 页`，
+而本台账的页标题是 **`##`**（h2）。实测两个面的最大号：**h2 型 = 407、h3 型 = 307**
+（所以工具把 307 当成了历史最大值，发出 308）。**后果是今天任何用这把尺的人都会拿到 308**
+——这正是它 2026-09-30 立这把尺要防的那种撞号。我已 `rmdir` 释放了那次误占（号池回到 50 个）。
+**未做**：正则收 `#{2,3}` 与配套判卷；本页只登记，不代修（改的是工具面，须走它自己的流程）。
+
+**这把尺的现状（第一手读数）**：本四页写完后跑 `node --import tsx scripts/docs-check.ts` ⇒ **exit 1**，**2 项违规（`D-11=2`，`D-10=0`）**。
+第一版是 4 条，D-10 那两条是我把 `src/main/agent-runner.ts` 与 `src/cli.ts`
+写成了裸文件名（已当场改成全路径与 `path#符号` 写法，行号不写——行号会腐，所以 D-10 现在为 0）；
+剩下的 D-11 两条是第 409／411 页点名了
+本笔那份**尚未入库**的取料（`outputs/` 下那个 dated 目录；本段刻意不再复述它的全路径——第一版声明里写了，
+于是这把尺把它记到了**第 407 页**头上，那是别人的页）。按这把尺自己的话——
+「证人要与页同笔落库；这一格若由本笔未提交的工件造成，**提交即归零，别当成旧账登记掉**」——
+这两条随本笔提交一起消失，**现在读它们是「未提交」而不是「仓库旧账」**。
+另：`prose-needle-scan` **exit=0**（改了台账之后该跑的那把尺）。
+
+## 2026-10-07 · 第 409 页：能力基线重算——十项判定对 HEAD `46cde6b7`，上一版是 10-01 那份（基线 `274f165`）
+
+0. **动因**：`outputs/agent-capability-roadmap-2026-10-01/PLAN.md` 第 1 节那张十条能力表已经过期——
+   7 天里 `apply_patch`、调度器生产入口、`map/impact` 持久化索引、`gym` 都落地了，而表里还写着"一个都不存在"。
+   业主的裁决是「度量先于改动」：**没有当前读数，后面选什么都是猜**。
+1. **做法**：两路**只读**审计并行（能力 1–5 ／ 能力 6–10＋自进化·信号回流·经验沉淀三个专题），第三路合并落盘。
+   产物：`outputs/capability-baseline-2026-10-07/README.md`（115 行；新目录、未跟踪，不动任何已有文件）。
+2. **判定（HEAD 现值 vs 10-01）**：已实现 3 条（执行-验证-修正闭环、记忆与上下文、安全与权限），
+   部分 7 条（代码理解、精确编辑、工具与环境、长程规划、人机协作、工程化与成本、评估与迭代）。
+   三处**缺口被关闭**：`apply_patch` 从"不存在"到已接线；调度器从"零生产调用者"到 `--serve` 入口被判卷钉住；
+   `ghost_tool => allow` 的 fail-open 已翻正（四档全 ask）。
+   最要紧的缺口逐条写进了那份文件，可直接当任务书用。
+3. **两路审计的一处冲突已按代码核实**：一路记门表 35 条、另一路记 34 条。**真值 34**——
+   多的那一条是 `scripts/gate-manifest.ts` 门表块内**一行注释里带引号的 `"test"`** 被数成了条目。
+   编排者独立复核：`node --import tsx -e '…import("./scripts/gate-manifest.ts")…'` ⇒ `GATES: 34`（34 个名字逐条打印）。
+4. **这份基线指出的三条（按"最值得先动"排）**：
+   ① M5 的路由/级联/supervisor 机制全在，但 `DEFAULT_SETTINGS` 默认全关且 CLI 无处可翻 ⇒ 生产路径零流量；
+   ② 调度器无人值守 run 的写类动作 fail-closed 自动拒（"按点自动跑"能读不能改）；
+   ③ 教训的**命中率/复发读数缺失**，且两条复跑面**零断言、不在门表**（台账记 `#75`）。
+5. **未证（本页最要紧的一句）**：这份基线**全部是代码级证据，零实测回执**——
+   两路审计未跑任何判卷、门禁、bench；「反向验证一条未做」；能力 10 的外部基准仍无尺（这条沿用 10-01 的判断）。
+   所以本页的十条判定读作「接线与形状」，不读作「今天跑通了」。
+
+## 2026-10-07 · 第 410 页：M5 两枚路由开关从「无处可翻」到 CLI 可翻（**未提交**）
+
+0. **不变式**：`routingBandit` / `routingCascade` 此前只存在于 settings 存储——`src/cli.ts` 上没有任何旗标能翻它们，
+   于是 M5 那条已经接好的学习链在生产 CLI 上是**零流量**。本笔只做「可翻」，**不动 `DEFAULT_SETTINGS` 一个字节**
+   （业主裁决：翻默认会真花钱，而本仓自己写着"要翻先得接基准"）。
+1. **形状（照仓规：纯函数模块＋最小接线）**：新文件 `src/main/routing-flags.ts`（纯函数、零 IO）——
+   `parseRoutingFlags`（四旗标 ⇒ 三态覆盖）＋ `resolveRoutingFlags`（`over.X ?? settings.X` 的**唯一一份**）；
+   `RunOverrides` 加两枚可选槽（照 `actionFusion` / `autoVerify` 的先例写"runtime override；settings 开闸另议"）；
+   `src/cli.ts` 只加解析、透传、`--help` 两行，并**更正开头那条半过期的注释**。
+   **不写 settings 存储**——写存储会让旗标变成粘性的，还会改业主工作区的 `.agent/settings.json`。
+2. **三处取料纠错（都是做的时候撞上的）**：
+   ① 那两处 `s.routingBandit` / `s.routingCascade` **不在 `runAgent` 里**，在私有 helper `orchestratorExtras`
+   （`src/main/agent-runner.ts#orchestratorExtras`），它手上根本没有 `over` ⇒ 原地改两行不成立，必须补一条**三跳通道**
+   （`handleAgentRun` → `runAgent` → `buildSessionOrchestrator` → `orchestratorExtras`），约 +35 行；
+   ② `src/cli.ts` 开头那句"三个开关默认全关且无处可翻"**只对一半**成立：`--max-usd` 早已存在并接到 `maxBudgetUsd`，
+   `impactAnalysis` 的默认也已翻成 `true` ⇒ 真缺的只剩本笔这两枚（注释已按实际改掉）；
+   ③ 门表里那条 34 的复查同上页。
+3. **读数（子代理实跑）**：`typecheck` **exit=0**；新判卷 `tests/routing-flags.test.ts` 10 条＋
+   `tests/cli-surface.test.ts` 新增 5 条共 **14 条绿**；顺手跑的 `wiring-coverage`＋`orchestrator-construction-sites`
+   **22 条绿**；`--help` 列出 `--bandit` / `--cascade` 两行。
+   **编排者独立复跑**：`./bin/cairn.mjs --bandit --no-bandit "做点事"` ⇒ **exit 2**，stderr 为
+   「--bandit 与 --no-bandit 不能同时给：一正一反两枚都在，读数不知道自己跑在哪副装配上（去掉其中一枚）」（零花费，解析期就拒）。
+4. **一条红，归因是环境不是本笔**：`tests/cli-surface.test.ts:180`「提示里点名了要设哪个环境变量，含 DeepSeek 那条通道」红。
+   根因：仓库根有一份**别人今天 13:05 建的、未跟踪的 `.agent/providers.json`**（`agnes-ai`），
+   它让 `src/cli.ts` 的 hint 走「你已声明自定义 provider」那一支，DeepSeek 那行就不出现。**这在我们动手前就是红的。**
+   口径：这是「机制＋复现」级证据（从没有 `.agent/` 的 cwd 跑同一命令，DeepSeek 那行照旧出现；
+   `git diff -U0 -- src/cli.ts` 的 hunk 不覆盖 hint 区），**不是「回退后亲跑」级**——那份文件属于别人的在飞状态，本笔不许碰。
+5. **反向验证（两半都做了，均未用 `git checkout`）**：纯函数那半——删掉矛盾旗标的拒绝 ⇒ 三条用例变红，
+   `cp` 备份逐字节复原、`cmp` 一致、shasum 前后相同；热文件那半——摘掉 `src/cli.ts` 那行接线 ⇒ 对应的接线存在性判据变红，
+   改前改中改后三次 `shasum` 记录在案（窗口内无人写），`cp` 复原、`cmp` 一致。
+6. **未证**：**没证「开了它真换档、真省钱」**——那要起 worker 流水线并花真钱，本笔为「零花费」刻意没做。
+   所以本笔证到的是：解析正确、矛盾拒跑、缺省逐字节等价、三跳接线在；**不是**「开了就更省」。
+   未跑全量判卷；两个热文件的改动量（约 `src/cli.ts` +23 / `src/main/agent-runner.ts` +35 / `−1`）是
+   **diff 差值推算的近似值**——只有当那半小时里没有别人同时改这两个文件才严格等于本笔的量。
+7. **未提交**：`src/cli.ts` 与 `src/main/agent-runner.ts` 里同时装着**别人的在飞功能**（`--discover` 一族）⇒
+   单独提交会把别人的活带进历史（本仓 `3c99f313` 那笔"更正夹带暂存内容"就是同型事故）。
+   故本笔**留在共享工作树里等那笔落库**，业主已明示。
+
+## 2026-10-07 · 第 411 页：给「经验沉淀」补上复发读数，并给两条裸复跑面配保护（**本笔入库**）
+
+0. **缺口**：基线文件（`outputs/capability-baseline-2026-10-07/`）第三条指出——教训的**注入**没有任何事件留痕（`src/events/index.ts` 里没有 lessons 类事件），
+   所以「命中率」不可能从流里直接算；而 `lessons-offline` / `lessons-round-ab` 两条复跑面**零断言、不在门表**。
+1. **做法与口径**：新纯函数模块 `scripts/replay/lessons-recurrence.ts`（零 IO）——
+   按"会话内最后一个事件的 `ts`"（收束时刻，教训正是那一刻落盘的；无 `ts` 的老日志退到文件 mtime）排序，
+   折演出「每场开始时哪些类教训已可用」，与「本场出现了哪些失败类」对照，输出**两张率＋分子分母**。
+   `lessons-offline.ts`（121 行）新增一节把它打印出来，保持"只 print、不 assert"的读数面身份。
+   输出里带**口径句**：这量的是**暴露与复发的相关性，不是因果**；`一个正确的零`是合格结果。
+2. **读数（编排者独立复跑 `node --import tsx scripts/replay/lessons-offline.ts`）**：
+   当前语料 **122 份日志 → 教训 29 条、覆盖 19/122**，按类 `{"tool-streak":5,"repeat-action":13,"verify-red":11}`，
+   硬门两项仍成立（`orphanFail=0`、`envRed=0`）。新增那一节：
+   `verify-red 已可用 6/112 (5.4%) ／ 尚不可用 1/10 (10.0%)`；
+   `tool-streak 32/114 (28.1%) ／ 3/8 (37.5%)`；`repeat-action 9/116 (7.8%) ／ 1/6 (16.7%)`。
+   三条方向一致地"可用组更低"，但**这正是口径句要拦的读法**：两组非随机分派、对照组分母只有 10/8/6
+   ⇒ 读不出任何显著差异，**报"一个正确的零"，不报效应**。
+3. **取料纠错**：① 我在任务书里引的「21 份日志 → 教训 10 条、覆盖 5/21」是 `outputs/m6-acceptance-2026-10-01/`
+   那份日志里的**历史读数**，不是当前值（上表为今日实测）；② `census` 家族里**没有"重复写向"这一列**，
+   所以 `repeat-action` 那一行的"出现"退用提炼器自身产出当证据 ⇒ **该行两组口径不独立**（已写进模块头与输出）。
+4. **保护（替代「进门表」）**：`package.json` 与 `scripts/gate-manifest.ts` 此刻都脏、且 `tests/gate-manifest.test.ts` 在
+   ⇒ 单改一边会红、且要碰别人的在飞文件。故保护落在 `tests/` 的两个新判卷上（`pnpm test` 本身就是一道门）：
+   `tests/lessons-recurrence.test.ts`（11 条，喂构造语料钉住度量本身）与 `tests/replay-faces.test.ts`
+   （真 spawn 两条面，断言 exit 0、新读数那一节在、`orphanFail=0` 仍在、`round-ab` 那条"不可达"声明**仍在**——
+   防有人图省事删掉它，让这面看起来像测了全部）。
+5. **读数**：`typecheck` **exit=0**；两份新判卷 `Test Files 2 passed (2)｜Tests 13 passed (13)`；
+   调动过的登记表门 `tests/replay-readings-registry.test.ts` `4 passed`（新模块被已登记面 import，不是孤儿）。
+   **编排者独立复跑** `tests/lessons-recurrence.test.ts` ⇒ `Tests 11 passed (11)`。
+6. **反向验证**：把"可用组/不可用组"的分子对调 ⇒ 新判卷 2 条变红，`cp` 备份逐字节复原、`cmp` 一致、shasum 相同。
+   造红前 `pgrep -fl vitest` 确认无人跑全量。
+7. **未证**：注入导致复发下降**未被证**（按设计不主张）；`repeat-action` 那行的口径不独立；
+   未跑全量判卷；**没在干净 checkout（无 `outputs/**/*.jsonl`）上跑过**这条面；
+   `tests/replay-faces.test.ts` 里钉了 `orphanFail=0` 这个**语料相关**的读数（一旦某份语料引入无归属红，这条会红）——属脆弱点，如实登记。
+
+## 2026-10-07 · 第 412 页：`replay:lessons-round-ab` 改用隔离工作区——靶子整树哈希不变量（**本笔入库**）
+
+0. **事故**：`scripts/replay/lessons-round-ab.ts` 把**靶子工作区** `fixtures/todo-app` 当自己的运行工作区：
+   往它的 `.agent/memory` 写教训、覆盖它的 `src/todo.ts`、往它的 `.agent/snapshots/` 落快照，
+   结尾 `rm(pmd, {recursive:true})` **整个删掉那份记忆目录**。上一轮它第一次被手工跑时，
+   **删掉了一份先于它存在的、属于别的会话的记忆目录**（`lesson-verify-red-1.md`／`lesson-tool-streak-run_shell.md`／`MEMORY.md`），
+   事后靠备份还原。而 `runLoop(opts)` 的 `workspace` 是**参数**（`src/agent/loop.ts:154`）——
+   这些"动靶子"的行为**全是这个面自己选的，不是必须的**。
+1. **污染（这才是要害）**：那份目录里有别人的教训时，它的 `[B]` 打印「已写入 2 条／注入块教训行 2 条」（**内容不是它写的**）；
+   清空后是 0 条。⇒ 同一份脚本在同一棵树上的读数**取决于谁先跑过**。它此前**不在任何门里**，所以这件事没人看得见。
+2. **修法**：`TARGET` 常量与 `ISO = mkdtemp(ROOT/.tmp/lessons-round-ab-…)` 隔离目录；
+   只拷靶子需要的三件（`package.json`／`tests/todo.test.ts`／`src/todo.ts`）；
+   `const WS = ISO;` 一行反向开关；两轮 `oneRound` 与两处 `buildMemoryInjection` 全用 `WS`；
+   清理只 `rm(ISO)`（原来删靶子记忆那句已删掉）。**整拷 `node_modules` 与否**：实测不必——
+   `.tmp/…` 下靠向上解析拿到根 `node_modules` 的 vitest（探针 `pnpm test` ⇒ `1 failed | 2 passed (3)`，121ms）。
+3. **新增的硬不变量**：`tests/replay-faces.test.ts`——面跑**前后**对 `fixtures/todo-app` **整棵树**递归哈希
+   （名字＋内容，软链取链接文本、不跟随），断言逐字节相同。
+   **改前红**（子代理实跑）：整树哈希不等，且输出里 `[A] 教训行 2 条`（不是它写的）、`[B] 已写入 2 条 → <ROOT>/fixtures/todo-app/.agent/memory`。
+   **改后绿**：`Test Files 1 passed (1)｜Tests 3 passed (3)`。
+   **编排者独立复跑**该判卷 ⇒ `Tests 3 passed (3)`（3065ms），且**我这一跑自己也没有改到靶子**。
+4. **反向验证**：把那一行 `const WS = ISO;` 改成 `WS = TARGET;` ⇒ 那条哈希不变量变红（`exit 0` 仍成立）；
+   `cp` 备份逐字节复原、`cmp` 一致、`grep` 确认回到 `const WS = ISO;`。**未用 `git checkout`。**
+   造红前 `pgrep -fl vitest` 空。
+5. **读数确定的证据**：连跑两次，两次都是
+   `[隔离] 隔离工作区（跑完回收）= <ROOT>/.tmp/lessons-round-ab-<随机>`
+   ＋`[B] 已写入 0 条 → <ROOT>/.tmp/…/.agent/memory`＋`[B] 注入块 project=null｜tokens=0｜教训行 0 条`——**逐字相同**，与别人跑过什么无关。
+   清理后 `.tmp/` 只剩原有那三样（`e2e-log.jsonl`／`gate-failures`／`sandbox-check-ws`）。
+   **编排者独立核对**：靶子记忆与我开工前的快照 `diff -r` **内容一致**（只有 mtime 被旧护栏刷过，本轮已把护栏改成保留时间戳）；
+   `git status --porcelain -- fixtures/` **空**。
+6. **取料纠错**：靶子那份 `node_modules/vitest` 是**断链**（`test -e` 为 DANGLING）——
+   靶子的 `pnpm test` 一直靠向上落到根 `node_modules`，不是靠它自己那份。这恰好是本笔"隔离目录不拷 node_modules 也能跑"成立的原因。
+7. **未证**：①「并发两次跑不互踩」只停在 `mkdtemp` 随机后缀这层**推理**上，**没有真并行起过两个面**；
+   ② vitest 解析只在本机 pnpm/Node 上实测，未验证根 `node_modules` 缺 vitest 时另需符号链接的情形；
+   ③ 靶子里那份 gitignored 的 `.vite/vitest/…/results.json` 缓存被**旧面**在"改前红"那次刷过、**未还原**；
+   ④ 首跑"before"哈希与还原后"before"哈希不同，`diff -r` 证明 `.agent/` 与 `src/` 已还原，
+   故差异只可能在 `node_modules/`——**这一条是推断，没做字节级前后对照**。
+8. **本笔的性质**：它不产出新能力，产出的是**一条会喊的不变量**。前三笔里唯一让我不敢放手的就是
+   "一个会删目录的面被我挂进了判卷"，而它能潜伏这么久，正是基线里那条"两条复跑面零断言"的真实代价。
