@@ -14058,7 +14058,7 @@ const MUTATIONS = [
     desc: "SWE-bench 构造路径不再产出 `judge` 两列 ⇒ 逐名规格整条断供：解析器与读者都还在、"
       + "却永远收不到料，读数退回同一枚退出码（「没做」伪装成「做了但没触发」）",
     apply: (s) => s.replace(`      judge: { failToPass, passToPass },\n`, ""),
-    expectFail: "合法一份：两列逐字落地，且与 verifier.command 各是各的（一个答退出码、一个答逐名）",
+    expectFail: "PASS_TO_PASS 是空数组的一份：命令少一枚 id，judge.passToPass 也照实是空（不编一份保住清单出来）",
   },
   {
     id: "task-fields-registry-drops-judge",
@@ -14067,7 +14067,7 @@ const MUTATIONS = [
     desc: "字段登记表不收 `judge` ⇒ 任务集文件里写了它却被判「认不出的字段」，而内建四格一条都不带它 ⇒ "
       + "整批出不了数。与上一根各红一条：那根断产出、这根断装载（同一件事的两半，缺一半就没人知道）",
     apply: (s) => s.replace(`"seed", "verifier", "heldOut", "judge", "expects"`, `"seed", "verifier", "heldOut", "expects"`),
-    expectFail: "PASS_TO_PASS 是空数组的一份：命令少一枚 id，judge.passToPass 也照实是空（不编一份保住清单出来）",
+    expectFail: "合法一份：两列逐字落地，且与 verifier.command 各是各的（一个答退出码、一个答逐名）",
   },
   {
     id: "namedsets-unmatched-folds-to-green",
