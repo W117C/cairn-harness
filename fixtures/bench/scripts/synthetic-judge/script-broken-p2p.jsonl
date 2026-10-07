@@ -1,0 +1,6 @@
+{"type":"assistant_message","content":"先读 src/shipping.js。"}
+{"type":"tool_call","id":"c1","name":"read_file","args":{"path":"src/shipping.js"}}
+{"type":"assistant_message","content":"把过线判断改成大于等于，并把基础运费一并调整。"}
+{"type":"tool_call","id":"c2","name":"write_file","args":{"path":"src/shipping.js","content":"// 合成靶子（第 422 页）：给「逐名判卷」那条路准备的最小仓库。\n// 约定：金额一律整数「分」。合成剧本的二号面：门槛改对了，但顺手把基础运费从 600 改成 500 ⇒ 两条 PASS_TO_PASS 坏。\n// 于是「券后正好过线」那一单仍然收运费——它对应的就是 judge.failToPass 那一条。\nexport const FREE_SHIPPING_THRESHOLD_CENTS = 10000;\nexport const BASE_SHIPPING_CENTS = 500; // 剧本故意改坏：目标转绿了，但把「该保住的」两条一起弄坏\n\nexport function applyCoupon(subtotalCents, discountCents) {\n  return Math.max(0, subtotalCents - discountCents);\n}\n\nexport function shippingCents(subtotalCents, discountCents = 0) {\n  const after = applyCoupon(subtotalCents, discountCents);\n  return after >= FREE_SHIPPING_THRESHOLD_CENTS ? 0 : BASE_SHIPPING_CENTS;\n}\n\nexport function feeBreakdown(subtotalCents, discountCents = 0) {\n  const shipping = shippingCents(subtotalCents, discountCents);\n  return { shipping, total: subtotalCents - discountCents + shipping };\n}\n"}}
+{"type":"assistant_message","content":"跑 verify。"}
+{"type":"tool_call","id":"c3","name":"verify","args":{}}

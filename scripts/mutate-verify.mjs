@@ -14886,7 +14886,35 @@ const unverifiedRows = [
     id: r.m.id,
     cls: typeof r.unloadable === "string" ? "judge-unloadable" : r.stopped === true ? "budget-stopped" : "judge-in-flight",
   })),
-];
+  /* 第 422 页（能力 10＋9）：离线合成面。三根各盯这一格的一种死法：分岔被摘（剧本永远不接）、
+   * 有效性那一判没接到 face（合成趟被「未起步」剔光）、等号写法的旗标被丢（用户以为在跑离线，实则在花钱）。 */
+  {
+    id: "synthetic-provider-face-not-swapped",
+    src: "scripts/loop-eval.ts",
+    test: "tests/loop-eval-synthetic-chain.test.ts",
+    desc: "分岔被摘 ⇒ 带了 `--scripted` 也照样去建真会话 provider：离线那一格名义存在、实际零流量，"
+      + "而这正是本仓反复登记的形状（机制全在、生产零流量）。它不会报错——它会安静地什么都不出",
+    apply: (s) => s.replace(`      provider: SCRIPTED === ""`, `      provider: "" === ""`),
+    expectFail: "剧本那一趟：逐名报全绿、提供者报剧本，取料面带格式与条数",
+  },
+  {
+    id: "synthetic-validity-face-unwired",
+    src: "scripts/lib/eval-validity.ts",
+    test: "tests/loop-eval-synthetic-chain.test.ts",
+    desc: "「0 次请求」不分装配就一律判未起步 ⇒ 剧本那一趟被剔出分母，合成面永远「拒绝出数」；"
+      + "反面同样要紧：真会话那侧的限流/鉴权必须照旧被剔（摘掉这一判就是让花钱跑不成的趟次进分母刷分）",
+    apply: (s) => s.replace(`  if (run.requests <= 0 && run.providerFace !== "剧本") {`, `  if (run.requests <= 0) {`),
+    expectFail: "剧本那一趟不许被「未起步」剔出分母：请求=0 是构造如此，不是跑不成",
+  },
+  {
+    id: "scripted-flag-equals-form-dropped",
+    src: "scripts/loop-eval.ts",
+    test: "tests/loop-eval-synthetic-chain.test.ts",
+    desc: "只认「旗标 空格 值」⇒ `--scripted=<剧本>` 被静默丢掉，脚本带着「我在跑离线」的信念**去打真会话**；"
+      + "有 key 的那台机器上这是一次花钱的误会，方向与「读不到 ≠ 安全」同一条（本跑器不拒未知旗标，所以这一判没有第二道门）",
+    apply: (s) => s.replace(`const SCRIPTED = scriptedEq !== undefined ? scriptedEq.slice("--scripted=".length) : pick("--scripted", "");`, `const SCRIPTED = pick("--scripted", "");`),
+    expectFail: "等号写法也要认，剧本缺文件时出声退 1——静默改用真会话等于在花用户的钱",
+  },];
 const unv = unverifiedCell(unverifiedRows);
 const unverifiedTotal = unv.total;
 let unvText = "";

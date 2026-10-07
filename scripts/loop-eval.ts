@@ -34,6 +34,8 @@ import type { VerifyRecovery } from "./lib/eval-validity";
 // 这里只把**最后一次 verify 拍**的原文交给它并把裁决带回读数。跑器不认格式、不拼 pytest 命令行。
 import { namedSetFailReason, readNamedSets, type NamedSetReading } from "./lib/eval-named-sets";
 import type { NamedSetState } from "../src/agent/eval/test-results";
+// 离线合成面的 provider（第 422 页）：靶场那套「按轮吐冻结剧本」的加载与切轮口径，一行都不重抄。
+import { createRoundScriptedProvider } from "../src/agent/gym/script";
 // 判据名 → 判定分支那张表（#35）：跑器只负责喂面，措辞与登记名由那份模块对齐。
 import { expectFailReason, type ExpectFace } from "./lib/eval-expects";
 // 重拨那一格：判据与分母共用同一个白名单（`providerInterruptOf`），等待有帽、帽外明说不重拨。
@@ -218,6 +220,20 @@ if (repeatedTasks) {
 }
 const TASKS_FILE = pick("--tasks", "");
 const SWEBENCH_FILE = pick("--swebench", "");
+/* 离线合成面（第 422 页）：`--scripted=<剧本>` 把 provider 换成靶场那套**按轮吐冻结剧本**的
+ * `createRoundScriptedProvider`（`src/agent/gym/script.ts`），于是一条 SWE-bench 形状的链
+ * （数据层产出 `judge` → 解析器读 TAP → 逐名裁决 → 读数行）可以零 key、零网络跑通。
+ * 刻意只换 provider：装配（工具面／三门／verify／换路提示）与判卷口径一字不动，
+ * 否则「离线跑通」证的就不是生产那一副装配。读数里 `提供者=` 单独一格声明它不是真会话。 */
+const scriptedEq = argv.find((a) => a.startsWith("--scripted="));
+/* 两种写法都认（空格与等号）。这不是糖：本跑器**不拒未知旗标**，而 `pick` 只认「旗标 空格 值」——
+ * 于是 `--scripted=<剧本>` 会被静默丢掉，脚本带着「我在跑离线合成面」的信念**去打真会话**。
+ * 有 key 的那台机器上这就是一次花钱的误会，方向与本仓「读不到 ≠ 安全」同一条。 */
+const SCRIPTED = scriptedEq !== undefined ? scriptedEq.slice("--scripted=".length) : pick("--scripted", "");
+if (scriptedEq !== undefined && SCRIPTED === "") {
+  console.error('[loop-eval] --scripted= 后面是空的 ⇒ 拒绝出数（要么给剧本路径，要么别带这枚旗标）');
+  process.exit(1);
+}
 const FEASIBILITY = argv.includes("--feasibility");
 
 function selectedTasks(): EvalTask[] {
@@ -367,6 +383,10 @@ interface Reading {
    *  同一枚 1 在这两格里是两种说法，那正是 SWE-bench 要分的东西。
    *  判据不在这儿：口径全在 `lib/eval-named-sets` ＋生产的 `parseTestResults`／`judgeNamedSets`。 */
   namedSets?: NamedSetReading;
+  /** 这一趟的「模型那一侧」从哪来：`真会话` = GLM 装配（花钱、要 key），`剧本` = 合成面（零花费）。
+   *  单独成一格而不是靠"读数里有没有钱"来猜：一条烧了 0 元的趟次在两副装配下长得一模一样，
+   *  而把合成读数引用成产品分数是本仓最贵的那一族错。 */
+  providerFace: "真会话" | "剧本";
   wroteTests: boolean; touchedJudge: boolean; onlySrcChanged: boolean;
   /** held-out（隐藏验收）观测：装不上的错误清单 + 跑出来的结果。
    *  `heldOutRun` 为 undefined = 这一格没跑（任务集没给隐藏面，或文件没装齐）。
@@ -493,15 +513,18 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   try {
     await runLoop({
       ...BENCH_RUNLOOP_KNOBS,
-      provider: createGlmSessionProvider(eventsPath, {
-        system,
-        workspace: work,
-        requestFace: () => ({ tools: face.specs, note: face.note }),
-        // 显式递模型名：provider 不传的话走 `process.env.CAIRN_MODEL ?? "glm-5.2"`，
-        // 而用 OPENAI_MODEL 配的路由（如 OpenRouter 的自由档）在这里就会被静默换成 glm-5.2 ⇒
-        // 请求打到不是你要测的那个模型上。压缩摘要器也吃这个值，两处同源。
-        ...(BENCH_MODEL !== undefined && BENCH_MODEL !== "" ? { model: BENCH_MODEL } : {}),
-      }),
+      provider: SCRIPTED === ""
+        ? createGlmSessionProvider(eventsPath, {
+          system,
+          workspace: work,
+          requestFace: () => ({ tools: face.specs, note: face.note }),
+          // 显式递模型名：provider 不传的话走 `process.env.CAIRN_MODEL ?? "glm-5.2"`，
+          // 而用 OPENAI_MODEL 配的路由（如 OpenRouter 的自由档）在这里就会被静默换成 glm-5.2 ⇒
+          // 请求打到不是你要测的那个模型上。压缩摘要器也吃这个值，两处同源。
+          ...(BENCH_MODEL !== undefined && BENCH_MODEL !== "" ? { model: BENCH_MODEL } : {}),
+        })
+        // 合成面：装配不变，只换「模型那一侧从哪来」——剧本按轮吐，零 key 零网络（见上面 SCRIPTED 那段）。
+        : createRoundScriptedProvider(resolve(ROOT, SCRIPTED)),
       events: driven,
       workspace: work,
       mode: "auto",
@@ -645,6 +668,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
     autoVerifyBeat: harnessBeats > 0, autoVerifyBeats: harnessBeats,
     verifyRecovery: recovery,
     namedSets,
+    providerFace: SCRIPTED === "" ? "真会话" : "剧本",
     wroteTests, touchedJudge, onlySrcChanged, changedFiles: changed, exitError, resources,
     heldOutInstallErrs, heldOutRun,
     assembly: ASSEMBLY_FACE,
@@ -783,9 +807,21 @@ if (tasks.some((t) => t.external)) {
   console.error("[loop-eval] 任务集含外部基准条目 ⇒ 本跑器（GLM 会话装配 + node 靶子）跑不了它；先加 --feasibility 看缺口");
   process.exit(1);
 }
-if (!BENCH_API_KEY || !BENCH_ENDPOINT) {
+if (SCRIPTED !== "") {
+  /* 合成面在第一趟之前把话说完两件事：① 剧本文件必须真的在（缺就出声退，不许静默退回真会话——
+   *    那等于「以为在跑离线，实际在烧钱」，方向与本仓「读不到 ≠ 安全」同一条）；
+   * ② 这一趟的读数**不是任何基准分数**，它证的只有「这条链端到端跑得起来、逐名那两件事分得开」。 */
+  const scriptPath = resolve(ROOT, SCRIPTED);
+  if (!existsSync(scriptPath)) {
+    console.error(`[loop-eval] --scripted=${SCRIPTED} 指向的剧本不存在 ⇒ 拒绝出数（不许静默改用真会话跑）`);
+    process.exit(1);
+  }
+  console.log(`[loop-eval] 合成面：provider=剧本（${SCRIPTED}）⇒ 零 API key、零网络；这一趟读数标「合成」，不进任何基准分母`);
+}
+if (SCRIPTED === "" && (!BENCH_API_KEY || !BENCH_ENDPOINT)) {
   console.log("[loop-eval] 暗卷缺席（无 CAIRN_API_KEY/CAIRN_ENDPOINT，也没有 OPENAI_API_KEY/OPENAI_BASE_URL）——显式跳过，不出数（未证 ≠ 通过）");
   console.log("[loop-eval] 想知道「现在能不能量、缺什么」：加 --feasibility（零花费，不发模型请求）");
+  console.log("[loop-eval] 想零花费跑通一条完整链：加 --scripted=<剧本>（合成面，见 fixtures/bench/scripts/）");
   process.exit(0);
 }
 await judgeSelfCheck(); // 判卷器不落定就不出数
@@ -828,7 +864,7 @@ for (let rep = 1; rep <= REPS; rep++) {
       `[loop-eval] ${t.id} rep${String(rep)} ${verdict} 起点=${r.seedVerifyOk ? "绿" : "红"} `
       + `读先于写=${r.readsBeforeFirstWrite} clarify=${String(r.clarified)} 先批后写=${r.plannedBeforeWrite ? "Y" : "N"} `
       + `verify=${String(r.verified)}→${String(r.verifyOkLast)} 闸拍=${String(r.autoVerifyBeats)} 返修=${RECOVERY_TOKEN[r.verifyRecovery]} 隐藏=${HELD_OUT_TOKEN[judgeHeldOut(t.spec?.heldOut, r.heldOutRun, r.heldOutInstallErrs).state]} `
-      + `逐名=${r.namedSets === undefined ? NO_NAMED_SET_TOKEN : NAMED_SET_TOKEN[r.namedSets.state]} `
+      + `逐名=${r.namedSets === undefined ? NO_NAMED_SET_TOKEN : NAMED_SET_TOKEN[r.namedSets.state]} 提供者=${r.providerFace} `
       + `工具=${String(r.toolCalls)}/${String(r.toolFailures)}败 `
       + `重复=${String(r.repeatedSameAction)} 请求=${String(r.requests)} 拨数=${String(r.attempts)} tok=${String(r.tokensIn)}/${String(r.tokensOut)} `
       + `${moneyText(r.cny)} ${String(Math.round(r.seconds))}s 内存峰=${String(r.resources.rssPeakMb)}MB/${String(r.resources.procPeak)}进程 cpu=${String(r.resources.cpuMs)}ms`

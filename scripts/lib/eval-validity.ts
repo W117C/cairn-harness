@@ -15,6 +15,8 @@
 /** 一趟跑里我们关心的最小面（从 `Reading` 与判卷的 `fails` 里取，不复制整个结构）。 */
 export interface RunFace {
   requests: number;
+  /** 这一趟的「模型那一侧」从哪来（第 422 页的合成面）。缺省按真会话处理。 */
+  providerFace?: "真会话" | "剧本";
 }
 
 /** provider / 传输层错误的白名单。**只认这些**——模型自己干坏事的失败不许走这条。 */
@@ -42,7 +44,11 @@ export function providerInterruptOf(fails: readonly string[]): string | null {
 
 /** 判一趟跑算不算数。`fails` 传判卷给出的失败原因列表。 */
 export function runValidity(run: RunFace, fails: readonly string[]): Validity {
-  if (run.requests <= 0) {
+  /* 「0 次请求」有两种成因，这里必须分开：**真会话**那一侧它是限流/鉴权/报错（不许记成"模型没做到"，
+   *  于是剔出分母）；**剧本**那一侧它是构造如此——按构造就没有网络请求。把后者也判成"未起步"，
+   *  等于宣布离线合成面永远出不了数（第一次端到端跑通就是这么被拦下的，2026-10-08）。
+   *  「被打断」那一判两边都照拦：剧本读不出来会留在 fails 里，不放行。 */
+  if (run.requests <= 0 && run.providerFace !== "剧本") {
     return { valid: false, why: WHY_NOT_STARTED };
   }
   const interrupt = providerInterruptOf(fails);

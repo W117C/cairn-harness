@@ -1,0 +1,14 @@
+[
+  {
+    "id": "S1-synthetic-named-sets",
+    "source": "合成@local",
+    "instruction": "这个仓库的测试有一条没过。先跑一遍测试复现它，定位根因，只改 src/ 下的代码把它修好，然后重跑测试证明全绿。不要改测试文件——那是判卷面。",
+    "seed": { "kind": "dir", "path": "fixtures/bench/bench-synthetic-judge" },
+    "verifier": { "command": "node --test tests/*.test.js" },
+    "judge": {
+      "failToPass": ["券后过线免运费"],
+      "passToPass": ["原价未过线收运费", "券后价不为负且总价含运费"]
+    },
+    "expects": ["readBeforeWrite", "verifyOk", "judgeUntouched"]
+  }
+]
