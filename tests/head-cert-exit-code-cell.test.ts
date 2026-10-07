@@ -98,6 +98,14 @@ describe("读数那一层：码、点名、归属", () => {
     }
   });
 
+  // 这条的标题是**字面量**（不像上面那族由 `${c.dimText}` 拼出来）：第 429 页实测——
+  // 锚点的 `expectFail` 指在拼接标题上会被算进「松钉指针」那一维（只靠占位符展开过关 ⇒ 秒级尺认不出），
+  // 水位帽 10 因此被顶红。所以给「阈值挪松」这一维配一条能当 killer 的字面标题证人。
+  it("⑭ 认证门面那一维的阈值是 0：红一道就算红（不许挪成 ≥2）", () => {
+    expect(certExitCode({ ...GREEN, gateRedCount: 1 })).toBe(1);
+    expect(certFailingDims({ ...GREEN, gateRedCount: 1 })).toEqual(["认证门面红 1 道"]);
+  });
+
   it("⑧ 红的那些面上，读数必须点名红的维", () => {
     for (const c of ONE_RED) {
       expect(certExitCodeCell({ ...GREEN, ...c.patch })).toContain(c.dimText);

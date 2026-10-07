@@ -14156,7 +14156,7 @@ const MUTATIONS = [
     desc: "认证门面那一维从「有红就算」挪成「红满 3 道才算」⇒ 单道门红不再进判决，"
       + "而门表正是这次认证要担保的那 23 道",
     apply: (s) => s.replace(`  if (o.gateRedCount > 0) out.push(`, `  if (o.gateRedCount > 2) out.push(`),
-    expectFail: "② 只有「认证门面红 2 道」这一维翻红 ⇒ 判决给 1，且逐维点名正好一条",
+    expectFail: "⑭ 认证门面那一维的阈值是 0：红一道就算红（不许挪成 ≥2）",
   },
   {
     id: "cert-exit-code-cell-decodes-its-own-verdict",
