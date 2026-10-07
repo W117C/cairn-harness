@@ -27,7 +27,7 @@ import { dirname, join, resolve } from "node:path";
 import { certGateCell, certGatePlan, certGateVerdict, certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, certTreeReclaim, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, defaultTimeoutFromConfig, depDirs, gitInflightArgs, headGateTableIntegrity, mainRootFromCommonDir, missingDeclaredDeps, parseCertGateRows, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, suiteRows, timingCell, timingNearCapCell, unknownCertArgs, wallClockCell } from "./lib/head-cert-deps";
 import { needsNodeModules } from "./lib/subrepo-dep-need";
 import { acquireToolLock } from "./lib/tool-lock";
-import { citableOf, provenanceDoc, provenancePath, provenanceStamp } from "./lib/head-cert-provenance";
+import { citableOf, provenanceDoc, provenancePath, provenanceStamp, certExitCode, certExitCodeCell, type CertOutcome } from "./lib/head-cert-provenance";
 import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
 
 const argv = process.argv.slice(2);
@@ -385,7 +385,18 @@ const staleCell = staleTreeCell(wtRows, staleScratchTrees(wtRows, {
 say(`  ${staleCell}（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）`);
 // 并发套数**刻意不进下面这个退出码**：别的会话在跑不是我这笔代码错，接进去等于把这道门变成共享树上的随机红。
 // 同理，**常驻残留数也不进退出码**——它是卫生读数，不是我这笔的回归；它进的是"每一次认证都会被看见"这一格。
-const code = certifiable && tc.status === 0 && (testStatus === null || testStatus === 0) && gateReds.length === 0 && dirtyCount === 0 && drift === null ? 0 : 1;
+const outcome: CertOutcome = {
+  depsComplete: certifiable,
+  typecheckOk: tc.status === 0,
+  testStatus,
+  gateRedCount: gateReds.length,
+  dirtyJudged: dirtyCount,
+  treeDrifted: drift !== null,
+};
+const code = certExitCode(outcome);
+// 门把自己的退出码印进读数行（第 426 页 · 任务 #14）：这个码从前只活在 `$?` 里，而认证常是 nohup 起的
+// ⇒ 第 421／423／425 页凭证连着三页写同一句「没直取」。`say` 进 `spoken`，stdout、summary.txt、provenance 三处同时有它。
+say(`  ${certExitCodeCell(outcome)}`);
 try {
   mkdirSync(logDir, { recursive: true });
   writeFileSync(join(logDir, "summary.txt"), spoken.join("\n") + "\n");

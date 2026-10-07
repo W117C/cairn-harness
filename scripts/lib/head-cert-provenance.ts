@@ -65,3 +65,53 @@ export function provenanceStamp(iso: string): string {
 export function provenancePath(root: string, rev: string, stamp: string): string {
   return [root, "outputs", `head-cert-${rev.slice(0, 7)}-${stamp}`, "provenance.md"].join("/");
 }
+
+/** 认证判决的输入面（第 426 页，任务 #14）。
+ *  动因是**同一个疏忽连写三页**：第 421／423／425 页凭证都写「`HEADCERT_EXIT` 是 nohup 起的、没直取」，
+ *  而门本来就已经算出那个码——只差没把它自己印进读数行（`spoken` 同时进 stdout、`summary.txt` 与 provenance，
+ *  所以印一次三处都有）。按「重复疏忽要搬进工具」的口径，这一格不许再靠人记 `$?`。
+ *  形状纪律：判决与那句读数**共用这一份函数**（调用方不许在外面再写一遍 `&&` 串——那是第二份事实源，
+ *  也是本仓点名过多次的「构造面与验证面各算一遍」形状）。 */
+export interface CertOutcome {
+  /** 依赖是否补齐（借不到包＝这一趟不构成认证，不可归因于代码）。 */
+  depsComplete: boolean;
+  typecheckOk: boolean;
+  /** `null` ＝ 这一趟按 `--skip-test` 跳过了全量判卷：这一维**既不算红也不算证过**（等级由「认证等级」那行说）。 */
+  testStatus: number | null;
+  /** 认证门面（`CERT_GATES`）里退出码非 0 的道数。 */
+  gateRedCount: number;
+  /** 判卷四面相对自己 HEAD 的在飞项数——非 0 就不是 HEAD-only 读数。 */
+  dirtyJudged: number;
+  /** 收尾复核发现树被切走 ⇒ **读数作废**：第三种态，既不是「HEAD 红」也不是绿。 */
+  treeDrifted: boolean;
+}
+
+/** 逐维点名，读不出的维不许折进「一切正常」；`treeDrifted` 不在这里（它不是「红」，是作废）。 */
+export function certFailingDims(o: CertOutcome): string[] {
+  const out: string[] = [];
+  if (!o.depsComplete) out.push("依赖不全");
+  if (!o.typecheckOk) out.push("typecheck 非 0");
+  if (o.testStatus !== null && o.testStatus !== 0) out.push(`判卷 exit=${String(o.testStatus)}`);
+  if (o.gateRedCount > 0) out.push(`认证门面红 ${String(o.gateRedCount)} 道`);
+  if (o.dirtyJudged !== 0) out.push(`判卷四面在飞 ${String(o.dirtyJudged)} 项`);
+  return out;
+}
+
+export function certExitCode(o: CertOutcome): 0 | 1 {
+  return certFailingDims(o).length === 0 && !o.treeDrifted ? 0 : 1;
+}
+
+/** 那一格读数：码 ＋ **这是谁的码** ＋ 为什么。
+ *  点名归属不是啰嗦：汇总里已经有一行 `exit=1（退出码直接取）`，那是**跑进去的 test runner** 的码；
+ *  两个码同屏而不说归属，凭证页就会把其中一个抄成另一个（第 425 页就是这么差点写错的）。 */
+export function certExitCodeCell(o: CertOutcome): string {
+  const who = "这是 head-cert 这道门自己的码，不是它跑进去的 test runner 的码";
+  const code = certExitCode(o);
+  if (code === 0) return `本次退出码=0（${who}）｜判决输入六维全过`;
+  const dims = certFailingDims(o);
+  if (o.treeDrifted) {
+    return `本次退出码=1（${who}）｜读数作废（收尾复核发现树被切走）——这一格既不算「HEAD 红」也不算绿`
+      + (dims.length > 0 ? `；同趟另有红的维：${dims.join("、")}` : "");
+  }
+  return `本次退出码=1（${who}）｜红的维：${dims.join("、")}`;
+}

@@ -14144,6 +14144,42 @@ const MUTATIONS = [
     apply: (s) => s.replace(`  return join(home, ".config", "cairn", PLUGIN_DATA_DIR_NAME);`, `  return join(home, ".config", "cairn");`),
     expectFail: "① 缺省 = 用户级 .config/cairn/plugin-data（与 memory 全局层同顶，不是各算一遍）",
   },
+  {
+    id: "cert-exit-code-drift-dim-dropped",
+    src: "scripts/lib/head-cert-provenance.ts",
+    test: "tests/head-cert-exit-code-cell.test.ts",
+    desc: "判决里摘掉「读数作废」那一维 ⇒ 收尾复核发现树被切走时门退 0，"
+      + "而汇总那行明明写着「作废」——第三态被折成绿（规则 92/232 那一格的正身）",
+    apply: (s) => s.replace(`  return certFailingDims(o).length === 0 && !o.treeDrifted ? 0 : 1;`, `  return certFailingDims(o).length === 0 ? 0 : 1;`),
+    expectFail: "③ 收尾复核发现树被切走 ⇒ 判决必须给 1（这一条只看判决函数）",
+  },
+  {
+    id: "cert-exit-code-gate-threshold-loosened",
+    src: "scripts/lib/head-cert-provenance.ts",
+    test: "tests/head-cert-exit-code-cell.test.ts",
+    desc: "认证门面那一维从「有红就算」挪成「红满 3 道才算」⇒ 单道门红不再进判决，"
+      + "而门表正是这次认证要担保的那 23 道",
+    apply: (s) => s.replace(`  if (o.gateRedCount > 0) out.push(`, `  if (o.gateRedCount > 2) out.push(`),
+    expectFail: "② 只有「认证门面红 2 道」这一维翻红 ⇒ 判决给 1，且逐维点名正好一条",
+  },
+  {
+    id: "cert-exit-code-cell-decodes-its-own-verdict",
+    src: "scripts/lib/head-cert-provenance.ts",
+    test: "tests/head-cert-exit-code-cell.test.ts",
+    desc: "读数行自己另算一遍（这里直接写死 0）⇒ 判决说 1、页上引的那句说 0，"
+      + "而凭证页引用的恰恰是落盘的那份——两件事各算一次就是本仓点名的形状",
+    apply: (s) => s.replace(`  const code = certExitCode(o);`, `  const code = 0;`),
+    expectFail: "⑦ cell 报的码必须等于 certExitCode 的返回值（八张面各问一次）",
+  },
+  {
+    id: "cert-exit-code-decision-inlined-at-call-site",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-exit-code-cell.test.ts",
+    desc: "调用点把合取式重写一遍（这里只留 typecheck 与门表两维）⇒ 纯函数与门各有一套判据，"
+      + "以后加一维只会改一处，而另一处静默不认——第二份事实源",
+    apply: (s) => s.replace(`const code = certExitCode(outcome);`, `const code = tc.status === 0 && gateReds.length === 0 ? 0 : 1;`),
+    expectFail: "⑩ 退出码只有一条算式，且它调的是那份共用函数（不许留第二条 `&&` 串）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
