@@ -13988,7 +13988,96 @@ const MUTATIONS = [
     apply: (s) => s.replace(`import { caseIdOfTrace, TRACE_SUFFIX } from "./lib/failed-trace-keep";\n`, ""),
     expectFail: "留档文件交给 gym-draft：--out <目录> --apply ⇒ 草稿三件真落盘（闭环走通，不是打印一句话）",
   },
-];
+  /* 第 417 页（能力 7）：判卷面冻结闸的批量形态。原先只读 `args.path`，而 apply_patch 的路径躺在
+   * `args.patch` 正文里 ⇒ 同一张冻结表下 write_file 写不动判卷文件、apply_patch 写得动。
+   * 三根针各盯这一格的一个死法：不接（算出来不并）、只判第一条（第二位整笔溜过）、读不到折成读得到。 */
+  {
+    id: "judge-patch-targets-not-merged",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/judge-frozen-gate.test.ts",
+    desc: "算出来不接：补丁正文解析出的目标清单有了，返回的那格却不并入 ⇒ 批量目标对这条闸整条不可见"
+      + "（就是 2026-10-08 修掉的那个洞本身）。针脚只钉「合并」那一位，不钉整条分支——分支还在、值不接才是这格的形状",
+    apply: (s) => s.replace(`      targets: [...targets, ...parsed.targets],`, `      targets,`),
+    expectFail: "⑩ 多文件补丁里有一条命中冻结表 ⇒ deny，理由点名的就是那一条路径",
+  },
+  {
+    id: "judge-patch-second-target-not-judged",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/judge-frozen-gate.test.ts",
+    desc: "批量形态退回「只判第一条」⇒ 冻结文件排在补丁第二位就整笔落盘（多文件补丁正是绕过单路径取料的天然形状）。"
+      + "与上一根各红一条：那根摘料、这根截断循环，同一个 ⑩ 对两种死法都不分辨的话这格就是恒真",
+    apply: (s) => s.replace(`    for (const target of targets.targets) {`, `    for (const target of targets.targets.slice(0, 1)) {`),
+    expectFail: "⑫ 冻结文件排在补丁第二位（后面还有）与中间位 ⇒ 仍逐条判到它并 deny",
+  },
+  {
+    id: "judge-patch-unreadable-folds-to-safe",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/judge-frozen-gate.test.ts",
+    desc: "「读不到要写哪些文件」折成「要写的文件都安全」⇒ 畸形补丁不用交代目标就能写判卷面，"
+      + "等于给同一道绕过留第二道门。这一格摘掉后 ⑩／⑫ 照样绿（它们本来就走可读那条路），只有出声 deny 那两条红",
+    apply: (s) => s.replace(`    if (targets.unreadable) {`, `    if (false && targets.unreadable) {`),
+    expectFail: "⑬ 畸形补丁：读不出要写哪些文件 ⇒ 出声 deny，不许静默放行",
+  },
+  /* 第 418 页（能力 10）：逐名判卷的那位读者。它把「该转绿的没绿」与「该保住的坏了」从同一枚退出码里
+   * 分出来；三根针分别盯它的三种死法：噪音折进裁决（装了尺永远说不出话）、第三态折成过（没有尺读成没问题）、
+   * 接线取错拍（两枚读数在比两趟不同的事）。 */
+  {
+    id: "namedsets-noisy-command-folded-into-verdict",
+    src: "scripts/lib/eval-named-sets.ts",
+    test: "tests/eval-named-sets.test.ts",
+    desc: "取料编排把「没接住任何测试名」的命令也折进证据面 ⇒ 一拍里混了 lint／typecheck 的多命令靶子"
+      + "**恒判不可读**：这一格装了尺、却保证它永远说不出话（假阴），且它把真红一起抹掉",
+    apply: (s) => s.replace(`    const carried = parsed.tests.length > 0;`, `    const carried = true;`),
+    expectFail: "没接住测试名的命令（lint／噪音）不参与裁决，也不抹掉那条红",
+  },
+  {
+    id: "namedsets-unreadable-read-as-pass",
+    src: "scripts/lib/eval-named-sets.ts",
+    test: "tests/eval-named-sets.test.ts",
+    desc: "拦路谓词把第三态放行 ⇒ 「没有尺」在评分里长得和「过了」一模一样，"
+      + "而这一格买来的东西就是这两件事分列（SWE-bench 那两半的读法全压在这里）",
+    apply: (s) => s.replace(`  if (r.state === "pass") return null;`, `  if (r.state === "pass" || r.state === "unreadable") return null;`),
+    expectFail: "逐名全对上、结尾那行汇总没了 ⇒ unreadable，且不许算过",
+  },
+  {
+    id: "namedsets-wired-to-first-verify-beat",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-named-sets.test.ts",
+    desc: "接线取**第一拍**的逐名料 ⇒ 返修那一拍（真正决定结局的那一拍）从不进裁决，"
+      + "而 `verifyOkLast` 取的是最后一拍——两枚读数在比两趟不同的事，正是本仓点名的第 4 形态（用例在、口径不对）",
+    apply: (s) => s.replace(`verifies.length > 0 ? verifies[verifies.length - 1]!.results : []`, `verifies.length > 0 ? verifies[0]!.results : []`),
+    expectFail: "跑器调读者，且吃的是**最后一次** verify 拍的 results 与 `t.spec?.judge`",
+  },
+  /* 第 418 页自偿第 414—415 页那簇欠的三根（当时 `scripts/mutate-verify.mjs` 在别人手里在飞，
+   * 「尺与针脚同笔」交不出去，页上明写着欠）。三根各钉那簇的一种死法：数据层不产出规格、
+   * 字段登记表不收这一枚、第三态被蒙成绿。 */
+  {
+    id: "swebench-judge-face-not-emitted",
+    src: "src/agent/eval/task-set.ts",
+    test: "tests/eval-task-set.test.ts",
+    desc: "SWE-bench 构造路径不再产出 `judge` 两列 ⇒ 逐名规格整条断供：解析器与读者都还在、"
+      + "却永远收不到料，读数退回同一枚退出码（「没做」伪装成「做了但没触发」）",
+    apply: (s) => s.replace(`      judge: { failToPass, passToPass },\n`, ""),
+    expectFail: "合法一份：两列逐字落地，且与 verifier.command 各是各的（一个答退出码、一个答逐名）",
+  },
+  {
+    id: "task-fields-registry-drops-judge",
+    src: "src/agent/eval/task-set.ts",
+    test: "tests/eval-task-set.test.ts",
+    desc: "字段登记表不收 `judge` ⇒ 任务集文件里写了它却被判「认不出的字段」，而内建四格一条都不带它 ⇒ "
+      + "整批出不了数。与上一根各红一条：那根断产出、这根断装载（同一件事的两半，缺一半就没人知道）",
+    apply: (s) => s.replace(`"seed", "verifier", "heldOut", "judge", "expects"`, `"seed", "verifier", "heldOut", "expects"`),
+    expectFail: "PASS_TO_PASS 是空数组的一份：命令少一枚 id，judge.passToPass 也照实是空（不编一份保住清单出来）",
+  },
+  {
+    id: "namedsets-unmatched-folds-to-green",
+    src: "src/agent/eval/test-results.ts",
+    test: "tests/eval-test-results.test.ts",
+    desc: "规格里的名字在任何逐名结果里都对不上号时不落第三态 ⇒ 「压根没读到那条用例」被报成「读到了且是绿」，"
+      + "而 SWE-bench 那种跨框架名字口径（TAP 标题 vs python nodeid）正是最容易整批对不上的形状",
+    apply: (s) => s.replace(`  else if (unmatched.length > 0) {`, `  else if (false && unmatched.length > 0) {`),
+    expectFail: "名字对不上 ⇒ 逐一点名并落第三态，绝不算成绿",
+  },];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
  *  单双引号与反引号三种写法都认）。取不到不判红：含插值的模板字面量无法静态求值，
@@ -14797,36 +14886,6 @@ const unverifiedRows = [
     id: r.m.id,
     cls: typeof r.unloadable === "string" ? "judge-unloadable" : r.stopped === true ? "budget-stopped" : "judge-in-flight",
   })),
-  /* 第 417 页（能力 7）：判卷面冻结闸的批量形态。原先只读 `args.path`，而 apply_patch 的路径躺在
-   * `args.patch` 正文里 ⇒ 同一张冻结表下 write_file 写不动判卷文件、apply_patch 写得动。
-   * 三根针各盯这一格的一个死法：不接（算出来不并）、只判第一条（第二位整笔溜过）、读不到折成读得到。 */
-  {
-    id: "judge-patch-targets-not-merged",
-    src: "src/permissions/autonomy.ts",
-    test: "tests/judge-frozen-gate.test.ts",
-    desc: "算出来不接：补丁正文解析出的目标清单有了，返回的那格却不并入 ⇒ 批量目标对这条闸整条不可见"
-      + "（就是 2026-10-08 修掉的那个洞本身）。针脚只钉「合并」那一位，不钉整条分支——分支还在、值不接才是这格的形状",
-    apply: (s) => s.replace(`      targets: [...targets, ...parsed.targets],`, `      targets,`),
-    expectFail: "⑩ 多文件补丁里有一条命中冻结表 ⇒ deny，理由点名的就是那一条路径",
-  },
-  {
-    id: "judge-patch-second-target-not-judged",
-    src: "src/permissions/autonomy.ts",
-    test: "tests/judge-frozen-gate.test.ts",
-    desc: "批量形态退回「只判第一条」⇒ 冻结文件排在补丁第二位就整笔落盘（多文件补丁正是绕过单路径取料的天然形状）。"
-      + "与上一根各红一条：那根摘料、这根截断循环，同一个 ⑩ 对两种死法都不分辨的话这格就是恒真",
-    apply: (s) => s.replace(`    for (const target of targets.targets) {`, `    for (const target of targets.targets.slice(0, 1)) {`),
-    expectFail: "⑫ 冻结文件排在补丁第二位（后面还有）与中间位 ⇒ 仍逐条判到它并 deny",
-  },
-  {
-    id: "judge-patch-unreadable-folds-to-safe",
-    src: "src/permissions/autonomy.ts",
-    test: "tests/judge-frozen-gate.test.ts",
-    desc: "「读不到要写哪些文件」折成「要写的文件都安全」⇒ 畸形补丁不用交代目标就能写判卷面，"
-      + "等于给同一道绕过留第二道门。这一格摘掉后 ⑩／⑫ 照样绿（它们本来就走可读那条路），只有出声 deny 那两条红",
-    apply: (s) => s.replace(`    if (targets.unreadable) {`, `    if (false && targets.unreadable) {`),
-    expectFail: "⑬ 畸形补丁：读不出要写哪些文件 ⇒ 出声 deny，不许静默放行",
-  },
 ];
 const unv = unverifiedCell(unverifiedRows);
 const unverifiedTotal = unv.total;

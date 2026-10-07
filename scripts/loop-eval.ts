@@ -30,6 +30,10 @@ import { ClarifyGate, PlanGate } from "../src/agent/gates";
 // **未起步 / 被 provider 打断的趟次不许进分母**（限流打断不能记成"模型没做到"）。
 import { autoVerifyBeats, costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally, verifyBeatFace, verifyRecovery } from "./lib/eval-validity";
 import type { VerifyRecovery } from "./lib/eval-validity";
+// 逐名那一格的读者（第 416 页）：`TaskSpec.judge` 由数据层产出、`src/agent/eval/test-results` 负责解析与裁决，
+// 这里只把**最后一次 verify 拍**的原文交给它并把裁决带回读数。跑器不认格式、不拼 pytest 命令行。
+import { namedSetFailReason, readNamedSets, type NamedSetReading } from "./lib/eval-named-sets";
+import type { NamedSetState } from "../src/agent/eval/test-results";
 // 判据名 → 判定分支那张表（#35）：跑器只负责喂面，措辞与登记名由那份模块对齐。
 import { expectFailReason, type ExpectFace } from "./lib/eval-expects";
 // 重拨那一格：判据与分母共用同一个白名单（`providerInterruptOf`），等待有帽、帽外明说不重拨。
@@ -356,6 +360,13 @@ interface Reading {
   /** 红→绿那一格走到哪一步（六态；口径在 `lib/eval-validity.ts` 的 `verifyRecovery`）。
    *  与上面那两枚的区别：布尔只说"有没有第二拍"，这里说的是**那一拍算谁的账**。 */
   verifyRecovery: VerifyRecovery;
+  /** 逐名判卷那一格（第 415 页产出规格、这一页才有读者）。
+   *  `undefined` = 这条任务**没有** `judge` 规格（内建 I1…I4 全走这里 ⇒ 既有读数一列不动）；
+   *  有值 = 规格在、裁决三态之一。含义与上面三枚**互不替换**：`verifyOkLast` 答「最后一次拍子是不是
+   *  退出码 0」，这一格答「哪条该转绿的没绿、哪条该保住的坏了、哪些名字对不上」——
+   *  同一枚 1 在这两格里是两种说法，那正是 SWE-bench 要分的东西。
+   *  判据不在这儿：口径全在 `lib/eval-named-sets` ＋生产的 `parseTestResults`／`judgeNamedSets`。 */
+  namedSets?: NamedSetReading;
   wroteTests: boolean; touchedJudge: boolean; onlySrcChanged: boolean;
   /** held-out（隐藏验收）观测：装不上的错误清单 + 跑出来的结果。
    *  `heldOutRun` 为 undefined = 这一格没跑（任务集没给隐藏面，或文件没装齐）。
@@ -521,6 +532,11 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   const verifyCallIds = new Set(calls.filter((c) => c.name === "verify").map((c) => c.id));
   const beatFaces = verifies.map((v) => verifyBeatFace(v, verifyCallIds, HARNESS_VERIFY_CALL_ID));
   const recovery = verifyRecovery(beatFaces);
+  /* 逐名那一格的取料：**最后一次 verify 拍**的每条命令原文（与 `verifyOkLast` 同一拍——两枚读数若来自
+   *  不同拍子，就是在拿两趟不同的事互相对账）。规格只从 `t.spec?.judge` 来：数据层第 415 页已经把它
+   *  与那句 `python -m pytest` 同笔产出，这里再拼一遍命令行就是第二份会漂的账。
+   *  没有规格 ⇒ `undefined`（无面），与「有规格但读不出」（unreadable）分列，见 `lib/eval-named-sets` ⑶。 */
+  const namedSets = readNamedSets(verifies.length > 0 ? verifies[verifies.length - 1]!.results : [], t.spec?.judge);
   const writers = ev.map((e, i) => ({ e, i })).filter(({ e }) => e.type === "tool_call" && isWriter((e as Extract<AgentEvent, { type: "tool_call" }>).name));
   const firstWriterIndex = writers.length > 0 ? writers[0]!.i : -1;
   const readsBeforeFirstWrite = firstWriterIndex < 0 ? 0
@@ -628,6 +644,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
     verifyOkLast: verifies.length > 0 ? verifies[verifies.length - 1]!.ok : null,
     autoVerifyBeat: harnessBeats > 0, autoVerifyBeats: harnessBeats,
     verifyRecovery: recovery,
+    namedSets,
     wroteTests, touchedJudge, onlySrcChanged, changedFiles: changed, exitError, resources,
     heldOutInstallErrs, heldOutRun,
     assembly: ASSEMBLY_FACE,
@@ -649,6 +666,12 @@ function grade(r: Reading, t: EvalTask): { ok: boolean; fails: string[] } {
     const why = expectFailReason(e, face);
     if (why) fails.push(why);
   }
+  /* 逐名那一格**不走 `expects` 通道**：它的开口条件是「这条任务带不带 `judge` 规格」，
+   *  所以不必新增判据名（`EXPECT_NAMES` ↔ `EXPECT_HANDLERS` 那张键集表因此一格没动）。
+   *  `fail` 与 `unreadable` 都算没成立——后者是「没有尺」，把它读成过是这一格最贵的假绿；
+   *  `undefined`（无规格）一条都不加 ⇒ 内建四格的 fails 逐字不变。 */
+  const namedWhy = namedSetFailReason(r.namedSets);
+  if (namedWhy !== null) fails.push(namedWhy);
   if (r.exitError) fails.push("runLoop 抛错:" + r.exitError.slice(0, 60));
   return { ok: fails.length === 0, fails };
 }
@@ -670,6 +693,17 @@ const HELD_OUT_TOKEN: Record<HeldOutState, string> = {
   red: "红",
   green: "绿",
 };
+
+/** 逐名那一格的读数令牌：**按 `NamedSetState` 三态穷举投影**（加一态而表没跟上就该在判卷里红，
+ *  与上面那枚 held-out 令牌同一纪律）。第三态单独一枚是必须的：`unreadable` 与 `pass` 共用
+ *  「没报错」这张脸，就是本仓点名的「没有尺」被读成「没问题」。
+ *  第四种情况（这条任务根本没有规格）不在枚举里——它交下面那枚常量，别塞进状态枚举去改生产的语义。 */
+const NAMED_SET_TOKEN: Record<NamedSetState, string> = {
+  pass: "逐名全绿",
+  fail: "逐名有红",
+  unreadable: "逐名读不出",
+};
+const NO_NAMED_SET_TOKEN = "无逐名格";
 
 /** 内建条目的数据层视图（文件加载的条目自带 spec）。verifier 与 runVerifyOutcome 的缺省同形。 */
 const specOf = (t: EvalTask): TaskSpec => t.spec ?? {
@@ -706,6 +740,20 @@ function reportFeasibility(tasks: readonly EvalTask[]): void {
     console.log(`[feasibility] ${x.id.padEnd(26)} ${x.r.runnable ? "可跑" : "不可跑"}` +
       (x.r.blockers.length > 0 ? " ← " + x.r.blockers.join("；") : ""));
   }
+  /* 逐名那一格在零花费这条路上也要出声：它回答的是「这批任务除了退出码，有没有第二半尺」。
+   * 规格一律取数据层的 `specOf(t).judge`（同一个来源，两列语义仍归 `namedSetProblems` 管，这里只数条数）；
+   * 而「带规格」与「这一趟能读到逐名料」是两件事——外部条目本跑器不执行，那一句必须说在前面。 */
+  const judged = tasks.filter((t) => specOf(t).judge !== undefined);
+  const judgedExternal = judged.filter((t) => t.external).length;
+  const sumOf = (pick2: "failToPass" | "passToPass"): number =>
+    judged.reduce((s, t) => s + (specOf(t).judge?.[pick2].length ?? 0), 0);
+  console.log(`[feasibility] 逐名格：${String(judged.length)} / ${String(tasks.length)} 条带 judge 规格`
+    + `（FAIL_TO_PASS 合计 ${String(sumOf("failToPass"))} 条／PASS_TO_PASS 合计 ${String(sumOf("passToPass"))} 条）`
+    + (judged.length === 0
+      ? "⇒ 这一批**没有一条**有第二半尺 ⇒ 「该转绿的没绿」与「该保住的坏了」仍只在同一枚退出码上同形"
+      : judgedExternal === judged.length
+        ? `⇒ 跑器会在最后一次 verify 拍上按逐名裁决；但这 ${String(judgedExternal)} 条是外部基准条目 ⇒ 本跑器不执行它们，逐名面此刻只活在规格里、还没有料`
+        : "⇒ 跑器会在最后一次 verify 拍上按逐名裁决，两件事从此分列"));
   for (const [cmd, ok] of checked) {
     console.log(`[feasibility] 工具链自检 ${ok ? "✅" : "❌"} ${cmd}`);
   }
@@ -780,6 +828,7 @@ for (let rep = 1; rep <= REPS; rep++) {
       `[loop-eval] ${t.id} rep${String(rep)} ${verdict} 起点=${r.seedVerifyOk ? "绿" : "红"} `
       + `读先于写=${r.readsBeforeFirstWrite} clarify=${String(r.clarified)} 先批后写=${r.plannedBeforeWrite ? "Y" : "N"} `
       + `verify=${String(r.verified)}→${String(r.verifyOkLast)} 闸拍=${String(r.autoVerifyBeats)} 返修=${RECOVERY_TOKEN[r.verifyRecovery]} 隐藏=${HELD_OUT_TOKEN[judgeHeldOut(t.spec?.heldOut, r.heldOutRun, r.heldOutInstallErrs).state]} `
+      + `逐名=${r.namedSets === undefined ? NO_NAMED_SET_TOKEN : NAMED_SET_TOKEN[r.namedSets.state]} `
       + `工具=${String(r.toolCalls)}/${String(r.toolFailures)}败 `
       + `重复=${String(r.repeatedSameAction)} 请求=${String(r.requests)} 拨数=${String(r.attempts)} tok=${String(r.tokensIn)}/${String(r.tokensOut)} `
       + `${moneyText(r.cny)} ${String(Math.round(r.seconds))}s 内存峰=${String(r.resources.rssPeakMb)}MB/${String(r.resources.procPeak)}进程 cpu=${String(r.resources.cpuMs)}ms`
@@ -886,6 +935,17 @@ console.log(`[loop-eval] 闸补拍：合计 ${String(beatCounts.reduce((a, b) =>
     + `／闸补的绿 ${String(n("harnessOnly"))}／红没回 ${String(n("notRecovered"))}`
     + `／一次绿 ${String(n("greenFirst"))}／归属不可知 ${String(n("attributionUnknown"))}／没验 ${String(n("noVerify"))}`
     + `（共 ${String(states.length)} 趟）`);
+}
+/* 逐名那一格的分子：三态各数一次，**没规格的趟次单列**。
+ * 为什么要有这行而不只有逐格令牌：「这批一条都没判逐名」与「判了但全读不出」是两种修法
+ * （前者改任务集、后者改取料面），把它们并成一个 0 就没人知道该动哪一边。 */
+{
+  const faces = rows.map((x) => x.r.namedSets);
+  const withSpec = faces.filter((f): f is NamedSetReading => f !== undefined);
+  const n = (s: NamedSetState) => withSpec.filter((f) => f.state === s).length;
+  console.log(`[loop-eval] 逐名那一格：全绿 ${String(n("pass"))}`
+    + `／有红 ${String(n("fail"))}／读不出 ${String(n("unreadable"))}`
+    + `（有规格 ${String(withSpec.length)} 趟／无规格 ${String(faces.length - withSpec.length)} 趟）`);
 }
 console.log("[loop-eval] 读数写出 " + OUT + "/readings.json");
 /* 失败轨迹留档那一行**永远印**（一条都没留也印）：
