@@ -96,7 +96,10 @@ describe("接线那一半：head-cert 真去跑门、真把红的接进退出码
   it("跑门那一行、名单来源、退出码里的门红三项都在语句开头", () => {
     expect(line(/^[ \t]*const gr = run\(TREE, "node", \["--import", "tsx", "scripts\/gates\.ts", /mu), "认证门面没去 spawn gates.ts").not.toBeNull();
     expect(line(/^[ \t]*const face = certGatePlan\(gateSrc/mu), "名单没取自被认证的那一笔（会读成假完整）").not.toBeNull();
-    expect(line(/^[ \t]*const code = certifiable[\s\S]{0,200}&& gateReds\.length === 0/mu), "门红没接进退出码 ⇒ cert exit=0 又只剩判卷").not.toBeNull();
+    // 门红接进退出码这件事现在分两跳（第 426 页 #14）：调用点交进共用判决的输入，真源那一头必须用它。
+    expect(line(/^[ \t]*const code = certExitCode\(outcome\);/mu), "退出码没走那份共用判决 ⇒ cert exit 与门红可以并存").not.toBeNull();
+    expect(line(/^[ \t]*gateRedCount: gateReds\.length,/mu), "门红没交进判决输入 ⇒ cert exit=0 又只剩判卷").not.toBeNull();
+    expect(read("../scripts/lib/head-cert-provenance.ts"), "那份合取式不认 gateRedCount ⇒ 交进去也没用").toContain("if (o.gateRedCount > 0)");
   });
 
   it("把跑门那一行摘掉，上面那条接线证人就红（不是恒真正则）", () => {

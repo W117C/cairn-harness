@@ -7644,10 +7644,9 @@ const MUTATIONS = [
     src: "scripts/head-cert.ts",
     test: "tests/head-cert-deps.test.ts",
     desc: "只在汇总里印一行、不进退出码 ⇒ 进了门表也永远不会因为树被切走而红（「出声」不等于「闸住」，规则 210 那一族）",
-    apply: (s) => s.replace(
-      "dirtyCount === 0 && drift === null ? 0 : 1",
-      "dirtyCount === 0 ? 0 : 1",
-    ),
+    // 针脚随实现搬家（第 426 页 #14 把式子抽进 lib）：这一根改钉**调用点那一跳**——作废那一维没交进
+    // 共用判决的输入时，lib 那头写得再对也白对。lib 那一头由 cert-exit-code-drift-dim-dropped 各红一条。
+    apply: (s) => s.replace(`    treeDrifted: drift !== null,`, `    treeDrifted: false,`),
     expectFail: "作废必须改退出码：只印一行而门照绿 ⇒ 这道门永远不会因为树被切走而红",
   },
   // ── 第 156 页 · head-cert 的「并发判卷」读数：撞窗的红要门里就有归因方向
@@ -7744,10 +7743,7 @@ const MUTATIONS = [
     src: "scripts/head-cert.ts",
     test: "tests/head-cert-deps.test.ts",
     desc: "反向哨兵：把并发套数接进退出码 ⇒ 别的会话在跑就让门红，这道门从此是共享树上的随机红（本笔的裁决是「只出声、不闸住」，改判要连着改这一条）",
-    apply: (s) => s.replace(
-      "dirtyCount === 0 && drift === null ? 0 : 1",
-      "dirtyCount === 0 && drift === null && psBefore === 0 ? 0 : 1",
-    ),
+    apply: (s) => s.replace(`const code = certExitCode(outcome);`, `const code = certExitCode(outcome) === 0 && psBefore === 0 ? 0 : 1;`),
     expectFail: "反向哨兵：并发套数刻意**不进退出码**（别的会话在跑不是我这笔代码错，接进去＝共享树上的随机红）",
   },
   // ── 第 159 页 · head-cert 的未知开关：拼错一次就会去认证另一棵树

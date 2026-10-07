@@ -332,7 +332,11 @@ describe("接线：认证流程真的做收尾复核，且它进得了退出码"
   });
 
   it("作废必须改退出码：只印一行而门照绿 ⇒ 这道门永远不会因为树被切走而红", () => {
-    expect(src).toContain("dirtyCount === 0 && drift === null ? 0 : 1");
+    // 判决从内联式搬进 `certExitCode`（第 426 页 #14），所以这一条改问两头：调用点有没有把作废那一维交进
+    // 共用判决的输入、那份真源有没有用它。只查一头就会「搬了实现、判据跟着瞎」（规则 229／410 那一族）。
+    expect(src, "调用点没把 drift 交进判决输入 ⇒ 作废那一维从退出码里消失").toContain("treeDrifted: drift !== null,");
+    const driftLibSrc = readFileSync(join(repoRoot, "scripts", "lib", "head-cert-provenance.ts"), "utf8");
+    expect(driftLibSrc, "那份合取式不认 treeDrifted ⇒ 只印一行、门照绿").toContain("!o.treeDrifted ? 0 : 1");
   });
 
   it("复核发生在判卷之后（切树时那次管不到这 90 秒）", () => {
@@ -469,7 +473,12 @@ describe("接线：认证流程真的两端各采一次，且这格进得了汇�
     // 不按 `process.exit(` 那一行——整行式针脚的脆法（规则 229）这次轮到自己挨：改的是结构，判据跟着走。
     const formula = src.split("\n").find((l) => l.startsWith("const code = ")) ?? "";
     expect(formula, "找不到退出码的式子＝这条反向哨兵从此恒真地通过").not.toBe("");
-    expect(formula).toContain("drift === null");
+    // 式子搬成一次共用判决调用，所以这里问「调的是那份真源」，不再问式子里有哪些 `&&`。
+    expect(formula, "退出码没走那份共用判决＝读数与判决各算一遍").toContain("certExitCode(outcome)");
+    const atOut = src.indexOf("const outcome: CertOutcome = {");
+    expect(atOut, "找不到判决输入那一块＝这条反向哨兵同样恒真地通过").toBeGreaterThan(-1);
+    const outcomeBlock = src.slice(atOut, src.indexOf("};", atOut));
+    expect(outcomeBlock, "把并发套数接进判决输入＝这道门从此看别人脸色").not.toMatch(/ps(Before|After)/);
     expect(formula, "把并发接进退出码＝这道门从此看别人脸色").not.toMatch(/ps(Before|After)/);
     expect(src, "式子算出来却不交给 process.exit＝退出码是摆设").toContain("\nprocess.exit(code);");
   });
