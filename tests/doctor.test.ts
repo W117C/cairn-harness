@@ -13,6 +13,7 @@ import {
   parseEngines,
   renderDoctor,
   runDoctor,
+  trustCountsText,
   trustFaceCheck,
   verdictOf,
   type DoctorCheck,
@@ -52,14 +53,17 @@ const TIER_COUNTS = {
   strong: specsByTier(DEFAULT_MODEL_TABLE, "strong").length,
 };
 
-/** 信任落点的「一切正常」基线：目录在、0755、表读得出且有条目。其余用例都从这一格改一维。 */
+/** 信任落点的「一切正常」基线：目录在、0755、表读得出且有条目。其余用例都从这一格改一维。
+ *  条数单独立一份（`TRUST_ENTRIES`）：断言要用的是生产那句的**拼法函数** `trustCountsText`，
+ *  把整串抄进判卷就成了顶包候选（这句横跨生产侧好几个字面量，改哪一个都不响）。 */
+const TRUST_ENTRIES = { trusted: 2, declined: 1 };
 const TRUST_OK: TrustFaceFacts = {
   root: "/fixture/home/.config/cairn/plugin-data",
   source: "default",
   dirState: "ok",
   dirMode: 0o755,
   storeState: "ok",
-  entries: { trusted: 2, declined: 1 },
+  entries: TRUST_ENTRIES,
 };
 
 function trust(over: Partial<TrustFaceFacts> = {}): TrustFaceFacts {
@@ -155,13 +159,13 @@ describe("trustFaceCheck（第七项：落点／权限位／条数，两处「�
     expect(c.fatal).toBe(false);
     expect(c.hint).toBeUndefined();
     expect(c.detail).toContain(TRUST_OK.root);
-    expect(c.detail).toContain("来路 缺省");
+    expect(c.detail).toContain("取址来自用户级缺省落点");
     expect(c.detail).toContain("权限 0755");
-    expect(c.detail).toContain("已信任 2 条／已拒绝 1 条");
+    expect(c.detail).toContain(trustCountsText(TRUST_ENTRIES.trusted, TRUST_ENTRIES.declined));
   });
 
-  it("env 给的落点要说明来路（缺省与 env 两种成因不许报成同一句）", () => {
-    expect(trustFaceCheck(trust({ source: "env" })).detail).toContain("来路 env M2E_PLUGIN_DATA");
+  it("env 给的落点要说明取址来路（缺省与 env 两种成因不许报成同一句）", () => {
+    expect(trustFaceCheck(trust({ source: "env" })).detail).toContain("取址来自 env M2E_PLUGIN_DATA");
     expect(trustFaceCheck(trust()).detail).not.toContain("M2E_PLUGIN_DATA");
   });
 
@@ -292,12 +296,15 @@ describe("runDoctor × 信任落点（真盘上的四种温度，判卷不赌本
   it("表里有决议 ⇒ 如实报条数，且报的是 env 给的那个落点（不是 home 下拼出来的第二个）", async () => {
     const root = mkdtempSync(join(tmpdir(), "doctor-trust-"));
     try {
-      writeFileSync(join(root, "plugin-trust.json"), JSON.stringify({ trusted: ["/a@f", "/b@f"], declined: ["/c@f"] }));
+      writeFileSync(
+        join(root, "plugin-trust.json"),
+        JSON.stringify({ trusted: ["/a@f", "/b@f", "/c@f"], declined: ["/d@f", "/e@f"] }),
+      );
       const t = await doctorTrust(root);
       expect(t.ok).toBe(true);
       expect(t.detail).toContain(root);
-      expect(t.detail).toContain("来路 env M2E_PLUGIN_DATA");
-      expect(t.detail).toContain("已信任 2 条／已拒绝 1 条");
+      expect(t.detail).toContain("取址来自 env M2E_PLUGIN_DATA");
+      expect(t.detail).toContain(trustCountsText(3, 2));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -360,7 +367,9 @@ describe("runDoctor × 信任落点（真盘上的四种温度，判卷不赌本
 
 describe("装配面（第七格的两半同笔：接进事实 ＋ 接进对账面；落点与表名都只有一份来源）", () => {
   const src = readFileSync(fileURLToPath(new URL("../src/main/doctor.ts", import.meta.url)), "utf8");
-  const io = src.slice(src.indexOf("async function readTrustFace"), src.indexOf("/** IO 壳"));
+  // 边界用**代码标识**（函数声明本身），不用注释文字：注释是可以说改就改的，
+  // 而切片判卷把边界钉在注释上＝改一句注释就把判卷的取料面悄悄挪走（assertion-health 那条棘轮）。
+  const io = src.slice(src.indexOf("async function readTrustFace"), src.indexOf("export async function runDoctor"));
 
   it("纯核里 trustFaceCheck 被 push 恰好一条，且吃的是 f.trust（算出来不接＝这一格永不生效）", () => {
     const lines = src.split("\n").filter((l) => /^\s*checks\.push\(trustFaceCheck/.test(l));

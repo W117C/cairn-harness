@@ -21,6 +21,10 @@
 | `storeState` | `ok` / `absent` / `unreadable` | 坏 JSON 与 0 字节都算 unreadable；不存在才算 absent |
 | `entries` | `{trusted, declined}` / `null` | 只从 `storeState === "ok"` 那条分支取长度 |
 
+报告里那一句的拼法由 `trustCountsText(trusted, declined)` 给出并**导出**，判卷用它拼期望串。
+（第 433 页补：判卷原先直接抄整串「已信任 2 条／已拒绝 1 条」，被 `prose-needle-scan` 判成顶包候选——
+那句横跨生产侧多个字面量，改哪一个都不响。）
+
 纯核另有一格「状态与条数不自洽」（state 说 ok 却没给数、说 absent 却给了数）⇒ 也判红：
 那种输入只可能是取料面写错，读成「干净」就是拿没尺当没问题。`fatal` 仍只留给 node 那一项。
 

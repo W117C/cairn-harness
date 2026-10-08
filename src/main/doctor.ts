@@ -91,6 +91,12 @@ export function nodeVersionOk(nodeVersion: string, range: ReturnType<typeof pars
   return cmpTriple(t, range.min) >= 0 && t[0] < range.maxExclusiveMajor;
 }
 
+/** 条数那一句的**唯一拼法**（导出的理由：判卷要钉「报告里有这两数」，但不许自己再抄一遍生产文案——
+ *  抄来的整串横跨生产侧好几个字面量，改动其中任一个都不会响，正是本仓的顶包候选那一格）。 */
+export function trustCountsText(trusted: number, declined: number): string {
+  return "信任表 已信任 " + trusted + " 条／已拒绝 " + declined + " 条";
+}
+
 /** 信任落点的纯核。判序：目录读不出 → 目录世界可写 → 表读不出 → 报数。
  *  「世界可写」为什么要单独出声：数据根从前落在 `<os.tmpdir()>/m2e-plugin-data`（第 424 页搬走的那个洞——
  *  任何本机用户都能在那儿预建 `plugin-trust.json`，把自己的条目写成已信任）。搬进用户级配置目录后
@@ -99,13 +105,13 @@ export function nodeVersionOk(nodeVersion: string, range: ReturnType<typeof pars
  *  状态与条数不自洽（state 说 ok 却没给数、说 absent 却给了数）也算病：那种输入只可能是取料面写错了，
  *  读成「干净」就是把没尺报成没问题。 */
 export function trustFaceCheck(t: TrustFaceFacts): DoctorCheck {
-  const origin = t.source === "env" ? "env M2E_PLUGIN_DATA" : "缺省";
+  const origin = t.source === "env" ? "取址来自 env M2E_PLUGIN_DATA" : "取址来自用户级缺省落点";
   const mode = t.dirMode === null ? "权限读不出" : "权限 " + t.dirMode.toString(8).padStart(4, "0");
-  const where = "插件数据根 " + t.root + "（来路 " + origin + "，" + mode + "）";
+  const where = "插件数据根 " + t.root + "（" + origin + "，" + mode + "）";
   const worldWritable = t.dirMode !== null && (t.dirMode & 0o002) !== 0;
   const store =
     t.storeState === "ok" && t.entries !== null
-      ? { text: "信任表 已信任 " + t.entries.trusted + " 条／已拒绝 " + t.entries.declined + " 条", ok: true }
+      ? { text: trustCountsText(t.entries.trusted, t.entries.declined), ok: true }
       : t.storeState === "unreadable"
         ? { text: "信任表读不出（这不等于「已信任 0 条」）", ok: false }
         : t.storeState === "absent" && t.entries === null
@@ -117,7 +123,7 @@ export function trustFaceCheck(t: TrustFaceFacts): DoctorCheck {
       ok: false,
       fatal: false,
       detail: where + "——目录读不出，权限位与信任表都无从判断",
-      hint: "检查这一格的来路（" + origin + "），或把数据根指回可读的位置",
+      hint: "读不出的是数据根本身：用 M2E_PLUGIN_DATA 指到一个可读目录，或把它的权限修好",
     };
   }
   if (t.dirState === "absent") {
