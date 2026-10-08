@@ -70,6 +70,9 @@ export {
 export interface PluginRuntimeOptions {
   userPluginsDir?: string;
   projectPluginsDir?: string;
+  /** 项目级 skill 根（缺省 = `<workspace>/.agent/skills`，见 `projectSkillsRootOf`）。
+   *  显式给空串＝关掉这一顶根（判卷与「只想看别的根」的脚本用）。 */
+  projectSkillsDir?: string;
   looseRoots?: string[];
   workspace: string;
   /** 插件数据根（PLUGIN_DATA / 超限落盘）。 */
@@ -113,6 +116,15 @@ export function defaultPluginDataRoot(home: string): string {
 export function pluginDataRootOf(env: NodeJS.ProcessEnv, home: string): string {
   const explicit = env.M2E_PLUGIN_DATA;
   return explicit ? explicit : defaultPluginDataRoot(home);
+}
+
+/** 项目级 skill 根的唯一算法（第 438 页）。从前本仓只扫 `<ws>/.agent/plugins`，
+ *  于是摆在 `.agent/skills` 的 skill **既列不出也批不了**（「装了但看不见」）：
+ *  想让某个项目 skill 生效只剩一条路＝把它塞进 `M2E_LOOSE_SKILLS`，而那一顶是恒 trusted 的
+ *  ——等于为了可用性绕开信任门。路径住这里（装配面与 `--plugins` 共用），不在调用方各拼一遍。 */
+export const PROJECT_SKILLS_DIR_SEGMENTS = [".agent", "skills"] as const;
+export function projectSkillsRootOf(workspace: string): string {
+  return join(workspace, ...PROJECT_SKILLS_DIR_SEGMENTS);
 }
 
 /** skill 激活投影：tool_call(name="skill") → 同 callId 的 tool_result 事件 id（1-based 行号）；
@@ -213,6 +225,8 @@ export class PluginRuntime {
     const manifest = await discoverPlugins({
       ...(opts.userPluginsDir ? { userPluginsDir: opts.userPluginsDir } : {}),
       ...(opts.projectPluginsDir ? { projectPluginsDir: opts.projectPluginsDir } : {}),
+      // 缺省取装配面那个唯一算法（不在调用方拼路径）；显式空串＝关掉这一顶（`??` 不把 "" 当没给）。
+      projectSkillsDir: opts.projectSkillsDir ?? projectSkillsRootOf(opts.workspace),
       ...(opts.looseRoots ? { looseRoots: opts.looseRoots } : {}),
       trustStatus: (abs, fp, bounded) => trust.statusSync(abs, fp, bounded),
     });

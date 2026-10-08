@@ -2706,8 +2706,10 @@ export async function currentWorkspace(): Promise<string> {
   return conf ?? WORKSPACE;
 }
 
-/** M2e run 装配与 M2g 运行间隙决议共用的插件运行时配置（信任文件路径的单一事实源在 PluginRuntime.load）。 */
-function pluginRuntimeOpts(workspace: string): Omit<Parameters<typeof PluginRuntime.load>[0], "mode"> {
+/** M2e run 装配与 M2g 运行间隙决议共用的插件运行时配置（信任文件路径的单一事实源在 PluginRuntime.load）。
+ *  导出（第 438 页）是因为 `cairn --plugins` 也吃这一批根：CLI 若自己再拼一遍 env 与路径，
+ *  它列出来的面可以和一次真 run 扫到的面不同——那正是「照着列表去批准」这条路最坏的失效。 */
+export function pluginRuntimeOpts(workspace: string): Omit<Parameters<typeof PluginRuntime.load>[0], "mode"> {
   return {
     ...(process.env.M2E_USER_PLUGINS ? { userPluginsDir: process.env.M2E_USER_PLUGINS } : {}),
     projectPluginsDir: join(workspace, ".agent", "plugins"),

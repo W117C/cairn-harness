@@ -44,6 +44,7 @@ import {
   handlePlanDecide,
   handleRunCancel,
   initSandbox,
+  pluginRuntimeOpts,
   serveScheduler,
   setAppHooks,
 } from "./main/agent-runner";
@@ -52,6 +53,10 @@ import { initSettingsStore } from "./main/settings-handlers";
 import { isValidSessionName, pathOf } from "./main/sessions";
 import type { SandboxStatus } from "./main/sandbox";
 import { renderDoctor, runDoctor } from "./main/doctor";
+import { PluginRuntime, pendingPlugins, trustFilePathOf } from "./agent/plugins";
+import {
+  pluginDecideText, pluginFaceRows, pluginFaceText, readTrustCountsFile, type PluginCliRequest,
+} from "./main/plugin-cli-face";
 import { providerKindFromEnv, resolveMainModel, type MainModelSelection } from "./main/provider-runtime";
 import type { ProviderKind } from "./main/settings";
 import { envKeyOf } from "./providers/env-keys";
@@ -241,6 +246,9 @@ interface Options {
   autoVerify: boolean;
   /** M4 路线图：`--serve` 常驻调度模式（调度器真入口；不跑单次会话）。 */
   serve: boolean;
+  /** `--plugins`／`--trust-plugin`／`--decline-plugin`：插件与 skill 的发现面及其信任决议。
+   *  三条都不跑模型、不落会话；`null` = 一枚都没给（普通任务那一路）。 */
+  plugins: PluginCliRequest | null;
 }
 
 function parseArgs(): Options | "help" | "version" | "doctor" {
@@ -261,6 +269,9 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
   const VALUE_FLAGS = [
     "--mode", "--provider", "--model", "--ctx-window", "--workspace", "--message", "--log",
     "--session", "--goal", "--max-turns", "--max-usd", "--replay", "--fork", "--from",
+    // 取值型旗标：名字不进这张表就会被当位置参数，于是 `cairn --trust-plugin graphflow`
+    // 读成「工作区 = graphflow、任务 = 空」——批准错对象比拒了更坏。
+    "--trust-plugin", "--decline-plugin",
   ];
   const positional = argv.filter((a, i) => !a.startsWith("--") && !VALUE_FLAGS.includes(argv[i - 1] ?? ""));
   if (positional.length > 2) {
@@ -273,10 +284,34 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
   const workspaceArg = flagWorkspace ?? (positional.length === 2 ? positional[0]! : process.cwd());
   const compact = argv.includes("--compact");
   const message = pick("--message") ?? (positional.length === 2 ? positional[1] : positional[0]);
+
+  // ---- 第 438 页：插件／skill 的发现面与信任决议（`--plugins`、`--trust-plugin`、`--decline-plugin`）----
+  // 决议入口必须住在 CLI 这一面：项目作用域的样本（含 `.agent/skills` 那顶根）默认是 pending，
+  // 而此前只有桌面面板能批——没有这一条，「扫得到」就等于「批不了」，
+  // 唯一的绕行是把目录塞进恒 trusted 的 M2E_LOOSE_SKILLS，那是为了可用而拆信任门。
+  const trustFlag = pick("--trust-plugin");
+  const declineFlag = pick("--decline-plugin");
+  if (trustFlag !== null && declineFlag !== null) {
+    throw new UsageError("--trust-plugin 与 --decline-plugin 只能给一枚：批准与拒绝是相反的决议，不该让后一枚悄悄赢");
+  }
+  const plugins: PluginCliRequest | null =
+    trustFlag !== null
+      ? { mode: "decide", name: trustFlag, trusted: true }
+      : declineFlag !== null
+        ? { mode: "decide", name: declineFlag, trusted: false }
+        : argv.includes("--plugins")
+          ? { mode: "list" }
+          : null;
+  if (plugins !== null && message !== undefined && message !== "") {
+    // 三条都是「看面／记决议」，不是「跑任务」。带着任务描述时**必须拒**：
+    // 让插件面抢跑就是把用户的任务悄悄吃掉，而退码还是 0。
+    throw new UsageError(`插件那三条旗标不跑任务：带了任务描述「${message}」⇒ 去掉它，或去掉插件旗标`);
+  }
+
   // `--replay` 也免给任务（它只读日志）——但复用它自己的 pick 会让「--replay 缺值」在这里
   // 先撞成一句含混的用法错；用 argv.includes 放行、把缺值留给下面那处 pick 去点名。
-  if ((message === undefined || message === "") && !compact && !argv.includes("--replay")) {
-    throw new UsageError("需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）");
+  if ((message === undefined || message === "") && !compact && !argv.includes("--replay") && plugins === null) {
+    throw new UsageError("需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay / 插件那三条不用给）");
   }
 
   // provider 的三个原始 flag **只收不解析**：解析推迟到 main() 里 replay 分支之后。
@@ -399,6 +434,7 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
     unattended,
     autoVerify: argv.includes("--auto-verify"),
     serve: argv.includes("--serve"),
+    plugins,
   };
 }
 
@@ -917,6 +953,10 @@ function printHelp(): void {
   --auto-verify        收束前补一拍验证（模型没自调 verify 时）
   --version            打印版本（cairn <version>）后退出
   --doctor             环境自检（Node/凭据在位/沙箱/工作区可写；不回显密钥值）后退出
+  --plugins            列出插件与 skill 的发现面（扫了哪几顶根、每支的信任状态、信任表在哪）后退出
+  --trust-plugin <名>  批准上面列出的那一条（决议按「绝对路径@内容指纹」记账，内容改了要重批）
+  --decline-plugin <名> 拒绝它；与 --trust-plugin 同时给 = 用法错，不让后一枚悄悄赢
+                       三条都不跑模型、不落会话，也不要求 CAIRN_API_KEY
   -h, --help           本帮助
 
 退出码：0 成功 / 1 跑完但失败 / 2 用法错
@@ -925,6 +965,35 @@ provider 的 key 从环境变量读（见 README）。缺 key 会明确报错退
 --log 把日志写到任意路径，代价是这条 run 不再是会话（目标挂不上去、既有会话也接不上），
 所以它与 --goal / --session 互斥。
 `);
+}
+
+/** `--plugins` 那一拍的取料层。两条不许漂的地方：扫面用的配置＝一次真 run 用的那一份
+ *  （`pluginRuntimeOpts`，不在这里重拼 env 与路径），决议出口＝`PluginRuntime.trustDecide`
+ *  （桌面面板点批准走的是同一个方法，本文件不碰 `TrustStore`）。文字全部由纯函数产，见 face 模块。 */
+async function runPluginFace(req: PluginCliRequest, workspace: string): Promise<number> {
+  const runtimeOpts = pluginRuntimeOpts(workspace);
+  const rt = await PluginRuntime.load(runtimeOpts);
+  try {
+    const rows = pluginFaceRows(rt.manifest);
+    const trustFile = trustFilePathOf(runtimeOpts);
+    const trust = await readTrustCountsFile(trustFile);
+    if (req.mode === "list") {
+      process.stdout.write(pluginFaceText({
+        workspace,
+        roots: rt.manifest.roots ?? null,
+        rows,
+        pending: pendingPlugins(rt.manifest).length,
+        trustFile,
+        trust,
+      }));
+      return EXIT_OK;
+    }
+    const ok = await rt.trustDecide(req.name, req.trusted);
+    process.stdout.write(pluginDecideText(req.name, req.trusted, ok, rows));
+    return ok ? EXIT_OK : EXIT_FAILED;
+  } finally {
+    await rt.shutdown().catch(() => {});
+  }
 }
 
 async function main(): Promise<number> {
@@ -958,6 +1027,11 @@ async function main(): Promise<number> {
     process.stdout.write(renderDoctor(report));
     return report.exitCode;
   }
+
+  // ---- 第 438 页：`--plugins` 列发现面／`--trust-plugin`、`--decline-plugin` 落一条信任决议 ----
+  // 与 --doctor 同族：不跑模型、不起沙箱、不落会话，所以排在 provider 解析之前（没配 key 的机器
+  // 也要能看面、能决议——读路径被无关闸门挡住是这一族反复栽的那格）。
+  if (opts.plugins !== null) return await runPluginFace(opts.plugins, opts.workspace);
 
   // ---- M8：`--replay` 只读日志打决策链（不搭壳、不起沙箱、不跑模型）----
   if (opts.replayId !== null) {

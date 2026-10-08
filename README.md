@@ -25,6 +25,9 @@ git clone <this-repo> && cd cairn-harness
 ./scripts/install.sh        # 按 package.json 的 engines 判 Node 版本；pnpm 在则 pnpm install，否则 npm install
 ./bin/cairn.mjs --doctor    # 环境自检：Node / 凭据在位 / 沙箱 / 工作区可写（不回显密钥值）
 ./bin/cairn.mjs --version   # 打印版本（cairn <version>）
+./bin/cairn.mjs --plugins   # 插件与 skill 的发现面：扫了哪几顶根、每支的信任状态、信任表落在哪
+./bin/cairn.mjs --trust-plugin <名称>    # 批准其中一条（项目作用域的样本默认待信任；决议绑「绝对路径@内容指纹」）
+./bin/cairn.mjs --decline-plugin <名称>  # 拒绝它。三条都不跑模型、不落会话、不需要 API key
 ```
 
 版本与受众裁决见 `docs/adr/0002-v1-audience-b1-internal-beta.md`（B1 内测先行，交付面只做 CLI；

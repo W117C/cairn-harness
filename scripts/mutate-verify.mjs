@@ -14290,6 +14290,75 @@ const MUTATIONS = [
     apply: (s) => s.replace(`process.exit(shapeBlocking.length > 0 ? 1 : 0);`, `process.exit(0);`),
     expectFail: "CLI 那一面：一处取料＋一处判据，退码接的是阻断数（不是恒 0）",
   },
+  // ---- 第 438 页：CLI 上的插件/skill 发现面与信任决议（#7 的 ②＋①）----
+  {
+    id: "plugin-cli-decide-failure-reads-approved",
+    src: "src/main/plugin-cli-face.ts",
+    test: "tests/plugin-cli-face.test.ts",
+    desc: "决议没落地却报「已批准」——人以为自己批过了，下一次装载照样出卡，这是最难查的那种不一致",
+    apply: (s) => s.replace("  if (!ok) {", "  if (false) {"),
+    expectFail: "决议没落地就绝不说「已批准」/「已拒绝」",
+  },
+  {
+    id: "plugin-cli-unreadable-trust-state-folded",
+    src: "src/main/plugin-cli-face.ts",
+    test: "tests/plugin-cli-face.test.ts",
+    desc: "「表读不出」与「表还没写」两档互换 ⇒ 坏文件被报成没事，没写的被报成有病",
+    apply: (s) => s.replace(`ctx.trust.state === "absent"`, `ctx.trust.state === "unreadable"`),
+    expectFail: "没写过表 ≠ 读不出表：后者明说不给条数",
+  },
+  {
+    id: "plugin-cli-absent-trust-file-folds-to-zero",
+    src: "src/main/plugin-cli-face.ts",
+    test: "tests/plugin-cli-face.test.ts",
+    desc: "取不到文件就回「已信任 0 条」＝把「没尺」印成「干净」（本仓点名的第三态折成一态那一族）",
+    apply: (s) => s.replace(
+      `    if (code === "ENOENT" || code === "ENOTDIR") return { state: "absent" };`,
+      `    return { state: "ok", trusted: 0, declined: 0 };`,
+    ),
+    expectFail: "文件不在 = absent",
+  },
+  {
+    id: "project-skills-root-bypasses-trust-gate",
+    src: "src/agent/plugins/discover.ts",
+    test: "tests/plugin-cli-face.test.ts",
+    desc: "新根若按恒 trusted 扫，克隆仓库放一支 SKILL.md 就免审批直进 system prompt（E3 那条边界作废）",
+    apply: (s) => s.replace(
+      `scanScopeRoot(opts.projectSkillsDir, "project", trustOf)`,
+      `scanScopeRoot(opts.projectSkillsDir, "project", () => "trusted")`,
+    ),
+    expectFail: "缺省就扫 <ws>/.agent/skills，且首次装载是 pending（不是免信任溜进来）",
+  },
+  {
+    id: "plugin-cli-face-rebuilds-runtime-opts",
+    src: "src/cli.ts",
+    test: "tests/plugin-cli-face.test.ts",
+    desc: "CLI 自己拼一份运行时配置 ⇒ 它列出的面与一次真 run 扫到的面可以不是同一份，照着列表批准就是批准错对象",
+    apply: (s) => s.replace(
+      "  const runtimeOpts = pluginRuntimeOpts(workspace);",
+      '  const runtimeOpts = { workspace, pluginDataRoot: "/tmp/dsh-anchor-438" };',
+    ),
+    expectFail: "扫面吃装配面那一份配置：取来的 opts 既喂 load 也喂信任表路径（不是各拼一遍）",
+  },
+  {
+    id: "plugin-cli-decide-name-counted-as-positional",
+    src: "src/cli.ts",
+    test: "tests/plugin-cli-face.test.ts",
+    desc: "取值型旗标表漏了这两枚 ⇒ `--trust-plugin demo` 把 demo 读成任务描述，决议落错地方还报成功",
+    apply: (s) => s.replace(`    "--trust-plugin", "--decline-plugin",\n`, ""),
+    expectFail: "批准后信任表里那条是「绝对路径@内容指纹」，再列一次就成了 trusted",
+  },
+  {
+    id: "plugin-cli-task-message-swallowed",
+    src: "src/cli.ts",
+    test: "tests/plugin-cli-face.test.ts",
+    desc: "插件面抢跑而不拒任务描述 ⇒ 用户交代的任务没跑、退码还是 0（静默吞任务）",
+    apply: (s) => s.replace(
+      '  if (plugins !== null && message !== undefined && message !== "") {',
+      "  if (false) {",
+    ),
+    expectFail: "带着任务描述就拒跑（退 2）——不能让插件面抢跑把任务悄悄吃掉还报 0",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

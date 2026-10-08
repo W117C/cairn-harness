@@ -1,6 +1,8 @@
 // M2e：容器发现（§9.1–9.2）。三级作用域扫描：
 //   user    = <appData>/plugins/ 下每个子目录（容器或散装 skill）
 //   project = <workspace>/.agent/plugins/（首次加载出信任卡）
+//   project = <workspace>/.agent/skills/（同一道信任门；第 438 页之前这一顶**根本不被扫**，
+//             摆在里面的 skill 既列不出也批不了，只剩「塞进恒 trusted 的 looseRoots」一条路）
 //   loose   = 显式给出的散装 skill 根（foo/SKILL.md 无 manifest = 独立 skill，免包装加载）
 // 会话启动静态扫描产「加载清单」（不新增事件类型）；单插件失败隔离：坏 manifest/坏 hook JSON
 // 只影响自身（errors 聚合 + 面板报错），其余照常。
@@ -12,7 +14,7 @@ import { parsePluginManifest, parseHooksFile, detectJsEntry, PluginLoadError } f
 import { parseHookIf } from "./hooks";
 import { LSP_SERVER_FIELDS } from "./types";
 import type {
-  DiscoveredPlugin, LooseSkill, PluginScope, PluginsManifest, SkillEntry, PromptCommandEntry,
+  DiscoveredPlugin, LooseSkill, PluginScanRoots, PluginScope, PluginsManifest, SkillEntry, PromptCommandEntry,
   AgentRoleEntry, LoadedHookDef, HookEventName, HookMatcherDef, LspConfigFile, LspServerConfig,
 } from "./types";
 
@@ -61,7 +63,7 @@ async function scanScopeRoot(
       // 显式 looseRoots 与用户级安装（两处的 trustOf 恒 trusted）。
       const { fp, bounded } = await pluginFingerprintEx(abs);
       const entry = await loadSkillEntry(null, name, abs);
-      if (entry) loose.push({ name, root: abs, entry, trust: trustOf(abs, fp, bounded) });
+      if (entry) loose.push({ name, root: abs, entry, trust: trustOf(abs, fp, bounded), scope });
     }
   }
   return { plugins, loose, errors, warnings };
@@ -260,6 +262,11 @@ export interface DiscoverOptions {
   userPluginsDir?: string;
   /** 项目级 <workspace>/.agent/plugins/。 */
   projectPluginsDir?: string;
+  /** 项目级 <workspace>/.agent/skills/（第 438 页）。与 `looseRoots` 的**唯一**区别是走不走信任门：
+   *  这一顶按 `project` 作用域扫，散装 skill 同样过门（E3：description 直进 system prompt = 注入面，
+   *  克隆一个仓库放进来不许免审批）；`looseRoots` 是人显式指定的免信任目录，恒 trusted。
+   *  从前只有 `looseRoots` 一条口 ⇒ 项目里的 skill 既列不出也无法决议，只能靠 env 绕过信任门。 */
+  projectSkillsDir?: string;
   /** 散装 skill 根（目录下每个含 SKILL.md 的子目录 = 独立 skill）。 */
   looseRoots?: string[];
   /** 项目级插件信任决议源（缺省全部 pending）。H3-P5（E-10）：附带插件内容指纹（abs@fp 绑定）。
@@ -274,6 +281,14 @@ export async function discoverPlugins(opts: DiscoverOptions): Promise<PluginsMan
   const looseSkills: LooseSkill[] = [];
   const errors: PluginsManifest["errors"] = [];
   const warnings: PluginsManifest["warnings"] = [];
+  // 每一顶**真的扫了**才记路径，没给／空串记 null。取的是下面四个 if 同一批变量，不是另算一遍
+  // ——「扫了哪些根」与「扫到了什么」必须出自同一个决策点（第 438 页，`--plugins` 直接印这份）。
+  const roots: PluginScanRoots = {
+    userPluginsDir: opts.userPluginsDir ? opts.userPluginsDir : null,
+    projectPluginsDir: opts.projectPluginsDir ? opts.projectPluginsDir : null,
+    projectSkillsDir: opts.projectSkillsDir ? opts.projectSkillsDir : null,
+    looseRoots: [...(opts.looseRoots ?? [])],
+  };
 
   if (opts.userPluginsDir) {
     const r = await scanScopeRoot(opts.userPluginsDir, "user", () => "trusted");
@@ -283,6 +298,13 @@ export async function discoverPlugins(opts: DiscoverOptions): Promise<PluginsMan
   }
   if (opts.projectPluginsDir) {
     const r = await scanScopeRoot(opts.projectPluginsDir, "project", trustOf);
+    plugins.push(...r.plugins);
+    looseSkills.push(...r.loose);
+    errors.push(...r.errors);
+  }
+  if (opts.projectSkillsDir) {
+    // 走 trustOf（项目门）而不是恒 trusted：这条根是人**随仓库带进来的**，不是本机显式指定的。
+    const r = await scanScopeRoot(opts.projectSkillsDir, "project", trustOf);
     plugins.push(...r.plugins);
     looseSkills.push(...r.loose);
     errors.push(...r.errors);
@@ -307,7 +329,7 @@ export async function discoverPlugins(opts: DiscoverOptions): Promise<PluginsMan
       }
     }
   }
-  return { plugins, looseSkills, errors, warnings };
+  return { plugins, looseSkills, roots, errors, warnings };
 }
 
 /** 静态扫描产出的已激活 hook 总表（仅 trusted 插件 + loaded 条目；跨层 (command+args) 去重在引擎做）。 */

@@ -126,6 +126,10 @@ export interface LooseSkill {
   root: string;
   entry: SkillEntry;
   trust: "trusted" | "pending" | "declined";
+  /** 来自哪一个作用域根（第 438 页给 `cairn --plugins` 用：同一份 SKILL.md 摆在
+   *  `<ws>/.agent/skills`（走信任门）和摆在 `M2E_LOOSE_SKILLS`（恒 trusted）下，
+   *  状态不同而名字相同——只报名字就说不出「为什么这条要批、那条不用」。 */
+  scope: PluginScope;
 }
 
 export interface SkillEntry {
@@ -170,10 +174,22 @@ export interface LoadedHookDef {
   loaded: boolean;
 }
 
+/** 这一次扫描**实际**吃了哪几顶根（`null` = 这一顶没给，不是「给了空目录」）。
+ *  由 `discoverPlugins` 用它自己传给 `scanScopeRoot` 的那几个变量填，调用方不许再算一遍：
+ *  「扫了哪些根」和「扫到了什么」必须出自同一个决策点，否则列出来的根可以是猜的（第 438 页）。 */
+export interface PluginScanRoots {
+  userPluginsDir: string | null;
+  projectPluginsDir: string | null;
+  projectSkillsDir: string | null;
+  looseRoots: string[];
+}
+
 /** 加载清单（会话启动静态扫描产物；不新增事件类型，面板/脚本直接消费）。 */
 export interface PluginsManifest {
   plugins: DiscoveredPlugin[];
   looseSkills: LooseSkill[];
+  /** 可选：旧清单（测试夹具、落盘的快照）没这一格时读方按「未记录」处理，不当「没扫」。 */
+  roots?: PluginScanRoots;
   /** 加载期错误聚合（单插件失败隔离的可见面：面板报错）。 */
   errors: { plugin: string; message: string }[];
   /** 加载期警告聚合。 */
