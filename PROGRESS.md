@@ -14481,3 +14481,38 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    `dominantDelete` 刻意不做成阻断维（理由见第 2 条）。`#16` 到此收口，`#2`／`#4`／`#7`／`#8`／`#10`／`#11`／`#13`／`#15` 照旧。
    **本轮没有花一分钱模型调用**。
 
+## 2026-10-08 · 第 436 页凭证（1/1）：`cb0f5c6` 认证读数——23/23 道绿、typecheck 0、全量 4936/4937，删除形状那道闸已经在门里（面③三面全绿）
+
+1. **被认证的与用的树**：`cb0f5c681`（第 435 页那一笔）；跑在 head-cert 自建的 `.worktrees/head-cert-cb0f5c6`（跑完自回收 `exit=0`），不是主树。
+   `TREE=cb0f5c6 DIRTY_JUDGED=0`、`依赖完整=是`、`收尾复核=同一笔`、`认证树锁=本进程持有`。
+2. **针脚体检两态**：干净树 `1508 条｜阻断 0｜待复认 2｜未覆盖 1｜逐行式 5｜未入库面 0｜钉在飞文本 0｜killer 指针失效 0`
+   ＋「1508 条改法全部产出合法源文件 ✅」；脏主树（落库前）`1512 条｜阻断 12`＝本簇 6 条 `commit-shape-*`（同笔未落库＝预期读数）
+   ＋ 隔壁 4 条 `d13-*` ＋ 2 条待复认（`cascade-ladder-cross-provider`、`goal-stopped-flag-ignored`，都不是本簇文件）。
+   认证内那道门：`mutate-needles-check exit=0 17194ms`。
+3. **本簇锚点杀死（派生取料）**：`--changed-since=26d2da0c --lock-tag=judge-435` ⇒ 变更文件 7 个 ⇒ 选中 `40/1508`，
+   `40/40 ✅`、末行「全部变异被正确杀死（断言非恒真）」、`MV_RC=0`、`本次耗时 45.0s`；
+   成本分母现读「spawn 80 次／40 条（2×40）·单次中位 0.4s·最贵一条 3.0s」。六根 `commit-shape-*` 逐根 ✅（映射表在上页）。
+4. **head-cert 汇总行原文**：`认证门面=23 道（跑到 23）｜绿 23 道｜⚠️ 超预算 0`、
+   `Test Files 1 failed | 346 passed (347)｜Tests 1 failed | 4936 passed (4937)｜exit=1（退出码直接取，不接管道）`、
+   `并发判卷=起前 0 套／跑完 0 套（两端独占）`、`本趟墙钟 272.05s`、`本次退出码=1｜红的维：判卷 exit=1`、
+   `逐条日志：/tmp/dsh-head-cert-cb0f5c6`、`HEADCERT_RC=1`（直取，不接管道）。
+5. **条数核对式**：`4937 = 4909 ＋ 28`，两条来源都对得上——`tests/commit-surface-check.test.ts` 27 → 47（＋20 条显式用例），
+   加上卫生门 `--self-test` 新增的 8 格（SH8—SH15）被 `tests/repo-hygiene-check.test.ts` 逐格派生成 8 条 `it()`。
+   两笔读数都取在各自认证树的 HEAD 上（引用"上一笔留档值"前先问过它取在哪一棵树）。
+6. **红的归因（两面都记）**：认证里唯一那条红＝`tests/scratch-tree-naming.test.ts > 真仓面：注册表里的暂存树名字都没说谎 > 三类不一致都必须为 0，且报出来时要点名是哪棵树`，
+   即第 413 页登记的常驻红（`gate-mutate-verify` 的树名豁免在别人工作树里未落库）⇒ 那一半不落，谁的 head-cert 都只能读到 exit=1。
+   另有一条只在**脏主树**出现的红：卫生门面②`src/main/agent-runner.ts 3107 行 > 帽 3100`——帽 3000→3100 与那个 3107 行的文件都是隔壁在飞的；
+   本笔的认证树里 `repo-hygiene-check exit=0 445ms`、三面全绿（HEAD 的帽仍是 3000）。本笔不代修、也不替别人降帽。
+7. **门耗时（第 154 页口径：加判据要同轮声明）**：`repo-hygiene-check` 加面③后认证内实测 `445ms`（主树脏跑 `real 0.38s`），
+   门预算 1200ms **没抬**；`mutate-needles-check 17194ms`（预算 20000ms）。三个量纲不互借：一道门 ≠ 全量判卷 `272.05s` ≠ 派生杀锚 `45.0s`。
+8. **清场**：本轮两棵建树都按规则 120 核过——`.worktrees/verify-cb0f5c6`（本笔）detached ∧ 0 项在飞 ∧ 那一笔已入库
+   ⇒ 先 `rm` 硬链的 `node_modules` 再 `git worktree remove --force`；`gate-check` 之后认证内那行也印证：`常驻残留树=1`
+   （只剩常驻门那棵 `.worktrees/gate-mutate-verify`；`.qoder/worktrees/*` 属别的会话，一律不动）。
+9. **取料面（本页引用的时间量都在这两个目录里，逐字可查）**：`outputs/head-cert-cb0f5c6-2026-10-08-1225/provenance.md`
+   （认证自己打出来的读数：`本趟墙钟 272.05s`、`repo-hygiene-check 445ms`、`mutate-needles-check 17194ms` 与两端独占那一行）
+   ＋ `outputs/commit-shape-gate-2026-10-08/threshold-census-and-anchors.md`（120 笔现读、阈值推导与六根锚点映射；
+   派生杀锚那趟的 `45.0s`／`spawn 80 次` 出自 `/tmp/dsh-head-cert-*` 之外的本轮日志，已把原文抄进该工件）。
+10. **刻意未做（写清免得被下游读成已做）**：不装 `.git/hooks/pre-commit`（共享状态，且本仓把「写 `.git/hooks`」列为安全面，等业主点头）；
+   `dominantDelete` 不做成阻断维；面③只问「被认证的那一笔」，不回头追整本历史（追历史要另立一格预算与豁免面，现读没有这个需求）。
+   `#16` 收口，`#2`／`#4`／`#7`／`#8`／`#10`／`#11`／`#13`／`#15` 照旧。**本轮没有花一分钱模型调用。**
+

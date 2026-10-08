@@ -61,3 +61,18 @@
   现阶段的兜底是「提交那一刻的尺 ＋ 认证那一拍的同一份判据」两道；真要第三道（钩子）请明说。
 - 门预算没抬（`repo-hygiene-check` 1200ms，实测 380ms）；帽也没抬。
 - `dominantDelete` 不做成阻断维——理由见上表那一行，这条读数现在只负责让人看见。
+
+## 7. 落库后复验（第 436 页凭证引的时间量原文，取在干净树上）
+
+```text
+改动面派生：rev=26d2da0c → 变更文件 7 个 ⇒ 选中锚点 40/1508 条
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 45.0s · 跑了 40/40 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 80 次／40 条（每条次数分布 2×40）· 单次中位 第1次 0.4s／第2次 0.4s· 最贵一条 changed-since-list-mode-always-filters 3.0s
+针脚体检：1508 条 —— 阻断 0，待复认 2，未覆盖 1，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 0，killer 指针失效 0（其中 HEAD 侧 0）
+改法语法体检：1508 条改法全部产出合法源文件 ✅
+```
+
+跑法（可复算）：`git worktree add --detach .worktrees/verify-cb0f5c6 cb0f5c68` ＋ `cp -al` 依赖，
+在树里 `node --import tsx scripts/typecheck.ts`、`node --import tsx scripts/mutate-verify.mjs --check-needles`、
+`node scripts/mutate-verify.mjs --changed-since=26d2da0c --lock-tag=judge-435`；核过 0 项在飞后回收。
