@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "一次请求的全生命周期",
+    "output": "outputs/request-lifecycle-2026-10-08/request-lifecycle.html",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [1683, 800]
+  },
+  "participants": [
+    { "id": "gui", "type": "frontend", "label": "渲染层 App.tsx" },
+    { "id": "bridge", "type": "messagebus", "label": "preload 桥" },
+    { "id": "mainproc", "type": "backend", "label": "Electron main" },
+    { "id": "host", "type": "backend", "label": "KernelHost" },
+    { "id": "runner", "type": "backend", "label": "runAgent 装配" },
+    { "id": "loop", "type": "backend", "label": "runLoop 轮循环" },
+    { "id": "provider", "type": "cloud", "label": "Provider" },
+    { "id": "gate", "type": "security", "label": "权限门" },
+    { "id": "tools", "type": "backend", "label": "工具执行面" },
+    { "id": "journal", "type": "database", "label": "会话 JSONL" }
+  ],
+  "segments": [
+    { "from": 155, "to": 262, "label": "① 提交与入站" },
+    { "from": 272, "to": 332, "label": "② 会话装配" },
+    { "from": 342, "to": 595, "label": "③ 轮循环：模型与工具交替" },
+    { "from": 605, "to": 688, "label": "④ 收束与回流" }
+  ],
+  "messages": [
+    { "id": "submit", "from": "gui", "to": "bridge", "y": 165, "label": "提交 run 请求", "variant": "emphasis" },
+    { "id": "ipc-invoke", "from": "bridge", "to": "mainproc", "y": 195, "label": "agent:run（IPC）", "variant": "emphasis" },
+    { "id": "host-run", "from": "mainproc", "to": "host", "y": 225, "label": "host.run(req)", "variant": "emphasis" },
+    { "id": "enter-runner", "from": "host", "to": "runner", "y": 255, "label": "handleAgentRun（带 signal）", "variant": "emphasis" },
+    { "id": "open-log", "from": "runner", "to": "journal", "y": 285, "label": "createEventLog 开会话日志", "variant": "dashed" },
+    { "id": "start-loop", "from": "runner", "to": "loop", "y": 315, "label": "runLoop（provider + 工具面）", "variant": "emphasis" },
+    { "id": "stream", "from": "loop", "to": "provider", "y": 345, "label": "stream(messages, tools)", "variant": "emphasis" },
+    { "id": "model-output", "from": "provider", "to": "loop", "y": 375, "label": "assistant_delta · tool_call", "variant": "return" },
+    { "id": "append-event", "from": "loop", "to": "journal", "y": 405, "label": "append 每条事件（先脱敏）", "variant": "dashed" },
+    { "id": "frozen-gate", "from": "loop", "to": "gate", "y": 435, "label": "gate() 冻结档位门", "variant": "security" },
+    { "id": "run-tool", "from": "loop", "to": "tools", "y": 465, "label": "tool.run(args, ctx)", "variant": "emphasis" },
+    { "id": "evaluate", "from": "tools", "to": "gate", "y": 495, "label": "gatedTool 内四层裁决", "variant": "security" },
+    { "id": "ask-card", "from": "gate", "to": "gui", "y": 525, "label": "ask 命中则出审批卡", "variant": "security" },
+    { "id": "decide", "from": "gui", "to": "gate", "y": 555, "label": "decide(askId, approved, scope)", "variant": "security" },
+    { "id": "tool-result", "from": "tools", "to": "loop", "y": 585, "label": "tool_result", "variant": "return" },
+    { "id": "next-round", "from": "loop", "to": "provider", "y": 615, "label": "下一轮 stream（循环至收束）", "variant": "dashed" },
+    { "id": "push-ui", "from": "runner", "to": "gui", "y": 645, "label": "onEvent 回流 agent:event", "variant": "dashed" },
+    { "id": "resolve", "from": "runner", "to": "gui", "y": 675, "label": "run() resolve（整轮收束）", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "gui", "from": 160, "to": 205, "type": "frontend" },
+    { "participant": "bridge", "from": 188, "to": 202, "type": "messagebus" },
+    { "participant": "mainproc", "from": 218, "to": 232, "type": "backend" },
+    { "participant": "host", "from": 248, "to": 680, "type": "backend" },
+    { "participant": "journal", "from": 278, "to": 294, "type": "database" },
+    { "participant": "runner", "from": 278, "to": 680, "type": "backend" },
+    { "participant": "loop", "from": 308, "to": 622, "type": "backend" },
+    { "participant": "provider", "from": 338, "to": 382, "type": "cloud" },
+    { "participant": "journal", "from": 398, "to": 414, "type": "database" },
+    { "participant": "gate", "from": 428, "to": 568, "type": "security" },
+    { "participant": "tools", "from": 458, "to": 592, "type": "backend" },
+    { "participant": "gui", "from": 518, "to": 568, "type": "frontend" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "四段主路径",
+      "items": [
+        "① 提交：渲染层 → preload 桥 → Electron main → KernelHost",
+        "② 装配：runAgent 先开会话日志，再装 provider 与工具面",
+        "③ 轮循环：runLoop 流式取模型输出，逐次过门、执行、落盘，再回到 stream",
+        "④ 回流：同一份事件既落 JSONL 又推回渲染层，最后 run() resolve"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "两道门不是一道",
+      "items": [
+        "runLoop 里的 gate() 是冻结档位门：agent-runner.ts 调 runLoop 时传的档位恒为 auto，它不做四层裁决",
+        "真实裁决在 gatedTool 内（agent-runner.ts 的 evaluate 调用处）：L0-hard → L1-deny → L2-ask → L3，先命中先短路",
+        "只有 ask 命中才出卡；无人值守或 60 秒无答一律按拒绝收束（ask-gate.ts 的 AskGate.request）"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "一次落盘兼两用",
+      "items": [
+        "loop.ts 的 events.append 落到 runAgent 的 pipeline（agent-runner.ts 注入）",
+        "pipeline 先 append 到 JSONL，再 onEvent 推 UI（agent-runner.ts 的 pipeline）",
+        "脱敏只换字符串叶子，事件形状本身就是重放契约（loop.ts 的 redactValue）",
+        "循环上限兜底：轮内无 tool_call 即收束，撞帽则抛 maxSteps（loop.ts 的循环上帽）"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "取证锚点",
+      "items": [
+        "渲染层发起：apps/desktop/src/renderer/App.tsx 的 window.agent.run（try/finally 收束）",
+        "桥面通道表：apps/desktop/src/main/channels.ts 的 INVOKE_CHANNELS，preload/index.ts 程序化生成",
+        "IPC 注册与派发：apps/desktop/src/main/index.ts 的 host.run 接线与 INVOKE_CHANNELS 循环注册",
+        "每会话取消与 outbox：apps/desktop/src/main/kernel-host.ts 的 AbortController 与 deps.outbox",
+        "流式出网：src/providers/openai.ts 的 establishStream（POST + SSE，逐帧转事件）"
+      ]
+    }
+  ]
+}

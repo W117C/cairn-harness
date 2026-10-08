@@ -14516,3 +14516,16 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    `dominantDelete` 不做成阻断维；面③只问「被认证的那一笔」，不回头追整本历史（追历史要另立一格预算与豁免面，现读没有这个需求）。
    `#16` 收口，`#2`／`#4`／`#7`／`#8`／`#10`／`#11`／`#13`／`#15` 照旧。**本轮没有花一分钱模型调用。**
 
+
+## 2026-10-08 · 第 437 页：把一份「看图才发现的文档债」收口——请求生命周期图落库、12 处行号锚点改符号名（`docs-check` D-7/D-3 两条门各纠了我一次）
+
+1. **这一格欠在哪**：工作区里躺着一份从没人引用过的 `request-lifecycle.html`（768KB 单文件、10 参与者／19 消息／4 段的「一次请求的全生命周期」图），在 `.archify/` 里挂成 `??` 未跟踪状态。它有用（新人冷启动比读 3000 行 `agent-runner.ts` 快），但**三处不适格**：① 未跟踪＝别人 clone 不到；② 卡片里 10 处 `file.ts:行号` 锚点会随重排腐掉；③ 同目录躺着两套回执／两套截图，其中一套是**旧版**。
+2. **归属实测（这一步推翻了原先的判断）**：`delivery.json` 记的产物 sha `9cce039d`／768430B 与 `review-2/` 那套回执一致；顶层 `finalize-summary.json`＋`browser-check.json`＋`visual-check/` 那一套记的是 `ce5277fc`／768324B＝**更早的一版**。⇒ 正品是 `review-2/`，顶层那套才是旧账。**若按"目录名像主目录就先删子目录"的直觉动手，会删掉正品留下旧版。**
+3. **落点实测（这条也推翻了先前的判断）**：原打算放进 `docs/diagrams/`，但 `scripts/docs-check.ts` 的 **D-7 禁止 `docs/` 下留任何图片二进制**（判据 `DOC_BINARY`，原文要求"证据图落 `outputs/`"）——本仓 `docs/` 现读 18 个文件全是 `.md`，图片数为 0。⇒ 整个包落 `outputs/request-lifecycle-2026-10-08/`（与仓内 522 个取料目录同族）。
+4. **可复现性（这决定了修法）**：实测该产物**确定性可复现**——用包内 candidate 在另一目录重跑，产物 sha 逐字节相同（`7a57955e…`／768607B 两次跑一致）。⇒ 修锚点走"改 `candidate.json` 再重跑"，**不是手改 HTML**：手改一个字节，`delivery.json` 那份公证当场作废。
+5. **锚点改造（12 处，每处先断言命中数＝1 再替换，不用盲替换）**：`src/main/agent-runner.ts` 的 runLoop 调用处（原 `:1988`）→ 该文件的 `runLoop` 传档处；同文件 `:581`（evaluate 调用处）→ `gatedTool`；`src/main/ask-gate.ts` 的 `:50、72` → `AskGate.request`；`src/agent/loop.ts` 的 `:377／:119／:630` → `events.append`／`redactValue`／`maxSteps`；`apps/desktop/src/renderer/App.tsx` 的 `:278`（收束于 `:295`）→ `window.agent.run` 的 try/finally；`apps/desktop/src/main/channels.ts` 的 `:14` → `INVOKE_CHANNELS`；`apps/desktop/src/main/index.ts` 的 `:186、:382` → `host.run` 接线与 `INVOKE_CHANNELS` 循环注册；`apps/desktop/src/main/kernel-host.ts` 的 `:226、:139` → `AbortController` 与 `deps.outbox`；`src/providers/openai.ts` 的 `:244` → `establishStream`。**理由不是"好看"，是本仓自己立的规矩**：`docs/CODE-WIKI.md` 开头写「定位按**符号名**而非行号」，先例提交 `b3263a60`「文档里两条本仓行号指针早就指错了：改成符号形引用」。
+6. **为什么这批锚点非改不可（现读撑着的）**：12 处多数指**脏工作树**而非 HEAD——图上写的 `src/main/agent-runner.ts` 第 1988 行在 HEAD 上其实是第 1923 行（该文件工作树 3109 行／HEAD 2970 行，是隔壁在飞的改动）。也就是说"给页脚钉一个 as-of-commit"这条路**当下就不诚实**：图上引的 9 个文件里 6 个带未提交改动。改成符号名后，14 个新锚点逐个核过**在 HEAD 里都存在**。
+7. **门**：`finalize`（validate／deliver／check／browser-check 四道）`pass`；`visual-check` `pass`（containment／readability／viewerChrome／themeStates／captures 五项）；包内 `delivery.json`／`finalize-summary.json`／`visual-check.json` 三份回执记的 sha 与产物实测 sha **一致**（都是 `7a57955e`）。未做视觉评审：`visualReview: "not-requested"`，截图是自动化浏览器证据，不等于我看过。
+8. **清场**：`.archify/sequence-request-lifecycle-20261008-205526/` 整个删除（2.7M／21 文件，含两套重复截图）。**删的依据是本笔新包已能独立满足**（candidate＋四道门回执＋visual-check 全在，且可复现）；不是"看着多余就删"。
+9. **取料面（本页引用的读数逐字可查）**：`outputs/request-lifecycle-2026-10-08/request-lifecycle.candidate.json`（图源，sha `d5422a3c`）＋`request-lifecycle.html`（产物，sha `7a57955e`／768607B）＋`request-lifecycle.delivery.json`＋`visual-check/request-lifecycle.visual-check.json`＋4 张截图（1440×900／2048×1320 × 明暗两主题）。
+10. **刻意未做（写清免得被读成已做）**：不改 `docs/CODE-WIKI.md`（它此刻被隔壁会话改着，+126 行未提交——不在别人的 WIP 上叠我的改动）；不给图加"行号→符号名"以外的内容改动（不改图的语义，只改引用形状）；`meta.repository` 不加——本仓 `git remote -v` 为空，而该字段要求 40 位 sha 的 GitHub/Gitee 地址，硬套会造一个假身份。

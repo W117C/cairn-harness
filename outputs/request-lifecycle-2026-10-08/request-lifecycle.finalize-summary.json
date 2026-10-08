@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "sequence",
+  "quality": "showcase",
+  "specification": {
+    "path": "/Users/ze/Downloads/Cairn/deepseek harness/outputs/request-lifecycle-2026-10-08/request-lifecycle.candidate.json",
+    "sha256": "d5422a3c434c5e995564d9695c106c91abfc6dc9ed204c74154c5ec52b53ffc0",
+    "bytes": 6737
+  },
+  "artifact": {
+    "path": "/Users/ze/Downloads/Cairn/deepseek harness/outputs/request-lifecycle-2026-10-08/request-lifecycle.html",
+    "sha256": "7a57955e1d17069b399f9fffd8b3088628542c84f93e182c93abe06e1f1f1fc0",
+    "bytes": 768607
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/Users/ze/Downloads/Cairn/deepseek harness/outputs/request-lifecycle-2026-10-08/request-lifecycle.finalize.json",
+    "summaryReceipt": "/Users/ze/Downloads/Cairn/deepseek harness/outputs/request-lifecycle-2026-10-08/request-lifecycle.finalize-summary.json",
+    "browserCheckReceipt": "/Users/ze/Downloads/Cairn/deepseek harness/outputs/request-lifecycle-2026-10-08/request-lifecycle.browser-check.json"
+  },
+  "update": {
+    "status": "unavailable",
+    "installedVersion": null,
+    "availableVersion": null,
+    "releaseNotes": null,
+    "checkedAt": null,
+    "source": null,
+    "noticeRequired": false,
+    "noticeText": null,
+    "reason": "cache-valid"
+  },
+  "visualReview": "not-requested",
+  "durationMs": 2193
+}

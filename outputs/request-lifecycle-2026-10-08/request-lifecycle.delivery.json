@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "b54d54ca-bff8-46b5-b719-950249739956",
+  "status": "current",
+  "command": "deliver",
+  "type": "sequence",
+  "input": "/Users/ze/Downloads/Cairn/deepseek harness/outputs/request-lifecycle-2026-10-08/request-lifecycle.candidate.json",
+  "output": "/Users/ze/Downloads/Cairn/deepseek harness/outputs/request-lifecycle-2026-10-08/request-lifecycle.html",
+  "specification": {
+    "sha256": "d5422a3c434c5e995564d9695c106c91abfc6dc9ed204c74154c5ec52b53ffc0",
+    "bytes": 6737
+  },
+  "artifact": {
+    "sha256": "7a57955e1d17069b399f9fffd8b3088628542c84f93e182c93abe06e1f1f1fc0",
+    "bytes": 768607
+  }
+}
