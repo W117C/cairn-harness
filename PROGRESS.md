@@ -14362,7 +14362,7 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    `TrustStore.load` 与 doctor 共用它——报告里的数字就是装载时真正生效的那份表取 `length`。
    落点与表名同理走装配面那两个出口（`pluginDataRootOf`／`trustFilePathOf`），doctor 侧不出现 `plugin-data`、
    `plugin-trust.json` 两个字面量。这三格各有一根锚点钉着（见 `outputs/doctor-trust-face-2026-10-08/anchor-and-state-map.md` 的映射表）。
-4. **判卷 24 条新增（`tests/doctor.test.ts` 35 条，本轮 180/180 含全部 plugin/trust 回归）**：纯核 12 条 ＋ 固定清单 1 条 ＋
+4. **判卷新增 21 条（原文误记为 24；纯核 9 条而非 12——按第 434 页凭证的逐文件条数现算更正，`tests/doctor.test.ts` 14 → 35，本轮 180/180 含全部 plugin/trust 回归）**：纯核 9 条 ＋ 固定清单 1 条 ＋
    verdictOf 1 条 ＋ 真盘 IO 壳 5 条（env 落点／坏 JSON 与 0 字节／世界可写／同名文件／目录不存在）＋ 装配面 5 条。
    真盘那五条刻意**不走 `inject`**——走 inject 只验纯核，验不到「装配面真把这一格收进了事实」这一半。
 5. **自己造的红，抓到自己头上一处**：最初的反证写成 `not.toContain("已信任 0 条")`，而那串字面正被我自己那句文案
@@ -14409,4 +14409,43 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
 6. **同笔更新的工件**：`outputs/doctor-trust-face-2026-10-08/certified-reds.md`（三条红的逐条归因与修法）＋
    同目录 `anchor-and-state-map.md` 补上 `trustCountsText` 那一格。`#12` 至此含「第七项自检」＋「把它写成能被尺喊住的形状」，
    `#2`／`#4`／`#7`／`#8`／`#10`／`#11`／`#13`／`#15`／`#16` 照旧。**本轮没有花一分钱模型调用**。
+
+## 2026-10-08 · 第 434 页凭证（1/1）：`3eda888` 认证读数——门 23/23、typecheck 0、全量 4908/4909，只剩那一格登记过的常驻红
+
+1. **被认证的对象与用的树**：`3eda888d`（第 433 页那一笔）；跑在 head-cert 自建的 `.worktrees/head-cert-3eda888`
+   （detached，跑完由门自回收 `exit=0`），**不是主树**；主树此刻还挂着隔壁在飞的 90 余支文件。
+   `DIRTY_JUDGED=0`（判卷四面在飞 0 项）、`依赖完整=是`、`import 面：3896 条边｜悬空 0（存量已豁免 0）`、
+   `门表：33 道，其中该笔 package.json 没有同名 script 的 0 道`、`认证树锁=本进程持有`。
+2. **针脚体检两态**（互相印证归因，不是同一个数）：干净树（`edf6101b` 那棵验证树）
+   `1502 条｜阻断 0｜待复认 2｜未覆盖 1｜逐行式 5｜未入库面 0｜钉在飞文本 0｜killer 指针失效 0（HEAD 侧 0）`；
+   脏主树（第 433 页落库前）`1506 条｜阻断 6`，其中 6 条逐条读过＝2 条待复认（`cascade-ladder-cross-provider`、
+   `goal-stopped-flag-ignored`，针脚已不在源文件，都不是本簇文件）＋4 条隔壁 `d13-*`（钉 `scripts/docs-check.ts` 的在飞实现）。
+   本簇六根 `doctor-trust-*` 在脏树与净树两面都无 ❌。认证内那道门：`mutate-needles-check exit=0 17531ms`。
+3. **本簇锚点杀死（派生取料，不手点）**：`--changed-since=040a02b7 --lock-tag=judge-432` ⇒
+   `变更文件 7 个 ⇒ 选中 40/1502 条`，`40/40 ✅`、末行「全部变异被正确杀死（断言非恒真）」、`MV_RC=0`、
+   `本次耗时 50.4s`，成本分母现读「判卷 spawn 80 次／40 条（每条 2×2 拍）·单次中位 0.4s·最贵一条 3.0s」。
+   选 40 而不是手点 6 的理由：本轮把 `TrustStore.load` 的解析搬进共用函数（搬家类改动），派生面同时带上了
+   `scripts/mutate-verify.mjs` 自 hosted 与 trust.ts 上的旧锚点——**这是第 410／426 页那两条课的形状**，不是保险。
+   上面那几个时间量的逐行原文在 `outputs/doctor-trust-face-2026-10-08/credential-readings.md`（与两棵认证树的 provenance 同处一份取料面）。
+4. **head-cert 汇总行原文**：`认证门面=23 道（跑到 23）｜绿 23 道｜⚠️ 超预算 0`、`typecheck exit=0（0 报错）`、
+   `Test Files 1 failed | 346 passed (347)｜Tests 1 failed | 4908 passed (4909)｜exit=1（退出码直接取，不接管道）`、
+   `并发判卷=起前 0 套／跑完 0 套（两端独占）`、`本趟墙钟 266.53s`、`收尾复核=同一笔`、
+   `本次退出码=1｜红的维：判卷 exit=1`、`逐条日志：/tmp/dsh-head-cert-3eda888`。`HEADCERT_RC=1`（直取，未接管道）。
+5. **条数核对式**：`4909 = 4888 ＋ 21`，增量由逐文件条数现算钉死——两笔认证之间**只有一支文件**的条数变了：
+   `tests/doctor.test.ts 14 → 35`（＋21），其余 345 支逐支相等；第 433 页本身净增 0 条（35 → 35，只改断言形状）。
+6. **一处更正（写在本页，也指回原页）**：第 432 页第 4 条原文写「判卷 24 条新增…纯核 12 条」，按上面的逐文件条数
+   现算是 **21 条、纯核 9 条**——那是我拿分组数相加得出的数，没回到逐笔原始数。已在第 432 页该行就地标注更正并指向本页。
+7. **红的归因**：唯一那条红＝`tests/scratch-tree-naming.test.ts > 真仓面：注册表里的暂存树名字都没说谎 > 三类不一致都必须为 0，且报出来时要点名是哪棵树`，
+   即第 413 页登记的常驻红（`gate-mutate-verify` 的树名豁免仍在别人工作树里未落库）⇒ 那一半不落，任何会话的 head-cert 都只能读到 `exit=1`。
+   本笔**不代修、不改指别人的针脚**；`#4` 继续挂着等业主裁决（等他们落库 vs 授权我补完那一半）。
+8. **清场与门耗时（量纲分开，从前写的分钟级是另一把尺）**：本轮新建的 `.worktrees/verify-edf6101` 已核
+   （detached ∧ `status --porcelain` 0 项 ∧ 那一笔已入库）并回收；`git worktree list` 剩下的
+   `.worktrees/gate-mutate-verify`（常驻门）与 `.qoder/worktrees/*`（别的会话）一律不动。认证内逐门现读：
+   `gate-check 3022ms`、`repo-hygiene-check 352ms`、`mutate-needles-check 17531ms（预算 20000ms）`、
+   `evidence-typecheck-check 3818ms（预算 5300ms）`；本簇判卷 `tests/doctor.test.ts 35 条`；
+   整棵认证树全量 `266.53s`（含本笔）／`281.14s`（`edf6101b` 那一趟，两端独占，时间量可引用：
+   `outputs/head-cert-3eda888-2026-10-08-1101/provenance.md` 与 `outputs/head-cert-edf6101-2026-10-08-1043/provenance.md`）。
+9. **刻意未做**：`src/cli.ts` 的 `--doctor` 帮助行仍未列第七项（该文件在飞 249/7 行，而那行本来不是穷举清单）；
+   没给 `trustCountsText` 加锚点（避免往文案上叠元验证）；`#12` 的产品面到此为止，
+   信任落点的**写侧**入口仍缺（CLI 没有信任决议命令，那是 `#7` 那一格）。
 
