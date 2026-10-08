@@ -34,6 +34,9 @@
 4. 沙箱可用性（复用 `src/main/sandbox.ts` 的状态面，与 `scripts/sandbox-check.ts` 同源；不可用 ⇒ 明说，不假装）
 5. 工作区可写性（`fs.access` W_OK；不落探针文件）
 6. `search.endpoint` 配了没（只读 `.agent/config.json`）
+7. 信任与插件数据的落点（第 432 页补）：数据根路径＋来路（env 还是缺省）＋目录权限位＋信任表条数。
+   三态显式——目录「读不出」不等于「还没建」，表「读不出」不等于「已信任 0 条」；世界可写出声但不阻断
+   （`fatal` 仍只留给第 1 项）。落点与表名复用装配面的 `pluginDataRootOf`／`trustFilePathOf`，doctor 不自己拼第二遍。
 
 输出：逐项 ✓/✗ ＋ 一句补救；末行总档（就绪 / 部分就绪 / 未就绪）。
 

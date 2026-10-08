@@ -13,6 +13,24 @@ interface TrustFile {
   declined: string[];
 }
 
+/** 信任表那份文本的**唯一**读取口径（第 432 页给 `--doctor` 用，装载路径 `TrustStore.load` 走同一个函数）。
+ *  返回**条目数组**而不是计数：doctor 报的数字就是装载时真正在用的那份表取 `length`，
+ *  不是它自己按另一套口径数出来的第二份事实（本仓点名的「登记表与表所指的行为各算一次 ⇒ 表退化成注释」）。
+ *  返回值 `null` ＝「读不出」（JSON 坏、顶层不是对象）——调用方必须把它当第三态，
+ *  不许折成「0 条已批准」：那等于把「没尺」报成「干净」。
+ *  数组里非字符串的条目按既有口径丢掉（不因为脏条目让整份表失效）。 */
+export function parseTrustFile(text: string): { trusted: string[]; declined: string[] } | null {
+  let parsed: Partial<TrustFile> | null = null;
+  try {
+    parsed = JSON.parse(text) as Partial<TrustFile>;
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== "object") return null;
+  const of = (v: unknown): string[] => (Array.isArray(v) ? v.filter((s) => typeof s === "string") : []);
+  return { trusted: of(parsed.trusted), declined: of(parsed.declined) };
+}
+
 // ---- H3-P5（审查 E-10）：信任绑定内容指纹 ----
 // 旧实现只按绝对路径记录信任：同路径下的插件内容被替换（恶意改写 hooks/MCP 配置）仍自动 trusted。
 // v1 口径：**新决议**一律写 `abs@指纹`（内容绑定，改动即重新出信任卡）；旧版裸路径记录继续命中
@@ -99,11 +117,11 @@ export class TrustStore {
     if (this.cache) return this.cache;
     try {
       const raw = await readFile(this.file, "utf8");
-      const parsed = JSON.parse(raw) as Partial<TrustFile>;
-      this.cache = {
-        trusted: Array.isArray(parsed.trusted) ? parsed.trusted.filter((s) => typeof s === "string") : [],
-        declined: Array.isArray(parsed.declined) ? parsed.declined.filter((s) => typeof s === "string") : [],
-      };
+      // 读不出（JSON 坏／顶层不是对象）与「表里没有决议」在**装载面**都落成空表：
+      // 那两态在 status() 里给不出可信判定，fail-closed 到 pending（重新出信任卡）。
+      // 但 doctor 那一面必须把它们分开报——见 src/main/doctor.ts 的 trustFaceCheck。
+      const parsed = parseTrustFile(raw);
+      this.cache = parsed ?? { trusted: [], declined: [] };
     } catch {
       this.cache = { trusted: [], declined: [] };
     }

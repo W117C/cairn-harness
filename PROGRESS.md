@@ -14345,3 +14345,43 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
 4. **重做那一笔时改了做法**：**先现读再提交**——把要用的那份 index 名从上一条命令的输出里取（不是从记忆里取），提交前先 `GIT_INDEX_FILE=… git diff --cached --numstat HEAD` 复述一遍内容（`11/0 PROGRESS.md＋58/0 provenance＋52/0 credential-readings`），确认就是我要的那三条才 commit；顺手用眼睛看了另一个 `p430-idx-1791407117.idx` 的条目数（**0**）并**不删它**——归属不认识的临时文件不是我的清理对象。落地为 `9e5e7175`，`git show --numstat` 与交接物逐行一致，`tree files=3649`（＝3647＋两份新工件）。
 5. **这一格该由尺做，不该由我下次小心**：门现在只在**落库之后**通过 numstat 与人眼发现这类事（`git commit` 的 stdout 会印「3647 files changed … 441768 deletions」，我是看到了才停的——这一格靠的是我看见）。登记 `#16`：给提交面加一道闸，**纯删且量大**（例如删行数 > 上一笔树行数的某比例，或 `git show --numstat` 里删的行数占绝对多数且提交者没写理由）就出声/拒落，把「我看到了才停」变成「门不让我走过去」。同一条口径也覆盖 Skill 里那句「别人 staged 的条目要在 `--cached --name-only` 里仍在原地」。
 6. **写进 memory 的形状**：临时 index、临时日志、验证树名这类**当场生成的标识符**，下一次引用只能取自上一条命令的输出；凭记忆补一个数字（哪怕它看着很像）在这条路上会直接改**提交的树形状**——这与第 424—428 页那一族（构造面与验证面共用取料／按记忆补完读数）是同一个根，只是这次的代价从「读数错」升级到「历史错」。
+
+## 2026-10-08 · 第 432 页：`--doctor` 补上第七项「信任与插件数据落点」——第 424 页搬完家没人报的那格，这次连着六根锚点一起落（`#12`）
+
+1. **这一格欠在哪**：第 424 页把插件数据根从 `<os.tmpdir()>/m2e-plugin-data` 搬进 `<home>/.config/cairn/plugin-data`，
+   理由写在页上（临时区任何本机用户都能预建 `plugin-trust.json` 把自己的条目写成已信任）。搬完之后**没人报它在哪、
+   权限位多少、表里有几条决议**——信任决议是静默落盘的动作，自检面不报它，用户要发现自己家被写了东西只能去读代码。
+   本轮把 `src/main/doctor.ts` 从六项补到七项（`id: "trust"`），`--doctor` 现在打印：数据根路径＋来路（env 还是缺省）＋
+   目录权限位＋信任表条数；世界可写出声、表读不出出声，`fatal` 仍只留给 node（第七项红 ⇒ 部分就绪/0，不改退出码契约）。
+2. **两处「读不出」是这一格的全部内容**：`dirState` 与 `storeState` 各有 absent／ok／unreadable 三档，
+   `entries` 只在 `storeState === "ok"` 时才是数字，否则是 `null`。取料侧只把 `ENOENT` 读成 absent，
+   `EACCES`、路径中段是文件、0 字节的表一律留在 unreadable；纯核另钉一格「状态与条数不自洽」（说 ok 却没给数、
+   说 absent 却给了数）也算病。**不许由 0 顶成「干净」**是这页唯一的成功判据——`TrustStore.load` 原本就把读不出的表
+   折成空表（装载面 fail-closed 到 pending，是对的），但报告面折成「已信任 0 条」就是给用户发假证明。
+3. **一条事实源，不许 doctor 数第二遍**：新增 `parseTrustFile(text)`（`src/agent/plugins/trust.ts`）返回**条目数组**而非计数，
+   `TrustStore.load` 与 doctor 共用它——报告里的数字就是装载时真正生效的那份表取 `length`。
+   落点与表名同理走装配面那两个出口（`pluginDataRootOf`／`trustFilePathOf`），doctor 侧不出现 `plugin-data`、
+   `plugin-trust.json` 两个字面量。这三格各有一根锚点钉着（见 `outputs/doctor-trust-face-2026-10-08/anchor-and-state-map.md` 的映射表）。
+4. **判卷 24 条新增（`tests/doctor.test.ts` 35 条，本轮 180/180 含全部 plugin/trust 回归）**：纯核 12 条 ＋ 固定清单 1 条 ＋
+   verdictOf 1 条 ＋ 真盘 IO 壳 5 条（env 落点／坏 JSON 与 0 字节／世界可写／同名文件／目录不存在）＋ 装配面 5 条。
+   真盘那五条刻意**不走 `inject`**——走 inject 只验纯核，验不到「装配面真把这一格收进了事实」这一半。
+5. **自己造的红，抓到自己头上一处**：最初的反证写成 `not.toContain("已信任 0 条")`，而那串字面正被我自己那句文案
+   引用着（「这不等于『已信任 0 条』」）⇒ 反例那行被反例的尺抓（本仓登记过的同一形状）。改钉**分支形状**
+   `not.toMatch(/信任表 已信任/)`：它问的是「报数那条分支没跑」，不依赖文案里的措辞。
+6. **落库前读数（脏主树，现读）**：`typecheck` `TC_EXIT=0`；`mutate-verify --check-needles` =
+   `1506 条｜阻断 12｜待复认 2｜未覆盖 1｜逐行式 5｜未入库面 0｜钉在飞文本 10｜killer 指针失效 0（HEAD 侧 0）`。
+   12 条 ❌ 逐条读过成因：本簇 6 条 `doctor-trust-*`（同笔未落库＝预期读数，落库后应归零）、隔壁 4 条 `d13-*`
+   （钉 `scripts/docs-check.ts` 的在飞实现，不动）、2 条待复认（`cascade-ladder-cross-provider`、`goal-stopped-flag-ignored`
+   针脚已不在源文件，非本簇文件，按第 408 页口径不代修）。针脚取料自证：六根在 `src/main/doctor.ts` 各命中 1 处、
+   六个 killer 标题在判卷各命中 1 处，反面哨兵（问突变后的写法）= 0。
+7. **归属与拆笔（共享树，逐文件现做）**：`src/main/doctor.ts` 7 hunk 里混着隔壁把 `DEFAULT_MODEL_TABLE` 换成
+   `effectiveModelTable` 那两处（6/5）、`scripts/mutate-verify.mjs` 2 hunk 里第 13701 行那 43 行是隔壁第 413 页的 `d13-*` 锚点、
+   `PROGRESS.md` 第 9867 行那一处是别人把 `cli.ts` 改成 `src/cli.ts`——都不是我的，一律按 hunk 隔离暂存。
+   `src/agent/plugins/trust.ts` 与 `tests/doctor.test.ts` 本轮全为我所改。
+8. **刻意不做**：`src/cli.ts` 的帮助行没跟着扩写（`--doctor` 那行列的是「Node/凭据在位/沙箱/工作区可写」，
+   本来就不是穷举，而该文件此刻在飞 249/7 行，加一行要走一次 blob 构造——收益不抵把归属搅浑的代价）。登记：
+   若下次有人把帮助行当清单读，那条枚举要补成七项或明写「非穷举」。`#12` 到此收口，`#2`／`#4`／`#7`／`#8`／`#10`／
+   `#11`／`#13`／`#15`／`#16` 照旧。**本轮没有花一分钱模型调用**（判卷与门全在本机）。
+9. **同页带上文档校正**：`docs/superpowers/specs/2026-10-06-productization-b1-design.md` §2 的「固定清单」补第 7 项
+   （含三态口径与「复用装配面出口」那句约束）。spec 说六项而实现是七项，这种差法下次会被当成实现越界。
+

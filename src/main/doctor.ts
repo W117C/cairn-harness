@@ -1,19 +1,22 @@
 // cairn --doctor 的核（spec：docs/superpowers/specs/2026-10-06-productization-b1-design.md §2）。
-// 纯函数核不做 I/O：node 版本、key 在位、沙箱、可写性、search 配置全由 runDoctor 收齐后注入，
+// 纯函数核不做 I/O：node 版本、key 在位、沙箱、可写性、search 配置、信任落点全由 runDoctor 收齐后注入，
 // 判卷只喂数据（tests/doctor.test.ts）。**脱敏是结构性的**：DoctorFacts 里只有「在位与否」，
 // 没有值的字段——想泄都泄不出去；渲染面与判卷同时钉住这一点。
 // 本文件不 spawn、不 exec 任何进程；正则取组一律用 String.match（不用 RegExp.exec 那个名字）。
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, stat } from "node:fs/promises";
 import { constants } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { pluginDataRootOf, trustFilePathOf } from "../agent/plugins";
+import { parseTrustFile } from "../agent/plugins/trust";
 import { ENV_KEYED_PROVIDERS, PROVIDER_ENV_KEYS } from "../providers/env-keys";
 import { DEFAULT_MODEL_TABLE, specsByTier } from "../providers/registry";
 import { loadSearchConfig } from "../tools/web-search";
 import { checkSandbox, type SandboxStatus } from "./sandbox";
 
 export interface DoctorCheck {
-  id: "node" | "keys" | "tiers" | "sandbox" | "workspace" | "search";
+  id: "node" | "keys" | "tiers" | "sandbox" | "workspace" | "search" | "trust";
   ok: boolean;
   detail: string;
   /** 只有 node 版本这一项可能是 true（spec：环境级阻断 exit 1）；其余项只报不红。 */
@@ -30,6 +33,28 @@ export interface DoctorReport {
 /** loadSearchConfig 的三态收拢：null ⇒ 未配（可选项，不算病）；抛 ⇒ 配了但坏（要报，非致命）。 */
 export type SearchReadout = { kind: "unset" } | { kind: "ok" } | { kind: "broken"; message: string };
 
+/** 信任/插件数据的落点这一格（第 432 页，能力 7「操作可审计」）。
+ *  动因：第 424 页把数据根从 `<tmpdir>/m2e-plugin-data` 搬进 `<home>/.config/cairn/plugin-data`，
+ *  搬完仍然没人报「它在哪、权限位多少、表里有几条决议」——信任决议是个静默的落盘动作，
+ *  自检面不报它，用户就只能靠读代码知道决议写没写进自己家里。
+ *  三态一律显式：`dirState`/`storeState` 各有「读不出」那一档，`entries` 在读不出时是 `null`
+ *  而**不是 0**——「数不出来」不许被报成「一条都没有」。条数取自 `parseTrustFile` 那份数组，
+ *  与 TrustStore 装载时用的是同一口径（这里再数一遍就是第二份事实源）。 */
+export interface TrustFaceFacts {
+  /** 数据根：由 `pluginDataRootOf` 现算，doctor 自己不拼路径（拼第二遍就会和装配面漂）。 */
+  root: string;
+  /** 这一格是 env（`M2E_PLUGIN_DATA`）给的还是缺省值——报告里要说明来路。 */
+  source: "env" | "default";
+  /** 目录三态：不存在（还没写过决议，正常）／存在／读不出（stat 抛，须报病）。 */
+  dirState: "ok" | "absent" | "unreadable";
+  /** 目录权限位低 9 位；`dirState !== "ok"` 时为 `null`（不许由 0 顶成「不可写」）。 */
+  dirMode: number | null;
+  /** 信任表三态：没有表／读得出／读不出（JSON 坏或顶层不是对象）。 */
+  storeState: "absent" | "ok" | "unreadable";
+  /** 表内条目数；`storeState !== "ok"` 时必须是 `null`。 */
+  entries: { trusted: number; declined: number } | null;
+}
+
 export interface DoctorFacts {
   nodeVersion: string;
   engines: string;
@@ -39,6 +64,7 @@ export interface DoctorFacts {
   workspaceWritable: boolean;
   search: SearchReadout;
   tierCounts: { total: number; cheap: number; standard: number; strong: number };
+  trust: TrustFaceFacts;
 }
 
 /** 手写比较器（spec：不引 semver）。只认 `">=X.Y.Z <N"` 这一形态——本仓 engines 现在的写法；
@@ -63,6 +89,51 @@ export function nodeVersionOk(nodeVersion: string, range: ReturnType<typeof pars
   if (!m) return false;
   const t: [number, number, number] = [Number(m[1]), Number(m[2]), Number(m[3])];
   return cmpTriple(t, range.min) >= 0 && t[0] < range.maxExclusiveMajor;
+}
+
+/** 信任落点的纯核。判序：目录读不出 → 目录世界可写 → 表读不出 → 报数。
+ *  「世界可写」为什么要单独出声：数据根从前落在 `<os.tmpdir()>/m2e-plugin-data`（第 424 页搬走的那个洞——
+ *  任何本机用户都能在那儿预建 `plugin-trust.json`，把自己的条目写成已信任）。搬进用户级配置目录后
+ *  这条路只剩「用户自己把 `M2E_PLUGIN_DATA` 指回临时区」——变窄了但没关死，所以它要**可看见**，
+ *  而不是靠一次搬家假装解决。
+ *  状态与条数不自洽（state 说 ok 却没给数、说 absent 却给了数）也算病：那种输入只可能是取料面写错了，
+ *  读成「干净」就是把没尺报成没问题。 */
+export function trustFaceCheck(t: TrustFaceFacts): DoctorCheck {
+  const origin = t.source === "env" ? "env M2E_PLUGIN_DATA" : "缺省";
+  const mode = t.dirMode === null ? "权限读不出" : "权限 " + t.dirMode.toString(8).padStart(4, "0");
+  const where = "插件数据根 " + t.root + "（来路 " + origin + "，" + mode + "）";
+  const worldWritable = t.dirMode !== null && (t.dirMode & 0o002) !== 0;
+  const store =
+    t.storeState === "ok" && t.entries !== null
+      ? { text: "信任表 已信任 " + t.entries.trusted + " 条／已拒绝 " + t.entries.declined + " 条", ok: true }
+      : t.storeState === "unreadable"
+        ? { text: "信任表读不出（这不等于「已信任 0 条」）", ok: false }
+        : t.storeState === "absent" && t.entries === null
+          ? { text: "信任表还没写", ok: true }
+          : { text: "信任表状态与条数不自洽（状态 " + t.storeState + "）", ok: false };
+  if (t.dirState === "unreadable") {
+    return {
+      id: "trust",
+      ok: false,
+      fatal: false,
+      detail: where + "——目录读不出，权限位与信任表都无从判断",
+      hint: "检查这一格的来路（" + origin + "），或把数据根指回可读的位置",
+    };
+  }
+  if (t.dirState === "absent") {
+    return { id: "trust", ok: true, fatal: false, detail: where + "——目录还没建（还没有信任决议落盘）" };
+  }
+  const parts = [where, store.text];
+  if (worldWritable) parts.push("目录世界可写，本机任何用户都能预置这份信任表");
+  return {
+    id: "trust",
+    ok: store.ok && !worldWritable,
+    fatal: false,
+    detail: parts.join("，"),
+    hint: store.ok && !worldWritable
+      ? undefined
+      : "chmod go-w 这个目录；信任表读不出就删掉它，让插件重新出信任卡",
+  };
 }
 
 export function collectDoctorChecks(f: DoctorFacts): DoctorCheck[] {
@@ -124,6 +195,7 @@ export function collectDoctorChecks(f: DoctorFacts): DoctorCheck[] {
         : ".agent/config.json 存在但解析失败：" + f.search.message,
     hint: f.search.kind === "broken" ? "修好或删掉 .agent/config.json" : undefined,
   });
+  checks.push(trustFaceCheck(f.trust));
   return checks;
 }
 
@@ -141,7 +213,41 @@ export function renderDoctor(r: DoctorReport): string {
   return lines.join("\n") + "\n";
 }
 
-/** IO 壳：收齐六项事实再进纯核。inject 只为判卷开（生产零参调用，判卷用它替换沙箱探测等机器态）。 */
+/** 取信任落点的三态事实（目录 stat ＋ 表文件读文）。
+ *  每一档「读不出」都留在事实里：不许折成 absent，更不许折成「0 条决议」。
+ *  路径与表名都走装配面那两个出口（`pluginDataRootOf`／`trustFilePathOf`），doctor 不自己拼——
+ *  自己拼一遍就有了第二份事实源，第 424 页搬的那次家正好会让它指到旧地址。 */
+async function readTrustFace(env: NodeJS.ProcessEnv, home: string): Promise<TrustFaceFacts> {
+  const root = pluginDataRootOf(env, home);
+  const source: TrustFaceFacts["source"] = env.M2E_PLUGIN_DATA ? "env" : "default";
+  let dirState: TrustFaceFacts["dirState"] = "unreadable";
+  let dirMode: number | null = null;
+  try {
+    const st = await stat(root);
+    if (st.isDirectory()) {
+      dirState = "ok";
+      dirMode = st.mode & 0o777;
+    }
+  } catch (err) {
+    // 只有「确实不存在」才算 absent；EACCES／路径中段不是目录一律 unreadable——
+    // 把读不出读成「还没建」就是让机器上的毛病冒充干净。
+    dirState = (err as { code?: string }).code === "ENOENT" ? "absent" : "unreadable";
+  }
+  let storeState: TrustFaceFacts["storeState"] = "absent";
+  let entries: TrustFaceFacts["entries"] = null;
+  if (dirState === "ok") {
+    try {
+      const parsed = parseTrustFile(await readFile(trustFilePathOf({ pluginDataRoot: root }), "utf8"));
+      storeState = parsed === null ? "unreadable" : "ok";
+      entries = parsed === null ? null : { trusted: parsed.trusted.length, declined: parsed.declined.length };
+    } catch (err) {
+      storeState = (err as { code?: string }).code === "ENOENT" ? "absent" : "unreadable";
+    }
+  }
+  return { root, source, dirState, dirMode, storeState, entries };
+}
+
+/** IO 壳：收齐七项事实再进纯核。inject 只为判卷开（生产零参调用，判卷用它替换沙箱探测等机器态）。 */
 export async function runDoctor(workspace: string, inject: Partial<DoctorFacts> = {}): Promise<DoctorReport> {
   const pkg = JSON.parse(
     await readFile(resolve(dirname(fileURLToPath(import.meta.url)), "../../package.json"), "utf8"),
@@ -170,6 +276,7 @@ export async function runDoctor(workspace: string, inject: Partial<DoctorFacts> 
       standard: specsByTier(DEFAULT_MODEL_TABLE, "standard").length,
       strong: specsByTier(DEFAULT_MODEL_TABLE, "strong").length,
     },
+    trust: await readTrustFace(process.env, homedir()),
     ...inject,
   };
   const checks = collectDoctorChecks(facts);

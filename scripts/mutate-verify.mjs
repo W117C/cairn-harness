@@ -14176,6 +14176,63 @@ const MUTATIONS = [
     apply: (s) => s.replace(`const code = certExitCode(outcome);`, `const code = tc.status === 0 && gateReds.length === 0 ? 0 : 1;`),
     expectFail: "⑩ 退出码只有一条算式，且它调的是那份共用函数（不许留第二条 `&&` 串）",
   },
+  // ---- 第 432 页：`--doctor` 第七项（信任与插件数据落点）----
+  // 这一族守的是同一条承诺：**读不出的东西不许报成「干净」**。三处「读不出」（目录 stat 抛、
+  // 表 JSON 坏、表不在目录里但落点是文件）各有一处会被写错的分支折成合法空态，所以各钉一根。
+  {
+    id: "doctor-trust-world-writable-silent",
+    src: "src/main/doctor.ts",
+    test: "tests/doctor.test.ts",
+    desc: "世界可写那一维摘掉（`false`）⇒ 数据根落在谁都能写的目录里也不再出声，"
+      + "而这条洞正是第 424 页搬家前那个 tmpdir 落点的原形——搬家不等于关死，报告要看得见",
+    apply: (s) => s.replace(`  const worldWritable = t.dirMode !== null && (t.dirMode & 0o002) !== 0;`, `  const worldWritable = false;`),
+    expectFail: "世界可写（0777）⇒ ✗ 并点名这条洞，但仍不是致命项",
+  },
+  {
+    id: "doctor-trust-stat-error-folds-to-absent",
+    src: "src/main/doctor.ts",
+    test: "tests/doctor.test.ts",
+    desc: "把 stat 的所有抛都读成 ENOENT ⇒ EACCES／路径中段是文件一律报「还没建」，"
+      + "于是「这台机器上doctor读不到它」与「这台机器干净」在报告里长成同一句话",
+    apply: (s) => s.replace(`    dirState = (err as { code?: string }).code === "ENOENT" ? "absent" : "unreadable";`, `    dirState = "absent";`),
+    expectFail: "只有 ENOENT 才读成 absent，其余抛（EACCES／ENOTDIR）留在 unreadable",
+  },
+  {
+    id: "doctor-trust-not-a-directory-counts-as-ok",
+    src: "src/main/doctor.ts",
+    test: "tests/doctor.test.ts",
+    desc: "去掉 isDirectory 那道判断（stat 成功就算目录）⇒ 落点被一个同名文件占了也照样报权限位与条数，"
+      + "而那时信任表根本不可能在那儿",
+    apply: (s) => s.replace(`    if (st.isDirectory()) {`, `    if (true) {`),
+    expectFail: "落点同名但是个文件 ⇒ ✗（stat 成功不等于它是目录，不许落成「还没建」）",
+  },
+  {
+    id: "doctor-trust-broken-store-reads-as-ok-empty",
+    src: "src/main/doctor.ts",
+    test: "tests/doctor.test.ts",
+    desc: "表读不出时把状态折成 ok ⇒ doctor 报「一切正常」而装载面其实一条决议都没读到；"
+      + "报告与装载各说各话，用户按报告去信任了一个根本没生效的表",
+    apply: (s) => s.replace(`      storeState = parsed === null ? "unreadable" : "ok";`, `      storeState = "ok";`),
+    expectFail: "表是坏 JSON ⇒ ✗ 并说「读不出」；同一路径换成 0 字节也是读不出，两条都不许报成 0 条决议",
+  },
+  {
+    id: "doctor-trust-root-recomputed-not-shared",
+    src: "src/main/doctor.ts",
+    test: "tests/doctor.test.ts",
+    desc: "doctor 自己拼一遍数据根（写死 .config/cairn/plugin-data）⇒ env 给的落点被忽略，"
+      + "报的是「我以为它在哪」而不是装配面真正在用的那个地址；第 424 页那种搬家下次还会漂",
+    apply: (s) => s.replace(`  const root = pluginDataRootOf(env, home);`, `  const root = join(home, ".config", "cairn", "plugin-data");`),
+    expectFail: "表里有决议 ⇒ 如实报条数，且报的是 env 给的那个落点（不是 home 下拼出来的第二个）",
+  },
+  {
+    id: "doctor-trust-check-computed-not-pushed",
+    src: "src/main/doctor.ts",
+    test: "tests/doctor.test.ts",
+    desc: "纯核算出来了却没接进清单 ⇒ 第七项在报告里彻底消失，而判卷里那 12 条用例照绿（恒真的接线），"
+      + "这一格只有把 push 摘掉才看得见它本来在不在",
+    apply: (s) => s.replace(`  checks.push(trustFaceCheck(f.trust));\n`, ``),
+    expectFail: "固定清单＝七项，顺序即渲染顺序，第七项是 trust（第 432 页带进来的那一格）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
