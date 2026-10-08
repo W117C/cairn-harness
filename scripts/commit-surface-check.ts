@@ -1,10 +1,13 @@
-// 落库面与门面对账（#47 ＋ #49，第 339 页）。判据本体在 `scripts/lib/commit-surface.ts`（纯函数），
-// 这里只做取料与出声。
+// 落库面与门面对账（#47 ＋ #49，第 339 页）＋ 提交面的删除形状（#16，第 435 页）。判据本体在
+// `scripts/lib/commit-surface.ts`（纯函数），这里只做取料与出声。
 //
 // 跑法：
-//   node --import tsx scripts/commit-surface-check.ts                 // 两面对账，只读
+//   node --import tsx scripts/commit-surface-check.ts                 // 两面对账 ＋ 问 HEAD 的删除形状，只读
 //   node --import tsx scripts/commit-surface-check.ts --landed=HEAD   // 额外问一句：这一笔落库的路径有几条不在 index 上
 //   node --import tsx scripts/commit-surface-check.ts --sync=HEAD     // 显式同步「那一笔动过且 index 确认落后」的路径（只写自己那批）
+//
+// 退出码：`0`＝删除形状那一格没阻断；`1`＝**这一笔的删除形状没被说明**（空树／消失文件超帽且无备案）；
+// `2`＝参数不认识。对账那一面（#47／#49）只出声不决定退码——那是邻接会话的状态，不是这一笔的失败。
 //
 // 缺省**只读**：同步要人明确说 `--sync=<rev>`，因为多会话共用一个 git 身份（author 分辨不出会话），
 // 自动判断「哪些是我的」会替别人改暂存面。`--sync` 的作用域被两件事同时夹住：该笔 diff 动过的路径
@@ -13,7 +16,17 @@ import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GATES } from "./gate-manifest.js";
-import { classifyDrift, driftSummary, gateFaceDiff, landedGap, type DriftKind } from "./lib/commit-surface.js";
+import {
+  classifyDrift,
+  commitShapeFacts,
+  commitShapeFindings,
+  commitShapeSummary,
+  driftSummary,
+  gateFaceDiff,
+  landedGap,
+  DELETE_WAIVER_MARK,
+  type DriftKind,
+} from "./lib/commit-surface.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const argv = process.argv.slice(2);
@@ -80,6 +93,28 @@ if (landedRev !== null) {
   }
 }
 
+// ---- 提交面的删除形状（任务 #16／第 435 页；判据与取料参数表都在 lib，这里只提供 git 与出声）----
+// 缺省问 HEAD，`--landed`／`--sync` 给了就问那一笔——因为第 431 页那笔空树提交是我**落完看一眼 stdout**
+// 才发现的；那一行现在由这道尺来读，读不到就红（不许折成"没删东西"）。
+const gitOrNull = (args: readonly string[]): string | null => {
+  try {
+    return git([...args]);
+  } catch {
+    return null;
+  }
+};
+
+const shapeRev = landedRev ?? "HEAD";
+const shape = commitShapeFindings(commitShapeFacts(shapeRev, gitOrNull));
+const shapeBlocking = shape.filter((x) => x.blocking);
+for (const x of shape) console.log(`  ${x.blocking ? "❌" : "ℹ️"} ${x.kind} — ${x.detail}`);
+console.log(`[commit-surface] 问的是 ${shapeRev}｜${commitShapeSummary(shape)}`);
+if (shapeBlocking.length > 0) {
+  console.log(`  出口两选一：① 这笔不该长这样 ⇒ 按第 431 页那条退回（git reset --mixed <父>，工作树一字不动）；`);
+  console.log(`  ② 确实要删 ⇒ 在提交说明里写「${DELETE_WAIVER_MARK}<为什么>」再落——那句话是给下一个读者留的账，不是给门交的钥匙。`);
+  console.log("  注：这一格红不取决于别人在飞什么，它只问这一笔自己的树与 numstat（第 435 页现读：近 120 笔 0 条误伤）。");
+}
+
 // 门面对账：`scripts/**` 里盘上与 HEAD 不一致的那些，哪些是**门本体**。
 const dirtyScripts = git(["diff", "HEAD", "--name-only", "-z", "--", "scripts"]).split("\0").filter((s) => s !== "");
 // HEAD 侧的 scripts 面（这道格的分母）：取不到就是空集 ⇒ 所有门都会落进 absentInHead，
@@ -95,4 +130,5 @@ if (face.absentInHead.length > 0) {
     + "在干净 HEAD 树里跑它们会直接 ERR_MODULE_NOT_FOUND，那既不是门的红也不是仓的缺陷，是我的取料面错了（第 345 页）。");
 }
 // 只读时不因别人在飞而红：门本体差异是**邻接会话的状态**，不是我的失败。要它阻断属裁决（#49 里写明）。
-process.exit(0);
+// 删除形状那一格不一样：它只问这一笔自己的树与 numstat，与别人在飞什么无关 ⇒ 这一格可以阻断（#16）。
+process.exit(shapeBlocking.length > 0 ? 1 : 0);

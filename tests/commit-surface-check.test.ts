@@ -3,10 +3,25 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { classifyDrift, driftSummary, gateFaceDiff, landedGap, type DriftReport } from "../scripts/lib/commit-surface.js";
+import {
+  classifyDrift,
+  commitShapeFacts,
+  commitShapeFindings,
+  commitShapeSummary,
+  commitShapeWaived,
+  driftSummary,
+  gateFaceDiff,
+  landedGap,
+  DELETED_FILE_CAP,
+  DELETE_WAIVER_MARK,
+  type DriftReport,
+  type GitRunner,
+} from "../scripts/lib/commit-surface.js";
 import { GATES } from "../scripts/gate-manifest.js";
 
 const cliSrc = readFileSync(fileURLToPath(new URL("../scripts/commit-surface-check.ts", import.meta.url)), "utf8");
+const hygieneSrc = readFileSync(fileURLToPath(new URL("../scripts/repo-hygiene-check.ts", import.meta.url)), "utf8");
+const libSrc = readFileSync(fileURLToPath(new URL("../scripts/lib/commit-surface.ts", import.meta.url)), "utf8");
 const map = (entries: [string, string][]): Map<string, string> => new Map(entries);
 
 describe("classifyDrift：四态分开印，谁也不许替谁闭嘴", () => {
@@ -167,5 +182,184 @@ describe("CLI 的接线（读源文，不 import 有取料与写动作的那支�
   });
   it("分母自证失败时明写「不可引用」，而不是继续报数", () => {
     expect(cliSrc).toMatch(/分母自证失败[\s\S]{0,40}不可引用/u);
+  });
+});
+
+// ---- 第 435 页（#16）：提交面的删除形状。取料用注入的 fake git，判据全喂合成输入 ----
+
+/** 按参数表分派的四段取料。参数表里没有的一律抛——lib 改了 git 参数而这里没跟着改，
+ *  就要在这里喊出来，而不是安静返回 null 让纯核把「没量到」当结论。 */
+function fakeGit(face: {
+  meta?: string | null;
+  numstat?: string | null;
+  gone?: string | null;
+  tree?: string | null;
+}): GitRunner {
+  return (args: readonly string[]): string | null => {
+    const s = args.join(" ");
+    if (s.startsWith("show --no-patch")) return face.meta ?? null;
+    if (s.includes("--numstat")) return face.numstat ?? null;
+    if (s.includes("--diff-filter=D")) return face.gone ?? null;
+    if (s.startsWith("ls-tree")) return face.tree ?? null;
+    throw new Error("参数表里没这一支：" + s);
+  };
+}
+
+const nulJoin = (xs: readonly string[]): string => xs.join("\0") + "\0";
+const shapeOf = (over: Partial<Parameters<typeof commitShapeFindings>[0]> = {}) => commitShapeFindings({
+  rev: "synthetic0",
+  deletedFiles: 0,
+  insertions: 10,
+  deletions: 10,
+  binaryFiles: 0,
+  treeFiles: 3600,
+  message: "合成提交",
+  hasParent: true,
+  ...over,
+});
+const blocked = (xs: ReturnType<typeof commitShapeFindings>): number => xs.filter((x) => x.blocking).length;
+
+describe("commitShapeFacts：四段 git 输出解成事实（fake git 注入，不碰真仓）", () => {
+  it("正常一笔：sha／父／正文都归位，numstat 与消失文件、树条数各按自己那段算", () => {
+    const f = commitShapeFacts("HEAD", fakeGit({
+      meta: "abc123\u001fdef456\u001f第 435 页：加一道提交面闸",
+      numstat: nulJoin(["4\t2\ta.ts", "1\t0\tb.ts"]),
+      gone: "",
+      tree: nulJoin(["a.ts", "b.ts", "c.ts"]),
+    }));
+    expect(f).toEqual({
+      rev: "abc123",
+      deletedFiles: 0,
+      insertions: 5,
+      deletions: 2,
+      binaryFiles: 0,
+      treeFiles: 3,
+      message: "第 435 页：加一道提交面闸",
+      hasParent: true,
+    });
+  });
+
+  it("四段全取不到 ⇒ 两个计数都是 `null` 而不是 0（「没量到」与「没删」不许同形）", () => {
+    const f = commitShapeFacts("HEAD", fakeGit({ meta: null, numstat: null, gone: null, tree: null }));
+    expect(f.deletedFiles).toBeNull();
+    expect(f.treeFiles).toBeNull();
+    expect(f.rev).toBe("HEAD");
+    expect(f.hasParent).toBe(false);
+  });
+
+  it("「空集」与「取不到」给出不同答案：消失 0 支 ⇒ 0，取不到 ⇒ null（防恒真）", () => {
+    expect(commitShapeFacts("HEAD", fakeGit({ gone: "", tree: nulJoin(["a.ts"]) })).deletedFiles).toBe(0);
+    expect(commitShapeFacts("HEAD", fakeGit({ gone: null, tree: nulJoin(["a.ts"]) })).deletedFiles).toBeNull();
+  });
+
+  it("二进制那几条不计行数，但记条数（否则「49 增 801 删」里混着的图片会隐身）", () => {
+    const f = commitShapeFacts("HEAD", fakeGit({
+      meta: "s\u001fp\u001fm",
+      numstat: nulJoin(["-\t-\tassets/logo.png", "5\t1\tb.ts"]),
+      gone: "",
+      tree: nulJoin(["b.ts"]),
+    }));
+    expect([f.insertions, f.deletions, f.binaryFiles]).toEqual([5, 1, 1]);
+  });
+
+  it("根提交（%P 为空）⇒ hasParent=false，让纯核把删除维度标成「无从判」而不是判红", () => {
+    const f = commitShapeFacts("HEAD", fakeGit({ meta: "s\u001f\u001f初始提交", gone: "", tree: nulJoin(["a.ts"]) }));
+    expect(f.hasParent).toBe(false);
+  });
+});
+
+describe("commitShapeFindings：帽与备案的每一维都问两句（该红的真红、该绿的闭嘴）", () => {
+  it(`消失文件恰好等于帽(${String(DELETED_FILE_CAP)}) ⇒ 不阻断；再多一支就阻断且点名备案写法`, () => {
+    const at = shapeOf({ deletedFiles: DELETED_FILE_CAP });
+    expect(blocked(at)).toBe(0);
+    const over = shapeOf({ deletedFiles: DELETED_FILE_CAP + 1 });
+    expect(over.some((x) => x.kind === "massDelete" && x.blocking)).toBe(true);
+    expect(over[0]?.detail).toContain(DELETE_WAIVER_MARK);
+  });
+
+  it("树里 0 支文件 ⇒ 单独一格 emptyTree 并阻断（第 431 页那笔的形状，不与 massDelete 混）", () => {
+    const xs = shapeOf({ treeFiles: 0, deletedFiles: 3647 });
+    expect(xs.some((x) => x.kind === "emptyTree" && x.blocking)).toBe(true);
+    expect(xs.some((x) => x.kind === "massDelete")).toBe(true);
+  });
+
+  it("取不到 ⇒ 两条 faceUnreadable 且都阻断；有尺时一条都不出（防恒真）", () => {
+    const noFace = shapeOf({ deletedFiles: null, treeFiles: null });
+    expect(noFace.filter((x) => x.kind === "faceUnreadable").length).toBe(2);
+    expect(blocked(noFace)).toBe(2);
+    expect(shapeOf().filter((x) => x.kind === "faceUnreadable").length).toBe(0);
+  });
+
+  it("没尺时不叠阈值判断：treeFiles 取不到而消失 400 支，也只报「没尺」两条（不拿猜出来的数下结论）", () => {
+    const xs = shapeOf({ treeFiles: null, deletedFiles: 400 });
+    expect(xs.map((x) => x.kind)).toEqual(["faceUnreadable"]);
+  });
+
+  it("删除占比 94.2% 但没有文件消失 ⇒ 只出声（现读：合法历史里就有这一笔）", () => {
+    const xs = shapeOf({ deletedFiles: 0, insertions: 49, deletions: 801 });
+    expect(xs.length).toBe(1);
+    expect(xs[0]?.kind).toBe("dominantDelete");
+    expect(xs[0]?.blocking).toBe(false);
+  });
+
+  it("占比不到阈值 ⇒ 一声不出（有面它闭嘴＝误报的那一半）", () => {
+    expect(shapeOf({ insertions: 900, deletions: 100 })).toEqual([]);
+  });
+
+  it("根提交：说「无从判」而不阻断，也不拿父树阈值判它", () => {
+    const xs = shapeOf({ hasParent: false, deletedFiles: 9000, treeFiles: 1 });
+    expect(xs.length).toBe(1);
+    expect(xs[0]?.kind).toBe("rootCommit");
+    expect(xs[0]?.blocking).toBe(false);
+  });
+
+  it("帽的取值有现读出处（4＝近 120 笔里「从树里消失的文件数」的最大值；抬帽要拿新的现读来，不许顺手）", () => {
+    expect(DELETED_FILE_CAP).toBe(4);
+  });
+
+  it("汇总行把阻断数与只报数分开印，帽与备案标记都写出来", () => {
+    const over = shapeOf({ deletedFiles: 9 });
+    expect(commitShapeSummary(over)).toContain("阻断 1");
+    expect(commitShapeSummary(shapeOf({ deletedFiles: 0, insertions: 49, deletions: 801 }))).toContain("阻断 0");
+    expect(commitShapeSummary([])).toContain(`≤ ${String(DELETED_FILE_CAP)}`);
+  });
+});
+
+describe("commitShapeWaived：备案标记的认法（一句话的理由，不是一个标点）", () => {
+  it("有标记有话 ⇒ 认；只有标记／话太短／没标记 ⇒ 都不认", () => {
+    expect(commitShapeWaived("修点东西\n" + DELETE_WAIVER_MARK + "把隔壁夹带的 400 支在飞文件退回原位")).toBe(true);
+    expect(commitShapeWaived(DELETE_WAIVER_MARK)).toBe(false);
+    expect(commitShapeWaived(DELETE_WAIVER_MARK + "删")).toBe(false);
+    expect(commitShapeWaived("这笔只是改名")).toBe(false);
+  });
+
+  it("标记在多行正文的中间也算（人不按我们的位置写）", () => {
+    expect(commitShapeWaived("标题行\n" + DELETE_WAIVER_MARK + "退回别人夹带的整本台账\n尾巴")).toBe(true);
+  });
+});
+
+describe("接线：提交那一刻与认证那一拍共用同一份取料参数表（不许有第二把尺）", () => {
+  it("CLI 那一面：一处取料＋一处判据，退码接的是阻断数（不是恒 0）", () => {
+    expect((cliSrc.match(/commitShapeFindings\(commitShapeFacts\(/gu) ?? []).length).toBe(1);
+    expect(cliSrc).toMatch(/process\.exit\(shapeBlocking\.length > 0 \? 1 : 0\);/u);
+  });
+
+  it("卫生门那一面：接进 failed 的计数，且失败时点名两种修法", () => {
+    expect(hygieneSrc).toMatch(/commitShapeFindings\(headCommitShape\(\)\)/u);
+    expect(hygieneSrc).toMatch(/if \(shapeBlocking\.length > 0\) failed\+\+;/u);
+    expect(hygieneSrc).toMatch(/reset --mixed/u);
+  });
+
+  it("git 参数表只在 lib 里出现一次（两个消费者各写一遍＝下一次改一处、另一处安静给不同的数）", () => {
+    expect((libSrc.match(/--diff-filter=D/gu) ?? []).length).toBe(1);
+    expect(cliSrc).not.toMatch(/--diff-filter=D/u);
+    expect(hygieneSrc).not.toMatch(/--diff-filter=D/u);
+    expect(cliSrc).toMatch(/commitShapeFacts\(shapeRev, gitOrNull\)/u);
+    expect(hygieneSrc).toMatch(/commitShapeFacts\(rev, gitText\)/u);
+  });
+
+  it("两个消费者都印汇总行（读数形状只有一处定义）", () => {
+    expect(cliSrc).toMatch(/commitShapeSummary\(shape\)/u);
+    expect(hygieneSrc).toMatch(/commitShapeSummary\(shapeFindings\)/u);
   });
 });

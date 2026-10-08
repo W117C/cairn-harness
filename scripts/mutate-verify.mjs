@@ -14233,6 +14233,63 @@ const MUTATIONS = [
     apply: (s) => s.replace(`  checks.push(trustFaceCheck(f.trust));\n`, ``),
     expectFail: "固定清单＝七项，顺序即渲染顺序，第七项是 trust（第 432 页带进来的那一格）",
   },
+  // ---- 第 435 页：提交面的删除形状那道闸（#16，空树提交的机械化）----
+  // 这一族守的是同一句话：**「没量到」与「没删」不许同形**，以及**闸不许靠人看见**。
+  // 判据只有一份（`scripts/lib/commit-surface.ts`），两个消费者各有一根接线锚点钉着。
+  {
+    id: "commit-shape-empty-tree-not-blocking",
+    src: "scripts/lib/commit-surface.ts",
+    test: "tests/commit-surface-check.test.ts",
+    desc: "空树那一格从阻断降成只出声 ⇒ 第 431 页那种「3647 支全删、树里 0 支」又能绿着过去，"
+      + "而它正是这道闸存在的全部理由（当时靠我看见 stdout 才停）",
+    apply: (s) => s.replace(`      kind: "emptyTree",\n      blocking: true,`, `      kind: "emptyTree",\n      blocking: false,`),
+    expectFail: "树里 0 支文件 ⇒ 单独一格 emptyTree 并阻断（第 431 页那笔的形状，不与 massDelete 混）",
+  },
+  {
+    id: "commit-shape-null-face-folds-to-zero",
+    src: "scripts/lib/commit-surface.ts",
+    test: "tests/commit-surface-check.test.ts",
+    desc: "把「树文件数取不到」折成 0 ⇒ 没尺被读成「树是空的／没删东西」，"
+      + "这道闸最坏的一种失效方向（它会把事故读成干净）",
+    apply: (s) => s.replace(`    treeFiles: treeList === null ? null : treeList.length,`, `    treeFiles: treeList?.length ?? 0,`),
+    expectFail: "四段全取不到 ⇒ 两个计数都是 `null` 而不是 0（「没量到」与「没删」不许同形）",
+  },
+  {
+    id: "commit-shape-waiver-marker-ignored",
+    src: "scripts/lib/commit-surface.ts",
+    test: "tests/commit-surface-check.test.ts",
+    desc: "备案标记永远认不出（indexOf 写死 -1）⇒ 写了理由的那一笔照样被拦，"
+      + "门看起来更严其实把「为什么删」这条审计面关掉了——没人会去写一句换不来放行的事",
+    apply: (s) => s.replace(`  const at = message.indexOf(DELETE_WAIVER_MARK);`, `  const at = -1;`),
+    expectFail: "有标记有话 ⇒ 认；只有标记／话太短／没标记 ⇒ 都不认",
+  },
+  {
+    id: "commit-shape-cap-raised-without-census",
+    src: "scripts/lib/commit-surface.ts",
+    test: "tests/commit-surface-check.test.ts",
+    desc: "帽从 4 抬到 5（现读近 120 笔的最大值就是 4）⇒ 本仓口径「帽只准调低」被反着走，"
+      + "而阈值一旦离开现读出处就成了愿望",
+    apply: (s) => s.replace(`export const DELETED_FILE_CAP = 4;`, `export const DELETED_FILE_CAP = 5;`),
+    expectFail: "帽的取值有现读出处（4＝近 120 笔里「从树里消失的文件数」的最大值；抬帽要拿新的现读来，不许顺手）",
+  },
+  {
+    id: "commit-shape-hygiene-face-not-counted",
+    src: "scripts/repo-hygiene-check.ts",
+    test: "tests/commit-surface-check.test.ts",
+    desc: "认证那一拍算出了红却不并进 failed ⇒ 这道门印 ❌ 而退 0，"
+      + "忘了跑提交面那道尺的人就再没有第二道闸（第 230 页「算出来不接」那一族）",
+    apply: (s) => s.replace(`  if (shapeBlocking.length > 0) failed++;\n`, ``),
+    expectFail: "卫生门那一面：接进 failed 的计数，且失败时点名两种修法",
+  },
+  {
+    id: "commit-shape-cli-exit-hardcoded-zero",
+    src: "scripts/commit-surface-check.ts",
+    test: "tests/commit-surface-check.test.ts",
+    desc: "提交那一刻那道尺退码写回 0 ⇒ 它照印 ❌ 但「绿」这个信号又是恒真的，"
+      + "整条流水线里没人会去读那一行小字（这正是第 431 页靠人眼的形状）",
+    apply: (s) => s.replace(`process.exit(shapeBlocking.length > 0 ? 1 : 0);`, `process.exit(0);`),
+    expectFail: "CLI 那一面：一处取料＋一处判据，退码接的是阻断数（不是恒 0）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
