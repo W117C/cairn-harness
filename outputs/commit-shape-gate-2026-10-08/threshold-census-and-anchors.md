@@ -76,3 +76,19 @@
 跑法（可复算）：`git worktree add --detach .worktrees/verify-cb0f5c6 cb0f5c68` ＋ `cp -al` 依赖，
 在树里 `node --import tsx scripts/typecheck.ts`、`node --import tsx scripts/mutate-verify.mjs --check-needles`、
 `node scripts/mutate-verify.mjs --changed-since=26d2da0c --lock-tag=judge-435`；核过 0 项在飞后回收。
+
+## 8. 拿**事故那一笔本身**回放（不是合成输入）
+
+第 431 页那笔空树提交被 `git reset --mixed` 退回后对象仍在库里（本仓无远端、没推送过），
+所以这道闸可以直接对着它自己验一次：
+
+```console
+$ node --import tsx scripts/commit-surface-check.ts --landed=9676ab10
+REPLAY_RC=1
+  ❌ emptyTree — 9676ab10e435ee3db20515a76a6dc7b34c531ed6 落完树里 **0 支文件**——第 431 页那笔空树提交就是这个形状（临时 index 没 read-tree ⇒ git 认为索引里该有的东西是零）
+  ❌ massDelete — 9676ab10e435ee3db20515a76a6dc7b34c531ed6 从树里删掉 3647 支文件 > 帽 4（现读：近 120 笔最大 4 支）——说明里没写「删除备案：<为什么>」，拒落｜增 0 行／删 441768 行｜树里剩 0 支
+[commit-surface] 问的是 9676ab10｜提交面删除形状：出声 3 条（阻断 2，只报 1）｜帽：消失文件 ≤ 4、备案标记「删除备案：」
+  出口两选一：① 这笔不该长这样 ⇒ 按第 431 页那条退回（git reset --mixed <父>，工作树一字不动）；
+```
+
+一条尺的"能红"不需要合成证据时，就拿它自己放过的那次事故跑一遍 ⇒ `REPLAY_RC=1` 与两条 ❌ 就是它该给的行为。
