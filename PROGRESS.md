@@ -9867,7 +9867,7 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 
 ### 2026-10-01 · 第 296 页（本会话）· M4 路线图交付：调度器真入口 `m0 --serve`（initScheduler 首个生产调用者）＋接线判卷 3/3——「摘掉入口 ⇒ 判卷红」反向验证到位（源码 +50 行）
 
-1. **交付物（M4 任务书核心格：调度器真入口，二选一取常驻）**：`agent-runner.ts` 新增 `serveScheduler({workspace})`（装自动化工具面 `installAppTools({automation:true})` → `initScheduler`（dataDir=<ws>/.agent/schedules、sessions 同区）→ `startScheduler()`）＋ `schedulerRunning()` 只读观测；`cli.ts` `--serve` 旗标（与 --goal/--session/--compact/--replay/--fork/--message/--log 互斥守卫）＋ SIGINT 停机＋帮助行。**选常驻弃 goal 内 cron 的理由**：Scheduler 本就是常驻语义（tick 60s/补跑 7 天/并发闸 ≤2），goal 轮内塞 wall-clock cron 是把两种节拍缝死在一起；代价＝常驻进程的 CPU/内存画像（本笔未实测常驻画像，登记下一批）。触发执行器 `makeScheduledExecutor` 此前已接（initScheduler 内），触发＝全新会话的真实代码路径。
+1. **交付物（M4 任务书核心格：调度器真入口，二选一取常驻）**：`agent-runner.ts` 新增 `serveScheduler({workspace})`（装自动化工具面 `installAppTools({automation:true})` → `initScheduler`（dataDir=<ws>/.agent/schedules、sessions 同区）→ `startScheduler()`）＋ `schedulerRunning()` 只读观测；`src/cli.ts` `--serve` 旗标（与 --goal/--session/--compact/--replay/--fork/--message/--log 互斥守卫）＋ SIGINT 停机＋帮助行。**选常驻弃 goal 内 cron 的理由**：Scheduler 本就是常驻语义（tick 60s/补跑 7 天/并发闸 ≤2），goal 轮内塞 wall-clock cron 是把两种节拍缝死在一起；代价＝常驻进程的 CPU/内存画像（本笔未实测常驻画像，登记下一批）。触发执行器 `makeScheduledExecutor` 此前已接（initScheduler 内），触发＝全新会话的真实代码路径。
 2. **判卷（`tests/scheduler-wiring.test.ts` 3 条全绿）**：① serve 后 `schedulerRunning()` 翻真＋`automation_create` 工具面在场＋upsert 真值落 `<ws>/.agent/schedules/automations.json`；② stop 后翻假、重启翻回真（停得下来也启得回来）；③ 反向证人——cli.ts 的 `serveScheduler(` 接线必须以非注释形态存在。**反向验证红→绿已贴**：注释 cli 入口行 ⇒ ③ 红；恢复 ⇒ 3/3 绿。
 3. **实现注意**：`Scheduler` 补公开只读 getter `running`（`started` 私有，agent-runner 隔着模块边界要观测启停）；`automation_create` 的工具运行面走权限门（currentSession fail-closed），判卷收任务走 `getScheduler().upsert`（调度器自身入口）——工具运行面归会话判卷，本页只钉接线。
 4. **门**：typecheck 0；judges 现读 scheduler-wiring 3/3＋impact 族 67/67（改动未涉 impact，回归确认）；全量 3681+ 判卷由下一次认证覆盖。
@@ -14529,51 +14529,3 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
 8. **清场**：`.archify/sequence-request-lifecycle-20261008-205526/` 整个删除（2.7M／21 文件，含两套重复截图）。**删的依据是本笔新包已能独立满足**（candidate＋四道门回执＋visual-check 全在，且可复现）；不是"看着多余就删"。
 9. **取料面（本页引用的读数逐字可查）**：`outputs/request-lifecycle-2026-10-08/request-lifecycle.candidate.json`（图源，sha `d5422a3c`）＋`request-lifecycle.html`（产物，sha `7a57955e`／768607B）＋`request-lifecycle.delivery.json`＋`visual-check/request-lifecycle.visual-check.json`＋4 张截图（1440×900／2048×1320 × 明暗两主题）。
 10. **刻意未做（写清免得被读成已做）**：不改 `docs/CODE-WIKI.md`（它此刻被隔壁会话改着，+126 行未提交——不在别人的 WIP 上叠我的改动）；不给图加"行号→符号名"以外的内容改动（不改图的语义，只改引用形状）；`meta.repository` 不加——本仓 `git remote -v` 为空，而该字段要求 40 位 sha 的 GitHub/Gitee 地址，硬套会造一个假身份。
-
-## 2026-10-08 · 第 438 页：项目 skill 从「装了但看不见」变成「列得出、也批得了」——CLI 上第一次有信任决议入口（#7 的 ②＋①）
-
-1. **这一格欠在哪（现读，用被测方自己的谓词）**：`discoverPlugins` 吃装配面那一份根跑一趟 ⇒ `plugins 0／loose 0／errors 0／pending 0`，
-   而盘上明明有 `.agent/skills/graphflow/SKILL.md`（`ls -d` 两行：`.agent/skills` 在、`.agent/plugins` 根本不存在）。
-   负控同一条命令跑通：搜 `.agent/plugins` 命中 `src/main/agent-runner.ts` 的构造处。⇒ 缺陷是**那一顶根没被扫**，不是 skill 坏了。
-   另一半：`grep 'plugin|trust' src/cli.ts` 零命中 ⇒ v1 唯一交付面（CLI）上**没有信任决议入口**，
-   于是项目作用域样本（默认 pending）既列不出也批不了，唯一绕行是把目录塞进恒 trusted 的 `M2E_LOOSE_SKILLS`——那是为了可用把信任门拆了。
-2. **顺序按台账要求走**：#7 原文写「修 ① 之前必须先有 ②，否则新发现的根只会制造更多批不了的 pending」⇒ 这一笔两半同簇落，
-   且 ① 的新根**走项目信任门**（`scanScopeRoot(dir, "project", trustOf)`），不折进 `looseRoots` 那条免信任的路。
-   判卷 ⑯ 钉的就是「首次装载是 pending」，锚点 `project-skills-root-bypasses-trust-gate` 把新根改成恒 trusted 时它必红。
-3. **三处「只有一个出处」（这决定了形状）**：① 缺省根 `projectSkillsRootOf(workspace)` 住在 `src/agent/plugins/index.ts`，
-   由 `PluginRuntime.load` 接缺省 ⇒ 桌面面板／每次 run／CLI 一起吃到，**不必动隔壁在飞的 `agent-runner.ts`**（那一文件此刻 181/42 在飞）；
-   ② 「扫了哪几顶根」由 `discoverPlugins` 用它自己那批 `opts.*` 变量填进 `manifest.roots`，列面直接印这份——
-   调用方再拼一遍就是第二份事实（规则 236 那一族）；③ 决议只经 `PluginRuntime.trustDecide`（桌面面板同一个方法），
-   `plugin-cli-face.ts` 连 `TrustStore` 都不 import，判卷 ㉗ 把这条钉住。另：`pluginRuntimeOpts` 由 private 变 `export`，
-   CLI 与一次真 run 因此共用同一批 env 根（`M2E_USER_PLUGINS`／`M2E_LOOSE_SKILLS`／`M2E_TRUST_FILE` 只在这一处读）。
-4. **真跑读数（本机原文在取料工件 §3，七台）**：`--plugins` 列出 `graphflow｜散装 skill｜project｜pending` 并印出四顶根与「批准：cairn --trust-plugin <名称>」；
-   `--trust-plugin nosuch` ⇒ 退 1 ＋「一条决议也没写下」＋**信任表文件没被创建**（fail-closed 的物理证据）；
-   `--trust-plugin graphflow` ⇒ 退 0，表里那条是 `…/.agent/skills/graphflow@7ab77bc0ff2ae4697c87beb948deb0fb`（内容绑定）；
-   再列一次 ⇒ `trusted`／`待信任 0 条`／`信任表 已信任 1 条／已拒绝 0 条`（数字走 `--doctor` 那同一个 `trustCountsText`，不抄第二份文案）；
-   `--decline-plugin` ⇒ 同一条从 trusted 移到 declined；两枚相反决议同时给 ⇒ 退 2；`--plugins` 带任务描述 ⇒ 退 2（不静默吞任务还报 0）。
-   整趟用 `M2E_TRUST_FILE` 指到 `/tmp/t437/`，**没碰真表**。
-5. **判卷**：新增 `tests/plugin-cli-face.test.ts` **31 条**（现读 `Tests 31 passed (31)`，独占 1.99s／墙钟 2.23s），五层：
-   纯函数合成面 ①–⑫、信任表三态真盘 ⑬–⑮、装配面真扫 ⑯–⑱、真 spawn CLI ⑲–㉓、接线㉔–㉛。
-   接线那五条钉的是「整条调用连入参」（`PluginRuntime.load(runtimeOpts)`、`rt.trustDecide(req.name, req.trusted)`、
-   `pending: pendingPlugins(rt.manifest).length`），不是只钉函数名——「算出来不接」这一维从前存活过。
-6. **锚点**：7 根（表长脏树面 1519），逐根→killer 映射在取料工件 §4。三根是「把自己骗过去」的那三种形状：
-   决议失败仍报已批准、取不到表回「0 条」、absent／unreadable 两档互换。
-7. **本轮被自己的尺抓到一次（这条最值钱）**：`promise-recall-inventory` 报 `src/cli.ts#parseArgs｜批准与拒绝是相反的决议` 欠证人——
-   句子含能力标记 `只能`，而证人取料面是 `trackedExistingFiles(ROOT, "tests")`：**我那句断言写在还没 `git add` 的新判卷里 ⇒ 在它眼里证人不存在**。
-   `git add` 两份新文件之后同一趟转绿。⇒ 「新文件暂存挂在首次 import 它的那一笔」这条老规矩多一重理由：
-   没 add 的新判卷不只是别人 clone 不到，是它给的证**当场不计入**。修法是把断言补成真句证人（㉓ 加 `toContain` 那句生产原文），**不是抬帽**（帽 0）。
-8. **落库前秒级读数（两面分开记）**：`node --check scripts/mutate-verify.mjs` RC 0；`typecheck` 0 条报错；`docs-check` RC 0（3 项未检照旧）；
-   `assertion-health` 17 passed；`--check-needles` 脏主树面 阻断 20 ＝ 本簇 14（未入库面 10 ＋ 钉在飞文本 4）＋ 隔壁 6
-   （`cascade-ladder-cross-provider`、`goal-stopped-flag-ignored` 两根针脚失效 ＋ 4 根 `d13-*` 钉在飞文本）；落库后本簇那 14 条应归零，剩 6 条属隔壁。
-9. **归因（只记不修）**：`prose-needle-scan` 顶包候选 11 ＞ 帽 10——11 条里**没有一条**来自本笔，在飞那 4 条全指 `tests/docs-check.test.ts`（隔壁）；
-   `mutate-verify-gates` 选择子水位现读 4 ＞ 帽 3，四根都不是本笔的锚点；`provider-config`／`cli-surface`／`prompt-surface-check` 三条红读的是隔壁在飞面；
-   `repo-hygiene-check` 面②（`src/main/agent-runner.ts` 工作树 3110 行 ＞ 帽 3100）里本笔只占 2 行（注释＋`export`），其余 +137 是隔壁的。
-   另登记一条**文档不适格**：隔壁在飞的 `AGENTS.md` managed 块写着 `dsh plugin --profile web add @roarpeng/graphflow`——
-   `HEAD:AGENTS.md` 搜不到这句（退 1），而本仓 `package.json` 的 bin 是 `cairn`、`src/cli.ts` 也没有 `plugin` 子命令 ⇒ 那是一条不存在的命令；
-   它住在别人工具的托管块里，改不由我代劳。本笔把自己该文档的那一面补上：`README.md` 装法那一节列出三条新旗标（此前 README 对插件／信任／skill **零提及**）。
-10. **刻意未做（写清免得被读成已做）**：不做同名歧义闸——`dup plugin names` 现读 0 条，发生率 0 不外推成玩具面；
-    反转条件写在取料工件 §7（一旦非零，先给 `trustDecide` 加「解析到多根 ⇒ fail-closed」）。
-    不给 `--plugins` 加 `--json` 面（现在没有消费者）；不动桌面面板（S2-12 那轮已让 pending 的 loose skill 能列能批，缺的是 CLI 侧）；
-    不扫用户级 skill 根（无消费者、且会把免信任目录变大）；不装 `.git/hooks/pre-commit`（共享状态，等业主明文点头）。
-    `#7` 这一页之后仍留一格未收：**「项目 skill 被批准之后到底进不进路由」**要用一次真 run 证明（本轮零模型调用，只证到发现面与决议面）。
-    `#2`／`#4`／`#8`／`#10`／`#11`／`#13`／`#15` 照旧。**本轮没有花一分钱模型调用。**
