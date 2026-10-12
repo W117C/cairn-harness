@@ -140,7 +140,10 @@ describe("D-5 STATE.md 的 rev 必须是真提交", () => {
   it("缺 rev 行 → 红（不静默放行）", () => {
     const d = hit(checkStateRev("# 现态\n正文", exists), "D-5");
     expect(d).toHaveLength(1);
-    expect(d[0]!.detail).toContain("rev");
+    // 规则 302：断言的串必须是**生产者独有**的那半句。`"rev"` 这种短词在盘上有 41 个生产者
+    // （`rev-parse`／`llm_review`…），换掉别处任何一句它都照绿 ⇒ 被 `prose-needle-scan` 数成
+    // 顶包候选、把落库挡在帽外。取这句里只有 `checkStateRev` 产的那半截。
+    expect(d[0]!.detail).toContain("首部必须写");
   });
 
   it("rev 指向不存在的提交 → 红（防伪引用，且 detail 带那个 sha）", () => {
@@ -218,7 +221,10 @@ describe("D-2 现行层禁手抄观测值", () => {
     const d = hit(checkObservedValues([p("AGENTS.md", "它紧接 ~800s 的 test 门，")]), "D-2");
     expect(d).toHaveLength(1);
     expect(d[0]!.detail).toContain("800");
-    expect(d[0]!.detail).toContain("pnpm facts");
+    // 规则 302 同族：`"pnpm facts"` 有 2 个生产者（`scripts/facts.ts` 的说明句也含它）⇒ 取只有
+    // `checkObservedValues` 产的那半截（`手抄了观测值` 全仓独此一处）。"给的是指针"那半由上一行
+    // 800 与这一格共同钉住——指针字样归 `scripts/facts.ts` 自己证。
+    expect(d[0]!.detail).toContain("手抄了观测值");
   });
 
   it("带比较符的规格阈值放行（≤1000ms 是契约不是观测）", () => {
@@ -251,7 +257,9 @@ describe("D-4 现行层禁「就地追注代替改写」", () => {
       { path: "AGENTS.md", text: "上面那句已过期，但当日快照不得改写。\n" },
     ]), "D-4");
     expect(d).toHaveLength(1);
-    expect(d[0]!.detail).toContain("STATE.md");
+    // 规则 302 同族：`"STATE.md"` 在 `src/agent/compaction.ts` 里也产 ⇒ 取只有
+    // `checkAppendOnlyCorrections` 产的那半截。
+    expect(d[0]!.detail).toContain("过期字随写消失");
   });
 
   it("档案层正是这类字的归宿，不判红", () => {

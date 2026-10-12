@@ -90,6 +90,36 @@ describe("合成面：三类不一致各响一次，一致的不出声", () => {
     expect(checkScratchTreeNaming(R, trees)).toEqual([]);
   });
 
+  // 10-08 起实测的假红形状（第 424 页 §6 登记过）：`package.json` 把 mutate-verify / head-cert-check
+  // 两道的树名写死成 `.worktrees/gate-mutate-verify` 与 `.worktrees/gate-head-cert`——它们是长期复用的
+  // 工具树、不是"钉在某一笔上"的验证树，所以名字里没有 sha 是**设计**，不是漂移。
+  // 只要这两棵树在册，任何会话的 head-cert 都只能读到 exit=1 ⇒ 豁免必须落库，且必须被钉住。
+  it("门自己复用的工具树（gate- 前缀）不带 sha 是设计，一条都不许多报", () => {
+    const trees = [
+      { path: R, head: "a".repeat(40) },
+      { path: join(R, ".worktrees", "gate-mutate-verify"), head: H },
+      { path: join(R, ".worktrees", "gate-head-cert"), head: H },
+    ];
+    expect(checkScratchTreeNaming(R, trees)).toEqual([]);
+    // 取料面不受豁免影响：两棵树仍被算作"暂存根下的树"，只是不再被命名判据喊。
+    expect(scratchTreesUnder(R, trees).map((t) => t.path)).toEqual([
+      join(R, ".worktrees", "gate-mutate-verify"),
+      join(R, ".worktrees", "gate-head-cert"),
+    ]);
+  });
+
+  // 反一侧：豁免只吞 `gate-` 那一族，**同批里的真验证树照旧全查**——否则这条豁免会被读成
+  // "暂存根下的树都不判了"，而那正是它要防的第二种假绿（比假红更贵）。
+  it("gate- 豁免不放大：同批里的 verify- 树仍逐条查", () => {
+    const trees = [
+      { path: R, head: "a".repeat(40) },
+      { path: join(R, ".worktrees", "gate-head-cert"), head: H },
+      { path: join(R, ".worktrees", "verify-abc1234"), head: "9".repeat(40) },
+      { path: join(R, ".worktrees", "verify-临时"), head: H },
+    ];
+    expect(checkScratchTreeNaming(R, trees).map((f) => f.kind).sort()).toEqual(["name-not-head", "no-sha-name"]);
+  });
+
   it("两棵树钉在同一个提交 ⇒ 响（同一 HEAD 该复用一棵，别留多份像两个证据面）", () => {
     const r = checkScratchTreeNaming(R, [
       { path: join(R, ".worktrees", "verify-abc1234"), head: H },

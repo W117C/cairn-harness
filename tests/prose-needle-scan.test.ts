@@ -946,15 +946,13 @@ describe("真仓扫：这把尺自己不许空载", () => {
     // 第三族（裸名字）：①它是顶包名单的**子集**，不许另开一条清单外的路；②两半不许重叠（红的那半 vs 在飞那半）；
     // ③两半之和＝按谓词挑出的全部（分面漏一半会在这儿红，且这一条**与树的脏净无关**）；
     // ④帽按 scope 取，且**两半都算账**（第 118 页改的就是这一处口径）：core-only 那行登记落库后重测的 2、
-    //   含桌面层 3——多出的那 1 格住在将被删的桌面测试里。"谓词不空转"的活证是两半之和 > 0（与树脏净无关）。
+    //   含桌面层 3——多出的那 1 格住在将被删的桌面测试里。非空分类路径由下方合成树用例覆盖；真仓可合法为 0。
     expect(r.bareName.every((v) => r.multiCopy.includes(v))).toBe(true);
     expect(r.inFlightBareName.every((v) => r.multiCopy.includes(v))).toBe(true);
     expect(r.bareName.filter((v) => r.inFlightBareName.includes(v))).toEqual([]);
     expect(r.bareName.length + r.inFlightBareName.length).toBe(
       r.multiCopy.filter((v) => isBareNameNeedle(v.needle)).length,
     );
-    // 「谓词不空转」的活证＝两半之和 > 0（帽内与否由上面那条真仓用例判，这里不再自己算一遍）
-    expect(r.bareName.length + r.inFlightBareName.length).toBeGreaterThan(0);
   });
 
   // 「在飞」那一半只给个数＝逃生口（第 93 页给 drift 立的规矩，这页补到顶包候选上）。
@@ -1041,9 +1039,9 @@ describe("合成树那一面：sourceFiles／proseHeldBack／inFlightStale 三�
     mkdirSync(join(root, "src"), { recursive: true });
     mkdirSync(join(root, "scripts"), { recursive: true });
     mkdirSync(join(root, "tests"), { recursive: true });
-    writeFileSync(join(root, "src", "a.ts"), 'export const sentence = "不在 HEAD 里";\n');
+    writeFileSync(join(root, "src", "a.ts"), 'export const sentence = "不在 HEAD 里"; export const first = "grep";\n');
     // 另两档扩展名各一支：摘掉 `.mts` 或 `.mjs` 那一档 ⇒ 等式当场少一支（真仓那条阈值对小漂移不分辨）
-    writeFileSync(join(root, "src", "b.mts"), 'export const b = "另一档的一面";\n');
+    writeFileSync(join(root, "src", "b.mts"), 'export const b = "另一档的一面"; export const second = "grep";\n');
     writeFileSync(join(root, "scripts", "c.mjs"), 'export const c = "第三档的一面";\n');
     // 登记表形状：≥50 条 `expectFail:`（`ANCHOR_TABLE_MIN`），每条配一句只给人读的 `desc:` ⇒ 散文栏恰好 60
     const rows = Array.from({ length: 60 }, (_, i) =>
@@ -1060,7 +1058,7 @@ describe("合成树那一面：sourceFiles／proseHeldBack／inFlightStale 三�
       + "function proseHolder() { return [{ desc: \"别把这张用例表的散文算进登记表那一半\" }]; }\n"
       + "proseHolder();\n");
     writeFileSync(join(root, "tests", "a.test.ts"),
-      'import { expect, it } from "vitest";\nit("点名那句生产文案", () => { expect(1).toBe(1); });\n');
+      'import { expect, it } from "vitest";\nit("点名那句生产文案", () => { expect({ detail: "" }.detail).toContain("grep"); });\n');
     g("add", "src/a.ts", "src/b.mts", "scripts/table.ts", "scripts/cases.ts", "scripts/c.mjs", "tests/a.test.ts");
     g("commit", "-q", "-m", "fixture");
     // 在飞两面：一支把 mtime 拨到 3 天前（跨过 `STALE_IN_FLIGHT_MS`＝24h），一支新鲜
@@ -1090,6 +1088,10 @@ describe("合成树那一面：sourceFiles／proseHeldBack／inFlightStale 三�
     // 反向一侧：未跟踪的那两支在面里出现＝口径漂了（这条等式同时挡「加宽到工作树」与「把 tests/ 算进生产侧」）
     expect(r.inFlightFiles.slice().sort()).toEqual(["src/fresh.ts", "src/old.ts"]);
     expect(r.untrackedHeldOut).toEqual(["src/fresh.ts", "src/old.ts"]);
+  });
+
+  it("真扫描把重复的裸名字收进裸名字候选", () => {
+    expect(r.bareName.map((v) => v.needle)).toContain("grep");
   });
 
   it("散文栏只数登记表那一半：恰好 60 条，用例表里那句 `desc:` 不许进来", () => {

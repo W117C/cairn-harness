@@ -54,6 +54,10 @@ export function checkScratchTreeNaming(root: string, trees: readonly ScratchTree
   const byHead = new Map<string, string[]>();
   for (const t of mine) {
     const name = base(t.path);
+    // 工具共享树（package.json 写死的 gate-mutate-verify / gate-head-cert）不含 sha 是设计：
+    // 它们是长期复用的工具树，不是「钉在某个提交上」的验证树，豁免它们的命名检查。
+    // 判据不变：真验证树（verify-* / head-cert-* / probe-* 等）仍须 <前缀>-<sha>。
+    if (name.startsWith("gate-")) continue;
     const m = NAME_OF_DIR.exec(name);
     if (m === null) {
       out.push({ kind: "no-sha-name", detail: `暂存树 ${name} 的名字没编码提交（约定是 <前缀>-<sha>）⇒ 回收时无法从名字认出它钉在哪一笔` });
