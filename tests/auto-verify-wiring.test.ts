@@ -144,8 +144,13 @@ describe("能力 5 收束闸的装配链（runAgent 直调 vs 生产入口）", 
       "utf8",
     );
     await settings({ provider: "demo", safeMode: "off" }); // 无键 ⇒ 缺省开，故只有 override 能关掉它
-    const events = await runViaIpc({ autoVerify: false });
+    // 第 449 页修：这一格原先没给 `trustedRepo`（②b 给了）⇒ 生产路径在 S3 信任闸就被拒、
+    // 一个事件都不产生，而下面两条断言在**空集**上恒真（`[].every()` 是 true、`length` 是 0）
+    // ⇒ 这条用例一直是**空过**的：变异验证当场读到「存活」（`autoverify-ipc-override-ignored`）。
+    // 补信任位（本目录是本用例现搭的 fixture，自行断言可信）＋ 一行非空断言，把假绿堵死。
+    const events = await runViaIpc({ trustedRepo: true, autoVerify: false });
     const results = events.filter((e) => e.type === "tool_result");
+    expect(results.length, "一个 tool_result 都没有 ⇒ 下面的断言是在空集上恒真").toBeGreaterThan(0);
     expect(results.every((e) => e.ok === true), JSON.stringify(results)).toBe(true); // 写成功，排除"门拒了所以没拍"
     expect(autoBeats(events).length).toBe(0);
   });

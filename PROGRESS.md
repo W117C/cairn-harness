@@ -14839,3 +14839,38 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    ——本页证的只有「认证门面里那道 `mutate-needles-check` 绿」与「表长 1534、阻断 0」，
    **不是**"整张变异表在 HEAD 上全杀"；② 真模型／生产读数一律没有（无凭据）；
    ③ 第 443 页那条结论（那批 `~/.dsh` 语料不是本仓的）不变。
+
+## 2026-10-12 · 第 449 页：全表变异第一次跑在「含那 22 个面」的 HEAD 上——1534/1534 条、34.3 分钟，抓到 3 条红（1 真存活 + 2 基线污染），三条根因都修了
+
+1. **动因**：第 446 页把 22 个此前**连一次变异执行都没有过**的面入了库，第 448 页只证了认证门面里那道
+   `mutate-needles-check`（它查的是「针脚在不在、指得对不对」，不执行判卷）。⇒ 这一趟是那张表**第一次**
+   在含那些面的 HEAD 上真跑。
+2. **读数（原文在取料）**：`跑了 1534/1534 条 · 本次耗时 2056.4s`（34.3 分钟）、
+   `判卷 spawn 3068 次／1534 条（每条 2 拍）· 单次中位 0.4s`、
+   `REDKINDS=survived:1,misattributed:0,baseline-red:2,no-effect:0,syntax:0,restore-mismatch:0,vacuous:0`
+   ⇒ **1531 条干净杀死**，3 条红各有各的成因。
+3. **红①（2 条）`baseline-red`：`memory-external-ref-*` ——判卷自己不 hermetic**。
+   根因：`tests/memory-store-pure.test.ts` 的夹具用**改 `process.env.HOME`**来隔离，而
+   `os.homedir()` 在 vitest 的 `--pool=threads`（门用的那套跑法）下**看不到**这个赋值
+   ⇒ 判卷把状态写去了**真实的** `~/.config/cairn/memory/`（实测那份 mtime 当场被改），
+   它自己断言的临时目录里那份根本没被创建，于是「基线就不绿」。修法是换成 store **自己的**测试钩子
+   `M2D_MEMORY_HOME`（模块头本来就写着"测试用临时目录"）。实测：threads 池 18/18 全过、
+   真实 HOME 的 mtime **不再变**；forks 池同形。
+4. **红②（1 条）`survived`：`autoverify-ipc-override-ignored` ——判卷**空过**（不是锚点错）**。
+   根因：`tests/auto-verify-wiring.test.ts` 的 ②c 少了 `trustedRepo: true`（同文件 ②b 有）
+   ⇒ 生产路径在 **S3 信任闸**就被拒、一个事件都不产生，而它的两条断言在**空集**上恒真
+   （`[].every()` 是 `true`、`length` 是 `0`）。判别实验（三次实跑）：把生产那一行改成恒 `true`，
+   ②c 照旧绿 ⇒ 那一行的值根本不进这条用例的观察面。修法：补 `trustedRepo: true` ＋
+   一行 `results.length > 0` 把假绿堵死。**修后上突变 ⇒ ②c 当场红（34ms）**，锚点这才有了观察者。
+5. **顺带（同一类问题的第二个实例，主套件里）**：跑这趟时发现 `tests/cancel-agents-tool.test.ts`
+   稳定失败（3/3）、而代码一字未改、第 448 页那趟认证还是绿的。逐层隔离：干净 HOME 下 8/8 全过 ⇒
+   这条用例**读真实 HOME**。**触发条件是本页自己造的**：第 3 条那处泄漏往真实
+   `~/.config/cairn/memory/` 写了一份 `external-refs.json`，那份在场时这条用例就必红。
+   修法同上：`vi.stubEnv("M2D_MEMORY_HOME", join(work, "memory"))` ＋ `afterEach` 里
+   `unstubAllEnvs`。**修后即使那份污染在场也 8/8 全过**；污染已从真实 HOME 移出（恢复到泄漏前状态）。
+   ⇒ 教训一句话：**判卷读真实 HOME 时，"红"与"绿"取决于开发机的家目录**——这在本仓是要命的。
+6. **读数（修后，都是实跑）**：核心判卷 **370 文件 / 5261 条、0 失败**；`typecheck` **0 报错**。
+7. **取料（与页同笔入库）**：`outputs/mutation-full-table-47ffec67-2026-10-12/mutate-verify-full.log`
+   （那一趟的逐条输出原文，1600 行）。
+8. **刻意未做**：**没有重跑整张表**（34 分钟）；三条修法各自的复跑读数见第 450 页。也没动任何帽、
+   判据或豁免；`scripts/mutate-verify.mjs` 一字未改（三条红的成因都不在表里，在判卷里）。

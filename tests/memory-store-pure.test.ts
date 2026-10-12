@@ -31,18 +31,23 @@ import {
   writeTopic,
 } from "../src/agent/memory/store";
 
-/** 每个用例一份干净的 HOME：`globalMemoryDir()` 读它，不隔离会串味。 */
+/** 每个用例一份干净的全局记忆目录：走 store **自己的**测试钩子 `M2D_MEMORY_HOME`
+ *  （模块头写着「可配：M2D_MEMORY_HOME / initMemoryHome，测试用临时目录」），**不再改 `process.env.HOME`**。
+ *
+ *  为什么必须换（2026-10-12 实测，不是推测）：`os.homedir()` 在 vitest 的 `--pool=threads` 下
+ *  **看不到**本进程里对 `HOME` 的赋值 ⇒ 这条判卷在那种跑法里把状态写去了**真实的**
+ *  `~/.config/cairn/memory/`（实测该文件 mtime 当场被改），而它断言的临时目录里那份根本没被创建
+ *  ⇒ 门把它读成 `baseline-red`（「基线就不绿」），两条锚点的判定因此被污染。
+ *  换钩子后两种池子同形：`M2D_MEMORY_HOME` 是 store 的 runtime 输入，不经 `os.homedir()` 的缓存。 */
 async function withHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
   const home = await mkdtemp(join(tmpdir(), "dsh-mem-"));
-  const prev = process.env.HOME;
-  const prevUserProfile = process.env.USERPROFILE;
-  process.env.HOME = home;
-  process.env.USERPROFILE = home; // win32 分支
+  const memHome = join(home, ".config", "cairn", "memory");
+  const prev = process.env.M2D_MEMORY_HOME;
+  process.env.M2D_MEMORY_HOME = memHome;
   try {
     return await fn(home);
   } finally {
-    if (prev === undefined) delete process.env.HOME; else process.env.HOME = prev;
-    if (prevUserProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = prevUserProfile;
+    if (prev === undefined) delete process.env.M2D_MEMORY_HOME; else process.env.M2D_MEMORY_HOME = prev;
     await rm(home, { recursive: true, force: true }).catch(() => {});
   }
 }

@@ -10,7 +10,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEventLog, type AgentEvent } from "../src/events";
 import { Orchestrator, type SpawnArgs, type WorkerModel } from "../src/agent/orchestrator";
 import { MAX_CONCURRENT_WORKERS, WORKER_FORBIDDEN_TOOLS } from "../src/agent/orchestrator-config";
@@ -40,9 +40,17 @@ beforeEach(async () => {
   work = await mkdtemp(join(tmpdir(), "cancel-agents-test-"));
   logPath = join(work, "events.jsonl");
   await writeFile(logPath, "", "utf8");
+  // 第 449 页：这条用例此前**读真实 HOME**（`~/.config/cairn/memory`）。2026-10-12 实测到后果：
+  // 那台机器上那份记忆目录一旦存在且内容不同，这条用例就**稳定失败**（撤了 worker 却不落
+  // `agent_status(cancelled)`），而代码一个字没改——同一份代码在干净 HOME 下 8/8 全过。
+  // ⇒ 判卷必须自带记忆目录，否则"红/绿"取决于开发机的家目录。
+  vi.stubEnv("M2D_MEMORY_HOME", join(work, "memory"));
   gate = Promise.resolve();
 });
-afterEach(async () => { await rm(work, { recursive: true, force: true }).catch(() => {}); });
+afterEach(async () => {
+  vi.unstubAllEnvs();
+  await rm(work, { recursive: true, force: true }).catch(() => {});
+});
 
 function deferred(): { promise: Promise<void>; release: () => void } {
   let release = (): void => {};
