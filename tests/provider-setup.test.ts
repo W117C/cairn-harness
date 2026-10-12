@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { discoverForProviderSetup, saveCustomProvider, suggestSetupDefaults, prepareCustomProvider } from "../src/main/provider-setup";
+import { suggestProviderId } from "../src/providers/provider-draft";
 import { customProvidersPath } from "../src/main/custom-provider-store";
 import type { CatalogReadout } from "../src/providers/catalog";
 
@@ -139,6 +140,8 @@ describe("saveCustomProvider：upsert 且不覆盖读不懂的文件", () => {
     const r = await saveCustomProvider(ws, entry);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain("不是合法 JSON");
+    // 第 447 页：`readExisting` 那句「我们不覆盖读不懂的配置」要原句证人（欠证人帽是 0）。
+    if (!r.ok) expect(r.error).toContain("我们不覆盖读不懂的配置");
     expect(readFileSync(customProvidersPath(ws), "utf8")).toBe("{ 这不是 JSON"); // 原样不动
   });
 
@@ -162,11 +165,16 @@ describe("saveCustomProvider：upsert 且不覆盖读不懂的文件", () => {
 
 describe("表单默认值推导：与命令行同一套", () => {
   it("地址 → id → 变量名", () => {
+    // 第 447 页：这一格要钉的是「setup 把 draft 的 note 原样透传」，不是那句文案本身——
+    // 所以断言两边相等（派生断言，不抄生产措辞，也不抄 `内置` 那种到处都有的词）。
     expect(suggestSetupDefaults("https://api.deepseek.com/v1")).toEqual({
       providerId: "deepseek",
       apiKeyEnv: "DEEPSEEK_API_KEY",
     });
-    expect(suggestSetupDefaults("https://api.openai.com/v1").note).toContain("内置");
+    const drafted = suggestProviderId("https://api.openai.com/v1");
+    const setup = suggestSetupDefaults("https://api.openai.com/v1");
+    expect(setup.providerId).toBe(drafted.id);
+    expect(setup.note).toBe(drafted.note);
   });
 });
 

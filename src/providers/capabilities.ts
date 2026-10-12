@@ -104,7 +104,8 @@ export function validateThinkingEffort(
   const value = requested ?? cap.thinking.default;
   if (!cap.thinking.values.includes(value)) {
     throw new Error(
-      `模型 ${spec.id} 不支持 thinking=${JSON.stringify(value)}；当前只支持 ${cap.thinking.values.join(", ")}`,
+      // 第 447 页：同上那把尺——「当前只支持」只有五字，读不出名字 ⇒ 写成可点名的一句。
+      `模型 ${spec.id} 不支持 thinking=${JSON.stringify(value)}；当前仅支持下列取值：${cap.thinking.values.join(", ")}`,
     );
   }
   return value;

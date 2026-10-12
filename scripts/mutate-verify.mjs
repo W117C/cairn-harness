@@ -7034,10 +7034,12 @@ const MUTATIONS = [
   // 观察着 = `tests/recovery-parent-mode.test.ts` 最后一格（走真 `handleCardAction`）。
   {
     id: "recovery-orchestrator-unreachable-after-restart",
-    src: "src/main/agent-runner.ts",
+    // 2026-10-12（第 447 页）：实现从 `agent-runner.ts` 搬到 `card-action-handlers.ts`
+    // ⇒ 针脚与替换文本同笔改指新位置。判据、killer 指针一个字没动。
+    src: "src/main/card-action-handlers.ts",
     test: "tests/recovery-parent-mode.test.ts",
     desc: "重派那支不再兜底建编排器 ⇒ 恢复卡的「重派」在唯一要用它的场景里点不动（报「无可用事件管线」），而所有直接调 orch.respawn 的用例照绿",
-    apply: (s) => s.replace("    (req.action === \"respawn\" && req.cardType === \"agent_result\" ? await ensureSessionOrchestrator() : null);\n", "    (false ? await ensureSessionOrchestrator() : null);\n"),
+    apply: (s) => s.replace("    (req.action === \"respawn\" && req.cardType === \"agent_result\" ? await D().ensureSessionOrchestrator() : null);\n", "    (false ? await D().ensureSessionOrchestrator() : null);\n"),
     expectFail: "会话历史是 read-only + 设置盘默认 auto ⇒ 重派 write worker 必须被拒（拒因点名 read-only）",
   },
   {
@@ -11506,6 +11508,17 @@ const MUTATIONS = [
     desc: "算出归因面却不印 ⇒ 对账表照常出数，没人看得见两臂其实不同档（与没算同形）",
     apply: (s) => s.replace('  process.stdout.write(renderModelFace(face) + "\\n\\n");\n', ""),
     expectFail: "接线：CLI 把归因面打在表之前，且吃的是**全部**基线文件而不是第一份",
+  },
+  {
+    // 第 447 页补（第 440 页 §7 欠的那条）：这一格此前**一条针脚都没有**——摘掉下面那行，
+    // 纯函数那些用例照绿（`exitCodeOf` 自己的四态用例会红，但那是同一份模块的自证），
+    // 真正没人钉的是「没盖章的存量语料会被印成一张可信表」这条端到端后果。
+    id: "exit-code-identity-branch-dropped",
+    src: "scripts/eval/report.ts",
+    test: "tests/eval-report.test.ts",
+    desc: "身份闸那一支不映射到出口码（`!identity.ok ⇒ 3` 被摘掉）⇒ 没有身份键的存量语料照旧印成「表可信」，调用方拿不到「这份表不能被当结论」这个信号",
+    apply: (s) => s.replace("  if (!identity.ok) return 3;\n", ""),
+    expectFail: "存量语料（读数里一个身份键都没有）⇒ 出口码 3，不是 5 也不是 0",
   },
   {
     // ↓ 钱的**出处**（10-02 第二族第三次命中：09-23 闸与回执分叉、09-27 usage 无归因键、这次是缺省价替所有人猜）。

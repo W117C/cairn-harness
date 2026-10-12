@@ -96,6 +96,16 @@ describe("好配置：解析通过并派生", () => {
     const [d] = deriveCustomProviders(okFile(raw), { builtinTable: TABLE });
     expect(d.specs[0].tier).toBe("cheap");
   });
+
+  // 第 447 页：`parseModel` 里那句 tier 白名单提示要原句证人（欠证人帽 0），
+  // 点的是改写后那句里 ≥6 字的连续中文。
+  it("tier 写不在白名单里的值 ⇒ 拒，并交出允许的取值清单", () => {
+    const ps = problemsOf(mutate((_f, _p, m) => {
+      m.tier = "premium";
+    }));
+    expect(ps.map((p) => p.kind)).toContain("model");
+    expect(ps.find((p) => p.kind === "model")?.message).toContain("只能是下列取值之一");
+  });
 });
 
 describe("三条安全线：判错，而不是提示", () => {
@@ -136,6 +146,17 @@ describe("三条安全线：判错，而不是提示", () => {
     const ps = problemsOf(raw);
     expect(ps.map((p) => p.kind)).toContain("key-field");
     expect(ps.find((p) => p.kind === "key-field")?.message).toContain("apiKeyEnv");
+    // 第 447 页：`rejectUnknown` 那句「请把钥匙放进环境变量」要原句证人（欠证人帽是 0）。
+    expect(ps.find((p) => p.kind === "key-field")?.message).toContain("请把钥匙放进环境变量");
+  });
+
+  // 第 447 页：`parseProvider` 那句「不新增第四种协议」此前一条用例都没点过名（帽 0 ⇒ 当场红）。
+  it("protocol 写第四种 ⇒ 拒，且明说「不新增第四种协议」", () => {
+    const ps = problemsOf(mutate((_f, p) => {
+      p.protocol = "graphql";
+    }));
+    expect(ps.map((p) => p.kind)).toContain("protocol");
+    expect(ps.find((p) => p.kind === "protocol")?.message).toContain("不新增第四种协议");
   });
 
   it("不认识的字段一律拒（收下不用 = 让人以为生效了）", () => {

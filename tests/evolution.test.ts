@@ -62,6 +62,18 @@ describe("evolution strategyPatches", () => {
     expect(p.length).toBeLessThanOrEqual(MAX_PATCHES_PER_RUN);
   });
 
+  // 第 447 页：这句进的是模型可见面，而 `tests/promise-recall-inventory.test.ts` 那条尺的
+  // 欠证人帽是 **0** ⇒ 每句都要有原句证人。断的是生产端那一整段连续字面量，不是某个关键词。
+  it("目标漂移那条 patch 的正文点名「下一轮开工前先复述当前目标与」", () => {
+    const p = strategyPatches({
+      verifyFailuresByCause: {}, repeatedVerifyCause: null, verifyOutcome: "green",
+      goalDriftCount: 2, costMeasurable: true, tokensPerBoundary: 1000, spendAfterLastBoundary: 0, eventCount: 5,
+    });
+    const drift = p.find((x) => x.kind === "goal-reconfirm");
+    expect(drift, "漂移信号没产出 patch ⇒ 那句话没有读者").toBeDefined();
+    expect(drift!.note).toContain("下一轮开工前先复述当前目标与");
+  });
+
   it("renderPatches produces empty string for no patches", () => {
     expect(renderPatches([])).toBe("");
   });

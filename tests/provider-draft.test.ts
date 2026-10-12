@@ -15,7 +15,8 @@ describe("从地址推名字（建议值，用户可改）", () => {
   it("撞上内置名时让开一步，并说明为什么", () => {
     const r = suggestProviderId("https://api.openai.com/v1");
     expect(r.id).toBe("openai-compat");
-    expect(r.note).toContain("内置");
+    // 第 447 页：`内置` 在盘上 12 处生产者里都有（规则 302 的顶包形状）⇒ 换成那一句独有的半截。
+    expect(r.note).toContain("已让开成");
   });
 
   it("认不出主机名 / 数字主机 / 本地 ⇒ custom", () => {
@@ -66,6 +67,8 @@ describe("草稿：只写拿到的字段，缺的必须点名", () => {
     const draft = buildProviderDraft({ ...base, models: [{ id: "internal-model", origin: "discovery" }] });
     expect(draft.missing).toEqual(["contextWindow", "maxOutputTokens", "price", "reasoningEfforts"]);
     expect(draft.warnings.join("\n")).toContain("没有价");
+    // 第 447 页：`draftGaps` 那句「美元闸对它们不生效」要原句证人（欠证人帽是 0）。
+    expect(draft.warnings.join("\n")).toContain("美元闸对它们不生效");
     expect(draft.warnings.join("\n")).toContain("上下文窗口");
     // 拿不到的字段一个都不许出现在 JSON 里
     expect(draft.json).not.toContain("contextWindow");

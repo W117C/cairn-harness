@@ -205,7 +205,9 @@ function parseModel(raw: unknown, where: string, problems: CustomProviderProblem
   }
   const tierRaw = raw.tier;
   if (tierRaw !== undefined && !(typeof tierRaw === "string" && (TIERS as readonly string[]).includes(tierRaw))) {
-    problems.push({ kind: "model", where: `${where}.tier`, message: `tier 只能是 ${TIERS.join(" / ")}` });
+    // 第 447 页：这句进的是模型可见面，而「点得出名字」那把尺要求句里有一段 ≥6 字的连续中文
+    // （插值会被挖掉、非中文会断开）⇒ 原文只剩「只能是」三字，被读成「尺读不出」。补一句可点名的措辞。
+    problems.push({ kind: "model", where: `${where}.tier`, message: `tier 只能是下列取值之一：${TIERS.join(" / ")}` });
   }
   for (const k of ["contextWindow", "maxOutputTokens"] as const) {
     if (raw[k] !== undefined && posInt(raw[k]) === undefined) {

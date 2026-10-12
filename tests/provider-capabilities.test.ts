@@ -32,6 +32,8 @@ describe("provider capability contract", () => {
   it("rejects a non-off thinking value while the adapter wire support is absent", () => {
     const spec = findSpecByNameOrId(DEFAULT_MODEL_TABLE, "openai-standard");
     expect(() => validateThinkingEffort(spec!, "high")).toThrow(/不支持 thinking/);
+    // 第 447 页：这句要原句证人（欠证人帽 0）；点的是那句里 ≥6 字的连续中文，不是关键词。
+    expect(() => validateThinkingEffort(spec!, "high")).toThrow(/当前仅支持下列取值/);
   });
 
   it("fails visibly for an unregistered model rather than inventing capability", () => {

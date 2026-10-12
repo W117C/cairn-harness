@@ -885,7 +885,10 @@ describe("D-13 页号唯一面：撞号要出声、登记不许空转、取号�
     const single = ["## 2026-10-08 · 第 500 页：甲"].join("\n");
     const f = checkPageNumberUniqueness(pagesOf(single), ["第 500 页"]);
     expect(f.findings.map((x) => x.rule)).toEqual(["D-13"]);
-    expect(f.findings[0]!.detail).toContain("登记过的重复页号「第 500 页」在台账里已不再重复");
+    // 第 447 页：原来断的是**插值之后**的整句（「…「第 500 页」在台账里已不再重复」），而生产端那是一枚
+    // 模板串 ⇒ 判卷比的是连续字面量，对不上就报 drift（`prose-needle-scan` 当场红）。
+    // 改成模板中段独有的那半截：既在连续字面量里，又只有这一句产它。
+    expect(f.findings[0]!.detail).toContain("在台账里已不再重复");
   });
 
   it("净零交换要报两条：销掉一条存量、同时新撞一个号", () => {

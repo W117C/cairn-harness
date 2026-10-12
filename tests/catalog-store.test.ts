@@ -109,18 +109,21 @@ describe("loadCatalog：三个来源的优先级", () => {
 
 describe("loadCatalog：失败必须说得出理由", () => {
   it("刷新抛异常 ⇒ 回退缓存，note 写明刷新失败的原因", async () => {
+    // 第 447 页：断言不抄「timeout」——那字在盘上有 25 处生产者（规则 302 的顶包形状），
+    // 改别处它照样绿。把夹具那条因抽成常量、断言它**原样透传**；生产那句前缀由下一行「刷新失败」钉住。
+    const CAUSE = "夹具标记：上游把请求掐了";
     const r = await loadCatalog(
       { refresh: "force" },
       {
         ...layout({ snap: snapshot("2026-01-01T00:00:00Z"), cache: snapshot("2026-10-06T00:00:00Z") }),
         fetchImpl: async () => {
-          throw new Error("The operation was aborted due to timeout");
+          throw new Error(CAUSE);
         },
       },
     );
     expect(r.origin).toBe("cache");
     expect(r.note).toContain("刷新失败");
-    expect(r.note).toContain("timeout");
+    expect(r.note).toContain(CAUSE);
   });
 
   it("刷新失败且没有缓存 ⇒ 回退内置快照，note 同时带上原因", async () => {
@@ -137,7 +140,8 @@ describe("loadCatalog：失败必须说得出理由", () => {
       { refresh: "force" },
       { ...layout({ snap: snapshot() }), fetchImpl: async () => jsonResponse("", 302) },
     );
-    expect(r.note).toContain("重定向");
+    // 第 447 页：`重定向` 在盘上 13 处生产者里都有 ⇒ 换成只有 catalog-store 那一句产出的短语。
+    expect(r.note).toContain("数据源返回重定向");
     expect(r.origin).toBe("snapshot");
   });
 
