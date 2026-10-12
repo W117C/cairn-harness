@@ -1,0 +1,12 @@
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → c8e4b6b
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
+变异验证：3 条
+✅ eval-run-identity-keys-rehardcoded — 配对那一层的身份键再从字面量抄一遍、且漏掉身份闸那三枚 ⇒ headSha 缺章的读数照样成对，「不同提交的读数互相当同分母」那条老路复活（#90 的动因；派生式没了就是两份表） ｜本机实测 0.6s／2 拍
+✅ eval-provider-face-not-in-pair-keys — providerFace 不进面键 ⇒ arm 同为 base 时合成臂与真会话臂配成同一面，构造出来的 0 宽噪声带被当成抖动底 ⇒ 真跑的微小改善全被读成超带改善 ｜本机实测 0.6s／2 拍
+✅ eval-rows-not-stamped-with-identity — 身份章只盖 run.json 旁证、逐条读数不盖 ⇒ 报告读到的是「有旁证的空身份行」，整批落进 unknown-face，配对那一格等于没接上写侧 ｜本机实测 0.5s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 1.9s · 跑了 3/3 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 eval-run-identity-keys-rehardcoded 0.6s
+跑法单价：selector 6 拍·中位 0.28s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
