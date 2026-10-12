@@ -20,9 +20,20 @@
 //
 // 用法：node --import tsx outputs/tool-face-p0-readings-2026-10-03/measure-declared-face.mts [--json]
 import { readdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { zstdDecompressSync } from "node:zlib";
+
+/** 目标已存在时拒写（2026-10-12 加，同 `measure-used-tools.mts`）：本脚本从前**直写**本目录那份
+ *  **已入库**的读数 ⇒ 谁再跑一次就把它静默顶掉。要另存 `--to=<路径>`，确实要覆盖再加 `--force`。 */
+const TO_ARG = process.argv.find((a) => a.startsWith("--to="));
+const OUT_PATH = TO_ARG !== undefined ? TO_ARG.slice("--to=".length) : join(import.meta.dirname, "declared-face.json");
+if (existsSync(OUT_PATH) && !process.argv.includes("--force")) {
+  console.error("[measure-declared-face] 目标已存在，拒写：" + OUT_PATH);
+  console.error("  要另存：--to=<新路径>；确实要覆盖：再加 --force。");
+  process.exit(2);
+}
 
 const ROOT = join(homedir(), ".dsh", "sessions");
 const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
@@ -225,12 +236,12 @@ async function main(): Promise<void> {
   }
 
   await writeFile(
-    join(import.meta.dirname, "declared-face.json"),
+    OUT_PATH,
     JSON.stringify(report, null, 2) + "\n",
     "utf8",
   );
   console.log("");
-  console.log("  明细已写：" + join(import.meta.dirname, "declared-face.json"));
+  console.log("  明细已写：" + OUT_PATH);
 }
 
 await main();
