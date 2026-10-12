@@ -233,8 +233,8 @@ describe("hint 通道：判据算出来的那句要真送到模型面前（「�
     expect(absent).not.toBe(stale);
   });
 
-  it("生产入口真的把 decision.hint 传进去（goalNextTurn 未导出 ⇒ 只能钉这一行的形状）", () => {
-    const src = readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf8");
+  it("生产入口真的把 decision.hint 传进去（拆分后住 goal-handlers，仍只能钉这一行的形状）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../src/main/goal-handlers.ts", import.meta.url)), "utf8");
     expect([...src.matchAll(/goalReminder\(/g)].length).toBe(1); // 只有一个生产调用点
     const call = /goalReminder\([^)]*\)/.exec(src)?.[0] ?? "";
     expect(call, "goalNextTurn 丢了这一位 ⇒ hint 算出来没人读").toContain("decision.hint");

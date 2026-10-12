@@ -1,4 +1,4 @@
-# m0 桌面端 M1：壳与桥面（纵向切片）实现计划
+# Cairn 桌面端 M1：壳与桥面（纵向切片）实现计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -17,7 +17,7 @@
 - 依赖只进 `apps/desktop/package.json`；`src/` 与根 package.json 零新增依赖。
 - 依赖方向单向：`apps/desktop → src`；`src/` 内禁止任何对 `apps/desktop` 或 electron/react 的 import。
 - 会话根按工作区解析：`<workspace>/.agent/sessions`（与 `src/cli.ts:933` 同根）。
-- 桌面端测试一律带自己的 config 跑：`pnpm --filter m0-desktop test`（内部 `vitest run --config vitest.config.ts`）。
+- 桌面端测试一律带自己的 config 跑：`pnpm --filter cairn-desktop test`（内部 `vitest run --config vitest.config.ts`）。
 - `scripts/docs-check.ts` 当前有其他会话的未提交改动——**本计划不碰该文件**；单向依赖扫描落在新文件 `scripts/desktop-boundary-check.ts`。
 - 工作树有并行会话：提交只 add 本计划清单内的文件，提交信息用中文详述（仓库惯例）。
 - Mimosa hook 对 spawn 行 Edit 可能假阳：遇拦截拆小编辑重试（既有绕行惯例）。
@@ -37,7 +37,7 @@
 - Create: `apps/desktop/.gitignore`（dist/）
 
 **Interfaces:**
-- Produces: 包名 `m0-desktop`；后续任务经 `pnpm --filter m0-desktop …` 调用；`src/main/index.ts` 为 Electron 入口（package.json `main` 字段指向其编译产物 `dist-electron/index.js`）。
+- Produces: 包名 `cairn-desktop`；后续任务经 `pnpm --filter cairn-desktop …` 调用；`src/main/index.ts` 为 Electron 入口（package.json `main` 字段指向其编译产物 `dist-electron/index.js`）。
 
 - [ ] **Step 1: pnpm-workspace.yaml 加 packages 与构建白名单**
 
@@ -58,7 +58,7 @@ onlyBuiltDependencies:
 
 ```json
 {
-  "name": "m0-desktop",
+  "name": "cairn-desktop",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -146,7 +146,7 @@ app.on("window-all-closed", () => app.quit());
 ```html
 <!doctype html>
 <html lang="zh-CN">
-  <head><meta charset="UTF-8" /><title>m0</title></head>
+  <head><meta charset="UTF-8" /><title>Cairn</title></head>
   <body><div id="root"></div><script type="module" src="./main.tsx"></script></body>
 </html>
 ```
@@ -155,7 +155,7 @@ app.on("window-all-closed", () => app.quit());
 
 ```tsx
 import { createRoot } from "react-dom/client";
-createRoot(document.getElementById("root")!).render(<div id="app-shell">m0 驾驶舱</div>);
+createRoot(document.getElementById("root")!).render(<div id="app-shell">cairn 驾驶舱</div>);
 ```
 
 `apps/desktop/.gitignore`：
@@ -170,8 +170,8 @@ node_modules/
 
 ```bash
 pnpm install
-pnpm --filter m0-desktop typecheck
-pnpm --filter m0-desktop build
+pnpm --filter cairn-desktop typecheck
+pnpm --filter cairn-desktop build
 ```
 
 Expected: 全绿（electron 二进制随 postinstall 下载）。
@@ -236,7 +236,7 @@ describe("通道名表完整性", () => {
 
 - [ ] **Step 3: 跑测试确认失败**
 
-Run: `pnpm --filter m0-desktop test`
+Run: `pnpm --filter cairn-desktop test`
 Expected: FAIL（channels.ts 不存在）。
 
 - [ ] **Step 4: 写 channels.ts**
@@ -300,7 +300,7 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
 
 - [ ] **Step 5: 跑测试与 typecheck 确认绿**
 
-Run: `pnpm --filter m0-desktop test && pnpm --filter m0-desktop typecheck`
+Run: `pnpm --filter cairn-desktop test && pnpm --filter cairn-desktop typecheck`
 Expected: PASS。若 typecheck 报 `INVOKE_CHANNELS` 缺键，缺哪个补哪个——这正是红线在工作。
 
 - [ ] **Step 6: Commit**
@@ -354,7 +354,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { createKernelHost } from "../src/main/kernel-host";
 
-const dir = mkdtempSync(join(tmpdir(), "m0-host-"));
+const dir = mkdtempSync(join(tmpdir(), "cairn-host-"));
 const workspace = join(dir, "ws");
 const userData = join(dir, "userData");
 mkdirSync(workspace, { recursive: true });
@@ -397,7 +397,7 @@ describe("kernel-host 纵向装配", () => {
 
 - [ ] **Step 3: 跑测试确认失败**
 
-Run: `pnpm --filter m0-desktop test`
+Run: `pnpm --filter cairn-desktop test`
 Expected: FAIL（kernel-host.ts 不存在）。
 
 - [ ] **Step 4: 写 kernel-host.ts**
@@ -469,7 +469,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
 
 - [ ] **Step 5: 跑测试确认通过**
 
-Run: `pnpm --filter m0-desktop test`
+Run: `pnpm --filter cairn-desktop test`
 Expected: 3 个用例 PASS（demo 通道不拨号；60s 上限内完成）。
 
 - [ ] **Step 6: 根门不受影响**
@@ -548,8 +548,8 @@ contextBridge.exposeInMainWorld("agent", api);
 - [ ] **Step 3: 验证**
 
 ```bash
-pnpm --filter m0-desktop typecheck
-pnpm --filter m0-desktop build
+pnpm --filter cairn-desktop typecheck
+pnpm --filter cairn-desktop build
 ```
 
 Expected: 绿；`dist-electron/preload/index.js` 产出。
@@ -630,7 +630,7 @@ describe("deriveRunPhase", () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter m0-desktop test`
+Run: `pnpm --filter cairn-desktop test`
 Expected: FAIL（projections.ts 不存在）。**事件类型名以 `src/events/index.ts` 的 `AGENT_EVENT_TYPES` 联合为准**（已核实含 `user_message`/`assistant_message`/`assistant_delta`；`tool_call` 若实际名不同——如 `tool_result`/分立的 call 与 result——按真实事件名改投影与测试，改的是测试对形状的假设，不是事件面）。
 
 - [ ] **Step 3: 写 projections.ts**
@@ -678,7 +678,7 @@ export function deriveRunPhase(events: readonly AgentEvent[], pendingAsk: boolea
 
 - [ ] **Step 4: 跑投影测试确认绿**
 
-Run: `pnpm --filter m0-desktop test`
+Run: `pnpm --filter cairn-desktop test`
 Expected: PASS。
 
 - [ ] **Step 5: 写组件（Codex 基因静态版，浅色 token）**
@@ -854,7 +854,7 @@ export function App() {
       }} />
       <div className="main">
         <div className="sessionbar">
-          <span style={{ fontWeight: 600 }}>{activeId ?? "m0"}</span>
+          <span style={{ fontWeight: 600 }}>{activeId ?? "Cairn"}</span>
           <span style={{ fontSize: 11, color: "var(--text-3)" }}>
             {phase === "ask" ? "● 等待审批" : phase === "thinking" ? "● 思考中" : phase === "tool" ? "● 执行工具" : "○ 就绪"}
           </span>
@@ -881,7 +881,7 @@ createRoot(document.getElementById("root")!).render(<App />);
 - [ ] **Step 6: typecheck + build**
 
 ```bash
-pnpm --filter m0-desktop typecheck && pnpm --filter m0-desktop build
+pnpm --filter cairn-desktop typecheck && pnpm --filter cairn-desktop build
 ```
 
 Expected: 绿（`window.agent` 的 declare global 与 AgentApi 对齐；若 preload 未编译进 dev 流程属预期——Task 6 手工冒烟时先跑一次 `tsc -p tsconfig.preload.json`）。
@@ -914,7 +914,7 @@ import { createKernelHost } from "./kernel-host";
 import type { InvokeChannel, PushChannel } from "./channels";
 
 const userData = app.getPath("userData");
-const workspace = process.env.M0_DESKTOP_WORKSPACE ?? app.getPath("home");
+const workspace = process.env.CAIRN_DESKTOP_WORKSPACE ?? app.getPath("home");
 const host = createKernelHost({
   workspace,
   userDataDir: userData,
@@ -944,17 +944,17 @@ void webContents; // 显式留痕：推送经 BrowserWindow.getAllWindows()
 - [ ] **Step 2: 编译并冒烟**
 
 ```bash
-pnpm --filter m0-desktop build
+pnpm --filter cairn-desktop build
 cd apps/desktop && pnpm exec electron .
 ```
 
-Expected: 窗口出现（Codex 基因浅色壳）；在 composer 输入任意文本回车：侧栏出现新会话、事件流逐步出 user/assistant/tool 行、状态条在思考中/执行工具间切换；无控制台红错。**审批卡路径**：把工作区切到一个会触发写工具的任务（如"在 /tmp/m0-smoke 目录创建一个文件"），出现审批卡点"允许"继续——demo 剧本若无写工具则本步记"待真模型轮验证"，不算失败。
+Expected: 窗口出现（Codex 基因浅色壳）；在 composer 输入任意文本回车：侧栏出现新会话、事件流逐步出 user/assistant/tool 行、状态条在思考中/执行工具间切换；无控制台红错。**审批卡路径**：把工作区切到一个会触发写工具的任务（如"在 /tmp/cairn-smoke 目录创建一个文件"），出现审批卡点"允许"继续——demo 剧本若无写工具则本步记"待真模型轮验证"，不算失败。
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add apps/desktop/src/main/index.ts
-git commit -m "桌面端 M1-6：Electron main 接 kernel-host 薄映射——六通道接线（run/decide/cancel/sessions 三件）、outbox 经 webContents 广播三推送通道、工作区根 M0_DESKTOP_WORKSPACE 可覆盖；真窗口冒烟通过"
+git commit -m "桌面端 M1-6：Electron main 接 kernel-host 薄映射——六通道接线（run/decide/cancel/sessions 三件）、outbox 经 webContents 广播三推送通道、工作区根 CAIRN_DESKTOP_WORKSPACE 可覆盖；真窗口冒烟通过"
 ```
 
 ---
@@ -1026,7 +1026,7 @@ Expected: 第一次 exit=1（抓到探针），第二次绿。
 - Desktop layer lives in `apps/desktop/` only. It may import from `src/` (typed via
   `src/main/ipc-protocol.ts`); `src/` must never import from `apps/desktop/`, Electron, or any UI
   module. `scripts/desktop-boundary-check.ts` enforces this.
-- Run desktop tests with `pnpm --filter m0-desktop test` (own vitest config); root gates never
+- Run desktop tests with `pnpm --filter cairn-desktop test` (own vitest config); root gates never
   scan `apps/`.
 ```
 
@@ -1035,7 +1035,7 @@ Expected: 第一次 exit=1（抓到探针），第二次绿。
 `apps/desktop/package.json` test 脚本改为 `"test": "vitest run --config vitest.config.ts && node --import tsx ../../scripts/desktop-boundary-check.ts"`，然后：
 
 ```bash
-pnpm --filter m0-desktop test
+pnpm --filter cairn-desktop test
 pnpm typecheck && node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts
 ```
 

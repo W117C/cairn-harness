@@ -150,11 +150,24 @@ function externalRefsPath(): string {
   return join(globalMemoryDir(), "external-refs.json");
 }
 
-export async function loadExternalRefState(): Promise<ExternalRefState> {
+/** 读取；文件缺失 = 首启无历史（正常静默）；文件存在但损坏/畸形 = 审批决议无痕蒸发
+ *  （批准过的 @path 全部回到未批准、拒绝记录也丢失），必须经 onCorrupt 显式告警并继续
+ *  按空态走——空态 = 无一批准，方向 fail-closed。
+ *  先例：`src/routing/bandit.ts` 的 `loadBanditState`（同一族，P2 审查修过）。 */
+export async function loadExternalRefState(
+  onCorrupt: (reason: string) => void = (reason) => console.warn("[memory] " + reason),
+): Promise<ExternalRefState> {
+  const path = externalRefsPath();
   try {
-    const raw = JSON.parse(await readFile(externalRefsPath(), "utf8")) as Partial<ExternalRefState>;
-    return { approved: raw.approved ?? [], declined: raw.declined ?? [] };
-  } catch {
+    const raw = JSON.parse(await readFile(path, "utf8")) as Partial<ExternalRefState>;
+    if (!Array.isArray(raw.approved) || !Array.isArray(raw.declined)) {
+      throw new Error("approved/declined 字段不是数组");
+    }
+    return { approved: raw.approved, declined: raw.declined };
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") {
+      onCorrupt("外部引用审批状态损坏，已按空态继续（决议记录丢失，需重新确认）：" + path + "：" + (err instanceof Error ? err.message : String(err)));
+    }
     return { approved: [], declined: [] };
   }
 }

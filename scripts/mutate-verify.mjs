@@ -1248,10 +1248,10 @@ const MUTATIONS = [
   },
   {
     id: "goal-budget-key-from-settings-field",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/goal-handlers.ts",
     test: "tests/budget-price-key.test.ts",
     desc: "只修会话闸、goal 美元闸那一半退回读盘上字段 ⇒ 同一个 run 里两道闸各说各话（判据要求两条接线同时在位）",
-    apply: (s) => s.replace("  const model = budgetPriceKeyOf(args.runModel);", "  const model = (await store().get()).model;"),
+    apply: (s) => s.replace("  const model = D().budgetPriceKeyOf(args.runModel);", "  const model = (await store().get()).model;"),
     expectFail: "两处消费各自接线在位",
   },
   {
@@ -1394,7 +1394,7 @@ const MUTATIONS = [
   },
   {
     id: "goal-gate-call-site-bypassed",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/goal-handlers.ts",
     test: "tests/goal-continue.test.ts",
     desc: "调用点递空窗口（函数没错、闸拿不到数）⇒ 美元闸惰掉，理由退到轮次上限，用户设的钱闸变随机数",
     apply: (s) => s.replace("goalWindowSpend(view.window, model)", "goalWindowSpend([], model)"),
@@ -1410,14 +1410,14 @@ const MUTATIONS = [
   },
   {
     id: "goal-lag-count-not-passed-at-call-site",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/goal-handlers.ts",
     test: "tests/goal-stop-decision.test.ts",
     // 第一版写这条时**变异存活**：goalReminder 的默认值是 0 ⇒ "省略这一位"与"传 0"行为逐字相同，
     // 而可选参数后面加不了必填，编译器也接不了这格。改由那条生产入口形状断言守住
     // （与 `decision.hint` 同一处、同一手法），这条才有了可杀的靶子。
     desc: "调用点不递第 6 个实参 ⇒ 提醒块永远不提「本拍的美元里还没有在途 worker 那一段」",
     apply: (s) => s.replace("goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint, unbookedWorkers)", "goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint)"),
-    expectFail: "生产入口真的把 decision.hint 传进去（goalNextTurn 未导出 ⇒ 只能钉这一行的形状）",
+    expectFail: "生产入口真的把 decision.hint 传进去（拆分后住 goal-handlers，仍只能钉这一行的形状）",
   },
   {
     id: "session-budget-inert-silent",
@@ -2287,7 +2287,7 @@ const MUTATIONS = [
   },
   {
     id: "verify-exec-pnpm-mapping-lost",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/sandbox-test-command.ts",
     test: "tests/verify-exec-sandbox.test.ts",
     desc: "丢掉「沙箱内 pnpm 映射为直连 vitest」（坑三）⇒ 冻结剧本里的 pnpm test 在 Seatbelt 下必然起不来，验证门空转。第 141 页把三处内联副本收成一份 `mapSandboxTestCommand`，针脚跟着搬到那一份身上——现在摘掉它＝worker／验证门／模型 run_shell 三条路一起坏，一条锚点管得住三处。",
     apply: (s) => s.replace("  return aliases.includes(command.trim()) ? VITEST_DIRECT : command;", "  return command;"),
@@ -2295,7 +2295,7 @@ const MUTATIONS = [
   },
   {
     id: "sandbox-model-alias-widened",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/sandbox-test-command.ts",
     test: "tests/verify-exec-sandbox.test.ts",
     desc: "把模型那条 `run_shell` 的窄名单悄悄放宽成全表 ⇒ 我们开始替模型改写它自己下的命令（这条差集是裁决，不是漂：改的是「同意范围」那一族）",
     apply: (s) => s.replace('export const MODEL_SHELL_TEST_ALIASES: readonly string[] = ["pnpm test"];', "export const MODEL_SHELL_TEST_ALIASES: readonly string[] = [...SANDBOX_TEST_ALIASES];"),
@@ -3457,7 +3457,7 @@ const MUTATIONS = [
   },
   {
     id: "skill-tool-drops-args-arg",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/tool-gates.ts",
     test: "tests/plugin-commands-dispatch.test.ts",
     desc: "工具执行面不读 args.args ⇒ 替换器永远收到空串。上面那条锚点杀的是「runtime 不替换」，这条杀的正是最后那一跳：接缝都在、参数没接",
     apply: (s) => s.replace('        return rt.triggerSkill(name, typeof args.args === "string" ? args.args : "");', '        return rt.triggerSkill(name);'),
@@ -3465,7 +3465,7 @@ const MUTATIONS = [
   },
   {
     id: "skill-tool-spec-hides-args",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/tool-gates.ts",
     test: "tests/plugin-commands-dispatch.test.ts",
     desc: "规格面不声明 args ⇒ 执行面读得到但模型看不见，等于这条参数通道对模型不存在（§4.4 三面同源的老形状）",
     apply: (s) => s.replace('          args: { type: "string", description: "传给 skill 的参数原文（正文里的 $ARGUMENTS / $1 / $name 按此替换；无参数可省略）" },', '          ...(false ? { args: { type: "string", description: "x" } } : {}),'),
@@ -3777,7 +3777,7 @@ const MUTATIONS = [
   },
   {
     id: "skill-allow-note-silent",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/tool-gates.ts",
     test: "tests/skill-tool-policy.test.ts",
     desc: "门卡不解释「申报了但没放行」⇒ 收紧点变成一条只有读源码的人才知道的规则，用户看到的效果是「插件写了 allowed-tools 却还是问我」而无从判断谁对",
     apply: (s) => s.replace("  const invo = currentPluginRuntime()?.skillAllowNote(tool) ?? null;", "  const invo: string | null = null;"),
@@ -3858,7 +3858,7 @@ const MUTATIONS = [
   },
   {
     id: "precompact-manual-producer-dropped",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/compact-and-report.ts",
     test: "tests/hook-precompact-producer.test.ts",
     desc: "手动 /compact 不再把钩子引擎递下去 ⇒ 压缩卡照出、钩子一个不跑（回归到「只有函数有源」的老形态；本条用真实 spawn 的哨兵文件计数钉住）",
     apply: (s) => s.replace('    onPreCompact: (trigger) => firePreCompactHook(hooks, trigger),', '    ...(false ? { onPreCompact: (t: "manual" | "auto") => firePreCompactHook(hooks, t) } : {}),'),
@@ -3887,7 +3887,7 @@ const MUTATIONS = [
   },
   {
     id: "spec-face-predicate-not-wired",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/tool-gates.ts",
     test: "tests/skill-tool-policy.test.ts",
     desc: "run 起点算面时不把活闸谓词递给规格组装 ⇒ 登记面、执行面、规格面三处只有两处对得上（同源接线断在中间那一跳）",
     apply: (s) => s.replace("    ...(skillDenial ? { skillDenial } : {}),", "    ...(false ? { skillDenial } : {}),"),
@@ -4015,7 +4015,7 @@ const MUTATIONS = [
   },
   {
     id: "mcp-grade-arg-dropped-at-gate",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/tool-gates.ts",
     test: "tests/mcp-grade-gate.test.ts",
     desc: "执行侧不递 info.grade ⇒ 采集面、注册表都齐了，最后一步没接（本仓点名的「接缝都在、末步未接」形状）",
     apply: (s) => s.replace("      const d = evaluate(name as ToolName, args, s.autonomy, info.grade);", "      const d = evaluate(name as ToolName, args, s.autonomy);"),
@@ -4023,7 +4023,7 @@ const MUTATIONS = [
   },
   {
     id: "mcp-noninteractive-denial-unexplained",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/tool-gates.ts",
     test: "tests/mcp-grade-gate.test.ts",
     desc: "非交互拒绝时把门给的理由丢掉 ⇒ 模型只看到「非交互模式」，不知道是注解缺失，换路也无从下手（能力 8 可解释）",
     apply: (s) => s.replace("      const d = evaluate(name as ToolName, args, s.autonomy, info.grade); // MCP scoped 名进同一管线（规则/风险/档位全生效）\n      const aMode = s.autonomy.mode;\n      if (d.verdict === \"deny\") return denied(name, aMode, d.reason, { ...gateBase(d, aMode), verdict: \"denied\" });\n      let manualScope: AskScope | undefined;\n      if (d.verdict === \"ask\") {\n        if (!s.askGate) return denied(name, aMode, \"非交互模式（fail-closed）：\" + d.reason, { ...gateBase(d, aMode), verdict: \"unattended\" });", "      const d = evaluate(name as ToolName, args, s.autonomy, info.grade); // MCP scoped 名进同一管线（规则/风险/档位全生效）\n      const aMode = s.autonomy.mode;\n      if (d.verdict === \"deny\") return denied(name, aMode, d.reason, { ...gateBase(d, aMode), verdict: \"denied\" });\n      let manualScope: AskScope | undefined;\n      if (d.verdict === \"ask\") {\n        if (!s.askGate) return denied(name, aMode, \"非交互模式（fail-closed）：\", { ...gateBase(d, aMode), verdict: \"unattended\" });"),
@@ -4039,7 +4039,7 @@ const MUTATIONS = [
   },
   {
     id: "mcp-spec-carrier-drops-grade",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/tool-gates.ts",
     test: "tests/session-tools.test.ts",
     desc: "规格面不带注解出厂 ⇒ 下游的 mode 判定没有输入，只能凭空猜哪把是只读的（摘除面与门面重新分家）",
     apply: (s) => s.replace("    out.push({ name: scoped, description: info.description, parameters: info.inputSchema, grade: info.grade });", "    out.push({ name: scoped, description: info.description, parameters: info.inputSchema });"),
@@ -4095,7 +4095,11 @@ const MUTATIONS = [
     src: "src/agent/orchestrator.ts",
     test: "tests/cascade-wiring.test.ts",
     desc: "阶梯不再限定同 provider ⇒ 一次 BYOK 会话在升档时被悄悄换成别家的 key 与模型",
-    apply: (s) => s.replace("DEFAULT_MODEL_TABLE.filter((s) => s.provider === picked.provider)", "DEFAULT_MODEL_TABLE.filter((s) => s.provider !== picked.provider)"),
+    // 针脚跟上现读（2026-10-11）：阶梯那半从 `DEFAULT_MODEL_TABLE.filter(…===…)` 改成
+    // `effectiveModelTable().filter(…===…)`（级联接进产品路径那笔）；变异体照旧「换成反集」。
+    // 反向验证：把 `===` 换成 `!==` 跑 killer（tests/cascade-wiring.test.ts 那条同 provider 断言），
+    // 实测转红（先试过「整支丢掉过滤」——那条在本表序下仍选回同 provider 的档，**存活**，故不用它）。
+    apply: (s) => s.replace("effectiveModelTable().filter((s) => s.provider === picked.provider)", "effectiveModelTable().filter((s) => s.provider !== picked.provider)"),
     expectFail: "verify 红 ⇒ 同 provider 升一档重跑，链的终态由最后一档负责，被淘汰那档的 worktree 回收",
   },
   {
@@ -4320,7 +4324,7 @@ const MUTATIONS = [
   },
   {
     id: "goal-continuation-unattended-guard-dropped",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/goal-handlers.ts",
     test: "tests/goal-continue.test.ts",
     desc: "摘掉「无人值守不自动续跑」这道闸 ⇒ 定时任务回到按判据决定续不续：那条路审批全被 fail-closed 拒，写不了盘、验不出绿，却能一路烧到轮次上限",
     apply: (s) => s.replace("  if (args.unattended) {", "  if (false) {"),
@@ -4352,15 +4356,17 @@ const MUTATIONS = [
   },
   {
     id: "goal-stopped-flag-ignored",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/goal-handlers.ts",
     test: "tests/goal-continue.test.ts",
     desc: "已停之后还继续判 ⇒ 用户再发一条消息就把自动续跑唤回来，goal_stopped 落第二条（停止不再是终态）",
-    apply: (s) => s.replace("if (view === null || view.stopped !== null) return null;", "if (view === null) return null;"),
+    // 针脚跟上现读（2026-10-11）：续跑判据那行加了 `|| view.paused !== null`（goal 挂起/恢复那笔），
+    // 变异体只摘 `stopped` 那一半（挂起照旧不续），表达的还是：停止不再是终态。
+    apply: (s) => s.replace("if (view === null || view.stopped !== null || view.paused !== null) return null;", "if (view === null || view.paused !== null) return null;"),
     expectFail: "停过的目标不会因用户再发一条而自动复活：停止是终态，要再跑得改设目标",
   },
   {
     id: "goal-clear-branch-removed",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/goal-handlers.ts",
     test: "tests/goal-continue.test.ts",
     desc: "清除分支整个摘掉 ⇒ 点「清除」掉进设定分支，报一句 objective 缺失，用户关不掉自动续跑（只能反复按停止）",
     apply: (s) => s.replace("if (req.clear === true) {", "if (false) {"),
@@ -4368,7 +4374,7 @@ const MUTATIONS = [
   },
   {
     id: "goal-clear-not-idempotent",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/goal-handlers.ts",
     test: "tests/goal-continue.test.ts",
     desc: "已停还补记第二条 goal_stopped ⇒ 审计面上「这个目标停过几次」变成假的（重复点击 = 重复落事实）",
     apply: (s) => s.replace("if (view.stopped !== null) return { ok: true };", "if (false) return { ok: true };"),
@@ -4376,7 +4382,7 @@ const MUTATIONS = [
   },
   {
     id: "goal-clear-enoesnt-read-as-io-error",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/goal-handlers.ts",
     test: "tests/goal-continue.test.ts",
     desc: "新建会话（日志还不存在）的 ENOENT 不再当成「没有目标」⇒ 把文件系统噪声端给用户当结论，且拒因文案消失",
     apply: (s) => s.replace('if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return [] as AgentEvent[];', 'if ((err as NodeJS.ErrnoException)?.code === "ENOTDIR") return [] as AgentEvent[];'),
@@ -4816,11 +4822,11 @@ const MUTATIONS = [
   // ---- goal 的 hint 通道：判据算出来的那句必须真送到模型面前（2026-09-21）----
   {
     id: "goal-hint-lost-at-callsite",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/goal-handlers.ts",
     test: "tests/goal-stop-decision.test.ts",
     desc: "生产入口不传 decision.hint ⇒ 被收走的那一轮仍收到「针对红字继续」（算了没人读的第 10 次）",
     apply: (s) => s.replace("goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint, unbookedWorkers)", "goalReminder(view.spec, turn, spentUsd, view.evidence, undefined, unbookedWorkers)"),
-    expectFail: "生产入口真的把 decision.hint 传进去（goalNextTurn 未导出 ⇒ 只能钉这一行的形状）",
+    expectFail: "生产入口真的把 decision.hint 传进去（拆分后住 goal-handlers，仍只能钉这一行的形状）",
   },
   {
     id: "goal-reminder-ignores-hint",
@@ -5234,7 +5240,7 @@ const MUTATIONS = [
     test: "tests/command-shape.test.ts",
     desc: "不跳前导环境赋值 ⇒ `GIT_PAGER=cat git push --force` 的有效二进制看不见（这条是 09-22 建共用件时**自己踩到并被测出来**的一支）",
     apply: (s) => s.replace("while (i < tokens.length && ASSIGN_RE.test(tokens[i]!)) i++;", "while (false && i < tokens.length && ASSIGN_RE.test(tokens[i]!)) i++;"),
-    expectFail: "GIT_PAGER=cat git push --force",
+    expectFail: "前导环境赋值不吞掉危险命令",
   },
   {
     id: "shape-wrapper-value-opt-not-swallowed",
@@ -5792,7 +5798,7 @@ const MUTATIONS = [
       "DEFAULT_SETTINGS 那行改得再对也到不了用户手上，而单测只测对象的话全绿" +
       "（这正是 promptCache 当年写那条注释的原因，同族第二实例）",
     apply: (s) => s.replace(`typeof r.autoVerify === "boolean" ? r.autoVerify : d.autoVerify`, "r.autoVerify === true"),
-    expectFail: "旧机器（JSON 里压根没这个键）读回来必须是 true",
+    expectFail: "autoVerify：旧机器（JSON 里压根没这个键）读回来必须是 true",
   },
   {
     id: "settings-auto-verify-default-reverted",
@@ -9484,7 +9490,7 @@ const MUTATIONS = [
   },
   {
     id: "runner-sandbox-exit-cause-unwired",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/tool-gates.ts",
     test: "tests/shell-family-cause.test.ts",
     desc: "主会话开沙箱那条出口（run_shell 被 runInSandbox 整个顶掉）不补归因 ⇒"+
       "同一台机器上换档就没人归因（第十三族：同一条判据只硬化一支）",
@@ -10231,7 +10237,7 @@ const MUTATIONS = [
     desc: "存量『不再命中就报该删』那一支焊死 ⇒ 登记表只增不减、静默烂在这儿，" +
       "而下一个人读到的是『74 条历史引用』这样一张早已不真实的名单",
     apply: (s) => s.replace("    if (!seen.has(k)) {", "    if (false) {"),
-    expectFail: "点名该删",
+    expectFail: "登记不再命中时要点名该删——只印不判",
   },
 
   /* ── 第 281 页：证据面门的归因分面（未跟踪＝不在 HEAD 的危险码只点名、不进棘轮）。
@@ -13628,7 +13634,7 @@ const MUTATIONS = [
   },
   {
     id: "always-rule-written-to-tracked-file",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/tool-gates.ts",
     test: "tests/d57-write-face.test.ts",
     desc: "授权记录写回**被 git 跟踪**的 permissions.json ⇒ 谁 clone 谁继承那一次授权（#57 的原形状）",
     apply: (s) => s.replace("const path = alwaysRulesPath(workspace);", 'const path = join(workspace, ".agent", "permissions.json");'),
@@ -13700,6 +13706,43 @@ const MUTATIONS = [
     // 单用它就落进「待复认」那一档——本仓的自指族（规则 236），实测当场复现。
     apply: (s) => s.replace("\\d{4}-\\d{2}-\\d{2}(?:-\\d{4})?)/gu", "\\d{4}-\\d{2}-\\d{2})/gu"),
     expectFail: "两种形状各钉一条：普通 `outputs/<主题>-<date>/` 与 `head-cert-<rev>-<date>-<HHMM>`",
+  },
+  // ---- 2026-10-07 第 413 页：D-13（页号唯一面）随判卷同笔配的锚点 ----
+  {
+    id: "d13-collision-detector-neutered",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "撞号那一半恒不报 ⇒ 台账再多几十个「同一天两位作者各写一遍第 N 页」，门照印「新撞的 0 个」。" +
+      "本条的动因就是现读那 106 个重复号：引用老页时得靠猜是哪一页",
+    apply: (s) => s.replace("    if (c <= 1 || legacy.includes(key)) continue;", "    if (true) continue;"),
+    expectFail: "两张同名页标题报一条；只有一张时一条不红（别把正常的页也喊成撞）",
+  },
+  {
+    id: "d13-title-anchor-dropped",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "取号式丢掉行首锚定（变成「标题里任何位置出现 第 N 页 都算一页」）⇒ 小节头只要正好顶着页号，" +
+      "就既虚增 titles 又凭空造出一个撞号；而 D-13 的存在理由正是「页号是引用单位」这件事不能被段落标签污染",
+    apply: (s) => s.replace("const PAGE_TITLE_NUMBER_RE = /^20\\d\\d-\\d\\d-\\d\\d · 第 (\\d+) 页/u;", "const PAGE_TITLE_NUMBER_RE = /第 (\\d+) 页/u;"),
+    expectFail: "小节头正好以页号开头不算第二页：按标题形状取号，不吃 key 的退化路径",
+  },
+  {
+    id: "d13-stale-registration-silent",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "登记表不再命中时不出声 ⇒ 有人重编号一页之后登记还留着，水位只减不查就烂在这儿，" +
+      "而「净零交换」（销掉一条存量同时新撞一个号）也一起被放过（D-10 为同一件事换成集合登记）",
+    apply: (s) => s.replace("  for (const key of legacy) {\n    if ((counts.get(key) ?? 0) > 1) continue;", "  for (const key of []) {\n    if ((counts.get(key) ?? 0) > 1) continue;"),
+    expectFail: "登记是集合不是豁免：命中登记不红，登记不再命中要点名该删",
+  },
+  {
+    id: "d13-page-face-not-the-shared-one",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "调用点不再吃 D-11 那批页（传空数组或自己重算一份）⇒ 这把尺的分母与门的分母分家，" +
+      "而「面为空照样绿」正是本仓最忌的假绿形状（第 392 页第 9 条同族）",
+    apply: (s) => s.replace("pageNum = checkPageNumberUniqueness(witnessPages);", "pageNum = checkPageNumberUniqueness([]);"),
+    expectFail: "接线：门吃的是 D-11 那批页（`witnessPages`），不在这里重算一份分页面",
   },
   // ---- 2026-10-05：R2 的「一致性判据」随判卷同笔配的锚点 ----
   {
@@ -14105,7 +14148,7 @@ const MUTATIONS = [
   },
   {
     id: "plugin-data-root-assembly-falls-back-to-tmp",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/state-handlers.ts",
     test: "tests/plugin-data-root-durable.test.ts",
     desc: "装配面退回「缺省落 os.tmpdir()」⇒ 信任表与插件 userConfig 一起回到会被回收、"
       + "且在共享 runner 上目录名固定可猜的那一顶（别的本机用户预建 plugin-trust.json 即免审批激活）。"
@@ -14358,6 +14401,123 @@ const MUTATIONS = [
       "  if (false) {",
     ),
     expectFail: "带着任务描述就拒跑（退 2）——不能让插件面抢跑把任务悄悄吃掉还报 0",
+  },
+  /* ── 2026-10-11 购入批（§7.3 欠条表 + 当日新修的守卫）──
+   * 前七支把优化计划 §7.8/§7.11/§7.12/§7.13 各页**已做过的反向验证**转成常驻锚点
+   * （那几次注入原来只活在页面的表格里，没人重跑就等于没有）；后两支守的是当日把
+   * `loadExternalRefState` 修成 fail-visible 时新增的判据。九条都先在本树杀过一遍
+   * （注入 → 只跑该 killer 用例 → 转红 → 逐字节还原）才写进这张表。 */
+  {
+    id: "ledger-manifest-per-entry-guard-degenerate",
+    src: "src/agent/ledger.ts",
+    test: "tests/ledger-manifest.test.ts",
+    desc: "逐条守卫退化成恒真（任何 key 都判非法）⇒ 正常 manifest 也被拒；对照组那条用例就是防这个退化形状的",
+    apply: (s) => s.replace("!ID.test(id) || !e || !HASH.test(e.sha256)", "true"),
+    expectFail: "对照组：原始 manifest 读得回来（守卫不能变成永真）",
+  },
+  {
+    id: "worktree-clean-glob-whitelist-dead",
+    src: "src/agent/worktree.ts",
+    test: "tests/worktree-pure.test.ts",
+    desc: "A6 的 glob 白名单失效 ⇒ 含 [ ? * 的 agentId 拼进 `branch --list` 会匹配全部 agent 分支并循环删除",
+    apply: (s) => s.replace("if (!/^[A-Za-z0-9_-]+$/.test(agentId)) {", "if (false) {"),
+    expectFail: "含 glob 元字符 / 路径分隔 / 命令分隔符的 agentId 一律拒绝，且不动盘",
+  },
+  {
+    id: "worktree-slug-empty-fallback-dropped",
+    src: "src/agent/worktree.ts",
+    test: "tests/worktree-pure.test.ts",
+    desc: "空 slug 的 `task` 兜底被摘 ⇒ 折叠到空的 task 会造出空分支名/空 slug 目录",
+    apply: (s) => s.replace("return s === \"\" ? \"task\" : s;", "return s;"),
+    expectFail: "折叠到空 ⇒ 落 `task`（不许产出空分支名）",
+  },
+  {
+    id: "worktree-slug-dangling-hyphen-kept",
+    src: "src/agent/worktree.ts",
+    test: "tests/worktree-pure.test.ts",
+    desc: "截断后的悬空连字符回退被摘 ⇒ 24 字符处正好截在连字符上时分支名以 `-` 结尾",
+    apply: (s) => s.replace("    .slice(0, 24)\n    .replace(/-+$/g, \"\");", "    .slice(0, 24);"),
+    expectFail: "截断后不留悬空连字符（否则分支名以 `-` 结尾）",
+  },
+  {
+    id: "line-delta-crlf-normalized",
+    src: "src/tools/line-delta.ts",
+    test: "tests/apply-patch-lf-shapes.test.ts",
+    desc: "contentLines 顺手做 \\r 归一（那个「看起来能修好 CRLF」的改法）⇒ CRLF 文件会静默被整篇改写成 LF——比逐字拒绝坏得多",
+    apply: (s) => s.replace("  const arr = text.split(\"\\n\");", "  const arr = text.split(\"\\n\").map((l) => l.replace(/\\r$/, \"\"));"),
+    expectFail: "上下文逐字不匹配 ⇒ 抛错，且**盘上一个字节都不改**",
+  },
+  {
+    id: "apply-patch-overlap-gate-dead",
+    src: "src/tools/apply_patch.ts",
+    test: "tests/apply-patch-lf-shapes.test.ts",
+    desc: "重叠闸改 `if (false)` ⇒ 乱序 hunk 不再被拒，cursor 倒退着拼出错内容落盘",
+    apply: (s) => s.replace("    if (p.at < cursor) {", "    if (false) {"),
+    expectFail: "靠后出现但位置靠前的 hunk ⇒ 被判重叠 ⇒ 抛错，盘上不变",
+  },
+  {
+    id: "bandit-posterior-guard-stripped",
+    src: "src/routing/bandit.ts",
+    test: "tests/bandit-primitives.test.ts",
+    desc: "逐条 posterior 校验失效（退回浅守卫）⇒ 畸形条目流进采样器就是那次实测的挂死；入口守卫是唯一挡它的东西",
+    apply: (s) => s.replace("if (!isValidPosterior(val)) {", "if (false) {"),
+    expectFail: "告警正文点名是哪一条坏（否则用户只知道「坏了」不知道坏在哪）",
+  },
+  {
+    id: "memory-external-ref-corrupt-silent-again",
+    src: "src/agent/memory/store.ts",
+    test: "tests/memory-store-pure.test.ts",
+    desc: "损坏态退回静默（缺失/损坏同路）⇒ 用户批准过的 @path 无声蒸发、拒绝记录一并丢，而盘上没有任何出声",
+    apply: (s) => s.replace("if ((err as NodeJS.ErrnoException)?.code !== \"ENOENT\") {", "if (false) {"),
+    expectFail: "状态文件损坏 ⇒ 空态 + onCorrupt 显式告警（fail-visible，不再静默蒸发）",
+  },
+  {
+    id: "memory-external-ref-shape-unchecked",
+    src: "src/agent/memory/store.ts",
+    test: "tests/memory-store-pure.test.ts",
+    desc: "字段形状校验被摘 ⇒ 合法 JSON 里的字符串 approved 会变成 `includes` 的子串匹配面（批准 A 等于批准含 A 的任意引用）",
+    apply: (s) => s.replace("if (!Array.isArray(raw.approved) || !Array.isArray(raw.declined)) {", "if (false) {"),
+    expectFail: "形状畸形（合法 JSON、字段不是数组）同样告警且按空态返回——不许把字符串漏成 `includes` 的隐式子串匹配",
+  },
+  {
+    id: "capabilities-image-evidence-dropped",
+    src: "src/providers/capabilities.ts",
+    test: "tests/provider-capabilities.test.ts",
+    desc: "识图能力不再要证据（缺席也报 true）⇒ 选择器会把「上游没说支持」的模型当能收图，用户贴图就炸在上游",
+    apply: (s) => s.replace("const image = spec?.inputModalities?.includes(\"image\") === true;", "const image = true;"),
+    expectFail: "lists a capability for every registered model without inventing thinking support",
+  },
+  {
+    id: "capabilities-thinking-evidence-dropped",
+    src: "src/providers/capabilities.ts",
+    test: "tests/provider-capabilities.test.ts",
+    desc: "思考档位不再要证据（`可能支持` 直接报 true）⇒ 与文件头「不能只因模型可能支持就报 true」那条纪律相抵",
+    apply: (s) => s.replace("const supported = declared.length > 0;", "const supported = true;"),
+    expectFail: "lists a capability for every registered model without inventing thinking support",
+  },
+  {
+    id: "capabilities-thinking-enforcement-dead",
+    src: "src/providers/capabilities.ts",
+    test: "tests/provider-capabilities.test.ts",
+    desc: "校验点失效 ⇒ 表里没证据的档位也能把 thinking=high 拨出去，参数在 wire 上被静默丢弃（花了钱没生效）",
+    apply: (s) => s.replace("if (!cap.thinking.values.includes(value)) {", "if (false) {"),
+    expectFail: "rejects a non-off thinking value while the adapter wire support is absent",
+  },
+  {
+    id: "sidechat-symlink-gate-dead",
+    src: "src/agent/sidechat.ts",
+    test: "tests/sidechat-core.test.ts",
+    desc: "文件类型闸失效 ⇒ 工作区内指向别处的软链开始进上下文（外泄面第一道闸，§7.6 实测承重的那半）",
+    apply: (s) => s.replace("if (st.isSymbolicLink() || !st.isFile()) return null; // 软链/非常规文件：fail-closed", "if (false) return null; // 软链/非常规文件：fail-closed"),
+    expectFail: "软链指向工作区内的普通文件同样拒（sidechat 不收任何软链，不问落点）",
+  },
+  {
+    id: "sidechat-realpath-containment-dead",
+    src: "src/agent/sidechat.ts",
+    test: "tests/sidechat-core.test.ts",
+    desc: "realpath 落点闸失效 ⇒ 父目录软链这一种形状能读到工作区外（§7.6 实测：只有这道挡得住）",
+    apply: (s) => s.replace("if (relReal === \"\" || relReal.startsWith(\"..\") || isAbsolute(relReal)) return null; // 软链逃逸出工作区", "if (false) return null; // 软链逃逸出工作区"),
+    expectFail: "父目录是软链（ws/sub → 工作区外）⇒ 拒读（只有 realpath 落点那道闸挡得住）",
   },
 ];
 

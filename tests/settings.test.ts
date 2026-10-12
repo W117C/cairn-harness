@@ -127,7 +127,7 @@ describe("autoVerify 缺省开：走读盘路径，不走 DEFAULT_SETTINGS 自�
     return new SettingsStore(file).get();
   };
 
-  it("旧机器（JSON 里压根没这个键）读回来必须是 true", async () => {
+  it("autoVerify：旧机器（JSON 里压根没这个键）读回来必须是 true", async () => {
     const s = await readBack({ mode: "default", theme: "dark", promptCache: false });
     expect(s.autoVerify).toBe(true);
     expect(s.promptCache, "显式关掉的另一项不受影响").toBe(false);
@@ -140,7 +140,7 @@ describe("autoVerify 缺省开：走读盘路径，不走 DEFAULT_SETTINGS 自�
     expect((await readBack(null)).autoVerify, "JSON 损坏回退整份缺省").toBe(true);
   });
 
-  it("DEFAULT_SETTINGS 与读盘回退同向（翻一处忘另一处 = 老用户永远拿不到新默认）", () => {
+  it("autoVerify 默认：DEFAULT_SETTINGS 与读盘回退同向（翻一处忘另一处 = 老用户永远拿不到新默认）", () => {
     expect(DEFAULT_SETTINGS.autoVerify).toBe(true);
   });
 

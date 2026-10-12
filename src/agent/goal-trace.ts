@@ -27,15 +27,18 @@ export interface GoalTrace {
   turn: number;
   /** 已停下来的原因原文（`goal_stopped`）；null = 还没停。 */
   stopped: string | null;
+  /** 已**挂起**的理由原文（`goal_paused`）；null = 没挂起。与 `stopped` 分开：挂起可恢复、
+   *  停止是终态。判据两者都短路，但只有停止会挡住「用户再发一条也不复活」那条语义。 */
+  paused: string | null;
   /** 最后一条 `goal_set` 在事件流里的下标（证据窗口 = 其后那段）。-1 = 没设过。 */
   at: number;
 }
 
 /** 与目标态有关的事件（其余一律不影响芯片读数）。
- *  渲染层为芯片只留这一小段筛选后的数组：goal_set / goal_stopped 各一轮至多一条，
- *  goal 代发轮更被轮次帽卡死 ⇒ 不随会话长度增长，也不必自造第二份「当前目标」状态。 */
+ *  渲染层为芯片只留这一小段筛选后的数组：goal_set / goal_stopped / goal_paused / goal_resumed
+ *  各一轮至多一条，goal 代发轮更被轮次帽卡死 ⇒ 不随会话长度增长，也不必自造第二份「当前目标」状态。 */
 export function goalRelevant(e: AgentEvent): boolean {
-  if (e.type === "goal_set" || e.type === "goal_stopped") return true;
+  if (e.type === "goal_set" || e.type === "goal_stopped" || e.type === "goal_paused" || e.type === "goal_resumed") return true;
   return e.type === "user_message" && e.origin?.kind === "goal";
 }
 
@@ -55,11 +58,17 @@ function step(prev: GoalTrace | null, e: AgentEvent, index: number): GoalTrace |
       spec: { objective: e.objective, maxTurns: e.max_turns, maxUsd: e.max_usd },
       turn: 1,
       stopped: null,
+      paused: null,
       at: index,
     };
   }
   if (prev === null) return null;
-  if (e.type === "goal_stopped") return { ...prev, stopped: e.reason };
+  // 停止是终态：它压过挂起位（`paused` 一并清掉，两种「不续跑」的理由不并存，消费者只看一个）。
+  if (e.type === "goal_stopped") return { ...prev, stopped: e.reason, paused: null };
+  // 已停的目标再点挂起是无意义的：不落状态（否则「停止」与「挂起」会同时为真）
+  if (e.type === "goal_paused") return prev.stopped !== null ? prev : { ...prev, paused: e.reason };
+  // 恢复只清挂起位：不动 spec/turn/stopped/窗口锚点（恢复 ≠ 改设，已完成的工作不作废）
+  if (e.type === "goal_resumed") return prev.paused === null ? prev : { ...prev, paused: null };
   if (e.type === "user_message" && e.origin?.kind === "goal") return { ...prev, turn: prev.turn + 1 };
   return prev;
 }

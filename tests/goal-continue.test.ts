@@ -235,6 +235,60 @@ describe("goal 模式端到端（真入口，缺省零行为）", () => {
     expect(evts.filter((e) => e.type === "goal_stopped").length).toBe(1);
   });
 
+  it("挂起 ≠ 清除：挂起后判据闭嘴（不落 goal_stopped）、恢复后重新武装（v2.16）", async () => {
+    process.env.M3A_MAIN_SCRIPT = scriptPath;
+    await handleGoalSet({ sessionId: "s-plain", objective: "回答问题", maxTurns: 6 });
+    expect((await handleGoalSet({ sessionId: "s-plain", pause: true })).ok).toBe(true);
+    // 幂等：再点一次不补记第二条挂起
+    expect((await handleGoalSet({ sessionId: "s-plain", pause: true })).ok).toBe(true);
+
+    const first = await handleAgentRun(
+      { message: "第一问", mode: "auto", sessionId: "s-plain" },
+      { workspace, sessionId: "s-plain", logPath, unattended: false },
+    );
+    expect(first.ok).toBe(true);
+    let evts = await events();
+    // 分辨力所在：同样是"没写盘也没验证"的一轮，未挂起时判据会落 goal_stopped（见上面那条用例）；
+    // 挂起后判据**在判据发声之前**就闭嘴 ⇒ 盘上零条 goal_stopped。这正是"挂起"与"清除"的分水岭：
+    // 清除落的是终态停止（不可复活），挂起只落一条可撤销的挂起位。
+    expect(evts.filter((e) => e.type === "goal_stopped").length).toBe(0);
+    expect(evts.filter((e) => e.type === "goal_paused").length).toBe(1); // 幂等：只一条
+    expect(userTurns(evts).filter((t) => t.type === "user_message" && t.origin?.kind === "goal").length).toBe(0);
+    expect(projectGoal(evts)?.paused).not.toBeNull();
+    expect(projectGoal(evts)?.stopped).toBeNull();
+
+    // 恢复：只清挂起位、轮次/目标/窗口全留；此后判据重新发声（下一轮仍按"没产出"停）
+    expect((await handleGoalSet({ sessionId: "s-plain", resume: true })).ok).toBe(true);
+    expect(projectGoal(await events())?.paused).toBeNull();
+    expect(projectGoal(await events())?.turn).toBe(1); // 恢复不重置轮次（≠ 改设）
+    const second = await handleAgentRun(
+      { message: "第二问", mode: "auto", sessionId: "s-plain" },
+      { workspace, sessionId: "s-plain", logPath, unattended: false },
+    );
+    expect(second.ok).toBe(true);
+    evts = await events();
+    expect(evts.filter((e) => e.type === "goal_stopped").length).toBe(1);
+    expect(projectGoal(evts)?.stopped).not.toBeNull();
+  });
+
+  it("挂起/恢复的守卫：没目标拒、没挂起时恢复拒、已停的目标两者都拒（都不补记事假事件）", async () => {
+    // 没有已武装的目标：挂起/恢复都拒（不许凭空落一条挂起到空会话上）
+    expect((await handleGoalSet({ sessionId: "s-plain", pause: true })).ok).toBe(false);
+    expect((await handleGoalSet({ sessionId: "s-plain", resume: true })).ok).toBe(false);
+    await handleGoalSet({ sessionId: "s-plain", objective: "回答问题", maxTurns: 6 });
+    // 没挂起就恢复 ⇒ 拒（不写一条假的 goal_resumed 骗审计面）
+    const noPause = await handleGoalSet({ sessionId: "s-plain", resume: true });
+    expect(noPause.ok).toBe(false);
+    expect(noPause.error).toContain("没有被暂停");
+    // 已停的目标：停止是终态，两者都拒（要接着跑只能改设目标）
+    await handleGoalSet({ sessionId: "s-plain", clear: true });
+    expect((await handleGoalSet({ sessionId: "s-plain", pause: true })).ok).toBe(false);
+    expect((await handleGoalSet({ sessionId: "s-plain", resume: true })).ok).toBe(false);
+    // 全程零条挂起/恢复事件：拒 = 不落流（审计面上"挂了几次"必须是真的）
+    const evts = await events();
+    expect(evts.filter((e) => e.type === "goal_paused" || e.type === "goal_resumed").length).toBe(0);
+  });
+
   it("unattended + 武装方案门 ⇒ 拒因来自方案门而不是无人值守闸，盘上不留痕（J3：不是被忽略）", async () => {
     // 定时任务那条路就是 `{ unattended: true }`：写向工具本来就会被"无人值守 fail-closed"自动拒。
     // 所以 J3 判的不是"有没有被拒"（两支都拒 ⇒ 恒真），而是**哪道闸在答话**：

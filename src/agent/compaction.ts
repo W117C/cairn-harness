@@ -201,7 +201,12 @@ function* iterateUnits(events: AgentEvent[], units: AtomicUnit[]): Generator<{ l
 
 // ---- 固定回注名单（切点纪律 3：永不压缩、永不进摘要输入）----
 /** V1 名单 = 全部 user_message（用户目标与中途补充——CC/CL 先例：用户轮次跨压缩存活，
- *  最近 typed user 消息永不吞因此自然成立）+ 当前 plan（最后一组 plan_proposed/plan_approved）。
+ *  最近 typed user 消息永不吞因此自然成立）+ 当前 plan（最后一组 plan_proposed/plan_approved）+
+ *  当前 goal（最后一组 goal_set/goal_stopped）。
+ *  goal 此前**不在受护名单**里——goal 证据窗口以「最后一条 goal_set」为锚点（`goal-trace.ts` /
+ *  `goal.ts` 的续跑判定都读它之后那段），一旦压缩把 goal_set 摘掉，锚点断、续跑判据在下一次
+ *  压缩后就读不出「设过目标」了（#84：goal 只落事件流、没有压缩回注点）。把它并进受护名单，
+ *  与 plan 同一条纪律：**证据锚点永不压缩、永不进摘要输入**。
  *  keep-first 按原子单元闭包扩护：单元内任一成员入选，整单元受护。 */
 export function keepFirstSet(events: AgentEvent[]): Set<number> {
   const seeds = new Set<number>();
@@ -209,14 +214,20 @@ export function keepFirstSet(events: AgentEvent[]): Set<number> {
   // 抛 RangeError，且恰在"会话已大、正需压缩"时调用。改单次循环。
   let lastPlanProposed = -1;
   let lastPlanApproved = -1;
+  let lastGoalSet = -1;
+  let lastGoalStopped = -1;
   events.forEach((e, i) => {
     const id = eventIdAt(i);
     if (e.type === "user_message") seeds.add(id); // 用户轮次全部受护（用户目标 + 中途补充）
     else if (e.type === "plan_proposed") lastPlanProposed = id;
     else if (e.type === "plan_approved") lastPlanApproved = id;
+    else if (e.type === "goal_set") lastGoalSet = id;
+    else if (e.type === "goal_stopped") lastGoalStopped = id;
   });
   if (lastPlanProposed > 0) seeds.add(lastPlanProposed);
   if (lastPlanApproved > 0) seeds.add(lastPlanApproved);
+  if (lastGoalSet > 0) seeds.add(lastGoalSet);
+  if (lastGoalStopped > 0) seeds.add(lastGoalStopped);
   const units = atomicUnits(events);
   const out = new Set<number>();
   // A4（审查根因 5）：units 按 lo 升序互不重叠——二分定位代替每 seed 全量 find。

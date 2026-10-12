@@ -18,8 +18,11 @@ const reach = analyze(ROOT);
 
 /** 例外表：**运行时是空的**那些文件（纯契约面）本来就没有可执行的东西，"没有执行路径"是事实不是缺口。
  *  豁免不靠"看着像类型文件"这种写法判断（换写法即绕过，规则 122），靠**真去 import 它**：
- *  下面第三条用例要求运行时导出为 0——哪天有人往里加一个 `export const`，豁免立刻失效并点名。 */
-const TYPE_ONLY_SURFACE: readonly string[] = ["src/main/ipc-protocol.ts"];
+ *  下面第三条用例要求运行时导出为 0——哪天有人往里加一个 `export const`，豁免立刻失效并点名。
+ *  SEMA Phase 3（§12）：ipc-protocol.ts 长出了运行时出口 `IPC_PROTOCOL_VERSION`（协议版本化）
+ *  ⇒ 按这条棘轮自己的规矩从豁免表撤名，执行路径由 tests/ipc-protocol-version.test.ts 的值边供给。
+ *  现豁免表为空——再躺人进来要连同第三条用例一起过得了「运行时导出为 0」的证明。 */
+const TYPE_ONLY_SURFACE: readonly string[] = [];
 
 /** 桌面层入口：headless vitest **结构上**不可能有它的判卷面（`import` 它就是启动 Electron），
  *  所以零执行路径是这一族的固有属性，不是"谁忘了写测试"。

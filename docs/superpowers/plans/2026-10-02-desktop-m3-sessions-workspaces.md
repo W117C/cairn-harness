@@ -1,4 +1,4 @@
-# m0 桌面端 M3：会话库与多工作区 实现计划
+# Cairn 桌面端 M3：会话库与多工作区 实现计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -16,7 +16,7 @@
 - 取消语义裁定（M2 终审 Important 2 的 M3 落地）：`cancel(sessionId)` 会话级；`aborted` 以 kernel-host 响应增强字段 `aborted?: boolean`（desktop 层扩展，不动 ipc-protocol 类型）为真值传 renderer；"■ 已停止"改由真值驱动（stoppedIds 本地态保留为即时反馈，二者并存）。
 - 漂移检测语义：kernel-host 对每个已打开会话记 `{size, mtimeMs}` 快照（openSession 与本端 run 收束时刷新）；run 启动前重读 stat，与快照不一致 ⇒ 拒绝该次 run（`{ok:false, error:"会话已被外部修改（CLI？），请刷新后重试"}`），不静默覆盖。
 - 冻结判卷文件与夹具不碰；根门形状以当次实测为准（M2 末基线 4063+，并行会话持续漂移，如实记录）；并行会话脏文件不碰不 add（scripts/docs-check.ts、scripts/head-cert*、scripts/mutate-verify.mjs、outputs/、.vitest/ 及其后续新增）。
-- 桌面测试 `pnpm --filter m0-desktop test`；冒烟 `pnpm --filter m0-desktop smoke`；**smoke.mjs 本任务链补 `spawnSync(…, { timeout: 45000 })`**（M2 终审 triage 项）。
+- 桌面测试 `pnpm --filter cairn-desktop test`；冒烟 `pnpm --filter cairn-desktop smoke`；**smoke.mjs 本任务链补 `spawnSync(…, { timeout: 45000 })`**（M2 终审 triage 项）。
 - 视觉 token 只用既有 CSS 变量；分组侧栏按 spec §6.2 方案 A（分组标题=工作区名，点击切换当前工作区）。
 - 提交只 add 本任务清单内文件，提交信息中文详述。
 
@@ -80,7 +80,7 @@ it("漂移检测：会话文件被外部追加后，下一次 run 被拒且报�
 }, 60_000);
 ```
 
-- [ ] **Step 2: 跑红** → **Step 3: 实现**（KernelHost v2 签名＋归属表＋注入＋漂移；`index.ts` 的接线同步改——`createKernelHost({ workspaces: [workspace], activeWorkspace: workspace, … })`，M0_SMOKE 分支同改）→ **Step 4: 跑绿**（全量 desktop test 含 M1/M2 存量——**M2 存量测试的 host 装配调用式须按新签名更新**，属授权内断言面更新）
+- [ ] **Step 2: 跑红** → **Step 3: 实现**（KernelHost v2 签名＋归属表＋注入＋漂移；`index.ts` 的接线同步改——`createKernelHost({ workspaces: [workspace], activeWorkspace: workspace, … })`，CAIRN_SMOKE 分支同改）→ **Step 4: 跑绿**（全量 desktop test 含 M1/M2 存量——**M2 存量测试的 host 装配调用式须按新签名更新**，属授权内断言面更新）
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -211,7 +211,7 @@ git commit -m "桌面端 M3-6：验收锚 e2e——CLI 产物会话桌面可见�
 
 **Interfaces:**
 - Produces: `spawnSync(…, { timeout: 45000, … })`（M2 终审 triage 项收口；超时 ⇒ exit 1 带诊断）。
-- [ ] **Step 1: 补 timeout → Step 2: 全量验收**（`pnpm --filter m0-desktop test`、`pnpm --filter m0-desktop smoke`、`pnpm typecheck`、`pnpm gates`（红项按并行会话归因如实记录）、根 vitest 形状）→ **Step 3: Commit**
+- [ ] **Step 1: 补 timeout → Step 2: 全量验收**（`pnpm --filter cairn-desktop test`、`pnpm --filter cairn-desktop smoke`、`pnpm typecheck`、`pnpm gates`（红项按并行会话归因如实记录）、根 vitest 形状）→ **Step 3: Commit**
 
 ```bash
 git add apps/desktop/scripts/smoke.mjs

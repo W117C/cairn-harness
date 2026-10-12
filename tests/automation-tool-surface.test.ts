@@ -126,7 +126,10 @@ describe("automationTools:false —— 规格面与执行面一起摘（同一�
   });
 
   it("执行面读的是同一个字段（改一面忘另一面 = 本文件开头那条失败形状）", () => {
-    const runner = readFileSync(join(ROOT, "src", "main", "agent-runner.ts"), "utf8");
+    // 2026-10-11 拆分：第三句钉的 `automationTools === false ⇒ AUTOMATION_TOOL_NAMES 过滤`
+    // 随 sessionToolFace 搬去 ./tool-gates ⇒ 取料读两处（前两句仍在装配根 runAgent 里）。
+    const runner = readFileSync(join(ROOT, "src", "main", "agent-runner.ts"), "utf8")
+      + "\n" + readFileSync(join(ROOT, "src", "main", "tool-gates.ts"), "utf8");
     // 执行面：installAppTools 的 opt-out 吃 opts.automationTools。
     // 2026-09-30 起同一行还带可选工具的摘除名单（omitTools）——两个开关同源同一个调用，
     // 所以判据从「逐字相等」放宽成「这一句里两个字段都在」，而不是把新的那半截删掉不判。

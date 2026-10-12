@@ -70,10 +70,17 @@ export function automationToolSpecs(): GlmToolSpec[] {
 
 function automationDescription(name: string): string {
   switch (name) {
-    case "automation_create": return "新建定时任务（周期或一次性）。" + UNATTENDED;
-    case "automation_update": return "按 id 改一个定时任务（只改你申报的字段，其余保留；无人值守口径同 create）。";
-    case "automation_delete": return "按 id 删除定时任务。";
-    case "automation_run_now": return "按 id 立刻手动触发一次（走同一准入管线：去重/并发/重叠闸生效）。";
-    default: return "列出全部定时任务（id、名称、规则、启用状态、下次触发时间）。";
+    case "automation_create":
+      return "新建定时任务（周期或一次性）。" +
+        "何时用：用户要求以后自动重复做某件事。" + UNATTENDED;
+    case "automation_update":
+      return "按 id 改一个定时任务（只改你申报的字段，其余保留；无人值守口径同 create）。" +
+        "改前先 automation_list 拿准 id。";
+    case "automation_delete":
+      return "按 id 删除定时任务（不可撤销；只是暂时不想跑就用 update 的 enabled:false，别删）。";
+    case "automation_run_now":
+      return "按 id 立刻手动触发一次（走同一准入管线：去重/并发/重叠闸生效）。";
+    default:
+      return "列出全部定时任务（id、名称、规则、启用状态、下次触发时间）。";
   }
 }

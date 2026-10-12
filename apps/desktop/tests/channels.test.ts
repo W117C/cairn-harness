@@ -6,7 +6,7 @@ import { INVOKE_CHANNELS, PUSH_CHANNELS, type PushChannel } from "../src/main/ch
 
 // 完整性裁决在类型侧：interface 无运行时形态，Object.keys({} as AgentApi) 恒为 []，
 // 「invoke 通道覆盖 AgentApi 全部非推送键」只能由 channels.ts 的 INVOKE_CHANNELS
-// 映射类型声明 ＋ tsc（pnpm --filter m0-desktop typecheck，tsconfig include 含 tests/）
+// 映射类型声明 ＋ tsc（pnpm --filter cairn-desktop typecheck，tsconfig include 含 tests/）
 // 静态裁决。运行时用例只验推送三键与 invoke 表非空。
 
 describe("通道名表完整性", () => {
@@ -18,8 +18,12 @@ describe("通道名表完整性", () => {
   it("invoke 通道表非空且每行通道名非空", () => {
     // 运行时计数钉（终审顺手项）：类型侧红线靠 tsconfig include 含 tests/ 才生效，
     // include 一收窄就哑火——表长在运行时也咬得住，漂移（AgentApi 增删方法）当场红。
-    // M4-5：＋pickDirectory（dialog 选目录，M3 deferred 收口）⇒ 40。
-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(40);
+    // M4-5：＋pickDirectory（dialog 选目录，M3 deferred 收口）⇒ 40；M3 补：＋forkSession ⇒ 41；
+    // ＋revertTurn / submitFeedback / listFeedback（v2.16 三面同批）⇒ 44；
+    // SEMA §12：＋protocolVersion（协议版本握手）⇒ 45。
+    // S7：＋providerDiscover / providerSave（自定义接口：拉取与存盘）⇒ 47。
+    // ③：＋createProject（按项目名建文件夹并登记）⇒ 48。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(48);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
@@ -33,78 +37,100 @@ describe("通道名表完整性", () => {
     expect(true).toBe(true);
   });
 
-  it("wired 覆盖守卫：应接线通道在 index.ts wired 表逐一有行（防漏行三连复发）", () => {
+  it("wired 覆盖守卫：INVOKE_CHANNELS 每条通道要么接真、要么在带理由的 fail-loud 白名单（防漏行三连复发）", () => {
     // M3 终审防回归守卫：wired 表漏行这一类 bug 已三连同型发生（getProviderInfo → submitClarify
     // → decidePlan）——channels 表/preload/AgentApi 三面齐全，wired 表独缺一行，renderer 调用
-    // 即 reject「No handler registered」，且只有真开窗冒烟才暴露。守卫读 index.ts 源文，
-    // 逐一断言「应接线名单」的每个键都有 wired 行（行首锚定 key:；index.ts 的注册循环按
-    // AgentApi 方法名从 wired 表取行，通道名字符串本身不出现在其源文——断言对象因此是键行）。
-    // 新接线一个通道：把它从白名单移出、加入应接线名单；漏行当场红。
+    // 即 reject「No handler registered」而被 void 吞掉 ⇒ 静默死路，且只有真开窗冒烟才暴露。
+    // B3 修复后判据升一级：不再是"白名单里那 27 条默许静默跳过"，而是**遍历 INVOKE_CHANNELS
+    // 全键**——每条要么在 wired 表有真 handler，要么写进 UNWIRED_FAIL_LOUD（带理由）且注册成
+    // fail-loud（返回 {ok:false,error}，不是 `if (handler)` 跳过）。
     const indexTs = readFileSync(fileURLToPath(new URL("../src/main/index.ts", import.meta.url)), "utf8");
-    // 应接线名单（M3 终审时点的实际已接线集合，含本笔新增 submitClarify/decidePlan）。
+
+    // ① wired 必须是**全键** Record，不是 Partial——这是"删掉一条已接通道必须转红"的静态支。
+    expect(indexTs).toMatch(/const wired:\s*Record<InvokeChannel,/);
+    expect(indexTs).not.toMatch(/Partial<\s*Record<\s*InvokeChannel/);
+
+    // ② 注册循环不许再有静默跳过（`if (handler)` 那一支就是漏行三连的温床）。
+    expect(indexTs).not.toMatch(/if\s*\(\s*handler\s*\)\s*ipcMain\.handle/);
+
+    // ③ 接真名单：wired 表里逐行锚定 `key:` 的键。
     const mustWire: readonly string[] = [
       "run",
       "decide",
       "submitClarify",
       "decidePlan",
-      "runCancel",
-      "listSessions",
-      "createSession",
-      "openSession",
-      "getProviderInfo",
-      "listProjects",
-      "addProject",
-      "removeProject",
-    ];
-    // 有意未接线白名单：v1 不做清单通道（M4+ 逐个接线时从白名单移出）。与 mustWire 无交、
-    // 二者并集恰为 INVOKE_CHANNELS 全键——名单本身漂移（漏列/多列）当场红。
-    const whitelist: readonly string[] = [
-      // 目标/压缩/状态（M4+ 会话管理面）
       "setGoal",
+      "runCancel",
       "compact",
       "getState",
-      // 引导与设置（v1 静默默认 + 模型选择器只读 getProviderInfo）
+      "getProviderInfo",
       "getOnboarding",
       "getSettings",
       "setSettings",
-      // 会话修饰（列表分组后的重命名/删除/归档/钉选/归组）
+      "listSessions",
+      "createSession",
+      "openSession",
       "renameSession",
       "deleteSession",
+      "listProjects",
+      "addProject",
+      "removeProject",
       "setSessionPinned",
       "setSessionArchived",
       "assignSessionProject",
-      // 记忆/插件（v1 无管理 UI）
       "deleteMemory",
       "pluginDecide",
-      // 侧聊（v1 不做）
       "sidechatCreate",
       "sidechatAsk",
       "sidechatPromote",
       "sidechatState",
-      // 卡片动作（v1 卡片只读）
       "cardAction",
-      // 调度（v1 不做）
       "scheduleSnapshot",
       "scheduleUpsert",
       "scheduleDelete",
       "scheduleRunNow",
-      // provider key 管理（v1 走 settings 文件，无 key 入库面）
       "providerKeySet",
       "providerKeyDelete",
       "providerKeyStatus",
-      // 更新与外链（桌面壳职责，M4+）
       "checkUpdate",
       "openExternal",
       // M4-5：dialog 选目录——新通道直接接真（wired 行＋AgentApi＋channels 三面同步），不进白名单。
       "pickDirectory",
+      "forkSession",
+      // v2.16 三面同批的在飞键（channels.ts/index.ts 已有 wired 行，名单在此补齐）。
+      "revertTurn",
+      "submitFeedback",
+      "listFeedback",
+      // SEMA §12：协议版本握手（wired 行 + AgentApi + channels 三面同步；renderer 闸见 protocol-version.test）。
+      "protocolVersion",
+      // S7：自定义接口——拉取（零副作用）与存盘（写工作区配置 + 存钥匙），三面同步直接接真。
+      "providerDiscover",
+      "providerSave",
+      // ③：新建项目（建同名文件夹 + 登记），三面同步直接接真。
+      "createProject",
     ];
+    // ④ fail-loud 白名单（带理由的未接）：B3 修复后为空——39 条全部接真。要留白须在此
+    //    逐条列名并注记理由，且 index.ts 的 UNWIRED_FAIL_LOUD 同步加键（下方断言钉死两者一致）。
+    const failLoud: readonly string[] = [];
+
+    // 名单完整性自钉：两份名单并集恰为 INVOKE_CHANNELS 全键、且互不相交（防名单漏列让守卫哑火）。
     const allKeys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
-    const expected = allKeys.filter((k) => !whitelist.includes(k));
-    // 名单完整性自钉：白名单之外的每一键都必须列在 mustWire 里（防名单漏列守卫哑火）。
-    expect([...mustWire].sort()).toEqual([...expected].sort());
+    expect(failLoud.filter((k) => mustWire.includes(k))).toEqual([]);
+    expect([...mustWire, ...failLoud].sort()).toEqual([...allKeys].sort());
+
+    // ⑤ 每条接真键在 index.ts 源文里确实有 wired 行（行首锚定 key:）。
     for (const key of mustWire) {
       const row = new RegExp(`^\\s*${key}\\s*:`, "m");
       expect(row.test(indexTs), `wired 表缺行：${key}（通道 ${INVOKE_CHANNELS[key as keyof typeof INVOKE_CHANNELS]}）`).toBe(true);
+    }
+    // ⑥ fail-loud 名单必须与 index.ts 的 UNWIRED_FAIL_LOUD 集合字面量一致（两侧漂移当场红）。
+    const setLit = indexTs.match(/UNWIRED_FAIL_LOUD[^=]*=\s*new Set\(\[([\s\S]*?)\]\)/)?.[1] ?? "";
+    const inSource = [...setLit.matchAll(/["']([a-zA-Z]+)["']/g)].map((m) => m[1]).sort();
+    expect(inSource).toEqual([...failLoud].sort());
+    // ⑦ fail-loud 白名单里的每一键都不许在 wired 表里有行（否则"未接"名不副实）。
+    for (const key of failLoud) {
+      const row = new RegExp(`^\\s*${key}\\s*:`, "m");
+      expect(row.test(indexTs), `fail-loud 白名单里的 ${key} 却在 wired 表接了真——请移出白名单`).toBe(false);
     }
   });
 });

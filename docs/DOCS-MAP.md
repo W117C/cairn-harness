@@ -14,6 +14,7 @@ This checkout is core-first. The desktop shell lives in `apps/desktop/` (reintro
 | Tests | `tests/` |
 | Core checks | `scripts/` |
 | Request-lifecycle diagram | `outputs/request-lifecycle-2026-10-08/request-lifecycle.html` |
+| Development & optimization plan (2026-10-12) | `docs/development-plan-2026-10-12.md` |
 
 The request-lifecycle diagram traces one `agent:run` from the renderer through the preload bridge,
 Electron main, `KernelHost`, `runAgent`, `runLoop`, the permission gate, the tool surface, and the

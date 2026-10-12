@@ -28,6 +28,8 @@ const T = (s: string) => `前缀 ${s} 后缀`;
 const SAMPLES: Record<string, { event: Record<string, unknown>; secrets: string[] }> = {
   assistant_message: { event: { type: "assistant_message", callId: "c", content: T(S1) }, secrets: [S1] },
   assistant_delta: { event: { type: "assistant_delta", callId: "c", text: T(S1) }, secrets: [S1] },
+  // 思考正文同正文一样是模型生成的文本：把 key / env 复述在"想"的过程里也得擦掉。
+  thinking_delta: { event: { type: "thinking_delta", callId: "c", text: T(S1) }, secrets: [S1] },
   tool_call: { event: { type: "tool_call", id: "t1", name: "write_file", args: { path: "a.ts", contents: T(S1) } }, secrets: [S1] },
   tool_result: { event: { type: "tool_result", callId: "t1", ok: true, output: T(S1) }, secrets: [S1] },
   verify_result: {
@@ -58,6 +60,7 @@ const SAMPLES: Record<string, { event: Record<string, unknown>; secrets: string[
     secrets: [S1, S2],
   },
   goal_stopped: { event: { type: "goal_stopped", reason: T(S1), turn: 3, evidence: "absent" }, secrets: [S1] },
+  goal_paused: { event: { type: "goal_paused", reason: T(S1), turn: 2 }, secrets: [S1] },
 };
 
 describe("注册表每一型都必须对正文表过态", () => {

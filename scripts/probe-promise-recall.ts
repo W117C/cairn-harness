@@ -489,6 +489,15 @@ export const CLAIM_BINDINGS: readonly ClaimBinding[] = [
     why: "那句话只在 `stray === 0` 那一支拼进 detail，而这条用例喂的正是「没活可干」的形状：`expect(red.detail).toContain(\"对照是空的\")`"
       + " ⇒ 这句点名话有观测者（红的那一支就是它要说的事），不是写了没人读",
   },
+  {
+    face: "src/agent/memory/store.ts#loadExternalRefState｜外部引用审批状态损坏",
+    symbol: "loadExternalRefState",
+    testFile: "tests/memory-store-pure.test.ts",
+    testCase: "状态文件损坏 ⇒ 空态 + onCorrupt 显式告警（fail-visible，不再静默蒸发）",
+    why: "2026-10-11 把「缺失/损坏同路静默」修成 fail-visible 后新添的那句告警文案，证人就是这条用例："
+      + "把 external-refs.json 截断成半截 JSON ⇒ 返回仍是空态（fail-closed 方向不变）且 onCorrupt 收到一条**带落点路径**的告警；"
+      + "同文件另两条各钉一边：「形状畸形（字段不是数组）同样告警」与「文件缺失不告警（首启不是损坏）」。",
+  },
 ];
 
 /** 存量帽（计数类**不留余量**，同 `prose-needle-scan` 那族）。三态各自出声：

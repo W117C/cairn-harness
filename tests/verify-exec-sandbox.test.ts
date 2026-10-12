@@ -91,7 +91,11 @@ describe("verifyExec（沙箱是发货缺省路径）", () => {
  *  且**宽度不同**（模型那条只认 `pnpm test`），三份里两份零观察者——只有 `verifyExec` 那条有测。
  *  收成一份之后，宽度差落成两个具名名单：差的那一条是"要不要替模型改写它自己下的命令"这个裁决，必须是点名的、不能是漂。 */
 describe("沙箱 pnpm 映射收成一份", () => {
-  const src = readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf8");
+  // 2026-10-11 拆分：模型那条 `run_shell` 的消费点（gatedTool 内的沙箱 lint 支）搬去 ./tool-gates
+  // ⇒ 取料跟着读三处（判据仍是「三处消费者一律走带工作区判据的入口」，少读一处会把搬走的读成绕开）。
+  const src = ["../src/main/agent-runner.ts", "../src/main/tool-gates.ts", "../src/main/sandbox-test-command.ts"]
+    .map((path) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), "utf8"))
+    .join("\n");
 
   it("消费者不再各自内联那句三元：`? VITEST_DIRECT : command` 全文件只剩映射器里那一处", () => {
     expect(src.split("? VITEST_DIRECT : command").length - 1).toBe(1);

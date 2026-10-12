@@ -54,6 +54,10 @@ export interface OpenAiOptions {
   fetchImpl?: typeof fetch;
   /** 停滞守卫静默窗口 ms（根因 4）；缺省 60s，<=0 关闭守卫。 */
   stallTimeoutMs?: number;
+  /** 思考档位（"low"|"medium"|"high"）：非空则写 body.reasoning_effort。
+   *  传的是**档位名**而不是数值——OpenAI 兼容族收的就是这个名字（DeepSeek 的 /models 自述里
+   *  `effort.supported_levels` 写明的也是这些名字）。undefined = 逐字旧行为（不出现这个字段）。 */
+  reasoningEffort?: string;
   /** Opt-in wire-boundary accounting; never stores payload/key text. */
   metering?: { meter: RequestMeter; category: RequestCategory };
 }
@@ -67,7 +71,13 @@ interface DeltaToolCall {
 interface ChatChunk {
   id?: string;
   choices?: {
-    delta?: { content?: string; tool_calls?: DeltaToolCall[] };
+    delta?: {
+      content?: string;
+      /** 推理正文：DeepSeek 系用 `reasoning_content`，OpenAI o 系用 `reasoning`。 */
+      reasoning_content?: string;
+      reasoning?: string;
+      tool_calls?: DeltaToolCall[];
+    };
     message?: { content?: string; tool_calls?: DeltaToolCall[] };
     finish_reason?: string | null;
   }[];
@@ -151,6 +161,7 @@ export async function* streamOpenAI(
   // C8（审查 P2）：流式计量——OpenAI 兼容端点默认不回 usage，须显式开启 stream_options.include_usage，
   // 否则流式会话 token 恒 0（成本闸/用量面板全失真）。extraBody 仍可覆盖（自建网关不兼容时）。
   if (stream) body.stream_options = { include_usage: true };
+  if (opts.reasoningEffort !== undefined && opts.reasoningEffort !== "") body.reasoning_effort = opts.reasoningEffort;
   if (opts.extraBody) Object.assign(body, opts.extraBody);
   if (tools && tools.length > 0) body.tools = toWireTools(tools);
 
@@ -297,6 +308,14 @@ export async function* streamOpenAI(
             const fr = chunk.choices?.[0]?.finish_reason;
             if (fr) finishReason2 = fr;
             const delta = chunk.choices?.[0]?.delta;
+            // 推理增量（`reasoning_content` / `reasoning`）→ **thinking_delta**（与正文分开的事件）。
+            // 2026-10-07 之前这里刻意不读（怕污染转录），现在用户要求显示思考过程：
+            // 关键是**走独立事件**而不是并进 content —— 转录里正文仍是正文，思考单独一段，
+            // 回放与转录都干净（思考块在多数家本就不可回传）。
+            const thinking = delta?.reasoning_content ?? delta?.reasoning;
+            if (typeof thinking === "string" && thinking !== "") {
+              yield { type: "thinking_delta", callId: callId2, text: thinking };
+            }
             if (delta?.content) {
               emitted = true;
               yield { type: "assistant_delta", callId: callId2, text: delta.content };

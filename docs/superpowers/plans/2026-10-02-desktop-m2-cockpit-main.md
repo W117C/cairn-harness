@@ -1,4 +1,4 @@
-# m0 桌面端 M2：驾驶舱主区完整化 实现计划
+# Cairn 桌面端 M2：驾驶舱主区完整化 实现计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -15,7 +15,7 @@
 - core 改动面**白名单**（除此之外 `src/` 零改动，`git diff -- src/` 只允许出现这几个文件）：`src/events/index.ts`（createEventLog 签名＋AgentEvent 别名交集）、`src/main/agent-runner.ts`（RunOverrides/RunOptions 透传＋:1634 调用点）。
 - `ts` 语义：缺省**关**（不写该字段，落盘字节与现状逐字一致）；开 = append 时写 `ts: Date.now()`（毫秒数）。旧日志无 `ts`，重放/投影必须容忍（显示留空，不造假）。
 - 冻结判卷文件与夹具不碰；根门保持绿（已知存量红 cli-surface 归并行会话，形状一致即合规）；根 vitest 不扫 apps/。
-- 桌面测试：`pnpm --filter m0-desktop test`；构建：`pnpm --filter m0-desktop build`；冒烟：`M0_SMOKE=1 M0_DESKTOP_WORKSPACE=$(mktemp -d) pnpm --filter m0-desktop exec electron .`。
+- 桌面测试：`pnpm --filter cairn-desktop test`；构建：`pnpm --filter cairn-desktop build`；冒烟：`CAIRN_SMOKE=1 CAIRN_DESKTOP_WORKSPACE=$(mktemp -d) pnpm --filter cairn-desktop exec electron .`。
 - 并行会话脏文件不碰不 add：scripts/docs-check.ts、scripts/head-cert*、scripts/mutate-verify.mjs、outputs/、.vitest/。
 - 视觉 token 用 spec §6.1 既有 CSS 变量，不新加颜色；彩色只留风险/错误/diff。
 - 提交只 add 本任务清单内文件，提交信息中文详述（仓库惯例）。
@@ -48,7 +48,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createEventLog, replay } from "../src/events";
 
-const dir = () => mkdtempSync(join(tmpdir(), "m0-evtlog-"));
+const dir = () => mkdtempSync(join(tmpdir(), "cairn-evtlog-"));
 const ev = { type: "user_message", content: "你好" } as const;
 
 describe("createEventLog timestamps 开关", () => {
@@ -116,7 +116,7 @@ export function createEventLog(path: string, opts?: { timestamps?: boolean }): E
 
 - [ ] **Step 4: 全量门**
 
-Run: `node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts`（根门形状与 M1 终审一致：唯一存量红 cli-surface）＋ `pnpm --filter m0-desktop test` ＋ `pnpm typecheck`
+Run: `node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts`（根门形状与 M1 终审一致：唯一存量红 cli-surface）＋ `pnpm --filter cairn-desktop test` ＋ `pnpm typecheck`
 Expected: 新测试 3 例绿；根门其余形状不变（缺省关保证）。
 
 - [ ] **Step 5: Commit**
@@ -219,12 +219,12 @@ describe("投影 v2", () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter m0-desktop test`
+Run: `pnpm --filter cairn-desktop test`
 Expected: FAIL（新形状未实现）。
 
 - [ ] **Step 3: 实现 projections.ts v2**（按 Interfaces 语义逐条实现；M1 的 `summarize` 保留）
 
-- [ ] **Step 4: 跑测试确认绿**（`pnpm --filter m0-desktop test`，全部用例含 M1 存量）
+- [ ] **Step 4: 跑测试确认绿**（`pnpm --filter cairn-desktop test`，全部用例含 M1 存量）
 
 - [ ] **Step 5: Commit**
 
@@ -256,7 +256,7 @@ git commit -m "桌面端 M2-2：投影 v2——delta 按 callId 分桶流式（l
 
 - [ ] **Step 2: 验证**
 
-Run: `pnpm --filter m0-desktop typecheck && pnpm --filter m0-desktop build && pnpm --filter m0-desktop test`
+Run: `pnpm --filter cairn-desktop typecheck && pnpm --filter cairn-desktop build && pnpm --filter cairn-desktop test`
 Expected: 全绿。
 
 - [ ] **Step 3: Commit**
@@ -380,7 +380,7 @@ git commit -m "桌面端 M2-5：三卡——审批卡 scope 展开（session_kin
 - kernel-host 测试补强（M1 账本 T3 项）：demo run 的 outbox 断言加 `agent_spawned` ≥1 与 `agent_result` ≥1（demo 剧本派两个 worker，事件在流里；断言事件类型存在而非内容形状——worker 报告内容不钉死）。
 
 - [ ] **Step 1: 改 Composer（真禁用）与 kernel-host.test（两行断言）**
-- [ ] **Step 2: `pnpm --filter m0-desktop test` 全绿（含 M1 既有 run 用例仍绿——worker 事件断言若在 demo 剧本下不成立，先勘 `fixtures/agents/main-demo.jsonl` 的 worker 是否真跑完，断言按事实写）**
+- [ ] **Step 2: `pnpm --filter cairn-desktop test` 全绿（含 M1 既有 run 用例仍绿——worker 事件断言若在 demo 剧本下不成立，先勘 `fixtures/agents/main-demo.jsonl` 的 worker 是否真跑完，断言按事实写）**
 - [ ] **Step 3: Commit**
 
 ```bash
@@ -440,7 +440,7 @@ it("打断：ask 等待期 runCancel → run 收束（ok false 或 error 提及�
 断言细节以实测为准的勘误窗口：cancel 后 run 的返回形状（ok:false+error 或 ok:true+aborted 事件）以 `agent-runner` 的取消语义真实行为为准——**只钉"不产生 marker + run 收束 + 无悬挂 promise"三条硬判据**，返回形状如实记录进报告。
 
 - [ ] **Step 3: 跑红→修绿**（若 scripted main 对 `run_shell` 的门语义与预期不符——例如脚本化通道强制 auto 档绕过 ask——勘 `scriptedMainModelPath` 消费侧与 mode 传递链，调 fixture/mode/断言至真语义；两轮调不通 BLOCKED 并贴机制）
-- [ ] **Step 4: 全绿**（`pnpm --filter m0-desktop test` 全量；`M0_SMOKE=1` 冒烟仍 PASS）
+- [ ] **Step 4: 全绿**（`pnpm --filter cairn-desktop test` 全量；`CAIRN_SMOKE=1` 冒烟仍 PASS）
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -456,16 +456,16 @@ git commit -m "桌面端 M2-7：审批→执行→打断全链路 headless 判�
 - Modify: `scripts/desktop-boundary-check.ts`、`apps/desktop/package.json`（冒烟脚本固化）
 
 **Interfaces:**
-- Produces: 扫描器补 `require(` 面与 `.mjs/.cjs/.jsx` 扩展名（终审 deferred triage 项）；`pnpm --filter m0-desktop smoke` 一键冒烟。
+- Produces: 扫描器补 `require(` 面与 `.mjs/.cjs/.jsx` 扩展名（终审 deferred triage 项）；`pnpm --filter cairn-desktop smoke` 一键冒烟。
 
 - [ ] **Step 1: 扫描器扩展**（正则加 `require\(\s*["'][^"']*(apps\/desktop|electron)`；walk 扩展名集合加 mjs/cjs/jsx。先红后绿自验：加 `src/__probe2__.cjs`（内容 `require("electron")`）应红，删后绿）
-- [ ] **Step 2: package.json 加 `"smoke": "node scripts/smoke.mjs"`**——新建 `apps/desktop/scripts/smoke.mjs`：生成 mktemp 工作区、带 `M0_SMOKE=1 M0_DESKTOP_WORKSPACE=<tmp> exec electron .`、透传退出码（把 M1-6 的命令行咒语固化为脚本）
-- [ ] **Step 3: 全量验收**：`pnpm --filter m0-desktop test`（含 Task 7 两用例）＋ `pnpm --filter m0-desktop smoke`（exit 0）＋ `pnpm gates`（含边界门）＋ `pnpm typecheck` ＋ 根 vitest 形状一致
+- [ ] **Step 2: package.json 加 `"smoke": "node scripts/smoke.mjs"`**——新建 `apps/desktop/scripts/smoke.mjs`：生成 mktemp 工作区、带 `CAIRN_SMOKE=1 CAIRN_DESKTOP_WORKSPACE=<tmp> exec electron .`、透传退出码（把 M1-6 的命令行咒语固化为脚本）
+- [ ] **Step 3: 全量验收**：`pnpm --filter cairn-desktop test`（含 Task 7 两用例）＋ `pnpm --filter cairn-desktop smoke`（exit 0）＋ `pnpm gates`（含边界门）＋ `pnpm typecheck` ＋ 根 vitest 形状一致
 - [ ] **Step 4: Commit**
 
 ```bash
 git add scripts/desktop-boundary-check.ts apps/desktop/package.json apps/desktop/scripts/smoke.mjs
-git commit -m "桌面端 M2-8：边界扫描器硬化（require( 面＋mjs/cjs/jsx 扩展名，先红后绿自验）＋M0_SMOKE 固化为一键 smoke 脚本；M2 全量验收（投影判卷含缺 ts 兼容、审批→执行→打断、冒烟、gates）全绿"
+git commit -m "桌面端 M2-8：边界扫描器硬化（require( 面＋mjs/cjs/jsx 扩展名，先红后绿自验）＋CAIRN_SMOKE 固化为一键 smoke 脚本；M2 全量验收（投影判卷含缺 ts 兼容、审批→执行→打断、冒烟、gates）全绿"
 ```
 
 ---

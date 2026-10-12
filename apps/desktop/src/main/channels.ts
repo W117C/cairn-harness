@@ -29,6 +29,10 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   openSession: "agent:sessions-open",
   renameSession: "agent:sessions-rename",
   deleteSession: "agent:sessions-delete",
+  forkSession: "agent:sessions-fork",
+  revertTurn: "agent:sessions-revert",
+  submitFeedback: "agent:feedback-submit",
+  listFeedback: "agent:feedback-list",
   listProjects: "agent:projects-list",
   addProject: "agent:projects-add",
   removeProject: "agent:projects-remove",
@@ -49,9 +53,15 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   providerKeySet: "agent:provider-key-set",
   providerKeyDelete: "agent:provider-key-delete",
   providerKeyStatus: "agent:provider-key-status",
+  createProject: "agent:project-create",
+  providerDiscover: "agent:provider-discover",
+  providerSave: "agent:provider-save",
   checkUpdate: "agent:check-update",
   openExternal: "agent:open-external",
   // M4-5：dialog 选目录（M3 deferred 收口）——main 端 dialog.showOpenDialog({ openDirectory })，
   // preload 程序化桥自动透传（桥面无逐通道代码，缺行才红）。
   pickDirectory: "agent:pick-directory",
+  // SEMA §3.5/§12：协议版本握手——main 实况版本（IPC_PROTOCOL_VERSION）→ renderer 与构建期
+  // 注入的期望版本比对，失配 fail-closed。
+  protocolVersion: "agent:protocol-version",
 };

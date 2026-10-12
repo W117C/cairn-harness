@@ -4,19 +4,18 @@
 // read-only 拒副作用 / default 询问（UI 批准才执行）/ auto 放行；沙箱不可用时写工具强制逐条审批。
 import { readFileSync, existsSync } from "node:fs";
 import { rm, readdir, mkdir, realpath } from "node:fs/promises";
-import { tmpdir, homedir } from "node:os";
+import { tmpdir } from "node:os";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runLoop } from "../agent/loop";
-import { runCompaction, createMockSummarizer, compactionCardPayload, type Summarizer } from "../agent/compaction";
+import { runCompaction } from "../agent/compaction";
 import { buildMap } from "../agent/map/build";
 import { computePrune } from "../agent/prune";
 import {
   createGlmSessionProvider,
   createGlmSummarizer,
   gateToolSpecs,
-  sessionToolSpecs,
   type SessionPluginTool,
   type SessionTransport,
 } from "../agent/glm-session";
@@ -25,7 +24,7 @@ import { ClarifyGate, PlanGate } from "../agent/gates";
 // `export … from` 只对外可见、**不进本地作用域**（本次实测踩到：改完立刻 `Cannot find name 'BASE_SYSTEM'`，
 // 而本文件下面还有两处在用）。所以写成"先 import 再 export"，两条都在。
 import { BASE_SYSTEM, systemPromptFor } from "../agent/system-prompt";
-import { annotateExecCause, classifyVerifyFailure, createVerifyHook, defaultExec, withVerifyCauseNote, type ExecFn } from "../agent/verify";
+import { classifyVerifyFailure, createVerifyHook, defaultExec, withVerifyCauseNote, type ExecFn } from "../agent/verify";
 import { createActionFusion } from "../agent/action-fusion";
 import { SolpiRuntime, privateSessionDirectory, removePrivateSessionData, observationRecallSpec, solpiEnabled, type SolpiFlags } from "../agent/solpi-runtime";
 import { createUsageAttributor } from "../agent/usage-attribution";
@@ -37,17 +36,23 @@ import { createCancelAgentsTool } from "../tools/cancel_agents";
 import { createRefineGoalTool } from "../tools/refine_goal";
 import { webFetch } from "../tools/web_fetch";
 import { loadSearchConfig, makeWebSearch, webSearchSpec } from "../tools/web-search";
-import { AUTOMATION_TOOL_NAMES } from "../agent/automation-surface";
 import { run_shell } from "../tools/run_shell";
 import type { AgentEvent, ClarifyAnswerMap, EventLog, GoalTurnOrigin } from "../events";
 import { frozenJudgePathSet } from "../frozen";
 import { createEventLog, replay } from "../events";
 // goal 模式：判据与投影全在纯函数面（src/agent/goal.ts），这里只做「读事件流 → 问它 → 落流 → 起下一轮」。
-import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, goalWindowSpend, parseGoalSpec, projectGoal } from "../agent/goal";
+import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, goalWindowSpend, parseGoalSpec, projectGoal, type GoalView } from "../agent/goal";
 // 目标漂移读数（能力 4「长任务不遗忘」的真读数）：判据全在 src/agent/goal-drift.ts 那个纯模块里，
 // 这里只做「读事件流 → 问它 → 印一行」。**不新增事件类型**——沿用本仓既有先例
 // （goal 的两态就是靠 user_message.origin 承载的），新增一种事件会让重放契约多一个分支。
 import { assistantTurnsFromEvents, goalDriftCell, goalDriftFindings } from "../agent/goal-drift";
+// cost-per-progress 读数（M10 防降智横切）：此前 `cost-per-progress.ts` 全树零生产消费者，
+// 只有单测在用——「每前进一份花多少钱」从没变成生产路径上的一个可见读数。这里接进会话收束点，
+// 与 goal-drift 同口径：只印一行，不落事件流（落流要新增事件类型，破坏重放契约）。
+import { costPerProgress } from "../agent/cost-per-progress";
+// 自进化闭环：会话收束时从同一份事件流抽信号 → 翻成策略补丁 → 落 .agent/evolution.json；
+// 下一轮装配时读回并注进 system prompt（让「上一轮的经验」真正回流到下一轮的决策，而不是只记笔记）。
+import { runEvolution, evolutionPromptNote } from "../agent/evolution";
 // 落流前的文本扫描表（`goal_stopped.reason` 已在表上）：异常原文是外部文本，而这条写入点不经
 // loop 那份 redactEventForLog，扫它就得取这张现成的表，不在这里再抄一遍「哪个字段该擦」。
 import { scanStreamEvent } from "../agent/worker-projection";
@@ -57,28 +62,32 @@ import {
   isNetworkCommandCall,
   loadPermissionRules,
   newAutonomySession,
-  noteCriticalDenial,
-  noteCriticalResolved,
-  noteManualDecision,
-  noteScopeApproval,
-  downgradeSuggestion,
-  scopeKey,
-  gateBase,
   type AskScope,
-  type GateMeta,
-  type PermissionRule,
-  type ToolResultWithAudit,
 } from "../permissions";
-import { alwaysRulesPath, globalPermissionsPath, savePermissionRules } from "../permissions/rules";
+import { globalPermissionsPath } from "../permissions/rules";
 import { type ProviderKind } from "./settings";
-import { getLastWorkspace, setRunWorkspace } from "./runner-workspace";
-import { createSession, pathOf, readSessionEvents, sessionExists, createSidechatSession, listSidechatSessions, readSidechatEvents, sidechatDir, sidechatEventsPath, type SessionInfo } from "./sessions";
+import { setRunWorkspace } from "./runner-workspace";
+import { createSession, pathOf, sessionExists, type SessionInfo } from "./sessions";
 import { createMockProvider } from "../providers/mock";
 import type { GlmToolSpec } from "../providers/glm";
 import { toWorkerModel, type RegistryWorkerModel } from "../providers/registry";
-import { validateThinkingEffort } from "../providers/capabilities";
+import { validateThinkingEffort, type ThinkingEffort } from "../providers/capabilities";
 import type { ModelOutput, Provider, ProviderToolSpec } from "../providers";
 import { validateRunRequestEnvelope } from "./run-request";
+import {
+  MODEL_SHELL_TEST_ALIASES,
+  mapSandboxTestCommand,
+  mapSandboxTestCommandForWorkspace,
+  SANDBOX_TEST_ALIASES,
+  workspaceDeclaresVitest,
+} from "./sandbox-test-command";
+export {
+  MODEL_SHELL_TEST_ALIASES,
+  mapSandboxTestCommand,
+  mapSandboxTestCommandForWorkspace,
+  SANDBOX_TEST_ALIASES,
+  workspaceDeclaresVitest,
+};
 import { formatAttachmentContext, validateRunAttachments, type ValidatedRunAttachment } from "./run-attachments";
 import {
   assertProviderKeyConfigured,
@@ -86,33 +95,25 @@ import {
   resolveMainModel,
   type MainModelSelection,
 } from "./provider-runtime";
+import { selectionProviderId } from "./provider-runtime";
 import { TOOLS, type Tool, type ToolResult } from "../tools";
 import { remember } from "../tools/remember";
 import type { ToolName } from "../tools/base";
 import { initMemoryHome, type TopicEntry } from "../agent/memory/store";
 import { runSessionEndDistill } from "../agent/memory/distill";
 export { initMemoryHome } from "../agent/memory/store"; // shell 启动时注入 userData/memory
-import type { MemorySnapshot } from "./ipc-protocol";
 import { AskGate } from "./ask-gate";
-import type { LicenseState } from "./license";
-import type { AskOutcomePayload, AskPayload, RunRequest, SidechatPanelSnapshot } from "./ipc-protocol";
-import { annotateNetworkDenial, buildSandboxProfile, checkSandbox, networkProfileFor, runInSandbox, type SandboxStatus } from "./sandbox";
-import { PluginRuntime, trustFilePathOf, pluginDataRootOf, setCurrentPluginRuntime, currentPluginRuntime, expandPromptCommand, expandSkillInvocation, commandInvokeName, skillInvokeName, type PluginPanelSnapshot } from "../agent/plugins";
+import type { AskOutcomePayload, AskPayload, RunRequest } from "./ipc-protocol";
+import { checkSandbox, networkProfileFor, runInSandbox, type SandboxStatus } from "./sandbox";
+import { resolveRoutingFlags, type RoutingFlagOverrides } from "./routing-flags";
+import { PluginRuntime, trustFilePathOf, setCurrentPluginRuntime, currentPluginRuntime, expandPromptCommand, expandSkillInvocation, commandInvokeName, skillInvokeName } from "../agent/plugins";
 // `TrustStore` 从**实现文件**取，不从 `../agent/plugins` 取：那边是 `export { … } from "./trust"`
 // 的再导出（只对外可见、不进本地作用域，本文件上面 BASE_SYSTEM 那次搬迁踩过同一个坑）。
 import { TrustStore } from "../agent/plugins/trust";
 import { createVerifyTrustGate } from "./verify-trust-gate";
 import type { VerifyTrustResolver } from "../agent/verify-trust";
-import type { HookEngine } from "../agent/plugins/hooks";
-import type { McpToolInfo } from "../agent/plugins/mcp";
-import { normalizeHistoryFilter, Scheduler, loadAutomationsFile, type ScheduleSnapshot, type TriggerExecutor } from "./scheduler";
+import type { ScheduleSnapshot } from "./scheduler";
 import { validateAutomation, isUnattendedTier } from "./automations";
-import {
-  runSidechatTurn,
-  promoteToMain,
-  scriptedSidechatModel,
-  type SidechatModel,
-} from "../agent/sidechat";
 import {
   Orchestrator,
   orchestratorForAgent,
@@ -125,19 +126,35 @@ import {
   type WorkerModel,
 } from "../agent/orchestrator";
 import { recoveryParentMode, type RespawnArgs } from "../agent/recovery";
-import { buildSecurityReport } from "../agent/security/scan";
 import {
-  listWorktreeDirs,
-  orphanWorktrees,
   cleanOrphanWorktree,
   type WorktreeCleanupResult,
 } from "../agent/worktree";
 // ---- 拆分面（同 provider-key-inject 先例：实现搬去轻模块，本装配根按原路径继续导出）----
 // settings/BYOK/license/更新面 → ./settings-handlers；会话列表与崩溃恢复 → ./session-handlers；
 // 记忆快照与删除 → ./memory-handlers；「最近一次 run 的工作区」单一事实源 → ./runner-workspace。
-import { getAppVersion, handleLicenseStatus, handleProviderKeyStatus, setSettingsHostDeps, store } from "./settings-handlers";
+import { setSettingsHostDeps, store } from "./settings-handlers";
 import { getSessionsDir, requireSessionsDir } from "./session-handlers";
-import { memorySnapshot } from "./memory-handlers";
+import {
+  automationsScheduled, handleScheduleSnapshot, initScheduler, installAutomationTools,
+  scheduleDataDir, schedulerEverStarted, setSchedulerRuntimeDeps, startScheduler, stopScheduler, updateScheduleCap,
+} from "./scheduler-runtime";
+import {
+  emitGoalEvent, emitGoalStoppedOnThrow, goalNextTurn, setGoalHandlerDeps,
+} from "./goal-handlers";
+import {
+  handleSidechatAsk, handleSidechatCreate, handleSidechatPromote, handleSidechatState, runSidechatDemo,
+  setSidechatHandlerDeps,
+} from "./sidechat-handlers";
+import { compactSessionLog, firePreCompactHook, resolveSafeMode, runSecurityReportHook } from "./compact-and-report";
+import { currentWorkspace, pluginRuntimeOpts, setPluginSnapshot, setStateHandlerDeps } from "./state-handlers";
+import {
+  denied, gatedTool, installPluginTools, pluginToolSpecsFromRuntime, sessionToolFace, setToolGateDeps,
+} from "./tool-gates";
+import {
+  handleAgentDecide, handleCardAction, handleClarifySubmit, handlePlanDecide, handleRunCancel,
+  setCardActionDeps,
+} from "./card-action-handlers";
 
 // settings 面不反向依赖本模块（避免装配根 ↔ 轻模块成环）：它需要本模块的两处按回调注入。
 setSettingsHostDeps({
@@ -145,6 +162,49 @@ setSettingsHostDeps({
   onScheduleCapChange: (cap) => updateScheduleCap(cap),
 });
 
+// M4a 调度器接线同理（实现住 ./scheduler-runtime）：它需要本模块的四处活状态，按回调注入。
+// 一律传闭包而不是现值：`WORKSPACE` / `hooks` 都在本调用之后才声明，且会话与钩子要活读。
+setSchedulerRuntimeDeps({
+  defaultWorkspace: () => WORKSPACE,
+  onEvent: (e) => hooks.onEvent?.(e),
+  runSession: (workspace, args) =>
+    handleAgentRun({ message: args.message, mode: args.mode }, { sessionId: args.sessionId, workspace, unattended: true, signal: args.signal }),
+  currentSession: () => currentSession(),
+});
+
+// goal 面同理（实现住 ./goal-handlers）：事件推送与价键派生按回调注入，其余依赖它自己 import。
+setGoalHandlerDeps({
+  onEvent: (e) => hooks.onEvent?.(e),
+  budgetPriceKeyOf: (selection) => budgetPriceKeyOf(selection),
+});
+
+// sidechat 面同理（实现住 ./sidechat-handlers）：事件推送 / 最近 run 日志 / 当前工作区三处活状态注入。
+setSidechatHandlerDeps({
+  onEvent: (e) => hooks.onEvent?.(e),
+  lastLogPath: () => lastLogPath,
+  currentWorkspace: () => currentWorkspace(),
+});
+
+// agent:state / 插件面板 / 工作区解析面同理（实现住 ./state-handlers）：装配根三处活状态注入。
+setStateHandlerDeps({
+  defaultWorkspace: () => WORKSPACE,
+  sandboxState: () => sandboxState,
+  lastLogPath: () => lastLogPath,
+});
+
+// 工具门同理（实现住 ./tool-gates）：只需要「当前会话」这一处活状态。
+setToolGateDeps({ currentSession: () => currentSession() });
+
+// 交互决议面同理（实现住 ./card-action-handlers）：三门 / 会话 emit / 编排器两路 / 取消信号注入。
+setCardActionDeps({
+  appAskGate: () => appAskGate,
+  appClarifyGate: () => appClarifyGate,
+  appPlanGate: () => appPlanGate,
+  session: () => session,
+  activeOrchestrator: () => activeOrchestrator,
+  ensureSessionOrchestrator: () => ensureSessionOrchestrator(),
+  interactiveRunAbort: () => interactiveRunAbort,
+});
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const WORKSPACE = join(ROOT, "fixtures", "todo-app");
@@ -164,67 +224,6 @@ export { BASE_SYSTEM, systemPromptFor };
 const DEMO_DIR = join(ROOT, "fixtures", "demo");
 const LSP_DEMO_FIXTURE = join(DEMO_DIR, "lsp-demo.jsonl");
 const SIDECHAT_DEMO_FIXTURE = join(DEMO_DIR, "sidechat-demo.jsonl");
-// 坑三：Seatbelt 下 pnpm 起不来（依赖检查失败）。冻结剧本里的 run_shell 命令是 "pnpm test"（sha 不可改），
-// 沙箱内映射为坑三实测可用的直连命令；TMPDIR 由 runInSandbox 指到工作区内 .tmp。
-const VITEST_DIRECT =
-  'node "' + join(ROOT, "node_modules", "vitest", "vitest.mjs") + '" run --pool=threads';
-
-/** 沙箱里要改写成直连 vitest 的命令写法。原先三处消费者各抄一行字面量（worker 与验证门是全表，
- *  模型那条 `run_shell` 只认 `pnpm test`）——同族副本还分两种宽度，两边都零观察者（第 141 页复认针脚歧义时看见）。
- *  收成一份之后，宽度差落成**两个具名名单**：少的那一条是「要不要代替模型改写它自己下的命令」这个裁决，不是漂。 */
-export const SANDBOX_TEST_ALIASES: readonly string[] = ["pnpm test", "pnpm run test"];
-/** 模型自己下的 `run_shell` 只改这一条惯用法（冻结剧本用的那个），其余逐字不动。 */
-export const MODEL_SHELL_TEST_ALIASES: readonly string[] = ["pnpm test"];
-
-export function mapSandboxTestCommand(command: string, aliases: readonly string[] = SANDBOX_TEST_ALIASES): string {
-  return aliases.includes(command.trim()) ? VITEST_DIRECT : command;
-}
-
-/** 该工作区的测试面是不是真跑 vitest（按**它自己声明的 test 脚本**判）。
- *
- *  为什么需要这只判据（2026-09-29 实测，一次真模型闭环）：
- *  `mapSandboxTestCommand` 把 `pnpm test` **无条件**改写成指向本仓 vitest 的直连命令。
- *  这条改写是为 `fixtures/todo-app` 写的（坑三：Seatbelt 下 pnpm 起不来，而那个靶子的
- *  test 脚本正是 `vitest run …`），但它是全局生效的 ⇒ **任何**非 vitest 项目的验证拍都被换掉：
- *  实测靶子 `cart-demo`（`node --test tests/*.test.js`）的 `pnpm test` 被换成 vitest，
- *  vitest 对着 node:test 文件报 "No test suite found" ⇒ **项目自己 3/3 全过、harness 的 verify 报红**。
- *  模型无法归因（事件里的 command 报的是原始命令），最后只能停下来问用户——
- *  「执行-验证-修正」闭环里最贵的一种失败：假红。
- *
- *  判据为什么是「读它自己的 test 脚本」而不是「看 node_modules 里有没有 vitest」：
- *  真实靶子 `fixtures/todo-app` 自己**没有** node_modules（依赖从仓库根解析），
- *  按「装没装」判会把该改的那一个判成不该改；而重写的意图正是「绕开 pnpm、用仓库根那份 vitest」。
- *  test 脚本里写的是哪个 runner，才是这个项目要对谁跑的**声明**。
- *  读不到 package.json / 解析不出 test 脚本 ⇒ **不改写**（保守那一边；「猜它大概是 vitest」
- *  正是上面那个假红的成因）。 */
-const vitestScriptCache = new Map<string, boolean>();
-export function workspaceDeclaresVitest(workspace: string): boolean {
-  const hit = vitestScriptCache.get(workspace);
-  if (hit !== undefined) return hit;
-  let declares = false;
-  try {
-    const pkg = JSON.parse(readFileSync(join(workspace, "package.json"), "utf8")) as { scripts?: Record<string, unknown> };
-    const test = pkg.scripts?.["test"];
-    declares = typeof test === "string" && test.includes("vitest");
-  } catch {
-    declares = false; // 没有 package.json / 读不到 / 坏 JSON 一律不改写
-  }
-  vitestScriptCache.set(workspace, declares);
-  return declares;
-}
-
-/** 带工作区判据的映射：只有该工作区自己申报用 vitest 时才改写，否则逐字不动。
- *  `workspace` 缺席 = 调用方没有工作区上下文（单测/旧调用）⇒ 保持旧语义（照改），
- *  这样这条缝的既有判卷不用为了新判据整体重写。 */
-export function mapSandboxTestCommandForWorkspace(
-  command: string,
-  workspace: string | undefined,
-  aliases: readonly string[] = SANDBOX_TEST_ALIASES,
-): string {
-  if (workspace !== undefined && !workspaceDeclaresVitest(workspace)) return command;
-  return mapSandboxTestCommand(command, aliases);
-}
-
 interface Session {
   mode: PermissionMode;
   askGate: AskGate | null;
@@ -239,8 +238,6 @@ interface Session {
 }
 // 单窗口单任务：UI 串行发 run；ipc:check 亦串行。会话状态仅存活于一次 runAgent。
 let session: Session | null = null;
-// M2e：最近一次 run 的插件面板快照（纯投影的留档，供 run 间隙的 agent:state 查询）。
-let lastPluginSnapshot: PluginPanelSnapshot | null = null;
 
 // 三门通道（模块级，仿 appAskGate）：clarify 表单提交 / plan 批准决议
 const appClarifyGate = new ClarifyGate();
@@ -334,10 +331,14 @@ async function orchestratorExtras(
   sandbox: SandboxStatus | null = null,
   runModel?: MainModelSelection,
   trust: { trustedRepo: boolean; verifyTrust: VerifyTrustResolver | null } = { trustedRepo: false, verifyTrust: null },
+  over: RoutingFlagOverrides = {},
 ): Promise<
   Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache" | "impactAnalysis" | "workerVerify" | "workerHooks">
 > {
   const s = await store().get();
+  // M5b 路由开关的取值面：runtime override（CLI `--bandit/--cascade` 一族）优先，缺席回落到 settings。
+  // 合并只在 `resolveRoutingFlags` 一处（纯函数、可单测）——判卷喂它就是喂生产路径本身。
+  const routing = resolveRoutingFlags(over, s);
   return {
     agentRoleFor: (invoke: string) => currentPluginRuntime()?.findAgentRole(invoke) ?? null,
     // §9.10「worker 继承主会话插件启用集」：worker 的工具调用过同一套钩子，视图按 worker 档降权限。
@@ -370,13 +371,15 @@ async function orchestratorExtras(
       : {}),
     // M5b 步骤 9：routingBandit 开关同时开启路由与学习状态持久化（bandit 蕴含 routing——
     // 无路由则无档位决策可学）。状态文件在 .agent/ 系统区（同 permissions.json 口径）。
-    ...(s.routingBandit
+    // 值 = `over.routingBandit ?? s.routingBandit`（CLI 的 `--bandit/--no-bandit` 从这里翻；本键缺席即按 settings）。
+    ...(routing.routingBandit
       ? { routing: true, banditStatePath: join(ROOT, ".agent", "routing-bandit.json") }
       : {}),
     // M5b 步骤 10（任务 #45）：级联蕴含 routing——阶梯起点取「路由当时落到哪一档」、升档靠 pin 换模型，
     // 没有路由这两件事都不存在（单开级联就会退化成花两遍钱跑同一个模型）。与 routingBandit 蕴含
     // routing 同形。缺省 false ⇒ 这一整段不接线，sequencer 每环照旧只跑一次。
-    ...(s.routingCascade ? { routing: true, cascadeUpgrade: true } : {}),
+    // 值 = `over.routingCascade ?? s.routingCascade`（CLI 的 `--cascade/--no-cascade` 从这里翻）。
+    ...(routing.routingCascade ? { routing: true, cascadeUpgrade: true } : {}),
     // A1 写侧断点：只有路由合成真实 provider 档位时才落到 wire（当前唯一有语义的是 Anthropic）。
     // 缺省即开（用户裁决 2026-09-19），所以这里**不打 warn**——routingBandit 缺省关，
     // 一条 warn 会变成每次 run 都刷的噪声；「没路由 ⇒ 没断点」写进 settings 的字段注释里。
@@ -399,7 +402,7 @@ export function workerShellRunnerFor(sandbox: SandboxStatus | null): Orchestrato
   if (sandbox === null || !sandbox.available) return undefined;
   return async (command, ctx) => {
     const mapped = mapSandboxTestCommandForWorkspace(command, ctx.workspace);
-    return await runInSandbox(mapped, { cwd: ctx.workspace, network: "deny" });
+    return runInSandbox(mapped, { cwd: ctx.workspace, network: "deny" });
   };
 }
 
@@ -429,6 +432,9 @@ async function buildSessionOrchestrator(a: {
    *  （恢复路径 / 非交互装配）⇒ worker 那条 verify 保持 fail-closed 拒绝，与今日逐字同形。
    *  注意它**不是**「父会话批过就给 worker 免问」的通道：键的第一维是 worker 自己的 repoDir。 */
   verifyTrust?: VerifyTrustResolver | null;
+  /** M5b 路由开关 runtime override（CLI `--bandit/--cascade` 一族）。缺席 = 用 settings
+   *  （恢复路径走的就是缺席那支，与今日逐字同形）。 */
+  routing?: RoutingFlagOverrides;
 }): Promise<Orchestrator> {
   const s = await store().get();
   const workerShell = workerShellRunnerFor(a.sandbox);
@@ -444,7 +450,7 @@ async function buildSessionOrchestrator(a: {
     // B1 语义合并闸：影响面开启时，spawn 的写租约判定多问一层「波及集相交」——
     // 两个 worker 各改各的文件（glob 不相交）但改动波及同一批调用点，合并时同样会打架。
     ...(s.impactAnalysis ? { semanticLease: (globs: string[]) => affectedFilesOf(a.workspace, globs) } : {}),
-    ...(await orchestratorExtras(a.sandbox, a.runModel, { trustedRepo: a.trustedRepo ?? false, verifyTrust: a.verifyTrust ?? null })), // M3c：插件角色 / worker 压缩摘要器 / 成本闸 / W4a worker 收束闸
+    ...(await orchestratorExtras(a.sandbox, a.runModel, { trustedRepo: a.trustedRepo ?? false, verifyTrust: a.verifyTrust ?? null }, a.routing ?? {})), // M3c：插件角色 / worker 压缩摘要器 / 成本闸 / W4a worker 收束闸
     ...(a.modelFor ? { modelFor: a.modelFor } : {}),
   });
 }
@@ -520,406 +526,12 @@ export function setAppHooks(h: Hooks): void {
   Object.assign(hooks, h);
 }
 
-function denied(name: ToolName | string, mode: PermissionMode, why: string, gate?: GateMeta): ToolResult {
-  return {
-    ok: false,
-    output: "[permission denied] " + name + " 在 " + mode + " 档下被门拒绝（" + why + "）",
-    ...(gate ? { gate } : {}),
-  } as ToolResultWithAudit;
-}
-
-/** §9.3 权限联动的**解释面**：某条已激活 skill 申报过 `allowed-tools` 里的这个工具，
- *  但按原话的收紧点（放行不得越过当前权限档位），这条申报**不给免批**。
- *  为什么不悄悄生效算了？——那正是「装载即陈列」的反面教材：字段收下了却不兑现，
- *  而这里连"不兑现"都要说清楚是谁申报的、为什么没放行（能力 8：可解释）。
- *  ⚠️ 反过来把它折成规则库的一条 allow 才是错的：规则库 allow 能顶掉档位的逐次审批，
- *  等于插件作者替用户扩权。两个门共用这一份实现。 */
-export function withSkillAllowNote(tool: string, reason: string): string {
-  const invo = currentPluginRuntime()?.skillAllowNote(tool) ?? null;
-  return invo === null ? reason
-    : reason + "（" + invo + " 的 allowed-tools 申报过 " + tool + "，但申报不放行：当前档位仍需确认）";
-}
-
-/** `web_fetch` 在这个字面量联合里而不在 `TOOL_NAMES` 里：静态注册表（M2 起 10 工具，
- *  `tools-check.ts` 判据）不含它，M2a 起的运行时注入先例不碰它。`name as ToolName` 与
- *  `staticRisk` 里 `(tool as string) === "web_fetch"` 是同一处类型缝的两面。 */
-type GatedName = "write_file" | "edit_file" | "apply_patch" | "run_shell" | "web_fetch" | "web_search" | "diagnose" | "lsp";
-
-function gatedTool(name: GatedName, original: Tool, beforeExecute?: () => Promise<ToolResult | null>): Tool {
-  return {
-    name,
-    async run(args, ctx) {
-      const s = currentSession();
-      if (!s) return denied(name, "default", "工具门未接线（fail-closed）");
-      // 方案门不再每次刷进 session 入参：权限会话里那份是**活委托**（permissions/plan-state），
-      // worker 与主会话读同一份——上一版只在这三处主会话路径刷新镜像，worker 那条路从不刷 ⇒ 先批后写可绕。
-      // M1e 设置页「产出代码安全模式」最小语义（§11.6）：gate = 写向工具在管线之前强制审批
-      //（setSettings 转发 M1E_SAFE_MODE；src/permissions 冻结，最小接线在本模块）
-      if (process.env.M1E_SAFE_MODE === "gate") {
-        if (!s.askGate) return denied(name, s.autonomy.mode, "安全模式 gate 非交互（fail-closed）");
-        const gateR = await s.askGate.request(name, args, { reason: "安全模式 gate：写工具强制审批", risk: "none", signal: ctx.signal });
-        if (gateR.outcome !== "approved") return denied(name, s.autonomy.mode, "安全模式 gate 未批准");
-      }
-      const d = evaluate(name as ToolName, args, s.autonomy);
-      const aMode = s.autonomy.mode;
-      if (d.verdict === "deny") return denied(name, aMode, d.reason, { ...gateBase(d, aMode), verdict: "denied" });
-      // 人工批准时人选的 scope（ask 分支才会赋值）——留痕要能回答「是谁放行的、放到哪一档」。
-      let manualScope: AskScope | undefined;
-      // 网络放行的取用面：只有「问过且批了」的网络命令才走 allow 支。
-      // §11.4 红线：任何档位下「网络全开」都不是免批条件 ⇒ auto 档的 L4-pass 与无人值守都拿不到，
-      // 判据挂在 verdict === "ask" → approved 这一条真实发生过的人工决议上，不挂在分类器上。
-      const wantsNetwork = isNetworkCommandCall(name as ToolName, args);
-      let humanApproved = false;
-      if (d.verdict === "ask") {
-        if (!s.askGate) return denied(name, aMode, "非交互模式（fail-closed）：" + d.reason, { ...gateBase(d, aMode), verdict: "unattended" });
-        const r = await s.askGate.request(name, args, {
-          // 网络命令的批准现在真的放行出网（此前批了也没用——OS 层从没写过 network 规则），
-          // 所以把这层后果写进卡片理由：批准必须是知情的。
-          reason: withSkillAllowNote(name, d.reason) + (wantsNetwork ? "｜批准 = 本次命令放行网络出网（一次性，不记忆）" : ""),
-          risk: d.risk,
-          riskReasons: d.riskReasons,
-          // 审查待确认第 4 条（任务 4.3）：门侧早已支持 ctx.signal（D12），但调用侧没传 =>
-          // run 取消后审批卡驻留到 60s 超时才收，会话/worker 在中间一直挂着。接上运行信号：
-          // 取消即按拒绝收束（pending 同步出表，notifyOutcome 记 user）。gatedTool 与
-          // gatedMcpTool 两处同形，一并接线。
-          signal: ctx.signal,
-        });
-        if (r.outcome !== "approved") {
-          if (d.risk === "critical") {
-            noteCriticalDenial(s.autonomy);
-            const tip = downgradeSuggestion(s.autonomy);
-            if (tip) console.warn("[permissions] " + tip);
-          }
-          return denied(name, aMode, r.reason === "unattended" ? "无人值守 fail-closed：审批请求自动拒绝" : "未获批准",
-            { ...gateBase(d, aMode), verdict: r.reason === "unattended" ? "unattended" : r.reason === "timeout" ? "timeout" : "rejected" });
-        }
-        // scope 回写（§10.4）：网络类命令强制 once（出网审计，scope 不放行）
-        const effScope: AskScope = wantsNetwork ? "once" : r.scope;
-        manualScope = effScope;
-        // 人工批准已成立 ⇒ 这一条命令这一次执行可以走网络放行支（一次性，不写规则库、不入 scope）。
-        // 「asked」由 d.verdict 现算，不另存状态——网络 profile 的三条条件里只有这一条是事件性的。
-        humanApproved = true;
-        if (effScope === "session_kind") {
-          (s.autonomy.sessionScopes as Set<string>).add(scopeKey(name as ToolName, args));
-        } else if (effScope === "always") {
-          await persistAlwaysRule(ctx.workspace, name as ToolName, args);
-        }
-        if (d.risk === "critical") noteCriticalResolved(s.autonomy);
-        noteManualDecision(s.autonomy);
-      } else if (d.auto?.source === "session_scope") {
-        noteScopeApproval(s.autonomy); // 断路器计数（连续 scope 自动放行）
-      }
-      // 判定留痕：能走到这里只有两种可能——本来就不用问（auto-approved）或问过且批了（approved）。
-      // 沙箱那两条 return 原先连 auto 审计都带不出去（同一条命令走不走沙箱留痕不一样），一并补上。
-      const gateMeta: GateMeta = d.verdict === "ask"
-        ? { ...gateBase(d, aMode), verdict: "approved", ...(manualScope !== undefined ? { scope: manualScope } : {}) }
-        : { ...gateBase(d, aMode), verdict: "auto-approved" };
-      const withGate = (r: ToolResult): ToolResult => ({ ...r, gate: gateMeta } as ToolResultWithAudit);
-      // Internal fusion callback, never a model argument: revalidate after approval (which may wait).
-      if (beforeExecute) {
-        const blocked = await beforeExecute();
-        if (blocked) return blocked;
-      }
-      if (name === "run_shell" && s.sandbox !== null && s.sandbox.available) {
-        const command = typeof args.command === "string" ? args.command : "";
-        const mapped = mapSandboxTestCommandForWorkspace(command, ctx.workspace, MODEL_SHELL_TEST_ALIASES);
-        // 缺省 deny：profile 里不写任何 network 规则 ⇒ 闭箱即全断网（sandbox:check ④ 钉着）。
-        // allow 支的取用条件全部住在 networkProfileFor（网络放行永不免批）。
-        const network = networkProfileFor({ wantsNetwork, asked: d.verdict === "ask", approved: humanApproved });
-        if (beforeExecute) {
-          // runInSandbox has no cancellation input. Reuse its profile, but launch via the existing
-          // run_shell process-group/cancellation path; approval above evaluated the original lint.
-          const tmp = join(await realpath(ctx.workspace), ".tmp");
-          await mkdir(tmp, { recursive: true });
-          if (ctx.signal?.aborted) return { ok: false, output: "cancelled before sandbox lint" };
-          const quote = (s: string): string => "'" + s.replace(/'/g, "'\\''") + "'";
-          const command = `TMPDIR=${quote(tmp)} exec /usr/bin/sandbox-exec -p ${quote(buildSandboxProfile(ctx.workspace, { network }))} bash -c ${quote(mapped)}`;
-          // 这条出口经 run_shell 工具而非 runInSandbox，故同一判据的提示在这里补（两处共用一只函数）。
-          return withGate(annotateNetworkDenial(await original.run({ command }, ctx), network));
-        }
-        const sand = await runInSandbox(mapped, { cwd: ctx.workspace, network });
-        // 上面那条注释说的是「经 run_shell 的那条出口」；这一条不经，故同一只归因函数在这里补
-        // （verify 不走这条路，所以不会与它那句「测试脚本未被执行」叠两层）。
-        return withGate(annotateExecCause(sand, { timedOut: sand.timedOut === true, exitCode: sand.exitCode ?? null }));
-      }
-      let result = await original.run(args, ctx);
-      if (name !== "run_shell" && result.ok && s.actionFusion) {
-        result = await s.actionFusion(result, args.path, ctx);
-      }
-      // 判定留痕进 tool_result（loop 透传并由 autoOf 派生 auto，零新事件类型）
-      return withGate(result);
-    },
-  };
-}
-
-/** M2e：MCP 工具统一注册表入口——与写工具同一条 evaluate 权限管线（无特权，§9.7）。 */
-function gatedMcpTool(name: string, info: McpToolInfo & { plugin: string; server: string }, rt: PluginRuntime): Tool {
-  return {
-    name,
-    async run(args, ctx) {
-      const s = currentSession();
-      if (!s) return denied(name, "default", "工具门未接线（fail-closed）");
-      const d = evaluate(name as ToolName, args, s.autonomy, info.grade); // MCP scoped 名进同一管线（规则/风险/档位全生效）
-      const aMode = s.autonomy.mode;
-      if (d.verdict === "deny") return denied(name, aMode, d.reason, { ...gateBase(d, aMode), verdict: "denied" });
-      let manualScope: AskScope | undefined;
-      if (d.verdict === "ask") {
-        if (!s.askGate) return denied(name, aMode, "非交互模式（fail-closed）：" + d.reason, { ...gateBase(d, aMode), verdict: "unattended" });
-        const r = await s.askGate.request(name, args, {
-          reason: withSkillAllowNote(name, d.reason),
-          risk: d.risk,
-          riskReasons: d.riskReasons,
-          // 审查待确认第 4 条（任务 4.3）：门侧早已支持 ctx.signal（D12），但调用侧没传 =>
-          // run 取消后审批卡驻留到 60s 超时才收，会话/worker 在中间一直挂着。接上运行信号：
-          // 取消即按拒绝收束（pending 同步出表，notifyOutcome 记 user）。gatedTool 与
-          // gatedMcpTool 两处同形，一并接线。
-          signal: ctx.signal,
-        });
-        if (r.outcome !== "approved") return denied(name, aMode, "未获批准",
-          { ...gateBase(d, aMode), verdict: r.reason === "unattended" ? "unattended" : r.reason === "timeout" ? "timeout" : "rejected" });
-        manualScope = r.scope;
-        noteManualDecision(s.autonomy);
-      } else if (d.auto?.source === "session_scope") {
-        noteScopeApproval(s.autonomy);
-      }
-      void ctx;
-      // MCP 出口原先把 d.auto 丢了：读了它做断路器计数，却不往结果上挂（§11.7.5 的审计在这条路上
-      // 一直是空的）。留痕统一走 gate，auto 由 loop 从 gate 派生。
-      const gateMeta: GateMeta = d.verdict === "ask"
-        ? { ...gateBase(d, aMode), verdict: "approved", ...(manualScope !== undefined ? { scope: manualScope } : {}) }
-        : { ...gateBase(d, aMode), verdict: "auto-approved" };
-      const res = await rt.mcp.callTool(info.plugin, info.server, info.name, args);
-      return { ok: res.ok, output: res.output, gate: gateMeta } as ToolResultWithAudit;
-    },
-  };
-}
-
-/** M2e：把插件面装进统一注册表——skill 工具 + 各 MCP 工具（scoped 名）；返回注入名清单（会话结束摘除）。 */
-function installPluginTools(rt: PluginRuntime): string[] {
-  const injected: string[] = [];
-  const table = TOOLS as unknown as Record<string, Tool>;
-  if (rt.skills().length > 0) {
-    table["skill"] = {
-      name: "skill",
-      async run(args) {
-        const name = typeof args.name === "string" ? args.name : "";
-        if (name.trim() === "") return { ok: false, output: "skill: name 参数必填（/plugin:name 或 /name）" };
-        // §9.3 参数通道：模型传进来的 args 原文交给替换器（$ARGUMENTS / $1 / $name）。
-        // 缺省空串而不是"不传"——正文里的 $ARGUMENTS 在无参数时按 CC 语义替换成空，
-        // 留裸变量给模型只会让它以为要自己填。
-        return rt.triggerSkill(name, typeof args.args === "string" ? args.args : "");
-      },
-    };
-    injected.push("skill");
-  }
-  for (const [scoped, info] of rt.mcpTools) {
-    table[scoped] = gatedMcpTool(scoped, info, rt);
-    injected.push(scoped);
-  }
-  return injected;
-}
-
-/** 运行时注入工具的**模型可见规格**（与 installPluginTools 的可执行面一一对应）：
- *  skill（有受信 skill 时）与 MCP scoped 工具。MCP 参数直接复用 server 的 inputSchema 原文，
- *  不翻译不裁剪——两套 schema 各写一份正是「模型看到的工具 ≠ 能执行的工具」的根因。 */
-export interface PluginToolSource {
-  skills(): readonly unknown[];
-  mcpTools: Map<string, McpToolInfo & { plugin: string; server: string }>;
-}
-
-/** §9.3 的工具面：一次算出「模型可见规格 + 摘除说明 + 活闸谓词」三件，同源同刻。
- *  规格面与活闸必须一份谓词：两处各判一份就是「模型看到的工具 ≠ 能执行的工具」的镜像缺陷
- *  （这边是能看到却被拒）。纯算、不出声——告警由调用点在 run 起点喊一次，逐请求重算时不该反复刷屏。
- *  导出是为了让这条接线有判据：provider 那条分支要真 key 才走得到，接线本身不能因此永远没证据。 */
-export function sessionToolFace(
-  rt: { skillDenial(tool: string): string | null } | null,
-  opts: { mode: RunOptions["mode"]; pluginTools?: readonly SessionPluginTool[]; automationTools?: boolean; omitTools?: readonly string[] },
-): { tools: GlmToolSpec[]; note: string; skipped: string[]; removed: { name: string; by: string }[]; skillDenial: ((tool: string) => string | null) | undefined } {
-  const skillDenial = rt ? (tool: string): string | null => rt.skillDenial(tool) : undefined;
-  const face = sessionToolSpecs({
-    mode: opts.mode,
-    pluginTools: opts.pluginTools ?? [],
-    // 能力没开就不挂说明书（见 OPTIONAL_TOOL_NAMES）：与执行面 installAppTools 同进同退。
-    ...(opts.omitTools !== undefined && opts.omitTools.length > 0 ? { omitTools: opts.omitTools } : {}),
-    ...(skillDenial ? { skillDenial } : {}),
-  });
-  /* 定时五件：**规格面与执行面一起摘**，判据是同一个 `automationTools`。
-   *
-   *  为什么必须两面都摘（只摘一头都会比现状更糟，两头都是本仓点名的失败形状）：
-   *  · 只摘实现不摘规格：`gateToolSpecs`（glm-session.ts:360）无条件 `push(automationToolSpecs())`，
-   *    于是模型看得见、只吃得到 `unknown tool: automation_create`——比现状那句
-   *    「调度器未初始化（fail-closed）」更难懂，还白烧一轮。
-   *  · 只摘规格不摘实现：反过来，模型看得见工具却永远建不成功，正是「存在 ≠ 接线」本身。
-   *  现状（两面都在、但没有调度器）反而不算坏：五件各自 fail-closed 说清楚在拒什么，
-   *  唯一白烧的一轮是 `automation_create`（审批在 `needScheduler()` 之前）。
-   *  摘掉之后一次性进程上模型连看都看不见它们 ⇒ 那轮也不用烧。 */
-  const specs =
-    opts.automationTools === false
-      ? face.specs.filter((s) => !AUTOMATION_TOOL_NAMES.includes(s.function.name))
-      : face.specs;
-  return { tools: specs, note: face.note, skipped: face.skipped, removed: face.removed, skillDenial };
-}
-
-export function pluginToolSpecsFromRuntime(rt: PluginToolSource | null): SessionPluginTool[] {
-  if (!rt) return [];
-  const out: SessionPluginTool[] = [];
-  if (rt.skills().length > 0) {
-    out.push({
-      name: "skill",
-      description:
-        "触发已加载的插件 skill（调用名见系统提示的 skill 路由表：/plugin:name 或 /name）；" +
-        "返回该 skill 的全文指令，按指令继续执行",
-      parameters: {
-        type: "object",
-        properties: {
-          name: { type: "string", description: "skill 调用名（/plugin:name 或 /name）" },
-          // 规格面与执行面同源：installPluginTools 读的就是 args.args，两处必须一起有
-          //（只在一处加 = 模型看不见参数面，或看得见却传不进替换器）。
-          args: { type: "string", description: "传给 skill 的参数原文（正文里的 $ARGUMENTS / $1 / $name 按此替换；无参数可省略）" },
-        },
-        required: ["name"],
-      },
-    });
-  }
-  for (const [scoped, info] of rt.mcpTools) {
-    // grade 随规格一起带出：档位对 MCP 的白名单在 sessionToolSpecs 那一处统一生效（同 isWriteCall 谓词），
-    // 这里不再按 mode 各判一份——两处各判就是「模型看到的」与「门会拒的」重新分家的地方。
-    out.push({ name: scoped, description: info.description, parameters: info.inputSchema, grade: info.grade });
-  }
-  return out;
-}
-
-/** always scope 批准落库为 allow 条目（项目规则库，原子写）；拒绝永不生成规则。 */
-async function persistAlwaysRule(workspace: string, name: string, args: Record<string, unknown>): Promise<void> {
-  // #57（2026-10-05）：授权记录落**独立且被 git 忽略**的那一份，不写回受跟踪的 permissions.json。
-  // 理由：受跟踪那份里可能有人写的项目策略（该随仓库走），而"这台机器上某人点过一次总是允许"
-  // 是授权记录、属于机器——写在一起就等于谁 clone 谁继承。读侧由 loadPermissionRules 透明并入，
-  // 所以批准过的规则照样生效（那一半已入库，见 src/permissions/rules.ts 的 ALWAYS_RULES_FILE）。
-  const path = alwaysRulesPath(workspace);
-  try {
-    const existing = loadPermissionRules(path);
-    const rule: PermissionRule =
-      name === "run_shell" && typeof args.command === "string"
-        ? { behavior: "allow", tool: name, pattern: args.command.trim(), scope: "always" }
-        : { behavior: "allow", tool: name, scope: "always" };
-    await savePermissionRules(path, [...existing, rule]);
-  } catch (err) {
-    // 落库失败不阻断本次已批准的执行，但必须可见（审计优先于静默）
-    console.error("[permissions] always 规则落库失败:", err instanceof Error ? err.message : String(err));
-  }
-}
 
 
-// ---- M1d：/compact 手动入口（压缩必出卡，走 BUILTIN_PROMPTS 内置模板）----
-// 摘要器：CAIRN_API_KEY 在场 → GLM 暗卷；缺 key 且 M1D_COMPACTION_DEMO=1 → 冻结 mock（演示通道，
-// M1a M0A_MOCK_DELTA 同族先例）；否则 fail-closed 报错，绝不静默压缩。
-// 演示通道同时收小 tail 预算（演示会话只有十几条事件，默认预算会把全部事件留在 tail 内无可压缩）。
-const DEMO_SUMMARY = [
-  "## Objective",
-  "- 修复 fixtures/todo-app 中失败的测试（completedCount 未过滤 done 项），由 agent 按 mock 剧本完成。",
-  "",
-  "## Important Details",
-  "- 事件流在 out 会话日志中；权限走 auto 档，写文件与跑测试均已批准。",
-  "",
-  "## Work State",
-  "### Completed",
-  "- read_file 读源码 → write_file 修复 completedCount 过滤 → run_shell 跑 vitest（3 passed）。",
-  "",
-  "### Active",
-  "- 无。",
-  "",
-  "### Blocked",
-  "- 无。",
-  "",
-  "## Next Move",
-  "- 继续下一个任务即可；靶子已恢复全绿。",
-  "",
-  "## Relevant Files",
-  "- fixtures/todo-app/src/todo.ts（写，修复点）",
-  "- fixtures/todo-app/tests/todo.test.ts（读，判卷用例）",
-].join("\n");
-
-/** §9.5 PreCompact 的发出口径（手动压缩与会话自动/溢出压缩两条生产者共用这一处）。
- *  无钩子引擎 = 零行为；阻断只告警——§9.5 表里 PreCompact 没有阻断语义，
- *  把它当闸门用等于让插件悄悄关掉压缩链（那必须是一行的可见输出，不是静默）。 */
-async function firePreCompactHook(hooks: HookEngine | undefined, trigger: "manual" | "auto"): Promise<void> {
-  if (!hooks) return;
-  const r = await hooks.run("PreCompact", { event: "PreCompact", trigger });
-  for (const msg of r.errors) console.warn("[hooks] PreCompact:", msg);
-  if (r.blocked) console.warn("[hooks] PreCompact 返回阻断（该事件无阻断语义，已忽略）：" + (r.blockReason ?? ""));
-}
-
-/** 对一份会话日志执行手动压缩（trigger=manual, reason=user_request）。
- *  emit = 会话管线（落盘+推送同路，M1b 坑十八口径）；缺省直接落盘（headless/脚本）。 */
-export async function compactSessionLog(
-  logPath: string,
-  emit?: (e: AgentEvent) => Promise<void>,
-  hooks?: HookEngine,
-): Promise<{ ok: boolean; error?: string; event?: AgentEvent; cardPayload?: Record<string, unknown> }> {
-  const events = await replay(logPath);
-  if (events.length === 0) return { ok: false, error: "会话为空，无可压缩" };
-  // §9.5 PreCompact 的生产端在 runCompaction 里（唯一）——这里只把「谁去跑钩子」递下去。
-  // 原先是本函数自己 run 一次，而自动压缩档没人发 ⇒ `PreCompact(auto)` 的 matcher 永不命中；
-  // 两处各发又会变成 SessionEnd 那种双生产者。trigger 取 §9.5 表里的枚举值 manual/auto。
-  const demo = process.env.M1D_COMPACTION_DEMO === "1";
-  const summarizer = process.env.CAIRN_API_KEY
-    ? createGlmSummarizer()
-    : demo
-      ? createMockSummarizer(DEMO_SUMMARY)
-      : undefined;
-  if (!summarizer) return { ok: false, error: "无 CAIRN_API_KEY，手动压缩不可用（fail-closed，不静默压缩）" };
-  const outcome = await runCompaction({
-    events,
-    trigger: "manual",
-    reason: "user_request",
-    summarizer,
-    onPreCompact: (trigger) => firePreCompactHook(hooks, trigger),
-    ...(demo ? { config: { tailMinTokens: 150, tailMaxTokens: 300 } } : {}),
-  });
-  if (!outcome.ok) return { ok: false, error: outcome.why };
-  if (emit) await emit(outcome.event);
-  else await createEventLog(logPath).append(outcome.event);
-  return { ok: true, event: outcome.event, cardPayload: compactionCardPayload(outcome.event) };
-}
-
-// ---- M2f：产出代码安全 report 的触发点（验证门收敛后 hook；默认 report，off 不跑）----
-// 只做静态快筛（零 token、本地）：从事件流写动作重建变更集 → findings → 一条 security_report 事件。
-// 不阻断主流程（loop 已收束，报告只是事后审计事件）；无写动作 / 未收敛 / off → 零行为。
-export function shouldRunSecurityReport(safeMode: string, events: AgentEvent[]): boolean {
-  if (safeMode !== "report") return false;
-  return events.some((e) => e.type === "verify_result" && e.ok);
-}
-
-/** 验证门收敛后的安全快筛 hook：产出报告事件（经 emit 落盘 + 上屏）。返回是否产出。 */
-export async function runSecurityReportHook(
-  logPath: string,
-  safeMode: string,
-  emit: (e: AgentEvent) => Promise<void>,
-): Promise<boolean> {
-  try {
-    const events = await replay(logPath);
-    if (!shouldRunSecurityReport(safeMode, events)) return false;
-    const report = buildSecurityReport(events, { scannedAt: new Date().toISOString() });
-    if (!report) return false;
-    await emit(report);
-    return true;
-  } catch (err) {
-    console.warn("[security] 快筛失败（不阻断主流程）:", err instanceof Error ? err.message : String(err));
-    return false;
-  }
-}
 
 // 最近一次会话日志路径：/compact 缺省压缩对象（UI 单窗口单任务，与 session 同生命周期语义）。
 let lastLogPath: string | null = null;
 
-/** M3b：产出代码安全模式解析（编排器与验收脚本共用口径）：显式 env 优先，缺省读设置页（默认 report）。 */
-export async function resolveSafeMode(): Promise<"off" | "report" | "gate"> {
-  const env = process.env.M1E_SAFE_MODE;
-  if (env === "off" || env === "report" || env === "gate") return env;
-  if (env !== undefined) delete process.env.M1E_SAFE_MODE; // 非法值清除（fail-visible 于下一次 get）
-  const safeMode = (await store().get()).safeMode;
-  return safeMode === "off" || safeMode === "gate" ? safeMode : "report";
-}
 
 /** IPC "agent:compact"：手动 /compact 入口。
  *  ① 目标 = **用户当前打开的那条会话**：缺省落到 lastLogPath 会压到「本进程最后一次 run 的会话」，
@@ -956,8 +568,6 @@ let installedAutomation = true;
 /** 同上的两把：本轮有没有武装长任务目标 / 有没有开自动记忆（决定 refine_goal 与 remember 挂不挂）。 */
 let installedGoal = true;
 let installedMemory = true;
-/** 同上第三把：该工作区有没有配 LSP（决定 lsp 挂不挂）。 */
-let installedLsp = true;
 /** 同上第四把：子代理三件套挂不挂（固定开销里最大的一块，611 tok/轮）。 */
 let installedSubagents = true;
 /** M2d：remember 门语义（可测工厂）：方案门写禁 / 档位表判 deny·ask·allow。
@@ -983,7 +593,7 @@ export function createGatedRemember(deps: {
         if (!ask) return denied("remember", mode, "非交互模式（fail-closed）");
         if (!(await ask(args))) return denied("remember", mode, "未获批准");
       }
-      return await remember.run(args, ctx);
+      return remember.run(args, ctx);
     },
   };
 }
@@ -1004,9 +614,7 @@ export function installAppTools(opts: { automation?: boolean; omitTools?: readon
   // 一轮轮传同一个值）照旧空转，异值当场抛，在那场 run 出门之前就拒。
   const wantAutomation = opts.automation !== false;
   const omit = new Set(opts.omitTools ?? []);
-  // 「本轮武装了没有」这两个开关决定两把工具要不要挂上去。它们**故意与 automation 同一条纪律**：
-  // 规格面与执行面必须同进同退，所以也走 `installed` 守卫的异值硬拒，不给「模型看得见却调不到」
-  // 那条路留缝。
+  // automation 必须全程同值；其余可选工具按进程内并集补注入，规格面每场按本次 omit 收窄。
   //
   // 为什么值得为这点字节动结构（2026-09-30 实测读数，`pnpm prompt-cost`）：
   //   refine_goal      85 tok/轮  没武装目标时该工具**恒 fail-closed**（refine_goal.ts:36）
@@ -1015,29 +623,30 @@ export function installAppTools(opts: { automation?: boolean; omitTools?: readon
   // 「能力没开却一直挂着说明书」是纯浪费：模型读了它、还可能在没开的能力上白花一轮。
   const wantGoal = !omit.has("refine_goal");
   const wantMemory = !omit.has("remember");
-  const wantLsp = !omit.has("lsp");
   const wantSubagents = !omit.has("spawn_agent");
   if (installed) {
-    if (wantAutomation !== installedAutomation || wantGoal !== installedGoal || wantMemory !== installedMemory
-        || wantLsp !== installedLsp || wantSubagents !== installedSubagents) {
+    if (wantAutomation !== installedAutomation) {
       throw new Error(
         "installAppTools: 同一进程里第二场 run 的能力开关与第一场不一致（第一场 定时" +
-        (installedAutomation ? "装" : "不装") + "/目标" + (installedGoal ? "装" : "不装") +
-        "/记忆" + (installedMemory ? "装" : "不装") + "/lsp" + (installedLsp ? "装" : "不装") + "/子代理" + (installedSubagents ? "装" : "不装") +
-        "，这一场 定时" + (wantAutomation ? "装" : "不装") +
-        "/目标" + (wantGoal ? "装" : "不装") + "/记忆" + (wantMemory ? "装" : "不装") +
-        "/lsp" + (wantLsp ? "装" : "不装") + "/子代理" + (wantSubagents ? "装" : "不装") +
+        (installedAutomation ? "装" : "不装") + "，这一场 定时" + (wantAutomation ? "装" : "不装") +
         "）。执行面 TOOLS 只装一次、规格面每场重算，异值会让模型看得见却调不到。",
       );
     }
+    // 动态工具（goal/memory/subagents）只增不减，避免 serve 预装与首场 run 的现场状态不同时报错；
+    // LSP 常驻基础 TOOLS 并受 gatedTool 保护，不需要补注入。
+    const grew = (wantGoal && !installedGoal) || (wantMemory && !installedMemory) || (wantSubagents && !installedSubagents);
+    installedGoal ||= wantGoal;
+    installedMemory ||= wantMemory;
+    installedSubagents ||= wantSubagents;
+    if (grew) injectOmitFaceTools();
     return;
   }
   installed = true;
   installedAutomation = wantAutomation;
   installedGoal = wantGoal;
   installedMemory = wantMemory;
-  installedLsp = wantLsp;
   installedSubagents = wantSubagents;
+  injectOmitFaceTools();
   TOOLS.write_file = gatedTool("write_file", TOOLS.write_file);
   TOOLS.edit_file = gatedTool("edit_file", TOOLS.edit_file);
   // M2 补丁工具同罪同罚：它是批量形态的 edit（跨文件、一笔可覆盖多份），必须走同一道门。
@@ -1053,10 +662,22 @@ export function installAppTools(opts: { automation?: boolean; omitTools?: readon
   // 钉成 `once`（`wantsNetwork` 那一条，见 `isNetworkCommandCall` 的注释：没有它，
   // 一次"总是允许"就会把出网永久写成免批）。worker 面不给（worker 出网是无条件 deny）。
   (TOOLS as unknown as Record<string, Tool>).web_fetch = gatedTool("web_fetch", webFetch);
+  if (opts.automation !== false) {
+    // M4a：agent 工具五件（§12.2.5）——automation_create/update/delete/run_now/list。
+    // 一切变更走审批卡（§10.4）；prompt 是持久化攻击面：4k 上限（校验拒）+ 审批卡全文展示（args 原样进审批卡）；
+    // workspace-write 及以上档位 → 审批卡红字「将无人值守执行」（§12.2.5）；调度器未初始化 = fail-closed。
+    installAutomationTools();
+  }
+}
+
+/** omit 四旗的执行面注入（幂等，可随并集增长重入）：按 installed 旗补装缺的那几件。
+ *  全部走 gated 闭包——补装不改变任何审批语义，只是让「某一场真需要的工具」真正在场。
+ *  首装与后续并集增长共用这一个入口（两份注入代码迟早漂，见 omit 累积判据处的注释）。 */
+function injectOmitFaceTools(): void {
   // M2d：remember 运行时注入（静态注册表 10 工具，tools-check 判据）
   // `autoMemory` 关掉时不挂：那条路上没有自动消费者，留着它等于每轮白付 269 tok 的说明书。
   // 代价说清楚——开了这个开关就**真的没有**手动记一笔的入口（重开 settings 即回来）。
-  if (wantMemory) (TOOLS as unknown as Record<string, Tool>).remember = createGatedRemember({
+  if (installedMemory) (TOOLS as unknown as Record<string, Tool>).remember = createGatedRemember({
     getMode: () => currentSession()?.autonomy.mode ?? "default",
     isPlanBlocked: () => planGateBlocks(getPlanState()),
     getAsk: () => {
@@ -1077,13 +698,13 @@ export function installAppTools(opts: { automation?: boolean; omitTools?: readon
   // `settings.subagentTools: false` 时整族不挂（省 611 tok/轮，固定开销里最大的一块）。
   // **规格面与执行面必须同进同退**（同一个 `omit` 名单驱动两处）：
   // 只摘执行面 = 模型看得见却只吃得到 `unknown tool`；只摘规格面 = 模型看不见却调得到。
-  if (wantSubagents) {
+  if (installedSubagents) {
     (TOOLS as unknown as Record<string, Tool>).spawn_agent = {
       name: "spawn_agent",
       async run(args, ctx) {
         const orch = currentOrchestrator();
         if (!orch) return { ok: false, output: "spawn_agent: 编排器未接线（fail-closed）" };
-        return await orch.spawn(args as SpawnArgs, { callId: ctx.callId });
+        return orch.spawn(args as SpawnArgs, { callId: ctx.callId });
       },
     };
     // W1a：收队工具（与 spawn_agent 同一注入面、同一「编排器未接线即 fail-closed」口径）。
@@ -1098,7 +719,7 @@ export function installAppTools(opts: { automation?: boolean; omitTools?: readon
   // 而投影层不因此挪动窗口锚点/轮次帽 ⇒ 模型能把自己的目标写进每轮提醒，拿不到续跑额度（那两条归人）。
   // 本轮没武装目标时不挂：`createRefineGoalTool` 在 view === null 时**必然**返回
   // 「这个会话没有已武装的长任务目标」⇒ 挂着它只有成本没有能力（85 tok/轮 × 每轮）。
-  if (wantGoal) {
+  if (installedGoal) {
     (TOOLS as unknown as Record<string, Tool>).refine_goal = createRefineGoalTool(async () => {
       const s = currentSession();
       if (!s?.sessionId) return null;
@@ -1111,12 +732,6 @@ export function installAppTools(opts: { automation?: boolean; omitTools?: readon
       };
     });
   }
-  if (opts.automation !== false) {
-    // M4a：agent 工具五件（§12.2.5）——automation_create/update/delete/run_now/list。
-    // 一切变更走审批卡（§10.4）；prompt 是持久化攻击面：4k 上限（校验拒）+ 审批卡全文展示（args 原样进审批卡）；
-    // workspace-write 及以上档位 → 审批卡红字「将无人值守执行」（§12.2.5）；调度器未初始化 = fail-closed。
-    installAutomationTools();
-  }
 }
 
 const appAskGate = new AskGate({
@@ -1128,85 +743,19 @@ const appAskGate = new AskGate({
   hasAnswerer: () => hooks.onAsk !== undefined,
 });
 
-// ---- M4a：定时任务调度器接线（§12.2）——初始化 / IPC handlers / 触发执行器 ----
-// 触发 = 全新会话走既有 createSession（调度器内）+ handleAgentRun（真实代码路径，unattended 覆盖）；
-// 主时间线落流 = 当前会话 append（有则落）+ UI 推送；journal 始终留账（双轨之二）。
-let scheduler: Scheduler | null = null;
-let scheduleCapCache = 2;
-/** 本进程**有没有起过**调度器（只置真、永不回退；`stopScheduler` 也不清）。
- *  为什么不直接读 `getScheduler() !== null`：那个槽会随 stop 变 null，而它喂的是执行面
- *  `installAppTools`（只让第一个调用赢）——一场判假、下一场判真就是「模型看得见却调不到」
- *  （或反过来那句），正是本仓点名的失败形状。这里要的是**单调**真值：起过就永远算用得上。 */
-let schedulerEverInitialized = false;
-/** 定时任务的数据目录：调度器装载与挂载判据读**同一个式子**（两份字面量迟早漂）。 */
-export function scheduleDataDir(workspace: string): string {
-  return join(workspace, ".agent", "schedules");
-}
-
-/** shell / 验收脚本初始化调度器（幂等）。 */
-export function initScheduler(opts: {
-  dataDir: string;
-  sessionsDir: string;
-  workspace?: string;
-  clock?: () => number;
-  jitterMs?: () => number;
-  cap?: number;
-}): void {
-  // 单调真值先置（下面那句 `if (scheduler) return` 的幂等路径也要认）：这一句之后
-  // `installTimeAutomationFace` 在本进程余生都判真，五件的说明书就一直在两面挂着。
-  schedulerEverInitialized = true;
-  if (scheduler) return;
-  if (opts.cap !== undefined) scheduleCapCache = opts.cap;
-  const ws = opts.workspace ?? WORKSPACE;
-  scheduler = new Scheduler({
-    dataDir: opts.dataDir,
-    sessionsDir: opts.sessionsDir,
-    workspace: ws,
-    // M4a 触发执行器（真缺陷修复，schedule-check F 段抓出）：makeScheduledExecutor 已导出但从未接线，
-    // 生产路径每次触发都会落「调度器未接线执行器（fail-closed）」——触发 = 全新会话的真实代码路径由此接通。
-    runSession: makeScheduledExecutor(ws),
-    ...(opts.clock ? { clock: opts.clock } : {}),
-    ...(opts.jitterMs ? { jitterMs: opts.jitterMs } : {}),
-    getCap: () => scheduleCapCache,
-    emitTimeline: async (e: AgentEvent) => {
-      const cur = (await store().get()).currentSession;
-      const sdir = getSessionsDir();
-      if (sdir && cur) await createEventLog(pathOf(sdir, cur)).append(e);
-      hooks.onEvent?.(e);
-    },
-  });
-}
-
-export function getScheduler(): Scheduler | null {
-  return scheduler;
-}
-
-export async function startScheduler(): Promise<void> {
-  // 并发上限从 settings 预热（getCap 为同步读缓存）
-  try {
-    const s = await store().get();
-    scheduleCapCache = s.scheduleConcurrencyCap;
-  } catch {
-    /* 缺省 2 */
-  }
-  await scheduler?.start();
-}
-
-export function stopScheduler(): void {
-  // 只停计时器：**不**清 `schedulerEverInitialized`——那是单调挂载判据，清了就会「第一场判真装了执行面、
-  // 后一场判假摘掉说明书」= 调得到却看不见（本仓点名的另一半失败形状）。
-  scheduler?.stop();
-}
+// ---- M4a：定时任务调度器接线（§12.2）——实现住 ./scheduler-runtime（拆分面先例），
+// 本装配根只留 serve 常驻入口这一块拼装（装工具面 + 初始化 + 启动）；公开面在文件尾按原路径再导出。
 
 /** serve 常驻入口（M4 路线图：调度器真落地——此前 initScheduler 全树零生产调用者，审计点名的那格）。
  *  装自动化工具面（automation 五件在常驻进程里才有意义）＋初始化＋启动调度器；
  *  触发执行器已在 initScheduler 内接 `makeScheduledExecutor`（触发 = 全新会话的真实代码路径）。
  *  停止交给 CLI 的 SIGINT 处理（返回的 stop 即 stopScheduler）。 */
 export async function serveScheduler(opts: { workspace: string }): Promise<{ stop: () => void }> {
-  // 顺序改了（原先 installAppTools 在前）：先 initScheduler 置上单调真值，再由**同一个判据**
-  // 决定执行面——常驻服务当然是「用得上」，判据在这里给真，与规格面（runAgent 读同一个函数）同源。
-  // 万一这个进程里已有一场 run 把执行面定终身成"摘"，这一句只能跟它而不是抛：
-  // `installAppTools` 只让第一个调用赢，而 M-2 那条判卷不许 false→true 补装（那正是分家那一步）。
+  // 预装执行面（scheduler-wiring ① / automation-mount ④ 钉住：跑过 serve 的进程两面必须齐全）。
+  // omit 四旗在 installAppTools 里走**累积并集**（2026-10-06 桌面接管笔）：serveScheduler 先于
+  // 一切 run 预装「全要」，此后任何一场 run 无论算出什么 omit 面，都只会是它的子集或触发补装
+  // ——不会再像严判时代那样把桌面 / CLI --serve 进程的第一场 run 一律炸掉
+  // （CAIRN_SMOKE 实测红：第一场 记忆装 / 这一场 记忆不装）。
   initScheduler({
     dataDir: scheduleDataDir(opts.workspace),
     sessionsDir: join(opts.workspace, ".agent", "sessions"),
@@ -1214,145 +763,9 @@ export async function serveScheduler(opts: { workspace: string }): Promise<{ sto
   });
   installAppTools({ automation: await installTimeAutomationFace(opts.workspace, undefined) });
   await startScheduler();
-  return { stop: () => stopScheduler() };
+  return { stop: stopScheduler };
 }
 
-export function schedulerRunning(): boolean {
-  return scheduler?.running ?? false;
-}
-
-/** 设置页并发上限变更 → 调度器即时生效（setSettings 转发）。 */
-export function updateScheduleCap(cap: number): void {
-  if (Number.isInteger(cap) && cap >= 1 && cap <= 8) scheduleCapCache = cap;
-}
-
-/** 定时触发执行器（真实代码路径）：handleAgentRun + unattended 覆盖 + signal 透传。 */
-export function makeScheduledExecutor(workspace: string): TriggerExecutor {
-  return async ({ sessionId, message, mode, signal }) => {
-    return await handleAgentRun({ message, mode }, { sessionId, workspace, unattended: true, signal });
-  };
-}
-
-export async function handleScheduleSnapshot(rawFilter?: unknown): Promise<ScheduleSnapshot> {
-  // 筛选值来自渲染层的下拉框（跨进程输入面）；合法性与归一都在 scheduler 那一处（防第二份谓词）
-  if (!scheduler) return { tasks: [], history: [], running: 0, queued: 0, cap: scheduleCapCache, startupDone: false, tzNotes: {} };
-  return await scheduler.snapshot(normalizeHistoryFilter(rawFilter));
-}
-
-export async function handleScheduleUpsert(raw: unknown, form = true): Promise<{ ok: boolean; error?: string }> {
-  if (!scheduler) return { ok: false, error: "调度器未初始化（fail-closed）" };
-  const r = await scheduler.upsert(raw, { form });
-  return r.ok ? { ok: true } : { ok: false, error: r.errors.join("；") };
-}
-
-export async function handleScheduleDelete(id: string): Promise<{ ok: boolean; error?: string }> {
-  if (!scheduler) return { ok: false, error: "调度器未初始化（fail-closed）" };
-  return await scheduler.remove(id);
-}
-
-export async function handleScheduleRunNow(id: string): Promise<{ ok: boolean; error?: string }> {
-  if (!scheduler) return { ok: false, error: "调度器未初始化（fail-closed）" };
-  return await scheduler.runNow(id);
-}
-
-/** agent 工具五件的实现（§12.2.5）：validate 先行 → 审批卡（全文展示 + 红字判定）→ 落库。 */
-function installAutomationTools(): void {
-  const table = TOOLS as unknown as Record<string, Tool>;
-  const schRef = () => scheduler;
-  const approval = async (tool: string, args: Record<string, unknown>, redNote: boolean, signal?: AbortSignal): Promise<ToolResult | null> => {
-    const s = currentSession();
-    if (!s) return { ok: false, output: "[permission denied] " + tool + "（工具门未接线，fail-closed）" };
-    if (!s.askGate) return { ok: false, output: "[permission denied] " + tool + "（非交互模式，fail-closed）" };
-    const reason =
-      "定时任务变更（审批卡全文展示）" +
-      (redNote ? " ⚠ 将无人值守执行：触发时一切审批请求自动拒绝（fail-closed）" : "");
-    // 审查 4.3 同口径：定时任务审批卡也接运行信号（取消即按拒绝收束，不留 60s 僵尸卡）
-    const r = await s.askGate.request(tool, args, { reason, risk: "medium", signal });
-    if (r.outcome !== "approved") {
-      const why = r.reason === "unattended" ? "无人值守 fail-closed：审批请求自动拒绝" : "未获批准";
-      return { ok: false, output: "[permission denied] " + tool + "（" + why + "）" };
-    }
-    return null;
-  };
-  const needScheduler = (): ToolResult | null =>
-    schRef() ? null : { ok: false, output: "调度器未初始化（fail-closed）" };
-  table["automation_create"] = {
-    name: "automation_create",
-    async run(args, ctx) { // 审查 4.3：接运行信号（审批卡随取消收束）
-      const v = validateAutomation(args, { form: true });
-      if (!v.ok) return { ok: false, output: "automation_create 参数无效：" + v.errors.join("；") };
-      const denial = await approval("automation_create", args, isUnattendedTier(v.value.permissionTier), ctx.signal);
-      if (denial) return denial;
-      const ns = needScheduler();
-      if (ns) return ns;
-      const r = await schRef()!.upsert(args, { form: true });
-      return r.ok
-        ? { ok: true, output: "已创建定时任务 " + r.value.name + "（id=" + r.value.id + "，permissionTier=" + r.value.permissionTier + "，下次触发 " + (r.value.nextRunAt ?? "无") + "）" }
-        : { ok: false, output: "automation_create 失败：" + r.errors.join("；") };
-    },
-  };
-  table["automation_update"] = {
-    name: "automation_update",
-    async run(args, ctx) { // 审查 4.3：接运行信号（审批卡随取消收束）
-      const ns0 = needScheduler();
-      if (ns0) return ns0;
-      const sch = schRef()!;
-      const id = typeof args.id === "string" ? args.id : "";
-      if (id === "") return { ok: false, output: "automation_update: id 必填" };
-      const cur = sch.list().find((t) => t.id === id);
-      if (!cur) return { ok: false, output: "automation_update: 任务不存在 " + id };
-      const merged = { ...cur, ...args, id, createdAt: cur.createdAt, updatedAt: cur.updatedAt };
-      const v = validateAutomation(merged, { form: true });
-      if (!v.ok) return { ok: false, output: "automation_update 合并后无效：" + v.errors.join("；") };
-      const denial = await approval("automation_update", { ...v.value }, isUnattendedTier(v.value.permissionTier), ctx.signal);
-      if (denial) return denial;
-      const r = await sch.upsert(v.value, { form: true });
-      return r.ok
-        ? { ok: true, output: "已更新定时任务 " + r.value.name + "（id=" + r.value.id + "）" }
-        : { ok: false, output: "automation_update 失败：" + r.errors.join("；") };
-    },
-  };
-  table["automation_delete"] = {
-    name: "automation_delete",
-    async run(args, ctx) { // 审查 4.3：接运行信号（审批卡随取消收束）
-      const ns0 = needScheduler();
-      if (ns0) return ns0;
-      const sch = schRef()!;
-      const id = typeof args.id === "string" ? args.id : "";
-      if (id === "") return { ok: false, output: "automation_delete: id 必填" };
-      const cur = sch.list().find((t) => t.id === id);
-      const denial = await approval("automation_delete", { id, ...(cur ? { name: cur.name } : {}) }, false, ctx.signal);
-      if (denial) return denial;
-      const r = await sch.remove(id);
-      return r.ok ? { ok: true, output: "已删除定时任务 " + id } : { ok: false, output: "automation_delete 失败：" + (r.error ?? "未知") };
-    },
-  };
-  table["automation_run_now"] = {
-    name: "automation_run_now",
-    async run(args, ctx) { // 审查 4.3：接运行信号（审批卡随取消收束）
-      const ns0 = needScheduler();
-      if (ns0) return ns0;
-      const id = typeof args.id === "string" ? args.id : "";
-      if (id === "") return { ok: false, output: "automation_run_now: id 必填" };
-      const denial = await approval("automation_run_now", { id }, false, ctx.signal);
-      if (denial) return denial;
-      const r = await schRef()!.runNow(id);
-      return r.ok ? { ok: true, output: "已手动触发 " + id + "（走准入管线：去重/并发/重叠闸生效）" } : { ok: false, output: "automation_run_now：" + (r.error ?? "未知") };
-    },
-  };
-  table["automation_list"] = {
-    name: "automation_list",
-    async run() {
-      const ns0 = needScheduler();
-      if (ns0) return ns0;
-      const tasks = schRef()!.list().map((t) => ({
-        id: t.id, name: t.name, kind: t.schedule.kind, timeZone: t.timeZone,
-        permissionTier: t.permissionTier, catchUp: t.catchUp, enabled: t.enabled, nextRunAt: t.nextRunAt,
-      }));
-      return { ok: true, output: JSON.stringify(tasks, null, 2) };
-    },
-  };
-}
 
 let sandboxState: SandboxStatus = { available: false, reason: "尚未自检" };
 
@@ -1374,6 +787,10 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
   /** 能力 5 收束闸：写过盘但模型没自调 verify 时，收束前补一拍验证并把红字落进事件流。
    *  缺省**开**（同族是 `impactAnalysis` / `promptCache`）；一拍 = 真跑一遍 lint/test。 */
   autoVerify?: boolean;
+  /** M5b 路由开关 runtime override（CLI `--bandit/--cascade` 一族；同 actionFusion / autoVerify
+   *  口径：settings 开闸另议）。字段缺席 = 用 `RunOverrides` 里同名的两枚分别覆盖，最终由
+   *  `resolveRoutingFlags` 与 settings 合。缺省缺席 ⇒ 与这两枚旗标存在前逐字同形。 */
+  routing?: RoutingFlagOverrides;
   /** 能力 5 的返修那一环（拍红 → 再要一轮去修 → 重验一次，上限一次）。
    *  **只从 settings 取，不留 override 槽**：`handleAgentRun` 的两个产品调用者从不传它，
    *  留 `over.X ??` 就是给一条永远走不到的左半边钉锚点（同 `impactAnalysis` 那一族的做法）。 */
@@ -1444,6 +861,8 @@ function createProvider(
     requestFace: () => { tools: GlmToolSpec[]; note: string };
     solpi?: SolpiRuntime;
     promptCache?: boolean;
+    /** 思考档位（§S8）：一路带到适配器的请求体里。缺省 / "off" ⇒ 请求体里不出现这个字段。 */
+    thinking?: ThinkingEffort;
     onPreCompact?: (trigger: "manual" | "auto") => Promise<void>;
     /** 本 provider 每次请求末尾追加的临时 user 消息（不进日志）：会话末沉淀轮送指令用。 */
     ephemeralUserTurn?: string;
@@ -1453,9 +872,15 @@ function createProvider(
   if (scripted !== null) return createMockProvider(scripted);
   if (selection.kind === "demo") return createMockProvider(MOCK_FIXTURE);
 
-  assertProviderKeyConfigured(selection.kind);
+  // 取 provider id 必须走 selectionProviderId：`kind` 在自定义家那一支上是标签 "custom"，
+  // 不是家名。直接传 kind 会让自定义 provider 在最后一米被误判成「未登记 env 映射」。
+  assertProviderKeyConfigured(selectionProviderId(selection));
   const modelTransport: RegistryWorkerModel = toWorkerModel(selection.spec, {
     promptCache: sessionOptions?.promptCache === true,
+    // "off" 等于没给：适配器只在拿到真实档位时才往请求体里加字段（逐字旧行为的边界就在这里）
+    ...(sessionOptions?.thinking !== undefined && sessionOptions.thinking !== "off"
+      ? { reasoningEffort: sessionOptions.thinking }
+      : {}),
   });
   // createGlmSessionProvider predates native adapters and exposes a GLM-shaped transport slot.
   // This adapter forwards cancellation + OpenAI/GLM metering while binding the already-resolved spec.
@@ -1480,7 +905,7 @@ function createProvider(
       solpi: sessionOptions.solpi,
       // Preserve the pre-CX main-session GLM default compaction budget. An explicit request/settings
       // model opts into the registry window; other providers always use their registry spec.
-      ...(selection.kind !== "glm" || selection.modelExplicit ? { model: selection.spec.model } : {}),
+      ...(selectionProviderId(selection) !== "glm" || selection.modelExplicit ? { model: selection.spec.model } : {}),
       // 自由档位的名字查表恒为 undefined ⇒ 窗口必须由 spec 递进预算，否则 `--ctx-window` 只改到一半
       // （toWorkerModel 会丢掉 ctxWindow，只有这一条真的落到 inputLimit 上）。
       ...(selection.modelExplicit ? { ctxWindow: selection.spec.ctxWindow } : {}),
@@ -1553,17 +978,6 @@ function searchConfigured(workspace: string): boolean {
   }
 }
 
-/** 该工作区盘上有没有**已落盘的定时任务**（`<workspace>/.agent/schedules/automations.json`）。
- *  口径与 `searchConfigured` 同形：判据复用被度量方自己的装载器（`loadAutomationsFile`），
- *  不再抄第二份谓词——文件不存在 / 空 / 坏 JSON / 条目全无效，装载器给的就是空清单 ⇒ 判假。
- *  为什么读盘而不是读设置：五件要 `initScheduler` 才有意义（tick 60s / 补跑 7 天 / 并发闸 ≤2），
- *  而"这个工作区排过任务"是这件事唯一能在盘上核对的事实；它也让摘除**自动可逆**——
- *  一旦有人（UI 或 `--serve`）落下第一条任务，下一场 run 就自己挂回来，不需要新发明一个设置项。 */
-export async function automationsScheduled(workspace: string): Promise<boolean> {
-  const { tasks } = await loadAutomationsFile(join(scheduleDataDir(workspace), "automations.json"))
-    .catch(() => ({ tasks: [], warnings: [] })); // 装载器自己已 fail-closed，这里只兜路径异常
-  return tasks.length > 0;
-}
 
 /** 上面那条的累积闸门：一旦判真就永不回退（缺省假 = 还没出现过任何"用得上"的证据）。 */
 let automationArmedOnce = false;
@@ -1583,7 +997,7 @@ let automationArmedOnce = false;
 export async function installTimeAutomationFace(workspace: string, explicit: boolean | undefined): Promise<boolean> {
   if (installed) return installedAutomation;
   if (explicit === false) return false;
-  if (schedulerEverInitialized) automationArmedOnce = true;
+  if (schedulerEverStarted()) automationArmedOnce = true;
   if (!automationArmedOnce && await automationsScheduled(workspace)) automationArmedOnce = true;
   // await 之后重读一次：并发的另一场可能就在这中间把执行面装了（那时规格面只能跟它）
   return installed ? installedAutomation : automationArmedOnce;
@@ -1659,10 +1073,17 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   // 位置有讲究：放在 installTimeOmitTools/installAppTools **之前**——那两句之间不许插 await，
   // 否则并发两场首跑会在"算出 omit 名单"与"喂给执行面"之间让出事件循环（守卫会撞自己的车）。
   opts.automationTools = await installTimeAutomationFace(opts.workspace, opts.automationTools);
+  // ⚠️ 极性（2026-10-06 接管笔翻正，P1 9e9323e6 落库时三参写反）：installTimeOmitTools 的 want
+  // 语义是「这场**需要**它」（需要 ⇒ 从 omit 名单删除 ⇒ 执行面/规格面都挂）。P1 原稿
+  // `goal: goalArmed !== true / memory: !memoOn / lsp: !lspOn` 传的是「该摘吗」，与函数语义相反，
+  // 净效果 = autoMemory **开着**反而没有 remember（M2d 的手写记忆入口对缺省用户整条死路）、
+  // 武装目标反而没有 refine_goal、配了 lsp 反而摘——恰好与上面三行注释各自相反。
+  // 自洽（规格/执行同一份名单）所以判卷全绿、P1 的实测省幅也真发生了，只是省错了人群。
+  // 翻正后由 installAppTools 的 omit 并集守卫兜面变化（automation 旗仍严判，见该处注释）。
   const omitTools = installTimeOmitTools({
-    goal: opts.goalArmed !== true,
-    memory: !memoOn,
-    lsp: !lspOn,
+    goal: opts.goalArmed === true,
+    memory: memoOn,
+    lsp: lspOn,
     subagents: await installTimeSubagents(),
   });
   installAppTools({ automation: opts.automationTools, ...(omitTools.length > 0 ? { omitTools } : {}) });
@@ -1779,6 +1200,9 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       ...(demoModelFor ? { modelFor: demoModelFor } : {}),
       // 成本闸的价键跟着**这个 run 真拨的那一档**走（逐请求指定的模型只在调用手里，重派路径没有）。
       ...(opts.modelSelection ? { runModel: opts.modelSelection } : {}),
+      // M5b：路由开关的 runtime override 透到 orchestratorExtras（CLI `--bandit/--cascade` 一族；
+      // 缺省缺席 ⇒ orchestratorExtras 回落到 settings，与今日逐字同形）。
+      ...(opts.routing ? { routing: opts.routing } : {}),
     });
     runScope.orchestrator = orchestrator;
     if (interactive) activeOrchestrator = orchestrator; // H3 D-2：unattended 不抢交互面的审批路由
@@ -1878,6 +1302,14 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // M3 检索工具：配了搜索端点才注入（口径同 lsp）。网络类 ⇒ gatedTool 包装 + staticRisk=high
     // （四档一律审批）+ isNetworkCommandCall 钉 once（一次"总是允许"不会把出网永久免批）。
     const searchTool = searchConfigured(opts.workspace) ? makeWebSearch() : undefined;
+    // 自进化：上一轮的策略补丁注进 system prompt（让经验回流到决策，而非只记笔记）。
+    // 零补丁时 renderPatches 返回空串 ⇒ 系统提示词逐字节不变（零行为回归面）。
+    let evolutionNote = "";
+    try {
+      evolutionNote = await evolutionPromptNote(opts.workspace);
+    } catch {
+      evolutionNote = "";
+    }
     const faceArgs = {
       mode: opts.mode,
       // 同一个字段喂给规格面（sessionToolFace）与执行面（installAppTools）——两面必须同时摘。
@@ -1904,7 +1336,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       // 两个都开才传，避免"闸关着却许诺返修"这种读起来矛盾的配置。
       ...(opts.autoVerify === true && opts.autoVerifyRepair === true ? { autoVerifyRepair: true } : {}),
       stuckNudge: true, // 主会话（人直用那条）才有换路提示：worker 有看门、靶场按字节计量，见 LoopOptions
-      provider: createProvider(promptText, systemPromptFor(opts.mode), modelSelection, {
+      provider: createProvider(promptText, systemPromptFor(opts.mode) + evolutionNote, modelSelection, {
         ...opts, emit: pipeline, solpi, promptCache: providerSettings.promptCache,
         requestFace: () => sessionToolFace(rt, faceArgs),
         // §9.5：自动/溢出压缩的 PreCompact 只有这一条生产者（provider 每会话一个，钩子引擎在 rt 上）
@@ -2105,7 +1537,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
         console.warn("[hooks] SessionEnd 失败:", err instanceof Error ? err.message : String(err));
       }
     }
-    if (rtNow) lastPluginSnapshot = rtNow.snapshot();
+    if (rtNow) setPluginSnapshot(rtNow.snapshot());
     await rtNow?.shutdown().catch(() => {});
     // M2e：会话结束摘除本 run 注入的插件工具（TOOLS 是模块级注册表，零残留）
     const table = TOOLS as unknown as Record<string, unknown>;
@@ -2130,7 +1562,33 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // 静默会把「没量到」读成「没漂移」——本仓反复点名的同一族坑。
     console.warn("[goal-drift] 读数失败（这一格未检，不等于没有漂移）: " + (err instanceof Error ? err.message : String(err)));
   }
-  return await replay(opts.logPath);
+  // cost-per-progress：同 goal-drift 的纪律——观测读数，不落事件流，不影响主流程。
+  try {
+    const cpp = costPerProgress(await replay(opts.logPath));
+    if (cpp.measurable && cpp.tokensPerBoundary !== null) {
+      console.warn(
+        "[cost-per-progress] 每 verified 边界约 " + cpp.tokensPerBoundary + " token" +
+          "｜主面 " + cpp.mainTokens + " token" +
+          "｜边界后死跑 " + cpp.spendAfterLastBoundary + " token" +
+          (cpp.excludedWorkerTokens > 0 ? "（worker 开销 " + cpp.excludedWorkerTokens + " 已单列不入比值）" : ""),
+      );
+    } else {
+      console.warn("[cost-per-progress] 本跑不可测（" + String(cpp.reason) + "）——不许折成 0 或 Infinity");
+    }
+  } catch (err) {
+    console.warn("[cost-per-progress] 读数失败（这一格未检）: " + (err instanceof Error ? err.message : String(err)));
+  }
+  // 自进化闭环：抽信号 → 生补丁 → 落 .agent/evolution.json。失败不阻塞主流程。
+  try {
+    const events = await replay(opts.logPath);
+    const evo = await runEvolution(events, opts.workspace, opts.sessionId ?? opts.logPath);
+    if (evo.patches.length > 0) {
+      console.warn("[evolution] 本跑产出 " + evo.patches.length + " 条策略补丁，已落 " + String(evo.persistedTo));
+    }
+  } catch (err) {
+    console.warn("[evolution] 读数/落盘失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
+  }
+  return replay(opts.logPath);
 }
 
 // 五个"只从 settings 取"的开关刻意**不在 overrides 里**（见 `runAgent` 调用处那条注释）：
@@ -2156,6 +1614,13 @@ export interface RunOverrides
   actionFusion?: boolean;
   /** 能力 5 收束闸 runtime override（同 actionFusion 口径：settings 与 IPC 开闸另议）。 */
   autoVerify?: boolean;
+  /** M5b 路由 bandit runtime override（同 actionFusion 口径：settings 与 IPC 开闸另议）。
+   *  缺省 = 用 settings.routingBandit；CLI `--bandit` / `--no-bandit` 走这里。
+   *  `routingBandit` 蕴含路由开启（本仓口径），故置真即等于给这条 run 开路由。 */
+  routingBandit?: boolean;
+  /** M5b 级联升档 runtime override（同 routingBandit 口径）。缺省 = 用 settings.routingCascade；
+   *  CLI `--cascade` / `--no-cascade` 走这里。 */
+  routingCascade?: boolean;
   /** 这一段会话有没有武装长任务目标（`--goal` / RunRequest.objective / goal 续跑轮）。
    *  只喂 `refine_goal` 的挂/摘判据（见 RunOptions.goalArmed）。 */
   goalArmed?: boolean;
@@ -2258,6 +1723,9 @@ export async function handleAgentRun(
         // M2e：M0B_WORKSPACE 工作区覆盖（M2B_MAP_WORKSPACE 同族演示通道，env 门控缺省零行为）——
         // 面板截图/演示指向带 .agent/plugins 的临时工作区，验收与生产路径不变。
         workspace,
+        // §S8：思考档位从请求一路带到请求体。以前它在这里被校验收下、然后就丢了
+        //（协议有字段、能力表有闸、渲染层有占位行，只有适配器没接）—— 现在这一跳接上了。
+        ...(req.thinking !== undefined ? { thinking: req.thinking } : {}),
         message,
         mode: req.mode,
         // plan 模式：settings 的默认档是唯一入口（composer 的即时开关随 goal 模式一起改，见 spec §3）。
@@ -2272,6 +1740,11 @@ export async function handleAgentRun(
         ...(over.signal ? { signal: over.signal } : {}),
         actionFusion: over.actionFusion ?? (await store().get()).actionFusion,
         autoVerify: over.autoVerify ?? (await store().get()).autoVerify,
+        // M5b：路由开关的 runtime override 收成一处（CLI `--bandit/--cascade` 一族；缺省缺席 ⇒
+        // 用 settings）。两枚都没给时这里不出现 ⇒ 与今日逐字同形。
+        ...(over.routingBandit !== undefined || over.routingCascade !== undefined
+          ? { routing: { routingBandit: over.routingBandit, routingCascade: over.routingCascade } }
+          : {}),
         trustedRepo: over.trustedRepo ?? false, // S3：IPC 路径不置位 = 不走调用方断言，交给 runAgent 里的「查表 + 首问」（不是缺省即永远拒绝）
         // 这一段会话有没有武装长任务目标：CLI 在 `--goal` 时显式传（它在 run 之前就把
         // `goal_set` 写进日志了），goal 续跑轮由 `goalTurn` 在场推定。只喂 refine_goal 的挂/摘。
@@ -2319,647 +1792,38 @@ export async function handleAgentRun(
   }
 }
 
-/** goal 事件的唯一出口：落流 + 推事件（带 session_id）。
- *  为什么必须有这个 helper：渲染层按 `e.session_id !== real.id` 把不可归因的事件丢掉，
- *  所以少了这个标记就是「JSONL 里有、live 界面上没有」——用户看不见"为什么不跑了"，
- *  而 replay 又看得见（两路不一致，正是本仓点名的形状）。三处 goal 写入点共用一份。 */
-async function emitGoalEvent(logPath: string, sessionId: string | undefined, ev: AgentEvent): Promise<void> {
-  await createEventLog(logPath).append(ev);
-  hooks.onEvent?.(sessionId !== undefined ? ({ ...ev, session_id: sessionId } as AgentEvent) : ev);
-}
-
-/** run 中途抛错时补的那一条 `goal_stopped`（异常收场也是「不跑了」，也得让用户看得见）。
- *  为什么必须有它：续跑判据 `goalNextTurn` 长在 `handleAgentRun` 的圈里、在 `runAgent` **外面**，
- *  异常一冒头就整圈跳过它 ⇒ 盘上一条停止都没有，而芯片读的是 `projectGoal` 投影 ⇒ 界面继续说「续跑中」，
- *  实际那条 run 已经死了（把没发生的事报成在发生，与「不可知不许当免费」同一条纪律）。
- *  停没停一律现读投影（与被量的对象同一个函数），不在这里另算一份「我觉得它停了」。 */
-async function emitGoalStoppedOnThrow(logPath: string, sessionId: string | undefined, err: unknown): Promise<void> {
-  // 会话日志一行都没落过 ⇒ replay 会 ENOENT。那是「这一场没有目标」，不是文件错误（同 handleGoalSet 的口径）。
-  const events = await replay(logPath).catch((e: unknown) => {
-    if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return [] as AgentEvent[];
-    throw e;
-  });
-  const view = projectGoal(events);
-  if (view === null || view.stopped !== null) return; // 没设过目标 / 已经停过 ⇒ 逐字零行为
-  const reason =
-    "run 中途抛错，没走到续跑判据 ⇒ goal 自动续跑已停（这一轮不会再跑，界面上不许再显示「续跑中」）：" +
-    (err instanceof Error ? err.message : String(err));
-  await emitGoalEvent(logPath, sessionId, scanStreamEvent(
-    { type: "goal_stopped", reason, turn: view.turn, evidence: view.evidence },
-  ));
-}
-
-/** goal 模式：一次 run 收束后问判据「还要不要再跑一轮」。返回 null = 不再续（没设目标 / 已停 / 被取消）。
- *  停止理由一律落 `goal_stopped` 上屏——「为什么不跑了」必须是用户看得见的事实。 */
-async function goalNextTurn(args: {
-  logPath: string;
-  sessionId?: string;
-  /** 无人值守（定时 / schedule 触发的 run）。goal 模式在这条路上被显式拒续，理由见下面的规则。 */
-  unattended?: boolean;
-  aborted: () => boolean;
-  /** 本 run 的模型选择：美元闸的价键由它派生（与拨号同一个数，见 `budgetPriceKeyOf`）。 */
-  runModel: MainModelSelection;
-}): Promise<{ message: string; origin: GoalTurnOrigin } | null> {
-  if (args.aborted()) return null; // 用户已经按停止：不再起新轮（取消是最高优先级，不是预算）
-  const events = await replay(args.logPath);
-  const view = projectGoal(events);
-  if (view === null || view.stopped !== null) return null; // 没设目标 / 已停 ⇒ 逐字零行为
-  // #53 的裁决：**无人值守 run 不自动续跑**。这不是保守，是这条路的产出面决定的——
-  // unattended 的审批一律 fail-closed 拒（unattendedAskGate）⇒ 写向工具全被拒、verify 必然红，
-  // 而判据里「证据 failed」是 **continue** ⇒ 定时任务会一路烧到轮次上限（≤25 轮），
-  // 且没有任何一轮可能成功。goal 是「有人在场」的能力：停在这里，并把理由落到流上（芯片与转录都看得见）。
-  if (args.unattended) {
-    const reason =
-      "无人值守 run 不自动续跑：这条路上审批一律 fail-closed 拒 ⇒ 写不了盘、验不出绿，续跑只会白烧钱；" +
-      "goal 模式请在有人盯着的会话里用（同一个目标，交互 run 会照常续）";
-    await emitGoalEvent(args.logPath, args.sessionId, {
-      type: "goal_stopped",
-      reason,
-      turn: view.turn,
-      evidence: view.evidence,
-    });
-    return null;
-  }
-  const model = budgetPriceKeyOf(args.runModel);
-  // 花费读数交给纯函数（`goalWindowSpend`）：闸要的价键是 provider 模型名（glm-5.2）而价表的键是
-  // 档位 id（glm-standard），反查只许有一处（orchestrator-join 的 priceForModel）——那一跳以前躺在这行，
-  // 写错就恒 null、闸恒惰，而单测全绿（它们直接注入 spentUsd）。**名字本身**要取自本 run 真拨的那一档
-  // （`budgetPriceKeyOf`）：读设置盘字段会在「model 留空」与「per-run 指定档位」下和实付分叉。
-  // 表里没有 / 不可知 ⇒ 美元闸惰掉并在提醒块里明写，**绝不**按 $0 继续烧（「把不可知记成免费」）。
-  // 计量窗口 = view.window（本目标之后那段），与证据/写盘同轴：设 $0.5 之前会话已花多少与这个闸无关。
-  // **worker 那一段用回执里已入账的表价**，不再按会话那一档估：会话档与 worker 档在本仓价表里
-  // 差到 40 倍，一乘就把闸与同一屏的回执弄成两个数（能力 39 修的是成本闸，这一支是同一族的第二支）。
-  const { spentUsd, unbookedWorkers } = goalWindowSpend(view.window, model);
-  const decision = goalStopDecision({
-    turn: view.turn,
-    spec: view.spec,
-    spentUsd,
-    evidence: view.evidence,
-    wrote: view.wrote,
-    truncated: view.truncated,
-  });
-  if (decision.kind === "done") return null;
-  if (decision.kind === "stop") {
-    const ev: AgentEvent = { type: "goal_stopped", reason: decision.reason, turn: view.turn, evidence: view.evidence };
-    await emitGoalEvent(args.logPath, args.sessionId, ev);
-    return null;
-  }
-  const turn = view.turn + 1;
-  return {
-    // hint 只有「上一轮被收走」那一支会给；默认那一子句（针对红字继续）在本轮没有红字时会指错方向。
-    message: goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint, unbookedWorkers),
-    origin: { kind: "goal", turn, max_turns: view.spec.maxTurns },
-  };
-}
-
-/** IPC "agent:goal-set"：给某个会话设定/改设目标，或清除它（goal 模式的唯一写入面）。
- *  与在途 run 并发时只做一件事——追加一条 goal_set；续跑判据在 run 结束时才读它，所以中途改设
- *  会自然从下一轮生效（不改写在飞的 run，也不锁住输入框）。
- *  `clear` 不开新事件也不开通道：停 = 追加一条带理由的 `goal_stopped`，而「停过的目标不许被
- *  用户下一条消息复活」这条语义已经有锚点守着，清除于是天然复用终态面。 */
-export async function handleGoalSet(req: {
-  sessionId?: string;
-  objective?: unknown;
-  maxTurns?: unknown;
-  maxUsd?: unknown;
-  clear?: unknown;
-}): Promise<{ ok: boolean; error?: string; clamped?: string[] }> {
-  try {
-    const dir = requireSessionsDir();
-    const sessionId = req.sessionId ?? (await store().get()).currentSession;
-    if (typeof sessionId !== "string" || sessionId === "") return { ok: false, error: "没有当前会话，目标无处可挂" };
-    const logPath = pathOf(dir, sessionId);
-    if (req.clear === true) {
-      // 新建会话还没落过一行 ⇒ 读日志会 ENOENT。那是"没有目标"，不是文件错误；其余错误照常抛出可见。
-      const events = await replay(logPath).catch((err: unknown) => {
-        if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return [] as AgentEvent[];
-        throw err;
-      });
-      const view = projectGoal(events);
-      if (view === null) return { ok: false, error: "这个会话没有设过目标 ⇒ 无可清除（不补记空停止）" };
-      if (view.stopped !== null) return { ok: true }; // 已停：幂等返回，不再落第二条停止
-      const stopped: AgentEvent = {
-        type: "goal_stopped",
-        reason: "用户清除目标 ⇒ 不再自动续跑（还要接着跑就重新设一个目标）",
-        turn: view.turn,
-        evidence: view.evidence,
-      };
-      await emitGoalEvent(logPath, sessionId, stopped);
-      return { ok: true };
-    }
-    const parsed = parseGoalSpec({ objective: req.objective, maxTurns: req.maxTurns, maxUsd: req.maxUsd });
-    if (parsed.spec === null) return { ok: false, error: parsed.errors.join("；") };
-    const ev: AgentEvent = {
-      type: "goal_set",
-      objective: parsed.spec.objective,
-      max_turns: parsed.spec.maxTurns,
-      max_usd: parsed.spec.maxUsd,
-    };
-    await emitGoalEvent(logPath, sessionId, ev);
-    return { ok: true, ...(parsed.clamped.length > 0 ? { clamped: parsed.clamped } : {}) };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
-
-/** IPC "agent:decide" 的处理函数（scope: once / session_kind / always，§10.4 审批卡回写）。 */
-export function handleAgentDecide(askId: string, approved: boolean, scope?: AskScope): boolean {
-  return appAskGate.decide(askId, approved, "user", scope ?? "once");
-}
-
-// ---- M3a：card_action 回写协议（§10.3）——审批应答与取消的唯一事件流入口 ----
-
-export interface CardActionRequest {
-  cardId: string;
-  sourceEventId: number;
-  cardType: string;
-  action: string;
-  payload?: Record<string, unknown>;
-  scope?: AskScope;
-  targetAgentId?: string;
-}
-
-/** card_action 处理：落流（card_action 事件）→ 路由（worker 审批决议 / agent 取消）。
- *  审批解耦（§4.4.3）：父 turn 结束后仍可应答——落流与路由走编排器绑定管线，不依赖活动 session。
- *  §11.7.6：worker scope=always 的 card_action 拒绝落流（先于写入检查，审批保持 pending 可再决议）。 */
-export async function handleCardAction(req: CardActionRequest): Promise<{ ok: boolean; error?: string; injected?: boolean }> {
-  // P3（审查）：边界形状校验（先于落流）——req=null/缺必备字段时旧实现直接 TypeError 或把垃圾
-  // payload 写进会话 JSONL 审计面。路由级失败（未知 agent 等）仍照常落流（审计语义：动作已发生）。
-  if (
-    typeof req?.cardId !== "string" || req.cardId === "" ||
-    typeof req.sourceEventId !== "number" || !Number.isInteger(req.sourceEventId) ||
-    typeof req.cardType !== "string" || req.cardType === "" ||
-    typeof req.action !== "string" || req.action === ""
-  ) {
-    return { ok: false, error: "card-action: req 非法（需 cardId/sourceEventId(int)/cardType/action 均为非空合法值）" };
-  }
-  if (req.scope === "always" && req.targetAgentId) {
-    return {
-      ok: false,
-      error: "worker 永不写 always：scope=always 仅主会话可发（§11.7.6），该 card_action 拒绝落流",
-    };
-  }
-  const approvalId =
-    req.cardType === "approval"
-      ? typeof req.payload?.approval_id === "string"
-        ? req.payload.approval_id
-        : req.cardId
-      : null;
-  const orch =
-    (req.targetAgentId ? orchestratorForAgent(req.targetAgentId) : null) ??
-    (req.targetAgentId ? orchestratorForMerge(req.targetAgentId) : null) ?? // M3b：write worker 终态后 emit 仍须经控制塔路由（合并/评论发生在 done 之后）
-    (approvalId ? orchestratorForApproval(approvalId) : null) ??
-    activeOrchestrator ??
-    // 崩溃恢复重派**只在这一支**允许兜底建编排器：重启后内存里的 session/activeOrchestrator 都归零，
-    // 少了这一跳，下面那句 emit 守卫会先一步把「重派」挡在「无可用事件管线」上——恢复卡的按钮
-    // 恰好在它唯一要用的场景里点不动。其余动作（审批/取消/合并）仍照旧：路由不到就是路由不到，
-    // 不替一个已经不在的 worker 现场凭空建一个编排器。
-    (req.action === "respawn" && req.cardType === "agent_result" ? await ensureSessionOrchestrator() : null);
-  const emit = session?.emit ?? (orch ? (e: AgentEvent) => orch.appendProtocol(e) : null);
-  if (!emit) return { ok: false, error: "无可用事件管线（fail-closed）" };
-  const event: AgentEvent = {
-    type: "card_action",
-    card_id: req.cardId,
-    source_event_id: req.sourceEventId,
-    card_type: req.cardType,
-    action: req.action,
-    ...(req.payload ? { payload: req.payload } : {}),
-    ...(req.scope ? { scope: req.scope } : {}),
-    ...(req.targetAgentId ? { target_agent_id: req.targetAgentId } : {}),
-  };
-  await emit(event);
-  // ---- M3b：合并控制塔 + 评审闭环（diff 卡动作经同一 card_action 协议；合并唯一出口 = git 面板，§4.3）----
-  if (req.action === "merge" && req.targetAgentId && (req.cardType === "diff" || req.cardType === "merge_tower")) {
-    const owner = orchestratorForMerge(req.targetAgentId);
-    if (!owner) return { ok: false, error: "该 agent 无合并控制塔归属（未知或 worktree 已收尾）: " + req.targetAgentId };
-    return await owner.mergeWorker(req.targetAgentId, { force: req.payload?.force === true });
-  }
-  if (req.action === "reject" && req.targetAgentId && (req.cardType === "diff" || req.cardType === "merge_tower")) {
-    const owner = orchestratorForMerge(req.targetAgentId);
-    if (!owner) return { ok: false, error: "该 agent 无合并控制塔归属（未知或 worktree 已收尾）: " + req.targetAgentId };
-    return await owner.rejectWorker(req.targetAgentId, { keepBranch: req.payload?.keep_branch === true });
-  }
-  if (req.action === "comment" && req.targetAgentId && req.cardType === "diff") {
-    const owner = orchestratorForAgent(req.targetAgentId) ?? orchestratorForMerge(req.targetAgentId);
-    if (!owner) return { ok: false, error: "该 agent 无归属编排器: " + req.targetAgentId };
-    const path = typeof req.payload?.path === "string" ? req.payload.path : "";
-    const line = typeof req.payload?.line === "number" ? req.payload.line : Number(req.payload?.line);
-    const body = typeof req.payload?.body === "string" ? req.payload.body : "";
-    if (path === "" || !Number.isInteger(line) || (line as number) < 1 || body.trim() === "") {
-      return { ok: false, error: "comment 需要 payload{path, line>=1, body 非空}" };
-    }
-    // diff_comment 落流（§3.4 新事件）→ 定向 user_message 注入 worker 子流（评审闭环；评论回传不挂 turn）
-    await emit({ type: "diff_comment", agent_id: req.targetAgentId, path, line: line as number, body, ts: Date.now() } as AgentEvent);
-    const r = await owner.injectComment(req.targetAgentId, path, line as number, body);
-    /* injected:false 是真事实，不是失败：worker 取消中 / 已终态且 worktree 已收尾 ⇒ 评论只落流、
-       没有进它的子流。这一面曾经被吞成 {ok:true}——界面就只剩「已送进子流」可说，等于把没送达说成送达。 */
-    if (!r.ok) return { ok: false, error: r.error };
-    return { ok: true, injected: r.injected, ...(r.injected || !r.error ? {} : { error: r.error }) };
-  }
-  if (req.action === "clean" && req.cardType === "orphan") {
-    const name = typeof req.payload?.name === "string" ? req.payload.name : "";
-    if (name === "" || !/^[A-Za-z0-9_-]+$/.test(name)) return { ok: false, error: "orphan clean 需要 payload{name（wt- 后的 agent_id）}" };
-    const ws = await currentWorkspace();
-    const r: WorktreeCleanupResult = await cleanOrphanWorktree(ws, name);
-    return r.removed ? { ok: true } : { ok: false, error: "孤儿 worktree 清理失败：" + (r.error ?? "未知") };
-  }
-  // ---- M3c 卡死出口一（§4.4.8）：「继续」= card_action(resume) 清除 stuck 态（worker 恢复运行）----
-  if (req.action === "resume" && req.targetAgentId) {
-    const owner = orchestratorForAgent(req.targetAgentId);
-    if (!owner) return { ok: false, error: "该 agent 无归属编排器（未知或已终态）" };
-    const okResume = owner.resumeAgent(req.targetAgentId);
-    return okResume ? { ok: true } : { ok: false, error: "agent 无卡死态: " + req.targetAgentId };
-  }
-  // ---- M3c 崩溃恢复出口（§4.4.9）：恢复卡「重派」= 全新 agent_id 按原 spawn 参数再 spawn ----
-  if (req.action === "respawn" && req.cardType === "agent_result") {
-    const r = req.payload?.respawn as RespawnArgs | undefined;
-    if (!r || typeof r.task !== "string" || r.task.trim() === "" || (r.mode !== "read" && r.mode !== "write")) {
-      return { ok: false, error: "respawn 需要 payload.respawn（恢复卡原 spawn 参数：mode/task 必填）" };
-    }
-    const orch = activeOrchestrator ?? (await ensureSessionOrchestrator());
-    if (!orch) return { ok: false, error: "无可用会话日志（重派需要会话上下文；fail-closed）" };
-    const rr = await orch.respawn(r, { callId: "respawn-" + String(Date.now()) });
-    return rr.ok ? { ok: true } : { ok: false, error: rr.output };
-  }
-  if (approvalId !== null) {
-    const owner = orchestratorForApproval(approvalId);
-    if (!owner) return { ok: false, error: "审批发起编排器已不可达（fail-closed）" };
-    const r = owner.decideWorkerApproval(approvalId, req.action === "approve", req.scope ?? "once");
-    return r.ok ? { ok: true } : { ok: false, error: r.error };
-  }
-  if (req.action === "cancel" && req.targetAgentId) {
-    const owner = orchestratorForAgent(req.targetAgentId);
-    if (!owner) return { ok: false, error: "该 agent 无归属编排器（未知）" };
-    const okCancel = owner.cancelAgent(req.targetAgentId);
-    return okCancel ? { ok: true } : { ok: false, error: "agent 不存在或已终态: " + req.targetAgentId };
-  }
-  return { ok: true };
-}
-
-/** IPC "agent:clarify" 的处理函数：澄清表单提交，值挂回原 tool_use id（与 turn 解耦）。 */
-export function handleClarifySubmit(callId: string, answers: ClarifyAnswerMap): boolean {
-  return appClarifyGate.submit(callId, answers);
-}
-
-/** IPC "agent:plan" 的处理函数：批准/拒绝当前 plan；决议走会话事件管线落盘并推送 UI（plan 卡状态）。 */
-export async function handlePlanDecide(approved: boolean, callId?: string): Promise<boolean> {
-  const pending = appPlanGate.pendingIds;
-  const target = callId ?? pending[0];
-  const ok = approved ? appPlanGate.approve(callId) : appPlanGate.reject(callId);
-  if (!ok) return false; // P3（审查）：settle=false（陈旧/重复/未知 callId）不落事件——不造「已批准」假记录
-  const s = session;
-  if (s?.emit) {
-    const event: AgentEvent = { type: "plan_approved", callId: target ?? "", approved };
-    await s.emit(event);
-  }
-  return ok;
-}
-
-/** IPC "agent:run-cancel"（P3 审查）：取消当前交互 run——信号沿 runLoop 轮界/门等待/长驻工具透传；
- *  unattended run 不经此通道（取消归 runTimeout/门控）。无活动交互 run → fail-visible。 */
-export function handleRunCancel(): { ok: boolean; error?: string } {
-  const c = interactiveRunAbort;
-  if (!c) return { ok: false, error: "无活动交互 run（取消不可达）" };
-  c.abort();
-  return { ok: true };
-}
-
-
-/** IPC "agent:state" 的处理函数。 */
-export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot; plugins?: PluginPanelSnapshot; sidechat?: SidechatPanelSnapshot; worktree?: { orphans: string[] }; schedule?: ScheduleSnapshot; license?: LicenseState; providerKeys?: { available: boolean; stored: string[]; envActive: boolean }; about?: { version: string } }> {
-  let memory: MemorySnapshot | undefined;
-  try {
-    memory = await memorySnapshot();
-  } catch {
-    memory = undefined; // 快照失败不阻塞 state（沙箱状态是主应答）
-  }
-  let plugins: PluginPanelSnapshot | undefined;
-  try {
-    const rt = currentPluginRuntime();
-    plugins = rt ? rt.snapshot() : (lastPluginSnapshot ?? await pluginSnapshotLite());
-  } catch {
-    plugins = undefined;
-  }
-  let sidechat: SidechatPanelSnapshot | undefined;
-  try {
-    sidechat = await handleSidechatState();
-  } catch {
-    sidechat = undefined;
-  }
-  // M3b 孤儿 worktree 扫描（§4.4.9：启动/会话重开语义 = state 拉取时现算；只列不自动删）
-  let worktree: { orphans: string[] } | undefined;
-  try {
-    worktree = { orphans: await scanOrphanWorktrees() };
-  } catch {
-    worktree = undefined;
-  }
-  // M4a schedule 面板快照（真缺陷修复，半托截图路径抓出：schedule 通道挂了 IPC handler 但从未进 state 应答，
-  // 面板 getState().schedule 恒 undefined → 任务列表/运行历史永久为空）
-  let schedule: ScheduleSnapshot | undefined;
-  try {
-    schedule = await handleScheduleSnapshot();
-  } catch {
-    schedule = undefined;
-  }
-  // M4b：license 状态（valid/expired/inactive/invalid；未激活 → renderer 引导横幅）与 provider key 状态面
-  let license: LicenseState | undefined;
-  try {
-    license = await handleLicenseStatus();
-  } catch {
-    license = undefined;
-  }
-  let providerKeys: { available: boolean; stored: string[]; envActive: boolean } | undefined;
-  try {
-    providerKeys = await handleProviderKeyStatus();
-  } catch {
-    providerKeys = undefined;
-  }
-  return { sandbox: sandboxState, memory, plugins, sidechat, worktree, schedule, license, providerKeys, about: { version: getAppVersion() } };
-}
-
-/** M3b 孤儿 worktree 扫描（纯投影面）：.agents/wt-* 目录 − 事件流有终态/收尾记录的 agent。 */
-export async function scanOrphanWorktrees(workspace?: string): Promise<string[]> {
-  const ws = workspace ?? (await currentWorkspace());
-  const dirs = await listWorktreeDirs(ws);
-  if (dirs.length === 0) return [];
-  const events = lastLogPath ? await replay(lastLogPath).catch(() => []) : [];
-  return orphanWorktrees(
-    dirs,
-    events.map((e) => e as { type: string; agent_id?: string; status?: string; callId?: string }),
-  );
-}
-
-/** 「此刻这个会话的工作区」的唯一答案：跑过就用最近一次 run 的，没跑过用**用户配置的**
- *  （settings.workspace），两者都没有才落到缺省靶子。
- *  此前有六处各写一份 `getLastWorkspace() ?? WORKSPACE`：一轮都没跑时，插件面板 / 信任决议 /
- *  孤儿 worktree 扫描 / sidechat 全都在扫 fixtures/todo-app，而不是用户真正打开的项目——
- *  面板上列出来的「已信任」可能根本是另一个仓的插件。 */
-export async function currentWorkspace(): Promise<string> {
-  const last = getLastWorkspace();
-  if (last) return last;
-  let conf: string | null = null;
-  try {
-    conf = (await store().get()).workspace;
-  } catch {
-    conf = null; // headless 脚本未装配 settings ⇒ 与旧行为一致（缺省工作区）
-  }
-  return conf ?? WORKSPACE;
-}
-
-/** M2e run 装配与 M2g 运行间隙决议共用的插件运行时配置（信任文件路径的单一事实源在 PluginRuntime.load）。
- *  导出（第 438 页）是因为 `cairn --plugins` 也吃这一批根：CLI 若自己再拼一遍 env 与路径，
- *  它列出来的面可以和一次真 run 扫到的面不同——那正是「照着列表去批准」这条路最坏的失效。 */
-export function pluginRuntimeOpts(workspace: string): Omit<Parameters<typeof PluginRuntime.load>[0], "mode"> {
-  return {
-    ...(process.env.M2E_USER_PLUGINS ? { userPluginsDir: process.env.M2E_USER_PLUGINS } : {}),
-    projectPluginsDir: join(workspace, ".agent", "plugins"),
-    ...(process.env.M2E_LOOSE_SKILLS ? { looseRoots: [process.env.M2E_LOOSE_SKILLS] } : {}),
-    workspace,
-    pluginDataRoot: pluginDataRootOf(process.env, homedir()),
-    ...(process.env.M2E_TRUST_FILE ? { trustFile: process.env.M2E_TRUST_FILE } : {}),
-  };
-}
-
-/** 运行间隙的冷快照：还没有 runtime（本进程一轮都没跑过）时也照样发现一次并留档。
- *  少了这一条，插件面板对「装了但从未跑过」的会话永远是空的——而那恰恰是唯一需要看到
- *  「待信任」并授权的时刻（§9.8 未信任不激活：没有列表就没有授权口）。
- *  与 handlePluginDecide 的 lite 分支同款配置、同样是只读发现（不 connectMcp、不跑钩子之外的动作）。 */
-async function pluginSnapshotLite(): Promise<PluginPanelSnapshot> {
-  const lite = await PluginRuntime.load(pluginRuntimeOpts(await currentWorkspace()));
-  try {
-    lastPluginSnapshot = lite.snapshot();
-    return lastPluginSnapshot;
-  } finally {
-    await lite.shutdown().catch(() => {});
-  }
-}
-
-/** IPC "agent:plugin-decide"：信任卡决议（批准/拒绝）→ 决议持久化 + 同样本重新激活（M2e §9.8）。
- *  M2g 收口修复：运行间隙（runtime 已回收）点击不再静默 ok:false——按 run 同款配置做一次轻量
- *  发现 + 决议落信任文件（下次 load 生效），留档快照同步改写（面板徽标即时反映）。 */
-export async function handlePluginDecide(pluginName: string, trusted: boolean): Promise<{ ok: boolean; snapshot?: PluginPanelSnapshot }> {
-  const rt = currentPluginRuntime();
-  if (rt) {
-    const found = await rt.trustDecide(pluginName, trusted);
-    if (!found) return { ok: false };
-    await rt.connectMcp(); // 信任后同样本开始生效（MCP 补连；hook 引擎已在重建后的 runtime 内）
-    return { ok: true, snapshot: rt.snapshot() };
-  }
-  const lite = await PluginRuntime.load(pluginRuntimeOpts(await currentWorkspace()));
-  let decided = false;
-  try {
-    decided = await lite.trustDecide(pluginName, trusted);
-  } finally {
-    await lite.shutdown().catch(() => {});
-  }
-  if (!decided) return { ok: false };
-  if (lastPluginSnapshot) {
-    lastPluginSnapshot = {
-      ...lastPluginSnapshot,
-      plugins: lastPluginSnapshot.plugins.map((p) => (p.name === pluginName ? { ...p, trust: trusted ? "trusted" : "declined" } : p)),
-      // 审查 S2-12（任务 4.6）：散装 skill 走同一出口后，留档快照也要同步改写——否则运行间隙
-      // 批准一个 loose skill，面板徽标仍停在「待信任」（rt 在场时走 rt.snapshot() 不受影响）。
-      looseSkills: lastPluginSnapshot.looseSkills.map((l) => (l.name === pluginName ? { ...l, trust: trusted ? "trusted" : "declined" } : l)),
-    };
-  }
-  return { ok: true, snapshot: lastPluginSnapshot ?? undefined };
-}
 
 
 
 
 
-// ---- M2f：辅助对话（sidechat）IPC 面 ----
-// 独立会话：own JSONL 文件组 + own loop + own 上下文；写向工具从工具表摘除（只读白名单硬闸）。
-// 主会话零打扰：sidechat 只读主会话 JSONL，永不 append 它（唯一写主会话的路径是用户显式 /promote）。
 
-/** M2F_SIDECHAT_DEMO 演示剧本（env 门控；缺省零行为）——截图/演示用，不进验收链。
- *  M2g：剧本外置为 fixtures/demo/sidechat-demo.jsonl（冻结 sha 在 scripts/frozen-demo-sha256.json）；
- *  读不到时回退这份内联常量并告警（fail-visible，不静默换剧本）。 */
-const SIDECHAT_DEMO_INLINE = [
-  {
-    type: "assistant_message",
-    content:
-      "旁路只读调查（不改主会话）：我读了 src/agent/loop.ts 与 src/agent/context.ts。" +
-      "结论：runLoop 的上下文来自 projectContext(seen) 投影，压缩只产出 compaction 事件、事件流零删改（loop.ts:67 / context.ts:46）。",
-  },
-] as Parameters<typeof scriptedSidechatModel>[0];
 
-function sidechatDemoScript(): ReturnType<typeof scriptedSidechatModel> {
-  let script: Parameters<typeof scriptedSidechatModel>[0] = SIDECHAT_DEMO_INLINE;
-  try {
-    const raw = readFileSync(SIDECHAT_DEMO_FIXTURE, "utf8");
-    const parsed = raw
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l !== "")
-      .map((l) => JSON.parse(l) as Parameters<typeof scriptedSidechatModel>[0][number]);
-    if (parsed.length > 0) script = parsed;
-  } catch (err) {
-    console.warn("[sidechat] 演示剧本读取失败，回退内联常量:", err instanceof Error ? err.message : String(err));
-  }
-  return scriptedSidechatModel(script);
-}
 
-/** 选模型：CAIRN_API_KEY 在场 → GLM（createSidechatProvider 缺省）；演示通道 → 脚本；否则 fail-closed。 */
-function resolveSidechatModel(explicit?: SidechatModel): { model?: SidechatModel; error?: string } {
-  if (explicit) return { model: explicit };
-  if (process.env.CAIRN_API_KEY) return {}; // 缺省 = GLM 暗卷
-  if (process.env.M2F_SIDECHAT_DEMO === "1") return { model: sidechatDemoScript() };
-  return { error: "无 CAIRN_API_KEY：sidechat 真实模型不可用（fail-closed，可注入脚本模型）" };
-}
-
-/** M2g §7.5：sidechat 自身历史压缩用的摘要器（与主会话**同一实现**，参数独立配置）。
- *  CAIRN_API_KEY → GLM；演示通道 → 冻结 mock；都没有 → undefined（走既有 overflow 紧急截断）。 */
-function resolveSidechatSummarizer(): ReturnType<typeof createGlmSummarizer> | undefined {
-  if (process.env.CAIRN_API_KEY) return createGlmSummarizer();
-  if (process.env.M2F_SIDECHAT_DEMO === "1") {
-    return createMockSummarizer("## Objective\n- 旁路会话自身历史压缩（演示通道，冻结摘要）。\n");
-  }
-  return undefined;
-}
-
-export async function handleSidechatCreate(parentSessionId: string, name?: string): Promise<{ id: string }> {
-  return { id: await createSidechatSession(requireSessionsDir(), parentSessionId, name) };
-}
-
-/** 跑一轮 sidechat（own loop）。事件只落 sidechat 自己的 JSONL；主会话文件字节不变。 */
-export async function handleSidechatAsk(
-  sidechatId: string,
-  message: string,
-  over: { parentSessionId?: string; model?: SidechatModel; summarizer?: Summarizer; onEvent?: (e: AgentEvent) => void } = {},
-): Promise<{ ok: boolean; error?: string; events?: AgentEvent[] }> {
-  try {
-    const dir = requireSessionsDir();
-    const parentId = over.parentSessionId ?? (await store().get()).currentSession ?? "";
-    const mainLogPath = parentId !== "" ? pathOf(dir, parentId) : (lastLogPath ?? "");
-    const picked = resolveSidechatModel(over.model);
-    if (picked.error) return { ok: false, error: picked.error };
-    const events = await runSidechatTurn({
-      sidechatDir: sidechatDir(dir, sidechatId),
-      mainLogPath,
-      workspace: await currentWorkspace(),
-      message,
-      ...(picked.model ? { model: picked.model } : {}),
-      ...(over.summarizer ? { summarizer: over.summarizer } : { summarizer: resolveSidechatSummarizer() }),
-      onEvent: (e) => over.onEvent?.(e),
-    });
-    return { ok: true, events };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
-
-/** /promote：sidechat 结论 → 主会话一条 user_message（带 origin）；过输出扫描。 */
-export async function handleSidechatPromote(req: {
-  sidechatId: string;
-  parentSessionId: string;
-  sourceEventIds: number[];
-  note?: string;
-  content?: string;
-}): Promise<{ ok: boolean; error?: string; event?: AgentEvent }> {
-  try {
-    const dir = requireSessionsDir();
-    const mainLogPath = pathOf(dir, req.parentSessionId);
-    const res = await promoteToMain({
-      mainLogPath,
-      sidechatLogPath: sidechatEventsPath(dir, req.sidechatId),
-      sidechatId: req.sidechatId,
-      sourceEventIds: req.sourceEventIds,
-      ...(req.note !== undefined ? { note: req.note } : {}),
-      ...(req.content !== undefined ? { content: req.content } : {}),
-    });
-    if (!res.ok) return { ok: false, error: res.error };
-    // 上屏：主会话活流（renderer 渲染为 promote 卡）
-    if (res.event) hooks.onEvent?.(res.event);
-    return { ok: true, event: res.event };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
-
-/** sidechat 面板快照（纯投影）：会话清单 + 各自最近消息 + 已提升记录（由主会话 origin 反向投影）。 */
-export async function handleSidechatState(parentSessionId?: string): Promise<SidechatPanelSnapshot> {
-  const dir = getSessionsDir();
-  if (!dir) return { parentSessionId: null, sessions: [], promoted: [] };
-  const parent = parentSessionId ?? (await store().get()).currentSession ?? null;
-  const infos = await listSidechatSessions(dir, parent ?? undefined);
-  const sessions = [] as SidechatPanelSnapshot["sessions"];
-  for (const info of infos) {
-    let events: AgentEvent[] = [];
-    try {
-      events = await readSidechatEvents(dir, info.id);
-    } catch {
-      events = [];
-    }
-    const messages: SidechatPanelSnapshot["sessions"][number]["messages"] = [];
-    let usage = { inputTokens: 0, outputTokens: 0, usageCount: 0, compactionCount: 0 };
-    events.forEach((e, i) => {
-      if (e.type === "user_message") messages.push({ eventId: i + 1, role: "user", text: e.content });
-      else if (e.type === "assistant_message") messages.push({ eventId: i + 1, role: "assistant", text: e.content });
-      else if (e.type === "usage") {
-        usage.inputTokens += e.inputTokens;
-        usage.outputTokens += e.outputTokens;
-        usage.usageCount++;
-      } else if (e.type === "compaction") usage.compactionCount++;
-    });
-    sessions.push({ id: info.id, parentId: info.parentId, lines: info.lines, mtimeMs: info.mtimeMs, messages, usage });
-  }
-  // 已提升：主会话里带 origin 的 user_message（反向投影，零新增事件类型）
-  const promoted: SidechatPanelSnapshot["promoted"] = [];
-  if (parent) {
-    try {
-      const mainEvents = await readSessionEvents(dir, parent);
-      mainEvents.forEach((e, i) => {
-        // 只投影 sidechat 提升记录；goal 续跑轮不是"提升"，它的面在 goal 芯片里。
-        if (e.type === "user_message" && e.origin?.kind === "sidechat") {
-          promoted.push({
-            eventId: i + 1,
-            sessionId: e.origin.session_id,
-            sourceEventIds: e.origin.source_event_ids,
-            ...(e.origin.note !== undefined ? { note: e.origin.note } : {}),
-          });
-        }
-      });
-    } catch {
-      /* 主会话不存在：无已提升记录 */
-    }
-  }
-  return { parentSessionId: parent, sessions, promoted };
-}
-
-/** M2F_SIDECHAT_DEMO=1：主 run 收束后跑 3 轮 sidechat + 一次 promote（截图/演示通道，缺省零行为）。 */
-async function runSidechatDemo(sessionId: string | undefined, parentLogPath: string, pipeline: (e: AgentEvent) => Promise<void>): Promise<void> {
-  try {
-    const dir = requireSessionsDir();
-    const parentId = sessionId ?? (await store().get()).currentSession ?? "demo";
-    const id = await createSidechatSession(dir, parentId, "旁路调查");
-    const questions = [
-      "主会话现在在改哪个文件？",
-      "压缩之后上下文是怎么重组的？",
-      "总结一句可提升的结论。",
-    ];
-    for (const q of questions) {
-      await handleSidechatAsk(id, q, { parentSessionId: parentId, model: sidechatDemoScript() });
-    }
-    const events = await readSidechatEvents(dir, id);
-    const lastAssistant = [...events.keys()].filter((i) => events[i].type === "assistant_message").pop();
-    if (lastAssistant !== undefined) {
-      const res = await promoteToMain({
-        mainLogPath: parentLogPath,
-        sidechatLogPath: sidechatEventsPath(dir, id),
-        sidechatId: id,
-        sourceEventIds: [lastAssistant + 1],
-        note: "旁路结论提升（演示）",
-      });
-      if (res.ok && res.event) await pipeline(res.event);
-    }
-  } catch (err) {
-    console.warn("[sidechat] 演示通道失败:", err instanceof Error ? err.message : String(err));
-  }
-}
 
 // ---- 公开面（拆分后不变）：以下实现住在轻模块里，本文件按原路径继续导出 ----
+export {
+  handleAgentDecide, handleCardAction, handleClarifySubmit, handlePlanDecide, handleRunCancel,
+  type CardActionRequest,
+} from "./card-action-handlers";
+export {
+  pluginToolSpecsFromRuntime, sessionToolFace, withSkillAllowNote, type PluginToolSource,
+} from "./tool-gates";
+export {
+  currentWorkspace, handleAgentState, handlePluginDecide, pluginRuntimeOpts, scanOrphanWorktrees,
+} from "./state-handlers";
+export {
+  compactSessionLog, resolveSafeMode, runSecurityReportHook, shouldRunSecurityReport,
+} from "./compact-and-report";
+export {
+  handleSidechatAsk, handleSidechatCreate, handleSidechatPromote, handleSidechatState,
+} from "./sidechat-handlers";
+export { handleGoalSet } from "./goal-handlers";
+export {
+  automationsScheduled, getScheduler, handleScheduleDelete, handleScheduleRunNow, handleScheduleSnapshot,
+  handleScheduleUpsert, initScheduler, makeScheduledExecutor, scheduleDataDir, schedulerRunning,
+  startScheduler, stopScheduler, updateScheduleCap,
+} from "./scheduler-runtime";
 export {
   getSettings, handleLicenseStatus, handleProviderKeyDelete, handleProviderKeySet, handleProviderKeyStatus,
   handleUpdateCheck, initLicenseStore, initSettingsStore, initUpdateContext, providerInfo, setSettings,

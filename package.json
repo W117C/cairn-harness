@@ -1,6 +1,6 @@
 {
   "name": "cairn-harness",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
@@ -47,6 +47,7 @@
     "repo-hygiene-check": "node --import tsx scripts/repo-hygiene-check.ts",
     "cost-per-progress-check": "node --import tsx scripts/cost-per-progress-check.ts",
     "desktop-boundary-check": "node --import tsx scripts/desktop-boundary-check.ts",
+    "desktop-test": "pnpm --filter cairn-desktop test",
     "head-import-check": "node --import tsx scripts/head-import-face.ts",
     "head-cert-check": "node --import tsx scripts/head-cert.ts --tree=.worktrees/gate-head-cert",
     "mutate-verify": "node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify",

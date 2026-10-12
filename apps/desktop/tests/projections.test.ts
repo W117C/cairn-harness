@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveRunPhase, pendingClarifyOf, pendingPlanOf, projectStream, relativeTime, usageAggregate } from "../src/renderer/projections";
+import { deriveRunPhase, formatRevertNotice, pendingClarifyOf, pendingPlanOf, projectStream, relativeTime, roundTimeline, turnChanges, usageAggregate } from "../src/renderer/projections";
 import type { AgentEvent } from "../../../src/main/ipc-protocol";
 
 const ev = (partial: Record<string, unknown>) => partial as unknown as AgentEvent;
@@ -94,7 +94,13 @@ describe("投影 v2", () => {
   });
   it("usageAggregate 与 relativeTime", () => {
     expect(usageAggregate([ev({ type: "usage", inputTokens: 10, outputTokens: 5 }), ev({ type: "usage", inputTokens: 1, outputTokens: 2 })]))
-      .toEqual({ inputTokens: 11, outputTokens: 7, usageCount: 2 });
+      .toEqual({ inputTokens: 11, outputTokens: 7, usageCount: 2, cacheReadTokens: 0, lastInputTokens: 1 });
+    // 缓存读：缺席不冒充 0（没量到 ≠ 量到了 0）；lastInput = 末轮输入（算上下文水位用，不是累加值）
+    expect(usageAggregate([
+      ev({ type: "usage", inputTokens: 100, outputTokens: 5, cacheReadInputTokens: 90 }),
+      ev({ type: "usage", inputTokens: 200, outputTokens: 5 }),
+    ])).toEqual({ inputTokens: 300, outputTokens: 10, usageCount: 2, cacheReadTokens: 90, lastInputTokens: 200 });
+    expect(usageAggregate([ev({ type: "usage" })]).lastInputTokens).toBe(0);
     expect(relativeTime(1_000_000, 1_000_000 - 30_000)).toBe("刚刚");
     expect(relativeTime(1_000_000, 1_000_000 - 5 * 60_000)).toBe("5 分钟前");
   });
@@ -144,7 +150,7 @@ describe("投影 v2 补钉（钉死条款里任务书用例未直接覆盖的面
     expect(relativeTime(1_000_000, 1_000_000 - 3 * day)).toBe("3 天前");
     const d = new Date(2020, 0, 2, 3, 4, 5); // 本地时区构造 ⇒ 期望串与时区无关
     expect(relativeTime(d.getTime() + 8 * day, d.getTime())).toBe("2020-01-02");
-    expect(usageAggregate([ev({ type: "usage" })])).toEqual({ inputTokens: 0, outputTokens: 0, usageCount: 1 });
+    expect(usageAggregate([ev({ type: "usage" })])).toEqual({ inputTokens: 0, outputTokens: 0, usageCount: 1, cacheReadTokens: 0, lastInputTokens: 0 });
   });
 });
 
@@ -180,5 +186,86 @@ describe("M3-4 agent 子流过滤（任务书裁定：带 agent_id 不进主流/
     expect(deriveRunPhase([ev({ type: "assistant_delta", callId: "c", text: "x" }), ev(workerCall), ev(workerResult)], false, false, false)).toBe("thinking");
     expect(deriveRunPhase([ev(workerCall), ev(workerResult), ev({ type: "assistant_delta", callId: "c", text: "x" })], false, false, false)).toBe("thinking");
     expect(deriveRunPhase([ev({ type: "tool_call", id: "t", name: "x", args: {} }), ev(workerResult)], false, false, false)).toBe("tool");
+  });
+});
+
+describe("v2.16 桌面接线投影（赞/踩与文件回滚的行锚）", () => {
+  const workerCall = { type: "tool_call", id: "w1", name: "run_shell", args: { command: "ls" }, agent_id: "a1" };
+
+  it("user 行带 1-based 轮号（主会话 user_message 计数）——与 core planTurnRevert 的轮口径同一份；worker 事件不成轮", () => {
+    const rows = projectStream([
+      ev({ type: "user_message", content: "第一轮" }),
+      ev(workerCall),
+      ev({ type: "user_message", content: "第二轮" }),
+      ev({ type: "user_message", content: "第三轮" }),
+    ]);
+    expect(rows.filter((r) => r.kind === "user").map((r) => (r.kind === "user" ? r.round : -1))).toEqual([1, 2, 3]);
+  });
+
+  it("assistant 行带 eventId（事件在会话 JSONL 的 1-based 行号，赞/踩的锚）；live 桶行同口径（锚首 delta 的行号）", () => {
+    // live 桶行：无终稿时未结桶成 live 行，锚在首 delta 的事件行号
+    const live = projectStream([
+      ev({ type: "user_message", content: "问" }),               // seq 0
+      ev({ type: "assistant_delta", callId: "c1", text: "答" }), // seq 1 → live 行 eventId 2
+    ]);
+    expect(live.filter((r) => r.kind === "assistant").map((r) => (r.kind === "assistant" ? r.eventId : 0))).toEqual([2]);
+    // 终稿行：终稿到达清空全部未结桶（既有语义），终稿行锚自身的事件行号
+    const final = projectStream([
+      ev({ type: "user_message", content: "问" }),      // seq 0
+      ev({ type: "assistant_message", content: "答" }), // seq 1 → 终稿行 eventId 2
+    ]);
+    expect(final.filter((r) => r.kind === "assistant").map((r) => (r.kind === "assistant" ? r.eventId : 0))).toEqual([2]);
+  });
+
+  it("formatRevertNotice：还原/删除计数恒在；manual/failed 有货才显并点名路径（看不见的降级等于没降级）", () => {
+    expect(formatRevertNotice(2, { restored: ["a.ts", "b.ts"], deleted: ["new.txt"], manual: [], failed: [] }))
+      .toBe("第 2 轮文件回滚：还原 2 个、删除 1 个");
+    expect(formatRevertNotice(1, {
+      restored: [],
+      deleted: [],
+      manual: [{ path: "late.ts", why: "本轮之后又被改过" }],
+      failed: [{ path: "../x", error: "越界" }],
+    })).toBe("第 1 轮文件回滚：还原 0 个、删除 0 个；需手动处理 1 个（late.ts）；失败 1 个（../x）");
+  });
+
+  it("roundTimeline（v2.12 rail 投影）：每轮一条（用户话 + 回复摘要首条 120 截断）；无模型行摘要为 null；单轮/空流为空", () => {
+    const rows = projectStream([
+      ev({ type: "user_message", content: "第一问" }),
+      ev({ type: "assistant_message", content: "第一答".repeat(60) }),
+      ev({ type: "user_message", content: "第二问" }),
+    ]);
+    const tl = roundTimeline(rows);
+    expect(tl).toHaveLength(2);
+    expect(tl[0]).toMatchObject({ round: 1, userText: "第一问" });
+    expect(tl[0]!.replySummary).toBe("第一答".repeat(60).slice(0, 120));
+    expect(tl[1]).toMatchObject({ round: 2, userText: "第二问", replySummary: null });
+    expect(roundTimeline([])).toEqual([]);
+    expect(roundTimeline(projectStream([ev({ type: "user_message", content: "单轮" })]))).toHaveLength(1);
+  });
+
+  it("turnChanges（C-32 投影）：写工具按轮聚合；change 缺席标 unknown；同文件去重；非写工具与 worker 写不计", () => {
+    const events = [
+      ev({ type: "user_message", content: "改一下" }),
+      ev({ type: "tool_call", id: "c1", name: "edit_file", args: { path: "a.ts" } }),
+      ev({ type: "tool_result", callId: "c1", ok: true, output: "", change: "modified", snapshotId: ".agent/snapshots/1--c1/a.ts" }),
+      ev({ type: "tool_call", id: "c2", name: "write_file", args: { path: "a.ts" } }), // 同文件第二笔：去重
+      ev({ type: "tool_result", callId: "c2", ok: true, output: "", change: "modified" }),
+      ev({ type: "tool_call", id: "c3", name: "write_file", args: { path: "new.ts" } }),
+      ev({ type: "tool_result", callId: "c3", ok: true, output: "" }), // change 缺席 ⇒ unknown
+      ev({ type: "tool_call", id: "c4", name: "run_shell", args: { command: "ls" } }), // 非写工具
+      ev({ type: "tool_result", callId: "c4", ok: true, output: "" }),
+      ev({ type: "tool_call", id: "w1", name: "write_file", args: { path: "w.ts" }, agent_id: "ag-1" }), // worker 写不计
+      ev({ type: "tool_result", callId: "w1", ok: true, output: "", change: "created", agent_id: "ag-1" }),
+      ev({ type: "user_message", content: "再改" }),
+      ev({ type: "user_message", content: "没写盘的一轮" }), // 空轮不落组
+    ];
+    const groups = turnChanges(events as unknown as AgentEvent[]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.round).toBe(1);
+    expect(groups[0]!.files).toEqual([
+      { path: "a.ts", change: "modified", snapshotId: ".agent/snapshots/1--c1/a.ts" },
+      { path: "new.ts", change: "unknown" },
+    ]);
+    expect(turnChanges([])).toEqual([]);
   });
 });

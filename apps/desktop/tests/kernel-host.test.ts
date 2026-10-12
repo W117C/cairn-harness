@@ -13,7 +13,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import { createKernelHost, type KernelHost } from "../src/main/kernel-host";
 import { createSession as createSessionInRoot, pathOf } from "../../../src/main/sessions";
 
-const dir = mkdtempSync(join(tmpdir(), "m0-host-"));
+const dir = mkdtempSync(join(tmpdir(), "cairn-host-"));
 const workspace = join(dir, "ws");
 const wsA = join(dir, "ws-a");
 const wsB = join(dir, "ws-b");
@@ -27,7 +27,7 @@ writeFileSync(join(userData, "settings.json"), JSON.stringify({ provider: "demo"
 
 // 剧本 env 的外部残留会劫持判卷（M3A_MAIN_SCRIPT 优先级最高；M0A_PROVIDER 强推真 provider 会拨号）——
 // 进门前清场，出门后还原（本进程只跑 apps/desktop 自己的套件，还原是礼貌不是必须）。
-const ambientKeys = ["M3A_MAIN_SCRIPT", "M0A_PROVIDER", "M0_MODEL", "M0B_WORKSPACE"] as const;
+const ambientKeys = ["M3A_MAIN_SCRIPT", "M0A_PROVIDER", "CAIRN_MODEL", "M0B_WORKSPACE"] as const;
 const ambientBackup = ambientKeys.map((k) => [k, process.env[k]] as const);
 for (const k of ambientKeys) delete process.env[k];
 process.env.M3A_AGENTS_DEMO = "1"; // 脚本化主模型：fixtures/agents/main-demo.jsonl，确定性

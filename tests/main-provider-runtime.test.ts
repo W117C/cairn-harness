@@ -113,7 +113,12 @@ describe("CX-02/CX-03 main provider registry", () => {
     expect(info.models.every((model) => model.capability.attachments.text && !model.capability.attachments.image)).toBe(true);
 
     const demo = buildProviderInfo({ kind: "demo" });
-    expect(demo).toMatchObject({ kind: "demo", model: "mock-script", models: [], keyConfigured: false });
+    // 2026-10-06 契约修正：demo 只表示「没选模型时跑预录剧本」，**不再**表示「没有模型可选」。
+    // 旧判据（models: []）正是用户实测里「回对话页选不到刚加的模型」的根因 —— demo 是缺省通道，
+    // 它交回空面 ⇒ 模型选择器在全新安装上永远空着，用户在设置里加好的模型也选不上。
+    expect(demo).toMatchObject({ kind: "demo", model: "mock-script", keyConfigured: false });
+    expect(demo.models.map((model) => model.id)).toEqual(DEFAULT_MODEL_TABLE.map((model) => model.id));
+    expect(demo.models.every((model) => model.capability.provider === model.provider)).toBe(true);
   });
 
   it("reports key presence from the provider-specific env without exposing values", () => {

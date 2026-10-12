@@ -69,30 +69,37 @@ describe("budgetPriceKeyOf / resolveRunModel：闸的价键取自真拨的那一
 
 describe("接线：两道闸共用同一份派生，且不许再抄第三份解析", () => {
   const src = () => readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf8");
+  // 2026-10-11 拆分：goal 那一半（第二处消费）搬去 ./goal-handlers，钉子跟着走——
+  // 会话那一半仍在装配根，跨两文件的断言按两处各读、同一句事实不许在两边各抄一半。
+  const goalSrc = () => readFileSync(fileURLToPath(new URL("../src/main/goal-handlers.ts", import.meta.url)), "utf8");
 
   it("env + 设置盘的解析式子在本文件里只许出现一次（三次副本就是本次缺陷的成因）", () => {
     const t = src();
     expect([...t.matchAll(/resolveMainModel\(/g)].length).toBe(1);
     // 两处消费（会话成本闸 + goal 美元闸）都得走派生函数；少一处 = 那一支回到读盘上字段。
-    expect([...t.matchAll(/budgetPriceKeyOf\(/g)].length).toBeGreaterThanOrEqual(3);
+    const total = [...t.matchAll(/budgetPriceKeyOf\(/g)].length + [...goalSrc().matchAll(/budgetPriceKeyOf\(/g)].length;
+    expect(total).toBeGreaterThanOrEqual(3);
   });
 
   it("两处消费各自接线在位（两个函数都未导出 ⇒ 只能钉形状），且旧写法不许复活", () => {
     const t = src();
+    const g = goalSrc();
     expect(t, "会话成本闸丢了派生 ⇒ 最常见配置下闸惰").toMatch(
       /priceModel: budgetPriceKeyOf\(runModel \?\? resolveRunModel\(s\)\)/);
-    expect(t, "goal 美元闸丢了派生 ⇒ per-run 指定档位时它按会话档折").toMatch(
-      /const model = budgetPriceKeyOf\(args\.runModel\);/);
+    expect(g, "goal 美元闸丢了派生 ⇒ per-run 指定档位时它按会话档折").toMatch(
+      /const model = D\(\)\.budgetPriceKeyOf\(args\.runModel\);/);
+    expect(t, "goal 面没接上装配根的价键派生 ⇒ 上面那行注入的就不是本仓那一份").toMatch(
+      /budgetPriceKeyOf: \(selection\) => budgetPriceKeyOf\(selection\),/);
     expect(t, "run 的解析没递进 goalNextTurn ⇒ 那一支永远只能读设置盘").toMatch(
       /goalNextTurn\(\{[^}]*runModel: modelSelection/);
     // 放宽成 `[^)]*`：2026-10-05 S3 信任闸给这一处加了第三个实参（trustedRepo），
-    // 原写法把把**整个实参表**钉死，于是加一个与本断言无关的参数就红。
+    // 原写法把**整个实参表**钉死，于是加一个与本断言无关的参数就红。
     // 原意是「runModel 这一档必须递进编排器」⇒ 前两个实参仍逐字钉住，尾部允许追加。
     expect(t, "run 的解析没递进编排器 ⇒ 同上").toMatch(/orchestratorExtras\(a\.sandbox, a\.runModel[^)]*\)/);
     expect(t, "逐请求指定的模型没进 buildSessionOrchestrator ⇒ 会话闸看不到本 run 真拨的档").toMatch(
       /\.\.\.\(opts\.modelSelection \? \{ runModel: opts\.modelSelection \} : \{\}\)/);
     // 反向：把闸的键退回设置盘字段（旧写法）必须当场红，而不是靠人记得。
     expect(t).not.toMatch(/priceModel: s\.model/);
-    expect(t).not.toMatch(/const model = \(await store\(\)\.get\(\)\)\.model/);
+    expect(g).not.toMatch(/const model = \(await store\(\)\.get\(\)\)\.model/);
   });
 });

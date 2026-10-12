@@ -18,6 +18,9 @@ export interface AnthropicOptions {
   model?: string;
   /** max_tokens 为 Anthropic 必填字段（单轮输出上限），缺省 4096。 */
   maxTokens?: number;
+  /** 思考预算（token）：非空则加 body.thinking = {type:"enabled", budget_tokens}。
+   *  Anthropic 要求 max_tokens **严格大于** budget_tokens，故调用处会一起把 maxTokens 抬上去。 */
+  thinkingBudget?: number;
   baseURL?: string;
   /** anthropic-version 请求头，缺省 2023-06-01。 */
   version?: string;
@@ -43,6 +46,8 @@ interface AnthropicSseEvent {
   delta?: {
     type?: string;
     text?: string;
+    /** thinking_delta 子类型的思考文本（budget 开启时才有）。 */
+    thinking?: string;
     partial_json?: string;
     stop_reason?: string | null;
   };
@@ -65,7 +70,7 @@ function parseArgs(raw: string, label: string): Record<string, unknown> {
 // user 消息）→ tool_result 块。全部按 Anthropic 官方 content-block 结构原生构造。
 export function toAnthropicBody(
   messages: ProviderMessage[],
-  opts: { model: string; maxTokens: number; stream: boolean; promptCache?: boolean },
+  opts: { model: string; maxTokens: number; stream: boolean; promptCache?: boolean; thinkingBudget?: number },
   tools?: ProviderToolSpec[],
 ): Record<string, unknown> {
   const systemParts: string[] = [];
@@ -106,6 +111,12 @@ export function toAnthropicBody(
   const body: Record<string, unknown> = {
     model: opts.model,
     max_tokens: opts.maxTokens,
+    // 思考档位（§S8）：开了就在请求体里说清楚 —— 预算必须小于 max_tokens，否则上游直接 400。
+    // 这里做的是**抬高上限**而不是拒绝：用户要 16k 思考预算时把 max_tokens 顶到 16k+余量，
+    // 比抛一句"两个数不合法"更有用（本仓对"用户意图明确、只是数值需要配合"的一律是配合而不是拒）。
+    ...(opts.thinkingBudget !== undefined && opts.thinkingBudget > 0
+      ? { thinking: { type: "enabled", budget_tokens: opts.thinkingBudget } }
+      : {}),
     stream: opts.stream,
     messages: wire,
   };
@@ -145,7 +156,12 @@ export async function* streamAnthropic(
   if (!apiKey) throw new Error(`${envName} 未设置（key 只从环境变量读取，不落文件）`);
   const model = opts.model ?? process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5";
   const baseURL = opts.baseURL ?? "https://api.anthropic.com";
-  const maxTokens = opts.maxTokens ?? 4096;
+  const thinkingBudget = opts.thinkingBudget;
+  // Anthropic 的硬要求：max_tokens **严格大于** budget_tokens。用户要 16k 思考预算时，
+  // 我们抬上限而不是拒跑 —— 意图是明确的，需要配合的只是数值（本仓对这类一律配合）。
+  const baseMaxTokens = opts.maxTokens ?? 4096;
+  const maxTokens =
+    thinkingBudget !== undefined && thinkingBudget > 0 ? Math.max(baseMaxTokens, thinkingBudget + 4096) : baseMaxTokens;
   const doFetch = opts.fetchImpl ?? fetch;
 
   // 根因 4：停滞守卫改由 establishStream 逐次新建（静默窗口，不是总时长），成功建连后交回
@@ -162,7 +178,13 @@ export async function* streamAnthropic(
         "x-api-key": apiKey,
         "anthropic-version": opts.version ?? "2023-06-01",
       },
-      body: JSON.stringify(toAnthropicBody(messages, { model, maxTokens, stream: true, promptCache: opts.promptCache === true }, tools)),
+      body: JSON.stringify(
+        toAnthropicBody(
+          messages,
+          { model, maxTokens, stream: true, promptCache: opts.promptCache === true, ...(thinkingBudget !== undefined ? { thinkingBudget } : {}) },
+          tools,
+        ),
+      ),
     },
     fetchImpl: doFetch,
     stallMs: opts.stallTimeoutMs ?? DEFAULT_STALL_MS,
@@ -213,11 +235,14 @@ export async function* streamAnthropic(
         const d = event.delta;
         if (d?.type === "text_delta" && d.text) {
           yield { type: "assistant_delta", callId, text: d.text };
+        } else if (d?.type === "thinking_delta" && d.thinking) {
+          // Claude 的思考块（budget 开启时吐 thinking_delta）→ 独立事件，不并进正文。
+          yield { type: "thinking_delta", callId, text: d.thinking };
         } else if (d?.type === "input_json_delta" && d.partial_json && event.index !== undefined) {
           const acc = blocks.get(event.index);
           if (acc) acc.json += d.partial_json; // 分片拼接成完整 JSON（流末 block_stop 时解析）
         }
-        // 其余 delta 子类型（thinking_delta / signature_delta / citations_delta …）按未知优雅跳过
+        // 其余 delta 子类型（signature_delta / citations_delta …）按未知优雅跳过
         return;
       }
       case "content_block_stop": {

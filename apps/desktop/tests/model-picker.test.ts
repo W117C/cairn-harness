@@ -1,13 +1,49 @@
+// C-21 `ModelPicker` 的判卷。2026-10-06 按 desktop-ui-spec §5.4 重写后重写判据：
+// 钉的四件事正是用户实测反馈缺的那四件 —— tier 徽标有**文字**、窗口有人话写法、
+// key 未配置要有 fail-visible 提示、演示要诚实标注（不是一句「演示」了事）。
 import { describe, expect, it } from "vitest";
-import { flattenModels } from "../src/renderer/components/ModelPicker";
+import {
+  describeSelection,
+  flattenModels,
+  formatCtxWindow,
+  groupModels,
+  pickerKeyNotice,
+  shortModelName,
+  tierBadge,
+} from "../src/renderer/components/ModelPicker";
 import { formatTokens } from "../src/renderer/components/TokenPanel";
 import type { ProviderInfo } from "../../../src/main/ipc-protocol";
 
-// Step 1 勘定（src/main/provider-runtime.ts:22 + src/providers/registry.ts:13）：
-// ProviderInfo = { kind, provider, model, modelId, models, keyConfigured }；
-// ProviderModelInfo extends ModelSpec = { id, provider, model, tier, ctxWindow } + capability。
-// 任务书骨架里的 `as never` 按真形收窄；ProviderInfo 层没有 capability（在 model 上），
-// demo 的 provider 是「demo（冻结剧本，非真实模型）」（buildProviderInfo 原样）。
+function model(id: string, provider: string, model_: string, tier: string, ctxWindow: number) {
+  return {
+    id,
+    provider,
+    model: model_,
+    tier: tier as "cheap" | "standard" | "strong",
+    ctxWindow,
+    capability: {
+      modelId: id,
+      provider,
+      availability: "unverified" as const,
+      thinking: { supported: false, values: ["off"] as const, default: "off" as const },
+      attachments: { text: true, image: false },
+    },
+  };
+}
+
+const info: ProviderInfo = {
+  kind: "openai",
+  provider: "OpenAI",
+  model: "gpt-4o",
+  modelId: "openai-standard",
+  models: [model("openai-standard", "openai", "gpt-4o", "standard", 128_000), model("deepseek-chat", "deepseek", "deepseek-chat", "standard", 1_000_000)],
+  keyConfigured: true,
+  providers: [
+    { id: "openai", label: "OpenAI", custom: false },
+    { id: "deepseek", label: "DeepSeek", custom: true },
+  ],
+};
+
 const demoInfo: ProviderInfo = {
   kind: "demo",
   provider: "demo（冻结剧本，非真实模型）",
@@ -15,54 +51,93 @@ const demoInfo: ProviderInfo = {
   modelId: null,
   models: [],
   keyConfigured: false,
+  providers: [],
 };
 
-const openaiInfo: ProviderInfo = {
-  kind: "openai",
-  provider: "OpenAI",
-  model: "gpt-4o",
-  modelId: "openai-standard",
-  models: [
-    {
-      id: "openai-standard",
-      provider: "openai",
-      model: "gpt-4o",
-      tier: "standard",
-      ctxWindow: 128_000,
-      capability: {
-        modelId: "openai-standard",
-        provider: "openai",
-        availability: "unverified",
-        thinking: { supported: false, values: ["off"], default: "off" },
-        attachments: { text: true, image: false },
-      },
-    },
-  ],
-  keyConfigured: true,
-};
-
-describe("flattenModels", () => {
-  it("demo 常驻首项，provider→models 两级铺平", () => {
-    const opts = flattenModels([demoInfo, openaiInfo]);
-    expect(opts[0]).toMatchObject({ registryId: null, label: "演示" });
-    expect(opts[1]).toMatchObject({ registryId: "openai-standard", provider: "openai" });
+describe("档位与窗口的人话写法（规范：徽标必须有文字，不只靠颜色）", () => {
+  it("tierBadge 三档有文字，认不出的说「未定档」而不是留空", () => {
+    expect(tierBadge("cheap")).toBe("便宜");
+    expect(tierBadge("standard")).toBe("标准");
+    expect(tierBadge("strong")).toBe("强");
+    expect(tierBadge(undefined)).toBe("未定档");
   });
 
-  it("入参无 demo 条目 demo 仍常驻；真模型按 spec.id 去重（ProviderInfo.models 是全量表，多条目不重复铺）", () => {
-    const opts = flattenModels([openaiInfo, openaiInfo]);
-    expect(opts).toHaveLength(2);
-    expect(opts[0]).toMatchObject({ registryId: null, label: "演示" });
-    expect(opts[1]).toMatchObject({ registryId: "openai-standard", label: "gpt-4o" });
+  it("formatCtxWindow：1M / 128k / 小数 / 缺省给 —（不给 0）", () => {
+    expect(formatCtxWindow(1_000_000)).toBe("1M");
+    expect(formatCtxWindow(128_000)).toBe("128k");
+    expect(formatCtxWindow(1_500_000)).toBe("1.5M");
+    expect(formatCtxWindow(500)).toBe("500");
+    expect(formatCtxWindow(undefined)).toBe("—");
+    expect(formatCtxWindow(0)).toBe("—");
   });
 });
 
-describe("formatTokens", () => {
-  it("过 1000 显 k 一位小数，未过原样；0 与 999 不造假", () => {
+describe("铺平与分组", () => {
+  it("演示常驻首项；真模型带上 tier 与窗口（旧实现这两样都丢了）", () => {
+    const options = flattenModels([info]);
+    expect(options[0].registryId).toBeNull();
+    expect(options[0].label).toBe("演示");
+    const custom = options.find((o) => o.registryId === "deepseek-chat");
+    expect(custom?.provider).toBe("deepseek");
+    expect(custom?.tier).toBe("standard");
+    expect(custom?.ctxWindow).toBe(1_000_000);
+  });
+
+  it("多个 ProviderInfo 里的重复模型只铺一次", () => {
+    const options = flattenModels([info, info]);
+    expect(options.filter((o) => o.registryId === "openai-standard")).toHaveLength(1);
+  });
+
+  it("按 provider 分组、保持首见顺序，且「演示」不归组", () => {
+    const groups = groupModels(flattenModels([info]));
+    expect(groups.map((g) => g.provider)).toEqual(["openai", "deepseek"]);
+    expect(groups[0].models).toHaveLength(1);
+    expect(groups.flatMap((g) => g.models).some((m) => m.registryId === null)).toBe(false);
+  });
+
+  it("空目录时没有任何分组（界面据此显示「去设置里接一家」）", () => {
+    expect(groupModels(flattenModels([demoInfo]))).toEqual([]);
+  });
+});
+
+describe("key 未配置是 fail-visible 的置顶提示", () => {
+  it("demo 不算未配置（它按设计不需要 key）", () => {
+    expect(pickerKeyNotice(demoInfo)).toBeNull();
+  });
+  it("真通道没 key ⇒ 给出带 provider 名的提示与去处", () => {
+    expect(pickerKeyNotice({ ...info, keyConfigured: false })).toBe("OpenAI 未配置 key · 去设置配置");
+  });
+  it("配好了 ⇒ null；没有 info ⇒ null", () => {
+    expect(pickerKeyNotice(info)).toBeNull();
+    expect(pickerKeyNotice(null)).toBeNull();
+  });
+});
+
+describe("触发条文案", () => {
+  it("短名：演示 / 模型名 / 未登记值时回退原值", () => {
+    const options = flattenModels([info]);
+    expect(shortModelName(null, options)).toBe("演示");
+    expect(shortModelName("deepseek-chat", options)).toBe("deepseek-chat");
+    expect(shortModelName("ghost-model", options)).toBe("ghost-model");
+  });
+
+  it("超长名截断到 140（规范条）", () => {
+    const long = "x".repeat(200);
+    expect(shortModelName(long, []).length).toBe(140);
+  });
+
+  it("describeSelection：演示写明「不产生真实调用」；命中给出 provider/tier/窗口；未命中显式回落", () => {
+    const options = flattenModels([info]);
+    expect(describeSelection(null, options)).toContain("不产生真实调用");
+    expect(describeSelection("deepseek-chat", options)).toContain("窗口 1M");
+    expect(describeSelection("deepseek-chat", options)).toContain("标准");
+    expect(describeSelection("ghost", options)).toContain("不在当前目录");
+  });
+});
+
+describe("formatTokens（相邻面板的同一把尺，顺手回归）", () => {
+  it("常见量级仍正常", () => {
     expect(formatTokens(0)).toBe("0");
-    expect(formatTokens(999)).toBe("999");
-    expect(formatTokens(1000)).toBe("1.0k");
-    expect(formatTokens(12_400)).toBe("12.4k");
-    expect(formatTokens(3_100)).toBe("3.1k");
-    expect(formatTokens(1_000_000)).toBe("1000.0k");
+    expect(formatTokens(1234)).toBe("1.2k");
   });
 });

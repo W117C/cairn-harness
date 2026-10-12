@@ -7,7 +7,7 @@
 import { clipWorkerSummary } from "./worker-report";
 import { estimateTextTokens } from "./text-budget";
 import { costUsd, priceOf, type ModelPrice } from "../routing/pricing";
-import { DEFAULT_MODEL_TABLE, findSpecByNameOrId, type ModelSpec } from "../providers/registry";
+import { effectiveModelTable, findSpecByNameOrId, type ModelSpec } from "../providers/registry";
 
 /** 单条 worker 摘要上限（token）。`SUMMARY_TOKEN_CAP`(2000) 是给一次 spawn 回执用的，
  *  收队一次最多回 4 个 worker ⇒ 整批帽按 2400、逐行 400，量级与主会话一轮工具结果相称。 */
@@ -36,7 +36,7 @@ export interface WorkerPrice {
 export function priceForModel(
   model: string,
   pickedId?: string,
-  table: readonly ModelSpec[] = DEFAULT_MODEL_TABLE,
+  table: readonly ModelSpec[] = effectiveModelTable(),
 ): WorkerPrice {
   const id = pickedId ?? findSpecByNameOrId(table, model)?.id;
   return id === undefined ? { model } : { model, priceId: id };

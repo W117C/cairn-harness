@@ -3,7 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { writeFileAtomic } from "../atomic-write";
 import { ENV_KEYED_PROVIDERS } from "../providers/env-keys";
-import { findSpecByNameOrId, DEFAULT_MODEL_TABLE } from "../providers/registry";
+import { effectiveModelTable, findSpecByNameOrId, isKnownProviderId } from "../providers/registry";
 
 // M2d：第四面板 memory（两层记忆快照 + 会话内 remember 审计投影）；M2e：第五面板 plugins（插件容器）；
 // M2f：第六面板 sidechat（辅助对话：只读旁路会话 + 提升记录投影）；
@@ -26,14 +26,21 @@ export { PERMISSION_MODES, type PermissionMode } from "../permissions/modes";
 import { PERMISSION_MODES, type PermissionMode } from "../permissions/modes";
 export type SafeMode = "off" | "report" | "gate";
 export type ThemeSetting = "system" | "light" | "dark";
-/** 主对话模型通道：demo 是冻结剧本；其余四家与 worker registry / env-key 表同源。 */
-export type ProviderKind = "demo" | (typeof ENV_KEYED_PROVIDERS)[number];
+/** v2.14：界面语言（i18n 偏好）——V1 只做持久化与校验（先让偏好可存可回读），渲染层文案翻译逐段接线。 */
+export type LocaleSetting = "zh-CN" | "en-US";
+/** 主对话模型通道：demo 是冻结剧本；内置四家与 worker registry / env-key 表同源；
+ *  自定义 provider（`.agent/providers.json` 里声明的）是**运行时**才知道的 id —— 静态枚举不出来，
+ *  所以用 `(string & {})` 保留内置字面量的编辑器提示、同时允许任意 id。
+ *  代价是类型不再是封闭联合 ⇒ 判据必须落在运行时那一道：`validateSettings` 里问 `isKnownProviderId`。 */
+export type ProviderKind = "demo" | (typeof ENV_KEYED_PROVIDERS)[number] | (string & {});
 
 export interface AppSettings {
   layout: LayoutState;
   mode: PermissionMode;
   safeMode: SafeMode;
   theme: ThemeSetting;
+  /** v2.14：界面语言（i18n 偏好）——V1 只做持久化与校验，文案翻译逐段接线。 */
+  locale: LocaleSetting;
   /** 当前会话（JSONL 即会话；重启还原用）。 */
   currentSession: string | null;
   /** M2d：会话结束自动沉淀开关（记忆面板/设置页可关，默认开，§8.1.4 双轨）。 */
@@ -51,6 +58,9 @@ export interface AppSettings {
   /** M4a §12.2.3：同时运行的定时会话上限（1-8；缺省 2）。与 worker 并发上限 4 独立计数。 */
   scheduleConcurrencyCap: number;
   /** M4b §2.4：新手引导完成标记（缺省 false = 首启弹向导；完成后不再弹，设置页可重跑）。 */
+  /** 首启引导是否已完成。**2026-10-06 起没有读者了**：用户要求删掉首启引导屏，
+   *  引导门（App 的三态 takeover）随之移除。字段保留是为了不破坏既有 settings.json
+   *  （删字段会让老档案被判成非法），但不要再拿它做任何门控。 */
   onboarded: boolean;
   /** M4b §2.3：更新 manifest URL（缺省空 = 「未配置更新源」显式态；V1 轻量检查不做自动下载）。 */
   updateManifestUrl: string;
@@ -102,6 +112,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   mode: "default",
   safeMode: "report",
   theme: "system",
+  locale: "zh-CN",
   currentSession: null,
   autoMemory: true,
   subagentTools: true,
@@ -138,8 +149,18 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 const SAFE_MODES = ["off", "report", "gate"] as const;
 const THEMES = ["system", "light", "dark"] as const;
-/** 设置面可持久化的主会话 provider：demo + 四个真实 adapter。 */
+const LOCALES = ["zh-CN", "en-US"] as const;
+/** 设置面可持久化的主会话 provider 的**内置**子集：demo + 四个真实 adapter。
+ *  自定义 provider 不在这个字面量里（它们是运行时才知道的），由 `isPersistableProvider` 一并放行。 */
 export const PROVIDER_KINDS = ["demo", ...ENV_KEYED_PROVIDERS] as const;
+
+/** 这个 provider 值能不能落盘：内置清单，或**已装上**的自定义 provider。
+ *  为什么不是「任意字符串」：写盘的值会在下次启动被回读并拿去拨号，收下一个永远不会生效的 id
+ *  等于让用户以为切过去了（静默回落）。 */
+export function isPersistableProvider(v: unknown): boolean {
+  if (typeof v !== "string") return false;
+  return (PROVIDER_KINDS as readonly string[]).includes(v) || isKnownProviderId(v);
+}
 
 function isPanelId(v: unknown): v is PanelId {
   return typeof v === "string" && (PANEL_IDS as readonly string[]).includes(v);
@@ -178,7 +199,7 @@ export function validateSettings(raw: unknown): AppSettings {
     : null;
   // Legacy settings may store either the stable registry id or the provider wire model name.
   // Unregistered strings are discarded here; RunRequest itself remains strict-id-only.
-  const model = typeof r.model === "string" && findSpecByNameOrId(DEFAULT_MODEL_TABLE, r.model)
+  const model = typeof r.model === "string" && findSpecByNameOrId(effectiveModelTable(), r.model)
     ? r.model.slice(0, 200)
     : d.model;
   return {
@@ -186,6 +207,8 @@ export function validateSettings(raw: unknown): AppSettings {
     mode: PERMISSION_MODES.includes(r.mode as PermissionMode) ? (r.mode as PermissionMode) : d.mode,
     safeMode: SAFE_MODES.includes(r.safeMode as SafeMode) ? (r.safeMode as SafeMode) : d.safeMode,
     theme: THEMES.includes(r.theme as ThemeSetting) ? (r.theme as ThemeSetting) : d.theme,
+    // v2.14：locale 白名单外回退默认（zh-CN）——与 theme 同式，非法值不落库
+    locale: LOCALES.includes(r.locale as LocaleSetting) ? (r.locale as LocaleSetting) : d.locale,
     currentSession: typeof r.currentSession === "string" && r.currentSession.length > 0 ? r.currentSession : null,
     autoMemory: typeof r.autoMemory === "boolean" ? r.autoMemory : d.autoMemory,
     subagentTools: typeof r.subagentTools === "boolean" ? r.subagentTools : d.subagentTools,
@@ -215,7 +238,7 @@ export function validateSettings(raw: unknown): AppSettings {
     // 缺省关的键才用 `=== true`（上面那条规矩的反面：默认关时严格真值才不会把 false 读成缺省）
     autoVerifyRepair: r.autoVerifyRepair === true,
     planRequiredByDefault: r.planRequiredByDefault === true,
-    provider: PROVIDER_KINDS.includes(r.provider as ProviderKind) ? (r.provider as ProviderKind) : d.provider,
+    provider: isPersistableProvider(r.provider) ? (r.provider as ProviderKind) : d.provider,
     model,
     // 工作区：非空字符串取原值（越界长度回退默认，避免把畸形路径带进 run 装配）；其余回退 null
     workspace:

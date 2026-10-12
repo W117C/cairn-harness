@@ -110,7 +110,7 @@ function num(v: unknown, what: string): number {
 
 /** 身份取值的**唯一**口径：空串**与写侧那枚「取不到」哨兵**都算缺章；缺键、类型不对也一律缺章。
  *
- *  为什么要专门收 `unknown`（第 393 页现读）：`scripts/loop-eval.ts` 的 `headSha` 在 git 取不到 HEAD 时
+ *  为什么要专门收 `unknown`（第 394 页现读）：`scripts/loop-eval.ts` 的 `headSha` 在 git 取不到 HEAD 时
  *  写的就是字面量 `"unknown"`（#63 留的哨兵），而档名缺省时历史上也落 `"unknown"`。
  *  不收成缺章的话，配对层会把这些行读成「两趟同一枚 sha」⇒ **不同代码被并成同分母**，
  *  正是 #90 要堵的那条路换了个名字复活。放宽方向只有一个：不许把缺章读成有章。

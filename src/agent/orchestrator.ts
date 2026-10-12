@@ -10,7 +10,7 @@ import type { AgentEvent, HarnessHoldReason, SecurityFinding } from "../events";
 import { HARNESS_HOLD_PROSE_TOKEN, replay } from "../events";
 import type { ModelOutput, Provider } from "../providers";
 import { glmDefaultModelName, type GlmMessage, type GlmToolSpec } from "../providers/glm";
-import { DEFAULT_MODEL_TABLE, findSpecByNameOrId, resolveModel, toWorkerModel, type ModelTier } from "../providers/registry";
+import { effectiveModelTable, findSpecByNameOrId, resolveModel, toWorkerModel, type ModelTier } from "../providers/registry";
 import { routeFor, TIER_ORDER as MODEL_TIER_ORDER } from "../routing/policy";
 import { cascadeLadder, runCascade } from "../routing/cascade";
 import { loadBanditState, saveBanditState, updatePriced, type BanditState } from "../routing/bandit";
@@ -577,7 +577,7 @@ export class Orchestrator {
                 : undefined,
           stage: stageRole?.role,
           mode: mode as "read" | "write",
-          table: DEFAULT_MODEL_TABLE,
+          table: effectiveModelTable(),
           ...(banditState !== null
             ? { bandit: { posteriors: banditState.posteriors, rngState: banditState.rngState } }
             : {}),
@@ -596,7 +596,7 @@ export class Orchestrator {
     // ② 路由分支合成的是「真实 provider 模型的 spec」，旧条件 `!model && !CAIRN_API_KEY`
     //    在 routeDecision 非空时永不成立 → 无凭据也照派 worker，第一跳 401 才死
     //    （白烧一轮 + 占并发预算 + 留一条必败 worker 记录）。现在同样要求凭据。
-    const routedSpec = !this.opts.modelFor && routeDecision ? resolveModel(DEFAULT_MODEL_TABLE, routeDecision.picked) : null;
+    const routedSpec = !this.opts.modelFor && routeDecision ? resolveModel(effectiveModelTable(), routeDecision.picked) : null;
     const model = this.opts.modelFor
       ? this.opts.modelFor(args)
       : routedSpec
@@ -1504,12 +1504,12 @@ export class Orchestrator {
     const from = w?.routeTier;
     // 精确按 id 查（不用 findSpecByNameOrId 的 id-or-model 两义匹配）：两义匹配一旦遇到
     // 「A 家的 model 名 == B 家的 id」就会算错家族，正好把跨厂商禁令从门缝里绕过去。
-    const picked = DEFAULT_MODEL_TABLE.find((s) => s.id === w?.routePicked);
+    const picked = effectiveModelTable().find((s) => s.id === w?.routePicked);
     if (from === undefined || picked === undefined) {
       return { from, ladder: [], note: "认不出这一跑当时选的模型（routeTier/routePicked 缺一方）⇒ 无从判断该往哪档升" };
     }
     if (budgetLeft <= 0) return { from, ladder: [], note: "整链升级预算已用尽（已花 " + String(this.opts.cascadeMaxUpgrades ?? 2) + " 次额度）" };
-    const ladder = cascadeLadder(from, DEFAULT_MODEL_TABLE.filter((s) => s.provider === picked.provider), budgetLeft);
+    const ladder = cascadeLadder(from, effectiveModelTable().filter((s) => s.provider === picked.provider), budgetLeft);
     return { from, ladder, note: ladder.length > 0 ? "" : picked.provider + " 一家在 " + from + " 之上没有更高档" };
   }
 

@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { pluginDataRootOf, trustFilePathOf } from "../agent/plugins";
 import { parseTrustFile } from "../agent/plugins/trust";
 import { ENV_KEYED_PROVIDERS, PROVIDER_ENV_KEYS } from "../providers/env-keys";
-import { DEFAULT_MODEL_TABLE, specsByTier } from "../providers/registry";
+import { effectiveModelTable, specsByTier } from "../providers/registry";
 import { loadSearchConfig } from "../tools/web-search";
 import { checkSandbox, type SandboxStatus } from "./sandbox";
 
@@ -277,10 +277,11 @@ export async function runDoctor(workspace: string, inject: Partial<DoctorFacts> 
     ),
     search,
     tierCounts: {
-      total: DEFAULT_MODEL_TABLE.length,
-      cheap: specsByTier(DEFAULT_MODEL_TABLE, "cheap").length,
-      standard: specsByTier(DEFAULT_MODEL_TABLE, "standard").length,
-      strong: specsByTier(DEFAULT_MODEL_TABLE, "strong").length,
+      // 有效表：内置 + 已装自定义（doctor 报的是"你现在有哪些档位"，漏掉自定义家会低报）
+      total: effectiveModelTable().length,
+      cheap: specsByTier(effectiveModelTable(), "cheap").length,
+      standard: specsByTier(effectiveModelTable(), "standard").length,
+      strong: specsByTier(effectiveModelTable(), "strong").length,
     },
     trust: await readTrustFace(process.env, homedir()),
     ...inject,

@@ -15,7 +15,12 @@ import { workerToolTable } from "../src/agent/orchestrator-config";
 import { isKnownToolName, isSideEffectTool } from "../src/permissions";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const RUNNER = readFileSync(join(ROOT, "src/main/agent-runner.ts"), "utf8");
+/** M4a 拆分（2026-10-11）：`table["automation_*"] =` 那一形搬去 ./scheduler-runtime，
+ *  文本对账跟着读两处（实现搬走、对账跟着走；同 verify-exec-sandbox 的双文件读法）。
+ *  同日后半：`table["skill"] =` 那一形随工具门搬去 ./tool-gates ⇒ 加入第三处。 */
+const RUNNER = ["src/main/agent-runner.ts", "src/main/scheduler-runtime.ts", "src/main/tool-gates.ts"]
+  .map((rel) => readFileSync(join(ROOT, rel), "utf8"))
+  .join("\n");
 
 /** 全局注入：installAppTools 往 TOOLS 上直接挂名。 */
 function globalInjected(): string[] {

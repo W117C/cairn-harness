@@ -23,7 +23,6 @@ describe("包装写法都产得出被禁的那条形（deny 不再被静默击�
     "command -p git push --force",
     "nice -n 5 git push --force",
     "/usr/bin/git push --force",
-    "GIT_PAGER=cat git push --force",
     "bash -c 'git push --force'",
     "sh -lc 'git push --force'",
     "bash -c 'git status; git push --force'",
@@ -34,6 +33,10 @@ describe("包装写法都产得出被禁的那条形（deny 不再被静默击�
       expect(forms(cmd)).toContain("git push --force");
     });
   }
+
+  it("前导环境赋值不吞掉危险命令", () => {
+    expect(forms("GIT_PAGER=cat git push --force")).toContain("git push --force");
+  });
 });
 
 describe("反例：参数、选项值、只读命令都不许冒充成被禁的那条形", () => {

@@ -149,7 +149,9 @@ describe("四个出口的接线各有证人（同一判据四份副本、宽度�
   };
 
   it("主会话沙箱出口、worker 两条出口、run_shell 直连——三处都真的调了同一只归因函数", async () => {
-    const runner = await readFile("../src/main/agent-runner.ts");
+    // 2026-10-11 拆分：主会话沙箱出口那条（gatedTool 内）搬去 ./tool-gates ⇒ 取料跟着读两处。
+    const runner = (await readFile("../src/main/agent-runner.ts"))
+      + "\n" + (await readFile("../src/main/tool-gates.ts"));
     const worker = await readFile("../src/agent/worker-shell-tools.ts");
     const shell = await readFile("../src/tools/run_shell.ts");
     // 行锚定（规则 247）：不锚行首就会撞上注释里那份自述文字，改了注释也算"接上了"。

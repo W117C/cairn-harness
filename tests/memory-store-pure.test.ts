@@ -10,7 +10,7 @@
 // （注释原话：「文件存在但损坏/畸形 = 学习历史无痕丢失，必须经 onCorrupt 显式告警」）。
 // 同一族在记忆这边还留着，且后果是**用户的安全决议无声蒸发**。
 import { describe, expect, it } from "vitest";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -77,21 +77,44 @@ describe("外部引用审批状态", () => {
     });
   });
 
-  // ↓↓↓ 本组钉的是那个**缺口**。
-  // 后果不是「读不到数据」，而是**用户的安全决议无声蒸发**：批准过的 @path 全部回到未批准，
-  // 每次回注都要重新问一遍；被拒绝过的也一并回到「未决」，等于拒绝记录也没了。
-  // 实测取证：把文件截断成半截 JSON，`loadExternalRefState()` 返回空且**不吭一声**。
-  it("状态文件损坏 ⇒ 读成空态且不告警（本条即缺口的证人）", async () => {
+  // 这条原先是「缺口证人」（旧实现：损坏 ⇒ 空态且不告警）。2026-10-11 按 `bandit.ts`
+  // 先例修成 fail-visible：损坏/畸形 ⇒ onCorrupt 显式告警 + 继续按空态走（fail-closed，
+  // 不抛错——抛错会把「重新询问」升级成硬失败）。本断言随之改成新契约。
+  it("状态文件损坏 ⇒ 空态 + onCorrupt 显式告警（fail-visible，不再静默蒸发）", async () => {
     await withHome(async (home) => {
       await saveExternalRefDecision("/etc/hosts", true);
       const p = join(home, ".config", "cairn", "memory", "external-refs.json");
       await writeFile(p, '{"approved": ["/etc/hosts"', "utf8"); // 半截 JSON（模拟写坏）
-      const s = await loadExternalRefState();
-      // 现状是静默返回空。把现状钉住；哪天修成 fail-visible，这条会红并提醒更新断言。
-      expect(s).toEqual({ approved: [], declined: [] });
+      const warned: string[] = [];
+      const s = await loadExternalRefState((r) => warned.push(r));
+      expect(s).toEqual({ approved: [], declined: [] }); // fail-closed：空态 = 无一批准
+      expect(warned).toHaveLength(1);
+      expect(warned[0]).toContain("external-refs.json"); // 告警带定位信息（§8.4 纪律）
       // 对照：文件确实坏到解析不动（不是「读不到」）。
       const raw = await readFile(p, "utf8");
       expect(() => JSON.parse(raw)).toThrow();
+    });
+  });
+
+  it("形状畸形（合法 JSON、字段不是数组）同样告警且按空态返回——不许把字符串漏成 `includes` 的隐式子串匹配", async () => {
+    await withHome(async (home) => {
+      const p = join(home, ".config", "cairn", "memory", "external-refs.json");
+      await mkdir(join(home, ".config", "cairn", "memory"), { recursive: true });
+      await writeFile(p, '{"approved": "/etc/hosts", "declined": []}', "utf8");
+      const warned: string[] = [];
+      const s = await loadExternalRefState((r) => warned.push(r));
+      expect(s).toEqual({ approved: [], declined: [] });
+      expect(Array.isArray(s.approved)).toBe(true);
+      expect(warned).toHaveLength(1);
+    });
+  });
+
+  it("文件缺失（首启）不告警——缺失是正常新状态，不是损坏", async () => {
+    await withHome(async () => {
+      const warned: string[] = [];
+      const s = await loadExternalRefState((r) => warned.push(r));
+      expect(s).toEqual({ approved: [], declined: [] });
+      expect(warned).toEqual([]);
     });
   });
 });

@@ -11,7 +11,7 @@ export interface Finding {
   // `D-12`（省略式点名）是**补进这条联合的**：新增规则 `checkAbbrevRefs` 已经在产出它，
   // 但 id 没进这个联合 ⇒ `tsc` 红两条（`Type '"D-12"' is not assignable to ...`）。
   // 与上面 `abbrev` 那一处是同一个漏法：**新增一个面要改的清单多于一处**，漏哪一处都是红。
-  rule: "D-1" | "D-2" | "D-3" | "D-4" | "D-5" | "D-7" | "D-8" | "D-9" | "D-10" | "D-11" | "D-12" | "W";
+  rule: "D-1" | "D-2" | "D-3" | "D-4" | "D-5" | "D-7" | "D-8" | "D-9" | "D-10" | "D-11" | "D-12" | "D-13" | "W";
   file: string;
   detail: string;
   /** 该判据的实测量纲值（D-1 = 字节，D-7 = 文件数）。有值时水位按"量"豁免；无值时按"条数"豁免。 */
@@ -264,6 +264,88 @@ export function checkAbbrevRefs(text: string, cap: number = LEGACY_ABBREV_REF_CA
     findings.push({ rule: "D-12", file: LEDGER_FILE, detail: `省略式点名只剩 ${String(hits)} 处而帽还是 ${String(cap)}——把 LEGACY_ABBREV_REF_CAP 调低（存量帽不许空转）` });
   }
   return { hits, findings };
+}
+
+/** D-13（第 413 页）：**页号要唯一**。台账的引用单位是「第 N 页」，而这个号是每个会话看一眼末尾自己数的。
+ *  2026-10-07 现读：**455 张页标题里 106 个号被同一天的两三位作者各写过一次**（跨日期撞号＝0，
+ *  因为号是全局递增的，撞只会撞在同一天并发写），另有 317 个不同号。
+ *  这条流水线自己也连续撞过三次（第 397 页重编号、第 403 页记下两对、第 407 页再一对）。
+ *  ⇒ 不重写历史：存量按**集合**登记（只准调低；不再命中即报 stale），这条只挡"再撞一个新的"。
+ *  另外把「下一个未占用页号＝现读最大号+1」印进汇总——撞号的根因是这件事没有机械答案，
+ *  登记只能止损，**给出起点才是收口**。引用老页时仍要配日期或 sha（第 403 页第 5 条）。
+ *  ⚠️ 取料面**吃调用点已经算好的那批页**（`ledgerPages(ledgerText, ANY_PAGE_HEAD)`＝与 D-11 同一个变量）：
+ *  自己再写一支分页谓词就是把"什么算一页"抄成第二份，而那份已经存在（`PAGE_HEAD_RE`）。
+ *  我第一版探针按 `^## ` 数，只量到 138 张／29 个——**308 页之前页标题是 h3 写的**（`PAGE_HEAD_RE`
+ *  的注释里就记着这件事），那是面写窄了，不是尺多算了（规则：异常读数先怀疑取料面与 join 键）。 */
+/** 取号式：只认**页标题那一支**（`20xx-xx-xx · 第 N 页`，h2 与 h3 都算页）。
+ *  为什么不直接吃 `CredPage.key`：key 的来历是「标题里第一个 `第 N 页` 子串，没有就取前 16 字」，
+ *  它的用途是**段落标签**而不是页号身份；小节头只要正好以「第 N 页」开头就会被当成一页。
+ *  今天这本台账上两种取法同数（455 张），换形状是为了不让那条退化路径决定判据的分母。
+ *  面仍由 `ledgerPages` 定，这里只收紧"哪个抬头才是页"，判卷各钉一条：
+ *  小节头以页号开头不算一页、两张同名页标题必红。 */
+const PAGE_TITLE_NUMBER_RE = /^20\d\d-\d\d-\d\d · 第 (\d+) 页/u;
+/** 上线时的现读存量＝**106 个**（本仓台账 455 张页里的重复号，按号升序；由本条判据第一次跑出来的
+ *  输出去重后生成，证人见第 413 页的取料面）。台账只追加 ⇒ 这些删不掉，所以登记就停在这儿：
+ *  多一个新撞号即红，**少一个也要红**（登记不许空转）。
+ *  选集合而不是数量帽：数量帽挡不住"修一条又添一条"的净零交换（D-10 为同一件事换成集合）。 */
+export const LEGACY_DUPLICATE_PAGES: readonly string[] = [
+  "第 83 页", "第 155 页", "第 156 页", "第 158 页", "第 159 页", "第 160 页", "第 161 页", "第 162 页",
+  "第 163 页", "第 164 页", "第 165 页", "第 166 页", "第 167 页", "第 168 页", "第 200 页", "第 201 页",
+  "第 213 页", "第 214 页", "第 215 页", "第 216 页", "第 217 页", "第 218 页", "第 219 页", "第 221 页",
+  "第 222 页", "第 224 页", "第 225 页", "第 226 页", "第 227 页", "第 228 页", "第 229 页", "第 230 页",
+  "第 231 页", "第 233 页", "第 235 页", "第 237 页", "第 242 页", "第 249 页", "第 253 页", "第 257 页",
+  "第 259 页", "第 260 页", "第 262 页", "第 263 页", "第 264 页", "第 265 页", "第 266 页", "第 267 页",
+  "第 268 页", "第 269 页", "第 270 页", "第 271 页", "第 272 页", "第 273 页", "第 274 页", "第 275 页",
+  "第 276 页", "第 277 页", "第 278 页", "第 279 页", "第 281 页", "第 284 页", "第 285 页", "第 286 页",
+  "第 287 页", "第 290 页", "第 291 页", "第 294 页", "第 297 页", "第 298 页", "第 299 页", "第 300 页",
+  "第 301 页", "第 302 页", "第 305 页", "第 306 页", "第 307 页", "第 308 页", "第 309 页", "第 310 页",
+  "第 311 页", "第 312 页", "第 314 页", "第 315 页", "第 316 页", "第 317 页", "第 318 页", "第 319 页",
+  "第 320 页", "第 322 页", "第 323 页", "第 324 页", "第 325 页", "第 326 页", "第 327 页", "第 328 页",
+  "第 329 页", "第 330 页", "第 332 页", "第 333 页", "第 334 页", "第 335 页", "第 336 页", "第 337 页",
+  "第 392 页", "第 394 页",
+];
+
+export function checkPageNumberUniqueness(
+  pages: readonly CredPage[],
+  legacy: readonly string[] = LEGACY_DUPLICATE_PAGES,
+): { titles: number; dups: number; sections: number; unregistered: string[]; next: number; findings: Finding[] } {
+  const counts = new Map<string, number>();
+  let max = 0;
+  let titles = 0;
+  for (const p of pages) {
+    const m = PAGE_TITLE_NUMBER_RE.exec(p.title);
+    // 标题不是页那一支的（h3 小节头、以及 h3 里提到某个页号）不进这一格：它不是页号。
+    // 这是**过滤**而不是第二份"什么算一页"的谓词——面仍由 `ledgerPages` 定。
+    if (m === null) continue;
+    const key = "第 " + m[1] + " 页";
+    titles += 1;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+    const n = Number(m[1]);
+    if (n > max) max = n;
+  }
+  const findings: Finding[] = [];
+  const unregistered: string[] = [];
+  for (const [key, c] of counts) {
+    if (c <= 1 || legacy.includes(key)) continue;
+    unregistered.push(key);
+    findings.push({
+      rule: "D-13", file: LEDGER_FILE,
+      detail: `页号「${key}」被 ${String(c)} 张页占用 ⇒ 「见${key}」这种引用要靠猜，两页各自还都自称那一页。`
+        + "修法＝把**自己这一页**改到未占用的号（已入库的号不动，那是历史），别把它塞进登记表",
+    });
+  }
+  for (const key of legacy) {
+    if ((counts.get(key) ?? 0) > 1) continue;
+    findings.push({
+      rule: "D-13", file: LEDGER_FILE,
+      detail: `登记过的重复页号「${key}」在台账里已不再重复（那一页被重编号或整段没了），该删——登记不删就是假存量`,
+    });
+  }
+  let dups = 0;
+  for (const c of counts.values()) if (c > 1) dups += 1;
+  // `sections`＝`ledgerPages` 认下来、但**不是页号**的那些抬头（h3 小节头那一类）。
+  // 这一列必须印出来：少了它，「按 key 数」与「按页标题数」这两种宽度就看不出差在哪。
+  return { titles, dups, sections: pages.length - titles, unregistered, next: max + 1, findings };
 }
 
 /** D-11：台账（第 290 页补⑴ 起＝**整本台账**，不再是凭证页）点名的每一条 dated 工件，必须能在 HEAD 里追到。
@@ -1053,6 +1135,9 @@ export function runDocsCheck(): {
   // 药方（"形状从被调用方派生"）只抹在了 `cred`/`witness` 上，**顶层字段清单仍是手写的**。
   // 治本是把整个返回类型从构造函数派生（加字段就不可能漂），那是独立一笔；这里先只补红。
   abbrev: ReturnType<typeof checkAbbrevRefs> | null;
+  // 第 413 页 D-13：页号唯一面。**四处一起改**（返回类型／局部声明／调用与并入 findings／汇总行）——
+  // 上面那三条注释说的就是"少改一处就红"，这一条按那份清单逐项核过再落笔。
+  pageNum: ReturnType<typeof checkPageNumberUniqueness> | null;
 } {
   const findings: Finding[] = [];
   const skipped: string[] = [];
@@ -1081,6 +1166,7 @@ export function runDocsCheck(): {
   let credPages: CredPage[] = [];
   let witnessPages: CredPage[] = [];
   let abbrev: ReturnType<typeof checkAbbrevRefs> | null = null;
+  let pageNum: ReturnType<typeof checkPageNumberUniqueness> | null = null;
   const ledgerAbs = join(ROOT, LEDGER_FILE);
   if (existsSync(ledgerAbs)) {
     const ledgerText = readFileSync(ledgerAbs, "utf8");
@@ -1095,6 +1181,10 @@ export function runDocsCheck(): {
     // 两条判据说的是同一件事的两半（"点名的能不能追到"／"有没有根本没被点名的写法"）。
     abbrev = checkAbbrevRefs(ledgerText);
     findings.push(...abbrev.findings);
+    // D-13（第 413 页）：页号唯一面。**吃 `witnessPages` 这份已经算好的页集合**（D-11 的同一变量），
+    // 不在这里重新决定"什么算一页"——那决定在 `PAGE_HEAD_RE`，只许有一处。
+    pageNum = checkPageNumberUniqueness(witnessPages);
+    findings.push(...pageNum.findings);
     // D-10（第 279 页）：台账里的源码行号引用要**追得到东西**。取不到 HEAD 清单时报"未检"，
     // 不许拿空集合当判据（那会把每一条引用都读成死指针——假红的量足以淹掉真信号）。
     // 第 285 页：同一份清单也喂 D-11 ⇒ 这一笔**没有新增子进程**，门还是那一次 `git ls-tree`。
@@ -1148,6 +1238,7 @@ export function runDocsCheck(): {
     cred,
     witness,
     abbrev,
+    pageNum,
   };
 }
 
@@ -1155,7 +1246,7 @@ const invokedDirectly =
   process.argv[1] !== undefined && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
 
 if (invokedDirectly) {
-  const { findings, skipped, waived, ledgerChecked, cred, witness, abbrev } = runDocsCheck();
+  const { findings, skipped, waived, ledgerChecked, cred, witness, abbrev, pageNum } = runDocsCheck();
   const byRule = new Map<string, number>();
   for (const f of findings) {
     byRule.set(f.rule, (byRule.get(f.rule) ?? 0) + 1);
@@ -1181,6 +1272,13 @@ if (invokedDirectly) {
   console.log(abbrev === null
     ? "  省略式点名面：未检（读不到台账），不等于通过"
     : `  省略式点名面：${String(abbrev.hits)} 处（帽 ${String(LEGACY_ABBREV_REF_CAP)}，只准调低；少一处也要出声）`);
+  // D-13（第 413 页）：页号唯一面。三态同 D-12，另外**必须印出下一个未占用页号**——
+  // 撞号的根因是这件事没有机械答案；只登记存量而不给起点，下一个会话还是得自己数一遍。
+  console.log(pageNum === null
+    ? "  页号唯一面：未检（读不到台账），不等于通过"
+    : `  页号唯一面：${String(pageNum.titles)} 张页标题（另有 ${String(pageNum.sections)} 个抬头不是页，如 h3 小节）`
+      + `｜重复号 ${String(pageNum.dups)} 个（登记 ${String(LEGACY_DUPLICATE_PAGES.length)}，只准调低）`
+      + `｜新撞的 ${String(pageNum.unregistered.length)} 个红在下方｜下一个未占用页号：${String(pageNum.next)}`);
   if (waived > 0) console.log(`  ⚠️  存量豁免 ${String(waived)} 处（LEGACY_WAIVERS，只准调低；spec §8 迁移提交须整条删除）`);
   const summary = [...byRule].map(([r, n]) => `${r}=${String(n)}`).join(" ");
   if (findings.length === 0) {

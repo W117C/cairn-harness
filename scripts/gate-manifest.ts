@@ -154,6 +154,11 @@ export const GATES: readonly string[] = [
   // 原先只挂在 apps/desktop test 链尾——core-only 会话跑根门永远不触发；注册进默认门表补上这个洞
   // （终审 #4）。快尺：纯文本扫 src/，亚秒档；不进 CERT_GATES——门面预算线快到头（见那张表头），不再顺手多买。
   "desktop-boundary-check",
+  // SEMA Phase 3（docs/sema-proposal.md §12）登记：桌面判卷进 GATES。动因：desktop-panel 包
+  // 进自进化流水线后，§3.5 的「必须通过 pnpm --filter cairn-desktop test」要能在账本上表达——
+  // 包的 manifest.gates 只认 GATES 名单里的门，桌面判卷不是门 ⇒ desktop-panel 提案声明不了它，
+  // 必需门注入面（requiredGatesByKind）就无从钉死。分钟档，不进 CERT_GATES。
+  "desktop-test",
 ];
 
 /** 认证面**替它跑**的那几道门（第 224 页 #36）。

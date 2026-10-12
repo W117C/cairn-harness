@@ -3,7 +3,8 @@
 > 出具：2026-09-13。对表对象：上文讨论的 A（模型路由）/ B（编排）/ C（自我进化）三组提案。
 > **v2 修订（2026-09-14，评审后）**：① 成本指标改「token 用量」代理口径（§1.3 备案 / §2.1 / §6.4）；② bandit 抽样补确定性口径——可播种 RNG，随机态显式管理（§3 步骤 9 / §5.12 / §6.3 新增第 8 条反向验证）；③ 补记 `SpawnArgs.model/tier` 与 `respawn` 重派面既有事实，恢复重派按 pin 处理（§3 步骤 8 / §7）；④ 测试基线更正为 57 files / 513 passed（I2 修正口径），并改为「以实施当日实测为准」；⑤ 全部行号锚点按当前工作区复核（forkSession 442→526 等）。
 > **v3 修订（2026-09-14，评审 Follow-up 1）**：弃用全部裸行号，改为「断言标签 + 符号名」定位（§5.1 / §7）——行号易腐（agents-check N5 曾标 :892、实测 934；forkSession 曾 442→526），实施前仍以当日代码为准。
-> 本文是**待批准的实施提案**，不是验收对表；批准后再补 `docs/m5-acceptance.md`。
+> 本文保留原始提案与决策约束；当前实施状态、验收证据和未达目标见 [`docs/m5-acceptance.md`](m5-acceptance.md)。
+> **现状说明（2026-10-11）**：本文记录的是 2026-09-13 的提案状态；下文“现状/不存在/未接入”只描述当时，不代表当前代码。当前入口包括 M5a 的 `src/events/index.ts` / `scripts/gym-check.ts`、M5b 的 `src/routing/policy.ts` / `src/routing/bandit.ts` / `scripts/routing-check.ts`，以及 M5c 的 `scripts/supervisor-check.ts`。入口和门禁存在不等于 §1.3 的效果目标已达成，指标仍需基于基线实测。
 > 复跑口径一律 `TERM=dumb`（`TERM=xterm-256color` 会让 vitest 输出 ANSI 序列，摘要正则假红）。
 > 纪律沿用：判据冻结、三态（已证/未证/不做）、每道核心断言配一条反向验证、未在本文列的项不偷做。
 >
@@ -33,9 +34,9 @@
 
 ### 1.1 要解决的问题
 
-现状三条结构性事实（均已核实到代码）：
+提案撰写时（2026-09-13）的三条结构性事实（均已核实到当时的代码）：
 
-1. **模型路由层不存在。** `src/providers/index.ts` 只有接口定义（`Provider.stream`），主会话硬编码 GLM（`src/main/agent-runner.ts:providerInfo` 读 `process.env.M0_MODEL ?? "glm-5.2"`）。`OrchestratorOptions.modelFor`（`src/agent/orchestrator.ts` 的 `OrchestratorOptions.modelFor` 字段）只是一个可选回调，所有 worker 共用同一模型。四个适配器（openai/anthropic/gemini/glm）**已实现但从未接入运行时**——全项目只装配了 GLM 一条链路。
+1. **当时模型路由层尚未接入。** `src/providers/index.ts` 只有接口定义（`Provider.stream`），主会话硬编码 GLM（`src/main/agent-runner.ts:providerInfo` 读 `process.env.CAIRN_MODEL ?? "glm-5.2"`）。`OrchestratorOptions.modelFor`（`src/agent/orchestrator.ts` 的 `OrchestratorOptions.modelFor` 字段）只是一个可选回调，所有 worker 共用同一模型。四个适配器（openai/anthropic/gemini/glm）当时尚未接入运行时。
 2. **编排天花板卡在人身上。** sequencer 零 LLM 是 M3 的正确收敛，代价是计划质量 = 人写 stages 那一刻。且 `docs/m3-acceptance.md` 九之 2 明确留位：gate 只落 verdict、不重跑——失败不触发任何系统级反应。
 3. **结果信号不回流。** `verify_result`（客观判据）、`usage`（按 agent 归因）、`approval_resolved`、`card_action`、`diff_comment` 全部落流，但目前只用于投影面板和单次交互，没有一个字节回到策略层。
 
@@ -78,7 +79,7 @@
 | # | 缺失项 | 默认假设 | 影响 |
 |---|---|---|---|
 | 1 | 各 provider / 各档位的真实单价 | M5 不引入绝对价格表；路由用**相对档位**（cheap/standard/strong），折算沿用现有 `budgetPricePerMTok` 单值——故 M5 的「成本」实为 token 用量代理（§1.3 口径备案） | 若已有单价表数据源，bandit 的代价项可直接换成真钱，§1.3 指标同步升级为真钱口径 |
-| 2 | 是否已有 M0_API_KEY 可用环境 | **假定长期缺席**。所有学习类断言走明卷（scripted）驱动；真连段沿用 M3a 口径「缺席显式打印跳过」 | 有 key 时靶场可自动闭合 M3/M4 两个"未证"项 |
+| 2 | 是否已有 CAIRN_API_KEY 可用环境 | **假定长期缺席**。所有学习类断言走明卷（scripted）驱动；真连段沿用 M3a 口径「缺席显式打印跳过」 | 有 key 时靶场可自动闭合 M3/M4 两个"未证"项 |
 | 3 | 本地小模型可用性 | **假定无本地推理**。A3 机械卸载改用确定性算法 + 复用现有 `shape.ts`/`compaction.ts` 模板 | 若允许引依赖，可换真小模型，收益更大 |
 | 4 | 是否接受新增 UI 面板 | M5 **不加任何新面板**，路由只在事件流与 check 脚本可见；设置页只加开关 | 需要可视化再单开一轮 |
 | 5 | Best-of-N 默认 N | **默认 1（关闭）**，可配到 2，硬上限 3 | 成本敏感，见 §5.6 |
@@ -166,7 +167,7 @@ fixtures/gym/
 **验收**：`gym-check` 段 B
 - B1 确定性：同一 case 明卷跑两次，`score` 与 `usage` 逐字段一致
 - B2 分叉：从 eventId=N 分叉后，新会话前 N 条事件与原会话逐字节一致，且原文件未被修改
-- B3 暗卷缺席：无 `M0_API_KEY` 时打印 skipped 并计数，**不计入 pass**
+- B3 暗卷缺席：无 `CAIRN_API_KEY` 时打印 skipped 并计数，**不计入 pass**
 
 #### 步骤 4：接进门禁
 
@@ -473,7 +474,7 @@ node --import tsx scripts/gym-run.ts --all --compare fixtures/gym/baseline.json
 
 M5 对表里沿用：
 - **已证** = 有可复跑断言
-- **未证** = 断言没跑到（如无 `M0_API_KEY` 的暗卷段）——**不等于通过**，必须显式打印 skipped
+- **未证** = 断言没跑到（如无 `CAIRN_API_KEY` 的暗卷段）——**不等于通过**，必须显式打印 skipped
 - **M6** = 明确留位不偷做（§1.4）
 
 ---

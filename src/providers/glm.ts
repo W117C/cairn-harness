@@ -36,6 +36,8 @@ export interface GlmOptions {
   endpoint?: string;
   /** 反向验证开关：false = 非流式（整段回复只算 1 个 delta），缺省 true。 */
   stream?: boolean;
+  /** 思考档位：透传给 openai 适配器的 body.reasoning_effort（GLM 走 OpenAI 兼容协议）。 */
+  reasoningEffort?: string;
   /** 单测注入点（缺省全局 fetch）。 */
   fetchImpl?: typeof fetch;
   metering?: OpenAiOptions["metering"];
@@ -68,6 +70,7 @@ function toOpenAiOptions(opts: GlmOptions): OpenAiOptions {
     defaultBaseURL: GLM_ENDPOINT,
     // GLM 特有：工具调用流式要额外打开 tool_stream（可由 CAIRN_GLM_TOOL_STREAM=0 关，见上）
     extraBody: glmToolStreamFlag(opts.stream),
+    ...(opts.reasoningEffort !== undefined ? { reasoningEffort: opts.reasoningEffort } : {}),
     stream: opts.stream,
     label: "GLM",
     fetchImpl: opts.fetchImpl,

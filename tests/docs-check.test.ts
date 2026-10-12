@@ -23,6 +23,8 @@ import {
   checkLineCitations,
   checkSourceLineCitations,
   checkObservedValues,
+  checkPageNumberUniqueness,
+  LEGACY_DUPLICATE_PAGES,
   checkReplay,
   checkStateRev,
   checkWitnessPaths,
@@ -827,7 +829,97 @@ describe("D-10 源码行号引用面：两半都钉，存量按集合登记", ()
   });
 });
 
-/* ── 第 284 页：D-9 的取料面收成**一个导出的构造器**，门与复现它的探针共用。
+/* ── 第 413 页 D-13：页号唯一面。台账的引用单位是「第 N 页」，而这个号一直是各会话自己数出来的——
+    现读 455 张页标题里 106 个号在同一天的两位作者手里撞过（跨日期 0 个）。
+    这几条各钉一种坏法：探测器被摘（撞号静默）、取号面写宽（小节头冒充页）、登记空转不出声、
+    以及接线（门自己再算一份分页面，与 D-11 分母不同）。── */
+describe("D-13 页号唯一面：撞号要出声、登记不许空转、取号面只认页标题", () => {
+  const pagesOf = (text: string) => ledgerPages(text, ANY_PAGE_HEAD);
+
+  it("两张同名页标题报一条；只有一张时一条不红（别把正常的页也喊成撞）", () => {
+    const two = [
+      "## 2026-10-08 · 第 500 页：甲", "正文甲",
+      "## 2026-10-08 · 第 500 页：乙", "正文乙",
+      "## 2026-10-08 · 第 501 页：丙", "正文丙",
+    ].join("\n");
+    const r = checkPageNumberUniqueness(pagesOf(two), []);
+    expect(r.titles).toBe(3);
+    expect(r.dups).toBe(1);
+    expect(r.unregistered).toEqual(["第 500 页"]);
+    expect(r.findings.map((x) => x.rule)).toEqual(["D-13"]);
+    // 反向一侧：同一份台账把乙改成别的号 ⇒ 一条不红，但页数还是三张
+    const ok = two.replace("第 500 页：乙", "第 502 页：乙");
+    const r2 = checkPageNumberUniqueness(pagesOf(ok), []);
+    expect(r2.findings).toEqual([]);
+    expect(r2.titles).toBe(3);
+  });
+
+  it("小节头正好以页号开头不算第二页：按标题形状取号，不吃 key 的退化路径", () => {
+    const text = [
+      "## 2026-10-08 · 第 500 页：甲", "正文甲",
+      "### 第 500 页 那一节的补充", "正文丁",
+    ].join("\n");
+    const r = checkPageNumberUniqueness(pagesOf(text), []);
+    // 按 key 数会把这条小节头也算成一页（key 的来历是"标题里第一个 第 N 页 子串"），
+    // 于是它既虚增 titles、又凭空造出一个"撞号"。这一格钉的就是那两个假读数都得是 0。
+    expect(r.titles).toBe(1);
+    expect(r.dups).toBe(0);
+    expect(r.findings).toEqual([]);
+    expect(r.sections).toBe(1);
+  });
+
+  it("h3 写的老页标题也算一页（308 页之前整本是 h3；只认 `## ` 会把面写窄）", () => {
+    const text = [
+      "### 2026-09-12 · 第 7 页：老甲", "正文",
+      "### 2026-09-12 · 第 7 页：老乙", "正文",
+    ].join("\n");
+    const r = checkPageNumberUniqueness(pagesOf(text), []);
+    expect(r.titles).toBe(2);
+    expect(r.unregistered).toEqual(["第 7 页"]);
+  });
+
+  it("登记是集合不是豁免：命中登记不红，登记不再命中要点名该删", () => {
+    const two = ["## 2026-10-08 · 第 500 页：甲", "## 2026-10-08 · 第 500 页：乙"].join("\n");
+    expect(checkPageNumberUniqueness(pagesOf(two), ["第 500 页"]).findings).toEqual([]);
+    // 空转那一半必须独立出声：台账里没撞号了，登记表还留着一条 ⇒ 红，且不依赖"有没有新撞号"
+    const single = ["## 2026-10-08 · 第 500 页：甲"].join("\n");
+    const f = checkPageNumberUniqueness(pagesOf(single), ["第 500 页"]);
+    expect(f.findings.map((x) => x.rule)).toEqual(["D-13"]);
+    expect(f.findings[0]!.detail).toContain("登记过的重复页号「第 500 页」在台账里已不再重复");
+  });
+
+  it("净零交换要报两条：销掉一条存量、同时新撞一个号", () => {
+    const text = ["## 2026-10-08 · 第 600 页：甲", "## 2026-10-08 · 第 600 页：乙"].join("\n");
+    const f = checkPageNumberUniqueness(pagesOf(text), ["第 500 页"]);
+    expect(f.findings.length).toBe(2);
+  });
+
+  it("next＝现读最大页号+1；空台账时是 1（「没有页」与「页号是 0」不许同形）", () => {
+    expect(checkPageNumberUniqueness(pagesOf(["## 2026-10-08 · 第 412 页：甲"].join("\n")), []).next).toBe(413);
+    const empty = checkPageNumberUniqueness([], []);
+    expect(empty.titles).toBe(0);
+    expect(empty.next).toBe(1);
+    expect(empty.findings).toEqual([]);
+  });
+
+  it("接线：门吃的是 D-11 那批页（`witnessPages`），不在这里重算一份分页面", () => {
+    const src = readFileSync(join(REPO, "scripts/docs-check.ts"), "utf8");
+    expect(src).toContain("checkPageNumberUniqueness(witnessPages)");
+    // 调用点必须在 `witnessPages` 赋值之后——写在它前面就是一路拿着空数组，读数恒绿而什么都没判
+    expect(src.indexOf("witnessPages = ledgerPages")).toBeLessThan(src.indexOf("checkPageNumberUniqueness(witnessPages)"));
+  });
+
+  it("真仓那一趟：106 条存量今天仍全部命中，所以 D-13 现在是绿的（登记不是凭空写的）", () => {
+    expect(LEGACY_DUPLICATE_PAGES.length).toBeGreaterThan(0);
+    const face = runDocsCheck();
+    expect(hit(face.findings, "D-13").length).toBe(0);
+    // 面不能是空的：空取料的读数恒 0 不是"没问题"（第 392 页第 9 条同一族）
+    expect(face.pageNum === null ? 0 : face.pageNum.titles).toBeGreaterThan(400);
+  });
+});
+
+
+    /* ── 第 284 页：D-9 的取料面收成**一个导出的构造器**，门与复现它的探针共用。
     动因是一条已入库探针抄了门的旧形状（一整块字符串），第 269 页把面改成按文件之后它静默烂掉——
     没人重跑就没人知道，直到本笔现跑才抛 `x.list.map is not a function`。
     这三条各钉一种坏法：三态被抹平（`null` 换成 `[]`＝"没有"与"取不到"同形）、排除面写宽（`.mjs` 进了面）、

@@ -73,7 +73,7 @@ export const OUTPUTS_SHARE_CAP = 0.7;
  * 第二名 2564（orchestrator）。帽高于现状，是为了让 W4 拆分之前这道门先绿着站住；
  * W4 落地后再把帽降到 2600 / 2400，**一次只降一档**（多会话并发下降太快会撞红在别人树上）。
  */
-export const SRC_FILE_LINE_CAP = 3000;
+export const SRC_FILE_LINE_CAP = 2600;
 /* ── 2026-10-05（第 383 页）：2800 → 2900，按本文件自己写明的帽设计「帽 = 现状上取整」──
  *
  * **为什么必须动**：设计不变式是「帽 > 现状」（2800 当初就是照着 2761 上取整定的），
@@ -109,6 +109,54 @@ export const SRC_FILE_LINE_CAP = 3000;
  * 本页记的另一件事：降帽条件写的是「W4 落地后按 2600 → 2400 逐档降」，而现状已是 2963 ⇒
  * **W4 落地那一刻这顶帽要一次性跨两档**（3000 → 2600 → 2400 中间那一档没有落点），
  * 写下这一格是因为「条件写在这里」与「条件还能走」是两件事，而后者刚被现读证伪了。 */
+/* ── 2026-10-06：3000 → 3100，同一设计不变式被第三次打破 ──
+ *
+ * **谁打破的**：本轮后端缺口三笔（#9 goal 挂起/恢复、#7 文件级回滚、#8 赞踩沉淀）给
+ * `src/main/agent-runner.ts` 加了约 31 行（goal_paused/goal_resumed 的判据短路 + handleGoalSet
+ * 的 pause/resume 两个新分支 + 抽出的 goalViewOf），把该文件从工作树里的约 3011 推到 **3042**
+ * ⇒ 越过 3000 ⇒ 面②红。
+ * 说清一件事：HEAD 是 2970，**工作树在本次改动之前已经越过 3000**（并发会话的在飞改动所致）。
+ * 也就是说这一格是把「已经破了的不变式」推得更破，不是把一个绿门弄红——但结果一样要恢复不变式。
+ * ⇒ 本笔与第 383／393 页**完全同一件事**：按本文件写明的「帽 = 现状上取整」恢复不变式，
+ * 3100 = 3042 上取整到百位。
+ * **为什么这不算「为了让门变绿而放宽」**：判据仍是该文件自己的设计不变式（帽 > 现状），不是数字好看。
+ * **不声称这是"修好了"**：真修法仍是 W4 拆分（第 383 页已备足证据：52 条针脚 + 按段切走的碰坏读数），
+ * 那一格至今没人做。降帽条件照旧：W4 落地后按 2600 → 2400 逐档降——注意现状 3042 > 2600，
+ * 落地那一刻要一次性跨档。 */
+/* ── 2026-10-11：3100 → 2900，W4 第一切片落地后的第一次降帽 ──
+ *
+ * **这一笔做了 W4 的第一刀**：按第 383 页按段探针的读数（M4a 段里**调度器接线本身** 0 条针脚，
+ * 35 条集中在同段 runAgent/handlers 两处），把调度器状态/生命周期/IPC handlers/触发执行器/
+ * automated 五件工具/盘上判据搬去 `src/main/scheduler-runtime.ts`（拆分面先例：装配根按原路径
+ * 再导出，调用方零改动；四处装配根活状态按 `setSchedulerRuntimeDeps` 注入）。
+ * 读数：`src/main/agent-runner.ts` 3047 → **2853** 行；搬迁的 14 个符号逐字一致（只六处声明过的
+ * 适配：目录常量回退、onEvent 转发、runSession 注入、session 审批面注入、installAutomationTools
+ * 导出、单调真值改名 + 读端；验证脚本比对了切分前原文与搬迁后实现）。
+ * ⇒ 本笔与第 383／393／2026-10-06 页同一件事：按「帽 = 现状上取整」降一档，2900 = 2853 上取整。
+ *
+ * **不声称 W4 整体完成**：runAgent（14 条针脚）与 handlers（20 条针脚）两段仍在原文件里，
+ * 搬它们要连带改锚点 `src:`，且只有先入库才能被 `mutate-verify`（量 HEAD）验证 ⇒ 那两段各自
+ * 仍要独占窗口 + 一笔入库。降帽路线照旧逐档走（下一档的判据：再搬一段、量完再降）。 */
+/* ── 2026-10-11（同日后半）：2900 → 2700，W4 第二切片（goal 面）落地后的第二档 ──
+ *
+ * 本笔把 goal 面（`emitGoalEvent` / `emitGoalStoppedOnThrow` / `goalNextTurn` / `goalViewOf` /
+ * `handleGoalSet`，5 个符号 173 行）搬去 `src/main/goal-handlers.ts`；装配根按原路径再导出，
+ * 两处活状态（事件推送、价键派生）按 `setGoalHandlerDeps` 注入。9 条 `goal-*` 锚点的 `src:`
+ * 同步改指新文件（其中 `goal-budget-key-*` 的针脚跟着注入形态改字面量，已按规矩先杀一遍）。
+ * 读数：`agent-runner.ts` 2853 → **2690**；2700 = 2690 上取整到百位；第二名 orchestrator 2566。
+ * **同样不声称 W4 完成**：runAgent 段（14 针）与 handleAgentRun..handleAgentDecide 段（13 针）仍是针脚最密的两块，
+ * 搬它们要独占窗口 + 一笔入库才能被 mutate-verify 验证。 */
+/* ── 2026-10-11（同日第三刀）：2700 → 2600，W4 第三切片（sidechat 面）落地 ──
+ *
+ * 本笔把 sidechat IPC 面（`sidechatDemoScript` / `resolveSidechatModel` / `resolveSidechatSummarizer` /
+ * `handleSidechatCreate` / `handleSidechatAsk` / `handleSidechatPromote` / `handleSidechatState` /
+ * `runSidechatDemo` + 内联剧本常量，189 行、0 针）搬去 `src/main/sidechat-handlers.ts`；
+ * 三处活状态（事件推送 / 最近 run 日志 / 当前工作区）按 `setSidechatHandlerDeps` 注入，四个公开
+ * handler 在文件尾按原路径再导出。读数：`agent-runner.ts` 2690 → **2515**。
+ *
+ * **最大文件换人**：现在是 `src/agent/orchestrator.ts` **2566 行** ⇒ 2600 = 2566 上取整到百位。
+ * 下一档降帽的判据因此从 agent-runner 转到 orchestrator（那是另一支的拆分面，不在 W4 账上——
+ * W4 的账只到「装配根不再是最大文件」为止，这一笔把它交出去了）。 */
 
 // ---- 纯判据（可单测；IO 只发生在 main 里）----
 
@@ -271,10 +319,10 @@ export function selfTests(): SelfTest[] {
     detail: `${selfConsistent.outputs} + ${selfConsistent.rest} = ${selfConsistent.total}`,
   });
 
-  // 面②：现状绿
+  // 面②：现状绿（读数 2026-10-11 六刀后：orchestrator 2566 / agent-runner 1978；帽 2600。夹具随读数走）
   const nowOk = oversizedFiles([
-    { path: "src/main/agent-runner.ts", lines: 2761 },
-    { path: "src/agent/orchestrator.ts", lines: 2564 },
+    { path: "src/agent/orchestrator.ts", lines: 2566 },
+    { path: "src/main/agent-runner.ts", lines: 1978 },
   ]);
   out.push({ id: "SH5-现状最大文件在帽内 ⇒ 绿", ok: nowOk.ok, detail: nowOk.detail });
   // 面②：超帽 ⇒ 必须红**且点名并按大小序**（反向验证）

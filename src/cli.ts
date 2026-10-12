@@ -8,8 +8,12 @@
 //   ④ 退出时收干净子进程（接回 killAllTrackedChildren —— 它的天然调用方就是这里）
 //
 // ②是这一版补上的。此前 CLI 直接调 `runAgent`，绕过了 `handleAgentRun` 那一层，而那一层里装着
-// goal 续跑循环、9 个 settings 开关、信封校验——绕过去的后果是 17 个导出入口零生产调用者，
-// 外加三个最值钱的开关（routingBandit / maxBudgetUsd / impactAnalysis）默认全关且无处可翻。
+// goal 续跑循环、9 个 settings 开关、信封校验——绕过去的后果是 17 个导出入口零生产调用者。
+// 这里曾写着「外加三个最值钱的开关（routingBandit / maxBudgetUsd / impactAnalysis）默认全关且无处可翻」，
+// 那句现在**只剩一半真**：`maxBudgetUsd` 早有 `--max-usd`（VALUE_FLAGS + parseGoal），`impactAnalysis`
+// 的默认已被翻成开（settings.ts 里那条 2026-09-27 裁决）——真缺的只剩 `routingBandit` / `routingCascade`，
+// 它们现已由 `--bandit/--no-bandit` 与 `--cascade/--no-cascade` 翻（翻的只是「可翻」，默认值一个字没动，
+// 见 main/routing-flags.ts）。
 // 「存在 ≠ 接线」不是比喻：那 17 个入口一直都在，只是没人搭那层壳。
 //
 // 刻意不做的事：不引新依赖、不加构建步骤、不碰 src/agent 与 src/tools。
@@ -57,6 +61,20 @@ import { PluginRuntime, pendingPlugins, trustFilePathOf } from "./agent/plugins"
 import {
   pluginDecideText, pluginFaceRows, pluginFaceText, readTrustCountsFile, type PluginCliRequest,
 } from "./main/plugin-cli-face";
+import { loadCustomProviders } from "./main/custom-provider-store";
+import { discoverModels } from "./main/model-discovery";
+import { loadCatalog } from "./main/catalog-store";
+import { parseRoutingFlags, type RoutingFlagOverrides } from "./main/routing-flags";
+import { DISCOVERY_PROTOCOLS, type DiscoveryProtocol } from "./providers/discovery";
+import {
+  buildProviderDraft,
+  mergeDiscoveredWithCatalog,
+  suggestApiKeyEnv,
+  suggestProviderId,
+  wrapProvidersFile,
+  type DiscoveredRow,
+} from "./providers/provider-draft";
+import { installCustomProviders, installedCustomProviders } from "./providers/registry";
 import { providerKindFromEnv, resolveMainModel, type MainModelSelection } from "./main/provider-runtime";
 import type { ProviderKind } from "./main/settings";
 import { envKeyOf } from "./providers/env-keys";
@@ -215,6 +233,20 @@ function pick(flag: string): string | null {
   return v;
 }
 
+interface DiscoverRequest {
+  baseURL: string;
+  /** key 的**环境变量名**（命令行只收名字，不收值：值会进 shell 历史与 ps）。 */
+  keyEnv: string | null;
+  protocol: DiscoveryProtocol | null;
+  /** 只挑这一条模型写进草稿（缺省把探测到的都放进去，上限 20 条）。 */
+  model: string | null;
+  json: boolean;
+  label: string | null;
+  providerId: string | null;
+  /** 显式放行本地/内网端点（本地模型：Ollama / LM Studio / vLLM）。 */
+  allowLocal: boolean;
+}
+
 interface GoalSpec {
   objective: string;
   maxTurns?: number;
@@ -244,8 +276,13 @@ interface Options {
   goal: GoalSpec | null;
   unattended: boolean;
   autoVerify: boolean;
+  /** M5b 路由开关覆盖（`--bandit/--no-bandit`、`--cascade/--no-cascade`）。空对象 = 一枚都没给
+   *  ⇒ 递进 over 后一个键都不多（等价于今天）。 */
+  routingOverrides: RoutingFlagOverrides;
   /** M4 路线图：`--serve` 常驻调度模式（调度器真入口；不跑单次会话）。 */
   serve: boolean;
+  /** `--discover <地址>`：问一次「这家有哪些模型」，配目录参数生成可粘贴的配置。 */
+  discover: DiscoverRequest | null;
   /** `--plugins`／`--trust-plugin`／`--decline-plugin`：插件与 skill 的发现面及其信任决议。
    *  三条都不跑模型、不落会话；`null` = 一枚都没给（普通任务那一路）。 */
   plugins: PluginCliRequest | null;
@@ -269,8 +306,9 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
   const VALUE_FLAGS = [
     "--mode", "--provider", "--model", "--ctx-window", "--workspace", "--message", "--log",
     "--session", "--goal", "--max-turns", "--max-usd", "--replay", "--fork", "--from",
-    // 取值型旗标：名字不进这张表就会被当位置参数，于是 `cairn --trust-plugin graphflow`
-    // 读成「工作区 = graphflow、任务 = 空」——批准错对象比拒了更坏。
+    "--discover", "--key-env", "--protocol", "--provider-name", "--label",
+    // 插件面那两条是**取值型**旗标：名字不进这张表就会被当位置参数，于是
+    // `cairn --trust-plugin graphflow` 读成「工作区 = graphflow、任务 = 空」——批准错对象比拒了还坏。
     "--trust-plugin", "--decline-plugin",
   ];
   const positional = argv.filter((a, i) => !a.startsWith("--") && !VALUE_FLAGS.includes(argv[i - 1] ?? ""));
@@ -286,8 +324,8 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
   const message = pick("--message") ?? (positional.length === 2 ? positional[1] : positional[0]);
 
   // ---- 第 438 页：插件／skill 的发现面与信任决议（`--plugins`、`--trust-plugin`、`--decline-plugin`）----
-  // 决议入口必须住在 CLI 这一面：项目作用域的样本（含 `.agent/skills` 那顶根）默认是 pending，
-  // 而此前只有桌面面板能批——没有这一条，「扫得到」就等于「批不了」，
+  // 决议入口必须住在 CLI 这一面：项目作用域的样本（含 `.agent/skills` 里那顶根）默认是 pending，
+  // 而 v1 交付面上原先只有桌面面板能批——没有这一条，「扫得到」就等于「批不了」，
   // 唯一的绕行是把目录塞进恒 trusted 的 M2E_LOOSE_SKILLS，那是为了可用而拆信任门。
   const trustFlag = pick("--trust-plugin");
   const declineFlag = pick("--decline-plugin");
@@ -310,8 +348,8 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
 
   // `--replay` 也免给任务（它只读日志）——但复用它自己的 pick 会让「--replay 缺值」在这里
   // 先撞成一句含混的用法错；用 argv.includes 放行、把缺值留给下面那处 pick 去点名。
-  if ((message === undefined || message === "") && !compact && !argv.includes("--replay") && plugins === null) {
-    throw new UsageError("需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay / 插件那三条不用给）");
+  if ((message === undefined || message === "") && !compact && !argv.includes("--replay") && !argv.includes("--discover") && plugins === null) {
+    throw new UsageError("需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）");
   }
 
   // provider 的三个原始 flag **只收不解析**：解析推迟到 main() 里 replay 分支之后。
@@ -324,6 +362,27 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
   const ctxWindowFlag = pick("--ctx-window");
 
   const unattended = argv.includes("--unattended");
+
+  // ---- `--discover`：探测一个地址有哪些模型，再配目录参数生成可粘贴的配置 ----
+  // 它是**显式 opt-in** 的网络动作（探测默认关：不该在你只是想看帮助时先把钥匙发出去）。
+  const discoverBaseURL = pick("--discover");
+  const protocolRaw = pick("--protocol");
+  if (protocolRaw !== null && !(DISCOVERY_PROTOCOLS as readonly string[]).includes(protocolRaw)) {
+    throw new UsageError(`未知 --protocol：${protocolRaw}（允许 ${DISCOVERY_PROTOCOLS.join(" / ")}）`);
+  }
+  const discover: DiscoverRequest | null =
+    discoverBaseURL === null
+      ? null
+      : {
+          baseURL: discoverBaseURL,
+          keyEnv: pick("--key-env"),
+          protocol: protocolRaw as DiscoveryProtocol | null,
+          model: pick("--model"),
+          json: argv.includes("--json"),
+          label: pick("--label"),
+          providerId: pick("--provider-name"),
+          allowLocal: argv.includes("--allow-local"),
+        };
   const workspace = resolve(ROOT, workspaceArg);
   const flagLog = pick("--log");
   const flagSession = pick("--session");
@@ -417,6 +476,11 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
     ? resolve(workspace, flagLog)
     : pathOf(join(workspace, ".agent", "sessions"), sessionId);
 
+  // M5b 路由开关：解析走纯函数（main/routing-flags），矛盾旗标一正一反同时给 ⇒ 在这里拒跑退 2，
+  // 而不是让后一枚赢（同 `--replay` 那族口径：两枚都在时读数不知道自己跑在哪副装配上）。
+  const routingParsed = parseRoutingFlags(argv);
+  if (!routingParsed.ok) throw new UsageError(routingParsed.error);
+
   return {
     workspace,
     message: message ?? "",
@@ -433,7 +497,9 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
     goal,
     unattended,
     autoVerify: argv.includes("--auto-verify"),
+    routingOverrides: routingParsed.overrides,
     serve: argv.includes("--serve"),
+    discover,
     plugins,
   };
 }
@@ -498,21 +564,36 @@ function resolveProviderSelection(flagProvider: string | undefined, flagModel?: 
     // 没显式给：谁配了 key 就用谁。一个都没配 ⇒ **报错退出，不落 demo**。
     // 落 demo 等于拿一段预录剧本冒充真跑：用户看到「跑完了」，实际什么都没发生。
     // demo 必须显式 `--provider demo`（它是个演示档，不是缺 key 时的兜底）。
+    //
+    // 顺序：**内置四家在前、自定义家在后**。理由不是偏好，是稳定：内置那四家的先后是一份写死的
+    // 产品裁决（见注释上文的「否则加一个 provider 就静默改默认」），把自定义家插进去会让老用户
+    // 的默认通道因为他新加了一个 provider 而改变。自定义家之间按**配置文件里的书写顺序**，可预期。
     for (const kind of ["glm", "openai", "anthropic", "gemini"] as const) {
       const envName = envKeyOf(kind);
       if (envName !== null && (process.env[envName] ?? "").trim() !== "") {
         return forward(kind);
       }
     }
+    for (const custom of installedCustomProviders()) {
+      const value = (process.env[custom.apiKeyEnv] ?? "").trim();
+      if (value !== "") return forward(custom.id);
+    }
     const names = (["glm", "openai", "anthropic", "gemini"] as const)
       .map((k) => envKeyOf(k))
       .filter((n): n is string => n !== null)
       .join(" / ");
-    throw new ConfigError(
-      `没有配置任何 provider 的 API key（查过：${names}）。\n` +
-      "  设一个再跑，例如：export CAIRN_API_KEY=<你的 key>\n" +
+    const custom = installedCustomProviders();
+    const customHint =
       "  DeepSeek 走 OpenAI 兼容通道：export OPENAI_BASE_URL=https://api.deepseek.com/v1\n" +
-      "  只想看演示（预录剧本，不调真模型）：加 --provider demo",
+      (custom.length > 0
+        ? `  你已声明自定义 provider：${custom.map((p) => `${p.id}（需要 ${p.apiKeyEnv}）`).join("、")}\n`
+        : "");
+    throw new ConfigError(
+      `没有配置任何 provider 的 API key（查过：${names}${custom.length > 0 ? `，以及自定义家的 ${custom.map((p) => p.apiKeyEnv).join(" / ")}` : ""}）。\n` +
+        "  设一个再跑，例如：export CAIRN_API_KEY=<你的 key>\n" +
+        customHint +
+        "  想接一家自己的（不改源码）：写 .agent/providers.json，或在设置页里填地址与钥匙\n" +
+        "  只想看演示（预录剧本，不调真模型）：加 --provider demo",
     );
   }
   return forward(forced);
@@ -951,12 +1032,18 @@ function printHelp(): void {
   --log <路径>         事件日志落盘位置（与 --goal / --session 互斥，见下）
   --unattended         无人值守：一切审批 fail-closed 拒绝（不给交互门）
   --auto-verify        收束前补一拍验证（模型没自调 verify 时）
+  --bandit             本会话开「路由 bandit」：每轮可能换模型档位，改花钱行为（--no-bandit 显式关；都不给=按设置）
+  --cascade            本会话开「级联升档」：客观判据不过时升一档重跑，多花一遍钱（--no-cascade 显式关；都不给=按设置）
   --version            打印版本（cairn <version>）后退出
   --doctor             环境自检（Node/凭据在位/沙箱/工作区可写；不回显密钥值）后退出
   --plugins            列出插件与 skill 的发现面（扫了哪几顶根、每支的信任状态、信任表在哪）后退出
   --trust-plugin <名>  批准上面列出的那一条（决议按「绝对路径@内容指纹」记账，内容改了要重批）
   --decline-plugin <名> 拒绝它；与 --trust-plugin 同时给 = 用法错，不让后一枚悄悄赢
                        三条都不跑模型、不落会话，也不要求 CAIRN_API_KEY
+  --discover <地址>    问一次「这家有哪些模型」，再用模型目录把窗口/价格补上，
+                       打印一份可粘贴的 .agent/providers.json（探测默认关，只有这条命令会发请求）
+                       配合：--key-env <变量名>（默认由地址推）｜--protocol openai|anthropic|gemini
+                             --model <名字>（只挑一条）｜--provider-name <id>｜--allow-local｜--json
   -h, --help           本帮助
 
 退出码：0 成功 / 1 跑完但失败 / 2 用法错
@@ -965,6 +1052,136 @@ provider 的 key 从环境变量读（见 README）。缺 key 会明确报错退
 --log 把日志写到任意路径，代价是这条 run 不再是会话（目标挂不上去、既有会话也接不上），
 所以它与 --goal / --session 互斥。
 `);
+}
+
+/** `--discover <baseURL>`：问一句「这家有哪些模型」，再用目录把窗口/价补上，最后打印可粘贴的配置。
+ *
+ *  为什么值得做成命令而不是只在界面里做：接一家自己的模型最费力的一步是**把参数填对**
+ *  （窗口填大了会撞远端 400、价填假了美元闸就悄悄失效）。命令行里跑一次就能拿到一份填好的配置，
+ *  比在表单里逐个猜要快。桌面表单（S7）会把同一套逻辑包成界面。
+ *
+ *  三段式在这里各就各位：① 探测拿清单（本函数第一跳，显式 opt-in）② 目录补参数（catalog）
+ *  ③ 剩下的缺口**打印出来交给用户**（绝不填假数）。 */
+async function runDiscover(req: DiscoverRequest, workspace: string): Promise<number> {
+  const protocol: DiscoveryProtocol = req.protocol ?? "openai";
+  const suggested = suggestProviderId(req.baseURL);
+  const providerId = req.providerId ?? suggested.id;
+  const keyEnv = req.keyEnv ?? suggestApiKeyEnv(providerId);
+
+  process.stdout.write(paint(BOLD, `模型清单：${req.baseURL}\n`));
+  process.stdout.write(paint(DIM, `  协议 ${protocol}｜provider id ${providerId}｜鉴权读环境变量 ${keyEnv} 的值（命令行不收 key 本身）\n`));
+  if (suggested.note !== undefined && req.providerId === null) {
+    process.stdout.write(paint(YELLOW, `  ⚠️ ${suggested.note}\n`));
+  }
+
+  const found = await discoverModels({
+    baseURL: req.baseURL,
+    protocol,
+    keyEnv,
+    env: process.env,
+    ...(req.allowLocal ? { allowLocalEndpoint: true } : {}),
+  });
+  if (!found.ok) {
+    const usageLevel = found.reason === "bad-url" || found.reason === "insecure-endpoint" || found.reason === "no-key";
+    process.stderr.write(paint(RED, `[cairn] 探测失败（${found.reason}）：${found.message}\n`));
+    if (!usageLevel) {
+      process.stderr.write(
+        paint(DIM, "  这家可能没有 /models 端点（自建网关很常见）。可以跳过探测，直接手写 .agent/providers.json。\n"),
+      );
+    }
+    return usageLevel ? EXIT_USAGE : EXIT_FAILED;
+  }
+
+  process.stdout.write(paint(GREEN, `  ✓ 上游回 ${String(found.models.length)} 条模型（${found.requestURL}）\n`));
+
+  // 目录：联网时顺手更新（用户已明确选了这个口径：带一份快照 + 联网刷新）。读数来源必须显示出来。
+  const readout = await loadCatalog({ refresh: "auto" });
+  const catalogLine =
+    `  目录：${readout.origin === "live" ? "刚拉到的" : readout.origin === "cache" ? "本地缓存" : "内置快照"}` +
+    (readout.generatedAt !== undefined ? `（生成于 ${readout.generatedAt}）` : "");
+  process.stdout.write(paint(DIM, catalogLine + "\n"));
+  if (readout.note !== undefined) process.stdout.write(paint(YELLOW, `  ⚠️ 目录：${readout.note}\n`));
+
+  const merged = mergeDiscoveredWithCatalog({
+    models: found.models,
+    catalog: readout.catalog,
+    baseURL: req.baseURL,
+    ...(req.model !== null ? { only: req.model } : {}),
+  });
+  if (req.model !== null && merged.rows.length === 0) {
+    process.stderr.write(paint(RED, `[cairn] 上游清单里没有这条模型：${req.model}\n`));
+    return EXIT_USAGE;
+  }
+  if (merged.matchedProviderId !== undefined) {
+    process.stdout.write(paint(DIM, `  目录认出了这家：${merged.matchedProviderId}（${merged.matchedKind ?? "exact"}）\n`));
+  }
+
+  const draft = buildProviderDraft({
+    providerId,
+    label: req.label ?? providerId,
+    protocol,
+    baseURL: req.baseURL,
+    apiKeyEnv: keyEnv,
+    models: merged.rows,
+  });
+
+  if (req.json) {
+    process.stdout.write(
+      JSON.stringify(
+        {
+          providerId,
+          protocol,
+          baseURL: req.baseURL,
+          apiKeyEnv: keyEnv,
+          catalogOrigin: readout.origin,
+          models: merged.rows,
+          truncated: merged.truncated,
+          missing: draft.missing,
+          warnings: draft.warnings,
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+    return EXIT_OK;
+  }
+
+  process.stdout.write(renderDiscoveredRows(merged.rows));
+  if (merged.truncated > 0) {
+    process.stdout.write(paint(DIM, `  …另有 ${String(merged.truncated)} 条未列出（表格只放参数最全的 20 条；要别的用 --model <名字>）\n`));
+  }
+  for (const warning of draft.warnings) process.stdout.write(paint(YELLOW, `  ⚠️ ${warning}\n`));
+  if (draft.missing.length > 0) {
+    process.stdout.write(paint(DIM, `  这几项目录也查不到，得你自己填：${draft.missing.join(" / ")}\n`));
+  }
+
+  process.stdout.write("\n" + paint(BOLD, `这一段可以存成 ${join(workspace, ".agent", "providers.json")}\n`));
+  process.stdout.write(paint(DIM, "（本命令只打印、不动你的文件；文件已存在的话把这一项加进 providers 数组）\n\n"));
+  process.stdout.write(wrapProvidersFile([draft.json]));
+  process.stdout.write(
+    "\n" +
+      paint(DIM, `接下来：export ${keyEnv}=<你的 key>，然后 cairn --provider ${providerId} "你的任务"\n`),
+  );
+  return EXIT_OK;
+}
+
+/** 探测结果的表格：终端里能扫，缺项一眼看得出空在哪。 */
+function renderDiscoveredRows(rows: readonly DiscoveredRow[]): string {
+  const width = Math.min(44, Math.max(12, ...rows.map((r) => r.id.length)));
+  const head =
+    "  " + "模型".padEnd(width) + "窗口".padStart(10) + "  输入/输出价(USD/百万)".padEnd(24) + "推理".padEnd(6) + "来源";
+  const lines = [paint(DIM, head)];
+  for (const r of rows) {
+    const price =
+      r.price === undefined
+        ? "—"
+        : `${r.price.inputPerMTok ?? "?"} / ${r.price.outputPerMTok ?? "?"}`;
+    const reasoning = r.reasoningEfforts !== undefined && r.reasoningEfforts.length > 0 ? r.reasoningEfforts.join(",") : "—";
+    const origin = r.origin === "both" ? "探测+目录" : r.origin === "discovery" ? "探测" : "目录";
+    const id = r.id.length > width ? r.id.slice(0, width - 1) + "…" : r.id;
+    lines.push("  " + id.padEnd(width) + String(r.contextWindow ?? "—").padStart(10) + "  " + price.padEnd(24) + reasoning.padEnd(6) + origin);
+  }
+  return lines.join("\n") + "\n";
 }
 
 /** `--plugins` 那一拍的取料层。两条不许漂的地方：扫面用的配置＝一次真 run 用的那一份
@@ -1016,8 +1233,7 @@ async function main(): Promise<number> {
     process.stdout.write(`cairn ${PKG_VERSION}\n`);
     return EXIT_OK;
   }
-  // ---- 产品化 B1：`--doctor` 环境自检（不跑模型、不落日志）----
-  // 工作区只认写得对的 --workspace <值>，其余一律按 cwd——doctor 本身不该因为 argv 另有毛病而炸，
+  // ---- 产品化 B1：`--doctor` 环境自检（不跑模型、不落日志）----  // 工作区只认写得对的 --workspace <值>，其余一律按 cwd——doctor 本身不该因为 argv 另有毛病而炸，
   // 所以不走 pick()（它对缺值抛 UsageError）。
   if (opts === "doctor") {
     const wsIdx = argv.indexOf("--workspace");
@@ -1032,6 +1248,11 @@ async function main(): Promise<number> {
   // 与 --doctor 同族：不跑模型、不起沙箱、不落会话，所以排在 provider 解析之前（没配 key 的机器
   // 也要能看面、能决议——读路径被无关闸门挡住是这一族反复栽的那格）。
   if (opts.plugins !== null) return await runPluginFace(opts.plugins, opts.workspace);
+
+  // ---- `--discover`：问一句「这家有哪些模型」+ 用目录补参数（不搭壳、不起沙箱、不落会话）----
+  if (opts.discover !== null) {
+    return await runDiscover(opts.discover, opts.workspace);
+  }
 
   // ---- M8：`--replay` 只读日志打决策链（不搭壳、不起沙箱、不跑模型）----
   if (opts.replayId !== null) {
@@ -1050,6 +1271,24 @@ async function main(): Promise<number> {
     process.stdout.write(formatReplay(events) + "\n");
     process.stdout.write(paint(DIM, `\n会话日志：${path}（${String(events.length)} 条事件）\n`));
     return EXIT_OK;
+  }
+
+  // 自定义 provider（`.agent/providers.json`）：必须在 provider 解析**之前**装上。
+  // 顺序不是风格问题：装上之前 `--provider deepseek` 会被判成未知家 —— 配置写得再对也不通，
+  // 那正是本仓点名过的「能力发货、入口不通」。配坏了则 exit 2 并把**每一条**问题打出来。
+  const custom = loadCustomProviders(opts.workspace);
+  if (custom.kind === "broken") {
+    process.stderr.write(paint(RED, `[cairn] ${custom.path} 配置有问题（${custom.message}）：\n`));
+    for (const problem of custom.problems) {
+      process.stderr.write(paint(RED, `  · ${problem.where === "" ? "(顶层)" : problem.where}：${problem.message}\n`));
+    }
+    return EXIT_USAGE;
+  }
+  if (custom.kind === "ok") {
+    installCustomProviders(custom.derived);
+    const names = custom.derived.map((d) => `${d.label}(${d.specs.length} 个模型)`).join("、");
+    process.stderr.write(paint(DIM, `[cairn] 已装自定义 provider：${names}\n`));
+    for (const warning of custom.warnings) process.stderr.write(paint(YELLOW, `[cairn] ⚠️ ${warning}\n`));
   }
 
   // provider 解析：M0A_PROVIDER 显式覆盖优先，其次 settings，最后按已配置的 key 推断。
@@ -1280,6 +1519,9 @@ async function main(): Promise<number> {
         // 拆成两个槽就是为了不翻转上面那半：沉淀留开，只有续跑停。
         ...(!interactive ? { noAnswerer: true as const } : {}),
         ...(opts.autoVerify ? { autoVerify: true } : {}),
+        // M5b 路由开关（`--bandit/--no-bandit`、`--cascade/--no-cascade`）：空对象 ⇒ 一个键都不多，
+        // 与「这两枚旗标存在前」逐字同形。真值由 agent-runner 与 settings 合（resolveRoutingFlags）。
+        ...opts.routingOverrides,
         // 武装了长任务目标 ⇒ 保留 refine_goal（它在无目标时恒 fail-closed，摘掉省 85 tok/轮）。
         ...(opts.goal !== null ? { goalArmed: true as const } : {}),
         // --model 自由档只能走这个槽：那一档的模型名按定义不在 DEFAULT_MODEL_TABLE 里，

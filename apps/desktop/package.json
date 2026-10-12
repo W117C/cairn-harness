@@ -1,5 +1,5 @@
 {
-  "name": "m0-desktop",
+  "name": "cairn-desktop",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,6 +10,7 @@
     "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs",
     "build": "pnpm run build:preload && vite build && tsc -p tsconfig.json --noEmit",
     "smoke": "node scripts/smoke.mjs",
+    "package": "node scripts/package.mjs",
     "test": "vitest run --config vitest.config.ts && node --import tsx ../../scripts/desktop-boundary-check.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

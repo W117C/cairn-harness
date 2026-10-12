@@ -236,8 +236,16 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
     opts.signal?.throwIfAborted();
     for await (const out of provider.stream(messages, [], { signal: opts.signal })) {
       opts.signal?.throwIfAborted();
-      if (out.type === "assistant_delta" || out.type === "assistant_message" || out.type === "usage") {
+      // 2026-10-07 用户实测：沉淀轮的**正文**原来原样进了主流 —— 模型按指令回一句「无」，
+      // 于是每轮回答后面都多挂一条「无」，看起来像模型突然说了句莫名其妙的话。
+      // 这一轮是**收尾记账**（指令经 ephemeralUserTurn 进请求，本身不进日志），不是答给用户的话：
+      //   · usage 照旧 emit —— 花掉的 token 必须记账（token 面板 / 成本闸都读它）；
+      //   · 正文不再 emit —— 它真正有内容的产物是 remember 调用（下面照旧 emit，走审批）。
+      if (out.type === "usage") {
         await opts.emit(out as AgentEvent);
+        continue;
+      }
+      if (out.type === "assistant_delta" || out.type === "assistant_message") {
         continue;
       }
       if (out.type !== "tool_call") continue;

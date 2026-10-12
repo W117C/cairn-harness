@@ -52,6 +52,9 @@ export function chainTable(chain: PipelineChain): string {
 const MODEL_OUTPUT_ATTRIBUTION: Record<ModelOutput["type"], true> = {
   assistant_message: true,
   assistant_delta: true,
+  // 思考正文同样归 worker 子流：漏了它，worker 的"自言自语"会以父会话正文的形态
+  // 落进主转录（父会话以为那是自己想的话）—— 这正是这张表存在的理由。
+  thinking_delta: true,
   tool_call: true,
   usage: true,
   turn_truncated: true,
@@ -87,6 +90,9 @@ export function withAgentId(e: AgentEvent, agentId: string): AgentEvent {
 export const SCANNED_TEXT_PATHS: Partial<Record<AgentEvent["type"], readonly (readonly string[])[]>> = {
   assistant_message: [["content"]],
   assistant_delta: [["text"]],
+  // 思考正文同样要扫：模型在"想"的时候一样可能把 key / env 整段复述出来
+  // （它是**模型生成的文本**，与正文同源 —— 不扫就等于在最像人话的那段留了个口子）。
+  thinking_delta: [["text"]],
   tool_call: [["args"]],          // write_file 的 contents 等（B5 审查补的那条）
   tool_result: [["output"]],
   verify_result: [["results"]],   // {command, output}[]
@@ -99,6 +105,9 @@ export const SCANNED_TEXT_PATHS: Partial<Record<AgentEvent["type"], readonly (re
   plan_proposed: [["plan"]],
   clarify_requested: [["questions"]],
   goal_stopped: [["reason"]],
+  // v2.16：挂起理由与停止理由是同一个形状（自由文本、将来可能内联读数），同口径扫——
+  // 「同族出口各扫一份」这条边界在这里保持一致，别因为今天那句文案是常量就放松。
+  goal_paused: [["reason"]],
 };
 
 /** 在**产出处**就已脱敏的事件（本表不参与扫描，判据只判「别再漏一处」）。 */
@@ -118,6 +127,8 @@ export const USER_AUTHORED_TEXT_TYPES: readonly AgentEvent["type"][] = [
 export const PROSE_FREE_TYPES: readonly AgentEvent["type"][] = [
   "usage", "session_meta", "plan_approved", "approval_resolved", "agent_status",
   "routing_decision", "impact_report", "turn_truncated",
+  // v2.16：恢复只有 turn（计数），无自由文本——显式表态，别顺手改成扫描路径。
+  "goal_resumed",
   // P0 装配账：字段是工具名（标识符，与 tool_call.name 同口径：那条也只扫 args）、计数、
   // 布尔与字节数。工具名来自插件/MCP 服务器，但它承载不了任何凭据——把它扫掉只会让
   // 「省了谁」这条读数失去分辨力。**这是一次显式表态，别顺手改成扫描路径**：

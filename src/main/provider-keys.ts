@@ -6,7 +6,7 @@
 import { readFile } from "node:fs/promises";
 import { writeFileAtomic } from "../atomic-write";
 import type { SafeStorageIo } from "../agent/plugins/secrets";
-import { ENV_KEYED_PROVIDERS, type EnvKeyedProvider } from "../providers/env-keys";
+import { ENV_KEYED_PROVIDERS, customEnvKeyedProviders, type EnvKeyedProvider } from "../providers/env-keys";
 
 export type { SafeStorageIo };
 
@@ -123,8 +123,21 @@ export function validateProviderKeyStore(raw: unknown): { ok: true; value: Provi
 }
 
 export function isProviderId(v: string): v is ProviderId {
-  return (PROVIDER_IDS as readonly string[]).includes(v);
+  return (PROVIDER_IDS as readonly string[]).includes(v) || isCustomProviderId(v);
 }
+
+/** 自定义 provider 的 id 也能存钥匙（S7）。判据是「**已装上**」—— 与路由面同一份注册表。
+ *
+ *  2026-10-06 实测踩到的坑与正解：设置页表单原本「先存钥匙、再写配置」，而配置写完才算装上
+ *  ⇒ 首次添加一家必然在第一步被拒（报「未知 provider」），用户看到的现象是「点了保存没有回音」。
+ *  当时的第一个修法是把判据放宽成「形状合法即可」，但那是**把保险柜变成来者不拒**——
+ *  本仓既有判据明写「未知 id 拒收」，那条是对的，该改的是顺序而不是判据。
+ *  正解：表单先把这一家装进运行期注册表（可逆），再存钥匙，最后落盘配置。
+ */
+function isCustomProviderId(v: string): boolean {
+  return customEnvKeyedProviders().includes(v);
+}
+
 
 /** 存一个 provider key；无后端 / 非白名单 provider → fail-closed 拒绝（绝不静默退回明文）。 */
 export async function putProviderKey(

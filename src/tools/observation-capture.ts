@@ -1,6 +1,11 @@
 import type { AuthorizedRedactedText, ObservationLedger, Projection, RecallInput } from "../agent/ledger.js";
 import type { Tool, ToolResult } from "./base.js";
 
+// 注：观测回取（obs_recall）与任何「向量检索 / RAG / embedding」增强能力都是**附加、可选**的。
+// 系统在它们完全关闭（ObservationLedger.enabled 默认 false，见 ledger.ts:91）时必须正常工作；
+// 启用只作为增强接入，且按既有权限管线（evaluate/gatedTool）与 fail-closed 纪律收束。
+// 未发布 / 无凭据 / 无索引时一律降级为「不注入该工具面」，绝不静默假装可用。
+
 /** Capture ONLY the host-authorized redacted ToolResult, after all permission and
  * redaction hooks. Full text stays in tool_result/events; the returned handle is
  * side metadata for later request projection. Never call this on raw stdout.

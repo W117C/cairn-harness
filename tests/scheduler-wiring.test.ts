@@ -14,6 +14,7 @@ import { getScheduler, serveScheduler, schedulerRunning } from "../src/main/agen
 import { TOOLS } from "../src/tools";
 
 const CLI_SRC = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
+const DESKTOP_MAIN_SRC = fileURLToPath(new URL("../apps/desktop/src/main/index.ts", import.meta.url));
 
 let ws = "";
 let handle: { stop: () => void } | null = null;
@@ -54,5 +55,18 @@ describe("调度器接线（M4：--serve 常驻入口）", () => {
       .filter((l) => !l.trim().startsWith("//"))
       .join("\n");
     expect(live).toMatch(/serveScheduler\(\{ workspace: opts\.workspace \}\)/);
+  });
+
+  it("④ 反向证人（桌面，v2.14）：apps/desktop main 以非注释形态调 serveScheduler（摘掉 = 桌面端快照恒空、CRUD fail-closed）", async () => {
+    const src = await readFile(DESKTOP_MAIN_SRC, "utf8");
+    const live = src
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("//"))
+      .join("\n");
+    expect(live, "桌面主进程必须常驻启动调度器（此前唯一生产入口在 CLI --serve，桌面端成空壳）").toMatch(
+      /serveScheduler\(\{\s*workspace\s*\}\)/,
+    );
+    // 停表同样必须在（起点接线而退出不停 = timer 泄漏）
+    expect(live).toMatch(/will-quit[\s\S]{0,80}stopDesktopScheduler/);
   });
 });

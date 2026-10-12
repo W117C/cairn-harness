@@ -36,6 +36,14 @@ export interface UserMessageEvent { type: "user_message"; content: string; origi
 export interface AssistantMessageEvent { type: "assistant_message"; content: string }
 /** 流式增量片段：callId 标识同一轮回复，text 为逐字追加的一小段。 */
 export interface AssistantDeltaEvent { type: "assistant_delta"; callId: string; text: string }
+/** 模型的**思考正文**（reasoning / thinking）增量。
+ *
+ *  与 assistant_delta 的区别：那段是"答给用户的话"，这段是"它自己怎么想的"。
+ *  两者必须分开 —— 混进正文会让转录与重放变脏（思考块在多数家不可回传）。
+ *  callId 与 assistant_delta 同源（同一次请求里的同一段输出），渲染层据此把思考挂在对应回答行前。
+ *  2026-10-07 用户要求显示思考过程：以前适配器是**刻意忽略**推理增量的。 */
+export interface ThinkingDeltaEvent { type: "thinking_delta"; callId: string; text: string }
+
 /** M3a：worker 子流的工具调用（§4.4.9 落主流口径）——agent_id 在场 = 该事件属于该 worker 子流，
  *  主上下文投影（projectContext）跳过带 agent_id 的事件（父上下文唯一接收物 = agent_result，§4.4.4）。 */
 export interface ToolCallEvent { type: "tool_call"; id: string; name: string; args: Record<string, unknown>; agent_id?: string }
@@ -543,6 +551,29 @@ export interface GoalStoppedEvent {
   ts?: number;
 }
 
+/** 用户把目标**挂起**的事实（≠ 停止）：自动续跑当场停手，但目标仍武装、窗口/轮次/证据全留，
+ *  恢复后从原样接着跑。与 `goal_stopped` 分开是因为「停过的目标不许被下一条消息复活」是终态语义，
+ *  而挂起要能复活——混用一条事件会让「暂停」要么退化成「清除」，要么把停止的终态闸打漏。 */
+export interface GoalPausedEvent {
+  type: "goal_paused";
+  /** 挂起理由原文（当前唯一来源：用户在目标面板点「暂停」）。 */
+  reason: string;
+  /** 挂起时已发生的轮数（与 `goal_stopped.turn` 同口径，只作展示记账）。 */
+  turn: number;
+  session_id?: string;
+  ts?: number;
+}
+
+/** 用户把挂起的目标**恢复**的事实：只清挂起位，**不新建目标、不重置窗口**——
+ *  轮次/证据/花费仍量同一条 `goal_set` 之后那一段（恢复不是改设，不该把已完成的工作作废）。 */
+export interface GoalResumedEvent {
+  type: "goal_resumed";
+  /** 恢复时已发生的轮数（展示记账）。 */
+  turn: number;
+  session_id?: string;
+  ts?: number;
+}
+
 /** 一轮模型输出**没说完就被收走**的证据（§3.3）：只在非正常收尾时落——答完的轮零新事件，
  *  既有转录与冻结判卷逐字不变。缺了这条，被 max_tokens 砍断的一轮与答完的一轮在流里长得
  *  一模一样，而 loop 判结束只看「有没有 tool_call」，于是截断被记账成成功（返工的源头）。
@@ -635,6 +666,7 @@ export type AgentEvent = (
   | UserMessageEvent
   | AssistantMessageEvent
   | AssistantDeltaEvent
+  | ThinkingDeltaEvent
   | ToolCallEvent
   | ToolResultEvent
   | UsageEvent
@@ -660,6 +692,8 @@ export type AgentEvent = (
   | AutomationCompletedEvent
   | GoalSetEvent
   | GoalStoppedEvent
+  | GoalPausedEvent
+  | GoalResumedEvent
   | TurnTruncatedEvent
   | SurfaceAccountEvent
   | RunErrorEvent
@@ -678,6 +712,7 @@ const KNOWN_TYPES: Record<AgentEvent["type"], true> = {
   user_message: true,
   assistant_message: true,
   assistant_delta: true,
+  thinking_delta: true,
   tool_call: true,
   tool_result: true,
   usage: true,
@@ -703,6 +738,8 @@ const KNOWN_TYPES: Record<AgentEvent["type"], true> = {
   automation_completed: true,
   goal_set: true,
   goal_stopped: true,
+  goal_paused: true,
+  goal_resumed: true,
   turn_truncated: true,
   surface_account: true,
   error: true,

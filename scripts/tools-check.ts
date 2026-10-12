@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TOOLS } from "../src/tools";
 import { edit_file } from "../src/tools/edit_file";
-import { closeAllLspClients, lsp } from "../src/tools/lsp";
+import { closeAllLspClients, lsp, setLspTrustedRepos } from "../src/tools/lsp";
 import type { ToolContext } from "../src/tools";
 
 let failures = 0;
@@ -195,6 +195,8 @@ console.log("\n== lsp（三项补齐：输出上限 / 截断提示 / 相对路�
 {
   const STUB = fileURLToPath(new URL("../fixtures/lsp/stub-server.mjs", import.meta.url));
   const ws = await mkdtemp(join(tmpdir(), "m2a-check-lsp-"));
+  // #58 第二半：判卷/基准跑的是仓内 fixture，显式声明信任（口径与 tests/lsp.test.ts 同源）。
+  setLspTrustedRepos([ws]);
   const ctx: ToolContext = { workspace: ws };
   // 1) 未启用 = fail loud（既有断言，保留）
   const err = await lsp.run({ operation: "hover", path: "a.ts", line: 1, column: 1 }, ctx).catch((e: Error) => e);

@@ -181,7 +181,7 @@ describe("按档拆文本（第 175 页，任务 #16）", () => {
 
   it("接线：生产装配点把按档取的面交给 provider（行锚定，防同字面量冒领）", () => {
     const src = readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf8");
-    const hits = src.match(/^ {6}provider: createProvider\(promptText, systemPromptFor\(opts\.mode\), modelSelection, \{$/gmu);
+    const hits = src.match(/^ {6}provider: createProvider\(promptText, systemPromptFor\(opts\.mode\)(?: \+ evolutionNote)?, modelSelection, \{$/gmu);
     expect(hits ?? [], "装配点还是硬传 BASE_SYSTEM ⇒ 拆完的文本没人消费（门会绿而这格没接线）").toHaveLength(1);
   });
 });

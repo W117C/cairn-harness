@@ -20,7 +20,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { createKernelHost, type KernelHost } from "../src/main/kernel-host";
 
-const dir = mkdtempSync(join(tmpdir(), "m0-m3-e2e-"));
+const dir = mkdtempSync(join(tmpdir(), "cairn-m3-e2e-"));
 const userData = join(dir, "userData");
 mkdirSync(userData, { recursive: true });
 // seed settings：provider=demo ⇒ 不拨号不花钱（同 kernel-host.test.ts 口径）
@@ -28,7 +28,7 @@ writeFileSync(join(userData, "settings.json"), JSON.stringify({ provider: "demo"
 
 // 剧本 env 的外部残留会劫持判卷（M3A_MAIN_SCRIPT 优先级最高；M0A_PROVIDER 强推真 provider 会拨号）——
 // 进门前清场，出门后还原（本进程只跑 apps/desktop 自己的套件，还原是礼貌不是必须）。
-const ambientKeys = ["M3A_MAIN_SCRIPT", "M0A_PROVIDER", "M0_MODEL", "M0B_WORKSPACE"] as const;
+const ambientKeys = ["M3A_MAIN_SCRIPT", "M0A_PROVIDER", "CAIRN_MODEL", "M0B_WORKSPACE"] as const;
 const ambientBackup = ambientKeys.map((k) => [k, process.env[k]] as const);
 for (const k of ambientKeys) delete process.env[k];
 process.env.M3A_AGENTS_DEMO = "1"; // 脚本化主模型：fixtures/agents/main-demo.jsonl，确定性

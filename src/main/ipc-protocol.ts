@@ -1,4 +1,6 @@
-// IPC 协议：main / preload / renderer 共享的类型（全部 type-only，跨层引用不产生运行时依赖）。
+// IPC 协议：main / preload / renderer 共享的类型（除协议版本常量外全部 type-only，跨层引用
+// 不产生运行时依赖；版本常量是唯一运行时出口，SEMA §3.5/§12——src-execution-path 棘轮的
+// 纯类型面豁免随 Phase 3 版本化撤名，执行路径由 tests/ipc-protocol-version.test.ts 供给）。
 import type { AgentEvent } from "../events";
 import type { PermissionMode } from "../permissions";
 import type { ToolName } from "../tools/base";
@@ -22,6 +24,56 @@ export type { SessionMetadataRecord } from "./session-metadata";
 export type { RunAttachmentReference } from "./run-attachments";
 export type { ThinkingEffort } from "../providers/capabilities";
 export type { ProviderInfo } from "./provider-runtime";
+export type { DiscoveryProtocol } from "../providers/discovery";
+export type { DiscoveredRow } from "../providers/provider-draft";
+// 本地也要用这两个名字（`export type { X } from` 只做再导出，不进本文件的作用域）
+import type { DiscoveryProtocol } from "../providers/discovery";
+import type { DiscoveredRow } from "../providers/provider-draft";
+
+// ---- SEMA §3.5/§12：IPC 协议版本化 ----
+/** 协议兼容面唯一事实源：renderer 的期望版本经 vite define 构建期注入（App.tsx 挂载即比对
+ *  主进程实况 `protocolVersion()`），失配 fail-closed 亮 fatal 面——老渲染层配新主进程（或反向）
+ *  不许静默错位。改协议形状（AgentApi 增删/字段语义变）= bump 这里，并以 desktop-panel 提案
+ *  走同一流水线（§3.5）。 */
+export const IPC_PROTOCOL_VERSION = 1;
+
+/** S7：探测结果（表单据此渲染那张可勾选的表）。 */
+export type ProviderDiscoverPayload =
+  | {
+      ok: true;
+      rows: DiscoveredRow[];
+      truncated: number;
+      /** 目录与探测都没给、**必须用户自己填**的字段名（界面据此把输入框标出来）。 */
+      missing: string[];
+      warnings: string[];
+      catalogOrigin: "snapshot" | "cache" | "live";
+      catalogNote?: string;
+      matchedProviderId?: string;
+    }
+  | { ok: false; reason: string; message: string };
+
+export interface ProviderSaveRequest {
+  providerId: string;
+  label?: string;
+  protocol: DiscoveryProtocol;
+  baseURL: string;
+  apiKeyEnv: string;
+  allowLocalEndpoint?: boolean;
+  models: {
+    id: string;
+    model?: string;
+    contextWindow?: number;
+    maxOutputTokens?: number;
+    price?: { inputPerMTok?: number; outputPerMTok?: number; cacheReadPerMTok?: number; cacheWritePerMTok?: number };
+    reasoningEfforts?: string[];
+  }[];
+  /** 有值就顺手存进 safeStorage（加密落盘，明文不落）。 */
+  keyValue?: string;
+}
+
+export type ProviderSaveResult =
+  | { ok: true; path: string; providers: string[]; installed: number; warnings: string[] }
+  | { ok: false; error: string; problems?: { kind: string; where: string; message: string }[] };
 
 export interface RunRequest {
   message: string;
@@ -77,7 +129,7 @@ export interface StateResponse {
   /** M4b：license 状态（valid/expired/inactive/invalid；inactive → 引导横幅，§2.2）。 */
   license?: LicenseState;
   /** M4b：provider key 状态面（safeStorage 可用性 + 已存 provider 清单 + env 并存提示；不含 key 值）。 */
-  providerKeys?: { available: boolean; stored: string[]; envActive: boolean };
+  providerKeys?: { available: boolean; stored: string[]; envActive: boolean; envProviders: string[] };
   /** M4b：关于信息（版本展示；关于/更新组与引导第 4 步消费）。 */
   about?: { version: string };
 }
@@ -156,8 +208,10 @@ export interface AgentApi {
   /** 方案门：批准 / 拒绝当前 plan（card_action plan_decide）。 */
   decidePlan(approved: boolean, callId?: string): Promise<boolean>;
   /** goal 模式：给某个会话设定/改设目标（轮次上限 + 美元上限），或 `clear:true` 清除。
-   *  不发 = 会话不自动续跑。`clamped` 回条 = 入参被钳制过的字段点名（不静默改用户的预算）。 */
-  setGoal(req: { sessionId?: string; objective?: string; maxTurns?: number; maxUsd?: number; clear?: boolean }): Promise<{ ok: boolean; error?: string; clamped?: string[] }>;
+   *  不发 = 会话不自动续跑。`clamped` 回条 = 入参被钳制过的字段点名（不静默改用户的预算）。
+   *  v2.16：`pause:true` 挂起（停自动续跑、目标仍武装）、`resume:true` 恢复（只清挂起位，
+   *  不重置窗口/轮次）。挂起 ≠ 清除：清除落 `goal_stopped`（终态、不可复活）。 */
+  setGoal(req: { sessionId?: string; objective?: string; maxTurns?: number; maxUsd?: number; clear?: boolean; pause?: boolean; resume?: boolean }): Promise<{ ok: boolean; error?: string; clamped?: string[] }>;
   /** P3（审查）：取消当前交互 run——信号沿 runLoop 轮界/门等待/长驻工具透传。
    *  M3-5：补可选 sessionId 走会话级取消（kernel-host cancel(sessionId)，T2 per-session controller）；
    *  缺省无参 = 兼容旧调用（host 侧 fail-visible：{ok:false,"会话不在运行"}）。 */
@@ -182,10 +236,27 @@ export interface AgentApi {
   openSession(id: string): Promise<{ events: AgentEvent[] }>;
   renameSession(oldId: string, newName: string): Promise<{ id: string }>;
   deleteSession(id: string): Promise<{ currentSession: string | null }>;
+  /** M8 分叉（v2.15 IPC 接线）：保留前 N 轮（含）→ 新会话 `<id>-f<N>`；源会话只读、字节不变。 */
+  forkSession(sessionId: string, round: number): Promise<{ ok: boolean; id?: string; error?: string }>;
+  /** #7 文件级回滚（v2.16 IPC 接线）：把第 N 轮主会话改过的文件还原成该轮之前的原件（源自 D7 覆盖前快照）。
+   *  只动主会话直写；worker 改动在各自 worktree（另有合并控制塔）。取不到原件 / 轮后又改过的逐条 manual 报出。 */
+  revertTurn(sessionId: string, round: number): Promise<{
+    ok: boolean;
+    error?: string;
+    restored: string[];
+    deleted: string[];
+    manual: { path: string; why: string }[];
+    failed: { path: string; error: string }[];
+  }>;
   // ---- CX-01：真实项目注册表 + Session-plane 组织记录（必选桥；不是 renderer-local state）----
   listProjects(): Promise<ProjectRecord[]>;
   addProject(input: AddProjectInput): Promise<ProjectRecord>;
   removeProject(id: string): Promise<ProjectRecord>;
+  /** v2.16 用户反馈沉淀（赞/踩）：落 sidecar `feedback.jsonl`（append-only，不进事件流）。
+   *  `rating:"none"` = 撤销（读时取最后一条生效）。未接线前界面只选中、不假提交。 */
+  submitFeedback(req: { sessionId: string; eventId: number; rating: "up" | "down" | "none"; note?: string }): Promise<{ ok: boolean; error?: string }>;
+  /** 当前生效的反馈（按 eventId 去重、撤销的不返回）：界面据此点亮赞/踩。 */
+  listFeedback(sessionId: string): Promise<{ sessionId: string; eventId: number; rating: "up" | "down"; note?: string; at: string }[]>;
   setSessionPinned(sessionId: string, pinned: boolean): Promise<SessionMetadataRecord>;
   setSessionArchived(sessionId: string, archived: boolean): Promise<SessionMetadataRecord>;
   assignSessionProject(sessionId: string, projectId: string | null): Promise<SessionMetadataRecord>;
@@ -229,7 +300,26 @@ export interface AgentApi {
   /** M4b §2.1：删除已存 provider key。 */
   providerKeyDelete(provider: string): Promise<{ ok: boolean; error?: string }>;
   /** M4b §2.1：key 状态面（不含 key 值）：safeStorage 可用性 / 已存 provider / env 并存提示。 */
-  providerKeyStatus(): Promise<{ available: boolean; stored: string[]; envActive: boolean }>;
+  providerKeyStatus(): Promise<{ available: boolean; stored: string[]; envActive: boolean; envProviders: string[] }>;
+  // ---- S7：自定义接口（BYO 端点）——「填地址+钥匙 → 拉取模型 → 勾选 → 存盘」三段 ----
+  /** 探测一个地址有哪些模型，并用本地目录补窗口/价格。**不改任何文件**（「拉取」必须零副作用）。 */
+  providerDiscover(req: {
+    baseURL: string;
+    protocol?: DiscoveryProtocol;
+    keyEnv: string;
+    /** 表单里刚输入、还没落盘的钥匙（一次性；不给则读环境变量）。 */
+    keyValue?: string;
+    allowLocal?: boolean;
+  }): Promise<ProviderDiscoverPayload>;
+  /** ③：按项目名建一个同名文件夹，登记成工作区并交回 canonical 路径（用户实测要求
+   *  「先建一个以项目名命名的文件夹，再进入项目」）。 */
+  createProject(req: { name: string; parentDir?: string }): Promise<
+    | { ok: true; name: string; path: string }
+    | { ok: false; reason: string; message: string }
+  >;
+  /** 把一家写进工作区 `.agent/providers.json`（按 id upsert，别的家原样保留）；
+   *  给了 `keyValue` 就顺手存进 safeStorage（存失败则整件事失败，不写半个配置）。 */
+  providerSave(req: ProviderSaveRequest): Promise<ProviderSaveResult>;
   /** M4b §2.3：轻量更新检查（未配置 / 网络失败 / 已最新 / 有新版 全显式态）。 */
   checkUpdate(): Promise<UpdateCheckResult>;
   /** M4b §2.3：打开下载页（shell.openExternal，仅 http(s) 白名单——防 manifest 注入协议）。 */
@@ -237,4 +327,8 @@ export interface AgentApi {
   /** M4-5：dialog 选目录（侧栏添加工作区表单「浏览…」的后端；M3 deferred 收口）。
    *  系统目录选择器（openDirectory，非模态）；取消/关窗 ⇒ null——文本手输兜底据此保留。 */
   pickDirectory(): Promise<string | null>;
+  /** SEMA §3.5/§12：主进程实况协议版本（唯一事实源 = 本文件 IPC_PROTOCOL_VERSION）。
+   *  renderer 挂载即比对构建期注入的期望版本，失配即 fatal——通道本身恒答得上来（版本化
+   *  的第一格就是它自己），查询失败也按失配面处理。 */
+  protocolVersion(): Promise<number>;
 }

@@ -834,3 +834,182 @@ RNG 确定性 5 · 状态守卫 13 · save/load 往返 1 · update 代价项 5 �
 ② 帽的设计本来就允许「先按现状站住、W4 之后再降」。
 
 **降帽路线（写清，免得帽子烂在这儿）**：W4 落地后按 2600 → 2400 逐档降，一档一笔、每笔写读数。
+
+---
+
+## 2026-10-11 追加：W4 第一切片落地（调度器接线搬去 `src/main/scheduler-runtime.ts`）+ 帽 3100 → 2900
+
+**先复量了 10-05 那张表**（原文在上，不涂改）：当时的「M4a 段 1215 行 ⇒ 35 条针脚」里，
+针脚并不长在**调度器接线本身**上——按现读分段：调度器状态/生命周期（1105–1232 区）**0 条**、
+`installAutomationTools`（1233–1333 区）**0 条**、LSP/搜索/automation face（1521–1623 区）**0 条**；
+14 条在 `runAgent`、20 条在 handlers（2220–2544 区）⇒ 可搬的只有前两区，后两区才是针脚集中的地方。
+
+**本切片搬走什么**（14 个符号，逐字一致，只六处声明过的适配）：
+
+- 状态：`scheduler` / `scheduleCapCache` / 单调真值（改名 `everInitialized` + 读端 `schedulerEverStarted()`）；
+- 生命周期与 IPC：`scheduleDataDir` / `initScheduler` / `getScheduler` / `startScheduler` /
+  `stopScheduler` / `schedulerRunning` / `updateScheduleCap` / `makeScheduledExecutor` / `handleSchedule*` 四件；
+- 执行面五件工具：`installAutomationTools`；盘上判据：`automationsScheduled`。
+
+**依赖注入**（不反向依赖装配根，同 `setSettingsHostDeps` 形态）：`setSchedulerRuntimeDeps` 注入
+`defaultWorkspace` / `onEvent` / `runSession` / `currentSession` 四处；`agent-runner.ts` 文件尾按原路径
+再导出，`cli.ts`、桌面 main、既有判卷的导入面零改动。`serveScheduler` 留在装配根（它的职责是拼装：
+装工具面 + 初始化 + 启动）。
+
+**读数**：`src/main/agent-runner.ts` 3047 → **2853** 行；`repo-hygiene-check` 面②
+「全部 ≤ 2900 行（最大 2853 / 180 支）」。搬迁正确性用切分前原文逐符号比对（切分前原文取自本会话
+回放记录），14/14 逐字一致。
+
+**判卷面随动**：`tests/tool-surface-parity.test.ts` 的源文本对账改读两处（`table["automation_*"] =`
+那一形搬去了新模块）；`tests/verify-exec-sandbox.test.ts` 的既有双文件读法不动。
+
+**同轮的四条死锚点归位**（`mutate-needles-check` 报「针脚已不在源文件里」的那批）：
+`verify-exec-pnpm-mapping-lost` / `sandbox-model-alias-widened` 的 `src:` 改指
+`src/main/sandbox-test-command.ts`——`5b8cadab`（09-27）把三处内联收成一份时落点在 agent-runner，
+本次在飞的抽取（未入库）把那份文本搬去了新文件，`src:` 跟着走，两针改指未入库面直到那份源文件入库；
+`cascade-ladder-cross-provider` 的针脚改为 `effectiveModelTable().filter(…===…)` 的反集形态
+（反向验证：换成 `!==` ⇒ killer 转红）；`goal-stopped-flag-ignored` 的针脚跟上加过 `paused` 的现读行
+（反向验证：摘掉 `stopped` 那一半 ⇒ killer 转红）。四条都只是**归位**：
+在未入库面上它们现在按仓库既有口径报「等入库」而不是静默空转，干净 HEAD 上的读数等入库后回正。
+
+**这一笔没有做什么（免得被读成 W4 完成）**：
+
+- `runAgent`（14 条针脚）与 handlers（20 条针脚）两段未搬：搬它们要连带改锚点 `src:`，且
+  `mutate-verify` 量 **HEAD**，只有先入库才能验证 ⇒ 各自仍需独占窗口 + 一笔入库；
+- 帽只降到 **2900**（= 2853 上取整）——原文写的「W4 落地后按 2600 → 2400」是照「M4a 整段 1215 行
+  可搬」估的，现读证伪了那个前提（可搬的只有约 210 行）⇒ 下一档何时降，看下一段真搬走多少。
+
+**同笔另一件事（不在 W4 内）**：§8.3 登记过的 `loadExternalRefState`「缺失/损坏同路静默」
+按本文件 §7.10 写下的修法方向修了——缺失仍静默（首启正常），损坏/畸形改为 `onCorrupt` 显式告警
+并继续按空态走（fail-closed 不变，`inject.ts` 消费面零改动）。判卷在 `tests/memory-store-pure.test.ts`
+（原「缺口证人」按新契约改写 + 形状畸形一条 + 缺失不告警一条）；反向验证：去掉告警 2 条断言转红。
+
+### 2026-10-11 追加（二）：§7.3 欠条表购入 14 条变异锚点（表 1519 → 1533）
+
+把 §7.6/§7.8/§7.11/§7.12/§7.13 各页**已做过、但只活在页内表格里**的反向验证转成常驻锚点
+（没人重跑就等于没有），外加本日新修的 `loadExternalRefState` 两条、§7.3 表尾的 `capabilities.ts` 三条：
+
+| 来源 | 文件 | 条数 |
+|---|---|---|
+| §7.13 | `src/agent/ledger.ts`（manifest 逐条守卫退化） | 1 |
+| §7.8 | `src/agent/worktree.ts`（glob 白名单 / 空 slug 兜底 / 悬空连字符） | 3 |
+| §7.11 | `src/tools/line-delta.ts` + `src/tools/apply_patch.ts`（`\r` 归一 / 重叠闸） | 2 |
+| §7.12 | `src/routing/bandit.ts`（逐条 posterior 守卫） | 1 |
+| §7.6 | `src/agent/sidechat.ts`（文件类型闸 / realpath 落点闸） | 2 |
+| 本日新修 | `src/agent/memory/store.ts`（损坏告警 / 形状校验） | 2 |
+| §7.3 表尾 | `src/providers/capabilities.ts`（image 证据 / thinking 证据 / 校验点） | 3 |
+
+**买法（每条先杀一遍才入库）**：注入 → 只跑该 killer 用例（`-t`，标题按字面量转义——标题里的 `+`/`*`/`\r`
+当正则会假绿）→ 确认**恰 1 条**转红 → `cmp` 逐字节还原。14/14 通过；`mutate-needles-check` 复核
+针脚都在盘上的源文件里、标题都能解析、改法全部产出合法源文件。
+**两处收口**（被 `tests/mutate-verify-gates.test.ts` 的「松钉指针 ≤ 10」当场拦下）：模板标题
+（`${label} ⇒ …`）那两条算松钉，超帽 ⇒ 改指**字面标题**的 killer——ledger 那条把变异从「掏空循环」
+改为「守卫恒真」（killer 是字面标题的对照组「守卫不能变成永真」，`ledger-manifest-per-entry-guard-degenerate`），
+bandit 那条改用同文件字面标题「告警正文点名是哪一条坏」。
+
+### 2026-10-11 追加（三）：W4 第二切片——goal 面搬去 `src/main/goal-handlers.ts`（cap 2900 → 2700）
+
+**搬走什么**（5 个符号 173 行，逐字一致，只两处声明适配）：`emitGoalEvent` / `emitGoalStoppedOnThrow` /
+`goalNextTurn` / `goalViewOf` / `handleGoalSet`。装配根留 `budgetPriceKeyOf`（会话成本闸也用同一份），
+按 `setGoalHandlerDeps({ onEvent, budgetPriceKeyOf })` 注入；`handleGoalSet` 在文件尾按原路径再导出，
+desktop/CLI 导入面零改动。
+
+**判卷面随动**：
+
+- 9 条 `goal-*` 锚点 `src:` 改指新文件（先按段量过：这 9 条的针脚全在搬迁区内）；
+  `goal-budget-key-from-settings-field` 的针脚跟着注入形态改字面量并**先杀一遍**（换成读盘字段 ⇒ 红）；
+  `goal-hint-lost-at-callsite` / `goal-lag-count-not-passed-at-call-site` 的 `expectFail`
+  随 `goal-stop-decision.test.ts` 那条标题改字（标题里「goalNextTurn 未导出」在拆分后已不成立）。
+- 两张扫源文本的判卷改读两处：`tests/budget-price-key.test.ts`（goal 侧断言读 goal-handlers，
+  计数按两文件之和）与 `tests/goal-stop-decision.test.ts`（goalReminder 调用点读 goal-handlers）。
+
+**读数**：`agent-runner.ts` 2853 → **2690**；`src` 单文件帽 2900 → **2700**（= 2690 上取整；
+第二名 orchestrator 2566）。搬迁正确性同样逐符号比对切分前原文：5/5 逐字一致。
+**仍未做**：runAgent 段（14 针）与 handleAgentRun..handleAgentDecide 段（13 针）——针脚最密的两块，
+要独占窗口 + 一笔入库才能被 `mutate-verify` 验证。
+
+**两处「新件要进门的面」（如实记，免得下一位重踩）**：
+
+1. `scripts/prose-needle-scan.ts` 的生产侧取料是 `git ls-files`（**索引面**，不是 HEAD 面）——
+   新模块只落在盘上而没进索引时，它移走的诊断文案会被判成「已提交态 drift」而红。
+   处置：对 `src/main/scheduler-runtime.ts` / `src/main/goal-handlers.ts` 用 `git add -N`
+   （intent-to-add，不落内容、可随时撤），两个新件即进索引 ⇒ 该面恢复全绿；
+   `mutate-needles-check` 的「未入库面」口径看的是 HEAD（`ls-tree`），不受影响、照旧点名声。
+2. `tests/repo-hygiene-check.test.ts` 与门内 `selfTests()` 的 SH5 夹具写的是**现读最大文件**
+   （旧值 2761）；降帽当笔必须把夹具同步到当笔读数（2690/2566），否则「帽 > 现状」那条自证会红。
+
+### 2026-10-11 追加（四）：W4 第三切片——sidechat 面搬去 `src/main/sidechat-handlers.ts`（cap 2700 → 2600）
+
+**搬走什么**（9 个符号含内联剧本常量，189 行、0 针脚，逐字一致，只三处声明适配）：
+`sidechatDemoScript` / `resolveSidechatModel` / `resolveSidechatSummarizer` / `handleSidechatCreate` /
+`handleSidechatAsk` / `handleSidechatPromote` / `handleSidechatState` / `runSidechatDemo` +
+`SIDECHAT_DEMO_INLINE`。三处活状态（事件推送 / 最近 run 日志 `lastLogPath` / `currentWorkspace`）按
+`setSidechatHandlerDeps` 注入；四个公开 handler 在文件尾按原路径再导出（桌面 main 导入面零改动）。
+
+**读数**：`agent-runner.ts` 2690 → **2509**（搬迁后顺手摘掉 6 行已无消费者的 import）；
+搬迁逐符号比对切分前原文 **9/9 逐字一致**。
+**最大文件换人**：`src/agent/orchestrator.ts` **2566 行** 成为新的第一名 ⇒ 帽 2700 → **2600**
+（= 2566 上取整）。下一档降帽的判据从此落在 orchestrator 那一支（不在 W4 账上；W4 的账到此完成
+「装配根不再持有最大文件」这一里程碑）。
+**仍未做（W4 账内剩下的两块）**：runAgent 段（14 针）与 handleAgentRun..handleAgentDecide 段（13 针）
+——针脚最密的两块，要独占窗口 + 一笔入库才能被 `mutate-verify` 验证。
+
+### 2026-10-11 追加（五）：W4 第四切片——会话收束面搬去 `src/main/compact-and-report.ts`
+
+**搬走什么**（6 个符号 106 行、**0 针脚、0 装配根依赖**）：`DEMO_SUMMARY` / `firePreCompactHook` /
+`compactSessionLog`（M1d 手动压缩核心）、`shouldRunSecurityReport` / `runSecurityReportHook`
+（M2f 安全快照 hook）、`resolveSafeMode`（M3b 安全模式解析）。钩子引擎与事件管线本来就由调用方
+以参数递进来，`store` 走 import ⇒ 本模块**不需要** `setXHostDeps`（拆分面里第一个零注入的）。
+
+**边界处理**：`lastLogPath`（可变状态，handleCompact / handleAgentRun / 状态面共用）留在装配根；
+`handleCompact`（IPC 入口，含两条 `manual-compact-*` 针脚）也留在装配根——那两条针脚因此**零改动**。
+
+**读数**：`agent-runner.ts` 2509 → **2405**；搬迁逐符号比对切分前原文 **6/6 逐字一致**
+（唯一适配：`firePreCompactHook` 从私有改导出，供装配根注入 provider 的 `onPreCompact` 用）。
+帽不变（2600）——最大文件仍是 orchestrator 2566。
+**仍未做**：runAgent 段（14 针）与 handleAgentRun..handleAgentDecide 段（13 针）。
+
+### 2026-10-11 追加（六）：W4 第五切片——状态/插件面搬去 `src/main/state-handlers.ts`
+
+**搬走什么**（6 个符号 139 行、0 针脚）：`handleAgentState`（agent:state 聚合面）、`scanOrphanWorktrees`、
+`currentWorkspace`（「此刻工作区」唯一答案）、`pluginRuntimeOpts`（插件面取址单一事实源）、
+`pluginSnapshotLite`、`handlePluginDecide`（信任决议）。三处装配根活状态
+（缺省靶子 `WORKSPACE` / 沙箱自检结果 / 最近一次 run 日志）按 `setStateHandlerDeps` 注入；
+**插件面板留档快照的状态归属随本面搬走**（模块内 `pluginSnapshot`），装配根一场 run 收束时经
+`setPluginSnapshot` 交回（原来那行是直接写装配根的同名变量）。
+
+**判卷面随动**：`tests/plugin-data-root-durable.test.ts` 的扫源面（⑥⑦ 两条钉「装配面只有一条
+`pluginDataRoot:` 取址」）改读两处（runner + state-handlers）——只看旧文件会把搬走的实现读成 0 条，
+红在取料面而不是产品面。
+
+**读数**：`agent-runner.ts` 2405 → **2270**；搬迁逐符号比对切分前原文 **6/6 逐字一致**
+（适配 4 处：defaultWorkspace / lastLogPath / sandboxState 注入 + 快照改名）。帽不变（2600，
+最大仍是 orchestrator 2566）。
+**仍未做**：runAgent 段（14 针）与 handleAgentRun..handleAgentDecide 段（13 针）；
+card_action 协议段（159 行、1 针、约 7 个注入）也还留着。
+
+### 2026-10-11 追加（七）：W4 第六切片——工具门组搬去 `src/main/tool-gates.ts`（agent-runner 跌破 2000 行）
+
+**搬走什么**（10 个符号 288 行、**7 针脚**）：`denied` / `withSkillAllowNote` / `gatedTool` /
+`gatedMcpTool`（写向与 MCP 工具的统一门：四档 + 方案门 + 安全模式 gate + always 落库）、
+`installPluginTools`、`sessionToolFace` / `pluginToolSpecsFromRuntime`（规格面，与执行面同源）、
+`persistAlwaysRule`、`GatedName` 类型、`PluginToolSource` 接口。**只一处注入**（`currentSession`：
+审批门 + 自治档 + 沙箱 + actionFusion 均由它带出），是本会话里「搬得多、注得少」最划算的一刀。
+
+**搬迁正确性**：逐符号比对切分前原文 **10/10 逐字一致**（适配：`currentSession` 注入 ×2、
+`RunOptions["mode"]` 收成 `PermissionMode`、3 处私有函数加导出供装配根用）。
+
+**判卷面随动**（三处扫源面）：
+
+- 7 条针脚（skill ×3 / spec ×1 / mcp ×2 / always-rule ×1）`src:` 改指新文件，抽一条按规矩杀过
+  （`mcp-grade-arg-dropped-at-gate`：注入 → killer 转红 → 逐字节还原）；
+- `tests/verify-exec-sandbox.test.ts` 的「三处消费者都走带工作区判据的入口」计数改读三处；
+- `tests/tool-surface-parity.test.ts` 的实例面文本对账加入第三处（`table["skill"] =` 那一形随迁）。
+
+**读数**：`agent-runner.ts` 2270 → **1978**（首次跌破 2000 行；起点 3047 → 现读 −35%）。
+帽不变（2600）——最大文件仍是 orchestrator 2566，下一档降帽的判据仍在那一支。
+**仍未做**：runAgent 段（14 针）、handleAgentRun..handleAgentDecide 段（13 针）、
+card_action 协议段（159 行、1 针、约 7 个注入）。
+**当前读数**：表 1519 → **1533**；阻断 14 条全部属于「等入库」两类
+（`sandbox-test-command.ts` 未入库 2 条、针脚钉在未入库文本上 10 条、HEAD 侧标题指针 2 条）——
+**没有死锚点、没有盘上标题失效**；上面那批「针脚已不在源文件里」的静默空转已清零。

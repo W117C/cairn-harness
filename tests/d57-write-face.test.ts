@@ -12,7 +12,9 @@ import { it, expect, describe } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const src = readFileSync(join(process.cwd(), "src", "main", "agent-runner.ts"), "utf8");
+// 2026-10-11 拆分：`persistAlwaysRule`（含那支 import）随工具门搬去 ./tool-gates ⇒ 取料读两处。
+const src = readFileSync(join(process.cwd(), "src", "main", "agent-runner.ts"), "utf8")
+  + "\n" + readFileSync(join(process.cwd(), "src", "main", "tool-gates.ts"), "utf8");
 
 describe("always-allow 的写入落点（#57 写入端）", () => {
   it("落点是 alwaysRulesPath(workspace)，不是受跟踪的 permissions.json", () => {

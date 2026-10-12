@@ -778,3 +778,40 @@ describe("cairn CLI：--compact 要摘要模型，没它就 fail-closed（不许
     expect(r.out).toContain("--session");
   });
 });
+
+describe("cairn CLI：M5b 路由开关（--bandit / --cascade 一族）", () => {
+  it("--help 列出这四枚旗标（没进 help 的选项等于不存在）", () => {
+    const out = runCli(["--help"]).out;
+    for (const f of ["--bandit", "--no-bandit", "--cascade", "--no-cascade"]) {
+      expect(out, `${f} 没进 --help`).toContain(f);
+    }
+  });
+
+  it("--bandit / --cascade 各占选项表里一行（与其它开关同形，不是夹在示例里的散字）", () => {
+    const out = runCli(["--help"]).out;
+    expect(out.split("\n").some((l) => /^\s+--bandit\s/.test(l))).toBe(true);
+    expect(out.split("\n").some((l) => /^\s+--cascade\s/.test(l))).toBe(true);
+  });
+
+  it("矛盾旗标（--bandit 与 --no-bandit 同时给）⇒ exit 2，报文点名两枚", () => {
+    const r = runCli(["--bandit", "--no-bandit", "做点事"]);
+    expect(r.status, "run 输出：" + r.out).toBe(2);
+    expect(r.out).toContain("--bandit");
+    expect(r.out).toContain("--no-bandit");
+  });
+
+  it("--max-usd 已在 help 里（「三个最值钱的开关」里它早就有旗标了，别再当缺件）", () => {
+    expect(runCli(["--help"]).out).toContain("--max-usd");
+  });
+
+  it("三跳接线都在源文本里（旗标解析 → over → 编排器装配）：摘任一跳都得变红", () => {
+    // 这一格是**存在性**的钉子（本仓那句「守卫原文钉不住可用态那条路」照样适用）：语义那一半由
+    // tests/routing-flags.test.ts 的纯函数判据量（四种组合 / 矛盾拒跑 / 等价性），这里只保证那条链
+    // 没被拆——摘掉任一跳，旗标就变回「有机制、零流量」，而下面的纯函数判据仍会全绿。
+    const cli = readFileSync(join(ROOT, "src/cli.ts"), "utf8");
+    const runner = readFileSync(join(ROOT, "src/main/agent-runner.ts"), "utf8");
+    expect(cli, "cli.ts 没把解析出的覆盖递进 handleAgentRun 的 over").toContain("...opts.routingOverrides");
+    expect(runner, "agent-runner 没把 opts.routing 透到 buildSessionOrchestrator").toContain("...(opts.routing ? { routing: opts.routing } : {})");
+    expect(runner, "over 没与 settings 合（取值面那一行没了）").toContain("resolveRoutingFlags(over, s)");
+  });
+});

@@ -105,7 +105,8 @@ describe("outputsShareVerdict：超帽才红，且必须带着分母", () => {
 
 describe("oversizedFiles：超帽判红且点名", () => {
   it("现状最大文件在帽内 ⇒ 绿", () => {
-    expect(oversizedFiles([{ path: "src/main/agent-runner.ts", lines: 2761 }]).ok).toBe(true);
+    // 读数 2026-10-11（W4 第三切片后）：最大是 orchestrator 2566 行（agent-runner 已降到 2515），帽 2600。夹具随现读走。
+    expect(oversizedFiles([{ path: "src/agent/orchestrator.ts", lines: 2566 }]).ok).toBe(true);
   });
 
   it("超帽 ⇒ 红，且按大小降序点名两支（反向验证）", () => {
@@ -155,8 +156,8 @@ describe("帽的取值有据（防「悄悄把帽调到让门绿」）", () => {
     expect(OUTPUTS_SHARE_CAP).toBeGreaterThan(0.6);
   });
 
-  it("体量帽仍高于现状最大文件 2761（降到 2761 及以下 ⇒ 门必红，那是降帽时刻该有的红）", () => {
-    expect(SRC_FILE_LINE_CAP).toBeGreaterThan(2761);
+  it("体量帽仍高于现状最大文件 2566（降到 2566 及以下 ⇒ 门必红，那是降帽时刻该有的红）", () => {
+    expect(SRC_FILE_LINE_CAP).toBeGreaterThan(2566);
   });
 
   it("**不变式**：帽必须高于盘上现状最大文件——否则门红在一个谁都不该去处理的地方", () => {

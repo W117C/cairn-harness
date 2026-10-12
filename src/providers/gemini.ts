@@ -15,6 +15,8 @@ export interface GeminiOptions {
   /** 缺失 key 时的环境变量名（进错误消息），缺省 GEMINI_API_KEY。 */
   apiKeyEnv?: string;
   model?: string;
+  /** 思考预算（token）：非空则加 generationConfig.thinkingConfig.thinkingBudget。 */
+  thinkingBudget?: number;
   baseURL?: string;
   /** 单测注入点（缺省全局 fetch）。 */
   fetchImpl?: typeof fetch;
@@ -29,6 +31,8 @@ interface GeminiChunk {
     content?: {
       parts?: {
         text?: string;
+        /** thought=true 的 part 是思考内容（thinkingBudget 开启时才有）。 */
+        thought?: boolean;
         functionCall?: { name?: string; args?: Record<string, unknown>; id?: string };
       }[];
       role?: string;
@@ -68,7 +72,11 @@ function parseArgs(args: Record<string, unknown> | undefined, label: string): Re
 // ProviderMessage → Gemini contents：system 抽成 systemInstruction；user/assistant 文本；
 // assistant 的 tool_calls → model 侧 functionCall parts；tool 结果 → user 侧 functionResponse parts
 //（连续合并进同一条 contents，name/response 为官方字段）。全部按 Gemini 官方结构原生构造。
-export function toGeminiBody(messages: ProviderMessage[], tools?: ProviderToolSpec[]): Record<string, unknown> {
+export function toGeminiBody(
+  messages: ProviderMessage[],
+  tools?: ProviderToolSpec[],
+  opts: { thinkingBudget?: number } = {},
+): Record<string, unknown> {
   const systemParts: string[] = [];
   const contents: { role: "user" | "model"; parts: Record<string, unknown>[] }[] = [];
   const push = (role: "user" | "model", part: Record<string, unknown>): void => {
@@ -119,6 +127,10 @@ export function toGeminiBody(messages: ProviderMessage[], tools?: ProviderToolSp
     push(role, { text: m.content ?? "" });
   }
   const body: Record<string, unknown> = { contents };
+  // 思考档位（§S8）：Gemini 收的是 token 预算，放在 generationConfig.thinkingConfig 里。
+  if (opts.thinkingBudget !== undefined && opts.thinkingBudget > 0) {
+    body.generationConfig = { thinkingConfig: { thinkingBudget: opts.thinkingBudget } };
+  }
   if (systemParts.length > 0) body.systemInstruction = { parts: [{ text: systemParts.join("\n\n") }] };
   if (tools && tools.length > 0) {
     body.tools = [
@@ -159,7 +171,7 @@ export async function* streamGemini(
     init: {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify(toGeminiBody(messages, tools)),
+      body: JSON.stringify(toGeminiBody(messages, tools, { ...(opts.thinkingBudget !== undefined ? { thinkingBudget: opts.thinkingBudget } : {}) })),
     },
     fetchImpl: doFetch,
     stallMs: opts.stallTimeoutMs ?? DEFAULT_STALL_MS,
@@ -229,7 +241,11 @@ export async function* streamGemini(
         if (chunk.promptFeedback?.blockReason) blockReason = chunk.promptFeedback.blockReason;
         const parts = cand?.content?.parts ?? [];
         for (const part of parts) {
-          if (part.text) {
+          // thought=true 的 part 是思考内容（thinkingBudget 开启时才有）→ 独立事件。
+          if (part.thought === true && part.text) {
+            yield { type: "thinking_delta", callId, text: part.text };
+          }
+          if (part.text && part.thought !== true) {
             yield { type: "assistant_delta", callId, text: part.text };
           } else if (part.functionCall) {
             const fc = part.functionCall;

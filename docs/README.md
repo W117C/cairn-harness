@@ -1,6 +1,6 @@
 # DSH core
 
-This repository currently contains the agent/core only. Desktop UI, Electron packaging, preload, renderer, and desktop acceptance material were removed by explicit request.
+This repository contains the agent/core (`src/`, electron-free) plus a desktop shell under `apps/desktop/`. The desktop layer was removed by explicit request on 2026-09-27 and reintroduced as new M1 slices on 2026-10-02; its disposition is decided in [`adr/0001-core-only-vs-desktop.md`](adr/0001-core-only-vs-desktop.md).
 
 Useful entry points:
 

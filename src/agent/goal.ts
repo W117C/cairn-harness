@@ -223,6 +223,9 @@ export interface GoalView {
   truncated: boolean;
   /** 已停下来的原因（`goal_stopped` 原文）；null = 还没停。 */
   stopped: string | null;
+  /** 已挂起的理由（`goal_paused` 原文）；null = 没挂起。与 `stopped` 分开：
+   *  挂起只停自动续跑、可恢复；停止是终态（用户再发一条也不复活）。 */
+  paused: string | null;
   /** **本目标窗口内**（与证据/写盘同一段）的累计 token。美元闸必须量这个，不能量整段会话：
    *  设 $0.5 上限之前会话已经花掉 $0.6 是常事，按全会话算会"第一轮就以已花 $0.6000 停下"，
    *  把用户设的闸变成随机数（审查 C2：闸与其余 goal 量不同轴）。 */
@@ -254,6 +257,7 @@ export function projectGoal(events: AgentEvent[]): GoalView | null {
     wrote: hasSessionWrites(window),
     truncated: lastTurnWasTruncated(window),
     stopped: trace.stopped,
+    paused: trace.paused,
     usage: sumWindowUsage(window),
     window,
   };

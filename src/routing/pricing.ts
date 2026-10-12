@@ -13,7 +13,7 @@
 //     3.8-Flash $0.75/$3.75 cache read $0.075、2.5-Pro $1.25/$10 cache read $0.125。
 //   · 智谱 docs.bigmodel.cn 的定价页是 JS 渲染，**官方数字没抓到** ⇒ GLM 三行仍是占位（未证）。
 //     第三方报道的「GLM-5.2 输入 8 元 / 输出 28 元 每百万 tokens」按未证处理，不写进数表。
-import { DEFAULT_MODEL_TABLE } from "../providers/registry";
+import { DEFAULT_MODEL_TABLE, installedCustomProviders } from "../providers/registry";
 
 export interface ModelPrice {
   /** USD / 每百万输入 token。 */
@@ -72,8 +72,34 @@ export const DEFAULT_PRICE_TABLE: Readonly<Record<string, ModelPrice>> = {
   "gemini-strong": { inputPerMTok: 1.25, outputPerMTok: 10.0, cacheReadPerMTok: 0.125, cacheWritePerMTok: null, calibrated: true },
 };
 
+/** 有效价表 = 内置 12 行 + 已装自定义 provider 给的那些行（`.agent/providers.json` 的 price）。
+ *
+ *  两条纪律：
+ *   · **价不齐就不进表**：只给了输出价、没给输入价的行整条不收录 —— 拿另一样按 0 算
+ *     等于把一次付费调用记成半价，而美元闸会据此低估。不进表的话代价是「这条模型价格未知」，
+ *     那是本仓一贯的诚实口径（明说不生效，不按 $0 烧）。
+ *   · **不打 calibrated**：本字段的语义是「当日在**厂商官方页**读到过数字」。用户自己填的价
+ *     不是我们读到过的 ⇒ 保持占位口径，`unpricedModels()` 会照旧把它列出来当待标定清单。 */
+export function effectivePriceTable(): Readonly<Record<string, ModelPrice>> {
+  const custom = installedCustomProviders();
+  if (custom.length === 0) return DEFAULT_PRICE_TABLE;
+  const extra: Record<string, ModelPrice> = {};
+  for (const p of custom) {
+    for (const [id, price] of Object.entries(p.prices)) {
+      if (price.inputPerMTok === undefined || price.outputPerMTok === undefined) continue;
+      extra[id] = {
+        inputPerMTok: price.inputPerMTok,
+        outputPerMTok: price.outputPerMTok,
+        cacheReadPerMTok: price.cacheReadPerMTok ?? null,
+        cacheWritePerMTok: price.cacheWritePerMTok ?? null,
+      };
+    }
+  }
+  return { ...DEFAULT_PRICE_TABLE, ...extra };
+}
+
 /** 查价；未知 id fail-visible 抛错（不静默按 0 算——价格面缺失必须显式）。 */
-export function priceOf(id: string, table: Readonly<Record<string, ModelPrice>> = DEFAULT_PRICE_TABLE): ModelPrice {
+export function priceOf(id: string, table: Readonly<Record<string, ModelPrice>> = effectivePriceTable()): ModelPrice {
   const p = table[id];
   if (!p) throw new Error(`未知 model 价格: ${JSON.stringify(id)}（价格表键：${Object.keys(table).join(", ")}）`);
   return p;
@@ -87,7 +113,7 @@ export function priceOf(id: string, table: Readonly<Record<string, ModelPrice>> 
 export function costUsd(
   id: string,
   usage: { inputTokens: number; outputTokens: number; cacheReadInputTokens?: number; cacheWriteInputTokens?: number },
-  table: Readonly<Record<string, ModelPrice>> = DEFAULT_PRICE_TABLE,
+  table: Readonly<Record<string, ModelPrice>> = effectivePriceTable(),
 ): number {
   const p = priceOf(id, table);
   const read = Math.max(0, Math.min(usage.cacheReadInputTokens ?? 0, usage.inputTokens));

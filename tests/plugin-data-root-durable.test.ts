@@ -20,6 +20,9 @@ import {
 } from "../src/agent/plugins";
 
 const RUNNER_SRC = fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url));
+// 2026-10-11 拆分：`pluginRuntimeOpts`（那一格唯一的取址行）搬去 ./state-handlers ⇒ 取料跟着读两处
+// （判据仍是「装配面上只有一条取址」；只看一处会把搬走的实现读成 0 条，红在取料面而不是产品面）。
+const STATE_SRC = fileURLToPath(new URL("../src/main/state-handlers.ts", import.meta.url));
 
 describe("插件数据根的缺省落点（信任表与 userConfig 同顶）", () => {
   it("① 缺省 = 用户级 .config/cairn/plugin-data（与 memory 全局层同顶，不是各算一遍）", () => {
@@ -54,7 +57,7 @@ describe("插件数据根的缺省落点（信任表与 userConfig 同顶）", (
 });
 
 describe("装配面真的用这条取址（不是纯函数自证）", () => {
-  const source = readFileSync(RUNNER_SRC, "utf8");
+  const source = readFileSync(RUNNER_SRC, "utf8") + "\n" + readFileSync(STATE_SRC, "utf8");
   // 先收成「这一处装配有几行」再判内容：直接对整份 3100 行文件做 toMatch，红起来把全文打进度里
   // （实测一份红读数 270KB），而「不许有第二条取址」这件事本身就是条要数的量。
   const lines = source.split("\n").filter((l) => /^\s*pluginDataRoot:/.test(l));

@@ -38,7 +38,7 @@
 ## 3. 2026-09-20 实测（20 段会话语料 / 285 次 tool_call）
 
 语料：`outputs/ga-strategy-2026-09-20{,-rep2,-rep3}/`、`outputs/loop-eval-*`、
-`~/Library/Application Support/m0-agent-loop/sessions/`（生产会话目录实测只有 1 个 JSONL）。
+`~/Library/Application Support/cairn-harness/sessions/`（生产会话目录实测只有 1 个 JSONL）。
 
 ### 3.1 直接读数：ask 密度读不出来
 

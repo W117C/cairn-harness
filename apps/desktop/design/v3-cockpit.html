@@ -1,0 +1,961 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-tier="normal" data-gate="none" data-drawer="closed" data-view="thread" data-error="off" data-width="1440">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cairn · 任务驾驶舱 v3（原型）</title>
+<style>
+/* ============ tokens ============ */
+:root{
+  --canvas:#f3f1ea; --surface:#fbfaf5; --surface-2:#efede5; --surface-3:#e7e4da;
+  --rail-bg:#efece3; --hair:#ddd8cb; --hair-2:#cfc9b9;
+  --t1:#1c1b18; --t2:#4f4c44; --t3:#7c786d; --t4:#a29d90;
+  --accent:#c2643c; --accent-soft:#f4e2d7; --accent-ink:#8a3f1f;
+  --ok:#2f7a5b; --ok-soft:#dff0e7;
+  --warn:#9a6a1a; --warn-soft:#f6ecd6;
+  --bad:#b03a2e; --bad-soft:#f7e0dd;
+  --wait:#3a6a9a; --wait-soft:#e0ebf5;
+  --violet:#5f5290;
+  --code-bg:#201e1a; --code-fg:#e8e3d6; --code-hair:#37342c;
+  --add:#2f7a5b; --add-bg:#e6f2ec; --del:#b03a2e; --del-bg:#f7e3e0;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+  --r1:5px; --r2:8px; --r3:12px; --rp:999px;
+  --read:760px; --rail:250px; --rev:440px;
+  --fs-xs:11px; --fs-sm:12.5px; --fs-md:13.5px; --fs-lg:15px; --fs-xl:17px;
+  --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,monospace;
+  --sans:-apple-system,"SF Pro Text","PingFang SC","Noto Sans SC",system-ui,sans-serif;
+  --sh-1:0 1px 2px rgba(28,27,24,.06);
+  --sh-2:0 6px 24px -8px rgba(28,27,24,.18),0 1px 2px rgba(28,27,24,.08);
+  --sh-3:0 20px 60px -12px rgba(28,27,24,.30);
+  --t-fast:120ms; --t-med:200ms; --ease:cubic-bezier(.2,.7,.2,1);
+}
+[data-theme="dark"]{
+  --canvas:#131210; --surface:#1b1a17; --surface-2:#232119; --surface-3:#2c2a21;
+  --rail-bg:#171612; --hair:#2e2b24; --hair-2:#3d3930;
+  --t1:#eee9dd; --t2:#bdb6a6; --t3:#8d8778; --t4:#6b6557;
+  --accent:#d97b52; --accent-soft:#3a2418; --accent-ink:#f0b393;
+  --ok:#59b189; --ok-soft:#1b2c24;
+  --warn:#cfa44a; --warn-soft:#2e2717;
+  --bad:#e0705f; --bad-soft:#331c18;
+  --wait:#6ea3d8; --wait-soft:#1c2836;
+  --violet:#a99ad8;
+  --code-bg:#0e0d0b; --code-fg:#e8e3d6; --code-hair:#2a271f;
+  --add:#59b189; --add-bg:#172a21; --del:#e0705f; --del-bg:#2e1a17;
+  --sh-1:0 1px 2px rgba(0,0,0,.4); --sh-2:0 8px 28px -8px rgba(0,0,0,.6); --sh-3:0 24px 60px -12px rgba(0,0,0,.7);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:#c9c4b6;font-family:var(--sans);color:var(--t1);-webkit-font-smoothing:antialiased;font-size:var(--fs-md)}
+[data-theme="dark"] body{background:#080807}
+button,input,textarea{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+.i{width:15px;height:15px;flex:none;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.i.s12{width:12px;height:12px}.i.s14{width:14px;height:14px}.i.s18{width:18px;height:18px}
+
+/* ============ prototype harness（非产品 UI） ============ */
+.harness{position:sticky;top:0;z-index:50;background:#0f0e0c;color:#d8d2c2;padding:10px 14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #2b2822}
+.harness .hb{font-size:var(--fs-xs);letter-spacing:.06em;text-transform:uppercase;color:#8d8778}
+.scene-btn{font-size:var(--fs-sm);padding:5px 10px;border-radius:var(--rp);border:1px solid #3a362d;color:#c9c3b2;transition:var(--t-fast)}
+.scene-btn:hover{border-color:#6d6757;color:#fff}
+.scene-btn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.harness details{margin-left:auto;font-size:var(--fs-sm)}
+.harness summary{cursor:pointer;color:#c9c3b2;font-size:var(--fs-sm)}
+.harness pre{white-space:pre-wrap;max-width:min(92vw,860px);background:#1a1916;padding:12px;border-radius:var(--r2);margin-top:8px;line-height:1.65;color:#c4bfae;font-size:var(--fs-sm)}
+.stage{padding:18px;display:flex;justify-content:center}
+[data-width="1440"] .app{width:1440px}
+[data-width="1180"] .app{width:1180px}
+[data-width="980"] .app{width:980px}
+[data-width="780"] .app{width:780px}
+[data-width="1180"] .rev-need,[data-width="980"] .rev-need,[data-width="780"] .rev-need{display:none}
+
+/* ============ app shell ============ */
+.app{height:calc(100vh - 96px);min-height:660px;background:var(--surface);border:1px solid var(--hair);border-radius:var(--r3);box-shadow:var(--sh-3);display:grid;grid-template-rows:auto 1fr;overflow:hidden;position:relative;max-width:100%;transition:width var(--t-med) var(--ease)}
+[data-view="empty"] .fleet,[data-view="empty"] .zone-gate,[data-view="empty"] .composer-ctx{display:none}
+[data-view="empty"] .zone-stream{display:grid;align-content:center}
+[data-view="empty"] .reading>*:not(.empty){display:none}
+
+.titlebar{height:42px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 var(--s3);border-bottom:1px solid var(--hair);background:var(--surface-2)}
+.tb-l,.tb-r{display:flex;align-items:center;gap:6px}
+.tb-r{justify-self:end}
+.wctrl{display:flex;gap:7px;margin-right:var(--s3)}
+.wctrl i{width:11px;height:11px;border-radius:50%;background:var(--hair-2);display:block}
+.tb-title{font-size:var(--fs-sm);font-weight:600;color:var(--t1);text-align:center;max-width:46ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tb-sub{font-size:var(--fs-xs);color:var(--t3);font-weight:400;margin-top:1px}
+.phase{display:flex;align-items:center;gap:7px;font-size:var(--fs-xs);color:var(--t2);background:var(--surface);border:1px solid var(--hair);border-radius:var(--rp);padding:3px 9px 3px 7px}
+.phase b{font-weight:600;color:var(--t1);font-variant-numeric:tabular-nums}
+.spin{width:11px;height:11px;border-radius:50%;border:1.6px solid var(--accent);border-top-color:transparent;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.ib{width:26px;height:26px;border-radius:var(--r1);display:grid;place-items:center;color:var(--t3);transition:var(--t-fast)}
+.ib:hover{background:var(--surface-3);color:var(--t1)}
+.ib.on{background:var(--accent-soft);color:var(--accent-ink)}
+.ib.stop{color:var(--bad)}
+
+.shell{display:grid;grid-template-columns:var(--rail) minmax(0,1fr) 0;min-height:0}
+[data-drawer="open"] .shell{grid-template-columns:var(--rail) minmax(0,1fr) var(--rev)}
+[data-drawer="full"] .shell{grid-template-columns:var(--rail) 0 minmax(0,1fr)}
+[data-drawer="full"] .main{display:none}
+
+/* ============ R1 nav rail ============ */
+.rail{background:var(--rail-bg);border-right:1px solid var(--hair);display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;min-height:0}
+.rail-top{padding:var(--s3) var(--s3) var(--s2)}
+.newtask{width:100%;display:flex;align-items:center;gap:8px;background:var(--accent);color:#fff;font-size:var(--fs-md);font-weight:600;padding:9px var(--s3);border-radius:var(--r2);box-shadow:var(--sh-1);transition:var(--t-fast)}
+.newtask:hover{filter:brightness(1.05);transform:translateY(-1px)}
+.newtask:active{transform:scale(.985)}
+.filters{display:flex;gap:4px;flex-wrap:wrap;padding:0 var(--s3) var(--s2)}
+.fchip{font-size:var(--fs-xs);padding:3px 8px;border-radius:var(--rp);color:var(--t3);border:1px solid transparent;transition:var(--t-fast)}
+.fchip:hover{background:var(--surface-3);color:var(--t2)}
+.fchip[aria-pressed="true"]{background:var(--surface);border-color:var(--hair-2);color:var(--t1);font-weight:600}
+.fchip em{font-style:normal;font-variant-numeric:tabular-nums;opacity:.65;margin-left:3px}
+.srch{margin:0 var(--s3) var(--s2);display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--hair);border-radius:var(--r1);padding:5px 8px;color:var(--t4)}
+.srch input{border:0;background:none;font-size:var(--fs-sm);width:100%;outline:none}
+.rail-scroll{overflow-y:auto;min-height:0;padding-bottom:var(--s3)}
+.wgroup{margin:0 var(--s2) var(--s3)}
+.whead{display:flex;align-items:center;gap:6px;padding:var(--s2) 6px;font-size:var(--fs-xs);font-weight:600;color:var(--t3);letter-spacing:.02em}
+.whead .i{color:var(--accent)}
+.whead button{margin-left:auto;color:var(--t4)}
+.whead button:hover{color:var(--t1)}
+.tcard{display:grid;grid-template-columns:auto 1fr;gap:8px;padding:8px;border-radius:var(--r2);cursor:pointer;transition:var(--t-fast);border:1px solid transparent;position:relative}
+.tcard:hover{background:var(--surface)}
+.tcard.sel{background:var(--surface);border-color:var(--hair);box-shadow:var(--sh-1)}
+.tcard .dot{width:7px;height:7px;border-radius:50%;margin-top:5px;background:var(--t4)}
+.dot.run{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.dot.wait{background:var(--wait);box-shadow:0 0 0 3px var(--wait-soft)}
+.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad);box-shadow:0 0 0 3px var(--bad-soft)}
+.dot.idle{background:var(--t4)}
+.tcard .tt{font-size:var(--fs-sm);font-weight:550;line-height:1.35;color:var(--t1);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.tcard .ph{font-size:var(--fs-xs);color:var(--t3);line-height:1.45;margin-top:3px;display:flex;gap:5px;align-items:center}
+.tcard .ph .i{width:11px;height:11px;color:var(--t4)}
+.tcard[data-st="wait"] .ph{color:var(--wait)}
+.tcard[data-st="bad"] .ph{color:var(--bad)}
+.tcard .meter{height:2px;border-radius:2px;background:var(--hair);margin-top:6px;overflow:hidden}
+.tcard .meter b{display:block;height:100%;background:var(--t4)}
+.tcard[data-st="run"] .meter b{background:var(--accent)}
+.badge{font-size:10px;padding:1px 5px;border-radius:3px;background:var(--surface-3);color:var(--t3);border:1px solid var(--hair);white-space:nowrap}
+.badge.sched{background:var(--wait-soft);color:var(--wait);border-color:transparent}
+.badge.fork{background:var(--accent-soft);color:var(--accent-ink);border-color:transparent}
+.rail-foot{border-top:1px solid var(--hair);padding:var(--s3)}
+.gauge{display:grid;gap:var(--s2)}
+.grow{display:flex;align-items:baseline;justify-content:space-between;font-size:var(--fs-xs);color:var(--t3)}
+.grow b{font-size:var(--fs-sm);color:var(--t1);font-variant-numeric:tabular-nums;font-weight:600}
+.gbar{height:4px;border-radius:4px;background:var(--hair);overflow:hidden;margin-top:3px}
+.gbar b{display:block;height:100%;background:linear-gradient(90deg,var(--ok),var(--warn) 78%,var(--bad))}
+.need{display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--violet);background:color-mix(in srgb,var(--violet) 12%,transparent);border-radius:3px;padding:0 4px;border:1px dashed color-mix(in srgb,var(--violet) 40%,transparent);white-space:nowrap}
+.foot-nav{display:flex;gap:6px;margin-top:var(--s3)}
+.foot-nav button{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;font-size:var(--fs-sm);color:var(--t2);padding:7px;border-radius:var(--r1);transition:var(--t-fast)}
+.foot-nav button:hover{background:var(--surface-3)}
+
+/* ============ R2 main ============ */
+.main{display:grid;grid-template-rows:auto minmax(0,1fr) auto auto;min-height:0;background:var(--canvas)}
+.fleet{display:flex;gap:var(--s2);padding:var(--s2) var(--s4);border-bottom:1px solid var(--hair);background:var(--surface);overflow-x:auto;align-items:stretch}
+.fleet[hidden]{display:none}
+.wcard{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:7px;align-items:center;min-width:230px;padding:7px 10px;border:1px solid var(--hair);border-radius:var(--r2);background:var(--surface-2);font-size:var(--fs-xs);transition:var(--t-fast)}
+.wcard>div{min-width:0}
+.wcard:hover{border-color:var(--hair-2);box-shadow:var(--sh-1)}
+.wcard .wn{font-weight:600;font-family:var(--mono);font-size:var(--fs-xs);color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wcard .wst{color:var(--t3);display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wcard .wev{font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:3px;background:var(--surface-3);color:var(--t2)}
+.wev.pass{background:var(--ok-soft);color:var(--ok)}
+.wev.red{background:var(--bad-soft);color:var(--bad)}
+.wev.gate{background:var(--warn-soft);color:var(--warn)}
+.wev.orphan{background:color-mix(in srgb,var(--violet) 14%,transparent);color:var(--violet)}
+.wcard .wcost{font-variant-numeric:tabular-nums;color:var(--t2)}
+.wcard.orphan{border-style:dashed;border-color:var(--violet)}
+.zone-stream{overflow-y:auto;min-height:0;padding:var(--s5) var(--s4) var(--s4);scroll-behavior:smooth}
+.reading{max-width:min(var(--read),100%);margin:0 auto;display:grid;gap:var(--s4)}
+.turn-h{display:flex;align-items:center;gap:var(--s2);font-size:var(--fs-xs);color:var(--t4);margin:var(--s3) 0 calc(var(--s3) * -1)}
+.turn-h:before,.turn-h:after{content:"";height:1px;background:var(--hair);flex:1}
+.msg-u{justify-self:end;max-width:78%;background:var(--surface-2);border:1px solid var(--hair);border-radius:var(--r3) var(--r3) var(--s1) var(--r3);padding:10px 14px;font-size:var(--fs-md);line-height:1.6;position:relative}
+.msg-u:hover .row-acts{opacity:1;transform:none}
+.a-wrap{display:grid;grid-template-columns:24px 1fr;gap:var(--s3)}
+.avatar{width:24px;height:24px;border-radius:50%;background:linear-gradient(150deg,var(--accent),#a04a2c);display:grid;place-items:center;color:#fff;flex:none}
+.a-body{min-width:0;display:grid;gap:var(--s2)}
+.a-body p{line-height:1.72;font-size:var(--fs-md)}
+.a-body h4{font-size:var(--fs-md);margin-top:var(--s2)}
+.a-body ul{padding-left:20px;line-height:1.7}
+.a-body code{font-family:var(--mono);font-size:var(--fs-sm);background:var(--surface-2);border:1px solid var(--hair);border-radius:4px;padding:1px 4px}
+.mdcode{background:var(--code-bg);color:var(--code-fg);border-radius:var(--r2);border:1px solid var(--code-hair);overflow:hidden}
+.mdcode .ch{display:flex;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid var(--code-hair);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:#9a9382;font-family:var(--mono)}
+.mdcode .ch button{margin-left:auto;color:#9a9382;display:flex;align-items:center;gap:4px}
+.mdcode .ch button:hover{color:#fff}
+.mdcode pre{padding:12px;font-family:var(--mono);font-size:var(--fs-sm);line-height:1.62;overflow-x:auto;white-space:pre}
+.row-acts{display:flex;gap:2px;opacity:0;transform:translateY(2px);transition:var(--t-fast) var(--ease);margin-top:var(--s2)}
+.msg-u .row-acts{position:absolute;top:-10px;right:6px;background:var(--surface);border:1px solid var(--hair);border-radius:var(--r1);box-shadow:var(--sh-1);padding:2px}
+.a-wrap:hover .row-acts{opacity:1;transform:none}
+.row-acts button{width:24px;height:24px;border-radius:4px;display:grid;place-items:center;color:var(--t4)}
+.row-acts button:hover{background:var(--surface-2);color:var(--t1)}
+.row-acts button.on{color:var(--ok)}
+.row-acts button.on.dn{color:var(--bad)}
+
+/* steps group: tier-aware collapse */
+.steps{display:grid;gap:3px;border-left:1px solid var(--hair);padding-left:var(--s3);margin-top:var(--s2)}
+.tline{display:grid;grid-template-columns:14px minmax(0,1fr) auto auto;gap:8px;align-items:center;font-size:var(--fs-sm);padding:5px 6px;border-radius:var(--r1);cursor:default;transition:var(--t-fast)}
+.tline:hover{background:var(--surface-2)}
+.tline .ti{display:grid;place-items:center;color:var(--ok)}
+.tline.fail .ti{color:var(--bad)}
+.tline.gate .ti{color:var(--warn)}
+.tline.hold .ti{color:var(--wait)}
+.tline .tn{font-family:var(--mono);font-size:var(--fs-xs);color:var(--t1)}
+.tline .ts{font-size:var(--fs-xs);color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tline .td{font-size:11px;color:var(--t4);font-variant-numeric:tabular-nums}
+.tdetail{grid-column:1/-1;background:var(--surface);border:1px solid var(--hair);border-radius:var(--r2);padding:10px;font-size:var(--fs-sm);display:none;margin:4px 0 6px}
+.tdetail .kv{display:grid;grid-template-columns:88px 1fr;gap:4px 10px;font-size:var(--fs-xs)}
+.tdetail .kv dt{color:var(--t3)}
+.tdetail .kv dd{font-family:var(--mono);color:var(--t2);overflow-wrap:anywhere}
+.tline[open] + .tdetail,.tline.exp + .tdetail{display:block}
+.chip{font-size:10.5px;padding:1px 6px;border-radius:var(--rp);border:1px solid var(--hair);background:var(--surface);color:var(--t2);white-space:nowrap;display:inline-flex;gap:4px;align-items:center}
+.chip.warn{background:var(--warn-soft);border-color:transparent;color:var(--warn);font-weight:600}
+.chip.bad{background:var(--bad-soft);border-color:transparent;color:var(--bad);font-weight:600}
+.chip.ok{background:var(--ok-soft);border-color:transparent;color:var(--ok)}
+.chip.wait{background:var(--wait-soft);border-color:transparent;color:var(--wait)}
+.chip.mono{font-family:var(--mono)}
+
+/* summary-only rollup */
+.rollup{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s3);padding:10px 12px;background:var(--surface);border:1px solid var(--hair);border-radius:var(--r2)}
+.rollup .ru{display:flex;align-items:center;gap:6px;font-size:var(--fs-sm);color:var(--t2)}
+.rollup .ru b{font-variant-numeric:tabular-nums;color:var(--t1)}
+.rollup .sep{width:1px;height:16px;background:var(--hair)}
+[data-tier="summary"] .steps{display:none}
+[data-tier="summary"] .rollup{display:flex}
+[data-tier="normal"] .rollup{display:flex}
+[data-tier="verbose"] .rollup{display:none}
+[data-tier="verbose"] .tdetail{display:block}
+[data-tier="normal"] .tline.exp + .tdetail{display:block}
+.veri{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:7px 10px;border-radius:var(--r2);background:var(--ok-soft);border:1px solid transparent;font-size:var(--fs-sm);color:var(--ok);margin-top:var(--s2)}
+.veri.bad{background:var(--bad-soft);color:var(--bad)}
+.veri .vc{font-family:var(--mono);font-size:10.5px;background:rgba(0,0,0,.06);padding:1px 5px;border-radius:3px}
+[data-tier="summary"] .veri.bad{display:grid}
+.think{display:flex;align-items:center;gap:8px;font-size:var(--fs-sm);color:var(--t3)}
+.think .pp{display:flex;gap:3px}
+.think .pp i{width:4px;height:4px;border-radius:50%;background:var(--accent);opacity:.3;animation:pl 1.1s infinite}
+.think .pp i:nth-child(2){animation-delay:.15s}.think .pp i:nth-child(3){animation-delay:.3s}
+@keyframes pl{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-2px)}}
+[data-tier="summary"] .think{display:none}
+
+/* gate dock + ledger */
+.zone-gate{padding:0 var(--s4) var(--s3);background:var(--canvas)}
+.gatewrap{max-width:min(var(--read),100%);margin:0 auto}
+[data-gate="none"] .gcard{display:none}
+.gcard{background:var(--surface);border:1px solid var(--hair);border-radius:var(--r3);box-shadow:var(--sh-2);overflow:hidden;transition:var(--t-med) var(--ease)}
+.gcard.hi{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft),var(--sh-2)}
+.ghead{display:flex;align-items:center;gap:8px;padding:10px var(--s3);border-bottom:1px solid var(--hair);background:var(--surface-2);font-size:var(--fs-sm);font-weight:600}
+.ghead .i{color:var(--warn)}
+.ghead .ttl{color:var(--t1)}
+.ghead .compact{margin-left:auto;font-size:var(--fs-xs);color:var(--t3);font-weight:400}
+.gbody{padding:var(--s3);display:grid;gap:var(--s2)}
+.gsum{display:flex;gap:10px;align-items:baseline;font-size:var(--fs-sm)}
+.gsum .cmd{font-family:var(--mono);font-size:var(--fs-md);color:var(--t1);background:var(--surface-2);border:1px solid var(--hair);border-radius:var(--r1);padding:3px 8px;overflow-wrap:anywhere}
+.ghint{display:none}
+.gcard.detail .ghint{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;background:var(--wait-soft);padding:9px 11px;border-radius:var(--r2);line-height:1.55;font-size:var(--fs-xs);color:var(--t2)}
+.ghint .i{color:var(--wait);margin-top:2px}
+.ghint code{font-family:var(--mono);font-size:var(--fs-xs);background:rgba(0,0,0,.05);padding:0 4px;border-radius:3px}
+.gmeta{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.gacts{display:flex;align-items:center;gap:var(--s2);padding-top:var(--s2);border-top:1px dashed var(--hair)}
+.gacts .cdown{margin-left:auto;font-size:var(--fs-xs);color:var(--t3);font-variant-numeric:tabular-nums}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:var(--r2);font-size:var(--fs-md);border:1px solid var(--hair-2);color:var(--t1);background:var(--surface);transition:var(--t-fast) var(--ease)}
+.btn:hover{border-color:var(--t4);box-shadow:var(--sh-1)}
+.btn:active{transform:scale(.97)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn.pri:hover{filter:brightness(1.06)}
+.btn.dgr{color:var(--bad);border-color:var(--bad-soft);background:var(--bad-soft)}
+.btn.sm{padding:5px 10px;font-size:var(--fs-sm)}
+.btn.gho{border-color:transparent;color:var(--t2)}
+.btn.gho:hover{background:var(--surface-2);box-shadow:none}
+.seg{display:flex;gap:2px;background:var(--surface-2);border:1px solid var(--hair);border-radius:var(--r2);padding:2px}
+.seg button{font-size:var(--fs-xs);padding:5px 10px;border-radius:var(--r1);color:var(--t3);transition:var(--t-fast);white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--t1);font-weight:600;box-shadow:var(--sh-1)}
+.seg button:disabled{opacity:.4;cursor:not-allowed}
+.seg button small{display:block;font-size:9.5px;color:var(--t4);font-weight:400}
+.ledger{margin-top:var(--s2);border:1px solid var(--hair);border-radius:var(--r2);background:var(--surface);overflow:hidden}
+.lg-h{display:flex;align-items:center;gap:8px;padding:8px var(--s3);font-size:var(--fs-xs);color:var(--t2);cursor:pointer;font-weight:600}
+.lg-h .i.chev{transition:transform var(--t-fast);color:var(--t4)}
+.ledger.open .lg-h .chev{transform:rotate(90deg)}
+.lg-h .cnt{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--t3);font-weight:400}
+.lg-b{display:none;border-top:1px solid var(--hair)}
+.ledger.open .lg-b{display:block}
+.lrow{display:grid;grid-template-columns:56px 1fr auto;gap:10px;padding:9px var(--s3);font-size:var(--fs-xs);border-bottom:1px solid var(--hair);align-items:start}
+.lrow:last-child{border-bottom:0}
+.lrow time{color:var(--t4);font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:10.5px}
+.lrow .lw{min-width:0}
+.lrow .lc{font-family:var(--mono);font-size:var(--fs-sm);color:var(--t1);overflow-wrap:anywhere}
+.lrow .lm{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;color:var(--t3)}
+.lrow .lm span{display:inline-flex;align-items:center;gap:3px}
+.lrow .lr{text-align:right;display:grid;gap:4px;justify-items:end}
+.silent{padding:var(--s3);background:var(--surface-2);border-top:1px solid var(--hair);font-size:var(--fs-xs);color:var(--t2);display:grid;gap:6px}
+.silent .srow{display:flex;align-items:center;gap:8px}
+.silent .sbar{flex:1;height:3px;background:var(--hair);border-radius:3px;overflow:hidden;max-width:150px}
+.silent .sbar b{display:block;height:100%;background:var(--wait)}
+
+/* error strip */
+.estrip{display:none;align-items:center;gap:10px;padding:9px var(--s4);background:var(--bad-soft);border-top:1px solid var(--bad);color:var(--bad);font-size:var(--fs-sm)}
+[data-error="on"] .estrip{display:flex}
+.estrip b{font-weight:600}
+.estrip .esx{margin-left:auto;color:var(--bad);display:flex;align-items:center;gap:6px}
+
+/* composer */
+.zone-composer{padding:0 var(--s4) var(--s4);background:var(--canvas)}
+.cbox{max-width:min(var(--read),100%);margin:0 auto;background:var(--surface);border:1px solid var(--hair-2);border-radius:var(--r3);box-shadow:var(--sh-2);overflow:hidden;transition:var(--t-med)}
+.cbox:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft),var(--sh-2)}
+.crow1{display:flex;gap:8px;padding:12px 14px 8px;align-items:flex-start}
+.crow1 textarea{flex:1;border:0;outline:none;resize:none;background:none;font-size:var(--fs-md);line-height:1.6;max-height:200px;min-height:24px;padding-top:2px}
+.crow1 .ph-hint{color:var(--t4)}
+.crow1 .att{width:24px;height:24px;border-radius:var(--r1);display:grid;place-items:center;color:var(--t4)}
+.crow1 .att:hover{background:var(--surface-2);color:var(--t1)}
+.crow2{display:flex;align-items:center;gap:8px;padding:8px 10px 10px 12px;flex-wrap:wrap}
+.trigger{display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-sm);color:var(--t2);padding:5px 9px;border-radius:var(--r1);border:1px solid transparent;transition:var(--t-fast)}
+.trigger:hover{background:var(--surface-2);border-color:var(--hair)}
+.trigger .i{color:var(--t3)}
+.trigger b{font-weight:600;color:var(--t1)}
+.pmode{font-weight:600}
+.pmode[data-v="auto"]{color:var(--warn)}
+.pmode[data-v="read"]{color:var(--wait)}
+.ctxpill{margin-left:auto;font-size:var(--fs-xs);color:var(--t3);font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:6px}
+.ctxpill .cb{width:38px;height:3px;border-radius:3px;background:var(--hair);overflow:hidden}
+.ctxpill .cb b{display:block;height:100%;background:var(--ok)}
+.send{width:32px;height:32px;border-radius:var(--r2);background:var(--accent);color:#fff;display:grid;place-items:center;transition:var(--t-fast) var(--ease)}
+.send:hover{filter:brightness(1.07)}
+.send:active{transform:scale(.94)}
+.send.stop{background:var(--bad)}
+.cnote{max-width:min(var(--read),100%);margin:6px auto 0;font-size:10.5px;color:var(--t4);display:flex;gap:12px}
+
+/* ============ R3 review drawer ============ */
+.review{border-left:1px solid var(--hair);background:var(--surface);display:none;grid-template-rows:auto minmax(0,1fr);min-height:0}
+[data-drawer="open"] .review,[data-drawer="full"] .review{display:grid}
+.rv-h{display:flex;align-items:center;gap:8px;padding:0 var(--s3) 0 var(--s4);height:42px;border-bottom:1px solid var(--hair);background:var(--surface-2)}
+.rv-h .rt{font-size:var(--fs-sm);font-weight:600}
+.rv-h .sp{margin-left:auto;display:flex;gap:2px}
+.rv-body{overflow-y:auto;min-height:0}
+.rvsum{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s2);padding:var(--s3) var(--s4);border-bottom:1px solid var(--hair)}
+.rvs{background:var(--surface-2);border:1px solid var(--hair);border-radius:var(--r2);padding:9px 11px}
+.rvs b{display:block;font-size:var(--fs-lg);font-variant-numeric:tabular-nums;line-height:1.2}
+.rvs span{font-size:10.5px;color:var(--t3);letter-spacing:.02em}
+.rvs.bad b{color:var(--bad)}.rvs.ok b{color:var(--ok)}
+.gatestrip{display:none;align-items:center;gap:8px;margin:var(--s3) var(--s4);padding:9px 11px;border-radius:var(--r2);background:var(--warn-soft);font-size:var(--fs-xs);color:var(--warn)}
+[data-drawer="open"] .gatestrip,[data-drawer="full"] .gatestrip{display:flex}
+.rvlab{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--t4);padding:var(--s3) var(--s4) 6px}
+.file{display:grid;gap:2px}
+.frow{display:grid;grid-template-columns:16px minmax(0,1fr) auto auto;gap:9px;align-items:center;padding:7px var(--s4);font-size:var(--fs-sm);cursor:pointer;transition:var(--t-fast);border-left:2px solid transparent}
+.frow:hover{background:var(--surface-2)}
+.frow.sel{background:var(--surface-2);border-left-color:var(--accent)}
+.frow .fp{font-family:var(--mono);font-size:var(--fs-xs);color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}
+.frow .fd{font-size:10.5px;color:var(--t3)}
+.fstat{font-family:var(--mono);font-size:10.5px;white-space:nowrap}
+.fstat .p{color:var(--add)}.fstat .m{color:var(--del)}
+.diffwrap{margin:var(--s2) var(--s3) var(--s4);background:var(--code-bg);border-radius:var(--r2);border:1px solid var(--code-hair);overflow:hidden}
+.dh{display:flex;align-items:center;gap:7px;padding:7px 10px;border-bottom:1px solid var(--code-hair);font-family:var(--mono);font-size:10.5px;color:#9a9382}
+.dh .sp{margin-left:auto;display:flex;gap:2px}
+.dh button{color:#9a9382;padding:2px 5px;border-radius:3px}
+.dh button:hover{color:#fff;background:#2c2a21}
+.diff{font-family:var(--mono);font-size:11.5px;line-height:1.62;color:var(--code-fg);overflow-x:auto}
+.dl{display:grid;grid-template-columns:30px 30px 16px minmax(0,1fr);gap:0;white-space:pre;padding-right:10px}
+.dl:hover{background:#26241d}
+.dl .n{color:#6e6757;text-align:right;padding-right:8px;user-select:none}
+.dl .g{text-align:center;color:#6e6757}
+.dl.add{background:rgba(47,122,91,.14)}
+.dl.add .g{color:var(--add)}
+.dl.del{background:rgba(176,58,46,.14)}
+.dl.del .g{color:var(--del)}
+.dl.hunk{color:#8b8471;background:#1a1815;padding:2px 0 2px 40px;grid-template-columns:1fr}
+.dl .say{justify-self:end;opacity:0;display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#e8b795;background:#3a2418;border:1px solid #55301d;padding:1px 7px;border-radius:3px;transition:var(--t-fast)}
+.dl:hover .say{opacity:1}
+.dl .say:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.cmt{margin:var(--s2) var(--s3);padding:10px;border-radius:var(--r2);background:var(--surface-2);border:1px solid var(--hair);display:none;gap:8px;grid-template-columns:1fr auto}
+[data-drawer="full"] .cmt,[data-gate="pending"][data-drawer="open"] .cmt{display:grid}
+.cmt textarea{border:0;background:none;outline:none;font-size:var(--fs-sm);resize:none;width:100%;line-height:1.5}
+.cmt .cl{font-size:10.5px;color:var(--violet);font-family:var(--mono);margin-bottom:4px}
+.thread-cmt{margin:0 var(--s3) var(--s2);font-size:var(--fs-xs);color:var(--t2);display:flex;gap:7px;align-items:flex-start;background:color-mix(in srgb,var(--violet) 9%,transparent);border:1px dashed color-mix(in srgb,var(--violet) 30%,transparent);border-radius:var(--r2);padding:8px 10px}
+.thread-cmt .i{color:var(--violet);margin-top:1px}
+
+/* empty / first run */
+.empty{display:none;padding:var(--s6) var(--s4);justify-content:center}
+[data-view="empty"] .empty{display:grid}
+.em-in{max-width:600px;width:100%;text-align:center;display:grid;gap:var(--s4);margin-top:6vh}
+.em-mark{width:44px;height:44px;border-radius:14px;background:linear-gradient(150deg,var(--accent),#9c4526);display:grid;place-items:center;margin:0 auto;color:#fff;box-shadow:var(--sh-2)}
+.em-h{font-size:var(--fs-xl);font-weight:600;letter-spacing:-.01em}
+.em-p{font-size:var(--fs-sm);color:var(--t3);line-height:1.6}
+.pills{display:flex;gap:var(--s2);justify-content:center;flex-wrap:wrap}
+.pill{display:inline-flex;gap:7px;align-items:center;font-size:var(--fs-sm);padding:8px 13px;border-radius:var(--rp);border:1px solid var(--hair-2);color:var(--t2);background:var(--surface);transition:var(--t-fast) var(--ease)}
+.pill:hover{border-color:var(--accent);color:var(--accent-ink);transform:translateY(-1px);box-shadow:var(--sh-1)}
+.em-key{border:1px solid var(--hair);border-radius:var(--r3);background:var(--surface);padding:var(--s4);text-align:left;display:grid;gap:10px}
+.em-key .kh{display:flex;align-items:center;gap:8px;font-size:var(--fs-sm);font-weight:600}
+.em-key .kh .i{color:var(--warn)}
+.em-key p{font-size:var(--fs-xs);color:var(--t3);line-height:1.6}
+.em-key .kr{display:flex;gap:8px;align-items:center;justify-content:space-between;font-size:var(--fs-sm);padding:7px 0;border-top:1px dashed var(--hair)}
+.em-key .kr:first-of-type{border-top:0}
+
+/* jump-to-latest + misc */
+.jump{position:absolute;left:calc(var(--rail) + 50%);bottom:170px;transform:translateX(-50%) translateY(6px);display:flex;align-items:center;gap:6px;font-size:var(--fs-xs);padding:6px 12px;border-radius:var(--rp);background:var(--accent);color:#fff;box-shadow:var(--sh-2);opacity:0;pointer-events:none;transition:var(--t-med) var(--ease);z-index:5}
+.jump.show{opacity:1;transform:translateX(-50%);pointer-events:auto}
+[data-drawer="open"] .jump{left:calc(var(--rail) + (100% - var(--rail) - var(--rev)) / 2)}
+.pop{position:absolute;z-index:20;background:var(--surface);border:1px solid var(--hair-2);border-radius:var(--r2);box-shadow:var(--sh-2);padding:6px;min-width:230px;display:none}
+.pop.show{display:block;animation:pop var(--t-fast) var(--ease)}
+@keyframes pop{from{opacity:0;transform:translateY(4px) scale(.985)}}
+.pop .po{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:var(--r1);font-size:var(--fs-sm);cursor:pointer}
+.pop .po:hover{background:var(--surface-2)}
+.pop .po.sel{background:var(--accent-soft);color:var(--accent-ink)}
+.pop .po .pd{width:7px;height:7px;border-radius:2px;flex:none}
+.pop .po small{margin-left:auto;color:var(--t4);font-size:10.5px;font-family:var(--mono)}
+.pop .pg{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--t4);padding:6px 9px 3px}
+.pop .psearch{display:flex;gap:7px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--hair);margin-bottom:4px;color:var(--t4)}
+.pop .psearch input{border:0;outline:none;background:none;width:100%;font-size:var(--fs-sm)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}.spin{border-top-color:var(--accent)}.think .pp i{opacity:.75}}
+</style>
+</head>
+<body>
+
+<svg class="sr" aria-hidden="true"><defs>
+<symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+<symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4"/><path d="M10 10l3 3"/></symbol>
+<symbol id="i-send" viewBox="0 0 16 16"><path d="M8 13V4M4.5 7L8 3.5 11.5 7" /></symbol>
+<symbol id="i-stop" viewBox="0 0 16 16"><rect x="4.5" y="4.5" width="7" height="7" rx="1.5" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-check" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-6.5"/></symbol>
+<symbol id="i-x" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+<symbol id="i-chev" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4"/></symbol>
+<symbol id="i-chevd" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></symbol>
+<symbol id="i-alert" viewBox="0 0 16 16"><path d="M8 2.5l6 11H2l6-11z"/><path d="M8 7v2.5M8 11.4v.2"/></symbol>
+<symbol id="i-shield" viewBox="0 0 16 16"><path d="M8 2l5 2v4c0 3-2 5-5 6-3-1-5-3-5-6V4l5-2z"/></symbol>
+<symbol id="i-brain" viewBox="0 0 16 16"><path d="M8 3.5a2 2 0 00-4 .6c0 .5.2.9.5 1.2A2 2 0 006 9c0 1.4.9 2.4 2 2.4s2-1 2-2.4a2 2 0 001.5-3.7c.3-.3.5-.7.5-1.2a2 2 0 00-4-.6z"/></symbol>
+<symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.2l2.2 1.4"/></symbol>
+<symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="7" height="7" rx="1.5"/><path d="M10.5 5.5v-1a1 1 0 00-1-1h-5a1 1 0 00-1 1v5a1 1 0 001 1h1"/></symbol>
+<symbol id="i-up" viewBox="0 0 16 16"><path d="M8 12V5M5 7.5L8 4.5l3 3"/></symbol>
+<symbol id="i-dn" viewBox="0 0 16 16"><path d="M8 4v7M5 8.5L8 11.5l3-3"/></symbol>
+<symbol id="i-spark" viewBox="0 0 16 16"><path d="M8 2.5l1.4 3.1L12.5 7l-3.1 1.4L8 11.5 6.6 8.4 3.5 7l3.1-1.4z"/><path d="M12 11.5l.6 1.4 1.4.6-1.4.6-.6 1.4"/></symbol>
+<symbol id="i-folder" viewBox="0 0 16 16"><path d="M2.5 12.5v-8a1 1 0 011-1h3l1.2 1.6h4.8a1 1 0 011 1v6.4a1 1 0 01-1 1h-9a1 1 0 01-1-1z"/></symbol>
+<symbol id="i-folderopen" viewBox="0 0 16 16"><path d="M2.5 12.5l1.6-5h9l-1.6 5h-9z"/><path d="M2.5 12.5v-7a1 1 0 011-1h2.6l1 1.6"/></symbol>
+<symbol id="i-cube" viewBox="0 0 16 16"><path d="M8 2l5 2.6v6.8L8 14l-5-2.6V4.6L8 2z"/><path d="M8 7.2l5-2.6M8 7.2L3 4.6M8 7.2V14"/></symbol>
+<symbol id="i-branch" viewBox="0 0 16 16"><circle cx="5" cy="4" r="1.6"/><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="6" r="1.6"/><path d="M5 5.6v4.8M6.6 6h2.4a1.4 1.4 0 001.4-1.4V6"/></symbol>
+<symbol id="i-settings" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 2v1.6M8 12.4V14M14 8h-1.6M3.6 8H2M12.2 3.8l-1.1 1.1M4.9 11.1l-1.1 1.1M12.2 12.2l-1.1-1.1M4.9 4.9L3.8 3.8"/></symbol>
+<symbol id="i-sun" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3"/><path d="M8 2v1.4M8 12.6V14M14 8h-1.4M3.4 8H2M12.2 3.8l-1 1M4.8 11.2l-1 1M12.2 12.2l-1-1M4.8 4.8l-1-1"/></symbol>
+<symbol id="i-panel" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M10 3v10"/></symbol>
+<symbol id="i-timer" viewBox="0 0 16 16"><circle cx="8" cy="9.2" r="4.8"/><path d="M8 9.2V6.4M6.4 2.4h3.2"/></symbol>
+<symbol id="i-file" viewBox="0 0 16 16"><path d="M4 2.5h5l3 3v8h-8v-11z"/><path d="M9 2.5V6h3"/></symbol>
+<symbol id="i-skip" viewBox="0 0 16 16"><path d="M4 4l5 4-5 4V4z"/><path d="M11.5 4v8"/></symbol>
+<symbol id="i-revert" viewBox="0 0 16 16"><path d="M3.5 6.5A5 5 0 118 13"/><path d="M3 3.5v3h3"/></symbol>
+<symbol id="i-att" viewBox="0 0 16 16"><path d="M10.5 6l-4.2 4.2a2 2 0 11-2.8-2.8l5-5a3 3 0 014.3 4.3l-5 5"/></symbol>
+<symbol id="i-loader" viewBox="0 0 16 16"><path d="M8 2.5v3M8 10.5v3M2.5 8h3M10.5 8h3M4.2 4.2l2 2M9.8 9.8l2 2M11.8 4.2l-2 2M6.2 9.8l-2 2"/></symbol>
+<symbol id="i-book" viewBox="0 0 16 16"><path d="M3 3.5h4a2 2 0 012 2v7a2 2 0 00-2-2H3v-7z"/><path d="M13 3.5H9a2 2 0 00-2 2v7a2 2 0 012-2h4v-7z"/></symbol>
+<symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.8 8S4 4.2 8 4.2 14.2 8 14.2 8 12 11.8 8 11.8 1.8 8 1.8 8z"/><circle cx="8" cy="8" r="1.6"/></symbol>
+<symbol id="i-key" viewBox="0 0 16 16"><circle cx="5.5" cy="10.5" r="2.6"/><path d="M7.4 8.6l4.6-4.6M10.4 5.6l1.4 1.4M12 4l1.4 1.4"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 16 16"><path d="M3 5h10M3 11h10"/><circle cx="6" cy="5" r="1.5"/><circle cx="10" cy="11" r="1.5"/></symbol>
+</defs></svg>
+
+<div class="harness">
+  <span class="hb">原型 · 数据为演示</span>
+  <button class="scene-btn" data-scene="run" aria-pressed="true">运行中·标准</button>
+  <button class="scene-btn" data-scene="gate" aria-pressed="false">等你拍板</button>
+  <button class="scene-btn" data-scene="summary" aria-pressed="false">摘要档</button>
+  <button class="scene-btn" data-scene="verbose" aria-pressed="false">详细档</button>
+  <button class="scene-btn" data-scene="review" aria-pressed="false">审查面全开</button>
+  <button class="scene-btn" data-scene="fleet" aria-pressed="false">多路并行</button>
+  <button class="scene-btn" data-scene="first" aria-pressed="false">首跑空态</button>
+  <button class="scene-btn" data-scene="error" aria-pressed="false">出错可见</button>
+  <button class="scene-btn" data-scene="narrow" aria-pressed="false">窄窗 980</button>
+  <button class="scene-btn" data-scene="dark" aria-pressed="false">暗色</button>
+  <details>
+    <summary>设计说明与开放问题</summary>
+<pre>读法：本文件是<b>设计交付物</b>，不是产品代码。产品 renderer 未改动。
+
+三处形状反转（相对旧面）：
+1 一等对象=任务线程；标题=任务标题（旧面标题=session id）。
+2 门槛卡不再"决议完自毁"：未决钉在底部「待你拍板」，已决进「决议台账」，
+  每行显示 谁判的层 / verdict / 命中原字面 / 风险 / 档位 / 授权范围。
+3 工具行按<b>透明度三档</b>折叠（摘要 / 标准 / 详细），旧面只有一条平铺流。
+
+虚线紫标「新读」= 需要三条新只读通道之一（diff 正文 / worker 名册 / 成本）。
+其余全部走现有事件流——34 类事件里 17 类现在被投影层丢掉，本设计把它们接回来。
+
+开放问题（等你定）：
+A 决议台账默认收起还是展开？
+B 「自动化任务」是并进主任务列（图中做法）还是保留整页？
+C 透明度缺省档＝标准，是否要按线程记忆？
+D 审查抽屉占 440px 后，窄窗（980）时是挤掉中栏还是盖上去（图中做法=挤）？</pre>
+  </details>
+</div>
+
+<div class="stage">
+<div class="app" id="app">
+
+  <!-- ===== TitleBar ===== -->
+  <header class="titlebar">
+    <div class="tb-l">
+      <span class="wctrl" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="phase" id="phaseChip">
+        <span class="spin" aria-hidden="true"></span>
+        <b>运行</b> <span id="elapsed">00:41</span> · 输出 <b>1.4k</b> tok · <b>$0.031</b>
+      </span>
+    </div>
+    <div>
+      <div class="tb-title" id="tbTitle">给 verify 尺补 cause 归属</div>
+      <div class="tb-sub" id="tbSub">deepseek harness · 主线程 ＋ 2 路 worker</div>
+    </div>
+    <div class="tb-r">
+      <button class="ib stop" title="打断当前运行（runCancel）"><svg class="i s14"><use href="#i-stop"/></svg></button>
+      <button class="ib" id="rvToggle" title="审查抽屉"><svg class="i s14"><use href="#i-panel"/></svg></button>
+      <button class="ib" id="thToggle" title="浅色/深色"><svg class="i s14"><use href="#i-sun"/></svg></button>
+      <button class="ib" title="设置"><svg class="i s14"><use href="#i-settings"/></svg></button>
+    </div>
+  </header>
+
+  <div class="shell">
+
+    <!-- ===== R1 nav rail ===== -->
+    <nav class="rail" aria-label="任务">
+      <div class="rail-top">
+        <button class="newtask"><svg class="i s14"><use href="#i-plus"/></svg> 新任务</button>
+      </div>
+      <div>
+        <div class="filters" role="group" aria-label="状态筛选">
+          <button class="fchip" aria-pressed="true">全部<em>12</em></button>
+          <button class="fchip" aria-pressed="false">运行中<em>2</em></button>
+          <button class="fchip" aria-pressed="false">等你拍板<em>1</em></button>
+          <button class="fchip" aria-pressed="false">出错<em>1</em></button>
+          <button class="fchip" aria-pressed="false">归档<em>4</em></button>
+        </div>
+        <div class="srch"><svg class="i s12"><use href="#i-search"/></svg><input placeholder="搜任务" aria-label="搜任务"></div>
+      </div>
+
+      <div class="rail-scroll">
+        <section class="wgroup">
+          <div class="whead"><svg class="i s12"><use href="#i-folder"/></svg> deepseek harness
+            <button title="本工作区新任务"><svg class="i s12"><use href="#i-plus"/></svg></button></div>
+
+          <article class="tcard sel" data-st="run">
+            <span class="dot run"></span>
+            <div>
+              <div class="tt">给 verify 尺补 cause 归属</div>
+              <div class="ph"><svg class="i"><use href="#i-cube"/></svg> 跑 run_shell · 2 路 worker</div>
+              <div class="meter"><b style="width:62%"></b></div>
+            </div>
+          </article>
+
+          <article class="tcard" data-st="wait">
+            <span class="dot wait"></span>
+            <div>
+              <div class="tt">路由开关进 CLI 面</div>
+              <div class="ph"><svg class="i"><use href="#i-shield"/></svg> write_file 待批 · 已等 41s/60s</div>
+            </div>
+          </article>
+
+          <article class="tcard" data-st="bad">
+            <span class="dot bad"></span>
+            <div>
+              <div class="tt">清理孤儿 worktree</div>
+              <div class="ph"><svg class="i"><use href="#i-alert"/></svg> 验证红：2 条断言</div>
+            </div>
+          </article>
+
+          <article class="tcard" data-st="idle">
+            <span class="dot idle"></span>
+            <div>
+              <div class="tt">triage 报告入库</div>
+              <div class="ph">空闲 · 12 轮 · 上轮 3 处改动</div>
+              <div class="meter"><b style="width:100%"></b></div>
+            </div>
+          </article>
+
+          <article class="tcard" data-st="idle">
+            <span class="dot ok"></span>
+            <div>
+              <div class="tt"><span class="badge sched">定时</span> 夜巡 · 02:00</div>
+              <div class="ph">完成 · 无人值守 · 1 道门超时自动拒</div>
+            </div>
+          </article>
+
+          <article class="tcard" data-st="idle">
+            <span class="dot idle"></span>
+            <div>
+              <div class="tt"><span class="badge fork">分叉</span> 只看第 408 页之前</div>
+              <div class="ph">源会话只读 · 保留前 9 轮</div>
+            </div>
+          </article>
+        </section>
+
+        <section class="wgroup">
+          <div class="whead"><svg class="i s12"><use href="#i-folderopen"/></svg> solpi-ports
+            <button title="本工作区新任务"><svg class="i s12"><use href="#i-plus"/></svg></button></div>
+          <article class="tcard" data-st="run">
+            <span class="dot run"></span>
+            <div>
+              <div class="tt">移植 solpi 视觉回归切片</div>
+              <div class="ph"><svg class="i"><use href="#i-brain"/></svg> 思考中 · 已读 7 文件</div>
+              <div class="meter"><b style="width:24%"></b></div>
+            </div>
+          </article>
+        </section>
+      </div>
+
+      <div class="rail-foot">
+        <div class="gauge">
+          <div>
+            <div class="grow"><span>本线程上下文</span><b>12.4k / 20k</b></div>
+            <div class="gbar"><b style="width:62%"></b></div>
+          </div>
+          <div class="grow"><span>今日花费 <span class="need">新读</span></span><b>$0.41</b></div>
+          <div class="grow"><span>授权余量（auto 连批）</span><b>17 / 50</b></div>
+        </div>
+        <div class="foot-nav">
+          <button><svg class="i s14"><use href="#i-cube"/></svg> 编排</button>
+          <button><svg class="i s14"><use href="#i-book"/></svg> 记忆</button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- ===== R2 main ===== -->
+    <main class="main">
+
+      <div class="fleet" id="fleet" aria-label="并行路">
+        <div class="wcard">
+          <svg class="i s14" style="color:var(--accent)"><use href="#i-cube"/></svg>
+          <div><div class="wn">wt-4f2a · 写 verify.cause</div><div class="wst"><span class="wev">证据未出</span> 运行 · 改 3 文件</div></div>
+          <span class="wcost">$0.012</span>
+        </div>
+        <div class="wcard">
+          <svg class="i s14" style="color:var(--ok)"><use href="#i-cube"/></svg>
+          <div><div class="wn">wt-b91c · 判卷夹具</div><div class="wst"><span class="wev pass">验过</span> diff 待合并 · <span class="chip warn">risk high</span></div></div>
+          <span class="wcost">$0.008</span>
+        </div>
+        <div class="wcard orphan">
+          <svg class="i s14" style="color:var(--violet)"><use href="#i-alert"/></svg>
+          <div><div class="wn">wt-77d0</div><div class="wst"><span class="wev orphan">孤儿</span> 无终态事件 · 无回收回执</div></div>
+          <button class="btn sm gho">回收</button>
+        </div>
+      </div>
+
+      <div class="zone-stream" id="stream">
+        <div class="reading">
+
+          <div class="turn-h">第 12 轮 · 00:41</div>
+
+          <div class="msg-u">
+            给 verify 的每条红加上原因归属，环境类的别混进真失败里。
+            <div class="row-acts">
+              <button title="复制"><svg class="i s12"><use href="#i-copy"/></svg></button>
+              <button title="还原此轮文件"><svg class="i s12"><use href="#i-revert"/></svg></button>
+            </div>
+          </div>
+
+          <div class="a-wrap">
+            <div class="avatar"><svg class="i s14"><use href="#i-spark"/></svg></div>
+            <div class="a-body">
+              <p>先读 <code>src/agent/verify.ts</code> 的原因分类，再动投影面。分三路走。</p>
+
+              <div class="think"><span class="pp" aria-hidden="true"><i></i><i></i><i></i></span> 思考中 · 4s <button class="btn sm gho">展开</button></div>
+
+              <div class="steps" aria-label="执行步">
+                <div class="tline"><span class="ti"><svg class="i s12"><use href="#i-file"/></svg></span><div><span class="tn">read_file</span> <span class="ts">src/agent/verify.ts · 486 行</span></div><span class="td">180ms</span><span></span></div>
+                <div class="tline exp"><span class="ti"><svg class="i s12"><use href="#i-loader"/></svg></span><div><span class="tn">edit_file</span> <span class="ts">VerifyCause 扩到 8 值 · 补 isEnvVerifyCause</span></div><span class="td">92ms</span><span class="chip mono">＋18 −4</span></div>
+                <div class="tdetail"><div class="kv"><dt>快照</dt><dd>.agent/snapshots/1727…/verify.ts</dd><dt>改动类型</dt><dd>modified</dd><dt>覆盖前原件</dt><dd>可还原（本轮未被外部改过）</dd></div></div>
+
+                <div class="tline fail"><span class="ti"><svg class="i s12"><use href="#i-alert"/></svg></span><div><span class="tn">run_shell</span> <span class="ts">pnpm test · 2 条断言红</span></div><span class="td">2.4s</span><span class="chip bad">exit 1</span></div>
+                <div class="tdetail"><div class="kv"><dt>命令</dt><dd>pnpm --filter cairn-core test</dd><dt>exitCode</dt><dd>1</dd><dt>输出节选</dt><dd>expected cause="env" · received cause=undefined（×2）</dd></div></div>
+
+                <div class="veri bad"><svg class="i s14"><use href="#i-alert"/></svg>
+                  <div>验证第 2/3 次 · 原因归属 <span class="vc">cause=env</span>（缺 python3，非真失败）· 摘要已重注入</div>
+                  <span class="chip warn">升级中</span>
+                </div>
+
+                <div class="tline hold"><span class="ti"><svg class="i s12"><use href="#i-shield"/></svg></span><div><span class="tn">run_shell</span> <span class="ts">git push · 被闸拦下（不进自动批准）</span></div><span class="td">—</span><span class="chip wait">blockedBy: deny-floor</span></div>
+
+                <div class="tline"><span class="ti"><svg class="i s12"><use href="#i-check"/></svg></span><div><span class="tn">run_shell</span> <span class="ts">第 3 次验证通过 · 145 条</span></div><span class="td">5.9s</span><span class="chip ok">exit 0</span></div>
+              </div>
+
+              <div class="rollup">
+                <span class="ru"><svg class="i s12"><use href="#i-cube"/></svg> 跑了 <b>6</b> 步</span><span class="sep"></span>
+                <span class="ru"><svg class="i s12"><use href="#i-file"/></svg> 改 <b>3</b> 文件 <span class="fstat"><span class="p">＋41</span> <span class="m">−7</span></span></span><span class="sep"></span>
+                <span class="ru"><svg class="i s12"><use href="#i-check"/></svg> 验证 <b>3/3</b> · 1 次为环境问题</span><span class="sep"></span>
+                <span class="ru"><svg class="i s12"><use href="#i-clock"/></svg> <b>38s</b> · <b>$0.031</b> <span class="need">新读</span></span>
+                <button class="btn sm gho" style="margin-left:auto" data-tierjump="normal">展开这一轮</button>
+              </div>
+
+              <p>落好了。原因归属走 <code>VerifyCause</code> 八值，环境类单独走 <code>isEnvVerifyCause()</code>，验证红不再和真失败同形。剩下的是把 <code>verify_result</code> 投影进界面——它现在被丢在投影层。</p>
+
+              <div class="row-acts">
+                <button title="复制"><svg class="i s12"><use href="#i-copy"/></svg></button>
+                <button title="有用" class="on"><svg class="i s12"><use href="#i-up"/></svg></button>
+                <button title="没用" class="dn"><svg class="i s12"><use href="#i-dn"/></svg></button>
+                <button title="分叉出去问"><svg class="i s12"><use href="#i-branch"/></svg></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="empty">
+            <div class="em-in">
+              <div class="em-mark"><svg class="i s18"><use href="#i-spark"/></svg></div>
+              <div>
+                <div class="em-h">今天要修点什么？</div>
+                <p class="em-p">说清目标和边界就行，跑什么命令由 agent 自己定；越界的会被闸拦下来给你看。</p>
+              </div>
+              <div class="pills">
+                <button class="pill"><svg class="i s12"><use href="#i-alert"/></svg> 看今天为什么红</button>
+                <button class="pill"><svg class="i s12"><use href="#i-cube"/></svg> 起一路并行改 README</button>
+                <button class="pill"><svg class="i s12"><use href="#i-brain"/></svg> 把上次事故变成尺</button>
+              </div>
+              <div class="em-key">
+                <div class="kh"><svg class="i s14"><use href="#i-key"/></svg> 还没有可用的模型接入</div>
+                <p>没 key 就只跑 demo 通道（剧本回放，不是真模型）。三条路都摆在这里，点了就有。</p>
+                <div class="kr"><span><svg class="i s12" style="margin-right:5px"><use href="#i-key"/></svg>配一家真 key</span><button class="btn sm">去设置</button></div>
+                <div class="kr"><span><svg class="i s12" style="margin-right:5px"><use href="#i-eye"/></svg>先看 demo 通道怎么走</span><button class="btn sm gho">试跑</button></div>
+                <div class="kr"><span><svg class="i s12" style="margin-right:5px"><use href="#i-book"/></svg>从环境变量读</span><span class="chip mono">DEEPSEEK_API_KEY 未设</span></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <button class="jump" id="jump"><svg class="i s12"><use href="#i-dn"/></svg> 回到最新</button>
+
+      <!-- gate dock + ledger -->
+      <div class="zone-gate">
+        <div class="gatewrap">
+          <section class="gcard" id="gcard" aria-label="等你拍板">
+            <div class="ghead">
+              <svg class="i s14"><use href="#i-shield"/></svg><span class="ttl">等你拍板</span>
+              <span class="chip warn">L3 · mode=default</span>
+              <span class="chip">risk medium</span>
+              <span class="compact">1 / 1</span>
+              <button class="btn sm gho" id="gDetail" aria-pressed="false">详情</button>
+            </div>
+            <div class="gbody">
+              <div class="gsum"><span>要跑</span><span class="cmd">git -C "…" worktree remove .agents/wt-77d0 --force</span></div>
+              <div class="ghint">
+                <svg class="i s14"><use href="#i-alert"/></svg>
+                <div><b>为什么要问</b>：删工作树会丢掉里面未合并的改动。命中的是 <code>allow:git *</code> 前缀，但 <code>worktree remove --force</code> 不在该前缀已同意的载荷范围内（consent gap ⇒ 降级为 ask）。</div>
+              </div>
+              <div class="gacts">
+                <div class="seg" role="group" aria-label="授权范围">
+                  <button aria-pressed="true">只这一次<small>本次调用</small></button>
+                  <button aria-pressed="false">这类会话<small>session_kind</small></button>
+                  <button aria-pressed="false">总是<small>写入本机规则</small></button>
+                </div>
+                <button class="btn pri sm"><svg class="i s14"><use href="#i-check"/></svg> 批准</button>
+                <button class="btn dgr sm"><svg class="i s14"><use href="#i-x"/></svg> 拒绝</button>
+                <span class="cdown"><svg class="i s12" style="vertical-align:-2px"><use href="#i-timer"/></svg> 剩 19s 自动拒</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="ledger" id="ledger">
+            <div class="lg-h" role="button" tabindex="0"><svg class="i s12 chev"><use href="#i-chev"/></svg><svg class="i s12"><use href="#i-book"/></svg> 决议台账（本线程）<span class="cnt">23 条 · 3 拒 · 17 连批</span></div>
+            <div class="lg-b">
+              <div class="lrow">
+                <time>12:04</time>
+                <div class="lw"><div class="lc">write_file src/main/ipc-protocol.ts</div>
+                  <div class="lm"><span><svg class="i s12"><use href="#i-shield"/></svg> L3 mode=default</span><span>命中 <code>allow:src/**</code></span><span>risk medium</span><span>范围 session_kind</span></div></div>
+                <div class="lr"><span class="chip ok">批准</span><span style="color:var(--t4)">＋18 行</span></div>
+              </div>
+              <div class="lrow">
+                <time>12:03</time>
+                <div class="lw"><div class="lc">run_shell git push origin zcode</div>
+                  <div class="lm"><span><svg class="i s12"><use href="#i-alert"/></svg> L0 硬地板（global deny 优先于任何 allow）</span><span>risk critical</span><span>无 range</span></div></div>
+                <div class="lr"><span class="chip bad">拒（地板）</span><span style="color:var(--t4)">不进连批计数</span></div>
+              </div>
+              <div class="lrow">
+                <time>12:01</time>
+                <div class="lw"><div class="lc">计划 3 步：分类 → 投影 → 判卷</div>
+                  <div class="lm"><span>计划门</span><span>本 run 强制（planRequiredByDefault）</span></div></div>
+                <div class="lr"><span class="chip ok">批准</span></div>
+              </div>
+              <div class="silent">
+                <div class="srow"><svg class="i s12"><use href="#i-clock"/></svg> 自动批准（没人看过）<span class="sbar"><b style="width:34%"></b></span> 17 / 50 触发断路器</div>
+                <div class="srow"><svg class="i s12"><use href="#i-alert"/></svg> critical 连拒 1 / 3 ⇒ 到 3 建议降档</div>
+                <div class="srow"><svg class="i s12"><use href="#i-skip"/></svg> 2 条被 hold 住（编排限制扩张），没问你</div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- error strip -->
+      <div class="estrip" role="alert">
+        <svg class="i s14"><use href="#i-alert"/></svg>
+        <b>本线程运行失败</b> <span>run#12 · verify attempt 3 后仍红（cause=code）· 2 条断言</span>
+        <span class="esx"><button class="btn sm gho">看第 3 次输出</button><button class="ib" title="关闭（只由你关）"><svg class="i s12"><use href="#i-x"/></svg></button></span>
+      </div>
+
+      <div class="zone-composer">
+        <div class="cbox">
+          <div class="crow1">
+            <textarea rows="1" placeholder="要做什么？说目标和边界就行"></textarea>
+            <button class="att" title="附件"><svg class="i s14"><use href="#i-att"/></svg></button>
+          </div>
+          <div class="crow2">
+            <button class="trigger pmode" data-v="default"><svg class="i s12"><use href="#i-shield"/></svg> <b>默认</b><svg class="i s12"><use href="#i-chevd"/></svg></button>
+            <button class="trigger" id="mT"><svg class="i s12" style="color:var(--accent)"><use href="#i-cube"/></svg> <b>DeepSeek-V3.2</b> · 128k<svg class="i s12"><use href="#i-chevd"/></svg></button>
+            <button class="trigger"><svg class="i s12"><use href="#i-brain"/></svg> 思考 中<svg class="i s12"><use href="#i-chevd"/></svg></button>
+            <button class="composer-ctx trigger" title="把工作树切给 agent"><svg class="i s12"><use href="#i-branch"/></svg> 主工作树</button>
+            <span class="ctxpill"><span class="cb"><b style="width:62%"></b></span> 62% <span class="need">新读</span></span>
+            <button class="send stop" title="打断"><svg class="i s14"><use href="#i-stop"/></svg></button>
+          </div>
+        </div>
+        <div class="cnote"><span>Enter 发送 · Shift+Enter 换行 · 组字中 Enter 不发</span><span>Esc 关弹层，不决议门</span></div>
+        <div class="pop" id="mPop" style="bottom:96px;left:calc(var(--rail) + 24px)">
+          <div class="psearch"><svg class="i s12"><use href="#i-search"/></svg><input placeholder="搜模型或接入家" aria-label="搜模型"></div>
+          <div class="pg">已接入</div>
+          <div class="po sel"><span class="pd" style="background:var(--accent)"></span> DeepSeek-V3.2 <small>128k · 识图</small></div>
+          <div class="po"><span class="pd" style="background:var(--wait)"></span> anthropic/sonnet-4 <small>200k</small></div>
+          <div class="po"><span class="pd" style="background:var(--ok)"></span> openai/gpt-5.3 <small>400k · 思考档</small></div>
+          <div class="pg">演示</div>
+          <div class="po"><span class="pd" style="background:var(--t4)"></span> demo 通道 <small>剧本回放</small></div>
+          <div class="po" style="border-top:1px solid var(--hair);margin-top:4px;color:var(--t3)"><svg class="i s12"><use href="#i-settings"/></svg> 管理模型接入</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ===== R3 review drawer ===== -->
+    <aside class="review" aria-label="审查">
+      <div class="rv-h">
+        <svg class="i s14" style="color:var(--accent)"><use href="#i-file"/></svg>
+        <span class="rt">审查 · 第 12 轮</span>
+        <div class="sp">
+          <button class="ib" title="上一轮"><svg class="i s12"><use href="#i-up"/></svg></button>
+          <button class="ib" title="下一轮"><svg class="i s12"><use href="#i-dn"/></svg></button>
+          <button class="ib" id="rvFull" title="全展开"><svg class="i s12"><use href="#i-panel"/></svg></button>
+          <button class="ib" id="rvClose" title="收起"><svg class="i s12"><use href="#i-x"/></svg></button>
+        </div>
+      </div>
+      <div class="rv-body">
+        <div class="rvsum">
+          <div class="rvs"><b>3</b><span>改动文件</span></div>
+          <div class="rvs ok"><b>＋41</b><span>新增行</span></div>
+          <div class="rvs bad"><b>−7</b><span>删除行</span></div>
+        </div>
+
+        <div class="gatestrip">
+          <svg class="i s14"><use href="#i-shield"/></svg>
+          <div>worker <b>wt-b91c</b> 的 diff 被合并闸挡住（risk high）· <code>forced</code> 只对这一次调用有效</div>
+          <button class="btn sm">仍要合并</button>
+        </div>
+
+        <div class="rvlab">文件（点行说话 = 定向喂进下一轮）</div>
+        <div class="file">
+          <div class="frow"><svg class="i s12"><use href="#i-file"/></svg><span class="fp">src/agent/verify.ts</span><span class="fd">modified</span><span class="fstat"><span class="p">＋26</span> <span class="m">−4</span></span></div>
+          <div class="frow sel"><svg class="i s12"><use href="#i-file"/></svg><span class="fp">src/events/index.ts</span><span class="fd">modified</span><span class="fstat"><span class="p">＋12</span> <span class="m">−3</span></span></div>
+          <div class="frow"><svg class="i s12"><use href="#i-file"/></svg><span class="fp">tests/verify-cause.test.ts</span><span class="fd">created</span><span class="fstat"><span class="p">＋3</span></span></div>
+        </div>
+
+        <div class="diffwrap">
+          <div class="dh"><svg class="i s12"><use href="#i-branch"/></svg> src/events/index.ts <span class="chip mono">＋12 −3</span>
+            <span class="sp"><button>复制</button><button>仅看改动</button></span>
+          </div>
+          <div class="diff">
+            <div class="dl hunk">@@ -76,9 +76,14 @@ export interface ToolResultEvent</div>
+            <div class="dl"><span class="n">76</span><span class="n">76</span><span class="g"> </span><span>  type: "tool_result";</span></div>
+            <div class="dl"><span class="n">77</span><span class="n">77</span><span class="g"> </span><span>  callId: string;</span></div>
+            <div class="dl del"><span class="n">78</span><span class="n"></span><span class="g">−</span><span>  ok: boolean;</span><span class="say">就这行说话</span></div>
+            <div class="dl add"><span class="n"></span><span class="n">78</span><span class="g">＋</span><span>  ok: boolean;</span><span class="say">就这行说话</span></div>
+            <div class="dl add"><span class="n"></span><span class="n">79</span><span class="g">＋</span><span>  /** 权限判定留痕：谁判的（layer）、怎么判的（verdict） */</span><span class="say">就这行说话</span></div>
+            <div class="dl add"><span class="n"></span><span class="n">80</span><span class="g">＋</span><span>  gate?: GateMeta;</span><span class="say">就这行说话</span></div>
+            <div class="dl"><span class="n">79</span><span class="n">81</span><span class="g"> </span><span>  agent_id?: string;</span></div>
+            <div class="dl add"><span class="n"></span><span class="n">82</span><span class="g">＋</span><span>  /** 验证原因归属；环境类不进真失败 */</span><span class="say">就这行说话</span></div>
+            <div class="dl add"><span class="n"></span><span class="n">83</span><span class="g">＋</span><span>  verifyCause?: VerifyCause;</span><span class="say">就这行说话</span></div>
+            <div class="dl"><span class="n">80</span><span class="n">84</span><span class="g"> </span><span>  snapshotId?: string;</span></div>
+          </div>
+        </div>
+
+        <div class="cmt">
+          <div>
+            <div class="cl">第 83 行 · verifyCause</div>
+            <textarea rows="2" placeholder="为什么这行不对 / 要改成什么"></textarea>
+          </div>
+          <button class="btn pri sm"><svg class="i s14"><use href="#i-send"/></svg> 回喂</button>
+        </div>
+        <div class="thread-cmt">
+          <svg class="i s12"><use href="#i-branch"/></svg>
+          <div>已发 1 条行级评论 → 定向注入 worker <code>wt-4f2a</code> 子流（<code>diff_comment</code> 事件，12:02）· 不等本轮结束</div>
+        </div>
+
+        <div class="rvlab">还原面（此轮可还原）</div>
+        <div class="file">
+          <div class="frow"><svg class="i s12"><use href="#i-revert"/></svg><span class="fp">2 个文件</span><span class="fd">走快照 restore</span><span class="chip ok">可还原</span></div>
+          <div class="frow"><svg class="i s12"><use href="#i-alert"/></svg><span class="fp">outputs/…/report.json</span><span class="fd">本轮之外被外部改过</span><span class="chip bad">manual</span></div>
+        </div>
+      </div>
+    </aside>
+
+  </div>
+</div>
+</div>
+
+<script>
+const app = document.getElementById('app');
+const root = document.documentElement;
+const scenes = {
+  run:     {tier:'normal',  gate:'none',    drawer:'closed', view:'thread', error:'off', width:'1440', theme:'light'},
+  gate:    {tier:'normal',  gate:'pending', drawer:'closed', view:'thread', error:'off', width:'1440', theme:'light'},
+  summary: {tier:'summary', gate:'none',    drawer:'closed', view:'thread', error:'off', width:'1440', theme:'light'},
+  verbose: {tier:'verbose', gate:'none',    drawer:'closed', view:'thread', error:'off', width:'1440', theme:'light'},
+  review:  {tier:'normal',  gate:'pending', drawer:'open',   view:'thread', error:'off', width:'1440', theme:'light'},
+  fleet:   {tier:'summary', gate:'none',    drawer:'full',   view:'thread', error:'off', width:'1440', theme:'light'},
+  first:   {tier:'normal',  gate:'none',    drawer:'closed', view:'empty',  error:'off', width:'1440', theme:'light'},
+  error:   {tier:'verbose', gate:'none',    drawer:'closed', view:'thread', error:'on',  width:'1440', theme:'light'},
+  narrow:  {tier:'normal',  gate:'pending', drawer:'open',   view:'thread', error:'off', width:'980',  theme:'light'},
+  dark:    {tier:'normal',  gate:'pending', drawer:'open',   view:'thread', error:'off', width:'1440', theme:'dark'},
+};
+function apply(s){
+  root.dataset.tier=s.tier; root.dataset.gate=s.gate; root.dataset.drawer=s.drawer;
+  root.dataset.view=s.view; root.dataset.error=s.error; root.dataset.width=s.width;
+  root.dataset.theme=s.theme;
+  document.getElementById('gcard').classList.toggle('hi', s.gate==='pending');
+  document.getElementById('fleet').hidden = s.view==='empty';
+  document.getElementById('phaseChip').style.visibility = s.view==='empty' ? 'hidden' : 'visible';
+  document.getElementById('tbTitle').textContent = s.view==='empty' ? '新任务' : '给 verify 尺补 cause 归属';
+  document.getElementById('tbSub').textContent = s.view==='empty' ? '还没跑过任何东西' : 'deepseek harness · 主线程 ＋ 2 路 worker';
+}
+document.querySelectorAll('.scene-btn').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.scene-btn').forEach(x=>x.setAttribute('aria-pressed','false'));
+  b.setAttribute('aria-pressed','true');
+  apply(scenes[b.dataset.scene]);
+}));
+document.getElementById('thToggle').addEventListener('click',()=>{
+  root.dataset.theme = root.dataset.theme==='dark'?'light':'dark';
+});
+const flip=(sel,attr)=>document.querySelectorAll(sel).forEach(el=>el.addEventListener('click',()=>{
+  root.dataset[attr] = root.dataset[attr]==='open'?'closed':'open';
+}));
+document.getElementById('rvToggle').addEventListener('click',()=>{
+  root.dataset.drawer = root.dataset.drawer==='closed'?'open':(root.dataset.drawer==='open'?'full':'closed');
+});
+document.getElementById('rvFull').addEventListener('click',()=>{
+  root.dataset.drawer = root.dataset.drawer==='full'?'open':'full';
+});
+document.getElementById('rvClose').addEventListener('click',()=>{root.dataset.drawer='closed';});
+document.getElementById('ledger').querySelector('.lg-h').addEventListener('click',()=>{
+  document.getElementById('ledger').classList.toggle('open');
+});
+document.getElementById('gDetail').addEventListener('click',(e)=>{
+  const on = document.getElementById('gcard').classList.toggle('detail');
+  e.currentTarget.setAttribute('aria-pressed', on ? 'true' : 'false');
+  e.currentTarget.textContent = on ? '收起' : '详情';
+});
+document.getElementById('mT').addEventListener('click',()=>{document.getElementById('mPop').classList.toggle('show');});
+document.querySelectorAll('.tline').forEach(t=>t.addEventListener('click',()=>t.classList.toggle('exp')));
+document.querySelectorAll('[data-tierjump]').forEach(b=>b.addEventListener('click',()=>{root.dataset.tier='verbose';}));
+document.querySelectorAll('.frow').forEach(f=>f.addEventListener('click',()=>{
+  document.querySelectorAll('.frow').forEach(x=>x.classList.remove('sel')); f.classList.add('sel');
+}));
+document.querySelectorAll('.dl .say').forEach(s=>s.addEventListener('click',()=>{
+  root.dataset.drawer='open'; const c=document.querySelector('.cmt');
+  c.querySelector('.cl').textContent='第 '+s.parentElement.querySelector('.n:last-of-type').textContent.trim()+' 行 · 行级评论';
+  c.style.display='grid'; c.querySelector('textarea').focus();
+}));
+document.querySelectorAll('.filter,.fchip').forEach(f=>f.addEventListener('click',()=>{
+  document.querySelectorAll('.fchip').forEach(x=>x.setAttribute('aria-pressed','false'));
+  f.setAttribute('aria-pressed','true');
+}));
+document.querySelectorAll('.tcard').forEach(c=>c.addEventListener('click',()=>{
+  document.querySelectorAll('.tcard').forEach(x=>x.classList.remove('sel')); c.classList.add('sel');
+}));
+const stream=document.getElementById('stream'), jump=document.getElementById('jump');
+stream.addEventListener('scroll',()=>{
+  const far = stream.scrollHeight - stream.scrollTop - stream.clientHeight > 120;
+  jump.classList.toggle('show', far);
+});
+jump.addEventListener('click',()=>stream.scrollTo({top:stream.scrollHeight,behavior:'instant'}));
+let sec=41; setInterval(()=>{sec++; const e=document.getElementById('elapsed');
+  if(e) e.textContent=String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0');},1000);
+apply(scenes.run);
+</script>
+</body>
+</html>

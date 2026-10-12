@@ -5,9 +5,9 @@ import {
 } from "./provider-keys";
 import { verifyLicenseFile, type LicenseState } from "./license";
 import { checkUpdate, type UpdateCheckResult } from "./updater";
-import { PROVIDER_KINDS, SettingsStore, type AppSettings, type ProviderKind } from "./settings";
-import { DEFAULT_MODEL_TABLE, findSpecByNameOrId } from "../providers/registry";
-import { ENV_KEYED_PROVIDERS, envKeyOf } from "../providers/env-keys";
+import { SettingsStore, isPersistableProvider, type AppSettings, type ProviderKind } from "./settings";
+import { effectiveModelTable, findSpecByNameOrId } from "../providers/registry";
+import { ENV_KEYED_PROVIDERS, customEnvKeyedProviders, envKeyOf } from "../providers/env-keys";
 import {
   buildProviderInfo,
   providerKindFromEnv,
@@ -56,10 +56,14 @@ export async function getSettings(): Promise<AppSettings> {
 
 export async function setSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   if (patch === null || typeof patch !== "object" || Array.isArray(patch)) throw new Error("settings patch 必须是对象");
-  if (patch.provider !== undefined && !(PROVIDER_KINDS as readonly string[]).includes(patch.provider)) {
+  // 2026-10-06 用户实测踩到：这两道闸原先是**只有内置四家的静态清单**，而读设置的通道
+  // （settings.ts 的 validateSettings）早就改成「内置 ∪ 已装自定义」了 —— 写读口径不一致，
+  // 于是自定义家刚存好、下一步"设为当前通道"就被打回（报 `未知 provider: agnes-ai`）。
+  // 现在两边共用同一对判据（isPersistableProvider / effectiveModelTable）。
+  if (patch.provider !== undefined && !isPersistableProvider(patch.provider)) {
     throw new Error(`未知 provider: ${String(patch.provider)}`);
   }
-  if (patch.model !== undefined && patch.model !== "" && !findSpecByNameOrId(DEFAULT_MODEL_TABLE, patch.model)) {
+  if (patch.model !== undefined && patch.model !== "" && !findSpecByNameOrId(effectiveModelTable(), patch.model)) {
     throw new Error(`未知模型: ${JSON.stringify(patch.model)}`);
   }
   const next = await store().set(patch);
@@ -107,14 +111,18 @@ export async function handleProviderKeyDelete(provider: string): Promise<{ ok: b
 }
 
 /** 状态面（设置页徽标 + env 并存提示；不含 key 值）。 */
-export async function handleProviderKeyStatus(): Promise<{ available: boolean; stored: string[]; envActive: boolean }> {
+export async function handleProviderKeyStatus(): Promise<{ available: boolean; stored: string[]; envActive: boolean; envProviders: string[] }> {
   const st = await providerKeyStatus();
+  // env 在场的 provider 清单：renderer 侧「按已配 key 过滤内置模型」需要逐家判断，
+  // envActive 是 any 粒度，无法区分是哪一家（注入面会把已存 key 写进 process.env，env 优先）。
+  const envProviders = [...ENV_KEYED_PROVIDERS, ...customEnvKeyedProviders()].filter((provider) => {
+    const envName = envKeyOf(provider);
+    return envName !== null && !!process.env[envName];
+  });
   return {
     ...st,
-    envActive: ENV_KEYED_PROVIDERS.some((provider) => {
-      const envName = envKeyOf(provider);
-      return envName !== null && !!process.env[envName];
-    }),
+    envActive: envProviders.length > 0,
+    envProviders,
   };
 }
 

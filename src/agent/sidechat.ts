@@ -115,6 +115,9 @@ function renderProjectionLine(e: AgentEvent): string | null {
       return "[主会话·助手] " + clip(e.content, PROJECTION_EVENT_CHARS);
     case "assistant_delta":
       return null; // delta 由 assistant_message 代表（避免重复）
+    case "thinking_delta":
+      // 思考正文不进主会话投影：那是模型自言自语的过程，不是给 sidechat 的上下文。
+      return null;
     case "tool_call":
       return "[主会话·工具调用] " + e.name + " " + clip(JSON.stringify(e.args), PROJECTION_EVENT_CHARS);
     case "tool_result":
@@ -149,6 +152,8 @@ function renderProjectionLine(e: AgentEvent): string | null {
     case "automation_completed":
     case "goal_set": // goal 是宿主会话的锚点与预算，sidechat 是只读问答面：不进投影（面归 goal 芯片/审计）
     case "goal_stopped":
+    case "goal_paused": // v2.16：挂起/恢复同 goal_set/goal_stopped 一档——目标态控制面，不进只读投影
+    case "goal_resumed":
     case "surface_account": // P0 装配账：纯观测面，不进只读投影。**必须是显式 case**——若改成渲染它，
       // 主会话的工具清单（含只读档本应「根本不存在于表内」的写向工具）会经这里发往外部 provider
       // （见本文件 SIDECHAT_FORBIDDEN_TOOLS 的设计意图与 streamGlm 调用点）。

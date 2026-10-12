@@ -2,7 +2,7 @@
 // direct/headless caller cannot bypass checks that renderer traffic receives.
 import { PERMISSION_MODES, type PermissionMode } from "../permissions";
 import { THINKING_EFFORTS } from "../providers/capabilities";
-import { DEFAULT_MODEL_TABLE, lookupModel } from "../providers/registry";
+import { effectiveModelTable, lookupModel } from "../providers/registry";
 import { parseRunAttachment, type RunAttachmentReference } from "./run-attachments";
 import { isValidSessionName } from "./sessions";
 import type { RunRequest } from "./ipc-protocol";
@@ -45,7 +45,8 @@ export function validateRunRequestEnvelope(raw: unknown): RunRequestValidation {
     if (typeof value.model !== "string" || value.model.trim() === "" || value.model.length > 128) {
       return { ok: false, error: "RunRequest.model 必须是非空稳定 registry id（≤128 字符）" };
     }
-    if (!lookupModel(DEFAULT_MODEL_TABLE, value.model)) {
+    // 同样改走有效表：否则「用自定义模型跑一轮」会在请求校验这一关卡住（用户刚踩到的下一站）
+    if (!lookupModel(effectiveModelTable(), value.model)) {
       return { ok: false, error: `RunRequest.model 未登记: ${JSON.stringify(value.model)}` };
     }
   }
