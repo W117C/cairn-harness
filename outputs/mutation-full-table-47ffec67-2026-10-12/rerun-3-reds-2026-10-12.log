@@ -1,0 +1,14 @@
+$ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify autoverify-ipc-override-ignored memory-external-ref-corrupt-silent-again memory-external-ref-shape-unchecked
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → 9cca37f
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
+变异验证：3 条
+✅ autoverify-ipc-override-ignored — 那一行改成「只读 settings」⇒ 调用方显式传的 false 被吞掉（要临时关一次的人只能去改设置文件），且没有任何用例会红 ｜本机实测 1.8s／2 拍
+✅ memory-external-ref-corrupt-silent-again — 损坏态退回静默（缺失/损坏同路）⇒ 用户批准过的 @path 无声蒸发、拒绝记录一并丢，而盘上没有任何出声 ｜本机实测 0.6s／2 拍
+✅ memory-external-ref-shape-unchecked — 字段形状校验被摘 ⇒ 合法 JSON 里的字符串 approved 会变成 `includes` 的子串匹配面（批准 A 等于批准含 A 的任意引用） ｜本机实测 0.6s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 3.2s · 跑了 3/3 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 autoverify-ipc-override-ignored 1.8s
+跑法单价：selector 6 拍·中位 0.28s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
+EXIT=0
