@@ -29,9 +29,22 @@
 //
 // 用法：node --import tsx outputs/tool-face-p0-readings-2026-10-03/measure-used-tools.mts [--json]
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { zstdDecompressSync } from "node:zlib";
+
+/** 目标文件：缺省仍是本目录那份（历史行为），`--to=<path>` 另存，`--force` 才允许覆盖。
+ *  为什么要这道门（2026-10-12 实测踩过一次）：本脚本从前**直写** `used-tools.json`，
+ *  谁再跑一次就把 10-03 那一笔的读数静默顶掉——那正是本仓「基线不覆盖」那条规矩要防的事。 */
+const TO_ARG = process.argv.find((a) => a.startsWith("--to="));
+const OUT_PATH = TO_ARG !== undefined ? resolve(TO_ARG.slice("--to=".length)) : join(import.meta.dirname, "used-tools.json");
+if (existsSync(OUT_PATH) && !process.argv.includes("--force")) {
+  console.error("[measure-used-tools] 目标已存在，拒写：" + OUT_PATH);
+  console.error("  本脚本从前直写它，会把那一笔的读数顶掉（2026-10-12 实测踩过一次）。");
+  console.error("  要另存：--to=<新路径>；确实要覆盖：再加 --force。");
+  process.exit(2);
+}
 
 const ROOT = join(homedir(), ".dsh", "sessions");
 const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
@@ -259,12 +272,12 @@ async function main(): Promise<void> {
   if (tools.length > 30) console.log("      …另有 " + (tools.length - 30) + " 把在长尾里");
 
   await writeFile(
-    join(import.meta.dirname, "used-tools.json"),
+    OUT_PATH,
     JSON.stringify({ ...report, tools }, null, 2) + "\n",
     "utf8",
   );
   console.log("");
-  console.log("  明细已写：" + join(import.meta.dirname, "used-tools.json"));
+  console.log("  明细已写：" + OUT_PATH);
 }
 
 await main();

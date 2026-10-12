@@ -1,0 +1,52 @@
+== P0 读数：真实会话里实际被调用过的工具集 ==
+取料：/Users/ze/.dsh/sessions
+口径：**使用集是声明面的下界**，不是声明面本身；只算 tool/call。见本文件头注。
+
+  会话日志          163 份（有工具调用 146：主会话 36 / 子代理 110）
+  zstd 帧           38666（解不开 0）
+  工具调用总数      15928
+  **用过的不同工具**  63 把
+
+  单会话用到的不同工具数：
+      主会话   min 1 / 中位 8 / max 19
+      子代理   中位 3
+
+  集中度（按调用量降序，前 N 把覆盖多少调用）：
+      前 5 把 91.8%    前 10 把 95.5%    前 20 把 98.3%    前 30 把 99.3%
+      覆盖到 50% 需要 1 把；80% 需要 2 把；90% 需要 4 把
+
+  逐把明细（前 30）：
+      工具                                 调用数     会话数      其中子代理
+      bash                             11786      76         42
+      read                              1345      53         30
+      edit                               920      26         12
+      write                              304      27         14
+      compress                           274      19         12
+      job_output                         150      20          6
+      web_fetch                          126      18          7
+      grep                               111      16          8
+      validate_dsh_ui                     95      29          7
+      read_image                          95       6          2
+      mnemon_document_search              76      64         62
+      mnemon_subagent_result              60      57         57
+      todo_write                          58      13          4
+      subagent                            56      10          4
+      mnemon_document_create              45      41         41
+      advanced_search                     35       8          5
+      job_kill                            32      17          9
+      send_message                        30      26         25
+      web_search                          28      15          8
+      read_page                           25       4          3
+      platform_search                     23       8          3
+      mnemon_runtime_memory               20      11          4
+      ask_user_question                   20      13          2
+      list_agents                         19       6          0
+      acp_status                          16       8          4
+      skill                               16      15          4
+      team_task_update                    16       6          6
+      present                             15       5          1
+      wait_agent                          14       3          0
+      team_task_list                      13       8          6
+      …另有 33 把在长尾里
+
+  明细已写：/Users/ze/Downloads/Cairn/deepseek harness/outputs/production-faces-2026-10-12/used-tools-2026-10-12.json

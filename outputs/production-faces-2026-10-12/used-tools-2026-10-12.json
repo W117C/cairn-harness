@@ -1,0 +1,412 @@
+{
+  "root": "/Users/ze/.dsh/sessions",
+  "sessions": 163,
+  "sessionsUnreadable": [],
+  "sessionsPartial": [],
+  "framesTotal": 38666,
+  "framesFailedTotal": 0,
+  "sessionsWithToolCalls": 146,
+  "sessionsMain": 36,
+  "sessionsSubagent": 110,
+  "totalToolCalls": 15928,
+  "distinctToolsEverUsed": 63,
+  "perSessionDistinct": {
+    "allMedian": 3,
+    "mainMin": 1,
+    "mainMedian": 8,
+    "mainMax": 19,
+    "subagentMedian": 3
+  },
+  "concentration": {
+    "50": 1,
+    "80": 2,
+    "90": 4,
+    "100": 63
+  },
+  "coverage": {
+    "top5": 91.84455047714717,
+    "top10": 95.46710195881467,
+    "top20": 98.26092415871422,
+    "top30": 99.3407835258664
+  },
+  "tools": [
+    {
+      "name": "bash",
+      "calls": 11786,
+      "sessions": 76,
+      "subagentSessions": 42
+    },
+    {
+      "name": "read",
+      "calls": 1345,
+      "sessions": 53,
+      "subagentSessions": 30
+    },
+    {
+      "name": "edit",
+      "calls": 920,
+      "sessions": 26,
+      "subagentSessions": 12
+    },
+    {
+      "name": "write",
+      "calls": 304,
+      "sessions": 27,
+      "subagentSessions": 14
+    },
+    {
+      "name": "compress",
+      "calls": 274,
+      "sessions": 19,
+      "subagentSessions": 12
+    },
+    {
+      "name": "job_output",
+      "calls": 150,
+      "sessions": 20,
+      "subagentSessions": 6
+    },
+    {
+      "name": "web_fetch",
+      "calls": 126,
+      "sessions": 18,
+      "subagentSessions": 7
+    },
+    {
+      "name": "grep",
+      "calls": 111,
+      "sessions": 16,
+      "subagentSessions": 8
+    },
+    {
+      "name": "validate_dsh_ui",
+      "calls": 95,
+      "sessions": 29,
+      "subagentSessions": 7
+    },
+    {
+      "name": "read_image",
+      "calls": 95,
+      "sessions": 6,
+      "subagentSessions": 2
+    },
+    {
+      "name": "mnemon_document_search",
+      "calls": 76,
+      "sessions": 64,
+      "subagentSessions": 62
+    },
+    {
+      "name": "mnemon_subagent_result",
+      "calls": 60,
+      "sessions": 57,
+      "subagentSessions": 57
+    },
+    {
+      "name": "todo_write",
+      "calls": 58,
+      "sessions": 13,
+      "subagentSessions": 4
+    },
+    {
+      "name": "subagent",
+      "calls": 56,
+      "sessions": 10,
+      "subagentSessions": 4
+    },
+    {
+      "name": "mnemon_document_create",
+      "calls": 45,
+      "sessions": 41,
+      "subagentSessions": 41
+    },
+    {
+      "name": "advanced_search",
+      "calls": 35,
+      "sessions": 8,
+      "subagentSessions": 5
+    },
+    {
+      "name": "job_kill",
+      "calls": 32,
+      "sessions": 17,
+      "subagentSessions": 9
+    },
+    {
+      "name": "send_message",
+      "calls": 30,
+      "sessions": 26,
+      "subagentSessions": 25
+    },
+    {
+      "name": "web_search",
+      "calls": 28,
+      "sessions": 15,
+      "subagentSessions": 8
+    },
+    {
+      "name": "read_page",
+      "calls": 25,
+      "sessions": 4,
+      "subagentSessions": 3
+    },
+    {
+      "name": "platform_search",
+      "calls": 23,
+      "sessions": 8,
+      "subagentSessions": 3
+    },
+    {
+      "name": "mnemon_runtime_memory",
+      "calls": 20,
+      "sessions": 11,
+      "subagentSessions": 4
+    },
+    {
+      "name": "ask_user_question",
+      "calls": 20,
+      "sessions": 13,
+      "subagentSessions": 2
+    },
+    {
+      "name": "list_agents",
+      "calls": 19,
+      "sessions": 6,
+      "subagentSessions": 0
+    },
+    {
+      "name": "acp_status",
+      "calls": 16,
+      "sessions": 8,
+      "subagentSessions": 4
+    },
+    {
+      "name": "skill",
+      "calls": 16,
+      "sessions": 15,
+      "subagentSessions": 4
+    },
+    {
+      "name": "team_task_update",
+      "calls": 16,
+      "sessions": 6,
+      "subagentSessions": 6
+    },
+    {
+      "name": "present",
+      "calls": 15,
+      "sessions": 5,
+      "subagentSessions": 1
+    },
+    {
+      "name": "wait_agent",
+      "calls": 14,
+      "sessions": 3,
+      "subagentSessions": 0
+    },
+    {
+      "name": "team_task_list",
+      "calls": 13,
+      "sessions": 8,
+      "subagentSessions": 6
+    },
+    {
+      "name": "job_list",
+      "calls": 12,
+      "sessions": 10,
+      "subagentSessions": 2
+    },
+    {
+      "name": "decompress",
+      "calls": 10,
+      "sessions": 6,
+      "subagentSessions": 3
+    },
+    {
+      "name": "sidebar_open",
+      "calls": 8,
+      "sessions": 2,
+      "subagentSessions": 0
+    },
+    {
+      "name": "mcp__graphflow__graphflow_context",
+      "calls": 8,
+      "sessions": 5,
+      "subagentSessions": 1
+    },
+    {
+      "name": "render_ui",
+      "calls": 6,
+      "sessions": 4,
+      "subagentSessions": 0
+    },
+    {
+      "name": "team_task_get",
+      "calls": 5,
+      "sessions": 5,
+      "subagentSessions": 5
+    },
+    {
+      "name": "search_context",
+      "calls": 5,
+      "sessions": 2,
+      "subagentSessions": 0
+    },
+    {
+      "name": "glob",
+      "calls": 5,
+      "sessions": 3,
+      "subagentSessions": 1
+    },
+    {
+      "name": "multi_search",
+      "calls": 4,
+      "sessions": 3,
+      "subagentSessions": 2
+    },
+    {
+      "name": "create_goal",
+      "calls": 4,
+      "sessions": 3,
+      "subagentSessions": 0
+    },
+    {
+      "name": "get_goal",
+      "calls": 4,
+      "sessions": 2,
+      "subagentSessions": 0
+    },
+    {
+      "name": "update_goal",
+      "calls": 4,
+      "sessions": 2,
+      "subagentSessions": 0
+    },
+    {
+      "name": "cordis_inspect_list",
+      "calls": 4,
+      "sessions": 4,
+      "subagentSessions": 3
+    },
+    {
+      "name": "summon_expert_team",
+      "calls": 3,
+      "sessions": 2,
+      "subagentSessions": 0
+    },
+    {
+      "name": "acp_cache",
+      "calls": 2,
+      "sessions": 2,
+      "subagentSessions": 1
+    },
+    {
+      "name": "list_subagent_models",
+      "calls": 2,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "mnemon_recall",
+      "calls": 2,
+      "sessions": 2,
+      "subagentSessions": 0
+    },
+    {
+      "name": "get_expert_team",
+      "calls": 2,
+      "sessions": 2,
+      "subagentSessions": 0
+    },
+    {
+      "name": "ego_status",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "ego_space_open",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "ego_doctor",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "mnemon_status",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "mnemon_memory_bodies",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "agent-reach",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "compression_note",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "mcp__graphflow__graphflow_diagnose",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "list_expert_teams",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "research",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 1
+    },
+    {
+      "name": "free_search_test",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 1
+    },
+    {
+      "name": "list_mcp_resource_templates",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "gash",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "brep",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    },
+    {
+      "name": "bcp_status",
+      "calls": 1,
+      "sessions": 1,
+      "subagentSessions": 0
+    }
+  ]
+}
