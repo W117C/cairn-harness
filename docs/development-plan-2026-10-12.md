@@ -64,9 +64,12 @@
 
 1. **写侧已盖章、盘上旧语料全没章**。`scripts/loop-eval.ts:957` 现在把 `headSha`/`ranAt`/`maxSteps`/
    `reps`/`arm` 盖进每条读数——这是 **HEAD `57f4d4a7` 上已有的代码**，不是未提交改动（`git show
-   HEAD:scripts/loop-eval.ts` 核过）。但盘上 **20 份 `readings.json` 全部未盖章**（现读逐份核过：连
+   HEAD:scripts/loop-eval.ts` 核过）。但盘上 **31 份存量 `readings.json` 全部未盖章**（现读逐份核过：连
    `outputs/bench-head-d0ffe15e-{a,b}` 这对专门用来算噪声带的孪生读数，也只有 `rep` 一个键）。
-   ⇒ 今天拿任何两份旧读数去喂 report，身份闸必咬、出口码 3、整表降级为「只当量级」。
+   ⇒ 当时拿任何两份旧读数去喂 report，身份闸必咬、出口码 3、整表降级为「只当量级」。
+   （**2026-10-12 后续：第一批带章读数已产出并喂通，出口码 0；见 `PROGRESS.md` 第 440 页与
+   `outputs/eval-first-stamped-readings-2026-10-12/`。那一批走 `--scripted=` 离线合成面，
+   证的是「章能被认」，**不是**真噪声带。**）
    **这不是缺陷，是设计意图**（`report.ts:249` 原文：「这道闸今天一定会咬」，写侧该往哪盖章交 `#63`）。
 2. **单趟重复仍然看不见**。`loop-eval` 有 `--reps`（缺省 1）且行内记 `rep`，但 `tally` 把 k×12 池成一个
    汇总数 ⇒ **重复跑了也不出分布**；而 `--reps 3` 那 36 趟实测 **32 趟死在 429 日配额**
@@ -243,8 +246,9 @@
   1 道红——`mutate-needles-check` exit=1（36 条阻断），**该红已归因并解掉**（见下「落地」）。
   ② 全量判卷 **5253 passed / 5253**（215.4s，`test` 门本轮实跑，不再是「未跑」）。
   ③ D-A 的 comparator **已存在**（`scripts/eval/report.ts` 711 行，身份闸 + 合取闸 + 出口码 3/4/5）——
-  初稿那句「尚不存在」是错的，已按现读改判；盘上 **31 份 `readings.json` 全部未盖章**（逐份核过，0 份含
-  `headSha`）⇒ 身份闸今天必咬。
+  初稿那句「尚不存在」是错的，已按现读改判；盘上 **31 份存量 `readings.json` 全部未盖章**（逐份核过，
+  0 份含 `headSha`）⇒ 身份闸今天必咬。**第一批带章读数由第 440 页产出**（3 份，命名
+  `readings-{a,b,c}.json`，喂进去出口码 0／故意退化出口码 4），走的是 `--scripted=` 离线合成面。
   ④ D-B（`git remote` = 0 条）、D-C（`git status` 244 项；`src/` 下 60 项含 18 个未 tracked 面）。
   ⑤ 能力面复核：`SUPPORTED_EXTS` = 9（不是 6）；调度器有生产调用方；`apply_patch` 在工具面内。
   ⑥ **`head-cert-check` 已跑，且在修完两条红之后 exit=0**（新 HEAD `6081383b`）：判卷
@@ -303,8 +307,9 @@ no-progress-check；prompt-surface-check；cost-per-progress-check。
   全在；per-target `pass@k` / `pass^k` 与翻转对也印。
 - 写侧 `scripts/loop-eval.ts` **在 HEAD 上就已经盖章**（`git show HEAD:scripts/loop-eval.ts` 里
   `headSha`/`ranAt`/`maxSteps`/`reps`/`arm` 俱在）⇒ 缺的确实只是语料，不是尺。
-- **盘上 31 份 `readings.json` 逐份 `rg '"headSha"'` ⇒ 0 份命中**。这一格因此是：尺已立、料未盖章 ⇒
-  今天喂任何两份旧读数都是出口码 3（整表降为「只当量级」）。这是设计意图，不是缺陷。
+- **盘上 31 份 `readings.json` 逐份 `rg '"headSha"'` ⇒ 0 份命中**（本行是修复前那一刻的读数）。
+  这一格因此是：尺已立、料未盖章 ⇒ 当时喂任何两份旧读数都是出口码 3（整表降为「只当量级」）。
+  这是设计意图，不是缺陷。**修复后的第一批带章读数见第 440 页**。
 
 ### 能力面复核（为「其余七条已达已实现」找反例，未找到）
 
