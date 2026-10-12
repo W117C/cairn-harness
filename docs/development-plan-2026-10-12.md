@@ -8,6 +8,11 @@
 > 七次追加，本轮已复核）；`outputs/agent-capability-roadmap-2026-10-01/PLAN.md` 是能力面十条判定与
 > M0-M10 分工；`docs/sema-proposal.md` 是自进化 Phase 0-3 的实施记录。本文不重复它们的内容，只做三件事：
 > 复核那些清单里的问题当前是什么状态、指出四处被各自立档的结构性风险、给出下一季度的波次与验收。
+>
+> ⚠️ **取料状态（2026-10-12 核，读本文引用前先看这行）**：上面点的四份里，
+> `docs/optimization-plan-2026-10-02.md` 与 `outputs/agent-capability-roadmap-2026-10-01/PLAN.md`
+> 已入库；**`docs/sema-proposal.md` 与 `docs/m5-acceptance.md` 不在 HEAD 上**（他处在飞，台账第 1112 行
+> 登记过「不代提交、不代改」）⇒ 引这两份的那几格读数请在盘上那份复现，别按「文档不存在」处理。
 
 > **2026-10-12 复核追加（§6.1）**：本文初稿有两处判断在复跑后被推翻——comparator 不是「未立」而是已落地并
 > 带身份闸（§2 D-A 的第 2 波因此改判）；`mutate-needles-check` 现读是**红的（36 条阻断）**，第 1 波要加一条
@@ -70,6 +75,13 @@
    （**2026-10-12 后续：第一批带章读数已产出并喂通，出口码 0；见 `PROGRESS.md` 第 440 页与
    `outputs/eval-first-stamped-readings-2026-10-12/`。那一批走 `--scripted=` 离线合成面，
    证的是「章能被认」，**不是**真噪声带。**）
+   ⚠️ **同批带出一个面键的洞（第 445 页登记）**：`identityOf` 的面键是
+   `headSha|model|maxSteps|reps|arm`，**不含 `providerFace`**，而 `--scripted=` 那批的 `arm` 也是
+   `base` ⇒ 合成臂与真会话臂**会被配成同一张脸**。后果是「拿合成批当基线去比一次真跑」不会被任何闸
+   挡下，而那个 0 宽噪声带是构造出来的、不是机器的抖动底。**在那之前：合成批只当"管道通不通"的证据，
+   不许当任何真跑比较的基线。** 治本那笔（把 `providerFace` 纳进面键，或让 `loop-eval` 在 scripted
+   档改写 `arm`）动的是共享面，等 `scripts/eval/report.ts` 与 `scripts/mutate-verify.mjs` 两处在飞
+   落库后再做。
    **这不是缺陷，是设计意图**（`report.ts:249` 原文：「这道闸今天一定会咬」，写侧该往哪盖章交 `#63`）。
 2. **单趟重复仍然看不见**。`loop-eval` 有 `--reps`（缺省 1）且行内记 `rep`，但 `tally` 把 k×12 池成一个
    汇总数 ⇒ **重复跑了也不出分布**；而 `--reps 3` 那 36 趟实测 **32 趟死在 429 日配额**
