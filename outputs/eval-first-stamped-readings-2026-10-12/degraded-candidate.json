@@ -1,0 +1,76 @@
+[
+ {
+  "r": {
+   "id": "S1-synthetic-named-sets",
+   "name": "S1-synthetic-named-sets",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "glm-5.2",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 0.553,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": null,
+   "toolCalls": 3,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 5,
+   "readsBeforeFirstWrite": 1,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "namedSets": {
+    "state": "pass",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [],
+    "reasons": [],
+    "sources": [
+     {
+      "command": "pnpm_config_verify_deps_before_run=false pnpm run test",
+      "format": "node-test-tap",
+      "tests": 3,
+      "carried": true,
+      "complete": true
+     }
+    ]
+   },
+   "providerFace": "剧本",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/shipping.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 130,
+    "procPeak": 2,
+    "cpuMs": 465,
+    "samples": 2
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:same impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "805e9d749fd7a7ea475de16779cb36b348d1fcb9",
+   "ranAt": "2026-10-12T03:20:49.049Z",
+   "maxSteps": 20,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "（故意退化：合成夹具，用来验证 comparator 报「越出」）"
+   ]
+  }
+ }
+]

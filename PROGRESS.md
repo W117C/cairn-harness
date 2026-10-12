@@ -14599,3 +14599,41 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
 5. **刻意未做**：`mutate-verify` **全表**仍未跑（单价 1.065-1.55s/条 × 1533 条 ≈ 18-25 分钟，且不在
    head-cert 门面里）⇒ 本页不许被读成「整张变异表在 HEAD 上全杀」；真模型／生产行为一律没跑
    （无 `CAIRN_API_KEY`／`OPENAI_*`）。
+
+## 2026-10-12 · 第 440 页：盘上第一次有**盖了章**的读数能喂进度量台——身份闸从「必咬」变成「可满足」（零 key、零网络）
+
+1. **这一格欠在哪（不是猜的，是数出来的）**：`scripts/eval/report.ts` 是第 415 页立起来的对账面，
+   带身份闸（`identityOf`：`headSha`／`ranAt`／`model` 三键）与合取闸（`outcomeGate`）。而盘上
+   **31 份存量 `readings.json` 逐份核过、0 份含 `headSha`** ⇒ 今天拿任何两份旧语料去喂这把尺，
+   身份闸必咬、出口码 3、整表降级成「只当量级」。写侧（`scripts/loop-eval.ts`）**早就盖章**，
+   缺的是**语料**——这一格因此不是缺陷，是「尺已立、料未盖」。
+2. **做了什么（零 key、零网络）**：用跑器自带的离线合成面（`--scripted=`，第 422 页那条链）在同一笔
+   `805e9d74` 上跑**三趟**（`--tasks fixtures/bench/tasks-synthetic.json`，
+   `--scripted=fixtures/bench/scripts/synthetic-judge/script.jsonl`），拿到三份**带章**读数；
+   再喂给对账面。**读数面原文**：`读数身份面：✅ 三个身份键齐（headSha／ranAt／model，共 3 行）
+   ——差值可以归因给这次改动。`｜`模型归因面：同一档（glm-5.2）✅`｜逐靶配对面：同面 3 趟、
+   1 个共同靶、flips 0`｜`unknown-face 读数不参与同面配对：0 条`｜**`〔出口码 0：表可信…〕`**。
+   ⇒ 这道闸从「今天必咬」变成「**可满足**」，且三份读数落在**同一张脸**上被配对（不是各自成面）。
+3. **反向验证（喂一份故意退化的候选）**：把候选那份的 `g.ok` 打成 `false`（其余逐字不动），
+   同一对基线 ⇒ 表里 `成功率 100.0% → 0.0%／达标数 1 → 0` 两格判 **`⚠退化`**，
+   末行 **`〔出口码 4：合取闸咬住：结果类超带退化，本表禁止读作改善〕`**。
+   退化的原文与阈值逐字在取料里（`report-degraded.txt`／`degraded-candidate.json`）。
+4. **判卷（本页的主要交付）**：`tests/eval-report.test.ts` 补一组**端到端**用例（真 spawn
+   `scripts/eval/report.ts`、喂盘上的 json、断**退出码**），三条分别钉 `4`／`0`／`3`。
+   为什么要端到端：上面那些用例钉的是**纯函数**，而 `exitCodeOf` 的接线、argv 取法、`process.exit`
+   那一行都在 CLI 层。两处突变各杀各的（都是实跑，不是照本宣科）：
+   ① 摘掉 `exitCodeOf` 里 `if (!identity.ok) return 3;` ⇒ `2 failed`（存量纯函数那条 ＋ 本组第三条）；
+   ② 把 CLI 尾部 `process.exit(code)` 改成恒不执行 ⇒ **只有本组那两条转红**（`60 passed` 其余全绿）
+   ——这一条正证「纯函数绿 ≠ 出口码对」。两次都还原并 `md5` 核对逐字一致。
+5. **诚实标注（这条比读数本身重要）**：本页跑的是**合成臂**（provider=剧本、`requests=0`、
+   `tok=0/0`）⇒ 拿到的**不是真噪声带**，宽度在多数指标上是构造出来的 0。它证的只有两件事：
+   ① 写侧的章**真的能被对账面认**（出口码 0 ≠ 3）；② 两道闸在**真 CLI 上**各自咬得动。
+   「这个改动到底有没有让 agent 变好」**本页一个字都没证**——那需要真会话读数（无凭据，未跑）。
+6. **取料（本页引用的读数逐字可查）**：`outputs/eval-first-stamped-readings-2026-10-12/`
+   ——`readings-a.json`／`readings-b.json`／`readings-c.json`（三份带章读数，`headSha=805e9d74…`）
+   ＋ `report-noise-in-band.txt`（出口码 0 原文）＋ `degraded-candidate.json`（故意退化那份）
+   ＋ `report-degraded.txt`（出口码 4 原文）。
+7. **刻意未做**：① 没给这一组补变异锚点——`scripts/mutate-verify.mjs` 此刻带着隔壁会话未入库的
+   190 行（d13 批次），往上面叠我的锚点＝在同一份未定稿里混两笔账（第 438 页第 5 条那个教训的同族）；
+   锚点等那笔落库后补。② `mutate-verify` 全表仍未跑。③ 真模型／生产行为一律未跑
+   （无 `CAIRN_API_KEY`／`OPENAI_*`）。

@@ -25,9 +25,12 @@
 //         × 任务集不一致 ⇒ sameTaskSet=false（分母变了，横比无意义）
 //         × 任务集不一致 ⇒ 明确印「结论全部作废」
 //     还原后 22/22 绿，`git diff` 确认与提交版逐字一致（没留下改坏的东西）。
-import { readFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import {
   compare,
   exitCodeOf,
@@ -735,5 +738,64 @@ describe("接线：配对与未知面真的打进 CLI 出口（不算不印＝�
     // 配对面排在正式对照表之前：先说"哪些靶翻了、谁没身份"，再谈整体差值
     expect(src.indexOf("renderPairing(indexFaces("), "配对读数排在整表之后 ⇒ 人先读了汇总数")
       .toBeLessThan(src.indexOf("renderReport(cmp, bandSource)"));
+  });
+});
+
+/* ── 端到端：真 CLI 上的两道闸（第 440 页补）─────────────────────────────────
+ * 上面那些用例钉的是**纯函数**（`outcomeGate`／`identityOf`）。纯函数绿不等于出口码对：
+ * `exitCodeOf` 的接线、argv 的取法、以及「闸咬了到底印没印那句」都只在 CLI 那一层可见。
+ * 这一组**真 spawn `scripts/eval/report.ts`**、喂盘上的 json、断**退出码**。
+ *
+ * 为什么这组非有不可：盘上 31 份存量 `readings.json` 一份都没盖章（`headSha` 逐份核过 = 0 份命中）
+ * ⇒ 拿任何两份旧语料去喂这把尺，身份闸必咬、整表降级成「只当量级」。而那件事**此前没有判卷**：
+ * 摘掉 `exitCodeOf` 里那行 `if (!identity.ok) return 3;`，全表照绿。 */
+describe("端到端：真 CLI 喂文件断出口码（纯函数绿 ≠ 出口码对）", () => {
+  const ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+  const tmpDirs: string[] = [];
+  afterAll(() => { for (const d of tmpDirs) rmSync(d, { recursive: true, force: true }); });
+  const fixture = (name: string, text: string): string => {
+    const d = mkdtempSync(join(tmpdir(), "dsh-report-cli-"));
+    tmpDirs.push(d);
+    const p = join(d, name);
+    writeFileSync(p, text, "utf8");
+    return p;
+  };
+  const run = (args: readonly string[]): { code: number; out: string } => {
+    const r = spawnSync(process.execPath, ["--import", "tsx", "scripts/eval/report.ts", ...args], { cwd: ROOT, encoding: "utf8" });
+    return { code: r.status ?? -1, out: (r.stdout ?? "") + (r.stderr ?? "") };
+  };
+  /** 一副**带身份**的同配置臂：三个身份键齐，只有 `ranAt` 逐份不同——那正是"两份同配置"的脸。 */
+  const STAMP = (sec: string) => ({
+    headSha: "a".repeat(40), ranAt: "2026-10-12T00:00:" + sec + ".000Z", model: "glm-5.2",
+    maxSteps: "20", reps: "1", arm: "base",
+  });
+
+  it("故意退化的候选 ⇒ 出口码 4（合取闸咬），且禁止改善那一句必须印出来", () => {
+    const a = fixture("a.json", readings([{ id: "S1", ...STAMP("01"), ok: true }]));
+    const b = fixture("b.json", readings([{ id: "S1", ...STAMP("02"), ok: true }]));
+    const c = fixture("c.json", readings([{ id: "S1", ...STAMP("03"), ok: false }]));
+    const r = run(["--baseline", a, "--baseline", b, "--candidate", c]);
+    expect(r.code, "故意退化没被拦 ⇒ 跑废了也能被读成变好\n" + r.out).toBe(4);
+    expect(r.out).toContain(GATE_SENTENCE);
+  });
+
+  it("三份同配置全过 ⇒ 出口码 0（防闸写反：正常的同配置对比不该被拦）", () => {
+    const a = fixture("a.json", readings([{ id: "S1", ...STAMP("01"), ok: true }]));
+    const b = fixture("b.json", readings([{ id: "S1", ...STAMP("02"), ok: true }]));
+    const c = fixture("c.json", readings([{ id: "S1", ...STAMP("03"), ok: true }]));
+    const r = run(["--baseline", a, "--baseline", b, "--candidate", c]);
+    expect(r.code, "闸写反 ⇒ 同配置的正常对比也被禁读\n" + r.out).toBe(0);
+    expect(r.out, "没咬的闸不许印「禁止读作改善」").not.toContain(GATE_SENTENCE);
+  });
+
+  it("存量语料（读数里一个身份键都没有）⇒ 出口码 3，不是 5 也不是 0", () => {
+    // 三份都不带 STAMP ⇒ 身份闸咬；三份都 ok ⇒ 结果类持平、合取闸**不**咬 ⇒ 只该是 3。
+    // 「两道都咬」那一态由上面第一条（带身份 + 退化）单独钉住，两态不许混成一个数。
+    const a = fixture("a.json", readings([{ id: "S1", ok: true }]));
+    const b = fixture("b.json", readings([{ id: "S1", ok: true }]));
+    const c = fixture("c.json", readings([{ id: "S1", ok: true }]));
+    const r = run(["--baseline", a, "--baseline", b, "--candidate", c]);
+    expect(r.code, "没盖章的语料被当成可比读数 ⇒ 这道闸等于没有\n" + r.out).toBe(3);
+    expect(r.out).toContain(IDENTITY_SENTENCE);
   });
 });
