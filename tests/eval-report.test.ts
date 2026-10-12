@@ -46,6 +46,7 @@ import {
   renderIdentityFace,
   renderModelFace,
   renderReport,
+  SCRIPTED_FACE,
   taskIds,
   totalsOf,
   type Comparison,
@@ -70,6 +71,9 @@ function readings(rows: Array<Partial<Row> & { id: string }>): string {
         ...(r.maxSteps !== undefined ? { maxSteps: r.maxSteps } : {}),
         ...(r.reps !== undefined ? { reps: r.reps } : {}),
         ...(r.arm !== undefined ? { arm: r.arm } : {}),
+        // 第 455 页的配对键：`providerFace`（`真会话`／`剧本`）。同 `arm` 那条规则——给了才盖章。
+        // 它必须能**缺**（存量语料没有这一格 ⇒ 空串 ⇒ unknown-face），也能**给**（合成臂与真会话臂分面）。
+        ...(r.providerFace !== undefined ? { providerFace: r.providerFace } : {}),
         tokensIn: r.tokensIn ?? 1000,
         tokensOut: r.tokensOut ?? 100,
         seconds: r.seconds ?? 10,
@@ -545,7 +549,9 @@ import {
   UNKNOWN_FACE_SENTENCE,
 } from "../scripts/eval/report";
 
-const FACE = { model: "glm-5.2", headSha: "aaaa111", maxSteps: "25", reps: "1", arm: "base" } as const;
+// 第 455 页：`providerFace` 进面键 ⇒ 合成夹具也带一枚（`真会话` 那一侧）。
+// 这一枚在写侧由 `loop-eval.ts` 判定（`--scripted=` 在不在），读侧只认值、不重判。
+const FACE = { model: "glm-5.2", headSha: "aaaa111", maxSteps: "25", reps: "1", arm: "base", providerFace: "真会话" } as const;
 
 describe("逐靶配对面：身份键取值走真解析（不是写死空串）", () => {
   it("盖章 ⇒ maxSteps/reps/arm/rep 全取到；存量读数 ⇒ 一律空串", () => {
@@ -593,6 +599,47 @@ describe("indexFaces：同面才配对，缺身份的不进分母（unknown-face
     expect(idx.faces.length).toBe(0);
     expect(idx.unknown).toBe(1);
     expect(idx.unknownIds).toEqual(["A"]);
+  });
+
+  /* ── 第 455 页：`providerFace` 进面键（合成臂不许被当成真会话的分母）──────────────
+   * 缺陷的原始形状（不是猜想，是 `loop-eval.ts:671` 与 `report.ts` 的面键两处对读出来的）：
+   *   `--scripted=` 那一支的 `arm` 缺省落 `base`，真会话那一支的 `arm` 也是 `base`；
+   *   `headSha`／`model`／`maxSteps`／`reps` 同理逐字相同 ⇒ **两支的面签名原本逐字一样**。
+   * 后果：拿合成批当基线去比一次真跑，没有任何闸会挡；而合成批的噪声带是**构造出来的**（剧本按轮吐、
+   * 零网络零抖动，宽度常常是 0）⇒ 真跑的任何微小改善都会被判 `beyond-noise`＝假阳性改善。
+   * 这正是本仓反复记的那一族（把"不可比"当成"可比"），只是换穿上靴子。 */
+  it("★ 合成批与真会话批即使五枚调用面键全同也不许同面（providerFace 是第六枚面键）", () => {
+    // 除 providerFace 外**逐字同脸**：同 sha、同模型、同帽、同 reps、同 arm —— 就是 `--scripted=` 的缺省形状。
+    const idx = indexFaces(parseReadings(readings([
+      { id: "A", ...FACE, providerFace: "真会话", ranAt: "2026-10-12T00:00:00Z" },
+      { id: "A", ...FACE, providerFace: "剧本", ranAt: "2026-10-12T01:00:00Z" },
+    ])));
+    expect(idx.faces.length, "合成臂与真会话臂合成同一个面 ⇒ 0 宽合成噪声带会被当成机器的抖动底").toBe(2);
+    for (const f of idx.faces) expect(f.paired, "两支各只 1 趟 ⇒ 谁也不许被配对").toBe(false);
+    expect(idx.unknown, "两支都盖齐了身份键 ⇒ 谁都不是缺章，只是不同面").toBe(0);
+  });
+
+  it("同一 providerFace 的两趟照旧同面（新面键不许把可比读成不可比）", () => {
+    // 反向半边：加了第六枚键之后，真的同配置两趟必须还能配成对——否则这把尺自己就废了。
+    const idx = indexFaces(parseReadings(readings([
+      { id: "A", ...FACE, providerFace: "剧本", ranAt: "2026-10-12T00:00:00Z" },
+      { id: "A", ...FACE, providerFace: "剧本", ranAt: "2026-10-12T01:00:00Z" },
+    ])));
+    expect(idx.faces.length).toBe(1);
+    expect(idx.faces[0]?.paired, "同一副合成臂跑两趟 ⇒ 这才谈得上噪声带").toBe(true);
+    expect(idx.unknown).toBe(0);
+  });
+
+  it("★ 存量语料缺 providerFace 那一格 ⇒ 落 unknown-face（不许拿「没记这一格」凑成同面）", () => {
+    // 写侧 2026-10-12 之前跑出的带章读数有那五枚、**没有** providerFace。
+    // 若把它读成"真会话"去凑配对，就等于在一面隶的旧读数上虚构一枚从未记下的观测。
+    const rows = parseReadings(readings([
+      { id: "A", model: "glm-5.2", headSha: "aaaa111", ranAt: "t0", maxSteps: "25", reps: "1", arm: "base" },
+    ]));
+    expect(rows[0]?.providerFace, "缺这一格要显式读成空串，不许默认真会话").toBe("");
+    const idx = indexFaces(rows);
+    expect(idx.faces.length, "五枚齐而缺 providerFace ⇒ 仍不可比").toBe(0);
+    expect(idx.unknown).toBe(1);
   });
 
   it("★ 只缺一枚**基三键**（headSha）而其余五枚齐 ⇒ 仍落 unknown-face（配对键必须从身份闸那三枚派生）", () => {
@@ -797,5 +844,33 @@ describe("端到端：真 CLI 喂文件断出口码（纯函数绿 ≠ 出口码
     const r = run(["--baseline", a, "--baseline", b, "--candidate", c]);
     expect(r.code, "没盖章的语料被当成可比读数 ⇒ 这道闸等于没有\n" + r.out).toBe(3);
     expect(r.out).toContain(IDENTITY_SENTENCE);
+  });
+
+  /* 第 455 页端到端：合成基线 vs 真会话候选 ⇒ 出口面必须说"这两支不是同一张脸"。
+   * 为什么它不能只由上面的纯函数用例背书：`faceKeyOf` 分面是配对层的事，而 `compare`/`exitCodeOf`
+   * 走的是**另一条路**（均值 + 噪声带 + 两道闸）——纯函数分面对了，出口那张表仍可能照印「改善」。
+   * 这一条因此钉的是「人/调用方从 CLI 看到的东西」：合成那两趟不再并进同一面。 */
+  it("★ 合成基线配真会话候选 ⇒ 报告里两支各成一格（不许被读成同分母的改善）", () => {
+    const syn = (sec: string) => ({ ...STAMP(sec), providerFace: SCRIPTED_FACE });
+    const real = (sec: string) => ({ ...STAMP(sec), providerFace: "真会话" });
+    const a = fixture("a.json", readings([{ id: "S1", ...syn("01"), ok: true }]));
+    const b = fixture("b.json", readings([{ id: "S1", ...syn("02"), ok: true }]));
+    const c = fixture("c.json", readings([{ id: "S1", ...real("03"), ok: true }]));
+    const r = run(["--baseline", a, "--baseline", b, "--candidate", c]);
+    const faces = (r.out.match(/面【[^】]*providerFace=剧本[^】]*】/gu) ?? []).length;
+    const realFaces = (r.out.match(/面【[^】]*providerFace=真会话[^】]*】/gu) ?? []).length;
+    expect(faces, "合成那两趟没被认成一个面\n" + r.out).toBe(1);
+    expect(realFaces, "真会话那一趟没被认成另一面\n" + r.out).toBe(1);
+    expect(r.out).not.toContain("面【headSha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|model=glm-5.2|maxSteps=20|reps=1|arm=base】");
+  });
+
+  it("同一副合成臂的两趟 ⇒ 出口面仍认成一个面（新面键不许把可比读成不可比）", () => {
+    const syn = (sec: string) => ({ ...STAMP(sec), providerFace: SCRIPTED_FACE });
+    const a = fixture("a.json", readings([{ id: "S1", ...syn("01"), ok: true }]));
+    const b = fixture("b.json", readings([{ id: "S1", ...syn("02"), ok: true }]));
+    const c = fixture("c.json", readings([{ id: "S1", ...syn("03"), ok: true }]));
+    const r = run(["--baseline", a, "--baseline", b, "--candidate", c]);
+    expect(r.code, "同臂三趟被当成不可比 ⇒ 这把尺自己废了\n" + r.out).toBe(0);
+    expect(r.out, "同一面的三趟要印成同一面（不是每行一格）").toContain("同面 3 趟");
   });
 });

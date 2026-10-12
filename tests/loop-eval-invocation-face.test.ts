@@ -102,7 +102,9 @@ describe("身份键落进每条读数（#90）", () => {
     expect(i, "找不到写 readings.json 的那一步").toBeGreaterThan(-1);
     const block = src.slice(i, i + 700);
     expect(block, "读数没逐条 map ⇒ 身份只落在旁证、配对仍看不见每条的脸").toContain("rows.map(");
-    for (const key of ["headSha", "ranAt", "maxSteps", "reps", "arm"]) {
+    // 第 455 页：`providerFace` 也进这一行（它是第 455 页新纳进面键的第六枚配对键）。
+    // 从前这一行只盖五枚 ⇒ 合成臂与真会话臂在写侧长得逐字一样，读侧再怎么分面都是空的。
+    for (const key of ["headSha", "ranAt", "maxSteps", "reps", "arm", "providerFace"]) {
       expect(block, "readings 每条没盖 " + key).toContain(key);
     }
     // 值全部复用同一趟已算好的量，不另起第二处事实源：帽/次数取 MAX_STEPS/REPS，臂取 ARM。

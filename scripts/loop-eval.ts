@@ -951,10 +951,17 @@ if (archived !== null) {
 }
 /* 身份键落进**每条**读数（#90）：`run.json` 只有一份、而 `scripts/eval/report.ts` 的对账面是逐条读读数；
  * 两副不同臂／不同帽／不同 reps 的读数混进同一堆时，配对要先认得各自的脸，否则「同分母」是猜出来的。
- * 全部取**同一趟已算好**的 headSha／ranAt／MAX_STEPS／REPS／ARM——不另取第二处事实源；`r.rep` 本来就在每条读数里。 */
+ * 全部取**同一趟已算好**的 headSha／ranAt／MAX_STEPS／REPS／ARM——不另取第二处事实源；`r.rep` 本来就在每条读数里。
+ *
+ * 第 455 页：`providerFace` 也在这里**显式**盖一层。它本来已经由 `buildReading`（上面 `providerFace:` 那一格）
+ * 逐条写进 `r`，但那是"每条读数自己算出来的那一枚"，而这一行是"身份章"的落点——
+ * 两处的差别是：前者跟着 `x.r` 展开（真写进去了），后者是显式出现在身份章这一行里，
+ * 于是「身份键有哪些」这件事在写侧只有**这一行**可查（与 `headSha`／`arm` 同形），
+ * 而 `scripts/eval/report.ts` 的 `RUN_IDENTITY_KEYS` 在读侧也只有一处 ⇒ 两侧各自一处、不再有第三份。
+ * 取值复用同一趟的 `SCRIPTED` 判定（与 `buildReading` 同一份事实源，不另判一次）。 */
 await writeFile(readingsPath, JSON.stringify(rows.map((x) => ({
   ...x,
-  r: { ...x.r, headSha, ranAt, maxSteps: MAX_STEPS, reps: REPS, arm: ARM },
+  r: { ...x.r, headSha, ranAt, maxSteps: MAX_STEPS, reps: REPS, arm: ARM, providerFace: SCRIPTED === "" ? "真会话" : "剧本" },
 })), null, 1), "utf8");
 /* 返修那一环的可读出口：`≥2 拍` 才是「第一拍代码红 ⇒ 模型真改过盘 ⇒ 再验一次」那条链路走通的样子。
  *  全 0 时先看装配面那一行——是闸没装（off-here），还是装了而没触发（模型自己验过了）。 */

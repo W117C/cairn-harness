@@ -47,6 +47,14 @@ export interface Row {
   reps?: string;
   /** 这一趟属于哪一副臂（A/B 的臂名；缺省由跑器落到 `--system`，见 `loop-eval.ts` 的 `ARM`）。空串＝没盖章。 */
   arm?: string;
+  /** **提供者那一侧的脸**（配对键，第 455 页进 `RUN_IDENTITY_KEYS`）：`真会话` = 真模型 provider（花钱、要 key），
+   *  `剧本` = `--scripted=` 合成面（零花费、零抖动）。
+   *
+   *  为什么它必须是一枚**身份键**而不是附注：`arm` 在两支上都缺省落 `base`（合成面不改调用面），
+   *  ⇒ 少了这一枚，合成读数与真会话读数在同一 commit 上是**逐字同一张脸**，会配成同一分母。
+   *  而合成批的噪声带是构造出来的、宽度 0 ⇒ 任何真跑会被读成「超出噪声带的改善」。
+   *  空串（存量语料没有这一格）＝缺章 ⇒ 落 unknown-face，**不并进任何可比面**。 */
+  providerFace?: string;
 }
 
 /** 一份读数文件的汇总。 */
@@ -181,6 +189,9 @@ export function parseReadings(text: string, label = "readings"): Row[] {
       maxSteps: identityNum(rr["maxSteps"] ?? rec["maxSteps"]),
       reps: identityNum(rr["reps"] ?? rec["reps"]),
       arm: identityStr(rr["arm"] ?? rec["arm"]),
+      // 提供者那一侧的脸（第 455 页）：写侧 `loop-eval.ts:671` 逐条盖 `providerFace`，
+      // 存量语料没这一格 ⇒ 空串＝缺章 ⇒ 落 unknown-face（不许把"没记这一格"当成"是真会话"去凑配对）。
+      providerFace: identityStr(rr["providerFace"] ?? rec["providerFace"]),
     };
   });
 }
@@ -291,7 +302,7 @@ export function renderIdentityFace(id: IdentityRuling): string {
  * 一把 1 靶的增益本该看得见，此前看不见。这一格**只做配对**，上面任何一张表、闸门、出口码都不改。
  *
  * 三条口径：
- *   ⑴ **面（face）**＝除 ranAt 之外的全部身份键（headSha／model／maxSteps／reps／arm）。同一面＝同一批分母；
+ *   ⑴ **面（face）**＝除 ranAt 之外的全部身份键（headSha／model／maxSteps／reps／arm／providerFace）。同一面＝同一批分母；
  *      ranAt 是**区分同面内不同趟**的键，不进面签名（否则同配置跑两遍就永远配不成对，而噪声带正需要它两遍）。
  *   ⑵ **unknown-face**：任一身份键缺失 ⇒ 这条读数连自己是谁跑的都判不出，单独成条、**不参与**任何同面配对，
  *      且在报告里**逐字出声**（本仓"取不到 ≠ 没问题"那条：缺章绝不并进可比组里蒙读数，也不许用 0/空冒充有）。
@@ -300,8 +311,24 @@ export function renderIdentityFace(id: IdentityRuling): string {
 /** 配对这一格**新加**的身份键。基三键只住上面 `IDENTITY_KEYS` 一处：这里再加一枚，
  *  身份闸与配对会同时看见它，不必两头对齐（本仓"补一列要复用已算出的变量，别建第二份派生"那条）。 */
 export const PAIR_EXTRA_IDENTITY_KEYS = ["maxSteps", "reps", "arm"] as const;
+/** **提供者那一侧的脸**（`真会话`／`剧本`）——第 455 页补进配对键，驻在 `PAIR_EXTRA_IDENTITY_KEYS` **之外**
+ *  单独一枚，因为它与那三枚的**来源不同**：那三枚是跑器命令行给的调用面（帽/次数/臂名），
+ *  这一枚是跑器**自己判定**的「模型那一侧从哪来」（`loop-eval.ts` 的 `providerFace`）。
+ *
+ *  为什么非要它进面键（不是可选项）：`--scripted=` 那一支的 `arm` 缺省也落 `base`，
+ *  而真会话那一支的 `arm` 同样是 `base` ⇒ 同一 commit、同一模型名、同一帽下，
+ *  **合成臂与真会话臂的面签名逐字相同**。后果是「拿合成批当基线去比一次真跑」不会被任何闸挡下，
+ *  而那个 0 宽噪声带是**构造出来的**（剧本按轮吐、无网络无抖动），不是机器的抖动底
+ *  ⇒ 真跑的任何微小改善都会被判 `beyond-noise`。这是把「取不到」读成「有」的那一族，只是换了名字
+ *  （与 `isUnidentified` 收 `unknown` 哨兵同族：放宽方向只有一个，不许把不可比读成可比）。
+ *
+ *  合进 `PAIR_EXTRA_IDENTITY_KEYS` 而不另立第四张名单：配对层与身份闸共用 `RUN_IDENTITY_KEYS`
+ *  这一条派生式，`eval-run-identity-keys-rehardcoded` 那根针脚钉的正是它。 */
+export const PROVIDER_FACE_KEY = "providerFace" as const;
+/** 合成面那一侧的取值（写侧 `loop-eval.ts` 的常量，这里只作**判读**用，不反向决定跑法）。 */
+export const SCRIPTED_FACE = "剧本";
 /** 定位「一趟 run」所需的全部身份键＝身份闸那三枚＋配对新加三枚。任一缺失 ⇒ 这条读数落进 unknown-face。 */
-export const RUN_IDENTITY_KEYS = [...IDENTITY_KEYS, ...PAIR_EXTRA_IDENTITY_KEYS] as const;
+export const RUN_IDENTITY_KEYS = [...IDENTITY_KEYS, ...PAIR_EXTRA_IDENTITY_KEYS, PROVIDER_FACE_KEY] as const;
 export type EvalIdentityKey = (typeof RUN_IDENTITY_KEYS)[number];
 /** 构成「面」的键（同分母签名）＝全部身份键去掉 `ranAt`（见 ⑵ 上方的 ⑴：ranAt 用来区分同面的两趟）。 */
 export const PAIR_FACE_KEYS: readonly EvalIdentityKey[] = RUN_IDENTITY_KEYS.filter((k) => k !== "ranAt");
@@ -444,9 +471,13 @@ export function renderPairing(idx: FaceIndex): string {
   const out: string[] = ["── 逐靶配对面（同面才比，缺身份的不进分母）──"];
   if (idx.faces.length === 0) out.push("  没有任何**有身份**的读数可配对。");
   for (const f of idx.faces) out.push("  " + renderFacePair(f));
+  // 点名哪几枚身份键由 `RUN_IDENTITY_KEYS` 派生（第 455 页：从前这里手抄「headSha／ranAt／model／
+  // maxSteps／reps／arm」，加一枚配对键就得改两处——而漏改的那一处会把"缺了什么"说错，
+  // 正是本仓"两份名单各漂各的"那一族）。
+  const keyList = RUN_IDENTITY_KEYS.join("／");
   out.push(
     idx.unknown > 0
-      ? `  ⚠ ${UNKNOWN_FACE_SENTENCE}：${String(idx.unknown)} 条缺身份键（headSha／ranAt／model／maxSteps／reps／arm 任一）` +
+      ? `  ⚠ ${UNKNOWN_FACE_SENTENCE}：${String(idx.unknown)} 条缺身份键（${keyList} 任一）` +
           "——取不到＝未证，绝不并进上面任一可比面里蒙读数。"
       : `  ${UNKNOWN_FACE_SENTENCE}：0 条（全部读数都盖齐了身份键）✅`,
   );

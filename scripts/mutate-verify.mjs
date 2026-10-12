@@ -13912,9 +13912,27 @@ const MUTATIONS = [
     test: "tests/eval-report.test.ts",
     desc: "配对那一层的身份键再从字面量抄一遍、且漏掉身份闸那三枚 ⇒ headSha 缺章的读数照样成对，"
       + "「不同提交的读数互相当同分母」那条老路复活（#90 的动因；派生式没了就是两份表）",
-    apply: (s) => s.replace(`export const RUN_IDENTITY_KEYS = [...IDENTITY_KEYS, ...PAIR_EXTRA_IDENTITY_KEYS] as const;`,
+    // 第 455 页同步：面键多了 `PROVIDER_FACE_KEY` 那一枚，改法文本要跟着走（否则这条针脚变成**空改**——
+    // 它 replace 的那串在源里已经不存在了，`mutate-needles-check` 会把它判成「钉在飞文本/未命中」）。
+    apply: (s) => s.replace(`export const RUN_IDENTITY_KEYS = [...IDENTITY_KEYS, ...PAIR_EXTRA_IDENTITY_KEYS, PROVIDER_FACE_KEY] as const;`,
       `export const RUN_IDENTITY_KEYS = ["maxSteps", "reps", "arm"] as const;`),
     expectFail: "★ 只缺一枚**基三键**（headSha）而其余五枚齐 ⇒ 仍落 unknown-face（配对键必须从身份闸那三枚派生）",
+  },
+  {
+    // 第 455 页新增（#90 那一族的第二次命中，形状换了个入口）：`providerFace` 不进面键 ⇒
+    // `--scripted=` 合成批（`arm` 缺省同样是 `base`）与真会话批在同一 commit 上**逐字同一张脸**，
+    // 合成批那 0 宽噪声带于是被当成机器的抖动底 ⇒ 真跑的任何微小改善都被判 `beyond-noise`（假阳性改善）。
+    // 它不是 `eval-run-identity-keys-rehardcoded` 的重复：那边摘的是「派生式」，这边只摘**它那一枚**。
+    id: "eval-provider-face-not-in-pair-keys",
+    src: "scripts/eval/report.ts",
+    test: "tests/eval-report.test.ts",
+    desc: "providerFace 不进面键 ⇒ arm 同为 base 时合成臂与真会话臂配成同一面，" +
+      "构造出来的 0 宽噪声带被当成抖动底 ⇒ 真跑的微小改善全被读成超带改善",
+    apply: (s) => s.replace(
+      `export const RUN_IDENTITY_KEYS = [...IDENTITY_KEYS, ...PAIR_EXTRA_IDENTITY_KEYS, PROVIDER_FACE_KEY] as const;`,
+      `export const RUN_IDENTITY_KEYS = [...IDENTITY_KEYS, ...PAIR_EXTRA_IDENTITY_KEYS] as const;`,
+    ),
+    expectFail: "★ 合成批与真会话批即使五枚调用面键全同也不许同面（providerFace 是第六枚面键）",
   },
   {
     id: "eval-rows-not-stamped-with-identity",
@@ -13922,7 +13940,11 @@ const MUTATIONS = [
     test: "tests/loop-eval-invocation-face.test.ts",
     desc: "身份章只盖 run.json 旁证、逐条读数不盖 ⇒ 报告读到的是「有旁证的空身份行」，"
       + "整批落进 unknown-face，配对那一格等于没接上写侧",
-    apply: (s) => s.replace(`  r: { ...x.r, headSha, ranAt, maxSteps: MAX_STEPS, reps: REPS, arm: ARM },`, `  r: { ...x.r },`),
+    // 第 455 页同步：身份章那一行现在多盖 `providerFace`，改法文本要跟着走（同上，不然是空改）。
+    apply: (s) => s.replace(
+      `  r: { ...x.r, headSha, ranAt, maxSteps: MAX_STEPS, reps: REPS, arm: ARM, providerFace: SCRIPTED === "" ? "真会话" : "剧本" },`,
+      `  r: { ...x.r },`,
+    ),
     expectFail: "写 readings.json 时逐条盖 headSha／ranAt／maxSteps／reps／arm（不是只盖 run.json 那一份旁证）",
   },
   /* ---- 2026-10-05 第 397 页：#96 写向悬挂的修法（装配点两格 ＋ 门内一格）----
