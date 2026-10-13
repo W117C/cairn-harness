@@ -15481,3 +15481,37 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    **96 条 5 050 ms**（修复前同一支文件 27 938 ms／上限 30 000 ms）⇒ 那一格的余量从 7% 变成约 6 倍，
    CI 全量 371 文件绿、desktop 145 条绿、25 道门绿。**本页到此收口**：假红的根因是单价，
    现在是单价被修掉、判据一条没动、锚点四枚把新拆法钉住。
+
+## 2026-10-13 · 第 473 页：依赖面的 57 条告警清零——两条主线＋四条补丁线，Electron 跨六代用**真启动**做证
+
+1. **动因**：GitHub 在这个私有仓的默认分支上报 57 条 Dependabot 告警。权威读数取 `pnpm audit`
+   （已入库：`outputs/dep-audit-473-2026-10-13/audit-before.json`）：**34 条公告**＝critical 1 ＋
+   high 13 ＋ moderate 16 ＋ low 4，落在 7 个包上（Dependabot 那条 57 是同一条公告在锁文件里
+   命中多处、各算一条所致，两个数不是一回事）。
+2. **两条主线（升直接依赖）**：
+   - `@modelcontextprotocol/sdk` 1.30.0 → **1.32.1**：那 1 条 high 是 OAuth 客户端可能把凭据发给
+     **由 MCP server 选定**的授权服务器（三方串谋面，不是本地 bug）。
+   - `electron` 38.8.6 → **44.7.0**：22 条公告全挂在它名下，补丁线是 ≥41.10.6。跨六个大版本，
+     所以判据不是"装上了"：桌面层 `vite build` ＋ tsc、145 条判卷、边界闸、**以及真启动的冒烟**
+     （`CAIRN_SMOKE`，PASS in 2 528 ms）四道一起过才算数。旧 Electron 的 `@electron/get` 那条链
+     （extract-zip／got／http-cache-semantics／global-agent／sprintf-js）整个从锁文件里消失了。
+3. **四条补丁线（传递依赖，父依赖的范围本来就容得下）**：
+   `pnpm update -r proxy-addr source-map-js fast-uri ip-address` —— proxy-addr 2.0.7 → **2.0.8**
+   （那条 **critical**：IPv4-mapped IPv6 信任子网下的 IP 欺骗）、fast-uri 3.1.7 → **3.1.8**、
+   ip-address 10.7.0 → **10.7.4**。
+4. **踩到一格（值得记）**：`source-map-js` 1.2.1 → 1.2.2 抬不上去。第一次按老习惯写进 package.json 的
+   `pnpm.overrides`，pnpm 11 **不再读**那个字段——它只印一行 warning，overrides 静默失效，
+   锁文件纹丝不动。设置已搬到 `pnpm-workspace.yaml`，落对地方之后 audit 归零。
+   与第 461/462 页同族：**"我配了"与"它生效了"是两件事**，判据要落在结果上（`pnpm audit` exit 0），
+   不是落在写法上。
+5. **终态读数**（`outputs/dep-audit-473-2026-10-13/audit-summary.log`，四段并排）：
+   34 → 5（两条主线之后）→ 1（补丁线之后）→ **0**（overrides 之后）；`pnpm audit` exit 0、
+   `No known vulnerabilities found`。
+6. **验证**（全部本机实跑，判据一条没动）：根 `typecheck` 0 报错；根套件 **371 文件／5286 条全绿**
+   （198.09s）；桌面 `build` ✓、`test` 145 条 ＋ `desktop-boundary-check` ✓、冒烟 PASS；
+   CI 同款 **25 道门 25/25 绿**（未证 8 项与前页相同，仍不得宣称"全部通过"）。
+7. **刻意没做**：`pnpm outdated` 里还有一批**非安全**项可升（react 18→19、typescript 5.9→7、
+   vite 7→8、vitest 5.0.0→5.0.4、tsx、esbuild、@types/*、web-tree-sitter…）。它们不在这 34 条公告里，
+   一起动就把"修安全问题"换成"换半个工具链"，回归面与收益不成比例 ⇒ 本页只修安全面；
+   真要动那批，按本页同样四道判据另开一笔。
+8. **仍未做**：GitHub 侧的告警数是否随之清零，要等这次 push 之后 GitHub 重算（落库本页时看一次）。

@@ -1,0 +1,14 @@
+== 终态版本 ==
+@modelcontextprotocol/sdk        @modelcontextprotocol/sdk@1.32.1
+proxy-addr                       proxy-addr@2.0.8
+fast-uri                         fast-uri@3.1.8
+ip-address                       ip-address@10.7.4
+source-map-js                    source-map-js@1.2.2
+electron                         44.7.0
+
+== 从锁文件里消失的三条（旧 Electron 链）==
+extract-zip              0
+http-cache-semantics     0
+sprintf-js               0
+got                      0
+global-agent             0

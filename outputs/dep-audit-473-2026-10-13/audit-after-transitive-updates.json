@@ -1,0 +1,44 @@
+{
+  "advisories": {
+    "1241209": {
+      "findings": [
+        {
+          "version": "1.2.1",
+          "paths": [
+            ".>vitest>@vitest/mocker>vite>postcss>source-map-js",
+            ".>vitest>vite>postcss>source-map-js",
+            "apps__desktop>@vitejs/plugin-react>vite>postcss>source-map-js",
+            "apps__desktop>vite>postcss>source-map-js",
+            "apps__desktop>vitest>@vitest/mocker>vite>postcss>source-map-js",
+            "apps__desktop>vitest>vite>postcss>source-map-js"
+          ],
+          "dev": true,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1241209,
+      "title": "source-map-js allows event-loop denial of service through indexed source-map section offsets",
+      "module_name": "source-map-js",
+      "vulnerable_versions": ">=1.0.0 <1.2.2",
+      "patched_versions": ">=1.2.2",
+      "severity": "high",
+      "cwe": "CWE-1284",
+      "github_advisory_id": "GHSA-68fv-2mgg-jv7q",
+      "url": "https://github.com/advisories/GHSA-68fv-2mgg-jv7q"
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 1,
+      "critical": 0
+    },
+    "dependencies": 104,
+    "devDependencies": 206,
+    "optionalDependencies": 121,
+    "totalDependencies": 324
+  }
+}

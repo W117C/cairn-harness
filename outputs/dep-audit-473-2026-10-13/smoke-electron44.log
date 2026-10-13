@@ -1,0 +1,29 @@
+$ node scripts/smoke.mjs
+[byok-inject] 启动注入：无可注入 key（未存或 env 优先）
+[m4a] 调度器已启动（桌面端常驻接线：快照/CRUD/触发同实例）
+(electron) 'console-message' arguments are deprecated and will be removed. Please use Event<WebContentsConsoleMessageEventParams> object instead.
+[cairn-smoke] window.agent type: object
+[cairn-smoke] session: 会话 2026-10-13 20:36:18
+[cairn-smoke] think row: {"rows":0}
+sandbox_extension_issue_file failed for /Users/ze/Downloads/Cairn/deepseek harness/node_modules/.pnpm/electron@44.7.0_supports-color@7.2.0/node_modules/electron/dist/Electron.app/Contents/Frameworks/Electron Helper.app/Contents/Resources: 1 (Operation not permitted)
+[cairn-smoke] idle picker: {"found":true,"disabledBefore":false,"opened":true,"options":5,"enabled":2,"before":"模型：演示（预录剧本 · 不产生真实调用）","after":"模型：演示（预录剧本 · 不产生真实调用）","switched":false,"pick":"off不发思考参数——最省、最快✓","saved":"demo|","errStrip":null}
+[renderer] [cairn-smoke] event 1: user_message
+[renderer] [cairn-smoke] event 2: assistant_message
+[renderer] [cairn-smoke] event 3: tool_call
+[renderer] [cairn-smoke] event 4: agent_spawned
+[renderer] [cairn-smoke] event 5: agent_status
+[renderer] [cairn-smoke] event 6: tool_result
+[renderer] [cairn-smoke] event 7: tool_call
+[renderer] [cairn-smoke] event 8: usage
+[renderer] [cairn-smoke] event 9: tool_call
+[renderer] [cairn-smoke] event 10: agent_spawned
+[renderer] [cairn-smoke] event 11: agent_status
+[renderer] [cairn-smoke] event 12: tool_result
+[memory] 会话结束沉淀: {"kind":"no_content"}
+[cost-per-progress] 本跑不可测（no-progress-boundary）——不许折成 0 或 Infinity
+[cairn-smoke] run: {"ok":true}
+[cairn-smoke] events: 23 asks auto-approved: 0
+[cairn-smoke] ui sidebar rows: 1 clicked: true listSessions: 1 text: "新会话插件自动化任务技能中心记忆系统工作区其他会话 2026-10-13 20:36:18刚刚设置Z"
+[cairn-smoke] picker probe: {"found":true,"diag":{"count":1,"tag":"BUTTON","cls":"mp-trigger","disabledAttr":true,"disabledProp":true,"rect":[113,26,720],"pointerEvents":"none","visible":"visible/flex"},"title":"模型：演示（预录剧本 · 不产生真实调用）","expanded":"true","menuVisible":true,"options":5,"enabledOptions":0,"pickedLabel":null,"afterTitle":null}
+[cairn-smoke] ui picker title: 模型：演示（预录剧本 · 不产生真实调用）
+[cairn-smoke] PASS in 2528 ms

@@ -5,3 +5,8 @@ allowBuilds:
   esbuild: true
 onlyBuiltDependencies:
   - esbuild
+# 第 473 页：pnpm 11 **不再读** package.json 的 `pnpm` 字段（写在那儿会被警告并忽略，overrides 静默失效），
+# 所以下面这一格必须住在这里。source-map-js 是 postcss ← vite/vitest 的传递依赖，postcss 自己的范围
+# （`^1.2.1`）已经容得下 1.2.2，但 `pnpm update -r` 没能把它抬上去 ⇒ 用 overrides 钉死补丁线。
+overrides:
+  source-map-js: "^1.2.2"

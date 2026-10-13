@@ -1,0 +1,4 @@
+升级前（audit-before.json）：公告 34 条 —— critical 1 / high 13 / moderate 16 / low 4
+直接依赖升级后：SDK 1.32.1 ＋ Electron 44.7.0（audit-after-direct-upgrades.json）：公告 5 条 —— critical 1 / high 1 / moderate 3 / low 0
+传递依赖按范围抬到补丁线后（audit-after-transitive-updates.json）：公告 1 条 —— critical 0 / high 1 / moderate 0 / low 0
+终态：overrides 钉住 source-map-js（audit-after.json）：公告 0 条 —— critical 0 / high 0 / moderate 0 / low 0
