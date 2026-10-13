@@ -20,7 +20,19 @@
  *      靠「去掉前缀再看看像不像」去蒙，就是把没测到读成测到了。
  */
 
-export type ResultsFormat = "vitest-json" | "node-test-tap" | "pytest" | "unknown";
+export type ResultsFormat = "vitest-json" | "node-test-tap" | "node-test-spec" | "pytest" | "unknown";
+/**
+ * `node --test` 的**另一种**原生 reporter（spec）。与 TAP 是同一个跑器的两种输出面：
+ * node 按 stdout 是不是 TTY 选 reporter——管道 ⇒ `tap`，TTY ⇒ `spec`。
+ * 2026-10-12 CI 自评抓到：GitHub Actions 给每个 step 分一个 PTY ⇒ CI 上永远是 spec，
+ * 本地（跑器把输出接进管道）永远是 TAP。只有 TAP 那一支的解析器因此在 CI 上整份读成
+ * `unknown`（「没有尺」），而退出码那一格照旧能判 ⇒ 逐名这半把尺子在 CI 上静默失效。
+ * 实测复现：`script -q /dev/null node --test tests/*.test.js` ⇒ `✔ 名字`／`✖ 名字`／`ℹ tests N`。
+ *
+ * 形状：`✔ 名字 (1.23ms)`／`✖ 名字 (1.23ms)`，结尾 `ℹ tests 3`／`ℹ pass 3`／`ℹ fail 0`。
+ * 名字后面的括号里是耗时；`ℹ` 行是汇总。嵌套用缩进表达，与 TAP 一样只数顶格。
+ */
+export type ResultsFormatSpec = "node-test-spec";
 export type TestOutcome = "passed" | "failed" | "skipped" | "todo" | "unknown";
 
 export interface ParsedTest {
@@ -215,6 +227,42 @@ const TAP_DIRECTIVE = /\s#\s(SKIP|TODO)\b/u;
 const TAP_LOCATION = /^\s+location:\s*'(.+?):\d+:\d+'/u;
 /** 本仓有界输出留下的省略标记（跑器把中段掐了只留两头）。被省略的那段里可能有红。 */
 const OUTPUT_ELISION = /\[\s*有界性：中段省略/u;
+
+/** spec 结果行：`✔ 名字 (1.23ms)`／`✖ 名字 (1.23ms)`。顶格才算（嵌套 subtest 缩进）。 */
+const SPEC_RESULT_LINE = /^(?<verdict>[✔✖]) (?<name>.+?)(?: \([0-9.]+ms\))?$/u;
+/** spec 的汇总行：`ℹ tests 3`／`ℹ pass 3`／`ℹ fail 0`。 */
+const SPEC_TRAILER = /^ℹ (?<key>tests|pass|fail|cancelled|skipped|todo|suites) (?<n>\d+)$/u;
+
+function looksLikeSpec(lines: readonly string[]): boolean {
+  const results = lines.filter((l) => !l.startsWith(" ") && SPEC_RESULT_LINE.test(l));
+  if (results.length === 0) return false;
+  // 同时要有一行 `ℹ` 汇总：单看 `✔ 某某` 太像给人看的一行字（同 looksLikeTap 那条纪律）。
+  return lines.some((l) => SPEC_TRAILER.test(l));
+}
+
+function parseNodeTestSpec(text: string, lines: readonly string[]): ParsedResults {
+  const tests: ParsedTest[] = [];
+  const reasons: string[] = [];
+  const trailer = new Map<string, number>();
+  for (const line of lines) {
+    const t = SPEC_TRAILER.exec(line);
+    if (t !== null) { trailer.set(t.groups!.key!, Number(t.groups!.n)); continue; }
+    const m = SPEC_RESULT_LINE.exec(line);
+    if (m === null || line.startsWith(" ")) continue;
+    const name = m.groups!.name!.trim();
+    if (name === "") { reasons.push("spec 结果行没有名字 ⇒ 它匹配不上任何 id"); continue; }
+    tests.push({ name, outcome: m.groups!.verdict === "✔" ? "passed" : "failed" });
+  }
+  const counts = countOf(tests);
+  for (const [key, bucket] of [["tests", "tests"], ["pass", "passed"], ["fail", "failed"], ["skipped", "skipped"], ["todo", "todo"]] as const) {
+    const declared = trailer.get(key);
+    if (declared === undefined) continue;
+    const got = bucket === "tests" ? tests.length : counts[bucket];
+    if (declared !== got) reasons.push(`结尾报 ${key} ${String(declared)}、逐名读到 ${String(got)} 条 ⇒ 对不上`);
+  }
+  if (tests.length === 0) reasons.push("一条逐名都没读到 ⇒ 这一格没有料");
+  return { format: "node-test-spec", tests, counts, complete: reasons.length === 0, reasons };
+}
 
 function looksLikeTap(lines: readonly string[]): boolean {
   if (lines.some((l) => TAP_HEADER.test(l))) return true;
@@ -417,9 +465,10 @@ export function parseTestResults(raw: string): ParsedResults {
   const vitest = parseVitestJson(text);
   if (vitest !== null) return vitest;
   const lines = text.split("\n");
+  if (looksLikeSpec(lines)) return parseNodeTestSpec(text, lines);
   if (looksLikeTap(lines)) return parseNodeTestTap(text, lines);
   if (looksLikePytest(lines)) return parsePytest(text, lines);
-  return unknownResults([`认不出格式：既不是 vitest 的 JSON 报告，也没有 TAP 的结果行，也没有 pytest 的逐名行（开头：${snippet(text)}）`]);
+  return unknownResults([`认不出格式：既不是 vitest 的 JSON 报告，也没有 node --test 的 spec/TAP 结果行，也没有 pytest 的逐名行（开头：${snippet(text)}）`]);
 }
 
 /** ANSI SGR 颜色序列（`ESC [ … m`）。跑器输出在 CI 里被强制着色，见 `parseTestResults` 头上那段。 */
