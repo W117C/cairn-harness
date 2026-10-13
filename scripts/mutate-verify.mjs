@@ -19,7 +19,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync, writeSync, rmSync } from "node:fs";
 import ts from "typescript";
 import { execFileSync, spawnSync } from "node:child_process";
-import { join, dirname, resolve } from "node:path";
+import { join, dirname, resolve, relative, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acquireToolLock } from "./lib/tool-lock.ts";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
@@ -14986,11 +14986,16 @@ function runTest(testRel, pattern, configRel) {
   // 判卷配置跟着锚点走：桌面层是**独立 vitest 配置**（apps/desktop/vitest.config.ts，
   // environment: node、include 只收 tests/**），拿核心那份去跑它 ⇒ 一条都选不中、退出码 0，
   // 于是任何桌面锚点都会读成「变异存活」。缺省仍是核心那份（现有 1556 条行为不变）。
-  const args = [VITEST, "run", "--pool=threads", "--config", configRel ?? "tests/vitest.config.ts", testRel];
+  // cwd 也要跟着配置走：vitest 的 include/filter 是相对**配置所在目录**解析的，
+  // 在仓库根拿 apps/desktop/vitest.config.ts 去跑 "apps/desktop/tests/…" ⇒ No test files found。
+  const cfg = configRel ?? "tests/vitest.config.ts";
+  const cwd = configRel === undefined ? ROOT : join(ROOT, dirname(cfg));
+  const testArg = configRel === undefined ? testRel : relative(cwd, join(ROOT, testRel));
+  const args = [VITEST, "run", "--pool=threads", "--config", configRel === undefined ? cfg : basename(cfg), testArg];
   if (typeof pattern === "string" && pattern !== "") args.push("--testNamePattern=" + escapeTitlePattern(pattern));
   try {
     const out = execFileSync(process.execPath, args,
-      { cwd: ROOT, env: { ...process.env, TERM: "dumb" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+      { cwd, env: { ...process.env, TERM: "dumb" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     return { code: 0, out, ms: Date.now() - started, selected: selectedTestCount(out) };
   } catch (e) {
     const out = (e.stdout ?? "") + (e.stderr ?? "");
