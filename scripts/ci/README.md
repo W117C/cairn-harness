@@ -7,7 +7,12 @@
 ## L1（已落地，零打扰）：`.github/workflows/verify.yml`
 
 - **覆盖**：`pnpm install --frozen-lockfile` → `pnpm typecheck` → `pnpm test`（全量判卷）→
-  **快门面** `pnpm gates --only=…`（= `CERT_GATES` 那 22 道，逐道点名在 workflow 里；10-02 起不再减门，见下一节）。
+  **快门面** `pnpm gates --only=…`（= `CERT_GATES` 那 25 道，唯一定义在 `scripts/gate-manifest.ts`，
+  逐道点名在 workflow 里；10-02 起不再减门，见下一节）。
+- **工具链版本钉在一处**（第 475 页）：`package.json` 的 `packageManager` 与 workflow 里的
+  `pnpm/action-setup` 同大版本（现读 11）。这不是洁癖——pnpm 9 与 11 **读 overrides 的地方不是一个**
+  （9 读 package.json 的 `pnpm` 字段、11 读 `pnpm-workspace.yaml`），差一个大版本就会让同一份锁文件
+  在两处解释成两种配置，CI 上直接 `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`。
 - **触发**：`push` / `pull_request` / `workflow_dispatch`（手动）。
 - **本地零影响**：不装钩子、不改任何本地行为；只有推上去才跑。
 - **本地复现一模一样的一串**（首次跑通前，CI 里的任何结论都以下面这串的实测为准）：

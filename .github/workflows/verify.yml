@@ -26,7 +26,12 @@ jobs:
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          # 2026-10-13 那趟 `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`（第 475 页）把这一行从 9 改成 11：
+          # **pnpm 9 与 11 读 overrides 的地方不是一个**——9 读 package.json 的 `pnpm` 字段，
+          # 11 读 `pnpm-workspace.yaml`（11 对前者只印一行 warning 就忽略）。本仓的开发环境与
+          # 第 473 页那笔覆盖面都是 pnpm 11 ⇒ CI 必须跟开发环境同一大版本，否则同一份锁文件
+          # 在两处解释成两种配置。改这一行时同步看 package.json 的 `packageManager`（同笔钉的）。
+          version: 11
       - uses: actions/setup-node@v4
         with:
           node-version: "22"

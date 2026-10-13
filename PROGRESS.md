@@ -15539,3 +15539,25 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
 6. **顺带记两格配置**（免得下一个人以为它们是自动的）：Dependabot **security updates 是关的**
    （`automated-security-fixes.enabled=false`）——本仓的依赖升级是手写一笔、走第 473 页那四道判据；
    以及"谁把它改成 public 的"没有答案，本页只记事实与修复，不猜成因。
+
+## 2026-10-13 · 第 475 页：CI 那趟红在**工具链版本**——pnpm 9 与 11 读 overrides 的地方不是一个
+
+1. **现象**：第 473 页那笔推上去，CI 在**第一步**就红：`ERR_PNPM_LOCKFILE_CONFIG_MISMATCH — The current
+   "overrides" configuration doesn't match the value found in the lockfile`。而本机
+   `pnpm install --frozen-lockfile` 是绿的——**同一个仓、同一份锁文件，两处两个结论**。
+2. **根因**：workflow 里 `pnpm/action-setup@v4` 那一行写的是 `version: 9`，开发机是 **pnpm 11.21.0**。
+   overrides 这两个大版本读的地方不是一个：**9 读 package.json 的 `pnpm` 字段，11 读 `pnpm-workspace.yaml`**
+   （11 对前者只印一行 warning 就忽略——第 473 页正是先写错地方、被那行 warning 提示才搬对的）。
+   第 473 页把 overrides 落到 `pnpm-workspace.yaml` ⇒ pnpm 9 那一侧读成"没有 overrides"，
+   而锁文件里记着 `overrides: source-map-js: ^1.2.2` ⇒ 冻结安装当场拒跑。
+3. **修法（钉一处，不是钉两处）**：`package.json` 加 `"packageManager": "pnpm@11.21.0"`；
+   workflow 的 `version: 9` → `11`，并把上面那段成因写进那一行旁边的注释。`scripts/ci/README.md`
+   的"覆盖"一节补一条"工具链版本钉在一处"，顺手把同一段里已经漂了的"那 22 道"改成 **25**
+   （`CERT_GATES` 现读 25／`GATES` 34；唯一定义在 `gate-manifest.ts`，逐道点名在 workflow）。
+4. **验证**：按 CI 的第一步原样复跑 `pnpm install --frozen-lockfile` → exit 0、锁文件零改动；
+   `tests/ci-cert-face-parity.test.ts` ＋ `tests/cert-gate-face.test.ts` **24 条绿**
+   （它们判的是 `--only=` 那份名单，本页没动它）。
+5. **这一格的一般形状（值得记）**：**"两处两个结论"最先要怀疑的不是判据，是两侧的解释器。**
+   本仓此前每一次"本机绿、CI 红"都往判据或环境变量上找，这一趟的变量在工具链大版本上——
+   而它一直摆在那儿（workflow 写 9、开发机跑 11），只是**没有 overrides 时两个大版本同答**，
+   差异被"当前输入下正好无差别"盖住了（同规则 340：一个只在特定输入下才分辨的旋钮＝没观测者的旋钮）。
