@@ -15396,3 +15396,44 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    - **裁决仍不变：产品缺省保持关**。本页证的是机制有效（第 469 页那格从「量不出」变成「量得出」），
      「值不值」要等真模型面上同时有频率与成本两个读数——那需要一个带凭据的跑批，
      归用户裁，不由这把尺替用户翻（同 `--auto-verify` 装配面注释里那条纪律）。
+
+## 2026-10-13 · 第 471 页：第三种收尾证据 `turn_stop_missing`——「模型自己收尾」与「上游静默掐流」第一次分得开
+
+1. **动因（第 469 页登记、本页施工）**：B1/B2 各有一次「叙述后停住」——文本停在半句上、
+   没有 tool_call，loop 按「无工具调用＝收工」收束。那到底是模型自己收尾（provider 会报
+   `finish_reason=stop`），还是上游静默掐流（一个字节都没报）？此前两种在事件流里**长得一模一样**
+   （都零新事件），所以第 469 页把那一格标成「不可归因」。
+2. **本页先做了两分钟的现场取证**：对本机端点连发两轮 `stream:true` 探针（纯文本 / 带 tools），
+   `finish_reason` 分别报 `stop` 与 `tool_calls`——即**正常收尾这一家是会报的**，
+   「一个都不报」在这个端点上确属异常信号，值得单独立证据。
+3. **新增第三种收尾证据 `turn_stop_missing`（观测 only）**：
+   - 事件三处同笔（`events/index.ts` 的接口 + 联合 + `KNOWN_TYPES`）；漏任一处由
+     `Record<AgentEvent["type"], true>` 与 `event-type-coverage` 判卷两头兜住。
+   - 判定收在 `stop-reason.ts` 的 `turnStopMissingEvent`：只有 `undefined`/`null`/空串/非字符串
+     ⇒ 落；报了任何非空原文（哪怕词表不认）⇒ 不落——「尺要补」与「缺席」是两个成因，不许折叠
+     （同文件既有的「不知道不是知道它坏了」纪律）。
+   - 三家适配器同笔接线：openai（流式 + 非流式，各自 `finish_reason`）、anthropic（`stopReason`）、
+     gemini（`finishReason ?? blockReason`）。位置与 `turn_truncated` 相邻：先于 tool_call 冲刷与
+     usage——args 解析若抛，证据不能陪葬。
+   - 观测 only 的三处**显式**表态：`context.ts` 投影不注入（进面要付缓存前缀的账）；
+     `sidechat.ts` 只读投影显式 case 返回 null（**不许把它渲染成「被截断」**——缺失 ≠ 已知坏了）；
+     `worker-projection.ts` 的归因表与脱敏桶各补一型（前者由 `Record<ModelOutput["type"], true>`
+     的编译期检查逼出，后者由 stream-redaction 的「四桶互斥且全覆盖」判卷逼出）。
+4. **判据（`tests/turn-truncated.test.ts`，6 条新用例，先红后绿）**：纯函数边界（缺席⇒落、
+   有原文⇒不落、`output_tokens=0` 与缺省分开）；openai 流式正控/负控；openai 非流式正控；
+   anthropic 正控；gemini 正控。
+5. **变异锚点 5 枚（同笔入表，已逐条实跑）**：
+   `stop-missing-never-fires`（1.3s/2 拍）、`stop-missing-fires-on-reported-reason`（1.2s/2 拍）、
+   `openai-never-emits-stop-missing`、`anthropic-never-emits-stop-missing`、
+   `gemini-never-emits-stop-missing`（各 1.2s/2 拍）——**5/5 全部被正确杀死**。
+6. **复证**：`typecheck` 0 报错；相关 8 个判卷文件 **175 passed**；
+   `mutate-verify --check-needles` **1544 条：阻断 0、钉在飞文本 0、killer 指针失效 0**。
+7. **这一刻能回答什么、不能回答什么**：
+   - 能回答：**下一批真跑里若再出现「叙述后停住」，事件流会告诉我们它属于哪一类**——
+     有 `turn_stop_missing` ⇒ 上游那一轮没报（传输嫌疑）；没有它 ⇒ provider 报了 stop
+     （模型自己收尾，归模型行为）。
+   - 不能回答：**已发生的两趟**（第 469 页那两例）仍不可归因——事件是**新加**的，旧 JSONL 里
+     没有这一位，不追溯、不补写（本仓纪律：不在旧证据上编新字段）。
+8. **仍未证**：这个事件在真实面上的**发生率**（要等下一批跑）；以及要不要据此动 loop 行为
+   （例如「缺失 ⇒ 不把它当收工」）——**本页刻意不动行为**：先有发生率读数，再谈判定，
+   顺序反了就是拿一次未归因的现象去改引擎。
