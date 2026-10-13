@@ -15257,3 +15257,52 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    `failures/2026-10-13/B12-long-horizon-rep1-base.events.jsonl`（那一趟完整事件流）。
 5. **仍未证**：`B12` 在 `--max-steps 80` 或别的模型上能不能过；它的红是「做法不对」还是
    「任务本身在 12 条里就是最贵的一条」（任务集自己的注释只写它考长程，没给成本预算）。
+
+## 2026-10-13 · 第 468 页：用尺抓真问题（第一笔）——B1 两趟失败**形状不同**，其中一趟是跑器把「被对端掐断」记成了「模型没做到」
+
+1. **动因**：第 466 页那两趟的 B1 都红，而红的话术只有「held-out 没过（可见测试绿了但隐藏验收不认
+   ⇒ 大概率是特殊分支，不是根因修复）」——那是**推测**。逐趟翻事件流之后发现：**两趟根本不是同一个形状。**
+2. **趟 A 的形状（`87a787fc`，`requests=3`）**：模型诊断**正确**（事件流原话：
+   「先用 `shippingFor(sub)` 按券前原价 6000 算运费 → 命中免邮线得到 0；随后才打 20% 折成 4800…
+   修复：把运费判定挪到折扣之后」），然后文本停在**「先提方案：」**四个字上，**没有 tool_call**，
+   轮就结束了 ⇒ loop 按「无工具调用＝任务结束」收工 ⇒ auto-verify 补拍发现仍是红 ⇒
+   `changedFiles: []`、`verifyOkLast: false`、`heldOutRun.ok: false`。
+   **从事件面无法区分**「模型自己没写完」与「上游丢了那个 tool_call 帧」
+   ——同一套装配、同一个端点，趟 B 的同一条任务**正常**调用了 `propose_plan`。这一格如实记为**待观察**，
+   不修（没有可复现的判据之前不许动 loop 的收工语义）。
+3. **趟 B 的形状（`87a787fc`，`requests=6`）**：`plan_proposed` → `plan_approved`（方案与趟 A 的
+   诊断逐字同源），**写盘之前**连接静默 60 秒被看门狗掐断，事件流留下
+   `error: GLM 停滞超时：60000ms 内无任何数据（对端挂起或网络黑洞）`。
+   而 `eval-validity` 的 provider 打断白名单**不认它** ⇒ 这一趟被判「有效」，
+   当成**模型的**失败进了分母；同一枚洞的另一半：`retryVerdict` 也不重拨它。
+   跑器自己的纪律写着「未起步 / 被 provider 打断的趟次不许进分母（限流打断不能记成模型没做到）」
+   ——停滞超时与 429 是同一族：这一跑是被**外面**切断的。
+4. **修法**：`PROVIDER_ERROR` 白名单加一枚 `停滞超时`（与既有的 `ECONNRESET`/`ETIMEDOUT`/
+   `socket hang up` 同格）。两处消费者共用 `providerInterruptOf` ⇒ 一处修两处同形
+   （`runValidity` 判无效 ＋ `retryVerdict` 会按基础等待重拨）。
+5. **TDD 三拍（判据先红后绿，逐拍有读数）**：
+   ① 先加两条用例 ⇒ **红**：`起步后被「停滞超时」打断 ⇒ 也判无效`（valid 期望 false 实得 true）、
+   `★停滞超时同属 provider 侧打断 ⇒ 按基础等待再拨`（retry 期望 true 实得 false）——
+   `2 failed | 42 passed (44)`；
+   ② 白名单加一枚 ⇒ **44 passed**（含既有的反向对照：模型自己造的坏输出仍算数、`tool_result` 层
+   的超时不进 `fails` 那条路）；
+   ③ 同笔补变异锚点 `provider-interrupt-whitelist-drops-stall`（摘掉那枚词）——
+   两处是同一个洞 ⇒ 一条锚点杀两处。替换串与 expectFail 两个前提先离线核过再入库。
+6. **复证（全部本机实测）**：`typecheck` 0 报错；单跑那枚锚点 ⇒
+   `✅ provider-interrupt-whitelist-drops-stall … 本机实测 0.6s／2 拍`、`全部变异被正确杀死`；
+   `mutate-verify --check-needles` ⇒ **1536 条：阻断 0、钉在飞文本 0**（本笔入库前那一趟它报的
+   正是本笔锚点「钉的是在飞文本」——提交后转绿，红的原因与修法都写在第 5 条里）。
+7. **取料**：B1 两趟的事件流分别在 `outputs/bench-hy3-head-a-chunk1/failures/2026-10-13/`
+   与 `outputs/bench-hy3-head-b-chunk1/failures/2026-10-13/`（第 466 页那批已入库）。
+8. **端到端见证（用当天的真实读数回放，不是合成输入）**：把趟 B 的 B1 那一行从
+   `outputs/bench-hy3-head-b-final/readings.json` 里原样读出来喂进新口径——
+   `g.fails` 里那条 `runLoop 抛错:GLM 停滞超时：60000ms 内无任何数据（对端挂起或网络黑洞）`
+   ⇒ `runValidity` 判 `{"valid":false,"why":"中途被打断（provider 侧错误）：…"}`，
+   `retryVerdict` 判 `{"retry":true,"waitMs":20000,"why":"端点没给 reset ⇒ 按基础等待 20000ms 试第 2 趟"}`。
+   **同批 12 行的分母重算**：旧＝`pass 10 / total 12`（83.3%），
+   新＝`{"pass":10,"total":11,"invalid":1,"refuse":false}`（10/11＝90.9%）——
+   被修掉的正是那一个百分点级的虚报。`outputs/bench-hy3-head-a-final/README.md` 里
+   那句 83.3% 是**当时的口径**，照旧不动，只在同一页加一行「已被第 468 页重分类」。
+9. **仍未证（不许被本页读成「B1 修好了」）**：本笔改的是**度量口径**，不是 agent 的行为——
+   下一批跑读数时才看得出「被判无效 + 重拨」是否真的把趟 B 那种形状救回来；
+   趟 A 那种「文本停在半句、无 tool_call」的形状**仍未归因**。
