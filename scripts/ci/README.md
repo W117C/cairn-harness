@@ -16,7 +16,8 @@
   pnpm install --frozen-lockfile
   pnpm typecheck
   pnpm test
-  pnpm gates --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check,gate-check,mutate-needles-check,repo-hygiene-check
+  # 2026-10-12：cert face 23 → 25（买进 e2e 与 desktop-test，理由见 scripts/gate-manifest.ts 的 CERT_GATES 买入注）
+  pnpm gates --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check,gate-check,mutate-needles-check,repo-hygiene-check,e2e,desktop-test
   ```
 
 - **校验状态（诚实标注）**：YAML 已用 `ruby -ryaml` 解析通过（结构化读取成功，不是"看着像"）；
