@@ -14652,7 +14652,7 @@ const MUTATIONS = [
     src: "scripts/prose-needle-scan.ts",
     test: "tests/prose-needle-scan.test.ts",
     desc: "把「函数头索引一次」退回「每收一条字面量重扫一遍前缀」——**语义完全等价**，一个读数都不动，"
-      + "只红在单价上：第 472 页实测这一形状在 `scripts/mutate-verify.mjs`（723 KB／12 103 条）上是 5 257 ms，"
+      + "只红在单价上：第 472 页实测这一形状在 `scripts/mutate-verify.mjs`（726 KB／12 136 条）上是 4 929 ms，"
       + "索引版 1 ms。没有这一格，第 472 页那种「判据全对、只是慢到超时」的假红会悄悄长回来",
     apply: (s) => s.replace(
       "    const fn = enclosingFn(heads, node.getStart(source));",

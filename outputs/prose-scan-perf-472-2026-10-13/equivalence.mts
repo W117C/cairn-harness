@@ -31,7 +31,10 @@ const ra = HEAD.scanRepo(root);
 const rb = FIXED.scanRepo(root);
 console.log("scanRepo reports deep-equal: " + String(isDeepStrictEqual(ra, rb)));
 if (!isDeepStrictEqual(ra, rb)) {
-  for (const k of Object.keys(ra)) if (!isDeepStrictEqual(ra[k], rb[k])) console.log("FIELD DIFFERS: " + k);
+  // 按**类型化的键**逐字段比：写成 `ra[k]`（k: string）会在证据面判卷里落一条 TS7053
+  // （按字符串下标取不存在的键＝会静默交出 undefined 的那一族，第 472 页落地时 CI 当场红过）。
+  const keys = Object.keys(ra) as (keyof typeof ra)[];
+  for (const k of keys) if (!isDeepStrictEqual(ra[k], rb[k])) console.log("FIELD DIFFERS: " + String(k));
 }
 const verdict = mismatchedFiles === 0 && isDeepStrictEqual(ra, rb);
 console.log(verdict ? "VERDICT: IDENTICAL" : "VERDICT: DIFFERS");

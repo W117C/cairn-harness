@@ -47,11 +47,13 @@ console.log("       needles=" + needles.length);
 const verdicts = classifyNeedles(needles, sources, new Map(testFiles.map((f) => [f.path, f.text]))); t = mark("classifyNeedles", t);
 const { rows, stale } = applyWaivers(verdicts); t = mark("applyWaivers (" + rows.length + " rows, " + stale.length + " stale)", t);
 const anchorTables = shadowFilesOf(sources); t = mark("shadowFilesOf (2nd pass)", t);
-const anchorSet = new Set(anchorTables.filter((x) => x.kind === "登记表").map((x) => x.path));
+// 回调参数一律显式标注：`M` 是**动态 import** 进来的（specifier 由环境变量给），按 `any` 推
+// ⇒ 不标就落 TS7006（证据面判卷里那一族不纳，但也没必要留）。
+const anchorSet = new Set(anchorTables.filter((x: { kind: string }) => x.kind === "登记表").map((x: { path: string }) => x.path));
 const proseHeldBack = sources.filter((s) => anchorSet.has(s.path))
-  .reduce((a, s) => a + extractLiterals(s.path, s.text).filter((c) => DOC_PROSE_KEYS.includes(c.key)).length, 0); t = mark("proseHeldBack extractLiterals over " + anchorSet.size + " anchor tables", t);
+  .reduce((a: number, s: { path: string; text: string }) => a + extractLiterals(s.path, s.text).filter((c: { key: string }) => DOC_PROSE_KEYS.includes(c.key)).length, 0); t = mark("proseHeldBack extractLiterals over " + anchorSet.size + " anchor tables", t);
 const fly = inFlightPaths(); t = mark("inFlightPaths (" + fly.size + ")", t);
-splitAged([...fly], (f) => { try { return statSync(resolve(root, f)).mtimeMs; } catch { return null; } }, Date.now()); t = mark("splitAged stat", t);
+splitAged([...fly], (f: string) => { try { return statSync(resolve(root, f)).mtimeMs; } catch { return null; } }, Date.now()); t = mark("splitAged stat", t);
 treeScopeOf(existsSync(resolve(root, "src/renderer"))); t = mark("treeScopeOf", t);
 console.log("STAGES " + Math.round(performance.now() - t0) + " ms");
 t = performance.now();
