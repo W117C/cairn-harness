@@ -1,0 +1,7 @@
+lex            87 ms
+headsOf        1 ms  (33 heads)
+walk+getStart   5 ms  (12136 literals)
+OLD enclosingFn 4929 ms  (acc 61883)
+NEW enclosingFn 1 ms  (acc 61883)
+mismatches      0
+extractLiterals 79 ms

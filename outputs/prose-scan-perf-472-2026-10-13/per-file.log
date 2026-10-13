@@ -1,0 +1,16 @@
+total 525 ms over 343 files
+    55 ms    726 KB  11910 chunks  scripts/mutate-verify.mjs
+    14 ms    117 KB    672 chunks  src/agent/orchestrator.ts
+    14 ms     56 KB    550 chunks  scripts/docs-check.ts
+    11 ms     87 KB    314 chunks  src/main/agent-runner.ts
+    10 ms     58 KB    387 chunks  scripts/lib/mutate-gates.ts
+     8 ms     16 KB    246 chunks  scripts/autonomy-check.ts
+     7 ms     64 KB    558 chunks  src/cli.ts
+     7 ms     10 KB     26 chunks  scripts/assertion-health.ts
+     6 ms     28 KB    263 chunks  scripts/eval/report.ts
+     6 ms     18 KB    270 chunks  scripts/compaction-check.ts
+     6 ms     53 KB    516 chunks  scripts/probe-promise-recall.ts
+     6 ms     32 KB    257 chunks  scripts/prefix-churn-check.ts
+     6 ms     53 KB    251 chunks  scripts/prose-needle-scan.ts
+     6 ms     37 KB    174 chunks  scripts/lib/head-cert-deps.ts
+     6 ms      1 KB     21 chunks  scripts/agent.ts

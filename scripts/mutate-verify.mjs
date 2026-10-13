@@ -14642,6 +14642,51 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (relReal === \"\" || relReal.startsWith(\"..\") || isAbsolute(relReal)) return null; // 软链逃逸出工作区", "if (false) return null; // 软链逃逸出工作区"),
     expectFail: "父目录是软链（ws/sub → 工作区外）⇒ 拒读（只有 realpath 落点那道闸挡得住）",
   },
+
+  /* ── 第 472 页：`scripts/prose-needle-scan.ts` 的抽料单价——`enclosingFn` 从「每收一条字面量重扫一遍
+   *    前缀」（条数 × 文件长）改成「函数头索引一次 ＋ 二分」。四根针各钉新判据的一个可松处，
+   *    四条 expectFail 各指一条**不同的** killer 用例（第 276 页那条规矩：两支钉同一条用例，
+   *    等于其中一支没有观测者）。 */
+  {
+    id: "prose-scan-enclosing-fn-per-call-rescan",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "把「函数头索引一次」退回「每收一条字面量重扫一遍前缀」——**语义完全等价**，一个读数都不动，"
+      + "只红在单价上：第 472 页实测这一形状在 `scripts/mutate-verify.mjs`（723 KB／12 103 条）上是 5 257 ms，"
+      + "索引版 1 ms。没有这一格，第 472 页那种「判据全对、只是慢到超时」的假红会悄悄长回来",
+    apply: (s) => s.replace(
+      "    const fn = enclosingFn(heads, node.getStart(source));",
+      "    const fn = enclosingFn(fnHeadsOf(code.slice(0, node.getStart(source))), node.getStart(source));",
+    ),
+    expectFail: "505 KB／12 000 条：整份抽料的墙钟在预算内（二次方那版 4 635 ms，索引版不到 1 s）",
+  },
+  {
+    id: "prose-scan-fn-heads-indexed-on-raw-text",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "函数头索引建在**未涂白**的原文上 ⇒ 只在注释里出现的函数头开始当代码用，它之后所有字面量都被记到"
+      + "那个名字底下（副本数按 `path#fn` 数 ⇒ 错的人名会静默把两处副本并成一处，或反过来）",
+    apply: (s) => s.replace("  const heads = fnHeadsOf(code);", "  const heads = fnHeadsOf(text);"),
+    expectFail: "索引建在涂白后的文本上：只在注释里的函数头不是一段代码，不许顶掉 (top)",
+  },
+  {
+    id: "prose-scan-enclosing-fn-boundary-exclusive",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "右边界从严一格（`end <= at` → `end < at`）⇒ 正好止于字面量起点的那条函数头被丢掉。"
+      + "老实现切的是 `slice(0, at)`，被截断的那条匹配**本来就不在切片里** ⇒ 严一格就是换了语义",
+    apply: (s) => s.replace("    if (heads[mid]!.end <= at) lo = mid + 1;", "    if (heads[mid]!.end < at) lo = mid + 1;"),
+    expectFail: "右边界算进切片：const f = (“…”) 那条字面量归 f，不是 (top)",
+  },
+  {
+    id: "prose-scan-enclosing-fn-picks-first-head",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "把「最后一条函数头赢」写成「第一条赢」⇒ 第二支函数之后的字面量全记到第一支名下，"
+      + "副本数按错误的分组算（真仓读数不一定当场变——这支钉的是口径本身，不是它的一个读数）",
+    apply: (s) => s.replace('  return lo === 0 ? "(top)" : heads[lo - 1]!.name;', '  return lo === 0 ? "(top)" : heads[0]!.name;'),
+    expectFail: "六种形状逐条对得上确切函数名（空字面量不落格、外层里嵌内层）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

@@ -1,0 +1,5 @@
+fixture 505 KB, 12000 literals
+literals walked: 12600
+OLD enclosingFn  4760 ms (acc 60690)
+NEW enclosingFn  1 ms (acc 60690)
+extractLiterals(CURRENT code) 45 ms (12000 chunks)

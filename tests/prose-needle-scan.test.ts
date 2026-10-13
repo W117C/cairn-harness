@@ -4,6 +4,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { performance } from "node:perf_hooks";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -51,7 +52,13 @@ const src = (path: string, text: string) => ({ path, text });
  *  第 287 页把真仓那趟全扫从 describe 体搬进 `beforeAll`，省下的是**每条锚点 spawn** 的 8.9s，
  *  换来的是一次「文件级、且吃 vitest 缺省 10s 钩子时限」的活——`scanRepo(真仓)` 冷缓存实测 8.9～9.5s，
  *  空闲刚好过、隔壁起一套判卷就炸（`e42b4af` 那趟认证就是这一形状：`Hook timed out in 10000ms.`）。
- *  只给这两支声明，**不调 config 的缺省**：那会把 `tests/` 里全部 210 支钩子一起放宽。 */
+ *  只给这两支声明，**不调 config 的缺省**：那会把 `tests/` 里全部 210 支钩子一起放宽。
+ *
+ *  第 472 页补一笔（本页的动因就是这里红过一次）：**这一格预算不动，改的是单价**——
+ *  `enclosingFn` 从「每收一条字面量重扫一遍前缀」改成「函数头索引一次＋二分」，真仓整趟
+ *  13 631 ms → 1 432 ms（本机实测，见 `outputs/prose-scan-perf-472-2026-10-13/`）。
+ *  CI 上它贴着天花板也是真的：`aa6b6c9d` 那趟本文件 27 938 ms／上限 30 000 ms，前一趟当场超时。
+ *  ⇒ 谁再看到这支尺变慢，先看单价那三格判卷，别先来动这个数（动它只会把红推后，不会修红）。 */
 const HOOK_BUDGET_MS = 30_000;
 
 describe("collectNeedles：只收『按诊断字段收字面量』那一类", () => {
@@ -146,6 +153,83 @@ describe("collectNeedles 加宽：认「取料来源」而不是认写法", () =
     expect([dead.needles.length, dead.unresolved]).toEqual([0, 1]);
     const unknown = collectNeedles("u3.test.ts", `expect(w).toContain("没有字段那条料");`);
     expect([unknown.needles.length, unknown.unresolved]).toEqual([0, 0]);
+  });
+});
+
+/* ── 第 472 页：`extractLiterals` 的单价。动因是一次**假红**——
+   CI（runner 38367542940 / `c551455b`）上本文件的整仓扫越过了 30s 钩子预算（`Hook timed out in 30000ms`），
+   而隔一天那趟绿灯读 27 938 ms／上限 30 000 ms：本来就贴着天花板，负载一动就翻。
+   分阶段实测（证人：`outputs/prose-scan-perf-472-2026-10-13/stage-profile.log`）整趟 13 949 ms 的去向：
+   `classifyNeedles` 7 109 ＋「散文栏」那格 4 845 ＋ 测试侧收料 1 739 ＋ git 与读盘 210。
+   根因不在解析（`lex` 90 ms）：`enclosingFn` **每收一条字面量**都把 `[0, at)` 切一份再 `matchAll(FN_HEAD)`
+   一遍——单价 = 条数 × 文件长。`scripts/mutate-verify.mjs`（723 KB／12 103 条）上 5 257 ms，
+   而「函数头索引一次＋二分」在同一批 12 103 个位置上是 1 ms，逐位比对**零处不一致**。
+   ⇒ 三格判卷：单价回到线性、函数名逐条对得上、以及右边界那条**切片语义**（下面第二条）。 ── */
+describe("extractLiterals 的单价：函数头索引一次，不随『条数 × 文件长』二次方", () => {
+  /** F 支函数 × P 条字面量。二次方那版：每条字面量都把 `[0, 位置)` 切一份再扫一遍正则。 */
+  const synth = (funcs: number, per: number): string => {
+    let out = "";
+    for (let i = 0; i < funcs; i += 1) {
+      out += "export function fn" + String(i) + "(): string {\n";
+      for (let j = 0; j < per; j += 1) {
+        out += "  const s" + String(i) + "_" + String(j) + ' = "第 ' + String(i) + "-" + String(j) + ' 句生产文案，用来量单价";\n';
+      }
+      out += '  return "";\n}\n';
+    }
+    return out;
+  };
+
+  it("505 KB／12 000 条：整份抽料的墙钟在预算内（二次方那版 4 635 ms，索引版不到 1 s）", () => {
+    const text = synth(600, 20);
+    const t0 = performance.now();
+    const chunks = extractLiterals("synth.ts", text);
+    const ms = performance.now() - t0;
+    // 预算按**实测**给（第 241 页那条规矩），两侧各留 ≥2 倍：索引版本机 0.2 s ⇒ 1 s 是 5 倍余量；
+    // 二次方那版 4.6 s ⇒ 越过预算 4.6 倍。所以这一格既不假红，也不会在二次方回来时安静地绿。
+    expect(ms, "抽料单价回到二次方：" + String(Math.round(ms)) + " ms 越过了 1 s 预算").toBeLessThan(1000);
+    // 配对的正确性：条数与前后的函数名都要对（只量时长＝一个不区分"抽到什么"的读数）
+    expect([chunks.length, chunks[0]!.fn, chunks[chunks.length - 1]!.fn]).toEqual([12_000, "fn0", "fn599"]);
+  });
+
+  it("六种形状逐条对得上确切函数名（空字面量不落格、外层里嵌内层）", () => {
+    const file = [
+      `const top = "顶层那句";`,
+      `export function decl(): string {`,
+      `  return "声明里那句";`,
+      `}`,
+      `export const arrow = () => "箭头那句";`,
+      `function outer(): string {`,
+      `  const first = "外层先那句";`,
+      `  function inner(): string { return "内层那句"; }`,
+      `  return first;`,
+      `}`,
+    ].join("\n");
+    expect(extractLiterals("shapes.ts", file).map((c) => [c.fn, c.chunk])).toEqual([
+      ["(top)", "顶层那句"],
+      ["decl", "声明里那句"],
+      ["arrow", "箭头那句"],
+      ["outer", "外层先那句"],
+      ["inner", "内层那句"],
+    ]);
+  });
+
+  it("右边界算进切片：const f = (“…”) 那条字面量归 f，不是 (top)", () => {
+    // 老实现切的是 `text.slice(0, at)`＝**整条**匹配必须落在 at 之前 ⇒ 边界是「≤ at」而不是「< at」。
+    // 而 `const f = (` 这条函数头的匹配**正好**止于字面量起点：严一格它就被丢掉、退回 (top)。
+    expect(extractLiterals("boundary.ts", `const f = ("参数位上的那句");`).map((c) => [c.fn, c.chunk]))
+      .toEqual([["f", "参数位上的那句"]]);
+  });
+
+  it("索引建在涂白后的文本上：只在注释里的函数头不是一段代码，不许顶掉 (top)", () => {
+    // 形状要按真机量（第 472 页被变异门当场抓过一次）：**行**注释里的 `function ghost() {` 原文也匹配不上
+    // FN_HEAD（模式要 `^`／`\n` 后跟空白，而 `//` 顶在那儿）⇒ 那种夹具对这一格零分辨力。
+    // 有分辨力的是**块**注释里另起一行的那条：原文命中 `ghost`、涂白后命中空（探针
+    // `outputs/prose-scan-perf-472-2026-10-13/ghost-shape-probe.log` 三种形状并排量过）。
+    const ghost = [`const before = "涂白之前那句";`, `/*`, `function ghost() {`, `*/`, `const after = "涂白之后那句";`].join("\n");
+    expect(extractLiterals("ghost.ts", ghost).map((c) => [c.fn, c.chunk])).toEqual([
+      ["(top)", "涂白之前那句"],
+      ["(top)", "涂白之后那句"],
+    ]);
   });
 });
 

@@ -1,0 +1,18 @@
+     8 ms  git ls-files tests   (t+8)
+    62 ms  read 370 test files   (t+71)
+     9 ms  git ls-files src,scripts   (t+79)
+    73 ms  read 343 source files   (t+152)
+    10 ms  untracked tests (0)   (t+162)
+     9 ms  untracked sources (0)   (t+171)
+  1719 ms  collectNeedles x370   (t+1890)
+       needles=201
+  7070 ms  classifyNeedles   (t+8960)
+     0 ms  applyWaivers (201 rows, 0 stale)   (t+8961)
+     3 ms  shadowFilesOf (2nd pass)   (t+8964)
+  4829 ms  proseHeldBack extractLiterals over 1 anchor tables   (t+13792)
+    47 ms  inFlightPaths (73)   (t+13839)
+     0 ms  splitAged stat   (t+13839)
+     0 ms  treeScopeOf   (t+13839)
+STAGES 13839 ms
+scanRepo one-shot 13631 ms
+READINGS {"needles":201,"testFiles":370,"sourceFiles":343,"counts":{"verbatim":152,"across-interpolation":6,"non-prose":31,"echo-caller-text":12,"drift":0},"multiCopy":10,"bareName":0,"drift":0,"proseHeldBack":2314,"anchorTables":2,"maskedSameSentence":3,"maskedSharedWord":7}

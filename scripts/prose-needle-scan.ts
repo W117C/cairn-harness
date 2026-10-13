@@ -316,10 +316,39 @@ export interface LiteralChunk {
 /** 字面量起点往前最近的函数头＝它所在的函数。只用来分副本，不是完整作用域分析（上限见页里写明）。 */
 const FN_HEAD = /(?:^|\n)\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(|(?:^|\n)\s*(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\(|[A-Za-z_$][\w$]*\s*=>)/g;
 
-function enclosingFn(text: string, at: number): string {
-  let fn = "(top)";
-  for (const m of text.slice(0, at).matchAll(FN_HEAD)) fn = m[1] ?? m[2] ?? fn;
-  return fn;
+/** 函数头的一次性索引（第 472 页）。原实现是**每收一条字面量**都把 `[0, at)` 切一份再
+ *  `matchAll(FN_HEAD)` 一遍 ⇒ 单价 = 条数 × 文件长，在 `scripts/mutate-verify.mjs`
+ *  （723 KB／12 103 条）上实测 5 257 ms，而索引版 1 ms，同一批位置逐位比对零处不一致——
+ *  所以换掉的只是单价，语义一个字没动。
+ *  `end` 记的是整条匹配的**右边界**（模式含 `^`／`\n` 与前导空白，故 `m[0].length` 不能省）。 */
+export interface FnHead {
+  end: number;
+  name: string;
+}
+
+export function fnHeadsOf(text: string): FnHead[] {
+  return [...text.matchAll(FN_HEAD)].map((m) => ({ end: m.index + m[0].length, name: m[1] ?? m[2] ?? "(top)" }));
+}
+
+/** 取「离 `at` 最近的、整条匹配都落在它之前」的那个函数头。
+ *
+ *  边界判据是 `end <= at` 而不是 `end < at`：老实现切的是 `text.slice(0, at)`，被截断的那条匹配
+ *  **根本不在切片里**。`const f = ("…")` 那条函数头正好止于字面量起点，严一格它就丢、退回 `(top)`
+ *  ——`tests/prose-needle-scan.test.ts` 里那一格就是这条边界的证人。
+ *
+ *  取 `heads[lo - 1]` 而不是 `heads[lo]`：老实现是「最后一条命中的赢」（后来的函数头覆盖前面的），
+ *  这不是完整作用域分析（见上），是**按最近函数头分副本**的同一条口径。
+ *  二分而不是游标推进：调用序今天按源码序，但这不该是隐式前提（游标遇到乱序就给错人名，而错的人名
+ *  会静默改变副本数——本仓判据的账）。 */
+export function enclosingFn(heads: readonly FnHead[], at: number): string {
+  let lo = 0;
+  let hi = heads.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (heads[mid]!.end <= at) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo === 0 ? "(top)" : heads[lo - 1]!.name;
 }
 
 /** 抽字面量的静态段：词法树上取 `StringLiteral` / 模板的 head·middle·tail，
@@ -360,12 +389,14 @@ function hasPairFaceKey(obj: ts.ObjectLiteralExpression, source: ts.SourceFile):
 
 export function extractLiterals(path: string, text: string): LiteralChunk[] {
   const { code, source } = lex(text);
+  // 索引建在**涂白后**的文本上：只在注释里的函数头不是一段代码（判卷钉着这一格）。
+  const heads = fnHeadsOf(code);
   const out: LiteralChunk[] = [];
   const K = ts.SyntaxKind;
   const push = (node: ts.Node, raw: string, key: string, pairRow: boolean): void => {
     const chunk = decodeJs(raw);
     if (chunk.trim() === "") return;
-    const fn = enclosingFn(code, node.getStart(source));
+    const fn = enclosingFn(heads, node.getStart(source));
     out.push(pairRow ? { path, fn, key, chunk, pairRow: true } : { path, fn, key, chunk });
   };
   const walk = (node: ts.Node, key: string, pairRow: boolean): void => {
