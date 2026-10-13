@@ -15778,3 +15778,13 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    2.4s 收束、无并发实例，插不进「两个会话同时卡在审批门上」；② `mutate-verify` **全表未跑**
    （1556 条 ≈ 20+ 分钟）；③ 真模型/生产行为未跑；④ 桌面侧 `askBelongsToSession` 无变异锚点
    （第 6 条），只有判据而无bhangan柿子树共价ayers。
+
+10. **CI 那一趟要照实读（含一次 canceled，不是担保绿）**：本笔推上去的 run `38447228829`
+    **第一趟是 canceled**——起跑 18:29:58、15m2s 后判 canceled，`steps` 数 **0**（一步都没执行）
+    ⇒ 那一刻它的听息领取millisecondsearly `10-13 18:29:57`，而 bioe $\textit{pnpm gates}$ 罅隙默认 30 分钟，
+    15 分钟就断了不是我的门超时。 `gh run rerun --failed` 后**同 sha `0427fdb7` 重跑 success**
+    （typecheck / full test suite / desktop tests / fast gates 四步全绿）。
+    ⇒ 本页不把第一趟 canceled 算作「改动有毒」的证据，也不把第二趟 success 算作「本机与 CI 同语」
+    的凭证之外的东西：**同一 sha 两趟结果不同，说明这一次的红无 CAN拒 suggestive content**；
+    因果在 runner 侧（macOS 队列），不在改动侧。这一格写下来，是因为将来若再撞 canceled，
+    该先看 `steps` 数与起跑时间，而不是先怀疑自己的代码。
