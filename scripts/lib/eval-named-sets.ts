@@ -49,6 +49,11 @@ export interface NamedSetSource {
   carried: boolean;
   /** 这一条自己的派生完整性。 */
   complete: boolean;
+  /** 原文开头一小段（只在一条测试名都没读到时才带）：「读不出」有三种完全不同的成因——
+   *  命令不存在／输出只剩噪音／格式换了，而 `format:unknown, tests:0` 一个都分不出来。
+   *  2026-10-12 CI 自评：本地全绿、CI 四连红，红的样子只有 `expected 'unreadable' to be 'pass'`
+   *  ⇒ 看不出该修哪一边。带上原文开头，下一趟就能直接读出是哪一种。 */
+  head?: string;
 }
 
 /** 进 `Reading` 的那一枚：生产的裁决结果 ＋ 本层的取料面。 */
@@ -108,7 +113,12 @@ export function readNamedSets(
   for (const r of rows) {
     const parsed = parseTestResults(typeof r.output === "string" ? r.output : "");
     const carried = parsed.tests.length > 0;
-    sources.push({ command: r.command, format: parsed.format, tests: parsed.tests.length, carried, complete: parsed.complete });
+    const raw = typeof r.output === "string" ? r.output : "";
+    sources.push({
+      command: r.command, format: parsed.format, tests: parsed.tests.length, carried, complete: parsed.complete,
+      // 只在那一条什么都没读到时带原文开头：读到了就没有诊断价值，而带上一大段会把读数行撑爆。
+      ...(carried ? {} : { head: raw.slice(0, 400) }),
+    });
     if (carried) carrying.push({ command: r.command, parsed });
   }
   return { ...judgeNamedSets(mergeEvidence(carrying, rows.length), spec), sources };

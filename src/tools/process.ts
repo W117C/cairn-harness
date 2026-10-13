@@ -13,8 +13,15 @@
 //   同时超时回调**先同步 settle**，不依赖 'close'。
 import { spawn, type ChildProcess } from "node:child_process";
 
-/** env 白名单：只传这些；名字含 KEY/TOKEN/SECRET/PASSWORD/CREDENTIAL 的一律剥除（双保险）。 */
-const ENV_ALLOW = ["PATH", "HOME", "TERM", "SHELL", "LANG", "TMPDIR", "USER"] as const;
+/** env 白名单：只传这些；名字含 KEY/TOKEN/SECRET/PASSWORD/CREDENTIAL 的一律剥除（双保险）。
+ *
+ *  `PNPM_HOME` 是 2026-10-12 第一次 CI 自评抓到的漏项：GitHub Actions 的 `pnpm/action-setup`
+ *  把 pnpm 装在 `/Users/runner/setup-pnpm/node_modules/.bin` 并把**这一个变量**指过去——
+ *  它不在 PATH 上。白名单没有它 ⇒ verify 里 `pnpm run test` 退成 `bash: pnpm: command not found`
+ *  ⇒ 输出里一条 TAP 都没有 ⇒ 逐名判卷整份读成 unknown（"没有尺"），
+ *  而退出码那一格照旧能判 ⇒ 一整格尺子在 CI 上静默失效，本地永远复现不出来。
+ *  它不是密钥（只是个目录路径），所以进白名单不破坏「密钥名一律剥除」那条双保险。 */
+const ENV_ALLOW = ["PATH", "HOME", "TERM", "SHELL", "LANG", "TMPDIR", "USER", "PNPM_HOME"] as const;
 const ENV_SECRET_RE = /(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)/i;
 
 /** 子进程环境：白名单 + 密钥名剥除。传 tmpDir 时覆盖 TMPDIR（沙箱路径用于写收敛）。 */
