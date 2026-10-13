@@ -15562,6 +15562,12 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    而它一直摆在那儿（workflow 写 9、开发机跑 11），只是**没有 overrides 时两个大版本同答**，
    差异被"当前输入下正好无差别"盖住了（同规则 340：一个只在特定输入下才分辨的旋钮＝没观测者的旋钮）。
 
+6. **落库后更正（同日晚）**：本页第 3 条先写成"workflow 的 `version: 9` → `11`"，**那一版被 action 当场拒了**——
+   `pnpm/action-setup@v4` 发现 `with.version` 与 package.json 的 `packageManager` 同时存在时报
+   `Multiple versions of pnpm specified`。最终落法是把 `with:` 整个删掉：版本只住在 `packageManager`
+   一处，action 自己去读。教训与第 473 页第 4 条同族——**"钉一处"要真的只钉一处**；同一句话写两遍，
+   工具会替你判红（这次红得早、红得明确，比漂着好）。
+
 ## 2026-10-13 · 第 476 页：BLOCKED 里那条"判据依赖 checkout 路径深度"解掉了——判据换成原因的**身份**，顺带给 200 字帽补上观测者
 
 1. **动因**：`BLOCKED.md` 里挂着一条 2026-09-30 的裁决请求——`tests/map-self-report.test.ts` 那条
@@ -15582,5 +15588,9 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    在 2026-10-12 之后已不成立——`desktop-test`（145 条 ＋ 边界闸）现在同时在 `GATES` 与 `CERT_GATES` 里，
    CI 也单跑 `pnpm --filter cairn-desktop test`。"桌面不属 v1 交付面"这条裁决不变，变的是"它没人看"这半句。
 6. **验证**：`tests/map-self-report.test.ts` **5 条绿**（含新增那一格）；`pnpm map-check` 全部通过；
-   `pnpm mutate-needles-check` **1549 条、阻断 0、killer 指针失效 0**。指向这支判卷的**五枚锚点**
-   （四枚原有＋本页新加那一枚）的实跑读数记在下一条落库注里。
+   `pnpm mutate-needles-check` **1549 条、阻断 0、killer 指针失效 0**。
+7. **五枚锚点逐一实跑（指向这支判卷的全部，含本页新加那枚）：5/5 被正确杀死**——
+   `map-self-report-dropped` 2.3s／2 拍、`map-candidates-denominator-lost` 1.2s／2 拍、
+   `map-degrade-reason-cap-removed` 0.9s／2 拍、`map-degradation-ok-false-silent` 0.9s／2 拍、
+   `map-inject-throw-swallowed` 0.9s／2 拍（判卷 spawn 10 次，selector 坏拍 0）。
+   ⇒ 换判据没有把任何一条锚点换成"恒真"。
