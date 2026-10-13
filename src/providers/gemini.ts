@@ -6,7 +6,7 @@
 //（chunk 间累计，末 chunk 为准——直接覆盖不累加）。解析直接消费 Gemini 原生字段，不经 OpenAI 中间格式。
 import { DEFAULT_STALL_MS, type StallGuard } from "../net";
 import { establishStream } from "./retry";
-import { turnTruncatedEvent } from "./stop-reason";
+import { turnStopMissingEvent, turnTruncatedEvent } from "./stop-reason";
 import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
 
 export interface GeminiOptions {
@@ -275,6 +275,10 @@ export async function* streamGemini(
     // 上面 C7 那条守的是「半帧被截断」，这里守的是「帧到齐、篇幅没给够/被拦」。
     const truncated = turnTruncatedEvent(callId, finishReason ?? blockReason, outputTokens);
     if (truncated) yield truncated;
+    // 同位置、互斥：candidates[0].finishReason 与 promptFeedback.blockReason 都没见到
+    // ⇒ 「不知道它说没说」的证据（Gemini 正常收尾是有 finishReason 的，缺席同样可疑）。
+    const stopMissing = turnStopMissingEvent(callId, finishReason ?? blockReason, outputTokens);
+    if (stopMissing) yield stopMissing;
   } finally {
     guard?.dispose();
     // 消费者提前 break / 出错退出时主动取消 body，否则连接与对端资源一直挂着。

@@ -58,6 +58,9 @@ const MODEL_OUTPUT_ATTRIBUTION: Record<ModelOutput["type"], true> = {
   tool_call: true,
   usage: true,
   turn_truncated: true,
+  // 第 471 页：停止原因缺席的观测证据也由 provider 发出 ⇒ 同样必须挂 worker 归因，
+  // 否则它会以父会话事件形态落进主转录（本表存在的理由，见上方注释）。
+  turn_stop_missing: true,
 };
 /** loop 自己合成的那一半（不是 provider 发的）。`user_message` 不在列：worker 的 runLoop
  *  从不带 userMessage 调用（任务文本走 worker-prompt 注入），所以它不是子流会发的东西。 */
@@ -134,6 +137,8 @@ export const PROSE_FREE_TYPES: readonly AgentEvent["type"][] = [
   // 「省了谁」这条读数失去分辨力。**这是一次显式表态，别顺手改成扫描路径**：
   // 改的话要同步 tests/stream-redaction.test.ts 的 SAMPLES。
   "surface_account",
+  // 第 471 页：停止原因缺席的证据只装 callId / token 计数，没有任何自由文本。
+  "turn_stop_missing",
 ];
 
 function scanStringLeaves(v: unknown): unknown {

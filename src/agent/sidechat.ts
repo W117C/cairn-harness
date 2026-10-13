@@ -161,6 +161,10 @@ function renderProjectionLine(e: AgentEvent): string | null {
     case "turn_truncated":
       // 与 error 同一档：主会话那句回答不完整，是用户接着提问的前提事实。
       return "[主会话·助手输出被截断] " + e.stop_reason;
+    case "turn_stop_missing":
+      // 与 surface_account 同一档：观测 only。**不知道它说没说**不等于「被截断」——
+      // 把它渲染成截断就是把「缺失」写成「已知坏了」（自造证据，同 stop-reason.ts 的纪律）。
+      return null;
     case "error":
       // 失败是用户后续提问的前提事实，进只读投影（不同于调度/路由这类纯审计面事件）。
       return "[主会话·运行失败] " + e.message;

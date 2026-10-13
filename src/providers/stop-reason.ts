@@ -2,7 +2,7 @@
 // 这个字段一直在线上（fixtures/providers/**/*.sse 逐字记着 end_turn / stop / STOP / tool_use），
 // 但四个适配器只声明了类型、从不读它 ⇒ 被 max_tokens 拦腰砍断的一轮与答完的一轮
 // 在事件流里长得一模一样，loop 据「有没有 tool_call」判定任务结束，于是截断＝成功。
-import type { TurnTruncatedEvent } from "../events";
+import type { TurnStopMissingEvent, TurnTruncatedEvent } from "../events";
 
 /** 归一化后的单轮收尾结局。 */
 export type TurnOutcome =
@@ -81,6 +81,31 @@ export function turnTruncatedEvent(
     // 原文可以带任意空白。大小写**故意保留**——max_tokens 与 MAX_TOKENS 是两家的不同观测。
     // 这条事件是模型可见文本（投影与摘要输入都会读它），不剪就等于把长度交给网关心情。
     stop_reason: raw.trim(),
+    ...(tokens !== null ? { output_tokens: tokens } : {}),
+  };
+}
+
+/** 第三个出口：流结束了，而**任何非空停止原因原文都没收到**（2026-10-13 第 471 页）。
+ *
+ *  为什么单开一扇而不并进 `turn_truncated`：后者是「知道它没说完」（有可判原因），
+ *  而这一枚是「不知道它说没说」——模型自己收尾与上游静默掐流在事件流里此前**长得一模一样**
+ *  （都零新事件），于是「叙述后停住」不可归因。把「不知道」折进「知道它坏了」是自造证据，
+ *  折进「正常收尾」是掩盖；所以它自成一枚，且**只在源头缺失时落**：
+ *  · 报到词表里的（stop/end_turn/tool_use/…）⇒ null（正常收尾）；
+ *  · 报到篇幅/策略那两种的 ⇒ null（归 turn_truncated）；
+ *  · 报了但词表认不得的 ⇒ null——那是「尺要补」，不是「缺席」，两个成因的修法不同；
+ *  · 只有 undefined / null / 空串 / 非字符串 ⇒ 落事件。
+ *  观测 only：不进模型上下文、不参与判定（同 surface_account 的口径）。 */
+export function turnStopMissingEvent(
+  callId: string,
+  raw: unknown,
+  outputTokens?: number | null,
+): TurnStopMissingEvent | null {
+  if (typeof raw === "string" && raw.trim() !== "") return null;
+  const tokens = asTokenCount(outputTokens);
+  return {
+    type: "turn_stop_missing",
+    callId,
     ...(tokens !== null ? { output_tokens: tokens } : {}),
   };
 }

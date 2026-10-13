@@ -4,7 +4,7 @@
 //（id 首块、name 非空即记、arguments 拼接）；末 chunk 带 usage（后到覆盖）；data: [DONE] 结束。
 import { DEFAULT_STALL_MS, type StallGuard } from "../net";
 import { backoffMs, establishStream, retryableStatus } from "./retry";
-import { turnTruncatedEvent } from "./stop-reason";
+import { turnStopMissingEvent, turnTruncatedEvent } from "./stop-reason";
 import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
 import type { RequestMeter, RequestCategory, MeterUsage, RequestOutcome } from "../agent/metering";
 
@@ -227,6 +227,8 @@ export async function* streamOpenAI(
       // 唯一的存活通道；一份砍了一半的摘要落进记录，比不落更坏（它会以「完整结论」的形态被读到）。
       const truncated = turnTruncatedEvent(callId, data.choices?.[0]?.finish_reason, data.usage?.completion_tokens);
       if (truncated) yield truncated;
+      const stopMissing = turnStopMissingEvent(callId, data.choices?.[0]?.finish_reason, data.usage?.completion_tokens);
+      if (stopMissing) yield stopMissing;
       meterOutcome = "ok";
     } finally {
       estNs.guard.dispose();
@@ -339,6 +341,10 @@ export async function* streamOpenAI(
         // ③ usage 最后。
         const truncated = turnTruncatedEvent(callId2, finishReason2, usage2?.outputTokens ?? null);
         if (truncated) yield truncated;
+        // 与 truncated 同一位置、同一理由：先于 tool_call 冲刷与 usage（args 解析若抛，
+        // 这条证据不能跟着陪葬）。两者互斥：有原文走 truncated，没原文走这一枚。
+        const stopMissing = turnStopMissingEvent(callId2, finishReason2, usage2?.outputTokens ?? null);
+        if (stopMissing) yield stopMissing;
         const ordered = [...pending2.entries()].sort((a, b) => a[0] - b[0]);
         for (const [index, acc] of ordered) {
           yield {

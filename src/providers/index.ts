@@ -1,4 +1,4 @@
-import type { AssistantDeltaEvent, AssistantMessageEvent, ThinkingDeltaEvent, ToolCallEvent, TurnTruncatedEvent, UsageEvent } from "../events";
+import type { AssistantDeltaEvent, AssistantMessageEvent, ThinkingDeltaEvent, ToolCallEvent, TurnStopMissingEvent, TurnTruncatedEvent, UsageEvent } from "../events";
 
 /** 模型单步输出：说话、逐字流式增量，或发起工具调用（+ usage 计量 + 非正常收尾的证据）。
  *  turn_truncated 只在被输出预算/内容策略收走时出现，正常收尾零新事件。 */
@@ -8,7 +8,8 @@ export type ModelOutput =
   | ThinkingDeltaEvent
   | ToolCallEvent
   | UsageEvent
-  | TurnTruncatedEvent;
+  | TurnTruncatedEvent
+  | TurnStopMissingEvent;
 
 /** 统一消息格式（中立交换形态；各适配器各自映射成自家协议的 wire 格式）。
  *  结构与 src/agent/context.ts 的 ContextMessage 投影产物一致 + system 角色，

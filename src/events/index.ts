@@ -591,6 +591,23 @@ export interface TurnTruncatedEvent {
   agent_id?: string;
 }
 
+/** 一轮模型输出结束了，而**一个停止原因都没收到**（2026-10-13 第 471 页）。
+ *
+ *  与 `turn_truncated` 的分界：那一族是「知道它没说完」（有可判原因：篇幅／策略）；
+ *  这一枚是「不知道它说没说」——模型自己收尾（provider 会报 stop）与上游静默掐流
+ *  （一个字节都没报）此前在事件流里长得一模一样（都零新事件），于是「叙述后停住」
+ *  到底是模型的账还是传输的账**不可归因**。它只补观测面，不改 loop 行为：
+ *  「缺失」不是「截断」，所以不进模型上下文、不参与判定（同 `surface_account` 的口径）。 */
+export interface TurnStopMissingEvent {
+  type: "turn_stop_missing";
+  /** 哪一轮（与 assistant_delta 的 callId 同源）。 */
+  callId: string;
+  /** 当时已用掉多少输出 token：缺 = provider 没上报（同 turn_truncated 的口径）。 */
+  output_tokens?: number;
+  /** M3a §4.4.10：worker 子流的轮归因（主 loop 无此字段）。 */
+  agent_id?: string;
+}
+
 /** P0（2026-10-03）：每轮模型面装配账，**观测 only**——只记 `planSurfaceBudget` 已经算出来的
  *  那份账，不参与任何判定、不进模型上下文（见 `context.ts` 的忽略名单与 `sidechat.ts` 的
  *  `return null` 分组）。
@@ -695,6 +712,7 @@ export type AgentEvent = (
   | GoalPausedEvent
   | GoalResumedEvent
   | TurnTruncatedEvent
+  | TurnStopMissingEvent
   | SurfaceAccountEvent
   | RunErrorEvent
 ) & { /** M2 §3.5：事件真值时间戳（毫秒）。core 自 8361657 起在落盘处统一盖戳——写调用方同一对象，live 与盘同式（tests/events.test.ts 三用例钉死），新事件恒在场；旧 JSONL 缺席，读侧按可选兼容（投影留空不造假）。 */ ts?: number };
@@ -741,6 +759,7 @@ const KNOWN_TYPES: Record<AgentEvent["type"], true> = {
   goal_paused: true,
   goal_resumed: true,
   turn_truncated: true,
+  turn_stop_missing: true,
   surface_account: true,
   error: true,
 };

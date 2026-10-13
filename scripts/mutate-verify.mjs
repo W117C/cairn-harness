@@ -4659,6 +4659,50 @@ const MUTATIONS = [
     apply: (s) => s.replace('...(tokens !== null ? { output_tokens: tokens } : {}),', '...(tokens ? { output_tokens: tokens } : {}),'),
     expectFail: "output_tokens：0 要如实留（0 也是读数），null/undefined 才不落字段",
   },
+  // ---- 第 471 页：第三种收尾证据（流结束而一个停止原因都没上报）。四枚针各钉一跳：
+  //      机制的「该落时落」与「不该落时不落」，加三家适配器的接线（各一行）。
+  {
+    id: "stop-missing-never-fires",
+    src: "src/providers/stop-reason.ts",
+    test: "tests/turn-truncated.test.ts",
+    desc: "缺席不再落证据（恒 null）⇒「模型自己收尾」与「上游静默掐流」重新变得不可分——" +
+      "第 469 页那两条「叙述后停住」的归因缺口原样回来",
+    apply: (s) => s.replace('  if (typeof raw === "string" && raw.trim() !== "") return null;\n', '  return null;\n'),
+    expectFail: "openai（glm 即其预设）：流结束而全程没有 finish_reason ⇒ 落一条 turn_stop_missing",
+  },
+  {
+    id: "stop-missing-fires-on-reported-reason",
+    src: "src/providers/stop-reason.ts",
+    test: "tests/turn-truncated.test.ts",
+    desc: "守卫失效 ⇒ 报了 stop 的轮也落一条「停止原因缺席」（把正常收尾写成缺失＝自造证据），" +
+      "而正控照绿——这一格只有负控抓得住",
+    apply: (s) => s.replace('  if (typeof raw === "string" && raw.trim() !== "") return null;\n', '  if (false) return null;\n'),
+    expectFail: "openai 负控：正常 stop ⇒ 零新事件（这一族只在该出声时出声）",
+  },
+  {
+    id: "openai-never-emits-stop-missing",
+    src: "src/providers/openai.ts",
+    test: "tests/turn-truncated.test.ts",
+    desc: "流式分支摘掉发射 ⇒ GLM/OpenRouter 这一路（基准面板与产品 CLI 的主路）失明",
+    apply: (s) => s.replace("        const stopMissing = turnStopMissingEvent(callId2, finishReason2, usage2?.outputTokens ?? null);\n        if (stopMissing) yield stopMissing;\n", ""),
+    expectFail: "openai（glm 即其预设）：流结束而全程没有 finish_reason ⇒ 落一条 turn_stop_missing",
+  },
+  {
+    id: "anthropic-never-emits-stop-missing",
+    src: "src/providers/anthropic.ts",
+    test: "tests/turn-truncated.test.ts",
+    desc: "Anthropic 这一路摘掉发射 ⇒ 它单独回到「缺失与正常不可分」",
+    apply: (s) => s.replace("    const stopMissing = turnStopMissingEvent(callId, stopReason, outputTokens);\n    if (stopMissing) yield stopMissing;\n", ""),
+    expectFail: "anthropic：流结束而 message_delta 没带 stop_reason ⇒ 落一条 turn_stop_missing",
+  },
+  {
+    id: "gemini-never-emits-stop-missing",
+    src: "src/providers/gemini.ts",
+    test: "tests/turn-truncated.test.ts",
+    desc: "Gemini 这一路摘掉发射 ⇒ 它单独回到「缺失与正常不可分」",
+    apply: (s) => s.replace("    const stopMissing = turnStopMissingEvent(callId, finishReason ?? blockReason, outputTokens);\n    if (stopMissing) yield stopMissing;\n", ""),
+    expectFail: "gemini：流结束而 finishReason 缺席 ⇒ 落一条 turn_stop_missing",
+  },
   {
     id: "anthropic-never-reads-stop-reason",
     src: "src/providers/anthropic.ts",

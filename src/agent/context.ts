@@ -318,6 +318,7 @@ export function projectContext(
     // surface_account（P0 装配账）**显式**归在这里，不靠「上面没写分支」的落空：
     // 它一旦进模型面，就会改写可缓存前缀（`cacheableFace` = 首条 system + tools，见 prefix-churn.ts），
     // 那是缓存命中率的账，不是观测量该付的代价。
+    // turn_stop_missing（第 471 页：停止原因缺席的证据）同一档：观测 only，不进模型面。
   });
   flushDeltas();
   injectOnce(); // offset 越过全部事件（tail 为空）时补注

@@ -7,7 +7,7 @@
 // 不经过任何 OpenAI 中间格式。
 import { DEFAULT_STALL_MS, type StallGuard } from "../net";
 import { establishStream } from "./retry";
-import { turnTruncatedEvent } from "./stop-reason";
+import { turnStopMissingEvent, turnTruncatedEvent } from "./stop-reason";
 import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
 
 export interface AnthropicOptions {
@@ -320,6 +320,9 @@ export async function* streamAnthropic(
     // 同一句注释里点名的危害（loop 无从得知），另一支一直没管。
     const truncated = turnTruncatedEvent(callId, stopReason, outputTokens);
     if (truncated) yield truncated;
+    // 同位置、互斥：整个流一条 message_delta.stop_reason 都没见到 ⇒ 「不知道它说没说」的证据。
+    const stopMissing = turnStopMissingEvent(callId, stopReason, outputTokens);
+    if (stopMissing) yield stopMissing;
   } finally {
     guard?.dispose();
     // 消费者提前 break / 出错退出时主动取消 body，否则连接与对端资源一直挂着。

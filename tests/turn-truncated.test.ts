@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { replay } from "../src/events";
 import { createEventLog } from "../src/events";
-import { normalizeStopReason, truncationOf, turnTruncatedEvent } from "../src/providers/stop-reason";
+import { normalizeStopReason, truncationOf, turnStopMissingEvent, turnTruncatedEvent } from "../src/providers/stop-reason";
 import { projectContext } from "../src/agent/context";
 import { serializeConversation } from "../src/agent/compaction";
 import { goalStopDecision, lastTurnWasTruncated, projectGoal } from "../src/agent/goal";
@@ -98,6 +98,78 @@ describe("停止原因解码（纯函数，三家词表）", () => {
     expect("output_tokens" in (zero ?? {})).toBe(true);
     expect(turnTruncatedEvent("c1", "max_tokens", null)?.output_tokens).toBeUndefined();
     expect(turnTruncatedEvent("c1", "max_tokens")?.output_tokens).toBeUndefined();
+  });
+});
+
+describe("第三种收尾证据：流结束而一个停止原因都没上报（2026-10-13 第 471 页）", () => {
+  // 动因：B1/B2 各有一次「叙述后停住」——文本停在半句上、没有 tool_call，loop 按「无工具调用＝收工」
+  // 收束。那到底是模型自己收尾（provider 会报 stop），还是上游静默掐流（一个字节都没报）？
+  // 此前两种在事件流里长得一模一样（都零新事件）。这一族只落**观测**，不改 loop 行为：
+  // 「缺失」不等于「截断」，所以它不借 turn_truncated 那枚事件、也不进模型上下文。
+  it("纯函数：缺席（undefined/null/空串）⇒ 落事件；有任何非空原文（含词表外的）⇒ 不落", () => {
+    expect(turnStopMissingEvent("c1", undefined)?.type).toBe("turn_stop_missing");
+    expect(turnStopMissingEvent("c1", null)?.type).toBe("turn_stop_missing");
+    expect(turnStopMissingEvent("c1", "   ")?.type).toBe("turn_stop_missing");
+    // 报了但认不得 ≠ 没报：那是词表要补的事，不许折成「缺席」。
+    expect(turnStopMissingEvent("c1", "某种没收录的新原因")).toBeNull();
+    // 两种已知截断走 turn_truncated 那一族，不许在这里重复落一条。
+    expect(turnStopMissingEvent("c1", "length")).toBeNull();
+    expect(turnStopMissingEvent("c1", "refusal")).toBeNull();
+    // 正常收尾同样零事件。
+    expect(turnStopMissingEvent("c1", "stop")).toBeNull();
+    // output_tokens 的口径与 turn_truncated 同源：0 要如实留，null/undefined 才不落字段。
+    expect(turnStopMissingEvent("c1", undefined, 0)?.output_tokens).toBe(0);
+    expect(turnStopMissingEvent("c1", undefined, null)?.output_tokens).toBeUndefined();
+  });
+
+  it("openai（glm 即其预设）：流结束而全程没有 finish_reason ⇒ 落一条 turn_stop_missing，且不落 turn_truncated", async () => {
+    const out = await collect(streamOpenAI(USER, {
+      apiKey: "test", fetchImpl: stubFetch([
+        'data: {"id":"chatcmpl-miss","choices":[{"index":0,"delta":{"content":"先提方案："},"finish_reason":null}]}',
+        "data: [DONE]",
+      ]),
+    }));
+    const m = out.filter((e) => e.type === "turn_stop_missing");
+    expect(m.length).toBe(1);
+    expect(m[0]).toMatchObject({ callId: "chatcmpl-miss" });
+    expect(truncatedOf(out)).toEqual([]); // 缺失 ≠ 截断：不许借道那一族
+  });
+
+  it("openai 负控：正常 stop ⇒ 零新事件（这一族只在该出声时出声）", async () => {
+    const out = await collect(streamOpenAI(USER, {
+      apiKey: "test", fetchImpl: stubFetch([
+        'data: {"id":"chatcmpl-ok2","choices":[{"index":0,"delta":{"content":"完整一句。"},"finish_reason":null}]}',
+        'data: {"id":"chatcmpl-ok2","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":11,"completion_tokens":7}}',
+        "data: [DONE]",
+      ]),
+    }));
+    expect(out.filter((e) => e.type === "turn_stop_missing")).toEqual([]);
+  });
+
+  it("anthropic：流结束而 message_delta 没带 stop_reason ⇒ 落一条 turn_stop_missing", async () => {
+    const out = await collect(streamAnthropic(USER, {
+      apiKey: "test", fetchImpl: stubFetch([
+        'data: {"type":"message_start","message":{"id":"msg_miss","usage":{"input_tokens":11,"output_tokens":1}}}',
+        'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"先提方案："}}',
+        'data: {"type":"message_stop"}',
+      ]),
+    }));
+    const m = out.filter((e) => e.type === "turn_stop_missing");
+    expect(m.length).toBe(1);
+    expect(m[0]).toMatchObject({ callId: "msg_miss" });
+    expect(truncatedOf(out)).toEqual([]);
+  });
+
+  it("gemini：流结束而 finishReason 缺席 ⇒ 落一条 turn_stop_missing", async () => {
+    const out = await collect(streamGemini(USER, {
+      apiKey: "test", fetchImpl: stubFetch([
+        'data: {"candidates":[{"content":{"parts":[{"text":"先提方案："}],"role":"model"},"finishReason":null,"index":0}]}',
+      ]),
+    }));
+    const m = out.filter((e) => e.type === "turn_stop_missing");
+    expect(m.length).toBe(1);
+    expect(m[0]).toMatchObject({ callId: m[0]?.callId });
+    expect(truncatedOf(out)).toEqual([]);
   });
 });
 
@@ -606,6 +678,14 @@ describe("非流式分支与 prompt 级拦截（第二次实测补上的两处�
     expect(truncatedOf(out)).toEqual([]);
     // 正文与用量照旧透出：这一支没被新事件改坏
     expect(out.filter((e) => e.type === "assistant_delta").length).toBe(1);
+  });
+
+  it("openai 非流式：finish_reason 缺席 ⇒ 落一条 turn_stop_missing（观测 only）", async () => {
+    const out = await collect(streamOpenAI(USER, { apiKey: "test", stream: false, fetchImpl: stubJsonFetch(nonStreamBody(null)) }));
+    const m = out.filter((e) => e.type === "turn_stop_missing");
+    expect(m.length).toBe(1);
+    expect(m[0]).toMatchObject({ callId: "chatcmpl-sum" });
+    expect(truncatedOf(out)).toEqual([]); // 缺失 ≠ 截断：不借道那一族
   });
 
   it("gemini：candidates 缺席、只有 promptFeedback.blockReason ⇒ SAFETY 看得见", async () => {
