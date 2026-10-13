@@ -16,10 +16,17 @@ option A). Consequences, stated precisely so nobody reads them backwards:
 - Consequently, no desktop item blocks v1 sign-off. Desktop work that is already in flight is not in
   conflict with this ruling.
 
-The remaining verification surface is the agent/core test and headless-check surface; note `apps/desktop`
-is not scanned by any root gate or CI.
+The remaining verification surface is the agent/core test and headless-check surface. ⚠️ 本文件此前那句
+「`apps/desktop` is not scanned by any root gate or CI」**在 2026-10-12 之后已失真**（第 476 页更正）：
+`desktop-test`（145 条 + `desktop-boundary-check`）现在同时在 `GATES` 与 `CERT_GATES` 里，CI 也单跑
+`pnpm --filter cairn-desktop test`。「桌面不属 v1 交付面」这条裁决保持不变——变的是"它没人看"这半句。
 
-## 2026-09-30 · `tests/map-self-report.test.ts:95` 判据依赖 checkout 路径深度（未改代码，待换判据）
+## 2026-09-30 · `tests/map-self-report.test.ts:95` 判据依赖 checkout 路径深度 —— **已解（第 476 页，2026-10-13）**
+
+> 解法的形状：判据从「原因里含某个魔词」换成「原因按**身份**带着」（降级行里的原因＝构建器那条错误
+> 本身、按 200 字截断），并给那个 200 字帽补了一只观测者（纯函数用例，长原因）。
+> 造红证据：`outputs/map-degrade-criterion-476-2026-10-13/repro.log`（同一份错误串：前缀 40 字时旧判据绿、
+> 104 字时旧判据红、而新判据三档全绿）。被锚的实现一个字没动。
 
 **现象**：`地图降级要出声，并且不许被读成「仓库没有结构」` 这一条红，报
 `expected '[map] 仓库地图本次不可用（原因：spawn …）' to contain 'rg'`。

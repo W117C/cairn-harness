@@ -1,0 +1,3 @@
+本仓现读（前缀 40 字）｜错误串 159 字｜旧判据 line.includes("rg") = true｜新判据（原因身份）＝ true
+BLOCKED 记的实况（前缀 104 字）｜错误串 217 字｜旧判据 line.includes("rg") = false｜新判据（原因身份）＝ true
+深一格（前缀 140 字）｜错误串 234 字｜旧判据 line.includes("rg") = false｜新判据（原因身份）＝ true

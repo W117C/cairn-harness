@@ -8,7 +8,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { buildMap, mapInjectText, type MapBuilder, type MapBuildResult } from "../src/agent/map/build";
+import { buildMap, mapInjectText, mapUnavailableText, type MapBuilder, type MapBuildResult } from "../src/agent/map/build";
 import { MAX_FILES_DEFAULT } from "../src/agent/map/cap";
 import { createGlmSessionProvider } from "../src/agent/glm-session";
 import { createEventLog, type EventLog } from "../src/events";
@@ -92,7 +92,22 @@ describe("地图的覆盖面自述（与影响面共用一把尺）", () => {
     const line = mapInjectText(built) ?? "";
     expect(line).toContain("仓库地图本次不可用");
     expect(line).toContain("不代表仓库没有结构");
-    expect(line, "原因要带出来，否则模型无从判断该等还是该换工具").toContain("rg");
+    // 原因要带出来，否则模型无从判断该等还是该换工具。
+    // 判据按**身份**取（降级行里的原因＝构建器报的那条错误本身、按 200 字截断），不按某个魔词取：
+    // 旧写法是 `toContain("rg")`，而那条错误是 `spawn <rg 绝对路径> ENOENT` ⇒ 仓库放在深目录时
+    // `rg` 落在 200 字窗外，断言于是与"这棵树放在哪个目录"耦合（BLOCKED.md 2026-09-30 记的就是这一格，
+    // 造红探针见 `outputs/map-degrade-criterion-476-2026-10-13/repro.log`：前缀 40 字绿、104 字红）。
+    const reason = built.error ?? "";
+    expect(reason, "这条真失败必须自带原因——否则下面那条断言是恒真的").not.toBe("");
+    expect(line, "原因要带出来，否则模型无从判断该等还是该换工具").toContain("（原因：" + reason.slice(0, 200) + "）");
+  });
+
+  it("降级那句是**有界**的：原因再长也只带前 200 字（帽有观测者，且不随路径长短变）", () => {
+    // 这一格把「截 200 字」这个承诺本身钉住：摘掉 `.slice(0, 200)` 不会让上面那条真失败用例红
+    // （那条错误只有一百多字），所以那个帽此前**没有观测者**（规则 340 的旋钮那一族）。
+    const line = mapUnavailableText("x".repeat(500));
+    expect(line).toContain("x".repeat(200));
+    expect(line).not.toContain("x".repeat(201));
   });
 });
 

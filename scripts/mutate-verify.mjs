@@ -9524,6 +9524,18 @@ const MUTATIONS = [
     apply: (s) => s.replace("{ ...r, exitCode: f.exitCode, timedOut: f.timedOut }", "{ ...r, exitCode: null, timedOut: false }"),
     expectFail: "共用出口 `annotateExecCause` 四条出口都盖：成功回执也带着这两个字段（幂等，不叠第二层）",
   },
+  /* 第 476 页：`mapUnavailableText` 那个 200 字帽此前**没有观测者**——真失败那条用例的错误串只有
+     一百多字，摘掉帽它照样绿。下面这一支配的是同页新补的纯函数那一格（长原因）。 */
+  {
+    id: "map-degrade-reason-cap-removed",
+    src: "src/agent/map/build.ts",
+    test: "tests/map-self-report.test.ts",
+    desc: "降级说明里的原因**不再截断** ⇒ 模型面多出一段长度不受控的**外部文本**（那是异常消息，"
+      + "不是我们承诺的长度）。这一支盯的是「帽还在不在」，与 `map-degradation-ok-false-silent`"
+      + "（盯「这一支有没有出声」）方向相反、各红一条不同断言",
+    apply: (s) => s.replace("${why.slice(0, 200)}", "${why}"),
+    expectFail: "降级那句是**有界**的：原因再长也只带前 200 字（帽有观测者，且不随路径长短变）",
+  },
   {
     id: "map-degradation-ok-false-silent",
     src: "src/agent/map/build.ts",
