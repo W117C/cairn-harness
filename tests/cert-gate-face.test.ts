@@ -125,7 +125,11 @@ describe("名单自己的边界（这条门不能变成一次 20 分钟的认证
 
   it("预算都是实测的两倍档（量纲类留余量、计数类不留）：单项预算 ≥ 400ms 且总额可加", () => {
     const total = CERT_GATES.reduce((n, g) => n + g.budgetMs, 0);
-    expect(total).toBeLessThanOrEqual(60_000);
+    // 这条线 2026-10-12 从 60_000 抬到 75_000（第 454 页）：买进 `e2e` 与 `desktop-test` 两道
+    // 「每笔交笔都要成立」的门（理由见 `scripts/gate-manifest.ts` 里那两道的买入注）。
+    // 抬的是**判据覆盖面**，不是某个门的预算——两道加起来给认证这趟约 +4.3s 实测墙钟，
+    // 对一趟 ~265s 的认证是 +1.6%。先例：第 272 页同为买门抬过 50_000 → 55_300。
+    expect(total).toBeLessThanOrEqual(75_000);
     for (const g of CERT_GATES) expect(g.budgetMs).toBeGreaterThanOrEqual(400);
   });
 
