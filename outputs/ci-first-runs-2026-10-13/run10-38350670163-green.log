@@ -1,0 +1,11 @@
+gh run 38350670163 (verify · zcode · push · 87a787fc) — 第一次全绿
+conclusion: success | duration 5m12s | finished 2026-10-13T05:23:04Z
+
+ Test Files  370 passed (370)
+      Tests  5266 passed (5266)
+ Test Files  14 passed (14)
+      Tests  145 passed (145)
+      └ Tests  145 passed (145)
+  绿 25 / 25，红 0
+  逐道退出码：e2e=0 sandbox:check=0 fork-check=0 gate-check=0 docs-check=0 autonomy-check=0 compaction-check=0 prune-check=0 provider:check=0 memory-check=0 security-check=0 gym-check=0 routing-ch
+  认证面：判卷四面与 HEAD 逐字一致（工作树 = HEAD） ⇒ 本表即 HEAD 认证

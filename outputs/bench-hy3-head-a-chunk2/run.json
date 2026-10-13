@@ -1,0 +1,16 @@
+{
+ "headSha": "87a787fcdb1d6f083d51f8e47d08da03b02ba97b",
+ "dirty": 84,
+ "ranAt": "2026-10-13T06:24:05.150Z",
+ "maxSteps": 20,
+ "reps": 1,
+ "system": "base",
+ "arm": "base",
+ "model": "cn:hy3",
+ "tasks": [
+  "B5-bugfix-async",
+  "B6-feature-flag",
+  "B7-feature-csv",
+  "B8-feature-memo"
+ ]
+}

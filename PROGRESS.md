@@ -15040,3 +15040,203 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    「与本次改动同源那 3 条锚点分别被杀」，**不是**「整表 1535 条在 HEAD 上全杀」；
    ② 真模型／生产读数一律没有（无凭据）；③ 第 453 页那格待裁决（认证面 60000 那条线）
    被第 454 页那笔在工作树里动过但**仍未入库** ⇒ 本页认证跑的仍是 23 道门面，不是 25 道。
+
+## 2026-10-13 · 第 457 页：本仓第一次**非本地自评**——CI 真跑起来了，而且第一次就是红的（13 条）
+
+1. **动因**：`docs/development-plan-2026-10-12.md` 的 D-B 登记着「本仓没有远端 ⇒ CI 一次也没真跑过，
+   `非本地自评` 这一路视点完全不存在」。2026-10-12 配了远端 `W117C/cairn-harness`（**private**）
+   并推 `zcode` ⇒ 这份 workflow 第一次真跑。**这一格的成功判据不是 CI 绿，是「终于有了一份
+   非本地自评的读数」**（计划 §4 第 4 波自己写的）。
+2. **首趟读数（run 38273993449 @`5b97924c`，4m37s）**：
+   `Test Files 8 failed | 362 passed (370)`、`Tests 13 failed | 5248 passed (5261)`；
+   `typecheck` 与 `pnpm install --frozen-lockfile` 全绿 ⇒ **红的是判据的取料面，不是构建**。
+3. **根因一（5 条红）**：`.gitignore` 的 `node_modules/` **带尾斜杠只匹配目录，不匹配指向目录的软链**。
+   `tests/mutate-shards.test.ts` 的 `cleanWorktree()` 会在临时 worktree 里造一条 `node_modules` 软链
+   ⇒ 干净 clone 里它被判成未跟踪 ⇒ 一棵「干净」worktree 一出生就是脏的 ⇒ `treeProblem` 拒跑
+   `工作树有 1 项在飞` ⇒ 5 条 shards 判卷连带红。**本地不红的机制**：主检出 `.git/info/exclude`
+   里躺着一条无斜杠的 `node_modules`，而那份文件不进 git ⇒ 这个洞只在干净树里现形。
+   复证：一棵 depth 1 的干净 clone 里 `git status --porcelain` 印 `?? node_modules`；
+   去掉尾斜杠后同命令为空。
+4. **根因二（5 个文件）**：`actions/checkout` 缺省 `fetch-depth: 1` ⇒ 浅克隆。五处吃 git 历史的
+   判据全部读成「不可达」：`docs-check` 的 D-5（台账引 445 个提交 sha，逐个核可达，CI 报 444 条
+   假红）、`blocked-citation-face`、`mutate-needles-check`（点名 `1f16bea`）、`head-import-face`
+   （`--at` 换 rev）、`head-cert-deps`（留档取料）。改为 `fetch-depth: 0`，代价是多拉约 128MB 历史
+   （1639 笔提交）——**这是判据正确性的对价，不是可省的优化**。
+5. **顺带**：workflow 注释还写「CERT_GATES 那 23 道」，而 `tests/ci-cert-face-parity.test.ts`
+   钉着这个数等于现读条数（现读 25）⇒ 改 25。那一笔只修了**对账面的一半**（见第 458 页）。
+6. **取料（与页同笔入库）**：`outputs/ci-first-runs-2026-10-13/run1-38273993449-13red.log`
+   （`gh run view --log-failed` 原文）+ 同目录 `README.md`（逐趟梯子 13→0）。
+7. **仍未证**：`mutate-verify` 全表没在 `5b97924c` 上重跑；真模型／生产读数一律没有。
+
+## 2026-10-13 · 第 458 页：把「cert face 23 → 25」那笔的门面买入补进 HEAD——workflow 与 manifest 得在同一个 HEAD 上自洽
+
+1. **动因**：第 457 页改 workflow 注释写「那 25 道」时，`e2e` 与 `desktop-test` 的买入
+   （`scripts/gate-manifest.ts` 的 `CERT_GATES` 23 → 25 ＋ 判卷的预算线 60_000 → 75_000）
+   还躺在工作树里没入库 ⇒ 推上去的 HEAD 上 manifest 仍是 23、workflow 写 25 ⇒
+   `tests/ci-cert-face-parity.test.ts` 与 `tests/cert-gate-face.test.ts` 当场红。
+   **这是我自己造成的假红：改了一处取料面，漏了与它对账的另一处。**
+2. **本笔做了什么**：把那两件在飞件一并入库（`scripts/gate-manifest.ts`、`tests/cert-gate-face.test.ts`），
+   **判据一字未改**，只让它们在同一个 HEAD 上自洽。买入的理由与单价账照抄工作树那笔的原注
+   （`e2e` 1995ms／`desktop-test` 4660ms 冷 2280ms 热，预算 4000／10000ms 都是两倍档）。
+3. **读数**：run 38328544106（`f7a6c208`）8 条红 → run 38330263950（`60927f97`）6 条红。
+4. **仍未证**：那 6 条里仍有吃历史的与 mutate 族的，逐条归因见后续各页。
+
+## 2026-10-13 · 第 459 页：台账引的 22 个提交**不在已推的分支上**——把 `refs/dsh/cluster-*` 推上去，并给逐名断言补取料面
+
+1. **那 22 条不是浅克隆问题**：`fetch-depth: 0` 之后 CI 仍报 22 条「sha 指向不存在的提交」。
+   逐条查证：它们**只存在于 `refs/dsh/cluster-p169-*` 与 `refs/heads/doc-layer-migration`**
+   （并行集群会话的分支），从没推过 ⇒ 远端根本没有这些对象。**这是仓的真缺陷**：
+   台账拿提交当证据引用，而证据不在已推分支的可达集里。
+2. **修法**：把那 12 个 ref 推上去（**不是**改判据、**不是**加豁免）：
+   `refs/dsh/cluster-p169-{189..196,198,199}`、`doc-layer-migration`。
+   复证：一棵含全部 ref 的干净 clone 里跑 `docs-check` ⇒
+   `台账 sha 面：抽到 449 条候选｜非提交形而带理由豁免 4 条` 零红；那 4 条就是既有的
+   `LEDGER_NON_REV`（三枚内容哈希前缀 ＋ 一枚判卷合成用例名）。
+3. **同笔的第二件事**：`loop-eval-synthetic-chain` 那 2 条在 CI 上连红，而断言只说
+   `expected 'unreadable' to be 'pass'` ⇒ 看不出是没跑测试、输出只剩噪音、还是解析换了格式
+   （三种修法完全不同）。给 `NamedSetSource` 补 `head` 字段（只在一条测试名都没读到时带原文开头
+   400 字），并给两条断言补 `JSON.stringify(ns.sources)` 当失败消息。**判据一字未动。**
+4. **读数**：run 38344870173（`baa805e5`）5 条红。
+5. **事后回看**：这一笔补的诊断在第 464 页一票命中——**那一趟之后 CI 直接读出 spec reporter 的原文**，
+   否则后面两笔仍是猜。
+
+## 2026-10-13 · 第 460 页：`scripts/ci/README.md` 那份手抄门单补上 `e2e` 与 `desktop-test`
+
+1. **`cert face 23 → 25` 共有四处手抄件**：`gate-manifest` 的 `CERT_GATES`、
+   `cert-gate-face.test.ts` 的预算线、workflow 的名单与注释、以及 `scripts/ci/README.md` 的复跑块。
+   前三处随第 457/458 笔入库，这一处还躺在工作树里 ⇒ CI 上
+   `CI 说明页的复跑块 第 19 行与门面不相等：缺 e2e、desktop-test`
+   （`tests/cert-gate-face.test.ts` 钉的正是「手抄份与 CERT_GATES 只准集合相等」）。
+2. **读数**：run 38346162200（`81d0c086`）4 条红。
+3. **记账**：同一批买入的四处对账面至此全部入库——这类「一处改动、四处抄件」的形状本仓点过名，
+   本页是它在 CI 上第一次被机器逮住。
+
+## 2026-10-13 · 第 461 页：给 CI 上仅剩的 3 条红补上取料原文（判据一字未动，只让红的时候说得清为什么）
+
+1. **动因**：第 460 页之后剩 4 条红，而其中 3 条在本地全史树、干净 clone 的单文件跑与全量跑里
+   **全绿**，只有 CI 红 ⇒ **先补诊断再猜**（这一笔是后面两笔能一票命中的前提）。
+2. **两处补原文**：
+   - `mutate-shards`「真跑一条」退 2：exit 2 有四种成因（脏树／名单空／id 不在表上／宿主跨片），
+     修法完全不同 ⇒ 断言红时带上编排器那一拍的原文。
+   - `mutate-verify-gates`「等号写法选中 1 条」读到 `null`：可能是内层 vitest 没起来、选择子没匹配、
+     或输出被截断 ⇒ 断言红时带上内层那一拍的末尾原文。
+3. **读数**：run 38346721806（`3154102f`）4 条红——**但这一趟的失败消息第一次带出了真因**
+   （见下两页）。
+4. **纪律**：本笔只改失败消息，**不改任何判据、不放宽任何断言**。
+
+## 2026-10-13 · 第 462 页：两把读 vitest 输出的尺**不剥 ANSI**，而 CI 强制彩色——4 条红里的 2 条同源
+
+1. **诊断原文（第 461 页补的那两处第一次派上用场）**：
+   `mutate-verify-gates` 的内层 vitest **其实成功选中了 1 条**——
+   末尾原文是 ``Test Files 1 passed (1)｜Tests 1 passed | 16 skipped (17)``（带 `ESC[…m`）；
+   而 `selectedTestCount` 的 `/^\s*Tests\s/` 匹配不上带色行 ⇒ 读成 `null`。
+   `mutate-shards` 的 `真跑一条` 是同一个函数 ⇒ `REDKINDS` 报 `vacuous:1` ⇒ 判定「读不出」。
+2. **根因**：**CI 里 `GITHUB_ACTIONS=true` 让 vitest 强制开彩色，`TERM=dumb` 压不住。**
+   本地全绿只因为本地不是 CI——而那**不是判据该依赖的东西**：这两把尺吃的是测试输出，
+   与终端有没有颜色无关。同文件的 `failingTestText` 早就剥过一次（同一个理由），这次是补上漏的那支。
+3. **修法**：`selectedTestCount` 入口 `replace(ANSI_SEQUENCE, "")`；
+   `parseTestResults` 入口同样先剥。**判据一字未改**，改的是喂进解析器之前的原文。
+4. **复证**：用 CI 原文**逐字节重建**的那一行（`ESC[2m Tests ESC[22m … 1 passed … 16 skipped … (17)`）
+   喂进去 ⇒ 现在读出 `1`（改前 `null`）；`mutate-verify-gates` 167 passed、
+   `mutate-shards` 55 passed、eval 族 187 passed；typecheck 0 报错。
+5. **读数**：run 38347829159（`11f5d5bd`）2 条红。
+
+## 2026-10-13 · 第 463 页：`sanitizedEnv` 白名单漏了 `PNPM_HOME`——CI 上 pnpm 根本找不到
+
+1. **剩余 2 条的形状**：`loop-eval-synthetic-chain`，取料面
+   `[{command: pnpm run test, format: unknown, tests: 0}]` ⇒ verify 跑了，输出里一条测试名都没有。
+2. **根因（CI 日志的 env 段直接给出）**：`pnpm/action-setup` 把 pnpm 装在
+   `/Users/runner/setup-pnpm/node_modules/.bin`，靠 **`PNPM_HOME`** 这一个变量指过去；
+   而 `src/tools/process.ts` 的 `sanitizedEnv` 白名单只有
+   `PATH/HOME/TERM/SHELL/LANG/TMPDIR/USER` ⇒ 子进程里 `PNPM_HOME` 被剥掉 ⇒
+   `pnpm: command not found` ⇒ 输出里没有 TAP ⇒ 逐名判卷整份读成 `unknown`（「没有尺」），
+   而退出码那一格照旧能判 ⇒ **逐名这半把尺子在 CI 上静默失效，本地永远复现不出来**
+   （本地 pnpm 在 `/usr/local/bin`，PATH 里有，不靠 `PNPM_HOME`）。
+   实测复现：`env -i PATH=/usr/bin:/bin … bash -c 'pnpm run test'` ⇒ `bash: pnpm: command not found`。
+3. **修法**：`ENV_ALLOW` 加 `PNPM_HOME`。它不是密钥（一个目录路径），
+   不破坏「名字含 KEY/TOKEN/SECRET/PASSWORD/CREDENTIAL 一律剥除」那条双保险；
+   同一份白名单服务四个消费面（verify／sandbox／map 的 rg／run_shell）⇒ 一处修四处同形。
+4. **读数**：run 38348823342（`1af11b93`）仍 2 条红——说明 `PNPM_HOME` 不是全部，见下一页。
+
+## 2026-10-13 · 第 464 页：CI 上最后 2 条红的真因——`node --test` **在 TTY 下走 spec reporter，不是 TAP**
+
+1. **第 463 页补的 `head` 字段一票命中**（CI 上第一次真正读出原文）：
+   ```
+   > bench-synthetic-judge@0.1.0 test /private/var/…/work
+   > node --test tests/*.test.js
+   ✔ 券后过线免运费 (0.429667ms)
+   ℹ tests 3 / ℹ pass 3 / ℹ fail 0
+   ```
+   ⇒ **spec reporter**，不是 TAP。
+2. **根因**：`node --test` 按 stdout 是不是 TTY 选 reporter——管道 ⇒ `tap`，TTY ⇒ `spec`。
+   **GitHub Actions 给每个 step 分一个 PTY** ⇒ CI 上永远是 spec；而跑器把 verify 的输出接进管道
+   ⇒ 本地永远是 TAP。只有 TAP 那一支的解析器 ⇒ CI 上整份逐名面读成 `unknown`。
+   实测复现：`script -q /dev/null node --test tests/*.test.js` ⇒ `✔/✖/ℹ` 三形状逐字同形。
+3. **修法**：给 `parseTestResults` 加第三支 node 原生格式（`node-test-spec`），判据与 TAP 同一套纪律——
+   顶格结果行 `✔/✖ 名字 (耗时)`，结尾 `ℹ tests/pass/fail/…` 汇总逐项对账，一条都没读到就进 `reasons`。
+   该文件头⑵「格式自动认，认不出就 `unknown`」**没动**。
+4. **复证**：把 CI 那段原文逐字喂进去 ⇒ `format: node-test-spec`、3 条全绿、`complete: true`、`reasons: []`；
+   typecheck 0 报错；eval 四件 120 passed；tools/security/gym/routing 4 道门绿。
+5. **读数**：run 38349681373（`3e826ef9`）1 条红。
+
+## 2026-10-13 · 第 465 页：CI 上最后 1 条红——`format` 断言把 reporter 钉成一种，而 `node --test` 有两种 ⇒ **全绿**
+
+1. **剩余那条的形状**：spec 那一支修好之后，逐名面读出来了（`carried: true`、`complete: true`、
+   `tests: 3`、`state: pass`），**只剩 `format` 字符串是 `node-test-spec` 而断言钉着 `node-test-tap`**。
+2. **修法**：两条 `format` 断言改成认 `node-test-(tap|spec)`。**判据要的是「三条名字与红绿读对了」
+   「逐名读到了 3 条、都带进来了、派生完整」，那一格与用哪种 reporter 无关**；
+   把格式钉成一种，等于让判据在另一种终端下必红（本仓这条在 CI 上连红七趟，前六趟都在修取料面，
+   这一趟才落到断言本身）。第三条用例（靶子起点态）同样处理。
+3. **读数（run 38350670163 @`87a787fc`，5m12s）——本仓第一次非本地自评全绿**：
+   `Test Files 370 passed (370)｜Tests 5266 passed (5266)`；
+   `desktop tests：14 files / 145 passed`；
+   `fast gates (cert face, 25)：绿 25 / 25，红 0`；
+   `认证面：判卷四面与 HEAD 逐字一致（工作树 = HEAD） ⇒ 本表即 HEAD 认证`。
+4. **取料**：`outputs/ci-first-runs-2026-10-13/run10-38350670163-green.log` ＋ 同目录 `README.md`
+   （逐趟梯子：13 → 8 → 6 → 5 → 4 → 4 → 2 → 2 → 1 → 0）。
+5. **仍未证（CI 自己印的，不许被本页读成全绿）**：同一份汇总里那句
+   ``⚠️ 未证 8 项（gate-check 1｜docs-check 3｜autonomy-check 1｜compaction-check 1｜provider:check 1｜gym-check 1）``
+   ——连网／凭据限制跑不到的断言，**门自己的原话是「不得宣称全部通过」**；
+   `mutate-verify` 整表仍不在 CI 面里（分钟档）；真模型暗卷仍缺 `CAIRN_API_KEY`。
+
+## 2026-10-13 · 第 466 页：`cn:hy3` 上的**第一个真模型基准读数**（11/12）＋ 第一对同提交读数（噪声带）
+
+1. **这是本仓第一个「产品行不行」的读数**：此前 5266 条判卷量的全是「harness 自己坏没坏」，
+   一条都没有量「agent 修 bug 行不行」（计划 D-A 那格：「效果目标 0% 达成」）。
+   本轮用本地端点 `http://127.0.0.1:7863/v1` 的 `cn:hy3`（零花费）跑
+   `fixtures/bench/tasks.json` 12 条，`--reps 1 --max-steps 20`。
+2. **第一对读数（在 `5b97924c` 上，2026-10-12）**：`合计 11/12 达标`——
+   B1–B11 全 PASS（B2 是模型自己红→绿修回来的：`verify 3→true`），
+   唯一 FAIL 是 `B12-long-horizon`：`runLoop 抛错: agent loop 超过 maxSteps=20，强制中止`，
+   `verify 0→false`——**步数帽问题，不是能力问题**（如实登记，不许折成「模型不行」）。
+   总量：`输入 534867 / 输出 28059 token`、墙钟 397.2s、内存峰 581MB。
+3. **第一对**同配置**读数与第一个真噪声带**：第二趟在**同参数**下再跑 12 条，
+   把两份喂进 `scripts/eval/report.ts` ⇒ `读数身份面：✅ 三个身份键齐`、
+   `出口码 0`（不再是 3）、八项指标全判「带内」。
+   ⇒ **那把尺从「喂不进语料」变成「能用了」**（计划第 2 波那一格）。
+4. **本页自己的一处真实缺陷，如实登记**：第二趟是**分 12 次单任务跑再拼**的——
+   整趟跑在本机会被外部信号杀掉（共试 5 次，分别死在 B6／B9 附近；后台 `nohup` 与前台两种跑法都试过）。
+   拼接造成的后果：那 12 行的 `headSha` 跨了 `6f1e6b36` 与 `dff78497` 两个**邻接提交**
+   （另一会话在跑的同时在提交）⇒ 严格说不是「同一棵树上的两趟」。
+   配对表因此把第二趟印成 9 个「同面 1 趟」的面（每面一个时间戳、0 个共同靶）。
+   **结论只在这一层站得住：噪声带量级的（八项全带内），逐靶翻转率不站得住。**
+5. **第 4 条那个缺陷已当场补掉（本页之内）**：在**当前 HEAD**（`87a787fc`）上重跑两趟，
+   两趟都盖着同一个 `sha` ⇒ 这才是本仓第一对**严格同提交**的读数：
+   **趟 A 9/12（75.0%）、趟 B 10/12（83.3%）、翻转 1 条（`B2-feature-export`：FAIL→PASS）**；
+   其余指标逐项喂进 `scripts/eval/report.ts` ⇒ `出口码 0`、八项全判「带内」，
+   噪声带现读：**成功率 8.3% ／ 达标数 1 条 ／ 输入 token 1404 ／ 输出 token 1506 ／
+   墙钟 67.1s ／ 内存峰 2MB**。
+   **这一对量出来的那句话（本仓此前没有的尺）**：同一配置下 12 条里会翻转 1 条 ⇒
+   **`reps=1` + 12 条的这套配置测不出「一次改动带来 1 条靶提升」**；要声称有效果，
+   至少得 ≥2 条靶的移动，或提高 `--reps`。这正是计划 D-A 那句「这把尺现在测不出…」
+   第一次被量化。两条稳定的红也顺带看清了：`B1` 在 `87a787fc` 上两趟都红
+   （而在 `5b97924c` 上那趟是绿的 ⇒ 它本身就是个翻转靶）、`B12` 两趟都撞 `maxSteps=20`。
+6. **取料**：`outputs/bench-hy3-2026-10-12/`（`5b97924c` 上那趟）、`outputs/bench-hy3-rep2-final/`
+   （它的拼合面，跨提交、只当量级）、`outputs/bench-hy3-head-a-final/`（**严格同提交的趟 A** ＋
+   `README.md` 与 `report-noise-band.txt`）、`outputs/bench-hy3-head-b-final/`（趟 B）、
+   `outputs/bench-hy3-head-{a,b}-chunk{1,2,3}/`（两趟的六个分块原文）。
+   ⚠️ 两趟都是**分块跑再拼**的（整趟跑会被外部信号杀掉）⇒ `report.ts` 的逐靶配对面按 `ranAt`
+   分趟，看到的是 6 个「同面 1 趟」的面（`0 个共同靶`）；上面那句「翻转 1 条」是按 id 手工对齐算的，
+   **不是** report 的输出——两处口径不同，别混读。
+7. **仍未证**：`--reps≥3` 的分布没有（历史 32/36 趟死在免费档日配额，本轮端点策略未定）；
+   真模型暗卷（`gym-check`）仍缺 `CAIRN_API_KEY`；`B12` 那条在 `--max-steps 30` 下能不能过没测。

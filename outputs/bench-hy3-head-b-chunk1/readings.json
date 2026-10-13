@@ -1,0 +1,241 @@
+[
+ {
+  "r": {
+   "id": "B1-bugfix-crossfile",
+   "name": "B1-bugfix-crossfile",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "cn:hy3",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 93.047,
+   "requests": 6,
+   "tokensIn": 40179,
+   "tokensOut": 1742,
+   "cny": null,
+   "toolCalls": 12,
+   "toolFailures": 1,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 45,
+   "readsBeforeFirstWrite": 1,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 停滞超时：60000ms 内无任何数据（对端挂起或网络黑洞）",
+   "resources": {
+    "rssPeakMb": 221,
+    "procPeak": 4,
+    "cpuMs": 2185,
+    "samples": 187
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": false,
+    "exitCode": 1,
+    "output": "TAP version 13\n# Subtest: 折扣不是 20% 时同样要按券后金额收运费\nnot ok 1 - 折扣不是 20% 时同样要按券后金额收运费\n  ---\n  duration_ms: 0.997792\n  type: 'test'\n  location: '/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/loop-eval-AOzMth/work/tests/checkout.held.test.js:11:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    4200 !== 4800\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 4800\n  actual: 4200\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/loop-eval-AOzMth/work/tests/checkout.held.test.js:13:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.start (node:internal/test_runner/test:944:17)\n    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)\n  ...\n# Subtest: 多条商品行：看的是券后总额，不是原始总额\nnot ok 2 - 多条商品行：看的是券后总额，不是原始总额\n  ---\n  duration_ms: 0.122875\n  type: 'test'\n  location: '/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/loop-eval-AOzMth/work/tests/checkout.held.test.js:16:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    4000 !== 4600\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 4600\n  actual: 4000\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/loop-eval-AOzMth/work/tests/checkout.held.te\n…[有界性：中段省略 2322 字]…\n  Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: 无券且刚好包邮线原价\nok 8 - 无券且刚好包邮线原价\n  ---\n  duration_ms: 0.034167\n  type: 'test'\n  ...\n1..8\n# tests 8\n# suites 0\n# pass 4\n# fail 4\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 63.5115\n\n[exit code: 1]"
+   },
+   "assembly": "autoMemory:off-here autoVerify:same impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "87a787fcdb1d6f083d51f8e47d08da03b02ba97b",
+   "ranAt": "2026-10-13T06:27:23.987Z",
+   "maxSteps": 20,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "held-out 没过（可见测试绿了但隐藏验收不认 ⇒ 大概率是特殊分支，不是根因）〔exit=1〕",
+    "runLoop 抛错:GLM 停滞超时：60000ms 内无任何数据（对端挂起或网络黑洞）"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B2-feature-export",
+   "name": "B2-feature-export",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "cn:hy3",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 125.663,
+   "requests": 7,
+   "tokensIn": 51059,
+   "tokensOut": 12357,
+   "cny": null,
+   "toolCalls": 7,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 3633,
+   "readsBeforeFirstWrite": 2,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": true,
+   "autoVerifyBeat": true,
+   "autoVerifyBeats": 1,
+   "verifyRecovery": "greenFirst",
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/fit.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 220,
+    "procPeak": 3,
+    "cpuMs": 6787,
+    "samples": 252
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": true,
+    "exitCode": 0,
+    "output": "TAP version 13\n# Subtest: 宽度换成 3：每段真的按 wrap 的规则折\nok 1 - 宽度换成 3：每段真的按 wrap 的规则折\n  ---\n  duration_ms: 0.307625\n  type: 'test'\n  ...\n# Subtest: 折行边界：正好装满一行不再塞下一个词\nok 2 - 折行边界：正好装满一行不再塞下一个词\n  ---\n  duration_ms: 0.081167\n  type: 'test'\n  ...\n# Subtest: 零段：空字符串，不许留下分隔符\nok 3 - 零段：空字符串，不许留下分隔符\n  ---\n  duration_ms: 0.037583\n  type: 'test'\n  ...\n# Subtest: 单空段：只有一个空行位，结果为空字符串\nok 4 - 单空段：只有一个空行位，结果为空字符串\n  ---\n  duration_ms: 0.307542\n  type: 'test'\n  ...\n# Subtest: 空段在开头：前面不留分隔空行，段间的空行照给\nok 5 - 空段在开头：前面不留分隔空行，段间的空行照给\n  ---\n  duration_ms: 0.081458\n  type: 'test'\n  ...\n# Subtest: 空段在结尾：保留一个空行 ⇒ 以换行收尾\nok 6 - 空段在结尾：保留一个空行 ⇒ 以换行收尾\n  ---\n  duration_ms: 0.03625\n  type: 'test'\n  ...\n# Subtest: 三段混合：长段折行 + 空段 + 短段\nok 7 - 三段混合：长段折行 + 空段 + 短段\n  ---\n  duration_ms: 0.079375\n  type: 'test'\n  ...\n1..7\n# tests 7\n# suites 0\n# pass 7\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 37.238167"
+   },
+   "assembly": "autoMemory:off-here autoVerify:same impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "87a787fcdb1d6f083d51f8e47d08da03b02ba97b",
+   "ranAt": "2026-10-13T06:27:23.987Z",
+   "maxSteps": 20,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B3-refactor-callsite",
+   "name": "B3-refactor-callsite",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "cn:hy3",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 36.159,
+   "requests": 6,
+   "tokensIn": 44946,
+   "tokensOut": 2359,
+   "cny": null,
+   "toolCalls": 10,
+   "toolFailures": 1,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 861,
+   "readsBeforeFirstWrite": 5,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": true,
+   "verified": 2,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "modelRecovery",
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/format.js",
+    "src/legacy.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 285,
+    "procPeak": 5,
+    "cpuMs": 7682,
+    "samples": 73
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:same impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "87a787fcdb1d6f083d51f8e47d08da03b02ba97b",
+   "ranAt": "2026-10-13T06:27:23.987Z",
+   "maxSteps": 20,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B4-bugfix-pagination",
+   "name": "B4-bugfix-pagination",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "cn:hy3",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 15.947,
+   "requests": 3,
+   "tokensIn": 19609,
+   "tokensOut": 1054,
+   "cny": null,
+   "toolCalls": 8,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 348,
+   "readsBeforeFirstWrite": 5,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/paginate.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 255,
+    "procPeak": 8,
+    "cpuMs": 8117,
+    "samples": 33
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:same impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "87a787fcdb1d6f083d51f8e47d08da03b02ba97b",
+   "ranAt": "2026-10-13T06:27:23.987Z",
+   "maxSteps": 20,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ }
+]
