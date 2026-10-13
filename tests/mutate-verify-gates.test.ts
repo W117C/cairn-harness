@@ -1022,7 +1022,7 @@ describe("成本分母：每条锚点实际 spawn 了几次判卷", () => {
     expect(src).toMatch(
       /\nconst costRows = results\.map\(\(r\) => \(\{ id: r\.m\.id, runsMs: r\.runsMs \}\)\);\nconst costLine = costCell\(costRollupOf\(costRows\)\);/);
     expect(src, "runTest 不记时 ⇒ 分母退化回「次数 × 文件时长」的模型").toMatch(
-      /\nfunction runTest\(testRel, pattern\) \{\n  const started = Date\.now\(\);/);
+      /\nfunction runTest\(testRel, pattern, configRel\) \{\n  const started = Date\.now\(\);/);
     expect(src).toMatch(/\nconst timing = [\s\S]{0,400}\$\{costLine\}/);
     // 相对读数（不写死条数）：每个内联出口那一行自己就得带账本；`return red(` 那份由 helper 统一带（helper 自己必须带）。
     const start = src.indexOf("function verifyEntry(");
@@ -1154,7 +1154,8 @@ describe("按标题选跑法：选中几条必须被读出来", () => {
     // 表与实现同文件 ⇒ 必须行锚定（规则 236/247）。
     expect(src, "不调共用判据 ⇒ 闸与单价格各漂各的，多选的那一拍永远不出声").toMatch(
       /^ {4}if \(vacuous === null && runReadingIsBad\(mode, r\.selected\)\) \{$/mu);
-    const calls = (src.match(/= runTest\(m\.test, pattern\);/g) ?? []).length;
+    // 桌面锚点自带 config ⇒ 调用点第三参在（仍在同一个闸上，不因加参而绕过）。
+    const calls = (src.match(/= runTest\(m\.test, pattern, m\.config\);/g) ?? []).length;
     const noted = (src.match(/note\("/g) ?? []).length;
     expect(calls, "跑法改了新加一拍却忘了过闸").toBeGreaterThan(0);
     expect(noted, "某一拍没过账本与选中数这道闸").toBe(calls);

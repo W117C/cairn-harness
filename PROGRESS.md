@@ -15788,3 +15788,37 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
     的凭证之外的东西：**同一 sha 两趟结果不同，说明这一次的红无 CAN拒 suggestive content**；
     因果在 runner 侧（macOS 队列），不在改动侧。这一格写下来，是因为将来若再撞 canceled，
     该先看 `steps` 数与起跑时间，而不是先怀疑自己的代码。
+
+## 2026-10-14 · 第 482 页：桌面层第一次进变异表（此前 1556 条尽数落在 src/ 与 scripts/）
+
+1. **动因（接第 481 页第 6 条那格刻意未做的事）**：桌面层此刻 17 个判卷文件、173 条用例、
+   独立 vitest 配置，而第 479（发送队列）与第 481（审批卡归属）两页的新逻辑**全在这一层** ⇒
+   它们是「有判据、无分辨力证据」的状态：判卷绿只说明**它能通过**，不说明**它对坏改动会红**。
+   变异表 1556 条里指向 `apps/desktop/` 的是 **0 条**。这不是设计排斥，是从没人开这道门。
+2. **为什么进不来（两处机械原因，两处都要改）**：①`runTest` 把配置写死成 `tests/vitest.config.ts`；
+   ②只改配置还不够——vitest 的 include/filter 相对**配置所在目录**解析，在库根跑
+   `--config apps/desktop/vitest.config.ts apps/desktop/tests/…` ⇒ `No test files found`（退出码 1）。
+   修法：`runTest(testRel, pattern, configRel)` 加可选第三参，cwd 取 `dirname(config)`、
+   判卷路径按该目录相对化；**缺省路径完全不变** ⇒ 既有 1556 条零行为变化（实测回归见第 5 条）。
+3. **首条桌面锚点**：`ask-card-owner-not-scoped`（`apps/desktop/src/renderer/send-queue.ts` →
+   `apps/desktop/tests/send-queue.test.ts` + `config: apps/desktop/vitest.config.ts`）。
+   变异＝把 `askBelongsToSession` 的归属判定改成恒 true（退回「来者不拒」）⇒ **被杀死**，
+   `坏拍（选中≠1） 0`。表长 1556→**1557**，`--check-needles` 阻断 0。
+4. **我自己踩的两个错（都当场验出来并订正，写下来因为两格都不是"手滑"）**：
+   ①**指针形状写错**：第一版 `expectFail` 写成 `describe › it` 形式（全表 1556 条里**只有我这条**用 `›`）
+   ⇒ 选择子零命中、判红 `vacuous`（那一拍根本没选中用例）。订正为纯 `it` 标题。
+   ②**动了别人的针脚**：改 `runTest` 签名时把既有锚点 `cost-run-test-uninstrumented` 的针脚一起改没了
+   ⇒ 该条判「针脚已不在源文件里」。已把它的 apply 改指新的注释行，**本意不变**（runTest 不记时
+   ⇒ #37 分母退回推算）。⇒ **改动共享 runner 会牵动别人的锚点**，改完必须跑 `--check-needles`，
+   不能只看自己那条。
+5. **回归（核心面没被我的 runner 改动弄钝）**：干净 worktree 里跑
+   `ask-gate-unattended-fail-closed` ＋ `ask-gate-session-id-not-forwarded` ⇒ **2/2 全杀**。
+   另：`runTest` 签名变了 ⇒ `tests/mutate-verify-gates.test.ts` 两条行锚断言（钉函数签名与
+   调用点数量）当场红，已按新签名订正，并**反向验证过**（磨掉 `const started = Date.now();`
+   ⇒ 那条「runTest 不记时」的判据仍红）。
+6. **读数**：桌面 17 文件 **173 条全绿** ＋ 边界闸绿；`pnpm typecheck` 0 报错；
+   `--check-needles` **1557 条｜阻断 0｜钉在飞文本 0**。取料
+   `outputs/desktop-mutation-482-2026-10-14/provenance.md`。
+7. **仍未证（不许读成绿）**：① `mutate-verify` **全表未跑**（1557 条 ≈ 20+ 分钟）；
+   ② 桌面层**目前只有 1 条锚点**——本页只是把门打开，其余 16 个桌面判卷文件仍无分辨力证据；
+   ③ 真模型／生产行为未跑。
