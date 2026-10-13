@@ -16,6 +16,14 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 全量历史（2026-10-12 第一次 CI 自评抓到的洞）：本仓判卷里有五处**吃 git 历史**——
+          # docs-check 的 D-5（PROGRESS.md 引了 445 个提交 sha，逐个核可达）、
+          # blocked-citation-face 的 sha256 恢复件、mutate-needles-check 的针脚搬迁成因
+          # （点名 1f16bea）、head-import-face 的 `--at` 换 rev、head-cert-deps 的留档取料。
+          # 缺省 fetch-depth:1 让它们全部读成「不可达」⇒ 13 条假红。
+          # 代价：多拉约 128MB 历史。对一条 1639 笔提交的私有仓，这是判据正确性的对价。
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 9
@@ -28,14 +36,18 @@ jobs:
         run: pnpm typecheck
       - name: full test suite
         run: pnpm test
-      # 快门面 = CERT_GATES 那 23 道，逐字点名（`pnpm gates` 不加参数跑的是 GATES 全集，比认证面慢、面也不同）。
+      - name: desktop tests
+        run: pnpm --filter cairn-desktop test
+      # 快门面 = CERT_GATES 那 25 道，逐字点名（`pnpm gates` 不加参数跑的是 GATES 全集，比认证面慢、面也不同）。
       # 道数由 `tests/ci-cert-face-parity.test.ts` 钉：两份名单必须逐字相等，且**今天还在生效的**标注必须等于条数。
       # 这一行从前**排除**过两道已知红：gate-check 的 H7 与 mutate-needles-check 的 4 支失针锚点。
       # 两条理由到 10-02 都已结案 ⇒ 名单补回来。当时那笔认证的原文（**历史读数，不随门表演化**）：
       # 认证树 `认证门面=22 道（跑到 22）｜绿 22 道`（`outputs/retry-backoff-2026-10-02/head-cert-7cc9605.log`，TREE=7cc9605、DIRTY_JUDGED=0）。
       # ⚠️ 但**本仓没有 git remote** ⇒ 这份 workflow 至今一次也没真跑过：它的正确性目前只由 head-cert 保证。
       #    "接不接远端"是业主裁决项（取舍见 scripts/ci/README.md），这条改动只是让名单不再谎报红灯。
-      - name: fast gates (cert face, 23)
+      # 2026-10-12：cert face 23 → 25（买进 `e2e` 与 `desktop-test`，理由见 `scripts/gate-manifest.ts`
+      # 的 `CERT_GATES` 那两条买入注）。这条名单被 `tests/cert-gate-face.test.ts` 钉着与门面集合相等。
+      - name: fast gates (cert face, 25)
         run: >-
           pnpm gates
-          --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check,gate-check,mutate-needles-check,repo-hygiene-check
+          --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check,gate-check,mutate-needles-check,repo-hygiene-check,e2e,desktop-test

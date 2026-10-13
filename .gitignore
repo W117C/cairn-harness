@@ -1,6 +1,11 @@
 .DS_Store
 oh-src/
-node_modules/
+# `node_modules` 不带尾斜杠：带斜杠只匹配**目录**，而本仓判卷（tests/mutate-shards.test.ts 的
+# `cleanWorktree`）会在临时 worktree 里造一个指向它的**软链**——那条软链在干净 clone 里
+# （CI 就是这样）会被 git 判成未跟踪 ⇒ 一棵"干净"worktree 一出生就是脏的 ⇒ treeProblem 拒跑。
+# 2026-10-12 第一次 CI 自评抓到这个（5 条 shards 判卷连带红）：本地靠 .git/info/exclude 兜住，
+# 而那份文件不进 git，所以这个洞只在干净树里现形。
+node_modules
 # Build/cache outputs
 .tmp/
 # 代码地图/索引工具的运行缓存（17M 级 codegraph.db + daemon.log，非源码）。
@@ -64,3 +69,21 @@ docs/facts/
 # ⚠️ 这不解「明文缓存无帽堆积」——`cache/` 会随会话增长（现读已 59M），
 #    回收与上限是 serena 侧的事（`serena project index` 的重建面），留给工具侧自己管。
 .serena/
+
+# SEMA 自进化的控制平面运行树（docs/sema-proposal.md §3.2/§11）：registry.jsonl 账本、staging/
+# （进化平面产出、不可信面）、installed/（版本目录）、grants.json（安装授权面——授权属于机器
+# 不属于仓库，与 .agent/permissions.always.json 同口径）。判卷全落 tmp；这份只在真实流量接线后出现。
+/modules/
+
+# AI 工具运行时产物（续）：GraphFlow / Trae / Claude / Antigravity 的项目级缓存与规则文件
+# 口径与 `.agent/memory/`、`.qoder/`、`.serena/` 同族——都是**AI 工具的运行时产物**，不是源码。
+.graphflow/
+.graphflow-cache/
+.trae/
+.claude/
+# .agent/rules/ 与 .agent/skills/ 是工具写入的规则/技能文件（GraphFlow install 产物），
+# 与有意跟踪的 .agent/permissions.json 分开。规则文件可由 install 重新生成，不进 git。
+.agent/rules/
+.agent/skills/
+# GEMINI.md 是 GraphFlow install 写入的托管块（与 AGENTS.md 的 GRAPHFLOW 块同源），可重新生成。
+GEMINI.md
