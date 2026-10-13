@@ -406,7 +406,13 @@ function parsePytest(text: string, lines: readonly string[]): ParsedResults {
 
 /** 自动认格式并逐名解析。调用方只负责把原文喂进来（不 open、不 spawn）。 */
 export function parseTestResults(raw: string): ParsedResults {
-  const text = typeof raw === "string" ? raw : "";
+  // 先剥 ANSI 再解析（2026-10-12 CI 自评抓到）：CI 里 `GITHUB_ACTIONS=true` 让 vitest 强制开彩色，
+  // `pnpm run test` 的每一行都带 `ESC[…m` ⇒ `looksLikeTap` 认不出 `TAP version 13` 头、
+  // 也认不出 `ok 1 - 名字` 结果行 ⇒ 整份逐名面退成 `unknown`（"没有尺"，不是"零条失败"）。
+  // 本地不红只因为 TERM=dumb 且非 CI，那**不是判据该依赖的东西**：这一支吃的是测试输出，
+  // 与终端有没有颜色无关。同族先例：`scripts/lib/mutate-gates.ts` 的 `failingTestText` 与
+  // `selectedTestCount` 早就剥过一次（同一个 CI 抓到）。
+  const text = (typeof raw === "string" ? raw : "").replace(ANSI_SEQUENCE, "");
   if (text.trim() === "") return unknownResults(["输入是空的 ⇒ 没有任何逐名可读（这是「没有尺」，不是「零条失败」）"]);
   const vitest = parseVitestJson(text);
   if (vitest !== null) return vitest;
@@ -415,6 +421,9 @@ export function parseTestResults(raw: string): ParsedResults {
   if (looksLikePytest(lines)) return parsePytest(text, lines);
   return unknownResults([`认不出格式：既不是 vitest 的 JSON 报告，也没有 TAP 的结果行，也没有 pytest 的逐名行（开头：${snippet(text)}）`]);
 }
+
+/** ANSI SGR 颜色序列（`ESC [ … m`）。跑器输出在 CI 里被强制着色，见 `parseTestResults` 头上那段。 */
+const ANSI_SEQUENCE = /\u001b\[[0-9;]*m/gu;
 
 /* ── SWE-bench 那一格的裁决 ────────────────────────────────────────────────────────────── */
 

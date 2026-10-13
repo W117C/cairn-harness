@@ -1147,7 +1147,11 @@ export function restoreDiffProblem(before: string, after: string): string | null
  *  `Tests 100 skipped (100)`＋**退出码 0**——这就是为什么「跑了」不能由退出码代表。
  *  收尾行读不到 ⇒ null（取料坏），**不许回 0**：0 是「一条也没选中」，null 是「这一格没量到」，两个红的修法相反。 */
 export function selectedTestCount(vitestOut: string): number | null {
-  const lines = vitestOut.split("\n");
+  // 先剥 ANSI 再匹配（2026-10-12 CI 自评抓到）：CI 里 `GITHUB_ACTIONS=true` 让 vitest 强制开彩色，
+  // 于是汇总行是 `ESC[2m Tests ESC[22m … (17)` —— `/^\s*Tests\s/` 匹配不上 ⇒ 返回 null。
+  // 本地不红只因为 TERM=dumb 且非 CI，那**不是判据该依赖的东西**：这把尺量的是 vitest 的
+  // 汇总，与终端有没有颜色无关。同文件里 `failingTestText` 早就剥过一次（同一个理由）。
+  const lines = vitestOut.replace(ANSI_SEQUENCE, "").split("\n");
   let line: string | undefined;
   for (let i = lines.length - 1; i >= 0; i--) {
     if (/^\s*Tests\s/u.test(lines[i] ?? "")) { line = lines[i]; break; }
