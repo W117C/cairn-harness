@@ -284,6 +284,16 @@ describe("文件面路径风险通道（S2 路径侧）", () => {
     expect(riskOf(evaluate("edit_file", { path: "src/index.ts" }, session({ mode: "auto" })))).toBe("medium");
   });
 
+  // 第 477 页：`read_file` 多了一份"一次多读"（`paths`）⇒ 路径面必须**逐条**进闸。
+  // 只读 `args.path` 的写法在这一格读成 none：批量里夹一条 `.env`／`.git/config` 就整条绕过路径通道
+  // （同上面那条口径：多判的代价是一次审批，漏判的代价是凭证面没有任何一层看着）。
+  it("一次多读（paths）逐条进路径面：夹一条敏感路径同样抬到 high，普通批量仍是 none", () => {
+    expect(riskOf(evaluate("read_file", { paths: ["src/index.ts", ".env"] }, session({ mode: "auto" })))).toBe("high");
+    expect(riskOf(evaluate("read_file", { paths: ["src/index.ts", "src/b.ts"] }, session({ mode: "auto" })))).toBe("none");
+    // 单份那条路一字未变（路径面里 join 只有一项）
+    expect(riskOf(evaluate("read_file", { path: ".git/config" }, session({ mode: "auto" })))).toBe("high");
+  });
+
   // 反向验证的另一半：这条通道**只在命中时抬**，不抬高文件工具的基线。若有人给它补一个
   // 常规 medium（或把表扩到普通路径），下面三条立刻红——guided/auto 两档每次写向都被拦
   // 是远超本条要堵的口子的行为变更。

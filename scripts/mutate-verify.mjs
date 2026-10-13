@@ -494,8 +494,9 @@ const MUTATIONS = [
     src: "src/tools/read_file.ts",
     test: "tests/edge-cases.test.ts",
     desc: "大文件仍只读前缀，但不声明 ⇒ 模型以为看到了整个文件（静默截断是本仓反复判红的形状）。" +
-      "注：只钉声明这一半；readPrefix 那一支无观测者，见规则 57 的撤针署名",
-    apply: (s) => s.replace("    if (oversized) {", "    if (false) {"),
+      "注：只钉声明这一半；readPrefix 那一支无观测者，见规则 57 的撤针署名。" +
+      "第 477 页那次把 `read_file` 的单份读取抽进 `readOne`，这一段跟着减了两格缩进 ⇒ 针脚改指新写法",
+    apply: (s) => s.replace("  if (oversized) {", "  if (false) {"),
     expectFail: "超过 16MB 只读前 16MB 并显式声明截断（旧实现整读进内存）",
   },
   {
@@ -14698,6 +14699,54 @@ const MUTATIONS = [
       + "副本数按错误的分组算（真仓读数不一定当场变——这支钉的是口径本身，不是它的一个读数）",
     apply: (s) => s.replace('  return lo === 0 ? "(top)" : heads[lo - 1]!.name;', '  return lo === 0 ? "(top)" : heads[0]!.name;'),
     expectFail: "六种形状逐条对得上确切函数名（空字面量不落格、外层里嵌内层）",
+  },
+  /* ── 第 477 页：`read_file` 的「一次多份」（`paths`）。一条真读数换来的原语——
+   *    `B12-long-horizon` 修复前 0/4（40 步全花在 41 次单份读上）、修复后 3/3（4 次批量读覆盖 40 份）。
+   *    五根针各钉这条链的一处，killer 各不相同。 */
+  {
+    id: "read-batch-total-cap-removed",
+    src: "src/tools/read_file.ts",
+    test: "tests/read-shape.test.ts",
+    desc: "「一次多份」的**总额帽**失效 ⇒ N 份各自 50KB 直接倒进上下文（20 份各 40KB 就是 800KB）。"
+      + "单份那条路有自己那道帽，这一支钉的是批量**新开的那道**：没有它，一次调用的交付量不设上限",
+    apply: (s) => s.replace("    if (used + bytes > BATCH_LIMIT_BYTES) {", "    if (false) {"),
+    expectFail: "总额帽：塞不下的那一份**整份不交**并点名，且不交半份",
+  },
+  {
+    id: "read-batch-ambiguity-silently-resolved",
+    src: "src/tools/read_file.ts",
+    test: "tests/read-shape.test.ts",
+    desc: "`path` 与 `paths` 同时给时不再拒绝 ⇒ 两条路读出来的东西混成一份，来源再也分不出来"
+      + "（单份的片段提示与批量的抬头混着走），而调用方以为两种写法都等价",
+    apply: (s) => s.replace('      if (typeof args.path === "string" && args.path.trim() !== "") {', "      if (false) {"),
+    expectFail: "path 与 paths 同时给 ⇒ 拒绝（两条路读出来的东西不一样，不许静默选一条）",
+  },
+  {
+    id: "read-batch-all-failed-still-ok",
+    src: "src/tools/read_file.ts",
+    test: "tests/read-shape.test.ts",
+    desc: "多份**全失败**仍报 ok ⇒ 工具失败面被批量洗白（一次调用什么都没读到，却与读到 20 份同形）。"
+      + "与 `read-batch-total-cap-removed` 方向相反：那支管交付量上限，这支管失败粒度",
+    apply: (s) => s.replace("  return { ok: delivered > 0, output: out };", "  return { ok: true, output: out };"),
+    expectFail: "多份全失败 ⇒ 这次调用判失败（工具失败面照旧真实，不许被批量洗成 ok）",
+  },
+  {
+    id: "read-batch-paths-invisible-to-risk-surface",
+    src: "src/permissions/risk.ts",
+    test: "tests/autonomy.test.ts",
+    desc: "路径风险面只读 `args.path` ⇒ 一次多读里夹一条 `.env`／`.git/config` 整条绕过路径通道"
+      + "（既有的 `apply_patch` 批量形态就是靠同一个函数扫正文兜住的，这一支是同一个口子的新入口）",
+    apply: (s) => s.replace("  if (Array.isArray(args.paths)) {", "  if (false) {"),
+    expectFail: "一次多读（paths）逐条进路径面：夹一条敏感路径同样抬到 high，普通批量仍是 none",
+  },
+  {
+    id: "read-batch-paths-invisible-to-map-context",
+    src: "src/agent/glm-session.ts",
+    test: "tests/map-self-report.test.ts",
+    desc: "地图的「最近碰过的文件」只认 `args.path` ⇒ 一整轮批量读对地图完全不可见"
+      + "（模型刚读了 20 份，地图却当它没读——接线漏掉的那半与风险面同族）",
+    apply: (s) => s.replace("        if (Array.isArray(many)) {", "        if (false) {"),
+    expectFail: "一次多读（paths）也进「最近碰过的文件」那半：地图上下文面不许对批量读瞎（第 477 页）",
   },
 ];
 

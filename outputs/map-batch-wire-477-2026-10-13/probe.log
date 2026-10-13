@@ -1,0 +1,4 @@
+只有 user_message ⇒ 构建器被叫 1 次；contextFiles=[]
+user_message + 一条批量 tool_call ⇒ 构建器被叫 0 次；contextFiles=null
+批量 tool_call + user_message ⇒ 构建器被叫 0 次；contextFiles=null
+user_message + 批量调用 + tool_result ⇒ 构建器被叫 0 次；contextFiles=null

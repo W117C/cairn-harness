@@ -248,11 +248,12 @@ describe("工具描述也是模型可见文本（第 176 页）", () => {
       const m = f.name.slice("params[".length, f.name.indexOf("]."));
       perMode.set(m, (perMode.get(m) ?? 0) + 1);
     }
-    // 现读水位：只读档 16 份、三个可写档各 62 份（合计 202；61→62 是 M2 的 apply_patch.patch）。
+    // 现读水位：只读档 17 份、三个可写档各 63 份（61→62 是 M2 的 apply_patch.patch；
+    // 16→17 / 62→63 是第 477 页给 read_file 加的 `paths`——一份新参数就是一份新的模型可见 prose）。
     // 这一格必须**精确**：只读到 183 的那一版（不递归）就是靠它露馅的；放宽成「≥ 某个数」之后
     // 「少走一族参数」仍然绿（规则 222）。改规格的人跟着改这一格。
-    expect(perMode.get("read-only"), "只读档参数描述面数（现读 16＝M2 后不变：它没有 write_file/edit_file/apply_patch）").toBe(16);
-    expect(perMode.get("default"), "缺省档参数描述面数（现读 62＝第 179 页两把写向模板 + M2 的 apply_patch.patch）").toBe(62);
+    expect(perMode.get("read-only"), "只读档参数描述面数（现读 17＝M2 那 16 份 + 第 477 页的 read_file.paths）").toBe(17);
+    expect(perMode.get("default"), "缺省档参数描述面数（现读 63＝第 179 页两把写向模板 + M2 的 apply_patch.patch + 第 477 页的 read_file.paths）").toBe(63);
     for (const m of ["guided", "auto"]) {
       expect(perMode.get(m), `${m} 与 default 档的工具面同日同表，参数面数不该分叉`).toBe(perMode.get("default"));
     }

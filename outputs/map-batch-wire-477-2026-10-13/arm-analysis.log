@@ -1,0 +1,4 @@
+bench-b12-before-477-2026-10-13｜请求 40｜工具 50 {"read_file": 41, "glob": 1, "edit_file": 8}｜read_file：批量 0 次(覆盖 0 份) / 单份 41 次
+bench-b12-before-477-2026-10-13｜请求 40｜工具 60 {"read_file": 41, "glob": 3, "propose_plan": 1, "edit_file": 15}｜read_file：批量 0 次(覆盖 0 份) / 单份 41 次
+bench-b12-batch-477-2026-10-13-run2｜请求 5｜工具 26 {"read_file": 4, "propose_plan": 1, "edit_file": 20, "verify": 1}｜read_file：批量 4 次(覆盖 40 份) / 单份 0 次
+bench-b12-batch-477-2026-10-13-run3｜请求 19｜工具 32 {"read_file": 9, "run_shell": 2, "edit_file": 20, "verify": 1}｜read_file：批量 9 次(覆盖 83 份) / 单份 0 次

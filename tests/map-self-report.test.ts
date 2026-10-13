@@ -112,6 +112,41 @@ describe("地图的覆盖面自述（与影响面共用一把尺）", () => {
 });
 
 describe("接线：那两句要真的发出去", () => {
+  it("一次多读（paths）也进「最近碰过的文件」那半：地图上下文面不许对批量读瞎（第 477 页）", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "map-wire-batch-"));
+    TMP.push(dir);
+    const log: EventLog = createEventLog(join(dir, "events.jsonl"));
+    await log.append({ type: "user_message", content: "TASK" });
+    await log.append({ type: "tool_call", id: "t1", name: "read_file", args: { paths: ["src/a.ts", "src/b.ts"] } });
+    // 地图只在**投影后**历史 ≤2 条时构建（`buildMapText` 里 `historyForMap.length > 2` 那道闸）——
+    // 首次请求时还没有任何 tool_call，所以这条接线只在**压缩之后**可达。那就先压一次：
+    // 上面两条被摘掉、摘要顶进来，投影成「摘要 + user_message」两条 ⇒ 构建器这次真的会被叫。
+    await log.append({
+      type: "compaction", trigger: "auto", reason: "threshold",
+      compressed_event_ids: [1, 2], summary: "早期：读了 src/a.ts 与 src/b.ts", summary_offset: 4,
+      tokens_before: 100, tokens_after: 20,
+    });
+    await log.append({ type: "user_message", content: "NEXT" });
+    await log.close?.();
+    const seen: string[][] = [];
+    const provider = createGlmSessionProvider(join(dir, "events.jsonl"), {
+      workspace: dir, system: "SYSTEM",
+      mapBuilder: {
+        build: async (opts) => {
+          seen.push([...(opts.contextFiles ?? [])]);
+          return {
+            text: "", tokens: 0, ok: true, fromTagsCache: 0, parsed: 0, fromRenderCache: false, fingerprint: "fp",
+            cap: MAX_FILES_DEFAULT, graphFiles: 10, candidates: 10, retrievedFiles: 0,
+          };
+        },
+      },
+      transport: async function* () { yield { type: "assistant_message", content: "ok" }; },
+    });
+    for await (const _ of provider.stream([])) { /* drain */ }
+    expect(seen.length, "前提：地图构建器真的被叫过").toBeGreaterThan(0);
+    expect(seen[0], "批量读进来的每一份都要在面里").toEqual(expect.arrayContaining(["src/a.ts", "src/b.ts"]));
+  });
+
   it("会话首请求里带着地图的自述行与降级行（装配面有观察者）", async () => {
     const degraded = await firstRequest(fakeBuilder({ ok: false, text: "", error: "impact: tree-sitter unavailable" }));
     expect(degraded).toContain("仓库地图本次不可用");

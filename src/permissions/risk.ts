@@ -154,8 +154,15 @@ const PATH_TOOL_NAMES: ReadonlySet<string> = new Set([
  *  通道能覆盖批量形态的唯一办法：宁可多判（多判的代价是一次审批），不可漏判。
  *  grep/glob 的 path 缺省是 "."，相对工作区根 ⇒ 天然不命中敏感片段，与它们的真实落点一致。 */
 function pathSurface(tool: string, args: Record<string, unknown>): string {
-  const p = typeof args.path === "string" ? args.path : "";
-  if (p !== "") return p;
+  const parts: string[] = [];
+  if (typeof args.path === "string" && args.path !== "") parts.push(args.path);
+  // 一次多份（`read_file` 的 `paths`，第 477 页）：**逐条都进这一面**。只读 `path` 的话，
+  // 批量里夹一条 `.env`／`.git/config` 就整条绕过路径风险通道——同第 152 行那条口径：
+  // 「宁可多判（多判的代价是一次审批），不可漏判」。单份那条路的返回值一字未变（join 只有一项）。
+  if (Array.isArray(args.paths)) {
+    for (const p of args.paths) if (typeof p === "string" && p !== "") parts.push(p);
+  }
+  if (parts.length > 0) return parts.join("\n");
   if (tool === "apply_patch" && typeof args.patch === "string") return args.patch;
   return "";
 }

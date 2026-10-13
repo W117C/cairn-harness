@@ -69,11 +69,18 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         name: "read_file",
         description:
           "读工作区单个文件（workspace 相对路径）；offset/limit 按 1-based 行号取片段，给目录路径则列条目，二进制拒读。" +
+          "**要一次看多份小文件（十几支源码/测试）就用 `paths` 数组**：一次调用交回多份，总量仍是同一道 50KB 帽——" +
+          "一轮一支读会整段吃掉步数预算。" +
           "何时用：要用或改某段代码之前先读原文——替换时拼的那个原文字符串要从这里拿，不能凭记忆手打。" +
           "按内容找位置用 grep，按文件名形状找用 glob，别拿它遍历目录。整文件读一次通常比多次小范围读便宜；已在上下文里的内容不必重读。",
         parameters: obj(
           {
             path: { type: "string", description: "workspace 相对路径" },
+            paths: {
+              type: "array",
+              items: { type: "string" },
+              description: "一次读多份（与 path 二选一）：按数组顺序返回，总量受同一道 50KB 帽",
+            },
             offset: { type: "number", description: "起始行（1-based，缺省 1）" },
             limit: { type: "number", description: "最多读取行数（缺省 2000）" },
           },
@@ -850,6 +857,16 @@ export function createGlmSessionProvider(
       if (e.type === "tool_call" && (e.name === "read_file" || e.name === "edit_file" || e.name === "write_file")) {
         const p = e.args.path;
         if (typeof p === "string") out.add(p);
+        // 一次多份（第 477 页）：批量读进来的那些同样是"最近碰过的文件"，不接线的话
+        // 地图的上下文文件面会对这一步**完全瞎**（模型刚读了 20 份，地图却当它没读）。
+        // 上限跟着上面那个 8 一起收：一个事件最多填到 8 为止（宁可少进，不许把帽撑破）。
+        const many = e.args.paths;
+        if (Array.isArray(many)) {
+          for (const q of many) {
+            if (out.size >= 8) break;
+            if (typeof q === "string" && q !== "") out.add(q);
+          }
+        }
       } else if (e.type === "user_message") {
         for (const m of e.content.match(makePathishRe()) ?? []) out.add(m);
       }

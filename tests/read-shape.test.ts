@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { read_file } from "../src/tools/read_file";
 import type { ToolContext } from "../src/tools";
+import { gateToolSpecs } from "../src/agent/glm-session";
 
 let ws = "";
 afterEach(async () => { if (ws) await rm(ws, { recursive: true, force: true }); });
@@ -104,5 +105,70 @@ describe("read_file 整形（M2a 任务 3）", () => {
     await writeFile(join(ws, "a.txt"), "hello cairn", "utf8");
     const res = await read_file.run({ path: "a.txt" }, ctx);
     expect(res.output).toBe("hello cairn");
+  });
+});
+
+/* ── 第 477 页：一次多份（`paths`）。
+   动因是一条真读数：`B12-long-horizon` 那趟 40 步里 41 次单份 read_file，请求 3–32 全是"一轮一支"
+   （模型会并行——同一轮里发过 10 支），于是步数预算全花在读上，只剩 7 步改文件。 */
+describe("read_file 一次多份（第 477 页）", () => {
+  it("paths：一次交回多份，按数组顺序、每份带抬头", async () => {
+    const ctx = await newCtx();
+    await writeFile(join(ws, "a.txt"), "AAA\n", "utf8");
+    await writeFile(join(ws, "b.txt"), "BBB\n", "utf8");
+    const res = await read_file.run({ paths: ["a.txt", "b.txt"] }, ctx);
+    expect(res.ok).toBe(true);
+    expect(res.output).toBe("--- a.txt ---\nAAA\n--- b.txt ---\nBBB");
+  });
+
+  it("paths 里一份读不到**不拖红整批**：那一份原地出声，其余照交", async () => {
+    const ctx = await newCtx();
+    await writeFile(join(ws, "a.txt"), "AAA\n", "utf8");
+    const res = await read_file.run({ paths: ["a.txt", "nope.txt"] }, ctx);
+    expect(res.ok, "还有一份真交回来了 ⇒ 这次调用不是失败").toBe(true);
+    expect(res.output).toContain("--- a.txt ---\nAAA");
+    expect(res.output).toContain("--- nope.txt ---\n[读取失败]");
+  });
+
+  it("多份全失败 ⇒ 这次调用判失败（工具失败面照旧真实，不许被批量洗成 ok）", async () => {
+    const ctx = await newCtx();
+    const res = await read_file.run({ paths: ["nope1.txt", "nope2.txt"] }, ctx);
+    expect(res.ok).toBe(false);
+    expect(res.output).toContain("[读取失败]");
+  });
+
+  it("path 与 paths 同时给 ⇒ 拒绝（两条路读出来的东西不一样，不许静默选一条）", async () => {
+    const ctx = await newCtx();
+    await writeFile(join(ws, "a.txt"), "AAA\n", "utf8");
+    await expect(read_file.run({ path: "a.txt", paths: ["a.txt"] }, ctx)).rejects.toThrow(/只给一个/);
+  });
+
+  it("总额帽：塞不下的那一份**整份不交**并点名，且不交半份", async () => {
+    const ctx = await newCtx();
+    const rows = (tag: string) => Array.from({ length: 1200 }, (_, i) => tag + "-" + String(i).padStart(6, "0") + "-" + "y".repeat(12)).join("\n");
+    await writeFile(join(ws, "big1.txt"), rows("first"), "utf8");
+    await writeFile(join(ws, "big2.txt"), rows("second"), "utf8");
+    const res = await read_file.run({ paths: ["big1.txt", "big2.txt"] }, ctx);
+    expect(res.ok).toBe(true);
+    expect(res.output, "第一份要整份在里面").toContain("first-000000-");
+    expect(res.output, "第二份越帽 ⇒ 一行都不许出现（半份会让人以为读全了）").not.toContain("second-");
+    expect(res.output, "越帽的那一份必须**点名**，不是静默少算").toContain("本次没有交付");
+    expect(res.output).toContain("big2.txt");
+    expect(Buffer.byteLength(res.output, "utf8"), "总额帽就是 50KB 那道").toBeLessThanOrEqual(52 * 1024);
+  });
+
+  it("offset/limit 对每一份都生效（批量不是另一套读法）", async () => {
+    const ctx = await newCtx();
+    await writeFile(join(ws, "a.txt"), "L1\nL2\nL3\nL4\n", "utf8");
+    await writeFile(join(ws, "b.txt"), "M1\nM2\nM3\nM4\n", "utf8");
+    const res = await read_file.run({ paths: ["a.txt", "b.txt"], offset: 2, limit: 2 }, ctx);
+    expect(res.output).toContain("--- a.txt ---\nL2\nL3");
+    expect(res.output).toContain("--- b.txt ---\nM2\nM3");
+  });
+
+  it("模型面把 paths 写进 read_file 的规格（不然这条原语模型看不见）", () => {
+    const spec = gateToolSpecs().find((s) => s.function.name === "read_file");
+    expect(JSON.stringify(spec)).toContain('"paths"');
+    expect(spec?.function.description, "说明里要讲什么时候用它——这支原语存在的理由就是省步数").toContain("paths");
   });
 });
