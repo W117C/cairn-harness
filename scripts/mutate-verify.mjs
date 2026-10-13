@@ -11578,6 +11578,18 @@ const MUTATIONS = [
     expectFail: "★模型自己干坏事 ⇒ 不重拨（这是被度量的行为，不是故障）",
   },
   {
+    // ↓ 白名单少一枚（2026-10-13）：`cn:hy3` × B1 那趟模型诊断对了、方案批了，写盘前被 60s
+    //   静默掐断；而这张表不认 `停滞超时` ⇒ 那一趟既被算成「模型没做到」又不重拨。
+    //   两处是同一个洞（`retryVerdict` 与 `runValidity` 共用 `providerInterruptOf`）⇒ 一条锚点杀两处。
+    id: "provider-interrupt-whitelist-drops-stall",
+    src: "scripts/lib/eval-validity.ts",
+    test: "tests/eval-validity.test.ts",
+    desc: "白名单摘掉「停滞超时」⇒ 被对端静默掐断的趟次重新被算成「模型没做到」进分母" +
+      "（同一枚洞的另一半：`retryVerdict` 也不再重拨它）",
+    apply: (s) => s.replace("socket hang up|停滞超时/iu", "socket hang up/iu"),
+    expectFail: "起步后被「停滞超时」打断",
+  },
+  {
     id: "retry-wait-cap-dropped",
     src: "scripts/lib/eval-retry.ts",
     test: "tests/eval-retry.test.ts",

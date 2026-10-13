@@ -31,6 +31,26 @@ describe("判卷分母：环境打断不算数，模型失败照旧算数", () =
     expect(v.valid === false && v.why.startsWith(WHY_INTERRUPTED_PREFIX)).toBe(true);
   });
 
+  it("① 起步后被「停滞超时」打断 ⇒ 也判无效：对端一个字节都没发，那不是模型行为", () => {
+    // 实测动因（2026-10-13，`cn:hy3` × B1）：模型诊断对了、方案也被批准了，
+    // **写盘之前**连接静默 60 秒被看门狗掐断（事件流里那条 `error`：
+    // `GLM 停滞超时：60000ms 内无任何数据（对端挂起或网络黑洞）`）。
+    // 而白名单当时不认它 ⇒ 这一趟被算成「模型没做到」进了分母。
+    // 与 429 同一族：这一跑是被**外面**切断的，不是被度量的行为。
+    const stall = ["runLoop 抛错:GLM 停滞超时：60000ms 内无任何数据（对端挂起或网络黑洞）"];
+    const v = runValidity({ requests: 6 }, stall);
+    expect(v.valid).toBe(false);
+    expect(v.valid === false && v.why.startsWith(WHY_INTERRUPTED_PREFIX)).toBe(true);
+  });
+
+  it("★② 模型自己卡住不算环境打断：同一条链路上的 tool 超时／坏输出仍要算数", () => {
+    // 这条是上面那条的**反向对照**：白名单只认「runLoop 抛错 ＋ 传输层字样」这一形状，
+    // 工具层的超时（例如 run_shell 的墙钟）走的是 tool_result，不进 `fails` 的那一支；
+    // 而模型自己产出的坏输出必须照旧算数——否则这次修正就变成「把红跑藏起来」。
+    expect(runValidity({ requests: 6 }, ["runLoop 抛错:模型返回了无法解析的 tool_call"]).valid).toBe(true);
+    expect(runValidity({ requests: 6 }, ["verify 未通过/未跑", "run_shell 超时（60s）"]).valid).toBe(true);
+  });
+
   it("★② 模型行为失败（改了判卷面 / verify 没过）⇒ **算数**，不许被这条修正藏起来", () => {
     expect(runValidity({ requests: 20 }, ["改了判卷面"]).valid).toBe(true);
     expect(runValidity({ requests: 20 }, ["verify 未通过/未跑"]).valid).toBe(true);

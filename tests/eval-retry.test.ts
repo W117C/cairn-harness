@@ -35,6 +35,15 @@ describe("retryVerdict：只有 provider 侧打断值得再拨，且等待要有
     if (v.retry) expect(v.waitMs).toBe(RETRY_BASE_MS);
   });
 
+  it("★停滞超时同属 provider 侧打断 ⇒ 按基础等待再拨（不是「模型没做到」，值得重拨一次）", () => {
+    // 2026-10-13 实测：`cn:hy3` × B1 那一趟在写盘前被 60s 静默掐断 ⇒ 白名单不认它
+    // ⇒ 既不重拨（这一格）又被算成有效失败（`runValidity` 那一格）。两处同一个洞。
+    const STALL = ["runLoop 抛错:GLM 停滞超时：60000ms 内无任何数据（对端挂起或网络黑洞）"];
+    const v = retryVerdict(STALL, 1, { nowMs: NOW });
+    expect(v.retry).toBe(true);
+    if (v.retry) expect(v.waitMs).toBe(RETRY_BASE_MS);
+  });
+
   it("端点给了帽内的 reset ⇒ 等它给的时长，而不是自己猜一个", () => {
     const reset = NOW + 90_000;
     const v = retryVerdict(['runLoop 抛错:HTTP 429 X-RateLimit-Reset: ' + String(reset)], 1, { nowMs: NOW });

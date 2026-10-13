@@ -19,8 +19,16 @@ export interface RunFace {
   providerFace?: "真会话" | "剧本";
 }
 
-/** provider / 传输层错误的白名单。**只认这些**——模型自己干坏事的失败不许走这条。 */
-const PROVIDER_ERROR = /HTTP (?:429|5\d\d)\b|请求失败|rate limit|fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|socket hang up/iu;
+/** provider / 传输层错误的白名单。**只认这些**——模型自己干坏事的失败不许走这条。
+ *
+ *  `停滞超时` 是 2026-10-13 补的（`src/net.ts` 的 stallGuard 抛的原话：
+ *  `停滞超时：60000ms 内无任何数据（对端挂起或网络黑洞）`）。当日实测：
+ *  `cn:hy3` × B1 那一趟模型**诊断对了、方案也被批准了**，写盘之前连接静默 60 秒被看门狗掐断；
+ *  而这张表不认它 ⇒ 那一趟被算成「模型没做到」进了分母，既算数又不重拨。
+ *  与 429 同一族：这一跑是被**外面**切断的，不是被度量的行为。
+ *  ⚠️ 反向那半照旧：工具层的超时（run_shell 墙钟）走 `tool_result`、不进 `fails` 的这一支；
+ *  模型自己造的坏输出（`无法解析的 tool_call`）不含传输层字样 ⇒ 仍算数。 */
+const PROVIDER_ERROR = /HTTP (?:429|5\d\d)\b|请求失败|rate limit|fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|socket hang up|停滞超时/iu;
 
 export type Validity = { valid: true } | { valid: false; why: string };
 
