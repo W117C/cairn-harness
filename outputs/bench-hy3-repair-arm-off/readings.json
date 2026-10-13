@@ -1,0 +1,65 @@
+[
+ {
+  "r": {
+   "id": "B1-bugfix-crossfile",
+   "name": "B1-bugfix-crossfile",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "glm-5.2",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 0.811,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": null,
+   "toolCalls": 2,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 5,
+   "readsBeforeFirstWrite": 1,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": false,
+   "autoVerifyBeat": true,
+   "autoVerifyBeats": 1,
+   "verifyRecovery": "notRecovered",
+   "providerFace": "剧本",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 125,
+    "procPeak": 2,
+    "cpuMs": 526,
+    "samples": 2
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": false,
+    "exitCode": 1,
+    "output": "TAP version 13\n# Subtest: 折扣不是 20% 时同样要按券后金额收运费\nnot ok 1 - 折扣不是 20% 时同样要按券后金额收运费\n  ---\n  duration_ms: 0.952542\n  type: 'test'\n  location: '/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/loop-eval-uE2SuZ/work/tests/checkout.held.test.js:11:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    4200 !== 4800\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 4800\n  actual: 4200\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/loop-eval-uE2SuZ/work/tests/checkout.held.test.js:13:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.start (node:internal/test_runner/test:944:17)\n    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)\n  ...\n# Subtest: 多条商品行：看的是券后总额，不是原始总额\nnot ok 2 - 多条商品行：看的是券后总额，不是原始总额\n  ---\n  duration_ms: 0.130125\n  type: 'test'\n  location: '/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/loop-eval-uE2SuZ/work/tests/checkout.held.test.js:16:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    4000 !== 4600\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 4600\n  actual: 4000\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/loop-eval-uE2SuZ/work/tests/checkout.held.\n…[有界性：中段省略 2325 字]…\nTest.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: 无券且刚好包邮线原价\nok 8 - 无券且刚好包邮线原价\n  ---\n  duration_ms: 0.037083\n  type: 'test'\n  ...\n1..8\n# tests 8\n# suites 0\n# pass 4\n# fail 4\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 40.985958\n\n[exit code: 1]"
+   },
+   "assembly": "autoMemory:off-here autoVerify:same impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "071d0b52964f3146098e309bb45202deef0649b4",
+   "ranAt": "2026-10-13T08:10:00.393Z",
+   "maxSteps": 20,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "held-out 没过（可见测试绿了但隐藏验收不认 ⇒ 大概率是特殊分支，不是根因）〔exit=1〕"
+   ]
+  }
+ }
+]

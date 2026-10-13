@@ -1,0 +1,13 @@
+{
+ "headSha": "071d0b52964f3146098e309bb45202deef0649b4",
+ "dirty": 69,
+ "ranAt": "2026-10-13T08:10:00.393Z",
+ "maxSteps": 20,
+ "reps": 1,
+ "system": "base",
+ "arm": "base",
+ "model": "glm-5.2",
+ "tasks": [
+  "B1-bugfix-crossfile"
+ ]
+}

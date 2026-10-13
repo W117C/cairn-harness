@@ -1,0 +1,64 @@
+[
+ {
+  "r": {
+   "id": "B1-bugfix-crossfile",
+   "name": "B1-bugfix-crossfile",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "glm-5.2",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 1.041,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": null,
+   "toolCalls": 3,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 5,
+   "readsBeforeFirstWrite": 1,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": true,
+   "autoVerifyBeat": true,
+   "autoVerifyBeats": 2,
+   "verifyRecovery": "harnessOnly",
+   "providerFace": "剧本",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/checkout.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 203,
+    "procPeak": 3,
+    "cpuMs": 499,
+    "samples": 3
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": true,
+    "exitCode": 0,
+    "output": "TAP version 13\n# Subtest: 折扣不是 20% 时同样要按券后金额收运费\nok 1 - 折扣不是 20% 时同样要按券后金额收运费\n  ---\n  duration_ms: 0.761667\n  type: 'test'\n  ...\n# Subtest: 多条商品行：看的是券后总额，不是原始总额\nok 2 - 多条商品行：看的是券后总额，不是原始总额\n  ---\n  duration_ms: 0.056417\n  type: 'test'\n  ...\n# Subtest: 整单清零：券 100% 时仍要付运费\nok 3 - 整单清零：券 100% 时仍要付运费\n  ---\n  duration_ms: 0.077584\n  type: 'test'\n  ...\n# Subtest: 原价恰好差一分不到包邮线\nok 4 - 原价恰好差一分不到包邮线\n  ---\n  duration_ms: 0.039791\n  type: 'test'\n  ...\n# Subtest: 券后正好落在包邮线上：应当免运费\nok 5 - 券后正好落在包邮线上：应当免运费\n  ---\n  duration_ms: 0.041459\n  type: 'test'\n  ...\n# Subtest: 非整除折扣取整后仍是整数分\nok 6 - 非整除折扣取整后仍是整数分\n  ---\n  duration_ms: 0.06275\n  type: 'test'\n  ...\n# Subtest: 跨过包邮线的另一档折扣\nok 7 - 跨过包邮线的另一档折扣\n  ---\n  duration_ms: 0.034334\n  type: 'test'\n  ...\n# Subtest: 无券且刚好包邮线原价\nok 8 - 无券且刚好包邮线原价\n  ---\n  duration_ms: 0.031958\n  type: 'test'\n  ...\n1..8\n# tests 8\n# suites 0\n# pass 8\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 42.700916"
+   },
+   "assembly": "autoMemory:off-here autoVerify:same autoVerifyRepair:on-here impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "071d0b52964f3146098e309bb45202deef0649b4",
+   "ranAt": "2026-10-13T08:10:02.668Z",
+   "maxSteps": 20,
+   "reps": 1,
+   "arm": "repair"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ }
+]

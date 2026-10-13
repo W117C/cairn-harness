@@ -15348,3 +15348,51 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    要分清得给这一档加观测（例如把「流结束而没有 finish_reason」记成独立证据），本页不动它。
 7. **仍未证**：B2 那条隐藏用例在别的模型／别的指令下是否同样支配失败（n=9、单模型）；
    「叙述后停住」的成因；对照臂在自然命中时的真实收益。
+
+## 2026-10-13 · 第 470 页：给靶场剧本面加 `round_end` 哨兵（一份实现、两个消费者）——`autoVerifyRepair` 的分歧第一次成为**确定性**读数
+
+1. **动因（第 469 页自报的缺口）**：真模型面上量 `autoVerifyRepair`，6 趟对照臂里它**一次都没触发**
+   （「跑过 shell 之后模型收工」这个形状自然命中太少）⇒ 开关值不值那一倍成本量不出来。
+   而写不出这个形状是因为靶场剧本面按 `tool_call` 切轮（`takeRound`：一轮 = 到第一个 tool_call 为止）
+   ⇒ **纯文本轮只可能出现在剧本末尾**，后面接不了「修复轮」。第 469 页把这条路探清后没施工，
+   本页是它的下一笔。
+2. **抽出共享模块 `src/providers/round-marker.ts`（一份实现，两个消费者）**：`ROUND_END` /
+   `ScriptItem` / `isRoundEnd` / `takeMarkedRound`。此前这套哨兵切轮**只住在 `mock.ts`**，
+   靶场侧抄的是另一套 tool_call 切法——正是本仓点过名的「同族出口两份实现」。两条旧口径**逐字不变**
+   （都有判卷钉着，见第 5 条）：带哨兵按哨兵切（两边同一份）、不带哨兵的靶场剧本仍到第一个
+   tool_call 为止、mock 对无哨兵剧本仍整条一轮。
+3. **同笔修掉一个写这笔时踩到的静默降级**（`scripts/loop-eval.ts` 的 `pick`）：取值旗标此前
+   **只认空格形** ⇒ `--arm=repair` 被静默忽略、命令行上零出声。后果是硬的：
+   **第 469 页那批对照臂读数的 `arm` 字段被记成 `base`**（身份面少一维，两副臂会被配成同一张脸）。
+   那批读数的真身份在 `assembly` 字段（`autoVerifyRepair:on-here`），引用它们时不许只看 `arm`。
+   修法：两种写法都收（与 `scripts/mutate-shards.ts` 同一条惯例）；ON 臂的判卷直接用等号形
+   ⇒ 这条修复本身也进了判据（第 6 条的第三枚锚点）。
+4. **新 fixture `fixtures/bench/scripts/narration-stop/`（四轮剧本）**：
+   ① 读 `tests/checkout.test.js`；② `npm test 2>&1 | head -60`——**管道吞掉失败退出码 ⇒ `ok:true`**
+   ⇒ `wroteThisRun` 置位（收束闸补拍的前提），与真轨迹逐字同形；③ 纯文本「根因清楚了……
+   先提方案：」**无 tool_call**；④ 写 `src/checkout.js`（把运费判定挪到折扣之后）。
+   哨兵在每轮末尾，切轮结果在 `tests/gym-script.test.ts` 有五条判卷钉着。
+   旁证（本页现读）：两份留档事件流里 `round_end` 出现次数 **0/0**——哨兵没有落进 JSONL。
+5. **新判卷 `tests/loop-eval-repair-arm.test.ts`：同一份剧本跑 OFF/ON 两个臂，两向都断言**
+   （少任何一个方向，「永远开」或「永远关」都能全绿）：
+   - **OFF（产品缺省）**：`合计 0/1`、`verify 0→false`、`闸拍=1`、`changedFiles=[]`、隐藏面红
+     ——轮 ④ 根本不会被要到（`repair-branch` 不开就只在补一拍后收）。
+   - **ON（`--auto-verify-repair`，`--arm=repair`）**：`合计 1/1`、`verify 0→true`、`闸拍=2`、
+     `返修=闸补的绿`、`changedFiles=["src/checkout.js"]`、隐藏面绿。
+   事件流形状（OFF，原文）：`user_message → assistant_message → tool_call → tool_result →
+   assistant_message → tool_call → tool_result → assistant_message → verify_result`（收在红上）。
+6. **复证（全部本机实测）**：`typecheck` 0 报错；相关 **10 个判卷文件 95 passed**（含 mock 的旧锚点面
+   `mock-provider-rounds` 与生产入口的 `auto-verify-repair-runner`）；`mutate-verify --check-needles`
+   **1539 条（+3）：阻断 0、钉在飞文本 0**；三枚新锚点逐条实跑全部被正确杀死：
+   `gym-script-round-end-mode-dropped`（0.8s/2 拍）、`round-marker-marker-ignored`（0.6s/2 拍）、
+   `loop-eval-pick-equals-form-dropped`（8.6s/2 拍，这条跑的是 e2e 判卷）。
+7. **取料（与页同笔入库）**：`outputs/bench-hy3-repair-arm-off/` 与 `outputs/bench-hy3-repair-arm-on/`
+   （各含 `readings.json`／`run.json`／整条事件流，`--keep` 留档）。
+8. **这一页量到了什么、没量到什么（不许读过头）**：
+   - 量到了：**这个形状下，机制确实把一趟红救成绿**（多要一轮 + 第二拍），且分歧可复跑、零花费。
+   - 没量到：**真实模型下那一轮的成本**（剧本面零 token、零请求，成本只在真会话里出现——
+     约等于「多一次完整模型轮 + 多一拍 verify」）；**这个形状在野外的频率**（第 469 页 18 趟里
+     约 2/18 出现「叙述后停住」，样本太小）。
+   - **裁决仍不变：产品缺省保持关**。本页证的是机制有效（第 469 页那格从「量不出」变成「量得出」），
+     「值不值」要等真模型面上同时有频率与成本两个读数——那需要一个带凭据的跑批，
+     归用户裁，不由这把尺替用户翻（同 `--auto-verify` 装配面注释里那条纪律）。
