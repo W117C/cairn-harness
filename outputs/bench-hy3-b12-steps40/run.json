@@ -1,0 +1,13 @@
+{
+ "headSha": "31dad4df871c89a86e351f47d6448d51e9549e00",
+ "dirty": 80,
+ "ranAt": "2026-10-13T06:43:54.730Z",
+ "maxSteps": 40,
+ "reps": 1,
+ "system": "base",
+ "arm": "base",
+ "model": "cn:hy3",
+ "tasks": [
+  "B12-long-horizon"
+ ]
+}

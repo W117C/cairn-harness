@@ -1,0 +1,67 @@
+[
+ {
+  "r": {
+   "id": "B12-long-horizon",
+   "name": "B12-long-horizon",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "cn:hy3",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 89.431,
+   "requests": 40,
+   "tokensIn": 397204,
+   "tokensOut": 3508,
+   "cny": null,
+   "toolCalls": 51,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 214,
+   "readsBeforeFirstWrite": 3,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": false,
+   "autoVerifyBeat": true,
+   "autoVerifyBeats": 1,
+   "verifyRecovery": "notRecovered",
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/m01-clamp.js",
+    "src/m02-sum.js",
+    "src/m03-unique.js",
+    "src/m04-chunk.js",
+    "src/m05-titleCase.js",
+    "src/m06-parseIntSafe.js",
+    "src/m07-mean.js"
+   ],
+   "exitError": "agent loop 超过 maxSteps=40，强制中止",
+   "resources": {
+    "rssPeakMb": 260,
+    "procPeak": 3,
+    "cpuMs": 3153,
+    "samples": 179
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:same impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "31dad4df871c89a86e351f47d6448d51e9549e00",
+   "ranAt": "2026-10-13T06:43:54.730Z",
+   "maxSteps": 40,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:agent loop 超过 maxSteps=40，强制中止"
+   ]
+  }
+ }
+]
