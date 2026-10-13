@@ -344,8 +344,12 @@ worker 要联网只能回主会话发。
 
 内核质量很高、**产品面刚补上**的一棵树：strict 零报错，fail-closed 是设计意图而非事后补丁，
 变异测试的判红标准很硬。桌面层曾于 2026-09-27（`69fbb0d`）整体移除，2026-10-02 起以 M1 切片
-重新入库于 `apps/desktop/`（Electron + React + Vite），目前仍是早期形态：39 个 invoke 通道
-只接了 6 个，事件投影只覆盖 30 个事件类型中的 4 个，且**未进任何根门或 CI**。
+重新入库于 `apps/desktop/`（Electron + React + Vite），此后持续接线：50 个 invoke 通道（现读，
+判据在 `apps/desktop/tests/channels.test.ts` 的表长断言，改表不改数当场红）
+**全键接线**——`apps/desktop/src/main/channels.ts` 与 main 的 `wired` 表都是全键映射，少一行
+typecheck 当场红；桌面判卷与 `desktop-boundary-check` 已进 `GATES`/`CERT_GATES`，CI 也单跑
+`pnpm --filter cairn-desktop test`。产品形态仍早（终端/浏览器等面板为后端前置，见
+[apps/desktop/design/desktop-ui-spec.md](apps/desktop/design/desktop-ui-spec.md) §8）。
 存废与受众的裁决见 [docs/adr/0001-core-only-vs-desktop.md](docs/adr/0001-core-only-vs-desktop.md)。
 内核侧保持 electron-free，应用服务在 `src/main/`。
 
@@ -355,7 +359,7 @@ worker 要联网只能回主会话发。
 - `src/permissions/` — 权限策略
 - `src/providers/` — provider 适配器与模型注册表
 - `src/main/` — electron-free 的应用服务（装配根）
-- `apps/desktop/` — 桌面壳（Electron + React + Vite；独立构建与测试，不进根门）
+- `apps/desktop/` — 桌面壳（Electron + React + Vite；独立构建，判卷与边界闸已进根门与 CI）
 - `scripts/` — headless 闸（`pnpm gates` 全跑，清单在 `scripts/gate-manifest.ts`，即事实源）
 
 开发规则见 [AGENTS.md](AGENTS.md)；架构说明见 [docs/CODE-WIKI.md](docs/CODE-WIKI.md)。

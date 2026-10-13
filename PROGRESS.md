@@ -15657,3 +15657,84 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
 6. **仍未证（不许读成绿）**：① CI 表里那 8 项「未证」照旧是连网/凭据限制，不是通过；
    ② 第 477 页那三个仍未证项（别的长程任务、别的模型、生产使用率）不在本页范围；
    ③ 本页只认证 `6d55cb5`——之后每一次提交都要重新走这趟，凭证不继承。
+
+## 2026-10-13 · 第 479 页：运行中可沟通——发送队列接线（渲染层切片，零 core 改动；实时投喂仍不开）
+
+1. **动因**：优化方案里「最先投入的三件事」第一件＝运行中可沟通。本笔之前，活动会话一跑起来 Composer
+   整卡 disabled（App.tsx 的 `disabled={runningActive || …}`）——只能打断，不能继续交代事情
+   （想补一句「顺手把 README 也改了」得等本轮收束）。
+2. **口径（切到哪／不切到哪）**：运行中允许写与发——回车=入队，⌘/Ctrl+↩=入队并打断；本轮收束
+   （done/failed/cancelled 任一）后按 FIFO 自动派下一条；队列**按会话**持有（切走不丢、不串会话）。
+   **实时投喂（轮中把消息喂给模型）不开**：取消与门等待的边界都在轮界，轮中注入要另立安全接收边界——
+   本刀零 core 改动。**本轮失败（ok=false 或抛出）即停表**：剩余队列留表等用户处理，不被吞；
+   主动打断不算失败（收束后队列照常先派——「打断并发送」的语义就靠这条）。
+3. **实现（三个新面 ＋ 两处接线）**：
+   - `send-queue.ts`（新）：`takeQueued`／`promoteQueued`／`dropQueued` 三条队列语义，
+     顺序派发 `drainQueue`（收束后取队首续派、run 报 false 停表），整卡禁用唯一判据 `composerLocked`。
+   - `SendQueueStrip.tsx`（新）：队列条（文本＋引用数＋「打断并发送」＋移除），零逻辑。
+   - `App.tsx`：`Map<sessionId, QueuedSend[]>`（渲染层内存态）＋ `runOn` 走 `drainQueue`；
+     运行中发消息先在 ref 上判 runningSet 再入队，不起第二轮（同会话并发 run 会被 core 拒）。
+   - `Composer.tsx`：运行中入队钮（`Ic.clock`）与停止钮同场；权限档/模型选择器**维持运行中禁用**
+     （C-20/C-21 口径：下一轮生效的控件不在半程开口子）。
+   - 设计契约同步：`desktop-ui-spec.md` v2.17——§1.2 状态矩阵两行、C-18/C-22 状态表、§7 新增第 17 条。
+     规范里「门槛禁用」只保留澄清/方案门：主会话审批不落事件流（`approval_requested` 只归 worker），
+     AskGate 载荷无 sessionId ⇒ ask 归属不可知，锁它会误锁别的会话（与 C-14 卡面同源，留待后续）。
+4. **红-绿（判卷先写，两次真红各看过）**：`tests/send-queue.test.ts`（队列语义＋drainQueue 顺序/停表）
+   与 `tests/composer-running.test.tsx`（SSR 结构：运行中输入可用＋入队/打断同场、门槛占位、队列条三态）。
+   红态：①模块/组件不存在（import 失败两文件全红）；②门槛占位断言缺「等待你的决定…」（后补的一格）。
+   绿态现读（2026-10-13 22:50）：`pnpm --filter cairn-desktop test` **16 文件 159 条全绿**（145→159，＋14）、
+   `desktop-boundary-check` 绿；`pnpm typecheck` 与桌面 `tsc --noEmit` **0 条报错**；
+   真窗口冒烟 `pnpm --filter cairn-desktop smoke` **PASS in 3022 ms**（run ok；运行中模型选择器探针
+   仍读 disabled——本笔保留的口径被真窗口照着）。
+5. **旁带（同一动因的文档漂移，优化方案点名的那处）**：`README.md` 桌面段此前写「39 个 invoke 通道
+   只接了 6 个、未进任何根门或 CI」；现读 48 个 invoke 通道全键接线（`channels.ts` 与 main 的 `wired`
+   表都是全键映射，少一行 typecheck 红）、桌面判卷与边界闸在 `GATES`/`CERT_GATES`、CI 单跑
+   `pnpm --filter cairn-desktop test`。同笔更正（读数来源：`channels.ts` 现数＋`scripts/gate-manifest.ts`
+   ＋ workflow）。
+6. **仍未证（不许读成绿）**：① App 侧的入队/自动派发**没有单测**——本仓无 jsdom，交互面按既有纪律拆
+   「纯函数＋SSR 结构」两面；真窗口冒烟过了，但它不驱动「运行中排队」这条路径（脚本化一轮 3 秒收束，
+   没有可插队的窗口）；② 队列只在渲染层内存，重启即丢（设计口径：不承诺持久化）；
+   ③ 没有真实模型下的排队体验读数（排队后多久看到下一条开始、打断落点感知）。
+
+## 2026-10-14 · 第 480 页：队列 sidecar 会易主——删掉会话 JSONL 后，同名新会话继承别人没发完的话
+
+1. **动因**：第 479 页把发送队列从「渲染层内存」接到「会话 sidecar 落盘」上（恢复闭环），
+   落盘面姓新、生命周期由 `sessions.ts` 管。这一刀补的是它自己带出来的洞：**sidecar 与 JSONL
+   的生命周期没有一起收口**。
+2. **缺陷（可复现，读数在 `outputs/queue-orphan-480-2026-10-14/provenance.md`）**：
+   `createSession` 的撞名加序号只看 `stat(<root>/<id>.jsonl)`——**只看 JSONL，不看 `.queue.json`**。
+   ⇒ 会话 JSONL 被外部删掉（CLI／手工清理／崩溃半写）而 sidecar 留在盘上时，再建一个同名字的会话
+   会算出**同一个 id**，新会话的 `queueGet` 于是读到上一条会话没发完的消息。
+   复现实读（core 出口）：新建 id `会话`（同名字复用）、`readSessionQueue` 返回
+   `[{"text":"遗留","attachments":[]}]`。
+3. **为什么这不是"多显示几行"**：渲染层恢复闭环里，`App.tsx` 的 `openSession` 用 `queueGet`
+   读回、由 `resumeQueue` 把队首交给同一条 `runOn`——**队列头就是新一轮的第一句用户消息**。
+   易主的后果是把别人的待发消息当成自己的话发给模型（带附件时还带别人的引用路径）。
+4. **修法（一行，钉在生命周期该管的地方）**：`createSession` 建完空 JSONL 后显式清掉同名
+   `.queue.json`。口径是「队列属于那条已被删掉的会话，不随名字传承」——不给新会话留孤儿，
+   也不让它继承。`src/main/sessions.ts` 新增 1 行（＋5 行注释），**零 core 之外改动**。
+5. **红-绿（判卷先写，真红看过）**：新用例「孤儿 sidecar 不被同名新会话继承」
+   （`tests/sessions.test.ts`）。红态 `1 failed | 23 passed`，失败行 217：期望 `[]`、
+   实收 `[{text:"上一个会话没发完的"}]`。绿态现读 `24 passed (24)`。
+   **反向验证**：把那行换成注释 ⇒ `1 failed | 23 passed`（实测），证它不是死测试。
+6. **变异锚点（新判据必须进表）**：`sessions-queue-orphan-inherited`
+   （`scripts/mutate-verify.mjs`，＋11 行）。`--check-needles` 认到 **1555 条**（1554→1555），
+   本条在列；**当前状态「钉在飞文本 1 条」**——锚点行已入库、被锚的实现改动还没入库，
+   干净 HEAD 上它等价于空操作，**入库后自动消失**。⚠️ 不许靠改针脚去消这一格
+   （那等于废掉这条锚点要守的东西）。
+7. **旁带（同一动因的文档漂移，第 479 页那笔自己带出来的）**：`README.md` 桌面段写
+   「48 个 invoke 通道（现读）」，而 `channels.ts` 现读 **50**（第 479 页加了
+   `queueGet`/`queueSet` 两键，README 没跟着走）。已更正为 50 **并把判据指向判卷**
+   （`apps/desktop/tests/channels.test.ts` 的表长断言）——数字不再靠人手写，改表不改数当场红。
+   读数来源：`node --import tsx -e` 现读 `INVOKE_CHANNELS` 键数 = 50。
+8. **门与判卷（本页引用的读数逐字可查）**：核心判卷 **371 文件／5301 条全绿**（5300→5301，
+   ＋1＝本页新用例）、`pnpm typecheck` **0 条报错**、桌面 `tsc --noEmit` 0 条报错；
+   `pnpm --filter cairn-desktop test` **17 文件 170 条全绿** ＋ `desktop-boundary-check` 绿；
+   真窗口冒烟 `pnpm --filter cairn-desktop smoke` **PASS in 2505 ms**（含第 479 页那格
+   队列 IPC 往返探针）；`repo-hygiene-check` 三面全绿、`docs-check` 受检项全绿（UNVERIFIED=3 照旧）。
+9. **仍未证（不许读成绿）**：① `mutate-verify` **全表未跑**（1555 条 ≈ 20+ 分钟）
+   ⇒「整张变异表在 HEAD 上全杀」本页没有读数；② 真模型／生产行为未跑（无凭据）；
+   ③ **「运行中排队」那条路本页没有运行时读数**——需要一个可插队的窗口，
+   脚本化一轮 3 秒就收束了（第 479 页第 6 条同一格，本页没补上）；
+   ④ 桌面 kernel-host 那一趟复验里「复用 id」读成 `false`（旧会话已删、另存成带序号的新 id）
+   ⇒ 那趟**只证「正常新建不继承」，不构成修复证据**，修复证据是 core 出口那一趟。

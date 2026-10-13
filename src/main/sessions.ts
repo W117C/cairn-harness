@@ -6,7 +6,8 @@ import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "nod
 import { join } from "node:path";
 import type { AgentEvent } from "../events";
 import { createEventLog, replay } from "../events";
-import { tmpPathFor } from "../atomic-write";
+import { tmpPathFor, writeFileAtomic } from "../atomic-write";
+import { parseRunAttachment, type RunAttachmentReference } from "./run-attachments";
 import type { SessionMetadataRecord, SessionMetadataRepository } from "./session-metadata";
 
 /** 文件事实始终来自 JSONL；sidecar 字段只在确有 metadata 时合并，老会话不会被伪造成默认记录。 */
@@ -174,6 +175,130 @@ function sessionPath(root: string, id: string): string {
   return join(root, id + ".jsonl");
 }
 
+/** 发送队列 sidecar：未执行的用户消息不是 agent 业务事件，不写进 JSONL；独立原子 JSON
+ *  随会话文件同生命周期（rename/delete 跟随），重启后由 main 读回、显式恢复发送。 */
+export interface SessionQueueEntry {
+  text: string;
+  attachments: RunAttachmentReference[];
+}
+
+interface SessionQueueState {
+  version: 1;
+  items: SessionQueueEntry[];
+}
+
+const SESSION_QUEUE_VERSION = 1 as const;
+const SESSION_QUEUE_MAX_ITEMS = 100;
+const SESSION_QUEUE_MAX_TEXT = 100_000;
+const SESSION_QUEUE_MAX_TOTAL_TEXT = 1_000_000;
+const SESSION_QUEUE_MAX_ATTACHMENTS = 32;
+
+export class SessionQueueCorruptError extends Error {
+  constructor(filePath: string, reason: string) {
+    super(`发送队列损坏，已拒绝覆盖: ${filePath} (${reason})`);
+    this.name = "SessionQueueCorruptError";
+  }
+}
+
+function queuePath(root: string, id: string): string {
+  return sessionPath(root, id).replace(/\.jsonl$/, ".queue.json");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function validateSessionQueueEntry(raw: unknown, index: number): SessionQueueEntry {
+  if (!isRecord(raw)) throw new Error(`发送队列第 ${String(index + 1)} 条不是对象`);
+  const unknown = Object.keys(raw).filter((key) => key !== "text" && key !== "attachments");
+  if (unknown.length > 0) throw new Error(`发送队列第 ${String(index + 1)} 条未知字段: ${unknown.join(", ")}`);
+  if (typeof raw.text !== "string" || raw.text.trim() === "" || raw.text.length > SESSION_QUEUE_MAX_TEXT) {
+    throw new Error(`发送队列第 ${String(index + 1)} 条 text 非法（非空且 ≤${String(SESSION_QUEUE_MAX_TEXT)} 字符）`);
+  }
+  if (!Array.isArray(raw.attachments) || raw.attachments.length > SESSION_QUEUE_MAX_ATTACHMENTS) {
+    throw new Error(`发送队列第 ${String(index + 1)} 条 attachments 非法（数组且 ≤${String(SESSION_QUEUE_MAX_ATTACHMENTS)} 条）`);
+  }
+  const attachments: RunAttachmentReference[] = [];
+  for (const rawAttachment of raw.attachments) {
+    const parsed = parseRunAttachment(rawAttachment);
+    if (!parsed.ok) throw new Error(`发送队列第 ${String(index + 1)} 条 attachments: ${parsed.error}`);
+    attachments.push(parsed.value);
+  }
+  return { text: raw.text, attachments };
+}
+
+function validateSessionQueueItems(raw: unknown): SessionQueueEntry[] {
+  if (!Array.isArray(raw) || raw.length > SESSION_QUEUE_MAX_ITEMS) {
+    throw new Error(`发送队列条目非法（数组且 ≤${String(SESSION_QUEUE_MAX_ITEMS)} 条）`);
+  }
+  const items = raw.map((entry, index) => validateSessionQueueEntry(entry, index));
+  const total = items.reduce((n, item) => n + item.text.length, 0);
+  if (total > SESSION_QUEUE_MAX_TOTAL_TEXT) {
+    throw new Error(`发送队列总文本过长（≤${String(SESSION_QUEUE_MAX_TOTAL_TEXT)} 字符）`);
+  }
+  return items;
+}
+
+function validateSessionQueueState(raw: unknown): SessionQueueState {
+  if (!isRecord(raw) || raw.version !== SESSION_QUEUE_VERSION || !Object.prototype.hasOwnProperty.call(raw, "items")) {
+    throw new Error("根对象/version/items 结构非法");
+  }
+  return { version: SESSION_QUEUE_VERSION, items: validateSessionQueueItems(raw.items) };
+}
+
+/** 读发送队列；缺文件 = 空队列。损坏或非法结构 fail-visible，绝不静默清空。 */
+export async function readSessionQueue(root: string, id: string): Promise<SessionQueueEntry[]> {
+  const p = queuePath(root, id);
+  let text: string;
+  try {
+    text = await readFile(p, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text) as unknown;
+  } catch (error) {
+    throw new SessionQueueCorruptError(p, error instanceof Error ? error.message : String(error));
+  }
+  try {
+    return validateSessionQueueState(raw).items;
+  } catch (error) {
+    throw new SessionQueueCorruptError(p, error instanceof Error ? error.message : String(error));
+  }
+}
+
+/** 原子写发送队列；空数组删文件，避免空 sidecar 长期留在目录里。 */
+export async function writeSessionQueue(root: string, id: string, entries: readonly SessionQueueEntry[]): Promise<void> {
+  const items = validateSessionQueueItems(entries);
+  const p = queuePath(root, id);
+  if (items.length === 0) {
+    await rm(p, { force: true });
+    return;
+  }
+  const state: SessionQueueState = { version: SESSION_QUEUE_VERSION, items };
+  await writeFileAtomic(p, JSON.stringify(state, null, 2) + "\n");
+}
+
+/** 重命名会话时同步迁移队列 sidecar；源不存在 = false（幂等），目标冲突显式拒绝。 */
+async function moveSessionQueue(root: string, fromId: string, toId: string): Promise<boolean> {
+  const from = queuePath(root, fromId);
+  const to = queuePath(root, toId);
+  const sourceExists = await stat(from).then(() => true, (error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  });
+  if (!sourceExists) return false;
+  const targetExists = await stat(to).then(() => true, (error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  });
+  if (targetExists) throw new Error(`目标会话队列已存在: ${toId}`);
+  await rename(from, to);
+  return true;
+}
+
 /** 扫描会话目录：mtime 降序（最近在上），行数 = 非空行数。
  *  metadataById 只做已存在 sidecar 的合并；缺失键不会补造 pinned/archived/projectId/时间。 */
 export async function listSessions(
@@ -240,6 +365,10 @@ export async function createSession(
   await mkdir(root, { recursive: true });
   const file = join(root, id + ".jsonl");
   await writeFile(file, "", "utf8"); // 空文件：JSONL 即会话，0 行 = 空投影
+  // 新会话不许继承上一个同名会话的待发队列：JSONL 被外部删掉（CLI/手工/崩溃半写）而
+  // sidecar 留在盘上时，同名字会被 createSession 复用 ⇒ 别人的待发消息会变成新会话的第一句。
+  // 队列属于那条已被删掉的会话，不随名字传承——这里显式清掉，不留孤儿也不让它易主。
+  await rm(queuePath(root, id), { force: true }).catch(() => undefined);
   if (metadata) {
     try {
       await metadata.create(id, id);
@@ -284,13 +413,28 @@ export async function renameSession(
     }
   }
   await rename(from, to);
-  if (metadata) {
-    try {
-      await metadata.rename(oldId, newName, newName);
-    } catch (error) {
-      await rename(to, from).catch(() => undefined);
-      throw error;
+  let queueMoved = false;
+  try {
+    queueMoved = await moveSessionQueue(root, oldId, newName);
+    if (metadata) await metadata.rename(oldId, newName, newName);
+  } catch (error) {
+    const rollbackErrors: unknown[] = [];
+    if (queueMoved) {
+      try {
+        await moveSessionQueue(root, newName, oldId);
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError);
+      }
     }
+    try {
+      await rename(to, from);
+    } catch (rollbackError) {
+      rollbackErrors.push(rollbackError);
+    }
+    if (rollbackErrors.length > 0) {
+      throw new AggregateError([error, ...rollbackErrors], `重命名会话失败且回滚不完整: ${oldId}`);
+    }
+    throw error;
   }
   return newName;
 }
@@ -303,7 +447,21 @@ export async function deleteSession(
 ): Promise<void> {
   const source = sessionPath(root, id);
   const staged = tmpPathFor(source);
+  const queueSource = queuePath(root, id);
+  const queueStaged = tmpPathFor(queueSource);
   await rename(source, staged); // 先原子移出列表；清理失败可原名恢复
+  let queueStagedExists = false;
+  try {
+    try {
+      await rename(queueSource, queueStaged);
+      queueStagedExists = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  } catch (error) {
+    await rename(staged, source).catch(() => undefined);
+    throw error;
+  }
   let record: SessionMetadataRecord | undefined;
   try {
     record = metadata ? await metadata.find(id) : undefined;
@@ -323,11 +481,20 @@ export async function deleteSession(
     } catch (rollbackError) {
       rollbackErrors.push(rollbackError);
     }
+    if (queueStagedExists) {
+      try {
+        await rename(queueStaged, queueSource);
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError);
+      }
+    }
     if (rollbackErrors.length > 0) {
       throw new AggregateError([error, ...rollbackErrors], `删除会话失败且回滚不完整: ${id}`);
     }
     throw error;
   }
+  // JSONL 已确认删除后，队列暂存文件是纯清理面；失败不把已完成的删除反签成失败。
+  if (queueStagedExists) await rm(queueStaged, { force: true }).catch(() => undefined);
 }
 
 /** 空会话文件存在性检查。 */

@@ -1083,6 +1083,17 @@ const MUTATIONS = [
     expectFail: "重命名撞名被拒：目标会话内容不被覆盖",
   },
   {
+    id: "sessions-queue-orphan-inherited",
+    src: "src/main/sessions.ts",
+    test: "tests/sessions.test.ts",
+    desc: "新建会话不再清孤儿 sidecar（JSONL 被外部删掉后，同名新会话继承上一条会话没发完的队列 —— 别人的待发消息会被当成新会话的话发出去）",
+    apply: (s) => s.replace(
+      "  await rm(queuePath(root, id), { force: true }).catch(() => undefined);",
+      "  // 变异：不清孤儿 sidecar",
+    ),
+    expectFail: "孤儿 sidecar 不被同名新会话继承（JSONL 被外部删掉后留下的队列不许易主）",
+  },
+  {
     id: "sessions-meta-head-strict",
     src: "src/main/sessions.ts",
     test: "tests/sessions.test.ts",

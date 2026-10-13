@@ -20,9 +20,11 @@ import {
   listSessions,
   listSidechatSessions,
   pathOf,
+  readSessionQueue,
   readSessionEvents,
   renameSession,
   sidechatEventsPath,
+  writeSessionQueue,
 } from "../src/main/sessions";
 import { createEventLog } from "../src/events";
 
@@ -153,6 +155,66 @@ describe("会话名边界与重命名守卫（补齐：路径穿越与覆盖式�
     expect(hit?.origin).toBeUndefined();
     expect(hit?.automationId).toBeUndefined();
     expect(hit?.automationName).toBeUndefined();
+  });
+});
+
+describe("会话发送队列 sidecar（重启恢复的数据面）", () => {
+  const queuePath = (id: string): string => pathOf(root, id).replace(/\.jsonl$/, ".queue.json");
+
+  it("写入后可跨模块实例读回；空队列清掉文件", async () => {
+    const id = await createSession(root, "排队会话");
+    await writeSessionQueue(root, id, [
+      { text: "第一条", attachments: [] },
+      { text: "第二条", attachments: [{ path: "src/a.ts", kind: "file", explicit: true }] },
+    ]);
+    expect(await readSessionQueue(root, id)).toEqual([
+      { text: "第一条", attachments: [] },
+      { text: "第二条", attachments: [{ path: "src/a.ts", kind: "file", explicit: true }] },
+    ]);
+    await writeSessionQueue(root, id, []);
+    expect(await readSessionQueue(root, id)).toEqual([]);
+    await expect(stat(queuePath(id))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("重命名跟随队列 sidecar；删除同时清掉队列", async () => {
+    const id = await createSession(root, "旧队列名");
+    await writeSessionQueue(root, id, [{ text: "重启后继续", attachments: [] }]);
+    await renameSession(root, id, "新队列名");
+    expect(await readSessionQueue(root, "新队列名")).toEqual([{ text: "重启后继续", attachments: [] }]);
+    await expect(stat(queuePath(id))).rejects.toMatchObject({ code: "ENOENT" });
+    await deleteSession(root, "新队列名");
+    expect(await readSessionQueue(root, "新队列名")).toEqual([]);
+    await expect(stat(queuePath("新队列名"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("损坏队列 fail-visible，不静默当空队列", async () => {
+    const id = await createSession(root, "坏队列");
+    await writeFile(queuePath(id), "{not-json", "utf8");
+    await expect(readSessionQueue(root, id)).rejects.toThrow(/发送队列损坏/);
+  });
+
+  it("非法条目 fail-closed：空文本、未知字段、坏附件都不落盘", async () => {
+    const id = await createSession(root, "坏条目");
+    await expect(writeSessionQueue(root, id, [{ text: " ", attachments: [] }])).rejects.toThrow(/text/);
+    await expect(
+      writeSessionQueue(root, id, [{ text: "x", attachments: [], extra: true } as never]),
+    ).rejects.toThrow(/未知字段/);
+    await expect(
+      writeSessionQueue(root, id, [{ text: "x", attachments: [{ path: "", kind: "file", explicit: true }] }]),
+    ).rejects.toThrow(/attachments/);
+    expect(await readSessionQueue(root, id)).toEqual([]);
+  });
+
+  it("孤儿 sidecar 不被同名新会话继承（JSONL 被外部删掉后留下的队列不许易主）", async () => {
+    const id = await createSession(root, "易主会话");
+    await writeSessionQueue(root, id, [{ text: "上一个会话没发完的", attachments: [] }]);
+    // 外部删除只删了 JSONL（CLI / 手工清理 / 崩溃半写），sidecar 留在盘上：
+    // 此时新建一个同名字的会话，id 会复用同一个 sidecar 路径。
+    await rm(pathOf(root, id), { force: true });
+    const again = await createSession(root, "易主会话");
+    expect(again).toBe(id);
+    // 新会话是全新的空会话：读到别人的待发消息会把「别人的话」当成自己的话发出去。
+    expect(await readSessionQueue(root, again)).toEqual([]);
   });
 });
 
