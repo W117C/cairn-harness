@@ -143,6 +143,20 @@ const MUTATIONS = [
     expectFail: "ctx.sessionId 透进 notify 载荷（卡的会话归属）；缺省 = 键缺席而非 undefined 属性",
   },
   {
+    id: "ask-card-owner-not-scoped",
+    src: "apps/desktop/src/renderer/send-queue.ts",
+    test: "apps/desktop/tests/send-queue.test.ts",
+    // 桌面层第一批锚点：renderer 此前在变异表里一条都没有（1556 条尽数落在 src/ 与 scripts/）。
+    // 能进表是因为 runTest 现在按锚点自带的 config 跑（桌面是独立 vitest 配置）。
+    config: "apps/desktop/vitest.config.ts",
+    desc: "审批卡归属判定退回「来者不拒」（别人的卡画在自己头上——第 481 页修的那个串台面的渲染层半边）",
+    apply: (s) => s.replace(
+      '  if (sid === "") return true; // 未知 ⇒ 沿用旧行为，不猜也不吞\n  return sid === (activeId ?? "");',
+      "  return true;",
+    ),
+    expectFail: "归属已知：只认本会话那张卡，别人的卡不上屏（此前是渲染最后到达的那张）",
+  },
+  {
     id: "clarify-submit-unknown",
     src: "src/agent/gates.ts",
     test: "tests/clarify.test.ts",
@@ -8578,8 +8592,8 @@ const MUTATIONS = [
     test: "tests/mutate-verify-gates.test.ts",
     desc: "runTest 不再记这一次的时间 ⇒ 每个位置的中位整个消失，#37 的分母退回到「拿文件时长乘次数」那种推（这条咬的是取料源头，上一条咬的是接线出口）",
     apply: (s) => s.replace(
-      "  const started = Date.now();\n  const args = [VITEST,",
-      "  const args = [VITEST,",
+      "  const started = Date.now();\n  // 判卷配置跟着锚点走",
+      "  // 判卷配置跟着锚点走",
     ),
     expectFail: "接线：汇总那一行吃的是 runner 自己那份 runsMs，且每个出口都带账本（表与实现同文件 ⇒ 钉跨行正则，规则 236）",
   },
@@ -14967,9 +14981,12 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
  *  实测单价从「宿主时长 ×3」的 8.0s/拍降到 0.14s/拍（同一棵树、同一份宿主、复测两次：8.0/8.5s vs 0.136/0.143s）。
  *  ⚠️ 代价是 `-t` 选不中时 vitest **退出码 0**、全部 skipped——那一条拍什么都没测，所以 `selected` 必须回传，
  *  由调用侧把「选中 0 条」判红（规则 246）。 */
-function runTest(testRel, pattern) {
+function runTest(testRel, pattern, configRel) {
   const started = Date.now();
-  const args = [VITEST, "run", "--pool=threads", "--config", "tests/vitest.config.ts", testRel];
+  // 判卷配置跟着锚点走：桌面层是**独立 vitest 配置**（apps/desktop/vitest.config.ts，
+  // environment: node、include 只收 tests/**），拿核心那份去跑它 ⇒ 一条都选不中、退出码 0，
+  // 于是任何桌面锚点都会读成「变异存活」。缺省仍是核心那份（现有 1556 条行为不变）。
+  const args = [VITEST, "run", "--pool=threads", "--config", configRel ?? "tests/vitest.config.ts", testRel];
   if (typeof pattern === "string" && pattern !== "") args.push("--testNamePattern=" + escapeTitlePattern(pattern));
   try {
     const out = execFileSync(process.execPath, args,
@@ -15110,7 +15127,7 @@ function verifyEntry(m) {
      *    被重试掉的第一次不许从读数里消失——否则「每条实际付了几拍」又变回一个乘数。
      *  载不动（判卷 import 不到的东西没入库）不是"基线不绿"——那是量不了（第 143 页）。 */
     const baseRun = judgeWithRetry(() => {
-      const r = runTest(m.test, pattern);
+      const r = runTest(m.test, pattern, m.config);
       note("基线", r);
       return r;
     });
@@ -15133,7 +15150,7 @@ function verifyEntry(m) {
     writeFileSync(srcAbs, mutated);
 
     // ③ 突变后必须红，且红在期望的那条用例上
-    const hit = runTest(m.test, pattern);
+    const hit = runTest(m.test, pattern, m.config);
     note("突变", hit);
     writeFileSync(srcAbs, original); // 尽早还原
     inFlight = null;
