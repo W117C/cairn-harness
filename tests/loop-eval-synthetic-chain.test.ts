@@ -72,7 +72,10 @@ describe("离线合成面：SWE-bench 那两半尺子第一次跑出读数", () 
     const r = firstReading(green, "全绿那趟");
     expect(r["providerFace"]).toBe("剧本");
     const ns = namedOf(r);
-    expect(ns.state).toBe("pass");
+    // 失败时带上取料面本身（2026-10-12 CI 自评：本地全绿、CI 两连红，而断言只说
+    // "expected 'unreadable' to be 'pass'" ⇒ 看不出是没跑测试、输出只剩噪音、还是解析换了格式。
+    // 那三种的修法完全不同，所以红的时候必须把 sources 与逐名原文一起交出来。
+    expect(ns.state, "逐名这一格的取料面：" + JSON.stringify(ns.sources)).toBe("pass");
     expect(ns.notGreen).toEqual([]);
     expect(ns.broken).toEqual([]);
     expect(ns.sources).toHaveLength(1);
@@ -82,7 +85,7 @@ describe("离线合成面：SWE-bench 那两半尺子第一次跑出读数", () 
   it("同一副装配换一条剧本：目标转绿而「该保住的」坏了一条 ⇒ broken 点名它、notGreen 仍为空", () => {
     expect(broken.status, broken.out.slice(-600)).toBe(0);
     const ns = namedOf(firstReading(broken, "改坏那一趟"));
-    expect(ns.state).toBe("fail");
+    expect(ns.state, "逐名这一格的取料面：" + JSON.stringify(ns.sources)).toBe("fail");
     expect(ns.notGreen, "「该转绿的没绿」这一格没坏就不许报它").toEqual([]);
     expect(ns.broken).toEqual(["券后价不为负且总价含运费"]);
     // 分辨力证人：这一趟退出码也是红的，但它说不出「是哪条、哪一种坏」——那两句话只在逐名这一格里。
