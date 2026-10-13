@@ -1631,6 +1631,38 @@ const MUTATIONS = [
     apply: (s) => s.replace("      i += 1; // 这一轮到 tool_call 为止，剩下的下轮再给\n", "      // 游标停在 tool_call 上，不前进\n"),
     expectFail: "切到剧本跑完不丢条、不重复：逐轮串起来恰等于原剧本",
   },
+  // ↓ 第 470 页：靶场剧本面加 `round_end` 哨兵（把「跑过 shell 之后模型收工」那一拍
+  //   钉成确定性输入，`autoVerifyRepair` 才有可复跑的分歧）。三枚针各钉一跳：
+  //   靶场这一侧的模式开关、共享切轮函数的边界判定、以及取值旗标的等号形（写这笔时踩到的静默降级）。
+  {
+    id: "gym-script-round-end-mode-dropped",
+    src: "src/agent/gym/script.ts",
+    test: "tests/gym-script.test.ts",
+    desc: "靶场这一侧不再按哨兵切轮（带哨兵的剧本退回旧口径）⇒ 中间那个纯文本轮不存在：" +
+      "`--scripted=` 面又写不出「收工那一拍」，修复臂的分歧不可再见",
+    apply: (s) => s.replace("  if (script.some(isRoundEnd)) return takeMarkedRound(script, cursor);", "  if (false) return takeMarkedRound(script, cursor);"),
+    expectFail: "中间那个纯文本轮单独成轮",
+  },
+  {
+    id: "round-marker-marker-ignored",
+    src: "src/providers/round-marker.ts",
+    test: "tests/gym-script.test.ts",
+    desc: "共享切轮函数不再在哨兵处收轮（哨兵被当成模型输出吐给 loop：落进 JSONL 就是一条假事件）",
+    apply: (s) => s.replace("    if (isRoundEnd(item)) {", "    if (false) {"),
+    expectFail: "中间那个纯文本轮单独成轮",
+  },
+  {
+    id: "loop-eval-pick-equals-form-dropped",
+    src: "scripts/loop-eval.ts",
+    test: "tests/loop-eval-repair-arm.test.ts",
+    desc: "取值旗标退回只认空格形 ⇒ `--arm=repair` 被静默忽略、对照臂记成 `arm: base`" +
+      "（身份面少一维，两副臂会被配成同一张脸——2026-10-13 那批读数正是这么被记错的）",
+    apply: (s) => s.replace(
+      "  const eq = flag + \"=\";\n  const withEq = argv.find((a) => a.startsWith(eq));\n  if (withEq !== undefined) return withEq.slice(eq.length);\n",
+      "",
+    ),
+    expectFail: "红拍之后再要一轮 ⇒ 拿到修复轮",
+  },
   {
     id: "gym-probe-transport-drains-all",
     src: "src/agent/gym/probe.ts",

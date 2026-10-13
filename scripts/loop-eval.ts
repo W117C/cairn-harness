@@ -68,7 +68,14 @@ import { BASE_SYSTEM } from "../src/main/agent-runner";
 import { stuckActionOf, stuckObservationOf } from "../src/agent/stuck";
 
 const argv = process.argv.slice(2);
+/** 取值旗标：**两种写法都收**（`--flag=值` 与 `--flag 值`）——与 `scripts/mutate-shards.ts` 同一条惯例。
+ *  为什么补等号形（2026-10-13 第 470 页）：此前只认空格形 ⇒ `--arm=repair` 被**静默忽略**，
+ *  那一批读数把对照臂记成了 `arm: base`（身份面因此少了一维、两副臂会被配成同一张脸），
+ *  而命令行上没有任何出声。静默降级正是本仓最忌的形状：要么收下它，要么报错，不许装作没看见。 */
 const pick = (flag: string, dflt: string): string => {
+  const eq = flag + "=";
+  const withEq = argv.find((a) => a.startsWith(eq));
+  if (withEq !== undefined) return withEq.slice(eq.length);
   const i = argv.indexOf(flag);
   return i < 0 || argv[i + 1] === undefined ? dflt : String(argv[i + 1]);
 };

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import type { AgentEvent } from "../events";
-import type { ModelOutput, Provider } from "./index.js";
+import type { Provider } from "./index.js";
+import { ROUND_END, takeMarkedRound, type ScriptItem } from "./round-marker.js";
 
 // 演示通道：M0A_MOCK_DELTA=1 时把剧本里的 assistant_message 拆成 assistant_delta 逐段吐出，
 // 走与真流式完全相同的 delta 事件管线（合并→上屏）。默认关闭，M0 事件流逐字节不变。
@@ -10,37 +11,6 @@ const DELTA_PACE_MS = 120; // 演示节奏：人眼可见的逐字上屏
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** 装配期哨兵：剧本用它说「这一轮到这儿结束，但会话还没完」。
- *  为什么需要：真 provider 的流自己会结束，而一条 JSONL 剧本没有「轮」这个概念——
- *  不写哨兵时整条剧本就是一轮（= 改前语义）。有了它才谈得上「第 2 轮」，而 harness 侧长在
- *  轮界上的那几件事（收束闸补一拍、拍红后再要一轮去修、逐轮上下文增长/压缩/跨轮保持目标）
- *  在「只有一次请求」的通道上**结构不可达**：收束闸的第二拍要求「上一拍之后又改过盘」，
- *  只有一轮的会话永远给不出这一位。
- *  它**不是模型输出**：切轮时吃掉、绝不吐给 loop（吐出去就是一条假事件，会落 JSONL 与所有投影面）。
- *  剧本纪律：哨兵跟在它要收的那一条输出**之后**。 */
-export const ROUND_END = "round_end";
-type RoundMarker = { readonly type: typeof ROUND_END };
-type ScriptItem = ModelOutput | RoundMarker;
-const isRoundEnd = (item: ScriptItem): item is RoundMarker => item.type === ROUND_END;
-
-/** 纯函数：从 cursor 起取一轮 = 到下一个哨兵为止（吃掉哨兵，不含它）；没有哨兵就取到剧本末尾。
- *  为什么边界只由哨兵决定、不学靶场在 tool_call 处切（`src/agent/gym/script.ts`）：真 provider
- *  一轮可以发**好几个** tool_call（会话沉淀就是「一轮里 N 条 remember ⇒ 合并成一次审批」），
- *  按 tool_call 切会把同一轮劈成 N 轮——那是靶场自己的记账纪律，不是剧本格式的义务。 */
-function takeMarkedRound(script: readonly ScriptItem[], cursor: number): { outputs: ModelOutput[]; next: number } {
-  const outputs: ModelOutput[] = [];
-  let i = cursor;
-  for (; i < script.length; i++) {
-    const item = script[i];
-    if (isRoundEnd(item)) {
-      i += 1; // 哨兵吃掉：本轮到此结束
-      break;
-    }
-    outputs.push(item);
-  }
-  return { outputs, next: i };
 }
 
 // 从 fixture JSONL 预录序列创建 mock provider（统一流式接口）：

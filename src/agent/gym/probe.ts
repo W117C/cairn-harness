@@ -16,6 +16,7 @@ import { createGlmSessionProvider, sessionToolSpecs } from "../glm-session";
 import { loadScriptOutputs, takeRound } from "./script";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../../providers/glm";
 import type { ModelOutput, Provider } from "../../providers";
+import type { ScriptItem } from "../../providers/round-marker";
 import type { AgentEvent } from "../../events";
 import type { PermissionMode } from "../../permissions";
 
@@ -103,7 +104,7 @@ export function createProbeTransport(
    *  缺省不传 ⇒ 与旧行为逐字一致（`AssemblyTurn` 的形状、基线 JSON 都不变）。 */
   onLayer?: (turn: number, layer: string) => void,
 ): typeof streamGlm {
-  let script: ModelOutput[] | null = null;
+  let script: ScriptItem[] | null = null;
   let cursor = 0;
   let turn = 0;
   return async function* (messages, _opts, tools) {
