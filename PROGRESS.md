@@ -15515,3 +15515,27 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    一起动就把"修安全问题"换成"换半个工具链"，回归面与收益不成比例 ⇒ 本页只修安全面；
    真要动那批，按本页同样四道判据另开一笔。
 8. **仍未做**：GitHub 侧的告警数是否随之清零，要等这次 push 之后 GitHub 重算（落库本页时看一次）。
+
+## 2026-10-13 · 第 474 页：业主那句"不设置为公开"被违反过——仓库当时是 public；已改回 private，并做了密钥面取证
+
+1. **怎么发现的**：第 473 页落库后去核 GitHub 侧的告警重算了没有，顺手 `gh repo view` 读默认分支，
+   回显 `private=false visibility=PUBLIC`。而业主的原话是「去 github 新建一个仓库把项目推送过去，
+   **不设置为公开**」。⇒ 这一格不是"配置偏好"，是**授权面的违反**：先修，再谈别的。
+2. **修**：`gh repo edit W117C/cairn-harness --visibility private --accept-visibility-change-consequences`，
+   复读 `{"private":true,"visibility":"private"}`。默认分支是 `zcode`（Dependabot 扫的就是它）。
+3. **密钥面取证**（既然公开过，就得按"可能被人 clone 过"处理）：
+   - 业主给的那枚本地端点 key（`29f357a99491356da201aef6285b9717`）在**当前树与全历史**里 0 命中
+     （`git grep` 与 `git log --all -S` 各跑一次）。
+   - 通用凭据形状扫描（`sk-[A-Za-z0-9]{20,}`／`ghp_`／`github_pat_`／`AKIA`）命中的，全是仓库里
+     早就备案的**演练假密钥**（`sk-abcdefghijklmnopqrstuvwxyz012345` 那一族）与扫描规则自身的字面。
+   - `127.0.0.1:7863` 只出现在文档里，且带 `<key>` 占位。
+   ⇒ **无需轮换任何真实凭据**。前提要说清楚：本页扫的是**当下**的全历史；若这期间别的会话往
+     别处推过真 key，那不在本页的取料面里。
+4. **暴露面读数**（能取到的只有这些）：`forks_count=0`、`network_count=0`、0 star／0 watch、
+   `open_issues=0`、`created_at=2026-10-12T15:54:13Z`。**"什么时候变成 public 的"取不到**——
+   events 接口没回 `PublicEvent` ⇒ 这一格如实记成"未取到"，不拿"应该没别人看过"当读数。
+5. **Dependabot 重算**：告警按**默认分支**算，第 473 页那笔已经在默认分支上；push 之后 GitHub 侧
+   仍报 57（重算有延迟）⇒ 这一格记成"待下一次扫描复读"。
+6. **顺带记两格配置**（免得下一个人以为它们是自动的）：Dependabot **security updates 是关的**
+   （`automated-security-fixes.enabled=false`）——本仓的依赖升级是手写一笔、走第 473 页那四道判据；
+   以及"谁把它改成 public 的"没有答案，本页只记事实与修复，不猜成因。
