@@ -79,7 +79,14 @@ describe("离线合成面：SWE-bench 那两半尺子第一次跑出读数", () 
     expect(ns.notGreen).toEqual([]);
     expect(ns.broken).toEqual([]);
     expect(ns.sources).toHaveLength(1);
-    expect(ns.sources[0]).toMatchObject({ format: "node-test-tap", tests: 3, carried: true, complete: true });
+    // format 认**两种**：`node --test` 按 stdout 是不是 TTY 选 reporter——管道 ⇒ tap，TTY ⇒ spec。
+    // GitHub Actions 给每个 step 分一个 PTY ⇒ CI 上永远是 spec，本地永远是 TAP。
+    // 判据要的是「逐名读到了 3 条、都带进来了、派生完整」，那一格与用哪种 reporter 无关；
+    // 把格式钉成一种，等于让这条判据在另一种终端下必红（2026-10-12 CI 上正是这么连红六趟的）。
+    expect(ns.sources[0]).toMatchObject({
+      format: expect.stringMatching(/^node-test-(tap|spec)$/u),
+      tests: 3, carried: true, complete: true,
+    });
   });
 
   it("同一副装配换一条剧本：目标转绿而「该保住的」坏了一条 ⇒ broken 点名它、notGreen 仍为空", () => {
@@ -128,7 +135,9 @@ describe("离线合成面：SWE-bench 那两半尺子第一次跑出读数", () 
       { cwd: ROOT, encoding: "utf8", timeout: 90_000 });
     expect(r.status, "起点态这条命令必须是红的（红→绿才是这一格要量的事）").not.toBe(0);
     const parsed = parseTestResults((r.stdout ?? "") + "\n" + (r.stderr ?? ""));
-    expect(parsed.format).toBe("node-test-tap");
+    // 这一支是 spawnSync（管道）⇒ 本地拿到 TAP；同一条判据在 CI 的 PTY 下会拿到 spec。
+    // 判的是「三条名字与红绿读对了」，与 reporter 无关（理由同上面那条 format 断言）。
+    expect(parsed.format).toMatch(/^node-test-(tap|spec)$/u);
     expect(parsed.tests.map((t) => [t.name, t.outcome])).toEqual([
       ["券后过线免运费", "failed"],
       ["原价未过线收运费", "passed"],
