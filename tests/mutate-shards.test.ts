@@ -441,7 +441,10 @@ describe("编排器接线：合并层不是挂在墙上的仪表", () => {
     const base = "judge-e2e-" + String(process.pid);
     try {
       const r = runEntry([`--trees=${wt.path}`, `--lock-tag-base=${base}`, "shard-plan-missing-hardcoded"], wt.path);
-      expect([0, 1]).toContain(r.status); // 杀没杀掉都由机器那一行说，这里只验「取料到、跑起来了、原文落了盘」
+      // 2026-10-12 CI 自评：本地全绿、CI 三连红，而断言只说 "expected [ +0, 1 ] to include 2" ⇒
+      // 看不出编排器是**为什么**拒跑（脏树／名单空／id 不在表上／宿主跨片，四种修法完全不同）。
+      // 所以红的时候把那一拍的原文一起交出来（判据本身一字未动）。
+      expect([0, 1], "编排器这一拍的原文：\n" + r.out.slice(-800)).toContain(r.status);
       const log = join(tmpdir(), `mutate-shards-${base}-0.log`);
       const text = readFileSync(log, "utf8");
       expect(text).toContain("变异验证：1 条");

@@ -1133,7 +1133,11 @@ describe("按标题选跑法：选中几条必须被读出来", () => {
         { cwd: root, encoding: "utf8", env: { ...process.env, TERM: "dumb" } });
       return (r.stdout ?? "") + (r.stderr ?? "");
     };
-    expect(selectedTestCount(run([`--testNamePattern=${pat}`])), "等号写法要真选中那一条").toBe(1);
+    // 2026-10-12 CI 自评：本地全绿、CI 三连红，而断言只说 "expected null to be 1" ⇒
+    // 看不出是内层 vitest 没起来、选择子没匹配上、还是输出被截断。这三种修法完全不同，
+    // 所以红的时候把内层那一拍的末尾原文一起交出来（判据本身一字未动）。
+    const eqOut = run([`--testNamePattern=${pat}`]);
+    expect(selectedTestCount(eqOut), "等号写法要真选中那一条\n--- 内层 vitest 末尾原文 ---\n" + eqOut.slice(-800)).toBe(1);
     expect(selectedTestCount(run(["-t", pat])), "空格写法被当成旗标 ⇒ 这一拍没跑，读数必须是「没量到」而不是 0").toBeNull();
   });
 
