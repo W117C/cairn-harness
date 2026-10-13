@@ -15477,4 +15477,7 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    探针也是代码**，`node --import tsx` 只剥类型不查类型，所以那条 `ra[k]`本机跑得好好的、CI 才拦下来。
    修法＝按类型化的键比（`Object.keys(ra) as (keyof typeof ra)[]`），顺手给 `stage-profile.mts` 的 4 条
    TS7006 补上显式标注（那一族门按设计不纳，但没有理由留着）。复跑 `evidence-typecheck-check` 绿。
-9. **仍未证**：CI 上修复后的实测耗时——下一趟 push 里读，落库本页时补。
+9. **CI 实测（`036d5f6c`，runner 38377232204，整趟 success）**：`tests/prose-needle-scan.test.ts`
+   **96 条 5 050 ms**（修复前同一支文件 27 938 ms／上限 30 000 ms）⇒ 那一格的余量从 7% 变成约 6 倍，
+   CI 全量 371 文件绿、desktop 145 条绿、25 道门绿。**本页到此收口**：假红的根因是单价，
+   现在是单价被修掉、判据一条没动、锚点四枚把新拆法钉住。
