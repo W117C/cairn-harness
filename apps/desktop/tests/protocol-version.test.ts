@@ -36,6 +36,6 @@ describe("协议版本握手接线（§3.5/§12）", () => {
   });
 
   it("版本事实源单点：桌面侧不许另抄一份版本数字（期望值从协议面 import）", () => {
-    expect(IPC_PROTOCOL_VERSION).toBe(1);
+    expect(IPC_PROTOCOL_VERSION).toBe(3);
   });
 });

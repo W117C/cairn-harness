@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AgentEvent, AskPayload, PermissionMode, ProjectRecord, ProviderInfo, RunResponse } from "../../../../src/main/ipc-protocol";
-import { deriveRunPhase, formatRevertNotice, pendingClarifyOf, pendingPlanOf, projectStream, roundTimeline, turnChanges, usageAggregate, countToolSteps } from "./projections";
+import type { AgentEvent, AskPayload, PermissionMode, ProjectRecord, ProviderInfo, RunAttachmentReference, RunResponse } from "../../../../src/main/ipc-protocol";
+import { deriveRunPhase, formatRevertNotice, pendingClarifyOf, pendingPlanOf, projectStream, roundTimeline, turnDelivery, usageAggregate, countToolSteps } from "./projections";
+import { askBelongsToSession, composerLocked, continueAfterRun, drainQueue, dropQueued, fromSessionQueueEntries, promoteQueued, takeQueued, toSessionQueueEntries, type QueuedSend } from "./send-queue";
 import { Sidebar, type WorkspaceSession } from "./components/Sidebar";
 import { TitleBar } from "./components/TitleBar";
 import { Stream } from "./components/Stream";
 import { TurnRail } from "./components/TurnRail";
 import { NewProjectCard } from "./components/NewProjectCard";
 import { Composer } from "./components/Composer";
+import { SendQueueStrip } from "./components/SendQueueStrip";
 import { ApprovalCard } from "./components/ApprovalCard";
 import { ClarifyCard } from "./components/ClarifyCard";
 import { PlanCard } from "./components/PlanCard";
@@ -29,13 +31,29 @@ export function App() {
   const [sessions, setSessions] = useState<WorkspaceSession[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [events, setEvents] = useState<AgentEvent[]>([]);
+  // 审批卡按会话键控（v2.18）：此前是单一 `ask` 态 ⇒ 渲染"最后到达的那张卡"，
+  // 跨会话时会把别人的卡画在自己头上。卡自带 sessionId 之后（core 侧 v3 协议），这里按
+  // Map<sessionId, 卡> 存，只显示**当前会话**那张。归属未知（老载荷/headless）落 "" 键，
+  // 语义 = 不知道是谁的卡 ⇒ 照旧显示（不静默吞卡），但也因此不参与任何按会话的回答/锁定。
   const [ask, setAsk] = useState<AskPayload | null>(null);
+  const askById = useRef(new Map<string, AskPayload>());
   const runningSet = useRef(new Set<string>());
+  // v2.17 运行中可沟通：发送队列（按会话，渲染层内存态——沿用 V1 不落 settings 纪律）。
+  const sendQueue = useRef(new Map<string, QueuedSend[]>());
+  // sidecar 写入按会话串行：快速连点时后一笔必须等前一笔落盘，不能靠 IPC 到达顺序赌最后写入。
+  const queueWrites = useRef(new Map<string, Promise<unknown>>());
+  const queueSeq = useRef(0);
   // 思考档位（每会话一份；缺省 off = 不向发请求体里加思考参数）
   const thinkingBySession = useRef(new Map<string, string>());
   // onEvent 闭包只建一次 ⇒ 用 ref 存当前活跃会话，避免读到过期 activeId（M1 T5 串屏收口）。
   const activeIdRef = useRef<string | null>(null);
   const [, force] = useState(0);
+  const setQueueLocal = useCallback((sid: string, list: QueuedSend[]) => {
+    if (list.length === 0) sendQueue.current.delete(sid); else sendQueue.current.set(sid, list);
+    force((n) => n + 1);
+  }, []);
+  // 打开会话时 sidecar 读回未完成前先锁输入，避免“先发新消息、后读回旧队列”互相覆盖。
+  const [queueLoading, setQueueLoading] = useState(false);
   // M2-4 模型选择：per-session 内存态（Map<sessionId, registryId|null>），M4 才落 settings。
   const selections = useRef(new Map<string, string | null>());
   const [providerInfo, setProviderInfo] = useState<ProviderInfo | null>(null);
@@ -223,8 +241,15 @@ export function App() {
       }
       setEvents((prev) => [...prev, e]);
     });
-    const offAsk = window.agent.onAsk((p) => setAsk(p));
-    const offDone = window.agent.onAskDone(() => setAsk(null));
+    const offAsk = window.agent.onAsk((p) => {
+      const sid = p.sessionId ?? "";
+      askById.current.set(sid, p);
+      setAsk(p);
+    });
+    const offDone = window.agent.onAskDone(() => {
+      askById.current.clear();
+      setAsk(null);
+    });
     return () => { offEvent(); offAsk(); offDone(); };
   }, [refreshSessions, refreshProviderInfo, refreshProviderKeys]);
 
@@ -236,11 +261,23 @@ export function App() {
   const openSession = useCallback((id: string) => {
     activate(id);
     const seq = ++openSeq.current;
-    void window.agent.openSession(id).then((r) => {
+    setQueueLoading(true);
+    const opened = window.agent.openSession(id).then((r) => {
       if (seq !== openSeq.current) return;
       setEvents(r.events);
+    }).catch((err: unknown) => {
+      if (seq === openSeq.current) setLastError(`会话打开失败：${err instanceof Error ? err.message : String(err)}`, id);
     });
-  }, [activate]);
+    const queued = window.agent.queueGet(id).then(({ items }) => {
+      if (seq !== openSeq.current) return;
+      setQueueLocal(id, fromSessionQueueEntries(items, () => ++queueSeq.current));
+    }).catch((err: unknown) => {
+      if (seq === openSeq.current) setLastError(`发送队列读取失败：${err instanceof Error ? err.message : String(err)}`, id);
+    });
+    void Promise.allSettled([opened, queued]).finally(() => {
+      if (seq === openSeq.current) setQueueLoading(false);
+    });
+  }, [activate, setLastError, setQueueLocal]);
 
   const addWorkspace = useCallback(async (path: string): Promise<string> => {
     const record = await window.agent.addProject({ path });
@@ -252,48 +289,107 @@ export function App() {
   }, [refreshSessions]);
 
   const newSession = useCallback(() => {
+    openSeq.current += 1;
+    setQueueLoading(false);
     activate(null);
     setEvents([]);
   }, [activate]);
 
-  const send = useCallback(async (text: string, attachments: import("../../../../src/main/ipc-protocol").RunAttachmentReference[] = []) => {
-    const isNew = activeId === null;
-    if (isNew) setPendingSend(true);
-    let id: string | undefined;
-    try {
-      const sid = activeId ?? (await window.agent.createSession(activeWorkspace ?? undefined)).id;
-      id = sid;
-      activate(sid);
-      if (isNew) refreshSessions();
+  // ---- v2.17 运行中可沟通：按会话发送队列 ----
+  // 队列语义全在 send-queue.ts（本文件只存表与接线）；表是 Map<sessionId, 队列>，
+  // 这样后台会话的排队不因切换会话而丢失，自动派发也只认原会话。
+  const setQueueFor = useCallback((sid: string, list: QueuedSend[]) => {
+    setQueueLocal(sid, list);
+    const prev = queueWrites.current.get(sid) ?? Promise.resolve();
+    const next = prev.catch(() => undefined).then(() => window.agent.queueSet(sid, toSessionQueueEntries(list)));
+    queueWrites.current.set(sid, next);
+    void next.then(
+      (r) => { if (!r.ok) setLastError(`发送队列保存失败：${r.error ?? "未知错误"}`, sid); },
+      (err: unknown) => setLastError(`发送队列保存失败：${err instanceof Error ? err.message : String(err)}`, sid),
+    ).finally(() => {
+      if (queueWrites.current.get(sid) === next) queueWrites.current.delete(sid);
+    });
+  }, [setLastError, setQueueLocal]);
+  /** 本轮收束后出队：队首出表并返回；空队列 null（调用方停表）。 */
+  const takeQueuedHead = useCallback((sid: string): QueuedSend | null => {
+    const { head, rest } = takeQueued(sendQueue.current.get(sid) ?? []);
+    if (head !== null) setQueueFor(sid, rest);
+    return head;
+  }, [setQueueFor]);
+
+  /** 一条消息 → 一轮 run；收束后自动派队列下一条（顺序派发唯一实现在 send-queue.drainQueue）。
+   *  不重入 send：send 要判 activeId，后台会话的续发必须显式钉住 sid。
+   *  本轮失败（ok=false 或抛出）→ 停表：剩余队列留在表里，等用户处理；用户主动打断不算失败。 */
+  const runOn = useCallback(async (sid: string, first: { text: string; attachments: RunAttachmentReference[] }) => {
+    await drainQueue(first, async (msg) => {
       setStoppedIds((prev) => {
         if (!prev.has(sid)) return prev;
-        const next = new Set(prev);
-        next.delete(sid);
-        return next;
+        const fresh = new Set(prev);
+        fresh.delete(sid);
+        return fresh;
       });
       runningSet.current.add(sid);
       runStartRef.current = Date.now();
       force((n) => n + 1);
-      const thinking = thinkingBySession.current.get(sid);
-      const res = (await window.agent.run({
-        message: text, mode, sessionId: sid, model: selections.current.get(sid) ?? undefined,
-        ...(thinking !== undefined ? { thinking: thinking as "off" | "low" | "medium" | "high" } : {}),
-        ...(attachments.length > 0 ? { attachments } : {}),
-      })) as RunResponse & { aborted?: boolean };
-      setStoppedIds((prev) => {
-        const want = res.aborted === true;
-        if (prev.has(sid) === want) return prev;
-        const next = new Set(prev);
-        if (want) next.add(sid); else next.delete(sid);
-        return next;
-      });
-      if (!res.ok && res.aborted !== true) setLastError(res.error ?? "本轮运行失败", sid);
+      try {
+        const thinking = thinkingBySession.current.get(sid);
+        const res = (await window.agent.run({
+          message: msg.text, mode, sessionId: sid, model: selections.current.get(sid) ?? undefined,
+          ...(thinking !== undefined ? { thinking: thinking as "off" | "low" | "medium" | "high" } : {}),
+          ...(msg.attachments.length > 0 ? { attachments: msg.attachments } : {}),
+        })) as RunResponse & { aborted?: boolean };
+        setStoppedIds((prev) => {
+          const want = res.aborted === true;
+          if (prev.has(sid) === want) return prev;
+          const fresh = new Set(prev);
+          if (want) fresh.add(sid); else fresh.delete(sid);
+          return fresh;
+        });
+        const keepGoing = continueAfterRun(res);
+        if (!keepGoing) setLastError(res.error ?? "本轮运行失败", sid);
+        return keepGoing;
+      }
+      catch (err) {
+        setLastError(`本轮运行失败：${err instanceof Error ? err.message : String(err)}`, sid);
+        return false;
+      }
+      finally { runningSet.current.delete(sid); force((n) => n + 1); }
+    }, () => takeQueuedHead(sid));
+  }, [mode, setLastError, takeQueuedHead]);
+
+  const send = useCallback(async (text: string, attachments: RunAttachmentReference[] = []) => {
+    const sid = activeId;
+    // 运行中发送 = 入队（收束后 runOn 的循环自动派下一条）。判据用 ref 不用渲染态：
+    // 收束与点击在同一拍竞争时，runningSet 是唯一真值。
+    if (sid !== null && runningSet.current.has(sid)) {
+      setQueueFor(sid, [...(sendQueue.current.get(sid) ?? []), { id: ++queueSeq.current, text, attachments }]);
+      return;
+    }
+    const isNew = sid === null;
+    if (isNew) setPendingSend(true);
+    let id: string | undefined;
+    try {
+      const newId = sid ?? (await window.agent.createSession(activeWorkspace ?? undefined)).id;
+      id = newId;
+      if (isNew) { activate(newId); refreshSessions(); }
+      await runOn(newId, { text, attachments });
     }
     catch (err) {
       setLastError(`本轮运行失败：${err instanceof Error ? err.message : String(err)}`, id ?? "");
     }
-    finally { setPendingSend(false); if (id !== undefined) runningSet.current.delete(id); force((n) => n + 1); }
-  }, [activeId, activeWorkspace, activate, refreshSessions, mode]);
+    finally { setPendingSend(false); force((n) => n + 1); }
+  }, [activeId, activeWorkspace, activate, refreshSessions, runOn, setQueueFor]);
+
+  /** 重启恢复：不自动执行，用户显式点「继续发送」才把队首交给同一条 runOn/权限/沙箱链路。 */
+  const resumeQueue = useCallback(() => {
+    const sid = activeIdRef.current;
+    if (sid === null || runningSet.current.has(sid)) return;
+    const first = takeQueuedHead(sid);
+    if (first === null) return;
+    void runOn(sid, first).catch((err: unknown) => {
+      setLastError(`恢复发送失败：${err instanceof Error ? err.message : String(err)}`, sid);
+    });
+  }, [runOn, setLastError, takeQueuedHead]);
 
   const lastError = sessionErrors.get(activeId ?? "") ?? null;
   const lastNotice = sessionNotices.get(activeId ?? "") ?? null;
@@ -308,7 +404,9 @@ export function App() {
   }, [runningActive]);
   const pendingClarify = pendingClarifyOf(events);
   const pendingPlan = pendingPlanOf(events);
-  const phase = deriveRunPhase(events, ask !== null, pendingClarify !== null, pendingPlan !== null);
+  // 只认当前会话那张卡（判定唯一处在 send-queue.askBelongsToSession）。
+  const askForActive = askBelongsToSession(ask, activeId) ? ask : null;
+  const phase = deriveRunPhase(events, askForActive !== null, pendingClarify !== null, pendingPlan !== null);
   const stopped = activeId !== null && stoppedIds.has(activeId) && !runningActive;
   const phaseLabel = stopped ? "已停止"
     : phase === "ask" ? "等待审批"
@@ -361,7 +459,7 @@ export function App() {
           running={runningSet.current}
           notice={registryNotice}
           pendingPhase={phase}
-          activePending={ask !== null || pendingClarify !== null || pendingPlan !== null}
+          activePending={askForActive !== null || pendingClarify !== null || pendingPlan !== null}
           lastRoundFailed={lastError !== null}
           stopped={stopped}
           onOpen={openSession}
@@ -438,8 +536,8 @@ export function App() {
                       rows={projectStream(events)}
                       actions={{ feedback, onFeedback: handleFeedback, onRevertTurn: handleRevertTurn, onCopyText: handleCopyText }}
                     />
-                    {/* C-32 变更汇总卡（v2 输出优先）：有文件改动的轮各一张，流尾展示 */}
-                    {turnChanges(events).map((g) => <ChangeSummaryCard key={g.round} group={g} />)}
+                    {/* C-32 交付摘要卡：有文件改动或验证证据的轮各一张，流尾展示 */}
+                    {turnDelivery(events).map((d) => <ChangeSummaryCard key={d.round} delivery={d} />)}
                   </div>
                 </div>
                 {/* spec ③：离开底部才出现（挂在 .zone-stream 下，不随内容滚走） */}
@@ -451,11 +549,11 @@ export function App() {
                 )}
               </div>
               <div className="zone-gate">
-                {ask ? (
+                {askForActive ? (
                   <ApprovalCard
-                    ask={ask}
+                    ask={askForActive}
                     onDecide={(approved, scope) => {
-                      void window.agent.decide(ask.askId, approved, scope).then((ok) => {
+                      void window.agent.decide(askForActive.askId, approved, scope).then((ok) => {
                         if (!ok) setLastError("审批提交失败");
                       }).catch((err: unknown) => {
                         setLastError(`审批提交失败：${err instanceof Error ? err.message : String(err)}`);
@@ -497,8 +595,32 @@ export function App() {
                     <GoalPanel view={goal} activeId={activeId} onError={(m) => setLastError(m)} />
                   ) : null;
                 })()}
+                {activeId !== null && (
+                  <SendQueueStrip
+                    items={sendQueue.current.get(activeId) ?? []}
+                    running={runningActive}
+                    onInterruptSend={(index) => {
+                      // 「打断并发送」：先把它提到队首，再打断本轮——收束在轮界，runOn 随即先派它。
+                      const sid = activeIdRef.current;
+                      if (sid === null) return;
+                      setQueueFor(sid, promoteQueued(sendQueue.current.get(sid) ?? [], index));
+                      void window.agent.runCancel(sid);
+                    }}
+                    onRemove={(index) => {
+                      const sid = activeIdRef.current;
+                      if (sid === null) return;
+                      setQueueFor(sid, dropQueued(sendQueue.current.get(sid) ?? [], index));
+                    }}
+                    {...(!runningActive && !queueLoading && !pendingSend && pendingClarify === null && pendingPlan === null
+                      ? { onResume: resumeQueue }
+                      : {})}
+                  />
+                )}
                 <Composer
-                  disabled={runningActive || (pendingSend && activeId === null)}
+                  disabled={queueLoading || composerLocked({
+                    creating: pendingSend && activeId === null,
+                    gateActive: pendingClarify !== null || pendingPlan !== null,
+                  })}
                   mode={mode}
                   running={runningActive}
                   stopped={stopped}

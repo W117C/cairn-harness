@@ -735,7 +735,14 @@ function injectOmitFaceTools(): void {
 }
 
 const appAskGate = new AskGate({
-  notify: (req) => hooks.onAsk?.(req),
+  // 审批卡的会话归属在这里盖上：`AskGate` 自己的 pending 键只有 askId（进程内自增序号，
+  // 无会话维度），而「这张卡在问哪个会话」只有发卡这一刻的 run 作用域知道 —— AsyncLocalStorage
+  // 把「当前 run 的 session」透到这里，工具闭包不必改签名。缺省（headless／无 sessionId 的 run）
+  // 留空 = 归属未知，渲染层按未知处理，不猜。
+  notify: (req) => {
+    const sid = req.sessionId ?? currentSession()?.sessionId;
+    hooks.onAsk?.(sid === undefined ? req : { ...req, sessionId: sid });
+  },
   notifyOutcome: (askId, outcome, reason) => hooks.onAskOutcome?.({ askId, outcome, reason }),
   // #96：`onAsk` 是可选注入（`setAppHooks` 只 `Object.assign`）。没注册时 `notify` 那一句会静默丢弃，
   // 而这一等只有 60s 看门狗会叫醒它——写向工具的回执挂在一张送不出去的书面上，整场 run 停在原地。

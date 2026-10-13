@@ -132,6 +132,17 @@ const MUTATIONS = [
     expectFail: "unattended 下 notify 不被调用（无 UI 等待，直接拒绝）",
   },
   {
+    id: "ask-gate-session-id-not-forwarded",
+    src: "src/main/ask-gate.ts",
+    test: "tests/ask-gate.test.ts",
+    desc: "发卡时不把会话归属透进 notify 载荷（审批卡重新变成无主项——渲染层无从判断这张卡在问哪个会话，跨会话串台的成因）",
+    apply: (s) => s.replace(
+      "      this.opts.notify?.({ askId, tool, args, ...notifyCtx });",
+      "      const { sessionId: _dropped, ...restCtx } = notifyCtx as Record<string, unknown>;\n      this.opts.notify?.({ askId, tool, args, ...restCtx });",
+    ),
+    expectFail: "ctx.sessionId 透进 notify 载荷（卡的会话归属）；缺省 = 键缺席而非 undefined 属性",
+  },
+  {
     id: "clarify-submit-unknown",
     src: "src/agent/gates.ts",
     test: "tests/clarify.test.ts",

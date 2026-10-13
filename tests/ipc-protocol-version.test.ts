@@ -11,6 +11,6 @@ describe("IPC 协议版本（§3.5/§12）", () => {
   });
 
   it("bump 版本必须有意为之：现钉 1——改协议形状（AgentApi 增删/字段语义变）= bump 常量 + 同步本格，desktop-panel 提案走同一流水线", () => {
-    expect(IPC_PROTOCOL_VERSION).toBe(1);
+    expect(IPC_PROTOCOL_VERSION).toBe(3);
   });
 });

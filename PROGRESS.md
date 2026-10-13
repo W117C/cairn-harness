@@ -15738,3 +15738,43 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    脚本化一轮 3 秒就收束了（第 479 页第 6 条同一格，本页没补上）；
    ④ 桌面 kernel-host 那一趟复验里「复用 id」读成 `false`（旧会话已删、另存成带序号的新 id）
    ⇒ 那趟**只证「正常新建不继承」，不构成修复证据**，修复证据是 core 出口那一趟。
+
+## 2026-10-14 · 第 481 页：审批卡给归属——sessionId 进 AskPayload（卡的权限面首次姓火朝向雨owning）
+
+1. **动因（接业主那句方向）**：要走「以任务对话为中心，把执行/审批/改动/验证串成完整流程」，
+   审批那一环得先知道自己属于谁。此前它是全树唯一**没有会话归属**的门\cap ——执行/改动/验证的
+   事件都带 `session_id`，只有审批卡不带。
+2. **缺陷（结构推导，见第 7 条的诚实口径）**：`AskPayload` 无 `sessionId`；卡经模块级共享面
+   `appAskGate` 发出、`pending` 键只有进程内自增的 `askId`（**不含会话维度**）；渲染层吃单一
+   `useState<AskPayload|null>` ⇒ 结构上只能画「最后到达的那张卡」。同一文件里错误条/提示条却
+   是按会话键控的（`sessionErrors`/`sessionNotices`）——同一功能面两套口径。这也是第 479 页那句
+   「ask 归属不可知 ⇒ 锁它会误锁别的会话」的根因：不是不想锁，是不知道该锁谁。
+3. **改法（三层各一处，零breaking）**：①`ask-gate.ts`：`AskRequest` 加可选 `sessionId`，
+   由 `request` 的 ctx 透进 notify 载荷，缺省 = **键缺席**（不是 undefined 属性，渲染层才分得清
+   「未知」与「归属当前会话」）；②`agent-runner.ts`：发卡边界用既有 `currentSession()?.sessionId`
+   盖章（AsyncLocalStorage 的 run 作用域，工具闭包签名**零改动**），headless 留空不猜；
+   ③渲染层新增纯函数 **`askBelongsToSession`**（`send-queue.ts`，唯一判定出口），App 用它筛卡，
+   归属未知 ⇒ 照旧显示（**不静默吞卡**，否则 headless 面永远出不了卡）。
+4. **协议形状变了 ⇒ `IPC_PROTOCOL_VERSION` 2→3**（握手套路 + vite define，新老不同源即 fatal，
+   两处判卷期望值同笔跟上）。
+5. **红-绿（每格 红→绿→红 都看过，含一次我自己写错的伪绿）**：
+   core「ctx.sessionId 透进 notify 载荷」11 passed／变异后 **1 failed**；
+   desktop「askBelongsToSession」173 passed／变异后 **1 failed**（改成恒 true 即红）。
+   ⚠️ **第一版判据是伪绿**：`{askId, tool, args, ...notifyCtx}` 天然把 sessionId 摊进去，
+   于是「删掉显式那行」「从签名摘掉 sessionId」两种变异都**照样通过**（类型擦除＋展开冗余）。
+   订正后核 `Object.keys(载荷)` 有无该键才有杀伤力。**「写了判据」≠「判据有牙」**——这一格单列。
+6. **变异锚点**：`ask-gate-session-id-not-forwarded`（＋12 行），`--check-needles` 1555→**1556 条**，
+   阻断 0。桌面侧那条**没进变异表**：现读 0 条uštarget 指向 `apps/desktop/src`（整表尽数落在
+   src/ 与 scripts/）⇒ 给它开一条等于由我立先例，本页不做，留给要不要把桌面面纳入变异bondager的裁决。
+7. **一次假红与它的真因（为了2271 出leetcode）**：第一趟 `smoke` 红（侧栏 0 行、`text:""`）。
+   归因：`git stash` 掉本笔七文件后**仍红** ⇒ 与本笔无关；只把 `askForActive` 退回 `ask` 也**仍红**。
+   真因是 `apps/desktop/dist/` 停在旧构建 ⇒ **`smoke` 吃的是 `dist/` 产物不是源码；改了 renderer
+   不重新 build，冒烟测的是上一版**。`pnpm run build` 后 **PASS in 2412 ms**。此格此前无人写下。
+8. **读数**：核心判卷 371 文件 **5302 条全绿**（＋1）；桌面 **17 文件 173 条全绿**（＋3）；
+   `pnpm typecheck` 与桌面 `tsc --noEmit` **0 报错**；边界闸绿；`security-check` 54 断言 0 红；
+   `repo-hygiene-check` 三面全绿；真窗口冒烟 **PASS in 2412 ms**。
+   取料 `outputs/ask-card-owner-481-2026-10-14/provenance.md`。
+9. **仍未证（不许读成绿）**：① 缺陷是**结构推导 + 判据验证**，**没有运行时复现**——demo 面一轮
+   2.4s 收束、无并发实例，插不进「两个会话同时卡在审批门上」；② `mutate-verify` **全表未跑**
+   （1556 条 ≈ 20+ 分钟）；③ 真模型/生产行为未跑；④ 桌面侧 `askBelongsToSession` 无变异锚点
+   （第 6 条），只有判据而无bhangan柿子树共价ayers。

@@ -13,6 +13,7 @@ import type { UpdateCheckResult } from "./updater";
 import type { AddProjectInput, ProjectRecord } from "./project-registry";
 import type { SessionMetadataRecord } from "./session-metadata";
 import type { RunAttachmentReference } from "./run-attachments";
+import type { SessionQueueEntry } from "./sessions";
 import type { ThinkingEffort } from "../providers/capabilities";
 import type { ProviderInfo } from "./provider-runtime";
 
@@ -22,6 +23,7 @@ export type { AppSettings } from "./settings";
 export type { AddProjectInput, ProjectRecord } from "./project-registry";
 export type { SessionMetadataRecord } from "./session-metadata";
 export type { RunAttachmentReference } from "./run-attachments";
+export type { SessionQueueEntry } from "./sessions";
 export type { ThinkingEffort } from "../providers/capabilities";
 export type { ProviderInfo } from "./provider-runtime";
 export type { DiscoveryProtocol } from "../providers/discovery";
@@ -35,7 +37,7 @@ import type { DiscoveredRow } from "../providers/provider-draft";
  *  主进程实况 `protocolVersion()`），失配 fail-closed 亮 fatal 面——老渲染层配新主进程（或反向）
  *  不许静默错位。改协议形状（AgentApi 增删/字段语义变）= bump 这里，并以 desktop-panel 提案
  *  走同一流水线（§3.5）。 */
-export const IPC_PROTOCOL_VERSION = 1;
+export const IPC_PROTOCOL_VERSION = 3;
 
 /** S7：探测结果（表单据此渲染那张可勾选的表）。 */
 export type ProviderDiscoverPayload =
@@ -107,6 +109,10 @@ export interface AskPayload {
   riskReasons?: string[];
   /** M1e：审批送达时间戳（徽标 ≤1s 验收用，Date.now 毫秒）；缺省 = 未标注。 */
   sentAt?: number;
+  /** 这张卡属于哪个会话。此前缺省 ⇒ 渲染层的单一 `ask` 态渲染"最后到达的那张卡"，
+   *  跨会话时既串台又不敢按会话锁输入框（误锁别的会话）。缺省 = 归属未知（老载荷/headless
+   *  路径本就没有会话面），渲染层按未知处理，**不许猜成当前会话**。 */
+  sessionId?: string;
 }
 export interface AskOutcomePayload {
   askId: string;
@@ -234,6 +240,10 @@ export interface AgentApi {
   listSessions(): Promise<SessionInfoPayload[]>;
   createSession(name?: string): Promise<{ id: string }>;
   openSession(id: string): Promise<{ events: AgentEvent[] }>;
+  /** 恢复闭环：读回 / 覆盖写该会话的发送队列 sidecar。队列不是 AgentEvent，不混入 JSONL；
+   *  重启后由 renderer 读回并显式继续发送，仍走原有权限与沙箱链路。 */
+  queueGet(sessionId: string): Promise<{ items: SessionQueueEntry[] }>;
+  queueSet(sessionId: string, items: SessionQueueEntry[]): Promise<{ ok: boolean; error?: string }>;
   renameSession(oldId: string, newName: string): Promise<{ id: string }>;
   deleteSession(id: string): Promise<{ currentSession: string | null }>;
   /** M8 分叉（v2.15 IPC 接线）：保留前 N 轮（含）→ 新会话 `<id>-f<N>`；源会话只读、字节不变。 */

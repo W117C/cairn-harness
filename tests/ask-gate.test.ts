@@ -26,6 +26,20 @@ describe("AskGate", () => {
     await expect(promise).resolves.toMatchObject({ outcome: "rejected", scope: "once" });
   });
 
+  it("ctx.sessionId 透进 notify 载荷（卡的会话归属）；缺省 = 键缺席而非 undefined 属性", async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const gate = new AskGate({ notify: (r) => { seen.push(r as unknown as Record<string, unknown>); } });
+    void gate.request("run_shell", { command: "true" }, { sessionId: "会话甲" });
+    void gate.request("run_shell", { command: "true" });
+    expect(seen).toHaveLength(2);
+    expect(seen[0]?.sessionId).toBe("会话甲");
+    // 两个会话同时有卡在 pending 时，区分力只能来自载荷自带的那份 sessionId：
+    // askId 是进程内自增序号，本身不带会话维度。
+    expect(Object.keys(seen[0] as object)).toContain("sessionId");
+    expect(Object.keys(seen[1] as object)).not.toContain("sessionId");
+    for (const card of seen) gate.decide(String(card.askId), false);
+  });
+
   it("默认 60 秒无响应 → 按拒绝（假时钟，不真等）", async () => {
     vi.useFakeTimers();
     const outcomes: Array<{ id: string; outcome: string; reason: string }> = [];

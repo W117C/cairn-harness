@@ -14,6 +14,12 @@ export interface AskRequest {
   /** 风险评级与依据（§11.7.4 三通道合成结果）。 */
   risk?: RiskLevel;
   riskReasons?: string[];
+  /** 这张卡属于哪个会话（可选：headless/无 sessionId 的 run 本来就没有会话面）。
+   *  为什么必须在载荷里：`AskGate` 是模块级共享面（appAskGate），pending 键只有 askId，
+   *  而 askId 是进程内自增序号——**不含会话维度** ⇒ 渲染层拿到的卡无从判断自己在问谁，
+   *  既不能按会话显示、也不能安全地按会话锁输入框（误锁别的会话）。带上它 ⇒ 卡有归属，
+   *  审批/历史/审计才谈得上。缺省 = 未知（老 elder JSON 与 headless 路径同形），不许猜。 */
+  sessionId?: string;
 }
 export type AskOutcome = "approved" | "rejected";
 /** 决议结果：批准时携带用户选择的 scope（缺省 once）；拒绝时携带拒绝原因（unattended/timeout）。 */
@@ -60,7 +66,7 @@ export class AskGate {
   request(
     tool: ToolName | string,
     args: Record<string, unknown>,
-    ctx: { reason?: string; risk?: RiskLevel; riskReasons?: string[]; signal?: AbortSignal } = {},
+    ctx: { reason?: string; risk?: RiskLevel; riskReasons?: string[]; signal?: AbortSignal; sessionId?: string } = {},
   ): Promise<AskOutcomeResult> {
     const askId = "ask-" + String(++this.seq);
     if (this.opts.unattended || (this.opts.hasAnswerer && !this.opts.hasAnswerer())) {
@@ -104,7 +110,9 @@ export class AskGate {
         }
         signal.addEventListener("abort", onAbort, { once: true });
       }
-      const { signal: _signal, ...notifyCtx } = ctx; // signal 是控制面，不进 UI 载荷
+      // signal 是控制面，不进 UI 载荷。其余 ctx 字段（含 sessionId）整体摊进载荷；
+      // sessionId 缺席键（不是 undefined 属性）⇒ 渲染层分得清「归属未知」与「归属是当前会话」。
+      const { signal: _signal, ...notifyCtx } = ctx;
       this.opts.notify?.({ askId, tool, args, ...notifyCtx });
     });
   }
