@@ -226,6 +226,10 @@ const MUTATIONS = [
     id: "provider-key-no-backend-fails-open",
     src: "src/main/provider-keys.ts",
     test: "apps/desktop/tests/provider-keys.test.ts",
+    // 被测面在 core、判卷在桌面层 ⇒ **必须自带 config**。第一版漏了它 ⇒ runTest 拿核心那份
+    // 配置在库根跑，而桌面判卷不在核心 include 里 ⇒ 选中 0 条、退出码 0，
+    // 于是这一条读成 vacuous（第 490 页：桌面锚点忘带 config 就是这个形状）。
+    config: "apps/desktop/vitest.config.ts",
     desc: "无安全后端时不再拒存（fail-closed 那支被摘）⇒ headless 上明文 provider key 落盘；"
       + "功能面看不出异常（有后端时两条路行为逐字相同），只有未装配 safeStorage 才分得开",
     // needle 必须**唯一**：`if (!backend) return { ok: false, error: PROVIDER_KEY_NO_BACKEND_ERROR };`
