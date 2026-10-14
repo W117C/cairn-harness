@@ -219,6 +219,25 @@ const MUTATIONS = [
     expectFail: "renderer 闸在：挂载比对实况版本，失配/查询失败 fail-closed 早退",
   },
   {
+    // 桌面层第五条锚点（第 490 页）：BYOK 的 fail-closed。`!backend ⇒ 拒存` 这一支若被摘掉，
+    // headless（未装配 safeStorage）上 putProviderKey 会继续往下走——而下游那几步默认假定
+    // 「已经加密过了」，于是明文 key 落盘。**这正是 secrets.ts 那条纪律要防的事**，
+    // 而它在本文件里此前没有变异锚点。
+    id: "provider-key-no-backend-fails-open",
+    src: "src/main/provider-keys.ts",
+    test: "apps/desktop/tests/provider-keys.test.ts",
+    desc: "无安全后端时不再拒存（fail-closed 那支被摘）⇒ headless 上明文 provider key 落盘；"
+      + "功能面看不出异常（有后端时两条路行为逐字相同），只有未装配 safeStorage 才分得开",
+    // needle 在源里出现两次（147 行的 put 与 162 行的 delete）⇒ replace 只改第一处，
+    // 即 put 那一支——它才是「明文落盘」那条路径。delete 的同类由 core 判卷兜着。
+    // 标题必须逐字等于桌面判卷里那条用例名（第一版我写了个近似标题 ⇒ 选择子零命中＝vacuous）。
+    apply: (s) => s.replace(
+      "  if (!backend) return { ok: false, error: PROVIDER_KEY_NO_BACKEND_ERROR };",
+      "  // 变异：fail-closed 那支摘掉",
+    ),
+    expectFail: "fail-closed：safeStorage 不可用 ⇒ 装配拒绝 + set 拒绝不落明文（目录零文件）；未装配后端同判",
+  },
+  {
     id: "clarify-submit-unknown",
     src: "src/agent/gates.ts",
     test: "tests/clarify.test.ts",
