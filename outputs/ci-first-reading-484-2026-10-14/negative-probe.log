@@ -1,0 +1,15 @@
+ac230ff562af613779653bbd1d677d70d6f3d0cb
+failure
+1 Set up job completed success
+2 Run actions/checkout@v4 completed success
+3 Run pnpm/action-setup@v4 completed success
+4 Run actions/setup-node@v4 completed success
+5 Run pnpm install --frozen-lockfile completed success
+6 typecheck completed failure
+7 full test suite completed skipped
+8 desktop tests completed skipped
+9 fast gates (cert face, 25) completed skipped
+16 Post Run actions/setup-node@v4 completed skipped
+17 Post Run pnpm/action-setup@v4 completed success
+18 Post Run actions/checkout@v4 completed success
+19 Complete job completed success

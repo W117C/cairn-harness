@@ -15888,3 +15888,28 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    路线图自己要求提高 `--reps`，而那条路仍被免费档日配额（1000 次/天）堵着；
    ② 本页没跑任何真模型请求，用的全是既有读数；③ `outcomeGate` 锚点只验「恒放行」，
    「恒拦截」由判卷用例兜着但不是变异锚点；④ 全表 1558 条未因这一笔重跑（≈20+ 分钟）。
+
+## 2026-10-14 · 第 485 页：CI 第一次给出本机之外的读数（含反向验证：坏树真的被拦住）
+
+1. **动因**：路线图第 4 波说这一波的成功判据**不是 CI 绿**，是「终于有了一份非本地自评的读数」。
+   本机 `pnpm gates` 34/34 之后，把 `40f09ccd` 推上远端，让 runner 复述同一棵树的结论。
+2. **正证**（run `38516829143`，`headSha=40f09ccd`）：9 步全 success——install / typecheck /
+   full test suite / desktop tests / fast gates(cert face, 25)。整 run ≈6 分钟，
+   `full test suite` 一段 3m46s。
+3. **反证**（同一页做的反向验证，路线图自己要求的那一格）：一次性分支
+   `codex/ci-negative-probe` 上注入一处类型错误推上去 ⇒ run `38517608076` **failure**，
+   **卡在第 6 步 typecheck**，后置三步（判卷 / 桌面 / 25 道快门）全 **skipped**；
+   CI 日志逐字 `error TS2322: Type 'string' is not assignable to type 'number'`。
+   看完就删本地分支与远端 ref，`zcode` 从未带过这笔。
+   ⇒ 「CI 会放过坏树」这一半不成立：好树放过、坏树拦住，两半证据都齐了。
+4. **顺手订正一份失真文档**：`outputs/agent-capability-roadmap-2026-10-01/PLAN.md` 总表写着
+   「能力 1 只认 4 种语法」、差距节写着「持久化索引尚未落地」——两句都已失真
+   （现为 9 扩展名 / 6 语言含 go+java，`tests/impact-multilang.test.ts` 与
+   `accuracy-repo-multilang` 夹具在库；`src/agent/impact/persist.ts` 第 477 页已落地）。
+   按原样留原文 + 划掉 + 写明现读，不涂改历史。
+5. **读数**：CI 正证 9/9 success、反证 failure 且后置全 skip；`docs-check` 全绿；
+   取料 `outputs/ci-first-reading-484-2026-10-14/{provenance.md,steps.log,negative-probe.log}`。
+6. **仍未证（不许读成绿）**：① CI 只覆盖 25 道 cert 面门，`mutate-verify` 全表与
+   `head-cert-check` **没有 runner 侧读数**（那两笔的绿只在本机）；② 反向验证只验了类型错误
+   这一种坏法，没验「判卷红而 typecheck 绿」那种；③ 真模型/生产行为未跑（CI 无凭据，暗卷跳过）；
+   ④ ubuntu runner 未验（workflow 注释里自己记着换 runner 前要先在真实 CI 上验一轮）。
