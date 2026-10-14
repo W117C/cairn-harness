@@ -11646,6 +11646,19 @@ const MUTATIONS = [
     expectFail: "存量语料（读数里一个身份键都没有）⇒ 出口码 3，不是 5 也不是 0",
   },
   {
+    // 第 483 页补：`outcomeGate` 是这张表唯一的误读面（2026-10-05 实跑那一次：成功率 70.8% ⇒ 5.6%，
+    // 而 token 与墙钟同时"降"，逐指标各判各的就把一次跑废了印成"改动有效"）。此前 7 条
+    // report.ts 锚点里**没有一条**打它——闸的判据松了，变异表照旧全绿。
+    // 打的是 `blocked` 那一行的合取本身（退化项为空也放行），不是某一种指标的方向。
+    id: "outcome-gate-conjunction-dropped",
+    src: "scripts/eval/report.ts",
+    test: "tests/eval-report.test.ts",
+    desc: "结果类超带退化不再拦表（`blocked = degraded.length > 0` 被换成恒 false）⇒ 跑废的那一趟"
+      + "凭成本类「变好」被整表读成改善，而这张表从来只有这一个误读面",
+    apply: (s) => s.replace("  const blocked = degraded.length > 0;", "  const blocked = false && degraded.length > 0;"),
+    expectFail: "故意退化的候选 ⇒ 出口码 4（合取闸咬），且禁止改善那一句必须印出来",
+  },
+  {
     // ↓ 钱的**出处**（10-02 第二族第三次命中：09-23 闸与回执分叉、09-27 usage 无归因键、这次是缺省价替所有人猜）。
     id: "price-face-missing-blind",
     src: "scripts/lib/eval-validity.ts",
