@@ -15913,3 +15913,31 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    `head-cert-check` **没有 runner 侧读数**（那两笔的绿只在本机）；② 反向验证只验了类型错误
    这一种坏法，没验「判卷红而 typecheck 绿」那种；③ 真模型/生产行为未跑（CI 无凭据，暗卷跳过）；
    ④ ubuntu runner 未验（workflow 注释里自己记着换 runner 前要先在真实 CI 上验一轮）。
+
+## 2026-10-14 · 第 486 页：探针找出两处真缺陷（口径分叉 / Infinity%）＋ 桌面层第二条锚点
+
+1. **方法**：不读注释里的承诺，直接给新写的代码喂边界输入。两个真缺陷都是这么出来的，
+   都不是门抓到的（门全绿着）。
+2. **缺陷一·口径分叉**：`acceptance-sampler#isWorkerSubflow` 用 `typeof id === "string"` 判
+   worker 子流，而 `scripts/replay/run-scorecard.ts#splitStreams` 用
+   `typeof id === "string" && id !== ""`。同一个 `agent_id: ""` 的事件会被**一把尺当 worker、
+   另一把当主会话** ⇒ 两个读数从此对不上。两处都改成空串不算 id（以 splitStreams 为准）。
+3. **缺陷二·Infinity%**：`formatRate` 对 `{hits:1,total:0,unmeasurable:false}` 印出
+   `1/0 = Infinity%`——正是 `cost-per-progress` 第二条纪律点名的那一族
+   （不可测不许悄悄变成 0 或 Infinity）。两个采样器都从 `rate()` 出来不会触发，
+   但 `formatRate` 是导出面，别的构造路径会。改成分母 0 一律判不可测，**不信任调用方给的标志**。
+4. **我自己写废过一条判据，写下来因为那不是手滑**：给缺陷一补的 coverage 用例第一版是**恒真的**——
+   `spawn(false)` 的 `agent_id` 是随机串，永不为空 ⇒ 无论实现把空串当不当 id，读数都一样。
+   改成让 spawn 自己也带空串 id，并补「换成真 id 就配得上」的反向格，**反向验证过才认**。
+   同一轮里 coverage 那半边的反向验证一开始还没生效（替换串没匹配上，看着像"已经验过"），
+   重做后才红 ⇒ **反向验证必须看到红，没看到红就是没验**。
+5. **桌面层第二条锚点**：`projections.ts` 11 个导出函数、409 行、27 条用例，变异表里桌面侧
+   此前只有 send-queue 那一条 ⇒ 整份投影层是「有判据、无分辨力证据」。补
+   `desktop-thinking-not-carried-onto-final`：终稿到达时思考桶被 clear，若不同时把正文挂到
+   终稿行上，「思考过程」就只在流式那几秒可见——**功能还在、信息没了，没有任何门会红**，
+   所以它值得一条锚点。干净 worktree 实测杀死。
+6. **读数**：核心判卷 373 文件 **5326 条**（＋3）；桌面 17 文件 **174 条**（＋1）；
+   typecheck 0 报错；needles 1558→**1559**｜阻断 0；两条新锚点都在干净 worktree 里杀死；
+   CI 三次 success。取料 `outputs/probe-finds-486-2026-10-14/`。
+7. **仍未证（不许读成绿）**：① 全表 1559 条未因这几笔重跑（≈20+ 分钟），只单独跑了新加的两条；
+   ② 探针只覆盖了我手写的边界，不代表穷尽；③ 真模型/生产行为未跑；④ CI 仍只覆盖 25 道 cert 面门。
