@@ -20,10 +20,16 @@ function rate(hits: number, total: number): RateSample {
   return { hits, total, unmeasurable: total === 0 };
 }
 
-/** 主会话面（worker 子流不计，与 projectStream/cost-per-progress 同口径）。 */
+/**
+ * 主会话面（worker 子流不计，与 projectStream/cost-per-progress 同口径）。
+ * 空串 `agent_id` 算**没有 id**（＝主会话），与 `scripts/replay/run-scorecard.ts#splitStreams`
+ * 逐字同口径：那一处判 `typeof id === "string" && id !== ""`。两处不一致时，同一个
+ * 「agent_id 为空」的事件会被一把尺当 worker、另一把当主会话，两个读数就再也对不上。
+ */
 function isWorkerSubflow(e: AgentEvent): boolean {
   if (e.type === "agent_spawned") return false; // 父流事实（「派出了哪个 worker」）
-  return typeof (e as { agent_id?: unknown }).agent_id === "string";
+  const id = (e as { agent_id?: unknown }).agent_id;
+  return typeof id === "string" && id !== "";
 }
 
 /**
@@ -74,11 +80,12 @@ export function routingDecisionCoverage(events: readonly AgentEvent[]): RateSamp
   const spawns = events.filter((e) => e.type === "agent_spawned");
   if (spawns.length === 0) return rate(0, 0);
   // 决策事件按 worker 归因（`agent_id`）。一个 id 多条只算一次：判的是「这一派出活有没有决策面」。
+  // 空串不算一个 id（同 `splitStreams` 口径）⇒ 归在空串上的决策不配任何 spawn。
   const decided = new Set<string>();
   for (const e of events) {
     if (e.type !== "routing_decision") continue;
     const id = (e as { agent_id?: unknown }).agent_id;
-    if (typeof id === "string") decided.add(id);
+    if (typeof id === "string" && id !== "") decided.add(id);
   }
   const withDecision = spawns.filter((e) => decided.has(e.agent_id));
   return rate(withDecision.length, spawns.length);

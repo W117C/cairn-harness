@@ -53,6 +53,16 @@ describe("reviewFailHealRate（review-fail 自愈率）", () => {
     ]);
     expect(s).toEqual({ hits: 0, total: 1, unmeasurable: false });
   });
+
+  it("空串 agent_id 算主会话，不算 worker（与 splitStreams 同一口径）", () => {
+    // 两处不一致时，同一个「agent_id 为空」的事件会被一把尺当 worker、另一把当主会话，
+    // 两个读数就再也对不上。空串＝没有 id，所以它那盏绿灯算主会话的绿灯。
+    const emptyIdGreen = ev({ type: "verify_result", callId: "ve", ok: true, attempt: 1, maxAttempts: 1, results: [], agent_id: "" });
+    expect(reviewFailHealRate([user(), verify(false), emptyIdGreen])).toEqual({ hits: 1, total: 1, unmeasurable: false });
+    // 反向格：真 worker id 的绿灯不许算主会话自愈
+    const workerGreen = ev({ type: "verify_result", callId: "vw", ok: true, attempt: 1, maxAttempts: 1, results: [], agent_id: "w1" });
+    expect(reviewFailHealRate([user(), verify(false), workerGreen])).toEqual({ hits: 0, total: 1, unmeasurable: false });
+  });
 });
 
 describe("routingDecisionCoverage（生产 spawn 的路由决策覆盖率）", () => {
@@ -77,6 +87,16 @@ describe("routingDecisionCoverage（生产 spawn 的路由决策覆盖率）", (
 
   it("没有 spawn ⇒ 不可测（不是 0%：没派过 worker 就没有这一格的分母）", () => {
     expect(routingDecisionCoverage([user()])).toEqual({ hits: 0, total: 0, unmeasurable: true });
+  });
+
+  it("空串 agent_id 不构成配对：空串不是 id（决策归在空串上 ⇒ 不配任何 spawn）", () => {
+    // 第一版这条判据是**空的**：`spawn(false)` 的 agent_id 是随机串，永远不会是空串 ⇒
+    // 无论实现把空串当不当 id，读数都一样。要真判这一格，spawn 自己也得带空串 id。
+    const emptyIdSpawn = ev({ type: "agent_spawned", agent_id: "", mode: "read", task: "t" });
+    expect(routingDecisionCoverage([emptyIdSpawn, decision("")])).toEqual({ hits: 0, total: 1, unmeasurable: false });
+    // 反向格：换成一个真 id，决策就配上了（证明上一格不是「反正都配不上」）
+    const realSpawn = ev({ type: "agent_spawned", agent_id: "w7", mode: "read", task: "t" });
+    expect(routingDecisionCoverage([realSpawn, decision("w7")])).toEqual({ hits: 1, total: 1, unmeasurable: false });
   });
 
   it("决策与 spawn 按 agent_id 对上，不是 spawn 上的字段（恒 0 那把尺就是这么来的）", () => {
