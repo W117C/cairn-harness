@@ -14318,7 +14318,7 @@ const MUTATIONS = [
       + "历史：这一条曾因 apply 打在**死代码**上而存活——原实现自己 find 一遍 --scripted=，与 pick 的结果恒等，"
       + "磨掉它行为一字不变；现已改为直接打 pick 的取键处，并由判卷对比两种写法的输出是否逐字相同",
     apply: (s) => s.replace(`const SCRIPTED = pick("--scripted", "");`, `const SCRIPTED = pick("--scripted ", "");`),
-    expectFail: "空格写法与等号写法走到同一个值：两道闸（空值 / 缺文件）在两种写法下同样开口",
+    expectFail: "两种旗标写法走到同一个值：等号写法必须真的拿到剧本，且空值闸同样开口",
   },
   {
     id: "plugin-data-root-assembly-falls-back-to-tmp",
