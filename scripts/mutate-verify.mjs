@@ -6280,6 +6280,34 @@ const MUTATIONS = [
     expectFail: "worker 的 usage 一律落在 workerTokens/byAgent，绝不进 mainTokens",
   },
   {
+    // 第 486 页补：acceptance-sampler.ts 是本页两个缺陷的所在文件、13 条用例，而变异表里
+    // **一条锚点都没有** ⇒ 整份采样器是「有判据、无分辨力」状态，恰是本仓点名的那一族。
+    // 打分母口径：没红过的轮不进分母。它是这个文件最贵的一条不变量——把没红过的轮也算进去，
+    // 读数会随「任务有多难」漂移，而不是反映「修得有多好」，而那种漂移**看起来完全合理**。
+    id: "heal-rate-denominator-includes-clean-rounds",
+    src: "src/agent/acceptance-sampler.ts",
+    test: "tests/acceptance-sampler.test.ts",
+    desc: "分母把没红过的轮也算进来 ⇒ 自愈率随任务难度漂移（难题一堆红灯拉低、简单题一堆绿灯抬高），"
+      + "而那种漂移读起来完全像「修得好不好」，没有任何别的地方能看出它错了",
+    // 打的是「把这道闸整个删掉」⇒ 每一轮都进分母（含没红过的）。不是换成 return;——
+    // 那样 closeRound 一次都不计数，读出来是「全不可测」，与这里要证的那条漂移不是同一件事。
+    apply: (s) => s.replace("    if (!roundHadRed) return;\n", ""),
+    expectFail: "没红过的轮不进分母（否则读数随任务难度漂移，而不是反映修得有多好）",
+  },
+  {
+    // 同一页第二条：join 键是本页修的那个真缺陷（按字段读 vs 按 agent_id 配对）。
+    // 之所以值得一条锚点：**两种读法在合成语料上都能全绿**——只有真语料能分开它们
+    // （真语料里 routing_decision 是独立事件，字段读法恒 0）。钉住它，下次有人"简化"回字段读法会红。
+    id: "routing-coverage-joins-by-field-not-agent-id",
+    src: "src/agent/acceptance-sampler.ts",
+    test: "tests/acceptance-sampler.test.ts",
+    desc: "覆盖率退回「读 spawn 事件上的 routing_decision 字段」⇒ 生产侧那是独立事件、按 agent_id 一对一，"
+      + "字段读法在真实语料里恒读 0，而读出来的是形状错、不是「路由没上场」",
+    apply: (s) => s.replace("  const withDecision = spawns.filter((e) => decided.has(e.agent_id));",
+      "  const withDecision = spawns.filter((e) => (e as { routing_decision?: unknown }).routing_decision !== undefined);"),
+    expectFail: "决策与 spawn 按 agent_id 对上，不是 spawn 上的字段（恒 0 那把尺就是这么来的）",
+  },
+  {
     id: "cpp-zero-boundary-ratio-zero",
     src: "src/agent/cost-per-progress.ts",
     test: "tests/cost-per-progress.test.ts",
