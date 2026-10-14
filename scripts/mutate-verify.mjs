@@ -157,6 +157,18 @@ const MUTATIONS = [
     expectFail: "归属已知：只认本会话那张卡，别人的卡不上屏（此前是渲染最后到达的那张）",
   },
   {
+    // 第 487 页事故的直接产物：那道门当初不存在，所以我把别人 42 行在飞改动连进了 commit。
+    // 判据是**增量比**（未声明文件新增 ≥ 我声明那批新增之和 × 2），不是绝对行数——
+    // 第一版用绝对行数量不出真事故（271→359 只有 1.3 倍，而其中 42 行是别人的）。
+    id: "carried-hunks-ratio-blind",
+    src: "scripts/lib/commit-surface.ts",
+    test: "tests/commit-surface-check.test.ts",
+    desc: "夹带判据的倍数闸失效（>= 换成 >，或阈值乘 100）⇒ 别人没提交的 hunk 又被连进 commit，"
+      + "而那一族的后果是「HEAD 上入库的测试 import 不存在的函数」，本地 gates 还全绿",
+    apply: (s) => s.replace("export const CARRIED_DELTA_RATIO = 2;", "export const CARRIED_DELTA_RATIO = 200;"),
+    expectFail: "未声明文件的新增恰好是我那批的 2 倍 ⇒ 响（判据是 ≥，边界含等号）",
+  },
+  {
     // 桌面层第二条锚点（第 485 页）：projections.ts 11 个导出函数、409 行、27 条用例，
     // 而变异表里桌面侧此前只有 send-queue 那一条 ⇒ 整份投影层是「有判据、无分辨力证据」。
     // 挑这一格是因为它**可以静默地丢**：思考桶在终稿到达时被 clear，若不同时把正文挂到
