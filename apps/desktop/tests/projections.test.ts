@@ -50,6 +50,24 @@ describe("投影 v2", () => {
     ]);
     expect(done).toEqual([expect.objectContaining({ kind: "assistant", text: "你好", live: false })]);
   });
+  it("思考正文挂到终稿行上再清（否则只在流式那几秒可见，等于没展示）", () => {
+    // 变异锚点 desktop-thinking-not-carried-onto-final 打的就是这一格：
+    // 把 carriedThinking 换成 undefined 功能照旧、信息没了，没有任何别的门会红。
+    const rows = projectStream([
+      ev({ type: "thinking_delta", callId: "c1", text: "让我想想" }),
+      ev({ type: "assistant_delta", callId: "c1", text: "答案" }),
+      ev({ type: "assistant_message", content: "答案" }),
+    ]);
+    expect(rows).toEqual([
+      expect.objectContaining({ kind: "assistant", text: "答案", live: false, thinking: "让我想想" }),
+    ]);
+    // 反向格：没有思考事件时终稿行**不带** thinking 键（不许留一个空串字段）
+    const plain = projectStream([
+      ev({ type: "assistant_delta", callId: "c2", text: "答" }),
+      ev({ type: "assistant_message", content: "答" }),
+    ]);
+    expect(plain[0]).not.toHaveProperty("thinking");
+  });
   it("工具待定：tool_call 未决 pending，tool_result 按 callId 收口 ok", () => {
     const rows = projectStream([
       ev({ type: "tool_call", id: "t1", name: "run_shell", args: { command: "pnpm bench" } }),

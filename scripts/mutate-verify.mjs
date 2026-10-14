@@ -157,6 +157,22 @@ const MUTATIONS = [
     expectFail: "归属已知：只认本会话那张卡，别人的卡不上屏（此前是渲染最后到达的那张）",
   },
   {
+    // 桌面层第二条锚点（第 485 页）：projections.ts 11 个导出函数、409 行、27 条用例，
+    // 而变异表里桌面侧此前只有 send-queue 那一条 ⇒ 整份投影层是「有判据、无分辨力证据」。
+    // 挑这一格是因为它**可以静默地丢**：思考桶在终稿到达时被 clear，若不同时把正文挂到
+    // 终稿行上，「思考过程」就只在流式那几秒可见——功能还在、信息没了，没有任何门会红。
+    id: "desktop-thinking-not-carried-onto-final",
+    src: "apps/desktop/src/renderer/projections.ts",
+    test: "apps/desktop/tests/projections.test.ts",
+    config: "apps/desktop/vitest.config.ts",
+    desc: "终稿到达时清掉思考桶却**不把正文挂到终稿行上** ⇒ 输出结束后思考过程消失（清空后不可见，等于没展示）",
+    apply: (s) => s.replace(
+      '        const carriedThinking = [...thinkingBuckets.values()].join("") || undefined;',
+      "        const carriedThinking = undefined;",
+    ),
+    expectFail: "思考正文挂到终稿行上再清（否则只在流式那几秒可见，等于没展示）",
+  },
+  {
     id: "clarify-submit-unknown",
     src: "src/agent/gates.ts",
     test: "tests/clarify.test.ts",
@@ -6305,7 +6321,10 @@ const MUTATIONS = [
       + "字段读法在真实语料里恒读 0，而读出来的是形状错、不是「路由没上场」",
     apply: (s) => s.replace("  const withDecision = spawns.filter((e) => decided.has(e.agent_id));",
       "  const withDecision = spawns.filter((e) => (e as { routing_decision?: unknown }).routing_decision !== undefined);"),
-    expectFail: "决策与 spawn 按 agent_id 对上，不是 spawn 上的字段（恒 0 那把尺就是这么来的）",
+    // 指名的必须是**真能杀它**那条：第一版我指的是「决策与 spawn 按 agent_id 对上…」，
+    // 而那条断言的是 0/1——字段读法同样读出 0/1（spawn(false) 两个读法都没有那个字段）⇒ 恒真。
+    // 真正分开两种读法的是「同一 id 多条决策只算一次」（1/1）：字段读法下它读 0/1。
+    expectFail: "同一 id 多条决策只算一次（分母是 spawn 数，不是事件数）",
   },
   {
     id: "cpp-zero-boundary-ratio-zero",
