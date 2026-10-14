@@ -93,9 +93,14 @@ export function routingDecisionCoverage(events: readonly AgentEvent[]): RateSamp
 
 /** 一格的人读面（门与台账共用一个写法，不在两处各拼一次字符串）。 */
 export function formatRate(label: string, s: RateSample, unit = "%"): string {
+  // 分母 0 ⇒ 一律走不可测，**不信任调用方给的 unmeasurable 标志**：两个采样器都从 `rate()`
+  // 出来（那里 total===0 ⇒ unmeasurable=true），但 formatRate 是导出面，别的构造路径
+  // （测试夹具、将来的门）可能给出 `total:0, unmeasurable:false` ⇒ 印出 `1/0 = Infinity%`。
+  // 那正是 cost-per-progress 第二条纪律点名的那一族：不可测不许悄悄变成 0 或 Infinity。
+  const unmeasurable = s.unmeasurable || s.total === 0;
   // 不可测这句话自己不许带上 `0${unit}` 那个字形：它一出现，「不可测」就被读成、也被下游扫成
   // 一个零读数（本仓三态纪律：读到 0 与没有尺是两件事）。所以这里只说「没有尺、读数不是零」。
-  if (s.unmeasurable) return `${label}：不可测（分母 0 ⇒ 这一格没有尺，读数不是零）`;
+  if (unmeasurable) return `${label}：不可测（分母 0 ⇒ 这一格没有尺，读数不是零）`;
   const pct = Math.round((s.hits / s.total) * 100);
   return `${label}：${String(s.hits)}/${String(s.total)} = ${String(pct)}${unit}`;
 }

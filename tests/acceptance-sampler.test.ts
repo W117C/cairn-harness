@@ -118,4 +118,15 @@ describe("formatRate（人读面）", () => {
     expect(formatRate("自愈率", { hits: 0, total: 0, unmeasurable: true })).toContain("不可测");
     expect(formatRate("自愈率", { hits: 0, total: 0, unmeasurable: true })).not.toContain("0%");
   });
+
+  it("分母 0 但标志说「可测」⇒ 仍判不可测，不许印 Infinity%（不信任调用方给的标志）", () => {
+    // 两个采样器都从 rate() 出来（total===0 ⇒ unmeasurable=true），但 formatRate 是导出面：
+    // 别的构造路径可能给出 {hits:1,total:0,unmeasurable:false}，那时 1/0 会印成 Infinity%
+    // ——cost-per-progress 第二条纪律点名的那一族（不可测不许悄悄变成 0 或 Infinity）。
+    const bad = { hits: 1, total: 0, unmeasurable: false };
+    expect(formatRate("自愈率", bad)).toContain("不可测");
+    expect(formatRate("自愈率", bad)).not.toContain("Infinity");
+    // 反向格：真读数 0/5 仍是 0%，别把「读到 0」一起扫掉
+    expect(formatRate("自愈率", { hits: 0, total: 5, unmeasurable: false })).toBe("自愈率：0/5 = 0%");
+  });
 });
