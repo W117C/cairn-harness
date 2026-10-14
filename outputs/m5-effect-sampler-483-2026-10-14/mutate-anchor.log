@@ -1,0 +1,9 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-483.lock）
+变异验证：1 条
+✅ scripted-flag-equals-form-dropped — `pick` 只认「旗标 空格 值」⇒ `--scripted=<剧本>` 被静默丢掉，脚本带着「我在跑离线」的信念**去打真会话**；有 key 的那台机器上这是一次花钱的误会，方向与「读不到 ≠ 安全」同一条（本跑器不拒未知旗标，所以这一判没有第二道门）。历史：这一条曾因 apply 打在**死代码**上而存活——原实现自己 find 一遍 --scripted=，与 pick 的结果恒等，磨掉它行为一字不变；现已改为直接打 pick 的取键处，并由判卷对比两种写法的输出是否逐字相同 ｜本机实测 6.0s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 6.1s · 跑了 1/1 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 2 次／1 条（每条次数分布 2×1）· 单次中位 第1次 4.9s／第2次 1.1s· 最贵一条 scripted-flag-equals-form-dropped 6.0s
+跑法单价：selector 2 拍·中位 4.88s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-483.lock）

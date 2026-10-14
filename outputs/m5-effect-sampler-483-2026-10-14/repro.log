@@ -1,0 +1,21 @@
+=== 反向验证 1：formatRate 文案磨回旧写法（自带 0% 字形）===
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance-sampler.test.ts > formatRate（人读面） > 可测出百分比；不可测明说不许折成 0%（与 0% 不同形）
+AssertionError: expected '自愈率：不可测（分母 0 ⇒ 不许折成 0%）' not to contain '0%'
+      Tests  1 failed | 9 passed (10)
+=== 反向验证 2：join 键磨回「spawn 上的字段」读法 ===
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance-sampler.test.ts > routingDecisionCoverage（生产 spawn 的路由决策覆盖率） > 带决策的 spawn / 全部 spawn
+AssertionError: expected { hits: +0, total: 2, …(1) } to deeply equal { hits: 1, total: 2, …(1) }
+ FAIL  tests/acceptance-sampler.test.ts > routingDecisionCoverage（生产 spawn 的路由决策覆盖率） > 同一 id 多条决策只算一次（分母是 spawn 数，不是事件数）
+AssertionError: expected { hits: +0, total: 1, …(1) } to deeply equal { hits: 1, total: 1, …(1) }
+      Tests  2 failed | 8 passed (10)
+
+=== 反向验证 3：磨掉 pick 的等号支 ===
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/loop-eval-synthetic-chain.test.ts > 离线合成面：SWE-bench 那两半尺子第一次跑出读数 > 剧本那一趟：逐名报全绿、提供者报剧本，取料面带格式与条数
+ FAIL  tests/loop-eval-synthetic-chain.test.ts > 离线合成面：SWE-bench 那两半尺子第一次跑出读数 > 同一副装配换一条剧本：目标转绿而「该保住的」坏了一条 ⇒ broken 点名它、notGreen 仍为空
+ FAIL  tests/loop-eval-synthetic-chain.test.ts > 离线合成面：SWE-bench 那两半尺子第一次跑出读数 > 剧本那一趟不许被「未起步」剔出分母：请求=0 是构造如此，不是跑不成
+ FAIL  tests/loop-eval-synthetic-chain.test.ts > 离线合成面：SWE-bench 那两半尺子第一次跑出读数 > 等号写法也要认，剧本缺文件时出声退 1——静默改用真会话等于在花用户的钱
+ FAIL  tests/loop-eval-synthetic-chain.test.ts > 离线合成面：SWE-bench 那两半尺子第一次跑出读数 > 两种旗标写法走到同一个值：等号写法必须真的拿到剧本，且空值闸同样开口
+      Tests  5 failed | 2 passed (7)
