@@ -202,6 +202,23 @@ const MUTATIONS = [
     expectFail: "createSession：未注册 workspace 被拒（fail-visible，堵 IPC 任意路径注入面）",
   },
   {
+    // 桌面层第四条锚点（第 490 页）：协议版本握手。这道闸坏掉的形状很隐蔽——
+    // 把 `live !== __IPC_PROTOCOL_VERSION__` 写成 `===`，**功能看着还在**（挂载照旧、查询照旧、
+    // 文案照旧），只有版本真失配时才分得开，而那时失配的渲染层会带着旧契约继续跑。
+    // 桌面 17 个判卷文件里此前只有 3 个有锚点。
+    id: "desktop-protocol-mismatch-gate-inverted",
+    src: "apps/desktop/src/renderer/App.tsx",
+    test: "apps/desktop/tests/protocol-version.test.ts",
+    config: "apps/desktop/vitest.config.ts",
+    desc: "版本失配的判据反过来（!== 写成 ===）⇒ 失配的渲染层照旧挂载，带着旧 IPC 契约继续调主进程；"
+      + "功能面看不出任何异常（查询照旧、文案照旧），只有版本真失配那一趟才分得开",
+    apply: (s) => s.replace(
+      "        if (live !== __IPC_PROTOCOL_VERSION__) {",
+      "        if (live === __IPC_PROTOCOL_VERSION__) {",
+    ),
+    expectFail: "renderer 闸在：挂载比对实况版本，失配/查询失败 fail-closed 早退",
+  },
+  {
     id: "clarify-submit-unknown",
     src: "src/agent/gates.ts",
     test: "tests/clarify.test.ts",
