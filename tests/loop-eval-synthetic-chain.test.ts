@@ -119,24 +119,23 @@ describe("离线合成面：SWE-bench 那两半尺子第一次跑出读数", () 
     expect(out, "不许把这条读成「暗卷缺席，跳过」——那条路会静默地不出数也不报错").not.toContain("暗卷缺席");
   });
 
-  it("空格写法与等号写法走到同一个值：两道闸（空值 / 缺文件）在两种写法下同样开口", () => {
+  it("两种旗标写法走到同一个值：等号写法必须真的拿到剧本，且空值闸同样开口", () => {
     // 这条判据的存在理由是一次**活下来的变异**：`scripted-flag-equals-form-dropped`
-    // 把「自己 find 一遍 --scripted=」那一支磨掉，而 `pick` 本来就认等号写法 ⇒ 行为一字不变，
-    // 上面那条判据当然还是绿。判据有牙的前提是它判的那件事**真的可被改坏**，
-    // 所以这里直接对比两种写法的输出：等号写法任何时候比空格写法少走一道闸，就是回归。
+    // 原先 apply 打在死代码上（自己 find 一遍 --scripted=，与 pick 的结果恒等）⇒ 磨掉它行为一字不变。
+    // 判据有牙的前提是它判的那件事**真的可被改坏**：所以这里不问「两种写法输出是否相同」
+    // （值一起失效时两种写法照样同时失败、输出逐字相同，那条断言是恒真的），
+    // 而问「等号写法有没有**真的拿到**那个值」——拿到与否，缺文件那句里回显的路径就是证人。
     const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1", CAIRN_API_KEY: "", OPENAI_API_KEY: "" };
     const missing = "fixtures/bench/scripts/synthetic-judge/没有这份剧本.jsonl";
     const eqMissing = spawnSync(process.execPath,
       ["--import", "tsx", "scripts/loop-eval.ts", "--tasks", TASKS, "--scripted=" + missing],
       { cwd: ROOT, encoding: "utf8", env, timeout: 90_000 });
-    const spMissing = spawnSync(process.execPath,
-      ["--import", "tsx", "scripts/loop-eval.ts", "--tasks", TASKS, "--scripted", missing],
-      { cwd: ROOT, encoding: "utf8", env, timeout: 90_000 });
     const eqOut = (eqMissing.stdout ?? "") + (eqMissing.stderr ?? "");
-    const spOut = (spMissing.stdout ?? "") + (spMissing.stderr ?? "");
-    expect(eqMissing.status).toBe(spMissing.status);
-    expect(eqOut).toBe(spOut);
+    expect(eqMissing.status).toBe(1);
+    expect(eqOut, "值没拿到就会掉进空值闸，而不是走到缺文件闸").not.toContain("后面是空的");
+    expect(eqOut, "缺文件那句回显的必须是等号写法给进来的那个路径").toContain(missing);
 
+    // 反向格：等号后面空着 ⇒ 必须掉进空值闸（这一格证明上一格不是「反正都退 1」）
     const eqEmpty = spawnSync(process.execPath,
       ["--import", "tsx", "scripts/loop-eval.ts", "--tasks", TASKS, "--scripted="],
       { cwd: ROOT, encoding: "utf8", env, timeout: 90_000 });
