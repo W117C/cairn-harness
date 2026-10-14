@@ -38,7 +38,22 @@
 - 本页没有跑任何真模型请求；CI 也没有凭据（`CAIRN_API_KEY` 缺席），暗卷照旧跳过。
 
 
-## 4. 反向验证：CI 真的会拦（路线图第 4 波自己要求的那一格）
+## 4. 累计读数（2026-10-14 晚更新）
+
+推送历史（`gh run list --branch zcode`）：
+
+| run | headSha | 结论 |
+|---|---|---|
+| 38516829143 | `40f09ccd` | success（9 步全绿） |
+| 38518011858 | `b3aa6e3e` | success |
+| 38523971766 | `e1b64ae3` | success |
+| 38552490396 | `065fa440` | success |
+
+⇒ **本机全绿之后，CI 连续四次独立复述同一结论**，其中三次是本页之后的新工作。
+第 481 页那次 `failure` 是早于本页的历史（第一趟 canceled、steps=0，同 sha 重跑 success），
+成因在 runner 侧（macOS 队列），不是改动信号。
+
+## 5. 反向验证：CI 真的会拦（路线图第 4 波自己要求的那一格）
 
 原文：「故意推一处类型错误 ⇒ CI 必须红，且由 workflow 抓到（**本地跑不算**）」。
 
@@ -62,7 +77,7 @@ CI 日志逐字：`##[error]src/agent/acceptance-sampler.ts(89,9): error TS2322:
 坏树拦住（38517608076 failure 且后置三步全 skip）。分支与远端 ref 均已删除，
 本机 `git log --oneline -1` 仍停在 `40f09ccd`，`rg deliberateTypeError src/` 零命中。
 
-## 5. 仍未证（不许读成绿）
+## 6. 仍未证（不许读成绿）
 
 ① CI 只覆盖 25 道 cert 面门，另 9 道（含 `mutate-verify` / `head-cert-check`）没有 runner 侧读数；
 ② 反向验证只验了**类型错误**这一种坏法，没验「判卷红但 typecheck 绿」那种（后者 CI 也会拦，
