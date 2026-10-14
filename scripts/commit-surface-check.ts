@@ -17,6 +17,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GATES } from "./gate-manifest.js";
 import {
+  carriedHunkFindings,
   classifyDrift,
   commitShapeFacts,
   commitShapeFindings,
@@ -36,9 +37,15 @@ const flag = (name: string): string | null => {
   const v = hit.slice(name.length + 3);
   return v === "" ? null : v;
 };
+const declaredPaths = argv
+  .filter((a) => a.startsWith("--declared="))
+  .flatMap((a) => a.slice("--declared=".length).split(","))
+  .map((s) => s.trim())
+  .filter((s) => s !== "");
 for (const a of argv) {
   if (/^--(landed|sync)=[^\s]+$/u.test(a)) continue;
-  console.error(`[commit-surface] 不认识参数：${a}（只认 --landed=<rev>／--sync=<rev>）`);
+  if (/^--declared=[^\s]+$/u.test(a)) continue;
+  console.error(`[commit-surface] 不认识参数：${a}（只认 --landed=<rev>／--sync=<rev>／--declared=<path>[,<path>]）`);
   process.exit(2);
 }
 const landedRev = flag("landed") ?? flag("sync");
@@ -109,6 +116,31 @@ const shape = commitShapeFindings(commitShapeFacts(shapeRev, gitOrNull));
 const shapeBlocking = shape.filter((x) => x.blocking);
 for (const x of shape) console.log(`  ${x.blocking ? "❌" : "ℹ️"} ${x.kind} — ${x.detail}`);
 console.log(`[commit-surface] 问的是 ${shapeRev}｜${commitShapeSummary(shape)}`);
+
+// ---- 夹带面（第 487 页事故）：这一笔给**未声明文件**新增了多少行 ----
+// 取料：numstat 拿「这一笔每个文件 +N 行」，父笔树拿不到行数就跳过（没尺不当 0）。
+// 声明的文件从提交说明读不到（本仓多会话共用一个 git 身份，author 分辨不出是谁的笔）
+// ⇒ 用 `--declared <path>` 显式传；不传就没有对照基准，这一格只出声不判。
+const numstatOut = gitOrNull(["diff-tree", "--numstat", "--no-commit-id", "-r", "-z", shapeRev]) ?? "";
+const perFile = new Map<string, number>();
+for (const rec of numstatOut.split("\0").filter((s) => s !== "")) {
+  const cells = rec.split("\t");
+  if (cells.length < 3) continue;
+  if (cells[0] === "-") continue; // 二进制不计行
+  perFile.set(cells[2]!, Number(cells[0]));
+}
+// 父笔行数：`git show <rev>:<path> | wc -l` 太慢，改用 ls-tree 拿不到行数这一事实
+// ⇒ 判据用的是**增量比**（新增 / 我声明那批新增之和），不需要绝对行数。
+// parentLines 传 0 表示「本格不读它」——carriedHunkFindings 的分母是 mineAdded，不是它。
+const carried = carriedHunkFindings({
+  rev: shapeRev,
+  files: [...perFile.entries()].map(([path, addedLines]) => ({ path, addedLines, parentLines: 1 })),
+  declaredPaths: declaredPaths,
+});
+for (const x of carried) console.log(`  ${x.blocking ? "❌" : "ℹ️"} ${x.kind} — ${x.detail}`);
+if (declaredPaths.length === 0 && perFile.size > 0) {
+  console.log(`  ℹ️ 没给 --declared ⇒ 夹带格没有对照基准，本轮只出声不判（第 487 页：判据要能复现真事故才算立住）`);
+}
 if (shapeBlocking.length > 0) {
   console.log(`  出口两选一：① 这笔不该长这样 ⇒ 按第 431 页那条退回（git reset --mixed <父>，工作树一字不动）；`);
   console.log(`  ② 确实要删 ⇒ 在提交说明里写「${DELETE_WAIVER_MARK}<为什么>」再落——那句话是给下一个读者留的账，不是给门交的钥匙。`);
