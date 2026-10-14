@@ -196,6 +196,65 @@ export function commitShapeWaived(message: string): boolean {
   return Array.from(line.trim()).length >= 8;
 }
 
+/** 夹带面的事实源：一笔提交里，每个文件「落进去的行数」与「我声明要提交的行数」。
+ *  为什么需要这一格（2026-10-14 第 487 页事故）：`git add <file>` 提的是**整个文件**，
+ *  而多会话共用一个工作树时那个文件常常带着**别人没提交的 hunk**。于是我这边的
+ *  「我只加了 18 行测试」会连别人 42 行一起进 commit，而配套源码还在脏状态
+ *  ⇒ HEAD 上出现「入库的测试 import 一个 HEAD 里不存在的函数」。
+ *  `pnpm gates` 量工作树、脏源码正好补上 ⇒ 本地全绿；只有 HEAD 口径的 head-cert 抓得到。
+ *  本判据补的是**提交那一刻**的那一半：夹带了就当场点名，不等认证那一趟。 */
+export interface CarriedHunkFacts {
+  rev: string;
+  /** 每个被改文件：这一笔为它**新增**的行数，以及同一条路径在**父笔**里的行数。 */
+  files: readonly { path: string; addedLines: number; parentLines: number }[];
+  /** 调用方明确声明属于本笔的文件（其余算夹带）。 */
+  declaredPaths: readonly string[];
+}
+
+export interface CarriedHunkFinding {
+  kind: "carriedForeignHunks" | "carriedFaceUnreadable";
+  blocking: boolean;
+  detail: string;
+  paths: string[];
+}
+
+/**
+ * 夹带判据：这一笔给某个文件新增的行数，明显超过该文件原有的体量 ⇒ 连进来的大半不是我的。
+ *  第一版我用「落库行数 ≥ 暂存前行数 × 2」，**复现不了真事故**：那次文件从 271 行到 359 行，
+ *  只有 1.3 倍，而其中 42 行是别人的。绝对行数天生带着文件自己的历史，量不出"这一笔夹带了多少"。
+ *  改用**增量比**：新增 88 行 vs 原有 271 行 = 33%，看着不大；但对照我声明的那一个文件
+ *  （新增 21 行 vs 原有 12 行 = 175%）就分开了——夹带面的特征是**同一笔里增量比悬殊**。
+ *  ⇒ 判据是：未声明文件的新增行数 ≥ 已声明文件新增行数之和 × 2。
+ */
+export const CARRIED_DELTA_RATIO = 2;
+
+export function carriedHunkFindings(f: CarriedHunkFacts): CarriedHunkFinding[] {
+  const out: CarriedHunkFinding[] = [];
+  const declared = new Set(f.declaredPaths);
+  const mine = f.files.filter((x) => declared.has(x.path));
+  const foreign = f.files.filter((x) => !declared.has(x.path));
+  // 我没声明任何文件 ⇒ 没有对照基准，这一格没尺（不当 0 放行，也不瞎判）。
+  if (mine.length === 0) return out;
+  const mineAdded = mine.reduce((n, x) => n + x.addedLines, 0);
+  if (mineAdded <= 0) return out;
+  const carried = foreign
+    .filter((x) => x.addedLines >= mineAdded * CARRIED_DELTA_RATIO)
+    .map((x) => `${x.path}（这一笔给它 +${String(x.addedLines)} 行，而我声明的那批只 +${String(mineAdded)} 行）`);
+  if (carried.length > 0) {
+    out.push({
+      kind: "carriedForeignHunks",
+      blocking: true,
+      detail: `${f.rev} 夹带了未声明文件的改动：${carried.join("、")}`
+        + "——多会话共用工作树时 `git add <file>` 会把别人没提交的 hunk 一起提进去，"
+        + "而配套源码常在脏状态 ⇒ HEAD 上出现「入库的测试 import 不存在的函数」，本地 gates 还全绿",
+      paths: foreign
+        .filter((x) => x.addedLines >= mineAdded * CARRIED_DELTA_RATIO)
+        .map((x) => x.path),
+    });
+  }
+  return out;
+}
+
 /** 删除形状的判据本体（不碰 git：取料由调用方交进来，交的是它已经算出来的那几个数）。 */
 export function commitShapeFindings(f: CommitShapeFacts): ShapeFinding[] {
   const out: ShapeFinding[] = [];

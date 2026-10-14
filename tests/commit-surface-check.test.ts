@@ -9,12 +9,15 @@ import {
   commitShapeFindings,
   commitShapeSummary,
   commitShapeWaived,
+  carriedHunkFindings,
+  CARRIED_DELTA_RATIO,
   driftSummary,
   gateFaceDiff,
   landedGap,
   DELETED_FILE_CAP,
   DELETE_WAIVER_MARK,
   type DriftReport,
+  type CarriedHunkFacts,
   type GitRunner,
 } from "../scripts/lib/commit-surface.js";
 import { GATES } from "../scripts/gate-manifest.js";
@@ -23,6 +26,83 @@ const cliSrc = readFileSync(fileURLToPath(new URL("../scripts/commit-surface-che
 const hygieneSrc = readFileSync(fileURLToPath(new URL("../scripts/repo-hygiene-check.ts", import.meta.url)), "utf8");
 const libSrc = readFileSync(fileURLToPath(new URL("../scripts/lib/commit-surface.ts", import.meta.url)), "utf8");
 const map = (entries: [string, string][]): Map<string, string> => new Map(entries);
+
+const carried = (over: Partial<CarriedHunkFacts> = {}): CarriedHunkFacts => ({
+  rev: "abc1234", files: [], declaredPaths: [], ...over,
+});
+
+describe("carriedHunkFindings：夹带别人没提交的 hunk ⇒ 提交那一刻就点名", () => {
+  it("事故复现：我只声明了自己的文件，另一个文件落库行数跳变 ⇒ 阻断并点名", () => {
+    // 第 487 页那次的真实数字：我声明了 mutate-verify.mjs（+21 行），
+    // 却连 projections.test.ts 一起提了 +88 行（其中 42 行是别人的）。
+    const f = carried({
+      files: [
+        { path: "scripts/mutate-verify.mjs", addedLines: 21, parentLines: 12 },
+        { path: "apps/desktop/tests/projections.test.ts", addedLines: 88, parentLines: 271 },
+      ],
+      declaredPaths: ["scripts/mutate-verify.mjs"],
+    });
+    const out = carriedHunkFindings(f);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.blocking).toBe(true);
+    expect(out[0]!.paths).toEqual(["apps/desktop/tests/projections.test.ts"]);
+    expect(out[0]!.detail).toContain("HEAD 上出现");
+    expect(out[0]!.detail).toContain("+88");
+  });
+
+  it("我自己写的文件行数正常增长 ⇒ 不响（一倍以内的增长是写测试的常态）", () => {
+    const f = carried({ files: [{ path: "a.ts", addedLines: 30, parentLines: 20 }], declaredPaths: ["a.ts"] });
+    expect(carriedHunkFindings(f)).toEqual([]);
+  });
+
+  it("未声明文件的新增恰好是我那批的 2 倍 ⇒ 响（判据是 ≥，边界含等号）", () => {
+    const f = carried({
+      files: [
+        { path: "mine.ts", addedLines: 10, parentLines: 5 },
+        { path: "b.ts", addedLines: 20, parentLines: 100 },
+      ],
+      declaredPaths: ["mine.ts"],
+    });
+    expect(carriedHunkFindings(f)[0]!.paths).toEqual(["b.ts"]);
+  });
+
+  it("差一点不到 2 倍 ⇒ 不响（防恒真：尺不能对全部输入同答）", () => {
+    const f = carried({
+      files: [
+        { path: "mine.ts", addedLines: 10, parentLines: 5 },
+        { path: "c.ts", addedLines: 19, parentLines: 100 },
+      ],
+      declaredPaths: ["mine.ts"],
+    });
+    expect(carriedHunkFindings(f)).toEqual([]);
+  });
+
+  it("我一个文件都没声明 ⇒ 没有对照基准 ⇒ 没尺就不判（不当 0 放行）", () => {
+    const f = carried({ files: [{ path: "d.ts", addedLines: 500, parentLines: 3 }], declaredPaths: [] });
+    expect(carriedHunkFindings(f)).toEqual([]);
+  });
+
+  it("声明过的文件即使行数跳变也不点名（那是我的笔，不是夹带）", () => {
+    const f = carried({ files: [{ path: "e.ts", addedLines: 400, parentLines: 10 }], declaredPaths: ["e.ts"] });
+    expect(carriedHunkFindings(f)).toEqual([]);
+  });
+
+  it("多文件夹带 ⇒ 全部点名，一个都不许静默", () => {
+    const f = carried({
+      files: [
+        { path: "mine.ts", addedLines: 5, parentLines: 5 },
+        { path: "x.ts", addedLines: 100, parentLines: 10 },
+        { path: "y.ts", addedLines: 200, parentLines: 50 },
+      ],
+      declaredPaths: ["mine.ts"],
+    });
+    expect(carriedHunkFindings(f)[0]!.paths).toEqual(["x.ts", "y.ts"]);
+  });
+
+  it("倍数阈值本身是导出常量（判卷改它要同笔改这里，规则 253）", () => {
+    expect(CARRIED_DELTA_RATIO).toBe(2);
+  });
+});
 
 describe("classifyDrift：四态分开印，谁也不许替谁闭嘴", () => {
   it("两侧一致 ⇒ 只有 aligned 出声（别的态必须为 0）", () => {
