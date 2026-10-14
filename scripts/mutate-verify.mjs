@@ -228,11 +228,13 @@ const MUTATIONS = [
     test: "apps/desktop/tests/provider-keys.test.ts",
     desc: "无安全后端时不再拒存（fail-closed 那支被摘）⇒ headless 上明文 provider key 落盘；"
       + "功能面看不出异常（有后端时两条路行为逐字相同），只有未装配 safeStorage 才分得开",
-    // needle 在源里出现两次（147 行的 put 与 162 行的 delete）⇒ replace 只改第一处，
-    // 即 put 那一支——它才是「明文落盘」那条路径。delete 的同类由 core 判卷兜着。
-    // 标题必须逐字等于桌面判卷里那条用例名（第一版我写了个近似标题 ⇒ 选择子零命中＝vacuous）。
+    // needle 必须**唯一**：`if (!backend) return { ok: false, error: PROVIDER_KEY_NO_BACKEND_ERROR };`
+    // 在源里出现两次（put 与 delete）。第一版只写那一行 ⇒ 针脚体检报「命中 2 处，需人工复认」。
+    // 连下一行一起写才唯一（`isProviderId` 那一支只有 put 有）。
+    // 标题必须逐字等于桌面判卷里那条用例名（近似标题 ⇒ 选择子零命中＝vacuous，第 483/490 页栽过两次）。
     apply: (s) => s.replace(
-      "  if (!backend) return { ok: false, error: PROVIDER_KEY_NO_BACKEND_ERROR };",
+      "  if (!backend) return { ok: false, error: PROVIDER_KEY_NO_BACKEND_ERROR };\n"
+      + "  if (!isProviderId(provider)) return { ok: false, error: \"未知 provider：\" + provider + \"（白名单：\" + PROVIDER_IDS.join(\"/\") + \"）\" };",
       "  // 变异：fail-closed 那支摘掉",
     ),
     expectFail: "fail-closed：safeStorage 不可用 ⇒ 装配拒绝 + set 拒绝不落明文（目录零文件）；未装配后端同判",
@@ -15160,7 +15162,17 @@ function mutantSyntaxProblem(mutated, rel = "") {
   }
   const diags = ts.transpileModule(mutated, {
     reportDiagnostics: true,
-    compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext, allowJs: true },
+    /* **`.tsx` 必须显式给 jsx 选项**（2026-10-14 第 490 页实测）：缺省时 transpileModule 把
+     *  JSX 当 TS 的类型断言语法解析 ⇒ 每个 `<div>` 都报 `'>' expected`。实测
+     *  `apps/desktop/src/renderer/App.tsx`（**未突变的原文件**）在这一组选项下报 355 条错
+     *  ⇒ 桌面层任何 `.tsx` 锚点都会被判「改法致语法错」，而那是工具自己的盲区，不是改法坏了。
+     *  这会把人引向「我的 replace 写错了」这个假因（与下面 `.json` 那条同族）。 */
+    compilerOptions: {
+      target: ts.ScriptTarget.ESNext,
+      module: ts.ModuleKind.ESNext,
+      allowJs: true,
+      ...(rel.endsWith(".tsx") ? { jsx: ts.JsxEmit.ReactJSX } : {}),
+    },
   }).diagnostics ?? [];
   const errs = diags.filter((d) => d.category === ts.DiagnosticCategory.Error);
   if (errs.length === 0) return null;
