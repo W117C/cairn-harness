@@ -185,6 +185,23 @@ const MUTATIONS = [
     expectFail: "思考正文挂到终稿行上再清（否则只在流式那几秒可见，等于没展示）",
   },
   {
+    // 桌面层第三条锚点（第 489 页）：kernel-host 的 workspace 白名单是**IPC 注入面**的闸——
+    // renderer 可经 IPC 传任意路径建会话，无校验即凭空 mkdir <注入路径>/.agent/sessions。
+    // 挑它是因为「闸失效」与「闸不存在」在功能上长得一样：正常路径两种实现都建得出会话，
+    // 只有传入未注册路径时才分得开。桌面 17 个判卷文件里此前只有 2 个有锚点。
+    id: "desktop-create-session-workspace-whitelist-dropped",
+    src: "apps/desktop/src/main/kernel-host.ts",
+    test: "apps/desktop/tests/kernel-host.test.ts",
+    config: "apps/desktop/vitest.config.ts",
+    desc: "createSession 不再校验 workspace ∈ workspaces ⇒ renderer 可指任意路径，"
+      + "会话目录被凭空 mkdir（IPC 任意路径注入面；正常路径两种实现都建得出会话，只有注入路径分得开）",
+    apply: (s) => s.replace(
+      "      if (!workspaces.includes(ws)) {\n        throw new Error(`workspace 不在 workspaces 里: ${ws}`);\n      }",
+      "      // 变异：白名单校验整段摘掉",
+    ),
+    expectFail: "createSession：未注册 workspace 被拒（fail-visible，堵 IPC 任意路径注入面）",
+  },
+  {
     id: "clarify-submit-unknown",
     src: "src/agent/gates.ts",
     test: "tests/clarify.test.ts",
