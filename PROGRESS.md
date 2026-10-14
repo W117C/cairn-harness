@@ -16031,3 +16031,24 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    桌面判卷 17 文件 **170 条**。
 6. **仍未证（不许读成绿）**：① 桌面仍有 **12 个判卷文件 0 条锚点**；② 本轮改动后全表未重跑；
    ③ CI 未跑这几笔；④ 真模型/生产行为未跑。
+
+## 2026-10-14 · 第 491 页：全表抓到我三条锚点自己坏着（工具的 .tsx 盲区 / needle 重名 / 漏带 config）
+
+1. **上一页（490）交完账后跑全表，34 道里红 3 道**——全是我自己那两笔新锚点引起的，写下来因为
+   三个失效形态都不同，且都不是"改法写错了"：
+2. **工具的 .tsx 盲区（这是真缺陷，不是我的错）**：`mutantSyntaxProblem` 用 `ts.transpileModule`
+   却没给 `jsx` 选项 ⇒ 每个 `<div>` 都被当 TS 类型断言解析、报 `'>' expected`。
+   实测 `apps/desktop/src/renderer/App.tsx` **未突变的原文件**在这一组选项下报 **355 条错**
+   ⇒ 桌面层任何 `.tsx` 锚点都会被判「改法致语法错」，把人引向「我的 replace 写错了」这个假因。
+   修：`.tsx` 显式给 `jsx: ReactJSX` ⇒ 355 → **0**。与同函数里 `.json` 那条（09-23 付过账）同族。
+3. **needle 重名**：`if (!backend) return {...PROVIDER_KEY_NO_BACKEND_ERROR}` 在源里出现两次
+   （put 与 delete）⇒ 体检报「命中 2 处，需人工复认」。连下一行 `isProviderId` 那一支才唯一
+   （只有 put 有）。**针脚不唯一时，声明与它实际改的东西会安静地分叉。**
+4. **漏带 config ⇒ vacuous**：BYOK 那条被测面在 `src/main/`、判卷在 `apps/desktop/tests/`，
+   我漏写 `config` ⇒ `runTest` 拿核心那份配置在库根跑，桌面判卷不在核心 include 里
+   ⇒ 选中 0 条、退出码 0 ⇒ 读成 vacuous。**跨层锚点必须自带 config**，这一条此前没人写过。
+5. **读数**：四条桌面锚点逐条在干净 worktree 里杀死（`desktop-thinking…`、
+   `desktop-create-session…`、`desktop-protocol-mismatch…`、`provider-key-no-backend…`）；
+   needles **1565**｜阻断 0；改法语法体检 1565 条全合法。
+6. **仍未证（不许读成绿）**：① 本轮修完后全表**尚未重跑**（正在跑）；② 桌面仍有 12 个判卷文件
+   0 条锚点；③ CI 未跑这几笔；④ 真模型/生产行为未跑。
