@@ -232,12 +232,13 @@ const SWEBENCH_FILE = pick("--swebench", "");
  * （数据层产出 `judge` → 解析器读 TAP → 逐名裁决 → 读数行）可以零 key、零网络跑通。
  * 刻意只换 provider：装配（工具面／三门／verify／换路提示）与判卷口径一字不动，
  * 否则「离线跑通」证的就不是生产那一副装配。读数里 `提供者=` 单独一格声明它不是真会话。 */
-const scriptedEq = argv.find((a) => a.startsWith("--scripted="));
-/* 两种写法都认（空格与等号）。这不是糖：本跑器**不拒未知旗标**，而 `pick` 只认「旗标 空格 值」——
- * 于是 `--scripted=<剧本>` 会被静默丢掉，脚本带着「我在跑离线合成面」的信念**去打真会话**。
- * 有 key 的那台机器上这就是一次花钱的误会，方向与本仓「读不到 ≠ 安全」同一条。 */
-const SCRIPTED = scriptedEq !== undefined ? scriptedEq.slice("--scripted=".length) : pick("--scripted", "");
-if (scriptedEq !== undefined && SCRIPTED === "") {
+/* `--scripted` 的值交给 `pick` 解析，而 `pick` **两种写法都认**（`--scripted 空格 值` 与 `--scripted=值`，
+ * 就是上面那个函数的头两行）。这里刻意不再自己 find 一遍 `--scripted=`：那一支与 `pick` 的结果恒等，
+ * 是死代码，还会把「等号写法被丢掉」这条不变量变成**永远测不出来**——变异表里
+ * `scripted-flag-equals-form-dropped` 正是因此存活（磨掉它行为一字不变，判卷当然全绿）。
+ * 真正要守的是拿到值之后那两道闸：空值出声退、缺文件出声退，都不许静默改去打真会话。 */
+const SCRIPTED = pick("--scripted", "");
+if (SCRIPTED === "") {
   console.error('[loop-eval] --scripted= 后面是空的 ⇒ 拒绝出数（要么给剧本路径，要么别带这枚旗标）');
   process.exit(1);
 }

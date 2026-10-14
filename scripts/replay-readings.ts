@@ -89,6 +89,11 @@ export const REPLAY_READINGS: readonly ReplayReading[] = [
     script: "scripts/replay/lessons-round-ab.ts",
     answers: "M6 两轮 A/B 的**可达面**：冻结剧本跑一轮后真失败轨迹 ⇒ 提炼出几条、注入块形状、两轮事件流除剧本外哪处字节变了。同一支同时把「同类失败率下降」为何在本仓结构不可达写进输出（诚实声明面）",
   },
+  {
+    id: "effect-sampler",
+    script: "scripts/replay/effect-sampler.ts",
+    answers: "docs/m5-acceptance.md 那两格「未测量」的生产发生率：真语料里 review-fail 自愈率（出过红灯又转绿的轮 / 出过红灯的轮）与生产 spawn 路由决策覆盖率（配得上一条 routing_decision 的 spawn / 全部 spawn），池化读数加 M5 50% 目标对照，零分母判「不可测」不判 0%",
+  },
 ];
 
 export interface ReplayFacts {

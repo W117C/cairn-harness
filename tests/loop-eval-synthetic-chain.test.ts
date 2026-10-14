@@ -119,6 +119,32 @@ describe("离线合成面：SWE-bench 那两半尺子第一次跑出读数", () 
     expect(out, "不许把这条读成「暗卷缺席，跳过」——那条路会静默地不出数也不报错").not.toContain("暗卷缺席");
   });
 
+  it("空格写法与等号写法走到同一个值：两道闸（空值 / 缺文件）在两种写法下同样开口", () => {
+    // 这条判据的存在理由是一次**活下来的变异**：`scripted-flag-equals-form-dropped`
+    // 把「自己 find 一遍 --scripted=」那一支磨掉，而 `pick` 本来就认等号写法 ⇒ 行为一字不变，
+    // 上面那条判据当然还是绿。判据有牙的前提是它判的那件事**真的可被改坏**，
+    // 所以这里直接对比两种写法的输出：等号写法任何时候比空格写法少走一道闸，就是回归。
+    const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1", CAIRN_API_KEY: "", OPENAI_API_KEY: "" };
+    const missing = "fixtures/bench/scripts/synthetic-judge/没有这份剧本.jsonl";
+    const eqMissing = spawnSync(process.execPath,
+      ["--import", "tsx", "scripts/loop-eval.ts", "--tasks", TASKS, "--scripted=" + missing],
+      { cwd: ROOT, encoding: "utf8", env, timeout: 90_000 });
+    const spMissing = spawnSync(process.execPath,
+      ["--import", "tsx", "scripts/loop-eval.ts", "--tasks", TASKS, "--scripted", missing],
+      { cwd: ROOT, encoding: "utf8", env, timeout: 90_000 });
+    const eqOut = (eqMissing.stdout ?? "") + (eqMissing.stderr ?? "");
+    const spOut = (spMissing.stdout ?? "") + (spMissing.stderr ?? "");
+    expect(eqMissing.status).toBe(spMissing.status);
+    expect(eqOut).toBe(spOut);
+
+    const eqEmpty = spawnSync(process.execPath,
+      ["--import", "tsx", "scripts/loop-eval.ts", "--tasks", TASKS, "--scripted="],
+      { cwd: ROOT, encoding: "utf8", env, timeout: 90_000 });
+    const eqEmptyOut = (eqEmpty.stdout ?? "") + (eqEmpty.stderr ?? "");
+    expect(eqEmpty.status).toBe(1);
+    expect(eqEmptyOut).toContain("后面是空的");
+  });
+
   it("接线：跑器按 SCRIPTED 分岔把剧本递给 runLoop（整条调用连入参，不钉函数名）", () => {
     const src = readFileSync(join(ROOT, "scripts/loop-eval.ts"), "utf8");
     expect(src).toMatch(

@@ -14313,10 +14313,12 @@ const MUTATIONS = [
     id: "scripted-flag-equals-form-dropped",
     src: "scripts/loop-eval.ts",
     test: "tests/loop-eval-synthetic-chain.test.ts",
-    desc: "只认「旗标 空格 值」⇒ `--scripted=<剧本>` 被静默丢掉，脚本带着「我在跑离线」的信念**去打真会话**；"
-      + "有 key 的那台机器上这是一次花钱的误会，方向与「读不到 ≠ 安全」同一条（本跑器不拒未知旗标，所以这一判没有第二道门）",
-    apply: (s) => s.replace(`const SCRIPTED = scriptedEq !== undefined ? scriptedEq.slice("--scripted=".length) : pick("--scripted", "");`, `const SCRIPTED = pick("--scripted", "");`),
-    expectFail: "等号写法也要认，剧本缺文件时出声退 1——静默改用真会话等于在花用户的钱",
+    desc: "`pick` 只认「旗标 空格 值」⇒ `--scripted=<剧本>` 被静默丢掉，脚本带着「我在跑离线」的信念**去打真会话**；"
+      + "有 key 的那台机器上这是一次花钱的误会，方向与「读不到 ≠ 安全」同一条（本跑器不拒未知旗标，所以这一判没有第二道门）。"
+      + "历史：这一条曾因 apply 打在**死代码**上而存活——原实现自己 find 一遍 --scripted=，与 pick 的结果恒等，"
+      + "磨掉它行为一字不变；现已改为直接打 pick 的取键处，并由判卷对比两种写法的输出是否逐字相同",
+    apply: (s) => s.replace(`const SCRIPTED = pick("--scripted", "");`, `const SCRIPTED = pick("--scripted ", "");`),
+    expectFail: "空格写法与等号写法走到同一个值：两道闸（空值 / 缺文件）在两种写法下同样开口",
   },
   {
     id: "plugin-data-root-assembly-falls-back-to-tmp",
