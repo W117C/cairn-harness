@@ -14446,9 +14446,15 @@ const MUTATIONS = [
     test: "tests/loop-eval-synthetic-chain.test.ts",
     desc: "`pick` 只认「旗标 空格 值」⇒ `--scripted=<剧本>` 被静默丢掉，脚本带着「我在跑离线」的信念**去打真会话**；"
       + "有 key 的那台机器上这是一次花钱的误会，方向与「读不到 ≠ 安全」同一条（本跑器不拒未知旗标，所以这一判没有第二道门）。"
-      + "历史：这一条曾因 apply 打在**死代码**上而存活——原实现自己 find 一遍 --scripted=，与 pick 的结果恒等，"
-      + "磨掉它行为一字不变；现已改为直接打 pick 的取键处，并由判卷对比两种写法的输出是否逐字相同",
-    apply: (s) => s.replace(`const SCRIPTED = pick("--scripted", "");`, `const SCRIPTED = pick("--scripted ", "");`),
+      + "历史：这一条迁过两次针脚。① 原先 apply 打在**死代码**上（原实现自己 find 一遍 --scripted=，"
+      + "与 pick 的结果恒等）⇒ 磨掉它行为一字不变、判卷全绿；改为直接打 pick 的取键处。"
+      + "② 第 492 笔恢复 scriptedEq 判别式（pick 分不出「旗标缺席」与「给了却是空」，而空值闸守的正是这个区别），"
+      + "针脚再次离位 ⇒ 报 no-effect；现改打 scriptedEq 那一支本身。"
+      + "教训：**针脚要打在「判别式」上，不是打在「某一种写法」上**——实现换个形状组织同一件事，针脚就得跟着走。",
+    apply: (s) => s.replace(
+      `const SCRIPTED = scriptedEq !== undefined ? scriptedEq.slice("--scripted=".length) : pick("--scripted", "");`,
+      `const SCRIPTED = pick("--scripted", "");`,
+    ),
     expectFail: "两种旗标写法走到同一个值：等号写法必须真的拿到剧本，且空值闸同样开口",
   },
   {
