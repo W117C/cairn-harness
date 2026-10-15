@@ -244,9 +244,17 @@ function parseNodeTestSpec(text: string, lines: readonly string[]): ParsedResult
   const tests: ParsedTest[] = [];
   const reasons: string[] = [];
   const trailer = new Map<string, number>();
+  let summaryStarted = false;
   for (const line of lines) {
     const t = SPEC_TRAILER.exec(line);
-    if (t !== null) { trailer.set(t.groups!.key!, Number(t.groups!.n)); continue; }
+    if (t !== null) {
+      trailer.set(t.groups!.key!, Number(t.groups!.n));
+      summaryStarted = true;
+      continue;
+    }
+    // Node's spec reporter repeats failed tests beneath `✖ failing tests:` after its ℹ summary.
+    // Those diagnostic lines are not another result list and must not be counted twice.
+    if (summaryStarted) continue;
     const m = SPEC_RESULT_LINE.exec(line);
     if (m === null || line.startsWith(" ")) continue;
     const name = m.groups!.name!.trim();

@@ -275,6 +275,39 @@ describe("parseTestResults：node --test 的 TAP", () => {
   });
 });
 
+describe("parseTestResults：node --test 的 spec", () => {
+  it("失败详情段里的汇总标题和重复失败行不再双计", () => {
+    const text = [
+      "✖ 券后过线免运费 (1.042375ms)",
+      "✔ 原价未过线收运费 (0.102417ms)",
+      "✔ 券后价不为负且总价含运费 (0.872667ms)",
+      "ℹ tests 3",
+      "ℹ suites 0",
+      "ℹ pass 2",
+      "ℹ fail 1",
+      "ℹ cancelled 0",
+      "ℹ skipped 0",
+      "ℹ todo 0",
+      "ℹ duration_ms 67.936084",
+      "",
+      "✖ failing tests:",
+      "",
+      "test at fixtures/bench/bench-synthetic-judge/tests/shipping.test.js:6:1",
+      "✖ 券后过线免运费 (1.042375ms)",
+      "  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal",
+    ].join("\n");
+    const p = parseTestResults(text);
+    expect(p.format).toBe("node-test-spec");
+    expect(p.tests.map((t) => [t.name, t.outcome])).toEqual([
+      ["券后过线免运费", "failed"],
+      ["原价未过线收运费", "passed"],
+      ["券后价不为负且总价含运费", "passed"],
+    ]);
+    expect(p.counts).toEqual({ passed: 2, failed: 1, skipped: 0, todo: 0 });
+    expect(p.complete, p.reasons.join("；")).toBe(true);
+  });
+});
+
 describe("parseTestResults：pytest（SWE-bench 的判卷就是它）", () => {
   it("绿的一份：verbose 行与 -rA 短汇总行并成同一枚 nodeid（不许双计）", () => {
     const p = parseTestResults(PYTEST_GREEN);
