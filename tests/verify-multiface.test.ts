@@ -9,7 +9,7 @@
 //   A/E 新机制本身：探测成立与否、第 3 拍起提示升级、第 2 拍逐字不变。
 import { mkdtemp, mkdir, rm, writeFile, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ESCALATE_REPEAT_ATTEMPT,
@@ -26,6 +26,10 @@ import {
 } from "../src/agent/verify";
 import { isEnvVerifyCause, type AgentEvent, type VerifyCause, type VerifyResultEvent } from "../src/events";
 import { runLoop } from "../src/agent/loop";
+import { fileURLToPath } from "node:url";
+
+/** 仓库根（tests/ 的上一级）。本仓自己的 .agent/config.json 要用真路径读。 */
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 let dir = "";
 afterEach(async () => { if (dir) await rm(dir, { recursive: true, force: true }); });
@@ -293,5 +297,37 @@ describe("M5 · 重复失败升级处置（交付物 2）", () => {
     // 第 2 拍：重复提示；第 3 拍：重复提示 + 升级段（同一条注入里两段都在）。
     expect(outs.some((o) => o.includes("逐字相同") && !o.includes("升级处置"))).toBe(true);
     expect(outs.some((o) => o.includes("升级处置"))).toBe(true);
+  });
+});
+describe("本仓自己的 verify 配置（.agent/config.json 与实测对上）", () => {
+  // 动因（2026-10-15 桌面端会话读数）：本仓 `pnpm run test` 是全量 382 文件 / 5429 条用例，
+  // 实测 219s，而 verify 缺省墙钟 60s（DEFAULT_VERIFY_TIMEOUT_MS）⇒ 每一轮自动补拍都被强杀，
+  // 报「取消信号生效 / not-run」。agent 于是把一条 harness 侧超时读成自己的失败，
+  // 还两次想把它写进记忆（都被权限门拒了）。
+  // 这一格钉的是「配置与实测不许分叉」：改了配置或改了套件规模，这里红。
+  it("超时帽高于全量套件的实测耗时（否则每一轮都会被强杀，而那不是代码红）", async () => {
+    const { config, source } = await loadVerifyConfig(ROOT);
+    expect(source).toBe("config");
+    expect(config.timeoutMs).toBeDefined();
+    // 实测 219s（2026-10-15 本机，382 文件 / 5429 条）。帽必须留余量：压在实测线上等于
+    // 机器一忙就又超时，而那类红最难归因。
+    expect(config.timeoutMs!).toBeGreaterThan(219_000);
+    // 同时不许抬到荒谬：帽越大，一次真的挂住要等越久才收束。
+    expect(config.timeoutMs!).toBeLessThanOrEqual(900_000);
+  });
+
+  it("验证面非空且第一条是 typecheck（类型错会让后面的测试报错变成噪音）", async () => {
+    const { config } = await loadVerifyConfig(ROOT);
+    const commands = verifyCommands(config);
+    expect(commands.length).toBeGreaterThan(0);
+    expect(commands[0]).toContain("typecheck");
+  });
+
+  it("测试面是收窄的定向集，不是全量 `pnpm run test`（全量跑不进帽内）", async () => {
+    const { config } = await loadVerifyConfig(ROOT);
+    for (const command of config.test ?? []) {
+      expect(command).not.toContain("pnpm run test");
+      expect(command).toContain("vitest");
+    }
   });
 });

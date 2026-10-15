@@ -1,0 +1,13 @@
+{
+  "_comment": "本工作区的 harness 配置。2026-10-15 桌面端会话读数：本仓 pnpm run test 是全量 382 文件 / 5429 条用例，实测 219s，而 verify 缺省墙钟是 60s（src/agent/verify.ts DEFAULT_VERIFY_TIMEOUT_MS）⇒ 每一轮自动补拍都被强杀，报「取消信号生效 / not-run」。那不是测试红，是这一轮从来没跑完。这里把超时抬到实测之上，并把测试面收窄到能在帽内跑完的范围。",
+  "verify": {
+    "_comment": "typecheck 是零误报的第一道（本仓 TS 严格）；test 只跑与改动最相关的三个判卷族（工具面 / 权限登记 / 写向判据）——全量套件留给 pnpm test 手动跑，不占 agent 每一轮的钱。",
+    "typecheck": ["node --import tsx scripts/typecheck.ts"],
+    "test": [
+      "node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/tool-surface-parity.test.ts tests/prompt-surface-check.test.ts tests/base-system-discipline.test.ts",
+      "node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/write-face.test.ts tests/permissions-tool-registry.test.ts tests/remember.test.ts"
+    ],
+    "timeoutMs": 300000
+  },
+  "_search": "本工作区**未配**联网搜索端点（loadSearchConfig 返回 null ⇒ web_search 整族不注入，模型会说「我没有检索能力」）。这是已知状态、不是疏漏：没有真实可用的 SearxNG 兼容端点可填。要启用就在这里加 \"search\": { \"endpoint\": \"https://searx.example/search?q={query}&format=json\" }——endpoint 必须含 {query} 占位符，否则仍视为未配。桌面端设置页「联网搜索」一行会显示这个状态。"
+}
