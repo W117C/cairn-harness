@@ -5,7 +5,7 @@
 import { DEFAULT_STALL_MS, type StallGuard } from "../net";
 import { backoffMs, establishStream, retryableStatus } from "./retry";
 import { turnStopMissingEvent, turnTruncatedEvent } from "./stop-reason";
-import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
+import type { ModelOutput, ProviderContentImage, ProviderMessage, ProviderMessageWithImage, ProviderToolSpec } from "./index";
 import type { RequestMeter, RequestCategory, MeterUsage, RequestOutcome } from "../agent/metering";
 
 /** 流内失败的分类（2026-09-30）：重试与否由**抛出处**决定，不由 catch 处猜字符串。
@@ -115,12 +115,43 @@ function toUsage(u: NonNullable<ChatChunk["usage"]>): ModelOutput & { type: "usa
 }
 
 function toWireMessages(messages: OpenAiMessage[]): unknown[] {
-  return messages.map((m) => ({
+  return toOpenAiWireMessages(messages);
+}
+
+/** 带图消息的 wire 形状：content 从字符串换成 OpenAI 的 parts 数组。
+ *  **纯文本消息不走这里**——它在 toWireMessages 里逐字保持 `content: "..."`，
+ *  既不让第三方 OpenAI 兼容网关看到陌生形状，也不动前缀缓存的前缀匹配。 */
+function toWireImageMessage(m: OpenAiMessage, parts: readonly ProviderContentImage[]): unknown {
+  const blocks: unknown[] = [];
+  if (m.content !== null && m.content !== "") blocks.push({ type: "text", text: m.content });
+  for (const p of parts) {
+    if (p.type !== "image") continue;
+    blocks.push({ type: "image_url", image_url: { url: p.dataUrl } });
+  }
+  if (blocks.length === 0) return { role: m.role, content: m.content };
+  return {
+    role: m.role,
+    content: blocks,
+    ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+    ...(m.tool_call_id !== undefined ? { tool_call_id: m.tool_call_id } : {}),
+  };
+}
+
+/** 一条消息的 wire 形状（识图那一支在这里分叉）。 */
+function toWireMessage(m: OpenAiMessage): unknown {
+  const parts = (m as ProviderMessageWithImage).contentParts;
+  if (parts !== undefined && parts.length > 0) return toWireImageMessage(m, parts);
+  return {
     role: m.role,
     content: m.content,
     ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
     ...(m.tool_call_id !== undefined ? { tool_call_id: m.tool_call_id } : {}),
-  }));
+  };
+}
+
+/** 识图消息表（纯函数，供判卷直接钉 wire 形状）。 */
+export function toOpenAiWireMessages(messages: OpenAiMessage[]): unknown[] {
+  return messages.map(toWireMessage);
 }
 
 function toWireTools(tools: OpenAiToolSpec[]): unknown[] {

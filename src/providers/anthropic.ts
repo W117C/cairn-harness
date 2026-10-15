@@ -8,7 +8,7 @@
 import { DEFAULT_STALL_MS, type StallGuard } from "../net";
 import { establishStream } from "./retry";
 import { turnStopMissingEvent, turnTruncatedEvent } from "./stop-reason";
-import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
+import type { ModelOutput, ProviderContentImage, ProviderMessage, ProviderMessageWithImage, ProviderToolSpec } from "./index";
 
 export interface AnthropicOptions {
   /** 缺省读 process.env.ANTHROPIC_API_KEY。 */
@@ -105,9 +105,29 @@ export function toAnthropicBody(
       wire.push({ role: "assistant", content: blocks.length > 0 ? blocks : m.content ?? "" });
       continue;
     }
-    wire.push({ role: "user", content: m.content ?? "" });
+    wire.push({ role: "user", content: toAnthropicUserContent(m) });
   }
   flushToolResults();
+
+/** user 消息的 content：带图片时换成 Anthropic 的 blocks 数组（text + image 混排）。
+ *  纯文本逐字保持字符串——旧形状不变，前缀缓存与网关兼容性都不动。 */
+function toAnthropicUserContent(m: ProviderMessage): unknown {
+  const parts = (m as ProviderMessageWithImage).contentParts;
+  if (parts === undefined || parts.length === 0) return m.content ?? "";
+  const blocks: Record<string, unknown>[] = [];
+  if (m.content !== null && m.content !== "") blocks.push({ type: "text", text: m.content });
+  for (const p of parts as readonly ProviderContentImage[]) {
+    if (p.type !== "image") continue;
+    const mm = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/s.exec(p.dataUrl);
+    // 不是 data URL（外链图片）⇒ 不猜、不静默转成空块：这条消息会 400，让问题暴露在请求上。
+    if (mm === null) {
+      blocks.push({ type: "text", text: "[image: 非 data URL 的图片引用已忽略——只接受 data:image/...;base64,...]" });
+      continue;
+    }
+    blocks.push({ type: "image", source: { type: "base64", media_type: mm[1], data: mm[2] } });
+  }
+  return blocks.length > 0 ? blocks : (m.content ?? "");
+}
   const body: Record<string, unknown> = {
     model: opts.model,
     max_tokens: opts.maxTokens,

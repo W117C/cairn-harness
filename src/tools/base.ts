@@ -47,6 +47,11 @@ export interface ToolContext {
 export interface ToolResult {
   ok: boolean;
   output: string;
+  /** 多模态内容块（识图）：工具把一张图片读进来时，真正的图像数据走这个字段，
+    而不是塞进 `output` 字符串——base64 进 output 会被 output-ring 截断，
+   *  而且「几千字符的 base64」会把这一轮 tool_result 的文本面撑到没法读。
+   *  缺席 = 这次调用没有图片内容（绝大多数调用）。 */
+  images?: readonly { type: "image"; dataUrl: string }[];
   /** D7 覆盖前快照落成的路径（workspace 相对）。缺席 = 没落快照（新建 / 空文件 / 快照自身失败）。
    *  同一个事实有两个读者：正文里那句给模型看（它得知道去哪儿找回原件），这个字段给事件流与界面看。 */
   snapshotId?: string;
@@ -68,7 +73,7 @@ export interface ToolResult {
 /** 本仓静态工具名的唯一事实源：联合类型与名字表同源（加一个工具只改这一行）。 */
 export const TOOL_NAMES = [
   "read_file", "write_file", "edit_file", "apply_patch", "run_shell", "grep", "glob", "lsp",
-  "clarify", "propose_plan", "verify",
+  "clarify", "propose_plan", "verify", "read_image",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];

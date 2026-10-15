@@ -7,7 +7,7 @@
 import { DEFAULT_STALL_MS, type StallGuard } from "../net";
 import { establishStream } from "./retry";
 import { turnStopMissingEvent, turnTruncatedEvent } from "./stop-reason";
-import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
+import type { ModelOutput, ProviderContentImage, ProviderMessage, ProviderMessageWithImage, ProviderToolSpec } from "./index";
 
 export interface GeminiOptions {
   /** 缺省读 process.env.GEMINI_API_KEY。 */
@@ -124,9 +124,32 @@ export function toGeminiBody(
       }
       continue;
     }
-    push(role, { text: m.content ?? "" });
+    // user 侧带图：先 text 再 inlineData（官方 parts 数组混排）。assistant 侧不产图片。
+    const imageParts = m.role === "user" ? geminiImageParts(m) : [];
+    if (m.content !== null && m.content !== "") push(role, { text: m.content });
+    for (const part of imageParts) push(role, part);
+    if ((m.content === null || m.content === "") && imageParts.length === 0) push(role, { text: "" });
   }
   const body: Record<string, unknown> = { contents };
+
+/** user 消息的图片 parts：data URL 拆成 Gemini 官方的 inlineData（mimeType + base64 data）。
+ *  非 data URL 不猜：宁可用一个 text part 说明「这张图没带上」，也不发一个空 inlineData
+ *  （上游对空 data 的 400 与「图没到」是两件事，后者至少能从对话里看出来）。 */
+function geminiImageParts(m: ProviderMessage): Record<string, unknown>[] {
+  const parts = (m as ProviderMessageWithImage).contentParts;
+  if (parts === undefined || parts.length === 0) return [];
+  const out: Record<string, unknown>[] = [];
+  for (const p of parts as readonly ProviderContentImage[]) {
+    if (p.type !== "image") continue;
+    const mm = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/s.exec(p.dataUrl);
+    if (mm === null) {
+      out.push({ text: "[image: 非 data URL 的图片引用已忽略——只接受 data:image/...;base64,...]" });
+      continue;
+    }
+    out.push({ inlineData: { mimeType: mm[1], data: mm[2] } });
+  }
+  return out;
+}
   // 思考档位（§S8）：Gemini 收的是 token 预算，放在 generationConfig.thinkingConfig 里。
   if (opts.thinkingBudget !== undefined && opts.thinkingBudget > 0) {
     body.generationConfig = { thinkingConfig: { thinkingBudget: opts.thinkingBudget } };

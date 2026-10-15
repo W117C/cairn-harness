@@ -19,7 +19,34 @@ export interface ProviderMessage {
   content: string | null;
   tool_calls?: { id: string; type: "function"; function: { name: string; arguments: string } }[];
   tool_call_id?: string;
+  /** 多模态图片块（识图）。**缺席 = 这条消息没有图片**（绝大多数消息）⇒ 缺省零行为：
+   *  纯文本消息在每一处 wire 映射里都逐字保持 `content: "..."` 原形状。
+   *
+   *  为什么直接放在 `ProviderMessage` 上而不是另立一个 `ProviderMessageWithImage`：
+   *  会话组装处（`composeTurnMessages`）要往一个 `GlmMessage[]` 里同时推文本消息和带图消息，
+   *  联合类型会让每一次 push 都要判类型。带图本就是「同一条消息多带一个字段」，
+   *  让它可选即可——读它的人（wire 映射）自己判空。 */
+  contentParts?: readonly ProviderContentImage[];
 }
+
+/** 多模态内容块（识图能力的唯一入口）。
+ *
+ *  为什么另立一个类型而不把 `content` 直接放宽成数组：`content: string | null` 是**四个适配器
+ *  共读的形状**，把它放宽会让每一处 `m.content` 都变成一个需要判空的联合——而绝大多数消息
+ *  仍然只有文本。带 image 的消息是新形状，让它在类型上就显式。
+ *
+ *  `image` 只收 data URL（`data:image/png;base64,...`），不收 http(s) URL：外链图片要过
+ *  SSRF 闸才进得去请求体（`web_fetch` 的 `assertPublicUrl` 那一套），而 adapter 层不做网络
+ *  判定。data URL 则天然只含 base64 字节，没有第二次出网。 */
+export interface ProviderContentImage {
+  type: "image";
+  /** data URL（`data:image/png;base64,...`）。 */
+  dataUrl: string;
+}
+
+/** 带图片的消息体：文本仍在 `content`（图片之外的话照常说），图片块进 `contentParts`。
+ *  两者可同存（「你看这张图，顺便说明这三行」是识图最常见的用法）。 */
+export type ProviderMessageWithImage = ProviderMessage;
 
 /** 统一工具规格（中立）；openai 包成 {type:"function",function:{...}}、
  *  anthropic 映射 {name,description,input_schema}、gemini 映射 functionDeclarations。 */
