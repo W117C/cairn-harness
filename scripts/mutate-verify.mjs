@@ -14449,12 +14449,14 @@ const MUTATIONS = [
       + "历史：这一条迁过两次针脚。① 原先 apply 打在**死代码**上（原实现自己 find 一遍 --scripted=，"
       + "与 pick 的结果恒等）⇒ 磨掉它行为一字不变、判卷全绿；改为直接打 pick 的取键处。"
       + "② 第 492 笔恢复 scriptedEq 判别式（pick 分不出「旗标缺席」与「给了却是空」，而空值闸守的正是这个区别），"
-      + "针脚再次离位 ⇒ 报 no-effect；现改打 scriptedEq 那一支本身。"
-      + "教训：**针脚要打在「判别式」上，不是打在「某一种写法」上**——实现换个形状组织同一件事，针脚就得跟着走。",
-    apply: (s) => s.replace(
-      `const SCRIPTED = scriptedEq !== undefined ? scriptedEq.slice("--scripted=".length) : pick("--scripted", "");`,
-      `const SCRIPTED = pick("--scripted", "");`,
-    ),
+      + "针脚再次离位 ⇒ 报 no-effect；现改打等号取值那一支。"
+      + "⚠️ 中间还试过打 `SCRIPTED` 的整行赋值 ⇒ **变异存活**：`pick` 自己第一条就吃等号写法"
+      + "（`argv.find(a => a.startsWith(flag + \"=\"))`），所以 scriptedEq 在**取值**上与 pick 恒等，"
+      + "磨掉它行为一字不变——正是这个锚点①里记过的同一个坑，换了个入口又踩一次。"
+      + "教训：**针脚要打在判别式/取值那一支上，不是打在「某一种写法」上**。"
+      + "另记一笔未补的洞：判别式 `scriptedEq !== undefined` 那一支（旗标缺席 ⇒ 不许落空值闸）"
+      + "今天没有任何判卷钉它——eae8eaed 那次回归能活下来，缺的就是这个证人。",
+    apply: (s) => s.replace(`scriptedEq.slice("--scripted=".length)`, `""`),
     expectFail: "两种旗标写法走到同一个值：等号写法必须真的拿到剧本，且空值闸同样开口",
   },
   {
