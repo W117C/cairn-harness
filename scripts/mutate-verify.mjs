@@ -14460,6 +14460,19 @@ const MUTATIONS = [
     expectFail: "两种旗标写法走到同一个值：等号写法必须真的拿到剧本，且空值闸同样开口",
   },
   {
+    id: "scripted-flag-absent-not-empty-value",
+    src: "scripts/loop-eval.ts",
+    test: "tests/loop-eval-scripted-flag-absent.test.ts",
+    desc: "旗标**缺席**被读成「给了 `--scripted=` 却是空」⇒ 空值闸恒真 ⇒ **真会话那条路变成死代码**，"
+      + "一份真模型读数都产不出来，而判卷全绿。eae8eaed（第 483 页）正是这么活的：守卫被并成 "
+      + "`pick(\"--scripted\",\"\") + if (SCRIPTED === \"\")`，而 pick 在旗标缺席时同样返回 \"\"。"
+      + "与 `scripted-flag-equals-form-dropped` 是同一道闸的两半：那半管「给了却空必须退」，"
+      + "这半管「没给必须放行」——只有前半时，第 483 页那种回归照样能活。"
+      + "判据是行为格（问缺席时走到哪），不是形状格（不问源码长什么样）。",
+    apply: (s) => s.replace(`if (scriptedEq !== undefined && SCRIPTED === "") {`, `if (SCRIPTED === "") {`),
+    expectFail: "旗标缺席 ⇒ 不许掉进空值闸（eae8eaed 那次回归的形状：缺席被读成「给了空剧本」）",
+  },
+  {
     id: "plugin-data-root-assembly-falls-back-to-tmp",
     src: "src/main/state-handlers.ts",
     test: "tests/plugin-data-root-durable.test.ts",
