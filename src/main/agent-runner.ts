@@ -9,6 +9,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runLoop } from "../agent/loop";
+import { createImageChannel } from "../agent/image-channel";
 import { runCompaction } from "../agent/compaction";
 import { buildMap } from "../agent/map/build";
 import { computePrune } from "../agent/prune";
@@ -589,6 +590,12 @@ export function createGatedRemember(deps: {
       const decision = sideEffectDecisionTable()[mode] ?? "ask";
       if (decision === "deny") return denied("remember", mode, "只读档拒写向工具");
       if (decision === "ask") {
+        // 项目层写入免批（2026-10-15 第十一遍业主裁决，与 runSessionEndDistill 同一条口径）：
+        // 只影响当前项目、写入即事件可见、记忆面板可删 ⇒ 不值得为它烧一张卡。
+        // 此前两条口径分叉的代价是实测的：桌面端会话里 agent 两次想把「本仓 verify 全量
+        // 219s 跑不进 60s 帽」这条真事写进项目记忆，两次都被 default 档的 ask 挡掉
+        // （无审批口 ⇒ fail-closed）⇒ 下一场会话从零开始踩同一个坑。
+        if (args.scope !== "global") return remember.run(args, ctx);
         const ask = deps.getAsk();
         if (!ask) return denied("remember", mode, "非交互模式（fail-closed）");
         if (!(await ask(args))) return denied("remember", mode, "未获批准");
@@ -873,6 +880,11 @@ function createProvider(
     onPreCompact?: (trigger: "manual" | "auto") => Promise<void>;
     /** 本 provider 每次请求末尾追加的临时 user 消息（不进日志）：会话末沉淀轮送指令用。 */
     ephemeralUserTurn?: string;
+    /** 识图活盒子：loop 读到图后，provider 在下一轮请求里取走附上（见 image-channel.ts）。
+     *  与 `ephemeralImages`（一次性、调用方自己算好）是两条不同的时机。 */
+    imageChannel?: { take: () => { type: "image"; dataUrl: string }[] };
+    /** 本次请求附带的图片内容块（不进日志）：`read_image` 读到的图走这条进请求体。 */
+    ephemeralImages?: readonly { type: "image"; dataUrl: string }[];
   },
 ): Provider {
   const scripted = scriptedMainModelPath();
@@ -919,6 +931,8 @@ function createProvider(
       transport,
       transportLabel: label,
       ...(sessionOptions.ephemeralUserTurn !== undefined ? { ephemeralUserTurn: sessionOptions.ephemeralUserTurn } : {}),
+      ...(sessionOptions.imageChannel !== undefined ? { imageChannel: sessionOptions.imageChannel } : {}),
+      ...(sessionOptions.ephemeralImages !== undefined ? { ephemeralImages: sessionOptions.ephemeralImages } : {}),
       ...(attachmentContext ? { attachmentContext } : {}),
     });
   }
@@ -1317,6 +1331,9 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     } catch {
       evolutionNote = "";
     }
+    // 识图通道：loop 存 read_image 读到的图，provider 在下一轮请求里取走附上。
+    // 建在 run 内（不跨 run）⇒ 上一场的图不会漏进下一场——那是把 A 任务的截图当 B 任务的上下文。
+    const imageChannel = createImageChannel();
     const faceArgs = {
       mode: opts.mode,
       // 同一个字段喂给规格面（sessionToolFace）与执行面（installAppTools）——两面必须同时摘。
@@ -1353,8 +1370,12 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
           hookContext,
           deriveRemount: (events: AgentEvent[]) => rt.remountFromEvents(events).text,
         } } : {}),
+        // 识图：loop 读到的图经这只盒子在下一轮请求里附上（不进事件日志，理由见 image-channel.ts）。
+        imageChannel,
       }),
       events: { append: pipeline },
+      // 识图的 loop 侧：只负责把 read_image 读到的图存进盒子（取走发生在 provider 组装请求时）。
+      pendingImages: imageChannel,
       ...(recall || impactTool || diagnoseTool || searchTool
         ? { tools: { ...TOOLS, ...(recall ? { obs_recall: recall } : {}), ...(impactTool ? { impact_query: impactTool } : {}), ...(diagnoseTool ? { diagnose: gatedTool("diagnose", diagnoseTool) } : {}), ...(searchTool ? { web_search: gatedTool("web_search", searchTool) } : {}) } }
         : {}),

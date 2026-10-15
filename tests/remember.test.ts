@@ -58,9 +58,11 @@ describe("remember：scope 只认顶层参数（任务2，mem0 三次越权同�
 });
 
 describe("remember：权限门（任务2 无权限不落盘）", () => {
-  it("default 档审批拒绝 → ok:false 且不落盘", async () => {
+  // 项目层自 2026-10-15 第十一遍裁决起免批（见下方「default 档项目层免批直写」那一格）⇒
+  // 「审批拒绝 ⇒ 不落盘」这一格改在**全局层**上断言：全局层仍逐次问人，那里才是它还成立的地方。
+  it("default 档全局层审批拒绝 → ok:false 且不落盘", async () => {
     const gated = createGatedRemember({ getMode: () => "default", isPlanBlocked: () => false, getAsk: () => async () => false });
-    const r = await gated.run({ scope: "project", kind: "memory", type: "user", topic: "denied", content: "x" }, ctx());
+    const r = await gated.run({ scope: "global", kind: "memory", type: "user", topic: "denied", content: "x" }, ctx());
     expect(r.ok).toBe(false);
     expect(existsSync(join(ws, ".agent", "memory", "denied.md"))).toBe(false);
   });
@@ -78,18 +80,56 @@ describe("remember：权限门（任务2 无权限不落盘）", () => {
     expect(r.ok).toBe(false);
     expect(r.output).toContain("方案门");
   });
+
+  // 2026-10-15 第十一遍业主裁决在沉淀轮那一侧先落了地（项目层免批、全局层一轮一张合并卡），
+  // 但**手动** remember 这条路仍按整族 ask ⇒ 实测代价：桌面端会话里 agent 两次想把
+  // 「本仓 verify 全量 219s 跑不进 60s 帽」写进项目记忆，两次都被挡，下一场从零踩坑。
+  // 这一格把两条口径对齐：项目层免批，全局层照旧问人。
+  it("default 档项目层免批直写（与沉淀轮的分层裁决同一条口径）", async () => {
+    const ask = vi.fn(async () => true);
+    const gated = createGatedRemember({ getMode: () => "default", isPlanBlocked: () => false, getAsk: () => ask });
+    const r = await gated.run({ scope: "project", kind: "memory", type: "user", topic: "proj-free", content: "x" }, ctx());
+    expect(r.ok).toBe(true);
+    expect(read(join(ws, ".agent", "memory", "proj-free.md"))).toContain("x");
+    expect(ask, "项目层不该为它烧一张卡").not.toHaveBeenCalled();
+  });
+
+  it("default 档全局层照旧逐次审批（跨项目回注，不许无声写）", async () => {
+    const ask = vi.fn(async () => false);
+    const gated = createGatedRemember({ getMode: () => "default", isPlanBlocked: () => false, getAsk: () => ask });
+    const r = await gated.run({ scope: "global", kind: "memory", type: "user", topic: "glob", content: "x" }, ctx());
+    expect(r.ok).toBe(false);
+    expect(ask).toHaveBeenCalledTimes(1);
+    // 全局层落在 M2D_MEMORY_HOME 下（测试里是临时 home），不在工作区
+    expect(existsSync(join(ws, ".agent", "memory", "glob.md"))).toBe(false);
+  });
+
+  it("read-only 档项目层也拒（免批只放宽 default/guided 的卡，不放宽只读禁写）", async () => {
+    const ro = createGatedRemember({ getMode: () => "read-only", isPlanBlocked: () => false, getAsk: () => undefined });
+    const r = await ro.run({ scope: "project", kind: "memory", type: "user", topic: "ro-proj", content: "x" }, ctx());
+    expect(r.ok).toBe(false);
+    expect(existsSync(join(ws, ".agent", "memory", "ro-proj.md"))).toBe(false);
+  });
   it("guided 档放行记忆写入（粗档表里它与 auto 同列）", async () => {
     const gated = createGatedRemember({ getMode: () => "guided", isPlanBlocked: () => false, getAsk: () => undefined });
     const r = await gated.run({ scope: "project", kind: "memory", type: "user", topic: "guided-ok", content: "x" }, ctx());
     expect(r.ok).toBe(true);
   });
   it("表外档位不落盘：走 ask，无审批口即 fail-closed（旧 if 链在这里静默放行）", async () => {
+    // 项目层照样免批（第十一遍裁决只对全局层问人）——这一格钉的就是「免批的边界画在 scope 上，
+    // 不画在档位上」：表外档位是未知数，全局层仍然不许它无声落盘。
+    const ro = createGatedRemember({ getMode: () => "yolo-ish" as PermissionMode, isPlanBlocked: () => false, getAsk: () => undefined });
+    await ro.run({ scope: "project", kind: "memory", type: "user", topic: "ghost-proj", content: "x" }, ctx());
+    expect(existsSync(join(ws, ".agent", "memory", "ghost-proj.md"))).toBe(true);
+
     const ask = vi.fn(async () => false);
     const noAsk = createGatedRemember({ getMode: () => "yolo-ish" as PermissionMode, isPlanBlocked: () => false, getAsk: () => undefined });
-    const r1 = await noAsk.run({ scope: "project", kind: "memory", type: "user", topic: "ghost-noask", content: "x" }, ctx());
+    // 全局层：表外档位 ⇒ 表里查不到 ⇒ `?? "ask"` ⇒ 无审批口 fail-closed。
+    // （项目层那一支现在免批，所以「表外不放行」这一格必须落在全局层上，否则它测不到判据。）
+    const r1 = await noAsk.run({ scope: "global", kind: "memory", type: "user", topic: "ghost-noask", content: "x" }, ctx());
     expect(r1.ok).toBe(false);
     const withAsk = createGatedRemember({ getMode: () => "yolo-ish" as PermissionMode, isPlanBlocked: () => false, getAsk: () => ask });
-    const r2 = await withAsk.run({ scope: "project", kind: "memory", type: "user", topic: "ghost-ask", content: "x" }, ctx());
+    const r2 = await withAsk.run({ scope: "global", kind: "memory", type: "user", topic: "ghost-ask", content: "x" }, ctx());
     expect(ask).toHaveBeenCalledTimes(1);
     expect(r2.ok).toBe(false);
     expect(existsSync(join(ws, ".agent", "memory", "ghost-ask.md"))).toBe(false);
