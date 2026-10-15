@@ -14420,6 +14420,18 @@ const MUTATIONS = [
     apply: (s) => s.replace(`  else if (unmatched.length > 0) {`, `  else if (false && unmatched.length > 0) {`),
     expectFail: "名字对不上 ⇒ 逐一点名并落第三态，绝不算成绿",
   },
+  {
+    id: "spec-summary-section-double-counted",
+    src: "src/agent/eval/test-results.ts",
+    test: "tests/eval-test-results.test.ts",
+    desc: "spec 输出末尾 `✖ failing tests:` 那段**诊断复述**被当成第二份结果清单 ⇒ 逐名多数两条"
+      + "（汇总标题本身 + 重复列的那条），与 `ℹ tests N` 对不上 ⇒ complete=false。"
+      + "真实命中：`tests/loop-eval-synthetic-chain.test.ts` 的「靶子自己的口径」断言 3 对、实得 5 对，"
+      + "head-cert 在 d6be184 与 a0850d0 两趟都因此红——而主树带着未入库的修复时全绿，"
+      + "同一个仓库两个面读成两个数。修法是在见到第一条 ℹ trailer 后关掉结果行扫描。",
+    apply: (s) => s.replace(`    if (summaryStarted) continue;\n`, ``),
+    expectFail: "失败详情段里的汇总标题和重复失败行不再双计",
+  },
   /* 第 422 页（能力 10＋9）：离线合成面。三根各盯这一格的一种死法：分岔被摘（剧本永远不接）、
    * 有效性那一判没接到 face（合成趟被「未起步」剔光）、等号写法的旗标被丢（用户以为在跑离线，实则在花钱）。 */
   {
