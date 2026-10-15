@@ -232,13 +232,17 @@ const SWEBENCH_FILE = pick("--swebench", "");
  * （数据层产出 `judge` → 解析器读 TAP → 逐名裁决 → 读数行）可以零 key、零网络跑通。
  * 刻意只换 provider：装配（工具面／三门／verify／换路提示）与判卷口径一字不动，
  * 否则「离线跑通」证的就不是生产那一副装配。读数里 `提供者=` 单独一格声明它不是真会话。 */
-/* `--scripted` 的值交给 `pick` 解析，而 `pick` **两种写法都认**（`--scripted 空格 值` 与 `--scripted=值`，
- * 就是上面那个函数的头两行）。这里刻意不再自己 find 一遍 `--scripted=`：那一支与 `pick` 的结果恒等，
- * 是死代码，还会把「等号写法被丢掉」这条不变量变成**永远测不出来**——变异表里
- * `scripted-flag-equals-form-dropped` 正是因此存活（磨掉它行为一字不变，判卷当然全绿）。
- * 真正要守的是拿到值之后那两道闸：空值出声退、缺文件出声退，都不许静默改去打真会话。 */
-const SCRIPTED = pick("--scripted", "");
-if (SCRIPTED === "") {
+/* ⚠️ 这里**必须**自己 find 一遍 `--scripted=`，不能只靠 `pick("--scripted", "")`。
+ * `pick` 两种写法都认（空格与等号），但它**分不出「旗标缺席」与「给了 `--scripted=` 却是空值」**——
+ * 两者都返回 `""`。而这道闸守的正是这两件事的区别：
+ *   · 旗标**缺席** ⇒ 用户没要合成面 ⇒ 走真会话（这是合法路径，不许挡）；
+ *   · 给了 `--scripted=` 却**是空** ⇒ 用户要合成面但没给剧本 ⇒ 出声退，不许静默改去打真会话。
+ * 第 483 页（`eae8eaed`）曾把这两行并成 `pick("--scripted", "")` + `if (SCRIPTED === "")`，
+ * 于是旗标缺席也恒为真 ⇒ **真会话那条路变成死代码，出不了任何真模型读数**（改前改后判卷全绿，
+ * 因为没有任何判据钉它）。现按上述口径恢复判别式。 */
+const scriptedEq = argv.find((a) => a.startsWith("--scripted="));
+const SCRIPTED = scriptedEq !== undefined ? scriptedEq.slice("--scripted=".length) : pick("--scripted", "");
+if (scriptedEq !== undefined && SCRIPTED === "") {
   console.error('[loop-eval] --scripted= 后面是空的 ⇒ 拒绝出数（要么给剧本路径，要么别带这枚旗标）');
   process.exit(1);
 }
