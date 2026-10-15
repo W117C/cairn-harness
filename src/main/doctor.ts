@@ -33,6 +33,41 @@ export interface DoctorReport {
 /** loadSearchConfig 的三态收拢：null ⇒ 未配（可选项，不算病）；抛 ⇒ 配了但坏（要报，非致命）。 */
 export type SearchReadout = { kind: "unset" } | { kind: "ok" } | { kind: "broken"; message: string };
 
+/** 桌面端用的「能力在场性」读数：把「模型为什么少了一把工具」从日志里搬到界面上。
+ *
+ *  动因（2026-10-15 桌面端会话读数）：用户让 agent「搜一下 deepseek 的新模型」，
+ *  agent 答「我没有主动检索能力，只有 web_fetch」。这句话本身没错，但**用户无从知道原因**——
+ *  `web_search` 的缺席是因为这个工作区没有配 `search.endpoint`（`searchConfigured()` 返回 false ⇒
+ *  规格面与执行面双双不注入），而这件事只存在于 `cairn --doctor` 的 CLI 输出里。
+ *  桌面端没有 doctor 面，于是「能力缺席」对用户呈现为「模型不行」。
+ *
+ *  口径与 doctor 的 search 那一格**同源**（同一个 `loadSearchConfig`、同一个三态），
+ *  不另写一份判据——两份判据迟早漂，而漂的那一格会让界面说「已配」而工具其实没挂。 */
+export interface CapabilityReadout {
+  search: SearchReadout;
+  /** 配置了搜索端点时的端点 URL（只回 http(s) 模板串，不含任何凭据）。未配/配坏 = undefined。 */
+  searchEndpoint?: string;
+  /** 这条读数对应的工作区（界面要能说清「是哪个工作区没配」）。 */
+  workspace: string;
+}
+
+export async function readCapabilities(workspace: string): Promise<CapabilityReadout> {
+  let search: SearchReadout;
+  let endpoint: string | undefined;
+  try {
+    const cfg = await loadSearchConfig(workspace);
+    if (cfg === null) {
+      search = { kind: "unset" };
+    } else {
+      search = { kind: "ok" };
+      endpoint = cfg.endpoint;
+    }
+  } catch (err) {
+    search = { kind: "broken", message: err instanceof Error ? err.message : String(err) };
+  }
+  return { search, ...(endpoint !== undefined ? { searchEndpoint: endpoint } : {}), workspace };
+}
+
 /** 信任/插件数据的落点这一格（第 432 页，能力 7「操作可审计」）。
  *  动因：第 424 页把数据根从 `<tmpdir>/m2e-plugin-data` 搬进 `<home>/.config/cairn/plugin-data`，
  *  搬完仍然没人报「它在哪、权限位多少、表里有几条决议」——信任决议是个静默的落盘动作，

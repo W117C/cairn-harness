@@ -2,13 +2,17 @@
 // AgentApi 新增方法而这里不加行 ⇒ typecheck 红（ipc-protocol 删键同理）。
 import type { AgentApi } from "../../../../src/main/ipc-protocol";
 
-export type PushChannel = "onEvent" | "onAsk" | "onAskDone";
+export type PushChannel = "onEvent" | "onAsk" | "onAskDone" | "onTerminalData" | "onTerminalExit" | "onBrowserState" | "onPreviewState";
 export type InvokeChannel = Exclude<keyof AgentApi, PushChannel>;
 
 export const PUSH_CHANNELS: { [K in PushChannel]: string } = {
   onEvent: "agent:event",
   onAsk: "agent:ask",
   onAskDone: "agent:ask-done",
+  onTerminalData: "agent:terminal-data",
+  onTerminalExit: "agent:terminal-exit",
+  onBrowserState: "agent:browser-state",
+  onPreviewState: "agent:preview-state",
 };
 
 export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
@@ -27,10 +31,44 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   listSessions: "agent:sessions-list",
   createSession: "agent:sessions-create",
   openSession: "agent:sessions-open",
+  queueGet: "agent:session-queue-get",
+  queueSet: "agent:session-queue-set",
   renameSession: "agent:sessions-rename",
   deleteSession: "agent:sessions-delete",
   forkSession: "agent:sessions-fork",
   revertTurn: "agent:sessions-revert",
+  // v4 变更审阅：逐 hunk diff（快照 vs 当前文件）。
+  changeDiff: "agent:change-diff",
+  // v5 窗格后端：file 窗格（列目录 + 读文本）。
+  workspaceListDir: "agent:workspace-list-dir",
+  workspaceReadText: "agent:workspace-read-text",
+  // v7：路径动作（复制绝对路径 / Finder 显示 / 默认应用打开）。
+  workspacePathAction: "agent:workspace-path-action",
+  // v7：朗读（macOS say）。
+  speakText: "agent:speak-text",
+  stopSpeaking: "agent:speak-stop",
+  // v5 窗格后端：terminal 窗格（PTY 起停 + 输入）。
+  terminalStart: "agent:terminal-start",
+  terminalWrite: "agent:terminal-write",
+  terminalKill: "agent:terminal-kill",
+  // v5 窗格弹出：独立窗口路由。
+  panePopout: "agent:pane-popout",
+  // v5 窗格后端：browser 窗格（WebContentsView 起停/边界/导航）。
+  browserOpen: "agent:browser-open",
+  browserBounds: "agent:browser-bounds",
+  browserNav: "agent:browser-nav",
+  browserClose: "agent:browser-close",
+  // v7：浏览器清除数据 + 元素选择。
+  browserClearData: "agent:browser-clear-data",
+  browserPickElement: "agent:browser-pick-element",
+  // v6：产品第一批（模板建项 / 预览运行时 / 项目导出 / 连接自检）。
+  projectTemplates: "agent:project-templates",
+  projectCreateFromTemplate: "agent:project-create-from-template",
+  previewStart: "agent:preview-start",
+  previewStop: "agent:preview-stop",
+  previewStatus: "agent:preview-status",
+  projectExport: "agent:project-export",
+  providerCheck: "agent:provider-check",
   submitFeedback: "agent:feedback-submit",
   listFeedback: "agent:feedback-list",
   listProjects: "agent:projects-list",
@@ -61,7 +99,15 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   // M4-5：dialog 选目录（M3 deferred 收口）——main 端 dialog.showOpenDialog({ openDirectory })，
   // preload 程序化桥自动透传（桥面无逐通道代码，缺行才红）。
   pickDirectory: "agent:pick-directory",
+  // v8：dialog 选文件（附件引用「选择文件…」）——main 端 dialog.showOpenDialog({ openFile, multiSelections })。
+  pickFiles: "agent:pick-files",
+  // v9：Tab 想下一条（业主裁 A②）——main 端按上下文单发模型调用（suggestNextMessage），
+  // renderer 原样上屏结果/分类文案。
+  suggestNext: "agent:suggest-next",
   // SEMA §3.5/§12：协议版本握手——main 实况版本（IPC_PROTOCOL_VERSION）→ renderer 与构建期
   // 注入的期望版本比对，失配 fail-closed。
   protocolVersion: "agent:protocol-version",
+  // v10：能力在场性——搜索端点配没配（口径同 CLI --doctor 的 search 那一格）。
+  // 它回答的是「模型为什么少了一把工具」：没配 search.endpoint 时 web_search 整族不注入。
+  capabilities: "agent:capabilities",
 };

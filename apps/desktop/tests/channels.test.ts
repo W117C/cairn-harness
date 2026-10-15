@@ -10,8 +10,8 @@ import { INVOKE_CHANNELS, PUSH_CHANNELS, type PushChannel } from "../src/main/ch
 // 静态裁决。运行时用例只验推送三键与 invoke 表非空。
 
 describe("通道名表完整性", () => {
-  it("推送通道恰为三条且通道名非空", () => {
-    expect(Object.keys(PUSH_CHANNELS).sort()).toEqual(["onAsk", "onAskDone", "onEvent"]);
+  it("推送通道恰为七条且通道名非空", () => {
+    expect(Object.keys(PUSH_CHANNELS).sort()).toEqual(["onAsk", "onAskDone", "onBrowserState", "onEvent", "onPreviewState", "onTerminalData", "onTerminalExit"]);
     for (const channel of Object.values(PUSH_CHANNELS)) expect(channel).toBeTruthy();
   });
 
@@ -23,7 +23,20 @@ describe("通道名表完整性", () => {
     // SEMA §12：＋protocolVersion（协议版本握手）⇒ 45。
     // S7：＋providerDiscover / providerSave（自定义接口：拉取与存盘）⇒ 47。
     // ③：＋createProject（按项目名建文件夹并登记）⇒ 48。
-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(48);
+    // 恢复闭环：＋queueGet / queueSet（会话发送队列 sidecar）⇒ 50。
+    // v4：＋changeDiff（变更审阅逐 hunk）⇒ 51。
+    // v5：＋workspaceListDir / workspaceReadText（file 窗格只读浏览）⇒ 53。
+    // v5：＋terminalStart / terminalWrite / terminalKill（terminal 窗格）⇒ 56。
+    // v5：＋browserOpen / browserBounds / browserNav / browserClose（browser 窗格）⇒ 60。
+    // v5：＋panePopout（独立窗口）⇒ 61。
+    // v6：＋projectTemplates / projectCreateFromTemplate / previewStart / previewStop / previewStatus /
+    //      projectExport / providerCheck（产品第一批：模板建项 + 预览运行时 + 导出 + 连接自检）⇒ 68。
+    // v7：＋workspacePathAction（路径右键菜单：abs/reveal/open）/ speakText / stopSpeaking（朗读）/
+    //      browserClearData / browserPickElement（浏览器清除数据 + 元素选择）⇒ 73。
+    // v8：＋pickFiles（附件引用「选择文件…」：dialog 选文件多选）⇒ 74。
+    // v9：＋suggestNext（Tab 想下一条：按上下文单发模型调用）⇒ 75。
+    // v10：＋capabilities（能力在场性：搜索端点配没配——让「模型为什么少一把工具」上屏）⇒ 76。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(76);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
@@ -96,6 +109,10 @@ describe("通道名表完整性", () => {
       "openExternal",
       // M4-5：dialog 选目录——新通道直接接真（wired 行＋AgentApi＋channels 三面同步），不进白名单。
       "pickDirectory",
+      // v8：dialog 选文件（附件引用「选择文件…」）——同上三面同步直接接真。
+      "pickFiles",
+      // v9：Tab 想下一条（按上下文单发模型调用）——三面同步直接接真。
+      "suggestNext",
       "forkSession",
       // v2.16 三面同批的在飞键（channels.ts/index.ts 已有 wired 行，名单在此补齐）。
       "revertTurn",
@@ -108,6 +125,42 @@ describe("通道名表完整性", () => {
       "providerSave",
       // ③：新建项目（建同名文件夹 + 登记），三面同步直接接真。
       "createProject",
+      // 恢复闭环：发送队列 sidecar 读回与覆盖写。
+      "queueGet",
+      "queueSet",
+      // v4：变更审阅逐 hunk（快照 vs 当前文件；三面同步直接接真）。
+      "changeDiff",
+      // v5：file 窗格只读浏览（三面同步直接接真）。
+      "workspaceListDir",
+      "workspaceReadText",
+      // v5：terminal 窗格（PTY 宿主；三面同步直接接真）。
+      "terminalStart",
+      "terminalWrite",
+      "terminalKill",
+      // v5：browser 窗格（WebContentsView 宿主；三面同步直接接真）。
+      "browserOpen",
+      "browserBounds",
+      "browserNav",
+      "browserClose",
+      // v5：窗格弹出独立窗口。
+      "panePopout",
+      // v6：产品第一批——模板建项 / 预览运行时 / 项目导出 / 连接自检（三面同步直接接真）。
+      "projectTemplates",
+      "projectCreateFromTemplate",
+      "previewStart",
+      "previewStop",
+      "previewStatus",
+      "projectExport",
+      "providerCheck",
+      // v7：全量补全批——路径动作（resolve 在工作区模块、shell 动作在主进程）/ 朗读（macOS say）/
+      //     浏览器清除数据 / 浏览器元素选择（三面同步直接接真）。
+      "workspacePathAction",
+      "speakText",
+      "stopSpeaking",
+      "browserClearData",
+      "browserPickElement",
+      // v10：能力在场性（搜索端点配没配；口径同 CLI --doctor 的 search 那一格）——三面同步直接接真。
+      "capabilities",
     ];
     // ④ fail-loud 白名单（带理由的未接）：B3 修复后为空——39 条全部接真。要留白须在此
     //    逐条列名并注记理由，且 index.ts 的 UNWIRED_FAIL_LOUD 同步加键（下方断言钉死两者一致）。

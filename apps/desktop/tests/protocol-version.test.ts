@@ -36,6 +36,8 @@ describe("协议版本握手接线（§3.5/§12）", () => {
   });
 
   it("版本事实源单点：桌面侧不许另抄一份版本数字（期望值从协议面 import）", () => {
-    expect(IPC_PROTOCOL_VERSION).toBe(3);
+    // 升版即在此钉新号：v8 → v9（建议批：suggestNext「Tab 想下一条」单发模型调用）；
+    // v9 → v10（能力在场性批：capabilities——搜索端点配没配，让「模型为什么少一把工具」上屏）。
+    expect(IPC_PROTOCOL_VERSION).toBe(10);
   });
 });
