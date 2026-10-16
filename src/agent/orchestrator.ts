@@ -7,14 +7,11 @@
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentEvent, HarnessHoldReason, SecurityFinding } from "../events";
-import { HARNESS_HOLD_PROSE_TOKEN, replay } from "../events";
+import { replay } from "../events";
 import type { ModelOutput, Provider } from "../providers";
 import { glmDefaultModelName, type GlmMessage, type GlmToolSpec } from "../providers/glm";
 import { effectiveModelTable, findSpecByNameOrId, resolveModel, toWorkerModel, type ModelTier } from "../providers/registry";
 import { routeFor, TIER_ORDER as MODEL_TIER_ORDER } from "../routing/policy";
-import { cascadeLadder, runCascade } from "../routing/cascade";
-import { loadBanditState, saveBanditState, updatePriced, type BanditState } from "../routing/bandit";
-import { costUsd } from "../routing/pricing";
 import type { ToolResult } from "../tools/base";
 import { glob } from "../tools/glob";
 import { run_shell } from "../tools/run_shell";
@@ -34,19 +31,12 @@ import {
   type Summarizer,
 } from "./compaction";
 import {
-  BUILTIN_ROLES,
-  concatStageTask,
   dependsOnCycle,
-  parseStages,
-  parseVerdict,
-  resolvePluginRole,
   type FrozenStage,
   type PluginAgentRoleDef,
   type ResolvedPluginRole,
 } from "./sequencer";
 import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckConfig, type StuckTurn } from "./stuck";
-import { decideSupervisor, ringVerdict, superviseApprovalDigest, type SupervisorAction } from "./supervisor";
-import { parseSuperviseContract } from "./supervise-contract";
 import { unconsumedSpawnArgs } from "./spawn-surface";
 import type { RespawnArgs } from "./recovery";
 import {
@@ -81,13 +71,15 @@ import { frozenJudgePathSet } from "../frozen";
 // ---- 拆分面（本文件只留 Orchestrator 类本体 + worker 会话 provider/压缩）----
 // 常量与纯函数按职责抽到同级轻模块（同 provider-key-inject 的先例：抽实现、原路径留公开面，
 // importer 与变异锚点不必跟着改）。本地引用走 import，公开面由文件尾的 re-export 维持逐字不变。
+import { ApprovalsChainsSupervise } from "./orchestrator-approvals";
+import { BudgetCascadeBandit } from "./orchestrator-budget";
 import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, WORKER_TOOL_TABLE, WRITE_WORKER_TOOL_TABLE, workerBudgetConfig, workerToolTable } from "./orchestrator-config";
 import { shell_rw, workerToolSpecs } from "./worker-shell-tools";
 import { clampTier, clipWorkerSummary, isPermissionMode, parseSpawnedAgentId, scanModelOutput, workerVerificationEvidence } from "./worker-report";
-import { priceForModel, priceTagText, shapeJoinRows, spentUsdFor, bucketsSpendUsd, type JoinInput, type JoinPayloadBody, type SpendBucket, type WorkerPrice } from "./orchestrator-join";
+import { priceForModel, priceTagText, spentUsdFor, type JoinPayloadBody, type WorkerPrice } from "./orchestrator-join";
 import { WorkerCancelled, defaultWorkerModel, isScriptedModel, usageNameOf, type WorkerModel } from "./worker-model";
 import { type OrchestratorOptions, type PipelineChain, type SpawnArgs, type StageRoleResolution, type WorkerContext, type WorkerHandle } from "./orchestrator-types";
-import { chainTable, digestArgs, filterWorkerSpecs, filterWorkerTable, parseStringList, parseWorkerContext, scanStreamEvent, withAgentId } from "./worker-projection";
+import { filterWorkerSpecs, filterWorkerTable, parseStringList, parseWorkerContext, scanStreamEvent, withAgentId } from "./worker-projection";
 import { globIntersects, semanticConflictsVia } from "./lease-conflicts";
 import { findToolCallEventId } from "./call-id-index";
 import { buildWorkerSystemMessages, lastAssistantText } from "./worker-prompt";
@@ -125,7 +117,6 @@ export function orchestratorForMerge(agentId: string): Orchestrator | null {
 
 export class Orchestrator {
   private seq = 0;
-  private approvalSeq = 0;
   private readonly workers = new Map<string, WorkerHandle>();
   private readonly pendingApprovals = new Map<
     string,
@@ -139,36 +130,29 @@ export class Orchestrator {
   private readonly diffVersions = new Map<string, number>();
   // ---- M3c ----
   private readonly opts: OrchestratorOptions;
-  /** 会话成本闸（§4.4.8）：maxUsd ≤0 = 关；没填单价时按内置价表估（见 OrchestratorOptions.budget）。 */
-  private readonly budget: { maxUsd: number; pricePerMTok: number; priceModel?: string } | null;
   private readonly stuckConf: StuckConfig;
-  /** M5b 步骤 9：bandit 在线学习状态（懒加载；routing+banditStatePath 双开才激活）。 */
-  private banditState: BanditState | null = null;
-  private banditLoading: Promise<BanditState | null> | null = null;
-  /** 级联前提不成立（开关开了但 routing 关着）只出声一次，不每环刷一遍。 */
-  private cascadeWarned = false;
-  /** 「设了成本上限却估不出价」同样只出声一次（闸不生效是用户必须知道的事实，但不刷屏）。 */
-  private budgetInertWarned = false;
+  /** 三缝之一（budget / cascade / bandit）的状态基座：三个域的状态与逻辑整箱在 orchestrator-budget.ts，
+   *  本类的同名方法全是薄委托；sessionUsage / mainUsage / workers 以**活引用**注入（见构造器）。 */
+  private readonly bcb: BudgetCascadeBandit;
+  /** 三缝之二（审批 / 链 sequencer / 终态等待）的状态基座：整箱在 orchestrator-approvals.ts，
+   *  本类的同名方法全是薄委托；等待表 / 链表 / 依赖登记 / worker 表以**活引用**注入（见构造器）。 */
+  private readonly acs: ApprovalsChainsSupervise;
   /** 会话累计 usage（emit 包装统计全部 usage 事件 = 主 loop + Σworker，§4.4.10 口径）。 */
   readonly sessionUsage = { inputTokens: 0, outputTokens: 0 };
   /** **只**统计无 `agent_id` 的 usage 事件（= 主会话自己那一跳）。
    *  成本闸要按桶分别计价：`sessionUsage` 里 worker 的 token 已经混在一起，按会话档一乘就错
    *  （见 `bucketsSpendUsd` 的实测理由）——所以另记一份"主会话那一段"，两边相加而不是各算各的总量。 */
   private readonly mainUsage = { inputTokens: 0, outputTokens: 0 };
-  /** 「上限设了却有一部分算不出价」只出声一次（闸晚触发的程度用户必须知道，但不刷屏）。 */
-  private budgetPartialWarned = false;
+  /** 依赖链：延迟 spawn 登记（前环未收敛；前环 done 事件驱动触发，无轮询调度器 §4.5）。 */
   /** 依赖链：延迟 spawn 登记（前环未收敛；前环 done 事件驱动触发，无轮询调度器 §4.5）。 */
   private readonly deferredSpawns = new Map<string, { callId: string; args: SpawnArgs; dependsOn: string[] }>();
   /** pipeline 链（callId → 链状态；stages 批准后冻结，重复请求 = 变更请求被拒）。 */
   private readonly chains = new Map<string, PipelineChain>();
-  /** worker 终态等待（sequencer 逐环同步点；finishInner 解析）。 */
-  private readonly terminalWaiters = new Map<string, Array<(r: { status: string; result: Extract<AgentEvent, { type: "agent_result" }> | null }) => void>>();
 
   constructor(opts: OrchestratorOptions) {
     this.approvalTimeoutMs = opts.approvalTimeoutMs ?? 120_000;
     this.raceDeadlineMs = opts.raceDeadlineMs ?? 120_000;
     this.safeMode = opts.safeMode ?? "report";
-    this.budget = opts.budget ?? null;
     this.stuckConf = { ...DEFAULT_STUCK_CONFIG, ...(opts.stuckConfig ?? {}) };
     const rawEmit = opts.emit;
     this.opts = {
@@ -186,77 +170,62 @@ export class Orchestrator {
         await rawEmit(e);
       },
     };
-  }
-
-  // ---- M3c 成本闸（§4.4.8 BYOK 成本底线）：maxUsd = 0 → 整闸零行为；单价缺省时走内置价表（见下） ----
-
-  /** 预算估价（纯查询）。两把尺按优先级：
-   *  ① 用户手填的 `pricePerMTok`（输入+输出同价的粗口径）——语义逐字保留，填了就以它为准；
-   *  ② 没填 ⇒ **分桶各按各档折**（主会话一桶按会话档、每个 worker 一桶按它自己那一档）。
-   *  旧写法是「全部 token × 会话那一档」，而 worker 可以跑在别的档上（价表里 flash 与 strong 差 40 倍）
-   *  ⇒ 上限会晚几十倍才触发，而同一屏的 worker 回执报的是真价：限制类判据与它要限制的那个读数分叉。
-   *  都拿不到 ⇒ 0，但 `budgetBlocked` 会因此出声，不把 0 当成"这会话免费"。 */
-  budgetEstimateUsd(): number {
-    const spend = this.budgetSpendReading();
-    return spend === null ? 0 : spend.usd;
-  }
-
-  /** 花费读数：`null` = 一桶都算不出（⇒ 闸惰掉但必须出声）；否则给出算得出的美元与**算不出的 token 数**
-   *  （后者不折成 $0，也不静默吞：见 `bucketsSpendUsd` 的口径）。 */
-  private budgetSpendReading(): { usd: number; unpricedTokens: number } | null {
-    const b = this.budget;
-    if (!b) return null;
-    if (b.pricePerMTok > 0) {
-      // ① 手填单价：粗口径「一份单价 × 全部 token」，填这个数的人声明的就是"我这儿每百万 token 值这么多钱"
-      const usage = { inputTokens: this.sessionUsage.inputTokens, outputTokens: this.sessionUsage.outputTokens };
-      return { usd: ((usage.inputTokens + usage.outputTokens) / 1_000_000) * b.pricePerMTok, unpricedTokens: 0 };
-    }
-    // ② 唯一给钱的那一行
-    return bucketsSpendUsd(this.budgetBuckets());
-  }
-
-  /** 成本闸的计价桶：主会话一桶按会话档，**每个 worker 一桶按它自己那一档**
-   *  （回放桶 `realMoney: false` ⇒ 不产生真钱，也不算"算不出"，因此不触发告警）。 */
-  private budgetBuckets(): SpendBucket[] {
-    const b = this.budget;
-    return [
-      {
-        usage: { inputTokens: this.mainUsage.inputTokens, outputTokens: this.mainUsage.outputTokens },
-        price: priceForModel(b?.priceModel ?? ""),
+    // A 簇状态基座：三份**活引用**（上面的 emit 包装照旧在原地累加 usage）+ 窄 opts 面 + 收尾回调。
+    // 不用 `...opts` 整包转：结构列写出来，模块加了新依赖（或这里漏转一个开关）当场编译不过。
+    this.bcb = new BudgetCascadeBandit({
+      budget: opts.budget ?? null,
+      sessionUsage: this.sessionUsage,
+      mainUsage: this.mainUsage,
+      workers: this.workers,
+      opts: {
+        emit: this.opts.emit,
+        routing: this.opts.routing,
+        cascadeUpgrade: this.opts.cascadeUpgrade,
+        cascadeMaxUpgrades: this.opts.cascadeMaxUpgrades,
+        banditStatePath: this.opts.banditStatePath,
       },
-      ...[...this.workers.values()].map((w) => ({
-        usage: { inputTokens: w.usage.inputTokens, outputTokens: w.usage.outputTokens },
-        price: w.price ?? null,
-        realMoney: w.price !== null,
-      })),
-    ];
+      cleanupWrite: (w, why) => this.cleanupWrite(w, why),
+    });
+    // B 簇状态基座：四个域（审批等待 / 链 / supervise / 收队）整箱在 orchestrator-approvals.ts。
+    // 活引用照 A 簇纪律只收引用不拷贝；出圈动作走回调，不反向 import 本文件。
+    this.acs = new ApprovalsChainsSupervise({
+      opts: {
+        emit: this.opts.emit,
+        budget: this.opts.budget,
+        agentRoleFor: this.opts.agentRoleFor,
+        cascadeUpgrade: this.opts.cascadeUpgrade,
+        cascadeMaxUpgrades: this.opts.cascadeMaxUpgrades,
+      },
+      pendingApprovals: this.pendingApprovals,
+      approvalTimeoutMs: this.approvalTimeoutMs,
+      markOwner: (id) => approvalOwners.set(id, this),
+      dropOwner: (id) => approvalOwners.delete(id),
+      chains: this.chains,
+      deferredSpawns: this.deferredSpawns,
+      workers: this.workers,
+      signal: this.root.signal,
+      leaseConflicts: (resources) => this.leaseConflicts(resources),
+      spawnStage: (args, ctx, stageRole) => this.spawnStage(args, ctx, stageRole),
+      spawn: (args, ctx) => this.spawn(args, ctx),
+      workerIds: () => this.workerIds(),
+      budgetBlocked: () => this.bcb.budgetBlocked(),
+      rejectOnBudget: (callId) => this.bcb.rejectOnBudget(callId),
+      cascadeReady: () => this.bcb.cascadeReady(),
+      cascadePlanFor: (agentId, budgetLeft) => this.bcb.cascadePlanFor(agentId, budgetLeft),
+      cleanupSuperseded: (agentId) => this.bcb.cleanupSuperseded(agentId),
+      mergeWorker: (agentId) => this.mergeWorker(agentId),
+      cleanupWrite: (w, why) => this.cleanupWrite(w, why),
+    });
   }
 
-  /** 闸判定：maxUsd >0 且估价 ≥ 上限 → 拒绝新 spawn。估不出价 ⇒ 不拦，但**出声一次**：
-   *  用户设的 BYOK 成本底线不许因为"单价没填且表里没这个模型"就静默变成不存在。
-   *  只有一部分算得出时**照触**（已知的钱是真的），另外出声说这道闸可能晚于实际上限。 */
+  // ---- M3c 成本闸（§4.4.8 BYOK 成本底线）：整箱实现在 orchestrator-budget.ts，以下为薄委托 ----
+
+  budgetEstimateUsd(): number {
+    return this.bcb.budgetEstimateUsd();
+  }
+
   budgetBlocked(): boolean {
-    const b = this.budget;
-    if (!b || !(b.maxUsd > 0)) return false;
-    const spend = this.budgetSpendReading();
-    if (spend === null) {
-      if (!this.budgetInertWarned) {
-        this.budgetInertWarned = true;
-        console.warn(
-          "[budget] 会话成本上限 $" + String(b.maxUsd) + " 设了，但既没填单价、价表里也查不到模型 " +
-          JSON.stringify(b.priceModel ?? "") + " ⇒ 这道闸本次不生效（不拿 $0 冒充实付）",
-        );
-      }
-      return false;
-    }
-    if (spend.unpricedTokens > 0 && !this.budgetPartialWarned) {
-      this.budgetPartialWarned = true;
-      console.warn(
-        "[budget] 会话成本上限 $" + String(b.maxUsd) + "：另有 " + String(spend.unpricedTokens) +
-        " 个 token 价不可知未计入 ⇒ 这道闸只按算得出的那部分拦，可能**晚于**实际上限",
-      );
-    }
-    return spend.usd >= b.maxUsd;
+    return this.bcb.budgetBlocked();
   }
 
   /** 活跃 worker 数（running / waiting_approval / waiting_input 计入并发上限；
@@ -482,25 +451,9 @@ export class Orchestrator {
     return { ok: true, waiting: dependsOn.filter((dep) => this.workers.get(dep)?.terminalResolved !== true) };
   }
 
-  /** 成本闸拒绝（落流警告 + tool_result 拒绝，§2.4）。
-   *  注意这一笔有**两个读者面**：下面那条自造 callId 的事件（`budget-<ts>`，流里没有对应的 tool_call，
-   *  只出声）＋真正挂回模型那一次 `spawn_agent` 的返回体。`hold` 两处都盖：那一列描述的是「这一笔是
-   *  harness 按住的」，与 callId 真不真无关。自造 callId 要不要换成真 callId（换成后两条会不会被
-   *  `mergeToolResultsById` 折成一条模型可见消息）属裁决，不属这一笔——第 229 页登记为仍开的一半。 */
+  /** 成本闸拒绝（薄委托：落流与返回体、以及那两个读者面的说明全在 orchestrator-budget.ts）。 */
   private async rejectOnBudget(callId?: string): Promise<ToolResult> {
-    const estimate = this.budgetEstimateUsd().toFixed(4);
-    const cap = String(this.budget?.maxUsd ?? 0);
-    // 落流事件挂真 callId（第 245 页登记的穿线，第 250 页折叠判定安全）：与返回体同 id，
-    // mergeToolResultsById 并成一条、正文不丢；无 callId 的调用点才落回 budget-<ts>（照旧孤儿降级）。
-    const rid = callId !== undefined && callId !== "" ? callId : "budget-" + String(Date.now());
-    await this.opts.emit({
-      type: "tool_result",
-      callId: rid,
-      ok: false,
-      hold: "budget",
-      output: "[budget] 会话成本超限：估价 $" + estimate + " ≥ maxBudgetUsd $" + cap + "（编排扩张被拒；主 loop 不受闸）",
-    } as AgentEvent).catch(() => {});
-    return { ok: false, hold: "budget", output: "spawn_agent: [budget] 会话成本超限（估价 $" + estimate + " ≥ maxBudgetUsd $" + cap + "），新 spawn 被拒" };
+    return await this.bcb.rejectOnBudget(callId);
   }
 
   /** B4（审查）：并发上限 check-then-act 旁路面——判定与 workers.set 之间隔着审批/worktree/emit
@@ -826,17 +779,9 @@ export class Orchestrator {
     };
   }
 
-  /** W3② 本编排器已派 worker 的表价累计（价格不可知的不计；一个都算不出 → null，不报 $0）。
-   *  与 `budgetEstimateUsd()` 是两件事：那条是**成本闸**的粗口径（单一可配单价 × 全部 token，含主 loop），
-   *  这条按每个 worker 真实档位的表价折算，只回答「worker 花掉多少」。 */
+  /** worker 花销累计（薄委托：这把尺与成本闸那把的区分在 orchestrator-budget.ts）。 */
   private workerSpentSoFarUsd(): number | null {
-    let total: number | null = null;
-    for (const w of this.workers.values()) {
-      const s = spentUsdFor(w.price, w.usage);
-      if (s === null) continue;
-      total = (total ?? 0) + s.usd;
-    }
-    return total === null ? null : Math.round(total * 1e6) / 1e6;
+    return this.bcb.workerSpentSoFarUsd();
   }
 
   /** 写租约求交（纯查询）：与活跃 write worker（未终态）的 resources 做 glob 相交判定。 */
@@ -864,46 +809,9 @@ export class Orchestrator {
     return await semanticConflictsVia(this.opts.semanticLease, resources, active);
   }
 
-  /** 审批等待内核（三处审批协议共用：spawn / pipeline 整链 / worker 工具）。
-   *  登记等待 → 超时 fail-closed → 所有者路由（approvalOwners 供 approval_resolved 反查编排器）。
-   *  坑十六先例（M3b 复训）：调用方必须**先拿到本 promise、再 emit 请求**——事件驱动的决议方
-   *  可能在 emit 的 await 解析前就到，先 emit 会丢掉决议。
-   *  调用方只负责各自的 approval_requested / approval_resolved 载荷（三处字段不同）。 */
-  private waitForApproval(id: string, agentId: string): Promise<{ approved: boolean; scope: AskScope; note?: string }> {
-    return new Promise<{ approved: boolean; scope: AskScope; note?: string }>((resolve) => {
-      const timer = setTimeout(() => {
-        this.pendingApprovals.delete(id);
-        approvalOwners.delete(id);
-        resolve({ approved: false, scope: "once", note: "审批超时（fail-closed 拒绝）" });
-      }, this.approvalTimeoutMs);
-      this.pendingApprovals.set(id, { agentId, resolve, timer });
-      approvalOwners.set(id, this);
-    });
-  }
-
-  /** 租约相交的 spawn 审批（§4.4.3 与 turn 解耦：请求落流 + 等待订阅式应答；超时 fail-closed 拒绝）。 */
+  /** 薄委托：写租约相交的 spawn 审批（等待内核与四路协议整箱在 orchestrator-approvals.ts）。 */
   private async requestSpawnApproval(agentId: string, warning: string, conflicts: { agentId: string; resource: string }[]): Promise<boolean> {
-    const id = "apr-" + String(++this.approvalSeq) + "-" + agentId;
-    const outcomePromise = this.waitForApproval(id, agentId);
-    await this.opts.emit({
-      type: "approval_requested",
-      id,
-      agent_id: agentId,
-      tool: "spawn_agent",
-      args_digest: "resources 相交（" + conflicts.map((c) => c.resource).join("、").slice(0, 160) + "）",
-      risk: "medium",
-      risk_reasons: [warning],
-    } as AgentEvent);
-    const outcome = await outcomePromise;
-    await this.opts.emit({
-      type: "approval_resolved",
-      id,
-      agent_id: agentId,
-      decision: outcome.approved ? "approved" : "rejected",
-      scope: "once",
-      ...(outcome.approved ? {} : { reason: "写租约相交未获批准（fail-closed）" }),
-    } as AgentEvent);
-    return outcome.approved;
+    return await this.acs.requestSpawnApproval(agentId, warning, conflicts);
   }
 
   /** 取消单 worker（§4.4.2：只 abort 该 worker；cancelled = 终态，子流终止 + 合成 tool_result 标 cancelled）。 */
@@ -966,735 +874,64 @@ export class Orchestrator {
     return cancelled;
   }
 
-  /** worker 审批决议（§4.4.3 与 turn 解耦：任何时刻可决议，不挂任何进行中的 turn）。
-   *  scope=always 拒绝（§11.7.6：worker 永不写 always）——审批保持 pending，可再以 once/session_kind 决议。 */
+  /** 薄委托：worker 审批决议（§11.7.6 的 always 拒绝在 orchestrator-approvals.ts）。 */
   decideWorkerApproval(id: string, approved: boolean, scope: AskScope): { ok: boolean; error?: string } {
-    const entry = this.pendingApprovals.get(id);
-    if (!entry) return { ok: false, error: "未知或已决议的审批 id: " + id };
-    if (approved && scope === "always") {
-      return { ok: false, error: "worker 永不写 always：scope=always 仅主会话可发（§11.7.6），本次批准被拒绝" };
-    }
-    clearTimeout(entry.timer);
-    this.pendingApprovals.delete(id);
-    approvalOwners.delete(id);
-    entry.resolve({ approved, scope });
-    return { ok: true };
+    return this.acs.decideWorkerApproval(id, approved, scope);
   }
 
+  /** 薄委托：待决议审批 id（审批等待表在 orchestrator-approvals.ts）。 */
   pendingApprovalIds(): string[] {
-    return [...this.pendingApprovals.keys()];
+    return this.acs.pendingApprovalIds();
   }
 
-  // ---- M3c：pipeline 哑 sequencer（§4.4.7 V1；零 LLM——展开路径只做解析/拼接/触发，不 import 任何 provider）----
-
-  /** sequencer 状态只读快照（验收断言面；不提供任何变更通道——stages 批准后冻结）。 */
+  /** 薄委托：sequencer 状态只读快照（链状态整箱在 orchestrator-approvals.ts）。 */
   pipelineSnapshot(callId: string): PipelineChain | null {
-    return this.chains.get(callId) ?? null;
+    return this.acs.pipelineSnapshot(callId);
   }
 
-  /** pipeline spawn：stages 解析冻结 → 整链一个审批（stages 全表 + 链内租约合并警告）→ 后台逐环 spawn。 */
+  /** 薄委托：pipeline spawn（stages 解析冻结 → 整链一个审批 → 哑 sequencer，整支在 orchestrator-approvals.ts）。 */
   private async spawnPipeline(args: SpawnArgs, ctx: { callId?: string }): Promise<ToolResult> {
-    const parsed = parseStages(args.stages);
-    if (!parsed.ok) return { ok: false, output: "spawn_agent(pipeline): " + parsed.why };
-    const callId = ctx.callId ?? "";
-    if (callId === "") {
-      return { ok: false, output: "spawn_agent(pipeline): 缺 callId（无法挂回整链合成结果）" };
-    }
-    const stages = parsed.stages;
-    // 角色解析在审批前完成并随链冻结（与 stages 同刻）：runChain 后环 spawn 不再依赖
-    // currentPluginRuntime 的存活期——主 run 结束清空插件运行时后，链仍按批准时的角色面跑完。
-    const resolutions: StageRoleResolution[] = [];
-    for (let i = 0; i < stages.length; i++) {
-      const resolved = this.resolveStageRole(stages[i]!.role);
-      if ("error" in resolved) {
-        return { ok: false, output: "spawn_agent(pipeline): stage " + String(i + 1) + " 角色解析失败：" + resolved.error };
-      }
-      resolutions.push({ ...resolved, role: stages[i]!.role }); // M5b：角色名随解析冻结，供路由选档/审计
-    }
-    // 整链一个审批（§2.2 裁决 2）：批准即授权全链；链内各环写租约在审批卡合并警告
-    const chainResources = parseStringList(args.resources);
-    const conflicts = this.leaseConflicts(chainResources);
-    const reasons = [
-      "pipeline 整链一个审批：批准即授权全部 " + String(stages.length) + " 环（stages 批准后冻结，模型不可增删改）",
-      "stages 全表: " + stages.map((s, i) => String(i + 1) + "." + s.role + "：" + s.task.slice(0, 40)).join(" → "),
-      ...(conflicts.length > 0 ? ["链内写租约相交：" + conflicts.map((c) => c.resource).join("、") + "（合并冲突预测）"] : []),
-    ];
-    const approved = await this.requestChainApproval(callId, reasons);
-    if (!approved) {
-      return { ok: false, output: "spawn_agent(pipeline): 未获批准（整链一个审批，fail-closed）" };
-    }
-    const chain: PipelineChain = {
-      callId,
-      stages,
-      resolutions,
-      state: stages.map((s, i) => ({ index: i, role: s.role, task: s.task, agentId: null, status: "pending" as const })),
-      // 写面随链冻结（与 stages 同刻）：逐环登记才谈得上约束，只印在卡上是警示不是租约。
-      ...(chainResources.length > 0 ? { resources: [...chainResources] } : {}),
-      status: "running",
-    };
-    this.chains.set(callId, chain);
-    await this.emitSequencerStatus(chain, "链已批准启动：" + String(stages.length) + " 环（" + stages.map((s) => s.role).join(" → ") + "）");
-    void this.runChain(chain).catch(() => {}); // sequencer 边界永不炸主 loop
-    return { ok: true, output: JSON.stringify({ pipeline: true, chain_id: callId, stages: stages.length, stage_roles: stages.map((s) => s.role) }) };
+    return await this.acs.spawnPipeline(args, ctx);
   }
 
-  /** M5c supervise：受限自适应循环（§m5-proposal 步骤 11 / §5.1 双轨）。
-   *  审批卡批准的是 { goal, budget, forbidden, maxStages }——与 pipeline 的 stages 全表**分开**（数据层双轨：
-   *  渲染卡只渲染 args_digest/risk_reasons，放什么契约是编排器的职责，pipeline 冻结断言不受影响）。
-   *  循环：spawn 环 worker → verdict → decideSupervisor → accept / retry / spawn / escalate / abort（有界）。
-   *  V1 单角色 implement（write）自适应重试；畸形 report（verdict 缺失）→ escalate（fail-visible，不静默猜）。
-   *  决策经 agent_message 落流（[supervisor] 审计轨迹，无需新事件类型）。 */
+  /** 薄委托：M5c supervise 受限自适应循环（整支在 orchestrator-approvals.ts）。 */
   private async spawnSupervise(args: SpawnArgs, ctx: { callId?: string }): Promise<ToolResult> {
-    const callId = ctx.callId ?? "";
-    if (callId === "") {
-      return { ok: false, output: "spawn_agent(supervise): 缺 callId（无法挂回受限循环结果）" };
-    }
-    const goal = typeof args.task === "string" ? args.task.trim() : "";
-    if (goal === "") {
-      return { ok: false, output: "spawn_agent(supervise): task（goal）必填" };
-    }
-    // 受限循环参数解析（契约面与规格面同源；fail-visible：非法/不可申报的键一律拒，不静默回落）
-    const sup = parseSuperviseContract(args.supervise);
-    if (sup.contract === null) {
-      return { ok: false, output: "spawn_agent(supervise): " + (sup.error ?? "契约解析失败") };
-    }
-    const { maxStages, forbidden } = sup.contract;
-    // 模型申报的写面（规格：resources）——真轨迹那次它写了 resources 而循环整支丢掉它。
-    // 现在逐环登记：环活着的时候这条链占住声明的面，别的派活与它相交会在自己的审批卡上撞见点名。
-    const ringResources = parseStringList(args.resources);
-    const budget = this.opts.budget?.maxUsd ?? 0;
-    // 审批双轨：批准 {goal, budget, forbidden, maxStages}（§5.1：与 pipeline stages 全表分开）
-    const approved = await this.requestSuperviseApproval(callId, { goal, budget, forbidden, maxStages });
-    if (!approved) {
-      return { ok: false, output: "spawn_agent(supervise): 未获批准（受限循环授权，fail-closed）" };
-    }
-    const roleResolved = this.resolveStageRole("implement");
-    if ("error" in roleResolved) {
-      return { ok: false, output: "spawn_agent(supervise): implement 角色解析失败：" + roleResolved.error };
-    }
-    const stageRole: StageRoleResolution = { ...roleResolved, role: "implement" };
-    const repeats = new Map<string, number>();
-    // M6：环 worktree 生命周期——write 环 worker done 后 worktree 留待合并，supervise 没有合并塔介入，
-    // 循环出口必须显式收尾（accept 合并最终环 / 其余 reject），否则 worktree 泄漏污染 workspace。
-    const ringAgentIds: string[] = [];
-    const rejectRings = async (ids: string[]): Promise<void> => {
-      for (const id of ids) await this.cleanupSuperseded(id);
-    };
-    let lastAgentId = "";
-    let lastFailure = "";
-    let lastReport = "";
-    let stageCount = 0;
-    for (;;) {
-      stageCount++;
-      // H2（审查 B-3）：环与环之间检查取消（与 runChain 同纪律）
-      if (this.root.signal.aborted) {
-        await rejectRings(ringAgentIds);
-        return { ok: false, output: "spawn_agent(supervise): 主会话已取消，受限循环中止（fail-closed）" };
-      }
-      if (this.budgetBlocked()) {
-        await this.rejectOnBudget(callId);
-        await rejectRings(ringAgentIds);
-        return { ok: false, output: "spawn_agent(supervise): 成本闸超限，受限循环中止" };
-      }
-      // 有界保险③：同 (role, task-hash) 出现次数（≥3 强制 escalate，防死循环）
-      const taskHash = String(goal.length) + ":" + lastFailure.slice(0, 60);
-      const key = "implement|" + taskHash;
-      const repeatCount = (repeats.get(key) ?? 0) + 1;
-      repeats.set(key, repeatCount);
-
-      const stageCallId = callId + "-sup" + String(stageCount);
-      const stageTask = stageCount === 1 ? goal : concatStageTask(goal, lastAgentId, lastReport);
-      const r = await this.spawnStage(
-        {
-          task: stageTask,
-          mode: stageRole.mode,
-          ...(ringResources.length > 0 && stageRole.mode === "write" ? { resources: ringResources } : {}), // 见上：申报过就真占（只读环不挂空租约）
-          // P1（审查）：forbidden 进 WorkerContext.constraints（提示词层，buildWorkerSystemMessages 渲染
-          // context.constraints）——旧实现塞字符串被 parseWorkerContext 丢弃，契约提示全程零落地。
-          ...(forbidden.length > 0
-            ? { context: { constraints: forbidden.map((f) => "supervise-forbidden（禁改面）：" + f) } }
-            : {}),
-        },
-        { callId: stageCallId },
-        stageRole,
-      );
-      if (!r.ok) {
-        await rejectRings(ringAgentIds);
-        return { ok: false, output: "spawn_agent(supervise): 环 " + String(stageCount) + " spawn 失败：" + r.output };
-      }
-      let agentId = "";
-      try {
-        agentId = (JSON.parse(r.output) as { agent_id?: string }).agent_id ?? "";
-      } catch {
-        agentId = "";
-      }
-      if (agentId === "") {
-        await rejectRings(ringAgentIds);
-        return { ok: false, output: "spawn_agent(supervise): 环 " + String(stageCount) + " spawn 应答异常（无 agent_id）" };
-      }
-      ringAgentIds.push(agentId);
-      const term = await this.waitForAgentTerminal(agentId);
-      if (term.result === null) {
-        await rejectRings(ringAgentIds);
-        return { ok: false, output: "spawn_agent(supervise): 环 " + String(stageCount) + " 终态 " + term.status + "（无结果）→ 受限循环中止" };
-      }
-      const report = term.result.artifacts.report ?? term.result.summary;
-      // P1（审查）：forbidden 契约强制层——diff 触碰禁改面 = 本环失败（报告 verdict 不采信）。
-      // 注入 fail 进既有决策机（retry/spawn/escalate/abort 有界：repeat 防死循环与 maxStages 照常兜底），
-      // 不绕过 decideSupervisor；lastFailure 随注入文本点名被触碰面，下一环反馈可读。
-      const changedFiles = term.result.artifacts?.files_changed ?? [];
-      const violated = forbidden.filter((g) => changedFiles.some((f) => globIntersects(f, g)));
-      // P1（审查）：失败环 diff 摘要喂回——已改文件清单随 report 进 lastReport（concatStageTask 拼
-      // 进下一环任务书），下一环不再从零猜波及面。追加在尾部，不干扰 parseVerdict 的行首锚点。
-      const diffNote = changedFiles.length > 0 ? "\n已改文件（worktree diff）：" + changedFiles.join("、") : "";
-      const effectiveReport = (violated.length > 0
-        ? "verdict: fail\nforbidden 违反：" + violated.join("、") + "（禁改面被触碰，报告 verdict 不采信）\n" + report
-        : report) + diffNote;
-      // 判据来源（`ringVerdict`）：有机器凭据 `artifacts.verified` 就只认凭据；凭据缺席才回落到
-      // 报告里的 verdict 契约行（无 verify 面的仓库里散文是唯一读物——未闭的一半已立案）。
-      // 旧实现只读散文 ⇒ supervise 恒 escalate（implement 任务书里没有 verdict 行可解析），
-      // 反方向还留着一道洞：报告里自写一行 `verdict: pass` 就能换取自动合并。
-      const verdict = ringVerdict({
-        evidence: term.result.artifacts.verified,
-        prose: parseVerdict(effectiveReport),
-        forbiddenViolated: violated.length > 0,
-      });
-      const action: SupervisorAction = decideSupervisor({
-        verdict,
-        stageCount,
-        maxStages,
-        budgetBlocked: this.budgetBlocked(),
-        repeatCount,
-        lastAgentId,
-        lastFailure,
-        nextRole: "implement",
-      });
-      // 决策审计轨迹落流（agent_message，无需新事件类型）
-      const decisionText =
-        action.kind === "retry" ? "retry " + action.agent_id + "：" + action.feedback.slice(0, 80)
-        : action.kind === "spawn" ? "spawn " + action.role
-        : action.kind === "escalate" ? "escalate：" + action.why
-        : action.kind === "abort" ? "abort：" + action.why
-        : "accept";
-      await this.opts.emit({
-        type: "agent_message",
-        agent_id: agentId,
-        kind: "progress",
-        text: "[supervisor] 环 " + String(stageCount) + "/" + String(maxStages) + "（" + term.status + "，判据=" + (verdict ?? "无判据") + "，凭据=" + (term.result.artifacts.verified ?? "无写盘") + "）→ " + decisionText,
-      } as AgentEvent).catch(() => {});
-      if (action.kind === "accept") {
-        // 收尾：最终环有真实写改动（以 finishInner 的 worktreeDiff files_changed 为准——工具调用
-        // 计数会把 shell_rw 改的文件漏成 0、把失败的 write_file 尝试误算成有改动）→ 合并落盘
-        // （mergeWorker 自带清理）；无改动 → 直接清理。前序环一律 reject（supervise 不建合并塔）。
-        const finalHandle = this.workers.get(agentId);
-        const hasChanges = (term.result.artifacts?.files_changed?.length ?? 0) > 0;
-        let merged = false;
-        if (hasChanges && finalHandle?.mode === "write" && finalHandle.worktree) {
-          const m = await this.mergeWorker(agentId);
-          merged = m.ok;
-          if (!m.ok) {
-            // P1（审查）：合并失败保留最终环 worktree+分支——冲突路径刚承诺「在 worktree 内人工
-            // 解决后重试合并」，gate 模式 force 二次确认也还活着；只 reject 前序环。
-            await rejectRings(ringAgentIds.filter((id) => id !== agentId));
-            return { ok: false, output: "spawn_agent(supervise): 最终环合并失败（worktree 已保留：冲突可在 git 面板人工解决/force 合并）：" + m.error };
-          }
-        } else if (finalHandle?.worktree) {
-          await this.cleanupWrite(finalHandle, "rejected");
-        }
-        await rejectRings(ringAgentIds.filter((id) => id !== agentId));
-        return {
-          ok: true,
-          output: JSON.stringify({ supervise: true, chain_id: callId, stages: stageCount, status: "accepted", final_agent: agentId, merged }),
-        };
-      }
-      // escalate / abort = 「交给人判」这两条出口：证据必须活着到人手边。旧实现在这里先 rejectRings
-      // （含最终环）删掉 worktree 与分支，再回去问人——真语料里三份**改对了**的收队回执就是这样
-      // 在升级前被销毁的（ga-strategy-2026-09-20 三次复跑，逐笔读到 `已清理（rejected）` 早于 escalate）。
-      // 与既有的「合并失败保留最终环 worktree」同形：只 reject 前序环，最终环留着，
-      // 现场由 `scanOrphanWorktrees` 在面板点名（泄漏有界且可见，不换取据销毁）。
-      // 取消 / 成本闸两条出口仍全量 reject：那是用户与钱的显式信号，不是「请人来判这份交付」。
-      if (action.kind === "escalate") {
-        await rejectRings(ringAgentIds.filter((id) => id !== agentId));
-        return { ok: false, output: "spawn_agent(supervise): 已升级人工裁决：" + action.why + this.ringScene(agentId) };
-      }
-      if (action.kind === "abort") {
-        await rejectRings(ringAgentIds.filter((id) => id !== agentId));
-        return { ok: false, output: "spawn_agent(supervise): " + action.why + this.ringScene(agentId) };
-      }
-      // retry / spawn → 续环：更新前环上下文（错误永不冒充结果；forbidden 注入的 fail 理由随行）
-      lastAgentId = agentId;
-      lastFailure = effectiveReport.slice(0, 300);
-      lastReport = effectiveReport;
-    }
+    return await this.acs.spawnSupervise(args, ctx);
   }
 
-  /** supervise 整链审批（§5.1 双轨：批准 {goal, budget, forbidden, maxStages}；agent_id 缺省——链没有 worker 身份）。 */
-  private async requestSuperviseApproval(
-    callId: string,
-    contract: { goal: string; budget: number; forbidden: string[]; maxStages: number },
-  ): Promise<boolean> {
-    const id = "apr-" + String(++this.approvalSeq) + "-supervise";
-    const outcomePromise = this.waitForApproval(id, "");
-    const digest = superviseApprovalDigest(contract);
-    await this.opts.emit({
-      type: "approval_requested",
-      id,
-      tool: "spawn_agent",
-      args_digest: digest,
-      risk: "medium",
-      risk_reasons: [
-        "supervise 受限循环授权（非 stages 全表，§5.1 双轨）：批准即授权 ≤" + String(contract.maxStages) + " 环自适应执行（实现→客观判据→失败重试/升级/中止）",
-      ],
-    } as AgentEvent);
-    const outcome = await outcomePromise;
-    await this.opts.emit({
-      type: "approval_resolved",
-      id,
-      decision: outcome.approved ? "approved" : "rejected",
-      scope: "once",
-      ...(outcome.approved ? {} : { reason: "supervise 受限循环未获批准（fail-closed）" }),
-    } as AgentEvent);
-    return outcome.approved;
-  }
-
-  /** 整链审批（§4.4.3 与 turn 解耦；agent_id 缺省——链没有 worker 身份，审批以 id 路由）。 */
-  private async requestChainApproval(callId: string, reasons: string[]): Promise<boolean> {
-    const id = "apr-" + String(++this.approvalSeq) + "-pipeline";
-    const outcomePromise = this.waitForApproval(id, ""); // 链没有 worker 身份，agentId 空串
-    await this.opts.emit({
-      type: "approval_requested",
-      id,
-      tool: "spawn_agent",
-      args_digest: "pipeline 整链审批（stages 批准后冻结）：" + reasons.slice(0, 2).join("；").slice(0, 180),
-      risk: "medium",
-      risk_reasons: reasons,
-    } as AgentEvent);
-    const outcome = await outcomePromise;
-    await this.opts.emit({
-      type: "approval_resolved",
-      id,
-      decision: outcome.approved ? "approved" : "rejected",
-      scope: "once",
-      ...(outcome.approved ? {} : { reason: "pipeline 整链未获批准（fail-closed）" }),
-    } as AgentEvent);
-    return outcome.approved;
-  }
-
-  /** 哑 sequencer 主循环（sequencer 自身零 LLM）：逐环 spawn → 等终态 → 报告拼接 → verdict 标注 → 整链终态。
-   *  唯一会「同一环再跑一遍」的是 cascadeUpgrade（且只由客观 verify 证据触发，整链预算见下）；
-   *  缺省关 ⇒ 每环恰好一次 worker，与今日逐字同形。 */
-  private async runChain(chain: PipelineChain): Promise<void> {
-    let prevReport = "";
-    let prevAgentId = "";
-    // 级联预算挂在**链**上而不是挂在环上：N 环各享 maxUpgrades 会变成「一次批准悄悄买 2N 遍」。
-    let cascadeLeft = this.opts.cascadeUpgrade === true ? (this.opts.cascadeMaxUpgrades ?? 2) : 0;
-    // 批准时随链冻结的写面：每一环起手都带上它（否则登记表里链是空的，见 spawnPipeline）
-    const ringResources = chain.resources ?? [];
-    for (let i = 0; i < chain.stages.length; i++) {
-      // H2（审查 B-3）：环与环之间检查取消——否则 cancelAll 后链停在两环之间，
-      // 会 spawn 出一个永不被取消的 worker 并跑完（addEventListener 不追认已 abort）。
-      if (this.root.signal.aborted) {
-        await this.failChain(chain, "stage " + String(i + 1) + " 未启动：主会话已取消（fail-closed，不再派发）");
-        return;
-      }
-      const stage = chain.stages[i]!;
-      const st = chain.state[i]!;
-      const resolved = chain.resolutions[i]!; // 批准时冻结的角色解析（不依赖运行时存活期）
-      const budgetBlock = this.budgetBlocked();
-      if (budgetBlock) {
-        await this.failChain(chain, "成本闸：会话成本超限（maxBudgetUsd），stage " + String(i + 1) + " spawn 被拒");
-        return;
-      }
-      await this.emitSequencerStatus(chain, "stage " + String(i + 1) + "/" + String(chain.stages.length) + "（" + stage.role + "）启动");
-      st.status = "running";
-      const stageCallId = chain.callId + "-s" + String(i + 1);
-      // 前环 agent_result.report 由代码拼进后环 task（[harness] 标注；§4.4.7）
-      const stageTask = i === 0 ? stage.task : concatStageTask(stage.task, prevAgentId, prevReport);
-      const stageArgs: SpawnArgs = {
-        task: stageTask,
-        mode: resolved.mode,
-        // 链级写租约逐环持有（任务 #16）：整链审批卡上那句「链内写租约相交」此前只是**印出来**，
-        // 环登记的却是空租约 ⇒ `leaseConflicts()` 看不见正在写盘的链，后来者静默并发。
-        // 只给真会写盘的环带：`leaseConflicts` 按 mode==="write" 取料，给只读环挂一份租约等于
-        // 在事件里写一个不会生效的面——那正是本笔要修的"印了不占"的缩小版。
-        ...(ringResources.length > 0 && resolved.mode === "write" ? { resources: ringResources } : {}),
-        ...(i > 0 ? { depends_on: [prevAgentId] } : {}), // depends_on sugar：后环 depends_on 前环（§4.5 预置链）
-        ...(resolved.maxTurns !== undefined ? { max_turns: resolved.maxTurns } : {}),
-        ...(resolved.model !== undefined ? { model: resolved.model } : {}),
-      };
-      const r = await this.spawnStage(stageArgs, { callId: stageCallId }, resolved);
-      if (!r.ok) {
-        await this.failChain(chain, "stage " + String(i + 1) + "（" + stage.role + "）spawn 失败：" + r.output);
-        return;
-      }
-      let agentId = "";
-      try {
-        agentId = (JSON.parse(r.output) as { agent_id?: string }).agent_id ?? "";
-      } catch {
-        agentId = "";
-      }
-      if (agentId === "") {
-        await this.failChain(chain, "stage " + String(i + 1) + " spawn 应答异常（无 agent_id）");
-        return;
-      }
-      st.agentId = agentId;
-      let term = await this.waitForAgentTerminal(agentId);
-      // M5b 级联升级（#45）：判据只用**客观**那一半——worker 事件流里的 verify_result
-      // （W4b 四态随 agent_result.artifacts.verified 带回）。只有 failed / stale 才升档：
-      // 终态 failed/cancelled 属环境类失败，换一档重跑同一环境只会再花一遍钱；
-      // absent 是没判据 ⇒ 不拿猜测换账单。模型自报的 verdict 不算判据（自己给自己打分）。
-      type StageTerm = { status: string; result: Extract<AgentEvent, { type: "agent_result" }> | null };
-      const evidenceOf = (t: StageTerm) => t.result?.artifacts.verified;
-      const objectiveFail = (t: StageTerm): boolean =>
-        evidenceOf(t) === "failed" || evidenceOf(t) === "stale";
-      // 升上来的那一档必须自己交出绿证据才算过。算上 absent 就等于花真钱买回一份
-      // 比触发时更弱的证据，还把环标成 done —— 正是本仓最忌的假绿形状。
-      const converged = (t: StageTerm): boolean =>
-        t.status === "done" && t.result !== null && evidenceOf(t) === "verified";
-      // 决策面在 runChain 之外（cascadePlanFor）：§4.4.7「哑 sequencer」判据（agents-check N6c）
-      // 要求这段源码里不出现档位表那一层——环只按客观判据决定「要不要再花一遍钱」，往哪档花是策略的事。
-      const plan = objectiveFail(term) && this.cascadeReady() ? this.cascadePlanFor(agentId, cascadeLeft) : null;
-      if (plan !== null) {
-        const ladder = plan.ladder;
-        if (ladder.length > 0) {
-          await this.opts.emit({
-            type: "agent_message", agent_id: agentId, kind: "progress",
-            text: "[cascade] stage " + String(i + 1) + "（" + stage.role + "，" + String(plan.from) + " 档）客观判据判它没过（"
-              + evidenceOf(term) + "）→ 升档重跑：" + ladder.map((r) => r.tier).join("→"),
-          } as AgentEvent);
-          let supersededId = agentId;
-          // 末次 rung 自报的失败细节：runCascade 的 decisions 只记档位不记原因，
-          // 不接住的话「升档仍未拿到绿证据」这条红连"最后一档到底说了什么"都查不到。
-          let lastRungNote = "";
-          let paidReruns = 0; // **真起来的** worker 数（spawn 失败 / 应答异常的不算已付费）
-          // 另一类失败（终态 failed / cancelled = 环境、配额、取消）之后不再往上爬：换一档重跑同一
-          // 环境只会再花一遍钱得同一结果。这条对首环成立，对升上来的每一档同样成立——旧写法只管第一手观察。
-          let stopClimb = "";
-          const escalated = await runCascade({
-            hasJudge: true, // 进到这里的前提就是拿到了 failed/stale —— 判据确实存在
-            maxRungs: cascadeLeft,
-            rungs: ladder.map((r, k) => ({
-              id: r.id,
-              tier: r.tier,
-              run: async (): Promise<{ ok: boolean; output?: string }> => {
-                if (this.root.signal.aborted) { stopClimb = "主会话已取消：不再升档重跑"; return { ok: false, output: stopClimb }; }
-                if (this.budgetBlocked()) { stopClimb = "整链成本闸已触发：不再升档重跑"; return { ok: false, output: stopClimb }; }
-                if (stopClimb !== "") return { ok: false, output: stopClimb };
-                if (cascadeLeft <= 0) return { ok: false, output: "整链升级预算用尽：不再重跑" };
-                cascadeLeft--;
-                const rr = await this.spawnStage(
-                  { ...stageArgs, model: r.id },
-                  { callId: stageCallId + "-up" + String(k + 1), cascadeFrom: k === 0 ? plan.from : ladder[k - 1]!.tier },
-                  resolved,
-                );
-                if (!rr.ok) return { ok: false, output: "升级 spawn 失败：" + rr.output };
-                let newId = "";
-                try { newId = (JSON.parse(rr.output) as { agent_id?: string }).agent_id ?? ""; } catch { newId = ""; }
-                if (newId === "") return { ok: false, output: "升级 spawn 应答异常（无 agent_id）" };
-                paidReruns++;
-                // 替代品已经在了，才回收被取代那一档的 worktree（顺序反过就会在升级失败时
-                // 把唯一一份改动连同分支一起删掉，还留下一个 diff_ref 指向已删目录的报告）
-                await this.cleanupSuperseded(supersededId);
-                supersededId = newId;
-                agentId = newId;
-                st.agentId = newId;
-                term = await this.waitForAgentTerminal(newId);
-                const ok = converged(term);
-                lastRungNote = "第 " + String(k + 1) + " 档（" + newId + "，" + r.tier + "）"
-                  + (ok ? "绿证据到手" : "终态 " + term.status + "（证据 " + (evidenceOf(term) ?? "absent") + "，result " + (term.result === null ? "无" : "有") + "）");
-                if (!ok && term.status !== "done") stopClimb = lastRungNote + " ⇒ 属另一类失败，停止升档";
-                return { ok, output: lastRungNote };
-              },
-            })),
-          });
-          if (!escalated.ok) {
-            st.status = "failed";
-            // runCascade 的 blockedNote 只说"为什么不再往上走"（预算/最高档），说的是**表**；
-            // stopClimb 才是**因**（另一类失败 / 取消 / 成本闸）——两者都得上这条红。
-            await this.failChain(chain, "stage " + String(i + 1) + "（" + stage.role + "）升档重跑 " + String(paidReruns)
-              + " 次仍未拿到绿证据（末次证据 " + (evidenceOf(term) ?? "absent") + "）"
-              + (escalated.blockedNote ? "：" + escalated.blockedNote : "")
-              + (stopClimb !== "" ? "；" + stopClimb : lastRungNote !== "" ? "；" + lastRungNote : "")
-              + " → 整链 failed（各环报告可见）");
-            return;
-          }
-        } else {
-          // 该升而升不动也要说出来（预算用尽 / 已在最高档 / 认不出这一跑选了谁）：
-          // 静默什么都不做是最难查的省钱——链照旧红着，但没人知道闸为什么没跳。
-          await this.opts.emit({
-            type: "agent_message", agent_id: agentId, kind: "progress",
-            text: "[cascade] 客观判据判 stage " + String(i + 1) + " 没过（" + evidenceOf(term) + "），但无可升档位："
-              + plan.note + " ⇒ 不升级",
-          } as AgentEvent);
-        }
-      }
-      if (term.status !== "done" || term.result === null) {
-        st.status = "failed";
-        await this.failChain(chain, "stage " + String(i + 1) + "（" + stage.role + "，" + agentId + "）终态 " + term.status + " → 整链 failed（各环报告可见）");
-        return;
-      }
-      st.status = "done";
-      const report = term.result.artifacts.report ?? term.result.summary;
-      st.reportPreview = report.slice(0, 160);
-      // gate 环 verdict 标注（V1 只标注不重跑，§4.4.7 范围收敛）
-      if (stage.gate === true || BUILTIN_ROLES[stage.role]?.gate === true) {
-        const verdict = parseVerdict(report);
-        st.verdict = verdict;
-        await this.opts.emit({
-          type: "agent_message",
-          agent_id: agentId,
-          kind: "progress",
-          text: "[sequencer] gate verdict=" + verdict + "（标注落流；V1 不重跑，loopback 随压力测试后再定）",
-        } as AgentEvent);
-      }
-      prevReport = report;
-      prevAgentId = agentId;
-    }
-    chain.status = "done";
-    await this.emitSequencerStatus(chain, "整链 done：\n" + chainTable(chain));
-    await this.opts.emit({
-      type: "tool_result",
-      callId: chain.callId,
-      ok: true,
-      output: "[harness] pipeline 整链 done（sequencer 零 LLM 展开）：\n" + chainTable(chain),
-    } as AgentEvent);
-  }
-
-  /** 整链失败（任一环 failed → 整链 failed；各环报告可见）。 */
-  private async failChain(chain: PipelineChain, reason: string): Promise<void> {
-    chain.status = "failed";
-    chain.reason = reason;
-    for (const st of chain.state) {
-      if (st.status === "pending" || st.status === "running") st.status = "failed";
-    }
-    await this.emitSequencerStatus(chain, "整链 failed：" + reason + "\n" + chainTable(chain));
-    await this.opts.emit({
-      type: "tool_result",
-      callId: chain.callId,
-      ok: false,
-      hold: "chain-failed",
-      output: "[harness] pipeline 整链 failed（各环报告可见）：\n" + chainTable(chain) + "\n原因：" + reason,
-    } as AgentEvent);
-  }
-
-  /** 级联可用 = 开关开着 **且** routing 开着。后一条不是形式主义：
-   *  阶梯起点取的是路由当时落到的档（handle.routeTier），升档也是靠 pin 换模型——
-   *  routing 关着时这两件事都不存在，"升级"会退化成花两遍钱跑同一个模型。
-   *  条件不成立时出声一次（不刷屏），别让人以为开关拨了就生效。 */
+  /** 薄委托：级联前提（cascadeUpgrade × routing）整支在 orchestrator-budget.ts。 */
   private cascadeReady(): boolean {
-    if (this.opts.cascadeUpgrade !== true) return false;
-    if (this.opts.routing !== true) {
-      if (!this.cascadeWarned) {
-        this.cascadeWarned = true;
-        console.warn("[cascade] 需要 routing=true（阶梯起点与升档都走路由）；本次会话不级联");
-      }
-      return false;
-    }
-    return true;
+    return this.bcb.cascadeReady();
   }
 
-  /** 级联阶梯（**决策面**，从 runChain 里拆出来）：从「这一跑当时选了谁」往上取档，
-   *  且只在同一 provider 的档位里取——跨厂商升档会把一次 BYOK 会话悄悄换成别家的 key。
-   *  拆出去有两个理由：① §4.4.7 的「哑 sequencer」静态判据（agents-check N6c）要求 runChain
-   *  源码段不碰档位表那一层，环只回答「要不要再花一遍钱」；② 这段判断值得单测（见 cascade-wiring）。
-   *  取不到档（未路由 / pin 的 id 不在表上 / 预算用尽 / 已在最高档）⇒ 交空阶梯 + 一句可落流的说明，
-   *  不猜一档、不把「无从判断」混成「已在最高档」。 */
+  /** 薄委托：升档决策面（同 provider 阶梯）整支在 orchestrator-budget.ts。 */
   private cascadePlanFor(agentId: string, budgetLeft: number): { from: ModelTier | undefined; ladder: { id: string; tier: ModelTier }[]; note: string } {
-    const w = this.workers.get(agentId);
-    const from = w?.routeTier;
-    // 精确按 id 查（不用 findSpecByNameOrId 的 id-or-model 两义匹配）：两义匹配一旦遇到
-    // 「A 家的 model 名 == B 家的 id」就会算错家族，正好把跨厂商禁令从门缝里绕过去。
-    const picked = effectiveModelTable().find((s) => s.id === w?.routePicked);
-    if (from === undefined || picked === undefined) {
-      return { from, ladder: [], note: "认不出这一跑当时选的模型（routeTier/routePicked 缺一方）⇒ 无从判断该往哪档升" };
-    }
-    if (budgetLeft <= 0) return { from, ladder: [], note: "整链升级预算已用尽（已花 " + String(this.opts.cascadeMaxUpgrades ?? 2) + " 次额度）" };
-    const ladder = cascadeLadder(from, effectiveModelTable().filter((s) => s.provider === picked.provider), budgetLeft);
-    return { from, ladder, note: ladder.length > 0 ? "" : picked.provider + " 一家在 " + from + " 之上没有更高档" };
+    return this.bcb.cascadePlanFor(agentId, budgetLeft);
   }
 
-  /** 被淘汰那一档的收尾：write 档的 worktree 必须回收——它已经是永远不会被采纳的候选，
-   *  留在合并塔里只会被误当成一份可交付。动作与 supervise 的 rejectRings 同一条
-   *  （cleanupWrite），这里不另开第二份清理路径。 */
+  /** 薄委托：被淘汰档的收尾（cleanupWrite）在 orchestrator-budget.ts。 */
   private async cleanupSuperseded(agentId: string): Promise<void> {
-    const w = this.workers.get(agentId);
-    if (w && w.mode === "write" && w.worktree) await this.cleanupWrite(w, "rejected");
+    await this.bcb.cleanupSuperseded(agentId);
   }
 
-  /** 「交给人判」那两条出口（escalate / abort）的现场说明：最终环的 worktree 与分支此刻被**刻意保留**，
-   *  回执必须点名它落在哪儿——否则「保留了」这句话对模型和用户都不可执行（读到一个动词却没有地址）。 */
-  private ringScene(agentId: string): string {
-    const w = this.workers.get(agentId);
-    if (w === undefined || w.worktree === undefined) return "";
-    const branch = w.branch;
-    return "（现场已保留：worktree=" + w.worktree + "，分支=" + (branch === undefined ? "未建" : branch) + "，可在 git 面板人工合并或丢弃）";
-  }
-
-  /** sequencer 状态只读呈现（tool_result；§4.4.7「pipeline worker 的 tool_result 里 sequencer 状态只读呈现」）。 */
-  private async emitSequencerStatus(chain: PipelineChain, text: string): Promise<void> {
-    await this.opts.emit({
-      type: "tool_result",
-      callId: "pipeline-" + chain.callId,
-      ok: chain.status !== "failed",
-      output: "[sequencer] （只读状态·模型不可改 §4.4.7）" + text,
-    } as AgentEvent);
-  }
-
-  /** stage 角色解析：内置 implement/review/test；"plugin:agent-name" 形态走 agentRoleFor（§9.6）。 */
+  /** 薄委托：stage 角色解析（内置 implement/review/test 与 plugin: 形态，整支在 orchestrator-approvals.ts）。 */
   private resolveStageRole(role: string): StageRoleResolution | { error: string } {
-    const builtin = BUILTIN_ROLES[role];
-    if (builtin) {
-      return { mode: builtin.mode, maxTurns: builtin.maxTurns, roleDefinition: builtin.roleDefinition };
-    }
-    if (role.includes(":")) {
-      const def = this.opts.agentRoleFor ? this.opts.agentRoleFor(role) : null;
-      if (!def) return { error: "agent 角色未注册: " + role + "（plugin-name:agent-name 或 user:agent-name；agentRoleFor 未命中）" };
-      const mapped = resolvePluginRole(def);
-      return {
-        mode: mapped.mode,
-        ...(mapped.maxTurns !== undefined ? { maxTurns: mapped.maxTurns } : {}),
-        ...(mapped.model !== undefined ? { model: mapped.model } : {}),
-        roleDefinition: mapped.roleDefinition,
-        ...(mapped.tools !== undefined ? { allowedTools: mapped.tools } : {}),
-        ...(mapped.disallowedTools !== undefined ? { disallowedTools: mapped.disallowedTools } : {}),
-        warnings: mapped.warnings,
-      };
-    }
-    return { error: "未知角色: " + role + "（内置 implement|review|test，或 plugin-name:agent-name / user:agent-name 形态）" };
+    return this.acs.resolveStageRole(role);
   }
 
-  // ---- M3c：depends_on 事件驱动触发（§4.5：前环 done 自动触发后环 spawn，无轮询调度器）----
-
-  /** worker 终态后解析依赖链：done → 唤醒等待的后环；failed/cancelled → 后环标记 dependency_failed（不静默跳过）。 */
+  /** 薄委托：worker 终态后解析依赖链（唤醒后环 / 标记 dependency_failed，整支在 orchestrator-approvals.ts）。 */
   private resolveDependents(agentId: string, status: "done" | "failed" | "cancelled"): void {
-    for (const [callId, d] of [...this.deferredSpawns]) {
-      if (!d.dependsOn.includes(agentId)) continue;
-      if (status !== "done") {
-        this.deferredSpawns.delete(callId);
-        void this.opts.emit({
-          type: "tool_result",
-          callId,
-          ok: false,
-          hold: "dependency-failed",
-          output: "[harness] 后环 spawn 标记 failed（reason=dependency_failed）：前环 " + agentId + " " + status,
-        } as AgentEvent).catch(() => {});
-        continue;
-      }
-      if (d.dependsOn.every((dep) => this.workers.get(dep)?.terminalStatus === "done")) {
-        this.deferredSpawns.delete(callId);
-        void this.triggerDeferredSpawn(d).catch(() => {});
-      }
-    }
+    this.acs.resolveDependents(agentId, status);
   }
 
-  private async triggerDeferredSpawn(d: { callId: string; args: SpawnArgs; dependsOn: string[] }): Promise<void> {
-    if (this.root.signal.aborted) {
-      await this.opts.emit({
-        type: "tool_result",
-        callId: d.callId,
-        ok: false,
-        hold: "cancelled",
-        output: "[harness] 后环 spawn 撤销（主会话已取消）",
-      } as AgentEvent).catch(() => {});
-      return;
-    }
-    const r = await this.spawn(d.args, { callId: d.callId });
-    if (!r.ok) {
-      // 原因改读**结构列**。从前这一行是对 `r.output` 做 `includes("并发")`／`includes("[budget]")` 的散文嗅探：
-      // 生产端拿自己的文案当判据，文案一改判读就静默换档（而「主会话已取消」那条嗅不出任何因，
-      // 会被兜底成 dependency_failed——一个从来没被任何用例钉过的错格）。
-      // 现在 `reason=` 记号由 `hold` 经 `HARNESS_HOLD_PROSE_TOKEN` 派生 ⇒ 结构面与散文面只有一个决策点。
-      // 缺列时仍写从前那句兜底（`spawn()` 的参数校验类拒绝本就不是按住），但这一格从此是可数的：
-      // 新增一条按住却不盖 `hold` 的出口，判卷面那条「五挡各有行为证人」会少一格而红。
-      const reason = r.hold === undefined ? "dependency_failed" : HARNESS_HOLD_PROSE_TOKEN[r.hold];
-      await this.opts.emit({
-        type: "tool_result",
-        callId: d.callId,
-        ok: false,
-        ...(r.hold === undefined ? {} : { hold: r.hold }),
-        output: "[harness] 后环 spawn 失败（reason=" + reason + "）：" + r.output,
-      } as AgentEvent).catch(() => {});
-    }
-  }
-
-  // ---- M3c：sequencer 与 worker 终态的同步点 ----
-
-  /** 等待指定 agent 终态（sequencer 逐环同步；finishInner 解析）。终态值已备好则立即返回。
-   *  判据是 terminalResolved 而非 finished：finishInner 开头就置 finished=true，但 done 分支还要
-   *  await git diff + 安全流水才挂 lastResult——落在窗口里读 finished 会返回「done + result 空」，
-   *  sequencer 据此把绿证据环判成失败环（实测：级联因此白烧一档再误报整链 failed）。 */
-  private waitForAgentTerminal(agentId: string): Promise<{ status: string; result: Extract<AgentEvent, { type: "agent_result" }> | null }> {
-    const w = this.workers.get(agentId);
-    if (w && w.terminalResolved) {
-      return Promise.resolve({ status: w.terminalStatus ?? "done", result: w.lastResult ?? null });
-    }
-    return new Promise((resolve) => {
-      const list = this.terminalWaiters.get(agentId) ?? [];
-      list.push(resolve);
-      this.terminalWaiters.set(agentId, list);
-    });
-  }
-
+  /** 薄委托：放行 sequencer 同步点（等待表整箱在 orchestrator-approvals.ts）。 */
   private resolveTerminalWaiters(agentId: string, status: "done" | "failed" | "cancelled", result: Extract<AgentEvent, { type: "agent_result" }> | null): void {
-    const list = this.terminalWaiters.get(agentId);
-    if (!list) return;
-    this.terminalWaiters.delete(agentId);
-    for (const fn of list) fn({ status, result });
+    this.acs.resolveTerminalWaiters(agentId, status, result);
   }
 
-  /** W1a 收队：等一批 worker 到终态。**不新增事件类型**——父模型看到的就是一条普通 tool_result。
-   *  复用 sequencer 的同步点（`waitForAgentTerminal` 终态值备好即立即返回），因此对已收敛的 worker
-   *  重复调用等价于「读一次快照」，这是 `wait_for_agents` 的取回通道能成立的前提。
-   *  算不算「已收敛」看 terminalResolved 而非 finished：finished 在 finishInner 开头就真，
-   *  之后还要 await git diff / 安全流水才挂 lastResult——窗口里报「done + 空报告」是把不可知记成已知。
-   *  边界三条都是实测教训：
-   *  ① 未知 id 必须先摘——`waitForAgentTerminal` 对不存在的 id 会把 resolve 推进等待表且永不触发；
-   *  ② 超时不算失败（本仓对"等人门"的统一口径）：已收敛的照给，未收敛的点名进 timedOut；
-   *  ③ abort 只结束这次等待，**不动任何 worker**——取消 worker 是 cancelAgent/cancelAll 的职责，
-   *    收队方无权替用户决定杀谁（权限 ≤ 父会话的同一族理由）。 */
+  /** 薄委托：W1a 收队（等待与回执整形整箱在 orchestrator-approvals.ts）。 */
   async waitForAgents(ids: readonly string[], timeoutMs: number, signal?: AbortSignal): Promise<JoinPayloadBody> {
-    const targets = ids.length > 0 ? [...ids] : this.workerIds();
-    if (targets.length === 0) return { rows: [], degraded: [], timedOut: [], cancelled: false };
-    const known = targets.filter((id) => this.workers.has(id));
-    const unknown = targets.filter((id) => !this.workers.has(id));
-    const snapshot = (want: string[]): JoinInput[] => want.map((id) => {
-      const w = this.workers.get(id);
-      if (!w) {
-        return { agentId: id, status: "unknown" as const, task: "", report: "未派生过该 agent_id（问错了名字）", usage: { inputTokens: 0, outputTokens: 0 }, spent: null };
-      }
-      const status = !w.terminalResolved
-        ? "running" as const
-        : w.terminalStatus === "failed" ? "failed" as const
-          : w.terminalStatus === "cancelled" ? "cancelled" as const
-            : "done" as const;
-      return { agentId: id, status, task: w.task, report: w.lastResult?.summary ?? "", usage: { ...w.usage }, spent: spentUsdFor(w.price, w.usage) };
-    });
-
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let onAbort: (() => void) | undefined;
-    const racers: Promise<"done" | "timeout" | "cancelled">[] = [
-      Promise.all(known.map((id) => this.waitForAgentTerminal(id))).then(() => "done" as const),
-      new Promise<"timeout">((resolve) => { timer = setTimeout(() => resolve("timeout"), timeoutMs); timer.unref?.(); }),
-    ];
-    if (signal) {
-      racers.push(new Promise<"cancelled">((resolve) => {
-        onAbort = () => resolve("cancelled");
-        signal.addEventListener("abort", onAbort, { once: true });
-      }));
-    }
-    const outcome = await Promise.race(racers);
-    if (timer !== undefined) clearTimeout(timer);
-    if (onAbort !== undefined && signal !== undefined) signal.removeEventListener("abort", onAbort);
-
-    const settled = known.filter((id) => this.workers.get(id)?.terminalResolved === true);
-    const unsettled = known.filter((id) => !settled.includes(id));
-    const shaped = shapeJoinRows([...snapshot(settled), ...snapshot(unsettled), ...snapshot(unknown)]);
-    return {
-      rows: shaped.rows,
-      degraded: shaped.degraded,
-      timedOut: outcome === "timeout" ? unsettled : [],
-      cancelled: outcome === "cancelled",
-    };
+    return await this.acs.waitForAgents(ids, timeoutMs, signal);
   }
 
   // ---- M3c：卡死检测出口（§4.4.8：人决定继续/取消）----
@@ -1917,58 +1154,19 @@ export class Orchestrator {
   /** 终态收束（§4.4.4/§4.4.8）：done/failed 出 agent_result + 合成 tool_result；cancelled 出终止态 + tool_result。
    *  M3b write mode：done → diff 快照（vs base_commit）+ 安全 gate 流水 + artifacts（stat 摘要/diff_ref）；
    *  failed/cancelled → worktree 自动清理（四路清理之三/四路）。 */
-  // ---- M5b 步骤 9：bandit 在线学习运行时接线（路由侧信道） ----
-  // 背景：routeFor/toWorkerModel/routing_decision 在步骤 8 已落，bandit 机器（selectArm/
-  //  updatePriced/持久化）也齐了，但两头都没接运行时——routeFor 从不收 bandit 上下文（reason
-  //  永远不是 "bandit"），worker 完成时也没人回灌奖励。本段闭合：启用判定 → 懒加载 → 回灌。
+  // ---- M5b 步骤 9：bandit 在线学习运行时（整箱在 orchestrator-budget.ts；下面为薄委托） ----
   private banditEnabled(): boolean {
-    return this.opts.routing === true && typeof this.opts.banditStatePath === "string" && this.opts.banditStatePath !== "";
+    return this.bcb.banditEnabled();
   }
 
-  /** 懒加载 bandit 状态（首次 spawn 才读盘）。加载失败 → null：本次会话只走静态档位表，
-   *  路由主路径与降级链完全不受影响（学习缺位不是路由失败）。 */
-  private async bandit(): Promise<BanditState | null> {
-    if (!this.banditEnabled()) return null;
-    if (this.banditState !== null) return this.banditState;
-    if (this.banditLoading === null) {
-      const path = this.opts.banditStatePath as string;
-      this.banditLoading = loadBanditState(path, (reason: string) => console.warn("[bandit] " + reason))
-        .then((st) => {
-          this.banditState = st;
-          return st;
-        })
-        .catch((err) => {
-          console.warn(
-            "[bandit] 状态加载失败，本次会话不学习（路由降级链不受影响）:",
-            err instanceof Error ? err.message : String(err),
-          );
-          return null;
-        });
-    }
-    return this.banditLoading;
+  /** 薄委托：bandit 状态懒加载在 orchestrator-budget.ts。 */
+  private async bandit() {
+    return await this.bcb.bandit();
   }
 
-  /** 奖励回灌：done **且客观证据不红** → reward=1；failed/cancelled 或 done+verify 红/stale → 0；
-   *  代价按真钱 usage 折算（pricing.costUsd，§m5-proposal §1.3 口径）。仅 reason=bandit 的 worker
-   *  记了臂——其余路由不污染学习面。best-effort 纪律：任何失败只 console.warn——
-   *  学习是侧信道，绝不改写 worker 终态或阻断收束。 */
+  /** 薄委托：奖励回灌（done × 客观证据 → reward）在 orchestrator-budget.ts。 */
   private async rewardBandit(w: WorkerHandle, status: "done" | "failed" | "cancelled"): Promise<void> {
-    if (w.routeArm === undefined || w.routeModelId === undefined) return;
-    const st = await this.bandit();
-    if (st === null) return;
-    try {
-      // 「done」不等于「做成了」：客观证据说这一跑验过但红（failed）或验完又写了盘（stale）时按 0 计。
-      // 否则级联一开，学习面恰好是在**被判失败的任务上**给便宜档加分（α 涨 β 不涨），
-      // 越学越往「便宜但红」的方向倒——与这条能力存在的目的（少花冤枉钱）正好相反。
-      // 证据 absent（这一路没跑过 verify）不改判据：没判据就不拿猜测改学习面（与级联 fail-closed 同口径）。
-      const evidence = w.lastResult?.artifacts.verified;
-      const reward = status === "done" && evidence !== "failed" && evidence !== "stale" ? 1 : 0;
-      const cost = costUsd(w.routeModelId, w.usage);
-      updatePriced(st.posteriors, w.routeArm, reward, cost);
-      await saveBanditState(this.opts.banditStatePath as string, st);
-    } catch (err) {
-      console.warn("[bandit] 奖励回灌失败（不影响 worker 终态）:", err instanceof Error ? err.message : String(err));
-    }
+    await this.bcb.rewardBandit(w, status);
   }
 
   /** §9.5 SubagentStart / SubagentStop 的唯一发送口（两条事件共用一个出口，免得同族策略各抄一份）。
@@ -2407,9 +1605,7 @@ export class Orchestrator {
     return w.spawnCallId !== "" ? w.spawnCallId : kind + "-" + w.agentId;
   }
 
-  /** worker 审批请求（§4.4.3：请求落流 + 等待订阅 approval_resolved by id，不挂任何进行中的 turn）。 */
-  /** worker 审批请求（§4.4.3：请求落流 + 等待订阅 approval_resolved by id，不挂任何进行中的 turn）。
-   *  编排器内部 API：模块内 gatedWorkerTool 使用，不进生产外部面。 */
+  /** 薄委托：worker 审批请求（§4.4.3 与 turn 解耦；四路共用的等待内核在 orchestrator-approvals.ts）。 */
   async requestWorkerApproval(
     w: WorkerHandle,
     tool: string,
@@ -2417,33 +1613,7 @@ export class Orchestrator {
     risk: RiskLevel,
     riskReasons: string[],
   ): Promise<{ approved: boolean; scope: AskScope; note?: string }> {
-    const id = "apr-" + String(++this.approvalSeq) + "-" + w.agentId;
-    // 先登记等待、再 emit 请求（waitForApproval 内部同步登记；坑十六）
-    const outcomePromise = this.waitForApproval(id, w.agentId);
-    await this.opts.emit({
-      type: "approval_requested",
-      id,
-      agent_id: w.agentId,
-      tool,
-      args_digest: digestArgs(args),
-      risk,
-      ...(riskReasons.length > 0 ? { risk_reasons: riskReasons } : {}),
-      ...(w.tierWarning ? { tier_warning: w.tierWarning } : {}),
-    } as AgentEvent);
-    await this.opts.emit({ type: "agent_status", agent_id: w.agentId, status: "waiting_approval" } as AgentEvent);
-    const outcome = await outcomePromise;
-    await this.opts.emit({
-      type: "approval_resolved",
-      id,
-      agent_id: w.agentId,
-      decision: outcome.approved ? "approved" : "rejected",
-      scope: outcome.approved ? outcome.scope : "once",
-      ...(outcome.note ? { reason: outcome.note } : {}),
-    } as AgentEvent);
-    if (outcome.approved) {
-      await this.opts.emit({ type: "agent_status", agent_id: w.agentId, status: "running" } as AgentEvent);
-    }
-    return outcome;
+    return await this.acs.requestWorkerApproval(w, tool, args, risk, riskReasons);
   }
 }
 

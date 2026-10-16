@@ -488,7 +488,8 @@ const MUTATIONS = [
   },
   {
     id: "unknown-role-error-hides-user-form",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：resolveStageRole 整支搬到 orchestrator-approvals.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-approvals.ts",
     test: "tests/worker-role.test.ts",
     desc: "未知角色的报错少列一种合法形态 ⇒ 猜错名字的模型被告知「这条路不存在」，而它本来写得对",
     apply: (s) => s.replace("plugin-name:agent-name / user:agent-name 形态", "plugin-name:agent-name 形态"),
@@ -1329,7 +1330,8 @@ const MUTATIONS = [
   // ---- 会话成本闸（§4.4.8 BYOK 底线）的估价来源 ----
   {
     id: "session-budget-table-fallback-dropped",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：budget 域整箱搬到 orchestrator-budget.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-budget.ts",
     test: "tests/m3c.test.ts",
     desc: "单价缺省时不再查内置价表（估价恒 0 ⇒ 用户只设 maxBudgetUsd 的常见配置下，spec 的 BYOK 底线静默失效）。针脚必须指**给钱的那一行**：上一版指相邻的 budgetRateKnown 早退，那行删掉行为不变（spentUsdFor 自己就 null→0），变异当场存活",
     apply: (s) => s.replace("    return bucketsSpendUsd(this.budgetBuckets());", "    return null;"),
@@ -1338,7 +1340,8 @@ const MUTATIONS = [
   // ---- 09-23「每桶按自己那一档折」新增的三格（同一把尺的三个组成面）----
   {
     id: "budget-worker-buckets-dropped",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：计价桶整箱搬到 orchestrator-budget.ts。
+    src: "src/agent/orchestrator-budget.ts",
     test: "tests/session-spend-ruler.test.ts",
     desc: "worker 桶全被当成「不产生真钱」跳过 ⇒ 上限只按主会话那一小段算，派活越多越拦不住",
     apply: (s) => s.replace("        realMoney: w.price !== null,", "        realMoney: false,"),
@@ -1346,7 +1349,8 @@ const MUTATIONS = [
   },
   {
     id: "budget-worker-priced-at-session-tier",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：桶的价键改指 orchestrator-budget.ts。
+    src: "src/agent/orchestrator-budget.ts",
     test: "tests/session-spend-ruler.test.ts",
     desc: "worker 桶改按**会话那一档**计价（= 旧尺换了个位置）⇒ 便宜档 worker 被贵档顶死，上限早触发白停",
     apply: (s) => s.replace("        price: w.price ?? null,", '        price: priceForModel(b?.priceModel ?? ""),'),
@@ -1545,7 +1549,8 @@ const MUTATIONS = [
   },
   {
     id: "session-budget-inert-silent",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：budgetBlocked 整支搬到 orchestrator-budget.ts。
+    src: "src/agent/orchestrator-budget.ts",
     test: "tests/m3c.test.ts",
     desc: "「估不出价所以闸不生效」不再出声（用户设的成本底线悄悄不存在，且读日志的人也拿不到模型名）",
     apply: (s) => s.replace("      if (!this.budgetInertWarned) {", "      if (false) {"),
@@ -2810,15 +2815,18 @@ const MUTATIONS = [
   },
   {
     id: "wait-unknown-id-enters-waiters",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：waitForAgents 整支搬到 orchestrator-approvals.ts；
+    // 锚文跟着搬家后的读法改字面量（this.workers → this.deps.workers）。
+    src: "src/agent/orchestrator-approvals.ts",
     test: "tests/orchestrator-wait.test.ts",
     desc: "未知 id 不先摘 ⇒ 进 terminalWaiters 永不触发：这次等待永挂 + 等待项泄漏（waitForAgentTerminal 的原语行为，所以必须在调用方挡）",
-    apply: (s) => s.replace("const known = targets.filter((id) => this.workers.has(id));", "const known = [...targets];"),
+    apply: (s) => s.replace("const known = targets.filter((id) => this.deps.workers.has(id));", "const known = [...targets];"),
     expectFail: "未知 id fail-visible 摘出（喂进 waitForAgentTerminal 会永挂 + 泄漏等待项）",
   },
   {
     id: "wait-returns-before-terminal",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：waitForAgents 整支搬到 orchestrator-approvals.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-approvals.ts",
     test: "tests/orchestrator-wait.test.ts",
     desc: "把「等终态」摘成立即返回 ⇒ 收队永远只报 running，模型读到的是「团队还没干活」而不是「我在等」",
     apply: (s) => s.replace("Promise.all(known.map((id) => this.waitForAgentTerminal(id))).then(() => \"done\" as const),", "Promise.resolve(\"done\" as const),"),
@@ -2826,7 +2834,8 @@ const MUTATIONS = [
   },
   {
     id: "wait-timeout-gate-removed",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：waitForAgents 整支搬到 orchestrator-approvals.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-approvals.ts",
     test: "tests/orchestrator-wait.test.ts",
     desc: "取消超时闸 ⇒ 收队变成无界等待：主会话的整轮挂在一次工具调用上（等人门必须有上限，同 UNATTENDED_GATE_WAIT_MS 族）",
     apply: (s) => s.replace("new Promise<\"timeout\">((resolve) => { timer = setTimeout(() => resolve(\"timeout\"), timeoutMs); timer.unref?.(); }),", "new Promise<\"timeout\">(() => {}),"),
@@ -4252,7 +4261,8 @@ const MUTATIONS = [
   // 什么算红、什么算绿、往哪些档升、升不动时怎样，以及新发现的收尾窗口竞态。
   {
     id: "cascade-trigger-wider-than-objective-fail",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：runChain 整支搬到 orchestrator-approvals.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-approvals.ts",
     test: "tests/cascade-wiring.test.ts",
     desc: "升级判据放宽成「不是 verified 就算红」⇒ 这一路压根没跑过 verify 的环也被拉去升档，拿猜测换账单",
     apply: (s) => s.replace("evidenceOf(t) === \"failed\" || evidenceOf(t) === \"stale\";", "evidenceOf(t) !== \"verified\";"),
@@ -4260,7 +4270,8 @@ const MUTATIONS = [
   },
   {
     id: "cascade-rung-accepts-absent-evidence",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：runChain 整支搬到 orchestrator-approvals.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-approvals.ts",
     test: "tests/cascade-wiring.test.ts",
     desc: "升上来的那一档不再要求绿证据 ⇒ 花真钱买回一份比触发时更弱的证据还把环标成 done（假绿形状）",
     apply: (s) => s.replace("t.status === \"done\" && t.result !== null && evidenceOf(t) === \"verified\";", "t.status === \"done\" && t.result !== null;"),
@@ -4268,7 +4279,8 @@ const MUTATIONS = [
   },
   {
     id: "cascade-ladder-cross-provider",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：cascadePlanFor 整支搬到 orchestrator-budget.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-budget.ts",
     test: "tests/cascade-wiring.test.ts",
     desc: "阶梯不再限定同 provider ⇒ 一次 BYOK 会话在升档时被悄悄换成别家的 key 与模型",
     // 针脚跟上现读（2026-10-11）：阶梯那半从 `DEFAULT_MODEL_TABLE.filter(…===…)` 改成
@@ -4280,15 +4292,18 @@ const MUTATIONS = [
   },
   {
     id: "cascade-ready-ignores-routing",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：cascadeReady 整支搬到 orchestrator-budget.ts，
+    // 开关的读法跟着搬成 `this.deps.opts.*`（锚文其余逐字未动）。
+    src: "src/agent/orchestrator-budget.ts",
     test: "tests/cascade-wiring.test.ts",
     desc: "cascadeReady 丢掉 routing 前置 ⇒ 未路由时档位无从知晓，「升档」退化成花两遍钱跑同一个模型",
-    apply: (s) => s.replace("    if (this.opts.routing !== true) {\n      if (!this.cascadeWarned) {", "    if (false) {\n      if (!this.cascadeWarned) {"),
+    apply: (s) => s.replace("    if (this.deps.opts.routing !== true) {\n      if (!this.cascadeWarned) {", "    if (false) {\n      if (!this.cascadeWarned) {"),
     expectFail: "只开 cascadeUpgrade、没开 routing ⇒ 不级联：阶梯起点与升档都靠路由，缺了就等于花两遍钱跑同一模型",
   },
   {
     id: "terminal-sync-reads-finished-not-resolved",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：waitForAgentTerminal 整支搬到 orchestrator-approvals.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-approvals.ts",
     test: "tests/terminal-sync-window.test.ts",
     desc: "sequencer 同步点回到只读 finished ⇒ 落在收尾窗口（diff/安全流水/emit 未完）的调用方拿到「done + result 空」",
     apply: (s) => s.replace("if (w && w.terminalResolved) {", "if (w && w.finished) {"),
@@ -4296,10 +4311,12 @@ const MUTATIONS = [
   },
   {
     id: "join-settled-reads-finished",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：waitForAgents 整支搬到 orchestrator-approvals.ts；
+    // 锚文跟着搬家后的读法改字面量（this.workers → this.deps.workers）。
+    src: "src/agent/orchestrator-approvals.ts",
     test: "tests/terminal-sync-window.test.ts",
     desc: "收队把「finished 已真」当已收敛 ⇒ 窗口里的 worker 不进 timedOut，报告记空串冒充已知",
-    apply: (s) => s.replace("known.filter((id) => this.workers.get(id)?.terminalResolved === true)", "known.filter((id) => this.workers.get(id)?.finished === true)"),
+    apply: (s) => s.replace("known.filter((id) => this.deps.workers.get(id)?.terminalResolved === true)", "known.filter((id) => this.deps.workers.get(id)?.finished === true)"),
     expectFail: "join 落在窗口内 ⇒ 回执说 running + timedOut 点名；不说 done + 空报告",
   },
   {
@@ -4312,7 +4329,8 @@ const MUTATIONS = [
   },
   {
     id: "cascade-climbs-past-other-class-failure",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：runChain 整支搬到 orchestrator-approvals.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-approvals.ts",
     test: "tests/cascade-wiring.test.ts",
     desc: "升上来的那档终态 failed/cancelled 仍继续往上爬 ⇒ 换一档重跑同一个坏环境，把预算烧在没判据说能修好的失败上",
     apply: (s) => s.replace("if (!ok && term.status !== \"done\") stopClimb =", "if (false) stopClimb ="),
@@ -4320,7 +4338,8 @@ const MUTATIONS = [
   },
   {
     id: "bandit-rewards-self-reported-done",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：rewardBandit 整支搬到 orchestrator-budget.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-budget.ts",
     test: "tests/cascade-wiring.test.ts",
     desc: "奖励只看终态 done、不看客观证据 ⇒ 在恰好被判红的那一跑上给便宜档加分，级联越开越学出「便宜但红」",
     apply: (s) => s.replace("const reward = status === \"done\" && evidence !== \"failed\" && evidence !== \"stale\" ? 1 : 0;", "const reward = status === \"done\" ? 1 : 0;"),
@@ -4328,7 +4347,8 @@ const MUTATIONS = [
   },
   {
     id: "bandit-cost-term-zeroed",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：代价项那一行搬到 orchestrator-budget.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-budget.ts",
     test: "tests/bandit-runtime.test.ts",
     desc: "代价项换成常量 0（§1.3 那次「从 token 代理升级成真钱」被静默摘掉：路由只学成功率、不看钱 ⇒ 越学越往贵的档走也没人发现）。旧断言 β≥2 / β>2 对这条完全无分辨力，现由等式 + 比例性一条判住",
     apply: (s) => s.replace("const cost = costUsd(w.routeModelId, w.usage);", "const cost = 0;"),
@@ -7134,7 +7154,8 @@ const MUTATIONS = [
   // 只红现场两条），但变异表只跑 vitest ⇒ 门侧的分辨力无常驻判据，故另落 tests/supervise-evidence.test.ts。
   {
     id: "supervise-caller-ignores-credential",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：spawnSupervise 整支搬到 orchestrator-approvals.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-approvals.ts",
     test: "tests/supervise-evidence.test.ts",
     desc: "caller 不读 `artifacts.verified`（判据退回纯散文）⇒ implement 角色永远取不到判据，supervise 恒 escalate 并删掉改对的成果",
     apply: (s) => s.replace("        evidence: term.result.artifacts.verified,", "        evidence: undefined,"),
@@ -7142,7 +7163,8 @@ const MUTATIONS = [
   },
   {
     id: "supervise-escalate-destroys-scene",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：spawnSupervise 整支搬到 orchestrator-approvals.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-approvals.ts",
     test: "tests/supervise-evidence.test.ts",
     desc: "escalate 出口把最终环一起 reject ⇒ 先删 worktree 再回去问人，裁决发生时证据已不在",
     apply: (s) => s.replace("        await rejectRings(ringAgentIds.filter((id) => id !== agentId));\n        return { ok: false, output: \"spawn_agent(supervise): 已升级人工裁决：", "        await rejectRings(ringAgentIds);\n        return { ok: false, output: \"spawn_agent(supervise): 已升级人工裁决："),
@@ -7392,7 +7414,8 @@ const MUTATIONS = [
   // ---- 第 41 页 · 链申报的写租约逐环真持有（不是只在审批卡上印一行） ----
   {
     id: "chain-ring-does-not-hold-lease",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：runChain 整支搬到 orchestrator-approvals.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-approvals.ts",
     test: "tests/chain-lease-held.test.ts",
     desc: "环不带链冻结的写面 ⇒ 登记表回到空租约，后来者看不见这条链正在写盘（合并阶段才炸）",
     apply: (s) => s.replace('        ...(ringResources.length > 0 && resolved.mode === "write" ? { resources: ringResources } : {}),\n', ""),
@@ -7400,7 +7423,8 @@ const MUTATIONS = [
   },
   {
     id: "chain-supervise-ring-drops-lease",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：spawnSupervise 整支搬到 orchestrator-approvals.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-approvals.ts",
     test: "tests/chain-lease-held.test.ts",
     desc: "只修 pipeline 那一支（本仓点名的「同一条解析只硬化一支」）⇒ supervise 那条真轨迹路径照旧丢租约",
     apply: (s) => s.replace('          ...(ringResources.length > 0 && stageRole.mode === "write" ? { resources: ringResources } : {}), // 见上：申报过就真占（只读环不挂空租约）\n', ""),
@@ -7408,7 +7432,8 @@ const MUTATIONS = [
   },
   {
     id: "chain-read-ring-holds-phantom-lease",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：runChain 整支搬到 orchestrator-approvals.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-approvals.ts",
     test: "tests/chain-lease-held.test.ts",
     desc: "去掉 write 守卫 ⇒ 只读环也在事件里挂一份永不生效的租约（「印了不占」的缩小版重演）",
     apply: (s) => s.replace('ringResources.length > 0 && resolved.mode === "write"', "ringResources.length > 0"),
@@ -11329,7 +11354,9 @@ const MUTATIONS = [
       replace 只改第一处 ⇒ 第二处的证人照样绿，写了也是假装守护（规则 259/261）。 ── */
   {
     id: "orchestrator-hold-budget-return-not-stamped",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：成本闸返回体整支搬到 orchestrator-budget.ts，
+    // 锚文逐字未动（那把尺的取料面已并上该文件，见 tests/orchestrator-hold.test.ts 的 ORCH_SRC_ALL）。
+    src: "src/agent/orchestrator-budget.ts",
     test: "tests/orchestrator-hold.test.ts",
     desc: "成本闸那条拒绝只留散文、不留结构列 ⇒ 模型看得见「被拒」，下游看不见是被哪一挡拒的：" +
       "钱与人手与取消在这一列上又长成同一个人。钉的是**返回体**那一半（落流那一半另有证人）",
@@ -11347,7 +11374,8 @@ const MUTATIONS = [
   },
   {
     id: "orchestrator-hold-chain-outlet-not-stamped",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：failChain 整支搬到 orchestrator-approvals.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-approvals.ts",
     test: "tests/orchestrator-hold.test.ts",
     desc: "整链 failed 的落流不盖章 ⇒ 五挡里只有这一挡的读者回到零：链级「后面的环压根没起」在事件流上又不可读",
     apply: (s) => s.replace('      hold: "chain-failed",', ""),
@@ -11355,7 +11383,8 @@ const MUTATIONS = [
   },
   {
     id: "orchestrator-hold-deferred-propagation-dropped",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：triggerDeferredSpawn 整支搬到 orchestrator-approvals.ts，锚文逐字未动。
+    src: "src/agent/orchestrator-approvals.ts",
     test: "tests/orchestrator-hold.test.ts",
     desc: "后环那一处只把因写进正文、不把结构列传下去 ⇒ 生产端与投影面对同一个因各判一次，" +
       "而这条用例同时钉着两半：结构那一格与正文里那个记号（两者要一起断才算这张网在）",

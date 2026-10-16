@@ -29,6 +29,12 @@ import { runLoop, type LoopOptions } from "../src/agent/loop";
 
 const exec = promisify(execFile);
 const ORCH_SRC = readFileSync(fileURLToPath(new URL("../src/agent/orchestrator.ts", import.meta.url)), "utf8");
+/** 三缝拆分后 `hold: "budget"` 的落点在 orchestrator-budget.ts、链级两挡在 orchestrator-approvals.ts：
+ *  这把尺数的是**盖字面章的那些落点**，不是某一个文件名——三处源码并成一份取料
+ *  （否则「枚举里每一挡都有人盖」会误判成白写）。 */
+const ORCH_SRC_ALL = ORCH_SRC + "\n"
+  + readFileSync(fileURLToPath(new URL("../src/agent/orchestrator-budget.ts", import.meta.url)), "utf8") + "\n"
+  + readFileSync(fileURLToPath(new URL("../src/agent/orchestrator-approvals.ts", import.meta.url)), "utf8");
 
 let work = "";
 let repo = "";
@@ -296,8 +302,8 @@ describe("取值只有一个事实源", () => {
   const holdLiterals = (src: string): string[] => [...src.matchAll(/\bhold:\s*"([a-z-]+)"/gu)].map((m) => m[1]!);
 
   it("编排里印出的每个取值都在枚举里，且枚举里没有白写的成员", () => {
-    const lits = holdLiterals(ORCH_SRC);
-    expect(lits.length, `只从 orchestrator.ts 抽到 ${String(lits.length)} 处取值 ⇒ 尺没接上电`).toBeGreaterThanOrEqual(6);
+    const lits = holdLiterals(ORCH_SRC_ALL);
+    expect(lits.length, `只从编排两处源码抽到 ${String(lits.length)} 处取值 ⇒ 尺没接上电`).toBeGreaterThanOrEqual(6);
     for (const v of lits) expect(HARNESS_HOLD_REASONS as readonly string[], `取值「${v}」不在枚举里`).toContain(v);
     expect(new Set(lits).size, `落点只用到 ${String(new Set(lits).size)} 种取值：枚举里有一挡压根没人盖（白写）`).toBe(
       HARNESS_HOLD_REASONS.length,
@@ -315,7 +321,7 @@ describe("取值只有一个事实源", () => {
     // 这一格只数**字面盖章**：dependency-failed 有两处（依赖校验的返回体＋后环落流），
     // 而 spawn／spawnReserved 两处兄弟出口是 `{ hold: v.hold }` 那种传播形状 ⇒ 这把尺看不见它们。
     // 传播那一半的证人是行为用例（前环倒下 → 回执带 dependency-failed），不在这把尺的分母里。
-    expect(holdLiterals(ORCH_SRC).filter((v) => v === "dependency-failed"), "两处字面盖章都要在分母里").toHaveLength(2);
+    expect(holdLiterals(ORCH_SRC_ALL).filter((v) => v === "dependency-failed"), "两处字面盖章都要在分母里").toHaveLength(2);
     expect([...ORCH_SRC.matchAll(/\{ hold: v\.hold \}/gu)].length, "两处兄弟出口各传播一次").toBe(2);
   });
 });

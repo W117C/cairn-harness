@@ -16081,3 +16081,51 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    `--check-needles` **1571 条｜阻断 9**（7 = 本笔未入库面、2 = system-prompt 在飞账）＋改法语法体检全绿。
 7. **仍未证（不许读成绿）**：① 7 枚改指针脚**尚未真杀**——mutate-verify 度量 HEAD，要入库后在干净树上跑；
    ② 报告里 `orchestrator.ts` 的三缝拆分未开始；③ 桌面层与 CI 未跑这一笔；④ 真模型/生产行为未跑。
+
+## 2026-10-17 · 第 493 页：orchestrator.ts 三缝落两缝（budget/cascade/bandit ＋ 审批/链/supervise），类 API 与文件尾 barrel 逐字不变
+
+1. **动因**：结构债审查报告第 ① 刀。`src/agent/orchestrator.ts` 拆前 **2,566 行**、约 60 个方法横跨 ≥7 个
+   互不相干的域。报告给的拆法是切三缝：`orchestrator-budget.ts`（budget＋cascade＋bandit）、
+   `orchestrator-approvals.ts`（审批＋chain＋supervise）、`worker-merge.ts`（merge/reject/injectComment/
+   diff-security）。本页落**前两缝**，第三缝未动（见「仍未证」）；落完 `src/agent/orchestrator.ts`
+   **2,566 → 1,736 行**，两模块 251 ＋ 843 行。
+2. **拆法纪律**（沿 `src/events/index.ts` 一刀三瓣的先例：搬整段实现、原路径留公开面）：
+   ① **类 API 与文件尾 barrel 逐字不变**——机械核对：barrel 段（`// ---- 公开面（拆分后不变）` 起 26 行）
+   与 HEAD 逐字节相同，25+ 个 import 该文件的 tests/scripts 一行不用动；② 注释「搬」不「抄」，针脚随实现走；
+   ③ **状态装箱**：状态有非本缝读者 ⇒ 留 Orchestrator 以**活引用**注入；仅本缝独占 ⇒ 随域搬入；
+   出圈动作（spawn / 合并 / 清理 / 成本闸 / 级联 / 终态回收）全走回调，新模块**不反向 import**
+   `orchestrator.ts`。
+3. **A 缝** `src/agent/orchestrator-budget.ts`（251 行）：budget 闸 / cascade / bandit 三域整箱搬入。
+   活引用三份（`sessionUsage` / `mainUsage` / `workers`，emit 包装照旧在原地累加 usage）；窄 opts 面
+   （routing / cascadeUpgrade / cascadeMaxUpgrades / banditStatePath）；被淘汰档的收尾（cleanupWrite）走回调。
+4. **B 缝** `src/agent/orchestrator-approvals.ts`（843 行）：审批三路（租约相交 spawn / pipeline 整链 /
+   supervise 受限循环）＋ worker 工具四路共用同一等待内核 ＋ 哑 sequencer 链 ＋ worker 终态等待。
+   四路共同纪律「与 turn 解耦」：先登记等待、再 emit 请求、应答按 id 订阅（坑十六）、超时 fail-closed。
+   deps 三层：窄 opts（emit / budget / agentRoleFor / cascadeUpgrade / cascadeMaxUpgrades）＋ 活引用
+   （pendingApprovals / chains / deferredSpawns / workers / `root.signal`）＋ 回调（approvalOwners 路由表的
+   markOwner / dropOwner；出圈的 leaseConflicts / spawnStage / spawn / workerIds / budgetBlocked /
+   rejectOnBudget / cascadeReady / cascadePlanFor / cleanupSuperseded / mergeWorker / cleanupWrite）。
+   `approvalSeq` / `terminalWaiters` 本缝独占 ⇒ 随域搬入；`pendingApprovals` 有非本缝读者（finishInner /
+   cancelAgent 直接遍历兜掉同 agent 等待项）⇒ 留 Orchestrator 传活引用。
+5. **逐字核对与接线**（三条脚本走「生成 → 核对 → 手术」）：20 个方法体核对 **20/20 ALL OK**，声明改写逐条
+   可解释——`this.` → `this.deps.`、markOwner / dropOwner、`root.signal` → `deps.signal`、6 处 `private` →
+   `public`（薄委托要过桥）、`requestWorkerApproval` 的重复 doc 并笔去重（一段留在新模块）。Orchestrator 侧
+   **20 处手术**：11 个同名**薄委托**（6 个因过桥改 public ＋ 5 个原本公开）＋ 9 个仅本缝使用的私方法
+   **整段删除**（waitForApproval / requestSuperviseApproval / requestChainApproval / runChain / failChain /
+   ringScene / emitSequencerStatus / triggerDeferredSpawn / waitForAgentTerminal）＋ 删两个字段 ＋ 构造器
+   装配 `this.acs`；import 面按实际引用收敛（B 缝带走 runCascade、supervisor 与 supervise-contract 两个整行、
+   HARNESS_HOLD_PROSE_TOKEN、shapeJoinRows 与 JoinInput、chainTable 与 digestArgs 等）。
+6. **卫星账**：① `tests/orchestrator-hold.test.ts` 的 `ORCH_SRC` 派生 `ORCH_SRC_ALL`（orchestrator ＋ budget ＋
+   approvals 三处并料）——`hold:` 字面章的落点跨了三份源码；`dependency-failed` 两处字面盖章的计数断言改读
+   并料面；`{ hold: v.hold }`=2 仍在 ORCH_SRC（那段没搬）。② `scripts/mutate-verify.mjs` **25 枚针脚改指**
+   （A 9 ＋ B 16；带「针脚随实现搬家（2026-10-17 三缝拆分）」注释）；两条 apply 字面量随搬家后的读法更新
+   （wait-unknown-id-enters-waiters / join-settled-reads-finished：`this.workers` → `this.deps.workers`）。
+7. **读数**：typecheck 0 报错｜定向判卷两批 18 文件 **202 条全绿**（批一 9 文件 87 条、批二 9 文件 115 条）｜
+   全量核心判卷 **388 文件 5558 条全绿**（206.75s）｜`--check-needles` **1571 条｜阻断 27**——9＋16 = 两模块
+   未入库的**预期中态**（提交即消），2 = system-prompt 在飞账；「锚文找不到」类清零，改法语法体检全绿。
+8. **在飞账 / 仍开**：① `requestWorkerApproval` 的重复 doc 并笔已随搬家去重；② `deferredSpawns` 上两行同形
+   重复注释（HEAD 固有）未顺手清，记账；③ `orchestrator.ts` 三个 HEAD 固有死 import（FrozenStage /
+   PluginAgentRoleDef / ResolvedPluginRole）不顺手清——死 import 基线 HEAD＝now＝18 条一致；④ system-prompt
+   两条针脚红是另一笔在飞改动欠的账（锚文本被搬走、锚点未改指），**本笔不动**。
+9. **仍未证（不许读成绿）**：① 25 枚改指针脚**尚未真杀**——mutate-verify 度量 HEAD，须入库后在干净树上跑；
+   ② 报告第 ① 刀第三缝 `worker-merge.ts` 未开始；③ 桌面层与 CI 未跑这一笔；④ 真模型/生产行为未跑。
