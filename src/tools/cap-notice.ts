@@ -33,3 +33,17 @@ export function countCapNotice(noun: string, limit: number, omitted: number): st
 export function byteCapNotice(limitKB: number, omittedBytes: number, nextStep: string): string {
   return `[truncated: 输出超过 ${String(limitKB)}KB 上限，已截断（还有 ${String(omittedBytes)} 字节未显示；${nextStep}）]`;
 }
+
+/** 单行字符帽。`grep` 的命中行与 `read_file` 的交付行共用这一支。
+ *
+ * 背景（2026-10-17 两份抄本合一）：这条帽原先在 `grep.ts` 与 `read_file.ts` 各写一份，且**行为已经
+ * 漂移**——`grep` 那份自带 ` …[行截断]` 标记，`read_file` 那份静默截断、标记由调用点自己补。
+ * 合一取「带标记」的那一份：两侧调用点产出的字节**逐字不变**（`tests/read-shape.test.ts` 与
+ * `tests/grep-glob-edit.test.ts` 两条判卷都钉着 `2000 + " …[行截断]".length`），同时「截断了却不说」
+ * 这条歧路被消掉——那正是 `byteCapNotice` 头上写的那条纪律：不报出少了多少，模型就会以为看全了，
+ * 然后原样重跑同一条宽查询。
+ */
+const MAX_LINE_CHARS = 2000;
+export function clipLine(text: string): string {
+  return text.length > MAX_LINE_CHARS ? text.slice(0, MAX_LINE_CHARS) + " …[行截断]" : text;
+}

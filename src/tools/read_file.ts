@@ -1,13 +1,12 @@
 import { open, readFile, readdir, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
-import { byteCapNotice } from "./cap-notice.js";
+import { byteCapNotice, clipLine } from "./cap-notice.js";
 import { headWithinBytes, utf8PrefixEnd } from "./output-ring.js";
 import { prefetchLsp } from "./lsp.js";
 
-// 输出上限 50KB；行截断 2000 字符；默认最多 2000 行。
+// 输出上限 50KB；行截断 2000 字符（帽与标记见 cap-notice.ts::clipLine）；默认最多 2000 行。
 const READ_LIMIT_BYTES = 50 * 1024;
-const MAX_LINE_CHARS = 2000;
 const DEFAULT_MAX_LINES = 2000;
 /** 一次多份（`paths`）时的**总额**帽：与单份同一个数。
  *  为什么必须有（第 477 页）：没有它就等于把「N 份各自 50KB」直接倒进上下文——20 份小文件没事，
@@ -69,10 +68,6 @@ async function nearNameSuggestions(workspace: string, rel: string): Promise<stri
   return scored.map((e) => dirRel + e);
 }
 
-function clipLine(line: string): string {
-  return line.length > MAX_LINE_CHARS ? line.slice(0, MAX_LINE_CHARS) : line;
-}
-
 /** 读**一份**：单份路径的全部现存语义（目录、二进制、大文件前缀、行/字节帽、offset/limit 提示）
  *  都住在这只函数里。「一次多份」复用它，而不是把同一套帽与提示抄第二遍（规则 122）。
  *  读不到/拒读一律 `ToolError` 抛出——批量那一侧负责决定「一份失败算不算整批失败」。 */
@@ -119,7 +114,7 @@ async function readOne(ctx: ToolContext, rel: string, offsetRaw: unknown, limitR
   const selected = lines.slice(offset - 1, offset - 1 + maxLines);
   const truncatedLines = offset - 1 + selected.length < lines.length;
 
-  let out = selected.map((l) => (l.length > MAX_LINE_CHARS ? clipLine(l) + " …[行截断]" : l)).join("\n");
+  let out = selected.map((l) => clipLine(l)).join("\n");
   const byteLen = Buffer.byteLength(out, "utf8");
   let byteTruncated = false;
   // 帽之后真正交付了几行必须重算（#57）：旧写法照旧报 `selected.length`，实测 500 行文件按 limit=400 读时

@@ -1,19 +1,14 @@
 import { assertRealContainment, resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
-import { countCapNotice } from "./cap-notice.js";
+import { countCapNotice, clipLine } from "./cap-notice.js";
 import { rgNegativeNote, runRgJson, type RawMatch } from "./ripgrep.js";
 
 // 命中上限与单行截断：输出准确 > 省 token > 功能多。
 const MAX_MATCHES = 100;
-const MAX_LINE_CHARS = 2000;
 /** 上下文档位帽。再宽不给：`context=5` 已经是 6 倍行数，而改点现场不需要 5 行以上——
  *  宽档位只会让 8KB 预算被第一条命中吃光，反而看不见后面的调用点。 */
 const CONTEXT_MAX = 5;
 /** 带上下文时的输出字符预算。context=0（缺省）不走这条 ⇒ 既有输出字节一字不变。 */
 const CONTEXT_BUDGET_CHARS = 8 * 1024;
-
-function clipLine(text: string): string {
-  return text.length > MAX_LINE_CHARS ? text.slice(0, MAX_LINE_CHARS) + " …[行截断]" : text;
-}
 
 /** 命中行 `Line N: text`（旧口径逐字不变）；邻行 `  N | text`。
  *  两种前缀不是美化：模型要拿这段文本拼 edit_file 的 old_string，

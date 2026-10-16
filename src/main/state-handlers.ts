@@ -44,55 +44,41 @@ export function setPluginSnapshot(s: PluginPanelSnapshot | null): void {
   pluginSnapshot = s;
 }
 
+/** 面板快照取用器：任何一支旁路面板炸了，只让它自己缺席，不许把 state 主应答拖红。
+ *
+ * 2026-10-17 由七份同形 `try { x = await f() } catch { x = undefined }` 合一（结构债审查报告 #6-5）：
+ * 同一件事抄七遍的后果是「为什么吞」只写了一遍——原先只有 memory 那份带注释，其余六份是裸
+ * catch，下一个人分不清是刻意还是漏写。理由收在这里一次说清。
+ *
+ * **不**收窄到 `ENOENT`（审查给的另一个选项）：这里的意图是「面板失败即缺席」，不是「只吞文件
+ * 不存在」。收窄等于把一支面板的异常升级成整条 IPC 的异常——那正好是这七份 catch 要防的事。
+ */
+async function optionalPanel<T>(f: () => Promise<T>): Promise<T | undefined> {
+  try {
+    return await f();
+  } catch {
+    return undefined;
+  }
+}
+
 /** IPC "agent:state" 的处理函数。 */
 export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot; plugins?: PluginPanelSnapshot; sidechat?: SidechatPanelSnapshot; worktree?: { orphans: string[] }; schedule?: ScheduleSnapshot; license?: LicenseState; providerKeys?: { available: boolean; stored: string[]; envActive: boolean }; about?: { version: string } }> {
-  let memory: MemorySnapshot | undefined;
-  try {
-    memory = await memorySnapshot();
-  } catch {
-    memory = undefined; // 快照失败不阻塞 state（沙箱状态是主应答）
-  }
-  let plugins: PluginPanelSnapshot | undefined;
-  try {
+  const memory = await optionalPanel(memorySnapshot);
+  const plugins = await optionalPanel(async () => {
     const rt = currentPluginRuntime();
-    plugins = rt ? rt.snapshot() : (pluginSnapshot ?? await pluginSnapshotLite());
-  } catch {
-    plugins = undefined;
-  }
-  let sidechat: SidechatPanelSnapshot | undefined;
-  try {
-    sidechat = await handleSidechatState();
-  } catch {
-    sidechat = undefined;
-  }
+    return rt ? rt.snapshot() : (pluginSnapshot ?? await pluginSnapshotLite());
+  });
+  const sidechat = await optionalPanel(handleSidechatState);
   // M3b 孤儿 worktree 扫描（§4.4.9：启动/会话重开语义 = state 拉取时现算；只列不自动删）
-  let worktree: { orphans: string[] } | undefined;
-  try {
-    worktree = { orphans: await scanOrphanWorktrees() };
-  } catch {
-    worktree = undefined;
-  }
+  const worktree = await optionalPanel(async () => ({ orphans: await scanOrphanWorktrees() }));
   // M4a schedule 面板快照（真缺陷修复，半托截图路径抓出：schedule 通道挂了 IPC handler 但从未进 state 应答，
   // 面板 getState().schedule 恒 undefined → 任务列表/运行历史永久为空）
-  let schedule: ScheduleSnapshot | undefined;
-  try {
-    schedule = await handleScheduleSnapshot();
-  } catch {
-    schedule = undefined;
-  }
+  const schedule = await optionalPanel(handleScheduleSnapshot);
   // M4b：license 状态（valid/expired/inactive/invalid；未激活 → renderer 引导横幅）与 provider key 状态面
-  let license: LicenseState | undefined;
-  try {
-    license = await handleLicenseStatus();
-  } catch {
-    license = undefined;
-  }
-  let providerKeys: { available: boolean; stored: string[]; envActive: boolean; envProviders: string[] } | undefined;
-  try {
-    providerKeys = await handleProviderKeyStatus();
-  } catch {
-    providerKeys = undefined;
-  }
+  const license = await optionalPanel(handleLicenseStatus);
+  // 面板只取三枚在场格（envProviders 归「能力在场性」通道，不进 state 应答）——显式收窄，同原实现。
+  const providerKeys: { available: boolean; stored: string[]; envActive: boolean } | undefined =
+    await optionalPanel(handleProviderKeyStatus);
   return { sandbox: D().sandboxState(), memory, plugins, sidechat, worktree, schedule, license, providerKeys, about: { version: getAppVersion() } };
 }
 

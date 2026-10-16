@@ -16212,3 +16212,41 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    本仓），CI 与别的 checkout 不受影响；⑤ 报告第 4 步「push ahead 提交」**未做**——当前 HEAD 领先
    `origin/zcode` **21 笔**（领先本分支上游 `origin/fix/spec-summary-double-count` 19 笔），
    推 remote 属业主拍板项。
+
+## 2026-10-17 · 第 496 页：#6 重复逻辑清单开刀——单行帽两份合一（cap-notice）＋ state 面板七份同形 catch 合一
+
+1. **动因**：结构债审查报告 #6「已实锤的重复逻辑（低风险顺手清）」。本页落两条：#6-1 与 #6-5；
+   #6-3 查下来是审查的误判（见第 4 条），记账不落笔。
+2. **#6-1 单行字符帽两份合一**：`MAX_LINE_CHARS=2000` ＋ `clipLine` 原先在 `src/tools/grep.ts` 与
+   `src/tools/read_file.ts` 各写一份，且**行为已经漂移**——grep 那份自带 ` …[行截断]` 标记，
+   read_file 那份静默截断、标记由调用点自己补。合一取「带标记」的那一份，搬进 `cap-notice.ts`
+   （该族唯一权威，与 `byteCapNotice` 并排）；两侧调用点产出字节**逐字不变**
+   （`tests/read-shape.test.ts` 与 `tests/grep-glob-edit.test.ts` 两条判卷都钉着
+   `2000 + " …[行截断]".length`），同时「截断了却不说」这条歧路被消掉——那正是 `byteCapNotice`
+   头上写的纪律：不报出少了多少，模型就会以为看全了，然后原样重跑同一条宽查询。
+   同名的 `src/tools/patch-parse.ts::clipLine` **不动**：它的帽是 `TAIL_SNIPPET_CAP`、后缀是裸 `…`，
+   是尾部摘要截断，与「单行交付行」不是同一件事。
+3. **#6-5 state 面板七份同形 catch 合一**：`src/main/state-handlers.ts::handleAgentState` 里七支面板
+   快照各写一份 `try { x = await f() } catch { x = undefined }`，而「为什么吞」只有 memory 那份写了
+   一句注释，其余六份是裸 catch——同一件事抄七遍的后果就是注释只写一遍。抽成 `optionalPanel<T>(f)`
+   一支，理由在它头上一次说清。**没有**采纳审查给的另一个选项「收窄到 `ENOENT`」：这里的意图是
+   「面板失败即缺席」，收窄等于把一支面板的异常升级成整条 IPC 的异常——正是这七份 catch 要防的事。
+   `providerKeys` 的显式收窄（只取三枚在场格、丢 `envProviders`）逐字保留。
+4. **#6-3 是审查的误判（记账，不落笔）**：报告写「版本常量双读 ｜ `cli.ts:209-210` ↔
+   `main/doctor.ts:351` ｜ 单源导出 `PKG_VERSION`」——不成立。`doctor.ts` 那一处读的是 `package.json`
+   的 **`engines.node`**（判 Node 版本区间，走 `parseEngines`），与产品版本号毫无关系。全仓读
+   `package.json` 的六处逐一看过：只有 `cli.ts:209` 取 `version`，**没有第二份抄本**。若将来要抽
+   `PKG_VERSION`，唯一消费者也只有 CLI 一处，抽出来反而是给单一消费者加一层间接。
+5. **读数**：typecheck 0 报错｜定向判卷 5 文件 **85 条全绿**｜全量核心判卷 **388 文件 5558 条全绿
+   （202.55s）**｜`--check-needles` **1571 条｜阻断 2**——与上一页同址的 system-prompt 在飞账
+   （另一笔改动正在改 `BASE_SYSTEM` 那一段），**本笔零新增**（未入库面 0、killer 指针失效 0、
+   改法语法体检全绿）。
+6. **仍未证（不许读成绿）**：① 桌面层（`pnpm --filter cairn-desktop test`）与 CI 未跑这一笔；
+   ② 报告 #6 清单其余条目未动——#6-2（fork 落点两份合一，最重的一条，两侧文件都在飞）、#6-4
+   （`join(workspace, ".agent", …)` 约 20 处收拢成 `appDataDir`）、#6-5 之外的裸 catch 面
+   （全仓 `catch {` 计 191 处）；③ 报告 #2 `agent-runner.ts`、#3 `cli.ts`、#5 `mutate-verify` 两刀
+   三个大件未动。
+7. **一条环境口径（免得下一个人照着红去查）**：本页在**沙箱内**跑全量套件时
+   `tests/render-image.test.ts`（Chrome 渲染写 PNG 被挡，`ENOENT …/frame.png`）与
+   `tests/cli-surface.test.ts` 曾报红；**出沙箱、改动落定后重跑全绿（388 文件 5558 条）** ⇒ 红是
+   沙箱与一次「编辑中途被读文件」的竞态，不是代码回归。
