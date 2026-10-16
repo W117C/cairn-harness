@@ -10,6 +10,18 @@ node_modules
 .tmp/
 # 代码地图/索引工具的运行缓存（17M 级 codegraph.db + daemon.log，非源码）。
 .codegraph/
+
+# GraphFlow 的图输出目录（2026-10-17 补漏）。不是推断，是实测的来路：git 对象库里曾有
+# graphflow-out/graphflow-graph.sqlite **275.8MB** + graphflow-graph.json **99.0MB**，
+# 就是被 IDE 的 turn-diff 快照（tree 引用）整包带进来的；引用已清、blob 已随 gc 回收
+# （drill: 见 dsh-worktree-archive-2026-10-17/READING-git-slimming.md）。目录删而复生，
+# 这一行只掐「再被 git add -A 扫走」这一条通路，产物仍在本地盘。
+graphflow-out/
+
+# agent-canon/ 是策展语料（1239 支 / 48M，含 canon/raw/families，从未提交、仓内无引用）。
+# 2026-10-17 业主裁决：归 ignore、不入仓。口径同 .serena/、.qoder/ 那一族——只掐分发通路，
+# 文件仍在本地盘；若改主意，删掉这一行即可。
+agent-canon/
 # I9（审查 P2）：敏感产物不进 git——凭据文件与运行期记忆（remember 会往 .agent/memory/ 写）。
 # 注意 .agent/permissions.json 是**有意跟踪**的（项目权限库），不整体忽略 .agent/。
 .env

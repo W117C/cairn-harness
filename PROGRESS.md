@@ -16168,3 +16168,47 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
 8. **仍未证（不许读成绿）**：① 1 枚改指针脚**尚未真杀**——mutate-verify 度量 HEAD，须入库后在干净树跑；
    ② 桌面层（`pnpm --filter cairn-desktop test`）与 CI 未跑这一笔；③ 真模型/生产行为未跑；④ 报告其余项
    （#2 `agent-runner.ts` 瘦身、#3 `cli.ts`、#5 `mutate-verify` 两刀、#6 重复逻辑清单）未动。
+
+## 2026-10-17 · 第 495 页：环境层收口——git 对象库 411M→58M（零历史改写）＋缓存/产物清 416M＋.gitignore 补漏＋pelican 标本入仓
+
+1. **动因**：结构债审查报告第 1/2/3 步（环境层）。审查当时把 750MB blob 的处置记成
+   「`git filter-repo`（改 hash·需独占窗口）」——本页实测把机制钉死了：**不需要任何历史改写，
+   也不需要独占窗口**。
+2. **750MB 的真身（现读，非推断）**：`git rev-list --objects --all` 里 ≥5MB 的 blob 四枚：
+   `graphflow-out/graphflow-graph.sqlite` **275.8MB**、`apps/desktop/release/…/Electron Framework`
+   **202.7MB**、`Cairn-macOS.zip` **156.0MB**、`graphflow-graph.json` **99.0MB**。它们**只挂**在两族
+   IDE 工具引用上：`refs/codex/turn-diffs/*` 21 条（直接指 **tree** 的 turn-diff 快照）＋
+   `refs/cline/checkpoints/*` 18 条（Cline 会话检查点 commit）。证法两条：按正确顺序
+   `git rev-list --objects --exclude='refs/codex/*' --exclude='refs/cline/*' --all` 后四枚全不可见；
+   全仓提交数 1854 → 1800（54 笔全进工具账）。
+3. **动作与读数**：39 条工具引用先全量存档（`dsh-worktree-archive-2026-10-17/
+   refs-codex-cline-2026-10-17.txt`）再删 → `git gc --prune=now` → **.git 411M → 58M**
+   （size-pack 393.57 → 55.93 MiB、in-pack 22960 → 18710）。分支 hash 全不变（HEAD 仍 `cc0c7e25`）、
+   reflog 未动、302 项在飞脏改动零触碰、`git fsck` 无损坏。**这 700MB 量级从来没有进过任何分支
+   历史**——审查报告里「改 hash」那条顾虑因此化解。
+4. **缓存/产物清理（~416M，只删被忽略/未跟踪面）**：`codex-workbench-proto/node_modules` 154M
+   （`pnpm install` 可重建）；`.mimosa/hook-state/*.baseline` 148M（死会话文件基线，session 账本留
+   6.1M）；`.serena/cache` 59M（LSP 索引缓存，`serena project index` 可重建）；`.tmp/` 55M
+   （判卷/脚手架残渣，清零）。
+5. **陈旧 worktree / 分支**：① **5 个** `/private/var/folders/…/tmp.*/wt*` 旧 worktree
+   （detached @6f1e6b36、全干净、无进程占用）`worktree remove` ＋ prune，只留
+   `.worktrees/gate-mutate-verify`（真杀专用）；② **24 支**陈旧本地分支（21 支 `worktree-agent-*`、
+   `agent/修复-todo-*`、`doc-layer-migration`、`opt/agent-v2`）先 `git bundle` 存档（24 refs 全量、
+   32MB、`bundle verify` 过、**恢复演练已做**：从 bundle 克隆出 24 支 / 1601 提交，抽验两支 tip
+   逐字对上存档清单）再删；`git rev-list --all --count` 1800 → **1786**（14 笔此后只活在 bundle 里）；
+   保留 4 支：当前分支 / `zcode` / `main` / `rescue/locate-weights-rev4`。
+6. **.gitignore 补漏**：`graphflow-out/`（上条点名的大 blob 来源目录，删而复生）＋ `agent-canon/`
+   （策展语料 1239 支 / 48M——**2026-10-17 业主裁决：归 ignore 不入仓**，文件仍在本地盘，改主意删
+   那一行即可）。同族的 `apps/desktop/release/` 等四支由在飞者已补（本笔不动其 hunk）。
+7. **pelican 归属确认（审查留的尾巴）**：`pelican-bicycle.html` 是 `tests/render-image.test.ts` 与
+   `tests/html-artifact-check.test.ts` 的**正样本**（两处原文都写着「本仓那份」，html-artifact 那条
+   还要它「不是空转的尺」）⇒ **入仓当标本**——干净树里这两格从此走真路径，不再落「文件不在就跳过」
+   的支路；`pelican-bike.html` 无任何引用、已被 bicycle 取代 ⇒ 删除。
+8. **读数**：typecheck 0 报错｜全量核心判卷 **388 文件 5558 条全绿（194.05s）**｜针脚表不动
+   （本笔不触 mutate-verify 面，`--check-needles` 沿用上页读数：1571 条｜阻断 2＝system-prompt 在飞账）。
+9. **仍未证（不许读成绿）**：① 桌面层与 CI 未跑这一笔；② refs/codex 删除后 Codex 工具的
+   **旧 turn-diff 回看**不再可用（工具账——快照本就是逐轮临时物，新会话会另生成）；③ `.tmp` 里若
+   有实验中间数据，按 scratch 口径不回滚；④ 本页的删除与回收**全是机器本地动作**（Cairn 根目录＋
+   本仓），CI 与别的 checkout 不受影响；⑤ 报告第 4 步「push ahead 提交」**未做**——当前 HEAD 领先
+   `origin/zcode` **21 笔**（领先本分支上游 `origin/fix/spec-summary-double-count` 19 笔），
+   推 remote 属业主拍板项。
