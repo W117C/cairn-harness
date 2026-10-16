@@ -49,7 +49,29 @@ describe("BASE_SYSTEM 纪律面", () => {
   it("静态段体积有上界（每轮重送的固定成本，随轮数放大）", () => {
     // 帽从 1400 → 1600 是一次**预算裁决**，不是为通过而调：W3 的调度纪律段实测 +115 字符 /
     // +269 字节（改前 1272B，改后 1542B）。留 58B 余量，再想加句子必须先量数再调帽。
-    expect(Buffer.byteLength(BASE_SYSTEM, "utf8")).toBeLessThan(1600);
+    // 帽 1600 → 1750 是第二次预算裁决，动因是一次真实失败（2026-10-16）：
+    // 桌面端让 agent 写「鹈鹕骑自行车的循环动画」，它 IK 算对了、模板组装对了、
+    // 回执确认无残留占位符——然后就没回头看。产物里膝盖被选肢钉死在身体右前方
+    // （膝 x 全程只摆 21px），而它三个机会都没发现：read_file limit=20 只读前 20 行、
+    // 想跑 PIL 分析截图被权限门拒、verify 面是全仓 TS 套件（219s > 60s 帽）每轮必超。
+    // 于是加一条「视觉产物交付前必须真的看过」的纪律（+110 字节）。
+    // 代价量过：约 68 tok/轮（按 1B≈0.6tok 估），比 read_image 工具说明书（101 tok/轮）便宜，
+    // 而那把工具正是这条纪律要调用的东西——只加工具不写纪律，等于买了设备没人用。
+    // 30 轮会话累计约 2000 token，换「交付前真的看一眼」，这个交换成立。
+    expect(Buffer.byteLength(BASE_SYSTEM, "utf8")).toBeLessThan(1750);
+  });
+
+  it("视觉产物自检段在：交付前必须真的看过（能力 5 对非代码产物同样成立）", () => {
+    const line = BASE_SYSTEM.split("\n").find((l) => l.startsWith("视觉产物"));
+    if (line === undefined) throw new Error("BASE_SYSTEM 缺「视觉产物」段——模型写完美化产物后没人要求它回头看");
+    expect(line).toContain("read_image");
+    expect(line).toMatch(/不许只凭/);
+  });
+
+  it("视觉产物段不占纪律编号（同编排段：条件段混进编号会造断号）", () => {
+    const line = BASE_SYSTEM.split("\n").find((l) => l.startsWith("视觉产物"));
+    expect(line).toBeDefined();
+    expect(/^\d+\)/.test(line ?? "")).toBe(false);
   });
 
   it("编排段在：拆的判据 / 任务书自包含 / 派完必须收队，三句各锁一句（W1a 的收队义务此前只在工具描述里）", () => {

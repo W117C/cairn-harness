@@ -480,7 +480,7 @@ const MUTATIONS = [
   // 模型**手里**的口径：清单列得出名字，工具参数说明与报错只认 plugin: 形态 ⇒ 同一件事两处口径
   {
     id: "role-spec-desc-hides-user-form",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/user-agent-roles.test.ts",
     desc: "spawn_agent 的 role 说明退回只写 plugin: 形态 ⇒ 模型被自己的工具说明书劝退，用户级角色永不被动用",
     apply: (s) => s.replace("plugin:agent-name / user:agent-name；未注册即拒绝", "plugin:agent-name；未注册即拒绝"),
@@ -697,7 +697,7 @@ const MUTATIONS = [
   // ---- 模型自己撤 worker（cancel_agents）：规格面 / 回执分母 / 整批拒 / 文案点名真工具 ----
   {
     id: "cancel-agents-spec-visible-in-read-only",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/cancel-agents-tool.test.ts",
     desc: "只读档不再摘掉 cancel_agents ⇒ 模型看得见、白名单挡着，白叫一次再吃一句不可用（两头断的规格半边）",
     apply: (s) => s.replace("      s.function.name !== \"cancel_agents\" &&\n", ""),
@@ -771,7 +771,7 @@ const MUTATIONS = [
   // ---- supervise 契约面：规格由解析器那份生成（同源），不可申报的键必须出声拒 ----
   {
     id: "supervise-spec-loses-a-declarable-field",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/supervise-contract.test.ts",
     desc: "规格少列一个解析器认得的字段 ⇒ 模型写不进这一支、只能猜（规格里没有 supervise 那一整段就是这么来的）",
     apply: (s) => s.replace("              properties: Object.fromEntries(SUPERVISE_MODEL_FIELDS.map((f) => [", "              properties: Object.fromEntries(SUPERVISE_MODEL_FIELDS.filter((f) => f.name !== \"maxStages\").map((f) => ["),
@@ -1288,7 +1288,7 @@ const MUTATIONS = [
   },
   {
     id: "context-budget-ignores-model-window",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/session-provider.test.ts",
     desc: "预算基线退回硬编码 128k（高档位模型提前压缩 = 多烧一次摘要 + 白丢冷细节；误拒合法请求）",
     apply: (s) => s.replace("{ ...withModelBudget(DEFAULT_COMPACTION_CONFIG, window), ...opts.compaction?.config }", "{ ...DEFAULT_COMPACTION_CONFIG, ...opts.compaction?.config }"),
@@ -2850,7 +2850,7 @@ const MUTATIONS = [
   },
   {
     id: "readonly-filter-keeps-wait-tool",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/tool-surface-parity.test.ts",
     desc: "只读档不再显式摘除 wait_for_agents ⇒ 模型面看得见、执行面白名单挡着（本仓第 6 次的那类两头断）",
     apply: (s) => s.replace("      s.function.name !== \"wait_for_agents\" &&\n", ""),
@@ -2992,6 +2992,26 @@ const MUTATIONS = [
     desc: "把编排段改成「7) …」⇒ 条件段混进动作序列编号，纪律 1–6 的连续性断号（模型会以为后面的约束可省）",
     apply: (s) => s.replace("\"编排（派子代理时）：", "\"7) 编排（派子代理时）："),
     expectFail: "六条纪律编号连续（缺号=模型读到断号，会以为后面的约束可省）",
+  },
+  {
+    id: "visual-self-check-rule-removed",
+    src: "src/agent/system-prompt.ts",
+    test: "tests/base-system-discipline.test.ts",
+    desc: "「视觉产物交付前必须真的看过」被删 ⇒ 回到「我写对了」即完成。动因是一次真实失败" +
+      "（2026-10-16）：agent 写鹈鹕骑自行车的循环动画，IK 算对了、模板组装对了、回执确认无残留占位符，" +
+      "然后就没回头看。产物里膝盖被选肢钉死在身体右前方（膝 x 全程只摆 21px），" +
+      "而它三个机会都没发现——缺的不是能力，是没人要求它回头看。",
+    apply: (s) => s.replace('  "视觉产物（HTML/SVG/动画/图表）：交付前必须真的看过——read_image 读渲染结果，或把关键数值读回来核对；不许只凭「我写对了」宣称完成。",\n', ''),
+    expectFail: "视觉产物自检段在：交付前必须真的看过（能力 5 对非代码产物同样成立）",
+  },
+  {
+    id: "visual-self-check-rule-renumbered",
+    src: "src/agent/system-prompt.ts",
+    test: "tests/base-system-discipline.test.ts",
+    desc: "视觉产物段被编成「7)」⇒ 条件段混进纪律编号，1–6 连续性断号（模型会以为后面的约束可省）。" +
+      "与编排段同一条理由。",
+    apply: (s) => s.replace('"视觉产物（HTML/SVG/动画/图表）', '"7) 视觉产物（HTML/SVG/动画/图表）'),
+    expectFail: "视觉产物段不占纪律编号（同编排段：条件段混进编号会造断号）",
   },
   {
     id: "typecheck-triage-scratches-into-tracked",
@@ -3300,7 +3320,7 @@ const MUTATIONS = [
           // ---- prune 存盘回取接进生产（tests/prune.test.ts + tests/session-prune-attachments.test.ts）----
   {
     id: "prune-attachment-production-entry",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/session-prune-attachments.test.ts",
     desc: "生产组装退回只传 {events} ⇒ 附件恒空、打桩里那行路径指向空气（§7.4「存盘回取」两头断的正是这一格）",
     apply: (s) => s.replace("const outcome = computePrune({ events, attachmentsDir: pruneAttachmentsDir, sessionId: pruneSessionId });", "const outcome = computePrune({ events });"),
@@ -4005,8 +4025,8 @@ const MUTATIONS = [
     expectFail: "压缩没开始就不发：decision=null 不发；摘要停用后 auto 不发，overflow 截断照发",
   },
   {
-    id: "precompact-glm-session-forward-dropped",
-    src: "src/agent/glm-session.ts",
+    id: "precompact-session-provider-forward-dropped",
+    src: "src/agent/session-provider.ts",
     test: "tests/hook-precompact-producer.test.ts",
     desc: "provider 收了 compaction.onPreCompact 却不递给协调器 ⇒ 真实会话里的自动压缩绕过了钩子（纯函数单测全绿也照样断，因为断在这一跳）",
     apply: (s) => s.replace("        ...(opts.compaction.onPreCompact ? { onPreCompact: opts.compaction.onPreCompact } : {}),", "        ...(false ? { onPreCompact: opts.compaction.onPreCompact } : {}),"),
@@ -4023,7 +4043,7 @@ const MUTATIONS = [
   // ---- §9.3 disallowed-tools 的规格面（任务 #39/#41：模型可见清单与活闸同源）----
   {
     id: "spec-face-deny-not-applied",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/skill-tool-policy.test.ts",
     desc: "读了 skillDenial 却不摘 ⇒ 规格面回到「看得见、叫得动、被执行面拒」的老形态（worker 侧三重闸只剩两重）",
     apply: (s) => s.replace("    if (by) removed.push({ name: s.function.name, by });", "    if (false && by) removed.push({ name: s.function.name, by });"),
@@ -4031,7 +4051,7 @@ const MUTATIONS = [
   },
   {
     id: "spec-face-drop-unexplained",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/skill-tool-policy.test.ts",
     desc: "摘了工具不给说明 ⇒ 模型的清单静默少几把，只能猜哪把没了（本仓规矩：不静默改语义，也不静默不兑现）。针脚 09-27 跟着 #5 那一笔挪过：note 表达式尾部从 `;` 变成 `+ (stranded ? …)" +
       "`，旧两行式针脚随之 0 命中 ⇒ 同笔改指「拼被摘清单」那半行（规则 229：别人——这次是我——提交实现后针脚必须当场跟着走）",
@@ -4051,7 +4071,7 @@ const MUTATIONS = [
   },
   {
     id: "plugin-context-note-part-dropped",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/session-provider.test.ts",
     desc: "摘除说明拼不进模型看到的 system 块 ⇒ 说明写好了却没人读到（收下即丢的新变体）",
     apply: (s) => s.replace("opts.plugins.hookContext, liveNote]", "opts.plugins.hookContext]"),
@@ -4059,7 +4079,7 @@ const MUTATIONS = [
   },
   {
     id: "plugin-context-routing-part-dropped",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/session-provider.test.ts",
     desc: "skill 路由清单不注入 ⇒ 模型再也不知道有哪些 skill 可点（M2e 的整条注入面在模型端从来没有判据看过，这条现在有了）",
     apply: (s) => s.replace("const parts = [opts.plugins.skillsRouting, opts.plugins.hookContext", "const parts = [opts.plugins.hookContext"),
@@ -4067,7 +4087,7 @@ const MUTATIONS = [
   },
   {
     id: "request-face-never-recomputed",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/session-provider.test.ts",
     desc: "逐请求工具面收了却从不重算 ⇒ 回到「run 起点冻结一份」的形态：模型中途点起的 skill，下一轮清单里那把还在，只能白叫一次再被执行面拒",
     apply: (s) => s.replace("      const face = opts.requestFace?.();", "      const face = opts.requestFace && false ? opts.requestFace() : undefined;"),
@@ -4075,7 +4095,7 @@ const MUTATIONS = [
   },
   {
     id: "request-face-tools-ignored",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/session-provider.test.ts",
     desc: "重算了面却仍把构造时那份 tools 发出去 ⇒ 说明与清单从此各说各话（模型被告知工具没了、请求里却还带着它）",
     // 2026-09-23 改指：模型面预算接进同一行时把它改成了 `declaredTools`（下游还要过一次降配），
@@ -4203,7 +4223,7 @@ const MUTATIONS = [
   },
   {
     id: "mcp-spec-face-read-only-filter-two-standards",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/session-tools.test.ts",
     desc: "规格面的只读摘除改用静态写向表 ⇒ 门必拒的 MCP 工具仍挂在模型清单上，白叫一轮再吃一句拒绝",
     apply: (s) => s.replace("    if (opts.mode === \"read-only\" && isWriteCall(tool.name, tool.grade)) continue;", "    if (opts.mode === \"read-only\" && isSideEffectTool(tool.name)) continue;"),
@@ -5005,7 +5025,7 @@ const MUTATIONS = [
   },
   {
     id: "summarizer-hides-truncation",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/turn-truncated.test.ts",
     desc: "摘要器收下 turn_truncated 却不往外传 ⇒ 第四闸永远等不到它（「两头断」的原型形状）",
     apply: (s) => s.replace('      else if (e.type === "turn_truncated") truncated = e.stop_reason;\n', ''),
@@ -5511,7 +5531,7 @@ const MUTATIONS = [
   },
   {
     id: "ms-surface-note-not-emitted",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/model-surface.test.ts",
     desc: "降配说明生产者有、消费者没接（composeTurnMessages 收了字段却不落块）⇒ 模型看到的是一份静默变小的工具表",
     apply: (s) => s.replace("if (opts.surfaceNote) msgs.push({ role: \"system\", content: opts.surfaceNote });", "if (false) msgs.push({ role: \"system\", content: opts.surfaceNote ?? \"\" });"),
@@ -5519,7 +5539,7 @@ const MUTATIONS = [
   },
   {
     id: "ms-enforcement-wiring-bypassed",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/model-surface.test.ts",
     desc: "装配链算了账却没采用降配结果（`tools` 仍指向未降配那份）⇒ 门绿而线上不生效",
     apply: (s) => s.replace("const tools = surface ? surface.specs : declaredTools;", "const tools = declaredTools;"),
@@ -6203,7 +6223,7 @@ const MUTATIONS = [
   },
   {
     id: "cc-head-survival-never-recorded",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/compaction-cost.test.ts",
     desc: "每轮把上一轮装配清空 ⇒ 头部存活比永远量不出来，策略只在关那一支生效（A/B 读成「策略无效」）",
     apply: (s) => s.replace("        prevRequestLayer = requestLayer;", "        prevRequestLayer = \"\";"),
@@ -6318,7 +6338,7 @@ const MUTATIONS = [
   },
   {
     id: "pb-wiring-passes-cumulative-not-fresh",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/prune-batching.test.ts",
     desc: "装配链把累计值递给策略（而不是增量）⇒ 策略算对了、判据照样无效果：本仓点名的「两头断」形状",
     apply: (s) => s.replace("              savedTokens: freshSavings(outcome.savedByIdTokens, prunedIdsSent),", "              savedTokens: outcome.savedTokens,"),
@@ -6334,7 +6354,7 @@ const MUTATIONS = [
   },
   {
     id: "pb-free-ride-flag-sticky",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/prune-batching.test.ts",
     desc: "旗标取用后不清零 ⇒ 蹭的那一次断变成之后每轮都免检：分批策略整条失效（PC9 判的是集合相等，正是为这一形而生的）",
     apply: (s) => s.replace("      const freeRideNow = pruneFreeRide;\n      pruneFreeRide = false;", "      const freeRideNow = pruneFreeRide;"),
@@ -6342,7 +6362,7 @@ const MUTATIONS = [
   },
   {
     id: "pb-free-ride-flag-never-set",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/prune-batching.test.ts",
     desc: "压缩成功后不置旗标 ⇒ 白断一次头却仍然攒着，下一轮再断一次（同一原理的另一头断）",
     apply: (s) => s.replace("          pruneFreeRide = true; //", "          pruneFreeRide = false; //"),
@@ -6350,7 +6370,7 @@ const MUTATIONS = [
   },
   {
     id: "pb-object-threshold-ignored",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/prune-batching.test.ts",
     desc: "只认 `pruneBatching: true`、把对象形式丢掉 ⇒ 门的对照臂（门槛=1）实际跑的是生产 40k 门槛，于是「只有压缩轮落盘」可能只是别的轮没活——主判据的对照变空",
     apply: (s) => s.replace('          typeof opts.pruneBatching === "object" && opts.pruneBatching !== null ? opts.pruneBatching : {};', "          false ? opts.pruneBatching : {};"),
@@ -7396,7 +7416,7 @@ const MUTATIONS = [
   },
   {
     id: "chain-lease-promise-says-reject",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/chain-lease-held.test.ts",
     desc: "规格退回承诺硬闸「相交即拒」⇒ 模型以为报了 resources 就有闸，从而不看真保护它的那一层（worktree）",
     apply: (s) => s.replace("与活跃写 worker 相交 ⇒ 审批卡点名，可强行批准", "与活跃写 worker 相交即拒"),
@@ -7405,7 +7425,7 @@ const MUTATIONS = [
   // ---- 第 42 页 · 定时五件的模型面 / 注入面解析器的形状 / core 与低频族的分界 ----
   {
     id: "automation-face-dropped",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/automation-tool-surface.test.ts",
     desc: "不拼那五份规格 ⇒ 模型面上又是零个（实现照装、能力照发不出去，且没人报错）",
     apply: (s) => s.replace("  specs.push(...automationToolSpecs());\n", ""),
@@ -7413,7 +7433,7 @@ const MUTATIONS = [
   },
   {
     id: "automation-face-in-read-only",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/automation-tool-surface.test.ts",
     desc: "只读档漏摘 ⇒ 只读会话能排下一次无人值守的写盘（与 wait/cancel 同族的漏摘形状）",
     apply: (s) => s.replace(" &&\n      !AUTOMATION_TOOL_NAMES.includes(s.function.name),", ","),
@@ -7421,7 +7441,7 @@ const MUTATIONS = [
   },
   {
     id: "automation-specs-become-core",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/automation-tool-surface.test.ts",
     desc: "core 集合不减低频族 ⇒ 五件每次请求都进固定面、降配梯再也砍不掉它们",
     apply: (s) => s.replace(".filter((n) => !OPTIONAL_SURFACE_TOOL_NAMES.includes(n))", ".filter(() => true)"),
@@ -8443,7 +8463,7 @@ const MUTATIONS = [
   },
   {
     id: "stranded-clause-computed-not-appended",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/skill-tool-policy.test.ts",
     desc: "算出来不接（规则 230 的同一格，第三次命中）：谓词对、变量在、注脚里却不拼那句话 ⇒ 模型仍要等派完活、想撤才发现撤不掉",
     apply: (s) => s.replace(
@@ -9357,7 +9377,7 @@ const MUTATIONS = [
   },
   {
     id: "prompt-surface-readonly-description-not-applied",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/prompt-surface-check.test.ts",
     desc: "按档换描述那一格摘掉 ⇒ 只读档的 `propose_plan` 继续写「批准前 write_file/run_shell 会被权限层拒绝」，" +
       "而那两把在这一档连面都不在——文本描述一个它拿不到的能力（第 176 页现读抓到的那一格，同类事故第四次）",
@@ -9458,7 +9478,7 @@ const MUTATIONS = [
   },
   {
     id: "prompt-surface-edit-path-prose-removed",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/prompt-surface-check.test.ts",
     desc: "把 `edit_file.path` 的说明摘掉 ⇒ 模型只能靠撞闸才知道「绝对路径会被拒」（`resolveInWorkspace` 硬拒两种形状：绝对路径、越界），" +
       "而每撞一次闸要付一整轮往返（现读一次模型往返 8.7–42s）。判卷两头都钉：说明里点名这两种拒绝 ＋ 闸真按这句话拒，" +
@@ -9471,7 +9491,7 @@ const MUTATIONS = [
   },
   {
     id: "prompt-surface-write-path-prose-removed",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/prompt-surface-check.test.ts",
     desc: "只给两把写向工具中的一把补说明 ⇒ 同一族里规矩看起来不同（模型会按「有说明那把」的规矩推另一把）。" +
       "这条与 `edit-path-prose-removed` 各用自己的 killer 用例：两条分支共用一条断言时，摘掉一支仍然全绿是本仓反复踩过的形状（规则 239）",
@@ -9623,7 +9643,7 @@ const MUTATIONS = [
   },
   {
     id: "map-turn-gate-bound-loosened",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/map-turn-gate.test.ts",
     desc: "首轮闸的界被放松（>2 → >200）⇒ 长会话每轮都重送地图正文。这一格从前**零观测者**：" +
       "第 206 页那条尺只钉「首轮有没有」，没钉「次轮还送不送」，把 >2 改成 >200 全量判卷一条不红。" +
@@ -9635,7 +9655,7 @@ const MUTATIONS = [
   },
   {
     id: "map-turn-gate-prints-degradation",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/map-turn-gate.test.ts",
     desc: "闸还在、但把「这一位根本没有」改成「送一句降级说明」⇒ 模型读到「这轮没有地图」，" +
       "与「这仓库没有结构」同形（第 206 页拆掉的就是这个形状，规则 261）。" +
@@ -9721,7 +9741,7 @@ const MUTATIONS = [
   },
   {
     id: "map-inject-throw-swallowed",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/map-self-report.test.ts",
     desc: "注入侧 catch 那一支仍返回 null ⇒ 两个失败出口只守了一个（装配面的一次抛出比内部降级更常见："+
       "builder 自己没入库、缓存目录坏了）；「读不到」与「没有问题」再次同形",
@@ -12408,7 +12428,7 @@ const MUTATIONS = [
    *  那已经是往判卷里搬实现，而不是改一个既有写法（理由同第 291 页那条「变异方向要与不变量同向」）。 */
   {
     id: "context-signals-provider-keeps-own-literal",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/context-signals.test.ts",
     desc: "provider 那半退回自带字面量 ⇒ 两端各漂各的，而尺的 A 臂继续声称「输入＝生产端算出来的」：" +
       "这正是从前写在注释里的那句「改了那两行而不改这里，A 臂就撒谎」的现行形状",
@@ -12537,7 +12557,7 @@ const MUTATIONS = [
   },
   {
     id: "map-retrieve-session-query-not-passed",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/map-retrieval.test.ts",
     desc: "生产入口没把整句问话交给构建器（只有纯函数与地图内部接了）⇒ 首轮注入永远不带检索行，" +
       "而全部判卷与探针照样绿——因为它们都是直接调 `buildMap`，不看装配面",
@@ -13310,7 +13330,7 @@ const MUTATIONS = [
   },
   {
     id: "memory-degraded-composer-note-not-pushed",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/memory-degradation.test.ts",
     desc: "装配口收了 memoryNote 却不落位 ⇒ 主会话仍然无痕；这条同时钉住落点（在 skills 之前）："
       + "挪到尾部会把已经攒下的前缀缓存自己抖掉，那正是这套装配花钱省的地方",
@@ -13645,7 +13665,7 @@ const MUTATIONS = [
   },
   {
     id: "glm-spec-web-fetch-truncation-promise-dropped",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/optional-tool-surface.test.ts",
     desc: "把规格里那句「正文太长会被截断并提示换更精确的地址」摘掉 ⇒ 模型只知道自己拿到的是截断后的正文，"
       + "不知道下一步该换地址（执行端那句提示仍会出来，但每轮重送的说明书不再预告它）；"
@@ -13666,7 +13686,7 @@ const MUTATIONS = [
   // 第 324 页：#25 的最后一格。「撤不回来」是可达性，「不可撤销的开销」才是模型能拿来权衡的量。
   {
     id: "glm-note-loses-irreversible-cost-framing",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/skill-tool-policy.test.ts",
     desc: "摘掉注脚里那句成本框架（只留「撤不回来」）⇒ 模型知道这个动作不可达，却不知道这笔钱收不回；"
       + "本仓 ⑨ 的口径是成本要可观测，而「派不派」恰恰是钱决定的。既有那条判卷已被表里两根锚点指着 ⇒ 代价这一半另开一条",
@@ -13676,7 +13696,7 @@ const MUTATIONS = [
   // 同一条注脚的**第二种**病：句子还在、门却宽了（谁被摘都喊一声开销）。上一根锚点对它全不分辨。
   {
     id: "glm-note-cost-clause-gate-widened-to-any-removal",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/skill-tool-policy.test.ts",
     desc: "把 `stranded` 那一档门改成「有摘除就出声」⇒ 连派活一起摘时仍承诺一笔根本不存在的开销（那一轮没东西可派）；"
       + "这是第 322 页 M2 那族「守卫放宽」的第三个形状，而正向断言（stranded 态句子照在）分辨不出，只有反向那一格会红",
@@ -14962,7 +14982,7 @@ const MUTATIONS = [
   },
   {
     id: "read-batch-paths-invisible-to-map-context",
-    src: "src/agent/glm-session.ts",
+    src: "src/agent/session-provider.ts",
     test: "tests/map-self-report.test.ts",
     desc: "地图的「最近碰过的文件」只认 `args.path` ⇒ 一整轮批量读对地图完全不可见"
       + "（模型刚读了 20 份，地图却当它没读——接线漏掉的那半与风险面同族）",
