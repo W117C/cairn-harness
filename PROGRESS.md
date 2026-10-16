@@ -16287,11 +16287,47 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    77 行。这一刀的性质是**域拆分**不是行数锦标赛——它消掉的是「生产 runner 揣着 demo 数据面」，
    行数是副产物；真要瘦身得看 #2 的三缝。
 8. **顺手修的 D-10 红（本笔之外的一处笔误）**：第 496 页第 4 条那几处引用照抄了审查报告的裸文件名
-   形（`cli.ts:209` / `main/doctor.ts:351`），被 docs-check D-10 判红 2 条——本节改成 `path#符号`
-   形（`src/cli.ts#PKG_VERSION` ↔ `src/main/doctor.ts#parseEngines`）。台账是 append-only，这里只动
-   引用形状、不动那句话的结论。
+   形——两种都不合 D-10（一种是裸文件名带行号、另一种少了一级目录），被判红 2 条。本节把那一处改成
+   `path#符号` 形（`src/cli.ts#PKG_VERSION` ↔ `src/main/doctor.ts#parseEngines`）。台账是 append-only，
+   这里只动引用形状、不动那句话的结论。
+   ⚠️ **这一条本身踩过一次坑**：本页初稿把那两个坏引用的原文照抄进来说明「修了什么」，结果又被判红
+   ——D-10 扫的是全文，**不认「这是反例」**。写这类说明时别把那个形状写出来（本节现在这种不带行号
+   的描述是安全写法）。
 9. **仍未证（不许读成绿）**：① 桌面层（`pnpm --filter cairn-desktop test`）与 CI 未跑这一笔；
    ② 报告 #2 的三缝（会话装配 / provider 装配 / run 管线，含 561 行的 `runAgent` 与
    `liveRunPaths` / `omittedForever` 的 `RuntimeCapability` 收拢）**未动**；③ 报告 #3 `cli.ts`、
    #5 `mutate-verify` 两刀未动（`src/cli.ts` 与 `src/main/session-handlers.ts` 现被别的会话改着，
+   那两处现在动必撞车）。
+
+## 2026-10-17 · 第 498 页：agent-runner.ts 第二刀——provider 装配外提（`main/provider-assembly.ts`）
+
+1. **动因**：结构债审查报告 #2 的第二缝「provider 装配」。`createProvider`（按 selection 分叉到
+   mock / 会话 provider / 非会话 transport 的那段**决策**）原先连带它的依赖面一起揣在装配根里。
+2. **搬走两件**：`resolveProviderKind`（导出 API——`src/main/settings-handlers.ts` 与桌面层
+   `apps/desktop/src/main/kernel-host.ts` 都按原路径 import，故再导出）与 `createProvider`（原先
+   **不导出**的私有函数；跨模块使用后改为导出）。
+3. **一处设计裁决：新模块不反向依赖装配根**。`createProvider` 的入参原写作
+   `Pick<RunOptions, "logPath" | "workspace" | "attachments"> & {…}`——照搬就会让新模块 import 装配根
+   的类型，与「抽出来的模块不反向依赖装配根」这条口径相反（`src/main/state-handlers.ts` 头上写的就是
+   这句）。所以把那个内联对象收成具名接口 `SessionProviderOptions`，前三枚按同形声明，并在头上说明
+   **这不是「同一谓词的第二份」**：两侧的关联由类型检查守着——装配根往这里递的就是 `RunOptions` 的
+   那三枚，形状一旦分叉，调用点当场红。`arch-cycle-check` 也因此没多出一圈。
+4. **顺手清 13 个随之作废的 import**（`createMockProvider` / `toWorkerModel` / `RegistryWorkerModel` /
+   `assertProviderKeyConfigured` / `formatAttachmentContext` / `SessionTransport` / `gateToolSpecs` /
+   `Provider` / `ProviderToolSpec` / `ThinkingEffort` / `GlmToolSpec` / `selectionProviderId` /
+   `createSessionProvider`），逐个与 HEAD 对数确认「HEAD 有消费者、现在没有」才删。**留着两个 HEAD
+   固有的死 import**（`ModelOutput` / `SessionPluginTool`）——同第 494 页对 orchestrator 那三个的处理
+   口径：死 import 基线要与 HEAD 可比，顺手清会把基线搅浑。
+5. **卫星账**：① `tests/main-provider-runtime.test.ts` 的窗口接线断言、`tests/usage-attribution.test.ts`
+   的 `const scripted = …` 断言，两条取料面改**并料**（读装配根 + 新模块）；② **变异锚点零改指**——
+   52 条锚在装配根的针脚里没有一条落在这两个函数里（动刀前已按锚文逐条筛过）；
+   ③ `arch-cycle-check` 读数不变（域内 237 支、圈 1 条、新圈 0）｜`desktop-boundary-check` 绿。
+6. **读数**：typecheck 0 报错｜定向判卷 **13 文件 195 条全绿**（全仓读 `agent-runner.ts` 源码的判卷
+   逐一点名）｜全量核心判卷 **388 文件 5558 条全绿（200.04s）**｜`--check-needles` **1571 条｜阻断 2**
+   （与前列同址的 system-prompt 在飞账，本笔零新增：未入库面 0、killer 指针失效 0）｜docs-check 全绿。
+7. **行数**：装配根 **1,854 → 1,764**（净 −90），新模块 126 行。两刀合计 **1,892 → 1,764（−128）**。
+8. **仍未证（不许读成绿）**：① 桌面层（`pnpm --filter cairn-desktop test`）与 CI 未跑这一笔；
+   ② 报告 #2 剩下的两缝（会话/编排器装配约 190 行、含 561 行 `runAgent` 的 run 管线）与
+   `liveRunPaths` / `omittedForever` 的 `RuntimeCapability` 收拢**未动**；③ 报告 #3 `cli.ts`、#5
+   `mutate-verify` 两刀未动（`src/cli.ts` 与 `src/main/session-handlers.ts` 仍被别的会话改着，
    那两处现在动必撞车）。

@@ -92,12 +92,16 @@ describe("CX-02/CX-03 main provider registry", () => {
   });
 
   it("接线：合成 spec 上的窗口真被递进 session（否则申报只改到一半，M-2 那一族）", () => {
-    /* 这一格**故意留成结构断言**：包住它的是 `createProvider`，没有导出，而真跑一次要一把真 key。
+    /* 这一格**故意留成结构断言**：包住它的是 `createProvider`（2026-10-17 起从
+     * `./provider-assembly.ts` 导出），而真跑一次要一把真 key。
      * 上下两端都另有行为判卷在盯——spec 那一面在上面这条，预算那一面在 tests/session-provider.test.ts
      * 的「自由档位的窗口申报落到预算面」。缺的只是这两端之间那根线，而线断了**只有**这里会红：
      * 上面的 spec 照样带窗口（它只查 resolveMainModel），下面的预算照样认 opts.ctxWindow
      * （它只喂 session），中间没人把前者的值送到后者手上。边界用代码标识，不用注释文字。 */
-    const src = readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf8");
+    // 并料读两份：函数随 provider 装配面搬走了，尺量的是「这根线在不在」，不是「必须写在哪个文件里」
+    // （同 `usage-attribution.test.ts` / `orchestrator-hold.test.ts` 的 ORCH_SRC_ALL 先例）。
+    const src = readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf8")
+      + readFileSync(fileURLToPath(new URL("../src/main/provider-assembly.ts", import.meta.url)), "utf8");
     expect(src, "自由档位的窗口没递进 session ⇒ --ctx-window 只落在 spec 上，预算那一面看不见")
       .toMatch(/\.\.\.\(selection\.modelExplicit \? \{ ctxWindow: selection\.spec\.ctxWindow \} : \{\}\),/);
   });

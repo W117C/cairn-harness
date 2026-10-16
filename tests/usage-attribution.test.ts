@@ -315,6 +315,7 @@ describe("接线：盖章点=主会话＋基准跑器两处，且不许再抄第
   // 「枚举只许活在哪个**函数**里」的尺，取料面就得跟着并料（同 `orchestrator-hold.test.ts` 的
   // ORCH_SRC_ALL 先例）——量的是「只许有一处」，不是「只许在某个文件里」。
   const demoScripted = () => readFileSync(fileURLToPath(new URL("../src/main/demo-scripted.ts", import.meta.url)), "utf8");
+  const providerAssembly = () => readFileSync(fileURLToPath(new URL("../src/main/provider-assembly.ts", import.meta.url)), "utf8");
   const orch = () => readFileSync(fileURLToPath(new URL("../src/agent/orchestrator.ts", import.meta.url)), "utf8");
 
   it("pipeline 里 stamp 在 append **之前**（live 与盘必须同一个对象），且这一份文件里只有这一处盖章", () => {
@@ -331,7 +332,8 @@ describe("接线：盖章点=主会话＋基准跑器两处，且不许再抄第
   it("剧本 env 枚举整份只许活在 scriptedMainModelPath 里（装配与归因共用同一个式子）", () => {
     // 并料后再切片，**顺序即语义**：函数头住在 `./demo-scripted.ts`，`mainUsageModelOf` 仍在装配根，
     // 所以新模块那份要拼在前——否则 `indexOf` 两头颠倒，切出来是空串（本笔真踩过这一下）。
-    const all = demoScripted() + "\n" + runner();
+    // 中间那份 `provider-assembly` 是 `const scripted = scriptedMainModelPath();` 的新落点（下面那条断言）。
+    const all = demoScripted() + "\n" + providerAssembly() + "\n" + runner();
     const fn = all.slice(all.indexOf("export function scriptedMainModelPath"), all.indexOf("export function mainUsageModelOf"));
     expect(fn.length).toBeGreaterThan(50); // 切片本身不许静默为空，否则下面全是恒真
     // `env.X` 这个形状只在真读 env 时出现（注释与文档写作裸名），所以按它计数。
@@ -343,7 +345,9 @@ describe("接线：盖章点=主会话＋基准跑器两处，且不许再抄第
     }
     // M3A_AGENTS_DEMO 刻意不在名单里：它在 scriptedMainModelPath 之外还答**另一个**问题
     // （`demoModelFor` = worker 用哪套剧本），那份不是本式的副本。
-    expect(runner()).toMatch(/const scripted = scriptedMainModelPath\(\);/);
+    // `const scripted = scriptedMainModelPath();` 2026-10-17 随 createProvider 搬去
+    // `./provider-assembly.ts` ⇒ 这条也读并料面（上面那份 `all`）。
+    expect(all).toMatch(/const scripted = scriptedMainModelPath\(\);/);
   });
 
   it("worker 侧：价格标签与归因键同分支同式子，且落进 spawned 事件", () => {

@@ -14,11 +14,8 @@ import { runCompaction } from "../agent/compaction";
 import { buildMap } from "../agent/map/build";
 import { computePrune } from "../agent/prune";
 import {
-  createSessionProvider,
   createSessionSummarizer,
-  gateToolSpecs,
   type SessionPluginTool,
-  type SessionTransport,
 } from "../agent/session-provider";
 import { ClarifyGate, PlanGate } from "../agent/gates";
 // M10 拆分：系统提示词面搬去 `src/agent/system-prompt.ts`。**这里既是本地消费、也再导出**——
@@ -69,11 +66,8 @@ import { globalPermissionsPath } from "../permissions/rules";
 import { type ProviderKind } from "./settings";
 import { setRunWorkspace } from "./runner-workspace";
 import { createSession, pathOf, sessionExists, type SessionInfo } from "./sessions";
-import { createMockProvider } from "../providers/mock";
-import type { GlmToolSpec } from "../providers/glm";
-import { toWorkerModel, type RegistryWorkerModel } from "../providers/registry";
-import { validateThinkingEffort, type ThinkingEffort } from "../providers/capabilities";
-import type { ModelOutput, Provider, ProviderToolSpec } from "../providers";
+import { validateThinkingEffort } from "../providers/capabilities";
+import type { ModelOutput } from "../providers";
 import { validateRunRequestEnvelope } from "./run-request";
 import {
   MODEL_SHELL_TEST_ALIASES,
@@ -89,14 +83,12 @@ export {
   SANDBOX_TEST_ALIASES,
   workspaceDeclaresVitest,
 };
-import { formatAttachmentContext, validateRunAttachments, type ValidatedRunAttachment } from "./run-attachments";
+import { validateRunAttachments, type ValidatedRunAttachment } from "./run-attachments";
 import {
-  assertProviderKeyConfigured,
   providerKindFromEnv,
   resolveMainModel,
   type MainModelSelection,
 } from "./provider-runtime";
-import { selectionProviderId } from "./provider-runtime";
 import { TOOLS, type Tool, type ToolResult } from "../tools";
 import { remember } from "../tools/remember";
 import type { ToolName } from "../tools/base";
@@ -161,6 +153,11 @@ import {
 // （本文件 system-prompt 那次搬迁踩过同一个坑，见下面 M10 那段注释）。
 import { DEFAULT_WORKSPACE, MOCK_FIXTURE, loadDemoWorkerModels, scriptedMainModelPath } from "./demo-scripted";
 export { scriptedMainModelPath };
+// provider 装配面（`resolveProviderKind` + `createProvider`）2026-10-17 搬去 `./provider-assembly.ts`
+// （结构债审查报告 #2 的第二缝）。`resolveProviderKind` 是导出 API（`settings-handlers` 与桌面层
+// `kernel-host` 都按原路径 import），故同样「先 import 再 export」。
+import { resolveProviderKind, createProvider } from "./provider-assembly";
+export { resolveProviderKind };
 
 // settings 面不反向依赖本模块（避免装配根 ↔ 轻模块成环）：它需要本模块的两处按回调注入。
 setSettingsHostDeps({
@@ -835,93 +832,6 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
    *  起过调度器 ⇒ 装，否则摘（省实测 2,482 字符/轮）。`runAgent` 会把判据写回本槽再喂两面，
    *  所以调用方看到的与两面吃的是同一个值。一次性进程显式传 false（优先级高于盘上事实）。 */
   automationTools?: boolean;
-}
-
-/** Explicit non-empty M0A_PROVIDER wins; empty means settings. Unknown env values fail visibly. */
-export async function resolveProviderKind(): Promise<ProviderKind> {
-  return providerKindFromEnv(process.env.M0A_PROVIDER) ?? (await store().get()).provider;
-}
-
-// Main-session wrapper + non-session transport share one selected registry model.
-// Explicit fixture env paths still win, preserving frozen demo/e2e bytes.
-function createProvider(
-  _userMessage: string,
-  systemPrefix: string | undefined,
-  selection: MainModelSelection,
-  sessionOptions?: Pick<RunOptions, "logPath" | "workspace" | "attachments"> & {
-    emit: (event: AgentEvent) => Promise<void>;
-    plugins?: NonNullable<Parameters<typeof createSessionProvider>[1]>["plugins"];
-    requestFace: () => { tools: GlmToolSpec[]; note: string };
-    solpi?: SolpiRuntime;
-    promptCache?: boolean;
-    /** 思考档位（§S8）：一路带到适配器的请求体里。缺省 / "off" ⇒ 请求体里不出现这个字段。 */
-    thinking?: ThinkingEffort;
-    onPreCompact?: (trigger: "manual" | "auto") => Promise<void>;
-    /** 本 provider 每次请求末尾追加的临时 user 消息（不进日志）：会话末沉淀轮送指令用。 */
-    ephemeralUserTurn?: string;
-    /** 识图活盒子：loop 读到图后，provider 在下一轮请求里取走附上（见 image-channel.ts）。
-     *  与 `ephemeralImages`（一次性、调用方自己算好）是两条不同的时机。 */
-    imageChannel?: { take: () => { type: "image"; dataUrl: string }[] };
-    /** 本次请求附带的图片内容块（不进日志）：`read_image` 读到的图走这条进请求体。 */
-    ephemeralImages?: readonly { type: "image"; dataUrl: string }[];
-  },
-): Provider {
-  const scripted = scriptedMainModelPath();
-  if (scripted !== null) return createMockProvider(scripted);
-  if (selection.kind === "demo") return createMockProvider(MOCK_FIXTURE);
-
-  // 取 provider id 必须走 selectionProviderId：`kind` 在自定义家那一支上是标签 "custom"，
-  // 不是家名。直接传 kind 会让自定义 provider 在最后一米被误判成「未登记 env 映射」。
-  assertProviderKeyConfigured(selectionProviderId(selection));
-  const modelTransport: RegistryWorkerModel = toWorkerModel(selection.spec, {
-    promptCache: sessionOptions?.promptCache === true,
-    // "off" 等于没给：适配器只在拿到真实档位时才往请求体里加字段（逐字旧行为的边界就在这里）
-    ...(sessionOptions?.thinking !== undefined && sessionOptions.thinking !== "off"
-      ? { reasoningEffort: sessionOptions.thinking }
-      : {}),
-  });
-  // createSessionProvider predates native adapters and exposes a GLM-shaped transport slot.
-  // This adapter forwards cancellation + OpenAI/GLM metering while binding the already-resolved spec.
-  const transport: SessionTransport = (messages, options, tools, call) => modelTransport(messages, tools ?? [], {
-    call,
-    ...(options?.stream !== undefined ? { stream: options.stream } : {}),
-    ...(options?.metering ? { metering: options.metering } : {}),
-  });
-  const label = selection.spec.provider;
-
-  if (sessionOptions) {
-    const attachmentContext = formatAttachmentContext(sessionOptions.attachments ?? [], sessionOptions.workspace);
-    return createSessionProvider(sessionOptions.logPath, {
-      system: systemPrefix,
-      workspace: sessionOptions.workspace,
-      requestFace: sessionOptions.requestFace,
-      compaction: {
-        ...(sessionOptions.onPreCompact ? { onPreCompact: sessionOptions.onPreCompact } : {}),
-      },
-      emit: sessionOptions.emit,
-      plugins: sessionOptions.plugins,
-      solpi: sessionOptions.solpi,
-      // Preserve the pre-CX main-session GLM default compaction budget. An explicit request/settings
-      // model opts into the registry window; other providers always use their registry spec.
-      ...(selectionProviderId(selection) !== "glm" || selection.modelExplicit ? { model: selection.spec.model } : {}),
-      // 自由档位的名字查表恒为 undefined ⇒ 窗口必须由 spec 递进预算，否则 `--ctx-window` 只改到一半
-      // （toWorkerModel 会丢掉 ctxWindow，只有这一条真的落到 inputLimit 上）。
-      ...(selection.modelExplicit ? { ctxWindow: selection.spec.ctxWindow } : {}),
-      transport,
-      transportLabel: label,
-      ...(sessionOptions.ephemeralUserTurn !== undefined ? { ephemeralUserTurn: sessionOptions.ephemeralUserTurn } : {}),
-      ...(sessionOptions.imageChannel !== undefined ? { imageChannel: sessionOptions.imageChannel } : {}),
-      ...(sessionOptions.ephemeralImages !== undefined ? { ephemeralImages: sessionOptions.ephemeralImages } : {}),
-      ...(attachmentContext ? { attachmentContext } : {}),
-    });
-  }
-
-  return {
-    stream(messages, _tools: ProviderToolSpec[] | undefined, call) {
-      const rememberTool = gateToolSpecs().filter((spec) => spec.function.name === "remember");
-      return transport(messages, {}, rememberTool, call);
-    },
-  };
 }
 
 // verify 执行器：沙箱可用时命令走 Seatbelt（坑三：pnpm 映射为直连 vitest），否则直跑。
