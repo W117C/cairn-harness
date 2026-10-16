@@ -30,11 +30,12 @@ import { runLoop, type LoopOptions } from "../src/agent/loop";
 const exec = promisify(execFile);
 const ORCH_SRC = readFileSync(fileURLToPath(new URL("../src/agent/orchestrator.ts", import.meta.url)), "utf8");
 /** 三缝拆分后 `hold: "budget"` 的落点在 orchestrator-budget.ts、链级两挡在 orchestrator-approvals.ts：
- *  这把尺数的是**盖字面章的那些落点**，不是某一个文件名——三处源码并成一份取料
- *  （否则「枚举里每一挡都有人盖」会误判成白写）。 */
+ *  这把尺数的是**盖字面章的那些落点**，不是某一个文件名——四处源码并成一份取料
+ *  （否则「枚举里每一挡都有人盖」会误判成白写；worker-merge.ts 收据接线那格也在这份并料面上）。 */
 const ORCH_SRC_ALL = ORCH_SRC + "\n"
   + readFileSync(fileURLToPath(new URL("../src/agent/orchestrator-budget.ts", import.meta.url)), "utf8") + "\n"
-  + readFileSync(fileURLToPath(new URL("../src/agent/orchestrator-approvals.ts", import.meta.url)), "utf8");
+  + readFileSync(fileURLToPath(new URL("../src/agent/orchestrator-approvals.ts", import.meta.url)), "utf8") + "\n"
+  + readFileSync(fileURLToPath(new URL("../src/agent/worker-merge.ts", import.meta.url)), "utf8");
 
 let work = "";
 let repo = "";
@@ -363,16 +364,17 @@ describe("落盘面接线：返回体上的 hold 要活到 tool_result", () => {
 
 describe("收据挂回接线：worker 收据必须能挂回模型自己的调用（第 245 页）", () => {
   it("diff/merge/wt-cleanup 收据走 receiptCallId（spawnCallId 优先，真零调用才落回派生 id）", () => {
-    expect(ORCH_SRC).toContain('callId: this.receiptCallId(w, "diff")');
-    expect(ORCH_SRC).toContain('callId: this.receiptCallId(w, "merge")');
-    expect(ORCH_SRC).toContain('callId: this.receiptCallId(w, "wt-cleanup")');
-    expect(ORCH_SRC).toContain('return w.spawnCallId !== "" ? w.spawnCallId : kind + "-" + w.agentId;');
+    // 2026-10-17 三缝拆分：收据三行随 merge/diff 面搬去 worker-merge.ts ⇒ 改读并料面。
+    expect(ORCH_SRC_ALL).toContain('callId: this.receiptCallId(w, "diff")');
+    expect(ORCH_SRC_ALL).toContain('callId: this.receiptCallId(w, "merge")');
+    expect(ORCH_SRC_ALL).toContain('callId: this.receiptCallId(w, "wt-cleanup")');
+    expect(ORCH_SRC_ALL).toContain('return w.spawnCallId !== "" ? w.spawnCallId : kind + "-" + w.agentId;');
   });
 
   it("旧派生 id 不再出现在收据位（反向：换了挂回方式就不许留旧路）", () => {
-    expect(ORCH_SRC).not.toContain('"diff-" + w.agentId');
-    expect(ORCH_SRC).not.toContain('"wt-cleanup-" + w.agentId');
-    expect(ORCH_SRC).not.toContain('"merge-" + agentId');
+    expect(ORCH_SRC_ALL).not.toContain('"diff-" + w.agentId');
+    expect(ORCH_SRC_ALL).not.toContain('"wt-cleanup-" + w.agentId');
+    expect(ORCH_SRC_ALL).not.toContain('"merge-" + agentId');
   });
 
   it("pipeline 冻结闸拒绝落流直接挂 ctx.callId（与返回体同 id，折叠后一条不丢）", () => {

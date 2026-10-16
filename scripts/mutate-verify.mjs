@@ -4389,7 +4389,8 @@ const MUTATIONS = [
   },
   {
     id: "merge-admits-worker-still-in-finish-window",
-    src: "src/agent/orchestrator.ts",
+    // 针脚随实现搬家（2026-10-17 三缝拆分）：mergeWorker 整支搬到 worker-merge.ts，锚文逐字未动。
+    src: "src/agent/worker-merge.ts",
     test: "tests/terminal-sync-window.test.ts",
     desc: "合并准入回到只看 finished ⇒ 收尾窗口里 lastFindings 还没填，gate 档被「零条高危」假通过，未扫描的代码被系统代为 commit 并进主树",
     apply: (s) => s.replace("if (!w.terminalResolved) return { ok: false, error: \"worker 尚未收敛（done 后才可合并）\" };", "if (false) return { ok: false, error: \"worker 尚未收敛（done 后才可合并）\" };"),

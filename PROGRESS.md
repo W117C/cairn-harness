@@ -16129,3 +16129,42 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    两条针脚红是另一笔在飞改动欠的账（锚文本被搬走、锚点未改指），**本笔不动**。
 9. **仍未证（不许读成绿）**：① 25 枚改指针脚**尚未真杀**——mutate-verify 度量 HEAD，须入库后在干净树上跑；
    ② 报告第 ① 刀第三缝 `worker-merge.ts` 未开始；③ 桌面层与 CI 未跑这一笔；④ 真模型/生产行为未跑。
+
+## 2026-10-17 · 第 494 页：orchestrator.ts 三缝之三（worker-merge：diff 快照 / 安全流水 / 清理 / 合并塔 / 评审注入），第 ① 刀落完
+
+1. **动因**：结构债审查报告第 ① 刀的第三缝。`src/agent/orchestrator.ts` 第 493 页落完两缝后
+   **1,736 行**，本页把最后的成果面搬走：**2,566 → 1,534 行**、三缝合计搬出 1,032 行到三个轻模块
+   （budget 251 ＋ approvals 843 ＋ worker-merge 282）。
+2. **搬法（同前两缝的「生成 → 核对 → 手术」三条脚本）**：六段整箱搬——`diffVersion` /
+   `emitWorkerDiffSecurity` / `finishInner` 里的 diff 快照发射块 / `cleanupWrite` / 合并塔三方法
+   （`mergeWorker` / `rejectWorker` / `injectComment`）/ `emitSyntheticResult` ＋ `receiptCallId`。
+   核对脚本 **6/6 ALL OK**（逐字比对，声明改写之外零漂移）。声明改写全清单：`this.opts.emit` /
+   `this.opts.workspace` / `this.safeMode` / `this.workers` / `this.diffVersions` → `this.deps.*`；
+   `mergeOwners.has/delete/set` → `has/drop/registerMergeOwner`；`agentOwners.set(agentId, this)` →
+   `markAgentOwner`；`this.runWorker` / `this.releaseWorkerMemory` → 回调；三处 `private` → `public`
+   供薄委托过桥。
+3. **快照块新落点**：`finishInner` 里内联的 `[diff] v<n>` 发射块（含 32KB 帽与 B5 脱敏注释）搬成
+   公开方法 `emitWorkerDiffSnapshot(w, diff, llmNote)`（剥外层 `if (diff !== null)` 包装、去 6 格缩进，
+   调用点变一行 `await this.wmr.emitWorkerDiffSnapshot(...)`）。**搬家丢了一层窄化**：原块在
+   `w.mode === "write" && w.worktree && w.baseCommit` 闸内，`w.baseCommit.slice(...)` 有类型窄化；
+   方法内按同族先例 `mergeCommit ?? ""` 补 `(w.baseCommit ?? "").slice(...)`（被闸路径输出不变，
+   这一条也写进核对脚本的声明清单）。
+4. **状态装箱**：`diffVersions` 留 Orchestrator 以**活引用**注入（`releaseWorkerMemory` 与 `w.events`
+   同门槛回收它，评审重启要跨重启存活）；`workers` 活引用；`mergeOwners` / `agentOwners` 是模块级
+   跨编排器路由表 ⇒ 走查/删/登记回调（同 B 缝 markOwner/dropOwner 先例），不反向 import
+   `orchestrator.ts`。
+5. **公开面**：三枚同名薄委托（`mergeWorker` / `rejectWorker` / `injectComment`）——`src/main/
+   card-action-handlers.ts` 直调这三个入口，签名与语义逐字不变；Orchestrator 侧其余调用点改指
+   `this.wmr`（finishInner 三处＋A/B 两缝 deps 的 cleanupWrite 回调两处）。文件尾 barrel 不动。
+6. **卫星账**：① `tests/diff-review.test.ts` 的 `[diff] v` 跨文件棘轮取料面改指 `worker-merge.ts`
+   （这条尺数的是生产端落点，落点随实现走）；② `tests/orchestrator-hold.test.ts` 的 `ORCH_SRC_ALL`
+   扩成**四处并料**（＋worker-merge.ts）——收据三行（diff/merge/wt-cleanup）的接线断言改读并料面；
+   ③ `scripts/mutate-verify.mjs` **1 枚针脚改指**（merge-admits-worker-still-in-finish-window，锚文逐字
+   未动）；④ `releaseWorkerMemory` 注释里指向旧落点的两处指针修正（「见 diffVersion」补上
+   `worker-merge.ts`，「见 2026 行」那枚死行号删掉）。
+7. **读数**：typecheck 0 报错｜定向判卷 7 文件 **179 条全绿**｜全量核心判卷 **388 文件 5558 条全绿（194.15s）**｜
+   `--check-needles` **1571 条｜阻断 3**——1 = worker-merge.ts 未入库的预期中态（本笔提交即消），
+   2 = system-prompt 在飞账＋改法语法体检全绿。
+8. **仍未证（不许读成绿）**：① 1 枚改指针脚**尚未真杀**——mutate-verify 度量 HEAD，须入库后在干净树跑；
+   ② 桌面层（`pnpm --filter cairn-desktop test`）与 CI 未跑这一笔；③ 真模型/生产行为未跑；④ 报告其余项
+   （#2 `agent-runner.ts` 瘦身、#3 `cli.ts`、#5 `mutate-verify` 两刀、#6 重复逻辑清单）未动。

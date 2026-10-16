@@ -48,7 +48,9 @@ describe("isWorkerDiffReceipt：两侧讲同一个标记（含生产端源头钉
   });
 
   it("跨文件棘轮：orchestrator 的 emit 仍在写 `[diff] v` 头（改了标记就必须同步两边）", () => {
-    const orch = readFileSync(join(ROOT, "src", "agent", "orchestrator.ts"), "utf8");
+    // 2026-10-17 三缝拆分：diff 快照的发射面整段搬去 worker-merge.ts（orchestrator 只剩一次薄委托）
+    // ⇒ 尺跟着实现走，取料面改指新落点（同第 493 页的「针脚随实现搬家」纪律）。
+    const orch = readFileSync(join(ROOT, "src", "agent", "worker-merge.ts"), "utf8");
     expect(orch).toContain('"[diff] v"');
   });
 
