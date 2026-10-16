@@ -73,7 +73,7 @@ export interface ToolResult {
 /** 本仓静态工具名的唯一事实源：联合类型与名字表同源（加一个工具只改这一行）。 */
 export const TOOL_NAMES = [
   "read_file", "write_file", "edit_file", "apply_patch", "run_shell", "grep", "glob", "lsp",
-  "clarify", "propose_plan", "verify", "read_image",
+  "clarify", "propose_plan", "verify", "read_image", "render_image",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];

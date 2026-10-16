@@ -80,7 +80,10 @@ describe("mayHaveWrittenDisk：写向判据的唯一事实源", () => {
   );
 
   it("只读工具（读文件/搜索/地图/等待/方案）⇒ false；`remember` 只写记忆区，不改被验的代码 ⇒ false", () => {
-    for (const name of ["read_file", "grep", "glob", "lsp", "impact_query", "wait_for_agents", "propose_plan", "clarify", "remember"]) {
+    // read_image 与 read_file 同族：读一张图片进上下文，一个字节都不改盘。
+    // render_image 起浏览器进程，但**截图落 OS 临时目录**（mkdtemp，用完即删）
+    // ⇒ 同样不改本工作区的盘。
+    for (const name of ["read_file", "read_image", "render_image", "grep", "glob", "lsp", "impact_query", "wait_for_agents", "propose_plan", "clarify", "remember"]) {
       expect(mayHaveWrittenDisk(name, {}), name + " 不该被算成改盘").toBe(false);
     }
   });
@@ -96,6 +99,10 @@ describe("mayHaveWrittenDisk：写向判据的唯一事实源", () => {
         "read_file", "grep", "glob", "lsp", "impact_query", "wait_for_agents", "clarify",
         "propose_plan", "remember", "spawn_agent", "shell_ro", "snapshot", "process",
         "web_fetch",
+        // 2026-10-15 识图：与 read_file 同族（读界内图片进上下文，不改盘）。
+        "read_image",
+        // 2026-10-16 渲染：起浏览器进程但截图落临时目录，不改本工作区的盘。
+        "render_image",
       ] as const;
       const names = Object.keys(TOOLS);
       const unclassified = names.filter(

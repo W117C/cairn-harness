@@ -1,5 +1,5 @@
 // M2a 任务 7 / M2g 任务 5：pnpm tools-check —— 逐工具实测输出三项清单（输出上限 / 截断提示 / 相对路径）
-// + 断言工具注册表含 11 个工具（9 + M2 的 apply_patch + 2026-10-15 的 read_image）。全部真实调用（临时工作区），不做静态扫描。
+// + 断言工具注册表含 12 个工具（9 + M2 的 apply_patch + 2026-10-15 的 read_image + 2026-10-16 的 render_image）。全部真实调用（临时工作区），不做静态扫描。
 //
 // M2g 修正（闭合 §1.4-4「空断言 + 言过其实的结语」）：
 //   - 删掉 `check(..., true)` 形式的空断言；
@@ -53,7 +53,8 @@ console.log("== 工具注册表 ==");
 const names = Object.keys(TOOLS).sort();
 console.log("  注册工具:", names.join(", "));
 // M2 起 10 个；2026-10-15 加 read_image（识图，静态注册表同 read_file 的准入口径）⇒ 11。
-check("注册表含 11 个工具", names.length === 11, "实际 " + String(names.length));
+// M2 起 10 个；2026-10-15 加 read_image（识图）；2026-10-16 加 render_image（渲染 HTML/SVG 成 PNG）⇒ 12。
+check("注册表含 12 个工具", names.length === 12, "实际 " + String(names.length));
 
 console.log("\n== grep ==");
 {

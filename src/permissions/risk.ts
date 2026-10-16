@@ -219,6 +219,13 @@ export function staticRisk(tool: ToolName, args: Record<string, unknown>): RiskF
   if ((tool as string) === "lsp") {
     return { level: "high", reason: "启动工作区配置里的语言服务器（命令来自 .agent/lsp.json，属外部输入）" };
   }
+  // render_image（2026-10-16）：spawn 一个真实浏览器进程去渲染工作区内的 HTML/SVG。
+  // 与 lsp 同族（执行进程、外部输入、不改盘）⇒ 同一档。**不改盘**这一条有判卷钉：
+  // 截图落 OS 临时目录（mkdtemp），用完即删，workspace 一个字节都不多（见 render_image.ts）。
+  // 给 high 不给 medium：默认档与只读档的 riskAskAt 就是 high，medium 在那两档等于不问。
+  if ((tool as string) === "render_image") {
+    return { level: "high", reason: "启动浏览器渲染工作区内的 HTML/SVG（外部进程；截图落临时目录，不改工作区）" };
+  }
   if (!hasThreatTableSurface(tool)) return NONE;
   const command = typeof args.command === "string" ? args.command : "";
   if (command.trim() === "") return NONE;

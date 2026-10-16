@@ -664,6 +664,10 @@ export function installAppTools(opts: { automation?: boolean; omitTools?: readon
   // #58：lsp 会 spawn 工作区配置里的命令（`.agent/lsp.json`，外部输入）——同 S3 那条形状。
   // 风险等级由 `src/permissions/risk.ts` 给（high），四档都出卡；不改盘，故不动 SIDE_EFFECT_TOOLS。
   TOOLS.lsp = gatedTool("lsp", TOOLS.lsp);
+  // render_image：spawn 浏览器渲染工作区内的 HTML/SVG（识图的另一只眼——read_image 只能读
+  // 盘上已有的图片，可视化产物得先渲染才看得见）。同 lsp 那一族：执行外部进程、不改盘 ⇒
+  // 风险 high（risk.ts），四档都出卡；截图落 OS 临时目录，workspace 一个字节都不多。
+  TOOLS.render_image = gatedTool("render_image", TOOLS.render_image);
   // web_fetch：出网取内容。**走 gatedTool 而不是裸挂**——SSRF 判据在工具内，但"要不要问人"
   // 在权限层，两处都要有：`gatedTool` 负责四档出审批卡 + 非交互 fail-closed，并把 scope
   // 钉成 `once`（`wantsNetwork` 那一条，见 `isNetworkCommandCall` 的注释：没有它，

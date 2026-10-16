@@ -81,7 +81,7 @@ export function withSkillAllowNote(tool: string, reason: string): string {
 /** `web_fetch` 在这个字面量联合里而不在 `TOOL_NAMES` 里：静态注册表（M2 起 10 工具，
  *  `tools-check.ts` 判据）不含它，M2a 起的运行时注入先例不碰它。`name as ToolName` 与
  *  `staticRisk` 里 `(tool as string) === "web_fetch"` 是同一处类型缝的两面。 */
-type GatedName = "write_file" | "edit_file" | "apply_patch" | "run_shell" | "web_fetch" | "web_search" | "diagnose" | "lsp";
+type GatedName = "write_file" | "edit_file" | "apply_patch" | "run_shell" | "web_fetch" | "web_search" | "diagnose" | "lsp" | "render_image";
 
 export function gatedTool(name: GatedName, original: Tool, beforeExecute?: () => Promise<ToolResult | null>): Tool {
   return {

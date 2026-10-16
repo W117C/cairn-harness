@@ -23,6 +23,7 @@ import { projectContext, type ContextMessage } from "./context";
 import { buildMemoryInjectionSafe, type MemoryInjection } from "./memory/inject";
 import { REMEMBER_DESCRIPTION } from "../tools/remember";
 import { READ_IMAGE_DESCRIPTION } from "../tools/read_image";
+import { RENDER_IMAGE_DESCRIPTION } from "../tools/render_image";
 import { computePrune, writePruneAttachments } from "./prune";
 import { basename, dirname, join } from "node:path";
 import { createMapBuilder, mapInjectText, mapUnavailableText, type MapBuilder } from "./map/build";
@@ -109,6 +110,21 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         parameters: obj(
           {
             path: { type: "string", description: "workspace 相对路径（PNG/JPEG/GIF/WebP）" },
+          },
+          ["path"],
+        ),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "render_image",
+        description: RENDER_IMAGE_DESCRIPTION,
+        parameters: obj(
+          {
+            path: { type: "string", description: "workspace 相对路径（.html/.htm/.svg）" },
+            atMs: { type: "number", description: "虚拟时间预算 ms（动画取不同时刻的帧；省略=加载完那一刻）" },
+            width: { type: "number", description: "视口宽 px（缺省 1200；高度由页面自己定）" },
           },
           ["path"],
         ),

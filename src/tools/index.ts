@@ -1,6 +1,7 @@
 import type { Tool } from "./base.js";
 import { read_file } from "./read_file.js";
 import { read_image } from "./read_image.js";
+import { render_image } from "./render_image.js";
 import { run_shell } from "./run_shell.js";
 import { write_file } from "./write_file.js";
 import { edit_file } from "./edit_file.js";
@@ -18,6 +19,7 @@ export * from "./base.js";
 export const TOOLS: Record<Exclude<Tool["name"], "verify">, Tool> = {
   read_file,
   read_image,
+  render_image,
   write_file,
   edit_file,
   apply_patch,

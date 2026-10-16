@@ -54,6 +54,9 @@ type Golden = readonly [ro: string, df: string, gd: string, au: string];
 const GOLDEN: Readonly<Record<string, Golden>> = {
   // 只读面：四档全部照常放行。**worker 只读档全靠这一段**（read_file/grep/glob/shell_ro/impact_query）。
   read_file: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
+  // read_image（2026-10-15 识图）：与 read_file 同族——只读界内图片进上下文，不改盘、不出网
+  // （图片是工作区内文件读出来的 data URL，不是 http(s) 拉取）⇒ 四档全放行，不出卡。
+  read_image: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
   grep: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
   glob: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
   // **2026-10-05 显式改判（#58）**：lsp 从「四档照常放行」移出，四档一律走风险线送审。
@@ -66,6 +69,10 @@ const GOLDEN: Readonly<Record<string, Golden>> = {
   //  不许按一份仓库带来的配置起进程。
   //  这条金标准的用途正是**逼着改的人显式写下来**——它当初红的时候，红的就是这一格。
   lsp: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk"],
+  // render_image（2026-10-16）：spawn 真实浏览器渲染工作区内的 HTML/SVG ⇒ 与 lsp 同族
+  // （执行外部进程、外部输入、不改盘）⇒ 四档一律走风险线送审，逐字同形于 lsp。
+  // 未值守（worker）侧因此 fail-closed 拒绝——无人可问时不许起浏览器。
+  render_image: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk"],
   shell_ro: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
   impact_query: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
   clarify: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
