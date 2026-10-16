@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createGlmSessionProvider, gateToolSpecs } from "../src/agent/glm-session";
+import { createGlmSessionProvider, gateToolSpecs } from "../src/agent/session-provider";
 import { createEventLog, type EventLog } from "../src/events";
 import type { ModelOutput } from "../src/providers";
 import type { GlmMessage } from "../src/providers/glm";
