@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { runLoop } from "../src/agent/loop";
 import { ClarifyGate, PlanGate } from "../src/agent/gates";
 import { createVerifyHook } from "../src/agent/verify";
-import { buildGlmHistory, createGlmSessionProvider, gateToolSpecs } from "../src/agent/session-provider";
+import { buildSessionHistory, createSessionProvider, gateToolSpecs } from "../src/agent/session-provider";
 import { approvePlan, markPlanProposed, resetPlanState } from "../src/permissions";
 import { sha256MatchesFrozen, sha256MatchesDemoFrozen, frozenCoverageDrift } from "../src/frozen";
 import { createMockProvider } from "../src/providers/mock";
@@ -239,7 +239,7 @@ if (!process.env.CAIRN_API_KEY) {
     "4) 修改完成后调用 verify 工具跑测试；verify 通过后用一句话收尾（不再调用工具）。",
   ].join("\n");
   await runLoop({
-    provider: createGlmSessionProvider(DARK_LOG, { system: SYSTEM, tools: gateToolSpecs() }),
+    provider: createSessionProvider(DARK_LOG, { system: SYSTEM, tools: gateToolSpecs() }),
     events: darkEvents,
     workspace: APP,
     mode: "auto",
@@ -257,7 +257,7 @@ if (!process.env.CAIRN_API_KEY) {
   assert(darkFrozen.ok, "暗卷后判卷文件 sha256 仍与冻结基线一致");
   const darkTests = await targetTests();
   console.log(`[gate-check] 暗卷靶子终态: ${String(darkTests.failed)} failed | ${String(darkTests.passed)} passed`);
-  void buildGlmHistory; // 导出面自检（构建期引用）
+  void buildSessionHistory; // 导出面自检（构建期引用）
 }
 
 // ---- 收口：判卷文件未被改动 ----

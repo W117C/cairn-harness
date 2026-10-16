@@ -11,7 +11,7 @@ import {
   measureHeadSurvival,
 } from "../src/agent/compaction-cost";
 import { DEFAULT_COMPACTION_CONFIG } from "../src/agent/compaction";
-import { createGlmSessionProvider } from "../src/agent/session-provider";
+import { createSessionProvider } from "../src/agent/session-provider";
 import { createMockSummarizer } from "../src/agent/compaction";
 import { createEventLog } from "../src/events";
 import type { GlmMessage, GlmToolSpec } from "../src/providers/glm";
@@ -115,7 +115,7 @@ async function runSession(amortize: boolean | undefined, rounds = 8): Promise<{ 
     await log.append({ type: "assistant_message", content: cjk(4_000) });
     await log.append({ type: "user_message", content: "q0" });
     let roundIndex = 0;
-    const provider = createGlmSessionProvider(path, {
+    const provider = createSessionProvider(path, {
       map: false,
       workspace: dir,
       system: "固定基础提示".repeat(20),

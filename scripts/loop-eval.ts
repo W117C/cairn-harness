@@ -62,7 +62,7 @@ import { createVerifyHook, defaultExec, runVerifyOutcome, type ExecFn } from "..
 // 所以这是同一个事实源，不是第三份 glm-5.2 字面量副本（同族出口那一族，规则里点过名）。
 import { createUsageAttributor } from "../src/agent/usage-attribution";
 import { glmDefaultModelName } from "../src/providers/glm";
-import { createGlmSessionProvider, sessionToolSpecs } from "../src/agent/session-provider";
+import { createSessionProvider, sessionToolSpecs } from "../src/agent/session-provider";
 import { createEventLog, replay, type AgentEvent } from "../src/events";
 import { BASE_SYSTEM } from "../src/main/agent-runner";
 import { stuckActionOf, stuckObservationOf } from "../src/agent/stuck";
@@ -526,7 +526,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
     await runLoop({
       ...BENCH_RUNLOOP_KNOBS,
       provider: SCRIPTED === ""
-        ? createGlmSessionProvider(eventsPath, {
+        ? createSessionProvider(eventsPath, {
           system,
           workspace: work,
           requestFace: () => ({ tools: face.specs, note: face.note }),

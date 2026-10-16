@@ -12,7 +12,7 @@ import { estimateTokens, type CompactionConfig } from "../compaction";
 import { serializeLayer } from "../prefix-churn";
 import { measureHeadSurvival } from "../compaction-cost";
 import { createEventLog } from "../../events";
-import { createGlmSessionProvider, sessionToolSpecs } from "../session-provider";
+import { createSessionProvider, sessionToolSpecs } from "../session-provider";
 import { loadScriptOutputs, takeRound } from "./script";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../../providers/glm";
 import type { ModelOutput, Provider } from "../../providers";
@@ -175,7 +175,7 @@ export async function probeAssembly(opts: {
   const turns: AssemblyTurn[] = [];
   const { specs } = sessionToolSpecs({ mode: opts.mode ?? "default" });
   const tools = opts.toolsOverride ?? (opts.extraTools ? [...specs, ...opts.extraTools] : specs);
-  const provider = createGlmSessionProvider(opts.eventsPath, {
+  const provider = createSessionProvider(opts.eventsPath, {
     system: opts.system,
     workspace: opts.workspace,
     tools,

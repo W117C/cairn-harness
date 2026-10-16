@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { buildMap, mapInjectText, mapUnavailableText, type MapBuilder, type MapBuildResult } from "../src/agent/map/build";
 import { MAX_FILES_DEFAULT } from "../src/agent/map/cap";
-import { createGlmSessionProvider } from "../src/agent/session-provider";
+import { createSessionProvider } from "../src/agent/session-provider";
 import { createEventLog, type EventLog } from "../src/events";
 
 const TMP: string[] = [];
@@ -46,7 +46,7 @@ async function firstRequest(mapBuilder: MapBuilder): Promise<string> {
   await log.append({ type: "user_message", content: "TASK" });
   await log.close?.();
   const seen: string[] = [];
-  const provider = createGlmSessionProvider(join(dir, "events.jsonl"), {
+  const provider = createSessionProvider(join(dir, "events.jsonl"), {
     workspace: dir, system: "SYSTEM", mapBuilder,
     transport: async function* (messages) {
       seen.push(messages.map((m) => `${m.role}:${typeof m.content === "string" ? m.content : JSON.stringify(m.content)}`).join("\n"));
@@ -129,7 +129,7 @@ describe("接线：那两句要真的发出去", () => {
     await log.append({ type: "user_message", content: "NEXT" });
     await log.close?.();
     const seen: string[][] = [];
-    const provider = createGlmSessionProvider(join(dir, "events.jsonl"), {
+    const provider = createSessionProvider(join(dir, "events.jsonl"), {
       workspace: dir, system: "SYSTEM",
       mapBuilder: {
         build: async (opts) => {
@@ -168,7 +168,7 @@ describe("接线：那两句要真的发出去", () => {
     await offLog.append({ type: "user_message", content: "TASK" });
     await offLog.close?.();
     const seen: string[] = [];
-    const provider = createGlmSessionProvider(join(dir, "events.jsonl"), {
+    const provider = createSessionProvider(join(dir, "events.jsonl"), {
       workspace: dir, system: "SYSTEM", map: false,
       transport: async function* (messages) {
         seen.push(messages.map((m) => (typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? ""))).join("\n"));

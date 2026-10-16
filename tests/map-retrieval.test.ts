@@ -25,7 +25,7 @@ import { budgetAfterRetrievalLine, buildMap, createMapBuilder, mapFingerprint } 
 import { clampBudget, mapTokensOf, renderMapBudget } from "../src/agent/map/render.js";
 import { buildGraph, personalizedPageRank, type FileTagsInput } from "../src/agent/map/rank.js";
 import { TAGS_EXTRACT_VERSION, __resetLangCache, __resetQueryCache } from "../src/agent/map/parse.js";
-import { createGlmSessionProvider } from "../src/agent/session-provider";
+import { createSessionProvider } from "../src/agent/session-provider";
 import { createEventLog, type EventLog } from "../src/events";
 
 const TMP: string[] = [];
@@ -353,7 +353,7 @@ describe("接线（算出来不接＝本仓那一族）", () => {
     const log: EventLog = createEventLog(join(dir, "events.jsonl"));
     await log.append({ type: "user_message", content: "那笔用量到底属于哪个模型 usageAttribution" });
     await log.close?.();
-    const provider = createGlmSessionProvider(join(dir, "events.jsonl"), {
+    const provider = createSessionProvider(join(dir, "events.jsonl"), {
       workspace: dir, system: "SYSTEM",
       mapBuilder: {
         build: async (opts) => {

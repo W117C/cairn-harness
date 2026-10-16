@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { type MapBuilder, type MapBuildResult } from "../src/agent/map/build";
 import { MAX_FILES_DEFAULT } from "../src/agent/map/cap";
-import { createGlmSessionProvider } from "../src/agent/session-provider";
+import { createSessionProvider } from "../src/agent/session-provider";
 import { createEventLog, type EventLog } from "../src/events";
 
 const TMP: string[] = [];
@@ -37,7 +37,7 @@ async function twoRequests(builder: MapBuilder): Promise<string[]> {
   logs.push(log);
   await log.append({ type: "user_message", content: "TASK" });
   const seen: string[] = [];
-  const provider = createGlmSessionProvider(path, {
+  const provider = createSessionProvider(path, {
     workspace: dir,
     system: "SYSTEM",
     mapBuilder: builder,

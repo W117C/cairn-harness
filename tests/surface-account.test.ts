@@ -12,7 +12,7 @@
 //      且必须钉住它们是**压缩前快照**（不是上界）：压缩会重建 skills 块，且可能因为新增
 //      重挂资格而**变大**（`plugins/index.ts` 的重挂只认已被 compaction 摘掉的激活记录）。
 //
-// 全部走**真 provider 装配链**（`createGlmSessionProvider`），不 mock 到测不到东西。
+// 全部走**真 provider 装配链**（`createSessionProvider`），不 mock 到测不到东西。
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -61,8 +61,8 @@ describe("P0 装配账落流", () => {
     dir = await mkdtemp(join(process.env.PI_SCRATCH_DIR!, "surface-account-"));
     const path = join(dir, "events.jsonl");
     await writeFile(path, JSON.stringify({ type: "user_message", content: "TASK" }) + "\n");
-    const { createGlmSessionProvider } = await import("../src/agent/session-provider");
-    const provider = createGlmSessionProvider(path, {
+    const { createSessionProvider } = await import("../src/agent/session-provider");
+    const provider = createSessionProvider(path, {
       // 地图默认关；要看 mapChars 就传 opts.mapText 并把 mapBuilder 接上（见下）。
       map: opts.mapText === undefined ? false : true,
       ...(opts.mapText !== undefined
@@ -201,8 +201,8 @@ describe("P0 装配账落流", () => {
     try {
       const path = join(dir2, "events.jsonl");
       await writeFile(path, JSON.stringify({ type: "user_message", content: "TASK" }) + "\n");
-      const { createGlmSessionProvider } = await import("../src/agent/session-provider");
-      const provider = createGlmSessionProvider(path, {
+      const { createSessionProvider } = await import("../src/agent/session-provider");
+      const provider = createSessionProvider(path, {
         map: false,
         workspace: dir2,
         system: SYSTEM,

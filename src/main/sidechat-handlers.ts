@@ -9,7 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentEvent } from "../events";
 import { createMockSummarizer, type Summarizer } from "../agent/compaction";
-import { createGlmSummarizer } from "../agent/session-provider";
+import { createSessionSummarizer } from "../agent/session-provider";
 import { promoteToMain, runSidechatTurn, scriptedSidechatModel, type SidechatModel } from "../agent/sidechat";
 import type { SidechatPanelSnapshot } from "./ipc-protocol";
 import {
@@ -83,8 +83,8 @@ function resolveSidechatModel(explicit?: SidechatModel): { model?: SidechatModel
 
 /** M2g §7.5：sidechat 自身历史压缩用的摘要器（与主会话**同一实现**，参数独立配置）。
  *  CAIRN_API_KEY → GLM；演示通道 → 冻结 mock；都没有 → undefined（走既有 overflow 紧急截断）。 */
-function resolveSidechatSummarizer(): ReturnType<typeof createGlmSummarizer> | undefined {
-  if (process.env.CAIRN_API_KEY) return createGlmSummarizer();
+function resolveSidechatSummarizer(): ReturnType<typeof createSessionSummarizer> | undefined {
+  if (process.env.CAIRN_API_KEY) return createSessionSummarizer();
   if (process.env.M2F_SIDECHAT_DEMO === "1") {
     return createMockSummarizer("## Objective\n- 旁路会话自身历史压缩（演示通道，冻结摘要）。\n");
   }

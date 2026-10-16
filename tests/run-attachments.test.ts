@@ -94,18 +94,18 @@ describe("run attachment boundary", () => {
   // 会一路走到最终硬闸才炸，报成 `[context_budget_exceeded] final estimated input N`——
   // 把「参数写错了」报成「上下文装不下」，是最难查的一类假象。
   it("provider 层对绕过入口的 attachmentContext fail-closed（不静默截断）", async () => {
-    const { ATTACHMENT_CONTEXT_CHAR_LIMIT, createGlmSessionProvider } = await import("../src/agent/session-provider");
+    const { ATTACHMENT_CONTEXT_CHAR_LIMIT, createSessionProvider } = await import("../src/agent/session-provider");
     const dir = await mkdtemp(join(process.env.PI_SCRATCH_DIR!, "attn-ctx-"));
     try {
       // 恰好等于帽：放行（边界本身也要有判据，否则「> 还是 >=」是猜的）。
-      expect(() => createGlmSessionProvider(join(dir, "ok.jsonl"), {
+      expect(() => createSessionProvider(join(dir, "ok.jsonl"), {
         map: false, workspace: dir,
         attachmentContext: "x".repeat(ATTACHMENT_CONTEXT_CHAR_LIMIT),
       })).not.toThrow();
       // 超一字符：抛，且错里带得出两个数字。
       let msg = "";
       try {
-        createGlmSessionProvider(join(dir, "too-big.jsonl"), {
+        createSessionProvider(join(dir, "too-big.jsonl"), {
           map: false, workspace: dir,
           attachmentContext: "x".repeat(ATTACHMENT_CONTEXT_CHAR_LIMIT + 1),
         });

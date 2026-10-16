@@ -16,7 +16,7 @@ import { goalStopDecision, lastTurnWasTruncated, projectGoal } from "../src/agen
 import { withAgentId } from "../src/agent/worker-projection";
 import { runLoop } from "../src/agent/loop";
 import { createMockProvider } from "../src/providers/mock";
-import { createGlmSessionProvider, createGlmSummarizer } from "../src/agent/session-provider";
+import { createSessionProvider, createSessionSummarizer } from "../src/agent/session-provider";
 import { streamGlm, type GlmMessage } from "../src/providers/glm";
 import { streamAnthropic } from "../src/providers/anthropic";
 import { streamOpenAI } from "../src/providers/openai";
@@ -406,7 +406,7 @@ describe("跨轮真请求体（会话型 provider 的 transport 抓包）", () =
       await log.append({ type: "turn_truncated", callId: "msg_1", outcome: "output_budget", stop_reason: "max_tokens", output_tokens: 4096 });
     }
     const requests: GlmMessage[][] = [];
-    const provider = createGlmSessionProvider(path, {
+    const provider = createSessionProvider(path, {
       map: false,
       workspace: dir,
       transport: async function* (messages): AsyncGenerator<never> {
@@ -721,7 +721,7 @@ describe("非流式分支与 prompt 级拦截（第二次实测补上的两处�
     const transport = (async function* (msgs: GlmMessage[]) {
       for await (const e of streamOpenAI(msgs, { apiKey: "test", stream: false, fetchImpl: stubJsonFetch(nonStreamBody("length")) })) yield e;
     }) as unknown as typeof streamGlm;
-    const out = await createGlmSummarizer("glm-5.2", undefined, transport)({ system: "s", conversation: "旧会话" });
+    const out = await createSessionSummarizer("glm-5.2", undefined, transport)({ system: "s", conversation: "旧会话" });
     expect(out.text).toContain("读到排序逻辑在这里被——"); // 动作真发生：正文仍按原样收着
     expect(out.truncated).toBe("length");
   });
@@ -730,7 +730,7 @@ describe("非流式分支与 prompt 级拦截（第二次实测补上的两处�
     const transport = (async function* (msgs: GlmMessage[]) {
       for await (const e of streamOpenAI(msgs, { apiKey: "test", stream: false, fetchImpl: stubJsonFetch(nonStreamBody("stop")) })) yield e;
     }) as unknown as typeof streamGlm;
-    const out = await createGlmSummarizer("glm-5.2", undefined, transport)({ system: "s", conversation: "旧会话" });
+    const out = await createSessionSummarizer("glm-5.2", undefined, transport)({ system: "s", conversation: "旧会话" });
     expect("truncated" in out).toBe(false);
   });
 });

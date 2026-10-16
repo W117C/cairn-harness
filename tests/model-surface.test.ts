@@ -174,8 +174,8 @@ describe("模型面总预算：接在真装配链上", () => {
       sent.push(args);
       yield { type: "assistant_message" as const, content: "ok" };
     };
-    const { createGlmSessionProvider } = await import("../src/agent/session-provider");
-    const provider = createGlmSessionProvider(path, {
+    const { createSessionProvider } = await import("../src/agent/session-provider");
+    const provider = createSessionProvider(path, {
       map: false,
       workspace: dir,
       system: "你是测试用的基础提示。".repeat(40),

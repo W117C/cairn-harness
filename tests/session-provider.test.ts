@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createGlmSessionProvider, gateToolSpecs } from "../src/agent/session-provider";
+import { createSessionProvider, gateToolSpecs } from "../src/agent/session-provider";
 import { createEventLog, type EventLog } from "../src/events";
 import type { ModelOutput } from "../src/providers";
 import type { GlmMessage } from "../src/providers/glm";
@@ -29,7 +29,7 @@ describe("session provider transport", () => {
     const path = await setup();
     let resumed = false;
     let closed = false;
-    const provider = createGlmSessionProvider(path, {
+    const provider = createSessionProvider(path, {
       map: false, workspace: dir,
       transport: async function* () {
         try {
@@ -51,7 +51,7 @@ describe("session provider transport", () => {
     const abort = new AbortController();
     const requests: GlmMessage[][] = [];
     const tools = gateToolSpecs("read-only");
-    const provider = createGlmSessionProvider(path, {
+    const provider = createSessionProvider(path, {
       map: false, workspace: dir, tools, system: "SYSTEM",
       transport: async function* (messages, _options, specs, call) {
         expect(call?.signal).toBe(abort.signal);
@@ -80,10 +80,10 @@ describe("session provider transport", () => {
 describe("注入面与逐请求工具面到模型眼前", () => {
   type Observation = { system: string; tools: string[] };
 
-  async function rounds(opts: Parameters<typeof createGlmSessionProvider>[1], between?: () => void): Promise<Observation[]> {
+  async function rounds(opts: Parameters<typeof createSessionProvider>[1], between?: () => void): Promise<Observation[]> {
     const path = await setup();
     const seen: Observation[] = [];
-    const provider = createGlmSessionProvider(path, {
+    const provider = createSessionProvider(path, {
       map: false, workspace: dir, ...opts,
       transport: async function* (messages, _o, specs): AsyncGenerator<ModelOutput> {
         seen.push({
@@ -144,8 +144,8 @@ describe("主会话预算随模型窗口（128k 帽不再一刀切）", () => {
    *  落在 128k 帽（可用 119.8k）之上、256k 窗（可用 247.8k）之下。 */
   const BIG = "x".repeat(600_000);
 
-  const drain = async (path: string, opts: Parameters<typeof createGlmSessionProvider>[1]) => {
-    const provider = createGlmSessionProvider(path, {
+  const drain = async (path: string, opts: Parameters<typeof createSessionProvider>[1]) => {
+    const provider = createSessionProvider(path, {
       map: false, workspace: dir,
       ...opts,
       transport: async function* (): AsyncGenerator<ModelOutput> {
@@ -192,8 +192,8 @@ describe("自由档位的窗口申报落到预算面（M-1）", () => {
   /** 表外名字：自由档位按定义没有登记，查表那条对它必然 undefined。 */
   const FREEFORM = "stealth/small-window-model";
 
-  const drain = async (path: string, opts: Parameters<typeof createGlmSessionProvider>[1]) => {
-    const provider = createGlmSessionProvider(path, {
+  const drain = async (path: string, opts: Parameters<typeof createSessionProvider>[1]) => {
+    const provider = createSessionProvider(path, {
       map: false, workspace: dir,
       ...opts,
       transport: async function* (): AsyncGenerator<ModelOutput> {

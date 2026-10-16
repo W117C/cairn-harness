@@ -22,7 +22,7 @@ import { costUsd } from "../src/routing/pricing";
 import { runLoop } from "../src/agent/loop";
 import { runVerifyOutcome } from "../src/agent/verify";
 import { Orchestrator } from "../src/agent/orchestrator";
-import { createGlmSessionProvider, sessionToolSpecs } from "../src/agent/session-provider";
+import { createSessionProvider, sessionToolSpecs } from "../src/agent/session-provider";
 import { hasWorkerAttribution } from "../src/agent/context";
 import { projectSession } from "../src/agent/tool-choice";
 import { TOOLS, type Tool } from "../src/tools";
@@ -140,7 +140,7 @@ async function runArm(arm: string, c: GymCase, budget: { left: number }): Promis
     execTools.wait_for_agents = createWaitForAgentsTool(() => orch);
   }
 
-  const provider = createGlmSessionProvider(eventsPath, {
+  const provider = createSessionProvider(eventsPath, {
     system: "你是桌面编程 agent：先读再改，改完必验；只说做过的事实，没做过的不说。",
     workspace: workDir,
     requestFace: () => ({ tools: specs, note: baseFace.note }),

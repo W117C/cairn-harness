@@ -20,7 +20,7 @@ import {
   serializeConversation,
   shouldCompact,
 } from "../src/agent/compaction";
-import { createGlmSessionProvider } from "../src/agent/session-provider";
+import { createSessionProvider } from "../src/agent/session-provider";
 import { withAgentId } from "../src/agent/worker-projection";
 
 let dir: string | undefined;
@@ -459,7 +459,7 @@ describe("session-provider 压缩接线", () => {
     const factor = calibrateFactor(events);
     const est = estimateContextTokens(projectContext(events), {}, factor);
     const calls: string[] = [];
-    const provider = createGlmSessionProvider(logPath, {
+    const provider = createSessionProvider(logPath, {
       compaction: {
         // 自整定：可用 = est+4，ratio 0.5 → est ≥ ~4 即触发（本会话 est 远大于此，确定性触发比例条件）
         config: { inputLimit: est + 5, maxOutputReserve: 1, ratio: 0.5, tailMinTokens: 10, tailMaxTokens: 30, retryBackoffMs: 1 },

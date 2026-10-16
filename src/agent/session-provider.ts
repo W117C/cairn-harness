@@ -1,4 +1,16 @@
 // 会话型 provider：保持既有日志重组/compaction 逻辑，transport 可由统一 registry 路由到 GLM/OpenAI/Anthropic/Gemini。
+// 2026-10-16 改名 glm-session.ts → session-provider.ts：这个文件早就不是 GLM 专属（transport 可路由到
+// 四家、83 个文件引用它、主会话与 worker/sidechat/沉淀轮共用同一装配入口），名字却在谎报职责。
+// 代价如实记：40 条变异锚点的 `src:` + PROGRESS.md 台账 5 条裸行号引用（docs-check D-10 的 legacy 名单）
+// 跟着走。同批把本文件的四个导出名也改了：
+//   createGlmSessionProvider → createSessionProvider（24 个消费方，主会话装配入口）
+//   createGlmSummarizer       → createSessionSummarizer
+//   buildGlmHistory           → buildSessionHistory
+//   GlmSessionCompaction      → SessionCompaction
+// 这四个名字在 mutate-verify 里 0 条锚点、在门里 0 处字符串判据、冻结表 0 条——改之前逐项量过。
+// 而 `GlmMessage` / `GlmToolSpec` / `GlmOptions` **不动**：它们的真身是 `src/providers/glm.ts`
+// （那个模块确实是智谱专属，名字是对的），本文件只是 import 来用。真正冻结它们的消费方
+// （scripts/provider-check.ts / tests/glm.test.ts）也是从 providers/glm 导入，与本文件无关。
 // 职责：从事件日志重建中立对话历史（含 tool_calls / tool 角色），把工具结果反馈回模型，
 // 使真实 GLM 能多轮调用 clarify / propose_plan / write_file / verify。
 import { createEventLog, replayIncremental, type AgentEvent, type CompactionUsage } from "../events";
@@ -10,6 +22,7 @@ import type { ModelOutput, Provider, ProviderCall } from "../providers";
 import { projectContext, type ContextMessage } from "./context";
 import { buildMemoryInjectionSafe, type MemoryInjection } from "./memory/inject";
 import { REMEMBER_DESCRIPTION } from "../tools/remember";
+import { READ_IMAGE_DESCRIPTION } from "../tools/read_image";
 import { computePrune, writePruneAttachments } from "./prune";
 import { basename, dirname, join } from "node:path";
 import { createMapBuilder, mapInjectText, mapUnavailableText, type MapBuilder } from "./map/build";
@@ -83,6 +96,19 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
             },
             offset: { type: "number", description: "起始行（1-based，缺省 1）" },
             limit: { type: "number", description: "最多读取行数（缺省 2000）" },
+          },
+          ["path"],
+        ),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "read_image",
+        description: READ_IMAGE_DESCRIPTION,
+        parameters: obj(
+          {
+            path: { type: "string", description: "workspace 相对路径（PNG/JPEG/GIF/WebP）" },
           },
           ["path"],
         ),
@@ -571,7 +597,7 @@ export function sessionToolSpecs(
 /** 事件日志 → OpenAI 兼容消息序列。
  *  M1d：改走组装器投影 projectContext——compaction 感知（跳过被压 id、offset 注入摘要、fresh start），
  *  assistant_delta 合并与 tool 角色映射逻辑与旧版逐字同构。 */
-export async function buildGlmHistory(logPath: string): Promise<RawMessage[]> {
+export async function buildSessionHistory(logPath: string): Promise<RawMessage[]> {
   return projectContext(await replayIncremental(logPath)) as unknown as RawMessage[];
 }
 
@@ -583,7 +609,7 @@ export type SessionTransport = (
 ) => AsyncIterable<ModelOutput>;
 
 /** Session summarizer over the selected transport. Legacy default remains GLM. */
-export function createGlmSummarizer(
+export function createSessionSummarizer(
   model?: string,
   meter?: RequestMeter,
   transport: SessionTransport = streamGlm,
@@ -616,7 +642,7 @@ export function createGlmSummarizer(
   };
 }
 
-export interface GlmSessionCompaction {
+export interface SessionCompaction {
   config?: Partial<CompactionConfig>;
   /** 缺省 = 显式 transport，或 legacy CAIRN_API_KEY + GLM。 */
   summarizer?: Summarizer;
@@ -664,6 +690,15 @@ export function composeTurnMessages(opts: {
    *  位置在**末尾**：前缀缓存按前缀匹配，追加在尾部不动前面任何一段，
    *  所以这一条不会把主会话已经攒下的缓存打掉（沉淀轮能拿到 98.8% 命中就是靠这个）。 */
   ephemeralUserTurn?: string;
+  /** 本次请求要附上的图片内容块，**不进事件日志**（与 `ephemeralUserTurn` 同一条理由）。
+   *
+   *  为什么图片不能走事件流：事件日志是可重放的 JSONL，而一张 2048×2048 的 PNG base64 后
+   *  约 3MB —— 写进日志等于让每场会话文件大一个量级，重放与 replay 契约都要为它买单。
+   *  而图片又必须真的进请求体（否则识图这件事在协议层就不成立）。所以它只活在这一次请求里。
+   *
+   *  由 loop 在 `read_image` 返回时投递：投递窗口是**下一轮**（本轮已经把 tool_result 发出去了），
+   *  所以它排在 `ephemeralUserTurn` 之后、作为最后一条 user 消息发出。 */
+  ephemeralImages?: readonly { type: "image"; dataUrl: string }[];
 }): GlmMessage[] {
   const msgs: GlmMessage[] = [];
   if (opts.system) msgs.push({ role: "system", content: opts.system });
@@ -685,10 +720,19 @@ export function composeTurnMessages(opts: {
   if (opts.ephemeralUserTurn !== undefined && opts.ephemeralUserTurn !== "") {
     msgs.push({ role: "user", content: opts.ephemeralUserTurn });
   }
+  // 识图块：接在临时 user 消息之后（图片是「最新给模型看的东西」，放最后最自然）。
+  // 与临时消息同一条纪律——只在本次请求里存在，不落事件日志。
+  if (opts.ephemeralImages !== undefined && opts.ephemeralImages.length > 0) {
+    msgs.push({
+      role: "user",
+      content: "[read_image] 以下是你要的图片内容：",
+      contentParts: opts.ephemeralImages.map((p) => ({ type: "image" as const, dataUrl: p.dataUrl })),
+    });
+  }
   return msgs;
 }
 
-export function createGlmSessionProvider(
+export function createSessionProvider(
   logPath: string,
   opts: {
     system?: string;
@@ -700,7 +744,7 @@ export function createGlmSessionProvider(
     transport?: SessionTransport;
     /** Persist and publish system events through the owning session pipeline. */
     emit?: (event: AgentEvent) => Promise<void>;
-    compaction?: GlmSessionCompaction;
+    compaction?: SessionCompaction;
     /** M2b：符号地图构建器（缺省 = 自建一个；workspace 从 M2B_WORKSPACE env 或 process.cwd()）。 */
     mapBuilder?: MapBuilder;
     /** M2b：地图工作区（缺省 M2B_WORKSPACE env 或 process.cwd()）。 */
@@ -733,6 +777,12 @@ export function createGlmSessionProvider(
      *  会话末沉淀轮用它把指令送进请求——既不落日志（否则下一轮会被当用户发言重放），
      *  又能真正到达模型。缺省 undefined = 零行为。 */
     ephemeralUserTurn?: string;
+    /** 识图通道（`read_image` → 下一轮请求）：provider 每轮组装时从这里取待发的图片。
+     *  与 `ephemeralImages` 的区别是**时机**：那个是「这一轮就附上」的一次性块（调用方自己算好），
+     *  这个是「loop 什么时候读到图，下一轮就附上」的活盒子。两者都缺省 = 零行为。 */
+    imageChannel?: { take: () => { type: "image"; dataUrl: string }[] };
+    /** 本次请求附带的图片内容块（不进日志）。见 `composeTurnMessages` 的同名参数。 */
+    ephemeralImages?: readonly { type: "image"; dataUrl: string }[];
     solpi?: SolpiRuntime;
   } = {},
 ): Provider {
@@ -774,7 +824,7 @@ export function createGlmSessionProvider(
     return typeof window === "number" ? { ...merged, inputLimit: Math.min(merged.inputLimit, window) } : merged;
   };
   const defaultSummarizer = opts.transport || process.env.CAIRN_API_KEY
-    ? createGlmSummarizer(opts.model, opts.solpi?.meter, opts.transport, opts.transportLabel)
+    ? createSessionSummarizer(opts.model, opts.solpi?.meter, opts.transport, opts.transportLabel)
     : undefined;
   const coordinator = opts.compaction
     ? new CompactionCoordinator({
@@ -1109,6 +1159,9 @@ export function createGlmSessionProvider(
           console.warn("[compaction] 连续摘要失败已达上限，本会话停用摘要（仅 overflow 紧急截断可用）");
         }
       }
+      // 识图：盒子里有图就取出来附到本轮请求末尾（take 即清空 ⇒ 同一张图不会在两轮里各付一遍 token）。
+      // 空盒时这个参数缺席 ⇒ 消息序列逐字不变，不读图的会话一个字节都不多付。
+      const liveImages = opts.imageChannel?.take() ?? [];
       const msgs = composeTurnMessages({
         system: opts.system,
         mapText,
@@ -1119,6 +1172,8 @@ export function createGlmSessionProvider(
         ...(surfaceNoteText ? { surfaceNote: surfaceNoteText } : {}),
         ...(opts.attachmentContext ? { attachmentContext: opts.attachmentContext } : {}),
         ...(opts.ephemeralUserTurn !== undefined ? { ephemeralUserTurn: opts.ephemeralUserTurn } : {}),
+        ...(liveImages.length > 0 ? { ephemeralImages: liveImages } : {}),
+        ...(opts.ephemeralImages !== undefined ? { ephemeralImages: opts.ephemeralImages } : {}),
       });
       // 压缩重写代价的**实测**（不是估算）：本轮装配与上一轮比，头部仍然逐字相同的那段占多少。
       // 只有本轮真的压过才记账——prune/skill 重挂造成的抖动不归这条策略管（它们各有判据）。

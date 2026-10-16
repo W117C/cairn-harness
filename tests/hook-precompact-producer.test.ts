@@ -18,7 +18,7 @@ import {
   runCompaction,
   type CompactDecision,
 } from "../src/agent/compaction";
-import { createGlmSessionProvider } from "../src/agent/session-provider";
+import { createSessionProvider } from "../src/agent/session-provider";
 import { HookEngine } from "../src/agent/plugins";
 import type { LoadedHookDef } from "../src/agent/plugins/types";
 import { compactSessionLog } from "../src/main/agent-runner";
@@ -166,7 +166,7 @@ describe("自动档经 session-provider 接到生产者（provider 是唯一发�
     const fired: string[] = [];
     const factor = calibrateFactor(session());
     const est = estimateContextTokens(projectContext(session()), {}, factor);
-    const provider = createGlmSessionProvider(logPath, {
+    const provider = createSessionProvider(logPath, {
       compaction: {
         // 自整定（同 compaction.test.ts 的接线用例）：可用 = est+4，ratio 0.5 → 必然触发，
         // 且压缩后的投影（tail ≤200 + 摘要）仍落在预算内 → 一路走到"要调模型"才因无 key 抛错。

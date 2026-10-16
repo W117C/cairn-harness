@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { projectContext, type ContextMessage } from "../src/agent/context";
 import { estimateTextTokens } from "../src/agent/text-budget";
-import { createGlmSessionProvider } from "../src/agent/session-provider";
+import { createSessionProvider } from "../src/agent/session-provider";
 import { createEventLog } from "../src/events";
 import type { GlmMessage } from "../src/providers/glm";
 import type { AgentEvent } from "../src/events";
@@ -182,7 +182,7 @@ describe("自动验证拍的红进下一轮上下文", () => {
     await log.append({ type: "assistant_message", content: "改完了，收尾" });
     await log.append(autoFail("pnpm test", "AssertionError: expected red\n Tests 1 failed"));
     const requests: GlmMessage[][] = [];
-    const provider = createGlmSessionProvider(path, {
+    const provider = createSessionProvider(path, {
       map: false,
       workspace: dir,
       transport: async function* (messages): AsyncGenerator<never> {

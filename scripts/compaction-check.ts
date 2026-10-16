@@ -18,7 +18,7 @@ import {
   runCompaction,
   shouldCompact,
 } from "../src/agent/compaction";
-import { createGlmSummarizer } from "../src/agent/session-provider";
+import { createSessionSummarizer } from "../src/agent/session-provider";
 import { sha256MatchesFrozen } from "../src/frozen";
 
 const GOAL_KEYWORD = "重构 todo 应用的排序功能";
@@ -333,7 +333,7 @@ async function main(): Promise<void> {
         events.push(say("收尾。"));
         const outcome = await runCompaction({
           events, trigger: "auto", reason: "threshold",
-          summarizer: createGlmSummarizer(),
+          summarizer: createSessionSummarizer(),
           config: { ...DEFAULT_COMPACTION_CONFIG, inputLimit: 1000, maxOutputReserve: 100, tailMinTokens: 50, tailMaxTokens: 200 },
           overhead: { systemChars: 3000 },
         });

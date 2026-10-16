@@ -7,7 +7,7 @@
 // 本模块零装配根依赖：钩子引擎与事件管线都由调用方以参数递进来。
 import { createEventLog, replay, type AgentEvent } from "../events";
 import { runCompaction, createMockSummarizer, compactionCardPayload } from "../agent/compaction";
-import { createGlmSummarizer } from "../agent/session-provider";
+import { createSessionSummarizer } from "../agent/session-provider";
 import type { HookEngine } from "../agent/plugins/hooks";
 import { buildSecurityReport } from "../agent/security/scan";
 import { store } from "./settings-handlers";
@@ -65,7 +65,7 @@ export async function compactSessionLog(
   // 两处各发又会变成 SessionEnd 那种双生产者。trigger 取 §9.5 表里的枚举值 manual/auto。
   const demo = process.env.M1D_COMPACTION_DEMO === "1";
   const summarizer = process.env.CAIRN_API_KEY
-    ? createGlmSummarizer()
+    ? createSessionSummarizer()
     : demo
       ? createMockSummarizer(DEMO_SUMMARY)
       : undefined;

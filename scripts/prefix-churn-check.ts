@@ -64,13 +64,13 @@ async function drive(opts: {
   const seen: AssemblyObservation[] = [];
   try {
     await log.append({ type: "user_message", content: "TASK-0" });
-    const { createGlmSessionProvider } = await import("../src/agent/session-provider");
+    const { createSessionProvider } = await import("../src/agent/session-provider");
     // provider **只建一次**：一个 run = 一个 provider 实例，跨请求的状态（压缩重写代价的头部存活比、
     // 已压次数）本来就挂在 provider 级。每轮新建会把状态洗掉——第一版就是这么把 PC7 量成
     // 「开与关逐字同值」的（读起来像策略坏，其实是驱动器不像生产）。
     let roundIndex = 0;
     let faceNote = "";
-    const provider = createGlmSessionProvider(path, {
+    const provider = createSessionProvider(path, {
       map: false,
       workspace: dir,
       system: SYSTEM_TEXT,
@@ -176,7 +176,7 @@ async function driveMutating(opts: {
       await log.append({ type: "user_message", content: "q0" });
     }
     await log.close?.();
-    const { createGlmSessionProvider } = await import("../src/agent/session-provider");
+    const { createSessionProvider } = await import("../src/agent/session-provider");
     let beforeCompact = countCompactionEvents(path);
     let beforeAttachments = countAttachments(attachments);
     // 与驱动器 A 同理：**一个 run 一个 provider**，跨请求的状态才量得到（PC7 的摊销判定读的就是它）。
@@ -192,7 +192,7 @@ async function driveMutating(opts: {
       summarySpend.outputChars += out.text.length;
       return out;
     };
-    const provider = createGlmSessionProvider(path, {
+    const provider = createSessionProvider(path, {
       map: false,
       workspace: dir,
       system: SYSTEM_TEXT,

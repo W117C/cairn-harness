@@ -1,14 +1,14 @@
 // 生产入口证明：会话型 provider 每轮组装时真的把被裁原文落到 <日志同级>/prune-attachments，
 // 且模型看到的那句尾注与「附件在不在工作区里」这个事实**一致**（#33：原先无条件说「存附件 <绝对路径>，
 // 需要时 read_file 取回」，而那七个工具第一句就拒绝对路径 ⇒ 空话）。
-// 这里跑的是 createGlmSessionProvider 的真实 assemble() 路径——只测 computePrune 纯函数
+// 这里跑的是 createSessionProvider 的真实 assemble() 路径——只测 computePrune 纯函数
 // 不足以证明这条：那正是本仓反复点名的「两头断」。
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEventLog, type AgentEvent } from "../src/events";
-import { createGlmSessionProvider } from "../src/agent/session-provider";
+import { createSessionProvider } from "../src/agent/session-provider";
 import { PRUNED_PLACEHOLDER } from "../src/agent/prune";
 import type { GlmMessage } from "../src/providers/glm";
 
@@ -36,7 +36,7 @@ async function seed(): Promise<void> {
 
 async function oneRequest(): Promise<GlmMessage[]> {
   const captured: GlmMessage[][] = [];
-  const provider = createGlmSessionProvider(logPath, {
+  const provider = createSessionProvider(logPath, {
     map: false,
     workspace: dir,
     transport: async function* (messages) {

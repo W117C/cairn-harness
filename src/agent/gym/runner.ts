@@ -9,7 +9,7 @@ import type { AgentEvent } from "../../events";
 import { createEventLog, forkSession, replay } from "../../events";
 import type { Provider } from "../../providers";
 import { streamGlm } from "../../providers/glm";
-import { createGlmSessionProvider, sessionToolSpecs } from "../session-provider";
+import { createSessionProvider, sessionToolSpecs } from "../session-provider";
 import { runLoop } from "../loop";
 import { runVerifyOutcome } from "../verify";
 import { changedFilesBetween, scoreCase } from "./score";
@@ -62,7 +62,7 @@ function createGymScriptedProvider(scriptPath: string): Provider {
   return createRoundScriptedProvider(scriptPath);
 }
 
-/** 暗卷 GLM provider：走**主会话同款装配**（`createGlmSessionProvider` ⇒ composeTurnMessages / 真实
+/** 暗卷 GLM provider：走**主会话同款装配**（`createSessionProvider` ⇒ composeTurnMessages / 真实
  *  工具面 / 压缩 / 预算全在链上），与探针档共用同一个会话 provider，只差 transport。
  *  ⚠️ 旧实现名不副实（注释写着"主会话同款接线"，代码是 stub）：它丢掉调用方传来的 messages 与
  *  tools、自己造 `streamGlm([{role:"user",content:task}])` ⇒ 模型看不到系统提示与工具表，
@@ -83,7 +83,7 @@ function createRealSessionProvider(
     mode: "auto",
     ...(omitTools && omitTools.length > 0 ? { omitTools } : {}),
   });
-  return createGlmSessionProvider(eventsPath, {
+  return createSessionProvider(eventsPath, {
     system,
     workspace,
     requestFace: () => ({ tools: face.specs, note: face.note }),
