@@ -245,7 +245,9 @@ describe("真表自证：这把尺不许是空载的，也不许对事故那笔�
     expect(dang.map((d) => d.target).sort()).toEqual([
       "src/main/provider-runtime.ts", "src/main/run-attachments.ts", "src/main/run-request.ts", "src/providers/capabilities.ts",
     ]);
-    expect(missing.map((m) => m.target + ":" + m.symbol)).toEqual(["src/agent/session-provider.ts:SessionTransport"]);
+    // 事故那一笔发生在 glm-session.ts 时代（该 rev 里还没有 session-provider.ts）⇒ 这里必须是旧名。
+    // 2026-10-16 改名时这一格被机械替换错过一次：历史事实不跟着今名走，改回去。
+    expect(missing.map((m) => m.target + ":" + m.symbol)).toEqual(["src/agent/glm-session.ts:SessionTransport"]);
   });
 
   it("干净的那一笔（`69fbb0d`）必须 0 项：尺不许靠假红证明自己在干活", () => {
