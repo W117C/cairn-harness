@@ -27,7 +27,7 @@
 //    memoryChars / mapChars / attachmentContext）与最终 fail-closed 硬闸 `finalChars`。
 //    所以这不是「默默超支」，而是**最便宜的那把刀在压力真正来处永远拔不出来**。
 // 易变侧仍然**可观测**：`surface_account` 事件的 `volatileChars` 及四个分项照实记（口径见
-// `src/events/index.ts`）；本文件的 `ModelSurfaceAccount.volatileChars` 则保留给未来的
+// `src/events/types.ts` 的 `surface_account` 字段注释）；本文件的 `ModelSurfaceAccount.volatileChars` 则保留给未来的
 // 纯记账用途，**不得**在不重跑 MS1–MS6 基准的前提下被喂进 `fits()`。
 //
 // 单位一律字符（本仓定稿：`estimateTextTokens` 的 chars/4 英文口径对中文低估 3–4 倍，

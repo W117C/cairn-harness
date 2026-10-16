@@ -1426,7 +1426,7 @@ const MUTATIONS = [
   },
   {
     id: "verify-skipped-not-in-env-cause-set",
-    src: "src/events/index.ts",
+    src: "src/events/types.ts",
     test: "tests/verify-skipped-third-outcome.test.ts",
     desc: "skipped 不进 ENV_VERIFY_CAUSE_SET ⇒ 下游（额度／证据／返修）仍把它当代码红：烧一次修复额度并注入没有红字的红",
     apply: (s) => s.replace('"pkg-manager", "not-run", "skipped",', '"pkg-manager", "not-run",'),
@@ -6717,7 +6717,7 @@ const MUTATIONS = [
   },
   {
     id: "permission-mode-events-copy-drift-blind",
-    src: "src/events/index.ts",
+    src: "src/events/types.ts",
     test: "tests/permission-mode-single-source.test.ts",
     desc: "events 那份抄本少一档 ⇒ 对账判卷若测不出来，「唯一事实源」就是假的：permissions 加了档、events/IPC/worker 侧仍按旧集走，且没人报错",
     apply: (s) => s.replace('export const AGENT_PERMISSION_MODES = ["read-only", "default", "guided", "auto"] as const;', 'export const AGENT_PERMISSION_MODES = ["read-only", "default", "auto"] as const;'),
@@ -6845,7 +6845,7 @@ const MUTATIONS = [
   // ── 落盘时钟戳 + 复跑面 latency（延迟第一次可测；两半各自的失效方式不同）
   {
     id: "event-stamp-dropped",
-    src: "src/events/index.ts",
+    src: "src/events/log.ts",
     test: "tests/events.test.ts",
     desc: "append 不再盖 ts ⇒ 每条事件的 `ts` 又变成「生产者记得才有」，工具耗时整个面消失（而测试面之外无人知）。针脚随 14d2736 搬家：那次把「另造一份只存在于盘上的副本」改成盖在事件本身上（副本会让 ipc:check / schedule-check 的 live≡盘 恒红）",
     apply: (s) => s.replace(
@@ -6856,7 +6856,7 @@ const MUTATIONS = [
   },
   {
     id: "event-stamp-overwrites-producer-ts",
-    src: "src/events/index.ts",
+    src: "src/events/log.ts",
     test: "tests/events.test.ts",
     desc: "无条件盖 now() ⇒ 把 automation 那批自己定的时间洗成本机时间（它们语义是「计划/发生时刻」，不是「落盘时刻」）。针脚同上一条一起搬家",
     apply: (s) => s.replace(
@@ -10202,7 +10202,7 @@ const MUTATIONS = [
   },
   {
     id: "verify-cause-not-run-not-environmental",
-    src: "src/events/index.ts",
+    src: "src/events/types.ts",
     test: "tests/verify-cause.test.ts",
     desc: "从 ENV 集合里摘掉 not-run ⇒ 三处出口（修复额度／升档与 bandit／沉淀）同时开始记模型的账。" +
       "这一格名字叫 ENV 却进表，是因为消费者要的那句语义是「别照它改代码」，不是「是环境问题」——" +
@@ -10965,7 +10965,7 @@ const MUTATIONS = [
   },
   {
     id: "events-block-reason-enum-drift",
-    src: "src/events/index.ts",
+    src: "src/events/types.ts",
     test: "tests/tool-block-witness.test.ts",
     desc: "枚举少一格而出口一个没少 ⇒ 那一列照样印得出来，只有分母证人知道名单和实跑不是一套。" +
       "少一个成员在类型上才叫得醒，而判卷跑 tsx 不做类型检查（规则 259「突变不可观察」那一族的新入口）",
@@ -11373,7 +11373,7 @@ const MUTATIONS = [
   },
   {
     id: "events-hold-reason-enum-drift",
-    src: "src/events/index.ts",
+    src: "src/events/types.ts",
     test: "tests/orchestrator-hold.test.ts",
     desc: "枚举少一格而落点一个没少 ⇒ 那一列照样印得出来，只有名单对账知道实跑与事实源不是一套。" +
       "少成员在类型上叫得醒，但判卷跑 tsx 不做类型检查（与 `events-block-reason-enum-drift` 同族同因）",

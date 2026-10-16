@@ -100,7 +100,7 @@ function projectHeadLine(firstLine: string): HeadMeta | null {
 
 // ---- 行数增量计数 ----
 // 旧实现为拿一个行数把每个会话整份 readFile + split + filter（还要再开一次读首行）
-// ⇒ 列表 = O(盘上总字节)，且每次刷新反复付。JSONL 是 append-only 的（events/index.ts 的 A5 段
+// ⇒ 列表 = O(盘上总字节)，且每次刷新反复付。JSONL 是 append-only 的（events/log.ts 的 A5 段
 // 用同一条前提做增量重放缓存），所以按 (ino, size) 记住上次数到哪、只读追加段即可。
 // 口径与旧写法逐字一致：非空（trim 后）的换行分隔段计数，**含未换行的尾段**（崩溃半写行）。
 interface LineCountEntry {

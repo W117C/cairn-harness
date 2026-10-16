@@ -5,7 +5,11 @@ import { join, dirname } from "node:path";
 import { readFileSync } from "node:fs";
 
 const ROOT = join(import.meta.dirname, "..");
-const EVENTS = "src/events/index.ts";
+// 2026-10-17：协议面（`AgentEvent` 联合 + `KNOWN_TYPES`）从 src/events/index.ts 拆去
+// src/events/types.ts（存储引擎去 ./log.ts；index 只做逐名再导出）。本取料口**按文件路径**取材——
+// 拆分的同笔必须同步这一行，否则 knownTypes()/unionTypes() 会 fail-loud 抛错
+// （设计如此：尺坏了要出声，不许静默数 0 条报「全过」）。
+const EVENTS = "src/events/types.ts";
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 
 /** 事件类型注册表（append 时拒未知类型的那一份）。

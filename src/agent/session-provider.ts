@@ -986,7 +986,7 @@ export function createSessionProvider(
       if (attempt !== 1 && !faceChanged && !(surface.account.overChars > 0)) return;
       // 易变侧四项一律照实记，缺项记 0 —— **不因为「可能不准」就省掉不记**：
       // 省掉的话「降配梯看不见的那一半」就彻底没有观测面，而这正是本字段存在的理由。
-      // 口径（压缩前快照、非上界、skills 块压缩后可能变大）写在 `events/index.ts` 的字段注释里。
+      // 口径（压缩前快照、非上界、skills 块压缩后可能变大）写在 `events/types.ts` 的字段注释里。
       const volatileChars =
         volatile.memoryChars + volatile.skillsBlockChars + volatile.mapChars + volatile.attachmentContextChars;
       await appendSurfaceAccount({
@@ -1039,7 +1039,7 @@ export function createSessionProvider(
       // **为什么必须排在降配计划之前**：P0 装配账要把它们记进去（`surface_account` 的
       // `volatileChars` 及四个分项），而降配按构造排在压缩之前 ⇒ 事件必须在压缩前落流。
       // 这四块与降配**互不依赖**（谁都不读谁的结果），所以整段上移是纯重排，不改任何判定。
-      // 口径钉死在事件定义里（`events/index.ts` 的 `volatileChars`）：记的是这一刻的快照，
+      // 口径钉死在事件定义里（`events/types.ts` 的 `volatileChars`）：记的是这一刻的快照，
       // 压缩那一轮它们会被重建（skills 块甚至可能因为新增重挂资格而变大）⇒ 既不是上界也不是实发值。
 
       // M2d 固定回注（§8.1.5/§8.1.9）：每轮组装重读两层记忆并重注（压缩后自然重注）。

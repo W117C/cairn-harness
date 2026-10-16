@@ -13,7 +13,8 @@ This checkout is core-first: the agent kernel (`src/`) is electron-free. The for
 
 ## ① 事件流就是重放契约（改这里等于改兼容性）
 
-真身：`src/events/index.ts`（`AgentEvent` 联合类型，约 42 个事件/载荷接口）。
+真身：`src/events/types.ts`（`AgentEvent` 联合类型，约 42 个事件/载荷接口）；存储引擎
+（`replay` / `forkSession` 等）住 `src/events/log.ts`——2026-10-17 拆分，公开面经 `src/events/index.ts` 逐名再导出。
 
 **为什么它是契约而不只是日志**：`replay(path)` 必须能把一份 JSONL 原样读回来，
 所以每条事件的字段都是重放面的一部分。三条由此推出的纪律：

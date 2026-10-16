@@ -16052,3 +16052,32 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    needles **1565**｜阻断 0；改法语法体检 1565 条全合法。
 6. **仍未证（不许读成绿）**：① 本轮修完后全表**尚未重跑**（正在跑）；② 桌面仍有 12 个判卷文件
    0 条锚点；③ CI 未跑这几笔；④ 真模型/生产行为未跑。
+
+## 2026-10-17 · 第 492 页：events 一刀三瓣（协议面 / 存储引擎 / 公开面 barrel）＋ 按路径取料的卫星账
+
+1. **动因**：结构债审查报告第 ⑤ 刀。`src/events/index.ts` 拆前 **1,166 行**、两张脸同宅：
+   ①**协议面**（`AgentEvent` 联合 + 各载荷接口 + `KNOWN_TYPES`——重放契约，「改这里等于改兼容性」，
+   见 CODE-WIKI ①）；②**存储引擎**（常驻句柄 / 半写尾行修复 / replay / forkSession——纯机制）。
+   同宅的后果：动机制的 diff 看起来也像在动契约，新增字段永远要在两个语义层之间选站位。
+2. **拆法：逐字节切分，不是重写**。`head -n 770` / `tail -n +771` 原样两瓣，边界在 `KNOWN_TYPES`
+   收尾与 A1 段之间：`src/events/types.ts`（772 行，协议面）、`src/events/log.ts`（402 行，存储引擎）。
+   两瓣相对原件内容多重集只差 **8 行、逐条可解释**：重写各自头注释（+7）＋ `KNOWN_TYPES` 由模块私有
+   改 `export`（供 log 段内共享；**不进公开面**）＋ log.ts 补一条 `import ... from "./types"`。
+3. **公开面 = `src/events/index.ts` 的逐名再导出**（32 行 / 74 名；对齐 `orchestrator.ts` 尾部先例，
+   不用 `export *`）。机械核对：旧面 74 名 vs 新面 74 名**零缺零多**；运行时导出 14 个值与拆前一致。
+4. **真成本在卫星——「按路径取料」的口 re-export 救不了**：
+   ① `tests/event-registry.ts` 拿 **src 文件路径**读文本数类型名 ⇒ 同笔改指 types.ts；不改会 fail-loud
+      抛错——尺坏了要出声，不许静默数 0 条报「全过」（本页只是把设计如此的路走通）。
+   ② `scripts/mutate-verify.mjs` **7 处针脚 src 改指**：5 处协议面针脚（verify-skipped…、
+      permission-mode-events-copy-drift-blind、verify-cause-not-run…、events-block-reason-enum-drift、
+      events-hold-reason-enum-drift）→ types.ts；2 处 ts 盖戳针脚（event-stamp-dropped、
+      event-stamp-overwrites-producer-ts）→ log.ts。
+   ③ 注释里指回旧落点的 4 处改指：`model-surface.ts`(1)、`session-provider.ts`(2)、`sessions.ts`(1)、
+      `CODE-WIKI.md`(1)。
+5. **在飞账两条**：① 别人给 `ToolResultEvent` 加的 `artifact?` 字段（+5 行）在切分中被带进 types.ts——
+   它挪不开（就在被切的字节里），随本笔一并入库、在此记账；② system-prompt 那 2 条针脚红是另一笔
+   在飞改动欠的账（锚文本被搬走、锚点未改指），**本笔不动**。
+6. **读数**：typecheck 0 报错｜全量核心判卷 **388 文件 5558 条全绿**｜直接取料面 3 文件 58 条复跑绿｜
+   `--check-needles` **1571 条｜阻断 9**（7 = 本笔未入库面、2 = system-prompt 在飞账）＋改法语法体检全绿。
+7. **仍未证（不许读成绿）**：① 7 枚改指针脚**尚未真杀**——mutate-verify 度量 HEAD，要入库后在干净树上跑；
+   ② 报告里 `orchestrator.ts` 的三缝拆分未开始；③ 桌面层与 CI 未跑这一笔；④ 真模型/生产行为未跑。
