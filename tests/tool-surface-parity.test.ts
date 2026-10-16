@@ -37,9 +37,21 @@ function tableInjectedNames(): string[] {
  *  只取**那一行**并在行内找键——按字符数切一段会把后续行的 `workspace:` / `mode:` 当成注入面，
  *  判据里混进噪声键，读者就得先怀疑这条门是不是在测别的东西。 */
 function runLoopInjected(): string[] {
-  const line = RUNNER.split("\n").find((l) => l.includes("tools: { ...TOOLS,"));
+  const line = runLoopInjectionLine();
   if (line === undefined) return [];
   return [...line.matchAll(/([a-z_][a-z0-9_]*)\s*:\s/g)].map((m) => m[1]!).filter((k) => k !== "TOOLS" && k !== "tools");
+}
+
+/** 取料行必须是**代码**，不能是注释。
+ *
+ *  2026-10-16 实测：我在 agent-runner 里写了一行解释"下一行是取料面、别拆成 helper"的注释，
+ *  正文里含 `tools: { ...TOOLS, ` 字面量 ⇒ 这个 find 先命中注释、把注入键读成 0 个 ⇒
+ *  三面对账红四条（impact_query / obs_recall / diagnose / web_search 全部"实例面缺"），
+ *  而红因与它们毫无关系。注释里出现判据的针脚，是这一族最隐蔽的自我妨碍。
+ *  所以加一条反向哨兵：命中的那行trim 后不许以 `//` 开头。 */
+function runLoopInjectionLine(): string | undefined {
+  const line = RUNNER.split("\n").find((l) => l.includes("tools: { ...TOOLS,"));
+  return line?.trimStart().startsWith("//") ? undefined : line;
 }
 function instanceNames(): Set<string> {
   return new Set([...globalInjected(), ...tableInjectedNames(), ...runLoopInjected()]);
@@ -90,6 +102,13 @@ function report(surface: InjectedToolSurface): string[] {
 }
 
 describe("G-B 注入工具三面对账", () => {
+  it("取料行是代码不是注释（针脚出现在注释里 ⇒ 注入键被读成 0 个，红因与工具无关）", () => {
+    // 反向哨兵：先证明这根针确实存在于 RUNNER 里（否则上一条会是空断言），
+    // 再证明它命中的那一行不是注释。
+    expect(RUNNER.includes("tools: { ...TOOLS,"), "针脚不在任何 runner 文件里了——上面的解析器已失效").toBe(true);
+    expect(runLoopInjectionLine(), "取料针脚只出现在注释里 ⇒ runLoopInjected() 恒为 []").toBeDefined();
+  });
+
   it("每个声明项在应有的一面全部在场（缺哪面报哪面，不整体红）", () => {
     const bad = INJECTED_TOOLS.flatMap((s) => report(s).map((p) => s.name + " :: " + p));
     expect(bad).toEqual([]);

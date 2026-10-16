@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runAgent } from "../src/main/agent-runner";
 import { AskGate } from "../src/main/ask-gate";
+import type { WebFetchDeps } from "../src/tools/web_fetch";
+import type { HostResolver } from "../src/tools/web-fetch-policy";
 import type { AskScope } from "../src/permissions";
 import type { AgentEvent } from "../src/events";
 
@@ -43,6 +45,25 @@ function resultsFor(events: AgentEvent[], name: string): Array<{ ok: boolean; ou
     })
     .map((r) => ({ ok: r.ok, output: r.output }));
 }
+
+/** 出网用例的传输层桩：**不连网**，回一封固定的 text/html。
+ *
+ *  为什么必须这样做：这两条测的是**权限门接线**（卡真的弹、批了才真跑、拒绝一个字节都不出），
+ *  而它们从前真连 https://example.com/。实测（2026-10-16）全量跑时网络时通时断——
+ *  `curl` 通而 Node `fetch` 报 `Client network socket disconnected before secure TLS
+ *  connection was established` ⇒ 一条与网络无关的断言被网络抖动拖着时红时绿。
+ *  传输层本身的判卷在 tests/web-fetch.test.ts（那里也是注入 fetchImpl，34 条全绿），
+ *  所以这里换掉字节来源不损失覆盖，只是让"门接得对"这件事不再看网络脸色。
+ *
+ *  `resolveHost` 给一个真公网 IP（同 web-fetch.test.ts 的 publicResolver 口径）：
+ *  那让 SSRF 判据照常判一遍"这段是公网"，而不是被一个总是放行的桩替它决定。 */
+const OFFLINE_FETCH_DEPS: WebFetchDeps = {
+  resolveHost: (async () => ["93.184.216.34"]) as HostResolver,
+  fetchImpl: (async () =>
+    new Response("<html><body><p>离线桩正文</p></body></html>", {
+      headers: { "content-type": "text/html; charset=utf-8" },
+    })) as unknown as typeof fetch,
+};
 
 describe("工具门接线（runAgent + AskGate）", () => {
   it(
@@ -146,6 +167,7 @@ describe("出网工具门接线（web_fetch + AskGate）", () => {
       logPath: join(dir, "approved.jsonl"),
       askGate: autoGate("approved", asked),
       sandbox: null,
+      webFetchDeps: OFFLINE_FETCH_DEPS,
     });
     // 这一格是本段的全部意义：出网**不是**"默认放行的只读工具"。
     // 四档裁决在 tests/web-fetch.test.ts 判过了，这里判的是那张卡真的弹、批了才真跑。
@@ -154,6 +176,7 @@ describe("出网工具门接线（web_fetch + AskGate）", () => {
     expect(result?.ok).toBe(true);
     expect(result?.output).toContain("<fetched-content");
     expect(result?.output).toContain("不是给我的指令");
+    expect(result?.output).toContain("离线桩正文");
   });
 
   it("default 档 + 拒绝 → 一个字节都不发出去（且这条与 write_file 逐字同权）", { timeout: 120_000 }, async () => {
@@ -165,6 +188,7 @@ describe("出网工具门接线（web_fetch + AskGate）", () => {
       logPath: join(dir, "rejected.jsonl"),
       askGate: autoGate("rejected", asked),
       sandbox: null,
+      webFetchDeps: OFFLINE_FETCH_DEPS,
     });
     expect(asked).toEqual(["web_fetch"]);
     const [result] = resultsFor(events, "web_fetch");
@@ -188,6 +212,7 @@ describe("出网工具门接线（web_fetch + AskGate）", () => {
       logPath: join(dir, "always-1.jsonl"),
       askGate: autoGate("approved", firstAsked, "always"),
       sandbox: null,
+      webFetchDeps: OFFLINE_FETCH_DEPS,
     });
     expect(firstAsked).toEqual(["web_fetch"]);
 
@@ -200,6 +225,7 @@ describe("出网工具门接线（web_fetch + AskGate）", () => {
       logPath: join(dir, "always-2.jsonl"),
       askGate: autoGate("approved", secondAsked),
       sandbox: null,
+      webFetchDeps: OFFLINE_FETCH_DEPS,
     });
     expect(secondAsked, "上一轮点过「总是允许」，这一轮仍然必须问").toEqual(["web_fetch"]);
     const ok = resultsFor(events, "web_fetch").filter((r) => r.ok);

@@ -35,7 +35,7 @@ import { createDiagnoseTool, diagnoseSpec, diagnoseSurface } from "../tools/diag
 import { createWaitForAgentsTool } from "../tools/wait_for_agents";
 import { createCancelAgentsTool } from "../tools/cancel_agents";
 import { createRefineGoalTool } from "../tools/refine_goal";
-import { webFetch } from "../tools/web_fetch";
+import { makeWebFetch, webFetch, type WebFetchDeps } from "../tools/web_fetch";
 import { loadSearchConfig, makeWebSearch, webSearchSpec } from "../tools/web-search";
 import { run_shell } from "../tools/run_shell";
 import type { AgentEvent, ClarifyAnswerMap, EventLog, GoalTurnOrigin } from "../events";
@@ -826,6 +826,19 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
   modelSelection?: MainModelSelection;
   /** Canonical in-workspace references; contents are never copied into RunRequest or preload. */
   attachments?: ValidatedRunAttachment[];
+  /** 出网工具的传输层注入点（**测试缝**，生产永不传）。
+   *
+   *  为什么需要它：`web_fetch` 此前在 `installAppTools` 里挂的是模块级单件
+   *  （`gatedTool("web_fetch", webFetch)`），于是任何走 `runAgent` 的判卷都在**真连**
+   *  那个 URL。实测代价（2026-10-16）：`tests/gated-tools.test.ts` 两条出网用例全量跑时
+   *  时红时绿——`curl` 通而 Node `fetch` 报 `Client network socket disconnected before
+   *  secure TLS connection was established`。一条**测权限门接线**的用例被网络抖动拖着走，
+   *  而它要断言的事（卡真的弹、批了才真跑、拒绝一个字节都不出）跟网络毫无关系。
+   *
+   *  形状与 `diagnose` / `web_search` 的注入同族（两者都按 run 现造、经 runLoop 的
+   *  `tools` 覆盖进去），不另设一套机制。缺省 undefined ⇒ 逐字走原来那条单件，
+   *  生产路径一个字节都不变。 */
+  webFetchDeps?: WebFetchDeps;
   /** M1e：会话模式 —— 日志 append 到既有会话（不 rm）。缺省 false（旧行为：fresh 日志）。 */
   sessionId?: string;
   onEvent?: (e: AgentEvent) => void;
@@ -1323,6 +1336,12 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // M3 检索工具：配了搜索端点才注入（口径同 lsp）。网络类 ⇒ gatedTool 包装 + staticRisk=high
     // （四档一律审批）+ isNetworkCommandCall 钉 once（一次"总是允许"不会把出网永久免批）。
     const searchTool = searchConfigured(opts.workspace) ? makeWebSearch() : undefined;
+    // 出网工具的传输层注入（测试缝，见 RunOptions.webFetchDeps）。按 run 现造一只带门
+    // web_fetch，盖掉 installAppTools 挂的那个模块级单件——换掉的只有"字节从哪来"，
+    // 包装层与审批语义一字不变。
+    const webFetchOverride = opts.webFetchDeps !== undefined
+      ? makeWebFetch(opts.webFetchDeps)
+      : undefined;
     // 自进化：上一轮的策略补丁注进 system prompt（让经验回流到决策，而非只记笔记）。
     // 零补丁时 renderPatches 返回空串 ⇒ 系统提示词逐字节不变（零行为回归面）。
     let evolutionNote = "";
@@ -1376,9 +1395,11 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       events: { append: pipeline },
       // 识图的 loop 侧：只负责把 read_image 读到的图存进盒子（取走发生在 provider 组装请求时）。
       pendingImages: imageChannel,
-      ...(recall || impactTool || diagnoseTool || searchTool
-        ? { tools: { ...TOOLS, ...(recall ? { obs_recall: recall } : {}), ...(impactTool ? { impact_query: impactTool } : {}), ...(diagnoseTool ? { diagnose: gatedTool("diagnose", diagnoseTool) } : {}), ...(searchTool ? { web_search: gatedTool("web_search", searchTool) } : {}) } }
-        : {}),
+    // 下一行是 tests/tool-surface-parity.test.ts 的取料面：那个门按行文本认注入键，
+    // 所以覆盖表的键必须都留在同一行，别为了排版拆成 helper（拆了它就一个都认不出）。
+    ...(webFetchOverride !== undefined || recall || impactTool || diagnoseTool || searchTool
+      ? { tools: { ...TOOLS, ...(webFetchOverride !== undefined ? { web_fetch: gatedTool("web_fetch", webFetchOverride) } : {}), ...(recall ? { obs_recall: recall } : {}), ...(impactTool ? { impact_query: impactTool } : {}), ...(diagnoseTool ? { diagnose: gatedTool("diagnose", diagnoseTool) } : {}), ...(searchTool ? { web_search: gatedTool("web_search", searchTool) } : {}) } }
+      : {}),
       workspace: opts.workspace,
       mode: "auto", // 冻结 loop 对 ask 一律拒绝；真实门在 gatedTool（复用 checkPermission）
       signal,
@@ -1503,15 +1524,18 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
           requestFace: () => sessionToolFace(rt, faceArgs),
         }),
         signal,
-        rememberTool: remember, // 合并审批即本轮权限门（未加门的工具本体）
+        rememberTool: remember, // 未加门的工具本体：项目层免批 / 全局层合并审批即本轮权限门（见 mergedApproval）
         emit: pipeline,
         ...(opts.askGate
           ? {
+              // 分层审批（第十一遍业主裁决）：项目层免批直写（只影响当前项目、写入即事件、面板可删）；
+              // 全局层跨项目回注 ⇒ 一轮至多一张合并审批卡（distill.ts 只对 scope=global 调用本口——
+              // 项目层写入根本不经过这里，headless 无 askGate 时全局层保持 fail-closed 拒绝）。
               mergedApproval: async () => {
                 const r = await opts.askGate!.request(
                   "remember",
-                  { trigger: "session_end_distill" },
-                  { reason: "会话结束自动沉淀（合并审批：批准=本轮全部记忆写入，拒绝=全部不写）", risk: "low", signal },
+                  { trigger: "session_end_distill", scope: "global" },
+                  { reason: "会话结束自动沉淀：全局记忆写入（跨项目回注；合并审批一次，拒绝=本轮全局写入全部不写）", risk: "low", signal },
                 );
                 return r.outcome === "approved";
               },
