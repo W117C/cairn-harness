@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { projectContext, type ContextMessage } from "../src/agent/context";
 import { estimateTextTokens } from "../src/agent/text-budget";
-import { createGlmSessionProvider } from "../src/agent/glm-session";
+import { createGlmSessionProvider } from "../src/agent/session-provider";
 import { createEventLog } from "../src/events";
 import type { GlmMessage } from "../src/providers/glm";
 import type { AgentEvent } from "../src/events";

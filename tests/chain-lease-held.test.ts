@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createEventLog, type AgentEvent } from "../src/events";
-import { gateToolSpecs } from "../src/agent/glm-session";
+import { gateToolSpecs } from "../src/agent/session-provider";
 import { Orchestrator, scriptedWorkerModel, type SpawnArgs } from "../src/agent/orchestrator";
 
 const exec = promisify(execFile);

@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEventLog, type AgentEvent } from "../src/events";
 import { Orchestrator, type SpawnArgs, type WorkerModel } from "../src/agent/orchestrator";
 import { MAX_CONCURRENT_WORKERS, WORKER_FORBIDDEN_TOOLS } from "../src/agent/orchestrator-config";
-import { gateToolSpecs } from "../src/agent/glm-session";
+import { gateToolSpecs } from "../src/agent/session-provider";
 import { workerToolSpecs } from "../src/agent/worker-shell-tools";
 import { renderJoinPayload } from "../src/agent/orchestrator-join";
 import { CANCEL_AGENTS_TOOL, createCancelAgentsTool, type CancelAgentsHost } from "../src/tools/cancel_agents";

@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { createGlmSessionProvider } from "../src/agent/glm-session";
+import { createGlmSessionProvider } from "../src/agent/session-provider";
 vi.mock("../src/agent/memory/inject", async () =>
   (await import("./helpers/memory-inject-mock")).memoryInjectMock({ project: null, global: null }));
 let dir: string;

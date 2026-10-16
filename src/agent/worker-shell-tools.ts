@@ -4,7 +4,7 @@ import { invocations, tokenize } from "../permissions/command-shape";
 import { impactQuerySpec } from "../tools/impact-query";
 import { run_shell } from "../tools/run_shell";
 import { annotateExecCause } from "./verify";
-import { gateToolSpecs } from "./glm-session";
+import { gateToolSpecs } from "./session-provider";
 
 // ---- 只读 bash 静态过滤（§4.4.6：显式白名单命令集，其余拒绝） ----
 /** 纯读命令集（首词精确匹配）。 */

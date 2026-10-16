@@ -9,7 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { INJECTED_TOOLS, missingFromFace, type InjectedToolSurface } from "../src/agent/tool-surface";
-import { gateToolSpecs } from "../src/agent/glm-session";
+import { gateToolSpecs } from "../src/agent/session-provider";
 import { workerToolSpecs } from "../src/agent/worker-shell-tools";
 import { workerToolTable } from "../src/agent/orchestrator-config";
 import { isKnownToolName, isSideEffectTool } from "../src/permissions";

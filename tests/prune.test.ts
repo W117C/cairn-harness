@@ -322,7 +322,7 @@ describe("prune 附件回取接进生产", () => {
     expect(got.output).toContain("F".repeat(1000)); // 取回的是被裁那份，不是别的文件
   });
 
-  // 生产今天的形状：组装那一跳没传 workspace（`glm-session.ts` 的 computePrune 实参）⇒ 必须走诚实话分支。
+  // 生产今天的形状：组装那一跳没传 workspace（`session-provider.ts` 的 computePrune 实参）⇒ 必须走诚实话分支。
   // 这一格不是"能力已交付"的见证，是"没交付时不许说谎"的见证；接线补上后它仍应绿（区外/未知同一分支）。
   it("①b 没登记工作区 ⇒ 一个路径都不递，并明说模型侧读不到（不递假地址）", async () => {
     const events = corpus();

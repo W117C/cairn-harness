@@ -22,7 +22,7 @@ import { createEventLog, replay } from "../src/events";
 import { createMockSummarizer, type Summarizer } from "../src/agent/compaction";
 import { computePrune } from "../src/agent/prune";
 import { freeRideCoincidence, thresholdKnobIsWired } from "../src/agent/prune-batching";
-import { gateToolSpecs, sessionToolSpecs } from "../src/agent/glm-session";
+import { gateToolSpecs, sessionToolSpecs } from "../src/agent/session-provider";
 import type { GlmMessage, GlmToolSpec } from "../src/providers/glm";
 import {
   amortizationIsPaidOff,
@@ -64,7 +64,7 @@ async function drive(opts: {
   const seen: AssemblyObservation[] = [];
   try {
     await log.append({ type: "user_message", content: "TASK-0" });
-    const { createGlmSessionProvider } = await import("../src/agent/glm-session");
+    const { createGlmSessionProvider } = await import("../src/agent/session-provider");
     // provider **只建一次**：一个 run = 一个 provider 实例，跨请求的状态（压缩重写代价的头部存活比、
     // 已压次数）本来就挂在 provider 级。每轮新建会把状态洗掉——第一版就是这么把 PC7 量成
     // 「开与关逐字同值」的（读起来像策略坏，其实是驱动器不像生产）。
@@ -176,7 +176,7 @@ async function driveMutating(opts: {
       await log.append({ type: "user_message", content: "q0" });
     }
     await log.close?.();
-    const { createGlmSessionProvider } = await import("../src/agent/glm-session");
+    const { createGlmSessionProvider } = await import("../src/agent/session-provider");
     let beforeCompact = countCompactionEvents(path);
     let beforeAttachments = countAttachments(attachments);
     // 与驱动器 A 同理：**一个 run 一个 provider**，跨请求的状态才量得到（PC7 的摊销判定读的就是它）。
@@ -326,7 +326,7 @@ async function runFaceSweep(): Promise<void> {
       rewrote: attrs.reduce((n, a) => n + a.rewroteChars, 0),
     };
   };
-  // 上限刻意留在 6,000：实测 pad=40,000 会让 `glm-session` 抛 `[context_budget_exceeded]`
+  // 上限刻意留在 6,000：实测 pad=40,000 会让 `session-provider` 抛 `[context_budget_exceeded]`
   // （final estimated input 11606 > available 11600，请求根本不发）——这既是 fail-visible 的好行为，
   // 也说明**面字节确实进了估算**，所以下面「加 60% 尺寸读数一动不动」不是接线断，是真的不敏感。
   // **真发出去的那份**才作数：「我要的」是我自己重算的，与实发不等就说明旋钮没穿到装配面（那是没尺，不是读数）。

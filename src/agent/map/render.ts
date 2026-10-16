@@ -3,7 +3,7 @@
 // 误差 <0.15 早停。token 估算复用 compaction 的 estimateTokens（chars/4，零 tokenizer 依赖）。
 //
 // ⚠️ 三个常量分三种身份，读错就会得出错的「生产值」：`MAP_TOKENS_DEFAULT`（1024）才是生产实际值
-// （`glm-session.ts` 的调用点已把它显式传成 `budgetTokens`）；`MAP_TOKENS_MIN`（1024）是下限夹取；
+// （`session-provider.ts` 的调用点已把它显式传成 `budgetTokens`）；`MAP_TOKENS_MIN`（1024）是下限夹取；
 // `MAP_TOKENS_MAX`（4096）是**上限**——只有显式请求更大预算时才可能取到，生产**从未取到过**。
 import { estimateTokens } from "../compaction.js";
 import type { BuiltGraph } from "./rank.js";

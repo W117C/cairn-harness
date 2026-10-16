@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { mkdir, realpath } from "node:fs/promises";
 import { createActionFusion } from "../agent/action-fusion";
 import { AUTOMATION_TOOL_NAMES } from "../agent/automation-surface";
-import { sessionToolSpecs, type SessionPluginTool } from "../agent/glm-session";
+import { sessionToolSpecs, type SessionPluginTool } from "../agent/session-provider";
 import { currentPluginRuntime, type PluginRuntime } from "../agent/plugins";
 import type { McpToolInfo } from "../agent/plugins/mcp";
 import { annotateExecCause } from "../agent/verify";
@@ -284,7 +284,7 @@ export function sessionToolFace(
   /* 定时五件：**规格面与执行面一起摘**，判据是同一个 `automationTools`。
    *
    *  为什么必须两面都摘（只摘一头都会比现状更糟，两头都是本仓点名的失败形状）：
-   *  · 只摘实现不摘规格：`gateToolSpecs`（glm-session.ts:360）无条件 `push(automationToolSpecs())`，
+   *  · 只摘实现不摘规格：`gateToolSpecs`（session-provider.ts:360）无条件 `push(automationToolSpecs())`，
    *    于是模型看得见、只吃得到 `unknown tool: automation_create`——比现状那句
    *    「调度器未初始化（fail-closed）」更难懂，还白烧一轮。
    *  · 只摘规格不摘实现：反过来，模型看得见工具却永远建不成功，正是「存在 ≠ 接线」本身。

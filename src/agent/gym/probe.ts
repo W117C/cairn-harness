@@ -12,7 +12,7 @@ import { estimateTokens, type CompactionConfig } from "../compaction";
 import { serializeLayer } from "../prefix-churn";
 import { measureHeadSurvival } from "../compaction-cost";
 import { createEventLog } from "../../events";
-import { createGlmSessionProvider, sessionToolSpecs } from "../glm-session";
+import { createGlmSessionProvider, sessionToolSpecs } from "../session-provider";
 import { loadScriptOutputs, takeRound } from "./script";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../../providers/glm";
 import type { ModelOutput, Provider } from "../../providers";

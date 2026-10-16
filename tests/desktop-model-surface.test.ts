@@ -175,9 +175,9 @@ describe("⑥ worker 面也看得见自定义家（spawn_agent 的模型参数�
 
   it("worker 与会话两条路径都不许再用内置四家的静态表（回归哨兵）", () => {
     // 2026-10-06：orchestrator 曾用 DEFAULT_MODEL_TABLE 做 worker 档位反查与级联梯子，
-    // glm-session 曾用它查上下文窗口 —— 那三处都看不见自定义家，正是用户撞到的"配了却用不上"。
+    // session-provider 曾用它查上下文窗口 —— 那三处都看不见自定义家，正是用户撞到的"配了却用不上"。
     // 这条哨兵钉住"别再退回去"。
-    const files = ["src/agent/orchestrator.ts", "src/agent/glm-session.ts"];
+    const files = ["src/agent/orchestrator.ts", "src/agent/session-provider.ts"];
     for (const f of files) {
       const src = readFileSync(join(process.cwd(), f), "utf8");
       expect(src.includes("DEFAULT_MODEL_TABLE"), `${f} 又用回了内置静态表`).toBe(false);

@@ -1,7 +1,7 @@
 // W1a 收队工具：把「派了 worker 却收不回来」这一条结构性缺陷闭合在产品路径上。
 // 前车之见：join 原语（Orchestrator.waitForAgentTerminal / waitAll）一直存在，但调用者全在验收
 // 脚本里 ⇒ 主 agent 派完 worker、说完这轮就结束，永远不被叫回来读团队的产出。
-// 注入纪律同 spawn_agent：常驻原语走静态规格表（glm-session）+ 运行期实例（installAppTools），
+// 注入纪律同 spawn_agent：常驻原语走静态规格表（session-provider）+ 运行期实例（installAppTools），
 // 不混 obs_recall / impact_query 那套「按开关注入」——没有开关可关它，关掉就等于没有收队。
 import { clampWaitTimeout, renderJoinPayload, type JoinPayloadBody } from "../agent/orchestrator-join";
 import { ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
@@ -44,5 +44,5 @@ export function createWaitForAgentsTool(host: () => WaitForAgentsHost | null): T
   };
 }
 
-// 模型可见规格**不在这里**：常驻原语按本文件的注入纪律走静态规格表（glm-session 的 gateToolSpecs），
+// 模型可见规格**不在这里**：常驻原语按本文件的注入纪律走静态规格表（session-provider 的 gateToolSpecs），
 // 这里再写一份就是第二个来源——两份的描述/参数会长出差异（曾漂移过），而 tests/tool-surface-parity 只比名字。

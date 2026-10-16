@@ -4,7 +4,7 @@
 // 而 read_file 第一句就拒绝对路径 ⇒ 模型照做会白跑一轮」。那是一条**已经证到底**的缺陷
 // （`scripts/probe-prune-recall.ts` 是真跑 `read_file` 的复现器），但它的影响面当时是**拍脑袋**的：
 // 谁都知道"如果模型真去读过附件，这就是活缺陷；从没读过，就是潜在缺陷"，
-// 可没人答得出这两种情况各对应多少笔——而 #33 的修法要动一处热文件（`glm-session` 的组装那一跳），
+// 可没人答得出这两种情况各对应多少笔——而 #33 的修法要动一处热文件（`session-provider` 的组装那一跳），
 // 值不值得动，正好由这个数决定。
 //
 // 三态规矩（本仓点过名的）：这里区分
@@ -25,7 +25,7 @@ const STUB_MARK = "原文已存附件";
  * 标记取整句里 prune 独有的那段，不取「模型侧读不到」——skill 截断那句也说这五个字，两支会被并成一桶。
  */
 const HONEST_MARK = "原文已另存到会话附件";
-/** 附件目录名（`src/agent/glm-session.ts` 里 `join(dirname(logPath), "prune-attachments")`）。 */
+/** 附件目录名（`src/agent/session-provider.ts` 里 `join(dirname(logPath), "prune-attachments")`）。 */
 const ATTACH_MARK = "prune-attachments";
 /** join 键：call 侧 `id`、result 侧 `callId`（不同名是事件面既有事实，读错键会得到一片零假读数）。 */
 const CALL_KEY = "id" as const;
@@ -145,7 +145,7 @@ export function prunePromiseVerdict(t: PrunePromiseTally): PrunePromiseVerdict {
       "附件每落一次区外就少一次可回取。缺的是「组装那一跳把 workspace 交给 prune」，不是文案" };
   }
   return { live: false, why: counts + " ⇒ 语料里从没发射过这句（prune 未在有附件的会话里触发过）：属**潜在**，" +
-    "不值得为它动 `glm-session` 的组装那一跳；这一支留着，触发一次就会出数" };
+    "不值得为它动 `session-provider` 的组装那一跳；这一支留着，触发一次就会出数" };
 }
 
 function main(): void {

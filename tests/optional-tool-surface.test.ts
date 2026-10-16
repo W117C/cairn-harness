@@ -14,7 +14,7 @@
 //      就是本仓点名的「模型看得见却调不到」）；
 //   ③ 反面对照：都不摘时三把都在面上（否则上面几条可能全在空转）。
 import { describe, expect, it } from "vitest";
-import { OPTIONAL_TOOL_NAMES, sessionToolSpecs } from "../src/agent/glm-session";
+import { OPTIONAL_TOOL_NAMES, sessionToolSpecs } from "../src/agent/session-provider";
 import { WEB_CONTENT_TRUNCATION_HINT } from "../src/tools/output-ring";
 
 const ALL_OPTIONAL = [

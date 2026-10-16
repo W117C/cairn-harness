@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { extractResults, loadSearchConfig, makeWebSearch, webSearchSpec } from "../src/tools/web-search";
-import { sessionToolSpecs } from "../src/agent/glm-session";
+import { sessionToolSpecs } from "../src/agent/session-provider";
 import { isNetworkCommandCall, isSideEffectTool } from "../src/permissions";
 import { staticRisk } from "../src/permissions/risk";
 import type { ToolName } from "../src/tools/base";

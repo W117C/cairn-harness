@@ -139,7 +139,7 @@ describe("工具选择靶场读数", () => {
   it("gym runner 的 omitTools：不传时逐字不变（零回归支）", async () => {
     // P1-b 的 A/B 靠这个参数换面。加参数时最容易犯的错是「不传也走新分支」——
     // 那会让**所有**既有靶场跑的都不再是原来的面，而它们全绿、看不出任何变化。
-    const { sessionToolSpecs } = await import("../src/agent/glm-session");
+    const { sessionToolSpecs } = await import("../src/agent/session-provider");
     const base = sessionToolSpecs({ mode: "auto" }).specs;
     // 三种「没给」都要与原面逐字相同：不给 / 给空数组 / 给 undefined。
     // （上一版这里写了 `undefined !== undefined && …` —— 恒假的死代码，

@@ -29,7 +29,7 @@ import {
   type ModelSurfaceAccount,
   type SurfacePlan,
 } from "../src/agent/model-surface";
-import { gateToolSpecs, sessionToolSpecs } from "../src/agent/glm-session";
+import { gateToolSpecs, sessionToolSpecs } from "../src/agent/session-provider";
 import type { GlmToolSpec } from "../src/providers/glm";
 
 const CORE_NAMES: ReadonlySet<string> = new Set(gateToolSpecs().map((s) => s.function.name));

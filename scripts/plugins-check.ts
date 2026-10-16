@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "../src/events";
 import { runAgent } from "../src/main/agent-runner";
-import { composeTurnMessages } from "../src/agent/glm-session";
+import { composeTurnMessages } from "../src/agent/session-provider";
 import {
   PluginRuntime, TrustStore, pluginFingerprint, buildSkillRoutingList, clampSkillBody,
   scopedToolName, expandPromptCommand,

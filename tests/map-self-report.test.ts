@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { buildMap, mapInjectText, mapUnavailableText, type MapBuilder, type MapBuildResult } from "../src/agent/map/build";
 import { MAX_FILES_DEFAULT } from "../src/agent/map/cap";
-import { createGlmSessionProvider } from "../src/agent/glm-session";
+import { createGlmSessionProvider } from "../src/agent/session-provider";
 import { createEventLog, type EventLog } from "../src/events";
 
 const TMP: string[] = [];

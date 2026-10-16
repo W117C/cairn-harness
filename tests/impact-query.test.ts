@@ -15,7 +15,7 @@ import { MAX_FILES_CEILING, MAX_FILES_DEFAULT } from "../src/agent/map/cap";
 import { TOOLS } from "../src/tools";
 import type { ToolContext } from "../src/tools/base";
 import { checkPermission, isSideEffectTool } from "../src/permissions";
-import { sessionToolSpecs } from "../src/agent/glm-session";
+import { sessionToolSpecs } from "../src/agent/session-provider";
 import type { ToolName } from "../src/tools";
 
 const MINI_REPO = fileURLToPath(new URL("../fixtures/impact/mini-repo", import.meta.url));

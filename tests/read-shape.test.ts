@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { read_file } from "../src/tools/read_file";
 import type { ToolContext } from "../src/tools";
-import { gateToolSpecs } from "../src/agent/glm-session";
+import { gateToolSpecs } from "../src/agent/session-provider";
 
 let ws = "";
 afterEach(async () => { if (ws) await rm(ws, { recursive: true, force: true }); });

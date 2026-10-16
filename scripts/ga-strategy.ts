@@ -22,7 +22,7 @@ import { costUsd } from "../src/routing/pricing";
 import { runLoop } from "../src/agent/loop";
 import { runVerifyOutcome } from "../src/agent/verify";
 import { Orchestrator } from "../src/agent/orchestrator";
-import { createGlmSessionProvider, sessionToolSpecs } from "../src/agent/glm-session";
+import { createGlmSessionProvider, sessionToolSpecs } from "../src/agent/session-provider";
 import { hasWorkerAttribution } from "../src/agent/context";
 import { projectSession } from "../src/agent/tool-choice";
 import { TOOLS, type Tool } from "../src/tools";

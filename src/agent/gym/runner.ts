@@ -9,7 +9,7 @@ import type { AgentEvent } from "../../events";
 import { createEventLog, forkSession, replay } from "../../events";
 import type { Provider } from "../../providers";
 import { streamGlm } from "../../providers/glm";
-import { createGlmSessionProvider, sessionToolSpecs } from "../glm-session";
+import { createGlmSessionProvider, sessionToolSpecs } from "../session-provider";
 import { runLoop } from "../loop";
 import { runVerifyOutcome } from "../verify";
 import { changedFilesBetween, scoreCase } from "./score";

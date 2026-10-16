@@ -30,7 +30,7 @@ const MAX_ATTACHMENTS = 32;
 const MAX_PATH_LENGTH = 4096;
 /** 限的是**路径总字符**（不是渲染后的块）。渲染产物每行还要加「- kind: path=」包装与头尾两行，
  *  正常满额约 17.4k 字符 ⇒ provider 侧那顶块级帽 `ATTACHMENT_CONTEXT_CHAR_LIMIT`（32,768，
- *  `src/agent/glm-session.ts`）留了约 1.9 倍余量。两处是**两个量纲**（路径字符 vs 块字符），
+ *  `src/agent/session-provider.ts`）留了约 1.9 倍余量。两处是**两个量纲**（路径字符 vs 块字符），
  *  不要互相顶替：入口闸用户输入，provider 闸绕过入口的调用方。 */
 const MAX_TOTAL_PATH_CHARS = 16_384;
 

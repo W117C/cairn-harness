@@ -39,7 +39,7 @@ export function shouldApplyPrune(opts: {
   estimatedTokens: number;
   /** 可用输入预算 = inputLimit − maxOutputReserve。 */
   availableTokens: number;
-  /** 本轮前缀**已被压缩打断**（`glm-session.ts` 在压缩成功后的那次重组装前置位，取用即清零）。
+  /** 本轮前缀**已被压缩打断**（`session-provider.ts` 在压缩成功后的那次重组装前置位，取用即清零）。
    *  头既然已经断了，这一刀就是免费的——攒批省的是"断前缀的次数"，已经在断的那一轮没有可省的。
    *  不许退化成"每轮都剪"：`computePrune` 自己的 `minimumTokens`（20,000）仍然挡着，
    *  顺手剪的仍是"够一刀"的量；而"取用即清零"由 PC9 那条集合相等判据钉住（见 `freeRideCoincidence`）。 */

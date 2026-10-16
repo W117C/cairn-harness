@@ -640,7 +640,7 @@ export interface SurfaceAccountEvent {
   /** 易变侧四块字符数合计（记忆 + skills 块 + 符号地图 + 附件引用）。
    *
    *  **为什么单列**：降配梯（`planSurfaceBudget`）的口径只有「system + 工具」——生产调用点
-   *  `glm-session.ts` 不传 `volatileChars`，`accountModelSurface` 落到 0。
+   *  `session-provider.ts` 不传 `volatileChars`，`accountModelSurface` 落到 0。
    *  于是这四个数是**唯一**能看到「降配梯看不见的那一半」的入口：不记就等于那部分开销无观测面。
    *
    *  ⚠️ **口径钉死：这是「降配计划那一刻」的快照，不是实际发出值。** 降配按构造排在压缩之前
@@ -1009,7 +1009,7 @@ export async function replay(path: string, untilEventId?: string): Promise<Agent
   return events.slice(0, n);
 }
 
-// ---- A5（审查根因 5）：增量重放——glm-session/sidechat 每轮全量读盘 → 只解析追加段 ----
+// ---- A5（审查根因 5）：增量重放——session-provider/sidechat 每轮全量读盘 → 只解析追加段 ----
 // 会话 JSONL append-only：按 (ino, 完整行字节偏移) 缓存已解析事件数组，每轮只读尾部新行。
 // 坏行裁决与 replay 同一条（共用 midBadLineError）：**尾坏可容、非尾坏必炸**，且「当时在尾部」
 // 不是永久豁免——崩溃留下的半行会被下一次 append 粘成一条完整的坏行，此后再追加就成了中段坏行；

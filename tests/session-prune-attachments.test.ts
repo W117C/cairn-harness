@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEventLog, type AgentEvent } from "../src/events";
-import { createGlmSessionProvider } from "../src/agent/glm-session";
+import { createGlmSessionProvider } from "../src/agent/session-provider";
 import { PRUNED_PLACEHOLDER } from "../src/agent/prune";
 import type { GlmMessage } from "../src/providers/glm";
 
@@ -54,7 +54,7 @@ afterEach(async () => {
 });
 
 describe("prune 存盘回取的生产入口", () => {
-  // 生产这一跳**今天没把 workspace 传进 computePrune**（`glm-session.ts` 的实参只有 events/attachmentsDir/
+  // 生产这一跳**今天没把 workspace 传进 computePrune**（`session-provider.ts` 的实参只有 events/attachmentsDir/
   // sessionId），而附件目录与会话日志同级 ⇒ 落位判定走「区外/未知」那一案。#33 的裁决＝分案改文案、
   // 不给 read_file 开第二根允许例，所以这两格钉的是「没接上时不许说谎 + 能力仍然真落盘」，
   // 而不是旧写法那句「打桩带绝对路径」——那正是被冻进用例里的假承诺。

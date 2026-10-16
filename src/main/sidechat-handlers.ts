@@ -9,7 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentEvent } from "../events";
 import { createMockSummarizer, type Summarizer } from "../agent/compaction";
-import { createGlmSummarizer } from "../agent/glm-session";
+import { createGlmSummarizer } from "../agent/session-provider";
 import { promoteToMain, runSidechatTurn, scriptedSidechatModel, type SidechatModel } from "../agent/sidechat";
 import type { SidechatPanelSnapshot } from "./ipc-protocol";
 import {

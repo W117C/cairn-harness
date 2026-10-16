@@ -21,7 +21,7 @@ import { globalMemoryDir, initMemoryHome, projectMemoryDir, projectAgentDir, wri
 import { EVIDENCE_LINE_PREFIX } from "../src/agent/memory/lessons";
 import { buildWorkerSystemMessages } from "../src/agent/worker-prompt";
 import { buildSidechatContext } from "../src/agent/sidechat";
-import { composeTurnMessages } from "../src/agent/glm-session";
+import { composeTurnMessages } from "../src/agent/session-provider";
 import { trackedExistingFiles } from "../scripts/lib/scan-scope";
 
 const ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");

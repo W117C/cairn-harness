@@ -16,7 +16,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { sessionToolSpecs } from "../src/agent/glm-session";
+import { sessionToolSpecs } from "../src/agent/session-provider";
 import { projectContext } from "../src/agent/context";
 import { replay, type AgentEvent } from "../src/events";
 import type { GlmToolSpec } from "../src/providers/glm";
@@ -61,7 +61,7 @@ describe("P0 装配账落流", () => {
     dir = await mkdtemp(join(process.env.PI_SCRATCH_DIR!, "surface-account-"));
     const path = join(dir, "events.jsonl");
     await writeFile(path, JSON.stringify({ type: "user_message", content: "TASK" }) + "\n");
-    const { createGlmSessionProvider } = await import("../src/agent/glm-session");
+    const { createGlmSessionProvider } = await import("../src/agent/session-provider");
     const provider = createGlmSessionProvider(path, {
       // 地图默认关；要看 mapChars 就传 opts.mapText 并把 mapBuilder 接上（见下）。
       map: opts.mapText === undefined ? false : true,
@@ -193,7 +193,7 @@ describe("P0 装配账落流", () => {
     // 这一条**不是**在赞同一个好行为，而是在把一处已知互斥钉成可见的：
     // `tests/final-budget.test.ts:20` 要求「硬闸拦下时盘上零字节」，而本事件排在硬闸之前。
     // 今天两条不冲突，只因 final-budget 那个用例**不传工具面**。谁给它补上工具面，
-    // 下面这条会先红并指向 `glm-session.ts` 调用点的取舍说明（判据赢，该动的是落点不是判据）。
+    // 下面这条会先红并指向 `session-provider.ts` 调用点的取舍说明（判据赢，该动的是落点不是判据）。
     const transport = vi.fn(async function* () {
       yield { type: "assistant_message" as const, content: "ok" };
     });
@@ -201,7 +201,7 @@ describe("P0 装配账落流", () => {
     try {
       const path = join(dir2, "events.jsonl");
       await writeFile(path, JSON.stringify({ type: "user_message", content: "TASK" }) + "\n");
-      const { createGlmSessionProvider } = await import("../src/agent/glm-session");
+      const { createGlmSessionProvider } = await import("../src/agent/session-provider");
       const provider = createGlmSessionProvider(path, {
         map: false,
         workspace: dir2,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gateToolSpecs } from "../src/agent/glm-session";
+import { gateToolSpecs } from "../src/agent/session-provider";
 import type { GlmMessage } from "../src/providers/glm";
 import {
   amortizationIsPaidOff,

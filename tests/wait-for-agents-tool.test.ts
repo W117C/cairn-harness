@@ -4,7 +4,7 @@
 // ok:false 的 tool_result）⇒ 单测直调 tool.run 时必须用 rejects.toThrow，不能期待返回值。
 import { describe, expect, it } from "vitest";
 import { WAIT_FOR_AGENTS_TOOL, createWaitForAgentsTool, type WaitForAgentsHost } from "../src/tools/wait_for_agents";
-import { gateToolSpecs } from "../src/agent/glm-session";
+import { gateToolSpecs } from "../src/agent/session-provider";
 
 const hostWith = (calls: unknown[]): WaitForAgentsHost & { calls: unknown[] } => ({
   calls,

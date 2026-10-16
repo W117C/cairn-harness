@@ -18,7 +18,7 @@ import {
   runCompaction,
   shouldCompact,
 } from "../src/agent/compaction";
-import { createGlmSummarizer } from "../src/agent/glm-session";
+import { createGlmSummarizer } from "../src/agent/session-provider";
 import { sha256MatchesFrozen } from "../src/frozen";
 
 const GOAL_KEYWORD = "重构 todo 应用的排序功能";

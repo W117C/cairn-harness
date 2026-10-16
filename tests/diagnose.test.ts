@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { DIAGNOSTIC_ENTRY_CAP, parseDiagnostics } from "../src/tools/diagnose-parse";
 import { createDiagnoseTool, diagnoseSurface, diagnoseSpec } from "../src/tools/diagnose";
-import { sessionToolSpecs } from "../src/agent/glm-session";
+import { sessionToolSpecs } from "../src/agent/session-provider";
 import { isSideEffectTool } from "../src/permissions";
 import type { ExecFn } from "../src/agent/verify";
 

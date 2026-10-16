@@ -1,6 +1,6 @@
 // 「问题 → 位置」那两只正则的唯一出处（`src/agent/context-signals.ts`）。
 //
-// 立案动因：尺（`scripts/probe-locate-recall.ts`）从前逐字镜像生产端 `glm-session.ts` 的两只正则，
+// 立案动因：尺（`scripts/probe-locate-recall.ts`）从前逐字镜像生产端 `session-provider.ts` 的两只正则，
 // 页上写着「改了那两行而不改这里，A 臂就撒谎」——那是靠注释守的不变量（本仓第三形态：判据在场、接线没有）。
 // 本簇把两端接到同一支源串上，于是"撒谎"这一格结构上不存在了。
 //
@@ -46,7 +46,7 @@ describe("抽取语义不许漂（与历史字面量对拍）", () => {
 });
 
 describe("两端确实共用这一支（镜像那一格不能回来）", () => {
-  const sessionSrc = readFileSync(fileURLToPath(new URL("../src/agent/glm-session.ts", import.meta.url)), "utf8");
+  const sessionSrc = readFileSync(fileURLToPath(new URL("../src/agent/session-provider.ts", import.meta.url)), "utf8");
   const probeSrc = readFileSync(fileURLToPath(new URL("../scripts/probe-locate-recall.ts", import.meta.url)), "utf8");
 
   it("provider 那半：从 context-signals 取，且源串里不再留路径字面量（镜像回来就红）", () => {

@@ -27,7 +27,7 @@ import { runCase, cleanupRun } from "../src/agent/gym/runner";
 import { caseToolChoice, mergeToolChoice, toolChoiceAblation, type CaseToolChoice } from "../src/agent/gym/tool-choice";
 import { replay } from "../src/events";
 import { BASE_SYSTEM } from "../src/agent/system-prompt";
-import { OPTIONAL_TOOL_NAMES } from "../src/agent/glm-session";
+import { OPTIONAL_TOOL_NAMES } from "../src/agent/session-provider";
 
 const ROOT = process.cwd();
 const CASES_ROOT = join(ROOT, "fixtures", "gym", "tool-choice");

@@ -7,12 +7,12 @@
 // 为什么值得单独立一层：这一族的其他成员各有自己的帽（记忆 `MEMORY_TOKEN_BUDGET_DEFAULT`、
 // skill 重挂 `SKILL_REMOUNT_TOKENS_TOTAL`、hook 上下文 `HOOK_CONTEXT_TOTAL_CHAR_LIMIT`、
 // 单条 MCP 描述 `MCP_DESCRIPTION_CHAR_LIMIT`），**唯独模型面没有总闸**——MCP 工具是一条裸
-// `specs.push`（`src/agent/glm-session.ts` 的 `sessionToolSpecs`）。逐件有帽、总和无人记账，
+// `specs.push`（`src/agent/session-provider.ts` 的 `sessionToolSpecs`）。逐件有帽、总和无人记账，
 // 是同一族缺陷的形状：装三个话痨 server 就能把每轮固定成本抬高一个数量级，而没有任何一处会红。
 //
 // ⚠️ **口径更正（2026-10-03）**：本模块的帽只管**固定面**（`systemChars` + 工具 JSON），
 // **不管易变侧**（记忆 / skills 块 / 符号地图 / 附件引用）。`SurfaceBudgetInput.volatileChars`
-// 是给调用方的口子，但**生产调用点不传**（`glm-session.ts` 的 `planSurfaceBudget({specs, systemChars, coreNames})`）
+// 是给调用方的口子，但**生产调用点不传**（`session-provider.ts` 的 `planSurfaceBudget({specs, systemChars, coreNames})`）
 // ⇒ 它恒为 0、`totalChars === fixedChars`，是一个恒等的装饰字段。此前本文件的注释与
 // `MODEL_SURFACE_TOTAL_CHAR_LIMIT` 的文档都声称这顶帽管「固定面加易变 system 块的字符和」，
 // 与实参不符——注释已按实参改写。

@@ -18,7 +18,7 @@ import {
   runCompaction,
   type CompactDecision,
 } from "../src/agent/compaction";
-import { createGlmSessionProvider } from "../src/agent/glm-session";
+import { createGlmSessionProvider } from "../src/agent/session-provider";
 import { HookEngine } from "../src/agent/plugins";
 import type { LoadedHookDef } from "../src/agent/plugins/types";
 import { compactSessionLog } from "../src/main/agent-runner";
@@ -156,7 +156,7 @@ describe("PreCompact 发点在 runCompaction（三条压缩路径的唯一必经
   });
 });
 
-describe("自动档经 glm-session 接到生产者（provider 是唯一发起方）", () => {
+describe("自动档经 session-provider 接到生产者（provider 是唯一发起方）", () => {
   it("组装前触发的压缩发出 PreCompact(auto)，且只发一次", async () => {
     useEnv("CAIRN_API_KEY", undefined); // 压缩后仍要调模型 → 无 key 在此抛错（抛错在压缩之后 = 接线生效）
     dir = await mkdtemp(join(tmpdir(), "dsh-precompact-auto-"));

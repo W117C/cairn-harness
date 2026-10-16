@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AUTOMATION_MODEL_FIELDS, AUTOMATION_SCHEDULE_KINDS, AUTOMATION_TOOLS, AUTOMATION_TOOL_NAMES, automationToolSpecs } from "../src/agent/automation-surface";
-import { gateToolSpecs } from "../src/agent/glm-session";
+import { gateToolSpecs } from "../src/agent/session-provider";
 import { KNOWN_TOP_FIELDS, FORM_KINDS } from "../src/main/automations";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -74,7 +74,7 @@ describe("规格与校验器同源（规格不许发明字段）", () => {
   });
 
   it("五件不算 core 面（固定面每次请求都付字节，低频族要能被降配梯砍掉）", async () => {
-    const { isCoreSurfaceTool } = await import("../src/agent/glm-session");
+    const { isCoreSurfaceTool } = await import("../src/agent/session-provider");
     for (const n of AUTOMATION_TOOL_NAMES) expect(isCoreSurfaceTool(n), n + " 被当成 core ⇒ 永远砍不掉").toBe(false);
     // 反向那一半：常用原语仍必须是 core，否则这条判据只是在为"全都可砍"背书
     for (const n of ["read_file", "edit_file", "spawn_agent"]) expect(isCoreSurfaceTool(n), n + " 不该被砍").toBe(true);
@@ -100,7 +100,7 @@ describe("规格与校验器同源（规格不许发明字段）", () => {
 });
 
 /* 一次性进程（CLI）摘掉定时五件 —— 摘的时候**两面必须同时摘**，这是本仓反复栽的同一个形状。
-   规格面在 `gateToolSpecs`（glm-session.ts:360 无条件 `push(...automationToolSpecs())`），
+   规格面在 `gateToolSpecs`（session-provider.ts:360 无条件 `push(...automationToolSpecs())`），
    执行面在 `installAppTools`（agent-runner）。只摘一头都会比现状更糟：
      只摘实现 ⇒ 模型看得见、只吃得到 `unknown tool: automation_create`（比现状那句
                   「调度器未初始化（fail-closed）」更难懂，还白烧一轮）；

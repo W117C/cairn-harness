@@ -17,7 +17,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { systemPromptFor } from "../../src/main/agent-runner";
 import { PERMISSION_MODES } from "../../src/permissions/modes";
-import { sessionToolSpecs } from "../../src/agent/glm-session";
+import { sessionToolSpecs } from "../../src/agent/session-provider";
 import { calibrateFactor } from "../../src/agent/compaction";
 import type { AgentEvent } from "../../src/events";
 import { fixedFacesOfModes, minAdmissibleFactor, promptCostRows, promptShareOfFixedFace, summarizePromptCost } from "../lib/prompt-cost";

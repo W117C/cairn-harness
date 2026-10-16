@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadUserAgentRoles, USER_AGENT_SOURCES } from "../src/agent/roles/user-agents";
 import { PluginRuntime } from "../src/agent/plugins";
-import { gateToolSpecs } from "../src/agent/glm-session";
+import { gateToolSpecs } from "../src/agent/session-provider";
 
 let root = "";
 afterEach(async () => { if (root) await rm(root, { recursive: true, force: true }).catch(() => {}); root = ""; });

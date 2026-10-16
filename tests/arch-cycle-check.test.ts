@@ -141,8 +141,8 @@ describe("登记表本体：它是数据，也要有判据", () => {
     if (RUNTIME_CYCLE_DEBT.length === 0) return;
     expect(debtSrc).toMatch(/第 \d+ 页/);
   });
-  it("今天这条债就是技术审查 A6 那一条（五支、含 write-face 回到 glm-session 的收口）", () => {
-    const A6 = ["src/agent/glm-session.ts", "src/agent/memory/inject.ts", "src/agent/memory/lessons.ts", "src/agent/worker-shell-tools.ts", "src/agent/write-face.ts"];
+  it("今天这条债就是技术审查 A6 那一条（五支、含 write-face 回到 session-provider 的收口）", () => {
+    const A6 = ["src/agent/session-provider.ts", "src/agent/memory/inject.ts", "src/agent/memory/lessons.ts", "src/agent/worker-shell-tools.ts", "src/agent/write-face.ts"];
     // 按规范化后的字符串比：数组实参在 toContain 里是引用相等，那样写这条永远红（尺没错，是我拿错比较器）。
     expect(RUNTIME_CYCLE_DEBT.map((c) => [...c].sort().join(" → "))).toContain(A6.join(" → "));
   });

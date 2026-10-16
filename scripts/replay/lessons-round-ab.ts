@@ -7,7 +7,7 @@
 //     （实测，见下「轮 A 提炼：0 条」）。没有失败就没有教训，两轮都空。
 //   · 就算把剧本改成失败的，`src/providers/mock.ts` 的 `createMockProvider` **忽略 messages**
 //     （它照 tool_call 念剧本），而 `runLoop` 唯一的消息出口就是 `projectContext(seen)`
-//     ——记忆块是**会话启动时**读的 `buildMemoryInjection`（glm-session 那条路），`runLoop`
+//     ——记忆块是**会话启动时**读的 `buildMemoryInjection`（session-provider 那条路），`runLoop`
 //     里根本没有注入点。所以「模型读到教训并改了动作」在 mock 靶上**没有承载路径**。
 // ⇒ 本面改测**真能测的那一半**：造一条真失败轨迹（A 的剧本就地生成、不碰冻结 fixture），
 //   提炼 → 写盘 → 回注 → 读回，逐字对照。测不到的那一半在上面写明，不拿"注入块在"冒充"行为变了"。
@@ -174,7 +174,7 @@ const sig = (evs: AgentEvent[]): string =>
 console.log("  A 投影 = " + sig(eventsA));
 console.log("  B 投影 = " + sig(eventsB));
 console.log("  事件流条数 A=" + String(eventsA.length) + " B=" + String(eventsB.length));
-console.log("  注入块是 runLoop 外的另一条路（glm-session 启动时读）⇒ 投影逐字相同是**预期的**，不是注入失败。");
+console.log("  注入块是 runLoop 外的另一条路（session-provider 启动时读）⇒ 投影逐字相同是**预期的**，不是注入失败。");
 console.log("");
 
 // ---- 逐字对照：盘上正文 vs 回注行 ----
@@ -212,5 +212,5 @@ console.log("所以「提炼 ⇒ 写盘 ⇒ 回注逐字含出处」那一支在
 console.log("（20 条，含真写盘往返与注入逐字断言）与 replay:lessons-offline（真语料非零读数）承担。");
 console.log("业主定的验收形态「冻结 mock 两轮对比同类失败率」在此**结构不可达**：");
 console.log("  · 冻结剧本是一次成功回合 ⇒ 0 红 ⇒ 0 教训（硬门正确地挡下）；");
-console.log("  · createMockProvider 忽略 messages，且记忆注入在 glm-session 启动时读盘、不在 runLoop 里。");
+console.log("  · createMockProvider 忽略 messages，且记忆注入在 session-provider 启动时读盘、不在 runLoop 里。");
 console.log("要真量「同类失败率下降」，需要换真模型 + 真靶子的独立实验，不在本轮写范围。未测即未证。");

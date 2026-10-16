@@ -13,7 +13,7 @@ import { CANCEL_AGENTS_NAME, INJECTED_TOOLS, SPAWN_AGENT_NAME } from "../src/age
 import { CANCEL_AGENTS_TOOL } from "../src/tools/cancel_agents";
 import { runLoop, type LoopOptions } from "../src/agent/loop";
 import { runAgent, handleAgentState, sessionToolFace, withSkillAllowNote } from "../src/main/agent-runner";
-import { sessionToolSpecs } from "../src/agent/glm-session";
+import { sessionToolSpecs } from "../src/agent/session-provider";
 import { TOOL_NAMES } from "../src/tools/base";
 import type { AgentEvent } from "../src/events";
 

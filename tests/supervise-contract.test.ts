@@ -16,7 +16,7 @@ import {
   SUPERVISE_MAX_STAGES_DEFAULT, SUPERVISE_MAX_STAGES_MAX, SUPERVISE_MAX_STAGES_MIN,
   SUPERVISE_MODEL_FIELDS, parseSuperviseContract,
 } from "../src/agent/supervise-contract";
-import { gateToolSpecs } from "../src/agent/glm-session";
+import { gateToolSpecs } from "../src/agent/session-provider";
 
 const fieldNames = SUPERVISE_MODEL_FIELDS.map((f) => f.name);
 

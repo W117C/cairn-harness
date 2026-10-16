@@ -6,7 +6,7 @@
 //     于是"派错了/方向变了"只能干等它跑完 —— 这正是"普通 agent 会派活、顶尖 agent 会改派"的分界。
 //  ② spawn 回执只报"派成功了"，不报在途几个、上限几个 ⇒ 「还要不要再拆一个」只能凭感觉，
 //     撞上 MAX_CONCURRENT_WORKERS 才知道有闸。
-// 注入纪律同 wait_for_agents / spawn_agent：常驻原语走静态规格表（glm-session）+ 运行期实例
+// 注入纪律同 wait_for_agents / spawn_agent：常驻原语走静态规格表（session-provider）+ 运行期实例
 // （installAppTools），不按开关注入——没有开关可关它，关掉就等于「派了收不回」。
 import { ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
 

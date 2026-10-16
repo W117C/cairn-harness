@@ -7,7 +7,7 @@
 // 本模块零装配根依赖：钩子引擎与事件管线都由调用方以参数递进来。
 import { createEventLog, replay, type AgentEvent } from "../events";
 import { runCompaction, createMockSummarizer, compactionCardPayload } from "../agent/compaction";
-import { createGlmSummarizer } from "../agent/glm-session";
+import { createGlmSummarizer } from "../agent/session-provider";
 import type { HookEngine } from "../agent/plugins/hooks";
 import { buildSecurityReport } from "../agent/security/scan";
 import { store } from "./settings-handlers";

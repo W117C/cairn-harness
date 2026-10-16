@@ -28,7 +28,7 @@ import {
 } from "../src/agent/sidechat";
 import { createEventLog, replay, type AgentEvent, type UserMessageEvent } from "../src/events";
 import { projectContext } from "../src/agent/context";
-import { composeTurnMessages } from "../src/agent/glm-session";
+import { composeTurnMessages } from "../src/agent/session-provider";
 
 const tmpDirs: string[] = [];
 async function mkTmp(): Promise<string> {

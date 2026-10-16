@@ -21,7 +21,7 @@ import {
   type CompactionConfig,
   type Summarizer,
 } from "./compaction";
-import { gateToolSpecs } from "./glm-session";
+import { gateToolSpecs } from "./session-provider";
 import { buildMemoryInjectionSafe } from "./memory/inject";
 import { scanModelOutput } from "./worker-report";
 

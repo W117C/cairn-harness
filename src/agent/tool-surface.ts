@@ -6,7 +6,7 @@
 
 export interface InjectedToolSurface {
   name: string;
-  /** 规格从哪一面来：`static` = glm-session 的 gateToolSpecs 静态表（常驻原语），
+  /** 规格从哪一面来：`static` = session-provider 的 gateToolSpecs 静态表（常驻原语），
    *  `runtime` = 运行期按开关注入。不区分的话，静态门会去静态表里找只在运行期出现的工具 ⇒ 假红。 */
   specFace: "static" | "runtime";
   /** worker 哪一档够得着（`remember` 只在 write 面出现——粗粒度布尔会把 read 面判成假红） */

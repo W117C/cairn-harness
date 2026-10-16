@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { gateToolSpecs } from "../src/agent/glm-session";
+import { gateToolSpecs } from "../src/agent/session-provider";
 import { workerToolSpecs, WORKER_TOOL_TABLE, WRITE_WORKER_TOOL_TABLE } from "../src/agent/orchestrator";
 
 it.each(["read", "write"] as const)("%s worker exposes each executable tool exactly once", (mode) => {

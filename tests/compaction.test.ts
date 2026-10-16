@@ -20,7 +20,7 @@ import {
   serializeConversation,
   shouldCompact,
 } from "../src/agent/compaction";
-import { createGlmSessionProvider } from "../src/agent/glm-session";
+import { createGlmSessionProvider } from "../src/agent/session-provider";
 import { withAgentId } from "../src/agent/worker-projection";
 
 let dir: string | undefined;
@@ -442,7 +442,7 @@ describe("事件流契约", () => {
   });
 });
 
-describe("glm-session 压缩接线", () => {
+describe("session-provider 压缩接线", () => {
   it("组装前触发压缩：compaction 事件先落盘再调模型（fresh start 后才请求）", async () => {
     dir = await mkdtemp(join(tmpdir(), "m1d-glm-"));
     const logPath = join(dir, "events.jsonl");

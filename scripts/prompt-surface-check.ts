@@ -11,7 +11,7 @@ import { pathToFileURL } from "node:url";
 import { systemPromptFor } from "../src/agent/system-prompt";
 import { TOOL_NAMES } from "../src/tools/base";
 import { PERMISSION_MODES } from "../src/permissions/modes";
-import { sessionToolSpecs } from "../src/agent/glm-session";
+import { sessionToolSpecs } from "../src/agent/session-provider";
 import { EVIDENCE_TEXT, goalReminder } from "../src/agent/goal";
 import {
   promptSurfaceCell,

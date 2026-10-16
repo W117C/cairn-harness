@@ -31,7 +31,7 @@ describe("prune then validated evidence projection", () => {
     ];
     const before = JSON.stringify(events);
     const assemble = async () => {
-      // Same order as glm-session: raw-event prune, then runtime, then context.
+      // Same order as session-provider: raw-event prune, then runtime, then context.
       const outcome = computePrune({ events });
       expect(outcome.why).toBe("saved");
       expect(outcome.replacements.get(3)).toBe(PRUNED_PLACEHOLDER);

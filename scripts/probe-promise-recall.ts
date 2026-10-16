@@ -234,7 +234,7 @@ export const CLAIM_MARKS: readonly string[] = [
  *       web_fetch 说明书那句与执行端提示同源／goal-drift 把 `why` 接进 finding 与读数行）
  *       → `outputs/claims-goal-drift-2026-10-03/claims-323.log`（未入库那份新判卷先读到 2，`git add` 之后才读到 1：
  *         证人语料走 `git ls-files`＝"已跟踪"含暂存，所以这一档要在暂存之后量，落库后由 HEAD 供同一读数）
- *     0 第 324 页补最后一格（`glm-session.ts#note` 那句「派活前请把它当成不可撤销的开销」）：
+ *     0 第 324 页补最后一格（`session-provider.ts#note` 那句「派活前请把它当成不可撤销的开销」）：
  *       既有判卷只钉了「撤不回来／人在面板上撤」那半句，成本那一半没人钉 ⇒ 这一格不是抄文案，
  *       是把「派活也被摘时不许再留这句话」的两态各钉一次 → `outputs/claims-last-face-2026-10-03/claims-324-after.log`
  *  最新一档的五个数：面 45、模型可见 43、原句证人 32、绑定 6、挑不出段 5（四态相加＝分母）。
@@ -345,7 +345,7 @@ export function claimWitnessFindings(
  * 缺任何一件 ⇒ 这一格**仍算欠证人**，且这条绑定自己上报原因。`why` 给人复核，尺不判它。
  *
  * ③④ 是第 317 页补上去的。原来只有"文件级"那两件（符号在这个判卷文件里出现过），而**面的符号名越通用就越空**：
- * `src/tools/write_file.ts#run`、`src/agent/glm-session.ts#specs` 这种格，任何一条调过工具入口的判卷都能满足它 ⇒
+ * `src/tools/write_file.ts#run`、`src/agent/session-provider.ts#specs` 这种格，任何一条调过工具入口的判卷都能满足它 ⇒
  * 那张表成了"随便填个两边都存在的词就能降帽"的空头支票。指到用例那一层，登记就必须说得出"哪一条判它"。
  * ⑤ 同页补：光指到用例还不够——`run` 在 295 份判卷里有 130 份提到它，符号本身没有区分度时，
  * ③④ 只是把蒙混的成本降低，没有取消 ⇒ 用一个"提到它的判卷文件数"帽把这类符号直接拒掉（见 `BINDING_SYMBOL_MAX_JUDGE_FILES`）。 */

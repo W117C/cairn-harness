@@ -3,7 +3,7 @@
 //
 // 登记纪律：每条都要写「为什么今天是债」＋页号出处；**只准调低**；登记了而盘上已经不是圈 ⇒
 // `classifyCycles` 报 stale 红（登记表自己烂掉＝假存量）。还圈的顺序按 2026-10-03 技术审查 A6：
-// 二选一断圈（`worker-shell-tools → glm-session → memory/inject → memory/lessons → write-face → 回起点`
+// 二选一断圈（`worker-shell-tools → session-provider → memory/inject → memory/lessons → write-face → 回起点`
 // 里挑一条改成运行期惰性取用），断完之后**回来把这一条删掉**。
 import type { CycleDebt } from "./arch-cycles.js";
 
@@ -18,5 +18,5 @@ export const RUNTIME_CYCLE_DEBT: readonly CycleDebt[] = [
   // ⇒ 两套取料面互相咬住（不是"数字好看"，是两个独立实现给出同一答案）。
   // 现状：跨圈符号全在函数体内被使用 ⇒ 今天不炸；**哪天有人在模块顶层用被圈住的符号就是 ESM TDZ**，
   // 而那要跑到那一行才炸、判卷恰好可能不经过 ⇒ 这一格只能靠结构闸，不能靠行为证人。
-  ["src/agent/glm-session.ts", "src/agent/memory/inject.ts", "src/agent/memory/lessons.ts", "src/agent/worker-shell-tools.ts", "src/agent/write-face.ts"],
+  ["src/agent/session-provider.ts", "src/agent/memory/inject.ts", "src/agent/memory/lessons.ts", "src/agent/worker-shell-tools.ts", "src/agent/write-face.ts"],
 ];

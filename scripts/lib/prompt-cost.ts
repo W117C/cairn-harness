@@ -119,7 +119,7 @@ export function summarizePromptCost(rows: readonly PromptCostRow[]): {
 // 这条尺的标签一直是「每请求固定输入」，而分子只有系统提示 ⇒ 标签比取料面大。
 // 真上 wire 的固定部分还包含**逐请求重发的工具规格**：本仓现读 default 档提示 670 字符、
 // 序列化规格 10,131 字符（**15.1 倍**，系统提示只占固定面的 6.2% ⇒ 旧读数少记 93.8%）。
-// 规格由调用方灌进来（本层刻意不 import `agent-runner`/`glm-session`，同文件头注那条纪律）。
+// 规格由调用方灌进来（本层刻意不 import `agent-runner`/`session-provider`，同文件头注那条纪律）。
 
 export interface ModeFaceInput {
   mode: string;

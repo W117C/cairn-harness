@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentEvent } from "../src/events";
 import { Orchestrator, type SpawnArgs } from "../src/agent/orchestrator";
-import { gateToolSpecs } from "../src/agent/glm-session";
+import { gateToolSpecs } from "../src/agent/session-provider";
 import { SPAWN_MODES } from "../src/agent/orchestrator-config";
 import {
   SPAWN_ARG_KEYS, SPAWN_MODE_ARG_READS, unconsumedSpawnArgs,

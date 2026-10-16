@@ -304,7 +304,7 @@ describe("M6 · E 回注：限量、带出处、无出处不注入", () => {
   });
 
   // 第 312 页：`evidence-line:` **在而行内为空**是上面那支的兄弟支，此前没人判。
-  // 修之前它一路走到 `lessonLine` 才抛，而三个生产调用点（glm-session / sidechat / worker-prompt）
+  // 修之前它一路走到 `lessonLine` 才抛，而三个生产调用点（session-provider / sidechat / worker-prompt）
   // 都把注入异常**静默吞掉** ⇒ 一句坏数据让整段跨会话教训消失，且没有任何人知道。
   it("指针行在、内容为空 ⇒ 与「没有那行」走同一道门（不合格，不是半合格）", () => {
     expect(parseLessonDigest("空指针抬头\nevidence-line:")).toBeNull();

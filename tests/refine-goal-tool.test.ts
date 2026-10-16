@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import type { AgentEvent } from "../src/events";
 import { goalReminder, projectGoal } from "../src/agent/goal";
 import { REFINE_GOAL_TOOL, createRefineGoalTool, type GoalViewLike } from "../src/tools/refine_goal";
-import { gateToolSpecs } from "../src/agent/glm-session";
+import { gateToolSpecs } from "../src/agent/session-provider";
 import { WORKER_FORBIDDEN_TOOLS } from "../src/agent/orchestrator-config";
 
 const armed: GoalViewLike = { objective: "修好 completedCount", maxTurns: 8, maxUsd: 0.5, turn: 3, stopped: null };

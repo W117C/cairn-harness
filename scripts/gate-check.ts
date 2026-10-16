@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { runLoop } from "../src/agent/loop";
 import { ClarifyGate, PlanGate } from "../src/agent/gates";
 import { createVerifyHook } from "../src/agent/verify";
-import { buildGlmHistory, createGlmSessionProvider, gateToolSpecs } from "../src/agent/glm-session";
+import { buildGlmHistory, createGlmSessionProvider, gateToolSpecs } from "../src/agent/session-provider";
 import { approvePlan, markPlanProposed, resetPlanState } from "../src/permissions";
 import { sha256MatchesFrozen, sha256MatchesDemoFrozen, frozenCoverageDrift } from "../src/frozen";
 import { createMockProvider } from "../src/providers/mock";

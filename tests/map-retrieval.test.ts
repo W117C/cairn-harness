@@ -25,12 +25,12 @@ import { budgetAfterRetrievalLine, buildMap, createMapBuilder, mapFingerprint } 
 import { clampBudget, mapTokensOf, renderMapBudget } from "../src/agent/map/render.js";
 import { buildGraph, personalizedPageRank, type FileTagsInput } from "../src/agent/map/rank.js";
 import { TAGS_EXTRACT_VERSION, __resetLangCache, __resetQueryCache } from "../src/agent/map/parse.js";
-import { createGlmSessionProvider } from "../src/agent/glm-session";
+import { createGlmSessionProvider } from "../src/agent/session-provider";
 import { createEventLog, type EventLog } from "../src/events";
 
 const TMP: string[] = [];
 const buildSrc = readFileSync(fileURLToPath(new URL("../src/agent/map/build.ts", import.meta.url)), "utf8");
-const sessionSrc = readFileSync(fileURLToPath(new URL("../src/agent/glm-session.ts", import.meta.url)), "utf8");
+const sessionSrc = readFileSync(fileURLToPath(new URL("../src/agent/session-provider.ts", import.meta.url)), "utf8");
 
 /** 合成语料：`n` 个 `src/f###.ts`，其中 `hot` 名单里的带 `hotTerm`，其余只带到处都有的「模型」。 */
 function corpus(n: number, hot: string[], hotTerm = "用量归因"): RetrievalEntry[] {

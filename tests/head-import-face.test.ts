@@ -245,7 +245,7 @@ describe("真表自证：这把尺不许是空载的，也不许对事故那笔�
     expect(dang.map((d) => d.target).sort()).toEqual([
       "src/main/provider-runtime.ts", "src/main/run-attachments.ts", "src/main/run-request.ts", "src/providers/capabilities.ts",
     ]);
-    expect(missing.map((m) => m.target + ":" + m.symbol)).toEqual(["src/agent/glm-session.ts:SessionTransport"]);
+    expect(missing.map((m) => m.target + ":" + m.symbol)).toEqual(["src/agent/session-provider.ts:SessionTransport"]);
   });
 
   it("干净的那一笔（`69fbb0d`）必须 0 项：尺不许靠假红证明自己在干活", () => {

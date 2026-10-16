@@ -38,7 +38,7 @@ async function main(): Promise<void> {
   const logDir = await mkdtemp(join(tmpdir(), "probe-recall-logs-"));
   const logPath = join(logDir, "session.events.jsonl");
   await writeFile(logPath, "", "utf8");
-  // 与 glm-session.ts 里那一行同算法（不是抄的字符串，是同一表达式）：
+  // 与 session-provider.ts 里那一行同算法（不是抄的字符串，是同一表达式）：
   const attachmentsDir = join(dirname(logPath), "prune-attachments");
 
   // 触发形状**逐字照抄** `scripts/prune-check.ts` 的长会话（那边稳定出 `why==="saved"`；

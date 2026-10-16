@@ -8,7 +8,7 @@
 // 两条纪律：
 //  · 字段名的真值在 `src/main/automations.ts` 的校验器（跨层方向只能是 main→agent，所以这里不 import 它，
 //    由 tests/automation-tool-surface.test.ts 做那份对账：规格不许发明字段）。
-//  · 这五件**不进 core 面**（见 glm-session 的 CORE_SURFACE_TOOL_NAMES）：固定面每次请求都付字节，
+//  · 这五件**不进 core 面**（见 session-provider 的 CORE_SURFACE_TOOL_NAMES）：固定面每次请求都付字节，
 //    而"排一次定时任务"不是每轮都用得上的能力；降配梯砍掉谁会说出去（MS5），比让它常驻便宜。
 import type { GlmToolSpec } from "../providers/glm";
 

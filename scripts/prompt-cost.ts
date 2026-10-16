@@ -17,7 +17,7 @@
 //   node --import tsx scripts/prompt-cost.ts --plugin-tools face.json  # 量一个含插件的真实面
 //
 // 退出码恒 0：它是尺子不是门（红了要拦谁也没想清楚）。哪天要拦，登记进 GATES 再谈。
-import { sessionToolSpecs, OPTIONAL_TOOL_NAMES, type SessionPluginTool } from "../src/agent/glm-session";
+import { sessionToolSpecs, OPTIONAL_TOOL_NAMES, type SessionPluginTool } from "../src/agent/session-provider";
 import { AUTOMATION_TOOL_NAMES } from "../src/agent/automation-surface";
 // M10 拆分：`BASE_SYSTEM` 已搬去 `src/agent/system-prompt.ts`。**从这里直接取它，而不是走 agent-runner**——
 // 本脚本只要一段常量文本，没有理由把 2,738 行的 runner 及其整条依赖链拉进来（扇入读数见
@@ -85,7 +85,7 @@ export function faceCost(
 async function pluginRootState(): Promise<{ root: string; exists: boolean; entries: number }[]> {
   const { stat, readdir } = await import("node:fs/promises");
   const { join } = await import("node:path");
-  // ⚠️ 工作区取 `M2B_WORKSPACE ?? cwd`，**与 glm-session.ts 的 `opts.workspace` 同一份来源**。
+  // ⚠️ 工作区取 `M2B_WORKSPACE ?? cwd`，**与 session-provider.ts 的 `opts.workspace` 同一份来源**。
   // 第一版这里图省事写了 `PI_SCRATCH_DIR`，那是个临时目录不是工作区 ⇒ 把一个不存在的插件目录
   // 报成「12 个条目」。教训与本仓纪律同款：**读数工具自己取错根，输出的数字就是假的**，
   // 而且它不会报错。改根之后必须复跑核对，不能只看「跑通了」。

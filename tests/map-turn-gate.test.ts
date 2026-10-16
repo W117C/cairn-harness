@@ -1,5 +1,5 @@
 /* 「地图只在首轮」这条闸的**另一半**（待办 #34）。
-   第 206 页那条尺守的是「首轮有没有」；今天现读 `glm-session.ts` 里
+   第 206 页那条尺守的是「首轮有没有」；今天现读 `session-provider.ts` 里
    `if (!mapBuilder || historyForMap.length > 2) return null;` 的另一支——**第二轮起不送**——仓里零个观察者：
    把 `> 2` 改成 `> 200`，全量判卷一条都不红（本仓反复点名的那一族：答不出哪条用例会红，就是这一格没有观测者）。
    这条闸不是免费的偏好，是省钱的位置：地图消息排在**历史之前**（`composeTurnMessages` 的 system 块里），
@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { type MapBuilder, type MapBuildResult } from "../src/agent/map/build";
 import { MAX_FILES_DEFAULT } from "../src/agent/map/cap";
-import { createGlmSessionProvider } from "../src/agent/glm-session";
+import { createGlmSessionProvider } from "../src/agent/session-provider";
 import { createEventLog, type EventLog } from "../src/events";
 
 const TMP: string[] = [];

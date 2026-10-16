@@ -10,7 +10,7 @@ import {
   surfaceSpecChars,
   surfaceTierOf,
 } from "../src/agent/model-surface";
-import { gateToolSpecs, sessionToolSpecs } from "../src/agent/glm-session";
+import { gateToolSpecs, sessionToolSpecs } from "../src/agent/session-provider";
 import type { GlmToolSpec } from "../src/providers/glm";
 
 vi.mock("../src/agent/memory/inject", async () =>
@@ -174,7 +174,7 @@ describe("模型面总预算：接在真装配链上", () => {
       sent.push(args);
       yield { type: "assistant_message" as const, content: "ok" };
     };
-    const { createGlmSessionProvider } = await import("../src/agent/glm-session");
+    const { createGlmSessionProvider } = await import("../src/agent/session-provider");
     const provider = createGlmSessionProvider(path, {
       map: false,
       workspace: dir,

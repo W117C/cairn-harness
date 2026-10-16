@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 import { estimateContextTokens } from "../src/agent/compaction";
-import { sessionToolSpecs, type SessionPluginTool } from "../src/agent/glm-session";
+import { sessionToolSpecs, type SessionPluginTool } from "../src/agent/session-provider";
 import { SPAWN_MODES, workerToolSpecs } from "../src/agent/orchestrator";
 import { PluginRuntime } from "../src/agent/plugins";
 import { skillInvokeName } from "../src/agent/plugins/skills";

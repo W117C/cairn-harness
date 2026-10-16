@@ -3,7 +3,7 @@
  * 立尺的实测（2026-09-27，第 131 页）：`cb70297`「产品面：把 core-only 的内核接成一条真能用的 cairn 命令」
  * 把**消费者**提交了、把它新建的模块留下了未跟踪状态 ⇒ HEAD 里 5 个相对模块悬空
  * （`src/main/{provider-runtime,run-request,run-attachments}.ts`、`src/providers/capabilities.ts`
- * ＋ `glm-session` 少一个 `SessionTransport` 导出），干净树 `head-cert` 跑出
+ * ＋ `session-provider` 少一个 `SessionTransport` 导出），干净树 `head-cert` 跑出
  * **typecheck 8 条错、vitest 34 个判卷文件红**，而**主树同一时刻 236 files / 2701 tests 全绿**。
  * ⇒ 这是「HEAD 红着而主树绿」那一族最贵的一次：主树的判卷永远看不见它，
  * 而唯一能看见的手段（认证树整跑）要 69 秒。

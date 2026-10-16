@@ -11,7 +11,7 @@ import {
   measureHeadSurvival,
 } from "../src/agent/compaction-cost";
 import { DEFAULT_COMPACTION_CONFIG } from "../src/agent/compaction";
-import { createGlmSessionProvider } from "../src/agent/glm-session";
+import { createGlmSessionProvider } from "../src/agent/session-provider";
 import { createMockSummarizer } from "../src/agent/compaction";
 import { createEventLog } from "../src/events";
 import type { GlmMessage, GlmToolSpec } from "../src/providers/glm";

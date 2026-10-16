@@ -16,7 +16,7 @@ import { goalStopDecision, lastTurnWasTruncated, projectGoal } from "../src/agen
 import { withAgentId } from "../src/agent/worker-projection";
 import { runLoop } from "../src/agent/loop";
 import { createMockProvider } from "../src/providers/mock";
-import { createGlmSessionProvider, createGlmSummarizer } from "../src/agent/glm-session";
+import { createGlmSessionProvider, createGlmSummarizer } from "../src/agent/session-provider";
 import { streamGlm, type GlmMessage } from "../src/providers/glm";
 import { streamAnthropic } from "../src/providers/anthropic";
 import { streamOpenAI } from "../src/providers/openai";
@@ -653,7 +653,7 @@ describe("评审修的五处", () => {
 });
 
 describe("非流式分支与 prompt 级拦截（第二次实测补上的两处盲区）", () => {
-  // 动手前的实测：src/ 里只有一处真用 stream:false（glm-session 的压缩摘要器），
+  // 动手前的实测：src/ 里只有一处真用 stream:false（session-provider 的压缩摘要器），
   // 而那一支从不读 finish_reason；Gemini 被 prompt 级安全策略拦下时 candidates 整个缺席，
   // 只读 candidates[0].finishReason 的那一条道永远撞不到。两处都是「字段在、零读者」。
   function stubJsonFetch(body: unknown): typeof fetch {
