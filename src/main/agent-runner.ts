@@ -14,8 +14,8 @@ import { runCompaction } from "../agent/compaction";
 import { buildMap } from "../agent/map/build";
 import { computePrune } from "../agent/prune";
 import {
-  createGlmSessionProvider,
-  createGlmSummarizer,
+  createSessionProvider,
+  createSessionSummarizer,
   gateToolSpecs,
   type SessionPluginTool,
   type SessionTransport,
@@ -345,7 +345,7 @@ async function orchestratorExtras(
     // §9.10「worker 继承主会话插件启用集」：worker 的工具调用过同一套钩子，视图按 worker 档降权限。
     // 闭包取 currentPluginRuntime()（本函数在装载前就被展开，装载完成后才真正被调）。
     workerHooks: (mode: "read" | "write") => currentPluginRuntime()?.hooks.forWorkerMode(mode) ?? null,
-    ...(process.env.CAIRN_API_KEY ? { workerSummarizer: createGlmSummarizer() } : {}),
+    ...(process.env.CAIRN_API_KEY ? { workerSummarizer: createSessionSummarizer() } : {}),
     // 会话成本底线（§4.4.8）：maxUsd = 0 ⇒ 整闸不接（缺省零行为）。单价留给价表兜底，
     // 所以这里必须把**当前真拨的那个模型**一起递下去——只递 maxUsd 会让闸在最常见配置下估不出价，
     // 而递设置盘字段会在「留空」与「per-run 指定档位」两种合法配置下和实付分叉（`budgetPriceKeyOf`）。
@@ -871,7 +871,7 @@ function createProvider(
   selection: MainModelSelection,
   sessionOptions?: Pick<RunOptions, "logPath" | "workspace" | "attachments"> & {
     emit: (event: AgentEvent) => Promise<void>;
-    plugins?: NonNullable<Parameters<typeof createGlmSessionProvider>[1]>["plugins"];
+    plugins?: NonNullable<Parameters<typeof createSessionProvider>[1]>["plugins"];
     requestFace: () => { tools: GlmToolSpec[]; note: string };
     solpi?: SolpiRuntime;
     promptCache?: boolean;
@@ -901,7 +901,7 @@ function createProvider(
       ? { reasoningEffort: sessionOptions.thinking }
       : {}),
   });
-  // createGlmSessionProvider predates native adapters and exposes a GLM-shaped transport slot.
+  // createSessionProvider predates native adapters and exposes a GLM-shaped transport slot.
   // This adapter forwards cancellation + OpenAI/GLM metering while binding the already-resolved spec.
   const transport: SessionTransport = (messages, options, tools, call) => modelTransport(messages, tools ?? [], {
     call,
@@ -912,7 +912,7 @@ function createProvider(
 
   if (sessionOptions) {
     const attachmentContext = formatAttachmentContext(sessionOptions.attachments ?? [], sessionOptions.workspace);
-    return createGlmSessionProvider(sessionOptions.logPath, {
+    return createSessionProvider(sessionOptions.logPath, {
       system: systemPrefix,
       workspace: sessionOptions.workspace,
       requestFace: sessionOptions.requestFace,
