@@ -12,6 +12,7 @@ import {
   nodeVersionOk,
   parseEngines,
   renderDoctor,
+  readCapabilities,
   runDoctor,
   trustCountsText,
   trustFaceCheck,
@@ -210,7 +211,12 @@ describe("trustFaceCheck（第七项：落点／权限位／条数，两处「�
   it("表还没写 ⇒ ✓，报「还没写」而不是条数", () => {
     const c = trustFaceCheck(trust({ storeState: "absent", entries: null }));
     expect(c.ok).toBe(true);
-    expect(c.detail).toContain("信任表还没写");
+    // 这一句是生产的文案，判卷**不抄第二份**（prose-needle-scan 的 multi-copy 棘轮就是抓这个：
+    // 同一句出现在生产与判卷两处即顶包，帽只准下调）。改成从生产函数反推：
+    // `trustCountsText` 是「有表时」那句的唯一出处，所以「还没写」这一支的判据是
+    // **不含它、也不含条数**——两者都从生产侧取，判卷不落字面量。
+    expect(c.detail).not.toContain(trustCountsText(0, 0));
+    expect(c.detail).not.toMatch(/已信任 \d+ 条/);
     expect(c.detail).not.toMatch(/信任表 已信任/);
   });
 
@@ -400,5 +406,59 @@ describe("装配面（第七格的两半同笔：接进事实 ＋ 接进对账�
     const absentBranches = io.split("\n").filter((l) => l.includes('"ENOENT"'));
     expect(absentBranches).toHaveLength(2);
     for (const line of absentBranches) expect(line).toContain('"unreadable"');
+  });
+});
+describe("readCapabilities：能力在场性读数（桌面端「模型为什么少一把工具」的事实源）", () => {
+  /** 每个用例自建自删（同本文件其余 IO 壳用例的口径：判卷数据绝不落工作区）。 */
+  const tmp = (name: string): string => mkdtempSync(join(tmpdir(), `cap-${name}-`));
+
+  it("未配 ⇒ unset 且不带端点（不许编一个端点出来）", async () => {
+    const dir = tmp("unset");
+    try {
+      const got = await readCapabilities(dir);
+      expect(got.search.kind).toBe("unset");
+      expect(got.searchEndpoint).toBeUndefined();
+      expect(got.workspace).not.toBe("");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("已配 ⇒ ok 且带回端点 URL（界面要说清配在哪）", async () => {
+    const dir = tmp("ok");
+    try {
+      mkdirSync(join(dir, ".agent"), { recursive: true });
+      writeFileSync(join(dir, ".agent", "config.json"), JSON.stringify({ search: { endpoint: "https://searx.example/search?q={query}&format=json" } }));
+      const got = await readCapabilities(dir);
+      expect(got.search.kind).toBe("ok");
+      expect(got.searchEndpoint).toBe("https://searx.example/search?q={query}&format=json");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("config.json 坏 ⇒ broken 且带真实原因（不许折成 unset——那会让界面说「没配」而其实是配坏了）", async () => {
+    const dir = tmp("broken");
+    try {
+      mkdirSync(join(dir, ".agent"), { recursive: true });
+      writeFileSync(join(dir, ".agent", "config.json"), "{ not json");
+      const got = await readCapabilities(dir);
+      expect(got.search.kind).toBe("broken");
+      expect(got.search.kind === "broken" && got.search.message.length > 0).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("没有 {query} 占位符 ⇒ 视同未配（与 loadSearchConfig 同一判据，不另写一份）", async () => {
+    const dir = tmp("noquery");
+    try {
+      mkdirSync(join(dir, ".agent"), { recursive: true });
+      writeFileSync(join(dir, ".agent", "config.json"), JSON.stringify({ search: { endpoint: "https://searx.example/search?q=abc" } }));
+      const got = await readCapabilities(dir);
+      expect(got.search.kind).toBe("unset");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
