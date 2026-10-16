@@ -16232,11 +16232,13 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    一支，理由在它头上一次说清。**没有**采纳审查给的另一个选项「收窄到 `ENOENT`」：这里的意图是
    「面板失败即缺席」，收窄等于把一支面板的异常升级成整条 IPC 的异常——正是这七份 catch 要防的事。
    `providerKeys` 的显式收窄（只取三枚在场格、丢 `envProviders`）逐字保留。
-4. **#6-3 是审查的误判（记账，不落笔）**：报告写「版本常量双读 ｜ `cli.ts:209-210` ↔
-   `main/doctor.ts:351` ｜ 单源导出 `PKG_VERSION`」——不成立。`doctor.ts` 那一处读的是 `package.json`
-   的 **`engines.node`**（判 Node 版本区间，走 `parseEngines`），与产品版本号毫无关系。全仓读
-   `package.json` 的六处逐一看过：只有 `cli.ts:209` 取 `version`，**没有第二份抄本**。若将来要抽
-   `PKG_VERSION`，唯一消费者也只有 CLI 一处，抽出来反而是给单一消费者加一层间接。
+4. **#6-3 是审查的误判（记账，不落笔）**：报告写「版本常量双读 ｜ `src/cli.ts#PKG_VERSION` ↔
+   `src/main/doctor.ts#parseEngines` ｜ 单源导出 `PKG_VERSION`」——不成立。`src/main/doctor.ts` 那一处
+   读的是 `package.json` 的 **`engines.node`**（判 Node 版本区间，走 `parseEngines`），与产品版本号毫无
+   关系。全仓读 `package.json` 的六处逐一看过：只有 `src/cli.ts` 取 `version`，**没有第二份抄本**。
+   若将来要抽 `PKG_VERSION`，唯一消费者也只有 CLI 一处，抽出来反而是给单一消费者加一层间接。
+   （本页首次落笔时这几处引用照抄了审查报告的裸文件名形，被 docs-check **D-10 判红 2 条**；第 497 页
+   顺手改成 `path#符号` 形——D-10 的口径原话就是「改成 HEAD 里真存在的路径，更好的写法是 `path#符号`」。）
 5. **读数**：typecheck 0 报错｜定向判卷 5 文件 **85 条全绿**｜全量核心判卷 **388 文件 5558 条全绿
    （202.55s）**｜`--check-needles` **1571 条｜阻断 2**——与上一页同址的 system-prompt 在飞账
    （另一笔改动正在改 `BASE_SYSTEM` 那一段），**本笔零新增**（未入库面 0、killer 指针失效 0、
@@ -16250,3 +16252,46 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    `tests/render-image.test.ts`（Chrome 渲染写 PNG 被挡，`ENOENT …/frame.png`）与
    `tests/cli-surface.test.ts` 曾报红；**出沙箱、改动落定后重跑全绿（388 文件 5558 条）** ⇒ 红是
    沙箱与一次「编辑中途被读文件」的竞态，不是代码回归。
+
+## 2026-10-17 · 第 497 页：agent-runner.ts 第一刀——演示/剧本通道的数据面外提（`main/demo-scripted.ts`）
+
+1. **动因**：结构债审查报告 #2（`src/main/agent-runner.ts`，1,892 行，桌面端唯一入口）。报告点名
+   「fixtures 硬编码驻留生产 runner（`WORKSPACE=fixtures/todo-app` 等）——demo 数据面应抽成
+   `main/demo-scripted.ts`」。本页落的就是这一刀；报告建议的「外壳 → 会话装配 / provider 装配 /
+   run 管线」三缝属后续几刀，本页不动。
+2. **搬走的六件**：缺省靶子 `DEFAULT_WORKSPACE`（原 `WORKSPACE`——取值一字未动，只把「缺省」写进
+   名字，它确实是**缺省**而非唯一靶子）、`MOCK_FIXTURE`、`GATE_FIXTURE`、`LSP_DEMO_FIXTURE`
+   （＋私有 `DEMO_DIR`）、`scriptedMainModelPath`、`loadDemoWorkerModels`。搬法沿用既有先例
+   （provider-key-inject / settings-handlers / state-handlers 那一族）：实现搬去轻模块，装配根按
+   原路径继续导出。`scriptedMainModelPath` 是**导出 API**（`tests/usage-attribution.test.ts` 按原
+   路径 import），故顶上「先 import 再 export」两条都写——`export … from` 不进本地作用域，而装配根
+   自己在 `createProvider` 里还要用它（system-prompt 那次搬迁踩过同一个坑）。
+3. **ROOT 就地重算**、不从装配根 import：两个文件同在 `src/main/`，同一个式子得同一个值。反过来
+   import 会把「谁负责定位仓根」变成一次装配根依赖，与本模块的定位（不依赖装配根）相反。装配根
+   自己那份 `ROOT` 留着——`banditStatePath` 那一处还在用。
+4. **顺手删掉一条零读者的声明**：`SIDECHAT_DEMO_FIXTURE` 在装配根里从 sidechat 面搬走起就再无人读；
+   同一路径在 `src/main/sidechat-handlers.ts` 另有一份活的（那份自己算 ROOT）。同笔清掉随之作废的
+   三个 import（`loadWorkerScript` / `scriptedWorkerModel` / `readdir`）。
+5. **卫星账**：① `tests/usage-attribution.test.ts` 那条「剧本 env 枚举整份只许活在
+   `scriptedMainModelPath` 里」的取料面改**并料**（新模块 + 装配根；顺序新模块在前——颠倒会切出
+   空串，本笔真踩过这一下，注释里留了记号）；② 四条 env 键（`M3A_MAIN_SCRIPT` / `M1B_GATE_FLOW` /
+   `M1C_AUTONOMY_SCRIPT` / `M2A_LSP_DEMO`）现读只剩那一处读点，判据原意（只许有一处）不变；
+   ③ **变异锚点零改指**：52 条锚在装配根的针脚里，落点在这附近的只有
+   `main-usage-model-ignores-scripted-channel` 一条，而它的锚文在 `mainUsageModelOf`（仍在装配根），
+   逐字未动。
+6. **读数**：typecheck 0 报错｜定向判卷 **11 文件 165 条全绿**（把全仓读 `agent-runner.ts` 源码的
+   判卷逐一点了名）｜全量核心判卷 **388 文件 5558 条全绿**｜`--check-needles` **1571 条｜阻断 2**
+   ——与上两页同址的 system-prompt 在飞账；未入库面 0、killer 指针失效 0、改法语法体检全绿｜
+   docs-check 全绿（本笔顺带改了第 496 页的 2 条 D-10 引用，见第 8 条）。
+7. **行数**：装配根 **1,892 → 1,854**（净 −38：搬走约 70 行，装配根补了约 30 行指路注释），新模块
+   77 行。这一刀的性质是**域拆分**不是行数锦标赛——它消掉的是「生产 runner 揣着 demo 数据面」，
+   行数是副产物；真要瘦身得看 #2 的三缝。
+8. **顺手修的 D-10 红（本笔之外的一处笔误）**：第 496 页第 4 条那几处引用照抄了审查报告的裸文件名
+   形（`cli.ts:209` / `main/doctor.ts:351`），被 docs-check D-10 判红 2 条——本节改成 `path#符号`
+   形（`src/cli.ts#PKG_VERSION` ↔ `src/main/doctor.ts#parseEngines`）。台账是 append-only，这里只动
+   引用形状、不动那句话的结论。
+9. **仍未证（不许读成绿）**：① 桌面层（`pnpm --filter cairn-desktop test`）与 CI 未跑这一笔；
+   ② 报告 #2 的三缝（会话装配 / provider 装配 / run 管线，含 561 行的 `runAgent` 与
+   `liveRunPaths` / `omittedForever` 的 `RuntimeCapability` 收拢）**未动**；③ 报告 #3 `cli.ts`、
+   #5 `mutate-verify` 两刀未动（`src/cli.ts` 与 `src/main/session-handlers.ts` 现被别的会话改着，
+   那两处现在动必撞车）。

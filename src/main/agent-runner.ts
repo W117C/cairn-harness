@@ -3,7 +3,7 @@
 // 真实门在本模块的工具包装里 —— 复用 src/permissions 的 checkPermission，语义与 M0 一致：
 // read-only 拒副作用 / default 询问（UI 批准才执行）/ auto 放行；沙箱不可用时写工具强制逐条审批。
 import { readFileSync, existsSync } from "node:fs";
-import { rm, readdir, mkdir, realpath } from "node:fs/promises";
+import { rm, mkdir, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { dirname, join, resolve } from "node:path";
@@ -120,8 +120,6 @@ import {
   orchestratorForAgent,
   orchestratorForApproval,
   orchestratorForMerge,
-  loadWorkerScript,
-  scriptedWorkerModel,
   type OrchestratorOptions,
   type SpawnArgs,
   type WorkerModel,
@@ -156,6 +154,13 @@ import {
   handleAgentDecide, handleCardAction, handleClarifySubmit, handlePlanDecide, handleRunCancel,
   setCardActionDeps,
 } from "./card-action-handlers";
+// 演示/剧本通道的**数据面**（fixtures 路径 + 剧本枚举 + demo worker 装配）2026-10-17 搬去
+// `./demo-scripted.ts`（结构债审查报告 #2：demo 数据面不该驻留装配根）。`scriptedMainModelPath`
+// 是导出 API（`tests/usage-attribution.test.ts` 按原路径 import），所以下面**再导出**一次——
+// 那条 `export … from` 只对外可见、**不进本地作用域**，故 上面 import、这里 export 两条都要
+// （本文件 system-prompt 那次搬迁踩过同一个坑，见下面 M10 那段注释）。
+import { DEFAULT_WORKSPACE, MOCK_FIXTURE, loadDemoWorkerModels, scriptedMainModelPath } from "./demo-scripted";
+export { scriptedMainModelPath };
 
 // settings 面不反向依赖本模块（避免装配根 ↔ 轻模块成环）：它需要本模块的两处按回调注入。
 setSettingsHostDeps({
@@ -164,9 +169,10 @@ setSettingsHostDeps({
 });
 
 // M4a 调度器接线同理（实现住 ./scheduler-runtime）：它需要本模块的四处活状态，按回调注入。
-// 一律传闭包而不是现值：`WORKSPACE` / `hooks` 都在本调用之后才声明，且会话与钩子要活读。
+// 一律传闭包而不是现值：`hooks` 在本调用之后才声明，且会话与钩子都要活读（`DEFAULT_WORKSPACE`
+// 随本笔搬成 import 之后值已固定，这里保留闭包写法只为不让两处形状分叉）。
 setSchedulerRuntimeDeps({
-  defaultWorkspace: () => WORKSPACE,
+  defaultWorkspace: () => DEFAULT_WORKSPACE,
   onEvent: (e) => hooks.onEvent?.(e),
   runSession: (workspace, args) =>
     handleAgentRun({ message: args.message, mode: args.mode }, { sessionId: args.sessionId, workspace, unattended: true, signal: args.signal }),
@@ -188,7 +194,7 @@ setSidechatHandlerDeps({
 
 // agent:state / 插件面板 / 工作区解析面同理（实现住 ./state-handlers）：装配根三处活状态注入。
 setStateHandlerDeps({
-  defaultWorkspace: () => WORKSPACE,
+  defaultWorkspace: () => DEFAULT_WORKSPACE,
   sandboxState: () => sandboxState,
   lastLogPath: () => lastLogPath,
 });
@@ -208,11 +214,11 @@ setCardActionDeps({
 });
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const WORKSPACE = join(ROOT, "fixtures", "todo-app");
-const MOCK_FIXTURE = join(ROOT, "fixtures", "mock", "todo-fix.jsonl");
-// M1b 三门演示通道：M1B_GATE_FLOW=1 时用 fixtures/gate/gate-flow.jsonl 驱动（clarify/plan 卡片真人交互）。
-// env 门控缺省关闭，M0 事件流字节不变。
-const GATE_FIXTURE = join(ROOT, "fixtures", "gate", "gate-flow.jsonl");
+// fixtures 一族路径（缺省靶子 / mock / gate / lsp 剧本）2026-10-17 搬去 `./demo-scripted.ts`：
+// 「生产 runner 里揣着 demo 数据面」正是审查 #2 点名的那件事。那边的 `DEFAULT_WORKSPACE` 就是原先
+// 这里的 `WORKSPACE`——取值一字未动，只把「缺省」写进名字（它确实是**缺省**而非唯一靶子）。
+// `SIDECHAT_DEMO_FIXTURE` 更早一步就没了读者：它随 sidechat 面搬去 `./sidechat-handlers.ts`
+// （那份自己算 ROOT），装配根里只留下一条零读者的声明，本笔顺手删。
 // M10 拆分：系统提示词面（`BASE_SYSTEM` / 按档取面）搬去 `src/agent/system-prompt.ts`
 // ——那段是**零依赖的常量文本 + 一个纯函数**，却住在 2,771 行的本文件里，两道门为了取一段常量
 // 得 import 整个 runner。**对外接口一行不变**：这里**再导出**（与 `gates.ts` 再导出 `assertion-health`
@@ -220,11 +226,6 @@ const GATE_FIXTURE = join(ROOT, "fixtures", "gate", "gate-flow.jsonl");
 // 搬迁是**逐字**的：8 条变异锚点钉在这份文本的字面量上，锚点的 `src:` 已同步改指新文件。
 // （import 在文件头那一段；此处只补再导出——`export … from` 不进本地作用域，不能只写这一条。）
 export { BASE_SYSTEM, systemPromptFor };
-// M2g 任务 6：演示通道剧本外部化（fixtures/demo/**，带冻结 sha 于 scripts/frozen-demo-sha256.json；
-// **独立**于判卷区 frozen-sha256.json）。缺省零行为不变；显式给路径的旧用法保留。
-const DEMO_DIR = join(ROOT, "fixtures", "demo");
-const LSP_DEMO_FIXTURE = join(DEMO_DIR, "lsp-demo.jsonl");
-const SIDECHAT_DEMO_FIXTURE = join(DEMO_DIR, "sidechat-demo.jsonl");
 interface Session {
   mode: PermissionMode;
   askGate: AskGate | null;
@@ -302,22 +303,11 @@ export function budgetPriceKeyOf(selection: MainModelSelection): string {
   return selection.kind === "demo" ? "" : selection.spec.model;
 }
 
-/** 这一轮主会话走的是**预录剧本**吗？是 ⇒ 返回那份剧本的路径；否 ⇒ null。
- *  这五行 env 判定原先只活在 `createProvider` 里，而"这笔用量是不是真钱"要问的是同一件事
- *  ⇒ 抄第二份迟早漂（第十三族）。现在装配与归因都吃这一个式子。
- *  顺序即语义：越靠前的通道越优先（`M3A_MAIN_SCRIPT` 指的是显式文件路径，故要 resolve）。 */
-export function scriptedMainModelPath(env: NodeJS.ProcessEnv = process.env): string | null {
-  if (env.M3A_MAIN_SCRIPT) return resolve(env.M3A_MAIN_SCRIPT);
-  if (env.M3A_AGENTS_DEMO === "1") return join(ROOT, "fixtures", "agents", "main-demo.jsonl");
-  if (env.M1B_GATE_FLOW === "1") return GATE_FIXTURE;
-  if (env.M1C_AUTONOMY_SCRIPT) return env.M1C_AUTONOMY_SCRIPT;
-  if (env.M2A_LSP_DEMO) return env.M2A_LSP_DEMO === "1" ? LSP_DEMO_FIXTURE : env.M2A_LSP_DEMO;
-  return null;
-}
-
 /** 这一轮主会话的 usage 归因键：真拨号 ⇒ 与美元闸同一个档位名；剧本 / demo ⇒ 空串（不可定价，由消费方出声）。
  *  单独成函数是因为**装配与归因必须答同一个问题**（`createProvider` 依它选传输通道，盖章器依它决定盖不盖）；
- *  抄第二份迟早漂（第十三族），且写成一行内联赋值就没有判卷能进到这个决策点里。 */
+ *  抄第二份迟早漂（第十三族），且写成一行内联赋值就没有判卷能进到这个决策点里。
+ *  它问的 `scriptedMainModelPath` 2026-10-17 随 fixtures 面搬去 `./demo-scripted.ts`（本文件顶上
+ *  import 进来；那里是那份剧本 env 枚举的唯一落点）。 */
 export function mainUsageModelOf(selection: MainModelSelection): string {
   return scriptedMainModelPath() === null ? budgetPriceKeyOf(selection) : "";
 }
@@ -485,34 +475,6 @@ async function ensureSessionOrchestrator(): Promise<Orchestrator | null> {
   });
   activeOrchestrator = orch;
   return orch;
-}
-
-/** M3A_AGENTS_DEMO 演示通道：spawn 的 model 字段 → fixtures/agents/<name> 脚本模型。
- *  缓存**剧本**而非模型实例——每次 spawn 造新 scriptedWorkerModel（光标独立，同名多 spawn 各自跑全本）。
- *  slow- 前缀的剧本逐事件延迟（截图节奏：一 worker done、一 worker running）。 */
-async function loadDemoWorkerModels(): Promise<(args: SpawnArgs) => WorkerModel | undefined> {
-  const dir = join(ROOT, "fixtures", "agents");
-  const scripts = new Map<string, Parameters<typeof scriptedWorkerModel>[0]>();
-  const names = (await readdir(dir)).filter((f) => f.endsWith(".jsonl") && !f.startsWith("main-"));
-  if (names.length === 0) throw new Error("M3A_AGENTS_DEMO：fixtures/agents 下没有 worker 剧本");
-  for (const n of names) {
-    scripts.set(n, await loadWorkerScript(join(dir, n)));
-  }
-  return (args: SpawnArgs) => {
-    const name = typeof args.model === "string" ? args.model : "";
-    const script = scripts.get(name);
-    if (!script) return undefined; // 未知剧本名 → 上层 fail-closed 拒绝 spawn
-    if (name.startsWith("slow-")) {
-      const base = scriptedWorkerModel(script);
-      return async function* (messages, tools) {
-        for await (const out of base(messages, tools)) {
-          await new Promise((r) => setTimeout(r, 700));
-          yield out;
-        }
-      };
-    }
-    return scriptedWorkerModel(script);
-  };
 }
 
 interface Hooks {
@@ -1743,7 +1705,7 @@ export async function handleAgentRun(
       req.workspace,
       process.env.M0B_WORKSPACE,
       settings.workspace,
-      WORKSPACE,
+      DEFAULT_WORKSPACE,
     );
 
     let attachments: ValidatedRunAttachment[] = [];

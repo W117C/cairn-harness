@@ -311,6 +311,10 @@ describe("真编排器：agent_spawned 上的归因键随「拨不拨号」分�
 
 describe("接线：盖章点=主会话＋基准跑器两处，且不许再抄第二份剧本枚举", () => {
   const runner = () => readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf8");
+  // 2026-10-17 搬迁：`scriptedMainModelPath` 随 fixtures 面搬去 `./demo-scripted.ts`。这一族里凡量
+  // 「枚举只许活在哪个**函数**里」的尺，取料面就得跟着并料（同 `orchestrator-hold.test.ts` 的
+  // ORCH_SRC_ALL 先例）——量的是「只许有一处」，不是「只许在某个文件里」。
+  const demoScripted = () => readFileSync(fileURLToPath(new URL("../src/main/demo-scripted.ts", import.meta.url)), "utf8");
   const orch = () => readFileSync(fileURLToPath(new URL("../src/agent/orchestrator.ts", import.meta.url)), "utf8");
 
   it("pipeline 里 stamp 在 append **之前**（live 与盘必须同一个对象），且这一份文件里只有这一处盖章", () => {
@@ -325,19 +329,21 @@ describe("接线：盖章点=主会话＋基准跑器两处，且不许再抄第
   });
 
   it("剧本 env 枚举整份只许活在 scriptedMainModelPath 里（装配与归因共用同一个式子）", () => {
-    const t = runner();
-    const fn = t.slice(t.indexOf("export function scriptedMainModelPath"), t.indexOf("export function mainUsageModelOf"));
+    // 并料后再切片，**顺序即语义**：函数头住在 `./demo-scripted.ts`，`mainUsageModelOf` 仍在装配根，
+    // 所以新模块那份要拼在前——否则 `indexOf` 两头颠倒，切出来是空串（本笔真踩过这一下）。
+    const all = demoScripted() + "\n" + runner();
+    const fn = all.slice(all.indexOf("export function scriptedMainModelPath"), all.indexOf("export function mainUsageModelOf"));
     expect(fn.length).toBeGreaterThan(50); // 切片本身不许静默为空，否则下面全是恒真
     // `env.X` 这个形状只在真读 env 时出现（注释与文档写作裸名），所以按它计数。
     for (const k of ["M3A_MAIN_SCRIPT", "M1B_GATE_FLOW", "M1C_AUTONOMY_SCRIPT", "M2A_LSP_DEMO"]) {
       const re = new RegExp("env\\." + k + "\\b", "g");
-      const all = [...t.matchAll(re)].length;
-      expect(all, k + " 一处都没读 ⇒ 切片判据空载").toBeGreaterThanOrEqual(1);
-      expect([...fn.matchAll(re)].length, k + " 被抄了第二份枚举").toBe(all);
+      const total = [...all.matchAll(re)].length;
+      expect(total, k + " 一处都没读 ⇒ 切片判据空载").toBeGreaterThanOrEqual(1);
+      expect([...fn.matchAll(re)].length, k + " 被抄了第二份枚举").toBe(total);
     }
     // M3A_AGENTS_DEMO 刻意不在名单里：它在 scriptedMainModelPath 之外还答**另一个**问题
     // （`demoModelFor` = worker 用哪套剧本），那份不是本式的副本。
-    expect(t).toMatch(/const scripted = scriptedMainModelPath\(\);/);
+    expect(runner()).toMatch(/const scripted = scriptedMainModelPath\(\);/);
   });
 
   it("worker 侧：价格标签与归因键同分支同式子，且落进 spawned 事件", () => {
