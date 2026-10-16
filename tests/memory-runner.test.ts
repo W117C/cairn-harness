@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runSessionEndDistill } from "../src/agent/memory/distill";
 import { initMemoryHome, readTextOrNull } from "../src/agent/memory/store";
-import { composeTurnMessages } from "../src/agent/glm-session";
+import { composeTurnMessages } from "../src/agent/session-provider";
 import { projectContext } from "../src/agent/context";
 import { DEFAULT_COMPACTION_CONFIG, createMockSummarizer, runCompaction } from "../src/agent/compaction";
 import { createMockProvider } from "../src/providers/mock";

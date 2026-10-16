@@ -19,7 +19,7 @@ import {
   gateToolSpecs,
   type SessionPluginTool,
   type SessionTransport,
-} from "../agent/glm-session";
+} from "../agent/session-provider";
 import { ClarifyGate, PlanGate } from "../agent/gates";
 // M10 拆分：系统提示词面搬去 `src/agent/system-prompt.ts`。**这里既是本地消费、也再导出**——
 // `export … from` 只对外可见、**不进本地作用域**（本次实测踩到：改完立刻 `Cannot find name 'BASE_SYSTEM'`，

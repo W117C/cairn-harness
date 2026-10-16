@@ -23,7 +23,7 @@ import { escapeControlTags } from "../src/agent/control-tags";
 import { runSessionEndDistill } from "../src/agent/memory/distill";
 import { createGatedRemember } from "../src/main/agent-runner";
 import { AskGate } from "../src/main/ask-gate";
-import { composeTurnMessages } from "../src/agent/glm-session";
+import { composeTurnMessages } from "../src/agent/session-provider";
 import { projectContext } from "../src/agent/context";
 import { DEFAULT_COMPACTION_CONFIG, createMockSummarizer, runCompaction } from "../src/agent/compaction";
 import { createMockProvider } from "../src/providers/mock";

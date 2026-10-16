@@ -27,7 +27,7 @@ import {
 import { resolveInWorkspace } from "../src/tools/base";
 import type { PermissionMode } from "../src/permissions/modes";
 import { EVIDENCE_TEXT } from "../src/agent/goal";
-import { sessionToolSpecs } from "../src/agent/glm-session";
+import { sessionToolSpecs } from "../src/agent/session-provider";
 import { TOOL_NAMES } from "../src/tools/base";
 
 const TABLES = { auto: ["edit_file", "verify", "clarify"], read: ["verify", "clarify"] } as const;
