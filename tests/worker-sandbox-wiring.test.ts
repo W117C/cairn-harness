@@ -111,9 +111,14 @@ describe("worker shell 走注入的执行出口", () => {
 // 少任何一层，worker 都照样在 Seatbelt 之外跑，而两批都会绿。
 describe("宿主侧接线：沙箱可用时把沙箱出口递给 worker", () => {
   const RUNNER = "src/main/agent-runner.ts";
+  // 2026-10-17 搬迁：唯一构造口与 worker 出口整支搬去 `src/main/session-assembly.ts`，取料面**并料**
+  // 读两份——这一批量的是「这两条线在不在」，不是「必须挂在哪个文件上」（同 ORCH_SRC_ALL 先例）。
+  const ASSEMBLY = "src/main/session-assembly.ts";
+  const sources = async (): Promise<string> =>
+    (await readFile(RUNNER, "utf8")) + "\n" + (await readFile(ASSEMBLY, "utf8"));
 
   it("唯一的编排器构造口按沙箱状态决定是否注入 worker 出口", async () => {
-    const src = await readFile(RUNNER, "utf8");
+    const src = await sources();
     // 判据与主会话 run_shell 那道门同口径：null 或不可用 ⇒ 不注入（落回裸执行）。
     expect(src).toMatch(/function workerShellRunnerFor\(sandbox: SandboxStatus \| null\)/);
     expect(src).toMatch(/if \(sandbox === null \|\| !sandbox\.available\) return undefined;/);
@@ -122,7 +127,7 @@ describe("宿主侧接线：沙箱可用时把沙箱出口递给 worker", () => 
   });
 
   it("沙箱出口默认断网（worker 门里没有 networkProfileFor 的审批上下文）", async () => {
-    const src = await readFile(RUNNER, "utf8");
+    const src = await sources();
     expect(src).toMatch(/runInSandbox\(mapped, \{ cwd: ctx\.workspace, network: "deny" \}\)/);
   });
 

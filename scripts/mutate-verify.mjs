@@ -2464,7 +2464,8 @@ const MUTATIONS = [
   },
   {
     id: "sandbox-mapping-copy-reintroduced",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/session-assembly.ts",
+    // 2026-10-17 搬迁：锚文随实现搬去 session-assembly.ts（agent-runner 三刀之第三刀），逐字未动。
     test: "tests/verify-exec-sandbox.test.ts",
     desc: "worker 那一支退回内联三元 ⇒ 同一谓词 again 两份副本，下一轮改动只会漂其中一份（第十三族；第 141 页复认针脚歧义时就是被这三行逐字相同的副本坑到的）",
     // 针脚改指（2026-10-02 修）：`404249c`（修 verify 假红）把 `mapSandboxTestCommand(command)` 扩成
@@ -7337,7 +7338,8 @@ const MUTATIONS = [
   },
   {
     id: "recovery-parent-mode-from-settings",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/session-assembly.ts",
+    // 2026-10-17 搬迁：锚文随实现搬去 session-assembly.ts（agent-runner 三刀之第三刀），逐字未动。
     test: "tests/recovery-parent-mode.test.ts",
     desc: "重派回来的会话又顶著「新对话默认档」当父档 ⇒ 全局 auto 的用户一重启，read-only 会话就变成可派 write worker 的会话（§11.7.6 单调继承被换松一档）",
     apply: (s) => s.replace("    parentMode: recoveryParentMode(await replay(logPath).catch(() => []), (await store().get()).mode),\n", "    parentMode: (await store().get()).mode,\n"),
@@ -7345,10 +7347,11 @@ const MUTATIONS = [
   },
   {
     id: "recovery-log-path-only-from-memory",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/session-assembly.ts",
+    // 2026-10-17 搬迁：锚文随实现搬去 session-assembly.ts（agent-runner 三刀之第三刀），逐字未动。
     test: "tests/recovery-restart-current-session.test.ts",
     desc: "恢复兜底只认内存里的 lastLogPath ⇒ 真重启后（三个内存态全归零）恢复卡的「重派」依旧点不动，只换了句错误文案",
-    apply: (s) => s.replace("  const logPath = sessionId ? pathOf(requireSessionsDir(), sessionId) : lastLogPath;\n", "  const logPath = lastLogPath;\n"),
+    apply: (s) => s.replace("  const logPath = sessionId ? pathOf(requireSessionsDir(), sessionId) : D().lastLogPath();\n", "  const logPath = D().lastLogPath();\n"),
     expectFail: "会话留痕是 read-only + 设置盘默认 auto ⇒ 重派 write worker 被拒（拒因点名 read-only）",
   },
   // 构造口把**项目规则库**递给编排器。这一格此前整个 suite 一条都不红：2026-09-24 实测把
@@ -7357,7 +7360,8 @@ const MUTATIONS = [
   // （`tests/worker-project-rules.test.ts` 的注释里有这条来历）。
   {
     id: "orchestrator-project-rules-not-passed",
-    src: "src/main/agent-runner.ts",
+    src: "src/main/session-assembly.ts",
+    // 2026-10-17 搬迁：锚文随实现搬去 session-assembly.ts（agent-runner 三刀之第三刀），逐字未动。
     test: "tests/worker-project-rules.test.ts",
     desc: "构造口不递项目规则库 ⇒ worker 侧的 deny 全线失效（P0-2 那句「否则规则对 worker 全表失效」重新成立），而所有直接 new Orchestrator 的用例照绿",
     apply: (s) => s.replace("    rules: a.rules,\n", "    rules: [],\n"),

@@ -93,7 +93,10 @@ describe("verifyExec（沙箱是发货缺省路径）", () => {
 describe("沙箱 pnpm 映射收成一份", () => {
   // 2026-10-11 拆分：模型那条 `run_shell` 的消费点（gatedTool 内的沙箱 lint 支）搬去 ./tool-gates
   // ⇒ 取料跟着读三处（判据仍是「三处消费者一律走带工作区判据的入口」，少读一处会把搬走的读成绕开）。
-  const src = ["../src/main/agent-runner.ts", "../src/main/tool-gates.ts", "../src/main/sandbox-test-command.ts"]
+  // 2026-10-17 又一处：worker 的 shell 出口（`workerShellRunnerFor`）随会话装配面搬去
+  // ./session-assembly ⇒ 取料加到四处。**判据没变**：仍是「三处消费者一律走那个入口」，只是它们在
+  // 四个文件里（定义那一处在 sandbox-test-command）。
+  const src = ["../src/main/agent-runner.ts", "../src/main/tool-gates.ts", "../src/main/sandbox-test-command.ts", "../src/main/session-assembly.ts"]
     .map((path) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), "utf8"))
     .join("\n");
 

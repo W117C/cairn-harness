@@ -16331,3 +16331,40 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    `liveRunPaths` / `omittedForever` 的 `RuntimeCapability` 收拢**未动**；③ 报告 #3 `cli.ts`、#5
    `mutate-verify` 两刀未动（`src/cli.ts` 与 `src/main/session-handlers.ts` 仍被别的会话改着，
    那两处现在动必撞车）。
+
+## 2026-10-17 · 第 499 页：agent-runner.ts 第三刀——会话/编排器装配外提（`main/session-assembly.ts`）
+
+1. **动因**：结构债审查报告 #2 的第三缝「会话装配」。唯一构造口、崩溃恢复兜底、worker 的 shell
+   出口原先都住在装配根。
+2. **搬走三件**：`buildSessionOrchestrator`（**唯一的编排器构造口**）、`ensureSessionOrchestrator`
+   （崩溃恢复兜底）、`workerShellRunnerFor`（worker 的 shell 出口；导出 API，装配根再导出）。
+3. **一处边界裁决（本刀最容易划歪的地方）**：`orchestratorExtras` **留在装配根、按回调注入**，
+   不跟着搬。它是**策略面**——按设置盘决定接哪些开关（maxBudgetUsd / impactAnalysis / autoVerify /
+   routingBandit / routingCascade / promptCache），而且它要摸 verifyExec、价键派生、插件运行时三个域；
+   搬进来就得把这三个域一起拽进来（或再注入两个纯助手），本模块当场从「机制」变成「半个装配根」。
+   一句话判据：**装配根接策略与活状态，本模块只做构造与查找**。「注入纯助手/政策口避反向 import」
+   是本仓既有先例（`setGoalHandlerDeps({ budgetPriceKeyOf })` 就是同一形状），不是本笔新立的规矩。
+4. **注入面**：四处模块级活状态（`activeOrchestrator` 读写、`lastLogPath`、`hooks.onEvent`、
+   `sandboxState`）＋ 扩展接线那一个策略口。一律传闭包——`hooks` / `sandboxState` / `lastLogPath`
+   都在那个注入调用之后才声明，且要活读。
+5. **卫星账（本刀的账比前两刀重）**：① **4 枚变异锚点改指**——
+   `sandbox-mapping-copy-reintroduced` / `recovery-parent-mode-from-settings` /
+   `recovery-log-path-only-from-memory` / `orchestrator-project-rules-not-passed`：锚文逐字未动，
+   只把 `src:` 改到新模块。其中 `recovery-log-path-only-from-memory` 的锚文是**整行字面量**
+   （以 `lastLogPath;` 收尾），而搬家时那一行按注入改了写法 ⇒ 它的 `apply` 字面量也随新读法更新
+   （同第 493 页那两枚的先例）。② **4 个判卷的取料面改并料**：`orchestrator-construction-sites`
+   （AST 数构造点 + 数调用者的判据不变，只是改成读两份）、`worker-sandbox-wiring`、
+   `budget-price-key`、`verify-exec-sandbox`（三处消费者的计数从读三文件变读四文件）。
+   ③ 顺手清 3 个作废 import（`existsSync` / `affectedFilesOf` / `recoveryParentMode`）。
+6. **读数**：typecheck 0 报错｜定向判卷 13 文件 152 条全绿｜全量核心判卷 **388 文件 5558 条全绿
+   （204.84s）**｜`--check-needles` **1571 条｜阻断 6 = 2 + 4**——2 是与前列同址的
+   system-prompt 在飞账，4 是**本笔的预期中态**（`src/main/session-assembly.ts` 未入库 ⇒ 记
+   「未入库面」），**提交即消**｜docs-check 全绿｜arch-cycle 读数不变（圈 1 条、新圈 0）｜
+   desktop-boundary 绿。
+7. **行数**：装配根 **1,764 → 1,683**（净 −81），新模块 168 行。三刀合计 **1,892 → 1,683（−209）**。
+8. **仍未证（不许读成绿）**：① **4 枚改指针脚尚未真杀**——mutate-verify 度量 HEAD，须入库后在干净树
+   跑（本刀与第 493/494 页同一个「提交即消」中态，这里明写出来免得下一个人把 6 读成回归）；
+   ② 桌面层（`pnpm --filter cairn-desktop test`）与 CI 未跑这一笔；③ 报告 #2 最后一缝（含 561 行
+   `runAgent` 的 run 管线 + `liveRunPaths` / `omittedForever` 的 `RuntimeCapability` 收拢）**未动**；
+   ④ 报告 #3 `cli.ts`、#5 `mutate-verify` 两刀未动（`src/cli.ts` 与 `src/main/session-handlers.ts`
+   仍被别的会话改着，那两处现在动必撞车）。

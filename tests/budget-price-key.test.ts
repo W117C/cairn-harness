@@ -68,7 +68,11 @@ describe("budgetPriceKeyOf / resolveRunModel：闸的价键取自真拨的那一
 });
 
 describe("接线：两道闸共用同一份派生，且不许再抄第三份解析", () => {
-  const src = () => readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf8");
+  // 2026-10-17 搬迁：唯一构造口（含它调 `orchestratorExtras` 那一行）搬去 `./session-assembly.ts`，
+  // 取料面**并料**读两份。`budgetPriceKeyOf` 的**生产落点仍在本文件**（orchestratorExtras 没搬），
+  // 所以下面「只许出现一次」那条计数不受影响；`resolveMainModel(` 在并料面也仍只有一处。
+  const src = () => readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf8")
+    + readFileSync(fileURLToPath(new URL("../src/main/session-assembly.ts", import.meta.url)), "utf8");
   // 2026-10-11 拆分：goal 那一半（第二处消费）搬去 ./goal-handlers，钉子跟着走——
   // 会话那一半仍在装配根，跨两文件的断言按两处各读、同一句事实不许在两边各抄一半。
   const goalSrc = () => readFileSync(fileURLToPath(new URL("../src/main/goal-handlers.ts", import.meta.url)), "utf8");

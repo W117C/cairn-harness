@@ -14,6 +14,11 @@ import ts from "typescript";
 
 const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 const SRC = join(ROOT, "src/main/agent-runner.ts");
+// 2026-10-17 搬迁：唯一构造口（`buildSessionOrchestrator`）与崩溃恢复兜底（`ensureSessionOrchestrator`）
+// 搬去 `./session-assembly.ts`。取料面跟着**并料**（读两份拼一份）——这条量的是「全仓只有一个构造点、
+// 且两处调用者共用同一个口」，不是「都得写在同一个文件里」（同 `orchestrator-hold.test.ts` 的
+// ORCH_SRC_ALL 先例）。
+const SESSION_ASSEMBLY = join(ROOT, "src/main/session-assembly.ts");
 
 function countSites(sourceText: string): { news: number; factoryCalls: number } {
   const sf = ts.createSourceFile("agent-runner.ts", sourceText, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS);
@@ -29,10 +34,10 @@ function countSites(sourceText: string): { news: number; factoryCalls: number } 
 }
 
 describe("编排器只有一个构造口，且现场与崩溃恢复两条路都走它", () => {
-  const src = readFileSync(SRC, "utf8");
+  const src = readFileSync(SRC, "utf8") + "\n" + readFileSync(SESSION_ASSEMBLY, "utf8");
   const found = countSites(src);
 
-  it("agent-runner 里 `new Orchestrator(` 恰好一处（多于一个 = 两份口径迟早漂）", () => {
+  it("并料面里 `new Orchestrator(` 恰好一处（多于一个 = 两份口径迟早漂）", () => {
     expect(found.news, "构造点数量 = " + String(found.news) + "；两处构造点必漂移（P0-2 就是只改了一处）").toBe(1);
   });
 
