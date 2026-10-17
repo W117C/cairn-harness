@@ -79,8 +79,12 @@ else console.log("✅ ②：三次换锚点取回的正文与基准**逐字相�
 if (bodyOf(String(other.output)) === baseBody) { console.log("❌ ③：换 path 也拿到同一份正文 ⇒ 取料坏了，② 的相同不能当证据"); red++; }
 else console.log("✅ ③：换 path 取回不同正文 ⇒ 取料真在按 URL 走，②的『相同』是片段无效造成的");
 
+// 三件事都成立 = 锚点确实不是出路。**这不等于文案有缺陷**：第 309 页已把「锚点」从候选里摘掉，
+// 并让那句自己否定这条路。所以这一支只证明事实；文案是否消费了这个事实由判卷侧断言
+// （`tests/web-fetch.test.ts`：括号里不许出现锚点、真出路要留着、否定式解释必须在场）。
+// 结论句据此改写——它还印着被摘掉的旧文案，会把下一个人引去修一个已经修好的东西。
 console.log(red === 0
-  ? "[probe web-anchor-claim] 三件事都成立 ⇒ 截断提示里『换一个更精确的 URL（锚点…）』是假出路，改法见第 309 页"
+  ? "[probe web-anchor-claim] 三件事都成立 ⇒ 锚点确实不是出路（文案侧第 309 页已摘掉它，判据在 tests/web-fetch.test.ts）"
   : `[probe web-anchor-claim] 红 ${String(red)} 条`);
 await new Promise<void>((r) => srv.close(() => r()));
 process.exit(red === 0 ? 0 : 1);
