@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { projectAgentPath } from "../app-data";
 import { writeFileAtomic } from "../atomic-write";
 import { commandForms, invocations, tokenize, tokenSubsequenceStart } from "./command-shape";
 import { ALLOW_PAYLOAD, isShellFamily } from "./risk";
@@ -123,7 +124,7 @@ export const ALWAYS_RULES_FILE = "permissions.always.json";
 
 /** always-allow 的落点：`<workspace>/.agent/permissions.always.json`（**必须**在 `.gitignore` 里）。 */
 export function alwaysRulesPath(workspace: string): string {
-  return join(workspace, ".agent", ALWAYS_RULES_FILE);
+  return projectAgentPath(workspace, ALWAYS_RULES_FILE);
 }
 
 /** 全局层占位路径：<appData>/permissions.json（M1d 接设置页）。 */

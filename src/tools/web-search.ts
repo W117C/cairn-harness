@@ -12,6 +12,7 @@
 import { lookup } from "node:dns/promises";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { projectAgentPath } from "../app-data";
 import { readBodyCapped, stallGuard } from "../net.js";
 import { ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
 import { createOutputRing, WEB_CONTENT_TRUNCATION_HINT } from "./output-ring.js";
@@ -40,7 +41,7 @@ export interface SearchConfig {
 export function loadSearchConfig(workspace: string): SearchConfig | null {
   let raw: string;
   try {
-    raw = readFileSync(join(workspace, ".agent", "config.json"), "utf8");
+    raw = readFileSync(projectAgentPath(workspace, "config.json"), "utf8");
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw err;

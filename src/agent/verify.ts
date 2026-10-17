@@ -4,6 +4,7 @@
 import { access, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
+import { projectAgentPath } from "../app-data";
 import { createOutputRing } from "../tools/output-ring";
 import { killGroup, sanitizedEnv, spawnTracked } from "../tools/process";
 import type { VerifyCause, VerifyCommandResult } from "../events";
@@ -246,7 +247,7 @@ export async function loadVerifyConfig(
 ): Promise<{ config: VerifyConfig; source: "config" | "probed" | "none" }> {
   // ① .agent/config.json 的 verify 字段
   try {
-    const raw = await readFile(join(repoDir, ".agent", "config.json"), "utf8");
+    const raw = await readFile(projectAgentPath(repoDir, "config.json"), "utf8");
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const v = parsed.verify;
     if (typeof v === "object" && v !== null) {

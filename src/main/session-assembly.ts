@@ -13,7 +13,7 @@
 // 本模块**不反向依赖装配根**（同 state-handlers / scheduler-runtime 那一族）：四处模块级活状态
 // 按回调注入。
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { projectAgentPath } from "../app-data";
 import { affectedFilesOf } from "../agent/impact/index.js";
 import { Orchestrator, type OrchestratorOptions } from "../agent/orchestrator";
 import { recoveryParentMode } from "../agent/recovery";
@@ -160,7 +160,7 @@ export async function ensureSessionOrchestrator(): Promise<Orchestrator | null> 
       D().onEvent(e);
     },
     sandbox: D().sandboxState(),
-    rules: loadPermissionRules(join(workspace, ".agent", "permissions.json"), globalPermissionsPath()),
+    rules: loadPermissionRules(projectAgentPath(workspace, "permissions.json"), globalPermissionsPath()),
   
   });
   D().setActiveOrchestrator(orch);

@@ -5,6 +5,7 @@
 // 本模块不反向依赖装配根：它需要装配根的四处活状态，由装配根启动时 `setSchedulerRuntimeDeps`
 // 注入（同 settings-handlers 的 `setSettingsHostDeps` 形态）。
 import { join } from "node:path";
+import { projectAgentPath } from "../app-data";
 import { createEventLog, type AgentEvent } from "../events";
 import { TOOLS, type Tool, type ToolResult } from "../tools";
 import type { AskGate } from "./ask-gate";
@@ -56,7 +57,7 @@ export function schedulerEverStarted(): boolean {
 
 /** 定时任务的数据目录：调度器装载与挂载判据读**同一个式子**（两份字面量迟早漂）。 */
 export function scheduleDataDir(workspace: string): string {
-  return join(workspace, ".agent", "schedules");
+  return projectAgentPath(workspace, "schedules");
 }
 
 /** shell / 验收脚本初始化调度器（幂等）。 */

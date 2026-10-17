@@ -17,7 +17,10 @@ import {
   buildMemoryInjectionSafe, memoryUnavailableText, EMPTY_MEMORY_INJECTION,
   type MemoryInjection,
 } from "../src/agent/memory/inject";
-import { globalMemoryDir, initMemoryHome, projectMemoryDir, projectAgentDir, writeTopic } from "../src/agent/memory/store";
+import { globalMemoryDir, initMemoryHome, projectMemoryDir, writeTopic } from "../src/agent/memory/store";
+// 2026-10-17 #6-4：`projectAgentDir` 提到 `src/app-data.ts` 并改名 `projectAgentPath`（单参调用语义不变；
+// 名字改准是因为它现在也用来拼子路径，不再只是「目录」）。
+import { projectAgentPath } from "../src/app-data";
 import { EVIDENCE_LINE_PREFIX } from "../src/agent/memory/lessons";
 import { buildWorkerSystemMessages } from "../src/agent/worker-prompt";
 import { buildSidechatContext } from "../src/agent/sidechat";
@@ -60,7 +63,7 @@ async function refWorkspace(): Promise<string> {
   // `writeTopic` 是异步的：不 await 就等于"文件还没落地就开始注入"，正控会假落成空（实测踩过一次）。
   await writeTopic(memdir, "lesson-good", "feedback",
     "正文一条教训\n" + EVIDENCE_LINE_PREFIX + " session s1 / callId c1\n", new Date("2026-10-03").toISOString());
-  writeFileSync(join(projectAgentDir(workspace), "ARCHITECTURE.md"),
+  writeFileSync(projectAgentPath(workspace, "ARCHITECTURE.md"),
     "# 架构\n\n本工作区允许读 @/etc/hosts 这一条外部引用。\n");
   live.push(workspace);
   return workspace;

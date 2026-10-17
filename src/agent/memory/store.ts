@@ -5,6 +5,7 @@
 import { appendFile, mkdir, open, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { projectAgentPath } from "../../app-data";
 import { writeFileAtomic } from "../../atomic-write";
 
 // ---- 布局常量（§8.1.3 定稿文件名）----
@@ -37,17 +38,13 @@ export function globalMemoryDir(): string {
   return join(homedir(), ".config", "cairn", "memory");
 }
 
-export function projectAgentDir(workspace: string): string {
-  return join(workspace, ".agent");
-}
-
 export function projectMemoryDir(workspace: string): string {
-  return join(workspace, ".agent", "memory");
+  return projectAgentPath(workspace, "memory");
 }
 
 /** 根三文件路径（kind → 文件名映射 §8.1.4；仅项目层——全局层只有 memory）。 */
 export function rootFilePath(workspace: string, kind: keyof typeof ROOT_FILES): string {
-  return join(projectAgentDir(workspace), ROOT_FILES[kind]);
+  return projectAgentPath(workspace, ROOT_FILES[kind]);
 }
 
 // ---- 错误分型（§8.1.4：「调用失败」与「无内容可沉淀」显式分型，mem0 main.py:963-969 教训）----
@@ -223,7 +220,7 @@ export async function appendRootFile(workspace: string, kind: keyof typeof ROOT_
   // 定时 unattended run 同工作区）会读到同一个旧末字节 => 都判「无需补换行」=> 条目粘成
   // 一行，"## " 分块解析被破坏。整段按文件路径串行（与 writeTopic 按 dir 串行同口径）。
   await serializeOn(path, async () => {
-    await ensureDir(projectAgentDir(workspace));
+    await ensureDir(projectAgentPath(workspace));
     let prefix = "";
     try {
       const fh = await open(path, "r");
@@ -246,7 +243,7 @@ export async function appendRootFile(workspace: string, kind: keyof typeof ROOT_
 
 /** 整写根文件（状态型 replace：old_content 已由调用方校验精确命中）；原子写。 */
 export async function replaceRootFile(workspace: string, kind: keyof typeof ROOT_FILES, content: string): Promise<void> {
-  await ensureDir(projectAgentDir(workspace));
+  await ensureDir(projectAgentPath(workspace));
   await writeFileAtomic(rootFilePath(workspace, kind), content);
 }
 

@@ -9,6 +9,7 @@ import { statSync as stat } from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { extname, join, relative, resolve, sep } from "node:path";
+import { projectAgentPath } from "../app-data";
 import { pathToFileURL } from "node:url";
 import { killGroup, sanitizedEnv } from "./process.js";
 import { TrustStore, type TrustState } from "../agent/plugins/trust";
@@ -113,7 +114,7 @@ export function setLspTrustedRepos(paths: Iterable<string>): void {
   for (const p of paths) lspTrustedRepos.add(resolve(p));
 }
 
-const defaultLspTrustFile = (root: string): string => join(root, ".agent", "lsp-trust.json");
+const defaultLspTrustFile = (root: string): string => projectAgentPath(root, "lsp-trust.json");
 
 /** 单文件内容指纹（截到 32 位，与插件门同形）。读不到或超单文件帽 ⇒ 空串（＝取不到，调用方按 fail-closed 处理）。 */
 const lspContentFingerprint = (absConfig: string): string => {

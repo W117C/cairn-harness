@@ -4,7 +4,7 @@
 // 路径），由装配根启动时 `setStateHandlerDeps` 注入；插件面板留档快照随本面搬进来，装配根写完
 // 一场 run 的快照经 `setPluginSnapshot` 交回（原先那行是直接写装配根的同名变量）。
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { projectAgentPath } from "../app-data";
 import { replay } from "../events";
 import { PluginRuntime, currentPluginRuntime, pluginDataRootOf, type PluginPanelSnapshot } from "../agent/plugins";
 import { listWorktreeDirs, orphanWorktrees } from "../agent/worktree";
@@ -118,7 +118,7 @@ export async function currentWorkspace(): Promise<string> {
 export function pluginRuntimeOpts(workspace: string): Omit<Parameters<typeof PluginRuntime.load>[0], "mode"> {
   return {
     ...(process.env.M2E_USER_PLUGINS ? { userPluginsDir: process.env.M2E_USER_PLUGINS } : {}),
-    projectPluginsDir: join(workspace, ".agent", "plugins"),
+    projectPluginsDir: projectAgentPath(workspace, "plugins"),
     ...(process.env.M2E_LOOSE_SKILLS ? { looseRoots: [process.env.M2E_LOOSE_SKILLS] } : {}),
     workspace,
     pluginDataRoot: pluginDataRootOf(process.env, homedir()),

@@ -16368,3 +16368,53 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    `runAgent` 的 run 管线 + `liveRunPaths` / `omittedForever` 的 `RuntimeCapability` 收拢）**未动**；
    ④ 报告 #3 `cli.ts`、#5 `mutate-verify` 两刀未动（`src/cli.ts` 与 `src/main/session-handlers.ts`
    仍被别的会话改着，那两处现在动必撞车）。
+
+## 2026-10-17 · 第 500 页：#6-4 `.agent` 拼接点收拢成单源（`src/app-data.ts`）
+
+1. **动因**：结构债审查报告 #6-4「`join(workspace, ".agent", …)` 手写 ≈10 处 → 导出单源」。散着写
+   不会立刻坏，坏在**改名与搬家时逐处改**：少改一处就是「有些开关读了一个目录、有些读了另一个」，
+   而这种分叉平时完全静默（两处都还能打开文件）。
+2. **一处命名裁决（审查给的名字不能用）**：报告建议叫 `appDataDir(ws)`，但 `src/permissions/rules.ts`
+   里 `globalPermissionsPath(appDataDir?: string)` 的同名参数指的是**全局应用数据根**
+   （`~/.local/share` 那一级，`DSH_APPDATA`），与「某个 workspace 下的 `.agent/`」是**两个概念**。
+   同一个词指两件事正是本仓反复点名的腐坏形状 ⇒ 取名 `projectAgentPath(workspace, ...segments)`。
+3. **单源不是新造的**：`src/agent/memory/store.ts` 里本来就有一支 `projectAgentDir(workspace)`
+   （同样是 `join(workspace, ".agent")`）——同一个概念的两份名字，而只有那份在用。本笔把它提到
+   `src/app-data.ts`，扩成可变参（`projectAgentPath(ws, …segments)`，单参调用语义不变），并改名：
+   它现在也用来拼**子路径**，`Dir` 这个后缀会谎报职责（同 `glm-session.ts → session-provider.ts`
+   那次改名的理由）。
+4. **迁移面**：8 处字面拼接（7 个模块）改指单源——`src/tools/web-search.ts`、`src/tools/lsp.ts`
+   （lsp-trust）、`src/agent/verify.ts`、`src/permissions/rules.ts`、`src/main/scheduler-runtime.ts`、
+   `src/main/session-assembly.ts`、`src/main/state-handlers.ts`、以及 `src/agent/memory/store.ts`
+   自己的两处；连同 store 里的两处 `ensureDir` 与一处 `rootFilePath`，共 11 个构造点。
+5. **刻意没并的三族**（写在新模块头上，免得下一个人再来一遍）：
+   · **相对路径段常量**（`PROJECT_SKILLS_DIR_SEGMENTS` / `CUSTOM_PROVIDERS_RELATIVE_PATH`）——
+     消费方自己拼根，不是「某 workspace 下的绝对路径」；
+   · **守卫**（`src/tools/base.ts` / `src/agent/file-revert.ts` 里判断某段路径是不是 `.agent`）——
+     守卫与构造分开写是对的：合并会让「改名时两边一起改」变成「改名时两边一起错」；
+   · `resolve(root, ".agent", …)` 那两处（lsp 的 lsp.json）——`resolve` 与 `join` 在**相对入参**下
+     语义不同（前者按 cwd 解析），收进来等于悄悄改语义。
+6. **仍未迁移的 13 处**（都在别人的在飞文件里，按 AGENTS.md 不碰）：`src/cli.ts` 6 处、
+   `src/main/agent-runner.ts` 4 处（其中一处基数是 `ROOT` 不是 workspace）、
+   `src/agent/evolution/store.ts` 1 处、`src/main/evolution/canary.ts` 2 处。它们落库后按同一支
+   收拢即可（本页末尾留账，不假装已单源）。
+7. **卫星账**：`tests/memory-degradation.test.ts` 曾从 store 里 import `projectAgentDir` —— 改名后
+   改指 `../src/app-data`（`join(projectAgentPath(ws), "ARCHITECTURE.md")` 一并收成
+   `projectAgentPath(ws, "ARCHITECTURE.md")`）。**这条是本笔唯一漏查的一处**：动刀前用
+   `grep … | head -20` 筛消费方，恰好被截断在它之前——记在这里，下次别用会截断的筛选当清点。
+8. **读数**：typecheck **tracked 面 0 报错**（另有 5 条在兄弟会话的**未跟踪草稿**
+   `scripts/svg-figure-check.ts` 里，与 HEAD 无关，工具自己的归因也这么写）｜定向判卷 6 文件
+   90 条全绿｜全量核心判卷 **389/393 文件、5625/5634 条**——**当前不绿，4 文件红逐条归因于
+   兄弟会话的在飞产物**：① `tests/cli-surface.test.ts` 6 条——`.agent/providers.json`（**未跟踪**、
+   由别的会话写入）里的 `_comment` 被现行校验器判成不认识的字段；② `tests/prose-needle-scan.test.ts`
+   1 条——顶包候选 11（已提交 10 ＋ 在飞 1），在飞那份是别人的新文案；③ `tests/verify-multiface.test.ts`
+   1 条——verify 面新增了 `scripts/svg-figure-check.ts`（未跟踪草稿）；④ `tests/write-face.test.ts`
+   1 条——新工具 `ik_solve` 未在写向面登记。**这四条都不是本笔引入的**（本笔只动 8 个模块的路径式
+   与一支记忆判卷）。｜`--check-needles` 沿用前页读数（本笔不触 mutate-verify 面；1571 条｜阻断 2
+   ＝system-prompt 在飞账）｜docs-check 全绿。
+9. **仍未证（不许读成绿）**：① 桌面层（`pnpm --filter cairn-desktop test`）与 CI 未跑这一笔；
+   ② 第 6 条那 13 处未迁移 ⇒ 现在**不是**全仓单源，只是「干净文件里的那 8 处」单源了；
+   ③ `tests/web-fetch.test.ts` 在**沙箱内**报 3 红（`listen EPERM 127.0.0.1`——沙箱禁本地端口绑定），
+   **出沙箱全绿**；这是环境不是回归；
+   ④ 报告 #2 最后一缝（`runAgent`）仍被兄弟会话的 delivery-guard 改动占着，未动。
+
