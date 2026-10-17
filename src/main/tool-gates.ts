@@ -26,6 +26,7 @@ import {
   scopeKey,
   type AskScope,
   type GateMeta,
+  type GateVerdict,
   type PermissionMode,
   type PermissionRule,
   type ToolResultWithAudit,
@@ -66,12 +67,52 @@ export function denied(name: ToolName | string, mode: PermissionMode, why: strin
   } as ToolResultWithAudit;
 }
 
+/** 审批没成的统一出口：`verdict` 与文字同一处派生（不在两处各判一次）。
+ *  安全模式那道 gate 与下面两条审批分支共用它——三处若各写一句"未获批准"，
+ *  `lessons.ts` 就分不出"工具没执行"与"执行了但失败"。 */
+export function deniedByAsk(
+  name: ToolName | string,
+  mode: PermissionMode,
+  reason: "user" | "timeout" | "unattended" | undefined,
+  gate?: GateMeta,
+): ToolResult {
+  return denied(name, mode, askDenialText(reason), gate);
+}
+
 /** §9.3 权限联动的**解释面**：某条已激活 skill 申报过 `allowed-tools` 里的这个工具，
  *  但按原话的收紧点（放行不得越过当前权限档位），这条申报**不给免批**。
  *  为什么不悄悄生效算了？——那正是「装载即陈列」的反面教材：字段收下了却不兑现，
  *  而这里连"不兑现"都要说清楚是谁申报的、为什么没放行（能力 8：可解释）。
  *  ⚠️ 反过来把它折成规则库的一条 allow 才是错的：规则库 allow 能顶掉档位的逐次审批，
  *  等于插件作者替用户扩权。两个门共用这一份实现。 */
+/** 审批没成的四种结局 → 模型可见的那句话。
+ *
+ *  为什么要分开（2026-10-16 桌面端真实会话读数）：三种结局此前都回「未获批准」，
+ *  于是一次**审批等待超时**（用户根本没看到卡）被模型读成「auto 档默认禁止写文件」，
+ *  接着它换 shell 试、问权限、把同一份内容重写三遍，最后把这条错误诊断写进了项目记忆。
+ *  下一轮装配时它作为经验回注——一次超时就这样变成了永久能力限制。
+ *
+ *  三件事必须各自说得出：① 发生了什么（等 60s 没人答 / 无人值守自动拒 / 人明确说不）；
+ *  ② **这个工具没有执行**（否则模型会以为写了没报成功，再去覆盖一次）；
+ *  ③ 下一步允许做什么（等审批变化 / 换合规路径 / 先提方案），不然它只能靠猜。
+ *  统一出口：`verdict` 已经落在 gate 结构里，这句话是它的**同源文字面**，不是第二份判据。 */
+export function askDenialText(reason: "user" | "timeout" | "unattended" | undefined): string {
+  switch (reason) {
+    case "timeout":
+      return "审批等待超时（无人应答即按拒绝收束）——该工具没有执行。"
+        + "这是授权状态尚未变化，不是本档位禁止这个工具：等用户回应审批卡、或提高权限档位/显式放行后再试，"
+        + "不要据此得出「此档位不能用这个工具」的结论，也不要换一个工具继续试探同一件事。";
+    case "unattended":
+      return "无人值守 fail-closed：这一轮没有任何人能回应审批，审批请求被立即拒绝——该工具没有执行。"
+        + "这不是档位或策略禁止，是执行方式（无人值守）不允许等待人工；"
+        + "改用非交互允许的路径，或等有人的会话再做这一步。";
+    default:
+      return "用户明确拒绝了这次审批——该工具没有执行。"
+        + "下一步：换一条合规路径，或用 propose_plan 把要改的内容提成方案再请批准；"
+        + "不要用相同参数重发同一个调用。";
+  }
+}
+
 export function withSkillAllowNote(tool: string, reason: string): string {
   const invo = currentPluginRuntime()?.skillAllowNote(tool) ?? null;
   return invo === null ? reason
@@ -94,9 +135,23 @@ export function gatedTool(name: GatedName, original: Tool, beforeExecute?: () =>
       // M1e 设置页「产出代码安全模式」最小语义（§11.6）：gate = 写向工具在管线之前强制审批
       //（setSettings 转发 M1E_SAFE_MODE；src/permissions 冻结，最小接线在本模块）
       if (process.env.M1E_SAFE_MODE === "gate") {
-        if (!s.askGate) return denied(name, s.autonomy.mode, "安全模式 gate 非交互（fail-closed）");
+        // 安全模式 gate 是**档位层**自己加的强制审批（发生在 evaluate 之前，所以没有 `d` 可交给
+        // gateBase）；留痕直接构造，layer 用 L3-mode——它就是"档位规定要问人"的那一层。
+        // 安全模式 gate 是**档位层**自己加的强制审批（发生在 evaluate 之前，所以没有 `d` 可交给
+        // gateBase）；留痕直接构造，layer 用 L3-mode——它就是"档位规定要问人"的那一层。
+        const modeGate = (verdict: GateVerdict): GateMeta => ({ layer: "L3-mode", mode: s.autonomy.mode, verdict });
+        if (!s.askGate) return denied(name, s.autonomy.mode, "安全模式 gate 非交互（fail-closed）", modeGate("unattended"));
         const gateR = await s.askGate.request(name, args, { reason: "安全模式 gate：写工具强制审批", risk: "none", signal: ctx.signal });
-        if (gateR.outcome !== "approved") return denied(name, s.autonomy.mode, "安全模式 gate 未批准");
+        // 与下面那条审批分支同一个出口：三种结局（拒绝/超时/无人值守）各自说清，并**带上 verdict**。
+        // 少了 verdict，`lessons.ts` 的 isAskDeniedResult 判不出"工具没执行"，这次超时就会被
+        // 记成"执行了但失败"⇒ 得出「这个工具用不了」的错误结论——与 askDenialText 修的是同一族。
+        // 与下面那条审批分支同一个出口：三种结局（拒绝/超时/无人值守）各自说清，并**带上 verdict**。
+        // 少了 verdict，`lessons.ts` 的 isAskDeniedResult 判不出"工具没执行"，这次超时就会被
+        // 记成"执行了但失败"⇒ 得出「这个工具用不了」的错误结论——与 askDenialText 修的是同一族。
+        if (gateR.outcome !== "approved") {
+          return deniedByAsk(name, s.autonomy.mode, gateR.reason,
+            modeGate(gateR.reason === "unattended" ? "unattended" : gateR.reason === "timeout" ? "timeout" : "rejected"));
+        }
       }
       const d = evaluate(name as ToolName, args, s.autonomy);
       const aMode = s.autonomy.mode;
