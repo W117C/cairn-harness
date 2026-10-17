@@ -380,6 +380,136 @@ describe("apply_patch：把计划落到盘上", () => {
     expect(await readFile(join(dir, "src", "dup.ts"), "utf8")).toBe(DUP);
   });
 
+
+  // 纯新增 hunk 的落点：`@@ -N,0 +M @@` 的 N 是「插在旧文件第 N 行**之后**」（git 口径），
+  // 所以 0-based 落点是 N，不是 N-1。旧实现按 N-1 插，于是每一次中间插入都整体早一行，
+  // 往文件尾追加时甚至插到末行之前——而回执照报 `ok: true`：静默改错地方比改不动危险得多。
+  // 反向锚点：拿 `@@ -0,0`（新建）当判据是空绿的，两式在那一格都落到 0。
+  it("纯新增 hunk 落在声明行**之后**，不是之前（-U0 补丁逐字对齐 git apply）", async () => {
+    const orig = ["a", "b", "c", "d", "e"].join("\n") + "\n";
+    await writeFile(join(dir, "src", "ins.ts"), orig, "utf8");
+    const r = await apply_patch.run({ patch: [
+      "diff --git a/src/ins.ts b/src/ins.ts",
+      "--- a/src/ins.ts",
+      "+++ b/src/ins.ts",
+      "@@ -2,0 +3 @@",
+      "+NEW",
+    ].join("\n") }, ctx());
+    expect(r.ok).toBe(true);
+    expect(await readFile(join(dir, "src", "ins.ts"), "utf8")).toBe(
+      ["a", "b", "NEW", "c", "d", "e"].join("\n") + "\n",
+    );
+  });
+
+  it("往文件尾追加：插在末行之后，不是抢在末行之前", async () => {
+    await writeFile(join(dir, "src", "tail.ts"), ["a", "b"].join("\n") + "\n", "utf8");
+    const r = await apply_patch.run({ patch: [
+      "diff --git a/src/tail.ts b/src/tail.ts",
+      "--- a/src/tail.ts",
+      "+++ b/src/tail.ts",
+      "@@ -2,0 +3 @@",
+      "+c",
+    ].join("\n") }, ctx());
+    expect(r.ok).toBe(true);
+    expect(await readFile(join(dir, "src", "tail.ts"), "utf8")).toBe(["a", "b", "c"].join("\n") + "\n");
+  });
+
+  it("两段 -U0 新增互不牵连（前一段落点不把后一段的行号带偏）", async () => {
+    await writeFile(join(dir, "src", "two.ts"), ["a", "b", "c", "d", "e"].join("\n") + "\n", "utf8");
+    const r = await apply_patch.run({ patch: [
+      "diff --git a/src/two.ts b/src/two.ts",
+      "--- a/src/two.ts",
+      "+++ b/src/two.ts",
+      "@@ -2,0 +3 @@",
+      "+X",
+      "@@ -4,0 +6 @@",
+      "+Y",
+    ].join("\n") }, ctx());
+    expect(r.ok).toBe(true);
+    expect(await readFile(join(dir, "src", "two.ts"), "utf8")).toBe(
+      ["a", "b", "X", "c", "d", "Y", "e"].join("\n") + "\n",
+    );
+  });
+
+  it("纯新增声明行越界 ⇒ 拒（不把「插不进去」折成插到文件末尾）", async () => {
+    await writeFile(join(dir, "src", "oob.ts"), ["a", "b"].join("\n") + "\n", "utf8");
+    const msg = await err([
+      "diff --git a/src/oob.ts b/src/oob.ts",
+      "--- a/src/oob.ts",
+      "+++ b/src/oob.ts",
+      "@@ -99,0 +100 @@",
+      "+z",
+    ].join("\n"));
+    expect(msg).toContain("上下文对不上");
+    expect(await readFile(join(dir, "src", "oob.ts"), "utf8")).toBe(["a", "b"].join("\n") + "\n");
+  });
+
+  //   · 结果无换行 ⇒ 标记跟在**新侧**末行后；结果有换行而原文件没有 ⇒ 标记跟在**旧侧**末行后。
+  //   所以 `oldNoNewline` 不决定结果形状；新侧没标记时**保持原文件**，不替用户决定。
+  it("补丁不带 `\\ No newline`：原文件没有行尾换行就保持没有（不替用户强加）", async () => {
+    await writeFile(join(dir, "src", "nn.ts"), "a\nb\nc", "utf8"); // 末行无换行
+    const r = await apply_patch.run({ patch: [
+      "diff --git a/src/nn.ts b/src/nn.ts",
+      "--- a/src/nn.ts",
+      "+++ b/src/nn.ts",
+      "@@ -1,3 +1,3 @@",
+      " a",
+      "-b",
+      "+B",
+      " c",
+    ].join("\n") }, ctx());
+    expect(r.ok).toBe(true);
+    expect(await readFile(join(dir, "src", "nn.ts"), "utf8")).toBe("a\nB\nc");
+  });
+
+  it("补丁不带 `\\ No newline`：原文件有行尾换行就保持有（反向锚点，不许一刀切）", async () => {
+    await writeFile(join(dir, "src", "yn.ts"), "a\nb\nc\n", "utf8"); // 末行有换行
+    const r = await apply_patch.run({ patch: [
+      "diff --git a/src/yn.ts b/src/yn.ts",
+      "--- a/src/yn.ts",
+      "+++ b/src/yn.ts",
+      "@@ -1,3 +1,3 @@",
+      " a",
+      "-b",
+      "+B",
+      " c",
+    ].join("\n") }, ctx());
+    expect(r.ok).toBe(true);
+    expect(await readFile(join(dir, "src", "yn.ts"), "utf8")).toBe("a\nB\nc\n");
+  });
+
+  it("整文件重写且原文件无行尾换行 ⇒ 重写后仍然没有", async () => {
+    await writeFile(join(dir, "src", "whole.ts"), "a\nb\nc\nd\ne", "utf8");
+    const r = await apply_patch.run({ patch: [
+      "diff --git a/src/whole.ts b/src/whole.ts",
+      "--- a/src/whole.ts",
+      "+++ b/src/whole.ts",
+      "@@ -1,5 +1,5 @@",
+      " a",
+      " b",
+      " c",
+      " d",
+      "-e",
+      "+E",
+    ].join("\n") }, ctx());
+    expect(r.ok).toBe(true);
+    expect(await readFile(join(dir, "src", "whole.ts"), "utf8")).toBe("a\nb\nc\nd\nE");
+  });
+
+  it("新建文件仍以行尾换行结尾（--- /dev/null 没有原文件可保持，git 同口径）", async () => {
+    const r = await apply_patch.run({ patch: [
+      "diff --git a/src/created.ts b/src/created.ts",
+      "new file mode 100644",
+      "--- /dev/null",
+      "+++ b/src/created.ts",
+      "@@ -0,0 +1,2 @@",
+      "+export const c = 1;",
+      "+",
+    ].join("\n") }, ctx());
+    expect(r.ok).toBe(true);
+    expect(await readFile(join(dir, "src", "created.ts"), "utf8")).toBe("export const c = 1;\n\n");
+  });
+
   it("`\\ No newline at end of file` 打到文件末时真的不留换行", async () => {
     const noNewline = [
       "diff --git a/src/b.ts b/src/b.ts",

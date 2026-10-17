@@ -83,8 +83,16 @@ function locate(f: PatchFile, h: PatchHunk, seq: number, lines: string[]): Place
   };
   if (before.length === 0) {
     // 纯新增 hunk（`-0,0` 或前后都无上下文时）：只能按声明行号插，越界就报。
-    const at = Math.min(Math.max(declared, 0), lines.length);
-    if (declared > lines.length) return mismatchError(f, h, seq, at, undefined);
+    // **纯新增时 oldStart 是"插在旧文件第几行之后"**（git 口径：`@@ -2,0 +3 @@` 的新内容跟在
+    // 旧第 2 行后面）。0-based 落点因此是 `oldStart`，不是 `oldStart - 1`——后者会让每一次
+    // 中间插入都整体早一行（往文件尾追加时甚至插到末行之前），而回执照报 `ok: true`：
+    // 静默改错地方比改不动危险得多。`@@ -0,0`（新建）两式都落到 0，行为不变。
+    // **纯新增时 oldStart 是"插在旧文件第几行之后"**（git 口径：`@@ -2,0 +3 @@` 的新内容跟在
+    // 旧第 2 行后面）。0-based 落点因此是 `oldStart`，不是 `oldStart - 1`——后者会让每一次
+    // 中间插入都整体早一行（往文件尾追加时甚至插到末行之前），而回执照报 `ok: true`：
+    // 静默改错地方比改不动危险得多。`@@ -0,0`（新建）两式都落到 0，行为不变。
+    const at = Math.min(Math.max(h.oldStart, 0), lines.length);
+    if (h.oldStart > lines.length) return mismatchError(f, h, seq, at, undefined);
     return { hunk: h, at, offset: 0 };
   }
   if (matches(declared)) return { hunk: h, at: declared, offset: 0 };
@@ -150,7 +158,37 @@ function buildFile(f: PatchFile, raw: string): { text: FileText; offsets: number
   for (let i = cursor; i < text.lines.length; i++) out.push(text.lines[i]);
 
   // 结尾换行：只有覆盖到文件末的那一个 hunk 说话才算（`\ No newline` 在中间段是补丁自身的形状，不是文件末的形状）。
-  const endsWithNewline = coversEof ? !lastNewNoNewline : text.endsWithNewline;
+  //
+  // **不能只看新侧就完事**：补丁完全不带 `\ No newline` 标记是常见形状（手写补丁、别处抄来的），
+  // 那时 `newNoNewline` 恒为 false，只看它就会给一个本来没有行尾换行的文件强加 `\n`——
+  // git apply 在这一格的真值是保持原样。
+  //
+  // git 的记法实测（`git diff` 自己产的两种补丁）：
+  //   · 结果无换行 ⇒ 标记跟在**新侧**末行之后（`newNoNewline = true`）；
+  //   · 结果有换行、而原文件末行没有 ⇒ 标记跟在**旧侧**末行之后（`oldNoNewline = true`）。
+  // 所以 `oldNoNewline` **不参与**结果形状——它只是在解释原文件。判据是：
+  //   ① 新侧标了     ⇒ 无换行（git 常规形状，也是既有测试钉的那两格）
+  //   ② 新侧没标     ⇒ 原文件怎样就怎样（不替用户决定要不要行尾换行）
+  // 例外是**新建文件**（`--- /dev/null`）：没有原文件可保持，而 git 对这一族补丁从不放
+  // `\ No newline` 标记、产出的却是带行尾换行的文件（POSIX 文本文件也以换行结尾）
+  // ⇒ 新建的缺省就是有换行。少了这一支，新建文件会写成无行尾换行。
+  //
+  // **不能只看新侧就完事**：补丁完全不带 `\ No newline` 标记是常见形状（手写补丁、别处抄来的），
+  // 那时 `newNoNewline` 恒为 false，只看它就会给一个本来没有行尾换行的文件强加 `\n`——
+  // git apply 在这一格的真值是保持原样。
+  //
+  // git 的记法实测（`git diff` 自己产的两种补丁）：
+  //   · 结果无换行 ⇒ 标记跟在**新侧**末行之后（`newNoNewline = true`）；
+  //   · 结果有换行、而原文件末行没有 ⇒ 标记跟在**旧侧**末行之后（`oldNoNewline = true`）。
+  // 所以 `oldNoNewline` **不参与**结果形状——它只是在解释原文件。判据是：
+  //   ① 新侧标了     ⇒ 无换行（git 常规形状，也是既有测试钉的那两格）
+  //   ② 新侧没标     ⇒ 原文件怎样就怎样（不替用户决定要不要行尾换行）
+  // 例外是**新建文件**（`--- /dev/null`）：没有原文件可保持，而 git 对这一族补丁从不放
+  // `\ No newline` 标记、产出的却是带行尾换行的文件（POSIX 文本文件也以换行结尾）
+  // ⇒ 新建的缺省就是有换行。少了这一支，新建文件会写成无行尾换行。
+  const endsWithNewline = f.op === "create" ? !lastNewNoNewline
+    : coversEof && lastNewNoNewline ? false
+      : text.endsWithNewline;
   return { text: { lines: out, endsWithNewline }, offsets, add, rem };
 }
 
