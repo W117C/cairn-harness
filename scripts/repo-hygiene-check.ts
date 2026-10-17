@@ -1,6 +1,7 @@
 /**
- * 仓库体量门（repo-hygiene）：三条面。前两条各带分母（取料占比、单文件行数），
- * 第三条问**被认证那一笔自己的删除形状**（#16／第 435 页：那笔空树提交当时只靠我看见 stdout）。
+ * 仓库体量门（repo-hygiene）：四面。① 取料占比、②-a `src` 单文件行数、②-b `scripts` 单文件行数
+ * （2026-10-17 第 501 页补：仪式层同样吃体量帽）、③ **被认证那一笔自己的删除形状**
+ * （#16／第 435 页：那笔空树提交当时只靠我看见 stdout）。
  *
  * 这道门量的是**仓库自己长得多快**，不是代码对不对。它存在的动因是 2026-10-02 全量实测：
  *   · 已跟踪 2443 个文件，其中 `outputs/` **1449（59.3%）**；
@@ -160,6 +161,19 @@ export const SRC_FILE_LINE_CAP = 2600;
 
 // ---- 纯判据（可单测；IO 只发生在 main 里）----
 
+/**
+ * ②-b 面：`scripts/` 下单个源文件（.ts / .mjs）的行数帽 —— 2026-10-17（第 501 页，审查报告 #5）。
+ *
+ * 加这一面的直接动因：`scripts/mutate-verify.mjs` 曾 **15,898 行**，是被 ②-a 管得住的最大文件
+ * （orchestrator 2,566）的 6 倍，却整支躲在帽的扫描面之外。「帽只扫 src」这条口径本身不是错，
+ * 错在**仪式层同样是生产代码**：它跑在每次认证之前，坏起来的代价比 src 更大，没道理反而没帽。
+ *
+ * 帽值与 src 同数（2600）：同一条不变式的两级面，不另立新标准。落地时现状读数（拆分后）：
+ * 最大 `scripts/lib/mutations/agent-runtime.mjs` 约 1,900 行、`scripts/lib/mutate-gates.ts` 1,417 行
+ * ⇒ 帽 > 现状，与 ②-a 那条「帽 = 现状上取整」的政策一致（一道永远红的门等于没有门）。
+ */
+export const SCRIPT_FILE_LINE_CAP = 2600;
+
 export interface TrackedCounts {
   /** 已跟踪文件总数（分母）。 */
   total: number;
@@ -241,14 +255,15 @@ function maxLines(files: readonly FileSize[]): string {
   return files.length === 0 ? "n/a" : String(Math.max(...files.map((f) => f.lines)));
 }
 
-/** 面②判据：单文件超帽即红，**并点名是哪一支**（不点名就等于只说「有文件太大」）。 */
-export function oversizedFiles(files: readonly FileSize[], cap = SRC_FILE_LINE_CAP): OversizeVerdict {
+/** 面②判据：单文件超帽即红，**并点名是哪一支**（不点名就等于只说「有文件太大」）。
+ *  `label` 只进文案（src / scripts 两个面共用同一支判据与同一个数）。 */
+export function oversizedFiles(files: readonly FileSize[], cap = SRC_FILE_LINE_CAP, label = "src"): OversizeVerdict {
   const offenders = files.filter((f) => f.lines > cap).sort((a, b) => b.lines - a.lines);
   return {
     ok: offenders.length === 0,
     offenders,
     detail: offenders.length === 0
-      ? `src 单文件全部 ≤ ${cap} 行（最大 ${maxLines(files)} 行 / ${files.length} 支）`
+      ? `${label} 单文件全部 ≤ ${cap} 行（最大 ${maxLines(files)} 行 / ${files.length} 支）`
       : `超帽 ${offenders.length} 支：` + offenders.map((f) => `${f.path} ${f.lines} 行`).join("、"),
   };
 }
@@ -422,13 +437,15 @@ function gitLsFiles(prefix?: string): string | null {
   return r.stdout;
 }
 
-function srcFileSizes(): { files: FileSize[]; unreadable: string[] } {
-  const out = gitLsFiles("src");
+/** 取某一面（src / scripts）下**被跟踪源文件**的行数。`exts` 是这一面认的源文件后缀。
+ *  两面共用同一支取料，免得一条口径两个实现（第 501 页把 scripts 纳入进来时只剩后缀不同）。 */
+function fileSizesUnder(prefix: string, exts: readonly string[]): { files: FileSize[]; unreadable: string[] } {
+  const out = gitLsFiles(prefix);
   if (out === null) return { files: [], unreadable: [] };
   const files: FileSize[] = [];
   const unreadable: string[] = [];
   for (const rel of nulPaths(out)) {
-    if (!rel.endsWith(".ts")) continue;
+    if (!exts.some((e) => rel.endsWith(e))) continue;
     try {
       const text = readFileSync(join(ROOT, rel), "utf8");
       // 行数口径：末尾有换行时最后一段不算一行（否则每个文件系统性多 1 行）
@@ -440,6 +457,15 @@ function srcFileSizes(): { files: FileSize[]; unreadable: string[] } {
     }
   }
   return { files, unreadable };
+}
+
+function srcFileSizes(): { files: FileSize[]; unreadable: string[] } {
+  return fileSizesUnder("src", [".ts"]);
+}
+
+/** ②-b：脚本面认 `.ts` 与 `.mjs`（母脚本与拆出来的变异表都是 `.mjs`）。 */
+function scriptFileSizes(): { files: FileSize[]; unreadable: string[] } {
+  return fileSizesUnder("scripts", [".ts", ".mjs"]);
 }
 
 // ---- 面③的取料：这一笔自己的删除形状（判据在 lib/commit-surface，这里只碰 git）----
@@ -505,6 +531,20 @@ async function main(): Promise<void> {
     if (!v.ok) for (const o of v.offenders) console.log(`     为什么要有这条：${o.path} ${o.lines} 行 > 帽 ${SRC_FILE_LINE_CAP}；见 docs/optimization-plan-2026-10-02.md W4`);
   }
 
+  // 面②-b（第 501 页，审查报告 #5）：scripts 下单个源文件的体量帽——仪式层不再是帽外之地。
+  // 取料与判据都与 ②-a 同一支，只有面与后缀不同；取不到同样判红（没尺 ≠ 合格）。
+  const scripts = scriptFileSizes();
+  if (scripts.unreadable.length > 0) console.log(`  ⚠️ 面②-b 已跟踪但盘上读不到 ${scripts.unreadable.length} 支（未计入，等于没量到这一格）`);
+  if (scripts.files.length === 0) {
+    console.log("  ❌ 面②-b 取不到 scripts 下任何源文件 ⇒ 没尺，判红");
+    failed++;
+  } else {
+    const v = oversizedFiles(scripts.files, SCRIPT_FILE_LINE_CAP, "scripts");
+    if (!v.ok) failed++;
+    console.log(`  ${v.ok ? "✅" : "❌"} 面②-b 单文件体量 — ${v.detail}`);
+    if (!v.ok) for (const o of v.offenders) console.log(`     为什么要有这条：${o.path} ${o.lines} 行 > 帽 ${SCRIPT_FILE_LINE_CAP}（第 501 页：仪式层同样吃体量帽）`);
+  }
+
   // 面③（#16／第 435 页）：被认证的那一笔自己的删除形状。
   // 它判的不是当前体量而是这一笔的历史形状——第 431 页那笔空树提交（3647 支全「删」、树里 0 支）
   // 是我**看见 stdout 才停的**；从这一版起由门喊，忘了跑 `commit-surface-check` 也拦得住。
@@ -522,8 +562,8 @@ async function main(): Promise<void> {
 
   console.log(
     failed === 0
-      ? `[repo-hygiene-check] 三面全绿 ✅（帽：取料 ≤ ${(OUTPUTS_SHARE_CAP * 100).toFixed(0)}%、src 单文件 ≤ ${SRC_FILE_LINE_CAP} 行、`
-        + `一笔里从树消失的文件 ≤ ${String(DELETED_FILE_CAP)} 支；现状站住，后续逐波降帽）`
+      ? `[repo-hygiene-check] 四面全绿 ✅（帽：取料 ≤ ${(OUTPUTS_SHARE_CAP * 100).toFixed(0)}%、src 单文件 ≤ ${SRC_FILE_LINE_CAP} 行、`
+        + `scripts 单文件 ≤ ${SCRIPT_FILE_LINE_CAP} 行、一笔里从树消失的文件 ≤ ${String(DELETED_FILE_CAP)} 支；现状站住，后续逐波降帽）`
       : `[repo-hygiene-check] ❌ ${failed} 面红`,
   );
   process.exit(failed === 0 ? 0 : 1);

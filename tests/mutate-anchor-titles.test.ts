@@ -8,6 +8,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { ANCHOR_COUNT_FLOOR, KNOWN_DRIFT, ZERO_ANCHOR_REVIEW, checkAnchorFace, checkAnchorTitles, parseAnchors, type Finding, type TableSource } from "../scripts/mutate-anchor-titles";
+// 2026-10-17 拆表：表按域搬去 scripts/lib/mutations/*.mjs，表文本统一从 mutation-table 取。
+import { readMutationTableText } from "../scripts/lib/mutation-table";
 
 const ROOT = resolve(__dirname, "..");
 const read = (rel: string): string | null => {
@@ -112,7 +114,7 @@ describe("checkAnchorTitles：漂移与误报的分界", () => {
 });
 
 describe("真表：新漂移必须红，存量必须逐条点名", () => {
-  const tableText = read("scripts/mutate-verify.mjs");
+  const tableText = readMutationTableText(ROOT);
   /** 取料只留一份：真表的两条断言（漂移=0 / 没尺必须登记）共用同一次求值，
    *  各抄一份取料迟早漂出两把尺（本仓"同一判据各抄一份"那一族的形状）。 */
   const realFindings = (): Finding[] => {
@@ -234,7 +236,7 @@ describe("checkAnchorFace：表只能被「摘得对」地缩小", () => {
   });
 
   it("真表现读：零发现，且解析到的行数与表里 id 行数一致（不许拿漏计当结论）", () => {
-    const tableText = read("scripts/mutate-verify.mjs");
+    const tableText = readMutationTableText(ROOT);
     expect(tableText).not.toBeNull();
     const rows = parseAnchors(tableText ?? "");
     const rawIds = [...(tableText ?? "").matchAll(/\bid:\s*"/g)].length;
@@ -244,7 +246,7 @@ describe("checkAnchorFace：表只能被「摘得对」地缩小", () => {
   });
 
   it("真表的下限不许是手抄的旧数：帽必须 ≤ 现表行数（否则本闸一落地就红在帽上）", () => {
-    const rows = parseAnchors(read("scripts/mutate-verify.mjs") ?? "");
+    const rows = parseAnchors(readMutationTableText(ROOT));
     expect(ANCHOR_COUNT_FLOOR).toBeLessThanOrEqual(rows.length);
   });
 

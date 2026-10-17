@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readMutationTableText } from "../scripts/lib/mutation-table";
 import {
   coverWiring,
   extractAnchorNeedles,
@@ -173,7 +174,8 @@ describe("coverWiring：两半各要有人守，豁免不许陈旧", () => {
 
 describe("真实现状：agent-runner 的每行接线都有锚点（棘轮本体）", () => {
   const runner = readFileSync(join(ROOT, "src/main/agent-runner.ts"), "utf8");
-  const table = readFileSync(join(ROOT, "scripts/mutate-verify.mjs"), "utf8");
+  // 2026-10-17 拆表：表按域搬去 scripts/lib/mutations/*.mjs，表文本从 mutation-table 统一取。
+  const table = readMutationTableText(ROOT);
   const found = extractToggleWiring(runner);
   const needles = extractAnchorNeedles(table);
   /** 读盘半边确实还没人守、已署名并挂任务的格（每条都得能在任务表里查到同号条目）。

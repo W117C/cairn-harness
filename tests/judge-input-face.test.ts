@@ -102,10 +102,13 @@ describe("attributeInputs：两把尺分开标，空集说「未记」", () => {
 });
 
 describe("活例负控：这把尺不许是空载的", () => {
-  it("第 86 页那条真红：`tests/mutate-anchor-titles.test.ts` 的字面量必须点出 `scripts/mutate-verify.mjs`", () => {
-    const text = readFileSync(resolve(ROOT, "tests/mutate-anchor-titles.test.ts"), "utf8");
+  it("第 86 页那条真红：`tests/mutate-verify-gates.test.ts` 的字面量必须点出 `scripts/mutate-verify.mjs`", () => {
+    /* 2026-10-17 拆表后，`mutate-anchor-titles.test.ts` 不再点名母脚本（表文本改走 `mutation-table`），
+       这条活例负控换成仍然**真读母脚本壳**的那份判卷——它仍是「判卷把生产脚本当输入」的真样本。
+       `inFlight` 只放一条 ⇒ 多出来的路径字面量不会进 hits，`toEqual` 的严格性不降。 */
+    const text = readFileSync(resolve(ROOT, "tests/mutate-verify-gates.test.ts"), "utf8");
     expect(pathLiterals(text)).toContain("scripts/mutate-verify.mjs");
-    const r = attributeInputs("tests/mutate-anchor-titles.test.ts", {
+    const r = attributeInputs("tests/mutate-verify-gates.test.ts", {
       graph: stubGraph({}),
       text,
       inFlight: new Set(["scripts/mutate-verify.mjs"]),

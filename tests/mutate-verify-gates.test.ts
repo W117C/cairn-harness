@@ -9,6 +9,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { anchorFaces, auditExpectFails, auditPointerWiring, enclosingSymbol, enclosingSymbolSpan, returnExitsOf, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, anchorCostCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, judgeWithRetry, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, mutateTreeGuard, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, restoreCheck, restoreDiffProblem, redVerdictCell, redKindsLine, selectChangedEntries, ledgerOnlyDerivationHint, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, testCaseBody, unverifiedCell, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, wiringCensus, type AnchorCostRow, type HeadState, type RestoreVerdict } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
+// 2026-10-17 拆表：变异配置表按域搬去 scripts/lib/mutations/*.mjs。凡是「数表长 / 数 id 行」的
+// 判据都从这一份取料面拿表文本，别各自抄一份十三条路径（抄一份就会在下次拆表时静默少读）。
+import { MUTATION_TABLE_FILES, readMutationTableText } from "../scripts/lib/mutation-table";
+
+const REPO_ROOT = fileURLToPath(new URL("../", import.meta.url));
 
 /** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
  *  以前这里 spawn `--check-needles`，结果在变异单跑时撞上门自己的备份文件预检 ⇒「读不到汇总行」
@@ -695,7 +700,8 @@ describe("auditExpectFails：killer 指针必须指得到活用例", () => {
     expect(rows.length).toBeGreaterThan(500);
     // 「一条都不许丢」：`--list` 是两把静态尺共同的取料面。字段里带换行会把一行拆成两行 ⇒
     // 那条锚点对两把尺同时隐形，而两把尺都发现不了（今天就抓到 1 条：desc 里带换行）。
-    const tableSrc = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    // 2026-10-17 拆表：表长从拆开后的 13 份拼起来数（清单与母脚本拼接顺序同一份：mutation-table）。
+    const tableSrc = readMutationTableText(REPO_ROOT);
     expect(rows.length).toBe((tableSrc.match(/^\s+id: "/gm) ?? []).length);
     const root = fileURLToPath(new URL("../", import.meta.url));
     expect(auditExpectFails(rows, (rel) => {
@@ -905,16 +911,19 @@ describe("mutate-verify 也接了这把锁：占不到就不许动盘（那份�
       // 而同条命令在 shell 管道里连测 20 次全是 918、把这条锚点的突变落到盘上再数也是 918 ⇒ 成因未定。
       // 写死 `>900` 只会把一次未定读数变成常驻假红；换成相对读数后这一格反而更硬——它成了
       // 「列协议一条都不许丢」（规则 225）在**锁语境下**的观测者，与上面那条真表自证各守一侧。
-      const tableSrc = readFileSync(script, "utf8");
+      // 2026-10-17 拆表：表长读**拼好的表文本**，下面三条分支位置读**壳**（母脚本本身）。
+      // 两者以前同源；拆开后必须分开取，否则表长恒为 0 而分支位置在一张表里永远找不到。
+      const tableSrc = readMutationTableText(REPO_ROOT);
+      const shellSrc = readFileSync(script, "utf8");
       expect(rows, "名单行数不等于表长＝吃 `--list` 的两把静态尺会少读锚点而不自知").toBe((tableSrc.match(/^\s+id: "/gm) ?? []).length);
       // `--check-needles` 这一支**不再 spawn**（它内部要对 920 条改法做语法体检，≈7.7s，而挂在本文件上的锚点有几十条、
       // 每条都要跑三遍 ⇒ 本判卷一个用例把整表成本抬了 19 分钟；09-28 现读：13.6s → 5.9s）。
       // 它换来的是同一条确定性的事：两条只读分支都在占锁之前 exit——按行首语句比**位置**，不是比措辞。
-      const readBranch = tableSrc.indexOf('\nif (plan.mode === "check-needles") {');
-      const claimAt = tableSrc.indexOf("\nconst LOCK = acquireToolLock({");
+      const readBranch = shellSrc.indexOf('\nif (plan.mode === "check-needles") {');
+      const claimAt = shellSrc.indexOf("\nconst LOCK = acquireToolLock({");
       expect(readBranch, "只读体检那一条分支不在了 ⇒ 下面这条位置比较失去意义（本文件基线红）").toBeGreaterThan(-1);
       expect(readBranch, "体检分支排到占锁之后＝不改盘的那一半也被锁死（读的人只会以为门坏了）").toBeLessThan(claimAt);
-      const listBranch = tableSrc.indexOf('\nif (plan.mode === "list") {');
+      const listBranch = shellSrc.indexOf('\nif (plan.mode === "list") {');
       expect(listBranch, "--list 分支同理，且要在体检之前（名单是别的尺的取料面）").toBeLessThan(readBranch);
     } finally { clear(); }
     expect(existsSync(LOCK_AT), "只读入口自己占了一把锁 ⇒ 两条并发 --list 会互相拒跑，而它一个字节都不改").toBe(false);
@@ -974,7 +983,8 @@ describe("印完就退的出口必须同步写：--list 是两把静态尺共同
     const r = spawnSync(process.execPath, ["--import", "tsx", script, "--list"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
     expect(r.status).toBe(0);
     const rows = (r.stdout ?? "").split("\n").filter((l) => l.includes("\t")).length;
-    expect(rows, "行数≠表长＝列协议在生产侧就漏了（不是读者的锅）").toBe((src.match(/^\s+id: "/gm) ?? []).length);
+    // 2026-10-17 拆表：表长读拼好的表文本（`src` 是壳，里面已经没有 `id:` 行了）。
+    expect(rows, "行数≠表长＝列协议在生产侧就漏了（不是读者的锅）").toBe((readMutationTableText(REPO_ROOT).match(/^\s+id: "/gm) ?? []).length);
   }, 60_000);
 });
 
@@ -1716,9 +1726,16 @@ describe("树闸接线：真跑本脚本——主检出拒跑且一个字节都�
   const fixture = (): { dir: string; main: string; wt: string } => {
     const dir = mkdtempSync(join(tmpdir(), "dsh-s2-tree-"));
     const main = join(dir, "repo");
-    mkdirSync(join(main, "scripts/lib"), { recursive: true });
+    mkdirSync(join(main, "scripts/lib/mutations"), { recursive: true });
     mkdirSync(join(main, "src"), { recursive: true });
-    for (const rel of ["scripts/mutate-verify.mjs", "scripts/lib/mutate-gates.ts", "scripts/lib/tool-lock.ts"]) {
+    // 2026-10-17 拆表：母脚本现在 import 13 份 mutations 模块——靶子树少拷一份就 ERR_MODULE_NOT_FOUND。
+    // 这条 fixture 只搬「被测的那几份代码」，所以清单必须跟着母脚本的 import 面走。
+    for (const rel of [
+      "scripts/mutate-verify.mjs",
+      "scripts/lib/mutate-gates.ts",
+      "scripts/lib/tool-lock.ts",
+      ...MUTATION_TABLE_FILES.map((f) => `scripts/lib/mutations/${f}.mjs`),
+    ]) {
       writeFileSync(join(main, rel), readFileSync(join(repoRoot, rel), "utf8"), "utf8");
     }
     writeFileSync(join(main, ANCHOR_SRC), "export const ANCHOR_SENTINEL = 1;\n", "utf8");

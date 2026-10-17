@@ -16418,3 +16418,52 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    **出沙箱全绿**；这是环境不是回归；
    ④ 报告 #2 最后一缝（`runAgent`）仍被兄弟会话的 delivery-guard 改动占着，未动。
 
+## 2026-10-17 · 第 501 页：#5 仪式层两刀——变异表按域拆出母脚本（15,898 → 936 行）＋体量帽扩到 `scripts/**`
+
+1. **动因**：结构债审查报告 #5。`scripts/mutate-verify.mjs` 曾 **15,898 行**，是被行数帽管得住的
+   最大 `src` 文件的 6 倍，却整支躲在帽的扫描面之外（`repo-hygiene` 只扫 `src/`）。报告的两步走：
+   帽扩到 `scripts/**` ＋ 母脚本朝判据层继续拆。
+2. **先量清楚再动刀**：15,898 行里 **14,995 行是那张 `MUTATIONS` 表**（1,571 条），壳代码只有 873 行
+   ——所以「拆母脚本」实际是**拆表**，不是拆逻辑。之前没人做这件事，是因为表在文件里时「一条都不能
+   丢」只能靠人眼；拆出来之后这条由计数与语法体检机械守住。
+3. **第一刀：表按域拆成 13 份**（`scripts/lib/mutations/*.mjs`）。分组按每条的 `src` 归属：
+   `agent-orchestration` / `agent-plugins` / `agent-subsystems` / `agent-runtime` / `agent-misc` /
+   `main` / `tools` / `core`（permissions+providers+events+routing+src 顶层）/ `scripts-gates` /
+   `scripts-mutate` / `scripts-certs-eval` / `scripts-misc` / `misc`。搬运是 **AST 切片、逐字搬**：
+   每条连同它前面的注释整块搬走，不改一个字符、不重排（同文件内保持原顺序）。母脚本只剩
+   import 与展开：**15,898 → 936 行**，新模块合计 15,059 行。
+4. **「一条都不能丢」怎么证的（三层）**：① 生成时去重校验——1,571 条进、1,571 条出、重复 id 0；
+   ② `--check-needles` 现读 **1571 条**（与拆前逐字同数），且「改法语法体检 1571 条全部产出合法
+   源文件」——**每条 `apply` 都被真跑过一遍**，所以「搬出来引用了不存在的模块级标识符」这种错
+   也会当场现形；③ 判卷侧「`--list` 行数 = 表里 `id:` 行数」两条自证继续绿。
+5. **取料面收成一处**：新建 `scripts/lib/mutation-table.ts`（文件清单 + 拼好的表文本）。凡「读表
+   文本」的判据都改从这里取，不各抄一份十三条路径——抄一份就会在下次拆表时静默少读，而少读的
+   形态恰恰是「锚点看起来都在」。改到的取料面：`tests/mutate-verify-gates.test.ts`（两处表长
+   + 一处分母，另加**靶子树拷贝清单**：那条 fixture 只搬「被测的那几份代码」，母脚本多了 13 个
+   import ⇒ 少拷一份就 `ERR_MODULE_NOT_FOUND`）、`tests/mutate-anchor-titles.test.ts` 三处、
+   `tests/wiring-coverage.test.ts` 一处。
+6. **第二刀：帽扩到 `scripts/**`**（`scripts/repo-hygiene-check.ts` 新增面 ②-b）。取料与判据都与
+   ②-a 共用同一支（只有面名与后缀不同：scripts 认 `.ts` ＋ `.mjs`），**帽值同数 2,600**——同一条
+   不变式的两级面，不另立新标准。落地读数：拆分后 scripts 最大 **2,036 行**（`scripts-certs-eval`
+   那份表）⇒ 帽 > 现状，与「帽 = 现状上取整」的政策一致；「取不到任何源文件 ⇒ 判红」那一格
+   （没尺 ≠ 合格）也照 ②-a 抄了。
+7. **读数**：typecheck 0 报错｜定向判卷 **4 文件 233 条全绿**（表的三族取料面 + 针脚体检）｜
+   `repo-hygiene` **四面全绿**（src 最大 1,725 / scripts 最大 1,417——后者是已跟踪文件；本页新增的
+   未跟踪面最大 2,036，入库后仍在帽内）｜全量核心判卷 **390/393 文件、5625/5633 条（203.74s）**
+   ——**当前不绿，3 文件红全部是既有的兄弟会话/环境账，本笔零新增**：① `tests/cli-surface.test.ts`
+   6 条——未跟踪的 `.agent/providers.json` 里 `_comment` 被现行校验器判成不认识的字段；
+   ② `tests/prose-needle-scan.test.ts` 1 条——顶包候选 11（已提交 9 ＋ 在飞 2）> 登记的 10；这条在
+   本页之前就是 11（那时是「已提交 10 ＋ 在飞 1」），本笔只是把其中一份从"已提交"挪到"在飞"；
+   ③ `tests/verify-multiface.test.ts` 1 条——verify 面新增了未跟踪草稿 `scripts/svg-figure-check.ts`｜
+   `--check-needles`
+   **1571 条｜阻断 4**——**本笔零改指、零新增**：4 条全是 `src/agent/system-prompt.ts` 的账，其中
+   2 条是本页之前就在的（`base-system-patch-first-rule-removed` / `visual-self-check-rule-removed`），
+   另 2 条（`orchestration-rule-dropped` / `orchestration-taskbook-removed`）是**兄弟会话正在改的
+   那一行**造成的：他们把 `任务书必须自包含——目标 / 涉及文件 / 验收口径，worker 看不到…` 改写成
+   `任务书必须自包含（worker 看不到…）`，两条锚文随之落空（HEAD 版里两处都在，逐字比对过）。
+8. **仍未证（不许读成绿）**：① 桌面层（`pnpm --filter cairn-desktop test`）与 CI 未跑这一笔；
+   ② 报告 #5 第三句「配套的 top5 判卷文件…改喂 lib 纯函数」**未动**——本页只把「读表文本」的取料
+   面收成一处，跨行正则锚定那些接线格仍是原样（那是一次独立的判据改造）；③ 13 份表文件的**组间
+   `--list` 顺序变了**（组内保持原序）：没有任何判据依赖组间顺序（逐条独立），但人读 `--list`
+   时看到的排序与从前不同，这里明写出来；④ 报告 #2 最后一缝（`runAgent`）仍被兄弟会话占着。
+
