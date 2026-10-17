@@ -40,17 +40,13 @@ import { frozenJudgePathSet } from "../frozen";
 import { createEventLog, replay } from "../events";
 // goal 模式：判据与投影全在纯函数面（src/agent/goal.ts），这里只做「读事件流 → 问它 → 落流 → 起下一轮」。
 import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, goalWindowSpend, parseGoalSpec, projectGoal, type GoalView } from "../agent/goal";
-// 目标漂移读数（能力 4「长任务不遗忘」的真读数）：判据全在 src/agent/goal-drift.ts 那个纯模块里，
-// 这里只做「读事件流 → 问它 → 印一行」。**不新增事件类型**——沿用本仓既有先例
-// （goal 的两态就是靠 user_message.origin 承载的），新增一种事件会让重放契约多一个分支。
-import { assistantTurnsFromEvents, goalDriftCell, goalDriftFindings } from "../agent/goal-drift";
-// cost-per-progress 读数（M10 防降智横切）：此前 `cost-per-progress.ts` 全树零生产消费者，
-// 只有单测在用——「每前进一份花多少钱」从没变成生产路径上的一个可见读数。这里接进会话收束点，
-// 与 goal-drift 同口径：只印一行，不落事件流（落流要新增事件类型，破坏重放契约）。
-import { costPerProgress } from "../agent/cost-per-progress";
-// 自进化闭环：会话收束时从同一份事件流抽信号 → 翻成策略补丁 → 落 .agent/evolution.json；
-// 下一轮装配时读回并注进 system prompt（让「上一轮的经验」真正回流到下一轮的决策，而不是只记笔记）。
-import { runEvolution, evolutionPromptNote } from "../agent/evolution";
+// 收束后的三支观测读数（目标漂移 / cost-per-progress / 自进化）2026-10-17 搬去
+// `./post-run-readings.ts`：判据仍住在各自的纯模块（goal-drift / cost-per-progress / evolution），
+// 那边只做「读事件流 → 问它 → 印一行」，不新增事件类型。
+import { emitPostRunReadings } from "./post-run-readings";
+// 自进化闭环的**装配侧**：下一轮装配时读回策略补丁并注进 system prompt（让「上一轮的经验」真正
+// 回流到下一轮的决策，而不是只记笔记）。落盘那一半随收尾读数搬去 post-run-readings。
+import { evolutionPromptNote } from "../agent/evolution";
 // 落流前的文本扫描表（`goal_stopped.reason` 已在表上）：异常原文是外部文本，而这条写入点不经
 // loop 那份 redactEventForLog，扫它就得取这张现成的表，不在这里再抄一遍「哪个字段该擦」。
 import { scanStreamEvent } from "../agent/worker-projection";
@@ -1391,50 +1387,14 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     for (const n of injectedToolNames) delete table[n];
     setCurrentPluginRuntime(null);
   }
-  // 目标漂移读数（能力 4「长任务不遗忘」的真读数，此前这个模块**零生产消费者**：
-  // 只有 tests/goal-drift.test.ts 引用它，于是「长任务会不会改口」永远只有单测证据、没有运行证据）。
-  //
-  // 为什么印 stderr 而**不落事件流**：落流就得新增一种事件类型，而事件流是重放契约
-  // （每条都要能 replay 往返，新增类型会让旧日志重放多一个分支）；而这条读数是
-  // **事后观测**，不驱动任何决策、不影响这一轮的行为。真要让它可回放，正确做法是下一波
-  // 把它并进既有的 `goal_stopped` 那类事件，而不是现在偷加一个类型。
-  //
-  // 取料口径与被判对象**同一份**（`assistantTurnsFromEvents` 从事件流重组），不另拼一套
-  // ——「同一条判据各抄一份」是本仓最忌的一种腐坏。
-  try {
-    const drift = goalDriftFindings(assistantTurnsFromEvents(await replay(opts.logPath)));
-    if (drift.length > 0) console.warn("[goal-drift] " + goalDriftCell(drift));
-  } catch (err) {
-    // 读数失败不许影响主流程（它只是观测），但也不许静默：这一格取不到就是「没量到」，
-    // 静默会把「没量到」读成「没漂移」——本仓反复点名的同一族坑。
-    console.warn("[goal-drift] 读数失败（这一格未检，不等于没有漂移）: " + (err instanceof Error ? err.message : String(err)));
-  }
-  // cost-per-progress：同 goal-drift 的纪律——观测读数，不落事件流，不影响主流程。
-  try {
-    const cpp = costPerProgress(await replay(opts.logPath));
-    if (cpp.measurable && cpp.tokensPerBoundary !== null) {
-      console.warn(
-        "[cost-per-progress] 每 verified 边界约 " + cpp.tokensPerBoundary + " token" +
-          "｜主面 " + cpp.mainTokens + " token" +
-          "｜边界后死跑 " + cpp.spendAfterLastBoundary + " token" +
-          (cpp.excludedWorkerTokens > 0 ? "（worker 开销 " + cpp.excludedWorkerTokens + " 已单列不入比值）" : ""),
-      );
-    } else {
-      console.warn("[cost-per-progress] 本跑不可测（" + String(cpp.reason) + "）——不许折成 0 或 Infinity");
-    }
-  } catch (err) {
-    console.warn("[cost-per-progress] 读数失败（这一格未检）: " + (err instanceof Error ? err.message : String(err)));
-  }
-  // 自进化闭环：抽信号 → 生补丁 → 落 .agent/evolution.json。失败不阻塞主流程。
-  try {
-    const events = await replay(opts.logPath);
-    const evo = await runEvolution(events, opts.workspace, opts.sessionId ?? opts.logPath);
-    if (evo.patches.length > 0) {
-      console.warn("[evolution] 本跑产出 " + evo.patches.length + " 条策略补丁，已落 " + String(evo.persistedTo));
-    }
-  } catch (err) {
-    console.warn("[evolution] 读数/落盘失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
-  }
+  // 收束后的三支观测读数（目标漂移 / cost-per-progress / 自进化）2026-10-17 搬去
+  // `./post-run-readings.ts`（结构债审查报告 #2 的 run 管线缝：主体 462 行的 try 当时正被另一会话
+  // 占着，先切这段与模块级状态零耦合的收尾）。三支都只读事件流、只印 stderr，失败语义随块搬走。
+  await emitPostRunReadings({
+    logPath: opts.logPath,
+    workspace: opts.workspace,
+    ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {}),
+  });
   return replay(opts.logPath);
 }
 

@@ -16467,3 +16467,33 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
    `--list` 顺序变了**（组内保持原序）：没有任何判据依赖组间顺序（逐条独立），但人读 `--list`
    时看到的排序与从前不同，这里明写出来；④ 报告 #2 最后一缝（`runAgent`）仍被兄弟会话占着。
 
+
+## 2026-10-17 · 第 502 页：agent-runner 第四刀（可做的那半）——收束后三支观测读数外提（`main/post-run-readings.ts`）
+
+1. **动因与边界**：报告 #2 的 run 管线缝。`runAgent` 现在 596 行，其中 **462 行是一个 `try`**，
+   而兄弟会话的 delivery-guard 两处 hunk 就插在里面（静置约 5.5 小时、**未提交**、他们自己的
+   25 条判卷全绿）⇒ 主体动不了。`try` **之后**那三支收尾读数与模块级状态零耦合，是本页能安全切的一段。
+2. **搬走三支**：目标漂移（`goal-drift`）/ cost-per-progress / 自进化落盘（`evolution`）。44 行原样
+   搬进 `src/main/post-run-readings.ts`（68 行），只有 `opts.` 换成入参名；三支共同的纪律（**只观测
+   不驱动决策 ⇒ 只印 stderr、不落事件流**；**失败不许静默**——「没量到」不许读成「没问题」）随块搬走，
+   注释一字未改。装配根那侧只剩一次 `await emitPostRunReadings({ logPath, workspace, sessionId? })`。
+3. **一处刻意不搬（记账，免得下一个人再试一遍）**：`try` 之前那段（工具面极性 / 权限库加载 /
+   `Session` 对象与 autonomy / runScope 与 plan scope / 日志占用登记 / 盖章器）看着「也是 setup」，
+   但它**就是外壳本身**——它写五个模块级槽（`session` / `interactiveRunAbort` / `runScopeALS` /
+   `liveRunPaths`，以及经 `installTimeOmitTools` 的 `omittedForever`）。抽进轻模块就得给这五个槽
+   各做一对注入口，等于把外壳改成回调拼装：净负，不做。
+4. **卫星账**：`tests/goal-drift.test.ts` 的三条断言**分两半**（不并成一份）：**调用点**仍在装配根
+   ⇒ 继续证「它在 `runLoop` 之后、返回事件之前」；**判据 import 与 catch 出声**在新模块 ⇒ 继续证
+   「没抄第二份、失败不静默」。并成一份会让「调用点在 loop 之后」退化成 join 顺序的恒真式——本仓
+   规则 65 那一族，刻意避开。
+5. **读数**：typecheck 0 报错｜定向判卷 **5 文件 95 条全绿**｜`--check-needles` **1571 条｜阻断 4**
+   ——**零改指、零新增**（那 4 条仍是 `system-prompt` 的两旧账 ＋ 兄弟会话在飞那一行的两笔）
+   ｜`repo-hygiene` **四面全绿**（src 最大 1,685 行）｜全量核心判卷 **390/393 文件、5625/5633 条
+   （217.58s）**——**不绿，但 3 文件红与第 501 页完全同一批、本笔零新增**：`cli-surface`（未跟踪
+   `.agent/providers.json` 的 `_comment`）、`prose-needle-scan`（顶包候选 11 > 登记 10，本页之前
+   就是 11）、`verify-multiface`（未跟踪草稿 `scripts/svg-figure-check.ts`）。
+6. **行数（口径要看清）**：工作树里 `agent-runner.ts` **1,726 → 1,685**（净 −41）；相对 **HEAD 的
+   1,683** 只 +2，因为兄弟会话那 **+43 行还在飞**、没入我的账。新模块 68 行。
+7. **仍未证（不许读成绿）**：① **主体 462 行 `try` 未动**，等兄弟会话把它那批改动落库后才能切；
+   ② 桌面层（`pnpm --filter cairn-desktop test`）与 CI 未跑这一笔；③ 三支的「失败出声」只在判卷层
+   被验证过，**没有在真故障下观测过**（要造一次事件流读取失败才看得见）。

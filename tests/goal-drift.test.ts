@@ -19,13 +19,19 @@ describe("接线面：goal-drift 不是孤儿模块（2026-10-02 接进 runAgent
   // 为什么按**文本**钉而不是 import 图扫描：本仓记忆规则 79——按行的正则判据会把注释里的
   // 示例当代码，而 AST 扫一遍 2761 行文件的 import 图成本远高于它挡住的回归。
   // 这里刻意只认 `import {` 那一行（真 import），不认注释里出现的函数名。
+  // 2026-10-17 搬迁：三支收尾读数搬去 `./post-run-readings.ts`。断言因此分两半（同第 493/494 页
+  // 的并料口径，但**不并成一份**——那会让「调用点在 runLoop 之后」变成 join 顺序的恒真式）：
+  //   · **调用点**仍在装配根 ⇒ 证明它在 runLoop 之后、返回事件之前；
+  //   · **判据 import 与 catch 出声**在新模块 ⇒ 证明没抄第二份、失败不静默。
   const runner = readFileSync(resolve(import.meta.dirname, "../src/main/agent-runner.ts"), "utf8");
-  // 判据调用点只找一次：后两条用例都要它的位置，魔法串抄两遍只会让两处各自漂。
-  const driftCallIdx = runner.indexOf("goalDriftFindings(assistantTurnsFromEvents(");
+  const readings = readFileSync(resolve(import.meta.dirname, "../src/main/post-run-readings.ts"), "utf8");
+  // 装配根里那一次调用；新模块里那一处判据调用点（措辞断言要围绕它取窗口）。
+  const emitCallIdx = runner.indexOf("await emitPostRunReadings({");
+  const driftCallIdx = readings.indexOf("goalDriftFindings(assistantTurnsFromEvents(");
 
-  it("agent-runner 真 import 了 goal-drift 的判据（不是抄第二份）", () => {
-    const imp = runner.match(/^import \{[^}]*\} from "\.\.\/agent\/goal-drift";$/m);
-    expect(imp, "agent-runner 必须 import goal-drift 的现成判据").not.toBeNull();
+  it("真 import 了 goal-drift 的判据（不是抄第二份）", () => {
+    const imp = readings.match(/^import \{[^}]*\} from "\.\.\/agent\/goal-drift";$/m);
+    expect(imp, "收尾读数模块必须 import goal-drift 的现成判据").not.toBeNull();
     // 三件都要：重组、取命中、读数措辞。少任一件都说明有支路在另拼一套。
     expect(imp?.[0]).toContain("assistantTurnsFromEvents");
     expect(imp?.[0]).toContain("goalDriftFindings");
@@ -33,16 +39,18 @@ describe("接线面：goal-drift 不是孤儿模块（2026-10-02 接进 runAgent
   });
 
   it("读数点落在 runAgent 的收束路径上（runLoop 跑完之后、返回事件之前）", () => {
-    expect(driftCallIdx, "runAgent 里必须真调一次判据").toBeGreaterThan(-1);
-    // 收束在runLoop 之后：调用点必须在 runLoop 调用点之后
+    expect(emitCallIdx, "runAgent 收束路径上必须真调一次收尾读数").toBeGreaterThan(-1);
+    // 收束在 runLoop 之后：调用点必须在 runLoop 调用点之后
     const loopIdx = runner.lastIndexOf("runLoop(");
     expect(loopIdx).toBeGreaterThan(-1);
-    expect(driftCallIdx).toBeGreaterThan(loopIdx);
+    expect(emitCallIdx).toBeGreaterThan(loopIdx);
+    // 且它在装配根里（不是只在新模块里定义、装配根从不调用）。
+    expect(driftCallIdx, "新模块里必须有那一处判据调用").toBeGreaterThan(-1);
   });
 
   it("取不到读数时必须出声，不许静默（静默会把「没量到」读成「没漂移」）", () => {
     expect(driftCallIdx).toBeGreaterThan(-1);
-    const seg = runner.slice(driftCallIdx - 400, driftCallIdx + 800);
+    const seg = readings.slice(driftCallIdx - 400, driftCallIdx + 800);
     expect(seg).toContain("catch");
     expect(seg).toContain("console.warn");
   });
