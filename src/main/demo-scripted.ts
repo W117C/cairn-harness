@@ -19,11 +19,25 @@ import {
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-/** 缺省靶子：装配根把它作为「没指定工作区时用哪个」的答案（原 `WORKSPACE`，2026-10-17 随本面搬出）。
- *  它就是 `fixtures/todo-app`——**生产 runner 里的缺省靶子是一个 fixture**，这正是审查点名的
- *  「fixtures 硬编码驻留生产 runner」。名字改成 `DEFAULT_WORKSPACE` 是为了让读者一眼看见它是
- *  「缺省」而不是「唯一」；取值一字未动。 */
-export const DEFAULT_WORKSPACE = join(ROOT, "fixtures", "todo-app");
+/** 缺省工作区：**调用方所在目录**（`process.cwd()`），不是 fixture。
+ *
+ *  2026-10-19 重构：这里原先恒为 `fixtures/todo-app`——「生产 runner 的缺省工作区是一个 git
+ *  判卷 fixture」。后果不是"不好看"，是**真污染**：任何没显式给 workspace 的 run
+ *  （IPC 会话模式、调度器触发、`runAgent` 省略）都会在收束时往那个 fixture 里写
+ *  `.agent/evolution.json`、覆盖 `src/todo.ts`、往 `.agent/snapshots/` 落快照。
+ *  实测抓到过一次：`tests/replay-faces.test.ts` 的「靶子整树逐字节不变」在**全量跑**里变红，
+ *  点名 `改动 .agent/evolution.json`——写入方是 `tests/runner-gates.test.ts` 的 m1b run
+ *  （它持锁，但 replay-faces 那条不变量只护自己那一段，锁管不了"别人也在写靶子"）。
+ *  更深一层：判卷 fixture 的纪律是"只读"，而缺省靶子却让**生产路径**把它当运行工作区——
+ *  这两件事不可能同时成立，所以缺省值本身就得换掉，不是给 fixture 加白名单。
+ *
+ *  为什么取 `process.cwd()`：CLI 的 `--workspace` 缺省早就是这个口径（`src/cli.ts:336`
+ *  的 `positional.length === 2 ? positional[0] : process.cwd()`），`src/agent/
+ *  session-provider.ts:853` 的 `opts.workspace ?? process.cwd()` 也是。三处同一个概念
+ *  三种答案是第十三族（同一谓词两份）的温床，这里收成同一个源。
+ *  demo / e2e 脚本仍显式传 `fixtures/todo-app`（`scripts/agent.ts`、`scripts/e2e.ts`、
+ *  `scripts/routing-check.ts`）——那是"我要打这个靶子"的显式意图，与缺省值无关。 */
+export const DEFAULT_WORKSPACE = process.cwd();
 export const MOCK_FIXTURE = join(ROOT, "fixtures", "mock", "todo-fix.jsonl");
 // M1b 三门演示通道：M1B_GATE_FLOW=1 时用 fixtures/gate/gate-flow.jsonl 驱动（clarify/plan 卡片真人交互）。
 // env 门控缺省关闭，M0 事件流字节不变。
