@@ -181,7 +181,32 @@ export class WorkerMergeReview {
     // B10：入口同步摘除登记——并发二次 merge 可在 commitAndMerge 的 await 窗口内同时过校验；
     // 失败路径回滚登记（合并可重试），成功路径保持摘除。
     this.deps.dropMergeOwner(agentId);
-    const outcome = await commitAndMerge(this.deps.opts.workspace, worktreePathFor(this.deps.opts.workspace, agentId), w.branch, agentId, w.task);
+    // `commitAndMerge` 内部走 `git()`，**任何非零退出都抛 WorktreeError**（worktree.ts），
+    // 而它的第一个调用 `git status --porcelain` 在 try 块**之外**。于是 git 起不来
+    // （spawn ENOENT）、仓库被锁、索引损坏……都会让异常从这里直接窜出 `mergeWorker`：
+    // 上面那句摘除已经生效，而下面 185 行的回滚只在 `outcome.ok === false`（**返回**失败）
+    // 时跑 ⇒ 抛异常的路径登记再也不回来，同一张卡再按一次合并读到的是
+    // 「merge 未登记…该 agent 已收尾或非 write worker」——**这个 worker 永久无法合并**，
+    // 与 181-182 行"失败路径回滚登记（合并可重试）"的承诺正好相反。
+    // 而且 handleCardAction 没有 try/catch ⇒ 用户连一条事件都看不到，UI 无从显示。
+    // 修法：把抛异常收敛成与"返回失败"同一种形状（回滚登记 + 落一条 tool_result），
+    // 与同文件的 cleanupWrite / rejectWorker 用 .catch 包 removeWorktree 是同一条纪律。
+    let outcome: Awaited<ReturnType<typeof commitAndMerge>>;
+    try {
+      outcome = await commitAndMerge(this.deps.opts.workspace, worktreePathFor(this.deps.opts.workspace, agentId), w.branch, agentId, w.task);
+    } catch (err) {
+      this.deps.registerMergeOwner(agentId); // 登记回来：合并可重试（见上）
+      const why = err instanceof Error ? err.message : String(err);
+      await this.deps.opts.emit({
+        type: "tool_result",
+        callId: this.receiptCallId(w, "merge"),
+        agent_id: agentId,
+        ok: false,
+        // 归因要说清是 harness/git 侧炸了，不是代码冲突——否则用户会去解一个不存在的冲突。
+        output: "[merge] 合并过程本身失败（不是代码冲突；登记已恢复，可重试）：" + why,
+      } as AgentEvent);
+      return { ok: false, error: "合并过程失败：" + why };
+    }
     if (!outcome.ok) {
       this.deps.registerMergeOwner(agentId);
       await this.deps.opts.emit({

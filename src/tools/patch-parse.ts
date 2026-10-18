@@ -328,6 +328,27 @@ export function parsePatch(text: string): PatchFile[] {
     }
     const rem = remaining(hunk);
     if (rem.old <= 0 && rem.new <= 0) {
+      // 收满了。**多给的行数也是坏补丁**（2026-10-19 补，与下面的收不满对称）：
+      // 声明 `@@ -1,1 +1,1 @@` 却给了 ctx+del+add 三行时，旧代码在这里 `hunk = null`
+      // 然后静默丢掉后面的 `-old` / `+new` ⇒ `parsePatch` 返回成功，而 hunk 只剩上下文行
+      // ⇒ 应用后文件**原样写回**、回执却报 `ok:true`「已应用补丁」。
+      // 实测：上面那份输入 `git apply` 报 `error: corrupt patch`，本解析器返回成功。
+      // 半掩比不掩更坏，半应用比不应用也更坏——模型被告知补丁落地了，其中一个文件纹丝不动。
+      //
+      // 判据是**当前行**的形状，不是下一行：收满是"上一条正文吃满"的瞬间成立的，
+      // 而多出来的那一行正是此刻手里这一条（先看下一行会漏掉"最后一条正文就是多出来的"
+      // 那一形态，实测踩过：` keep\n+new` 配 `-1,1 +1,1` 时下一行是段头，于是漏检）。
+      // 段头（diff --git / @@ / --- / +++ / rename…）与 `\ No newline` 之外的
+      // 杂行不是正文，收满后遇到它们照旧停手。
+      const bodyShaped = line.startsWith("+") || line.startsWith("-") || line.startsWith(" ") || line === "";
+      if (bodyShaped) {
+        // 不带 truncation 载荷：那是「收不满」那一族的自纠读数（见 PatchParseError 的注释），
+        // 多给是另一种坏形状，硬塞一份会让人按"补丁被截断"去修，而真相是行数写多了。
+        throw new PatchParseError(
+          `hunk 声明 -${hunk.oldStart},${hunk.oldCount} +${hunk.newStart},${hunk.newCount} 已收满，但第 ${String(i + 1)} 行还是正文行（声明的行数少于实际给的）`,
+          hunk.declaredAt,
+        );
+      }
       hunk = null; // 收满了，多余的行不再算上下文
       continue;
     }

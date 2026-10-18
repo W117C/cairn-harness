@@ -201,3 +201,108 @@ describe("纯 hex：熵分支不判，凭据交给上下文规则", () => {
     }
   });
 });
+
+/** 本文件后加的判据共用的取料助手（上面两个 describe 里各有一份同名局部 helper，
+ *  这里在模块作用域再要一份——`ruleId` 在类型上是可选的，缺的当空串处理）。 */
+const ruleIdsOf = (line: string): string[] =>
+  redactSecrets(line).findings.map((f) => f.ruleId ?? "");
+
+// ---- 2026-10-19：连接串凭据 + 值带括号（三条独立实测漏检）----
+// 判据形状与上面几条不同：不只问"有没有命中规则"，而是问**任何一段真凭据还留在不在文本里**。
+// 半掩比不掩更坏——`PASSWORD=post****` 那种只掩到第一个 `/` 的输出会给人"已脱敏"的假象，
+// 而 `//` 之后的真密码原样在场。
+describe("连接串内嵌凭据：整条掩，不许留下 // 之后那一段", () => {
+  const URIS = [
+    "postgres://appuser:s3cr3tp4ssw0rd@db.internal:5432/prod",
+    "postgresql://appuser:s3cr3tp4ssw0rd@db.internal:5432/prod",
+    "redis://:r3d1sp4ssw0rd@cache.internal:6379/0",
+    "mongodb://admin:hunter2hunter2@mongo.internal:27017/db",
+    "mongodb+srv://admin:hunter2hunter2@cluster0.abcd.mongodb.net/db",
+    "amqp://guest:guestpass1234@mq.internal:5672/%2F",
+    "mysql://root:rootpassw0rd@127.0.0.1:3306/app",
+  ];
+  /** 每一段可能凭据的东西：用户名、密码、主机。任何一个还在文本里就是漏。 */
+  const FRAGMENTS = ["s3cr3tp4ssw0rd", "r3d1sp4ssw0rd", "hunter2hunter2", "appuser",
+    "db.internal", "cache.internal", "mongo.internal", "cluster0.abcd.mongodb.net",
+    "guestpass1234", "rootpassw0rd"];
+
+  for (const uri of URIS) {
+    it(`键名是 url/uri/dsn 的也抓：${uri.slice(0, 22)}…`, () => {
+      for (const key of ["DATABASE_URL", "REDIS_URL", "MONGO_URI", "DSN"]) {
+        const line = `${key}=${uri}`;
+        const r = redactSecrets(line);
+        expect(ruleIdsOf(line), line).toContain("secret.connection_string");
+        for (const frag of FRAGMENTS) {
+          expect(r.text, `${line} 之后还留着 ${frag}`).not.toContain(frag);
+        }
+      }
+    });
+  }
+
+  it("同一行里连接串与普通赋值各掩各的（两条规则不互相破坏）", () => {
+    const line = "DATABASE_URL=postgres://appuser:s3cr3tp4ssw0rd@db.internal:5432/prod API_KEY=bf9ccaa2dab744fa83c232deef772ad0";
+    const r = redactSecrets(line);
+    expect(r.text).not.toContain("s3cr3tp4ssw0rd");
+    expect(r.text).not.toContain("bf9ccaa2dab744fa83c232deef772ad0");
+  });
+
+  it("反向验证：连接串规则排在 assigned **之后**时会退化成半掩（顺序即优先级，不是风格）", () => {
+    // 旧行为实测：assigned 先跑，把 `postgres:` 掩成 `post****`，整串匹配随后再也找不到
+    // ⇒ 输出 `PASSWORD=post****`，而 `//appuser:s3cr3tp4ssw0rd@db.internal…` 原样留下。
+    // 这里把那个退化解法现造出来钉住：它必须被"任何一段凭据都不许留"判为红。
+    const degraded = "PASSWORD=post****//appuser:s3cr3tp4ssw0rd@db.internal:5432/prod";
+    for (const frag of ["s3cr3tp4ssw0rd", "appuser", "db.internal"]) {
+      expect(degraded, "退化解法里凭据还在").toContain(frag); // 前提：它确实是坏的
+    }
+    const good = redactSecrets("PASSWORD=postgres://appuser:s3cr3tp4ssw0rd@db.internal:5432/prod");
+    for (const frag of ["s3cr3tp4ssw0rd", "appuser", "db.internal"]) {
+      expect(good.text, `退化解法不该是现状（${frag} 竟还在）`).not.toContain(frag);
+    }
+  });
+
+  it("普通 URL 不是凭据：不许把 https 链接整条掩掉（误伤的代价是看不见排查信息）", () => {
+    for (const line of [
+      "see https://example.com/path?x=1 for details",
+      "docs at http://docs.internal/guide#section",
+      "redis.io client library, not a URI",
+    ]) {
+      const r = redactSecrets(line);
+      expect(ruleIdsOf(line), line).not.toContain("secret.connection_string");
+      expect(r.text, line).toBe(line);
+    }
+  });
+});
+
+describe("赋值式凭据的值带括号（被 {12,} 卡掉的那一类）", () => {
+  it("值自带括号的密码也要掩（旧 charset 把 ( ) 排除在外 ⇒ 截断后够不到 12 字）", () => {
+    for (const line of [
+      "ADMIN_PASSWORD=Tr0ub4dor&3(x)99",
+      "password = Correct-Horse(Battery)9",
+      "api_key=abc123(def456)ghi789",
+    ]) {
+      const r = redactSecrets(line);
+      expect(r.text, line).not.toContain("Tr0ub4dor&3(x)99");
+      expect(r.text, line).not.toContain("Correct-Horse(Battery)9");
+      expect(r.text, line).not.toContain("abc123(def456)ghi789");
+    }
+  });
+
+  it("反向验证：括号被排除时这条会漏（现造旧 charset 的后果钉住）", () => {
+    // 旧正则的 charset 排除 ( ) ⇒ `Tr0ub4dor&3` 只有 11 字，够不到 {12,} ⇒ 零命中。
+    const oldStyle = /(?:api[_-]?key|secret|token|password|passwd|access[_-]?key)\s*[:=]\s*["'`]?([^\s"'`,;{}()<>$]{12,})["'`]?/i;
+    expect(oldStyle.test("ADMIN_PASSWORD=Tr0ub4dor&3(x)99"), "旧 charset 确实漏").toBe(false);
+    expect(ruleIdsOf("ADMIN_PASSWORD=Tr0ub4dor&3(x)99")).toContain("secret.assigned_bracketed");
+  });
+
+  it("括号放行不放变量引用与空值进来（放行的边界要钉住）", () => {
+    for (const line of [
+      "DB_TOKEN=${VAULT_TOKEN}",
+      "password: (short)",
+      "token_count: 42",
+      "the password field is empty",
+    ]) {
+      expect(ruleIdsOf(line), line).not.toContain("secret.assigned_bracketed");
+      expect(redactSecrets(line).text, line).toBe(line);
+    }
+  });
+});

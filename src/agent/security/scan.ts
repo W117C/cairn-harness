@@ -59,6 +59,30 @@ export const SECRET_PATTERNS: readonly {
   title: string;
 }[] = [
   { ruleId: "secret.private_key", re: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/, severity: "critical", confidence: "high", title: "私钥块" },
+  // **必须排在 secret.assigned 之前**（表头注释"顺序即优先级"的字面含义）：
+  // 脱敏是按表序逐条做 `out.split(secret).join(mask(secret))` 的。若 assigned 先跑，
+  // 它会把 `PASSWORD=postgres://…` 的 `postgres:` 那一段掩成 `post****`，本条的整串匹配
+  // 于是**在已改过的文本上再也找不到** ⇒ 只剩半掩，`//` 之后的真密码原样留下。
+  // 实测过这个顺序：放后面时输出 `PASSWORD=post****`，放前面时整条掩掉。
+  // 两条独立实测漏检（2026-10-19）：
+  //   ① `DATABASE_URL=postgres://user:pass@host/db` —— 键名 url/uri/dsn 不在 assigned 的
+  //      alternation 里，而值的 charset 又不含 `/` `:` ⇒ 整条零命中，明文落盘。
+  //   ② `PASSWORD=postgres://user:pass@host/db` —— assigned **会**命中但只掩到第一个 `/`。
+  //      半掩比不掩更坏：它给出"已经脱敏过了"的假象。所以这条整条掩，不猜哪段不要掩。
+  // 连接串凭据（2026-10-19 补，两条独立实测漏检）：
+  //   ① `DATABASE_URL=postgres://user:pass@host:5432/db` —— 键名 url/uri/dsn 不在上面那条的
+  //       alternation 里，而值的 charset 又不含 `/` `:` ⇒ 整条零命中，明文落盘。
+  //   ② `PASSWORD=postgres://user:pass@host/db` —— 上面那条**会命中**，但只掩到第一个 `/`
+  //       （`post****`），`//` 之后真正的密码原样留在文本里。半掩比不掩更坏：它给出
+  //       "已经脱敏过了"的假象。所以这条必须**整条**掩，不能只掩片段。
+  // 掩整个 URI（含 scheme 与路径）：连接串里每一段都可能是凭据，猜"哪一段不要掩"就是在猜。
+  {
+    ruleId: "secret.connection_string",
+    re: /\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis|rediss|amqp|mssql|jdbc:[a-z0-9]+):\/\/[^\s"'`]{4,}@[^\s"'`]+/gi,
+    severity: "high",
+    confidence: "medium",
+    title: "连接串内嵌凭据",
+  },
   { ruleId: "secret.openai", re: /\bsk-[A-Za-z0-9_-]{16,}/, severity: "high", confidence: "high", title: "OpenAI 风格密钥" },
   { ruleId: "secret.google", re: /\bAIza[0-9A-Za-z_-]{20,}/, severity: "high", confidence: "high", title: "Google API 密钥" },
   { ruleId: "secret.aws", re: /\bAKIA[0-9A-Z]{16}\b/, severity: "high", confidence: "high", title: "AWS Access Key ID" },
@@ -71,10 +95,22 @@ export const SECRET_PATTERNS: readonly {
     // 捕获组 1 = 真正要掩的值（掩值不吃键名）。值里排除 `$ { } ( ) < > , ;` 与引号空白 ⇒
     // 变量引用（DB_TOKEN=${VAULT_TOKEN}）、空值、短值都不算；`token_count:` 这类"键不是整词"
     // 也进不来（token 后面还有 _count，[:=] 接不上）。
+    // ⚠️ `( )` 在排除集里 ⇒ 值自带括号的密码（`Tr0ub4dor&3(x)99`）会被截到 12 字以下而漏检；
+    //   见 `secret.connection_string` 与 `secret.assigned_bracketed` 两条补丁。
     re: /(?:api[_-]?key|secret|token|password|passwd|access[_-]?key)\s*[:=]\s*["'`]?([^\s"'`,;{}()<>$]{12,})["'`]?/i,
     severity: "high",
     confidence: "medium",
     title: "赋值式凭据",
+  },
+  // 值自带括号的赋值式凭据：上面那条把 `( )` 排除在值外，于是 `ADMIN_PASSWORD=Tr0ub4dor&3(x)99`
+  // 这类真实密码被截成 `Tr0ub4dor&3`（11 字，够不到 {12,}）⇒ 漏检。这条允许括号，
+  // 但仍排除引号/空白/`$ { } < > , ;`（不引变量引用、不吃后半个 YAML 行）。
+  {
+    ruleId: "secret.assigned_bracketed",
+    re: /(?:api[_-]?key|secret|token|password|passwd|access[_-]?key)\s*[:=]\s*["'`]?([^\s"'`,;{}<>$][^\s"'`,;{}<>$]{11,}|[^\s"'`,;{}<>$]{12,})["'`]?/i,
+    severity: "high",
+    confidence: "medium",
+    title: "赋值式凭据（值含括号）",
   },
 ];
 

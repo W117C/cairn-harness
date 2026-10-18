@@ -160,3 +160,56 @@ describe("verify 面落盘前脱敏（同一族的第二个落盘面）", () => 
     expect(log).not.toContain("****");
   });
 });
+
+// ---- 2026-10-19：脱敏面自己的两条边界（都是实测出来的）----
+// ① 循环引用：`redactValue` 无 visited-set ⇒ `RangeError` 从 `events.append` 里窜出
+//    `runLoop`，**整轮任务死在那一次 emit**。工具是可能造出自引结构的（带 parent 指针的图）。
+// ② 结构不变只对普通对象成立：`Object.entries` 把 Map/Set/Date 重建成 `{}`，
+//    与"非字符串值原样返回"的承诺相反。事件形状是重放契约，不许被脱敏顺手拍平。
+describe("脱敏面自身的边界：循环引用不炸、非普通对象不拍平", () => {
+  /** 一条 emit 出自引 args 的 tool_call：跑得过 + 日志读得回 + 密钥仍被掩。 */
+  async function runWith(args: Record<string, unknown>): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), "redact-edge-"));
+    dirs.push(dir);
+    const logPath = join(dir, "events.jsonl");
+    await runLoop({
+      provider: providerEmitting({ id: "c1", name: "read_file", args }),
+      events: createEventLog(logPath),
+      workspace: dir,
+      mode: "auto",
+      userMessage: "跑一轮就停",
+    });
+    return readFile(logPath, "utf8");
+  }
+
+  it("循环引用的 args：不炸（整轮跑完）、日志读得回、密钥仍被掩、重逢处有显式占位", async () => {
+    const cyclic: Record<string, unknown> = { path: "a.ts", key: FAKE_KEY };
+    cyclic.self = cyclic;
+    const log = await runWith(cyclic);
+    expect(log).toContain("read_file");
+    expect(log, "密钥仍要掩").not.toContain(FAKE_KEY);
+    expect(log).toContain("循环引用");
+  });
+
+  it("自引用数组同样不炸（另一条递归路径）", async () => {
+    const arr: unknown[] = ["a.ts", FAKE_KEY];
+    arr.push(arr);
+    const log = await runWith({ paths: arr });
+    expect(log).not.toContain(FAKE_KEY);
+    expect(log).toContain("循环引用");
+  });
+
+  it("非普通对象原样返回：Date 不被拍成 {}（结构是重放契约）", async () => {
+    // 判据走 runLoop：args 里放一个 Date，日志里必须还是完整 ISO 串而不是 {}
+    const log = await runWith({ path: "a.ts", scannedAt: new Date("2026-01-02T03:04:05.000Z"), key: FAKE_KEY });
+    expect(log).not.toContain(FAKE_KEY);
+    expect(log).toContain("2026-01-02T03:04:05.000Z");
+    expect(log, "不许被拍平成空对象").not.toContain('"scannedAt":{}');
+  });
+
+  it("普通嵌套结构照旧逐键递归（这条修复没把原来的面改窄）", async () => {
+    const log = await runWith({ path: "a.ts", nested: { deep: [FAKE_KEY, "plain"] } });
+    expect(log).not.toContain(FAKE_KEY);
+    expect(log).toContain("plain");
+  });
+});
