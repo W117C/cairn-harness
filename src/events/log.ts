@@ -27,7 +27,18 @@ const TAIL_SCAN_CAP = 1 << 20;
  *  容错（`replay`/`replayIncremental`），但写入侧此前没人补这一步——下一次 append 会把它和
  *  下一条事件拼成**一条**坏行，于是**新事件静默不可见**（2026-10-01 M8 侧发现并登记的边界，
  *  本笔收口）。这里把没成行的尾段裁掉并响亮告警：丢的是从未成行的字节，而读者本来就看不见它们。
- *  **只在尾部修**：文件中间的坏行不动——那是另一类事故，重放会当场抛；不许被这条修安静地抹掉。 */
+ *  **只在尾部修**：文件中间的坏行不动——那是另一类事故，重放会当场抛；不许被这条修安静地抹掉。
+ *
+ *  2026-10-19 修一个真缺陷（分支二打偏）：旧代码用 `scanned < TAIL_SCAN_CAP` 当循环条件，
+ *  退出时分不清「扫完全文都没换行」与「扫到上限就收手」——**小于一个 chunk（64KB）的文件
+ *  一轮就把全文扫完**，`cut` 仍是 null，于是掉进分支二：补一个换行把半写尾段**留在文件里**。
+ *  那不是隔离，是**把尾部坏行升级成中间坏行**：`replay` 见到"坏行后面还有好行"会当场抛
+ *  `midBadLineError`（跳过会使事件 id 与行号错位）⇒ 整个会话永久打不开，只能手工修文件。
+ *  实测复现：全新日志的第一个事件被硬杀在写中途（33 字节无换行），下一次 append 后
+ *  `replay` 抛「有 1 条非尾部坏行（首在第 1 行）」，并先打一句假的「尾部超过 1MB 无换行」
+ *  ——文件总共 33 字节。而这条路正是 headless run 的常见形状（`agent-runner.ts` 先 rm 日志）。
+ *  修法：循环退出后先问「扫到哪儿了」。`pos === 0` ⇒ 全文已扫，边界是已知的（没有换行）
+ *  ⇒ 裁到 0；只有真被上限挡住（`scanned >= TAIL_SCAN_CAP` 且 `pos > 0`）才走"不猜边界"那支。 */
 async function repairPartialTail(path: string, fh: FileHandle): Promise<void> {
   const size = (await fh.stat()).size;
   if (size === 0) return;
@@ -51,6 +62,9 @@ async function repairPartialTail(path: string, fh: FileHandle): Promise<void> {
     pos = start;
     scanned += len;
   }
+  // 扫完全文仍无换行：边界已知（cut = 0）——整个文件都是没成行的尾段。
+  // 与分支二的区别只在于"我们知不知道该裁在哪儿"，不在于文件大小。
+  if (cut === null && pos === 0) cut = 0;
   if (cut !== null) {
     await fh.truncate(cut);
     console.warn(
@@ -58,8 +72,8 @@ async function repairPartialTail(path: string, fh: FileHandle): Promise<void> {
     );
     return;
   }
-  // >1MB 却一个换行都没有：不猜边界。补一个换行把劣质尾段隔离——下一条事件落在干净的新行上，
-  // 而重放会对那条坏行**大声抛**（可见胜于静默：这条路径不允许修成"悄悄少几条"）。
+  // 扫到上限仍无换行（文件真的很大且一个换行都没有）：不猜边界。补一个换行把劣质尾段隔离——
+  // 这一支保持原样：那种文件不是半写一行，而是另一种事故，让重放**大声抛**（可见胜于静默）。
   await fh.write("\n");
   console.warn(
     `[events] 尾部超过 ${String(TAIL_SCAN_CAP / 1024 / 1024)}MB 无换行，放弃自动裁剪：已补换行隔离，重放会点名该坏行：${path}`,

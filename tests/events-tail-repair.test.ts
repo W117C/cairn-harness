@@ -79,6 +79,50 @@ describe("repairPartialTail：硬杀后的续写", () => {
     await expect(replay(path)).rejects.toThrow(/坏行/u);
   });
 
+  // ---- 2026-10-19：分支二打偏的真缺陷（半写的是**第一条**事件）----
+  // 旧代码用 `scanned < TAIL_SCAN_CAP` 当循环条件，退出时分不清「扫完全文都没换行」与
+  // 「扫到上限就收手」：小于一个 chunk（64KB）的文件一轮扫完，cut 仍是 null ⇒ 掉进分支二
+  // 「补换行隔离」。那不是隔离，是把**尾部**坏行升级成**中间**坏行——replay 见到"坏行后面
+  // 还有好行"会当场抛 midBadLineError ⇒ 会话永久打不开。而"第一个事件被硬杀"正是 headless
+  // run 的常见形状（agent-runner 先 rm 日志再 createEventLog）。
+  it("半写的是**第一条**事件（全文无换行）：裁到 0 而不是补换行——补换行会让会话永久打不开", async () => {
+    const tornFirst = '{"type":"session_meta","kind":"si'; // 33 字节、无换行
+    writeFileSync(path, tornFirst, "utf8");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const log = createEventLog(path);
+      await log.append(EV(1));
+      const warnText = warn.mock.calls.map((c) => String(c[0])).join("\n");
+      // 裁掉并说清丢了多少字节；**不许**走那句「超过 1MB 无换行」（文件总共 33 字节）
+      expect(warnText).toContain("半写尾行");
+      expect(warnText).toContain(`已丢弃未成行的 ${String(Buffer.byteLength(tornFirst))} 字节`);
+      expect(warnText, "全文已扫完 ⇒ 边界已知，不该拿上限当借口").not.toContain("无换行，放弃自动裁剪");
+
+      const content = readFileSync(path, "utf8");
+      expect(content, "没成行的尾段一个字节都不留").not.toContain("session_meta");
+      const bodyLines = content.trimEnd().split("\n");
+      expect(bodyLines).toHaveLength(1);
+      expect((JSON.parse(bodyLines[0]!) as { content: string }).content).toBe("第 1 条");
+      // 关键：会话**打得开**。修之前这里抛「有 1 条非尾部坏行（首在第 1 行）」。
+      const events = await replay(path);
+      expect(events.map((e) => (e as { content: string }).content)).toEqual(["第 1 条"]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("反向验证：把退出条件改回旧的 `scanned < CAP` 写法 ⇒ 上一条必须红（尺不是空转的）", async () => {
+    // 专破上一条的坏输入：旧写法在"全文无换行"时 cut 保持 null ⇒ 走补换行分支 ⇒
+    // 文件变成"坏行 + 好行"两行 ⇒ replay 抛。这里不 import 私有函数，直接用**同形状的
+    // 现造文件**钉住那个后果：补了换行的两行文件必须被 replay 拒绝。
+    const twoLines = '{"type":"session_meta","kind":"si\n' + line(1) + "\n";
+    writeFileSync(path, twoLines, "utf8");
+    await expect(replay(path), "补换行留下的『坏行+好行』必须被重放拒绝——这正是旧代码的后果").rejects.toThrow(/坏行/u);
+    // 而修好之后（裁到 0）同一个现场是打得开的：两侧对照，证明尺量的是那条分界。
+    writeFileSync(path, line(1) + "\n", "utf8");
+    await expect(replay(path)).resolves.toHaveLength(1);
+  });
+
   it("空文件 / 新建文件：无告警、正常写入", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
