@@ -215,13 +215,32 @@ function parseVitestJson(text: string): ParsedResults | null {
 
 const TAP_HEADER = /^TAP version \d+/u;
 /** 结果行：`ok 3 - 名字`／`not ok 3 - 名字`。**解析与判卷共用这一枚**（判卷不许再抄一份取料）。
- *  顶格的那些才是 node 结尾计数数的那些；缩进的是嵌套 subtest，收了会双计。 */
-export const TAP_RESULT_LINE = /^(?<indent> *)(?<verdict>not ok|ok) (?<num>\d+) - (?<rest>.*)$/u;
+ *  只有**顶格**的那些进逐名面（缩进的是嵌套 subtest，收了会双计）。
+ *  ⚠️ 别把这条读成「顶格的才是 node 结尾计数数的那些」——**不成立**（2026-10-19 实测）：
+ *  `node --test --test-reporter tap` 的 `# tests N` 把 subtest 一起数进去
+ *  （2 个父 + 2 个子 ⇒ `# tests 4`）。所以带 subtest 的 TAP 在结尾计数对账那一格
+ *  必然对不上，`complete` 会是 false——方向是 fail-safe（不会假绿），但成因要说清楚，
+ *  否则读的人会去查"少了哪几条结果行"，而真相是"subtest 被有意排除、计数却含它们"。
+ *  **连字符与描述都是可选的**（TAP 文法：`ok <number> [<description>]`）——2026-10-19 修：
+ *  原先硬要 `" - "`，于是 `ok 1 甲`／`ok 1` 这两种**合法** TAP 一整行都匹配不上，
+ *  在 `if (m === null …) continue` 那里被静默跳过，逐名面直接空掉（下面那句
+ *  「第 N 行结果没有名字」因此对它们永不可达）。改成 `(?: - )?` 之后，没描述的
+ *  由 `rest` 为空串接手，走那条**会出声**的分支——宁可报「没有名字」，别静默丢。
+ *  ⚠️ 别为了兼容把 ` - ` 换成 `-`：那会把 `ok 1 -a-b` 这类名字切错位置。 */
+export const TAP_RESULT_LINE = /^(?<indent> *)(?<verdict>not ok|ok) (?<num>\d+)(?: - )?(?<rest>.*)$/u;
 const TAP_PLAN = /^1\.\.(\d+)/u;
 const TAP_TRAILER = /^# (tests|pass|fail|cancelled|skipped|todo) (\d+)/u;
 /** 指令（`# SKIP`／`# TODO`）：node 把它接在名字后面。已知局限——标题里自己带 ` # SKIP` 会被切成两段，
- *  本仓没有这种标题；要放宽也得先有见证，别预先造一条更松的匹配。 */
-const TAP_DIRECTIVE = /\s#\s(SKIP|TODO)\b/u;
+ *  本仓没有这种标题；要放宽也得先有见证，别预先造一条更松的匹配。
+ *  **大小写不敏感**（TAP 规定指令大小写无关）：2026-10-19 修。原先只认大写，而下一行的
+ *  `directive?.[1]?.toUpperCase()` 因此是**死代码**（正则永远产不出小写），小写
+ *  `# skip` / `# todo` 整条不匹配 ⇒ 指令文本粘在名字上、用例按 ok/not ok 归桶：
+ *  实测 `ok 1 - 甲 # skip 还没装依赖` 读出 `name:"甲 # skip 还没装依赖", outcome:"passed"`
+ *  ，且 `complete: true`——**被跳过的用例计成绿**。见证：node 24 实测输出是大写，
+ *  但 TAP 语法本身允许小写，别的生产者会这么写（见 tests/eval-test-results.test.ts 的
+ *  小写用例）。大小写放开的**代价**是名字里出现 ` # skip` 的概率上升，与本条原有的
+ *  已知局限同向，不引入新的一类错。 */
+const TAP_DIRECTIVE = /\s#\s(SKIP|TODO)\b/iu;
 /** 失败块里的 `location: '<路径>:<行>:<列>'`——路径在引号**内**，别把收尾引号写在冒号前面。
  *  node 只在失败（或有诊断）的那些块里打它，绿块没有 ⇒ `file` 因此是「读得到才给」。 */
 const TAP_LOCATION = /^\s+location:\s*'(.+?):\d+:\d+'/u;
@@ -326,7 +345,10 @@ function parseNodeTestTap(text: string, lines: readonly string[]): ParsedResults
   }
   if (planCount === null) reasons.push("没有 1..N 计划线 ⇒ 无法核对逐名是否齐全（读到几条就是几条，可能就是半份）");
   else if (planCount !== tests.length) {
-    reasons.push(`计划 ${String(planCount)} 条、逐名读到 ${String(tests.length)} 条 ⇒ 差的 ${String(Math.abs(planCount - tests.length))} 条没有结果行`);
+    // 措辞不许说「没有结果行」：那些行可能**在场**，只是没匹配上（`ok 1 甲` 这种无连字符
+    // 形状在 2026-10-19 之前正是如此——整行都在，却被读成 0 条）。判据要指认"数不上"，
+    // 而不是替一个没验证过的成因定罪（第 186 页同一次课：判据的措辞会教人去错的方向查）。
+    reasons.push(`计划 ${String(planCount)} 条、逐名只读到 ${String(tests.length)} 条 ⇒ 差的 ${String(Math.abs(planCount - tests.length))} 条没进逐名面（行没匹配上，或整行缺失）`);
   }
   const trailerPairs: readonly [string, keyof TestCounts | "tests" | "cancelled"][] = [
     ["tests", "tests"], ["pass", "passed"], ["fail", "failed"], ["skipped", "skipped"], ["todo", "todo"], ["cancelled", "cancelled"],
@@ -339,7 +361,16 @@ function parseNodeTestTap(text: string, lines: readonly string[]): ParsedResults
       if (declared > 0) reasons.push(`结尾报 cancelled=${String(declared)} ⇒ 那些用例既不是绿也不是红，逐名面上没有它们的行`);
       continue;
     }
-    if (declared !== got) reasons.push(`结尾计数 # ${key} ${String(declared)} 与逐名读到的 ${String(got)} 不符`);
+    if (declared !== got) {
+      // 多出来的那侧往往是**嵌套 subtest**：node 的结尾计数含它们，而逐名面按设计只收顶格
+      // （收了会双计）。措辞要把这个成因说出来——只说"不符"会把读的人送去查少了哪条结果行，
+      // 而真相是两边口径不同（2026-10-19：这条成因此前在注释里就是错的，见 TAP_RESULT_LINE）。
+      const more = declared > got;
+      reasons.push(
+        `结尾计数 # ${key} ${String(declared)} 与逐名读到的 ${String(got)} 不符`
+        + (more ? "（多出来的多半是嵌套 subtest：计数含它们、逐名面只收顶格，收齐了会双计）" : "（少的那侧可能被省略标记掐掉，或行没匹配上）"),
+      );
+    }
   }
   if (OUTPUT_ELISION.test(text)) reasons.push("输出里有省略标记（[有界性：中段省略 N 字]）⇒ 被掐掉的那段里可能有红，这一格的逐名面不完整");
   return { format: "node-test-tap", tests, counts, complete: reasons.length === 0, reasons };

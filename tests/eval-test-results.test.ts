@@ -241,7 +241,7 @@ describe("parseTestResults：node --test 的 TAP", () => {
     expect(p.complete).toBe(false);
     expect(p.tests).toHaveLength(1);
     expect(p.reasons.join("；")).toContain("省略");
-    expect(p.reasons.join("；")).toContain("计划 7 条、逐名读到 1 条");
+    expect(p.reasons.join("；")).toContain("计划 7 条、逐名只读到 1 条");
     expect(p.reasons.join("；")).toContain("# fail 3 与逐名读到的 1 不符");
   });
 
@@ -260,6 +260,69 @@ describe("parseTestResults：node --test 的 TAP", () => {
     expect(p.complete, p.reasons.join("；")).toBe(true);
   });
 
+  // ---- 2026-10-19：三条 TAP 取料缺陷的回归判据（各配专破它的坏输入）----
+  // 缺陷①：指令正则只认大写，而下一行 `directive?.[1]?.toUpperCase()` 因此是死代码
+  //   ⇒ 小写 `# skip`/`# todo` 整条不匹配，指令文本粘在名字上、用例按 ok/not ok 归桶：
+  //   实测 `ok 1 - 甲 # skip 还没装依赖` 读出 outcome:"passed" 且 complete:true
+  //   ——**被跳过的用例计成绿**（假绿方向，正是最坏的那一边）。
+  it("小写指令同样归桶（TAP 规定大小写无关；大写那条早已绿，这条防的是一直只认大写）", () => {
+    const p = parseTestResults(tapDoc([
+      tapRow(1, "小写被跳的 # skip 还没装依赖", false),
+      tapRow(2, "小写待写的 # todo 已知不通过", false),
+      tapRow(3, "混合写法 # Skip 第三种形态", false),
+    ], 3, 0, 0, 2, 1));
+    expect(p.counts).toEqual({ passed: 0, failed: 0, skipped: 2, todo: 1 });
+    expect(p.tests.map((t) => t.name)).toEqual(["小写被跳的", "小写待写的", "混合写法"]);
+    expect(p.complete, p.reasons.join("；")).toBe(true);
+  });
+
+  it("反向验证：指令只认大写时，小写用例会混进绿桶（尺真的量着那件事）", () => {
+    // 专破上一条的坏输入：把正则改回 /\s#\s(SKIP|TODO)\b/u（无 i 旗），
+    // 上面那条必须红。这里不 import 私有常量，用"期望值与旧行为的差值"钉住：
+    // 旧行为下小写指令不被识别 ⇒ 两条都按 ok 计 passed ⇒ passed 应为 3。
+    const p = parseTestResults(tapDoc([tapRow(1, "甲 # skip 理由", false)], 1, 0, 0, 1, 0));
+    // 正确行为：skipped 1 / passed 0。若哪天退回只认大写，这里读到的是 passed 1 ⇒ 红。
+    expect(p.counts).toEqual({ passed: 0, failed: 0, skipped: 1, todo: 0 });
+    expect(p.tests.map((t) => t.name)).toEqual(["甲"]);
+  });
+
+  // 缺陷②：结果行硬要 `" - "`，而 TAP 文法里连字符与描述**都可选**
+  //   ⇒ `ok 1 甲` 整行匹配不上，在 `m === null` 处静默跳过，逐名面直接空掉。
+  it("无连字符的合法 TAP（`ok 1 名字`）照样进逐名面", () => {
+    const p = parseTestResults("TAP version 13\nok 1 甲\nnot ok 2 乙\n1..2\n# tests 2\n# pass 1\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n");
+    expect(p.tests.map((t) => t.name)).toEqual(["甲", "乙"]);
+    expect(p.counts).toEqual({ passed: 1, failed: 1, skipped: 0, todo: 0 });
+    expect(p.complete, p.reasons.join("；")).toBe(true);
+  });
+
+  // 缺陷③：连描述都没有（`ok 1`）时，从前整行静默消失 ⇒ 逐名面空、成因还说错
+  //   （"没有结果行"——行明明在场）。现在走那条**会出声**的分支。
+  it("无描述的结果行不许静默消失：出声说「没有名字」而不是读成 0 条", () => {
+    const p = parseTestResults("TAP version 13\nok 1\nok 2\n1..2\n");
+    expect(p.tests).toEqual([]);
+    expect(p.complete).toBe(false);
+    const why = p.reasons.join("；");
+    expect(why).toContain("没有名字");
+    // 措辞不许再替没验证的成因定罪：行在场、只是没名字 ⇒ 不能说成"整行缺失"。
+    expect(why).not.toContain("没有结果行");
+  });
+
+  it("带 subtest 的 TAP：逐名面只收顶格，且成因说清是 subtest 而不是「少了结果行」", () => {
+    // node --test --test-reporter tap 实测：2 个父 + 2 个子 ⇒ # tests 4 / # pass 2 / # fail 2
+    // （结尾计数**含** subtest）。逐名面按设计只收顶格 ⇒ 计数必然对不上；
+    // 方向 fail-safe（不会假绿），但理由必须点名 subtest——2026-10-19 之前注释里
+    // 写着「顶格的才是结尾计数数的那些」，那是错的，会把读的人送去错的方向。
+    const p = parseTestResults(
+      "TAP version 13\nnot ok 1 - 父甲\n  ok 1 - 子甲\n  not ok 2 - 子乙\nok 2 - 父乙\n"
+      + "1..2\n# tests 4\n# pass 2\n# fail 2\n# cancelled 0\n# skipped 0\n# todo 0\n");
+    expect(p.tests.map((t) => t.name)).toEqual(["父甲", "父乙"]);
+    expect(p.counts).toEqual({ passed: 1, failed: 1, skipped: 0, todo: 0 });
+    expect(p.complete, p.reasons.join("；")).toBe(false);
+    const why = p.reasons.join("；");
+    expect(why).toContain("subtest");
+    expect(why).not.toContain("没有结果行");
+  });
+
   it("缩进的嵌套 subtest 结果行不双计（顶格那些才是结尾计数数的那些）", () => {
     const p = parseTestResults("TAP version 13\nnot ok 1 - 父\n  ---\n  error: '嵌套里红了两条'\n  ...\n    ok 1 - 子甲\n    not ok 2 - 子乙\n1..1\n# tests 1\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n");
     expect(p.tests.map((t) => t.name)).toEqual(["父"]);
@@ -271,7 +334,7 @@ describe("parseTestResults：node --test 的 TAP", () => {
     const p = parseTestResults("TAP version 13\nok 1 - 跑到的\nBail out! runner died\n1..9\n");
     expect(p.complete).toBe(false);
     expect(p.reasons.join("；")).toContain("Bail out!");
-    expect(p.reasons.join("；")).toContain("计划 9 条、逐名读到 1 条");
+    expect(p.reasons.join("；")).toContain("计划 9 条、逐名只读到 1 条");
   });
 });
 
