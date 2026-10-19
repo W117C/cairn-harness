@@ -3,12 +3,14 @@
 // 新建/切换/重命名/删除；删除当前会话回退到最近一个（mtime 降序）。
 // electron-free（root 由调用方传入：app 用 userData，验收脚本用临时目录），可 headless 单测。
 import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import type { AgentEvent } from "../events";
 import { createEventLog, replay } from "../events";
 import { tmpPathFor, writeFileAtomic } from "../atomic-write";
 import { parseRunAttachment, type RunAttachmentReference } from "./run-attachments";
 import type { SessionMetadataRecord, SessionMetadataRepository } from "./session-metadata";
+import { isSessionLogBusy, markSessionMutating, unmarkSessionMutating } from "./session-liveness";
+import { attachmentPrefixFor } from "../agent/prune";
 
 /** 文件事实始终来自 JSONL；sidecar 字段只在确有 metadata 时合并，老会话不会被伪造成默认记录。 */
 export interface SessionInfo extends Partial<SessionMetadataRecord> {
@@ -345,6 +347,46 @@ export async function listSessions(
   return out.sort((a, b) => b.mtimeMs - a.mtimeMs);
 }
 
+/** 东亚宽字符近似（CJK/韩文/全角记 2 格；其余 1 格）——只为标题截断配额，不追求 Unicode 全表。 */
+function isWideChar(ch: string): boolean {
+  const cp = ch.codePointAt(0) ?? 0;
+  return (
+    (cp >= 0x1100 && cp <= 0x115f) ||
+    (cp >= 0x2e80 && cp <= 0xa4cf) ||
+    (cp >= 0xac00 && cp <= 0xd7a3) ||
+    (cp >= 0xf900 && cp <= 0xfaff) ||
+    (cp >= 0xfe30 && cp <= 0xfe4f) ||
+    (cp >= 0xff00 && cp <= 0xff60) ||
+    (cp >= 0xffe0 && cp <= 0xffe6) ||
+    (cp >= 0x20000 && cp <= 0x3fffd)
+  );
+}
+
+/** 首条消息 → 会话短标题（第十八遍，业主 21.50.54「对话命名也需要改」；纯函数可判卷）。
+ *  规则：取首条非空行 → 剥 markdown 头/引用/列表前缀 → 空白压单格 → 显示宽超预算（CJK 记 2）
+ *  即截断加「…」。全空（纯附件/纯换行）⇒ null——调用方保留时间戳名，不硬编凑。 */
+export function deriveSessionTitle(message: string, maxWidth = 32): string | null {
+  const firstLine = message.split(/\r?\n/).find((line) => line.trim() !== "");
+  if (firstLine === undefined) return null;
+  const cleaned = firstLine
+    .replace(/^[\s>]+/, "") // 前导空白与引用符号
+    .replace(/^#{1,6}\s+/, "") // markdown 标题
+    .replace(/^[-*+]\s+/, "") // 无序列表
+    .replace(/^\d+[.)]\s+/, "") // 有序列表
+    .replace(/\s+/g, " ")
+    .trim();
+  if (cleaned === "") return null;
+  let width = 0;
+  let out = "";
+  for (const ch of cleaned) {
+    const w = isWideChar(ch) ? 2 : 1;
+    if (width + w > maxWidth) return out + "…";
+    out += ch;
+    width += w;
+  }
+  return out;
+}
+
 /** 新建会话：名字缺省 = 时间戳；撞名自动加序号。可选 sidecar 写入失败时回滚空 JSONL。 */
 export async function createSession(
   root: string,
@@ -353,18 +395,23 @@ export async function createSession(
 ): Promise<string> {
   const base = name?.trim() || `会话 ${new Date().toLocaleString("sv-SE").replace(/[T]/g, " ").slice(0, 16)}`;
   if (!isValidSessionName(base)) throw new Error(`非法会话名: ${JSON.stringify(name)}`);
+  await mkdir(root, { recursive: true });
+  // 独占创建（O_EXCL）把「查重 + 建文件」合成一个原子步：旧实现 stat 后 writeFile，
+  // 两个并发调用（双击新建 / 编辑入口与发送入口同秒）会都看到 ENOENT、都写同一个文件，
+  // 随后第二个的 metadata 回滚 rm 掉第一个刚建好的会话（实测 5/5）。
   let id = base;
-  for (let i = 2; ; i++) {
+  let handle: Awaited<ReturnType<typeof open>> | null = null;
+  for (let attempt = 2; ; attempt += 1) {
     try {
-      await stat(join(root, id + ".jsonl"));
-      id = `${base} (${String(i)})`;
-    } catch {
+      handle = await open(join(root, id + ".jsonl"), "wx");
       break;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      id = `${base} (${String(attempt)})`;
     }
   }
-  await mkdir(root, { recursive: true });
   const file = join(root, id + ".jsonl");
-  await writeFile(file, "", "utf8"); // 空文件：JSONL 即会话，0 行 = 空投影
+  await handle.close(); // 空文件：JSONL 即会话，0 行 = 空投影
   // 新会话不许继承上一个同名会话的待发队列：JSONL 被外部删掉（CLI/手工/崩溃半写）而
   // sidecar 留在盘上时，同名字会被 createSession 复用 ⇒ 别人的待发消息会变成新会话的第一句。
   // 队列属于那条已被删掉的会话，不随名字传承——这里显式清掉，不留孤儿也不让它易主。
@@ -392,6 +439,23 @@ export function pathOf(root: string, id: string): string {
 
 /** 重命名：文件重命名（内容逐字不变，重放无损）；sidecar 跟随迁移，失败则回滚文件名。 */
 export async function renameSession(
+  root: string,
+  oldId: string,
+  newName: string,
+  metadata?: Pick<SessionMetadataRepository, "rename">,
+): Promise<string> {
+  const from = sessionPath(root, oldId);
+  // 重命名与运行中的 append 抢同一个 inode：句柄跟着旧文件走，新路径会缺一段事件。
+  if (isSessionLogBusy(from)) throw new Error(`会话正在运行，先停止再重命名: ${oldId}`);
+  markSessionMutating(from);
+  try {
+    return await renameSessionUnlocked(root, oldId, newName, metadata);
+  } finally {
+    unmarkSessionMutating(from);
+  }
+}
+
+async function renameSessionUnlocked(
   root: string,
   oldId: string,
   newName: string,
@@ -436,11 +500,42 @@ export async function renameSession(
     }
     throw error;
   }
+  // 裁剪附件按会话 id 命名：不随重命名迁移的话，之后删除新 id 只清新前缀，旧文件永久残留。
+  try {
+    const pruneDir = join(root, "prune-attachments");
+    const fromPrefix = attachmentPrefixFor(oldId);
+    const toPrefix = attachmentPrefixFor(newName);
+    for (const name of await readdir(pruneDir)) {
+      if (name.startsWith(fromPrefix)) {
+        await rename(join(pruneDir, name), join(pruneDir, toPrefix + name.slice(fromPrefix.length)));
+      }
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.warn("[sessions] 裁剪附件随重命名迁移失败:", err instanceof Error ? err.message : String(err));
+    }
+  }
   return newName;
 }
 
 /** 硬删除：只触及 sessions root 内已校验的单个 JSONL；metadata 一并清理，任一步失败都回滚暂存文件。 */
 export async function deleteSession(
+  root: string,
+  id: string,
+  metadata?: Pick<SessionMetadataRepository, "find" | "remove" | "restore">,
+): Promise<void> {
+  const source = sessionPath(root, id);
+  // 运行中的会话有常驻写句柄：unlink 后 append 会写进已删除的 inode，事件静默消失。
+  if (isSessionLogBusy(source)) throw new Error(`会话正在运行，先停止再删除: ${id}`);
+  markSessionMutating(source);
+  try {
+    await deleteSessionUnlocked(root, id, metadata);
+  } finally {
+    unmarkSessionMutating(source);
+  }
+}
+
+async function deleteSessionUnlocked(
   root: string,
   id: string,
   metadata?: Pick<SessionMetadataRepository, "find" | "remove" | "restore">,

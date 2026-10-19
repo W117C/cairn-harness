@@ -605,7 +605,7 @@ export const MUTATIONS = [
     src: "src/agent/orchestrator-join.ts",
     test: "tests/goal-price.test.ts",
     desc: "反查被摘掉，只认显式传入的档位 id ⇒ 模型名那一态恒不产值表键（worker 未路由时与 goal 续跑两条路一起退回「价格不可知」）",
-    apply: (s) => s.replace("const id = pickedId ?? findSpecByNameOrId(table, model)?.id;", "const id = pickedId;"),
+    apply: (s) => s.replace("  const id = findSpecByNameOrId(table, model)?.id ?? pickedId;", "  const id = pickedId;"),
     expectFail: "用户在设置里选的那个名字（provider 模型名）逐档都算得出钱",
   },
   {
@@ -806,7 +806,7 @@ export const MUTATIONS = [
     src: "src/agent/orchestrator.ts",
     test: "tests/worker-role.test.ts",
     desc: "重派改回逐字段列写（漏掉 role 等四位）⇒ 映射端补了、转发端没跟上，这一跳静默丢参数",
-    apply: (s) => s.replace("    return await this.spawn({ ...args }, ctx);", "    return await this.spawn({ task: args.task, mode: args.mode }, ctx);"),
+    apply: (s) => s.replace("    return await this.spawn(respawnSpawnArgs(args), ctx);", "    return await this.spawn({ task: args.task, mode: args.mode }, ctx);"),
     expectFail: "真链：落流的角色 → respawnArgsFrom → respawn() 的新 agent_spawned 仍带同一角色（全新 agent_id）",
   },
   // 署名（规则 57：没有锚点的那一格要有名字与理由）：worker 侧**非工具档**那行 `frozenJudgePaths`

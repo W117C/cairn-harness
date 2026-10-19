@@ -3,16 +3,18 @@
 // 真实门在本模块的工具包装里 —— 复用 src/permissions 的 checkPermission，语义与 M0 一致：
 // read-only 拒副作用 / default 询问（UI 批准才执行）/ auto 放行；沙箱不可用时写工具强制逐条审批。
 import { readFileSync } from "node:fs";
-import { rm, mkdir, realpath } from "node:fs/promises";
+import { rm, mkdir, realpath, appendFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runLoop } from "../agent/loop";
+// 断面补落（finally 那一格）要用同一枚哨兵 id 与同一份判据——不重抄字符串、不重写谓词。
+import { DELIVERY_GUARD_CALL_ID, describePhantomDelivery, eventsForCurrentRun, findPhantomDelivery } from "../agent/delivery-guard";
 import { createImageChannel } from "../agent/image-channel";
 import { runCompaction } from "../agent/compaction";
 import { buildMap } from "../agent/map/build";
-import { computePrune } from "../agent/prune";
+import { computePrune, writePruneAttachments } from "../agent/prune";
 import {
   createSessionSummarizer,
   type SessionPluginTool,
@@ -26,6 +28,9 @@ import { classifyVerifyFailure, createVerifyHook, defaultExec, withVerifyCauseNo
 import { createActionFusion } from "../agent/action-fusion";
 import { SolpiRuntime, privateSessionDirectory, removePrivateSessionData, observationRecallSpec, solpiEnabled, type SolpiFlags } from "../agent/solpi-runtime";
 import { createUsageAttributor } from "../agent/usage-attribution";
+import { isSessionLogBusy, markSessionRunLive, unmarkSessionRunLive } from "./session-liveness";
+// 既有消费者（compact 等）从这里取；唯一实现在 session-liveness（删除/重命名也共用）。
+export { isSessionLogBusy } from "./session-liveness";
 import { defaultImpactHook } from "../agent/impact/index.js";
 import { createImpactQueryTool, impactQuerySpec } from "../tools/impact-query";
 import { createDiagnoseTool, diagnoseSpec, diagnoseSurface } from "../tools/diagnose";
@@ -60,7 +65,7 @@ import {
 } from "../permissions";
 import { globalPermissionsPath } from "../permissions/rules";
 import { type ProviderKind } from "./settings";
-import { setRunWorkspace } from "./runner-workspace";
+import { getLastWorkspace, setRunWorkspace } from "./runner-workspace";
 import { createSession, pathOf, sessionExists, type SessionInfo } from "./sessions";
 import { validateThinkingEffort } from "../providers/capabilities";
 import type { ModelOutput } from "../providers";
@@ -687,6 +692,8 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
    *  **只从 settings 取，不留 override 槽**：`handleAgentRun` 的两个产品调用者从不传它，
    *  留 `over.X ??` 就是给一条永远走不到的左半边钉锚点（同 `impactAnalysis` 那一族的做法）。 */
   autoVerifyRepair?: boolean;
+  /** 能力 12 交付断言的返修环：落红后再要一轮去补做（缺省 undefined = 落红即收束）。 */
+  deliveryRepair?: boolean;
   /** S3 信任闸（调用方断言那一层）：true = **这个调用方**担保这批命令，不经信任表也不发审批卡。
    *  **缺省 false**——verify 命令 100% 来自仓库自带文件（.agent/config.json / package.json /
    *  Makefile 探测），而那条执行路径上没有权限判定。自建 fixture / 自有仓库的调用方（判卷、
@@ -726,6 +733,8 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
   sandbox?: SandboxStatus | null;
   /** M4a 无人值守（§12.2.4）：会话尾自动沉淀跳过（审批必被拒 = 纯噪音）；审批门由调用方给 unattended 门。 */
   unattended?: boolean;
+  /** 这条 run 现场没有人能应答（CLI 管道）。只影响 clarify/plan 门的超时，不关沉淀。 */
+  noAnswerer?: boolean;
   /** plan 模式（用户武装）：true ⇒ 本轮无论模型是否自愿提交方案，未获批即写禁。
    *  缺省 false = 逐字同武装前。只有用户侧（RunRequest / settings）能置位，模型无入口。 */
   planRequired?: boolean;
@@ -772,12 +781,6 @@ export function verifyExec(sandbox: SandboxStatus | null, run: typeof runInSandb
 
 /** 核心：mock（或演示通道）驱动跑一轮 loop；每条事件先落 JSONL 再回调。返回完整事件流。
  *  M1b：接线三门 —— clarify/plan 通道（挂起等人）+ verify 反射循环钩子。 */
-const liveRunPaths = new Set<string>();
-const deletingSessionPaths = new Set<string>();
-/** 「这条会话日志正被占用」的唯一判据：run 起时的互斥、手动压缩时的让路，两处读同一个式子。 */
-export function isSessionLogBusy(logPath: string): boolean {
-  return liveRunPaths.has(resolve(logPath)) || deletingSessionPaths.has(resolve(logPath));
-}
 
 /** 该工作区有没有配 LSP（`.agent/lsp.json` 里有真配置）。
  *  读不到 / 坏 JSON / 显式 false 一律 false = 不挂那把工具——
@@ -920,6 +923,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     join(opts.workspace, ".agent", "permissions.json"),
     globalPermissionsPath(),
   );
+  // 先拒绝占用，再改写交互态；到 liveRunPaths.add 之间必须保持同步。
+  if (isSessionLogBusy(opts.logPath)) throw new Error("session already running or being deleted");
   // H3（D-2 RunScope）：交互面全局只由交互 run 写入；unattended run 的会话态只活在 scope 里，
   // 结束时不再把全局 session 置 null（旧实现会话间相互覆写/假死布防的根源）。
   const interactive = opts.unattended !== true;
@@ -953,8 +958,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   enterPlanRunScope(opts.planRequired === true);
   // M2e：本 run 注入统一注册表的插件工具名（会话结束摘除，零残留）；声明在 try 外防 finally TDZ
   let injectedToolNames: string[] = [];
-  if (isSessionLogBusy(opts.logPath)) throw new Error("session already running or being deleted");
-  liveRunPaths.add(resolve(opts.logPath));
+  markSessionRunLive(opts.logPath);
   let log: EventLog | undefined;
   let solpi: SolpiRuntime | undefined;
   let parentFinished = false;
@@ -1030,6 +1034,11 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       ...(opts.routing ? { routing: opts.routing } : {}),
     });
     runScope.orchestrator = orchestrator;
+    // 取消必须沿树传播：旧实现只 abort run 的主循环，派出去的 worker / pipeline 链 / supervise 环
+    // 继续跑并继续往同一 JSONL 写（父 run 收束后仍 append）。cancelAll 在此之前**生产代码零调用**。
+    const onRunAbort = (): void => { orchestrator.cancelAll(); };
+    if (signal.aborted) onRunAbort();
+    else signal.addEventListener("abort", onRunAbort, { once: true });
     if (interactive) activeOrchestrator = orchestrator; // H3 D-2：unattended 不抢交互面的审批路由
     // M2e：插件运行时（会话启动静态扫描产加载清单，不新增事件类型）。
     // 零插件环境（无 .agent/plugins、无 M2E_USER_PLUGINS/M2E_LOOSE_SKILLS）= 空清单 = 零行为。
@@ -1049,6 +1058,11 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // 而不是那串用户敲下的斜杠。refused 单列且出声：false 的语义是「不进 / 菜单」，不是「当没看见」。
     const expanded = expandPromptCommand(rt?.commands() ?? [], opts.message, (c) => rt?.substitutionFor(c) ?? {});
     if (expanded.refused !== null) {
+      await pipeline({
+        type: "error",
+        message: "命令不可用户调用：" + expanded.refused + "（frontmatter user-invocable:false）",
+        step: 0,
+      });
       await pipeline({ type: "assistant_message", content: "[command 不可用户调用] " + expanded.refused + "（frontmatter user-invocable:false）" });
       return await replay(opts.logPath);
     }
@@ -1082,7 +1096,9 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       try {
         const ups = await rt.hooks.run("UserPromptSubmit", { event: "UserPromptSubmit", prompt: promptText });
         if (ups.blocked) {
-          await pipeline({ type: "assistant_message", content: "[hook blocked prompt] " + (ups.blockReason ?? "UserPromptSubmit hook 阻断") });
+          const reason = ups.blockReason ?? "UserPromptSubmit hook 阻断";
+          await pipeline({ type: "error", message: "UserPromptSubmit 阻断：" + reason, step: 0 });
+          await pipeline({ type: "assistant_message", content: "[hook blocked prompt] " + reason });
           return await replay(opts.logPath);
         }
         if (ups.additionalContext !== "") hookContext += (hookContext === "" ? "" : "\n") + ups.additionalContext;
@@ -1169,6 +1185,11 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       // 返修那一环只在收束闸开着时才有意义（它接的是拍红之后的一步），所以不单独成一支形状：
       // 两个都开才传，避免"闸关着却许诺返修"这种读起来矛盾的配置。
       ...(opts.autoVerify === true && opts.autoVerifyRepair === true ? { autoVerifyRepair: true } : {}),
+      // 交付断言的返修**不套 autoVerify 前置**（与上面那一支形状故意不同）：它接的是
+      // 「承诺了没落盘」那条红，与收束闸拍出的代码红是两条独立的路——
+      // 恰恰是「一个字节都没写」的那些趟走不到收束闸，才需要这一支接住它们。
+      // 套用前置会让这一支在最需要它的那一类趟上永远不开。
+      ...(opts.deliveryRepair === true ? { deliveryRepair: true } : {}),
       stuckNudge: true, // 主会话（人直用那条）才有换路提示：worker 有看门、靶场按字节计量，见 LoopOptions
       provider: createProvider(promptText, systemPromptFor(opts.mode) + evolutionNote, modelSelection, {
         ...opts, emit: pipeline, solpi, promptCache: providerSettings.promptCache,
@@ -1195,19 +1216,23 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       mode: "auto", // 冻结 loop 对 ask 一律拒绝；真实门在 gatedTool（复用 checkPermission）
       signal,
       userMessage: promptText,
+      ...(opts.attachments !== undefined && opts.attachments.length > 0
+        ? { userMessageAttachments: opts.attachments.map((a) => ({ path: a.path, kind: a.kind })) }
+        : {}),
       ...(skillFace.hit ? { userMessageSkill: skillFace.hit } : {}),
       ...(opts.goalTurn ? { userMessageOrigin: opts.goalTurn } : {}),
       // §9.3 disallowed-tools 的活闸：管本轮已经在飞的调用（下一轮的清单由 requestFace 自己收）。
       // 与规格面用的是**同一份**谓词——两处各写一个闭包等于给"两边口径不一致"留门。
       ...(initialFace.skillDenial ? { skillDenial: initialFace.skillDenial } : {}),
       clarify: {
-        // H2（A-2）：等人门可收束——run 取消信号随门透传；无人值守 run 的 clarify/plan
-        // 挂起 60s 后 fail-closed（不再悬到 runTimeoutMs 30min 才被超时闸收走）。
+        // H2（A-2）：等人门可收束——run 取消信号随门透传；无人值守/无人应答 run 的 clarify/plan
+        // 挂起 60s 后 fail-closed。`noAnswerer` 与 `unattended` 取或：CLI 管道（stdin 非 TTY）
+        // 只翻前者，旧实现只认后者 ⇒ clarify/propose_plan 会无限等一个不存在的应答者。
         wait: (id, o) =>
           appClarifyGate.wait(id, {
             ...o,
             signal,
-            ...(opts.unattended ? { timeoutMs: UNATTENDED_GATE_WAIT_MS } : {}),
+            ...(opts.unattended === true || opts.noAnswerer === true ? { timeoutMs: UNATTENDED_GATE_WAIT_MS } : {}),
           }),
       },
       plan: {
@@ -1215,7 +1240,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
           appPlanGate.waitApproval(id, {
             ...o,
             signal,
-            ...(opts.unattended ? { timeoutMs: UNATTENDED_GATE_WAIT_MS } : {}),
+            ...(opts.unattended === true || opts.noAnswerer === true ? { timeoutMs: UNATTENDED_GATE_WAIT_MS } : {}),
           }),
       },
       verify: createVerifyHook(opts.workspace, {
@@ -1263,7 +1288,18 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
           maxInputTokens: 128_000,
           nowRound: 0,
         });
-        const pruned = computePrune({ events: events2 });
+        // prune 那一栏的取址与生产那条同形（`session-provider` 的 assemble）：附件目录放事件日志
+        // 旁边、sessionId 取日志文件名。**必须真落盘**——这句「原文已存附件 …可取回」说的是模型
+        // 能走的路，那就得把附件写出来；只报数不落盘 = 指空气（探针 `hopMapDemo` 判的就是这条：
+        // 它照**源码里这个调用点的实参**量，交不出附件即为假承诺）。
+        const demoAttachmentsDir = join(dirname(opts.logPath), "prune-attachments");
+        const demoSessionId = basename(opts.logPath).replace(/\.jsonl$/u, "");
+        const pruned = computePrune({
+          events: events2,
+          attachmentsDir: demoAttachmentsDir,
+          sessionId: demoSessionId,
+          workspace: opts.workspace,
+        });
         const body =
           "[符号地图] " +
           (built.ok && built.text
@@ -1271,8 +1307,13 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
             : "构建失败（静默降级为无地图）" + (built.error ? "：" + built.error : "")) +
         "\n\n[prune] " +
           (pruned.why === "saved"
-            ? `裁剪 ${String(pruned.replacements.size)} 条旧工具结果，省 ${String(pruned.savedTokens)} token（原文可从附件目录回取）`
+            ? `裁剪 ${String(pruned.replacements.size)} 条旧工具结果，省 ${String(pruned.savedTokens)} token`
+              + `（原文已存附件 ${demoAttachmentsDir}，可用 read_file 按打桩里那个文件名取回）`
             : `未触发（${pruned.why}）`);
+        // 打桩里给了路径，路径就必须真在盘上：报数与落盘同一次完成（生产那条也是这个次序）。
+        if (pruned.why === "saved" && pruned.replacements.size > 0) {
+          await writePruneAttachments(events2, pruned, demoAttachmentsDir, demoSessionId);
+        }
         await pipeline({ type: "tool_call", id: "m2b-map-demo", name: "read_file", args: { path: "(符号地图演示)" } });
         await pipeline({ type: "tool_result", callId: "m2b-map-demo", ok: true, output: body });
       } catch (err) {
@@ -1352,6 +1393,27 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     throw err;
   } finally {
     parentFinished = true;
+    // 异常、取消或审批等待超时可能绕过 runLoop 的收束段；最终检查只看最后一条 user_message 之后的本轮。
+    try {
+      const seen = eventsForCurrentRun(await replay(opts.logPath));
+      const already = seen.some((e) => e.type === "tool_result" && e.callId === DELIVERY_GUARD_CALL_ID);
+      const phantom = already ? null : findPhantomDelivery(seen, opts.workspace);
+      if (phantom !== null) {
+        await appendFile(
+          opts.logPath,
+          JSON.stringify({
+            type: "tool_result",
+            callId: DELIVERY_GUARD_CALL_ID,
+            ok: false,
+            output: describePhantomDelivery(phantom),
+          }) + "\n",
+          "utf8",
+        );
+      }
+    } catch (err) {
+      // 断言自己绝不能把 run 拖崩：它的全部价值是留下一条证据，不是保证留得下。
+      console.warn("[delivery] 交付断言补落失败:", err instanceof Error ? err.message : String(err));
+    }
     // Same queue as retained orchestrator pipeline, so no close/write race.
     await eventQueue;
     await log?.close?.();
@@ -1359,7 +1421,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       try { await solpi.finish(await replay(opts.logPath)); }
       catch (err) { console.warn("[solpi] report persistence failed:", err instanceof Error ? err.message : String(err)); }
     }
-    liveRunPaths.delete(resolve(opts.logPath));
+    unmarkSessionRunLive(opts.logPath);
     if (interactive) session = null; // H3 D-2：unattended run 不清交互面全局（旧实现把在途交互 run 假死）
     if (interactive && interactiveRunAbort === runAbort) interactiveRunAbort = null; // P3（审查）：run 收束即摘取消句柄
     // 会话结束 = MCP server 子进程一并回收（stdio 流不挂事件循环）；快照留档供 run 间隙查询
@@ -1380,7 +1442,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
         console.warn("[hooks] SessionEnd 失败:", err instanceof Error ? err.message : String(err));
       }
     }
-    if (rtNow) setPluginSnapshot(rtNow.snapshot());
+    if (rtNow) setPluginSnapshot(rtNow.snapshot(), getLastWorkspace());
     await rtNow?.shutdown().catch(() => {});
     // M2e：会话结束摘除本 run 注入的插件工具（TOOLS 是模块级注册表，零残留）
     const table = TOOLS as unknown as Record<string, unknown>;
@@ -1421,6 +1483,8 @@ export interface RunOverrides
   actionFusion?: boolean;
   /** 能力 5 收束闸 runtime override（同 actionFusion 口径：settings 与 IPC 开闸另议）。 */
   autoVerify?: boolean;
+  /** CLI `--delivery-repair`：交付断言落红后再向模型要一轮补做。 */
+  deliveryRepair?: boolean;
   /** M5b 路由 bandit runtime override（同 actionFusion 口径：settings 与 IPC 开闸另议）。
    *  缺省 = 用 settings.routingBandit；CLI `--bandit` / `--no-bandit` 走这里。
    *  `routingBandit` 蕴含路由开启（本仓口径），故置真即等于给这条 run 开路由。 */
@@ -1544,9 +1608,11 @@ export async function handleAgentRun(
         ...(attachmentCount > 0 ? { attachments } : {}),
         ...(sessionMode ? { sessionId } : {}),
         ...(over.unattended ? { unattended: true as const } : {}),
+        ...(over.noAnswerer ? { noAnswerer: true as const } : {}),
         ...(over.signal ? { signal: over.signal } : {}),
         actionFusion: over.actionFusion ?? (await store().get()).actionFusion,
         autoVerify: over.autoVerify ?? (await store().get()).autoVerify,
+        ...(over.deliveryRepair === true ? { deliveryRepair: true } : {}),
         // M5b：路由开关的 runtime override 收成一处（CLI `--bandit/--cascade` 一族；缺省缺席 ⇒
         // 用 settings）。两枚都没给时这里不出现 ⇒ 与今日逐字同形。
         ...(over.routingBandit !== undefined || over.routingCascade !== undefined
@@ -1617,7 +1683,7 @@ export {
   pluginToolSpecsFromRuntime, sessionToolFace, withSkillAllowNote, type PluginToolSource,
 } from "./tool-gates";
 export {
-  currentWorkspace, handleAgentState, handlePluginDecide, pluginRuntimeOpts, scanOrphanWorktrees,
+  currentWorkspace, handleAgentState, handleListSkills, handlePluginDecide, handleSkillBody, pluginRuntimeOpts, scanOrphanWorktrees,
 } from "./state-handlers";
 export {
   compactSessionLog, resolveSafeMode, runSecurityReportHook, shouldRunSecurityReport,

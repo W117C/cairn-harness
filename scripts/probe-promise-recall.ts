@@ -436,6 +436,21 @@ export function bindClaimFaces(
 /** 已甄别的绑定登记表。每条都要能过 `claimBindingDefects` 那四件事，过不了就红在判卷里——
  *  这张表不是"我说它真"，是"它背后那个开关真在被指认的那条用例里被用着"。逐条附**为什么这句被它兜住**。 */
 export const CLAIM_BINDINGS: readonly ClaimBinding[] = [
+  /* 2026-10-16：教训提炼的「重复动作」源加了一条反向约束——**后来成功过的那一支不成条**。
+     证人就是我新写的那条用例（tests/memory-lessons.test.ts 的「重复但后来成功了 ⇒ 不成条」）：
+     它给三次同参数 write_file（前两次审批超时没执行、第三次成功）并断言零条目，
+      ⇒ 这句话不是注释，是判据。反向那一半（全都没成功 ⇒ 成条）由同文件
+     「写向动作的完全相同参数重复调用成条」兜，那条不给它登记是因为它钉的是正向。 */
+  {
+    face: "src/agent/memory/lessons.ts#distillLessons｜同样的输入不会有新结果",
+    symbol: "distillLessons",
+    testFile: "tests/memory-lessons.test.ts",
+    testCase: "**重复但后来成功了 ⇒ 不成条**（一次审批超时 + 第三次落盘，不许写成「同样输入同样结果」）",
+    why: "那条用例构造的正是这句话要防的形状：三次逐字相同的 write_file，前两次因审批门没执行、"
+      + "第三次成功落盘。它断言 repeat-action 一条都不产 ⇒ 「没有一次成功才成条」这句边界由它兜住。"
+      + "同形状的另一半（连续两次都没成功 ⇒ 成条且正文带「没有一次成功」）在同文件"
+      + "「写向动作的完全相同参数重复调用成条」里，那里判的是正向，故不重复登记。",
+  },
   {
     face: "src/agent/sidechat.ts#SIDECHAT_SYSTEM｜写向工具已从你的工具表摘除",
     symbol: "SIDECHAT_FORBIDDEN_TOOLS",
@@ -786,7 +801,23 @@ export interface PruneStubColumn {
 /** 尺本体：同一份事件 fixture，唯一变量是**传给 `computePrune` 的实参形状** ⇒ 栏与栏之差
  *  只能是那一格 0 的成因，不可能是别的东西。抽成纯函数是为了让判卷吃结构、不吃我印的那句话
  *  （规则 371：判卷不许替被验对象做那个动作，也不许靠正则读我的报告才看得见结论）。 */
-export function pruneStubMatrix(): PruneStubColumn[] {
+/** 从源码里读出 `agent-runner.ts` 那个 `computePrune({...})` 实参带了哪些键。
+ *
+ *  **为什么要有这一函数**：栏一从前硬编码 `computePrune({ events })`，注释写着"源码那一行逐字如此"。
+ *  那是一个**假设**不是读数——调用点一改，尺还照旧形状判，判卷于是把当时的缺陷冻成了期望值
+ *  （`expect(cols[0].wrote).toBe(0)`；本仓点名的第三种踩法，`#33` 那条注释已经吃过一次）。
+ *  现在栏一照源码实参跑：取的是形状，不是我手写的样子。
+ *
+ *  只认**字面键名**，不猜值——值的可证明性由栏三那一支量，这里只回答"调用点交了哪几样"。 */
+export function computePruneArgKeys(source: string): readonly string[] {
+  const call = /computePrune\(\{([\s\S]*?)\}\)/u.exec(source);
+  if (call === null) return [];
+  const body = call[1] ?? "";
+  return ["events", "attachmentsDir", "sessionId", "workspace"].filter((k) =>
+    new RegExp("(?:^|,|\\s)" + k + "\\s*:", "u").test(body));
+}
+
+export function pruneStubMatrix(source?: string): PruneStubColumn[] {
   const events: AgentEvent[] = [];
   for (let r = 0; r < 6; r++) {
     events.push({ type: "user_message", content: "round " + String(r) } as AgentEvent);
@@ -797,10 +828,17 @@ export function pruneStubMatrix(): PruneStubColumn[] {
     replacements.size === 0 ? "裸占位" : classifyPruneStub(String([...replacements.values()][0]));
   const column = (label: string, res: ReturnType<typeof computePrune>): PruneStubColumn =>
     ({ label, why: res.why, wrote: res.attachments.length, kind: kindOf(res.replacements) });
-  // 栏一＝与那个调用点**同一实参形状**：只给 events（源码那一行逐字如此）。
+  // 栏一＝**源码里那个调用点的实参形状**（键名照源码读；值用本 fixture 自己的——要量的是
+  // "这个形状交不交地址"，不是"那一趟盘上有什么"）。取不到源码时退回只给 events。
   // 栏二＝反事实甲：补目录，但不给工作区。栏三＝反事实乙：目录就在工作区内。
+  const keys = source === undefined ? [] : computePruneArgKeys(source);
   return [
-    column("栏一（调用点形状）", computePrune({ events })),
+    column("栏一（调用点形状）", computePrune({
+      events,
+      ...(keys.includes("attachmentsDir") ? { attachmentsDir: join(ROOT, ".dsh-hop-attachments") } : {}),
+      ...(keys.includes("sessionId") ? { sessionId: "s1" } : {}),
+      ...(keys.includes("workspace") ? { workspace: ROOT } : {}),
+    })),
     column("栏二（只给目录）", computePrune({ events, attachmentsDir: "/tmp/dsh-hop-attachments", sessionId: "s1" })),
     column("栏三（目录在工作区内）", computePrune({
       events, attachmentsDir: join(ROOT, ".dsh-hop-attachments"), sessionId: "s1", workspace: ROOT,
@@ -816,14 +854,18 @@ export function pruneStubMatrix(): PruneStubColumn[] {
  *  ⇒ 修法因此是两件事，不是一件；这也是为什么这里不满足于"跑两栏"。
  *  （第一版这里只断言 `原文已存` 一个标记，而它有两个分支，于是栏三差点被读成"路不通"——
  *  标记选窄了＝量法缺陷本身，`classifyPruneStub` 就是为修它而抽出来的。） */
-export function hopMapDemo(): Verdict {
-  const [asCalled, dirOnly, inWorkspace] = pruneStubMatrix();
+export function hopMapDemo(source?: string): Verdict {
+  // 栏一照**源码里那个调用点的实参**跑（不再手写一个形状当假设）：读不到源码时尺退回
+  // 只给 events，那种情形 `detail` 里会写着「源码取不到」，不许静默按绿处理。
+  const src = loadSrcFiles().files.find((f) => f.path.endsWith("src/main/agent-runner.ts"))?.text;
+  const [asCalled, dirOnly, inWorkspace] = pruneStubMatrix(src);
   const lied = asCalled.why === "saved" && asCalled.wrote === 0;
   return {
     ok: !lied,
     how: "computePrune 三栏：照调用点实参形状／只给目录／给目录且目录在工作区内——三栏之差就是那一格 0 的成因",
     detail:
-      `why=${asCalled.why}｜${asCalled.label}附件=${String(asCalled.wrote)} 条、占位=${asCalled.kind}`
+      `${src === undefined ? "源码取不到（栏一按只给 events 判，可能假绿）｜" : ""}`
+      + `why=${asCalled.why}｜${asCalled.label}附件=${String(asCalled.wrote)} 条、占位=${asCalled.kind}`
       + `｜${dirOnly.label}附件=${String(dirOnly.wrote)} 条、占位=${dirOnly.kind}`
       + `｜${inWorkspace.label}附件=${String(inWorkspace.wrote)} 条、占位=${inWorkspace.kind}`
       + ` ⇒ 那句「原文可从附件目录回取」在此刻${lied
@@ -875,6 +917,22 @@ function hopSnapshotNote(): Verdict {
   return {
     ok: r.status === 0,
     how: "spawn scripts/probe-snapshot-copy-restore.ts（真起 write_file 覆盖 ⇒ 复制快照回写比字节 ⇒ 同一份快照再经 read_file 交付比不等）",
+    detail: `exit=${String(r.status)}｜${tail.slice(0, 190)}`,
+  };
+}
+
+/** 2026-10-17：`apply_patch` 多文件写入的恢复指引。判据要注入 fs 失败，而 ESM 的 fs 命名空间
+ *  只读 ⇒ 判据住在 `tests/apply-patch.test.ts`（那里有 vi.mock）。本 hop 只 exec 那一支，
+ *  确认登记表指向的判据现在还是绿的。 */
+function hopPatchRollbackRecovery(): Verdict {
+  const r = spawnSync(process.execPath, ["--import", "tsx", join(ROOT, "scripts", "probe-patch-rollback-recovery.ts")], {
+    cwd: ROOT,
+    encoding: "utf8",
+  });
+  const tail = String(r.stdout ?? "").trim().split("\n").slice(-3).join(" / ");
+  return {
+    ok: r.status === 0,
+    how: "exec scripts/probe-patch-rollback-recovery.ts（它再 exec tests/apply-patch.test.ts 的回滚指路那条：注入 rename 失败 + 回滚写回失败，量「没有快照时不拿快照指路」及其反向锚点）",
     detail: `exit=${String(r.status)}｜${tail.slice(0, 190)}`,
   };
 }
@@ -978,6 +1036,9 @@ export const RUNNERS: Readonly<Record<string, string>> = {
   // 第 376 页：D7 快照回执新加的那半句「要逐字节取回请复制该文件」。措辞含「取回」⇒ 这一面必须有人判，
   // 而它欠的判定与 web 那一格同族：不是"能不能取回"，是**它给的出路做不做得到**（复制逐字节／read_file 转写不等）。
   "src/tools/snapshot.ts#snapshotNote": "hopSnapshotNote",
+  // 2026-10-17：多文件 apply_patch 改两阶段写入后新增的恢复指引。两个分支都得有人判：
+  // 有快照时指快照、没有时只说 git——没有快照却指快照是空头承诺（模型照做会发现没有原件）。
+  "src/tools/apply_patch.ts#recovery": "hopPatchRollbackRecovery",
 };
 
 /** 判定名的花名册：**登记一个不存在的名字，等于这一面没人判过**。
@@ -986,6 +1047,7 @@ export const RUNNERS: Readonly<Record<string, string>> = {
  *  现在名字表在这里列一次，`isKnownRunner` 与判卷 `tests/promise-recall-inventory.test.ts` 共用它。 */
 const RUNNER_NAMES: readonly string[] = [
   "hopSkill", "hopJoinPayload", "hopMapDemo", "hopLedgerRecall", "hopSolpiReceipt", "hopWebAnchorClaim", "hopSnapshotNote", "hopPruneStub",
+  "hopPatchRollbackRecovery",
 ];
 
 export function isKnownRunner(name: string): boolean {
@@ -1008,7 +1070,8 @@ export function runnerVerdict(name: string, workspace: string): Promise<Verdict>
           : name === "hopSolpiReceipt" ? hopSolpiReceipt()
             : name === "hopWebAnchorClaim" ? Promise.resolve(hopWebAnchorClaim())
               : name === "hopSnapshotNote" ? Promise.resolve(hopSnapshotNote())
-                : Promise.resolve(hopPruneStub());
+                : name === "hopPatchRollbackRecovery" ? Promise.resolve(hopPatchRollbackRecovery())
+                  : Promise.resolve(hopPruneStub());
 }
 
 function loadSrcFiles(): { files: { path: string; text: string }[]; missingOnDisk: string[] } {

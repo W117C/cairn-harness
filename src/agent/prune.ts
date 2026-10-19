@@ -145,10 +145,17 @@ function safeSegment(raw: string, maxLen: number): string {
   return raw.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, maxLen);
 }
 
+/** 某会话的附件名前缀（删除会话时按前缀清理；与 attachmentName 同一套清洗，别抄第二份）。
+ *  带 sessionId 的 sha1 前 8 位：只按前 32 字符清洗会让两个长会话名共用命名空间。 */
+export function attachmentPrefixFor(sessionId: string): string {
+  const digest = createHash("sha1").update(sessionId).digest("hex").slice(0, 8);
+  return `${safeSegment(sessionId, 32)}-${digest}-`;
+}
+
 /** 原文回取：附件文件名（sha1 前缀防碰撞 + 清洗后的 sessionId/callId）。 */
 function attachmentName(sessionId: string, callId: string): string {
   const digest = createHash("sha1").update(callId).digest("hex").slice(0, 8);
-  return `${safeSegment(sessionId, 32)}-${digest}-${safeSegment(callId, 64)}.txt`;
+  return `${attachmentPrefixFor(sessionId)}${digest}-${safeSegment(callId, 64)}.txt`;
 }
 
 /**

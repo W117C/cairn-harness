@@ -124,9 +124,21 @@ export function updateScheduleCap(cap: number): void {
   if (Number.isInteger(cap) && cap >= 1 && cap <= 8) scheduleCapCache = cap;
 }
 
+/** 调度器触发的在跑 run 数（宿主退出闸/并发读数用）：调度执行器不经过 host.run，
+ *  旧实现 `runningCount()` 恒看不见它们 ⇒ ⌘Q 不提示直接退出、runCancel 恒答「不在运行」。 */
+let scheduledRunsInFlight = 0;
+export function scheduledRunCount(): number {
+  return scheduledRunsInFlight;
+}
+
 /** 定时触发执行器（真实代码路径）：装配根注入的 run 入口 + unattended 覆盖 + signal 透传。 */
 export function makeScheduledExecutor(workspace: string): TriggerExecutor {
-  return (args) => D().runSession(workspace, args);
+  return (args) => {
+    scheduledRunsInFlight += 1;
+    return D().runSession(workspace, args).finally(() => {
+      scheduledRunsInFlight = Math.max(0, scheduledRunsInFlight - 1);
+    });
+  };
 }
 
 export async function handleScheduleSnapshot(rawFilter?: unknown): Promise<ScheduleSnapshot> {

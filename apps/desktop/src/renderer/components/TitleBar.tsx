@@ -1,17 +1,19 @@
-// C-02 TitleBar（v2.6）：40px 全宽拖拽 chrome——侧栏开关 / 会话标题（对中栏居中）/ 右栏开关。
-// hiddenInset 已定（main/index.ts），红绿灯由系统绘制；76px 避让位与原型一致。
-import { useEffect, useRef } from "react";
-import { Ic } from "./icons";
+// 顶栏（Claude 蓝本 v1）：窗口 chrome——红绿灯避让位 + 侧栏开关 + 会话名（对中栏居中）+ 右端操作槽 + 拖拽区。
+// hiddenInset 已定（main/index.ts），红绿灯由系统绘制，76px 避让位，不画假灯。
+// 设计规范 §3.11：聊天顶栏内容行 = 会话名 13px（26px 行）——本组件即那条行 + 拖拽与开关；
+// 右端操作槽承接「Changes / ⋮」等窗格入口（蓝本 §3.4 会话标题栏入口）。
+import { useEffect, useRef, type ReactNode } from "react";
+import { PanelLeft } from "lucide-react";
 
 export function TitleBar(props: {
   title: string;
   sidebarCollapsed: boolean;
-  rightCollapsed: boolean;
   onToggleSidebar: () => void;
-  onToggleRight: () => void;
+  /** 右端操作槽（窗格入口按钮等；no-drag）。 */
+  right?: ReactNode;
 }) {
   const titleRef = useRef<HTMLDivElement | null>(null);
-  // 标题对齐中栏居中（v2.6）：观察 .main 的几何，同步 left/width（侧栏/右栏开合与窗口变化即时跟上）。
+  // 标题对齐中栏居中：观察 .main 的几何，同步 left/width（侧栏开合与窗口变化即时跟上）。
   useEffect(() => {
     const el = titleRef.current;
     if (!el) return;
@@ -32,17 +34,18 @@ export function TitleBar(props: {
   }, []);
   return (
     <header className="titlebar">
-      {/* hiddenInset：红绿灯由系统绘制，这里只留 76px 避让位，不画假灯（否则会与系统灯重复） */}
+      {/* hiddenInset：红绿灯由系统绘制，这里只留 76px 避让位 */}
       <div className="traffic" aria-hidden="true"></div>
-      <button className="iconbtn" title="折叠侧栏" aria-label="折叠侧栏" onClick={props.onToggleSidebar}>
-        <Ic.sidebarLeft size={14} />
+      <button
+        className="iconbtn sm"
+        title={props.sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
+        aria-label={props.sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
+        onClick={props.onToggleSidebar}
+      >
+        <PanelLeft size={14} />
       </button>
-      <div className="tb-title" ref={titleRef}>{props.title}</div>
-      <div className="tb-right">
-        <button className="iconbtn" title="折叠/展开右栏" aria-label="切换右侧面板" onClick={props.onToggleRight}>
-          <Ic.panelRight size={14} />
-        </button>
-      </div>
+      <div className="tb-title" ref={titleRef} title={props.title}>{props.title}</div>
+      <div className="tb-right">{props.right}</div>
     </header>
   );
 }

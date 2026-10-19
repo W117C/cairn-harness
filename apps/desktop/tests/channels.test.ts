@@ -36,7 +36,16 @@ describe("通道名表完整性", () => {
     // v8：＋pickFiles（附件引用「选择文件…」：dialog 选文件多选）⇒ 74。
     // v9：＋suggestNext（Tab 想下一条：按上下文单发模型调用）⇒ 75。
     // v10：＋capabilities（能力在场性：搜索端点配没配——让「模型为什么少一把工具」上屏）⇒ 76。
-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(76);
+    // v11：＋gitStatus / gitClone / workspaceSearch / touchProject / saveTempFile / snapshotRestore /
+    //      revealInFinder（主界面重做批：git 两闸 / 项目内搜索 / 最近打开 / 粘贴落盘 / 快照还原 / Finder 显示）⇒ 83。
+    // v12：＋projectDiagnose（导入诊断批：导入已有文件夹先给三态诊断——ADR 0004 §4）⇒ 84。
+    // 2026-10-17：＋setWorkspaceContext（工作区上下文：冷启动/切项目后 diff、文件窗格、回滚可用）⇒ 85。
+    // 2026-10-18：＋exportTranscript（导出对话 .md：原生保存面板）⇒ 86。
+    // 2026-10-18：＋listSkills（斜杠菜单技能清单）⇒ 87。
+    // 2026-10-18：＋skillBody（技能抽屉读正文，§8 #15）⇒ 88；＋attachmentThumb（图片 chip 缩略图）⇒ 89。
+    // 2026-10-19：＋browserSetAllowedHosts（授权清单同步到主进程的逐跳导航闸）⇒ 90；
+    // ＋pluginUserConfigSet（插件配置写入面）⇒ 91。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(91);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
@@ -90,9 +99,14 @@ describe("通道名表完整性", () => {
       "removeProject",
       "setSessionPinned",
       "setSessionArchived",
+      "setWorkspaceContext",
+      "exportTranscript",
+      "listSkills",
+      "skillBody",
       "assignSessionProject",
       "deleteMemory",
       "pluginDecide",
+      "pluginUserConfigSet",
       "sidechatCreate",
       "sidechatAsk",
       "sidechatPromote",
@@ -142,6 +156,7 @@ describe("通道名表完整性", () => {
       "browserBounds",
       "browserNav",
       "browserClose",
+      "browserSetAllowedHosts",
       // v5：窗格弹出独立窗口。
       "panePopout",
       // v6：产品第一批——模板建项 / 预览运行时 / 项目导出 / 连接自检（三面同步直接接真）。
@@ -161,6 +176,20 @@ describe("通道名表完整性", () => {
       "browserPickElement",
       // v10：能力在场性（搜索端点配没配；口径同 CLI --doctor 的 search 那一格）——三面同步直接接真。
       "capabilities",
+      // v11：主界面重做批（七条）——git 两闸（core git-ops）/ 项目内模糊搜索（core workspace-search）/
+      //   最近打开（touchProject + listProjects options）/ 粘贴落盘（desktop temp-file）/ 快照还原 /
+      //   Finder 显示——三面同步直接接真。
+      "gitStatus",
+      "gitClone",
+      "workspaceSearch",
+      "touchProject",
+      "saveTempFile",
+      "snapshotRestore",
+      "revealInFinder",
+      // 2026-10-18：附件图片 chip 缩略图（nativeImage 40px data URL）——三面同步直接接真。
+      "attachmentThumb",
+      // v12：导入诊断（导入已有文件夹先给三态诊断——ADR 0004 §4）——三面同步直接接真。
+      "projectDiagnose",
     ];
     // ④ fail-loud 白名单（带理由的未接）：B3 修复后为空——39 条全部接真。要留白须在此
     //    逐条列名并注记理由，且 index.ts 的 UNWIRED_FAIL_LOUD 同步加键（下方断言钉死两者一致）。

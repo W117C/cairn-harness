@@ -19,21 +19,26 @@ const BIN = join(ROOT, "bin", "cairn.mjs");
 
 /** 真跑 CLI。`noKeys` 抹掉全部 provider key，让 provider 推断走「一个都没配」那一支；
  *  `keys` 在抹完**之后**注入假 key（值是探针，专测「报在位但值绝不入报告」）。 */
-function runCli(args: string[], opts: { noKeys?: boolean; env?: Record<string, string>; keys?: Record<string, string>; timeout?: number } = {}): { status: number | null; out: string } {
+function runCli(args: string[], opts: { noKeys?: boolean; env?: Record<string, string>; keys?: Record<string, string>; timeout?: number; isolate?: boolean } = {}): { status: number | null; out: string } {
   const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1", ...opts.env };
   if (opts.noKeys !== false) {
     for (const k of ["CAIRN_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"]) delete env[k];
     delete env.M0A_PROVIDER;
   }
   Object.assign(env, opts.keys ?? {});
-  const r = spawnSync(process.execPath, [BIN, ...args], {
-    cwd: ROOT,
-    encoding: "utf8",
-    env,
-    input: "",
-    ...(opts.timeout === undefined ? {} : { timeout: opts.timeout, killSignal: "SIGKILL" as const }),
-  });
-  return { status: r.status, out: (r.stdout ?? "") + (r.stderr ?? "") };
+  const cwd = opts.isolate === true ? mkdtempSync(join(tmpdir(), "cairn-cli-surface-")) : ROOT;
+  try {
+    const r = spawnSync(process.execPath, [BIN, ...args], {
+      cwd,
+      encoding: "utf8",
+      env,
+      input: "",
+      ...(opts.timeout === undefined ? {} : { timeout: opts.timeout, killSignal: "SIGKILL" as const }),
+    });
+    return { status: r.status, out: (r.stdout ?? "") + (r.stderr ?? "") };
+  } finally {
+    if (cwd !== ROOT) rmSync(cwd, { recursive: true, force: true });
+  }
 }
 
 describe("cairn CLI：产品面存在且可执行", () => {
@@ -117,14 +122,14 @@ describe("cairn CLI：--model 自由档位", () => {
   it("模型名是取值不是位置参数：不会被当成工作区或任务（漏登记进 VALUE_FLAGS 的后果）", () => {
     // 一个 key 都没配 ⇒ 停在 provider 推断并 exit 2；只要没先撞上「位置参数最多两个」，
     // 就说明 --model 的值确实被当成 flag 取值吃掉了。
-    const r = runCli(["--model", "stealth/space-bunny-alpha", "做点事"]);
+    const r = runCli(["--model", "stealth/space-bunny-alpha", "做点事"], { isolate: true });
     expect(r.status).toBe(2);
     expect(r.out).not.toContain("位置参数最多两个");
     expect(r.out).toContain("没有配置任何 provider 的 API key");
   });
 
   it("--provider demo 下点名模型 ⇒ exit 2（demo 不拨号，静默忽略等于换掉用户意图）", () => {
-    const r = runCli(["--provider", "demo", "--model", "stealth/space-bunny-alpha", "做点事"]);
+    const r = runCli(["--provider", "demo", "--model", "stealth/space-bunny-alpha", "做点事"], { isolate: true });
     expect(r.status).toBe(2);
     expect(r.out).toContain("不匹配");
   });
@@ -136,7 +141,7 @@ describe("cairn CLI：--ctx-window（只配 --model，申报自由档位的真�
   });
 
   it("没有 --model 却给了 --ctx-window ⇒ exit 2（表内档位的窗口由档位表说了算，不接受申报）", () => {
-    const r = runCli(["--provider", "demo", "--ctx-window", "32768", "做点事"]);
+    const r = runCli(["--provider", "demo", "--ctx-window", "32768", "做点事"], { isolate: true });
     expect(r.status).toBe(2);
     expect(r.out).toContain("--ctx-window");
   });
@@ -146,7 +151,7 @@ describe("cairn CLI：--ctx-window（只配 --model，申报自由档位的真�
   // 给显式上限，与本文件其它真跑用例（gate 流程 / shell 探针）同口径，不去动全局 testTimeout。
   it("非正整数 ⇒ exit 2（窗口是 token 数，0/负数/小数都不成）", () => {
     for (const bad of ["0", "-1", "32768.5", "abc"]) {
-      const r = runCli(["--provider", "openai", "--model", "stealth/small", "--ctx-window", bad, "做点事"]);
+      const r = runCli(["--provider", "openai", "--model", "stealth/small", "--ctx-window", bad, "做点事"], { isolate: true });
       expect(r.status, `--ctx-window ${bad} 应当被拒`).toBe(2);
       expect(r.out).toContain("--ctx-window");
     }
@@ -157,7 +162,7 @@ describe("cairn CLI：--ctx-window（只配 --model，申报自由档位的真�
     // 32768 就会被当成第三个位置参数（`positional.length` 2→3），撞上「位置参数最多两个」那道
     // 解析期闸——它排在「provider 没配 key」之前，所以后果看得见。早先这格只给一个位置参数：
     // 误读后正好卡在 2（=上限，不报错），于是整条判卷恒绿，摘掉 VALUE_FLAGS 也照样过（09-29 复扫变异体存活）。
-    const r = runCli(["--provider", "openai", "--model", "stealth/small", "--ctx-window", "32768", "工作区", "做点事"]);
+    const r = runCli(["--provider", "openai", "--model", "stealth/small", "--ctx-window", "32768", "工作区", "做点事"], { isolate: true });
     // 显式给了 --provider ⇒ 停在「openai 没配 key」这一关（不是推断那一关）。能走到这里就说明
     // 取值、配对、正整数三关都过了，且 32768 没被当成位置参数。
     expect(r.out).not.toContain("位置参数最多两个");
@@ -167,7 +172,7 @@ describe("cairn CLI：--ctx-window（只配 --model，申报自由档位的真�
 
 describe("cairn CLI：缺 key 时 fail-closed，不静默换一家也不落 demo", () => {
   it("一个 key 都没配 ⇒ exit 2，且**没有**默默跑 demo", () => {
-    const r = runCli(["做点事"]);
+    const r = runCli(["做点事"], { isolate: true });
     expect(r.status).toBe(2);
     expect(r.out).toContain("没有配置任何 provider 的 API key");
     // 关键：不能出现「跑完了」这类仿佛真跑过的输出，也不能说自己在 demo 档
@@ -175,13 +180,20 @@ describe("cairn CLI：缺 key 时 fail-closed，不静默换一家也不落 demo
   });
 
   it("提示里点名了要设哪个环境变量，含 DeepSeek 那条 OpenAI 兼容通道", () => {
-    const r = runCli(["做点事"]);
+    const r = runCli(["做点事"], { isolate: true });
     expect(r.out).toContain("CAIRN_API_KEY");
     expect(r.out).toContain("OPENAI_BASE_URL=https://api.deepseek.com/v1");
   });
 
   it("配置错不打「用法」行（那行会把人引到 argv 上去，而该配的是环境变量）", () => {
-    expect(runCli(["做点事"]).out).not.toContain("用法：cairn");
+    expect(runCli(["做点事"], { isolate: true }).out).not.toContain("用法：cairn");
+  });
+});
+
+describe("cairn CLI：交付返修开关", () => {
+  it("--delivery-repair 在 help 的选项表里（隐藏开关等于不可发现）", () => {
+    const out = runCli(["--help"]).out;
+    expect(out.split("\n").some((line) => /^\s+--delivery-repair\s/.test(line))).toBe(true);
   });
 });
 

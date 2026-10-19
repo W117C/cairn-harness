@@ -199,6 +199,9 @@ async function buildGraphFromScan(
   let parsed = 0;
   let fromTagsCache = 0;
   const knownFiles = new Set(files.map((f) => f.rel));
+  /** 真正进了图的文件（缓存命中或本次解析成功）。读/解析失败的不算——
+   *  旧实现用扫描清单直接当 graph.files，覆盖率永远看不到「被跳过」的文件。 */
+  const represented = new Set<string>();
 
   for (const f of files) {
     let tags: SymbolTag[];
@@ -208,6 +211,7 @@ async function buildGraphFromScan(
       tags = hit.tags;
       imports = hit.imports;
       fromTagsCache++;
+      represented.add(f.rel);
     } else {
       let src: string;
       try {
@@ -222,6 +226,7 @@ async function buildGraphFromScan(
         tags = sym.tags;
         imports = sym.imports;
         parsed++;
+        represented.add(f.rel);
         await writeTagsCache(dir, f, tags, imports);
       } catch (err) {
         if (err instanceof TreeSitterUnavailableError) {
@@ -244,10 +249,11 @@ async function buildGraphFromScan(
     const perFile = new Map<string, string[]>();
     for (const ir of imports) {
       const key = bindingSourceKey(resolveModuleSpecifier(f.rel, ir.spec, knownFiles), ir.spec);
-      const arr = perFile.get(ir.name);
+      const local = ir.localName ?? ir.name; // 归属键是**本文件名**（alias），不是对面的 def 名
+      const arr = perFile.get(local);
       if (arr) {
         if (!arr.includes(key)) arr.push(key);
-      } else perFile.set(ir.name, [key]);
+      } else perFile.set(local, [key]);
     }
     nameSources.set(f.rel, perFile);
   }
@@ -293,7 +299,7 @@ async function buildGraphFromScan(
   for (const list of refs.values()) list.sort(siteOrder);
 
   return {
-    files: [...files.map((f) => f.rel)].sort(),
+    files: files.filter((f) => represented.has(f.rel)).map((f) => f.rel).sort(),
     candidates: candidates.length,
     cap,
     defs,

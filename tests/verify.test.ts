@@ -314,3 +314,13 @@ describe("verify 重复注入去重（能力 5 的修正拍不再白烧 token）
     expect(outs.some((o) => o.includes("逐字相同"))).toBe(false);
   });
 });
+
+describe("verify 成功拍的配对结果（2026-10-19）", () => {
+  it("成功也落 tool_result：下一轮投影不得伪造「上次运行中途结束」", async () => {
+    const hook = { maxAttempts: 3, run: outcomes(true).run };
+    const { log } = await run([{ type: "tool_call", id: "v-ok", name: "verify", args: {} }], hook);
+    const paired = log.filter((e) => e.type === "tool_result" && e.callId === "v-ok");
+    expect(paired).toHaveLength(1);
+    expect(paired[0]).toMatchObject({ ok: true });
+  });
+});

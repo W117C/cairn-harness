@@ -1,0 +1,318 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Cairn 桌面端 · 设计 token（v3 · Claude 暖色盘）
+   依据：业主 2026-10-17「桌面端设计要像 Claude」＋设计规范 §4.1（Claude 蓝本值）。
+         2026-10-16 brief 的冷灰一套作废（见 §9 2026-10-17 追记）。
+   结构（三层，组件只许消费语义层）：
+     ① 命名色阶（gray 中性谱 + orange 蓝本族留档；语义按主题取值）
+     ② 语义令牌（bg / text / accent / 语义三色 + 结构语义；组件唯一消费面）
+     ③ 刻度（字号 / 控件高 / 圆角 / 间距 / 内边距；× --rem-scale）
+   存储纪律：色彩一律 HSL 三元组裸值（`H S% L%`），消费时
+     `hsl(var(--token))` 或 `hsl(var(--token) / α)`。色阶永不被组件直接引用。
+   主题：亮色在 :root，暗色在 [data-theme="dark"]（data 属性切换）。
+     用户字号偏好（双轴 · 文字轴）在 [data-text-size]。
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── ① 命名色阶（中性谱；组件永不直接引用——仅 scrollbar 等历史消费保留）─ */
+  --gray-0:    0 0% 100%;        /* #FFFFFF */
+  --gray-25:   240 11% 96.5%;    /* #F5F5F7 */
+  --gray-50:   240 5.3% 92.5%;   /* #EBEBED */
+  --gray-75:   240 7.1% 94.5%;   /* #F0F0F2（well 系） */
+  --gray-100:  240 6.1% 87.1%;   /* #DCDCE0 */
+  --gray-450:  240 2.8% 71.8%;   /* #B5B5B9 */
+  --gray-500:  240 2.4% 59%;     /* #949499 */
+  --gray-650:  240 2.3% 42.9%;   /* #6B6B70 */
+  --gray-750:  240 3.4% 28.8%;   /* #47474C */
+  --gray-825:  240 4.5% 17.3%;   /* #2A2A2E */
+  --gray-850:  240 4.1% 14.3%;   /* #232326 */
+  --gray-875:  240 3.3% 11.8%;   /* #1D1D1F */
+  --gray-900:  240 4.5% 8.6%;    /* #151517 */
+  --gray-1000: 0 0% 0%;          /* #000000 */
+
+  /* orange：蓝本族留档（消费已迁语义色；族值保留防断代） */
+  --orange-100: 18 73.3% 88.2%;  /* #f7d8cb */
+  --orange-200: 16 81.4% 76.9%;  /* #f4ae94 */
+  --orange-300: 17 79.3% 63.9%;  /* #ec835a */
+  --orange-350: 17 82.1% 56.3%;  /* #eb6834 */
+  --orange-400: 17 70.2% 50%;    /* #d95926 */
+  --orange-500: 17 72.3% 39.6%;  /* #ae461c */
+  --orange-700: 18 78.8% 20.4%;  /* #5d230b */
+
+  /* ── ② 语义令牌（亮色 · 暗色的同构一套）───────────────────────── */
+  /* 2026-10-17 业主裁「桌面端设计要像 Claude」：色板回到设计规范 §4.1 的 Claude
+     暖色盘（暖米白画布 / 暖中性描边 / 陶土橙）。2026-10-16 brief 的冷灰一套
+     （#F5F5F7 / #EBEBED / #1D1D1F）作废——冷灰是「像 IDE」，不是「像 Claude」。
+     与 §4.1 定值的唯一偏差：--text-400/500 由 #73726C 压到 #66655C——#73726C 在
+     bg-400 #E8E6DC 上只有 4.34:1，过不了本仓 tokens.test 的 4.5:1 闸；色相同在
+     暖中性（48°），肉眼同族。偏差逐条在 §9 在册。 */
+  --bg-000: 0 0% 100%;           /* surface #FFFFFF */
+  --bg-100: 48 33.3% 97.1%;      /* base #FAF9F5（暖米白画布） */
+  --bg-200: 52.5 28.6% 94.5%;    /* sidebar #F5F4ED */
+  --bg-300: 48 25% 92.2%;        /* well / 用户气泡 #F0EEE6 */
+  --bg-400: 50 20.7% 88.6%;      /* #E8E6DC */
+  --bg-500: 50 20.7% 88.6%;
+  --bg-elevated: 0 0% 100%;      /* elevated（亮色靠阴影抬升）#FFFFFF */
+  /* 用户气泡底：亮色取 well（比画布深一档），暗色取 surface（比背景亮一档）——
+     「气泡要浮起来」在两个主题里方向相反，不能共用 bg-300。 */
+  --user-bubble-bg: hsl(var(--bg-300));
+
+  --text-000: 60 2.6% 7.6%;      /* #141413（暖近黑） */
+  --text-200: 60 2.5% 23.3%;     /* #3D3D3A */
+  --text-300: 60 2.5% 23.3%;
+  --text-400: 48 5.2% 37.8%;     /* #66655C（暖中性，正常字号 ≥4.5:1） */
+  --text-500: 48 5.2% 37.8%;
+
+  /* 品牌陶土橙（brief：保留现有陶土橙 ≈#d97757，只用于选中/主按钮/焦点环） */
+  --accent-brand: 15 63.1% 59.6%;
+  /* 蓝（链接与信息强调）：100/200 同值，000/900 分主题——「等待决定」状态族在用 */
+  --accent-000: 210 73.7% 40.2%;
+  --accent-100: 210 70.9% 51.6%;
+  --accent-200: 210 70.9% 51.6%;
+  --accent-900: 211 72.5% 90%;
+
+  /* 实色底上的前景（实色按钮/徽标文字）：亮色白字 */
+  --fg-on-accent: 0 0% 100%;     /* #FFFFFF */
+  --fg-on-danger: 0 0% 100%;     /* #FFFFFF（红底 4.8:1） */
+
+  /* 主按钮（语义，2026-10-17）：亮色 = 暖近黑实底 + 浅字；暗色 = 抬升面 + 亮字。
+     修的是暗色里「主按钮变纯白块」——原写法直接把 text-000 当底色，暗色 text-000
+     本身是暖白，于是新任务/确定类按钮在暗界面翻成白底黑字，抢走整个视觉重心。
+     组件只消费这三个语义位，不再各自写反色。 */
+  --btn-primary-bg: hsl(var(--text-000));
+  --btn-primary-bg-hover: hsl(var(--text-000) / 88%);
+  --btn-primary-fg: hsl(var(--bg-100));
+  --btn-primary-border: transparent;
+
+  /* 语义三色（brief 定值 · 亮色取深侧保对比） */
+  --success: 142.4 71.8% 29.2%;        /* #15803D */
+  --color-risk: 26 90.5% 37.1%;        /* #B45309（warning） */
+  --color-risk-ink: 22.7 82.5% 31.4%;  /* #92400E */
+  --color-danger: 0 72.2% 50.6%;       /* #DC2626 */
+  --color-danger-ink: 0 73.7% 41.8%;   /* #B91C1C */
+  --color-run: 32.1 94.6% 43.7%;       /* #D97706 */
+  --color-wait: 218 40.3% 48.6%;       /* #4A6FAE（等待态留档） */
+  /* 权限档色点（P2-2 · brief 三节：只读=灰绿 / 默认=蓝灰 / 引导=黄 / 自动=红） */
+  --color-mode-readonly: 145 14.4% 49%;  /* #6B8F7A 灰绿 */
+  --color-mode-default: 218 19% 44%;     /* #5C6B85 蓝灰 */
+  --color-mode-guided: 32.1 94.6% 43.7%; /* #D97706 黄 */
+  --color-mode-auto: 0 72.2% 50.6%;      /* #DC2626 红 */
+  --color-diff-add-bg: 137 43.8% 93.7%;/* #E8F6EC */
+  --color-diff-del-bg: 0 75% 95.3%;    /* #FCEAEA */
+  --color-diff-add-ink: 142.4 71.8% 29.2%;
+  --color-diff-del-ink: 0 73.7% 41.8%;
+
+  /* ── 结构语义 ───────────────────────────────────────────────── */
+  /* 描边随文字主色走（暖中性），不再写死纯黑/纯白——换色板时描边自动同族。 */
+  --hairline: hsl(var(--text-000) / 8%);
+  --hairline-strong: hsl(var(--text-000) / 13%);
+  --scrim: hsl(60 6% 4% / 22%);
+  --side-bg: hsl(var(--bg-200));
+
+  /* ── alpha 阶（基色 = 文字主色：暗色谱上叠深、亮色谱上叠浅，随主题自翻转）─ */
+  --alpha-0: hsl(var(--text-000) / 0%);
+  --alpha-1: hsl(var(--text-000) / 5%);
+  --alpha-2: hsl(var(--text-000) / 10%);
+  --alpha-3: hsl(var(--text-000) / 20%);
+  --alpha-4: hsl(var(--text-000) / 35%);
+  --alpha-5: hsl(var(--text-000) / 50%);
+  --alpha-6: hsl(var(--text-000) / 60%);
+  --alpha-7: hsl(var(--text-000) / 70%);
+  --alpha-8: hsl(var(--text-000) / 85%);
+  --alpha-9: hsl(var(--text-000) / 95%);
+
+  /* ── ③ 刻度 ─────────────────────────────────────────────────── */
+  /* 双轴 · 文字轴：用户字号偏好（settings 字段接线后由 App 写 data-text-size） */
+  --rem-scale: 1;
+
+  /* 字号（brief：正文 14.5·行高 1.7 / 辅助 12.5 / 标题 16–20·600；每个 calc 乘 --rem-scale） */
+  --fs-caption-2xs: calc(0.625rem * var(--rem-scale));   /* 10 · 微字（kbd/角标） */
+  --fs-caption-xs: calc(0.78125rem * var(--rem-scale));  /* 12.5 · 辅助 */
+  --fs-caption-sm: calc(0.78125rem * var(--rem-scale));  /* 12.5 · 辅助 */
+  --fs-caption-md: calc(0.78125rem * var(--rem-scale));  /* 12.5 · 辅助 */
+  --fs-body-sm: calc(0.78125rem * var(--rem-scale));     /* 12.5 · 辅助正文 */
+  --fs-body-md: calc(0.90625rem * var(--rem-scale));     /* 14.5 · 正文 */
+  --fs-body-lg: calc(0.9375rem * var(--rem-scale));      /* 15 */
+  --fs-body-xl: calc(1rem * var(--rem-scale));           /* 16 */
+  --fs-heading-sm: calc(0.875rem * var(--rem-scale));    /* 14 */
+  --fs-heading-md: calc(0.9375rem * var(--rem-scale));   /* 15 */
+  --fs-heading-lg: calc(1rem * var(--rem-scale));        /* 16 */
+  --fs-heading-xl: calc(1.125rem * var(--rem-scale));    /* 18 */
+  --fs-title-md: calc(1.25rem * var(--rem-scale));       /* 20 */
+  --fs-title-lg: calc(1.375rem * var(--rem-scale));      /* 22 */
+  --fs-prose-s: calc(0.8125rem * var(--rem-scale));      /* 13 */
+  --fs-prose-m: calc(0.90625rem * var(--rem-scale));     /* 14.5 */
+  --fs-prose-l: calc(0.9375rem * var(--rem-scale));      /* 15 */
+  --fs-prose-xl: calc(1rem * var(--rem-scale));          /* 16 */
+  --fs-prose-2xl: calc(1.125rem * var(--rem-scale));     /* 18 */
+  --fs-footnote: calc(0.78125rem * var(--rem-scale));    /* 12.5 */
+  --fs-code: calc(0.8125rem * var(--rem-scale));         /* 13 */
+  --fs-entry-floor: 16px;  /* 输入框字号下限（防移动端自动放大） */
+
+  /* 控件高 */
+  --h-control-xs: calc(1.25rem * var(--rem-scale));      /* 20 */
+  --h-control-sm: calc(1.5rem * var(--rem-scale));       /* 24 */
+  --h-control-md: calc(1.75rem * var(--rem-scale));      /* 28 */
+  --h-control-lg: calc(2rem * var(--rem-scale));         /* 32 */
+  --h-control-xl: calc(2.5rem * var(--rem-scale));       /* 40 */
+  --h-menu-item: calc(2.25rem * var(--rem-scale));       /* 36 · 弹层条目（批 5 细则 §五） */
+  /* 嵌套控件高 */
+  --h-nested-1: calc(1rem * var(--rem-scale));
+  --h-nested-2: calc(1.125rem * var(--rem-scale));
+  --h-nested-3: calc(1.25rem * var(--rem-scale));
+  --h-nested-4: calc(1.375rem * var(--rem-scale));
+  --h-nested-5: calc(1.75rem * var(--rem-scale));
+
+  /* 圆角（brief：6 / 10 / 14 三档；composer 独立 14 档；弹层 14 档） */
+  --radius-xs: calc(0.375rem * var(--rem-scale));        /* 6 */
+  --radius-sm: calc(0.375rem * var(--rem-scale));        /* 6（并入 6 档） */
+  --radius-md: calc(0.625rem * var(--rem-scale));        /* 10 */
+  --radius-lg: calc(0.625rem * var(--rem-scale));        /* 10 */
+  --radius-composer: calc(0.875rem * var(--rem-scale));  /* 14 */
+  --radius-pop: calc(0.875rem * var(--rem-scale));       /* 14 · 弹层（批 5 细则 §五） */
+  --radius-field: calc(0.5rem * var(--rem-scale));       /* 8 · 设置页控件（2026-10-16 模型/通道页重做） */
+  --radius-pill: 999px;
+
+  /* 间距（brief：4px 栅格 4 8 12 16 24 32） */
+  --space-xs: calc(0.25rem * var(--rem-scale));          /* 4 */
+  --space-sm: calc(0.5rem * var(--rem-scale));           /* 8 */
+  --space-md: calc(0.75rem * var(--rem-scale));          /* 12 */
+  --space-16: calc(1rem * var(--rem-scale));             /* 16 · 栅格遗漏档补齐（2026-10-16 模型/通道页重做） */
+  --space-lg: calc(1.5rem * var(--rem-scale));           /* 24 */
+  --space-xl: calc(2rem * var(--rem-scale));             /* 32 */
+
+  /* 内边距（4px 栅格） */
+  --pad-xs: calc(0.25rem * var(--rem-scale));            /* 4 */
+  --pad-sm: calc(0.5rem * var(--rem-scale));             /* 8 */
+  --pad-md: calc(0.75rem * var(--rem-scale));            /* 12 */
+  --pad-lg: calc(1rem * var(--rem-scale));               /* 16 */
+  --pad-xl: calc(1.5rem * var(--rem-scale));             /* 24 */
+
+  /* ── 存量别名（迁移期：旧名 → 新语义层；迁移完成后删除）────────
+     包装为完整颜色值，兼容 `background: var(--canvas)` 直用与
+     `color-mix(..., var(--text-1) …)`。 */
+  --canvas: hsl(var(--bg-100));
+  --surface: hsl(var(--bg-000));
+  --surface-2: hsl(var(--bg-200));
+  --surface-3: hsl(var(--bg-300));
+  --text-1: hsl(var(--text-000));
+  --text-2: hsl(var(--text-200));
+  --text-3: hsl(var(--text-400));
+  --accent: hsl(var(--accent-brand));
+  --accent-ink: hsl(var(--bg-100));
+  --ok: hsl(var(--success));
+  --ok-ink: hsl(var(--success));
+  --risk: hsl(var(--color-risk));
+  --risk-ink: hsl(var(--color-risk-ink));
+  --danger: hsl(var(--color-danger));
+  --danger-ink: hsl(var(--color-danger-ink));
+  --run: hsl(var(--color-run));
+  --wait: hsl(var(--color-wait));
+  --mode-readonly: hsl(var(--color-mode-readonly));
+  --mode-default: hsl(var(--color-mode-default));
+  --mode-guided: hsl(var(--color-mode-guided));
+  --mode-auto: hsl(var(--color-mode-auto));
+  --diff-add-bg: hsl(var(--color-diff-add-bg));
+  --diff-del-bg: hsl(var(--color-diff-del-bg));
+  --diff-add-ink: hsl(var(--color-diff-add-ink));
+  --diff-del-ink: hsl(var(--color-diff-del-ink));
+
+  /* 存量刻度别名 → 新刻度 */
+  --fs-2xs: var(--fs-caption-2xs);
+  --fs-xs: var(--fs-caption-xs);
+  --fs-sm: var(--fs-body-sm);
+  --fs-md: var(--fs-body-md);
+  --fs-lg: var(--fs-body-lg);
+  --fs-xl: var(--fs-heading-xl);
+  --fs-2xl: var(--fs-title-lg);
+  --s-1: calc(2px * var(--rem-scale));
+  --s-2: calc(4px * var(--rem-scale));
+  --s-3: calc(8px * var(--rem-scale));
+  --s-4: calc(12px * var(--rem-scale));
+  --s-5: calc(16px * var(--rem-scale));
+  --s-6: calc(24px * var(--rem-scale));
+  --s-7: calc(32px * var(--rem-scale));
+  --r-sm: var(--radius-xs);
+  --r-md: var(--radius-md);
+  --r-lg: var(--radius-composer);
+  --r-pill: var(--radius-pill);
+
+  /* 非色彩刻度 */
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 6px rgb(0 0 0 / 0.04);
+  --shadow-pop: 0 8px 28px rgb(0 0 0 / 0.12), 0 2px 8px rgb(0 0 0 / 0.07);
+  --reading: 47.5rem; /* 阅读列 760px（P3-1 收口 · brief 六：对话区内容列限宽 760px 居中） */
+  /* 动效刻度（2026-10-18 建）：时长三档 + 缓动两族，全部经 token 消费——组件不写裸毫秒。
+     --t-fast 既有（140ms，交互过渡区间 120–160ms）；补齐两档与缓动后，
+     「同一个动作在不同组件时长不一」才有单一事实源可改。
+     命名对齐用途而非数字：instant=微反馈（hover/按下）、fast=浮层与微件、
+     slow=面板/模态这类「占了一块地」的位移。 */
+  --t-instant: 90ms ease-out;   /* 微反馈：hover / 按下 / 勾选——快到不觉得在等 */
+  --t-fast: 140ms ease-out; /* 交互过渡区间 120–160ms（brief §七） */
+  --t-med: 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --t-slow: 260ms cubic-bezier(0.2, 0.8, 0.2, 1); /* 面板/模态进场（占地的位移要敢给） */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1); /* 强收尾：浮层弹出这类「快出慢收」 */
+  --z: 1.25; /* 演示缩放（原型外壳；非产品） */
+}
+
+/* ── 暗色语义（data 属性切换）──────────────────────────────────────── */
+/* 2026-10-17 同步换回 Claude 暖暗盘（§4.1）：bg 自下而上是 #000 → #141413 → #1F1E1D
+   → #262624 → #30302E；极暗处偏暖而不是偏蓝。--text-400 由 #9C9A92 提到 #A8A69E
+   ——#9C9A92 在 elevated #383835 上只有 4.07:1，抬亮后 4.67:1（过 4.5 闸）。 */
+[data-theme="dark"] {
+  --bg-000: 60 2.1% 18.4%;       /* surface #30302E */
+  --bg-100: 60 2.7% 14.5%;       /* base #262624 */
+  --bg-200: 60 3.3% 11.8%;       /* sidebar #1F1E1D */
+  --bg-300: 60 2.6% 7.6%;        /* well #141413 */
+  --bg-400: 0 0% 0%;             /* #000000 */
+  --bg-500: 0 0% 0%;
+  --bg-elevated: 60 2.8% 21.4%;  /* elevated #383835 */
+  --user-bubble-bg: hsl(var(--bg-000)); /* 暗色气泡要比 base 亮，取 surface */
+
+  --text-000: 48 33.3% 97.1%;    /* #FAF9F5（暖白） */
+  --text-200: 50 9% 73.7%;       /* #C2C0B6 */
+  --text-300: 50 9% 73.7%;
+  --text-400: 48 5.4% 63.9%;     /* #A8A69E（正常字号 ≥4.5:1） */
+  --text-500: 48 5.4% 63.9%;
+
+  --accent-000: 210 65.5% 67.1%;
+  --accent-900: 210 55.6% 24.7%;
+
+  /* 实色底上的前景：暗色浅红底配深字（6.2:1） */
+  --fg-on-danger: 60 2.7% 14.5%; /* #262624 */
+
+  /* 主按钮（暗色）：抬升暖面 + 亮字 + 细描边——不是白底黑字（见 :root 同名注释） */
+  --btn-primary-bg: hsl(var(--bg-elevated));
+  --btn-primary-bg-hover: hsl(var(--bg-elevated) / 78%);
+  --btn-primary-fg: hsl(var(--text-000));
+  --btn-primary-border: var(--hairline-strong);
+
+  /* 语义三色（brief 定值 · 暗色直用） */
+  --success: 142 69.2% 58%;          /* #4ADE80 */
+  --color-risk: 38.3 89.9% 61.4%;    /* #F5B544（warning） */
+  --color-risk-ink: 38 89.7% 69.6%;  /* #F7C46C */
+  --color-danger: 0 90.6% 70.8%;     /* #F87171 */
+  --color-danger-ink: 0 92% 80.2%;   /* #FB9E9E */
+  --color-run: 38.3 89.9% 61.4%;     /* #F5B544 */
+  --color-wait: 215 58.3% 68%;       /* #7EA6DD（等待态留档） */
+  /* 权限档色点（P2-2 · 暗色提亮同构一套） */
+  --color-mode-readonly: 145 18% 62%;    /* #8FB5A0 灰绿 */
+  --color-mode-default: 218 24% 66%;     /* #93A7C4 蓝灰 */
+  --color-mode-guided: 38.3 89.9% 61.4%; /* #F5B544 黄 */
+  --color-mode-auto: 0 90.6% 70.8%;      /* #F87171 红 */
+  --color-diff-add-bg: 140 29% 12.2%; /* #16281C */
+  --color-diff-del-bg: 0 28.8% 14.3%; /* #2F1A1A */
+  --color-diff-add-ink: 142 69.2% 58%;
+  --color-diff-del-ink: 0 90.6% 70.8%;
+
+  /* 结构语义 · 暗色：描边跟文字主色走（暖白 8% / 13%），不再写死纯白 */
+  --hairline: hsl(var(--text-000) / 8%);
+  --hairline-strong: hsl(var(--text-000) / 13%);
+  --scrim: hsl(60 6% 2% / 52%);
+
+  --shadow-card: none;
+  --shadow-pop: 0 8px 28px rgb(0 0 0 / 0.5), 0 2px 8px rgb(0 0 0 / 0.35);
+}
+
+/* ── 双轴 · 文字轴：用户字号偏好（settings 接线后由 App 写 data-text-size）─ */
+html[data-text-size="sm"] { --rem-scale: 0.92; }
+html[data-text-size="lg"] { --rem-scale: 1.08; }

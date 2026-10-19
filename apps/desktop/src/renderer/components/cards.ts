@@ -35,3 +35,38 @@ export function clarifyFormValues(
 export function planFileLines(files: readonly PlanFileChange[]): string[] {
   return files.map((f) => `${f.action}  ${f.path} — ${f.summary}`);
 }
+
+/** 批准卡该说的人话（第十一遍重设计；纯函数，SSR 判卷锚）。
+ *  旧版把 `JSON.stringify(args)` 直接上屏——remember 卡显示 `{"trigger":"session_end_distill"}`、
+ *  write_file 卡一整行转义 JSON：业主截屏批「太丑」的一半就是它。锚定口径：
+ *  · title = 这是什么事（工具级人话）；body = 在动什么（命令/路径/patch，mono 面）；
+ *  · subject = 一行补充（记忆层与类型 / 出网地址）；
+ *  · 只有**兜底名单外的工具**才把 args 落 body（可诊断性保留，别把未知形状藏起来）。 */
+export interface AskDigest {
+  title: string;
+  body?: string;
+  subject?: string;
+}
+
+export function describeAsk(ask: { tool?: string; args?: Record<string, unknown> }): AskDigest {
+  const tool = ask.tool ?? "";
+  const args = ask.args ?? {};
+  const s = (v: unknown): string | undefined => (typeof v === "string" && v !== "" ? v : undefined);
+  if (tool === "run_shell") return { title: "运行命令", body: s(args.command) ?? JSON.stringify(args) };
+  if (tool === "write_file") return { title: "写入文件", body: s(args.path) ?? JSON.stringify(args) };
+  if (tool === "edit_file") return { title: "编辑文件", body: s(args.path) ?? JSON.stringify(args) };
+  if (tool === "apply_patch") return { title: "应用补丁", body: s(args.patch) ?? JSON.stringify(args) };
+  if (tool === "web_fetch") return { title: "访问网络", subject: s(args.url) };
+  if (tool === "remember") {
+    if (args.trigger === "session_end_distill") {
+      return { title: "写入全局记忆", subject: "会话沉淀：把本场要点写进跨项目记忆（影响你的所有项目）" };
+    }
+    const layer = args.scope === "global" ? "全局记忆" : "项目记忆";
+    const KIND: Record<string, string> = { architecture: "架构", decision: "决策", preference: "偏好", memory: "记忆" };
+    const kind = KIND[String(args.kind)] ?? "记忆";
+    const topic = s(args.topic) ?? s(args.type);
+    return { title: `写入${layer}`, subject: topic !== undefined ? `${kind}「${topic}」` : kind };
+  }
+  if (tool.startsWith("automation_")) return { title: "变更定时任务", subject: s(args.name) };
+  return { title: "需要你批准", body: JSON.stringify(args) };
+}

@@ -58,14 +58,29 @@ describe("BASE_SYSTEM 纪律面", () => {
     // 代价量过：约 68 tok/轮（按 1B≈0.6tok 估），比 read_image 工具说明书（101 tok/轮）便宜，
     // 而那把工具正是这条纪律要调用的东西——只加工具不写纪律，等于买了设备没人用。
     // 30 轮会话累计约 2000 token，换「交付前真的看一眼」，这个交换成立。
+    // 2026-10-16 第二次加句（帽没抬，字节是腾出来的）：同一场交付里落盘那份与最终回复里
+    // 重抄的那份**动画数据不同** ⇒ 视觉段 118→259 字节，加上「只交付落盘那一份、不要在
+    // 回复里重抄」。腾出来的地方：纪律 3 138→126、机制边界子代理段 197→150
+    // （删的是 spawn_agent 说明书里已有的重复信息，不是删约束）。
     expect(Buffer.byteLength(BASE_SYSTEM, "utf8")).toBeLessThan(1750);
   });
 
   it("视觉产物自检段在：交付前必须真的看过（能力 5 对非代码产物同样成立）", () => {
     const line = BASE_SYSTEM.split("\n").find((l) => l.startsWith("视觉产物"));
     if (line === undefined) throw new Error("BASE_SYSTEM 缺「视觉产物」段——模型写完美化产物后没人要求它回头看");
-    expect(line).toContain("read_image");
-    expect(line).toMatch(/不许只凭/);
+    expect(line).toMatch(/必须真的看过/);
+  });
+
+  // 产物权威版（2026-10-16 加）：同一次生成里落盘那份与最终回复里重抄的那份腿部动画数据不同
+  // （两条腿被写成同一组数、髋关节横移 40 单位、脚偏离曲柄圆周最多 22.9 单位）⇒ 用户从聊天
+  // 复制到的和打开 agent 存的文件看到的是两个动画。这一段把「引用落盘那一份」定成交付方式。
+  it("产物权威版段在：只交付落盘那一份，不许在回复里重抄", () => {
+    const line = BASE_SYSTEM.split("\n").find((l) => l.startsWith("视觉产物"));
+    if (line === undefined) throw new Error("BASE_SYSTEM 缺产物权威版约束——重抄一份就有两个版本，而两个版本必然漂移");
+    expect(line).toContain("只交付落盘那一份");
+    expect(line).toMatch(/不要在回复里重抄/);
+    // 反面也钉：这句不是"建议"，是禁止。
+    expect(line).not.toContain("可以重抄");
   });
 
   it("视觉产物段不占纪律编号（同编排段：条件段混进编号会造断号）", () => {

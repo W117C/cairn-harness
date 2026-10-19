@@ -32,7 +32,11 @@ export interface GoalTurnOrigin {
 /** `user_message.origin` 的两种来源：sidechat 提升 / goal 自动续跑。消费端一律按 kind 分支，
  *  不许再无条件读 `.session_id`——那会把另一种来源在类型上假装成不存在。 */
 export type UserMessageOrigin = PromoteOrigin | GoalTurnOrigin;
-export interface UserMessageEvent { type: "user_message"; content: string; origin?: UserMessageOrigin; skill?: SkillInvocationMeta }
+/** 用户消息附带的文件/目录引用（2026-10-18）：只记引用，不含内容；缺省 = 无附件，既有事件字节不变。
+ *  kind 与主进程 RunAttachmentKind 同字面量；事件层不反向依赖 main，故就地声明。 */
+export interface UserMessageAttachment { path: string; kind: "file" | "directory" }
+
+export interface UserMessageEvent { type: "user_message"; content: string; origin?: UserMessageOrigin; skill?: SkillInvocationMeta; attachments?: readonly UserMessageAttachment[] }
 export interface AssistantMessageEvent { type: "assistant_message"; content: string }
 /** 流式增量片段：callId 标识同一轮回复，text 为逐字追加的一小段。 */
 export interface AssistantDeltaEvent { type: "assistant_delta"; callId: string; text: string }
@@ -83,7 +87,9 @@ export interface ToolResultEvent { type: "tool_result"; callId: string; ok: bool
    *  从前这一路整段缺席：agent 说"图已经贴在上面了"，而落盘事件里没有任何可指的产物，
    *  桌面端也就无从显示。缺席 = 这次调用没有交付物（绝大多数调用）。 */
   artifact?: { kind: "image" | "html" | "svg" | "text"; path: string; note?: string };
-  change?: "created" | "modified"; /** 进程退出码（run_shell / worker shell / 沙箱出口才有）。
+  change?: "created" | "modified";
+  /** 多文件写工具成功落盘的 workspace 相对路径清单；缺席表示没有结构化清单。 */
+  changedPaths?: string[]; /** 进程退出码（run_shell / worker shell / 沙箱出口才有）。
    *  **缺席 = 这一笔不是跑进程的工具**（或旧日志），绝不等于 0；`null` 才是"进程没起来/被强杀"。
    *  为什么现在才落：这两个字段一直活在 `ToolResult` 上，却在落盘面那一步被丢掉 ⇒
    *  任何下游读者（额度、按档升级、沉淀、评估失败轨迹）只能去匹配 `[exit code: 127]` 那句文案，

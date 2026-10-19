@@ -116,7 +116,53 @@ describe("闸三：PNG 复核与字节帽（注入 shoot 写盘，不走真浏�
     const tool = makeRenderImage({ findChrome: async () => "/fake/chrome", shoot: shootTo(PNG_1X1) });
     const r = await tool.run({ path: "a.html", atMs: 650 }, ctx());
     expect(r.ok).toBe(true);
-    expect(r.output).toContain("@650ms");
+    expect(r.output).toContain("虚拟时间 650ms");
+  });
+
+  // 回执不许把「生成了 PNG」说成「已经有效检查过」：单帧静态图证明得了元素出现，
+  // 证明不了动画质量。钉的是**旧那句不在**，而不只是新文案在——否则换个写法就能绕过去。
+  it("回执不宣称「已经看过」，并说清单帧能证明与不能证明的边界", async () => {
+    writeFileSync(join(ws, "a.html"), "<h1>x</h1>");
+    const tool = makeRenderImage({ findChrome: async () => "/fake/chrome", shoot: shootTo(PNG_1X1) });
+    const r = await tool.run({ path: "a.html", width: 800, height: 600 }, ctx());
+    expect(r.ok).toBe(true);
+    expect(r.output).not.toContain("现在你真的看过它了");
+    expect(r.output).toContain("视口 800×600");
+    // 「只证明页面跑起来了」这句在，模型才知道还差什么检查。
+    expect(r.output).toContain("只证明页面跑起来了");
+  });
+
+  it("height 真的进 window-size（说明书说高由页面自己定，实现从前写死 1200）", async () => {
+    writeFileSync(join(ws, "a.html"), "<h1>x</h1>");
+    const seen: string[] = [];
+    const tool = makeRenderImage({
+      findChrome: async () => "/fake/chrome",
+      shoot: (_c, _h, out, opts) => {
+        writeFileSync(out, PNG_1X1); // 真渲染那一半不由本格负责，这里只让字节复核过得去
+        seen.push("--window-size=" + String(opts.width) + "," + String(opts.height));
+        return Promise.resolve();
+      },
+    });
+    // 不传 height ⇒ 1200（与写死时代逐字一致：变的只是"能不能传"，不是缺省值）。
+    await tool.run({ path: "a.html" }, ctx());
+    expect(seen[0]).toBe("--window-size=1200,1200");
+    await tool.run({ path: "a.html", width: 800, height: 2400 }, ctx());
+    expect(seen[1]).toBe("--window-size=800,2400");
+  });
+
+  // 产物引用的 kind 必须按后缀分类（与 write_file 共用同一个分类器），不是写死 "html"：
+  // 写死时 .svg 也会被报成 html，桌面端两种 kind 都进 openPreview ⇒ 观感一样、数据是错的，
+  // 判卷也就跟着错。用户面据此给「打开预览 / 看图 / 看源码」三个入口。
+  it("产物引用的 kind 按后缀分类：.svg 报 svg、.html 报 html", async () => {
+    writeFileSync(join(ws, "a.svg"), "<svg></svg>");
+    writeFileSync(join(ws, "a.html"), "<h1>x</h1>");
+    const tool = makeRenderImage({ findChrome: async () => "/fake/chrome", shoot: shootTo(PNG_1X1) });
+    const svg = await tool.run({ path: "a.svg" }, ctx());
+    expect(svg.ok).toBe(true);
+    expect(svg.artifact).toMatchObject({ kind: "svg", path: "a.svg" });
+    const html = await tool.run({ path: "a.html" }, ctx());
+    expect(html.ok).toBe(true);
+    expect(html.artifact).toMatchObject({ kind: "html", path: "a.html" });
   });
 
   it("空文件 ⇒ 拒（不把空图当看过）", async () => {

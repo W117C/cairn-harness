@@ -2,6 +2,7 @@
 // risk = max(静态评级, 模型映射)；critical 任何档位强制审批（管线 L4）。
 // 不做 LLM 风险分析器 V1（§11.7.4 拍板）。
 import type { ToolName } from "../tools/base";
+import { normalizeCommandForMatch } from "./command-shape";
 
 export type RiskLevel = "none" | "low" | "medium" | "high" | "critical";
 
@@ -227,8 +228,10 @@ export function staticRisk(tool: ToolName, args: Record<string, unknown>): RiskF
     return { level: "high", reason: "启动浏览器渲染工作区内的 HTML/SVG（外部进程；截图落临时目录，不改工作区）" };
   }
   if (!hasThreatTableSurface(tool)) return NONE;
-  const command = typeof args.command === "string" ? args.command : "";
-  if (command.trim() === "") return NONE;
+  const rawCommand = typeof args.command === "string" ? args.command : "";
+  if (rawCommand.trim() === "") return NONE;
+  // 静态威胁表同样按 shell 展开后的形状判：`rm${IFS}-rf` 实际就是 `rm -rf`。
+  const command = normalizeCommandForMatch(rawCommand);
   let best: RiskFinding = NONE;
   for (const t of THREAT_TABLE) {
     if (t.re.test(command)) {
@@ -265,5 +268,6 @@ const NETWORK_RE =
 /** 网络类命令判定：外泄主通道，scope 不对其提供 session_kind/always（强制 once，§11.7.2）。 */
 export function isNetworkCommand(command?: string): boolean {
   if (command === undefined || command.trim() === "") return false;
-  return NETWORK_RE.test(command);
+  // `$IFS` 是 shell 的空白展开：不归一就会 `git${IFS}clone …` 绕过网络审计。
+  return NETWORK_RE.test(normalizeCommandForMatch(command));
 }

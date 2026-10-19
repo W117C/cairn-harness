@@ -651,3 +651,21 @@ describe("真料证人：留档原文逐字对得上", () => {
     expect(p.reasons.join("；")).toContain("numTotalTests=");
   });
 });
+
+// 2026-10-19 自审：pytest `-rA` 的短汇总 skipped 行是 `SKIPPED [1] nodeid: reason`，
+// 旧正则只认 ` - reason`/行尾 ⇒ 该用例不进逐名面，汇总对不上 → complete=false → unreadable。
+describe("pytest 短汇总的 skipped 行（2026-10-19）", () => {
+  it("`SKIPPED [1] nodeid: reason` 进逐名面且判卷完整", () => {
+    const p = parseTestResults([
+      "============================= test session starts =============================",
+      "collected 2 items",
+      "SKIPPED [1] tests/a.py::t: 环境缺依赖",
+      "PASSED tests/a.py::ok",
+      "========================= 1 passed, 1 skipped in 0.12s =========================",
+    ].join("\n"));
+    expect(p.format).toBe("pytest");
+    expect(p.tests.find((t) => t.name === "tests/a.py::t")?.outcome).toBe("skipped");
+    expect(p.counts).toMatchObject({ passed: 1, skipped: 1 });
+    expect(p.complete, p.reasons.join("；")).toBe(true);
+  });
+});

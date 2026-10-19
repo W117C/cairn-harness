@@ -37,7 +37,10 @@ describe("协议版本握手接线（§3.5/§12）", () => {
 
   it("版本事实源单点：桌面侧不许另抄一份版本数字（期望值从协议面 import）", () => {
     // 升版即在此钉新号：v8 → v9（建议批：suggestNext「Tab 想下一条」单发模型调用）；
-    // v9 → v10（能力在场性批：capabilities——搜索端点配没配，让「模型为什么少一把工具」上屏）。
-    expect(IPC_PROTOCOL_VERSION).toBe(10);
+    // v9 → v10（能力在场性批：capabilities——搜索端点配没配，让「模型为什么少一把工具」上屏）；
+    // v10 → v11（主界面重做批：git 两闸 / 项目内搜索 / 最近打开 / 粘贴落盘 / 快照还原 / Finder 显示）；
+    // v11 → v12（导入诊断批：导入已有文件夹先给三态诊断，ADR 0004 §4）；
+    // v12 → v13（记忆正文批：MemoryTopicPayload 增 body——「主题正文」快照面接通，无新通道）。
+    expect(IPC_PROTOCOL_VERSION).toBe(13);
   });
 });

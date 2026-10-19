@@ -13,11 +13,14 @@
 import type { AgentEvent, VerifyCause } from "../../events";
 import { goalDriftFindings, assistantTurnsFromEvents } from "../goal-drift";
 import { costPerProgress } from "../cost-per-progress";
+import { eventsForCurrentRun } from "../delivery-guard";
 
 export interface EvolutionSignals {
   /** verify 失败按 cause 计数（cause 缺席 = 模型自调且未归因，记 "unknown"）。 */
   verifyFailuresByCause: Record<string, number>;
-  /** 同一 cause 连续 ≥3 次失败 ⇒ 升级信号（模型照着红改本来正确的代码那一族）。 */
+  /** 最后一拍 verify 的失败原因；绿色或无 verify 时为 null。 */
+  lastVerifyFailureCause?: VerifyCause | "unknown" | null;
+  /** 同一 cause 连续 ≥3 次失败 ⇒ 升级信号；具体处置由 cause 归因决定。 */
   repeatedVerifyCause: VerifyCause | "unknown" | null;
   /** verify 全绿 / 全红 / 未跑。 */
   verifyOutcome: "green" | "red" | "none";
@@ -35,7 +38,9 @@ export interface EvolutionSignals {
 
 /** 从事件流抽取自进化信号。纯函数。 */
 export function extractSignals(events: readonly AgentEvent[]): EvolutionSignals {
-  const verifyResults = events.filter(
+  // 只读当前用户轮的主会话：历史轮次与 worker 子流都不能替父会话表态。
+  const scoped = eventsForCurrentRun(events);
+  const verifyResults = scoped.filter(
     (e): e is Extract<AgentEvent, { type: "verify_result" }> => e.type === "verify_result",
   );
   const verifyFailuresByCause: Record<string, number> = {};
@@ -47,6 +52,7 @@ export function extractSignals(events: readonly AgentEvent[]): EvolutionSignals 
     if (v.ok) {
       lastCause = null;
       runOfCause = 0;
+      repeatedVerifyCause = null;
       continue;
     }
     const cause = v.cause ?? "unknown";
@@ -57,26 +63,26 @@ export function extractSignals(events: readonly AgentEvent[]): EvolutionSignals 
       lastCause = cause;
       runOfCause = 1;
     }
-    if (runOfCause >= 3 && repeatedVerifyCause === null) {
-      repeatedVerifyCause = cause as VerifyCause | "unknown";
-    }
+    // 只保留当前连续失败段：恢复或切换 cause 后，旧升级信号必须失效。
+    repeatedVerifyCause = runOfCause >= 3 ? cause as VerifyCause | "unknown" : null;
   }
 
   const lastVerify = verifyResults[verifyResults.length - 1];
   const verifyOutcome: "green" | "red" | "none" =
     lastVerify === undefined ? "none" : lastVerify.ok ? "green" : "red";
 
-  const drift = goalDriftFindings(assistantTurnsFromEvents(events));
-  const cost = costPerProgress(events);
+  const drift = goalDriftFindings(assistantTurnsFromEvents(scoped));
+  const cost = costPerProgress(scoped);
 
   return {
     verifyFailuresByCause,
+    lastVerifyFailureCause: lastVerify !== undefined && !lastVerify.ok ? lastVerify.cause ?? "unknown" : null,
     repeatedVerifyCause,
     verifyOutcome,
     goalDriftCount: drift.length,
     costMeasurable: cost.measurable,
     tokensPerBoundary: cost.tokensPerBoundary,
     spendAfterLastBoundary: cost.spendAfterLastBoundary,
-    eventCount: events.length,
+    eventCount: scoped.length,
   };
 }

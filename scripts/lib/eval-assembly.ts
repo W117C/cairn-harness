@@ -55,7 +55,7 @@ export const BENCH_KNOBS: Readonly<Record<string, BenchDeclaration>> = {
   },
   promptCache: {
     face: "off-here",
-    why: "provider 级选项（agent-runner:1767 传 providerSettings.promptCache）；基准的 createGlmSessionProvider 没带这个键",
+    why: "provider 级选项（agent-runner:1767 传 providerSettings.promptCache）；基准的 createSessionProvider 没带这个键",
   },
   autoMemory: {
     face: "off-here",
@@ -64,6 +64,10 @@ export const BENCH_KNOBS: Readonly<Record<string, BenchDeclaration>> = {
   subagentTools: {
     face: "same",
     why: "三件套（spawn_agent/wait_for_agents/cancel_agents）在 sessionToolSpecs 的面上，实测 22 把里都在",
+  },
+  ctrlTabCycle: {
+    face: "not-applicable",
+    why: "纯渲染层快捷键闸（App.tsx 的 hotkeysRef：Ctrl+Tab 切会话），不进 runLoop 也不进 agent-runner——基准是 CLI 跑器，根本没有键盘面可拦",
   },
 };
 

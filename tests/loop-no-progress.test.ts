@@ -103,7 +103,10 @@ describe("M10② 无进展阶梯接进主循环（no-progress.ts 的首个生产
     const { log } = await run([{ name: "verify" }], {
       verify: { async run() { return { ok: true, results: [{ command: "pnpm test", ok: true, output: "" }] }; } },
     });
-    expect(toolResults(log)).toHaveLength(0);
+    // 2026-10-19：成功拍也留一条配对的 tool_result（防下一轮投影伪造 dangling note）；
+    // 这里要钉的是「没有 [no-progress] 注记」，不是「零 tool_result」。
+    expect(toolResults(log)).toEqual(["[verify] 验证通过"]);
+    expect(toolResults(log).filter((o) => o.includes("[no-progress]"))).toHaveLength(0);
     expect(log.filter((e) => e.type === "verify_result")).toHaveLength(1);
   });
 

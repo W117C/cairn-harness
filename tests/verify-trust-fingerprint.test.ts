@@ -297,19 +297,19 @@ describe("④同指纹第二次 ⇒ 不再问（免问的证人）", () => {
     expect(await store.status(verifyTrustKey(repo), altered), "换个内容就免问 ⇒ 键没绑住面内容").toBe("pending");
   });
 
-  it("旧版插件信任留下的**裸路径**条目顶不掉这一门（键域标签不是装饰）", async () => {
-    // `TrustStore.hit` 有一条明文备案的兼容：无 `@指纹` 的裸路径条目仍能命中无界条目。
-    // 那条是给插件历史留的。若 verify 的条目也用裸路径，一条「曾经把某个目录当插件批过」的历史
-    // 记录就会顺带免掉仓库自带命令的问 —— 所以第一维带域标签。这一格钉的就是它没被顶包。
+  it("旧版插件信任留下的**裸路径**条目顶不掉这一门（键域标签 + 裸条目已不命中）", async () => {
+    // 2026-10-19：TrustStore 已移除裸路径兼容（内容绑定不可回退）。
+    // 本格钉两件事：裸条目本身不再命中；它更不可能顶替带域标签的 verify 条目。
     const { config } = await loadVerifyConfig(repo);
     const fp = verifySurfaceFingerprint(config, "repo-config");
     await writeFile(rig.trustFile, JSON.stringify({ trusted: [repo], declined: [] }), "utf8");
     const store = new TrustStore(rig.trustFile);
-    expect(await store.status(repo, fp), "前提不成立：裸路径条目本身在兼容面里就该命中（否则下面那条是恒真）").toBe("trusted");
+    expect(await store.status(repo, fp), "裸路径条目不得命中").toBe("pending");
+    expect(await store.status(verifyTrustKey(repo), fp), "裸条目也不得顶包 verify 域").toBe("pending");
 
     const probe = spyExec();
     await createVerifyHook(repo, { exec: probe.exec, trustResolver: rig.resolverFor("deny") }).run();
-    expect(rig.cards.length, "历史裸路径条目免掉了这一问 ⇒ 域标签没生效").toBe(1);
+    expect(rig.cards.length, "历史裸路径条目免掉了这一问 ⇒ 域标签/内容绑定没生效").toBe(1);
     expect(probe.seen, "被一条不是给这一门写的记录放了行").toEqual([]);
   });
 });

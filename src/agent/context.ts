@@ -10,6 +10,7 @@ import type { AgentEvent, CompactionEvent, TurnTruncatedEvent, VerifyCommandResu
 import { failureDigest } from "./verify";
 import { clampTailToTokenBudget } from "./text-budget";
 import { escapeControlTags } from "./control-tags";
+import { DELIVERY_GUARD_CALL_ID } from "./delivery-guard";
 
 /** OpenAI 兼容消息（投影产物；system 由调用方按需前置）。 */
 export interface ContextMessage {
@@ -303,7 +304,18 @@ export function projectContext(
     } else if (e.type === "tool_result") {
       flushDeltas();
       const pruned = replacements?.get(id);
-      msgs.push({ role: "tool", tool_call_id: e.callId, content: escapeControlTags(pruned ?? e.output) });
+      // 交付断言那一拍（能力 12）：它没有配对的 tool_call，直接当 tool 消息塞进去会让 provider
+      // 侧 tool 消息失去前置 tool_calls 而 400 ⇒ 与自动验证拍同路：投成 user 消息。
+      // 为什么不并入下面的 verify_result 分支：那支的措辞是「补跑的 verify 未通过」，
+      // 而这条说的是「你承诺的文件根本不存在」——两件事的模型处置完全不同
+      // （一个去改代码，一个去补写文件或收回说法），混成一条等于让模型猜该做哪个。
+      // 这里用 if/else 而不是 `continue`：这段活在 forEach 的回调里，`continue` 会跳出
+      // 函数边界（TS1107）——而改成 return 又会漏掉回调尾部的别的事。两分支互斥就够了。
+      if (e.callId === DELIVERY_GUARD_CALL_ID) {
+        msgs.push({ role: "user", content: escapeControlTags(e.output) });
+      } else {
+        msgs.push({ role: "tool", tool_call_id: e.callId, content: escapeControlTags(pruned ?? e.output) });
+      }
     } else if (e.type === "verify_result") {
       flushDeltas();
       // 只有「系统补拍且红」这一种 verify_result 进上下文（见 autoVerifyNote 的理由）；

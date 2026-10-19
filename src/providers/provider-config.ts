@@ -12,6 +12,7 @@
 //
 // 本文件是纯逻辑：读文件、发请求、注入环境变量都不在这里（那是接线层的事）。判卷直接喂 JSON。
 
+import { isIP } from "node:net";
 import { DEFAULT_MODEL_TABLE, type ModelSpec, type ModelTier } from "./registry";
 import type { CatalogPricing } from "./catalog";
 import { DISCOVERY_PROTOCOLS, type DiscoveryProtocol } from "./discovery";
@@ -129,14 +130,35 @@ function money(v: unknown): number | undefined {
 /** 私网 / 回环判定（只用于「要不要显式放行」这一件事；真正的出网安全在请求侧另有一道）。 */
 export function isLocalHostname(hostname: string): boolean {
   const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (h === "localhost" || h === "::1" || h === "0.0.0.0") return true;
-  if (/^127\./.test(h) || /^10\./.test(h)) return true;
-  if (/^192\.168\./.test(h)) return true;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
-  return h.endsWith(".local");
+  if (h === "localhost" || h === "::1" || h === "0.0.0.0" || h.endsWith(".localhost")) return true;
+  const v4 = (s: string): boolean => {
+    const parts = s.split(".").map(Number);
+    if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
+    const [a, b] = parts as [number, number, number, number];
+    return a === 0 || a === 10 || a === 127
+      || (a === 169 && b === 254)                       // link-local / 云元数据
+      || (a === 172 && b >= 16 && b <= 31)              // 172.16/12
+      || (a === 192 && b === 168)
+      || (a === 100 && b >= 64 && b <= 127);            // 100.64/10 CGNAT
+  };
+  if (isIP(h) === 4) return v4(h);
+  if (isIP(h) === 6) {
+    const emb = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(h);
+    if (emb !== null) return v4(emb[1]!);
+    // ULA (fc00::/7) 与 link-local (fe80::/10)
+    if (/^f[cd][0-9a-f]{2}:/.test(h) || /^fe[89ab][0-9a-f]:/.test(h)) return true;
+  }
+  return h.endsWith(".local") || h.endsWith(".internal");
 }
 
-/** 未知字段一律判错。allowed 用小写比对（JSON 里大小写是用户自由，但我们要给出确定的拒绝）。 */
+/** 未知字段一律判错。allowed 用小写比对（JSON 里大小写是用户自由，但我们要给出确定的拒绝）。
+ *
+ *  **唯一例外：`_` 开头的键是注释**（2026-10-18）。JSON 没有注释语法，而本仓的
+ *  `.agent/config.json` 一直用 `_comment` / `_search` 记录「为什么这么配」；providers.json
+ *  却在同一个工作区里把 `_comment` 判成 unknown-field ⇒ 文件自己的说明把整份配置判死
+ *  （真机：本仓 `.agent/providers.json` 因此整份 broken，三家 provider 全不生效）。
+ *  `_` 前缀按通行约定只作说明、不参与生效字段，所以忽略它不会造成「以为配上了」的假象；
+ *  真正的未知字段（如 `stream_idle_timeout_ms`）仍逐字判错。 */
 function rejectUnknown(
   obj: Record<string, unknown>,
   allowed: readonly string[],
@@ -145,6 +167,7 @@ function rejectUnknown(
 ): void {
   const allow = new Set(allowed.map((a) => a.toLowerCase()));
   for (const k of Object.keys(obj)) {
+    if (k.startsWith("_")) continue;
     if (FORBIDDEN_KEY_FIELDS.includes(k.toLowerCase())) {
       problems.push({
         kind: "key-field",

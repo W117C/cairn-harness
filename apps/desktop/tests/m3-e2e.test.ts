@@ -13,12 +13,13 @@
 //   onEvent）——故「逐行归属」的主断言落在事件运行时（分桶数据源），JSONL 行内若出现 session_id
 //   字段则作反向 fail-safe（绝不许是对方的 id）。
 // demo 通道不拨号不花钱（spec §3.2）：settings provider=demo + M3A_AGENTS_DEMO=1 ⇒ 确定性剧本。
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { realpathSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { createKernelHost, type KernelHost } from "../src/main/kernel-host";
+import { createSession as createSessionInRoot } from "../../../src/main/sessions";
 
 const dir = mkdtempSync(join(tmpdir(), "cairn-m3-e2e-"));
 const userData = join(dir, "userData");
@@ -88,7 +89,7 @@ describe("M3 验收锚 e2e", () => {
       // 清单可见且归属 wsA：两根扫描面下恰一条（不误归 wsB）、行数与盘上事实一致。
       const listed = (await host.listSessions()).filter((s) => s.id === cliId);
       expect(listed).toHaveLength(1);
-      expect(listed[0]!.workspace).toBe(wsA);
+      expect(listed[0]!.workspace).toBe(realpathSync(wsA)); // 2026-10-17：host 统一 realpath 工作区
       expect(listed[0]!.lines).toBe(2);
       // 显式工作区读回（硬判据口径 openSession(id, wsA)）。
       const opened = await host.openSession(cliId, wsA);
@@ -177,4 +178,30 @@ describe("M3 验收锚 e2e", () => {
     },
     60_000,
   );
+
+  it("同秒跨工作区建会：两根本地序号撞到同一后缀时仍不得复用 ID", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-17T14:30:00Z"));
+    try {
+      const now = new Date();
+      const p2 = (n: number): string => String(n).padStart(2, "0");
+      const stamp = `会话 ${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())} `
+        + `${p2(now.getHours())}:${p2(now.getMinutes())}:${p2(now.getSeconds())}`;
+      const wsA = join(dir, "same-second-ws-a");
+      const wsB = join(dir, "same-second-ws-b");
+      const host = makeHost([wsA, wsB], wsA, []);
+      for (const ws of [wsA, wsB]) {
+        const root = join(ws, ".agent", "sessions");
+        mkdirSync(root, { recursive: true });
+        await createSessionInRoot(root, stamp);
+        await createSessionInRoot(root, `${stamp} (2)`);
+      }
+
+      const a = await host.createSession(wsA);
+      const b = await host.createSession(wsB);
+      expect(a.id).not.toBe(b.id);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

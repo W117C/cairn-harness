@@ -60,7 +60,7 @@ export interface DiscoverInput {
 
 export type DiscoverOutcome =
   | { ok: true; models: readonly DiscoveredModel[]; requestURL: string }
-  | { ok: false; reason: DiscoverFailure; message: string; requestURL?: string };
+  | { ok: false; reason: DiscoverFailure; message: string; requestURL?: string; status?: number };
 
 export type DiscoverFailure =
   | "bad-url"
@@ -130,7 +130,7 @@ export async function discoverModels(input: DiscoverInput): Promise<DiscoverOutc
     };
   }
   if (!res.ok) {
-    return { ok: false, reason: "http", message: `上游 HTTP ${res.status}`, requestURL };
+    return { ok: false, reason: "http", message: `上游 HTTP ${res.status}`, requestURL, status: res.status };
   }
 
   let text: string;

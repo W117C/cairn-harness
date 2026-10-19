@@ -11,7 +11,7 @@ import {
   shortModelName,
   tierBadge,
 } from "../src/renderer/components/ModelPicker";
-import { formatTokens } from "../src/renderer/components/TokenPanel";
+import { formatTokens } from "../src/renderer/components/format-tokens";
 import type { ProviderInfo } from "../../../src/main/ipc-protocol";
 
 function model(id: string, provider: string, model_: string, tier: string, ctxWindow: number) {

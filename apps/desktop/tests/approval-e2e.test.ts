@@ -135,8 +135,8 @@ describe("审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 
       rmSync(join(wsApprove, "approval-marker.tmp"), { force: true }); // 场 1 留下的 marker 清场（单独跑本例时本就不在）
       outbox.length = 0;
       const a = await host.createSession(wsCancel);
-      let b = await host.createSession(wsApprove);
-      if (b.id === a.id) b = await host.createSession(wsApprove); // 同分钟两根撞名规避（归属表覆盖），沿 kernel-host.test.ts 先例
+      const b = await host.createSession(wsApprove);
+      expect(b.id).not.toBe(a.id);
       const runA = host.run({ message: "建标记（将被打断）", mode: "default", sessionId: a.id });
       const askA = await awaitRunShellAsk(); // A 先飞：第一张 run_shell 审批卡必属 A
       const runB = host.run({ message: "建标记（照常跑完）", mode: "default", sessionId: b.id });

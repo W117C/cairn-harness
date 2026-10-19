@@ -41,8 +41,8 @@ describe("priceForModel：两态输入都要能落到价表", () => {
     expect(spentUsdFor(price, USAGE)).toBeNull();
   });
 
-  it("已定的档位优先于按名反查（路由决策不能被模型名盖掉）", () => {
-    expect(priceForModel("glm-5.2", "glm-strong").priceId).toBe("glm-strong");
+  it("真拨模型名优先于路由档位（按实际服务的模型计价，不按选择依据）", () => {
+    expect(priceForModel("glm-5.2", "glm-strong").priceId).toBe("glm-standard");
   });
 
   it("闸在真模型名下真的会拦：$0.05 上限 × 200k/20k 用量 ⇒ stop（不是惰过去）", () => {

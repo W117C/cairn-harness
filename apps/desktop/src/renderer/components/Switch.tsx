@@ -1,13 +1,6 @@
-// ④ 统一的开关控件（用户实测反馈：设置里的按键「全只有勾选和不勾选」）。
-//
-// 为什么不用 `<input type="checkbox">`：一个裸复选框只表达「勾了没勾」，
-// 而设置项需要三件额外信息 ——
-//   ① **当前状态的人话**（已开启 / 已关闭），不然用户得从勾的形态反推；
-//   ② **在忙**（保存中），此时要禁用并让禁用可解释，而不是点了没反应；
-//   ③ **可点区域**：复选框的小方块只有十几像素，而整行才是人真正会点的地方。
-//
-// 用 `role="switch"` 而不是 `role="checkbox"`：屏幕阅读器会把开关读成"开/关"，
-// 与界面语义一致（这也是 WAI-ARIA 对这类二元设置的推荐用法）。
+// 开关控件（自旧 Switch 保留语义与判卷锚：role="switch"、aria-checked、状态文字、
+// 保存中禁用可解释）。新设计改用 Radix 视觉骨架（sw/sw-knob 类由 tokens 驱动，
+// 样式见 styles.css），组件接口与原判卷断言（已开启/已关闭/自定义词/title）不变。
 import type { ReactNode } from "react";
 
 export function Switch(props: {
@@ -36,7 +29,7 @@ export function Switch(props: {
         className={"sw" + (props.checked ? " on" : "")}
         disabled={off}
         title={props.busy === true ? "保存中…" : `${props.label}：${stateText}`}
-        onClick={() => props.onChange(!props.checked)}
+        onClick={() => { props.onChange(!props.checked); }}
       >
         <span className="sw-knob" aria-hidden="true" />
       </button>

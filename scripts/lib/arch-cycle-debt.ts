@@ -18,5 +18,7 @@ export const RUNTIME_CYCLE_DEBT: readonly CycleDebt[] = [
   // ⇒ 两套取料面互相咬住（不是"数字好看"，是两个独立实现给出同一答案）。
   // 现状：跨圈符号全在函数体内被使用 ⇒ 今天不炸；**哪天有人在模块顶层用被圈住的符号就是 ESM TDZ**，
   // 而那要跑到那一行才炸、判卷恰好可能不经过 ⇒ 这一格只能靠结构闸，不能靠行为证人。
-  ["src/agent/session-provider.ts", "src/agent/memory/inject.ts", "src/agent/memory/lessons.ts", "src/agent/worker-shell-tools.ts", "src/agent/write-face.ts"],
+  // 2026-10-16：glm-session.ts → session-provider.ts 改名后字典序变了（memory/ 排在 session- 之前）
+  // ⇒ 按规范化后的顺序重排。登记纪律要求「已按字典序规范化」，改名必须跟着重排，否则假 fresh 红。
+  ["src/agent/memory/inject.ts", "src/agent/memory/lessons.ts", "src/agent/session-provider.ts", "src/agent/worker-shell-tools.ts", "src/agent/write-face.ts"],
 ];

@@ -11,17 +11,20 @@
 // 端点，重定向即拒并把 Location 报出来让人改配置——这里不需要 web_fetch 那条逐跳重校验的链。
 import { lookup } from "node:dns/promises";
 import { readFileSync } from "node:fs";
+import { isIP } from "node:net";
 import { join } from "node:path";
 import { projectAgentPath } from "../app-data";
-import { readBodyCapped, stallGuard } from "../net.js";
+import { readBodyCapped, stallGuard, withAbort } from "../net.js";
 import { ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
 import { createOutputRing, WEB_CONTENT_TRUNCATION_HINT } from "./output-ring.js";
-import { assertPublicUrl, type HostResolver } from "./web-fetch-policy.js";
-import { htmlToText } from "./web_fetch.js";
+import { assertPublicUrlAndResolve, type HostResolver } from "./web-fetch-policy.js";
+import { htmlToText, pinnedHttpFetch, type WebFetchImpl } from "./web_fetch.js";
 
 const BODY_CAP = 2 * 1024 * 1024;
 const RAW_TEXT_BYTES = 16 * 1024;
 const STALL_MS = 30_000;
+/** 墙钟上限：停滞窗口会被任意分片续期，慢速滴灌可让搜索永久不返回。 */
+const TOTAL_MS = 60_000;
 const RESULTS_CAP = 10;
 const TITLE_CAP = 120;
 const SNIPPET_CAP = 240;
@@ -107,7 +110,8 @@ function renderResults(query: string, source: string, all: readonly SearchResult
 }
 
 export interface WebSearchDeps {
-  fetchImpl?: typeof fetch;
+  /** 传输必须使用本次已校验的地址快照；生产使用与 web_fetch 同一条绑定传输。 */
+  fetchImpl?: WebFetchImpl;
   resolveHost?: HostResolver;
 }
 
@@ -117,7 +121,7 @@ const defaultResolve: HostResolver = async (host) =>
   (await lookup(host, { all: true })).map((r) => r.address);
 
 export function makeWebSearch(deps: WebSearchDeps = {}): Tool {
-  const doFetch = deps.fetchImpl ?? fetch;
+  const doFetch: WebFetchImpl = deps.fetchImpl ?? ((input, init, addresses) => pinnedHttpFetch(input, init, addresses, "web_search"));
   const resolve = deps.resolveHost ?? defaultResolve;
   return {
     name: "web_search",
@@ -143,18 +147,42 @@ export function makeWebSearch(deps: WebSearchDeps = {}): Tool {
       const query = raw.trim();
       const target = cfg.endpoint.replaceAll("{query}", encodeURIComponent(query));
       const guard = stallGuard(STALL_MS, "web_search");
+      const total = new AbortController();
+      const totalTimer = setTimeout(() => total.abort(new Error(`web_search 总时长超过 ${String(TOTAL_MS / 1000)}s`)), TOTAL_MS);
+      (totalTimer as { unref?: () => void }).unref?.();
+      const signal = ctx.signal
+        ? AbortSignal.any([guard.signal, total.signal, ctx.signal])
+        : AbortSignal.any([guard.signal, total.signal]);
+      let response: Response | undefined;
       try {
+        signal.throwIfAborted();
         // 默认走 SSRF 闸；显式 `allowLocalEndpoint: true` 才跳过私网/回环判定，
         // 并仍要求 http(s) 与 {query} 已替换——本地端点也属于「检索端点」，不许静默降级成 file/data。
-        const u = cfg.allowLocalEndpoint === true ? new URL(target) : await assertPublicUrl(target, resolve, "web_search");
+        const checked = cfg.allowLocalEndpoint === true ? undefined : await withAbort(signal, () => assertPublicUrlAndResolve(target, resolve, "web_search"));
+        const u = checked?.url ?? new URL(target);
+        signal.throwIfAborted();
         if (u.protocol !== "http:" && u.protocol !== "https:") {
           return { ok: false, output: `web_search: endpoint 协议必须是 http(s)，当前是 ${u.protocol}` };
         }
-        const res = await doFetch(u.href, {
+        // 保持原生 fetch 拒绝 URL 凭据的约束，错误回执也不回显密码。
+        if (u.username !== "" || u.password !== "") {
+          return { ok: false, output: "web_search: endpoint 不允许嵌入用户名或密码" };
+        }
+        let addresses = checked?.addresses;
+        if (addresses === undefined) {
+          const host = u.hostname.replace(/^\[|\]$/gu, "");
+          addresses = isIP(host) !== 0 ? [host] : [...await withAbort(signal, () => resolve(host))];
+          if (addresses.length === 0 || addresses.some((address) => isIP(address) === 0)) {
+            throw new Error("web_search: 搜索端点解析未返回有效 IP 地址");
+          }
+        }
+        signal.throwIfAborted();
+        const res = response = await doFetch(u.href, {
           redirect: "manual",
-          signal: guard.signal,
+          signal,
           headers: { accept: "application/json, text/html;q=0.9, */*;q=0.5" },
-        });
+        }, addresses);
+        signal.throwIfAborted();
         guard.bump();
         const loc = res.headers?.get?.("location");
         if (res.status >= 300 && res.status < 400) {
@@ -168,6 +196,7 @@ export function makeWebSearch(deps: WebSearchDeps = {}): Tool {
         }
         const ct = res.headers?.get?.("content-type") ?? "";
         const body = await readBodyCapped(res, BODY_CAP, guard);
+        signal.throwIfAborted();
         guard.bump();
         let json: unknown = null;
         try {
@@ -192,9 +221,13 @@ export function makeWebSearch(deps: WebSearchDeps = {}): Tool {
           output: envelope("search-raw", query, u.href, `（端点返回的不是结果 JSON——${why}；以下为响应正文还原，可能不是检索结果）\n\n` + ring.read()),
         };
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return { ok: false, output: `web_search 失败: ${msg}` };
+        const cause = signal.aborted ? signal.reason : err;
+        const msg = cause instanceof Error ? cause.message : String(cause);
+        const cancelled = ctx.signal?.aborted === true && signal.reason === ctx.signal.reason;
+        return { ok: false, output: cancelled ? `[cancelled] web_search 已取消: ${msg}` : `web_search 失败: ${msg}` };
       } finally {
+        if (response?.body && !response.bodyUsed) void response.body.cancel().catch(() => {});
+        clearTimeout(totalTimer);
         guard.dispose();
       }
     },

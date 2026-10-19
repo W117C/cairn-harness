@@ -23,7 +23,7 @@
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, rename, rm } from "node:fs/promises";
+import { mkdir, rename, rm, appendFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { argsDigest, firstLine, forkPointOf, forkSessionName, formatReplay } from "./agent/fork-cli";
 import {
@@ -79,6 +79,17 @@ import { providerKindFromEnv, resolveMainModel, type MainModelSelection } from "
 import type { ProviderKind } from "./main/settings";
 import { envKeyOf } from "./providers/env-keys";
 import { killAllTrackedChildren } from "./tools/process";
+import { closeAllLspClients } from "./tools/lsp";
+// 能力 12 交付断言的最终收口（CLI 是 run 结果的消费者，也是唯一能覆盖
+// 「handleAgentRun 挂在审批门上从未返回」那一族的一层）。
+import {
+  DELIVERY_GUARD_CALL_ID,
+  EMPTY_RUN_DELIVERY,
+  describePhantomDelivery,
+  eventsForCurrentRun,
+  findEmptyRun,
+  findPhantomDelivery,
+} from "./agent/delivery-guard";
 import {
   forkSession,
   isEnvVerifyCause,
@@ -100,7 +111,8 @@ const BLOCKING_VERDICTS: ReadonlySet<string> = new Set(
 );
 
 /** 会话末的沉淀轮（`X-` 层）**不算**本轮任务的失败：它是收尾的记账，
- *  在管道/CI 里本来就会被合并审批拒掉（`[distill] 沉淀轮只允许 remember 工具`）。
+ *  在管道/CI 里全局层会被合并审批拒掉、项目层分层免批直写（第十一遍裁决；
+ *  非 remember 工具仍被白名单拒：`[distill] 沉淀轮只允许 remember 工具`）。
  *  把它计进退出码，等于让每一次成功的无人值守 run 都返回 1。
  *  `X-` 前缀的语义（见 permissions/autonomy.ts 的 GATE_LAYERS 注）就是「判定发生在 evaluate 之外」，
  *  所以这里按前缀排除，而不是拿 X-distill 这**一个**名字硬编码。 */
@@ -191,6 +203,8 @@ export function runFailed(input: {
   gateBlocks: number;
   deniedPlans: number;
   plainToolFailures: number;
+  /** 能力 12 交付断言：收束时仍未交付（幽灵文件或真正空输出）。 */
+  deliveryFailure?: boolean;
 }): boolean {
   return input.errorEvents > 0
     || input.verifyRed
@@ -198,7 +212,8 @@ export function runFailed(input: {
     || (input.verifyEnvBeats ?? 0) > 0
     || input.gateBlocks > 0
     || input.deniedPlans > 0
-    || input.plainToolFailures > 0;
+    || input.plainToolFailures > 0
+    || input.deliveryFailure === true;
 }
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -1032,6 +1047,7 @@ function printHelp(): void {
   --log <路径>         事件日志落盘位置（与 --goal / --session 互斥，见下）
   --unattended         无人值守：一切审批 fail-closed 拒绝（不给交互门）
   --auto-verify        收束前补一拍验证（模型没自调 verify 时）
+  --delivery-repair    交付断言落红后再要一轮补做（幽灵文件 / 空输出；缺省关）
   --bandit             本会话开「路由 bandit」：每轮可能换模型档位，改花钱行为（--no-bandit 显式关；都不给=按设置）
   --cascade            本会话开「级联升档」：客观判据不过时升一档重跑，多花一遍钱（--no-cascade 显式关；都不给=按设置）
   --version            打印版本（cairn <version>）后退出
@@ -1393,6 +1409,9 @@ async function main(): Promise<number> {
   // 退出码的计数器全从事件流取（判据是纯函数 runFailed）——不猜模型说了什么。
   // verify 那一格按归因分三档计数（`tallyVerifyBeat`，#102）：判据仍只有 `isEnvVerifyCause` 那一只。
   const tally = { errorEvents: 0, gateBlocks: 0, deniedPlans: 0, plainToolFailures: 0 };
+  // 交付失败的最终状态：只看收束时的工作区与当前轮事件，不把中间返修哨兵当永久失败。
+  let deliveryFailure = false;
+  let deliveryGuardObserved = false;
   const verifyBeats: VerifyBeatTally = { codeBeats: 0, blockedBeats: 0, envBeats: 0 };
   const pendingPlanIds = new Set<string>();
   // 真实 provider 的一轮只发 assistant_delta，聚合的 assistant_message 是 mock/demo 通道才有的东西
@@ -1437,9 +1456,12 @@ async function main(): Promise<number> {
     // 红着的验证按归因分档（#102）：被拒那一拍不再长得像「你的代码跑红了」。
     if (e.type === "verify_result" && !e.ok) tallyVerifyBeat(verifyBeats, e.cause);
     if (e.type === "tool_result") {
+      if (e.callId === DELIVERY_GUARD_CALL_ID && (e.agent_id === undefined || e.agent_id === "")) {
+        deliveryGuardObserved = true;
+      }
       if (gateDenied(e)) tally.gateBlocks += 1;
       // 会话末记账轮的失败不算本轮的（X- 层），其余 ok=false 一律算。
-      else if (!e.ok && !isSessionEndBookkeeping(e)) tally.plainToolFailures += 1;
+      else if (!e.ok && e.callId !== DELIVERY_GUARD_CALL_ID && !isSessionEndBookkeeping(e)) tally.plainToolFailures += 1;
     }
   };
 
@@ -1471,6 +1493,7 @@ async function main(): Promise<number> {
     } finally {
       rl.close();
       killAllTrackedChildren();
+    void closeAllLspClients();
     }
   }
 
@@ -1519,6 +1542,10 @@ async function main(): Promise<number> {
         // 拆成两个槽就是为了不翻转上面那半：沉淀留开，只有续跑停。
         ...(!interactive ? { noAnswerer: true as const } : {}),
         ...(opts.autoVerify ? { autoVerify: true } : {}),
+        // 能力 12 交付断言的返修环（`--delivery-repair`）：承诺了没落盘时再要一轮去补做。
+        // 与 `--auto-verify` 不共享旗标：那一支接的是 verify 拍出的代码红，
+        // 而恰恰是「一个字节都没写」的趟走不到收束闸，才需要这一支独立接住。
+        ...(argv.includes("--delivery-repair") ? { deliveryRepair: true } : {}),
         // M5b 路由开关（`--bandit/--no-bandit`、`--cascade/--no-cascade`）：空对象 ⇒ 一个键都不多，
         // 与「这两枚旗标存在前」逐字同形。真值由 agent-runner 与 settings 合（resolveRoutingFlags）。
         ...opts.routingOverrides,
@@ -1535,6 +1562,46 @@ async function main(): Promise<number> {
     if (!r.ok) {
       process.stderr.write(paint(RED, `[cairn] 运行失败：${r.error ?? "未知原因"}\n`));
       tally.errorEvents += 1;
+    }
+    // ---- 能力 12 交付断言：**最终收口**（2026-10-17）----
+    // loop 里三个出口 + agent-runner 的 finally 都补落过，但**都够不着这一族**：
+    // 实测 r3–r6（qwen）四趟都停在 `plan_proposed`——run 是在**方案审批门**上被
+    // `UNATTENDED_GATE_WAIT_MS` 超时收走的，`handleAgentRun` 从未返回 ⇒ 它自己那个 finally 也没跑。
+    // 这一趟在用户眼里是「正常结束」（退 0、无红字），实际上承诺的文件一个都没造。
+    // 所以把收口立在**这一层**（run 结果的消费者）：不管这一趟是走完的、崩的、
+    // 还是卡在门上被收走的，只要承诺过要造而盘上没有，就落一条红进事件日志。
+    // 这是最后一道，也是唯一一道能覆盖「从未回到调用方」那一族的。
+    try {
+      const seen = eventsForCurrentRun(await replay(opts.logPath));
+      const already = seen.some((e) => e.type === "tool_result" && e.callId === DELIVERY_GUARD_CALL_ID);
+      // 去重只约束“还要不要再写一条日志”；最终失败状态必须继续按当前工作区计算。
+      const phantom = findPhantomDelivery(seen, opts.workspace);
+      const emptyRun = findEmptyRun(seen);
+      deliveryFailure = phantom !== null || emptyRun !== null;
+      if (deliveryFailure) {
+        if (!already) {
+          const output = phantom !== null ? describePhantomDelivery(phantom) : EMPTY_RUN_DELIVERY;
+          await appendFile(
+            opts.logPath,
+            JSON.stringify({
+              type: "tool_result",
+              callId: DELIVERY_GUARD_CALL_ID,
+              ok: false,
+              output,
+            }) + "\n",
+            "utf8",
+          );
+          const warning = phantom !== null
+            ? `承诺要造的 ${phantom.missing.join("、")} 没有落盘（检查补齐，或说明实际阻塞点）`
+            : "这一轮没有工具调用，也没有收尾消息（检查任务是否真正开始）";
+          process.stderr.write(paint(YELLOW, `[cairn] 交付断言：${warning}\n`));
+        }
+      }
+    } catch (err) {
+      // 断言自己不能把这一趟拖崩：它的全部价值是留下一条证据。
+      // 已经看到交付红却读不到最终状态时，宁可保留红，也不把“算不了”读成修好了。
+      deliveryFailure ||= deliveryGuardObserved;
+      console.warn("[delivery] 交付断言收口失败:", err instanceof Error ? err.message : String(err));
     }
     // M8 增量：跑完后的 worker diff 逐文件审阅（TTY 才弹；被 Ctrl-C 取消的轮次不弹）
     if (!cancelling) {
@@ -1555,6 +1622,7 @@ async function main(): Promise<number> {
     // 暴露面是**优雅退出**（SIGINT 带着活着的 bash 子树）；超时路径由 killGroup 覆盖。
     rl.close();
     killAllTrackedChildren();
+    void closeAllLspClients();
   }
 
   // 分档必须印得出来（#102）：只存在内存里的话，用户看到的还是上一行那句「✗ 验证失败」，
@@ -1569,6 +1637,9 @@ async function main(): Promise<number> {
     verifyRed: verifyBeats.codeBeats > 0,
     verifyBlockedBeats: verifyBeats.blockedBeats,
     verifyEnvBeats: verifyBeats.envBeats,
+    // 幽灵交付进退码（第 318 页）：11 趟实测里 8 趟交付了不存在的文件而退 0，
+    // 「说了没做」与「做成了」在 CI 上同形。这一格让它真的红。
+    deliveryFailure,
   }) ? EXIT_FAILED : EXIT_OK;
 }
 
@@ -1580,6 +1651,7 @@ process.on("SIGINT", () => {
   if (cancelling) {
     // 第二次 Ctrl-C：第一次已经请 run 收束了，它还在跑说明用户等不及。硬退是这时候唯一诚实的动作。
     killAllTrackedChildren();
+    void closeAllLspClients();
     process.exit(130);
   }
   cancelling = true;

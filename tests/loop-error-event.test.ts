@@ -79,3 +79,23 @@ describe("错误即事件（P0：失败不得静默）", () => {
     expect(restored[0]).toEqual(event);
   });
 });
+
+describe("内核异常也落事件（2026-10-19）", () => {
+  it("撞 maxSteps 的 throw 之前先落一条 error（否则日志在最后一条普通事件处戛然而止）", async () => {
+    const provider: Provider = {
+      async *stream() {
+        yield { type: "tool_call", id: "t1", name: "read_file", args: { path: "x" } } as unknown as ModelOutput;
+      },
+    };
+    const { log, error } = await runAndCollect(provider, {
+      mode: "auto",
+      maxSteps: 2,
+      tools: { read_file: { name: "read_file", async run() { return { ok: true, output: "x" }; } } },
+    });
+    expect((error as Error).message).toContain("maxSteps");
+    const errors = log.filter((e) => e.type === "error");
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as { message?: string }).message).toContain("maxSteps");
+    expect(log[log.length - 1]?.type).toBe("error");
+  });
+});

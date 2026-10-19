@@ -96,7 +96,23 @@ describe("establishStream：只重试「响应体尚未消费」的失败", () =
       sleep: async () => { abort.abort(); },
     });
     await expect(p).rejects.toThrow();
-    expect(f.calls()).toBe(2); // 取消发生在第 1 次重试的等待里 ⇒ 第 2 次请求后即收束，绝不跑满 5 次
+    expect(f.calls()).toBe(1); // 第 1 次重试的等待里取消 ⇒ 下一次请求不得启动
+
+    // 正文读取期间取消也要保留原原因，并且不能宣告一笔不会执行的新重试。
+    const bodyAbort = new AbortController();
+    const reason = new Error("stop while reading error body");
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) { bodyAbort.abort(reason); controller.error(reason); },
+    }, { highWaterMark: 0 });
+    const duringBody = scripted(new Response(body, { status: 503 }));
+    const retries: unknown[] = [];
+    const error = await establishStream({
+      ...base, fetchImpl: duringBody.fetchImpl, ...noSleep, callerSignal: bodyAbort.signal,
+      onRetry: (info) => { retries.push(info); },
+    }).then(({ guard }) => { guard.dispose(); return null; }, (err: unknown) => err);
+    expect(error).toBe(reason);
+    expect(duringBody.calls()).toBe(1);
+    expect(retries).toEqual([]);
   });
 
   it("停滞不重试（60s 量级等三次 = 白挂三分钟），直接把可读原因抛回上层", async () => {

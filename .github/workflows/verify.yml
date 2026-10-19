@@ -48,8 +48,10 @@ jobs:
       # 这一行从前**排除**过两道已知红：gate-check 的 H7 与 mutate-needles-check 的 4 支失针锚点。
       # 两条理由到 10-02 都已结案 ⇒ 名单补回来。当时那笔认证的原文（**历史读数，不随门表演化**）：
       # 认证树 `认证门面=22 道（跑到 22）｜绿 22 道`（`outputs/retry-backoff-2026-10-02/head-cert-7cc9605.log`，TREE=7cc9605、DIRTY_JUDGED=0）。
-      # ⚠️ 但**本仓没有 git remote** ⇒ 这份 workflow 至今一次也没真跑过：它的正确性目前只由 head-cert 保证。
-      #    "接不接远端"是业主裁决项（取舍见 scripts/ci/README.md），这条改动只是让名单不再谎报红灯。
+      # 2026-10-15 状态复核：origin 已连接；verify 最近一次于 2026-10-14 11:47Z
+      # 在 zcode@074656c522ac7b6b350f389bd854fb28a712da0b 通过（Actions run 38559010713）。
+      # 该读数只覆盖该远端提交，不代表当前本地 HEAD 或未提交工作树通过；详见 scripts/ci/README.md。
+      # “本仓没有 git remote / workflow 从未真跑过”是 10-02 的历史状态，现已过时。
       # 2026-10-12：cert face 23 → 25（买进 `e2e` 与 `desktop-test`，理由见 `scripts/gate-manifest.ts`
       # 的 `CERT_GATES` 那两条买入注）。这条名单被 `tests/cert-gate-face.test.ts` 钉着与门面集合相等。
       - name: fast gates (cert face, 25)

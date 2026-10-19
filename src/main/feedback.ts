@@ -8,6 +8,7 @@
 // 读时按 (sessionId, eventId) 取最后一条生效——既天然可审计（改过几次都看得见），也不需要读-改-写整文件。
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { writeFileAtomic } from "../atomic-write";
 
 export type FeedbackRating = "up" | "down" | "none";
 
@@ -154,6 +155,31 @@ export class FeedbackStore {
       else records.push(r);
     }
     return { records, skipped };
+  }
+
+  /** 会话删除时清掉它的反馈。append-only 是运行期纪律；会话本身不存在了，记录不再有锚点
+   *  （同 id 新会话会继承旧 eventId 的高亮/评分，指向不存在的转录）。 */
+  async removeSession(sessionId: string): Promise<number> {
+    if (!isSessionId(sessionId)) throw new Error(`反馈 sessionId 非法: ${JSON.stringify(sessionId)}`);
+    return await this.enqueue(async () => {
+      let text: string;
+      try {
+        text = await readFile(this.filePath, "utf8");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
+        throw error;
+      }
+      const kept: string[] = [];
+      let removed = 0;
+      for (const line of text.split("\n")) {
+        if (line.trim() === "") continue;
+        const r = parseLine(line);
+        if (r !== null && r.sessionId === sessionId) { removed += 1; continue; }
+        kept.push(line); // 坏行原样保留（审计面，不借删除会话顺手清洗）
+      }
+      if (removed > 0) await writeFileAtomic(this.filePath, kept.length === 0 ? "" : kept.join("\n") + "\n");
+      return removed;
+    });
   }
 
   private timestamp(): string {

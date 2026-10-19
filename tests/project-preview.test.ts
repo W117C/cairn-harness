@@ -1,6 +1,6 @@
 // 预览运行时判卷：静态服务的真实 HTTP 行为、失败分类（spec/prepare/start/ready）、停止回收。
 // 判卷纪律与 CLAUDE 记录一致：临时目录 mkdtemp 唯一、绝不落工作区；假子进程注入，不依赖真 pnpm。
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -93,13 +93,17 @@ describe("单文件 HTML 直接预览（不需要 .cairn/project.json）", () =>
     await rt.stop(html, "exit");
   });
 
-  it("目录没有 .cairn/project.json 时仍然 spec 失败（这一支没有被单文件路覆盖掉）", async () => {
+  // 行为变更（2026-10-16，ADR 0004 受控纳管）：从前这一支是「缺清单就拒」；
+  // 现在没有清单的目录先过诊断——空目录归 unsupported，失败文案改为点出缺什么（入口页）
+  // 与下一步，.cairn/project.json 不再是唯一的认路牌。
+  it("空目录：spec 失败，诊断点出缺入口页与下一步", async () => {
     const dir = tmp();
     const rt = new PreviewRuntime();
     const snap = await rt.start(dir);
     expect(snap.status).toBe("failed");
     expect(snap.stage).toBe("spec");
-    expect(snap.message).toContain(".cairn/project.json");
+    expect(snap.message).toContain("index.html");
+    expect(snap.hint).toBeTruthy();
   });
 });
 
@@ -272,5 +276,72 @@ describe("PreviewRuntime：状态机与失败分类", () => {
     await runtime.start(root);
     await runtime.stopAll();
     expect(runtime.status(root)).toMatchObject({ status: "stopped", reason: "exit" });
+  });
+});
+
+describe("已有目录的受控纳管（没有 .cairn/project.json 也能进）", () => {
+  it("零依赖静态目录：诊断放行 ⇒ 直接 ready，URL 服务入口页；不写用户目录", async () => {
+    const root = tmp();
+    writeFileSync(join(root, "index.html"), "<p>imported</p>", "utf8");
+    const runtime = new PreviewRuntime();
+    const ready = await runtime.start(root);
+    expect(ready).toMatchObject({ status: "ready", kind: "static" });
+    expect(await (await fetch(ready.url ?? "")).text()).toContain("imported");
+    expect(existsSync(join(root, ".cairn"))).toBe(false);
+    await runtime.stop(root);
+  });
+
+  it("受控 Vite 目录：没有清单也走同一条 pnpm（--ignore-scripts）+ vite 受控启动", async () => {
+    const root = tmp();
+    writeFileSync(join(root, "index.html"), "<div id=root></div>", "utf8");
+    writeFileSync(join(root, "package.json"), JSON.stringify({ devDependencies: { vite: "^7.0.0" } }), "utf8");
+    const calls: string[][] = [];
+    const children: ReturnType<typeof fakeChild>[] = [];
+    let probes = 0;
+    const runtime = new PreviewRuntime({
+      run: (cmd, args) => {
+        calls.push([cmd, ...args]);
+        const child = fakeChild();
+        children.push(child);
+        if (children.length === 1) setTimeout(() => { child.exit({ code: 0, signal: null }); }, 0);
+        return child;
+      },
+      sleep: async () => undefined,
+      probe: async () => { probes += 1; return probes >= 2; },
+      pickPort: async () => 45995,
+      readyTimeoutMs: 10,
+      probeIntervalMs: 1,
+    });
+    const ready = await runtime.start(root);
+    expect(ready).toMatchObject({ status: "ready", kind: "vite" });
+    expect(calls[0]?.[0]).toBe("pnpm");
+    expect(calls[0]).toContain("--ignore-scripts");
+    await runtime.stop(root);
+    expect(children[1]?.killed).toContain("SIGTERM");
+  });
+
+  it("危险形态：vite 项目带 postinstall ⇒ spec 失败，点名脚本与下一步", async () => {
+    const root = tmp();
+    writeFileSync(join(root, "index.html"), "<div id=root></div>", "utf8");
+    writeFileSync(
+      join(root, "package.json"),
+      JSON.stringify({ scripts: { postinstall: "node x.mjs" }, devDependencies: { vite: "^7.0.0" } }),
+      "utf8",
+    );
+    const runtime = new PreviewRuntime();
+    const failed = await runtime.start(root);
+    expect(failed).toMatchObject({ status: "failed", stage: "spec" });
+    expect(failed.message).toContain("postinstall");
+    expect(failed.hint).toBeTruthy();
+  });
+
+  it("差信息形态：只有 home.html ⇒ spec 失败，补法指向 index.html", async () => {
+    const root = tmp();
+    writeFileSync(join(root, "home.html"), "<h1>home</h1>", "utf8");
+    const runtime = new PreviewRuntime();
+    const failed = await runtime.start(root);
+    expect(failed).toMatchObject({ status: "failed", stage: "spec" });
+    expect(failed.message).toContain("home.html");
+    expect(failed.hint).toContain("index.html");
   });
 });

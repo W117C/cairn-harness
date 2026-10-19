@@ -2,8 +2,8 @@
 // baseURL / model / 额外 body 参数（extraBody）/ 环境变量名均可配，GLM 是它的一组预设（见 glm.ts）。
 // 解码规则与迁移前逐字一致：增量在 choices[0].delta.content；tool_calls 按 index 跨块累积
 //（id 首块、name 非空即记、arguments 拼接）；末 chunk 带 usage（后到覆盖）；data: [DONE] 结束。
-import { DEFAULT_STALL_MS, type StallGuard } from "../net";
-import { backoffMs, establishStream, retryableStatus } from "./retry";
+import { DEFAULT_STALL_MS } from "../net";
+import { backoffMs, establishStream, retryableStatus, waitRetryDelay } from "./retry";
 import { turnStopMissingEvent, turnTruncatedEvent } from "./stop-reason";
 import type { ModelOutput, ProviderContentImage, ProviderMessage, ProviderMessageWithImage, ProviderToolSpec } from "./index";
 import type { RequestMeter, RequestCategory, MeterUsage, RequestOutcome } from "../agent/metering";
@@ -186,7 +186,7 @@ export async function* streamOpenAI(
     opts.baseURL ?? process.env[opts.baseURLEnv ?? "OPENAI_BASE_URL"] ?? opts.defaultBaseURL ?? "https://api.openai.com/v1",
   );
   const stream = opts.stream ?? true;
-  const doFetch = opts.fetchImpl ?? fetch;
+  const rawFetch = opts.fetchImpl ?? fetch;
 
   const body: Record<string, unknown> = { model, messages: toWireMessages(messages), stream };
   // C8（审查 P2）：流式计量——OpenAI 兼容端点默认不回 usage，须显式开启 stream_options.include_usage，
@@ -198,13 +198,29 @@ export async function* streamOpenAI(
 
   // 根因 4：停滞守卫改由 establishStream 逐次新建（静默窗口，不是总时长）；
   // 成功建连后交回本函数继续管流体（bump / dispose）。
-  let guard: StallGuard | undefined;
-  let res: Response;
   const serializedBody = JSON.stringify(body);
   call?.signal?.throwIfAborted();
-  const requestId = opts.metering?.meter.beginRequest(opts.metering.category, serializedBody);
+  const metering = opts.metering;
+  let requestId: number | undefined;
   let meterOutcome: RequestOutcome = "failed";
   let meterUsage: Partial<MeterUsage> = {};
+  const finishMeter = (outcome: RequestOutcome): void => {
+    if (requestId === undefined || metering === undefined) return;
+    metering.meter.finishRequest(requestId, outcome, meterUsage);
+    requestId = undefined;
+  };
+  // establishStream 的 HTTP 重试与下方 SSE 重试都在同一发送位置逐笔登记。
+  const doFetch: typeof fetch = metering === undefined ? rawFetch : async (input, init) => {
+    meterUsage = {};
+    meterOutcome = "failed";
+    requestId = metering.meter.beginRequest(metering.category, serializedBody);
+    try {
+      return await rawFetch(input, init);
+    } catch (error) {
+      finishMeter(call?.signal?.aborted ? "cancelled" : "failed");
+      throw error;
+    }
+  };
   const observeUsage = (u: NonNullable<ChatChunk["usage"]>): void => {
     const input = tokenCount(u.prompt_tokens), read = tokenCount(u.prompt_tokens_details?.cached_tokens);
     // OpenAI/GLM do not report a disjoint cache-write bucket. Do not invent zero.
@@ -234,6 +250,7 @@ export async function* streamOpenAI(
         body: serializedBody,
       },
       fetchImpl: doFetch,
+      onRetry: () => finishMeter("failed"),
       stallMs: opts.stallTimeoutMs ?? DEFAULT_STALL_MS,
       ...(call?.signal !== undefined ? { callerSignal: call.signal } : {}),
     });
@@ -267,7 +284,6 @@ export async function* streamOpenAI(
     return;
   }
 
-  const decoder = new TextDecoder();
   const STREAM_ATTEMPTS = 3;
   const streamOnce = async function* (): AsyncGenerator<ModelOutput, void, undefined> {
     let attempt = 0;
@@ -283,6 +299,7 @@ export async function* streamOpenAI(
           body: serializedBody,
         },
         fetchImpl: doFetch,
+        onRetry: () => finishMeter("failed"),
         stallMs: opts.stallTimeoutMs ?? DEFAULT_STALL_MS,
         ...(call?.signal !== undefined ? { callerSignal: call.signal } : {}),
         ...(attempt > 1 ? { attempts: 1 } : {}), // 建连段那一层重试上一轮已付过
@@ -293,13 +310,15 @@ export async function* streamOpenAI(
         throw new Error(`${label} 流式响应缺少 body`);
       }
       const reader2 = res2.body.getReader();
-      // 每次尝试都从干净状态起：半截 buf 与累积的 tool_call 分片都不能带进下一轮
+      // 每次尝试单独解码；半个 UTF-8 字符、buf 与 tool_call 分片都不能带入下一轮。
+      const decoder = new TextDecoder();
       let buf2 = "";
       let finished2 = false;
       let callId2 = "a-0";
       const pending2 = new Map<number, { id?: string; name: string; args: string }>();
       let usage2: (ModelOutput & { type: "usage" }) | null = null;
       let finishReason2: string | null | undefined;
+      let retryError: unknown;
       try {
         while (!finished2) {
           const { done, value } = await reader2.read();
@@ -347,6 +366,7 @@ export async function* streamOpenAI(
             // 回放与转录都干净（思考块在多数家本就不可回传）。
             const thinking = delta?.reasoning_content ?? delta?.reasoning;
             if (typeof thinking === "string" && thinking !== "") {
+              emitted = true;
               yield { type: "thinking_delta", callId: callId2, text: thinking };
             }
             if (delta?.content) {
@@ -386,31 +406,39 @@ export async function* streamOpenAI(
           };
         }
         if (usage2) yield usage2;
-        est.guard.dispose();
-        void reader2.cancel().catch(() => {});
         return;
       } catch (err) {
-        est.guard.dispose();
-        void reader2.cancel().catch(() => {});
+        finishMeter(call?.signal?.aborted ? "cancelled" : "failed");
         const cancelled = call?.signal?.aborted === true;
         // 不可重放的失败（协议级：帧损坏 / 非 5xx 的 error 帧）立刻抛，不拿它去打转。
         // stall 守卫触发也不重放：重放会把静默窗当网络抖动再烧一遍全长超时。
         const stalledByGuard = est.guard.stalled();
         const retryable = stalledByGuard ? false : err instanceof StreamFailure ? err.retryable : true; // 未知形状按可重放（网络抖动那一类）
         if (emitted || attempt >= STREAM_ATTEMPTS || cancelled || !retryable) throw err;
-        const delay = backoffMs(attempt, 300, 2_000, Math.random);
-        console.warn(
-          `[${label}] 流内失败（第 ${String(attempt)} 次，尚未产出任何输出）⇒ ${String(delay)}ms 后重试：`
-          + (err instanceof Error ? err.message : String(err)),
-        );
-        await new Promise((r) => setTimeout(r, delay));
+        retryError = err;
+      } finally {
+        // 包括消费者在 yield 处提前 return；重试退避前也先回收本次响应。
+        est.guard.dispose();
+        void reader2.cancel().catch(() => {});
+        reader2.releaseLock();
+      }
+      const delay = backoffMs(attempt, 300, 2_000, Math.random);
+      console.warn(
+        `[${label}] 流内失败（第 ${String(attempt)} 次，尚未产出任何输出）⇒ ${String(delay)}ms 后重试：`
+        + (retryError instanceof Error ? retryError.message : String(retryError)),
+      );
+      try {
+        await waitRetryDelay(delay, call?.signal);
+      } catch (error) {
+        call?.signal?.throwIfAborted();
+        throw error;
       }
     }
   };
   // 流式分支的全部产出（含流内重试与收尾三件）都在 streamOnce 里，这里只负责调用。
   yield* streamOnce();
+  meterOutcome = "ok";
   } finally {
-    guard?.dispose();
-    if (requestId !== undefined) opts.metering!.meter.finishRequest(requestId, call?.signal?.aborted ? "cancelled" : meterOutcome, meterUsage);
+    finishMeter(call?.signal?.aborted ? "cancelled" : meterOutcome);
   }
 }

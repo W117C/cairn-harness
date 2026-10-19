@@ -15,7 +15,7 @@
   在两处解释成两种配置，CI 上直接 `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`。
 - **触发**：`push` / `pull_request` / `workflow_dispatch`（手动）。
 - **本地零影响**：不装钩子、不改任何本地行为；只有推上去才跑。
-- **本地复现一模一样的一串**（首次跑通前，CI 里的任何结论都以下面这串的实测为准）：
+- **本地复现一模一样的一串**（首次跑通前，CI 里的任何结论都以下面这串的实测为准；首次远端运行现已完成）：
 
   ```sh
   pnpm install --frozen-lockfile
@@ -25,9 +25,11 @@
   pnpm gates --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check,gate-check,mutate-needles-check,repo-hygiene-check,e2e,desktop-test
   ```
 
-- **校验状态（诚实标注）**：YAML 已用 `ruby -ryaml` 解析通过（结构化读取成功，不是"看着像"）；
-  那一串命令在本机按同序跑过（读数见 `outputs/m9-ci-2026-10-01/`）。
-  **但"GitHub 上的首次真实运行"本机无法验证** ⇒ 首次推上去视作一次联调，不预先宣称 CI 已绿。
+- **校验状态（按提交区分）**：YAML 曾用 `ruby -ryaml` 解析通过；那一串命令在本机按同序跑过
+  （历史读数见 `outputs/m9-ci-2026-10-01/`）。GitHub Actions 的真实运行已验证：2026-10-14 11:47Z，
+  [`verify` run 38559010713](https://github.com/W117C/cairn-harness/actions/runs/38559010713) 在
+  `zcode@074656c522ac7b6b350f389bd854fb28a712da0b` 全绿。这个结果只认证该远端提交；本地 HEAD 及
+  未提交工作树须另行验证。下次远端提交仍应以对应 run 的 SHA 和结果为准。
 
 ### 两道曾被排除的门：10-02 已结案并加回（这一段留作登记，不是现状）
 

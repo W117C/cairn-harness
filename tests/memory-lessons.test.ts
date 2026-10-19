@@ -147,13 +147,17 @@ describe("M6 · A 三类来源各成一条", () => {
   });
 
   it("③ 写向动作的完全相同参数重复调用成条；推进式（参数不同）不算", () => {
+    // 两次都**没成功**才成条（2026-10-16 语义修正）：从前只要同参数出现两次就写教训，
+    // 于是一次「前两次审批超时、第三次成功」的轨迹被记成「同样的输入同样的结果」——
+    // 而授权状态变过、动作也推进了。那句话会让下一轮相信重发无用，事实恰好相反。
     const same: AgentEvent[] = [
-      toolCall("w1", "write_file", { path: "src/a.ts", content: "x" }), toolOk("w1"),
-      toolCall("w2", "write_file", { path: "src/a.ts", content: "x" }), toolOk("w2"),
+      toolCall("w1", "write_file", { path: "src/a.ts", content: "x" }), toolFail("w1", "EACCES"),
+      toolCall("w2", "write_file", { path: "src/a.ts", content: "x" }), toolFail("w2", "EACCES"),
     ];
     const l = distillLessons(same, LOG).find((x) => x.topic === "lesson-repeat-action-1");
     expect(l).toBeDefined();
     expect(l!.body).toContain("完全相同的参数");
+    expect(l!.body).toContain("没有一次成功");
     expect(REPEAT_ACTION_MIN).toBe(2);
     // 推进式（参数不同）不是重复动作。
     const progressing: AgentEvent[] = [
@@ -173,11 +177,51 @@ describe("M6 · A 三类来源各成一条", () => {
     ];
     expect(distillLessons(reread, LOG).filter((x) => x.topic.includes("repeat-action"))).toEqual([]);
     // 对照：同样的「同参数重复」，换成写向工具就成条 —— 变的只是写向与否。
+    // 注意这里两次都**成功**：按新语义它们不再成条（推进完成了，没有"同样的输入同样的结果"）。
     const rewrite: AgentEvent[] = [
       toolCall("w1", "write_file", { path: "src/a.ts", content: "x" }), toolOk("w1"),
       toolCall("w2", "write_file", { path: "src/a.ts", content: "x" }), toolOk("w2"),
     ];
-    expect(distillLessons(rewrite, LOG).filter((x) => x.topic.includes("repeat-action"))).toHaveLength(1);
+    expect(distillLessons(rewrite, LOG).filter((x) => x.topic.includes("repeat-action"))).toEqual([]);
+  });
+
+  it("**重复但后来成功了 ⇒ 不成条**（一次审批超时 + 第三次落盘，不许写成「同样输入同样结果」）", () => {
+    // 这条就是 2026-10-16 那次真实轨迹：两次 write_file 因审批等待超时没执行，第三次成功。
+    // 旧逻辑三条一起数成"重复动作"，模型据此推出"重发没用"，再把错误诊断写进项目记忆。
+    const trace: AgentEvent[] = [
+      toolCall("w1", "write_file", { path: "src/a.ts", content: "x" }),
+      { type: "tool_result", callId: "w1", ok: false, output: "[permission denied] 审批等待超时", blockedBy: "permission" },
+      toolCall("w2", "write_file", { path: "src/a.ts", content: "x" }),
+      { type: "tool_result", callId: "w2", ok: false, output: "[permission denied] 审批等待超时", blockedBy: "permission" },
+      toolCall("w3", "write_file", { path: "src/a.ts", content: "x" }), toolOk("w3"),
+    ];
+    expect(distillLessons(trace, LOG).filter((x) => x.topic.includes("repeat-action"))).toEqual([]);
+  });
+
+  it("审批门未放行**单独成条**，且不混进「工具连败」（工具没执行过，结论不是换做法）", () => {
+    const denied: AgentEvent[] = [
+      toolCall("t1", "write_file", { path: "a" }),
+      { type: "tool_result", callId: "t1", ok: false, output: "denied", blockedBy: "permission" },
+      toolCall("t2", "write_file", { path: "b" }),
+      { type: "tool_result", callId: "t2", ok: false, output: "denied", blockedBy: "permission" },
+    ];
+    const ls = distillLessons(denied, LOG);
+    // 「连败」那一条不该出现（它的结论"先换做法"对没执行过的工具是错的）。
+    expect(ls.filter((x) => x.topic === "lesson-tool-streak-write_file")).toEqual([]);
+    const l = ls.find((x) => x.topic === "lesson-ask-denied-write_file");
+    expect(l).toBeDefined();
+    expect(l!.body).toContain("没有执行");
+    expect(l!.body).toContain("不要据此得出");
+    // gate.verdict 那一列也认（老日志只有 blockedBy，新日志两者都有——判据不能只认一种写法）。
+    const withGate: AgentEvent[] = [
+      toolCall("g1", "run_shell", { command: "x" }),
+      { type: "tool_result", callId: "g1", ok: false, output: "denied", gate: { layer: "L3-mode", verdict: "timeout" } },
+      toolCall("g2", "run_shell", { command: "y" }),
+      { type: "tool_result", callId: "g2", ok: false, output: "denied", gate: { layer: "L3-mode", verdict: "timeout" } },
+    ];
+    const l2 = distillLessons(withGate, LOG).find((x) => x.topic === "lesson-ask-denied-run_shell");
+    expect(l2).toBeDefined();
+    expect(l2!.body).toContain("timeout");
   });
 
   it("verify 那一拍的回声**不被数成工具连败**（同一 callId 不重复计数）", () => {
@@ -373,5 +417,24 @@ describe("M6 · E 回注：限量、带出处、无出处不注入", () => {
     const inj = await buildMemoryInjection({ workspace, globalRoot: g, tokenBudget: 200 });
     expect(inj.tokens).toBeLessThanOrEqual(200);
     expect(inj.truncated).toBe(true);
+  });
+});
+
+// 2026-10-19 独立评审：worker 子流事件带 agent_id 落同一份父日志；旧实现不看归属，
+// 一次子 agent 的偶发失败会被沉淀成「这个项目里 write_file 连败 / 验证红」并跨会话注入。
+describe("worker 子流不进项目级教训（2026-10-19）", () => {
+  it("带 agent_id 的连败与验证红一律不产出", () => {
+    const events = [
+      { ...toolCall("w1", "write_file"), agent_id: "w1" } as ToolCallEvent,
+      { ...toolFail("w1"), agent_id: "w1" } as ToolResultEvent,
+      { ...toolFail("w1"), agent_id: "w1" } as ToolResultEvent,
+      { ...verifyRed("v1"), agent_id: "w1" } as VerifyResultEvent,
+    ];
+    expect(distillLessons(events, LOG)).toEqual([]);
+  });
+
+  it("同一批事件去掉 agent_id 后照常产出（尺没有放空）", () => {
+    const events = [toolCall("w1", "write_file"), toolFail("w1"), toolFail("w1")];
+    expect(distillLessons(events, LOG).length).toBeGreaterThan(0);
   });
 });

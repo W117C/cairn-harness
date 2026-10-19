@@ -1,11 +1,12 @@
 // M1c 规则库（§11.7.3）：allow/ask/deny 三行为条目、两层存储（项目 + 全局）、
 // 命令链式拆分逐段判定（任一段 deny 全链 deny，同段最长前缀）、原子写、坏配置拒载。
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { readdir, rm } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { projectAgentPath } from "../app-data";
 import { writeFileAtomic } from "../atomic-write";
-import { commandForms, invocations, tokenize, tokenSubsequenceStart } from "./command-shape";
+import { commandForms, invocations, normalizeCommandForMatch, tokenize, tokenSubsequenceStart } from "./command-shape";
 import { ALLOW_PAYLOAD, isShellFamily } from "./risk";
 
 export type RuleBehavior = "allow" | "ask" | "deny";
@@ -97,17 +98,40 @@ export function loadPermissionRules(projectPath?: string, globalPath?: string): 
     // 症状是"批准过的总是允许下次不生效"——那是**静默失效**，比记错更坏。
     // 收在一处，任何调用方（含将来新增的）都不可能忘。文件不存在＝零行为（现读全仓都没有这个文件）。
     const alwaysPath = join(dirname(projectPath), ALWAYS_RULES_FILE);
-    const alwaysRaw = readIfExists(alwaysPath);
-    if (alwaysRaw !== null) rules.push(...parsePermissionsFile(alwaysRaw, alwaysPath).map((r) => ({ ...r, layer: "project" as const })));
+    const alwaysRaw = resolve(alwaysPath) === resolve(projectPath) ? null : readIfExists(alwaysPath);
+    // 机器本地授权不许随仓库分发：被 git 跟踪的 always 文件是仓库作者写的，不是本机用户点出来的。
+    // 旧实现只按「文件存在」并入 ⇒ 恶意仓库提交一份 allow-all 即免掉全部审批。
+    if (alwaysRaw !== null && !isGitTracked(alwaysPath)) {
+      rules.push(...parsePermissionsFile(alwaysRaw, alwaysPath).map((r) => ({ ...r, layer: "project" as const })));
+    }
   }
   return rules;
+}
+
+/** 该文件是否随仓库分发（被 git 跟踪）。只看「文件在不在」会把 clone 来的授权当成本机用户的点击。
+ *  git 不可用 / 非仓库 ⇒ false（保留非 git 工作区的旧行为）；git 明确说 tracked ⇒ true。 */
+function isGitTracked(file: string): boolean {
+  try {
+    const dir = dirname(file);
+    const rel = relative(dir, file);
+    const r = spawnSync("git", ["-C", dir, "ls-files", "--error-unmatch", "--", rel], {
+      encoding: "utf8",
+      stdio: ["ignore", "ignore", "ignore"],
+      timeout: 2_000,
+    });
+    return r.status === 0;
+  } catch {
+    return false;
+  }
 }
 
 function readIfExists(path: string): string | null {
   try {
     return readFileSync(path, "utf8");
-  } catch {
-    return null;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return null;
+    // 读不出已有规则不等于没有规则；静默跳过可能把 deny 变成默认放行。
+    throw new Error(`权限库读取失败，拒载（${path}）：${error instanceof Error ? error.message : String(error)}`, { cause: error });
   }
 }
 
@@ -133,7 +157,19 @@ export function globalPermissionsPath(appDataDir?: string): string {
   return join(base, "permissions.json");
 }
 
-/** 原子写：临时文件 + rename；写前清理历史残留临时文件（写入中断自愈）。
+/** 现用临时名带 PID；只有 ESRCH 能确认写入进程已退出，无 PID 的旧格式沿用历史清理。 */
+function tempWriterMayBeRunning(suffix: string): boolean {
+  const owner = /^(\d+)-/.exec(suffix);
+  if (owner === null) return false;
+  try {
+    process.kill(Number(owner[1]), 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException)?.code !== "ESRCH";
+  }
+}
+
+/** 原子写：临时文件 + rename；写前清理历史残留，跳过仍在运行或状态未知的写入进程。
  *  临时名由目标文件名派生（见 src/atomic-write），故清理前缀同样派生——写死的名字在
  *  传非缺省 path 时清不到自己留下的残留。 */
 export async function savePermissionRules(path: string, rules: PermissionRule[]): Promise<void> {
@@ -141,7 +177,9 @@ export async function savePermissionRules(path: string, rules: PermissionRule[])
   const prefix = basename(path) + ".tmp-";
   try {
     for (const name of await readdir(dir)) {
-      if (name.startsWith(prefix)) await rm(join(dir, name), { force: true });
+      if (name.startsWith(prefix) && !tempWriterMayBeRunning(name.slice(prefix.length))) {
+        await rm(join(dir, name), { force: true });
+      }
     }
   } catch {
     // 目录清理失败不阻塞主写入
@@ -169,7 +207,7 @@ export function splitCommandChain(command: string): string[] {
 }
 
 export function normalizeCommand(s: string): string {
-  return s.trim().replace(/\s+/g, " ");
+  return normalizeCommandForMatch(s);
 }
 
 const BEHAVIOR_RANK: Record<RuleBehavior, number> = { deny: 0, ask: 1, allow: 2 };

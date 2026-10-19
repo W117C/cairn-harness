@@ -79,6 +79,8 @@ export const read_image: Tool = {
       // output 是给人/日志看的摘要；真正进上下文的是下面这个结构化块。
       output: "[image] " + basename(rel) + "（" + mime + "，" + String(st.size) + " 字节）已作为图片内容块附上",
       images: [{ type: "image", dataUrl }],
+      // 用户面引用（同 render_image）：图片只进模型上下文，聊天里是看不见的。
+      artifact: { kind: "image", path: rel.trim() },
     };
   },
 };

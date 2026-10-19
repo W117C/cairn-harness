@@ -7,14 +7,17 @@
 // ④ 行数读数用 hunk 声明的 +/- 计数，与 `git diff --stat` 同口径（现 `lineDelta` 是多重集差，实测 2.7–3.6% 的文件差 1–2 行）。
 //
 // 写盘纪律全部复用 `base.ts` 的四道闸 + `snapshot.ts` + `lsp.ts` + 影响面回注：本工具不另立第二套。
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { chmod, mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { dirname, posix } from "node:path";
 import {
   appendImpact,
   assertNotAgentArea,
   assertNotAgentAreaReal,
+  assertNotFrozenReal,
+  assertNotSensitivePathReal,
   assertRealContainment,
   resolveInWorkspace,
+  resolveWriteTarget,
   ToolError,
   type Tool,
   type ToolResult,
@@ -22,6 +25,7 @@ import {
 import { collectDiagnostics } from "./lsp.js";
 import { snapshotBeforeOverwrite, snapshotNote } from "./snapshot.js";
 import { contentLines } from "./line-delta.js";
+import { tmpPathFor } from "../atomic-write.js";
 import { parsePatch, PatchParseError, type PatchFile, type PatchHunk } from "./patch-parse.js";
 
 /** 补丁正文上限：比 write_file 的单文件 50KB 宽（补丁天然跨文件），但必须有界——
@@ -87,10 +91,6 @@ function locate(f: PatchFile, h: PatchHunk, seq: number, lines: string[]): Place
     // 旧第 2 行后面）。0-based 落点因此是 `oldStart`，不是 `oldStart - 1`——后者会让每一次
     // 中间插入都整体早一行（往文件尾追加时甚至插到末行之前），而回执照报 `ok: true`：
     // 静默改错地方比改不动危险得多。`@@ -0,0`（新建）两式都落到 0，行为不变。
-    // **纯新增时 oldStart 是"插在旧文件第几行之后"**（git 口径：`@@ -2,0 +3 @@` 的新内容跟在
-    // 旧第 2 行后面）。0-based 落点因此是 `oldStart`，不是 `oldStart - 1`——后者会让每一次
-    // 中间插入都整体早一行（往文件尾追加时甚至插到末行之前），而回执照报 `ok: true`：
-    // 静默改错地方比改不动危险得多。`@@ -0,0`（新建）两式都落到 0，行为不变。
     const at = Math.min(Math.max(h.oldStart, 0), lines.length);
     if (h.oldStart > lines.length) return mismatchError(f, h, seq, at, undefined);
     return { hunk: h, at, offset: 0 };
@@ -135,6 +135,7 @@ function buildFile(f: PatchFile, raw: string): { text: FileText; offsets: number
   let cursor = 0;
   let coversEof = false;
   let lastNewNoNewline = false;
+  let lastOldNoNewline = false;
   let add = 0;
   let rem = 0;
   const offsets: number[] = [];
@@ -148,6 +149,7 @@ function buildFile(f: PatchFile, raw: string): { text: FileText; offsets: number
     cursor = p.at + beforeOf(p.hunk).length;
     coversEof = cursor >= text.lines.length;
     lastNewNoNewline = p.hunk.newNoNewline;
+    lastOldNoNewline = p.hunk.oldNoNewline;
     offsets.push(p.offset);
     for (const l of p.hunk.lines) {
       if (l.mark === "+") add++;
@@ -166,29 +168,19 @@ function buildFile(f: PatchFile, raw: string): { text: FileText; offsets: number
   // git 的记法实测（`git diff` 自己产的两种补丁）：
   //   · 结果无换行 ⇒ 标记跟在**新侧**末行之后（`newNoNewline = true`）；
   //   · 结果有换行、而原文件末行没有 ⇒ 标记跟在**旧侧**末行之后（`oldNoNewline = true`）。
-  // 所以 `oldNoNewline` **不参与**结果形状——它只是在解释原文件。判据是：
+  // 所以 `oldNoNewline` **不是**"不参与结果形状"：它恰恰说明新结果**有**行尾换行。
+  // 旧实现完全忽略它 ⇒「无换行 → 有换行」的补丁被反向执行成仍然无换行（与 git apply 相反）。
+  // 判据是：
   //   ① 新侧标了     ⇒ 无换行（git 常规形状，也是既有测试钉的那两格）
-  //   ② 新侧没标     ⇒ 原文件怎样就怎样（不替用户决定要不要行尾换行）
-  // 例外是**新建文件**（`--- /dev/null`）：没有原文件可保持，而 git 对这一族补丁从不放
-  // `\ No newline` 标记、产出的却是带行尾换行的文件（POSIX 文本文件也以换行结尾）
-  // ⇒ 新建的缺省就是有换行。少了这一支，新建文件会写成无行尾换行。
-  //
-  // **不能只看新侧就完事**：补丁完全不带 `\ No newline` 标记是常见形状（手写补丁、别处抄来的），
-  // 那时 `newNoNewline` 恒为 false，只看它就会给一个本来没有行尾换行的文件强加 `\n`——
-  // git apply 在这一格的真值是保持原样。
-  //
-  // git 的记法实测（`git diff` 自己产的两种补丁）：
-  //   · 结果无换行 ⇒ 标记跟在**新侧**末行之后（`newNoNewline = true`）；
-  //   · 结果有换行、而原文件末行没有 ⇒ 标记跟在**旧侧**末行之后（`oldNoNewline = true`）。
-  // 所以 `oldNoNewline` **不参与**结果形状——它只是在解释原文件。判据是：
-  //   ① 新侧标了     ⇒ 无换行（git 常规形状，也是既有测试钉的那两格）
-  //   ② 新侧没标     ⇒ 原文件怎样就怎样（不替用户决定要不要行尾换行）
-  // 例外是**新建文件**（`--- /dev/null`）：没有原文件可保持，而 git 对这一族补丁从不放
+  //   ② 旧侧标了     ⇒ 有换行（原文件无、结果有）
+  //   ③ 两侧都没标   ⇒ 原文件怎样就怎样（不替用户决定要不要行尾换行）
+  // 例外是**新建文件**（`--- /dev/null`）：没有"原文件"可保持，而 git 对这一族补丁从不放
   // `\ No newline` 标记、产出的却是带行尾换行的文件（POSIX 文本文件也以换行结尾）
   // ⇒ 新建的缺省就是有换行。少了这一支，新建文件会写成无行尾换行。
   const endsWithNewline = f.op === "create" ? !lastNewNoNewline
     : coversEof && lastNewNoNewline ? false
-      : text.endsWithNewline;
+      : coversEof && lastOldNoNewline ? true
+        : text.endsWithNewline;
   return { text: { lines: out, endsWithNewline }, offsets, add, rem };
 }
 
@@ -197,6 +189,13 @@ interface Prepared {
   rel: string;
   abs: string;
   result: { text: FileText; offsets: number[]; add: number; rem: number };
+  /** 落盘后的文件模式：new mode 优先，否则沿用原文件（新建未指定 = undefined）。 */
+  mode?: number;
+  /** 覆盖前快照 id（没拍 / 关着快照 = null）。回执用它，所以挂在数据结构上而不是局部变量。
+   *  **不用于回滚**：快照是 best-effort 且可被 `ctx.snapshot === false` 关掉，回滚不能依赖它。 */
+  snap: string | null;
+  /** 原文件内容（新建 = null）。多文件写入中途失败时靠它把已落盘的恢复回去。 */
+  original: string | null;
   existed: boolean;
 }
 
@@ -224,6 +223,22 @@ export const apply_patch: Tool = {
     const failures: string[] = [];
     const prepared: Prepared[] = [];
     const skipped: string[] = [];
+    // 同一路径被拆成多段：每段都基于同一份旧内容各自构造结果，逐个 rename 时后者胜、
+    // 前一段改动静默消失（git apply 对同形输入直接报 corrupt patch）。
+    const seenPaths = new Map<string, number>();
+    /** 真实落点去重：`link.txt`（软链→real.txt）与 `real.txt` 两段在词法上不同，
+     *  解析后是同一个 inode；逐段 rename 会让前一段静默消失。 */
+    const resolvedPaths = new Map<string, string>();
+    for (const f of files) {
+      if (f.path === "") continue;
+      const key = posix.normalize(f.path.split("\\").join("/").replace(/^\.\//, ""));
+      const prev = seenPaths.get(key);
+      if (prev !== undefined) {
+        failures.push(`${f.path}（补丁第 ${String(f.headerLine)} 行）与第 ${String(prev)} 行是同一路径的两段：逐段写会静默丢掉前一段，请合并成一段，或拆成两次 apply_patch`);
+      } else {
+        seenPaths.set(key, f.headerLine);
+      }
+    }
     for (const f of files) {
       if (f.op === "binary") {
         failures.push(`${f.path}（补丁第 ${String(f.headerLine)} 行）是二进制文件，统一 diff 里没有可应用的内容，已拒绝`);
@@ -251,13 +266,37 @@ export const apply_patch: Tool = {
         assertNotAgentArea(f.path, "apply_patch");
         await assertRealContainment(ctx.workspace, abs, "apply_patch");
         await assertNotAgentAreaReal(ctx.workspace, abs, "apply_patch"); // C3：软链落点复查
+        await assertNotFrozenReal(ctx.workspace, abs, "apply_patch"); // L0：软链/大小写落到判卷文件
+        await assertNotSensitivePathReal(ctx.workspace, abs, "apply_patch");
+        // 写穿软链：temp+rename 会替换软链本身（同 write_file 的 path-boundary 回归）。
+        abs = await resolveWriteTarget(ctx.workspace, abs, "apply_patch");
+        const prior = resolvedPaths.get(abs);
+        if (prior !== undefined) {
+          failures.push(`${f.path} 与 ${prior} 解析到同一真实文件（软链/大小写别名）：逐段写会静默丢掉前一段`);
+          continue;
+        }
+        resolvedPaths.set(abs, f.path);
       } catch (e) {
         failures.push(e instanceof Error ? e.message : String(e));
         continue;
       }
       let raw: string | null = null;
+      let originalMode: number | undefined;
       try {
-        raw = await readFile(abs, "utf8");
+        const buf = await readFile(abs);
+        // 非 UTF-8 / 二进制：按 utf8 解码会把非法字节变成 U+FFFD，整文件写回时未被 hunk
+        // 触碰的行也一起被永久替换。这里 fail-visible 拒绝，不静默改坏文件。
+        if (buf.includes(0)) {
+          failures.push(`${f.path} 是二进制文件（含 NUL 字节），内容补丁已拒绝`);
+          continue;
+        }
+        const decoded = buf.toString("utf8");
+        if (!Buffer.from(decoded, "utf8").equals(buf)) {
+          failures.push(`${f.path} 不是合法 UTF-8（按 utf8 改写会把非法字节替换成 U+FFFD）；请改用二进制安全的工具`);
+          continue;
+        }
+        raw = decoded;
+        originalMode = (await stat(abs)).mode & 0o777;
       } catch {
         raw = null;
       }
@@ -275,7 +314,9 @@ export const apply_patch: Tool = {
         failures.push(...built);
         continue;
       }
-      prepared.push({ file: f, rel: f.path, abs, result: built, existed });
+      const requestedMode = f.newMode !== undefined ? Number.parseInt(f.newMode, 8) : undefined;
+      prepared.push({ file: f, rel: f.path, abs, result: built, existed, snap: null, original: raw,
+        ...(requestedMode !== undefined ? { mode: requestedMode } : originalMode !== undefined ? { mode: originalMode } : {}) });
     }
 
     if (failures.length > 0) {
@@ -292,24 +333,88 @@ export const apply_patch: Tool = {
     }
 
     // —— 第二趟：校验全过了才动盘。快照排在「不可应用」那道拒绝之后（与 edit_file 的 D7 同纪律）。
+    //
+    // 多文件时**逐文件 writeFile 是不原子的**：第 3 个文件写失败（EACCES / 磁盘满 / 路径被占），
+    // 前两个已经改完，而回执抛的是裸 fs 错误——「整笔未写盘」这句承诺在这一格是假的，
+    // 且模型看不出哪几个已经落了盘。改成两阶段：
+    //   ① 全部内容先写进各自的临时文件（**目标文件一个都没碰**）；
+    //   ② 全部临时文件就绪才逐个 rename（同目录内 rename 是原子的，且不看目标文件权限）。
+    // ① 里任何一笔失败 ⇒ 一个字节都没动盘，直接报失败（这正是"整笔未写盘"该有的形状）。
+    // ② 里 rename 失败（极窄窗口）⇒ 把已 rename 的用临时文件反向恢复，并在回执里点名
+    //      哪些回滚了、哪些没有——**不静默**，也不把半成品说成成功。
     const notes: string[] = [];
     let totalAdd = 0;
     let totalRem = 0;
     let snapshotId: string | undefined;
-    for (const p of prepared) {
-      const s = ctx.snapshot === false || !p.existed ? null : await snapshotBeforeOverwrite(ctx.workspace, p.abs, p.rel, ctx.callId);
-      // 新建文件的父目录可能整条都不存在（write_file 同纪律）：真数据探针在 138/163 笔上撞到的就是这条。
-      await mkdir(dirname(p.abs), { recursive: true });
-      await writeFile(p.abs, fromText(p.result.text), "utf8");
-      totalAdd += p.result.add;
-      totalRem += p.result.rem;
-      const offsetNote = p.result.offsets.filter((o) => o !== 0);
-      notes.push(
-        `  ${p.rel} +${String(p.result.add)} −${String(p.result.rem)}` +
-          (offsetNote.length > 0 ? `（${String(offsetNote.length)} 处行号漂移，最大偏差 ${String(Math.max(...offsetNote.map(Math.abs)))} 行）` : "") +
-          (s !== null ? snapshotNote(s) : ""),
+    const staged: { p: Prepared; tmp: string }[] = [];
+    try {
+      for (const p of prepared) {
+        p.snap = ctx.snapshot === false || !p.existed ? null : await snapshotBeforeOverwrite(ctx.workspace, p.abs, p.rel, ctx.callId);
+        // 新建文件的父目录可能整条都不存在（write_file 同纪律）：真数据探针在 138/163 笔上撞到的就是这条。
+        await mkdir(dirname(p.abs), { recursive: true });
+        const tmp = tmpPathFor(p.abs);
+        await writeFile(tmp, fromText(p.result.text), "utf8");
+        // 临时文件按 0666&umask 创建：不补模式，rename 后原 0755/ACL 会被换成 0644。
+        if (p.mode !== undefined) await chmod(tmp, p.mode).catch(() => undefined);
+        staged.push({ p, tmp });
+        if (p.snap !== null && snapshotId === undefined) snapshotId = p.snap;
+      }
+      // 全部就绪：逐个 rename。同目录内 rename 原子，失败只剩"目录被撤权"这一种，概率极窄。
+      const renamed: string[] = [];
+      for (const { p, tmp } of staged) {
+        try {
+          await rename(tmp, p.abs);
+          renamed.push(p.rel);
+        } catch (err) {
+          // 回滚：已 rename 落盘的用**原内容**写回去（不依赖快照——快照 best-effort 且可关）。
+          // 新建的文件原本不存在 ⇒ 删掉它。恢复失败的如实点名，不假装干净。
+          const rolled: string[] = [];
+          const stuck: string[] = [];
+          for (const other of staged) {
+            if (other.p.rel === p.rel || !renamed.includes(other.p.rel)) continue;
+            try {
+              if (other.p.original === null) await unlink(other.p.abs).catch(() => {});
+              else await writeFile(other.p.abs, other.p.original, "utf8");
+              rolled.push(other.p.rel);
+            } catch {
+              stuck.push(other.p.rel);
+            }
+          }
+          for (const { tmp: t } of staged) await unlink(t).catch(() => {});
+          const why = err instanceof Error ? err.message : String(err);
+          // 恢复不了时才该指路，而且**只指确实存在的路**：没有快照（关着或没拍）时说
+          // 「用覆盖前快照取回」是空头承诺——模型照做会发现没有那份原件。那种情形只说 git。
+          const recovery = snapshotId !== undefined
+            ? `请用覆盖前快照取回（${snapshotId}），或走 git`
+            : "本轮没有覆盖前快照，请走 git 取回";
+          throw new ToolError(
+            `apply_patch: 写入 ${p.rel} 失败（${why}）` +
+            (stuck.length > 0
+              ? `，已回滚 ${String(rolled.length)} 个，但 ${stuck.join("、")} 没能恢复——这几个文件停在改动后的状态，${recovery}`
+              : `，已回滚 ${String(rolled.length)} 个，全部文件回到改动前状态，整笔未写盘`),
+          );
+        }
+      }
+      for (const { p } of staged) {
+        totalAdd += p.result.add;
+        totalRem += p.result.rem;
+        const offsetNote = p.result.offsets.filter((o) => o !== 0);
+        notes.push(
+          `  ${p.rel} +${String(p.result.add)} −${String(p.result.rem)}` +
+            (offsetNote.length > 0 ? `（${String(offsetNote.length)} 处行号漂移，最大偏差 ${String(Math.max(...offsetNote.map(Math.abs)))} 行）` : "") +
+            (p.snap !== null ? snapshotNote(p.snap) : ""),
+        );
+      }
+    } catch (err) {
+      // 阶段①（预写临时文件）失败：目标文件一个都没碰，清掉临时文件即可。
+      // 阶段② 的失败已经在上面包成 ToolError（带回滚明细），直接透传。
+      if (err instanceof ToolError) throw err;
+      for (const { tmp } of staged) await unlink(tmp).catch(() => {});
+      const why = err instanceof Error ? err.message : String(err);
+      throw new ToolError(
+        `apply_patch: 预写阶段失败（${why}）——目标文件一个都没有改动，整笔未写盘` +
+        (staged.length > 0 ? `（已写好 ${String(staged.length)} 个临时文件，已清理）` : ""),
       );
-      if (s !== null && snapshotId === undefined) snapshotId = s;
     }
 
     const summary =
@@ -329,6 +434,7 @@ export const apply_patch: Tool = {
       ok: true,
       output,
       change: prepared.every((p) => !p.existed) ? "created" : "modified",
+      changedPaths: prepared.map((p) => p.rel),
       ...(snapshotId !== undefined ? { snapshotId } : {}),
     };
   },

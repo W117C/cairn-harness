@@ -762,3 +762,141 @@ describe("tick 拒绝护栏（P1 回归）", () => {
     await expect(s.tick()).rejects.toThrow("boom-manual");
   });
 });
+
+// 2026-10-19 独立评审：调度 journal 在 spawn **前**写（崩溃窗口不双跑），因此条目天然没有
+// session_id；旧实现只把 session_id 放内存 ⇒ 重启后所有成功触发都投影成 failed/interrupted。
+describe("调度会话索引跨重启（journal 无 session_id 的补账）", () => {
+  it("建会话后落旁路索引；新实例 snapshot 仍能取到 session_id", async () => {
+    const now = Date.parse("2026-09-12T12:00:00Z");
+    const data = join(dir, "shared-data");
+    const sessions = join(dir, "shared-sessions");
+    const common: SchedulerDeps = {
+      dataDir: data,
+      sessionsDir: sessions,
+      workspace: dir,
+      clock: () => now,
+      jitterMs: () => 0,
+      runSession: async () => ({ ok: true }),
+      runTimeoutMs: 600,
+      settlesWithinMs: 600,
+    };
+    const s1 = new Scheduler(common);
+    await s1.start();
+    s1.stop();
+    await s1.upsert(base({
+      name: "索引靶",
+      schedule: { kind: "interval", everyMinutes: 5 },
+      createdAt: new Date(now - 10 * 60_000).toISOString(),
+    }));
+    const rep = await s1.tick({ startup: true });
+    expect(rep.catchup + rep.triggered).toBe(1);
+    const key = rep.decisions.find((d) => d.decision === "catchup" || d.decision === "triggered")!.occurrence_key;
+
+    const index = JSON.parse(await readFile(join(data, "automation-sessions.json"), "utf8")) as Record<string, string>;
+    const sid = index[key];
+    expect(sid, "旁路索引里应有 occurrence_key → session_id").toBeTruthy();
+
+    const s2 = new Scheduler(common);
+    await s2.start();
+    s2.stop();
+    const snap = await s2.snapshot();
+    const row = snap.history.find((h) => h.occurrence_key === key);
+    expect(row?.session_id).toBe(sid);
+  });
+});
+
+// 2026-10-19 独立评审：枚举帽只留最早 500 条 ⇒ 启动 tick 处理不到最近一次，下一 tick 把剩余
+// 最近的一条当 triggered 真跑（skip 档也跑；latest 档跑两次）。
+describe("补跑枚举帽按最近 500 条（长停机不越界补跑）", () => {
+  const NOW = Date.parse("2026-09-12T12:00:00Z");
+  // 50h / 5min = 600 次错过（上限 500）。
+  const CREATED_50H = new Date(NOW - 50 * 3_600_000).toISOString();
+
+  it("skip 档：启动 tick 后下一分钟 tick 不得触发（旧行为会跑一条 41h 前的）", async () => {
+    const { s } = makeScheduler({ now: NOW, runSession: async () => ({ ok: true }) });
+    await s.start();
+    s.stop();
+    await s.upsert(base({
+      name: "长停机 skip",
+      schedule: { kind: "interval", everyMinutes: 5 },
+      catchUp: "skip",
+      createdAt: CREATED_50H,
+    }));
+    const startup = await s.tick({ startup: true });
+    expect(startup.triggered).toBe(0);
+    expect(startup.skipped["catch-up-skip"]).toBe(1);
+    // 被帽舍弃的前缀要留一条聚合账（审计可查）。
+    expect(startup.skipped["too-old"]).toBeGreaterThan(0);
+    const next = await s.tick({ now: NOW + 60_000 });
+    expect(next.triggered).toBe(0);
+    expect(next.catchup).toBe(0);
+  });
+
+  it("latest 档：只跑最近一次；下一 tick 不得再跑第二次", async () => {
+    const { s } = makeScheduler({ now: NOW, runSession: async () => ({ ok: true }) });
+    await s.start();
+    s.stop();
+    await s.upsert(base({
+      name: "长停机 latest",
+      schedule: { kind: "interval", everyMinutes: 5 },
+      catchUp: "latest",
+      createdAt: CREATED_50H,
+    }));
+    const startup = await s.tick({ startup: true });
+    expect(startup.catchup).toBe(1);
+    const j = await readJournalFile(s.journalPath);
+    const cu = j.entries.filter((e) => e.decision === "catchup");
+    expect(cu).toHaveLength(1);
+    expect(cu[0]!.due_at).toBe("2026-09-12T12:00:00.000Z"); // 最近一次（NOW 恰为 5min 边界）
+    const next = await s.tick({ now: NOW + 60_000 });
+    expect(next.triggered).toBe(0);
+    expect(next.catchup).toBe(0);
+  });
+});
+
+// 2026-10-19：同根两个调度实例（桌面 app + `cairn --serve`）内存去重表互不可见 ⇒ 同一
+// occurrence 双触发；整表回写还会抹掉对方刚建的任务。
+describe("同根多实例：journal 去重与任务表合并", () => {
+  it("两个实例对同一 occurrence 只触发一次", async () => {
+    const now = Date.parse("2026-09-12T12:00:00Z");
+    const data = join(dir, "multi-data");
+    const sessions = join(dir, "multi-sessions");
+    const common: SchedulerDeps = {
+      dataDir: data, sessionsDir: sessions, workspace: dir,
+      clock: () => now, jitterMs: () => 0,
+      runSession: async () => ({ ok: true }), runTimeoutMs: 600, settlesWithinMs: 600,
+    };
+    const s1 = new Scheduler(common);
+    await s1.start(); s1.stop();
+    await s1.upsert(base({
+      name: "多实例靶",
+      schedule: { kind: "interval", everyMinutes: 5 },
+      createdAt: new Date(now - 10 * 60_000).toISOString(),
+    }));
+    const s2 = new Scheduler(common); // 在 s1 写任务之后装载
+    await s2.start(); s2.stop();
+    const r1 = await s1.tick({ startup: true });
+    const r2 = await s2.tick({ startup: true });
+    expect(r1.catchup + r1.triggered).toBe(1);
+    expect(r2.catchup + r2.triggered).toBe(0);
+    const j = await readJournalFile(join(data, "automations-journal.jsonl"));
+    expect(j.entries.filter((e) => e.decision === "triggered" || e.decision === "catchup")).toHaveLength(1);
+  });
+
+  it("实例 B 的 upsert 不抹掉实例 A 刚建的任务", async () => {
+    const data = join(dir, "multi-tasks");
+    const sessions = join(dir, "multi-tasks-sessions");
+    const common: SchedulerDeps = {
+      dataDir: data, sessionsDir: sessions, workspace: dir, clock: () => Date.now(), jitterMs: () => 0,
+    };
+    const a = new Scheduler(common);
+    const b = new Scheduler(common);
+    await a.start(); a.stop(); await b.start(); b.stop();
+    const r1 = await a.upsert(base({ name: "任务 A", schedule: { kind: "daily", time: "09:00" } }));
+    expect(r1.ok).toBe(true);
+    const r2 = await b.upsert(base({ name: "任务 B", schedule: { kind: "daily", time: "10:00" } }));
+    expect(r2.ok).toBe(true);
+    const disk = await loadAutomationsFile(join(data, "automations.json"));
+    expect(disk.tasks.map((t) => t.name).sort()).toEqual(["任务 A", "任务 B"]);
+  });
+});

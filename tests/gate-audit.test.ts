@@ -65,9 +65,10 @@ const LAYER_CASES: readonly { name: string; expected: GateLayer; run: () => unkn
   { name: "未登记工具名按写 fail-closed（M7）", expected: "L4-mcp-unannotated", run: () => evaluate("never_registered_tool" as never, {}, session({ mode: "auto" })) },
   { name: "自主档网络类 risk≥medium 送审", expected: "L4-network", run: () => evaluate("run_shell", { command: "curl http://api.example.com" }, session({ mode: "auto" })) },
   { name: "自主档末行放行（今天零痕迹的那条）", expected: "L4-pass", run: () => evaluate("run_shell", { command: "echo hi" }, session({ mode: "auto" })) },
-  // `X-distill`：沉淀轮那三类判定不在 `evaluate` 里发生，因此这里钉的是**它的登记形状**（层名单列、
-  // 三型不塌成一格）；真发出去的那份留痕由 `tests/distill.test.ts` 从真入口判。
+  // `X-distill`：沉淀轮的四类判定不在 `evaluate` 里发生，因此这里钉的是**它的登记形状**（层名单列、
+  // 四型不塌成一格；`auto` 档=项目层分层免批）；真发出去的那份留痕由 `tests/distill.test.ts` 从真入口判。
   { name: "沉淀轮结局（判定在 evaluate 之外）", expected: "X-distill", run: () => DISTILL_GATE.unapproved },
+  { name: "沉淀轮项目层免批（判定在 evaluate 之外）", expected: "X-distill", run: () => DISTILL_GATE.auto },
 ];
 
 describe("evaluate 的每个出口自报判据层", () => {

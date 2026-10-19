@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { ClarifyAnswerMap, ClarifyQuestion } from "../../../../../src/events";
 import { clarifyFormValues } from "./cards";
-import { Ic } from "./icons";
+import { MessageSquare } from "lucide-react";
 
 /**
  * 澄清卡（M2-5）：questions 渲染表单——options 有 ⇒ radio（单选）/ checkbox（multiSelect），
@@ -38,7 +38,7 @@ export function ClarifyCard(props: {
   return (
     <div className="card">
       <div className="card-head">
-        <span className="ico-wait" aria-hidden="true"><Ic.message size={15} /></span>
+        <span className="ico-wait" aria-hidden="true"><MessageSquare size={15} /></span>
         <h3>需要澄清（{props.questions.length} 问）</h3>
         <span className="chip wait">回答后继续</span>
       </div>

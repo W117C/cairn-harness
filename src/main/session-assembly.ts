@@ -15,6 +15,7 @@
 import { existsSync } from "node:fs";
 import { projectAgentPath } from "../app-data";
 import { affectedFilesOf } from "../agent/impact/index.js";
+import { scanStreamEvent } from "../agent/worker-projection";
 import { Orchestrator, type OrchestratorOptions } from "../agent/orchestrator";
 import { recoveryParentMode } from "../agent/recovery";
 import type { VerifyTrustResolver } from "../agent/verify-trust";
@@ -122,7 +123,9 @@ export async function buildSessionOrchestrator(a: {
     logPath: a.logPath,
     workspace: a.workspace,
     parentMode: a.parentMode,
-    emit: a.emit,
+    // 编排器直接 emit 的事件（worker 压缩摘要 / 审批 args_digest / agent_spawned.task）
+    // 不经过 loop 的落盘脱敏面；统一在装配口扫一遍（同一张 SCANNED_TEXT_PATHS 表）。
+    emit: async (e) => a.emit(scanStreamEvent(e)),
     rules: a.rules,
     sandboxAvailable: a.sandbox ? a.sandbox.available : null,
     ...(workerShell ? { workerShell } : {}),

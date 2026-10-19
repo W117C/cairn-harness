@@ -55,7 +55,8 @@ describe("双轨触发：会话结束自动沉淀（任务6）", () => {
       enabled: true, logPath, workspace: ws, signal: abort.signal,
       provider: { async *stream(_messages, _tools, call) {
         expect(call?.signal).toBe(abort.signal);
-        yield { type: "tool_call", id: "cancel-memory", name: "remember", args: {} };
+        // 全局层才过审批口（分层后项目层免批、不碰审批）——本条要测的正是「审批中途取消」。
+        yield { type: "tool_call", id: "cancel-memory", name: "remember", args: { scope: "global" } };
       } },
       rememberTool: { name: "remember", async run() { writes++; return { ok: true, output: "saved" }; } },
       emit: async () => {},
@@ -76,7 +77,7 @@ describe("双轨触发：会话结束自动沉淀（任务6）", () => {
     expect(outcome.kind).toBe("disabled");
     expect(providerCalls).toBe(0);
   });
-  it("开启 → N 次写入合并为 1 次审批请求；批准则全部落盘且写入即事件", async () => {
+  it("分层开启 → 全局 1 次审批 + 项目直写：3 条全落盘，写入即事件", async () => {
     const logPath = join(ws, "s.jsonl");
     await seedSession(logPath);
     const fixture = join(ws, "d.jsonl");
@@ -91,13 +92,13 @@ describe("双轨触发：会话结束自动沉淀（任务6）", () => {
       mergedApproval: async () => { asks++; return true; },
     });
     expect(outcome).toEqual({ kind: "saved", writes: 3, asks: 1 });
-    expect(asks).toBe(1);
+    expect(asks).toBe(1); // 只有 d1（global）过审批口；d2/d3（project）直写不碰它
     expect(readFileSync(join(home, "lang.md"), "utf8")).toContain("中文");
     expect(readFileSync(join(ws, ".agent", "memory", "flaky.md"), "utf8")).toContain("e2e 偶发");
     expect(events.filter((e) => e.type === "tool_call" && e.name === "remember").length).toBe(3);
     expect(events.filter((e) => e.type === "tool_result").length).toBe(3);
   });
-  it("审批拒绝 → 全部不写", async () => {
+  it("全局被拒 ⇒ 全局不写、项目层照写（第十一遍分层裁决）", async () => {
     const logPath = join(ws, "s.jsonl");
     await seedSession(logPath);
     const fixture = join(ws, "d.jsonl");
@@ -110,9 +111,10 @@ describe("双轨触发：会话结束自动沉淀（任务6）", () => {
       rememberTool: remember, emit: async () => {},
       mergedApproval: async () => false,
     });
-    expect(outcome.kind).toBe("no_content");
-    expect(readFileSync(join(ws, ".agent", "memory", "flaky.md"), "utf8")).toBe("旧内容");
+    // d1（global）被拒；d2/d3（project）免批直写 ⇒ 有写入、结局是 saved 而不是 no_content
+    expect(outcome).toEqual({ kind: "saved", writes: 2, asks: 1 });
     expect(existsSync(join(home, "lang.md"))).toBe(false);
+    expect(readFileSync(join(ws, ".agent", "memory", "flaky.md"), "utf8")).toContain("e2e 偶发");
   });
   it("provider 调用失败显式分型（failed ≠ no_content）", async () => {
     const logPath = join(ws, "s.jsonl");

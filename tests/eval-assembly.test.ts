@@ -41,8 +41,9 @@ describe("装配表：产品缺省开的键必须逐枚表态", () => {
    * 没有这一格，谁把 `assemblyRows` 的筛选写死成空数组，整张表就静默变成恒真。 */
   it("真缺省确实投影出行：少一行就是缺省翻了而这里没人管", () => {
     expect(PLAIN.length).toBeGreaterThanOrEqual(4);
+    // ctrlTabCycle = v7 全量补全批新开的缺省键（纯渲染层；表里记 not-applicable）。
     expect(PLAIN.map((r) => r.key)).toEqual([
-      "autoMemory", "autoVerify", "impactAnalysis", "promptCache", "subagentTools",
+      "autoMemory", "autoVerify", "ctrlTabCycle", "impactAnalysis", "promptCache", "subagentTools",
     ]);
   });
 
@@ -101,8 +102,8 @@ describe("表 → 递进 runLoop 的参数：不许各算一次", () => {
     expect(runLoopKnobsFromAssembly(FLAGGED)).toEqual({ autoVerify: true });
   });
 
-  it("旗标只改一枚的表态，其余四枚不许跟着翻", () => {
-    for (const key of ["autoMemory", "impactAnalysis", "promptCache", "subagentTools"]) {
+  it("旗标只改一枚的表态，其余各枚不许跟着翻", () => {
+    for (const key of ["autoMemory", "ctrlTabCycle", "impactAnalysis", "promptCache", "subagentTools"]) {
       expect(faceOf(UNARMED, key)).toBe(faceOf(PLAIN, key));
     }
     // 而那一枚**确实**翻了：否则"只改一枚"是空话，把 --no-auto-verify 写成没作用也照样绿

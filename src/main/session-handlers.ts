@@ -1,11 +1,17 @@
 import { existsSync } from "node:fs";
-import { rename, rm } from "node:fs/promises";
+import { rename, rm, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { createEventLog, forkSession, replay, type AgentEvent } from "../events";
 import { forkPointOf, forkSessionName } from "../agent/fork-cli";
 import { applyTurnRevert, planTurnRevert, type FileRevertResult } from "../agent/file-revert";
 import { getLastWorkspace } from "./runner-workspace";
+import { readChangeDiff, restoreSnapshot } from "./change-diff";
+import { listDir, readTextFile } from "./workspace-fs";
 import { interruptedWorkers, respawnArgsFrom } from "../agent/recovery";
+import { orchestratorForAgent } from "../agent/orchestrator";
+import { isSessionLogBusy } from "./session-liveness";
+import { removePrivateSessionData } from "../agent/solpi-runtime";
+import { attachmentPrefixFor } from "../agent/prune";
 import {
   createSession,
   deleteSession,
@@ -92,8 +98,12 @@ export async function handleSessionOpen(id: string): Promise<{ events: AgentEven
 /** M3c 崩溃恢复扫描 + 补发（§4.4.9）：无终态 worker → failed(interrupted) + 恢复卡（respawn 载荷）。
  *  纯投影层模拟口径（裁决 5）：headless 验收直接对本函数断言；UI 走 session:open 同路。 */
 export async function applyCrashRecovery(logPath: string, emit?: (e: AgentEvent) => Promise<void>): Promise<string[]> {
+  // 活着的会话不做恢复：worker 的生命周期刻意长于父 turn（父 run 收束后 worker 仍在跑/等审批），
+  // 只按「事件流里没有终态」判崩溃会给活 worker 补 failed(interrupted)，随后真完成又落 done。
+  if (isSessionLogBusy(logPath)) return [];
   const events = await replay(logPath).catch(() => [] as AgentEvent[]);
-  const interrupted = interruptedWorkers(events);
+  // 本进程仍能路由到的 agent 也是活的（run 已收束但 worker 未收束的场景，日志不再登记为 busy）。
+  const interrupted = interruptedWorkers(events).filter((iw) => orchestratorForAgent(iw.agentId) === null);
   if (interrupted.length === 0) return [];
   const out: string[] = [];
   const sink = emit ?? (async (e: AgentEvent) => { await createEventLog(logPath).append(e); });
@@ -133,7 +143,28 @@ export async function handleSessionRename(oldId: string, newName: string): Promi
 /** 删除会话：若删的是当前会话 → 回退到最近一个（列表 mtime 降序首个）；无会话 → null。 */
 export async function handleSessionDelete(id: string): Promise<{ currentSession: string | null }> {
   const dir = requireSessionsDir();
+  const logPath = pathOf(dir, id);
   await deleteSession(dir, id, requireSessionMetadata());
+  // 删除会话要连私有观测数据 / 反馈 / 裁剪附件一起清：它们都以会话 id 为锚，留着会让同 id
+  // 新会话继承旧反馈（eventId 指向不存在的转录），且隐私面残留在盘上。
+  // 清理失败不把已完成的删除反签成失败（与 deleteSession 的队列清理同口径），但要出声。
+  await removePrivateSessionData(logPath).catch((err: unknown) => {
+    console.warn("[session-delete] 私有观测数据清理失败:", err instanceof Error ? err.message : String(err));
+  });
+  await requireFeedbackStore().removeSession(id).catch((err: unknown) => {
+    console.warn("[session-delete] 反馈清理失败:", err instanceof Error ? err.message : String(err));
+  });
+  try {
+    const pruneDir = join(dir, "prune-attachments");
+    const prefix = attachmentPrefixFor(id);
+    for (const name of await readdir(pruneDir)) {
+      if (name.startsWith(prefix)) await rm(join(pruneDir, name), { force: true });
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.warn("[session-delete] 裁剪附件清理失败:", err instanceof Error ? err.message : String(err));
+    }
+  }
   const cur = await store().get();
   if (cur.currentSession !== id) return { currentSession: cur.currentSession };
   const rest = await listSessions(dir);
@@ -149,6 +180,7 @@ export async function handleSessionDelete(id: string): Promise<{ currentSession:
 export async function handleSessionFork(
   sessionId: string,
   round: number,
+  unique = false,
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
   const dir = requireSessionsDir();
   if (!(await sessionExists(dir, sessionId))) return { ok: false, error: `源会话不存在：${sessionId}` };
@@ -159,16 +191,53 @@ export async function handleSessionFork(
   } catch (err) {
     return { ok: false, error: `读源会话失败：${err instanceof Error ? err.message : String(err)}` };
   }
-  const point = forkPointOf(events, round);
+  // round = 0（第十四遍，desktop 侧扩展，对话菜单「分叉…」）：**全量分叉**——保留到最后一轮。
+  // 总轮数从同一份 forkPointOf 算术取（round=1 的返回带 totalRounds，不另抄一份计数）；
+  // 名字仍按实际轮数拼 <id>-f<总轮数>，与 CLI `--from <总轮数>` 同源。CLI 仍只收正整数（fork-cli 校验不动）。
+  let effective = round;
+  if (effective === 0) {
+    const probe = forkPointOf(events, 1);
+    if ("error" in probe) return { ok: false, error: probe.error };
+    effective = probe.totalRounds;
+  }
+  const point = forkPointOf(events, effective);
   if ("error" in point) return { ok: false, error: point.error };
-  const newId = forkSessionName(sessionId, round);
+  const baseId = forkSessionName(sessionId, effective);
+  let newId = baseId;
+  let suffix = 1;
+  // 桌面「分叉/回放」没有名字输入口；同一父轮分叉第二次若也撞名就无路可走（真机实测：
+  // 回放第二次直接报「目标会话已存在」）。unique=true 时自动加 `-2/-3…` 后缀——仍不覆盖，
+  // 只是换一个唯一名字；CLI/`--from` 保持 fail-visible（默认 false）。
+  if (existsSync(pathOf(dir, newId))) {
+    if (!unique) return { ok: false, error: `目标会话已存在：${newId}（不覆盖既有转录）` };
+    do {
+      suffix += 1;
+      newId = `${baseId}-${String(suffix)}`;
+      if (!isValidSessionName(newId)) return { ok: false, error: `分叉出的会话名非法（多半过长）：${newId}` };
+    } while (existsSync(pathOf(dir, newId)));
+  }
   if (!isValidSessionName(newId)) return { ok: false, error: `分叉出的会话名非法（多半过长）：${newId}` };
   const target = pathOf(dir, newId);
-  if (existsSync(target)) return { ok: false, error: `目标会话已存在：${newId}（不覆盖既有转录）` };
+  // 第十八遍「命名继承」：源已带真标题（title ≠ id，即首条消息自动命名落下的）⇒ 分叉继承
+  // 「标题-f<轮数>」，与原型 .or 的分叉命名（「…-f1」）同式。sidecar 先写（目标 sidecar 撞车
+  // ⇒ 整体失败、文件未动，与「已存在」同向 fail-visible）；fork 物理落位失败则回滚 sidecar
+  // （对称 createSession 的 sidecar 回滚纪律）。源 sidecar 读取失败（损坏）不阻断 fork——
+  // 降级为无标题分叉，比拿 fork 当人质强。
+  const meta = requireSessionMetadata();
+  const srcRecord = await meta.find(sessionId).catch(() => undefined);
+  const baseTitle =
+    srcRecord !== undefined && srcRecord.title !== sessionId ? `${srcRecord.title}-f${String(effective)}` : null;
+  const forkTitle = baseTitle === null ? null : (suffix > 1 ? `${baseTitle}-${String(suffix)}` : baseTitle);
+  if (forkTitle !== null) await meta.create(newId, forkTitle);
   const scratch = join(dir, ".fork-" + newId);
-  const made = await forkSession(srcPath, String(point.lastIncluded), scratch);
-  await rename(made.eventsPath, target);
-  await rm(scratch, { recursive: true, force: true });
+  try {
+    const made = await forkSession(srcPath, String(point.lastIncluded), scratch);
+    await rename(made.eventsPath, target);
+    await rm(scratch, { recursive: true, force: true });
+  } catch (error) {
+    if (forkTitle !== null) await meta.remove(newId).catch(() => undefined);
+    throw error;
+  }
   return { ok: true, id: newId };
 }
 
@@ -180,11 +249,12 @@ export async function handleSessionFork(
 export async function handleSessionRevert(
   sessionId: string,
   round: number,
+  workspaceOverride: string | null = null,
 ): Promise<FileRevertResult & { ok: boolean; error?: string }> {
   const empty: FileRevertResult = { restored: [], deleted: [], manual: [], failed: [] };
   const dir = requireSessionsDir();
   if (!(await sessionExists(dir, sessionId))) return { ok: false, error: `会话不存在：${sessionId}`, ...empty };
-  const workspace = getLastWorkspace();
+  const workspace = workspaceOverride ?? getLastWorkspace();
   if (workspace === null) return { ok: false, error: "没有已知的工作区（本进程还没跑过 run）⇒ 无法定位要回滚的文件", ...empty };
   let events: AgentEvent[];
   try {
@@ -263,4 +333,45 @@ export async function handleSessionAssignProject(id: string, projectId: string |
   await requireExistingSession(id);
   if (projectId !== null) await requireProjectRegistry().getActive(projectId);
   return await requireSessionMetadata().assignProject(id, projectId);
+}
+
+// ---- v4 变更审阅（diff 窗格逐 hunk）----
+
+/** 某文件的逐 hunk 差异。工作区取"最近一次 run 的工作区"（与 revert 同口径）——
+ *  没有它就无法把相对路径落到盘上 ⇒ fail-visible。全部纪律在 src/main/change-diff.ts。 */
+export async function handleChangeDiff(req: { path: string; snapshotId?: string }, workspaceOverride: string | null = null) {
+  const workspace = workspaceOverride ?? getLastWorkspace();
+  if (workspace === null) {
+    return { ok: false as const, error: "没有已知的工作区（本进程还没跑过 run）⇒ 无法定位要审阅的文件" };
+  }
+  return await readChangeDiff(workspace, req.path, req.snapshotId);
+}
+
+/** v11：快照还原（检查器「撤销此文件改动」）。工作区口径与 changeDiff 同——最近一次 run 的工作区。 */
+export async function handleSnapshotRestore(req: { path?: string; snapshotId?: string }, workspaceOverride: string | null = null) {
+  const workspace = workspaceOverride ?? getLastWorkspace();
+  if (workspace === null) {
+    return { ok: false as const, error: "没有已知的工作区（本进程还没跑过 run）⇒ 无法定位要还原的文件" };
+  }
+  return await restoreSnapshot(workspace, String(req.path ?? ""), String(req.snapshotId ?? ""));
+}
+
+// ---- v5 file 窗格（只读浏览）----
+
+/** 列 workspace 内一层目录。工作区取"最近一次 run 的工作区"（与 revert/changeDiff 同口径）。 */
+export async function handleWorkspaceListDir(relPath: string, workspaceOverride: string | null = null) {
+  const workspace = workspaceOverride ?? getLastWorkspace();
+  if (workspace === null) {
+    return { ok: false as const, error: "没有已知的工作区（本进程还没跑过 run）⇒ 无法浏览文件" };
+  }
+  return await listDir(workspace, relPath);
+}
+
+/** 读 workspace 内文本文件（帽 + 二进制拒在 workspace-fs.ts）。 */
+export async function handleWorkspaceReadText(relPath: string, workspaceOverride: string | null = null) {
+  const workspace = workspaceOverride ?? getLastWorkspace();
+  if (workspace === null) {
+    return { ok: false as const, error: "没有已知的工作区（本进程还没跑过 run）⇒ 无法读取文件" };
+  }
+  return await readTextFile(workspace, relPath);
 }

@@ -8,7 +8,7 @@ export const MUTATIONS = [
     test: "tests/lsp-trust-gate.test.ts",
     desc: "#58 第二半：把内容指纹信任门整段摘掉（退回只有权限门、spawn 前零判定的形状）⇒ 克隆即携带那份 .agent/lsp.json 直接起进程。期望红落在「spawn 没发生」那一格上——它量的是「有没有起进程」这个行为，不是话术。",
     apply: (s) => s.replace(
-      "  if (pluginServers.get(wsKey(root))?.[serverId] === undefined && !lspTrustedRepos.has(wsKey(root))) {",
+      "  if (!fromPlugin && !lspTrustedRepos.has(wsKey(root))) {",
       "  if (false) {",
     ),
     expectFail: "工作区自带 lsp.json + 从未授权 ⇒ 报错点名，且 spawn 没发生",
@@ -124,7 +124,7 @@ export const MUTATIONS = [
     src: "src/tools/base.ts",
     test: "tests/path-boundary.test.ts",
     desc: ".agent/ 系统区的词法拒写被拆 ⇒ 模型可直接改 permissions.json（跨会话提权）。第 141 页普查里它是**唯一一条真存活**：分诊结论不是「闸多余」，而是旧判卷量不到这一格——`.agent/permissions.json` 这种写法落点复查也会拒，两道闸都拦 ⇒ 摘一道看不出来。词法闸独有的那一格是「`.agent` 这个名字本身保留」（借名软链 `.agent -> staging` 只有词法闸看得见），补了那条判卷它才有牙齿。",
-    apply: (s) => s.replace("  if (typeof rel === \"string\" && rel.split(/[\\\\/]/).includes(\".agent\")) {", "  if (false) {"),
+    apply: (s) => s.replace('  if (typeof rel === "string" && rel.split(/[\\\\/]/).some((seg) => seg.toLowerCase() === ".agent")) {', "  if (false) {"),
     expectFail: "借名软链：`.agent -> staging` 时写 `.agent/x.json` 仍被词法闸拒（名字本身保留，摘掉词法闸＝承诺句失效）",
   },
   {
@@ -132,7 +132,7 @@ export const MUTATIONS = [
     src: "src/tools/base.ts",
     test: "tests/path-boundary.test.ts",
     desc: "落点复查被拆 ⇒ 一条指向 .agent 的软链，rel 里没有 \".agent\" 字样，词法闸与 containment 都放行，写入落到 lsp.json（任意 command RCE 面复活）",
-    apply: (s) => s.replace("  if (relReal.split(/[\\\\/]/).includes(\".agent\")) {", "  if (false) {"),
+    apply: (s) => s.replace('  if (relReal.split(/[\\\\/]/).some((seg) => seg.toLowerCase() === ".agent")) {', "  if (false) {"),
     expectFail: "词法闸看不见的软链落点：`link -> .agent` 时写与改都被拒（C3 复查闸，摘掉它 = RCE 面复活）",
   },
   {
@@ -410,7 +410,7 @@ export const MUTATIONS = [
     src: "src/tools/write_file.ts",
     test: "tests/write-line-delta.test.ts",
     desc: "大到不值得读的既有文件也去读（或统计失败时按 0 行处理）⇒ 把「不知道」报成「新建」，覆盖掉整个旧文件却显示新建",
-    apply: (s) => s.replace("      oldText = st.size <= DELTA_READ_LIMIT_BYTES ? await readFile(abs, \"utf8\") : null;\n", "      oldText = await readFile(abs, \"utf8\");\n"),
+    apply: (s) => s.replace("      oldText = st.size <= DELTA_READ_LIMIT_BYTES ? await readFile(targetAbs, \"utf8\") : null;\n", "      oldText = await readFile(targetAbs, \"utf8\");\n"),
     expectFail: "既有文件大到不统计时，退回旧口径而不是假装是新建（不拿「不知道」当「新建」）",
   },
   {

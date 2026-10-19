@@ -108,6 +108,13 @@ describe("M2e skill/prompt：参数替换（任务 4 + §9.3 变量集）", () =
     );
     expect(out).toBe("把 staging 环境部署到 us-east。");
   });
+
+  it("没有参数占位符时，参数按 CC 口径追加 ARGUMENTS: <value>", () => {
+    const bare = (body: string) => ({ plugin: null, name: "x", description: "", path: "", frontmatter: {}, body });
+    expect(renderPromptCommand(bare("你是演示技能。"), "你好")).toBe("你是演示技能。\n\nARGUMENTS: 你好");
+    expect(renderPromptCommand(bare("对 $ARGUMENTS 问好"), "张三")).toBe("对 张三 问好");
+    expect(renderPromptCommand(bare("无参数调用"), "  ")).toBe("无参数调用");
+  });
 });
 
 describe("M2e skill：渐进披露与触发全文（任务 3）", () => {

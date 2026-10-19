@@ -168,6 +168,22 @@ describe("三条安全线：判错，而不是提示", () => {
     expect(ps[0].where).toContain("stream_idle_timeout_ms");
   });
 
+  it("`_` 开头的注释键不生效、也不判错（四层：文件/provider/model/price）；真未知字段仍拒", () => {
+    // 真机根因（2026-10-18）：本仓 .agent/providers.json 在 models[0] 写了 `_comment`，
+    // 旧校验把它当 unknown-field ⇒ 整份配置 broken、三家 provider 全部不生效。
+    const withComments = mutate((f, p, m) => {
+      f._comment = "文件级说明";
+      p._comment = "provider 级说明";
+      m._comment = "模型级说明";
+      (m.price as Record<string, unknown>)._comment = "价格级说明";
+      m._why = "任意下划线键都只作说明";
+    });
+    expect(okFile(withComments).providers).toHaveLength(1);
+    // 反向锚：非下划线未知字段不能跟着放过。
+    const bad = mutate((_f, _p, m) => { m.stream_idle_timeout_ms = 300000; });
+    expect(kindsOf(bad)).toContain("unknown-field");
+  });
+
   it("isLocalHostname 认回环与私网，不认公网域名", () => {
     expect(isLocalHostname("localhost")).toBe(true);
     expect(isLocalHostname("127.0.0.1")).toBe(true);
@@ -279,5 +295,32 @@ describe("派生：缺窗口、缺价都是「保守 + 出声」", () => {
     const [d] = deriveCustomProviders(okFile(raw), { builtinTable: TABLE });
     expect(d.specs.map((s) => s.id)).toEqual(["same-id"]);
     expect(d.warnings.join("\n")).toContain("重复");
+  });
+});
+
+// 2026-10-19：私网判定漏 169.254/16（云元数据）、100.64/10、IPv6 ULA/link-local、.internal
+// 与内嵌 IPv4 ⇒ 仓库自带的 providers.json 可把请求指向内网。
+describe("isLocalHostname 覆盖私网全谱", () => {
+  it("云元数据 / CGNAT / .internal", () => {
+    expect(isLocalHostname("169.254.169.254")).toBe(true);
+    expect(isLocalHostname("100.64.1.2")).toBe(true);
+    expect(isLocalHostname("100.128.0.1")).toBe(false);
+    expect(isLocalHostname("service.internal")).toBe(true);
+    expect(isLocalHostname("app.localhost")).toBe(true);
+  });
+
+  it("IPv6 ULA / link-local / 内嵌 IPv4", () => {
+    expect(isLocalHostname("[fc00::1]")).toBe(true);
+    expect(isLocalHostname("[fd12:3456::1]")).toBe(true);
+    expect(isLocalHostname("[fe80::1]")).toBe(true);
+    expect(isLocalHostname("[::ffff:127.0.0.1]")).toBe(true);
+    expect(isLocalHostname("[::ffff:10.0.0.5]")).toBe(true);
+    expect(isLocalHostname("[::ffff:8.8.8.8]")).toBe(false);
+  });
+
+  it("公网地址不被误伤", () => {
+    expect(isLocalHostname("8.8.8.8")).toBe(false);
+    expect(isLocalHostname("172.15.0.1")).toBe(false);
+    expect(isLocalHostname("172.32.0.1")).toBe(false);
   });
 });

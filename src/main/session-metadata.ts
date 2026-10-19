@@ -187,6 +187,12 @@ export class SessionMetadataRepository {
     return await this.mutate(id, (record) => ({ ...record, archived }));
   }
 
+  /** 只改显示标题（第十八遍：首条消息自动命名）——id/文件名一字不动，改名走 rename 那条路。 */
+  async setTitle(id: string, title: string): Promise<SessionMetadataRecord> {
+    assertTitle(title);
+    return await this.mutate(id, (record) => ({ ...record, title }));
+  }
+
   async assignProject(id: string, projectId: string | null): Promise<SessionMetadataRecord> {
     if (projectId !== null && !isProjectId(projectId)) throw new Error(`会话 projectId 非法: ${JSON.stringify(projectId)}`);
     return await this.mutate(id, (record) => {

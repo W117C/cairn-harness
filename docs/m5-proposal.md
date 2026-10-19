@@ -444,7 +444,7 @@ TERM=dumb pnpm gates
 | `tests/routing-policy.test.ts` | 路由优先级矩阵（pin/档位/降级） |
 | `tests/gym.test.ts` | case 加载、评分纯函数、反例控制 |
 
-vitest 配置 `tests/vitest.config.ts`：`include: ["tests/**/*.test.ts"]`、`fileParallelism: false`，新文件放 `tests/` 自动收纳。
+vitest 配置 `tests/vitest.config.ts`：`include: ["tests/**/*.test.ts"]`、文件级并行（2026-10-18 起；共用靶子 `fixtures/todo-app` 的三支判卷改由 `tests/app-fixture-lock.ts` 跨 worker 互斥，整表实测 258.9s → 70.3s），新文件放 `tests/` 自动收纳。
 
 ### 6.3 第三层：反向验证（每条核心断言配一条"故意改坏必须变红"）
 

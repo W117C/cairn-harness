@@ -75,15 +75,15 @@ export function costPerProgress(events: readonly AgentEvent[]): CostPerProgress 
   const boundaries = deriveProgressBoundaries(events);
   const verified = boundaries.filter((b) => b.kind === "verified");
   const lastId = verified.length > 0 ? verified[verified.length - 1]!.tailStart : null;
-  // 位置而不是字段：tailStart 是 1-based 事件号，数组下标 0-based。
+  // tailStart 是尾部首条事件的 1-based 位置，这一条也须计入开销。
   let after = 0;
   events.forEach((e, i) => {
-    if (e.type === "usage" && (lastId === null || i + 1 > lastId)) {
+    if (e.type === "usage" && (lastId === null || i + 1 >= lastId)) {
       const u = e as Extract<AgentEvent, { type: "usage" }>;
       if (u.agent_id === undefined) after += tokOf(u);
     }
   });
-  if (split.requests === 0) {
+  if (!events.some((e) => e.type === "usage" && e.agent_id === undefined)) {
     return {
       measurable: false, reason: "no-usage", verifiedBoundaries: verified.length,
       userBoundaries: boundaries.length - verified.length, mainTokens: 0,

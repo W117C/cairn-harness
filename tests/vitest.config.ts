@@ -23,9 +23,12 @@ mkdirSync(process.env.M7_IMPACT_TAGS_DIR, { recursive: true });
 export default defineConfig({
   test: {
     include: ["tests/**/*.test.ts"],
-    // runner-gates 与 gated-tools 共用 fixtures/todo-app 靶子（重置/断言同一目录），
-    // 并行跑会文件竞争 → 测试文件级串行（vitest 文件间仍各自隔离模块注册表）。
-    fileParallelism: false,
+    // 文件级并行（vitest 缺省）。共用靶子 `fixtures/todo-app` 的三支判卷自己互斥，不再拖慢整张表：
+    // gated-tools / runner-gates 会改写靶子的 src/todo.ts，replay-faces 断言整棵树逐字节不变——
+    // 三支各自在 beforeAll 里拿 `tests/app-fixture-lock.ts` 的跨 worker 文件锁。
+    // 实测（本机 8 核，2026-10-18 同分母全量）：串行 258.9s → 并行三跑 69.5/78.6/72.2s（约 3.6×），
+    // 415 文件 / 5884 条三跑全绿；两处负载敏感的判据同轮修掉（orchestrator-hold 等两条事件、
+    // evidence-typecheck 的真 tsc 预算 15s→60s）。
 
     /* `testTimeout` 对齐**实测**，不是放松判据（断言一条没动，改的只是"允许多久之内跑完"）。
      *

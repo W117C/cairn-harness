@@ -242,9 +242,11 @@ function collectImportRefs(stmt: import("web-tree-sitter").Node): ImportRef[] {
     if (n.type === "import_specifier" || n.type === "export_specifier") {
       const nameNode = n.childForFieldName("name");
       if (nameNode?.text) {
+        const aliasNode = n.childForFieldName("alias");
         const specType = (n.children ?? []).some((c) => c !== null && c.type === "type");
         out.push({
           name: nameNode.text,
+          ...(aliasNode?.text ? { localName: aliasNode.text } : {}),
           spec,
           typeOnly: stmtType || specType,
           line: n.startPosition.row + 1,
@@ -281,6 +283,9 @@ export interface ImportRef {
    *  （2026-09-23 用户裁决：先分类型边／运行边并在读端分开呈现，在那之前不许并进同一张名字图）。 */
   typeOnly: boolean;
   line: number;
+  /** `import { execute as run }` 的本文件名（run）。缺省 = 与 name 相同。
+   *  精确边与影响面都必须用本文件名：源名 execute 只是对面的 def，调用点写的是 run。 */
+  localName?: string;
 }
 
 /** `fileSymbols` 的完整出口：tags（名字图）＋ imports（跨文件依赖）＋ summary（词面检索的语料）。 */

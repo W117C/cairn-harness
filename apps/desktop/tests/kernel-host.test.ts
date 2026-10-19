@@ -4,14 +4,15 @@
 // 主模型走 fixtures/agents/main-demo.jsonl 剧本，spawn 的 worker 走同名剧本（read-worker/slow-worker）。
 // M3 T1 起装配面升级为多工作区（workspaces + activeWorkspace）：会话→工作区归属、跨工作区
 // 列举/建会话走 sessions.ts root 注入族、漂移检测（外部改动拒绝 run 不静默覆盖）。
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { createKernelHost, type KernelHost } from "../src/main/kernel-host";
+import { autoTitleFirstMessage, createKernelHost, normalizeWorkspaces, stableSessionSnapshot, type KernelHost } from "../src/main/kernel-host";
 import { createSession as createSessionInRoot, pathOf } from "../../../src/main/sessions";
+import { SessionMetadataRepository } from "../../../src/main/session-metadata";
 
 const dir = mkdtempSync(join(tmpdir(), "cairn-host-"));
 const workspace = join(dir, "ws");
@@ -21,6 +22,8 @@ const userData = join(dir, "userData");
 mkdirSync(workspace, { recursive: true });
 mkdirSync(wsA, { recursive: true });
 mkdirSync(wsB, { recursive: true });
+// 2026-10-17：host 构造/入参统一 realpath（同目录两种写法不再算两个工作区）⇒ 断言比对真实路径。
+const real = (p: string): string => realpathSync(p);
 // seed settings：provider=demo ⇒ 不拨号不花钱（spec §3.2 / agent-runner resolveRunModel）
 mkdirSync(userData, { recursive: true });
 writeFileSync(join(userData, "settings.json"), JSON.stringify({ provider: "demo", model: "" }));
@@ -81,6 +84,42 @@ describe("kernel-host 纵向装配", () => {
     60_000,
   );
 
+  it(
+    "收束补发合成终态 + openSession.running：在跑为 true、收束转 false、恰一条 push-only 终态",
+    async () => {
+      // 记忆沉淀不挡对话（v7.3，owner 实证 2026-10-15）：主会话 run 从不发 agent_status ⇒
+      // 渲染层的终态摘位判据断粮，切换会话后陈旧「运行中」清不掉，消息只入队没人派。
+      // 两层各自可判：① run finally 补发合成终态（push-only，不落 JSONL）；② openSession
+      // 返回 running 实况（开会对账的真值面）。此处判语义；接线哨兵在 memory-distill.test.ts。
+      const created = await host.createSession();
+      const runP = host.run({ message: "跑一遍 demo", mode: "default", sessionId: created.id });
+      await vi.waitFor(
+        async () => {
+          const s = await host.openSession(created.id);
+          expect(s.running).toBe(true);
+        },
+        { timeout: 10_000, interval: 100 },
+      );
+      const res = await runP;
+      expect(res.ok, JSON.stringify(res)).toBe(true);
+      const after = await host.openSession(created.id);
+      expect(after.running).toBe(false);
+      // 合成终态辨识度：主会话终态**不带 agent_id**（带 agent_id 会被渲染层当 worker 子流，
+      // isMainSessionTerminalEvent 返回 false，运行旗永远摘不掉）。
+      const synth = outbox.filter(([ch, p]) => {
+        const ev = p as { type?: string; agent_id?: string; session_id?: string };
+        return ch === "onEvent" && ev.type === "agent_status" && ev.session_id === created.id && ev.agent_id === undefined;
+      });
+      expect(synth.length).toBe(1);
+      expect((synth[0]![1] as { status?: string }).status).toBe("done");
+      // push-only：合成终态是渲染层摘位信号，不是会话记录——JSONL 盘面查无此件（该会话的
+      // 事件里没有任何一条带 agent_id = 自己的行；worker 事件带 worker 名，不产生误伤）。
+      const logRaw = readFileSync(join(workspace, ".agent", "sessions", `${created.id}.jsonl`), "utf8");
+      expect(logRaw).not.toContain(`"agent_id":"${created.id}"`);
+    },
+    60_000,
+  );
+
   it("decide：未知 askId fail-closed 返回 false", () => {
     expect(host.decide("no-such-ask", true)).toBe(false);
   });
@@ -119,10 +158,8 @@ describe("M3 多工作区运行面", () => {
         },
       });
       const a = await multi.createSession(wsA);
-      // createSession 缺省名是时间戳（到分钟），同分钟两根各建 ⇒ id 同名（撞名规避只在各自根内）
-      // ⇒ 归属表互相覆盖。重试一次拿撞名后缀「(2)」，让 a/b 的 id 必然可分辨。
-      let b = await multi.createSession(wsB);
-      if (b.id === a.id) b = await multi.createSession(wsB);
+      const b = await multi.createSession(wsB);
+      expect(b.id).not.toBe(a.id);
       // run 不带 workspace 产品位：工作区由归属表给出（M3 面的本质断言——各落各的根）
       const ra = await multi.run({ message: "demo", mode: "default", sessionId: a.id });
       expect(ra.ok, JSON.stringify(ra)).toBe(true);
@@ -131,11 +168,9 @@ describe("M3 多工作区运行面", () => {
       expect(existsSync(join(wsA, ".agent", "sessions", `${a.id}.jsonl`))).toBe(true);
       expect(existsSync(join(wsB, ".agent", "sessions", `${b.id}.jsonl`))).toBe(true);
       const all = await multi.listSessions();
-      // 归组断言用 (id, workspace) 对而非单 find：createSession 缺省名是时间戳（到分钟），
-      // 同一分钟在两根各建一条 ⇒ id 相同（撞名检测只在各自根内）⇒ 单 find 恒命中先扫描的 wsA。
-      // 语义锚不变：每条会话都带着自己根的 workspace 标记进清单。
-      expect(all.some((s) => s.id === a.id && s.workspace === wsA)).toBe(true);
-      expect(all.some((s) => s.id === b.id && s.workspace === wsB)).toBe(true);
+      // 每条会话都带着自己根的 workspace 标记进清单。
+      expect(all.some((s) => s.id === a.id && s.workspace === real(wsA))).toBe(true);
+      expect(all.some((s) => s.id === b.id && s.workspace === real(wsB))).toBe(true);
     },
     60_000,
   );
@@ -161,12 +196,12 @@ describe("M3 多工作区运行面", () => {
       // 断言按 workspace 归属而非按 id 全表查：同进程多 host 实例共享盘上根，秒级时间戳名可跨
       // 实例同名（实例级 owner 表互不知晓，撞名修法保证的是 host 实例级唯一——单 main 进程单
       // host ⇒ 产品语义成立），wsA 根里可能有同名文件。
-      expect((await dyn.listSessions()).every((s) => s.workspace === wsA)).toBe(true);
+      expect((await dyn.listSessions()).every((s) => s.workspace === real(wsA))).toBe(true);
       // 并入（重复两次）：立即出现且恰一条——幂等去重（workspaces 数组被 listSessions 按引用
       // 迭代，重复 push 会逐根扫描两遍、清单出重复条目）。
       dyn.addWorkspace(wsC);
       dyn.addWorkspace(wsC);
-      const listed = (await dyn.listSessions()).filter((s) => s.workspace === wsC);
+      const listed = (await dyn.listSessions()).filter((s) => s.workspace === real(wsC));
       expect(listed).toHaveLength(1);
       expect(listed[0]!.id).toBe(createdId);
     },
@@ -194,7 +229,7 @@ describe("M3 多工作区运行面", () => {
       expect(res.error).toMatch(/外部修改/);
       // 恢复缝：「请刷新后重试」——openSession 重立基线后同一会话可继续 run（外部行不丢，并入基线）。
       // 刷新前先等事件面静默（文件 stat 与 outbox 长度 600ms 不再变化）：本端 worker 子流在父 run
-      // 收束后仍会落盘（实测 ≥5s），且同进程其他 host 的同分钟同名会话尾随会抬高归因计数——
+      // 收束后仍会落盘（实测 ≥5s），且同进程其他 host 的同秒同名会话尾随会抬高归因计数——
       // 静默后刷新，恢复判据才钉在「外部行并入基线」本身而非与尾随写的竞速。
       const sessionFile = pathOf(join(wsA, ".agent", "sessions"), s.id);
       const statQuiet = async (p: string) => {
@@ -217,6 +252,88 @@ describe("M3 多工作区运行面", () => {
     },
     60_000,
   );
+
+  it("漂移基线：自写计数与文件快照错拍时重试，等三面稳定后再落基线", async () => {
+    const stats = [
+      { size: 5537, mtimeMs: 1 },
+      { size: 5537, mtimeMs: 1 },
+      { size: 6762, mtimeMs: 2 },
+      { size: 6762, mtimeMs: 2 },
+    ];
+    const lines = [22, 23];
+    const own = [22, 23, 23, 23];
+
+    const snapshot = await stableSessionSnapshot(
+      async () => stats.shift() ?? null,
+      async () => lines.shift() ?? null,
+      () => own.shift() ?? 0,
+    );
+
+    expect(snapshot).toEqual({ size: 6762, mtimeMs: 2, lines: 23, ownAtSnapshot: 23 });
+    expect(stats).toHaveLength(0);
+    expect(lines).toHaveLength(0);
+    expect(own).toHaveLength(0);
+  });
+
+  it("漂移基线：持续变化时不冒充可信快照，下一轮按 fail-closed 处理", async () => {
+    let own = 0;
+    let size = 0;
+    const snapshot = await stableSessionSnapshot(
+      async () => {
+        size += 1;
+        return { size, mtimeMs: size };
+      },
+      async () => 1,
+      () => {
+        own += 1;
+        return own;
+      },
+    );
+
+    expect(snapshot).toMatchObject({ unstable: true });
+  });
+});
+
+describe("发送队列持久化（重启恢复的 host 面）", () => {
+  it("queueSet 落会话 sidecar；新 host 实例 queueGet 读回；queueSet 空数组清队列", async () => {
+    const ws = join(dir, "queue-ws");
+    mkdirSync(ws, { recursive: true });
+    const make = () => createKernelHost({
+      workspaces: [ws],
+      activeWorkspace: ws,
+      userDataDir: userData,
+      outbox: () => undefined,
+    });
+    const first = make();
+    const s = await first.createSession(ws);
+    expect(await first.queueGet(s.id)).toEqual({ items: [] });
+    await first.queueSet(s.id, [
+      { text: "重启后继续", attachments: [] },
+      { text: "再跑一遍验证", attachments: [{ path: "src/a.ts", kind: "file", explicit: true }] },
+    ]);
+    const second = make();
+    expect(await second.queueGet(s.id)).toEqual({
+      items: [
+        { text: "重启后继续", attachments: [] },
+        { text: "再跑一遍验证", attachments: [{ path: "src/a.ts", kind: "file", explicit: true }] },
+      ],
+    });
+    await second.queueSet(s.id, []);
+    expect(await first.queueGet(s.id)).toEqual({ items: [] });
+  });
+
+  it("不存在的会话 queueGet / queueSet fail-visible，不凭空建队列", async () => {
+    const ws = join(dir, "queue-missing-ws");
+    mkdirSync(ws, { recursive: true });
+    const host = createKernelHost({
+      workspaces: [ws],
+      activeWorkspace: ws,
+      userDataDir: userData,
+      outbox: () => undefined,
+    });
+    await expect(host.queueGet("不存在")).rejects.toThrow(/会话不存在/);
+    await expect(host.queueSet("不存在", [{ text: "x", attachments: [] }])).rejects.toThrow(/会话不存在/);
+  });
 });
 
 // ---- M4-5 removeWorkspace 缩面（removeProject 成功后的对称面）----
@@ -239,7 +356,7 @@ describe("M4-5 removeWorkspace 缩面", () => {
       shrink.addWorkspace(wsD);
       const sid = await createSessionInRoot(join(wsD, ".agent", "sessions"), "m4-5 缩面用会话");
       await shrink.openSession(sid);
-      expect((await shrink.listSessions()).some((s) => s.id === sid && s.workspace === wsD)).toBe(true);
+      expect((await shrink.listSessions()).some((s) => s.id === sid && s.workspace === real(wsD))).toBe(true);
       // 缩面：清单不再出现该组；createSession 白名单同步收窄（同表驱动，fail-visible）。
       shrink.removeWorkspace(wsD);
       expect((await shrink.listSessions()).every((s) => s.workspace !== wsD)).toBe(true);
@@ -304,4 +421,104 @@ describe("M4-5 removeWorkspace 缩面", () => {
     },
     60_000,
   );
+});
+
+describe("第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点）", () => {
+  it("空会话 + 缺省 title ⇒ 写 sidecar；非空/已有名/无记录/空消息各门槛都收手", async () => {
+    const repo = new SessionMetadataRepository(join(dir, "auto-title-sidecar.json"));
+    await repo.create("会话 2026-10-15 21:51:38", "会话 2026-10-15 21:51:38");
+
+    const sid = "会话 2026-10-15 21:51:38";
+    // 门槛 1：非空会话不动
+    expect(await autoTitleFirstMessage(repo, sid, false, "帮我看看这个 bug")).toBeNull();
+    // 门槛 2：消息提炼不出（全空白）不动
+    expect(await autoTitleFirstMessage(repo, sid, true, "  \n ")).toBeNull();
+    // 正路：空 + 缺省 title + 有效消息 ⇒ 落标题（id 一字不动）
+    expect(await autoTitleFirstMessage(repo, sid, true, "帮我看看这个 bug")).toBe("帮我看看这个 bug");
+    expect((await repo.get(sid)).title).toBe("帮我看看这个 bug");
+    // 门槛 3：已是真标题（title ≠ id）⇒ 永不覆盖
+    expect(await autoTitleFirstMessage(repo, sid, true, "另一条")).toBeNull();
+    expect((await repo.get(sid)).title).toBe("帮我看看这个 bug");
+    // 无记录（CLI/外部建的会话首次在桌面里跑）：空 + 有效消息 ⇒ 懒建记录并落标题（同 setPinned 懒建语义）
+    expect(await autoTitleFirstMessage(repo, "外部戳名", true, "部署脚本换成滚动的")).toBe("部署脚本换成滚动的");
+    expect((await repo.get("外部戳名")).title).toBe("部署脚本换成滚动的");
+    // …但非空会话连记录都不造（读侧「不补造」契约的写侧镜像）
+    expect(await autoTitleFirstMessage(repo, "外部非空", false, "帮我看看")).toBeNull();
+    expect(await repo.find("外部非空")).toBeUndefined();
+  });
+
+  it("P1 标题预算 40 宽（≈ 汉字 20 字）：19 字不截断、20 字恰满、21 字截断加「…」", async () => {
+    const repo = new SessionMetadataRepository(join(dir, "auto-title-width-sidecar.json"));
+    const sid19 = "会话 width19";
+    const sid21 = "会话 width21";
+    await repo.create(sid19, sid19);
+    // 19 个汉字 = 38 宽：预算内原样（旧 32 宽预算下这里会被截成 16 字 + …）
+    expect(await autoTitleFirstMessage(repo, sid19, true, "字".repeat(19))).toBe("字".repeat(19));
+    await repo.create(sid21, sid21);
+    // 21 个汉字 = 42 宽：截到 20 字（40 宽）+ 「…」
+    expect(await autoTitleFirstMessage(repo, sid21, true, "字".repeat(21))).toBe("字".repeat(20) + "…");
+  });
+
+  it(
+    "e2e：run 首条消息 ⇒ sidecar 标题落位 + push-only session_titled（带 ts）进 outbox",
+    async () => {
+      // 独立 host + 独立根：本进程多 host 单例 sidecar「最后一个赢」，共享 host 会与别的
+      // describe 同秒撞 id（秒级戳）串记录；这里全隔离，断言钉自己的盘面。
+      const titleDir = join(dir, "title-ws");
+      const titleUserData = join(dir, "title-userData");
+      mkdirSync(titleDir, { recursive: true });
+      mkdirSync(titleUserData, { recursive: true });
+      writeFileSync(join(titleUserData, "settings.json"), JSON.stringify({ provider: "demo", model: "" }));
+      const titleOutbox: (readonly [string, unknown])[] = [];
+      const titleHost = createKernelHost({
+        workspaces: [titleDir],
+        activeWorkspace: titleDir,
+        userDataDir: titleUserData,
+        outbox: (channel, payload) => {
+          titleOutbox.push([channel, payload]);
+        },
+      });
+      const created = await titleHost.createSession();
+      const res = await titleHost.run({ message: "部署脚本怎么改成滚动的", mode: "default", sessionId: created.id });
+      expect(res.ok, JSON.stringify(res)).toBe(true);
+      const listed = (await titleHost.listSessions()).find((s) => s.id === created.id);
+      expect(listed?.title).toBe("部署脚本怎么改成滚动的");
+      const pushes = titleOutbox.filter(([ch, p]) => {
+        const ev = p as { type?: string };
+        return ch === "onEvent" && ev.type === "session_titled";
+      });
+      expect(pushes).toHaveLength(1);
+      expect(pushes[0]![1]).toMatchObject({
+        type: "session_titled",
+        session_id: created.id,
+        title: "部署脚本怎么改成滚动的",
+      });
+      expect(typeof (pushes[0]![1] as { ts?: number }).ts).toBe("number");
+      // 次轮不再改标题（sidecar 已是真标题）——同会话二跑后标题保持首条消息的
+      const again = await titleHost.run({ message: "再来一轮", mode: "default", sessionId: created.id });
+      expect(again.ok, JSON.stringify(again)).toBe(true);
+      expect((await titleHost.listSessions()).find((s) => s.id === created.id)?.title).toBe("部署脚本怎么改成滚动的");
+    },
+    60_000,
+  );
+});
+
+
+// 2026-10-17 真机实证：默认工作区（env，/tmp/x）与项目注册表（realpath /private/tmp/x）指向
+// 同一个目录时，listSessions 把同一份会话列两遍、侧栏出现两行同 id。修法 = 工作区串先真实化再去重。
+describe("normalizeWorkspaces（同目录两种写法只算一个工作区）", () => {
+  it("symlink 指向同一目录 ⇒ 去重成一个；active 取真实路径", () => {
+    const link = join(dir, "ws-link");
+    if (!existsSync(link)) symlinkSync(workspace, link);
+    const out = normalizeWorkspaces([workspace, link], link);
+    expect(out.workspaces).toEqual([realpathSync(workspace)]);
+    expect(out.activeWorkspace).toBe(realpathSync(workspace));
+  });
+
+  it("不存在的路径保留原串（不抛、不吞）", () => {
+    const ghost = join(dir, "no-such-dir");
+    const out = normalizeWorkspaces([ghost], ghost);
+    expect(out.workspaces).toEqual([ghost]);
+    expect(out.activeWorkspace).toBe(ghost);
+  });
 });

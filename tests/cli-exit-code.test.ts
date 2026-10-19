@@ -13,7 +13,7 @@
 //   B. 真跑 bin（demo 通道，零凭据、离线、确定性）断言真实退出码，而不是只测纯函数。
 import { spawnSync } from "node:child_process";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -29,6 +29,73 @@ const dirs: string[] = [];
 afterEach(() => {
   while (dirs.length > 0) rmSync(dirs.pop()!, { recursive: true, force: true });
 });
+
+function runAgentCli(
+  scriptLines: Record<string, unknown>[],
+  args: string[] = [],
+  extraEnv: Record<string, string> = {},
+  prepareWorkspace?: (workspace: string) => Record<string, string>,
+  message: string = "执行任务",
+): { status: number | null; output: string; workspace: string; events: Record<string, unknown>[] } {
+  const workspace = mkdtempSync(join(tmpdir(), "cairn-delivery-"));
+  dirs.push(workspace);
+  const script = join(workspace, "main.jsonl");
+  writeFileSync(script, scriptLines.map((line) => JSON.stringify(line)).join("\n") + "\n", "utf8");
+  const prepared = prepareWorkspace?.(workspace) ?? {};
+
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    NO_COLOR: "1",
+    M3A_MAIN_SCRIPT: script,
+    ...extraEnv,
+    ...prepared,
+  };
+  for (const key of ["CAIRN_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "M0A_PROVIDER"]) {
+    if (!(key in extraEnv)) delete env[key];
+  }
+  if (!("M0A_MOCK_DELTA" in extraEnv)) delete env.M0A_MOCK_DELTA;
+
+  const r = spawnSync(
+    process.execPath,
+    [BIN, "--provider", "demo", "--mode", "auto", "--unattended", "--workspace", workspace, ...args, message],
+    { cwd: ROOT, encoding: "utf8", env, input: "", timeout: 120_000, killSignal: "SIGKILL" },
+  );
+  const sessionDir = join(workspace, ".agent", "sessions");
+  const logName = readdirSync(sessionDir)[0] ?? "";
+  const events = readFileSync(join(sessionDir, logName), "utf8")
+    .trim().split("\n").filter((line) => line !== "")
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  return {
+    status: r.status,
+    output: (r.stdout ?? "") + (r.stderr ?? ""),
+    workspace,
+    events,
+  };
+}
+
+const PLAN_ONLY = [
+  {
+    type: "tool_call",
+    id: "p1",
+    name: "propose_plan",
+    args: { goal: "创建 a.html", files: [{ action: "create", path: "a.html", summary: "页面" }] },
+  },
+  { type: "round_end" },
+  { type: "assistant_message", content: "已完成" },
+];
+
+const PLAN_THEN_WRITE = [
+  ...PLAN_ONLY,
+  { type: "round_end" },
+  {
+    type: "tool_call",
+    id: "w1",
+    name: "write_file",
+    args: { path: "a.html", content: "<h1>ok</h1>\n" },
+  },
+  { type: "round_end" },
+  { type: "assistant_message", content: "这次真的写好了" },
+];
 
 describe("runFailed：退出码判据（纯函数，五个输入各自能单独判红）", () => {
   it("全零 ⇒ 不判红（反向对照：判据不是恒真的）", () => {
@@ -62,8 +129,21 @@ describe("runFailed：退出码判据（纯函数，五个输入各自能单独�
       { ...CLEAN, gateBlocks: 3 },
       { ...CLEAN, deniedPlans: 1 },
       { ...CLEAN, plainToolFailures: 5 },
+      { ...CLEAN, deliveryFailure: true },
     ];
     for (const input of each) expect(runFailed(input)).toBe(true);
+  });
+
+  // 能力 12（2026-10-17）：交付失败是**唯一一项「跑完了、没报错、但产物不在」的失败**。
+  // 实测 11 趟鹈鹕跑分里 8 趟交付了不存在的文件，而退码 0 ⇒ 「说了没做」与「做成了」
+  // 在 CI 上同形。这一格把它接进退码。
+  it("交付失败 ⇒ 判红（承诺要造的文件没落盘或真正空输出）", () => {
+    expect(runFailed({ ...CLEAN, deliveryFailure: true })).toBe(true);
+  });
+
+  it("交付失败缺席 ⇒ 不判红（缺字段 = 没这回事，不是恒红）", () => {
+    expect(runFailed({ ...CLEAN })).toBe(false);
+    expect(runFailed({ ...CLEAN, deliveryFailure: false })).toBe(false);
   });
 });
 
@@ -96,5 +176,81 @@ describe("真跑 bin：demo 通道的退出码（零凭据、离线、确定性�
     } else {
       expect(r.status).toBe(0);
     }
+  }, 180_000);
+
+  it("CLI 已落交付红时仍按最终文件状态 exit 1", () => {
+    const r = runAgentCli(PLAN_ONLY);
+    expect(r.status).toBe(1);
+    expect(r.output).toContain("[delivery]");
+    expect(r.events.filter((e) => e["type"] === "tool_result" && e["callId"] === "harness-delivery-guard")).toHaveLength(1);
+    expect(existsSync(join(r.workspace, "a.html"))).toBe(false);
+  }, 180_000);
+
+  it("--delivery-repair 从 CLI 穿到 runner：补写真实文件后 exit 0", () => {
+    const r = runAgentCli(PLAN_THEN_WRITE, ["--delivery-repair"]);
+    expect(r.status).toBe(0);
+    expect(existsSync(join(r.workspace, "a.html")), "返修开关没传到 runLoop ⇒ 没有第二笔真实写盘").toBe(true);
+    expect(readFileSync(join(r.workspace, "a.html"), "utf8")).toBe("<h1>ok</h1>\n");
+  }, 180_000);
+
+  it("默认路径下零输出零工具也落交付告警并 exit 1", () => {
+    const r = runAgentCli([]);
+    expect(r.status).toBe(1);
+    expect(r.output).toContain("[delivery] 这一轮没有工具调用");
+    expect(r.events.filter((e) => e["type"] === "tool_result" && e["callId"] === "harness-delivery-guard")).toHaveLength(1);
+  }, 180_000);
+
+  it("正常流式正文不被误判为空转", () => {
+    const r = runAgentCli([{ type: "assistant_message", content: "这是完整回答" }], [], { M0A_MOCK_DELTA: "1" });
+    expect(r.events.some((e) => e["type"] === "assistant_delta"), "流式通道没有真的启用").toBe(true);
+    expect(r.output).not.toContain("[delivery] 这一轮没有工具调用");
+    expect(r.status).toBe(0);
+  }, 180_000);
+
+  it("UserPromptSubmit 阻断 ⇒ 落结构化失败并 exit 1", () => {
+    const r = runAgentCli([], [], {}, (workspace) => {
+      const root = join(workspace, "plugins", "cli-hook-demo");
+      writeFileSync(join(workspace, "block-hook.cjs"),
+        "process.stderr.write('blocked by cli hook'); process.exit(2);\n", "utf8");
+      mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+      mkdirSync(join(root, "hooks"), { recursive: true });
+      writeFileSync(join(root, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "cli-hook-demo", description: "CLI 阻断判据", version: "0.1.0" }), "utf8");
+      writeFileSync(join(root, "hooks", "hooks.json"), JSON.stringify({
+        hooks: {
+          UserPromptSubmit: [{
+            hooks: [{ type: "command", command: 'node "' + join(workspace, "block-hook.cjs") + '"' }],
+          }],
+        },
+      }), "utf8");
+      return {
+        M2E_USER_PLUGINS: join(workspace, "plugins"),
+        M2E_PLUGIN_DATA: join(workspace, "plugin-data"),
+      };
+    });
+    expect(r.status).toBe(1);
+    expect(r.output).toContain("blocked by cli hook");
+    expect(r.events.some((e) => e["type"] === "error"
+      && String(e["message"]).includes("UserPromptSubmit"))).toBe(true);
+  }, 180_000);
+
+  it("user-invocable:false 命令拒绝 ⇒ 落结构化失败并 exit 1", () => {
+    const r = runAgentCli([], [], {}, (workspace) => {
+      const root = join(workspace, "plugins", "cli-command-demo");
+      mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+      mkdirSync(join(root, "commands"), { recursive: true });
+      writeFileSync(join(root, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "cli-command-demo", description: "CLI 命令拒绝判据", version: "0.1.0" }), "utf8");
+      writeFileSync(join(root, "commands", "quiet.md"),
+        "---\ndescription: 不可用户调用\nuser-invocable: false\n---\n不该执行\n", "utf8");
+      return {
+        M2E_USER_PLUGINS: join(workspace, "plugins"),
+        M2E_PLUGIN_DATA: join(workspace, "plugin-data"),
+      };
+    }, "/cli-command-demo:quiet");
+    expect(r.status).toBe(1);
+    expect(r.output).toContain("不可用户调用");
+    expect(r.events.some((e) => e["type"] === "error"
+      && String(e["message"]).includes("不可用户调用"))).toBe(true);
   }, 180_000);
 });

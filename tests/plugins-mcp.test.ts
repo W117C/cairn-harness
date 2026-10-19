@@ -204,10 +204,13 @@ describe("M2e 信任门（任务 6）", () => {
       PluginRuntime.load({ projectPluginsDir: pluginsDir, workspace: ws, pluginDataRoot: join(ws, "data"), trustFile });
     const rt = await load();
     expect(rt.manifest.plugins.find((p) => p.name === "echo-suite")?.trust).toBe("pending"); // 首次出卡
-    await rt.trustDecide("echo-suite", true);
-    expect(rt.manifest.plugins.find((p) => p.name === "echo-suite")?.trust).toBe("trusted"); // 批准即生效
+    // bounded 指纹（含软链）不可批准：没绑定的内容批准后能不经重新授权被替换。
+    await expect(rt.trustDecide("echo-suite", true)).rejects.toThrow(/不能批准/);
+    expect(rt.manifest.plugins.find((p) => p.name === "echo-suite")?.trust).toBe("pending");
+    await rt.trustDecide("echo-suite", false); // 明确拒绝可以落盘
+    expect(rt.manifest.plugins.find((p) => p.name === "echo-suite")?.trust).toBe("declined");
     const rt2 = await load();
-    expect(rt2.manifest.plugins.find((p) => p.name === "echo-suite")?.trust).toBe("trusted"); // 旧实现：这里退回 pending
+    expect(rt2.manifest.plugins.find((p) => p.name === "echo-suite")?.trust).toBe("declined");
     await rt.shutdown();
     await rt2.shutdown();
     await rm(ws, { recursive: true, force: true });

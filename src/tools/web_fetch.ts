@@ -14,10 +14,15 @@
 // 不读环境变量**——那样的开关等于把判定从策略挪到配置，产品面上立刻多一个能关掉红线的口子。
 
 import { lookup } from "node:dns/promises";
+import { request as httpRequest, type IncomingMessage, type RequestOptions } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { isIP } from "node:net";
+import { PassThrough, Readable, pipeline } from "node:stream";
+import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import { ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
 import { createOutputRing, WEB_CONTENT_TRUNCATION_HINT } from "./output-ring.js";
-import { readBodyCapped, stallGuard } from "../net.js";
-import { assertPublicUrl, type HostResolver } from "./web-fetch-policy.js";
+import { readBodyCapped, stallGuard, withAbort } from "../net.js";
+import { assertPublicUrlAndResolve, type HostResolver } from "./web-fetch-policy.js";
 
 /** 重定向上限。3 跳够覆盖 http→https 与 www 化；`fetch` 的缺省 20 跳是给浏览器用的，
  *  对"取一个文档页"来说那是一扇没理由开着的门。**导出**是给 `web-fetch-check` 读的：
@@ -31,6 +36,9 @@ const MODEL_TEXT_BYTES = 32 * 1024;
 /** 静默窗口：建连后多久没有任何数据就判停滞。与 provider 同一条（`net.ts` 的 stallGuard），
  *  不是总时长上限——一个 2MB 的文档页慢而有进展地传十分钟是合法的。 */
 const STALL_MS = 30_000;
+/** 总时长上限：停滞窗口会被任何一个分片续期，对端每 29s 发 1 字节就能把工具永久挂住。
+ *  这是墙钟闸，与"多久没数据"无关。 */
+const TOTAL_MS = 120_000;
 
 const HTML_ENTITIES: Readonly<Record<string, string>> = {
   amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
@@ -102,8 +110,11 @@ function envelope(url: string, finalUrl: string, body: string, capped: boolean):
   return head + body + tail + "\n</fetched-content>";
 }
 
+export type WebFetchImpl = (input: string, init: RequestInit, resolvedAddresses: readonly string[]) => Promise<Response>;
+
 export interface WebFetchDeps {
-  fetchImpl?: typeof fetch;
+  /** Test seam. Production uses pinnedHttpFetch so it cannot perform a second DNS lookup. */
+  fetchImpl?: WebFetchImpl;
   resolveHost?: HostResolver;
 }
 
@@ -112,33 +123,189 @@ export interface WebFetchDeps {
 const defaultResolve: HostResolver = async (host) =>
   (await lookup(host, { all: true })).map((r) => r.address);
 
-/** 组装工具。测试注入 fetchImpl / resolveHost；生产两者都走真值（本仓既有惯例：`opts.fetchImpl ?? fetch`）。 */
+type PinnedLookup = NonNullable<RequestOptions["lookup"]>;
+
+function normalizeLookupHost(host: string): string {
+  return host.toLowerCase().replace(/^\[|\]$/gu, "").replace(/\.$/u, "");
+}
+
+/** Node's socket lookup callback reads only the IP snapshot already checked by assertPublicUrlAndResolve. */
+export function createPinnedLookup(host: string, addresses: readonly string[], label = "web_fetch"): PinnedLookup {
+  const records = addresses.map((address) => {
+    const family = isIP(address);
+    if (family === 0) throw new Error(`${label}: pinned lookup 收到无效 IP 地址：${address}`);
+    return { address, family };
+  });
+  if (records.length === 0) throw new Error(`${label}: pinned lookup 没有可用地址`);
+  const expectedHost = normalizeLookupHost(host);
+  return (lookupHost, options, callback) => {
+    const fail = (message: string): void => {
+      const error = Object.assign(new Error(message), { code: "ENOTFOUND" });
+      callback(error, "", 0);
+    };
+    if (normalizeLookupHost(lookupHost) !== expectedHost) {
+      fail(`${label}: 连接主机与已校验主机不符：${lookupHost}`);
+      return;
+    }
+    const matching = options.family === undefined || options.family === 0
+      ? records
+      : records.filter((record) => record.family === options.family);
+    if (matching.length === 0) {
+      fail(`${label}: 已校验地址中没有 IPv${String(options.family)} 地址`);
+      return;
+    }
+    if (options.all === true) callback(null, matching);
+    else callback(null, matching[0]!.address, matching[0]!.family);
+  };
+}
+
+function nodeHeaders(headers: RequestInit["headers"]): Record<string, string> {
+  const out: Record<string, string> = {};
+  new Headers(headers).forEach((value, name) => { out[name] = value; });
+  return out;
+}
+
+function responseHeaders(message: IncomingMessage): Headers {
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(message.headers)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) for (const item of value) headers.append(name, item);
+    else headers.set(name, value);
+  }
+  return headers;
+}
+
+export function decodeResponseBody(message: IncomingMessage, headers: Headers, label = "web_fetch"): ReadableStream<Uint8Array> {
+  const encodings = (headers.get("content-encoding") ?? "")
+    .split(",").map((value) => value.trim().toLowerCase()).filter((value) => value !== "" && value !== "identity");
+  if (encodings.length === 0) return Readable.toWeb(message) as ReadableStream<Uint8Array>;
+
+  const decoders = encodings.reverse().map((encoding) => {
+    if (encoding === "gzip" || encoding === "x-gzip") return createGunzip();
+    if (encoding === "deflate") return createInflate();
+    if (encoding === "br") return createBrotliDecompress();
+    throw new Error(`${label}: 不支持响应内容编码 ${encoding}`);
+  });
+  // readBodyCapped must count decoded bytes; compressed Content-Length is not its limit.
+  headers.delete("content-encoding");
+  headers.delete("content-length");
+  // 解码链与对外流必须是**两条**：pipeline 会把解码器的错误写进它自己那条流，而
+  // `Readable.toWeb` 抛给读方的正是那条流的错误——那是个 message 为空的 TypeError
+  // （`code: Z_DATA_ERROR`、cause 才是 `incorrect header check`）。若直接拿它当对外流，
+  // 上层只能打出「web_fetch 失败: terminated」：既不像编码错也不像网络错，模型无从判断
+  // 该换 URL 还是该重试。这里让对外流是独立的 `output`，由 pipeline 回调用**带可读 message**
+  // 的错误销毁它，原错误挂 cause 供追查。
+  const sink = new PassThrough();
+  const output = new PassThrough();
+  pipeline(message, ...decoders, sink, (error) => {
+    if (output.destroyed) return;
+    if (error) {
+      const why = error instanceof Error ? error.message : String(error);
+      output.destroy(Object.assign(
+        new Error(`${label}: 响应内容解码失败（content-encoding: ${encodings.join(", ")}）：${why}`),
+        { cause: error },
+      ));
+      return;
+    }
+    output.end();
+  });
+  // 数据经 pipe 转出去，保留背压。**不要**给 sink 挂 error/close 处理器去动 output：sink 的 error 事件比
+  // pipeline 回调更早到（实测同一 tick 内先 fire），那时跟着 destroy 就会把 output 的错误
+  // 换成流自带的 `AbortError: The operation was aborted`——正是要换掉的那句糊话。
+  // 对外的错误由 pipeline 回调决定。
+  sink.pipe(output);
+  // 消费方取消/截断时，反向终止 pipeline，关闭下载连接和解码器。
+  output.once("close", () => { sink.destroy(); });
+  return Readable.toWeb(output) as ReadableStream<Uint8Array>;
+}
+
+/** Direct HTTP(S) transport. The original hostname remains in the URL for Host and TLS checks;
+ *  the custom lookup pins the socket to the exact addresses the policy just approved. */
+export async function pinnedHttpFetch(
+  input: string, init: RequestInit, addresses: readonly string[], label = "web_fetch",
+): Promise<Response> {
+  const url = new URL(input);
+  const options: RequestOptions = {
+    method: "GET",
+    headers: nodeHeaders(init.headers),
+    signal: init.signal ?? undefined,
+    agent: false,
+    lookup: createPinnedLookup(url.hostname, addresses, label),
+  };
+  return await new Promise<Response>((resolve, reject) => {
+    const onResponse = (message: IncomingMessage): void => {
+      try {
+        const status = message.statusCode;
+        if (status === undefined) throw new Error(`${label}: HTTP 响应缺少状态码`);
+        const headers = responseHeaders(message);
+        for (const name of ["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade"]) {
+          headers.delete(name);
+        }
+        const bodyless = status === 204 || status === 205 || status === 304;
+        resolve(new Response(bodyless ? null : decodeResponseBody(message, headers, label), {
+          status,
+          statusText: message.statusMessage,
+          headers,
+        }));
+      } catch (error) {
+        message.destroy();
+        reject(error);
+      }
+    };
+    const req = url.protocol === "https:"
+      ? httpsRequest(url, options, onResponse)
+      : httpRequest(url, options, onResponse);
+    req.once("error", reject);
+    req.once("upgrade", (_message, socket) => {
+      socket.destroy();
+      reject(new Error(`${label}: 不接受 HTTP 协议升级`));
+    });
+    req.end();
+  });
+}
+
+/** 组装工具。测试可注入 fetchImpl / resolveHost；生产连接固定到本轮刚校验过的 DNS 地址。 */
 export function makeWebFetch(deps: WebFetchDeps = {}): Tool {
-  const doFetch = deps.fetchImpl ?? fetch;
+  const doFetch = deps.fetchImpl ?? pinnedHttpFetch;
   const resolve = deps.resolveHost ?? defaultResolve;
   return {
     name: "web_fetch",
     async run(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
-      void ctx;
       const raw = args.url;
       if (typeof raw !== "string" || raw.trim() === "") {
         throw new ToolError("web_fetch: url 参数必须是非空字符串");
       }
       const guard = stallGuard(STALL_MS, "web_fetch");
+      const total = new AbortController();
+      const totalTimer = setTimeout(() => total.abort(new Error(`web_fetch 总时长超过 ${String(TOTAL_MS / 1000)}s（对端持续慢速滴灌）`)), TOTAL_MS);
+      (totalTimer as { unref?: () => void }).unref?.();
+      const signal = ctx.signal
+        ? AbortSignal.any([guard.signal, total.signal, ctx.signal])
+        : AbortSignal.any([guard.signal, total.signal]);
+      let response: Response | undefined;
       try {
+        signal.throwIfAborted();
         let current = raw.trim();
         let hops = 0;
         for (;;) {
           // 每一跳都重跑判据：这是"只校验输入 URL 等于没校验"的正解。
-          const u = await assertPublicUrl(current, resolve, "web_fetch");
-          const res = await doFetch(u.href, {
+          const target = await withAbort(signal, () => assertPublicUrlAndResolve(current, resolve, "web_fetch"));
+          const u = target.url;
+          signal.throwIfAborted();
+          const res = response = await doFetch(u.href, {
             redirect: "manual",
-            signal: guard.signal,
-            headers: { accept: "text/html,application/xhtml+xml,text/plain,application/json;q=0.9,*/*;q=0.5" },
-          });
+            signal,
+            headers: {
+              accept: "text/html,application/xhtml+xml,text/plain,application/json;q=0.9,*/*;q=0.5",
+              "accept-encoding": "gzip, deflate, br",
+            },
+          }, target.addresses);
+          signal.throwIfAborted();
           guard.bump();
           const loc = res.headers?.get?.("location");
           if (res.status >= 300 && res.status < 400 && loc !== undefined && loc !== null && loc !== "") {
+            await res.body?.cancel().catch(() => {});
+            signal.throwIfAborted();
             if (++hops > MAX_REDIRECTS) {
               return { ok: false, output: `web_fetch: 重定向超过 ${String(MAX_REDIRECTS)} 跳，已停止（最终目标 ${u.href}）` };
             }
@@ -146,14 +313,21 @@ export function makeWebFetch(deps: WebFetchDeps = {}): Tool {
             continue;
           }
           if (!res.ok) {
+            await res.body?.cancel().catch(() => {});
+            signal.throwIfAborted();
             return { ok: false, output: `web_fetch: ${u.href} 返回 HTTP ${String(res.status)}${res.statusText !== "" ? " " + res.statusText : ""}` };
           }
           const ct = res.headers?.get?.("content-type") ?? null;
-          const body = await readBodyCapped(res, MAX_BODY_BYTES, guard);
+          const body = await readBodyCapped(res, MAX_BODY_BYTES, guard, { oversizedHeader: "truncate" }).catch(async (error) => {
+            await res.body?.cancel().catch(() => {});
+            throw error;
+          });
+          signal.throwIfAborted();
           guard.bump();
           const text = isHtml(ct) ? htmlToText(body.text) : body.text;
           if (text.trim() === "") {
-            return { ok: false, output: `web_fetch: ${u.href} 响应体还原后为空（content-type: ${ct ?? "未声明"}，原始 ${String(body.bytes)} 字节）` };
+            const why = body.capped ? `读取达到 ${String(MAX_BODY_BYTES / 1024 / 1024)}MB 上限，前缀还原后为空，页面可能不完整` : "响应体还原后为空";
+            return { ok: false, output: `web_fetch: ${u.href} ${why}（content-type: ${ct ?? "未声明"}，原始 ${String(body.bytes)} 字节）` };
           }
           const ring = createOutputRing(MODEL_TEXT_BYTES, WEB_CONTENT_TRUNCATION_HINT);
           ring.push(text);
@@ -161,9 +335,13 @@ export function makeWebFetch(deps: WebFetchDeps = {}): Tool {
         }
       } catch (err) {
         // 停滞与出网失败都走这里：说清是哪种，别让模型拿到一句 "fetch failed" 自己猜。
-        const msg = err instanceof Error ? err.message : String(err);
-        return { ok: false, output: `web_fetch 失败: ${msg}` };
+        const cause = signal.aborted ? signal.reason : err;
+        const msg = cause instanceof Error ? cause.message : String(cause);
+        const cancelled = ctx.signal?.aborted === true && signal.reason === ctx.signal.reason;
+        return { ok: false, output: cancelled ? `[cancelled] web_fetch 已取消: ${msg}` : `web_fetch 失败: ${msg}` };
       } finally {
+        if (response?.body && !response.bodyUsed) void response.body.cancel().catch(() => {});
+        clearTimeout(totalTimer);
         guard.dispose();
       }
     },

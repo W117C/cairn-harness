@@ -79,8 +79,19 @@ async function readOne(ctx: ToolContext, rel: string, offsetRaw: unknown, limitR
   const st = await stat(abs).catch(() => null);
   if (st?.isDirectory()) {
     const entries = await readdir(abs);
-    const lines = entries.sort().map((e) => e + "/");
-    return rel + "/（目录，" + entries.length + " 项）\n" + lines.join("\n");
+    const sorted = entries.sort().map((e) => e + "/");
+    // 目录同样要受行/字节帽约束：旧实现把整目录条目 join 后直接返回，5 万项直接吃光上下文
+    // 且不给 truncated 信号（批量读复用本函数时同样无帽）。
+    const shown: string[] = [];
+    let used = 0;
+    for (const line of sorted) {
+      if (shown.length >= DEFAULT_MAX_LINES || used + Buffer.byteLength(line, "utf8") + 1 > READ_LIMIT_BYTES) break;
+      shown.push(line);
+      used += Buffer.byteLength(line, "utf8") + 1;
+    }
+    const truncated = shown.length < sorted.length;
+    return rel + "/（目录，" + entries.length + " 项）\n" + shown.join("\n")
+      + (truncated ? "\n[truncated] 仅列前 " + String(shown.length) + " 项（共 " + String(entries.length) + " 项）" : "");
   }
 
   // 大文件只读前缀（stat 已在上面取过，零额外系统调用）。

@@ -25,6 +25,8 @@ interface PendingApproval {
   agentId: string;
   resolve: (r: { approved: boolean; scope: AskScope; note?: string }) => void;
   timer: ReturnType<typeof setTimeout>;
+  /** 摘除 abort 监听器（normal/超时/取消三条出口都要调，否则 root.signal 上监听器累积）。 */
+  cleanup?: () => void;
 }
 
 export interface ApprovalsChainsSuperviseDeps {
@@ -71,10 +73,19 @@ export interface ApprovalsChainsSuperviseDeps {
   cleanupWrite: (w: WorkerHandle, why: "rejected") => Promise<void>;
 }
 
+/** 编排器实例序号（模块级）：让并发会话的审批 id 不撞号。 */
+let APPROVAL_INSTANCE_SEQ = 0;
+
 /** 本类只被 orchestrator.ts 使用（薄委托的宿主）；不导出到文件尾 barrel。 */
 export class ApprovalsChainsSupervise {
-  /** 审批 id 序号（三处协议共用：apr-<n>-<agentId | supervise | pipeline>）。 */
+  /** 审批 id 序号（三处协议共用：apr-<instance>-<n>-<agentId | supervise | pipeline>）。 */
   private approvalSeq = 0;
+  /** 编排器实例前缀：旧 id = `apr-1-pipeline`，两个并发会话各发第一张卡时 id 完全相同，
+   *  模块级 approvalOwners 后写覆盖先写 ⇒ 一张卡永远等不到决议、另一张批错会话。 */
+  private readonly approvalTag = (++APPROVAL_INSTANCE_SEQ).toString(36);
+  private nextApprovalId(suffix: string): string {
+    return "apr-" + this.approvalTag + "-" + String(++this.approvalSeq) + "-" + suffix;
+  }
   /** worker 终态等待（sequencer 逐环同步点；finishInner 解析）。 */
   private readonly terminalWaiters = new Map<string, Array<(r: { status: string; result: Extract<AgentEvent, { type: "agent_result" }> | null }) => void>>();
 
@@ -87,19 +98,31 @@ export class ApprovalsChainsSupervise {
    *  调用方只负责各自的 approval_requested / approval_resolved 载荷（三处字段不同）。 */
   private waitForApproval(id: string, agentId: string): Promise<{ approved: boolean; scope: AskScope; note?: string }> {
     return new Promise<{ approved: boolean; scope: AskScope; note?: string }>((resolve) => {
-      const timer = setTimeout(() => {
+      const settle = (r: { approved: boolean; scope: AskScope; note?: string }): void => {
+        clearTimeout(timer);
+        this.deps.signal.removeEventListener("abort", onAbort);
         this.deps.pendingApprovals.delete(id);
         this.deps.dropOwner(id);
-        resolve({ approved: false, scope: "once", note: "审批超时（fail-closed 拒绝）" });
+        resolve(r);
+      };
+      const onAbort = (): void => {
+        settle({ approved: false, scope: "once", note: "主会话已取消（审批 fail-closed 拒绝）" });
+      };
+      const timer = setTimeout(() => {
+        settle({ approved: false, scope: "once", note: "审批超时（fail-closed 拒绝）" });
       }, this.deps.approvalTimeoutMs);
-      this.deps.pendingApprovals.set(id, { agentId, resolve, timer });
+      this.deps.pendingApprovals.set(id, { agentId, resolve: settle, timer, cleanup: () => this.deps.signal.removeEventListener("abort", onAbort) });
       this.deps.markOwner(id);
+      // 主会话取消必须释放审批等待：旧实现只挂超时，取消后要等满 approvalTimeoutMs 才收束，
+      // 期间 worker 仍在等一张永远不会被决议的卡。
+      if (this.deps.signal.aborted) onAbort();
+      else this.deps.signal.addEventListener("abort", onAbort, { once: true });
     });
   }
 
   /** 租约相交的 spawn 审批（§4.4.3 与 turn 解耦：请求落流 + 等待订阅式应答；超时 fail-closed 拒绝）。 */
   async requestSpawnApproval(agentId: string, warning: string, conflicts: { agentId: string; resource: string }[]): Promise<boolean> {
-    const id = "apr-" + String(++this.approvalSeq) + "-" + agentId;
+    const id = this.nextApprovalId(agentId);
     const outcomePromise = this.waitForApproval(id, agentId);
     await this.deps.opts.emit({
       type: "approval_requested",
@@ -131,6 +154,7 @@ export class ApprovalsChainsSupervise {
       return { ok: false, error: "worker 永不写 always：scope=always 仅主会话可发（§11.7.6），本次批准被拒绝" };
     }
     clearTimeout(entry.timer);
+    entry.cleanup?.();
     this.deps.pendingApprovals.delete(id);
     this.deps.dropOwner(id);
     entry.resolve({ approved, scope });
@@ -387,7 +411,7 @@ export class ApprovalsChainsSupervise {
     callId: string,
     contract: { goal: string; budget: number; forbidden: string[]; maxStages: number },
   ): Promise<boolean> {
-    const id = "apr-" + String(++this.approvalSeq) + "-supervise";
+    const id = this.nextApprovalId("supervise");
     const outcomePromise = this.waitForApproval(id, "");
     const digest = superviseApprovalDigest(contract);
     await this.deps.opts.emit({
@@ -413,7 +437,7 @@ export class ApprovalsChainsSupervise {
 
   /** 整链审批（§4.4.3 与 turn 解耦；agent_id 缺省——链没有 worker 身份，审批以 id 路由）。 */
   private async requestChainApproval(callId: string, reasons: string[]): Promise<boolean> {
-    const id = "apr-" + String(++this.approvalSeq) + "-pipeline";
+    const id = this.nextApprovalId("pipeline");
     const outcomePromise = this.waitForApproval(id, ""); // 链没有 worker 身份，agentId 空串
     await this.deps.opts.emit({
       type: "approval_requested",
@@ -812,7 +836,7 @@ export class ApprovalsChainsSupervise {
     risk: RiskLevel,
     riskReasons: string[],
   ): Promise<{ approved: boolean; scope: AskScope; note?: string }> {
-    const id = "apr-" + String(++this.approvalSeq) + "-" + w.agentId;
+    const id = this.nextApprovalId(w.agentId);
     // 先登记等待、再 emit 请求（waitForApproval 内部同步登记；坑十六）
     const outcomePromise = this.waitForApproval(id, w.agentId);
     await this.deps.opts.emit({

@@ -1,21 +1,27 @@
 // Electron main 装配根（M1-6）：kernel-host 单点装配 + IPC 薄映射。
 // 装载通道：entry.cjs 注册 repo 根 tsx 后 require 本 TS 源——core 链零打包零漂移
 // （esbuild 打包会把 agent-runner 的 ROOT 漂进 <repo>/apps，fixtures 运行时静默落空）。
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell, webContents } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, safeStorage, screen, shell, webContents, type IpcMainInvokeEvent } from "electron";
+import { clampToWorkArea, readWindowState, writeWindowState } from "./window-state";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { stat } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { isAbsolute, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { INVOKE_CHANNELS, PUSH_CHANNELS } from "./channels";
+import { handleAttachmentThumb } from "./thumb";
 import type { InvokeChannel, PushChannel } from "./channels";
 // SEMA §3.5/§12：IPC_PROTOCOL_VERSION 是本文件从协议面取的唯一**值**（其余全 type import）——
 // wired 表的 protocolVersion 行把它递给 renderer 比对构建期注入的期望版本。
-import { IPC_PROTOCOL_VERSION, type AddProjectInput } from "../../../../src/main/ipc-protocol";
+import { IPC_PROTOCOL_VERSION, type AddProjectInput, type SessionQueueEntry } from "../../../../src/main/ipc-protocol";
 // M3 终审 Critical 修复：澄清/方案两卡自 M2 起端到端死路（wired 表漏行 ⇒ renderer 调用即
 // reject「No handler registered」）。与 decide 同式——main 进程 import core 出口后直调，
 // 不经 kernel-host 转手（两出口本就是为 IPC 处理函数而生的单例缝，见 agent-runner 各自头注）。
 import {
   handleAgentState,
+  handleListSkills,
+  handleSkillBody,
   handleCardAction,
   handleClarifySubmit,
   handleCompact,
@@ -30,9 +36,13 @@ import {
   handleSidechatCreate,
   handleSidechatPromote,
   handleSidechatState,
+  resolveRunModel,
   serveScheduler,
 } from "../../../../src/main/agent-runner";
+import { suggestNextMessage } from "../../../../src/main/suggest-next";
 import { handleMemoryDelete } from "../../../../src/main/memory-handlers";
+import { closeAllLspClients, killAllLspClientsSync } from "../../../../src/tools/lsp";
+import { killAllTrackedChildren } from "../../../../src/tools/process";
 import {
   getSettings,
   handleProviderKeyDelete,
@@ -51,18 +61,38 @@ import {
   handleSessionFork,
   handleSessionRename,
   handleSessionRevert,
+  handleChangeDiff,
+  handleSnapshotRestore,
+  handleWorkspaceListDir,
+  handleWorkspaceReadText,
   handleSessionSetArchived,
   handleSessionSetPinned,
 } from "../../../../src/main/session-handlers";
+import { getLastWorkspace } from "../../../../src/main/runner-workspace";
+import { TerminalHost } from "./terminal-host";
+import { BrowserHost } from "./browser-host";
 import type { ClarifyAnswerMap } from "../../../../src/events";
 import { installProviderKeyBackend } from "../../../../src/main/provider-keys";
+import { installSafeStorageBackend } from "../../../../src/agent/plugins/secrets";
+import { currentPluginRuntime } from "../../../../src/agent/plugins";
 import { injectStoredProviderKey } from "../../../../src/main/provider-key-inject";
-import { createKernelHost } from "./kernel-host";
+import { createKernelHost, canonicalWorkspacePath } from "./kernel-host";
+import { isAppShellUrl } from "./shell-url";
 import { ProjectRegistry } from "../../../../src/main/project-registry";
 import { loadCustomProviders } from "../../../../src/main/custom-provider-store";
 import { installCustomProviders, installedCustomProviders } from "../../../../src/providers/registry";
 import { discoverForProviderSetup, prepareCustomProvider, commitCustomProvider } from "../../../../src/main/provider-setup";
 import { createProjectFolder } from "../../../../src/main/project-create";
+import { createProjectFromTemplate, diagnoseProjectDirectory, templateCatalog } from "../../../../src/main/project-templates";
+import { PreviewRuntime } from "../../../../src/main/project-preview";
+import { exportProject } from "../../../../src/main/project-export";
+import { checkProviderConnection } from "../../../../src/main/provider-connection";
+import { resolveEntry } from "../../../../src/main/workspace-fs";
+import { readCapabilities } from "../../../../src/main/doctor";
+import { gitClone, gitStatus } from "../../../../src/main/git-ops";
+import { searchWorkspace } from "../../../../src/main/workspace-search";
+import { saveTempFile, cleanupPasteTempFiles } from "./temp-file";
+import { quitWarningMessage, shouldWarnBeforeQuit } from "./quit-guard";
 import type { DiscoveryProtocol } from "../../../../src/providers/discovery";
 import type { ProviderSaveRequest } from "../../../../src/main/ipc-protocol";
 
@@ -74,6 +104,31 @@ const reinjectSavedProviderKey = injectStoredProviderKey;
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const distElectron = join(here, "..", "..", "dist-electron");
+
+// ---- v7 朗读宿主（§2.2 消息操作条 read aloud）----
+// macOS 系统 say：无 npm 依赖、无网络、进程随应用退出清理；重复调用先停上一条（一次只念一条）。
+let speakProc: { kill: () => void } | null = null;
+function stopSpeakingNow(): void {
+  if (speakProc !== null) {
+    try { speakProc.kill(); } catch { /* 已退出 */ }
+    speakProc = null;
+  }
+}
+
+// ---- §2.1 完成通知：会话 run 收束且窗口整体失焦时发 OS 通知 ----
+// 近似口径（如实记）：渲染层没有「你正在看哪个会话」的主进程镜像，这里用「窗口整体失焦 = 你不在看」
+// 作判据——聚焦时不发（你就在跟前看）；失焦时哪怕看的是别家窗口也发（宁可多一条不丢一条）。
+function maybeNotifyRunSettled(sessionId: string, ok: boolean, error?: string): void {
+  if (Notification.isSupported() === false) return;
+  if (BrowserWindow.getAllWindows().some((w) => w.isFocused())) return;
+  const title = ok ? "Cairn · 会话完成" : "Cairn · 会话未完成";
+  const body = ok ? `会话「${sessionId}」本轮已收束。` : `会话「${sessionId}」本轮未完成：${error ?? "未知原因"}`;
+  try {
+    new Notification({ title, body }).show();
+  } catch (err) {
+    console.error("[notify] 系统通知失败（不阻运行）:", err instanceof Error ? err.message : String(err));
+  }
+}
 
 // CAIRN_SMOKE userData 隔离（终审 #3，data-loss 防线）：冒烟会 seed settings.json，落真实 userData
 // 就是覆写用户数据——先把 userData 指到 mkdtemp 临时目录，seed 与 Electron 存储全部落隔离面。
@@ -98,6 +153,12 @@ const workspace = process.env.CAIRN_DESKTOP_WORKSPACE
 if (app.isPackaged && process.env.CAIRN_DESKTOP_WORKSPACE === undefined) {
   mkdirSync(join(userData, "workspace"), { recursive: true });
 }
+
+/** 活动工作区上下文（2026-10-17）：渲染层切项目/开会话时经 IPC 上报。工作区类操作
+ *  （diff / 文件窗格 / 回滚 / 快照还原 / 路径动作）优先用它，缺省才回落「最近一次 run」。
+ *  修的是冷启动实证：没跑过 run 时这些面板全部报「没有已知的工作区」。 */
+let workspaceContext: string | null = null;
+const resolveWorkspace = (): string | null => workspaceContext ?? getLastWorkspace();
 
 // 自定义 provider（工作区的 `.agent/providers.json`）：与 CLI **同一条装载路径**，而且必须在
 // 任何一次 run 之前装上（provider 解析、档位表、适配器 baseURL 三处都读它）。
@@ -150,6 +211,31 @@ const host = createKernelHost({
   },
 });
 
+// v5 terminal 窗格：PTY 宿主（推送用与 kernel host 同一广播面）。退出时 killAll 不留孤儿 shell。
+const terminalHost = new TerminalHost((e) => {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send(
+      PUSH_CHANNELS[e.kind === "data" ? "onTerminalData" : "onTerminalExit"],
+      e.kind === "data" ? { id: e.id, data: e.data } : { id: e.id, code: e.code },
+    );
+  }
+});
+
+// v5 browser 窗格：WebContentsView 宿主（独立干净 profile）；视图挂在当前主窗口上。
+const browserHost = new BrowserHost(
+  // 优先当前聚焦窗口：弹出窗格里的浏览器页必须挂到 popout，而不是恒挂主窗（getAllWindows()[0]）。
+  () => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null,
+  (state) => {
+    for (const win of BrowserWindow.getAllWindows()) win.webContents.send(PUSH_CHANNELS.onBrowserState, state);
+  },
+);
+
+// v6 项目预览运行时：static 走进程内静态服务，vite 起受控子进程（命令写死在 core，见其头注）。
+// 状态推送与 browserHost 同一条广播面；退出时由 will-quit 全部回收（不留孤儿 dev server）。
+const previewRuntime = new PreviewRuntime({}, (snapshot) => {
+  for (const win of BrowserWindow.getAllWindows()) win.webContents.send(PUSH_CHANNELS.onPreviewState, snapshot);
+});
+
 // CX-01 项目注册表（M3-3 修复轮接线）：构造注入路径落 userData/projects.json（project-registry.ts:125
 // 构造面 = new ProjectRegistry(filePath)）。文件不存在是空默认、结构损坏显式失败不静默覆盖；
 // CAIRN_SMOKE 的 userData 已隔离到 mkdtemp，不碰真实数据。
@@ -183,7 +269,15 @@ void (async () => {
 // addProject 一行仍记 M3-3 修复轮的语义：透传之外在成功后同步 host.addWorkspace(record.path)，
 // 新工作区并入 host 扫描面（main 进程内直调，不经 IPC、renderer 无感知自动生效）。
 const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
-  run: (req) => host.run(req as never),
+  // §2.1 完成通知的挂点：run 收束后（会话模式）窗口失焦则发系统通知；不改变 run 的任何语义。
+  run: async (req) => {
+    const sessionId = (req as { sessionId?: string } | null)?.sessionId;
+    const res = await host.run(req as never);
+    if (typeof sessionId === "string" && sessionId !== "") {
+      maybeNotifyRunSettled(sessionId, res.ok === true, res.error);
+    }
+    return res;
+  },
   decide: (askId, approved, scope) => host.decide(askId as string, approved as boolean, scope as never),
   // M3 终审 Critical（wired 表漏行三连之三、四）：channels 表/preload/AgentApi 自 M2 起有
   // submitClarify 与 decidePlan，App.tsx（澄清卡/方案卡 onSubmit/onDecide）也早已在调，
@@ -205,12 +299,17 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // createSession 首参 M3 起是工作区（原 name 槽位被 M3 接口接管）；渲染层现不传 ⇒ 缺省 activeWorkspace
   createSession: (workspace) => host.createSession(workspace as string | undefined),
   openSession: (id) => host.openSession(id as string),
+  queueGet: (sessionId) => host.queueGet(sessionId as string),
+  queueSet: (sessionId, items) => host.queueSet(sessionId as string, items as SessionQueueEntry[]),
   // M3 小修（M1 六通道清单遗留缺口）：channels.ts 有 getProviderInfo 通道、preload 程序化桥自动
   // 透传、App.tsx 挂载即调，wired 表却从没这行 ⇒ renderer 调用即 reject「No handler registered」，
   // 模型选择器自 M2 起静默失效（providerInfo 恒 null）。实现直走 settings-handlers 的同名 read
   // model（无参异步，kernel-host 已注入 resolveProviderKind 依赖面），选择器恢复真值目录。
   getProviderInfo: () => providerInfo(),
-  listProjects: () => projectRegistry.list(),
+  // v11：listProjects 收 options（recentFirst = 「最近打开」菜单序；includeRemoved = 含软删除记录）。
+  listProjects: (options) => projectRegistry.list(options as { includeRemoved?: boolean; recentFirst?: boolean } | undefined),
+  // v11：最近打开标（打开会话/切项目时 renderer 调用；未知 id 拒绝上抛）。
+  touchProject: (id) => projectRegistry.touch(String(id)),
   // ③「新建项目」：建同名文件夹 → 登记 → 同步进 host 工作区面。
   // 两段失败分开报：建目录失败（名字非法/已存在/没权限）与登记失败是两回事，
   // 而且登记失败时目录**已经建好了** —— 消息里必须给出那个路径，否则用户找不到它。
@@ -233,6 +332,69 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
       };
     }
   },
+  // v6 模板建项：一次拿到**可运行的项目**（模板文件 + .cairn/project.json），登记后并入工作区面。
+  // 两段失败分开报与 createProject 同式；区别是这里回滚由 core 服务负责（不把半个项目留给用户）。
+  projectTemplates: () => Promise.resolve(templateCatalog()),
+  projectCreateFromTemplate: async (req) => {
+    const r = req as { name?: string; templateId?: string; parentDir?: string };
+    const made = createProjectFromTemplate({
+      name: String(r.name ?? ""),
+      templateId: String(r.templateId ?? ""),
+      ...(typeof r.parentDir === "string" && r.parentDir !== "" ? { parentDir: r.parentDir } : {}),
+    });
+    if (!made.ok) return { ok: false, reason: made.reason, message: made.message };
+    try {
+      const record = await projectRegistry.add({ name: made.name, path: made.path });
+      host.addWorkspace(record.path);
+      return { ok: true, name: made.name, path: record.path, parentDir: made.parentDir, templateId: made.templateId };
+    } catch (err) {
+      return {
+        ok: false,
+        reason: "register-failed",
+        message: `项目已建好：${made.path}，但登记失败（${err instanceof Error ? err.message : String(err)}）——可以用「添加已有文件夹」把它加进来`,
+      };
+    }
+  },
+  // v6 预览运行时（宿主见 project-preview.ts；状态经 onPreviewState 推送）。
+  previewStart: (projectPath) => previewRuntime.start(String(projectPath)),
+  previewStop: (projectPath) => previewRuntime.stop(String(projectPath)),
+  previewStatus: (projectPath) => Promise.resolve(previewRuntime.status(String(projectPath))),
+  // v12 导入诊断（ADR 0004 §4）：只读判定，不写盘、不登记——诊断只提示不阻断。
+  projectDiagnose: (projectPath) => diagnoseProjectDirectory(String(projectPath)),
+  // v6 导出：位置由用户选（系统目录选择器）；取消不是错误，不弹失败条。
+  projectExport: async (projectPath) => {
+    const picked = await dialog.showOpenDialog({ title: "选择导出位置（将在其中新建同名文件夹）", properties: ["openDirectory", "createDirectory"] });
+    const destParent = picked.filePaths[0];
+    if (destParent === undefined) return { ok: false, error: "已取消导出", cancelled: true };
+    const r = exportProject(String(projectPath), destParent);
+    if (!r.ok) return { ok: false, error: r.message };
+    return { ok: true, dest: r.dest, copiedFiles: r.copiedFiles };
+  },
+  // v6 连接自检：GET 模型清单（不产生 token 费用）。
+  providerCheck: (provider) => checkProviderConnection({ provider: String(provider) }),
+  // 斜杠菜单技能清单（2026-10-18）：显式传工作区，切项目时不吃竞态。
+  listSkills: (workspace) => handleListSkills(String(workspace ?? "") || workspaceContext),
+  // 技能正文（§8 #15）：同上按显式工作区读取。
+  skillBody: (name, workspace) => handleSkillBody(String(name ?? ""), String(workspace ?? "") || workspaceContext),
+  // 导出对话为 .md（2026-10-18）：原生保存面板；取消是合法结果（canceled），不是错误。
+  exportTranscript: async (markdown, suggestedName) => {
+    const raw = String(suggestedName ?? "").trim();
+    const name = raw === "" ? "cairn-transcript.md" : raw;
+    const opts = {
+      title: "导出对话",
+      defaultPath: join(app.getPath("downloads"), name),
+      filters: [{ name: "Markdown", extensions: ["md"] }],
+    };
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
+    const r = win !== null ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+    if (r.canceled || r.filePath === undefined || r.filePath === "") return { ok: false as const, canceled: true as const };
+    try {
+      writeFileSync(r.filePath, String(markdown ?? ""), "utf8");
+      return { ok: true as const, path: r.filePath };
+    } catch (err) {
+      return { ok: false as const, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
   addProject: (input) =>
     projectRegistry.add(input as AddProjectInput).then((record) => {
       host.addWorkspace(record.path);
@@ -241,38 +403,159 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // M4-5 缩面对称（addWorkspace 的逆操作）：removeProject 成功后同步 host.removeWorkspace(record.path)
   // ——被移除工作区退出扫描面（listSessions 不再出现该组）、归属表/漂移基线同步清理；该组有在跑
   // 会话 ⇒ host.removeWorkspace fail-visible throw（IPC reject 上抛 renderer，不静默缩面）。
-  removeProject: (id) =>
-    projectRegistry.remove(id as string).then((record) => {
-      host.removeWorkspace(record.path);
-      return record;
-    }),
+  removeProject: async (id) => {
+    // 先摘工作区（有在跑会话会 throw）再软删注册表：旧顺序先删注册表，throw 时项目已消失
+    // 但扫描面还在——用户看到「移除失败」，实际上项目列表里已经没了。
+    const record = await projectRegistry.get(id as string);
+    host.removeWorkspace(record.path);
+    return await projectRegistry.remove(id as string);
+  },
   // M4-5：dialog 选目录（M3 deferred 收口，侧栏添加表单「浏览…」的后端）：非模态 showOpenDialog
   // 只选目录（openDirectory）；取消/关窗 ⇒ filePaths 空 ⇒ null——renderer 据此保留手输兜底。
   pickDirectory: async () => {
     const picked = await dialog.showOpenDialog({ properties: ["openDirectory"] });
     return picked.filePaths[0] ?? null;
   },
-  getState: () => handleAgentState(),
+  // v8：dialog 选文件（附件引用「选择文件…」的后端，业主 21.56 反馈「为什么还要粘贴路径」）：
+  // 非模态多选（openFile）；取消/关窗 ⇒ 空 ⇒ null（不假报空数组）——路径手输照旧兜底。
+  pickFiles: async () => {
+    const picked = await dialog.showOpenDialog({ properties: ["openFile", "multiSelections"] });
+    return picked.filePaths.length > 0 ? picked.filePaths : null;
+  },
+  // v9：Tab 想下一条（业主裁 A②）：按「当前选中模型（会话覆盖 > 设置缺省）」单发一次上下文建议。
+  // 不走会话归属/漂移——单发不进会话流、不落 JSONL；解析失败（模型未登记等）也分类返回，
+  // renderer 原样上屏，不抛裸异常。
+  suggestNext: async (input) => {
+    const req = input as { model: string | null; excerpt: string };
+    try {
+      const settings = await getSettings();
+      const selection = resolveRunModel({ provider: settings.provider, model: settings.model }, req.model ?? undefined);
+      return await suggestNextMessage({ selection, excerpt: req.excerpt });
+    } catch (error) {
+      const brief = error instanceof Error ? error.message : String(error);
+      return { ok: false as const, reason: "error" as const, message: brief, hint: `想建议失败（${brief.slice(0, 60)}）——去设置检查模型，或再按一次 Tab。` };
+    }
+  },
+  getState: () => handleAgentState(workspaceContext),
   getOnboarding: () => onboardingGroups(),
   getSettings: () => getSettings(),
   setSettings: (patch) => setSettings(patch as never),
-  compact: (req) => handleCompact(req as never),
+  compact: (sessionId) => handleCompact({ sessionId: sessionId as string | undefined }),
   setGoal: (req) => handleGoalSet(req as never),
   cardAction: (req) => handleCardAction(req as never),
   renameSession: (oldId, newName) => handleSessionRename(oldId as string, newName as string),
   deleteSession: (id) => handleSessionDelete(id as string),
   // M8 分叉（v2.15）：保留前 N 轮 → 新会话 `<id>-f<N>`；与 CLI --fork/--from 同口径（fork-cli 单源）。
-  forkSession: (id, round) => handleSessionFork(id as string, round as number),
+  forkSession: (id, round, unique) => handleSessionFork(id as string, round as number, unique === true),
   // #7 文件级回滚（v2.16）：把第 N 轮主会话改过的文件还原成该轮之前的原件（源自 D7 覆盖前快照）。
-  revertTurn: (id, round) => handleSessionRevert(id as string, round as number),
+  // 活动工作区上下文（desktop 专用）：空串清除；写入口只收字符串，非法值留给后续操作 fail-visible。
+  setWorkspaceContext: async (path) => {
+    const p = String(path ?? "");
+    if (p === "") { workspaceContext = null; return { ok: true as const }; }
+    // 只接受**已注册**的工作区：`/` 也是合法路径，不校验就把整盘变成文件窗格/预览的边界
+    // （workspaceReadText("etc/hosts")、workspacePathAction("Applications/X.app","open")）。
+    let canonical: string;
+    try { canonical = canonicalWorkspacePath(p); } catch { return { ok: false as const, error: "工作区路径不可解析" }; }
+    const known = new Set<string>([canonicalWorkspacePath(workspace)]);
+    const last = getLastWorkspace();
+    if (last !== null) known.add(canonicalWorkspacePath(last));
+    try {
+      for (const record of await projectRegistry.list()) known.add(canonicalWorkspacePath(record.path));
+    } catch { /* 注册表读失败：按默认/最近工作区判，绝不因此放宽为任意路径 */ }
+    if (!known.has(canonical)) {
+      return { ok: false as const, error: `未注册的工作区，已拒绝：${p}` };
+    }
+    workspaceContext = canonical;
+    return { ok: true as const };
+  },
+  revertTurn: (id, round) => handleSessionRevert(id as string, round as number, workspaceContext),
+  // v4 变更审阅（diff 窗格逐 hunk）。
+  changeDiff: (req) => handleChangeDiff(req as never, workspaceContext),
+  // v5 file 窗格（只读浏览）。
+  workspaceListDir: (relPath) => handleWorkspaceListDir(relPath as string, workspaceContext),
+  workspaceReadText: (relPath) => handleWorkspaceReadText(relPath as string, workspaceContext),
+  // v7 路径动作（§2.3 右键菜单）：解析段（存在性 + 越界拒绝）在 workspace-fs（纯 Node 判卷面），
+  // shell 调用留在壳。openPath 空串 = 成功（Electron 口径）。
+  workspacePathAction: async (relPath, action) => {
+    const ws = resolveWorkspace();
+    if (ws === null) return { ok: false, error: "工作区未知（先跑一场会话或选工作区）" };
+    const resolved = await resolveEntry(ws, String(relPath ?? ""));
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    const act = String(action);
+    if (act === "abs") return { ok: true, path: resolved.abs };
+    if (act === "reveal") {
+      shell.showItemInFolder(resolved.abs);
+      return { ok: true, path: resolved.abs };
+    }
+    if (act === "open") {
+      const err = await shell.openPath(resolved.abs);
+      return err === "" ? { ok: true, path: resolved.abs } : { ok: false, error: err };
+    }
+    return { ok: false, error: `未知路径动作：${act}` };
+  },
+  // v7 朗读（macOS say；非 darwin fail-visible 不装样子）。上限 8000 字符防超长正文卡进程。
+  speakText: (text) => {
+    const t = String(text ?? "").trim();
+    if (t === "") return Promise.resolve({ ok: false, error: "没有可朗读的文本" });
+    if (process.platform !== "darwin") return Promise.resolve({ ok: false, error: "朗读目前仅支持 macOS（系统 say）" });
+    stopSpeakingNow();
+    const proc = spawn("say", ["--", t.slice(0, 8000)], { stdio: "ignore" });
+    speakProc = proc;
+    proc.on("exit", () => { if (speakProc === proc) speakProc = null; });
+    proc.on("error", (err) => {
+      if (speakProc === proc) speakProc = null;
+      console.error("[speak] say 启动失败:", err.message);
+    });
+    return Promise.resolve({ ok: true });
+  },
+  stopSpeaking: () => {
+    stopSpeakingNow();
+    return Promise.resolve({ ok: true });
+  },
+  // v5 terminal 窗格（PTY 宿主见 terminal-host.ts）。
+  // 与 diff/文件窗格/回滚同一条工作区解析：活动上下文优先，最近 run 只做兜底。
+  terminalStart: () => terminalHost.start(resolveWorkspace()),
+  terminalWrite: (id, data) => Promise.resolve(terminalHost.write(id as string, data as string)),
+  terminalKill: (id) => { terminalHost.kill(id as string); return Promise.resolve(); },
+  // v5 窗格弹出：独立窗口（同壳参数；#pane=<kind>[&session=<id>] 路由）。
+  panePopout: (kind, sessionId) => {
+    const win = new BrowserWindow({
+      width: 760,
+      height: 620,
+      titleBarStyle: "hiddenInset",
+      webPreferences: { preload: join(distElectron, "preload.cjs"), contextIsolation: true, nodeIntegration: false },
+    });
+    hardenAppWindow(win);
+    const hash = `pane=${encodeURIComponent(kind as string)}${typeof sessionId === "string" && sessionId !== "" ? `&session=${encodeURIComponent(sessionId)}` : ""}`;
+    if (process.env.VITE_DEV_SERVER_URL) void win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#${hash}`);
+    else void win.loadFile(join(distElectron, "..", "dist", "index.html"), { hash });
+    return Promise.resolve({ ok: true });
+  },
+  // v5 browser 窗格（WebContentsView 宿主见 browser-host.ts）。
+  browserOpen: (id, url) => Promise.resolve(browserHost.open(id as string, url as string)),
+  browserBounds: (id, rect) => { browserHost.setBounds(id as string, rect as { x: number; y: number; width: number; height: number }); return Promise.resolve(); },
+  browserNav: (id, action) => { browserHost.navigate(id as string, action as "back" | "forward" | "reload"); return Promise.resolve(); },
+  browserClose: (id) => { browserHost.close(id as string); return Promise.resolve(); },
+  // v7：清除浏览数据（keepCookies 语义对齐「Keep cookies」）+ 元素选择（§3.6 ⌘⇧S）。
+  browserClearData: (id, opts) => browserHost.clearData(String(id), (opts as { keepCookies?: boolean } | undefined)?.keepCookies === true),
+  browserSetAllowedHosts: (hosts) => {
+    browserHost.setAllowedHosts(Array.isArray(hosts) ? (hosts as unknown[]).filter((h): h is string => typeof h === "string") : []);
+    return Promise.resolve({ ok: true });
+  },
+  browserPickElement: (id) => browserHost.pickElement(String(id)),
   // v2.16 用户反馈沉淀（赞/踩）：sidecar feedback.jsonl，append-only、不进事件流。
   submitFeedback: (req) => handleFeedbackSubmit(req as never),
   listFeedback: (sessionId) => handleFeedbackList(sessionId as string),
   setSessionPinned: (sessionId, pinned) => handleSessionSetPinned(sessionId as string, pinned as boolean),
   setSessionArchived: (sessionId, archived) => handleSessionSetArchived(sessionId as string, archived as boolean),
   assignSessionProject: (sessionId, projectId) => handleSessionAssignProject(sessionId as string, projectId as string | null),
-  deleteMemory: (scope, topic) => handleMemoryDelete(scope as never, topic as string),
-  pluginDecide: (plugin, trusted) => handlePluginDecide(plugin as string, trusted as boolean),
+  deleteMemory: (scope, topic) => handleMemoryDelete(scope as never, topic as string, workspaceContext),
+  pluginDecide: (plugin, trusted, workspace) => handlePluginDecide(plugin as string, trusted as boolean, String(workspace ?? "") || workspaceContext),
+  pluginUserConfigSet: (plugin, values) => {
+    const rt = currentPluginRuntime();
+    if (rt === null) return Promise.resolve({ ok: false, error: "插件运行时未装载（先跑一场会话）" });
+    return rt.setUserConfig(String(plugin), (values ?? {}) as Record<string, unknown>);
+  },
   sidechatCreate: (parentSessionId, name) => handleSidechatCreate(parentSessionId as string, name as string | undefined),
   sidechatAsk: (sidechatId, message, parentSessionId) =>
     handleSidechatAsk(sidechatId as string, message as string, { parentSessionId: parentSessionId as string | undefined }),
@@ -370,6 +653,34 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   },
   // SEMA §3.5/§12：协议版本握手（同步返回 number，ipcMain.handle 自动包成 resolve）。
   protocolVersion: () => IPC_PROTOCOL_VERSION,
+  // 能力在场性：搜索端点配没配。口径与 CLI --doctor 的 search 那一格同源（同一个 loadSearchConfig）。
+  capabilities: async () => await readCapabilities(resolveWorkspace() ?? workspace, join(app.getPath("userData"), "settings.json")),
+  // v11 主界面重做批（七行）——
+  // git 两闸：读数无副作用；克隆 URL 白名单 + 目标已存在即拒（都在 core 模块内判）。
+  gitStatus: (path) => gitStatus(String(path)),
+  gitClone: (req) => {
+    const r = req as { url?: string; parentDir?: string };
+    return gitClone(String(r.url ?? ""), String(r.parentDir ?? ""));
+  },
+  // 项目内模糊搜索（@ 引用数据面；只读文件名，不读文件内容）。
+  workspaceSearch: (ws, query) => searchWorkspace(String(ws), String(query)),
+  // ⌘V 粘贴落临时文件（字节帽 20MB 在核心模块内判；校验先于 electron 动态导入）。
+  saveTempFile: (req) => {
+    const r = req as { name?: string; bytes?: unknown };
+    return saveTempFile(String(r.name ?? ""), r.bytes);
+  },
+  // 快照还原（检查器「撤销此文件改动」；工作区口径与 changeDiff 同——最近一次 run 的工作区）。
+  snapshotRestore: (req) => handleSnapshotRestore(req as { path?: string; snapshotId?: string }, workspaceContext),
+  // Finder 显示（项目右键菜单 / 项目外附件 chip 的落点）。只显示不打开；绝对路径 + 存在性前置。
+  attachmentThumb: (path) => handleAttachmentThumb(path as string),
+  revealInFinder: async (path) => {
+    const p = String(path ?? "");
+    if (!isAbsolute(p)) return { ok: false, error: "不是绝对路径" };
+    const st = await stat(p).catch(() => null);
+    if (st === null) return { ok: false, error: "路径不存在" };
+    shell.showItemInFolder(p);
+    return { ok: true };
+  },
 };
 // 注册循环（B3 修复）：去掉旧的 `if (handler)` **静默跳过**——那正是漏行三连的温床（renderer
 // 调到「No handler registered」，被 void 吞掉、UI 无任何反馈）。wired 现为全键 Record，缺键
@@ -388,17 +699,88 @@ for (const [key, channel] of Object.entries(INVOKE_CHANNELS) as [InvokeChannel, 
     }
     throw new Error(`wired 表缺 handler：${key}（通道 ${channel}）——补实现，或写进 UNWIRED_FAIL_LOUD 并注记理由`);
   }
-  ipcMain.handle(channel, (_e, ...args: unknown[]) => handler(...args));
+  ipcMain.handle(channel, (event, ...args: unknown[]) => {
+    if (!isTrustedIpcSender(event)) {
+      throw new Error(`IPC 来源不可信，已拒绝：${channel}`);
+    }
+    return handler(...args);
+  });
 }
 void webContents; // 显式留痕：推送经 BrowserWindow.getAllWindows()
 
+/** 应用窗口的导航硬化（2026-10-17）：外链一律交给系统浏览器，绝不在带 preload 的应用
+ *  窗口里加载外部页面——应用壳的 preload 暴露 window.agent（全量 IPC），把渲染层交给
+ *  远程页面等于把本机能力一起交出去。只放行「应用壳自身」的导航（dist/index.html 或
+ *  dev server 根）；http(s) 外链 shell.openExternal，其余协议直接丢。 */
+const shellUrlOptions = { devServerUrl: process.env.VITE_DEV_SERVER_URL ?? "", appPath: app.getAppPath() };
+const isShellUrl = (raw: string): boolean => isAppShellUrl(raw, shellUrlOptions);
+
+/** IPC 来源校验：只有应用壳页面（含 popout，同一 dist/index.html）能调 window.agent。
+ *  浏览器窗格没有 preload；将来新增窗口/壳内 XSS 也不该直接拿到文件读、终端、provider key。 */
+function isTrustedIpcSender(event: IpcMainInvokeEvent): boolean {
+  try {
+    const frameUrl = event.senderFrame?.url ?? event.sender.getURL();
+    return isShellUrl(frameUrl);
+  } catch {
+    return false;
+  }
+}
+function openExternalSafe(raw: string): void {
+  try {
+    const u = new URL(raw);
+    if (u.protocol === "http:" || u.protocol === "https:") void shell.openExternal(u.href);
+  } catch { /* about:blank / 非法 URL：不打开 */ }
+}
+function hardenAppWindow(win: BrowserWindow): void {
+  const wc = win.webContents;
+  wc.setWindowOpenHandler(({ url }) => {
+    openExternalSafe(url);
+    return { action: "deny" };
+  });
+  wc.on("will-navigate", (event, url) => {
+    if (isShellUrl(url)) return;
+    event.preventDefault();
+    openExternalSafe(url);
+  });
+}
+
 const createWindow = () => {
+  // 上次的窗口位置/大小（2026-10-18）：夹到当前显示器工作区（换过屏/拔过副屏时旧坐标可能不可见）。
+  const statePath = join(app.getPath("userData"), "window-state.json");
+  const saved = readWindowState(statePath);
+  const bounds = saved === null ? null : clampToWorkArea(saved, screen.getDisplayMatching(saved).workArea);
   const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    ...(bounds === null ? {} : { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }),
+    ...(bounds === null ? { width: 1200, height: 800 } : {}),
+    minWidth: 880,
+    // 窗口位置/大小由本应用自己持久化（window-state.json）。
+    // 2026-10-18 修正：此前这里写 `restorable: false`，注释说是要关掉 macOS 的 NSWindow 状态恢复
+    // （系统会用 savedState 覆盖我们读回的 bounds）。但 **Electron 没有 restorable 这个选项**——
+    // 它既不在 BrowserWindowConstructorOptions 也不在 BaseWindowConstructorOptions 里
+    // （node_modules/electron/electron.d.ts 全文无此键），tsc 直接报 TS2353，桌面打包链是红的。
+    // 真实情况：macOS 的窗口状态恢复只在应用注册了 restoration 类（NSWindowRestoration
+    // protocol / Electron 的 supportsAutomaticWindowState）时才生效。本应用**从未注册**
+    // （入口 entry.cjs → src/main/index.ts 无任何 restore 相关调用），系统不会替我们还原窗口，
+    // 也就无所谓「覆盖」。真正防覆盖的是下面 createWindow 里 bounds 显式传入 + clampToWorkArea。
+    // 因此：删掉这个不存在的键，typecheck 恢复绿；行为不变（本来就没开系统恢复）。
     titleBarStyle: "hiddenInset",
     webPreferences: { preload: join(distElectron, "preload.cjs"), contextIsolation: true, nodeIntegration: false },
   });
+  if (saved?.maximized === true) win.maximize();
+  // 拖动/缩放防抖 400ms 落盘；关闭前再写一次（正常退出一定留住最后位置）。
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  const persistBounds = (): void => {
+    if (win.isDestroyed()) return;
+    writeWindowState(statePath, { ...win.getNormalBounds(), ...(win.isMaximized() ? { maximized: true } : {}) });
+  };
+  const scheduleSave = (): void => {
+    if (saveTimer !== null) clearTimeout(saveTimer);
+    saveTimer = setTimeout(persistBounds, 400);
+  };
+  win.on("resize", scheduleSave);
+  win.on("move", scheduleSave);
+  win.on("close", persistBounds);
+  hardenAppWindow(win);
   if (process.env.VITE_DEV_SERVER_URL) void win.loadURL(process.env.VITE_DEV_SERVER_URL);
   else void win.loadFile(join(distElectron, "..", "dist", "index.html"));
 
@@ -406,8 +788,8 @@ const createWindow = () => {
   // → 事件计数 → 自退。renderer 的 [cairn-smoke] console 行经 console-message 转发进 stdout。
   if (process.env.CAIRN_SMOKE === "1") {
     const t0 = Date.now();
-    win.webContents.on("console-message", (_details, _level, message) => {
-      if (message.includes("[cairn-smoke]")) console.log("[renderer]", message);
+    win.webContents.on("console-message", (event) => {
+      if (event.message.includes("[cairn-smoke]")) console.log("[renderer]", event.message);
     });
     win.webContents.on("did-finish-load", () => {
       const watchdog = setTimeout(() => {
@@ -428,6 +810,60 @@ const createWindow = () => {
             "window.agent.createSession().then((s) => s.id)",
           );
           console.log("[cairn-smoke] session:", sessionId);
+          const queueProbe = (await win.webContents.executeJavaScript(
+            `(async () => {
+               await window.agent.queueSet(${JSON.stringify(sessionId)}, [{ text: "恢复探针", attachments: [] }]);
+               const read = await window.agent.queueGet(${JSON.stringify(sessionId)});
+               await window.agent.queueSet(${JSON.stringify(sessionId)}, []);
+               const cleared = await window.agent.queueGet(${JSON.stringify(sessionId)});
+               return { read, cleared };
+             })()`,
+          )) as { read?: { items?: { text?: string }[] }; cleared?: { items?: unknown[] } };
+          console.log("[cairn-smoke] queue probe:", JSON.stringify(queueProbe));
+          const chainFailed: string[] = [];
+          // v6 产品链探针（第一批第 6/9 条的可执行判据）：模板建项 → 起预览 → main 侧抓真页面
+          // → 停预览。项目落 CAIRN_SMOKE 的隔离工作区（绝不碰用户家目录）；这条链同时被
+          // 打包后的二进制复跑（package.mjs 出来的 Cairn.app + CAIRN_SMOKE=1）。
+          const made = (await win.webContents.executeJavaScript(
+            `window.agent.projectCreateFromTemplate({ name: "smoke-project", templateId: "static-site", parentDir: ${JSON.stringify(workspace)} })`,
+          )) as { ok: boolean; path?: string; message?: string };
+          const started = made.ok && typeof made.path === "string"
+            ? ((await win.webContents.executeJavaScript(
+                `window.agent.previewStart(${JSON.stringify(made.path)})`,
+              )) as { status?: string; url?: string; stage?: string; message?: string })
+            : undefined;
+          let chainPageOk = false;
+          let chainPageError = "";
+          if (started?.status === "ready" && typeof started.url === "string") {
+            try {
+              const res = await fetch(started.url);
+              const html = await res.text();
+              chainPageOk = res.ok && html.length > 0;
+            } catch (err) {
+              chainPageOk = false;
+              chainPageError = err instanceof Error ? err.message : String(err);
+            }
+          }
+          const stopped = made.ok && typeof made.path === "string"
+            ? ((await win.webContents.executeJavaScript(
+                `window.agent.previewStop(${JSON.stringify(made.path)})`,
+              )) as { status?: string })
+            : undefined;
+          console.log(
+            "[cairn-smoke] product chain:",
+            JSON.stringify({
+              created: made.ok === true,
+              preview: started?.status,
+              stage: started?.stage,
+              pageOk: chainPageOk,
+              pageError: chainPageError || undefined,
+              stopped: stopped?.status,
+            }),
+          );
+          if (made.ok !== true) chainFailed.push(`模板建项失败：${made.message ?? "未知"}`);
+          else if (started?.status !== "ready") chainFailed.push(`预览未就绪：${started?.status ?? "未知"} ${started?.message ?? ""}`);
+          else if (!chainPageOk) chainFailed.push(`预览页面抓取失败：${started.url ?? ""}${chainPageError !== "" ? `（${chainPageError}）` : ""}`);
+          else if (stopped?.status !== "stopped") chainFailed.push(`预览停止回执异常：${stopped?.status ?? "未知"}`);
           // S7/②：**空闲态**的模型选择交互判据（必须在 run 之前 —— 跑起来之后
           // 输入框与选择器本来就该禁用，那时测不出"点得动"）。
           // C-31 思考行的真 DOM 探针（用户实测：以前它连点都点不开）
@@ -505,12 +941,14 @@ const createWindow = () => {
             await new Promise((r) => setTimeout(r, 200));
             const probe = (await win.webContents.executeJavaScript(
               `(async () => {
-                 const rows = [...document.querySelectorAll(".sidebar .session")];
-                 const t = rows.find((r) => (r.textContent || "").includes(${JSON.stringify(sessionId)}));
+                 // v5 组件栈重写把侧栏根类名从 .sidebar 改成 .side（aside.side）：探针跟着界面走，
+                 // 否则冒烟恒报"侧栏 0 行"——那是探针过期，不是产品没渲染（本轮实测定位）。
+                 const rows = [...document.querySelectorAll(".side .session")];
+                 const t = rows.find((r) => r.getAttribute("data-session-id") === ${JSON.stringify(sessionId)});
                  if (t) t.click();
                  let listed = -1;
                  try { listed = (await window.agent.listSessions()).length; } catch { listed = -2; }
-                 const aside = document.querySelector(".sidebar");
+                 const aside = document.querySelector(".side");
                  return { rows: rows.length, clicked: !!t, listed, text: (aside && aside.textContent) || "" };
                })()`,
             )) as { rows: number; clicked: boolean; listed: number; text: string };
@@ -580,8 +1018,12 @@ const createWindow = () => {
           console.log("[cairn-smoke] ui picker title:", pickerTitle);
           // 退出码编码判据：CAIRN_SMOKE 是可重跑门——判据不过必须非零退（CI 可判）
           const failed: string[] = [];
+          failed.push(...chainFailed);
           if (!run.ok) failed.push(`run ok:false${run.error ? `（${run.error}）` : ""}`);
           if (events < 1) failed.push(`事件计数 ${events} < 1`);
+          if (queueProbe.read?.items?.[0]?.text !== "恢复探针" || queueProbe.cleared?.items?.length !== 0) {
+            failed.push(`发送队列 IPC 往返失败：${JSON.stringify(queueProbe)}`);
+          }
           if (!sidebarClicked) failed.push(`侧栏未定位到会话 ${sessionId} 的条目行（真点击路径没走通）`);
           if (sidebarRows < 1) failed.push(`侧栏条目计数 ${sidebarRows} < 1（新建会话没出现在侧栏）`);
           if (!pickerTitle || !pickerTitle.startsWith("模型：")) {
@@ -606,6 +1048,10 @@ const createWindow = () => {
   }
 };
 app.whenReady().then(() => {
+  // 应用菜单（蓝本 §3.6）：刻意**不含 Close Window**——默认菜单的 ⌘W 会直接关门，
+  // 占掉了「关闭会话」这一键；自定义菜单后 ⌘W 落到渲染层（关会话回主页），窗口关闭走红灯。
+  // 保留 appMenu（关于/退出）、editMenu（复制粘贴剪切全选，缺了输入框就废）、
+  // viewMenu（重载/开发者工具/缩放/全屏）。
   // M4a 桌面端调度器接线（v2.14，§8 #18 在案缺口收口）：此前调度器长驻入口只在 CLI `--serve`，
   // 桌面端 schedule 通道全桥接、快照/CRUD 皆可调——但模块级 scheduler 恒 null ⇒ 快照恒空、
   // upsert/runNow 一律 fail-closed「调度器未初始化」（自动化面板由此成空壳）。
@@ -621,6 +1067,11 @@ app.whenReady().then(() => {
   // ★ 装配点必须在 ready 之后：Electron 文档钉死 Windows/Linux 的 isEncryptionAvailable() 以 ready 事件
   // 为前提（Linux 未 ready 恒 false）——顶层装配会让后端在那些平台**永不注入**（BYOK 静默全灭）。
   // 首场 run 只可能晚于 renderer 加载（whenReady → createWindow），注入先于一切 run 的语义不受影响。
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { role: "appMenu" },
+    { role: "editMenu" },
+    { role: "viewMenu" },
+  ]));
   installProviderKeyBackend(
     {
       isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
@@ -629,6 +1080,18 @@ app.whenReady().then(() => {
     },
     join(userData, "provider-keys.json"),
   );
+  // 插件 userConfig 的敏感值同样要有后端：此前 installSafeStorageBackend 全仓零调用点 ⇒
+  // getPluginSecret 恒 null、所有 sensitive 字段恒 missing（带字面占位符去连远端）。
+  if (!installSafeStorageBackend(
+    {
+      isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+      encryptString: (plain) => safeStorage.encryptString(plain),
+      decryptString: (payload) => safeStorage.decryptString(payload),
+    },
+    join(userData, "plugin-secrets.json"),
+  )) {
+    console.warn("[plugins] safeStorage 不可用：插件敏感 userConfig 将 fail-closed（拒绝存/取）");
+  }
   // 存过的 key 启动即解密注入各自 provider 的 env（env 优先：该家 env 已在 = 那一家零行为，注入面自带）。
   // fire-and-forget：注入不阻启动；结果 console 一行留痕（boolean 文案，**不含任何 key 值**——
   // 明文零落盘三处纪律的日志面），失败也留痕不被 void 吞掉。CAIRN_SMOKE 的 userData 已隔离成
@@ -647,5 +1110,42 @@ app.whenReady().then(() => {
   createWindow();
 });
 app.on("window-all-closed", () => app.quit());
+// §3.3 退出后果告知：有在跑会话 → 先问（默认按钮 = 取消，防误触直接中断）；确认后才走真退出。
+// 未在跑（含冒烟路径）⇒ 不问，行为逐字同此前。
+let quitConfirmed = false;
+app.on("before-quit", (e) => {
+  if (quitConfirmed) return;
+  const running = host.runningCount();
+  if (!shouldWarnBeforeQuit(running)) return;
+  e.preventDefault();
+  const choice = dialog.showMessageBoxSync({
+    type: "warning",
+    message: quitWarningMessage(running),
+    buttons: ["仍然退出", "取消"],
+    defaultId: 1,
+    cancelId: 1,
+  });
+  if (choice === 0) {
+    quitConfirmed = true;
+    app.quit();
+  } else if (BrowserWindow.getAllWindows().length === 0) {
+    // 取消退出且窗口已关（window-all-closed → quit → 本闸拦下）：重开主窗，
+    // 不让应用停在「无窗可操作、在跑会话看不见」的悬空态。
+    createWindow();
+  }
+});
 // 调度器随应用退出停表（清 timer；与 CLI SIGINT → stop 同语义）。
-app.on("will-quit", () => stopDesktopScheduler?.());
+app.on("will-quit", () => {
+  stopDesktopScheduler?.();
+  terminalHost.killAll();
+  browserHost.closeAll();
+  // v7：朗读进程随应用退出回收（不停会念到退出后）。
+  stopSpeakingNow();
+  // v6：预览子进程必须随应用退出回收（SIGTERM 给进程组）；静态服务随进程消失，无需等待。
+  void previewRuntime.stopAll();
+  // LSP 与工具子进程都是 detached 进程组：异步 shutdown 在 will-quit 里等不到，必须同步杀组。
+  killAllLspClientsSync();
+  killAllTrackedChildren();
+  void cleanupPasteTempFiles();
+  void closeAllLspClients();
+});

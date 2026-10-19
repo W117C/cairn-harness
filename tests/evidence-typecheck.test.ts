@@ -218,7 +218,8 @@ describe("真环境：这一格得在真仓里跑得出东西（规则 237/320�
     const t = tally((ran?.out ?? "").split("\n"));
     expect(t.parsed, "报错行一条都抽不出来 ⇒ 解析形状与真 tsc 输出对不上").toBe(t.total);
     expect(t.total, "证据面一条报错都没有？那要么门白装，要么取料面空了").toBeGreaterThan(0);
-  }, 15_000); // 一次真 tsc：安静态实测 2.56s，三套判卷并行时越过缺省 5s（第 262 页）
+  }, 60_000); // 一次真 tsc：安静态实测 2.56s，三套判卷并行时越过缺省 5s（第 262 页）；
+  // 2026-10-18 全量文件级并行后与别的文件争 CPU，实测越过 15s ⇒ 抬到 60s（断言没动）。
 
   it("登记表里的文件都还在盘上（删了的登记＝下一笔必须把帽撤到 0，不许留幽灵条目）", () => {
     for (const f of Object.keys(DANGER_BASELINE)) {
@@ -247,7 +248,7 @@ describe("真环境：这一格得在真仓里跑得出东西（规则 237/320�
       return h !== null && DANGER_CODES.includes(h.code) && !flySet.has(h.file) ? acc + 1 : acc;
     }, 0);
     expect(Number(/危险码 (\d+) 条/u.exec(v.cell)?.[1]), "cell 的 HEAD 口径与独立重数不等 ⇒ 分面数错了").toBe(independent);
-  }, 15_000); // 一次真 tsc ＋ 两次 git：与上面那条约量级（安静态 2.3s）
+  }, 60_000); // 一次真 tsc ＋ 两次 git：与上面那条约量级（安静态 2.3s）；并行负载下同抬到 60s。
 });
 
 /* 门那一半（进程编排）的两个拒绝分支。判定全在 lib，但「拒绝」只长在 runner 里：
@@ -269,7 +270,7 @@ describe("门那一半：runner 的两个拒绝分支各自要出声", () => {
     expect(out).toContain("本门不认参数");
     // 反向证人：同一个脚本不带参数时**不许**退 2（否则上面那条恒真）
     expect(runGate([], repoRoot).status === 2, "不带参数也退 2 ⇒ 拒绝分支写反了，上面那条就没分辨力了").toBe(false);
-  }, 15_000); // 反向证人那一跑要真把门跑一遍（含一次 tsc）：安静态 2.74s（第 262 页）
+  }, 60_000); // 反向证人那一跑要真把门跑一遍（含一次 tsc）：安静态 2.74s（第 262 页）；并行负载下实测越过 15s。
 
   it("归属面取料那一行必须印出来，且前缀与 tsc 的 include 同源（接线证人：这行掉了，豁免就没人看得见）", () => {
     const { status, out } = runGate([], repoRoot);
@@ -279,7 +280,7 @@ describe("门那一半：runner 的两个拒绝分支各自要出声", () => {
     const inc = Array.isArray(cfg.include) ? cfg.include.filter((x): x is string => typeof x === "string") : [];
     expect(out).toContain(`归属面取料：前缀 ${evidenceOthersPrefixes(inc).join("、")}`);
     expect(out, "未跟踪那一半没印条数 ⇒ 「豁免了几支」读不出来").toMatch(/未跟踪 \d+ 支/u);
-  }, 15_000); // 又一次真门（含一次 tsc）：安静态 2.3s（第 281 页现读）
+  }, 60_000); // 又一次真门（含一次 tsc）：安静态 2.3s（第 281 页现读）；并行负载下同抬到 60s。
 
   it("口径文件取不到 ⇒ 出声且非零，不许读成干净", () => {
     const empty = mkdtempSync(join(tmpdir(), "dsh-evtsf-"));

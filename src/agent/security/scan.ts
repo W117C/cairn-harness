@@ -14,6 +14,7 @@ import type {
   SecurityReportEvent,
   SecuritySeverity,
 } from "../../events";
+import { parsePatch } from "../../tools/patch-parse";
 
 export interface ChangeSetEntry {
   path: string;
@@ -39,6 +40,21 @@ export function collectChangeSet(events: AgentEvent[]): ChangeSetEntry[] {
       const lines = e.args.new_string.split("\n");
       if (prev) prev.lines.push(...lines);
       else byKey.set(key, { path: e.args.path, op: "edit", lines });
+    } else if (e.name === "apply_patch" && typeof e.args.patch === "string") {
+      // apply_patch 是模型最主要的跨文件修改方式：旧实现只收 write_file/edit_file，
+      // 补丁写入的密钥/危险 API 在安全快筛里整体失明（连 security_report 都不产生）。
+      let parsed: ReturnType<typeof parsePatch> = [];
+      try { parsed = parsePatch(e.args.patch); } catch { continue; } // 畸形补丁归工具层报错，不在这里二次抛
+      for (const f of parsed) {
+        if (f.path === "") continue;
+        const lines: string[] = [];
+        for (const h of f.hunks) for (const l of h.lines) if (l.mark === "+") lines.push(l.text);
+        if (lines.length === 0) continue;
+        const key = "edit::" + f.path;
+        const prev = byKey.get(key);
+        if (prev) prev.lines.push(...lines);
+        else byKey.set(key, { path: f.path, op: "edit", lines });
+      }
     }
   }
   return [...byKey.values()];
@@ -147,6 +163,13 @@ const ENTROPY_TOKEN_RE = /[A-Za-z0-9+/_-]{16,}={0,2}/g;
  *  已知模式分支（私钥块 / sk- / AIza / AKIA / ghp_ / xox / 赋值式）与「串中含 `/`」的候选均不受影响。 */
 const HEX_ONLY = /^[0-9a-f]{24,}$/;
 
+/** 真实 provider 的工具/消息 id（Anthropic `toolu_01…`、OpenAI `call_…`/`chatcmpl-…` 等）。
+ *  它们是**关联键**而不是凭据：一旦被熵分支掩成同一个 `tool****`，同一会话里所有
+ *  tool_call/tool_result 的 id 塌成一个值 ⇒ 上下文重建时结果按 id 合并、快照路径撞名、
+ *  文件回滚找不到快照（2026-10-19 实测：200/200 个 Anthropic 形状 id 全变成 `tool****`）。
+ *  只豁免「前缀 + 标识符字符」的整串，key 里出现的 `sk-…` 等已知密钥形态不受影响。 */
+const PROVIDER_ID_TOKEN = /^(?:toolu|tool|call|msg|chatcmpl|resp|run|fc|file|asst|item)[_-][A-Za-z0-9_-]{8,}$/;
+
 function looksLikePath(token: string): boolean {
   return token.startsWith("/");
 }
@@ -171,6 +194,8 @@ export function findHighEntropyTokens(
   for (const m of line.matchAll(ENTROPY_TOKEN_RE)) {
     const token = m[0];
     if (looksLikePath(token)) continue;
+    // provider 关联 id 不是凭据：掩掉会把整个 id 空间塌成一个常量（见 PROVIDER_ID_TOKEN）。
+    if (PROVIDER_ID_TOKEN.test(token)) continue;
     // 小写纯 hex 一律不由熵分支判（实测取料：本仓一次 `git ls-tree -r HEAD` 809 行里 3 行的
     // blob id 今天就被改写过，全量 git 样本 3727 条 naked 长 hex 中**凭据形状 0 条**）。
     // 机制：40 位 hex 的香农熵上界是 log2(16)=4.0 ⇒ 随机 SHA 一半会**撞过** threshold。

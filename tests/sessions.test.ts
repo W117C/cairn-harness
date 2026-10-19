@@ -16,6 +16,7 @@ import {
   createSession,
   createSidechatSession,
   deleteSession,
+  deriveSessionTitle,
   isValidSessionName,
   listSessions,
   listSidechatSessions,
@@ -27,6 +28,7 @@ import {
   writeSessionQueue,
 } from "../src/main/sessions";
 import { createEventLog } from "../src/events";
+import { markSessionRunLive, unmarkSessionRunLive } from "../src/main/session-liveness";
 
 /** 某个文件被整份 readFile 了几次（增量计数生效后应为 0/1，而不是每次列表都 1）。 */
 function fullReads(p: string): number {
@@ -323,5 +325,89 @@ describe("会话列表只读头 + 行数增量计数", () => {
     const reads0 = fullReads(p);
     expect((await listSidechatSessions(root))[0]?.lines).toBe(2);
     expect(fullReads(p) - reads0).toBe(0);
+  });
+});
+
+describe("第十八遍：首条消息 → 会话短标题（deriveSessionTitle；业主 21.50.54「对话命名也需要改」）", () => {
+  it("取首条非空行；markdown 头/引用/列表前缀剥壳；空白压单格", () => {
+    expect(deriveSessionTitle("# 帮我看看这个 bug")).toBe("帮我看看这个 bug");
+    expect(deriveSessionTitle("> 引用一句原文")).toBe("引用一句原文");
+    expect(deriveSessionTitle("- 列表项开头")).toBe("列表项开头");
+    expect(deriveSessionTitle("1. 有序第一项")).toBe("有序第一项");
+    expect(deriveSessionTitle("\n\n   第二行的开头\n后面不算")).toBe("第二行的开头");
+    expect(deriveSessionTitle("查一下   deepseek   的 V4")).toBe("查一下 deepseek 的 V4");
+  });
+
+  it("显示宽预算 32（CJK 记 2）：恰好放得下不加省略号，超了截断加「…」", () => {
+    expect(deriveSessionTitle("a".repeat(32))).toBe("a".repeat(32)); // 恰 32 宽：原样
+    expect(deriveSessionTitle("a".repeat(33))).toBe("a".repeat(32) + "…"); // 33 宽：截 32 + …
+    expect(deriveSessionTitle("一二三四五六七八九十一二三四五六七八")).toBe("一二三四五六七八九十一二三四五六七八".slice(0, 16) + "…"); // 18 字 = 36 宽 ⇒ 16 字 + …
+    expect(deriveSessionTitle("fix the scrollback glitch")).toBe("fix the scrollback glitch"); // 25 宽：原样
+  });
+
+  it("全空/纯空白 ⇒ null（调用方保留时间戳名，不硬编凑）", () => {
+    expect(deriveSessionTitle("")).toBeNull();
+    expect(deriveSessionTitle("   \n\t\n  ")).toBeNull();
+    expect(deriveSessionTitle("###   ")).toBeNull(); // 只剥出空壳
+  });
+});
+
+// 2026-10-19 独立评审：删除/重命名运行中的会话会把日志 rename/unlink 掉，而 run 的常驻句柄
+// 继续 append 到已删除的 inode ⇒ 后续事件静默消失（目录里再也看不到）。
+describe("运行中的会话不许删除 / 重命名", () => {
+  it("占用登记在场 ⇒ 两条通道都拒绝；摘除后照常可用", async () => {
+    const root = await mkdtemp(join(tmpdir(), "sessions-busy-"));
+    try {
+      const id = await createSession(root, "busy-one");
+      markSessionRunLive(pathOf(root, id));
+      await expect(deleteSession(root, id)).rejects.toThrow(/正在运行/);
+      await expect(renameSession(root, id, "busy-two")).rejects.toThrow(/正在运行/);
+      // 失败不破坏文件：原 id 仍在，且内容可读。
+      await expect(readSessionEvents(root, id)).resolves.toBeInstanceOf(Array);
+      unmarkSessionRunLive(pathOf(root, id));
+      await renameSession(root, id, "busy-two");
+      await deleteSession(root, "busy-two");
+    } finally {
+      await rm(root, { recursive: true, force: true }).catch(() => undefined);
+    }
+  });
+});
+
+// 2026-10-19 独立评审：并发同名创建会互相删文件（stat→writeFile 两步可交错；
+// 第二个的 metadata 回滚 rm 掉第一个刚建好的 JSONL）。独占创建后两者都必须成立。
+describe("并发同名 createSession", () => {
+  it("两个调用都成功、id 不同、两个 JSONL 都在", async () => {
+    const root = await mkdtemp(join(tmpdir(), "sessions-race-"));
+    const metadata = {
+      async create(id: string): Promise<void> {
+        // 模拟真实 sidecar：同样要求名字唯一（撞名抛错）——正是旧回滚删掉对方文件的路径。
+        await stat(join(root, id + ".meta"));
+        throw new Error("metadata exists");
+      },
+    };
+    // 上面的桩一定会抛错并触发回滚；用它验证「回滚只删自己那份」。
+    const results = await Promise.allSettled([
+      createSession(root, "race", metadata as never),
+      createSession(root, "race", metadata as never),
+    ]);
+    try {
+      expect(results.every((r) => r.status === "rejected")).toBe(true);
+      // 两个回滚都删自己的文件 ⇒ 目录里应当为空（不许出现「一个成功、一个被对方删掉」）。
+      const names = (await import("node:fs/promises").then((fs) => fs.readdir(root))).filter((n) => n.endsWith(".jsonl"));
+      expect(names).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true }).catch(() => undefined);
+    }
+
+    // 无 metadata 的正常路径：两个都成功且 id 不同、文件都在。
+    const root2 = await mkdtemp(join(tmpdir(), "sessions-race2-"));
+    try {
+      const [a, b] = await Promise.all([createSession(root2, "race"), createSession(root2, "race")]);
+      expect(a).not.toBe(b);
+      await expect(stat(pathOf(root2, a))).resolves.toBeTruthy();
+      await expect(stat(pathOf(root2, b))).resolves.toBeTruthy();
+    } finally {
+      await rm(root2, { recursive: true, force: true }).catch(() => undefined);
+    }
   });
 });

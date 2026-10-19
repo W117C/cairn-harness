@@ -3,7 +3,7 @@
 // 工具白名单**只读强制**：write_file / run_shell / edit_file 从工具表摘除（不是提示词自觉），
 // 且 loop 以 allowedTools 硬闸兜底 + 权限层 read-only 档二次拦截（三重 fail-closed）。
 // 让步序（任务书）：主会话不受打扰 > 结论可追溯 > 界面好看。
-import { lstatSync, readFileSync, realpathSync } from "node:fs";
+import { closeSync, lstatSync, openSync, readFileSync, readSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { createEventLog, replay, replayIncremental, type AgentEvent, type CompactionEvent, type PromoteOrigin, type UserMessageEvent } from "../events";
 import type { ModelOutput, Provider } from "../providers";
@@ -59,9 +59,11 @@ export const SIDECHAT_COMPACTION_CONFIG: Partial<CompactionConfig> = {
 export function sidechatHistoryBudget(
   ownEvents: AgentEvent[],
   config: Partial<CompactionConfig> = SIDECHAT_COMPACTION_CONFIG,
+  /** 每轮都会重注的面（记忆/主会话投影/@ 引用）字符数：不算进来就会「估算没超、实际请求超」。 */
+  reserveChars = 0,
 ): { estimate: number; decision: CompactDecision | null } {
   const factor = calibrateFactor(ownEvents);
-  const estimate = estimateContextTokens(projectContext(ownEvents), { systemChars: SIDECHAT_SYSTEM.length }, factor);
+  const estimate = estimateContextTokens(projectContext(ownEvents), { systemChars: SIDECHAT_SYSTEM.length + reserveChars }, factor);
   return { estimate, decision: shouldCompact(estimate, { ...DEFAULT_COMPACTION_CONFIG, ...config }) };
 }
 
@@ -76,10 +78,11 @@ export async function compactSidechatHistory(opts: {
   sidechatLogPath: string;
   summarizer?: Summarizer;
   config?: Partial<CompactionConfig>;
+  reserveChars?: number;
 }): Promise<SidechatCompactionOutcome> {
   const events = await replay(opts.sidechatLogPath).catch((): AgentEvent[] => []);
   const config = opts.config ?? SIDECHAT_COMPACTION_CONFIG;
-  const { estimate, decision } = sidechatHistoryBudget(events, config);
+  const { estimate, decision } = sidechatHistoryBudget(events, config, opts.reserveChars ?? 0);
   if (!decision) return { kind: "none", estimate };
   // 阈值路径需要摘要器；无摘要器时退到既有 overflow 紧急截断（同一条降级链，不静默）
   const useOverflow = decision.trigger === "overflow" || !opts.summarizer;
@@ -236,7 +239,27 @@ export function readAtRef(workspace: string, ref: string): { path: string; conte
     const real = realpathSync(abs);
     const relReal = relative(realpathSync(workspace), real);
     if (relReal === "" || relReal.startsWith("..") || isAbsolute(relReal)) return null; // 软链逃逸出工作区
-    const raw = readFileSync(real, "utf8");
+    // @ 引用不是工具调用，不经过工具权限门：敏感/凭证面必须在这里硬拒，
+    // 否则项目规则 deny 了 read_file(.env*) 也挡不住 sidechat 把密钥发给外部 provider。
+    const segs = relReal.split(sep);
+    const hay = "/" + segs.join("/");
+    const SENSITIVE = [".git/", "/.env", ".npmrc", ".netrc", ".git-credentials", "id_rsa", "id_ed25519", "authorized_keys"];
+    if (SENSITIVE.some((s) => (s.includes("/") ? hay.includes(s) || relReal === s.slice(1) : segs.includes(s)))) return null;
+    // 只读前缀：整文件读入会把 GB 级日志直接吃进主进程内存（clip 发生在读完之后）。
+    const MAX_BYTES = 256 * 1024;
+    let raw: string;
+    if (st.size > MAX_BYTES) {
+      const fd = openSync(real, "r");
+      try {
+        const buf = Buffer.allocUnsafe(MAX_BYTES);
+        const n = readSync(fd, buf, 0, MAX_BYTES, 0);
+        raw = buf.subarray(0, n).toString("utf8");
+      } finally {
+        closeSync(fd);
+      }
+    } else {
+      raw = readFileSync(real, "utf8");
+    }
     return { path: rel.split(sep).join("/"), content: clip(raw, 4_000) };
   } catch {
     return null;
@@ -285,9 +308,21 @@ export async function buildSidechatContext(opts: {
   const lastUser = [...own].reverse().find((e) => e.type === "user_message");
   const refs =
     lastUser && lastUser.type === "user_message"
-      ? extractAtRefs(lastUser.content)
-          .map((r) => readAtRef(opts.workspace, r))
-          .filter((r): r is { path: string; content: string } => r !== null)
+      ? (() => {
+          const limit = 8;      // 引用数量上限
+          let budget = 12_000;  // 引用正文总预算（每份已各自 clip 到 4000）
+          const out: { path: string; content: string }[] = [];
+          for (const r of extractAtRefs(lastUser.content).slice(0, limit)) {
+            const got = readAtRef(opts.workspace, r);
+            if (got === null) continue;
+            if (got.content.length > budget) got.content = got.content.slice(0, Math.max(0, budget)) + "…";
+            if (got.content.length === 0) continue;
+            budget -= got.content.length;
+            out.push(got);
+            if (budget <= 0) break;
+          }
+          return out;
+        })()
       : [];
 
   const messages: GlmMessage[] = [{ role: "system", content: SIDECHAT_SYSTEM }];
@@ -385,8 +420,22 @@ export async function runSidechatTurn(opts: SidechatTurnOptions): Promise<AgentE
   // M2g §7.5：进模型前先给**自身历史**过预算帽——超限走同一压缩链路，compaction 事件记在自己流内。
   // 主会话文件全程只读（本函数内不存在任何对 mainLogPath 的写路径）。
   try {
+    // 估算要含每轮重注的面：记忆 + 主会话投影 + @ 引用。只算自身历史会「估算没超、实际 400」。
+    let reserveChars = 0;
+    try {
+      const mem = await buildMemoryInjectionSafe({ workspace: opts.workspace });
+      reserveChars += (mem.injection.project ?? "").length + (mem.injection.global ?? "").length;
+    } catch { /* 记忆不可用 = 不注入，不占预算 */ }
+    try {
+      const mainEvents = await replayIncremental(opts.mainLogPath);
+      reserveChars += buildMainProjection(mainEvents, opts.rounds ?? SIDECHAT_PROJECTION_ROUNDS).text.length;
+    } catch { /* 投影读不到 = 空投影 */ }
+    for (const ref of extractAtRefs(opts.message).slice(0, 8)) {
+      reserveChars += readAtRef(opts.workspace, ref)?.content.length ?? 0;
+    }
     const r = await compactSidechatHistory({
       sidechatLogPath: eventsPath,
+      reserveChars,
       ...(opts.summarizer ? { summarizer: opts.summarizer } : {}),
       ...(opts.compactionConfig ? { config: opts.compactionConfig } : {}),
     });

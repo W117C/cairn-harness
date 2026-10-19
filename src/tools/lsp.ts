@@ -15,6 +15,7 @@ import { killGroup, sanitizedEnv } from "./process.js";
 import { TrustStore, type TrustState } from "../agent/plugins/trust";
 import {
   createProtocolConnection,
+  CancellationTokenSource,
   StreamMessageReader,
   StreamMessageWriter,
   DiagnosticSeverity,
@@ -67,6 +68,8 @@ export interface LspConfig {
  *    且宿主文件里的同名 id 永远压过插件的。
  */
 const pluginServers = new Map<string, Record<string, LspServerConfig>>();
+// 配置对象保留来源，防止撤回后仍从旧快照启动插件进程。
+const pluginConfigs = new WeakSet<LspServerConfig>();
 
 const wsKey = (workspace: string): string => resolve(workspace);
 
@@ -159,6 +162,7 @@ export function registerPluginLspServers(workspace: string, servers: Record<stri
   for (const [id, cfg] of Object.entries(servers)) {
     if (id in mine || cfg.extensions.some((e) => taken.has(e))) { refused.push(id); continue; }
     mine[id] = cfg;
+    pluginConfigs.add(cfg);
     for (const e of cfg.extensions) taken.add(e);
     accepted.push(id);
   }
@@ -244,6 +248,25 @@ export function isLspBroken(root: string, serverId: string): boolean {
 
 const clients = new Map<string, Promise<LspClient>>();
 const broken = new Set<string>();
+const pluginClientKeys = new Set<string>();
+
+/** 仅回收实际由插件启动的客户端；同名的宿主服务器不属于插件。 */
+export async function closePluginLspClients(root: string, ids: readonly string[]): Promise<void> {
+  await Promise.all(ids.map(async (id) => {
+    const key = clientKey(root, id);
+    if (!pluginClientKeys.delete(key)) return;
+    const pending = clients.get(key);
+    clients.delete(key);
+    broken.delete(key);
+    try {
+      await (await pending)?.shutdown();
+    } catch {
+      /* 启动失败的客户端无需关闭 */
+    } finally {
+      if (!clients.has(key)) broken.delete(key);
+    }
+  }));
+}
 
 export class LspClient {
   readonly pid: number;
@@ -253,11 +276,13 @@ export class LspClient {
   private root: string;
   /** uri → { version, text }：didOpen/didChange 状态（openFile 幂等推送）。 */
   private openDocs = new Map<string, { version: number; text: string }>();
-  /** 诊断最新值 + 全局版本号（waitForDiagnostics 靠版本号免竞态）。 */
+  /** 最新诊断与各 URI 最近一次推送的全局序号，其他文件的推送不能证明本文件已更新。 */
   private latestDiags = new Map<string, Diagnostic[]>();
+  private diagRevisions = new Map<string, number>();
   private revCounter = 0;
-  private diagWaiters: { uri: string; minRev: number; resolve: (d: Diagnostic[]) => void; timer: ReturnType<typeof setTimeout> }[] = [];
+  private diagWaiters: { uri: string; minRev: number; resolve: (d: Diagnostic[]) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }[] = [];
   private inflight = new Map<string, { promise: Promise<unknown>; reject: (e: Error) => void }>();
+  private stopping = false;
 
   constructor(child: ChildProcess, conn: ReturnType<typeof createProtocolConnection>, root: string, key: string) {
     this.child = child;
@@ -266,7 +291,10 @@ export class LspClient {
     this.key = key;
     this.pid = child.pid ?? 0;
     this.conn.onNotification(PublishDiagnosticsNotification.type, (params) => {
+      const version = this.openDocs.get(params.uri)?.version;
+      if (params.version !== undefined && version !== undefined && params.version !== version) return;
       this.revCounter++;
+      this.diagRevisions.set(params.uri, this.revCounter);
       this.latestDiags.set(params.uri, params.diagnostics ?? []);
       const fired = this.diagWaiters.filter((w) => w.uri === params.uri);
       this.diagWaiters = this.diagWaiters.filter((w) => w.uri !== params.uri);
@@ -276,11 +304,12 @@ export class LspClient {
       }
     });
     const fail = (reason: string) => {
-      if (!broken.has(this.key)) broken.add(this.key);
-      clients.delete(this.key);
-      const err = new Error(reason);
-      for (const entry of this.inflight.values()) entry.reject(err);
-      this.inflight.clear();
+      if (!this.stopping) {
+        if (!broken.has(this.key)) broken.add(this.key);
+        clients.delete(this.key);
+      }
+      this.stopping = true;
+      this.rejectPending(new Error(reason));
       // 连接先于进程尸体关闭：jsonrpc 不得再向已销毁的 stdin 写（ERR_STREAM_DESTROYED）
       try {
         this.conn.dispose();
@@ -290,6 +319,16 @@ export class LspClient {
     };
     this.child.on("error", (err) => fail("lsp: server 进程错误: " + err.message));
     this.child.on("exit", (code) => fail("lsp: server 进程退出（code=" + String(code) + "）"));
+  }
+
+  private rejectPending(error: Error): void {
+    for (const entry of this.inflight.values()) entry.reject(error);
+    this.inflight.clear();
+    for (const waiter of this.diagWaiters) {
+      clearTimeout(waiter.timer);
+      waiter.reject(error);
+    }
+    this.diagWaiters = [];
   }
 
   /** 全局诊断版本号（每次 publish 递增；等待方用它判断是否有新推送）。 */
@@ -320,28 +359,32 @@ export class LspClient {
 
   /** 请求（in-flight 去重：同一 method+params 的并发请求共享一个 Promise），带超时。 */
   request<R>(method: string, params: unknown, timeoutMs = 8000): Promise<R> {
+    if (this.stopping) return Promise.reject(new Error("lsp: 客户端已关闭"));
     const key = method + "\u241F" + JSON.stringify(params);
     const existing = this.inflight.get(key);
     if (existing) return existing.promise as Promise<R>;
+    const cancellation = new CancellationTokenSource();
     let rejectRef: (e: Error) => void = () => {};
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const p = new Promise<R>((resolvePromise, rejectPromise) => {
       rejectRef = rejectPromise;
-      const timer = setTimeout(() => {
-        this.inflight.delete(key);
+      timer = setTimeout(() => {
         rejectPromise(new Error("lsp: 请求 " + method + " 超时（" + String(timeoutMs) + "ms）"));
+        cancellation.cancel();
       }, timeoutMs);
       this.conn
-        .sendRequest(method, params)
+        .sendRequest(method, params, cancellation.token)
         .then((r) => {
-          clearTimeout(timer);
-          this.inflight.delete(key);
           resolvePromise(r as R);
         })
         .catch((err: unknown) => {
-          clearTimeout(timer);
-          this.inflight.delete(key);
           rejectPromise(err instanceof Error ? err : new Error(String(err)));
         });
+    }).finally(() => {
+      if (timer !== undefined) clearTimeout(timer);
+      cancellation.dispose();
+      // 超时后可能已有同键重试；迟到的旧响应不能清掉新请求。
+      if (this.inflight.get(key)?.promise === p) this.inflight.delete(key);
     });
     this.inflight.set(key, { promise: p, reject: rejectRef });
     return p;
@@ -353,7 +396,8 @@ export class LspClient {
 
   /** 等下一次该 uri 的诊断推送（自 minRev 起有新 publish 才返回）。 */
   waitForDiagnostics(uri: string, minRev: number, timeoutMs: number): Promise<Diagnostic[]> {
-    if (this.revCounter > minRev) {
+    if (this.stopping) return Promise.reject(new Error("lsp: 客户端已关闭"));
+    if ((this.diagRevisions.get(uri) ?? 0) > minRev) {
       const cur = this.latestDiags.get(uri);
       if (cur) return Promise.resolve(cur);
     }
@@ -362,18 +406,23 @@ export class LspClient {
         this.diagWaiters = this.diagWaiters.filter((w) => w.timer !== timer);
         rejectPromise(new Error("lsp: 等待诊断超时（" + String(timeoutMs) + "ms）"));
       }, timeoutMs);
-      this.diagWaiters.push({ uri, minRev, resolve: resolvePromise, timer });
+      this.diagWaiters.push({ uri, minRev, resolve: resolvePromise, reject: rejectPromise, timer });
     });
   }
 
   async shutdown(): Promise<void> {
+    this.stopping = true;
+    this.rejectPending(new Error("lsp: 客户端已关闭"));
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
         this.conn.sendRequest(ShutdownRequest.method, null),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("shutdown 超时")), 1000)),
+        new Promise((_, rej) => { timer = setTimeout(() => rej(new Error("shutdown 超时")), 1000); }),
       ]);
     } catch {
       /* 尽力而为 */
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
     }
     try {
       await this.conn.sendNotification(ExitNotification.method, null);
@@ -395,6 +444,9 @@ export async function getLspClient(root: string, cfg: LspConfig, serverId: strin
   const key = clientKey(root, serverId);
   const server = cfg.servers[serverId];
   if (!server) throw new ToolError('lsp: 未配置服务器 "' + serverId + '"');
+  if (pluginConfigs.has(server) && pluginServers.get(wsKey(root))?.[serverId] !== server) {
+    throw new ToolError('lsp: 插件服务器 "' + serverId + '" 已停用，请重新读取配置');
+  }
   if (broken.has(key)) {
     throw new ToolError('lsp: 服务器 "' + serverId + '" 启动失败已标记不可用（broken），不再重试');
   }
@@ -404,7 +456,12 @@ export async function getLspClient(root: string, cfg: LspConfig, serverId: strin
   // 两个不参与本门的面（各自有主，刻意不是"顺带放行"）：
   //  · 插件贡献的服务器——它们的激活权归插件那只门（口径 ① 已写明总开关归宿主）；
   //  · 调用方断言拥有的工作区（`setLspTrustedRepos`）——判卷／基准跑的是仓内 fixture。
-  if (pluginServers.get(wsKey(root))?.[serverId] === undefined && !lspTrustedRepos.has(wsKey(root))) {
+  // 只有**生效配置就是插件那一份**时才归插件信任门。旧判据只看 pluginServers[id] 存在：
+  // 仓库自带 `.agent/lsp.json` 用同一个 id 时宿主配置抢先生效，但插件表里仍有同名条目
+  // ⇒ 恶意宿主命令被当成插件面跳过指纹检查（实测 trustState=pending 仍 spawn）。
+  const pluginCfg = pluginServers.get(wsKey(root))?.[serverId];
+  const fromPlugin = pluginCfg !== undefined && pluginCfg === server;
+  if (!fromPlugin && !lspTrustedRepos.has(wsKey(root))) {
     const trust = await lspConfigTrustState(root);
     if (trust.state !== "trusted") {
       throw new ToolError(
@@ -416,6 +473,8 @@ export async function getLspClient(root: string, cfg: LspConfig, serverId: strin
   }
   if (!clients.has(key)) {
     const starting = startClient(root, server, key);
+    if (pluginConfigs.has(server)) pluginClientKeys.add(key);
+    else pluginClientKeys.delete(key);
     clients.set(key, starting);
     starting.catch(() => {
       clients.delete(key);
@@ -425,10 +484,12 @@ export async function getLspClient(root: string, cfg: LspConfig, serverId: strin
   return clients.get(key) as Promise<LspClient>;
 }
 
+/** 活着的 LSP 子进程（同步退出面用：应用退出时来不及 await shutdown）。 */
+const liveChildren = new Set<import("node:child_process").ChildProcess>();
+
 async function startClient(root: string, server: LspServerConfig, key: string): Promise<LspClient> {
-  // C6（审查）：`-` 开头的 flag 是语言服务器参数（--stdio/--node-ipc），不能被 resolve 成路径；
-  // 相对路径参数仍按 root 解析。
-  const args = (server.args ?? []).map((a) => (a.startsWith("-") ? a : resolve(root, a)));
+  // argv 还包含子命令、选项值和代码；原样传递，相对路径由子进程的 cwd 处理。
+  const args = server.args ?? [];
   const child = spawn(server.command, args, {
     cwd: root,
     stdio: ["pipe", "pipe", "pipe"],
@@ -440,11 +501,16 @@ async function startClient(root: string, server: LspServerConfig, key: string): 
     env: sanitizedEnv(),
   });
   if (!child.stdout || !child.stdin) throw new ToolError("lsp: server 进程 stdio 不可用");
+  liveChildren.add(child);
+  child.on("exit", () => liveChildren.delete(child));
+  child.on("error", () => liveChildren.delete(child));
   // spawn 失败/进程退出时管道会销毁；jsonrpc 的写错误走 unhandled rejection，这里吞掉管道层错误
   //（生命周期错误已由 LspClient 的 fail 闭包统一处理，不丢语义）
   child.stdin.on("error", () => {});
   child.stdout.on("error", () => {});
   child.stderr?.on("error", () => {});
+  // stderr 不参与协议；持续排空，防止日志填满管道后卡住服务器。
+  child.stderr?.resume();
   const reader = new StreamMessageReader(child.stdout);
   const innerWriter = new StreamMessageWriter(child.stdin);
   // 进程死后 jsonrpc 的 write 会返回无消费者的 rejected Promise（ERR_STREAM_DESTROYED）→
@@ -460,6 +526,7 @@ async function startClient(root: string, server: LspServerConfig, key: string): 
   const client = new LspClient(child, conn, root, key);
   conn.listen();
   // initialize 带超时（服务器起不来 = 失败进 broken，不悬挂）
+  let timer: ReturnType<typeof setTimeout> | undefined;
   await Promise.race([
     (async () => {
       await conn.sendRequest(InitializeRequest.type, {
@@ -472,9 +539,9 @@ async function startClient(root: string, server: LspServerConfig, key: string): 
       });
       await conn.sendNotification(InitializedNotification.type, {});
     })(),
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('lsp: 服务器 "' + server.command + '" initialize 超时（启动失败）')), 8000),
-    ),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('lsp: 服务器 "' + server.command + '" initialize 超时（启动失败）')), 8000);
+    }),
   ]).catch((err) => {
     try {
       conn.dispose();
@@ -483,8 +550,22 @@ async function startClient(root: string, server: LspServerConfig, key: string): 
     }
     killGroup(child);
     throw err instanceof Error ? err : new Error(String(err));
+  }).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
   });
   return client;
+}
+
+/** 同步收掉全部 LSP 进程组（桌面 will-quit 用；异步 shutdown 在退出路径上等不到）。 */
+export function killAllLspClientsSync(): void {
+  for (const child of liveChildren) {
+    try { killGroup(child); } catch { /* 尽力而为 */ }
+  }
+  liveChildren.clear();
+  clients.clear();
+  broken.clear();
+  pluginServers.clear();
+  pluginClientKeys.clear();
 }
 
 /** 测试收尾：关掉全部客户端进程并清缓存（含 broken，测试自行重建场景）。
@@ -494,6 +575,7 @@ export async function closeAllLspClients(): Promise<void> {
   clients.clear();
   broken.clear();
   pluginServers.clear();
+  pluginClientKeys.clear();
   for (const p of all) {
     try {
       const c = await p;

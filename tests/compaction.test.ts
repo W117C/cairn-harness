@@ -460,6 +460,10 @@ describe("session-provider 压缩接线", () => {
     const est = estimateContextTokens(projectContext(events), {}, factor);
     const calls: string[] = [];
     const provider = createSessionProvider(logPath, {
+      // 卫生修复（2026-10-16）：workspace 显式钉到本用例的隔离临时目录——缺省走 process.cwd()，
+      // 仓根一旦有现场数据（`.agent/memory/` 的记忆注入等）就会被吸进终装配估算，
+      // 把本用例自设的针尖预算（est+5）撑爆 ⇒ 报 context_budget_exceeded 而非预期的 CAIRN_API_KEY。
+      workspace: dir,
       compaction: {
         // 自整定：可用 = est+4，ratio 0.5 → est ≥ ~4 即触发（本会话 est 远大于此，确定性触发比例条件）
         config: { inputLimit: est + 5, maxOutputReserve: 1, ratio: 0.5, tailMinTokens: 10, tailMaxTokens: 30, retryBackoffMs: 1 },

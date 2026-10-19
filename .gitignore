@@ -99,3 +99,31 @@ docs/facts/
 .agent/skills/
 # GEMINI.md 是 GraphFlow install 写入的托管块（与 AGENTS.md 的 GRAPHFLOW 块同源），可重新生成。
 GEMINI.md
+
+# 构建产物与机器本地运行时（2026-10-16 现读）：以下四支 `git ls-files` 均为 **0** ⇒ 从来不是源码，
+# 而 `git check-ignore` 全部**不命中** ⇒ `git status` 一直看得见、任何 `git add -A` 会整包扫走。
+# 实测体量：apps/desktop/release/ 715 支文件 / 543M（Cairn.app + zip，内含一份 src 冗余副本）、
+# .venv/ 861 支、.rivet/ 13 支、var/ 5 支。口径与 `.serena/`、`.qoder/` 那一族相同——
+# **只掐掉「随仓库分发」这一条通路**，文件仍在本地盘。
+apps/desktop/release/
+apps/desktop/preview/dist/
+
+# python venv（解释器＋site-packages），`python -m venv .venv` 可重建。
+.venv/
+
+# Rivet（提示词图工具）的项目级数据，AI 工具运行时产物。
+.rivet/
+
+# 运行期 scratch 落错位置的**容器**：`var/folders/pc/<hash>/T/dsh-synth-chain-*/`。
+# 形状是「绝对路径被当相对路径拼进仓根」：`scripts/loop-eval.ts:85` 把 `--out` 当仓内相对路径，
+# 而 `:658`/`:942`/`:953` 一律 `join(ROOT, OUT)`——`path.join` 不认绝对的第二参 ⇒ 传绝对
+# `--out $TMPDIR/…` 就会在仓根造出 `var/folders/…`。
+# ⚠️ 这一条只兜住**结果**，不修根因（跑器侧该写成 `isAbsolute(out) ? out : join(ROOT, out)`）。
+var/
+
+# ⚠️ 下面两支是**刻意不忽略**的，写在这儿免得下一个人再扫一遍：
+#  · `apps/desktop/preview/` **整支**——它是 pnpm-workspace.yaml 声明的包，有 README/package.json/
+#    tsconfig/vite.config/src，且**尚无任何提交**。整体忽略＝把这包源码永久挡在 git 外；
+#    只有它的 `dist/` 是产物（已在上方忽略）。
+#  · `agent-canon/`（1239 支 / 48M，含 INDEX.md/README.md/canon/raw/families/tools）——是**策展语料**
+#    不是产物，但从未提交、仓内也无引用。归 commit 还是归 ignore 属业主裁决，不替它决定。

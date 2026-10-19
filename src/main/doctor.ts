@@ -47,11 +47,19 @@ export interface CapabilityReadout {
   search: SearchReadout;
   /** 配置了搜索端点时的端点 URL（只回 http(s) 模板串，不含任何凭据）。未配/配坏 = undefined。 */
   searchEndpoint?: string;
+  /** 识图能力（当前选中那个模型的输入模态）。**三态不许塌成两态**：
+   *  · `declared` = 模型声明里含 "image"（用户在自己的 providers.json 写了 `inputModalities`，
+   *    或上游 /models 自述里探测到）——这是**配置侧**的事实，不是"上游真的看得懂"的证明；
+   *  · `undeclared` = 没声明 ⇒ 按不支持处理（`capabilities.ts` 的口径：缺席 = 上游没说）；
+   *  · `unverified` = 既没声明也没否证，且本仓没有任何带凭据实测记录。
+   *  2026-10-16 读数：`cn:hy3` 当前就是 `undeclared`，而 render_image 的图照样进请求体——
+   *  "工具调用成功"不等于"上游理解这张图"。这一格就是把这两件事分开摆出来。 */
+  vision: { state: "declared" | "undeclared" | "unverified"; modelId: string | null; declaredModalities: readonly string[] };
   /** 这条读数对应的工作区（界面要能说清「是哪个工作区没配」）。 */
   workspace: string;
 }
 
-export async function readCapabilities(workspace: string): Promise<CapabilityReadout> {
+export async function readCapabilities(workspace: string, settingsPath?: string): Promise<CapabilityReadout> {
   let search: SearchReadout;
   let endpoint: string | undefined;
   try {
@@ -65,7 +73,58 @@ export async function readCapabilities(workspace: string): Promise<CapabilityRea
   } catch (err) {
     search = { kind: "broken", message: err instanceof Error ? err.message : String(err) };
   }
-  return { search, ...(endpoint !== undefined ? { searchEndpoint: endpoint } : {}), workspace };
+  const vision = await readVisionState(workspace, settingsPath);
+  return { search, ...(endpoint !== undefined ? { searchEndpoint: endpoint } : {}), vision, workspace };
+}
+
+/** 读桌面端当前选中的模型 id（settings 文件里的 `model` 字段）。
+ *  与 `SettingsStore.get()` 读同一份文件，但**不实例化那个 store**（headless 下没有 userData）。
+ *  取不到 / 值不在表里 ⇒ null（「不知道选中谁」不许被报成一个具体 id）。 */
+async function readSelectedModelId(workspace: string, table: readonly { id: string }[], settingsPath?: string): Promise<string | null> {
+  const candidates = [
+    ...(settingsPath !== undefined ? [settingsPath] : []),
+    join(workspace, ".cairn", "settings.json"),
+    join(workspace, ".agent", "settings.json"), // CLI 的真实落点（此前漏了这一份）
+    join(homedir(), ".cairn", "settings.json"),
+  ];
+  for (const path of candidates) {
+    try {
+      const raw = JSON.parse(await readFile(path, "utf8")) as { model?: unknown };
+      const m = raw.model;
+      if (typeof m === "string" && m !== "" && table.some((s) => s.id === m)) return m;
+    } catch {
+      // 这份不在或读不动：试下一个候选
+    }
+  }
+  return null;
+}
+
+/** 识图三态：从**盘上的模型表**读声明，不去拨号（这一格必须是零成本的只读面）。
+ *  `state === "unverified"` 只在一种情况下出现：当前工作区压根取不到选中模型（无 provider 配置），
+ *  那时既不能说"支持"也不能说"不支持"——说任何一个都是编。 */
+async function readVisionState(workspace: string, settingsPath?: string): Promise<CapabilityReadout["vision"]> {
+  try {
+    const table = effectiveModelTable();
+    void workspace; // 模型表是全局 catalog + 自定义家的并集，与 workspace 无关（保留入参是为了签名稳定）
+    // 选中模型：与桌面端设置页同一口径（settings 的 model 字段）。取不到就退到表里第一项，
+    // 但 `modelId` 仍如实报 null——不把"猜的那个"报成"选中的那个"。
+    // 选中模型从**桌面端 settings 文件**读（`SettingsStore` 的盘上真相），不经过 settings-handlers
+    // 那个进程级单件——doctor 是被 CLI 与桌面端共用的只读面，拖一个 desktop 装配进来会让
+    // 它在 headless 下直接抛。读不到 ⇒ null，由调用方按 unverified 处理（不猜一个模型顶上）。
+    const modelId = await readSelectedModelId(workspace, table, settingsPath);
+    if (modelId === null) {
+      return { state: "unverified", modelId: null, declaredModalities: [] };
+    }
+    const spec = table.find((s) => s.id === modelId);
+    const mods = spec?.inputModalities ?? [];
+    return {
+      state: mods.includes("image") ? "declared" : "undeclared",
+      modelId,
+      declaredModalities: mods,
+    };
+  } catch {
+    return { state: "unverified", modelId: null, declaredModalities: [] };
+  }
 }
 
 /** 信任/插件数据的落点这一格（第 432 页，能力 7「操作可审计」）。
@@ -278,7 +337,10 @@ async function readTrustFace(env: NodeJS.ProcessEnv, home: string): Promise<Trus
   let entries: TrustFaceFacts["entries"] = null;
   if (dirState === "ok") {
     try {
-      const parsed = parseTrustFile(await readFile(trustFilePathOf({ pluginDataRoot: root }), "utf8"));
+      // 与运行期同源：`M2E_TRUST_FILE` 在场时装配面读的是那份表，doctor 必须查同一份，
+      // 否则审计读数（「信任表还没写」）可能来自另一个地址。
+      const trustFile = env.M2E_TRUST_FILE ? env.M2E_TRUST_FILE : trustFilePathOf({ pluginDataRoot: root });
+      const parsed = parseTrustFile(await readFile(trustFile, "utf8"));
       storeState = parsed === null ? "unreadable" : "ok";
       entries = parsed === null ? null : { trusted: parsed.trusted.length, declined: parsed.declined.length };
     } catch (err) {

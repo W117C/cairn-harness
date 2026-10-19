@@ -182,7 +182,7 @@ async function main(): Promise<void> {
   check(REMEMBER_DESCRIPTION.includes("密钥") && REMEMBER_DESCRIPTION.includes("skip"), "E6 remember 描述：密钥卫生 + skip 纪律明文");
 
   // ---------- F 双轨触发 ----------
-  console.log("[memory-check] F 会话结束自动沉淀（开关 / 合并审批 / 分型）");
+  console.log("[memory-check] F 会话结束自动沉淀（开关 / 分层审批 / 分型）");
   const logPath = join(ws, "session.jsonl");
   const log = createEventLog(logPath);
   await log.append({ type: "user_message", content: "把测试 stabilized，顺便记住我用中文" });
@@ -211,20 +211,29 @@ async function main(): Promise<void> {
     },
   });
   const langWritten = await readFile(join(home, "lang.md"), "utf8").catch(() => "");
-  check(f1.kind === "saved" && f1.writes === 3 && f1.asks === 1 && askCount === 1, "F2 开启 → 3 次写入合并为 1 次审批请求", JSON.stringify(f1));
+  check(f1.kind === "saved" && f1.writes === 3 && f1.asks === 1 && askCount === 1, "F2 分层开启 → 全局 1 问 + 项目直写：3 写入 1 问", JSON.stringify(f1));
   check(langWritten.includes("中文交流"), "F2b 沉淀写入落盘");
   check(emit.some((e) => e.type === "tool_call" && e.name === "remember") && emit.some((e) => e.type === "tool_result"), "F2c 写入即事件（tool_call/tool_result 落事件流审计）");
+  // F3（第十一遍分层裁决重写）：全局被拒 ⇒ 全局不写、项目层照写。
+  // 旧版「拒绝 = 全部不写」已随分层裁决废止；这里专门用**新** global/project 主题，避免吃到 F2 的残留文件。
+  const denyFixture = join(ws, "distill-deny.jsonl");
+  await writeFile(denyFixture, [
+    JSON.stringify({ type: "tool_call", id: "x1", name: "remember", args: { scope: "global", kind: "memory", type: "user", topic: "lang2", content: "全局层应被拒" } }),
+    JSON.stringify({ type: "tool_call", id: "x2", name: "remember", args: { scope: "project", kind: "memory", type: "project", topic: "p2", content: "项目层应直写" } }),
+    JSON.stringify({ type: "assistant_message", content: "完毕" }),
+  ].join("\n") + "\n", "utf8");
   const denyGate = new AskGate({ notify: (req) => denyGate.decide(req.askId, false) });
-  const beforeDeny = await readFile(join(ws, ".agent", "memory", "e2e-flaky.md"), "utf8").catch(() => "");
   const f2 = await runSessionEndDistill({
     enabled: true, logPath, workspace: ws,
-    provider: createMockProvider(fixturePath),
+    provider: createMockProvider(denyFixture),
     rememberTool: remember,
     emit: async () => {},
     mergedApproval: async () => (await denyGate.request("remember", {})).outcome === "approved",
   });
-  const afterDeny = await readFile(join(ws, ".agent", "memory", "e2e-flaky.md"), "utf8").catch(() => "");
-  check(f2.kind === "no_content" && beforeDeny === afterDeny, "F3 拒绝 → 全部不写（文件逐字不变）", JSON.stringify(f2));
+  const lang2Written = await readFile(join(home, "lang2.md"), "utf8").catch(() => "");
+  const p2Written = await readFile(join(ws, ".agent", "memory", "p2.md"), "utf8").catch(() => "");
+  check(f2.kind === "saved" && f2.writes === 1 && f2.asks === 1 && lang2Written === "" && p2Written.includes("项目层应直写"),
+    "F3 全局被拒 ⇒ 全局不写、项目层直写（分层裁决）", JSON.stringify(f2));
   const boom = await mkdtemp(join(tmpdir(), "m2d-boom-"));
   const f3 = await runSessionEndDistill({
     enabled: true, logPath, workspace: ws,

@@ -33,11 +33,14 @@ export function parseTrustFile(text: string): { trusted: string[]; declined: str
 
 // ---- H3-P5（审查 E-10）：信任绑定内容指纹 ----
 // 旧实现只按绝对路径记录信任：同路径下的插件内容被替换（恶意改写 hooks/MCP 配置）仍自动 trusted。
-// v1 口径：**新决议**一律写 `abs@指纹`（内容绑定，改动即重新出信任卡）；旧版裸路径记录继续命中
-// （兼容既有信任文件与验收预信任通道，显式备案的兼容边界）。
-const FP_SKIP_DIRS = new Set(["node_modules", ".git", "dist", "out"]);
-const FP_MAX_FILES = 500;
-const FP_MAX_FILE_BYTES = 512 * 1024;
+// v1 口径：**一概**写 `abs@指纹`（内容绑定，改动即重新出信任卡）。旧版裸路径记录不再命中
+// （fail-closed：重新出一次卡），见 hit 的注释。
+// 只跳过 `.git`（版本库元数据不参与执行）。`dist`/`out`/`node_modules` 必须入指纹：
+// 插件 manifest 可以把 hooks/MCP/LSP 指向这些目录，旧实现跳过它们 ⇒ 批准后替换
+// `dist/hooks.json` 不改指纹，信任继续命中（等于批准了一个可随时换内容的执行面）。
+const FP_SKIP_DIRS = new Set<string>(); // 不再整目录跳过（`.git` 单独只哈希 config + hooks）
+const FP_MAX_FILES = 5_000;
+const FP_MAX_FILE_BYTES = 8 * 1024 * 1024;
 
 /** 指纹结果（E1/E2，审查 P1-11/P1-12）：bounded=true 表示本指纹**不能**完整绑定插件内容
  *  （文件数超帽 / 单文件超大 / 目录内存在软链）——信任判定必须 fail-closed（视为 pending），
@@ -63,6 +66,7 @@ export async function pluginFingerprintEx(root: string): Promise<PluginFingerpri
     try {
       entries = await readdir(dir, { withFileTypes: true });
     } catch {
+      bounded = true; // 读不出 = 这部分内容没绑定（旧实现静默 return）
       return;
     }
     for (const ent of entries.sort((a, b) => a.name.localeCompare(b.name))) {
@@ -77,18 +81,45 @@ export async function pluginFingerprintEx(root: string): Promise<PluginFingerpri
       }
       if (ent.isDirectory()) {
         if (FP_SKIP_DIRS.has(ent.name)) continue;
+        if (ent.name === ".git") {
+          // 版本库元数据不整体入指纹（churn 大），但**可执行面**必须绑定：
+          // manifest 可以把 hooks 指向 `.git/hooks.json`，整目录跳过会让批准后替换 hook 指纹不变。
+          await walkGitMeta(abs);
+          continue;
+        }
         await walk(abs);
         continue;
       }
       if (!ent.isFile()) continue;
       const st = await stat(abs).catch(() => null);
-      if (st && st.size > FP_MAX_FILE_BYTES) {
-        bounded = true; // E1：超大文件不入指纹 = 绑定不完整（不再静默 continue）
+      if (st === null) { bounded = true; continue; }
+      if (st.size > FP_MAX_FILE_BYTES) {
+        bounded = true; // 超大文件不入指纹 = 绑定不完整（信任会被拒绝）
         continue;
       }
-      if (!st) continue;
       const content = await readFile(abs).catch(() => null);
-      if (content === null) continue;
+      if (content === null) { bounded = true; continue; }
+      count++;
+      parts.push(relative(root, abs).replaceAll("\\", "/") + ":" + createHash("sha1").update(content).digest("hex"));
+    }
+  };
+  /** `.git` 里只绑定会参与执行的两处：config（可重定向 hooksPath）与 hooks/ 下的全部文件。 */
+  const walkGitMeta = async (gitDir: string): Promise<void> => {
+    const config = await readFile(join(gitDir, "config")).catch(() => null);
+    if (config !== null) {
+      count++;
+      parts.push(relative(root, join(gitDir, "config")).replaceAll("\\", "/") + ":" + createHash("sha1").update(config).digest("hex"));
+    }
+    const hooksDir = join(gitDir, "hooks");
+    let hooks;
+    try { hooks = await readdir(hooksDir, { withFileTypes: true }); }
+    catch { return; } // 没有 hooks 目录是常态
+    for (const ent of hooks.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (ent.isSymbolicLink()) { bounded = true; continue; }
+      if (!ent.isFile()) continue;
+      const abs = join(hooksDir, ent.name);
+      const content = await readFile(abs).catch(() => null);
+      if (content === null) { bounded = true; continue; }
       count++;
       parts.push(relative(root, abs).replaceAll("\\", "/") + ":" + createHash("sha1").update(content).digest("hex"));
     }
@@ -108,6 +139,8 @@ export async function pluginFingerprint(root: string): Promise<string> {
 export class TrustStore {
   private file: string;
   private cache: TrustFile | null = null;
+  /** 决议读-改-写串行链（并发批准不互相覆盖）。 */
+  private writes: Promise<unknown> = Promise.resolve();
 
   constructor(filePath: string) {
     this.file = filePath;
@@ -154,16 +187,20 @@ export class TrustStore {
     return absRoot + "@" + fingerprint + (bounded ? "+b" : "");
   }
 
-  /** 条目命中：按 `abs@指纹[+b]` 精确匹配；裸路径 = 旧版记录，仅无界形态兼容命中
-   *  （旧版没有「有界」概念，放它顺带命中有界条目等于绕开 E1/E2 的 fail-closed）。 */
+  /** 条目命中：只认 `abs@指纹[+b]` 精确匹配。
+   *  2026-10-19：**移除**旧版裸路径兼容——裸条目在批准后任何内容替换都不改键，
+   *  等于把「授权绑内容」退回「授权绑路径」（本文件存在的理由）。旧信任文件里的裸条目
+   *  会让对应插件重新出一次信任卡（fail-closed），用户重新批准后写入指纹条目。 */
   private hit(list: string[], absRoot: string, fingerprint: string, bounded: boolean): boolean {
-    return list.includes(this.entryKey(absRoot, fingerprint, bounded)) || (!bounded && list.includes(absRoot));
+    return list.includes(this.entryKey(absRoot, fingerprint, bounded));
   }
 
-  /** 决议查询：未记录 = pending（首次加载出信任卡）。 */
+  /** 决议查询：未记录 = pending（首次加载出信任卡）。
+   *  bounded 指纹**不可批准**：它没绑定软链目标/超帽/读不出的那部分内容，批准后替换那些内容
+   *  指纹逐字不变 ⇒ 等于授权绑路径。bounded 只允许 declined（明确拒绝）。 */
   async status(absRoot: string, fingerprint: string, bounded = false): Promise<TrustState> {
     const s = await this.load();
-    if (this.hit(s.trusted, absRoot, fingerprint, bounded)) return "trusted";
+    if (!bounded && this.hit(s.trusted, absRoot, fingerprint, bounded)) return "trusted";
     if (this.hit(s.declined, absRoot, fingerprint, bounded)) return "declined";
     return "pending";
   }
@@ -171,7 +208,7 @@ export class TrustStore {
   /** 同步查询（发现器 trustStatus 回调是同步口；以已加载缓存为准）。 */
   statusSync(absRoot: string, fingerprint: string, bounded = false): TrustState {
     if (!this.cache) return "pending";
-    if (this.hit(this.cache.trusted, absRoot, fingerprint, bounded)) return "trusted";
+    if (!bounded && this.hit(this.cache.trusted, absRoot, fingerprint, bounded)) return "trusted";
     if (this.hit(this.cache.declined, absRoot, fingerprint, bounded)) return "declined";
     return "pending";
   }
@@ -181,17 +218,29 @@ export class TrustStore {
     await this.load();
   }
 
-  /** 信任决议（信任卡批准/拒绝）；持久化。新决议一律写 `abs@指纹`（E-10：内容绑定）。 */
+  /** 信任决议（信任卡批准/拒绝）；持久化。新决议一律写 `abs@指纹`（E-10：内容绑定）。
+   *  读-改-写走单条串行链：并发批准两个插件时旧实现各自基于旧表整写，后写者抹掉前者。 */
   async decide(absRoot: string, trusted: boolean, fingerprint: string, bounded = false): Promise<void> {
-    const s = await this.load();
-    const entry = this.entryKey(absRoot, fingerprint, bounded);
-    const other = this.entryKey(absRoot, fingerprint, !bounded);
-    const next: TrustFile = {
-      // 清掉同路径同指纹的旧决议（两种有界形态 + 旧版裸路径一并移除，避免残留相反决议）
-      trusted: s.trusted.filter((p) => p !== absRoot && p !== entry && p !== other),
-      declined: s.declined.filter((p) => p !== absRoot && p !== entry && p !== other),
+    if (trusted && bounded) {
+      throw new Error(
+        "插件内容指纹不完整（含软链 / 超出指纹上限 / 有文件读不出），不能批准："
+        + "那部分内容没有绑定，批准后可以不经重新授权被替换。请把插件改成普通文件布局后重试。",
+      );
+    }
+    const run = async (): Promise<void> => {
+      const s = await this.load();
+      const entry = this.entryKey(absRoot, fingerprint, bounded);
+      const other = this.entryKey(absRoot, fingerprint, !bounded);
+      const next: TrustFile = {
+        // 清掉同路径同指纹的旧决议（两种有界形态 + 旧版裸路径一并移除，避免残留相反决议）
+        trusted: s.trusted.filter((p) => p !== absRoot && p !== entry && p !== other),
+        declined: s.declined.filter((p) => p !== absRoot && p !== entry && p !== other),
+      };
+      (trusted ? next.trusted : next.declined).push(entry);
+      await this.persist(next);
     };
-    (trusted ? next.trusted : next.declined).push(entry);
-    await this.persist(next);
+    const pending = this.writes.then(run, run);
+    this.writes = pending.catch(() => undefined);
+    await pending;
   }
 }

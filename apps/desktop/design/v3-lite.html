@@ -74,7 +74,7 @@ button{background:none;border:0;cursor:pointer}
 /* 窄窗（侧边栏里打开）：左右两栏用同一套展开效果——同宽、同缓动、同一层遮罩，从各自那条边推入 */
 .head .railBtn{display:none}
 .rail-scrim{display:none}
-@media (max-width:680px){
+@media (max-width:760px){
   .rail{position:absolute !important;left:0;top:0;bottom:0;z-index:26;width:min(340px,88%) !important;transform:translateX(-103%);border-right:1px solid var(--hair-2);transition:transform var(--fast) var(--ease);box-shadow:var(--sh-2)}
   [data-rail="open"] .rail{transform:none !important}
   .rp{position:absolute !important;right:0;top:0;bottom:0;z-index:27;width:min(340px,88%) !important;transform:translateX(103%);border-left:1px solid var(--hair-2);transition:transform var(--fast) var(--ease);box-shadow:var(--sh-2)}
@@ -281,13 +281,15 @@ button{background:none;border:0;cursor:pointer}
 .in{max-width:720px;margin:0 auto;background:var(--surface-up);border:1px solid var(--hair-2);border-radius:var(--r3);box-shadow:var(--sh-2)}
 .in:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft),var(--sh-2)}
 .in textarea{width:100%;border:0;outline:none;background:none;resize:none;padding:13px 14px 6px;line-height:1.6;min-height:44px;font-size:var(--fs-md)}
-.bar{display:flex;align-items:center;gap:6px;padding:0 10px 10px 3px;flex-wrap:wrap}
+.bar{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto auto;align-items:center;gap:6px;padding:0 10px 10px 3px}
 .tr{display:inline-flex;align-items:center;gap:5px;font-size:var(--fs-sm);color:var(--t2);padding:5px 8px;border-radius:var(--r1);border:1px solid transparent}
 .tr:hover{background:var(--surface-2);border-color:var(--hair)}
 .tr b{font-weight:600;color:var(--t1)}
 .tr .i{color:var(--t3)}
 .tr.auto{color:var(--warn)}
-.ctxw{margin-left:auto;position:relative;display:flex;align-items:center}
+#mT{min-width:0;white-space:nowrap;overflow:hidden}
+#mT b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ctxw{justify-self:end;position:relative;display:flex;align-items:center}
 .ring{width:27px;height:27px;border-radius:50%;display:grid;place-items:center;position:relative;color:var(--t3)}
 .ring:hover{background:var(--surface-2)}
 .ring svg{position:absolute;inset:0;width:27px;height:27px;transform:rotate(-90deg)}
@@ -313,8 +315,10 @@ button{background:none;border:0;cursor:pointer}
 .rail-bot button:hover{background:var(--surface-3);color:var(--t1)}
 .rail-bot .sp{margin-left:auto}
 .page{display:none;grid-row:2;grid-template-rows:auto minmax(0,1fr);min-height:0;background:transparent}
-[data-page="mem"] .page,[data-page="sched"] .page,[data-page="plug"] .page{display:grid}
+[data-page="mem"] .page,[data-page="sched"] .page,[data-page="plug"] .page,[data-page="settings"] .page{display:grid}
 [data-page] .scroll,[data-page] .zone-in,[data-page] .head{display:none}
+[data-page] .rail,[data-page] .rp,[data-page] .rail-scrim{display:none!important}
+[data-page] .main{grid-column:1/-1}
 .pg-h{display:flex;align-items:center;gap:10px;height:46px;padding:0 var(--s4);border-bottom:1px solid var(--hair);background:var(--surface)}
 .pg-h .pt{font-size:var(--fs-sm);font-weight:600}
 .pg-h .ps2{font-size:var(--fs-xs);color:var(--t4)}
@@ -323,7 +327,7 @@ button{background:none;border:0;cursor:pointer}
 .pg-b{padding:var(--s3) var(--s4);min-height:0;overflow:hidden}
 .pg-pane{display:none;grid-template-columns:minmax(0,1fr) minmax(240px,30%);grid-template-rows:auto auto minmax(0,1fr);
   gap:var(--s2) var(--s3);min-height:0;height:100%}
-[data-page="mem"] .pg-pane[data-pg="mem"],[data-page="sched"] .pg-pane[data-pg="sched"],[data-page="plug"] .pg-pane[data-pg="plug"]{display:grid}
+[data-page="mem"] .pg-pane[data-pg="mem"],[data-page="sched"] .pg-pane[data-pg="sched"],[data-page="plug"] .pg-pane[data-pg="plug"],[data-page="settings"] .pg-pane[data-pg="settings"]{display:grid}
 .stats{grid-column:1/-1;grid-row:1;display:flex;gap:var(--s2);flex-wrap:wrap;align-self:start}
 .pg-tools{grid-column:1/-1;grid-row:2;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .plist{grid-column:1;grid-row:3;overflow-y:auto;min-height:0;display:grid;gap:6px;align-content:start}
@@ -431,7 +435,7 @@ button{background:none;border:0;cursor:pointer}
 .macts time{font-variant-numeric:tabular-nums;margin-right:5px}
 .ma{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:var(--rp);color:var(--t4)}
 .ma:hover{background:var(--surface-2);color:var(--t1)}
-.send{margin-left:12px;width:31px;height:31px;border-radius:var(--r2);background:var(--accent);color:var(--accent-fg);display:grid;place-items:center}
+.send{width:31px;height:31px;border-radius:var(--r2);background:var(--accent);color:var(--accent-fg);display:grid;place-items:center}
 .send:hover{filter:brightness(1.07)}
 .send:active{transform:scale(.94)}
 .send.stop{background:var(--bad)}
@@ -492,9 +496,9 @@ button{background:none;border:0;cursor:pointer}
 .cb.show{display:block}
 .ab .macts .p{font-family:var(--mono);font-size:10.5px;color:var(--t4);margin-right:auto;overflow-wrap:anywhere}
 .sc-in textarea{padding:10px 11px 4px;font-size:var(--fs-sm);min-height:36px}
-.sc-in .bar{padding:0 8px 8px 9px;gap:4px}
+.sc-in .bar{grid-template-columns:auto minmax(0,1fr) auto;padding:0 8px 8px 9px;gap:4px}
 .sc-in .tr{font-size:var(--fs-xs);padding:4px 6px}
-.sc-in .send{width:27px;height:27px}
+.sc-in .send{width:27px;height:27px;justify-self:end}
 .rv-f{display:grid;grid-template-columns:14px minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 0;font-size:var(--fs-sm);border-bottom:1px dashed var(--hair)}
 .rv-f .fp{font-family:var(--mono);font-size:var(--fs-xs);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rv-f .nums{font-family:var(--mono);font-size:var(--fs-xs)}
@@ -537,6 +541,54 @@ button{background:none;border:0;cursor:pointer}
 [data-gate="on"] .in{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft),var(--sh-2)}
 [data-gate="on"] .in textarea{color:var(--t4)}
 [data-gate="on"] .send{opacity:.35;pointer-events:none}
+[data-page="settings"] .pg-h{display:none}
+.pg-pane[data-pg="settings"]{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+.settings-shell{display:grid;grid-template-columns:238px minmax(0,1fr);min-height:0;height:100%;margin:calc(-1 * var(--s3)) calc(-1 * var(--s4))}
+.ss-nav{border-right:1px solid var(--hair);background:var(--surface-2);padding:16px 12px;overflow-y:auto;min-height:0}
+.ss-title{font-size:20px;font-weight:650;color:var(--t1);padding:2px 8px 12px}
+.ss-search{display:flex;align-items:center;gap:7px;border:1px solid var(--hair);border-radius:var(--rp);padding:7px 11px;background:var(--surface);color:var(--t4);margin-bottom:14px}
+.ss-search input{border:0;background:none;outline:none;width:100%;font-size:var(--fs-sm);color:var(--t1)}
+.ss-group-label{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--t4);padding:9px 9px 4px}
+.ss-item{width:100%;display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:8px;align-items:center;text-align:left;
+  padding:8px 9px;border-radius:var(--r1);border:1px solid transparent;color:var(--t2);font-size:var(--fs-sm)}
+.ss-item:hover{background:var(--surface);color:var(--t1)}
+.ss-item.on{background:var(--surface);border-color:var(--hair);color:var(--t1);font-weight:600;box-shadow:var(--sh-1)}
+.ss-item .i{color:var(--t3)}
+.ss-item .tag{font-size:9.5px;color:var(--t4);border:1px solid var(--hair);border-radius:var(--rp);padding:1px 6px}
+.ss-body{overflow-y:auto;min-height:0;padding:24px 30px 64px}
+.ss-panel{display:none;max-width:780px}
+.ss-panel.on{display:block}
+.ss-panel h2{font-size:22px;font-weight:650;margin-bottom:20px;color:var(--t1)}
+.ss-panel .ss-desc{font-size:var(--fs-xs);color:var(--t3);line-height:1.6;margin:-12px 0 18px}
+.ss-group{border:1px solid var(--hair);border-radius:var(--r2);background:var(--surface);overflow:hidden;margin-bottom:22px}
+.ss-group-title{font-size:11px;font-weight:650;color:var(--t2);padding:11px 14px 8px;background:var(--surface-2)}
+.ss-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:center;padding:12px 14px;border-top:1px solid var(--hair);font-size:var(--fs-sm)}
+.ss-row:first-of-type{border-top:0}
+.ss-row b{display:block;color:var(--t1);font-weight:560}
+.ss-row small{display:block;margin-top:2px;font-size:10.5px;line-height:1.5;color:var(--t3)}
+.ss-row .ss-note{font-size:10.5px;color:var(--warn);background:var(--warn-soft);border-radius:var(--r1);padding:8px 10px;line-height:1.5}
+.ss-control{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.ss-select{border:1px solid var(--hair);border-radius:var(--r1);background:var(--surface);padding:6px 9px;font-size:var(--fs-xs);color:var(--t2)}
+.ss-switch{width:38px;height:22px;border-radius:var(--rp);background:var(--hair-2);position:relative;transition:background var(--fast) var(--ease);flex:none}
+.ss-switch::after{content:"";position:absolute;width:18px;height:18px;border-radius:50%;background:var(--surface-up);top:2px;left:2px;box-shadow:var(--sh-1);transition:transform var(--fast) var(--ease)}
+.ss-switch[aria-pressed="true"]{background:var(--accent)}
+.ss-switch[aria-pressed="true"]::after{transform:translateX(16px)}
+.ss-link{display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;padding:12px 14px;border-top:1px solid var(--hair);color:var(--t2)}
+.ss-link:hover{background:var(--surface-2);color:var(--t1)}
+.ss-kbd{font-family:var(--mono);font-size:10.5px;border:1px solid var(--hair);border-radius:4px;padding:2px 6px;background:var(--surface-2);color:var(--t2);white-space:nowrap}
+@media (max-width:1100px){
+  :root{--c-rail:216px}
+  [data-rp="open"]{--c-rp:286px}
+  .stage{padding:10px}
+  .zone-in{padding:0 10px 10px}
+  .in{max-width:none}
+  .bar{gap:4px;padding-right:6px}
+  .tr{padding:5px 6px}
+}
+@media (max-width:900px){
+  :root{--c-rail:196px}
+  [data-rp="open"]{--c-rp:260px}
+}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
 </head>
@@ -602,6 +654,7 @@ button{background:none;border:0;cursor:pointer}
   <button class="scene-btn" data-scene="mem" aria-pressed="false">整页·记忆</button>
   <button class="scene-btn" data-scene="sched" aria-pressed="false">整页·定时任务</button>
   <button class="scene-btn" data-scene="plug" aria-pressed="false">整页·扩展</button>
+  <button class="scene-btn" data-scene="settings" aria-pressed="false">整页·设置</button>
   <button class="scene-btn" data-scene="menu" aria-pressed="false">对话动作菜单</button>
   <button class="scene-btn" data-scene="folder" aria-pressed="false">文件夹动作菜单</button>
   <button class="scene-btn" data-scene="narrow" aria-pressed="false">窄窗 900</button>
@@ -679,14 +732,8 @@ button{background:none;border:0;cursor:pointer}
       <div class="item"><span class="dot"></span><div><div class="ti">这段报错是什么意思</div><div class="ts">昨天 22:15 · 未绑文件夹</div></div></div>
       <div class="item"><span class="dot"></span><div><div class="ti">帮我把周报口吻改软一点</div><div class="ts">10-06 · 未绑文件夹</div></div></div>
     </div>
-    <div class="rnav">
-      <button data-page="mem"><svg class="i s14"><use href="#i-book"/></svg> 记忆</button>
-      <button data-page="sched"><svg class="i s14"><use href="#i-timer"/></svg> 定时任务</button>
-      <button data-page="plug"><svg class="i s14"><use href="#i-cube"/></svg> 扩展</button>
-    </div>
     <div class="rail-bot">
-      <button><svg class="i s14"><use href="#i-settings"/></svg> 设置</button>
-      <button class="sp" id="thT" title="浅色/深色"><svg class="i s14"><use href="#i-sun"/></svg></button>
+      <button id="settingsBtn"><svg class="i s14"><use href="#i-settings"/></svg> 设置</button>
     </div>
   </nav>
 
@@ -971,9 +1018,161 @@ button{background:none;border:0;cursor:pointer}
     <section class="page" id="page" aria-label="面板">
       <div class="pg-h">
         <span class="pt" id="pgT">记忆</span><span class="ps2" id="pgS">项目 6 · 全局 3</span>
-        <button class="back" id="pgBack"><svg class="i s12"><use href="#i-chev"/></svg> 返回对话</button>
+        <button class="back" id="pgBack"><svg class="i s12"><use href="#i-chev"/></svg> <span id="pgBackLabel">返回对话</span></button>
       </div>
       <div class="pg-b">
+
+        <div class="pg-pane" data-pg="settings">
+          <div class="settings-shell">
+            <nav class="ss-nav" aria-label="设置分区">
+              <div class="ss-title">设置</div>
+              <label class="ss-search"><svg class="i s12"><use href="#i-search"/></svg><input id="settingsSearch" placeholder="搜索设置" aria-label="搜索设置"></label>
+
+              <div class="ss-group-label">个人</div>
+              <button class="ss-item on" data-sp="general"><svg class="i s14"><use href="#i-settings"/></svg><span>常规</span></button>
+              <button class="ss-item" data-sp="appearance"><svg class="i s14"><use href="#i-sun"/></svg><span>外观</span></button>
+              <button class="ss-item" data-sp="notifications"><svg class="i s14"><use href="#i-alert"/></svg><span>通知</span><span class="tag">待接</span></button>
+
+              <div class="ss-group-label">工作区</div>
+              <button class="ss-item" data-sp="model"><svg class="i s14"><use href="#i-cube"/></svg><span>模型与 Provider</span></button>
+              <button class="ss-item" data-sp="permissions"><svg class="i s14"><use href="#i-shield"/></svg><span>权限与安全</span></button>
+              <button class="ss-item" data-sp="behavior"><svg class="i s14"><use href="#i-brain"/></svg><span>行为与成本</span></button>
+
+              <div class="ss-group-label">数据与集成</div>
+              <button class="ss-item" data-sp="memory"><svg class="i s14"><use href="#i-book"/></svg><span>记忆与数据</span></button>
+              <button class="ss-item" data-sp="automation"><svg class="i s14"><use href="#i-timer"/></svg><span>自动化任务</span></button>
+              <button class="ss-item" data-sp="plugins"><svg class="i s14"><use href="#i-cube"/></svg><span>插件与扩展</span></button>
+
+              <div class="ss-group-label">系统</div>
+              <button class="ss-item" data-sp="shortcuts"><svg class="i s14"><use href="#i-layers"/></svg><span>键盘快捷键</span></button>
+              <button class="ss-item" data-sp="about"><svg class="i s14"><use href="#i-target"/></svg><span>关于与更新</span></button>
+              <button class="ss-item" id="settingsBack"><svg class="i s14"><use href="#i-chev"/></svg><span>返回对话</span></button>
+            </nav>
+
+            <div class="ss-body">
+              <section class="ss-panel on" data-ss="general">
+                <h2>常规</h2>
+                <p class="ss-desc">默认权限、工作区与窗口行为。改动即时保存，下一轮任务生效。</p>
+                <div class="ss-group">
+                  <div class="ss-group-title">权限</div>
+                  <div class="ss-row"><span><b>默认权限档</b><small>新会话的起始档位；命中全局 deny 时仍直接拒绝。</small></span><span class="ss-control"><select class="ss-select" aria-label="默认权限档"><option>只读</option><option selected>默认</option><option>引导</option><option>自动</option></select></span></div>
+                  <div class="ss-row"><span><b>方案门缺省</b><small>新对话默认要求先批准方案才能写入。</small></span><span class="ss-control"><button class="ss-switch" aria-label="方案门缺省" aria-pressed="false"></button></span></div>
+                  <div class="ss-row"><span><b>完整访问权限</b><small>自动档只降低提问频率，不会越过全局 deny、路径白名单或外发审批。</small></span><span class="ss-control"><button class="ss-switch" aria-label="完整访问权限" aria-pressed="false"></button></span></div>
+                </div>
+                <div class="ss-group">
+                  <div class="ss-group-title">常规</div>
+                  <div class="ss-row"><span><b>无项目任务文件夹</b><small>项目外启动的任务默认存储数据的位置。</small></span><span class="ss-control"><span class="ss-note">~/CairnProjects</span><button class="btn sm">更改</button></span></div>
+                  <div class="ss-row"><span><b>默认文件打开位置</b><small>默认打开文件和文件夹的位置。</small></span><span class="ss-control"><select class="ss-select"><option>Default app</option><option>Finder</option></select></span></div>
+                  <div class="ss-row"><span><b>语言</b><small>应用界面语言。</small></span><span class="ss-control"><select class="ss-select"><option>自动检测</option><option selected>简体中文</option><option>English</option></select></span></div>
+                  <div class="ss-row"><span><b>在菜单栏中显示</b><small>关闭主窗口后仍在菜单栏保留 Cairn。</small></span><span class="ss-control"><button class="ss-switch" aria-label="在菜单栏中显示" aria-pressed="true"></button></span></div>
+                  <div class="ss-row"><span><b>关闭窗口前确认</b><small>快捷键关闭窗口时是否发出警告。</small></span><span class="ss-control"><select class="ss-select"><option selected>仅在使用“关闭”快捷键时</option><option>总是</option><option>从不</option></select></span></div>
+                  <div class="ss-row"><span><b>默认采用完整视图</b><small>开始新任务时，在同一标签页栏中显示对话和内容。</small></span><span class="ss-control"><button class="ss-switch" aria-label="默认采用完整视图" aria-pressed="false"></button></span></div>
+                  <div class="ss-row"><span><b>底部面板</b><small>内容面板显示在窗口底部。</small></span><span class="ss-control"><button class="ss-switch" aria-label="底部面板" aria-pressed="true"></button></span></div>
+                </div>
+              </section>
+
+              <section class="ss-panel" data-ss="appearance">
+                <h2>外观</h2>
+                <p class="ss-desc">主题、语言与界面密度。</p>
+                <div class="ss-group">
+                  <div class="ss-row"><span><b>主题</b><small>跟随系统或显式浅色/深色。</small></span><span class="ss-control"><select class="ss-select" id="themeSelect"><option>跟随系统</option><option selected>浅色</option><option>深色</option></select></span></div>
+                  <div class="ss-row"><span><b>界面语言</b><small>设置页与主界面的语言。</small></span><span class="ss-control"><select class="ss-select"><option selected>简体中文</option><option>English</option></select></span></div>
+                  <div class="ss-row"><span><b>界面密度</b><small>桌面端默认紧凑；舒适档待接。</small></span><span class="ss-control"><select class="ss-select"><option selected>紧凑</option><option>舒适</option></select></span></div>
+                </div>
+              </section>
+
+              <section class="ss-panel" data-ss="notifications">
+                <h2>通知</h2>
+                <p class="ss-desc">当前没有独立通知通道；先保留设置位，不摆假开关。</p>
+                <div class="ss-group"><div class="ss-row"><span><b>任务完成通知</b><small>需要系统通知通道后接线。</small></span><span class="ss-control"><span class="tag">待接</span></span></div></div>
+              </section>
+
+              <section class="ss-panel" data-ss="model">
+                <h2>模型与 Provider</h2>
+                <p class="ss-desc">当前默认：DeepSeek-V3.2 · 128k。接入与 key 管理沿用现有模型接入流程。</p>
+                <div class="ss-group">
+                  <div class="ss-group-title">已接入</div>
+                  <div class="ss-row"><span><b>DeepSeek</b><small>DeepSeek-V3.2 · 128k · 当前默认</small></span><span class="ss-control"><span class="chip ok">已配置</span></span></div>
+                  <div class="ss-row"><span><b>OpenAI</b><small>gpt-5.3 · 400k · 未设为默认</small></span><span class="ss-control"><span class="chip">已配置</span></span></div>
+                  <div class="ss-row"><span><b>Anthropic</b><small>sonnet-4 · 200k · 未配置 key</small></span><span class="ss-control"><span class="chip warn">未配置</span></span></div>
+                  <div class="ss-row"><span><b>Demo 通道</b><small>预录剧本 · 不产生真实调用</small></span><span class="ss-control"><span class="chip ok">可用</span></span></div>
+                </div>
+              </section>
+
+              <section class="ss-panel" data-ss="permissions">
+                <h2>权限与安全</h2>
+                <p class="ss-desc">默认档位、方案门与完整访问风险。</p>
+                <div class="ss-group">
+                  <div class="ss-row"><span><b>默认权限档</b><small>会话内批准“总是允许”是另一条持久面。</small></span><span class="ss-control"><select class="ss-select"><option>只读</option><option selected>默认</option><option>引导</option><option>自动</option></select></span></div>
+                  <div class="ss-row"><span><b>写前方案门</b><small>要求先提交方案并获得批准。</small></span><span class="ss-control"><button class="ss-switch" aria-label="写前方案门" aria-pressed="false"></button></span></div>
+                  <div class="ss-row"><span><b>完整访问权限</b><small>风险：减少询问，但不绕过全局 deny、沙箱、工作区边界和外发审批。</small></span><span class="ss-control"><button class="ss-switch" aria-label="完整访问权限" aria-pressed="false"></button></span></div>
+                </div>
+              </section>
+
+              <section class="ss-panel" data-ss="behavior">
+                <h2>行为与成本</h2>
+                <p class="ss-desc">全部为持久化开关，改动后下一轮 run 生效。</p>
+                <div class="ss-group">
+                  <div class="ss-row"><span><b>自动记忆</b><small>会话结束自动沉淀。</small></span><span class="ss-control"><button class="ss-switch" aria-label="自动记忆" aria-pressed="true"></button></span></div>
+                  <div class="ss-row"><span><b>自动验证</b><small>改完自动跑 verify 收束。</small></span><span class="ss-control"><button class="ss-switch" aria-label="自动验证" aria-pressed="true"></button></span></div>
+                  <div class="ss-row"><span><b>动作融合</b><small>编辑与验证并步执行。</small></span><span class="ss-control"><button class="ss-switch" aria-label="动作融合" aria-pressed="false"></button></span></div>
+                  <div class="ss-row"><span><b>前缀缓存</b><small>复用会话前缀，降低输入成本。</small></span><span class="ss-control"><button class="ss-switch" aria-label="前缀缓存" aria-pressed="true"></button></span></div>
+                  <div class="ss-row"><span><b>证据回执</b><small>关键结论带可回查凭据。</small></span><span class="ss-control"><button class="ss-switch" aria-label="证据回执" aria-pressed="true"></button></span></div>
+                  <div class="ss-row"><span><b>经济压缩</b><small>按成本最优策略压缩历史。</small></span><span class="ss-control"><button class="ss-switch" aria-label="经济压缩" aria-pressed="false"></button></span></div>
+                </div>
+              </section>
+
+              <section class="ss-panel" data-ss="memory">
+                <h2>记忆与数据</h2>
+                <p class="ss-desc">项目层 6 个主题 · 全局层 3 个主题 · 24 行索引。</p>
+                <div class="ss-group">
+                  <button class="ss-link" data-page="mem"><span><b>打开记忆系统</b><small>查看主题、证据指针与待批外部引用。</small></span><svg class="i s12"><use href="#i-chev"/></svg></button>
+                  <button class="ss-link"><span><b>数据目录</b><small><code>.agent/</code> · 会话、记忆与快照都在本机。</small></span><svg class="i s12"><use href="#i-chev"/></svg></button>
+                </div>
+              </section>
+
+              <section class="ss-panel" data-ss="automation">
+                <h2>自动化任务</h2>
+                <p class="ss-desc">3 个任务 · 1 正在跑 · 并发上限 4。</p>
+                <div class="ss-group">
+                  <button class="ss-link" data-page="sched"><span><b>打开定时任务</b><small>查看任务定义、触发历史与手动运行。</small></span><svg class="i s12"><use href="#i-chev"/></svg></button>
+                  <div class="ss-row"><span><b>无人值守默认档</b><small>定时触发时遇到风险步骤的处理方式。</small></span><span class="ss-control"><select class="ss-select"><option selected>自动拒绝</option><option>引导档</option></select></span></div>
+                </div>
+              </section>
+
+              <section class="ss-panel" data-ss="plugins">
+                <h2>插件与扩展</h2>
+                <p class="ss-desc">4 个扩展 · 5 个 MCP server · 61 个工具。</p>
+                <div class="ss-group">
+                  <button class="ss-link" data-page="plug"><span><b>打开扩展中心</b><small>查看信任状态、工具计数与异常。</small></span><svg class="i s12"><use href="#i-chev"/></svg></button>
+                  <div class="ss-row"><span><b>未信任不加载</b><small>插件 hook / MCP 未经用户批准不会进入运行面。</small></span><span class="ss-control"><span class="chip ok">已启用</span></span></div>
+                </div>
+              </section>
+
+              <section class="ss-panel" data-ss="shortcuts">
+                <h2>键盘快捷键</h2>
+                <p class="ss-desc">桌面端常用操作。</p>
+                <div class="ss-group">
+                  <div class="ss-row"><span><b>新建任务</b></span><span class="ss-kbd">⌘ N</span></div>
+                  <div class="ss-row"><span><b>发送 / 排队</b></span><span class="ss-kbd">Enter</span></div>
+                  <div class="ss-row"><span><b>打断并发送</b></span><span class="ss-kbd">⌘ Enter</span></div>
+                  <div class="ss-row"><span><b>打开设置</b></span><span class="ss-kbd">⌘ ,</span></div>
+                  <div class="ss-row"><span><b>关闭弹层</b></span><span class="ss-kbd">Esc</span></div>
+                </div>
+              </section>
+
+              <section class="ss-panel" data-ss="about">
+                <h2>关于与更新</h2>
+                <p class="ss-desc">Cairn 0.1.0 · 内测版。</p>
+                <div class="ss-group">
+                  <div class="ss-row"><span><b>版本</b><small>0.1.0（B1 内测）</small></span><span class="ss-control"><button class="btn sm">检查更新</button></span></div>
+                  <div class="ss-row"><span><b>构建</b><small>Electron + React + Vite · 本机运行</small></span><span class="chip">developer</span></div>
+                  <div class="ss-row"><span><b>关于</b><small>可重放与可审计的 agent harness。</small></span><span class="chip ok">MIT core</span></div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
 
         <div class="pg-pane" data-pg="mem">
           <div class="stats">
@@ -1163,7 +1362,6 @@ button{background:none;border:0;cursor:pointer}
     <div class="rp-b rp-start" data-pane="start">
       <button class="ib rp-x" id="rpClose2" title="收起右栏"><svg class="i s12"><use href="#i-x"/></svg></button>
       <div class="rv-lab">面板 · 还没开标签</div>
-      <p class="th-hint" style="padding:0 0 4px">点一张卡开一个标签；同一类可以多开，标签上能关。</p>
       <button class="pc" data-open="browser"><span class="pi"><svg class="i s14"><use href="#i-eye"/></svg></span>
         <span><b>内置浏览器</b><span class="ps">看文档、看上游报错原文</span></span><span class="chip bad">待接</span></button>
       <button class="pc" data-open="side"><span class="pi"><svg class="i s14"><use href="#i-branch"/></svg></span>
@@ -1269,6 +1467,7 @@ const SC={
   mem:    {t:'给 verify 尺补 cause 归属',page:'mem'},
   sched:  {t:'给 verify 尺补 cause 归属',page:'sched'},
   plug:   {t:'给 verify 尺补 cause 归属',page:'plug'},
+  settings:{t:'设置',page:'settings'},
   ctx:    {t:'给 verify 尺补 cause 归属',ctx:1,run:1},
   sub:    {t:'给 verify 尺补 cause 归属',steps:1,think:1,run:1,wk:1},
   wkd:    {t:'给 verify 尺补 cause 归属',rp:1,tabs:['wk:wt-4f2a'],steps:1,think:1,run:1},
@@ -1352,6 +1551,11 @@ const setRp=(v)=>{if(v==='open'&&inOverlay())root.dataset.rail='closed';root.dat
 railBtn.addEventListener('click',()=>setRail(root.dataset.rail==='open'?'closed':'open'));
 document.getElementById('railScrim').addEventListener('click',()=>{setRail('closed');setRp('closed');});
 document.querySelector('.rail').addEventListener('click',(e)=>{if(e.target.closest('.item')&&inOverlay())setRail('closed');});
+function setSettingsSection(id){
+  root.dataset.sp=id;
+  document.querySelectorAll('.ss-panel').forEach(p=>p.classList.toggle('on',p.dataset.ss===id));
+  document.querySelectorAll('.ss-item[data-sp]').forEach(b=>b.classList.toggle('on',b.dataset.sp===id));
+}
 function apply(s){
   const c=SC[s]||SC.chat;
   root.dataset.scene=c.empty?'first':'thread';
@@ -1359,6 +1563,8 @@ function apply(s){
   setRp(c.rp?'open':'closed');
   setRail(c.rail?'open':'closed');
   root.dataset.theme=c.theme||'light';
+  const themeSelect=document.getElementById('themeSelect');
+  if(themeSelect) themeSelect.value=root.dataset.theme==='dark'?'深色':'浅色';
   document.getElementById('hTitle').textContent=c.t;
   const ta=document.getElementById('ta');
   ta.disabled=!!c.gate; ta.placeholder=c.gate?'先处理输入框上方的拍板，再继续输入':'要做什么？说目标和边界就行';
@@ -1374,10 +1580,10 @@ function apply(s){
   snd.innerHTML='<svg class="i s14"><use href="#'+(c.run?'i-stop':'i-send')+'"/></svg>';
   TABS=c.tabs||[];ACT=c.act||0;renderTabs();
   if(c.page)root.dataset.page=c.page;else root.removeAttribute('data-page');
-  document.querySelectorAll('.rnav button').forEach(b=>{
-    if(c.page&&b.dataset.page===c.page)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
-  const PG={mem:['记忆','项目 6 · 全局 3 · 索引 24 行'],sched:['定时任务','3 个任务 · 1 正在跑 · 上限 4'],plug:['扩展','4 个 · 5 个 MCP server · 61 工具']};
+  const PG={settings:['设置','外观与应用'],mem:['记忆','项目 6 · 全局 3 · 索引 24 行'],sched:['定时任务','3 个任务 · 1 正在跑 · 上限 4'],plug:['扩展','4 个 · 5 个 MCP server · 61 工具']};
   if(c.page){document.getElementById('pgT').textContent=PG[c.page][0];document.getElementById('pgS').textContent=PG[c.page][1];}
+  if(c.page==='settings') setSettingsSection('general');
+  document.getElementById('pgBackLabel').textContent=(c.page==='mem'||c.page==='sched'||c.page==='plug')?'返回设置':'返回对话';
   document.getElementById('mPop').classList.toggle('show',!!c.pop);
   if(c.pop)document.getElementById('mPop').dataset.view=c.mv||'effort';
   document.getElementById('ctxPop').classList.toggle('show',!!c.ctx);
@@ -1426,7 +1632,21 @@ document.getElementById('rpToggle').addEventListener('click',()=>setRp(root.data
 document.getElementById('rpClose').addEventListener('click',()=>setRp('closed'));
 document.getElementById('rpClose2').addEventListener('click',()=>setRp('closed'));
 apply('chat');
-document.getElementById('thT').addEventListener('click',()=>{root.dataset.theme=root.dataset.theme==='dark'?'light':'dark';});
+document.getElementById('settingsBtn').addEventListener('click',()=>apply('settings'));
+document.querySelectorAll('.ss-item[data-sp]').forEach(b=>b.addEventListener('click',()=>setSettingsSection(b.dataset.sp)));
+document.querySelectorAll('.ss-link[data-page]').forEach(b=>b.addEventListener('click',()=>apply(b.dataset.page)));
+document.getElementById('settingsBack').addEventListener('click',()=>apply('chat'));
+document.getElementById('themeSelect').addEventListener('change',e=>{
+  const v=e.target.value;
+  root.dataset.theme=v==='深色'?'dark':v==='浅色'?'light':(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+});
+document.getElementById('settingsSearch').addEventListener('input',e=>{
+  const q=e.target.value.trim().toLowerCase();
+  document.querySelectorAll('.ss-item[data-sp]').forEach(b=>{b.style.display=b.textContent.toLowerCase().includes(q)?'':'none';});
+});
+document.querySelectorAll('.ss-switch').forEach(b=>b.addEventListener('click',()=>{
+  b.setAttribute('aria-pressed',String(b.getAttribute('aria-pressed')!=='true'));
+}));
 document.querySelector('#steps .sh').addEventListener('click',e=>e.currentTarget.parentElement.classList.toggle('open'));
 document.querySelector('#chg .ch').addEventListener('click',e=>e.currentTarget.parentElement.classList.toggle('open'));
 document.querySelectorAll('.fh').forEach(f=>f.addEventListener('click',()=>{
@@ -1474,8 +1694,10 @@ document.addEventListener('click',(e)=>{if(e.target.closest('.harness'))return;
   if(!e.target.closest('#permPop')&&!e.target.closest('#permT'))document.getElementById('permPop').classList.remove('show');
   if(!e.target.closest('#slashPop')&&!e.target.closest('#addT'))document.getElementById('slashPop').classList.remove('show');});
 document.querySelector('#think .th').addEventListener('click',e=>e.currentTarget.parentElement.classList.toggle('open'));
-document.querySelectorAll('.rnav button').forEach(b=>b.addEventListener('click',()=>apply(b.dataset.page)));
-document.getElementById('pgBack').addEventListener('click',()=>apply('chat'));
+document.getElementById('pgBack').addEventListener('click',()=>{
+  const p=root.dataset.page;
+  apply(p==='mem'||p==='sched'||p==='plug'?'settings':'chat');
+});
 document.querySelectorAll('.pg-pane').forEach(pn=>pn.querySelectorAll('.pr').forEach(r=>r.addEventListener('click',()=>{
   pn.querySelectorAll('.pr').forEach(x=>x.classList.remove('sel'));r.classList.add('sel');})));
 document.querySelectorAll('.more-row').forEach(m=>{

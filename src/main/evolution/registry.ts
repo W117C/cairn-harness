@@ -19,7 +19,7 @@
 //  - deprecate 不许落在当前 active 版本上——先回滚再废弃，不留「已废弃却还在位」的模糊态；
 //  - prune（清退）只许落在已废弃、且不在 active/previous 位、未清退过的版本上——
 //    回滚目标被清退 = 指针将指向盘上没有的文件，这条在账本层就闸死。
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { writeFileAtomic } from "../../atomic-write";
 import {
@@ -65,6 +65,9 @@ export interface RegistryIndex {
   version: typeof INDEX_VERSION;
   rebuiltAt: string;
   bundles: Record<string, BundleEntry>;
+  /** 生成这份索引时 registry.jsonl 的字节数。append 成功而 persist 失败时两者不一致 ⇒ 重建，
+   *  否则日志里已落账的事件会永久不可见（旧实现只校验索引 JSON 形状）。 */
+  logSize?: number;
 }
 
 export type RegistryEvent =
@@ -424,6 +427,7 @@ export class ModuleRegistry {
       const ev = this.parseEventLine(trimmed, i + 1);
       foldEvent(index, ev);
     }
+    index.logSize = Buffer.byteLength(text, "utf8");
     return await this.persistIndex(index);
   }
 
@@ -445,6 +449,12 @@ export class ModuleRegistry {
       try {
         const raw = JSON.parse(text) as unknown;
         if (isRecord(raw) && raw.version === INDEX_VERSION && isRecord(raw.bundles)) {
+          // 与日志对账：投影不是事实。大小不一致（append 后 persist 失败 / 外部追加）⇒ 重建。
+          const st = await stat(this.logPath).catch(() => null);
+          const logSize = st?.size ?? 0;
+          if (typeof raw.logSize !== "number" || raw.logSize !== logSize) {
+            return await this.rebuildInner();
+          }
           return raw as unknown as RegistryIndex;
         }
       } catch {
@@ -457,6 +467,7 @@ export class ModuleRegistry {
   private async commit(ev: RegistryEvent, index: RegistryIndex): Promise<void> {
     await mkdir(dirname(this.logPath), { recursive: true });
     await appendFile(this.logPath, JSON.stringify(ev) + "\n", "utf8");
+    index.logSize = (await stat(this.logPath)).size;
     await this.persistIndex(index);
   }
 

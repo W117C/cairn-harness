@@ -8,13 +8,15 @@
 
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { PassThrough } from "node:stream";
+import { gzipSync } from "node:zlib";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { assertPublicUrl, blockedHostReason, blockedReason } from "../src/tools/web-fetch-policy.js";
 import { WEB_CONTENT_TRUNCATION_HINT } from "../src/tools/output-ring.js";
-import { htmlToText, makeWebFetch } from "../src/tools/web_fetch.js";
+import { createPinnedLookup, decodeResponseBody, htmlToText, makeWebFetch } from "../src/tools/web_fetch.js";
 import { evaluate, newAutonomySession } from "../src/permissions/autonomy.js";
 import { PERMISSION_MODES } from "../src/permissions/index.js";
 import { staticRisk } from "../src/permissions/risk.js";
@@ -90,6 +92,23 @@ describe("web_fetch 出网判据（纯函数，零网络）", () => {
     expect(u.protocol).toBe("https:");
   });
 
+  it("把已经校验过的 DNS 地址交给传输层，避免连接时再次解析", async () => {
+    const validated = ["93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946"];
+    let used: readonly string[] | undefined;
+    const tool = makeWebFetch({
+      resolveHost: async () => validated,
+      fetchImpl: ((url: string, init: RequestInit, addresses: readonly string[]) => {
+        void url;
+        void init;
+        used = addresses;
+        return Promise.resolve(new Response("<p>ok</p>", { headers: { "content-type": "text/html" } }));
+      }) as unknown as typeof fetch,
+    });
+    const result = await tool.run({ url: "https://example.com/" }, CTX);
+    expect(result.ok).toBe(true);
+    expect(used).toEqual(validated);
+  });
+
   it("协议白名单：file:/data:/ftp:/javascript: 一律拒（它们不是站，是本机与内网的读取面）", async () => {
     for (const bad of ["file:///etc/passwd", "data:text/html,<script>x</script>", "ftp://example.com/x",
       "javascript:alert(1)", "gopher://example.com/"]) {
@@ -100,6 +119,10 @@ describe("web_fetch 出网判据（纯函数，零网络）", () => {
   // DNS 失败被当放行是这一族里最贵的形态：解析器返回空列表时，"没查到什么"很容易被读成"没问题"。
   it("解析不出任何地址 ⇒ 判拒（不把解析失败当放行）", async () => {
     await expect(assertPublicUrl("https://nowhere.invalid/", async () => [])).rejects.toThrow(/解析不出任何地址/);
+  });
+
+  it("解析器返回非 IP 值时判拒，不能把畸形结果交给 socket 层", async () => {
+    await expect(assertPublicUrl("https://example.com/", async () => ["not-an-ip"])).rejects.toThrow(/无效 IP 地址/);
   });
 
   // 双栈是"只判第一条"的现成旁路：AAAA 指向内网、A 指向公网时，只看第一条就过了。
@@ -152,6 +175,85 @@ describe("web_fetch 权限：四档都问（出网永不免批）", () => {
 });
 
 describe("web_fetch 传输层（注入 fetchImpl / resolveHost）", () => {
+  it("gzip 响应解码成正文，并丢弃压缩体积对应的长度头", async () => {
+    const source = new PassThrough();
+    const headers = new Headers({ "content-encoding": "gzip", "content-length": "99" });
+    const body = decodeResponseBody(source as unknown as import("node:http").IncomingMessage, headers);
+    const text = new Response(body).text();
+    source.end(gzipSync("压缩正文"));
+    await expect(text).resolves.toBe("压缩正文");
+    expect(headers.has("content-encoding")).toBe(false);
+    expect(headers.has("content-length")).toBe(false);
+  });
+
+  it("不支持的响应内容编码会给出可读错误", () => {
+    const source = new PassThrough();
+    expect(() => decodeResponseBody(
+      source as unknown as import("node:http").IncomingMessage,
+      new Headers({ "content-encoding": "zstd" }),
+    )).toThrow(/不支持响应内容编码 zstd/);
+    source.destroy();
+  });
+
+  // 对端**谎报**编码（说 gzip 却发明文）或流被截断时，读方必须拿到能读懂的原因。
+  // 旧实现直接 `output.destroy(zlibError)`：Readable.toWeb 抛出来的是 message 为空的
+  // TypeError（`code: Z_DATA_ERROR`、真正的 `incorrect header check` 只挂在 cause 上），
+  // 上层于是打出「web_fetch 失败: terminated」——那既不像编码错也不像网络错，
+  // 模型无从判断该换 URL 还是该重试。判据钉的是**说人话**这件事本身。
+  it("谎报 content-encoding：读到的错误说得出是哪一种编码、真正的原因是什么", async () => {
+    const source = new PassThrough();
+    const headers = new Headers({ "content-encoding": "gzip" });
+    const body = decodeResponseBody(source as unknown as import("node:http").IncomingMessage, headers);
+    const pending = new Response(body).text();
+    source.end("这不是 gzip");
+    await expect(pending).rejects.toThrow(/响应内容解码失败（content-encoding: gzip）/);
+    await expect(pending).rejects.toThrow(/incorrect header check/);
+  });
+
+  it("截断的 gzip 流也说得出是解码失败，不是一句空 message", async () => {
+    const source = new PassThrough();
+    const headers = new Headers({ "content-encoding": "gzip" });
+    const body = decodeResponseBody(source as unknown as import("node:http").IncomingMessage, headers);
+    const pending = new Response(body).text();
+    source.end(gzipSync("前半段").subarray(0, 6)); // 头还在，数据断了
+    const err = await pending.catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toMatch(/响应内容解码失败（content-encoding: gzip）/);
+    expect((err as Error).message).not.toBe("");
+  });
+
+  it("socket lookup 只返回本轮已校验的地址，不重新查询 DNS", async () => {
+    const addresses = ["93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946"];
+    const pinned = createPinnedLookup("example.com", addresses);
+    const all = await new Promise<readonly { address: string; family: number }[]>((resolve, reject) => {
+      pinned("EXAMPLE.COM.", { all: true }, (error, result) => {
+        if (error) return reject(error);
+        if (typeof result === "string") return reject(new Error("all=true 必须返回地址列表"));
+        resolve(result);
+      });
+    });
+    expect(all).toEqual([
+      { address: "93.184.216.34", family: 4 },
+      { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 },
+    ]);
+
+    const ipv4 = await new Promise<{ address: string; family?: number }>((resolve, reject) => {
+      pinned("example.com", { family: 4 }, (error, address, family) => {
+        if (error) return reject(error);
+        if (typeof address !== "string") return reject(new Error("默认 lookup 必须返回单地址"));
+        resolve({ address, family });
+      });
+    });
+    expect(ipv4).toEqual({ address: "93.184.216.34", family: 4 });
+  });
+
+  it("socket lookup 对非本轮主机 fail closed", async () => {
+    const pinned = createPinnedLookup("example.com", ["93.184.216.34"]);
+    await expect(new Promise<void>((resolve, reject) => {
+      pinned("other.example", { all: true }, (error) => error ? reject(error) : resolve());
+    })).rejects.toThrow(/与已校验主机不符/);
+  });
+
   it("HTML 还原成文本：剥脚本与样式、块级转换行、解实体、收空白", () => {
     const html = `<!doctype html><html><head><style>a{color:red}</style><script>alert(1)</script></head>
       <body><h1>Title</h1><p>Hello &amp; <b>world</b>&nbsp;&#65;</p>

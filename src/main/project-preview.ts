@@ -16,7 +16,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { basename, dirname, extname, join, normalize, resolve, sep } from "node:path";
-import { readProjectManifest, type TemplateRunKind } from "./project-templates";
+import { diagnoseProjectDirectory, HTML_FILE_EXTENSIONS, readProjectManifest, type TemplateRunKind } from "./project-templates";
 
 /* ---------- 静态文件服务（static 形态的全部实现） ---------- */
 
@@ -202,7 +202,7 @@ export type PreviewFailureStage = "spec" | "prepare" | "start" | "ready";
  *  「这个文件夹不是 Cairn 模板项目（缺 .cairn/project.json）」+「去用模板新建一个」。
  *  对一个**已经写完的单文件交付物**，那句建议是错的方向——用户要的是"看一眼我写的东西"。
  *  而静态服务本来就能serve任意文件，缺的只是入口认这条路。 */
-const DIRECT_HTML_EXTENSIONS: ReadonlySet<string> = new Set([".html", ".htm"]);
+const DIRECT_HTML_EXTENSIONS: ReadonlySet<string> = HTML_FILE_EXTENSIONS;
 
 /** 传进来的是不是一个可直接预览的 HTML 文件（不是目录、也不是别的文件类型）。 */
 export function isDirectHtmlFile(p: string): boolean {
@@ -365,13 +365,24 @@ export class PreviewRuntime {
       return this.fail(entry, "spec", `项目目录不存在：${root}`, "在侧栏里重新添加这个项目，或从模板新建一个。");
     }
     const manifest = readProjectManifest(root);
-    if (manifest === null) {
-      return this.fail(
-        entry,
-        "spec",
-        "这个文件夹不是 Cairn 模板项目（缺 .cairn/project.json）",
-        "用「新建项目」从模板创建；已有项目请先在终端里跑起来，再把地址粘进浏览器窗格。",
-      );
+    // 已有项目纳管入口（ADR 0004：先诊断，再工作）：没有清单的目录先过一遍诊断——
+    //   · supported：按诊断出的受控形态直接接管运行（命令仍由本文件写死，也不写用户目录里的任何文件）；
+    //   · needs-info / unsupported：spec 阶段失败，message 带逐条依据、hint 带可执行下一步。
+    // 行为变更（相对「缺 .cairn/project.json 就拒」）：零依赖静态目录与受控 Vite 目录从「拒收」变成「直接可预览」。
+    let kind: TemplateRunKind;
+    if (manifest !== null) {
+      kind = manifest.run.kind;
+    } else {
+      const diagnosis = diagnoseProjectDirectory(root);
+      if (diagnosis.verdict !== "supported" || diagnosis.runKind === null) {
+        return this.fail(
+          entry,
+          "spec",
+          `${diagnosis.summary}——${diagnosis.reasons.join("；")}`,
+          diagnosis.hint ?? "换个目录，或从模板新建一个项目。",
+        );
+      }
+      kind = diagnosis.runKind;
     }
     // 已有在跑的预览（进程或静态服务）先收掉，拿到干净端口与进程；全新条目跳过这步，
     // 免得给渲染层推一次没有意义的 "stopped"。
@@ -379,7 +390,6 @@ export class PreviewRuntime {
       await this.stop(root, "user").catch(() => undefined);
     }
     entry.cancelled = false;
-    const kind = manifest.run.kind;
     if (kind === "static") {
       this.emit(entry, { projectPath: root, status: "starting", kind, detail: "启动本地预览服务" });
       try {
@@ -411,8 +421,15 @@ export class PreviewRuntime {
     } catch (err) {
       return this.fail(entry, "start", `找不到可用端口：${err instanceof Error ? err.message : String(err)}`, "稍后重试；若持续失败，检查本机端口占用。");
     }
+    if (entry.cancelled) return this.emitStopped(entry); // stop 落在 pickPort 窗口：不要起子进程
     const child = this.deps.run("pnpm", ["exec", "vite", "--port", String(port), "--strictPort", "--host", "127.0.0.1"], { cwd: root });
     entry.child = child;
+    if (entry.cancelled) {
+      // stop 与 spawn 同拍：stop 的清理没看见这个 child ⇒ 这里补杀，别让 dev server 在「已停止」后活着。
+      child.kill("SIGTERM");
+      entry.child = null;
+      return this.emitStopped(entry);
+    }
     const url = `http://127.0.0.1:${String(port)}/`;
     let exited: PreviewChildExit | null = null;
     let exitedEarly = false;
@@ -469,6 +486,8 @@ export class PreviewRuntime {
       });
     });
     if (entry.child === child) entry.child = null;
+    // stop 杀掉安装进程后，exit.code 非 0 是「用户停止」而不是「安装失败」：别把 stopped 覆盖成 failed。
+    if (entry.cancelled) return this.emitStopped(entry);
     if (exit.error !== undefined && /ENOENT|not found/i.test(exit.error)) {
       return this.fail(entry, "prepare", "找不到 pnpm（本机没有安装 Node 包管理器）", "安装 Node.js 后执行 corepack enable，或在终端确认 pnpm -v 可用；零依赖模板不需要这一步。");
     }

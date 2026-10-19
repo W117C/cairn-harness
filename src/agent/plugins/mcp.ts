@@ -6,6 +6,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { withTimeout } from "../../net";
 import type { McpGrade } from "../../permissions/autonomy";
 import { expandUserConfig } from "./skills";
@@ -16,6 +17,8 @@ export interface McpExpandRoots {
   pluginRoot?: string;
   projectDir?: string;
   userConfig?: Record<string, string>;
+  /** 敏感键：只进 env；command/args 里保留占位符（argv 可被 ps/崩溃报告读到）。 */
+  userConfigSensitive?: readonly string[];
 }
 
 /** MCP 连接/列工具的默认总时长上限（根因 4）：server 挂起时不让 IPC promise 永久悬空。 */
@@ -180,16 +183,19 @@ function defaultClientFactory(cfg: McpServerConfig): Promise<{ client: Transport
  *  ——拿空串顶位会让 server 拿着空 token 去请求，报回来的 401 和配置毫无关系。 */
 export function expandMcpConfig(cfg: McpServerConfig, roots: McpExpandRoots): McpServerConfig {
   const userConfig = roots.userConfig ?? {};
-  const sub = (s: string): string =>
+  const sensitive = new Set(roots.userConfigSensitive ?? []);
+  const argvConfig = Object.fromEntries(Object.entries(userConfig).filter(([k]) => !sensitive.has(k)));
+  const sub = (s: string, values: Record<string, string> = userConfig): string =>
     expandUserConfig(
       s
         .replace(/\$\{PLUGIN_ROOT\}/g, roots.pluginRoot ?? "")
         .replace(/\$\{PROJECT_DIR\}/g, roots.projectDir ?? ""),
-      userConfig,
+      values,
     );
   const out: McpServerConfig = { ...cfg };
-  if (typeof out.command === "string") out.command = sub(out.command);
-  if (Array.isArray(out.args)) out.args = out.args.map((a) => (typeof a === "string" ? sub(a) : a));
+  // 敏感值只允许经 env 下发；argv 里引用敏感键的模板原样保留占位符，由插件改走 env。
+  if (typeof out.command === "string") out.command = sub(out.command, argvConfig);
+  if (Array.isArray(out.args)) out.args = out.args.map((a) => (typeof a === "string" ? sub(a, argvConfig) : a));
   if (out.env) {
     const env: Record<string, string> = {};
     for (const [k, v] of Object.entries(out.env)) env[k] = typeof v === "string" ? sub(v) : v;
@@ -208,7 +214,16 @@ export function expandMcpConfig(cfg: McpServerConfig, roots: McpExpandRoots): Mc
 
 export class McpManager {
   private connections = new Map<string, Connection>();
+  /** 同一 (plugin, server) 的握手只跑一轮：并发 connect 共用这个 promise，不许各建一个 SDK client。 */
+  private inflight = new Map<string, Promise<McpConnectResult>>();
+  private closingKeys = new Map<string, Promise<void>>();
+  /** 退出进行中：新连接直接拒绝（否则迟到的连接会在 disconnectAll 之后把服务复活）。 */
+  private closing: Promise<void> | null = null;
+  /** 每轮 disconnectAll 递增；握手跨过一轮退出就用代际对不上来识别。 */
+  private generation = 0;
   private factory: McpClientFactory;
+  /** server 崩溃时通知运行时摘掉它的工具（否则模型继续看到一组永远「未连接」的工具）。 */
+  onServerDown?: (plugin: string, server: string) => void;
   private readonly connectTimeoutMs: number;
   private readonly callTimeoutMs: number;
 
@@ -222,13 +237,35 @@ export class McpManager {
     return plugin + "::" + server;
   }
 
-  /** 连接一个 server 并拉取 tools/list（scoped 名在此处定型；${PLUGIN_ROOT} 展开在此层做）。 */
+  /** 连接一个 server 并拉取 tools/list（scoped 名在此处定型；${PLUGIN_ROOT} 展开在此层做）。
+   *  并发语义：同一 key 的并发调用共用一轮握手；退出期间的调用直接失败（不排队、不缓存）。 */
   async connect(plugin: string, server: string, cfg: McpServerConfig, roots?: McpExpandRoots): Promise<McpConnectResult> {
     const k = this.key(plugin, server);
-    if (this.connections.has(k)) {
-      const c = this.connections.get(k)!;
-      return c.error ? { ok: false, tools: [], error: c.error } : { ok: true, tools: c.tools };
+    if (this.closing || this.closingKeys.has(k)) return { ok: false, tools: [], error: "MCP 连接正在关闭，暂不接受新连接" };
+    const pending = this.inflight.get(k);
+    if (pending) return pending;
+    const existing = this.connections.get(k);
+    if (existing) {
+      // 失败态**允许重连**：旧实现对 error 条目直接返回缓存错误，server 崩一次后本会话永久不可用。
+      if (!existing.error) return { ok: true, tools: existing.tools };
+      this.connections.delete(k);
     }
+    const generation = this.generation;
+    const attempt = this.connectOnce(plugin, server, cfg, roots, k, generation).finally(() => {
+      if (this.inflight.get(k) === attempt) this.inflight.delete(k);
+    });
+    this.inflight.set(k, attempt);
+    return attempt;
+  }
+
+  private async connectOnce(
+    plugin: string,
+    server: string,
+    cfg: McpServerConfig,
+    roots: McpExpandRoots | undefined,
+    k: string,
+    generation: number,
+  ): Promise<McpConnectResult> {
     const resolved = roots ? expandMcpConfig(cfg, roots) : cfg;
     let client: Client | undefined;
     let transport: Transport | undefined;
@@ -255,22 +292,34 @@ export class McpManager {
           grade: mcpGradeOf((t as { annotations?: unknown }).annotations),
         };
       });
+      // 握手期间退出已开始：这条连接属于被放弃的那一轮，关掉且**不入表**（否则退出后服务会复活）。
+      if (generation !== this.generation || this.closingKeys.has(k)) {
+        try {
+          await client.close();
+        } catch {
+          /* 已断 */
+        }
+        await this.killStdioLeftover(transport);
+        return { ok: false, tools: [], error: "MCP 连接在建立期间已关闭" };
+      }
       const conn: Connection = { plugin, server, client, transport, tools };
-      this.connections.set(k, conn);
       // E5（审查 P2）：订阅 transport onclose——server 进程崩溃后 statuses() 不再报
       // connected 僵尸态（fail-visible 转为 failed；重连入口留位，本轮不自动重连）。
       // 审查 S1-3：必须**链式**而非覆盖——SDK 的 client.connect() 已在 transport.onclose
       // 上装了自己的包装（protocol.js:220-224 → _onclose() 把 ConnectionClosed 结算给全部
       // 在途 responseHandlers）。直接赋值会把那半条链摘掉：server 崩溃时在途 tools/call
       // 永不 settle，agent loop 卡死在工具调用上（旧行为是 reject 后 fail-visible）。
+      // 身份比对：上一轮的 onclose 迟到时，不得把这一轮重新接入的服务标成失败。
       const prevOnClose = transport.onclose;
       transport.onclose = (): void => {
         prevOnClose?.(); // 先让 SDK 结算在途请求，再记本层失败态
         const cur = this.connections.get(k);
-        if (cur && !cur.error) {
+        if (cur === conn && !cur.error) {
           this.connections.set(k, { ...cur, client: undefined as unknown as Client, error: "MCP server 连接已断开（onclose）" });
+          try { this.onServerDown?.(plugin, server); } catch { /* 摘工具失败不改变失败态 */ }
         }
       };
+      this.connections.set(k, conn);
       return { ok: true, tools };
     } catch (err) {
       // 超时/失败：底层连接可能仍挂着 → 先尽力关掉（含 stdio 收杀兜底），再记失败态（fail-visible，不留僵尸连接）。
@@ -281,6 +330,8 @@ export class McpManager {
       }
       await this.killStdioLeftover(transport);
       const msg = err instanceof Error ? err.message : String(err);
+      // 退出已经开始时不缓存失败态：statuses() 在 disconnectAll 之后必须是空的。
+      if (generation !== this.generation || this.closingKeys.has(k)) return { ok: false, tools: [], error: msg };
       this.connections.set(k, {
         plugin, server,
         client: undefined as unknown as Client,
@@ -293,14 +344,22 @@ export class McpManager {
   }
 
   /** tools/call（bare 名回传 server 侧）。 */
-  async callTool(plugin: string, server: string, tool: string, args: Record<string, unknown>): Promise<{ ok: boolean; output: string }> {
-    const conn = this.connections.get(this.key(plugin, server));
+  async callTool(plugin: string, server: string, tool: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<{ ok: boolean; output: string }> {
+    const k = this.key(plugin, server);
+    const conn = this.closing || this.closingKeys.has(k) ? undefined : this.connections.get(k);
     if (!conn || conn.error || !conn.client) return { ok: false, output: "MCP server 未连接: " + plugin + "/" + server };
+    const label = `MCP tools/call ${plugin}/${server}/${tool}`;
+    // 独立信号在请求结束时解除会话监听，避免稍后的取消再次通知已完成请求。
+    const requestAbort = new AbortController();
+    const cancel = (): void => requestAbort.abort(signal?.reason);
+    const timeout = Number.isFinite(this.callTimeoutMs) && this.callTimeoutMs > 0 ? this.callTimeoutMs : undefined;
     try {
+      signal?.throwIfAborted();
+      signal?.addEventListener("abort", cancel, { once: true });
       const res = await withTimeout(
-        conn.client.callTool({ name: tool, arguments: args }),
+        conn.client.callTool({ name: tool, arguments: args }, undefined, { signal: requestAbort.signal, ...(timeout !== undefined ? { timeout } : {}) }),
         this.callTimeoutMs,
-        `MCP tools/call ${plugin}/${server}/${tool}`,
+        label,
       );
       const parts: string[] = [];
       const content = res.content as unknown;
@@ -313,7 +372,16 @@ export class McpManager {
       const isError = (res as { isError?: boolean }).isError === true;
       return { ok: !isError, output: capMcpResult(parts.join("\n")) || "(空结果)" };
     } catch (err) {
+      if (signal?.aborted) {
+        const reason = signal.reason instanceof Error ? signal.reason.message : String(signal.reason);
+        return { ok: false, output: "[cancelled] MCP tools/call 已取消: " + reason };
+      }
+      if (timeout !== undefined && err instanceof McpError && err.code === ErrorCode.RequestTimeout) {
+        return { ok: false, output: `MCP tools/call 失败: ${label} 超时：${String(timeout)}ms 内未完成` };
+      }
       return { ok: false, output: "MCP tools/call 失败: " + (err instanceof Error ? err.message : String(err)) };
+    } finally {
+      signal?.removeEventListener("abort", cancel);
     }
   }
 
@@ -328,16 +396,49 @@ export class McpManager {
     }));
   }
 
+  /** 退出收束：并发调用共用同一轮关闭；进行中的握手被接管（代际递增，握手方自己收尾且不入表）。 */
   async disconnectAll(): Promise<void> {
-    for (const c of this.connections.values()) {
-      try {
-        await c.client?.close();
-      } catch {
-        /* 关闭失败不影响退出路径 */
-      }
-      await this.killStdioLeftover(c.transport);
+    if (this.closing) return this.closing;
+    const close = (async (): Promise<void> => {
+      this.generation++;
+      const keys = new Set([...this.connections.keys(), ...this.inflight.keys(), ...this.closingKeys.keys()]);
+      await Promise.all([...keys].map((key) => this.disconnectKey(key)));
+    })();
+    this.closing = close;
+    try {
+      await close;
+    } finally {
+      if (this.closing === close) this.closing = null;
     }
-    this.connections.clear();
+  }
+
+  /** 撤回信任只关闭该插件的连接；同一连接的局部关闭与全局退出共用收尾。 */
+  async disconnectPlugin(plugin: string): Promise<void> {
+    const prefix = plugin + "::";
+    const keys = new Set([...this.connections.keys(), ...this.inflight.keys(), ...this.closingKeys.keys()]);
+    await Promise.all([...keys].filter((key) => key.startsWith(prefix)).map((key) => this.disconnectKey(key)));
+  }
+
+  private async disconnectKey(key: string): Promise<void> {
+    const existing = this.closingKeys.get(key);
+    if (existing) return existing;
+    const close = Promise.resolve().then(async () => {
+      await this.inflight.get(key);
+      const conn = this.connections.get(key);
+      this.connections.delete(key);
+      try {
+        await conn?.client?.close();
+      } catch {
+        /* 已断 */
+      }
+      await this.killStdioLeftover(conn?.transport);
+    });
+    this.closingKeys.set(key, close);
+    try {
+      await close;
+    } finally {
+      if (this.closingKeys.get(key) === close) this.closingKeys.delete(key);
+    }
   }
 
   /** D3/D5（审查 P2）：stdio server 收杀兜底——SDK close 对 stdio 子进程发 SIGTERM，但

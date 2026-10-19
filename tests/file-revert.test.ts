@@ -164,3 +164,39 @@ describe("applyTurnRevert：真盘落实", () => {
     expect(await readFile(join(workspace, "src/a.txt"), "utf8")).toBe("NEW"); // 原样不动
   });
 });
+
+// 2026-10-19 独立评审：worker 与 parent 的 callId 可撞号（provider 流内序号），
+// 旧实现用全量 tool_call 建表 ⇒ 主会话 result 可能解析到 worker 的路径，回滚删错文件。
+describe("回滚计划的归属与多文件（2026-10-19）", () => {
+  it("worker 的 callId 不参与主会话的路径解析", () => {
+    const events: AgentEvent[] = [
+      user("第 1 轮"),
+      call("call-0", "src/parent.ts"),
+      ok("call-0", { change: "created" }),
+      { type: "tool_call", id: "call-0", name: "write_file", args: { path: "src/worker.ts" }, agent_id: "w1" } as AgentEvent,
+      ok("call-0", { change: "created", agent_id: "w1" } as never),
+    ];
+    const plan = planTurnRevert(events, 1);
+    expect("entries" in plan).toBe(true);
+    if (!("entries" in plan)) return;
+    expect(plan.entries.map((e) => `${e.path}:${e.undo}`)).toEqual(["src/parent.ts:delete"]);
+  });
+
+  it("apply_patch 的 changedPaths 全部进计划：新建可删、无快照的改动标 manual", () => {
+    const created: AgentEvent[] = [
+      user("第 1 轮"),
+      { type: "tool_call", id: "p1", name: "apply_patch", args: { patch: "x" } } as AgentEvent,
+      ok("p1", { change: "created", changedPaths: ["a.ts", "b.ts"] }),
+    ];
+    const p1 = planTurnRevert(created, 1);
+    expect("entries" in p1 && p1.entries.map((e) => `${e.path}:${e.undo}`)).toEqual(["a.ts:delete", "b.ts:delete"]);
+
+    const modified: AgentEvent[] = [
+      user("第 1 轮"),
+      { type: "tool_call", id: "p2", name: "apply_patch", args: { patch: "x" } } as AgentEvent,
+      ok("p2", { change: "modified", changedPaths: ["a.ts", "b.ts"], snapshotId: snap("a.ts", "1--p2") }),
+    ];
+    const p2 = planTurnRevert(modified, 1);
+    expect("entries" in p2 && p2.entries.map((e) => `${e.path}:${e.undo}`)).toEqual(["a.ts:restore", "b.ts:manual"]);
+  });
+});

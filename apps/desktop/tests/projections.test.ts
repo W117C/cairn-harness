@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { deriveRunPhase, formatRevertNotice, pendingClarifyOf, pendingPlanOf, projectStream, relativeTime, roundTimeline, turnChanges, usageAggregate } from "../src/renderer/projections";
+import { countRunSteps, deliveryTrail, deriveRunPhase, formatEmptyTrailNote, formatRevertNotice, isMainSessionTerminalEvent, mergeSessionSnapshot, pendingClarifyOf, pendingPlanOf, projectStream, relativeTime, roundTimeline, turnChanges, usageAggregate } from "../src/renderer/projections";
 import type { AgentEvent } from "../../../src/main/ipc-protocol";
+import type { TurnDelivery } from "../src/renderer/projections";
 
 const ev = (partial: Record<string, unknown>) => partial as unknown as AgentEvent;
 
@@ -25,6 +26,25 @@ describe("projectStream", () => {
       ev({ type: "assistant_message", content: "你好" }),
     ]);
     expect(rows.filter((r) => r.kind === "assistant")).toHaveLength(1);
+  });
+
+  // 产物直达（2026-10-16）：从前 tool_result 只带文字 ⇒ 聊天里看不到 agent 刚渲染的图，
+  // 用户只能自己去仓库里翻；而"图已经贴在上面了"这类话也就没有任何可指的凭据。
+  it("成功的 tool_result.artifact 挂到同一 tool 行；失败的不挂", () => {
+    const rows = projectStream([
+      ev({ type: "tool_call", id: "t1", name: "render_image", args: { path: "pelican-bike.html" } }),
+      ev({ type: "tool_result", callId: "t1", ok: true, output: "ok", artifact: { kind: "html", path: "pelican-bike.html", note: "刚渲染过的产物" } }),
+      ev({ type: "tool_call", id: "t2", name: "write_file", args: { path: "a.txt" } }),
+      ev({ type: "tool_result", callId: "t2", ok: false, output: "denied", artifact: { kind: "text", path: "a.txt" } }),
+      ev({ type: "tool_call", id: "t3", name: "read_file", args: { path: "b.ts" } }),
+      ev({ type: "tool_result", callId: "t3", ok: true, output: "ok" }),
+    ]);
+    const tools = rows.filter((r) => r.kind === "tool");
+    expect(tools[0]!.kind === "tool" && tools[0]!.artifact).toMatchObject({ kind: "html", path: "pelican-bike.html" });
+    // 失败那一笔没有可看的东西 ⇒ 不挂入口（不摆一个点了 404 的按钮）。
+    expect(tools[1]!.kind === "tool" && tools[1]!.artifact).toBeUndefined();
+    // 没有产物引用的普通工具行：字段缺席，不是空对象。
+    expect(tools[2]!.kind === "tool" && "artifact" in tools[2]!).toBe(false);
   });
 });
 
@@ -285,5 +305,271 @@ describe("v2.16 桌面接线投影（赞/踩与文件回滚的行锚）", () => 
       { path: "new.ts", change: "unknown" },
     ]);
     expect(turnChanges([])).toEqual([]);
+  });
+});
+
+describe("v7.1 落定语义（真实 provider 只发 delta——桶的「说完」不能只靠 assistant_message）", () => {
+  it("轮界落定：下一条 user_message 把前轮未结桶以终稿形态收走（live=false、round=前轮、顺序在 user 行前）", () => {
+    const rows = projectStream([
+      ev({ type: "user_message", content: "第一问" }),
+      ev({ type: "assistant_delta", callId: "c1", text: "第一答" }),
+      ev({ type: "user_message", content: "第二问" }),
+      ev({ type: "assistant_delta", callId: "c2", text: "第二答" }),
+    ]);
+    const asst = rows.filter((r) => r.kind === "assistant");
+    expect(asst).toHaveLength(2);
+    expect(asst[0]).toMatchObject({ text: "第一答", live: false, round: 1 });
+    expect(asst[1]).toMatchObject({ text: "第二答", live: true, round: 2 }); // 运行中（默认）：尾桶仍是 live
+    // 顺序：第一答落在「第二问」之前（sort 由 seq 收口）
+    const kinds = rows.map((r) => r.kind);
+    expect(kinds.indexOf("assistant")).toBeLessThan(kinds.lastIndexOf("user"));
+  });
+
+  it("停转落定：running=false 时尾桶同为终稿（操作条/光标据此显形）", () => {
+    const events = [
+      ev({ type: "user_message", content: "问" }),
+      ev({ type: "assistant_delta", callId: "c1", text: "答" }),
+    ];
+    const live = projectStream(events, true);
+    expect(live.filter((r) => r.kind === "assistant")[0]).toMatchObject({ live: true });
+    const settled = projectStream(events, false);
+    expect(settled.filter((r) => r.kind === "assistant")[0]).toMatchObject({ live: false, text: "答", round: 1 });
+  });
+
+  it("停转落定带走思考正文；空文本桶（只想过没说的半轮）不产空行", () => {
+    const settled = projectStream([
+      ev({ type: "user_message", content: "问" }),
+      ev({ type: "thinking_delta", callId: "c1", text: "想了一半" }),
+    ], false);
+    expect(settled.filter((r) => r.kind === "assistant")).toHaveLength(0);
+    const withText = projectStream([
+      ev({ type: "user_message", content: "问" }),
+      ev({ type: "thinking_delta", callId: "c1", text: "想" }),
+      ev({ type: "assistant_delta", callId: "c1", text: "答" }),
+    ], false);
+    expect(withText.filter((r) => r.kind === "assistant")[0]).toMatchObject({ text: "答", live: false, thinking: "想" });
+  });
+
+  it("assistant_message 终稿语义不回归：终稿到达即清桶（原有路径原样）", () => {
+    const rows = projectStream([
+      ev({ type: "assistant_delta", callId: "c1", text: "旧" }),
+      ev({ type: "assistant_message", content: "终" }),
+      ev({ type: "assistant_delta", callId: "c2", text: "新" }),
+    ], false);
+    const asst = rows.filter((r) => r.kind === "assistant");
+    expect(asst).toHaveLength(2);
+    expect(asst[0]).toMatchObject({ text: "终", live: false });
+    expect(asst[1]).toMatchObject({ text: "新", live: false }); // 停转路径落定
+  });
+});
+
+describe("投影 第十九遍：usage = 模型调用说完的落定点（输出完光标不陪跑尾部）", () => {
+  // 案卷 21:51:38（真 provider）：末 delta 与 usage 同秒，之后 10s 尾部（记忆沉淀）才收束——
+  // 旧判据只有 running=false 兜底 ⇒ live 行（含光标）陪跑整个尾巴。usage 到达即落定。
+  it("真流形态：delta……usage（running 仍 true）⇒ 行已落定，无 live 行", () => {
+    const rows = projectStream([
+      ev({ type: "user_message", content: "问" }),
+      ev({ type: "assistant_delta", callId: "c1", text: "你" }),
+      ev({ type: "assistant_delta", callId: "c1", text: "好" }),
+      ev({ type: "usage", inputTokens: 10, outputTokens: 3 }),
+    ]); // running 缺省 true：尾部还在跑
+    expect(rows.filter((r) => r.kind === "assistant")).toEqual([
+      expect.objectContaining({ text: "你好", live: false }),
+    ]);
+    expect(rows.filter((r) => r.kind === "assistant" && r.live === true)).toHaveLength(0);
+  });
+
+  it("两次调用各落各的：usage 只收自己的桶，下一 call 的 delta 重新 live", () => {
+    const rows = projectStream([
+      ev({ type: "user_message", content: "问" }),
+      ev({ type: "assistant_delta", callId: "c1", text: "第一段" }),
+      ev({ type: "usage", inputTokens: 10, outputTokens: 3 }),
+      ev({ type: "assistant_delta", callId: "c2", text: "第二段" }),
+    ]);
+    const asst = rows.filter((r) => r.kind === "assistant");
+    expect(asst).toHaveLength(2);
+    expect(asst[0]).toMatchObject({ text: "第一段", live: false });
+    expect(asst[1]).toMatchObject({ text: "第二段", live: true });
+  });
+
+  it("工具轮序：delta → tool_call → tool_result → usage ⇒ 文本行落定、下一 call 再 live", () => {
+    const rows = projectStream([
+      ev({ type: "user_message", content: "问" }),
+      ev({ type: "assistant_delta", callId: "c1", text: "我来查" }),
+      ev({ type: "tool_call", id: "t1", name: "web_fetch", args: {} }),
+      ev({ type: "tool_result", callId: "t1", ok: true, output: "" }),
+      ev({ type: "usage", inputTokens: 10, outputTokens: 3 }),
+      ev({ type: "assistant_delta", callId: "c2", text: "查到了" }),
+    ]);
+    const asst = rows.filter((r) => r.kind === "assistant");
+    expect(asst[0]).toMatchObject({ text: "我来查", live: false });
+    expect(asst[1]).toMatchObject({ text: "查到了", live: true });
+  });
+
+  it("只想过没说的桶在 usage 落定即弃行（既有空桶口径，不前移也不后移）", () => {
+    const rows = projectStream([
+      ev({ type: "user_message", content: "问" }),
+      ev({ type: "thinking_delta", callId: "c1", text: "想想" }),
+      ev({ type: "usage", inputTokens: 10, outputTokens: 3 }),
+    ]);
+    expect(rows.filter((r) => r.kind === "assistant")).toHaveLength(0);
+  });
+});
+
+// 阶段 2（全局 UI 重构 brief §二.4）：工具行携带**原始参数 JSON**——展开区数据源（默认折叠，
+// 点击展开才看细节；紧凑行只留 工具名 + 一句话摘要）。JSON 美化两格、超长截断，防一行巨物。
+describe("工具行原始参数（阶段 2 · 展开区数据源）", () => {
+  it("tool_call 行携带 args 的美化 JSON（缩进 2 格）", () => {
+    const rows = projectStream([
+      ev({ type: "tool_call", id: "t1", name: "read_file", args: { path: "src/todo.ts" } }),
+    ]);
+    const row = rows[0]!;
+    expect(row.kind).toBe("tool");
+    if (row.kind === "tool") {
+      expect(row.args).toBeDefined();
+      expect(row.args!).toContain('"path": "src/todo.ts"');
+    }
+  });
+
+  it("超长 args 截断加省略标记（展开区不摆巨物）", () => {
+    const rows = projectStream([
+      ev({ type: "tool_call", id: "t1", name: "run_shell", args: { command: "x".repeat(2000) } }),
+    ]);
+    const row = rows[0]!;
+    if (row.kind === "tool") {
+      expect(row.args!.length).toBeLessThanOrEqual(1501);
+      expect(row.args!.endsWith("…")).toBe(true);
+    }
+  });
+
+  it("spawn_agent 行无 args（不是工具调用，不造假 JSON）", () => {
+    const rows = projectStream([
+      ev({ type: "agent_spawned", agent_id: "a1", task: "查一下" }),
+    ]);
+    const row = rows[0]!;
+    if (row.kind === "tool") expect(row.args).toBeUndefined();
+  });
+
+  it("summary 取值链补 url/query（web_fetch/web_search 的一句话摘要就是目标本身）", () => {
+    const rows = projectStream([
+      ev({ type: "tool_call", id: "t1", name: "web_fetch", args: { url: "api-docs.deepseek.com/news" } }),
+      ev({ type: "tool_call", id: "t2", name: "web_search", args: { query: "reasoning efforts 配置" } }),
+    ]);
+    expect(rows[0]).toMatchObject({ summary: "api-docs.deepseek.com/news" });
+    expect(rows[1]).toMatchObject({ summary: "reasoning efforts 配置" });
+  });
+});
+
+// 批 3（文档阶段 3·对话页①）：空轮不摆全卡，改一行弱提示；连续空轮并一段；运行中的末轮
+// 不预告（还没写完的轮不能断言「无文件改动」——写盘随时可能发生，弱行只落定已收束的轮）。
+describe("deliveryTrail（批 3：空轮弱行 + 连续空轮合并 + 运行中末轮不预告）", () => {
+  const card = (round: number): TurnDelivery => ({
+    round,
+    files: [{ path: `src/${String(round)}.ts`, change: "modified" }],
+    verification: { status: "absent", attempts: 0, latest: null },
+    unverifiedFiles: [`src/${String(round)}.ts`],
+    nextAction: "跑验证",
+  });
+  const shape = (trail: ReturnType<typeof deliveryTrail>): string[] =>
+    trail.map((t) => (t.kind === "card" ? `c${String(t.delivery.round)}` : `e${String(t.from)}-${String(t.to)}`));
+
+  it("卡片按轮序交错；被隔开的空轮各成一段", () => {
+    expect(shape(deliveryTrail([card(1), card(3)], 3, false))).toEqual(["c1", "e2-2", "c3"]);
+  });
+  it("连续空轮并一段", () => {
+    const trail = deliveryTrail([card(1)], 4, false);
+    expect(shape(trail)).toEqual(["c1", "e2-4"]);
+    expect(trail[1]).toEqual({ kind: "empty", from: 2, to: 4 });
+  });
+  it("运行中：末轮为空不预告弱行；末轮有卡照出（live 卡不压）", () => {
+    // 第 3 轮还在跑且尚无交付 ⇒ 只出第 2 轮的弱行
+    expect(shape(deliveryTrail([card(1)], 3, true))).toEqual(["c1", "e2-2"]);
+    // 末轮已有交付（写盘中）⇒ 卡照出；第 2 轮已收束为空 ⇒ 其弱行照常
+    expect(shape(deliveryTrail([card(1), card(3)], 3, true))).toEqual(["c1", "e2-2", "c3"]);
+  });
+  it("无轮=空；弱行文案：单轮与区间（en 破折）", () => {
+    expect(deliveryTrail([], 0, false)).toEqual([]);
+    expect(formatEmptyTrailNote(3, 3)).toBe("第 3 轮 · 无文件改动");
+    expect(formatEmptyTrailNote(2, 4)).toBe("第 2–4 轮 · 无文件改动");
+  });
+});
+
+describe("countRunSteps（状态条的本轮步数）", () => {
+  it("只数最后一个 user_message 之后的 tool_call", () => {
+    const events = [
+      { type: "user_message", content: "a" },
+      { type: "tool_call", callId: "c1" },
+      { type: "tool_call", callId: "c2" },
+      { type: "user_message", content: "b" },
+      { type: "tool_call", callId: "c3" },
+    ] as unknown as AgentEvent[];
+    expect(countRunSteps(events)).toBe(1);
+  });
+
+  it("工头子流程不计；没有 user_message 时返回 0（不冒充历史）", () => {
+    const events = [
+      { type: "tool_call", callId: "c1" },
+      { type: "tool_call", callId: "c2", agent_id: "worker-1" },
+    ] as unknown as AgentEvent[];
+    expect(countRunSteps(events)).toBe(0);
+  });
+});
+
+describe("user 行带附件引用（2026-10-18）", () => {
+  it("user_message 的 attachments 投影到行上", () => {
+    const events = [
+      { type: "user_message", content: "看这个文件", attachments: [{ path: "/ws/note.txt", kind: "file" }] },
+    ] as unknown as AgentEvent[];
+    const row = projectStream(events, false)[0];
+    expect(row).toMatchObject({ kind: "user", attachments: [{ path: "/ws/note.txt", kind: "file" }] });
+  });
+});
+
+describe("运行终态判定：worker 子流不摘主会话的运行旗", () => {
+  it("父会话 done/failed/cancelled 是终态", () => {
+    for (const status of ["done", "failed", "cancelled"]) {
+      expect(isMainSessionTerminalEvent(ev({ type: "agent_status", status }))).toBe(true);
+    }
+  });
+
+  it("带 agent_id 的 worker 终态不是主会话终态（同型且同带 session_id）", () => {
+    for (const status of ["done", "failed", "cancelled"]) {
+      expect(isMainSessionTerminalEvent(ev({ type: "agent_status", status, agent_id: "w1" }))).toBe(false);
+    }
+  });
+
+  it("非 agent_status 与未知状态不算终态", () => {
+    expect(isMainSessionTerminalEvent(ev({ type: "user_message", content: "x" }))).toBe(false);
+    expect(isMainSessionTerminalEvent(ev({ type: "agent_status", status: "running" }))).toBe(false);
+  });
+});
+
+describe("mergeSessionSnapshot：读盘快照与读盘期间的 live 增量", () => {
+  const a = ev({ type: "user_message", content: "a" });
+  const b = ev({ type: "assistant_message", content: "b" });
+  const c = ev({ type: "assistant_message", content: "c" });
+  const d = ev({ type: "assistant_message", content: "d" });
+
+  it("无增量：原快照（复制，不共享可变数组）", () => {
+    const out = mergeSessionSnapshot([a, b], []);
+    expect(out).toEqual([a, b]);
+    expect(out).not.toBe([a, b]);
+  });
+
+  it("增量全在快照之外：按序接上", () => {
+    expect(mergeSessionSnapshot([a, b], [c, d])).toEqual([a, b, c, d]);
+  });
+
+  it("增量与快照尾部重叠：重叠部分不重复", () => {
+    expect(mergeSessionSnapshot([a, b], [b, c])).toEqual([a, b, c]);
+    expect(mergeSessionSnapshot([a, b], [a, b, c])).toEqual([a, b, c]);
+  });
+
+  it("快照为空：增量全收", () => {
+    expect(mergeSessionSnapshot([], [a, b])).toEqual([a, b]);
+  });
+
+  it("增量与快照内容不同：不吞任何一条（宁多勿丢）", () => {
+    expect(mergeSessionSnapshot([a, b], [c])).toEqual([a, b, c]);
   });
 });

@@ -9,8 +9,9 @@
 // （落流要新增事件类型，而事件流是重放契约）；失败**不许静默**——「没量到」不许被读成「没问题」。
 import { assistantTurnsFromEvents, goalDriftCell, goalDriftFindings } from "../agent/goal-drift";
 import { costPerProgress } from "../agent/cost-per-progress";
+import { eventsForCurrentRun } from "../agent/delivery-guard";
 import { runEvolution } from "../agent/evolution";
-import { replay } from "../events";
+import { replay, type AgentEvent } from "../events";
 
 export interface PostRunReadingInput {
   logPath: string;
@@ -21,6 +22,16 @@ export interface PostRunReadingInput {
 
 /** 收束时调一次。**任何一支失败都不抛**——它不参与这一场的结果。 */
 export async function emitPostRunReadings(input: PostRunReadingInput): Promise<void> {
+  let events: AgentEvent[];
+  try {
+    events = eventsForCurrentRun(await replay(input.logPath), { includeWorkers: true });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    console.warn("[goal-drift] 读数失败（这一格未检，不等于没有漂移）: " + reason);
+    console.warn("[cost-per-progress] 读数失败（这一格未检）: " + reason);
+    console.warn("[evolution] 读数/落盘失败（不影响主流程）: " + reason);
+    return;
+  }
   // 目标漂移读数（能力 4「长任务不遗忘」的真读数，此前这个模块**零生产消费者**：
   // 只有 tests/goal-drift.test.ts 引用它，于是「长任务会不会改口」永远只有单测证据、没有运行证据）。
   //
@@ -32,7 +43,7 @@ export async function emitPostRunReadings(input: PostRunReadingInput): Promise<v
   // 取料口径与被判对象**同一份**（`assistantTurnsFromEvents` 从事件流重组），不另拼一套
   // ——「同一条判据各抄一份」是本仓最忌的一种腐坏。
   try {
-    const drift = goalDriftFindings(assistantTurnsFromEvents(await replay(input.logPath)));
+    const drift = goalDriftFindings(assistantTurnsFromEvents(eventsForCurrentRun(events)));
     if (drift.length > 0) console.warn("[goal-drift] " + goalDriftCell(drift));
   } catch (err) {
     // 读数失败不许影响主流程（它只是观测），但也不许静默：这一格取不到就是「没量到」，
@@ -41,7 +52,7 @@ export async function emitPostRunReadings(input: PostRunReadingInput): Promise<v
   }
   // cost-per-progress：同 goal-drift 的纪律——观测读数，不落事件流，不影响主流程。
   try {
-    const cpp = costPerProgress(await replay(input.logPath));
+    const cpp = costPerProgress(events);
     if (cpp.measurable && cpp.tokensPerBoundary !== null) {
       console.warn(
         "[cost-per-progress] 每 verified 边界约 " + cpp.tokensPerBoundary + " token" +
@@ -57,9 +68,8 @@ export async function emitPostRunReadings(input: PostRunReadingInput): Promise<v
   }
   // 自进化闭环：抽信号 → 生补丁 → 落 .agent/evolution.json。失败不阻塞主流程。
   try {
-    const events = await replay(input.logPath);
     const evo = await runEvolution(events, input.workspace, input.sessionId ?? input.logPath);
-    if (evo.patches.length > 0) {
+    if (evo.persistedTo !== null && evo.patches.length > 0) {
       console.warn("[evolution] 本跑产出 " + evo.patches.length + " 条策略补丁，已落 " + String(evo.persistedTo));
     }
   } catch (err) {

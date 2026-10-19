@@ -9,10 +9,16 @@ import type { ClarifyQuestion, PlanProposal } from "../../../../src/events";
 // openSession 读旧日志时 undefined ⇒ 行上留空，不造假。
 // v2.16 行面补钉：user 行带 round（主会话 1-based 轮号，core planTurnRevert 同口径——worker
 // 事件不成轮）；assistant 行带 eventId（事件在会话 JSONL 里的 1-based 行号，赞/踩的锚）。
+// v7 行面补钉：assistant 行也带 round（它所属的用户轮——「从这条回复分支」= fork 保留到该轮）。
 export type StreamRow =
-  | { kind: "user"; text: string; ts?: number; seq: number; round: number }
-  | { kind: "assistant"; text: string; live?: boolean; thinking?: string; ts?: number; seq: number; eventId: number } // live=true = delta 流式中尚未被终稿取代的未结桶行；thinking = 同一 callId 下累计的思考正文
-  | { kind: "tool"; tool: string; summary: string; pending?: boolean; ok?: boolean; ts?: number; seq: number }
+  | { kind: "user"; text: string; ts?: number; seq: number; round: number; attachments?: readonly { path: string; kind: "file" | "directory" }[] }
+  | { kind: "assistant"; text: string; live?: boolean; thinking?: string; ts?: number; seq: number; eventId: number; round: number } // live=true = delta 流式中尚未被终稿取代的未结桶行；thinking = 同一 callId 下累计的思考正文
+  | { kind: "tool"; tool: string; summary: string; args?: string; pending?: boolean; ok?: boolean; ts?: number; seq: number
+      /** tool_result 收口的到达时间（P3-1 折叠行耗时 = then − ts；拿不到不显）。 */
+      then?: number
+      /** 产物引用（本次调用交付给用户的东西）。从前聊天里只有文字回执 ⇒ 用户看不到 agent
+       *  刚渲染的图，也拿不到"刚写的那份 HTML"的直接入口，只能自己去仓库里翻。 */
+      artifact?: { kind: "image" | "html" | "svg" | "text"; path: string; note?: string } }
   | { kind: "error"; text: string; ts?: number; seq: number };
 
 type ToolRow = Extract<StreamRow, { kind: "tool" }>;
@@ -29,12 +35,54 @@ function isWorkerSubflowEvent(e: AgentEvent): boolean {
   return typeof id === "string";
 }
 
+/** 主会话终态判据（运行旗/侧栏黄点唯一处）：worker 的 agent_status 也是 agent_status 且
+ *  同样被盖上父会话 session_id（agent-runner 的 outbox 盖章），不能据此摘主会话的运行旗。 */
+export function isMainSessionTerminalEvent(e: AgentEvent): boolean {
+  if (isWorkerSubflowEvent(e)) return false;
+  if (e.type !== "agent_status") return false;
+  const status = (e as { status?: unknown }).status;
+  return status === "done" || status === "failed" || status === "cancelled";
+}
+
+/** 打开会话时的快照合并：openSession 读盘期间 onEvent 仍会追加 live 事件；
+ *  直接 setEvents(快照) 会丢掉这段增量（长会话可达数百毫秒）。pending 从快照尾巴之后开始，
+ *  用「后缀/前缀重叠」去重——重叠部分已在快照里，其余按序接上。
+ *  事件没有全局 seq，只能按内容比；同一事件在两侧的序列化逐字节一致（同一 JSONL 行）。 */
+export function mergeSessionSnapshot(
+  snapshot: readonly AgentEvent[],
+  pending: readonly AgentEvent[],
+): AgentEvent[] {
+  if (pending.length === 0) return [...snapshot];
+  const pendingText = pending.map((e) => JSON.stringify(e));
+  const max = Math.min(snapshot.length, pending.length);
+  for (let k = max; k > 0; k -= 1) {
+    let same = true;
+    for (let i = 0; i < k; i += 1) {
+      if (JSON.stringify(snapshot[snapshot.length - k + i]) !== pendingText[i]) {
+        same = false;
+        break;
+      }
+    }
+    if (same) return [...snapshot, ...pending.slice(k)];
+  }
+  return [...snapshot, ...pending];
+}
+
 const summarize = (args: Record<string, unknown>): string => {
-  const first = args.command ?? args.path ?? args.file ?? "";
+  // url / query 进取值链（阶段 2 · brief §二.4 例：「抓取 api-docs.deepseek.com/news」——
+  // web_fetch/web_search 的一句话摘要就是目标本身）。
+  const first = args.command ?? args.path ?? args.file ?? args.url ?? args.query ?? "";
   return typeof first === "string" && first ? first : JSON.stringify(args).slice(0, 80);
 };
 
-export function projectStream(events: readonly AgentEvent[]): StreamRow[] {
+/** 工具行展开区数据源（阶段 2 · brief §二.4）：原始参数的美化 JSON（2 格缩进）。
+ *  超 1500 字截断加省略标记——折叠区不摆巨物；原始事件面不动，这里只是展示层的字符串。 */
+const rawArgs = (args: Record<string, unknown>): string => {
+  const s = JSON.stringify(args, null, 2);
+  return s.length > 1500 ? `${s.slice(0, 1500)}…` : s;
+};
+
+export function projectStream(events: readonly AgentEvent[], running: boolean = true): StreamRow[] {
   const rows: StreamRow[] = [];
   // delta 分桶（语义钉死）：callId → 累计文本 ＋ 首 delta 的 seq/ts（live 行落在流式开始的位置，
   // 时间取首 delta——行的时间戳口径与其在流里的位置一致）。桶被 assistant_message 终稿取代后即清除。
@@ -47,13 +95,36 @@ export function projectStream(events: readonly AgentEvent[]): StreamRow[] {
   // 轮号（v2.16）：主会话 user_message 的 1-based 计数——与 core planTurnRevert 的轮口径同一份
   // （worker 子流事件不成轮，见 isWorkerSubflowEvent 过滤；worker 本也不产生 user_message）。
   let rounds = 0;
+  // 落定未结桶（v7.1 修）：真实 provider 的**一轮只发 assistant_delta**（aggregate 的 assistant_message
+  // 是 mock/demo 通道才有的东西，见 src/cli.ts 的刻意注释）——所以「桶什么时候算说完」不能只靠
+  // assistant_message。轮界（下一条 user_message）与停转（running=false）都是落定点：以终稿形态
+  // （live=false）吐行，操作条与光标据此归位。settled=true 时空文本桶（只想过没说的半轮）不产行。
+  const flushBuckets = (settled: boolean): void => {
+    for (const [callId, bucket] of buckets) {
+      if (settled && bucket.text === "") continue;
+      rows.push({
+        kind: "assistant", text: bucket.text, live: settled ? false : true, ts: bucket.ts, seq: bucket.seq, eventId: bucket.seq + 1, round: rounds,
+        ...(thinkingBuckets.get(callId) ? { thinking: thinkingBuckets.get(callId) } : {}),
+      });
+    }
+    buckets.clear();
+    thinkingBuckets.clear();
+  };
   for (let seq = 0; seq < events.length; seq++) {
     const e = events[seq]!;
     // M3-4 裁定：worker 子流事件不进主流行（过滤判据见 isWorkerSubflowEvent）；seq 仍按事件
     // 全序编号，行序与流序一致，不因过滤错位。
     if (isWorkerSubflowEvent(e)) continue;
     switch (e.type) {
-      case "user_message": rounds += 1; rows.push({ kind: "user", text: e.content, ts: e.ts, seq, round: rounds }); break;
+      case "user_message":
+        // 轮界：上一轮还没被终稿收走的桶在此落定（新消息开头 = 旧轮已说完）。
+        flushBuckets(true);
+        rounds += 1;
+        rows.push({
+          kind: "user", text: userVisibleText(e), ts: e.ts, seq, round: rounds,
+          ...(e.attachments !== undefined && e.attachments.length > 0 ? { attachments: e.attachments } : {}),
+        });
+        break;
       case "assistant_message":
         // 终稿到达：AssistantMessageEvent 无 callId，无法按桶匹配 ⇒ 全部未结桶被终稿行取代
         //（live=false），此后不再输出这些桶的 live 行。
@@ -63,7 +134,7 @@ export function projectStream(events: readonly AgentEvent[]): StreamRow[] {
         buckets.clear();
         thinkingBuckets.clear();
         rows.push({
-          kind: "assistant", text: e.content, live: false, ts: e.ts, seq, eventId: seq + 1,
+          kind: "assistant", text: e.content, live: false, ts: e.ts, seq, eventId: seq + 1, round: rounds,
           ...(carriedThinking !== undefined ? { thinking: carriedThinking } : {}),
         });
         break;
@@ -71,6 +142,15 @@ export function projectStream(events: readonly AgentEvent[]): StreamRow[] {
         const bucket = buckets.get(e.callId);
         if (bucket === undefined) buckets.set(e.callId, { text: e.text, seq, ts: e.ts });
         else bucket.text += e.text;
+        break;
+      }
+      // 第十九遍（业主 21.51.47「输出完之后橙色竖线还闪一下才停」）：usage = 本次模型调用说完了的
+      // 精确落定点（openai.ts 在流末 yield usage；案卷 21:51:38 实证：末 delta 与 usage 同秒，
+      // 之后 10s 尾部记忆沉淀才收束——旧判据 running=false 让光标陪跑了整个尾巴）。
+      // 工具轮里 usage 亦在 tool_result 之后、下一 call 之前到达 ⇒ 桶不跨调用，flush 语义干净；
+      // 空文本桶（只想过没说）在此落定即按既有口径弃行。
+      case "usage": {
+        flushBuckets(true);
         break;
       }
       case "thinking_delta": {
@@ -83,14 +163,20 @@ export function projectStream(events: readonly AgentEvent[]): StreamRow[] {
       }
       // 勘误落地：ToolCallEvent 的工具名字段是 name（不是计划作者预期的 tool）；行面仍叫 tool。
       case "tool_call": {
-        const row: ToolRow = { kind: "tool", tool: e.name, summary: summarize(e.args), pending: true, ts: e.ts, seq };
+        const row: ToolRow = { kind: "tool", tool: e.name, summary: summarize(e.args), args: rawArgs(e.args), pending: true, ts: e.ts, seq };
         toolRows.set(e.id, row);
         rows.push(row);
         break;
       }
       case "tool_result": {
         const row = toolRows.get(e.callId);
-        if (row) { row.pending = false; row.ok = e.ok; }
+        if (row) {
+          row.pending = false;
+          row.ok = e.ok;
+          if (e.ts !== undefined) row.then = e.ts; // P3-1：耗时的落地端（ts→then 一段）
+          // 只认**成功**的产物：失败的那一笔没有可看的东西（写盘被拒 / 渲染超时）。
+          if (e.ok && e.artifact !== undefined) row.artifact = e.artifact;
+        }
         break;
       }
       // M3-4 裁定：agent_spawned 是父流事实，保留为 tool 类行——summary=task 截断（与 summarize
@@ -104,20 +190,114 @@ export function projectStream(events: readonly AgentEvent[]): StreamRow[] {
       default: break; // 其余事件类型不成行：clarify/plan 走卡片选择器（pendingClarifyOf/pendingPlanOf）
     }
   }
-  // 未结桶 ⇒ live=true 的 assistant 行（text=该桶累计），按首 delta 的 seq 归位后与既有行并序。
-  for (const [callId, bucket] of buckets) {
-    rows.push({
-      kind: "assistant", text: bucket.text, live: true, ts: bucket.ts, seq: bucket.seq, eventId: bucket.seq + 1,
-      ...(thinkingBuckets.get(callId) ? { thinking: thinkingBuckets.get(callId) } : {}),
-    });
-  }
+  // 尾部未结桶（按首 delta 的 seq 归位后与既有行并序——末尾 sort 统一收口）：
+  // 运行中 ⇒ live=true 行（追字光标只该亮在正在流的那一段）；会话已停 ⇒ 同样是终稿（live=false），
+  // 操作条与「思考完成」据此显形——真实 provider 不补发 assistant_message，停转就是落定信号。
+  flushBuckets(!running);
   return rows.sort((a, b) => a.seq - b.seq);
+}
+
+/** 事件 id（1-based 行号，assistant 行 eventId 同口径）→ 所属轮号（1-based）。P3-1 回放/分叉的
+ *  轮号自事件日志投影（hover 操作对「事件日志的 fork/replay」的接口）。轮界口径与 projectStream
+ *  的 rounds 计数同一份：主会话 user_message 计数（worker 子流先滤）；事件在首个用户消息之前
+ *  或 id 越界（<1 / > events.length）→ null（不猜）。 */
+export function roundOfEvent(events: readonly AgentEvent[], eventId: number): number | null {
+  if (!Number.isInteger(eventId) || eventId < 1 || eventId > events.length) return null;
+  let rounds = 0;
+  for (let i = 0; i < eventId; i++) {
+    const e = events[i]!;
+    if (isWorkerSubflowEvent(e)) continue;
+    if (e.type === "user_message") rounds += 1;
+  }
+  return rounds === 0 ? null : rounds;
+}
+
+/** 第 N 轮的用户输入原文（回放 = fork 到该轮后把它注入新会话输入框）。拿不到 → null，不编。 */
+/** 用户面原文（2026-10-18）：技能调用轮的事件 content 是**展开后的技能提示词**（模型面），
+ *  直接显示会把整份 SKILL.md 当成用户说的话。skill 元信息在 ⇒ 还原成用户敲的 `<invoke> <args>`；
+ *  缺席（普通消息）⇒ 原样。事件本身不改：重放/续跑要的是展开后的上下文。 */
+export function userVisibleText(e: { content: string; skill?: { invoke: string; args: string } }): string {
+  if (e.skill === undefined) return e.content;
+  const args = e.skill.args.trim();
+  return args === "" ? e.skill.invoke : `${e.skill.invoke} ${args}`;
+}
+
+export function userTextOfRound(events: readonly AgentEvent[], round: number): string | null {
+  if (!Number.isInteger(round) || round < 1) return null;
+  let rounds = 0;
+  for (const e of events) {
+    if (isWorkerSubflowEvent(e)) continue;
+    if (e.type === "user_message") {
+      rounds += 1;
+      if (rounds === round) return userVisibleText(e);
+    }
+  }
+  return null;
+}
+
+/** 步骤时间线（P3-2 检查器「时间线」Tab 的数据面）——事件日志 → 步骤序列。
+ *  「只取在场字段，不编时间」：at 直接取事件 ts（缺席即不给），label 是在场文本的截断。
+ *  落步口径：user_message → user 步；tool_call → tool 步（name + 摘要）；
+ *  assistant 内容在真实 provider 是 delta-only（aggregate 终稿是 mock/demo 通道的产品）⇒
+ *  **每个 callId 的首个 delta** 落一个 assistant 步（后续 delta 并入——与「回放到此步」的
+ *  段落开头语义一致）；assistant_message 终稿是独立一笔事件，照落（demo 通道会同时有两者，
+ *  这里如实两步——都是真实事件，不合并）。usage → 用量步（「模型调用说完了」的精确落定点）。
+ *  worker 子流不进（与主流行同一过滤）；error 在对话行自呈现，时间线不为它立步。 */
+export interface TimelineItem {
+  /** 事件全序的 1-based 行号（assistant 行 eventId / DOM data-event-id 同口径）。 */
+  eventId: number;
+  kind: "user" | "tool" | "assistant" | "usage";
+  label: string;
+  /** 事件真值时间戳（毫秒）；缺席 = 旧日志没戳，不编。 */
+  at?: number;
+}
+
+const TIMELINE_LABEL_MAX = 60;
+const timelineLabel = (text: string): string => {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length <= TIMELINE_LABEL_MAX ? flat : flat.slice(0, TIMELINE_LABEL_MAX) + "…";
+};
+const fmtTokens = (n: number): string => {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
+};
+
+export function timelineItems(events: readonly AgentEvent[]): TimelineItem[] {
+  const out: TimelineItem[] = [];
+  const seenDeltaCalls = new Set<string>(); // 已落步的 callId（其后续 delta 并入首步）
+  for (let seq = 0; seq < events.length; seq++) {
+    const e = events[seq]!;
+    if (isWorkerSubflowEvent(e)) continue;
+    const eventId = seq + 1;
+    switch (e.type) {
+      case "user_message":
+        out.push({ eventId, kind: "user", label: timelineLabel(e.content), ...(e.ts !== undefined ? { at: e.ts } : {}) });
+        break;
+      case "assistant_delta":
+        if (seenDeltaCalls.has(e.callId)) break;
+        seenDeltaCalls.add(e.callId);
+        out.push({ eventId, kind: "assistant", label: timelineLabel(e.text), ...(e.ts !== undefined ? { at: e.ts } : {}) });
+        break;
+      case "assistant_message":
+        out.push({ eventId, kind: "assistant", label: timelineLabel(e.content), ...(e.ts !== undefined ? { at: e.ts } : {}) });
+        break;
+      case "tool_call":
+        out.push({ eventId, kind: "tool", label: timelineLabel(`${e.name} ${summarize(e.args)}`), ...(e.ts !== undefined ? { at: e.ts } : {}) });
+        break;
+      case "usage":
+        out.push({ eventId, kind: "usage", label: `输入 ${fmtTokens(e.inputTokens)} · 输出 ${fmtTokens(e.outputTokens)}`, ...(e.ts !== undefined ? { at: e.ts } : {}) });
+        break;
+      default:
+        break; // clarify/plan/error 等：对话面有专卡/专行，时间线不为它们立步
+    }
+  }
+  return out;
 }
 
 export type RunPhase = "idle" | "thinking" | "tool" | "ask" | "clarify" | "plan";
 
-/**
- * 尾扫判据（v2 语义钉死）：pending 三参任一 true ⇒ 对应门相位，ask 优先级最高；
+/** 尾扫判据（v2 语义钉死）：pending 三参任一 true ⇒ 对应门相位，ask 优先级最高；
  * 否则从尾向头扫——未决 tool_call（其后无同 id 的 tool_result）⇒ "tool"；
  * 晚于最后 tool_result 的 assistant_delta ⇒ "thinking"（扫描途中已见 result 的 delta 一律跳过，
  * 那些是「早于最后 tool_result」的 delta，判据不成立）；error 在尾部 ⇒ "idle"（error 行自呈现，不再判忙）。
@@ -204,6 +384,22 @@ export function countToolSteps(events: readonly AgentEvent[]): number {
   return steps;
 }
 
+/** 本轮步数（2026-10-18）：最后一个 user_message 之后的 tool_call 数——状态条要的是“这一轮做了几步”。
+ *  不能直接拿 countToolSteps（那是整条会话的累计）。工头子流程不计（与累计口径同一谓词）。 */
+export function countRunSteps(events: readonly AgentEvent[]): number {
+  // 找不到 user_message 时返回 0，而不是把整条会话的历史步数冒充成本轮——状态条宁可空着。
+  let start = events.length;
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    if (events[i]!.type === "user_message") { start = i + 1; break; }
+  }
+  let steps = 0;
+  for (let i = start; i < events.length; i += 1) {
+    const e = events[i]!;
+    if (e.type === "tool_call" && !isWorkerSubflowEvent(e)) steps += 1;
+  }
+  return steps;
+}
+
 /** 相对时间（语义钉死分界）：<60s "刚刚"；<60m "N 分钟前"；<24h "N 小时前"；<7d "N 天前"；
  *  否则本地日期 YYYY-MM-DD。未来时间戳（diff 为负）落入第一档显 "刚刚"，不显负数。 */
 export function relativeTime(nowMs: number, tsMs: number): string {  const diff = nowMs - tsMs;
@@ -249,39 +445,89 @@ export function roundTimeline(
   return out;
 }
 
+export type TurnVerificationStatus = "not-required" | "absent" | "stale" | "verified" | "failed";
+
+export interface TurnVerificationEvidence {
+  command: string;
+  ok: boolean;
+  output: string;
+  cause?: string;
+  exitCode?: number | null;
+}
+
+export interface TurnDelivery {
+  round: number;
+  files: Array<{ path: string; change: "created" | "modified" | "unknown"; snapshotId?: string }>;
+  verification: {
+    status: TurnVerificationStatus;
+    attempts: number;
+    latest: {
+      ok: boolean;
+      auto: boolean;
+      attempt: number;
+      maxAttempts: number;
+      results: TurnVerificationEvidence[];
+    } | null;
+  };
+  unverifiedFiles: string[];
+  nextAction: string;
+}
+
+interface InternalVerification {
+  index: number;
+  ok: boolean;
+  auto: boolean;
+  attempt: number;
+  maxAttempts: number;
+  results: TurnVerificationEvidence[];
+}
+
+interface InternalTurn {
+  round: number;
+  files: TurnDelivery["files"];
+  lastWriteIndex: number;
+  verifications: InternalVerification[];
+}
+
 /** C-32 ChangeSummaryCard 的投影（v2 输出优先）：按轮聚合写工具改动——user 行开新轮，
  *  写类 tool_call（write_file/edit_file/apply_patch）与其 tool_result 配对后计入该轮；
  *  change 字段缺席标 unknown（不猜 created/modified）；worker 子流事件已在 projectStream
- *  的过滤之外（此处直接吃原始事件，沿用同一过滤判据）。 */
-export function turnChanges(events: readonly AgentEvent[]): Array<{
-  round: number;
-  files: Array<{ path: string; change: "created" | "modified" | "unknown"; snapshotId?: string }>;
-}> {
+ *  的过滤之外（此处直接吃原始事件，沿用同一过滤判据）。
+ *  新投影在这份文件事实之上补验证券：验证拍晚于最后一次写盘才算当前证据，
+ *  验证后又写盘标 stale，worker 验证不替主会话销账。 */
+function collectTurnDelivery(events: readonly AgentEvent[]): InternalTurn[] {
   const WRITE_TOOLS = new Set(["write_file", "edit_file", "apply_patch"]);
   const isWorker = (e: AgentEvent): boolean =>
     e.type !== "agent_spawned" && typeof (e as { agent_id?: unknown }).agent_id === "string";
-  const out: Array<{ round: number; files: Array<{ path: string; change: "created" | "modified" | "unknown"; snapshotId?: string }> }> = [];
+  const out: InternalTurn[] = [];
   let round = 0;
-  let current: (typeof out)[number] | null = null;
+  let current: InternalTurn | null = null;
   // tool_call id → { path }（写工具才登记）；tool_result 按 callId 收口并计入当前轮。
   const pendingWrites = new Map<string, { path: string }>();
-  for (const e of events) {
+  const finish = (): void => {
+    if (current !== null && (current.files.length > 0 || current.verifications.length > 0)) out.push(current);
+    current = null;
+  };
+  for (let index = 0; index < events.length; index++) {
+    const e = events[index]!;
     if (isWorker(e)) continue;
     if (e.type === "user_message") {
-      if (current !== null && current.files.length > 0) out.push(current);
+      finish();
       round += 1;
-      current = { round, files: [] };
+      current = { round, files: [], lastWriteIndex: -1, verifications: [] };
       continue;
     }
+    if (current === null) continue;
     if (e.type === "tool_call" && WRITE_TOOLS.has(e.name)) {
       const p = e.args.path;
       if (typeof p === "string" && p !== "") pendingWrites.set(e.id, { path: p });
       continue;
     }
-    if (e.type === "tool_result" && current !== null) {
+    if (e.type === "tool_result") {
       const call = pendingWrites.get(e.callId);
       if (call === undefined) continue;
       pendingWrites.delete(e.callId);
+      current.lastWriteIndex = index;
       // 同一文件轮内多笔只记一次（首次的 change 口径）。
       if (current.files.some((f) => f.path === call.path)) continue;
       current.files.push({
@@ -289,8 +535,114 @@ export function turnChanges(events: readonly AgentEvent[]): Array<{
         change: e.change === "created" ? "created" : e.change === "modified" ? "modified" : "unknown",
         ...(e.snapshotId !== undefined ? { snapshotId: e.snapshotId } : {}),
       });
+      continue;
+    }
+    if (e.type === "verify_result") {
+      current.verifications.push({
+        index,
+        ok: e.ok,
+        auto: e.auto === true,
+        attempt: e.attempt,
+        maxAttempts: e.maxAttempts,
+        results: e.results.map((r) => ({
+          command: r.command,
+          ok: r.ok,
+          output: r.output,
+          ...(r.cause !== undefined ? { cause: r.cause } : {}),
+          ...(r.exitCode !== undefined ? { exitCode: r.exitCode } : {}),
+        })),
+      });
     }
   }
-  if (current !== null && current.files.length > 0) out.push(current);
+  finish();
   return out;
+}
+
+export function turnDelivery(events: readonly AgentEvent[]): TurnDelivery[] {
+  return collectTurnDelivery(events).map((turn) => {
+    const fresh = turn.verifications.filter((v) => v.index > turn.lastWriteIndex);
+    const latest = fresh.length > 0 ? fresh[fresh.length - 1]! : (turn.verifications[turn.verifications.length - 1] ?? null);
+    const status: TurnVerificationStatus =
+      turn.files.length === 0
+        ? "not-required"
+        : fresh.length === 0
+          ? turn.verifications.length === 0 ? "absent" : "stale"
+          : latest!.ok ? "verified" : "failed";
+    const unverifiedFiles = status === "verified" || status === "not-required" ? [] : turn.files.map((f) => f.path);
+    const nextAction =
+      status === "failed" ? "修复失败项后重新运行验证"
+      : status === "stale" ? "文件在上次验证后又有改动，请重新运行验证"
+      : status === "absent" ? "本轮有文件改动但还没有验证记录，请运行验证"
+      : status === "verified" ? "改动已验证，可进入审查或继续下一项"
+      : "本轮没有文件改动，可继续下一项";
+    return {
+      round: turn.round,
+      files: turn.files,
+      verification: {
+        status,
+        attempts: turn.files.length === 0 ? turn.verifications.length : fresh.length,
+        latest: latest === null ? null : {
+          ok: latest.ok,
+          auto: latest.auto,
+          attempt: latest.attempt,
+          maxAttempts: latest.maxAttempts,
+          results: latest.results,
+        },
+      },
+      unverifiedFiles,
+      nextAction,
+    };
+  });
+}
+
+/** 批 3 交付卡流尾的条目：有交付的轮出卡，空轮出一行弱提示（连续空轮并一段）。 */
+export type DeliveryTrailItem =
+  | { kind: "card"; delivery: TurnDelivery }
+  | { kind: "empty"; from: number; to: number };
+
+/** 空轮弱行文案（单轮「第 N 轮」；区间「第 M–N 轮」）。 */
+export function formatEmptyTrailNote(from: number, to: number): string {
+  return from === to ? `第 ${String(from)} 轮 · 无文件改动` : `第 ${String(from)}–${String(to)} 轮 · 无文件改动`;
+}
+
+/** 交付卡流尾序列（批 3 · 文档阶段 3·对话页①）：按轮序把「有交付的卡」与「空轮弱行」交错铺开，
+ *  连续空轮合并为一段（第 M–N 轮）。`currentRoundRunning` = 末轮还在跑：即便它此刻没有交付也
+ *  不预告弱行——轮还没收束，「无文件改动」断言不成立（写盘随时可能发生）；末轮已有交付时卡照出
+ *  （live 卡与运行中流式并存是既有行为）。总轮数取 max(totalRounds, 末卡轮号) 防御失配。 */
+export function deliveryTrail(
+  deliveries: readonly TurnDelivery[],
+  totalRounds: number,
+  currentRoundRunning: boolean,
+): DeliveryTrailItem[] {
+  const byRound = new Map<number, TurnDelivery>();
+  for (const d of deliveries) byRound.set(d.round, d);
+  const last = deliveries.length > 0 ? deliveries[deliveries.length - 1]!.round : 0;
+  const total = Math.max(totalRounds, last);
+  const out: DeliveryTrailItem[] = [];
+  let emptyFrom: number | null = null;
+  const flushEmpty = (end: number): void => {
+    if (emptyFrom !== null) out.push({ kind: "empty", from: emptyFrom, to: end });
+    emptyFrom = null;
+  };
+  for (let r = 1; r <= total; r++) {
+    const card = byRound.get(r);
+    if (card !== undefined) {
+      flushEmpty(r - 1);
+      out.push({ kind: "card", delivery: card });
+      continue;
+    }
+    if (r === total && currentRoundRunning) { flushEmpty(total - 1); break; } // 运行中末轮不预告（见上注）
+    emptyFrom ??= r;
+  }
+  flushEmpty(total);
+  return out;
+}
+
+export function turnChanges(events: readonly AgentEvent[]): Array<{
+  round: number;
+  files: TurnDelivery["files"];
+}> {
+  return turnDelivery(events)
+    .filter((t) => t.files.length > 0)
+    .map((t) => ({ round: t.round, files: t.files }));
 }

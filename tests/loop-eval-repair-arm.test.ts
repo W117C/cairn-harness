@@ -9,6 +9,7 @@
 //   OFF（产品缺省）：轮 3 收工 ⇒ 收束闸补一拍（闸拍=1）⇒ 红 ⇒ 直接收——剧本第 4 轮（修复）根本不会被要到
 //   ON （--auto-verify-repair）：红拍之后再要一轮 ⇒ 拿到第 4 轮 ⇒ 写盘 ⇒ 第二拍绿（闸拍=2）⇒ 收
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -17,8 +18,10 @@ import { afterAll, describe, expect, it } from "vitest";
 const ROOT = process.cwd();
 const SCRIPT = "fixtures/bench/scripts/narration-stop/script.jsonl";
 const TASKS = "fixtures/bench/tasks.json";
-const OUT_OFF = ".tmp/dsh-repair-arm-off";
-const OUT_ON = ".tmp/dsh-repair-arm-on";
+// 多个全量套件可并行运行；每次运行拥有独立输出目录，避免互相清理读数。
+const RUN_ID = randomUUID();
+const OUT_OFF = `.tmp/dsh-repair-arm-${RUN_ID}-off`;
+const OUT_ON = `.tmp/dsh-repair-arm-${RUN_ID}-on`;
 const spawnedDirs = [OUT_OFF, OUT_ON];
 
 interface Run {

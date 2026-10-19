@@ -1,8 +1,10 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { spawnTracked } from "./process.js";
 import { assertRealContainment, resolveInWorkspace, type Tool, type ToolContext, type ToolResult } from "./base.js";
+import { artifactKindOf } from "./write_file.js";
 
 /** 渲染工作区内的 HTML/SVG 成 PNG，作为图片内容块进上下文（识图的另一只眼）。
  *
@@ -23,6 +25,15 @@ import { assertRealContainment, resolveInWorkspace, type Tool, type ToolContext,
 
 /** 单帧渲染的墙钟上限。Chrome 冷启 + 页面加载实测约 1.2s；20s 留给重资源与长虚拟时间预算。 */
 export const RENDER_TIMEOUT_MS = 20_000;
+
+/** 视口高度上限（px）。高度此前**写死 1200** 而说明书说「高由页面自己定」——
+ *  那句是错的：`--window-size` 定的是视口，页面低于它时底部留白、高于它时被裁掉，
+ *  于是「截图 = 页面全貌」这个默认预期在两种页面上都不成立。现在它是一个可传参数，
+ *  说明书与实现同一个口径（200–4000，与 width 同一道校验）。 */
+export const MAX_RENDER_HEIGHT_PX = 4000;
+
+/** 视口高度缺省（px）。取 1200 = 与写死时代逐字一致，行为不变的只有这一格。 */
+export const DEFAULT_RENDER_HEIGHT_PX = 1200;
 
 /** 交付进上下文的 PNG 字节帽（与 read_image 同一顶帽，两个入口不许有两个数）。 */
 export const MAX_RENDER_PNG_BYTES = 5 * 1024 * 1024;
@@ -47,7 +58,10 @@ export const RENDER_IMAGE_DESCRIPTION =
   "何时用：写完或改完 HTML/SVG/动画/图表，要确认它真的长成你要的样子；" +
   "何时不用：读盘上已有的图片用 read_image；读源码配置用 read_file。" +
   "参数：path 必填；atMs 是虚拟时间预算（动画用它取不同时刻的帧，省略＝加载完那一刻）；" +
-  "width 是视口宽（高由页面自己定）。约束：单帧 ≤ " + String(Math.floor(MAX_RENDER_PNG_BYTES / 1024 / 1024)) + "MB。";
+  "width 是视口宽、height 是视口高（px，缺省 1200/1200）——两者定的是**视口**，不是页面："
+  + "页面比视口矮时底部留白，比视口高时超出的部分被裁掉，要全貌就把 height 调大。" +
+  "单帧只覆盖一个时刻：动画要看脚贴不贴踏板、循环交界跳不跳变，就用 atMs 取一个周期内的多个时刻分别看。"
+  + "约束：单帧 ≤ " + String(Math.floor(MAX_RENDER_PNG_BYTES / 1024 / 1024)) + "MB。";
 
 /** Chrome/Chromium 可执行文件的候选名单（按序找第一个在的）。
  *  只认这几个**已知安装位**，不去 PATH 里翻：PATH 里翻到一个同名二进制就 spawn，
@@ -63,7 +77,7 @@ export interface RenderImageDeps {
   /** 找 Chrome 可执行文件（测试注入）。返回 null = 本机没有。 */
   findChrome?: () => Promise<string | null>;
   /** 渲染一帧（测试注入：不真起浏览器）。抛错 = 这一帧没拿到。 */
-  shoot?: (chrome: string, htmlPath: string, out: string, opts: { width: number; atMs?: number }) => Promise<void>;
+  shoot?: (chrome: string, htmlPath: string, out: string, opts: { width: number; height: number; atMs?: number }) => Promise<void>;
 }
 
 async function defaultFindChrome(): Promise<string | null> {
@@ -84,13 +98,24 @@ async function defaultFindChrome(): Promise<string | null> {
  *  **必须**经 spawnTracked（进程组 + 超时强杀 + 超时先 settle）：
  *  实测 `about:blank` 也能挂住不退出，裸 spawn 等 'close' 会永久挂死 agent loop。
  *  env 由 spawnTracked 消毒（不继承主进程 ⇒ 解密后的 BYOK key 不会进浏览器进程）。 */
-async function defaultShoot(chrome: string, htmlPath: string, out: string, opts: { width: number; atMs?: number }): Promise<void> {
+async function defaultShoot(chrome: string, htmlPath: string, out: string, opts: { width: number; height: number; atMs?: number }): Promise<void> {
   const args = [
     "--headless", "--disable-gpu", "--no-sandbox", "--hide-scrollbars",
+    // 渲染的是**工作区里的 HTML**（可能刚由模型写、可被提示注入）：页面里的 fetch/img/script
+    // 默认能访问内网与云元数据（169.254.169.254），完全绕过 web-fetch-policy 的 SSRF 闸。
+    // 这里把 DNS 解析全部掐断（相对路径与内联资源照常渲染），并关掉浏览器的后台网络。
+    "--host-resolver-rules=MAP * ~NOTFOUND",
+    // `host-resolver-rules` 只管域名：IP 字面量（127.0.0.1 / 169.254.169.254 / 192.168.x.x）
+    // 不经 DNS。所有 http(s) 强制走一个必然失败的本地代理，并让回环也不绕过代理。
+    "--proxy-server=127.0.0.1:9",
+    "--proxy-bypass-list=<-loopback>",
+    "--disable-background-networking",
+    "--disable-component-update",
+    "--no-pings",
     "--screenshot=" + out,
-    "--window-size=" + String(opts.width) + ",1200",
+    "--window-size=" + String(opts.width) + "," + String(opts.height),
     ...(opts.atMs !== undefined ? ["--virtual-time-budget=" + String(opts.atMs)] : []),
-    "file://" + htmlPath,
+    pathToFileURL(htmlPath).href,
   ];
   let timedOut = false;
   const handle = spawnTracked(chrome, args, {
@@ -124,6 +149,11 @@ export function makeRenderImage(deps: RenderImageDeps = {}): Tool {
       const width = typeof args.width === "number" && Number.isInteger(args.width) && args.width >= 200 && args.width <= 4000
         ? args.width
         : 1200;
+      // height 与 width 同一道校验、同一个缺省形状。写死 1200 的时代这里什么都没有，
+      // 于是「页面自己定高」那句说明书从来没有兑现过（见 MAX_RENDER_HEIGHT_PX 注释）。
+      const height = typeof args.height === "number" && Number.isInteger(args.height) && args.height >= 200 && args.height <= MAX_RENDER_HEIGHT_PX
+        ? args.height
+        : DEFAULT_RENDER_HEIGHT_PX;
       const atMs = typeof args.atMs === "number" && Number.isInteger(args.atMs) && args.atMs >= 0 && args.atMs <= 60_000
         ? args.atMs
         : undefined;
@@ -146,7 +176,7 @@ export function makeRenderImage(deps: RenderImageDeps = {}): Tool {
       const dir = await mkdtemp(join(tmpdir(), "cairn-render-"));
       const out = join(dir, "frame.png");
       try {
-        await shoot(chrome, abs, out, { width, ...(atMs !== undefined ? { atMs } : {}) });
+        await shoot(chrome, abs, out, { width, height, ...(atMs !== undefined ? { atMs } : {}) });
         const buf = await readFile(out);
         if (buf.length === 0) {
           return { ok: false, output: "render_image: 渲染出来是空文件（Chrome 可能没起来或页面是空的）——不把空图当看过" };
@@ -164,9 +194,25 @@ export function makeRenderImage(deps: RenderImageDeps = {}): Tool {
         const dataUrl = "data:image/png;base64," + buf.toString("base64");
         return {
           ok: true,
-          output: "[render_image] " + rel + (atMs !== undefined ? " @" + String(atMs) + "ms" : "") +
-            "（" + String(buf.length) + " 字节 PNG）已作为图片内容块附上——现在你真的看过它了",
+          // 回执只声称**这张图本身**的事实：哪个文件、哪个视口、哪个时刻、多少字节。
+          // 从前那句「现在你真的看过它了」把「生成了一张 PNG」说成「已经有效检查过」——
+          // 而单帧静态图证明得了「元素出现了」，证明不了脚贴没贴踏板、循环交界跳不跳变。
+          // 那句话是模型据以宣称「我看过了」的唯一凭据，所以它必须只说自己能兑现的部分，
+          // 并把「还差什么检查」写在同一个回执里（否则模型没有任何提示要去补那些帧）。
+          output: "[render_image] " + rel
+            + "（视口 " + String(width) + "×" + String(height) + "，"
+            + (atMs !== undefined ? "虚拟时间 " + String(atMs) + "ms" : "加载态那一帧")
+            + "，" + String(buf.length) + " 字节 PNG）已作为图片内容块附上。"
+            + "这一帧只证明页面跑起来了、元素在画面里；动画还需要按周期多点采样（atMs）比对脚/踏板/膝盖，"
+            + "页面比视口高的部分会被裁掉。",
           images: [{ type: "image", dataUrl }],
+          // 产物引用指向**被渲染的那个源文件**，不是这张 PNG（PNG 落在 OS 临时目录、用完即删）。
+          // 用户面据此给「打开预览」入口——同一条链路的另一半在桌面端 projections/Stream。
+          // 产物引用指向**被渲染的那个源文件**，不是这张 PNG（PNG 落在 OS 临时目录、用完即删）。
+          // 用户面据此给「打开预览」入口——同一条链路的另一半在桌面端 projections/Stream。
+          // kind 走 write_file 那个共用分类器（按后缀名）：写死 "html" 会把 .svg 也报成 html，
+          // 而桌面端两个 kind 都进 openPreview ⇒ 观感一样、数据是错的，判卷也就跟着错。
+          artifact: { kind: artifactKindOf(rel), path: rel.trim(), note: "刚渲染过的产物" },
         };
       } finally {
         await rm(dir, { recursive: true, force: true }).catch(() => undefined);

@@ -311,7 +311,7 @@ export const MUTATIONS = [
     src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "「改已有文件用 edit_file 打补丁」被删 ⇒ 模型继续整文件重抄（write_file 的行数提示只在事后，事前预防更省一轮）",
-    apply: (s) => s.replace("  \"3) 改已有文件用 edit_file 打补丁，write_file 只用于新建文件（整份重抄既费 output 又容易漏抄未改的行）；\",\n", ""),
+    apply: (s) => s.replace("  \"3) 改已有文件用 edit_file 打补丁，write_file 只用于新建文件（整份重抄费 output 又容易漏抄未改的行）；\",\n", ""),
     expectFail: "补丁优先写进纪律：改已有文件用 edit_file，write_file 只用于新建（能力 2「补丁级 diff」）",
   },
   {
@@ -434,7 +434,7 @@ export const MUTATIONS = [
     src: "src/agent/verify.ts",
     test: "tests/verify-probe.test.ts",
     desc: "探测档沿用 npm 的 60s ⇒ 探出验证面却让它必然超时（比探不出来更坏：给出「已经验过」的错觉）",
-    apply: (s) => s.replace("timeoutMs: PROBED_LANG_TIMEOUT_MS }", "timeoutMs: DEFAULT_VERIFY_TIMEOUT_MS }"),
+    apply: (s) => s.replace("if (lang.length > 0) return { config: { test: lang, timeoutMs: PROBED_LANG_TIMEOUT_MS }, source: \"probed\" };", "if (lang.length > 0) return { config: { test: lang, timeoutMs: DEFAULT_VERIFY_TIMEOUT_MS }, source: \"probed\" };"),
     expectFail: "Cargo.toml → cargo test",
   },
   {
@@ -499,7 +499,7 @@ export const MUTATIONS = [
     src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "整段编排纪律删掉 ⇒ 模型面重新没人教「何时拆 / 怎么派 / 派完收队」，而 W1a 的工具照样在线（能力已发货、指令面缺席）",
-    apply: (s) => s.replace("  \"编排（派子代理时）：能各自独立验收才拆，单一改动别拆；任务书必须自包含——目标 / 涉及文件 / 验收口径，worker 看不到本会话历史；派完先调 wait_for_agents 收队，未拿到回执不得转述 worker 的结论。\",\n", ""),
+    apply: (s) => s.replace("  \"编排（派子代理时）：能各自独立验收才拆，单一改动别拆；任务书必须自包含（worker 看不到本会话历史）；派完先调 wait_for_agents 收队，未拿到回执不得转述 worker 的结论。\",\n", ""),
     expectFail: "编排段在：拆的判据 / 任务书自包含 / 派完必须收队，三句各锁一句（W1a 的收队义务此前只在工具描述里）",
   },
   {
@@ -515,7 +515,7 @@ export const MUTATIONS = [
     src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "删「任务书自包含」半句 ⇒ worker 拿不到验收口径就要返工（它看不到父会话历史，这条是 worker 质量的上游）",
-    apply: (s) => s.replace("任务书必须自包含——目标 / 涉及文件 / 验收口径，worker 看不到本会话历史；", ""),
+    apply: (s) => s.replace("任务书必须自包含（worker 看不到本会话历史）；", ""),
     expectFail: "编排段在：拆的判据 / 任务书自包含 / 派完必须收队，三句各锁一句（W1a 的收队义务此前只在工具描述里）",
   },
   {
@@ -534,7 +534,7 @@ export const MUTATIONS = [
       "（2026-10-16）：agent 写鹈鹕骑自行车的循环动画，IK 算对了、模板组装对了、回执确认无残留占位符，" +
       "然后就没回头看。产物里膝盖被选肢钉死在身体右前方（膝 x 全程只摆 21px），" +
       "而它三个机会都没发现——缺的不是能力，是没人要求它回头看。",
-    apply: (s) => s.replace('  "视觉产物（HTML/SVG/动画/图表）：交付前必须真的看过——read_image 读渲染结果，或把关键数值读回来核对；不许只凭「我写对了」宣称完成。",\n', ''),
+    apply: (s) => s.replace('  "视觉产物（HTML/SVG/动画/图表）：交付前必须真的看过；只交付落盘那一份——不要在回复里重抄内容。",\n', ''),
     expectFail: "视觉产物自检段在：交付前必须真的看过（能力 5 对非代码产物同样成立）",
   },
   {
@@ -1252,7 +1252,7 @@ export const MUTATIONS = [
     src: "src/agent/loop.ts",
     test: "tests/auto-verify-repair.test.ts",
     desc: "自动拍的返回值不再区分环境红 ⇒ 装不上工具链的机器多要一轮去重跑同一件必失败的事，P1-3 归因白做",
-    apply: (s) => s.replace("    if (auto) return outcome.ok || envBeat ? \"stop\" : \"auto-red\";", "    if (auto) return outcome.ok ? \"stop\" : \"auto-red\";"),
+    apply: (s) => s.replace('      return outcome.ok || envBeat ? "stop" : "auto-red";', '      return outcome.ok ? "stop" : "auto-red";'),
     expectFail: "环境红不驱动返修：装不上工具链的机器上重跑一遍还是 127，那等于把 P1-3 的归因白做",
   },
   {
@@ -1699,15 +1699,9 @@ export const MUTATIONS = [
     apply: (s) => s.replace(`    test: config.test ?? [],`, `    test: [],`),
     expectFail: "改过 test 命令之后同目录再问一次，且新面没批过就跑不起来",
   },
-  {
-    id: "verify-trust-key-tag-dropped",
-    src: "src/agent/verify-trust.ts",
-    test: "tests/verify-trust-fingerprint.test.ts",
-    desc: "键域标签没了 ⇒ verify 的条目与插件信任的历史**裸路径**条目落进同一键域，"
-      + "一条给插件历史留的兼容记录能顺带免掉「执行仓库自带命令」那一问",
-    apply: (s) => s.replace(`  return repoDir + VERIFY_TRUST_KEY_TAG;`, `  return repoDir;`),
-    expectFail: "旧版插件信任留下的**裸路径**条目顶不掉这一门（键域标签不是装饰）",
-  },
+  // 2026-10-19：撤掉 verify-trust-key-tag-dropped。它原本守护「verify 条目不得被插件历史的
+  // 裸路径兼容记录顶包」；TrustStore 已移除裸路径兼容（内容绑定不可回退），这条变异不再有
+  // 能杀死它的用例——留一条恒绿针比没有更坏，故撤锚点并保留 tests 里「裸条目不得放行」的断言。
   {
     id: "read-batch-paths-invisible-to-map-context",
     src: "src/agent/session-provider.ts",

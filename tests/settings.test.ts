@@ -57,6 +57,15 @@ describe("settings 存储（M1e 布局持久化）", () => {
     expect(validateSettings({ currentSession: 42 }).currentSession).toBeNull();
   });
 
+  it("locale 往返：写入后新实例读回；白名单外的值回退缺省（面板白名单放行它才谈得上落库）", async () => {
+    const file = join(dir, "locale.json");
+    const s = new SettingsStore(file);
+    const next = await s.set({ locale: "en-US" });
+    expect(next.locale).toBe("en-US");
+    expect((await new SettingsStore(file).get()).locale).toBe("en-US");
+    expect(validateSettings({ locale: "fr-FR" }).locale).toBe(DEFAULT_SETTINGS.locale);
+  });
+
   it("set 深合并 layout（只改一个字段不动其他）；写盘无 .tmp 残留", async () => {
     const file = join(dir, "s2.json");
     const a = new SettingsStore(file);
@@ -233,5 +242,30 @@ describe("settings 并发写不得互相吞字段", () => {
     expect(disk.theme).toBe("dark");
     expect(full.mode).toBe("auto");
     expect(full.layout.width).toBe(41);
+  });
+});
+
+// 2026-10-19：自定义 provider 在注册表未装载时会被校验回退 demo，而随后任一笔 layout 写
+// 会把 demo 持久化 ⇒ 配置修好后用户偏好也回不来（静默走 demo）。
+describe("未知 provider/model 不被 layout 写照回默认", () => {
+  it("未 patch 的 provider/model 原样留在盘上，内存仍按校验值工作", async () => {
+    const file = join(dir, "settings.json");
+    await writeFile(file, JSON.stringify({ provider: "mycustom", model: "my-model", layout: { width: 30 } }), "utf8");
+    const s = new SettingsStore(file);
+    expect((await s.get()).provider).toBe(DEFAULT_SETTINGS.provider); // 注册表未装 ⇒ 回退
+    await s.set({ layout: { width: 41 } });
+    const disk = JSON.parse(await readFile(file, "utf8")) as Record<string, unknown>;
+    expect(disk.provider).toBe("mycustom");
+    expect(disk.model).toBe("my-model");
+    expect((disk.layout as { width?: number }).width).toBe(41);
+  });
+
+  it("显式 patch provider 时以 patch 为准（不会被旧值盖回去）", async () => {
+    const file = join(dir, "settings.json");
+    await writeFile(file, JSON.stringify({ provider: "mycustom" }), "utf8");
+    const s = new SettingsStore(file);
+    await s.set({ provider: "openai" });
+    const disk = JSON.parse(await readFile(file, "utf8")) as Record<string, unknown>;
+    expect(disk.provider).toBe("openai");
   });
 });

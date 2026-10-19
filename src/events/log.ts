@@ -20,7 +20,9 @@ const logHandles = new Map<string, CachedHandle>();
 const logHandleChain = new Map<string, Promise<FileHandle>>();
 
 /** 半写尾行的扫描上限：尾段超过它仍无换行就**不猜边界**（见 `repairPartialTail` 的分支二）。 */
-const TAIL_SCAN_CAP = 1 << 20;
+/** 尾部反向扫描上限：64MB。旧值 1MB 对一条超大 tool_result（>1MB）不够——扫描会停在上限、
+ *  走「补换行隔离」分支，下一次 append 就把坏行升级成中段坏行（会话永久打不开）。 */
+const TAIL_SCAN_CAP = 64 << 20;
 
 /** 半写尾行修复（只在新开句柄时做，= 跨进程续写的唯一入口）：
  *  进程被硬杀在单次 `write` 中途时，文件尾可能留下**半条 JSON**。读者侧一直按「尾部半写可丢」
@@ -336,7 +338,10 @@ async function replayIncrementalInner(path: string): Promise<AgentEvent[]> {
       const oldest = replayCache.keys().next().value;
       if (oldest !== undefined) replayCache.delete(oldest);
     }
-    const entry: ReplayCacheEntry = { ino: st.ino, offset: Math.min(offset, st.size), events, line: completeInit.length, tailBad: bad };
+    // 偏移用**实际读到的字节数**，不再按 stat 时的大小夹回去：stat 在 readFile 之前，
+    // 期间追加会让 raw 比 st.size 大，`Math.min` 把 offset 退回旧大小 ⇒ 下次增量把
+    // [旧大小, 新大小) 整段重读一遍（投影重复事件；同族见 sessions.listSessions 行数）。
+    const entry: ReplayCacheEntry = { ino: st.ino, offset, events, line: completeInit.length, tailBad: bad };
     replayCache.set(path, entry);
     return entry.events.slice(); // 交副本：消费方排序/清空不得影响缓存
   }

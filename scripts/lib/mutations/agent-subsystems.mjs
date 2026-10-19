@@ -795,7 +795,7 @@ export const MUTATIONS = [
     test: "tests/map-import-edge.test.ts",
     desc: "只建边不建节点 ⇒ 那条边在 nodes 里没有端点，幂迭代扫的是 nodes，于是「import 了但没用」这一整类" +
       "依赖对排名完全不起作用（adj 里看得见、单测里 edgeWeight 也查得到，偏偏差距一格）",
-    apply: (s) => s.replace("      ensure(f.file, ir.name, \"ref\", ir.line);", "      void ir;"),
+    apply: (s) => s.replace("      ensure(f.file, local, \"ref\", ir.line);", "      void ir;"),
     expectFail: "import 了但本地没用 ⇒ 仍建出 ref 节点，PageRank 才有可流的边",
   },
   {

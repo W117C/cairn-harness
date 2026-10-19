@@ -4,7 +4,7 @@
 // （src/、apps/desktop/、tests/、scripts/）一行不用动，「这份清单 = 公开面契约」。
 // 新增导出请想清楚归属：契约字段进 ./types，存储机制进 ./log；不在此清单里的名字不算公开面。
 export type {
-  PromoteOrigin, SkillInvocationMeta, GoalTurnOrigin, UserMessageOrigin,
+  PromoteOrigin, SkillInvocationMeta, GoalTurnOrigin, UserMessageOrigin, UserMessageAttachment,
   UserMessageEvent, AssistantMessageEvent, AssistantDeltaEvent, ThinkingDeltaEvent,
   ToolCallEvent, ToolBlockReason, HarnessHoldReason, ToolResultEvent,
   UsageEvent, SessionMetaEvent,

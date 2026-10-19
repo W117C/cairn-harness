@@ -6,7 +6,7 @@
 //  - 学习面 = 静默丢弃：orchestrator.rewardBandit 按侧信道纪律只 console.warn，同毫秒收队的
 //    并行 worker 那一笔后验就此不见（tests/bandit-runtime.test.ts 24 笔并发实测）。
 // 所以临时名再加一个进程内单调序号：序号只在同进程内有意义，跨进程仍由 pid 分开。
-import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 let seq = 0;
@@ -17,12 +17,14 @@ export function tmpPathFor(path: string, at = Date.now()): string {
   return path + ".tmp-" + String(process.pid) + "-" + String(at) + "-" + String(seq);
 }
 
-/** 覆盖式写（父目录自动建）。失败时清掉自己留下的临时文件，不把半成品留在盘上。 */
-export async function writeFileAtomic(path: string, text: string): Promise<void> {
+/** 覆盖式写（父目录自动建）。失败时清掉自己留下的临时文件，不把半成品留在盘上。
+ *  `mode`：把临时文件先改成目标模式再 rename——否则覆盖会把原文件的 0755 换成 0666&umask。 */
+export async function writeFileAtomic(path: string, text: string, opts: { mode?: number } = {}): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const tmp = tmpPathFor(path);
   try {
     await writeFile(tmp, text, "utf8");
+    if (opts.mode !== undefined) await chmod(tmp, opts.mode).catch(() => undefined);
     await rename(tmp, path);
   } catch (err) {
     await unlink(tmp).catch(() => {});

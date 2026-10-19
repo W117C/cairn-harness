@@ -54,12 +54,26 @@ export interface ChunkText {
   push(d: Buffer): void;
   text(): string;
 }
-export function createChunkText(): ChunkText {
+export function createChunkText(maxBytes: number = Number.POSITIVE_INFINITY): ChunkText {
   const dec = new StringDecoder("utf8");
   let out = "";
+  let used = 0;
+  let dropped = false;
   return {
-    push: (d: Buffer): void => { out += dec.write(d); },
-    text: (): string => out,
+    push: (d: Buffer): void => {
+      const s = dec.write(d);
+      if (used + bytesOf(s) <= maxBytes) {
+        out += s;
+        used += bytesOf(s);
+        return;
+      }
+      // 到帽即停止累积（仍继续解码以保持跨块字符边界），防止 `yes` 一类 hook 在超时前把宿主内存撑爆。
+      const room = Math.max(0, maxBytes - used);
+      if (room > 0) out += headWithinBytes(s, room);
+      used = maxBytes;
+      dropped = true;
+    },
+    text: (): string => out + (dropped ? "\n[truncated]" : ""),
   };
 }
 

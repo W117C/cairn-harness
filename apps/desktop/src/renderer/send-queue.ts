@@ -68,13 +68,46 @@ export function continueAfterRun(res: { ok: boolean; aborted?: boolean }): boole
   return res.ok || res.aborted === true;
 }
 
-/** Composer 整卡禁用口径（v2.17 唯一处）：
- *  · creating ＝ 新建会话往返中（pendingSend 防双发，沿用既有语义）；
- *  · gateActive ＝ **活动会话**的澄清/方案门未决（事件投影按会话正确）。
+/** 「打断/停止」点击后的陈旧旗自愈判据（第十三遍）：main 答 {ok:false}（该会话无在跑 controller）
+ *  ＝本实例的「运行中」是陈旧旗（旧 main 无收束推送时代的残影 / 整页重载前的孤儿标记）——
+ *  旧代码 void 掉结果，点了像没点（业主实测「排队中·打断并发送，点击没有反应」）。可摘三道闸：
+ *  ① cancelOk=true ⇒ 真打断了一场 run（正常收束链自会续派）不摘；
+ *  ② 点击后 runGen 已动 ⇒ 收束链已把队列先派起来（同拍竞态），那是真在跑，不碰；
+ *  ③ 旗已不在 ⇒ 收束链已自行摘掉，无事可做。
+ *  纯函数：全是入参，不含时钟与全局。 */
+export function shouldHealStaleRun(args: {
+  cancelOk: boolean;
+  genAtClick: number;
+  genNow: number;
+  flagPresent: boolean;
+}): boolean {
+  if (args.cancelOk) return false;
+  if (args.genNow !== args.genAtClick) return false;
+  if (!args.flagPresent) return false;
+  return true;
+}
+
+/** Composer 锁因（2026-10-18 收口）：同一个 disabled 布尔此前被 Composer 拿去猜占位文案，
+ *  于是「澄清/方案门未决」被写成「正在创建会话…」——禁用是真的，原因说错了。
+ *  优先级 = 用户越需要处理的越靠前：门（要你做决定）> 队列读回（一闪而过的加载）> 创建会话。
  *  **运行中不在这里**——运行中输入可用（回车排队、⌘↩ 打断并发送）。
  *  ask（审批）门不进 gateActive：卡在场时输入保持可用（v2.17 口径，v2.18 沿用）。 */
+export type ComposerLockReason = "gate" | "queue" | "creating";
+
+export function composerLockReason(input: {
+  /** 读回发送队列的瞬时加载（App 侧原本以 disabled 的第三项独立 OR 进来）。 */
+  queueLoading?: boolean;
+  creating: boolean;
+  gateActive: boolean;
+}): ComposerLockReason | null {
+  if (input.gateActive) return "gate";
+  if (input.queueLoading === true) return "queue";
+  if (input.creating) return "creating";
+  return null;
+}
+
 export function composerLocked(input: { creating: boolean; gateActive: boolean }): boolean {
-  return input.creating || input.gateActive;
+  return composerLockReason(input) !== null;
 }
 
 /** 审批卡归属判定（v2.18 唯一处）：这张卡该不该画在**当前会话**的头上。
@@ -87,4 +120,13 @@ export function askBelongsToSession(payload: { sessionId?: string } | null, acti
   const sid = payload.sessionId ?? "";
   if (sid === "") return true; // 未知 ⇒ 沿用旧行为，不猜也不吞
   return sid === (activeId ?? "");
+}
+
+/** 会话结束自动沉淀的合并审批（agent-runner 双轨②，agent-runner.ts:1492 送审形状）：
+ *  distill 的合并审批 args 带 trigger 标记；手打记忆写入的普通审批同为 tool=remember
+ *  但 args 无 trigger——两者必须分开（后者是用户主动要求写记忆，照常弹卡）。
+ *  「对话优先跳沉」的唯一判据（App 的 onAsk 队列在场即拒 / send 运行中即拒），
+ *  别处不得复制这份字符串比较。 */
+export function isSessionEndDistillAsk(p: { tool?: string; args?: Record<string, unknown> }): boolean {
+  return p.tool === "remember" && p.args?.trigger === "session_end_distill";
 }

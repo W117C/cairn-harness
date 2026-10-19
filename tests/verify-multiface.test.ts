@@ -327,7 +327,26 @@ describe("本仓自己的 verify 配置（.agent/config.json 与实测对上）"
     const { config } = await loadVerifyConfig(ROOT);
     for (const command of config.test ?? []) {
       expect(command).not.toContain("pnpm run test");
-      expect(command).toContain("vitest");
+      // 2026-10-16：test 面第一次接纳了一条**非 vitest** 的产物检查（html-artifact-check）。
+      // 2026-10-17：又接纳了两条运动学检查（anim-geometry-check / anim-js-geometry-check）。
+      //               同日纳入 svg-figure-check：同为零依赖、单文件、不启动浏览器的静态产物检查。
+      // 判据的本意是"收窄、跑得进帽内"，不是"必须是 vitest"、也不是"必须是字节层那一格"
+      // ——所以按形状分两类放行，并各自钉住它为什么在帽内：定向 vitest（点了具体判卷文件）
+      // 与零依赖的静态产物检查（一条命令、只吃一个文件、不起浏览器）。
+      const targetedVitest = command.includes("vitest") && command.includes("tests/");
+      const artifactCheck = /scripts\/(html-artifact|anim-geometry|anim-js-geometry|svg-figure)-check\.ts/.test(command);
+      expect(targetedVitest || artifactCheck, "test 面只收定向 vitest 与产物静态检查，收到：" + command).toBe(true);
     }
+  });
+
+  // 验证对象（2026-10-16）：从前这个工作区的 test 面只查 harness 自己的健康，用户要的那份
+  // HTML 一次都没被看过。这一格钉住"产物检查真在面上"——它不是文档承诺，是一条会跑的命令。
+  it("产物检查在验证面上：用户要的那份 HTML 有人看（不只查 harness 自己）", async () => {
+    const { config } = await loadVerifyConfig(ROOT);
+    const cmds = config.test ?? [];
+    const artifact = cmds.find((c) => c.includes("scripts/html-artifact-check.ts"));
+    expect(artifact, "test 面没有产物检查 ⇒ 验证对象仍只对准 harness 自身").toBeDefined();
+    // 命令必须点名一个具体产物（空参数那条路退 2，写进配置就是每条 verify 都红）。
+    expect(artifact).toMatch(/[\w.-]+\.(html|htm|svg)\b/);
   });
 });

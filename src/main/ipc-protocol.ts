@@ -11,11 +11,16 @@ import type { ScheduleSnapshot } from "./scheduler";
 import type { LicenseState } from "./license";
 import type { UpdateCheckResult } from "./updater";
 import type { AddProjectInput, ProjectRecord } from "./project-registry";
+import type { ChangeDiffPayload } from "./change-diff";
+import type { ListDirPayload, ReadTextPayload } from "./workspace-fs";
 import type { SessionMetadataRecord } from "./session-metadata";
 import type { RunAttachmentReference } from "./run-attachments";
 import type { SessionQueueEntry } from "./sessions";
 import type { ThinkingEffort } from "../providers/capabilities";
 import type { ProviderInfo } from "./provider-runtime";
+import type { CapabilityReadout } from "./doctor";
+// v9：建议单发的结果形状事实源在 suggest-next（分类 + hint 的构造与失败面同源）；这里只转发类型。
+import type { SuggestNextResult } from "./suggest-next";
 
 export type { AgentEvent } from "../events";
 export type { PermissionMode } from "../permissions";
@@ -25,19 +30,44 @@ export type { SessionMetadataRecord } from "./session-metadata";
 export type { RunAttachmentReference } from "./run-attachments";
 export type { SessionQueueEntry } from "./sessions";
 export type { ThinkingEffort } from "../providers/capabilities";
+export type { SuggestNextResult, SuggestNextReason } from "./suggest-next";
 export type { ProviderInfo } from "./provider-runtime";
+export type { CapabilityReadout } from "./doctor";
+export type { ProjectDiagnosis, ProjectDiagnosisVerdict } from "./project-templates";
 export type { DiscoveryProtocol } from "../providers/discovery";
 export type { DiscoveredRow } from "../providers/provider-draft";
 // 本地也要用这两个名字（`export type { X } from` 只做再导出，不进本文件的作用域）
 import type { DiscoveryProtocol } from "../providers/discovery";
 import type { DiscoveredRow } from "../providers/provider-draft";
+import type { PreviewSnapshot } from "./project-preview";
+// v12：导入诊断三态的形状事实源在 project-templates（判定与文案同源）；这里只转发类型。
+import type { ProjectDiagnosis } from "./project-templates";
+import type { ProviderConnectionResult } from "./provider-connection";
 
 // ---- SEMA §3.5/§12：IPC 协议版本化 ----
 /** 协议兼容面唯一事实源：renderer 的期望版本经 vite define 构建期注入（App.tsx 挂载即比对
  *  主进程实况 `protocolVersion()`），失配 fail-closed 亮 fatal 面——老渲染层配新主进程（或反向）
  *  不许静默错位。改协议形状（AgentApi 增删/字段语义变）= bump 这里，并以 desktop-panel 提案
- *  走同一流水线（§3.5）。 */
-export const IPC_PROTOCOL_VERSION = 3;
+ *  走同一流水线（§3.5）。v4 = 变更审阅通道（changeDiff）；v5 = 窗格后端通道批（file/terminal/browser）；
+ *  v6 = 产品第一批（模板建项 / 预览运行时 / 项目导出 / 连接自检）；
+ *  v7 = 全量补全批（朗读 say / 路径动作 / 浏览器元素选择 / 浏览器清除数据）；
+ *  v8 = 附件选择批（dialog 选文件——附件引用「选择文件…」）；
+ *  v9 = 建议批（suggestNext——「Tab 想下一条」按上下文单发模型调用）；
+ *  v10 = 能力在场性批（capabilities——搜索端点配没配，让「模型为什么少一把工具」上屏）；
+ *  v11 = 主界面重做批（git 两闸 / 项目内模糊搜索 / 最近打开 / 粘贴落盘 / 快照还原 / Finder 显示）；
+ *  v12 = 导入诊断批（projectDiagnose——导入已有文件夹先给三态诊断，ADR 0004 §4）；
+ *  v13 = 记忆正文批（MemoryTopicPayload 增 body——「主题正文」快照面接通，§8 #15 销账）。 */
+export const IPC_PROTOCOL_VERSION = 13;
+
+// ---- v11：主界面重做批的载荷（git 读数 / 克隆 / 项目内搜索）----
+/** git 在场读数：branch 为 null = detached HEAD（如实，不拿 "HEAD" 冒充分支名）。 */
+export type GitStatusPayload = { ok: true; branch: string | null; dirtyFiles: number } | { ok: false; error: string };
+/** 克隆结果：path = 落成的项目目录（成功后调用方登记为项目并切过去）。 */
+export type GitCloneResult = { ok: true; path: string } | { ok: false; error: string };
+/** 项目内搜索：hits 为 workspace 相对路径（正斜杠）；truncated = 扫描或命中超帽（不假装完整）。 */
+export type WorkspaceSearchPayload =
+  | { ok: true; hits: { path: string; kind: "file" | "directory" }[]; truncated: boolean }
+  | { ok: false; error: string };
 
 /** S7：探测结果（表单据此渲染那张可勾选的表）。 */
 export type ProviderDiscoverPayload =
@@ -190,6 +220,10 @@ export interface MemoryTopicPayload {
   type: string;
   modified: string;
   bytes: number;
+  /** v13：正文（frontmatter 已剥；无正文 = 空串）——「主题正文」面板此前是「待接」占位，
+   *  快照只带索引与元信息（§8 #15）。正文读取本就在外部引用扫描里发生过，这里只是带上。
+   *  展示口径：面板向人展示，不进模型上下文（与 index 同）。 */
+  body: string;
 }
 export interface MemoryLayerSnapshot {
   /** 该层根目录（展示用绝对路径——面板向人展示，不进模型上下文）。 */
@@ -223,7 +257,7 @@ export interface AgentApi {
    *  缺省无参 = 兼容旧调用（host 侧 fail-visible：{ok:false,"会话不在运行"}）。 */
   runCancel(sessionId?: string): Promise<{ ok: boolean; error?: string }>;
   /** M1d 手动压缩入口（M1e 起 preload 暴露：token 面板按钮）。 */
-  compact?(): Promise<CompactResponse>;
+  compact?(sessionId?: string): Promise<CompactResponse>;
   onEvent(cb: (e: AgentEvent) => void): () => void;
   onAsk(cb: (p: AskPayload) => void): () => void;
   onAskDone(cb: (p: AskOutcomePayload) => void): () => void;
@@ -247,7 +281,7 @@ export interface AgentApi {
   renameSession(oldId: string, newName: string): Promise<{ id: string }>;
   deleteSession(id: string): Promise<{ currentSession: string | null }>;
   /** M8 分叉（v2.15 IPC 接线）：保留前 N 轮（含）→ 新会话 `<id>-f<N>`；源会话只读、字节不变。 */
-  forkSession(sessionId: string, round: number): Promise<{ ok: boolean; id?: string; error?: string }>;
+  forkSession(sessionId: string, round: number, unique?: boolean): Promise<{ ok: boolean; id?: string; error?: string }>;
   /** #7 文件级回滚（v2.16 IPC 接线）：把第 N 轮主会话改过的文件还原成该轮之前的原件（源自 D7 覆盖前快照）。
    *  只动主会话直写；worker 改动在各自 worktree（另有合并控制塔）。取不到原件 / 轮后又改过的逐条 manual 报出。 */
   revertTurn(sessionId: string, round: number): Promise<{
@@ -258,10 +292,83 @@ export interface AgentApi {
     manual: { path: string; why: string }[];
     failed: { path: string; error: string }[];
   }>;
+  /** v4 变更审阅：某文件的逐 hunk 差异（D7 覆盖前快照 vs 当前文件）。snapshotId 缺席 = 新建。
+   *  二进制/超帽/快照缺失都 fail-visible；路径越界即拒（审阅面不许成为任意读通道）。 */
+  changeDiff(req: { path: string; snapshotId?: string }): Promise<ChangeDiffPayload>;
+  /** v5 file 窗格：列 workspace 内一层目录（懒加载树；条目数帽截断如实标注）。 */
+  /** 当前活动工作区上下文（desktop 专用，2026-10-17）：diff / 文件窗格 / 回滚 / 路径动作
+   *  不再只认「最近一次 run 的工作区」——冷启动或切项目后还没跑过 run 也要能用。
+   *  空串 = 清除上下文（回到旧口径）。 */
+  setWorkspaceContext(path: string): Promise<{ ok: boolean; error?: string }>;
+  workspaceListDir(relPath: string): Promise<ListDirPayload>;
+  /** v5 file 窗格：读 workspace 内文本文件（单侧 512 KiB 帽；二进制拒）。 */
+  workspaceReadText(relPath: string): Promise<ReadTextPayload>;
+  /** v7 路径动作（§2.3 右键菜单）：relPath 相对当前工作区（越界即拒——同 workspace-fs 口径）。
+   *  "abs" 只解析并回绝对路径（复制路径用）；"reveal" 在 Finder 中显示；"open" 用默认应用打开。 */
+  workspacePathAction(relPath: string, action: "abs" | "reveal" | "open"): Promise<{ ok: boolean; path?: string; error?: string }>;
+  /** v7 朗读（§2.2 消息操作条 read aloud）：macOS 走系统 say；非 darwin fail-visible。
+   *  重复调用先停上一条；进程随应用退出清理（will-quit）。 */
+  speakText(text: string): Promise<{ ok: boolean; error?: string }>;
+  /** v7 停止朗读（幂等）。 */
+  stopSpeaking(): Promise<{ ok: boolean }>;
+  /** v5 terminal 窗格（macOS）：起一个登录 shell（PTY 经 script(1)）；非 darwin fail-visible。 */
+  terminalStart(): Promise<{ ok: true; id: string } | { ok: false; error: string }>;
+  /** 用户输入 → shell stdin（未知 id 返回 false，不静默丢）。 */
+  terminalWrite(id: string, data: string): Promise<boolean>;
+  /** 杀终端（幂等）。 */
+  terminalKill(id: string): Promise<void>;
+  /** v5 terminal 窗格推送：pty 输出（按 id 归因）。 */
+  onTerminalData(cb: (e: { id: string; data: string }) => void): () => void;
+  /** v5 terminal 窗格推送：终端退出（code null = 被信号杀）。 */
+  onTerminalExit(cb: (e: { id: string; code: number | null }) => void): () => void;
+  /** v5 browser 窗格：创建/导航某 id 的 WebContentsView（独立干净 profile；站点授权在渲染层先问）。 */
+  browserOpen(id: string, url: string): Promise<{ ok: boolean; error?: string }>;
+  /** v5 browser 窗格：容器矩形同步（窗口内像素；宽高 ≤0 = 隐藏视图）。 */
+  browserBounds(id: string, rect: { x: number; y: number; width: number; height: number }): Promise<void>;
+  /** v5 browser 窗格：后退/前进/刷新。 */
+  browserNav(id: string, action: "back" | "forward" | "reload"): Promise<void>;
+  /** v5 browser 窗格：销毁视图（窗格关闭时）。 */
+  browserClose(id: string): Promise<void>;
+  /** v7 browser 窗格：清除浏览数据（独立干净 profile 的存储；keepCookies=true 时保留 cookies）。 */
+  browserClearData(id: string, opts: { keepCookies: boolean }): Promise<{ ok: boolean; error?: string }>;
+  /** 渲染层授权清单变更（移除站点/忘记全部）同步到主进程：页内跳转/重定向的逐跳闸读这一份。 */
+  browserSetAllowedHosts(hosts: string[]): Promise<{ ok: boolean }>;
+  /** v7 browser 窗格：元素选择（§3.6 ⌘⇧S）——进入取色态，点击页面元素返回选择器/片段/URL；Esc 取消。
+   *  取消是结果不是错误（ok:false + error 文案），界面如实呈现。 */
+  browserPickElement(id: string): Promise<{ ok: boolean; selector?: string; snippet?: string; url?: string; error?: string }>;
+  /** v5 窗格弹出：把某个窗格弹成独立窗口（#pane=<kind>&session=<id> 路由；事件推送已广播所有窗口）。 */
+  panePopout(kind: string, sessionId?: string): Promise<{ ok: boolean; error?: string }>;
+  /** v5 browser 窗格推送：导航状态（URL/标题/可否后退前进/加载中）。
+   *  v7：`pick` 为元素选择的回程（页内 ⌘⇧S 由主进程 before-input-event 捕获——页面持有焦点时
+   *  渲染层收不到按键；结果经本字段推回，与 browserPickElement 的返回同形）。 */
+  onBrowserState(cb: (s: { id: string; url: string; title: string; canGoBack: boolean; canGoForward: boolean; loading: boolean; pick?: { ok: boolean; selector?: string; snippet?: string; url?: string; error?: string }; pending?: { url: string } }) => void): () => void;
   // ---- CX-01：真实项目注册表 + Session-plane 组织记录（必选桥；不是 renderer-local state）----
-  listProjects(): Promise<ProjectRecord[]>;
+  /** v11：options.recentFirst = 最近打开序（lastOpenedAt 优先、旧记录退回 updatedAt）；
+   *  includeRemoved = 含软删除（「最近打开」菜单列历史上用过的项目，一键重加）。缺省 = 旧行为。 */
+  listProjects(options?: { includeRemoved?: boolean; recentFirst?: boolean }): Promise<ProjectRecord[]>;
   addProject(input: AddProjectInput): Promise<ProjectRecord>;
   removeProject(id: string): Promise<ProjectRecord>;
+  // ---- v11：主界面重做批（七通道）----
+  /** v11：读某项目的 git 在场信息（分支名 + 未提交条目数）——项目 chip 与快速建议的数据面。
+   *  非仓库 / git 缺席分别可辨，一切失败进 ok:false（不抛）。 */
+  gitStatus(path: string): Promise<GitStatusPayload>;
+  /** v11：把远端仓库克隆到 parentDir（目录名取仓库名）；URL 限 https/ssh/git@ 白名单。
+   *  目标已存在即拒（不合并不覆盖）；失败原文上屏（git 的报错本身是人话）。 */
+  gitClone(req: { url: string; parentDir: string }): Promise<GitCloneResult>;
+  /** v11：项目内文件模糊搜索（@ 引用补全）：命中 = workspace 相对路径 + 文件/目录；
+   *  跳过 .git/node_modules 等，扫描与命中双帽截断如实标注。 */
+  workspaceSearch(workspace: string, query: string): Promise<WorkspaceSearchPayload>;
+  /** v11：标记项目「最近打开」（打开会话 / 切换项目时调用）；未知 id 拒绝。 */
+  touchProject(id: string): Promise<ProjectRecord>;
+  /** v11：⌘V 粘贴素材落临时文件（截图等）；字节帽 20MB，返回路径此后走既有附件引用链。 */
+  saveTempFile(req: { name: string; bytes: Uint8Array }): Promise<{ ok: boolean; path?: string; error?: string }>;
+  /** v11：把覆盖前快照还原回目标文件（检查器「撤销此文件改动」）——写前先给当前版本备份，
+   *  撤销本身可再撤销；快照与路径配对校验与 changeDiff 完全同口径（越界即拒、防串文件）。 */
+  snapshotRestore(req: { path: string; snapshotId: string }): Promise<{ ok: boolean; error?: string }>;
+  /** v11：在 Finder 中显示某绝对路径（项目右键菜单 / 项目外附件 chip 的落点）。只显示不打开。 */
+  revealInFinder(path: string): Promise<{ ok: boolean; error?: string }>;
+  /** 附件图片缩略图（2026-10-18 desktop 扩展）：仅图片扩展名、≤25MB；返回 40px PNG data URL。 */
+  attachmentThumb(path: string): Promise<{ ok: boolean; dataUrl?: string; error?: string }>;
   /** v2.16 用户反馈沉淀（赞/踩）：落 sidecar `feedback.jsonl`（append-only，不进事件流）。
    *  `rating:"none"` = 撤销（读时取最后一条生效）。未接线前界面只选中、不假提交。 */
   submitFeedback(req: { sessionId: string; eventId: number; rating: "up" | "down" | "none"; note?: string }): Promise<{ ok: boolean; error?: string }>;
@@ -276,7 +383,9 @@ export interface AgentApi {
   /** M2d：记忆删除（仅用户经记忆面板；模型无删除权，§8.1.7）。 */
   deleteMemory(scope: "project" | "global", topic: string): Promise<{ ok: boolean; error?: string }>;
   /** M2e：插件信任卡决议（仅用户经插件面板；未信任不激活）。 */
-  pluginDecide(plugin: string, trusted: boolean): Promise<{ ok: boolean; error?: string }>;
+  pluginDecide(plugin: string, trusted: boolean, workspace?: string): Promise<{ ok: boolean; error?: string }>;
+  /** 写插件 userConfig（敏感字段走 safeStorage；值绝不回读给渲染层）。 */
+  pluginUserConfigSet(plugin: string, values: Record<string, string>): Promise<{ ok: boolean; error?: string }>;
   /** M2f：辅助对话（sidechat）+ /promote。 */
   sidechatCreate(parentSessionId: string, name?: string): Promise<{ id: string }>;
   sidechatAsk(sidechatId: string, message: string, parentSessionId?: string): Promise<{ ok: boolean; error?: string; events?: AgentEvent[] }>;
@@ -334,9 +443,58 @@ export interface AgentApi {
   checkUpdate(): Promise<UpdateCheckResult>;
   /** M4b §2.3：打开下载页（shell.openExternal，仅 http(s) 白名单——防 manifest 注入协议）。 */
   openExternal(url: string): Promise<{ ok: boolean; error?: string }>;
+  /** 能力在场性读数：搜索端点配没配、配在哪。**它回答的是「模型为什么少了一把工具」**——
+   *  没配 `search.endpoint` 时 `web_search` 整族不注入（规格面与执行面同时摘），
+   *  而这件事此前只存在于 CLI 的 --doctor 输出里，桌面端用户看到的是「模型说它不会搜」。 */
+  capabilities(): Promise<CapabilityReadout>;
+  // ---- v6：产品第一批（模板建项 / 预览运行时 / 项目导出 / 连接自检）----
+  /** 模板目录：三条零依赖（展示网页 / 表单小工具 / 数据展示页）+ 一条 React/Vite。 */
+  projectTemplates(): Promise<{ id: string; name: string; description: string; runKind: "static" | "vite" }[]>;
+  /** 按模板建一个**能运行**的项目（模板文件 + .cairn/project.json；写盘失败自动回滚）。 */
+  projectCreateFromTemplate(req: { name: string; templateId: string; parentDir?: string }): Promise<
+    | { ok: true; name: string; path: string; parentDir: string; templateId: string }
+    | { ok: false; reason: string; message: string }
+  >;
+  /** 起预览：static 走进程内静态服务；vite 先装依赖再起 dev server。失败分类见 PreviewSnapshot.stage。 */
+  previewStart(projectPath: string): Promise<PreviewSnapshot>;
+  /** 停预览（幂等）：进程组回收 + 静态服务关闭。 */
+  previewStop(projectPath: string): Promise<PreviewSnapshot>;
+  /** 当前预览状态（不触发启动）。 */
+  previewStatus(projectPath: string): Promise<PreviewSnapshot>;
+  /** v12 导入诊断：这个目录现在能不能受控预览（三态 supported / needs-info / unsupported + 原因 + 下一步）。
+   *  只读判定，不写盘、不登记项目——诊断只提示不阻断（ADR 0004 §4：先给结果，再开始工作）。 */
+  projectDiagnose(projectPath: string): Promise<ProjectDiagnosis>;
+  /** 预览状态推送（准备/启动/就绪/失败/停止）。 */
+  onPreviewState(cb: (s: PreviewSnapshot) => void): () => void;
+  /** 导出项目到用户选的目录：排除 node_modules/dist/.git/.agent/.DS_Store，不覆盖已有目标。 */
+  projectExport(projectPath: string): Promise<
+    { ok: true; dest: string; copiedFiles: number } | { ok: false; error: string; cancelled?: boolean }
+  >;
+  /** 一次「检查连接」：GET 模型清单（不产生 token 费用），返回分类结果与下一步。 */
+  providerCheck(provider: string): Promise<ProviderConnectionResult>;
+  /** 导出当前对话为 Markdown 文件（2026-10-18）：原生保存面板（默认 Downloads），取消 ⇒ canceled。
+   *  内容由渲染层生成（transcriptMarkdown），主进程只负责选路径与落盘。 */
+  exportTranscript(markdown: string, suggestedName: string): Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }>;
+  /** 斜杠菜单列技能（2026-10-18）：当前工作区的 loose skills（调用名/描述/信任态）。
+   *  workspace 缺省 = 当前工作区；桌面端显式传，避免切项目时的竞态。 */
+  listSkills(workspace?: string): Promise<{
+    skills: { invoke: string; description: string; trust: string }[];
+    /** 容器插件的 prompt command（2026-10-18）：与技能同进斜杠补全；信任随插件。 */
+    commands: { invoke: string; description: string; trust: string }[];
+  }>;
+  /** 技能指令正文（2026-10-18，§8 #15 待接收口）：设置页技能抽屉「读了再信任」。
+   *  只读当前工作区 loose skill 的 SKILL.md 正文；超过 20000 字符截断并标 truncated。 */
+  skillBody(name: string, workspace?: string): Promise<{ ok: boolean; body?: string; truncated?: boolean; path?: string; error?: string }>;
   /** M4-5：dialog 选目录（侧栏添加工作区表单「浏览…」的后端；M3 deferred 收口）。
    *  系统目录选择器（openDirectory，非模态）；取消/关窗 ⇒ null——文本手输兜底据此保留。 */
   pickDirectory(): Promise<string | null>;
+  /** v8：dialog 选文件（附件引用「选择文件…」的后端）：系统文件选择器（openFile 多选，非模态）；
+   *  取消/关窗 ⇒ null（空选不假报空数组）——手输路径兜底据此保留。 */
+  pickFiles(): Promise<string[] | null>;
+  /** v9：「Tab 想下一条」（业主 2026-10-16 裁 A②）：空输入框按 Tab → 按会话上下文单发一次模型调用，
+   *  把「用户下一句最可能说的话」取回来填入输入框（只填不发）。单发不进会话流、不落 JSONL、不计量；
+   *  失败按类分说（demo/no-key/empty/timeout/error + hint）——renderer 原样上屏，不静默凑字。 */
+  suggestNext(input: { model: string | null; excerpt: string }): Promise<SuggestNextResult>;
   /** SEMA §3.5/§12：主进程实况协议版本（唯一事实源 = 本文件 IPC_PROTOCOL_VERSION）。
    *  renderer 挂载即比对构建期注入的期望版本，失配即 fatal——通道本身恒答得上来（版本化
    *  的第一格就是它自己），查询失败也按失配面处理。 */

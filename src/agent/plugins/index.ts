@@ -10,18 +10,18 @@ import { TrustStore, pluginFingerprint, pluginFingerprintEx } from "./trust";
 import { HookEngine } from "./hooks";
 import { McpManager, type McpToolInfo } from "./mcp";
 import {
-  buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRemount, modelInvocable,
+  buildSkillRoutingList, skillInvokeName, commandInvokeName, resolveSkillName, skillRemount, modelInvocable,
   clampSkillBody, skillRecallSuffix, substituteVars, declaredArgumentNames, expandConfigVars, expandUserConfig, referencedUserConfigKeys,
   skillToolPolicy,
   SKILL_REMOUNT_TOKENS_PER_SKILL,
   type ActivatedSkill, type RoutingListResult, type RemountResult, type SubstitutionContext, type SkillToolPolicy,
 } from "./skills";
 import {
-  readPluginUserConfig, pluginUserConfigDir, type PluginUserConfigRead,
+  readPluginUserConfig, pluginUserConfigDir, writePluginUserConfig, type PluginUserConfigRead,
 } from "./secrets";
 import { loadUserAgentRoles, userAgentInvoke, type UserAgentRole } from "../roles/user-agents";
 import {
-  registerPluginLspServers, unregisterPluginLspServers, type LspServerConfig as LspRuntimeConfig,
+  registerPluginLspServers, unregisterPluginLspServers, closePluginLspClients, type LspServerConfig as LspRuntimeConfig,
 } from "../../tools/lsp";
 import type { AgentEvent, ToolCallEvent, ToolResultEvent, UserMessageEvent } from "../../events";
 import type {
@@ -169,6 +169,21 @@ export interface PluginPanelSnapshot {
     trust: string;
     root: string;
     counts: { skills: number; commands: number; agents: number; hooks: number; mcp: number; lsp: number; lspActive: number };
+    /** 2026-10-18：面板不再只报数目——列出可调用的技能与命令（invoke 名与描述）。
+     *  信任是插件级的（未信任不激活），条目本身不另带 trust 字段。 */
+    skills: { name: string; invoke: string; description: string }[];
+    commands: { name: string; invoke: string; description: string }[];
+    /** userConfig 可编辑面的**元数据**（值绝不发给渲染层；敏感字段只报 hasValue）。 */
+    userConfig: {
+      key: string;
+      type: string;
+      title?: string;
+      description?: string;
+      required: boolean;
+      sensitive: boolean;
+      hasValue: boolean;
+      missing: boolean;
+    }[];
     errors: string[];
     warnings: string[];
   }[];
@@ -214,8 +229,15 @@ export class PluginRuntime {
       ...(opts.sessionId ? { sessionId: opts.sessionId } : {}),
       // exec form 的 ${user_config.*} 展开与 PLUGIN_OPTION_* 取值共用这一份解析结果。
       userConfigValues: (plugin) => this.userConfigs.get(plugin)?.values ?? {},
+      userConfigSensitive: (plugin) => this.userConfigs.get(plugin)?.sensitive ?? [],
     });
     this.mcp = new McpManager();
+    // server 崩溃 ⇒ 立即摘掉它的工具（旧实现只标 failed，模型仍看到一组永远「未连接」的工具）。
+    this.mcp.onServerDown = (plugin, server) => {
+      for (const [name, info] of this.mcpTools) {
+        if (info.plugin === plugin && info.server === server) this.mcpTools.delete(name);
+      }
+    };
   }
 
   /** 静态扫描 + 信任过滤（不连 MCP 不跑 hook——纯装载）。 */
@@ -266,6 +288,36 @@ export class PluginRuntime {
   /** 某插件的 userConfig 取值（配置面：hook exec form / MCP / LSP）。未装载 = 空表。 */
   userConfigValuesFor(plugin: string): Record<string, string> {
     return this.userConfigs.get(plugin)?.values ?? {};
+  }
+
+  /** 写插件 userConfig（桌面设置面的唯一写入口）。敏感字段走 safeStorage；写后重解析激活面。 */
+  async setUserConfig(plugin: string, values: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
+    const p = this.manifest.plugins.find((x) => x.name === plugin);
+    if (p === undefined) return { ok: false, error: `插件不存在: ${plugin}` };
+    const allowed = new Set(p.userConfigFields.map((f) => f.key));
+    const unknown = Object.keys(values).filter((k) => !allowed.has(k));
+    if (unknown.length > 0) return { ok: false, error: `未知配置项: ${unknown.join("、")}` };
+    const clean: Record<string, string> = {};
+    for (const [k, v] of Object.entries(values)) {
+      if (typeof v !== "string") return { ok: false, error: `配置项 ${k} 必须是字符串` };
+      clean[k] = v;
+    }
+    const r = await writePluginUserConfig({
+      plugin,
+      fields: p.userConfigFields,
+      values: clean,
+      dir: pluginUserConfigDir(this.opts.pluginDataRoot, plugin),
+    });
+    if (!r.ok) return { ok: false, error: r.error };
+    await this.resolveUserConfigs();
+    // 敏感值/端点变化要重连 MCP、重注册 LSP；失败不把写入回滚（值已安全落盘），但要出声。
+    await this.connectMcp().catch((err: unknown) => {
+      console.warn("[plugins] userConfig 更新后 MCP 重连失败:", err instanceof Error ? err.message : String(err));
+    });
+    try { this.activateLsp(); } catch (err) {
+      console.warn("[plugins] userConfig 更新后 LSP 重注册失败:", err instanceof Error ? err.message : String(err));
+    }
+    return { ok: true };
   }
 
   /** §9.3 权限联动：一条 skill / prompt command **被激活的那一瞬间**登记它的工具面申报。
@@ -319,15 +371,32 @@ export class PluginRuntime {
     // **永远查不到出口**（面板既显示不出待信任，批准也点不动，用户只能看着 skill 不在路由清单里）。
     // 出口统一：按名字在 plugins / looseSkills 两处解析 root，其余流程（指纹 + bounded 位 +
     // 重建激活面）复用同一条路径；IPC 通道 agent:plugin-decide 原样够用，不新增机制。
-    const target =
-      this.manifest.plugins.find((x) => x.name === pluginName) ??
-      this.manifest.looseSkills.find((x) => x.name === pluginName);
-    if (!target) return false;
+    // 决议只带名字（IPC 形状不动）。同名条目（项目插件 vs 项目散装 skill，或用户级插件）时
+    // 旧实现取扫描序第一个 ⇒ 用户批的是 A，落信任的可能是 B 的执行面。
+    // 判不准就不落：歧义时拒绝本次决议（fail-closed），面板仍显示待信任。
+    const matches = [
+      ...this.manifest.plugins.map((x) => ({ name: x.name, root: x.root })),
+      ...this.manifest.looseSkills.map((x) => ({ name: x.name, root: x.root })),
+    ].filter((x) => x.name === pluginName);
+    if (matches.length !== 1) return false;
+    const target = matches[0]!;
     const { fp, bounded } = await pluginFingerprintEx(target.root);
     await this.trust.decide(target.root, trusted, fp, bounded);
     const reloaded = await PluginRuntime.load(this.opts);
+    const inactive = this.manifest.plugins.filter((plugin) =>
+      reloaded.manifest.plugins.find((current) => current.name === plugin.name)?.trust !== "trusted");
     this.manifest = reloaded.manifest;
     this.hooks = reloaded.hooks;
+    this.userConfigs = reloaded.userConfigs;
+    const cleanups: Promise<void>[] = [];
+    for (const plugin of inactive) {
+      for (const [name, info] of this.mcpTools) if (info.plugin === plugin.name) this.mcpTools.delete(name);
+      const ids = this.lspServerIds.filter((id) => id.startsWith(plugin.name + ":"));
+      unregisterPluginLspServers(this.opts.workspace, ids);
+      this.lspServerIds = this.lspServerIds.filter((id) => !ids.includes(id));
+      cleanups.push(this.mcp.disconnectPlugin(plugin.name), closePluginLspClients(this.opts.workspace, ids));
+    }
+    await Promise.all(cleanups);
     return true;
   }
 
@@ -336,12 +405,15 @@ export class PluginRuntime {
     for (const p of this.manifest.plugins) {
       if (p.trust !== "trusted") continue;
       for (const { serverName, config } of p.mcp) {
+        if (this.manifest.plugins.find((current) => current.name === p.name)?.trust !== "trusted") break;
         const res = await this.mcp.connect(p.name, serverName, config, {
           pluginRoot: p.root,
           projectDir: this.opts.workspace,
           // §9.5：远程 server 的 API key 就写在 headers/url 里，不展开这一层等于那类插件连不上。
           userConfig: this.userConfigValuesFor(p.name),
+          userConfigSensitive: this.userConfigs.get(p.name)?.sensitive ?? [],
         });
+        if (this.manifest.plugins.find((current) => current.name === p.name)?.trust !== "trusted") break;
         for (const t of res.tools) {
           this.mcpTools.set(t.scopedName, { ...t, plugin: p.name, server: serverName });
         }
@@ -358,9 +430,12 @@ export class PluginRuntime {
       if (p.trust !== "trusted") continue;
       const servers: Record<string, LspRuntimeConfig> = {};
       const cfgValues = this.userConfigValuesFor(p.name);
+      // 敏感值只进 env；LSP 的 command/args 会出现在进程表里。
+      const sensitive = new Set(this.userConfigs.get(p.name)?.sensitive ?? []);
+      const argvValues = Object.fromEntries(Object.entries(cfgValues).filter(([k]) => !sensitive.has(k)));
       const expand = (t: string): string => expandUserConfig(
         expandConfigVars(t, { pluginRoot: p.root, projectDir: this.opts.workspace }),
-        cfgValues,
+        argvValues,
       );
       for (const [id, cfg] of Object.entries(p.lsp)) {
         const extensions = Object.keys(cfg.extensionToLanguage ?? {});
@@ -533,6 +608,21 @@ export class PluginRuntime {
           // 注意这是"已注册"，不是"已起进程"——LSP 总开关（.agent/lsp.json）关着时注册了也不启动。
           lspActive: this.lspServerIds.filter((id) => id.startsWith(p.name + ":")).length,
         },
+        skills: p.skills.map((sk) => ({ name: sk.name, invoke: skillInvokeName(sk), description: sk.description })),
+        commands: p.commands.map((c) => ({ name: c.name, invoke: commandInvokeName(c), description: c.description })),
+        userConfig: (() => {
+          const read = this.userConfigs.get(p.name);
+          return p.userConfigFields.map((f) => ({
+            key: f.key,
+            type: f.type,
+            ...(f.title !== undefined ? { title: f.title } : {}),
+            ...(f.description !== undefined ? { description: f.description } : {}),
+            required: f.required,
+            sensitive: f.sensitive,
+            hasValue: read?.values[f.key] !== undefined,
+            missing: read?.missing.includes(f.key) === true,
+          }));
+        })(),
         errors: p.errors,
         warnings: p.warnings,
       })),
@@ -554,6 +644,7 @@ export class PluginRuntime {
     // LSP 注册表与会话同生命周期（TOOLS 摘除同族）：不清零的话下一个会话会继承上一个插件的服务器，
     // 而那个插件的目录可能已经被卸载——pickServerForFile 会挑到一个不存在的 command。
     unregisterPluginLspServers(this.opts.workspace, this.lspServerIds);
+    await closePluginLspClients(this.opts.workspace, this.lspServerIds);
     this.lspServerIds = [];
   }
 }

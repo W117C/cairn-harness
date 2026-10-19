@@ -167,7 +167,10 @@ describe("auto-verify on completion (harness 补拍，证据 only)", () => {
       { type: "verify_result", callId: "harness-auto-verify", ok: false, auto: true, attempt: 1 },
     ]);
     expect(requests).toHaveLength(2); // 证据拍不偷要一轮模型
-    expect(log.filter((e) => e.type === "tool_result")).toHaveLength(1); // 只有一拍 = 写盘本身
+    // 2026-10-19：自动拍也落配对 tool_result（写盘 1 + 自动验证 1），否则下一轮投影会伪造成
+    // 「工具调用没有收到结果 ⇒ 上次运行中途结束」。
+    expect(log.filter((e) => e.type === "tool_result")).toHaveLength(2);
+    expect(log.some((e) => e.type === "tool_result" && e.output.includes("自动验证未通过"))).toBe(true);
     expect(log.some((e) => e.type === "tool_call" && e.name === "verify")).toBe(false); // 不合成工具调用
   });
 

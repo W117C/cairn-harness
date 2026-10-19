@@ -97,6 +97,24 @@ export async function withTimeout<T>(p: Promise<T>, ms: number, label: string): 
   }
 }
 
+/** 可取消的等待。不会强制终止不支持 signal 的底层操作；晚到的结果/异常仍由 race 接住。 */
+export async function withAbort<T>(signal: AbortSignal, operation: () => Promise<T>): Promise<T> {
+  signal.throwIfAborted();
+  let onAbort!: () => void;
+  const cancelled = new Promise<never>((_resolve, reject) => {
+    onAbort = () => { reject(signal.reason); };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  try {
+    const result = await Promise.race([
+      Promise.resolve().then(() => { signal.throwIfAborted(); return operation(); }),
+      cancelled,
+    ]);
+    signal.throwIfAborted();
+    return result;
+  } finally { signal.removeEventListener("abort", onAbort); }
+}
+
 export interface BodyRead {
   /** 已读到的正文（按 UTF-8 逐块解码，跨块的多字节字符不会被切成 U+FFFD）。 */
   text: string;
@@ -107,34 +125,49 @@ export interface BodyRead {
   capped: boolean;
 }
 
-/** 流式读响应体，超过 cap 就停。`Content-Length` 先帽（能省掉一次白读的传输），
+/** 流式读响应体，超过 cap 就停。声明长度超限默认拒绝，接受不完整正文的调用方可显式选择截断。
  *  真流起来再逐块计数并 `guard.bump()`（进展即续命：慢而有进展的响应体不该被一次性定时器误杀）。
  *  原先私有于 `src/main/updater.ts`，搬到这里是因为 `src/tools/` 也要用——让工具反向 import
  *  `main/` 是把装配层压进内核，方向反了。 */
-export async function readBodyCapped(res: Response, cap: number, guard?: StallGuard): Promise<BodyRead> {
+export async function readBodyCapped(
+  res: Response, cap: number, guard?: StallGuard,
+  options: { oversizedHeader?: "reject" | "truncate" } = {},
+): Promise<BodyRead> {
   const declared = Number(res.headers?.get?.("content-length") ?? "0");
-  if (Number.isFinite(declared) && declared > cap) {
+  if (Number.isFinite(declared) && declared > cap && options.oversizedHeader !== "truncate") {
+    void res.body?.cancel().catch(() => {});
     throw new Error("body 超上限");
   }
   const reader = res.body?.getReader?.();
   if (!reader) {
     const text = await res.text();
-    return { text, bytes: Buffer.byteLength(text, "utf8"), capped: false };
+    const bytes = Buffer.byteLength(text, "utf8");
+    if (bytes > cap) {
+      const prefix = Buffer.from(text.slice(0, cap), "utf8").subarray(0, cap);
+      return { text: new TextDecoder().decode(prefix, { stream: true }), bytes, capped: true };
+    }
+    return { text, bytes, capped: false };
   }
   const decoder = new TextDecoder();
   let text = "";
   let bytes = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    bytes += value.length;
-    guard?.bump();
-    if (bytes > cap) {
-      void reader.cancel().catch(() => {});
-      return { text, bytes, capped: true };
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const remaining = Math.max(0, cap - bytes);
+      bytes += value.length;
+      guard?.bump();
+      if (bytes > cap) {
+        // 保留越界块里仍在预算内的部分；不 flush 人为截断的半个 UTF-8 字符。
+        text += decoder.decode(value.subarray(0, remaining), { stream: true });
+        return { text, bytes, capped: true };
+      }
+      text += decoder.decode(value, { stream: true });
     }
-    text += decoder.decode(value, { stream: true });
+    return { text: text + decoder.decode(), bytes, capped: false };
+  } finally {
+    void reader.cancel().catch(() => {});
+    reader.releaseLock();
   }
-  // 收尾那一次 decode：把还挂在解码器里的延续字节吐出来（流末尾常有一个不完整块）。
-  return { text: text + decoder.decode(), bytes, capped: false };
 }

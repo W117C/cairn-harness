@@ -150,8 +150,9 @@ export function buildGraph(files: FileTagsInput[], opts: GraphBuildOptions = {})
         importStats.resolvedNoDef++;
         continue; // 对面没这个名字（re-export 链等）：留给你原来的样子，别把真依赖换成假精确
       }
-      const refKey = nodeKey(f.file, ir.name, "ref");
-      ensure(f.file, ir.name, "ref", ir.line); // 只用不用（re-export）的导入也要有节点，PageRank 才有可流的边
+      const local = ir.localName ?? ir.name; // 本文件里的引用名（alias）
+      const refKey = nodeKey(f.file, local, "ref");
+      ensure(f.file, local, "ref", ir.line); // 只用不用（re-export）的导入也要有节点，PageRank 才有可流的边
       pinned.set(refKey, defKey);
       importStats.edges++;
     }

@@ -4,7 +4,8 @@ import { cp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { acquireAppFixtureLock } from "./app-fixture-lock";
 import {
   handleClarifySubmit,
   handlePlanDecide,
@@ -27,6 +28,11 @@ afterEach(() => {
   resetPlanState();
   delete process.env.M1B_GATE_FLOW;
 });
+
+// 共享靶子 fixtures/todo-app 的写入方：与 gated-tools / replay-faces 互斥（见 tests/app-fixture-lock.ts）。
+let releaseAppFixture: (() => Promise<void>) | undefined;
+beforeAll(async () => { releaseAppFixture = await acquireAppFixtureLock(); }, 360_000);
+afterAll(async () => { await releaseAppFixture?.(); });
 
 describe("三门 IPC 接线（runAgent + card_action 处理函数）", () => {
   it(

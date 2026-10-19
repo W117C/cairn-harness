@@ -11,7 +11,8 @@ import type { Provider } from "../../providers";
 import { streamGlm } from "../../providers/glm";
 import { createSessionProvider, sessionToolSpecs } from "../session-provider";
 import { runLoop } from "../loop";
-import { runVerifyOutcome } from "../verify";
+import { createVerifyHook, loadVerifyConfig, type VerifyHook } from "../verify";
+import { verifySurfaceFingerprint } from "../verify-trust";
 import { changedFilesBetween, scoreCase } from "./score";
 import { copyRepoAndApply, gymTempDir, type GymCase } from "./case";
 import { createRoundScriptedProvider } from "./script";
@@ -103,6 +104,23 @@ function sumUsage(log: AgentEvent[]): { inputTokens: number; outputTokens: numbe
   return { inputTokens, outputTokens };
 }
 
+/** gym 的 verify 信任闸：以**case 启动时**的 verify 面指纹为基线。
+ *  模型改写 package.json/.agent/config.json 后指纹变了 ⇒ fail-closed 不执行
+ *  （旧实现直接把 runVerifyOutcome 塞进 loop，等于让被测模型给宿主下命令）。 */
+async function gymVerifyHook(workDir: string): Promise<VerifyHook> {
+  const { config, source } = await loadVerifyConfig(workDir);
+  const provenance = source === "config" ? "repo-config" as const : source === "probed" ? "repo-probed" as const : "host" as const;
+  const baseline = verifySurfaceFingerprint(config, provenance);
+  return createVerifyHook(workDir, {
+    maxAttempts: 1,
+    trustedRepo: false,
+    trustResolver: {
+      isTrusted: async (req) => req.fingerprint === baseline,
+      requestTrust: async () => false, // 无人值守：改过的面永不执行
+    },
+  });
+}
+
 async function computeResult(
   c: GymCase,
   workDir: string,
@@ -111,8 +129,9 @@ async function computeResult(
   model: GymModelKind,
   scriptPath: string | null,
   forked: boolean,
+  verifyHook: VerifyHook,
 ): Promise<GymCaseResult> {
-  const outcome = await runVerifyOutcome(workDir);
+  const outcome = await verifyHook.run();
   const changed = await changedFilesBetween(c.repoDir, workDir);
   const score = scoreCase(c.expect, { verifyOk: outcome.ok, changedFiles: changed });
   const log = await replay(eventsPath);
@@ -165,15 +184,16 @@ export async function runCase(c: GymCase, opts: RunCaseOptions): Promise<GymCase
     : opts.model === "real"
       ? createRealSessionProvider(eventsPath, workDir, opts.system ?? GYM_PROBE_SYSTEM, opts.transport, opts.omitTools)
       : createGymScriptedProvider(scriptPath!);
+  const verifyHook = await gymVerifyHook(workDir);
   await runLoop({
     provider,
     events,
     workspace: workDir,
     mode: "auto",
     userMessage: c.task,
-    verify: { maxAttempts: 1, run: () => runVerifyOutcome(workDir) },
+    verify: verifyHook,
   });
-  const result = await computeResult(c, workDir, eventsPath, sessionDir, opts.model, scriptPath, false);
+  const result = await computeResult(c, workDir, eventsPath, sessionDir, opts.model, scriptPath, false, verifyHook);
   return probe ? { ...result, assembly: probe.report() } : result;
 }
 
@@ -196,15 +216,16 @@ export async function forkCase(
   const provider = opts.model === "real"
     ? createRealSessionProvider(fork.eventsPath, workDir, opts.system ?? GYM_PROBE_SYSTEM, opts.transport)
     : createGymScriptedProvider(scriptPath!);
+  const verifyHook = await gymVerifyHook(workDir);
   await runLoop({
     provider,
     events,
     workspace: workDir,
     mode: "auto",
     userMessage: c.task,
-    verify: { maxAttempts: 1, run: () => runVerifyOutcome(workDir) },
+    verify: verifyHook,
   });
-  return await computeResult(c, workDir, fork.eventsPath, sessionDir, opts.model, scriptPath, true);
+  return await computeResult(c, workDir, fork.eventsPath, sessionDir, opts.model, scriptPath, true, verifyHook);
 }
 
 /** 清理单个 run 的会话目录。 */

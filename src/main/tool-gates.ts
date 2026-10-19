@@ -17,6 +17,7 @@ import {
   evaluate,
   gateBase,
   isNetworkCommandCall,
+  isWriteCall,
   loadPermissionRules,
   newAutonomySession,
   noteCriticalDenial,
@@ -31,7 +32,7 @@ import {
   type PermissionRule,
   type ToolResultWithAudit,
 } from "../permissions";
-import { alwaysRulesPath, savePermissionRules } from "../permissions/rules";
+import { alwaysRulesPath, globalPermissionsPath, savePermissionRules, splitCommandChain } from "../permissions/rules";
 import type { GlmToolSpec } from "../providers/glm";
 import { TOOLS, type Tool, type ToolResult } from "../tools";
 import type { ToolName } from "../tools/base";
@@ -67,24 +68,6 @@ export function denied(name: ToolName | string, mode: PermissionMode, why: strin
   } as ToolResultWithAudit;
 }
 
-/** 审批没成的统一出口：`verdict` 与文字同一处派生（不在两处各判一次）。
- *  安全模式那道 gate 与下面两条审批分支共用它——三处若各写一句"未获批准"，
- *  `lessons.ts` 就分不出"工具没执行"与"执行了但失败"。 */
-export function deniedByAsk(
-  name: ToolName | string,
-  mode: PermissionMode,
-  reason: "user" | "timeout" | "unattended" | undefined,
-  gate?: GateMeta,
-): ToolResult {
-  return denied(name, mode, askDenialText(reason), gate);
-}
-
-/** §9.3 权限联动的**解释面**：某条已激活 skill 申报过 `allowed-tools` 里的这个工具，
- *  但按原话的收紧点（放行不得越过当前权限档位），这条申报**不给免批**。
- *  为什么不悄悄生效算了？——那正是「装载即陈列」的反面教材：字段收下了却不兑现，
- *  而这里连"不兑现"都要说清楚是谁申报的、为什么没放行（能力 8：可解释）。
- *  ⚠️ 反过来把它折成规则库的一条 allow 才是错的：规则库 allow 能顶掉档位的逐次审批，
- *  等于插件作者替用户扩权。两个门共用这一份实现。 */
 /** 审批没成的四种结局 → 模型可见的那句话。
  *
  *  为什么要分开（2026-10-16 桌面端真实会话读数）：三种结局此前都回「未获批准」，
@@ -113,6 +96,22 @@ export function askDenialText(reason: "user" | "timeout" | "unattended" | undefi
   }
 }
 
+/** 审批没成的统一出口：`verdict` 与文字同一处派生（不在两处各判一次）。 */
+export function deniedByAsk(
+  name: ToolName | string,
+  mode: PermissionMode,
+  reason: "user" | "timeout" | "unattended" | undefined,
+  gate?: GateMeta,
+): ToolResult {
+  return denied(name, mode, askDenialText(reason), gate);
+}
+
+/** §9.3 权限联动的**解释面**：某条已激活 skill 申报过 `allowed-tools` 里的这个工具，
+ *  但按原话的收紧点（放行不得越过当前权限档位），这条申报**不给免批**。
+ *  为什么不悄悄生效算了？——那正是「装载即陈列」的反面教材：字段收下了却不兑现，
+ *  而这里连"不兑现"都要说清楚是谁申报的、为什么没放行（能力 8：可解释）。
+ *  ⚠️ 反过来把它折成规则库的一条 allow 才是错的：规则库 allow 能顶掉档位的逐次审批，
+ *  等于插件作者替用户扩权。两个门共用这一份实现。 */
 export function withSkillAllowNote(tool: string, reason: string): string {
   const invo = currentPluginRuntime()?.skillAllowNote(tool) ?? null;
   return invo === null ? reason
@@ -137,14 +136,9 @@ export function gatedTool(name: GatedName, original: Tool, beforeExecute?: () =>
       if (process.env.M1E_SAFE_MODE === "gate") {
         // 安全模式 gate 是**档位层**自己加的强制审批（发生在 evaluate 之前，所以没有 `d` 可交给
         // gateBase）；留痕直接构造，layer 用 L3-mode——它就是"档位规定要问人"的那一层。
-        // 安全模式 gate 是**档位层**自己加的强制审批（发生在 evaluate 之前，所以没有 `d` 可交给
-        // gateBase）；留痕直接构造，layer 用 L3-mode——它就是"档位规定要问人"的那一层。
         const modeGate = (verdict: GateVerdict): GateMeta => ({ layer: "L3-mode", mode: s.autonomy.mode, verdict });
         if (!s.askGate) return denied(name, s.autonomy.mode, "安全模式 gate 非交互（fail-closed）", modeGate("unattended"));
         const gateR = await s.askGate.request(name, args, { reason: "安全模式 gate：写工具强制审批", risk: "none", signal: ctx.signal });
-        // 与下面那条审批分支同一个出口：三种结局（拒绝/超时/无人值守）各自说清，并**带上 verdict**。
-        // 少了 verdict，`lessons.ts` 的 isAskDeniedResult 判不出"工具没执行"，这次超时就会被
-        // 记成"执行了但失败"⇒ 得出「这个工具用不了」的错误结论——与 askDenialText 修的是同一族。
         // 与下面那条审批分支同一个出口：三种结局（拒绝/超时/无人值守）各自说清，并**带上 verdict**。
         // 少了 verdict，`lessons.ts` 的 isAskDeniedResult 判不出"工具没执行"，这次超时就会被
         // 记成"执行了但失败"⇒ 得出「这个工具用不了」的错误结论——与 askDenialText 修的是同一族。
@@ -183,7 +177,10 @@ export function gatedTool(name: GatedName, original: Tool, beforeExecute?: () =>
             const tip = downgradeSuggestion(s.autonomy);
             if (tip) console.warn("[permissions] " + tip);
           }
-          return denied(name, aMode, r.reason === "unattended" ? "无人值守 fail-closed：审批请求自动拒绝" : "未获批准",
+          // 三种结局（拒绝 / 超时 / 无人值守）在文字面分开说：从前一律「未获批准」，
+          // 于是「等 60s 没人答」被读成「这一档禁止这个工具」——实测已经沉淀成一条错误的永久经验。
+          // verdict 那列不变（事件流早就是四个值），这里只把同一件事说明白。
+          return deniedByAsk(name, aMode, r.reason,
             { ...gateBase(d, aMode), verdict: r.reason === "unattended" ? "unattended" : r.reason === "timeout" ? "timeout" : "rejected" });
         }
         // scope 回写（§10.4）：网络类命令强制 once（出网审计，scope 不放行）
@@ -195,7 +192,18 @@ export function gatedTool(name: GatedName, original: Tool, beforeExecute?: () =>
         if (effScope === "session_kind") {
           (s.autonomy.sessionScopes as Set<string>).add(scopeKey(name as ToolName, args));
         } else if (effScope === "always") {
-          await persistAlwaysRule(ctx.workspace, name as ToolName, args);
+          if (await persistAlwaysRule(ctx.workspace, name as ToolName, args)) {
+            // 当前轮与下轮使用同一套规则加载/匹配语义，并保留全局和项目的拒绝约束。
+            // 重载失败不许吃掉这次已批准的执行：`loadPermissionRules` 对读不出/解析不了的规则库
+            // 是 fail-closed 抛错（拒载），而这里抛出去的结果是「人点了总是允许、规则也落了盘、
+            // 工具却没执行」——下一次会话才会生效，本轮只见一句解析错误。授权已成立 ⇒ 执行优先，
+            // 但失败必须留痕（与 persistAlwaysRule 同一口径：不阻断、不静默）。
+            try {
+              s.autonomy.rules = loadPermissionRules(join(ctx.workspace, ".agent", "permissions.json"), globalPermissionsPath());
+            } catch (err) {
+              console.error("[permissions] always 规则已落库，但重载失败（本次仍执行；下个会话生效）：", err instanceof Error ? err.message : String(err));
+            }
+          }
         }
         if (d.risk === "critical") noteCriticalResolved(s.autonomy);
         noteManualDecision(s.autonomy);
@@ -213,6 +221,8 @@ export function gatedTool(name: GatedName, original: Tool, beforeExecute?: () =>
         const blocked = await beforeExecute();
         if (blocked) return blocked;
       }
+      // 审批、授权落盘和执行前复核都可能等待；取消后不再启动已批准的操作。
+      if (ctx.signal?.aborted) return withGate({ ok: false, output: "[cancelled] 会话已取消，工具没有执行" });
       if (name === "run_shell" && s.sandbox !== null && s.sandbox.available) {
         const command = typeof args.command === "string" ? args.command : "";
         const mapped = mapSandboxTestCommandForWorkspace(command, ctx.workspace, MODEL_SHELL_TEST_ALIASES);
@@ -246,12 +256,25 @@ export function gatedTool(name: GatedName, original: Tool, beforeExecute?: () =>
 }
 
 /** M2e：MCP 工具统一注册表入口——与写工具同一条 evaluate 权限管线（无特权，§9.7）。 */
-function gatedMcpTool(name: string, info: McpToolInfo & { plugin: string; server: string }, rt: PluginRuntime): Tool {
+function gatedMcpTool(name: string, rt: PluginRuntime): Tool {
   return {
     name,
     async run(args, ctx) {
       const s = D().currentSession();
       if (!s) return denied(name, "default", "工具门未接线（fail-closed）");
+      const info = rt.mcpTools.get(name);
+      if (!info) return denied(name, s.autonomy.mode, "插件工具已停用或未注册");
+      // 安全模式 gate 必须覆盖 MCP 写工具：旧实现只在 gatedTool 里加这道闸，
+      // 把写操作搬到 MCP（annotations:{} = 非只读）就能在 guided/auto 下整体绕开「写前强制审批」。
+      if (process.env.M1E_SAFE_MODE === "gate" && isWriteCall(name, info.grade)) {
+        const modeGate = (verdict: GateVerdict): GateMeta => ({ layer: "L3-mode", mode: s.autonomy.mode, verdict });
+        if (!s.askGate) return denied(name, s.autonomy.mode, "安全模式 gate 非交互（fail-closed）", modeGate("unattended"));
+        const gateR = await s.askGate.request(name, args, { reason: "安全模式 gate：MCP 写工具强制审批", risk: "none", signal: ctx.signal });
+        if (gateR.outcome !== "approved") {
+          return deniedByAsk(name, s.autonomy.mode, gateR.reason,
+            modeGate(gateR.reason === "unattended" ? "unattended" : gateR.reason === "timeout" ? "timeout" : "rejected"));
+        }
+      }
       const d = evaluate(name as ToolName, args, s.autonomy, info.grade); // MCP scoped 名进同一管线（规则/风险/档位全生效）
       const aMode = s.autonomy.mode;
       if (d.verdict === "deny") return denied(name, aMode, d.reason, { ...gateBase(d, aMode), verdict: "denied" });
@@ -268,20 +291,26 @@ function gatedMcpTool(name: string, info: McpToolInfo & { plugin: string; server
           // gatedMcpTool 两处同形，一并接线。
           signal: ctx.signal,
         });
-        if (r.outcome !== "approved") return denied(name, aMode, "未获批准",
+        if (r.outcome !== "approved") return deniedByAsk(name, aMode, r.reason,
           { ...gateBase(d, aMode), verdict: r.reason === "unattended" ? "unattended" : r.reason === "timeout" ? "timeout" : "rejected" });
         manualScope = r.scope;
         noteManualDecision(s.autonomy);
       } else if (d.auto?.source === "session_scope") {
         noteScopeApproval(s.autonomy);
       }
-      void ctx;
       // MCP 出口原先把 d.auto 丢了：读了它做断路器计数，却不往结果上挂（§11.7.5 的审计在这条路上
       // 一直是空的）。留痕统一走 gate，auto 由 loop 从 gate 派生。
       const gateMeta: GateMeta = d.verdict === "ask"
         ? { ...gateBase(d, aMode), verdict: "approved", ...(manualScope !== undefined ? { scope: manualScope } : {}) }
         : { ...gateBase(d, aMode), verdict: "auto-approved" };
-      const res = await rt.mcp.callTool(info.plugin, info.server, info.name, args);
+      // 同一连接重复补连只重建外层记录；SDK 的 schema/grade 引用随真正重连更换。
+      const current = rt.mcpTools.get(name);
+      if (!current || current.inputSchema !== info.inputSchema || current.grade !== info.grade) {
+        return { ok: false, output: "[permission denied] MCP 工具已停用或更新，请重新发起调用", gate: gateMeta } as ToolResultWithAudit;
+      }
+      const res = ctx.signal?.aborted
+        ? { ok: false, output: "[cancelled] 会话已取消，工具没有执行" }
+        : await rt.mcp.callTool(info.plugin, info.server, info.name, args, ctx.signal);
       return { ok: res.ok, output: res.output, gate: gateMeta } as ToolResultWithAudit;
     },
   };
@@ -305,8 +334,8 @@ export function installPluginTools(rt: PluginRuntime): string[] {
     };
     injected.push("skill");
   }
-  for (const [scoped, info] of rt.mcpTools) {
-    table[scoped] = gatedMcpTool(scoped, info, rt);
+  for (const scoped of rt.mcpTools.keys()) {
+    table[scoped] = gatedMcpTool(scoped, rt);
     injected.push(scoped);
   }
   return injected;
@@ -382,22 +411,40 @@ export function pluginToolSpecsFromRuntime(rt: PluginToolSource | null): Session
   return out;
 }
 
+// 宿主进程内的 always 追加串行化：锁住读取到保存的整段，避免并发批准丢掉另一项授权。
+let alwaysRuleWrites: Promise<void> = Promise.resolve();
+
 /** always scope 批准落库为 allow 条目（项目规则库，原子写）；拒绝永不生成规则。 */
-async function persistAlwaysRule(workspace: string, name: string, args: Record<string, unknown>): Promise<void> {
+async function persistAlwaysRule(workspace: string, name: string, args: Record<string, unknown>): Promise<boolean> {
   // #57（2026-10-05）：授权记录落**独立且被 git 忽略**的那一份，不写回受跟踪的 permissions.json。
   // 理由：受跟踪那份里可能有人写的项目策略（该随仓库走），而"这台机器上某人点过一次总是允许"
   // 是授权记录、属于机器——写在一起就等于谁 clone 谁继承。读侧由 loadPermissionRules 透明并入，
   // 所以批准过的规则照样生效（那一半已入库，见 src/permissions/rules.ts 的 ALWAYS_RULES_FILE）。
   const path = alwaysRulesPath(workspace);
-  try {
+  const write = alwaysRuleWrites.then(async () => {
     const existing = loadPermissionRules(path);
-    const rule: PermissionRule =
-      name === "run_shell" && typeof args.command === "string"
-        ? { behavior: "allow", tool: name, pattern: args.command.trim(), scope: "always" }
-        : { behavior: "allow", tool: name, scope: "always" };
-    await savePermissionRules(path, [...existing, rule]);
+    // 命令链**逐段**匹配（`judgeChain` 先 `splitCommandChain`，再要求**每一段**都命中规则，
+    // 否则整链 miss）⇒ 「总是允许」一条命令必须落成**每段各一条** allow：
+    // 把 `pnpm test && echo done` 整条当 pattern 存，匹配时它已不是任何一段 ⇒ 这条授权
+    // **永远匹配不上**——用户点过一次、回执照报成功、下一条同样的命令照旧弹卡。
+    // 只存第一段也不够（余下的段 miss 照样整链 miss）。单段命令（绝大多数）形状不变。
+    const rules = [...existing];
+    if (name === "run_shell" && typeof args.command === "string") {
+      for (const seg of splitCommandChain(args.command)) {
+        rules.push({ behavior: "allow", tool: name, pattern: seg, scope: "always" });
+      }
+    } else {
+      rules.push({ behavior: "allow", tool: name, scope: "always" });
+    }
+    await savePermissionRules(path, rules);
+  });
+  alwaysRuleWrites = write.catch(() => undefined);
+  try {
+    await write;
+    return true;
   } catch (err) {
     // 落库失败不阻断本次已批准的执行，但必须可见（审计优先于静默）
     console.error("[permissions] always 规则落库失败:", err instanceof Error ? err.message : String(err));
+    return false;
   }
 }

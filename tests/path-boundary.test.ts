@@ -296,3 +296,17 @@ describe("回取地址的落位判定（workspaceUsablePath）", () => {
     expect(workspaceUsablePath(join(w, "a.txt"), undefined)).toBeNull();
   });
 });
+
+// 2026-10-19：风险通道按 rel 字面匹配敏感片段，工作区内软链 `docs/hooks -> .git/hooks`
+// 的 rel 里没有 `.git/hooks/` ⇒ guided/auto 直接免批写 hooks（持久化代码执行面）。
+describe("敏感路径的软链别名（真实落点复查）", () => {
+  it("docs/hooks -> .git/hooks：写 pre-commit 被拒，真实目标未落地", async () => {
+    const ctx = await newCtx();
+    await mkdir(join(ws, ".git", "hooks"), { recursive: true });
+    await mkdir(join(ws, "docs"), { recursive: true });
+    await symlink(join(ws, ".git", "hooks"), join(ws, "docs", "hooks"));
+    await expect(write_file.run({ path: "docs/hooks/pre-commit", content: "#!/bin/sh\n" }, ctx))
+      .rejects.toThrow(/敏感路径/);
+    expect(existsSync(join(ws, ".git", "hooks", "pre-commit"))).toBe(false);
+  });
+});

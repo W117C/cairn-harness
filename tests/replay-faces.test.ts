@@ -25,7 +25,8 @@ import { cp, mkdtemp, readFile, readdir, readlink, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { acquireAppFixtureLock } from "./app-fixture-lock";
 
 const HERE = resolve(fileURLToPath(import.meta.url), "../..");
 /** 面的墙钟预算：离线面实测 <1s、round-ab 实测 ~2s；给足余量以吸收冷启动与并发负载
@@ -37,25 +38,50 @@ const MEMORY_DIR = join(FIXTURE_TREE, ".agent", "memory");
 /** 递归哈希一整棵树：**工作区相对路径 + 内容字节**进哈希（软链取链接文本，不跟随）。
  *  含 `src/`、`tests/`、`.agent/` 下所有文件的名字与内容——不只是判卷面的那三份，
  *  也不漏 `node_modules/`（它也在靶子树里）。两次哈希相等 ⇔ 这面没往靶子上写过一个字节。 */
-async function hashTree(dir: string): Promise<string> {
-  const h = createHash("sha256");
+async function treeEntries(dir: string): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
   const walk = async (rel: string): Promise<void> => {
     const abs = rel === "" ? dir : join(dir, rel);
     const entries = (await readdir(abs, { withFileTypes: true })).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
     for (const e of entries) {
       const childRel = rel === "" ? e.name : rel + "/" + e.name;
+      // `node_modules/.vite` 是 vitest 自己的结果缓存树，不是靶子资产：fixture 里的
+      // `pnpm test`（隔壁 gated-tools / runner-gates 的用例）会刷新它，与本面是否越界无关。
+      // 两跑里它都被误判成「面改了靶子」（单跑绿、全量红）。只跳过这一棵工具缓存树；
+      // `node_modules/` 其余文件仍逐字节进哈希。
+      if (childRel === "node_modules/.vite") continue;
       if (e.isSymbolicLink()) {
-        h.update("L " + childRel + " -> " + (await readlink(join(dir, childRel))) + "\n");
+        out.set(childRel, "L " + (await readlink(join(dir, childRel))));
       } else if (e.isDirectory()) {
-        h.update("D " + childRel + "\n");
+        out.set(childRel, "D");
         await walk(childRel);
       } else if (e.isFile()) {
-        h.update("F " + childRel + " " + createHash("sha256").update(await readFile(join(dir, childRel))).digest("hex") + "\n");
+        out.set(childRel, "F " + createHash("sha256").update(await readFile(join(dir, childRel))).digest("hex"));
       }
     }
   };
   await walk("");
+  return out;
+}
+
+function hashEntries(entries: Map<string, string>): string {
+  const h = createHash("sha256");
+  for (const [rel, mark] of [...entries].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) h.update(rel + " " + mark + "\n");
   return h.digest("hex");
+}
+
+/** 差异必须**点名具体路径**：只说「整棵树变了」的失败读不出是谁写的（实测并行后这条断言会红，
+ *  而旧文案只给一份面自己的输出）。 */
+function diffEntries(before: Map<string, string>, after: Map<string, string>): string[] {
+  const paths = new Set([...before.keys(), ...after.keys()]);
+  const changed: string[] = [];
+  for (const rel of [...paths].sort()) {
+    const a = before.get(rel);
+    const b = after.get(rel);
+    if (a === b) continue;
+    changed.push((a === undefined ? "新增 " : b === undefined ? "删除 " : "改动 ") + rel);
+  }
+  return changed;
 }
 
 function runFace(script: string): { code: number | null; out: string } {
@@ -81,6 +107,12 @@ async function withFixtureMemoryKept<T>(fn: () => T): Promise<T> {
     await rm(backup, { recursive: true, force: true });
   }
 }
+
+// 下面那条「整树逐字节不变」要求靶子在整个文件期间没有别的写入方：与 gated-tools / runner-gates
+// 共用一把锁（此前靠全表串行，实测并行后同一份断言会红）。
+let releaseAppFixture: (() => Promise<void>) | undefined;
+beforeAll(async () => { releaseAppFixture = await acquireAppFixtureLock(); }, 360_000);
+afterAll(async () => { await releaseAppFixture?.(); });
 
 describe("复跑面保护 · replay:lessons-offline（读数面，只 print）", () => {
   it("真跑：exit 0，且新复发读数那一节与分母侧硬门那行都在", () => {
@@ -110,11 +142,13 @@ describe("复跑面保护 · replay:lessons-round-ab（可达那一半 + 诚实�
   });
 
   it("硬不变量：跑前跑后 fixtures/todo-app **整棵树**逐字节不变（面只动自己的隔离目录）", async () => {
-    const before = await hashTree(FIXTURE_TREE);
+    const before = await treeEntries(FIXTURE_TREE);
     const { code, out } = await withFixtureMemoryKept(() => runFace("scripts/replay/lessons-round-ab.ts"));
-    const after = await hashTree(FIXTURE_TREE);
+    const after = await treeEntries(FIXTURE_TREE);
     expect(code, out.slice(-3000)).toBe(0);
-    expect(after, "靶子 fixtures/todo-app 被这面改动了：\n" + out.slice(-3000)).toBe(before);
+    const changed = diffEntries(before, after);
+    expect(changed, "靶子 fixtures/todo-app 被这面改动了（逐路径）：\n" + changed.join("\n") + "\n\n" + out.slice(-3000)).toEqual([]);
+    expect(hashEntries(after)).toBe(hashEntries(before));
     // 顺带：面把隔离工作区路径印在输出里，回读那一行确认它跑完已被回收（不留残留）。
     const marker = "[隔离] 隔离工作区（跑完回收）= ";
     const line = out.split("\n").find((l) => l.startsWith(marker));

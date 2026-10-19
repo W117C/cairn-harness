@@ -37,6 +37,10 @@ export interface PatchFile {
   hunks: PatchHunk[];
   /** 该段在补丁文本里的起始行号（1-based）：报错时用来指认是第几段出的事。 */
   headerLine: number;
+  /** `old mode 100644` / `new mode 100755`：内容段也能带模式变更（旧实现只在无 hunk 时
+   *  把整段当 mode-only，有 hunk 时静默忽略 chmod）。 */
+  oldMode?: string;
+  newMode?: string;
 }
 
 /** 补丁本身读不下去。「对不上盘上的内容」不在这一层——那是逐 hunk 归因，见 apply_patch。
@@ -205,11 +209,33 @@ export function formatTruncationGuidance(t: PatchTruncation): string {
 
 const HUNK_RE = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 
-/** `--- a/<path>` / `+++ b/<path>` 去掉前缀；`/dev/null` 返回 null（由 op 判定）。 */
+/** `--- a/<path>` / `+++ b/<path>` 去掉前缀；`/dev/null` 返回 null（由 op 判定）。
+ *  git 对非 ASCII 路径默认输出 C 风格引号（`"b/\346\226\260..."`）：先解码再剥前缀。
+ *  旧实现先判 `a/` 前缀再去引号 ⇒ 带引号的路径一律原样留下 `b/` 与八进制字面量。 */
+function decodeGitQuoted(body: string): string {
+  const bytes: number[] = [];
+  const pushText = (s: string): void => { for (const b of Buffer.from(s, "utf8")) bytes.push(b); };
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i]!;
+    if (ch !== "\\") { pushText(ch); continue; }
+    const oct = body.slice(i + 1, i + 4);
+    if (/^[0-7]{3}$/.test(oct)) { bytes.push(Number.parseInt(oct, 8)); i += 3; continue; }
+    const nxt = body[i + 1];
+    if (nxt === "n") { bytes.push(0x0a); i++; continue; }
+    if (nxt === "t") { bytes.push(0x09); i++; continue; }
+    if (nxt === "r") { bytes.push(0x0d); i++; continue; }
+    if (nxt === '"' || nxt === "\\") { pushText(nxt); i++; continue; }
+    pushText(ch);
+  }
+  return Buffer.from(bytes).toString("utf8");
+}
+
 function pathOf(prefix: "a/" | "b/", raw: string): string | null {
-  if (raw === "/dev/null") return null;
-  const p = raw.startsWith(prefix) ? raw.slice(prefix.length) : raw;
-  return p.startsWith('"') && p.endsWith('"') ? p.slice(1, -1) : p;
+  let p = raw;
+  if (p.startsWith('"') && p.endsWith('"') && p.length >= 2) p = decodeGitQuoted(p.slice(1, -1));
+  if (p === "/dev/null") return null;
+  if (p.startsWith(prefix)) p = p.slice(prefix.length);
+  return p;
 }
 
 /** 一个 hunk 还差几行：旧侧 = 上下文 + 删除，新侧 = 上下文 + 新增。收满就停手，
@@ -247,7 +273,35 @@ export function parsePatch(text: string): PatchFile[] {
       cur = next;
       continue;
     }
-    if (line.startsWith("index ") || line.startsWith("old mode ") || line.startsWith("new mode ") ||
+
+    // hunk 未收满时，正文行**优先于表头**：删除 SQL 注释 `-- foo` 在补丁里是 `--- foo`，
+    // 旧实现先认表头 ⇒ 把正文截断并把「解析器把正文当表头」误报成「补丁被截断」。
+    // git 语法里表头只在 hunk 收满后出现，所以此刻以剩余行数为准。
+    if (hunk !== null) {
+      const remNow = remaining(hunk);
+      if (remNow.old > 0 || remNow.new > 0) {
+        if (line.startsWith("\\")) {
+          const last = hunk.lines[hunk.lines.length - 1];
+          hunk.bodyEndLine = i + 1;
+          if (last !== undefined) {
+            if (last.mark === "-") hunk.oldNoNewline = true;
+            else if (last.mark === "+") hunk.newNoNewline = true;
+            else { hunk.oldNoNewline = true; hunk.newNoNewline = true; }
+          }
+          continue;
+        }
+        if (line.startsWith("+")) { hunk.lines.push({ mark: "+", text: line.slice(1) }); hunk.bodyEndLine = i + 1; continue; }
+        if (line.startsWith("-")) { hunk.lines.push({ mark: "-", text: line.slice(1) }); hunk.bodyEndLine = i + 1; continue; }
+        if (line.startsWith(" ") || line === "") {
+          hunk.lines.push({ mark: " ", text: line.startsWith(" ") ? line.slice(1) : "" });
+          hunk.bodyEndLine = i + 1;
+          continue;
+        }
+        // 非正文（@@ / 新段头 / 杂行）：结束本 hunk；收尾的 remaining 检查会按「收不满」报错。
+        hunk = null;
+      }
+    }
+    if (line.startsWith("index ") || line.startsWith("old mode ") || line.startsWith("new mode ") || line.startsWith("new file mode ") ||
         line.startsWith("similarity index") || line.startsWith("copy from") || line.startsWith("copy to") ||
         line.startsWith("--- ") || line.startsWith("+++ ")) {
       // 段内表头：hunk 到此为止（后面的表头不属于上一个 hunk 的上下文）。
@@ -268,6 +322,15 @@ export function parsePatch(text: string): PatchFile[] {
         if (p === null) cur.op = "delete"; // `+++ /dev/null` = 删除
         else cur.path = p;
       }
+      const mode = /^(old|new) mode (\d{6})$/.exec(line);
+      if (mode !== null) {
+        if (mode[1] === "old") cur.oldMode = mode[2];
+        else cur.newMode = mode[2];
+      }
+      // git 的新建段用 `new file mode 100755`，没有 old/new mode 两行；
+      // 旧实现只认后者 ⇒ 新建文件的可执行位丢失（回执仍报成功）。
+      const newFileMode = /^new file mode (\d{6})$/.exec(line);
+      if (newFileMode !== null) cur.newMode = newFileMode[1];
       continue;
     }
 
@@ -340,7 +403,7 @@ export function parsePatch(text: string): PatchFile[] {
       // 那一形态，实测踩过：` keep\n+new` 配 `-1,1 +1,1` 时下一行是段头，于是漏检）。
       // 段头（diff --git / @@ / --- / +++ / rename…）与 `\ No newline` 之外的
       // 杂行不是正文，收满后遇到它们照旧停手。
-      const bodyShaped = line.startsWith("+") || line.startsWith("-") || line.startsWith(" ") || line === "";
+      const bodyShaped = line.startsWith("+") || line.startsWith("-") || line.startsWith(" ");
       if (bodyShaped) {
         // 不带 truncation 载荷：那是「收不满」那一族的自纠读数（见 PatchParseError 的注释），
         // 多给是另一种坏形状，硬塞一份会让人按"补丁被截断"去修，而真相是行数写多了。

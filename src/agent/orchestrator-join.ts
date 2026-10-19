@@ -38,7 +38,9 @@ export function priceForModel(
   pickedId?: string,
   table: readonly ModelSpec[] = effectiveModelTable(),
 ): WorkerPrice {
-  const id = pickedId ?? findSpecByNameOrId(table, model)?.id;
+  // 真拨模型名优先于路由档位 id：`model` 是实际计费的那一档，`pickedId` 只是选择依据；
+  // 旧顺序让路由档覆盖自述真名，可比实际花费差一个数量级。
+  const id = findSpecByNameOrId(table, model)?.id ?? pickedId;
   return id === undefined ? { model } : { model, priceId: id };
 }
 /** 一笔表价花费。`calibrated=false` = 单价仍是占位数（GLM 三档），只可横向比较、不可当省钱证据。 */

@@ -11,7 +11,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ModelMenu, ModelPicker, type ModelOption } from "../src/renderer/components/ModelPicker";
-import { NewProjectCard } from "../src/renderer/components/NewProjectCard";
 import type { ProviderInfo } from "../../../src/main/ipc-protocol";
 
 function model(id: string, provider: string, name: string, tier: string, ctxWindow: number) {
@@ -80,7 +79,7 @@ describe("ModelPicker 触发条（真 HTML）", () => {
   });
 });
 
-describe("ModelMenu 菜单（真 HTML）", () => {
+describe("ModelMenu 菜单（真 HTML——P2-2 合并单面：搜索 + 列表 + 下半区思考段同屏）", () => {
   const render = (over: Partial<Parameters<typeof ModelMenu>[0]> = {}): string =>
     renderToStaticMarkup(
       <ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} {...over} />,
@@ -105,10 +104,11 @@ describe("ModelMenu 菜单（真 HTML）", () => {
     expect((html.match(/aria-selected="true"/g) ?? []).length).toBe(1);
   });
 
-  it("演示项常驻，且写着「预录剧本 · 不产生真实调用 · 结果与你的任务无关」", () => {
+  it("演示项常驻；副文案短词一行放得下，完整免责句在 title", () => {
     const html = render();
     expect(html).toContain(">演示<");
-    expect(html).toContain("预录剧本 · 不产生真实调用 · 结果与你的任务无关");
+    expect(html).toContain("剧本回放 · 不产生真实调用");
+    expect(html).toContain('title="预录剧本 · 不产生真实调用 · 结果与你的任务无关"');
   });
 
   it("key 未配置 ⇒ 置顶警示行 + 可跳设置，但**不**因此禁掉整列", () => {
@@ -123,7 +123,7 @@ describe("ModelMenu 菜单（真 HTML）", () => {
 
   it("运行中 ⇒ 整列禁用（含「演示」）：跑着的时候不该换模型", () => {
     const html = render({ running: true });
-    // 三条选项全部带 disabled（菜单里「演示」出现两次：分节标题 + 那一行的名字，取最后一次）
+    // 三条选项全部带 disabled（两视图后「演示」只在列表出现一次）
     const labelAt = html.lastIndexOf(">演示<");
     const demoOpenTag = html.slice(html.lastIndexOf("<button", labelAt), labelAt);
     expect(demoOpenTag).toContain('disabled=""');
@@ -155,23 +155,11 @@ describe("ModelMenu 菜单（真 HTML）", () => {
   });
 });
 
-describe("NewProjectCard（③ 的入口：真 HTML）", () => {
-  it("两个带标签的输入 + 两个按钮；名字为空时「创建并进入」是禁用的", () => {
-    const html = renderToStaticMarkup(<NewProjectCard onCreated={() => undefined} />);
-    expect(html).toContain('aria-label="项目名"');
-    expect(html).toContain('aria-label="项目位置"');
-    expect(html).toContain("会成为文件夹名");
-    expect(html).toContain("留空 = ~/CairnProjects");
-    expect(html).toContain("选择位置");
-    // 名字为空 ⇒ 禁用（用户不用点了才知道）
-    const createBtn = html.slice(html.lastIndexOf("mini-btn primary") - 120, html.lastIndexOf("mini-btn primary") + 60);
-    expect(createBtn).toContain('disabled=""');
-    expect(html).toContain("创建并进入");
-  });
-});
-
-// ⑤ 左栏对齐原型（prototype.html 的 `.section-head` 三枚图标按钮 + `.pop down` 筛选菜单 + `.ws-search-row`）
+// ⑤ 左栏（P1 主界面重做：brief 第二节合同）——旧交互（四图标工具行、行内路径表单、组头「＋」文案
+// 「在这个文件夹里新对话」）随 brief 明裁作废并重写本组；保留两件不变资产：折叠开关的
+// `group-toggle`/`aria-expanded` 锚、以及筛选词表/纯函数判据（数据面未变，词表词面相同）。
 import { Sidebar, SESSION_FILTERS, SESSION_FILTER_NOTE, filterSessions } from "../src/renderer/components/Sidebar";
+import type { ProjectRecord } from "../../../src/main/ipc-protocol";
 
 // 显式标注：Sidebar 要 WorkspaceSession[]，而筛选判据还要 origin（定时任务）这一格
 type TestSession = Parameters<typeof Sidebar>[0]["sessions"][number] & { origin?: "scheduled" };
@@ -182,48 +170,117 @@ const SESSIONS: TestSession[] = [
   { id: "s4", title: "每日巡检", mtimeMs: 4, lines: 6, origin: "scheduled" as const, workspace: "/tmp/ws" },
 ];
 
+const PROJECT: ProjectRecord = {
+  id: "p1",
+  name: "工作区甲",
+  path: "/tmp/ws",
+  defaultLocation: "/tmp/ws",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+};
+
 function sidebarHtml(over: Partial<Parameters<typeof Sidebar>[0]> = {}): string {
   // 显式收口成组件的 props 类型：本包开了 exactOptionalPropertyTypes，
   // Partial<T> 展开出来的 `T[K] | undefined` 过不了那一关（与组件行为无关，是夹具的写法问题）。
   const props = {
+    projects: [PROJECT],
     sessions: SESSIONS,
-    workspaces: [],
-    activeWorkspace: null,
     activeId: null,
+    activeWorkspace: null,
     running: new Set<string>(),
-    mode: "auto" as const,
-    providerInfo: null,
-    onSelect: () => undefined,
-    onNew: () => undefined,
+    waitingIds: new Set<string>(),
+    outcomes: new Map<string, "ok" | "failed">(),
+    providerOk: null,
+    onOpen: () => undefined,
+    onNewTask: () => undefined,
+    onOpenPalette: () => undefined,
     onSwitchWorkspace: () => undefined,
-    onAddWorkspace: async () => undefined,
+    onAddProject: async () => undefined,
+    onCloneProject: async () => undefined,
+    onOpenNewProjectDialog: () => undefined,
+    onUpdateProject: async () => undefined,
+    onRemoveProject: async () => undefined,
+    onRevealProject: () => undefined,
     onPickDirectory: () => Promise.resolve(null),
     onOpenSettings: () => undefined,
-    onOpenPage: () => undefined,
     ...over,
   } as Parameters<typeof Sidebar>[0];
   return renderToStaticMarkup(<Sidebar {...props} />);
 }
 
-describe("⑤ 左栏：原型里那三枚图标按钮都在", () => {
-  it("搜索会话 / 筛选会话 / 新建工作区 三枚都渲染出来，且都带 aria-label", () => {
+describe("⑤ 左栏顶栏：＋ 新任务（⌘N）＋ 搜索（⌘K）——旧四图标工具行与行内表单整体下架", () => {
+  it("两枚钮都在，快捷键进 tooltip", () => {
     const html = sidebarHtml();
-    expect(html).toContain('aria-label="搜索会话"');
-    expect(html).toContain('aria-label="筛选会话"');
-    expect(html).toContain('aria-label="新建工作区"');
-    expect((html.match(/class="iconbtn sm"/g) ?? []).length).toBe(3);
+    expect(html).toContain(">新任务<");
+    expect(html).toContain("新任务（⌘N）");
+    expect(html).toContain('aria-label="搜索"');
+    expect(html).toContain("（⌘K）");
   });
 
-  it("没展开时不渲染筛选菜单与搜索框（点了才有，不是常驻空壳）", () => {
+  it("旧入口下架：无行内「工作区路径」表单、无绝对路径 placeholder、无「新建工作区」钮", () => {
     const html = sidebarHtml();
-    expect(html).not.toContain('role="menu"');
-    expect(html).not.toContain("ws-search-row");
+    expect(html).not.toContain("ws-add-row");
+    expect(html).not.toContain("/绝对/路径");
+    expect(html).not.toContain("新建工作区");
+  });
+});
+
+describe("⑤ 左栏项目区：显示名不是路径（路径只进 tooltip）＋ 折叠开关 ＋「添加项目」入口", () => {
+  it("项目名上屏、完整路径只进 title（不把绝对路径当文案）", () => {
+    const html = sidebarHtml();
+    expect(html).toContain(">工作区甲<");
+    expect(html).toContain('title="/tmp/ws"');
+    expect(html).not.toContain(">/tmp/ws<");
+  });
+
+  it("折叠开关保留 aria-expanded 锚（默认展开；收起走 data-collapsed）", () => {
+    const toggle = /<button[^>]*class="group-toggle"[^>]*>/.exec(sidebarHtml())?.[0] ?? "";
+    expect(toggle).toContain('aria-expanded="true"');
+  });
+
+  it("底部「添加项目」入口在场（四入口菜单的触发钮；tooltip 指 ⌘O）", () => {
+    const html = sidebarHtml();
+    expect(html).toContain("添加项目");
+    expect(html).toContain("⌘O");
+  });
+});
+
+describe("⑤ 会话行：「临时对话」组 ＋ 空列表文案 ＋ 行 title 全称与相对时间", () => {
+  it("无项目归属的会话落「临时对话」组（防吞数据的哨兵），有项目归属不出现它", () => {
+    const withProjects = sidebarHtml();
+    expect(withProjects).not.toContain("临时对话");
+    const noProjects = sidebarHtml({ projects: [] });
+    expect(noProjects).toContain("临时对话");
+    expect(noProjects).toContain('data-sentinel="true"');
+  });
+
+  it("全空 ⇒ 空列表文案（⌘N 指路，不摆空壳）", () => {
+    const html = sidebarHtml({ projects: [], sessions: [] });
+    expect(html).toContain("还没有任务，按 ⌘N 开始");
+  });
+
+  it("行 title 属性 = 完整标题（省略号只截视觉）；相对时间在位", () => {
+    const html = sidebarHtml();
+    expect(html).toContain('title="修左栏样式"');
+    expect(html).toContain("s-time");
+  });
+});
+
+describe("⑤ 工具行闸：每个按钮都有 title 或 aria-label（brief 第九节；P1-6 tooltip-audit 先行面）", () => {
+  it("渲染整棵侧栏：所有 <button> 都带 title= 或 aria-label=", () => {
+    const html = sidebarHtml();
+    const buttons = html.match(/<button[^>]*>/g) ?? [];
+    expect(buttons.length).toBeGreaterThan(5);
+    for (const b of buttons) {
+      expect(b.includes("title=") || b.includes("aria-label="), `按钮缺提示：${b}`).toBe(true);
+    }
   });
 });
 
 describe("⑤ 左栏筛选：只列有数据支撑的项，并把缺的那半边说清楚", () => {
   it("四项属性筛选（不是原型那六个实时状态——数据面没有那个字段）", () => {
-    expect(SESSION_FILTERS.map((f) => f.label)).toEqual(["全部", "运行中", "已固定", "已归档", "定时任务"]);
+    // 第十四遍：词面随原型统一为「置顶」族（已固定 → 已置顶）
+    expect(SESSION_FILTERS.map((f) => f.label)).toEqual(["全部", "运行中", "已置顶", "已归档", "定时任务"]);
   });
 
   it("脚注诚实说明实时状态为什么没做（同原型的 .menu-note 口吻）", () => {
@@ -294,37 +351,39 @@ describe("④ Switch：不是裸复选框，而是一个说人话的开关", () 
   });
 });
 
-describe("④ 设置页：三处裸复选框已换成开关", () => {
+describe("④ 设置页：不摆裸复选框，开关走 Switch（说人话的开关）", () => {
   const src = (rel: string): string => readFileSync(new URL(rel, import.meta.url), "utf8");
 
-  it("设置页里不再有裸复选框，三处都走 Switch", () => {
-    // 这里用源码级断言而不是 SSR 渲染：设置页的各段要等 IPC 回来的 settings（非空）才渲染，
-    // 服务端渲染拿不到 → SSR 出来的是空壳，验不到那三行。Switch 自身的渲染行为在上面的用例里验过。
-    const panel = src("../src/renderer/components/SettingsPanel.tsx");
-    expect(panel).not.toContain('type="checkbox"');
-    expect((panel.match(/<Switch/g) ?? []).length).toBe(3);
-    expect(panel).toContain('label="遥测"');
-    expect(panel).toContain('label="方案门缺省"');
+  it("设置页里不再有裸复选框；方案门走 Switch（遥测等行为面随 behavior 分区重建时恢复）", () => {
+    // 源码级断言而不是 SSR 渲染：设置页各段要等 IPC 回来的 settings（非空）才渲染。
+    // 批 6 换壳：正文四段迁至 settings-sections.tsx（壳只留导航+状态）——锚随正文走、断言不放宽；
+    // 方案门文案同步改通俗句「写文件前先提交方案，等我批准」（总纲阶段 3-2）。
+    const shell = src("../src/renderer/components/SettingsPanel.tsx");
+    const sections = src("../src/renderer/components/settings-sections.tsx");
+    expect(shell + sections).not.toContain('type="checkbox"');
+    expect(sections).toContain("<Switch");
+    expect(sections).toContain('label="写文件前先提交方案，等我批准"');
   });
 });
 
-describe("④ 插件信任：单向按钮 → 双向开关（误点可撤销）", () => {
-  it("pluginDecide 收到的是开关的目标值，而不是写死的 true", () => {
-    // 源码级回归哨兵：曾经这里是 pluginDecide(p.name, true) + 一个只能「信任」的按钮，
-    // 误点之后在界面上无法撤销（通道本身支持 false，是入口缺了一半）。
+// 插件信任开关（pluginDecide 双向）的源码哨兵：插件页已随四页重建（AppPage.tsx）恢复，
+// v7.1 并入设置页后页体仍是同一份源码——哨兵跟着页体走（不许退化成只读展示）。
+describe("插件信任开关：pluginDecide 双向（源码哨兵）", () => {
+  it("插件抽屉与技能抽屉的信任决议都写回 pluginDecide（各一处，Switch 双向 onChange）", () => {
     const src = readFileSync(new URL("../src/renderer/components/AppPage.tsx", import.meta.url), "utf8");
-    expect(src).toContain("pluginDecide(p.name, next)");
-    expect(src).not.toContain("pluginDecide(p.name, true)");
+    expect((src.match(/pluginDecide\(/g) ?? []).length).toBe(2);
     expect(src).toContain('label="信任该插件"');
+    expect(src).toContain('label="信任该技能"');
     expect(src).toContain('onText="已信任"');
+    expect(src).toContain('offText="未信任"');
   });
 });
 
 describe("设置页左侧导航：一处事实源，不许重复", () => {
-  it("六个分区各出现一次、顺序固定（用户实测：行为与成本/记忆与数据 曾各出现两次）", () => {
+  it("八个分区各出现一次、顺序固定（导航只从 SECTIONS 渲染；工作台四分区并入）", () => {
     const html = renderToStaticMarkup(<SettingsPanel onClose={() => undefined} />);
     const nav = html.slice(html.indexOf('aria-label="设置分区"'), html.indexOf('class="sp-nav-foot"'));
-    const labels = ["通用", "模型与 Provider", "权限与安全", "行为与成本", "记忆与数据", "关于与更新"];
+    const labels = ["通用", "模型与 Provider", "权限与安全", "插件", "自动化任务", "技能中心", "记忆系统", "关于与更新"];
     for (const label of labels) {
       const n = (nav.match(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) ?? []).length;
       expect(n, `${label} 出现了 ${String(n)} 次`).toBe(1);
@@ -332,6 +391,10 @@ describe("设置页左侧导航：一处事实源，不许重复", () => {
     // 顺序也钉住（顺序错乱同样是导航不可用的形态）
     const idx = labels.map((l) => nav.indexOf(`>${l}<`));
     expect(idx).toEqual([...idx].sort((a, b) => a - b));
+    // 「工作台」分组行恰一次，且夹在「权限与安全」与「插件」之间（纯标记，不可点）
+    expect((nav.match(/>工作台</g) ?? []).length).toBe(1);
+    expect(nav.indexOf(">工作台<")).toBeGreaterThan(nav.indexOf(">权限与安全<"));
+    expect(nav.indexOf(">工作台<")).toBeLessThan(nav.indexOf(">插件<"));
   });
 
   it("不再出现第二个硬编码的导航渲染（回归哨兵）", () => {
@@ -340,9 +403,9 @@ describe("设置页左侧导航：一处事实源，不许重复", () => {
   });
 });
 
-// 2026-10-06 用户实测：接本地端点（http://127.0.0.1:…）时保存被自己拦下三条错。
-// 根因是表单只在「拉取」那一步送了 allowLocal，保存时**漏送** ⇒ 能探测、存不进。
-import { isLocalEndpointURL, envNameHint } from "../src/renderer/components/CustomProviderForm";
+// 自定义接口的纯函数资产（表单 UI 随蓝本重建中；纯函数与语义先立）：
+// 本地端点判定必须被"拉取"与"保存"两处用同一份；变量名字段即时体检点破"把钥匙填进这一格"。
+import { isLocalEndpointURL, envNameHint } from "../src/renderer/components/provider-form";
 
 describe("自定义接口：本地端点（用户实测那条路的判据）", () => {
   it("认得出本地/内网地址（loopback、私网段、.local）", () => {
@@ -369,11 +432,10 @@ describe("自定义接口：本地端点（用户实测那条路的判据）", (
     expect(envNameHint("lowercase_name")).toContain("大写字母");
   });
 
-  it("源码级回归哨兵：保存请求必须带上 allowLocalEndpoint（漏了就是这次的 bug 复发）", () => {
+  it("源码级回归哨兵：保存请求必须带上 allowLocalEndpoint（漏了就是「能探测、存不进」复发）", () => {
     const src = readFileSync(new URL("../src/renderer/components/CustomProviderForm.tsx", import.meta.url), "utf8");
     expect(src).toContain("allowLocalEndpoint: true");
-    expect(src).toContain("isLocalEndpointURL");
-    // 同一判定必须被用两次（拉取 allowLocal + 保存 allowLocalEndpoint），不许只留一处
+    // 同一判定必须被用两次以上（拉取 allowLocal + 保存 allowLocalEndpoint + 本地端点提示）
     expect((src.match(/isLocalEndpointURL\(/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 });
@@ -455,39 +517,78 @@ describe("思考正文：投影与渲染", () => {
   });
 });
 
-// 思考档位（2026-10-07 对齐原型 modelBtn/modelPop）：触发条 = 「模型 · 思考 off」单芯片，
-// 菜单里出「思考程度（ThinkingEffort）」段——独立分段控件那一版按业主指名废止。
+// 思考档位（P2-2 合并单面：brief 三节「模型列表…思考强度 Segmented 同屏」；旧两视图下架）。
+// 触发条 = 「模型 · 思考 关」单芯片（短档词族 关/低/中/强）；弹窗 = 搜索 + 模型列表 + 下半区思考段。
+// 22.01 裁的语义随 brief 更新：未声明支持 ⇒ 触发条不带「· 思考」段、弹窗思考段**整组禁用** +
+// 注「当前模型不支持思考强度」+ 配置折叠（不摆空壳也不噤声）。
 import { filterModelOptions } from "../src/renderer/components/ModelPicker";
 
-describe("思考档位：模型单芯片 + 菜单内的思考程度段（原型形态）", () => {
+describe("思考段合并单面（P2-2；触发条短档词族）", () => {
   const menu = (over: Partial<Parameters<typeof ModelMenu>[0]> = {}): string =>
     renderToStaticMarkup(
       <ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} onThinkingChange={() => undefined} {...over} />,
     );
 
-  it("触发条 = 「deepseek-chat · 思考 off」单芯片（原型字面）", () => {
+  it("触发条 = 「deepseek-chat · 思考 关」单芯片（短档词族；请求侧 off 字面量不变）", () => {
     const html = renderToStaticMarkup(
-      <ModelPicker infos={[info]} value="deepseek-chat" onChange={() => undefined} thinking="off" onThinkingChange={() => undefined} />,
+      <ModelPicker infos={[info]} value="deepseek-chat" onChange={() => undefined} thinking="off" thinkingSupported onThinkingChange={() => undefined} />,
     );
-    expect(html).toContain("deepseek-chat · 思考 off");
+    expect(html).toContain("deepseek-chat · 思考 关");
     // 不给 onThinkingChange（如旧消费者）就不显示思考段——触发条保持纯模型名
     const plain = renderToStaticMarkup(<ModelPicker infos={[info]} value="deepseek-chat" onChange={() => undefined} />);
     expect(plain).not.toContain("· 思考");
+    // 模型没提供思考能力（业主 2026-10-15 裁）：也不显示思考段——没有的能力不摆按键面
+    const unsupported = renderToStaticMarkup(
+      <ModelPicker infos={[info]} value="deepseek-chat" onChange={() => undefined} thinking="off" onThinkingChange={() => undefined} />,
+    );
+    expect(unsupported).not.toContain("· 思考");
   });
 
-  it("声明支持 ⇒ off/low/medium/high 四档都在、当前档打勾（aria-selected 计 2）", () => {
+  it("合并面：搜索框 + 列表同屏 + 下半区思考分段（四键、当前档恰一枚 aria-pressed、逐键 title 说明、当前档提示）", () => {
     const html = menu({ thinkingSupported: true, thinking: "low" });
-    expect(html).toContain("思考程度（ThinkingEffort）");
-    for (const label of ["off", "low", "medium", "high"]) expect(html).toContain(`>${label}<`);
-    expect((html.match(/aria-selected="true"/g) ?? []).length).toBe(2); // 模型一档 + 思考一档
+    expect(html).toContain("mp-search");
+    expect(html).toContain(">openai<"); // 列表与思考段同屏（旧两视图的翻面下架）
+    expect(html).toContain("思考强度");
+    for (const s of ["关", "低", "中", "强"]) expect(html).toContain(`>${s}<`);
+    expect((html.match(/aria-pressed="true"/g) ?? []).length).toBe(1);
+    expect(html).toContain("轻量思考"); // low 的当前档提示上屏
+    expect(html).toContain('title="强 = 深度思考（16k 预算）——难题、方案设计、跨文件推理。"'); // 逐键一句说明
+    expect(html).toContain('role="listbox"');
   });
 
-  it("未声明支持 ⇒ 只有 off 可点，其余禁用 + 说明怎么解锁（不摆空壳）", () => {
+  it("未声明 ⇒ 整组禁用（四键 disabled）+ 注「当前模型不支持思考强度」+ 配置折叠（为什么+怎么解锁）", () => {
     const html = menu({ thinkingSupported: false });
-    expect(html).toContain("capability 未支持");
+    expect(html).toContain("th-row"); // 按键仍在场（brief：Segmented 常摆，按能力禁用）
+    expect((html.match(/aria-pressed="true"/g) ?? []).length).toBe(1); // 选中态仍是 off
+    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(4); // 四键全禁（列表本面不禁）
+    expect(html).toContain("当前模型不支持思考强度");
+    expect(html).toContain("th-why");
     expect(html).toContain("reasoningEfforts");
-    // 三档被禁用（off 不算）
-    expect((html.match(/disabled=""/g) ?? []).length).toBe(3);
+    expect(html).toContain(".agent/providers.json");
+    // 运行中同面：没有可调的，运行注记也不在（不谎称「思考程度可调」）
+    const running = menu({ running: true, thinkingSupported: false });
+    expect(running).not.toContain("思考程度可调");
+  });
+
+  it("运行中：列表整列禁用、思考四键一枚都不禁（跑着也能拧）+ 运行注记在场", () => {
+    const html = menu({ running: true, thinkingSupported: true, thinking: "off" });
+    expect(html).toContain("运行中：模型档位锁定；思考程度可调（下一轮派活生效）。");
+    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(3); // 模型两行 + 演示禁；四键不禁
+  });
+
+  it("不带 onThinkingChange（旧消费者）：思考段整体不出现，列表照常（零行为变化）", () => {
+    const html = renderToStaticMarkup(<ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} />);
+    expect(html).not.toContain("th-row");
+    expect(html).toContain(">openai<");
+  });
+
+  it("运行中：触发器不灰（可开菜单拧思考档）；标签照常显示当前档（短词）", () => {
+    const html = renderToStaticMarkup(
+      <ModelPicker infos={[info]} value="deepseek-chat" onChange={() => undefined} running thinkingSupported thinking="low" onThinkingChange={() => undefined} />,
+    );
+    const trigger = /<button[^>]*aria-label="模型选择"[^>]*>/.exec(html)?.[0] ?? "";
+    expect(trigger).not.toContain("disabled");
+    expect(html).toContain("deepseek-chat · 思考 低");
   });
 });
 
@@ -505,8 +606,9 @@ describe("模型菜单搜索（spec ②）", () => {
   });
 });
 
-// 模型选择弹窗（2026-10-07 业主反馈：自定义接口拉到清单后一条条勾太麻烦 → 弹窗 + 全选/全不选）。
-import { ModelPickModal, selectAllRows } from "../src/renderer/components/CustomProviderForm";
+// 模型选择弹窗（表单重建后恢复）：全选/全不选 + 整行点选 + aria-checked 计数。
+import { ModelPickModal } from "../src/renderer/components/CustomProviderForm";
+import { selectAllRows } from "../src/renderer/components/provider-form";
 
 const PICK_ROWS = [
   { id: "agnes-2.5-pro-alpha", contextWindow: 1_000_000, origin: "catalog" as const },

@@ -7,9 +7,8 @@
 // 为什么本仓要自己建：全仓此前不存在任何 URL/主机/IP 校验（`new URL` 的几处只做协议白名单，
 // 且都不处理重定向）。`fetch` 默认自动跟随重定向（最多 20 跳），所以**只校验输入 URL 等于没校验**。
 //
-// ⚠️ 已知缺口（v1 明确不假装堵上）：DNS rebinding 的 TOCTOU 窗口——先解析后连接，中间 DNS 可以换 IP。
-// 真要堵得用 `node:http(s).request` + 自定义 `lookup`（解析与连接用同一份结果），那是另一轮的事。
-// 本轮把窗口留在注释里，而不是留成一个没人知道的口子。
+// DNS rebinding 的 TOCTOU 窗口由传输层封住：这里返回校验过的解析结果，连接层必须原样用于 lookup，
+// 不能再交给 fetch/系统解析器二次解析。重定向每一跳都重新走本入口。
 
 import { isIP } from "node:net";
 
@@ -181,15 +180,26 @@ export function blockedHostReason(host: string): string {
 function checkResolved(host: string, ips: readonly string[]): string {
   if (ips.length === 0) return `${host} 解析不出任何地址（不把解析失败当放行）`;
   for (const ip of ips) {
+    if (isIP(ip) === 0) return `${host} 解析返回无效 IP 地址：${ip}`;
     const why = blockedReason(ip);
     if (why !== "") return `${host} → ${ip} 落在保留段：${why}`;
   }
   return "";
 }
 
-/** SSRF 判据的唯一入口。返回通过校验的 URL；不通过则抛错并说清原因。
+export interface PublicUrlTarget {
+  url: URL;
+  /** DNS 名称对应的所有已校验地址；IP 字面量则只含该字面量。 */
+  addresses: readonly string[];
+}
+
+/** SSRF 判据的唯一入口。返回 URL 和通过校验的地址；传输层必须用这些地址建立连接。
  *  `label` 只进文案（沿用本仓各工具"报错里说清是哪条"的口径）。 */
-export async function assertPublicUrl(raw: string, resolve: HostResolver, label = "web_fetch"): Promise<URL> {
+export async function assertPublicUrlAndResolve(
+  raw: string,
+  resolve: HostResolver,
+  label = "web_fetch",
+): Promise<PublicUrlTarget> {
   if (typeof raw !== "string" || raw.trim() === "") throw new Error(`${label}: url 参数必须是非空字符串`);
   let u: URL;
   try {
@@ -207,9 +217,16 @@ export async function assertPublicUrl(raw: string, resolve: HostResolver, label 
   if (isIP(host) !== 0) {
     const why = blockedReason(host);
     if (why !== "") throw new Error(`${label}: ${host} 落在保留段：${why}`);
-    return u;
+    return { url: u, addresses: [host] };
   }
-  const why = checkResolved(host, await resolve(host));
+  // 复制注入的数组：后续连接使用的快照与本次判据一一对应，不受调用方随后改写数组影响。
+  const addresses = [...await resolve(host)];
+  const why = checkResolved(host, addresses);
   if (why !== "") throw new Error(`${label}: ${why}`);
-  return u;
+  return { url: u, addresses };
+}
+
+/** 兼容只需要判据结果的调用方；联网传输请用 assertPublicUrlAndResolve 并固定其地址。 */
+export async function assertPublicUrl(raw: string, resolve: HostResolver, label = "web_fetch"): Promise<URL> {
+  return (await assertPublicUrlAndResolve(raw, resolve, label)).url;
 }

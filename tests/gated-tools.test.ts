@@ -1,10 +1,11 @@
 // 工具门接线测试（任务 3）：default 档 ask → 批准才执行；拒绝不执行；沙箱不可用时写工具强制审批。
 // runAgent 即 main 暴露的同一入口；AskGate 用即时决议的 stub 模拟 UI 点击。
-import { cp, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { acquireAppFixtureLock } from "./app-fixture-lock";
 import { runAgent } from "../src/main/agent-runner";
 import { AskGate } from "../src/main/ask-gate";
 import type { WebFetchDeps } from "../src/tools/web_fetch";
@@ -65,6 +66,12 @@ const OFFLINE_FETCH_DEPS: WebFetchDeps = {
     })) as unknown as typeof fetch,
 };
 
+// 本文件会改写共享靶子 fixtures/todo-app/src/todo.ts：与 runner-gates / replay-faces 共用一把锁
+// （全量判卷是文件级并行的，无锁时 replay-faces 的「整树逐字节不变」会被这里的写入打断）。
+let releaseAppFixture: (() => Promise<void>) | undefined;
+beforeAll(async () => { releaseAppFixture = await acquireAppFixtureLock(); }, 360_000);
+afterAll(async () => { await releaseAppFixture?.(); });
+
 describe("工具门接线（runAgent + AskGate）", () => {
   it(
     "default 档 + 批准 → write_file 与 run_shell 真实执行，靶子修复",
@@ -110,7 +117,11 @@ describe("工具门接线（runAgent + AskGate）", () => {
       const shells = resultsFor(events, "run_shell");
       expect(writes[0]?.ok).toBe(false);
       expect(writes[0]?.output).toContain("[permission denied]");
-      expect(writes[0]?.output).toContain("未获批准");
+      // 「未获批准」那句一律文案拆成了三种结局各说各的（拒绝 / 超时 / 无人值守，见 tool-gates 的
+      // askDenialText）：实测一次审批超时被读成「auto 档禁止写文件」，然后沉淀成跨会话错误经验。
+      // 这里改钉**这一格到底是哪种结局**，而不是一句可以同时匹配三种的糊话。
+      expect(writes[0]?.output).toContain("用户明确拒绝了这次审批");
+      expect(writes[0]?.output).toContain("该工具没有执行");
       expect(shells[0]?.ok).toBe(false);
       const buggy = await readFile(TARGET, "utf8");
       expect(buggy).toContain("return todos.length;"); // bug 原样保留，未被改写
@@ -231,5 +242,58 @@ describe("出网工具门接线（web_fetch + AskGate）", () => {
     const ok = resultsFor(events, "web_fetch").filter((r) => r.ok);
     expect(ok).toHaveLength(1);
     expect(ok[0]?.output).toContain("<fetched-content");
+  });
+
+  // 「总是允许」落库之后要**当场重载**规则库（否则本轮内的后续调用与下一轮读到的不是同一套）。
+  // 重载读的是那份可能坏掉/读不出的 permissions.json——`loadPermissionRules` 对它是 fail-closed 抛错。
+  // 若那次抛错漏出 gatedTool，症状是「人点了总是允许、规则也确实落了盘、工具却没执行」：
+  // 授权已经成立，却因为一次重载失败把它吃掉，且要等到下个会话才生效。
+  // 判据反过来钉这件事：规则库坏 ⇒ 工具照旧执行（授权优先），而不是把已批准的执行赔进去。
+  //
+  // 为什么用 write_file 而不是 web_fetch：`effScope = wantsNetwork ? "once" : r.scope`
+  // （tool-gates:176）把出网类的 scope 钉死成 once，web_fetch/web_search **永远走不到**
+  // always 那一格——拿它们写这条用例是空绿（判据有洞，见仓库自己的判卷纪律）。
+  //
+  // 形状要点：启动时规则库必须合法（runAgent 入口就 load 一次，坏的在那里就炸，走不到要测的
+  // 那一格）；坏掉发生在**批准之后、重载之前**——用审批回调当那个时间窗。
+  it("规则库重载失败不吃掉已批准的执行（always 授权成立，执行仍发生）", { timeout: 120_000 }, async () => {
+    const dir = await mkdtemp(join(tmpdir(), "m0b-t-always-reload-"));
+    await mkdir(join(dir, ".agent"), { recursive: true });
+    await writeFile(join(dir, ".agent", "permissions.json"), JSON.stringify({ rules: [] }), "utf8");
+    // 剧本通道让工具调用确定化（同本文件上面几条的口径）：这一格要的是"write_file 拿到 always
+    // 授权"，靠模型自己挑工具就等于把判据交给模型的随机性。
+    // 不共用上面那个 writeScript：它闭包的是另一个 describe 的 dir。
+    const scriptPath = join(dir, `script-always-${String(seq++)}.jsonl`);
+    await writeFile(scriptPath, JSON.stringify({ type: "tool_call", id: "w1", name: "write_file", args: { path: "note.txt", content: "hello" } }), "utf8");
+    vi.stubEnv("M3A_MAIN_SCRIPT", scriptPath);
+    try {
+      const asked: string[] = [];
+      // 卡一弹出来就把规则库写坏：此刻 always 规则还没落库（那一步在批准返回之后），
+      // 而重载发生在它之后 ⇒ 重载面对的正是这份坏文件。
+      const gate = new AskGate({
+        timeoutMs: 1000,
+        notify: (req) => {
+          asked.push(req.tool);
+          void writeFile(join(dir, ".agent", "permissions.json"), "{ 这不是合法 JSON", "utf8");
+          gate.decide(req.askId, true, "user", "always");
+        },
+      });
+      const events = await runAgent({
+        workspace: dir,
+        message: "把 hello 写进 note.txt",
+        mode: "default",
+        logPath: join(dir, "always-reload.jsonl"),
+        askGate: gate,
+        sandbox: null,
+      });
+      expect(asked).toEqual(["write_file"]);
+      const ok = resultsFor(events, "write_file").filter((r) => r.ok);
+      expect(ok, "规则库重载失败时，这次已批准的 write_file 仍必须真的执行").toHaveLength(1);
+      // 授权记录确实落了盘（重载失败与落库失败是两件事，不许互相顶包）
+      const always = await readFile(join(dir, ".agent", "permissions.always.json"), "utf8");
+      expect(always).toContain("write_file");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

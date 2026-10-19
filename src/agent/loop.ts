@@ -1,5 +1,5 @@
 import { isEnvVerifyCause } from "../events";
-import type { AgentEvent, EventLog, SkillInvocationMeta, UserMessageOrigin, VerifyCommandResult } from "../events";
+import type { AgentEvent, EventLog, SkillInvocationMeta, UserMessageAttachment, UserMessageOrigin, VerifyCommandResult } from "../events";
 import { redactSecrets } from "./security/scan";
 import { autoOf, denyReason, gate, type PermissionMode, type ToolResultWithAudit } from "../permissions";
 import type { HookEngine } from "./plugins/hooks";
@@ -12,6 +12,12 @@ import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, t
 // 取的全是纯判据：`no-progress.ts` 只做判断，出声与措辞在本文件（判据别抄第二份）。
 import { detectAlternatingThrash, detectVerifyStagnation, noProgressLadder, verifySignature, type VerifyBeat } from "./no-progress";
 import { mayHaveWrittenDisk } from "./write-face";
+// 能力 12 交付断言：判据住在 `./delivery-guard`；loop 在收束时检查事件和工作区最终状态，
+// 再决定是否出声（与 `no-progress` 一样，判据与动作分开维护）。
+// 哨兵 callId 也从那里 import 并再导出（`context.ts` 要读它，而本文件反过来 import context
+// ⇒ 常量放本文件会造出依赖圈）。**两条都写**：`export … from` 不进本地作用域，而下面要用它。
+import { DELIVERY_GUARD_CALL_ID, EMPTY_RUN_DELIVERY, describePhantomDelivery, findEmptyRun, findPhantomDelivery } from "./delivery-guard";
+export { DELIVERY_GUARD_CALL_ID };
 import { TOOLS, type ClarifyChannel, type PlanChannel, type ToolContext, type ToolName } from "../tools";
 
 export interface LoopOptions {
@@ -35,6 +41,8 @@ export interface LoopOptions {
   /** goal 模式的自动续跑轮（可选）：这条 user_message 不是人发的，origin 记下它是谁发的。
    *  与 skill 同一思路：零新增事件类型，缺省 = 字段不进事件 ⇒ 既有事件流逐字节不变。 */
   userMessageOrigin?: UserMessageOrigin;
+  /** 本轮用户消息附带的引用（可选）：只记路径/类型，不进正文；缺省 = 字段不进事件。 */
+  userMessageAttachments?: readonly UserMessageAttachment[];
   /** 澄清门通道：接了 clarify 工具才挂得起；缺省 fail-closed。 */
   clarify?: ClarifyChannel;
   /** 方案门通道：接了 propose_plan 工具才挂得起；缺省 fail-closed。 */
@@ -59,6 +67,14 @@ export interface LoopOptions {
    *  环境红（`isEnvVerifyCause`）不驱动返修：装不上工具链的机器上重跑一遍还是 127，
    *  那是把 P1-3 的归因白做。多一轮 = 花真钱 ⇒ 默认关，开与不开由实测读数裁。 */
   autoVerifyRepair?: boolean;
+  /** 能力 12 的返修环：交付断言落红（幽灵交付 / 空转）时**再要一轮**去补做，而不是带着红收束。
+   *  动机与 `autoVerifyRepair` 同一族：zeroshot 那句「写代码的 agent 不该由自己宣布能跑」
+   *  的下半截是「该有人要求它回去补」。只落红不改行为，那一趟已经结束了——
+   *  实测 6 趟里 5 趟交付了不存在的文件，落红只让审计面看见，用户拿到的仍然是一个不存在的路径。
+   *  开则：至多**一轮**返修（与 autoVerifyRepair 的「至多一次、至多两拍」同形），
+   *  红字由 context.ts 投成下一轮可见的 user 消息；那一轮若仍没落盘 ⇒ 收束（不无限要）。
+   *  缺省 undefined/false = 零行为（逐字同今日：落红即收束）。 */
+  deliveryRepair?: boolean;
   /** M7 影响面钩子：注入后 write_file/edit_file 成功落盘会回注跨文件波及。
    *  缺省 undefined = 零行为（与 ToolContext.impact 同源，透传不加工）。 */
   impact?: ToolContext["impact"];
@@ -75,11 +91,26 @@ export interface LoopOptions {
   /** M3a worker 工具表覆盖（编排内核注入独立工具面，如只读 shell_ro）；缺省 undefined = 全局 TOOLS
    *  （既有路径字节不变）。先于 allowedTools 硬闸之后的执行面查表。 */
   tools?: Record<string, import("../tools").Tool>;
-  /** M3a 取消信号（编排器 AbortController 树）：中止于轮界（工具执行中不打断，轮末收束）。
+  /** M3a 取消信号（编排器 AbortController 树）：等待边界复查，已开始工具的真实结果仍落流。
    *  缺省 undefined = 无取消（既有路径字节不变）。 */
   signal?: AbortSignal;
   /** worker 归因（§4.4）：只进 hook 的 stdin JSON（agent_id 字段），主会话缺省 = 该字段缺席。 */
   agentId?: string;
+  /** 识图通道：`read_image` 读到的图片在**下一轮**请求里附上（本轮 tool_result 已经发出去了）。
+   *
+   *  为什么是下一轮而不是本轮：provider 是会话型，本轮的消息在调 tool 之前就已经发出去；
+   *  图片只能从下一轮的请求进模型面。这与 `verify` 自动补拍的红「下一轮回流成 user 消息」
+   *  是同一条时序（context.ts 的 autoVerifyNote）。
+   *
+   *  为什么由调用方递一个收件盒而不是 loop 自己攒：loop 每轮从事件日志重建历史
+   *  （projectContext），而图片刻意**不进事件日志**（base64 会让会话文件大一个量级，
+   *  且事件流是重放契约）。所以图片只能活在进程内存里，收件盒由持有 provider 的调用方
+   *  （agent-runner）提供——它同时握着 provider 与这个盒，能把它塞进下一次请求。
+   *  缺省 undefined = 零行为（识图关着时，字节与路径都不变）。 */
+  pendingImages?: {
+    /** loop 侧：读到的图存进盒子。 */
+    push: (images: readonly { type: "image"; dataUrl: string }[]) => void;
+  };
   /** 换路压力：同一调用连续重复时，在那条 tool_result 尾部追加一行提示（见 loop 内注释）。
    *  **缺省 false = 零行为**——三条既有路径各自的原因：
    *  - worker（编排器跑 runLoop）：那边已有更强的看门（detectStuck → waiting_input 等人），
@@ -115,13 +146,38 @@ function isAbortLike(err: unknown): boolean {
  *
  *  两处口径：结构不变（只换字符串叶子），非字符串值原样返回——事件形状是重放契约的一部分，
  *  不能因为脱敏顺手改掉。命中即掩码，与 remember 同一条契约（那里遇 `blocked` 抛错，
- *  这里不能：工具已经跑完、模型已经看过，抛错会吞掉一次真实结果）。 */
-function redactValue(v: unknown): unknown {
+ *  这里不能：工具已经跑完、模型已经看过，抛错会吞掉一次真实结果）。
+ *
+ *  2026-10-19 补两条边界（都是实测出来的，不是预防性的）：
+ *  ① **循环引用**：旧实现无 visited-set 也无深度帽，`{a:1, self:<自身>}` 直接
+ *     `RangeError: Maximum call stack size exceeded`。而这个函数包在 `events.append`
+ *     外面 ⇒ 异常从 `runLoop` 直接窜出去，**整轮任务死在那一次 emit 上**。
+ *     工具是可能造出自引结构的（诊断/影响面那种带 parent 指针的图）。改用 WeakSet
+ *     记来路，重逢时返回一个**显式占位**（不静默丢、也不炸）。
+ *  ② **结构不变的适用域**：`Object.entries` 会把 `Map`/`Set`/`Date` 重建成 `{}`
+ *     （实测 `{scannedAt: new Date()}` → `{"scannedAt":{}}`）。那已经**改了结构**，
+ *     与上面"非字符串值原样返回"的承诺相反。所以非普通对象（无 `Object` 原型或不是
+ *     Object/Array 构造器的实例）一律原样返回——它们本来也过不了 JSON 序列化，
+ *     落盘面迟早会报，比在这里被静默拍平诚实。 */
+function redactValue(v: unknown, seen: WeakSet<object> = new WeakSet()): unknown {
   if (typeof v === "string") return redactSecrets(v).text;
-  if (Array.isArray(v)) return v.map(redactValue);
+  if (Array.isArray(v)) {
+    if (seen.has(v)) return "[循环引用]";
+    seen.add(v);
+    const out = v.map((inner) => redactValue(inner, seen));
+    seen.delete(v);
+    return out;
+  }
   if (typeof v === "object" && v !== null) {
+    // 只对**普通对象**逐键递归；Map/Set/Date/类实例原样返回（见上面口径②）。
+    const proto = Object.getPrototypeOf(v) as object | null;
+    const plain = proto === null || proto === Object.prototype;
+    if (!plain) return v;
+    if (seen.has(v)) return "[循环引用]";
+    seen.add(v);
     const out: Record<string, unknown> = {};
-    for (const [k, inner] of Object.entries(v as Record<string, unknown>)) out[k] = redactValue(inner);
+    for (const [k, inner] of Object.entries(v as Record<string, unknown>)) out[k] = redactValue(inner, seen);
+    seen.delete(v);
     return out;
   }
   return v;
@@ -151,8 +207,14 @@ function redactVerifyResults(results: VerifyCommandResult[]): VerifyCommandResul
  *  导出是为了让下游（`scripts/loop-eval.ts` 的返修归因）不必再抄一遍这个字符串。 */
 export const HARNESS_VERIFY_CALL_ID = "harness-auto-verify";
 
+/** 交付断言那一拍的哨兵 callId：**没有**配对的 tool_call（它不是模型调的工具，
+ *  是 harness 在收束那一刻落的证据）。单独一枚是为了让下游能把它与自动验证拍分开——
+ *  两件事都叫「harness 补的那一拍」，混用一枚 id 就等于说它们是一回事。
+ *  常量住在 `./delivery-guard`（纯叶子模块）：`context.ts` 也要读它，而 loop 反过来 import
+ *  context ⇒ 放本文件会当场造出一个圈（`arch-cycle-check` 会红）。再导出见文件头那两条。 */
+
 export async function runLoop(opts: LoopOptions): Promise<void> {
-  const { workspace, userMessage, userMessageSkill, userMessageOrigin } = opts;
+  const { workspace, userMessage, userMessageSkill, userMessageOrigin, userMessageAttachments } = opts;
   const seen: AgentEvent[] = [];
   // Persist first: failed writes must not become model-visible history.
   // 落盘与投影用同一份脱敏副本（`seen`）；工具执行面照原件执行。
@@ -162,6 +224,9 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       await opts.events.append(safe);
       seen.push(safe);
     },
+  };
+  const cancelUnstartedTool = async (callId: string): Promise<void> => {
+    await events.append({ type: "tool_result", callId, ok: false, output: "[cancelled] 会话已取消，工具没有执行" });
   };
   const mode = opts.mode ?? "default";
   const interactive = opts.interactive ?? false;
@@ -184,6 +249,9 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   let autoBeats = 0;
   let wroteSinceAutoBeat = false;
   let repairPending = false;
+  // 能力 12 交付断言的返修环：本 run 是否已为了补做而多要过一轮（至多一轮）。
+  let deliveryRepairUsed = false;
+  let deliveryGuardRecorded = false;
   // 换路压力（能力 4/9）：同一调用连败/连抄同一结果时，在那条 tool_result 尾部追加一行提示。
   // 复用 worker 看门那颗纯函数（stuck.ts）与它的阈值，不另造检测器。差别在动作：编排器命中
   // 是把 worker 挂成 waiting_input 等人，交互主循环里暂停会把「一次重复」的代价抬成「整轮等人」，
@@ -253,11 +321,30 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       if (verifyBeats.length > 8) verifyBeats.shift();
       wroteSinceVerifyBeat = false;
     }
-    if (outcome.ok) return "stop"; // 验证通过 → 立即停止，不再调用模型
+    if (outcome.ok) {
+      // 成功的 verify 也必须留配对的 tool_result：旧实现只落 verify_result 就 return，
+      // 下一轮投影会给模型注入「工具调用没有收到结果：上次运行中途结束」——与事实相反。
+      await events.append({
+        type: "tool_result",
+        callId,
+        ok: true,
+        output: "[verify] 验证通过",
+      });
+      return "stop"; // 验证通过 → 立即停止，不再调用模型
+    }
     // 自动拍：**同轮**不外注（没有合法通道），但红不是到此为止——下一轮的投影会把它
     // 回流成一条 user 消息（context.ts 的 autoVerifyNote）。缺省仍不收第二意见：直接收束。
     // 开了 autoVerifyRepair 时，调用方据 "auto-red" 再要一轮模型去修（环境红不算——那是机器的账）。
-    if (auto) return outcome.ok || envBeat ? "stop" : "auto-red";
+    if (auto) {
+      // 自动拍同样要有配对结果（无论 stop 还是 auto-red）。
+      await events.append({
+        type: "tool_result",
+        callId,
+        ok: outcome.ok,
+        output: outcome.ok ? "[verify] 自动验证通过" : "[verify] 自动验证未通过",
+      });
+      return outcome.ok || envBeat ? "stop" : "auto-red";
+    }
     if (envBeat && envVerifyBeats >= MAX_ENV_VERIFY_BEATS) {
       // 环境类连拍到独立上限：停，但停因不是"你没修好"，是这台机器跑不了验证。
       await events.append({
@@ -344,7 +431,13 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     messages: Parameters<Provider["stream"]>[0],
   ): AsyncGenerator<ModelOutput> {
     try {
-      yield* rawStream(messages);
+      for await (const output of rawStream(messages)) {
+        // 已经收到的 usage 是实际用量，取消也要如实记账；其它迟到输出不再处理。
+        if (opts.signal?.aborted && output.type !== "usage") return;
+        yield output;
+        // 消费方可能在执行工具或落日志时取消；不再拉取下一块，并关闭上游迭代器。
+        if (opts.signal?.aborted) return;
+      }
     } catch (err) {
       if (!isAbortLike(err) && !opts.signal?.aborted) {
         await events.append({
@@ -362,12 +455,17 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       type: "user_message", content: userMessage,
       ...(userMessageSkill ? { skill: userMessageSkill } : {}),
       ...(userMessageOrigin ? { origin: userMessageOrigin } : {}),
+      ...(userMessageAttachments !== undefined && userMessageAttachments.length > 0
+        ? { attachments: userMessageAttachments }
+        : {}),
     });
   }
 
   /** 撞帽位（#69）：步数已尽而模型仍在调工具 ⇒ 让这一段也走一次收束闸，再落回循环外那条 throw。 */
   let capReached = false;
   for (let step = 0; step < maxSteps; step++) {
+    // 三个出口都补落：r3/r4 实测那一趟停在 `plan_proposed`，循环内那次根本没跑到。
+    // 被取消 / 验证通过或达上限 / 模型自然收束——这三条出去时承诺都还没对过账。
     if (opts.signal?.aborted) return; // M3a：取消信号于轮界收束（终态由编排器分类：cancelled）
     currentStep = step;
     let sawToolCall = false;
@@ -376,6 +474,11 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       // （模型自己写的凭据原样执行，不要在这里把它改成一个掩码路径）。
       await events.append(output); // append 内统一脱敏，落盘与投影同副本
       if (output.type !== "tool_call") continue; // assistant_message / delta / usage：继续
+
+      if (opts.signal?.aborted) {
+        await cancelUnstartedTool(output.id);
+        return;
+      }
 
       sawToolCall = true;
 
@@ -422,7 +525,46 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           });
           continue;
         }
+        // verify 会执行仓库自带命令：审计/阻断型 PreToolUse 钩子也必须看得到它
+        // （旧实现 verify 分支排在 hook 之前并 continue，`matcher:"*"` 的钩子整支失明）。
+        if (opts.hooks) {
+          try {
+            const pre = await opts.hooks.run("PreToolUse", {
+              event: "PreToolUse",
+              tool_name: "verify",
+              tool_args: output.args,
+              tool_use_id: output.id,
+              agent_id: opts.agentId,
+            });
+            if (pre.blocked) {
+              await events.append({
+                type: "tool_result",
+                callId: output.id,
+                ok: false,
+                output: "[hook blocked] " + (pre.blockReason ?? "PreToolUse hook 阻断"),
+                blockedBy: "hook",
+              });
+              continue;
+            }
+          } catch (err) {
+            console.warn("[hooks] PreToolUse(verify) 引擎失败:", err instanceof Error ? err.message : String(err));
+          }
+        }
         const beat = await verifyBeat(output.id, false);
+        if (opts.hooks) {
+          try {
+            await opts.hooks.run("PostToolUse", {
+              event: "PostToolUse",
+              tool_name: "verify",
+              tool_args: output.args,
+              tool_response: beat === "stop" ? "[verify] 已收束" : "[verify] 未通过，继续修",
+              tool_use_id: output.id,
+              agent_id: opts.agentId,
+            });
+          } catch (err) {
+            console.warn("[hooks] PostToolUse(verify) 引擎失败:", err instanceof Error ? err.message : String(err));
+          }
+        }
         if (beat === "stop") return; // 通过或达上限 → 收束，不再调用模型
         continue; // 失败已回注，同轮继续修
       }
@@ -455,6 +597,10 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       }
 
       // 权限门：先过门再动手（verify 已在上面分支处理，此处 name 不含 verify）
+      if (opts.signal?.aborted) {
+        await cancelUnstartedTool(output.id);
+        return;
+      }
       const name = output.name as Exclude<ToolName, "verify">;
       const decision = gate(mode, name, interactive);
       if (decision !== "allow") {
@@ -494,6 +640,11 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         };
         try {
           result = await tool.run(output.args, ctx);
+          // 识图：图片内容块进待发盒（下一轮请求带上）。**只在这里存一次**——
+          // 落盘的 tool_result 不带 base64，所以这条图不会跟着事件流重放，也不必去重。
+          if (result.images !== undefined && result.images.length > 0) {
+            opts.pendingImages?.push(result.images);
+          }
         } catch (err) {
           result = { ok: false, output: err instanceof Error ? err.message : String(err) };
         }
@@ -506,6 +657,9 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       // 同一个事实只有一个 writer（写工具），这里只搬运不改写。
       const snapshotId = (result as { snapshotId?: string }).snapshotId;
       const change = (result as { change?: "created" | "modified" }).change;
+      // 交付给用户的产物引用：与 snapshotId / change 同一条搬运纪律（唯一 writer 是工具，
+      // 这里只透传不改写）。base64 不进事件流，所以这一格只有路径与用途。
+      const artifact = (result as { artifact?: { kind: "image" | "html" | "svg" | "text"; path: string; note?: string } }).artifact;
       // 换路压力记账（只读，不改事件序）：动作换了 ⇒ 上一轮的重复段结束，解除提示帽
       let repeatNote = "";
       if (opts.stuckNudge === true) {
@@ -530,7 +684,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       }
       // M2e：PostToolUse（成功）/ PostToolUseFailure（失败）——additionalContext 回注 tool_result 尾部
       let postContext = "";
-      if (opts.hooks) {
+      if (opts.hooks && !opts.signal?.aborted) {
         try {
           const post = await opts.hooks.run(result.ok ? "PostToolUse" : "PostToolUseFailure", {
             event: result.ok ? "PostToolUse" : "PostToolUseFailure",
@@ -557,6 +711,8 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         ...(audit ? { auto: audit } : {}),
         ...(snapshotId !== undefined ? { snapshotId } : {}),
         ...(change !== undefined ? { change } : {}),
+        ...(artifact !== undefined ? { artifact } : {}),
+        ...(result.changedPaths !== undefined ? { changedPaths: result.changedPaths } : {}),
         // 跑进程类工具的结局必须**结构地**活到落盘面：从前 `ok:false` ＋一句文案就是全部，
         // 于是"工具链没装（127）／被墙钟杀掉／模型代码真错了"三件事在事件流里长得一模一样，
         // 下游（额度、按档升级、沉淀、失败轨迹评估）只能回去匹配文案。缺席＝这一笔不是跑进程的工具。
@@ -572,6 +728,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         wroteSinceVerifyBeat = true; // M10②：判据的另一位——两拍同签名红之间**有过成功的写**就算在换路子试
       }
     }
+    if (opts.signal?.aborted) return;
     // #69：最后一步模型**仍在调工具**时，也让收束闸有机会留下证据——
     // 从前这一段只在模型自己不再调工具时才走到，于是撞帽的 run 一条 verify 证据都没有
     // （真模型面实测 5/43≈12% 整趟被帽砍掉）。这里只把"该收束了"这件事说给它听，
@@ -612,6 +769,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
             auto: true,
           });
         }
+        if (opts.signal?.aborted) return;
         if (hasSurface) {
           const beat = await verifyBeat(HARNESS_VERIFY_CALL_ID, true);
           autoBeats++;
@@ -623,9 +781,40 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           }
         }
       }
+      // 交付断言在返修前必须先进事件流：context.ts 会把哨兵投成 user 消息，下一次请求才看得到原因。
+      // 收尾层仍负责异常/中断时补记；它按当前 user_message 边界去重，不会把历史轮次当成本轮。
+      const phantom = findPhantomDelivery(seen, workspace);
+      const emptyRun = findEmptyRun(seen);
+      const guardFired = phantom !== null || emptyRun !== null;
+      if (guardFired) {
+        // 检测与记录始终发生；返修开关只决定要不要再向模型要一轮。
+        if (!deliveryGuardRecorded) {
+          deliveryGuardRecorded = true;
+          await events.append({
+            type: "tool_result",
+            callId: DELIVERY_GUARD_CALL_ID,
+            ok: false,
+            output: phantom !== null
+              ? describePhantomDelivery(phantom)
+              : EMPTY_RUN_DELIVERY,
+          });
+        }
+        // 返修环（与 autoVerifyRepair 同形）：红已落流 ⇒ 再要一轮去补做。
+        // 上限**一轮**：补不出来就收束，无限要下去只会把钱烧在不会写的那一趟上。
+        if (opts.deliveryRepair === true && !deliveryRepairUsed) {
+          deliveryRepairUsed = true;
+          continue;
+        }
+      }
       if (!capReached) return; // 模型认为任务结束（纯文本轮 / 事件源耗尽）；撞帽则落回循环外那条 throw
       // 撞帽路：证据已在上面落流，这里**不吞掉失败**——继续往下走，由循环外那句抛。
     }
   }
-  throw new Error(`agent loop 超过 maxSteps=${String(maxSteps)}，强制中止`);
+  // 最后一轮的验证或收尾日志也可能等到取消；不能把用户取消改判成步数耗尽。
+  if (opts.signal?.aborted) return;
+  const capMessage = `agent loop 超过 maxSteps=${String(maxSteps)}，强制中止`;
+  // 内核异常也要落事件：旧实现直接 throw，会话 JSONL 在最后一条普通事件处戛然而止，
+  // 事后重开/审计完全看不到「为什么停了」（terminal 的 agent_status 是 push-only 不写盘）。
+  await events.append({ type: "error", message: capMessage, step: maxSteps } as AgentEvent);
+  throw new Error(capMessage);
 }

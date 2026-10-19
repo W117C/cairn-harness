@@ -10,6 +10,7 @@ import type { AgentEvent, HarnessHoldReason } from "../events";
 import { replay } from "../events";
 import type { ModelOutput, Provider } from "../providers";
 import { glmDefaultModelName, type GlmMessage, type GlmToolSpec } from "../providers/glm";
+import { envKeyOf } from "../providers/env-keys";
 import { effectiveModelTable, findSpecByNameOrId, resolveModel, toWorkerModel, type ModelTier } from "../providers/registry";
 import { routeFor, TIER_ORDER as MODEL_TIER_ORDER } from "../routing/policy";
 import type { ToolResult } from "../tools/base";
@@ -18,6 +19,7 @@ import { run_shell } from "../tools/run_shell";
 import { write_file } from "../tools/write_file";
 import { remember } from "../tools/remember";
 import { runLoop } from "./loop";
+import { DELIVERY_GUARD_CALL_ID, EMPTY_RUN_DELIVERY } from "./delivery-guard";
 import { projectContext, type ContextMessage } from "./context";
 import {
   DEFAULT_COMPACTION_CONFIG,
@@ -38,7 +40,7 @@ import {
 } from "./sequencer";
 import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckConfig, type StuckTurn } from "./stuck";
 import { unconsumedSpawnArgs } from "./spawn-surface";
-import type { RespawnArgs } from "./recovery";
+import { respawnSpawnArgs, type RespawnArgs } from "./recovery";
 import {
   branchForAgent,
   createWorktree,
@@ -110,7 +112,7 @@ export class Orchestrator {
   private readonly workers = new Map<string, WorkerHandle>();
   private readonly pendingApprovals = new Map<
     string,
-    { agentId: string; resolve: (r: { approved: boolean; scope: AskScope; note?: string }) => void; timer: ReturnType<typeof setTimeout> }
+    { agentId: string; resolve: (r: { approved: boolean; scope: AskScope; note?: string }) => void; timer: ReturnType<typeof setTimeout>; cleanup?: () => void }
   >();
   readonly root = new AbortController();
   private readonly approvalTimeoutMs: number;
@@ -351,7 +353,8 @@ export class Orchestrator {
    *  这里漏转一手，重派会**静默换一张角色面**（工具剔除面与提示词都变了），而卡上写的还是「按原参数」。
    *  `RespawnArgs` 里没有 `depends_on`（依赖链已断），所以展开不会把不该带上的参数带进来。 */
   async respawn(args: RespawnArgs, ctx: { callId?: string } = {}): Promise<ToolResult> {
-    return await this.spawn({ ...args }, ctx);
+    // 只转 spawn_agent 真正接受的顶层参数（见 respawnSpawnArgs 的注释：旧实现对真实 worker 必拒）。
+    return await this.spawn(respawnSpawnArgs(args), ctx);
   }
 
   /** M5c Best-of-N 竞争编排（§m5-proposal 步骤 12）：N 个候选并行，judge 命中即早停取消其余。
@@ -564,11 +567,16 @@ export class Orchestrator {
       : routedSpec
         ? toWorkerModel(routedSpec, this.opts.promptCache === true ? { promptCache: true } : {})
         : undefined;
-    if (!model && !process.env.CAIRN_API_KEY) {
-      return { ok: false, output: "spawn_agent: 无可用模型（无 CAIRN_API_KEY 且未接 modelFor；fail-closed 不造必败 worker）" };
+    // 凭据按**选中的 provider** 判：旧实现硬编码 CAIRN_API_KEY ⇒ 只配 ANTHROPIC_API_KEY 时
+    // 路由到 anthropic 档位会被判「无凭据」；反之只有 GLM key 时又放行一个必败 worker。
+    const routedProviderId = routedSpec?.provider ?? "glm";
+    const routedEnvName = envKeyOf(routedProviderId);
+    const hasRoutedCredential = routedEnvName !== null && process.env[routedEnvName] !== undefined;
+    if (!model && !hasRoutedCredential) {
+      return { ok: false, output: `spawn_agent: 无可用模型（无 ${routedEnvName ?? "provider"} 凭据且未接 modelFor；fail-closed 不造必败 worker）` };
     }
-    if (routeDecision && !this.opts.modelFor && !process.env.CAIRN_API_KEY) {
-      return { ok: false, output: "spawn_agent: 路由路径需要 CAIRN_API_KEY（无注入模型且无凭据；fail-closed 不造必败 worker）" };
+    if (routeDecision && !this.opts.modelFor && !hasRoutedCredential) {
+      return { ok: false, output: `spawn_agent: 路由路径需要 ${routedEnvName ?? "provider"} 凭据（无注入模型且无凭据；fail-closed 不造必败 worker）` };
     }
     // W3②「价格标签」：worker 的钱此前只喂 bandit（rewardBandit 里算完即丢），派工时模型看不到单价、
     // 收队时看不到花了多少、终态里也没有机器可读的花费。档位以路由决策为准；没路由时 worker 走
@@ -830,6 +838,7 @@ export class Orchestrator {
     for (const [id, p] of this.pendingApprovals) {
       if (p.agentId === agentId) {
         clearTimeout(p.timer);
+        p.cleanup?.();
         approvalOwners.delete(id);
         this.pendingApprovals.delete(id);
         p.resolve({ approved: false, scope: "once", note: "worker 已取消" });
@@ -1113,6 +1122,19 @@ export class Orchestrator {
         ...(workerHooks ? { hooks: workerHooks } : {}),
         ...(workerVerify ? { verify: workerVerify, autoVerify: true } : {}),
       });
+      // loop 可以在取消后正常返回；终态看信号，不能只靠 catch 判断取消。
+      if (w.controller.signal.aborted) {
+        await this.finish(w, "cancelled");
+        return;
+      }
+      // 零输出 worker 不得收成 done：runLoop 只在自己的子流落一条带 agent_id 的 delivery 红，
+      // 父模型按 agent_id 过滤后只看到 status:done + 空 summary ——「什么都没做」被显示成成功。
+      const emptyRun = w.events.some((e) =>
+        e.type === "tool_result" && e.callId === DELIVERY_GUARD_CALL_ID && e.output === EMPTY_RUN_DELIVERY);
+      if (emptyRun) {
+        await this.finish(w, "failed", "empty_run: 上游模型未产出任何工具调用或正文");
+        return;
+      }
       await this.finish(w, "done");
     } catch (err) {
       if (err instanceof WorkerCancelled || w.controller.signal.aborted) {
@@ -1239,6 +1261,7 @@ export class Orchestrator {
     for (const [id, p] of this.pendingApprovals) {
       if (p.agentId === w.agentId) {
         clearTimeout(p.timer);
+        p.cleanup?.();
         approvalOwners.delete(id);
         this.pendingApprovals.delete(id);
         p.resolve({ approved: false, scope: "once", note: "worker 已终态（" + status + "）" });

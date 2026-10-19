@@ -26,6 +26,9 @@ export { PERMISSION_MODES, type PermissionMode } from "../permissions/modes";
 import { PERMISSION_MODES, type PermissionMode } from "../permissions/modes";
 export type SafeMode = "off" | "report" | "gate";
 export type ThemeSetting = "system" | "light" | "dark";
+/** 2026-10-18：界面字号三档（tokens.css 的 `html[data-text-size=…]` 同名单）。
+ *  md = 中间档 = --rem-scale 维持 1（缺省走这支，保证对既有用户零视觉变化）。 */
+export type TextSizeSetting = "sm" | "md" | "lg";
 /** v2.14：界面语言（i18n 偏好）——V1 只做持久化与校验（先让偏好可存可回读），渲染层文案翻译逐段接线。 */
 export type LocaleSetting = "zh-CN" | "en-US";
 /** 主对话模型通道：demo 是冻结剧本；内置四家与 worker registry / env-key 表同源；
@@ -76,7 +79,7 @@ export interface AppSettings {
   provider: ProviderKind;
   /** 真实通道的模型名（缺省空 = 由 provider 层取缺省，如 glm-5.2）。 */
   model: string;
-  /** SoL-Pi P-1 步骤 2：主对话工作区（缺省 null = 回落 M0B_WORKSPACE / 内置的 fixtures/todo-app）。 */
+  /** SoL-Pi P-1 步骤 2：主对话工作区（缺省 null = 回落 M0B_WORKSPACE / 调用方 cwd）。 */
   workspace: string | null;
   /** SoL-Pi C1：写入后执行配置检查，显式开启，默认关闭。 */
   actionFusion: boolean;
@@ -101,6 +104,15 @@ export interface AppSettings {
   /** plan 模式默认档：新对话是否默认武装「未批准方案即写禁」（composer 里的即时开关以此为初值）。
    *  缺省 false = 逐字同武装前（写禁只在模型自愿 propose_plan 后成立）。零 token 成本，只是谓词。 */
   planRequiredByDefault: boolean;
+  /** 桌面蓝本 §3.6：Ctrl+Tab / Ctrl+Shift+Tab 循环会话开关。缺省**开**（文档把这对键列为主力）；
+   *  §7.3.3 点名「别做成不可关闭」——误触用户可在此关掉，只留 ⌘⇧[ / ]。 */
+  ctrlTabCycle: boolean;
+  /** 2026-10-18：界面字号档（双轴变体的**文字轴**）。CSS 侧三档早已写好并在用——
+   *  `html[data-text-size=sm|lg] { --rem-scale: .92|1.08 }`，而 --rem-scale 乘在 tokens.css 的
+   *  每一个字号 calc 上 ⇒ 改这一个值，全界面文字一起缩放。此前缺的只是**一个字段 + 一处赋值**：
+   *  没有字段 ⇒ App 无处存偏好；data-text-size 从来没被任何代码写过 ⇒ 三档是死代码。
+   *  "md" = 不动 --rem-scale（维持 1），所以缺省值对既有用户是**逐像素零变化**。 */
+  textSize: TextSizeSetting;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -145,11 +157,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoVerify: true,
   autoVerifyRepair: false,
   planRequiredByDefault: false,
+  ctrlTabCycle: true,
+  textSize: "md",
 };
 
 const SAFE_MODES = ["off", "report", "gate"] as const;
 const THEMES = ["system", "light", "dark"] as const;
 const LOCALES = ["zh-CN", "en-US"] as const;
+/** 字号三档（与 tokens.css 的 html[data-text-size=…] 选择器逐字对应——改一处必须改另一处）。 */
+const TEXT_SIZES = ["sm", "md", "lg"] as const;
 /** 设置面可持久化的主会话 provider 的**内置**子集：demo + 四个真实 adapter。
  *  自定义 provider 不在这个字面量里（它们是运行时才知道的），由 `isPersistableProvider` 一并放行。 */
 export const PROVIDER_KINDS = ["demo", ...ENV_KEYED_PROVIDERS] as const;
@@ -238,6 +254,10 @@ export function validateSettings(raw: unknown): AppSettings {
     // 缺省关的键才用 `=== true`（上面那条规矩的反面：默认关时严格真值才不会把 false 读成缺省）
     autoVerifyRepair: r.autoVerifyRepair === true,
     planRequiredByDefault: r.planRequiredByDefault === true,
+    // 缺省开的键走 `d.` 回退（promptCache 同族）：老 settings.json 无此键时保持「开」，不被静默关掉。
+    ctrlTabCycle: typeof r.ctrlTabCycle === "boolean" ? r.ctrlTabCycle : d.ctrlTabCycle,
+    // 2026-10-18 字号档：白名单外（含旧档案没这个键）回退 "md" = --rem-scale 1 = 与今天逐像素一致。
+    textSize: TEXT_SIZES.includes(r.textSize as TextSizeSetting) ? (r.textSize as TextSizeSetting) : d.textSize,
     provider: isPersistableProvider(r.provider) ? (r.provider as ProviderKind) : d.provider,
     model,
     // 工作区：非空字符串取原值（越界长度回退默认，避免把畸形路径带进 run 装配）；其余回退 null
@@ -269,7 +289,8 @@ export class SettingsStore {
     } catch {
       raw = null; // 文件不存在 / JSON 损坏 → 默认（验收②）
     }
-    this.cache = validateSettings(raw);
+    // 首读可能晚于另一笔 get/set 完成，迟到的旧结果不能覆盖已更新的缓存。
+    if (this.cache === null) this.cache = validateSettings(raw);
     return this.cache;
   }
 
@@ -299,13 +320,33 @@ export class SettingsStore {
         : cur.layout,
     };
     const validated = validateSettings(next);
-    await this.persist(validated);
+    // 把「调用方这次没改、但校验器不认识」的 provider/model 原样写回磁盘：
+    // 自定义 provider 在注册表未装载时会回退 demo，而随后任何一笔 layout 写都会把 demo
+    // 持久化 ⇒ 配置修好后用户偏好也回不来（静默走 demo）。内存仍用校验后的值。
+    const raw = await this.readRaw();
+    const persisted: Record<string, unknown> = { ...(validated as unknown as Record<string, unknown>) };
+    for (const key of ["provider", "model"] as const) {
+      if ((scalars as Record<string, unknown>)[key] === undefined && typeof raw?.[key] === "string") {
+        persisted[key] = raw[key];
+      }
+    }
+    await this.persist(persisted);
     this.cache = validated;
     return validated;
   }
 
+  /** 磁盘原文（合并基的「不认识但别丢」那一半）。坏文件 = null。 */
+  private async readRaw(): Promise<Record<string, unknown> | null> {
+    try {
+      const raw = JSON.parse(await readFile(this.filePath, "utf8")) as unknown;
+      return raw !== null && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** 原子写（临时文件 + rename，中断自愈）。 */
-  private async persist(s: AppSettings): Promise<void> {
+  private async persist(s: Record<string, unknown>): Promise<void> {
     await writeFileAtomic(this.filePath, JSON.stringify(s, null, 2));
   }
 }

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 // 纯函数判卷（node 环境不渲染 JSX，同 sidebar-groups / model-picker 先例：组件文件同源导出）。
 import {
@@ -15,6 +16,10 @@ import {
 // （renderer bundle 反而不行——settings.ts 拖 node:fs/registry 进包，面板侧只能同形再推导，测试钉住等值）。
 import { PROVIDER_KINDS } from "../../../src/main/settings";
 import { envKeyOf } from "../../../src/providers/env-keys";
+
+const panelSrc = readFileSync(new URL("../src/renderer/components/SettingsPanel.tsx", import.meta.url), "utf8");
+const appSrc = readFileSync(new URL("../src/renderer/App.tsx", import.meta.url), "utf8");
+const modalSurfaceSrc = readFileSync(new URL("../src/renderer/components/ModalSurface.tsx", import.meta.url), "utf8");
 
 describe("providerStatusLabel（凭据段状态行，三态文案判卷）", () => {
   it("safeStorage 不可用：写明 fail-closed 拒存、不落明文——不让用户以为 key 存上了", () => {
@@ -35,15 +40,15 @@ describe("providerStatusLabel（凭据段状态行，三态文案判卷）", () 
     );
   });
 
-  it("env 并存：追加 env 优先提示（启动注入对 env 已在的 provider 零行为）", () => {
+  it("env 并存：追加 env 优先提示（启动注入对 env 已在的 provider 零行为；批 6 改通俗行文）", () => {
     expect(providerStatusLabel({ available: true, stored: ["glm"], envActive: true })).toBe(
-      "已存 key：glm；检测到环境变量 key（env 优先于已存）",
+      "已存 key：glm；检测到环境变量，将优先使用",
     );
   });
 
   it("env 在场但未存任何 key：两个事实同一条文案，不静默", () => {
     expect(providerStatusLabel({ available: true, stored: [], envActive: true })).toBe(
-      "尚未存储任何 key；检测到环境变量 key（env 优先于已存）",
+      "尚未存储任何 key；检测到环境变量，将优先使用",
     );
   });
 });
@@ -151,5 +156,37 @@ describe("searchCapabilityLabel（联网搜索状态行，三态文案判卷）"
 
   it("配法提示带 {query} 占位符（那是 loadSearchConfig 的硬判据，漏了照样不注入）", () => {
     expect(SEARCH_CONFIG_HINT).toContain("{query}");
+  });
+});
+
+describe("设置页模态边界（背景不可达 + 焦点环绕 + 关闭恢复）", () => {
+  it("设置页走统一 ModalSurface，由边界声明 aria-modal 并隔离背景", () => {
+    expect(panelSrc).toContain('<ModalSurface className="sp-page" label="设置" onClose={props.onClose}>');
+    expect(modalSurfaceSrc).toContain('aria-modal="true"');
+    expect(modalSurfaceSrc).toContain('setAttribute("inert", "")');
+    expect(modalSurfaceSrc).toContain('setAttribute("aria-hidden", "true")');
+  });
+
+  it("Tab / Shift+Tab 在设置内环绕，卸载时把焦点还给打开前的控件", () => {
+    expect(modalSurfaceSrc).toContain('e.key !== "Tab"');
+    expect(modalSurfaceSrc).toContain("previousFocus");
+    expect(modalSurfaceSrc).toContain("previousFocus?.focus()");
+    expect(modalSurfaceSrc).toContain("last.focus()");
+    expect(modalSurfaceSrc).toContain("first.focus()");
+  });
+
+  it("设置打开时 App 全局快捷键让路，Esc 不会被误判成停止运行", () => {
+    expect(appSrc).toContain("if (document.querySelector('[data-modal-surface=\"true\"]') !== null || h.paletteOpen) return;");
+  });
+});
+
+
+// 2026-10-17：设置分区切换的进场（Claude 质感：短淡入，不弹跳）。
+import { readFileSync as readFs } from "node:fs";
+import { fileURLToPath as fileUrl } from "node:url";
+describe("设置页切换动效", () => {
+  it(".ss-page 首绘淡入（120–160ms 区间）", () => {
+    const css = readFs(fileUrl(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
+    expect(css).toMatch(/\.ss-page\s*{[^}]*animation:\s*fade-in var\(--t-fast\)/s);
   });
 });

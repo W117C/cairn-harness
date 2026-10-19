@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { redactSecrets } from "../src/agent/security/scan";
+import { findHighEntropyTokens, redactSecrets } from "../src/agent/security/scan";
 import { scanStreamEvent } from "../src/agent/worker-projection";
 import type { AgentEvent } from "../src/events";
 
@@ -304,5 +304,32 @@ describe("赋值式凭据的值带括号（被 {12,} 卡掉的那一类）", () 
       expect(ruleIdsOf(line), line).not.toContain("secret.assigned_bracketed");
       expect(redactSecrets(line).text, line).toBe(line);
     }
+  });
+});
+
+describe("provider 关联 id 不许被熵分支掩掉（2026-10-19）", () => {
+  it("Anthropic / OpenAI 形状的 tool id 原样保留", () => {
+    const ids = [
+      "toolu_01AbCdEfGhIjKlMnOpQrStUv",
+      "toolu_01X9y8Z7w6V5u4T3s2R1q0P",
+      "call_9fK2mQ8xLp3Zv7Nw1Rt5Yc6Bd",
+      "msg_01Hk4P2mQ8xLp3Zv7Nw1Rt5Y",
+      "chatcmpl-Bx7K2mQ8xLp3Zv7Nw1Rt5Yc6",
+    ];
+    for (const id of ids) {
+      const r = redactSecrets(`{"id":"${id}"}`);
+      expect(r.text, id).toContain(id);
+      expect(r.text, id).not.toContain("****");
+    }
+  });
+
+  it("豁免只覆盖 id 前缀：同形高熵串仍会被掩（尺没有放空）", () => {
+    const random = "Zx9Kq2Mn7Pv4Rt8Wc3Yb6Hd1";
+    expect(redactSecrets(random).text).not.toBe(random);
+    // 反向对照：旧行为（不豁免）下 Anthropic id 确实会变成一个常量——把豁免去掉即可复现，
+    // 这里用同一熵参数直接证明该串本应命中。
+    const before = findHighEntropyTokens("toolu_01AbCdEfGhIjKlMnOpQrStUv");
+    // 豁免后返回空；若把 PROVIDER_ID_TOKEN 去掉，这条会非空（本判据即反向验证的锚）。
+    expect(before).toEqual([]);
   });
 });

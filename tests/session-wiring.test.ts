@@ -29,7 +29,8 @@ it("UI cancellation settles the distillation approval immediately without writin
     requests++;
     const delta = requests === 1 ? { content: "TASK_COMPLETED" } : {
       tool_calls: [{ index: 0, id: "distill-remember", type: "function", function: {
-        name: "remember", arguments: JSON.stringify({ scope: "project", kind: "memory", type: "user", topic: "language", content: "Chinese" }),
+        // 全局层才过合并审批（第十一遍分层裁决：项目层免批直写不弹卡）——本条测的正是「审批等待期取消」。
+        name: "remember", arguments: JSON.stringify({ scope: "global", kind: "memory", type: "user", topic: "language", content: "Chinese" }),
       } }],
     };
     return new Response("data: " + JSON.stringify({ choices: [{ delta, finish_reason: requests === 1 ? "stop" : "tool_calls" }] }) + "\n\ndata: [DONE]\n\n", {

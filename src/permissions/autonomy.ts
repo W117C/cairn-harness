@@ -5,6 +5,7 @@
 //   → L4 风险层（三通道，critical 任何档强制审批——allow 规则也批不掉 critical）。
 // 零私有状态：规则库与放行集是仅有的两个输入源；断路器计数在 session 入参里，evaluate 只读不写
 // （调用方经 note* helper 更新）——同一输入两次调用结果一致。
+import { posix } from "node:path";
 import { FROZEN_TABLE_REL } from "../frozen";
 import { TOOL_NAMES, type ToolName } from "../tools/base";
 // 判卷闸的补丁取料：与 `apply_patch` 工具层共用同一个解析器（同一个决策点，不在闸里再解析一遍 diff）。
@@ -33,7 +34,8 @@ export const GATE_LAYERS = [
   "L0-hard", "L1-deny", "L2-ask-rule",
   "L3-rule", "L3-scope", "L3-mode",
   "L4-critical", "L4-risk", "L4-mcp-unannotated", "L4-network", "L4-pass",
-  // `X-` = 判定发生在 `evaluate` **之外**的那一面（今天只有会话末沉淀轮：工具白名单 + 合并审批）。
+  // `X-` = 判定发生在 `evaluate` **之外**的那一面（今天只有会话末沉淀轮：工具白名单 + 分层审批
+  // ——项目层免批 auto-approved / 全局层合并审批 approved·rejected，第十一遍裁决）。
   // 单列一层而不是借 `L3-mode` / `L2-ask-rule` 的名字：借名会把"一次问答覆盖整轮"的量混进逐次审批的
   // 分母里，而 §7 第 2 步的免批率与 ECE 恰好是按 `layer × verdict` 逐格算的。
   "X-distill",
@@ -302,8 +304,23 @@ const NO_JUDGE_SURFACE: ReadonlySet<string> = new Set<string>();
 function relTargetKeyOf(raw: unknown): string | null {
   if (typeof raw !== "string" || raw === "") return null;
   const rel = raw.split("\\").join("/").replace(/^\.\//, "");
-  if (rel === "" || rel.startsWith("/") || rel.split("/").includes("..")) return null;
-  return rel;
+  if (rel === "" || rel.startsWith("/")) return null;
+  // 词法归一：`foo/../tests/todo.test.ts` 与 `tests/todo.test.ts` 是同一个文件。
+  // 旧实现见到 `..` 直接返回 null（「不归本闸管」）⇒ 冻结文件被 `..` 绕过。
+  const norm = posix.normalize(rel);
+  if (norm === "" || norm === "." || norm === ".." || norm.startsWith("../") || norm.startsWith("/")) return null;
+  return norm;
+}
+
+/** 冻结表的命中判定：归一大小写（macOS/Win 默认大小写不敏感；`.AGENT` 与 `.agent` 同文件）。
+ *  Linux 保持逐字符：那是两个不同文件，误拒会挡掉合法路径。 */
+const CASE_INSENSITIVE_FS = process.platform === "darwin" || process.platform === "win32";
+function frozenHit(paths: ReadonlySet<string>, target: string): string | null {
+  if (paths.has(target)) return target;
+  if (!CASE_INSENSITIVE_FS) return null;
+  const lower = target.toLowerCase();
+  for (const key of paths) if (key.toLowerCase() === lower) return key;
+  return null;
 }
 
 /** 单路径那一格（`write_file` / `edit_file` 与所有走 `path` 键的写向调用）：口径逐字不变。 */
@@ -466,12 +483,13 @@ export function evaluate(
     }
     // 逐条判，不是只判第一条（批量形态一次可落多处）。
     for (const target of targets.targets) {
-      if (!s.frozenJudgePaths.has(target)) continue;
+      const hit = frozenHit(s.frozenJudgePaths, target);
+      if (hit === null) continue;
       return {
         verdict: "deny",
         layer: "L0-hard",
         reason:
-          `判卷文件冻结：${target}（sha256 基线在 ${FROZEN_TABLE_REL}）` +
+          `判卷文件冻结：${hit}（sha256 基线在 ${FROZEN_TABLE_REL}）` +
           "——判据有缺陷请写 BLOCKED.md 要求换判据，不许改代码去绕",
       };
     }
@@ -513,6 +531,17 @@ export function evaluate(
         riskReasons: channels.reasons,
       };
     }
+    // 「总是允许」在 UI 上落成**裸工具名** allow（无 pattern）：一次普通 write_file 批准
+    // 不能把 `.env` / `.git/hooks` 这类 high 风险路径一起免掉（非 shell 的 scopeKey 也是工具级）。
+    if (risk === "high" && chain.pattern === undefined && !isShellFamily(tool) && staticRisk(tool, args).level === "high") {
+      return {
+        verdict: "ask",
+        layer: "L4-risk",
+        reason: "高风险路径不随「总是允许该工具」一起放行：仍需逐次确认",
+        risk,
+        riskReasons: channels.reasons,
+      };
+    }
     return { verdict: "approve", layer: "L3-rule", risk, auto: { source: "rule", ruleId: chain.ruleId } };
   }
   const policy = policyOf(s.mode);
@@ -547,7 +576,9 @@ export function evaluate(
     // 这条快捷存在的意义就是让**中风险**的那批（编辑、装包）也只问一次。
     const key = scopeKey(tool, args);
     // 单行不折：`autonomy-network-once` 锚点的针脚是这条表达式的一部分（拆行会把它顶成空操作）。
-    const scopeAllowed = policy.scopeMemory && !s.breakerTripped && !isNetworkCommandCall(tool, args) && s.sessionScopes.has(key);
+    // high/critical 不因 scope 记忆免批：非 shell 的 scopeKey 是工具级（`write_file␟*`），
+    // 一次普通写批准会把 `.env` / `.git/hooks/*` 这类敏感路径一起放行——风险层必须仍能出卡。
+    const scopeAllowed = policy.scopeMemory && risk !== "high" && risk !== "critical" && !s.breakerTripped && !isNetworkCommandCall(tool, args) && s.sessionScopes.has(key);
     if (scopeAllowed) {
       return { verdict: "approve", layer: "L3-scope", risk, auto: { source: "session_scope", ruleId: key } };
     }

@@ -153,14 +153,15 @@ describe("userConfig 进激活面（§9.5 的三条通道）", () => {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   });
 
-  it("exec form 的 ${user_config.TOKEN} 被展开，且 PLUGIN_OPTION_TOKEN 真的进了子进程 env", async () => {
+  it("exec form：敏感值只进 env（argv 里保留占位符，进程表读不到密钥）", async () => {
     const e = await loadPlugin({ withValue: true });
     const r = await e.hooks.run("PostToolUse", { event: "PostToolUse", tool_name: "read_file", tool_args: {} });
     expect(r.ran).toBe(1);
     expect(r.errors).toEqual([]);
-    expect(r.additionalContext).toContain("argv=" + KEY);
+    // 2026-10-19：sensitive 值不再展开进 argv（`ps` / 崩溃报告可读）；插件应走 PLUGIN_OPTION_*。
+    expect(r.additionalContext).toContain("argv=${user_config.TOKEN}");
     expect(r.additionalContext).toContain("env=" + KEY);
-    expect(r.additionalContext).not.toContain("${user_config.");
+    expect(r.additionalContext).not.toContain("argv=" + KEY);
     expect(r.additionalContext).not.toContain(SECRET_PLACEHOLDER);
   });
 
@@ -196,16 +197,17 @@ describe("userConfig 进激活面（§9.5 的三条通道）", () => {
     expect(remote?.url).toBe("https://api.example.com/prod/mcp"); // PROFILE 走 default
     expect(remote?.headers?.authorization).toBe("Bearer " + KEY);
     const local = seen.find((c) => Array.isArray(c.args));
-    expect(local?.args).toContain(KEY);
+    // 敏感值只进 env / 远程 headers；stdio server 的 argv 会出现在进程表里。
+    expect(local?.args).not.toContain(KEY);
+    expect(local?.args).toContain("${user_config.TOKEN}");
     expect(local?.args).toContain(pluginRoot()); // PLUGIN_ROOT 展开没被这轮改动挤掉
-    expect(JSON.stringify(seen)).not.toContain("${user_config.");
   });
 
-  it("第三激活面 LSP：注册前就展开，面板同源读路径看到的是展开后的", async () => {
+  it("第三激活面 LSP：敏感值不进 command/args（进程表可读）", async () => {
     const e = await loadPlugin({ withValue: true, preWrite: true });
     e.activateLsp();
     const cfg = loadLspConfig(dir);
-    expect(cfg.servers["cfg:stub"]?.args).toEqual([KEY + "/srv.mjs"]);
+    expect(cfg.servers["cfg:stub"]?.args).toEqual(["${user_config.TOKEN}/srv.mjs"]);
   });
 
   it("getPluginSecret 不再零调用者：读侧确实经过它取敏感值（后端被拿掉 → 进 missing）", async () => {
@@ -214,6 +216,28 @@ describe("userConfig 进激活面（§9.5 的三条通道）", () => {
     const r = await readPluginUserConfig({ dir: join(dir, "plugin-data", "cfg"), plugin: "cfg", fields });
     expect(r.missing).toContain("TOKEN");
     expect(await getPluginSecret("cfg", "TOKEN")).toBeNull();
+  });
+
+  // 2026-10-19：插件配置此前只有后端，没有写入入口。快照只给元数据（含 hasValue），
+  // 写入走 setUserConfig，敏感值绝不回传渲染层。
+  it("写入入口：快照不含值；setUserConfig 写入后 hasValue 翻转", async () => {
+    const e = await loadPlugin({ withValue: false });
+    const before = e.snapshot().plugins.find((p) => p.name === "cfg")?.userConfig ?? [];
+    expect(before.map((f) => f.key).sort()).toEqual(["PROFILE", "TOKEN"]);
+    expect(before.find((f) => f.key === "TOKEN")?.sensitive).toBe(true);
+    expect(before.find((f) => f.key === "TOKEN")?.hasValue).toBe(false);
+    expect(JSON.stringify(before)).not.toContain(KEY);
+
+    const r = await e.setUserConfig("cfg", { TOKEN: KEY, PROFILE: "staging" });
+    expect(r.ok, JSON.stringify(r)).toBe(true);
+    const after = e.snapshot().plugins.find((p) => p.name === "cfg")?.userConfig ?? [];
+    expect(after.find((f) => f.key === "TOKEN")?.hasValue).toBe(true);
+    expect(after.find((f) => f.key === "PROFILE")?.hasValue).toBe(true);
+    expect(JSON.stringify(after)).not.toContain(KEY); // 敏感值绝不回传
+
+    const bad = await e.setUserConfig("cfg", { NOPE: "x" });
+    expect(bad.ok).toBe(false);
+    expect(bad.error).toContain("未知配置项");
   });
 });
 
@@ -232,3 +256,5 @@ describe("expandMcpConfig 的覆盖面（远程 server 的 key 在 headers 里�
     expect(out.env?.ROOT).toBe("/pr");
   });
 });
+
+// 2026-10-19：插件配置写入入口的判据放在上面的激活面 describe 内部（复用 loadPlugin）。

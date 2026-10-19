@@ -1,11 +1,12 @@
 // M2b 任务 6+7 验收（prune 执行器 + 类型化规则）：
 // ①预计裁剪未达 20k → 不修剪（too-small，零替换）②最近 2 轮不被剪 ③免剪名单条目不被剪
 // ④被裁原文可从附件目录读回且逐字一致。类型化：code/log/doc 三类 + 摘要 2k 截断。
-import { describe, expect, it, beforeEach } from "vitest";
-import { existsSync } from "node:fs";
-import { mkdtemp, writeFile, readFile, stat } from "node:fs/promises";
+import { describe, expect, it, beforeEach, vi } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir, mkdtemp, writeFile, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { isAbsolute, join, resolve } from "node:path";
 import {
   computePrune,
   writePruneAttachments,
@@ -16,8 +17,10 @@ import {
   DEFAULT_PRUNE_CONFIG,
   PRUNED_PLACEHOLDER,
 } from "../src/agent/prune.js";
-import { classifyPruneStub, hopMapDemo, pruneStubMatrix } from "../scripts/probe-promise-recall";
+import { classifyPruneStub, computePruneArgKeys, hopMapDemo, pruneStubMatrix } from "../scripts/probe-promise-recall";
 import type { AgentEvent } from "../src/events";
+
+const ROOT = resolve(fileURLToPath(import.meta.url), "..", "..");
 import { read_file } from "../src/tools/read_file.js";
 import type { ToolContext } from "../src/tools/base.js";
 
@@ -479,15 +482,27 @@ describe("被裁占位串的三种语义：一格的 0 要能自己说清是哪�
 
   it("探针那一格必须交得出三栏，且三栏彼此可分辨（一栏空转＝分母是假的）", () => {
     // 吃 `pruneStubMatrix` 的结构，不吃我印的那句话：判卷用正则读自己的报告＝读数一改判卷就瞎。
-    const cols = pruneStubMatrix();
+    // 三栏都喂同一份源码：栏一照源码实参跑，栏二/栏三是反事实。少了源码那一栏就退回
+    // "只给 events" 的假设形状——那正是这里要修掉的病根。
+    const src = readFileSync(join(ROOT, "src", "main", "agent-runner.ts"), "utf8");
+    const cols = pruneStubMatrix(src);
     expect(cols.map((c) => c.label), "少一栏就是没量").toEqual([
       "栏一（调用点形状）", "栏二（只给目录）", "栏三（目录在工作区内）",
     ]);
-    expect(cols.map((c) => c.kind), "三栏塌成同一种＝这一格的 0 分不出成因").toEqual([
-      "裸占位", "读不到声明", "带可取路径",
-    ]);
-    expect(cols[0].wrote, "栏一（调用点的真实形状）不该交出任何附件地址").toBe(0);
+    // 分辨力这一格钉的是**差分**，不是某个具体分布。那句承诺要两件事（目录 + 可证明的工作区），
+    // 差分因此长在栏二↔栏三之间：同一条目录，缺 workspace 就得说"读不到"，补上才给地址。
+    // 栏一照源码走 ⇒ 修好调用点之后它与栏三同值（这正是修好的样子），所以这里
+    // **不**钉"栏一必须是裸占位"——那曾把 2026-10-17 的缺陷冻成期望值，也**不**钉"必须三种"。
+    expect(cols[1].kind, "栏二仍须是「读不到声明」：缺可证明工作区时不许给地址").toBe("读不到声明");
+    expect(cols[2].kind, "栏三仍须是「带可取路径」：目录可证明时该给地址").toBe("带可取路径");
+    expect(cols[1].kind, "两栏同值＝这把尺量不出「还缺工作区」那件事").not.toBe(cols[2].kind);
     expect(cols[2].wrote, "栏三交不出地址＝取料坏了，另两栏的对比没有意义").toBeGreaterThan(0);
+    // 栏一必须与源码实参一致（照形状判，不是照我手写的样子）：四个键齐了才该给出可取路径。
+    const keys = computePruneArgKeys(src);
+    expect(keys, "调用点四个实参缺一个 ⇒ 打桩给的出路就缺一半").toEqual(
+      ["events", "attachmentsDir", "sessionId", "workspace"],
+    );
+    expect(cols[0].kind, "实参齐了却仍给裸占位 ⇒ 取料坏了").toBe("带可取路径");
   });
 
   it("反向对照：只补 attachmentsDir 仍拿不到可取路径 ⇒ 那句承诺的修法确有两件事", () => {
@@ -503,11 +518,65 @@ describe("被裁占位串的三种语义：一格的 0 要能自己说清是哪�
   });
 
   it("报告要把三栏都印出来（藏一栏＝读数看着更干净，其实那一格没量）", () => {
-    const v = hopMapDemo();
-    for (const c of pruneStubMatrix()) {
+    // 栏一照源码实参判，所以这里必须把源码喂进去：无参调用会让尺退回"只给 events"，
+    // 于是印出来的是另一种形状的三栏——看着齐全，量的不是生产那一格。
+    const src = readFileSync(join(ROOT, "src", "main", "agent-runner.ts"), "utf8");
+    const v = hopMapDemo(src);
+    for (const c of pruneStubMatrix(src)) {
       expect(v.detail, `缺 ${c.label}：${v.detail}`).toContain(`${c.label}附件=${String(c.wrote)} 条、占位=${c.kind}`);
     }
     // 假话那一半也要印出来：探针判红时结论得跟着红，不许只交三栏数字。
     expect(v.detail).toContain("那句「原文可从附件目录回取」在此刻");
   });
+});
+
+/** M2B 演示通道的 prune 那一栏：打桩里给了「原文已存附件 …可取回」，那个文件就必须真在盘上。
+ *  2026-10-17 之前调用点是 `computePrune({ events })` ⇒ 一个附件都不写，那句话指向空气
+ *  （探针 `hopMapDemo` 的栏一照源码实参量到 `wrote === 0`，判为假承诺）。
+ *
+ *  这一条从**外面**验：真跑一次 runAgent，再拿回执里点名的目录去盘上核。
+ *  空会话里 prune 不触发（语料远小于最小修剪闸）⇒ 判据按"报数了才核路径"写，
+ *  不为了触发它去造 160KB 语料——那样判据就绑在了一个魔法阈值上。 */
+describe("M2B 演示通道：附件路径与落盘一致", () => {
+  it("演示通道一旦报出附件目录，那个目录与文件就真在盘上", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "prune-m2b-demo-"));
+    try {
+      await mkdir(join(dir, ".agent"), { recursive: true });
+      const logPath = join(dir, "run.jsonl");
+      vi.stubEnv("M2B_MAP_DEMO", "1");
+      vi.stubEnv("M0A_PROVIDER", "demo");
+      const { initSettingsStore, setSettings } = await import("../src/main/settings-handlers");
+      initSettingsStore(join(dir, "settings.json"));
+      await setSettings({ autoMemory: false, autoVerify: false, subagentTools: false, safeMode: "off" });
+      const { runAgent } = await import("../src/main/agent-runner");
+      // ⚠️ 这一格**不**验落盘：runAgent 这条路造不出够大的语料（read_file 的 tool_result 有
+      // 32KB 输出帽，够不到 40k token 的保护区 + 20k 的最小修剪闸），实测多轮也仍是 `none`。
+      // 落盘由 `hopMapDemo` 那一支量（栏一照源码实参跑，读到 4 条附件路径）。这里守的是
+      // **形状**：一旦报数就必须给目录，且绝不许回到"只说可取回不给路径"那句旧假承诺。
+      await runAgent({ workspace: dir, logPath, message: "demo", mode: "default" });
+
+      const { replay } = await import("../src/events");
+      const events = await replay(logPath);
+      const body = events
+        .filter((e) => e.type === "tool_result" && e.callId === "m2b-map-demo")
+        .map((e) => (e as { output: string }).output)
+        .join("\n");
+      expect(body, "演示通道没跑起来（这条判据会空转）").toContain("[prune] ");
+      const dirMentioned = /原文已存附件 (\S+?)，/u.exec(body)?.[1] ?? "";
+      if (dirMentioned === "") {
+        // 没触发裁剪：这一趟核不了落盘，但也不许出现"只报数不给路径"那句旧的假承诺形状
+        expect(body, "说了可取回却没给目录 ⇒ 又一处指向空气").not.toContain("原文可从附件目录回取");
+        return;
+      }
+      const attachmentsDir = isAbsolute(dirMentioned) ? dirMentioned : join(dir, dirMentioned);
+      expect(existsSync(attachmentsDir), `回执点了这个目录，盘上却没有：${attachmentsDir}`).toBe(true);
+      const files = await readdir(attachmentsDir);
+      expect(files.length, "目录在但没有文件 ⇒ 只报数没落盘").toBeGreaterThan(0);
+      // 目录必须与事件日志同级（同生命周期：删会话目录即一起清掉）
+      expect(resolve(attachmentsDir), "附件目录要与日志同级，否则清理面对不上").toBe(resolve(join(dir, "prune-attachments")));
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 120_000);
 });

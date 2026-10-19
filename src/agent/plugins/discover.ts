@@ -51,6 +51,7 @@ async function scanScopeRoot(
         // bounded 位随查询一起传给信任库，编进条目键（abs@fp+b）：批准一次即对该形态生效，
         // 内容有界/无界形态互换或指纹变化都自然不命中 = 重新出卡。
         const { fp, bounded } = await pluginFingerprintEx(abs);
+        if (bounded) warnings.push({ plugin: name, message: "内容指纹不完整（含软链 / 超出上限 / 有文件读不出）⇒ 不可批准（fail-closed）；请改成普通文件布局" });
         plugins.push(await loadContainer(abs, scope, trustOf(abs, fp, bounded)));
       } catch (err) {
         // 单插件失败隔离：坏 manifest 只影响自身
@@ -62,6 +63,7 @@ async function scanScopeRoot(
       // 清单直进 system prompt = 注入面，克隆仓库放一个 SKILL.md 不许免审批；免信任只保留给
       // 显式 looseRoots 与用户级安装（两处的 trustOf 恒 trusted）。
       const { fp, bounded } = await pluginFingerprintEx(abs);
+      if (bounded) warnings.push({ plugin: name, message: "内容指纹不完整（含软链 / 超出上限 / 有文件读不出）⇒ 不可批准（fail-closed）" });
       const entry = await loadSkillEntry(null, name, abs);
       if (entry) loose.push({ name, root: abs, entry, trust: trustOf(abs, fp, bounded), scope });
     }

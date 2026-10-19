@@ -37,6 +37,60 @@ export const REPEAT_ACTION_MIN = 2;
 /** 正文里摘录原文的字节上限（记忆会被回注，摘录太长就把预算吃光）。 */
 const EXCERPT_LIMIT = 400;
 
+/** 审批门没让过的四种 gate 结局（`GATE_VERDICTS` 里与"问过没成"相关的那几条）。
+ *  **为什么按 gate 判而不去匹配文案**：这三种失败里工具**一个字节都没执行**，
+ *  把它们与"执行了但报错"混在同一族计数，得出的结论会是「这个工具在这个项目里用不了」——
+ *  而真因可能只是 60 秒内没人点那张审批卡。文案是可变量（`askDenialText` 已经改过一次措辞），
+ *  gate.verdict 是事件流里早就落下的结构列，判它才是判事实。 */
+const ASK_DENIED_VERDICTS: ReadonlySet<string> = new Set(["rejected", "timeout", "unattended"]);
+
+/** 一次 tool_result 是"审批门没让过"（而不是"工具自己跑挂了"）？
+ *  只认 `blockedBy === "permission"` 或 gate.verdict 属那一族——两者任一都说明没进执行面。 */
+export function isAskDeniedResult(e: ToolResultEvent): boolean {
+  if (e.blockedBy === "permission") return true;
+  const v = e.gate?.verdict;
+  return typeof v === "string" && ASK_DENIED_VERDICTS.has(v);
+}
+
+/** 连败的两种成因——**结论完全不同**，所以从源头就分开装袋，不落在同一族里再筛。
+ *  · executed：工具真的跑了、真的报错 ⇒ 「同一手法连续失败，先换做法」成立；
+ *  · notExecuted：被审批门拦下（拒绝/超时/无人值守）⇒ 工具没有执行过，
+ *    此时写「同一手法连续失败」是错的结论，正确的是「授权状态没变化，等审批或换路径」。 */
+export interface ToolFailureSplit {
+  executed: Map<string, { callIds: string[]; outs: string[] }>;
+  notExecuted: Map<string, { callIds: string[]; verdicts: string[] }>;
+}
+
+/** 把一次失败轨迹按"执行过没有"分成两族（纯函数）。 */
+export function splitToolFailures(
+  events: readonly AgentEvent[],
+  callName: ReadonlyMap<string, string>,
+  skip: (callId: string) => boolean,
+): ToolFailureSplit {
+  const executed: ToolFailureSplit["executed"] = new Map();
+  const notExecuted: ToolFailureSplit["notExecuted"] = new Map();
+  for (const e of events as readonly ToolResultEvent[]) {
+    if (e.type !== "tool_result" || e.ok) continue;
+    // worker 子流与主会话共用 callId 空间：不带归属地沉淀会把子 agent 的偶发失败记成项目级教训。
+    if (typeof (e as { agent_id?: unknown }).agent_id === "string") continue;
+    if (typeof e.callId !== "string" || e.callId === "") continue;
+    if (skip(e.callId)) continue;
+    const name = callName.get(e.callId);
+    if (name === undefined) continue; // 无归属的 tool_result ⇒ 无证据指针 ⇒ 不产出
+    if (isAskDeniedResult(e)) {
+      const g = notExecuted.get(name) ?? { callIds: [], verdicts: [] };
+      g.callIds.push(e.callId);
+      g.verdicts.push(e.gate?.verdict ?? "permission");
+      notExecuted.set(name, g);
+      continue;
+    }
+    const g = executed.get(name) ?? { callIds: [], outs: [] };
+    g.callIds.push(e.callId);
+    if (g.outs.length < 2) g.outs.push(excerpt(e.output));
+    executed.set(name, g);
+  }
+  return { executed, notExecuted };
+}
 /** 验证拍的工具名。`tool_result` 事件不带工具名（只有 callId），verify 这一路是例外：
  *  `loop.ts` 的 verify 拍是 harness 自己发的反射，没有配套 `tool_call` 事件，
  *  所以下面查表查不到 —— 这一串是代码里唯一的那个名字，不另造一份表（避免"第二个事实源"）。 */
@@ -108,6 +162,10 @@ export function distillLessons(events: AgentEvent[], logPath: string): Lesson[] 
   const session = sessionOf(logPath);
   if (session === "") return [];
 
+  // worker 子流的 tool_call/tool_result/verify_result 与主会话落在同一份 JSONL（带 agent_id）：
+  // 不排除就会把「子 agent 这次没写成」沉淀成「这个项目里 write_file 连败」并跨会话注入。
+  events = events.filter((e) => typeof (e as { agent_id?: unknown }).agent_id !== "string");
+
   const out: Lesson[] = [];
 
   // 先扫一遍 tool_call 建 callId→工具名 的表：`tool_result` 事件**不带工具名**（只有 callId），
@@ -154,23 +212,11 @@ export function distillLessons(events: AgentEvent[], logPath: string): Lesson[] 
   }
 
   // ---- 来源②：同一工具连败 ≥ TOOL_STREAK_MIN 次 ----
-  const failsByTool = new Map<string, { callIds: string[]; outs: string[] }>();
-  for (const e of events as ToolResultEvent[]) {
-    if (e.type !== "tool_result" || e.ok) continue;
-    if (typeof e.callId !== "string" || e.callId === "") continue;
-    // verify 自己那几声 tool_result 回声不算"工具失败"：它就是上面①那条拍的回注，同一个 callId
-    // 会被数多次，把一次验证红说成"verify 连败三次"。blockedBy 也排除（压根没执行的失败
-    // 与执行后失败不是同一件事）。两条都是**同一路过滤**，不是事后补救。
-    if (verifyCallIds.has(e.callId)) continue;
-    if (e.blockedBy !== undefined) continue;
-    const name = callName.get(e.callId);
-    if (name === undefined) continue; // 无归属的 tool_result ⇒ 无证据指针 ⇒ 不产出
-    const g = failsByTool.get(name) ?? { callIds: [], outs: [] };
-    g.callIds.push(e.callId);
-    if (g.outs.length < 2) g.outs.push(excerpt(e.output));
-    failsByTool.set(name, g);
-  }
-  for (const [name, g] of [...failsByTool.entries()].sort((a, b) => b[1].callIds.length - a[1].callIds.length)) {
+  // verify 自己那几声 tool_result 回声不算"工具失败"：它就是上面①那条拍的回注，同一个 callId
+  // 会被数多次，把一次验证红说成"verify 连败三次"。
+  const skipFail = (callId: string): boolean => verifyCallIds.has(callId);
+  const fails = splitToolFailures(events, callName, skipFail);
+  for (const [name, g] of [...fails.executed.entries()].sort((a, b) => b[1].callIds.length - a[1].callIds.length)) {
     if (g.callIds.length < TOOL_STREAK_MIN) continue;
     const evidence: LessonEvidence[] = g.callIds.map((c) => ({ session, callId: c, kind: "tool-streak" }));
     out.push({
@@ -181,8 +227,32 @@ export function distillLessons(events: AgentEvent[], logPath: string): Lesson[] 
       evidence,
     });
   }
+  // 来源②b：审批门连续没让过。**单独一条 topic、单独一句结论**：工具没有执行过，
+  // 所以「换做法」是错的下一步，正确的是等授权状态变化。实测（2026-10-16）：两次 write_file
+  // 审批等待超时被旧逻辑写成「write_file 连败 2 次」，模型据此推出「auto 档默认禁止写文件」，
+  // 再把这条写进项目记忆——一次超时从此变成永久能力限制，还在记忆里点名了一个不存在的档位。
+  for (const [name, g] of [...fails.notExecuted.entries()].sort((a, b) => b[1].callIds.length - a[1].callIds.length)) {
+    if (g.callIds.length < TOOL_STREAK_MIN) continue;
+    const evidence: LessonEvidence[] = g.callIds.map((c) => ({ session, callId: c, kind: "tool-streak" }));
+    const mix = [...new Set(g.verdicts)].join("/");
+    out.push({
+      topic: "lesson-ask-denied-" + name,
+      body: bodyFor(
+        "「" + name + "」连续 " + String(g.callIds.length) + " 次**没有执行**（审批门未放行：" + mix + "）"
+        + "——这不是工具失败：先等审批/调整档位，或换合规路径；不要据此得出「此档位不能用这个工具」",
+        [], evidence, session),
+      evidence,
+    });
+  }
 
   // ---- 来源③：同一 (工具, 参数) 重复调用 ≥ REPEAT_ACTION_MIN 次 ----
+  /** 成功执行过的 callId（来自 tool_result.ok=true）。**只由执行面写**：审批门放行后工具
+   *  真的跑了并回报成功才算。用它排除"重复但后来成功了"的那一支，见下面那处 continue。 */
+  const succeededCallIds = new Set<string>();
+  for (const e of events as readonly ToolResultEvent[]) {
+    if (e.type !== "tool_result" || !e.ok) continue;
+    if (typeof e.callId === "string" && e.callId !== "") succeededCallIds.add(e.callId);
+  }
   // 只看**工具名+参数逐字相同**的那些；换个参数不算（那是正常推进，见 tool-choice.test.ts 的同档判断）。
   //
   // 为什么**只要写向工具**（实测 2026-10-01，不是拍的）：对 tracked 的 20 份日志跑离线提炼，
@@ -207,12 +277,17 @@ export function distillLessons(events: AgentEvent[], logPath: string): Lesson[] 
   const repeats = [...bySig.values()].filter((g) => g.ids.length >= REPEAT_ACTION_MIN);
   repeats.sort((a, b) => b.ids.length - a.ids.length);
   for (const [i, g] of repeats.entries()) {
+    // 后来成功过的那一支不进教训（2026-10-16 读数修的错结论）：同一次轨迹里
+    // write_file 被调三次，前两次因审批超时没执行、第三次成功落盘。旧逻辑把三次一起数成
+    // 「同样的输入同样的结果」——实际上授权状态变过、动作也推进了。这句话会让下一轮
+    // 相信「重发同一个调用是没用的」，而事实恰好相反。
+    if (g.ids.some((id) => succeededCallIds.has(id))) continue;
     const evidence: LessonEvidence[] = g.ids.map((c) => ({ session, callId: c, kind: "repeat-action" }));
     out.push({
       topic: "lesson-repeat-action-" + String(i + 1),
       body: bodyFor(
         "「" + g.name + "」用**完全相同的参数**调了 " + String(g.ids.length)
-        + " 次——同样的输入同样的结果，确认它能推进再调第三次",
+        + " 次且没有一次成功——同样的输入不会有新结果，确认它能推进再调第三次",
         [], evidence, session),
       evidence,
     });

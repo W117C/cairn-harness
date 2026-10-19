@@ -1,6 +1,7 @@
 import { lstat, readlink, realpath } from "node:fs/promises";
 import type { Stats } from "node:fs";
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
+import { frozenJudgePathSet } from "../frozen";
 import type { AgentEvent, ClarifyAnswerMap, HarnessHoldReason, ImpactReportEvent } from "../events";
 
 /** 工具可预期失败的统一错误类型：loop 捕获后转成 ok:false 的 tool_result。 */
@@ -47,6 +48,19 @@ export interface ToolContext {
 export interface ToolResult {
   ok: boolean;
   output: string;
+  /** 交付给**用户**看的产物引用（图片进模型上下文之外的另一条链路）。
+   *
+   *  为什么需要它（2026-10-16 读数）：识图的图只进 `images`（内存 -> 下一轮请求），落盘的
+   *  `tool_result` 只留文字 => 桌面端聊天里永远看不到 agent 刚渲染的那张图，用户得自己去仓库里翻。
+   *  与此同时"图已经贴在上面了"这类话成了没有凭据的宣称——交付面与声称面对不上。
+   *
+   *  只放**引用**（workspace 相对路径 + 用途），不放 base64：事件流是重放契约，图片字节
+   *  进去会让会话文件大一个量级（同 `images` 不进日志的那条纪律）。渲染层拿引用自己决定
+   *  怎么显示（缩略图 / 打开预览 / 下载）。
+   *
+   *  `kind` 决定前端给什么入口：image = 一张图；html/svg = 可预览的页面；text = 源码/报告。
+   *  缺席 = 这次调用没有要交付给用户的产物（绝大多数调用）。 */
+  artifact?: { kind: "image" | "html" | "svg" | "text"; path: string; note?: string };
   /** 多模态内容块（识图）：工具把一张图片读进来时，真正的图像数据走这个字段，
     而不是塞进 `output` 字符串——base64 进 output 会被 output-ring 截断，
    *  而且「几千字符的 base64」会把这一轮 tool_result 的文本面撑到没法读。
@@ -57,6 +71,8 @@ export interface ToolResult {
   snapshotId?: string;
   /** 写工具的结构化变更类型；缺席时事件消费者必须显示 unknown，不能从工具名猜。 */
   change?: "created" | "modified";
+  /** 一次工具实际落盘的 workspace 相对路径（多文件工具使用）；缺席表示工具未提供清单。 */
+  changedPaths?: string[];
   /** 进程退出码；被超时强杀 / 根本没起来 = null。此前只有 `ok` 与拼进 output 的那句
    *  `[exit code: N]` 活到收束处，**结构化信号在 settle 时被丢掉** ⇒ 任何想区分"工具链没装（127）"
    *  与"你的测试挂了"的读者只能去匹配文案。verify 归因需要它，所以在这里补回来。 */
@@ -180,7 +196,8 @@ export async function assertRealContainment(workspace: string, abs: string, labe
 // .agent/ 是系统区（审查 C-11：permissions.json 跨会话提权 / lsp.json 任意 command RCE 面 / plugins / memory）。
 // 记忆走 remember 专用通道、配置由用户维护——内容工具对整个 .agent/ 子树一律拒写。
 export function assertNotAgentArea(rel: string, label: string): void {
-  if (typeof rel === "string" && rel.split(/[\\/]/).includes(".agent")) {
+  // 大小写不敏感：macOS 默认 APFS 不区分大小写，`.AGENT/permissions.json` 与 `.agent/…` 是同一个文件。
+  if (typeof rel === "string" && rel.split(/[\\/]/).some((seg) => seg.toLowerCase() === ".agent")) {
     throw new ToolError(`${label}: .agent/ 是系统区（权限/记忆/插件配置），禁止经内容工具写入: ${rel}`);
   }
 }
@@ -192,8 +209,73 @@ export async function assertNotAgentAreaReal(workspace: string, abs: string, lab
   const wsReal = await realpath(workspace).catch(() => null);
   if (wsReal === null) return; // workspace 不可解析时由 assertRealContainment 拒绝（职责不在本闸）
   const relReal = relative(wsReal, await resolveDeepest(abs, label));
-  if (relReal.split(/[\\/]/).includes(".agent")) {
+  if (relReal.split(/[\\/]/).some((seg) => seg.toLowerCase() === ".agent")) {
     throw new ToolError(`${label}: .agent/ 是系统区——路径经软链解析后写入落点在 .agent/ 内（${relReal}），已拒绝: ${abs}`);
+  }
+}
+
+/** 写盘落点：目标若是软链，写到它指向的真实路径（同内核语义）。
+ *  原子写（temp + rename）会**替换软链本身**而不是写穿它——path-boundary 的「悬空软链指向界内
+ *  不存在路径」用例就是这样回归的（写完后 link 变成普通文件、目标仍不存在）。 */
+export async function resolveWriteTarget(workspace: string, abs: string, label: string): Promise<string> {
+  const st = await lstatOrNull(abs);
+  if (st === null || !st.isSymbolicLink()) return abs;
+  const landed = await resolveDeepest(abs, label);
+  await assertRealContainment(workspace, landed, label);
+  return landed;
+}
+
+/** 敏感落点（与 permissions/risk.ts 的 SENSITIVE_PATH_SEGMENTS 同一张表）的**真实路径**复查：
+ *  权限层是纯字符串匹配，工作区内软链 `docs/hooks -> .git/hooks` 的 rel 里没有敏感片段，
+ *  于是 guided/auto 下写 pre-commit 免批。软链落点仍在 workspace 内 ⇒ containment 闸放行。 */
+const SENSITIVE_REAL_SEGMENTS: readonly string[] = [
+  ".git/hooks/", ".git/config", ".npmrc", ".netrc", ".env", ".git-credentials",
+  "id_rsa", "id_ed25519", "authorized_keys",
+];
+export async function assertNotSensitivePathReal(workspace: string, abs: string, label: string): Promise<void> {
+  const wsReal = await realpath(workspace).catch(() => null);
+  if (wsReal === null) return; // 由 assertRealContainment 拒绝
+  const relReal = relative(wsReal, await resolveDeepest(abs, label)).split(sep).join("/");
+  // 只在「软链把落点搬进了敏感面」时硬拒：词法路径本身命中敏感片段的调用交给权限层
+  // （那里是 L4 high → 审批卡，用户可批准合法写 `.env`）。这样既堵别名绕过，又不越权改语义。
+  const relLexical = relative(resolve(workspace), abs).split(sep).join("/");
+  const caseInsensitive = process.platform === "darwin" || process.platform === "win32";
+  const norm = (s: string): string => (caseInsensitive ? s.toLowerCase() : s);
+  const hitIn = (relRaw: string): string | null => {
+    const rel = norm(relRaw);
+    const hay = "/" + rel;
+    for (const segRaw of SENSITIVE_REAL_SEGMENTS) {
+      const seg = norm(segRaw);
+      if (seg.includes("/") ? hay.includes(seg) : rel.split("/").includes(seg)) return segRaw;
+    }
+    return null;
+  };
+  const realHit = hitIn(relReal);
+  if (realHit !== null && hitIn(relLexical) === null) {
+    throw new ToolError(`${label}: 敏感路径（经软链解析后的真实落点 ${relReal} 命中 ${realHit}）：持久化执行面/凭证面，内容工具拒绝写入`);
+  }
+}
+
+/** 判卷面冻结闸的**落点**复查：权限层 L0 是纯函数（只能做词法归一），工作区内软链
+ *  `alias.ts -> tests/todo.test.ts` 的 rel 里没有冻结路径 ⇒ 会放行。这里沿真实落点复查一次，
+ *  与 `.agent` 的软链闸同形。macOS/Win 大小写不敏感，键比较也随之归一。 */
+export async function assertNotFrozenReal(workspace: string, abs: string, label: string): Promise<void> {
+  const frozen = frozenJudgePathSet(workspace);
+  if (frozen.size === 0) return;
+  const wsReal = await realpath(workspace).catch(() => null);
+  if (wsReal === null) return; // 无法解析由 assertRealContainment 拒绝（职责不在本闸）
+  const relReal = relative(wsReal, await resolveDeepest(abs, label)).split(sep).join("/");
+  const caseInsensitive = process.platform === "darwin" || process.platform === "win32";
+  const lower = relReal.toLowerCase();
+  let hit: string | null = null;
+  for (const key of frozen) {
+    if (key === relReal || (caseInsensitive && key.toLowerCase() === lower)) { hit = key; break; }
+  }
+  if (hit !== null) {
+    throw new ToolError(
+      `${label}: 判卷文件冻结：${hit}（真实落点 ${relReal}；sha256 基线在 scripts/frozen-sha256.json）` +
+      "——判据有缺陷请写 BLOCKED.md 要求换判据，不许改代码去绕",
+    );
   }
 }
 

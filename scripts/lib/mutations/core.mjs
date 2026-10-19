@@ -38,8 +38,8 @@ export const MUTATIONS = [
     test: "tests/secrets.test.ts",
     desc: "去掉 rename：tmp 写完不落定（崩溃即丢密文）",
     apply: (s) => s.replace(
-      '    await writeFile(tmp, text, "utf8");\n    await rename(tmp, path);',
-      '    await writeFile(tmp, text, "utf8");',
+      '    await writeFile(tmp, text, "utf8");\n    if (opts.mode !== undefined) await chmod(tmp, opts.mode).catch(() => undefined);\n    await rename(tmp, path);',
+      '    await writeFile(tmp, text, "utf8");\n    if (opts.mode !== undefined) await chmod(tmp, opts.mode).catch(() => undefined);',
     ),
     expectFail: "原子写：经 tmp→rename 落盘，成功后无 .tmp 残留",
   },
@@ -49,7 +49,7 @@ export const MUTATIONS = [
     test: "tests/secrets.test.ts",
     desc: "tmp+rename 退回裸 writeFile（写中途崩溃截断密文存储）",
     apply: (s) => s.replace(
-      '    await writeFile(tmp, text, "utf8");\n    await rename(tmp, path);',
+      '    await writeFile(tmp, text, "utf8");\n    if (opts.mode !== undefined) await chmod(tmp, opts.mode).catch(() => undefined);\n    await rename(tmp, path);',
       '    await writeFile(path, text, "utf8");',
     ),
     expectFail: "原子写：经 tmp→rename 落盘，成功后无 .tmp 残留",
@@ -432,7 +432,7 @@ export const MUTATIONS = [
     src: "src/permissions/plan-state.ts",
     test: "tests/plan-required.test.ts",
     desc: "模型交方案时把 required 一并抹掉 ⇒ 用户的闸能被模型的自愿动作解除",
-    apply: (s) => s.replace('setPlanState({ ...currentPlanState(), proposed: true, approved: false });', 'setPlanState({ required: false, proposed: true, approved: false });'),
+    apply: (s) => s.replace("  // 保留 required：武装态下模型提交方案不该顺手把用户那道闸关掉。\n  setPlanState({ ...currentPlanState(), proposed: true, approved: false });", "  // 保留 required：武装态下模型提交方案不该顺手把用户那道闸关掉。\n  setPlanState({ required: false, proposed: true, approved: false });"),
     expectFail: "模型自己提交方案不得顺手把用户的闸关掉（required 在 markPlanProposed 后保留）",
   },
   {
@@ -492,7 +492,7 @@ export const MUTATIONS = [
     src: "src/providers/stop-reason.ts",
     test: "tests/turn-truncated.test.ts",
     desc: "真值判断代替 != null ⇒ output_tokens=0 被折成「provider 没上报」（0 也是读数）",
-    apply: (s) => s.replace('...(tokens !== null ? { output_tokens: tokens } : {}),', '...(tokens ? { output_tokens: tokens } : {}),'),
+    apply: (s) => s.replace("    stop_reason: raw.trim(),\n    ...(tokens !== null ? { output_tokens: tokens } : {}),", "    stop_reason: raw.trim(),\n    ...(tokens ? { output_tokens: tokens } : {}),"),
     expectFail: "output_tokens：0 要如实留（0 也是读数），null/undefined 才不落字段",
   },
   // ---- 第 471 页：第三种收尾证据（流结束而一个停止原因都没上报）。四枚针各钉一跳：

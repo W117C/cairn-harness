@@ -1,8 +1,10 @@
 // M2d 会话结束自动沉淀（§8.1.4 双轨触发②）：hook 提示模型按四类型检查本轮是否有值得沉淀项，
 // 模型自行调 remember 或判无。写入即事件：remember 的 tool_call/tool_result 照常落事件流（审计），
 // 沉淀指令只在 provider 调用时以 user 角色出现，不落 user_message 事件（不污染固定回注名单）。
-// 合并审批：整个沉淀轮只发一次审批请求——批准 = 本轮全部 remember 写入放行，拒绝 = 全部不写
-//（防审批疲劳，§10.4 scope 机制复用）。「调用失败」与「无内容可沉淀」显式分型（mem0 main.py:963-969）。
+// 分层审批（2026-10-15 第十一遍业主裁决，取代原「整轮合并审批」）：**项目层免批直写**
+// （只影响当前项目、写入即事件可见、记忆面板可删）；**全局层跨项目回注 ⇒ 一轮至多一张合并审批卡**
+// （批准 = 本轮全部全局写入放行，拒绝 = 本轮全局写入不写、项目层不受影响）。
+//「调用失败」与「无内容可沉淀」显式分型（mem0 main.py:963-969）。
 import { isEnvVerifyCause, replay, type AgentEvent } from "../../events";
 import { projectContext } from "../context";
 import type { Provider, ProviderMessage } from "../../providers";
@@ -23,16 +25,20 @@ export const DISTILL_INSTRUCTION = [
   "5. 没有值得沉淀的内容就只回答「无」三个字，不要调用工具。",
 ].join("\n");
 
-/** 沉淀轮三类结局的判定留痕（层名单列 `X-distill`：这些判定不在 `evaluate` 里发生）。
+/** 沉淀轮四类结局的判定留痕（层名单列 `X-distill`：这些判定不在 `evaluate` 里发生）。
  *  缺 `mode` 是刻意的（见 `GateMeta.mode` 注释）：这一轮不受档位机管辖，编一个档位会把它的量
- *  算进那一档的免批率。**三类不塌成一格**是这条表存在的全部理由——
- *  `denied` = 白名单挡下（没问过人），`rejected` = 问过人且人说不，`approved` = 问过人且人说行。
- *  前两者在 §7 的可标语料里是不同侧：借成一格就把最稀缺的正例读没了。 */
-export type DistillGateKind = "whitelist" | "unapproved" | "approved";
+ *  算进那一档的免批率。**四类不塌成一格**是这条表存在的全部理由——
+ *  `denied` = 白名单挡下（没问过人），`rejected` = 问过人且人说不，`approved` = 问过人且人说行，
+ *  `auto-approved` = 项目层分层免批（第十一遍裁决；没问过人，也不是门拦的）。
+ *  前三者在 §7 的可标语料里是不同的侧：借成一格就把最稀缺的正例读没了；
+ *  `auto-approved` 必须与 `approved` 分开——否则免批写入会被读成「人答过行」，
+ *  污染 `humanAnswered`（scripts/replay/gate-outcomes.ts 按 verdict 分词）。 */
+export type DistillGateKind = "whitelist" | "unapproved" | "approved" | "auto";
 export const DISTILL_GATE: Record<DistillGateKind, Pick<GateMeta, "layer" | "verdict">> = {
   whitelist: { layer: "X-distill", verdict: "denied" },
   unapproved: { layer: "X-distill", verdict: "rejected" },
   approved: { layer: "X-distill", verdict: "approved" },
+  auto: { layer: "X-distill", verdict: "auto-approved" },
 };
 
 export type DistillOutcome =
@@ -64,10 +70,11 @@ export interface DistillOptions {
    *  前缀缓存按前缀匹配，追加在尾部不动前面任何一段——沉淀轮能拿到 98.8% 命中就是靠这个。 */
   providerFor?: (instruction: string) => Provider;
   signal?: AbortSignal;
-  /** 未加门的 remember 工具（合并审批本身就是本轮的权限门）。 */
+  /** 未加门的 remember 工具（项目层免批 / 全局层合并审批，即本轮的权限门——见 mergedApproval）。 */
   rememberTool: Tool;
   emit: (e: AgentEvent) => Promise<void>;
-  /** 合并审批口：整个沉淀轮只应请求一次；返回是否批准。缺省 = fail-closed 拒绝。 */
+  /** 全局层合并审批口：整轮**全局**写入只请求一次；项目层不经过它（免批直写）。
+   *  缺省 = 全局层 fail-closed 拒绝（项目层照写）。 */
   mergedApproval?: () => Promise<boolean>;
 }
 
@@ -153,8 +160,10 @@ export async function writeLessons(opts: {
   workspace: string;
   emit: (e: AgentEvent) => Promise<void>;
   nowISO?: string;
+  signal?: AbortSignal;
 }): Promise<LessonWriteResult> {
   const out: LessonWriteResult = { written: [], failed: [] };
+  if (opts.signal?.aborted) return out;
   let lessons;
   try {
     lessons = distillLessons(opts.events, opts.logPath);
@@ -166,6 +175,7 @@ export async function writeLessons(opts: {
   }
   const dir = projectMemoryDir(opts.workspace);
   for (const l of lessons) {
+    if (opts.signal?.aborted) break;
     try {
       await writeTopic(dir, l.topic, LESSON_MEMORY_TYPE, l.body, opts.nowISO ?? new Date().toISOString());
       out.written.push(l.topic);
@@ -183,8 +193,15 @@ export async function writeLessons(opts: {
   return out;
 }
 
+function cancelledDistillOutcome(signal: AbortSignal): DistillOutcome {
+  const reason: unknown = signal.reason;
+  return { kind: "failed", why: reason instanceof Error ? reason.message : String(reason) };
+}
+
 export async function runSessionEndDistill(opts: DistillOptions): Promise<DistillOutcome> {
   if (!opts.enabled) return { kind: "disabled" };
+  // 模型之前还有确定性的记忆/草稿写入；取消检查必须覆盖这些副作用。
+  if (opts.signal?.aborted) return cancelledDistillOutcome(opts.signal);
   let events: Awaited<ReturnType<typeof replay>>;
   try {
     events = await replay(opts.logPath);
@@ -194,6 +211,7 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
     // 也必须在调模型之前退出——读不到历史时烧一次沉淀调用没有意义。
     return { kind: "failed", why: "读会话日志失败: " + (err instanceof Error ? err.message : String(err)) };
   }
+  if (opts.signal?.aborted) return cancelledDistillOutcome(opts.signal);
   if (events.length === 0) return { kind: "no_content" }; // 会话确实为空：合法终态，不是失败
   // 失败轨迹引导（能力 6/10）：把失败聚成显式证据并入指令——回放本身不含注意力引导，
   // 模型不会自动盯着失败看；无失败时 digest 为空串，指令逐字不变（零行为回归）。
@@ -201,7 +219,8 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
   /* M6 教训落盘：放在调 provider **之前**——此刻事件已在手，写入不依赖任何模型判断，
      正是「不许凭空总结」要的那一支。放在之后的话，一轮 provider 异常（failed 结局）就会
      把已经算好的证据一起带走。失败不改变下面的结局（见 writeLessons 的取舍注释）。 */
-  await writeLessons({ events, logPath: opts.logPath, workspace: opts.workspace, emit: opts.emit });
+  await writeLessons({ events, logPath: opts.logPath, workspace: opts.workspace, emit: opts.emit, signal: opts.signal });
+  if (opts.signal?.aborted) return cancelledDistillOutcome(opts.signal);
   /* 能力 10 的另一半（2026-10-05 接通）：失败轨迹 ⇒ 靶场草稿。此前 `renderDraft` 只有手工 CLI
      （`scripts/gym-draft.ts`，缺省 dry run + 要 `--apply`）会调，判卷/bench 跑完一片红而
      `fixtures/gym/drafts/` 恒为 0 条。放在 `writeLessons` 同一格：同样**不经模型**的确定性落盘，
@@ -217,6 +236,7 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
   } catch (err) {
     await opts.emit({ type: "tool_result", callId: "", ok: false, output: "[gym] 失败轨迹草稿异常: " + (err instanceof Error ? err.message : String(err)) });
   }
+  if (opts.signal?.aborted) return cancelledDistillOutcome(opts.signal);
   const instruction = digest.length > 0 ? digest + "\n\n" + DISTILL_INSTRUCTION : DISTILL_INSTRUCTION;
   /* 真 session provider 以事件日志为唯一事实源（`stream(_messages,_tools)` 明确忽略入参），
    * 所以「只在内存塞一条指令」是发不出去的——那正是本模块长期存在的缺口（见 DistillOptions
@@ -230,48 +250,74 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
   let asks = 0;
   let writes = 0;
   let sawRemember = false;
-  let approval: boolean | null = null;
+  /** 全局层合并审批缓存：整轮全局写入只问一次（防审批疲劳）；项目层不经过审批（分层免批）。 */
+  let globalApproval: boolean | null = null;
   const ctx: ToolContext = { workspace: opts.workspace, signal: opts.signal };
   try {
     opts.signal?.throwIfAborted();
     for await (const out of provider.stream(messages, [], { signal: opts.signal })) {
-      opts.signal?.throwIfAborted();
       // 2026-10-07 用户实测：沉淀轮的**正文**原来原样进了主流 —— 模型按指令回一句「无」，
       // 于是每轮回答后面都多挂一条「无」，看起来像模型突然说了句莫名其妙的话。
       // 这一轮是**收尾记账**（指令经 ephemeralUserTurn 进请求，本身不进日志），不是答给用户的话：
       //   · usage 照旧 emit —— 花掉的 token 必须记账（token 面板 / 成本闸都读它）；
       //   · 正文不再 emit —— 它真正有内容的产物是 remember 调用（下面照旧 emit，走审批）。
       if (out.type === "usage") {
+        // 已收到的用量先记账；取消后随即关闭流，不再拉取下一笔输出。
         await opts.emit(out as AgentEvent);
+        opts.signal?.throwIfAborted();
         continue;
       }
+      opts.signal?.throwIfAborted();
       if (out.type === "assistant_delta" || out.type === "assistant_message") {
         continue;
       }
       if (out.type !== "tool_call") continue;
       if (out.name !== "remember") {
         await opts.emit({ type: "tool_result", callId: out.id, ok: false, output: "[distill] 沉淀轮只允许 remember 工具，" + out.name + " 已拒绝", gate: DISTILL_GATE.whitelist });
+        opts.signal?.throwIfAborted();
         continue;
       }
       sawRemember = true;
       await opts.emit({ type: "tool_call", id: out.id, name: out.name, args: out.args });
-      if (approval === null) {
-        asks += 1;
-        approval = opts.mergedApproval ? await opts.mergedApproval() : false;
+      // 分层（第十一遍裁决）：项目层免批直写；全局层过合并审批（ask 缓存，一轮至多一张卡）。
+      const isGlobal = out.args.scope === "global";
+      let approved = true;
+      let gate: Pick<GateMeta, "layer" | "verdict"> | undefined = isGlobal ? undefined : DISTILL_GATE.auto;
+      try {
+        if (isGlobal) {
+          if (globalApproval === null) {
+            opts.signal?.throwIfAborted();
+            asks += 1;
+            globalApproval = opts.mergedApproval ? await opts.mergedApproval() : false;
+          }
+          approved = globalApproval;
+          gate = approved ? DISTILL_GATE.approved : DISTILL_GATE.unapproved;
+        }
+        opts.signal?.throwIfAborted();
+      } catch (err) {
+        // 调用已经落盘；取消或审批异常也必须有配对回执，未知的审批状态不盖章。
+        const why = err instanceof Error ? err.message : String(err);
+        const prefix = opts.signal?.aborted ? "[cancelled]" : "[distill]";
+        await opts.emit({ type: "tool_result", callId: out.id, ok: false, output: prefix + " remember 没有执行: " + why, ...(gate ? { gate } : {}) });
+        throw err;
       }
-      opts.signal?.throwIfAborted();
-      if (!approval) {
-        await opts.emit({ type: "tool_result", callId: out.id, ok: false, output: "[permission denied] remember 会话结束自动沉淀未获批准（合并审批一次，本轮全部拒绝）", gate: DISTILL_GATE.unapproved });
+      if (!approved) {
+        await opts.emit({ type: "tool_result", callId: out.id, ok: false, output: "[permission denied] remember 会话结束自动沉淀：全局记忆写入未获批准（合并审批一次，本轮全局写入全部拒绝；项目层不在此列）", gate: DISTILL_GATE.unapproved });
+        opts.signal?.throwIfAborted();
         continue;
       }
       try {
         const r = await opts.rememberTool.run(out.args, ctx);
         if (r.ok) writes += 1;
-        await opts.emit({ type: "tool_result", callId: out.id, ok: r.ok, output: r.output, gate: DISTILL_GATE.approved });
+        await opts.emit({ type: "tool_result", callId: out.id, ok: r.ok, output: r.output, gate });
       } catch (err) {
-        await opts.emit({ type: "tool_result", callId: out.id, ok: false, output: err instanceof Error ? err.message : String(err), gate: DISTILL_GATE.approved });
+        await opts.emit({ type: "tool_result", callId: out.id, ok: false, output: err instanceof Error ? err.message : String(err), gate });
       }
+      // 回执落盘后再收束取消，保留已完成写入的真实结果。
+      opts.signal?.throwIfAborted();
     }
+    // 最后一次 next() 也可能在取消时正常返回 done。
+    opts.signal?.throwIfAborted();
   } catch (err) {
     return { kind: "failed", why: err instanceof Error ? err.message : String(err) };
   }

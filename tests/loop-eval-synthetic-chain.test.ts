@@ -12,6 +12,7 @@
  *  第二副里那条「原价未过线收运费」故意**不**坏：它断言的是 import 进来的常量本身，
  *  改常量不会动它——读数只报真坏了的那条，不替剧本编故事。 */
 import { execFileSync, spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -23,8 +24,10 @@ const ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "
 const GREEN_SCRIPT = "fixtures/bench/scripts/synthetic-judge/script.jsonl";
 const BROKEN_SCRIPT = "fixtures/bench/scripts/synthetic-judge/script-broken-p2p.jsonl";
 const TASKS = "fixtures/bench/tasks-synthetic.json";
-const GREEN_OUT = ".tmp/dsh-synth-chain-green";
-const BROKEN_OUT = ".tmp/dsh-synth-chain-broken";
+// 多个全量套件可并行运行；共享固定目录会让一个进程的 afterAll 删除另一个进程正在写的读数。
+const RUN_ID = randomUUID();
+const GREEN_OUT = `.tmp/dsh-synth-chain-${RUN_ID}-green`;
+const BROKEN_OUT = `.tmp/dsh-synth-chain-${RUN_ID}-broken`;
 
 interface Run { status: number | null; out: string; readings: unknown }
 
@@ -147,7 +150,7 @@ describe("离线合成面：SWE-bench 那两半尺子第一次跑出读数", () 
   it("接线：跑器按 SCRIPTED 分岔把剧本递给 runLoop（整条调用连入参，不钉函数名）", () => {
     const src = readFileSync(join(ROOT, "scripts/loop-eval.ts"), "utf8");
     expect(src).toMatch(
-      /provider:\s*SCRIPTED === ""\s*\?\s*createGlmSessionProvider\([\s\S]{0,900}?\)\s*(?:\/\/[^\n]*\n\s*)?:\s*createRoundScriptedProvider\(resolve\(ROOT, SCRIPTED\)\)/u,
+      /provider:\s*SCRIPTED === ""\s*\?\s*createSessionProvider\([\s\S]{0,900}?\)\s*(?:\/\/[^\n]*\n\s*)?:\s*createRoundScriptedProvider\(resolve\(ROOT, SCRIPTED\)\)/u,
     );
     const validitySrc = readFileSync(join(ROOT, "scripts/lib/eval-validity.ts"), "utf8");
     expect(validitySrc).toMatch(/if\s*\(run\.requests <= 0 && run\.providerFace !== "剧本"\)/u);

@@ -342,11 +342,25 @@ export function declaredArgumentNames(frontmatter: Record<string, unknown> | und
  *  就是本仓点名的「同族出口副本」）。形参写命令那侧即可：SkillEntry 与之结构同形，直接可传。
  *  首尾空白剥掉：那是 markdown 文件的换行，不是提示词的一部分。 */
 export function renderPromptCommand(cmd: PromptCommandEntry, argsString: string, ctx: Omit<SubstitutionContext, "args" | "named"> = {}): string {
-  return substituteVars(cmd.body, {
+  const named = declaredArgumentNames(cmd.frontmatter);
+  const rendered = substituteVars(cmd.body, {
     args: argsString,
-    named: declaredArgumentNames(cmd.frontmatter),
+    named,
     ...ctx,
   }).trim();
+  const args = argsString.trim();
+  // CC 口径（官方 skills 文档）：**没有任何占位符吃到参数**时，参数追成 `ARGUMENTS: <value>`。
+  // 此前这里只做替换 ⇒ 正文不含 $ARGUMENTS/$1/$name 的技能，`/skill 你好` 里的「你好」被静默吞掉：
+  // 模型看得到技能正文，却看不到用户到底要它做什么（2026-10-18 用回显 mock 实测发现）。
+  if (args === "" || usesArguments(cmd.body, named)) return rendered;
+  return `${rendered}\n\nARGUMENTS: ${args}`;
+}
+
+/** 模板里是否有占位符会吃到参数（决定渲染后要不要追加 ARGUMENTS 段）。 */
+function usesArguments(template: string, named: readonly string[]): boolean {
+  if (/\$ARGUMENTS\b/.test(template)) return true;
+  if (/\$\d\b/.test(template)) return true;
+  return named.some((n) => new RegExp(`\\$${n}\\b`).test(template));
 }
 
 /** prompt 命令调用名：/plugin-name:command-name。 */

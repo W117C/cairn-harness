@@ -1,8 +1,12 @@
 packages:
   - apps/*
+  - apps/desktop/preview
 allowBuilds:
   electron: true
   esbuild: true
+minimumReleaseAgeExclude:
+  - lucide-react@1.56.0
+  - react-resizable-panels@4.14.5
 onlyBuiltDependencies:
   - esbuild
 # 第 473 页：pnpm 11 **不再读** package.json 的 `pnpm` 字段（写在那儿会被警告并忽略，overrides 静默失效），

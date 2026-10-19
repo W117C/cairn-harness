@@ -40,6 +40,7 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   // v4 变更审阅：逐 hunk diff（快照 vs 当前文件）。
   changeDiff: "agent:change-diff",
   // v5 窗格后端：file 窗格（列目录 + 读文本）。
+  setWorkspaceContext: "agent:set-workspace-context",
   workspaceListDir: "agent:workspace-list-dir",
   workspaceReadText: "agent:workspace-read-text",
   // v7：路径动作（复制绝对路径 / Finder 显示 / 默认应用打开）。
@@ -60,6 +61,7 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   browserClose: "agent:browser-close",
   // v7：浏览器清除数据 + 元素选择。
   browserClearData: "agent:browser-clear-data",
+  browserSetAllowedHosts: "agent:browser-set-allowed-hosts",
   browserPickElement: "agent:browser-pick-element",
   // v6：产品第一批（模板建项 / 预览运行时 / 项目导出 / 连接自检）。
   projectTemplates: "agent:project-templates",
@@ -67,8 +69,13 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   previewStart: "agent:preview-start",
   previewStop: "agent:preview-stop",
   previewStatus: "agent:preview-status",
+  // v12：导入诊断（导入已有文件夹先给三态诊断——ADR 0004 §4）。
+  projectDiagnose: "agent:project-diagnose",
   projectExport: "agent:project-export",
   providerCheck: "agent:provider-check",
+  exportTranscript: "agent:transcript-export",
+  listSkills: "agent:list-skills",
+  skillBody: "agent:skill-body",
   submitFeedback: "agent:feedback-submit",
   listFeedback: "agent:feedback-list",
   listProjects: "agent:projects-list",
@@ -79,6 +86,7 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   assignSessionProject: "agent:session-assign",
   deleteMemory: "agent:memory-delete",
   pluginDecide: "agent:plugin-decide",
+  pluginUserConfigSet: "agent:plugin-user-config-set",
   sidechatCreate: "agent:sidechat-create",
   sidechatAsk: "agent:sidechat-ask",
   sidechatPromote: "agent:sidechat-promote",
@@ -110,4 +118,13 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   // v10：能力在场性——搜索端点配没配（口径同 CLI --doctor 的 search 那一格）。
   // 它回答的是「模型为什么少了一把工具」：没配 search.endpoint 时 web_search 整族不注入。
   capabilities: "agent:capabilities",
+  // v11：主界面重做批（git 两闸 / 项目内模糊搜索 / 最近打开 / 粘贴落盘 / 快照还原 / Finder 显示）。
+  gitStatus: "agent:git-status",
+  gitClone: "agent:git-clone",
+  workspaceSearch: "agent:workspace-search",
+  touchProject: "agent:project-touch",
+  saveTempFile: "agent:save-temp-file",
+  snapshotRestore: "agent:snapshot-restore",
+  revealInFinder: "agent:reveal-in-finder",
+  attachmentThumb: "agent:attachment-thumb",
 };

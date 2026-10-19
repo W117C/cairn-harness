@@ -21,6 +21,7 @@ import {
   type DoctorFacts,
   type TrustFaceFacts,
 } from "../src/main/doctor";
+import { effectiveModelTable } from "../src/providers/registry";
 import { PROVIDER_ENV_KEYS } from "../src/providers/env-keys";
 import { DEFAULT_MODEL_TABLE, specsByTier } from "../src/providers/registry";
 
@@ -457,6 +458,40 @@ describe("readCapabilities：能力在场性读数（桌面端「模型为什么
       writeFileSync(join(dir, ".agent", "config.json"), JSON.stringify({ search: { endpoint: "https://searx.example/search?q=abc" } }));
       const got = await readCapabilities(dir);
       expect(got.search.kind).toBe("unset");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // 识图三态（2026-10-16）：把「声明了图片模态」与「上游真的看得懂」分开。
+  // 实测形状：cn:hy3 没有 inputModalities ⇒ undeclared，而 render_image 的图照样进请求体。
+  it("识图三态：取不到选中模型 ⇒ unverified（不猜它支不支持）", async () => {
+    const dir = tmp("vision-unverified");
+    try {
+      const got = await readCapabilities(dir);
+      // 判卷跑在没有 settings 文件的环境里 ⇒ modelId=null ⇒ 第三个态。
+      expect(got.vision.state).toBe("unverified");
+      expect(got.vision.modelId).toBeNull();
+      expect(got.vision.declaredModalities).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("识图：声明与未声明都由**模型表**判，undeclared 时不给「支持」的错觉", async () => {
+    const dir = tmp("vision-table");
+    try {
+      mkdirSync(join(dir, ".cairn"), { recursive: true });
+      // 表里第一个内置模型（一定存在；本仓内置表恒非空）。
+      const table = effectiveModelTable();
+      const spec = table[0]!;
+      writeFileSync(join(dir, ".cairn", "settings.json"), JSON.stringify({ model: spec.id }));
+      const got = await readCapabilities(dir);
+      expect(got.vision.modelId).toBe(spec.id);
+      const declared = (spec.inputModalities ?? []).includes("image");
+      // 声没声明由图说；但两种态都不许变成「已实测支持」。
+      expect(got.vision.state).toBe(declared ? "declared" : "undeclared");
+      if (!declared) expect(got.vision.declaredModalities).not.toContain("image");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

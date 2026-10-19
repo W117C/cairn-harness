@@ -4,7 +4,7 @@
 // 事件 id = 1-based 行号（M1a 定稿，append-only 永不漂移）。
 import type { AgentEvent, CompactionEvent, CompactionUsage } from "../events";
 import { isEnvVerifyCause } from "../events";
-import { eventIdAt, excludedIds, hasWorkerAttribution, projectContext, type ContextMessage } from "./context";
+import { eventIdAt, excludedIds, hasWorkerAttribution, isWorkerCompaction, projectContext, type ContextMessage } from "./context";
 import { classifyResult, shapeLog, shapeResult, summaryTruncate } from "./shape";
 import { setTimeout as delay } from "node:timers/promises";
 import { deriveBoundaries, snapToProgressBoundary, economicGate, type EconomicState } from "./economics";
@@ -738,7 +738,9 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
   }
 
   const compressedEvents = cut.compressedIds.map((id) => events[id - 1]);
-  const compactions = events.filter((e): e is CompactionEvent => e.type === "compaction");
+  // worker 子流压缩事件也落在主 JSONL 且同为 type="compaction"：把它当 priorSummary 会让主摘要
+  // 以「worker 的任务交接摘要」为滚动基线，真正的主摘要被丢弃（excludedIds/projectContext 都排除了它）。
+  const compactions = events.filter((e): e is CompactionEvent => e.type === "compaction" && !isWorkerCompaction(e));
   const priorSummary = compactions.length > 0 ? compactions[compactions.length - 1].summary : undefined;
   // M2b：摘要输入的工具结果走类型化整形（同一份规则表 §6.2/§7.4）
   const callName = new Map<string, string>();

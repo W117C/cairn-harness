@@ -1,5 +1,6 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { appendImpact, assertNotAgentArea, assertNotAgentAreaReal, assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolResult } from "./base.js";
+import { readFile, stat } from "node:fs/promises";
+import { writeFileAtomic } from "../atomic-write.js";
+import { appendImpact, assertNotAgentArea, assertNotAgentAreaReal, assertNotFrozenReal, assertNotSensitivePathReal, assertRealContainment, resolveInWorkspace, resolveWriteTarget, ToolError, type Tool, type ToolResult } from "./base.js";
 import { collectDiagnostics } from "./lsp.js";
 import { snapshotBeforeOverwrite, snapshotNote } from "./snapshot.js";
 import { lineDelta } from "./line-delta.js";
@@ -54,10 +55,21 @@ export const edit_file: Tool = {
     assertNotAgentArea(rel, "edit_file");
     await assertRealContainment(ctx.workspace, abs, "edit_file");
     await assertNotAgentAreaReal(ctx.workspace, abs, "edit_file"); // C3：软链落点复查
+    await assertNotFrozenReal(ctx.workspace, abs, "edit_file"); // L0：软链/大小写落到判卷文件
+    await assertNotSensitivePathReal(ctx.workspace, abs, "edit_file"); // 软链落点命中敏感路径
+    const targetAbs = await resolveWriteTarget(ctx.workspace, abs, "edit_file");
     let content: string;
     try {
-      content = await readFile(abs, "utf8");
-    } catch {
+      const raw = await readFile(targetAbs);
+      // 非 UTF-8 / 二进制：按 utf8 解码 + 整文件写回会把非法字节替换成 U+FFFD，
+      // 且未命中的行也会一起被改写。与 apply_patch 同口径 fail-visible。
+      if (raw.includes(0)) throw new ToolError("edit_file: 疑似二进制文件（含 NUL 字节），拒绝按文本编辑: " + rel);
+      content = raw.toString("utf8");
+      if (!Buffer.from(content, "utf8").equals(raw)) {
+        throw new ToolError("edit_file: 文件不是合法 UTF-8（按 utf8 回写会替换非法字节）；请改用二进制安全的工具: " + rel);
+      }
+    } catch (err) {
+      if (err instanceof ToolError) throw err;
       throw new ToolError("edit_file: 文件不存在或不可读: " + rel);
     }
     // 唯一匹配纪律：非唯一且未显式 replace_all 一律拒绝并回报匹配数。
@@ -78,13 +90,14 @@ export const edit_file: Tool = {
     // 替换模式解释（把匹配到的原文插回去），静默写出错误内容——两个分支必须同口径。
     const updated = replaceAll ? content.split(oldString).join(newString) : content.replace(oldString, () => newString);
     // D7 覆盖前快照：排在「0 处/多处匹配」两道拒绝**之后**——被拒的编辑不该留下快照（那会是脏文件）。
-    const snapshotId = ctx.snapshot === false ? null : await snapshotBeforeOverwrite(ctx.workspace, abs, rel, ctx.callId);
-    await writeFile(abs, updated, "utf8");
+    const snapshotId = ctx.snapshot === false ? null : await snapshotBeforeOverwrite(ctx.workspace, targetAbs, rel, ctx.callId);
+    const existingMode = (await stat(targetAbs).catch(() => null))?.mode;
+    await writeFileAtomic(targetAbs, updated, existingMode !== undefined ? { mode: existingMode & 0o777 } : {});
     const replacements = replaceAll ? count : 1;
     // 行增减是「改动范围最小」的可核对面：处数只说改了几块，不说动了多少行内容。
     const d = lineDelta(content, updated);
     // M2a 诊断回流：成功写盘后等诊断（LSP 未配置 = 空串，输出不变）
-    const diag = await collectDiagnostics(ctx.workspace, abs);
+    const diag = await collectDiagnostics(ctx.workspace, targetAbs);
     // M7 影响面：替换成功后回注跨文件波及（best-effort，见 appendImpact）。
     const output = await appendImpact(
       ctx,

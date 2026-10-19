@@ -50,11 +50,7 @@ export const MUTATIONS = [
     // 在源里出现两次（put 与 delete）。第一版只写那一行 ⇒ 针脚体检报「命中 2 处，需人工复认」。
     // 连下一行一起写才唯一（`isProviderId` 那一支只有 put 有）。
     // 标题必须逐字等于桌面判卷里那条用例名（近似标题 ⇒ 选择子零命中＝vacuous，第 483/490 页栽过两次）。
-    apply: (s) => s.replace(
-      "  if (!backend) return { ok: false, error: PROVIDER_KEY_NO_BACKEND_ERROR };\n"
-      + "  if (!isProviderId(provider)) return { ok: false, error: \"未知 provider：\" + provider + \"（白名单：\" + PROVIDER_IDS.join(\"/\") + \"）\" };",
-      "  // 变异：fail-closed 那支摘掉",
-    ),
+    apply: (s) => s.replace("  if (!backend) return { ok: false, error: PROVIDER_KEY_NO_BACKEND_ERROR };\n  if (!isProviderId(provider)) return { ok: false, error: \"未知 provider：\" + provider + \"（白名单：\" + PROVIDER_IDS.join(\"/\") + \"）\" };", "  // 变异：fail-closed 那支摘掉"),
     expectFail: "fail-closed：safeStorage 不可用 ⇒ 装配拒绝 + set 拒绝不落明文（目录零文件）；未装配后端同判",
   },
   {
@@ -177,7 +173,7 @@ export const MUTATIONS = [
     src: "src/main/sessions.ts",
     test: "tests/sessions.test.ts",
     desc: "撞名序号从 2 起（① 冲突覆盖：同名会话被新建空文件覆盖）",
-    apply: (s) => s.replace("非法会话名: ${JSON.stringify(name)}`);\n  let id = base;\n  for (let i = 2; ; i++) {", "非法会话名: ${JSON.stringify(name)}`);\n  let id = base;\n  for (let i = 1; ; i++) {"),
+    apply: (s) => s.replace("  for (let attempt = 2; ; attempt += 1) {", "  for (let attempt = 1; ; attempt += 1) {"),
     expectFail: "新建撞名自动加序号；空目录列表为空",
   },
   {
@@ -745,7 +741,7 @@ export const MUTATIONS = [
     desc: "缺省被悄悄改回关 ⇒ §483 的「桌面产品默认开」失效，能力 5 的收束闸退回零真流量" +
       "（09-19 设计稿 D7 记的就是这串默认关造成的『永远未证』）",
     apply: (s) => s.replace("  autoVerify: true,", "  autoVerify: false,"),
-    expectFail: "DEFAULT_SETTINGS 与读盘回退同向（翻一处忘另一处 = 老用户永远拿不到新默认）",
+    expectFail: "autoVerify 默认：DEFAULT_SETTINGS 与读盘回退同向（翻一处忘另一处 = 老用户永远拿不到新默认）",
   },
   // 中间那一棒（`over.autoVerify ?? settings`）此前零观察着 = 「两头断」第 12 次。
   // 两半各钉一条：只钉一支，另一支写坏都不会红（②b 与 ②c 只差一个显式 false）。

@@ -23,6 +23,9 @@ export interface ProjectRecord {
   updatedAt: string;
   /** 软删除时间；记录仍在仓库，但默认 list 不再把它当活动项目。 */
   removedAt?: string;
+  /** v11：最近打开时间（add 即记、打开会话/切项目时 touch 刷新）——「最近打开」菜单的数据面。
+   *  旧记录（本字段诞生前）缺席不炸；缺席时排序退回 updatedAt。 */
+  lastOpenedAt?: string;
 }
 
 export interface AddProjectInput {
@@ -89,6 +92,7 @@ function validateProject(raw: unknown, key: string): ProjectRecord {
   assertStoredPath(raw.defaultLocation, "defaultLocation");
   if (!isTimestamp(raw.createdAt) || !isTimestamp(raw.updatedAt)) throw new Error(`projects.${key} 时间戳非法`);
   if (raw.removedAt !== undefined && !isTimestamp(raw.removedAt)) throw new Error(`projects.${key}.removedAt 非法`);
+  if (raw.lastOpenedAt !== undefined && !isTimestamp(raw.lastOpenedAt)) throw new Error(`projects.${key}.lastOpenedAt 非法`);
 
   return {
     id: raw.id,
@@ -98,6 +102,7 @@ function validateProject(raw: unknown, key: string): ProjectRecord {
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     ...(raw.removedAt !== undefined ? { removedAt: raw.removedAt } : {}),
+    ...(raw.lastOpenedAt !== undefined ? { lastOpenedAt: raw.lastOpenedAt } : {}),
   };
 }
 
@@ -127,10 +132,18 @@ export class ProjectRegistry {
 
   constructor(private readonly filePath: string) {}
 
-  async list(options: { includeRemoved?: boolean } = {}): Promise<ProjectRecord[]> {
+  async list(options: { includeRemoved?: boolean; recentFirst?: boolean } = {}): Promise<ProjectRecord[]> {
     const state = await this.load();
-    return Object.values(state.projects)
-      .filter((project) => options.includeRemoved === true || project.removedAt === undefined)
+    const active = Object.values(state.projects)
+      .filter((project) => options.includeRemoved === true || project.removedAt === undefined);
+    if (options.recentFirst === true) {
+      // 最近打开序：lastOpenedAt 优先，旧记录退回 updatedAt（不编造 lastOpenedAt）。
+      const at = (p: ProjectRecord): string => p.lastOpenedAt ?? p.updatedAt;
+      return active
+        .sort((a, b) => at(b).localeCompare(at(a)) || b.createdAt.localeCompare(a.createdAt) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+        .map(cloneProject);
+    }
+    return active
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
       .map(cloneProject);
   }
@@ -159,7 +172,8 @@ export class ProjectRegistry {
 
       const state = await this.load();
       const existing = Object.values(state.projects).find((project) => project.path === canonicalPath);
-      if (existing && existing.removedAt === undefined) throw new Error(`项目已注册: ${canonicalPath}`);
+      // 同路径 = upsert：桌面「重命名显示名 / 改默认运行位置」走的就是 addProject（零新通道）。
+      // 旧实现对已注册路径直接 throw ⇒ 两个改名入口都是死路（内联改名还没有 catch，静默失败）。
 
       const now = new Date().toISOString();
       const name = input.name === undefined
@@ -174,6 +188,7 @@ export class ProjectRegistry {
             defaultLocation: canonicalDefault,
             updatedAt: now,
             removedAt: undefined,
+            lastOpenedAt: now, // v11：add 即「刚打开/重加」——最近打开序有据可依
           }
         : {
             id: randomUUID(),
@@ -182,6 +197,7 @@ export class ProjectRegistry {
             defaultLocation: canonicalDefault,
             createdAt: now,
             updatedAt: now,
+            lastOpenedAt: now,
           };
       // `removedAt: undefined` 不会留下 JSON 键；显式重建以免复用对象时残留软删除字段。
       const normalized = cloneProject(project);
@@ -205,6 +221,22 @@ export class ProjectRegistry {
       state.projects[id] = removed;
       await this.persist(state);
       return cloneProject(removed);
+    });
+  }
+
+  /** v11：最近打开标（打开会话/切项目时调用）。id 口径与 get/remove 同——非法抛、不存在抛。 */
+  async touch(id: string): Promise<ProjectRecord> {
+    return await this.enqueue(async () => {
+      if (!isSafeId(id)) throw new Error(`项目 id 非法: ${JSON.stringify(id)}`);
+      const state = await this.load();
+      const project = Object.prototype.hasOwnProperty.call(state.projects, id) ? state.projects[id] : undefined;
+      if (!project) throw new Error(`项目不存在: ${id}`);
+
+      const now = new Date().toISOString();
+      const touched: ProjectRecord = { ...project, updatedAt: now, lastOpenedAt: now };
+      state.projects[id] = touched;
+      await this.persist(state);
+      return cloneProject(touched);
     });
   }
 

@@ -130,7 +130,10 @@ function gatedWorkerTool(name: string, inner: Tool, w: WorkerHandle, orch: Orche
         // scope=always 在 decideWorkerApproval 已拒绝（worker 永不写 always）；此处不会收到
       }
       // worker 出口今天什么审计都不挂（approval_* 落了流，但结果侧读不到「谁放行的」）——补上。
-      const res = await inner.run(args, ctx);
+      // 批准不代表仍在运行：等审批期间的取消必须在真实执行前再次检查。
+      const res = ctx.signal?.aborted
+        ? { ok: false, output: "[cancelled] 会话已取消，工具没有执行" }
+        : await inner.run(args, ctx);
       return {
         ...res,
         gate: d.verdict === "ask"

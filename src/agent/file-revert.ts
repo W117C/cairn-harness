@@ -66,13 +66,24 @@ interface WriteTouch {
   created: boolean;
 }
 
-/** 一条主会话成功的写回执 → 一次"改了这个文件"的接触点；取不到路径的返回 null（调用方按 manual 记）。 */
-function touchOf(result: Extract<AgentEvent, { type: "tool_result" }>, eventId: number, callPath: string | null): WriteTouch | null {
+/** 一条主会话成功的写回执 → 它改到的**全部**文件接触点。
+ *  旧实现只取 snapshotId/单一路径：`apply_patch` 的 args 没有 path，`changedPaths` 里其余文件
+ *  被整段静默漏掉（"回滚成功"却留着 b.ts）。取不到任何路径才返回空数组（调用方无条目）。 */
+function touchesOf(result: Extract<AgentEvent, { type: "tool_result" }>, eventId: number, callPath: string | null): WriteTouch[] {
   const snapshotId = typeof result.snapshotId === "string" && result.snapshotId !== "" ? result.snapshotId : null;
   const fromSnapshot = snapshotId === null ? null : pathFromSnapshotId(snapshotId);
-  const path = fromSnapshot ?? callPath;
-  if (path === null) return null;
-  return { eventId, path, snapshotId, created: result.change === "created" };
+  const paths = new Set<string>();
+  if (fromSnapshot !== null) paths.add(fromSnapshot);
+  for (const p of result.changedPaths ?? []) if (typeof p === "string" && p !== "") paths.add(p);
+  if (callPath !== null) paths.add(callPath);
+  const created = result.change === "created";
+  return [...paths].map((path) => ({
+    eventId,
+    path,
+    // 快照只覆盖 snapshotId 指出的那一份（apply_patch 只带第一份）；其余文件按 manual 如实报。
+    snapshotId: path === fromSnapshot ? snapshotId : null,
+    created,
+  }));
 }
 
 /** 轮次 → 事件区间（0-based，半开）。与 `forkPointOf` 同一份「轮 = user_message 边界」定义。 */
@@ -95,10 +106,10 @@ export function planTurnRevert(events: readonly AgentEvent[], round: number): Fi
   const slice = turnSlice(events, round);
   if ("error" in slice) return slice;
 
-  // callId → 写目标（从 tool_call 取；apply_patch 的多文件不在这一份里，见 ④）
+  // callId → 写目标（从主会话 tool_call 取；worker 的 callId 可与 parent 撞号，必须排除）
   const callPaths = new Map<string, string | null>();
   for (const e of events) {
-    if (e.type === "tool_call") callPaths.set(e.id, callTargetPath(e.args));
+    if (e.type === "tool_call" && e.agent_id === undefined) callPaths.set(e.id, callTargetPath(e.args));
   }
 
   // 轮内接触点（只收主会话成功写；worker 事件带 agent_id，跳过）
@@ -109,8 +120,7 @@ export function planTurnRevert(events: readonly AgentEvent[], round: number): Fi
     const isWrite = e.snapshotId !== undefined || e.change !== undefined;
     if (!isWrite) continue;
     const callPath = e.callId === undefined ? null : callPaths.get(e.callId) ?? null;
-    const t = touchOf(e, i + 1, callPath);
-    if (t !== null) touches.push(t);
+    touches.push(...touchesOf(e, i + 1, callPath));
   }
 
   // 同一路径取最早一份快照（轮内中间态不算「这一轮之前」）
@@ -125,8 +135,7 @@ export function planTurnRevert(events: readonly AgentEvent[], round: number): Fi
     const isWrite = e.snapshotId !== undefined || e.change !== undefined;
     if (!isWrite) continue;
     const callPath = e.callId === undefined ? null : callPaths.get(e.callId) ?? null;
-    const t = touchOf(e, i + 1, callPath);
-    if (t !== null) touchedAfter.add(t.path);
+    for (const t of touchesOf(e, i + 1, callPath)) touchedAfter.add(t.path);
   }
 
   const entries: FileRevertEntry[] = [];

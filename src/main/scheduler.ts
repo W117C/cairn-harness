@@ -11,7 +11,7 @@
 //   AskGate 承担；超时双闸 = runTimeoutMs（到点 abort，轮界收束）+ settlesWithin（宿主不响应时的二道退出）。
 // - 完成回写：summarizeRun 纯投影摘要（零新 LLM 调用）→ automation_completed 事件（复用 report 卡类型）。
 // electron-free；tick/jitter/clock/executor 全部可注入，验收禁止真实 sleep 等触发。
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { writeFileAtomic } from "../atomic-write";
 import type { PermissionMode } from "../permissions/modes";
@@ -256,9 +256,14 @@ export function nextOccurrence(def: AutomationDefinition, after: Date): Date | n
     return new Date(created.getTime() + k * stepMs);
   }
   if (s.kind === "custom") {
-    // custom：锚点 = 创建日（tz 墙钟），每 everyDays 一跳
+    // custom：锚点 = 创建日在**任务时区**的墙钟日（旧实现取主机本地 getFullYear/getMonth/getDate，
+    // 任务时区与主机不同且 everyDays>1 时会把整条相位平移一天）。
     const { h, m } = parseHHmm(s.time);
-    const anchor = zonedDate(def.timeZone, created.getFullYear(), created.getMonth(), created.getDate(), h, m);
+    const wall = new Intl.DateTimeFormat("en-CA", {
+      timeZone: def.timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(created);
+    const part = (type: string): number => Number(wall.find((p) => p.type === type)?.value ?? "0");
+    const anchor = zonedDate(def.timeZone, part("year"), part("month") - 1, part("day"), h, m);
     const anchorUtc = anchor.getTime() - tzOffsetMs(def.timeZone, anchor);
     // 以 24h 步进近似找首个 > after 的天序，再按 tz 墙钟重建（跨月由 Date.UTC 归一化）
     const dayMs = s.everyDays * 24 * 60 * 60 * 1000;
@@ -279,18 +284,43 @@ export function nextOccurrence(def: AutomationDefinition, after: Date): Date | n
   return cron.nextRun(after) ?? null;
 }
 
-/** 回看窗口内枚举错过触发（strictly after startExclusive，≤ endInclusive；防御性上限 MAX_MISSED_ENUM）。 */
-export function occurrencesBetween(def: AutomationDefinition, startExclusive: Date, endInclusive: Date): Date[] {
+/** 回看窗口内枚举错过触发（strictly after startExclusive，≤ endInclusive）。
+ *  超过 MAX_MISSED_ENUM 时保留**最近**的 500 条（旧实现保留最早 500 条 ⇒ 启动 tick 只处理到
+ *  第 500 条，下一分钟常规 tick 把剩余里最近的一条当 triggered 真跑：skip 档仍会跑、latest 档跑两次）。
+ *  `stats` 回填被舍弃的前缀条数与其后第一条 due（用于折一条聚合账，审计仍可查）。 */
+export function occurrencesBetween(
+  def: AutomationDefinition,
+  startExclusive: Date,
+  endInclusive: Date,
+  stats?: { dropped: number; droppedBefore: Date | null; truncated: boolean },
+): Date[] {
   const out: Date[] = [];
   let cur = startExclusive;
-  for (let i = 0; i < MAX_MISSED_ENUM; i++) {
+  let seen = 0;
+  let dropped = 0;
+  let droppedBefore: Date | null = null;
+  for (;;) {
     const next = nextOccurrence(def, cur);
     if (!next || next.getTime() > endInclusive.getTime()) break;
     if (next.getTime() <= cur.getTime()) break; // 防御：不前进即断（避免死循环）
-    out.push(next);
+    seen += 1;
+    if (out.length >= MAX_MISSED_ENUM) {
+      dropped += 1;
+      if (droppedBefore === null) droppedBefore = out[0] ?? next;
+      out.push(next);
+      // 摊销裁剪：只保留最近 500 条，避免长停机时数组无限增长。
+      if (out.length >= MAX_MISSED_ENUM * 2) out.splice(0, out.length - MAX_MISSED_ENUM);
+    } else {
+      out.push(next);
+    }
     cur = next;
   }
-  return out;
+  if (stats) {
+    stats.dropped = dropped;
+    stats.droppedBefore = droppedBefore;
+    stats.truncated = dropped > 0;
+  }
+  return dropped > 0 ? out.slice(-MAX_MISSED_ENUM) : out;
 }
 
 /** 会话标题时刻（任务时区墙钟 "YYYY-MM-DD HH:mm"）。 */
@@ -472,6 +502,11 @@ export class Scheduler {
   private readonly jitterMs: () => number;
   readonly definitionsPath: string;
   readonly journalPath: string;
+  /** occurrence_key → session_id 的旁路索引：journal 条目在 spawn **前**写（崩溃窗口不双跑），
+   *  此时 session 还不存在 ⇒ 条目天然没有 session_id。旧实现只把 session_id 写进内存表，
+   *  重启后所有成功触发都被投影成 failed/interrupted。 */
+  readonly sessionIndexPath: string;
+  private sessionIndexChain: Promise<void> = Promise.resolve();
 
   constructor(private readonly deps: SchedulerDeps) {
     this.clock = deps.clock ?? Date.now;
@@ -480,6 +515,7 @@ export class Scheduler {
     this.jitterMs = deps.jitterMs ?? defaultJitterMs;
     this.definitionsPath = join(deps.dataDir, "automations.json");
     this.journalPath = join(deps.dataDir, "automations-journal.jsonl");
+    this.sessionIndexPath = join(deps.dataDir, "automation-sessions.json");
   }
 
   private warn(msg: string): void {
@@ -500,6 +536,7 @@ export class Scheduler {
     for (const w of loaded.warnings) this.warn("[scheduler] " + w);
     const j = await readJournalFile(this.journalPath);
     this.ingestJournal(j.entries);
+    await this.loadSessionIndex();
     for (const w of j.warnings) this.warn("[scheduler] " + w);
     // D7（审查 P2）：启动时对 journal 做保留上限收敛（超帽截到 KEEP 条，原子替换）。
     const kept = await compactJournalIfLarge(this.journalPath, (keep) => this.rebuildJournalMemory(keep)).catch(() => -1);
@@ -541,6 +578,41 @@ export class Scheduler {
     for (const e of entries) this.addJournalEntry(e);
   }
 
+  /** 读旁路索引（坏文件 = 空表 + 警告；历史仍可按 journal 的 session_id 读）。 */
+  private async loadSessionIndex(): Promise<void> {
+    try {
+      const raw = JSON.parse(await readFile(this.sessionIndexPath, "utf8")) as unknown;
+      if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return;
+      for (const [key, sid] of Object.entries(raw as Record<string, unknown>)) {
+        if (typeof sid === "string" && sid !== "") this.sessionIdByKey.set(key, sid);
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        this.warn("[scheduler] 会话索引读取失败（按空表继续）：" + (err instanceof Error ? err.message : String(err)));
+      }
+    }
+  }
+
+  /** 建会话后立刻落索引（串行链 + 原子写；失败只警告，不把已触发的 run 反签成失败）。
+   *  写前重读磁盘并合并：同根多实例各自持有旧表，整表回写会抹掉对方刚记的 occurrence。 */
+  private rememberSessionId(key: string, sessionId: string): Promise<void> {
+    this.sessionIdByKey.set(key, sessionId);
+    const run = async (): Promise<void> => {
+      let disk: Record<string, unknown> = {};
+      try {
+        const raw = JSON.parse(await readFile(this.sessionIndexPath, "utf8")) as unknown;
+        if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) disk = raw as Record<string, unknown>;
+      } catch { /* 不存在/坏了：按空表起步，下面写完整快照 */ }
+      const merged = { ...disk, ...Object.fromEntries(this.sessionIdByKey) };
+      await writeFileAtomic(this.sessionIndexPath, JSON.stringify(merged, null, 0));
+    };
+    const write = this.sessionIndexChain.then(run, run);
+    this.sessionIndexChain = write.catch(() => undefined);
+    return write.catch((err: unknown) => {
+      this.warn("[scheduler] 会话索引写入失败：" + (err instanceof Error ? err.message : String(err)));
+    });
+  }
+
   /** 单条入账（内存表 upsert）：journalKeys / journalByTask / sessionIdByKey 三表同步。
    *  P2-6（审查）：sessionIdByKey 同 key 以**最新**一条为准（原 findSessionIdByKey 取 journalByTask
    *  迭代序首个带 session_id 的条目；occurrence_key 全局唯一，二者等价）。 */
@@ -554,10 +626,13 @@ export class Scheduler {
 
   /** P1-9（审查）：用保留条目回灌内存三表（先 clear 再填）——与磁盘收敛同链执行。 */
   private rebuildJournalMemory(entries: JournalEntry[]): void {
+    // 旁路索引不随 journal 收敛丢失：journal 没有 session_id（spawn 前写账），索引才有。
+    const sidecar = new Map(this.sessionIdByKey);
     this.journalKeys.clear();
     this.journalByTask.clear();
     this.sessionIdByKey.clear();
     for (const e of entries) this.addJournalEntry(e);
+    for (const [key, sid] of sidecar) this.sessionIdByKey.set(key, sid);
   }
 
   /** 手动 tick（验收注入；生产由 interval 驱动）。startup=true = 启动 tick（补跑闸生效）。 */
@@ -575,6 +650,8 @@ export class Scheduler {
         return report;
       }
       this.firstTickDone = true;
+      // 每拍先对齐磁盘 journal：同根多实例（桌面 app + cairn --serve）各自的内存表会滞后。
+      await this.refreshJournalFromDisk();
       for (const def of this.tasks) {
         if (!def.enabled) continue;
         report.considered++;
@@ -582,7 +659,11 @@ export class Scheduler {
           await this.catchupGate(def, now, report);
         } else {
           const lastDecided = this.lastDecidedAt(def);
-          const dueList = occurrencesBetween(def, lastDecided, now);
+          const dueStats = { dropped: 0, droppedBefore: null as Date | null, truncated: false };
+          const dueList = occurrencesBetween(def, lastDecided, now, dueStats);
+          if (dueStats.dropped > 0 && dueStats.droppedBefore !== null) {
+            await this.decideSkip(def, dueStats.droppedBefore, "too-old", report, "+fold" + String(dueStats.dropped));
+          }
           // D6（审查 P2）：运行期错过的多个 occurrence 全部补记账（旧实现只取最后一个进管线，
           // 中间错过的既不漏账可查）。审查 S2-11（任务 2.4）补上限：枚举帽是 500，笔记本合盖
           // 数周后醒来的第一个 tick 会逐条写 500 行 skipped 账 + 500 次投影通知（启动路径有
@@ -625,8 +706,13 @@ export class Scheduler {
     const lastDecided = this.lastDecidedAt(def);
     const windowStart = new Date(now.getTime() - CATCHUP_WINDOW_MS);
     const from = lastDecided.getTime() > windowStart.getTime() ? lastDecided : windowStart;
-    const missed = occurrencesBetween(def, from, now);
+    const missedStats = { dropped: 0, droppedBefore: null as Date | null, truncated: false };
+    const missed = occurrencesBetween(def, from, now, missedStats);
     if (missed.length === 0) return;
+    // 被枚举帽舍弃的最旧前缀折一条聚合账（审计可查；键带 +foldN 不与真实 occurrence 撞）。
+    if (missedStats.dropped > 0 && missedStats.droppedBefore !== null) {
+      await this.decideSkip(def, missedStats.droppedBefore, "too-old", report, "+fold" + String(missedStats.dropped));
+    }
     const latest = missed[missed.length - 1]!;
     const older = missed.slice(0, -1);
     for (const occ of older) {
@@ -646,11 +732,60 @@ export class Scheduler {
     kind: "triggered" | "catchup",
     report: TickReport,
   ): Promise<void> {
-    const run = () => this.admitOccurrence(def, dueAt, kind, report);
+    const run = async (): Promise<void> => {
+      // 跨进程互斥：同根多实例（桌面 app + cairn --serve）各自内存表 + append-only journal
+      // 仍有「双方都读到未决、都 append」的窗口。刷新只能缩小窗口，锁才关掉它。
+      const locked = await this.withCrossProcessLock(() => this.admitOccurrence(def, dueAt, kind, report));
+      if (!locked) report.duplicates += 1; // 对方进程正在决定这一拍：本次让路，不重复触发
+    };
     const next = this.admissionMutex.then(run, run);
     // IO 失败仍释放锁；原始拒绝交还调用者，journal 的已决水位不回滚。
     this.admissionMutex = next.then(() => undefined, () => undefined);
     return next;
+  }
+
+  /** 跨进程准入锁（O_EXCL + 陈旧清理）。返回 false = 锁被活着的另一进程持有。 */
+  private async withCrossProcessLock<T>(fn: () => Promise<T>): Promise<T | false> {
+    const lockPath = join(this.deps.dataDir, "automations.lock");
+    const tryOnce = async (): Promise<T | false> => {
+      let fh: Awaited<ReturnType<typeof open>>;
+      try {
+        await mkdir(this.deps.dataDir, { recursive: true });
+        fh = await open(lockPath, "wx");
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+        return false;
+      }
+      try {
+        try {
+          await fh.writeFile(String(process.pid));
+        } finally {
+          await fh.close().catch(() => undefined);
+        }
+        return await fn();
+      } finally {
+        await rm(lockPath, { force: true }).catch(() => undefined);
+      }
+    };
+    const first = await tryOnce();
+    if (first !== false) return first;
+    // 陈旧锁（崩溃留下的）：超过 2 分钟视为无主，清掉重试一次。
+    const st = await stat(lockPath).catch(() => null);
+    if (st !== null && Date.now() - st.mtimeMs > 120_000) {
+      await rm(lockPath, { force: true }).catch(() => undefined);
+      const retry = await tryOnce();
+      return retry;
+    }
+    return false;
+  }
+
+  /** 把磁盘上（别的进程刚写的）新 journal 条目并入内存去重表。 */
+  private async refreshJournalFromDisk(): Promise<void> {
+    const j = await readJournalFile(this.journalPath).catch(() => null);
+    if (j === null) return;
+    for (const e of j.entries) {
+      if (!this.journalKeys.has(e.occurrence_key)) this.addJournalEntry(e);
+    }
   }
 
   /** 仅在准入锁内调用；执行队列不持锁，queued + running 仍共同占用 cap。 */
@@ -660,8 +795,10 @@ export class Scheduler {
     kind: "triggered" | "catchup",
     report: TickReport,
   ): Promise<void> {
+    // 跨进程去重：内存 journalKeys 只含本实例启动时装载的条目；桌面 app 与 `cairn --serve`
+    // 同根时，对方刚写的 occurrence 本实例看不见 ⇒ 同一 occurrence 双触发。
+    await this.refreshJournalFromDisk();
     const key = occurrenceKeyOf(def.id, dueAt);
-    // occurrenceKey 去重（崩溃/重启双触发免疫）：已决 → 静默跳过，不写新账
     if (this.journalKeys.has(key)) {
       report.duplicates++;
       return;
@@ -696,6 +833,7 @@ export class Scheduler {
     // 会话标题 = 任务名 · 触发时刻（任务时区墙钟）
     const title = def.name + " · " + formatLocal(dueAt, def.timeZone);
     const sessionId = await createSession(this.deps.sessionsDir, isValidSessionName(title) ? title : def.name);
+    await this.rememberSessionId(key, sessionId);
     await createEventLog(pathOf(this.deps.sessionsDir, sessionId)).append({
       type: "session_meta",
       origin: "scheduled",
@@ -870,6 +1008,10 @@ export class Scheduler {
   async upsert(raw: unknown, opts: { form?: boolean } = {}): Promise<ValidationResult & { duplicate?: boolean }> {
     const v = validateAutomation(raw, { form: opts.form === true });
     if (!v.ok) return v;
+    // 写前重读磁盘任务表：两个实例（桌面 app + `cairn --serve`）各持启动时的旧表，
+    // 直接整表回写会静默抹掉对方刚建/改的任务。
+    const disk = await loadAutomationsFile(this.definitionsPath).catch(() => null);
+    if (disk !== null) this.tasks = disk.tasks;
     const dup = this.tasks.find((t) => t.name === v.value.name && t.id !== v.value.id);
     if (dup) return { ok: false, errors: [`任务名已存在: ${v.value.name}（name 唯一）`] };
     const nowIso = new Date(this.clock()).toISOString();
@@ -885,6 +1027,9 @@ export class Scheduler {
   }
 
   async remove(id: string): Promise<{ ok: boolean; error?: string }> {
+    // 同 upsert：先与磁盘合并，别用旧表整表回写抹掉对方的改动。
+    const disk = await loadAutomationsFile(this.definitionsPath).catch(() => null);
+    if (disk !== null) this.tasks = disk.tasks;
     const before = this.tasks.length;
     this.tasks = this.tasks.filter((t) => t.id !== id);
     if (this.tasks.length === before) return { ok: false, error: "任务不存在: " + id };

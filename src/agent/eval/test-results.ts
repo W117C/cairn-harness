@@ -389,7 +389,9 @@ const PYTEST_VERBOSE = new RegExp(
   "u",
 );
 const PYTEST_SUMMARY = new RegExp(
-  "^(?<status>" + PYTEST_STATUS_TOKEN + ")(?:\\s+\\[[^\\]]*\\])? (?<nodeid>\\S+)(?:\\s+- .*)?$",
+  // 短汇总的 skipped 形如 `SKIPPED [1] tests/x.py::t: reason`（nodeid 后是单个冒号），
+  // 旧正则只认 ` - reason` / 行尾 ⇒ 该行解析不到，逐名计数与结尾汇总对不上，整份判卷变 unreadable。
+  "^(?<status>" + PYTEST_STATUS_TOKEN + ")(?:\\s+\\[[^\\]]*\\])? (?<nodeid>\\S+?)(?::\\s.*|\\s+- .*)?$",
   "u",
 );
 const PYTEST_SESSION = /^=+ test session starts =+$/u;

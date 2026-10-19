@@ -33,6 +33,8 @@ function capHookReason(text: string): string {
 }
 /** timeout 缺省（秒）。 */
 export const HOOK_TIMEOUT_DEFAULT = 600;
+/** 上界与缺省同值：hook 是同步面，单个 handler 挂 10 分钟已经是极限；旧实现接受任意大数。 */
+export const HOOK_TIMEOUT_MAX = 600;
 export const HOOK_TIMEOUT_USER_PROMPT = 30;
 /** 会话终止同样在关键路径上（窗口关闭 / 下一次 run 之前）：不给短帽的话，
  *  一个挂死的 SessionEnd 钩子能把「退出」拖到缺省 600s。 */
@@ -148,6 +150,9 @@ export interface HookEngineOptions {
   /** §9.5 userConfig 取值面（按插件给）。缺席 = 不展开、不设 PLUGIN_OPTION_*（零行为，旧调用方逐字不变）。
    *  由 PluginRuntime 注入：值来自明文配置 + safeStorage，敏感位只进子进程 env。 */
   userConfigValues?: (plugin: string) => Record<string, string>;
+  /** 敏感键名：**只进 env（PLUGIN_OPTION_*），不进 argv**。argv 在进程表/崩溃报告/审计里可读，
+   *  `["--token","<secret>"]` 等于把 safeStorage 的目标作废。 */
+  userConfigSensitive?: (plugin: string) => readonly string[];
 }
 
 interface SanitizedEnv {
@@ -255,8 +260,8 @@ function defaultExec(): HookExecFn {
     return await new Promise<HookExecOutcome>((resolveP) => {
       // #55：逐块 `d.toString("utf8")` 会把跨块的多字节字符各变成一个 U+FFFD——hook 的 stdout 是
       // 要回注给模型的上下文（SessionStart / UserPromptSubmit / PostToolUse），不能让解码器改写字节。
-      const stdoutText = createChunkText();
-      const stderrText = createChunkText();
+      const stdoutText = createChunkText(HOOK_OUTPUT_CAP * 4);
+      const stderrText = createChunkText(HOOK_OUTPUT_CAP * 4);
       let killed = false;
       let settled = false;
       let spawnError: string | undefined;
@@ -418,7 +423,7 @@ export class HookEngine {
         result.errors.push("hook 拒跑（插件 " + h.plugin + "）：" + denied);
         continue;
       }
-      timeouts.push(typeof h.handler.timeout === "number" ? h.handler.timeout
+      timeouts.push(typeof h.handler.timeout === "number" ? Math.min(Math.max(1, h.handler.timeout), HOOK_TIMEOUT_MAX)
         : event === "UserPromptSubmit" ? HOOK_TIMEOUT_USER_PROMPT
           : event === "SessionEnd" ? HOOK_TIMEOUT_SESSION_END
             : HOOK_TIMEOUT_DEFAULT);
@@ -430,10 +435,14 @@ export class HookEngine {
       // §9.5：`${user_config.*}` 只进 exec form（shell form 在装载期就被拒载——那串会被 shell 再解析一次）。
       // 执行端展开而不是装载端展开：值来自 safeStorage，装载期（纯静态扫描）不该去碰密钥环。
       const cfgValues = this.opts.userConfigValues?.(h.plugin) ?? {};
+      // argv 展开用过滤后的值：敏感键（safeStorage）只走 env，留在 argv 里会被 ps / 崩溃报告读走。
+      // 引用敏感键的 argv 保留 `${user_config.<key>}` 字面量（插件应改走 PLUGIN_OPTION_*）。
+      const sensitive = new Set(this.opts.userConfigSensitive?.(h.plugin) ?? []);
+      const argvValues = Object.fromEntries(Object.entries(cfgValues).filter(([k]) => !sensitive.has(k)));
       const command = shell
         ? (h.handler.command as string)
-        : expandUserConfig((h.handler.command as string[])[0] ?? "", cfgValues);
-      const argv = shell ? [] : (h.handler.command as string[]).slice(1).map((a) => expandUserConfig(a, cfgValues));
+        : expandUserConfig((h.handler.command as string[])[0] ?? "", argvValues);
+      const argv = shell ? [] : (h.handler.command as string[]).slice(1).map((a) => expandUserConfig(a, argvValues));
       const pluginRoot = this.pluginRootOf(h);
       const env = hookEnv({
         pluginRoot,

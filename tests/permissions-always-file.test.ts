@@ -75,3 +75,29 @@ describe("② 读侧透明并入（漏了这一半就是静默失效）", () => 
     } finally { await rm(ws, { recursive: true, force: true }); }
   });
 });
+
+// 2026-10-19：读侧只按「文件存在」并入 always ⇒ 克隆来的仓库提交一份 allow-all 即免掉全部审批。
+// 机器本地授权不能随仓库分发：被 git 跟踪的那份不并入。
+describe("③ 仓库分发的 always 文件不得被当成用户授权", () => {
+  it("git 跟踪 ⇒ 忽略；未跟踪 ⇒ 照常并入", async () => {
+    const { execFileSync } = await import("node:child_process");
+    const ws = await mkdtemp(join(tmpdir(), "perm-always-git-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: ws });
+      await mkdir(join(ws, ".agent"), { recursive: true });
+      const alwaysPath = join(ws, ".agent", ALWAYS_RULES_FILE);
+      await writeFile(alwaysPath, always, "utf8");
+      await writeFile(join(ws, ".agent", "permissions.json"), tracked, "utf8");
+      execFileSync("git", ["add", "-f", ".agent/permissions.always.json"], { cwd: ws });
+      const before = loadPermissionRules(join(ws, ".agent", "permissions.json"));
+      expect(before.map((r) => r.behavior + ":" + r.tool)).toEqual(["deny:run_shell"]);
+
+      // 未跟踪（机器本地）⇒ 并入仍然生效（不许把功能一起修没）。
+      execFileSync("git", ["rm", "--cached", "-q", ".agent/permissions.always.json"], { cwd: ws });
+      const after = loadPermissionRules(join(ws, ".agent", "permissions.json"));
+      expect(after.map((r) => r.behavior + ":" + r.tool).sort()).toEqual(["allow:write_file", "deny:run_shell"]);
+    } finally {
+      await rm(ws, { recursive: true, force: true }).catch(() => undefined);
+    }
+  });
+});

@@ -43,6 +43,12 @@
 > （v2.14：**两处后端接线落地**——① 桌面主进程常驻 `serveScheduler({ workspace })`（whenReady 启动 / will-quit 停表）：自动化面板结束「空壳」态，§8 #18 关案，反向证人入 `tests/scheduler-wiring.test.ts` ④；② `AppSettings.locale` 字段落地（zh-CN/en-US，持久化 + 白名单校验），设置页界面语言由「待接入」转正（文案翻译逐段接线）。全仓 typecheck 通过、21/21 测试绿、desktop-boundary-check 绿。）
 > （v2.15：**会话五动作全接 + 分叉通道落地**——侧栏 ⋯ 菜单扩为 重命名 / 固定 / 分叉… / 归档 / 删除（前四项映射既有桥接通道）；新增 `handleSessionFork` + `AgentApi.forkSession` + `agent:sessions-fork`（与 CLI `--fork/--from` 同口径，复用 `fork-cli` 单源算术：源会话只读、目标已存在不覆盖、越界 fail-visible 不留半成品）；模型动作条分叉按钮同源接线。§8 #12 关案、#7 对话级部分收口。28/28 测试绿、全仓 typecheck 通过。）
 > （v2.16：**赞踩 / 文件级回滚接线落地（接手笔 2026-10-06）**——core 沉淀链路与文件回滚先行落齐（`src/main/feedback.ts` append-only sidecar + `handleFeedbackSubmit/List`；`planTurnRevert/applyTurnRevert` + `handleSessionRevert`；判卷 `tests/feedback.test.ts` / `tests/file-revert.test.ts`），goal pause/resume 语义同批（`setGoal{pause,resume}` + `goal_paused/goal_resumed`）。本笔接 renderer：事件行**悬停动作条**（C-33 的现行切片）——终稿 assistant 行挂 复制/赞/踩（`submitFeedback` 真提交、再点撤销、`listFeedback` 点亮；live 桶行不挂，防锚错事件）；user 行挂「⟲ 还原此轮文件」（`revertTurn`，轮号 = 主会话 user_message 1-based，与 core 同口径；confirm 后执行）；回滚结果走**会话键控提示条**（`.notice-strip`，成功面不进错误条），复制失败/提交失败走 ErrorStrip。§8 #7/#8 关案、#9 core 半收口。桌面判卷 93 条绿（projections +3）。）
+> （v2.17：**运行中可沟通**——运行中不再禁用输入：回车=入队（本轮结束后自动发送），⌘↩=打断并发送；
+> 队列条挂在输入卡上沿（按会话持有，可移除、可「打断并发送」把某条提到队首后打断本轮）。权限档与模型选择器
+> 维持运行中禁用（C-20/C-21 既有口径：下一轮生效的控件不在半程开口子）。实时投喂（轮中把消息喂给模型）**仍不开**——
+> 要等核心开安全接收边界；本刀只做「排队 + 收束后自动派发」。澄清/方案门仍锁输入（占位「等待你的决定…」）；
+> ask 门**不做**锁：主会话审批不落事件流（`approval_requested` 只归 worker），AskGate 载荷无 sessionId ⇒
+> 归属不可知，锁它就会误锁别的会话——归属面留待后续（与 C-14 卡面同源）。）
 >
 > **本文是什么**：设计与实现之间的契约。每个组件的层级归属、所处区域、可视状态、交互行为都有唯一定义；
 > 组件名一经此处定义，代码、评审、验收共用同一套词汇。
@@ -101,8 +107,8 @@
 | 首启未完成 | —（被 Onboarding 接管） | — | — |
 | 无会话（新任务） | EmptyState 取代 | 空 | 启用（占位「发消息或创建任务，/ 调用指令，@ 文件或对话」） |
 | 会话 · 空闲 | 历史行 | 空 | 启用 |
-| 会话 · 运行中 | 流式行 + 尾随呼吸光标 | 空 | **输入禁用**（占位「会话运行中…」）· SendButton=■ |
-| 会话 · 门槛（ask/clarify/plan） | 历史行 | **有且仅有一张卡** | 输入禁用（占位「等待你的决定…」）· SendButton=■ |
+| 会话 · 运行中 | 流式行 + 尾随呼吸光标 | 空 | **输入可用**（占位「运行中 · 回车排队，⌘↩ 打断并发送」）· SendButton=■ ＋ 入队钮（v2.17） |
+| 会话 · 门槛（ask/clarify/plan） | 历史行 | **有且仅有一张卡** | clarify/plan 门：输入禁用（占位「等待你的决定…」）· ■；ask 门：输入可用（归属不可知，见 v2.17 注） |
 | 会话 · 已停止 | 历史行（含停止留痕） | 空 | 启用 |
 | 会话 · 出错 | 历史行 + 错误行 | 空 | 启用；run 级失败另出 ErrorStrip |
 | 设置打开 | 不变（被整页设置覆盖） | 不变 | 不变（SettingsPage 全覆盖，TitleBar 除外） |
@@ -712,17 +718,19 @@ waiting 改为静态外环、running 改为高亮实心（见 §4.4）。
 
 #### C-18 `ComposerCard`
 - **区域/层级**：Zone 3 主体；三行富卡（Row1 chips / Row2 输入 / Row3 控件）。
-- **域映射**：发送 `run({message, mode, sessionId, model})`；disabled 判据 = `runningActive || pendingSend && 无会话`。
-- **结构**：外卡：`border hairline · r-lg · surface · shadow-card`；Row2 为自增高 textarea（1–6 行后内滚）。
+- **域映射**：发送 `run({message, mode, sessionId, model})`；**整卡 disabled 判据 = `composerLocked({creating: pendingSend && 无会话, gateActive: 澄清/方案门未决})`**
+  （v2.17：运行中不在判据里——运行中输入可用，发送=入队。唯一处 `send-queue.ts`）。
+- **结构**：外卡：`border hairline · r-lg · surface · shadow-card`；Row2 为自增高 textarea（1–6 行后内滚）；
+  卡上沿可挂**发送队列条**（`SendQueueStrip`，v2.17：按会话持有多条——文本 + 引用数 + 「打断并发送」+ 移除）。
 - **状态表**：
 
 | 状态 | 视觉 |
 |---|---|
 | 默认 | placeholder「给 agent 派活…」 |
 | focus-within | 边线 text-3 + 外环 3px 6% 墨色 |
-| 运行中 | 整体 opacity .55；输入禁用；placeholder「会话运行中…」；SendButton=■ |
-| 门槛中 | 同运行中；placeholder「等待你的决定…」；**输入区完整保留、不做任何隐藏或删除**（v2.9 修正：曾试隐控件行被用户否决——占高问题由门卡折叠解决） |
-| 新建往返中 | 同运行中（防双发窗口，沿用 pendingSend 语义） |
+| 运行中 | 输入可用（不置灰）；placeholder「运行中 · 回车排队，⌘↩ 打断并发送」；SendButton=■ ＋ 入队钮；权限档与模型选择器仍 disabled（C-20/C-21） |
+| 门槛中（澄清/方案） | 输入禁用；placeholder「等待你的决定…」；**输入区完整保留、不做任何隐藏或删除**（v2.9 修正：曾试隐控件行被用户否决——占高问题由门卡折叠解决） |
+| 新建往返中 | 同门槛中（防双发窗口，沿用 pendingSend 语义）；placeholder「正在创建会话…」 |
 | 发送失败 | 草稿**回填** + ErrorStrip（不丢输入） |
 
 - **交互**：Enter 发送（IME 组字中不触发——中文输入必需）、Shift+Enter 换行、Cmd+Enter 始终发送；
@@ -805,12 +813,14 @@ waiting 改为静态外环、running 改为高亮实心（见 §4.4）。
 |---|---|---|
 | 可用 | accent 底 + `↑`（accent-ink） | 提交 |
 | hover/active | opacity .82 / scale .98 | — |
-| 禁用（空输入/运行中/门中） | surface-2 底 + text-3 字形 | 不可点 |
+| 禁用（空输入/门中/新建往返中） | surface-2 底 + text-3 字形 | 不可点 |
 | 发送往返中 | Spinner（pulse）替代字形，禁用 | 防双发 |
 | 运行中（可打断） | surface 底 + hairline 描边 + `■` 墨色；hover 变 danger 边/字 | `runCancel`；本地即亮「已停止」标记，收束校正 |
+| 运行中 · 入队钮（v2.17，■ 左侧） | surface 底 + hairline 描边 + `Ic.clock`；空输入时禁用 | 入队（等价回车）；本轮结束后自动发送（`send-queue.ts` FIFO） |
 
-- **交互**：点击等价 Enter；核心不误触——打断不 confirm（误触代价 = 本轮收束，fail-closed，不是数据损失——沿用既有裁定）。
-- **a11y**：`aria-label` 随态（「发送」/「打断本轮」）；`aria-busy`。
+- **交互**：点击等价 Enter（运行中=入队）；⌘↩=入队并打断（打断落轮界，队列随即派发）；核心不误触——
+  打断不 confirm（误触代价 = 本轮收束，fail-closed，不是数据损失——沿用既有裁定）。
+- **a11y**：`aria-label` 随态（「发送」/「打断本轮」/「加入队列」）；`aria-busy`。
 - **落地**：新增（现无独立发送钮；发送靠 Enter，无鼠标面、无打断钮的常驻位）。
 - **＋优化**：鼠标用户此前只能按 Enter；打断按钮散在 sessionbar。收进 SendButton 后「主行为」唯一化。
 
@@ -1081,7 +1091,8 @@ waiting 改为静态外环、running 改为高亮实心（见 §4.4）。
 ## 7. 验收清单（可判定）
 
 1. **门槛互斥**：任意时刻 GateSlot ≤ 1 张卡；三卡同现时优先级 = ask > clarify > plan。
-2. **门槛禁用**：卡在场时 Composer 输入禁用、SendButton 不可发送、`Esc` 不产生决议。
+2. **门槛禁用**：clarify/plan 门在场时 Composer 输入禁用、SendButton 不可发送、`Esc` 不产生决议
+   （ask 门见 v2.17 注：归属不可知，输入保持可用、不误锁）。
 3. **状态点**：五态各自可达；`prefers-reduced-motion: reduce` 下无任何无限动画且五态仍可辨。
 4. **跟滚**：运行中用户上翻视口不动；新事件到达不跳底；点「回到最新」恢复钉底。
 5. **ToolRow 终态**：`blockedBy / hold / timedOut / exitCode` 四类在 UI 有专属字形与文案（不与其他失败同形）。
@@ -1096,6 +1107,9 @@ waiting 改为静态外环、running 改为高亮实心（见 §4.4）。
 14. **思考行**：折叠/展开可切换；live 态有动效且 reduced-motion 下静止；内容位必带「未接线」注记。
 15. **三栏收口**：任意窗口宽下门槛卡 / 目标面板 / 状态条不越出主区（两条布局纪律：`min(var(--reading),100%)` + `minmax(0,1fr)`）。
 16. **缺口纪律**：界面不出现无对应能力的假操作——未接线项（赞踩 / 分叉 / 暂停 / 工作树切换 / 推理文本）均有显式注记，且点击无假提交。
+17. **运行中可沟通（v2.17）**：运行中回车入队且不打断；⌘↩ 入队并打断（打断落轮界）；本轮收束后
+    队列严格 FIFO 自动派下一条（切走会话不丢、不串会话）；队列条可移除任一条、可把任一条
+    「打断并发送」提到队首。
 
 ---
 
@@ -1125,3 +1139,12 @@ waiting 改为静态外环、running 改为高亮实心（见 §4.4）。
 | 17 | 开始页（右栏）· 新建终端 / 浏览器 | 同 #1/#2 | 开始页已落**右栏**（v2.2）；浏览器卡开标签（见 #2）；新建终端保持「待接入」 |
 | 18 | 侧栏 · 自动化任务（**v2.14 已收口**） | 桌面端主进程已常驻接线：`serveScheduler({ workspace })`（whenReady；will-quit 停表）——快照/CRUD/触发同一实例，触发 = 全新会话（`makeScheduledExecutor`）；反向证人 = `tests/scheduler-wiring.test.ts` ④（摘掉调用即红） | ✅ 桌面端可用（面板不再空壳） |
 | 19 | 右栏 · 审查面板 | 后端最全（worker diff + `diff_comment` + 合并控制塔 + 孤儿扫描），v2 已实现原型 | 按「本轮只做浏览器和辅助对话」**暂时移出右栏**；可随时作为标签类型加回 |
+
+---
+
+## 9. 组件实现约束（2026-10-14）
+
+标准控件不再逐个手写。组件库选型、替代方案、组件映射与迁移顺序见
+[`docs/adr/0003-desktop-ui-component-stack.md`](../../../docs/adr/0003-desktop-ui-component-stack.md)。
+本设计规范只描述产品语义与视觉目标；Button / Input / Select / Tabs / Dialog /
+Menu / Popover / ScrollArea / Tooltip 等标准交互以组件库实现为准。

@@ -317,5 +317,18 @@ describe("判卷面硬闸的批量形态（apply_patch：目标路径在补丁�
     expect(evaluate("apply_patch", { patch: "没有 diff 段\n" }, s).verdict).not.toBe("deny");
     expect(evaluate("apply_patch", { patch: seg(JUDGE) }, s).verdict).not.toBe("deny");
   });
+
+  it("⑱ `..` 归一与大小写变体不得绕过冻结闸（2026-10-19 实测三种输入）", () => {
+    const s = armed([JUDGE]);
+    // `foo/../x` 与 `x` 是同一个文件：旧实现见到 `..` 直接判「不归本闸管」。
+    expect(denyReason(evaluate("write_file", { path: "foo/../" + JUDGE, content: "x" }, s))).toContain(`判卷文件冻结：${JUDGE}`);
+    expect(denyReason(evaluate("edit_file", { path: "a/../" + JUDGE, old_string: "a", new_string: "b" }, s))).toContain(`判卷文件冻结：${JUDGE}`);
+    // macOS/Win 默认文件系统大小写不敏感：`FIXTURES/MOCK/...` 命中同一个文件。
+    if (process.platform === "darwin" || process.platform === "win32") {
+      expect(evaluate("write_file", { path: JUDGE.toUpperCase(), content: "x" }, s).verdict).toBe("deny");
+    }
+    // 越界仍不归本闸管（方向不许被顺手改宽）。
+    expect(evaluate("write_file", { path: "../" + JUDGE }, s).verdict).not.toBe("deny");
+  });
 });
 

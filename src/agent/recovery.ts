@@ -83,6 +83,21 @@ export function interruptedWorkers(events: readonly AgentEvent[]): InterruptedWo
   return out.sort((a, b) => a.spawned.parent_event_id - b.spawned.parent_event_id);
 }
 
+/** RespawnArgs → spawn_agent 真正接受的顶层参数（去掉审计/展示字段）。
+ *  旧实现 `{...args}` 原样转给 spawn，被 unconsumedSpawnArgs 当未知参数拒绝：
+ *  真实 read worker 恒带 usage_model、write worker 恒带 worktree/base_commit。 */
+export function respawnSpawnArgs(a: RespawnArgs): Record<string, unknown> {
+  return {
+    mode: a.mode,
+    task: a.task,
+    ...(a.resources !== undefined ? { resources: a.resources } : {}),
+    ...(a.max_turns !== undefined ? { max_turns: a.max_turns } : {}),
+    ...(a.tier !== undefined ? { tier: a.tier } : {}),
+    ...(a.model !== undefined ? { model: a.model } : {}),
+    ...(a.role !== undefined ? { role: a.role } : {}),
+  };
+}
+
 /** agent_spawned → 重派 SpawnArgs（纯函数；恢复的「重派」= 全新 agent_id 重新 spawn，§4.4.9）。 */
 export function respawnArgsFrom(spawned: AgentSpawnedEvent): RespawnArgs {
   return {

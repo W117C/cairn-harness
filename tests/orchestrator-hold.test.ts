@@ -275,7 +275,9 @@ describe("编排按住的这一次扩张：每挡各有行为证人", () => {
     expect(await waitFor(() => hang.has("前环任务A"))).toBe(true);
     await orch.appendProtocol({ type: "usage", inputTokens: 700_000, outputTokens: 400_000 } as AgentEvent);
     releaseOne(hang); // 前环 done → 事件驱动触发后环 → 成本闸把这一环按住
-    expect(await waitFor(() => resultsFor(events, "b4").length >= 1)).toBe(true);
+    // 等**两条**都到再断言：两条由触发支与按住支各落一条，中间隔一个微任务队列。旧写法等第一条就取快照，
+    // 全量判卷并行后有负载时读到 1 条 → 偶发红（2026-10-18 实测）。断言仍是「恰好 2 条」，没有放松。
+    expect(await waitFor(() => resultsFor(events, "b4").length >= 2)).toBe(true);
     const evs = resultsFor(events, "b4");
     // 第 245 页穿线后：触发支的落流事件也挂 b4（两条同 id，投影时 mergeToolResultsById 并成一条、正文不丢）
     expect(evs.length).toBe(2);

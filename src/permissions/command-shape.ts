@@ -303,6 +303,18 @@ export function tokenSubsequenceStart(tokens: string[], pattern: string): number
 /** 规则匹配用的形态集：原形（逐字，调用方已归一空白）+ 每个调用点的 `bin args…`。
  *  deny/ask 逐形取最长命中；allow 只吃原形——包装器恰恰是「被禁的事」藏身的地方，
  *  而「用户点过一次总是允许」那次的同意不该顺着 `env`/`timeout` 一起放宽。 */
+/** 匹配前的 shell 词法归一（**只用于判定，不用于执行**）。
+ *  `$IFS`/`${IFS}` 在 shell 里展开成空白：`git${IFS}push${IFS}--force` 实际执行的是
+ *  `git push --force`，而旧匹配按未展开字面量看 ⇒ deny/ask/网络判定整条被绕过。
+ *  单引号里的 `$IFS` 本不展开，这里仍当空白（对判定是收紧方向，宁可多问一次）。 */
+export function normalizeCommandForMatch(s: string): string {
+  return s
+    .replace(/\$\{[^}]*\bIFS\b[^}]*\}|\$IFS\b/gi, " ")
+    .replace(/\$'\\x20'|\$'\\t'|\$'\\n'/gi, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 export function commandForms(normalizedSegment: string): string[] {
   const out: string[] = [normalizedSegment];
   const seen = new Set<string>([normalizedSegment]);
