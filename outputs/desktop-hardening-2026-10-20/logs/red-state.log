@@ -1,0 +1,19 @@
+FAIL 提交中的同一条反馈禁止重复发送 undefined
+FAIL 反馈失败只回滚本条，不清空其他已成功标记 undefined
+FAIL 置顶失败只回滚本条，不清空其他已成功标记 undefined
+PASS 另一会话先展示自己的反馈与置顶 undefined
+FAIL 旧会话迟到失败不覆盖当前会话的标记 undefined
+PASS 旧会话的提交错误不显示到当前会话 undefined
+PASS 渲染过程无控制台错误 []
+FAIL 提交中的同一条反馈禁止重复发送 undefined
+FAIL 反馈失败只回滚本条，不清空其他已成功标记 undefined
+FAIL 置顶失败只回滚本条，不清空其他已成功标记 undefined
+PASS 另一会话先展示自己的反馈与置顶 undefined
+FAIL 旧会话迟到失败不覆盖当前会话的标记 undefined
+PASS 旧会话的提交错误不显示到当前会话 undefined
+PASS 渲染过程无控制台错误 []
+截图与读数：/Users/ze/Downloads/Cairn/deepseek harness/outputs/desktop-hardening-2026-10-20/repro-ui
+隔离测试配置：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-state-profile-ux77vs
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron scripts/state-smoke.cjs '/Users/ze/Downloads/Cairn/deepseek harness/outputs/desktop-hardening-2026-10-20/repro-ui'

@@ -14,7 +14,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Command } from "cmdk";
 import { PaletteContent } from "../src/renderer/components/CommandPalette";
 import { ShortcutsSection } from "../src/renderer/components/settings-sections";
-import { SHORTCUTS } from "../src/renderer/shortcuts";
+import { SHORTCUTS, keysOf } from "../src/renderer/shortcuts";
 import type { WorkspaceSession } from "../src/renderer/sessions-view";
 
 const appSrc = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
@@ -50,10 +50,15 @@ describe("① PaletteContent SSR（命令面板内容面）", () => {
     expect(html).toContain("切换主题");
     expect(html).toContain("切换权限档");
     expect(html).toContain("开合检查器");
-    // 键位提示与 SHORTCUTS 同源（新任务 ⌘N / 打开文件夹 ⌘O / 开合检查器 ⌘⌥B）
+    // 键位提示与 SHORTCUTS 同源（新任务 ⌘N / 打开文件夹 ⌘O / 开合侧栏 ⌘B / 开合检查器 ⌘⌥B）
     expect(html).toContain("⌘N");
     expect(html).toContain("⌘O");
     expect(html).toContain("⌘⌥B");
+    // 2026-10-20：开合侧栏此前 shortcutId 误指 palette ⇒ 面板把 ⌘K（命令面板的键）
+    // 显示成开合侧栏的快捷键，照着按会打开面板而不是收起侧栏。
+    expect(html).toContain("开合侧栏");
+    expect(html).toContain("⌘B");
+    expect(html).not.toContain("⌘K");
     // 会话与项目组：标题 / 项目名在场
     expect(html).toContain("改登录页");
     expect(html).toContain("cairn");
@@ -94,6 +99,13 @@ describe("③ 同源哨兵（tooltip 与表同源，防漂移）", () => {
     expect(sidebarSrc).toContain("keysOf(id)");
   });
 
+  it("命令面板每个 shortcutId 都能在 SHORTCUTS 里取到键（不引表外 id——取不到就静默不显示键）", () => {
+    const ids = [...paletteSrc.matchAll(/shortcutId: "([^"]+)"/g)].map((m) => m[1] ?? "");
+    expect(ids.length).toBeGreaterThanOrEqual(5);
+    const missing = ids.filter((id) => keysOf(id) === null);
+    expect(missing).toEqual([]);
+  });
+
   it("strings.ts 三处 tooltip 不再手写键位（新任务 / 搜索会话与命令 / 设置）", () => {
     expect(stringsSrc).not.toContain("新任务（⌘N）");
     expect(stringsSrc).not.toContain("搜索会话与命令（⌘K）");
@@ -116,7 +128,9 @@ describe("④ App 哨兵（键位 → 面板）", () => {
   });
 
   it("面板打开时 App 全局快捷键让路，不穿透改背景状态", () => {
-    expect(appSrc).toContain("if (document.querySelector('[data-modal-surface=\"true\"]') !== null || h.paletteOpen) return;");
+    // 2026-10-20：改钉「走共享门」（command-gate.ts 的 overlayBlocked）——
+    // 行为判据在 tests/command-gate.test.ts（真 DOM）；这里钉 App 的快捷键路径接上了那道门。
+    expect(appSrc).toContain("overlayBlocked(readGateInput(");
   });
 
   it("命令面板向辅助技术声明模态对话框，而不只是视觉遮罩", () => {

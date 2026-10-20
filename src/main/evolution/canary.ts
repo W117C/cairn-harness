@@ -407,7 +407,14 @@ export class CanaryController {
   }
 
   /** 跨进程互斥：观察档是读-改-写整文件；两实例同时收束会各写 N+1（丢样本）或互相撤销回滚。
-   *  锁只覆盖「读档 → 判据 → 落盘」短段；O_EXCL + 60s 陈旧回收。 */
+   *  锁只覆盖「读档 → 判据 → 落盘」短段；O_EXCL + 持锁进程探活 + 60s 陈旧兜底。
+   *
+   *  为什么探活必须优先于时钟：持锁者会把 pid 写进锁文件（下面 `writeFile(String(process.pid))`），
+   *  而"陈旧"从前只按 `Date.now() - mtimeMs > 60s` 判。时钟会跳——NTP 校正、虚拟机恢复、
+   *  手动改表都能让它往回走。往回一跳，一个**早就不在的进程**留下的锁永远读不出"超过 60s"，
+   *  于是 canary 从这一秒起永远 refused，盘上却没有任何东西能解开它。探活不受时钟影响：
+   *  pid 不在就是不在。反过来它也堵住另一个方向——活着的进程卡住超过 60s 时，旧逻辑会把它的锁
+   *  当陈旧收走，两个实例同时写同一份观察档（那正是这把锁要防的事）。 */
   private async withLock<T>(fn: () => Promise<T>): Promise<T> {
     if (this.lockDepth > 0) return await fn();
     const dir = join(this.workspace(), ".agent");
@@ -421,11 +428,28 @@ export class CanaryController {
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
         const st = await stat(lockPath).catch(() => null);
-        if (st !== null && Date.now() - st.mtimeMs > 60_000) {
-          await rm(lockPath, { force: true }).catch(() => undefined);
-          return await open(lockPath, "wx");
+        // 锁文件被外部删掉 ⇒ 没有持锁者可言，直接重取（这一支不靠 mtime，删了就是删了）。
+        if (st === null) return await open(lockPath, "wx");
+        const holder = await readFile(lockPath, "utf8").then((t) => Number.parseInt(t.trim(), 10), () => Number.NaN);
+        // 探活：`kill(pid, 0)` 只问存在。EPERM＝存在但不是我的进程 ⇒ 算活着
+        // （判错了只能是多等，不能是抢走别人的锁）。
+        let alive = false;
+        if (Number.isInteger(holder) && holder > 0) {
+          try { process.kill(holder, 0); alive = true; }
+          catch (e) { alive = (e as NodeJS.ErrnoException).code === "EPERM"; }
         }
-        throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
+        if (alive) throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
+        // 持锁者已不在 ⇒ 直接收回，**不看时钟**。这正是修的那一格：旧逻辑在这里仍要求
+        // "超过 60s"，时钟一回跳（NTP 校正 / 虚拟机恢复 / 手动改表），死进程留下的锁永远读不出
+        // 超时 ⇒ canary 从这一秒起永远 refused，而盘上没有任何东西能解开它。
+        // pid 读不出（NaN，典型是崩溃在 open 与 writeFile 之间）时不猜，退回 60s 时间兜底。
+        if (!Number.isInteger(holder) || holder <= 0) {
+          if (Date.now() - st.mtimeMs <= 60_000) {
+            throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
+          }
+        }
+        await rm(lockPath, { force: true }).catch(() => undefined);
+        return await open(lockPath, "wx");
       }
     };
     const fh = await acquire();
@@ -556,7 +580,13 @@ export class CanaryController {
         out.push({ id: record.id, outcome: "idle", observation: record, acted: false });
         continue;
       }
-      if (this.observations.get(record.id) === undefined) this.observations.set(record.id, record);
+      // **每次都从盘上那份刷新内存副本**（2026-10-19 独立评审追出）：
+      // 旧实现只在内存里**没有**这一档时才 set ⇒ 本进程里已经有一份（可能是上一轮、甚至
+      // 另一个实例写下的）旧副本时，盘上刚读出来的新记录被**丢掉**，接着拿那份旧副本去判
+      // ⇒ 两个实例各判各的、样本各丢各的，甚至能**为一个从没发生过的漂移做回滚**。
+      // 根因：O_EXCL 那把锁只串行化了**写**，没串行化"读-改-写"（另一个实例的 observe 落盘
+      // 之后，本进程的内存副本并不会自动跟着变）。盘上那份才是真相（每次 observe 都回写）。
+      this.observations.set(record.id, record);
       const res = await this.observe(record.id, sample);
       out.push({ id: record.id, outcome: "resumed", observation: res.observation, acted: res.acted });
     }
@@ -677,7 +707,9 @@ export class CanaryController {
       obs.rollbackError = `${obs.id} 没有 previous 版本可回退（这是它的首个激活版本）`;
     } else {
       try {
-        await this.installer.rollbackInstalled(obs.id, this.actor);
+        // 只回退到**观察记录里那个**版本（账本的 previous 位期间被别人动过就拒）：
+        // 否则装上的版本与 `rollbackTo` 记的不一致 ⇒ 记录在撒谎。
+        await this.installer.rollbackInstalled(obs.id, this.actor, obs.previousVersion ?? undefined);
         obs.state = "rolled-back";
         obs.rollbackTo = obs.previousVersion;
       } catch (err) {

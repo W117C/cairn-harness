@@ -255,7 +255,9 @@ export const MUTATIONS = [
   // ---- 高熵候选的边界（security/scan.ts，2026-09-22）----
   {
     id: "entropy-candidate-eats-assignment-label",
-    src: "src/agent/security/scan.ts",
+    // 2026-10-20：熵分支与脱敏原语一起搬到了 `src/events/redact.ts`（脱敏归落盘边界那一层，
+    // 见那里的说明）；变异跟着实现走，**判据与判卷面一字未改**。
+    src: "src/events/redact.ts",
     test: "tests/redact.test.ts",
     desc: "候选字符集含 `=` ⇒ `SESSION=<高熵>` 整串成为候选，mask() 只留前 4 字符，键名连同值一起吃掉（掩码产物读起来像原文被改坏了）",
     apply: (s) => s.replace("/[A-Za-z0-9+/_-]{16,}={0,2}/g", "/[A-Za-z0-9+/=_-]{16,}/g"),
@@ -263,7 +265,7 @@ export const MUTATIONS = [
   },
   {
     id: "entropy-path-veto-removed",
-    src: "src/agent/security/scan.ts",
+    src: "src/events/redact.ts", // 2026-10-20：同上，熵分支搬到 src/events/redact.ts
     test: "tests/redact.test.ts",
     desc: "去掉绝对路径否决 ⇒ 字符集含 `/`，一条 tmpdir 整段成为候选（实测 `/var/folders/…` 落成 `/var****`），落流与归档两面的路径全毁",
     apply: (s) => s.replace("    if (looksLikePath(token)) continue;\n", ""),
@@ -536,14 +538,6 @@ export const MUTATIONS = [
   },
 
   // ── 第 4 档 guided（judgment-layer §7 第 1 步）：政策表的每一格都要有「废掉它必须有名字红」的锚
-                            {
-    id: "distill-gate-whitelist-unlabeled",
-    src: "src/agent/memory/distill.ts",
-    test: "tests/distill.test.ts",
-    desc: "沉淀轮的白名单拒绝不带留痕 ⇒ §7 的可标分母少一格（受管调用发生了、判定也发生了，只是没人记）",
-    apply: (s) => s.replace(', gate: DISTILL_GATE.whitelist }', ' }'),
-    expectFail: "白名单挡下非 remember 工具 ⇒ gate = X-distill / denied（没问过人，不是人的答复）",
-  },
   {
     id: "distill-gate-merged-verdict-collapse",
     src: "src/agent/memory/distill.ts",

@@ -273,7 +273,73 @@ describe("连接串内嵌凭据：整条掩，不许留下 // 之后那一段", 
   });
 });
 
+describe("私钥块：掩材料、留标记（publicMarker）", () => {
+  // 2026-10-19：旧写法把 `-----BEGIN … PRIVATE KEY-----` 整段掩掉 ⇒ 下游再也认不出
+  // "这里曾经是私钥块" ⇒ sidechat 的提升面（promote）那声 fail-closed 的"拒"静默失效
+  // （而它本该拒的正是**旁路模型**产出的私钥——那是最该拒的一类）。
+  // 那两行是**公开常量**，秘密是中间的 base64 体 ⇒ 掩材料、留标记。
+  it("材料被掩、标记留着（下游仍能认出这是私钥块）", () => {
+    const body = "MIIEowIBAAKCAQEAySecretKeyMaterialHere0123456789abcdef";
+    const r = redactSecrets(`-----BEGIN RSA PRIVATE KEY-----\n${body}\n-----END RSA PRIVATE KEY-----`);
+    expect(r.blocked, "私钥块 = critical = 阻断").toBe(true);
+    expect(r.text).not.toContain(body); // 材料不留
+    expect(r.text).toContain("-----BEGIN RSA PRIVATE KEY-----"); // 标记留着
+  });
+
+  it("下游凭这个标记仍能判出 secret.private_key（提升面要靠它拒）", () => {
+    const r = redactSecrets("-----BEGIN RSA PRIVATE KEY-----\nMIIEowtest\n-----END RSA PRIVATE KEY-----");
+    expect(r.findings.map((f) => f.ruleId)).toContain("secret.private_key");
+  });
+
+  it("反面对照：非 publicMarker 的规则仍照掩（这条不是「一律不掩」）", () => {
+    const r = redactSecrets("AKIAIOSFODNN7EXAMPLE");
+    expect(r.text).not.toContain("AKIAIOSFODNN7EXAMPLE");
+    expect(r.text).toContain("AKIA****");
+  });
+});
+
 describe("赋值式凭据的值带括号（被 {12,} 卡掉的那一类）", () => {
+  // 2026-10-19 独立评审：头的长度决定走哪条规则，而**掩码是按顺序做的**
+  // （`out.split(secret).join(mask(secret))`）——先到的那条把整串换掉之后，后到的那条就再也
+  // 匹配不到完整串了。旧顺序里 `secret.assigned` 排在 `secret.assigned_bracketed` **之前**：
+  // 头的长度 ≥12 时它**会**命中、只掩住头 ⇒ 尾巴（`(staple)123` 那一段）原样留在明文里。
+  // 半掩比不掩更坏——它给出"已经脱敏过了"的假象。同 `secret.connection_string` 那条补丁。
+  it("★头部长到 ≥12 字时，括号里的尾巴也不许留在明文里（旧顺序只掩住头）", () => {
+    const r = redactSecrets("PASSWORD=correcthorsebattery(staple)123");
+    expect(r.text).not.toContain("(staple)123");
+    expect(r.text).not.toContain("correcthorsebattery");
+    // 整条值都要被掩掉，不能只掩一半
+    expect(r.text).toBe("PASSWORD=corr****");
+  });
+
+  it("反向验证：把 bracketed 规则挪到 assigned 之后 ⇒ 尾巴就会幸存（钉住这个次序）", () => {
+    // 忠实复刻 redactSecrets 的语义：**matchAll 打在原始行上**，替换用 `out.split(secret).join(mask)`
+    //（不是 regex replace）。于是先到的那条把整串换掉之后，后到的那条虽然**匹配得到**
+    // 完整 secret（它匹配的是原始行），但那个串**已经不在 out 里了** ⇒ split 找不到 ⇒ 替换是空操作
+    // ⇒ 尾巴幸存。
+    const secret = "correcthorsebattery(staple)123";
+    const line = "PASSWORD=" + secret;
+    const assignedRe = /(?:api[_-]?key|secret|token|password|passwd|access[_-]?key)\s*[:=]\s*["'`]?([^\s"'`,;{}()<>$]{12,})["'`]?/i;
+    const bracketedRe = /(?:api[_-]?key|secret|token|password|passwd|access[_-]?key)\s*[:=]\s*["'`]?([^\s"'`,;{}<>$][^\s"'`,;{}<>$]{11,}|[^\s"'`,;{}<>$]{12,})["'`]?/i;
+    const simulate = (order: readonly RegExp[]): string => {
+      let out = line;
+      for (const re of order) {
+        // redactSecrets 内部会给每条规则补 "g" 标志（matchAll 要求全局）
+        const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+        for (const m of line.matchAll(g)) {
+          const s = m[1] ?? m[0];
+          if (s === "") continue;
+          out = out.split(s).join(s.slice(0, 4) + "****");
+        }
+      }
+      return out;
+    };
+    const oldOrder = simulate([assignedRe, bracketedRe]);
+    expect(oldOrder, "旧顺序确实留下明文尾巴").toContain("(staple)123");
+    // 新顺序（bracketed 在前）把整条掩掉
+    expect(simulate([bracketedRe, assignedRe])).not.toContain("(staple)123");
+  });
+
   it("值自带括号的密码也要掩（旧 charset 把 ( ) 排除在外 ⇒ 截断后够不到 12 字）", () => {
     for (const line of [
       "ADMIN_PASSWORD=Tr0ub4dor&3(x)99",

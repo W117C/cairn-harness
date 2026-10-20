@@ -10,7 +10,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import type { AppSettings, CapabilityReadout, ProviderInfo } from "../../../../../src/main/ipc-protocol";
-import type { TextSizeSetting } from "../../../../../src/main/settings";
+import type { TextSizeSetting, UiSizeSetting } from "../../../../../src/main/settings";
 import { SettingsPage } from "./settings-ui";
 import {
   AboutSection,
@@ -69,6 +69,7 @@ export function SettingsPanel(props: {
   // 字号档（2026-10-18）：与 App 的 live state 同源，但设置页自己持一份初值，
   // 保存后立刻回灌（不等 App 的 getSettings 回流）——点下去就要看见变化。
   const [textSize, setTextSize] = useState<TextSizeSetting>("md");
+  const [uiSize, setUiSize] = useState<UiSizeSetting>("2");
   // 分区搜索（2026-10-18）：收窄左栏九个分区；Esc 两级（有字先清空，空着才失焦）。
   const [navQuery, setNavQuery] = useState("");
   const navSearchRef = useRef<HTMLInputElement | null>(null);
@@ -85,7 +86,7 @@ export function SettingsPanel(props: {
   }, []);
 
   const refresh = () => {
-    void window.agent.getSettings().then((s) => { setS(s); setTextSize(s.textSize); }).catch((err: unknown) => {
+    void window.agent.getSettings().then((s) => { setS(s); setTextSize(s.textSize); setUiSize(s.uiSize); }).catch((err: unknown) => {
       setError(err instanceof Error ? err.message : String(err));
     });
     void window.agent.providerKeyStatus().then((s) => setStatus({ available: s.available, stored: s.stored, envActive: s.envActive })).catch(() => undefined);
@@ -285,9 +286,11 @@ export function SettingsPanel(props: {
               <GeneralSection
                 settings={settings}
                 textSize={textSize}
+                uiSize={uiSize}
                 onSave={(patch) => { void save(patch); }}
                 onCtrlTab={saveCtrlTab}
                 onTextSize={(next) => { setTextSize(next); void saveSettingKey("textSize", next); }}
+                onUiSize={(next) => { setUiSize(next); void saveSettingKey("uiSize", next); }}
               />
             </SettingsPage>
           )}

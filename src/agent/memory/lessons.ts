@@ -37,19 +37,27 @@ export const REPEAT_ACTION_MIN = 2;
 /** 正文里摘录原文的字节上限（记忆会被回注，摘录太长就把预算吃光）。 */
 const EXCERPT_LIMIT = 400;
 
-/** 审批门没让过的四种 gate 结局（`GATE_VERDICTS` 里与"问过没成"相关的那几条）。
- *  **为什么按 gate 判而不去匹配文案**：这三种失败里工具**一个字节都没执行**，
- *  把它们与"执行了但报错"混在同一族计数，得出的结论会是「这个工具在这个项目里用不了」——
- *  而真因可能只是 60 秒内没人点那张审批卡。文案是可变量（`askDenialText` 已经改过一次措辞），
- *  gate.verdict 是事件流里早就落下的结构列，判它才是判事实。 */
-const ASK_DENIED_VERDICTS: ReadonlySet<string> = new Set(["rejected", "timeout", "unattended"]);
+/** 一次 tool_result 是「这一次调用**没有执行**」（而不是"工具自己跑挂了"）？
+ *
+ *  判据是**结构列**，不是文案：① `blockedBy` 在场 ⇒ 六道执行前闸里有一道拦下了它
+ *  （`TOOL_BLOCK_REASONS`：tool-table / skill-denial / verify-unwired / hook / permission /
+ *  unknown-tool——**每一道**都意味着工具压根没跑）；② gate.verdict 属"没执行"那一族。
+ *
+ *  ⚠️ 这一族在 2026-10-20 独立评审里被查出**漏了六分之五**（旧判据只认 `blockedBy === "permission"`
+ *  与 verdict ∈ {rejected, timeout, unattended}）：于是「门直接拒（verdict=denied）」、
+ *  「工具不在本会话工具表」、「被 skill 摘除」、「被 PreToolUse 钩子拦下」、「工具名不存在」
+ *  这五种**同样没执行**的形状被装进了「执行了但失败」那一袋 ⇒ 沉淀出
+ *  「「X」连败 N 次——同一手法连续失败，先换做法再重试」——**一次都没执行过的手法哪来的失败**？
+ *  后果实测：一条 deny 规则（写工具被策略禁掉）⇒ 项目记忆里永久留下「write_file 连败 2 次」，
+ *  下一场会话读到的结论是「这个工具坏了」，而真因是**授权状态没变**。
+ *  这正是 ②b 分支（2026-10-16）当初要防的那件事——**换个门又长了一遍**。 */
+const NEVER_EXECUTED_VERDICTS: ReadonlySet<string> = new Set(["rejected", "timeout", "unattended", "denied"]);
 
-/** 一次 tool_result 是"审批门没让过"（而不是"工具自己跑挂了"）？
- *  只认 `blockedBy === "permission"` 或 gate.verdict 属那一族——两者任一都说明没进执行面。 */
-export function isAskDeniedResult(e: ToolResultEvent): boolean {
-  if (e.blockedBy === "permission") return true;
+export function neverExecutedResult(e: ToolResultEvent): boolean {
+  // `blockedBy` 在场 = 有一道执行前闸拦下了它（那六道闸的定义就是"执行前就拦下"）。
+  if (e.blockedBy !== undefined) return true;
   const v = e.gate?.verdict;
-  return typeof v === "string" && ASK_DENIED_VERDICTS.has(v);
+  return typeof v === "string" && NEVER_EXECUTED_VERDICTS.has(v);
 }
 
 /** 连败的两种成因——**结论完全不同**，所以从源头就分开装袋，不落在同一族里再筛。
@@ -77,10 +85,12 @@ export function splitToolFailures(
     if (skip(e.callId)) continue;
     const name = callName.get(e.callId);
     if (name === undefined) continue; // 无归属的 tool_result ⇒ 无证据指针 ⇒ 不产出
-    if (isAskDeniedResult(e)) {
+    if (neverExecutedResult(e)) {
       const g = notExecuted.get(name) ?? { callIds: [], verdicts: [] };
       g.callIds.push(e.callId);
-      g.verdicts.push(e.gate?.verdict ?? "permission");
+      // 记**拦它的那一道**（结构列）：`blockedBy` 缺席时才是 gate verdict。
+      // 旧写法一律写 "permission" ⇒ 钩子拦的与门拒的在条目里长得一样（文案是第二个注入面）。
+      g.verdicts.push(e.gate?.verdict ?? e.blockedBy ?? "permission");
       notExecuted.set(name, g);
       continue;
     }
@@ -236,10 +246,14 @@ export function distillLessons(events: AgentEvent[], logPath: string): Lesson[] 
     const evidence: LessonEvidence[] = g.callIds.map((c) => ({ session, callId: c, kind: "tool-streak" }));
     const mix = [...new Set(g.verdicts)].join("/");
     out.push({
-      topic: "lesson-ask-denied-" + name,
+      // topic 名跟着这一族的**真实含义**走：这一族现在装的是「六道执行前闸 + 四种 gate 结局」
+      // （不再只是"审批门没让过"）⇒ 旧名 lesson-ask-denied- 对钩子拦的/门直接拒的那些是**说谎的**。
+      // 旧名留下的历史文件不迁（它们当时说的确实是真的），新条目用新名。
+      topic: "lesson-not-executed-" + name,
       body: bodyFor(
-        "「" + name + "」连续 " + String(g.callIds.length) + " 次**没有执行**（审批门未放行：" + mix + "）"
-        + "——这不是工具失败：先等审批/调整档位，或换合规路径；不要据此得出「此档位不能用这个工具」",
+        "「" + name + "」连续 " + String(g.callIds.length) + " 次**没有执行**（被拦在执行面之前：" + mix + "）"
+        + "——这不是工具失败：先看那一条拦它的是什么（审批/档位/钩子/工具表），等授权状态变化或换合规路径；"
+        + "不要据此得出「此档位不能用这个工具」",
         [], evidence, session),
       evidence,
     });

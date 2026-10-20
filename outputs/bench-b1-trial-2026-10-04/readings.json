@@ -1,0 +1,60 @@
+[
+ {
+  "r": {
+   "id": "B1-bugfix-crossfile",
+   "name": "B1-bugfix-crossfile",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "stealth/space-bunny-alpha",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 159.079,
+   "requests": 16,
+   "tokensIn": 107730,
+   "tokensOut": 5296,
+   "cny": null,
+   "toolCalls": 18,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 30,
+   "readsBeforeFirstWrite": 8,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "wroteTests": true,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    "src/checkout.js",
+    "src/discount.js",
+    "tests/discount.test.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 212,
+    "procPeak": 7,
+    "cpuMs": 2316,
+    "samples": 318
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": true,
+    "exitCode": 0,
+    "output": "TAP version 13\n# Subtest: 折扣不是 20% 时同样要按券后金额收运费\nok 1 - 折扣不是 20% 时同样要按券后金额收运费\n  ---\n  duration_ms: 0.821916\n  type: 'test'\n  ...\n# Subtest: 多条商品行：看的是券后总额，不是原始总额\nok 2 - 多条商品行：看的是券后总额，不是原始总额\n  ---\n  duration_ms: 0.063083\n  type: 'test'\n  ...\n# Subtest: 整单清零：券 100% 时仍要付运费\nok 3 - 整单清零：券 100% 时仍要付运费\n  ---\n  duration_ms: 0.080333\n  type: 'test'\n  ...\n# Subtest: 原价恰好差一分不到包邮线\nok 4 - 原价恰好差一分不到包邮线\n  ---\n  duration_ms: 0.04325\n  type: 'test'\n  ...\n# Subtest: 券后正好落在包邮线上：应当免运费\nok 5 - 券后正好落在包邮线上：应当免运费\n  ---\n  duration_ms: 0.043792\n  type: 'test'\n  ...\n# Subtest: 非整除折扣取整后仍是整数分\nok 6 - 非整除折扣取整后仍是整数分\n  ---\n  duration_ms: 0.067625\n  type: 'test'\n  ...\n# Subtest: 跨过包邮线的另一档折扣\nok 7 - 跨过包邮线的另一档折扣\n  ---\n  duration_ms: 0.035667\n  type: 'test'\n  ...\n# Subtest: 无券且刚好包邮线原价\nok 8 - 无券且刚好包邮线原价\n  ---\n  duration_ms: 0.0335\n  type: 'test'\n  ...\n1..8\n# tests 8\n# suites 0\n# pass 8\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 52.487167"
+   },
+   "assembly": "autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ }
+]

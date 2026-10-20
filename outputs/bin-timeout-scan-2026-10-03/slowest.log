@@ -1,0 +1,25 @@
+用例 4063 条｜每条用例的缺省预算 = 30000ms（vitest 文档缺省，config 的 test 块里没写）
+
+最慢 18 条（占缺省的比值只在 defMs 取到时给）：
+  15.18s 占缺省 50.6%  取不到标题位置  tests/m3c.test.ts｜M3c pipeline 哑 sequencer（零 LLM） 未获批准 fail-closed；批准后 stages 变更请求被拒且落流
+  3.13s 占缺省 10.4%  取不到标题位置  tests/evidence-typecheck.test.ts｜门那一半：runner 的两个拒绝分支各自要出声 拼错的开关 ⇒ 退 2 并点名，不许当成「没给参数」拿默认口径跑
+  2.62s 占缺省 8.7%  取不到标题位置  tests/evidence-typecheck.test.ts｜真环境：这一格得在真仓里跑得出东西（规则 237/320） 仓内 tsconfig.evidence.json 存在，且 tsc 真跑了（退出码 0 或 2
+  2.57s 占缺省 8.6%  取不到标题位置  tests/mutate-shards.test.ts｜编排器接线：合并层不是挂在墙上的仪表 真跑一条：片文件里确有机器原文（这条是整个编排器的端到端证人）
+  2.55s 占缺省 8.5%  取不到标题位置  tests/evidence-typecheck.test.ts｜门那一半：runner 的两个拒绝分支各自要出声 归属面取料那一行必须印出来，且前缀与 tsc 的 include 同源（接线证人：这行掉了，豁免就没人看得
+  2.52s 占缺省 8.4%  无（撞缺省）  tests/mutate-verify-gates.test.ts｜树闸接线：真跑本脚本——主检出拒跑且一个字节都没改过盘，linked worktree 放行 树名的包含判定：解完仍在主检出里就放行，解出去了才拒（S2-4
+  2.48s 占缺省 8.3%  取不到标题位置  tests/mutate-shards.test.ts｜treeProblem 与编排器的前置闸：脏树不许当片用 同一宿主被摊到两片 ⇒ 行为上当场拒（默认切法同输入放行）
+  2.47s 占缺省 8.2%  取不到标题位置  tests/mutate-shards.test.ts｜编排器的权重取料面 真跑 --dry-run：给了 --cost-logs 就说清权重与来源，不给就说没有来源
+  2.09s 占缺省 7.0%  取不到标题位置  tests/evidence-typecheck.test.ts｜真环境：这一格得在真仓里跑得出东西（规则 237/320） 真仓那一趟：被豁免的每一支都必须真的不在 HEAD，且 HEAD 那一半与独立重数同值
+  2.00s 占缺省 6.7%  取不到标题位置  tests/verify-probe.test.ts｜verify 超时是配置项，不是 60s 硬编码 defaultExec 真按传入上限掐表，消息里的秒数跟着配置走
+  1.92s 占缺省 6.4%  无（撞缺省）  tests/cli-fork-replay.test.ts｜真跑 bin：--replay 只读 / --fork 不污染原历史 / 中断后可续（离线 demo） --fork：前缀逐字节一致 + session_m
+  1.73s 占缺省 5.8%  取不到标题位置  tests/cli-plan-auto.test.ts｜CLI 端到端反向哨兵：写盘被拒必须反映在退出码上 同一条路在 auto 档下退出码不受影响（反向哨兵不能把成功也判红）
+  1.65s 占缺省 5.5%  无（撞缺省）  tests/cli-fork-replay.test.ts｜真跑 bin：--replay 只读 / --fork 不污染原历史 / 中断后可续（离线 demo） 中断后完整可续：SIGINT 收束后，同一条会话继续
+  1.61s 占缺省 5.4%  取不到标题位置  tests/gate-kill.test.ts｜门禁跑命令的超时支路 子进程赖着不走：宽限到点整组强杀，输出如实写「已 SIGKILL」
+  1.51s 占缺省 5.0%  取不到标题位置  tests/gate-kill.test.ts｜门禁跑命令的超时支路 子进程超时后自己退出：判红 124、输出写明阶梯走到了哪一步，且还原动作真发生
+  1.51s 占缺省 5.0%  取不到标题位置  tests/gate-kill.test.ts｜门禁跑命令的超时支路 超时后子进程以退出码 0 收场：仍是 124，不被自己的退出码翻绿（宽限带来的口子）
+  1.36s 占缺省 4.5%  无（撞缺省）  tests/cli-fork-replay.test.ts｜真跑 bin：--replay 只读 / --fork 不污染原历史 / 中断后可续（离线 demo） --fork 的用法闸：轮次越界 exit 2；目标
+  1.36s 占缺省 4.5%  无（撞缺省）  tests/mutate-verify-gates.test.ts｜树闸接线：真跑本脚本——主检出拒跑且一个字节都没改过盘，linked worktree 放行 语义钉：建出来被量的那棵树是 **HEAD**，主树里未提交的
+
+最慢这批 18 条里：无显式预算 5 条、定位失败 13 条（两个数都要印，只印一个就会读成"都有"）
+  tests/cli-fork-replay.test.ts ×3
+  tests/mutate-verify-gates.test.ts ×2

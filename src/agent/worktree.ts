@@ -114,7 +114,13 @@ export interface CreatedWorktree {
 
 /** spawn 批准后的 worktree 创建：base = 当前 HEAD → worktree add -b → symlink gitignored 目录。
  *  幂等加固：同路径残留（同 id 撞车/上次清理失败）先清 git 注册与目录再建；分支已存在则挂载而非重建。 */
-export async function createWorktree(root: string, agentId: string, task: string): Promise<CreatedWorktree> {
+export async function createWorktree(
+  root: string,
+  agentId: string,
+  task: string,
+  /** 额外要链回主 checkout 的目录（会话层用它链 `.agent`：配置/权限/记忆/会话根必须同源）。 */
+  extraSymlinks: readonly string[] = [],
+): Promise<CreatedWorktree> {
   const baseCommit = (await git(root, "rev-parse", "HEAD")).trim();
   const branch = branchForAgent(task, agentId);
   const rel = join(WORKTREE_ROOT_DIR, "wt-" + agentId);
@@ -125,15 +131,19 @@ export async function createWorktree(root: string, agentId: string, task: string
   const branchExists = await git(root, "rev-parse", "--verify", "--quiet", branch).then(() => true, () => false);
   if (branchExists) await git(root, "worktree", "add", rel, branch);
   else await git(root, "worktree", "add", rel, "-b", branch);
-  const symlinkWarnings = await linkGitignoredDirs(root, worktreePathFor(root, agentId));
+  const symlinkWarnings = await linkGitignoredDirs(root, worktreePathFor(root, agentId), extraSymlinks);
   await ensureGitignoreAgents(root);
   return { worktree: rel, branch, baseCommit, symlinkWarnings };
 }
 
 /** symlink gitignored 目录（node_modules 等）：主 checkout 存在才链；失败降级为警告不阻断（fail-visible）。 */
-export async function linkGitignoredDirs(root: string, wtPath: string): Promise<string[]> {
+export async function linkGitignoredDirs(
+  root: string,
+  wtPath: string,
+  extra: readonly string[] = [],
+): Promise<string[]> {
   const warnings: string[] = [];
-  for (const name of WORKTREE_SYMLINK_DIRS) {
+  for (const name of [...WORKTREE_SYMLINK_DIRS, ...extra]) {
     const src = join(root, name);
     const dst = join(wtPath, name);
     try {
@@ -282,6 +292,17 @@ export async function removeWorktree(root: string, agentId: string, opts: { keep
     }
   }
   return { removed, branchDeleted, ...(error ? { error } : {}) };
+}
+
+/** worktree 当前分支（会话合并卡用：分支名里带任务 slug，记不住就别猜——从树自己读）。
+ *  读不到（detached/目录没了）⇒ null，调用方按失败处理，不拿主 checkout 的分支顶上。 */
+export async function currentBranch(wtPath: string): Promise<string | null> {
+  try {
+    const name = (await git(wtPath, "rev-parse", "--abbrev-ref", "HEAD")).trim();
+    return name === "" || name === "HEAD" ? null : name;
+  } catch {
+    return null;
+  }
 }
 
 /** 扫描 worktree 目录（孤儿扫描的目录侧输入）。 */

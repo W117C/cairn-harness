@@ -1,0 +1,22 @@
+Already up to date
+Done in 319ms using pnpm v11.21.0
+
+   ╭─────────────────────────────────────────╮
+   │                                         │
+   │   Update available! 11.21.0 → 12.8.1.   │
+   │   Changelog: https://pnpm.io/v/12.8.1   │
+   │    To update, run: pnpm add -g pnpm     │
+   │                                         │
+   ╰─────────────────────────────────────────╯
+
+$ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify shell-tail-assembly-drops-tail
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → a5197eb
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
+变异验证：1 条
+✅ shell-tail-assembly-drops-tail — 尾环算好了却在拼装时没接上（模型看到的仍是纯头部） ｜本机实测 1.9s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 2.1s · 跑了 1/1 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 2 次／1 条（每条次数分布 2×1）· 单次中位 第1次 1.4s／第2次 0.5s· 最贵一条 shell-tail-assembly-drops-tail 1.9s
+跑法单价：selector 2 拍·中位 1.36s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）

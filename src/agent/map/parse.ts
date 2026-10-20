@@ -131,8 +131,12 @@ const PATTERNS = [
  *  rev 4（2026-10-02）：跨文件依赖多出一个**独立出口**（`fileSymbols` 的 `imports`）——
  *  老条目里没有 import 面，缓存命中那支就会给出「有 tags、没边」的另一张图 ⇒ 必须整体重解析一次。
  *  rev 5（2026-10-02）：再加第三个出口 `summary`（头注释摘要＝词面检索的语料）。同一族理由：
- *  只核 tags/imports 而让 summary 缺席，热缓存那支的地图会突然"问什么都不命中"。 */
-const EXTRACT_LOGIC_REV = 5;
+ *  只核 tags/imports 而让 summary 缺席，热缓存那支的地图会突然"问什么都不命中"。
+ *  rev 6（2026-10-20）：tags 多一个**字段** `crossFile`（成员位名字标成不可跨文件链接）。
+ *  同一族理由、但更要紧：老缓存条目里**没有这个字段** ⇒ 缺席 = 可链接 ⇒ 热缓存那支会把
+ *  成员名照旧连成跨文件依赖，出来的是**另一张图**（成员名假边又回来了）。
+ *  ⇒ 必须整体重解析一次。 */
+const EXTRACT_LOGIC_REV = 6;
 /** 版本号的算法单独成一个纯函数：判卷可以直接拿「改一行 pattern ⇒ 版本必须变」这条不变量打它。 */
 export function tagsExtractVersion(patterns: readonly string[]): string {
   return createHash("sha1").update(EXTRACT_LOGIC_REV + "\n" + patterns.join("\n")).digest("hex").slice(0, 12);
@@ -266,6 +270,11 @@ export interface SymbolTag {
   kind: "def" | "ref";
   /** 1-based 行号（对外口径，与工具 schema 一致；内部 graph 索引照用）。 */
   line: number;
+  /** `false` = 这个名字挂在**成员位**上（类方法／类字段／接口成员）⇒ 它**不可跨文件链接**。
+   *  缺席 = 可跨文件链接（缺省，含这份字段出现之前落盘的所有缓存条目）。
+   *  消费方是构图层（`rank.ts`）：跨文件的 ref→def 边不许落到成员定义上，
+   *  **同文件内的边照旧**（类内自调用是真依赖）。 */
+  crossFile?: false;
 }
 
 /** 一条跨文件依赖：本文件从 `spec` 里取走名字 `name`。
@@ -334,6 +343,27 @@ function isLocalVariableBinding(nameNode: import("web-tree-sitter").Node): boole
   return !declaredAtModuleScope(nameNode);
 }
 
+/** 挂在**成员位**上的名字：类方法／类字段／接口成员。
+ *  闸这一族的理由与上一道同源，只是换了载体：成员名**只能**经 `obj.name`（或 `new Klass().name`）
+ *  被别处触到，而那种写法走属性/选择器纪律、**根本不进图**（见 PATTERNS 上方那段「不抽属性名」的
+ *  设计边界）⇒ 把成员名当跨文件可链接定义，等于凭空造依赖。
+ *  真仓读数（2026-10-02 一次全量图构建）：`src/agent/ledger.ts` 的 `private readFile` 吸了
+ *  **107 个文件**的同名 ref、`src/tools/grep.ts` 的 `run` 吸 23 个——一条成员定义横跨上百个文件，
+ *  还把地图前排占成假枢纽（影响面分析的首位因此指向一个谁也调不到它的私有方法）。
+ *  ⚠️ 只标**成员位**（不是「所有方法」）：类的**名字**本身是可跨文件引用的（`new Klass()`），
+ *  闸掉它会把真依赖一起闸掉。 */
+const MEMBER_NAME_PARENTS = new Set([
+  "method_definition", "method_declaration", "method_signature", "abstract_method_signature",
+  "field_definition", "public_field_definition", "property_signature",
+]);
+function isMemberPositionName(nameNode: import("web-tree-sitter").Node): boolean {
+  const p = nameNode.parent;
+  if (!p || !MEMBER_NAME_PARENTS.has(p.type)) return false;
+  // 按位置比、不按对象比（rev 2 踩过的坑：tree-sitter 每次取节点都新建外壳，`===` 恒 false ⇒ 闸门静默不生效）
+  const nm = p.childForFieldName("name");
+  return nm !== null && nm.startIndex === nameNode.startIndex && nm.endIndex === nameNode.endIndex;
+}
+
 /** 回收口径为什么只是一句「hasError 不再一票否决」，而没有再加一道「丢掉 ERROR 子树里的 capture」：
  *  实测那一道在现有图案下**什么都不挡**——四个真触发文件（见 `probe-map-recall.ts` 首跑读数）与
  *  另造的七种坏法（空初值 `const a = ;`、未闭合类、断在半表达式、`if (true {`、坏参数表、
@@ -385,7 +415,9 @@ export async function fileSymbols(src: string, ext: string): Promise<FileSymbols
           const name = c.node.text;
           if (!name) continue;
           if (c.name === "def" && isLocalVariableBinding(c.node)) continue; // 函数体里的变量不是跨文件符号
-          tags.push({ name, kind: c.name as "def" | "ref", line: c.node.startPosition.row + 1 });
+          const tag = { name, kind: c.name as "def" | "ref", line: c.node.startPosition.row + 1 };
+          // 成员名是同一族的第二道闸（与上面那道「局部变量」同因，只是换了载体）。
+          tags.push(c.name === "def" && isMemberPositionName(c.node) ? { ...tag, crossFile: false } : tag);
         }
       }
     }

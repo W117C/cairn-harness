@@ -1,0 +1,42 @@
+== 阶段 B 死树回收（规则 120：detached ∧ 0 项在飞 ∧ 那一笔是 zcode 祖先）2026-10-03 13:42:42 ==
+check_time; pgrep_gate=4
+zcode HEAD=7bb95b7
+TREE .worktrees/gate-mutate-import          head=b4b4db3 ref=HEAD         dirty=0   ancestor=YES  pgrep=4
+  -> SKIP（判据未全中）
+TREE gate-mutate-318                        head=e8a8ed5 ref=HEAD         dirty=0   ancestor=YES  pgrep=4
+  -> SKIP（判据未全中）
+TREE gate-mutate-319                        head=07641c0 ref=HEAD         dirty=0   ancestor=YES  pgrep=4
+  -> SKIP（判据未全中）
+TREE gate-mutate-320                        head=2cd5fae ref=HEAD         dirty=0   ancestor=YES  pgrep=4
+  -> SKIP（判据未全中）
+--- prune + 现状
+/Users/ze/Downloads/deepseek harness                                            7bb95b7 [zcode]
+/Users/ze/Downloads/deepseek harness/.claude/worktrees/charming-neumann-b4ee71  3a6d63c [claude/charming-neumann-b4ee71]
+/Users/ze/Downloads/deepseek harness/.claude/worktrees/elastic-antonelli-ec59c9 3a6d63c [claude/elastic-antonelli-ec59c9]
+/Users/ze/Downloads/deepseek harness/.claude/worktrees/laughing-burnell-7239e5  3a6d63c [claude/laughing-burnell-7239e5]
+/Users/ze/Downloads/deepseek harness/.claude/worktrees/unruffled-dirac-5cf0e0   3a6d63c [claude/unruffled-dirac-5cf0e0]
+/Users/ze/Downloads/deepseek harness/.worktrees/doc-layer                       da60f0d [doc-layer-migration]
+/Users/ze/Downloads/deepseek harness/.worktrees/gate-head-cert                  b4b4db3 (detached HEAD)
+/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-import              b4b4db3 (detached HEAD)
+/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-verify              204f017 (detached HEAD)
+/Users/ze/Downloads/deepseek harness/.worktrees/locate-weights                  36a9ec6 (detached HEAD)
+/Users/ze/Downloads/deepseek harness/.worktrees/opt                             1de92fa [opt/agent-v2]
+/Users/ze/Downloads/deepseek harness/.worktrees/port                            f789dac [port/opt2]
+/Users/ze/Downloads/deepseek harness/.worktrees/port2                           eb140cc [port2]
+/Users/ze/Downloads/deepseek harness/.worktrees/suite-refresh-318               e8a8ed5 (detached HEAD)
+/Users/ze/Downloads/deepseek harness/gate-mutate-318                            e8a8ed5 (detached HEAD)
+/Users/ze/Downloads/deepseek harness/gate-mutate-319                            07641c0 (detached HEAD)
+/Users/ze/Downloads/deepseek harness/gate-mutate-320                            2cd5fae (detached HEAD)
+/Users/ze/Downloads/deepseek harness/gate-mutate-321                            7bb95b7 (detached HEAD)
+
+== 重跑：判据改为「①该树被正在跑的门引用？否 ②规则 120 三条全中 ③非 package.json 写死的共享树」2026-10-03 13:45:15 ==
+用户裁决：用更窄的『在用品』判据现在继续
+在跑的门：73523 /bin/zsh -c { source '/Users/ze/.qoder/shell-snapshots/snapshot-zsh-1791000256319-3ubc3p.sh' 2>/dev/null || true; } && export PATH="${__QODER_BASH_PATH_PREFIX:+$__QODER_BASH_PATH_PREFIX:}$PATH" && { setopt NO_EXTENDED_GLOB 2>/dev/null || true; } && eval 'cd "/Users/ze/Downloads/deepseek harness" && node scripts/mutate-verify.mjs --in-worktree=gate-mutate-321 --changed-since=80ba2ca > outputs/claims-3faces-2026-10-03/mutate-kill-321.log 2>&1; echo KILL_EXIT=$? | tee -a outputs/claims-3faces-2026-10-03/mutate-kill-321.log' < /dev/null && pwd -P >| /var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/qoder-053c-cwd|73525 node scripts/mutate-verify.mjs --in-worktree=gate-mutate-321 --changed-since=80ba2ca|73769 /Users/ze/.hermes/node/bin/node --import tsx /Users/ze/Downloads/deepseek harness/gate-mutate-321/scripts/mutate-verify.mjs --changed-since=80ba2ca|
+TREE .worktrees/gate-mutate-import        head=b4b4db3 ref=HEAD   dirty=0  ancestor=YES  in_use=NO 
+  -> removed rc=0 exists=GONE
+TREE gate-mutate-318                      head=e8a8ed5 ref=HEAD   dirty=0  ancestor=YES  in_use=NO 
+  -> removed rc=0 exists=GONE
+TREE gate-mutate-319                      head=07641c0 ref=HEAD   dirty=0  ancestor=YES  in_use=NO 
+  -> removed rc=0 exists=GONE
+TREE gate-mutate-320                      head=2cd5fae ref=HEAD   dirty=0  ancestor=YES  in_use=NO 
+  -> removed rc=0 exists=GONE

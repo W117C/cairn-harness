@@ -1,0 +1,175 @@
+面分类：model 字段值集合＝["mimo-v2.6-flash"]｜轨迹总数＝107｜真模型面＝43｜脚本面＝64
+注：分类只读流里的 `model` 字段，目录名（base/head-a/head-b/a/a50）一律不参与判断。
+
+=== [1] 两面基本量（轨迹 / tool_call / tool_result / ok:false）===
+面      轨迹  tool_call  tool_result   ok:false  失败率    未配对回执  发出未收 receipt
+real    43        643          607         16     2.6%            0            36
+mock    64        850          815         32     3.9%            9            53
+合计（只为对账，不作任何表的分子）：tool_call=1493｜tool_result=1422｜ok:false=48
+对账原件：只取 `outputs/` 时 ok:false＝39（verify-face.mts 那个 39 就是这一格，它没扫 fixtures）；只取 `fixtures/no-progress/` ＝9；两面相加 39+9=48 ⇒ 旧表把 107 份当 39 条看，漏的正是 fixtures 这一头与分面这一刀。
+
+=== [2] 失败簇 Top 10（键＝工具名 + 归一化输出首行）===
+主口径＝**保留路径本身**（数字→<n>、0x..／长哈希→<hex>，路径不抹）；对照口径＝再把两段以上路径→<path>。
+— 真模型面 —
+  主口径（路径保留）（簇总数＝9，失败条数＝16）
+    n= 6｜散在  6 份轨迹｜run_shell · (空首行)
+    n= 2｜散在  1 份轨迹｜run_shell · TAP version <n>
+    n= 2｜散在  1 份轨迹｜verify · [verify FAIL] pnpm_config_verify_deps_before_run=false pnpm run test
+    n= 1｜散在  1 份轨迹｜apply_patch · apply_patch: hunk 声明 -<n>,<n> +<n>,<n>，实收旧侧 <n> 行／新侧 <n> 行（补丁不完整）（补丁第 <n> 行）
+    n= 1｜散在  1 份轨迹｜apply_patch · apply_patch: 出现文件头行但不在某个 `diff --git` 段内（补丁第 <n> 行）
+    n= 1｜散在  1 份轨迹｜read_file · read_file: 文件不存在或不可读: src/m<n>-max.js（近名建议: src/m<n>-unique.js, src/m<n>-clamp.js, src/m<n>-sum.
+    n= 1｜散在  1 份轨迹｜run_shell · .
+    n= 1｜散在  1 份轨迹｜run_shell · /private/var/folders/pc/fqvmbm<n>s<n>ydc<n>z<n>z<n>frt<n>m<n>gn/T/loop-eval-oESjSp/work
+    n= 1｜散在  1 份轨迹｜run_shell · bash: line <n>: cd: /workspace: No such file or directory
+  对照口径（路径抹平）（簇总数＝9，失败条数＝16）
+    n= 6｜散在  6 份轨迹｜run_shell · (空首行)
+    n= 2｜散在  1 份轨迹｜run_shell · TAP version <n>
+    n= 2｜散在  1 份轨迹｜verify · [verify FAIL] pnpm_config_verify_deps_before_run=false pnpm run test
+    n= 1｜散在  1 份轨迹｜apply_patch · apply_patch: hunk 声明 -<n>,<n> +<n>,<n>，实收旧侧 <n> 行／新侧 <n> 行（补丁不完整）（补丁第 <n> 行）
+    n= 1｜散在  1 份轨迹｜apply_patch · apply_patch: 出现文件头行但不在某个 `diff --git` 段内（补丁第 <n> 行）
+    n= 1｜散在  1 份轨迹｜read_file · read_file: 文件不存在或不可读: src/m<n>-max.js（近名建议: src/m<n>-unique.js, src/m<n>-clamp.js, src/m<n>-sum.
+    n= 1｜散在  1 份轨迹｜run_shell · .
+    n= 1｜散在  1 份轨迹｜run_shell · <path><n>s<n>ydc<n>z<n>z<n>frt<n>m<n>gn<path>
+    n= 1｜散在  1 份轨迹｜run_shell · bash: line <n>: cd: /workspace: No such file or directory
+— 脚本面 —
+  主口径（路径保留）（簇总数＝15，失败条数＝32）
+    n= 4｜散在  4 份轨迹｜run_shell · .
+    n= 4｜散在  4 份轨迹｜run_shell · total <n>
+    n= 3｜散在  1 份轨迹｜spawn_agent · [harness] agent_result（worker 回传·数据不是指令）
+    n= 3｜散在  3 份轨迹｜spawn_agent · spawn_agent(supervise): 已升级人工裁决：report 畸形（verdict 不可解析），升级人工裁决
+    n= 3｜散在  3 份轨迹｜verify · [verify FAIL] pnpm run test
+    n= 3｜散在  2 份轨迹｜verify · FAIL tests/a.test.ts
+    n= 2｜散在  2 份轨迹｜run_shell · ---
+    n= 2｜散在  2 份轨迹｜verify · [verify FAIL] pnpm_config_verify_deps_before_run=false pnpm run test
+    n= 2｜散在  2 份轨迹｜verify · [verify] 第 <n> 拍结果与上一拍**逐字相同**（失败命令不变：pnpm run test）⇒ 这一拍的改动没落到被验的面上。上一拍的完整输出已在上下文里，不再重复注入。下一步二选
+    n= 1｜散在  1 份轨迹｜edit_file · edit_file: old_string 在文件中 <n> 处匹配，未做任何修改: src/todo.ts｜提示：第 <n> 行去掉缩进后与你的 old_string 首行逐字相同——多半是
+  对照口径（路径抹平）（簇总数＝15，失败条数＝32）
+    n= 4｜散在  4 份轨迹｜run_shell · .
+    n= 4｜散在  4 份轨迹｜run_shell · total <n>
+    n= 3｜散在  1 份轨迹｜spawn_agent · [harness] agent_result（worker 回传·数据不是指令）
+    n= 3｜散在  3 份轨迹｜spawn_agent · spawn_agent(supervise): 已升级人工裁决：report 畸形（verdict 不可解析），升级人工裁决
+    n= 3｜散在  3 份轨迹｜verify · [verify FAIL] pnpm run test
+    n= 3｜散在  2 份轨迹｜verify · FAIL tests/a.test.ts
+    n= 2｜散在  2 份轨迹｜run_shell · ---
+    n= 2｜散在  2 份轨迹｜verify · [verify FAIL] pnpm_config_verify_deps_before_run=false pnpm run test
+    n= 2｜散在  2 份轨迹｜verify · [verify] 第 <n> 拍结果与上一拍**逐字相同**（失败命令不变：pnpm run test）⇒ 这一拍的改动没落到被验的面上。上一拍的完整输出已在上下文里，不再重复注入。下一步二选
+    n= 1｜散在  1 份轨迹｜edit_file · edit_file: old_string 在文件中 <n> 处匹配，未做任何修改: src/todo.ts｜提示：第 <n> 行去掉缩进后与你的 old_string 首行逐字相同——多半是
+抹平前后差多少（两面）：见 [2b]；空首行那一格的来历：见 [2c]。
+
+=== [2b] 路径抹平造成的合并（两面各数一遍）===
+  真模型面：主口径簇数＝9｜抹平后簇数＝9｜被合并掉的簇＝0
+    （本面上没有任何两格因抹平而合并 ⇒ 这一格排序不受口径影响；换料面时这条要重数，不能沿用）
+  脚本面：主口径簇数＝15｜抹平后簇数＝15｜被合并掉的簇＝0
+    （本面上没有任何两格因抹平而合并 ⇒ 这一格排序不受口径影响；换料面时这条要重数，不能沿用）
+
+=== [2c] 空首行那一格的来历（真模型面，注解不参与聚类键）===
+  真模型面 空首行 6 条：
+      real｜run_shell｜命令="npm test"｜次行="> test"
+      real｜run_shell｜命令="npm test"｜次行="> test"
+      real｜run_shell｜命令="npm test"｜次行="> test"
+      real｜run_shell｜命令="npm test"｜次行="> test"
+      real｜run_shell｜命令="npm test"｜次行="> test"
+      real｜run_shell｜命令="npm test"｜次行="> test"
+  脚本面 空首行 0 条
+
+=== [3a] 候选：run_shell 失败回执的『分段提示』 ===
+触发条件（全满足才出声）：① 工具＝run_shell ② 回执判死 ③ 正文有内容（剥掉 [exit code: N]／[exec:…] 后 >20 字） ④ 命令是复合的（含 ; && || 或换行，切完 ≥2 段）⑤ 命令里不含 " ' ` 任一引号/反引号。
+  真模型面：run_shell 判死＝11 → 有非零码证据＝10（其中只靠 exitCode 字段＝0） → 正文有内容＝10 → 复合命令＝2 → 且不带引号＝触发 2（因带引号闭嘴 0，单段命令 8）｜触发里『回执首行已点名哪一段（bash: line N: …）』＝1 ⇒ 分段提示真正补信息的＝1
+    出声样本：
+      outputs/bench-head-d0ffe15e-a/B11-refactor-signature-rep1-base.events.jsonl｜"ls -a; cat package.json 2>/dev/null; cat .agent/verify.json 2>/dev/null"
+        回执首行＝"."｜正文 169 字〔首行没有点名 ⇒ 这是分段提示真正补信息的一格〕
+      outputs/bench-head-d0ffe15e-a/B2-feature-export-rep1-base.events.jsonl｜"cd /workspace && node --test tests/ 2>&1 | tail -30"
+        回执首行＝"bash: line 0: cd: /workspace: No such file or directory"｜正文 55 字〔首行已点名是哪一段炸的 ⇒ 分段提示在这一格不新增信息〕
+    判死却拿不出非零码（补丁看不到『哪一段失败』那一格，另计）：
+      outputs/repair-arm-ab-2026-10-04/a/B1-bugfix-crossfile-rep1-base.events.jsonl｜判死但无非零码证据（两者皆无）｜正文 592 字｜命令="cd \"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/loop-eval"
+  脚本面：run_shell 判死＝12 → 有非零码证据＝12（其中只靠 exitCode 字段＝0） → 正文有内容＝12 → 复合命令＝11 → 且不带引号＝触发 5（因带引号闭嘴 6，单段命令 1）｜触发里『回执首行已点名哪一段（bash: line N: …）』＝0 ⇒ 分段提示真正补信息的＝5
+    出声样本：
+      fixtures/no-progress/real-green-long-explore.events.jsonl｜"git log --oneline -10 2>/dev/null; ls -a; ls .agent 2>/dev/null"
+        回执首行＝"."｜正文 53 字〔首行没有点名 ⇒ 这是分段提示真正补信息的一格〕
+      fixtures/no-progress/real-red-verify-stagnation.events.jsonl｜"ls -la . 2>/dev/null; ls -la .agent 2>/dev/null; cat .agent/*.json 2>/dev/null"
+        回执首行＝"total 8"｜正文 468 字〔首行没有点名 ⇒ 这是分段提示真正补信息的一格〕
+      outputs/eval-base-b/B7-feature-csv-rep1-base.events.jsonl｜"ls -a; cat package.json 2>/dev/null; ls test tests 2>/dev/null; cat .agent/verify.json"
+        回执首行＝"."｜正文 202 字〔首行没有点名 ⇒ 这是分段提示真正补信息的一格〕
+      outputs/loop-eval-2026-09-20-base/I2-rep1-base.events.jsonl｜"ls -la . 2>/dev/null; ls -la .agent 2>/dev/null; cat .agent/*.json 2>/dev/null"
+        回执首行＝"total 8"｜正文 468 字〔首行没有点名 ⇒ 这是分段提示真正补信息的一格〕
+      outputs/loop-eval-v2-base/I3-rep1-base.events.jsonl｜"git log --oneline -10 2>/dev/null; ls -a; ls .agent 2>/dev/null"
+        回执首行＝"."｜正文 53 字〔首行没有点名 ⇒ 这是分段提示真正补信息的一格〕
+
+=== [3b] 候选：撞 maxSteps 帽导致的『没收束就退出』 ===
+触发条件：① 轨迹尾部是步数帽终态 ② 该 run 写过盘（write_file/edit_file/apply_patch 有成功回执）③ 全程没出现过自动验证拍。
+先说取料面能不能支撑『步数帽终态』这句话：流里带 maxSteps／强制中止 字样的事件＝0 条；error 事件全仓＝6 条（都是 message="terminated"，无帽值）。
+⇒ 帽值不在流里（跑器 --max-steps 是命令行参数：loop-eval 缺省 20，本面这几档实跑 30／50）。这里用**流内可观测的帽终形状**代理：
+   尾部形状＝最后一个实质事件是 tool_result（其后没有 verify_result 收口、也没有任何 assistant_delta 文本收口），且模型请求数（usage 事件）≥20。
+  真模型面：帽终形状＝6 → ∧写过盘＝5 → ∧从无自动验证拍＝5（该面自动验证拍总数＝0；帽终形状里一次 verify 都没跑过的＝5）
+    逐条：
+      usage= 30｜calls= 47｜写盘=是｜verify拍= 0｜自动拍=0｜outputs/bench-baseline-2026-10-04/B12-long-horizon-rep1-base.events.jsonl
+      usage= 30｜calls= 31｜写盘=是｜verify拍= 0｜自动拍=0｜outputs/bench-head-d0ffe15e-a/B2-feature-export-rep1-base.events.jsonl
+      usage= 30｜calls= 35｜写盘=是｜verify拍= 0｜自动拍=0｜outputs/bench-head-d0ffe15e-b/B12-long-horizon-rep1-base.events.jsonl
+      usage= 30｜calls= 31｜写盘=是｜verify拍= 0｜自动拍=0｜outputs/bench-head-d0ffe15e-b/B2-feature-export-rep1-base.events.jsonl
+      usage= 30｜calls= 36｜写盘=否｜verify拍= 0｜自动拍=0｜outputs/repair-arm-ab-2026-10-04/a/B1-bugfix-crossfile-rep1-base.events.jsonl
+      usage= 30｜calls= 31｜写盘=是｜verify拍= 2｜自动拍=0｜outputs/repair-arm-ab-2026-10-04/a/B2-feature-export-rep1-base.events.jsonl
+  脚本面：帽终形状＝0 → ∧写过盘＝0 → ∧从无自动验证拍＝0（该面自动验证拍总数＝0；帽终形状里一次 verify 都没跑过的＝0）
+  分面收口方式普查（(b) 的分母在这一格）：
+    真模型面（43 份）：以验证拍收口 36｜帽终形状（末回执无文本收口且请求数≥20） 6｜以模型文本收口（末事件是工具回执） 1
+    脚本面（64 份）：以验证拍收口 53｜以模型文本收口（末事件是工具回执） 5｜以 error 事件终止（＝abort/terminated） 3｜末回执无文本收口但请求数<20 3
+  附①：判据『从无自动验证拍』在全仓不区分任何东西——107 份流里 verify_result 带 auto=true 的＝0 条（run.log 那几档也印『闸拍=0』）⇒ 这一条子句在本面上恒真，不能用来筛。
+  附②：同样的尾部形状但 usage<20 的轨迹＝3 份（分面：mock 3）——都是 0 请求的合成件，代理把它们排除掉了：
+      usage=0｜fixtures/no-progress/synth-alternating-thrash.events.jsonl
+      usage=0｜fixtures/no-progress/synth-progress-not-stagnation.events.jsonl
+      usage=0｜fixtures/no-progress/synth-stagnation-suppressed-by-write.events.jsonl
+
+=== [3c] 候选：同参数逐字重发（失败后原样再发一次同一调用） ===
+口径 A＝窗口：那条失败回执之后**紧接着的 6 次回执**内出现同工具名＋args 逐字相同的调用；
+口径 B＝整尾：同一条失败回执之后**任意靠后**位置出现同样的调用。两数之差＝中间隔了别的事、窗口看不见的重发。
+口径 C＝不看成败的整尾重复：同一 (工具名, args 逐字) 在同一条流里被发过 ≥2 次时，后面那些次的条数——任何『重发去抖』类改动都会碰到这一格。
+  真模型面：A 窗口＝3（散在 3 份）｜B 整尾＝3（散在 3 份）｜B−A（隔 >6 条才重发）＝0｜C 不看成败＝11（散在 8 份）｜首次重发距离中位＝3（最小 2，最大 4）
+    A 命中的样子：
+      隔 4 条｜run_shell｜outputs/bench-baseline-2026-10-04/B2-feature-export-rep1-base.events.jsonl｜args="{\"command\":\"node --test tests/fit.test.js\"}"
+      隔 3 条｜run_shell｜outputs/bench-baseline-2026-10-04/B7-feature-csv-rep1-base.events.jsonl｜args="{\"command\":\"npm test\"}"
+      隔 2 条｜verify｜outputs/repair-arm-ab-2026-10-04/a/B2-feature-export-rep1-base.events.jsonl｜args="{}"
+    C 按工具拆开：read_file 5｜run_shell 4｜grep 1｜verify 1〔注意 `verify`／`propose_plan` 这类 args＝{} 或定值，『逐字同参』对它们是恒真，不能当『模型在原地重发』的证据〕
+  脚本面：A 窗口＝4（散在 4 份）｜B 整尾＝4（散在 4 份）｜B−A（隔 >6 条才重发）＝0｜C 不看成败＝76（散在 22 份）｜首次重发距离中位＝2（最小 1，最大 6）
+    A 命中的样子：
+      隔 6 条｜verify｜fixtures/no-progress/real-red-verify-stagnation.events.jsonl｜args="{}"
+      隔 1 条｜verify｜fixtures/no-progress/synth-progress-not-stagnation.events.jsonl｜args="{\"command\":\"pnpm test\"}"
+      隔 2 条｜verify｜fixtures/no-progress/synth-stagnation-suppressed-by-write.events.jsonl｜args="{\"command\":\"pnpm test\"}"
+      隔 6 条｜verify｜outputs/loop-eval-2026-09-20-base/I2-rep1-base.events.jsonl｜args="{}"
+    C 按工具拆开：read_file 58｜edit_file 8｜verify 6｜run_shell 2｜glob 2〔注意 `verify`／`propose_plan` 这类 args＝{} 或定值，『逐字同参』对它们是恒真，不能当『模型在原地重发』的证据〕
+
+=== [3d] 实际发生次数：apply_patch 补丁不完整 与 read_file 文件不存在 ===
+  真模型面：apply_patch 判死＝2（补丁不完整 1｜头行不在段内 1｜其它 0）｜read_file 判死＝1（文件不存在或不可读 1｜其它 0）
+    逐条：
+      补丁不完整｜outputs/bench-head-d0ffe15e-a/B10-refactor-dedupe-rep1-base.events.jsonl｜"apply_patch: hunk 声明 -1,7 +1,2，实收旧侧 6 行／新侧 1 行（补丁不完整）（补丁第 4 行）"
+      read_file 不存在｜outputs/bench-head-d0ffe15e-a/B12-long-horizon-rep1-base.events.jsonl｜"read_file: 文件不存在或不可读: src/m03-max.js（近名建议: src/m03-unique.js, src/m01-clamp.js, src/m02-sum.js）"
+      头行不在段内｜outputs/bench-head-d0ffe15e-a/B12-long-horizon-rep1-base.events.jsonl｜"apply_patch: 出现文件头行但不在某个 `diff --git` 段内（补丁第 1 行）"
+  脚本面：apply_patch 判死＝0（补丁不完整 0｜头行不在段内 0｜其它 0）｜read_file 判死＝0（文件不存在或不可读 0｜其它 0）
+  分母对照（整面，只为看这一格有多小，不合并两面）：apply_patch 调用 10 次／两面判死合计 2；read_file 调用 551 次／两面判死合计 1。
+
+=== [4] 与参考原件对账（同判据应复现，复现不了先查这里）===
+  real：『正文有却被判死』＝10（原件：real 10／mock 12）｜其中补丁会出声＝2（原件：real 2／mock 5）
+  mock：『正文有却被判死』＝12（原件：real 10／mock 12）｜其中补丁会出声＝5（原件：real 2／mock 5）
+
+=== [5] 面外佐证：帽终形状那几份，同级 run.log 怎么说 ===
+说明：这一段读的是 `run.log`（跑器 stdout 留档），**不参与分面、不进表**——它只回答『代理挑中的是不是真撞帽』。
+  可外部核对的覆盖率（同级有没有 run.log／readings.json 证人）：脚本面 57/64 份｜真模型面 43/43 份
+  outputs/bench-baseline-2026-10-04/B12-long-horizon-rep1-base.events.jsonl
+      流内 usage=30 写盘=是
+      跑器档「readings.json：exitError="agent loop 超过 maxSteps=30，强制中止"｜requests=30｜autoVerifyBeat=false」 ⇒ （该档无 run.log，取同档 readings.json）
+  outputs/bench-head-d0ffe15e-a/B2-feature-export-rep1-base.events.jsonl
+      流内 usage=30 写盘=是
+      跑器档「maxSteps=30，强制中止〕」 ⇒ B2-feature-export rep1 FAIL 起点=红 读先于写=2 clarify=0 先批后写=N verify=0→null 闸拍=0 返修=没验 隐藏=红 工具=31/1败 重复=1 请求=30 拨数=1 tok=240418/1991 价不可知 146s 内存峰=103MB/3进
+  outputs/bench-head-d0ffe15e-b/B12-long-horizon-rep1-base.events.jsonl
+      流内 usage=30 写盘=是
+      跑器档「maxSteps=30，强制中止〕」 ⇒ B12-long-horizon rep1 FAIL 起点=红 读先于写=22 clarify=0 先批后写=N verify=0→null 闸拍=0 返修=没验 隐藏=无面 工具=35/0败 重复=0 请求=30 拨数=1 tok=216228/2385 价不可知 107s 内存峰=114MB/5
+  outputs/bench-head-d0ffe15e-b/B2-feature-export-rep1-base.events.jsonl
+      流内 usage=30 写盘=是
+      跑器档「maxSteps=30，强制中止〕」 ⇒ B2-feature-export rep1 FAIL 起点=红 读先于写=2 clarify=0 先批后写=N verify=0→null 闸拍=0 返修=没验 隐藏=红 工具=31/0败 重复=0 请求=30 拨数=1 tok=226319/2093 价不可知 94s 内存峰=125MB/6进程
+  outputs/repair-arm-ab-2026-10-04/a/B1-bugfix-crossfile-rep1-base.events.jsonl
+      流内 usage=30 写盘=否
+      跑器档「maxSteps=30，强制中止〕」 ⇒ B1-bugfix-crossfile rep1 FAIL 起点=红 读先于写=0 clarify=0 先批后写=N verify=0→null 闸拍=0 返修=没验 隐藏=红 工具=36/1败 重复=0 请求=30 拨数=1 tok=577134/3414 价不可知 319s 内存峰=193MB/
+  outputs/repair-arm-ab-2026-10-04/a/B2-feature-export-rep1-base.events.jsonl
+      流内 usage=30 写盘=是
+      跑器档「maxSteps=30，强制中止〕」 ⇒ B2-feature-export rep1 FAIL 起点=红 读先于写=2 clarify=0 先批后写=Y verify=2→false 闸拍=0 返修=红没回 隐藏=红 工具=31/2败 重复=0 请求=30 拨数=1 tok=267100/2916 价不可知 106s 内存峰=86MB/5
+  帽终形状轨迹合计＝6 份（分面实测：真模型面 6；其中同级有证人文件可外部核对的＝6 份里上面逐条给出）。
+
+探针结束。所有数字来自本次遍历，未合并两面。

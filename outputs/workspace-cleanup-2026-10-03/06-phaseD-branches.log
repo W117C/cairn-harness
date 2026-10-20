@@ -1,0 +1,32 @@
+== 阶段 D 分支治理 2026-10-03 13:46:36 ==
+zcode HEAD=05be8f9762ac1087447b5b64ca0500e4ef939bee
+--- port/opt2 的 patch-id 证据（删前重验）
+applied  a58bb990d853534b5ac5476ff353c0ce46932b18
+applied  5a984a2818ccd2a6b6dc7a0f686bce1ae3ef20e1
+applied  f2ece1ff953816053fda8aaf8841f4cdacb0e994
+applied  ff45eed2a71ba42c4b55bc06ecb032147fc9733e
+applied  d273b7c199da7304cf69e09572b0760416ad41f6
+applied  82ed1e3262e4d40b40d49f68cff23ddadc6b4e36
+applied  a6efa23a2712205352c7517ebfb31c8638aa530a
+applied  4ed392e3a2de5ffba591a09bcd15308d4cd16e4a
+applied  07c32de849448981a8f3bb3e317e4db5b78df6d5
+applied  36770b55fa0bb7f8205dd338928e998e6612e5b5
+applied  da3f4ed05a28f6702305b36ad3e405847d97de2a
+applied  02f497154e2c5eae834b2be5b40e7ddaf598b9f9
+applied  f789dac08caf9e105ec3cc53ddb810ed72d7df15
+port/opt2: applied=13 unlanded=0
+DEL(-d) claude/charming-neumann-b4ee71         sha=3a6d63c1d rc=0 | Deleted branch claude/charming-neumann-b4ee71 (was 3a6d63c).
+DEL(-d) claude/elastic-antonelli-ec59c9        sha=3a6d63c1d rc=0 | Deleted branch claude/elastic-antonelli-ec59c9 (was 3a6d63c).
+DEL(-d) claude/laughing-burnell-7239e5         sha=3a6d63c1d rc=0 | Deleted branch claude/laughing-burnell-7239e5 (was 3a6d63c).
+DEL(-d) claude/unruffled-dirac-5cf0e0          sha=3a6d63c1d rc=0 | Deleted branch claude/unruffled-dirac-5cf0e0 (was 3a6d63c).
+DEL(-d) port2                                  sha=eb140cca0 rc=0 | Deleted branch port2 (was eb140cc).
+DEL(-D) port/opt2                              sha=f789dac08 rc=0 | Deleted branch port/opt2 (was f789dac).（依据：13/13 patch-id 已落地）
+--- 剩余分支
+      doc-layer-migration        da60f0d 合入主树至 fc531e5
+      main                       3a6d63c M4b 收口: docs 四件 + PROGRESS/BLOCKED + AGENTS 计划完成声明
+      opt/agent-v2               1de92fa P4 补完：把「CPU/内存占用」变成落盘读数（此前只有聊天里报过一次）
+      rescue/locate-weights-rev4 3719e5c rescue: locate/map rev 4 未落地实验（EXTRACT_LOGIC_REV=4、成员位名字不再算跨文件可链接定义）——2026-10-03 收树前保全原状
+    * zcode                      05be8f9 桌面端 M3-2：每会话取消——per-session AbortController 经 RunOverrides.signal 透传（零 core 改动）、cancel(sessionId) 会话级、run 响应 aborted 真值增强（desktop 扩展字段）；门等待打断语义按 AskGate 监听面实测裁决（报告落结论）
+--- 保留的标签（唯一 ref，勿删）
+goofy-satoshi-0edc69 84850747f5567ca0a6626b4cd1bc9b95d04b73f4 给缺口 #3 的核心修复补上变异锚点：词根收窄这条变异本来是存活的
+rescue/stash-chain-41772808 c9fdb400c1d7e331e4719adf2de47ad8c47151d9 head-cert 回收自己建的认证树：印了两个月的那行命令改成真执行

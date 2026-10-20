@@ -19,6 +19,7 @@ import { run_shell } from "../tools/run_shell";
 import { write_file } from "../tools/write_file";
 import { remember } from "../tools/remember";
 import { runLoop } from "./loop";
+import { redactEventForLog } from "../events";
 import { DELIVERY_GUARD_CALL_ID, EMPTY_RUN_DELIVERY } from "./delivery-guard";
 import { projectContext, type ContextMessage } from "./context";
 import {
@@ -1162,8 +1163,12 @@ export class Orchestrator {
     } else if (e.type === "tool_call") {
       w.toolStats[e.name] = (w.toolStats[e.name] ?? 0) + 1;
     }
-    // 落主流（带 agent_id 的子流；文本字段过 redactSecrets——子流也落 JSONL，密钥不外泄）
-    const streamed = scanStreamEvent(withAgentId(e, w.agentId));
+    // 落主流（带 agent_id 的子流；文本字段过 redactSecrets——子流也落 JSONL，密钥不外泄）。
+    // 2026-10-19 重构：loop 交给消费者的是**原件**（见 loop.ts 的 redactEventForLog），
+    // 所以脱敏在这一侧做；`w.events`（内存态）因此拿到的是**真内容** ——
+    // 安全扫描面（collectChangeSet → scanChangeSet）要靠它认出密钥，脱敏后再扫就成了一道
+    // 静默空转的闸（写进文件里的 AKIA… 在 report 里报 total=0）。
+    const streamed = redactEventForLog(withAgentId(e, w.agentId));
     await this.opts.emit(streamed);
     // progress 消息（§4.4.8：agent_message{kind:progress}；面板子流最近事件的数据源之一）
     if (e.type === "assistant_message" && e.content.trim() !== "") {
@@ -1238,8 +1243,22 @@ export class Orchestrator {
       // 产出就是没过），并把错误照旧上抛给 runWorker 的 catch-all——不新增吞错误的路。
       if (!w.terminalResolved) {
         w.terminalResolved = true;
+        // **终态要改口**（2026-10-19 独立评审追出的 HIGH）：`finishInner` 在发 done 之前就把
+        // `w.terminalStatus = "done"` 盖上了；`emit(doneResult)` 一抛（磁盘满 / 事件形状非法），
+        // 后面那几行（lastResult / terminalResolved / resolveTerminalWaiters）全被跳过 ⇒
+        // ① 终态仍读成 "done" ⇒ 父会话拿到 `{"status":"done","summary":""}` ——
+        //    **一句"成功但没有产出"的谎**（那正是 terminal-sync-window 那组判据要防的东西）；
+        // ② 耐久日志里只有 agent_status:done、没有 agent_result ⇒ 重启后 interruptedWorkers
+        //    看见终态就返回 [] ⇒ 永远补不上 failed(interrupted) ⇒ 僵尸 worker；
+        // ③ `agentOwners` 与内存回收（下面两行）被跳过 ⇒ 路由表里永远留着这个 agent
+        //    ⇒ 崩溃恢复的过滤器（`orchestratorForAgent(id) === null`）跳过它 ⇒ 救不回来。
+        // 这里把三样都补齐：终态改口成 failed、路由表摘掉、内存回收照做。
+        w.terminalStatus = "failed";
+        w.lastResult = undefined; // 拿不出产出就是没有产出（不装一份空报告）
         this.resolveTerminalWaiters(w.agentId, "failed", null);
         this.resolveDependents(w.agentId, "failed");
+        agentOwners.delete(w.agentId);
+        this.releaseWorkerMemory(w);
         console.warn("[orchestrator] worker 收尾中途失败，按 failed 放行等待方：" + w.agentId + " "
           + (err instanceof Error ? err.message : String(err)));
       }

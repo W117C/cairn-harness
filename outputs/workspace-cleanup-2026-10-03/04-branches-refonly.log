@@ -1,0 +1,18 @@
+== 已并入分支删除（ref-only，不需要独占窗口）2026-10-03 13:43:20 ==
+zcode HEAD=05be8f9762ac1087447b5b64ca0500e4ef939bee
+DEL agent/修复-todo-的-completedcount-worker-12 sha=bd5ec4496 rc=0 | Deleted branch agent/修复-todo-的-completedcount-worker-12 (was bd5ec44).
+DEL codex/r1b-renderer-subtraction                 sha=0bae71c65 rc=0 | Deleted branch codex/r1b-renderer-subtraction (was 0bae71c).
+DEL feat/goal-plan-mode                            sha=1d6093d4e rc=0 | Deleted branch feat/goal-plan-mode (was 1d6093d).
+DEL feat/m10-split-prompt-face                     sha=f7a15ae5d rc=0 | Deleted branch feat/m10-split-prompt-face (was f7a15ae).
+DEL feat/ui-codex-bench                            sha=12434391f rc=0 | Deleted branch feat/ui-codex-bench (was 1243439).
+--- 剩余分支
++ claude/charming-neumann-b4ee71  3a6d63c (/Users/ze/Downloads/deepseek harness/.claude/worktrees/charming-neumann-b4ee71) M4b 收口: docs 四件 + PROGRESS/BLOCKED + AGENTS 计划完成声明
++ claude/elastic-antonelli-ec59c9 3a6d63c (/Users/ze/Downloads/deepseek harness/.claude/worktrees/elastic-antonelli-ec59c9) M4b 收口: docs 四件 + PROGRESS/BLOCKED + AGENTS 计划完成声明
++ claude/laughing-burnell-7239e5  3a6d63c (/Users/ze/Downloads/deepseek harness/.claude/worktrees/laughing-burnell-7239e5) M4b 收口: docs 四件 + PROGRESS/BLOCKED + AGENTS 计划完成声明
++ claude/unruffled-dirac-5cf0e0   3a6d63c (/Users/ze/Downloads/deepseek harness/.claude/worktrees/unruffled-dirac-5cf0e0) M4b 收口: docs 四件 + PROGRESS/BLOCKED + AGENTS 计划完成声明
++ doc-layer-migration             da60f0d (/Users/ze/Downloads/deepseek harness/.worktrees/doc-layer) 合入主树至 fc531e5
+  main                            3a6d63c M4b 收口: docs 四件 + PROGRESS/BLOCKED + AGENTS 计划完成声明
++ opt/agent-v2                    1de92fa (/Users/ze/Downloads/deepseek harness/.worktrees/opt) P4 补完：把「CPU/内存占用」变成落盘读数（此前只有聊天里报过一次）
++ port/opt2                       f789dac (/Users/ze/Downloads/deepseek harness/.worktrees/port) P4 补完：把「CPU/内存占用」变成落盘读数（此前只有聊天里报过一次）
++ port2                           eb140cc (/Users/ze/Downloads/deepseek harness/.worktrees/port2) handoff: port2 合并交接说明（14 笔、0 冲突、验证读数、回滚方式）
+* zcode                           05be8f9 桌面端 M3-2：每会话取消——per-session AbortController 经 RunOverrides.signal 透传（零 core 改动）、cancel(sessionId) 会话级、run 响应 aborted 真值增强（desktop 扩展字段）；门等待打断语义按 AskGate 监听面实测裁决（报告落结论）

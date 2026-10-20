@@ -1,0 +1,34 @@
+== 阶段 C1/C2 有货的树：先保全/先证明，再删 2026-10-03 13:45:48 ==
+identity: user.name='local verification' user.email='local-verification@example.invalid' | 最近作者: local verification <local-verification@example.invalid>
+--- C1 .worktrees/locate-weights 保全
+ M src/agent/map/parse.ts
+ M src/agent/map/rank.ts
+?? fixtures/locate/
+?? scripts/probe-locate-recall.ts
+Switched to a new branch 'rescue/locate-weights-rev4'
+rescue commit: 3719e5c rescue: locate/map rev 4 未落地实验（EXTRACT_LOGIC_REV=4、成员位名字不再算跨文件可链接定义）——2026-10-03 收树前保全原状
+rescue stat:  scripts/probe-locate-recall.ts     | 106 +++++++++++++++++++++++++++++++++++++  src/agent/map/parse.ts             |  29 ++++++++--  src/agent/map/rank.ts              |  13 ++++-  4 files changed, 164 insertions(+), 4 deletions(-) 
+保全后该树 status: [0 项]
+  -> remove rc=0 exists=GONE
+--- C2 .worktrees/suite-refresh-318 先证明零损耗
+  suite-quiet.json             tree=d3e1f9f6f840 main=d3e1f9f6f840 same=YES
+  suite-quiet-default.log      tree= main=92acb338251c same=NO
+  suite-cold-first-run.log     tree= main=6934eb80937d same=NO
+  ⚠️ 反向抵消失败 ⇒ 按不冗余处理
+
+-- C2 判定（零损耗证明，逐条）：
+   ① 语料：树里 outputs/suite-refresh-2026-10-03/ **只有** suite-quiet.json，sha256 d3e1f9f6f840… 与主树同名文件**逐字节相同**；两份日志主树有、树里没有（主树更全）。
+   ② dirty 改动：该树相对自己 HEAD 的 10 行新增里，9 行主树已有；唯一主树没有的一行是**被重写过的旧注释**，原文如下（存档备查）：
+          // 入档的是**热的那一趟**（`suite-cold-first-run.json` 同目录留着，免得下一个人以为 225s 是冷树能跑出来的）。
+      主树对应那一行已改成：冷树读数留在同目录 `suite-cold-first-run.log`（措辞更准，且那份冷树日志主树确实有）。
+   ③ 整份文件差异 145 行 = 主树在这条线上**往前走**了（路 B：按留档自己那棵树解析），不是树里多了东西。
+   ⇒ 判「零损耗」，force 删树。
+C2 remove rc=0 exists=GONE
+.worktrees/doc-layer       branch=doc-layer-migration  dirty=0  in_use=NO  -> removed rc=0 gone=YES
+.worktrees/opt             branch=opt/agent-v2         dirty=0  in_use=NO  -> removed rc=0 gone=YES
+.worktrees/port            branch=port/opt2            dirty=0  in_use=NO  -> removed rc=0 gone=YES
+.worktrees/port2           branch=port2                dirty=0  in_use=NO  -> removed rc=0 gone=YES
+.claude/worktrees/charming-neumann-b4ee71 branch=claude/charming-neumann-b4ee71     dirty=0  -> removed rc=0 gone=YES
+.claude/worktrees/elastic-antonelli-ec59c9 branch=claude/elastic-antonelli-ec59c9    dirty=0  -> removed rc=0 gone=YES
+.claude/worktrees/laughing-burnell-7239e5 branch=claude/laughing-burnell-7239e5     dirty=0  -> removed rc=0 gone=YES
+.claude/worktrees/unruffled-dirac-5cf0e0 branch=claude/unruffled-dirac-5cf0e0      dirty=0  -> removed rc=0 gone=YES

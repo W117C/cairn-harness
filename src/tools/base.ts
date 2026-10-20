@@ -2,6 +2,7 @@ import { lstat, readlink, realpath } from "node:fs/promises";
 import type { Stats } from "node:fs";
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { frozenJudgePathSet } from "../frozen";
+import { SENSITIVE_PATH_SEGMENTS } from "../sensitive-paths";
 import type { AgentEvent, ClarifyAnswerMap, HarnessHoldReason, ImpactReportEvent } from "../events";
 
 /** 工具可预期失败的统一错误类型：loop 捕获后转成 ok:false 的 tool_result。 */
@@ -225,13 +226,15 @@ export async function resolveWriteTarget(workspace: string, abs: string, label: 
   return landed;
 }
 
-/** 敏感落点（与 permissions/risk.ts 的 SENSITIVE_PATH_SEGMENTS 同一张表）的**真实路径**复查：
+/** 敏感落点的**真实路径**复查（与权限层**同一张表**——`src/sensitive-paths.ts` 是全仓唯一一份）：
  *  权限层是纯字符串匹配，工作区内软链 `docs/hooks -> .git/hooks` 的 rel 里没有敏感片段，
- *  于是 guided/auto 下写 pre-commit 免批。软链落点仍在 workspace 内 ⇒ containment 闸放行。 */
-const SENSITIVE_REAL_SEGMENTS: readonly string[] = [
-  ".git/hooks/", ".git/config", ".npmrc", ".netrc", ".env", ".git-credentials",
-  "id_rsa", "id_ed25519", "authorized_keys",
-];
+ *  于是 guided/auto 下写 pre-commit 免批。软链落点仍在 workspace 内 ⇒ containment 闸放行。
+ *
+ *  **为什么必须共用一份**（2026-10-20「做薄、做标准」）：这份表此前在这里**抄了一份**，
+ *  而且**已经漂了**——少了 `.agent/lsp.json` 与 `.agent/config.json` 两项（宿主配置面：
+ *  模型能改这两个文件 = 能让宿主执行任意命令）。同一个落点在两层各有一份真相，
+ *  迟早分家；本轮追出的那条 HIGH（路径别名绕过）就是"两层口径不一致"的活例子。 */
+const SENSITIVE_REAL_SEGMENTS: readonly string[] = SENSITIVE_PATH_SEGMENTS;
 export async function assertNotSensitivePathReal(workspace: string, abs: string, label: string): Promise<void> {
   const wsReal = await realpath(workspace).catch(() => null);
   if (wsReal === null) return; // 由 assertRealContainment 拒绝

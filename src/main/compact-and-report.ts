@@ -92,16 +92,29 @@ export function shouldRunSecurityReport(safeMode: string, events: AgentEvent[]):
   return events.some((e) => e.type === "verify_result" && e.ok);
 }
 
-/** 验证门收敛后的安全快筛 hook：产出报告事件（经 emit 落盘 + 上屏）。返回是否产出。 */
+/** 验证门收敛后的安全快筛 hook：产出报告事件（经 emit 落盘 + 上屏）。返回是否产出。
+ *
+ *  `rawWriteEvents` = 本场 run **脱敏前**的写事件原件（2026-10-19 重构）：
+ *  变更集是从写动作重建的（write_file 的 content / edit_file 的 new_string / apply_patch 的 patch），
+ *  而盘上那份是**脱敏副本**（`AKIAIOSFODNN7EXAMPLE` → `AKIA****`）⇒ 密钥模式一条都不命中
+ *  ⇒ 这道安全闸**静默空转**（实测：写进 `src/creds.ts` 的 AKIA… 在 report 里报 total=0）。
+ *  所以扫描面要读**原件**：落盘/出站那一侧擦（loop.ts 的 redactEventForLog），扫描面留一份原件。
+ *  缺省（不传）时退回读盘——那份是脱敏的，扫不出密钥（**旧行为**），但结构判定仍在。
+ */
 export async function runSecurityReportHook(
   logPath: string,
   safeMode: string,
   emit: (e: AgentEvent) => Promise<void>,
+  rawWriteEvents?: readonly AgentEvent[],
 ): Promise<boolean> {
   try {
     const events = await replay(logPath);
     if (!shouldRunSecurityReport(safeMode, events)) return false;
-    const report = buildSecurityReport(events, { scannedAt: new Date().toISOString() });
+    // 扫描面用原件（若有）；结构判定（有没有可验的改动）仍看整条流。
+    const scanSource = rawWriteEvents !== undefined && rawWriteEvents.length > 0
+      ? [...events.filter((e) => e.type !== "tool_call"), ...rawWriteEvents]
+      : events;
+    const report = buildSecurityReport(scanSource, { scannedAt: new Date().toISOString() });
     if (!report) return false;
     await emit(report);
     return true;

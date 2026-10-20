@@ -1,0 +1,15 @@
+$ vitest run --config vitest.config.ts && node --import tsx ../../scripts/desktop-boundary-check.ts
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness/apps/desktop
+
+
+ Test Files  22 passed (22)
+      Tests  206 passed (206)
+   Start at  14:30:28
+   Duration  3.81s (transform 59%, import 27%, tests 14%, worker 1%)
+
+  Transform  transforming modules took 8.48s · 59% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+desktop-boundary-check: 绿（src 无反向依赖、无 UI import）

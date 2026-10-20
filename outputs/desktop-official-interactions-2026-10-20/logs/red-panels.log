@@ -1,0 +1,33 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness/apps/desktop
+
+ ❯ tests/pane-disclosure.test.tsx (2 tests | 1 failed) 14ms
+   × 多面板提供聚焦、恢复和添加入口，原布局与关闭入口保留 12ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/pane-disclosure.test.tsx > 多面板提供聚焦、恢复和添加入口，原布局与关闭入口保留
+AssertionError: expected '<div class="pane-grid" data-grid="tru…' to contain 'aria-label="面板导航"'
+
+Expected: "aria-label="面板导航""
+Received: "<div class="pane-grid" data-grid="true" data-testid="cairn-panes" id="cairn-panes" style="height:100%;width:100%;overflow:hidden;display:grid;grid-template-columns:minmax(0, 100fr);grid-template-rows:minmax(0, 50fr) auto minmax(0, 50fr);touch-action:none"><div class="pane-cell" data-cell="true" id=":R2d:" style="overflow:auto;min-height:0;min-width:0;grid-column:1 / span 1;grid-row:1 / span 1"><section class="pane-chunk" aria-label="变更窗格"><div class="pane-chunk-head" draggable="false" data-dragging="false"><span class="pc-label">变更</span><button class="pt-x" aria-label="关闭变更窗格"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div><div class="pane-chunk-body"><div class="pane-empty">本会话还没有文件改动。<br/>agent 写盘后会在这里按轮列出。</div></div></section></div><div aria-orientation="horizontal" class="pane-gridline" data-separator="inactive" id=":R1l:" role="separator" style="grid-column:1 / -1;grid-row:2 / span 1;touch-action:none" tabindex="0"></div><div class="pane-cell" data-cell="true" id=":R2l:" style="overflow:auto;min-height:0;min-width:0;grid-column:1 / span 1;grid-row:3 / span 1"><section class="pane-chunk" aria-label="方案窗格"><div class="pane-chunk-head" draggable="false" data-dragging="false"><span class="pc-label">方案</span><button class="pt-x" aria-label="关闭方案窗格"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div><div class="pane-chunk-body"><div class="pane-empty">本会话还没有提交过方案。<br/>模型提请计划后会在审核后留档在这里。</div></div></section></div></div>"
+
+ ❯ tests/pane-disclosure.test.tsx:8:16
+      6| it("多面板提供聚焦、恢复和添加入口，原布局与关闭入口保留", () => {
+      7|   const html = renderToStaticMarkup(<PaneDock tabs={["changes", "plan"…
+      8|   expect(html).toContain('aria-label="面板导航"');
+       |                ^
+      9|   expect(html).toContain('aria-label="聚焦变更窗格"');
+     10|   expect(html).toContain('aria-label="恢复多面板布局"');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  21:34:48
+   Duration  375ms (import 53%, transform 41%, tests 5%, worker 1%)
+
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts tests/pane-disclosure.test.tsx

@@ -19,6 +19,8 @@ const pushApi = {
   onTerminalExit: (cb: (p: unknown) => void) => subscribe(PUSH_CHANNELS.onTerminalExit, cb),
   onBrowserState: (cb: (p: unknown) => void) => subscribe(PUSH_CHANNELS.onBrowserState, cb),
   onPreviewState: (cb: (p: unknown) => void) => subscribe(PUSH_CHANNELS.onPreviewState, cb),
+  // 载荷是命令 id 字符串（main 侧只发 id）；subscribe 的入参是 unknown，这里显式过一手。
+  onMenu: (cb: (id: string) => void) => subscribe(PUSH_CHANNELS.onMenu, (v) => { cb(String(v)); }),
 };
 
 function subscribe(channel: string, cb: (v: unknown) => void): () => void {

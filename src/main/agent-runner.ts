@@ -38,11 +38,11 @@ import { createWaitForAgentsTool } from "../tools/wait_for_agents";
 import { createCancelAgentsTool } from "../tools/cancel_agents";
 import { createRefineGoalTool } from "../tools/refine_goal";
 import { makeWebFetch, webFetch, type WebFetchDeps } from "../tools/web_fetch";
-import { loadSearchConfig, makeWebSearch, webSearchSpec } from "../tools/web-search";
+import { loadSearchConfig, makeWebSearch, webSearchSpec, type SearchConfig } from "../tools/web-search";
 import { run_shell } from "../tools/run_shell";
 import type { AgentEvent, ClarifyAnswerMap, EventLog, GoalTurnOrigin } from "../events";
 import { frozenJudgePathSet } from "../frozen";
-import { createEventLog, replay } from "../events";
+import { createEventLog, redactEventForLog, replay } from "../events";
 // goal 模式：判据与投影全在纯函数面（src/agent/goal.ts），这里只做「读事件流 → 问它 → 落流 → 起下一轮」。
 import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, goalWindowSpend, parseGoalSpec, projectGoal, type GoalView } from "../agent/goal";
 // 收束后的三支观测读数（目标漂移 / cost-per-progress / 自进化）2026-10-17 搬去
@@ -55,7 +55,7 @@ import { evolutionPromptNote } from "../agent/evolution";
 // 落流前的文本扫描表（`goal_stopped.reason` 已在表上）：异常原文是外部文本，而这条写入点不经
 // loop 那份 redactEventForLog，扫它就得取这张现成的表，不在这里再抄一遍「哪个字段该擦」。
 import { scanStreamEvent } from "../agent/worker-projection";
-import { checkPermission, enterPlanRunScope, getPlanState, planGateBlocks, seedPendingPlanFromEvents, sideEffectDecisionTable, type PermissionMode } from "../permissions";
+import { checkPermission, enterPlanRunScope, getPlanState, planGateBlocks, rememberDecision, seedPendingPlanFromEvents, type PermissionMode } from "../permissions";
 import {
   evaluate,
   isNetworkCommandCall,
@@ -146,7 +146,8 @@ import {
 import { compactSessionLog, firePreCompactHook, resolveSafeMode, runSecurityReportHook } from "./compact-and-report";
 import { currentWorkspace, pluginRuntimeOpts, setPluginSnapshot, setStateHandlerDeps } from "./state-handlers";
 import {
-  denied, gatedTool, installPluginTools, pluginToolSpecsFromRuntime, sessionToolFace, setToolGateDeps,
+  denied, gatedTool, installPluginTools, pluginToolSpecsFromRuntime, resolveLivePluginTool, sessionToolFace, setToolGateDeps,
+  type CardExtra,
 } from "./tool-gates";
 import {
   handleAgentDecide, handleCardAction, handleClarifySubmit, handlePlanDecide, handleRunCancel,
@@ -452,9 +453,11 @@ let installedMemory = true;
 let installedSubagents = true;
 /** M2d：remember 门语义（可测工厂）：方案门写禁 / 档位表判 deny·ask·allow。
  *  §8.1.4「remember 属写动作走权限门」；无权限 → ok:false 且不落盘。
- *  裁决读 `SIDE_EFFECT_DECISION` 那一列（`sideEffectDecisionTable()`）——旧写法是
- *  `if (mode === "read-only") … if (mode === "default") …`，**表外档位一路掉到底、直接落盘**，
- *  和 `checkPermission` 修掉的那个 fail-open 尾巴是同一族。 */
+ *  裁决走**共用那一份**（`permissions/rememberDecision`）——它读 `SIDE_EFFECT_DECISION` 那一列，
+ *  旧写法是 `if (mode === "read-only") … if (mode === "default") …`，**表外档位一路掉到底、直接落盘**，
+ *  和 `checkPermission` 修掉的那个 fail-open 尾巴是同一族；
+ *  而**主会话与 worker 必须读同一份**（两处各判各的，漂的方向是 worker 那条更松：
+ *  worker 的 remember 曾经连卡都不出就把模型控制的文本写进了跨项目注入的全局层）。 */
 export function createGatedRemember(deps: {
   getMode(): PermissionMode;
   isPlanBlocked(): boolean;
@@ -464,17 +467,23 @@ export function createGatedRemember(deps: {
   return {
     name: "remember",
     async run(args, ctx) {
-      if (deps.isPlanBlocked()) return denied("remember", deps.getMode(), "方案门：先批后写（当前没有已批准的方案）");
       const mode = deps.getMode();
-      const decision = sideEffectDecisionTable()[mode] ?? "ask";
-      if (decision === "deny") return denied("remember", mode, "只读档拒写向工具");
+      // 裁决口径走**共用那一份**（`permissions/rememberDecision`）——主会话与 worker 同一件事
+      // 必须同一个答案，两处各写一份就会漂，而漂的方向是 worker 那条更松。
+      const decision = rememberDecision({ scope: args.scope, mode, isPlanBlocked: deps.isPlanBlocked });
+      if (decision === "deny") {
+        return denied(
+          "remember",
+          mode,
+          deps.isPlanBlocked() ? "方案门：先批后写（当前没有已批准的方案）" : "只读档拒写向工具",
+        );
+      }
       if (decision === "ask") {
         // 项目层写入免批（2026-10-15 第十一遍业主裁决，与 runSessionEndDistill 同一条口径）：
         // 只影响当前项目、写入即事件可见、记忆面板可删 ⇒ 不值得为它烧一张卡。
         // 此前两条口径分叉的代价是实测的：桌面端会话里 agent 两次想把「本仓 verify 全量
         // 219s 跑不进 60s 帽」这条真事写进项目记忆，两次都被 default 档的 ask 挡掉
         // （无审批口 ⇒ fail-closed）⇒ 下一场会话从零开始踩同一个坑。
-        if (args.scope !== "global") return remember.run(args, ctx);
         const ask = deps.getAsk();
         if (!ask) return denied("remember", mode, "非交互模式（fail-closed）");
         if (!(await ask(args))) return denied("remember", mode, "未获批准");
@@ -540,6 +549,19 @@ export function installAppTools(opts: { automation?: boolean; omitTools?: readon
   // 模型一旦发出这个名字就会真落盘）——这正是 M7 审计点名的「新工具族静默绕过写禁」形状。
   TOOLS.apply_patch = gatedTool("apply_patch", TOOLS.apply_patch);
   TOOLS.run_shell = gatedTool("run_shell", TOOLS.run_shell);
+  // 读侧三把也进门（2026-10-20 独立评审追出，**HIGH**）：路径通道早就判得出「这个路径是敏感面」
+  // （`src/permissions/risk.ts` 的 pathRisk：`.git/config` / `.env` / `.agent/config.json` …），
+  // 但那个判据**只在 evaluate 里跑**——而 evaluate 只对被 gatedTool 包装的工具跑。
+  // 主会话此前只包了写向与执行类（write_file/edit_file/apply_patch/run_shell/lsp/render_image/web_fetch），
+  // **read_file/grep/glob 三把裸挂** ⇒ 判据在那条路上**一次也没跑过**：
+  // `read_file {path:".git/config"}` 与 `grep {pattern:"…", path:".git"}` 在**四档里都是零审批**，
+  // 凭据直接进模型上下文（还落进会话 JSONL）。worker 那条路一直是包着的（`gatedWorkerTool`），
+  // 于是同一个工具、同一套判据、两个出口两个结论——**两层各说各话**。
+  // 这一笔把读侧三把接进同一道门：路径命中敏感片段 ⇒ L4-risk 出卡（人点一次才放行），
+  // 不命中 ⇒ 照旧 L4-pass 放行（**不抬高文件工具的基线风险**，见 pathRisk 那段口径）。
+  TOOLS.read_file = gatedTool("read_file", TOOLS.read_file);
+  TOOLS.grep = gatedTool("grep", TOOLS.grep);
+  TOOLS.glob = gatedTool("glob", TOOLS.glob);
   // #58：lsp 会 spawn 工作区配置里的命令（`.agent/lsp.json`，外部输入）——同 S3 那条形状。
   // 风险等级由 `src/permissions/risk.ts` 给（high），四档都出卡；不改盘，故不动 SIDE_EFFECT_TOOLS。
   TOOLS.lsp = gatedTool("lsp", TOOLS.lsp);
@@ -807,6 +829,30 @@ function searchConfigured(workspace: string): boolean {
 }
 
 
+/** 审批卡上要**多显示**的字段：`web_search` 的目的地（2026-10-19 独立评审追出）。
+ *
+ *  端点不在模型给的 args 里（它来自工作区的 `.agent/config.json`）⇒ 卡上只有 `{"query":"…"}`，
+ *  人不知道这次要把查询发到哪去 ⇒ 那次批准是**不知情**的。而这一格正好是出网面：
+ *  一个克隆来的仓只要带一份 `.agent/config.json`（`search.endpoint` +
+ *  `allowLocalEndpoint:true`），端点就能指向回环/内网/云元数据地址，而卡上**看不出这件事**。
+ *  ⇒ 端点（与"该端点允许访问本机/内网"这件事）必须上卡，批准才是知情的。
+ *
+ *  读侧失败（配置坏了/读不到）**不遮蔽**这件事：卡上照样说"端点读不到"，
+ *  而不是安静地显示成"没有端点"——那会把"看不出来"变成"看不出来且以为没问题"。 */
+function searchCardExtra(workspace: string): CardExtra {
+  return (args) => {
+    const query = typeof args.query === "string" ? args.query : "";
+    let cfg: SearchConfig | null = null;
+    try { cfg = loadSearchConfig(workspace); } catch { cfg = null; }
+    if (cfg === null) return { endpoint: "（端点读不到：工作区的 .agent/config.json 没有可用的 search.endpoint）" };
+    const shown = cfg.endpoint.replaceAll("{query}", query === "" ? "{query}" : encodeURIComponent(query));
+    return {
+      endpoint: shown,
+      ...(cfg.allowLocalEndpoint === true ? { allowLocalEndpoint: "该端点被配置为允许访问本机/内网（已跳过出网地址闸）" } : {}),
+    };
+  };
+}
+
 /** 上面那条的累积闸门：一旦判真就永不回退（缺省假 = 还没出现过任何"用得上"的证据）。 */
 let automationArmedOnce = false;
 
@@ -987,12 +1033,26 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       try { solpi = new SolpiRuntime(await privateSessionDirectory(opts.logPath, opts.workspace), opts); }
       catch (err) { console.warn("[solpi] private storage unavailable; optimizations disabled:", err instanceof Error ? err.message : String(err)); }
     }
+    // 安全扫描面要的**原件**写事件（脱敏前）：变更集是从写动作重建的（write_file 的 content /
+    // edit_file 的 new_string / apply_patch 的 patch），而盘上那份是脱敏副本（`AKIA…` → `AKIA****`）
+    // ⇒ 密钥模式一条都不命中 ⇒ 这道安全闸静默空转（2026-10-19 重构，见 loop.ts 的 redactEventForLog）。
+    // 只留写事件（变更集只由它们重建），不囤整条流。
+    const rawWriteEvents: AgentEvent[] = [];
     const pipeline = (e: AgentEvent): Promise<void> => {
       const task = eventQueue.then(async () => {
+        if (e.type === "tool_call" && (e.name === "write_file" || e.name === "edit_file" || e.name === "apply_patch")) {
+          rawWriteEvents.push(e);
+        }
+        // 脱敏归**落盘边界**管（2026-10-19 重构，见 src/events/redact.ts）：
+        // loop 交给消费者的是**原件**（安全扫描面要看到真内容——脱敏后的串认不出密钥，
+        // 那道闸就静默空转了），所以**日志自己擦**（log.append 内部）⇒ 任何新写的出口
+        // 都不可能"忘了擦"（旧形状把擦除藏在 loop 里，新出口漏了没人会报错）。
         usageAttribution.stamp(e); // 落盘前先盖：live 与盘必须是同一个对象（同 events 盖 ts 的口径）
         await log!.append(e);
         if (!parentFinished && !(e as { agent_id?: string }).agent_id && e.type === "verify_result") solpi?.meter?.recordVerification({ id: `${e.callId}:${e.attempt}`, ok: e.ok, elapsedMs: null }); // worker 子流不进父验证计量（同投影同口径）
-        opts.onEvent?.(e);
+        // 出站面（推给渲染层的那一份）也擦：日志自己擦的是"写进盘的那一份"，
+        // 推出去的那一份是另一条出口，同样不能带明文。
+        opts.onEvent?.(redactEventForLog(e));
         // Workers retain this pipeline after the parent turn. Its queue serializes
         // close with append; a late worker append reopens through createEventLog.
         if (parentFinished) await log!.close?.();
@@ -1191,6 +1251,11 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       // 套用前置会让这一支在最需要它的那一类趟上永远不开。
       ...(opts.deliveryRepair === true ? { deliveryRepair: true } : {}),
       stuckNudge: true, // 主会话（人直用那条）才有换路提示：worker 有看门、靶场按字节计量，见 LoopOptions
+      // 执行面补表：run 中途才批准的插件，它的 MCP 工具此刻已进 rt.mcpTools 与模型面
+      // （requestFace 逐请求重算），但 installPluginTools 那张执行表是起点快照 ⇒ 不补这一手，
+      // 模型看得见却落到 `unknown tool`。与 installPluginTools 用**同一个** gatedMcpTool 构造，
+      // 不另写一份执行路径。rt 为 null（零插件降级）时钩子缺席，既有路径字节不变。
+      ...(rt ? { resolveTool: (name: string) => resolveLivePluginTool(name, rt) } : {}),
       provider: createProvider(promptText, systemPromptFor(opts.mode) + evolutionNote, modelSelection, {
         ...opts, emit: pipeline, solpi, promptCache: providerSettings.promptCache,
         requestFace: () => sessionToolFace(rt, faceArgs),
@@ -1210,7 +1275,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // 下一行是 tests/tool-surface-parity.test.ts 的取料面：那个门按行文本认注入键，
     // 所以覆盖表的键必须都留在同一行，别为了排版拆成 helper（拆了它就一个都认不出）。
     ...(webFetchOverride !== undefined || recall || impactTool || diagnoseTool || searchTool
-      ? { tools: { ...TOOLS, ...(webFetchOverride !== undefined ? { web_fetch: gatedTool("web_fetch", webFetchOverride) } : {}), ...(recall ? { obs_recall: recall } : {}), ...(impactTool ? { impact_query: impactTool } : {}), ...(diagnoseTool ? { diagnose: gatedTool("diagnose", diagnoseTool) } : {}), ...(searchTool ? { web_search: gatedTool("web_search", searchTool) } : {}) } }
+      ? { tools: { ...TOOLS, ...(webFetchOverride !== undefined ? { web_fetch: gatedTool("web_fetch", webFetchOverride) } : {}), ...(recall ? { obs_recall: recall } : {}), ...(impactTool ? { impact_query: impactTool } : {}), ...(diagnoseTool ? { diagnose: gatedTool("diagnose", diagnoseTool) } : {}), ...(searchTool ? { web_search: gatedTool("web_search", searchTool, undefined, searchCardExtra(opts.workspace)) } : {}) } }
       : {}),
       workspace: opts.workspace,
       mode: "auto", // 冻结 loop 对 ask 一律拒绝；真实门在 gatedTool（复用 checkPermission）
@@ -1263,7 +1328,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // M2f 安全 report：验证门收敛后 hook 触发（默认 report / off 不跑；不阻断主流程）
     {
       const safeMode = (await store().get()).safeMode;
-      await runSecurityReportHook(opts.logPath, safeMode, pipeline);
+      await runSecurityReportHook(opts.logPath, safeMode, pipeline, rawWriteEvents);
     }
     // M2f sidechat 演示通道（env 门控，缺省零行为）：3 轮旁路问答 + 一次 /promote 上屏
     if (process.env.M2F_SIDECHAT_DEMO === "1") {

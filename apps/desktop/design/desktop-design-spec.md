@@ -1,3 +1,32 @@
+# 2026-10-20 视觉实现更新
+
+用户最新指定直接使用 [Nwflower/dsh-claude-style](https://github.com/Nwflower/dsh-claude-style)。当前视觉层复用其 0.17.0、提交 `484ece039400ab45a97e935abb5bc47245845a96` 的主题源码，并经 `src/renderer/dsh-claude-style.css` 适配 Cairn。上游来源与接入范围见 `src/renderer/vendor/dsh-claude-style/README.md`，文件校验值见同目录 `UPSTREAM.json`。
+
+本文以下的旧配色、字体与控件像素记录保留为历史；与本次接入冲突时，以固定上游源码和 Cairn 适配层为准。任务、权限、会话、窗格等功能与安全契约继续适用。没有安装或替换官方 DSH 宿主。
+
+
+## 2026-10-20 官方 DSH 交互对照
+
+按用户补充要求，交互参考 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness/tree/687f282e8625c6b8d11ff58211a90524be2e4317)，此次核对提交为 `687f282e8625c6b8d11ff58211a90524be2e4317`。以下增量优先于旧蓝本中冲突的交互描述：
+
+- Normal / Thinking 模式把连续工具调用收成一条可展开摘要，执行中的调用和失败计数仍在摘要中；每次调用展开显示参数、返回内容和既有差异/产物入口。Verbose 继续显示全部调用详情。
+- 工具组与调用使用事件序号作为稳定键，追加调用、返回与最终回复不会重置手动展开选择。工具返回文本最多展示 10,000 字符，截断必须明示，原始事件保留。
+- 侧栏收起保留 48px 快捷栏（展开、新建、搜索、文件、终端、设置）；专注模式仍收起全部侧栏。项目分组折叠状态本地保存，搜索临时展开命中组，清除搜索恢复原选择。
+- 右侧窗格增加导航、添加和单面板聚焦，支持恢复原来的多面板布局；切换可见布局保留同一棵面板内容树。原有拖动、行高记忆、关闭和弹出入口继续有效。
+
+这是 Cairn 现有组件上的交互适配；官方 Cordis 插件宿主、完整 DockKit、四档视图和全轮过程折叠尚未迁入。验证与截图见 `outputs/desktop-official-interactions-2026-10-20/REPORT.md`。
+
+
+## 2026-10-20 后续可靠性打磨
+
+- 工具调用未返回结果、而主会话已经停止时，显示「未收到结果」；与执行中、成功、失败分别表达。主会话终态会结清历史未决调用的运行提示，worker 终态不影响主会话；迟到的真实结果仍可更新记录。
+- 反馈/置顶共用 `useMessageAnnotations` 管理会话归属与请求代次。同一标记提交中禁用重复发送并显示等待态，操作条在提交结束前保持可见。失败只回滚该条标记；切换会话及切走再切回后，旧请求不能覆盖新加载的状态。
+- 反馈与置顶 sidecar 查询等待同一 Store 此前入队的写入，避免刚提交的内容在重载时被旧读数覆盖。此保证限于既有进程内串行队列。
+- 工具差异入口读取保留的结构化路径；参数展示截断不再影响大文件编辑后的差异入口。
+- 关闭窗格后将键盘焦点交还剩余窗格导航；拖动/弹出操作使用同一套图标。验证记录见 `outputs/desktop-hardening-2026-10-20/REPORT.md`。
+
+---
+
 # Cairn 桌面端设计规范（v1.0 · Claude 蓝本）
 
 > **唯一依据**：《Claude 桌面端设计规范》（`/Users/ze/Documents/deepseek-harness/default-workspace/Claude桌面端设计规范.md`，2026-10-15 版）。下文一切条款回引其章节号（§2.x / §3.x / §4.x / §5.x）。
@@ -185,7 +214,7 @@
 | 侧边栏会话行 | 高 26px、字 13px、分组上留白 12px |
 | 侧边栏宽度 | 可拖；把手停在 **242px** |
 | 侧边栏顶栏 / 页脚 | 48px / 头像 + 用户名 + 套餐（头像槽 22px） |
-| 聊天顶栏 | 26px（会话名 13px + Terminal / Changes / Browser + ⋮） |
+| 窗口顶栏（唯一一条） | **38px**：红绿灯避让 + 侧栏开关 · 上下文（会话名/品牌名，**对中栏居中**）· 右组（对话目录 / Terminal / Changes / Browser / ⋯ / 专注模式）。**原 26px 聊天顶栏已并入此栏（批 129）** |
 | 聊天气沟 | 左右各约 41px |
 | 回复"阅读停顿" | 右侧最多留 56px |
 | 消息操作条 | 渲染即挂载（**禁止延迟构建**，§5.3-5）；copy / branch / pin / read aloud / time |
@@ -266,6 +295,81 @@
 | `--rem-scale` | `html` 根元素 · settings（用户字号偏好） | 全局乘一次且在组件之外；各组件自乘会漂移 |
 | 双轴变体 | 刻度族生成 · 令牌层 | 合成一轴则"用大号字"被迫连控件一起放大 |
 | 主题模式 | `[data-theme]` · settings.theme | 组件不该知道主题从哪来 |
+
+### 4.8 macOS / Apple 约定（2026-10-20 批 129 新增）
+
+本节此前不存在——「像苹果」这件事此前只落在字体栈（`-apple-system`）与 `hiddenInset` 两处，没有条款。
+本节把它变成**可判定的约束**，而不是每次重新翻截图。
+
+#### 4.8.1 统一工具栏（一条栏承载窗口控件与上下文）
+
+| 条款 | 规定 |
+|---|---|
+| 栏数 | **恰好一条**。窗口控件（红绿灯避让 76px + 侧栏开关）、上下文（会话名/品牌名）、动作（右组）同在一条 38px 栏里。**不许再出现第二条上下文栏**——两条栏并排必然让同一语义出现两次（批 120/121 的争点即此） |
+| 上下文落点 | 标题**恒对中栏居中**。中栏带 = 中栏中心 ± 左右可用空间（左右各取小者）⇒ 长会话名让带收窄并省略，**不滑到右组按钮底下** |
+| 附带件的处置 | 目标芯片等附属件住「标题右侧的翼」，**不与标题同槽**——同槽会把标题挤偏半个芯片宽 |
+| 拖拽区 | 工具栏本体是 `drag`；**带内的 input/button 一律 `no-drag`**（Electron 拖拽区里的输入框打不了字，属功能级硬要求）。带本体 `pointer-events: none`（它只是定位框），可交互子元素各自接管 |
+| 焦点序 | DOM 序即 Tab 序：侧栏开关 → 会话名 → 右组。**不许用 `tabindex` 倒序** |
+| 红绿灯 | 由系统绘制（`hiddenInset`），只留避让位，**不画假灯** |
+
+#### 4.8.2 控件度量与滚动条
+
+- 滚动条：槽无底、胶囊端；**静息压淡、指针进入内容区才提亮**。**不做完全隐藏**——隐藏会把「下面还有内容」这个信息一起消失（长对话流里代价比收益大）。
+- 命中区与圆角沿用 §4.5 的控件刻度（20/24/28/32/40），不另立一套。
+- 窗口级动作与内容级动作在右组里**分组**（细分隔线），不混成一排。
+
+#### 4.8.3 平台可达性偏好
+
+| 系统偏好 | 处理 |
+|---|---|
+| `prefers-reduced-motion` | 已在：动效归零、平滑滚动降级为 `auto`（§4.10） |
+| `prefers-contrast: more` | 已在（批 129）：抬描边（8%→22% / 13%→38%）与最弱一档文字（`--text-400/500` → `--text-200` 档）。**品牌色与语义三色不动**（各自已过 4.5:1 闸） |
+| `prefers-reduced-transparency` | **当前是 no-op**：全仓无 `backdrop-filter`、无半透明材质，没有可降级的东西。**登记在册**：将来若引入半透明材质，**必须**同时引入该查询 |
+
+### 4.9 竞品对照册（2026-10-20 批 129 新增）
+
+此前「对标 Claude」散落在 §9 的批次日志里（批 1/10/13/117…），**没有对照册**，于是每次改动都要重新翻截图、重新裁决。本节把裁决钉成条款。
+
+| 参照 | 取 | 不取 | 理由 |
+|---|---|---|---|
+| **Claude 桌面端** | 暖米白画布 + 单一珊瑚强调；衬线大字 hero；安静的 chrome；会话名**可点重命名**（点按 / F2） | — | 本仓 §4.1 色板与 §3.1 hero 已是 Claude 形制，维持 |
+| **Claude 桌面端** | — | 顶栏只放品牌、会话名另起一行 | 两条栏 ⇒ 标题出现两次（批 120/121 的争点）。**并成一条**（批 129） |
+| **Codex（OpenAI）** | 颜色预算只花在**状态**（侧栏行状态点、变更计数徽标）；产品级导航在项目之上；悬浮式输入卡；内容列留白慷慨 | — | 本仓侧栏已有行状态点；输入卡已是悬浮形制 |
+| **Codex（OpenAI）** | — | 侧栏选中态改**中性灰药丸** | 本仓批 #71 已登记「淡底 + 2px 珊瑚强调条」为唯一选中态语言（Claude 形制）。**改它需业主裁决**，不在自动范围 |
+| **Codex（OpenAI）** | — | 半透明 / 毛玻璃 | 同上：见 §4.8.3 与「不做」条 |
+| **macOS** | 统一工具栏；叠层滚动条；系统可达性偏好 | vibrancy / 毛玻璃材质 | 材质跟随桌面壁纸，与本仓**自带明暗主题**打架（材质不会随 `data-theme` 翻）；Claude 与 Codex 两侧栏也都是实色 |
+
+> 本节是**对照册**，不是「抄谁」的清单：每一行都记了「取/不取 + 理由」，下一次改设计时先查本节，再查 §9 的批次日志。
+
+### 4.10 层级与动效刻度（2026-10-20 批 129 新增）
+
+此前层级与动效只有 §9 的批次日志、没有规范章，于是同一个浮层在不同批次里拿到过不同的阴影写法。
+
+#### 4.10.1 层级（elevation）
+
+| 档 | 令牌 | 用途 | 亮色 | 暗色 |
+|---|---|---|---|---|
+| 0 | — | 页面底 / 卡片（无阴影，靠描边分层） | — | — |
+| 1 | `--shadow-card` | 卡片浮起（重命名输入框等） | `0 1px 2px rgb(0 0 0 / .04), 0 1px 6px rgb(0 0 0 / .04)` | `none`（暗色靠底色分层，不靠阴影） |
+| 2 | `--shadow-pop` | 浮层 / 菜单 / 弹窗 | `0 8px 28px rgb(0 0 0 / .12), 0 2px 8px rgb(0 0 0 / .07)` | `0 8px 28px rgb(0 0 0 / .5), 0 2px 8px rgb(0 0 0 / .35)` |
+
+- 浮层另叠**描边**（`--hairline-strong`）——暗色里阴影弱，描边才是主要分层信号。
+- **层级只许这两档**：再加一档就会开始「谁比谁高」说不清；组件要更多层次时改用描边，不新造阴影。
+- 组件**不许**写裸 `box-shadow` 阴影值（零字面色值纪律的同源要求）；要新样式先加 token。
+
+#### 4.10.2 动效（motion）
+
+| 档 | 令牌 | 时长 | 用途 |
+|---|---|---|---|
+| 微反馈 | `--t-instant` | 60ms | hover / 按下 / 勾选 |
+| 浮层与微件 | `--t-fast` | 140ms | 菜单、按钮、展开收起 |
+| 常态过渡 | `--t-med` | 200ms | 遮罩淡入、颜色/透明度变化 |
+| 面板/模态进场 | `--t-slow` | 300ms | 浮层上浮、页面级位移 |
+| 大面位移 | `--t-slowest` | 450ms | 大面板搬移 |
+
+- 缓动四族：`--ease-out`（默认）/ `--ease-snap`（快速贴位）/ `--ease-overshoot`（弹入）/ `--ease-out-quint`（强收尾）。**时长令牌不写裸缓动**（同动作跨组件必须一致）。
+- **`prefers-reduced-motion: reduce` ⇒ 动效归零**（`animation`/`transition` 0.01ms、`scroll-behavior: auto`），JS 侧的 `behavior: "smooth"` 同步降级为 `auto`。这是硬条款：系统偏好优先于本规范的动效偏好。
+- **非用户触发的动效要克制**：一次编排好的进场（页面载入/面板展开）比满屏「淡入+上移」的卡片列表好；后者是生成式设计的味道，不是本产品要的。
 
 ---
 
@@ -1906,3 +2010,972 @@
 - 若面自己往 `.vite` 写（它不运行 vitest）本判据不会抓；其余路径仍逐字节覆盖。
 - 另一会话并发跑全量时的负载假红（evidence-typecheck 60s、render-image 20s）归因于并发，
   已在当轮记录，不作为本批结论。
+
+### 2026-10-20 · 批 104：两处结构缺口收口（G4 会话级 worktree 隔离 / 原生菜单树 §5.2）
+
+#### A. 改了什么（只剩「必须动」的部分）
+
+- **G4 会话级 worktree 隔离**（本节 §3.7 表项「Git worktree 隔离」）：
+  - core 新增 `src/main/session-worktree.ts`——**复用 worker 层既有原语**（`src/agent/worktree.ts` 的
+    创建/合并/清理，含残留自愈、冲突自动 `merge --abort`），只加会话维度的三件事：命名
+    `+ s-<id>`、按 id 找回、把 `.agent` 链回主 checkout（权限表/记忆/配置/会话根同源）。
+  - 桌面：一条 invoke 通道 `sessionWorktree`（create/merge/discard 共用，会话归属与「在跑就拒」
+    在 kernel-host 里）；`listSessions` 读侧现算 `isolated`（目录存在即真，不落 sidecar）；
+    隔离会话的 run 主工作区 = 那棵树，`logPath` 仍钉主 checkout。
+  - 渲染层：会话行菜单加「在隔离工作区里跑 / 合并回主工作区… / 丢弃隔离工作区…」，
+    行内一枚分支图标标出隔离态；丢弃走确认卡（未提交改动会消失）。
+  - **路径偏离蓝本默认**：落 `.agents/wt-s-<id>`（与 worker 同根、同一行 .gitignore），
+    不住 `.agent/worktrees/`——`.agent` 要被 symlink 进 worktree，住进去就自我指涉。
+- **原生菜单树**（§5.2）：`App → 文件 → 编辑 → 视图 → 前往 → 窗口 → 帮助`。
+  模板是纯数据（`main/menu-template.ts`，可判卷），装配在 `main/menu.ts`；
+  渲染层拥有键位的项一律 `registerAccelerator:false`（accelerator 只显示、不注册——否则菜单 push
+  与渲染层 keydown 双发，⌘N 会建两个会话）；命令经新 push 通道 `onMenu` 转交，
+  渲染层用 `Record<MenuCommandId, () => void>` 接（少接一条 typecheck 红）。
+  保留系统 role（App 菜单/编辑族/重载/缩放/全屏/窗口）——这些是 OS 级语义，重写只会丢平台约定。
+
+#### B. 顺手收掉的重复（不是新功能）
+
+- 「无会话时给回执」原在三个键位各抄一份 → 一处出口 `cycleSessionOrToast`（菜单也走它）。
+- ⌘W 的回执原在键位块内联 → `closeSessionToHome`（菜单「关闭会话」共用）。
+- ⌘G 的开合口径原在内联分支 → `findStep`（菜单「查找下一个/上一个」共用）。
+
+#### C. 判卷（真跑，不 mock）
+
+- 新增 `apps/desktop/tests/session-worktree.test.ts`：临时仓里真跑 git——建树/`.agent` 是真 symlink/
+  合并真落盘/冲突真 abort 回干净态/丢弃真删树与分支/id 不合规当场拒/run 接线针脚。
+- 新增 `apps/desktop/tests/app-menu.test.ts`：命令表与菜单项一一对应、每条命令 click 真的递到发送口、
+  渲染层项全 `registerAccelerator:false`、accelerator 无重复、⌘W 属「关闭会话」而「关闭窗口」无键。
+- 桌面 **144 文件 / 1073 用例全绿**（行为判卷 6 条在 core 侧：`tests/session-worktree.test.ts`，
+  桌面只留 kernel-host 接线针脚）；core 全量 **439 文件 / 6148 用例（6142 绿 / 6 红见 D）**；root tsc 0；桌面 build 0；
+  `desktop-boundary-check` 绿；`CAIRN_SMOKE` 真机冒烟 **PASS 1389ms**（菜单在真 Electron 里装上了，
+  accelerator 串没有非法值——非法时 `Menu.buildFromTemplate` 会当场抛）。
+
+#### D. 未证 / 欠账
+
+- root 全量仍有 **6 红**（`src/providers/provider-config.ts` 的 `isLocalHostname` 一族）——该文件是
+  另一笔在飞改动，与本批无 import 关系；本批未触碰。
+- 隔离会话的 run **未做真模型 e2e**：只到「接线针脚 + 真 git 行为」这一层；建议下一次真机跑一轮
+  隔离会话确认写面落在 `.agents/` 里。
+- G1 插件侧栏（§3.7 侧栏按钮条）仍未做——业主本轮只点了 G4 与菜单树。
+- `pnpm gates` / head-cert / mutate-verify 未跑；未提交。
+
+### 2026-10-20 · 批 105：四条真机交互缺陷收口（沉淀污染 / 拒绝写入假改动 / Esc 杀任务 / 双焦点环）+ 浮层回焦
+
+#### A. 改了什么（全部由真机读数触发，不是样式偏好）
+
+1. **沉淀轮不再落无主 `tool_result`**（core `src/agent/memory/distill.ts`）。
+   - 实测：mock 剧本每轮复用 `c1/c2/c3`；白名单拒绝为一次**从未写进会话**的调用 emit 了
+     `tool_result`，没有配对 `tool_call`。`mergeToolResultsById` 按 callId 把它并进主会话里同一
+     callId 的真实结果（模型读到「已写入 src/todo.ts…[distill] write_file 已拒绝」）；转录面
+     `toolRows` 按 callId 收口，把成功的 `read_file`/`write_file` 改写成失败；压缩面也把这次
+     拒绝记成工具失败。
+   - 修法：白名单拒绝只短路，不落事件；`DISTILL_GATE` 去掉 `whitelist` 一格（历史日志里的
+     `X-distill/denied` 仍可读），对应变异锚点 `distill-gate-whitelist-unlabeled` 删除；
+     `tests/distill.test.ts` 改为断言「零事件」，`memory-runner` 同步改判据。
+2. **被拒绝/失败的写盘不再算改动**（`apps/desktop/src/renderer/projections.ts`）。
+   - `collectTurnDelivery` 只收 `ok:true` 的写回执；`restoredPathsOf` 只在成功时记 `write`；
+     `lastWriteIndex` 也只随成功写推进（否则一次没发生的写会把已有验证打成 stale）。
+   - 后果：拒绝写盘后改动面/顶栏徽标/交付卡都不再出现该文件；还原之后再遇拒绝写，文件仍留在
+     「已还原」侧。
+3. **审批/澄清/计划卡在场时 Esc 不再取消整轮**（`App.tsx`）。
+   - 卡面写着「Esc 不做决议」，旧全局 Esc 却在卡在时执行 `cancelRun`；真机按 Esc 后
+     `approval=false / phase=已停止`，任务被误杀。
+   - 修法：`gatePending` 进 hotkeys latest-ref，Esc 在取消前短路；速查表 Esc 文案同步为
+     「先关浮层；决策卡在场时让路；无浮层停止本轮」。
+4. **去掉输入框双焦点环**（`styles.css`）。
+   - 2026-10-20 焦点环改为三层 `box-shadow` 后，旧的 `input:focus-visible` outline 规则与
+     `.ss-field > input:focus-visible` 规则仍生效 ⇒ 设置搜索框/命令面板输入框同时有 2px outline
+     与三层 shadow（真机 computed 实锤两圈）。
+   - 修法：删除元素级 outline 规则；composer textarea 同时 `outline:none; box-shadow:none`，
+     只留卡片 `focus-within` 环。
+5. **键盘浮层关闭回焦输入框**（`App.tsx`）。
+   - 真机：⌘K / ⌘F / ⌘/ 关闭后 `activeElement=BODY`，要接着打字得先点输入框。
+   - 修法：`focusComposer()`（rAF 等卸载完）+ `closeFind` / `closeCheat` / palette `onClose`；
+     设置面板仍由 Radix Dialog 自己回焦，不重复接。
+6. **门卡进场动效**（`styles.css`）：`.zone-gate > *` 用 `gate-in` 140ms（只动
+   transform/opacity）；既有 `prefers-reduced-motion` 全局块覆盖。
+
+#### B. 判卷（真跑）
+
+- desktop **145 文件 / 1085 用例全绿**（新增 `keyboard-modal-focus.test.ts` 5 条；
+  `restore-drops-from-changes` +3 条；`motion` 改为「无双环 / 门卡进场」2 条）；boundary 绿。
+- core 全量 **439 文件 / 6147 用例：6141 绿 / 6 红**；6 红仍为既知的 provider-config 在飞改动
+  （`isLocalHostname` / localhost 放行一族），与本批 import 面无交集；本批涉及面全绿
+  （distill 19、memory-runner 8、distill-stream-completion 8、distill-receipts 8、gate-audit 35）。
+- root tsc 0；`mutate-needles-check` 仍有 4 条既有阻断（`src/events/redact.ts` 未入库 ×2、
+  `memory/store.ts` 钉在飞文本 ×2），不是本批锚点；删掉的锚点不在阻断名单。
+- 真机（隔离实例，重启主进程使 core 修复生效）：
+  - 新会话一轮：`read_file ✓ 3ms`、`write_file ✓ 11s`、`run_shell ✗ 9.7s`（显式拒绝）；
+    改动面 1 个文件；会话 JSONL 中 `distill` 出现 **0** 次，工具事件只有 c1/c2/c3 各一对。
+  - 拒绝 `write_file` 后交付 trail 显示「第 2 轮 · 无文件改动」，不再出第 2 轮文件卡
+    （旧 main 实例复现；renderer HMR 后消失）。
+  - Esc 门卡：`approval=true, running=true, phase=等待审批 10s`（未停）。
+  - 焦点环：设置搜索框 `outline:none` + 三层 shadow；composer textarea `shadow:none`、卡片边框
+    accent 40%。回焦：⌘K/⌘F/⌘/ 关闭后 `activeElement=TEXTAREA[aria-label=任务输入]`。
+  - 门卡 `animationName=gate-in`、`animationDuration=0.14s`。
+  - 截图：`/tmp/cairn-t25-23-focus-single.png`、`/tmp/cairn-t25-24-esc-gate.png`、
+    `/tmp/cairn-t25-22-bottom.png`。
+
+#### C. 未证 / 欠账
+
+- `pnpm gates` / head-cert / mutate-verify 未跑；未提交。
+- 沉淀修复只在 mock/demo 与单测上验证；未用真模型跑会话结束沉淀 e2e（真模型在空工具表下到不了
+  白名单分支）。
+- 回焦只覆盖 palette/find/cheat 三处；设置面板由 Radix Dialog 回焦（已核）。
+- 删除元素级 outline 后，将来若有新输入框放进 `overflow:hidden` 容器，三层 shadow 可能被裁；
+  当前输入框容器均未裁。
+- 批 104 的欠账仍在：G1 插件侧栏未做、隔离会话 run 未做真模型 e2e。
+
+### 2026-10-20 · 批 106：sidecar 侧车不长假会话 + 侧栏宽度把手可读名/复位收口
+
+#### A. 改了什么
+
+1. **会话根目录的 UI sidecar 不再被列成会话**（`src/main/sessions.ts`）。
+   - 真机复现：点一次消息操作条的「置顶」后，`sessions/pins.jsonl` 被 `listSessions` 的
+     `*.jsonl` 扫描当成一个会话，侧栏多出名为 **pins** 的假会话（时间“刚刚”、无内容）。
+     `feedback.jsonl` 是同一形状的潜伏问题：点一次赞/踩就会长出名为 **feedback** 的假会话。
+   - 修法：首行判定（`isUiSidecarLine`）——sidecar 首行是 `{sessionId,eventId,…}` 且**没有
+     `type`**；事件首行必有 `type`。先读首行、命中就跳过，再数行/读徽标。判据不按文件名：
+     用户完全可以把会话命名成 `pins`（测试用真事件首行钉了这条反向锚）。
+   - 顺带修掉一个更隐蔽的后果：删除当前会话时 `listSessions(dir)[0]` 可能选中 `pins` 当“下一个
+     会话”——现在不会再落到 sidecar 上。
+2. **侧栏宽度把手的可读名/复位值跟随常量**（`App.tsx`）。
+   - 旧 `aria-label="调整侧栏宽度（240–280px）"`、`title="…双击回到 240px"`、双击
+     `persistSidebarWidth(240)` 都是 200–280 域之前的残留；读屏用户被告知不存在的下限，
+     双击也回不到缺省 200。
+   - 改为 `${SIDEBAR_MIN}–${SIDEBAR_MAX}` / `${SIDEBAR_DEFAULT}`，并补
+     `aria-valuemin/valuemax/valuenow`（role=separator + tabIndex 的键盘控件必须有当前值）。
+     左右键步进 16px 不变。
+3. **侧栏会话时间锚改回文件 mtime**（`sessions-view.ts`）。
+   - 真机：置顶一个一小时前的会话后，它的 mtime 没变，侧栏时间却从「1 小时前」跳成「刚刚」，
+     并被分进「今天」桶——因为 `sessionTime` 优先读 `metadata.updatedAt`，而置顶/改名/归档都会
+     刷新它。组织动作不是对话活动。
+   - 改为 `mtimeMs`（事件 append 的落盘时间 = 对话活动时间）；`updatedAt` 仍留在元数据里做
+     “组织信息最后修改”的语义，不再进 recency 显示/分桶。`sessionTime` 只被时间标签、时间桶、
+     命令面板用，不参与后端排序，故列表顺序不变。
+
+#### B. 判卷（真跑）
+
+- core 新增 `tests/sessions.test.ts` 一格：真会话 + `pins.jsonl` + `feedback.jsonl` ⇒ 只列真会话；
+  再把 `pins.jsonl` 首行换成真事件 ⇒ 必须列出（证明判据不是文件名）。该文件 **30 用例全绿**。
+- desktop `interaction-deadends.test.ts` +2：把手标签/复位/ARIA 值取常量、反向钉 240 字面量
+  不再出现。桌面全量 **145 文件 / 1087 用例全绿**；boundary 绿。
+- core 全量 **439 文件 / 6148 用例：6142 绿 / 6 红**；6 红与批 105 同一组 provider-config 在飞
+  改动，不在本批 import 面；root tsc 0。
+- 真机（隔离实例，重启 main 后）：侧栏只剩 3 个真会话，**pins 假会话消失**；
+  点「赞」生成 `feedback.jsonl` 后整页 reload，侧栏仍无 feedback 假会话。
+  把手 `aria-label=调整侧栏宽度（200–280px）`、`valuemin=200/valuemax=280/valuenow=200`；
+  聚焦后 → 两次 `valuenow=232`、侧栏实宽 232；双击复位 `200`。
+  置顶旧会话后时间显示 **37 分钟前**（mtime 15:43 / 现在 16:20），不再是「刚刚」；取消置顶后
+  顺序回到 active 优先。
+- `sessions-view.test.ts` 的时间锚用例改为反向锚：updatedAt 是“现在”、mtime 是旧值 ⇒ 取 mtime。
+
+#### C. 未证 / 欠账
+
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+- **编辑第 1 轮消息会立刻建一个空分支会话**（`createSession` 后才能载入空转录）；点
+  「回到原会话」后这个 0 字节会话仍留在侧栏。本批**未动**它：静默删除会话是破坏性动作，
+  需要先定「空分支是否算草稿」的产品口径。已作为下一批候选记录。
+- `prune-attachments/`、`sidechats/` 等目录内的文件不走本判据（它们本来就不在扫描面）。
+- 若 sidecar 首行被写坏（半行/损坏），content 判定拿不到 shape，仍可能被列成会话；
+  当前两个 store 都是追加完整行，崩溃半行未覆盖。
+
+### 2026-10-20 · 批 107：窄窗 ⌘⌥B 一次开（侧栏避让后检查器不再只写 storage 不展开）
+
+#### A. 改了什么
+
+1. **`revealInspector` 的侧栏避让分支：两个 rAF → 等侧栏过渡落定再 expand**（`App.tsx`）。
+   - 真机复现（880×620，侧栏 200，主组 680，检查器 0，storage 已为 "1"）：按一次 ⌘⌥B 后
+     `inspector-col` 宽仍 **0**、`inert` 仍 true，只有 `cairn.inspector.open.v1` 变成 "1"；
+     再按一次才真的展开。
+   - 根因：窄窗（主组 < 744）开检查器要先收侧栏；旧代码在**两个 rAF** 后就 `expand()`，
+     而侧栏收起是 240ms 过渡——面板在过渡中拿不到宽度，被布局夹回 0；storage 已写成“开”，
+     于是状态与画面相反，第二次按又走“开”的分支才成功。
+   - 修法：`window.setTimeout(() => { inspectorRef.current?.expand(); }, 260)`，与专注模式
+     退出恢复宽度的 240ms 同口径，等过渡结束再开。
+   - 判据跟着实现走：`inspector.test.tsx` 原断言两个 rAF + 旧 expand 针脚，现改为钉
+     `setTimeout(...260)`、反向断言旧 rAF 针脚不再存在（不降低覆盖，只改落点）。
+
+#### B. 判卷（真跑）
+
+- desktop `inspector.test.tsx` 15 用例全绿；`interaction-deadends.test.ts` 15 用例全绿
+  （新增一格：窄窗避让分支不再用 rAF 抢跑）。
+- desktop 全量 **145 文件 / 1088 用例全绿**；boundary 绿；root tsc 0。
+- core 本批未改，沿用批 106 的 **439 文件 / 6148 用例：6142 绿 / 6 红**（同组 provider-config
+  在飞改动）。
+- 真机（同一隔离实例，改后 HMR）：
+  - 修复前状态：`side=200, group=680, insp=0, ls="1", inert=true`；
+  - 按一次 ⌘⌥B：`insp=414.5, side≈0（收起过渡）, group=880, ls="1", inert=false`；
+  - 再按一次：`insp=0, side=200, ls="0"`（侧栏按 auto-collapse 约定回来）；
+  - 再按一次：`insp=414.5, side≈0, ls="1"`——**每次一键到位**，不再需要第三按。
+
+#### C. 未证 / 欠账
+
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+- 固定 260ms 延迟在 `prefers-reduced-motion` 下仍存在（过渡被全局块停掉，属多余等待）；
+  当前可接受，若要做可读 `matchMedia` 归零——本批未动。
+- 只覆盖“侧栏开着、检查器收起”的窄窗路径；宽窗（主组 ≥ 744）直接 `expand()` 的路径
+  真机未单独复测（逻辑未改）。
+
+### 2026-10-20 · 批 108：还原改动后界面即时收口（不再等切会话）
+
+#### A. 改了什么
+
+1. **`handleRestoreSnapshot` 成功后本地补一条 `file_restored` 事件**（`App.tsx`）。
+   - 真机复现：在 Inspector 点「撤销」→ 画面出现「已还原：src/todo.ts」、盘上文件确实回退，
+     但改动 Tab 仍摆着撤销钮、变更窗格与徽标仍数着这个文件；**切走再切回**才消失。
+   - 根因：主进程 `handleSnapshotRestore` 直接 `createEventLog(logPath).append(...)`，
+     不经 run 的事件推流；渲染层的 `events` 只由 `onEvent`（run 子流）与 `openSession` 更新，
+     所以这次 append 对当前界面不可见。投影逻辑本身没错——重开会话从磁盘读到事件就正确了。
+   - 修法：成功后若 `activeIdRef.current === sid`，向 `events` 追加同形
+     `{type:"file_restored", path, snapshotId}`；只补发起还原的那个会话，切走后不误写。
+     主进程仍是持久事实源，本地这条只负责当前渲染面的即时一致性。
+   - 旧接线判据 `...(activeId !== null ? ...)` 改为 `sid` 口径，并新增本地补事件的断言
+     （`restore-drops-from-changes.test.ts`、`inspector.test.tsx`）。
+
+#### B. 判卷（真跑）
+
+- `restore-drops-from-changes.test.ts` **14 用例全绿**；`inspector.test.tsx` **15 用例全绿**。
+- desktop 全量 **145 文件 / 1088 用例全绿**；boundary 绿；root tsc 0。
+- core 本批未改，沿用 **439 文件 / 6148 用例：6142 绿 / 6 红**（同组 provider-config 在飞改动）。
+- 真机（隔离实例，改后 HMR）：
+  - 起一轮 → 允许 write → 拒绝 shell → 结束后 `undo=true, files=1`；
+  - 真鼠标点「撤销」→ **700ms 内** `undo=false, files=0, changes=0`，底部「已还原：src/todo.ts」；
+  - `src/todo.ts` 回到改动前（`completedCount` 仍数全部 todo），不是只改了 UI。
+
+#### C. 未证 / 欠账
+
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+- 若未来主进程改为把这条 append 也推给渲染层，会收到两份同形 `file_restored`；
+  当前投影按“最后一次动作”取，重复事件幂等，不重复计数——但推送协议若加，需去重口径。
+- 本地补的事件不带 `ts`（与主进程落盘的那条同形）；若以后有按 ts 排序的面，需补时间。
+
+### 2026-10-20 · 批 109：「回到原会话」真正载入原会话 + 清掉空编辑分支
+
+#### A. 改了什么
+
+1. **回到原会话改走 `openSession(originId)`，不再裸 `activate`**（`App.tsx`）。
+   - 真机复现：点 user 行「编辑第 1 轮」→ 建空分支并切过去（rows=0）→ 点条上「回到原会话」：
+     标题变回「你好」，但**屏上仍是空流**（rows=0、users=0）。原因是旧按钮只
+     `activate(editCtx.originId); setEditCtx(null);`，`activate` 只改 `activeId`，不重新读
+     会话事件；分支的空 `events` 原样留在渲染层。重新点侧栏或重开会话才有内容。
+   - 修法：`openSession(ctx.originId)` 走正常开会话链路（读盘 + 写 currentSession + 合并增量）。
+2. **空分支回到原会话即清理**：`emptyBranch = activeIdRef.current === forkId &&
+   events.length === 0 && 队列为空`；`openSession(origin)` 同时异步 `deleteSession(forkId)`，
+   删后 `refreshSessions`。
+   - 第 1 轮编辑没有前文，`createSession` 先建 0 字节会话；旧行为点「回到原会话」后它一直
+     留在侧栏（批 106 登记的欠账）。现在不再留 0 字节会话。
+   - 有内容/有排队消息的分支不删（判定在当前会话与事件数组上，不猜侧栏 lines）。
+
+#### B. 判卷（真跑）
+
+- `edit-notice.test.ts` **3 用例全绿**（新增空分支清理接线；旧 `activate` 针脚反向断言）。
+- desktop 全量 **145 文件 / 1089 用例全绿**；boundary 绿；root tsc 0。
+- core 本批未改，沿用 **439 文件 / 6148 用例：6142 绿 / 6 红**（同组 provider-config 在飞改动）。
+- 真机（隔离实例，改后 HMR + reload）：
+  - 修复前复现：编辑第 1 轮 → rows=0 → 回到原会话 → **rows=0**（标题已是「你好」）；
+  - 修复后：同样操作 → 回到原会话 → **rows=40 / users=5**，notice 条消失；
+  - 新建的空分支标题 `会话 2026-10-20 16:47:14 #2` 从侧栏消失；此前遗留的
+    `16:45:51 #1` 用会话菜单「删除…」清掉（真删除确认卡）；
+  - 侧栏剩两个真会话。
+
+#### C. 未证 / 欠账
+
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+- 空分支清理是**静默删除**（无二次确认）：判定为“当前会话、0 事件、0 排队”才删；
+  若用户点「回到原会话」前在分支里打了草稿但没发送，草稿本来也会随切会话丢，不另做保留。
+- 删除失败会在原会话挂错误条，但空分支仍留在侧栏；本批未做重试。
+- 只覆盖第 1 轮（无前文）的编辑分支；round>1 的分支有前文，永不判空。
+
+### 2026-10-20 · 批 110：「界面密度」不再只改圆角（组件尺寸轴落到外壳/按钮）
+
+#### A. 改了什么
+
+1. **尺寸轴补常用固定行高令牌**（`tokens.css`）：新增
+   `--h-row / --h-btn / --h-btn-sm / --h-btn-lg / --h-btn-xs / --h-send`，
+   全部 `calc(Npx * var(--size-scale))`。
+   - 现状取证：`--size-scale` 五档与 `html[data-ui-size]` 已存在，但全 CSS 只有
+     **1 处**（`.menu-item` 的 `min-height: var(--h-menu-item)`）吃 `--h-control-*`；
+     会话行 26px、新任务 28px、发送钮 32px 全是硬编码 ⇒ 设置里切「紧凑/超大」时
+     只有圆角/间距微动，控件高度不变，看起来像没生效。
+2. **把核心外壳/按钮的固定 px 换成令牌**（`styles.css`）：
+   `.session` / `.group-toggle` / `.chat-bar` 走 `--h-row`；`.mini-btn` 走 `--h-btn`；
+   `.iconbtn` 与 `.side-new` 走 `--h-btn-lg`；`.iconbtn.sm` / `.cb-btn` 走 `--h-btn-sm`；
+   `.send-btn` 走 `--h-send`。字号轴完全不动（仍由 `--rem-scale` 管）。
+
+#### B. 判卷（真跑）
+
+- `tokens.test.ts` **28 用例全绿**（新增一排：6 个高度令牌都乘 `--size-scale`，
+  且 styles 真用 `var(--h-row)` / `var(--h-send)` / `var(--h-btn-lg)`）。
+- desktop 全量 **145 文件 / 1090 用例全绿**；boundary 绿；root tsc 0。
+- core 本批未改，沿用 **439 文件 / 6148 用例：6142 绿 / 6 红**（同组 provider-config 在飞改动）。
+- 真机（隔离实例，设置页切档后回主界面读数）：
+  - 紧凑（`data-ui-size=1`）：会话行 **21.66px**（原 26）、新任务 **23.32**（28）、
+    发送 **26.65**（32）、`cb-btn` **19.98**（24）、mini **21.66**（26）；
+  - 超大（`=5`）：会话行 **43.34**、新任务 **46.67**、发送 **53.34**；
+  - 标准（`=2`）：属性清空，26 / 28 / 32 复原。
+
+#### C. 未证 / 欠账
+
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+- 只覆盖外壳/会话行/常用按钮；检查器时间线行、变更卡、部分设置页控件仍用固定 px，
+  所以密度档是**部分生效**，不是全局像素级缩放。下一批可继续把 pane 行高/卡片间距纳入。
+- 超大档（1.667）下设置页纵向内容明显变长、需要滚动；未做“超大档布局重排”。
+- 紧凑档首屏截图里消息流在会话条下沿有滚动裁切属既有滚动位置，不是本批引入；
+  未做逐档全页面视觉回归。
+
+### 2026-10-20 · 批 111：尺寸轴继续覆盖小控件（行操作/窗格头/折叠钮）
+
+#### A. 改了什么
+
+1. **再补 3 个令牌**（`tokens.css`）：`--h-btn-2xs`（18px）、`--w-row-action`（28px）、
+   `--h-row-action`（22px），都乘 `--size-scale`。
+2. **小控件接线**（`styles.css`）：`.s-more` / `.s-rename` / `.g-new` / `.pane-card-toggle`
+   走 `--h-btn-xs`；`.row-action` 走 `--w-row-action × --h-row-action`；`.changes-toggle`
+   走 `--h-row-action`；`.pt-x`（窗格头关闭/弹出）走 `--h-btn-2xs`。
+   - 批 110 只做了会话行/主按钮，紧凑档下行高缩到 21.7，但行尾「…」仍是 20px、
+     窗格头按钮仍是 18px，视觉上大小不成比例；超大档则相反（行 43px、按钮还 20px）。
+
+#### B. 判卷（真跑）
+
+- `tokens.test.ts` **28 用例全绿**（高度令牌清单扩到 9 个；新增
+  `--h-btn-2xs` / `--h-row-action` 的 styles 接线断言）。
+- desktop 全量 **145 文件 / 1090 用例全绿**；boundary 绿；root tsc 0。
+- core 本批未改，沿用 **439 文件 / 6148 用例：6142 绿 / 6 红**（同组 provider-config 在飞改动）。
+- 真机（设置页切档→回主界面）：
+  - 紧凑：`.s-more` **16.66px**（原 20）、`.pt-x` **14.99px**（原 18）；
+  - 标准：20 / 18 复原（`data-ui-size` 属性清空）。
+
+#### C. 未证 / 欠账
+
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+- 仍有固定 px：主题缩略图、usage ring、部分弹层按钮、设置页少数控件；尺寸轴仍是**部分**生效。
+- 紧凑档下行尾「…」靶面 16.66px 低于 44px 触控建议；桌面鼠标场景可接受，触屏场景未验。
+
+### 2026-10-20 · 批 112：尺寸轴覆盖 Composer 左列（附件 / 芯片 / 上下文环）
+
+#### A. 改了什么
+
+1. **Composer 左列三个 28px 控件改吃 `--h-btn-lg`**（`styles.css`）：`.attach-btn`、
+   `.ctl`（模型/权限芯片）、`.usage-ring`。`.usage-ring svg` 从固定 28px 改为 `100%`，
+   让环随外框一起缩放（否则紧凑档环还是 28px、外框 23px，视觉溢出）。
+   - 批 110/111 已覆盖会话行、主按钮、行操作/窗格头；Composer 左列仍是硬编码 28px，
+     紧凑档下和右侧 23px 的发送/打断钮不成比例。
+
+#### B. 判卷（真跑）
+
+- `tokens.test.ts` **28 用例全绿**（新增 composer 接线断言：`--h-btn-lg` 用于左列、
+  环 svg 100%）。
+- desktop 全量 **145 文件 / 1090 用例全绿**；boundary 绿；root tsc 0。
+- core 本批未改，沿用 **439 文件 / 6148 用例：6142 绿 / 6 红**（同组 provider-config 在飞改动）。
+- 真机（设置页切紧凑→回主界面）：`.attach-btn` / `.ctl` / `.usage-ring` 均 **23.32px**
+  （原 28），紧凑档截图中左列与发送钮同高；切回标准后恢复 28px、属性清空。
+
+#### C. 未证 / 欠账
+
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+- 主题缩略图（42×26）、开关（30×18）、settings 部分控件仍固定 px；尺寸轴仍非全局。
+- 紧凑档 23px 靶面低于 44px 触控建议；桌面鼠标场景未验触屏。
+- 超大档 Composer 未截图复检（只量了紧凑/标准）；逻辑与 110/111 同一 `--size-scale`。
+
+### 2026-10-20 · 批 113：尺寸轴覆盖开关与主题缩略图（含 knob 定位公式）
+
+#### A. 改了什么
+
+1. **开关走令牌**（`tokens.css` + `styles.css`）：`--w-switch/--h-switch/--d-switch-knob/--sw-knob-inset`
+   全乘 `--size-scale`；`.sw` 宽高、`.sw-knob` 宽高/`top`/`left` 改吃令牌。
+   - `.sw.on .sw-knob` 从固定 `left: 14px` 改为
+     `left: calc(100% - var(--d-switch-knob) - var(--sw-knob-inset))`。
+     固定 14px 在超大档会算错（轨道 50、knob 23.3、inset 3.3 ⇒ 应为 23.3，不是 14），
+     用百分比公式后三档都不溢轨。
+2. **主题缩略图** `.theme-thumb` 42×26 → `--w-theme-thumb × --h-theme-thumb`，
+   与尺寸轴同步（设置页三张预览卡不再固定大小）。
+
+#### B. 判卷（真跑）
+
+- `tokens.test.ts` **28 用例全绿**（高度令牌清单再扩 6 个；新增开关/缩略图 styles 接线断言，
+  包含 `calc(100% - var(--d-switch-knob) - var(--sw-knob-inset))` 公式）。
+- desktop 全量 **145 文件 / 1090 用例全绿**；boundary 绿；root tsc 0。
+- core 本批未改，沿用 **439 文件 / 6148 用例：6142 绿 / 6 红**（同组 provider-config 在飞改动）。
+- 真机（设置页三档实测）：
+  - 标准：缩略图 42×26、轨道 30×18、knob 14（on 态右侧留 2px）；
+  - 紧凑：34.98×21.66、24.98×14.99、knob 11.66；
+  - 超大：70.01×43.34、50.01×30、knob 23.34；knob 右缘 581.0 < 轨道右缘 584.35（含 inset 3.34），不溢轨。
+  - 过渡中读数会短暂停在旧位置（`left` 140ms）；稳定后复测一致，不是布局错。
+
+#### C. 未证 / 欠账
+
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+- 仍有固定 px：usage ring 内部字、部分弹层按钮、主题卡宽高之外的排版；尺寸轴仍非全局。
+- 超大档设置页内容变长需滚动，未做重排；开关过渡仍 140ms，未按 reduced-motion 归零。
+
+### 2026-10-20 · 批 114：带窗格重载的检查器不再「看得见但 inert」＋减少动态不白等
+
+#### A. 改了什么
+
+1. **开合状态与 Panel 实际布局同源**（`App.tsx`）：
+   - 初始 `useLayoutEffect`：`paneTabs.length > 0 || inspectorDefaultOpen` 时
+     `setInspectorCollapsed(false)`；否则 `collapse()` + `setInspectorCollapsed(true)`。
+   - imperative `collapse()`/`expand()` 的三处调用同步落状态：`toggleInspector` 关闭、
+     `toggleSidebar` 开侧栏时自动收检查器、专注模式进入/退出、`revealInspector` 展开后。
+   - 根因：`inspectorCollapsed` 初值 true，只靠 Panel `onResize` 回写；带窗格重载时布局已展开
+     但状态仍 true ⇒ `.inspector-col[inert]` 挂在可见面板上，整列点不动/读屏不念。
+2. **减少动态偏好下不再白等**：`revealInspector` 的 260ms 与专注模式退出的 240ms 改为
+   `matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : N`；CSS 已把过渡压到 0.01ms，
+   JS 不该继续等。
+
+#### B. 判卷（真跑）
+
+- desktop 全量 **145 文件 / 1092 用例全绿**；boundary 绿；root tsc 0。
+- core 本批未改，沿用 **439 文件 / 6148 用例：6142 绿 / 6 红**（同组 provider-config 在飞改动）。
+- 真机（隔离实例，带恢复窗格 reload）：
+  - 修前：`.pane-panel` **284.75px**、`.inspector-col` 带 `inert` ⇒ 可见却不可操作；
+  - 修后：`panel 292.76px / inert=false`；点关闭钮（JS click）后 `panel=0 / inert=true / side=200`。
+  - 减少动态（CDP `Emulation.setEmulatedMedia`，同一会话内）：`matchMedia=true` 后按 ⌘⌥B，
+    **80ms 时 inspector 已 420px**；同一环境未模拟时 80ms 仍 0（260ms 后才开）。
+  - 备注：应用窗口被遮挡时 Chromium 会冻结 CSS 过渡，宽度读数可能停在 200；这不作为产品结论，
+    侧栏回开的视觉过渡本批未单独取证。
+
+#### C. 未证 / 欠账
+
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+- 侧栏自动回开的**视觉**过渡未在可见窗口下复测（只证了状态/inert 与面板宽度）。
+- 专注模式退出的 240ms 归零只做源码/同式接线，未单独在 reduced-motion 下计时。
+- `Panel onResize` 与显式状态的重复写入未做去抖；两者同值幂等，暂不合并。
+
+### 2026-10-20 · 批 115：快捷键页从「裸 span 一列字」重做成键帽双列速查
+
+#### A. 实锤与修法
+
+- 用户截图（设置 → 快捷键）里 11 行挤成 `⌘N新任务` 一列、卡内大片空白。
+  根因：`settings-sections.tsx` 已输出 `.kx-list/.kx-row/.kx-keys/.kx-what`，但
+  `styles.css` **整族零定义** ⇒ span 内联、无列宽、无行高，卡片只剩一条文字柱。
+- 重做：
+  1. 语义化键帽：`<kbd class="kx-keys">`，等宽字体、hairline 边框 + inset 底边，
+     `justify-self:start`、`min-width:56px`（不再被 grid 拉成 108px 大板）。
+  2. `.kx-list` 双列网格（`repeat(2,minmax(0,1fr))`，列距 28px），
+     `.kx-row` 108px 键帽列 + 弹性说明列、44px 行高、底部 hairline；
+     窗口 ≤760px 收单列，最后一对行去掉底线。
+  3. 核心表补第 12 项 `⌘/ 完整速查表`，2×6 排满；`SHORTCUTS` 仍单源，
+     命令面板/侧栏 tooltip 不受影响。
+  4. 组标题提示前加 `·`，不再与标题黏成一句。
+
+#### B. 判卷（真跑）
+
+- desktop 全量 **145 文件 / 1093 用例全绿**；boundary 绿；root tsc 0。
+- core 本批未改，沿用 **439 文件 / 6148 用例：6142 绿 / 6 红**（同组 provider-config 在飞改动）。
+- 真机（设置页真开）：
+  - 880px 窗：列表 594×278，双列 263/263，行高 44，键帽 56×25.5；
+  - 700px 窗（设备度量模拟）：单列 366px，列表 406×538，12 行不横向溢出；
+  - 1269px 窗：列表 958，双列 445/445，行高 44，仍不拉成三列（说明列保持可读宽度）。
+  - 修前同页 `.kx-list` display=block、行内只有裸 span；修后截图键帽列 + 说明列对齐。
+
+#### C. 未证 / 欠账
+
+- 只量了浅色主题；暗色下键帽的 alpha/hairline 对比未截图。
+- 触屏/键盘 Tab 到 `kbd` 不涉及焦点；但键帽不是按钮，无焦点态需求未另验。
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+
+### 2026-10-20 · 批 116：去掉头像菜单里重复的「设置…」
+
+#### A. 实锤与修法
+
+- 用户截图（2026-10-20 17:13）：头像下拉里一条「设置…」，而页脚左侧已有常驻「⚙ 设置」；
+  同一动作两个入口，且头像菜单更远。
+- 修法：删掉 `Sidebar` 头像 `DropdownMenu.Content` 里的
+  `onSelect={props.onOpenSettings}` 项；保留页脚常驻设置、模型状态点、头像菜单里的
+  「关于与更新」。删除处留一行注释说明“页脚常驻入口唯一”。
+
+#### B. 判卷（真跑）
+
+- desktop 全量 **145 文件 / 1094 用例全绿**；boundary 绿；root tsc 0。
+- core 本批未改，沿用 **439 文件 / 6148 用例：6142 绿 / 6 红**（同组 provider-config 在飞改动）。
+- 真机（隔离实例）：点头像后弹层 **只有「关于与更新」**一项；再点它，设置页打开且
+  页面标题为「关于与更新」；页脚「设置」仍在（源码判据同钉）。
+- 新增判据：`sidebar-highlight.test.tsx` 切片头像 `DropdownMenu.Content`，断言含
+  `STR.footer.about`、不含 `onSelect={props.onOpenSettings}`，并保留 `.foot-settings`。
+
+#### C. 未证 / 欠账
+
+- 头像菜单只有一项后是否该进一步把「关于」挪到页脚、或加分隔线，未做产品决策。
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+
+### 2026-10-20 · 批 117：空屏按 frontend-design 重做——编号起手行 + 纸面层级 + 错峰入场
+
+#### A. 设计方向
+
+- 延续 Claude 桌面端的**暖纸面 / 衬线大字 / 单一珊瑚强调**，不引入第二套配色；
+- 去掉「三枚胶囊」的通用 AI 空态语法，改成**编号起手行**（01/02/03 + 一句话 + hover 箭头），
+  像工作台索引而不是聊天建议 chips；初看安静，hover 才给反馈；
+- 动效只做一次：问候 → 项目 chip → composer → 起手行逐项 40–45ms 错峰上浮；
+  `prefers-reduced-motion` 仍由全局媒体查询压到 0.01ms。
+
+#### B. 改了什么
+
+1. `QuickStarts.tsx`：`.pills/.pill` 换成 `.starts/.start`；
+   三列 grid（26px 编号 / 弹性说明 / 16px 箭头），`aria-hidden` 编号与箭头，点击语义不变（填入不发送）。
+2. `styles.css`：
+   - `.starts` 与 composer 同宽；`.start` 40px 行高、底部 hairline、hover 底色 + 箭头淡入；
+   - 新增 `@keyframes rise-in`（6px 上浮 + 淡入）；hero/chip/composer/起手行分别 0/50/90/90+i*45ms；
+   - hero 字号 `clamp(2rem, 4vw, 2.5rem)`，星标 0.68em；≤920px `.empty-below` 左右 16px，
+     与 composer 窄窗气沟一致（此前 41px 导致起手行比输入卡窄 50px）。
+3. 删除 `.pills/.pill` 两条死样式；判据同步。
+
+#### C. 判卷（真跑）
+
+- desktop 全量 **145 文件 / 1095 用例全绿**；boundary 绿；root tsc 0。
+- core 本批未改，沿用 **439 文件 / 6148 用例：6142 绿 / 6 红**（同组 provider-config 在飞改动）。
+- 真机（隔离实例）：
+  - 880px：问候 35.2px、起手行 40px、composer 645px、starts 645px（左右完全对齐）；
+  - 1269px：composer 678px、starts 678px；两档行高一致；
+  - 计算样式 animationName=`rise-in`，`prefers-reduced-motion` 命中时全局时长被压到 0.01ms（沿用既有媒体查询）。
+- 测试：`quick-starts-ui` 13 用例（三列 grid、箭头 hover、rise-in、16px 对齐、无 `.pill`）。
+
+#### D. 未证 / 欠账
+
+- 暗色主题下的纸面/起手行对比未截图；hover 箭头只做计算样式/源码判据，未逐帧录像。
+- 3 条建议的布局已验；4 条（带最近会话+git 脏）未单独截图。
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+
+### 2026-10-20 · 批 118：正文已出但 run 还在收尾时，不再谎报「思考中」
+
+#### A. 根因
+
+- `Composer` 的 `.cc-phase` 只在 `running || stopped` 时挂载；`phaseLabel` 由
+  `deriveRunPhase(events)` 推出。真实 provider 正文只有 `assistant_delta`，最后一条事件仍是它
+  ⇒ phase=`thinking`，标签就写「思考中」。
+- 但 `running` 的真值不是「模型还在生成」，而是 **`window.agent.run` promise 尚未 resolve**。
+  `runAgent` 在正文结束后还会 await 会话收尾：Stop hook、安全报告、**会话结束记忆蒸馏**
+  （`runSessionEndDistill`，默认开，会再调一次模型）、SessionEnd 等。收尾期间 run 未回，
+  状态条就一直显示「思考中」。
+- 真机复现（隔离实例，可见窗口，真 provider）：发「只回复 OK」，正文 `OK` 已在屏上，
+  状态条依次为 **收尾中 14s / 17s**，随后消失；对应截图里的 16s。
+
+#### B. 修法（UI 诚实层）
+
+1. `projections.hasAssistantTextThisRun(events)`：最后一条主 `user_message` 之后是否已有
+   非空 `assistant_delta` / `assistant_message`；worker 子流正文不算。
+2. App 按会话记录最后一次正文增量到桌时间 `lastDeltaAt`（run 起跑/终态清掉）。
+3. 标签分档：
+   - 无正文且 phase=thinking → **思考中**
+   - 有正文、增量仍新鲜（≤1.5s）→ **生成中**
+   - 有正文且静默 >1.5s，或 phase=idle 但 run 未回 → **收尾中**
+   - 审批/澄清/方案/工具/停止各按原档优先。
+4. 1s 秒表 tick 会让 1.5s 静默阈值自然翻档；重载接管、无时间戳的 run 不猜，按生成中显示。
+
+#### C. 判卷（真跑）
+
+- desktop 全量 **145 文件 / 1097 用例全绿**；boundary 绿；root tsc 0。
+- 新增判据：`projections.test.ts` 的 `hasAssistantTextThisRun`（含 worker 子流排除、最后 user 重置）；
+  `composer-phase.test.ts` 钉住收尾/生成/思考三档接线。
+- core 本批未改，沿用 **439 文件 / 6148 用例：6142 绿 / 6 红**（同组 provider-config 在飞改动）。
+
+#### D. 未证 / 欠账
+
+- **收尾蒸馏仍同步阻塞 run**：寒暄也会多等 ~14s。本批只把谎报改成「收尾中」，没有改变等待；
+  下一步应把蒸馏移出 run 的完成路径，或对无工具/极短会话跳过（需业主裁记忆收益）。
+- 暗色主题未截图；`pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+
+### 2026-10-20 · 批 119：首轮寒暄不再为「无内容沉淀」白等一轮模型
+
+#### A. 根因
+
+- 批 118 把状态条改诚实了，但 14s 还在：`runAgent` 在正文后同步 await
+  `runSessionEndDistill`；后者即使最终只会得到 `no_content`，也**先发一次模型请求**。
+  实测「你好」/「只回复 OK」每轮都付 14–17s。
+- 沉淀本身是会话级记忆维护，不该按「每轮固定一次模型调用」收费；首轮无工具、无记忆线索的
+  短会话，模型几乎只会答「无」。
+
+#### B. 修法（确定性快判，不调模型）
+
+- `distill.ts` 新增 `isTrivialSession(events)`：
+  - 仅有 1 条主 `user_message`（worker 子流不算）；
+  - 没有 `tool_call` / `clarify_requested` / `plan_proposed`；
+  - 已有 assistant 正文（没答完的轮次不判）；
+  - 总正文 < 800 字符；
+  - 用户文本不含 `记住/以后/总是/永远/不要/偏好/习惯/remember/always/never/preference`。
+- 放在 `writeLessons` / `writeDraftFromFailedSession` **之后**、建 provider **之前**：确定性落盘照旧，
+  只省掉无意义的那次模型请求；返回 `{kind:"no_content"}`。
+- 多轮、工具轮、明确记忆线索、长答一律照旧沉淀，不改变记忆覆盖面。
+
+#### C. 判卷（真跑）
+
+- 真机（重启主进程后，隔离实例）：新会话发「你好」，500ms 轮询：
+  6s 生成中 → 6.5s 正文 172 字符 → 7s 仍生成中 → **7.5s phase=null / running=false**；
+  修前同场景 14–17s 收尾。日志仍落 `{"kind":"no_content"}`（快判路径）。
+- core 全量 **439 文件 / 6151 用例：6145 绿 / 6 红**（仍是 provider-config 组既有红；
+  新增 3 条 distill 用例，session-wiring 4 条改用带记忆线索的输入）。
+- desktop **145 文件 / 1097 用例全绿**；boundary 绿；root tsc 0。
+
+#### D. 未证 / 欠账
+
+- 只跳过**首轮无工具短会话**；多轮 / 工具轮 / 长答仍同步沉淀（可能继续有数秒收尾）。
+- 记忆线索词表是启发式；「以后」等词可能误判为需要沉淀（只会多跑，不会少跑）。
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+
+### 2026-10-20 · 批 120：顶栏中央终于显示会话名（而不是永远 Cairn）
+
+#### A. 实锤
+
+- `TitleBar` 的契约与样式注释都写着「会话名 13px / 对话顶栏内容行」，但 `App` 传的是
+  硬编码 `title="Cairn"`：进入任何会话，顶栏中央永远是品牌名，会话名只能在侧栏找。
+- 对 Claude / Codex 这类工作台，顶栏是当前上下文的锚点；永远 Cairn 等于丢掉一层导航。
+
+#### B. 修法
+
+- `App.tsx`：`title={activeId !== null ? sessionTitle : "Cairn"}`；
+  `sessionTitle` 已在同文件由 `activeId + sessions` 投影（空会话回落到 id）。
+- 主页仍显示 `Cairn`，不把品牌从首页拿掉；长标题由 `.tb-title` 现有 ellipsis 收口。
+
+#### C. 判卷（真跑）
+
+- desktop **145 文件 / 1098 用例全绿**；boundary 绿；root tsc 0。
+- 真机：激活会话「你好」时 `.tb-title` = 「你好」；点「新任务」回主页后 = 「Cairn」。
+- 判据：`quick-starts-ui.test.tsx` 新增顶栏标题接线断言。
+- core 本批未改，沿用 **439 文件 / 6151 用例：6145 绿 / 6 红**（provider-config 组既有红）。
+
+#### D. 未证 / 欠账
+
+- 顶栏标题仍不可双击重命名（侧栏已有入口）；未做，避免顶栏拖拽区与内容区手势冲突。
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+
+### 2026-10-20 · 批 121：批 120 的顶栏会话名与 chat-bar 重复，撤回
+
+#### A. 实锤
+
+- 批 120 把 `TitleBar.title` 从 `Cairn` 改成当前会话名。截图复查发现会话内容区顶部已有
+  `.chat-bar`：`.cb-name` 就是会话名（点按可重命名），旁边才是 Terminal / Changes / ⋮。
+- 结果同一屏出现两处「你好」：窗口顶栏一处、会话条一处，等于制造了新的重复入口。
+- 设计原意：窗口顶栏是窗口 chrome（品牌 + 侧栏开关 + 专注模式）；会话名与重命名属于
+  `.chat-bar`。批 120 把两层混成一层。
+
+#### B. 修法
+
+- `App.tsx` 的 `TitleBar title` 撤回 `"Cairn"`；`.chat-bar` 的 `.cb-name` 保持唯一会话名与重命名入口。
+- 判据改为「顶栏保持 Cairn；会话名只在会话条，不重复两处」：
+  `quick-starts-ui.test.tsx` 断言 `title="Cairn"`、不含会话名表达式、`.cb-name` 在场。
+
+#### C. 判卷（真跑）
+
+- desktop **145 文件 / 1098 用例全绿**；boundary 绿；root tsc 0。
+- 真机：主页 `.tb-title=Cairn`；进入「你好」会话后 `.tb-title=Cairn`、`.cb-name=你好`，只一处会话名。
+- core 本批未改，沿用 **439 文件 / 6151 用例：6145 绿 / 6 红**（provider-config 组既有红）。
+
+#### D. 未证 / 欠账
+
+- 顶栏是否该显示项目名的产品决策未做；目前只保留品牌，避免再次重复。
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+
+### 2026-10-20 · 批 122：窗格 tooltip 的键位收回单一事实源
+
+#### A. 实锤
+
+- 会话条三个窗格按钮的 `title` 仍手抄键位：
+  `终端窗格（Ctrl+`）`、`变更窗格（⌘⇧D）`、`浏览器窗格（⌘⇧B）`。
+- 键位真值在 `PANE_SHORTCUTS`（批 100 已收口）；tooltip 手抄意味着改键后提示会漂——
+  与「表里写了、App 没接」是同一类问题，只是方向反过来。
+
+#### B. 修法
+
+- `pane-shortcuts.ts` 新增 `paneShortcutKeys(kind)`：从表里取展示键位。
+- `App.tsx` 三个 tooltip 改为
+  `title={`终端窗格（${paneShortcutKeys("terminal")}）`}` 等；`Ctrl+`` 等字面量从 App 消失。
+- 判据：`pane-shortcuts.test.ts` 断言三个键位取值 + App 不含旧手抄 title + 含
+  `paneShortcutKeys("terminal")`。
+
+#### C. 判卷（真跑）
+
+- desktop **145 文件 / 1099 用例全绿**；boundary 绿；root tsc 0。
+- 真机 DOM：`.cb-btn` 的 title 依次为
+  `终端窗格（Ctrl+`）` / `变更窗格（⌘⇧D）` / `浏览器窗格（⌘⇧B）` / `更多窗格`；
+  三个键位与表内值一致。
+- core 本批未改，沿用 **439 文件 / 6151 用例：6145 绿 / 6 红**（provider-config 组既有红）。
+
+#### D. 未证 / 欠账
+
+- 只收口了三个常驻按钮；`更多窗格` 菜单项不展示键位（后续可给每个 pane 行补 hint）。
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+
+### 2026-10-20 · 批 123：更多窗格菜单补键位（同一单一事实源）
+
+#### A. 改了什么
+
+- 会话条「更多窗格」下拉此前只有「打开/关闭 X 窗格」，七项键位不可见；用户得去 ⌘/ 速查表另查。
+- 每个 menu item 右侧补 `<span className="sub">{paneShortcutKeys(k)}</span>`，复用 `.menu-item .sub`
+  的 `margin-left:auto` 右对齐；键位仍从 `PANE_SHORTCUTS` 取，不新增手抄。
+- 判据补在 `pane-shortcuts.test.ts`（App 含 `paneShortcutKeys(k)` 的 sub 接线）。
+
+#### B. 判卷（真跑）
+
+- desktop **145 文件 / 1099 用例全绿**；boundary 绿；root tsc 0。
+- 真机点开「更多窗格」，7 行键位依次为：
+  `⌘⇧D` / `⌘⇧P` / `⌘⇧T` / `⌘⇧F` / `Ctrl+`` / `⌘⇧B` / `⌘;`，与 PANE_SHORTCUTS 一致。
+- core 本批未改，沿用 **439 文件 / 6151 用例：6145 绿 / 6 红**（provider-config 组既有红）。
+
+#### C. 未证 / 欠账
+
+- 菜单打开/关闭后焦点回位由 Radix 负责，未单独做键盘往返录像。
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+
+### 2026-10-20 · 批 124：会话名把 F2 重命名露出来
+
+#### A. 实锤
+
+- `.cb-name` 的可点重命名只有 hover 时一句「点按重命名」；F2 已实现、已进速查表，
+  但用户在会话条上看不到这个键盘入口。
+- 多轮/短聊沉淀跳过曾尝试放宽到「多轮短聊」，但会牺牲无明确线索的记忆抽取（产品风险），
+  本批撤回，不写入；仍只跳过首轮无工具短会话（批 119）。
+
+#### B. 修法
+
+- 会话条标题：
+  `title={`${sessionTitle} · 点按或按 F2 重命名`}`，并加 `aria-keyshortcuts="F2"`。
+- 判据：`rename-shortcut.test.ts` 断言 `aria-keyshortcuts="F2"` 与文案；
+  `session-list-polish.test.tsx` 的 hover 文案同步到新句。
+
+#### C. 判卷（真跑）
+
+- desktop **145 文件 / 1099 用例全绿**；boundary 绿；root tsc 0。
+- 真机 DOM：`.cb-name.title = "你好 · 点按或按 F2 重命名"`，`aria-keyshortcuts="F2"`。
+- core 本批未改，沿用 **439 文件 / 6151 用例：6145 绿 / 6 红**（provider-config 组既有红）。
+
+#### D. 未证 / 欠账
+
+- 没有加铅笔图标（会挤占标题宽度，且点按已有入口）；F2 的键盘往返未录像。
+- 多轮/工具轮沉淀仍同步收尾；`pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+
+### 2026-10-20 · 批 125：侧栏会话列表补 Home/End
+
+#### A. 缺口
+
+- `.sidenav` 是 `role=listbox`，行是 `role=option`；已有 ↑/↓ 逐行移动、Enter/Space 选中，
+  但没有 Home/End。会话一多（本机实测 8 个可见行），从中间回第一个/最后一个仍得连续按方向键。
+- 这是 listbox 的标准键盘期望；缺了会让“方向键已补”只补了一半。
+
+#### B. 修法
+
+- 行 `onKeyDown` 增加 Home/End：
+  - 仍只取 `getClientRects().length > 0` 的可见行（折叠组不聚焦）；
+  - Home→第一行、End→最后一行；`preventDefault`；只移焦点不切会话（与 ↑/↓ 同语义）。
+- 判据：`sidebar-arrow-nav.test.ts` 断言 Home/End 分支与首尾取值。
+
+#### C. 判卷（真跑）
+
+- desktop **145 文件 / 1100 用例全绿**；boundary 绿；root tsc 0。
+- 真机：8 个可见会话行，先把焦点放第 3 行，Home 后 activeElement 首行 id；
+  首行 End 后 activeElement 末行 id，均只移焦点未开会话。
+- core 本批未改，沿用 **439 文件 / 6151 用例：6145 绿 / 6 红**（provider-config 组既有红）。
+
+#### D. 未证 / 欠账
+
+- 未加 PageUp/PageDown（列表通常一屏内，优先保持简单）；Home/End 的读屏播报未录像。
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+
+### 2026-10-20 · 批 126：会话行菜单有键盘入口（Shift+F10 / ContextMenu）
+
+#### A. 缺口
+
+- 会话行的置顶/重命名/分叉/隔离/归档/CLI/删除只在行内 `⋯`（鼠标 hover）或右键菜单里。
+- 键盘用户能 Tab 到 `⋯` 再 Enter，但这既不是标准右键等价键，也要穿过每行尾按钮；
+  读屏用户没有「这行有菜单」的键盘声明。
+
+#### B. 修法
+
+- 行 `onKeyDown` 增加：
+  - `Shift+F10` 或 `ContextMenu` 键；
+  - 仅有 actions（`a !== null`）时 `setCtxOpen(true)`，`preventDefault`；
+  - 不触发 `onOpen`（只开菜单，不切会话）。
+- 菜单打开后 Radix 负责焦点：真机 activeElement 落在第一个 `menuitem`（“置顶”）。
+
+#### C. 判卷（真跑）
+
+- desktop **145 文件 / 1101 用例全绿**；boundary 绿；root tsc 0。
+- 真机：聚焦会话行 → 派发 `Shift+F10` → 菜单出现 7 项
+  （置顶 / 重命名… / 分叉… / 在隔离工作区里跑 / 归档… / 在 CLI 续跑 / 删除…），
+  `activeElement` 为 `role=menuitem` 的“置顶”。
+- core 本批未改，沿用 **439 文件 / 6151 用例：6145 绿 / 6 红**（provider-config 组既有红）。
+
+#### D. 未证 / 欠账
+
+- 未逐个键盘走完 7 个菜单动作（置顶/删除等有副作用，另测）。
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+
+### 2026-10-20 · 批 127：键盘开菜单后，Esc 关闭焦点回会话行
+
+#### A. 缺口
+
+- 批 126 让 Shift+F10 能开会话行菜单，但 Radix 关闭时默认把焦点还给触发器 `⋯`。
+- 行 keydown 只在 `e.target === e.currentTarget` 时处理 ↑/↓；焦点落在 `⋯` 后，
+  方向键不再移动会话——键盘用户开一次菜单就掉出列表导航，需要再 Shift+Tab 回行。
+
+#### B. 修法
+
+- `SessionRow` 增加：
+  - `ctxByKeyboard` ref：Shift+F10 / ContextMenu 置 true；鼠标右键、点击 `⋯` 置 false；
+  - `rowRef`：行根节点；
+  - `DropdownMenu.Content.onCloseAutoFocus`：仅键盘开时 `preventDefault()` 并 `rowRef.focus()`，
+    然后清旗；鼠标路径维持 Radix 默认。
+- 菜单项动作（重命名/删除）自己的焦点语义不被劫持——只在关闭自动聚焦这一拍生效。
+
+#### C. 判卷（真跑）
+
+- desktop **145 文件 / 1101 用例全绿**；boundary 绿；root tsc 0。
+- 真机：聚焦会话行（id 记录）→ Shift+F10 → 菜单出现 → Escape（keyDown）→
+  `activeElement` 回到同一 `data-session-id` 行，`role=menuitem` 全部消失。
+- core 本批未改，沿用 **439 文件 / 6151 用例：6145 绿 / 6 红**（provider-config 组既有红）。
+
+#### D. 未证 / 欠账
+
+- 鼠标点外关闭时 Radix 的默认焦点路径未单独录像；菜单项选中后的落点未逐项测。
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+
+### 2026-10-20 · 批 128：主页不再叠两个同名项目 chip
+
+#### A. 实锤（暗色截图）
+
+- 主页 composer 上方同时出现两个 `cairn-t25-ws`：
+  1) `.empty-chip`（文件夹 + 名 + 分支 + 下拉，点开选项目）；
+  2) composer 的 `.ctx-chip`（“cairn-t25-ws 本地”信息 chip）。
+- 两者信息几乎相同，只是一个是入口、一个是状态；在主页并排叠着，比缺入口更伤。
+  这是又一处“同一语义两个位置”——和会话名重复同类。
+
+#### B. 修法
+
+- `App` 传给 Composer 的 `workspaceLabel` 在空态让位：
+  `workspaceLabel={!showEmpty && activeWorkspace ? … : null}`。
+- 会话页 `.empty-chip` 不存在，`.ctx-chip` 照旧显示；两态各自只有一处项目信息。
+- 判据：`quick-starts-ui.test.tsx` 断言 `!showEmpty && activeWorkspace` 以及 `.empty-chip` 仍在。
+
+#### C. 判卷（真跑）
+
+- desktop **145 文件 / 1102 用例全绿**；boundary 绿；root tsc 0。
+- 真机：主页 `empty-chip=1 / ctx-chip=0`；进入会话后 `empty-chip=0 / ctx-chip=1`。
+- 暗色主题截图目验：主页只剩一个 `cairn-t25-ws` chip，下方直接是 composer。
+- core 本批未改，沿用 **439 文件 / 6151 用例：6145 绿 / 6 红**（provider-config 组既有红）。
+
+#### D. 未证 / 欠账
+
+- 主页项目 chip 的“本地/隔离”状态仍不展示（会话页才由 ctx-chip 给）；若需要，应做成同一 chip 的副标题而非第二个 chip。
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+
+### 2026-10-20 · 批 129：顶栏与会话条并成一条工具栏（Apple 统一工具栏 + 对标 Claude/Codex）
+
+#### A. 实锤（真机渲染 + 规范审计）
+
+- **两条顶栏**（真机截图量）：38px 窗口 chrome（居中「Cairn」）+ 26px 会话条（会话名 + 窗格按钮）。
+  Claude 与 Codex 都是「**一条**工具栏承载上下文」；规范 L2518 自己写着「对 Claude / Codex 这类工作台，
+  顶栏是当前上下文的锚点；永远 Cairn 等于丢掉一层导航」——但当时没落地。
+- **批 120/121 的争点在此有解**：批 120 把会话名放进顶栏，批 121 又因「标题出现两次」撤回。
+  真因不是「顶栏放标题」错，是**两条栏都在**。合并掉 ⇒ 标题任何时刻只出现一次，争点自然消解。
+- **规范审计三处缺口**（此前无任何条款）：
+  §1–§8 规范章里**没有 macOS/Apple 一节**、**没有竞品对照节**、
+  **没有层级/动效规范章**（只有 §9 批次日志）⇒「像苹果」「对标 Codex」此前无处落地。
+
+#### B. 修法
+
+1. **一条工具栏**（§4.8.1）：
+   - `.chat-bar`（26px，主列内）整条撤净；会话名 / 目标芯片 / 对话目录 / 三窗格 / ⋯ / 专注模式
+     全部并入 38px 窗口顶栏 ⇒ **主区净增 26px**。
+   - 会话名**恒对中栏居中**：中栏带 = 中栏中心 ± 左右可用空间（左右各取小者）⇒ 长名让带收窄并省略，
+     不滑到右组按钮底下；侧栏收起时中栏左沿自动为 0，公式照样成立。
+   - 目标芯片住「标题右侧的翼」（`1fr auto 1fr`）⇒ 芯片宽度不把标题挤偏。
+   - 拖拽区修好：原先 `.tb-title` 设了 `no-drag` 而那个盒子横跨整个中栏 ⇒ **中栏整段是不可拖拽的死区**；
+     现在带本体 `pointer-events: none`（只是定位框），工具栏里一切 `button`/`input` 一律 `no-drag`
+     （Electron 拖拽区里的输入框打不了字，属功能级硬要求）。
+2. **Apple 度量与平台可达性**（§4.8.2 / §4.8.3）：
+   - 滚动条改 macOS 叠层味（静息 12% / 进入内容区 24% / 压在滑块上 30%），槽无底、胶囊端保留。
+   - 新增 `prefers-contrast: more`：抬描边（8%→22% / 13%→38%）与最弱一档文字（→ `--text-200` 档）；
+     品牌色与语义三色不动（各自已过 4.5:1 闸）。
+   - `prefers-reduced-transparency` **登记为 no-op**（全仓无半透明材质）；将来引入半透明必须配套。
+3. **规范补章**：§4.8 macOS/Apple 约定 · §4.9 竞品对照册（Claude/Codex 各取什么、不取什么、为什么）
+   · §4.10 层级与动效刻度（把此前只在 §9 日志里的两套刻度收成条款）。
+   §3.11 密度表的「聊天顶栏 26px」一行改写为「窗口顶栏（唯一一条）38px」。
+4. **视觉自查工具修好**（此前截出来的**全是白图**，因为渲染层 mount 时抛 `TypeError` 而脚本只报 "done"）：
+   - 删掉 `ui-gallery.cjs` 里那份**从不执行的死副本**假 API（真注入点在 preload；死副本随接口演进而漂移）。
+   - 假 API 的兜底名单改为**从真接口 `src/main/ipc-protocol.ts` 的 `AgentApi` 推导**（102 个成员，
+     含「返回类型是否数组」⇒ 兜底给 `[]` 还是 `{}`），经 `additionalArguments` 交接给 sandboxed preload；
+     协议版本也从 `IPC_PROTOCOL_VERSION` 取（此前桩回 1、渲染层期望 13 ⇒ 亮「协议版本失配」fatal 面）。
+   - 补 console / preload-error / 页面内 error 栈上屏 + 「根节点字符数」自查 + 90s 看门狗
+     （中途某步不返回时自退，不再无声挂住）。
+   - 修设置页那一档的选择器（`.sidefooter .foot-btn` / `.sp-item` 两个都不存在 ⇒ **设置页一直没被看过**）
+     并补 `queueGet` / `capabilities` 桩（否则首屏挂错误条、设置页抛 `reading 'kind'`）。
+   - 新增 `GALLERY_LIGHT=1` 亮色档与「默认清存储」（应用会恢复上次会话 ⇒ 第二次跑时 01-empty 截到的不是空屏）。
+
+#### C. 判卷（真跑）
+
+- desktop **146 文件 / 1111 用例全绿**（基线 145 / 1102）；boundary 绿；root tsc 0。
+- 判据**变强而非变弱**：
+  - `stream-nav.test.tsx`：落点容器从 `.chat-bar` 改为 `.tb-cluster`，原四条断言逐条保留，
+    并**新增**「三个窗格按钮 + ⋮ 与目录按钮同在该容器」——这正是原测试靠「同一容器」隐含表达、
+    容器改名后必须显式钉住的东西；再**新增**「工具栏是第一行，不在主栏里」与「旧 `.chat-bar` 撤净」。
+  - `quick-starts-ui.test.tsx`：旧不变量「顶栏只有 Cairn / 会话名只在会话条」被合并取代，
+    改为更强的「会话名**只此一处**（`tb-title` 恰好一次）+ 品牌名存在 + 旧会话条不存在」。
+  - 新增 `titlebar.test.tsx`（8 例）：左组 / 中栏三段 / 芯片在右翼 / 焦点序 / 拖拽区规则 / 几何为绝对定位。
+- **真机目验**（`ui-gallery.cjs` 离屏渲染，亮色 + 暗色各一轮，1440×900 @2×，共 9 档）：
+  - 工具栏**只有一条**；会话名对中栏中心（实测中心 790px = 中栏 [192,1389] 的中点）；
+  - 主页显示品牌「Cairn」且右组只有专注模式（无会话即无窗格簇）；进入会话后右组出现目录/三窗格/⋯/分隔线/专注；
+  - 26px 让位后内容顶到工具栏下沿（`.gen-bar` 进度条与查找条同在流顶）。
+  - **窄窗 880px**（产品 minWidth）：三窗格按钮按 `@media max-width:920px` 收进 ⋮，右组只剩 ⋯ + 专注；标题仍对中栏居中。
+  - **长会话名**（40 字）：标题仍对中栏居中，**未与右组按钮相撞**（带按「中栏中心 ± 左右可用空间」收窄）。
+  - **高对比**（CDP `Emulation.setEmulatedMedia` 置 `prefers-contrast: more`）：自查读数
+    `matchMedia=true`、`--hairline` 由 8% → **22%**、侧栏描边 `rgba(20,20,19,.22)` ⇒ 抬升确实生效。
+- core 本批未改，沿用 **439 文件 / 6151 用例：6145 绿 / 6 红**（provider-config 组既有红）。
+
+#### D. 未证 / 欠账
+
+- **拖窗手感**：标题文字本身是 `no-drag` 的洞 ⇒ 用户不能再「抓着会话名拖窗口」；工具栏其余部分仍是拖拽区。
+  这是「工具栏里点按重命名」的既定代价（业主在批 124 定了点按重命名），本批未做双击/拖拽的区分。
+- **目标芯片在极长会话名下会被右翼裁掉**（右翼宽度 = 带的剩余空间的一半）——罕见但未处理。
+- 高对比这一档**只验了令牌层抬升**，未做逐控件的对比度重测（语义三色与品牌色按 §4.8.3 刻意不动）。
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。
+
+### 2026-10-20 · 批 130：工具行去胶囊化 + 头像菜单成侧栏枢纽
+
+#### A. 实锤（业主截图 + 规范在册裁决）
+
+- **业主 2026-10-20 判「太丑」**（截图指工具行）：旧形态是**通栏有底胶囊**——每步一行灰底长条，
+  耗时被 `flex:1` 推到最右 ⇒ 读起来像状态栏/表格行；且摘要整段走 mono（`read_file 读取 src/main/settings.ts`
+  全是等宽字）⇒ 「终端转储」观感的真正来源是**整段 mono + 通栏底色**两件事，不只是底色。
+- **业主 2026-10-20 追加令**：「点击头像展示设置按键，外观，用量统计」。
+  而页脚本来就常驻一枚「⚙ 设置」钮 —— 2026-10-20 当天已记过一条「头像菜单再放设置是重复入口」。
+  两条令合起来只有一个自洽解：**设置入口从页脚收进头像菜单**（同一语义仍只许一处入口，见 §4.8.1 同款纪律）。
+
+#### B. 修法
+
+1. **工具行**：贴内容一行（`inline-flex` + `max-width:100%`，不再 `width:100%`）· 静息无底（悬停才起 `--alpha-1`）
+   · 耗时紧跟摘要（`.tsum` 不再 `flex:1`）· 摘要走**正文字体**（不再整段 mono）。
+   层级：摘要 = 正文档 / 工具名 = 标签档 / 耗时 = 元数据档。
+2. **头像菜单**成侧栏枢纽（Radix `DropdownMenu`，四段）：
+   - **外观**（子菜单）= 主题三选一（跟随系统 / 亮 / 暗），当前项打勾；点选即生效并落盘。
+     完整的外观面（主题 + 文字大小 + 界面密度）仍在设置页「通用」分区——子菜单是快捷，不是第二份。
+   - **用量统计** = 贴侧栏右下角的面板（当前会话口径：输入/输出/缓存读取/工具步数/对话轮数/用量次数）。
+     数据面是纯函数 `usageSummary(events)`（`projections.ts`）⇒ 可判卷。
+   - **设置…**（键位 ⌘, 从 SHORTCUTS 表取，不手抄）· **关于与更新**。
+3. **页脚**撤掉常驻「⚙ 设置」钮，只留**模型服务状态点 + 头像**。
+   状态点改为**直达「模型与 Provider」分区**（它就是为修模型服务而存在的入口，笼统开设置页等于让用户自己找那一格）。
+4. **面板不越界**（两处实测踩到的坑，已钉进判据）：
+   - 头像菜单比通用浮层窄（220→176px）+ `collisionPadding` ⇒ 贴着窗口左缘开会被裁；
+   - 用量面板锚在**侧栏**右下角而非头像旁，宽度 184px（侧栏最窄 200px）；
+     且 `min-width` 必须一起压——`.pop` 的 `min-width:220px` 会**盖过** `width`，实测把面板顶到 x=−28（标题行被裁）。
+
+#### C. 判卷（真跑）
+
+- desktop **147 文件 / 1118 用例全绿**（批 129 的 146/1111 → +1 文件 +7 例）；boundary 绿；root tsc 0；docs-check 绿。
+- 判据**变强而非变弱**：
+  - `tool-rows.test.tsx`：旧判据钉的是「胶囊：有底 + 圆角 + 悬停加深」——**随业主裁决作废**，改钉新形状
+    （inline-flex 贴内容 / 不通栏 / 静息无底 / 摘要正文字体 / 耗时不被推到最右），四条新判各自能杀掉对应突变。
+  - `sidebar-highlight.test.tsx`：「设置入口唯一」这条不变量**没变**，变的是这一处在哪（页脚 → 头像菜单）；
+    改钉为「头像菜单里有设置/外观/用量统计，页脚不再另开一处」——比原来多钉了菜单窄度（`pop-account`）。
+  - 新增 `usage-summary.test.ts`（4 例）：空会话全 0 / token 累计与 `usageAggregate` 同源（缓存缺字段不计）
+    / 工具步数只数主会话（子 agent 子流不计）/ 对话轮数 = `user_message` 条数。
+- **真机目验**（画廊 12 档，亮色）：工具行已是两行细字（`› ✓ read_file 读取 src/main/settings.ts 500ms`）；
+  头像菜单四段齐（含 ⌘, 键位提示）；外观子菜单三档且「跟随系统」带珊瑚勾；用量面板六行数字完整落在侧栏内。
+- Electron 真机冒烟 PASS（1.38s）+ 硬化真机冒烟 PASS；core 本批未改，沿用既有读数。
+
+#### D. 未证 / 欠账
+
+- **用量统计只到「当前会话」**：跨会话汇总需要把每个会话的事件都读一遍（渲染层拿不到，主进程也没有这个账本）。
+  面板标题写明「当前会话用量」——不拿单会话的数字冒充全局。跨会话账本列为下一轮候选。
+- 主题子菜单的**切换后视觉复核**未单独截图（切主题会改 `data-theme`，画廊里是静态档）。
+- 头像菜单的**键盘导航**（↑↓ 进子菜单 / Esc 回退 / 焦点归还）未逐键录像。
+- `pnpm gates` / head-cert / mutate-verify 未跑；改动未提交。

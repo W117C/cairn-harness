@@ -1,0 +1,20 @@
+== pnpm gates ==
+门清单（30 道，清单即事实源）：typecheck sandbox:check fork-check gate-check docs-check autonomy-check compaction-check tools-check map-check prune-check provider:check memory-check plugins-check security-check gym-check routing-check supervisor-check model-surface-check prefix-churn-check prompt-surface-check replay-determinism-check no-progress-check cost-per-progress-check head-import-check web-fetch-check repo-hygiene-check mutate-needles-check evidence-typecheck-check desktop-boundary-check desktop-test
+执行器：pnpm run
+  清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）
+
+  ▶ typecheck …  ✅ typecheck          exit=0  4848ms
+      └ typecheck: tsc --noEmit 通过（0 条报错）✅
+  ▶ sandbox:check …  ✅ sandbox:check      exit=0  592ms
+      └ ✅ ⑤ 尾部结论留住（只留头部时这条必红）
+  ▶ fork-check …  ✅ fork-check         exit=0  252ms
+      └ ✅ 越界 eventId 被拒绝（fail loud）
+  ▶ gate-check …  ✅ gate-check         exit=0  1898ms
+      └ ✅ H7 冻结表与判卷区目录双向一致（新增判卷文件不许逃出冻结面；新判卷目录须登记进 src/frozen.ts 的 areas）：{"onDiskNotInTable":[],"inTableNotOnDisk":[],"tableDirsNotSwept":[]}
+  ▶ docs-check …  ✅ docs-check         exit=0  889ms
+      └ UNVERIFIED=3
+  ▶ autonomy-check …  ✅ autonomy-check     exit=0  561ms
+      └ ✅ 收口时判卷文件 sha256 仍与冻结基线逐字一致
+  ▶ compaction-check …  ✅ compaction-check   exit=0  365ms
+      └ [compaction-check] 断言全过，但有 1 项未证（不得宣称全绿）
+  ▶ tools-check …

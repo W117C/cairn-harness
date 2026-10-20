@@ -1,0 +1,8 @@
+针脚体检：1295 条 —— 阻断 0，待复认 1，未覆盖 1，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 0，killer 指针失效 0（其中 HEAD 侧 0）
+改法语法体检：1295 条改法全部产出合法源文件 ✅
+[mutate-needles-check] 全部锚点针脚可判定 ✅
+NEEDLES_EXIT=
+SUITE_EXIT=0
+Test Files  292 passed (292)
+Tests  4032 passed (4032)
+Duration  157.03s (tests 88%, import 10%, transform 1%)

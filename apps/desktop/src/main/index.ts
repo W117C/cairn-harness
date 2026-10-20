@@ -1,7 +1,7 @@
 // Electron main 装配根（M1-6）：kernel-host 单点装配 + IPC 薄映射。
 // 装载通道：entry.cjs 注册 repo 根 tsx 后 require 本 TS 源——core 链零打包零漂移
 // （esbuild 打包会把 agent-runner 的 ROOT 漂进 <repo>/apps，fixtures 运行时静默落空）。
-import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, safeStorage, screen, shell, webContents, type IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Notification, safeStorage, screen, shell, webContents, type IpcMainInvokeEvent } from "electron";
 import { clampToWorkArea, readWindowState, writeWindowState } from "./window-state";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -10,6 +10,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { INVOKE_CHANNELS, PUSH_CHANNELS } from "./channels";
+import { installAppMenu } from "./menu";
 import { handleAttachmentThumb } from "./thumb";
 import type { InvokeChannel, PushChannel } from "./channels";
 // SEMA §3.5/§12：IPC_PROTOCOL_VERSION 是本文件从协议面取的唯一**值**（其余全 type import）——
@@ -54,7 +55,7 @@ import {
   setSettings,
 } from "../../../../src/main/settings-handlers";
 import {
-  handleFeedbackList,
+  handleFeedbackList, handlePinSet, handlePinList,
   handleFeedbackSubmit,
   handleSessionAssignProject,
   handleSessionDelete,
@@ -77,6 +78,11 @@ import { installSafeStorageBackend } from "../../../../src/agent/plugins/secrets
 import { currentPluginRuntime } from "../../../../src/agent/plugins";
 import { injectStoredProviderKey } from "../../../../src/main/provider-key-inject";
 import { createKernelHost, canonicalWorkspacePath } from "./kernel-host";
+import {
+  canonicalKnownProjectPath as canonicalKnownProjectPathIn,
+  canonicalKnownRoots,
+  resolveKnownProjectTarget as resolveKnownProjectTargetIn,
+} from "./project-path-gate";
 import { isAppShellUrl } from "./shell-url";
 import { ProjectRegistry } from "../../../../src/main/project-registry";
 import { loadCustomProviders } from "../../../../src/main/custom-provider-store";
@@ -241,6 +247,53 @@ const previewRuntime = new PreviewRuntime({}, (snapshot) => {
 // CAIRN_SMOKE 的 userData 已隔离到 mkdtemp，不碰真实数据。
 const projectRegistry = new ProjectRegistry(join(userData, "projects.json"));
 
+/** 用户**真的用系统对话框选过**的目录（规范路径）。
+ *
+ *  为什么要记这份名单（2026-10-19 独立评审追出）：`gitClone` 的落点 `parentDir` 是渲染层给的
+ *  路径，而 `dest = join(parentDir, repoName)` 直接就是文件系统写入目标——URL 过了白名单、
+ *  仓库名也严了字符集，**唯独 parentDir 原样照收**：
+ *  `window.agent.gitClone({url:"https://x/y.git", parentDir:"/Users/me/.ssh"})` 就会把仓库
+ *  克隆进 `~/.ssh/y`（连 `.git/hooks/*.sample` 一起写进去），没有审批、没有提示。
+ *  界面上那一栏只能通过系统目录对话框选（AddProjectMenu 的 cloneParent），没有手输兜底
+ *  ⇒ 主进程记下"用户选过哪些目录"，克隆落点只认这份名单，两边口径一致。 */
+const pickedDirs = new Set<string>();
+
+/** 已知工作区根（默认工作区 / 最近跑过的工作区 / 注册表里的项目）——规范路径去重。
+ *
+ *  为什么要这道门（2026-10-19 独立评审追出）：渲染层给的是**路径**，而路径在这几个通道上
+ *  是**执行落点**，不是"看一眼"：
+ *  · `previewStart` → 在该目录跑 `pnpm install` + `pnpm exec vite` ⇒ **vite 会加载并执行该目录的
+ *    `vite.config.js`**（任意代码执行），且没有审批门；
+ *  · `projectExport` → 把该目录整份拷到用户选的位置（`~/.ssh` 也拷）。
+ *  同一个文件里 `setWorkspaceContext` 早就把工作区上下文限死在"已注册"面上（不校验的话
+ *  `/` 就成了文件窗格/预览的边界），唯独这两条通道**绕过了那道门**——同一个信任边界，
+ *  一半有门一半没有，那一半就是洞。
+ *
+ *  口径：**等于某个根**（项目目录本身）或**落在某个根之内**（工作区里 agent 交付的单文件
+ *  交付物也要能预览——那是产品明确支持的一路，不能顺手砍掉）。根之外的路径一律拒绝。 */
+async function knownProjectRoots(): Promise<string[]> {
+  const roots: (string | null)[] = [workspace, getLastWorkspace()];
+  try {
+    for (const record of await projectRegistry.list()) roots.push(record.path);
+  } catch { /* 注册表读失败：按默认/最近工作区判，绝不因此放宽为任意路径 */ }
+  return canonicalKnownRoots(roots);
+}
+
+/** 严格相等版：路径**恰好等于**某个已知根才放行。
+ *  `setWorkspaceContext` 要的就是这个：它定的是"文件窗格/预览的**根**"，
+ *  落进某个子目录会让边界含糊。 */
+async function canonicalKnownProjectPath(p: string): Promise<string | null> {
+  return canonicalKnownProjectPathIn(p, await knownProjectRoots());
+}
+
+/** 包含版：等于某个根**或**落在某个根之内就放行。
+ *  落在根之内这一支是给"工作区里 agent 交付的单文件交付物也要能预览"留的
+ *  （产品明确支持的一路，不能顺手砍掉）。软链逐段解析后再判
+ *  （core 的 assertRealContainment 正是这件事：词法 relative 挡不住"工作区内软链指向外部"）。 */
+async function resolveKnownProjectTarget(p: string): Promise<string | null> {
+  return await resolveKnownProjectTargetIn(p, await knownProjectRoots());
+}
+
 // v2.14：桌面端调度器 stop 句柄（whenReady 里 serveScheduler 返回；will-quit 停表）。
 let stopDesktopScheduler: (() => void) | null = null;
 
@@ -356,17 +409,35 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     }
   },
   // v6 预览运行时（宿主见 project-preview.ts；状态经 onPreviewState 推送）。
-  previewStart: (projectPath) => previewRuntime.start(String(projectPath)),
+  // 预览会**在该目录跑 vite**（加载并执行它的 vite.config.js）⇒ 路径必须先过已知工作区门。
+  previewStart: async (projectPath) => {
+    const p = String(projectPath);
+    const canonical = await resolveKnownProjectTarget(p);
+    if (canonical === null) {
+      return {
+        projectPath: p,
+        status: "failed" as const,
+        stage: "spec" as const,
+        message: `未注册的项目路径，已拒绝：${p}`,
+        hint: "先把该文件夹添加为项目，再预览它",
+      };
+    }
+    return await previewRuntime.start(canonical);
+  },
   previewStop: (projectPath) => previewRuntime.stop(String(projectPath)),
   previewStatus: (projectPath) => Promise.resolve(previewRuntime.status(String(projectPath))),
   // v12 导入诊断（ADR 0004 §4）：只读判定，不写盘、不登记——诊断只提示不阻断。
   projectDiagnose: (projectPath) => diagnoseProjectDirectory(String(projectPath)),
   // v6 导出：位置由用户选（系统目录选择器）；取消不是错误，不弹失败条。
   projectExport: async (projectPath) => {
+    // 导出源目录也是**落点**（整份拷走）⇒ 与预览同口径先过已知工作区门。
+    const p = String(projectPath);
+    const canonical = await resolveKnownProjectTarget(p);
+    if (canonical === null) return { ok: false as const, error: `未注册的项目路径，已拒绝：${p}` };
     const picked = await dialog.showOpenDialog({ title: "选择导出位置（将在其中新建同名文件夹）", properties: ["openDirectory", "createDirectory"] });
     const destParent = picked.filePaths[0];
     if (destParent === undefined) return { ok: false, error: "已取消导出", cancelled: true };
-    const r = exportProject(String(projectPath), destParent);
+    const r = exportProject(canonical, destParent);
     if (!r.ok) return { ok: false, error: r.message };
     return { ok: true, dest: r.dest, copiedFiles: r.copiedFiles };
   },
@@ -414,7 +485,11 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // 只选目录（openDirectory）；取消/关窗 ⇒ filePaths 空 ⇒ null——renderer 据此保留手输兜底。
   pickDirectory: async () => {
     const picked = await dialog.showOpenDialog({ properties: ["openDirectory"] });
-    return picked.filePaths[0] ?? null;
+    const dir = picked.filePaths[0];
+    if (dir === undefined) return null;
+    // 记下"用户真的用系统对话框选过这个目录"——gitClone 的落点门靠它（见下）。
+    try { pickedDirs.add(canonicalWorkspacePath(dir)); } catch { /* 不可解析：不记（那条路本来就拒） */ }
+    return dir;
   },
   // v8：dialog 选文件（附件引用「选择文件…」的后端，业主 21.56 反馈「为什么还要粘贴路径」）：
   // 非模态多选（openFile）；取消/关窗 ⇒ 空 ⇒ null（不假报空数组）——路径手输照旧兜底。
@@ -454,15 +529,8 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     if (p === "") { workspaceContext = null; return { ok: true as const }; }
     // 只接受**已注册**的工作区：`/` 也是合法路径，不校验就把整盘变成文件窗格/预览的边界
     // （workspaceReadText("etc/hosts")、workspacePathAction("Applications/X.app","open")）。
-    let canonical: string;
-    try { canonical = canonicalWorkspacePath(p); } catch { return { ok: false as const, error: "工作区路径不可解析" }; }
-    const known = new Set<string>([canonicalWorkspacePath(workspace)]);
-    const last = getLastWorkspace();
-    if (last !== null) known.add(canonicalWorkspacePath(last));
-    try {
-      for (const record of await projectRegistry.list()) known.add(canonicalWorkspacePath(record.path));
-    } catch { /* 注册表读失败：按默认/最近工作区判，绝不因此放宽为任意路径 */ }
-    if (!known.has(canonical)) {
+    const canonical = await canonicalKnownProjectPath(p);
+    if (canonical === null) {
       return { ok: false as const, error: `未注册的工作区，已拒绝：${p}` };
     }
     workspaceContext = canonical;
@@ -546,8 +614,13 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // v2.16 用户反馈沉淀（赞/踩）：sidecar feedback.jsonl，append-only、不进事件流。
   submitFeedback: (req) => handleFeedbackSubmit(req as never),
   listFeedback: (sessionId) => handleFeedbackList(sessionId as string),
+  // 2026-10-20 消息置顶（销 G6）：sidecar pins.jsonl，append-only、不进事件流。
+  setMessagePinned: (req) => handlePinSet(req as never),
+  listMessagePins: (sessionId) => handlePinList(sessionId as string),
   setSessionPinned: (sessionId, pinned) => handleSessionSetPinned(sessionId as string, pinned as boolean),
   setSessionArchived: (sessionId, archived) => handleSessionSetArchived(sessionId as string, archived as boolean),
+  // §3.7 · G4 会话级 worktree 隔离：解析归属/在跑拒绝/创建合并清理全在 kernel-host 与 core 侧。
+  sessionWorktree: (req) => host.sessionWorktree(req as never),
   assignSessionProject: (sessionId, projectId) => handleSessionAssignProject(sessionId as string, projectId as string | null),
   deleteMemory: (scope, topic) => handleMemoryDelete(scope as never, topic as string, workspaceContext),
   pluginDecide: (plugin, trusted, workspace) => handlePluginDecide(plugin as string, trusted as boolean, String(workspace ?? "") || workspaceContext),
@@ -660,7 +733,17 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   gitStatus: (path) => gitStatus(String(path)),
   gitClone: (req) => {
     const r = req as { url?: string; parentDir?: string };
-    return gitClone(String(r.url ?? ""), String(r.parentDir ?? ""));
+    const parentDir = String(r.parentDir ?? "");
+    // 落点门：只认用户用系统对话框**真的选过**的目录（见 pickedDirs 的注释）。
+    // 克隆会往那里写整个仓库（含 .git/hooks/*.sample）——渲染层给的路径不因此就可信。
+    let canonical: string;
+    try { canonical = canonicalWorkspacePath(parentDir); } catch {
+      return Promise.resolve({ ok: false as const, error: "克隆目标目录不可解析" });
+    }
+    if (!pickedDirs.has(canonical)) {
+      return Promise.resolve({ ok: false as const, error: `克隆目标目录未经选择，已拒绝：${parentDir}（请用「浏览…」选一个目录）` });
+    }
+    return gitClone(String(r.url ?? ""), canonical);
   },
   // 项目内模糊搜索（@ 引用数据面；只读文件名，不读文件内容）。
   workspaceSearch: (ws, query) => searchWorkspace(String(ws), String(query)),
@@ -1048,10 +1131,10 @@ const createWindow = () => {
   }
 };
 app.whenReady().then(() => {
-  // 应用菜单（蓝本 §3.6）：刻意**不含 Close Window**——默认菜单的 ⌘W 会直接关门，
-  // 占掉了「关闭会话」这一键；自定义菜单后 ⌘W 落到渲染层（关会话回主页），窗口关闭走红灯。
-  // 保留 appMenu（关于/退出）、editMenu（复制粘贴剪切全选，缺了输入框就废）、
-  // viewMenu（重载/开发者工具/缩放/全屏）。
+  // 应用菜单（蓝本 §5.2 菜单树）：App → 文件 → 编辑 → 视图 → 前往 → 窗口 → 帮助。
+  // 模板在 ./menu-template.ts（纯数据、可判卷），这里只装 + 给一条出口：渲染层拥有键位的项
+  // 经 push 通道 `onMenu` 转交，accelerator 只显示不注册（否则菜单 push 与渲染层 keydown 双发）。
+  // 仍然**不含 Close Window 的 ⌘W**：那一键属于「关闭会话」，窗口关闭走红绿灯。
   // M4a 桌面端调度器接线（v2.14，§8 #18 在案缺口收口）：此前调度器长驻入口只在 CLI `--serve`，
   // 桌面端 schedule 通道全桥接、快照/CRUD 皆可调——但模块级 scheduler 恒 null ⇒ 快照恒空、
   // upsert/runNow 一律 fail-closed「调度器未初始化」（自动化面板由此成空壳）。
@@ -1067,11 +1150,12 @@ app.whenReady().then(() => {
   // ★ 装配点必须在 ready 之后：Electron 文档钉死 Windows/Linux 的 isEncryptionAvailable() 以 ready 事件
   // 为前提（Linux 未 ready 恒 false）——顶层装配会让后端在那些平台**永不注入**（BYOK 静默全灭）。
   // 首场 run 只可能晚于 renderer 加载（whenReady → createWindow），注入先于一切 run 的语义不受影响。
-  Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { role: "appMenu" },
-    { role: "editMenu" },
-    { role: "viewMenu" },
-  ]));
+  installAppMenu({
+    send: (id) => {
+      for (const win of BrowserWindow.getAllWindows()) win.webContents.send(PUSH_CHANNELS.onMenu, id);
+    },
+    closeWindow: () => { BrowserWindow.getFocusedWindow()?.close(); },
+  });
   installProviderKeyBackend(
     {
       isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),

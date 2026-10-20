@@ -8,6 +8,17 @@ import { describe, expect, it } from "vitest";
 const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/Composer.tsx", import.meta.url)), "utf8");
 
 describe("运行状态条", () => {
+  it("正文开始后不再叫「思考中」：生成中 → 收尾中（run 未完但正文已停）", () => {
+    const app = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+    expect(app).toContain("hasAssistantTextThisRun(events)");
+    expect(app).toContain("lastDeltaAt.current.set");
+    expect(app).toContain("answerQuiet");
+    // 2026-10-20：文案口径搬进 projections.runPhaseLabel（纯函数）——
+    // 这里钉的是**接线**（App 用的是那一个函数），文案本身的行为判据在 tests/phase-label.test.ts。
+    expect(app).toContain("runPhaseLabel({ phase, stopped, running: runningActive, hasAnswerText, answerQuiet })");
+    expect(app, "App 里不该再留一份自己的文案三元链").not.toContain('finishing ? "收尾中"');
+  });
+
   it("仅运行/已停时出现，读 phaseLabel + elapsedSec + 累计步数", () => {
     expect(src).toContain("{(props.running || props.stopped) && (");
     expect(src).toContain('className="cc-phase" role="status" aria-live="polite"');

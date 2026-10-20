@@ -20,6 +20,10 @@ export interface AskRequest {
    *  既不能按会话显示、也不能安全地按会话锁输入框（误锁别的会话）。带上它 ⇒ 卡有归属，
    *  审批/历史/审计才谈得上。缺省 = 未知（老 elder JSON 与 headless 路径同形），不许猜。 */
   sessionId?: string;
+  /** 连拦降级提示（§2.2 双向断路器）：本会话「被判危险而连续拒绝」达阈值时，调用方算好一句
+   *  人话随卡下发，渲染层据此摆一键降档。**门只管转发、不置一字**——档位词汇属 permissions，
+   *  在这里再写一遍就是第二份口径。 */
+  tierWarning?: string;
 }
 export type AskOutcome = "approved" | "rejected";
 /** 决议结果：批准时携带用户选择的 scope（缺省 once）；拒绝时携带拒绝原因（unattended/timeout）。 */
@@ -66,7 +70,7 @@ export class AskGate {
   request(
     tool: ToolName | string,
     args: Record<string, unknown>,
-    ctx: { reason?: string; risk?: RiskLevel; riskReasons?: string[]; signal?: AbortSignal; sessionId?: string } = {},
+    ctx: { reason?: string; risk?: RiskLevel; riskReasons?: string[]; signal?: AbortSignal; sessionId?: string; tierWarning?: string } = {},
   ): Promise<AskOutcomeResult> {
     const askId = "ask-" + String(++this.seq);
     if (this.opts.unattended || (this.opts.hasAnswerer && !this.opts.hasAnswerer())) {

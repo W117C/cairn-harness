@@ -6,19 +6,34 @@
 //     双击标题重命名（开态全选 + 视口回串首）；hover ⋯ 五项菜单（置顶/重命名/分叉/归档/删除，对齐原型序）；
 //   组内分段：置顶段恒前（不摆标签），其余按时间（今天/昨天/过去7天/更早）带桶标签；
 //   底部「添加项目」四入口（打开文件夹…/新建项目…/从 Git 仓库克隆…/最近打开）；
-//   页脚 48px：设置（齿轮 + 文字）+ 头像 + 模型服务状态点（绿=可用，红=不可用，点击进设置）。
+//   页脚 48px：模型服务状态点（绿=可用，红=不可用，点击直达「模型与 Provider」分区）+ 头像。
+//     头像是侧栏的「账户/外观/用量」枢纽（2026-10-20 批 130）：点开有 外观（主题三选一）/
+//     用量统计（当前会话面板）/ 设置 / 关于与更新。**页脚不再常驻「⚙ 设置」钮**——
+//     同一个语义两处入口是本仓反复要治的病（批 #128 同款）。
 // 文案一律走 STR（strings.ts——源文扫描判卷钉死）；图标 = lucide（ADR 0003）；会话行菜单 = Radix。
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Archive, Check, ChevronRight, Folder, Loader2, MoreHorizontal, Pencil, Pin, Plus, Search, Settings, X } from "lucide-react";
+import { Archive, Check, ChevronRight, Folder, GitBranch, Loader2, MoreHorizontal, Pencil, Pin, Plus, Search, Settings2, X } from "lucide-react";
 import type { ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import { relativeTime } from "../projections";
+import type { UsageSummary } from "../projections";
 import { keysOf } from "../shortcuts";
 import { filterSessions, groupByWorkspace, projectSections, sessionStatus, sessionTime, splitArchived, workspaceLabel, OTHER_WORKSPACE, type TimeBucket, type WorkspaceSession } from "../sessions-view";
 import { STR } from "../strings";
+import { formatTokens } from "./format-tokens";
+import { Popover, usePopoverDismiss } from "./Popover";
 import { useNow } from "../useNow";
+import type { ThemePref } from "../theme";
 import { ModalSurface } from "./ModalSurface";
 import { AddProjectMenu } from "./AddProjectMenu";
+
+/** 头像菜单的「外观」三档（2026-10-20 批 130）。与设置页 GeneralSection 的 THEME_OPTIONS
+ *  同三档同措辞——**同一个语义两处措辞不许各写一份**（这里直接引用 STR.footer 的文案）。 */
+const THEME_CHOICES: readonly { id: ThemePref; label: string }[] = [
+  { id: "system", label: STR.footer.themeSystem },
+  { id: "light", label: STR.footer.themeLight },
+  { id: "dark", label: STR.footer.themeDark },
+];
 
 /** 时间桶标签（业主四图批：brief §2.1 的「今天/昨天/过去7天/更早」要读得出来——
  *  原「间隔即分组」只剩无声空白，业主截图里读不出桶界）。文案走 STR（判卷钉）。 */
@@ -70,6 +85,10 @@ function SessionRow(props: {
     onFork: () => void;
     onArchive: (archived: boolean) => void;
     onDelete: () => void;
+    /** 跨面接力（§3.9）：给出在 CLI 续跑的等价命令。 */
+    onOpenInCli: () => void;
+    /** 会话级 worktree 隔离（§3.7 · G4）：隔离 / 合并回主工作区 / 丢弃。 */
+    onWorktree: (kind: "create" | "merge" | "discard") => void;
   } | null;
 }): React.JSX.Element {
   const s = props.session;
@@ -84,6 +103,9 @@ function SessionRow(props: {
       // 是肌肉记忆——在会话行上右键什么也不发生，会被读成「这个应用坏了」。
       // 走 Radix 的受控 open（不另写一套自绘菜单）：菜单内容与「…」完全同一个，行为也不会分叉。
       const [ctxOpen, setCtxOpen] = useState(false);
+  // 键盘开菜单时，关闭后把焦点还给这一行（Radix 默认还给 ⋯ 触发器；从 ⋯ 按 ↑/↓ 不会进列表移动）。
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const ctxByKeyboard = useRef(false);
   const statusTitle =
     props.status === "running" ? `${STR.sidebar.sessionRunning}：${title}`
     : props.status === "waiting" ? `${STR.sidebar.sessionWaiting}：${title}`
@@ -91,6 +113,7 @@ function SessionRow(props: {
     : `${STR.sidebar.sessionFailed}：${title}`;
   return (
     <div
+      ref={rowRef}
       className={"session" + (s.id === props.activeId ? " active" : "")}
       data-active={s.id === props.activeId}
       data-session-id={s.id}
@@ -101,6 +124,7 @@ function SessionRow(props: {
         if (props.renaming || a === null) return;
         e.preventDefault();
         e.stopPropagation();
+        ctxByKeyboard.current = false;
         setCtxOpen(true);
       }}
       role="option"
@@ -117,14 +141,29 @@ function SessionRow(props: {
       onKeyDown={(e) => {
         if (props.renaming || e.target !== e.currentTarget) return;
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); props.onOpen(s.id); return; }
+        // Shift+F10 / ContextMenu：键盘打开行菜单（右键的等价入口）。没有 actions 时让路。
+        if ((e.key === "F10" && e.shiftKey) || e.key === "ContextMenu") {
+          if (a !== null) { e.preventDefault(); ctxByKeyboard.current = true; setCtxOpen(true); }
+          return;
+        }
+        // Home/End 跳列表首尾（listbox 的标准键盘语义；↑/↓ 已覆盖逐行）。
+        if (e.key === "Home" || e.key === "End") {
+          e.preventDefault();
+          const rows = Array.from(
+            e.currentTarget.closest(".sidenav")?.querySelectorAll<HTMLElement>(".session") ?? [],
+          ).filter((el) => el.getClientRects().length > 0 && el.closest('.group[data-collapsed="true"]') === null);
+          const target = e.key === "Home" ? rows[0] : rows[rows.length - 1];
+          target?.focus();
+          return;
+        }
         if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
         e.preventDefault();
         // 只把「看得见」的行算进移动序列：折叠组的行仍在 DOM 里（高度过渡要它），
         // 但 visibility:hidden + 高度 0 ⇒ 键盘移过去会聚焦一个看不见的行。
-        // 用 getClientRects 判真实占位（visibility:hidden 与 0 高度都会给出空数组）。
+        // getClientRects 不排除 visibility:hidden 的后代；同时排除已折叠组。
         const rows = Array.from(
           e.currentTarget.closest(".sidenav")?.querySelectorAll<HTMLElement>(".session") ?? [],
-        ).filter((el) => el.getClientRects().length > 0);
+        ).filter((el) => el.getClientRects().length > 0 && el.closest('.group[data-collapsed="true"]') === null);
         const at = rows.indexOf(e.currentTarget);
         const next = rows[at + (e.key === "ArrowDown" ? 1 : -1)];
         next?.focus();
@@ -156,11 +195,18 @@ function SessionRow(props: {
       ) : (
         <>
           {s.pinned === true && <Pin size={11} className="s-pin" aria-label={STR.sidebar.pinned} />}
-          <span className="s-title" title={title} onDoubleClick={() => { props.onRenameStart(); }}>{title}</span>
-          {props.hasDraft === true && (
-            <span className="s-draft" aria-label={STR.sidebar.draftLabel} title={STR.sidebar.draftLabel}><Pencil size={9} /></span>
-          )}
-          {Number.isFinite(t) && <span className="s-time">{relativeTime(now, t)}</span>}
+          <div className="s-summary">
+            <span className="s-title" title={title} onDoubleClick={() => { props.onRenameStart(); }}>{title}</span>
+            <div className="s-meta">
+              {Number.isFinite(t) && <span className="s-time">{relativeTime(now, t)}</span>}
+              {props.hasDraft === true && (
+                <span className="s-draft" aria-label={STR.sidebar.draftLabel} title={STR.sidebar.draftLabel}><Pencil size={9} /></span>
+              )}
+              {s.isolated === true && (
+                <span className="s-draft" aria-label={STR.sidebar.isolatedLabel} title={STR.sidebar.isolatedLabel}><GitBranch size={9} /></span>
+              )}
+            </div>
+          </div>
           {a !== null && (
             <DropdownMenu.Root open={ctxOpen} onOpenChange={setCtxOpen}>
               <DropdownMenu.Trigger asChild>
@@ -168,7 +214,7 @@ function SessionRow(props: {
                   className="s-more"
                   aria-label={STR.sidebar.sessionMore}
                   title={STR.sidebar.sessionMoreTip.replace("{title}", title)}
-                  onClick={(e) => { e.stopPropagation(); }}
+                  onClick={(e) => { e.stopPropagation(); ctxByKeyboard.current = false; }}
                 >
                   <MoreHorizontal size={13} />
                 </button>
@@ -180,17 +226,37 @@ function SessionRow(props: {
                 side="bottom"
                 align="start"
                 sideOffset={4}
+                onCloseAutoFocus={(e) => {
+                  if (!ctxByKeyboard.current) return;
+                  ctxByKeyboard.current = false;
+                  e.preventDefault();
+                  rowRef.current?.focus();
+                }}
                 onClick={(e) => { e.stopPropagation(); }}
                 onKeyDown={(e) => { e.stopPropagation(); }}
               >
-                <DropdownMenu.Item className="menu-item" onSelect={() => { a.onPin(s.pinned !== true); }}>
+                <DropdownMenu.Item className="menu-item" onSelect={() => {
+                  a.onPin(s.pinned !== true);
+                  // 置顶会重排列表；Radix 的 close auto-focus 在这里落空（实测 activeElement=null），
+                  // 键盘开菜单的用户选完就掉出列表。下一帧把焦点还给同一行。
+                  if (ctxByKeyboard.current) requestAnimationFrame(() => { rowRef.current?.focus(); });
+                }}>
                   {s.pinned === true ? STR.sessionMenu.unpin : STR.sessionMenu.pin}
                 </DropdownMenu.Item>
                 <DropdownMenu.Item className="menu-item" onSelect={props.onRenameStart}>{STR.sessionMenu.rename}</DropdownMenu.Item>
                 <DropdownMenu.Item className="menu-item" onSelect={() => { a.onFork(); }}>{STR.sessionMenu.fork}</DropdownMenu.Item>
+                {s.isolated === true ? (
+                  <>
+                    <DropdownMenu.Item className="menu-item" onSelect={() => { a.onWorktree("merge"); }}>{STR.sessionMenu.wtMerge}</DropdownMenu.Item>
+                    <DropdownMenu.Item className="menu-item danger-text" onSelect={() => { a.onWorktree("discard"); }}>{STR.sessionMenu.wtDiscard}</DropdownMenu.Item>
+                  </>
+                ) : (
+                  <DropdownMenu.Item className="menu-item" onSelect={() => { a.onWorktree("create"); }}>{STR.sessionMenu.wtIsolate}</DropdownMenu.Item>
+                )}
                 <DropdownMenu.Item className="menu-item" onSelect={() => { a.onArchive(s.archived !== true); }}>
                   {s.archived === true ? STR.sessionMenu.unarchive : STR.sessionMenu.archive}
                 </DropdownMenu.Item>
+                <DropdownMenu.Item className="menu-item" onSelect={() => { a.onOpenInCli(); }}>{STR.sessionMenu.openInCli}</DropdownMenu.Item>
                 <DropdownMenu.Item className="menu-item danger-text" onSelect={() => { a.onDelete(); }}>{STR.sessionMenu.delete}</DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu.Root>
@@ -357,20 +423,46 @@ export interface SidebarProps {
   onRenameSession?: (id: string, name: string) => Promise<void>;
   onPinSession?: (id: string, pinned: boolean) => Promise<void>;
   onArchiveSession?: (s: WorkspaceSession, archived: boolean) => void;
+  onOpenInCliSession?: (s: WorkspaceSession) => void;
+  /** §3.7 · G4：丢弃由 App 侧先弹确认卡（未提交改动会消失）。 */
+  onSessionWorktree?: (kind: "create" | "merge" | "discard", s: WorkspaceSession) => void;
   onDeleteSession?: (s: WorkspaceSession) => void;
   onForkSession?: (s: WorkspaceSession) => void;
   onOpenSettings: () => void;
   onOpenAbout?: () => void;
+  /** 状态点：直接进「模型与 Provider」分区（它就是为修模型服务而存在的入口，
+   *  笼统地开设置页等于让用户自己找那一格）。 */
+  onOpenProviderSettings?: () => void;
+  /** 当前主题（头像菜单「外观」子菜单打勾用）。 */
+  theme: ThemePref;
+  /** 切主题（子菜单点选即生效）。 */
+  onThemeChange: (t: ThemePref) => void;
+  /** 当前会话用量（头像菜单「用量统计」面板读它）；null = 没有会话。 */
+  usage: UsageSummary | null;
   /** 系统目录选择（「打开文件夹…」「选择克隆位置」「项目设置·更改」共用）。 */
   onPickDirectory: () => Promise<string | null>;
 }
 
 export function Sidebar(props: SidebarProps): React.JSX.Element {
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => {
+    try {
+      if (typeof window === "undefined") return new Set();
+      const saved: unknown = JSON.parse(window.localStorage.getItem("cairn.sidebar.groups.v1") ?? "null");
+      return new Set(Array.isArray(saved) ? saved.filter((key): key is string => typeof key === "string") : []);
+    } catch { return new Set(); }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("cairn.sidebar.groups.v1", JSON.stringify([...collapsed])); } catch { /* 本窗口仍然生效 */ }
+  }, [collapsed]);
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const [renamingProject, setRenamingProject] = useState<{ id: string; value: string } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; project: ProjectRecord } | null>(null);
   const [settingsFor, setSettingsFor] = useState<ProjectRecord | null>(null);
+  // 用量统计面板（批 130）：头像菜单点开；锚在头像上，外点/Esc 关。
+  const [usageOpen, setUsageOpen] = useState(false);
+  const usageAnchorRef = useRef<HTMLDivElement | null>(null);
+  const closeUsage = useCallback(() => { setUsageOpen(false); }, []);
+  usePopoverDismiss(usageOpen, closeUsage, usageAnchorRef);
   // 侧栏会话搜索（2026-10-18 接通）：筛选纯函数与词表（filterSessions / SESSION_FILTERS）
   // 从 P3-3 起就在 sessions-view.ts 里、也有判卷，但一直没有调用方——侧栏顶的放大镜实际打开
   // 的是 ⌘K 命令面板（整屏模态），用户点「搜索」想收窄列表，得到的却是盖住整个应用的弹窗。
@@ -382,9 +474,10 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
   const searchOpen = sessionQuery.trim() !== "";
 
   const toggleGroup = (key: string): void => {
+    if (searchOpen) setSessionQuery("");
     setCollapsed((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
+      if (next.has(key) && !searchOpen) next.delete(key); else next.add(key);
       return next;
     });
   };
@@ -409,7 +502,8 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
   const now = Date.now();
   const hasRowActions =
     props.onRenameSession !== undefined || props.onPinSession !== undefined ||
-    props.onArchiveSession !== undefined || props.onDeleteSession !== undefined;
+    props.onArchiveSession !== undefined || props.onDeleteSession !== undefined ||
+    props.onOpenInCliSession !== undefined || props.onSessionWorktree !== undefined;
   // 扁平可见序（2026-10-18）：给 role=option 的 aria-posinset/setsize 用，也是 ↑↓ 键的依据。
   // 与渲染顺序同源：常规组（按项目 → 组内置顶/时间桶）在前，「已归档」组在末尾。
   // 注意这是**渲染序**，不是「打开顺序」——被折叠的组其行仍在 DOM 里（高度过渡），
@@ -448,6 +542,8 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                         onFork: () => { props.onForkSession?.(s); },
                         onArchive: (archived) => { props.onArchiveSession?.(s, archived); },
                         onDelete: () => { props.onDeleteSession?.(s); },
+                        onOpenInCli: () => { props.onOpenInCliSession?.(s); },
+                        onWorktree: (kind) => { props.onSessionWorktree?.(kind, s); },
                       } : null}
                     />
   );
@@ -542,7 +638,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           const key = g.workspace === OTHER_WORKSPACE ? "\u0000temp" : g.workspace;
           const project = byPath.get(g.workspace) ?? null;
           const isTemp = project === null;
-          const isCollapsed = collapsed.has(key);
+          const isCollapsed = !searchOpen && collapsed.has(key);
           const activeGroup = !isTemp && g.workspace === props.activeWorkspace;
           const busyDot = g.sessions.some((s) => props.running.has(s.id) || props.waitingIds.has(s.id));
           const sections = projectSections(g.sessions, now);
@@ -641,11 +737,11 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           );
         })}
         {visibleArchived.length > 0 && (
-          <div className="group" data-archived="true" data-collapsed={collapsed.has("\u0000archived")}>
+          <div className="group" data-archived="true" data-collapsed={!searchOpen && collapsed.has("\u0000archived")}>
             <div className="group-head" title={STR.sidebar.archivedTip}>
               <button
                 className="group-toggle"
-                aria-expanded={!collapsed.has("\u0000archived")}
+                aria-expanded={searchOpen || !collapsed.has("\u0000archived")}
                 title={STR.sidebar.collapseTip}
                 onClick={() => toggleGroup("\u0000archived")}
               >
@@ -671,31 +767,98 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
         />
       </nav>
 
-      {/* 页脚 48px：设置 + 头像 + 模型服务状态点（brief 第二节底部） */}
+      {/* 页脚 48px：模型服务状态点 + 头像。
+          **页脚不再常驻「设置」按钮**（2026-10-20 批 130）：设置入口收进头像菜单——
+          同一个语义两处入口是本仓反复要治的病（批 #128 同类：主页叠两个同名项目 chip）。
+          状态点仍在页脚常驻：它是「模型服务可用/不可用」的常驻事实位，不是设置入口的重复。 */}
       <footer className="side-foot">
-        <button className="foot-settings" title={withKeys(STR.footer.settingsTip, "settings")} onClick={props.onOpenSettings}>
-          <Settings size={13} />
-          {STR.footer.settings}
-        </button>
-        <span className="foot-spacer" />
         <button
           className="provider-dot"
           data-ok={props.providerOk === null ? "unknown" : props.providerOk ? "ok" : "bad"}
           aria-label={props.providerOk === null ? STR.footer.providerUnknown : props.providerOk ? STR.footer.providerOk : STR.footer.providerBad}
           title={props.providerOk === null ? STR.footer.providerUnknown : props.providerOk ? STR.footer.providerOk : STR.footer.providerBad}
-          onClick={props.onOpenSettings}
+          onClick={props.onOpenProviderSettings ?? props.onOpenSettings}
         />
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
-            <button className="avatar" aria-label={STR.footer.accountTip} title={STR.footer.accountTip}>Z</button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content className="pop-rd" side="top" align="end" sideOffset={6}>
-            <DropdownMenu.Item className="menu-item" onSelect={props.onOpenSettings}>{STR.footer.settings}…</DropdownMenu.Item>
-            {props.onOpenAbout !== undefined && (
-              <DropdownMenu.Item className="menu-item" onSelect={() => { props.onOpenAbout?.(); }}>{STR.footer.about}</DropdownMenu.Item>
-            )}
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
+        <div className="foot-avatar-wrap">
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button className="avatar" aria-label={STR.footer.accountTip} title={STR.footer.accountTip}>
+                <Settings2 size={15} aria-hidden="true" />
+                <span>{STR.footer.preferences}</span>
+                <ChevronRight size={12} aria-hidden="true" />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content
+              className="pop-rd pop-account"
+              side="top"
+              align="end"
+              sideOffset={6}
+              collisionPadding={10}
+            >
+              {/* 外观：主题三选一（子菜单，当前项打勾）。给的是快捷切换，
+                  完整的外观面（主题 + 文字大小 + 界面密度）在设置页「通用」分区。 */}
+              <DropdownMenu.Sub>
+                <DropdownMenu.SubTrigger className="menu-item">
+                  <span>{STR.footer.appearance}</span>
+                </DropdownMenu.SubTrigger>
+                <DropdownMenu.SubContent className="pop-rd" sideOffset={2}>
+                  {THEME_CHOICES.map((t) => (
+                    <DropdownMenu.Item key={t.id} className="menu-item" onSelect={() => { props.onThemeChange(t.id); }}>
+                      <span>{t.label}</span>
+                      {props.theme === t.id && <span className="check" aria-hidden="true">✓</span>}
+                    </DropdownMenu.Item>
+                  ))}
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Sub>
+              {/* 用量统计：开一个贴着头像的面板（当前会话口径，面板自己写明口径）。 */}
+              <DropdownMenu.Item className="menu-item" onSelect={() => { setUsageOpen(true); }}>
+                <span>{STR.footer.usage}</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator className="menu-sep" />
+              <DropdownMenu.Item
+                className="menu-item"
+                title={withKeys(STR.footer.settingsTip, "settings")}
+                onSelect={() => { props.onOpenSettings(); }}
+              >
+                <span>{STR.footer.settings}</span>
+                {/* 键位从 SHORTCUTS 表取（不手抄——哨兵判卷盯的就是这个） */}
+                {keysOf("settings") !== null && <span className="sub">{keysOf("settings")}</span>}
+              </DropdownMenu.Item>
+              {props.onOpenAbout !== undefined && (
+                <DropdownMenu.Item className="menu-item" onSelect={() => { props.onOpenAbout?.(); }}>{STR.footer.about}</DropdownMenu.Item>
+              )}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        </div>
+        {/* 用量统计面板：锚在**侧栏**右下角（不是头像旁）——面板宽 184px、侧栏最窄 200px，
+            贴头像锚会把它推到窗口左缘外裁掉标题行。 */}
+        {usageOpen && (
+          /* 锚：0×0 的定位点。面板本体在锚里 ⇒ 外点判定（usePopoverDismiss）
+             不会把「点面板内部」判成外点。 */
+          <div className="usage-anchor" ref={usageAnchorRef}>
+            <Popover open up className="usage-pop" role="dialog" aria-label={STR.footer.usageTitle}>
+              <div className="pop-label">{STR.footer.usageTitle}</div>
+              {props.usage === null ? (
+                <p className="usage-empty">{STR.footer.usageEmpty}</p>
+              ) : (
+                <dl className="usage-grid">
+                  <dt>{STR.footer.usageInput}</dt>
+                  <dd className="num">{formatTokens(props.usage.inputTokens)}</dd>
+                  <dt>{STR.footer.usageOutput}</dt>
+                  <dd className="num">{formatTokens(props.usage.outputTokens)}</dd>
+                  <dt>{STR.footer.usageCache}</dt>
+                  <dd className="num">{formatTokens(props.usage.cacheReadTokens)}</dd>
+                  <dt>{STR.footer.usageSteps}</dt>
+                  <dd className="num">{String(props.usage.toolSteps)}</dd>
+                  <dt>{STR.footer.usageRounds}</dt>
+                  <dd className="num">{String(props.usage.rounds)}</dd>
+                  <dt>{STR.footer.usageCalls}</dt>
+                  <dd className="num">{String(props.usage.usageCount)}</dd>
+                </dl>
+              )}
+            </Popover>
+          </div>
+        )}
       </footer>
 
       {ctxMenu !== null && (

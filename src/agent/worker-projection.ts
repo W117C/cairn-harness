@@ -111,6 +111,12 @@ export const SCANNED_TEXT_PATHS: Partial<Record<AgentEvent["type"], readonly (re
   // v2.16：挂起理由与停止理由是同一个形状（自由文本、将来可能内联读数），同口径扫——
   // 「同族出口各扫一份」这条边界在这里保持一致，别因为今天那句文案是常量就放松。
   goal_paused: [["reason"]],
+  // 还原事件：字段是**路径**（被撤的文件 + 用的那份快照）。它必须与 `tool_call.args` 里的
+  // 同一个路径**同样地**被扫：主会话落盘时 args.path 已过 redactSecrets（loop 的 redactEventForLog
+  // 逐个字符串叶子扫），而这条是主进程直接 append 的（不经 loop）——不扫就两处文本可能不同
+  // （文件名里带密钥时，一边被掩一边没被掩）⇒ 改动面按路径配不上，还原白落。
+  // 扫法与 loop 那份同源（都是 redactSecrets 逐叶子），所以掩出来的结果逐字一致。
+  file_restored: [["path"], ["snapshotId"]],
 };
 
 /** 在**产出处**就已脱敏的事件（本表不参与扫描，判据只判「别再漏一处」）。 */

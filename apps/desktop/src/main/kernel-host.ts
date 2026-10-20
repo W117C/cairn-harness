@@ -17,7 +17,23 @@ import { realpathSync } from "node:fs";
 import { readFile, rm, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
 import type { AgentEvent } from "../../../../src/events";
-import type { RunRequest, RunResponse, SessionInfoPayload } from "../../../../src/main/ipc-protocol";
+import type {
+  RunRequest,
+  RunResponse,
+  SessionInfoPayload,
+  SessionWorktreeRequest,
+  SessionWorktreeResult,
+} from "../../../../src/main/ipc-protocol";
+// 会话级 worktree 隔离（§3.7 · G4）：创建/合并/清理全在 core 侧（src/main/session-worktree.ts），
+// 这里只做三件宿主事——按会话归属解析工作区、在跑就拒、把结果原样交回渲染层。
+import {
+  createSessionWorktree,
+  discardSessionWorktree,
+  isSessionIsolated,
+  listIsolatedSessions,
+  mergeSessionWorktree,
+  sessionWorktreePath,
+} from "../../../../src/main/session-worktree";
 import { scheduledRunCount } from "../../../../src/main/scheduler-runtime";
 import {
   handleAgentDecide,
@@ -28,7 +44,7 @@ import {
   setAppHooks,
   updateScheduleCap,
 } from "../../../../src/main/agent-runner";
-import { applyCrashRecovery, initSessionsDir, requireSessionMetadata } from "../../../../src/main/session-handlers";
+import { applyCrashRecovery, initSessionsDir, requireSessionMetadata, setSessionRootResolver } from "../../../../src/main/session-handlers";
 import { initSettingsStore, setSettingsHostDeps } from "../../../../src/main/settings-handlers";
 import {
   createSession as createSessionInRoot,
@@ -63,6 +79,10 @@ export interface KernelHost {
    *  该会话不在运行 ⇒ { ok:false, error:"会话不在运行" }。不再走 M2 全局缝 handleRunCancel
    *  （那只认最后注册的 interactiveRunAbort——并发会话下取消的是最后启动的那场，杀错对象）。 */
   cancel(sessionId: string): Promise<{ ok: boolean; error?: string }>;
+  /** 会话级 worktree 隔离（§3.7 · G4）：create / merge / discard。
+   *  三条都先按会话归属解析工作区（与 run 同一张归属表），并在该会话**正在跑**时拒绝——
+   *  run 正在那棵树里写东西，此刻合并/删除等于把脚下的地板抽走。 */
+  sessionWorktree(req: SessionWorktreeRequest): Promise<SessionWorktreeResult>;
   /** 全工作区合并的会话清单，每条带 workspace 归组标记（T3 分组侧栏的数据源）；
    *  并合并单例 sidecar 的 pinned/archived/projectId（与写路径同源，见实现处注释）。 */
   listSessions(): Promise<(SessionInfoPayload & { workspace: string })[]>;
@@ -89,7 +109,7 @@ export interface KernelHost {
   /** 读回会话事件并登记归属/漂移基线；workspace 缺省时按归属表 → 全工作区扫描解析。
    *  返回值带 running（desktop 扩展字段，同 aborted 先例不动 ipc-protocol 必填面）：
    *  main 侧 runControllers 实况——渲染层开会对账用（换实例后旧标记没有主人，真值只在 main）。 */
-  openSession(id: string, workspace?: string): Promise<{ events: AgentEvent[]; running: boolean }>;
+  openSession(id: string, workspace?: string): Promise<{ events: AgentEvent[]; running: boolean; startedAt?: number }>;
   /** 在跑会话数（per-session runController 键数）——§3.3 退出告知闸的判据（main 内直调，不经 IPC）。 */
   runningCount(): number;
   /** 发送队列 sidecar 读回（重启恢复的数据面）；会话不存在 fail-visible。 */
@@ -102,7 +122,7 @@ export interface KernelHost {
 const DRIFT_ERROR = "会话已被外部修改（CLI？），请刷新后重试";
 
 /** 漂移快照：stat 之外还记基线行数与本端事件计数锚——见 externalDrift 的归因慢路径。 */
-interface DriftSnapshot {
+export interface DriftSnapshot {
   size: number;
   mtimeMs: number;
   /** 基线时刻的非空行数（与本端事件一一对应：pipeline 每事件恰落一行）。 */
@@ -111,6 +131,48 @@ interface DriftSnapshot {
   ownAtSnapshot: number;
   /** 取不到稳定三面时的 fail-closed 标记；下一轮必须刷新重建基线。 */
   unstable?: true;
+}
+
+/** 漂移判定的**结论**（纯函数面，便于判卷真跑这一格而不是只钉源码）。 */
+export type DriftVerdict =
+  /** 放行：没有外部改动。 */
+  | { kind: "allow" }
+  /** 放行，但基线不可信 ⇒ 先重建基线再跑（见下）。 */
+  | { kind: "rebuild" }
+  /** 拒绝：有外部改动的证据。 */
+  | { kind: "reject" };
+
+/** 漂移判据（纯函数）：基线 + 当前读数 + 本端归因 ⇒ 放行/重建/拒绝。
+ *
+ *  四条判据与它们的理由：
+ *  ① **无基线** ⇒ 放行（首场 run，基线在这一轮收束时建立）。
+ *  ② **文件不在场** ⇒ 拒绝（快照在而文件没了 = 外部删除）。
+ *  ③ **文件自基线起逐字未动** ⇒ 放行（零 I/O 快路径）。**这条排在不稳之前**：
+ *     快照不稳只说明"我们测不准"，不是"别人改了"；文件确实没动时不该被拒。
+ *  ④ **基线不稳** ⇒ **重建后放行**，不是拒绝。理由见 externalDrift 的注释：
+ *     旧实现在这里直接 `return true`（拒绝），而拒绝发生在 refreshSnapshot 之前
+ *     ⇒ 基线永远不重建 ⇒ 会话**永久卡死**，且那句文案（"会话已被外部修改（CLI？）"）
+ *     是**没有证据的指控**。实测：20MB 会话日志、本端无人写、文件逐字未动，
+ *     连续两轮 run 全被这句拒绝，连它自己给的出路（"请刷新后重试"）都走不通。
+ *  ⑤ **增长行数 == 本端事件数** ⇒ 增长全来自本端 ⇒ 刷新基线放行；否则拒绝。
+ */
+export function decideDrift(input: {
+  baseline: DriftSnapshot | undefined;
+  current: { size: number; mtimeMs: number } | null;
+  /** 自基线以来本端追加的事件数（ownTotal - ownAtSnapshot）。 */
+  ownSinceSnapshot: number;
+  /** 当前的非空行数（读不到时传 null）。 */
+  currentLines: number | null;
+}): DriftVerdict {
+  const snap = input.baseline;
+  if (snap === undefined) return { kind: "allow" };
+  if (input.current === null) return { kind: "reject" };
+  if (input.current.size === snap.size && input.current.mtimeMs === snap.mtimeMs) return { kind: "allow" };
+  if (snap.unstable === true) return { kind: "rebuild" };
+  if (input.ownSinceSnapshot > 0 && input.currentLines !== null && input.currentLines === snap.lines + input.ownSinceSnapshot) {
+    return { kind: "allow" };
+  }
+  return { kind: "reject" };
 }
 
 const SNAPSHOT_STABLE_ATTEMPTS = 8;
@@ -216,12 +278,34 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
   const owner = new Map<string, string>();
   let sessionSeq = 0;
 
+  // **会话归属解析器**（多根面）：core 侧那些「按会话 id 找它自己的日志」的动作
+  // （存在性检查 / 改名 / 删除 / 还原事件落哪个日志）问这一个函数，而不是问单例根。
+  // 旧形状（不注册 ⇒ core 落回单例根）会让**项目工作区**里的会话：
+  //   ① 置顶/赞踩/归档/改名/删除一律被判成「会话不存在」（用户加一个项目文件夹就全废——
+  //      而"加项目文件夹"是这产品的主入口）；
+  //   ② 还原文件那一笔落进默认工作区的日志 ⇒ 侧栏多一个幽灵会话，真会话里没有这次还原
+  //      ⇒ 还原不持久（重开又变回"已改"）。
+  // 两处是同一个 bug 的两个出口 ⇒ 收成**一个**解析器。
+  // ⚠️ 找不到就返回 null（**不回落 activeWorkspace**）：回落 = 往别人的日志里写 = 造幽灵会话。
+  setSessionRootResolver(async (sessionId) => {
+    const known = owner.get(sessionId);
+    if (known !== undefined) return wsRoot(known);
+    for (const ws of workspaces) {
+      if (await sessionExists(wsRoot(ws), sessionId)) return wsRoot(ws);
+    }
+    return null;
+  });
+
   // ---- 每会话取消（M3 T2）：run 启动建 per-session AbortController，经 RunOverrides.signal 注入
   //  （agent-runner.ts:1584 AbortSignal.any 并入运行信号 ⇒ 轮界 loop.ts:363 + 门等待 ask-gate.ts:92-97
   //  + 长驻工具 loop.ts:484 全语义，实测见 task-2-report 勘误裁决）；run 收束清 map。
   //  同会话并发 run 被 core 的 isSessionLogBusy 拒（第二场速死），首场的 controller 保持 canonical
   //  ——set 只在缺位时发生、清只在还是自己时发生，cancel 永远指向真正在跑的那一场。
   const runControllers = new Map<string, AbortController>();
+  // 每会话这一轮 run 的**起点**（毫秒）：渲染层换实例（HMR/重载）后秒表要接着真值算，
+  // 不能从 0 起（2026-10-20 独立评审追出，LOW-MEDIUM：旧形状换实例后秒表恒读 "0s"——
+  // 而 `setElapsedSec(0)` 是同值更新 ⇒ React 根本不重渲染 ⇒ 那个 0 永远冻在那儿）。
+  const runStartedAt = new Map<string, number>();
 
   // ---- 漂移检测状态 ----
   // 快照按 logPath（=工作区×会话）记，不按裸 id：同一秒在两工作区外部建的会话 id 可同名
@@ -283,19 +367,38 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
    *  行数对不上（含外部追加/删改/触碰）⇒ 拒绝，恢复走 openSession 重建基线（「请刷新后重试」）。 */
   const externalDrift = async (sessionId: string, logPath: string): Promise<boolean> => {
     const snap = drift.get(logPath);
-    if (snap === undefined) return false; // 尚无基线（首场 run）：本轮收束时建立
-    if (snap.unstable === true) return true;
     const st = await statSession(logPath);
-    if (st === null) return true; // 快照在场而文件消失 = 外部删除
-    if (st.size === snap.size && st.mtimeMs === snap.mtimeMs) return false; // 原样：零 I/O 快路径
     const ownTotal = ownAppends.get(sessionId) ?? 0;
-    const own = ownTotal - snap.ownAtSnapshot;
-    if (own > 0) {
-      const lines = await countLines(logPath);
-      if (lines !== null && lines === snap.lines + own) {
+    const own = snap === undefined ? 0 : ownTotal - snap.ownAtSnapshot;
+    // 只有在可能走归因慢路径时才读行数（读整份文件很贵；快路径不该付这个钱）。
+    const needLines = snap !== undefined && snap.unstable !== true && own > 0;
+    const lines = needLines ? await countLines(logPath) : null;
+    const verdict = decideDrift({
+      baseline: snap,
+      current: st,
+      ownSinceSnapshot: own,
+      currentLines: lines,
+    });
+    if (verdict.kind === "allow") {
+      // 归因慢路径判定"增长全来自本端"时，基线要跟着刷新（否则下一轮又拿旧基线比）。
+      if (snap !== undefined && st !== null && own > 0 && lines !== null && lines === snap.lines + own) {
         drift.set(logPath, { size: st.size, mtimeMs: st.mtimeMs, lines, ownAtSnapshot: ownTotal });
-        return false; // 增长全部来自本端事件管线
       }
+      return false;
+    }
+    if (verdict.kind === "rebuild") {
+      // 基线不稳 ⇒ 这一格我们**自己都测不出**「文件有没有被外部改过」——
+      // 把它读成外部改动是**指控**（文案说"会话已被外部修改（CLI？），请刷新后重试"），
+      // 而证据并不支持那个指控；更糟的是它把会话**永久卡死**：旧实现在这里直接 return true，
+      // 而拒绝发生在 refreshSnapshot 之前 ⇒ 基线永远不重建 ⇒ 每一轮都撞同一句拒绝，
+      // 连"刷新后重试"那条出路都走不通（实测：20MB 会话日志、本端无人写、文件逐字未动，
+      // 连续两轮 run 全被这句拒绝；只有切走再切回（openSession 重建基线）才恢复）。
+      // 正确处置：**重新取一次基线**（读当前状态），让这一轮从当前真相起跑；
+      // 下一轮再从新基线判。重建后仍不稳（worker 还在尾随写）也照样放行——
+      // 卡死比"这一轮测不出漂移"坏得多：卡死让会话彻底不可用，而尾随写是我们自己的。
+      await refreshSnapshot(sessionId, logPath);
+      console.warn("[drift] 基线不稳（多见于 worker 尾随写）⇒ 重建基线后放行本轮；这不是外部改动");
+      return false;
     }
     return true;
   };
@@ -324,9 +427,17 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       if (sessionId === undefined) return handleAgentRun(req); // 非会话模式：临时日志，无归属无漂移无可取消缝
       const ws = await resolveSessionWs(sessionId);
       const logPath = pathOf(wsRoot(ws), sessionId);
+      // 会话级 worktree 隔离（§3.7 · G4）：隔离会话的 run 工作区 = 它自己那棵 worktree
+      // （工具 cwd / 写面 / 验证全在里面，主 checkout 不被并行会话踩）。会话存储**不受影响**：
+      // logPath 已显式钉在主 checkout 侧，而 worktree 里的 `.agent` 是指回主 checkout 的 symlink
+      // ⇒ 权限表/记忆/配置/会话根仍是同一份（这正是「配置跨面共享」那一环，缺了隔离会话就成活孤岛）。
+      const runWs = (await isSessionIsolated(ws, sessionId)) ? sessionWorktreePath(ws, sessionId) : ws;
       if (await externalDrift(sessionId, logPath)) return { ok: false, error: DRIFT_ERROR };
       const controller = new AbortController();
-      if (!runControllers.has(sessionId)) runControllers.set(sessionId, controller);
+      if (!runControllers.has(sessionId)) {
+        runControllers.set(sessionId, controller);
+        runStartedAt.set(sessionId, Date.now());
+      }
       // 第十八遍：首条消息自动命名——空会话（0 字节）才出手；装饰性增强不挡跑（sidecar 写不上
       // 就留戳名，catch 不吞 run）。落名后 push-only 合成事件（同收束终态先例，不落 JSONL）让
       // 渲染层秒级刷新侧栏标题。**刻意排在 controller 注册之后**：demo 剧本 21ms 就收束，
@@ -343,12 +454,15 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       }
       let settledOk = false;
       try {
-        const res = await handleAgentRun(req, { sessionId, logPath, workspace: ws, signal: controller.signal });
+        const res = await handleAgentRun(req, { sessionId, logPath, workspace: runWs, signal: controller.signal });
         settledOk = res.ok === true;
         // aborted 真值（desktop 扩展字段，不动 ipc-protocol 类型）：当且仅当本会话 controller 被 abort
         return controller.signal.aborted ? { ...res, aborted: true } : res;
       } finally {
-        if (runControllers.get(sessionId) === controller) runControllers.delete(sessionId);
+        if (runControllers.get(sessionId) === controller) {
+          runControllers.delete(sessionId);
+          runStartedAt.delete(sessionId);
+        }
         // 收束补发合成终态（push-only，不落 JSONL、不进漂移计数）：main-session 的 run 只发业务
         // 事件、从不发 agent_status——渲染层摘「运行中」只认终态 agent_status 或自家 run promise
         // 的 finally。用户切走会话后（非活动事件路径点灯）run 收束时两条路都不经过 ⇒ 运行标记
@@ -387,8 +501,10 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       const metadataById = new Map(records.map((record) => [record.id, record]));
       const out: (SessionInfoPayload & { workspace: string })[] = [];
       for (const ws of workspaces) {
+        // 隔离标记读侧现算（目录存在即真）：不落 sidecar、不进事件流 ⇒ 也不会有第二份会漂的状态。
+        const isolated = new Set(await listIsolatedSessions(ws));
         for (const info of await listSessionsInRoot(wsRoot(ws), metadataById)) {
-          out.push({ ...info, workspace: ws });
+          out.push({ ...info, workspace: ws, ...(isolated.has(info.id) ? { isolated: true } : {}) });
         }
       }
       // 同 id 跨工作区（秒级时间戳撞名）：无法判断这份 sidecar 属于哪一边 ⇒ 两边都不套组织字段，
@@ -405,6 +521,28 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
         }
       }
       return out;
+    },
+    sessionWorktree: async (req) => {
+      const kind = req.kind;
+      const sessionId = req.sessionId;
+      // 在跑就拒（fail-visible）：合并/丢弃会动这棵树与主 checkout，run 正在里面写。
+      if (runControllers.has(sessionId)) {
+        return { ok: false, error: "这条会话正在运行——先等它收束或取消，再动它的工作区" };
+      }
+      const ws = await resolveSessionWs(sessionId);
+      if (kind === "create") {
+        const r = await createSessionWorktree(ws, sessionId, req.title?.trim() || sessionId);
+        if (r.ok) console.log(`[worktree] 会话 ${sessionId} 已隔离：${r.path ?? "?"}（分支 ${r.branch ?? "?"}）`);
+        return r;
+      }
+      if (kind === "merge") {
+        const r = await mergeSessionWorktree(ws, sessionId);
+        if (r.ok) console.log(`[worktree] 会话 ${sessionId} 已合并回主 checkout（${r.branch ?? "?"}）`);
+        else if (r.conflict === true) console.warn(`[worktree] 会话 ${sessionId} 合并冲突：${(r.conflictedFiles ?? []).join("、")}`);
+        else console.warn(`[worktree] 会话 ${sessionId} 合并失败：${r.error ?? "未知原因"}`);
+        return r;
+      }
+      return await discardSessionWorktree(ws, sessionId);
     },
     addWorkspace: (wsInput) => {
       // 动态并入扫描面（M3-3 修复轮）：唯一调用方是 main 进程 addProject handler（registry.add
@@ -487,7 +625,8 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       // running 实况（desktop 扩展字段）：渲染层开会对账——换实例后的新渲染层靠这条把陈旧的
       // 「运行中」标记收敛到 main 真值（真在跑 ⇒ 补上；已收束 ⇒ 摘掉）。收束补发终态是正路，
       // 这条是开一条会话就自愈一次的兜底（两者互不依赖）。
-      return { events, running: runControllers.has(id) };
+      // startedAt：这一轮 run 的起点（渲染层换实例后秒表接着真值算；不在场 = 起点未知）
+      return { events, running: runControllers.has(id), startedAt: runStartedAt.get(id) };
     },
     queueGet: async (sessionId) => {
       const ws = await resolveSessionWs(sessionId);

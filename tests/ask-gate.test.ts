@@ -40,6 +40,16 @@ describe("AskGate", () => {
     for (const card of seen) gate.decide(String(card.askId), false);
   });
 
+  it("ctx.tierWarning 透进 notify 载荷（连拦降级提示上卡）；缺省 = 键缺席", async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const gate = new AskGate({ notify: (r) => { seen.push(r as unknown as Record<string, unknown>); } });
+    void gate.request("write_file", { path: "a.ts" }, { risk: "critical", tierWarning: "critical 连续 3 次被拒——建议降档回默认档" });
+    void gate.request("write_file", { path: "b.ts" }, { risk: "critical" });
+    expect(seen[0]?.tierWarning).toContain("建议降档回默认档");
+    expect(Object.keys(seen[1] as object)).not.toContain("tierWarning");
+    for (const card of seen) gate.decide(String(card.askId), false);
+  });
+
   it("默认 60 秒无响应 → 按拒绝（假时钟，不真等）", async () => {
     vi.useFakeTimers();
     const outcomes: Array<{ id: string; outcome: string; reason: string }> = [];

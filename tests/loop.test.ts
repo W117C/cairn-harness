@@ -295,3 +295,73 @@ describe("allowedTools 硬闸与 verify 系统门的次序", () => {
     expect(hookRuns).toBe(1);
   });
 });
+
+describe("resolveTool 补表钩子（run 中途才出现的工具，2026-10-19）", () => {
+  /** 起点快照里没有 `mcp__x__y`，钩子在**每一次查表前**现问一次——
+   *  这正是 provider 的 requestFace 逐请求重算所需要的对称一手：
+   *  模型面看得见（读活引用），执行面也必须动得了，否则落到 `unknown tool`。 */
+  it("静态表里没有、钩子给得出 ⇒ 照常执行（模型看到的 ≠ 能执行的，这条堵住后半句）", async () => {
+    const log: AgentEvent[] = [];
+    let sent = false;
+    const ran: string[] = [];
+    let asked = 0;
+    await runLoop({
+      provider: {
+        async *stream() {
+          // 只发一次：provider 是会话型，每轮都会重放同一份 stream ⇒ 不设闸会一路撞到 maxSteps
+          if (!sent) { sent = true; yield { type: "tool_call", id: "c1", name: "mcp__plugin_x__srv__t", args: {} }; }
+        },
+      },
+      events: { async append(event) { log.push(event); } },
+      workspace: "/tmp",
+      userMessage: "call the late tool",
+      resolveTool: (name) => {
+        asked++;
+        if (name !== "mcp__plugin_x__srv__t") return undefined;
+        return { name, async run() { ran.push(name); return { ok: true, output: "LATE_TOOL_OK" }; } };
+      },
+    });
+    expect(asked, "钩子必须在查表时真被问到（没问 = 这一手根本没接上）").toBeGreaterThan(0);
+    expect(ran).toEqual(["mcp__plugin_x__srv__t"]);
+    const result = log.find((e) => e.type === "tool_result") as Extract<AgentEvent, { type: "tool_result" }> | undefined;
+    expect(result?.output).toBe("LATE_TOOL_OK");
+  });
+
+  it("钩子也拿不到 ⇒ 仍是 unknown tool（补表不放行未注册工具，fail-closed 不变）", async () => {
+    const log: AgentEvent[] = [];
+    let sent = false;
+    await runLoop({
+      provider: {
+        async *stream() {
+          // 只发一次：provider 是会话型，每轮都会重放同一份 stream ⇒ 不设闸会一路撞到 maxSteps
+          if (!sent) { sent = true; yield { type: "tool_call", id: "c1", name: "mcp__plugin_x__srv__t", args: {} }; }
+        },
+      },
+      events: { async append(event) { log.push(event); } },
+      workspace: "/tmp",
+      userMessage: "call the absent tool",
+      resolveTool: () => undefined,
+    });
+    const result = log.find((e) => e.type === "tool_result") as Extract<AgentEvent, { type: "tool_result" }> | undefined;
+    expect(result?.ok).toBe(false);
+    expect(result?.output).toContain("unknown tool");
+  });
+
+  it("反向（突变体专破）：把 `?? opts.resolveTool?.(name)` 从 loop 里拆掉 ⇒ 第一条必须红在这儿", async () => {
+    // 这一条不是恒真：判据若不再回落到钩子，下面这个 ran 会是空数组。
+    const ran: string[] = [];
+    let sent = false;
+    await runLoop({
+      provider: {
+        async *stream() {
+          if (!sent) { sent = true; yield { type: "tool_call", id: "c1", name: "only_in_hook", args: {} }; }
+        },
+      },
+      events: { async append() {} },
+      workspace: "/tmp",
+      userMessage: "call the hooked tool",
+      resolveTool: (name) => ({ name, async run() { ran.push(name); return { ok: true, output: "ok" }; } }),
+    });
+    expect(ran, "loop 必须回落到 resolveTool；断了这一手，run 中途批准的插件就永远 unknown tool").toEqual(["only_in_hook"]);
+  });
+});

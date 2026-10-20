@@ -139,6 +139,7 @@ export class FeedbackStore {
 
   /** 全部原始记录（审计面）：`skipped` = 丢弃的坏行数（丢的事件必须能被数出来，不静默）。 */
   async listAll(): Promise<{ records: FeedbackRecord[]; skipped: number }> {
+    await this.writes; // 先看见此前入队的写入/删除；失败的写入已由队列尾消化。
     let text: string;
     try {
       text = await readFile(this.filePath, "utf8");

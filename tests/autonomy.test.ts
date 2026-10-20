@@ -309,4 +309,61 @@ describe("文件面路径风险通道（S2 路径侧）", () => {
     expect(evaluate("write_file", { path: "src/hooks.ts", content: "x" }, session({ mode: "auto" })).verdict).toBe("approve");
     expect(evaluate("write_file", { path: "docs/environment.md", content: "x" }, session({ mode: "auto" })).verdict).toBe("approve");
   });
+
+  // ---- 2026-10-19 独立评审：权限层与工具层对"这是哪个文件"的口径不一致 ----
+  //
+  // 工具层先 `resolve()`（src/tools/base.ts:119）把 `//`、`.`、`x/..` 折叠掉，权限层却在
+  // **未归一的原始串**上做子串匹配 ⇒ 两层说的不是同一个文件。旧实现的三种拼法都落到
+  // `<ws>/.git/hooks/pre-commit`（同一个可执行钩子），却因为原文里没有 `.git/hooks/`
+  // 这个子串而判成 none ⇒ auto 档免批写钩子；读侧同理：`.git//config` 连**只读档**都能
+  // 读出 `.git/config` 里的凭据。
+  it("路径别名不绕过：三种拼法都指向同一个钩子，都必须抬到 high", () => {
+    for (const path of [".git//hooks/pre-commit", ".git/./hooks/pre-commit", ".git/x/../hooks/pre-commit"]) {
+      const d = evaluate("write_file", { path, content: "x" }, session({ mode: "auto" }));
+      expect(d.verdict, `${path} 被放行`).not.toBe("approve");
+      expect(riskOf(d), `${path} 没抬到 high`).toBe("high");
+    }
+  });
+
+  it("读侧同样不绕过：`.git//config` 在只读档也要送审（凭据面没有一层是松的）", () => {
+    const d = evaluate("read_file", { path: ".git//config" }, session({ mode: "read-only" }));
+    expect(d.verdict, "`.git//config` 被放行").not.toBe("approve");
+    expect(riskOf(d)).toBe("high");
+  });
+
+  it("apply_patch 带一个惰性的 path 诱饵 ⇒ 补丁正文仍要进路径面（并集，不是先到先得）", () => {
+    // `apply_patch` 本身不读 `path` 键（对它是惰性的），而工具 schema 没有
+    // additionalProperties:false、provider 传的是 JSON.parse 原文 ⇒ 模型可以带这个键。
+    // 旧实现 `if (parts.length > 0) return …` 提前返回，整个 patch 就不被扫。
+    const patch = "--- a/.git/hooks/pre-commit\n+++ b/.git/hooks/pre-commit\n+#!/bin/sh\n+x\n";
+    const decoy = evaluate("apply_patch", { patch, path: "README.md" }, session({ mode: "auto" }));
+    expect(decoy.verdict, "带诱饵 path 的补丁被放行").not.toBe("approve");
+    expect(riskOf(decoy)).toBe("high");
+    // paths 数组形态的诱饵同理
+    const decoy2 = evaluate("apply_patch", { patch, paths: ["README.md"] }, session({ mode: "auto" }));
+    expect(decoy2.verdict, "带 paths 诱饵的补丁被放行").not.toBe("approve");
+  });
+
+  it("递归扫描面（grep/glob）：目录参数落在敏感根下 ⇒ 整棵子树都要过这道门", () => {
+    // path 是 `.git`（不含 `.git/hooks/` 也不含 `.git/config` 两个子串）⇒ 旧实现判 none
+    // ⇒ 连只读档都 approve，而 grep 扫的是整棵子树，把 `.git/config` 的凭据带进上下文。
+    for (const tool of ["grep", "glob"] as const) {
+      for (const path of [".git", ".git/hooks", ".agent", "sub/.git", "a/b/.agent"]) {
+        const d = evaluate(tool, { pattern: "x", path }, session({ mode: "read-only" }));
+        expect(d.verdict, `${tool} 扫 ${path} 被放行`).not.toBe("approve");
+        expect(riskOf(d), `${tool} 扫 ${path} 没抬到 high`).toBe("high");
+      }
+    }
+  });
+
+  it("递归面不误伤：普通目录与工作区根仍放行（这条通道不许把每次 grep 都变成要审批）", () => {
+    expect(evaluate("grep", { pattern: "x", path: "src" }, session({ mode: "auto" })).verdict).toBe("approve");
+    expect(evaluate("grep", { pattern: "x", path: "." }, session({ mode: "auto" })).verdict).toBe("approve");
+    expect(evaluate("glob", { pattern: "**/*", path: "." }, session({ mode: "auto" })).verdict).toBe("approve");
+    // 非递归工具指的是**那个文件**，子树不在它的覆盖面里 ⇒ 不因根而误伤
+    expect(evaluate("read_file", { path: ".git/HEAD" }, session({ mode: "auto" })).verdict).toBe("approve");
+    expect(evaluate("read_file", { path: ".gitignore" }, session({ mode: "auto" })).verdict).toBe("approve");
+    // 名字里带 .git 但**不是**那一段（.gitignore ≠ .git）⇒ 递归面也不误伤
+    expect(evaluate("grep", { pattern: "x", path: "src/.gitignore" }, session({ mode: "auto" })).verdict).toBe("approve");
+  });
 });

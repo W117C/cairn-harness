@@ -2,7 +2,7 @@
 // AgentApi 新增方法而这里不加行 ⇒ typecheck 红（ipc-protocol 删键同理）。
 import type { AgentApi } from "../../../../src/main/ipc-protocol";
 
-export type PushChannel = "onEvent" | "onAsk" | "onAskDone" | "onTerminalData" | "onTerminalExit" | "onBrowserState" | "onPreviewState";
+export type PushChannel = "onEvent" | "onAsk" | "onAskDone" | "onTerminalData" | "onTerminalExit" | "onBrowserState" | "onPreviewState" | "onMenu";
 export type InvokeChannel = Exclude<keyof AgentApi, PushChannel>;
 
 export const PUSH_CHANNELS: { [K in PushChannel]: string } = {
@@ -13,6 +13,7 @@ export const PUSH_CHANNELS: { [K in PushChannel]: string } = {
   onTerminalExit: "agent:terminal-exit",
   onBrowserState: "agent:browser-state",
   onPreviewState: "agent:preview-state",
+  onMenu: "agent:menu-command",
 };
 
 export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
@@ -78,11 +79,14 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   skillBody: "agent:skill-body",
   submitFeedback: "agent:feedback-submit",
   listFeedback: "agent:feedback-list",
+  setMessagePinned: "agent:message-pin-set",
+  listMessagePins: "agent:message-pin-list",
   listProjects: "agent:projects-list",
   addProject: "agent:projects-add",
   removeProject: "agent:projects-remove",
   setSessionPinned: "agent:session-pin",
   setSessionArchived: "agent:session-archive",
+  sessionWorktree: "agent:session-worktree",
   assignSessionProject: "agent:session-assign",
   deleteMemory: "agent:memory-delete",
   pluginDecide: "agent:plugin-decide",

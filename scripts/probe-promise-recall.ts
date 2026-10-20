@@ -513,6 +513,14 @@ export const CLAIM_BINDINGS: readonly ClaimBinding[] = [
       + "把 external-refs.json 截断成半截 JSON ⇒ 返回仍是空态（fail-closed 方向不变）且 onCorrupt 收到一条**带落点路径**的告警；"
       + "同文件另两条各钉一边：「形状畸形（字段不是数组）同样告警」与「文件缺失不告警（首启不是损坏）」。",
   },
+  {
+    face: "src/main/provider-connection.ts#hintFor｜这家服务不提供模型清单接口",
+    symbol: "unsupported",
+    testFile: "tests/provider-connection.test.ts",
+    testCase: "404：unsupported（这家没有模型清单接口），文案允许用户继续用",
+    why: "hintFor 的 unsupported 分支就是这句话；用例让 /models 返回 404，断言 reason=unsupported 且 hint 允许继续用，"
+      + "⇒ 这句文案有执行端观测者，不是只写在提示里。",
+  },
 ];
 
 /** 存量帽（计数类**不留余量**，同 `prose-needle-scan` 那族）。三态各自出声：

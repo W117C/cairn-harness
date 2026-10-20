@@ -1,0 +1,15 @@
+  agent/修复-todo-的-completedcount-worker-12 bd5ec44 第 259 页补 读数修正：三处文字里的旧读数换成现测（工作树 51 条 vs HEAD 侧 31 条要并报；97 个探针；锚点 desc 的帽 10→12、"解析 51/51"→"N/N"）
++ claude/charming-neumann-b4ee71              3a6d63c (/Users/ze/Downloads/deepseek harness/.claude/worktrees/charming-neumann-b4ee71) M4b 收口: docs 四件 + PROGRESS/BLOCKED + AGENTS 计划完成声明
++ claude/elastic-antonelli-ec59c9             3a6d63c (/Users/ze/Downloads/deepseek harness/.claude/worktrees/elastic-antonelli-ec59c9) M4b 收口: docs 四件 + PROGRESS/BLOCKED + AGENTS 计划完成声明
++ claude/laughing-burnell-7239e5              3a6d63c (/Users/ze/Downloads/deepseek harness/.claude/worktrees/laughing-burnell-7239e5) M4b 收口: docs 四件 + PROGRESS/BLOCKED + AGENTS 计划完成声明
++ claude/unruffled-dirac-5cf0e0               3a6d63c (/Users/ze/Downloads/deepseek harness/.claude/worktrees/unruffled-dirac-5cf0e0) M4b 收口: docs 四件 + PROGRESS/BLOCKED + AGENTS 计划完成声明
+  codex/r1b-renderer-subtraction              0bae71c 修 R1b 自造缺陷：启动分支调 showEmptyStream 让 renderer-startup 的 VM 夹具抛未捕获拒绝
++ doc-layer-migration                         da60f0d (/Users/ze/Downloads/deepseek harness/.worktrees/doc-layer) 合入主树至 fc531e5
+  feat/goal-plan-mode                         1d6093d 无人值守 run 不再自动续跑 goal：那条路写不了盘，续跑只会一路烧到轮次上限
+  feat/m10-split-prompt-face                  f7a15ae M10 拆分第一轮 · 两个消费方的 import 直接指新模块（这才是"扇入读数"的那一半）
+  feat/ui-codex-bench                         1243439 文档：能力 35（#14 收完，8 行接线的盘上半边全有针）+ 两个当场踩到的界
+  main                                        3a6d63c M4b 收口: docs 四件 + PROGRESS/BLOCKED + AGENTS 计划完成声明
++ opt/agent-v2                                1de92fa (/Users/ze/Downloads/deepseek harness/.worktrees/opt) P4 补完：把「CPU/内存占用」变成落盘读数（此前只有聊天里报过一次）
++ port/opt2                                   f789dac (/Users/ze/Downloads/deepseek harness/.worktrees/port) P4 补完：把「CPU/内存占用」变成落盘读数（此前只有聊天里报过一次）
++ port2                                       eb140cc (/Users/ze/Downloads/deepseek harness/.worktrees/port2) handoff: port2 合并交接说明（14 笔、0 冲突、验证读数、回滚方式）
+* zcode                                       80ba2ca 凭证：2cd5fae 认证通过（22/22 门绿、超预算 1、干净树 288 文件 3988 条＝3983＋本笔 5 条、两端独占、收尾复核＝同一笔）——D-11 那条预提交红顺手把 #24 坐实：页号被记到第 307 页名下（## 页的证人归属不可信）

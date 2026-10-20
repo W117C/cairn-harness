@@ -1,0 +1,26 @@
+== 阶段 A 删除记录 2026-10-03 13:40:28 ==
+ROOT=/Users/ze/Downloads/deepseek harness
+DEL files=0 /Users/ze/Downloads/deepseek harness/dev/null
+DEL files=0 /Users/ze/Downloads/deepseek harness/tmp
+DEL files=0 /Users/ze/Downloads/deepseek harness/32768
+DEL files=0 /Users/ze/Downloads/deepseek harness/工作区
+DEL files=1 /Users/ze/Downloads/deepseek harness/.vitest
+DEL files=0 /Users/ze/Downloads/deepseek harness/.worktrees/suite-refresh-2026-10-03
+DEL files=1 /Users/ze/Downloads/deepseek harness/.DS_Store
+DEL files=1 /Users/ze/Downloads/deepseek harness/outputs/.DS_Store
+--- .tmp 内容清单（删前）
+total 168
+drwxr-xr-x@ 13 ze  staff    416 Oct  3 03:53 .
+drwxr-xr-x@ 40 ze  staff   1280 Oct  3 13:40 ..
+drwxr-xr-x@  5 ze  staff    160 Sep 28 03:18 bite-check
+-rw-r--r--@  1 ze  staff   3144 Oct  3 03:53 e2e-log.jsonl
+drwxr-xr-x@  8 ze  staff    256 Sep 27 22:42 fixloop
+-rw-r--r--@  1 ze  staff   2596 Sep 27 22:43 fixloop-tty.log
+drwxr-xr-x@ 12 ze  staff    384 Oct  3 02:39 gate-failures
+drwxr-xr-x@  4 ze  staff    128 Sep 27 22:22 gate-ws
+drwxr-xr-x@  5 ze  staff    160 Sep 27 19:40 or-ws
+-rw-r--r--@  1 ze  staff  70875 Sep 27 22:24 real-run.jsonl
+drwxr-xr-x@  4 ze  staff    128 Oct  3 03:53 sandbox-check-ws
+drwxr-xr-x@  4 ze  staff    128 Sep 27 22:29 tty-ws
+-rw-r--r--@  1 ze  staff   3054 Sep 27 22:29 tty.log
+DEL .tmp/*（gitignore 内 gate scratch，3.0M）

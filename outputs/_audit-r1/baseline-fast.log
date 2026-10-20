@@ -1,0 +1,23 @@
+### typecheck
+typecheck: tsc --noEmit 通过（0 条报错）✅
+typecheck exit=0
+### docs-check
+  ℹ️  跳过 D-1 STATE.md 不存在（迁移前属正常）——该文件未受检，不等于通过
+  ℹ️  跳过 D-5 STATE.md 不存在（迁移前属正常）——rev 真伪未检，不等于通过
+  ℹ️  跳过 D-2/D-4 STATE.md 不存在（迁移前属正常）——该页未受检，不等于通过
+  台账 sha 面：抽到 380 条候选｜非提交形而带理由豁免 3 条
+  凭证对账面：可比对 444 个读数（红 0）｜页未点名取料目录 0 个＝未检｜未点名页 0 页（帽 0，只准调低）｜点名但目录读不到 0 个＝取不到｜登记不可回查 8 条｜弱证 0 对（帽 0，只准调低）｜证人无身份行 245 对＝这一格无从判｜已登记不可回查 10 页／20 条
+  证人点名面（整本台账）：239 页点名 344 条 dated 工件（红 0）｜登记 12 条（帽，只准调低）
+  省略式点名面：7 处（帽 7，只准调低；少一处也要出声）
+docs-check: 受检项全绿（另有 3 项未检，见上）
+UNVERIFIED=3
+docs-check exit=0
+### repo-hygiene
+== 仓库体量门（取料占比 + 单文件体量，各带分母）==
+  ❌ 面① 取料占比 — outputs/ 1724 / 已跟踪 2760 = 62.5%（其余 1036）｜帽 60%
+  ✅ 面② 单文件体量 — src 单文件全部 ≤ 2800 行（最大 2783 行 / 174 支）
+[repo-hygiene-check] ❌ 1 面红
+repo-hygiene exit=1
+### desktop-boundary
+desktop-boundary-check: 绿（src 无反向依赖、无 UI import）
+desktop-boundary exit=0

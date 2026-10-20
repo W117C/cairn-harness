@@ -1,0 +1,641 @@
+[
+ {
+  "r": {
+   "id": "B1-bugfix-crossfile",
+   "name": "B1-bugfix-crossfile",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "mimo-v2.6-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 35.223,
+   "requests": 8,
+   "tokensIn": 47794,
+   "tokensOut": 719,
+   "cny": null,
+   "toolCalls": 12,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 2,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/checkout.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 198,
+    "procPeak": 5,
+    "cpuMs": 1731,
+    "samples": 70
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": true,
+    "exitCode": 0,
+    "output": "TAP version 13\n# Subtest: 折扣不是 20% 时同样要按券后金额收运费\nok 1 - 折扣不是 20% 时同样要按券后金额收运费\n  ---\n  duration_ms: 1.411792\n  type: 'test'\n  ...\n# Subtest: 多条商品行：看的是券后总额，不是原始总额\nok 2 - 多条商品行：看的是券后总额，不是原始总额\n  ---\n  duration_ms: 0.931875\n  type: 'test'\n  ...\n# Subtest: 整单清零：券 100% 时仍要付运费\nok 3 - 整单清零：券 100% 时仍要付运费\n  ---\n  duration_ms: 0.505334\n  type: 'test'\n  ...\n# Subtest: 原价恰好差一分不到包邮线\nok 4 - 原价恰好差一分不到包邮线\n  ---\n  duration_ms: 0.229542\n  type: 'test'\n  ...\n# Subtest: 券后正好落在包邮线上：应当免运费\nok 5 - 券后正好落在包邮线上：应当免运费\n  ---\n  duration_ms: 0.112542\n  type: 'test'\n  ...\n# Subtest: 非整除折扣取整后仍是整数分\nok 6 - 非整除折扣取整后仍是整数分\n  ---\n  duration_ms: 0.27\n  type: 'test'\n  ...\n# Subtest: 跨过包邮线的另一档折扣\nok 7 - 跨过包邮线的另一档折扣\n  ---\n  duration_ms: 0.066333\n  type: 'test'\n  ...\n# Subtest: 无券且刚好包邮线原价\nok 8 - 无券且刚好包邮线原价\n  ---\n  duration_ms: 0.045542\n  type: 'test'\n  ...\n1..8\n# tests 8\n# suites 0\n# pass 8\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 69.386583"
+   },
+   "assembly": "autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B2-feature-export",
+   "name": "B2-feature-export",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "mimo-v2.6-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 93.981,
+   "requests": 30,
+   "tokensIn": 226319,
+   "tokensOut": 2093,
+   "cny": null,
+   "toolCalls": 31,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 7,
+   "readsBeforeFirstWrite": 2,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/fit.js"
+   ],
+   "exitError": "agent loop 超过 maxSteps=30，强制中止",
+   "resources": {
+    "rssPeakMb": 125,
+    "procPeak": 6,
+    "cpuMs": 2716,
+    "samples": 188
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": false,
+    "exitCode": 1,
+    "output": "TAP version 13\n# Subtest: 宽度换成 3：每段真的按 wrap 的规则折\nok 1 - 宽度换成 3：每段真的按 wrap 的规则折\n  ---\n  duration_ms: 0.607625\n  type: 'test'\n  ...\n# Subtest: 折行边界：正好装满一行不再塞下一个词\nok 2 - 折行边界：正好装满一行不再塞下一个词\n  ---\n  duration_ms: 0.123375\n  type: 'test'\n  ...\n# Subtest: 零段：空字符串，不许留下分隔符\nok 3 - 零段：空字符串，不许留下分隔符\n  ---\n  duration_ms: 0.046417\n  type: 'test'\n  ...\n# Subtest: 单空段：只有一个空行位，结果为空字符串\nok 4 - 单空段：只有一个空行位，结果为空字符串\n  ---\n  duration_ms: 0.453208\n  type: 'test'\n  ...\n# Subtest: 空段在开头：前面不留分隔空行，段间的空行照给\nnot ok 5 - 空段在开头：前面不留分隔空行，段间的空行照给\n  ---\n  duration_ms: 0.708833\n  type: 'test'\n  location: '/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/loop-eval-rRBDXO/work/tests/fit.held.test.js:28:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    '\\n\\nx' !== '\\nx'\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: |-\n    \n    x\n  actual: |-\n    \n    \n    x\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/loop-eval-rRBDXO/work/tests/fit.held.test.js:30:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: 空段在结尾：保留一个空行 \n…[有界性：中段省略 1714 字]…\nner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n1..7\n# tests 7\n# suites 0\n# pass 4\n# fail 3\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 85.212\n\n[exit code: 1]"
+   },
+   "assembly": "autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "held-out 没过（可见测试绿了但隐藏验收不认 ⇒ 大概率是特殊分支，不是根因）〔exit=1〕",
+    "runLoop 抛错:agent loop 超过 maxSteps=30，强制中止"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B3-refactor-callsite",
+   "name": "B3-refactor-callsite",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "mimo-v2.6-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 21.141,
+   "requests": 5,
+   "tokensIn": 28671,
+   "tokensOut": 767,
+   "cny": null,
+   "toolCalls": 12,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 18,
+   "readsBeforeFirstWrite": 7,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/format.js",
+    "src/legacy.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 172,
+    "procPeak": 6,
+    "cpuMs": 2948,
+    "samples": 42
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B4-bugfix-pagination",
+   "name": "B4-bugfix-pagination",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "mimo-v2.6-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 35.449,
+   "requests": 7,
+   "tokensIn": 40180,
+   "tokensOut": 535,
+   "cny": null,
+   "toolCalls": 12,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 19,
+   "readsBeforeFirstWrite": 7,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/paginate.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 251,
+    "procPeak": 8,
+    "cpuMs": 3236,
+    "samples": 71
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B5-bugfix-async",
+   "name": "B5-bugfix-async",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "mimo-v2.6-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 21.582,
+   "requests": 4,
+   "tokensIn": 23088,
+   "tokensOut": 478,
+   "cny": null,
+   "toolCalls": 9,
+   "toolFailures": 1,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 13,
+   "readsBeforeFirstWrite": 5,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/queue.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 316,
+    "procPeak": 6,
+    "cpuMs": 3438,
+    "samples": 44
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B6-feature-flag",
+   "name": "B6-feature-flag",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "mimo-v2.6-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 21.54,
+   "requests": 4,
+   "tokensIn": 21913,
+   "tokensOut": 265,
+   "cny": null,
+   "toolCalls": 8,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 11,
+   "readsBeforeFirstWrite": 4,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/parse-args.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 193,
+    "procPeak": 5,
+    "cpuMs": 3697,
+    "samples": 43
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B7-feature-csv",
+   "name": "B7-feature-csv",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "mimo-v2.6-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 25.162,
+   "requests": 6,
+   "tokensIn": 35960,
+   "tokensOut": 562,
+   "cny": null,
+   "toolCalls": 12,
+   "toolFailures": 1,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 21,
+   "readsBeforeFirstWrite": 8,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/export.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 185,
+    "procPeak": 3,
+    "cpuMs": 3965,
+    "samples": 50
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B8-feature-memo",
+   "name": "B8-feature-memo",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "mimo-v2.6-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 17.791,
+   "requests": 4,
+   "tokensIn": 21925,
+   "tokensOut": 486,
+   "cny": null,
+   "toolCalls": 7,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 9,
+   "readsBeforeFirstWrite": 3,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/service.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 240,
+    "procPeak": 5,
+    "cpuMs": 4136,
+    "samples": 36
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B9-refactor-rename",
+   "name": "B9-refactor-rename",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "mimo-v2.6-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 18.831,
+   "requests": 6,
+   "tokensIn": 35204,
+   "tokensOut": 645,
+   "cny": null,
+   "toolCalls": 14,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 13,
+   "readsBeforeFirstWrite": 5,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/admin.js",
+    "src/api.js",
+    "src/cart.js",
+    "src/orders.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 201,
+    "procPeak": 6,
+    "cpuMs": 4364,
+    "samples": 38
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B10-refactor-dedupe",
+   "name": "B10-refactor-dedupe",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "mimo-v2.6-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 28.627,
+   "requests": 7,
+   "tokensIn": 42034,
+   "tokensOut": 1112,
+   "cny": null,
+   "toolCalls": 12,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 11,
+   "readsBeforeFirstWrite": 4,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "wroteTests": true,
+   "touchedJudge": true,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    "src/order.js",
+    "src/user.js",
+    "tests/email.test.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 185,
+    "procPeak": 5,
+    "cpuMs": 4719,
+    "samples": 57
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "改了判卷面"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B11-refactor-signature",
+   "name": "B11-refactor-signature",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "mimo-v2.6-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 43.216,
+   "requests": 8,
+   "tokensIn": 47594,
+   "tokensOut": 788,
+   "cny": null,
+   "toolCalls": 13,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 13,
+   "readsBeforeFirstWrite": 5,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/audit.js",
+    "src/orders.js",
+    "src/store.js",
+    "src/users.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 165,
+    "procPeak": 5,
+    "cpuMs": 5159,
+    "samples": 86
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B12-long-horizon",
+   "name": "B12-long-horizon",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "mimo-v2.6-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 106.572,
+   "requests": 30,
+   "tokensIn": 216228,
+   "tokensOut": 2385,
+   "cny": null,
+   "toolCalls": 35,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 67,
+   "readsBeforeFirstWrite": 22,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/m01-clamp.js",
+    "src/m02-sum.js",
+    "src/m03-unique.js",
+    "src/m04-chunk.js",
+    "src/m05-titleCase.js",
+    "src/m06-parseIntSafe.js",
+    "src/m07-mean.js",
+    "src/m08-zip.js",
+    "src/m09-flatten.js",
+    "src/m10-groupBy.js"
+   ],
+   "exitError": "agent loop 超过 maxSteps=30，强制中止",
+   "resources": {
+    "rssPeakMb": 114,
+    "procPeak": 5,
+    "cpuMs": 6143,
+    "samples": 211
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:agent loop 超过 maxSteps=30，强制中止"
+   ]
+  }
+ }
+]

@@ -68,9 +68,31 @@ export function detectStuck(turns: readonly StuckTurn[], config: StuckConfig = D
   return { stuck: false };
 }
 
-/** 动作摘要（tool_call → 稳定可比的 action 串；参数截断防长参数抖动）。 */
+/** 循环引用安全的 JSON 摘要（**不许抛**：参数里有环时 JSON.stringify 直接抛 TypeError）。
+ *  环处换成显式占位（与脱敏面同一口径："[循环引用]"），既不炸也不静默丢字段。 */
+function safeJsonSummary(value: unknown, seen: WeakSet<object> = new WeakSet()): string {
+  try {
+    return JSON.stringify(value, (_key, v: unknown) => {
+      if (typeof v === "object" && v !== null) {
+        if (seen.has(v)) return "[循环引用]";
+        seen.add(v);
+      }
+      return v;
+    }) ?? "";
+  } catch {
+    // 兜底：带 getter 的对象、Proxy 陷阱等 stringify 也可能抛——摘要面不许因此炸掉整轮。
+    return "[无法序列化]";
+  }
+}
+
+/** 动作摘要（tool_call → 稳定可比的 action 串；参数截断防长参数抖动）。
+ *
+ *  **不许抛**（2026-10-19）：这一格曾被关在 `stuckNudge` 开关里，只有主会话那条路会调到它；
+ *  开关打开后它**恒**被调（历史是判据的输入，与提示无关）⇒ 参数里带环的工具调用
+ *  （诊断/影响面那种带 parent 指针的图）会让 `JSON.stringify` 抛 TypeError ⇒ 整轮任务死在
+ *  这一次调用上。脱敏面早就处理过环（`redactValue` 的 WeakSet），这里跟同一口径。 */
 export function stuckActionOf(name: string, args: Record<string, unknown>): string {
-  return name + " " + JSON.stringify(args).slice(0, 200);
+  return name + " " + safeJsonSummary(args).slice(0, 200);
 }
 
 /** 观察摘要（tool_result → 稳定可比的 observation 串；截断防长输出抖动）。 */

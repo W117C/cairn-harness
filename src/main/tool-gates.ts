@@ -35,7 +35,7 @@ import {
 import { alwaysRulesPath, globalPermissionsPath, savePermissionRules, splitCommandChain } from "../permissions/rules";
 import type { GlmToolSpec } from "../providers/glm";
 import { TOOLS, type Tool, type ToolResult } from "../tools";
-import type { ToolName } from "../tools/base";
+import type { ToolContext, ToolName } from "../tools/base";
 import type { AskGate } from "./ask-gate";
 import { annotateNetworkDenial, buildSandboxProfile, networkProfileFor, runInSandbox, type SandboxStatus } from "./sandbox";
 import { MODEL_SHELL_TEST_ALIASES, mapSandboxTestCommandForWorkspace } from "./sandbox-test-command";
@@ -120,10 +120,28 @@ export function withSkillAllowNote(tool: string, reason: string): string {
 
 /** `web_fetch` 在这个字面量联合里而不在 `TOOL_NAMES` 里：静态注册表（M2 起 10 工具，
  *  `tools-check.ts` 判据）不含它，M2a 起的运行时注入先例不碰它。`name as ToolName` 与
- *  `staticRisk` 里 `(tool as string) === "web_fetch"` 是同一处类型缝的两面。 */
-type GatedName = "write_file" | "edit_file" | "apply_patch" | "run_shell" | "web_fetch" | "web_search" | "diagnose" | "lsp" | "render_image";
+ *  `staticRisk` 里 `(tool as string) === "web_fetch"` 是同一处类型缝的两面。
+ *
+ *  读侧三把（`read_file`/`grep`/`glob`）在 2026-10-20 接进来（此前主会话没包它们 ⇒
+ *  路径通道的判据在主会话这条路上一次也没跑过）。它们在 `TOOL_NAMES` 里 ⇒ 直接列名即可。 */
+type GatedName = "write_file" | "edit_file" | "apply_patch" | "run_shell" | "web_fetch" | "web_search" | "diagnose" | "lsp" | "render_image" | "read_file" | "grep" | "glob";
 
-export function gatedTool(name: GatedName, original: Tool, beforeExecute?: () => Promise<ToolResult | null>): Tool {
+/** 审批卡上要**多显示**的字段（纯展示面；不改执行语义，也不改模型给的 args）。
+ *
+ *  为什么要它（2026-10-19 独立评审追出）：`web_search` 的**目的地不在模型给的 args 里**——
+ *  端点来自工作区的 `.agent/config.json`，模型只递了 `{query}` ⇒ 审批卡上只有 `{"query":"…"}`，
+ *  人不知道这次要把查询发到哪去 ⇒ 那次批准是**不知情**的。而这一格正好是出网面：
+ *  一个克隆来的仓只要带一份 `.agent/config.json`（`search.endpoint` + `allowLocalEndpoint:true`），
+ *  端点就能指向回环/内网/云元数据地址，而卡上**看不出这件事**。
+ *  ⇒ 端点必须上卡，批准才是知情的。 */
+export type CardExtra = (args: Record<string, unknown>, ctx: ToolContext) => Record<string, unknown>;
+
+export function gatedTool(
+  name: GatedName,
+  original: Tool,
+  beforeExecute?: () => Promise<ToolResult | null>,
+  cardExtra?: CardExtra,
+): Tool {
   return {
     name,
     async run(args, ctx) {
@@ -133,14 +151,23 @@ export function gatedTool(name: GatedName, original: Tool, beforeExecute?: () =>
       // worker 与主会话读同一份——上一版只在这三处主会话路径刷新镜像，worker 那条路从不刷 ⇒ 先批后写可绕。
       // M1e 设置页「产出代码安全模式」最小语义（§11.6）：gate = 写向工具在管线之前强制审批
       //（setSettings 转发 M1E_SAFE_MODE；src/permissions 冻结，最小接线在本模块）
-      if (process.env.M1E_SAFE_MODE === "gate") {
+      //
+      // ⚠️ 范围必须是**写向**（2026-10-20 独立评审追出）：旧实现对**每个**进门工具都强制审批，
+      // 而这条分支的语义与卡面文案都写着「写工具」。读侧三把（read_file/grep/glob）接进门之后，
+      // 旧形状会让安全模式**每读一个文件都弹一张卡**——这不是更安全，是把设置变成噪声，
+      // 人会开始闭眼点「允许」⇒ 反而更危险。判据用 `isWriteCall`（与 `gatedMcpTool` 同一口径：
+      // 那条早就写了 `isWriteCall(name, info.grade)`，只有这条漏了）。
+      // 不受影响的三把（lsp/render_image/web_fetch）：它们不是写向，但风险等级是 **high**
+      // （`src/permissions/risk.ts`）⇒ 正常管线那层（L4-risk）在四档里照样出卡，
+      // 安全模式这道**本来就是冗余的**（去掉它不改变任何一档的实际行为）。
+      if (process.env.M1E_SAFE_MODE === "gate" && isWriteCall(name as ToolName)) {
         // 安全模式 gate 是**档位层**自己加的强制审批（发生在 evaluate 之前，所以没有 `d` 可交给
         // gateBase）；留痕直接构造，layer 用 L3-mode——它就是"档位规定要问人"的那一层。
         const modeGate = (verdict: GateVerdict): GateMeta => ({ layer: "L3-mode", mode: s.autonomy.mode, verdict });
         if (!s.askGate) return denied(name, s.autonomy.mode, "安全模式 gate 非交互（fail-closed）", modeGate("unattended"));
         const gateR = await s.askGate.request(name, args, { reason: "安全模式 gate：写工具强制审批", risk: "none", signal: ctx.signal });
         // 与下面那条审批分支同一个出口：三种结局（拒绝/超时/无人值守）各自说清，并**带上 verdict**。
-        // 少了 verdict，`lessons.ts` 的 isAskDeniedResult 判不出"工具没执行"，这次超时就会被
+        // 少了 verdict，`lessons.ts` 的 neverExecutedResult 判不出"工具没执行"，这次超时就会被
         // 记成"执行了但失败"⇒ 得出「这个工具用不了」的错误结论——与 askDenialText 修的是同一族。
         if (gateR.outcome !== "approved") {
           return deniedByAsk(name, s.autonomy.mode, gateR.reason,
@@ -159,7 +186,14 @@ export function gatedTool(name: GatedName, original: Tool, beforeExecute?: () =>
       let humanApproved = false;
       if (d.verdict === "ask") {
         if (!s.askGate) return denied(name, aMode, "非交互模式（fail-closed）：" + d.reason, { ...gateBase(d, aMode), verdict: "unattended" });
-        const r = await s.askGate.request(name, args, {
+        // 卡上多显示的字段（见 CardExtra 的注释）：只进**审批卡**，不进执行面，
+        // 也不改模型给的 args（那一份是落盘的凭据，不能被展示面污染）。
+        const extra = cardExtra !== undefined ? cardExtra(args, ctx) : {};
+        const cardArgs = Object.keys(extra).length > 0 ? { ...args, ...extra } : args;
+        // 连拦降级（§2.2 双向断路器）：**先算后问**——提示要说的是"此前已连续被拒 N 次"，
+        // 挂在下一张卡上才赶得上做决定。不静默、不自动改档：只提示 + 给一键降档按钮。
+        const breakerTip = downgradeSuggestion(s.autonomy);
+        const r = await s.askGate.request(name, cardArgs, {
           // 网络命令的批准现在真的放行出网（此前批了也没用——OS 层从没写过 network 规则），
           // 所以把这层后果写进卡片理由：批准必须是知情的。
           reason: withSkillAllowNote(name, d.reason) + (wantsNetwork ? "｜批准 = 本次命令放行网络出网（一次性，不记忆）" : ""),
@@ -170,6 +204,7 @@ export function gatedTool(name: GatedName, original: Tool, beforeExecute?: () =>
           // 取消即按拒绝收束（pending 同步出表，notifyOutcome 记 user）。gatedTool 与
           // gatedMcpTool 两处同形，一并接线。
           signal: ctx.signal,
+          ...(breakerTip !== null ? { tierWarning: breakerTip } : {}),
         });
         if (r.outcome !== "approved") {
           if (d.risk === "critical") {
@@ -281,6 +316,7 @@ function gatedMcpTool(name: string, rt: PluginRuntime): Tool {
       let manualScope: AskScope | undefined;
       if (d.verdict === "ask") {
         if (!s.askGate) return denied(name, aMode, "非交互模式（fail-closed）：" + d.reason, { ...gateBase(d, aMode), verdict: "unattended" });
+        const breakerTip = downgradeSuggestion(s.autonomy);
         const r = await s.askGate.request(name, args, {
           reason: withSkillAllowNote(name, d.reason),
           risk: d.risk,
@@ -290,9 +326,16 @@ function gatedMcpTool(name: string, rt: PluginRuntime): Tool {
           // 取消即按拒绝收束（pending 同步出表，notifyOutcome 记 user）。gatedTool 与
           // gatedMcpTool 两处同形，一并接线。
           signal: ctx.signal,
+          ...(breakerTip !== null ? { tierWarning: breakerTip } : {}),
         });
-        if (r.outcome !== "approved") return deniedByAsk(name, aMode, r.reason,
-          { ...gateBase(d, aMode), verdict: r.reason === "unattended" ? "unattended" : r.reason === "timeout" ? "timeout" : "rejected" });
+        if (r.outcome !== "approved") {
+          // 连拦计数不认出口（2026-10-20）：计数此前只长在 gatedTool 那一侧，同一个会话里
+          // 从 MCP 面拒掉的 critical 一次都不算 ⇒ "连续被拒 3 次"在这条路上永远到不了阈值，
+          // 提示与一键降档成了半截功能。两个出口同源，才谈得上"连续"。
+          if (d.risk === "critical") noteCriticalDenial(s.autonomy);
+          return deniedByAsk(name, aMode, r.reason,
+            { ...gateBase(d, aMode), verdict: r.reason === "unattended" ? "unattended" : r.reason === "timeout" ? "timeout" : "rejected" });
+        }
         manualScope = r.scope;
         noteManualDecision(s.autonomy);
       } else if (d.auto?.source === "session_scope") {
@@ -339,6 +382,22 @@ export function installPluginTools(rt: PluginRuntime): string[] {
     injected.push(scoped);
   }
   return injected;
+}
+
+/** 执行面补表：run 起点之后才出现的插件工具（典型：会话跑到一半，用户在面板上批准了插件）。
+ *
+ *  为什么需要它：模型面是逐请求重算的（provider 的 requestFace → sessionToolFace →
+ *  pluginToolSpecsFromRuntime 读的是 `rt.mcpTools` 的**活引用**），而 `installPluginTools`
+ *  写进全局 `TOOLS` 的执行表是**起点快照**。批准一落地，`rt.mcpTools` 立刻多出几个 scoped 名、
+ *  模型下一轮就看见它们；可执行面那张表还是旧的 ⇒ 模型调它只会拿到 `unknown tool`。
+ *  这正是「模型看到的工具 ≠ 能执行的工具」——本仓把这类分家当根因反复判死，这里补上同源一手。
+ *
+ *  同源：复用 `gatedMcpTool` 这一个构造（权限管线、安全模式闸、审计留痕全都走它），
+ *  不另写一条执行路径。只补 `rt.mcpTools` 里**已经有**的名字：表里没有的仍由 loop 落
+ *  `unknown tool`（fail-closed 方向不变，不会因为补表就放行一个没注册的工具）。 */
+export function resolveLivePluginTool(name: string, rt: PluginRuntime): Tool | undefined {
+  if (!rt.mcpTools.has(name)) return undefined;
+  return gatedMcpTool(name, rt);
 }
 
 /** 运行时注入工具的**模型可见规格**（与 installPluginTools 的可执行面一一对应）：

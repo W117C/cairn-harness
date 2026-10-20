@@ -19,7 +19,7 @@
 //  - deprecate 不许落在当前 active 版本上——先回滚再废弃，不留「已废弃却还在位」的模糊态；
 //  - prune（清退）只许落在已废弃、且不在 active/previous 位、未清退过的版本上——
 //    回滚目标被清退 = 指针将指向盘上没有的文件，这条在账本层就闸死。
-import { appendFile, mkdir, readFile, stat } from "node:fs/promises";
+import { appendFile, mkdir, open, readFile, stat, truncate } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { writeFileAtomic } from "../../atomic-write";
 import {
@@ -421,10 +421,31 @@ export class ModuleRegistry {
       throw err;
     }
     const lines = text.split("\n");
+    // **尾部半写行**（进程被硬杀在单次 append 中途）：文件不以换行结尾、且最后一行解析失败
+    // ⇒ 这一行**从未成行**（读者本来也看不见它）。旧实现让它当场抛 ⇒ **注册表永久打不开**
+    // （每次重建都撞同一行），而 canary 的回滚正是走这条 ⇒ 退化的版本就一直装着退不下来。
+    // 修法（同 src/events/log.ts 的 repairPartialTail 口径）：裁掉未成行的字节、响亮告警，
+    // 并把 journal **截回最后一条完整行**（不截的话下一次重建又撞同一行）。
+    // **中段的坏行不走这一支**：那是另一类事故（数据丢失），必须当场抛，不许被安静地抹掉。
+    const tornTail = !text.endsWith("\n") && lines.length > 0 && lines[lines.length - 1]!.trim() !== "";
     for (const [i, line] of lines.entries()) {
       const trimmed = line.trim();
       if (trimmed === "") continue;
-      const ev = this.parseEventLine(trimmed, i + 1);
+      let ev: RegistryEvent;
+      try {
+        ev = this.parseEventLine(trimmed, i + 1);
+      } catch (err) {
+        if (!tornTail || i !== lines.length - 1) throw err;
+        const cut = Buffer.byteLength(text.slice(0, text.lastIndexOf("\n") + 1), "utf8");
+        await truncate(this.logPath, cut);
+        console.warn(
+          "[evolution] registry.jsonl 尾部半写行（上次写入未完成，多半是被硬杀在写中途）："
+            + "已丢弃未成行的字节并截回最后一条完整行：",
+          err instanceof Error ? err.message : String(err),
+        );
+        index.logSize = cut;
+        return await this.persistIndex(index);
+      }
       foldEvent(index, ev);
     }
     index.logSize = Buffer.byteLength(text, "utf8");
@@ -466,6 +487,26 @@ export class ModuleRegistry {
 
   private async commit(ev: RegistryEvent, index: RegistryIndex): Promise<void> {
     await mkdir(dirname(this.logPath), { recursive: true });
+    // 追加前先把**没以换行收尾**的旧尾行隔开：那次 append 若是半写（进程被硬杀在写中途），
+    // 尾段没成行；下一次 append 会直接拼在它后面 ⇒ **半行 + 完整行 = 一条坏行**，
+    // 而这条坏行在**中段**（后面还有好行）⇒ 重建会当场抛 ⇒ 注册表永久打不开。
+    // 这里补一个换行把它隔开（与 src/events/log.ts 的同一口径）。
+    const st = await stat(this.logPath).catch(() => null);
+    if (st !== null && st.size > 0) {
+      const fh = await open(this.logPath, "r");
+      let needsNewline = false;
+      try {
+        const last = Buffer.alloc(1);
+        await fh.read(last, 0, 1, st.size - 1);
+        needsNewline = last[0] !== 0x0a;
+      } finally {
+        await fh.close().catch(() => undefined);
+      }
+      if (needsNewline) {
+        await appendFile(this.logPath, "\n", "utf8");
+        console.warn("[evolution] registry.jsonl 尾行没以换行收尾：已补换行隔离（否则下一次追加会把它拼成坏行）");
+      }
+    }
     await appendFile(this.logPath, JSON.stringify(ev) + "\n", "utf8");
     index.logSize = (await stat(this.logPath)).size;
     await this.persistIndex(index);

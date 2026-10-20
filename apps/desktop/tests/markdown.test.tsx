@@ -236,9 +236,9 @@ describe("阶段 2 样式钉（styles.css：行内码 / 加粗 / 列表距 / 小
     expect(css).toMatch(/\.md-icode\s*{[^}]*padding:\s*1px 6px/s);
     expect(css).toMatch(/\.md-icode\s*{[^}]*font-size:\s*0\.9em/s);
   });
-  it("加粗 = primary 色 + 600（不变大）", () => {
+  it("加粗 = primary 色 + --fw-bold（600，不变大）", () => {
     expect(css).toMatch(/\.md-body strong\s*{[^}]*color:\s*hsl\(var\(--text-000\)\)/s);
-    expect(css).toMatch(/\.md-body strong\s*{[^}]*font-weight:\s*600/s);
+    expect(css).toMatch(/\.md-body strong\s*{[^}]*font-weight:\s*var\(--fw-bold\)/s);
   });
   it("列表项间距 6px", () => {
     expect(css).toMatch(/\.md-ul li,\s*\.md-ol li\s*{[^}]*margin:\s*6px 0/s);

@@ -27,7 +27,16 @@ function toolIcon(tool: string) {
   return undefined;
 }
 
-export function ApprovalCard(props: { ask: AskPayload; onDecide: (approved: boolean, scope?: "once" | "session_kind" | "always") => void }) {
+// 连拦降级（§2.2 双向断路器 · 2026-10-20）：核心早就在数「连续被拒 N 次」（autonomy.ts 的
+// CRITICAL_DENIAL_LIMIT / downgradeSuggestion），但那一句只进 console.warn —— 界面上一次也没出现过，
+// 等于断路器只断给日志看。这里把它摆到卡面上：明说是哪一档在连拦、建议降到哪一档，
+// 且**只给按钮、不自动改档**（改档是用户的动作，静默改档比不提示更糟）。
+export function ApprovalCard(props: {
+  ask: AskPayload;
+  onDecide: (approved: boolean, scope?: "once" | "session_kind" | "always") => void;
+  /** 一键降档（缺省 = 只提示不给按钮；不摆按不动的按钮）。 */
+  onDowngrade?: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [alwaysArmed, setAlwaysArmed] = useState(false);
   // 二次确认 2.5s 回退（持久提权值得一次确认）。
@@ -78,6 +87,14 @@ export function ApprovalCard(props: { ask: AskPayload; onDecide: (approved: bool
             </div>
           )}
         </>
+      )}
+      {a.tierWarning !== undefined && (
+        <div className="note-tier" role="status">
+          <span>{a.tierWarning}</span>
+          {props.onDowngrade !== undefined && (
+            <button className="btn ghost" onClick={() => { props.onDowngrade?.(); }}>降档回默认档</button>
+          )}
+        </div>
       )}
       <div className="card-actions">
         <button className="btn primary" onClick={() => props.onDecide(true)}>允许 · 本次</button>

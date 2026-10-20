@@ -1,0 +1,68 @@
+worktree /Users/ze/Downloads/deepseek harness
+HEAD 80ba2ca7a8eeb57d46e7936ebd071c229bdc017b
+branch refs/heads/zcode
+
+worktree /Users/ze/Downloads/deepseek harness/.claude/worktrees/charming-neumann-b4ee71
+HEAD 3a6d63c1db6829e1aa1bc629b1d7d9e5340b695b
+branch refs/heads/claude/charming-neumann-b4ee71
+
+worktree /Users/ze/Downloads/deepseek harness/.claude/worktrees/elastic-antonelli-ec59c9
+HEAD 3a6d63c1db6829e1aa1bc629b1d7d9e5340b695b
+branch refs/heads/claude/elastic-antonelli-ec59c9
+
+worktree /Users/ze/Downloads/deepseek harness/.claude/worktrees/laughing-burnell-7239e5
+HEAD 3a6d63c1db6829e1aa1bc629b1d7d9e5340b695b
+branch refs/heads/claude/laughing-burnell-7239e5
+
+worktree /Users/ze/Downloads/deepseek harness/.claude/worktrees/unruffled-dirac-5cf0e0
+HEAD 3a6d63c1db6829e1aa1bc629b1d7d9e5340b695b
+branch refs/heads/claude/unruffled-dirac-5cf0e0
+
+worktree /Users/ze/Downloads/deepseek harness/.worktrees/doc-layer
+HEAD da60f0ddb006754a9bfb3544177e620514443ded
+branch refs/heads/doc-layer-migration
+
+worktree /Users/ze/Downloads/deepseek harness/.worktrees/gate-head-cert
+HEAD b4b4db363109d392924b68d83349b1c98a056c54
+detached
+
+worktree /Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-import
+HEAD b4b4db363109d392924b68d83349b1c98a056c54
+detached
+
+worktree /Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-verify
+HEAD 204f0178a126695ab5574d15a08eb2bc4b33e3f7
+detached
+
+worktree /Users/ze/Downloads/deepseek harness/.worktrees/locate-weights
+HEAD 36a9ec6e2beb9c10f6b2faaafd8eeb2dff3bd538
+detached
+
+worktree /Users/ze/Downloads/deepseek harness/.worktrees/opt
+HEAD 1de92fab9c6c67b2c2d8394db2c3681338142e56
+branch refs/heads/opt/agent-v2
+
+worktree /Users/ze/Downloads/deepseek harness/.worktrees/port
+HEAD f789dac08caf9e105ec3cc53ddb810ed72d7df15
+branch refs/heads/port/opt2
+
+worktree /Users/ze/Downloads/deepseek harness/.worktrees/port2
+HEAD eb140cca0cdd3b5e2d21bd65dd27a011e0f4cdf2
+branch refs/heads/port2
+
+worktree /Users/ze/Downloads/deepseek harness/.worktrees/suite-refresh-318
+HEAD e8a8ed50f6ced5fec525a733a3c1eb78ad33e51d
+detached
+
+worktree /Users/ze/Downloads/deepseek harness/gate-mutate-318
+HEAD e8a8ed50f6ced5fec525a733a3c1eb78ad33e51d
+detached
+
+worktree /Users/ze/Downloads/deepseek harness/gate-mutate-319
+HEAD 07641c0b8f95a7a57196dee86a633f62a2353e7d
+detached
+
+worktree /Users/ze/Downloads/deepseek harness/gate-mutate-320
+HEAD 2cd5faee4be1c2ecd08ef58ff3f370a66e03f7a0
+detached
+

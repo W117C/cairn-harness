@@ -4,6 +4,7 @@
 import { mkdir, open, readFile, stat, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { KNOWN_TYPES, type AgentEvent, type AssistantDeltaEvent } from "./types";
+import { redactEventForLog } from "./redact";
 
 // ---- A1（P0-A）：事件落盘常驻文件句柄 ----
 // 旧实现 appendFile 每事件 open+write+close（实测 1,930 µs/事件）；createEventLog().append 被
@@ -171,7 +172,12 @@ export function createEventLog(path: string): EventLog {
       // 而单测面用 stripTs 各自绕过了它——同一件事在五个测试文件里各抄一份归一化，就是这种漏口的形状）。
       const holder = event as { ts?: number };
       if (holder.ts === undefined) holder.ts = Date.now();
-      await cur.write(JSON.stringify(event) + "\n");
+      // **落盘面自己擦**（2026-10-19 重构）：脱敏是持久化边界的职责，不是 loop 的。
+      // 旧形状把脱敏藏在 loop 的 `events.append` 里 ⇒ ① 任何不经过 loop 的新出口都可能把明文
+      // 写进盘；② 安全扫描面失明（扫描读的是已脱敏的事件，密钥模式一条都不命中）。
+      // 现在：内存流是**原件**（扫描面要真内容），**写进盘的那一份**是脱敏副本。
+      // 盖戳仍在**原件**上（上面那行）⇒ live 与盘同式那条老不变量不破。
+      await cur.write(JSON.stringify(redactEventForLog(event)) + "\n");
     },
     async close() {
       // 关闭本实例对应 path 的缓存句柄（仅当缓存中仍是本实例解析的那个）。不在 append 后自动关闭。

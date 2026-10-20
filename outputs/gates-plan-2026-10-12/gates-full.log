@@ -1,0 +1,7 @@
+$ node --import tsx scripts/gates.ts --no-scan
+== pnpm gates ==
+门清单（34 道，清单即事实源）：typecheck test e2e sandbox:check fork-check gate-check docs-check autonomy-check compaction-check tools-check map-check prune-check provider:check memory-check plugins-check security-check gym-check routing-check supervisor-check model-surface-check prefix-churn-check prompt-surface-check replay-determinism-check no-progress-check cost-per-progress-check head-import-check web-fetch-check repo-hygiene-check head-cert-check mutate-verify mutate-needles-check evidence-typecheck-check desktop-boundary-check desktop-test
+执行器：pnpm run
+  清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）
+
+  ▶ typecheck …

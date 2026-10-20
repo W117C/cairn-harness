@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { rename, rm, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { createEventLog, forkSession, replay, type AgentEvent } from "../events";
+import { scanStreamEvent } from "../agent/worker-projection";
 import { forkPointOf, forkSessionName } from "../agent/fork-cli";
 import { applyTurnRevert, planTurnRevert, type FileRevertResult } from "../agent/file-revert";
 import { getLastWorkspace } from "./runner-workspace";
@@ -26,6 +27,7 @@ import {
 import { ProjectRegistry, type AddProjectInput, type ProjectRecord } from "./project-registry";
 import { SessionMetadataRepository, type SessionMetadataRecord } from "./session-metadata";
 import { FeedbackStore, type FeedbackRating, type ResolvedFeedback } from "./feedback";
+import { PinStore } from "./pins";
 import { store } from "./settings-handlers";
 
 // ---- M1e：会话列表 IPC（会话目录由 index.ts 初始化；headless 脚本未初始化 → 未配置错误） ----
@@ -33,12 +35,15 @@ let sessionsDir: string | null = null;
 let projects: ProjectRegistry | null = null;
 let metadata: SessionMetadataRepository | null = null;
 let feedback: FeedbackStore | null = null;
+let pins: PinStore | null = null;
 
 export interface SessionRepositoryPaths {
   projectRegistryPath?: string;
   sessionMetadataPath?: string;
   /** 用户反馈 sidecar（赞/踩）；缺省 `<sessions>/feedback.jsonl`。 */
   feedbackPath?: string;
+  /** 消息置顶 sidecar；缺省 `<sessions>/pins.jsonl`。 */
+  pinsPath?: string;
 }
 
 /** shell 启动时初始化会话目录与 CX-01 组织仓库。生产路径由 userData 显式传入。 */
@@ -47,11 +52,41 @@ export function initSessionsDir(dir: string, paths: SessionRepositoryPaths = {})
   projects = new ProjectRegistry(paths.projectRegistryPath ?? join(dir, "projects.json"));
   metadata = new SessionMetadataRepository(paths.sessionMetadataPath ?? join(dir, "session-metadata.json"));
   feedback = new FeedbackStore(paths.feedbackPath ?? join(dir, "feedback.jsonl"));
+  pins = new PinStore(paths.pinsPath ?? join(dir, "pins.jsonl"));
 }
 
 /** 只读访问会话目录（未初始化 = null）：调度器的 emitTimeline 需要「有目录才落盘」的判定。 */
 export function getSessionsDir(): string | null {
   return sessionsDir;
+}
+
+/** 会话归属根解析（多根面）：**这条会话的日志住在哪个根**。
+ *
+ *  单例形态（headless/CLI）：只有装配根 ⇒ 缺省就是 `requireSessionsDir()`。
+ *  多根形态（桌面端注册了项目文件夹 ⇒ 会话散在多个工作区下）：由宿主注入解析器，
+ *  它知道每个会话属于哪个工作区（桌面端那份归属表就是 `resolveSessionWs`）。
+ *
+ *  **为什么要有这一层**（2026-10-20 独立评审追出）：会话的「存在性检查」与
+ *  「事件落哪个日志」必须问**同一个**问题。两处各问一次（一次问单例根、一次问别处）
+ *  就会同时出两种自相矛盾的结果：
+ *   ① 存在性检查问单例根 ⇒ 项目工作区里的会话被判成「会话不存在」⇒
+ *      置顶/赞踩/归档/改名/删除**全部**对项目会话失效（用户加一个项目文件夹就全废）；
+ *   ② 事件落盘问单例根 ⇒ 还原文件那一笔落进**默认工作区**的日志里
+ *      ⇒ 侧栏多出一个只含这一行的幽灵会话，而真会话里**没有**这次还原
+ *      ⇒ 还原不持久（重开会话又变回"已改"）。
+ *  这两处是同一个 bug 的两个出口 ⇒ 收成**一个**解析器。 */
+export type SessionRootResolver = (sessionId: string) => Promise<string | null>;
+let sessionRootResolver: SessionRootResolver | null = null;
+
+/** 注册会话归属解析器（宿主注入；传 null = 回到单例形态）。 */
+export function setSessionRootResolver(fn: SessionRootResolver | null): void {
+  sessionRootResolver = fn;
+}
+
+/** 这条会话的日志根。解析器说"不知道" ⇒ null（**不回落单例根**：回落就是往别人的日志里写）。 */
+export async function resolveSessionRoot(sessionId: string): Promise<string | null> {
+  if (sessionRootResolver === null) return requireSessionsDir();
+  return await sessionRootResolver(sessionId);
 }
 
 export function requireSessionsDir(): string {
@@ -72,6 +107,12 @@ export function requireSessionMetadata(): SessionMetadataRepository {
 export function requireFeedbackStore(): FeedbackStore {
   if (!feedback) throw new Error("反馈仓库未初始化（shell 未启动？）");
   return feedback;
+}
+
+/** 只读访问置顶 sidecar（未初始化 = 未配置错误，与 feedback 同一形制）。 */
+export function requirePinStore(): PinStore {
+  if (pins === null) throw new Error("置顶仓库未初始化（shell 未启动？）");
+  return pins;
 }
 
 export async function handleSessionList(): Promise<SessionInfo[]> {
@@ -133,7 +174,10 @@ export async function applyCrashRecovery(logPath: string, emit?: (e: AgentEvent)
 }
 
 export async function handleSessionRename(oldId: string, newName: string): Promise<{ id: string }> {
-  const dir = requireSessionsDir();
+  // 归属根来自解析器（多根面）：项目工作区里的会话不在单例根下，
+  // 用单例根去改名 = 改不到（或改到同 id 的另一条）——桌面端「改名」对项目会话整条失效。
+  const dir = await resolveSessionRoot(oldId);
+  if (dir === null) throw new Error(`会话不存在: ${oldId}`);
   const id = await renameSession(dir, oldId, newName, requireSessionMetadata());
   const cur = await store().get();
   if (cur.currentSession === oldId) await store().set({ currentSession: id });
@@ -142,7 +186,8 @@ export async function handleSessionRename(oldId: string, newName: string): Promi
 
 /** 删除会话：若删的是当前会话 → 回退到最近一个（列表 mtime 降序首个）；无会话 → null。 */
 export async function handleSessionDelete(id: string): Promise<{ currentSession: string | null }> {
-  const dir = requireSessionsDir();
+  const dir = await resolveSessionRoot(id);
+  if (dir === null) throw new Error(`会话不存在: ${id}`);
   const logPath = pathOf(dir, id);
   await deleteSession(dir, id, requireSessionMetadata());
   // 删除会话要连私有观测数据 / 反馈 / 裁剪附件一起清：它们都以会话 id 为锚，留着会让同 id
@@ -153,6 +198,10 @@ export async function handleSessionDelete(id: string): Promise<{ currentSession:
   });
   await requireFeedbackStore().removeSession(id).catch((err: unknown) => {
     console.warn("[session-delete] 反馈清理失败:", err instanceof Error ? err.message : String(err));
+  });
+  // 置顶记录同样以会话 id 为锚：留着会让同 id 新会话继承旧 eventId 的高亮（指向不存在的转录）。
+  await requirePinStore().removeSession(id).catch((err: unknown) => {
+    console.warn("[session-delete] 置顶清理失败:", err instanceof Error ? err.message : String(err));
   });
   try {
     const pruneDir = join(dir, "prune-attachments");
@@ -299,6 +348,28 @@ export async function handleFeedbackList(sessionId: string): Promise<ResolvedFee
   return await requireFeedbackStore().listForSession(sessionId);
 }
 
+// ---- 消息置顶（2026-10-20 · 销 G6）：操作条 pin 的沉淀面（sidecar，不进事件流）----
+
+/** 置顶或取消置顶一条消息（append-only：取消 = 追加一条 pinned:false，读时取最后一条）。 */
+export async function handlePinSet(req: {
+  sessionId: string;
+  eventId: number;
+  pinned: boolean;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireExistingSession(req.sessionId);
+    await requirePinStore().append({ sessionId: req.sessionId, eventId: req.eventId, pinned: req.pinned });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** 某会话当前生效的置顶锚点（界面据此点亮 pin 钮、大纲里置顶项排前）。 */
+export async function handlePinList(sessionId: string): Promise<number[]> {
+  return await requirePinStore().listForSession(sessionId);
+}
+
 // ---- CX-01：项目注册表 + Session-plane 组织记录 ----
 // pin/archive/project assignment 只写 sidecar repository，绝不追加 AgentEvent：它们不是模型业务事实，
 // 也不得让同一会话的 live 与 replay 因 UI 组织动作产生差异。
@@ -316,7 +387,10 @@ export async function handleProjectRemove(id: string): Promise<ProjectRecord> {
 }
 
 async function requireExistingSession(id: string): Promise<void> {
-  if (!(await sessionExists(requireSessionsDir(), id))) throw new Error(`会话不存在: ${id}`);
+  // 归属根由解析器给（多根面）；**存在性仍然当场查**——解析器只说"去哪儿找"，
+  // 不替它说"存在"（否则解析器的一次误判就变成一次静默放行）。
+  const root = await resolveSessionRoot(id);
+  if (root === null || !(await sessionExists(root, id))) throw new Error(`会话不存在: ${id}`);
 }
 
 export async function handleSessionSetPinned(id: string, pinned: boolean): Promise<SessionMetadataRecord> {
@@ -347,13 +421,50 @@ export async function handleChangeDiff(req: { path: string; snapshotId?: string 
   return await readChangeDiff(workspace, req.path, req.snapshotId);
 }
 
-/** v11：快照还原（检查器「撤销此文件改动」）。工作区口径与 changeDiff 同——最近一次 run 的工作区。 */
-export async function handleSnapshotRestore(req: { path?: string; snapshotId?: string }, workspaceOverride: string | null = null) {
+/** v11：快照还原（检查器「撤销此文件改动」）。工作区口径与 changeDiff 同——最近一次 run 的工作区。
+ *
+ *  成功后向该会话的事件流落一条 `file_restored`：**还原这件事此前不留任何痕迹**，
+ *  而改动面（Inspector 的「改动」Tab、变更窗格、顶栏 Changes 徽标、交付卡的「改动已验证」）
+ *  全部从事件流投影 ⇒ 还原之后那一行仍写着"修改"、仍提供"撤销"、徽标仍数着它，
+ *  而那个改动在盘上已经不存在了。落流之后改动面才能如实反映"这一项被撤了"。 */
+export async function handleSnapshotRestore(
+  req: { path?: string; snapshotId?: string; sessionId?: string },
+  workspaceOverride: string | null = null,
+) {
   const workspace = workspaceOverride ?? getLastWorkspace();
   if (workspace === null) {
     return { ok: false as const, error: "没有已知的工作区（本进程还没跑过 run）⇒ 无法定位要还原的文件" };
   }
-  return await restoreSnapshot(workspace, String(req.path ?? ""), String(req.snapshotId ?? ""));
+  const r = await restoreSnapshot(workspace, String(req.path ?? ""), String(req.snapshotId ?? ""));
+  if (r.ok !== true) return r;
+  const sessionId = typeof req.sessionId === "string" ? req.sessionId : "";
+  if (sessionId !== "") {
+    // 落流失败**不**把还原判成失败（文件已经改回去了）：还原的结论是盘上的事实，
+    // 事件流只是改动面的读数面。读不出来时出声，不静默。
+    try {
+      // 落哪个日志 = 这条会话**自己的**根（多根面）：旧写法落单例根 ⇒ 项目工作区的会话
+      // 那笔 file_restored 落进了**默认工作区**的日志 ⇒ ① 侧栏多出一个只含这一行的幽灵会话
+      // ② 真会话里没有这次还原 ⇒ 重开会话文件又变回"已改"（还原不持久，正是这个功能要修的 bug）。
+      // 解析不出根（会话不在任何已知根下）⇒ **不写**（宁可事件缺席，也不要写到别人的日志里造幽灵）。
+      const root = await resolveSessionRoot(sessionId);
+      if (root === null) {
+        console.warn("[changes] 还原成功但找不到这条会话的日志根，file_restored 事件未落（改动面可能仍显示旧状态）:", sessionId);
+      } else {
+        const logPath = pathOf(root, sessionId);
+        // 过一遍落盘脱敏面（与 loop 的 redactEventForLog 同一份 redactSecrets 逐叶子）：
+        // 这条是主进程直接 append 的（不经 loop），不扫就路径可能与 tool_call.args 里的
+        // 同一个路径文本不同（文件名里带密钥时，一边被掩一边没被掩）⇒ 改动面配不上，还原白落。
+        await createEventLog(logPath).append(scanStreamEvent({
+          type: "file_restored",
+          path: String(req.path ?? ""),
+          ...(req.snapshotId !== undefined ? { snapshotId: String(req.snapshotId) } : {}),
+        } as AgentEvent));
+      }
+    } catch (err) {
+      console.warn("[changes] 还原成功但落 file_restored 事件失败（改动面可能仍显示旧状态）:", err instanceof Error ? err.message : String(err));
+    }
+  }
+  return r;
 }
 
 // ---- v5 file 窗格（只读浏览）----

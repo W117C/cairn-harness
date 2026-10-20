@@ -13,15 +13,14 @@
 // 本文件是纯逻辑：读文件、发请求、注入环境变量都不在这里（那是接线层的事）。判卷直接喂 JSON。
 
 import { isIP } from "node:net";
+import { MODEL_ID_RE, RESERVED_PROVIDER_IDS } from "./provider-identifiers";
+export { isValidModelId, RESERVED_PROVIDER_IDS } from "./provider-identifiers";
 import { DEFAULT_MODEL_TABLE, type ModelSpec, type ModelTier } from "./registry";
 import type { CatalogPricing } from "./catalog";
 import { DISCOVERY_PROTOCOLS, type DiscoveryProtocol } from "./discovery";
 
 /** 用户侧配置文件名（工作区级，与 `.agent/config.json` / `.agent/lsp.json` 同族先例）。 */
 export const CUSTOM_PROVIDERS_RELATIVE_PATH = [".agent", "providers.json"] as const;
-
-/** 内置 provider id：自定义的不许叫这些名字（否则路由/注入面分不清谁是内置的）。 */
-export const RESERVED_PROVIDER_IDS = ["demo", "glm", "openai", "anthropic", "gemini"] as const;
 
 /** 目录里能替用户填的字段名（与 catalog.ts 的 CATALOG_FILLABLE_MODEL_FIELDS 同族；
  *  这里只用于**报错文案**，别处不要再抄一份）。 */
@@ -88,18 +87,12 @@ export type ParseResult =
   | { ok: false; problems: readonly CustomProviderProblem[] };
 
 const PROVIDER_ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
-const MODEL_ID_RE = /^[A-Za-z0-9._:/-]{1,128}$/;
 const ENV_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
 const TIERS: readonly ModelTier[] = ["cheap", "standard", "strong"];
 const PRICE_KEYS = ["inputPerMTok", "outputPerMTok", "cacheReadPerMTok", "cacheWritePerMTok"] as const;
 /** 出现这些字段名 = 用户想把 key 值写进文件。不是「忽略」，是**判错**：
  *  静默忽略会让人以为钥匙已经配好了，而实际上一轮真跑会以「没配 key」失败。 */
 const FORBIDDEN_KEY_FIELDS = ["apikey", "key", "token", "secret", "apikeyvalue", "bearertoken", "password"];
-
-/** 模型 id 是否合法（与配置校验同一把尺；草稿生成器也要用它，否则会产出「自己都不合法」的片段）。 */
-export function isValidModelId(id: unknown): id is string {
-  return typeof id === "string" && MODEL_ID_RE.test(id);
-}
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);

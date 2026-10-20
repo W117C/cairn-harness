@@ -1,0 +1,49 @@
+/* Cairn adapter. Upstream CSS and tokens remain in vendor/dsh-claude-style. */
+@import "./vendor/dsh-claude-style/palette.css";
+@import "./vendor/dsh-claude-style/tokens.css";
+@import "./vendor/dsh-claude-style/typography.css";
+@import "./vendor/dsh-claude-style/composer-vars.css";
+@import "./vendor/dsh-claude-style/composer-card.css";
+@import "./vendor/dsh-claude-style/hero.css";
+
+@font-face { font-family: "Claude Style Inter"; src: url("./vendor/dsh-claude-style/fonts/InterVariable.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Claude Style Noto Serif"; src: url("./vendor/dsh-claude-style/fonts/NotoSerifVariable.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("./vendor/dsh-claude-style/fonts/JetBrainsMonoVariable.ttf") format("truetype"); font-weight: 100 800; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("./vendor/dsh-claude-style/fonts/JetBrainsMonoItalicVariable.ttf") format("truetype"); font-weight: 100 800; font-style: italic; font-display: swap; }
+
+/* 原有组件消费 HSL 分量；用原生相对颜色接到上游值，避免再维护一套色值。 */
+body[data-dsh-claude-style] {
+  --bg-000: from var(--dsw-specific-input-major) h s l;
+  --bg-100: from var(--dsw-alias-bg-base) h s l;
+  --bg-200: from var(--dsh-claude-sidebar-canvas) h s l;
+  --bg-300: from var(--dsw-alias-bg-layer-2) h s l;
+  --bg-elevated: from var(--dsh-claude-card) h s l;
+  --text-000: from var(--dsw-alias-label-primary) h s l;
+  --text-100: from var(--dsw-alias-label-primary) h s l;
+  --text-200: from var(--dsw-alias-label-secondary) h s l;
+  --text-400: from var(--dsw-alias-label-secondary) h s l;
+  --text-500: from var(--dsw-alias-label-secondary) h s l;
+  --accent-brand: from var(--dsw-alias-brand-primary) h s l;
+  --hairline: var(--dsw-alias-border-l1);
+  --hairline-strong: var(--dsw-alias-border-l2);
+  --mono: var(--dsh-claude-font-code);
+  --shadow-pop: var(--dsw-shadow-lv2);
+  --t-fast: var(--dsh-claude-duration-feedback) var(--dsh-claude-ease-standard);
+  --dsw-font-markdown-h1: 600 var(--fs-heading-xl)/1.3 var(--dsh-claude-font-prose);
+  --dsw-font-markdown-h2: 600 var(--fs-heading-lg)/1.35 var(--dsh-claude-font-prose);
+  --dsw-font-markdown-h3: 600 var(--fs-heading-md)/1.4 var(--dsh-claude-font-prose);
+  --dsw-font-markdown-h4: 600 var(--fs-heading-sm)/1.4 var(--dsh-claude-font-prose);
+}
+
+body[data-dsh-claude-style] .side { background: var(--dsh-claude-sidebar-canvas); }
+body[data-dsh-claude-style] .row.user .t { background: var(--dsw-specific-bubble); }
+body[data-dsh-claude-style] .md-code { background: var(--dsw-alias-markdown-code-block); border-color: var(--dsw-alias-border-l1); }
+body[data-dsh-claude-style] .md-code-head { background: var(--dsw-alias-markdown-code-block-banner); }
+body[data-dsh-claude-style] .md-body { font-size: var(--fs-body-lg); }
+body[data-dsh-claude-style] [data-composer-card] { color: var(--dsw-alias-label-primary); background: var(--dsw-specific-input-major); }
+body[data-dsh-claude-style] .composer-card[data-disabled="true"] { opacity: .72; }
+body[data-dsh-claude-style] .pop-rd, body[data-dsh-claude-style] .pop { background: var(--dsh-claude-card); }
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-dsh-claude-style] { --dsh-claude-duration-rise: 0.01ms; --dsh-claude-duration-stagger: 0ms; }
+}

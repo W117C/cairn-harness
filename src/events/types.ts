@@ -522,6 +522,24 @@ export interface AutomationCompletedEvent {
 }
 
 // ---- P0 错误即事件：模型/网络失败此前只活在进程里，事件流与 UI 一律看不见 ----
+/** 一次「还原」的事实（检查器「撤销此文件改动」成功后落流）。
+ *
+ *  为什么需要它：改动面（Inspector 的「改动」Tab、变更窗格、顶栏 Changes 徽标、交付卡的
+ *  「改动已验证」）此前**全部**从事件流投影，而还原这件事只改了盘上的文件、**不留任何事件**
+ *  ⇒ 还原之后那一行仍写着"修改"、仍提供"撤销"、徽标仍数着它、交付卡仍说"改动已验证"——
+ *  而那个改动在盘上已经不存在了。这不是显示小疵，是产品对"这一轮交付了什么"在撒谎。
+ *
+ *  语义：一个文件被显式还原 ⇒ 它退出改动面（用户明说"这一项我撤了"）；此后 agent **再写**它，
+ *  它重新进改动面（还原只撤掉改动，没撤掉这个文件以后再被改的资格）。 */
+export interface FileRestoredEvent {
+  type: "file_restored";
+  /** 被还原的路径（相对工作区，与 tool_call 的 path 同一口径）。 */
+  path: string;
+  /** 还原所用的覆盖前快照 id（可选；同一份事件流里能对回是哪一次覆盖）。 */
+  snapshotId?: string;
+  ts?: number;
+}
+
 /** 一次 run 的失败事实。loop 在模型流边界落此事件后把原错误继续上抛，
  *  调用方语义逐字不变（仍是 reject）；增量类型，旧日志重放不受影响。 */
 export interface RunErrorEvent {
@@ -725,6 +743,7 @@ export type AgentEvent = (
   | TurnTruncatedEvent
   | TurnStopMissingEvent
   | SurfaceAccountEvent
+  | FileRestoredEvent
   | RunErrorEvent
 ) & { /** M2 §3.5：事件真值时间戳（毫秒）。core 自 8361657 起在落盘处统一盖戳——写调用方同一对象，live 与盘同式（tests/events.test.ts 三用例钉死），新事件恒在场；旧 JSONL 缺席，读侧按可选兼容（投影留空不造假）。 */ ts?: number };
 
@@ -774,5 +793,6 @@ export const KNOWN_TYPES: Record<AgentEvent["type"], true> = {
   turn_truncated: true,
   turn_stop_missing: true,
   surface_account: true,
+  file_restored: true,
   error: true,
 };

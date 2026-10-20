@@ -1,0 +1,21 @@
+有 spawn 的判卷 22 份（git 跟踪的 tests/**.ts）
+  tests/mutate-verify-gates.test.ts  spawn=24  显式timeout=0  it=204  ← 像真跑 bin
+  tests/head-cert-deps.test.ts  spawn=13  显式timeout=1  it=141  ← 像真跑 bin
+  tests/mutate-shards.test.ts  spawn=6  显式timeout=0  it=55  ← 像真跑 bin
+  tests/prose-needle-scan.test.ts  spawn=6  显式timeout=0  it=91  ← 像真跑 bin
+  tests/cli-exit-code.test.ts  spawn=4  显式timeout=1  it=8  ← 像真跑 bin
+  tests/evidence-typecheck.test.ts  spawn=4  显式timeout=0  it=22  ← 像真跑 bin
+  tests/assertion-health-scan.test.ts  spawn=3  显式timeout=0  it=17  ← 像真跑 bin
+  tests/utf8-text-safety.test.ts  spawn=3  显式timeout=0  it=13
+  tests/blocked-citation-face.test.ts  spawn=2  显式timeout=0  it=11  ← 像真跑 bin
+  tests/cli-fork-replay.test.ts  spawn=2  显式timeout=1  it=13  ← 像真跑 bin
+  tests/cli-plan-auto.test.ts  spawn=2  显式timeout=1  it=6  ← 像真跑 bin
+  tests/cli-surface.test.ts  spawn=2  显式timeout=3  it=66  ← 像真跑 bin
+  tests/diff-review.test.ts  spawn=2  显式timeout=0  it=14
+  tests/prompt-cost.test.ts  spawn=2  显式timeout=2  it=17
+  tests/text-readers.test.ts  spawn=2  显式timeout=0  it=27  ← 像真跑 bin
+  tests/docs-check.test.ts  spawn=1  显式timeout=0  it=93  ← 像真跑 bin
+
+「像真跑 bin」的 17 份：spawn 合计 75｜显式 timeout 合计 8
+显式 timeout = 0 的份数：11 ⇒ mutate-verify-gates.test.ts、mutate-shards.test.ts、prose-needle-scan.test.ts、evidence-typecheck.test.ts、assertion-health-scan.test.ts、blocked-citation-face.test.ts、text-readers.test.ts、docs-check.test.ts、grep-glob-edit.test.ts、mutate-anchor-titles.test.ts、promise-recall-inventory.test.ts
+注：这条尺只说形状，不说哪条用例真的撞过 30s 缺省——那要在负载态里看红名（#28 的原读数就是这么来的）。

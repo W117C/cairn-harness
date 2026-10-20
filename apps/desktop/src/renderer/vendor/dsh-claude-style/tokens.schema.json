@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-claude-style design tokens",
+  "description": "The skin's custom properties: the build generates the token stylesheet and the docs/STYLE.md token table from this document (D9).",
+  "type": "object",
+  "required": ["typeface", "apex", "palette", "motion", "layer"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "typeface": {
+      "description": "Font tokens: `claude` under the Claude typeface, `host` under the host's.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["token"],
+        "anyOf": [{ "required": ["claude"] }, { "required": ["host"] }],
+        "additionalProperties": false,
+        "properties": {
+          "token": { "$ref": "#/$defs/token" },
+          "claude": { "$ref": "#/$defs/value" },
+          "host": { "$ref": "#/$defs/value" },
+          "note": { "$ref": "#/$defs/note" }
+        }
+      }
+    },
+    "apex": {
+      "description": "The reasoning slider's top rung: the same violet under every palette.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["token", "dark", "light"],
+        "additionalProperties": false,
+        "properties": {
+          "token": { "$ref": "#/$defs/token" },
+          "dark": { "$ref": "#/$defs/value" },
+          "light": { "$ref": "#/$defs/value" },
+          "note": { "$ref": "#/$defs/note" }
+        }
+      }
+    },
+    "palette": {
+      "description": "Colour tokens: the Claude brand's two themes, the DeepSeek brand's overrides of them, and the alias under the host palette.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["token"],
+        "anyOf": [{ "required": ["claude"] }, { "required": ["deepseek"] }, { "required": ["host"] }],
+        "additionalProperties": false,
+        "properties": {
+          "token": { "$ref": "#/$defs/token" },
+          "claude": { "$ref": "#/$defs/themes" },
+          "deepseek": { "$ref": "#/$defs/themes" },
+          "host": { "$ref": "#/$defs/value" },
+          "use": { "description": "What the token paints, for the docs/STYLE.md table.", "type": "string", "minLength": 1 },
+          "note": { "$ref": "#/$defs/note" }
+        }
+      }
+    },
+    "motion": {
+      "description": "Motion tokens (D9): durations, loop periods, easing curves, distances, blur and scale, and the two duration-and-curve shorthands. One value under every palette and typeface; the only place a stylesheet may write a time or a curve.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["token", "value", "use"],
+        "additionalProperties": false,
+        "properties": {
+          "token": { "type": "string", "pattern": "^--dsh-claude-(duration|period|ease|distance|blur|scale|timing)-[a-z0-9-]+$" },
+          "value": { "$ref": "#/$defs/value" },
+          "use": { "description": "The role the token plays, for the docs/STYLE.md motion table.", "type": "string", "minLength": 1 },
+          "note": { "$ref": "#/$defs/note" }
+        }
+      }
+    },
+    "layer": {
+      "description": "Layer tokens (D9): the stacking levels a skin surface takes against what the host draws around it. One value under every palette and typeface; the only place a stylesheet may write a z-index above the local orders 0 to 9.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["token", "value", "use"],
+        "additionalProperties": false,
+        "properties": {
+          "token": { "type": "string", "pattern": "^--dsh-claude-layer-[a-z0-9-]+$" },
+          "value": { "type": "string", "pattern": "^[1-9][0-9]+$" },
+          "use": { "description": "What stands on this level and what it has to clear, for the docs/STYLE.md layer table.", "type": "string", "minLength": 1 },
+          "note": { "$ref": "#/$defs/note" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "token": { "type": "string", "pattern": "^--(dsw|dsh-claude)-[a-z0-9-]+$" },
+    "value": { "type": "string", "minLength": 1, "pattern": "^[^;{}]+$" },
+    "note": { "description": "Why the value has this shape; kept for maintainers, not emitted.", "type": "string", "minLength": 1 },
+    "themes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "dark": { "$ref": "#/$defs/value" },
+        "light": { "$ref": "#/$defs/value" }
+      }
+    }
+  }
+}

@@ -1630,6 +1630,11 @@ async function main(): Promise<number> {
   const verifyReadout = formatVerifyBeats(verifyBeats);
   if (verifyReadout !== null) process.stdout.write(paint(YELLOW, verifyReadout) + "\n");
   process.stdout.write(paint(DIM, `\n事件日志：${opts.logPath}\n`));
+  // 跨面接力（规范 §3.9 · 必抄 #6）：CLI 收尾时把这一面续到桌面的入口印出来——桌面与 CLI 是
+  // **同一个 sessions 存储的两个面**，而这一行是 CLI 侧唯一能把用户领过去的地方（反过来由桌面
+  // 会话菜单给「在 CLI 续跑」的等价命令）。`--log` 那条路不印：它写的不是会话，桌面列表里没有它，
+  // 印出来就是一句指向不存在的 id 的空话。
+  if (opts.wireSession) process.stdout.write(paint(DIM, `在桌面打开：${opts.sessionId}\n`));
   return runFailed({
     ...tally,
     // 三档各自进退出码：红那一格仍是 README 那句「验证红」，被拒／环境两档按上面那段说明照旧置 1，

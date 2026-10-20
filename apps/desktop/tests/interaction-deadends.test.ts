@@ -15,9 +15,14 @@ const css = read("../src/renderer/styles.css");
 
 describe("快捷键静默死点（F6/F7 + F5）", () => {
   it("⌘W：主页给回执；在跑的一轮回主页后说明它仍在后台", () => {
+    // 2026-10-20 起这两条回执收在一处出口（⌘W 与原生菜单「关闭会话」共用），
+    // 判据跟着从「键位块里有这两行」升到「出口里有这两行 + 两个入口都走它」。
+    expect(app).toContain("const closeSessionToHome = useCallback((): void => {");
     expect(app).toContain("toast(STR.shortcut.alreadyHome)");
-    expect(app).toContain("const wasRunning = h.running;");
+    expect(app).toContain("const wasRunning = runningSet.current.has(sid);");
     expect(app).toContain("if (wasRunning) toast(STR.shortcut.leftRunning);");
+    expect(app).toContain("h.closeSessionToHome();");
+    expect(app).toContain('"close-session": closeSessionToHome,');
   });
 
   it("F2：startRename 返回是否落点；主页不再 preventDefault 后无动作", () => {
@@ -25,9 +30,15 @@ describe("快捷键静默死点（F6/F7 + F5）", () => {
     expect(app).toContain("if (!h.startRename()) toast(STR.shortcut.renameNeedsSession);");
   });
 
-  it("会话循环无会话时给回执（Ctrl+Tab / ⌘⇧[ / ⌘⇧] 三处）", () => {
-    expect(app.match(/toast\(STR\.shortcut\.noSession\)/g)?.length).toBe(3);
+  it("会话循环无会话时给回执（Ctrl+Tab / ⌘⇧[ / ⌘⇧] 三处 + 菜单两项，同一出口）", () => {
+    // 2026-10-20：回执从「三个键位各抄一份」收成一处出口（菜单也走它），
+    // 判据不再数散落的字面量，而是钉出口 + 入口数——散抄的那种写法改口径必漏。
+    expect(app.match(/toast\(STR\.shortcut\.noSession\)/g)?.length).toBe(1);
+    expect(app).toContain("const cycleSessionOrToast = useCallback((dir: 1 | -1): void => {");
     expect(app).toContain("const cycleSession = useCallback((dir: 1 | -1): boolean => {");
+    // 五个入口：Ctrl+Tab、⌘⇧]、⌘⇧[、菜单「上一个/下一个会话」
+    // 调用点 5 处（键位 3 + 菜单 2）；定义那行是 `= useCallback(` 不算调用，故这里是 5。
+    expect(app.match(/cycleSessionOrToast\(/g)?.length).toBe(5);
   });
 
   it("输入区锁定时 ⌘⇧I/M/E 说清原因，不再静默无效", () => {
@@ -105,5 +116,39 @@ describe("侧栏首屏：加载 ≠ 空，失败 ≠ 空", () => {
   it("CSS：骨架条只表示读取中（reduced-motion 由全局块停掉动画）", () => {
     expect(css).toContain(".side-skeleton-row {");
     expect(css).toContain("animation: breathe 1.6s ease-in-out infinite;");
+  });
+});
+
+describe("侧栏宽度把手（键盘 / 可读名 / 复位）", () => {
+  it("范围与复位值取自常量——不再手写 240–280 / 240px", () => {
+    // 2026-10-20 真机：常量已改成 200–280（缺省 200），把手上的 aria-label/title 还写着
+    // 240–280 / 双击回 240；读屏用户被告知一个不存在的下限，双击也会跳到非缺省值。
+    expect(app).toContain("const SIDEBAR_MIN = 200;");
+    expect(app).toContain("const SIDEBAR_MAX = 280;");
+    expect(app).toContain("const SIDEBAR_DEFAULT = 200;");
+    expect(app).toContain("aria-label={`调整侧栏宽度（${SIDEBAR_MIN}–${SIDEBAR_MAX}px）`}");
+    expect(app).toContain("title={`拖动调整侧栏宽度；双击回到 ${SIDEBAR_DEFAULT}px`}");
+    expect(app).not.toContain("240–280px");
+    expect(app).not.toContain("双击回到 240px");
+    expect(app).toContain("persistSidebarWidth(SIDEBAR_DEFAULT)");
+  });
+
+  it("separator 暴露当前值与范围；左右键各步进 16px", () => {
+    expect(app).toContain("aria-valuemin={SIDEBAR_MIN}");
+    expect(app).toContain("aria-valuemax={SIDEBAR_MAX}");
+    expect(app).toContain("aria-valuenow={sidebarWidth}");
+    expect(app).toContain("sidebarWidthRef.current + (e.key === \"ArrowRight\" ? 16 : -16)");
+  });
+});
+
+describe("窄窗检查器一键开（⌘⌥B）", () => {
+  it("侧栏收起有 240ms 过渡：expand 排在过渡后，不再两个 rAF 抢跑", () => {
+    // 2026-10-20 真机：880px 窗、侧栏 200、主组 680、inspector 0 时按 ⌘⌥B，storage 写成 "1"
+    // 但宽度仍 0；再按一次才开。两个 rAF 时侧栏还在收起，expand 被布局夹回 0。
+    expect(app).toContain('const expandDelay = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 260;');
+    expect(app).toContain("window.setTimeout(() => { inspectorRef.current?.expand(); setInspectorCollapsed(false); }, expandDelay);");
+    const revealBlock = app.slice(app.indexOf("const revealInspector = useCallback"), app.indexOf("revealInspectorRef.current = revealInspector"));
+    expect(revealBlock).not.toContain("window.requestAnimationFrame");
+    expect(revealBlock).toContain("INSPECTOR_SIDEBAR_COLLAPSE_BELOW");
   });
 });

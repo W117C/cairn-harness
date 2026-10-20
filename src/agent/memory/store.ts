@@ -241,11 +241,11 @@ export async function appendRootFile(workspace: string, kind: keyof typeof ROOT_
   });
 }
 
-/** 整写根文件（状态型 replace：old_content 已由调用方校验精确命中）；原子写。 */
-export async function replaceRootFile(workspace: string, kind: keyof typeof ROOT_FILES, content: string): Promise<void> {
-  await ensureDir(projectAgentPath(workspace));
-  await writeFileAtomic(rootFilePath(workspace, kind), content);
-}
+/* 整写根文件的**无条件**版本已被删除（2026-10-19）：
+ * 它与 appendRootFile 抢同一个文件时**不拿锁**，整写那一份会把追加那笔静默盖掉，
+ * 而两边都回执"已写入"。现在只有一条写路：`replaceRootFileIfMatches`（读-判-写整段在锁里，
+ * 判据过期就拒），并发追加与替换**两笔都在**——替换要么被拒（内容已变），要么排在追加之后。 */
+
 
 /** DECISIONS 追加一个决策条目（追加式日志；修订 = 新条目「取代 <旧条引用>」，旧条保留）。 */
 export async function appendDecisionEntry(workspace: string, content: string, nowISO: string): Promise<void> {
@@ -279,6 +279,89 @@ export async function writeTopic(
     await writeFileAtomic(join(dir, topic + ".md"), doc);
     await writeFileAtomic(join(dir, MEMORY_INDEX), projected);
     return { bytes: Buffer.byteLength(doc, "utf8") };
+  });
+}
+
+/** 追加一节到 topic（读-改-写**全程在锁里**）。
+ *
+ *  **为什么需要这一支**（2026-10-19 独立评审追出的 MEDIUM-HIGH）：`writeTopic` 拿的是**目录锁**
+ *  （`serializeOn(dir, …)`），而追加形态的"读旧正文 → 拼新正文 → 写"原本**读在锁外**
+ *  （`remember.ts` 先 `readTopicBody` 再 `writeTopic`）⇒ 两个并发追加都读到同一份旧正文，
+ *  第二个写把第一个**整个盖掉**（两笔都回执"已写入"）。实测：并发追加 FROM-A / FROM-B ⇒
+ *  盘上只剩 FROM-B。`writeTopic` 的锁只护住了"写"那一段，护不住"读-改-写"这一整段。
+ *
+ *  形状：把读-改-写搬进 store，由**持有锁的那一层**做（调用方不该知道有锁这件事——
+ *  抄第二份锁/第二份读改写就是新的漏口）。`writeTopic` 的索引 upsert 也在同一把锁里，
+ *  追加与索引不会不同步。 */
+export async function appendTopic(
+  dir: string,
+  topic: string,
+  type: MemoryType,
+  text: string,
+  nowISO: string,
+): Promise<{ bytes: number }> {
+  validateTopic(topic);
+  return await serializeOn(dir, async () => {
+    const prev = await readTopicBody(dir, topic);
+    const body = prev === null ? text : prev.replace(/\n+$/, "") + "\n\n" + text;
+    const firstLine = (body.split("\n")[0] ?? "").trim();
+    const projected = upsertIndexLine(await readIndex(dir), topic, indexLine(topic, type, nowISO, firstLine));
+    checkIndexLimit(projected);
+    await ensureDir(dir);
+    const doc = renderTopicDoc({ type, modified: nowISO }, body);
+    await writeFileAtomic(join(dir, topic + ".md"), doc);
+    await writeFileAtomic(join(dir, MEMORY_INDEX), projected);
+    return { bytes: Buffer.byteLength(doc, "utf8") };
+  });
+}
+
+/** 根三文件的**比较-替换**（CAS）：`expected` 必须逐字等于当前内容才改写。
+ *
+ *  **为什么 CAS 必须整段在锁里**（2026-10-19 独立评审追出的 MEDIUM-HIGH）：
+ *  旧形状是"先读出来比一比、隔一会儿再整写"——判据与写**不在同一段临界区**⇒ 并发追加夹在
+ *  中间时，CAS 判据已经过期（它比的是追加之前的内容），追加那笔被静默盖掉，
+ *  而它回执的是"已写入"。实测：并发 `appendRootFile` + `replaceRootFile` ⇒ 盘上只剩整写那份。
+ *  ⇒ 读、判、写三步放进**同一把路径锁**（与 appendRootFile 同一把），CAS 才是 CAS。
+ *
+ *  返回 `matched=false` 时**一个字节都没写**（由调用方报 old_content_mismatch）。 */
+export async function replaceRootFileIfMatches(
+  workspace: string,
+  kind: keyof typeof ROOT_FILES,
+  expected: string,
+  content: string,
+): Promise<{ matched: boolean; current: string | null }> {
+  const path = rootFilePath(workspace, kind);
+  return await serializeOn(path, async () => {
+    const current = await readOrNull(path);
+    if (current === null || current !== expected) return { matched: false, current };
+    await ensureDir(projectAgentPath(workspace));
+    await writeFileAtomic(path, content);
+    return { matched: true, current };
+  });
+}
+
+/** topic 的**比较-替换**（CAS）：同上，锁键是**目录**（索引 upsert 要在同一段里）。
+ *  索引与 topic 文件不同步是另一类坏（同 E9 的旧账），所以这里不另开一把锁。 */
+export async function replaceTopicIfMatches(
+  dir: string,
+  topic: string,
+  type: MemoryType,
+  expected: string,
+  body: string,
+  nowISO: string,
+): Promise<{ matched: boolean; current: string | null }> {
+  validateTopic(topic);
+  return await serializeOn(dir, async () => {
+    const current = await readTopicBody(dir, topic);
+    if (current === null || current !== expected) return { matched: false, current };
+    const firstLine = (body.split("\n")[0] ?? "").trim();
+    const projected = upsertIndexLine(await readIndex(dir), topic, indexLine(topic, type, nowISO, firstLine));
+    checkIndexLimit(projected);
+    await ensureDir(dir);
+    const doc = renderTopicDoc({ type, modified: nowISO }, body);
+    await writeFileAtomic(join(dir, topic + ".md"), doc);
+    await writeFileAtomic(join(dir, MEMORY_INDEX), projected);
+    return { matched: true, current };
   });
 }
 

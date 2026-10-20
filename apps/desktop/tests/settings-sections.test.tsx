@@ -13,7 +13,7 @@ import {
   providerStatusLabel,
   providerStatusParts,
 } from "../src/renderer/components/settings-sections";
-import { DEFAULT_SETTINGS, type AppSettings, type TextSizeSetting } from "../../../src/main/settings";
+import { DEFAULT_SETTINGS, type AppSettings, type TextSizeSetting, type UiSizeSetting } from "../../../src/main/settings";
 
 const S = (over: Partial<AppSettings> = {}): AppSettings => ({ ...DEFAULT_SETTINGS, ...over });
 const noop = (): void => undefined;
@@ -23,13 +23,13 @@ const STATUS = { available: true, stored: [] as string[], envActive: false };
 const VISION = { state: "undeclared" as const, modelId: "cn:hy3", declaredModalities: [] as readonly string[] };
 
 describe("批 6：通用段（外观 / 语言 / 字号 / 快捷键 四卡）", () => {
-  const menu = (over: Partial<AppSettings> = {}, textSize: TextSizeSetting = "md"): string =>
-    renderToStaticMarkup(<GeneralSection settings={S(over)} textSize={textSize} onSave={noop} onCtrlTab={noop} onTextSize={noop} />);
+  const menu = (over: Partial<AppSettings> = {}, textSize: TextSizeSetting = "md", uiSize: UiSizeSetting = "2"): string =>
+    renderToStaticMarkup(<GeneralSection settings={S(over)} textSize={textSize} uiSize={uiSize} onSave={noop} onCtrlTab={noop} onTextSize={noop} onUiSize={noop} />);
 
   it("四组标题在场（ss-sec 卡式分组）", () => {
     const h = menu();
-    for (const t of ["外观", "语言", "字号", "快捷键"]) expect(h).toContain(t);
-    expect((h.match(/class="ss-sec"/g) ?? []).length).toBe(4);
+    for (const t of ["外观", "语言", "字号", "组件尺寸", "快捷键"]) expect(h).toContain(t);
+    expect((h.match(/class="ss-sec"/g) ?? []).length).toBe(5);
   });
 
   it("主题 = 3 个带小预览图的选项卡；选中项恰一枚 on（强调描边交给 CSS 哨兵）", () => {
@@ -70,13 +70,39 @@ describe("批 6：通用段（外观 / 语言 / 字号 / 快捷键 四卡）", (
       expect(h).toContain("文字大小");
       expect(h).toContain('aria-label="文字大小"');
       // 三档齐、且各带一个按档变字号的 A 预览
-      const tsGroup = h.slice(h.indexOf('aria-label="文字大小"'));
+      // 边界到「组件尺寸」组之前——两组都复用 theme-opt / ts-thumb class，全文数会串组。
+      const tsGroup = h.slice(h.indexOf('aria-label="文字大小"'), h.indexOf('aria-label="界面密度"'));
       expect([...tsGroup.matchAll(/class="ts-thumb" data-ts="(sm|md|lg)"/g)].map((m) => m[1])).toEqual(["sm", "md", "lg"]);
       // 字号组里恰一枚 on，且是传入的那一档（theme-opt 与主题组复用同一 class，按组分）
       const opts = [...tsGroup.matchAll(/class="theme-opt( on)?"/g)];
       expect(opts.length).toBe(3);
       expect(opts.findIndex((m) => m[1] === " on")).toBe(idx);
     }
+  });
+
+  it("组件尺寸段：五档单选，选中态跟着 props.uiSize（双轴尺寸轴 · 销 G2）", () => {
+    for (const [size, idx] of [["1", 0], ["2", 1], ["3", 2], ["4", 3], ["5", 4]] as const) {
+      const h = menu({}, "md", size);
+      expect(h).toContain("界面密度");
+      expect(h).toContain('aria-label="界面密度"');
+      const uiGroup = h.slice(h.indexOf('aria-label="界面密度"'));
+      expect([...uiGroup.matchAll(/class="ts-thumb" data-ui="([1-5])"/g)].map((m) => m[1])).toEqual(["1", "2", "3", "4", "5"]);
+      const opts = [...uiGroup.matchAll(/class="theme-opt( on)?"/g)];
+      expect(opts.length).toBe(5);
+      expect(opts.findIndex((m) => m[1] === " on")).toBe(idx);
+    }
+  });
+
+  it("双轴正交：字号段与尺寸段各自独立，改一档不动另一档", () => {
+    const a = menu({}, "lg", "1");
+    const b = menu({}, "lg", "5");
+    // 字号都停在 lg（尺寸档变化不影响文字轴）
+    expect(a.slice(a.indexOf('aria-label="文字大小"'), a.indexOf('aria-label="界面密度"'))).toContain('data-ts="lg"');
+    expect(b.slice(b.indexOf('aria-label="文字大小"'), b.indexOf('aria-label="界面密度"'))).toContain('data-ts="lg"');
+    // 但选中态分别落在第 1 / 第 5 档
+    const pick = (h: string) => [...h.slice(h.indexOf('aria-label="界面密度"')).matchAll(/class="theme-opt( on)?"/g)].findIndex((m) => m[1] === " on");
+    expect(pick(a)).toBe(0);
+    expect(pick(b)).toBe(4);
   });
 
   it("字号段的说明不撒谎（说清是整界面一起缩放）", () => {

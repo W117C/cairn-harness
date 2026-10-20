@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   PluginRuntime, expandMcpConfig, getPluginSecret, putPluginSecret, readPluginUserConfig,
   setPluginSecretBackend, writePluginUserConfig, SECRET_PLACEHOLDER,
+  userConfigValueError, userConfigValuesErrors,
   type McpServerConfig, type PluginSecretBackend, type UserConfigField,
 } from "../src/agent/plugins";
 import { McpManager } from "../src/agent/plugins/mcp";
@@ -258,3 +259,110 @@ describe("expandMcpConfig 的覆盖面（远程 server 的 key 在 headers 里�
 });
 
 // 2026-10-19：插件配置写入入口的判据放在上面的激活面 describe 内部（复用 loadPlugin）。
+
+describe("userConfig 按声明类型校验（2026-10-19：type 从前只被解析和陈列，没有任何一处按它校验）", () => {
+  const typedFields: UserConfigField[] = [
+    { key: "PORT", type: "number", required: false, sensitive: false, hasDefault: false },
+    { key: "TIMEOUT", type: "number", required: false, sensitive: false, hasDefault: false },
+    { key: "VERBOSE", type: "boolean", required: false, sensitive: false, hasDefault: false },
+    { key: "PROFILE", type: "string", required: false, sensitive: false, hasDefault: false },
+  ];
+
+  it("number 字段：十进制收下，'abc' / '12px' / '' 拒（空串归 required 与留空层管，不在这层）", () => {
+    expect(userConfigValueError(typedFields[0]!, "8080")).toBeNull();
+    expect(userConfigValueError(typedFields[0]!, " 8080 ")).toBeNull(); // 表单粘贴常带空白
+    expect(userConfigValueError(typedFields[0]!, "1.5")).toBeNull();
+    expect(userConfigValueError(typedFields[0]!, "-3")).toBeNull();
+    expect(userConfigValueError(typedFields[0]!, "abc")).toContain("不是十进制数字");
+    expect(userConfigValueError(typedFields[0]!, "12px")).toContain("不是十进制数字");
+    expect(userConfigValueError(typedFields[0]!, "")).toContain("不是十进制数字");
+    expect(userConfigValueError(typedFields[0]!, "1e3")).toContain("不是十进制数字"); // 人写不出来这种端口
+    expect(userConfigValueError(typedFields[0]!, "0x10")).toContain("不是十进制数字");
+    expect(userConfigValueError(typedFields[0]!, "Infinity")).toContain("不是十进制数字");
+  });
+
+  it("boolean 字段：true/false 与大小写收下，'yes' / '1' / 'TRUE ' 之外的形状拒", () => {
+    expect(userConfigValueError(typedFields[2]!, "true")).toBeNull();
+    expect(userConfigValueError(typedFields[2]!, "FALSE")).toBeNull();
+    expect(userConfigValueError(typedFields[2]!, " true ")).toBeNull();
+    expect(userConfigValueError(typedFields[2]!, "yes")).toContain("可接受的值只有 true 或 false");
+    expect(userConfigValueError(typedFields[2]!, "1")).toContain("可接受的值只有 true 或 false");
+    expect(userConfigValueError(typedFields[2]!, "0")).toContain("可接受的值只有 true 或 false");
+  });
+
+  it("string 与未知类型一律放过（CC 形态允许只写 title/description；未知类型当非法会让那些插件永远写不进）", () => {
+    expect(userConfigValueError(typedFields[3]!, "任何东西都行")).toBeNull();
+    expect(userConfigValueError(typedFields[3]!, "")).toBeNull();
+    expect(userConfigValueError({ key: "K", type: "weird-future-type", required: false, sensitive: false, hasDefault: false }, "x")).toBeNull();
+  });
+
+  it("一批值一次报全（不让用户改一个字段存一次），且点名是哪个键", () => {
+    const errs = userConfigValuesErrors(typedFields, { PORT: "abc", VERBOSE: "maybe" });
+    expect(errs).toHaveLength(2);
+    expect(errs[0]).toContain("PORT");
+    expect(errs[1]).toContain("VERBOSE");
+    expect(userConfigValuesErrors(typedFields, { PORT: "8080", VERBOSE: "true" })).toEqual([]);
+    expect(userConfigValuesErrors(typedFields, {})).toEqual([]); // 全留空 = 保持不变，不是错
+  });
+
+  it("反向（突变体专破）：把 number 的校验拆掉 ⇒ 同一批输入必须从「拒」翻成「过」", () => {
+    // 这一条证明上面几条不是恒真：判据若对 "abc" 也返回 null，本条的 expect 会红。
+    const bad = userConfigValueError(typedFields[0]!, "abc");
+    expect(bad, "number 字段对 'abc' 必须是拒，不能是放过").not.toBeNull();
+  });
+});
+
+describe("端到端：写入口按类型拒值，坏值到不了 MCP/LSP argv（2026-10-19）", () => {
+  let dir: string;
+  let rt: PluginRuntime | null = null;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "dsh-usercfg-typed-"));
+    setPluginSecretBackend(memoryBackend().backend);
+  });
+  afterEach(async () => {
+    await rt?.shutdown();
+    rt = null;
+    setPluginSecretBackend(null);
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  /** 一个把 `PORT`（number）拼进 MCP argv 的插件：值错了不会在任何地方报错，
+   *  只会让那家 server 起不来——所以必须在写入口就拒。 */
+  async function load(): Promise<PluginRuntime> {
+    const root = join(dir, "user-plugins", "typed");
+    await mkdir(join(root, ".claude-plugin"), { recursive: true });
+    await writeFile(join(root, ".claude-plugin", "plugin.json"), JSON.stringify({
+      name: "typed", description: "typed userConfig", version: "0.1.0",
+      userConfig: { PORT: { type: "number" }, NAME: { type: "string" } },
+      mcpServers: { local: { command: "node", args: ["--port", "${user_config.PORT}"] } },
+    }, null, 2), "utf8");
+    return await PluginRuntime.load({
+      userPluginsDir: join(dir, "user-plugins"),
+      workspace: dir,
+      pluginDataRoot: join(dir, "plugin-data"),
+      trustFile: join(dir, "trust.json"),
+    });
+  }
+
+  it("往 number 字段写 'abc' ⇒ setUserConfig 拒，且激活面里 PORT 仍是没有值（不是坏值）", async () => {
+    const e = await load();
+    rt = e;
+    const bad = await e.setUserConfig("typed", { PORT: "abc" });
+    expect(bad.ok).toBe(false);
+    expect(bad.error).toContain("PORT");
+    expect(bad.error).toContain("不是十进制数字");
+    // 关键：拒了之后**没有留下半个坏值**——读侧仍是缺值，展开时原样留着占位串，
+    // 而不是把 "abc" 塞进 --port。这正是"错值不在任何地方报错"那条病被堵住的地方。
+    expect(e.userConfigValuesFor("typed").PORT).toBeUndefined();
+    expect(e.snapshot().plugins.find((p) => p.name === "typed")?.warnings.join("|")).toContain("userConfig 缺项");
+  });
+
+  it("写 '8080' ⇒ 收下，MCP 的 argv 真展开成那个端口（判据不是只拒不做）", async () => {
+    const e = await load();
+    rt = e;
+    const ok = await e.setUserConfig("typed", { PORT: "8080", NAME: "demo" });
+    expect(ok.ok, JSON.stringify(ok)).toBe(true);
+    expect(e.userConfigValuesFor("typed").PORT).toBe("8080");
+  });
+});

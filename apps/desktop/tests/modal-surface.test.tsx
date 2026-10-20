@@ -72,8 +72,10 @@ describe("ModalSurface（统一模态边界）", () => {
     ]) {
       expect(read(rel), rel).toContain("<ModalSurface");
     }
-    expect(read("../src/renderer/App.tsx")).toContain(
-      "if (document.querySelector('[data-modal-surface=\"true\"]') !== null || h.paletteOpen) return;",
-    );
+    // 2026-10-20：这条从「源码里有一行字面量」改成「走共享门」——
+    // 判断本身搬进了 src/renderer/command-gate.ts（**行为**判据在 tests/command-gate.test.ts：
+    // 真造一个模态面、真把焦点放进输入框），这里钉的是
+    // **App 的全局快捷键路径确实走那道门**（键盘与菜单两条入口同源，别再各判各的）。
+    expect(read("../src/renderer/App.tsx")).toContain("overlayBlocked(readGateInput(");
   });
 });

@@ -69,6 +69,29 @@ describe("ApprovalCard SSR（重设计后）", () => {
     expect(high).toContain("triangle-alert");
   });
 
+  it("连拦降级提示（§2.2 双向断路器）：有 tierWarning 才出一行 + 一键降档；没有就一个字都不多", () => {
+    const warn = renderToStaticMarkup(
+      <ApprovalCard
+        ask={ask({ risk: "critical", tierWarning: "critical 连续 3 次被拒——建议降档回默认档" })}
+        onDecide={() => undefined}
+        onDowngrade={() => undefined}
+      />,
+    );
+    expect(warn).toContain('class="note-tier"');
+    expect(warn).toContain("连续 3 次被拒");
+    expect(warn).toContain(">降档回默认档<"); // 按钮文案（>…< 锚：不误命中提示句里的同名尾字）
+    // 不静默、不自动改档：文案是「建议」，按钮是**用户点的**那一枚。
+    expect(warn).toContain("建议降档");
+    const quiet = renderToStaticMarkup(<ApprovalCard ask={ask({ risk: "critical" })} onDecide={() => undefined} />);
+    expect(quiet).not.toContain("note-tier");
+    // 没给降档回调就不摆按钮（按不动的按钮比没有按钮更糟）。
+    const noHook = renderToStaticMarkup(
+      <ApprovalCard ask={ask({ risk: "critical", tierWarning: "建议降档回默认档" })} onDecide={() => undefined} />,
+    );
+    expect(noHook).toContain("note-tier");
+    expect(noHook).not.toContain(">降档回默认档<");
+  });
+
   it("remember 合并审批卡：不裸 JSON（旧形状回归钉）", () => {
     const html = renderToStaticMarkup(
       <ApprovalCard ask={ask({ tool: "remember", args: { trigger: "session_end_distill", scope: "global" }, risk: "low" })} onDecide={() => undefined} />,

@@ -1,0 +1,35 @@
+bytes: 恢复版 1491203 | HEAD 版 1491201
+首个差异位置(字符): 99863
+恢复版 ... "ancestorTitles\":[\"withModelBudget（inputLimit 换成模型真实窗口）\"],\"fullName\":\"withModelBudget（inputLimit 换成模型真实窗口） 窗口不可得 / 非有限 / 放不下输出预留 → 原样返回（保守回落，不放大也不炸）\",\"status\":\"passed\",\"title\":\"窗口不可得 / 非有限 / 放不下输出预留 → 原样返回（保守回落，不放大也不炸）\",\"duration\":0.25116700000000947,\"failureMessages\":[],\"meta\":{}"
+HEAD 版 ... "ancestorTitles\":[\"withModelBudget（inputLimit 换成模型真实窗口）\"],\"fullName\":\"withModelBudget（inputLimit 换成模型真实窗口） 窗口不可得 / 非有限 / 非正 → 原样返回（保守回落，不放大也不炸）\",\"status\":\"passed\",\"title\":\"窗口不可得 / 非有限 / 非正 → 原样返回（保守回落，不放大也不炸）\",\"duration\":0.25116700000000947,\"failureMessages\":[],\"meta\":{},\"tags\":[]"
+差异段数: 31155
+  @99863
+    恢复版: "放不下输出预留 → 原样返回（保守回落，不放大也不炸）\",\""
+    HEAD 版: "非正 → 原样返回（保守回落，不放大也不炸）\",\"statu"
+  @99894
+    恢复版: "tatus\":\"passed\",\"title\":\"窗口不可得 / 非有限"
+    HEAD 版: "\":\"passed\",\"title\":\"窗口不可得 / 非有限 / 非正"
+  @99931
+    恢复版: "/"
+    HEAD 版: "→"
+  @99933
+    恢复版: "放不下输出预留 → 原样返回（保守回落，不放大也不炸）\",\"duration\":"
+    HEAD 版: "原样返回（保守回落，不放大也不炸）\",\"duration\":0.25116700"
+  @99974
+    恢复版: ".25116700000000947,\"f"
+    HEAD 版: "00000947,\"failureMess"
+  @99996
+    恢复版: "ilureMessages"
+    HEAD 版: "ges\":[],\"meta"
+  @100011
+    恢复版: "[]"
+    HEAD 版: "{}"
+  @100015
+    恢复版: "meta"
+    HEAD 版: "tags"
+  @100021
+    恢复版: "{}"
+    HEAD 版: "[]"
+  @100025
+    恢复版: "tags\":[],\"benchmarks\":[]},{\"ancestorTitles\":[\"摘要输入不含子流（§4.4.4 在折叠面上的那一半）\"],\"fullName\":\"摘要输入不含子流（§4.4.4 在折叠面上的那"
+    HEAD 版: "benchmarks\":[]},{\"ancestorTitles\":[\"摘要输入不含子流（§4.4.4 在折叠面上的那一半）\"],\"fullName\":\"摘要输入不含子流（§4.4.4 在折叠面上的那一半） 带归因的四型"

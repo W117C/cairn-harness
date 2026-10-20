@@ -18401,3 +18401,541 @@ typecheck 0 报错｜八份判卷 **101 条全绿**（含两条反过拟合用�
    `mutate-needles-check` 17 条「钉在飞文本」均为未提交所致，提交后消解；其余 31 道门全绿。
    **入库形状**：同第 608–613 页——不擅自提交，改动留在工作树。
 
+
+## 2026-10-19 · 第 615 页：第三轮独立评审（桌面主进程 + 渲染层）+ 上批遗留债收口（14 条，含 1 条会话永久卡死）
+
+1. **动因与方法**：业主 goal「优化所有模块，桌面端着重」。派 4 支独立评审（桌面主进程 / 渲染层 /
+   agent 循环 / 工具与权限）；前一轮的三支因 503 中途夭折，本轮重派。评审只读，要求
+   「造专破它的坏输入」。评审带出的高危项逐条自验，每条改动都配**能杀掉它的突变体**。
+   本页同时收口第 613/614 页留下的四条结构债中的三条。
+2. **桌面主进程（评审 6 条，本页落 6 条）**：
+   - **【高】会话被永久卡死 + 没有证据的指控**（`kernel-host.ts` 的 `externalDrift`）：基线不稳
+     （只在我们自己测不准时出现——多半是 worker 尾随写）时直接 `return true`（拒绝），而拒绝发生在
+     `refreshSnapshot` **之前** ⇒ 基线永远不重建 ⇒ 每一轮 run 都撞同一句"会话已被外部修改（CLI？），
+     请刷新后重试" ⇒ 会话**彻底不可用**，连它自己给的那条出路都走不通。实测：20MB 会话日志、
+     本端无人写、文件逐字未动，连续两轮全被这句拒绝。修法：基线不稳 ⇒ **重建基线后放行**
+     （让这一轮从当前真相起跑），不指控、不卡死；快路径（文件逐字未动）排在不稳判据**之前**。
+     判据抽成纯函数 `decideDrift`（放行/重建/拒绝三态），判卷直接钉这三态。
+   - **【中高】未授权站点的闸不覆盖子框架**（`browser-host.ts`）：`will-navigate` / `will-redirect`
+     **只对主框架触发** ⇒ 页面里一个 `<iframe src="https://intranet.corp/">` 就能把未授权站点拉进
+     窗格跑 JS/WebSocket，而 UI 上那份"已授权站点"清单（还能逐站移除）让人以为它限定了这个窗格
+     能到哪。实测真 Electron 44：子框架跳转时 `will-navigate` 根本不触发，`will-frame-navigate`
+     触发（带 `isMainFrame`）——正确的 API 就在那儿，只是没挂。接上 `will-frame-navigate`。
+   - **【中】失败的 iframe 改写本窗格的 URL 与标题**：Electron 的 `did-fail-load` 对**每个**帧都触发，
+     旧实现忽略 `isMainFrame` ⇒ 一个加载失败的第三方 iframe（被拦的广告帧、拉不到的追踪像素）把
+     **那个 iframe 的 URL** 推成本窗格的 URL，标题也变成错误文案；渲染层照单全收 ⇒ 地址栏变成
+     用户从没打开过的 URL（可以据此点进任意外站）。改为只认主框架。
+   - **【中】终端输出的多字节 UTF-8 跨块被拆坏**（`terminal-host.ts`）：PTY 输出按块到达，
+     旧实现每块各自 `chunk.toString("utf8")` ⇒ 汉字的三字节分两次读到达时解成 U+FFFD ⇒ 中文与
+     emoji 在终端窗格里变乱码（中文文件名、git 中文提交信息、中文注释都走这条路；ASCII 标记照旧
+     完好，所以既有判卷全绿也看不出来）。改用 `StringDecoder`（`Utf8ChunkDecoder`），stdout 与
+     stderr 各持一份（两条独立字节流，共用会把两个半字拼成假字符）。
+   - **【低中】预览与导出绕过了"已知工作区"那道门**（`index.ts`）：同一个文件里 `setWorkspaceContext`
+     早把工作区上下文限死在"已注册"面上，唯独 `previewStart` / `projectExport` 绕过——
+     `previewStart` 会在该目录跑 `pnpm exec vite`（**vite 会加载并执行该目录的 `vite.config.js`**，
+     任意代码执行，无审批门），`projectExport` 把该目录整份拷走。补已知工作区门（等于某个根
+     **或**落在某个根之内——工作区里 agent 交付的单文件交付物也要能预览，那是产品明确支持的一路；
+     软链逐段解析后再判）。`setWorkspaceContext` 保持**严格相等**（它定的是"文件窗格/预览的根"）。
+   - **【低】`gitClone` 的 `parentDir` 是裸的写入目标**：URL 过了白名单、仓库名也严了字符集，
+     唯独 `parentDir` 原样照收 ⇒ `parentDir:"/Users/me/.ssh"` 就把仓库克隆进 `~/.ssh/y`
+     （连 `.git/hooks/*.sample` 一起写）。界面上那一栏只能经系统目录对话框选（没有手输兜底）
+     ⇒ 主进程记下"用户真选过的目录"，克隆落点只认这份名单。
+3. **渲染层（评审 7 条，本页落 7 条）**：
+   - **【高】对话导出丢掉助手的全部回答**（`transcript.ts`）：真实 provider（openai/anthropic）
+     **一轮只发 `assistant_delta`**，`assistant_message` 终稿是 mock/demo 通道才有的东西；
+     旧实现只认终稿 ⇒ **每个真会话导出的对话里助手的话整段消失**（只余用户消息）。
+     既有判卷只喂 `assistant_message`，照旧全绿。改为按 callId 分桶累计 delta（落定点与
+     `projectStream` 同口径：轮界 = 下一条 `user_message`，停转 = 事件流结束），思考正文仍不进导出。
+   - **【高】没有会话归属的弹出窗把所有会话的事件都吸进来**（`PopoutApp.tsx`）：旧实现
+     `props.sessionId === null || sid === undefined || sid === props.sessionId` —— 第一个析取项
+     为真时后面两项全是废话。真实路径：⌘N 回首页时 paneTabs 不清，⧉ 传的是 undefined ⇒ 窗格无
+     sessionId ⇒ 用户在一个只有「变更」两个字、空态写着"本会话还没有文件改动"的窗格里，读到
+     **另一个会话**的轮次、文件与验证状态。归属判据抽成纯函数 `popoutEventBelongsTo`（无归属就不显示）。
+   - **【中高】弹出窗读盘期间到达的增量被覆盖**：`setEvents(r.events)` 直接**替换**状态，而
+     `onEvent` 早几行就注册了 ⇒ 读盘窗口内到达的事件被盖掉，窗格永久缺一段（主窗口同款缺陷那边
+     用 `openPending` + `mergeSessionSnapshot` 修过，弹出窗漏了这一手）。改走 `mergeSessionSnapshot`。
+   - **【中】模型菜单在切会话时自己弹开**（`ModelPicker.tsx`）：`ModelPicker` 按 `key={draftKey}`
+     在切会话时重挂（那个 key 正是为了不"让模型搜索框悬在新会话上"），重挂把"上一次见过的 seq"
+     复位成 0，而 Composer 那边的 `pickerOpenSeq` 不复位、还留着上一次 ⌘⇧I 的值 ⇒ 重挂后的 picker
+     以为"seq 前进了一大截"⇒ 菜单自己弹开、悬在新会话的输入框上抢焦点。判据抽成纯函数
+     `nextOpenSeqState`：**重挂不算前进**（首帧只对齐基线）。
+   - **【中】运行秒表读的是另一个会话的耗时**（`App.tsx`）：起点存**一个** ref，谁起跑就盖谁 ⇒
+     A 起跑 → 切 B → B 起跑 → 切回 A（A 还在跑）⇒ 算的是 `now − B 的起点`，A 真实跑了 3600s
+     显示成 0s。改为按会话存（与 `runGen` 同一形状），读数走纯函数 `elapsedSecondsFor`。
+   - **【中】用量环的明细浮层关不掉**（`Composer.tsx`）：只有附件/权限两个菜单接了
+     `usePopoverDismiss`，用量浮层两个手势都不认 ⇒ 点开后按 Esc 不关、点外面也不关，一直钉在
+     输入框上方盖着内容；每一个别的浮层两个手势都关，这一支独自关不掉读起来就是坏控件。补第三支。
+   - **【低中】还原之后改动面还当这个文件没撤**：还原只改盘上的文件、**不留任何事件**，而改动面
+     （Inspector 的「改动」Tab、变更窗格、顶栏 Changes 徽标、交付卡的「改动已验证」）**全部**从
+     事件流投影 ⇒ 还原之后那一行仍写着"修改"、仍提供"撤销"、徽标仍数着它、交付卡仍说"改动已验证"，
+     而那个改动在盘上已经不存在了。补 `file_restored` 事件（主进程还原成功后落流，带 sessionId），
+     投影按**最后一次动作**判定（还原之后再被写 ⇒ 重新进改动面）。
+4. **上批遗留债收口（3 条）**：
+   - **插件配置表单的类型化校验**（第 614 页未证项②）：`UserConfigField.type` 从前只被解析
+     （`parseUserConfigFields`）和陈列（快照回给面板），**没有任何一处按它校验** ⇒ 往
+     `type:"number"` 的字段填 `"abc"` 会被原样收下，再原样进 MCP 的 `command/args`、LSP 的 `args`
+     与 hook 的 exec form；一个拼错的数字不会在任何地方报错，只会让那家 MCP server 起不来。
+     补 `userConfigValueError` / `userConfigValuesErrors`（写入口拒；未知类型一律放过——
+     CC 形态允许插件作者只写 title/description）。
+   - **运行中批准插件的工具面**（第 614 页未证项①的"模型可见面"那一半）：模型面是**逐请求**重算的
+     （`requestFace` → `sessionToolFace` → 读 `rt.mcpTools` 的**活引用**），而 `installPluginTools`
+     写进全局 `TOOLS` 的执行表是**起点快照** ⇒ 会话跑到一半才被批准的插件，它的 MCP 工具会出现在
+     模型清单里、却在执行面查不到，落一句 `unknown tool: …`——这正是本仓反复判死的
+     「模型看到的工具 ≠ 能执行的工具」。loop 加 `resolveTool` 钩子（查表前现问一次），
+     补表复用**同一个** `gatedMcpTool` 构造（权限管线与审计留痕全都走它，不另写执行路径）。
+   - **canary 跨实例锁**：锁只按 `Date.now() - mtimeMs > 60s` 判陈旧 ⇒ 时钟往回一跳（NTP 校正 /
+     虚拟机恢复 / 手动改表），**早就不在的进程**留下的锁永远读不出"超时"，canary 从这一秒起永远
+     refused，而盘上没有任何东西能解开它。持锁者本来就把 pid 写进了锁文件，却从没读回来过 ⇒
+     改为**探活优先于时钟**（pid 不在就是不在，不受时钟影响；顺带堵住"活着的进程卡住超 60s 时
+     锁被当陈旧收走、两个实例同时写同一份观察档"那一侧）。pid 读不出（崩溃在 open 与 writeFile
+     之间）时不猜，退回 60s 时间兜底。
+5. **本批的自审与判据纪律**：
+   - 每一处改动都配**能杀掉它的突变体**（改回旧形状 ⇒ 对应用例必须红）：配置类型校验 5 条、
+     插件补表 2 条、canary 探活 1 条、对话导出 4 条、弹出窗归属 3 条、漂移判据 2 条、
+     终端解码 4 条、浏览器子框架闸 3 条、路径门 2 条。**没有一条突变体存活**。
+   - 中途发现两处判据自身的缺陷并当场修：① canary 探活那一版把"探活"排在时间判据**之后**
+     （死进程仍读不出超时 ⇒ 仍卡死）；② 终端解码的判据按**字符**切块而不是按**字节**切
+     （切出来正好落在字符边界上 ⇒ 测不到任何东西）。两条都是"判据恒真/恒假"的形状。
+   - 回取承诺网（`probe-promise-recall`）当场抓到本批新增的一句"只能"文案点不出 ≥6 字可判中文
+     ⇒ 改写成点得出名字的"可接受的值只有"，并让用例引原句作证人（**不是**把文案改到不触发标记）。
+   - 落流脱敏网（`stream-redaction`）要求每个事件类型对"带不带外部文本"表过态 ⇒ 新增的
+     `file_restored` 明确归入**要扫**（字段是路径，但必须与 `tool_call.args` 里的同一个路径
+     同样地扫：主会话落盘时 args.path 已过 `redactSecrets`，这条是主进程直接 append 的
+     （不经 loop），不扫就两处文本可能不同 ⇒ 改动面按路径配不上，还原白落）。
+6. **工具与权限面（评审 5 条，本页落 5 条；前两条是可直接落地的执行面绕过）**：
+   - **【高】路径别名拼写绕过敏感路径的审批门**（`src/permissions/risk.ts` 的 `pathRisk`）：
+     **权限层与工具层对"这是哪个文件"的口径不一致**——工具层先 `resolve()`（`src/tools/base.ts:119`）
+     把 `//`、`.`、`x/..` 折叠掉，权限层却在**未归一的原始串**上做子串匹配。
+     `.git//hooks/pre-commit`、`.git/./hooks/pre-commit`、`.git/x/../hooks/pre-commit`
+     三种写法工具层都落到 `<ws>/.git/hooks/pre-commit`（**同一个每次 git commit 自动跑的钩子**），
+     却因为原文里没有 `.git/hooks/` 这个子串而判成 none ⇒ **auto 档免批写钩子**（实测文件真的落盘）；
+     读侧同理：`.git//config` 连**只读档**都能读出 `.git/config` 里的凭据。
+     修法：候选串按空白切成 token、每个 token 先按工具层同口径归一再查表
+     （**只增不减**：归一只把"同一个文件的多种拼法"收成一种，`src/.env.local` 这类今天照样命中的写法不动）。
+   - **【高】`apply_patch` 带一个惰性的 `path` 诱饵 ⇒ 整个补丁正文不被扫**
+     （`pathSurface` 的 `if (parts.length > 0) return …` **提前返回**）：`apply_patch` 本身不读
+     `path` 键（对它是惰性的），而工具 schema 没有 `additionalProperties:false`、provider 传的是
+     `JSON.parse` 原文 ⇒ 模型可以带这个键。实测
+     `apply_patch {patch:"…b/.git/hooks/pre-commit…", path:"README.md"}` 走 approve/L4-pass，
+     **钩子真的落盘且带可执行位**；同一份 patch 不带诱饵键时是 ask/L4-risk ⇒ 门被一个惰性参数关掉了。
+     修法：patch 正文与 path/paths 是**并集**，不是先到先得。
+   - **【中高】`grep`/`glob` 的目录参数落在敏感根下 ⇒ 整棵子树绕过路径通道**：
+     `grep {pattern:"ghp_", path:".git"}` 的 path 是 `.git`（不含 `.git/hooks/` 也不含 `.git/config`
+     两个子串）⇒ 旧实现判 none ⇒ **连只读档都 approve**（免批），而 grep 扫的是整棵 `.git` 子树，
+     把 `.git/config` 里的凭据原样带进模型上下文（实测返回 `url = https://ghp_SECRET…@github.com/…`）。
+     修法：递归扫描面另认「敏感根」（从既有那张表**推**出来，不另抄一份：`.git` / `.agent`）——
+     目录参数落在敏感根下 ⇒ high。**只对递归工具生效**（`read_file` 指的是那个文件，子树不在它的覆盖面里），
+     且不误伤 `grep path:"src"` / `path:"."`（每次 grep 都变成要审批是远超本条的行为变更）。
+   - **【中】`redactSecrets` 把带括号密码的尾巴留在明文里**（`src/agent/security/scan.ts`）：
+     `secret.assigned` 排在 `secret.assigned_bracketed` **之前**，而掩码是按顺序做的
+     （`out.split(secret).join(mask(secret))`）——先到的那条把整串换掉之后，后到的那条
+     虽然**匹配得到**完整 secret（它匹配的是原始行），但那个串**已经不在 out 里了** ⇒ 替换是空操作
+     ⇒ 尾巴幸存。实测 `PASSWORD=correcthorsebattery(staple)123` → `PASSWORD=corr****(staple)123`
+     （`(staple)123` 明文）。**半掩比不掩更坏**（它给出"已经脱敏过了"的假象）——
+     与第 612 页给 `secret.connection_string` 的那条补丁同源同法：把 bracketed 挪到 assigned **之前**。
+   - **【中】`web_search` 的目的地不在审批卡上 ⇒ 那次批准是**不知情**的**：端点来自工作区的
+     `.agent/config.json`（`search.endpoint` + `search.allowLocalEndpoint`），**不在模型给的 args 里**
+     ⇒ 卡上只有 `{"query":"…"}`。而一个克隆来的仓只要带一份
+     `{"search":{"endpoint":"http://169.254.169.254/latest/meta-data/{query}","allowLocalEndpoint":true}}`，
+     端点就能指向云元数据地址（`allowLocalEndpoint` 还会让 SSRF 闸被跳过），而卡上**看不出这件事**。
+     修法：端点（与"该端点允许访问本机/内网"这件事）**上卡**——主进程侧加 `CardExtra` 钩子
+     （只进审批卡，**执行面仍用模型给的原 args**），渲染侧 `describeAsk` 补 `web_search` 一支。
+7. **读数（出沙箱、无并发编辑）**：core **429 文件 / 6102 用例全绿**（基线 428/6073）；
+   桌面 **142 文件 / 1050 用例全绿**（基线 132/961）；双端 typecheck 0；
+   desktop-boundary 绿；docs-check 绿；**Electron 真机冒烟 PASS**（1.44s，`pnpm smoke`：
+   侧栏/模型选择器/整场 run 都通）；**Electron 硬化真机冒烟 PASS**（`pnpm hardening-smoke`：
+   权限默认 `denied`；302 到 `169.254.169.254` 被 will-redirect 拦下并推 `pending`，
+   页面仍停在原 URL——本批改过 browser-host，这道真机冒烟是它没坏掉的证据）。
+   **HEAD 态是红的（工作树是绿的）**：`head-cert-check` 在 **29d1ea4（HEAD）** 上跑出
+   **2 条红**（`tests/promise-recall-inventory.test.ts` 与 `tests/prose-needle-scan.test.ts`）——
+   那是上一批留在工作树里没入库的改动造成的（其中一条就是本页第 5 节那条"死登记"）。
+   本批的修复在工作树上，两条都已转绿；**但未入库** ⇒ `head-cert-check` / `mutate-verify`
+   这两道**测 HEAD** 的门在提交前仍会红。这是"改动留在工作树"这条纪律的直接代价，
+   如实记下，不把工作树的绿说成 HEAD 的绿。
+   **入库形状**：同第 608–614 页——不擅自提交，改动留在工作树。
+
+## 2026-10-20 · 第 616 页：第三轮独立评审（agent 循环 + 工具与权限）· 脱敏归落盘边界（12 条，含 3 条 HIGH）
+
+1. **动因与方法**：业主 goal 追加「**给 harness 做薄、做标准**」。这一轮把那句话当判据用：
+   评审追出的 12 条里，多数是**同一个信任边界被抄成多份、或两层互相抵消**的形状——
+   正是"薄"要治的病。评审只读、要求"造专破它的坏输入"；每条改动都配**能杀掉它的突变体**。
+2. **脱敏归落盘边界（本次最核心的一处"薄"）**：
+   - 旧形状把脱敏藏在 loop 的 `events.append` 里（消费者拿到的是**已脱敏**的事件）⇒ 两条代价：
+     ① 任何**不经过 loop 的新出口**都可能把明文写进盘，而没有一处会报错；
+     ② **安全扫描面失明**：`collectChangeSet` 从事件里取 `args.content` / `args.new_string` /
+     `args.patch` 去扫密钥，那些串早已被掩成 `AKIA****` ⇒ `secret.*` 规则**一条都不命中**
+     ⇒ 写进 `src/creds.ts` 的 `AKIA…` 在 security_report 里报 **total=0**，merge 闸因此放行，
+     凭据落进用户的主干——**一道静默空转的安全闸**（它每次都"跑过了"，只是什么也没看见）。
+     实测六种密钥形状：raw 各 1–3 条命中，redacted 各 **0** 条；`mergeGateVerdict(raw)=allow:false`
+     对 `mergeGateVerdict(redacted)=allow:true`。
+   - 修法（**薄的那一版**）：脱敏归**持久化边界**管——`src/events/log.ts` 的 append 自己擦
+     （新建 `src/events/redact.ts` 收拢脱敏原语，storage engine 不再依赖 agent 层）；
+     内存流留**原件**（扫描面要真内容）。三处落盘/出站面（agent-runner / sidechat / orchestrator）
+     各擦自己那份，执行面仍用原件。**"密钥不进主转录 JSONL"这条承诺一字未变**（有判据钉着）。
+   - 附带修好一处被它揭出来的旧伤：私钥块的**标记**（`-----BEGIN … PRIVATE KEY-----`）从前被
+     整段掩掉 ⇒ 下游再也认不出"这里曾经是私钥块" ⇒ sidechat 的提升面（promote）那声 fail-closed
+     的"拒"**静默失效**（而它本该拒的正是旁路模型产出的私钥）。那两行是**公开常量**，秘密是
+     中间的 base64 体 ⇒ 掩材料、留标记（与 `secret.assigned` 同一口径："掩值不吃键名"）。
+     顺带把 sidechat 的 fail-closed 承诺**在生产里也补齐了**（从前生产路径的日志是脱敏的，
+     那声"拒"压根不会触发——只有直接写日志的判卷路径才会）。
+3. **agent 循环（评审 8 条，本页落 5 条 HIGH/MEDIUM）**：
+   - **【HIGH】worker 收尾中途 emit 失败 ⇒ 留下一个永远成功的僵尸**（`orchestrator.ts` 的 `finish`）：
+     `finishInner` 在发 `agent_result` 之前就把 `terminalStatus = "done"` 盖上了；那一抛让后面几行
+     全被跳过 ⇒ ① 终态仍读成 done ⇒ 父会话拿到 `{"status":"done","summary":""}`（**一句谎**）；
+     ② 耐久日志里只有 `agent_status:done` 没有 `agent_result` ⇒ 重启后补不上 failed(interrupted)；
+     ③ `agentOwners` 与内存回收被跳过 ⇒ 崩溃恢复的过滤器永远跳过它 ⇒ **救不回来的僵尸**。
+     修法：catch 里把终态改口成 failed、路由表摘掉、内存回收照做。
+   - **【HIGH】worker 的失败被沉淀成跨会话注入的项目级教训**（`memory/distill.ts` 的
+     `failureDigestFromEvents`）：它的兄弟 `distillLessons`（src/agent/memory/lessons.ts）早就过滤了
+     worker 子流，**这一支漏了同一道过滤** ⇒ 父会话干净、worker 连败两次 ⇒ 摘要照样吐
+     "write_file×2" ⇒ 而这份摘要会被拼进沉淀指令、让模型按 `scope=project` 沉下去。
+     修法：同款过滤（同一个漏口，一个消费者漏了）。
+   - **【MEDIUM-HIGH】并发写丢数据两处**：① `replaceRootFile` **一把锁都不拿**，与
+     `appendRootFile` 抢同一个文件 ⇒ 整写那一份把追加那笔静默盖掉（两边都回执"已写入"）；
+     ② `remember` 的追加形态**读在锁外** ⇒ 两个并发追加都读到同一份旧正文，后一个整个盖掉前一个。
+     修法：追加的"读-改-写"搬进 store 的锁里（`appendTopic`）；替换改成**比较-替换**（CAS）——
+     判据与写在同一段临界区，判据过期就拒。**无条件整写那个原语直接删掉**（没有安全写路时，
+     少一个能踩的坑）。
+   - **【MEDIUM】连败之后通过的那一环，改动永远落不进主干**（`supervisor` 的重复闸）：
+     重复闸数的是"同一件事反复**失败**"（门侧 B2 那三格用的都是 `verdict:"fail"`），
+     旧实现把**上一环**的失败计数原样递给**这一环**的裁决 ⇒ 连败三环后**第四环即使通过**也被
+     escalate ⇒ 父会话拿到"已升级人工裁决"，而那一环明明做对了、worktree 被留着等人工合并。
+     修法在**caller**（通过的那一环递 0）——决策函数与它的判卷契约**逐字未动**。
+   - **【MEDIUM】目标漂移"没测过"被读成"已消解"**（`evolution/patch-effect.ts`）：
+     `goalDriftCount === 0` 有两种成因——"测过了没有"与"根本没得测"（这一跑只有工具调用、
+     助手一句散文都没写）；旧实现把两者都读成 0 ⇒ 上一轮的 goal-reconfirm 补丁**被删掉**，
+     审计轨迹还记着"已消解"（为一个从没测过的漂移）。修法同 `costMeasurable` 那一格
+     （2026-10-16「不可测 ≠ 无前进」）：补 `goalDriftMeasurable`，不可测 ⇒ inconclusive + 观察。
+   - 另两条（【MEDIUM-LOW】R3 往返抖动在 worker 路径上永远判不出；registry 的**尾部半写行**
+     把注册表**永久打死**）同页修完：前者是"历史恒收、提示才受开关管"（这两件事被混成一件了），
+     后者照 `src/events/log.ts` 的 `repairPartialTail` 口径裁尾并**截回最后一条完整行**
+     （中段的坏行仍然当场抛——那是另一类事故，不许被安静地抹掉）。
+4. **工具与权限面（评审 5 条，本页落 4 条）**：
+   - **【HIGH】路径别名拼写绕过敏感路径的审批门**（`permissions/risk.ts`）：**权限层与工具层
+     对"这是哪个文件"的口径不一致**——工具层先 `resolve()`（折叠 `//`、`.`、`x/..`），
+     权限层却在**未归一的原始串**上做子串匹配 ⇒ `.git//hooks/pre-commit`、`.git/./hooks/…`、
+     `.git/x/../hooks/…` 三种写法工具层都落到**同一个每次 git commit 自动跑的钩子**，
+     却因为原文里没有 `.git/hooks/` 而判成 none ⇒ **auto 档免批写钩子**；读侧同理
+     （`.git//config` 连**只读档**都能读出凭据）。修法：候选串按空白切 token、每个 token 先按
+     工具层同口径归一再查表（**只增不减**：`src/.env.local` 这类今天照样命中的写法不动）。
+   - **【HIGH】`apply_patch` 带一个惰性的 `path` 诱饵 ⇒ 整个补丁正文不被扫**：
+     `pathSurface` 的 `if (parts.length > 0) return …` 提前返回；`apply_patch` 本身不读 `path` 键
+     （对它是惰性的），而工具 schema 没有 `additionalProperties:false`、provider 传的是
+     `JSON.parse` 原文 ⇒ 模型可以带这个键 ⇒ 补丁里的 `.git/hooks/…` **实测真的落盘且带可执行位**。
+     修法：patch 正文与 path/paths 是**并集**，不是先到先得。
+   - **【MEDIUM-HIGH】`grep`/`glob` 的目录参数落在敏感根下 ⇒ 整棵子树绕过路径通道**：
+     `path:".git"` 不含那两个子串 ⇒ 旧实现判 none ⇒ **连只读档都 approve**（免批），
+     而 grep 扫的是整棵 `.git` 子树 ⇒ 实测把 `.git/config` 里的凭据带进模型上下文。
+     修法：递归扫描面另认「敏感根」（从既有那张表**推**出来，不另抄一份）；**只对递归工具生效**
+     （`read_file` 指的是那个文件，子树不在它的覆盖面里），且不误伤 `grep path:"src"` / `"."`。
+   - **【MEDIUM】`redactSecrets` 把带括号密码的尾巴留在明文里**：`secret.assigned` 排在
+     `secret.assigned_bracketed` 之前，而掩码是按表序逐条做的（`out.split(secret).join(mask)`）⇒
+     先到的那条把整串换掉之后，后到的那条虽然**匹配得到**完整 secret（它匹配的是原始行），
+     但那个串**已经不在 out 里了** ⇒ 替换是空操作 ⇒ 尾巴幸存。实测
+     `PASSWORD=correcthorsebattery(staple)123` → `PASSWORD=corr****(staple)123`。
+     修法：bracketed 挪到 assigned **之前**（同第 612 页给 connection_string 的那条补丁）。
+   - 另有一条（`web_search` 的目的地不在审批卡上 ⇒ 那次批准是**不知情**的）同页修完：
+     端点来自工作区的 `.agent/config.json`、**不在模型给的 args 里** ⇒ 卡上只有 `{"query":"…"}`；
+     而一个克隆来的仓只要带一份 `{"search":{"endpoint":"http://169.254.169.254/…",
+     "allowLocalEndpoint":true}}` 就能把端点指向云元数据地址（`allowLocalEndpoint` 还会让 SSRF 闸
+     被跳过），而卡上**看不出这件事**。修法：端点（与"该端点允许访问本机/内网"这件事）**上卡**
+     （主进程侧加 `CardExtra` 钩子，只进审批卡、**执行面仍用模型给的原 args**）。
+5. **「薄」的一处结构收口（业主方向：给 harness 做薄、做标准）**：
+   敏感落点片段表此前**抄了两份**——权限层（`src/permissions/risk.ts`）与工具层
+   （`src/tools/base.ts`）各一份，**而且已经漂了**：工具层那份少了 `.agent/lsp.json` 与
+   `.agent/config.json`（宿主配置面：模型能改这两个文件 = 能让宿主执行任意命令）。
+   后果不是"多写了几行"，而是**同一个落点在两层各有一份真相**——"这一格算不算敏感"要看
+   调用到哪一层；本轮追出的那条 HIGH（路径别名绕过）正是"两层口径不一致"的活例子。
+   修法：收成**一份**（`src/sensitive-paths.ts`，全仓唯一事实源；扫描用的敏感根从它**推**出来，
+   不另抄），两层各按自己的语义消费（权限层词法判风险、工具层软链后真实落点复查）。
+   顺带补上漂移漏掉的那一格：软链落到 `.agent/lsp.json` 现在被工具层硬拒（从前放行）。
+6. **本批的自审与判据纪律**：
+   - 每一处改动都配**能杀掉它的突变体**（改回旧形状 ⇒ 对应用例必须红）：脱敏归位 2 条、
+     安全扫描不盲 2 条、僵尸 worker 2 条、跨会话沉淀 1 条、并发丢写 1 条、supervisor 1 条、
+     路径别名 3 条、apply_patch 并集 1 条、递归敏感根 1 条、掩码次序 1 条、
+     搜索端点上卡 1 条、canary 陈旧副本/回滚版本 1 条、registry 裁尾 1 条、
+     R3 历史 1 条、目标漂移可测 1 条。**没有一条突变体存活**。
+   - 中途发现**两处判据自身的缺陷**并当场修：① 终稿转录那条判据按**字符**切块而不是按**字节**切
+     （切出来正好落在字符边界上 ⇒ 测不到任何东西）；② 私有钥那条判据我一度改成"掩材料留标记"，
+     但掩码是**逐行**做的 ⇒ 多行 PEM 跨行捕获不到 ⇒ 又退回来改成"标记整段不掩"（`publicMarker`）。
+     两条都是"判据恒真/恒假"的形状——**判据也要被突变体审**。
+   - `stuckActionOf` 顺带修好：它被"恒收历史"这一改**调到**了参数带环的工具调用上，
+     而 `JSON.stringify` 对环直接抛 ⇒ 整轮任务死在一次调用上。摘要面改成环安全（同脱敏面口径）。
+7. **变异锚点随实现走（4 条改指，判据与判卷面一字未改）**：本批把两处实现搬了家
+   （熵分支与脱敏原语 → `src/events/redact.ts`；replace 的精确命中检查 → store 的**比较-替换**），
+   4 条变异锚点因此落在"在飞文本"上（`mutate-needles-check` 会点名：针脚已不在源文件里 /
+   被测面不在 HEAD 的树里）。按那道门自己的说法改指：跟着实现走，**判据（expectFail）与判卷
+   （test 文件）一字未改**——其中两条 CAS 检查的锚点还特意**加了上下文**（`readTopicBody` 那一支
+   vs `readOrNull` 那一支），否则两条变异会打在**同一行**上，等于少守一半。
+   ⇒ 这 4 条在**实现入库前**仍会被点名为红（与 `head-cert-check` / `mutate-verify` 同理：
+   它们测的是 HEAD，而本批的改动**留在工作树**没有入库）。
+8. **读数（出沙箱、无并发编辑、**没有别的门在跑**）**：
+   - core **437 文件 / 6135 用例全绿**（基线 428/6073）；桌面 **142 文件 / 1050 用例全绿**（基线 132/961）；
+   - 双端 typecheck 0；desktop-boundary 绿；docs-check 绿；
+   - **工作树上的 31 道门退出码全 0**（`pnpm gates --only=<除三道 HEAD 门以外的全表>`），
+     另有 **9 项未证**（连网/凭据限制下没跑到的断言，与既有基线同档）——**不得宣称"全部通过"**；
+   - **Electron 真机冒烟 PASS**（1.32s，`pnpm smoke`：侧栏/模型选择器/整场 run 都通）；
+     **Electron 硬化真机冒烟 PASS**（`pnpm hardening-smoke`：权限默认 `denied`；
+     302 到 `169.254.169.254` 被 will-redirect 拦下并推 `pending`，页面仍停在原 URL——
+     本批改过 browser-host，这道真机冒烟是它没坏掉的证据）；
+   - **三道测 HEAD 的门仍红**：`head-cert-check` / `mutate-verify` / `mutate-needles-check`——
+     前两道测的是 **29d1ea4（HEAD）**，而 HEAD 本身就有 2 条判卷红（第 615 页记过：本页第 1 批的
+     "死登记"修在工作树上没入库）；第三道是本批 4 条锚点改指后落在"在飞文本"上。
+     **这不是本批的回归，是"改动留在工作树"的直接代价**——如实记着，不把工作树的绿说成 HEAD 的绿。
+   **入库形状**：同第 608–615 页——不擅自提交，改动留在工作树。
+
+## 2026-10-20 · 第 617 页：工作区清理（删了什么、留下什么与为什么）＋ 第四轮独立评审的三条真缺陷（读侧安全门 / 教训分桶 / worker 全局记忆）＋ 一条 17 天前救回来的未落地实验
+
+业主 goal：**继续打磨（桌面端 + 各个代码模块）＋ 清理整理工作区、过期的没用的全部清除 ＋ 做到顶尖 AI 公司水平的 agent**。
+本页记三件事：① 工作区清理的**逐项处置与理由**（"全清除"不等于"全删"——**未落地的活不许当垃圾扔**）；
+② 第四轮独立评审（core 面）追出的三条真缺陷，**都已修 + 都配了能杀掉它的突变体**；
+③ 一条 2026-10-03 被"抢救"下来、17 天没人动的未落地实验，本轮**落地并量到了效果**。
+
+### 一、工作区清理：删了什么、留下什么、为什么
+
+**判据**：① 磁盘上**没有第二份**且**不可能再被引用**的东西 ⇒ 删；② **未落地的活**（分支/实验）⇒ 先查它有没有被别处重新落地，
+查实了才删，查不实就**留在仓内**（分支成本 ≈ 0，删掉才是不可逆）；③ 机器本地状态与机器本地授权 ⇒ **入仓级 ignore**
+（原来只在 `.git/info/exclude` 里，换个克隆就以 untracked 的身份出现在 `git status` 里——本仓的纪律是
+「`git add -A` 会把不像源码的东西扫进 HEAD」，本地排除挡不住它）。
+
+| 处置 | 对象 | 理由 |
+|---|---|---|
+| **删** | `f.txt`（5 字节垃圾）、全树 `.DS_Store` | 纯垃圾 |
+| **删** | `_worktree-archive-2026-10-15/`（18 棵 agent worktree，480K） | 那些分支的 tip **全部是 HEAD 的祖先**（逐条验过）⇒ 无独有内容 |
+| **删** | `dsh-worktree-archive-2026-10-01/`（patches，704K） | 一次性产物 |
+| **删** | `dsh-worktree-archive-2026-10-17/`（31M：refs 清单 + 31M bundle） | 清单里的分支逐条查过：20 棵 `worktree-agent-general-purpose-*` 全部已并入 HEAD；两条有独有内容的**先救回仓内**（见下） |
+| **删** | 仓内 `.tmp/`（54M：调试日志、截图、scratch 脚本） | gitignored 的 scratch |
+| **删** | 仓内 `.worktrees/gate-head-cert` + `gate-mutate-verify`（733M，其中 590M 是 node_modules） | 两道门的**一次性树**，脚本自己会 `worktree add` 重开（查过 `scripts/head-cert.ts:131`） |
+| **删** | `.mimosa/` `.atomcode/` `.pi/` `.qoder/` `.rivet/` `.serena/` `.trae/` `.workbuddy*/` `.superpowers/` | 别的 AI 工具的运行时产物（不是源码）；`apps/desktop/src/renderer/.mimosa/` 更是**长在源码目录里** |
+| **删** | `src/cli.ts.bak`（89KB，2026-10-17 的旧版 cli.ts） | 人肉备份：与源码同目录同后缀，`git add -A` 会把它当新文件扫进 HEAD |
+| **删** | 本地分支 `agent/修复-todo-的-completedcount-worker-12`、`zcode` | 两条的 tip 都是 HEAD 的祖先（`zcode` 那条本地提交也在 HEAD 历史里） |
+| **留（并救回仓内）** | `doc-layer-migration`（5 笔：文档分层提案） | **未落地**：AGENTS.md 拆分、PROGRESS 归档、STATE.md 那一套还没进主干。已从 bundle 取出**存成本地分支**（对象已在仓内，删 bundle 不丢内容）——**删掉就是删掉一份还没人做过的活** |
+| **留** | `rescue/locate-weights-rev4`（1 笔：locate/map rev 4 实验） | **未落地**：本轮把它的实验**落到了主干**（见第三节）⇒ 落地后它才是可删的 |
+| **留** | `outputs/` 的已跟踪取料（2637 文件 / 63.0%） | 仓库体量门明写「本门不追溯、不删历史取料（那是别的会话的证据）」⇒ **历史取料不在"过期没用"那一栏** |
+| **留** | `agent-canon/`（47M）、`dsh-refs/`（59M）、`pel-runs/`（1M） | 参考面与实验证据（协作工作流 §1 定为只读参考） |
+
+**顺带补的三处 ignore 缺口**（都是"机器本地"却以 untracked 身份出现在 `git status` 里的）：
+`.mimosa/` `.pi/` `.atomcode/`（此前**只在 `.git/info/exclude`**，不随仓走）、`.agent/providers.json` `.agent/evolution.json`
+（前者是本机接了哪几家 provider——表里带 `allowLocalEndpoint: true`，那是**授权**，口径同 `.agent/permissions.always.json`：
+授权属于机器不属于仓库）、`*.bak`（同 `*.mutbak` 那一族：备份不是源码）。
+**外加一条纪律**：`src/permissions/index.ts` 里那个参数名**不能**写成「plan + Blocked 连写」——
+`tests/plan-required.test.ts` 的复发闸（全 src 只有 `permissions/autonomy.ts` 能提那个名字）会当场红；
+本轮撞了一次（把方案门做成布尔快照传参）⇒ 改成**传闭包**（活委托，不是快照），当场改对。
+
+### 二、第四轮独立评审（core 面）：三条真缺陷，三条都修了，每条都配了能杀掉它的突变体
+
+评审只读、要求"造专破它的坏输入"、且**必须自验复现**（这一轮三条全部在真 `runAgent` / 真工具 / 真事件流上复现过，
+不是对着谓词念）。三条的**同一个形状**：**判据是对的，但那条路上没接线**（或只接了一半）⇒ 判据从未被触发过。
+
+1. **【HIGH】读侧敏感路径门在主会话**从未**跑过 ⇒ `.git/config` 四档零审批就读出来了**
+   - 形状：路径通道（`src/permissions/risk.ts` 的 `pathRisk`）判得出「这个路径是敏感面」
+     （`.git/config` / `.env` / `.agent/config.json` / `.agent/lsp.json` …），但那个判据**只在 `evaluate()` 里跑**，
+     而 evaluate 只对**被 `gatedTool` 包装**的工具跑。主会话此前只包了写向与执行类
+     （write_file/edit_file/apply_patch/run_shell/lsp/render_image/web_fetch）⇒ **read_file/grep/glob 三把裸挂**
+     ⇒ 那道门在主会话这条路上**一次也没跑过**。worker 那边一直是包着的（`gatedWorkerTool`）
+     ⇒ **同一个工具、同一套判据、两个出口两个结论**。
+   - 实测（评审复现）：`read_file {path:".git/config"}` 与 `grep {pattern:"…", path:".git"}`
+     在 **default 与 read-only 两档都是零审批**，凭据直接进模型上下文（还落进会话 JSONL）。
+   - 修法：读侧三把接进同一道门（`src/main/agent-runner.ts` 的 `installAppTools`）。
+     命中敏感片段 ⇒ L4-risk 出卡（人点一次才放行）；不命中 ⇒ 照旧 L4-pass（**不抬高文件工具的基线风险**）。
+   - **连带修掉一处被它揭出来的旧伤**：`gatedTool` 的安全模式 gate（`M1E_SAFE_MODE=gate`）原先对**每个**进门工具都强制审批，
+     而它的语义与卡面文案都写着"写工具"；读侧三把接进门之后，旧形状会变成**每读一个文件一张卡**
+     ⇒ 人开始闭眼点"允许"⇒ 反而更危险。改成按 `isWriteCall` 限域（与 `gatedMcpTool` 同一口径——那条早就限了，只有这条漏了）。
+     不受影响的三把（lsp/render_image/web_fetch）：风险等级本来就是 **high** ⇒ 正常管线的 L4-risk 在四档里照样出卡，
+     安全模式这道**本来就是冗余的**（去掉不改变任何一档的实际行为）。
+   - 判卷（`tests/read-path-gate-live.test.ts`，8 条）：真 runAgent + 真 AskGate + 真 `.git/config`（带凭据）——
+     ① 读 `.git/config` ⇒ **出卡**，人点"不" ⇒ **凭据一个字都不进模型上下文**；② 读普通文件 ⇒ **不出卡**；
+     ③ `grep` 扫 `.git` 子树 ⇒ 出卡；④ **只读档同样出卡**（只读 ≠ 无门：读出去一样是外泄）；
+     ⑤ 人点"是" ⇒ 放行（门是问人，不是替人决定）；⑥ 安全模式开着时读普通文件仍不出卡、写文件照样出卡；
+     ⑦ 一条**源文本接线棘轮**（读侧三把必须都被 gatedTool 包着）＋它的**反向对照**（假源文本上必须认得出缺的那把）。
+     **突变体 3 条全杀**：摘掉 read_file 的包装 ⇒ 4 红；摘掉 grep 的包装 ⇒ 2 红；去掉安全模式的写向限域 ⇒ 1 红。
+
+2. **【MEDIUM-HIGH】"这个工具连败 N 次"的教训，是从**一次都没执行过**的调用里提炼出来的**
+   - 形状：`isAskDeniedResult` 只认 `blockedBy === "permission"` 与 verdict ∈ {rejected,timeout,unattended}，
+     而"没执行"的形状有**十种**（`TOOL_BLOCK_REASONS` 六道执行前闸 ＋ 四种 gate 结局，含 `denied`）。
+     漏掉的那五种（门直接拒 / 工具不在本会话工具表 / 被 skill 摘除 / 被 PreToolUse 钩子拦下 / 工具名不存在）
+     全落进"执行了但失败"那一袋 ⇒ 沉淀出「「X」连败 N 次——同一手法连续失败，先换做法再重试」。
+     **一次都没执行过的手法，哪来的失败？** 后果实测：一条 `deny:write_file` 规则 ⇒ 项目记忆里永久留下
+     「write_file 连败 2 次」，下一场会话读到的结论是"这个工具坏了"，而真因是**授权状态没变**。
+     这正是 ②b 分支（2026-10-16）当初要防的那件事——**换个门又长了一遍**。
+   - 修法：判据改成"**有没有执行过**"（`neverExecutedResult`）：`blockedBy` 在场 ⇒ 六道执行前闸之一拦下了它
+     （那个常量的定义就是"执行前就拦下"）；gate.verdict 属"没执行"那一族（含 `denied`）。
+     顺带把**成因**写进条目（`blockedBy` 的结构列，而不是一律写 "permission"——文案是第二个注入面）。
+     判据改名、条目 topic 改名（`lesson-ask-denied-` → `lesson-not-executed-`）：旧名对钩子拦的/门直接拒的那些**是说谎的**。
+   - 判卷（`tests/lesson-not-executed-bucket.test.ts`，3 条）：**穷举** `TOOL_BLOCK_REASONS` 全族（不是抽样）
+     ＋ verdict=denied ＋ **反向对照**（真跑挂了的工具仍走"连败"那一支，别把真失败一起豁免）。
+     **突变体 3 条全杀**：blockedBy 退回只认 permission ⇒ 1 红；verdict 族漏掉 denied ⇒ 1 红；成因一律写 permission ⇒ 1 红。
+
+3. **【MEDIUM】worker 能把**模型控制的文本**写进**全局层**（跨项目注入），连卡都不出**
+   - 形状：主会话的 remember 走 `createGatedRemember`（方案门 → 档位表 → **全局层要人点头**）；
+     worker 的 remember 只过通用 `evaluate`，而 `remember` **不在 `SIDE_EFFECT_TOOLS` 里**
+     ⇒ 既不是写向（方案门/只读档都不管它）、风险也是 none ⇒ **L4-pass 放行**。
+     评审实测：worker 一次 `remember {scope:"global"}` **连审批卡都不出**就把文本写进了全局层——
+     而全局索引会被注入到**每一个项目**的每一场会话。主会话对同一件事却是要问人的。
+   - 修法：**口径收成一份**（`permissions/rememberDecision`：方案门 → 只读档 → 全局层要人点头；项目层免批，
+     2026-10-15 业主裁决那一档），主会话与 worker **都从它读**（两处各写一份就会漂，而漂的方向是 worker 更松）。
+     worker 那侧多了一扇门：ask 走 worker 审批协议（留痕仍走同一条门：同一张卡、同一个 verdict 出口）。
+   - 判卷（`tests/worker-remember-scope.test.ts`，5 条）：真 worker 工具表 + 真审批协议 + 真落盘——
+     ① 全局层 ⇒ 出审批请求，人点"不" ⇒ **一个字节都不落盘**；② 点"是" ⇒ 落盘；③ 项目层仍免批；
+     ④ **两个出口对同一组 (档位, scope) 必须给同一个答案**（这条钉的是"漂移的方向是 worker 更松"这件事本身）；
+     ⑤ auto 档两个出口同答（auto 档的粗档表是"全放行"，这一格**不另立口径**——另立就是新政策，不是修 bug）。
+     **突变体 3 条全杀**：worker remember 退回旧形状 ⇒ 3 红；全局层那一半摘掉 ⇒ 3 红；只读档那一半摘掉 ⇒ 2 红。
+
+### 三、一条 17 天前救下来、没人动的未落地实验：本轮落地，并量到了效果
+
+- **来路**：分支 `rescue/locate-weights-rev4`（2026-10-03「收树前保全原状」）里的一次实验：
+  **成员位上的名字（类方法/类字段/接口成员）不再算跨文件可链接定义**。它**从未进入主干**——
+  而主干后来把 `EXTRACT_LOGIC_REV` 推到了 5，那两个 rev 4/5 讲的是**缓存出口**（imports/summary），与这条**不是同一件事**
+  （数字撞了，含义没撞）⇒ 差点被当成"已落地"而永远丢掉。
+- **为什么该做**：成员名只能经 `obj.name` 被别处触到，而那种写法走属性/选择器纪律、**根本不进图**
+  ⇒ 把成员名当跨文件可链接定义 = **凭空造依赖**。
+- **落地**（`src/agent/map/parse.ts` + `rank.ts`）：tags 多一个字段 `crossFile`（成员位标成不可跨文件链接）；
+  构图层**只拦跨文件**的 ref→def 边，**同文件内的边照旧**（类内自调用是真依赖）。
+  ⚠️ 口径比原实验**严一格**：同一个文件里若还有一个**非成员位**的同名 def，这个名字在那个文件里就是模块级可得的
+  （名字图分不出位置，同名即同一节点）⇒ **不闸它**。宁可留一条假边，不许砍掉一条真边。
+  `EXTRACT_LOGIC_REV` 5 → 6（老缓存条目里**没有这个字段** ⇒ 必须整体重解析一次，否则冷/热两支给出两张图）。
+- **量到了**（全仓 338 支文件的真图构建）：**跨文件假边 5858 → 5628（少 230 条）**；
+  成员位 def 469 个（占全部 def 的 11%）；**整张图的 Top1 节点从前是 `src/agent/ledger.ts:readFile`**——
+  一个 `private` 方法，靠 107 个文件的同名 ref 吸成假枢纽，**谁也调不到它**；新 Top1 是 `src/main/catalog-store.ts:resolve`。
+  ⇒ 这一条不是"洁癖"，是**地图首位指错了文件**。
+- **判卷**（`tests/map-member-name-crossfile.test.ts`，7 条）：解析层（ts 类方法/go 方法被标；类名与模块级函数**不许**被标
+  ——标了就等于把可跨文件引用的名字也砍了）＋ 构图层（跨文件不连 / 同文件照连 / 有模块级同名 def 时不闸 / import 钉不到成员位）。
+  **突变体 3 条全杀**（去掉跨文件边跳过 ⇒ 2 红；去掉解析层标记 ⇒ 2 红；去掉 import 那一闸 ⇒ 1 红）。
+- **既有判卷没被带跑**：`map-parse`/`map-rank`/`map-build`/`map-render`/`map-retrieval`/`map-import-edge`/
+  `locate-recall-ruler` 共 106 条全绿；`map-check` 门绿（真仓召回 1.0000、漏抽 0 ⇒ 这一刀没伤召回）；
+  `tags-extract-version` / `impact*` 51 条全绿。
+
+### 四、桌面端：两条红不是回归，是**钉子过期**
+
+桌面 153 文件 / 1130 用例在沙箱里跑出 3 红、**出沙箱**后剩 2 红（`listen EPERM` 那一支是沙箱产物，判卷不认）。
+两条红是同一根因：**上一轮把 `handleRetryRound` 从闭包里的 `events` 改成活的那份 `eventsRef.current`（陈旧闭包修对了），
+而两条源文本判卷还钉着旧写法**。判卷红的是钉子，不是实现。
+钉子改成**更强**的那一版（断言 `userTextOfRound(eventsRef.current, round)`：闭包那份在
+`useCallback` 依赖表里没有 `events` ⇒ 任何非首屏的轮次都会读成"找不到该轮的输入原文"），
+并把"为什么是 ref"写进判卷注释（判据与判卷面不是"改小断言换绿"）。
+
+### 五、读数与边界（如实记，不把工作树的绿说成 HEAD 的绿）
+
+- core **444 文件 / 6177 用例全绿**（基线 437/6135 ⇒ +7 文件 / +42 用例，全是本轮新判卷）；
+  桌面 **153 文件 / 1130 用例全绿**（基线 142/1050）；双端 typecheck 0；
+  `desktop-boundary-check` 绿；`docs-check` 受检项全绿（另有 3 项未检，同既有基线）；
+  `repo-hygiene-check` 四面全绿（取料占比 2637/4189 = **63.0%**、src 单文件最大 1753 行、scripts 单文件最大 2036 行）。
+- **`mutate-needles-check` 阻断 7 条**（如实记）：其中 **2 条**是上一批的 `src/events/redact.ts` 未入库
+  （被测面不在 HEAD 的树里）、**2 条**是上一批的 `src/agent/memory/store.ts` 改动落在在飞文本、
+  **3 条是本批的**：remember 那三条变异锚点**跟着实现搬了家**（口径从 `agent-runner.ts` 的内联判断
+  收到 `permissions/rememberDecision` 一份）⇒ 按那道门自己的说法改指（**跟着实现走，判据（expectFail）
+  与判卷（test 文件）一字未改**）。这 3 条在**实现入库前**会红——与 `head-cert-check` / `mutate-verify` 同理：
+  它们测的是 HEAD，而本批的改动**留在工作树**没有入库。**这不是本批的回归，是"改动留在工作树"的直接代价。**
+- **入库形状**：同第 608–616 页——**不擅自提交**，改动留在工作树；提交与否由业主定（`cairn-协作工作流` §5：
+  提交/推送/打 tag 属"必须先问"那一栏）。
+
+## 2026-10-20 · 第 618 页：第四轮独立评审（桌面面）· macOS 菜单夺键 / 项目会话的操作面全废 / 状态条报假相位（13 条，落 7 条）
+
+上一页（617）记的是工作区清理与 core 面三条真缺陷；本页记**桌面面**那一轮独立评审的落账。
+评审只读、要求"造专破它的坏输入"、且必须**自验复现**——13 条里 **6 条被评审复现**（HIGH 2 / MEDIUM-HIGH 1 / MEDIUM 2 / LOW-MEDIUM 1），
+本轮落了其中 7 条（含 2 条 HIGH）；余下的记在第五节，**不假装都修了**。
+
+### 一、形状：这一轮追出的，多是"判据在、但那条路上没接线"
+
+和第 616–617 页同一族，但这次长在**桌面**上：路径/权限那几道门在 core 里判得对，
+可**桌面这一侧的入口**没接上；或**主进程知道真值、渲染层没去问**。
+
+### 二、【HIGH】macOS 上原生菜单**夺走了 14 个键**，渲染层那两道门形同虚设
+
+- **机制（Electron 自己的 typings 说得很清楚）**：`registerAccelerator` 标着 `@platform linux,win32`
+  （`apps/desktop/node_modules/electron/electron.d.ts` 的 `MenuItemConstructorOptions`）
+  ⇒ **macOS 上这个字段是空操作** ⇒ 菜单里那把"渲染层拥有键位"的项**照样被系统注册**
+  ⇒ macOS 把键交给菜单、渲染层的 keydown **根本不响**。
+  而 `apps/desktop/src/main/menu-template.ts` 的文件头写着「渲染层拥有键位的项一律 registerAccelerator:false」——
+  **这条纪律在唯一的出货平台上从来没成立过**。
+- **后果（评审复现，两条）**：
+  ① 确认卡（「删除会话确认」）开着时按 ⌘W ⇒ **会话被关掉回到主页，而那张卡还开着**
+  （keydown 路径有"浮层在不在"这道门，菜单路径没有）；
+  ② ⌘↑/⌘↓ 在输入框里**该让给文本编辑**（移动光标；keydown 路径显式不劫持），
+  菜单路径没这道判断 ⇒ 在输入框里按 ⌘↑ 变成"滚动转录"。
+- **修法（把两处判断收成一道门）**：新模块 `apps/desktop/src/renderer/command-gate.ts`——
+  判断是**纯函数**（`commandAllowed(id, {paletteOpen, modalSurfaceOpen, editableTarget})`），
+  DOM 读法单独一只（`readGateInput`，DOM 可注入 ⇒ 桌面端那套 node 环境 vitest 也能真跑它，不必装 jsdom）。
+  **键盘路径与菜单路径现在走同一道门**（`overlayBlocked` / `commandAllowed`）。
+  菜单模板的文件头改成如实记：**这一格在 macOS 上是空操作，macOS 的防线是渲染层那道共享门**。
+- **判卷**（`apps/desktop/tests/command-gate.test.ts`，6 条）：真造模态面、真把焦点放进输入框
+  （假 DOM 注入 + 一个最小 `Element` 替身）＋ **接线钉**（App 的两条入口都必须走这道门；
+  且 App 里**不许**再自己判模态面——那又变成两份）。**突变体 4 条全杀**：
+  菜单路径不走门 ⇒ 1 红；门恒放行 ⇒ 2 红；光标让位那一支摘掉 ⇒ 1 红；读法里模态面读不出来 ⇒ 3 红。
+- **三处源文本判卷跟着改指**（`modal-surface` / `settings-panel` / `command-palette`）：
+  它们原先钉的是 App.tsx 里那行**字面量**；判断搬进模块后字面量没了 ⇒ 改钉"走共享门"，
+  **行为那一半由新的纯函数判卷兜住**（比字面量更强：从"有一行字"变成"这道门真的挡得住"）。
+
+### 三、【HIGH】项目工作区里的会话：置顶/赞踩/归档/改名/删除**全部**判成「会话不存在」
+
+- **形状**：core 的会话面是**单例根**（`initSessionsDir` 一份），
+  而桌面端注册了项目文件夹 ⇒ 会话**散在多个根**下。
+  存在性检查问的是**单例根** ⇒ 项目会话压根不在那儿 ⇒ 「会话不存在」。
+  桌面端那句"边界如实记"把它记成了已知边界（"非装配根会话的组织动作在写路径 fail-loud"）——
+  但那是**主入口**（用户加一个项目文件夹就走这条路），不是边角。
+- **第二个出口，同一个根因**：还原文件那一笔（`file_restored`）落的也是**单例根**
+  ⇒ 侧栏多出一个**只含这一行的幽灵会话**，而真会话里**没有**这次还原
+  ⇒ **还原不持久**（重开会话又变回"已改"——正是这个功能要修的 bug）。
+- **修法（收成**一个**解析器）**：core 加 `setSessionRootResolver`（宿主注入），
+  存在性检查 / 改名 / 删除 / 还原事件落盘**都问它**；桌面端注册一份
+  （`kernel-host.ts` 的归属表 + 全工作区扫描，**找不到就返回 null**）。
+  ⚠️ **null 不回落单例根**：回落 = 往别人的日志里写 = 造幽灵会话。
+- **判卷**（`tests/session-root-resolver.test.ts`，4 条）：真起两个根、真在第二个根里建会话、真调 handler、
+  真读回事件流。**突变体 3 条全杀**：存在性检查退回单例根 ⇒ 1 红；还原事件退回单例根 ⇒ 1 红；
+  解析器说"不知道"时回落单例根 ⇒ 1 红（这一条是补做的：初版判卷**杀不掉它**——
+  因为那条用例里会话本来就不在单例根，回落与否**结果一样** ⇒ 补了一条"会话不在任何根下 ⇒ 那一笔不落任何日志"）。
+
+### 四、【MEDIUM-HIGH】状态条在工具还在跑的时候报「收尾中」
+
+- **形状**：`finishing`（"收尾中"）的第二个条件是 `answerQuiet`（正文停了 >1.5s）——
+  而那**恰好是"工具在跑"的形状**（模型吐完字就调工具，然后等着它跑完）
+  ⇒ 任何超过 1.5s 的构建/测试都被报成"收尾中"，**而 agent 还在干活**。
+  那条注释自己写着「读错比不读更坏」——报错的相位比不报更坏。
+- **修法**：文案口径搬进 `projections.runPhaseLabel`（**纯函数**）⇒「工具在跑 ⇒ 执行工具」排在"收尾中"**之前**。
+- **判卷**（`apps/desktop/tests/phase-label.test.ts`，6 条）：真跑纯函数（工具在跑/正文停了/三道门/已停止/思考中）。
+  **突变体 1 条杀**（把"工具在跑"那一支挪回收尾之后 = 回到旧形状 ⇒ 1 红）。
+  旧判卷（`composer-phase`）的**字面量**钉改成"接线钉"（App 用的是那一个函数）。
+
+### 五、其余落账的几条（评审 13 条里本轮落的另外 4 条）
+
+- **【MEDIUM】会话改名会改到**别人**头上**（数据损坏）**：改名输入框只存"正在编辑的文本"，
+  提交时用**当前**的 `activeId` ⇒ 改 A 的名 → 按 ⌘⇧] 切到 B（输入框还挂着、还聚焦、显示的还是 A 的标题）→ 按 Enter
+  ⇒ **把 B 改名成 A 的标题**。修法两道保险：① 改名状态**绑定到发起时那条会话**（提交用绑定的 id）；
+  ② 切会话就**取消**改名（输入框不跨会话活着——界面不撒谎）。
+- **【LOW-MEDIUM】「查找上一个」在查找条没开时**静默无响应**（⌘⇧G / 菜单「查找上一个」）：
+  与这条函数自己的理由（「旧实现此时静默无响应，会被读成键坏了」）自相矛盾 ⇒ 两个方向都先**开条**。
+- **【LOW-MEDIUM】换渲染层实例（HMR/重载）后接管在跑的会话，秒表恒读 "0s"**：
+  起点在 `send()` 里盖（属于旧实例），本机没有 ⇒ `elapsedSecondsFor` 返回 0，
+  而 `setElapsedSec(0)` 是**同值更新** ⇒ React 根本不重渲染 ⇒ 那个 0 永远冻在那儿（用户以为任务刚开始）。
+  修法：**main 侧记这一轮的起点**（`runStartedAt`）并随 `openSession` 报出来，渲染层拿它补上。
+- **【LOW-MEDIUM】「回到原会话」删掉空分支时，用户还没发出去的编辑稿变成孤儿**：
+  稿存在那条分支的草稿键下（localStorage）⇒ 删会话不删草稿 ⇒ 谁也读不到它。
+  修法：删之前把稿**搬到用户要回去的那条会话**上（`moveDraftInBucket` 是纯函数，判卷不用 DOM）。
+
+**另修一条"判卷自己瞎了"**：`apps/desktop/tests/app-menu.test.ts` 的「每条命令都真的接了出口」
+原先只**抽一条**真跑（`new-session`）⇒ 一个 `click: () => undefined` 的空壳照样全绿
+（菜单模板里那只未被使用的 `cmd()` 帮手正是这个形状，离"菜单点了没反应"只差一次编辑）。
+改成**逐条**点：每一条都必须递出自己的 id，且不多不少 ⇒ **突变体验证：把一条换成空壳 ⇒ 红**。
+
+### 六、评审提了但本轮**没落**的（记下来，不假装修了）
+
+- **`createProject` / `projectCreateFromTemplate` 接受渲染层给的 `parentDir` 而无"已知根"闸**
+  （不像新加的 `previewStart` / `projectExport`）：影响面限于"建一个目录"（目录名有清洗）⇒ 评审判为不报。
+- **`listSkills` / `skillBody` / `pluginDecide` 接受渲染层给的 `workspace`**（盖过有闸的那个）：
+  只读/影响面小、且是**既有**形态 ⇒ 评审判为不报。
+- **⌘O 在 Windows/Linux 上与"循环视图"撞键**：这产品只出货 macOS ⇒ 实践中不是缺陷。
+- **评审的诚实边界**：macOS 那条**没能在真机硬件键上复现**（本机无 GUI 会话，
+  `sendInputEvent` 注入进渲染层、绕开了菜单派发路径）⇒ 机制是**Electron 文档/typings 写明的**，
+  后果是**评审用真 Electron 44.7.0 建出菜单看到 accelerator 带着 `registerAccelerator=false`** 验证的。
+  本页把它记成「文档与类型面确认、行为面未在真机复现」——**不把没复现的写成复现了**。
+
+### 七、读数与边界
+
+- core **445 文件 / 6181 用例全绿**（基线 437/6135 ⇒ +8 文件 / +46 用例，全是本轮新判卷）；
+  桌面 **156 文件 / 1147 用例全绿**（基线 142/1050）；双端 typecheck 0；
+  `desktop-boundary-check` 绿；`docs-check` 受检项全绿（另有 3 项未检，同既有基线）；
+  `repo-hygiene-check` 四面全绿（取料占比 63.0%、src 单文件最大 1753 行、scripts 单文件最大 2036 行）。
+- **本批新判卷的突变体全杀**：core 侧 9 条（脱敏/读侧门 3、教训分桶 3、worker 全局记忆 3）＋
+  地图那条 3 条；桌面侧 4 条（命令门）＋1 条（相位文案）＋3 条（会话归属根）＋4 条（本批接线钉）——
+  **没有一条存活**。
+- **入库形状**：同第 608–617 页——**不擅自提交**，改动留在工作树。

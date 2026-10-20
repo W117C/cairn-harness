@@ -60,7 +60,7 @@ describe("沉淀轮流收束时仍须核对取消", () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
-  it.each(["saved", "rejected", "whitelist", "write-error"] as const)("%s 回执落盘期间取消：立即关闭流，回执只保留真实结果", async (kind) => {
+  it.each(["saved", "rejected", "write-error"] as const)("%s 回执落盘期间取消：立即关闭流，回执只保留真实结果", async (kind) => {
     const s = await setup();
     const nextPull = vi.fn();
     const close = vi.fn();
@@ -69,7 +69,6 @@ describe("沉淀轮流收束时仍须核对取消", () => {
       call = { ...remember, args: { ...remember.args, scope: "global" } };
       s.approve.mockResolvedValueOnce(false);
     }
-    if (kind === "whitelist") call = { ...remember, name: "run_shell" };
     if (kind === "write-error") s.write.mockRejectedValueOnce(new Error("write failed"));
     const outcome = await s.run({ async *stream() {
       try {

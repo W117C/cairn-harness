@@ -31,12 +31,28 @@ describe("消息间距 24px（brief §二.1：消息之间间距 24px）", () =>
   });
 });
 
-describe("工具行样式钉（步骤胶囊 + 三色字形）", () => {
+describe("工具行样式钉（2026-10-20 批 130：一行一步，不再是通栏胶囊）", () => {
   const css = read("../src/renderer/styles.css");
-  it("胶囊：有底 + 圆角 + 悬停加深（不再是无底的裸行）", () => {
-    expect(css).toMatch(/\.tool-head\s*{[^}]*background:\s*var\(--alpha-1\)/s);
-    expect(css).toMatch(/\.tool-head\s*{[^}]*border-radius:\s*var\(--radius-md\)/s);
-    expect(css).toMatch(/\.tool-head:hover\s*{\s*background:\s*var\(--alpha-2\)/);
+  // 业主 2026-10-20 判「太丑」：旧形态 = 通栏有底胶囊 + 耗时刻意推到最右
+  // ⇒ 读起来像状态栏/表格行。新形态 = 贴着内容的一行：静息无底、悬停才起淡底、
+  // 耗时紧跟摘要、摘要走正文字体。判据随之改钉——**钉新形状，不钉旧形状**。
+  it("贴着内容一行：inline-flex + max-width（不通栏，长摘要仍收窄省略）", () => {
+    expect(css).toMatch(/\.tool-head\s*{[^}]*display:\s*inline-flex/s);
+    expect(css).toMatch(/\.tool-head\s*{[^}]*max-width:\s*100%/s);
+    // 「不通栏」：规则体里不得再有独立的 width:100%（max-width 不算，用负向后顾防误伤）
+    expect(css).not.toMatch(/\.tool-head\s*{[^}]*(?<!-)\bwidth:\s*100%/s);
+  });
+  it("静息无底、悬停才起淡底（不再是常驻胶囊）", () => {
+    expect(css).not.toMatch(/\.tool-head\s*{[^}]*background:/s);
+    expect(css).toMatch(/\.tool-head:hover\s*{\s*background:\s*var\(--alpha-1\)/);
+  });
+  it("摘要走正文字体（整段 mono 才是「终端转储」观感的来源）", () => {
+    expect(css).not.toMatch(/\.tsum\s*{[^}]*font-family/s);
+    expect(css).toMatch(/\.tsum\s*{[^}]*color:\s*hsl\(var\(--text-200\)\)/s);
+  });
+  it("耗时紧跟摘要，不被推到最右（摘要不再 flex:1 吃掉剩余空间）", () => {
+    expect(css).toMatch(/\.tsum\s*{[^}]*flex:\s*0 1 auto/s);
+    expect(css).not.toMatch(/\.tsum\s*{[^}]*flex:\s*1;/s);
   });
   it("成功灰勾 / 失败琥珀 / 运行中性（大红叉与彩对勾下架）", () => {
     expect(css).toMatch(/\.glyph\.ok\s*{\s*color:\s*hsl\(var\(--text-400\)\)/);

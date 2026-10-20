@@ -9,21 +9,27 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ArrowDown, ChevronDown, FileDiff, Focus, Folder, FolderPlus, GitBranch, Globe, List, MoreHorizontal, Sparkles, Terminal, X } from "lucide-react";
 import { Group, Panel, Separator, type PanelImperativeHandle } from "react-resizable-panels";
 import type { AgentEvent, AskPayload, PermissionMode, ProjectDiagnosis, ProjectRecord, ProviderInfo, RunAttachmentReference, RunResponse, SuggestNextResult } from "../../../../src/main/ipc-protocol";
-import type { TextSizeSetting } from "../../../../src/main/settings";
+import type { StreamActions } from "./components/Stream";
+import type { TextSizeSetting, UiSizeSetting } from "../../../../src/main/settings";
 // 预览状态是**类型**导入（值面留在主进程：project-preview 拖 node:http/child_process，
 // 渲染层只消费推送快照；文案在渲染层按 status 组合）。
 import type { PreviewSnapshot } from "../../../../src/main/project-preview";
-import { deliveryTrail, deriveRunPhase, formatEmptyTrailNote, formatRevertNotice, isMainSessionTerminalEvent, mergeSessionSnapshot, pendingClarifyOf, pendingPlanOf, projectStream, roundOfEvent, turnDelivery, usageAggregate, countToolSteps, countRunSteps, userTextOfRound } from "./projections";
+import { deliveryTrail, deriveRunPhase, elapsedSecondsFor, runPhaseLabel, formatEmptyTrailNote, formatRevertNotice, hasAssistantTextThisRun, isMainSessionTerminalEvent, mergeSessionSnapshot, pendingClarifyOf, pendingPlanOf, projectStream, roundOfEvent, turnDelivery, usageAggregate, usageSummary, countToolSteps, countRunSteps, userTextOfRound } from "./projections";
 import { askBelongsToSession, composerLockReason, continueAfterRun, drainQueue, dropQueued, fromSessionQueueEntries, isSessionEndDistillAsk, promoteQueued, shouldHealStaleRun, takeQueued, toSessionQueueEntries, type QueuedSend } from "./send-queue";
 import { stripMarkdownForSpeech } from "./speech";
+import { useMessageAnnotations } from "./useMessageAnnotations";
 import { Sidebar } from "./components/Sidebar";
+import { SidebarRail } from "./components/SidebarRail";
 import { NewProjectDialog } from "./components/NewProjectDialog";
 import { AddProjectMenu } from "./components/AddProjectMenu";
 import { QuickStarts } from "./components/QuickStarts";
 import { Popover, usePopoverDismiss } from "./components/Popover";
 import { buildQuickStarts, greetingFor, type QuickStartInput } from "./quick-starts";
 import type { WorkspaceSession } from "./sessions-view";
+import type { MenuCommandId } from "../shared/menu-commands";
 import { classifyDrop } from "./sessions-view";
+import { moveDraftBetweenSessions } from "./drafts";
+import { commandAllowed, isEditableTarget, overlayBlocked, readGateInput } from "./command-gate";
 import { STR } from "./strings";
 import { toast } from "./toast";
 import { TitleBar } from "./components/TitleBar";
@@ -59,7 +65,7 @@ import { applyTheme, browserThemeEnv, type ThemePref } from "./theme";
 import { nextViewMode, VIEW_LABEL, type ViewMode } from "./view-mode";
 import { buildSuggestContext } from "./suggest";
 import { SHORTCUT_GROUPS } from "./shortcuts";
-import { paneShortcutFor } from "./pane-shortcuts";
+import { paneShortcutFor, paneShortcutKeys } from "./pane-shortcuts";
 
 const PaneDock = lazy(() => import("./components/PaneDock").then((m) => ({ default: m.PaneDock })));
 const CommandPalette = lazy(() => import("./components/CommandPalette").then((m) => ({ default: m.CommandPalette })));
@@ -71,10 +77,21 @@ declare global { interface Window { agent: import("../../../../src/main/ipc-prot
 // SEMA §3.5/§12：构建期注入的期望协议版本（vite define 换字面量——产物零运行时 import src）。
 declare const __IPC_PROTOCOL_VERSION__: number;
 
-/** 文本编辑面（输入框/文本域/可编辑元素）：⌘↑/⌘↓ 在这些地方是文本编辑语义，全局快捷键让路（不劫持）。 */
-function isEditableTarget(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest("input, textarea, [contenteditable='true'], [contenteditable='']") !== null;
-}
+/**
+ * 侧栏宽度域（2026-10-20 真机还原更正）。
+ * 依据：Claude 桌面端 2.42304.2 真机实测——1100×700 原生窗、2× 截图（2200×1400，
+ * 倍率严格 2.0，已用 CGWindowList 独立验证 bounds），侧栏/主区接缝在 y=200/400/900/1300
+ * 四个高度**完全一致**落在 x=399–400 ⇒ 侧栏宽 **(399−2)/2 = 198.5pt**。
+ * 规范 §3.11 写的 242px 与实测差 −18%，据此改域：缺省取 200（198.5 的整数近似）。
+ * 上限保留 280（规范既有上限，不因本轮实测收窄）。
+ */
+const SIDEBAR_MIN = 200;
+const SIDEBAR_MAX = 280;
+const SIDEBAR_DEFAULT = 200;
+
+/** 文本编辑面（输入框/文本域/可编辑元素）：⌘↑/⌘↓ 在这些地方是文本编辑语义，全局快捷键让路（不劫持）。
+ *  2026-10-20 搬进 `command-gate.ts`：它同时管着**菜单路径**要不要让给文本编辑——
+ *  两处各写一份判法就会漂（keydown 让了、菜单没让 = 同一个键两种行为）。 */
 
 /** P2-1 空屏建议面（App 装配数据 → quick-starts 纯函数出题；缓存单位=项目路径）。 */
 interface EmptySurface {
@@ -104,6 +121,8 @@ export function App() {
   const [sessionsLoadError, setSessionsLoadError] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [events, setEvents] = useState<AgentEvent[]>([]);
+  const eventsRef = useRef(events);
+  useLayoutEffect(() => { eventsRef.current = events; }, [events]);
   // 审批卡按会话键控：卡自带 sessionId 之后（core 侧 v3 协议），按 Map<sessionId, 卡> 存，
   // 只显示**当前会话**那张；归属未知（老载荷/headless）落 "" 键，照旧显示但不参与按会话回答。
   // 必须是 state（不只是 ref）：并发会话各停一张卡时，切到 A 要能把 A 那张重新画出来；
@@ -178,19 +197,23 @@ export function App() {
   sessionsRef.current = sessions;
   // 侧栏折叠（渲染态，V1 不落 settings）。
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  // 侧栏宽度（brief 第九节：240–280）：可拖拽，持久在 localStorage；旧值（242–480）读回时就地收进新域。
+  // 侧栏宽度：可拖拽，持久在 localStorage。
+  // 2026-10-20 真机还原更正：Claude 真机实测侧栏 **198.5pt**（1100×700 原生窗 2× 截图，
+  // y=200/400/900/1300 四个高度接缝一致）。旧域 240–280（brief 第九节）据此改为
+  // 200–280、缺省 200；旧值读回时就地收进新域。
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     try {
       const raw = Number(window.localStorage.getItem("cairn.sidebar.width"));
-      if (Number.isFinite(raw) && raw > 0) return Math.min(280, Math.max(240, raw));
-    } catch { /* 读不到用缺省 240 */ }
-    return 240;
+      if (Number.isFinite(raw) && raw > 0) return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, raw));
+    } catch { /* 读不到用缺省 */ }
+    return SIDEBAR_DEFAULT;
   });
   const sidebarWidthRef = useRef(sidebarWidth);
   sidebarWidthRef.current = sidebarWidth;
   const persistSidebarWidth = useCallback((w: number) => {
-    setSidebarWidth(Math.min(280, Math.max(240, w)));
-    try { window.localStorage.setItem("cairn.sidebar.width", String(Math.min(280, Math.max(240, w)))); } catch { /* 存不下则本会话内生效 */ }
+    const clamped = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w));
+    setSidebarWidth(clamped);
+    try { window.localStorage.setItem("cairn.sidebar.width", String(clamped)); } catch { /* 存不下则本会话内生效 */ }
   }, []);
   const startSidebarDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -202,7 +225,7 @@ export function App() {
     // 把手肉眼可见地落后于光标、松手又补一段。收/开要过渡、拖拽要即时，靠 data-resizing 分流。
     document.body.dataset.resizing = "sidebar";
     const onMove = (ev: PointerEvent): void => {
-      last = Math.min(280, Math.max(240, startW + (ev.clientX - startX)));
+      last = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startW + (ev.clientX - startX)));
       setSidebarWidth(last);
     };
     const onUp = (): void => {
@@ -246,35 +269,7 @@ export function App() {
       return next;
     });
   }, []);
-  // ---- v2.16 桌面接线：赞/踩真提交 + 文件级回滚 ----
-  const [feedback, setFeedback] = useState<ReadonlyMap<number, "up" | "down">>(new Map());
-  const feedbackSeq = useRef(0);
-  useEffect(() => {
-    const sid = activeId;
-    const my = ++feedbackSeq.current;
-    if (sid === null) { setFeedback(new Map()); return; }
-    // 赞/踩锚是「会话内事件行号」，跨会话必然撞号：迟到响应不带归属校验就会点亮别的会话。
-    void window.agent.listFeedback(sid).then((list) => {
-      if (feedbackSeq.current !== my || activeIdRef.current !== sid) return;
-      setFeedback(new Map(list.map((f) => [f.eventId, f.rating])));
-    }).catch(() => {
-      if (feedbackSeq.current === my && activeIdRef.current === sid) setFeedback(new Map());
-    });
-  }, [activeId]);
-  const handleFeedback = useCallback((eventId: number, rating: "up" | "down" | null) => {
-    const sid = activeIdRef.current;
-    if (sid === null) return;
-    const prev = feedback;
-    const next = new Map(prev);
-    if (rating === null) next.delete(eventId); else next.set(eventId, rating);
-    setFeedback(next);
-    const rollback = (why: string) => { setFeedback(prev); setLastError(`反馈提交失败：${why}`, sid); };
-    void window.agent.submitFeedback({ sessionId: sid, eventId, rating: rating ?? "none" }).then((r) => {
-      if (!r.ok) rollback(r.error ?? "未知错误");
-    }, (err: unknown) => {
-      rollback(err instanceof Error ? err.message : String(err));
-    });
-  }, [feedback, setLastError]);
+  const { feedback, feedbackBusy, onFeedback: handleFeedback, pinnedEventIds, pinBusy, annotationPending, onPin: handlePin } = useMessageAnnotations(activeId, setLastError);
   const doRevertTurn = useCallback((round: number) => {
     const sid = activeIdRef.current;
     if (sid === null) return;
@@ -338,6 +333,10 @@ export function App() {
   // CSS 三档（html[data-text-size=sm|md|lg] → --rem-scale .92|1|1.08）早已写好，
   // 此前缺的只是「一个字段 + 这一处赋值」——data-text-size 从来没被任何代码写过。
   const [textSize, setTextSize] = useState<TextSizeSetting>("md");
+  // 2026-10-20：组件尺寸档（双轴变体的**尺寸轴**，销 G2）。Claude 实测 data-step="1…5"。
+  // 与 textSize 正交：几何令牌乘 --size-scale，字号令牌乘 --rem-scale，
+  // 于是「调大字号」不再连带把控件也撑大（规范 §4.5 尾）。
+  const [uiSize, setUiSize] = useState<UiSizeSetting>("2");
   // P3-3 命令面板（⌘K / 侧栏搜索钮）。
   const [paletteOpen, setPaletteOpen] = useState(false);
   // §3.6/§7.3.3：Ctrl+Tab 会话循环开关（设置页可关；缺省开）。
@@ -413,13 +412,24 @@ export function App() {
   const [archiveConfirm, setArchiveConfirm] = useState<WorkspaceSession | null>(null);
   // §6.3 删除会话的不可撤销闸（后果前置 + 明示不可撤销；确认卡在流尾）。
   const [deleteConfirm, setDeleteConfirm] = useState<WorkspaceSession | null>(null);
+  // §3.7 · G4 丢弃隔离工作区闸：未提交改动会一并消失，必问。
+  const [wtDiscard, setWtDiscard] = useState<WorkspaceSession | null>(null);
   // 2026-10-17：回滚轮次 / 移除项目改走产品自绘确认卡（原生 confirm 与界面语言不一致）。
   const [revertConfirm, setRevertConfirm] = useState<number | null>(null);
   const [projectRemoveConfirm, setProjectRemoveConfirm] = useState<ProjectRecord | null>(null);
-  const [barRenaming, setBarRenaming] = useState<string | null>(null);
+  // 改名**绑定到发起时那条会话**（2026-10-20 独立评审追出，MEDIUM）：
+  // 旧形状只存"正在编辑的文本"，提交时用**当前**的 activeId ⇒
+  // 改 A 的名 → 按 ⌘⇧] 切到 B（输入框还挂着、还聚焦着、显示的还是 A 的标题）→ 按 Enter
+  // ⇒ **把 B 改名成 A 的标题**（数据损坏）。现在状态里带着 id ⇒ 提交时用绑定的那个。
+  const [barRenaming, setBarRenaming] = useState<{ id: string; text: string } | null>(null);
   // 运行读数（跑了多少秒）——runningActive 翻真时起点落 ref，秒表 interval 驱动。
   const [elapsedSec, setElapsedSec] = useState(0);
-  const runStartRef = useRef<number | null>(null);
+  // 起点按**会话**存（与 runGen 同一形状）：旧实现是**一个** ref，谁起跑就盖谁——
+  // A 起跑 → 切 B → B 起跑 → 切回 A（A 还在跑）⇒ 秒表读的是 B 的起点，A 的真实耗时被读成别的值。
+  // 秒表是"这一轮跑了多久"的用户可见读数，读错比不读更坏（用户以为任务刚开始）。
+  const runStartBySession = useRef(new Map<string, number>());
+  // 本轮最后一次正文增量的到桌时间（按会话）：用来区分「还在生成」与「正文已停、run 在收尾」。
+  const lastDeltaAt = useRef(new Map<string, number>());
   // 粘底滚动 + 「回到底部」浮钮。
   const [streamEl, setStreamEl] = useState<HTMLDivElement | null>(null);
   const [findOpen, setFindOpen] = useState(false);
@@ -428,7 +438,7 @@ export function App() {
   const stick = useStickyScroll(streamEl);
   // 载入设置：打开即进主界面（不拿向导拦在门口）。
   useEffect(() => {
-    void window.agent.getSettings().then((s) => { setMode(s.mode); setThemePref(s.theme); setCtrlTabCycle(s.ctrlTabCycle); setTextSize(s.textSize); setOnboarded(s.onboarded); }).catch(() => undefined);
+    void window.agent.getSettings().then((s) => { setMode(s.mode); setThemePref(s.theme); setCtrlTabCycle(s.ctrlTabCycle); setTextSize(s.textSize); setUiSize(s.uiSize); setOnboarded(s.onboarded); }).catch(() => undefined);
   }, []);
   // v6 模板目录：入口下拉的数据面（拉不到 = 空表，入口禁用而不是摆一个点不动的按钮）。
   useEffect(() => {
@@ -451,12 +461,27 @@ export function App() {
   }, []);
   // 主题应用（§4.6）：偏好变化即写 data-theme；system 跟随系统并订阅变化（清理函数解除）。
   useEffect(() => applyTheme(themePref, browserThemeEnv()), [themePref]);
+  // 头像菜单「外观」子菜单的切主题（批 130）：点选即生效并落盘；
+  // 失败要说人话（否则界面停在旧主题，用户以为点了没反应）。
+  const changeTheme = useCallback((next: ThemePref) => {
+    void window.agent.setSettings({ theme: next }).then(() => {
+      setThemePref(next);
+    }).catch((err: unknown) => {
+      toast.error(`主题切换失败：${err instanceof Error ? err.message : String(err)}`);
+    });
+  }, []);
   // 2026-10-18 字号档应用：与主题同一形制——单一事实源写一个 data 属性，tokens.css 消费。
   // md 档不写属性（让 --rem-scale 保持 :root 的 1），不往 DOM 上堆无意义的状态。
   useEffect(() => {
     if (textSize === "md") document.documentElement.removeAttribute("data-text-size");
     else document.documentElement.setAttribute("data-text-size", textSize);
   }, [textSize]);
+  // 2026-10-20 尺寸档应用：与字号同一形制——单一事实源写一个 data 属性，tokens.css 消费。
+  // "2" 档不写属性（让 --size-scale 保持 :root 的 1），不往 DOM 上堆无意义的状态。
+  useEffect(() => {
+    if (uiSize === "2") document.documentElement.removeAttribute("data-ui-size");
+    else document.documentElement.setAttribute("data-ui-size", uiSize);
+  }, [uiSize]);
   // 快捷键统一收口在下方 hotkeysRef 段（蓝本 §3.6 全表；此处不再各自挂监听）。
 
   // SEMA §3.5/§12：协议版本握手（失配/查询失败 fail-closed）。
@@ -644,9 +669,12 @@ export function App() {
       // 运行集口径（2026-10-06 收口）：活动会话不由事件置位（置位只走发送那条路）；
       // 任何会话收到**主会话**终态 agent_status 摘位；worker 子流的终态不摘主会话旗
       // （二者同型且同带 session_id，唯一判据在 projections.isMainSessionTerminalEvent）。
+      const deltaSid = sid ?? (e.type === "assistant_delta" ? activeIdRef.current : null);
+      if (e.type === "assistant_delta" && deltaSid !== null) lastDeltaAt.current.set(deltaSid, Date.now());
       const terminal = isMainSessionTerminalEvent(e);
       if (sid && terminal) {
         runningSet.current.delete(sid);
+        lastDeltaAt.current.delete(sid);
         // P1 侧栏状态记账（诚实边界）：done ⇒ 对勾、failed ⇒ 红点、cancelled ⇒ 清位
         // （用户主动停的不冒充完成也不报失败）。会话终态不落盘 ⇒ 本进程记账，重启归零如实。
         const status = (e as { status?: string }).status;
@@ -768,7 +796,7 @@ export function App() {
     // 先例，不动 ipc-protocol）：main 侧运行实况。换渲染层实例（HMR/重载）后陈旧的「运行中」
     // 标记没有主人（收束时旧实例的 finally 已随实例销毁），打开即用 main 真值收敛：在跑补上、
     // 已收束摘掉。收束补发终态是正路，这条是每次开会话自愈一次的兜底，两者互不依赖。
-    const opened = (window.agent.openSession(id) as Promise<{ events: AgentEvent[]; running?: boolean }>).then((r) => {
+    const opened = (window.agent.openSession(id) as Promise<{ events: AgentEvent[]; running?: boolean; startedAt?: number }>).then((r) => {
       if (seq !== openSeq.current) return;
       if (openPending.current === pending) openPending.current = null;
       setEvents(mergeSessionSnapshot(r.events, pending.events));
@@ -776,6 +804,13 @@ export function App() {
         const was = runningSet.current.has(id);
         if (r.running) runningSet.current.add(id); else runningSet.current.delete(id);
         if (was !== r.running) force((n) => n + 1);
+      }
+      // 换渲染层实例后接管一场**在跑**的 run：秒表起点本机没有（起点在 send() 里盖，
+      // 那个 send 属于旧实例）⇒ 用 main 报的真起点补上（2026-10-20 独立评审追出，LOW-MEDIUM：
+      // 旧形状此处什么都没有 ⇒ 秒表恒读 "0s"，而 `setElapsedSec(0)` 是同值更新 ⇒ React 不重渲染
+      // ⇒ 那个 0 永远冻在那儿，用户以为任务刚开始）。
+      if (r.running === true && !runStartBySession.current.has(id)) {
+        runStartBySession.current.set(id, r.startedAt ?? Date.now());
       }
     }).catch((err: unknown) => {
       if (openPending.current === pending) openPending.current = null;
@@ -894,9 +929,9 @@ export function App() {
   const handleReplay = useCallback((eventId: number) => {
     const sid = activeIdRef.current;
     if (sid === null) return;
-    const round = roundOfEvent(events, eventId);
+    const round = roundOfEvent(eventsRef.current, eventId);
     if (round === null) { setLastError("回放失败：这条消息不在事件日志的轮次里", sid); return; }
-    const text = userTextOfRound(events, round);
+    const text = userTextOfRound(eventsRef.current, round);
     void window.agent.forkSession(sid, round, true).then((r) => {
       if (r.ok !== true || r.id === undefined) { setLastError(`回放失败：${r.error ?? "未知原因"}`, sid); return; }
       void refreshSessions();
@@ -905,13 +940,25 @@ export function App() {
     }, (err: unknown) => {
       setLastError(`回放失败：${err instanceof Error ? err.message : String(err)}`, sid);
     });
-  }, [events, refreshSessions, openSession, injectText, setLastError]);
+  }, [refreshSessions, openSession, injectText, setLastError]);
   /** P3-2 检查器「撤销此文件改动」：snapshotRestore（v11 通道，渲染层首个消费者）。
-   *  成功 toast（STR 文案 v11 就位）；失败 fail-visible 原文上屏（不装成功）。 */
+   *  成功 toast（STR 文案 v11 就位）；失败 fail-visible 原文上屏（不装成功）。
+   *  带上 sessionId：主进程还原成功后要往**这个会话**的事件流落一条 `file_restored`，
+   *  否则改动面（改动 Tab / 变更窗格 / Changes 徽标 / 交付卡的「改动已验证」）还当这个文件没撤。 */
   const handleRestoreSnapshot = useCallback((path: string, snapshotId: string): void => {
-    void window.agent.snapshotRestore({ path, snapshotId }).then((r) => {
+    const sid = activeIdRef.current;
+    void window.agent.snapshotRestore({
+      path, snapshotId,
+      ...(sid !== null ? { sessionId: sid } : {}),
+    }).then((r) => {
       if (r.ok !== true) { toast.error(r.error ?? "还原失败"); return; }
       toast.success(STR.toast.snapshotRestored.replace("{path}", path));
+      // 主进程直接 append 事件日志、不经 run 的事件推流：不本地补一条的话，改动面/徽标/
+      // 交付卡会一直停在“未还原”，直到切走再开（2026-10-20 真机：还原成功、文件已回退，
+      // 但 Inspector 仍显示撤销钮；重开会话才消失）。只补到发起还原的那个会话。
+      if (sid !== null && activeIdRef.current === sid) {
+        setEvents((prev) => [...prev, { type: "file_restored", path, snapshotId } as AgentEvent]);
+      }
     }, (err: unknown) => {
       toast.error(err instanceof Error ? err.message : String(err));
     });
@@ -1029,6 +1076,33 @@ export function App() {
     setPaletteOpen(true);
   }, []);
 
+  /** 键盘浮层关闭后把光标交回输入框（2026-10-20 真机实测）：⌘K / ⌘F 打开再 Esc，焦点落到 BODY，
+   *  用户要继续打字得先点一下输入框。浮层关闭的语义是「回到刚才的写作」，不是「离开输入」。
+   *  rAF 等浮层卸载完再 focus：卸载中的焦点陷阱会把同一帧里的 focus 抢走。 */
+  const focusComposer = useCallback((): void => {
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLTextAreaElement>(".composer-card textarea")?.focus();
+    });
+  }, []);
+
+  /** 关闭查找条（Esc / 面板 × / 菜单）统一出口：关掉并把焦点交回输入框。 */
+  const closeFind = useCallback((): void => {
+    setFindOpen(false);
+    focusComposer();
+  }, [focusComposer]);
+
+  /** 关闭速查表统一出口（同 closeFind：键盘浮层关闭不丢焦点）。 */
+  const closeCheat = useCallback((): void => {
+    setCheatOpen(false);
+    focusComposer();
+  }, [focusComposer]);
+
+  /** ⌘/ 开合速查表：关闭那一支回焦输入框。 */
+  const toggleCheat = useCallback((): void => {
+    if (cheatOpen) closeCheat();
+    else setCheatOpen(true);
+  }, [cheatOpen, closeCheat]);
+
   /** 「打开文件夹」（P3-3 ⌘O / 命令面板）：系统选择器 → 登记（与拖放同一个 handleAddProject）。 */
   const pickAndAddProject = useCallback(async (): Promise<void> => {
     try {
@@ -1130,9 +1204,11 @@ export function App() {
     if (groupWidth < INSPECTOR_SIDEBAR_COLLAPSE_BELOW) {
       if (!sidebarCollapsed) sidebarAutoCollapsedRef.current = true;
       setSidebarCollapsed(true);
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => { inspectorRef.current?.expand(); });
-      });
+      // 2026-10-20 真机：窄窗（主组 < 744）且侧栏开着时，⌘⌥B 第一次只把 storage 写成 "1"、
+      // 宽度仍是 0；再按一次才开。两个 rAF 时侧栏 240ms 收起动画还没走完，expand() 被布局
+      // 夹回 0。等过渡落定再 expand（与专注模式退出恢复宽度的 240ms 同口径）。
+      const expandDelay = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 260;
+      window.setTimeout(() => { inspectorRef.current?.expand(); setInspectorCollapsed(false); }, expandDelay);
       return;
     }
     ref.expand();
@@ -1151,6 +1227,9 @@ export function App() {
     sidebarAutoCollapsedRef.current = false;
     if (opening && inspectorRef.current?.isCollapsed() === false && groupWidth - sidebarWidthRef.current < INSPECTOR_SIDEBAR_COLLAPSE_BELOW) {
       inspectorRef.current.collapse();
+      // 2026-10-20：imperative collapse() 不保证触发 Panel onResize ⇒ React 仍以为展开、inert 不上、
+      // 窄窗自动收起的侧栏也不回开。显式落状态，别只信 resize 回调。
+      setInspectorCollapsed(true);
     }
     setSidebarCollapsed(!sidebarCollapsed);
   }, [sidebarCollapsed]);
@@ -1163,6 +1242,7 @@ export function App() {
       try { window.localStorage.setItem("cairn.inspector.open.v1", "1"); } catch { /* 存不下则忽略 */ }
     } else {
       ref.collapse();
+      setInspectorCollapsed(true);
       try { window.localStorage.setItem("cairn.inspector.open.v1", "0"); } catch { /* 同上 */ }
     }
   }, [revealInspector]);
@@ -1180,8 +1260,12 @@ export function App() {
         window.requestAnimationFrame(() => {
           const ref = inspectorRef.current;
           ref?.expand();
+          setInspectorCollapsed(false);
           // 宽度也回到进入前（展开是百分比口径，侧栏同时回开时会重新分配）；等侧栏过渡落定再钉宽。
-          if (width !== null) window.setTimeout(() => { ref?.resize(width); }, 240);
+          if (width !== null) {
+            const restoreDelay = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 240;
+            window.setTimeout(() => { ref?.resize(width); }, restoreDelay);
+          }
         });
       }
       toast("已退出专注模式");
@@ -1200,6 +1284,7 @@ export function App() {
     setFocusMode(true);
     setSidebarCollapsed(true);
     inspectorRef.current?.collapse();
+    setInspectorCollapsed(true);
     toast("专注模式：只留对话与输入（⌘⌥F 退出）");
   }, [sidebarCollapsed]);
   exitFocusRef.current = () => {
@@ -1212,8 +1297,14 @@ export function App() {
     // 初始收起（brief 七「默认收起」）：layout 时机 collapse，不闪出 360 再收。
     // 2026-10-18：恢复了窗格（cairn.panes.v1）时保持展开——否则窗格在 width 0 的右栏里
     // 虽然挂载了却完全看不见，“恢复了”等于没恢复。
-    if (paneTabs.length > 0 || inspectorDefaultOpen) return;
+    if (paneTabs.length > 0 || inspectorDefaultOpen) {
+      // 2026-10-20 真机：带窗格重载后 Panel 实际展开（宽 ~293），但 inspectorCollapsed 初值 true
+      // ⇒ inert 挂在可见面板上，整列点不动/读屏不念。初始展开必须同步落状态。
+      setInspectorCollapsed(false);
+      return;
+    }
     inspectorRef.current?.collapse();
+    setInspectorCollapsed(true);
   }, []);
   useEffect(() => {
     if (!inspectorCollapsed || !sidebarAutoCollapsedRef.current) return;
@@ -1301,8 +1392,7 @@ export function App() {
           toast.error(`主题切换失败：${err instanceof Error ? err.message : String(err)}`);
         });
         break;
-      }
-      case "cycle-perm": {
+      }      case "cycle-perm": {
         const order: PermissionMode[] = ["read-only", "default", "guided", "auto"];
         const next = order[(order.indexOf(mode) + 1) % order.length] ?? "default";
         const runningHere = activeId !== null && runningSet.current.has(activeId); // runningActive 的同一读法（TDZ 口径在其定义之前不可引用）
@@ -1374,12 +1464,13 @@ export function App() {
         return fresh;
       });
       runningSet.current.add(sid);
+      lastDeltaAt.current.delete(sid);
       // 代际号（2026-10-18 真机：打断并发送后新 run 在跑、running 却为 false）：旧 run 的
       // finally 会把**新 run**刚置上的旗摘掉——经典“旧清理清掉新状态”。每次起跑领一个号，
       // 清理/停止态写入只在“号还是自己的”时生效。
       const myGen = (runGen.current.get(sid) ?? 0) + 1;
       runGen.current.set(sid, myGen);
-      runStartRef.current = Date.now();
+      runStartBySession.current.set(sid, Date.now());
       force((n) => n + 1);
       try {
         const thinking = thinkingBySession.current.get(sid);
@@ -1407,6 +1498,8 @@ export function App() {
       }
       finally {
         if ((runGen.current.get(sid) ?? 0) === myGen) runningSet.current.delete(sid);
+        // 起点随这一轮一起收掉（收之前先判代际：新 run 已经起跑时不能把它的起点删了）。
+        if ((runGen.current.get(sid) ?? 0) === myGen) runStartBySession.current.delete(sid);
         force((n) => n + 1);
       }
     }, () => takeQueuedHead(sid));
@@ -1494,21 +1587,21 @@ export function App() {
     const sid = activeIdRef.current;
     if (sid === null || runningSet.current.has(sid)) return;
     let rounds = 0;
-    for (const e of events) if (e.type === "user_message") rounds += 1;
-    const text = rounds === 0 ? null : userTextOfRound(events, rounds);
+    for (const e of eventsRef.current) if (e.type === "user_message") rounds += 1;
+    const text = rounds === 0 ? null : userTextOfRound(eventsRef.current, rounds);
     if (text === null) { setLastError("重试失败：找不到上一轮的输入原文", sid); return; }
     void send(text);
-  }, [events, send, setLastError]);
+  }, [send, setLastError]);
 
   /** 消息操作条「重跑这一轮」（2026-10-17，Claude 式重试）：取该轮用户输入再发一次，追加为新轮。
    *  与「回放」的区别：回放 = fork 新会话 + 只填不发；重跑 = 当前会话原地再来一轮。运行中不动作。 */
   const handleRetryRound = useCallback((round: number) => {
     const sid = activeIdRef.current;
     if (sid === null || runningSet.current.has(sid)) return;
-    const text = userTextOfRound(events, round);
+    const text = userTextOfRound(eventsRef.current, round);
     if (text === null) { setLastError("重跑失败：找不到该轮的输入原文", sid); return; }
     void send(text);
-  }, [events, send, setLastError]);
+  }, [send, setLastError]);
 
   /** 重启恢复：不自动执行，用户显式点「继续发送」才把队首交给同一条 runOn/权限/沙箱链路。
    *  （第十三遍拆出按 sid 版：陈旧旗自愈要按点击时的会话派发，不随 activeId 漂。） */
@@ -1548,14 +1641,17 @@ export function App() {
   const lastError = sessionErrors.get(activeId ?? "") ?? null;
   const lastNotice = sessionNotices.get(activeId ?? "") ?? null;
   const runningActive = activeId !== null && runningSet.current.has(activeId);
-  // 运行秒表：起点在 send() 里盖；这里只负责 interval 的开与关（终态由 runningActive 翻假收掉）。
+  // 运行秒表：起点在 send() 里按会话盖；这里只负责 interval 的开与关（终态由 runningActive 翻假收掉）。
+  // 依赖里有 activeId：切会话时重算起点（否则切回一个还在跑的会话，秒表会接着别人的起点算）。
   useEffect(() => {
-    if (!runningActive) return;
-    const t0 = runStartRef.current ?? Date.now();
-    setElapsedSec(Math.floor((Date.now() - t0) / 1000));
-    const id = setInterval(() => setElapsedSec(Math.floor((Date.now() - t0) / 1000)), 1000);
+    if (!runningActive || activeId === null) return;
+    setElapsedSec(elapsedSecondsFor(runStartBySession.current, activeId, Date.now()));
+    const id = setInterval(
+      () => setElapsedSec(elapsedSecondsFor(runStartBySession.current, activeId, Date.now())),
+      1000,
+    );
     return () => clearInterval(id);
-  }, [runningActive]);
+  }, [runningActive, activeId]);
   const pendingClarify = pendingClarifyOf(events);
   const pendingPlan = pendingPlanOf(events);
   // 只认当前会话那张卡（判定唯一处在 send-queue.askBelongsToSession）；归属未知落 "" 键，照旧显示。
@@ -1564,16 +1660,20 @@ export function App() {
     : askBySid.get("") ?? null;
   const phase = deriveRunPhase(events, askForActive !== null, pendingClarify !== null, pendingPlan !== null);
   const stopped = activeId !== null && stoppedIds.has(activeId) && !runningActive;
-  const phaseLabel = stopped ? "已停止"
-    : phase === "ask" ? "等待审批"
-    : phase === "clarify" ? "等待澄清"
-    : phase === "plan" ? "等待方案"
-    : phase === "thinking" ? "思考中"
-    : phase === "tool" ? "执行工具"
-    : "就绪";
+  const hasAnswerText = hasAssistantTextThisRun(events);
+  const lastDelta = activeId !== null ? (lastDeltaAt.current.get(activeId) ?? 0) : 0;
+  // 正文已停 >1.5s，run 还没回 ⇒ 主进程在跑收尾（Stop hook / 安全报告 / 记忆沉淀等），
+  // 不是模型还在想。没有时间戳（如重载后接管在跑会话）就不猜，按生成中显示。
+  const answerQuiet = hasAnswerText && lastDelta > 0 && Date.now() - lastDelta > 1500;
+  // 文案口径在 projections.runPhaseLabel 一处（纯函数，好判卷）：
+  // 2026-10-20 独立评审追出 MEDIUM-HIGH——旧实现先判 `finishing`，而 `answerQuiet`
+  // （正文停了 >1.5s）**恰好是"工具在跑"的形状** ⇒ 任何超过 1.5s 的构建都被报成"收尾中"。
+  const phaseLabel = runPhaseLabel({ phase, stopped, running: runningActive, hasAnswerText, answerQuiet });
   const chosen = activeId !== null ? selections.current.get(activeId) : undefined;
   const pickerValue = chosen !== undefined ? chosen : (providerInfo?.modelId ?? null);
   const usage = usageAggregate(events);
+  // 头像菜单「用量统计」面板的数据（批 130）：当前会话口径，纯投影 ⇒ 判卷可测。
+  const usageStats = useMemo(() => usageSummary(events), [events]);
   // 状态条数据：步数（主会话 tool_call 计数）与所选模型窗口（上下文水位）。
   const steps = countToolSteps(events);
   const runSteps = countRunSteps(events);
@@ -1723,6 +1823,48 @@ export function App() {
       setLastError(`分叉失败：${err instanceof Error ? err.message : String(err)}`, s.id);
     }
   }, [refreshSessions, openSession]);
+  /** 跨面接力（规范 §3.9 · 必抄 #6）：桌面与 CLI 是**同一个 sessions 存储的两个面**。
+   *  这里给出等价命令并复制到剪贴板——不假装能拉起终端（桌面没有那条通道，设了就是占位）。
+   *  反向那一面由 CLI 收尾时打印「在桌面打开：<id>」接回来。 */
+  const openSessionInCli = useCallback((s: WorkspaceSession) => {
+    const cmd = `cairn --session ${s.id}`;
+    void navigator.clipboard.writeText(cmd).then(
+      () => { setLastNotice(`已复制：${cmd}——在终端粘贴后续跑（CLI 还需要一句任务描述）`); },
+      (err: unknown) => { setLastError(`复制失败：${err instanceof Error ? err.message : String(err)}`); },
+    );
+  }, []);
+  /** 会话级 worktree 隔离（§3.7 · G4）：三个动作共用一条 IPC。成功/失败都落到流尾那一行——
+   *  隔离标记由 listSessions 读侧现算，所以动完必须刷新清单，否则菜单文案还是旧的。 */
+  const sessionWorktreeOp = useCallback(async (kind: "create" | "merge" | "discard", s: WorkspaceSession) => {
+    try {
+      const r = await window.agent.sessionWorktree(
+        kind === "create" ? { kind, sessionId: s.id, ...(s.title !== undefined ? { title: s.title } : {}) } : { kind, sessionId: s.id },
+      );
+      if (!r.ok) {
+        // 冲突单独说：主 checkout 已被 abort 回干净态，用户的活还在隔离树里，不是丢了。
+        setLastError(
+          r.conflict === true
+            ? `合并冲突：${(r.conflictedFiles ?? []).join("、")}——主工作区已恢复干净态，改动仍在隔离工作区里`
+            : `${kind === "create" ? "隔离" : kind === "merge" ? "合并" : "丢弃"}失败：${r.error ?? "未知原因"}`,
+          s.id,
+        );
+        void refreshSessions();
+        return;
+      }
+      setLastNotice(
+        kind === "create"
+          ? `已隔离：下一条消息起写在这条会话自己的隔离工作区里${r.path !== undefined ? `（${r.path}）` : ""}`
+          : kind === "merge"
+            ? `已合并回主工作区${r.branch !== undefined ? `（${r.branch}）` : ""}`
+            : "隔离工作区已丢弃",
+        s.id,
+      );
+      if (r.warnings !== undefined && r.warnings.length > 0) setLastNotice(`隔离已建成，但有降级：${r.warnings.join("；")}`, s.id);
+      void refreshSessions();
+    } catch (err) {
+      setLastError(`隔离工作区操作失败：${err instanceof Error ? err.message : String(err)}`, s.id);
+    }
+  }, [refreshSessions, setLastError, setLastNotice]);
   const doArchiveSession = useCallback(async (id: string, archived: boolean) => {
     try {
       await window.agent.setSessionArchived(id, archived);
@@ -1805,7 +1947,12 @@ export function App() {
     }
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const el = streamEl?.querySelector(`[data-event-id="${String(eventId)}"]`);
-      (el instanceof HTMLElement ? el : null)?.scrollIntoView({ behavior: scrollBehavior("smooth"), block: "center" });
+      // 工具组也可能收起；时间线跳转先沿既有披露入口展开，再定位。
+      const toggle = el?.closest(".toolcluster")?.querySelector<HTMLButtonElement>('.tool-group-toggle[aria-expanded="false"]');
+      toggle?.click();
+      requestAnimationFrame(() => {
+        (el instanceof HTMLElement ? el : null)?.scrollIntoView({ behavior: scrollBehavior("smooth"), block: "center" });
+      });
     }));
   }, [events, streamEl]);
   // ── P3-1 滚动记忆：Map(sessionId → scrollTop) 存 App 内存——切走存、切回取；回底钮逻辑不动。──
@@ -1878,13 +2025,21 @@ export function App() {
     compute();
     return () => { el.removeEventListener("scroll", onScroll); cancelAnimationFrame(raf); };
   }, [outlineOpen, streamRows, foldedRounds, streamEl]);
+  // 切会话 ⇒ **取消改名**（2026-10-20 独立评审追出，MEDIUM 的第二道保险）：
+  // 改名输入框不该跨会话活着——切过去之后它还聚焦着、显示的还是**上一条**会话的标题，
+  // 用户在 B 的界面里改着 A 的名。绑 id 那道保险保证「不改错对象」，
+  // 这一道保证「界面不撒谎」（输入框直接收起来，不留一个改不动的框）。
+  useEffect(() => {
+    setBarRenaming(null);
+  }, [activeId]);
+
   // ── 蓝本 §3.6 快捷键全表（一处挂载；latest-ref 模式——监听器只订阅一次，闭包每次渲染取最新值）──
   /** F2 重命名当前会话（2026-10-18）：桌面端肌肉记忆；点会话名也能改，这里补键盘入口。
    *  不劫持输入框里的 F2（用户在写正文时按 F2 不是想改名）。 */
   const startBarRename = useCallback((): boolean => {
     const sid = activeIdRef.current;
     if (sid === null) return false;
-    setBarRenaming(sessions.find((s) => s.id === sid)?.title ?? sid);
+    setBarRenaming({ id: sid, text: sessions.find((s) => s.id === sid)?.title ?? sid });
     return true;
   }, [sessions]);
   // 输入区锁因（2026-10-18 唯一处）：快捷键提示、Composer disabled、占位文案三面共用同一判据，
@@ -1903,20 +2058,107 @@ export function App() {
         ? STR.shortcut.menuLockedGate
         : null;
 
-  const hotkeysRef = useRef({ togglePane, closeLastPane, newSession, cycleSession, cycleView, openComposerMenu, toggleSidebar, cancelRun: cancelRunHeal, running: runningActive, activeId, cheatOpen, setCheatOpen, ctrlTabCycle, composerMenuBlock, requestPickElement, outlineOpen, setOutlineOpen, jumpTop: () => stick.scrollToTop("smooth"), jumpBottom: () => stick.scrollToBottom("smooth"), toggleInspector, toggleFocusMode, openPalette: handleOpenPalette, openFolder: () => { void pickAndAddProject(); }, openSettings: () => { setSettingsSection(undefined); setSettingsOpen(true); }, paletteOpen, findOpen, openFind: () => { setFindOpen(true); }, closeFind: () => { setFindOpen(false); }, startRename: startBarRename });
-  hotkeysRef.current = { togglePane, closeLastPane, newSession, cycleSession, cycleView, openComposerMenu, toggleSidebar, cancelRun: cancelRunHeal, running: runningActive, activeId, cheatOpen, setCheatOpen, ctrlTabCycle, composerMenuBlock, requestPickElement, outlineOpen, setOutlineOpen, jumpTop: () => stick.scrollToTop("smooth"), jumpBottom: () => stick.scrollToBottom("smooth"), toggleInspector, toggleFocusMode, openPalette: handleOpenPalette, openFolder: () => { void pickAndAddProject(); }, openSettings: () => { setSettingsSection(undefined); setSettingsOpen(true); }, paletteOpen, findOpen, openFind: () => { setFindOpen(true); }, closeFind: () => { setFindOpen(false); }, startRename: startBarRename };
+  /** 切换会话（键位双入口与菜单共用一处出口）：无会话时给回执——静默无响应会被读成「键坏了」。
+   *  这条回执此前在三个键位里各抄一份；菜单再抄两份就是五份，改口径时必然漏。 */
+  const cycleSessionOrToast = useCallback((dir: 1 | -1): void => {
+    if (!cycleSession(dir)) toast(STR.shortcut.noSession);
+  }, [cycleSession]);
+  /** 关闭当前会话回主页（⌘W 与菜单「关闭会话」同一出口）：主页按 = 可见回执；
+   *  在跑的一轮回主页后仍在后台，也要说清楚（否则用户以为它被关掉了）。 */
+  const closeSessionToHome = useCallback((): void => {
+    const sid = activeIdRef.current;
+    if (sid !== null) {
+      const wasRunning = runningSet.current.has(sid);
+      newSession();
+      if (wasRunning) toast(STR.shortcut.leftRunning);
+    } else {
+      toast(STR.shortcut.alreadyHome);
+    }
+  }, [newSession]);
+  /** 查找下一个/上一个（⌘G / ⇧⌘G / 菜单「查找下一个」）：查找条没开时先开（与 ⌘F 同一落点——
+   *  原生查找的肌肉记忆是先按下一个，旧实现此时静默无响应，会被读成键坏了）。
+   *  返回是否接管了这次按键（没接管就不 preventDefault）。 */
+  const findStep = useCallback((dir: 1 | -1): boolean => {
+    if (findOpen) { findRef.current?.step(dir); return true; }
+    // 2026-10-20 独立评审追出（LOW-MEDIUM）：旧形状对 `dir === -1` 直接 return false ⇒
+    // 「查找上一个」（⌘⇧G / 菜单「查找上一个」）在查找条**没开**时**静默无响应**
+    // ——与这条函数自己的理由（「旧实现此时静默无响应，会被读成键坏了」）自相矛盾。
+    // 改法：两个方向都先**开条**（从关着状态没有"上一个"可跳，开条即回执）。
+    if (activeIdRef.current === null) return false;
+    setFindOpen(true);
+    findRef.current?.focus();
+    return true;
+  }, [findOpen]);
+  /** ⌘F / 菜单「查找…」：没开会话时给回执，不静默。 */
+  const openFindBar = useCallback((): void => {
+    if (activeIdRef.current === null) { toast.error("先打开一个会话再查找"); return; }
+    setFindOpen(true);
+    findRef.current?.focus();
+  }, []);
+  const hotkeysRef = useRef({ togglePane, closeLastPane, newSession, cycleSession, cycleView, openComposerMenu, toggleSidebar, cancelRun: cancelRunHeal, running: runningActive, activeId, cheatOpen, toggleCheat, closeCheat, ctrlTabCycle, composerMenuBlock, gatePending: askForActive !== null || pendingClarify !== null || pendingPlan !== null, requestPickElement, outlineOpen, setOutlineOpen, jumpTop: () => stick.scrollToTop("smooth"), jumpBottom: () => stick.scrollToBottom("smooth"), toggleInspector, toggleFocusMode, openPalette: handleOpenPalette, openFolder: () => { void pickAndAddProject(); }, openSettings: () => { setSettingsSection(undefined); setSettingsOpen(true); }, paletteOpen, findOpen, openFind: () => { setFindOpen(true); }, closeFind, startRename: startBarRename, findStep, closeSessionToHome, cycleSessionOrToast });
+  hotkeysRef.current = { togglePane, closeLastPane, newSession, cycleSession, cycleView, openComposerMenu, toggleSidebar, cancelRun: cancelRunHeal, running: runningActive, activeId, cheatOpen, toggleCheat, closeCheat, ctrlTabCycle, composerMenuBlock, gatePending: askForActive !== null || pendingClarify !== null || pendingPlan !== null, requestPickElement, outlineOpen, setOutlineOpen, jumpTop: () => stick.scrollToTop("smooth"), jumpBottom: () => stick.scrollToBottom("smooth"), toggleInspector, toggleFocusMode, openPalette: handleOpenPalette, openFolder: () => { void pickAndAddProject(); }, openSettings: () => { setSettingsSection(undefined); setSettingsOpen(true); }, paletteOpen, findOpen, openFind: () => { setFindOpen(true); }, closeFind, startRename: startBarRename, findStep, closeSessionToHome, cycleSessionOrToast };
+  /** 原生菜单命令 → 既有动作（蓝本 §5.2 菜单树）。**唯一**一张菜单分发表：类型是
+   *  `Record<MenuCommandId, () => void>` ⇒ 菜单里加一条而这里不接，typecheck 直接红。
+   *  菜单项自己不实现行为，全部转发到既有能力——同一个动作两条入口（键盘/菜单）必须同源，
+   *  否则迟早出现「⌘N 建会话、菜单新建建别的东西」这种两套口径。表放 ref：订阅挂一次，动作取最新帧。 */
+  const menuCommandsRef = useRef<Record<MenuCommandId, () => void> | null>(null);
+  menuCommandsRef.current = {
+    "new-session": () => { newSession(); },
+    "open-folder": () => { void pickAndAddProject(); },
+    "close-session": closeSessionToHome,
+    "export-transcript": () => { handlePaletteAction("export-transcript"); },
+    "compact": () => { handlePaletteAction("compact"); },
+    "find": openFindBar,
+    "find-next": () => { findStep(1); },
+    // 查找条没开时「查找上一个」也要有回执（与「查找…」同一口径：没会话就说没会话）
+    "find-prev": () => { if (!findStep(-1)) toast.error("先打开一个会话再查找"); },
+    "palette": handleOpenPalette,
+    "toggle-sidebar": toggleSidebar,
+    "toggle-inspector": toggleInspector,
+    "toggle-theme": () => { handlePaletteAction("toggle-theme"); },
+    "cycle-perm": () => { handlePaletteAction("cycle-perm"); },
+    "copy-transcript": () => { handlePaletteAction("copy-transcript"); },
+    "prev-session": () => { cycleSessionOrToast(-1); },
+    "next-session": () => { cycleSessionOrToast(1); },
+    "jump-top": () => { stick.scrollToTop("smooth"); },
+    "jump-bottom": () => { stick.scrollToBottom("smooth"); },
+    "settings": () => { setSettingsSection(undefined); setSettingsOpen(true); },
+    "cheat-sheet": () => { toggleCheat(); },
+    "about": () => { setSettingsSection("about"); setSettingsOpen(true); },
+  };
+  useEffect(() => {
+    // 原生菜单（main 进程）→ 这里分发。id 与 main/menu-template.ts 同表；未知 id 静默丢弃
+    // （版本错配时的旧 main 不该把渲染层带崩）。
+    return window.agent.onMenu((id) => {
+      const fn = menuCommandsRef.current?.[id as MenuCommandId];
+      if (fn === undefined) return;
+      // ⚠️ 与 keydown 路径**同一道门**（2026-10-20 独立评审追出的 HIGH）：
+      // macOS 上 `registerAccelerator:false` 是**空操作**（Electron 的 typings 标着
+      // `@platform linux,win32`）⇒ 那些键被系统注册给了菜单 ⇒ macOS 把键交给菜单、
+      // 渲染层的 keydown 根本不响 ⇒ 菜单转发过来的命令**绕过了 keydown 那道浮层门**。
+      // 实测形状：确认卡（「删除会话确认」）开着时按 ⌘W ⇒ 会话被关掉回到主页，而那张卡还开着。
+      // 判据（浮层在不在 / 移动光标的命令要不要让给输入框）都在 command-gate.ts 一处。
+      if (!commandAllowed(id as string, readGateInput(hotkeysRef.current.paletteOpen))) return;
+      fn();
+    });
+  }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const h = hotkeysRef.current;
-      if (document.querySelector('[data-modal-surface="true"]') !== null || h.paletteOpen) return;
+      // 浮层在不在 ⇒ 快捷键一律不动作（与菜单路径**同一道门**，见 command-gate.ts）。
+      if (overlayBlocked(readGateInput(h.paletteOpen))) return;
       if (e.key === "Escape") {
         // 站点授权弹层自己吃 Esc（2026-10-18）：全局这里让路，否则按 Esc 想关弹层会顺带停掉本轮。
         if (document.querySelector('.bp-permit[role="alertdialog"]') !== null) return;
         // Esc 智慧停止（§7.3 禁令的正面写法）：浮层优先——开着菜单/弹层/速查表/目录时 Esc 只关它，不动运行。
         // capture 阶段检查：此刻菜单还开着，能可靠判定；等冒泡时 Radix 已把它关了。
-        if (h.cheatOpen) { e.preventDefault(); h.setCheatOpen(false); return; }
+        if (h.cheatOpen) { e.preventDefault(); h.closeCheat(); return; }
         if (h.outlineOpen) { e.preventDefault(); h.setOutlineOpen(false); return; }
         if (h.findOpen) { e.preventDefault(); h.closeFind(); return; }
+        // 审批/澄清/计划卡在场 ⇒ Esc 什么都不做（2026-10-20 真机实测的坑）：卡面写着
+        // 「Esc 不做决议」，旧实现却会让全局 Esc 顺带取消整轮——用户想关掉卡，任务没了。
+        // 停止仍有明确出口：卡上的停止键 / ⌘. / 状态条；Esc 不承担这个语义。
+        if (h.gatePending) return;
         // 侧栏是常驻 `role=listbox`（收起时 display:none 也照样命中），不能把它当「浮层开着」。
         // 只让真正会出现的浮层短路：侧栏排除后，Esc 才能按速查表承诺停掉本轮。
         if (document.querySelector(".pop.show, .pop-rd, [role='menu'][data-state='open'], [role='listbox']:not(.sidenav)") !== null) return;
@@ -1938,7 +2180,7 @@ export function App() {
       if (e.key === "Tab" && e.ctrlKey && !e.metaKey && !e.altKey) {
         if (!h.ctrlTabCycle) return;
         e.preventDefault();
-        if (!h.cycleSession(e.shiftKey ? -1 : 1)) toast(STR.shortcut.noSession);
+        h.cycleSessionOrToast(e.shiftKey ? -1 : 1);
         return;
       }
       // 窗格族走 pane-shortcuts.ts 单一表：键位、修饰键、落点同源（速查表也从同一张表生成）；
@@ -1976,10 +2218,10 @@ export function App() {
           else if (!shift && !e.altKey && h.activeId !== null) { e.preventDefault(); h.openFind(); findRef.current?.focus(); }
           break;
         case "BracketRight": // ⌘⇧] 下一个会话（§3.6）
-          if (shift) { e.preventDefault(); if (!h.cycleSession(1)) toast(STR.shortcut.noSession); }
+          if (shift) { e.preventDefault(); h.cycleSessionOrToast(1); }
           break;
         case "BracketLeft": // ⌘⇧[ 上一个会话（§3.6）
-          if (shift) { e.preventDefault(); if (!h.cycleSession(-1)) toast(STR.shortcut.noSession); }
+          if (shift) { e.preventDefault(); h.cycleSessionOrToast(-1); }
           break;
         case "KeyN": // ⌘N 新会话（§3.6）
           if (!shift) { e.preventDefault(); h.newSession(); }
@@ -1989,11 +2231,9 @@ export function App() {
           else if (!shift && !e.altKey) { e.preventDefault(); h.openFolder(); }
           break;
         case "KeyG": // ⌘G / ⇧⌘G 查找下一个 / 上一个（Claude Edit > Find Next/Previous 的标准键）
-          // 查找条没开时 ⌘G 先把它打开（与 ⌘F 同一落点）：原生查找的肌肉记忆是先按下一个，
-          // 旧实现此时静默无响应，像快捷键坏了。
+          // 落点/开合口径在 findStep 一处（菜单「查找下一个」共用同一出口）。
           if (e.altKey) break;
-          if (h.findOpen) { e.preventDefault(); findRef.current?.step(shift ? -1 : 1); }
-          else if (!shift && h.activeId !== null) { e.preventDefault(); h.openFind(); findRef.current?.focus(); }
+          if (h.findStep(shift ? -1 : 1)) e.preventDefault();
           break;
         case "KeyK": // ⌘K 命令面板（P3-3 · brief 八）
           if (!shift && !e.altKey) { e.preventDefault(); h.openPalette(); }
@@ -2034,21 +2274,14 @@ export function App() {
           if (shift) { e.preventDefault(); h.requestPickElement(); }
           break;
         case "KeyW": // ⌘W 关会话回主页（蓝本 §3.6；窗口关闭走红绿灯——菜单已相应定制）
-          // 2026-10-18：主页按 ⌘W 为空操作会被读成「键坏了」；在跑的一轮回主页后仍在后台，
-          // 也必须说清楚（否则用户以为它被关掉了）。两种都给可见回执。
+          // 回执口径在 closeSessionToHome 一处（菜单「关闭会话」共用同一出口）。
           if (!shift) {
             e.preventDefault();
-            if (h.activeId !== null) {
-              const wasRunning = h.running;
-              h.newSession();
-              if (wasRunning) toast(STR.shortcut.leftRunning);
-            } else {
-              toast(STR.shortcut.alreadyHome);
-            }
+            h.closeSessionToHome();
           }
           break;
         case "Slash": // ⌘/ 快捷键速查（蓝本 §3.6「查看全部」）
-          if (!shift) { e.preventDefault(); h.setCheatOpen((v) => !v); }
+          if (!shift) { e.preventDefault(); h.toggleCheat(); }
           break;
       }
     };
@@ -2116,6 +2349,40 @@ export function App() {
     [deliveries, outlineTurns, runningActive],
   );
 
+  const handleOpenArtifact = useCallback<NonNullable<StreamActions["onOpenArtifact"]>>((a) => {
+  if (activeWorkspace === null) return;
+  const abs = a.path.startsWith("/") ? a.path : `${activeWorkspace}/${a.path}`;
+  if (a.kind === "html" || a.kind === "svg") void openPreview(abs);
+  else void window.agent.revealInFinder(abs);
+  }, [activeWorkspace, openPreview]);
+  const streamActions = useMemo<StreamActions>(() => ({
+  feedback,
+  feedbackBusy,
+  pinBusy,
+  annotationPending,
+  onPin: handlePin,
+  ...(pinnedEventIds.size > 0 ? { pinnedEventIds } : {}),
+  onFeedback: handleFeedback,
+  onRevertTurn: handleRevertTurn,
+  onCopyText: handleCopyText,
+  onOpenAttachment: openAttachment,
+  onBranch: handleBranch,
+  onEditRound: handleEditUser,
+  onReplay: handleReplay,
+  onSpeak: handleSpeak,
+  speakingEventId,
+  onToggleFold: toggleFoldRound,
+  // 错误行「重试」：最后一轮输入再跑一轮（追加；运行中 Stream 侧不摆按钮）
+  onRetryLast: handleRetryLast,
+  onRetryRound: handleRetryRound,
+  running: runningActive,
+  // 产物直达（2026-10-16）：工具交付的东西给一个入口，指向**落盘那一份**
+  // （不是模型在回复里重新抄的那份）。可预览的走 openPreview，其余回落 Finder。
+  onOpenArtifact: handleOpenArtifact,
+  }), [feedback, feedbackBusy, pinBusy, annotationPending, handlePin, pinnedEventIds, handleFeedback,
+    handleRevertTurn, handleCopyText, openAttachment, handleBranch, handleEditUser, handleReplay,
+    handleSpeak, speakingEventId, toggleFoldRound, handleRetryLast, handleRetryRound, runningActive, handleOpenArtifact]);
+
   // SEMA §3.5/§12：协议失配 fatal 早退面。
   if (protocolMismatch !== null) {
     return (
@@ -2137,27 +2404,178 @@ export function App() {
   const chipList = (chipRecent ?? []).filter((p) =>
     chipQueryNorm === "" || p.name.toLowerCase().includes(chipQueryNorm) || p.path.toLowerCase().includes(chipQueryNorm),
   );
+  // 统一工具栏 · 中栏主体（2026-10-20 批 129）：上下文锚点。
+  // 首页无会话 ⇒ 品牌名；会话内 ⇒ 可重命名的会话名。
+  // **任何时刻只有一个标题**——批 120/121 的「标题出现两次」争点随两栏合并自然消解。
+  const toolbarCenter = activeId === null ? (
+    <span className="tb-brand">Cairn</span>
+  ) : (
+    <>
+      {/* 会话名可点重命名（蓝本 §2.1「点工具栏会话名可重命名」）：Enter/失焦提交，Esc 取消。 */}
+      {barRenaming !== null ? (
+        <input
+          className="tb-rename"
+          autoFocus
+          value={barRenaming.text}
+          aria-label="重命名会话"
+          onFocus={(e) => {
+            // 业主四图批：开态从串首读起——全选（键入即替换整名）并回卷视口到串首
+            // （长标题此前停在串尾，只露中段碎片）。rAF 让浏览器先完成首次滚动再回卷。
+            const el = e.target;
+            el.select();
+            requestAnimationFrame(() => { el.scrollLeft = 0; });
+          }}
+          onChange={(e) => setBarRenaming({ ...barRenaming, text: e.target.value })}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Enter") {
+              e.preventDefault();
+              // 提交给**绑定的那条会话**（不是 activeId）：会话切换过也不能改名改到别人头上。
+              const v = barRenaming.text.trim();
+              const original = sessions.find((s) => s.id === barRenaming.id)?.title ?? "";
+              if (v !== "" && v !== original) void renameSessionById(barRenaming.id, v);
+              setBarRenaming(null);
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setBarRenaming(null);
+            }
+          }}
+          onBlur={() => {
+            const v = barRenaming.text.trim();
+            const original = sessions.find((s) => s.id === barRenaming.id)?.title ?? "";
+            if (v !== "" && v !== original) void renameSessionById(barRenaming.id, v);
+            setBarRenaming(null);
+          }}
+        />
+      ) : (
+        <button className="tb-title" title={`${sessionTitle} · 点按或按 F2 重命名`} aria-keyshortcuts="F2" onClick={() => { if (activeId !== null) setBarRenaming({ id: activeId, text: sessionTitle }); }}>
+          {sessionTitle}
+        </button>
+      )}
+    </>
+  );
+
+  // 统一工具栏 · 目标芯片（批 129）：单独占「标题右侧的翼」，
+  // 不与标题同槽 ⇒ 芯片的宽度不会把标题挤偏（标题恒对中栏居中）。
+  const toolbarAside = goalTrace !== null && (goalTrace.stopped === null || dismissedGoals.get(activeId ?? "") !== goalTrace.at) ? (
+    <GoalChip
+      trace={goalTrace}
+      onPause={() => { goalAct({ pause: true }); }}
+      onResume={() => { goalAct({ resume: true }); }}
+      onClear={() => { goalAct({ clear: true }); }}
+      onDismiss={() => {
+        const sid = activeIdRef.current;
+        if (sid === null) return;
+        setDismissedGoals((prev) => {
+          const next = new Map(prev).set(sid, goalTrace.at);
+          writeDismissedGoals(next);
+          return next;
+        });
+      }}
+    />
+  ) : null;
+
+  // 统一工具栏 · 右组（批 129）：对话目录 + 窗格入口（Terminal / Changes / Browser）+ ⋯ + 专注模式。
+  // 窄窗（≤920px）三钮收进 ⋮（CSS 收口）；⋯ 恒列全部窗格。
+  const toolbarRight = !settingsOpen && (
+    <>
+      {activeId !== null && (
+        <div className="tb-cluster">
+          {/* 对话目录（v7.2 长对话导航）：2026-10-17 从流内浮片迁入会话条
+              （真机目验：absolute 浮片压住第一条工具行）。批 129 起随会话条并入工具栏。 */}
+          {outlineTurns.length >= 2 && (
+            <button
+              className="tb-btn"
+              aria-label="对话目录"
+              aria-expanded={outlineOpen}
+              title="对话目录（跳到任意一轮）"
+              data-on={outlineOpen}
+              onClick={() => setOutlineOpen((v) => !v)}
+            >
+              <List size={13} />
+            </button>
+          )}
+          <span className="tb-quick">
+            <button
+              className="tb-btn"
+              aria-label="终端窗格"
+              title={`终端窗格（${paneShortcutKeys("terminal")}）`}
+              data-on={paneTabs.includes("terminal")}
+              onClick={() => togglePane("terminal")}
+            >
+              <Terminal size={13} />
+            </button>
+            <button
+              className="tb-btn"
+              aria-label="变更窗格"
+              title={`变更窗格（${paneShortcutKeys("changes")}）`}
+              data-on={paneTabs.includes("changes")}
+              onClick={() => togglePane("changes")}
+            >
+              <FileDiff size={13} />
+              {fileCount > 0 && <span className="tb-badge num">{String(fileCount)}</span>}
+            </button>
+            <button
+              className="tb-btn"
+              aria-label="浏览器窗格"
+              title={`浏览器窗格（${paneShortcutKeys("browser")}）`}
+              data-on={paneTabs.includes("browser")}
+              onClick={() => togglePane("browser")}
+            >
+              <Globe size={13} />
+            </button>
+          </span>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button className="tb-btn" aria-label="更多窗格" title="更多窗格">
+                <MoreHorizontal size={13} />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content className="pop-rd" side="bottom" align="end" sideOffset={4}>
+              {PANE_OPENABLE.map((k) => (
+                <DropdownMenu.Item key={k} className="menu-item" onSelect={() => togglePane(k)}>
+                  <span>{paneTabs.includes(k) ? `关闭${PANE_META[k].label}窗格` : `打开${PANE_META[k].label}窗格`}</span>
+                  <span className="sub">{paneShortcutKeys(k)}</span>
+                </DropdownMenu.Item>
+              ))}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        </div>
+      )}
+      {/* 专注模式是窗口级动作，与内容级动作分组（macOS 工具栏的分组惯例）。 */}
+      {activeId !== null && <span className="tb-sep" aria-hidden="true"></span>}
+      <button
+        className="iconbtn sm"
+        aria-label={focusMode ? "退出专注模式" : "进入专注模式"}
+        aria-pressed={focusMode}
+        data-on={focusMode}
+        title={focusMode ? "退出专注模式（⌘⌥F）" : "专注模式（⌘⌥F）：收起侧栏与检查器"}
+        onClick={toggleFocusMode}
+      >
+        <Focus size={14} />
+      </button>
+    </>
+  );
+
   return (
     <div className="app" data-sidebar={sidebarCollapsed ? "collapsed" : "expanded"}>
       <TitleBar
-        title="Cairn"
+        center={settingsOpen ? <span className="tb-brand">设置</span> : toolbarCenter}
+        aside={settingsOpen ? undefined : toolbarAside}
         sidebarCollapsed={sidebarCollapsed}
         onToggleSidebar={toggleSidebar}
-        right={(
-          <button
-            className="iconbtn sm"
-            aria-label={focusMode ? "退出专注模式" : "进入专注模式"}
-            aria-pressed={focusMode}
-            data-on={focusMode}
-            title={focusMode ? "退出专注模式（⌘⌥F）" : "专注模式（⌘⌥F）：收起侧栏与检查器"}
-            onClick={toggleFocusMode}
-          >
-            <Focus size={14} />
-          </button>
-        )}
+        right={toolbarRight}
       />
       <div className="shell">
-        <div className="side-wrap" style={{ width: sidebarWidth }}>
+        {sidebarCollapsed && !focusMode && <SidebarRail
+          onExpand={toggleSidebar}
+          onNewTask={newSession}
+          onSearch={handleOpenPalette}
+          onFiles={() => openPane("file")}
+          onTerminal={() => openPane("terminal")}
+          onSettings={() => { setSettingsSection(undefined); setSettingsOpen(true); }}
+        />}
+        <div className="side-wrap" data-dsh-claude-part="sidebar-column" style={{ width: sidebarWidth }}>
         <Sidebar
           projects={projects}
           sessions={sessions}
@@ -2186,20 +2604,34 @@ export function App() {
           onPinSession={pinSessionById}
           onForkSession={forkSessionFromMenu}
           onArchiveSession={requestArchiveSession}
+          onOpenInCliSession={openSessionInCli}
+          onSessionWorktree={(kind, s) => {
+            if (kind === "discard") setWtDiscard(s);
+            else void sessionWorktreeOp(kind, s);
+          }}
           onDeleteSession={requestDeleteSession}
           onPickDirectory={() => window.agent.pickDirectory()}
           onOpenSettings={() => { setSettingsSection(undefined); setSettingsOpen(true); }}
           onOpenAbout={() => { setSettingsSection("about"); setSettingsOpen(true); }}
+          /* 状态点是「模型服务可用与否」的常驻事实位 ⇒ 直接进「模型与 Provider」分区，
+             笼统开设置页等于让用户自己找那一格。 */
+          onOpenProviderSettings={() => { setSettingsSection("provider"); setSettingsOpen(true); }}
+          theme={themePref}
+          onThemeChange={changeTheme}
+          usage={activeId === null ? null : usageStats}
         />
           <div
             className="side-handle"
             role="separator"
             aria-orientation="vertical"
-            aria-label="调整侧栏宽度（240–280px）"
-            title="拖动调整侧栏宽度；双击回到 240px"
+            aria-label={`调整侧栏宽度（${SIDEBAR_MIN}–${SIDEBAR_MAX}px）`}
+            aria-valuemin={SIDEBAR_MIN}
+            aria-valuemax={SIDEBAR_MAX}
+            aria-valuenow={sidebarWidth}
+            title={`拖动调整侧栏宽度；双击回到 ${SIDEBAR_DEFAULT}px`}
             tabIndex={0}
             onPointerDown={startSidebarDrag}
-            onDoubleClick={() => { persistSidebarWidth(240); }}
+            onDoubleClick={() => { persistSidebarWidth(SIDEBAR_DEFAULT); }}
             onKeyDown={(e) => {
               if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
               e.preventDefault();
@@ -2209,129 +2641,8 @@ export function App() {
         </div>
         <Group orientation="horizontal" id="cairn-main" className="main-group" elementRef={mainGroupRef}>
           <Panel minSize={420}>
-        <main className="main" data-empty={showEmpty ? "true" : "false"}>
-          <FindBar ref={findRef} open={findOpen && !showEmpty} container={streamEl} onClose={() => { setFindOpen(false); }} />
-          {/* 会话条（蓝本 §2.2：26px 行——会话名 13px + Terminal / Changes / Browser 三钮 + ⋮）。
-              窗格入口从窗口顶栏迁到此处（顶栏只留窗口 chrome）；窄窗时三钮收进 ⋮（CSS 收口）。 */}
-          {activeId !== null && (
-            <div className="chat-bar">
-              {/* 会话名可点重命名（蓝本 §2.1「点工具栏会话名可重命名」）：Enter/失焦提交，Esc 取消。 */}
-              {barRenaming !== null ? (
-                <input
-                  className="cb-rename"
-                  autoFocus
-                  value={barRenaming}
-                  aria-label="重命名会话"
-                  onFocus={(e) => {
-                    // 业主四图批：开态从串首读起——全选（键入即替换整名）并回卷视口到串首
-                    // （长标题此前停在串尾，只露中段碎片）。rAF 让浏览器先完成首次滚动再回卷。
-                    const el = e.target;
-                    el.select();
-                    requestAnimationFrame(() => { el.scrollLeft = 0; });
-                  }}
-                  onChange={(e) => setBarRenaming(e.target.value)}
-                  onKeyDown={(e) => {
-                    e.stopPropagation();
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      const v = barRenaming.trim();
-                      if (v !== "" && activeId !== null && v !== sessionTitle) void renameSessionById(activeId, v);
-                      setBarRenaming(null);
-                    } else if (e.key === "Escape") {
-                      e.preventDefault();
-                      setBarRenaming(null);
-                    }
-                  }}
-                  onBlur={() => {
-                    const v = barRenaming.trim();
-                    if (v !== "" && activeId !== null && v !== sessionTitle) void renameSessionById(activeId, v);
-                    setBarRenaming(null);
-                  }}
-                />
-              ) : (
-                <button className="cb-name" title={`${sessionTitle} · 点按重命名`} onClick={() => setBarRenaming(sessionTitle)}>
-                  {sessionTitle}
-                </button>
-              )}
-              {goalTrace !== null && (goalTrace.stopped === null || dismissedGoals.get(activeId ?? "") !== goalTrace.at) && (
-                <GoalChip
-                  trace={goalTrace}
-                  onPause={() => { goalAct({ pause: true }); }}
-                  onResume={() => { goalAct({ resume: true }); }}
-                  onClear={() => { goalAct({ clear: true }); }}
-                  onDismiss={() => {
-                    const sid = activeIdRef.current;
-                    if (sid === null) return;
-                    setDismissedGoals((prev) => {
-                      const next = new Map(prev).set(sid, goalTrace.at);
-                      writeDismissedGoals(next);
-                      return next;
-                    });
-                  }}
-                />
-              )}
-              <span className="cb-spacer" />
-              {/* 对话目录（v7.2 长对话导航）：2026-10-17 从流内浮片迁入会话条。
-                  原先 absolute 贴在流右上，长对话里会压住第一条工具行（真机截图目验）；
-                  会话条是它的稳定落点，和 Terminal/Changes/Browser 同族。 */}
-              {outlineTurns.length >= 2 && (
-                <button
-                  className="cb-btn"
-                  aria-label="对话目录"
-                  aria-expanded={outlineOpen}
-                  title="对话目录（跳到任意一轮）"
-                  data-on={outlineOpen}
-                  onClick={() => setOutlineOpen((v) => !v)}
-                >
-                  <List size={13} />
-                </button>
-              )}
-              <span className="cb-quick">
-                <button
-                  className="cb-btn"
-                  aria-label="终端窗格"
-                  title="终端窗格（Ctrl+`）"
-                  data-on={paneTabs.includes("terminal")}
-                  onClick={() => togglePane("terminal")}
-                >
-                  <Terminal size={13} />
-                </button>
-                <button
-                  className="cb-btn"
-                  aria-label="变更窗格"
-                  title="变更窗格（⌘⇧D）"
-                  data-on={paneTabs.includes("changes")}
-                  onClick={() => togglePane("changes")}
-                >
-                  <FileDiff size={13} />
-                  {fileCount > 0 && <span className="tb-badge num">{String(fileCount)}</span>}
-                </button>
-                <button
-                  className="cb-btn"
-                  aria-label="浏览器窗格"
-                  title="浏览器窗格（⌘⇧B）"
-                  data-on={paneTabs.includes("browser")}
-                  onClick={() => togglePane("browser")}
-                >
-                  <Globe size={13} />
-                </button>
-              </span>
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger asChild>
-                  <button className="cb-btn" aria-label="更多窗格" title="更多窗格">
-                    <MoreHorizontal size={13} />
-                  </button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content className="pop-rd" side="bottom" align="end" sideOffset={4}>
-                  {PANE_OPENABLE.map((k) => (
-                    <DropdownMenu.Item key={k} className="menu-item" onSelect={() => togglePane(k)}>
-                      {paneTabs.includes(k) ? `关闭${PANE_META[k].label}窗格` : `打开${PANE_META[k].label}窗格`}
-                    </DropdownMenu.Item>
-                  ))}
-                </DropdownMenu.Content>
-              </DropdownMenu.Root>
-            </div>
-          )}
+        <main className="main" data-dsh-claude-part="center-column" data-empty={showEmpty ? "true" : "false"}>
+          <FindBar ref={findRef} open={findOpen && !showEmpty} container={streamEl} onClose={closeFind} />
           {showEmpty ? (
             /* 空屏（P2-1）：品牌字标 → 问候 → 项目 chip →（输入区居中枢位见 zone-composer）→ 建议行。
                错误/提示条在这里也渲染：新建项目与预览的失败发生在"还没有会话"时，
@@ -2361,7 +2672,7 @@ export function App() {
                 {/* 2026-10-18 对照 Claude 桌面端：hero 不是「字标 + 问候」两行，而是珊瑚星标与
                     问候同一行、衬线大字（Claude 的「✳ You're here!」）。品牌名仍在窗口顶栏，
                     这里不再叠一个 CAIRN 字标。 */}
-                <h1 className="empty-greet">
+                <h1 className="empty-greet" data-dsh-claude-part="hero-headline" data-dsh-claude-holds="hero-mark">
                   <Sparkles size={26} strokeWidth={2.2} className="empty-greet-mark" aria-hidden="true" />
                   <span>{greetingFor(new Date().getHours())}，{STR.empty.greetingAsk}</span>
                 </h1>
@@ -2477,31 +2788,7 @@ export function App() {
                       streaming={runningActive}
                       foldedRounds={foldedRounds}
                       flashRound={flashRound}
-                      actions={{
-                        feedback,
-                        onFeedback: handleFeedback,
-                        onRevertTurn: handleRevertTurn,
-                        onCopyText: handleCopyText,
-                        onOpenAttachment: openAttachment,
-                        onBranch: handleBranch,
-                        onEditRound: handleEditUser,
-                        onReplay: handleReplay,
-                        onSpeak: handleSpeak,
-                        speakingEventId,
-                        onToggleFold: toggleFoldRound,
-                        // 错误行「重试」：最后一轮输入再跑一轮（追加；运行中 Stream 侧不摆按钮）
-                        onRetryLast: handleRetryLast,
-                        onRetryRound: handleRetryRound,
-                        running: runningActive,
-                        // 产物直达（2026-10-16）：工具交付的东西给一个入口，指向**落盘那一份**
-                        // （不是模型在回复里重新抄的那份）。可预览的走 openPreview，其余回落 Finder。
-                        onOpenArtifact: (a) => {
-                          if (activeWorkspace === null) return;
-                          const abs = a.path.startsWith("/") ? a.path : `${activeWorkspace}/${a.path}`;
-                          if (a.kind === "html" || a.kind === "svg") void openPreview(abs);
-                          else void window.agent.revealInFinder(abs);
-                        },
-                      }}
+                      actions={streamActions}
                     />
                   </Suspense>
                   {/* 交付摘要卡（批 3）：有交付的轮各一张、空轮一行弱提示（连续空轮并一段），流尾展示。
@@ -2578,6 +2865,18 @@ export function App() {
             {askForActive !== null && (
               <ApprovalCard
                 ask={askForActive}
+                // 连拦降级（§2.2 双向断路器）：一键落到**比当前更保守**的那一档。
+                // 为什么落「默认」而不是再往下：auto/guided 都是「免逐笔问写」的档，
+                // 连拦说明被免掉的那层正在出事，退回逐笔审批就是这副断路器要说的话。
+                // 不自动改档：这里只有用户点了才写 settings。
+                onDowngrade={() => {
+                  void window.agent.setSettings({ mode: "default" }).then(() => {
+                    setMode("default");
+                    setLastNotice(`权限档已降到「${MODE_LABEL.default.label}」——${MODE_LABEL.default.desc}`);
+                  }).catch((err: unknown) => {
+                    setLastError(`权限档保存失败：${err instanceof Error ? err.message : String(err)}`);
+                  });
+                }}
                 onDecide={(approved, scope) => {
                   void window.agent.decide(askForActive.askId, approved, scope).then((ok) => {
                     if (!ok) setLastError("审批提交失败");
@@ -2622,7 +2921,28 @@ export function App() {
                 <span className="msg">正在新分支里编辑第 {editCtx.round} 轮消息；原会话「{editCtx.originTitle}」不动。</span>
                 <button
                   className="btn-ghost"
-                  onClick={() => { activate(editCtx.originId); setEditCtx(null); }}
+                  onClick={() => {
+                    const ctx = editCtx;
+                    if (ctx === null) return;
+                    // 2026-10-20 真机：旧实现只 activate(originId)，只换标题不载入原会话转录——
+                    // 回到原会话后屏上是空流（rows=0）。必须走 openSession 重新载入。
+                    const emptyBranch = activeIdRef.current === ctx.forkId
+                      && events.length === 0
+                      && (sendQueue.current.get(ctx.forkId)?.length ?? 0) === 0;
+                    setEditCtx(null);
+                    openSession(ctx.originId);
+                    // 第 1 轮编辑建的空分支：回到原会话即无内容，顺手清掉，别留 0 字节会话。
+                    // 删除与 openSession 谁先落都收敛到 origin（openSession 会写 currentSession）。
+                    if (emptyBranch) {
+                      // 删之前先把**用户还没发出去的编辑稿**搬到 origin（2026-10-20 独立评审追出，
+                      // LOW-MEDIUM）：那份稿存在空分支的草稿键下 ⇒ 删会话不删草稿 ⇒ 稿子变孤儿
+                      // （那条会话没了，谁也读不到它）⇒ 用户以为写的字还在，其实没了。
+                      moveDraftBetweenSessions(ctx.forkId, ctx.originId);
+                      void window.agent.deleteSession(ctx.forkId).then(() => { void refreshSessions(); }, (err: unknown) => {
+                        setLastError(`空分支清理失败：${err instanceof Error ? err.message : String(err)}`, ctx.originId);
+                      });
+                    }
+                  }}
                 >回到原会话</button>
               </div>
             )}
@@ -2665,7 +2985,7 @@ export function App() {
               steps={steps}
               runSteps={runSteps}
               {...(chosenCtx !== undefined ? { ctxWindow: chosenCtx } : {})}
-              workspaceLabel={activeWorkspace ? activeWorkspace.slice(activeWorkspace.lastIndexOf("/") + 1) : null}
+              workspaceLabel={!showEmpty && activeWorkspace ? activeWorkspace.slice(activeWorkspace.lastIndexOf("/") + 1) : null}
               workspacePath={activeWorkspace}
               recentRefs={activeId !== null ? recentRefsBySession.current.get(activeId) ?? [] : []}
               onReferenceAdded={noteRecentRef}
@@ -2783,6 +3103,7 @@ export function App() {
                 onJump={jumpToEvent}
                 onOpenPane={openPane}
                 onRestore={handleRestoreSnapshot}
+                onClose={toggleInspector}
               />
               {paneTabs.length > 0 && (
                 <div className="pane-dock-zone">
@@ -2796,6 +3117,7 @@ export function App() {
                       onPickResult={handlePickResult}
                       {...(preview !== null && preview.status === "ready" && preview.url !== undefined ? { browserUrl: preview.url } : {})}
                       onClose={closePane}
+                      onOpen={openPane}
                       onReview={(text) => void send(text)}
                       onReorder={(from, to) => setPaneTabs((tabs) => movePane(tabs, from, to))}
                       onPopout={(kind) => { void window.agent.panePopout(kind, activeId ?? undefined); }}
@@ -2813,11 +3135,11 @@ export function App() {
       )}
       {/* ⌘/ 快捷键速查（§3.6「查看全部」）：数据单一源 shortcuts.ts（只列已实现的键）。 */}
       {cheatOpen && (
-        <ModalSurface className="sheet-scrim" label="快捷键速查" onClose={() => setCheatOpen(false)} onClick={() => setCheatOpen(false)}>
+        <ModalSurface className="sheet-scrim" label="快捷键速查" onClose={closeCheat} onClick={closeCheat}>
           <div className="sheet" onClick={(e) => { e.stopPropagation(); }}>
             <div className="sheet-head">
               <span className="sheet-title">快捷键</span>
-              <button className="iconbtn sm" aria-label="关闭速查表" onClick={() => setCheatOpen(false)}><X size={13} /></button>
+              <button className="iconbtn sm" aria-label="关闭速查表" onClick={closeCheat}><X size={13} /></button>
             </div>
             <div className="sheet-body">
               {SHORTCUT_GROUPS.map((g) => (
@@ -2899,12 +3221,35 @@ export function App() {
           </div>
         </ModalSurface>
       )}
+      {/* §3.7 · G4 丢弃隔离工作区闸：后果前置（哪棵树、会丢什么）+ 明示不可撤销。 */}
+      {wtDiscard !== null && (
+        <ModalSurface className="confirm-scrim" label="丢弃隔离工作区确认" onClose={() => setWtDiscard(null)}>
+          <div className="confirm-card">
+            <div className="cc-title">丢弃「{wtDiscard.title ?? wtDiscard.id}」的隔离工作区？</div>
+            <div className="cc-note">
+              此操作无法撤销：这块隔离工作区会被删除，里面未提交的改动一并消失。<br />
+              主工作区不受影响——合并前它本来就没被动过。
+            </div>
+            <div className="cc-actions">
+              <button className="mini-btn" onClick={() => setWtDiscard(null)}>取消</button>
+              <button
+                className="mini-btn danger"
+                onClick={() => {
+                  const target = wtDiscard;
+                  setWtDiscard(null);
+                  void sessionWorktreeOp("discard", target);
+                }}
+              >丢弃</button>
+            </div>
+          </div>
+        </ModalSurface>
+      )}
       {/* 命令面板（P3-3 · brief 八）：⌘K / 侧栏搜索钮；数据全从 App 拿（技能组待数据面接入）。 */}
       {paletteOpen && (
         <Suspense fallback={null}>
           <CommandPalette
             open
-            onClose={() => setPaletteOpen(false)}
+            onClose={() => { setPaletteOpen(false); focusComposer(); }}
             sessions={sessions}
             projects={projects.map((p) => ({ id: p.id, name: p.name, path: p.path }))}
             onOpenSession={(id) => { setPaletteOpen(false); openSession(id); }}
@@ -2941,6 +3286,7 @@ export function App() {
                 setMode(s.mode);
                 setThemePref(s.theme);
                 setTextSize(s.textSize);
+                setUiSize(s.uiSize);
                 // 2026-10-18 真机：Ctrl+Tab 开关只落盘、未回灌 live 状态 ⇒ 关掉后快捷键照样切会话
                 // （重启才生效）。设置页保存的回灌必须覆盖快捷键读取的那份 state。
                 setCtrlTabCycle(s.ctrlTabCycle);

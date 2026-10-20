@@ -26,6 +26,13 @@ export interface EvolutionSignals {
   verifyOutcome: "green" | "red" | "none";
   /** 目标漂移条数（goal-drift 的真读数）。 */
   goalDriftCount: number;
+  /** 目标漂移**是否可测**（有没有助手的散文可读）。**可选**：缺省 = 可测
+   *  （手搭的信号字面量没这一格时，按"给了 count 就是测过了"读——`extractSignals` 恒给）。
+   *  `goalDriftCount === 0` 有两种成因：**测过了没有**，与**根本没得测**（这一跑只有工具调用、
+   *  助手一句散文都没写）——旧实现把两者都读成 0，于是"没测过"被当成"漂移已消解"
+   *  ⇒ 上一轮的 goal-reconfirm 补丁被**删掉**，审计轨迹还记着"已消解"（为一个从没测过的漂移）。
+   *  同 `costMeasurable` 那一格（2026-10-16「不可测 ≠ 无前进」），此处补上对应的可测标记。 */
+  goalDriftMeasurable?: boolean;
   /** 成本÷前进是否可测。 */
   costMeasurable: boolean;
   /** 可测时的 tokensPerBoundary；不可测则 null。 */
@@ -71,7 +78,8 @@ export function extractSignals(events: readonly AgentEvent[]): EvolutionSignals 
   const verifyOutcome: "green" | "red" | "none" =
     lastVerify === undefined ? "none" : lastVerify.ok ? "green" : "red";
 
-  const drift = goalDriftFindings(assistantTurnsFromEvents(scoped));
+  const turns = assistantTurnsFromEvents(scoped);
+  const drift = goalDriftFindings(turns);
   const cost = costPerProgress(scoped);
 
   return {
@@ -80,6 +88,7 @@ export function extractSignals(events: readonly AgentEvent[]): EvolutionSignals 
     repeatedVerifyCause,
     verifyOutcome,
     goalDriftCount: drift.length,
+    goalDriftMeasurable: turns.length > 0,
     costMeasurable: cost.measurable,
     tokensPerBoundary: cost.tokensPerBoundary,
     spendAfterLastBoundary: cost.spendAfterLastBoundary,

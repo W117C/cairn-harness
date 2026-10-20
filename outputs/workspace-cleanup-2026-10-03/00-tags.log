@@ -1,0 +1,2 @@
+goofy-satoshi-0edc69 84850747f5567ca0a6626b4cd1bc9b95d04b73f4 给缺口 #3 的核心修复补上变异锚点：词根收窄这条变异本来是存活的
+rescue/stash-chain-41772808 c9fdb400c1d7e331e4719adf2de47ad8c47151d9 head-cert 回收自己建的认证树：印了两个月的那行命令改成真执行

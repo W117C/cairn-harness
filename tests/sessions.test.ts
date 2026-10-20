@@ -58,10 +58,30 @@ describe("会话列表存储（M1e：JSONL 即会话）", () => {
     expect(list.find((s) => s.id === "测试会话")?.lines).toBe(2);
   });
 
+  it("置顶/反馈 sidecar 不算会话（首行形状判定，不误伤同名真会话）", async () => {
+    // 2026-10-20 真机：点一次「置顶」后 sessions/pins.jsonl 被列表当成会话，侧栏多出一个“pins”。
+    // 两个 sidecar 都与事件同扩展名 ⇒ 判定不能只看文件名；用首行「无 type、有 sessionId+eventId」。
+    await createSession(root, "真会话");
+    await writeFile(
+      join(root, "pins.jsonl"),
+      JSON.stringify({ sessionId: "真会话", eventId: 2, pinned: true, at: "2026-10-20T08:01:13.873Z" }) + "\n",
+      "utf8",
+    );
+    await writeFile(
+      join(root, "feedback.jsonl"),
+      JSON.stringify({ sessionId: "真会话", eventId: 2, rating: "up", at: "2026-10-20T08:01:13.873Z" }) + "\n",
+      "utf8",
+    );
+    expect((await listSessions(root)).map((s) => s.id)).toEqual(["真会话"]);
+
+    // 用户真把会话命名成 pins（首行是事件）⇒ 仍须列出：文件名不是判据。
+    await writeFile(join(root, "pins.jsonl"), JSON.stringify({ type: "user_message", content: "我是真会话" }) + "\n", "utf8");
+    expect((await listSessions(root)).map((s) => s.id).sort()).toEqual(["pins", "真会话"]);
+  });
+
   it("新建撞名自动加序号；空目录列表为空", async () => {
     await createSession(root, "A");
-    const second = await createSession(root, "A");
-    expect(second).toBe("A (2)");
+    const second = await createSession(root, "A");    expect(second).toBe("A (2)");
     const empty = await mkdtemp(join(tmpdir(), "m1e-empty-"));
     expect(await listSessions(empty)).toEqual([]);
     await rm(empty, { recursive: true, force: true });

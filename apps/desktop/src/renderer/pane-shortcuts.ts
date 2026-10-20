@@ -34,6 +34,11 @@ export interface PaneKeyMods {
   alt: boolean;
 }
 
+/** 窗格键位展示文案（tooltip/速查表共用这一处，别在调用点手抄）。 */
+export function paneShortcutKeys(kind: PaneKind): string {
+  return PANE_SHORTCUTS.find((s) => s.kind === kind)?.keys ?? "";
+}
+
 /** 物理键 + 修饰键 → 要开合的窗格；不匹配（含多按了修饰键）返回 null。 */
 export function paneShortcutFor(code: string, mods: PaneKeyMods): PaneKind | null {
   for (const s of PANE_SHORTCUTS) {

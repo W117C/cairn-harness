@@ -1,0 +1,5 @@
+[89707:1020/222910.967575:ERROR:content/browser/network_service_instance_impl.cc:650] Network service crashed or was terminated, restarting service.
+native-host-smoke 超时
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron scripts/native-host-smoke.cjs '/Users/ze/Downloads/Cairn/deepseek harness/outputs/desktop-performance-2026-10-20/native-before.json'

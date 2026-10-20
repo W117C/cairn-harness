@@ -3,6 +3,7 @@
 // 不做 LLM 风险分析器 V1（§11.7.4 拍板）。
 import type { ToolName } from "../tools/base";
 import { normalizeCommandForMatch } from "./command-shape";
+import { SENSITIVE_PATH_SEGMENTS, SENSITIVE_SCAN_ROOTS } from "../sensitive-paths";
 
 export type RiskLevel = "none" | "low" | "medium" | "high" | "critical";
 
@@ -134,27 +135,40 @@ export function hasThreatTableSurface(tool: string): boolean {
  *  一律拒绝」的沙箱口径，这里是「路径片段 ⇒ 抬风险等级」的权限口径，语义不同、强制合并
  *  会改掉任一边的行为。两处注释互指，将来要收敛时按本仓口径先记锚点再动。
  */
-const SENSITIVE_PATH_SEGMENTS: readonly string[] = [
-  // 持久化代码执行面：git commit 时自动运行；.git/config 还能重定向 core.hooksPath
-  ".git/hooks/", ".git/config",
-  // 宿主配置面：内容是待 spawn 的命令（lsp.json）或待执行的 verify 命令（config.json）。
-  // 模型能改这两个文件 = 能让宿主执行任意命令，且执行不经 shell 威胁表与网络审批通道。
-  ".agent/lsp.json", ".agent/config.json",
-  // 凭证面（仓库内那份同样是凭证：常被误提交）
-  ".npmrc", ".netrc", ".env", ".git-credentials", "id_rsa", "id_ed25519", "authorized_keys",
-];
+
 
 /** 文件面工具族：走 `path` 键判定路径风险。`apply_patch` 批量形态单列（见 pathSurface）。 */
 const PATH_TOOL_NAMES: ReadonlySet<string> = new Set([
   "read_file", "write_file", "edit_file", "grep", "glob",
 ]);
 
-/** 从入参里取「这次操作指向哪些路径」。
+/** **递归扫描面**的工具（grep/glob）：它们的 path 参数是**目录**，实际覆盖面是整棵子树。
+ *
+ *  为什么单列（2026-10-19 独立评审追出）：`pathSurface` 只看 path 参数本身，而
+ *  `grep {pattern:"ghp_", path:".git"}` 的 path 是 `.git` —— 它不含 `.git/hooks/` 也不含
+ *  `.git/config` 这两个子串 ⇒ 旧实现判成 none ⇒ **连只读档都 approve**（免批），
+ *  而 grep 随后扫的是整棵 `.git` 子树，把 `.git/config` 里的凭据原样带进模型上下文
+ *  （实测返回 `url = https://ghp_SECRET…@github.com/…`）。`path:".git/hooks"` 同理。
+ *  一条"只看参数本身"的通道管不住"参数是目录"的工具。 */
+const RECURSIVE_SCAN_TOOLS: ReadonlySet<string> = new Set(["grep", "glob"]);
+
+
+
+/** 从入参里取「这次操作指向哪些路径」（**逐条**，不是一个拼起来的串）。
+ *
  *  正常工具读 `path` 键；**apply_patch 没有 path 键**——它一次落多处，路径只出现在 patch 正文
  *  （`--- a/x` / `+++ b/x`，`src/tools/apply_patch.ts:168` 读 `args.patch`）。取全文扫是这条
  *  通道能覆盖批量形态的唯一办法：宁可多判（多判的代价是一次审批），不可漏判。
- *  grep/glob 的 path 缺省是 "."，相对工作区根 ⇒ 天然不命中敏感片段，与它们的真实落点一致。 */
-function pathSurface(tool: string, args: Record<string, unknown>): string {
+ *  grep/glob 的 path 缺省是 "."，相对工作区根 ⇒ 天然不命中敏感片段，与它们的真实落点一致。
+ *
+ *  **apply_patch 的 patch 正文与 path/paths 是并集，不是先到先得**（2026-10-19 独立评审追出）：
+ *  旧实现 `if (parts.length > 0) return parts.join("\n")` **提前返回**，于是补丁正文根本没进
+ *  这一面。模型只要多带一个 `path:"README.md"`（`apply_patch` 本身不读这个键，对它是惰性的；
+ *  而工具 schema 没有 `additionalProperties:false`、provider 传的是 `JSON.parse` 原文），
+ *  整个 patch 就不被扫 ⇒ `apply_patch {patch:"…b/.git/hooks/pre-commit…", path:"README.md"}`
+ *  走 approve/L4-pass（auto 档免批），实测**钩子真的落盘且带可执行位**。
+ *  同一份 patch 不带那个诱饵键时是 ask/L4-risk —— 门被一个惰性参数关掉了。 */
+function pathSurface(tool: string, args: Record<string, unknown>): string[] {
   const parts: string[] = [];
   if (typeof args.path === "string" && args.path !== "") parts.push(args.path);
   // 一次多份（`read_file` 的 `paths`，第 477 页）：**逐条都进这一面**。只读 `path` 的话，
@@ -163,23 +177,73 @@ function pathSurface(tool: string, args: Record<string, unknown>): string {
   if (Array.isArray(args.paths)) {
     for (const p of args.paths) if (typeof p === "string" && p !== "") parts.push(p);
   }
-  if (parts.length > 0) return parts.join("\n");
-  if (tool === "apply_patch" && typeof args.patch === "string") return args.patch;
-  return "";
+  // apply_patch：patch 正文**总是**进这一面（哪怕同时带了 path/paths）。
+  if (tool === "apply_patch" && typeof args.patch === "string" && args.patch !== "") parts.push(args.patch);
+  return parts;
+}
+
+/** 把一个路径 token 归一成语法上等价的规范形态（与工具层的 `resolve` 同一口径）。
+ *
+ *  为什么必须归一（2026-10-19 独立评审追出）：**权限层与工具层对"这是哪个文件"的口径不一致**。
+ *  工具层先 `resolve()`（`src/tools/base.ts:119`）把 `//`、`.`、`x/..` 折叠掉，
+ *  权限层却在**未归一的原始串**上做子串匹配 ⇒ 两层说的不是同一个文件：
+ *  `.git//hooks/pre-commit`、`.git/./hooks/pre-commit`、`.git/x/../hooks/pre-commit`
+ *  三种写法工具层都落到 `<ws>/.git/hooks/pre-commit`（同一个可执行钩子），
+ *  权限层却因为原文里没有 `.git/hooks/` 这个子串而判成 none ⇒ **auto 档免批写钩子**；
+ *  读侧同理：`.git//config` 在**只读档**也能读出 `.git/config` 里的凭据。
+ *
+ *  归一后仍是子串匹配（不改成"整段相等"）：那是**收紧**语义，会把 `src/.env.local` 这类
+ *  今天照样命中 `.env` 的写法放过。归一只把"同一个文件的多种拼法"收成一种，
+ *  命中面只增不减（见 pathRisk 的分段说明）。 */
+function normalizePathToken(token: string): string {
+  const slash = token.replace(/\\/g, "/");
+  const out: string[] = [];
+  for (const seg of slash.split("/")) {
+    if (seg === "" || seg === ".") continue; // `//` 与 `/./` 折叠
+    if (seg === "..") { out.pop(); continue; } // `x/../` 折叠（与 resolve 同口径）
+    out.push(seg);
+  }
+  return out.join("/");
 }
 
 /** 路径通道：命中敏感片段 ⇒ high。**不命中就是 NONE**，刻意不抬高文件工具的基线风险——
  *  若给 write_file 补一个常规 medium，引导/自主两档的每一次写向调用都会被拦（两档
  *  `writeAsk=false`、风险线分别是 medium/high），那是远超本条要堵的口子的行为变更。
  *  high 的选择理由与 web_fetch 同源：四档的 `RISK_ORDER[risk] >= RISK_ORDER[riskAskAt]`
- *  一条出口全中，复用既有 `L4-risk` 层，不新增判据层（GATE_LAYERS 与 gate-audit 判卷不动）。 */
-function pathRisk(candidate: string): RiskFinding {
-  if (candidate.trim() === "") return NONE;
-  // 反斜杠归一：Windows 形态的入参（.git\\hooks\\x）否则整条表失效。
-  const hay = candidate.replace(/\\/g, "/").toLowerCase();
-  const hit = SENSITIVE_PATH_SEGMENTS.find((seg) => hay.includes(seg));
-  if (!hit) return NONE;
-  return { level: "high", reason: `敏感路径（${hit}）：持久化执行面/凭证面，文件面路径通道` };
+ *  一条出口全中，复用既有 `L4-risk` 层，不新增判据层（GATE_LAYERS 与 gate-audit 判卷不动）。
+ *
+ *  匹配面：候选串按**空白切成 token**，每个 token 先归一（见 normalizePathToken）再查表。
+ *  为什么切 token：patch 正文里路径是嵌在 `+++ b/.git/hooks/x` 这类行里的，
+ *  而路径参数本身通常不含空白——一刀切按 token 处理，两种形态共用同一份归一，
+ *  不用在"这是路径"还是"这是补丁"之间分叉（分叉两处各写一份就会漂）。
+ *  归一 + 分段是**只增不减**的：原文能命中的写法，归一后仍在某个 token 里命中。 */
+function pathRisk(candidates: readonly string[], opts: { recursive: boolean }): RiskFinding {
+  for (const candidate of candidates) {
+    if (candidate.trim() === "") continue;
+    for (const token of candidate.split(/\s+/u)) {
+      if (token === "") continue;
+      const normalized = normalizePathToken(token).toLowerCase();
+      if (normalized === "") continue;
+      const hay = normalized;
+      const hit = SENSITIVE_PATH_SEGMENTS.find((seg) => hay.includes(seg));
+      if (hit) {
+        return { level: "high", reason: `敏感路径（${hit}）：持久化执行面/凭证面，文件面路径通道` };
+      }
+      // 递归扫描面：参数是目录 ⇒ 覆盖面是整棵子树。落在敏感根下（`.git` / `.agent`）
+      // ⇒ 整棵子树都要过这道门（子树里就有 `.git/config` 这样的凭证面与 `.git/hooks/` 这样的执行面）。
+      // 只对递归工具生效：read_file/write_file 指的是**那个文件**，子树不在它的覆盖面里。
+      // **看任意一段**（不是只看第一段）：`sub/.git` 同样是一棵 .git 子树（里面照样有 config），
+      // 只看首段会漏掉它；而 `.gitignore` 是一**段**且不等于 `.git`，不会被误伤。
+      if (opts.recursive) {
+        for (const seg of normalized.split("/")) {
+          if (SENSITIVE_SCAN_ROOTS.includes(seg)) {
+            return { level: "high", reason: `敏感目录（${seg}）：递归扫描会覆盖整棵子树（含持久化执行面/凭证面）` };
+          }
+        }
+      }
+    }
+  }
+  return NONE;
 }
 
 /** 静态通道：扫描命令（含链）命中威胁表取最高级。 */
@@ -189,7 +253,7 @@ export function staticRisk(tool: ToolName, args: Record<string, unknown>): RiskF
   //  ② 排在 `!hasThreatTableSurface` 早退之前（同 web_fetch 的理由：插在后面等于没写这一支）。
   //  write_file / apply_patch 原先在这里一律 NONE，这是缺口本身。
   if (PATH_TOOL_NAMES.has(tool as string) || (tool as string) === "apply_patch") {
-    const hit = pathRisk(pathSurface(tool as string, args));
+    const hit = pathRisk(pathSurface(tool as string, args), { recursive: RECURSIVE_SCAN_TOOLS.has(tool as string) });
     if (hit.level !== "none") return hit;
   }
   // edit_file：就地改文件（文件破坏面 ≤ write_file 的覆盖写，但仍是写向操作）

@@ -1,0 +1,14 @@
+{
+ "headSha": "aa6b6c9d5644b89b238f07f5457e478795d899de",
+ "dirty": 69,
+ "ranAt": "2026-10-13T08:40:51.154Z",
+ "maxSteps": 20,
+ "reps": 2,
+ "system": "base",
+ "arm": "base",
+ "model": "cn:hy3",
+ "tasks": [
+  "B1-bugfix-crossfile",
+  "B2-feature-export"
+ ]
+}

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { DISTILL_INSTRUCTION, failureDigestFromEvents, runSessionEndDistill } from "../src/agent/memory/distill";
+import { DISTILL_INSTRUCTION, failureDigestFromEvents, isTrivialSession, runSessionEndDistill } from "../src/agent/memory/distill";
 import type { AgentEvent } from "../src/events";
 import type { Provider, ProviderMessage, ModelOutput } from "../src/providers";
 import type { Tool } from "../src/tools/base";
@@ -20,6 +20,20 @@ describe("failureDigestFromEvents（纯函数）", () => {
   it("全成功/空流 → 空串（零注入，无回归）", () => {
     expect(failureDigestFromEvents([])).toBe("");
     expect(failureDigestFromEvents([tc("a", "edit_file"), tr("a", true), vr(true, 1)])).toBe("");
+  });
+
+  it("★worker 子流不进摘要（跨会话注入的漏口：兄弟 distillLessons 早就滤了，这一支漏了）", () => {
+    // 父会话干净、worker-1 连败两次 write_file ⇒ 摘要里出现「write_file×2」，
+    // 而这份摘要会被拼进沉淀指令、让模型按 scope=project 沉下去 ⇒ 一个子 agent 的
+    // 暂时失败变成**跨会话注入**的项目级教训。distillLessons 对同一份事件返回 []。
+    const workerTc = (id: string, name: string): AgentEvent =>
+      ({ type: "tool_call", id, name, args: {}, agent_id: "worker-1" }) as AgentEvent;
+    const workerTr = (callId: string): AgentEvent =>
+      ({ type: "tool_result", callId, ok: false, output: "x", agent_id: "worker-1" }) as AgentEvent;
+    const d = failureDigestFromEvents([workerTc("w1", "write_file"), workerTr("w1"), workerTc("w2", "write_file"), workerTr("w2")]);
+    expect(d, "worker 的失败被算进主会话摘要 ⇒ 会被沉淀成跨会话注入的项目级教训").toBe("");
+    // 对照：主会话自己的失败照旧进摘要（这一格不许被改坏）
+    expect(failureDigestFromEvents([tc("a", "write_file"), tr("a", false)])).toContain("write_file×1");
   });
 
   it("工具失败按工具名归并计数", () => {
@@ -45,6 +59,21 @@ describe("failureDigestFromEvents（纯函数）", () => {
     const d = failureDigestFromEvents([tc("a", "edit_file"), tr("a", false)]);
     expect(d).toContain("type=feedback");
     expect(d).toContain("scope=project");
+  });
+});
+
+describe("isTrivialSession（首轮寒暄的确定性快判）", () => {
+  const um = (content: string): AgentEvent => ({ type: "user_message", content });
+  const ad = (text: string): AgentEvent => ({ type: "assistant_delta", callId: "c", text });
+  it("一条短 user + 短答、无工具 → trivial；不调模型", () => {
+    expect(isTrivialSession([um("你好"), ad("你好！我是 Agnes。")])).toBe(true);
+    expect(isTrivialSession([um("只回复 OK"), ad("OK")])).toBe(true);
+  });
+  it("多轮 / 工具轮 / 明确记忆线索 / 长文 → 不跳过", () => {
+    expect(isTrivialSession([um("你好"), ad("你好"), um("再来")])).toBe(false);
+    expect(isTrivialSession([um("看下文件"), tc("a", "read_file"), ad("好")])).toBe(false);
+    expect(isTrivialSession([um("记住：以后都用中文"), ad("好")])).toBe(false);
+    expect(isTrivialSession([um("你好"), ad("长".repeat(900))])).toBe(false);
   });
 });
 
@@ -113,6 +142,22 @@ describe("runSessionEndDistill（失败轨迹注入沉淀指令）", () => {
       emit: async () => {},
     });
     expect(cap.lastUser()?.content).toBe(DISTILL_INSTRUCTION);
+  });
+
+  it("首轮寒暄 → no_content，零 provider 调用（不再白等 14s）", async () => {
+    const logPath = await tmpLog([{ type: "user_message", content: "你好" }, { type: "assistant_delta", callId: "c", text: "你好！" }]);
+    let called = false;
+    const provider: Provider = {
+      async *stream() {
+        called = true;
+        yield { type: "assistant_message", content: "无" };
+      },
+    };
+    const out = await runSessionEndDistill({
+      enabled: true, logPath, workspace: "/tmp", provider, rememberTool, emit: async () => {},
+    });
+    expect(out.kind).toBe("no_content");
+    expect(called).toBe(false);
   });
 
   it("开关关闭 → disabled，零 provider 调用", async () => {
@@ -249,10 +294,13 @@ describe("沉淀轮结局的 gate 留痕（X-distill：判定发生在 evaluate 
     return emitted.filter((e) => e.type === "tool_result");
   }
 
-  it("白名单挡下非 remember 工具 ⇒ gate = X-distill / denied（没问过人，不是人的答复）", async () => {
+  it("白名单挡下非 remember 工具 ⇒ 不落无主回执（同 callId 会与主会话结果合并）", async () => {
+    // 2026-10-20 修：旧实现为这次拒绝 emit 一条 tool_result，但这一轮从未把该 tool_call
+    // 写进会话 ⇒ 无主回执。脚本/mock 复用 callId（c1/c2/c3）时，它会被
+    // `mergeToolResultsById` 并进主会话同一 callId 的真实结果，模型读到「已写入…已拒绝」，
+    // 转录面的工具行也从成功被改写成失败。白名单拒绝是执行面短路，不需要收口。
     const results = await runWith([call("d1", "write_file"), done], async () => true);
-    expect(results).toHaveLength(1);
-    expect(results[0]).toMatchObject({ ok: false, gate: { layer: "X-distill", verdict: "denied" } });
+    expect(results).toHaveLength(0);
   });
 
   it("合并审批被拒 ⇒ gate = X-distill / rejected（问过人才算正例，不许记成门自己拦的）", async () => {
@@ -299,19 +347,19 @@ describe("沉淀轮结局的 gate 留痕（X-distill：判定发生在 evaluate 
       .toEqual(["auto-approved", "approved", "auto-approved"]);
   });
 
-  it("反向一侧：四类结局都落在 X-distill 那一行，不污染 L* 的格子（矩阵按层分行的前提）", async () => {
-    const denied = await runWith([call("d7", "run_shell"), done], async () => true);
+  it("反向一侧：三类结局都落在 X-distill 那一行，不污染 L* 的格子（矩阵按层分行的前提）", async () => {
+    // 白名单拒绝不落事件（见上一格），所以这里只取剩下三类真实收口的结局。
     const rejected = await runWith([call("d8", "remember", "global"), done], async () => false);
     const approved = await runWith([call("d9", "remember", "global"), done], async () => true);
     const auto = await runWith([call("d10", "remember", "project"), done]);
-    const all = [...denied, ...rejected, ...approved, ...auto];
-    expect(all).toHaveLength(4);
+    const all = [...rejected, ...approved, ...auto];
+    expect(all).toHaveLength(3);
     for (const e of all) {
       const g = (e as { gate?: { layer?: string } }).gate;
       expect(typeof g?.layer).toBe("string");
       expect(g?.layer).not.toMatch(/^L\d/); // 不冒充 evaluate 的层——冒充会把合并审批的量混进逐次审批的分母
     }
     expect(new Set(all.map((e) => (e as { gate: { verdict: string } }).gate.verdict)))
-      .toEqual(new Set(["denied", "rejected", "approved", "auto-approved"]));
+      .toEqual(new Set(["rejected", "approved", "auto-approved"]));
   });
 });

@@ -13,7 +13,7 @@ import { useRef, useState } from "react";
 import type { MutableRefObject, ReactNode } from "react";
 import { Copy, Image as ImageIcon } from "lucide-react";
 import type { AppSettings, PermissionMode } from "../../../../../src/main/ipc-protocol";
-import type { TextSizeSetting } from "../../../../../src/main/settings";
+import type { TextSizeSetting, UiSizeSetting } from "../../../../../src/main/settings";
 import { envKeyOf } from "../../../../../src/providers/env-keys";
 import { Badge, Banner, Field, OptionCard, SettingsSection, SettingsRow, StatusDot } from "./settings-ui";
 import { Switch } from "./Switch";
@@ -146,6 +146,17 @@ const TEXT_SIZE_OPTIONS: readonly { id: TextSizeSetting; label: string }[] = [
   { id: "lg", label: "大" },
 ];
 
+/** 组件尺寸五档（2026-10-20 · 双轴变体的尺寸轴，销 G2）。
+ *  依据 Claude 实测 data-step="1…5"（step2 = 缺省 = --size-scale 1，step4 = comfortable 密度）。
+ *  id 与 tokens.css 的 `html[data-ui-size="…"]` 逐字对应。 */
+const UI_SIZE_OPTIONS: readonly { id: UiSizeSetting; label: string }[] = [
+  { id: "1", label: "紧凑" },
+  { id: "2", label: "标准" },
+  { id: "3", label: "宽松" },
+  { id: "4", label: "舒适" },
+  { id: "5", label: "超大" },
+];
+
 export function GeneralSection(props: {
   settings: AppSettings;
   /** 当前字号档（App 的 live state——与 settings.textSize 同源，但保存后立刻回灌）。 */
@@ -155,6 +166,9 @@ export function GeneralSection(props: {
   onCtrlTab: (next: boolean) => void;
   /** 字号档同样走单键直调（不入 panelPatch 白名单；理由同 onCtrlTab）。 */
   onTextSize: (next: TextSizeSetting) => void;
+  /** 2026-10-20：组件尺寸档（尺寸轴）；同样走单键直调，理由同上。 */
+  uiSize: UiSizeSetting;
+  onUiSize: (next: UiSizeSetting) => void;
 }): React.JSX.Element {
   return (
     <>
@@ -204,6 +218,28 @@ export function GeneralSection(props: {
                 onClick={() => props.onTextSize(t.id)}
               >
                 <span className="ts-thumb" data-ts={t.id} aria-hidden="true">A</span>
+                <span>{t.label}</span>
+              </button>
+            ))}
+          </div>
+        </SettingsRow>
+      </SettingsSection>
+
+      {/* 2026-10-20 组件尺寸档（尺寸轴）：与上面的字号档正交——
+          字号改文字、尺寸改控件高/圆角/间距。Claude 实测五档 data-step="1…5"。 */}
+      <SettingsSection title="组件尺寸" hint="控件高 / 圆角 / 间距一起缩放，不影响文字大小">
+        <SettingsRow label="界面密度">
+          <div className="theme-opts" role="radiogroup" aria-label="界面密度">
+            {UI_SIZE_OPTIONS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="radio"
+                aria-checked={props.uiSize === t.id}
+                className={"theme-opt" + (props.uiSize === t.id ? " on" : "")}
+                onClick={() => props.onUiSize(t.id)}
+              >
+                <span className="ts-thumb" data-ui={t.id} aria-hidden="true">▭</span>
                 <span>{t.label}</span>
               </button>
             ))}
@@ -593,7 +629,7 @@ export function ShortcutsSection(): React.JSX.Element {
       <div className="kx-list">
         {SHORTCUTS.map((s) => (
           <div className="kx-row" key={s.id}>
-            <span className="kx-keys">{s.keys}</span>
+            <kbd className="kx-keys">{s.keys}</kbd>
             <span className="kx-what">{s.label}</span>
           </div>
         ))}

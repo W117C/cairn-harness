@@ -1,0 +1,59 @@
+ M .gitignore
+ M BLOCKED.md
+ M README.md
+ M docs/CODE-WIKI.md
+ M docs/DOCS-MAP.md
+ M docs/README.md
+ A docs/optimization-plan-2026-10-02.md
+ M package.json
+ M scripts/ci/README.md
+ M scripts/docs-check.ts
+ M scripts/gate-manifest.ts
+ M scripts/lib/eval-heldout.ts
+ M scripts/lib/head-cert-deps.ts
+ A scripts/repo-hygiene-check.ts
+ M scripts/security-check.ts
+ M src/agent/orchestrator.ts
+ A src/agent/security/merge-gate.ts
+ M src/main/agent-runner.ts
+ M src/routing/bandit.ts
+ M tests/cert-gate-face.test.ts
+ M tests/cli-surface.test.ts
+ M tests/eval-heldout.test.ts
+ M tests/goal-drift.test.ts
+ M tests/head-cert-deps.test.ts
+ M tests/impact-query.test.ts
+ A tests/repo-hygiene-check.test.ts
+ A tests/security-merge-gate.test.ts
+ M tests/sidechat-core.test.ts
+?? docs/adr/
+?? docs/review-2026-10-03-technical.md
+?? gate-mutate-321/
+?? outputs/_audit-claims.md
+?? outputs/_audit-quality.md
+?? outputs/_audit-r1/
+?? outputs/_audit-usability.md
+?? outputs/_audit2-capability.md
+?? outputs/_audit2-quality.md
+?? outputs/claims-3faces-2026-10-03/head-cert-7bb95b7.log
+?? outputs/claims-3faces-2026-10-03/mutate-kill-321.log
+?? outputs/eval-b4-diag/
+?? outputs/eval-baseline-1/readings.json
+?? outputs/head-import-template-data-2026-10-02/head-cert-067a68a.log
+?? outputs/hold-callid-ruling-2026-09-30/
+?? outputs/landing-1c40df7-2026-09-30/mutate-verify-229.log
+?? outputs/landing-1c40df7-2026-09-30/readings.md
+?? outputs/memory-degradation-2026-10-03/docs-check-postcommit.log
+?? outputs/needles-distribution-2026-10-03/docs-check-postcommit.log
+?? outputs/needles-distribution-2026-10-03/judge-318a.log
+?? outputs/needles-distribution-2026-10-03/judge-318b.log
+?? outputs/retry-backoff-2026-10-02/head-cert-a674793.log
+?? outputs/shell-tail-repoint-kill-2026-10-01/
+?? outputs/summary-coverage-2026-10-02/post-commit-checks.log
+?? outputs/witness-face-widen-290b-2026-10-01/docs-check-post-credential.log
+?? outputs/workspace-cleanup-2026-10-03/
+?? tests/apply-patch-lf-shapes.test.ts
+?? tests/bandit-primitives.test.ts
+?? tests/ledger-manifest.test.ts
+?? tests/memory-store-pure.test.ts
+?? tests/worktree-pure.test.ts

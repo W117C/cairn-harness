@@ -24,7 +24,10 @@ export interface ThemeEnv {
 export function browserThemeEnv(): ThemeEnv {
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
   return {
-    setDataTheme: (v) => { document.documentElement.setAttribute("data-theme", v); },
+    setDataTheme: (v) => {
+      document.documentElement.setAttribute("data-theme", v);
+      document.body.toggleAttribute("data-ds-dark-theme", v === "dark");
+    },
     systemDark: () => mq.matches,
     watchSystemDark: (onChange) => {
       mq.addEventListener("change", onChange);

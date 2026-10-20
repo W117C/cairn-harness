@@ -1,0 +1,136 @@
+== 阶段 F 验证 2026-10-03 13:46:57 ==
+-- worktrees（期望 4：主树 + gate-head-cert + gate-mutate-verify + 另一会话在用的 gate-mutate-321）
+.                               05be8f9 [zcode]
+./.worktrees/gate-head-cert     b4b4db3 (detached HEAD)
+./.worktrees/gate-head-cert-321 7bb95b7 (detached HEAD)
+./.worktrees/gate-mutate-verify 204f017 (detached HEAD)
+./gate-mutate-321               7bb95b7 (detached HEAD)
+worktrees=5
+-- branches（期望 5）
+  doc-layer-migration
+  main
+  opt/agent-v2
+  rescue/locate-weights-rev4
+* zcode
+-- prune -n（期望空）
+-- zcode HEAD
+05be8f9
+-- status 变化（基线 → 现在）
+  仅基线有（应=我清掉的垃圾 + 我还原的留档 + 另一会话碰过的）:
+    - .vitest/
+    - PROGRESS.md
+    - apps/desktop/src/main/kernel-host.ts
+    - apps/desktop/tests/approval-e2e.test.ts
+    - gate-mutate-318/
+    - gate-mutate-319/
+    - gate-mutate-320/
+    - outputs/claims-3faces-2026-10-03/
+    - outputs/judge-timeout-2026-10-01/suite-quiet.json
+    - scripts/mutate-verify.mjs
+    - scripts/probe-promise-recall.ts
+    - tests/remember.test.ts
+    - tests/write-line-delta.test.ts
+  仅现在有（应=我新增的 .gitignore / 证据目录 + 另一会话的新产物）:
+    + .gitignore
+    + gate-mutate-321/
+    + outputs/claims-3faces-2026-10-03/head-cert-7bb95b7.log
+    + outputs/claims-3faces-2026-10-03/mutate-kill-321.log
+    + tests/cli-surface.test.ts
+-- diff --stat 文件数:  28 files changed, 2308 insertions(+), 45 deletions(-)
+-- 我方唯一的被跟踪文件改动（应是 .gitignore 一条 + 留档还原）
+ .gitignore | 3 +++
+ 1 file changed, 3 insertions(+)
+-- df/du 前后
+/dev/disk3s1   460Gi   136Gi   294Gi    32%    3.1M  3.1G    0%   /System/Volumes/Data
+/dev/disk3s1   460Gi   136Gi   295Gi    32%    3.2M  3.1G    0%   /System/Volumes/Data
+1.7G	.
+1.8G	.
+-- 只读便宜门（不跑全量/变异/认证：另一会话在飞）
+typecheck rc=0 (tail: typecheck: tsc --noEmit 通过（0 条报错）✅)
+repo-hygiene rc=1
+== 仓库体量门（取料占比 + 单文件体量，各带分母）==
+  ❌ 面① 取料占比 — outputs/ 1744 / 已跟踪 2780 = 62.7%（其余 1036）｜帽 60%
+  ✅ 面② 单文件体量 — src 单文件全部 ≤ 2800 行（最大 2783 行 / 174 支）
+[repo-hygiene-check] ❌ 1 面红
+
+-- 复核 2026-10-03 13:47:54（另一会话在同期继续跑，故同时列出它的新树）
+worktrees_now=5:
+    .                               05be8f9 [zcode]
+    ./.worktrees/gate-head-cert     b4b4db3 (detached HEAD)
+    ./.worktrees/gate-head-cert-321 7bb95b7 (detached HEAD)
+    ./.worktrees/gate-mutate-verify 204f017 (detached HEAD)
+    ./gate-mutate-321               7bb95b7 (detached HEAD)
+  归属：主树=活；.worktrees/gate-head-cert 与 gate-mutate-verify=package.json 写死的共享树（保留）；
+        .worktrees/gate-head-cert-321 与 gate-mutate-321=另一会话此刻在用的（本轮不碰，按同一判据留给下一轮）
+branches_now=5:
+      doc-layer-migration
+      main
+      opt/agent-v2
+      rescue/locate-weights-rev4
+    * zcode
+prune -n:
+    （空=没有待清的元数据）
+-- status 对账（基线       67 条 → 现在       59 条）
+   我删掉/还原掉的条目：
+      - .vitest/
+      - gate-mutate-318/
+      - gate-mutate-319/
+      - gate-mutate-320/
+      - outputs/judge-timeout-2026-10-01/suite-quiet.json
+   我新增的条目：
+      + .gitignore
+      + gate-mutate-321/
+      + outputs/claims-3faces-2026-10-03/head-cert-7bb95b7.log
+      + outputs/claims-3faces-2026-10-03/mutate-kill-321.log
+      + tests/cli-surface.test.ts
+   其余差异=另一会话自己提交/新产出的（PROGRESS.md、kernel-host.ts、claims-3faces-*、gate-mutate-321/、gate-head-cert-321/、tests/cli-surface.test.ts 等）
+-- 我的被跟踪文件改动共 1 个文件：
+ .gitignore                           |   3 +
+ BLOCKED.md                           |  15 +-
+ README.md                            |  13 +-
+ docs/CODE-WIKI.md                    | 103 ++++-
+ docs/DOCS-MAP.md                     |   2 +-
+ docs/README.md                       |   2 +-
+ docs/optimization-plan-2026-10-02.md | 772 +++++++++++++++++++++++++++++++++++
+ package.json                         |   3 +-
+ scripts/ci/README.md                 |  12 +-
+ scripts/docs-check.ts                |  52 ++-
+ scripts/gate-manifest.ts             |   7 +
+ scripts/lib/eval-heldout.ts          |  31 +-
+ scripts/lib/head-cert-deps.ts        | 118 ++++++
+ scripts/mutate-verify.mjs            |  48 +++
+ scripts/repo-hygiene-check.ts        | 313 ++++++++++++++
+ scripts/security-check.ts            |  62 ++-
+ src/agent/orchestrator.ts            |  14 +-
+ src/agent/security/merge-gate.ts     |  62 +++
+ src/main/agent-runner.ts             |  22 +
+ src/routing/bandit.ts                |  30 ++
+ tests/cert-gate-face.test.ts         |  71 +++-
+ tests/cli-surface.test.ts            |  34 ++
+ tests/eval-heldout.test.ts           |  47 ++-
+ tests/goal-drift.test.ts             |  39 +-
+ tests/head-cert-deps.test.ts         | 143 ++++++-
+ tests/impact-query.test.ts           |   4 +
+ tests/repo-hygiene-check.test.ts     | 142 +++++++
+ tests/security-merge-gate.test.ts    | 199 +++++++++
+ tests/sidechat-core.test.ts          |  43 +-
+ 29 files changed, 2361 insertions(+), 45 deletions(-)
+-- rescue 分支（保全物）
+    3719e5c rescue: locate/map rev 4 未落地实验（EXTRACT_LOGIC_REV=4、成员位名字不再算跨文件可链接定义）——2026-10-03 收树前保全原状
+     fixtures/locate/dsh-questions.json |  20 +++++++
+     scripts/probe-locate-recall.ts     | 106 +++++++++++++++++++++++++++++++++++++
+     src/agent/map/parse.ts             |  29 ++++++++--
+     src/agent/map/rank.ts              |  13 ++++-
+     4 files changed, 164 insertions(+), 4 deletions(-)
+-- docs-check（只读）
+    rc=0  末行: UNVERIFIED=3
+-- 体量分解（单次 du）
+    1.1G	.worktrees
+      0B	.claude
+     44M	gate-mutate-321
+     62M	.git
+     32M	outputs
+    1.4G	.
+   对照基线：. 1.8G / .worktrees 1.3G / .claude 42M / .git 94M / 根级 gate-mutate-318..320 共约 130M / outputs 32M
+-- df 尾行
+    /dev/disk3s1   460Gi   136Gi   294Gi    32%    3.1M  3.1G    0%   /System/Volumes/Data

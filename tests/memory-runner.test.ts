@@ -126,7 +126,7 @@ describe("双轨触发：会话结束自动沉淀（任务6）", () => {
     });
     expect(outcome).toEqual({ kind: "failed", why: "429 限流" });
   });
-  it("无 remember 调用 → no_content；非 remember 工具被拒且不执行", async () => {
+  it("无 remember 调用 → no_content；非 remember 工具被拒且不落无主回执", async () => {
     const logPath = join(ws, "s.jsonl");
     await seedSession(logPath);
     const fixture = join(ws, "d2.jsonl");
@@ -142,9 +142,9 @@ describe("双轨触发：会话结束自动沉淀（任务6）", () => {
       rememberTool: remember, emit: async (e) => { events.push(e); },
     });
     expect(outcome.kind).toBe("no_content");
-    const rejected = events.find((e) => e.type === "tool_result" && e.callId === "x1") as { ok: boolean; output: string } | undefined;
-    expect(rejected?.ok).toBe(false);
-    expect(rejected?.output).toContain("只允许 remember");
+    // 2026-10-20：这次越界调用从未写进会话（工具表为空），拒绝不再落 tool_result。
+    // 落成无主回执会被 mergeToolResultsById 并进同一 callId 的真实结果，污染上下文与转录。
+    expect(events).toEqual([]);
   });
 });
 

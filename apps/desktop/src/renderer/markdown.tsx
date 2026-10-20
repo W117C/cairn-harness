@@ -335,7 +335,7 @@ function BlockView(props: { block: Block; onCopy?: (code: string) => void; caret
       return <MarkdownImage alt={b.alt} src={b.src} />;
     case "table":
       return (
-        <div className="md-table-wrap">
+        <div className="md-table-wrap" data-dsh-claude-part="table-scroll">
           <table className="md-table">
             <thead><tr>{b.header.map((h, i) => <th key={i}>{renderInline(h)}</th>)}</tr></thead>
             <tbody>{b.rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{renderInline(c)}</td>)}</tr>)}</tbody>
@@ -366,7 +366,7 @@ export const Markdown = memo(function Markdown(props: { text: string; onCopy?: (
   const blocks = parseBlocks(props.text);
   const last = blocks.length - 1;
   return (
-    <div className="md-body">
+    <div className="md-body" data-dsh-claude-part="markdown">
       {blocks.map((b, i) => (
         <BlockView key={i} block={b}
           {...(props.onCopy !== undefined ? { onCopy: props.onCopy } : {})}

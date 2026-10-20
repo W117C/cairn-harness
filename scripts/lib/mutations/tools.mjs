@@ -212,10 +212,16 @@ export const MUTATIONS = [
   },
   {
     id: "remember-topic-replace-mismatch",
-    src: "src/tools/remember.ts",
+    // 2026-10-20：精确命中检查搬进了 store 的**比较-替换**（CAS）——
+    // 读、判、写要在同一段临界区里，否则判据会在写之前过期（并发追加夹在中间时
+    // 旧正文被静默盖掉）。变异跟着实现走，**判据与判卷面一字未改**。
+    src: "src/agent/memory/store.ts",
     test: "tests/remember.test.ts",
     desc: "topic replace 精确命中检查被拆（不匹配也静默改写，报错重试语义失效）",
-    apply: (s) => s.replace("if (oldContent !== oldBody) {", "if (false) {"),
+    apply: (s) => s.replace(
+      "    const current = await readTopicBody(dir, topic);\n    if (current === null || current !== expected) return { matched: false, current };",
+      "    const current = await readTopicBody(dir, topic);\n    if (false) return { matched: false, current };",
+    ),
     expectFail: "replace 不命中 → old_content_mismatch（消息可区分）",
   },
   {
@@ -276,10 +282,13 @@ export const MUTATIONS = [
   },
   {
     id: "remember-rootfile-replace-mismatch",
-    src: "src/tools/remember.ts",
+    src: "src/agent/memory/store.ts", // 2026-10-20：同上，检查搬进了 store 的比较-替换
     test: "tests/remember.test.ts",
     desc: "根三文件 replace 精确命中检查被拆（不匹配也静默改写 .agent/ 根文件）",
-    apply: (s) => s.replace("if (cur === null || cur !== oldContent) {", "if (false) {"),
+    apply: (s) => s.replace(
+      "    const current = await readOrNull(path);\n    if (current === null || current !== expected) return { matched: false, current };",
+      "    const current = await readOrNull(path);\n    if (false) return { matched: false, current };",
+    ),
     expectFail: "根三文件 replace 不命中 → old_content_mismatch，原文不被静默改写",
   },
   {

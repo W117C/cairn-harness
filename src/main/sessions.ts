@@ -41,7 +41,7 @@ const HEAD_MAX_BYTES = 64 * 1024;
 /** 只读首行（旧实现固定 1024 字节：首行超过它就 JSON.parse 失败 ⇒ 徽标/父归属静默丢失）。
  *  逐段找 0x0A：换行字节不可能出现在 UTF-8 多字节序列内部，按字节找是安全的，
  *  拼齐一段再解码也就不存在截断半个字符的问题。读不到/坏首行 = null。 */
-async function readHeadMeta(p: string): Promise<HeadMeta | null> {
+async function readHeadLine(p: string): Promise<string | null> {
   let fh;
   try {
     fh = await open(p, "r");
@@ -60,19 +60,36 @@ async function readHeadMeta(p: string): Promise<HeadMeta | null> {
       got += bytesRead;
       const joined = Buffer.concat(chunks, got);
       const nl = joined.indexOf(0x0a, scanned);
-      if (nl >= 0) {
-        const firstLine = joined.subarray(0, nl).toString("utf8");
-        return projectHeadLine(firstLine);
-      }
+      if (nl >= 0) return joined.subarray(0, nl).toString("utf8");
       scanned = joined.length;
     }
     if (got === 0) return null;
-    return projectHeadLine(Buffer.concat(chunks, got).toString("utf8")); // 无换行的整份就一行
+    return Buffer.concat(chunks, got).toString("utf8"); // 无换行的整份就一行
   } catch {
     return null;
   } finally {
     await fh.close().catch(() => undefined);
   }
+}
+
+/** 会话根目录里的 UI sidecar（feedback / pins）与事件同用 `.jsonl` 扩展名：若按文件名扫描，
+ *  一次「置顶/点赞」就会在侧栏长出一个叫 `pins` / `feedback` 的假会话（2026-10-20 真机复现）。
+ *  判定看**首行形状**而不是文件名：用户完全可以把会话命名成 `pins`，那一行的 type 是事件名。 */
+function isUiSidecarLine(firstLine: string): boolean {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(firstLine);
+  } catch {
+    return false;
+  }
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return false;
+  const r = raw as Record<string, unknown>;
+  return typeof r["type"] !== "string" && typeof r["sessionId"] === "string" && typeof r["eventId"] === "number";
+}
+
+async function readHeadMeta(p: string): Promise<HeadMeta | null> {
+  const line = await readHeadLine(p);
+  return line === null ? null : projectHeadLine(line);
 }
 
 function projectHeadLine(firstLine: string): HeadMeta | null {
@@ -321,8 +338,11 @@ export async function listSessions(
     try {
       const st = await stat(p);
       if (!st.isFile()) continue;
+      // 先读首行再数行：sidecar 在这里就被挡掉，不会为一个假会话把整份 pins/feedback 读一遍。
+      const head = await readHeadLine(p);
+      if (head !== null && isUiSidecarLine(head)) continue;
       const lines = await countSessionLines(p, st); // 未变即复用计数，不再整份读文件体
-      const meta = await readHeadMeta(p); // 只读首行（旧实现在此之上还要整份 readFile 数行）
+      const meta = head === null ? null : projectHeadLine(head); // 只读首行（旧实现在此之上还要整份 readFile 数行）
       const organization = metadataById?.get(id);
       out.push({
         id,

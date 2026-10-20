@@ -322,9 +322,16 @@ export function Composer(props: {
   // Composer 只 import 了 Popover 基座，漏了 usePopoverDismiss；模型菜单有、这两个没有）。
   const attachWrapRef = useRef<HTMLDivElement | null>(null);
   const permWrapRef = useRef<HTMLDivElement | null>(null);
+  // 用量环的明细浮层（2026-10-19 独立评审追出）：此前只有 attach/perm 两个菜单接了
+  // usePopoverDismiss，用量浮层两个手势都不认 ⇒ 点开后按 Esc 不关、点外面也不关，
+  // 它一直钉在输入框上方盖着内容，用户只能再点一次环、或点里面的「压缩历史…」、或切会话。
+  // 每一个别的浮层（附件/权限/模型/芯片/mention/slash）都两个手势都关，这一支独自关不掉
+  // 读起来就是坏控件。
+  const meterWrapRef = useRef<HTMLDivElement | null>(null);
   const closeMenu = useCallback(() => { setMenu("none"); }, []);
   usePopoverDismiss(menu === "attach", closeMenu, attachWrapRef);
   usePopoverDismiss(menu === "perm", closeMenu, permWrapRef);
+  usePopoverDismiss(menu === "meter", closeMenu, meterWrapRef);
   // 键盘导航（2026-10-18）：两个自绘菜单支持 ↓/↑ / Home / End，焦点在触发钮上时 ↓ 也能开菜单；
   // 此前只有 Tab 能进菜单，与模型菜单/命令面板的手感不一致。
   const setAttachOpen = useCallback((open: boolean) => { setMenu(open ? "attach" : "none"); }, []);
@@ -640,6 +647,8 @@ export function Composer(props: {
       <div
         ref={cardRef}
         className="composer-card"
+        data-composer-card="true"
+        data-phase={props.activeId === null ? "hero" : "conversation"}
         data-disabled={disabled ? "true" : "false"}
         data-dragging={dragging ? "true" : "false"}
         onDragOver={(e) => {
@@ -786,6 +795,7 @@ export function Composer(props: {
         )}
         <div className="row2">
           <textarea
+            data-composer-input="true"
             ref={taRef}
             rows={1}
             value={text}
@@ -1058,7 +1068,7 @@ export function Composer(props: {
           <span className="spacer" />
           {/* 用量环（v3-lite .ring：环心带上下文百分数；环钉在发送/中断钮左侧——原型 .bar 列序
               模型芯片弹性、ctxRing 与 send 贴右。「模型选择器旁」§3.5 语义随同一控件行保持）。 */}
-          <div className="usage-slot">
+          <div className="usage-slot" ref={meterWrapRef}>
             <button
               className="usage-ring"
               aria-label={ringAria}

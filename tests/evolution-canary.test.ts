@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GATES } from "../scripts/gate-manifest";
 import {
   CanaryController,
+  CanaryRefusedError,
   canaryLessonTopic,
   checkStagingLedgerConsistency,
   RuntimeLoader,
@@ -327,6 +328,18 @@ describe("观察档跨进程续档（账本校验 + 续档，不靠时间戳推�
     expect((await regB.readIndex()).bundles["tool.demo-fetch"]?.active?.version).toBe("0.1.0");
   });
 
+  it("观察档版本不认 ⇒ 点名 refused（读不动不许折成没有档）", async () => {
+    await twoVersions();
+    const p = recordPath("tool.demo-fetch");
+    await mkdir(dirname(p), { recursive: true });
+    await writeFile(p, JSON.stringify({ version: 99 }), "utf8");
+    const ctl = new CanaryController({ registry: registry(), workspace: root });
+    const r = await ctl.tickAll(greenSample());
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ id: "tool.demo-fetch", outcome: "refused" });
+    expect(r[0]!.refused).toContain("观察档版本不认");
+  });
+
   it("反向：盘上没有档 ⇒ tickAll 一条都不动（不替谁开档）", async () => {
     await twoVersions();
     const reg = registry();
@@ -507,5 +520,64 @@ describe("staging ↔ 账本一致性（只读检查）", () => {
     const report = await checkStagingLedgerConsistency(reg);
     expect(report.ok).toBe(false);
     expect(report.findings.map((f) => f.kind)).toEqual(["ledger-staging-missing"]);
+  });
+});
+
+describe("canary 跨进程锁：探活优先于时钟（2026-10-19）", () => {
+  /** 锁只按 `Date.now() - mtimeMs > 60s` 判陈旧 ⇒ 时钟往回一跳（NTP 校正 / 虚拟机恢复 /
+   *  手动改表），一个早就不在的进程留下的锁永远读不出"超时"，canary 从这一秒起永远 refused，
+   *  而盘上没有任何东西能解开它。持锁者本来就把 pid 写进了锁文件，却从没读回来过。 */
+  const lockPath = (): string => join(root, ".agent", ".canary.lock");
+
+  /** 起一个 controller 并跑一次 tickAll（零档也走取锁这条路：锁在 fn 外面取）。 */
+  /** 取不到锁时 CanaryRefusedError 是**抛**出来的（不是塞进结果里），所以这儿要接。
+   *  判据关心的是两件事：能不能重取，以及拒的时候有没有把别人的锁删掉。 */
+  async function tick(): Promise<{ outcome: string; refused?: string }> {
+    const ctl = new CanaryController({ registry: registry(), workspace: root });
+    try {
+      const r = await ctl.tickAll(greenSample());
+      return r.length === 0 ? { outcome: "empty" } : { outcome: r[0]!.outcome, refused: r[0]!.refused };
+    } catch (err) {
+      if (err instanceof CanaryRefusedError) return { outcome: "refused", refused: err.message };
+      throw err;
+    }
+  }
+
+  it("锁里写着一个**已不在**的 pid，且 mtime 是刚刚（时钟跳回的那一格）⇒ 必须能重取，不永久卡死", async () => {
+    await mkdir(dirname(lockPath()), { recursive: true });
+    // pid 取一个几乎必然不在的值：Linux pid_max 默认 4194304，这里用远超它的数 + 轮空。
+    const deadPid = 2147483646;
+    await writeFile(lockPath(), String(deadPid), "utf8");
+    // mtime 设为"刚刚"：旧逻辑据此判"不陈旧"⇒ 永久 refused。新逻辑先探活，探到不在就收回。
+    const now = new Date();
+    await import("node:fs/promises").then((fs) => fs.utimes(lockPath(), now, now));
+    const r = await tick();
+    expect(r.outcome, "持锁进程已不在，锁必须被收回；否则这一格永远 refused 且盘上无解").not.toBe("refused");
+  });
+
+  it("锁里写着**本进程**的 pid（活着）⇒ 照旧拒绝（探活不能变成抢锁）", async () => {
+    await mkdir(dirname(lockPath()), { recursive: true });
+    await writeFile(lockPath(), String(process.pid), "utf8");
+    const r = await tick();
+    expect(r.outcome).toBe("refused");
+    expect(r.refused).toContain("另一实例正在更新观察档");
+    // 拒了就不该把别人的锁文件删掉
+    expect(existsSync(lockPath())).toBe(true);
+  });
+
+  it("锁文件读不出 pid（空 / 非数字）⇒ 不探活，退回 60s 时间兜底（不猜）", async () => {
+    await mkdir(dirname(lockPath()), { recursive: true });
+    await writeFile(lockPath(), "", "utf8"); // 崩溃在 open 与 writeFile 之间正是这个形状
+    const r = await tick();
+    expect(r.outcome).toBe("refused");
+    expect(r.refused).toContain("另一实例正在更新观察档");
+  });
+
+  it("零档取锁 ⇒ 不顺手建出 `.agent/canary/`（既有判据：没有档 = 目录不存在）", async () => {
+    const r = await tick();
+    expect(r.outcome).toBe("empty");
+    expect(existsSync(join(root, ".agent", "canary"))).toBe(false);
+    // 锁本身用完即销，不在盘上留残余
+    expect(existsSync(lockPath())).toBe(false);
   });
 });

@@ -208,7 +208,7 @@ describe("M6 · A 三类来源各成一条", () => {
     const ls = distillLessons(denied, LOG);
     // 「连败」那一条不该出现（它的结论"先换做法"对没执行过的工具是错的）。
     expect(ls.filter((x) => x.topic === "lesson-tool-streak-write_file")).toEqual([]);
-    const l = ls.find((x) => x.topic === "lesson-ask-denied-write_file");
+    const l = ls.find((x) => x.topic === "lesson-not-executed-write_file");
     expect(l).toBeDefined();
     expect(l!.body).toContain("没有执行");
     expect(l!.body).toContain("不要据此得出");
@@ -219,7 +219,7 @@ describe("M6 · A 三类来源各成一条", () => {
       toolCall("g2", "run_shell", { command: "y" }),
       { type: "tool_result", callId: "g2", ok: false, output: "denied", gate: { layer: "L3-mode", verdict: "timeout" } },
     ];
-    const l2 = distillLessons(withGate, LOG).find((x) => x.topic === "lesson-ask-denied-run_shell");
+    const l2 = distillLessons(withGate, LOG).find((x) => x.topic === "lesson-not-executed-run_shell");
     expect(l2).toBeDefined();
     expect(l2!.body).toContain("timeout");
   });

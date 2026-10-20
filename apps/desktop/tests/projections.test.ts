@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countRunSteps, deliveryTrail, deriveRunPhase, formatEmptyTrailNote, formatRevertNotice, isMainSessionTerminalEvent, mergeSessionSnapshot, pendingClarifyOf, pendingPlanOf, projectStream, relativeTime, roundTimeline, turnChanges, usageAggregate } from "../src/renderer/projections";
+import { countRunSteps, deliveryTrail, deriveRunPhase, formatEmptyTrailNote, formatRevertNotice, hasAssistantTextThisRun, isMainSessionTerminalEvent, mergeSessionSnapshot, pendingClarifyOf, pendingPlanOf, projectStream, relativeTime, roundTimeline, turnChanges, usageAggregate } from "../src/renderer/projections";
 import type { AgentEvent } from "../../../src/main/ipc-protocol";
 import type { TurnDelivery } from "../src/renderer/projections";
 
@@ -45,6 +45,15 @@ describe("projectStream", () => {
     expect(tools[1]!.kind === "tool" && tools[1]!.artifact).toBeUndefined();
     // 没有产物引用的普通工具行：字段缺席，不是空对象。
     expect(tools[2]!.kind === "tool" && "artifact" in tools[2]!).toBe(false);
+  });
+});
+
+describe("hasAssistantTextThisRun", () => {
+  it("只看最后一条主 user_message 之后；worker 子流正文不算", () => {
+    expect(hasAssistantTextThisRun([])).toBe(false);
+    expect(hasAssistantTextThisRun([ev({ type: "assistant_delta", callId: "c", text: "旧" }), ev({ type: "user_message", content: "新" })])).toBe(false);
+    expect(hasAssistantTextThisRun([ev({ type: "user_message", content: "问" }), ev({ type: "assistant_delta", callId: "c", text: "答" })])).toBe(true);
+    expect(hasAssistantTextThisRun([ev({ type: "user_message", content: "问" }), ev({ type: "assistant_delta", callId: "w", text: "worker", agent_id: "a" })])).toBe(false);
   });
 });
 

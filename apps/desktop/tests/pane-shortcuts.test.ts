@@ -4,13 +4,24 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { PANE_SHORTCUTS, paneShortcutFor, type PaneKeyMods } from "../src/renderer/pane-shortcuts";
+import { PANE_SHORTCUTS, paneShortcutFor, paneShortcutKeys, type PaneKeyMods } from "../src/renderer/pane-shortcuts";
 import { PANE_OPENABLE } from "../src/renderer/components/panes";
 import { SHORTCUT_GROUPS } from "../src/renderer/shortcuts";
 
 const app = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
 const mods = (p: Partial<PaneKeyMods>): PaneKeyMods => ({ meta: false, ctrl: false, shift: false, alt: false, ...p });
 const rows = SHORTCUT_GROUPS.find((g) => g.title === "窗格")?.rows ?? [];
+
+it("窗格 tooltip 的键位只从 PANE_SHORTCUTS 取（不再手抄）", () => {
+  expect(paneShortcutKeys("terminal")).toBe("Ctrl+`");
+  expect(paneShortcutKeys("changes")).toBe("⌘⇧D");
+  expect(paneShortcutKeys("browser")).toBe("⌘⇧B");
+  expect(app).not.toContain('title="终端窗格（Ctrl+`）"');
+  expect(app).not.toContain('title="变更窗格（⌘⇧D）"');
+  expect(app).not.toContain('title="浏览器窗格（⌘⇧B）"');
+  expect(app).toContain('paneShortcutKeys("terminal")');
+  expect(app).toContain('<span className="sub">{paneShortcutKeys(k)}</span>');
+});
 
 describe("PANE_SHORTCUTS：七窗格一表全覆盖", () => {
   it("每个可开窗格恰有一条键位；code + 修饰组合不重复", () => {

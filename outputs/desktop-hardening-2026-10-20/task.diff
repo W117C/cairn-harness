@@ -1,0 +1,769 @@
+--- a/apps/desktop/design/desktop-design-spec.md
++++ b/apps/desktop/design/desktop-design-spec.md
+@@ -15,6 +15,15 @@
+ - 右侧窗格增加导航、添加和单面板聚焦，支持恢复原来的多面板布局；切换可见布局保留同一棵面板内容树。原有拖动、行高记忆、关闭和弹出入口继续有效。
+ 
+ 这是 Cairn 现有组件上的交互适配；官方 Cordis 插件宿主、完整 DockKit、四档视图和全轮过程折叠尚未迁入。验证与截图见 `outputs/desktop-official-interactions-2026-10-20/REPORT.md`。
++
++
++## 2026-10-20 后续可靠性打磨
++
++- 工具调用未返回结果、而主会话已经停止时，显示「未收到结果」；与执行中、成功、失败分别表达。主会话终态会结清历史未决调用的运行提示，worker 终态不影响主会话；迟到的真实结果仍可更新记录。
++- 反馈/置顶共用 `useMessageAnnotations` 管理会话归属与请求代次。同一标记提交中禁用重复发送并显示等待态，操作条在提交结束前保持可见。失败只回滚该条标记；切换会话及切走再切回后，旧请求不能覆盖新加载的状态。
++- 反馈与置顶 sidecar 查询等待同一 Store 此前入队的写入，避免刚提交的内容在重载时被旧读数覆盖。此保证限于既有进程内串行队列。
++- 工具差异入口读取保留的结构化路径；参数展示截断不再影响大文件编辑后的差异入口。
++- 关闭窗格后将键盘焦点交还剩余窗格导航；拖动/弹出操作使用同一套图标。验证记录见 `outputs/desktop-hardening-2026-10-20/REPORT.md`。
+ 
+ ---
+ 
+--- a/apps/desktop/scripts/interaction-smoke.cjs
++++ b/apps/desktop/scripts/interaction-smoke.cjs
+@@ -1,5 +1,5 @@
+ // 用真实 renderer + 合成 AgentApi 验证工具披露、侧栏与面板交互；不运行模型，不使用或清空产品用户数据。
+-// 先 pnpm --filter cairn-desktop build，再 pnpm --filter cairn-desktop exec electron scripts/layout-smoke.cjs [输出目录]
++// 先 pnpm --filter cairn-desktop build，再 pnpm --filter cairn-desktop exec electron scripts/interaction-smoke.cjs [输出目录]
+ const { app, BrowserWindow, nativeTheme } = require("electron");
+ const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+ const { join, resolve } = require("node:path");
+@@ -53,7 +53,7 @@
+   })()`);
+   await click('.session'); await pause();
+   let state = await read(`const b = document.querySelector('.tool-group-toggle'); return { text: b.textContent, open: b.getAttribute('aria-expanded'), hidden: document.querySelector('.tool-group-body').hidden };`);
+-  check('工具组默认收起，执行中与失败原因仍可见', state.open === 'false' && state.hidden && state.text.includes('执行中') && state.text.includes('Assertion failed'), state);
++  check('停转会话的工具组明确未收到结果，失败原因仍可见', state.open === 'false' && state.hidden && state.text.includes('未收到结果') && state.text.includes('Assertion failed'), state);
+   await shot('01-tools-folded');
+   await click('.tool-group-toggle'); await pause();
+   await click('.tool-head'); await pause();
+@@ -92,7 +92,9 @@
+   check('恢复原来的多面板布局', await read(`return !document.querySelector('.pane-grid').hasAttribute('data-focused') && [...document.querySelectorAll('.pane-cell')].every(el => el.getBoundingClientRect().height > 20);`));
+   await shot('04-split-panels');
+   await click('[aria-label="聚焦方案窗格"]'); await pause();
++  await js(`document.querySelector('[aria-label="关闭方案窗格"]').focus()`);
+   await click('[aria-label="关闭方案窗格"]'); await pause();
++  check('关闭面板后键盘焦点回到剩余面板导航', await read(`return document.activeElement.getAttribute('aria-label') === '聚焦文件窗格';`));
+   check('关闭聚焦面板后回到剩余面板', await read(`return !document.querySelector('[data-pane="plan"]') && document.querySelector('[data-pane="file"]').getBoundingClientRect().height > 100;`));
+   await win.setContentSize(880, 700); await pause();
+   state = await read(`return { overflow: document.documentElement.scrollWidth > innerWidth, rail: document.querySelector('.sidebar-rail').getBoundingClientRect().width };`);
+@@ -101,10 +103,9 @@
+   nativeTheme.themeSource = 'dark'; await shot('06-dark');
+   check("渲染过程无控制台错误", errors.length === 0, errors);
+   writeFileSync(join(out, "checks.json"), JSON.stringify(checks, null, 2));
+-  checks.forEach((c) => console.log(`${c.ok ? "PASS" : "FAIL"} ${c.name} ${JSON.stringify(c.detail)}`));
+   console.log(`截图与读数：${out}\n隔离测试配置：${profile}`);
+   app.exit(checks.every((c) => c.ok) ? 0 : 1);
+ }
+-const watchdog = setTimeout(() => { console.error("layout-smoke: 超时"); app.exit(1); }, 45_000);
++const watchdog = setTimeout(() => { console.error("interaction-smoke: 超时"); app.exit(1); }, 45_000);
+ watchdog.unref();
+ main().catch((err) => { console.error(err); app.exit(1); });
+--- a/apps/desktop/scripts/ui-gallery-preload.cjs
++++ b/apps/desktop/scripts/ui-gallery-preload.cjs
+@@ -169,4 +169,42 @@
+   };
+ }
+ 
++// 跨会话/异步失败夹具，供 state-smoke 显式开启；不进入产品 preload。
++if (process.argv.includes("--cairn-hardening-fixture")) {
++  const ratings = new Map([["s1", new Map([[2, "up"]])], ["s2", new Map([[2, "down"]])]]);
++  const pins = new Map([["s1", new Set([2])], ["s2", new Set([3])]]);
++  const requests = { feedback: [], pin: [] };
++  stub.listSessions = reply([
++    { id: "s1", title: "会话甲 · 异步交互", mtimeMs: now, lines: 4, workspace: "/tmp/demo-ws" },
++    { id: "s2", title: "会话乙 · 保留独立标记", mtimeMs: now - 1000, lines: 4, workspace: "/tmp/demo-ws" },
++  ]);
++  stub.openSession = async (id) => ({ events: [
++    { type: "user_message", content: id === "s1" ? "检查交互可靠性" : "另一条独立会话", ts: now - 5000 },
++    { type: "assistant_message", content: "第一条回复：会话标记必须独立。", ts: now - 4000 },
++    { type: "assistant_message", content: "第二条回复：失败只回滚当前条目。", ts: now - 3000 },
++  ] });
++  stub.listFeedback = async (sid) => [...(ratings.get(sid) ?? new Map())].map(([eventId, rating]) => ({ sessionId: sid, eventId, rating, at: new Date().toISOString() }));
++  stub.listMessagePins = async (sid) => [...(pins.get(sid) ?? new Set())];
++  stub.submitFeedback = (req) => new Promise((resolve) => { requests.feedback.push({ req, resolve }); });
++  stub.setMessagePinned = (req) => new Promise((resolve) => { requests.pin.push({ req, resolve }); });
++  contextBridge.exposeInMainWorld("__cairnFixture", {
++    count: (kind) => requests[kind].length,
++    settle: (kind, index, ok) => {
++      const item = requests[kind][index];
++      if (!item || item.settled) throw new Error("夹具请求不存在或已完成");
++      item.settled = true;
++      const { req } = item;
++      if (ok && kind === "feedback") {
++        const values = ratings.get(req.sessionId);
++        if (req.rating === "none") values.delete(req.eventId); else values.set(req.eventId, req.rating);
++      }
++      if (ok && kind === "pin") {
++        const values = pins.get(req.sessionId);
++        if (req.pinned) values.add(req.eventId); else values.delete(req.eventId);
++      }
++      item.resolve(ok ? { ok: true } : { ok: false, error: "测试用延迟失败" });
++    },
++  });
++}
++
+ contextBridge.exposeInMainWorld("agent", stub);
+--- a/apps/desktop/src/renderer/App.tsx
++++ b/apps/desktop/src/renderer/App.tsx
+@@ -16,6 +16,7 @@
+ import { deliveryTrail, deriveRunPhase, elapsedSecondsFor, formatEmptyTrailNote, formatRevertNotice, hasAssistantTextThisRun, isMainSessionTerminalEvent, mergeSessionSnapshot, pendingClarifyOf, pendingPlanOf, projectStream, roundOfEvent, turnDelivery, usageAggregate, usageSummary, countToolSteps, countRunSteps, userTextOfRound } from "./projections";
+ import { askBelongsToSession, composerLockReason, continueAfterRun, drainQueue, dropQueued, fromSessionQueueEntries, isSessionEndDistillAsk, promoteQueued, shouldHealStaleRun, takeQueued, toSessionQueueEntries, type QueuedSend } from "./send-queue";
+ import { stripMarkdownForSpeech } from "./speech";
++import { useMessageAnnotations } from "./useMessageAnnotations";
+ import { Sidebar } from "./components/Sidebar";
+ import { SidebarRail } from "./components/SidebarRail";
+ import { NewProjectDialog } from "./components/NewProjectDialog";
+@@ -264,64 +265,7 @@
+       return next;
+     });
+   }, []);
+-  // ---- v2.16 桌面接线：赞/踩真提交 + 文件级回滚 ----
+-  const [feedback, setFeedback] = useState<ReadonlyMap<number, "up" | "down">>(new Map());
+-  const feedbackSeq = useRef(0);
+-  useEffect(() => {
+-    const sid = activeId;
+-    const my = ++feedbackSeq.current;
+-    if (sid === null) { setFeedback(new Map()); return; }
+-    // 赞/踩锚是「会话内事件行号」，跨会话必然撞号：迟到响应不带归属校验就会点亮别的会话。
+-    void window.agent.listFeedback(sid).then((list) => {
+-      if (feedbackSeq.current !== my || activeIdRef.current !== sid) return;
+-      setFeedback(new Map(list.map((f) => [f.eventId, f.rating])));
+-    }).catch(() => {
+-      if (feedbackSeq.current === my && activeIdRef.current === sid) setFeedback(new Map());
+-    });
+-  }, [activeId]);
+-  const handleFeedback = useCallback((eventId: number, rating: "up" | "down" | null) => {
+-    const sid = activeIdRef.current;
+-    if (sid === null) return;
+-    const prev = feedback;
+-    const next = new Map(prev);
+-    if (rating === null) next.delete(eventId); else next.set(eventId, rating);
+-    setFeedback(next);
+-    const rollback = (why: string) => { setFeedback(prev); setLastError(`反馈提交失败：${why}`, sid); };
+-    void window.agent.submitFeedback({ sessionId: sid, eventId, rating: rating ?? "none" }).then((r) => {
+-      if (!r.ok) rollback(r.error ?? "未知错误");
+-    }, (err: unknown) => {
+-      rollback(err instanceof Error ? err.message : String(err));
+-    });
+-  }, [feedback, setLastError]);
+-  // ---- 2026-10-20 消息置顶（销 G6 / 规范 §3.11 操作条 pin）----
+-  // 与 feedback 同一形制：置顶锚是「会话内事件行号」，跨会话撞号 ⇒ 加载与提交都带归属校验。
+-  const [pinnedEventIds, setPinnedEventIds] = useState<ReadonlySet<number>>(new Set());
+-  const pinsSeq = useRef(0);
+-  useEffect(() => {
+-    const sid = activeId;
+-    const my = ++pinsSeq.current;
+-    if (sid === null) { setPinnedEventIds(new Set()); return; }
+-    void window.agent.listMessagePins(sid).then((ids) => {
+-      if (pinsSeq.current !== my || activeIdRef.current !== sid) return;
+-      setPinnedEventIds(new Set(ids));
+-    }).catch(() => {
+-      if (pinsSeq.current === my && activeIdRef.current === sid) setPinnedEventIds(new Set());
+-    });
+-  }, [activeId]);
+-  const handlePin = useCallback((eventId: number, pinned: boolean) => {
+-    const sid = activeIdRef.current;
+-    if (sid === null) return;
+-    const prev = pinnedEventIds;
+-    const next = new Set(prev);
+-    if (pinned) next.add(eventId); else next.delete(eventId);
+-    setPinnedEventIds(next);
+-    const rollback = (why: string) => { setPinnedEventIds(prev); setLastError(`置顶失败：${why}`, sid); };
+-    void window.agent.setMessagePinned({ sessionId: sid, eventId, pinned }).then((r) => {
+-      if (!r.ok) rollback(r.error ?? "未知错误");
+-    }, (err: unknown) => {
+-      rollback(err instanceof Error ? err.message : String(err));
+-    });
+-  }, [pinnedEventIds, setLastError]);
++  const { feedback, feedbackBusy, onFeedback: handleFeedback, pinnedEventIds, pinBusy, annotationPending, onPin: handlePin } = useMessageAnnotations(activeId, setLastError);
+   const doRevertTurn = useCallback((round: number) => {
+     const sid = activeIdRef.current;
+     if (sid === null) return;
+@@ -2779,6 +2723,9 @@
+                       flashRound={flashRound}
+                       actions={{
+                         feedback,
++                        feedbackBusy,
++                        pinBusy,
++                        annotationPending,
+                         onPin: handlePin,
+                         ...(pinnedEventIds.size > 0 ? { pinnedEventIds } : {}),
+                         onFeedback: handleFeedback,
+--- a/apps/desktop/src/renderer/components/PaneDock.tsx
++++ b/apps/desktop/src/renderer/components/PaneDock.tsx
+@@ -7,7 +7,7 @@
+ // 数据面全部来自 panes.ts 纯投影 + turnDelivery（既有）+ changeDiff（v4 通道，懒加载）。
+ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+ import "@xterm/xterm/css/xterm.css";
+-import { AlertTriangle, Check, ChevronRight, Crosshair, FileText, Folder, Loader2, MoreHorizontal, PanelsTopLeft, Plus, X } from "lucide-react";
++import { AlertTriangle, Check, ChevronRight, Crosshair, ExternalLink, FileText, Folder, GripVertical, Loader2, MoreHorizontal, PanelsTopLeft, Plus, X } from "lucide-react";
+ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+ import { Cell, Grid, Gridline, useGridRef } from "react-resizable-panels";
+ import type { AgentEvent } from "../../../../../src/events";
+@@ -891,6 +891,14 @@
+   const [focusedPane, setFocusedPane] = useState<PaneKind | null>(null);
+   const focused = focusedPane !== null && props.tabs.includes(focusedPane) ? focusedPane : null;
+   const previousTabs = useRef(props.tabs);
++  const navRef = useRef<HTMLElement | null>(null);
++  const closePane = (kind: PaneKind): void => {
++    props.onClose(kind);
++    // 关闭按钮卸载后将焦点交给剩余窗格，避免键盘用户掉回文档起点。
++    window.requestAnimationFrame(() => {
++      navRef.current?.querySelector<HTMLButtonElement>(".pane-nav-item")?.focus();
++    });
++  };
+   useEffect(() => {
+     const added = props.tabs.find((kind) => !previousTabs.current.includes(kind));
+     if (focusedPane !== null) setFocusedPane(added ?? (props.tabs.includes(focusedPane) ? focusedPane : null));
+@@ -932,7 +940,7 @@
+   }
+   return (
+     <div className="pane-workbench">
+-    <nav className="pane-nav" aria-label="面板导航">
++    <nav className="pane-nav" aria-label="面板导航" ref={navRef}>
+       <div className="pane-nav-items">
+         {props.tabs.map((kind) => <button key={kind} className="pane-nav-item"
+           aria-label={`聚焦${PANE_META[kind].label}窗格`} aria-pressed={focused === kind}
+@@ -1000,7 +1008,7 @@
+                 }}
+                 title={props.onReorder !== undefined ? "拖动换位（键盘：⌥↑ / ⌥↓）" : undefined}
+               >
+-                {props.onReorder !== undefined && <span className="pc-grip" aria-hidden="true">⋮⋮</span>}
++                {props.onReorder !== undefined && <span className="pc-grip" aria-hidden="true"><GripVertical size={12} /></span>}
+                 <span className="pc-label">{PANE_META[kind].label}</span>
+                 {props.onPopout !== undefined && (
+                   <button
+@@ -1008,12 +1016,12 @@
+                     aria-label={`弹出${PANE_META[kind].label}窗格`}
+                     title="弹出为独立窗口"
+                     onClick={() => { props.onPopout?.(kind); }}
+-                  >⧉</button>
++                  ><ExternalLink size={12} /></button>
+                 )}
+                 <button
+                   className="pt-x"
+                   aria-label={`关闭${PANE_META[kind].label}窗格`}
+-                  onClick={() => { props.onClose(kind); }}
++                  onClick={() => { closePane(kind); }}
+                 ><X size={11} /></button>
+               </div>
+               <div className="pane-chunk-body">
+--- a/apps/desktop/src/renderer/components/Stream.tsx
++++ b/apps/desktop/src/renderer/components/Stream.tsx
+@@ -13,7 +13,7 @@
+ // 全部逐字保留（本文件换形态与图标，不动锚）。
+ // 图标 = lucide-react（ADR 0003）。
+ import { Fragment, useEffect, useId, useState } from "react";
+-import { AlertTriangle, Check, ChevronRight, ChevronUp, Copy, Download, Eye, FileCode2, FileText, Folder, GitBranch, History, Image as ImageIcon, Loader2, Pencil, Pin, RotateCcw, RotateCw, Sparkles, Square, ThumbsDown, ThumbsUp, Volume2 } from "lucide-react";
++import { AlertTriangle, Check, ChevronRight, ChevronUp, CircleDashed, Copy, Download, Eye, FileCode2, FileText, Folder, GitBranch, History, Image as ImageIcon, Loader2, Pencil, Pin, RotateCcw, RotateCw, Sparkles, Square, ThumbsDown, ThumbsUp, Volume2 } from "lucide-react";
+ import { relativeTime, type StreamRow } from "../projections";
+ import { userMessageCopy } from "../transcript";
+ import { useNow } from "../useNow";
+@@ -30,8 +30,10 @@
+ 
+ /** 写文件类工具 + args JSON 里的 path → diff 目标路径；其余工具 / 非法 args → null（不摆差异区）。
+  *  P3-1 Step 2（计划稿）：工具卡展开区的行内 diff 走 changeDiff 懒加载（既有 DiffView 复用）。 */
+-export function writeDiffPathOf(tool: string, args: string | undefined): string | null {
+-  if (!WRITE_TOOLS.has(tool) || args === undefined) return null;
++export function writeDiffPathOf(tool: string, args: string | undefined, path?: string): string | null {
++  if (!WRITE_TOOLS.has(tool)) return null;
++  if (path !== undefined && path !== "") return path;
++  if (args === undefined) return null;
+   try {
+     const parsed: unknown = JSON.parse(args);
+     if (typeof parsed !== "object" || parsed === null) return null;
+@@ -83,9 +85,9 @@
+   return rs === 0 ? `${String(m)}m` : `${String(m)}m${String(rs)}s`;
+ }
+ 
+-/** 工具行三态字形（阶段 2 · brief §二.4）：成功=灰勾 / 运行中=旋转 / 失败=琥珀叹号（不要大红叉）。
+- *  ok 缺席按成功处理（不造假失败）。 */
+-function ToolGlyph(props: { pending?: boolean; ok?: boolean }) {
++/** 工具状态：未返回结果与失败分开，停转后不继续转圈或暗示成功。 */
++function ToolGlyph(props: { pending?: boolean; interrupted?: boolean; ok?: boolean }) {
++  if (props.interrupted) return <span className="glyph interrupted" aria-label="未收到结果"><CircleDashed size={12} /></span>;
+   if (props.pending) return <span className="glyph pending" aria-label="执行中"><Loader2 size={12} /></span>;
+   if (props.ok === false) return <span className="glyph failed" aria-label="失败"><AlertTriangle size={12} /></span>;
+   return <span className="glyph ok" aria-label="完成"><Check size={12} /></span>;
+@@ -101,7 +103,7 @@
+   const verb = toolVerb(r.tool);
+   // 写文件类行的行内 diff（P3-1 Step 2）：展开 + 成功收口后才懒加载（changeDiff 既有通道）；
+   // 失败原文上屏（fail-visible），通道无应答如实说。
+-  const diffPath = writeDiffPathOf(r.tool, r.args);
++  const diffPath = writeDiffPathOf(r.tool, r.args, r.path);
+   const [diff, setDiff] = useState<{ loading: boolean; payload: ChangeDiffPayload | null }>({ loading: false, payload: null });
+   useEffect(() => {
+     if (!open || r.ok !== true || diffPath === null) return;
+@@ -117,9 +119,10 @@
+     <div className={`row tool${open ? " open" : ""}`} data-event-id={String(r.seq + 1)}>
+       <button className="tool-head" aria-expanded={open} onClick={() => setOpen(!open)}>
+         <span className="chev" aria-hidden="true"><ChevronRight size={10} /></span>
+-        <ToolGlyph pending={r.pending} ok={r.ok} />
++        <ToolGlyph pending={r.pending} interrupted={r.interrupted} ok={r.ok} />
+         <span className="tname">{r.tool}</span>
+         <span className="tsum">{verb !== null ? `${verb} ${r.summary}` : `· ${r.summary}`}</span>
++        {r.interrupted && <span className="tdur">未收到结果</span>}
+         {r.ts !== undefined && r.then !== undefined && (
+           <span className="tdur">{formatDuration(r.then - r.ts)}</span>
+         )}
+@@ -192,6 +195,7 @@
+   const open = props.view === undefined || props.view === "verbose" || expanded;
+   const pending = props.rows.filter((r) => r.pending);
+   const failures = props.rows.filter((r) => r.ok === false);
++  const interrupted = props.rows.filter((r) => r.interrupted);
+   const latest = pending.at(-1);
+   const failure = failures.at(-1);
+   return (
+@@ -199,9 +203,10 @@
+       {props.view !== undefined && props.view !== "verbose" && (
+         <button className="tool-group-toggle" aria-expanded={open} aria-controls={id} onClick={() => setExpanded(!expanded)}>
+           <ChevronRight className="chev" size={12} aria-hidden="true" />
+-          <ToolGlyph {...(latest !== undefined ? { pending: true } : { ok: failures.length === 0 })} />
++          <ToolGlyph pending={latest !== undefined} interrupted={latest === undefined && interrupted.length > 0} ok={failures.length === 0} />
+           <span>{props.rows.length} 次工具调用</span>
+           {latest !== undefined && <span className="tool-group-detail">执行中 · {toolVerb(latest.tool) ?? latest.tool} {latest.summary}</span>}
++          {interrupted.length > 0 && <span className="tool-group-detail">{interrupted.length} 次未收到结果</span>}
+           {failures.length > 0 && <span className="tool-group-failure">{failures.length} 次失败{!open && failure?.output ? ` · ${truncateSummary(failure.output, 80)}` : ""}</span>}
+         </button>
+       )}
+@@ -217,6 +222,9 @@
+ export interface StreamActions {
+   /** eventId → 当前生效评分（listFeedback 投影）；缺席 = 未评。 */
+   feedback?: ReadonlyMap<number, "up" | "down">;
++  feedbackBusy?: (eventId: number) => boolean;
++  pinBusy?: (eventId: number) => boolean;
++  annotationPending?: (eventId: number) => boolean;
+   /** 赞/踩真提交（core submitFeedback 落 sidecar）；rating=null = 撤销。 */
+   onFeedback?: (eventId: number, rating: "up" | "down" | null) => void;
+   /** 文件级回滚（core revertTurn；确认与结果提示在 App）。 */
+@@ -260,9 +268,11 @@
+   const current = props.actions.feedback?.get(props.eventId) ?? null;
+   const { onCopyText, onFeedback, onReplay, onSpeak, onRetryRound, onPin } = props.actions;
+   const pinned = props.actions.pinnedEventIds?.has(props.eventId) === true;
++  const feedbackBusy = props.actions.feedbackBusy?.(props.eventId) === true;
++  const pinBusy = props.actions.pinBusy?.(props.eventId) === true;
+   const running = props.actions.running === true;
+   return (
+-    <span className="row-actions">
++    <span className="row-actions" data-saving={props.actions.annotationPending?.(props.eventId) === true}>
+       <button className="row-action" aria-label="复制这行输出" title="复制" onClick={() => onCopyText?.(props.text)}>
+         <Copy size={12} />
+       </button>
+@@ -271,9 +281,11 @@
+           className={`row-action${pinned ? " on" : ""}`}
+           aria-label={pinned ? "取消置顶这条输出" : "置顶这条输出"}
+           aria-pressed={pinned}
++          disabled={pinBusy}
++          aria-busy={pinBusy}
+           title={pinned ? "已置顶（再点取消）" : "置顶：钉在会话大纲里，长对话好找"}
+           onClick={() => onPin(props.eventId, !pinned)}
+-        ><Pin size={12} /></button>
++        >{pinBusy ? <Loader2 size={12} /> : <Pin size={12} />}</button>
+       )}
+       {onRetryRound !== undefined && !running && (
+         <button
+@@ -304,16 +316,20 @@
+         className={`row-action${current === "up" ? " on" : ""}`}
+         aria-label={current === "up" ? "取消点赞" : "赞这条输出"}
+         aria-pressed={current === "up"}
++        disabled={feedbackBusy}
++        aria-busy={feedbackBusy}
+         title={current === "up" ? "已赞（再点撤销）" : "赞"}
+         onClick={() => onFeedback?.(props.eventId, current === "up" ? null : "up")}
+-      ><ThumbsUp size={12} /></button>
++      >{feedbackBusy ? <Loader2 size={12} /> : <ThumbsUp size={12} />}</button>
+       <button
+         className={`row-action${current === "down" ? " on" : ""}`}
+         aria-label={current === "down" ? "取消点踩" : "踩这条输出"}
+         aria-pressed={current === "down"}
++        disabled={feedbackBusy}
++        aria-busy={feedbackBusy}
+         title={current === "down" ? "已踩（再点撤销）" : "踩"}
+         onClick={() => onFeedback?.(props.eventId, current === "down" ? null : "down")}
+-      ><ThumbsDown size={12} /></button>
++      >{feedbackBusy ? <Loader2 size={12} /> : <ThumbsDown size={12} />}</button>
+     </span>
+   );
+ }
+@@ -536,7 +552,7 @@
+                 <ThinkingLive
+                   seq={r.seq}
+                   thinking={r.thinking}
+-                  running={r.live === true && r.text === ""}
++                  running={streaming && r.live === true && r.text === ""}
+                   {...(view !== undefined ? { view } : {})}
+                 />
+               ),
+--- a/apps/desktop/src/renderer/projections.ts
++++ b/apps/desktop/src/renderer/projections.ts
+@@ -13,7 +13,7 @@
+ export type StreamRow =
+   | { kind: "user"; text: string; ts?: number; seq: number; round: number; attachments?: readonly { path: string; kind: "file" | "directory" }[] }
+   | { kind: "assistant"; text: string; live?: boolean; thinking?: string; ts?: number; seq: number; eventId: number; round: number } // live=true = delta 流式中尚未被终稿取代的未结桶行；thinking = 同一 callId 下累计的思考正文
+-  | { kind: "tool"; tool: string; summary: string; args?: string; output?: string; outputTruncated?: boolean; pending?: boolean; ok?: boolean; ts?: number; seq: number
++  | { kind: "tool"; tool: string; summary: string; path?: string; args?: string; output?: string; outputTruncated?: boolean; pending?: boolean; interrupted?: boolean; ok?: boolean; ts?: number; seq: number
+       /** tool_result 收口的到达时间（P3-1 折叠行耗时 = then − ts；拿不到不显）。 */
+       then?: number
+       /** 产物引用（本次调用交付给用户的东西）。从前聊天里只有文字回执 ⇒ 用户看不到 agent
+@@ -135,6 +135,13 @@
+   // tool_call id → 行对象：tool_result 按 callId 收口（就地改写 pending/ok，行保持 call 侧 ts）；
+   // 无匹配调用的 tool_result 忽略，不造假行。
+   const toolRows = new Map<string, ToolRow>();
++  const interruptTools = (): void => {
++    for (const row of toolRows.values()) {
++      if (row.pending !== true) continue;
++      row.pending = false;
++      row.interrupted = true;
++    }
++  };
+   // 轮号（v2.16）：主会话 user_message 的 1-based 计数——与 core planTurnRevert 的轮口径同一份
+   // （worker 子流事件不成轮，见 isWorkerSubflowEvent 过滤；worker 本也不产生 user_message）。
+   let rounds = 0;
+@@ -207,6 +214,8 @@
+       // 勘误落地：ToolCallEvent 的工具名字段是 name（不是计划作者预期的 tool）；行面仍叫 tool。
+       case "tool_call": {
+         const row: ToolRow = { kind: "tool", tool: e.name, summary: summarize(e.args), args: rawArgs(e.args), pending: true, ts: e.ts, seq };
++        // 行为数据不从展示用截断 JSON 反解；长编辑参数仍保留差异入口。
++        if (typeof e.args.path === "string" && e.args.path !== "") row.path = e.args.path;
+         toolRows.set(e.id, row);
+         rows.push(row);
+         break;
+@@ -215,6 +224,7 @@
+         const row = toolRows.get(e.callId);
+         if (row) {
+           row.pending = false;
++          delete row.interrupted;
+           row.ok = e.ok;
+           if (typeof e.output === "string") {
+             row.output = e.output.slice(0, 10000);
+@@ -234,6 +244,9 @@
+         break;
+       // RunErrorEvent 勘定（src/events/index.ts）：失败原因原文在 message（渲染侧负责转义）。
+       case "error": rows.push({ kind: "error", text: e.message, ts: e.ts, seq }); break;
++      case "agent_status":
++        if (isMainSessionTerminalEvent(e)) interruptTools();
++        break;
+       default: break; // 其余事件类型不成行：clarify/plan 走卡片选择器（pendingClarifyOf/pendingPlanOf）
+     }
+   }
+@@ -241,6 +254,7 @@
+   // 运行中 ⇒ live=true 行（追字光标只该亮在正在流的那一段）；会话已停 ⇒ 同样是终稿（live=false），
+   // 操作条与「思考完成」据此显形——真实 provider 不补发 assistant_message，停转就是落定信号。
+   flushBuckets(!running);
++  if (!running) interruptTools();
+   return rows.sort((a, b) => a.seq - b.seq);
+ }
+ 
+--- a/apps/desktop/src/renderer/styles.css
++++ b/apps/desktop/src/renderer/styles.css
+@@ -2368,3 +2368,8 @@
+ .pane-grid[data-focused] > .pane-gridline { display: none; }
+ .pane-grid[data-focused] > .pane-cell { display: none; position: absolute; inset: 0; }
+ .pane-grid[data-focused] > .pane-cell[data-focused="true"] { display: block; }
++
++.row-action[aria-busy="true"] { cursor: progress; opacity: .65; }
++.row-actions[data-saving="true"] { opacity: 1; }
++.row-action[aria-busy="true"] svg { animation: spin 1s linear infinite; }
++.glyph.interrupted { color: hsl(var(--text-400)); }
+--- a/src/main/feedback.ts
++++ b/src/main/feedback.ts
+@@ -139,6 +139,7 @@
+ 
+   /** 全部原始记录（审计面）：`skipped` = 丢弃的坏行数（丢的事件必须能被数出来，不静默）。 */
+   async listAll(): Promise<{ records: FeedbackRecord[]; skipped: number }> {
++    await this.writes; // 先看见此前入队的写入/删除；失败的写入已由队列尾消化。
+     let text: string;
+     try {
+       text = await readFile(this.filePath, "utf8");
+--- a/src/main/pins.ts
++++ b/src/main/pins.ts
+@@ -100,6 +100,7 @@
+ 
+   /** 全部原始记录（审计面）；`skipped` = 丢弃的坏行数（丢的要能数出来，不静默）。 */
+   async listAll(): Promise<{ records: PinRecord[]; skipped: number }> {
++    await this.writes; // 与反馈日志一致：查询等待此前入队的修改。
+     let text: string;
+     try {
+       text = await readFile(this.filePath, "utf8");
+--- /dev/null
++++ b/apps/desktop/src/renderer/useMessageAnnotations.ts
+@@ -0,0 +1,97 @@
++import { useEffect, useRef, useState } from "react";
++
++type MarkState<Value> = {
++  sessionId: string | null;
++  values: ReadonlyMap<number, Value>;
++  pending: ReadonlySet<number>;
++  loading: boolean;
++};
++type MarkSource<Value> = {
++  label: string;
++  load: (sessionId: string) => Promise<ReadonlyMap<number, Value>>;
++  save: (sessionId: string, eventId: number, value: Value | undefined) => Promise<{ ok: boolean; error?: string }>;
++};
++type ReportError = (message: string, sessionId?: string) => void;
++
++/** 两类消息标记共用归属、读写与逐条回滚；同一条标记有请求时禁止重复提交。 */
++function useSessionMarks<Value>(sessionId: string | null, source: MarkSource<Value>, onError: ReportError) {
++  const [state, setState] = useState<MarkState<Value>>({ sessionId: null, values: new Map(), pending: new Set(), loading: true });
++  const generation = useRef(0);
++  const locks = useRef(new Set<number>());
++  useEffect(() => {
++    const version = ++generation.current;
++    locks.current.clear();
++    setState({ sessionId, values: new Map(), pending: new Set(), loading: sessionId !== null });
++    if (sessionId !== null) {
++      void source.load(sessionId).then((values) => {
++        if (generation.current === version) setState({ sessionId, values, pending: new Set(), loading: false });
++      }).catch((error: unknown) => {
++        if (generation.current !== version) return;
++        setState({ sessionId, values: new Map(), pending: new Set(), loading: false });
++        onError(`${source.label}读取失败：${error instanceof Error ? error.message : String(error)}。请刷新后重试。`, sessionId);
++      });
++    }
++    return () => { generation.current += 1; };
++  }, [sessionId, source, onError]);
++
++  const set = async (eventId: number, value: Value | undefined): Promise<void> => {
++    if (sessionId === null || state.sessionId !== sessionId || state.loading || locks.current.has(eventId)) return;
++    locks.current.add(eventId); // 同帧连点也只发一次，不依赖 React 下一帧的 disabled。
++    const version = generation.current;
++    const previous = state.values.get(eventId);
++    const update = (nextValue: Value | undefined, pending: boolean) => {
++      setState((current) => {
++        if (current.sessionId !== sessionId) return current;
++        const values = new Map(current.values);
++        if (nextValue === undefined) values.delete(eventId); else values.set(eventId, nextValue);
++        const nextPending = new Set(current.pending);
++        if (pending) nextPending.add(eventId); else nextPending.delete(eventId);
++        return { ...current, values, pending: nextPending };
++      });
++    };
++    update(value, true);
++    try {
++      const result = await source.save(sessionId, eventId, value);
++      if (!result.ok) throw new Error(result.error ?? "未知错误");
++      if (generation.current === version) update(value, false);
++    } catch (error: unknown) {
++      if (generation.current !== version) return;
++      update(previous, false);
++      onError(`${source.label}提交失败：${error instanceof Error ? error.message : String(error)}`, sessionId);
++    } finally {
++      if (generation.current === version) locks.current.delete(eventId);
++    }
++  };
++  const current = state.sessionId === sessionId;
++  return {
++    values: current ? state.values : new Map<number, Value>(),
++    busy: (eventId: number) => !current || state.loading || state.pending.has(eventId),
++    pending: (eventId: number) => current && state.pending.has(eventId),
++    set,
++  };
++}
++
++const feedbackSource: MarkSource<"up" | "down"> = {
++  label: "反馈",
++  load: async (sid) => new Map((await window.agent.listFeedback(sid)).map((item) => [item.eventId, item.rating])),
++  save: (sid, eventId, value) => window.agent.submitFeedback({ sessionId: sid, eventId, rating: value ?? "none" }),
++};
++const pinSource: MarkSource<true> = {
++  label: "置顶",
++  load: async (sid) => new Map((await window.agent.listMessagePins(sid)).map((id) => [id, true as const])),
++  save: (sid, eventId, value) => window.agent.setMessagePinned({ sessionId: sid, eventId, pinned: value === true }),
++};
++
++export function useMessageAnnotations(sessionId: string | null, onError: ReportError) {
++  const feedback = useSessionMarks(sessionId, feedbackSource, onError);
++  const pins = useSessionMarks(sessionId, pinSource, onError);
++  return {
++    feedback: feedback.values,
++    feedbackBusy: feedback.busy,
++    onFeedback: (eventId: number, rating: "up" | "down" | null) => { void feedback.set(eventId, rating ?? undefined); },
++    pinnedEventIds: new Set(pins.values.keys()),
++    pinBusy: pins.busy,
++    annotationPending: (eventId: number) => feedback.pending(eventId) || pins.pending(eventId),
++    onPin: (eventId: number, pinned: boolean) => { void pins.set(eventId, pinned ? true : undefined); },
++  };
++}
+--- /dev/null
++++ b/apps/desktop/scripts/state-smoke.cjs
+@@ -0,0 +1,81 @@
++// 用真实 renderer + 可控 AgentApi 验证消息标记的延迟、失败与跨会话归属；不运行模型，不使用或清空产品用户数据。
++// 先 pnpm --filter cairn-desktop build，再 pnpm --filter cairn-desktop exec electron scripts/state-smoke.cjs [输出目录]
++const { app, BrowserWindow, nativeTheme } = require("electron");
++const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
++const { join, resolve } = require("node:path");
++const { tmpdir } = require("node:os");
++
++const profile = mkdtempSync(join(tmpdir(), "cairn-state-profile-"));
++app.setPath("userData", profile);
++nativeTheme.themeSource = "light";
++app.on("quit", () => { rmSync(profile, { recursive: true, force: true }); });
++const out = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-state-"));
++mkdirSync(out, { recursive: true });
++
++async function main() {
++  await app.whenReady();
++  const protocol = readFileSync(join(__dirname, "../../../src/main/ipc-protocol.ts"), "utf8");
++  const version = Number(protocol.match(/IPC_PROTOCOL_VERSION\s*=\s*(\d+)/)[1]);
++  const start = protocol.indexOf("export interface AgentApi");
++  const body = protocol.slice(start, protocol.indexOf("\n}", start));
++  const starts = [...body.matchAll(/^\s{2}(\w+)\??\s*[(<]/gm)];
++  const members = starts.map((s, i) => ({
++    name: s[1],
++    isArray: /Promise<[^>]*\[\]/.test(body.slice(s.index, starts[i + 1]?.index ?? body.length)),
++  }));
++  const win = new BrowserWindow({
++    width: 1440, height: 900, show: false,
++    webPreferences: {
++      preload: join(__dirname, "ui-gallery-preload.cjs"),
++      additionalArguments: ["--cairn-api-members=" + JSON.stringify(members), "--cairn-protocol-version=" + version, "--cairn-hardening-fixture"],
++    },
++  });
++  const errors = [];
++  win.webContents.on("console-message", (details) => { if (details.level === "error") errors.push(details.message); });
++  const js = (source) => win.webContents.executeJavaScript(source);
++  const pause = () => new Promise((r) => setTimeout(r, 350));
++  const shot = async (name) => { await pause(); writeFileSync(join(out, name + ".png"), (await win.webContents.capturePage()).toPNG()); };
++  const checks = [];
++  const check = (name, ok, detail) => { checks.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name} ${JSON.stringify(detail)}`); };
++  await win.loadFile(join(__dirname, "../dist/index.html"));
++  await pause();
++  const row = (event, label) => `[data-event-id="${event}"] button[aria-label="${label}"]`;
++  const click = (selector) => js(`document.querySelector(${JSON.stringify(selector)}).click()`);
++  const mark = (event, label) => js(`document.querySelector(${JSON.stringify(row(event, label))})?.getAttribute('aria-pressed') === 'true'`);
++  const settle = async (kind, index, ok) => { await js(`window.__cairnFixture.settle(${JSON.stringify(kind)}, ${index}, ${ok})`); await pause(); };
++  await click('.session'); await pause();
++  await click(row(2, '踩这条输出')); await pause();
++  check('提交中的同一条反馈禁止重复发送', await js(`document.querySelector(${JSON.stringify(row(2,'取消点踩'))}).disabled`));
++  await click(row(2, '取消点踩')); await pause();
++  check('等待中的重复点击不发送第二个反馈请求', await js(`window.__cairnFixture.count('feedback') === 1`));
++  check('请求未完成时操作条保持可见，移开鼠标也能看到保存状态', await js(`getComputedStyle(document.querySelector(${JSON.stringify(row(2,'取消点踩'))}).closest('.row-actions')).opacity === '1'`));
++  await shot('01-feedback-pending');
++  await click(row(3, '赞这条输出')); await pause();
++  await settle('feedback', 1, true); await settle('feedback', 0, false);
++  check('反馈失败只回滚本条，不清空其他已成功标记', await mark(3, '取消点赞'));
++  await click(row(2, '取消置顶这条输出')); await pause();
++  check('提交中的置顶按钮同样有等待状态', await js(`document.querySelector(${JSON.stringify(row(2,'置顶这条输出'))}).disabled`));
++  await click(row(3, '置顶这条输出')); await pause();
++  await settle('pin', 1, true); await settle('pin', 0, false);
++  check('置顶失败只回滚本条，不清空其他已成功标记', await mark(3, '取消置顶这条输出'));
++  await click(row(2, '踩这条输出')); await pause();
++  await click(row(2, '取消置顶这条输出')); await pause();
++  await js(`document.querySelectorAll('.session')[1].click()`); await pause();
++  check('另一会话先展示自己的反馈与置顶', await mark(2, '取消点踩') && await mark(3, '取消置顶这条输出'));
++  await settle('feedback', 2, false); await settle('pin', 2, false);
++  check('旧会话迟到失败不覆盖当前会话的标记', await mark(2, '取消点踩') && await mark(3, '取消置顶这条输出'));
++  check('旧会话的提交错误不显示到当前会话', await js(`!document.querySelector('.error-strip')?.textContent.includes('测试用延迟失败')`));
++  await click(row(2, '取消点踩')); await pause();
++  await js(`document.querySelectorAll('.session')[0].click()`); await pause();
++  await js(`document.querySelectorAll('.session')[1].click()`); await pause();
++  await settle('feedback', 3, false);
++  check('切走再切回同一会话，旧请求也不能回滚新加载的状态', await mark(2, '取消点踩'));
++  await shot('02-independent-session-marks');
++  check("渲染过程无控制台错误", errors.length === 0, errors);
++  writeFileSync(join(out, "checks.json"), JSON.stringify(checks, null, 2));
++  console.log(`截图与读数：${out}\n隔离测试配置：${profile}`);
++  app.exit(checks.every((c) => c.ok) ? 0 : 1);
++}
++const watchdog = setTimeout(() => { console.error("state-smoke: 超时"); app.exit(1); }, 30_000);
++watchdog.unref();
++main().catch((err) => { console.error(err); app.exit(1); });
+--- /dev/null
++++ b/apps/desktop/tests/tool-lifecycle.test.tsx
+@@ -0,0 +1,28 @@
++import { expect, it } from "vitest";
++import { renderToStaticMarkup } from "react-dom/server";
++import type { AgentEvent } from "../../../src/events";
++import { projectStream } from "../src/renderer/projections";
++import { Stream } from "../src/renderer/components/Stream";
++const call = { type: "tool_call", id: "a", name: "read_file", args: { path: "a.ts" }, ts: 1 } as AgentEvent;
++it("未返回的调用在运行时显示执行中，停转后明确未收到结果", () => {
++  expect(projectStream([call], true)[0]).toMatchObject({ pending: true });
++  const rows = projectStream([call], false);
++  expect(rows[0]).toMatchObject({ pending: false, interrupted: true });
++  const html = renderToStaticMarkup(<Stream rows={rows} view="normal" streaming={false} />);
++  expect(html).toContain("未收到结果");
++  expect(html).not.toContain('aria-label="执行中"');
++  expect(html).not.toContain('aria-label="完成"');
++});
++it("历史主会话终态关闭未结调用，新一轮运行也不会重新转圈", () => {
++  const rows = projectStream([call, { type: "agent_status", status: "cancelled" },
++    { type: "tool_call", id: "b", name: "list_dir", args: {} }] as AgentEvent[], true);
++  expect(rows[0]).toMatchObject({ pending: false, interrupted: true });
++  expect(rows[1]).toMatchObject({ pending: true });
++});
++it("worker 终态不关闭主会话工具；迟到的真实返回替换未收口状态", () => {
++  expect(projectStream([call, { type: "agent_status", agent_id: "worker", status: "done" }] as AgentEvent[], true)[0]).toMatchObject({ pending: true });
++  const rows = projectStream([call, { type: "agent_status", status: "cancelled" },
++    { type: "tool_result", callId: "a", ok: false, output: "操作取消" }] as AgentEvent[], false);
++  expect(rows[0]).toMatchObject({ pending: false, ok: false, output: "操作取消" });
++  expect(rows[0]?.kind === "tool" && rows[0].interrupted).not.toBe(true);
++});
+--- /dev/null
++++ b/apps/desktop/tests/tool-diff-payload.test.tsx
+@@ -0,0 +1,23 @@
++import { expect, it } from "vitest";
++import { renderToStaticMarkup } from "react-dom/server";
++import type { AgentEvent } from "../../../src/events";
++import { projectStream } from "../src/renderer/projections";
++import { Stream } from "../src/renderer/components/Stream";
++
++it("大文件编辑的参数展示被截断后，差异入口仍用原始路径", () => {
++  const rows = projectStream([
++    { type: "tool_call", id: "a", name: "edit_file", args: { path: "src/large.ts", old_text: "x".repeat(5000), new_text: "y".repeat(5000) } },
++    { type: "tool_result", callId: "a", ok: true, output: "已修改" },
++  ] as AgentEvent[], false);
++  expect(rows[0]?.kind === "tool" && rows[0].args?.length).toBeLessThanOrEqual(1501);
++  const html = renderToStaticMarkup(<Stream rows={rows} view="verbose" streaming={false} />);
++  expect(html).toContain("文件差异");
++  expect(html).toContain("src/large.ts");
++});
++it("相同的非写入工具不能因为有 path 就显示文件差异", () => {
++  const rows = projectStream([
++    { type: "tool_call", id: "a", name: "read_file", args: { path: "src/large.ts", note: "x".repeat(5000) } },
++    { type: "tool_result", callId: "a", ok: true, output: "文件内容" },
++  ] as AgentEvent[], false);
++  expect(renderToStaticMarkup(<Stream rows={rows} view="verbose" streaming={false} />)).not.toContain("文件差异");
++});
+--- /dev/null
++++ b/tests/annotation-read-order.test.ts
+@@ -0,0 +1,40 @@
++import { mkdtemp, rm } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { afterEach, expect, it } from "vitest";
++import { FeedbackStore } from "../src/main/feedback";
++import { PinStore } from "../src/main/pins";
++
++const roots: string[] = [];
++afterEach(async () => { await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true }))); });
++async function file(name: string) {
++  const root = await mkdtemp(join(tmpdir(), "cairn-annotation-order-")); roots.push(root);
++  return join(root, name);
++}
++
++it("反馈查询等待此前入队的写入，连续改主意立即读到最后一笔", async () => {
++  const store = new FeedbackStore(await file("feedback.jsonl"));
++  const first = store.append({ sessionId: "s1", eventId: 2, rating: "up" });
++  const second = store.append({ sessionId: "s1", eventId: 2, rating: "down" });
++  const result = await store.listForSession("s1");
++  await Promise.all([first, second]);
++  expect(result).toEqual([expect.objectContaining({ eventId: 2, rating: "down" })]);
++});
++it("置顶查询等待此前入队的写入，包括撤销", async () => {
++  const store = new PinStore(await file("pins.jsonl"));
++  const first = store.append({ sessionId: "s1", eventId: 2, pinned: true });
++  const second = store.append({ sessionId: "s1", eventId: 2, pinned: false });
++  const third = store.append({ sessionId: "s1", eventId: 3, pinned: true });
++  const result = await store.listForSession("s1");
++  await Promise.all([first, second, third]);
++  expect(result).toEqual([3]);
++});
++it("写入失败不阻塞后续查询或合法写入", async () => {
++  const store = new FeedbackStore(await file("feedback.jsonl"));
++  const failure = store.append({ sessionId: "s1", eventId: 0, rating: "up" }).catch(() => undefined);
++  const write = store.append({ sessionId: "s1", eventId: 1, rating: "up" });
++  const result = await store.listAll();
++  await Promise.all([failure, write]);
++  expect(result.records).toHaveLength(1);
++  expect(result.records[0]).toMatchObject({ eventId: 1, rating: "up" });
++});

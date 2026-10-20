@@ -50,13 +50,21 @@ function contrast(a: Rgb, b: Rgb): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-describe("暗色分层与文字（2026-10-17 Claude 暖暗盘 · 规范 §4.1 定值）", () => {
-  it("四件套：base / sidebar / surface / elevated", () => {
-    expect(tokens).toMatch(/--bg-100:\s*60 2\.7% 14\.5%;/);      // base #262624
-    expect(tokens).toMatch(/--bg-200:\s*60 3\.3% 11\.8%;/);       // sidebar #1F1E1D
-    expect(tokens).toMatch(/--bg-000:\s*60 2\.1% 18\.4%;/);       // surface #30302E
-    expect(tokens).toMatch(/--bg-elevated:\s*60 2\.8% 21\.4%;/);  // elevated #383835
-    for (const hex of ["#262624", "#1F1E1D", "#30302E", "#383835"]) expect(tokens).toContain(hex);
+describe("暗色分层与文字（2026-10-20 真机还原更正 · 原 2026-10-17 #262624 系作废）", () => {
+  it("四件套：base / sidebar / surface / elevated（暗色越抬升越亮，与亮色同向）", () => {
+    // 2026-10-20 更正：Claude 真机主区底实测 rgb(21,21,21)=#151515（gray-850），
+    // 推翻原规范「越抬升越暗（#000→#262624→#30302E）」。方向改为与亮色一致。
+    expect(tokens).toMatch(/--bg-100:\s*0 0% 8\.2%;/);          // base #151515 ← 真机实测
+    expect(tokens).toMatch(/--bg-000:\s*60 3\.4% 11\.8%;/);     // 最底 #1F1E1D
+    expect(tokens).toMatch(/--bg-200:\s*60 2\.4% 16\.5%;/);     // sidebar/卡片 #2A2A28
+    expect(tokens).toMatch(/--bg-elevated:\s*60 2% 21\.6%;/);   // elevated #383836
+    for (const hex of ["#151515", "#1F1E1D", "#2A2A28", "#383836"]) expect(tokens).toContain(hex);
+    // 方向断言：越抬升越亮（base < 最底 < sidebar），取代原「越抬升越暗」的反向断言。
+    // 取 HSL 三元组第三个分量（L%）——不能用"第一个 %"，那是饱和度 S。
+    const lum = (hsl: string) => Number(/(\d+(?:\.\d+)?)%\s*$/.exec(hsl.trim())?.[1] ?? 0);
+    expect(lum("0 0% 8.2%")).toBeLessThan(lum("60 3.4% 11.8%"));
+    expect(lum("60 3.4% 11.8%")).toBeLessThan(lum("60 2.4% 16.5%"));
+    expect(lum("60 2.4% 16.5%")).toBeLessThan(lum("60 2% 21.6%"));
   });
 
   it("文字三档 + 描边两档（描边跟文字主色走，暖白 8% / 13%）", () => {
@@ -67,11 +75,13 @@ describe("暗色分层与文字（2026-10-17 Claude 暖暗盘 · 规范 §4.1 �
     expect(tokens).toMatch(/--hairline-strong:\s*hsl\(var\(--text-000\) \/ 13%\);/);
   });
 
-  it("用户气泡底按主题取方向（亮 = bg-300 深一档 / 暗 = bg-000 亮一档）", () => {
+  it("用户气泡底按主题取方向（两个主题都是「比画布亮/深一档」，同向）", () => {
     const dark = tokens.slice(tokens.search(/\[data-theme="dark"\]\s*\{/));
     const light = tokens.slice(0, tokens.search(/\[data-theme="dark"\]\s*\{/));
     expect(light).toMatch(/--user-bubble-bg:\s*hsl\(var\(--bg-300\)\);/);
-    expect(dark).toMatch(/--user-bubble-bg:\s*hsl\(var\(--bg-000\)\);/);
+    // 2026-10-20 更正：暗色与亮色同向——都取「比画布深/亮一档」的 bg-300，
+    // 不再反向取 bg-000（原方向断言建立在「暗色越抬升越暗」这个已被推翻的前提上）。
+    expect(dark).toMatch(/--user-bubble-bg:\s*hsl\(var\(--bg-300\)\);/);
   });
 
   it("主按钮语义：暗色 = 抬升暖面 + 亮字（不是「text-000 当底」翻成白底黑字）", () => {
@@ -81,11 +91,49 @@ describe("暗色分层与文字（2026-10-17 Claude 暖暗盘 · 规范 §4.1 �
     expect(dark).not.toMatch(/--btn-primary-bg:\s*hsl\(var\(--text-000\)\);/);
   });
 
-  it("语义三色：success / warning(risk) / danger", () => {
-    expect(tokens).toMatch(/--success:\s*142 69\.2% 58%;/);        // #4ADE80
-    expect(tokens).toMatch(/--color-risk:\s*38\.3 89\.9% 61\.4%;/); // #F5B544
-    expect(tokens).toMatch(/--color-danger:\s*0 90\.6% 70\.8%;/);   // #F87171
-    for (const hex of ["#4ADE80", "#F5B544", "#F87171"]) expect(tokens).toContain(hex);
+  it("语义三色挂角色层（亮暗分档由角色承担，语义层只写引用）", () => {
+    // 2026-10-20：success/risk/danger 改为引用 role-* 而非写死色值。
+    // 这样暗色块只需重定义 role-*，语义名自动换档——组件始终只写一个名。
+    expect(tokens).toMatch(/--success:\s*var\(--role-success-450\);/);
+    expect(tokens).toMatch(/--color-risk:\s*var\(--role-warning-450\);/);
+    expect(tokens).toMatch(/--color-danger:\s*var\(--role-danger-300\);/);
+  });
+
+  it("角色层四族齐全（accent / danger / success / warning），每族带 fill / fill-hover / on", () => {
+    for (const role of ["accent", "danger", "success", "warning"]) {
+      // 刻度族
+      for (const step of ["50", "100", "250", "300", "400", "450", "600", "700", "800"]) {
+        expect(tokens, `--role-${role}-${step}`).toMatch(new RegExp(`--role-${role}-${step}:\\s`));
+      }
+      // 派生位（Claude 实测接法：fill=450、fill-hover=400、on=前景色）
+      expect(tokens, `--role-${role}-fill`).toMatch(new RegExp(`--role-${role}-fill:\\s*var\\(--role-${role}-450\\);`));
+      expect(tokens, `--role-${role}-fill-hover`).toMatch(new RegExp(`--role-${role}-fill-hover:\\s*var\\(--role-${role}-400\\);`));
+      expect(tokens, `--role-${role}-on`).toMatch(new RegExp(`--role-${role}-on:\\s`));
+    }
+  });
+
+  it("暗色块只重定义角色层，不重复定义语义三色（分档单一事实源）", () => {
+    const dark = tokens.slice(tokens.search(/\[data-theme="dark"\]\s*\{/));
+    // 角色层在暗色块里有重定义
+    expect(dark).toMatch(/--role-success-450:\s*97 75% 32\.9%;/);
+    expect(dark).toMatch(/--role-danger-300:\s*0 90\.6% 70\.8%;/);
+    expect(dark).toMatch(/--role-warning-450:\s*38\.3 89\.9% 61\.4%;/);
+    // 语义三色在暗色块里**不**应再写死色值（否则角色层形同虚设）
+    expect(dark).not.toMatch(/--success:\s*\d/);
+    expect(dark).not.toMatch(/--color-danger:\s*\d/);
+    expect(dark).not.toMatch(/--color-risk:\s*\d/);
+  });
+
+  it("语义三色解析：亮暗各自落在不同档（角色翻转生效）", () => {
+    const light = tokens.slice(0, tokens.search(/\[data-theme="dark"\]\s*\{/));
+    const dark = tokens.slice(tokens.search(/\[data-theme="dark"\]\s*\{/));
+    const pick = (src: string, name: string) => new RegExp(`${name}:\\s*([^;]+);`).exec(src)?.[1]?.trim();
+    // 亮色 success 取深侧（103°），暗色取提亮侧（97° 且 L 更高）
+    expect(pick(light, "--role-success-450")).toMatch(/^103 72\.3% 26\.9%$/);
+    expect(pick(dark, "--role-success-450")).toMatch(/^97 75% 32\.9%$/);
+    // danger 亮色 50.6% vs 暗色 70.8% —— 暗色必须更亮
+    expect(pick(light, "--role-danger-300")).toBe("0 72.2% 50.6%");
+    expect(pick(dark, "--role-danger-300")).toBe("0 90.6% 70.8%");
   });
 });
 
@@ -112,22 +160,106 @@ describe("亮色同构一套（Claude 暖米白画布）", () => {
   });
 });
 
+describe("字重纪律（2026-10-20）", () => {
+  it("组件样式层不许再写裸字重——统一走 --fw-* 令牌（暗色减重才生效）", () => {
+    // 存量 61 处已全量迁移。留这条守卫：新写 `font-weight: 600` 会在暗色里偏重且无从统一调。
+    const bare = [...styles.matchAll(/font-weight:\s*(400|500|550|600|700)\b/g)].map((m) => m[0]);
+    expect(bare, `样式层仍有裸字重：${bare.join(", ")}`).toEqual([]);
+  });
+
+  it("字重令牌在双主题都有定义（漏一档 ⇒ 暗色 var 悬空、退回继承）", () => {
+    const light = tokens.slice(0, tokens.search(/\[data-theme="dark"\]\s*\{/));
+    const dark = tokens.slice(tokens.search(/\[data-theme="dark"\]\s*\{/));
+    for (const n of ["--fw-regular", "--fw-medium", "--fw-semibold", "--fw-bold", "--fw-heavy"]) {
+      expect(light, n).toMatch(new RegExp(`${n}:\\s*\\d+;`));
+      expect(dark, n).toMatch(new RegExp(`${n}:\\s*\\d+;`));
+    }
+  });
+});
+
+describe("动效刻度（2026-10-20 · Claude 实测 5 档时长 × 4 缓动）", () => {
+  it("五档时长齐备，且都在 Claude 实测值上", () => {
+    for (const [name, val] of [
+      ["--t-instant", "60ms"], ["--t-fast", "140ms"], ["--t-med", "200ms"],
+      ["--t-slow", "300ms"], ["--t-slowest", "450ms"],
+    ] as const) {
+      expect(tokens, name).toMatch(new RegExp(`${name}:\\s*${val} `));
+    }
+  });
+
+  it("四族缓动齐备，Claude 实测曲线逐位一致", () => {
+    expect(tokens).toContain("--ease-out: cubic-bezier(0.165, 0.84, 0.44, 1)");
+    expect(tokens).toContain("--ease-snap: cubic-bezier(0.32, 0.72, 0, 1)");
+    expect(tokens).toContain("--ease-overshoot: cubic-bezier(0.34, 1.3, 0.64, 1)");
+    expect(tokens).toContain("--ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1)");
+  });
+
+  it("时长令牌不写裸缓动（缓动必须走 --ease-* 令牌，防同动作跨组件不一致）", () => {
+    const ladders = [...tokens.matchAll(/--t-(?:instant|fast|med|slow|slowest):\s*([^;]+);/g)].map((m) => m[1]);
+    expect(ladders.length).toBeGreaterThanOrEqual(5);
+    for (const v of ladders) expect(v).toContain("var(--ease-");
+  });
+});
+
+describe("字重刻度（2026-10-20 · Claude 实测非标准字重 + 暗色减重补偿）", () => {
+  it("五档语义字重齐备，semibold = 580（不是 600）", () => {
+    expect(tokens).toMatch(/--fw-regular:\s*400;/);
+    expect(tokens).toMatch(/--fw-medium:\s*500;/);
+    expect(tokens).toMatch(/--fw-semibold:\s*580;/);
+    expect(tokens).toMatch(/--fw-bold:\s*600;/);
+    expect(tokens).toMatch(/--fw-heavy:\s*700;/);
+  });
+
+  it("暗色整体减重（regular 360 / bold 580），换主题自动补偿", () => {
+    const dark = tokens.slice(tokens.search(/\[data-theme="dark"\]\s*\{/));
+    expect(dark).toMatch(/--fw-regular:\s*360;/);
+    expect(dark).toMatch(/--fw-semibold:\s*560;/);
+    expect(dark).toMatch(/--fw-bold:\s*580;/);
+    // 暗色每一档都必须 ≤ 亮色同名档（减重，不是加重）
+    const light = tokens.slice(0, tokens.search(/\[data-theme="dark"\]\s*\{/));
+    const pick = (src: string, n: string) => Number(new RegExp(`${n}:\\s*(\\d+);`).exec(src)?.[1] ?? -1);
+    for (const n of ["--fw-regular", "--fw-medium", "--fw-semibold", "--fw-bold", "--fw-heavy"]) {
+      expect(pick(dark, n), n).toBeLessThanOrEqual(pick(light, n));
+    }
+  });
+});
+
 describe("刻度重钉：4px 栅格 / 圆角三档 / 正文字号 / 阅读列 / 过渡区间", () => {
   it("圆角收敛 6 / 10 / 14", () => {
-    expect(tokens).toMatch(/--radius-sm:\s*calc\(0\.375rem \* var\(--rem-scale\)\);/);     // 6
-    expect(tokens).toMatch(/--radius-md:\s*calc\(0\.625rem \* var\(--rem-scale\)\);/);     // 10
-    expect(tokens).toMatch(/--radius-composer:\s*calc\(0\.875rem \* var\(--rem-scale\)\);/); // 14
+    expect(tokens).toMatch(/--radius-sm:\s*calc\(0\.375rem \* var\(--size-scale\)\);/);     // 6
+    expect(tokens).toMatch(/--radius-md:\s*calc\(0\.625rem \* var\(--size-scale\)\);/);     // 10
+    expect(tokens).toMatch(/--radius-composer:\s*calc\(0\.875rem \* var\(--size-scale\)\);/); // 14
   });
 
   it("正文 14.5 / 辅助 12.5 / 间距下探到 4 档", () => {
     expect(tokens).toMatch(/--fs-body-md:\s*calc\(0\.90625rem \* var\(--rem-scale\)\);/); // 14.5
     expect(tokens).toMatch(/--fs-caption-md:\s*calc\(0\.78125rem \* var\(--rem-scale\)\);/); // 12.5
-    expect(tokens).toMatch(/--space-xs:\s*calc\(0\.25rem \* var\(--rem-scale\)\);/); // 4
+    expect(tokens).toMatch(/--space-xs:\s*calc\(0\.25rem \* var\(--size-scale\)\);/); // 4
+  });
+
+  it("尺寸轴落到外壳/按钮：固定行高也乘 --size-scale（不再只有 1 处菜单项吃令牌）", () => {
+    for (const name of ["--h-row", "--h-btn", "--h-btn-sm", "--h-btn-lg", "--h-btn-xs", "--h-btn-2xs", "--w-row-action", "--h-row-action", "--w-switch", "--h-switch", "--d-switch-knob", "--sw-knob-inset", "--w-theme-thumb", "--h-theme-thumb", "--h-send"]) {
+      expect(tokens).toMatch(new RegExp(`${name}:\\s*calc\\([^)]*\\* var\\(--size-scale\\)\\)`));
+    }
+    expect(styles).toContain("height: var(--h-row)");
+    expect(styles).toContain("width: var(--h-send); height: var(--h-send)");
+    expect(styles).toContain("width: var(--h-btn-lg); height: var(--h-btn-lg)");
+    expect(styles).toContain("width: var(--h-btn-2xs); height: var(--h-btn-2xs)");
+    expect(styles).toContain("width: var(--h-row-action); height: var(--h-row-action)");
+    // 批 112：composer 的左「＋」、模型/权限芯片、上下文环也吃同一档
+    expect(styles).toContain("width: var(--h-btn-lg); height: var(--h-btn-lg)");
+    expect(styles).toContain("height: var(--h-btn-lg); padding: 0 var(--space-sm)");
+    expect(styles).toContain("width: 100%; height: 100%; transform: rotate(-90deg)");
+    expect(styles).toContain("width: var(--w-switch); height: var(--h-switch)");
+    expect(styles).toContain("left: calc(100% - var(--d-switch-knob) - var(--sw-knob-inset))");
+    expect(styles).toContain(".theme-thumb { width: var(--w-theme-thumb); height: var(--h-theme-thumb)");
   });
 
   it("阅读列 760px（P3-1 收口：brief 六 · 内容列限宽 760）；过渡 140ms ease-out（120–160ms 区间内）", () => {
     expect(tokens).toMatch(/--reading:\s*47\.5rem;/);
-    expect(tokens).toMatch(/--t-fast:\s*140ms ease-out;/);
+    // 2026-10-20：缓动改走 --ease-out 令牌（Claude --cds-ease-out 实测值），
+    // 断言「时长 140ms」这个真正的行为契约，不再钉 ease-out 的拼写。
+    expect(tokens).toMatch(/--t-fast:\s*140ms var\(--ease-out\);/);
   });
 });
 

@@ -1,0 +1,644 @@
+--- a/apps/desktop/design/desktop-design-spec.md
++++ b/apps/desktop/design/desktop-design-spec.md
+@@ -3,6 +3,18 @@
+ 用户最新指定直接使用 [Nwflower/dsh-claude-style](https://github.com/Nwflower/dsh-claude-style)。当前视觉层复用其 0.17.0、提交 `484ece039400ab45a97e935abb5bc47245845a96` 的主题源码，并经 `src/renderer/dsh-claude-style.css` 适配 Cairn。上游来源与接入范围见 `src/renderer/vendor/dsh-claude-style/README.md`，文件校验值见同目录 `UPSTREAM.json`。
+ 
+ 本文以下的旧配色、字体与控件像素记录保留为历史；与本次接入冲突时，以固定上游源码和 Cairn 适配层为准。任务、权限、会话、窗格等功能与安全契约继续适用。没有安装或替换官方 DSH 宿主。
++
++
++## 2026-10-20 官方 DSH 交互对照
++
++按用户补充要求，交互参考 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness/tree/687f282e8625c6b8d11ff58211a90524be2e4317)，此次核对提交为 `687f282e8625c6b8d11ff58211a90524be2e4317`。以下增量优先于旧蓝本中冲突的交互描述：
++
++- Normal / Thinking 模式把连续工具调用收成一条可展开摘要，执行中的调用和失败计数仍在摘要中；每次调用展开显示参数、返回内容和既有差异/产物入口。Verbose 继续显示全部调用详情。
++- 工具组与调用使用事件序号作为稳定键，追加调用、返回与最终回复不会重置手动展开选择。工具返回文本最多展示 10,000 字符，截断必须明示，原始事件保留。
++- 侧栏收起保留 48px 快捷栏（展开、新建、搜索、文件、终端、设置）；专注模式仍收起全部侧栏。项目分组折叠状态本地保存，搜索临时展开命中组，清除搜索恢复原选择。
++- 右侧窗格增加导航、添加和单面板聚焦，支持恢复原来的多面板布局；切换可见布局保留同一棵面板内容树。原有拖动、行高记忆、关闭和弹出入口继续有效。
++
++这是 Cairn 现有组件上的交互适配；官方 Cordis 插件宿主、完整 DockKit、四档视图和全轮过程折叠尚未迁入。验证与截图见 `outputs/desktop-official-interactions-2026-10-20/REPORT.md`。
+ 
+ ---
+ 
+--- a/apps/desktop/src/renderer/App.tsx
++++ b/apps/desktop/src/renderer/App.tsx
+@@ -17,6 +17,7 @@
+ import { askBelongsToSession, composerLockReason, continueAfterRun, drainQueue, dropQueued, fromSessionQueueEntries, isSessionEndDistillAsk, promoteQueued, shouldHealStaleRun, takeQueued, toSessionQueueEntries, type QueuedSend } from "./send-queue";
+ import { stripMarkdownForSpeech } from "./speech";
+ import { Sidebar } from "./components/Sidebar";
++import { SidebarRail } from "./components/SidebarRail";
+ import { NewProjectDialog } from "./components/NewProjectDialog";
+ import { AddProjectMenu } from "./components/AddProjectMenu";
+ import { QuickStarts } from "./components/QuickStarts";
+@@ -1994,7 +1995,12 @@
+     }
+     requestAnimationFrame(() => requestAnimationFrame(() => {
+       const el = streamEl?.querySelector(`[data-event-id="${String(eventId)}"]`);
+-      (el instanceof HTMLElement ? el : null)?.scrollIntoView({ behavior: scrollBehavior("smooth"), block: "center" });
++      // 工具组也可能收起；时间线跳转先沿既有披露入口展开，再定位。
++      const toggle = el?.closest(".toolcluster")?.querySelector<HTMLButtonElement>('.tool-group-toggle[aria-expanded="false"]');
++      toggle?.click();
++      requestAnimationFrame(() => {
++        (el instanceof HTMLElement ? el : null)?.scrollIntoView({ behavior: scrollBehavior("smooth"), block: "center" });
++      });
+     }));
+   }, [events, streamEl]);
+   // ── P3-1 滚动记忆：Map(sessionId → scrollTop) 存 App 内存——切走存、切回取；回底钮逻辑不动。──
+@@ -2550,6 +2556,14 @@
+         right={toolbarRight}
+       />
+       <div className="shell">
++        {sidebarCollapsed && !focusMode && <SidebarRail
++          onExpand={toggleSidebar}
++          onNewTask={newSession}
++          onSearch={handleOpenPalette}
++          onFiles={() => openPane("file")}
++          onTerminal={() => openPane("terminal")}
++          onSettings={() => { setSettingsSection(undefined); setSettingsOpen(true); }}
++        />}
+         <div className="side-wrap" data-dsh-claude-part="sidebar-column" style={{ width: sidebarWidth }}>
+         <Sidebar
+           projects={projects}
+@@ -3114,6 +3128,7 @@
+                       onPickResult={handlePickResult}
+                       {...(preview !== null && preview.status === "ready" && preview.url !== undefined ? { browserUrl: preview.url } : {})}
+                       onClose={closePane}
++                      onOpen={openPane}
+                       onReview={(text) => void send(text)}
+                       onReorder={(from, to) => setPaneTabs((tabs) => movePane(tabs, from, to))}
+                       onPopout={(kind) => { void window.agent.panePopout(kind, activeId ?? undefined); }}
+--- a/apps/desktop/src/renderer/components/PaneDock.tsx
++++ b/apps/desktop/src/renderer/components/PaneDock.tsx
+@@ -7,7 +7,7 @@
+ // 数据面全部来自 panes.ts 纯投影 + turnDelivery（既有）+ changeDiff（v4 通道，懒加载）。
+ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+ import "@xterm/xterm/css/xterm.css";
+-import { AlertTriangle, Check, ChevronRight, Crosshair, FileText, Folder, Loader2, MoreHorizontal, Plus, X } from "lucide-react";
++import { AlertTriangle, Check, ChevronRight, Crosshair, FileText, Folder, Loader2, MoreHorizontal, PanelsTopLeft, Plus, X } from "lucide-react";
+ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+ import { Cell, Grid, Gridline, useGridRef } from "react-resizable-panels";
+ import type { AgentEvent } from "../../../../../src/events";
+@@ -18,7 +18,7 @@
+ import { DiffView } from "./DiffView";
+ import { SidechatPane } from "./SidechatPane";
+ import { PathMenu } from "./PathMenu";
+-import { changedFileCount, composeReviewMessage, PANE_META, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, type PaneKind, type WorkerPaneItem } from "./panes";
++import { changedFileCount, composeReviewMessage, PANE_META, PANE_OPENABLE, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, type PaneKind, type WorkerPaneItem } from "./panes";
+ 
+ // PaneKind / PANE_META 的唯一事实源在 panes.ts（独立窗口路由同用）；此处 re-export 保接口。
+ export { PANE_META, PANE_OPENABLE, type PaneKind } from "./panes";
+@@ -868,6 +868,7 @@
+   tabs: readonly PaneKind[];
+   events: readonly AgentEvent[];
+   onClose: (kind: PaneKind) => void;
++  onOpen?: (kind: PaneKind) => void;
+   /** 行级评注一次性提交的去处（App 传 send → 新一轮/入队）；缺省 = 评注 UI 不出现。 */
+   onReview?: (text: string) => void;
+   /** 拖标题栏换位（from/to 为 tabs 下标）；缺省 = 不可拖。 */
+@@ -887,6 +888,14 @@
+ }): React.JSX.Element {
+   // 拖拽换位状态（HTML5 DnD；拖动中的格子给视觉反馈）。
+   const [dragIndex, setDragIndex] = useState<number | null>(null);
++  const [focusedPane, setFocusedPane] = useState<PaneKind | null>(null);
++  const focused = focusedPane !== null && props.tabs.includes(focusedPane) ? focusedPane : null;
++  const previousTabs = useRef(props.tabs);
++  useEffect(() => {
++    const added = props.tabs.find((kind) => !previousTabs.current.includes(kind));
++    if (focusedPane !== null) setFocusedPane(added ?? (props.tabs.includes(focusedPane) ? focusedPane : null));
++    previousTabs.current = props.tabs;
++  }, [props.tabs, focusedPane]);
+   // 右键路径菜单（§2.3）：窗格内坐标 + 目标；渲染层自绘（见 PathMenu）。
+   const [pathMenu, setPathMenu] = useState<{ x: number; y: number; rel: string; kind: "file" | "directory" } | null>(null);
+   const openPathMenu = (rel: string, kind: "file" | "directory", x: number, y: number): void => {
+@@ -922,23 +931,43 @@
+     );
+   }
+   return (
+-    <>
++    <div className="pane-workbench">
++    <nav className="pane-nav" aria-label="面板导航">
++      <div className="pane-nav-items">
++        {props.tabs.map((kind) => <button key={kind} className="pane-nav-item"
++          aria-label={`聚焦${PANE_META[kind].label}窗格`} aria-pressed={focused === kind}
++          onClick={() => setFocusedPane(kind)}>{PANE_META[kind].label}</button>)}
++      </div>
++      <button className="iconbtn sm" aria-label="恢复多面板布局" title="恢复多面板布局" aria-pressed={focused === null}
++        onClick={() => setFocusedPane(null)}><PanelsTopLeft size={15} /></button>
++      {props.onOpen !== undefined && <DropdownMenu.Root>
++        <DropdownMenu.Trigger asChild><button className="iconbtn sm" aria-label="添加面板" title="添加面板"><Plus size={15} /></button></DropdownMenu.Trigger>
++        <DropdownMenu.Portal><DropdownMenu.Content className="pop-rd" sideOffset={5} align="end">
++          {PANE_OPENABLE.map((kind) => <DropdownMenu.Item key={kind} className="menu-item"
++            onSelect={() => { if (!props.tabs.includes(kind)) props.onOpen?.(kind); setFocusedPane(kind); }}>
++            <span>{PANE_META[kind].label}</span>{props.tabs.includes(kind) && <Check size={12} />}
++          </DropdownMenu.Item>)}
++        </DropdownMenu.Content></DropdownMenu.Portal>
++      </DropdownMenu.Root>}
++    </nav>
+     <Grid
+       gridRef={gridRef}
+       columns={1}
+       rows={rowTracks}
+       defaultLayout={{ rows: defaultRows }}
+       onLayoutChanged={(layout, meta) => {
++        if (focused !== null) return;
+         if (!meta.isUserInteraction) return;
+         savePaneRows(mergePaneRows(loadPaneRows(), layout.rows, props.tabs));
+       }}
+       className="pane-grid"
+       id="cairn-panes"
++      data-focused={focused ?? undefined}
+     >
+       {props.tabs.map((kind, i) => (
+         <Fragment key={kind}>
+           {i > 0 && <Gridline type="row" row={i} className="pane-gridline" />}
+-          <Cell column={0} row={i} className="pane-cell">
++          <Cell column={0} row={i} className="pane-cell" data-pane={kind} data-focused={focused === kind}>
+             <section className="pane-chunk" aria-label={`${PANE_META[kind].label}窗格`}>
+               <div
+                 className="pane-chunk-head"
+@@ -1023,7 +1052,7 @@
+         {...(props.onAttach !== undefined ? { onAttach: props.onAttach } : {})}
+       />
+     )}
+-    </>
++    </div>
+   );
+ }
+ 
+--- a/apps/desktop/src/renderer/components/Sidebar.tsx
++++ b/apps/desktop/src/renderer/components/Sidebar.tsx
+@@ -151,7 +151,7 @@
+           e.preventDefault();
+           const rows = Array.from(
+             e.currentTarget.closest(".sidenav")?.querySelectorAll<HTMLElement>(".session") ?? [],
+-          ).filter((el) => el.getClientRects().length > 0);
++          ).filter((el) => el.getClientRects().length > 0 && el.closest('.group[data-collapsed="true"]') === null);
+           const target = e.key === "Home" ? rows[0] : rows[rows.length - 1];
+           target?.focus();
+           return;
+@@ -160,10 +160,10 @@
+         e.preventDefault();
+         // 只把「看得见」的行算进移动序列：折叠组的行仍在 DOM 里（高度过渡要它），
+         // 但 visibility:hidden + 高度 0 ⇒ 键盘移过去会聚焦一个看不见的行。
+-        // 用 getClientRects 判真实占位（visibility:hidden 与 0 高度都会给出空数组）。
++        // getClientRects 不排除 visibility:hidden 的后代；同时排除已折叠组。
+         const rows = Array.from(
+           e.currentTarget.closest(".sidenav")?.querySelectorAll<HTMLElement>(".session") ?? [],
+-        ).filter((el) => el.getClientRects().length > 0);
++        ).filter((el) => el.getClientRects().length > 0 && el.closest('.group[data-collapsed="true"]') === null);
+         const at = rows.indexOf(e.currentTarget);
+         const next = rows[at + (e.key === "ArrowDown" ? 1 : -1)];
+         next?.focus();
+@@ -444,7 +444,16 @@
+ }
+ 
+ export function Sidebar(props: SidebarProps): React.JSX.Element {
+-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
++  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => {
++    try {
++      if (typeof window === "undefined") return new Set();
++      const saved: unknown = JSON.parse(window.localStorage.getItem("cairn.sidebar.groups.v1") ?? "null");
++      return new Set(Array.isArray(saved) ? saved.filter((key): key is string => typeof key === "string") : []);
++    } catch { return new Set(); }
++  });
++  useEffect(() => {
++    try { window.localStorage.setItem("cairn.sidebar.groups.v1", JSON.stringify([...collapsed])); } catch { /* 本窗口仍然生效 */ }
++  }, [collapsed]);
+   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
+   const [renamingProject, setRenamingProject] = useState<{ id: string; value: string } | null>(null);
+   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; project: ProjectRecord } | null>(null);
+@@ -465,9 +474,10 @@
+   const searchOpen = sessionQuery.trim() !== "";
+ 
+   const toggleGroup = (key: string): void => {
++    if (searchOpen) setSessionQuery("");
+     setCollapsed((prev) => {
+       const next = new Set(prev);
+-      if (next.has(key)) next.delete(key); else next.add(key);
++      if (next.has(key) && !searchOpen) next.delete(key); else next.add(key);
+       return next;
+     });
+   };
+@@ -628,7 +638,7 @@
+           const key = g.workspace === OTHER_WORKSPACE ? "\u0000temp" : g.workspace;
+           const project = byPath.get(g.workspace) ?? null;
+           const isTemp = project === null;
+-          const isCollapsed = collapsed.has(key);
++          const isCollapsed = !searchOpen && collapsed.has(key);
+           const activeGroup = !isTemp && g.workspace === props.activeWorkspace;
+           const busyDot = g.sessions.some((s) => props.running.has(s.id) || props.waitingIds.has(s.id));
+           const sections = projectSections(g.sessions, now);
+@@ -727,11 +737,11 @@
+           );
+         })}
+         {visibleArchived.length > 0 && (
+-          <div className="group" data-archived="true" data-collapsed={collapsed.has("\u0000archived")}>
++          <div className="group" data-archived="true" data-collapsed={!searchOpen && collapsed.has("\u0000archived")}>
+             <div className="group-head" title={STR.sidebar.archivedTip}>
+               <button
+                 className="group-toggle"
+-                aria-expanded={!collapsed.has("\u0000archived")}
++                aria-expanded={searchOpen || !collapsed.has("\u0000archived")}
+                 title={STR.sidebar.collapseTip}
+                 onClick={() => toggleGroup("\u0000archived")}
+               >
+--- a/apps/desktop/src/renderer/components/Stream.tsx
++++ b/apps/desktop/src/renderer/components/Stream.tsx
+@@ -12,7 +12,7 @@
+ // data-round-anchor、think-live/think-body/think-elapsed/aria 全套、复制/还原 aria-label ——
+ // 全部逐字保留（本文件换形态与图标，不动锚）。
+ // 图标 = lucide-react（ADR 0003）。
+-import { Fragment, useEffect, useState } from "react";
++import { Fragment, useEffect, useId, useState } from "react";
+ import { AlertTriangle, Check, ChevronRight, ChevronUp, Copy, Download, Eye, FileCode2, FileText, Folder, GitBranch, History, Image as ImageIcon, Loader2, Pencil, Pin, RotateCcw, RotateCw, Sparkles, Square, ThumbsDown, ThumbsUp, Volume2 } from "lucide-react";
+ import { relativeTime, type StreamRow } from "../projections";
+ import { userMessageCopy } from "../transcript";
+@@ -141,6 +141,13 @@
+               <pre>{r.summary}</pre>
+             </div>
+           )}
++          {r.output !== undefined && (
++            <div className="kv tool-output" data-failed={r.ok === false}>
++              <span className="k">返回内容</span>
++              <pre>{r.output === "" ? "（空输出）" : r.output}</pre>
++              {r.outputTruncated && <span className="tool-output-note">仅显示前 10,000 字符；完整内容可在事件日志中查看。</span>}
++            </div>
++          )}
+         {/* 行内 diff（P3-1 Step 2 · 计划稿）：写文件类且已成功收口——changeDiff 懒加载 + DiffView 复用。 */}
+         {diffPath !== null && r.ok === true && (
+           <div className="kv">
+@@ -174,6 +181,35 @@
+         )}
+         </div>
+       )}
++    </div>
++  );
++}
++
++/** 摘要 → 调用列表 → 单次输入/输出；展开选择不随流式追加或收口重置。 */
++function ToolCluster(props: { rows: Extract<StreamRow, { kind: "tool" }>[]; view?: ViewMode; onOpenArtifact?: StreamActions["onOpenArtifact"] }) {
++  const [expanded, setExpanded] = useState(false);
++  const id = useId();
++  const open = props.view === undefined || props.view === "verbose" || expanded;
++  const pending = props.rows.filter((r) => r.pending);
++  const failures = props.rows.filter((r) => r.ok === false);
++  const latest = pending.at(-1);
++  const failure = failures.at(-1);
++  return (
++    <div className="toolcluster" data-tool-group={String(props.rows[0]?.seq)}>
++      {props.view !== undefined && props.view !== "verbose" && (
++        <button className="tool-group-toggle" aria-expanded={open} aria-controls={id} onClick={() => setExpanded(!expanded)}>
++          <ChevronRight className="chev" size={12} aria-hidden="true" />
++          <ToolGlyph {...(latest !== undefined ? { pending: true } : { ok: failures.length === 0 })} />
++          <span>{props.rows.length} 次工具调用</span>
++          {latest !== undefined && <span className="tool-group-detail">执行中 · {toolVerb(latest.tool) ?? latest.tool} {latest.summary}</span>}
++          {failures.length > 0 && <span className="tool-group-failure">{failures.length} 次失败{!open && failure?.output ? ` · ${truncateSummary(failure.output, 80)}` : ""}</span>}
++        </button>
++      )}
++      <div id={id} className="tool-group-body" hidden={!open}>
++        {props.rows.map((r) => <ToolRow key={r.seq} row={r}
++          {...(props.view !== undefined ? { view: props.view } : {})}
++          {...(props.onOpenArtifact !== undefined ? { onOpenArtifact: props.onOpenArtifact } : {})} />)}
++      </div>
+     </div>
+   );
+ }
+@@ -388,32 +424,21 @@
+   const renderGroup = (rows: readonly StreamRow[], canFold: boolean): Array<{ key: string; node: React.ReactNode }> => {
+     const out: Array<{ key: string; node: React.ReactNode }> = [];
+     let cluster: Extract<StreamRow, { kind: "tool" }>[] = [];
+-    let clusterStart = 0;
+-    let n = 0;
+     const flush = () => {
+       if (cluster.length === 0) return;
+       const toolRows = cluster;
+-      const key = `c${String(clusterStart)}`;
++      const key = `c${String(toolRows[0]!.seq)}`;
+       cluster = [];
+       out.push({
+         key,
+         node: (
+-          <div className="toolcluster" key={key}>
+-            {toolRows.map((r, i) => (
+-              <ToolRow
+-                key={i}
+-                row={r}
+-                {...(view !== undefined ? { view } : {})}
+-                {...(actions?.onOpenArtifact !== undefined ? { onOpenArtifact: actions.onOpenArtifact } : {})}
+-              />
+-            ))}
+-          </div>
++          <ToolCluster rows={toolRows}
++            {...(view !== undefined ? { view } : {})}
++            {...(actions?.onOpenArtifact !== undefined ? { onOpenArtifact: actions.onOpenArtifact } : {})} />
+         ),
+       });
+     };
+     for (const r of rows) {
+-      n += 1;
+-      clusterStart = n;
+       switch (r.kind) {
+         case "tool":
+           cluster.push(r);
+--- a/apps/desktop/src/renderer/projections.ts
++++ b/apps/desktop/src/renderer/projections.ts
+@@ -13,7 +13,7 @@
+ export type StreamRow =
+   | { kind: "user"; text: string; ts?: number; seq: number; round: number; attachments?: readonly { path: string; kind: "file" | "directory" }[] }
+   | { kind: "assistant"; text: string; live?: boolean; thinking?: string; ts?: number; seq: number; eventId: number; round: number } // live=true = delta 流式中尚未被终稿取代的未结桶行；thinking = 同一 callId 下累计的思考正文
+-  | { kind: "tool"; tool: string; summary: string; args?: string; pending?: boolean; ok?: boolean; ts?: number; seq: number
++  | { kind: "tool"; tool: string; summary: string; args?: string; output?: string; outputTruncated?: boolean; pending?: boolean; ok?: boolean; ts?: number; seq: number
+       /** tool_result 收口的到达时间（P3-1 折叠行耗时 = then − ts；拿不到不显）。 */
+       then?: number
+       /** 产物引用（本次调用交付给用户的东西）。从前聊天里只有文字回执 ⇒ 用户看不到 agent
+@@ -216,6 +216,10 @@
+         if (row) {
+           row.pending = false;
+           row.ok = e.ok;
++          if (typeof e.output === "string") {
++            row.output = e.output.slice(0, 10000);
++            if (e.output.length > 10000) row.outputTruncated = true;
++          }
+           if (e.ts !== undefined) row.then = e.ts; // P3-1：耗时的落地端（ts→then 一段）
+           // 只认**成功**的产物：失败的那一笔没有可看的东西（写盘被拒 / 渲染超时）。
+           if (e.ok && e.artifact !== undefined) row.artifact = e.artifact;
+--- a/apps/desktop/src/renderer/styles.css
++++ b/apps/desktop/src/renderer/styles.css
+@@ -2336,3 +2336,35 @@
+ }
+ 
+ @keyframes gc-in { from { opacity: 0; transform: translateY(3px); } }
++
++/* 官方 DSH 的摘要/披露层级，沿用 Cairn 的 Claude Style 色值与字号。 */
++.tool-group-toggle { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; min-height: 30px; max-width: 100%; padding: 3px 6px; border-radius: var(--radius-sm); font-size: var(--fs-caption-sm); color: hsl(var(--text-200)); text-align: left; }
++.tool-group-toggle > span:not([class]) { flex: none; white-space: nowrap; }
++.tool-group-toggle:hover { background: var(--alpha-1); }
++.tool-group-toggle[aria-expanded="true"] > .chev { transform: rotate(90deg); }
++.tool-group-detail { color: hsl(var(--text-400)); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.tool-group-failure { color: hsl(var(--color-risk)); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.tool-group-body { display: flex; flex-direction: column; gap: 6px; }
++.tool-group-body[hidden] { display: none; }
++.tool-group-toggle + .tool-group-body { margin: 4px 0 6px 14px; max-height: min(400px, 50vh); overflow: auto; }
++.tool-body > .kv + .kv { margin-top: 10px; }
++.tool-output[data-failed="true"] pre { color: hsl(var(--color-risk)); }
++.tool-output-note { display: block; margin-top: 4px; color: hsl(var(--text-400)); font-size: var(--fs-caption-sm); }
++.sidebar-rail { width: 48px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0; background: hsl(var(--bg-200)); border-right: 1px solid var(--hairline); }
++.shell:has(> .sidebar-rail) { grid-template-columns: 48px auto minmax(0, 1fr); }
++body[data-dsh-claude-style] .app[data-sidebar="collapsed"] .side-wrap { border: 0; }
++.sidebar-rail .iconbtn { width: 34px; height: 34px; flex: none; }
++.rail-divider { width: 20px; height: 1px; background: var(--hairline); margin: 6px 0; }
++.sidebar-rail .rail-settings { margin-top: auto; }
++.pane-workbench { display: flex; flex-direction: column; height: 100%; min-height: 0; }
++.pane-nav { display: flex; align-items: center; gap: 3px; padding: 5px 7px; border-bottom: 1px solid var(--hairline); flex: none; }
++.pane-nav-items { display: flex; flex: 1; min-width: 0; overflow-x: auto; gap: 3px; }
++.pane-nav-item { flex: none; font-size: var(--fs-caption-sm); color: hsl(var(--text-400)); padding: 5px 8px; border-radius: var(--radius-sm); }
++.pane-nav-item:hover, .pane-nav-item[aria-pressed="true"] { color: hsl(var(--text-100)); background: var(--alpha-2); }
++.pane-nav > .iconbtn { flex: none; }
++.pane-workbench > .pane-grid { flex: 1; min-height: 0; height: auto; }
++/* 同一棵内容树：聚焦仅改变可见布局，终端、浏览器与表单不重挂载。 */
++.pane-grid[data-focused] { display: block !important; position: relative; }
++.pane-grid[data-focused] > .pane-gridline { display: none; }
++.pane-grid[data-focused] > .pane-cell { display: none; position: absolute; inset: 0; }
++.pane-grid[data-focused] > .pane-cell[data-focused="true"] { display: block; }
+--- /dev/null
++++ b/apps/desktop/src/renderer/components/SidebarRail.tsx
+@@ -0,0 +1,21 @@
++import { Folder, PanelLeft, Plus, Search, Settings2, Terminal } from "lucide-react";
++
++/** 收起侧栏后仍可继续工作；动作复用展开态的同一入口。 */
++export function SidebarRail(props: {
++  onExpand: () => void;
++  onNewTask: () => void;
++  onSearch: () => void;
++  onFiles: () => void;
++  onTerminal: () => void;
++  onSettings: () => void;
++}) {
++  return <nav className="sidebar-rail" aria-label="侧栏快捷入口">
++    <button className="iconbtn" aria-label="展开侧栏" title="展开侧栏（⌘B）" onClick={props.onExpand}><PanelLeft size={17} /></button>
++    <button className="iconbtn" aria-label="新建任务" title="新建任务（⌘N）" onClick={props.onNewTask}><Plus size={18} /></button>
++    <button className="iconbtn" aria-label="搜索会话与命令" title="搜索会话与命令（⌘K）" onClick={props.onSearch}><Search size={17} /></button>
++    <div className="rail-divider" />
++    <button className="iconbtn" aria-label="打开文件窗格" title="工作区文件" onClick={props.onFiles}><Folder size={17} /></button>
++    <button className="iconbtn" aria-label="打开终端窗格" title="终端" onClick={props.onTerminal}><Terminal size={17} /></button>
++    <button className="iconbtn rail-settings" aria-label="打开设置" title="设置与偏好" onClick={props.onSettings}><Settings2 size={17} /></button>
++  </nav>;
++}
+--- /dev/null
++++ b/apps/desktop/scripts/interaction-smoke.cjs
+@@ -0,0 +1,110 @@
++// 用真实 renderer + 合成 AgentApi 验证工具披露、侧栏与面板交互；不运行模型，不使用或清空产品用户数据。
++// 先 pnpm --filter cairn-desktop build，再 pnpm --filter cairn-desktop exec electron scripts/layout-smoke.cjs [输出目录]
++const { app, BrowserWindow, nativeTheme } = require("electron");
++const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
++const { join, resolve } = require("node:path");
++const { tmpdir } = require("node:os");
++
++const profile = mkdtempSync(join(tmpdir(), "cairn-interactions-profile-"));
++app.setPath("userData", profile);
++nativeTheme.themeSource = "light";
++app.on("quit", () => { rmSync(profile, { recursive: true, force: true }); });
++const out = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-interactions-"));
++mkdirSync(out, { recursive: true });
++
++async function main() {
++  await app.whenReady();
++  const protocol = readFileSync(join(__dirname, "../../../src/main/ipc-protocol.ts"), "utf8");
++  const version = Number(protocol.match(/IPC_PROTOCOL_VERSION\s*=\s*(\d+)/)[1]);
++  const start = protocol.indexOf("export interface AgentApi");
++  const body = protocol.slice(start, protocol.indexOf("\n}", start));
++  const starts = [...body.matchAll(/^\s{2}(\w+)\??\s*[(<]/gm)];
++  const members = starts.map((s, i) => ({
++    name: s[1],
++    isArray: /Promise<[^>]*\[\]/.test(body.slice(s.index, starts[i + 1]?.index ?? body.length)),
++  }));
++  const win = new BrowserWindow({
++    width: 1440, height: 900, show: false,
++    webPreferences: {
++      preload: join(__dirname, "ui-gallery-preload.cjs"),
++      additionalArguments: ["--cairn-api-members=" + JSON.stringify(members), "--cairn-protocol-version=" + version, "--cairn-interaction-fixture"],
++    },
++  });
++  const errors = [];
++  win.webContents.on("console-message", (details) => { if (details.level === "error") { errors.push(details.message); console.error("renderer:", details.message); } });
++  const js = (source) => win.webContents.executeJavaScript(source).catch((err) => { console.error("操作失败:", source); throw err; });
++  const pause = () => new Promise((r) => setTimeout(r, 350));
++  const shot = async (name) => { await pause(); writeFileSync(join(out, name + ".png"), (await win.webContents.capturePage()).toPNG()); };
++  const checks = [];
++  const check = (name, ok, detail) => { checks.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name} ${JSON.stringify(detail)}`); };
++  await win.loadFile(join(__dirname, "../dist/index.html"));
++  await pause();
++  const click = (selector) => js(`document.querySelector(${JSON.stringify(selector)}).click()`);
++  const pointerClick = async (selector) => {
++    const point = await js(`(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: Math.round(r.left + r.width/2), y: Math.round(r.top+r.height/2) }; })()`);
++    win.webContents.sendInputEvent({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 });
++    win.webContents.sendInputEvent({ type: 'mouseUp', ...point, button: 'left', clickCount: 1 });
++  };
++  const read = (source) => js(`(() => { ${source} })()`);
++  const setInput = (selector, value) => js(`(() => {
++    const el = document.querySelector(${JSON.stringify(selector)});
++    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, ${JSON.stringify(value)});
++    el.dispatchEvent(new Event('input', { bubbles: true }));
++  })()`);
++  await click('.session'); await pause();
++  let state = await read(`const b = document.querySelector('.tool-group-toggle'); return { text: b.textContent, open: b.getAttribute('aria-expanded'), hidden: document.querySelector('.tool-group-body').hidden };`);
++  check('工具组默认收起，执行中与失败原因仍可见', state.open === 'false' && state.hidden && state.text.includes('执行中') && state.text.includes('Assertion failed'), state);
++  await shot('01-tools-folded');
++  await click('.tool-group-toggle'); await pause();
++  await click('.tool-head'); await pause();
++  check('展开调用可读真实返回内容', await read(`return document.querySelector('.tool-output').innerText.includes('export const desktop = true;');`));
++  await js(`document.querySelector('.toolcluster').dataset.identity = 'retained'; window.agent.run({ sessionId: 's1', text: 'synthetic completion' });`);
++  await pause();
++  state = await read(`const g = document.querySelector('.toolcluster'); return { identity: g.dataset.identity, open: g.querySelector('.tool-group-toggle').getAttribute('aria-expanded'), body: g.querySelector('.tool-output')?.innerText, count: g.querySelectorAll('.tool-head').length, summary: g.querySelector('.tool-group-toggle').textContent };`);
++  check('流式追加、收口和最终答复保留组与单次展开状态', state.identity === 'retained' && state.open === 'true' && state.body.includes('export const desktop') && state.count === 4 && !state.summary.includes('执行中'), state);
++  await shot('02-tools-expanded');
++  await click('.tool-group-toggle'); await pause();
++  await click('.group-toggle'); await pause();
++  check('项目组收起状态已保存', await read(`return JSON.parse(localStorage.getItem('cairn.sidebar.groups.v1')).length === 1;`));
++  await win.reload(); await pause();
++  check('重载恢复项目组收起状态', await read(`return document.querySelector('.group').dataset.collapsed === 'true';`));
++  await setInput('.side-search-input', 'routing'); await pause();
++  check('搜索自动显示收起组里的匹配会话', await read(`return document.querySelector('.group').dataset.collapsed === 'false' && document.querySelector('.session').getBoundingClientRect().height > 0;`));
++  await setInput('.side-search-input', ''); await pause();
++  check('清除搜索恢复原折叠选择', await read(`return document.querySelector('.group').dataset.collapsed === 'true';`));
++  await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', metaKey: true, bubbles: true }))`); await pause();
++  state = await read(`return { rail: document.querySelector('.sidebar-rail').getBoundingClientRect().width, side: document.querySelector('.side-wrap').getBoundingClientRect().width };`);
++  check('侧栏收起仍有可用快捷栏', state.rail === 48 && state.side === 0, state);
++  state = await read(`const g = document.querySelector('.main-group').getBoundingClientRect(); const rail = document.querySelector('.sidebar-rail').getBoundingClientRect(); return { top: g.top, railTop: rail.top, right: g.right, viewport: innerWidth, railHeight: rail.height };`);
++  check('快捷栏和主区同排且主区填满剩余宽高', Math.abs(state.top-state.railTop) < 1 && Math.abs(state.right-state.viewport) < 1 && state.railHeight > 600, state);
++  await click('.sidebar-rail [aria-label="打开文件窗格"]'); await pause();
++  check('快捷栏文件入口打开可交互的面板', await read(`return !!document.querySelector('[data-pane="file"]') && !document.querySelector('.inspector-col').hasAttribute('inert');`));
++  await pointerClick('[aria-label="添加面板"]'); await pause();
++  await js(`[...document.querySelectorAll('[role="menuitem"]')].find(el => el.textContent.trim() === '方案').click()`); await pause();
++  check('添加面板直接聚焦新开的面板', await read(`return document.querySelector('.pane-grid').dataset.focused === 'plan';`));
++  await click('[aria-label="聚焦文件窗格"]'); await pause();
++  await js(`document.querySelector('[data-pane="file"]').dataset.identity = 'retained-file'`);
++  await click('[aria-label="聚焦方案窗格"]'); await pause();
++  state = await read(`const file = document.querySelector('[data-pane="file"]'); return { display: getComputedStyle(file).display, plan: document.querySelector('[data-pane="plan"]').getBoundingClientRect().height, identity: file.dataset.identity };`);
++  check('聚焦切换隐藏其他面板并保留同一内容树', state.display === 'none' && state.plan > 100 && state.identity === 'retained-file', state);
++  await shot('03-focused-panel');
++  await click('[aria-label="恢复多面板布局"]'); await pause();
++  check('恢复原来的多面板布局', await read(`return !document.querySelector('.pane-grid').hasAttribute('data-focused') && [...document.querySelectorAll('.pane-cell')].every(el => el.getBoundingClientRect().height > 20);`));
++  await shot('04-split-panels');
++  await click('[aria-label="聚焦方案窗格"]'); await pause();
++  await click('[aria-label="关闭方案窗格"]'); await pause();
++  check('关闭聚焦面板后回到剩余面板', await read(`return !document.querySelector('[data-pane="plan"]') && document.querySelector('[data-pane="file"]').getBoundingClientRect().height > 100;`));
++  await win.setContentSize(880, 700); await pause();
++  state = await read(`return { overflow: document.documentElement.scrollWidth > innerWidth, rail: document.querySelector('.sidebar-rail').getBoundingClientRect().width };`);
++  check('窄窗快捷栏和面板无横向溢出', !state.overflow && state.rail === 48, state);
++  await shot('05-narrow');
++  nativeTheme.themeSource = 'dark'; await shot('06-dark');
++  check("渲染过程无控制台错误", errors.length === 0, errors);
++  writeFileSync(join(out, "checks.json"), JSON.stringify(checks, null, 2));
++  checks.forEach((c) => console.log(`${c.ok ? "PASS" : "FAIL"} ${c.name} ${JSON.stringify(c.detail)}`));
++  console.log(`截图与读数：${out}\n隔离测试配置：${profile}`);
++  app.exit(checks.every((c) => c.ok) ? 0 : 1);
++}
++const watchdog = setTimeout(() => { console.error("layout-smoke: 超时"); app.exit(1); }, 45_000);
++watchdog.unref();
++main().catch((err) => { console.error(err); app.exit(1); });
+--- /dev/null
++++ b/apps/desktop/tests/tool-disclosure.test.tsx
+@@ -0,0 +1,45 @@
++import { describe, expect, it } from "vitest";
++import { renderToStaticMarkup } from "react-dom/server";
++import type { AgentEvent } from "../../../src/events";
++import { projectStream } from "../src/renderer/projections";
++import { Stream } from "../src/renderer/components/Stream";
++
++const events = [
++  { type: "tool_call", id: "a", name: "read_file", args: { path: "a.ts" } },
++  { type: "tool_result", callId: "a", ok: true, output: "export const a = 1;" },
++  { type: "tool_call", id: "b", name: "run_shell", args: { command: "pnpm test" } },
++  { type: "tool_result", callId: "b", ok: false, output: "Assertion failed\nExpected 2, received 1" },
++] as AgentEvent[];
++
++describe("工具过程的分层披露", () => {
++  it("返回内容与调用配对，保留失败原因，限制巨量输出并明确标记截断", () => {
++    const rows = projectStream([...events, { type: "tool_call", id: "c", name: "read_file", args: {} },
++      { type: "tool_result", callId: "c", ok: true, output: "x".repeat(15000) }] as AgentEvent[]);
++    expect(rows[0]).toMatchObject({ output: "export const a = 1;" });
++    expect(rows[1]).toMatchObject({ ok: false, output: "Assertion failed\nExpected 2, received 1" });
++    expect(rows[2]).toMatchObject({ outputTruncated: true });
++    expect(rows[2]?.kind === "tool" && rows[2].output?.length).toBe(10000);
++  });
++
++  it("普通模式以工具组摘要开场，失败状态在收起时仍可见", () => {
++    const html = renderToStaticMarkup(<Stream rows={projectStream(events)} view="normal" streaming={false} />);
++    expect(html).toContain('class="tool-group-toggle"');
++    expect(html).toContain('aria-expanded="false"');
++    expect(html).toContain("2 次工具调用");
++    expect(html).toContain("1 次失败");
++    expect(html).toContain("Assertion failed");
++  });
++
++  it("详细模式显示输入和返回内容；输出当作文本转义，不执行 HTML", () => {
++    const rows = projectStream(events);
++    const html = renderToStaticMarkup(<Stream rows={rows} view="verbose" streaming={false} />);
++    expect(html).toContain("原始参数（JSON）");
++    expect(html).toContain("返回内容");
++    expect(html).toContain("Expected 2, received 1");
++    const escaped = renderToStaticMarkup(<Stream rows={projectStream([
++      ...events.slice(0, 1), { type: "tool_result", callId: "a", ok: true, output: '<script>alert("x")</script>' },
++    ] as AgentEvent[])} view="verbose" />);
++    expect(escaped).toContain("&lt;script&gt;");
++    expect(escaped).not.toContain("<script>");
++  });
++});
+--- /dev/null
++++ b/apps/desktop/tests/pane-disclosure.test.tsx
+@@ -0,0 +1,20 @@
++import { expect, it } from "vitest";
++import { renderToStaticMarkup } from "react-dom/server";
++import { PaneDock } from "../src/renderer/components/PaneDock";
++import { SidebarRail } from "../src/renderer/components/SidebarRail";
++const noop = () => undefined;
++it("多面板提供聚焦、恢复和添加入口，原布局与关闭入口保留", () => {
++  const html = renderToStaticMarkup(<PaneDock tabs={["changes", "plan"]} events={[]} onClose={noop} onOpen={noop} />);
++  expect(html).toContain('aria-label="面板导航"');
++  expect(html).toContain('aria-label="聚焦变更窗格"');
++  expect(html).toContain('aria-label="恢复多面板布局"');
++  expect(html).toContain('aria-label="添加面板"');
++  expect(html).toContain('aria-label="关闭变更窗格"');
++  expect(html).toContain("pane-grid");
++});
++it("收起侧栏仍可新建、搜索、打开文件和设置", () => {
++  const html = renderToStaticMarkup(<SidebarRail onExpand={noop} onNewTask={noop} onSearch={noop} onFiles={noop} onTerminal={noop} onSettings={noop} />);
++  for (const label of ["展开侧栏", "新建任务", "搜索会话与命令", "打开文件窗格", "打开终端窗格", "打开设置"]) {
++    expect(html).toContain(`aria-label="${label}"`);
++  }
++});
+--- a/apps/desktop/scripts/ui-gallery-preload.cjs
++++ b/apps/desktop/scripts/ui-gallery-preload.cjs
+@@ -141,4 +141,32 @@
+ // 协议版本必须与渲染层期望一致，否则渲染层亮「协议版本失配」fatal 面——画廊要的是产品面。
+ stub.protocolVersion = reply(Number(argOf("--cairn-protocol-version=", "0")));
+ 
++// 可选交互夹具：只在独立 smoke 窗口显式传参时启用，不进入产品桥。
++if (process.argv.includes("--cairn-interaction-fixture")) {
++  const listeners = new Set();
++  const history = [
++    { type: "user_message", content: "检查桌面交互，保留完整工具记录", ts: now - 5000 },
++    { type: "tool_call", id: "read", name: "read_file", args: { path: "src/main/settings.ts" }, ts: now - 4000 },
++    { type: "tool_result", callId: "read", ok: true, output: "export const desktop = true;", ts: now - 3500 },
++    { type: "tool_call", id: "test", name: "run_shell", args: { command: "pnpm test" }, ts: now - 3000 },
++    { type: "tool_result", callId: "test", ok: false, output: "Assertion failed\nExpected 2, received 1", ts: now - 2500 },
++    { type: "tool_call", id: "fetch", name: "web_fetch", args: { url: "https://example.com/docs" }, ts: now - 2000 },
++  ];
++  stub.openSession = reply(() => ({ events: history }));
++  stub.onEvent = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
++  stub.run = async () => {
++    const events = [
++      { type: "tool_result", callId: "fetch", ok: true, output: "Documentation loaded.", ts: Date.now() },
++      { type: "tool_call", id: "next", name: "list_dir", args: { path: "apps/desktop" }, ts: Date.now() },
++      { type: "tool_result", callId: "next", ok: true, output: "src\ntests\nscripts", ts: Date.now() },
++      { type: "assistant_message", content: "检查完成。工具记录可随时展开查看。", ts: Date.now() },
++    ];
++    for (const e of events) {
++      history.push(e);
++      for (const listener of listeners) listener({ ...e, session_id: "s1" });
++    }
++    return { ok: true };
++  };
++}
++
+ contextBridge.exposeInMainWorld("agent", stub);

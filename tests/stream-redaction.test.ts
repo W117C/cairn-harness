@@ -61,6 +61,13 @@ const SAMPLES: Record<string, { event: Record<string, unknown>; secrets: string[
   },
   goal_stopped: { event: { type: "goal_stopped", reason: T(S1), turn: 3, evidence: "absent" }, secrets: [S1] },
   goal_paused: { event: { type: "goal_paused", reason: T(S1), turn: 2 }, secrets: [S1] },
+  // 还原事件：字段是**路径**，但路径必须与 tool_call.args 里的同一个路径同样地扫——
+  // 主会话落盘时 args.path 已过 redactSecrets，这条是主进程直接 append 的（不经 loop），
+  // 不扫就两处文本可能不同 ⇒ 改动面按路径配不上，还原白落。
+  file_restored: {
+    event: { type: "file_restored", path: `src/${S1}.ts`, snapshotId: `.agent/snapshots/${S2}/src/a.ts` },
+    secrets: [S1, S2],
+  },
 };
 
 describe("注册表每一型都必须对正文表过态", () => {

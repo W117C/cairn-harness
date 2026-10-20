@@ -23,6 +23,44 @@ export interface BrowserState {
 
 interface Entry { view: WebContentsView }
 
+/** 一次导航的处置（纯函数面；判卷直接钉，不靠源码断言）。 */
+export type NavigationDecision =
+  /** 放行。 */
+  | "allow"
+  /** 主框架跳未授权站点：拦下，并给渲染层一张待批卡（用户可显式授权这个 host）。 */
+  | "block-main"
+  /** 子框架（iframe）跳未授权站点：拦下，但**不**动本窗格的标题与待批卡
+   *  （页面的第三方 iframe 不是用户发起的导航；一个带十个追踪像素的页面不该弹十张卡）。 */
+  | "block-frame";
+
+/** 目标 host 是否在授权面内（纯函数面）。
+ *  只认 http/https；localhost 与回环地址视作本地面（与渲染层 sitePermissionFor 的 "local" 同口径）。 */
+export function hostAllowed(raw: string, allowedHosts: ReadonlySet<string>): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+    const host = u.hostname.toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" || allowedHosts.has(host);
+  } catch {
+    return false;
+  }
+}
+
+/** 一次导航的处置判据（纯函数面）。
+ *
+ *  **为什么主框架与子框架要分开**：`will-navigate` / `will-redirect` **只对主框架触发**。
+ *  旧实现只挂这两个 ⇒ 页面里一个 `<iframe src="https://intranet.corp/">` 就能把未授权站点
+ *  拉进窗格跑 JS/WebSocket，而 UI 上那份"已授权站点"清单（还能逐站移除）让人以为它限定了
+ *  这个窗格能到哪。Electron 44 有 `will-frame-navigate`（主框架与子框架都触发，带 isMainFrame）——
+ *  接上这一支才是完整的闸。
+ *
+ *  主框架那一支仍走 `will-navigate`（文案与待批语义逐字不变）；这里对主框架也返回 block-main，
+ *  是为了让判据本身自洽、可单测——接线时主框架那一支由 will-navigate 负责，不重复弹卡。 */
+export function decideNavigation(url: string, isMainFrame: boolean, allowedHosts: ReadonlySet<string>): NavigationDecision {
+  if (hostAllowed(url, allowedHosts)) return "allow";
+  return isMainFrame ? "block-main" : "block-frame";
+}
+
 export class BrowserHost {
   /** 已授权站点（host）。只由 open() 的显式导航写入——渲染层在地址栏提交前已问过用户。 */
   private readonly allowedHosts = new Set<string>();
@@ -78,14 +116,7 @@ export class BrowserHost {
   /** 目标 URL 是否允许在本窗格导航：只认 http/https，且 host 已由显式地址栏导航授权
    *  （localhost 视作本地面，与渲染层 sitePermissionFor 的 "local" 同口径）。 */
   private targetAllowed(raw: string): boolean {
-    try {
-      const u = new URL(raw);
-      if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-      const host = u.hostname.toLowerCase();
-      return host === "localhost" || host === "127.0.0.1" || host === "::1" || this.allowedHosts.has(host);
-    } catch {
-      return false;
-    }
+    return hostAllowed(raw, this.allowedHosts);
   }
 
   /** 创建（或复用后导航）某 id 的浏览器视图。 */
@@ -137,6 +168,20 @@ export class BrowserHost {
         const s = this.stateOf(id);
         if (s !== null) this.push({ ...s, title: `已拦截重定向：${target}（未授权站点）`, pending: { url: target } });
       });
+      // 子框架（iframe）导航（2026-10-19 独立评审追出）：`will-navigate` / `will-redirect`
+      // **只对主框架触发** ⇒ 页面里一个 `<iframe src="https://intranet.corp/">` 就能把未授权站点
+      // 拉进窗格跑 JS/WebSocket，而 UI 上那份"已授权站点"清单（还能逐站移除）让人以为它限定了
+      // 这个窗格能到哪。Electron 44 的 `will-frame-navigate` 主框架与子框架都触发（带 isMainFrame）
+      // —— 实测真 Electron 44：子框架跳转时 will-navigate 根本不触发，will-frame-navigate 触发。
+      // 主框架那一支仍由 will-navigate 负责（文案与待批语义逐字不变），这里只管子框架。
+      wc.on("will-frame-navigate", (details) => {
+        if (details.isMainFrame) return; // 主框架走 will-navigate
+        if (decideNavigation(details.url, false, this.allowedHosts) === "allow") return;
+        details.preventDefault();
+        // 不推标题、不给待批卡：第三方 iframe 不是用户发起的导航，一个带十个追踪像素的页面
+        // 不该弹十张卡、也不该把本窗格的标题改成"已拦截"。拦下的事实进主进程日志。
+        console.warn("[browser] 已拦截子框架跳转（未授权站点）:", details.url);
+      });
       // window.open / target=_blank（2026-10-17）：单窗格模型没有新标签页，默认行为会新开一个
       // 不受主窗口硬化约束的 Electron 窗口。这里把弹窗降级为「本窗格内导航」（仅 http/https），
       // 其余协议一律拒绝——既保留链接可用，又不把浏览面变成任意窗口工厂。
@@ -154,7 +199,14 @@ export class BrowserHost {
       wc.on("did-start-loading", () => { this.emit(id); });
       wc.on("did-stop-loading", () => { this.emit(id); });
       wc.on("page-title-updated", () => { this.emit(id); });
-      wc.on("did-fail-load", (_e, errorCode, errorDescription, validatedURL) => {
+      wc.on("did-fail-load", (_e, errorCode, errorDescription, validatedURL, isMainFrame) => {
+        // 只认主框架的失败（2026-10-19 独立评审追出）：Electron 的 did-fail-load 对**每个**帧都触发，
+        // 而旧实现忽略 isMainFrame ⇒ 页面里一个加载失败的第三方 iframe（被拦的广告帧、
+        // 拉不到的追踪像素）会把**那个 iframe 的 URL** 推成本窗格的 URL，标题也变成那句错误文案。
+        // 实测真 Electron 44：主框架 did-navigate 之后，子框架失败事件才到 ⇒ 覆盖掉正确的 URL，
+        // 而渲染层 `if (key === activeKeyRef.current && s.url !== "") setUrlDraft(s.url)`
+        // 会照单全收 ⇒ 地址栏变成用户从没打开过的 URL（可以据此点进任意外站）。
+        if (!isMainFrame) return;
         this.push({ id, url: validatedURL, title: `加载失败：${errorDescription}（${String(errorCode)}）`, canGoBack: wc.navigationHistory.canGoBack(), canGoForward: wc.navigationHistory.canGoForward(), loading: false });
       });
       // v7 元素选择：页面持有焦点时渲染层收不到 ⌘⇧S（原生视图独立 webContents）——

@@ -1,0 +1,9 @@
+warning: garbage found: .git/objects/40/tmp_obj_Ly3va4
+count: 513
+size: 28.03 MiB
+in-pack: 15932
+packs: 4
+size-pack: 61.54 MiB
+prune-packable: 0
+garbage: 1
+size-garbage: 0 bytes

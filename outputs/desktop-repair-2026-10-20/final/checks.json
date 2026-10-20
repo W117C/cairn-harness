@@ -1,0 +1,72 @@
+[
+  {
+    "name": "首页标题、项目与输入区共用阅读起点",
+    "ok": true,
+    "detail": {
+      "headingLeft": 479.5,
+      "composerLeft": 479.5,
+      "footer": "设置与偏好",
+      "canvas": "rgb(252, 252, 251)",
+      "radius": "18px",
+      "upstream": true
+    }
+  },
+  {
+    "name": "设置入口有可见文字，未伪装成用户头像",
+    "ok": true,
+    "detail": "设置与偏好"
+  },
+  {
+    "name": "已加载上游 Claude 主题与输入卡样式",
+    "ok": true,
+    "detail": {
+      "headingLeft": 479.5,
+      "composerLeft": 479.5,
+      "footer": "设置与偏好",
+      "canvas": "rgb(252, 252, 251)",
+      "radius": "18px",
+      "upstream": true
+    }
+  },
+  {
+    "name": "侧栏任务名获得至少六成行宽",
+    "ok": true,
+    "detail": {
+      "rowWidth": 186.5,
+      "titleWidth": 157.5
+    }
+  },
+  {
+    "name": "窄窗输入框完整可见，页面无横向溢出",
+    "ok": true,
+    "detail": {
+      "left": 216,
+      "right": 861,
+      "viewport": 880,
+      "overflow": false
+    }
+  },
+  {
+    "name": "暗色主题与 Markdown 链接使用上游配色",
+    "ok": true,
+    "detail": {
+      "canvas": "rgb(20, 20, 19)",
+      "link": "rgb(138, 180, 248)"
+    }
+  },
+  {
+    "name": "设置页顶栏显示当前页面并收起任务操作",
+    "ok": true,
+    "detail": {
+      "open": true,
+      "title": "设置",
+      "tools": "",
+      "taskButton": false
+    }
+  },
+  {
+    "name": "渲染过程无控制台错误",
+    "ok": true,
+    "detail": []
+  }
+]

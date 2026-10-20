@@ -1,0 +1,119 @@
+== 第二轮（用户授权收尾 ①②）2026-10-03 13:56:22 ==
+-- 动手前现状 --
+.                               05be8f9 [zcode]
+./.worktrees/gate-head-cert     b4b4db3 (detached HEAD)
+./.worktrees/gate-mutate-verify 204f017 (detached HEAD)
+./gate-mutate-321               7bb95b7 (detached HEAD)
+zcode HEAD=05be8f9
+gate 进程=0
+-- ② 另一会话那棵 gate-mutate-321：规则 120 三条 + 在用检查 --
+  head=7bb95b7 ref=HEAD   dirty=0  ancestor=YES  in_use=NO 
+  -> removed rc=0 exists=GONE
+-- 回收后 --
+  .                               05be8f9 [zcode]
+  ./.worktrees/gate-head-cert     b4b4db3 (detached HEAD)
+  ./.worktrees/gate-mutate-verify 204f017 (detached HEAD)
+=== 只查已跟踪文件的引用面（git grep 只看 index；未跟踪的取证目录/状态转储不算证人）
+  outputs/_audit-claims.md                                               已跟踪引用=45  outputs/bench-assembly-face-2026-10-02/prose-needle.log,outputs/bench-verify-beats-2026-10-02/prose-needle.log,outputs/claims-3faces-2026-10-03/prose-scan.log,
+  outputs/_audit-quality.md                                              已跟踪引用=43  outputs/bench-assembly-face-2026-10-02/prose-needle.log,outputs/bench-verify-beats-2026-10-02/prose-needle.log,outputs/claims-3faces-2026-10-03/prose-scan.log,
+  outputs/_audit-usability.md                                            已跟踪引用=43  outputs/bench-assembly-face-2026-10-02/prose-needle.log,outputs/bench-verify-beats-2026-10-02/prose-needle.log,outputs/claims-3faces-2026-10-03/prose-scan.log,
+  outputs/_audit2-capability.md                                          已跟踪引用=17  outputs/agent-capability-roadmap-2026-10-01/PLAN.md,outputs/bench-assembly-face-2026-10-02/prose-needle.log,outputs/bench-verify-beats-2026-10-02/prose-needle.log,
+  outputs/_audit2-quality.md                                             已跟踪引用=16  outputs/agent-capability-roadmap-2026-10-01/PLAN.md,outputs/bench-assembly-face-2026-10-02/prose-needle.log,outputs/bench-verify-beats-2026-10-02/prose-needle.log,
+  outputs/_audit-r1                                                      已跟踪引用=0   
+  outputs/eval-b4-diag                                                   已跟踪引用=14  outputs/bench-assembly-face-2026-10-02/prose-needle.log,outputs/bench-verify-beats-2026-10-02/prose-needle.log,outputs/claims-3faces-2026-10-03/prose-scan.log,
+  outputs/hold-callid-ruling-2026-09-30                                  已跟踪引用=14  outputs/bench-assembly-face-2026-10-02/prose-needle.log,outputs/bench-verify-beats-2026-10-02/prose-needle.log,outputs/claims-4faces-2026-10-03/needles.log,
+  outputs/shell-tail-repoint-kill-2026-10-01                             已跟踪引用=4   outputs/bench-assembly-face-2026-10-02/prose-needle.log,outputs/m10-face-false-red-2026-10-01/raw/ambient-contention-2025/tree-before.txt,outputs/m10-face-false-red-2026-10-01/raw/tree-before.txt,
+  outputs/eval-baseline-1/readings.json                                  已跟踪引用=14  outputs/bench-assembly-face-2026-10-02/prose-needle.log,outputs/bench-verify-beats-2026-10-02/prose-needle.log,outputs/claims-3faces-2026-10-03/prose-scan.log,
+  outputs/head-import-template-data-2026-10-02/head-cert-067a68a.log     已跟踪引用=0   
+  outputs/landing-1c40df7-2026-09-30/mutate-verify-229.log               已跟踪引用=13  outputs/bench-assembly-face-2026-10-02/prose-needle.log,outputs/bench-verify-beats-2026-10-02/prose-needle.log,outputs/claims-4faces-2026-10-03/needles.log,
+  outputs/landing-1c40df7-2026-09-30/readings.md                         已跟踪引用=13  outputs/bench-assembly-face-2026-10-02/prose-needle.log,outputs/bench-verify-beats-2026-10-02/prose-needle.log,outputs/claims-4faces-2026-10-03/needles.log,
+  outputs/memory-degradation-2026-10-03/docs-check-postcommit.log        已跟踪引用=0   
+  outputs/needles-distribution-2026-10-03/docs-check-postcommit.log      已跟踪引用=0   
+  outputs/needles-distribution-2026-10-03/judge-318a.log                 已跟踪引用=0   
+  outputs/needles-distribution-2026-10-03/judge-318b.log                 已跟踪引用=0   
+  outputs/retry-backoff-2026-10-02/head-cert-a674793.log                 已跟踪引用=0   
+  outputs/summary-coverage-2026-10-02/post-commit-checks.log             已跟踪引用=0   
+  outputs/witness-face-widen-290b-2026-10-01/docs-check-post-credential.log 已跟踪引用=2   outputs/m10-face-false-red-2026-10-01/raw/ambient-contention-2025/tree-before.txt,outputs/m10-face-false-red-2026-10-01/raw/tree-before.txt,
+
+=== 只认权威引用面：PROGRESS.md / docs/ / tests/ / scripts/ / apps/ / AGENTS.md / README.md / BLOCKED.md
+  outputs/_audit-claims.md                                               权威引用=0   
+  outputs/_audit-quality.md                                              权威引用=0   
+  outputs/_audit-usability.md                                            权威引用=0   
+  outputs/_audit2-capability.md                                          权威引用=0   
+  outputs/_audit2-quality.md                                             权威引用=1   scripts/ci/README.md 
+  outputs/_audit-r1                                                      权威引用=0   
+  outputs/eval-b4-diag                                                   权威引用=0   
+  outputs/hold-callid-ruling-2026-09-30                                  权威引用=0   
+  outputs/shell-tail-repoint-kill-2026-10-01                             权威引用=0   
+  outputs/eval-baseline-1/readings.json                                  权威引用=0   
+  outputs/head-import-template-data-2026-10-02/head-cert-067a68a.log     权威引用=0   
+  outputs/landing-1c40df7-2026-09-30/mutate-verify-229.log               权威引用=0   
+  outputs/landing-1c40df7-2026-09-30/readings.md                         权威引用=0   
+  outputs/memory-degradation-2026-10-03/docs-check-postcommit.log        权威引用=0   
+  outputs/needles-distribution-2026-10-03/docs-check-postcommit.log      权威引用=0   
+  outputs/needles-distribution-2026-10-03/judge-318a.log                 权威引用=0   
+  outputs/needles-distribution-2026-10-03/judge-318b.log                 权威引用=0   
+  outputs/retry-backoff-2026-10-02/head-cert-a674793.log                 权威引用=0   
+  outputs/summary-coverage-2026-10-02/post-commit-checks.log             权威引用=0   
+  outputs/witness-face-widen-290b-2026-10-01/docs-check-post-credential.log 权威引用=0   
+=== 那条唯一权威引用长什么样
+scripts/ci/README.md:5:⇒ 质量此前**没有任何自动保险丝**（`outputs/_audit2-quality.md`，能力 9）。
+
+=== 父目录 mtime（近 60 分钟内被写过的=在飞主题，别动）
+  outputs/_audit-r1                                    10-03 13:17
+  outputs/eval-b4-diag                                 10-01 17:54
+  outputs/hold-callid-ruling-2026-09-30                09-30 13:39
+  outputs/shell-tail-repoint-kill-2026-10-01           10-01 00:14
+  outputs/eval-baseline-1                              10-01 18:22
+  outputs/head-import-template-data-2026-10-02         10-02 15:13
+  outputs/landing-1c40df7-2026-09-30                   09-30 13:28
+  outputs/memory-degradation-2026-10-03                10-03 04:50
+  outputs/needles-distribution-2026-10-03              10-03 12:09
+  outputs/retry-backoff-2026-10-02                     10-02 14:12
+  outputs/summary-coverage-2026-10-02                  10-02 22:03
+  outputs/witness-face-widen-290b-2026-10-01           10-01 16:32
+
+=== 内容重复检查：残余文件是否与某个已跟踪文件逐字节相同
+  outputs/_audit-claims.md                                               bytes=23066     与已跟踪重复=0
+  outputs/_audit-quality.md                                              bytes=36067     与已跟踪重复=0
+  outputs/_audit-usability.md                                            bytes=27360     与已跟踪重复=0
+  outputs/_audit2-capability.md                                          bytes=42318     与已跟踪重复=0
+  outputs/_audit2-quality.md                                             bytes=53960     与已跟踪重复=0
+  outputs/_audit-r1/baseline-fast.log                                    bytes=1585      与已跟踪重复=0
+  outputs/eval-b4-diag/readings.json                                     bytes=1019      与已跟踪重复=0
+  outputs/eval-b4-diag/B4-bugfix-pagination-rep1-base.events.jsonl       bytes=36830     与已跟踪重复=0
+  outputs/hold-callid-ruling-2026-09-30/readings.md                      bytes=7167      与已跟踪重复=0
+  outputs/shell-tail-repoint-kill-2026-10-01/kill.log                    bytes=1664      与已跟踪重复=0
+  outputs/eval-baseline-1/readings.json                                  bytes=14402     与已跟踪重复=0
+  outputs/head-import-template-data-2026-10-02/head-cert-067a68a.log     bytes=5899      与已跟踪重复=0
+  outputs/landing-1c40df7-2026-09-30/mutate-verify-229.log               bytes=51837     与已跟踪重复=0
+  outputs/landing-1c40df7-2026-09-30/readings.md                         bytes=2460      与已跟踪重复=0
+  outputs/memory-degradation-2026-10-03/docs-check-postcommit.log        bytes=1030      与已跟踪重复=0
+  outputs/needles-distribution-2026-10-03/docs-check-postcommit.log      bytes=1025      与已跟踪重复=0
+  outputs/needles-distribution-2026-10-03/judge-318a.log                 bytes=18072     与已跟踪重复=0
+  outputs/needles-distribution-2026-10-03/judge-318b.log                 bytes=806       与已跟踪重复=0
+  outputs/retry-backoff-2026-10-02/head-cert-a674793.log                 bytes=5920      与已跟踪重复=0
+  outputs/summary-coverage-2026-10-02/post-commit-checks.log             bytes=456       与已跟踪重复=0
+  outputs/witness-face-widen-290b-2026-10-01/docs-check-post-credential.log bytes=1099      与已跟踪重复=0
+=== 每条散落日志：它所在目录已跟踪的文件里有没有点名它（基名）
+  outputs/eval-b4-diag/readings.json                               同目录已跟踪文件=0   点名它的=无
+  outputs/eval-b4-diag/B4-bugfix-pagination-rep1-base.events.jsonl 同目录已跟踪文件=0   点名它的=无
+  outputs/eval-baseline-1/readings.json                            同目录已跟踪文件=1   点名它的=无
+  outputs/head-import-template-data-2026-10-02/head-cert-067a68a.log 同目录已跟踪文件=1   点名它的=无
+  outputs/landing-1c40df7-2026-09-30/mutate-verify-229.log         同目录已跟踪文件=1   点名它的=无
+  outputs/landing-1c40df7-2026-09-30/readings.md                   同目录已跟踪文件=1   点名它的=无
+  outputs/memory-degradation-2026-10-03/docs-check-postcommit.log  同目录已跟踪文件=10  点名它的=无
+  outputs/needles-distribution-2026-10-03/docs-check-postcommit.log 同目录已跟踪文件=12  点名它的=无
+  outputs/needles-distribution-2026-10-03/judge-318a.log           同目录已跟踪文件=12  点名它的=无
+  outputs/needles-distribution-2026-10-03/judge-318b.log           同目录已跟踪文件=12  点名它的=无
+  outputs/retry-backoff-2026-10-02/head-cert-a674793.log           同目录已跟踪文件=6   点名它的=无
+  outputs/summary-coverage-2026-10-02/post-commit-checks.log       同目录已跟踪文件=5   点名它的=无
+  outputs/witness-face-widen-290b-2026-10-01/docs-check-post-credential.log 同目录已跟踪文件=13  点名它的=无
+
+=== 顶层 6 个 _audit* 的性质（行数/首行）
+  outputs/_audit-claims.md                     lines=197   首行: # 声称 vs 现实：对账报告（README / AGENTS / 工具面 / 模块可达性）
+  outputs/_audit-quality.md                    lines=316   首行: # 工程质量审计（代码健康度面）
+  outputs/_audit-usability.md                  lines=183   首行: # m0（deepseek harness）可用性审计：真实用户能不能用起来
+  outputs/_audit2-capability.md                lines=266   首行: # 功能完整度核查：业主 10 大能力 × 当前主树现状
+  outputs/_audit2-quality.md                   lines=756   首行: # 工程质量审计（代码健不健康）
+  outputs/_audit-r1/baseline-fast.log          lines=23    首行: ### typecheck

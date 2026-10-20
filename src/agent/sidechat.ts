@@ -10,6 +10,7 @@ import type { ModelOutput, Provider } from "../providers";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../providers/glm";
 import type { ToolName } from "../tools/base";
 import { runLoop } from "./loop";
+import { redactEventForLog } from "../events";
 import { projectContext, summaryEnvelope, excludedIds, eventIdAt, isCompaction, isWorkerCompaction, type ContextMessage } from "./context";
 import {
   DEFAULT_COMPACTION_CONFIG,
@@ -168,6 +169,11 @@ function renderProjectionLine(e: AgentEvent): string | null {
       // 与 surface_account 同一档：观测 only。**不知道它说没说**不等于「被截断」——
       // 把它渲染成截断就是把「缺失」写成「已知坏了」（自造证据，同 stop-reason.ts 的纪律）。
       return null;
+    case "file_restored":
+      // 还原是**状态事实**不是观测面：用户把某文件的改动撤了，此后那个文件不再算"改过"。
+      // 不进投影的话，sidechat 会照着 tool_result 说"某某文件已修改"——而那个改动已经被撤掉了，
+      // 这正是本文件"不把缺失写成已知"的反面：把**已撤销**说成**仍然成立**。
+      return "[主会话·已还原改动] " + e.path;
     case "error":
       // 失败是用户后续提问的前提事实，进只读投影（不同于调度/路由这类纯审计面事件）。
       return "[主会话·运行失败] " + e.message;
@@ -446,8 +452,10 @@ export async function runSidechatTurn(opts: SidechatTurnOptions): Promise<AgentE
   }
   const log = createEventLog(eventsPath);
   const pipeline = async (e: AgentEvent): Promise<void> => {
+    // 脱敏归落盘边界管（2026-10-19 重构，见 src/events/redact.ts）：日志自己擦，
+    // 出站的那一份在这里擦（两条出口各自一份，不漏）。
     await log.append(e);
-    opts.onEvent?.(e);
+    opts.onEvent?.(redactEventForLog(e));
   };
   await runLoop({
     provider: createSidechatProvider({

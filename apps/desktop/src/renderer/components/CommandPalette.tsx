@@ -21,7 +21,7 @@ const OPS: readonly { id: PaletteAction; label: string; shortcutId?: string }[] 
   { id: "new-project", label: "添加项目" },
   { id: "toggle-theme", label: "切换主题" },
   { id: "cycle-perm", label: "切换权限档" },
-  { id: "toggle-sidebar", label: "开合侧栏", shortcutId: "palette" },
+  { id: "toggle-sidebar", label: "开合侧栏", shortcutId: "sidebar" },
   { id: "toggle-inspector", label: "开合检查器", shortcutId: "inspector" },
   { id: "copy-transcript", label: "复制整段对话" },
   { id: "find-in-session", label: "在当前会话中查找", shortcutId: "find" },

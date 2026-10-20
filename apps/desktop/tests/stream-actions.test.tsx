@@ -136,7 +136,12 @@ describe("重跑这一轮", () => {
     const start = appSrc.indexOf("const handleRetryRound");
     expect(start).toBeGreaterThan(-1);
     const block = appSrc.slice(start, start + 420);
-    expect(block).toContain("userTextOfRound(events, round)");
+    // 该轮输入要取**活的那份**事件（`eventsRef.current`），不是闭包里那份 `events`：
+    // `handleRetryRound` 的 useCallback 依赖表里**没有 events** ⇒ 用闭包那份就是陈旧闭包，
+    // 任何不是首屏就存在的轮次都会读成「找不到该轮的输入原文」。
+    // （这一格 2026-10-20 从 `userTextOfRound(events, round)` 改过来：实现早已改用 ref，
+    // 钉子还钉着旧写法 ⇒ 判卷红的是钉子，不是实现。）
+    expect(block).toContain("userTextOfRound(eventsRef.current, round)");
     expect(block).toContain("runningSet.current.has(sid)");
     expect(appSrc).toContain("onRetryRound: handleRetryRound");
   });

@@ -33,6 +33,15 @@ agent-canon/
 # .agent/permissions.json（策展过的项目策略）分开。授权属于机器不属于仓库——
 # 写在被跟踪那份里就等于谁 clone 谁继承那一次授权。
 .agent/permissions.always.json
+# 同一条口径的两支（2026-10-20 实测补漏）：它们是**机器本地状态**，却一直以 untracked 的身份
+# 出现在 `git status` 里——本仓的纪律是「`git add -A` 会把不像源码的东西扫进 HEAD」。
+# · `.agent/providers.json`：本机接了哪几家 provider（`apiKeyEnv` 只是环境变量名，没有明文钥匙）。
+#   但表里带 `allowLocalEndpoint: true`（允许打本机/内网）——那是**授权**，口径同
+#   `.agent/permissions.always.json`：授权属于机器不属于仓库，谁 clone 谁继承那一次授权不合适。
+#   用户要接哪一家，CLI 与设置页会生成这份草稿（`src/providers/provider-draft.ts`）。
+# · `.agent/evolution.json`：会话沉淀出来的进化补丁登记（本机运行产物）。
+.agent/providers.json
+.agent/evolution.json
 # 桌面端（apps/desktop）首启工作区默认落仓库根（S2 ①：不得回落 $HOME）⇒ 会话 JSONL 写进
 # <repo>/.agent/sessions/。这是运行产物，与 .agent/memory/ 同理不进 git；.agent/permissions.json
 # 仍是有意跟踪的（见上），所以只忽略 sessions/ 这一支，不整体忽略 .agent/。
@@ -58,6 +67,16 @@ docs/facts/
 .qoder/
 .workbuddy/
 .workbuddy-ai/
+# 同一族的后补三支（2026-10-20 实测）：它们此前**只在 .git/info/exclude**（本地文件、不随仓走），
+# ⇒ 换个克隆或换台机器，这些目录就以 untracked 的身份出现在 `git status` 里，
+# 而本仓有一条纪律是「`git add -A` 会把不像源码的东西扫进 HEAD」——本地排除挡不住它。
+# · `.mimosa/`：安全插件的 hook-state（会话元数据）；实测它会出现在**源码目录里**
+#   （apps/desktop/src/renderer/.mimosa/），那更该在仓级忽略。
+# · `.pi/`：Pi CLI 的会话运行时元数据（goal 状态等）。
+# · `.atomcode/`：AtomCode 的项目级元数据。
+.mimosa/
+.pi/
+.atomcode/
 
 # mutate-verify 的原件备份：它就地改写源文件，把原件复制成 <file>.mutbak 再还原。
 # 2026-09-28 实测：它在主树跑时把备份散在 src/agent/、src/permissions/、src/tools/ 下，
@@ -65,6 +84,10 @@ docs/facts/
 # 更要紧的是它被杀（SIGTERM）时会把**突变体**留在盘上（mutate-verify.mjs:7871），
 # 那份残留和这些备份长得一样，都不是源码。
 *.mutbak
+# 同族的另一支：人肉备份（编辑器/脚本留下的 `x.ts.bak`）。2026-10-20 实测在 src/ 下捡到一份
+# `src/cli.ts.bak`（89KB，2026-10-17 的旧版 cli.ts）——它与源码同目录同后缀，`git add -A`
+# 会把它当新文件扫进 HEAD，而它比真正的源码多一份 ⇒ 读者会读错"当前实现"。
+*.bak
 .worktrees/
 .superpowers/
 

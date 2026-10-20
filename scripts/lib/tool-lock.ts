@@ -21,6 +21,8 @@ export interface ToolLock { tool: string; pid: number; target: string; tree: str
 
 /** 锁目录名（判卷**故意另写一份字面**：改名时要被行为用例抓到，而不是跟着一起漂）。 */
 export const LOCK_DIR_NAME = "dsh-tool-locks";
+/** 「未登记帽」的成因前缀（判卷与生产共用这一份拼法；测试不再抄字面量）。 */
+export const UNREGISTERED_CAP_REASON = "没有登记";
 
 /** 帽按工具分档：**宁可让下一次等，不可让下一次抢**。
  *  · `head-cert` 一棵树实测 2.5–4 分钟（含全量判卷）⇒ 30 分钟已经很宽；
@@ -91,7 +93,7 @@ export function decideToolLock(input: {
   const by = parseToolLock(input.text);
   if (by === null) return { kind: "unreadable", path: input.path };
   if (input.maxAgeMs === null) {
-    return { kind: "held", by, reason: `没有登记 ${by.tool} 这一档的帽 ⇒ 不敢据此回收（猜出来的帽会把活人的锁抢走）；pid ${String(by.pid)} 持有 ${by.tree}` };
+    return { kind: "held", by, reason: `${UNREGISTERED_CAP_REASON} ${by.tool} 这一档的帽 ⇒ 不敢据此回收（猜出来的帽会把活人的锁抢走）；pid ${String(by.pid)} 持有 ${by.tree}` };
   }
   const cap = input.maxAgeMs;
   if (by.pid === input.selfPid) return { kind: "reclaim", by, reason: `pid ${String(by.pid)} 就是本进程（上一次留下的）` };

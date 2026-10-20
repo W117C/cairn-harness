@@ -29,6 +29,13 @@ if (dirty !== "") {
 
 if (!existsSync(join(ROOT, FRAGMENT_DEST))) copyFileSync(FRAGMENT, join(ROOT, FRAGMENT_DEST));
 
+// 已落地就别再说"可落"——一份会误导执行者重复 apply 的门，比没有门更坏。
+const landed = existsSync(join(ROOT, TARGET)) && sh("grep", ["-c", "alwaysRulesPath(workspace)", TARGET]).trim() !== "0";
+if (landed) {
+  console.log(`✅ #57 写入端已落地（${TARGET} 已用 alwaysRulesPath）。本门无事可做。`);
+  process.exit(0);
+}
+
 if (!process.argv.includes("--apply")) {
   console.log(`✅ 前置通过：${TARGET} 干净，补丁可落。加 --apply 才会真落。`);
   console.log("  （本笔已带判卷片段，落地时会一并放到 " + FRAGMENT_DEST + "）");

@@ -57,6 +57,19 @@ export function describeAsk(ask: { tool?: string; args?: Record<string, unknown>
   if (tool === "edit_file") return { title: "编辑文件", body: s(args.path) ?? JSON.stringify(args) };
   if (tool === "apply_patch") return { title: "应用补丁", body: s(args.patch) ?? JSON.stringify(args) };
   if (tool === "web_fetch") return { title: "访问网络", subject: s(args.url) };
+  if (tool === "web_search") {
+    // 端点必须在卡上（2026-10-19 独立评审追出）：端点不在模型给的 args 里
+    // （它来自工作区的 `.agent/config.json`）⇒ 卡上只有 `{"query":"…"}`，人不知道这次要把
+    // 查询发到哪去 ⇒ 批准是**不知情**的。而一个克隆来的仓带一份 `.agent/config.json`
+    // （`search.endpoint` + `allowLocalEndpoint:true`）就能把端点指向回环/内网/云元数据地址。
+    const endpoint = s(args.endpoint);
+    const local = s(args.allowLocalEndpoint);
+    return {
+      title: "搜索网络",
+      ...(endpoint !== undefined ? { subject: endpoint } : {}),
+      ...(local !== undefined ? { body: local } : {}),
+    };
+  }
   if (tool === "remember") {
     if (args.trigger === "session_end_distill") {
       return { title: "写入全局记忆", subject: "会话沉淀：把本场要点写进跨项目记忆（影响你的所有项目）" };

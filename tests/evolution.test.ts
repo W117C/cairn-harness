@@ -38,6 +38,25 @@ describe("evolution extractSignals", () => {
     expect(extractSignals([]).verifyOutcome).toBe("none");
   });
 
+  it("★目标漂移的可测性：只有工具调用（助手没写散文）⇒ 不可测；有散文 ⇒ 可测", () => {
+    // 这一格是"不可测 ≠ 无前进"的对应面：goalDriftCount === 0 有两种成因，
+    // 旧实现把"根本没得测"也读成 0 ⇒ 旧补丁被当成"已消解"扔掉。
+    const onlyTools: AgentEvent[] = [
+      ev({ type: "tool_call", id: "t1", name: "write_file", args: { path: "a.ts" } }),
+      ev({ type: "tool_result", callId: "t1", ok: true, output: "written" }),
+    ];
+    const noProse = extractSignals(onlyTools);
+    expect(noProse.goalDriftCount).toBe(0);
+    expect(noProse.goalDriftMeasurable, "没有可读的目标漂移面却报成可测 ⇒ 补丁会被当成已消解扔掉").toBe(false);
+
+    const withProse: AgentEvent[] = [
+      ...onlyTools,
+      ev({ type: "assistant_delta", callId: "c1", text: "我先看看目标再动手。" }),
+    ];
+    const measurable = extractSignals(withProse);
+    expect(measurable.goalDriftMeasurable).toBe(true);
+  });
+
   it("同一会话的新一轮没有 verify ⇒ 不继承上一轮的连败升级", () => {
     const events: AgentEvent[] = [
       ev({ type: "user_message", content: "上一轮" }),
@@ -251,6 +270,12 @@ describe("跨轮闭环：补丁效果评估", () => {
 
   it("目标复述：漂移归零 ⇒ 已消解；多于上轮 ⇒ 升级；少于上轮 ⇒ 保持", () => {
     expect(evaluatePatchEffects([goalPatch], sig({ goalDriftCount: 0 }))[0]).toMatchObject({ status: "resolved", disposition: "drop" });
+    // ★不可测 ≠ 已消解（2026-10-19 独立评审追出的 MEDIUM）：这一跑只有工具调用、助手一句散文
+    // 都没写 ⇒ 目标漂移**根本没得测**（那个 0 是"没得测"而不是"测了没有"）。
+    // 旧实现把两者都读成"消解"⇒ 上一轮的 goal-reconfirm 补丁被**删掉**，审计轨迹还记着"已消解"——
+    // 为一个从没测过的漂移记了一次消解。补丁是"治漂移"的方子，没测过就没有理由扔。
+    expect(evaluatePatchEffects([goalPatch], sig({ goalDriftCount: 0, goalDriftMeasurable: false }))[0])
+      .toMatchObject({ status: "inconclusive", disposition: "observe" });
     expect(evaluatePatchEffects([goalPatch], sig({ goalDriftCount: 5 }))[0]).toMatchObject({ status: "recurred", disposition: "escalate" });
     expect(evaluatePatchEffects([goalPatch], sig({ goalDriftCount: 2 }))[0]).toMatchObject({ status: "recurred", disposition: "keep" });
     expect(evaluatePatchEffects([goalPatch], sig({ goalDriftCount: 2 }))[0]!.observed).toContain("目标漂移 2 处（补丁发出时 3 处）");

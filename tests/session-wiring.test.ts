@@ -47,7 +47,7 @@ it("UI cancellation settles the distillation approval immediately without writin
     },
     notifyOutcome: (_id, _outcome, reason) => { outcomes.push(reason); },
   });
-  await runAgent({ workspace: dir, message: "USER_TASK", mode: "default", logPath: join(dir, "session.jsonl"), askGate });
+  await runAgent({ workspace: dir, message: "记住 USER_TASK", mode: "default", logPath: join(dir, "session.jsonl"), askGate });
   expect(requests).toBe(2);
   expect(pendingAfterCancel).toBe(0);
   expect(outcomes).toEqual(["user"]);
@@ -70,9 +70,9 @@ it("distillation consumes session history and its instruction with only remember
       headers: { "content-type": "text/event-stream" },
     });
   }));
-  const result = await runAgent({ workspace: dir, message: "USER_TASK", mode: "default", logPath: join(dir, "session.jsonl") });
+  const result = await runAgent({ workspace: dir, message: "记住 USER_TASK", mode: "default", logPath: join(dir, "session.jsonl") });
   expect(requests).toHaveLength(2);
-  expect(requests[1].messages).toContainEqual({ role: "user", content: "USER_TASK" });
+  expect(requests[1].messages).toContainEqual({ role: "user", content: "记住 USER_TASK" });
   expect(requests[1].messages).toContainEqual({ role: "assistant", content: "TASK_COMPLETED" });
   /* 沉淀轮的请求形状（2026-09-30 P2 定稿）：**主会话前缀 + 末尾一条沉淀指令**。
      历史沿革——这格被改过两次，两次都是因为现实变了而不是为了让测试变绿：
@@ -116,7 +116,7 @@ it("沉淀指令真的进到请求里（走真 session provider 这条路）", a
       headers: { "content-type": "text/event-stream" },
     });
   }));
-  const result = await runAgent({ workspace: dir, message: "USER_TASK", mode: "auto", logPath: join(dir, "session.jsonl") });
+  const result = await runAgent({ workspace: dir, message: "记住 USER_TASK", mode: "auto", logPath: join(dir, "session.jsonl") });
   expect(requests).toHaveLength(2);
   const last = requests[1]!.messages.at(-1)!;
   expect(last.role).toBe("user");
@@ -144,7 +144,7 @@ it("沉淀轮的请求与主会话共享同一个前缀（system 同形 + 工具
       headers: { "content-type": "text/event-stream" },
     });
   }));
-  await runAgent({ workspace: dir, message: "T", mode: "auto", logPath: join(dir, "session.jsonl") });
+  await runAgent({ workspace: dir, message: "记住 T", mode: "auto", logPath: join(dir, "session.jsonl") });
   expect(requests).toHaveLength(2);
   type Msg = { role: string; content: unknown };
   const sys = (r: Record<string, unknown>): unknown => (r["messages"] as Msg[])[0]?.content;

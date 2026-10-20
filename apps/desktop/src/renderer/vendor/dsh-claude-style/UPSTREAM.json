@@ -1,0 +1,109 @@
+{
+  "repository": "https://github.com/Nwflower/dsh-claude-style",
+  "version": "0.17.0",
+  "revision": "484ece039400ab45a97e935abb5bc47245845a96",
+  "files": [
+    {
+      "source": "packages/client/src/theme/tokens.json",
+      "file": "vendor/dsh-claude-style/tokens.json",
+      "sha256": "a39e1f980c35db5d6428597d83d874f6d962a12ad740a283bc9fbd44c624bb7f",
+      "adapted": false
+    },
+    {
+      "source": "packages/client/src/theme/tokens.schema.json",
+      "file": "vendor/dsh-claude-style/tokens.schema.json",
+      "sha256": "82327171e13e4e0d032d8009a9cb44404528f136fabfb327a8fbb3f178dd5f14",
+      "adapted": false
+    },
+    {
+      "source": "packages/client/src/theme/tokens.css",
+      "file": "vendor/dsh-claude-style/tokens.css",
+      "sha256": "fb7b10c4ba50c2cfcd146f4783c88d787a50ba11f5bbdc679df65be2f06d9d45",
+      "adapted": false
+    },
+    {
+      "source": "packages/client/src/theme/hero.css",
+      "file": "vendor/dsh-claude-style/hero.css",
+      "sha256": "a9e9f0018e2582e6dc27aba0c787a7f928ca4c86d8f1f11acb4c979f9b3b18a9",
+      "adapted": false
+    },
+    {
+      "source": "packages/client/src/theme/typography.css",
+      "file": "vendor/dsh-claude-style/typography.css",
+      "sha256": "dd525fe8e359128c9afc54f3d6730517660e9efad3f48fe2e85c01d4449b2ebb",
+      "adapted": true
+    },
+    {
+      "source": "packages/client/src/features/composer/card.css",
+      "file": "vendor/dsh-claude-style/composer-card.css",
+      "sha256": "f47c8d1c702f1ead345042b501392cb0f7f23b8cf063856ffb435f9cda9762a6",
+      "adapted": false
+    },
+    {
+      "source": "packages/client/src/features/composer/vars.css",
+      "file": "vendor/dsh-claude-style/composer-vars.css",
+      "sha256": "e21aeceaa825451343d8f66405910d43f48524621c3a48c43e5aa2ab4abbb547",
+      "adapted": false
+    },
+    {
+      "source": "packages/assets/src/fonts/InterVariable.woff2",
+      "file": "vendor/dsh-claude-style/fonts/InterVariable.woff2",
+      "sha256": "e69a6b252515c6bda69d18df94031355f8864574c1753610b75374f6f56cd460",
+      "adapted": false
+    },
+    {
+      "source": "packages/assets/src/fonts/NotoSerifVariable.woff2",
+      "file": "vendor/dsh-claude-style/fonts/NotoSerifVariable.woff2",
+      "sha256": "10ec3744914ee49755ad76f54c5c114a4597be7b2d5ad05a65ff84008e15b92a",
+      "adapted": false
+    },
+    {
+      "source": "packages/assets/src/fonts/JetBrainsMonoVariable.ttf",
+      "file": "vendor/dsh-claude-style/fonts/JetBrainsMonoVariable.ttf",
+      "sha256": "662a196d58f1183bf2d77428b6d5283fe3f45161ab021bea4036bc98e5cac016",
+      "adapted": false
+    },
+    {
+      "source": "packages/assets/src/fonts/JetBrainsMonoItalicVariable.ttf",
+      "file": "vendor/dsh-claude-style/fonts/JetBrainsMonoItalicVariable.ttf",
+      "sha256": "f115aaa12113718c02ce72864fe6823b87241bc23d3e44cf1220155f861063f2",
+      "adapted": false
+    },
+    {
+      "source": "LICENSE",
+      "file": "public/licenses/dsh-claude-style/LICENSE",
+      "sha256": "15747d9e2ce37fd5670c4351572b10435f03f79d2b333a50be9c84e771f0af7f",
+      "adapted": false
+    },
+    {
+      "source": "THIRD_PARTY_NOTICES.md",
+      "file": "public/licenses/dsh-claude-style/THIRD_PARTY_NOTICES.md",
+      "sha256": "e5a2906f24f171c092fad66df730c4fb0886d4e437a42a838ce4497d4796441c",
+      "adapted": false
+    },
+    {
+      "source": "packages/assets/src/fonts/OFL.txt",
+      "file": "public/licenses/dsh-claude-style/OFL.txt",
+      "sha256": "30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad",
+      "adapted": false
+    },
+    {
+      "source": "packages/assets/src/fonts/OFL-Inter.txt",
+      "file": "public/licenses/dsh-claude-style/OFL-Inter.txt",
+      "sha256": "5b9321a4298cfeb6b34354164a1c3afc3db114569984c502b9b35d988fd58c57",
+      "adapted": false
+    },
+    {
+      "source": "packages/assets/src/fonts/OFL-NotoSerif.txt",
+      "file": "public/licenses/dsh-claude-style/OFL-NotoSerif.txt",
+      "sha256": "cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a",
+      "adapted": false
+    },
+    {
+      "source": "packages/assets/src/fonts/AUTHORS.txt",
+      "file": "public/licenses/dsh-claude-style/AUTHORS.txt",
+      "sha256": "33f99c94ef0a0909d7584a5d4bde1fb9b1630daa620f5a788c28c43327e79412",
+      "adapted": false
+    }
+  ]
+}

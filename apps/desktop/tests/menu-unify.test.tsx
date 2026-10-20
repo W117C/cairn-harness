@@ -26,8 +26,8 @@ function block(css: string, sel: string): string {
 
 describe("批 5：弹层底座统一（14 圆角 / 8 内距 / 36 条目）", () => {
   it("tokens：--radius-pop = 14、--h-menu-item = 36（rem 缩放制）", () => {
-    expect(tokens).toContain("--radius-pop: calc(0.875rem * var(--rem-scale))");
-    expect(tokens).toContain("--h-menu-item: calc(2.25rem * var(--rem-scale))");
+    expect(tokens).toContain("--radius-pop: calc(0.875rem * var(--size-scale))");
+    expect(tokens).toContain("--h-menu-item: calc(2.25rem * var(--size-scale))");
   });
 
   it(".pop / .pop-rd / .path-menu 三个浮层底座同口径：var(--radius-pop) + var(--space-sm) 内距", () => {

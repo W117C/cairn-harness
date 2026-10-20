@@ -16,7 +16,7 @@ const now = at("2026-10-16T12:00:00");
 const sess = (id: string, iso: string, extra: Partial<WorkspaceSession> = {}): WorkspaceSession => ({
   id,
   workspace: "/repo/a",
-  mtimeMs: 0,
+  mtimeMs: at(iso),
   lines: 1,
   updatedAt: iso,
   ...extra,
@@ -32,10 +32,19 @@ describe("timeBucket（今天/昨天/过去7天/更早）", () => {
     expect(timeBucket(at("2026-10-08T23:59:00"), now)).toBe("earlier");
   });
 
-  it("sessionTime：updatedAt 有效用 updatedAt；缺省/坏值退回 mtimeMs", () => {
+  it("sessionTime：文件 mtime 是活动锚；metadata.updatedAt（置顶/改名会写）不参与", () => {
     expect(sessionTime(sess("a", "2026-10-16T09:00:00"))).toBe(at("2026-10-16T09:00:00"));
     expect(sessionTime({ id: "b", workspace: "", mtimeMs: 12345, lines: 1 })).toBe(12345);
-    expect(sessionTime({ id: "c", workspace: "", mtimeMs: 777, lines: 1, updatedAt: "not-a-date" })).toBe(777);
+    // 置顶/改名把 updatedAt 刷成“现在”，但文件没动 ⇒ 仍按文件时间显示（不再跳「刚刚」）
+    expect(
+      sessionTime({
+        id: "c",
+        workspace: "",
+        mtimeMs: 777,
+        lines: 1,
+        updatedAt: "2026-10-16T11:59:00",
+      }),
+    ).toBe(777);
   });
 
   it("groupByTime：空桶不列；桶序固定；桶内保持输入序", () => {

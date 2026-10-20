@@ -45,6 +45,9 @@ function sidebarHtml(sessions: Parameters<typeof Sidebar>[0]["sessions"]): strin
       waitingIds={new Set<string>()}
       outcomes={new Map<string, "ok" | "failed">()}
       providerOk={null}
+      theme="system"
+      onThemeChange={() => undefined}
+      usage={{ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, usageCount: 0, toolSteps: 0, rounds: 0 }}
       onOpen={() => undefined}
       onNewTask={() => undefined}
       onOpenPalette={() => undefined}
@@ -99,7 +102,7 @@ describe("③ 时间桶分组标签（今天/昨天/过去7天/更早）", () =>
 
 describe("④ 会话条重命名开态可读（业主截图：只露串中段）", () => {
   it("hover 提示 = 完整会话名 + 动作（先读全文，再决定改不改）", () => {
-    expect(appSrc).toContain("title={`${sessionTitle} · 点按重命名`}");
+    expect(appSrc).toContain("title={`${sessionTitle} · 点按或按 F2 重命名`}");
   });
   it("开态聚焦：全选 + 视口回串首（chat-bar 与侧栏行内两处输入框同修）", () => {
     expect(appSrc).toContain("el.select()");

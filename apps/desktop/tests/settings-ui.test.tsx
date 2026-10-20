@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { Badge, Banner, EmptyState, Field, OptionCard, SettingsPage, SettingsRow, SettingsSection, StatusDot } from "../src/renderer/components/settings-ui";
+import { ShortcutsSection } from "../src/renderer/components/settings-sections";
 
 const styles = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
 function block(css: string, sel: string): string {
@@ -42,6 +43,20 @@ describe("批 6：设置页公共组件（SSR 结构）", () => {
     expect(h).toContain('id="row"');
     const bare = renderToStaticMarkup(<SettingsSection title="快捷键"><span /></SettingsSection>);
     expect(bare).not.toContain("ss-sec-hint");
+  });
+
+  it("快捷键速查：双列键帽+说明，12 行；窄窗一列", () => {
+    const h = renderToStaticMarkup(<ShortcutsSection />);
+    expect(h).toContain('class="kx-list"');
+    expect(h).toContain('<kbd class="kx-keys">⌘N</kbd>');
+    expect(h).toContain('class="kx-what">新任务');
+    expect((h.match(/class="kx-row"/g) ?? []).length).toBe(12);
+    expect(h).toContain("完整速查表");
+    const list = block(styles, ".kx-list");
+    expect(list).toContain("repeat(2, minmax(0, 1fr))");
+    expect(block(styles, ".kx-row")).toContain("grid-template-columns: 108px minmax(0, 1fr)");
+    expect(block(styles, ".kx-keys")).toContain("font-family: var(--mono)");
+    expect(styles).toContain("@media (max-width: 760px)");
   });
 
   it("SettingsRow：左标题+说明、右控件；desc 可选", () => {
@@ -117,10 +132,10 @@ describe("批 6：设置页公共组件（SSR 结构）", () => {
 });
 
 describe("批 6：设置页公共组件（CSS 口径哨兵）", () => {
-  it(".ss-title = 20px/600；内容列 960px 水平居中（2026-10-16 重做 A：滚动容器撑满、内容列收口）", () => {
+  it(".ss-title = 20px / --fw-bold；内容列 960px 水平居中（2026-10-16 重做 A：滚动容器撑满、内容列收口）", () => {
     const t = block(styles, ".ss-title");
     expect(t).toContain("font-size: var(--fs-title-md)");
-    expect(t).toContain("font-weight: 600");
+    expect(t).toContain("font-weight: var(--fw-bold)");
     // 宽度与居中的单一落点：sp-body 的内容列包装规则（原 .ss-page 自带 720 上限已下架）
     expect(styles).toContain(".sp-body > .ss-page, .sp-body > .ap-body { max-width: 960px; margin: 0 auto; width: 100%; }");
     expect(block(styles, ".sp-body")).not.toContain("max-width"); // 滚动容器自身不再设宽（A 的根因）
@@ -190,7 +205,7 @@ describe("2026-10-16：控件契约三件（Field / Badge / StatusDot）", () =>
     expect(sub).toContain("flex: 1 1 100%");
     expect(sub).toContain("gap: var(--space-sm)");
     // 8px 控件圆角走 token（唯一源在 tokens.css）
-    expect(tokens).toMatch(/--radius-field:\s*calc\(0\.5rem \* var\(--rem-scale\)\);/);
+    expect(tokens).toMatch(/--radius-field:\s*calc\(0\.5rem \* var\(--size-scale\)\);/);
   });
 
   it("Badge：中性胶囊；给 onRemove 才出「×」（aria-label 由调用方给全）", () => {

@@ -1,0 +1,103 @@
+import { readFile } from "node:fs/promises";
+import type { AgentEvent } from "../events";
+import type { ModelOutput, Provider } from "./index.js";
+
+// 演示通道：M0A_MOCK_DELTA=1 时把剧本里的 assistant_message 拆成 assistant_delta 逐段吐出，
+// 走与真流式完全相同的 delta 事件管线（合并→上屏）。默认关闭，M0 事件流逐字节不变。
+const DELTA_MODE = process.env.M0A_MOCK_DELTA === "1";
+const DELTA_CHUNK = 4; // 每段字符数（按码点切，避免劈开代理对）
+const DELTA_PACE_MS = 120; // 演示节奏：人眼可见的逐字上屏
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 装配期哨兵：剧本用它说「这一轮到这儿结束，但会话还没完」。
+ *  为什么需要：真 provider 的流自己会结束，而一条 JSONL 剧本没有「轮」这个概念——
+ *  不写哨兵时整条剧本就是一轮（= 改前语义）。有了它才谈得上「第 2 轮」，而 harness 侧长在
+ *  轮界上的那几件事（收束闸补一拍、拍红后再要一轮去修、逐轮上下文增长/压缩/跨轮保持目标）
+ *  在「只有一次请求」的通道上**结构不可达**：收束闸的第二拍要求「上一拍之后又改过盘」，
+ *  只有一轮的会话永远给不出这一位。
+ *  它**不是模型输出**：切轮时吃掉、绝不吐给 loop（吐出去就是一条假事件，会落 JSONL 与所有投影面）。
+ *  剧本纪律：哨兵跟在它要收的那一条输出**之后**。 */
+export const ROUND_END = "round_end";
+type RoundMarker = { readonly type: typeof ROUND_END };
+type ScriptItem = ModelOutput | RoundMarker;
+const isRoundEnd = (item: ScriptItem): item is RoundMarker => item.type === ROUND_END;
+
+/** 纯函数：从 cursor 起取一轮 = 到下一个哨兵为止（吃掉哨兵，不含它）；没有哨兵就取到剧本末尾。
+ *  为什么边界只由哨兵决定、不学靶场在 tool_call 处切（`src/agent/gym/script.ts`）：真 provider
+ *  一轮可以发**好几个** tool_call（会话沉淀就是「一轮里 N 条 remember ⇒ 合并成一次审批」），
+ *  按 tool_call 切会把同一轮劈成 N 轮——那是靶场自己的记账纪律，不是剧本格式的义务。 */
+function takeMarkedRound(script: readonly ScriptItem[], cursor: number): { outputs: ModelOutput[]; next: number } {
+  const outputs: ModelOutput[] = [];
+  let i = cursor;
+  for (; i < script.length; i++) {
+    const item = script[i];
+    if (isRoundEnd(item)) {
+      i += 1; // 哨兵吃掉：本轮到此结束
+      break;
+    }
+    outputs.push(item);
+  }
+  return { outputs, next: i };
+}
+
+// 从 fixture JSONL 预录序列创建 mock provider（统一流式接口）：
+// 按序惰性吐出预录的 assistant_message / tool_call / usage（for-await 拉取与工具执行交错，与旧
+// next() 逐条拉取的日志顺序逐字节一致），序列跑完即停（之后 stream 产出为空 = 任务结束）。
+// 一次请求给几条 = 剧本里哨兵切出来的那一轮（见 ROUND_END）；不写哨兵就是整条一次给完，与历史逐字同形。
+// 为什么 `usage` 也在允许之列：它是真 provider 每轮都会发的输出（loop 直接落进事件流），
+// 剧本不许它就是让所有「花钱口径」的判据只能靠手工注入事件——而「按手注入」测不到生产那一跳。
+// `turn_truncated` 同理（§3.3）：它现在也是模型那一轮的真实收尾输出之一。不许它，
+// 就等于「截断」这条通道只能靠测试里手写 provider 来验，端到端（剧本 → runLoop → JSONL）
+// 那一跳永远没有观测者——同一个理由，同一种「两头断」。
+// 其余类型（tool_result / user_message …）仍一律拒收：那是运行时产物，不是模型输出。
+export function createMockProvider(fixturePath: string): Provider {
+  let script: ScriptItem[] | null = null;
+  let cursor = 0;
+
+  async function load(): Promise<void> {
+    if (script) return;
+    const raw = await readFile(fixturePath, "utf8");
+    const parsed = raw
+      .split("\n")
+      .filter((line) => line.trim().length > 0)
+      .map((line) => JSON.parse(line) as AgentEvent);
+    const out: ScriptItem[] = [];
+    let turn = 0;
+    for (const e of parsed) {
+      if (e.type === "assistant_message") {
+        if (DELTA_MODE) {
+          const chars = Array.from(e.content);
+          for (let i = 0; i < chars.length; i += DELTA_CHUNK) {
+            out.push({ type: "assistant_delta", callId: `mock-a${String(turn)}`, text: chars.slice(i, i + DELTA_CHUNK).join("") });
+          }
+        } else {
+          out.push(e);
+        }
+        turn++;
+      } else if (e.type === "tool_call" || e.type === "usage" || e.type === "turn_truncated") {
+        out.push(e);
+      } else if ((e as { type: string }).type === ROUND_END) {
+        out.push({ type: ROUND_END }); // 只用来收轮，切轮时吃掉（见 ROUND_END 的注释）
+      } else {
+        throw new Error(`mock fixture 只允许 assistant_message/tool_call/usage/turn_truncated/round_end，读到: ${JSON.stringify(e)}`);
+      }
+    }
+    script = out;
+  }
+
+  return {
+    async *stream() {
+      await load();
+      const round = takeMarkedRound(script!, cursor);
+      cursor = round.next;
+      for (const output of round.outputs) {
+        if (DELTA_MODE && output.type === "assistant_delta") await sleep(DELTA_PACE_MS);
+        yield output;
+      }
+      // 剧本跑完即停：之后 stream() 产出为空（loop 据此收束）
+    },
+  };
+}

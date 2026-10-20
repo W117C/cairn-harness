@@ -1,0 +1,49 @@
+[
+  {
+    "name": "首页标题、项目与输入区共用阅读起点",
+    "ok": false,
+    "detail": {
+      "headingLeft": 558.296875,
+      "composerLeft": 479.5,
+      "footer": "Z"
+    }
+  },
+  {
+    "name": "设置入口有可见文字，未伪装成用户头像",
+    "ok": false,
+    "detail": "Z"
+  },
+  {
+    "name": "侧栏任务名获得至少六成行宽",
+    "ok": false,
+    "detail": {
+      "rowWidth": 187,
+      "titleWidth": 103.3203125
+    }
+  },
+  {
+    "name": "窄窗输入框完整可见，页面无横向溢出",
+    "ok": true,
+    "detail": {
+      "left": 216,
+      "right": 861,
+      "viewport": 880,
+      "overflow": false
+    }
+  },
+  {
+    "name": "设置页顶栏显示当前页面并收起任务操作",
+    "ok": false,
+    "detail": {
+      "open": true,
+      "title": "接 routing 开关并跑全量验证",
+      "tools": "1",
+      "taskButton": true
+    }
+  },
+  {
+    "name": "渲染过程无控制台错误",
+    "ok": true,
+    "detail": []
+  }
+]

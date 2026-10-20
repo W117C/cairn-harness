@@ -13,7 +13,7 @@ import type { ClarifyQuestion, PlanProposal } from "../../../../src/events";
 export type StreamRow =
   | { kind: "user"; text: string; ts?: number; seq: number; round: number; attachments?: readonly { path: string; kind: "file" | "directory" }[] }
   | { kind: "assistant"; text: string; live?: boolean; thinking?: string; ts?: number; seq: number; eventId: number; round: number } // live=true = delta 流式中尚未被终稿取代的未结桶行；thinking = 同一 callId 下累计的思考正文
-  | { kind: "tool"; tool: string; summary: string; args?: string; pending?: boolean; ok?: boolean; ts?: number; seq: number
+  | { kind: "tool"; tool: string; summary: string; path?: string; args?: string; output?: string; outputTruncated?: boolean; pending?: boolean; interrupted?: boolean; ok?: boolean; ts?: number; seq: number
       /** tool_result 收口的到达时间（P3-1 折叠行耗时 = then − ts；拿不到不显）。 */
       then?: number
       /** 产物引用（本次调用交付给用户的东西）。从前聊天里只有文字回执 ⇒ 用户看不到 agent
@@ -29,10 +29,53 @@ type ToolRow = Extract<StreamRow, { kind: "tool" }>;
 // id，血缘另靠 parent_event_id），但它是父流事实（「派出了哪个 worker」）⇒ 按类型特判保留，
 // 不按字段缺席判定——按字段判会把 spawn 行也滤掉。agent_status/agent_message/agent_result 属
 // 必带 agent_id 的子流事件族，恒滤。
-function isWorkerSubflowEvent(e: AgentEvent): boolean {
+// 导出：对话转录也要走这同一条过滤（worker 子流的 delta 不是主会话的对话正文）。
+// 判据自己抄一遍就会漂——所以这里导出，让 transcript.ts 用同一份。
+export function isWorkerSubflowEvent(e: AgentEvent): boolean {
   if (e.type === "agent_spawned") return false;
   const id = (e as { agent_id?: unknown }).agent_id;
   return typeof id === "string";
+}
+
+/** 独立窗格窗口（PopoutApp）收不收这条事件——**归属**判据，纯函数。
+ *
+ *  旧实现在组件里内联写着 `props.sessionId === null || sid === undefined || sid === props.sessionId`：
+ *  第一个析取项为真时，后面两项全是废话 ⇒ 一个**没有会话归属**的弹出窗会把**所有会话**的事件
+ *  都吸进来。而这种窗格是真实存在的路径：⌘N 回首页时 paneTabs 不清，⧉ 传的是 undefined。
+ *  用户于是在一个只有「变更」两个字的窗格里，读到**另一个会话**的轮次、文件与验证状态，
+ *  而空态还写着"本会话还没有文件改动"——两句话互相打架。
+ *
+ *  三条判据各自的理由：
+ *  · `sessionId === null` ⇒ **没有归属就不显示**（不是"全都显示"）。显示别人的会话比不显示更坏。
+ *  · `sid === undefined` ⇒ 事件没盖章归属。推送是广播来的（所有窗口都收得到），没盖章的
+ *    那条**不属于任何会话**，让它进来就等于让弹出窗回到"什么都收"的老毛病。
+ *  · `session_titled` 是 push-only 的命名推送（第十八遍的既定口径），与窗格内容无关。
+ */
+export function popoutEventBelongsTo(e: AgentEvent, sessionId: string | null): boolean {
+  if (sessionId === null) return false;
+  if ((e as { type?: string }).type === "session_titled") return false;
+  const sid = (e as { session_id?: string }).session_id;
+  if (sid === undefined) return false;
+  return sid === sessionId;
+}
+
+/** 运行秒表读数：起点按**会话**存，读的时候只读**当前会话**那一格。
+ *
+ *  旧实现是**一个** ref（谁起跑就盖谁）+ 读的时候无条件取它 ⇒ A 起跑、切 B、B 起跑、
+ *  切回 A（A 还在跑）时，秒表算的是 `now − B 的起点`：A 真实跑了 3600s 会显示成 0s。
+ *  秒表是"这一轮跑了多久"的用户可见读数，读错比不读更坏（用户以为任务刚开始）。
+ *
+ *  纯函数形态（起点表 + 会话 id + 当前时刻 → 秒数），让判卷能真跑这一格，
+ *  不必退化成源码断言。缺起点（这一格还没盖）按"现在起算"⇒ 0s，不编一个假起点。 */
+export function elapsedSecondsFor(
+  startBySession: ReadonlyMap<string, number>,
+  sessionId: string | null,
+  now: number,
+): number {
+  if (sessionId === null) return 0;
+  const t0 = startBySession.get(sessionId);
+  if (t0 === undefined) return 0;
+  return Math.max(0, Math.floor((now - t0) / 1000));
 }
 
 /** 主会话终态判据（运行旗/侧栏黄点唯一处）：worker 的 agent_status 也是 agent_status 且
@@ -92,6 +135,13 @@ export function projectStream(events: readonly AgentEvent[], running: boolean = 
   // tool_call id → 行对象：tool_result 按 callId 收口（就地改写 pending/ok，行保持 call 侧 ts）；
   // 无匹配调用的 tool_result 忽略，不造假行。
   const toolRows = new Map<string, ToolRow>();
+  const interruptTools = (): void => {
+    for (const row of toolRows.values()) {
+      if (row.pending !== true) continue;
+      row.pending = false;
+      row.interrupted = true;
+    }
+  };
   // 轮号（v2.16）：主会话 user_message 的 1-based 计数——与 core planTurnRevert 的轮口径同一份
   // （worker 子流事件不成轮，见 isWorkerSubflowEvent 过滤；worker 本也不产生 user_message）。
   let rounds = 0;
@@ -164,6 +214,8 @@ export function projectStream(events: readonly AgentEvent[], running: boolean = 
       // 勘误落地：ToolCallEvent 的工具名字段是 name（不是计划作者预期的 tool）；行面仍叫 tool。
       case "tool_call": {
         const row: ToolRow = { kind: "tool", tool: e.name, summary: summarize(e.args), args: rawArgs(e.args), pending: true, ts: e.ts, seq };
+        // 行为数据不从展示用截断 JSON 反解；长编辑参数仍保留差异入口。
+        if (typeof e.args.path === "string" && e.args.path !== "") row.path = e.args.path;
         toolRows.set(e.id, row);
         rows.push(row);
         break;
@@ -172,7 +224,12 @@ export function projectStream(events: readonly AgentEvent[], running: boolean = 
         const row = toolRows.get(e.callId);
         if (row) {
           row.pending = false;
+          delete row.interrupted;
           row.ok = e.ok;
+          if (typeof e.output === "string") {
+            row.output = e.output.slice(0, 10000);
+            if (e.output.length > 10000) row.outputTruncated = true;
+          }
           if (e.ts !== undefined) row.then = e.ts; // P3-1：耗时的落地端（ts→then 一段）
           // 只认**成功**的产物：失败的那一笔没有可看的东西（写盘被拒 / 渲染超时）。
           if (e.ok && e.artifact !== undefined) row.artifact = e.artifact;
@@ -187,6 +244,9 @@ export function projectStream(events: readonly AgentEvent[], running: boolean = 
         break;
       // RunErrorEvent 勘定（src/events/index.ts）：失败原因原文在 message（渲染侧负责转义）。
       case "error": rows.push({ kind: "error", text: e.message, ts: e.ts, seq }); break;
+      case "agent_status":
+        if (isMainSessionTerminalEvent(e)) interruptTools();
+        break;
       default: break; // 其余事件类型不成行：clarify/plan 走卡片选择器（pendingClarifyOf/pendingPlanOf）
     }
   }
@@ -194,6 +254,7 @@ export function projectStream(events: readonly AgentEvent[], running: boolean = 
   // 运行中 ⇒ live=true 行（追字光标只该亮在正在流的那一段）；会话已停 ⇒ 同样是终稿（live=false），
   // 操作条与「思考完成」据此显形——真实 provider 不补发 assistant_message，停转就是落定信号。
   flushBuckets(!running);
+  if (!running) interruptTools();
   return rows.sort((a, b) => a.seq - b.seq);
 }
 
@@ -327,6 +388,61 @@ export function deriveRunPhase(
   return "idle";
 }
 
+/** 本轮（最后一条主会话 user_message 之后）是否已有模型正文。
+ *  用途：状态条不能把「正文已经开始/已经输出完、run 还在收尾」继续叫「思考中」。
+ *  worker 子流正文不算（父会话唯一接收物是 agent_result）。 */
+export function hasAssistantTextThisRun(events: readonly AgentEvent[]): boolean {
+  let start = 0;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (isWorkerSubflowEvent(e)) continue;
+    if (e.type === "user_message") { start = i; break; }
+  }
+  for (let i = start; i < events.length; i++) {
+    const e = events[i]!;
+    if (isWorkerSubflowEvent(e)) continue;
+    if (e.type === "assistant_message" && e.content.trim() !== "") return true;
+    if (e.type === "assistant_delta" && e.text.trim() !== "") return true;
+  }
+  return false;
+}
+
+/** 状态条那一格的文案（纯函数，好判卷；2026-10-20 从 App.tsx 搬出来）。
+ *
+ *  口径（逐条，顺序即优先级）：
+ *  ① 已停止 ⇒ "已停止"；
+ *  ② 三道门在场 ⇒ "等待审批" / "等待澄清" / "等待方案"；
+ *  ③ **工具在跑 ⇒ "执行工具"**（这一条排在"收尾中"**之前**——2026-10-20 独立评审追出的 MEDIUM-HIGH：
+ *     旧实现先判 `finishing`，而 `finishing` 的第二个条件 `answerQuiet`（正文停了 >1.5s）
+ *     **恰好就是"工具在跑"的形状**（模型吐完字就调工具，然后等着它跑完）
+ *     ⇒ 任何超过 1.5s 的构建/测试都被报成"收尾中"，而 agent 还在干活。
+ *     那条注释自己写着「读错比不读更坏」——报错的相位比不报更坏）；
+ *  ④ 正文停了而 run 还在 ⇒ "收尾中"（Stop hook / 安全报告 / 记忆沉淀那几样）；
+ *  ⑤ 有正文 ⇒ "生成中"；还没有 ⇒ "思考中"；
+ *  ⑥ run 还在但没有正文 ⇒ "思考中"；都不在 ⇒ "就绪"。
+ */
+export function runPhaseLabel(input: {
+  phase: RunPhase;
+  stopped: boolean;
+  running: boolean;
+  /** 本轮已经有模型正文（`hasAssistantTextThisRun`）。 */
+  hasAnswerText: boolean;
+  /** 正文已停 >1.5s（App 的 `answerQuiet`）。 */
+  answerQuiet: boolean;
+}): string {
+  if (input.stopped) return "已停止";
+  if (input.phase === "ask") return "等待审批";
+  if (input.phase === "clarify") return "等待澄清";
+  if (input.phase === "plan") return "等待方案";
+  // 工具在跑 ⇒ 不是收尾（见上：answerQuiet 与"工具在跑"同形）
+  if (input.phase === "tool") return "执行工具";
+  const finishing = input.running && input.hasAnswerText && (input.phase === "idle" || input.answerQuiet);
+  if (finishing) return "收尾中";
+  if (input.phase === "thinking") return input.hasAnswerText ? "生成中" : "思考中";
+  if (input.running) return input.hasAnswerText ? "收尾中" : "思考中";
+  return "就绪";
+}
+
 /** 最后一个 clarify_requested，且其后无同 callId 的 tool_result（澄清门的答复按原工具 id 挂回）。
  *  只看最后一个请求：其后已收口 ⇒ null（更早的未决请求不追溯，与门的串行语义一致）。 */
 export function pendingClarifyOf(events: readonly AgentEvent[]): { callId: string; questions: ClarifyQuestion[] } | null {
@@ -375,9 +491,38 @@ export function usageAggregate(events: readonly AgentEvent[]): {
   return { inputTokens, outputTokens, usageCount, cacheReadTokens, lastInputTokens };
 }
 
+/** 用量统计（2026-10-20 批 130 · 头像菜单的「用量统计」面板读它）。
+ *  口径与 `usageAggregate` 一致（同一份 usage 事件、同一套缺字段当 0 的防御），
+ *  外加步数与轮数两个「非 token」维度。纯函数 ⇒ 可判卷。
+ *  **只算当前会话**：跨会话汇总需要把所有会话的事件都读一遍（渲染层拿不到，
+ *  主进程也没有这个账本）——面板如实写「当前会话」，不拿单会话的数字冒充全局。 */
+export interface UsageSummary {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  usageCount: number;
+  toolSteps: number;
+  rounds: number;
+}
+
+export function usageSummary(events: readonly AgentEvent[]): UsageSummary {
+  const agg = usageAggregate(events);
+  let rounds = 0;
+  for (const e of events) {
+    if (e.type === "user_message") rounds += 1;
+  }
+  return {
+    inputTokens: agg.inputTokens,
+    outputTokens: agg.outputTokens,
+    cacheReadTokens: agg.cacheReadTokens,
+    usageCount: agg.usageCount,
+    toolSteps: countToolSteps(events),
+    rounds,
+  };
+}
+
 /** 步数（状态条「N 轮 · M 步」的 M）：主会话 tool_call 计数（worker 子流不计，同 projectStream 口径）。 */
-export function countToolSteps(events: readonly AgentEvent[]): number {
-  let steps = 0;
+export function countToolSteps(events: readonly AgentEvent[]): number {  let steps = 0;
   for (const e of events) {
     if (e.type === "tool_call" && !isWorkerSubflowEvent(e)) steps += 1;
   }
@@ -489,6 +634,44 @@ interface InternalTurn {
   verifications: InternalVerification[];
 }
 
+/** 被显式还原过、且此后**没有再被写**的文件集合（退出改动面的那些）。
+ *
+ *  为什么要有这一格：还原（检查器「撤销此文件改动」）此前只改盘上的文件、**不留任何事件**，
+ *  而改动面全部从事件流投影 ⇒ 还原之后那一行仍写着"修改"、仍提供"撤销"、徽标仍数着它、
+ *  交付卡仍说"改动已验证"——那个改动在盘上已经不存在了。
+ *
+ *  判定按**最后一次动作**：还原之后再被写 ⇒ 重新进改动面（还原只撤掉改动，没撤掉这个文件
+ *  以后再被改的资格）；只还原过、没再写 ⇒ 不在改动面。 */
+export function restoredPathsOf(events: readonly AgentEvent[]): ReadonlySet<string> {
+  const lastAction = new Map<string, "write" | "restore">();
+  const WRITE_TOOLS = new Set(["write_file", "edit_file", "apply_patch"]);
+  const writes = new Map<string, string>(); // tool_call id → path
+  for (const e of events) {
+    if (e.type === "tool_call" && WRITE_TOOLS.has(e.name)) {
+      const p = (e as { args?: { path?: unknown } }).args?.path;
+      if (typeof p === "string" && p !== "") writes.set(e.id, p);
+      continue;
+    }
+    if (e.type === "tool_result") {
+      const p = writes.get(e.callId);
+      if (p !== undefined) {
+        writes.delete(e.callId);
+        // 被拒绝/失败的一笔没有改动盘上文件（门拒绝、审批超时、工具报错都在执行前/写盘前收口）：
+        // 记成 write 会让「还原」之后的文件被一笔没发生的写入重新拉回改动面。
+        if (e.ok) lastAction.set(p, "write");
+      }
+      continue;
+    }
+    if (e.type === "file_restored") {
+      const p = (e as { path?: unknown }).path;
+      if (typeof p === "string" && p !== "") lastAction.set(p, "restore");
+    }
+  }
+  const out = new Set<string>();
+  for (const [p, kind] of lastAction) if (kind === "restore") out.add(p);
+  return out;
+}
+
 /** C-32 ChangeSummaryCard 的投影（v2 输出优先）：按轮聚合写工具改动——user 行开新轮，
  *  写类 tool_call（write_file/edit_file/apply_patch）与其 tool_result 配对后计入该轮；
  *  change 字段缺席标 unknown（不猜 created/modified）；worker 子流事件已在 projectStream
@@ -527,6 +710,11 @@ function collectTurnDelivery(events: readonly AgentEvent[]): InternalTurn[] {
       const call = pendingWrites.get(e.callId);
       if (call === undefined) continue;
       pendingWrites.delete(e.callId);
+      // 只有真的落盘的写入才算改动（2026-10-20 修）：gate 拒绝 / 审批超时 / 执行失败的回执
+      // 同样带 path，旧实现照单全收 ⇒ 一次被拒的 write_file 会在「改动」面凭空多一行、
+      // 顶栏徽标多 1、交付卡把这一轮说成「有改动未验证」——而盘上什么都没发生。
+      // 它也不能推进 lastWriteIndex：否则「验证之后又写盘 ⇒ stale」会被一次没发生的写入触发。
+      if (!e.ok) continue;
       current.lastWriteIndex = index;
       // 同一文件轮内多笔只记一次（首次的 change 口径）。
       if (current.files.some((f) => f.path === call.path)) continue;
@@ -559,16 +747,20 @@ function collectTurnDelivery(events: readonly AgentEvent[]): InternalTurn[] {
 }
 
 export function turnDelivery(events: readonly AgentEvent[]): TurnDelivery[] {
+  // 被显式还原过的文件退出改动面（用户明说"这一项我撤了"）。判定按**最后一次动作**：
+  // 还原之后再被写 ⇒ 重新进改动面（还原只撤掉改动，没撤掉它以后再被改的资格）。
+  const restored = restoredPathsOf(events);
   return collectTurnDelivery(events).map((turn) => {
+    const files = turn.files.filter((f) => !restored.has(f.path));
     const fresh = turn.verifications.filter((v) => v.index > turn.lastWriteIndex);
     const latest = fresh.length > 0 ? fresh[fresh.length - 1]! : (turn.verifications[turn.verifications.length - 1] ?? null);
     const status: TurnVerificationStatus =
-      turn.files.length === 0
+      files.length === 0
         ? "not-required"
         : fresh.length === 0
           ? turn.verifications.length === 0 ? "absent" : "stale"
           : latest!.ok ? "verified" : "failed";
-    const unverifiedFiles = status === "verified" || status === "not-required" ? [] : turn.files.map((f) => f.path);
+    const unverifiedFiles = status === "verified" || status === "not-required" ? [] : files.map((f) => f.path);
     const nextAction =
       status === "failed" ? "修复失败项后重新运行验证"
       : status === "stale" ? "文件在上次验证后又有改动，请重新运行验证"
@@ -577,10 +769,10 @@ export function turnDelivery(events: readonly AgentEvent[]): TurnDelivery[] {
       : "本轮没有文件改动，可继续下一项";
     return {
       round: turn.round,
-      files: turn.files,
+      files,
       verification: {
         status,
-        attempts: turn.files.length === 0 ? turn.verifications.length : fresh.length,
+        attempts: files.length === 0 ? turn.verifications.length : fresh.length,
         latest: latest === null ? null : {
           ok: latest.ok,
           auto: latest.auto,

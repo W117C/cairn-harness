@@ -1,0 +1,90 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness/apps/desktop
+
+ ❯ tests/tool-disclosure.test.tsx (3 tests | 3 failed) 12ms
+   ❯ 工具过程的分层披露 (3)
+     × 返回内容与调用配对，保留失败原因，限制巨量输出并明确标记截断 5ms
+     × 普通模式以工具组摘要开场，失败状态在收起时仍可见 5ms
+     × 详细模式显示输入和返回内容；输出当作文本转义，不执行 HTML 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/tool-disclosure.test.tsx > 工具过程的分层披露 > 返回内容与调用配对，保留失败原因，限制巨量输出并明确标记截断
+AssertionError: expected { kind: 'tool', …(7) } to match object { output: 'export const a = 1;' }
+(8 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "output": "export const a = 1;",
++   "args": "{
++   \"path\": \"a.ts\"
++ }",
++   "kind": "tool",
++   "ok": true,
++   "pending": false,
++   "seq": 0,
++   "summary": "a.ts",
++   "tool": "read_file",
++   "ts": undefined,
+  }
+
+ ❯ tests/tool-disclosure.test.tsx:18:21
+     16|     const rows = projectStream([...events, { type: "tool_call", id: "c…
+     17|       { type: "tool_result", callId: "c", ok: true, output: "x".repeat…
+     18|     expect(rows[0]).toMatchObject({ output: "export const a = 1;" });
+       |                     ^
+     19|     expect(rows[1]).toMatchObject({ ok: false, output: "Assertion fail…
+     20|     expect(rows[2]).toMatchObject({ outputTruncated: true });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/tool-disclosure.test.tsx > 工具过程的分层披露 > 普通模式以工具组摘要开场，失败状态在收起时仍可见
+AssertionError: expected '<div class="gen-bar" data-running="fa…' to contain 'class="tool-group-toggle"'
+
+Expected: "class="tool-group-toggle""
+Received: "<div class="gen-bar" data-running="false" aria-hidden="true"></div><div class="toolcluster"><div class="row tool" data-event-id="1"><button class="tool-head" aria-expanded="false"><span class="chev" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span><span class="glyph ok" aria-label="完成"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span><span class="tname">read_file</span><span class="tsum">读取 a.ts</span></button></div><div class="row tool" data-event-id="3"><button class="tool-head" aria-expanded="false"><span class="chev" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span><span class="glyph failed" aria-label="失败"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-triangle-alert lucide-alert-triangle" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg></span><span class="tname">run_shell</span><span class="tsum">运行 pnpm test</span></button></div></div>"
+
+ ❯ tests/tool-disclosure.test.tsx:26:18
+     24|   it("普通模式以工具组摘要开场，失败状态在收起时仍可见", () => {
+     25|     const html = renderToStaticMarkup(<Stream rows={projectStream(even…
+     26|     expect(html).toContain('class="tool-group-toggle"');
+       |                  ^
+     27|     expect(html).toContain('aria-expanded="false"');
+     28|     expect(html).toContain("2 次工具调用");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/tool-disclosure.test.tsx > 工具过程的分层披露 > 详细模式显示输入和返回内容；输出当作文本转义，不执行 HTML
+AssertionError: expected '<div class="gen-bar" data-running="fa…' to contain '返回内容'
+
+- Expected
++ Received
+
+- 返回内容
++ <div class="gen-bar" data-running="false" aria-hidden="true"></div><div class="toolcluster"><div class="row tool open" data-event-id="1"><button class="tool-head" aria-expanded="true"><span class="chev" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span><span class="glyph ok" aria-label="完成"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span><span class="tname">read_file</span><span class="tsum">读取 a.ts</span></button><div class="tool-body"><div class="kv"><span class="k">原始参数（JSON）</span><pre>{
++   &quot;path&quot;: &quot;a.ts&quot;
++ }</pre></div></div></div><div class="row tool open" data-event-id="3"><button class="tool-head" aria-expanded="true"><span class="chev" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span><span class="glyph failed" aria-label="失败"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-triangle-alert lucide-alert-triangle" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg></span><span class="tname">run_shell</span><span class="tsum">运行 pnpm test</span></button><div class="tool-body"><div class="kv"><span class="k">原始参数（JSON）</span><pre>{
++   &quot;command&quot;: &quot;pnpm test&quot;
++ }</pre></div></div></div></div>
+
+ ❯ tests/tool-disclosure.test.tsx:37:18
+     35|     const html = renderToStaticMarkup(<Stream rows={rows} view="verbos…
+     36|     expect(html).toContain("原始参数（JSON）");
+     37|     expect(html).toContain("返回内容");
+       |                  ^
+     38|     expect(html).toContain("Expected 2, received 1");
+     39|     const escaped = renderToStaticMarkup(<Stream rows={projectStream([
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  21:33:13
+   Duration  254ms (transform 51%, import 41%, tests 7%, worker 1%)
+
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts tests/tool-disclosure.test.tsx

@@ -1,0 +1,19 @@
+== pnpm gates ==
+门清单（2 道，清单即事实源）：test e2e
+执行器：pnpm run
+  清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）
+
+  ▶ test …  ✅ test               exit=0  215355ms
+      └ Tests  5253 passed (5253)
+  ▶ e2e …  ✅ e2e                exit=0  2310ms
+      └ ✅ 交付时 sha256 与开工冻结逐字一致
+
+== 断言体检（空断言 / 恒真式 / 暗卷段零断言 / 析取式弱断言）==
+  扫描面：126 个已跟踪且在盘的脚本（未跟踪草稿不判，口径同 tests/assertion-health-scan.test.ts）
+  ✅ 零命中
+
+== 汇总 ==
+  绿 2 / 2，红 0
+  逐道退出码：test=0 e2e=0
+  认证面 = **工作树，不是 HEAD**：判卷四面（src/scripts/tests/fixtures）在飞 114 项｜全仓在飞 244 项 ⇒ 本表全 0 **不等于 HEAD 全 0**；要 HEAD 认证请在 HEAD 的隔离 worktree 里跑整表（`git worktree add --detach <tmp> HEAD`；注意 `pnpm gates --direct` 只换执行器〔`pnpm run X` → `/bin/sh -c <script>`〕，**不改取料树**）
+  ✅ pnpm gates 全部通过 （子集 2/34 道门——非全量运行，不等于全量全绿）

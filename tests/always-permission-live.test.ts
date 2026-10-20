@@ -146,10 +146,10 @@ describe("总是允许在本轮立即生效", () => {
   });
 
   // M1e 安全模式那道 gate 是**独立于** evaluate 的第二次审批（它跑在 evaluate 之前）。
-  // 从前它的拒绝出口既不区分三种结局、也不挂 verdict ⇒ `lessons.ts` 的 isAskDeniedResult
+  // 从前它的拒绝出口既不区分三种结局、也不挂 verdict ⇒ `lessons.ts` 的 neverExecutedResult
   // 判不出"工具没执行"，一次审批超时会被记成"执行了但失败"，进而得出
   // 「这个工具在这个项目里用不了」——与 askDenialText 修的是同一族，只是漏了这一处。
-  // 判据：拒绝出口必须带 verdict，且能被 isAskDeniedResult 认成"没执行"。
+  // 判据：拒绝出口必须带 verdict，且能被 neverExecutedResult 认成"没执行"。
   it("安全模式 gate 的拒绝也带 verdict（超时不等于「这个工具用不了」）", async () => {
     const s = await setup();
     vi.stubEnv("M1E_SAFE_MODE", "gate");
@@ -161,8 +161,8 @@ describe("总是允许在本轮立即生效", () => {
     const r = await bare.run({ path: "x.txt", content: "x" }, ctx) as ToolResultWithAudit;
     expect(r.ok).toBe(false);
     expect(r.gate).toMatchObject({ layer: "L3-mode", verdict: "unattended" });
-    const { isAskDeniedResult } = await import("../src/agent/memory/lessons");
-    expect(isAskDeniedResult({ type: "tool_result", callId: "c", ok: false, output: r.output, gate: r.gate } as never)).toBe(true);
+    const { neverExecutedResult } = await import("../src/agent/memory/lessons");
+    expect(neverExecutedResult({ type: "tool_result", callId: "c", ok: false, output: r.output, gate: r.gate } as never)).toBe(true);
     expect(s.execute).not.toHaveBeenCalled();
   });
 

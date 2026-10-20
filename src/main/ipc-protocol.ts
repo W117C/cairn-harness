@@ -128,6 +128,25 @@ export interface RunResponse {
   /** Present only when validated references were consumed as path context. */
   attachmentCount?: number;
 }
+/** 会话级 worktree 动作（§3.7 · G4）。`sessionId` 由调用方给——main 侧按会话归属解析工作区。 */
+export type SessionWorktreeRequest =
+  | { kind: "create"; sessionId: string; title?: string }
+  | { kind: "merge"; sessionId: string }
+  | { kind: "discard"; sessionId: string };
+
+export interface SessionWorktreeResult {
+  ok: boolean;
+  /** 工作区绝对路径（create）。 */
+  path?: string;
+  branch?: string;
+  /** symlink 降级警告（成功也可能有：链不上只是少一份共享，不阻断隔离）。 */
+  warnings?: string[];
+  /** merge 冲突：主 checkout 已被 abort 回干净态，清单交给人处理。 */
+  conflict?: boolean;
+  conflictedFiles?: string[];
+  error?: string;
+}
+
 export interface AskPayload {
   askId: string;
   // M2d：remember 等运行时注入工具不进 ToolName 静态键域，审批卡只作展示串
@@ -143,6 +162,9 @@ export interface AskPayload {
    *  跨会话时既串台又不敢按会话锁输入框（误锁别的会话）。缺省 = 归属未知（老载荷/headless
    *  路径本就没有会话面），渲染层按未知处理，**不许猜成当前会话**。 */
   sessionId?: string;
+  /** 连拦降级提示（§2.2 双向断路器）：审批卡上明说"这一档最近连续被拒"并给一键降档。
+   *  缺省 = 未达阈值（不是"没有这一档"）。 */
+  tierWarning?: string;
 }
 export interface AskOutcomePayload {
   askId: string;
@@ -212,6 +234,8 @@ export interface SessionInfoPayload {
   projectId?: string;
   createdAt?: string;
   updatedAt?: string;
+  /** 这条会话有自己的 git worktree（§3.7 · G4）。读侧由目录存在与否给真值，不另存状态。 */
+  isolated?: boolean;
 }
 
 // ---- M2d 记忆快照（getState 透传：两层记忆 + 外部引用待批清单）----
@@ -260,6 +284,10 @@ export interface AgentApi {
   compact?(sessionId?: string): Promise<CompactResponse>;
   onEvent(cb: (e: AgentEvent) => void): () => void;
   onAsk(cb: (p: AskPayload) => void): () => void;
+  /** 原生菜单命令（main → 渲染层）：id 见 apps/desktop/src/shared/menu-commands.ts。
+   *  为什么走 push 而不是让主进程直接干活：菜单里绝大多数动作的真身在渲染层（要点亮浮层、
+   *  要读「本轮是否在跑」、要移动焦点），主进程没有那些状态。 */
+  onMenu(cb: (id: string) => void): () => void;
   onAskDone(cb: (p: AskOutcomePayload) => void): () => void;
   getState(): Promise<StateResponse>;
   /** Provider/model/capability catalog derived from the same registry used by workers. */
@@ -363,8 +391,10 @@ export interface AgentApi {
   /** v11：⌘V 粘贴素材落临时文件（截图等）；字节帽 20MB，返回路径此后走既有附件引用链。 */
   saveTempFile(req: { name: string; bytes: Uint8Array }): Promise<{ ok: boolean; path?: string; error?: string }>;
   /** v11：把覆盖前快照还原回目标文件（检查器「撤销此文件改动」）——写前先给当前版本备份，
-   *  撤销本身可再撤销；快照与路径配对校验与 changeDiff 完全同口径（越界即拒、防串文件）。 */
-  snapshotRestore(req: { path: string; snapshotId: string }): Promise<{ ok: boolean; error?: string }>;
+   *  撤销本身可再撤销；快照与路径配对校验与 changeDiff 完全同口径（越界即拒、防串文件）。
+   *  成功后向该会话的事件流落一条 `file_restored`（sessionId 给了才落）——
+   *  否则改动面还当这个文件没撤（行上仍写"修改"、徽标仍数着它、交付卡仍说"改动已验证"）。 */
+  snapshotRestore(req: { path: string; snapshotId: string; sessionId?: string }): Promise<{ ok: boolean; error?: string }>;
   /** v11：在 Finder 中显示某绝对路径（项目右键菜单 / 项目外附件 chip 的落点）。只显示不打开。 */
   revealInFinder(path: string): Promise<{ ok: boolean; error?: string }>;
   /** 附件图片缩略图（2026-10-18 desktop 扩展）：仅图片扩展名、≤25MB；返回 40px PNG data URL。 */
@@ -374,6 +404,14 @@ export interface AgentApi {
   submitFeedback(req: { sessionId: string; eventId: number; rating: "up" | "down" | "none"; note?: string }): Promise<{ ok: boolean; error?: string }>;
   /** 当前生效的反馈（按 eventId 去重、撤销的不返回）：界面据此点亮赞/踩。 */
   listFeedback(sessionId: string): Promise<{ sessionId: string; eventId: number; rating: "up" | "down"; note?: string; at: string }[]>;
+  /** 2026-10-20 消息置顶（规范 §3.11 操作条 pin）：sidecar `pins.jsonl`，append-only、不进事件流。
+   *  `pinned:false` = 取消置顶（追加一条撤销行，读时取最后一条生效）。 */
+  setMessagePinned(req: { sessionId: string; eventId: number; pinned: boolean }): Promise<{ ok: boolean; error?: string }>;
+  /** 某会话当前生效的置顶锚点（eventId 升序）。 */
+  listMessagePins(sessionId: string): Promise<number[]>;
+  /** 会话级 worktree 隔离（§3.7 · G4）：一条会话可以在自己的 git worktree 里跑，做完合并回来。
+   *  三动作一个通道——它们共用同一条事实（磁盘上那棵树在不在），拆成三条只是把同一份状态抄三遍。 */
+  sessionWorktree(req: SessionWorktreeRequest): Promise<SessionWorktreeResult>;
   setSessionPinned(sessionId: string, pinned: boolean): Promise<SessionMetadataRecord>;
   setSessionArchived(sessionId: string, archived: boolean): Promise<SessionMetadataRecord>;
   assignSessionProject(sessionId: string, projectId: string | null): Promise<SessionMetadataRecord>;

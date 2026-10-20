@@ -5,6 +5,11 @@ import { parsePaneHash } from "./components/panes";
 import { ToastHost } from "./components/ToastHost";
 import "./tokens.css";
 import "./styles.css";
+import "./dsh-claude-style.css";
+
+document.body.setAttribute("data-dsh-claude-style", "");
+document.body.setAttribute("data-dsh-claude-palette", "claude");
+document.body.setAttribute("data-dsh-claude-brand", "claude");
 
 const PopoutApp = lazy(() => import("./components/PopoutApp").then((m) => ({ default: m.PopoutApp })));
 

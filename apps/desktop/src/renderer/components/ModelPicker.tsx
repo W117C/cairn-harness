@@ -141,6 +141,25 @@ export const THINKING_LEVELS = [
   { id: "high", short: STR.modelPicker.thinkHigh, hint: STR.modelPicker.thinkHighHint },
 ] as const;
 
+/** 「信号开菜单」这一步的判据（纯函数）：seq 前进一次 = 开一次。
+ *
+ *  `prev === null` 是**首帧**（含重挂后的首帧）：那时只对齐基线、不开。
+ *  这一支是修的那一格：ModelPicker 按 `key={draftKey}` 在切会话时重挂，重挂把「上一次见过的 seq」
+ *  这个 ref 复位掉了，而 Composer 那边的 seq 不会复位、还留着上一次 ⌘⇧I 的值 ⇒ 重挂后的 picker
+ *  以为"seq 前进了一大截"⇒ **切会话时菜单自己弹开**，悬在新会话的输入框上抢焦点。
+ *  语义不变：「seq 前进一次 = 开一次」，而**重挂不算前进**。
+ *
+ *  seq 回退（< prev）也不开：基线不倒退，避免下一次前进被算成"连跳两格"而开两次。 */
+export function nextOpenSeqState(
+  prev: number | null,
+  incoming: number | undefined,
+): { open: boolean; baseline: number | null } {
+  if (incoming === undefined) return { open: false, baseline: prev };
+  if (prev === null) return { open: false, baseline: incoming };
+  if (incoming <= prev) return { open: false, baseline: prev };
+  return { open: true, baseline: incoming };
+}
+
 export function ModelPicker(props: {
   infos: readonly ProviderInfo[];
   value: string | null;
@@ -174,11 +193,20 @@ export function ModelPicker(props: {
   const box = useRef<HTMLDivElement>(null);
   // 信号开菜单：seq 前进且未被**硬锁**（disabled：门槛/排队读回）才开。
   // v7.2 业主裁后 running 不再折进 disabled ⇒ ⌘⇧E 运行中也能开（思考档要能调）。
-  const lastOpenSeq = useRef(0);
+  //
+  // 首帧只**对齐**、不开（2026-10-19 独立评审追出）：ModelPicker 按 `key={draftKey}` 在切会话时
+  // 重挂（见 Composer.tsx 的注释），重挂会把 `lastOpenSeq` 这个 ref 复位成 0；而 Composer 那边的
+  // `pickerOpenSeq` 不会重挂、还留着上一次 ⌘⇧I 的值（3 之类）⇒ 重挂后的 picker 看到
+  // "openSeq(3) > lastOpenSeq(0)" ⇒ **切会话时菜单自己弹开**，悬在新会话的输入框上抢焦点——
+  // 正是那个 key 原本要防的症状（"模型搜索框还开着"）。
+  // 修法：首帧把基线对齐到当前 openSeq（此后只在它**真的前进**时开），语义不变：
+  // "seq 前进一次 = 开一次"，重挂不算前进。
+  const lastOpenSeq = useRef<number | null>(null);
   useEffect(() => {
-    if (props.openSeq === undefined || props.openSeq <= lastOpenSeq.current) return;
-    lastOpenSeq.current = props.openSeq;
-    if (props.disabled !== true) setOpen(true);
+    if (props.openSeq === undefined) return;
+    const step = nextOpenSeqState(lastOpenSeq.current, props.openSeq);
+    lastOpenSeq.current = step.baseline;
+    if (step.open && props.disabled !== true) setOpen(true);
   }, [props.openSeq, props.disabled]);
   const allOptions = flattenModels(props.infos);
   const options = props.configuredProviders === undefined

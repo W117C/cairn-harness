@@ -1,0 +1,58 @@
+# 认证读数 · rev 57f4d4a
+- 生成时刻=2026-10-11-1809（UTC。台账页按本地日期，跨零点时页号与这里差一天，不是写错了）
+- 温度＝两端独占 ⇒ **时间量可以引用**（墙钟／门耗时／杀锚用时）
+- 收尾复核=同一笔
+- 判据：两端独占＝「起前 0 且跑完 0 且这一趟真跑了全量判卷」；本页引用时间量前先回看这一行
+
+## 认证打出来的读数（原样，未改写）
+
+```text
+目标提交：57f4d4a（--at=HEAD）
+worktree add exit=0
+已核：TREE=57f4d4a7730783f7e2f755cc5973bf19fe55a5f7｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 apps/desktop/node_modules ← 主树 exit=0
+  零依赖子仓库 17 个（不需要 node_modules，不计入补齐面）
+import 面：3915 条边｜悬空 0（其中存量已豁免 0）
+门表：33 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（23 道，名单取自 57f4d4a）==
+  ✅ no-progress-check exit=0 264ms（预算 1100ms）
+  ✅ prune-check exit=0 304ms（预算 1100ms）
+  ✅ fork-check exit=0 260ms（预算 1100ms）
+  ✅ compaction-check exit=0 368ms（预算 1200ms）
+  ✅ docs-check exit=0 904ms（预算 1300ms）
+  ✅ memory-check exit=0 437ms（预算 1300ms）
+  ✅ head-import-check exit=0 1530ms（预算 2400ms）
+  ✅ autonomy-check exit=0 538ms（预算 1500ms）
+  ✅ sandbox:check exit=0 1244ms（预算 1700ms）
+  ✅ security-check exit=0 519ms（预算 1500ms）
+  ✅ provider:check exit=0 257ms（预算 1300ms）
+  ✅ routing-check exit=0 450ms（预算 1400ms）
+  ✅ model-surface-check exit=0 473ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 536ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 317ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 320ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 261ms（预算 1000ms）
+  ✅ web-fetch-check exit=0 309ms（预算 1200ms）
+  ✅ gym-check exit=0 1022ms（预算 2400ms）
+  ✅ gate-check exit=0 2655ms（预算 5400ms）
+  ✅ evidence-typecheck-check exit=0 3409ms（预算 5300ms）
+  ✅ mutate-needles-check exit=0 15645ms（预算 20000ms）
+  ✅ repo-hygiene-check exit=0 361ms（预算 1200ms）
+  认证门面=23 道（跑到 23）｜绿 23 道｜⚠️ 超预算 0
+
+== 认证汇总 ==
+  TREE=57f4d4a DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-gate-head-cert.lock）
+  Test Files 2 failed | 346 passed (348)｜Tests 2 failed | 4966 passed (4968)｜exit=1（退出码直接取，不接管道）
+  并发判卷=起前 0 套／跑完 0 套（两端独占）
+  本趟墙钟 269.75s（同一进程 hrtime 实测·口径＝起跑→汇总那一行，不含提前退出的那些趟）
+  贴帽读数（缺省＝config 里的 testTimeout=30000ms）：4968 条里 0 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 4614 条｜标题非字面量（it.each／插值／拼接，按缺省算）195 条｜预算没落到 0 条｜无｜离帽余量最近：tests/m3c.test.ts·M3c pipeline 哑 sequencer（零 LLM） 未获 15179ms/25000ms=61%；tests/evidence-typecheck.test.ts·真环境：这一格得在真仓里跑得出东西（规则 237/320） 真仓那一 4925ms/15000ms=33%；tests/evidence-typecheck.test.ts·门那一半：runner 的两个拒绝分支各自要出声 拼错的开关 ⇒ 退 4343ms/15000ms=29%
+  逐条日志：/tmp/dsh-head-cert-57f4d4a
+  已回收认证树 .worktrees/gate-head-cert（exit=0）
+  常驻残留树=2（/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/gate-mutate-verify@46cde6b、/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/verify-5691a5c@5691a5c）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+  本次退出码=1（这是 head-cert 这道门自己的码，不是它跑进去的 test runner 的码）｜红的维：判卷 exit=1
+  汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-57f4d4a/summary.txt
+```

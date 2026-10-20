@@ -29,6 +29,11 @@ export type ThemeSetting = "system" | "light" | "dark";
 /** 2026-10-18：界面字号三档（tokens.css 的 `html[data-text-size=…]` 同名单）。
  *  md = 中间档 = --rem-scale 维持 1（缺省走这支，保证对既有用户零视觉变化）。 */
 export type TextSizeSetting = "sm" | "md" | "lg";
+/** 2026-10-20：组件尺寸档（双轴变体的**尺寸轴**，Claude 实测 data-step="1…5" 五档）。
+ *  tokens.css 的 `html[data-ui-size="1..5"] { --size-scale: … }` 同名单。
+ *  与 textSize 正交：字号改字号、尺寸改尺寸——规范 §4.5 尾「各调各的」。
+ *  "2" = 中间档 = --size-scale 维持 1（缺省走这支，对既有用户零视觉变化）。 */
+export type UiSizeSetting = "1" | "2" | "3" | "4" | "5";
 /** v2.14：界面语言（i18n 偏好）——V1 只做持久化与校验（先让偏好可存可回读），渲染层文案翻译逐段接线。 */
 export type LocaleSetting = "zh-CN" | "en-US";
 /** 主对话模型通道：demo 是冻结剧本；内置四家与 worker registry / env-key 表同源；
@@ -113,6 +118,10 @@ export interface AppSettings {
    *  没有字段 ⇒ App 无处存偏好；data-text-size 从来没被任何代码写过 ⇒ 三档是死代码。
    *  "md" = 不动 --rem-scale（维持 1），所以缺省值对既有用户是**逐像素零变化**。 */
   textSize: TextSizeSetting;
+  /** 2026-10-20：组件尺寸档（尺寸轴）。CSS 侧五档已写好——`html[data-ui-size="1..5"]`
+   *  → --size-scale .833/1/1.167/1.333/1.667，乘在每一个几何 calc 上（控件高/圆角/间距/内边距）。
+   *  "2" = 不动 --size-scale（维持 1）⇒ 缺省对既有用户逐像素零变化。 */
+  uiSize: UiSizeSetting;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -159,6 +168,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   planRequiredByDefault: false,
   ctrlTabCycle: true,
   textSize: "md",
+  uiSize: "2",
 };
 
 const SAFE_MODES = ["off", "report", "gate"] as const;
@@ -166,6 +176,8 @@ const THEMES = ["system", "light", "dark"] as const;
 const LOCALES = ["zh-CN", "en-US"] as const;
 /** 字号三档（与 tokens.css 的 html[data-text-size=…] 选择器逐字对应——改一处必须改另一处）。 */
 const TEXT_SIZES = ["sm", "md", "lg"] as const;
+/** 尺寸五档（与 tokens.css 的 html[data-ui-size="…"] 选择器逐字对应——改一处必须改另一处）。 */
+const UI_SIZES = ["1", "2", "3", "4", "5"] as const;
 /** 设置面可持久化的主会话 provider 的**内置**子集：demo + 四个真实 adapter。
  *  自定义 provider 不在这个字面量里（它们是运行时才知道的），由 `isPersistableProvider` 一并放行。 */
 export const PROVIDER_KINDS = ["demo", ...ENV_KEYED_PROVIDERS] as const;
@@ -258,6 +270,8 @@ export function validateSettings(raw: unknown): AppSettings {
     ctrlTabCycle: typeof r.ctrlTabCycle === "boolean" ? r.ctrlTabCycle : d.ctrlTabCycle,
     // 2026-10-18 字号档：白名单外（含旧档案没这个键）回退 "md" = --rem-scale 1 = 与今天逐像素一致。
     textSize: TEXT_SIZES.includes(r.textSize as TextSizeSetting) ? (r.textSize as TextSizeSetting) : d.textSize,
+    // 2026-10-20 尺寸档：白名单外（含旧档案没这个键）回退 "2" = --size-scale 1 = 与今天逐像素一致。
+    uiSize: UI_SIZES.includes(r.uiSize as UiSizeSetting) ? (r.uiSize as UiSizeSetting) : d.uiSize,
     provider: isPersistableProvider(r.provider) ? (r.provider as ProviderKind) : d.provider,
     model,
     // 工作区：非空字符串取原值（越界长度回退默认，避免把畸形路径带进 run 装配）；其余回退 null

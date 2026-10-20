@@ -7,7 +7,7 @@
 // 数据面全部来自 panes.ts 纯投影 + turnDelivery（既有）+ changeDiff（v4 通道，懒加载）。
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
-import { AlertTriangle, Check, ChevronRight, Crosshair, FileText, Folder, Loader2, MoreHorizontal, Plus, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, Crosshair, ExternalLink, FileText, Folder, GripVertical, Loader2, MoreHorizontal, PanelsTopLeft, Plus, X } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Cell, Grid, Gridline, useGridRef } from "react-resizable-panels";
 import type { AgentEvent } from "../../../../../src/events";
@@ -18,7 +18,7 @@ import { MIN_PANE_PCT, loadPaneRows, mergePaneRows, paneRowLayout, savePaneRows 
 import { DiffView } from "./DiffView";
 import { SidechatPane } from "./SidechatPane";
 import { PathMenu } from "./PathMenu";
-import { changedFileCount, composeReviewMessage, PANE_META, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, type PaneKind, type WorkerPaneItem } from "./panes";
+import { changedFileCount, composeReviewMessage, PANE_META, PANE_OPENABLE, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, type PaneKind, type WorkerPaneItem } from "./panes";
 
 // PaneKind / PANE_META 的唯一事实源在 panes.ts（独立窗口路由同用）；此处 re-export 保接口。
 export { PANE_META, PANE_OPENABLE, type PaneKind } from "./panes";
@@ -868,6 +868,7 @@ export function PaneDock(props: {
   tabs: readonly PaneKind[];
   events: readonly AgentEvent[];
   onClose: (kind: PaneKind) => void;
+  onOpen?: (kind: PaneKind) => void;
   /** 行级评注一次性提交的去处（App 传 send → 新一轮/入队）；缺省 = 评注 UI 不出现。 */
   onReview?: (text: string) => void;
   /** 拖标题栏换位（from/to 为 tabs 下标）；缺省 = 不可拖。 */
@@ -887,6 +888,22 @@ export function PaneDock(props: {
 }): React.JSX.Element {
   // 拖拽换位状态（HTML5 DnD；拖动中的格子给视觉反馈）。
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [focusedPane, setFocusedPane] = useState<PaneKind | null>(null);
+  const focused = focusedPane !== null && props.tabs.includes(focusedPane) ? focusedPane : null;
+  const previousTabs = useRef(props.tabs);
+  const navRef = useRef<HTMLElement | null>(null);
+  const closePane = (kind: PaneKind): void => {
+    props.onClose(kind);
+    // 关闭按钮卸载后将焦点交给剩余窗格，避免键盘用户掉回文档起点。
+    window.requestAnimationFrame(() => {
+      navRef.current?.querySelector<HTMLButtonElement>(".pane-nav-item")?.focus();
+    });
+  };
+  useEffect(() => {
+    const added = props.tabs.find((kind) => !previousTabs.current.includes(kind));
+    if (focusedPane !== null) setFocusedPane(added ?? (props.tabs.includes(focusedPane) ? focusedPane : null));
+    previousTabs.current = props.tabs;
+  }, [props.tabs, focusedPane]);
   // 右键路径菜单（§2.3）：窗格内坐标 + 目标；渲染层自绘（见 PathMenu）。
   const [pathMenu, setPathMenu] = useState<{ x: number; y: number; rel: string; kind: "file" | "directory" } | null>(null);
   const openPathMenu = (rel: string, kind: "file" | "directory", x: number, y: number): void => {
@@ -922,23 +939,43 @@ export function PaneDock(props: {
     );
   }
   return (
-    <>
+    <div className="pane-workbench">
+    <nav className="pane-nav" aria-label="面板导航" ref={navRef}>
+      <div className="pane-nav-items">
+        {props.tabs.map((kind) => <button key={kind} className="pane-nav-item"
+          aria-label={`聚焦${PANE_META[kind].label}窗格`} aria-pressed={focused === kind}
+          onClick={() => setFocusedPane(kind)}>{PANE_META[kind].label}</button>)}
+      </div>
+      <button className="iconbtn sm" aria-label="恢复多面板布局" title="恢复多面板布局" aria-pressed={focused === null}
+        onClick={() => setFocusedPane(null)}><PanelsTopLeft size={15} /></button>
+      {props.onOpen !== undefined && <DropdownMenu.Root>
+        <DropdownMenu.Trigger asChild><button className="iconbtn sm" aria-label="添加面板" title="添加面板"><Plus size={15} /></button></DropdownMenu.Trigger>
+        <DropdownMenu.Portal><DropdownMenu.Content className="pop-rd" sideOffset={5} align="end">
+          {PANE_OPENABLE.map((kind) => <DropdownMenu.Item key={kind} className="menu-item"
+            onSelect={() => { if (!props.tabs.includes(kind)) props.onOpen?.(kind); setFocusedPane(kind); }}>
+            <span>{PANE_META[kind].label}</span>{props.tabs.includes(kind) && <Check size={12} />}
+          </DropdownMenu.Item>)}
+        </DropdownMenu.Content></DropdownMenu.Portal>
+      </DropdownMenu.Root>}
+    </nav>
     <Grid
       gridRef={gridRef}
       columns={1}
       rows={rowTracks}
       defaultLayout={{ rows: defaultRows }}
       onLayoutChanged={(layout, meta) => {
+        if (focused !== null) return;
         if (!meta.isUserInteraction) return;
         savePaneRows(mergePaneRows(loadPaneRows(), layout.rows, props.tabs));
       }}
       className="pane-grid"
       id="cairn-panes"
+      data-focused={focused ?? undefined}
     >
       {props.tabs.map((kind, i) => (
         <Fragment key={kind}>
           {i > 0 && <Gridline type="row" row={i} className="pane-gridline" />}
-          <Cell column={0} row={i} className="pane-cell">
+          <Cell column={0} row={i} className="pane-cell" data-pane={kind} data-focused={focused === kind}>
             <section className="pane-chunk" aria-label={`${PANE_META[kind].label}窗格`}>
               <div
                 className="pane-chunk-head"
@@ -971,7 +1008,7 @@ export function PaneDock(props: {
                 }}
                 title={props.onReorder !== undefined ? "拖动换位（键盘：⌥↑ / ⌥↓）" : undefined}
               >
-                {props.onReorder !== undefined && <span className="pc-grip" aria-hidden="true">⋮⋮</span>}
+                {props.onReorder !== undefined && <span className="pc-grip" aria-hidden="true"><GripVertical size={12} /></span>}
                 <span className="pc-label">{PANE_META[kind].label}</span>
                 {props.onPopout !== undefined && (
                   <button
@@ -979,12 +1016,12 @@ export function PaneDock(props: {
                     aria-label={`弹出${PANE_META[kind].label}窗格`}
                     title="弹出为独立窗口"
                     onClick={() => { props.onPopout?.(kind); }}
-                  >⧉</button>
+                  ><ExternalLink size={12} /></button>
                 )}
                 <button
                   className="pt-x"
                   aria-label={`关闭${PANE_META[kind].label}窗格`}
-                  onClick={() => { props.onClose(kind); }}
+                  onClick={() => { closePane(kind); }}
                 ><X size={11} /></button>
               </div>
               <div className="pane-chunk-body">
@@ -1023,7 +1060,7 @@ export function PaneDock(props: {
         {...(props.onAttach !== undefined ? { onAttach: props.onAttach } : {})}
       />
     )}
-    </>
+    </div>
   );
 }
 

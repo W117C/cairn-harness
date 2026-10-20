@@ -104,6 +104,23 @@ function verifyEscalateEffect(patch: Extract<StrategyPatch, { kind: "verify-esca
 }
 
 function goalReconfirmEffect(patch: Extract<StrategyPatch, { kind: "goal-reconfirm" }>, s: EvolutionSignals): PatchEffect {
+  // **没测过 ≠ 漂移已消解**（2026-10-19 独立评审追出的 MEDIUM）：
+  // 旧实现只看 `goalDriftCount > 0`，而那个 0 有两种成因——"测过了没有"与"根本没得测"
+  // （这一跑只有工具调用、助手一句散文都没写 ⇒ 没有可读的目标漂移面）。
+  // 后者被当成"消解" ⇒ 上一轮的 goal-reconfirm 补丁**被删掉**，审计轨迹还记着"已消解"——
+  // 为一个**从没测过**的漂移记了一次消解。补丁是"治漂移"的方子，没测过就没有理由扔。
+  // 同 `costMeasurable` 那一格（2026-10-16「不可测 ≠ 无前进」）：不可测 ⇒ inconclusive + 观察，
+  // 不动补丁（verify 那一维早就是这个形状）。
+  if (s.goalDriftMeasurable === false) {
+    return {
+      kind: patch.kind,
+      key: patchKeyOf(patch),
+      status: "inconclusive",
+      disposition: "observe",
+      observed: "这一跑没有可读的目标漂移面（助手没写散文）⇒ 不可测，不据此消解旧补丁",
+      patch,
+    };
+  }
   if (s.goalDriftCount > 0) {
     return {
       kind: patch.kind,

@@ -176,7 +176,9 @@ describe("设置页模态边界（背景不可达 + 焦点环绕 + 关闭恢复�
   });
 
   it("设置打开时 App 全局快捷键让路，Esc 不会被误判成停止运行", () => {
-    expect(appSrc).toContain("if (document.querySelector('[data-modal-surface=\"true\"]') !== null || h.paletteOpen) return;");
+    // 2026-10-20：改钉「走共享门」（command-gate.ts 的 overlayBlocked）——
+    // 行为判据在 tests/command-gate.test.ts（真 DOM）；这里钉 App 的快捷键路径接上了那道门。
+    expect(appSrc).toContain("overlayBlocked(readGateInput(");
   });
 });
 

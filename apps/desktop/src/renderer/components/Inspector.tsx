@@ -5,7 +5,7 @@
 // 宽度与开合收口在 App 的右 Panel（320–420，默认收起，⌘⌥B 开合）——本组件只管内容。
 import { useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ChevronRight, Plus } from "lucide-react";
+import { ChevronRight, Plus, X } from "lucide-react";
 import type { AgentEvent } from "../../../../../src/events";
 import { timelineItems } from "../projections";
 import { diffCount, useLazyChangeDiff } from "../change-diff-state";
@@ -84,6 +84,9 @@ export interface InspectorProps {
   onRestore?: (path: string, snapshotId: string) => void;
   /** 判卷/深链预留：强制初始 Tab（缺省 = 第一个有数据的）。 */
   initialTab?: "changes" | "plan" | "timeline";
+  /** 关闭检查器（App 的 toggleInspector：开合 + 跨重启记忆同一出口）。
+   *  缺省不摆按钮——判卷/嵌用面没有右 Panel 可关，摆一枚点了没反应的 × 更糟。 */
+  onClose?: () => void;
 }
 
 export function Inspector(props: InspectorProps): React.JSX.Element {
@@ -126,6 +129,13 @@ export function Inspector(props: InspectorProps): React.JSX.Element {
             ))}
           </DropdownMenu.Content>
         </DropdownMenu.Root>
+        {/* 关闭钮（2026-10-20 真机：「右边侧栏打开就没有关闭」）：此前只有 ⌘⌥B 一条路，
+            鼠标用户把面板打开了却找不到出口。复用 .isp-add 的图标钮样式——同排同形，不新造一套。 */}
+        {props.onClose !== undefined && (
+          <button className="isp-add isp-close" aria-label="关闭检查器" title="关闭检查器（⌘⌥B）" onClick={() => { props.onClose?.(); }}>
+            <X size={13} />
+          </button>
+        )}
       </div>
       <div className="isp-body">
         {selected === "changes" && <ChangesTab items={changes} onRestore={props.onRestore} />}

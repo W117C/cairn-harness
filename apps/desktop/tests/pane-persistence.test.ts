@@ -14,7 +14,9 @@ describe("窗格布局持久化", () => {
   });
 
   it("恢复窗格时检查器保持展开；无窗格才初始收起", () => {
-    expect(app).toContain("if (paneTabs.length > 0 || inspectorDefaultOpen) return;");
+    expect(app).toContain("if (paneTabs.length > 0 || inspectorDefaultOpen) {");
+    expect(app).toContain("setInspectorCollapsed(false);");
+    expect(app).toContain("setInspectorCollapsed(true);");
     expect(app).toContain("恢复了窗格（cairn.panes.v1）时保持展开");
   });
 

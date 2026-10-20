@@ -117,6 +117,60 @@ export function sensitiveUserConfigKeys(fields: UserConfigField[]): string[] {
   return fields.filter((f) => f.sensitive).map((f) => f.key);
 }
 
+/** userConfig 字段值按声明类型校验（写侧；读侧不校验，读出来就是要敢说"存的是什么"）。
+ *
+ *  为什么必须有这一层：`type` 从前只被解析（`parseUserConfigFields`）和陈列（快照回给面板），
+ *  **没有任何一处按它校验** ⇒ 表单里往 `type:"number"` 的字段填 "abc" 会被原样收下，
+ *  再原样进 MCP 的 `command/args`、LSP 的 `args` 与 hook 的 exec form。
+ *  一个拼错的数字不会在任何地方报错——它只会让那家 MCP server 起不来或悄悄用错端口，
+ *  而用户看到的只是"插件没连上"。宁可在这里拒，不要让它带着错值上路。
+ *
+ *  只对**声明了的**类型收紧：`type` 缺省/未知一律按 string 放过（CC 形态允许插件作者
+ *  只写 title/description；把未知类型当非法会让那些插件的配置永远写不进去）。
+ *  空串交给 required 与"留空＝保持不变"那两层管，不在这里判——敏感字段的回显占位
+ *  就是空串，按"非数字"拒掉会让用户永远无法保存别的字段。 */
+export function userConfigValueError(field: UserConfigField, value: string): string | null {
+  if (field.type === "number") {
+    // Number() 会把 "" 与 "  " 收成 0、把 "0x10"/"1e3" 收成合法数字；这里要的是
+    // "人能看懂的十进制量"：端口、超时、上限这一类。所以另立形状，不复用 Number 的宽容。
+    if (!/^[+-]?(?:\d+\.?\d*|\.\d+)$/u.test(value.trim())) {
+      return `配置项 ${field.key} 声明为 number，但 ${JSON.stringify(value)} 不是十进制数字`;
+    }
+    if (!Number.isFinite(Number(value.trim()))) {
+      return `配置项 ${field.key} 的数字超出可表示范围：${JSON.stringify(value)}`;
+    }
+    return null;
+  }
+  if (field.type === "boolean") {
+    // 表单是纯文本框（值可能来自剪贴板/脚本），所以把常见写法都认下，但大小写与
+    // "yes/no/1/0" 这种只在人眼里有意义的串不认——那会让"到底存的是真还是假"说不清。
+    if (!["true", "false"].includes(value.trim().toLowerCase())) {
+      // 这句是**能力断言**（"只有这两个取值"），所以文案里留一段点得出名字的中文：
+      // 判卷网认"只能"这类标记，但它要的是**能配证人的连续中文**——"可接受的值只有"这七字
+      // 才是判卷能钉住的一格；写成"只能是 true 或 false"就只剩三个字的中文碎片，钉不住。
+      return `配置项 ${field.key} 声明为 boolean，可接受的值只有 true 或 false（收到 ${JSON.stringify(value)}）`;
+    }
+    return null;
+  }
+  return null;
+}
+
+/** 一批值按字段表逐个校验（返回全部问题，不让用户改一个存一次）。 */
+export function userConfigValuesErrors(fields: readonly UserConfigField[], values: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  for (const f of fields) {
+    const v = values[f.key];
+    if (v === undefined) continue;
+    if (typeof v !== "string") {
+      out.push(`配置项 ${f.key} 必须是字符串`);
+      continue;
+    }
+    const err = userConfigValueError(f, v);
+    if (err !== null) out.push(err);
+  }
+  return out;
+}
+
 /** 解析 .claude-plugin/plugin.json；结构性错误抛 PluginLoadError（隔离），非结构缺陷只警告。 */
 export async function parsePluginManifest(root: string): Promise<ManifestParseResult> {
   const manifestPath = join(root, ".claude-plugin", "plugin.json");

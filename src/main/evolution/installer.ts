@@ -109,12 +109,24 @@ export class Installer {
     }
   }
 
-  /** 回滚 = 指针对换；前置：previous 版本的文件必须真的在盘上——指针不许指向缺失的文件。 */
-  async rollbackInstalled(id: string, actor: string): Promise<BundleEntry> {
+  /** 回滚 = 指针对换；前置：previous 版本的文件必须真的在盘上——指针不许指向缺失的文件。
+   *
+   *  `expectedPrevious` = 期望回退到的那个版本（观察期记录里的 previousVersion）。
+   *  给了它就**只认它**：账本上的 previous 位在这期间被别人动过（又装过一版、又回滚过一次），
+   *  而观察记录仍写着当初那个版本 ⇒ 无条件按账本回退会装上**另一个版本**，
+   *  而记录里的 `rollbackTo` 仍写着当初那个 ⇒ **记录在撒谎**（说回退到了 A，实际装的是 B）。
+   *  宁可不回退（退成 degraded、把实情说出来），也不装一个与记录不符的版本。 */
+  async rollbackInstalled(id: string, actor: string, expectedPrevious?: string): Promise<BundleEntry> {
     const index = await this.registry.readIndex();
     const entry = index.bundles[id];
     if (entry?.active === undefined || entry.previous === undefined) {
       throw new InstallRefusedError(`${id} 没有 active+previous 可回滚`);
+    }
+    if (expectedPrevious !== undefined && entry.previous.version !== expectedPrevious) {
+      throw new InstallRefusedError(
+        `${id} 期望回退到 ${expectedPrevious}，但账本上的 previous 位现在是 ${entry.previous.version}`
+          + "（期间被别的安装/回滚动过）——拒绝装一个与记录不符的版本",
+      );
     }
     const prevDir = join(this.registry.paths.installed, id, entry.previous.version);
     try {

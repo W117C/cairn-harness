@@ -1,0 +1,9 @@
+除 duration/时间戳/perfStats/heap 外逐字节相同: false
+恢复版长度 1015541 | HEAD 版长度 1015551
+文件清单+每文件用例数 相同: true
+numTotalTests/Passed/Failed: 3394 3393 1 | HEAD: 3394 3393 1
+duration 面不同: false
+perfStats 面不同: false
+perfStats 样例 恢复版: undefined
+perfStats 样例 HEAD  : undefined
+文件/用例/状态/标题面（去掉所有读数）逐字节相同: false

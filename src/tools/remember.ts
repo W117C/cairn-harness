@@ -17,8 +17,9 @@ import {
   globalMemoryDir,
   projectMemoryDir,
   readTextOrNull,
-  readTopicBody,
-  replaceRootFile,
+  appendTopic,
+  replaceRootFileIfMatches,
+  replaceTopicIfMatches,
   rootFilePath,
   writeTopic,
   type MemoryType,
@@ -109,7 +110,7 @@ export const remember: Tool = {
     }
     const nowISO = new Date().toISOString();
     // 闸后文本一次算好，四个写原语（writeTopic 的 append/replace、appendDecisionEntry、
-    // appendRootFile、replaceRootFile）共用同一份——分头过闸必然漏一支。
+    // appendRootFile、replaceRootFileIfMatches）共用同一份——分头过闸必然漏一支。
     const safe = sanitizeForMemory(content);
     const note = safe.masked > 0 ? "（§11.1 脱敏 pass：已掩码 " + safe.masked + " 处凭据；凭据本体不入记忆，只写位置指针）" : "";
     if (k === "memory") {
@@ -123,26 +124,29 @@ export const remember: Tool = {
       }
       const dir = scope === "project" ? projectMemoryDir(ctx.workspace) : globalMemoryDir();
       if (op === "replace") {
-        const oldBody = await readTopicBody(dir, topic);
-        if (oldBody === null) {
-          throw new MemoryError("old_content_mismatch", "remember: topic 不存在，无法 replace（新建请用 append）: " + topic);
-        }
         const oldContent = rawArgs.old_content;
         if (typeof oldContent !== "string") {
           throw new MemoryError("call_failed", "remember: op=replace 必带 old_content（精确命中原文，否则报错重试）");
         }
-        if (oldContent !== oldBody) {
-          throw new MemoryError("old_content_mismatch", "remember: old_content 与 " + topic + " 正文不精确匹配（replace 报错重试语义）");
-        }
         if (oldContent === safe.text) {
           throw new MemoryError("empty_change", "remember: 空变更（old_content === 闸后 content），无内容可沉淀");
         }
-        const res = await writeTopic(dir, topic, type, safe.text, nowISO);
-        return { ok: true, output: "已写入 " + (scope === "project" ? ".agent/" : "全局层 ") + "memory/" + topic + ".md（replace，type=" + type + "，" + res.bytes + " 字节，modified 已落账）" + note };
+        // **比较与写合成一段 CAS**（2026-10-19）：旧形状是"先读出来比一比、隔一会儿再整写"
+        // ⇒ 并发追加夹在中间时判据已过期，追加那笔被静默盖掉（它回执的是"已写入"）。
+        // 见 store.ts 的 replaceTopicIfMatches。
+        const cas = await replaceTopicIfMatches(dir, topic, type, oldContent, safe.text, nowISO);
+        if (cas.current === null) {
+          throw new MemoryError("old_content_mismatch", "remember: topic 不存在，无法 replace（新建请用 append）: " + topic);
+        }
+        if (!cas.matched) {
+          throw new MemoryError("old_content_mismatch", "remember: old_content 与 " + topic + " 正文不精确匹配（replace 报错重试语义）");
+        }
+        return { ok: true, output: "已写入 " + (scope === "project" ? ".agent/" : "全局层 ") + "memory/" + topic + ".md（replace，type=" + type + "，" + Buffer.byteLength(safe.text, "utf8") + " 字节，modified 已落账）" + note };
       }
-      const prev = await readTopicBody(dir, topic);
-      const body = prev === null ? safe.text : prev.replace(/\n+$/, "") + "\n\n" + safe.text;
-      const res = await writeTopic(dir, topic, type, body, nowISO);
+      // 追加的"读旧正文 → 拼新正文 → 写"**整段在 store 的锁里**（appendTopic）：
+      // 旧实现读在锁外 ⇒ 两个并发追加都读到同一份旧正文，后一个把前一个整个盖掉
+      // （两笔都回执"已写入"）。见 store.ts 的 appendTopic 注释。
+      const res = await appendTopic(dir, topic, type, safe.text, nowISO);
       return { ok: true, output: "已写入 " + (scope === "project" ? ".agent/" : "全局层 ") + "memory/" + topic + ".md（append，type=" + type + "，" + res.bytes + " 字节，modified 已落账）" + note };
     }
     // ---- 根三文件（仅项目层）----
@@ -156,17 +160,18 @@ export const remember: Tool = {
     if (typeof oldContent !== "string") {
       throw new MemoryError("call_failed", "remember: op=replace 必带 old_content（精确命中原文，否则报错重试）");
     }
-    const cur = await readTextOrNull(path);
-    if (cur === null || cur !== oldContent) {
+    if (oldContent === safe.text) {
+      throw new MemoryError("empty_change", "remember: 空变更（old_content === 闸后 content），无内容可沉淀");
+    }
+    // **比较与写合成一段 CAS**（同 topic 那支）：并发追加夹在读与写之间时，
+    // 判据已过期 ⇒ 追加那笔被静默盖掉。见 store.ts 的 replaceRootFileIfMatches。
+    const cas = await replaceRootFileIfMatches(ctx.workspace, k, oldContent, safe.text);
+    if (!cas.matched) {
       throw new MemoryError(
         "old_content_mismatch",
         "remember: old_content 与 .agent/" + ROOT_FILES[k] + " 当前内容不精确匹配（replace 报错重试语义）",
       );
     }
-    if (oldContent === safe.text) {
-      throw new MemoryError("empty_change", "remember: 空变更（old_content === 闸后 content），无内容可沉淀");
-    }
-    await replaceRootFile(ctx.workspace, k, safe.text);
     return { ok: true, output: "已写入 .agent/" + ROOT_FILES[k] + "（replace，全量改写）" + note };
   },
 };

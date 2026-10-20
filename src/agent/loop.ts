@@ -1,6 +1,6 @@
 import { isEnvVerifyCause } from "../events";
 import type { AgentEvent, EventLog, SkillInvocationMeta, UserMessageAttachment, UserMessageOrigin, VerifyCommandResult } from "../events";
-import { redactSecrets } from "./security/scan";
+import { redactEventForLog, redactSecrets } from "../events";
 import { autoOf, denyReason, gate, type PermissionMode, type ToolResultWithAudit } from "../permissions";
 import type { HookEngine } from "./plugins/hooks";
 import { projectContext } from "./context";
@@ -91,6 +91,12 @@ export interface LoopOptions {
   /** M3a worker 工具表覆盖（编排内核注入独立工具面，如只读 shell_ro）；缺省 undefined = 全局 TOOLS
    *  （既有路径字节不变）。先于 allowedTools 硬闸之后的执行面查表。 */
   tools?: Record<string, import("../tools").Tool>;
+  /** 执行面补表钩子（run 中途才出现的工具）：模型面是**逐请求**重算的（provider 的 requestFace），
+   *  而 `TOOLS` 那张执行表是 run 起点快照 ⇒ 一场会话跑到一半才被批准的插件，它的 MCP 工具
+   *  会出现在模型清单里、却在执行面查不到，落一句 `unknown tool: …`——这正是本仓反复判死的
+   *  「模型看到的工具 ≠ 能执行的工具」。每次查表前先问一次这个钩子，缺省 undefined = 零行为
+   *  （既有路径字节不变）。 */
+  resolveTool?: (name: string) => import("../tools").Tool | undefined;
   /** M3a 取消信号（编排器 AbortController 树）：等待边界复查，已开始工具的真实结果仍落流。
    *  缺省 undefined = 无取消（既有路径字节不变）。 */
   signal?: AbortSignal;
@@ -159,35 +165,6 @@ function isAbortLike(err: unknown): boolean {
  *     与上面"非字符串值原样返回"的承诺相反。所以非普通对象（无 `Object` 原型或不是
  *     Object/Array 构造器的实例）一律原样返回——它们本来也过不了 JSON 序列化，
  *     落盘面迟早会报，比在这里被静默拍平诚实。 */
-function redactValue(v: unknown, seen: WeakSet<object> = new WeakSet()): unknown {
-  if (typeof v === "string") return redactSecrets(v).text;
-  if (Array.isArray(v)) {
-    if (seen.has(v)) return "[循环引用]";
-    seen.add(v);
-    const out = v.map((inner) => redactValue(inner, seen));
-    seen.delete(v);
-    return out;
-  }
-  if (typeof v === "object" && v !== null) {
-    // 只对**普通对象**逐键递归；Map/Set/Date/类实例原样返回（见上面口径②）。
-    const proto = Object.getPrototypeOf(v) as object | null;
-    const plain = proto === null || proto === Object.prototype;
-    if (!plain) return v;
-    if (seen.has(v)) return "[循环引用]";
-    seen.add(v);
-    const out: Record<string, unknown> = {};
-    for (const [k, inner] of Object.entries(v as Record<string, unknown>)) out[k] = redactValue(inner, seen);
-    seen.delete(v);
-    return out;
-  }
-  return v;
-}
-
-/** 所有事件共用落盘/投影脱敏面：字符串叶子逐段过 `redactSecrets`，结构保持不变。 */
-function redactEventForLog(e: AgentEvent): AgentEvent {
-  return redactValue(e) as AgentEvent;
-}
-
 /** verify 面落盘用：命令与输出各自过脱敏，其余字段（ok / exitCode / cause）不是文本，原样带走。
  *
  *  为什么 tool_call 那两处修了它还漏着：`verify_result.results[].output` 是**测试输出**——
@@ -220,9 +197,11 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   // 落盘与投影用同一份脱敏副本（`seen`）；工具执行面照原件执行。
   const events: EventLog = {
     async append(event) {
-      const safe = redactEventForLog(event);
-      await opts.events.append(safe);
-      seen.push(safe);
+      // **原件**交给消费者（落盘/出站那一侧自己擦——见 redactEventForLog 的注释）：
+      // 安全扫描面要看到真内容（脱敏后的串认不出密钥，那道闸就静默空转了）。
+      // 上下文面（seen）仍是脱敏副本：模型读到的与盘上的一致，"live 与盘同式"不破。
+      await opts.events.append(event);
+      seen.push(redactEventForLog(event));
     },
   };
   const cancelUnstartedTool = async (callId: string): Promise<void> => {
@@ -624,7 +603,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         continue;
       }
 
-      const tool = (opts.tools ?? TOOLS)[name];
+      const tool = (opts.tools ?? TOOLS)[name] ?? opts.resolveTool?.(name);
       let result;
       if (!tool) {
         result = { ok: false, output: `unknown tool: ${output.name}` };
@@ -662,12 +641,22 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       const artifact = (result as { artifact?: { kind: "image" | "html" | "svg" | "text"; path: string; note?: string } }).artifact;
       // 换路压力记账（只读，不改事件序）：动作换了 ⇒ 上一轮的重复段结束，解除提示帽
       let repeatNote = "";
-      if (opts.stuckNudge === true) {
+      // **历史恒收，提示才受开关管**（2026-10-19 独立评审追出的 MEDIUM-LOW）：
+      // 旧实现把"记这一拍"也关在 `stuckNudge` 里面 ⇒ 编排器的 worker 那条 runLoop 不开这个开关
+      // （它自己在编排器里另有一套卡死看门狗）⇒ worker 的 `stuckTurns` **恒为空**
+      // ⇒ `detectStuck` 与 `detectAlternatingThrash`（R3 往返抖动）在 worker 路径上**永远判不出**：
+      // 同一串 A/B/A/B/A/B 的动作往返，主会话判 thrashing=true、worker 判 false（列表恒空）。
+      // 这两件事是**两件事**：「有没有得判」（历史）与「判出来了要不要说给模型听」（提示）。
+      // 历史是判据的输入，开关只该管后者。
+      {
         const action = stuckActionOf(output.name, output.args);
         const lastTurn = stuckTurns.length > 0 ? stuckTurns[stuckTurns.length - 1] : undefined;
         if (lastTurn !== undefined && lastTurn.action !== action) nudgedActions.delete(lastTurn.action);
         stuckTurns.push({ action, observation: stuckObservationOf(result.output), ok: result.ok });
         if (stuckTurns.length > DEFAULT_STUCK_CONFIG.windowSize) stuckTurns.shift();
+      }
+      if (opts.stuckNudge === true) {
+        const action = stuckActionOf(output.name, output.args);
         const verdict = detectStuck(stuckTurns);
         if (verdict.stuck && !nudgedActions.has(action)) {
           nudgedActions.add(action);

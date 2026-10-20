@@ -1,0 +1,6 @@
+== pnpm gates ==
+门清单（1 道，清单即事实源）：head-cert-check
+执行器：pnpm run
+  清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）
+
+  ▶ head-cert-check …

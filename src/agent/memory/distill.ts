@@ -25,17 +25,22 @@ export const DISTILL_INSTRUCTION = [
   "5. 没有值得沉淀的内容就只回答「无」三个字，不要调用工具。",
 ].join("\n");
 
-/** 沉淀轮四类结局的判定留痕（层名单列 `X-distill`：这些判定不在 `evaluate` 里发生）。
+/** 沉淀轮三类结局的判定留痕（层名单列 `X-distill`：这些判定不在 `evaluate` 里发生）。
  *  缺 `mode` 是刻意的（见 `GateMeta.mode` 注释）：这一轮不受档位机管辖，编一个档位会把它的量
- *  算进那一档的免批率。**四类不塌成一格**是这条表存在的全部理由——
- *  `denied` = 白名单挡下（没问过人），`rejected` = 问过人且人说不，`approved` = 问过人且人说行，
+ *  算进那一档的免批率。**三类不塌成一格**是这条表存在的全部理由——
+ *  `rejected` = 问过人且人说不，`approved` = 问过人且人说行，
  *  `auto-approved` = 项目层分层免批（第十一遍裁决；没问过人，也不是门拦的）。
- *  前三者在 §7 的可标语料里是不同的侧：借成一格就把最稀缺的正例读没了；
+ *  `rejected`/`approved` 是 §7 可标语料里最稀缺的正例侧；
  *  `auto-approved` 必须与 `approved` 分开——否则免批写入会被读成「人答过行」，
- *  污染 `humanAnswered`（scripts/replay/gate-outcomes.ts 按 verdict 分词）。 */
-export type DistillGateKind = "whitelist" | "unapproved" | "approved" | "auto";
+ *  污染 `humanAnswered`（scripts/replay/gate-outcomes.ts 按 verdict 分词）。
+ *
+ *  白名单挡下的非 remember 调用（历史上的 `denied`）**不再登记**：那一次调用没有配对的
+ *  `tool_call` 落盘，登记只能落一条无主 `tool_result`——它会与同 callId 的历史结果在
+ *  `mergeToolResultsById` 合并、并被改动面/压缩面当真（2026-10-20 实测：成功的 write_file
+ *  在界面上变成失败、模型上下文里出现「已写入…已拒绝」）。白名单拒绝本身就是执行面的短路，
+ *  不值得为一条留痕污染所有消费者。 */
+export type DistillGateKind = "unapproved" | "approved" | "auto";
 export const DISTILL_GATE: Record<DistillGateKind, Pick<GateMeta, "layer" | "verdict">> = {
-  whitelist: { layer: "X-distill", verdict: "denied" },
   unapproved: { layer: "X-distill", verdict: "rejected" },
   approved: { layer: "X-distill", verdict: "approved" },
   auto: { layer: "X-distill", verdict: "auto-approved" },
@@ -83,6 +88,16 @@ export interface DistillOptions {
  *  而失败（验证未过、工具报错）恰是「下次怎么不重犯」的最高价值素材。这里把失败聚成
  *  一行显式证据并并入沉淀指令，引导模型按 feedback 类型沉淀；成功轮返回空串（零注入）。 */
 export function failureDigestFromEvents(events: AgentEvent[]): string {
+  // **worker 子流不进这一份摘要**（2026-10-19 独立评审追出的 HIGH）：
+  // worker 的 tool_call/tool_result/verify_result 与主会话落在同一份 JSONL（带 agent_id），
+  // 而这份摘要的正文会被拼进沉淀指令，让模型按 `scope=project` 沉下去 ⇒ **跨会话注入**。
+  // 它的兄弟 `distillLessons`（lessons.ts:167）早就做了这道过滤，注释写得很清楚：
+  // 「不排除就会把『子 agent 这次没写成』沉淀成『这个项目里 write_file 连败』并跨会话注入」。
+  // 这里漏了同一道过滤 ⇒ **同一个漏口，一个消费者漏了**：
+  // 实测（父会话干净、worker-1 连败两次 write_file）⇒ 本函数照样吐出
+  // 「本轮：write_file×2（工具失败）」，而 lessons.ts 的 distillLessons 对同一份事件返回 []。
+  // 一条指令里有两条口径 ⇒ 模型照着摘要沉一条项目级教训。
+  events = events.filter((e) => typeof (e as { agent_id?: unknown }).agent_id !== "string");
   const callName = new Map<string, string>();
   const toolFails = new Map<string, number>();
   let verifyFails = 0;
@@ -198,6 +213,34 @@ function cancelledDistillOutcome(signal: AbortSignal): DistillOutcome {
   return { kind: "failed", why: reason instanceof Error ? reason.message : String(reason) };
 }
 
+/** 首条寒暄/一次性问答的确定性判据：只有一条主 user_message、没有工具调用、总正文短，
+ *  且用户没有留下「记住/以后/总是/不要/偏好」这类明确记忆线索。
+ *  这类轮次跑一次模型沉淀通常只会得到 no_content，却让 run 多等十几秒（2026-10-20 真机：
+ *  「只回复 OK」正文已上屏，收尾蒸馏 14–17s）。只跳过**首轮**，不碰多轮会话与工具轮。 */
+const MEMORY_CUE = /记住|以后|总是|永远|不要|偏好|习惯|remember|always|never|preference/i;
+
+export function isTrivialSession(events: readonly AgentEvent[]): boolean {
+  let users = 0;
+  let chars = 0;
+  let userText = "";
+  let hasAssistant = false;
+  for (const e of events) {
+    if ((e as { agent_id?: string }).agent_id !== undefined) continue; // worker 子流不算
+    if (e.type === "user_message") {
+      users += 1;
+      if (users > 1) return false;
+      if ((e.attachments?.length ?? 0) > 0) return false;
+      userText = e.content;
+      chars += e.content.length;
+      continue;
+    }
+    if (e.type === "tool_call" || e.type === "clarify_requested" || e.type === "plan_proposed") return false;
+    if (e.type === "assistant_message") { hasAssistant = true; chars += e.content.length; }
+    else if (e.type === "assistant_delta") { hasAssistant = true; chars += e.text.length; }
+  }
+  return users === 1 && hasAssistant && chars < 800 && !MEMORY_CUE.test(userText);
+}
+
 export async function runSessionEndDistill(opts: DistillOptions): Promise<DistillOutcome> {
   if (!opts.enabled) return { kind: "disabled" };
   // 模型之前还有确定性的记忆/草稿写入；取消检查必须覆盖这些副作用。
@@ -237,6 +280,7 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
     await opts.emit({ type: "tool_result", callId: "", ok: false, output: "[gym] 失败轨迹草稿异常: " + (err instanceof Error ? err.message : String(err)) });
   }
   if (opts.signal?.aborted) return cancelledDistillOutcome(opts.signal);
+  if (isTrivialSession(events)) return { kind: "no_content" };
   const instruction = digest.length > 0 ? digest + "\n\n" + DISTILL_INSTRUCTION : DISTILL_INSTRUCTION;
   /* 真 session provider 以事件日志为唯一事实源（`stream(_messages,_tools)` 明确忽略入参），
    * 所以「只在内存塞一条指令」是发不出去的——那正是本模块长期存在的缺口（见 DistillOptions
@@ -273,7 +317,8 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
       }
       if (out.type !== "tool_call") continue;
       if (out.name !== "remember") {
-        await opts.emit({ type: "tool_result", callId: out.id, ok: false, output: "[distill] 沉淀轮只允许 remember 工具，" + out.name + " 已拒绝", gate: DISTILL_GATE.whitelist });
+        // 白名单挡下的调用**不落事件**（2026-10-20 修，理由见 DISTILL_GATE 上方那段）：
+        // 没有配对的 tool_call，落成无主 tool_result 会与同 callId 的真实结果合并。
         opts.signal?.throwIfAborted();
         continue;
       }

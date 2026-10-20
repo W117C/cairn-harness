@@ -28,8 +28,17 @@ describe("动效批", () => {
     expect(sidebar).not.toContain('!collapsed.has("\\u0000archived") &&');
   });
 
-  it("输入类控件有键盘焦点环；composer 不叠第二圈", () => {
-    expect(css).toMatch(/input:focus-visible, textarea:focus-visible, select:focus-visible\s*{[^}]*outline:\s*2px solid hsl\(var\(--accent-brand\) \/ 45%\)/s);
-    expect(css).toMatch(/\.composer-card textarea:focus-visible\s*{[^}]*outline:\s*none/s);
+  it("输入类控件只走全局三层 box-shadow 焦点环，不再叠 outline 双环", () => {
+    // 2026-10-20：焦点环改为 box-shadow 后，旧的元素级 outline 规则会让搜索框/面板输入框
+    // 出现两圈（outline + box-shadow）。这里钉住"没有第二条 outline 规则"与 composer 让路。
+    expect(css).not.toMatch(/input:focus-visible[^{]*\{[^}]*outline:\s*2px solid[^}]*box-shadow/s);
+    expect(css).not.toMatch(/input:focus-visible, textarea:focus-visible, select:focus-visible\s*\{/);
+    expect(css).not.toMatch(/\.ss-field > input:focus-visible[^{]*\{[^}]*outline/);
+    expect(css).toMatch(/\.composer-card textarea:focus-visible\s*{[^}]*outline:\s*none;\s*box-shadow:\s*none/s);
+  });
+
+  it("门卡进场用 gate-in + --t-fast（审批/澄清/计划同一语言）", () => {
+    expect(css).toMatch(/\.zone-gate > \*\s*{[^}]*animation:\s*gate-in var\(--t-fast\)/s);
+    expect(css).toMatch(/@keyframes gate-in\s*{/);
   });
 });

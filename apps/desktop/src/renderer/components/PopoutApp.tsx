@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import type { AgentEvent } from "../../../../../src/events";
 import { applyTheme, browserThemeEnv, type ThemePref } from "../theme";
+import { mergeSessionSnapshot, popoutEventBelongsTo } from "../projections";
 import { PaneDock, type PaneKind } from "./PaneDock";
 import { PANE_META } from "./panes";
 
@@ -22,16 +23,19 @@ export function PopoutApp(props: { kind: PaneKind; sessionId: string | null }): 
     document.title = `Cairn · ${PANE_META[props.kind].label}${sid}`;
   }, [props.kind, props.sessionId]);
   useEffect(() => {
-    if (props.sessionId !== null) {
-      void window.agent.openSession(props.sessionId).then((r) => { setEvents(r.events); }).catch(() => undefined);
-    }
+    // 没有 sessionId 的弹出窗**不收任何事件**：旧实现 `props.sessionId === null || …` 让第一个
+    // 析取项把后面两项都变成废话 ⇒ 弹出窗会把**所有会话**的事件都吸进来（⌘N 回首页时 paneTabs
+    // 不清、⧉ 传的是 undefined）。用户在这个只有「变更」两个字、空态还写着"本会话还没有文件改动"
+    // 的窗格里，看到的是**另一个会话**的轮次、文件与验证状态。没有归属就不显示，不是全都显示。
+    if (props.sessionId === null) return;
+    void window.agent.openSession(props.sessionId).then((r) => {
+      // 读盘期间到达的增量不能丢：openSession 回的是**读之前**的快照，直接 setEvents 会把
+      // 这窗口注册 onEvent 之后收到的那些事件盖掉（主窗口同款缺陷，那边用 openPending +
+      // mergeSessionSnapshot 修过，见 App.tsx 与 projections.ts；弹出窗漏了这一手）。
+      setEvents((prev) => mergeSessionSnapshot(r.events, prev));
+    }).catch(() => undefined);
     const off = window.agent.onEvent((e) => {
-      // 第十八遍：命名推送与窗格无关（push-only）——不进本窗口事件面。
-      if ((e as { type?: string }).type === "session_titled") return;
-      const sid = (e as { session_id?: string }).session_id;
-      if (props.sessionId === null || sid === undefined || sid === props.sessionId) {
-        setEvents((prev) => [...prev, e]);
-      }
+      if (popoutEventBelongsTo(e, props.sessionId)) setEvents((prev) => [...prev, e]);
     });
     return off;
   }, [props.sessionId]);

@@ -1,0 +1,46 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness/apps/desktop
+
+ ❯ tests/stream-actions.test.tsx (13 tests | 1 failed) 44ms
+   ❯ 重跑这一轮 (4)
+     × App 接线：取该轮输入 + runningSet 兜底 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/stream-actions.test.tsx > 重跑这一轮 > App 接线：取该轮输入 + runningSet 兜底
+AssertionError: expected 'const handleRetryRound = useCallback(…' to contain 'userTextOfRound(events, round)'
+
+- Expected
++ Received
+
+- userTextOfRound(events, round)
++ const handleRetryRound = useCallback((round: number) => {
++     const sid = activeIdRef.current;
++     if (sid === null || runningSet.current.has(sid)) return;
++     const text = userTextOfRound(eventsRef.current, round);
++     if (text === null) { setLastError("重跑失败：找不到该轮的输入原文", sid); return; }
++     void send(text);
++   }, [send, setLastError]);
++
++   /** 重启恢复：不自动执行，用户显式点「继续发送」才把队首交给同一条 runOn/权限/沙箱链路。
++    *  （第十三遍拆出按 sid 版：陈旧旗自愈要按
+
+ ❯ tests/stream-actions.test.tsx:139:19
+    137|     expect(start).toBeGreaterThan(-1);
+    138|     const block = appSrc.slice(start, start + 420);
+    139|     expect(block).toContain("userTextOfRound(events, round)");
+       |                   ^
+    140|     expect(block).toContain("runningSet.current.has(sid)");
+    141|     expect(appSrc).toContain("onRetryRound: handleRetryRound");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 4 passed (5)
+      Tests  1 failed | 93 passed (94)
+   Start at  22:31:14
+   Duration  511ms (transform 48%, import 43%, tests 9%, worker 1%)
+
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts tests/stream-actions.test.tsx tests/stream-nav.test.tsx tests/render-structure.test.tsx tests/tool-disclosure.test.tsx tests/tool-lifecycle.test.tsx

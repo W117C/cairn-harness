@@ -11,7 +11,7 @@
 import type { CatalogPricing, CatalogSnapshot, CatalogSuggestion } from "./catalog";
 import { suggestFromCatalog } from "./catalog";
 import type { DiscoveredModel, DiscoveryProtocol } from "./discovery";
-import { RESERVED_PROVIDER_IDS, isValidModelId } from "./provider-config";
+import { RESERVED_PROVIDER_IDS, isValidModelId } from "./provider-identifiers";
 
 /** 模型级字段里「目录可能替我们填」的那几个（与 catalog.ts 的 CATALOG_FILLABLE_MODEL_FIELDS 同义，
  *  这里是给用户看的**配置字段名**：price / contextWindow / maxOutputTokens / reasoningEfforts）。 */

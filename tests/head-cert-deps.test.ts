@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import { budgetFromTestSource, archivedBudgetReader, archiveRevFromProvenance, certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, certTreeReclaim, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, defaultTimeoutFromConfig, depDirs, gitInflightArgs, headGateTableIntegrity, installedDeps, mainRootFromCommonDir, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, suiteRows, timingCell, timingNearCapCell, unknownCertArgs, VITEST_DEFAULT_TIMEOUT_MS, wallClockCell } from "../scripts/lib/head-cert-deps";
 import type { SuiteRow } from "../scripts/lib/head-cert-deps";
-import { acquireToolLock, decideToolLock, lockAgeCap, parseToolLock, shouldReleaseLock, toolLockPath } from "../scripts/lib/tool-lock";
+import { acquireToolLock, decideToolLock, lockAgeCap, parseToolLock, shouldReleaseLock, toolLockPath, UNREGISTERED_CAP_REASON } from "../scripts/lib/tool-lock";
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const listWorktrees = (cwd: string): string[] =>
@@ -503,7 +503,7 @@ describe("认证树的锁：谁能占这棵树（谓词）", () => {
     expect(lockAgeCap("no-such-tool")).toBeNull();
     const d = decideToolLock({ path: "/p.lock", text: lock(), now: NOW + 999 * 60_000, selfPid: mine, alive: () => true, maxAgeMs: null });
     expect(d.kind, "没登记帽却照样回收＝猜出来的帽会抢活人的锁").toBe("held");
-    if (d.kind === "held") expect(d.reason).toContain("没有登记");
+    if (d.kind === "held") expect(d.reason).toContain(UNREGISTERED_CAP_REASON);
   });
 
   it("没有锁文件 ⇒ free（反向哨兵：这道门**不许**依赖锁文件存在）", () => {

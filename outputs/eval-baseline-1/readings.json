@@ -1,0 +1,581 @@
+[
+ {
+  "r": {
+   "id": "B1-bugfix-crossfile",
+   "name": "B1-bugfix-crossfile",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 64.457,
+   "requests": 13,
+   "tokensIn": 76224,
+   "tokensOut": 3315,
+   "cny": 0,
+   "toolCalls": 15,
+   "toolFailures": 0,
+   "repeatedSameAction": 1,
+   "firstWriterIndex": 26,
+   "readsBeforeFirstWrite": 8,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    ".agent/snapshots/1790847393733--f0d698a1-d4be-4675-a47b-e02e95181cc2/src/checkout.js",
+    "src/checkout.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 210,
+    "procPeak": 6,
+    "cpuMs": 1503,
+    "samples": 129
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B2-feature-export",
+   "name": "B2-feature-export",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 326.29,
+   "requests": 10,
+   "tokensIn": 59265,
+   "tokensOut": 26783,
+   "cny": 0,
+   "toolCalls": 12,
+   "toolFailures": 1,
+   "repeatedSameAction": 1,
+   "firstWriterIndex": 12,
+   "readsBeforeFirstWrite": 3,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    ".agent/snapshots/1790847719945--10d09992-0e00-4c79-8e44-28348a92329e/src/fit.js",
+    "src/fit.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 170,
+    "procPeak": 6,
+    "cpuMs": 4670,
+    "samples": 652
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B3-refactor-callsite",
+   "name": "B3-refactor-callsite",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 43.984,
+   "requests": 10,
+   "tokensIn": 63138,
+   "tokensOut": 2491,
+   "cny": 0,
+   "toolCalls": 14,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 22,
+   "readsBeforeFirstWrite": 6,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": true,
+   "touchedJudge": true,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    ".agent/snapshots/1790847760254--ed98db05-181a-4dd9-9788-bdef764d6283/src/format.js",
+    ".agent/snapshots/1790847763538--8bd0883c-33c9-4efe-a07b-1e038003be74/src/legacy.js",
+    ".agent/snapshots/1790847766897--164e1354-d410-4e2f-838d-4ddbee7909b2/tests/receipt.test.js",
+    "src/format.js",
+    "src/legacy.js",
+    "tests/receipt.test.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 60,
+    "procPeak": 3,
+    "cpuMs": 5118,
+    "samples": 88
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B4-bugfix-pagination",
+   "name": "B4-bugfix-pagination",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 147.298,
+   "requests": 14,
+   "tokensIn": 89910,
+   "tokensOut": 6665,
+   "cny": 0,
+   "toolCalls": 15,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 29,
+   "readsBeforeFirstWrite": 7,
+   "clarified": 2,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 73,
+    "procPeak": 3,
+    "cpuMs": 6532,
+    "samples": 295
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B5-bugfix-async",
+   "name": "B5-bugfix-async",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 49.02,
+   "requests": 12,
+   "tokensIn": 71158,
+   "tokensOut": 2795,
+   "cny": 0,
+   "toolCalls": 15,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 24,
+   "readsBeforeFirstWrite": 7,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": true,
+   "touchedJudge": true,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    ".agent/snapshots/1790847951901--562f39b9-9950-4ffb-a632-8eda3a6f670c/src/queue.js",
+    ".agent/snapshots/1790847956027--e69f8697-b0cf-4133-87d2-e6848c8e623e/tests/queue.test.js",
+    "src/queue.js",
+    "tests/queue.test.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 169,
+    "procPeak": 9,
+    "cpuMs": 7000,
+    "samples": 98
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B6-feature-flag",
+   "name": "B6-feature-flag",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 22.98,
+   "requests": 6,
+   "tokensIn": 33366,
+   "tokensOut": 934,
+   "cny": 0,
+   "toolCalls": 11,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 21,
+   "readsBeforeFirstWrite": 7,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    ".agent/snapshots/1790847987214--43363f12-5914-4371-aa4f-4b0861f52936/src/parse-args.js",
+    "src/parse-args.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 247,
+    "procPeak": 7,
+    "cpuMs": 7221,
+    "samples": 47
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B7-feature-csv",
+   "name": "B7-feature-csv",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 43.341,
+   "requests": 9,
+   "tokensIn": 52127,
+   "tokensOut": 2490,
+   "cny": 0,
+   "toolCalls": 13,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 27,
+   "readsBeforeFirstWrite": 7,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": true,
+   "touchedJudge": true,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    ".agent/snapshots/1790848025814--68a17254-62b9-48d7-a19d-7861a9466883/tests/export.test.js",
+    ".agent/snapshots/1790848028852--f4f968aa-d566-411d-a0c7-e3f24c818ca9/src/export.js",
+    "src/export.js",
+    "tests/export.test.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 121,
+    "procPeak": 7,
+    "cpuMs": 7636,
+    "samples": 87
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B8-feature-memo",
+   "name": "B8-feature-memo",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 37.843,
+   "requests": 7,
+   "tokensIn": 39580,
+   "tokensOut": 1763,
+   "cny": 0,
+   "toolCalls": 10,
+   "toolFailures": 1,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 12,
+   "readsBeforeFirstWrite": 3,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": true,
+   "touchedJudge": true,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    ".agent/snapshots/1790848062391--cb593873-2c5c-43b2-b37e-13e9f8bea653/src/service.js",
+    "src/service.js",
+    "tests/memo-extra.test.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 113,
+    "procPeak": 6,
+    "cpuMs": 7988,
+    "samples": 76
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B9-refactor-rename",
+   "name": "B9-refactor-rename",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 58.439,
+   "requests": 10,
+   "tokensIn": 61482,
+   "tokensOut": 1349,
+   "cny": 0,
+   "toolCalls": 17,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 53,
+   "readsBeforeFirstWrite": 9,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": true,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    ".agent/snapshots/1790848109961--307b71a9-4a90-4278-88c0-1fcf8f5ef9c1/src/api.js",
+    ".agent/snapshots/1790848115928--ac25eb75-94ac-428b-8323-91bafddb64d7/src/cart.js",
+    ".agent/snapshots/1790848118633--aa8208ae-fe77-4d0e-9add-cb408c01b6a7/src/orders.js",
+    ".agent/snapshots/1790848121393--93b6ed8f-85d9-4422-9672-3a9db25cd03b/src/admin.js",
+    "src/admin.js",
+    "src/api.js",
+    "src/cart.js",
+    "src/orders.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 110,
+    "procPeak": 6,
+    "cpuMs": 8416,
+    "samples": 117
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B10-refactor-dedupe",
+   "name": "B10-refactor-dedupe",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 97.956,
+   "requests": 17,
+   "tokensIn": 131760,
+   "tokensOut": 4121,
+   "cny": 0,
+   "toolCalls": 21,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 25,
+   "readsBeforeFirstWrite": 4,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": true,
+   "touchedJudge": true,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    ".agent/snapshots/1790848169128--c4094f50-9367-4b04-b51c-cba7bc7a09fc/src/user.js",
+    ".agent/snapshots/1790848174412--a1ec7ec9-cb2d-476a-8858-fc69a26287ff/src/order.js",
+    ".agent/snapshots/1790848194382--e43c6ca3-d7eb-4cb5-b3b2-49ba94a02666/tests/dedupe.test.js",
+    ".agent/snapshots/1790848197885--42fecbd8-decd-4913-bc5b-9210197bf642/tests/dedupe.test.js",
+    "src/order.js",
+    "src/user.js",
+    "tests/dedupe.test.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 112,
+    "procPeak": 6,
+    "cpuMs": 8924,
+    "samples": 196
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B11-refactor-signature",
+   "name": "B11-refactor-signature",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 39.482,
+   "requests": 11,
+   "tokensIn": 63351,
+   "tokensOut": 1495,
+   "cny": 0,
+   "toolCalls": 15,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 40,
+   "readsBeforeFirstWrite": 8,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": true,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    ".agent/snapshots/1790848257812--d8cdf762-3eef-4a09-af43-a42ad3e1c9ec/src/store.js",
+    ".agent/snapshots/1790848259852--2cbfbee8-8d2f-445a-bfd5-47eb866150a0/src/users.js",
+    ".agent/snapshots/1790848262860--75de88e1-4c53-44d4-90b3-e48143a5af33/src/orders.js",
+    ".agent/snapshots/1790848264579--e230aacb-1783-4180-8761-26969cec577f/src/audit.js",
+    "src/audit.js",
+    "src/orders.js",
+    "src/store.js",
+    "src/users.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 239,
+    "procPeak": 6,
+    "cpuMs": 9153,
+    "samples": 80
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B12-long-horizon",
+   "name": "B12-long-horizon",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 106.849,
+   "requests": 26,
+   "tokensIn": 317866,
+   "tokensOut": 4862,
+   "cny": 0,
+   "toolCalls": 28,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 5,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    ".agent/snapshots/1790848309736--978c3af9-1fbd-42da-9f46-44379a7b67e3/src/m01-clamp.js",
+    ".agent/snapshots/1790848312331--9f8b50ca-e967-4998-a89e-48f5a81a3289/src/m02-sum.js",
+    ".agent/snapshots/1790848317344--ee2eadab-bf3f-4253-93c2-48c6e1f38112/src/m03-unique.js",
+    ".agent/snapshots/1790848320768--29624bf7-c6b3-4f3f-a51e-edf4638f5870/src/m04-chunk.js",
+    ".agent/snapshots/1790848323508--bb8846a6-a4bf-43c2-a92b-e31ae06ab1ab/src/m05-titleCase.js",
+    ".agent/snapshots/1790848325491--cf5b021d-65bc-4ced-b7bf-2a2ce6567795/src/m06-parseIntSafe.js",
+    ".agent/snapshots/1790848327939--408c5d17-7f8c-42b3-bf7c-0375fc3ceb82/src/m07-mean.js",
+    ".agent/snapshots/1790848331129--311e7c23-4eae-4a71-be67-36680045a4f2/src/m08-zip.js",
+    ".agent/snapshots/1790848334206--31389ee8-9d5d-4ad4-a410-93647a3221cb/src/m09-flatten.js",
+    ".agent/snapshots/1790848336964--0303d5ff-d034-4202-a380-564a083a9c33/src/m10-groupBy.js",
+    ".agent/snapshots/1790848339685--1dac827e-69a8-4d2a-8341-fb94a47c3eb5/src/m11-sortBy.js",
+    ".agent/snapshots/1790848341810--722117d1-2cac-42f5-9d78-f1777e5051fb/src/m12-trimAll.js",
+    ".agent/snapshots/1790848344169--05ecf71f-f667-449f-b7a4-f5f345f68471/src/m13-escapeHtml.js",
+    ".agent/snapshots/1790848347526--28805448-b851-451f-b4e9-4ccd71f6a291/src/m14-splitLines.js",
+    ".agent/snapshots/1790848350136--bc78094a-b2c5-43ba-95ac-b68351850830/src/m15-percent.js",
+    ".agent/snapshots/1790848353168--6db34f60-8345-4399-a0db-62304012159a/src/m16-roundTo.js",
+    ".agent/snapshots/1790848355894--6b3ace61-e342-41de-a2c8-059c07b39081/src/m17-pickKeys.js",
+    ".agent/snapshots/1790848360171--660da3f4-cc63-4ce8-b95b-5594e4a6c457/src/m18-deepMerge.js",
+    ".agent/snapshots/1790848362334--71ce6e81-3532-47ef-bd55-3960bd717d31/src/m19-lastN.js",
+    ".agent/snapshots/1790848367814--14dd0105-b6bf-4d47-a8c8-596d8a6f3b5d/src/m20-repeatEach.js",
+    "src/m01-clamp.js",
+    "src/m02-sum.js",
+    "src/m03-unique.js",
+    "src/m04-chunk.js",
+    "src/m05-titleCase.js",
+    "src/m06-parseIntSafe.js",
+    "src/m07-mean.js",
+    "src/m08-zip.js",
+    "src/m09-flatten.js",
+    "src/m10-groupBy.js",
+    "src/m11-sortBy.js",
+    "src/m12-trimAll.js",
+    "src/m13-escapeHtml.js",
+    "src/m14-splitLines.js",
+    "src/m15-percent.js",
+    "src/m16-roundTo.js",
+    "src/m17-pickKeys.js",
+    "src/m18-deepMerge.js",
+    "src/m19-lastN.js",
+    "src/m20-repeatEach.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 382,
+    "procPeak": 11,
+    "cpuMs": 9783,
+    "samples": 214
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ }
+]

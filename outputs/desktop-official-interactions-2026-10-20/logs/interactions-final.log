@@ -1,0 +1,34 @@
+PASS 工具组默认收起，执行中与失败原因仍可见 {"text":"3 次工具调用执行中 · 抓取 https://example.com/docs1 次失败 · Assertion failed Expected 2, received 1","open":"false","hidden":true}
+PASS 展开调用可读真实返回内容 undefined
+PASS 流式追加、收口和最终答复保留组与单次展开状态 {"identity":"retained","open":"true","body":"返回内容\nexport const desktop = true;","count":4,"summary":"4 次工具调用1 次失败"}
+PASS 项目组收起状态已保存 undefined
+PASS 重载恢复项目组收起状态 undefined
+PASS 搜索自动显示收起组里的匹配会话 undefined
+PASS 清除搜索恢复原折叠选择 undefined
+PASS 侧栏收起仍有可用快捷栏 {"rail":48,"side":0}
+PASS 快捷栏和主区同排且主区填满剩余宽高 {"top":38,"railTop":38,"right":1440,"viewport":1440,"railHeight":826}
+PASS 快捷栏文件入口打开可交互的面板 undefined
+PASS 添加面板直接聚焦新开的面板 undefined
+PASS 聚焦切换隐藏其他面板并保留同一内容树 {"display":"none","plan":304.75,"identity":"retained-file"}
+PASS 恢复原来的多面板布局 undefined
+PASS 关闭聚焦面板后回到剩余面板 undefined
+PASS 窄窗快捷栏和面板无横向溢出 {"overflow":false,"rail":48}
+PASS 渲染过程无控制台错误 []
+PASS 工具组默认收起，执行中与失败原因仍可见 {"text":"3 次工具调用执行中 · 抓取 https://example.com/docs1 次失败 · Assertion failed Expected 2, received 1","open":"false","hidden":true}
+PASS 展开调用可读真实返回内容 undefined
+PASS 流式追加、收口和最终答复保留组与单次展开状态 {"identity":"retained","open":"true","body":"返回内容\nexport const desktop = true;","count":4,"summary":"4 次工具调用1 次失败"}
+PASS 项目组收起状态已保存 undefined
+PASS 重载恢复项目组收起状态 undefined
+PASS 搜索自动显示收起组里的匹配会话 undefined
+PASS 清除搜索恢复原折叠选择 undefined
+PASS 侧栏收起仍有可用快捷栏 {"rail":48,"side":0}
+PASS 快捷栏和主区同排且主区填满剩余宽高 {"top":38,"railTop":38,"right":1440,"viewport":1440,"railHeight":826}
+PASS 快捷栏文件入口打开可交互的面板 undefined
+PASS 添加面板直接聚焦新开的面板 undefined
+PASS 聚焦切换隐藏其他面板并保留同一内容树 {"display":"none","plan":304.75,"identity":"retained-file"}
+PASS 恢复原来的多面板布局 undefined
+PASS 关闭聚焦面板后回到剩余面板 undefined
+PASS 窄窗快捷栏和面板无横向溢出 {"overflow":false,"rail":48}
+PASS 渲染过程无控制台错误 []
+截图与读数：/Users/ze/Downloads/Cairn/deepseek harness/outputs/desktop-official-interactions-2026-10-20/final
+隔离测试配置：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-interactions-profile-vHHPkj

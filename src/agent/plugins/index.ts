@@ -24,6 +24,7 @@ import {
   registerPluginLspServers, unregisterPluginLspServers, closePluginLspClients, type LspServerConfig as LspRuntimeConfig,
 } from "../../tools/lsp";
 import type { AgentEvent, ToolCallEvent, ToolResultEvent, UserMessageEvent } from "../../events";
+import { userConfigValuesErrors } from "./manifest";
 import type {
   DiscoveredPlugin, LoadedHookDef, LooseSkill, PluginsManifest, SkillEntry, McpServerStatus,
 } from "./types";
@@ -32,6 +33,8 @@ export * from "./types";
 export {
   parseUserConfigFields,
   sensitiveUserConfigKeys,
+  userConfigValueError,
+  userConfigValuesErrors,
   type UserConfigField,
 } from "./manifest";
 export {
@@ -297,6 +300,10 @@ export class PluginRuntime {
     const allowed = new Set(p.userConfigFields.map((f) => f.key));
     const unknown = Object.keys(values).filter((k) => !allowed.has(k));
     if (unknown.length > 0) return { ok: false, error: `未知配置项: ${unknown.join("、")}` };
+    // 按声明类型校验（number/boolean）。此前这里只查"是不是字符串"⇒ 往 number 字段填
+    // "abc" 会被收下并原样进 MCP/LSP argv 与 hook exec form，错值不在任何地方报错。
+    const bad = userConfigValuesErrors(p.userConfigFields, values);
+    if (bad.length > 0) return { ok: false, error: bad.join("；") };
     const clean: Record<string, string> = {};
     for (const [k, v] of Object.entries(values)) {
       if (typeof v !== "string") return { ok: false, error: `配置项 ${k} 必须是字符串` };

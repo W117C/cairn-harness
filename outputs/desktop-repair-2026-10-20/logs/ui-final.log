@@ -1,0 +1,10 @@
+PASS 首页标题、项目与输入区共用阅读起点 {"headingLeft":479.5,"composerLeft":479.5,"footer":"设置与偏好","canvas":"rgb(252, 252, 251)","radius":"18px","upstream":true}
+PASS 设置入口有可见文字，未伪装成用户头像 "设置与偏好"
+PASS 已加载上游 Claude 主题与输入卡样式 {"headingLeft":479.5,"composerLeft":479.5,"footer":"设置与偏好","canvas":"rgb(252, 252, 251)","radius":"18px","upstream":true}
+PASS 侧栏任务名获得至少六成行宽 {"rowWidth":186.5,"titleWidth":157.5}
+PASS 窄窗输入框完整可见，页面无横向溢出 {"left":216,"right":861,"viewport":880,"overflow":false}
+PASS 暗色主题与 Markdown 链接使用上游配色 {"canvas":"rgb(20, 20, 19)","link":"rgb(138, 180, 248)"}
+PASS 设置页顶栏显示当前页面并收起任务操作 {"open":true,"title":"设置","tools":"","taskButton":false}
+PASS 渲染过程无控制台错误 []
+截图与读数：/Users/ze/Downloads/Cairn/deepseek harness/outputs/desktop-repair-2026-10-20/final
+隔离测试配置：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-layout-profile-yv1vji

@@ -856,29 +856,29 @@ export const MUTATIONS = [
   },
         {
     id: "remember-gate-if-chain-back",
-    src: "src/main/agent-runner.ts",
+    src: "src/permissions/index.ts",
     test: "tests/remember.test.ts",
     desc: "remember 门退回按档位字面量的 if 链 ⇒ 表外档位一路掉到底、直接落盘（粗档表在这条路上没人读）",
-    apply: (s) => s.replace('const decision = sideEffectDecisionTable()[mode] ?? "ask";', 'const decision = mode === "read-only" ? "deny" : mode === "default" ? "ask" : "allow";'),
+    apply: (s) => s.replace('const decision = SIDE_EFFECT_DECISION[opts.mode] ?? "ask";', 'const decision = opts.mode === "read-only" ? "deny" : opts.mode === "default" ? "ask" : "allow";'),
     expectFail: "表外档位不落盘：走 ask，无审批口即 fail-closed（旧 if 链在这里静默放行）",
   },
   {
     id: "remember-project-scope-free-write",
-    src: "src/main/agent-runner.ts",
+    src: "src/permissions/index.ts",
     test: "tests/remember.test.ts",
     desc: "项目层免批那一支被摘掉 ⇒ default 档下每次 remember 都出卡，而无 ask gate 时 fail-closed。" +
       "实测代价（2026-10-15 桌面端会话）：agent 两次想把「本仓 verify 全量 219s 跑不进 60s 帽」" +
       "写进项目记忆，两次被挡 ⇒ 下一场会话从零开始踩同一个坑。",
-    apply: (s) => s.replace('        if (args.scope !== "global") return remember.run(args, ctx);\n', ''),
+    apply: (s) => s.replace('if (decision === "ask" && opts.scope === "global") return "ask";', 'if (decision === "ask") return "ask";'),
     expectFail: "default 档项目层免批直写（与沉淀轮的分层裁决同一条口径）",
   },
   {
     id: "remember-global-scope-free-write",
-    src: "src/main/agent-runner.ts",
+    src: "src/permissions/index.ts",
     test: "tests/remember.test.ts",
     desc: "免批边界从 scope 改成「一律免批」⇒ 全局层跨项目回注无声落盘。" +
       "这一格是上一条的反向：项目层值得省一张卡，全局层不值得（它改的是所有项目）。",
-    apply: (s) => s.replace('        if (args.scope !== "global") return remember.run(args, ctx);', '        if (true) return remember.run(args, ctx);'),
+    apply: (s) => s.replace('opts.scope === "global"', 'opts.scope === "global_never"'),
     expectFail: "default 档全局层照旧逐次审批（跨项目回注，不许无声写）",
   },
   {

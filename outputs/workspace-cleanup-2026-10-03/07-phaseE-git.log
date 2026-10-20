@@ -1,0 +1,35 @@
+== 阶段 E .git 卫生 2026-10-03 13:46:42 ==
+-- 删前对象账 --
+count: 549
+size: 29.36 MiB
+in-pack: 15932
+packs: 4
+size-pack: 61.54 MiB
+prune-packable: 0
+garbage: 1
+size-garbage: 0 bytes
+-- garbage 文件 --
+total 32
+drwxr-xr-x    5 ze  staff   160 Oct  3 03:45 .
+drwxr-xr-x@ 226 ze  staff  7232 Oct  3 13:45 ..
+-r--r--r--@   1 ze  staff  9207 Oct  3 03:45 61ee0ce75c53e9b5543c312b4650d06278c940
+-r--r--r--@   1 ze  staff  1550 Oct  3 02:27 95fef86825868c315e5475e1e84b421c696f58
+-r--r--r--@   1 ze  staff     0 Sep 17 11:39 tmp_obj_Ly3va4
+DEL garbage .git/objects/40/tmp_obj_Ly3va4 rc=0 exists=GONE
+-- 在跑的 gate 进程数=0
+git gc rc=0
+-- 删后对象账 --
+count: 0
+size: 0 bytes
+in-pack: 16128
+packs: 2
+size-pack: 58.88 MiB
+prune-packable: 0
+garbage: 0
+size-garbage: 0 bytes
+dangling commit 950083e707453b7dc7a9cf7310253916517537f5
+dangling tree 050260989c6db8f69aaf59d29b0b965151224ef7
+dangling tree 42021f6c168eef13bc53f6e4d5fa88e0ea196514
+dangling tree df02727a081dfc11c7301c64995ffabd81f8f239
+dangling commit f3828693f993a6a663bbf5e7e2ed5d4675358631
+(fsck 无输出=无错误)

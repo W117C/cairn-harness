@@ -2,7 +2,7 @@
 // 表格只列**已实现**的键（不摆没接的键位当装饰——诚实口径）。
 // P3-3 起分两张表（brief 九节「统一在设置里展示，tooltip 里同步显示」）：
 //   · SHORTCUT_GROUPS = 完整速查（⌘/ 弹层；既有全量）；
-//   · SHORTCUTS = 核心 10 项单一事实源（设置页「快捷键」区渲染；Sidebar/命令面板 tooltip 取键）。
+//   · SHORTCUTS = 核心键单一事实源（设置页「快捷键」区渲染；Sidebar/命令面板 tooltip 取键）。
 // 批 100：窗格族（7 个）改从 pane-shortcuts.ts 生成——键位与 App dispatch 同源，不再手抄两份。
 import { PANE_SHORTCUTS } from "./pane-shortcuts";
 export interface ShortcutRow {
@@ -55,7 +55,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: "Enter", what: "发送；运行中 = 排队（不打断）" },
       { keys: "⌘↩", what: "运行中 = 入队并打断本轮" },
       { keys: "⌘.", what: "停止本轮生成" },
-      { keys: "Esc", what: "先关浮层；无浮层时停止本轮" },
+      { keys: "Esc", what: "先关浮层；决策卡在场时让路；无浮层停止本轮" },
     ],
   },
 ];
@@ -71,6 +71,7 @@ export const SHORTCUTS: readonly ShortcutSpec[] = [
   { id: "new-session", keys: "⌘N", label: "新任务" },
   { id: "open-folder", keys: "⌘O", label: "打开文件夹" },
   { id: "palette", keys: "⌘K", label: "命令面板" },
+  { id: "sidebar", keys: "⌘B", label: "开合侧栏" },
   { id: "find", keys: "⌘F", label: "对话内查找" },
   { id: "inspector", keys: "⌘⌥B", label: "检查器" },
   { id: "stop", keys: "⌘.", label: "停止生成" },
@@ -78,6 +79,7 @@ export const SHORTCUTS: readonly ShortcutSpec[] = [
   { id: "settings", keys: "⌘,", label: "设置" },
   { id: "send", keys: "⏎", label: "发送" },
   { id: "newline", keys: "⇧⏎", label: "换行" },
+  { id: "cheat-sheet", keys: "⌘/", label: "完整速查表" },
 ];
 
 /** 表内取键（tooltip/命令面板用——键位只在这张表里改，消费面自动跟）。 */

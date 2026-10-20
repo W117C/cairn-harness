@@ -14,7 +14,9 @@ describe("检查器宽度持久化", () => {
 
   it("开合状态：用户显式 ⌘⌥B 时记 1/0；有恢复窗格或上次是开则启动不收起", () => {
     expect(app).toContain('window.localStorage.getItem("cairn.inspector.open.v1") === "1"');
-    expect(app).toContain("if (paneTabs.length > 0 || inspectorDefaultOpen) return;");
+    expect(app).toContain("if (paneTabs.length > 0 || inspectorDefaultOpen) {");
+    expect(app).toContain("setInspectorCollapsed(false);");
+    expect(app).toContain("setInspectorCollapsed(true);");
     expect(app).toContain('window.localStorage.setItem("cairn.inspector.open.v1", "1");');
     expect(app).toContain('window.localStorage.setItem("cairn.inspector.open.v1", "0");');
   });

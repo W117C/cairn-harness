@@ -73,10 +73,12 @@ const dayStart = (ms: number): number => {
   return d.getTime();
 };
 
-/** 会话的时间锚：updatedAt 有效用 updatedAt，否则 mtimeMs（与旧 SessionRow 同式）。 */
+/** 会话的时间锚 = 文件 mtime：事件 append 会刷新它，这**就是**对话活动时间。
+ *  `metadata.updatedAt` 是组织信息的修改时间（置顶/改名/归档/归项目都会写）——拿它当 recency，
+ *  置顶一下就会把一小时前的会话显示成「刚刚」、并把它分进「今天」桶（2026-10-20 真机：
+ *  置顶旧会话后侧栏时间从「1 小时前」跳成「刚刚」，而 JSONL mtime 没变）。 */
 export function sessionTime(s: WorkspaceSession): number {
-  const parsed = s.updatedAt !== undefined && s.updatedAt !== "" ? Date.parse(s.updatedAt) : NaN;
-  return Number.isFinite(parsed) ? parsed : s.mtimeMs;
+  return s.mtimeMs;
 }
 
 /** 桶判据用**日历日**边界（本地时区）：今天 → 昨天 → 过去 7 天 → 更早。 */

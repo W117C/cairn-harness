@@ -42,6 +42,58 @@ describe("transcriptMarkdown", () => {
     expect(transcriptMarkdown([], "空")).toBe("# 空\n");
   });
 
+  it("★真实 provider 只发 delta：同 callId 的 delta 必须拼成一段（旧实现只认终稿 ⇒ 每个真会话都导不出助手回答）", () => {
+    const md = transcriptMarkdown([
+      ev({ type: "user_message", content: "帮我把 README 补全" }),
+      ev({ type: "assistant_delta", callId: "c1", text: "我来" }),
+      ev({ type: "assistant_delta", callId: "c1", text: "补全" }),
+      ev({ type: "assistant_delta", callId: "c1", text: "安装段。" }),
+    ], "T");
+    expect(md).toBe("# T\n\n## 你\n\n帮我把 README 补全\n\n## Cairn\n\n我来补全安装段。\n");
+  });
+
+  it("多轮 delta：轮界落定，不把两轮拼成一段（轮界 = 下一条 user_message）", () => {
+    const md = transcriptMarkdown([
+      ev({ type: "user_message", content: "第一问" }),
+      ev({ type: "assistant_delta", callId: "c1", text: "第一答" }),
+      ev({ type: "user_message", content: "第二问" }),
+      ev({ type: "assistant_delta", callId: "c2", text: "第二答" }),
+    ], "T");
+    expect(md).toBe("# T\n\n## 你\n\n第一问\n\n## Cairn\n\n第一答\n\n## 你\n\n第二问\n\n## Cairn\n\n第二答\n");
+  });
+
+  it("工具轮里的 delta 也收（真实会话里回答常夹在工具调用之间）", () => {
+    const md = transcriptMarkdown([
+      ev({ type: "user_message", content: "读一下 a.ts" }),
+      ev({ type: "assistant_delta", callId: "c1", text: "我先读文件。" }),
+      ev({ type: "tool_call", id: "t1", name: "read_file", args: { path: "a.ts" } }),
+      ev({ type: "tool_result", callId: "t1", ok: true, output: "…" }),
+      ev({ type: "assistant_delta", callId: "c2", text: "读完了，内容是空的。" }),
+    ], "T");
+    expect(md).toContain("## Cairn\n\n我先读文件。");
+    expect(md).toContain("## Cairn\n\n读完了，内容是空的。");
+    expect(md).not.toContain("read_file");
+  });
+
+  it("worker 子流的 delta 不进主会话导出（agent_id 归因字段）", () => {
+    const md = transcriptMarkdown([
+      ev({ type: "user_message", content: "主会话问题" }),
+      ev({ type: "assistant_delta", callId: "w1", text: "worker 的内心", agent_id: "worker-1" }),
+      ev({ type: "assistant_delta", callId: "c1", text: "主会话回答" }),
+    ], "T");
+    expect(md).toContain("主会话回答");
+    expect(md).not.toContain("worker 的内心");
+  });
+
+  it("空文本 delta（只想过没说）不成段", () => {
+    const md = transcriptMarkdown([
+      ev({ type: "user_message", content: "问" }),
+      ev({ type: "thinking_delta", callId: "c1", text: "内心戏" }),
+      ev({ type: "assistant_delta", callId: "c1", text: "  " }),
+    ], "T");
+    expect(md).toBe("# T\n\n## 你\n\n问\n");
+  });
+
   it("接线：面板操作 + App 分发 + Markdown 生成", () => {
     const palette = read("../src/renderer/components/CommandPalette.tsx");
     expect(palette).toContain('{ id: "copy-transcript", label: "复制整段对话" }');

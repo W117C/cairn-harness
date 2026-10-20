@@ -1,0 +1,452 @@
+--- before/apps/desktop/design/desktop-design-spec.md
++++ after/apps/desktop/design/desktop-design-spec.md
+@@ -1,3 +1,11 @@
++# 2026-10-20 视觉实现更新
++
++用户最新指定直接使用 [Nwflower/dsh-claude-style](https://github.com/Nwflower/dsh-claude-style)。当前视觉层复用其 0.17.0、提交 `484ece039400ab45a97e935abb5bc47245845a96` 的主题源码，并经 `src/renderer/dsh-claude-style.css` 适配 Cairn。上游来源与接入范围见 `src/renderer/vendor/dsh-claude-style/README.md`，文件校验值见同目录 `UPSTREAM.json`。
++
++本文以下的旧配色、字体与控件像素记录保留为历史；与本次接入冲突时，以固定上游源码和 Cairn 适配层为准。任务、权限、会话、窗格等功能与安全契约继续适用。没有安装或替换官方 DSH 宿主。
++
++---
++
+ # Cairn 桌面端设计规范（v1.0 · Claude 蓝本）
+ 
+ > **唯一依据**：《Claude 桌面端设计规范》（`/Users/ze/Documents/deepseek-harness/default-workspace/Claude桌面端设计规范.md`，2026-10-15 版）。下文一切条款回引其章节号（§2.x / §3.x / §4.x / §5.x）。
+--- before/apps/desktop/tests/tooltip-audit.test.tsx
++++ after/apps/desktop/tests/tooltip-audit.test.tsx
+@@ -39,6 +39,9 @@
+         waitingIds={new Set<string>()}
+         outcomes={new Map([["s1", "ok"]])}
+         providerOk={null}
++        theme="system"
++        onThemeChange={() => undefined}
++        usage={{ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, usageCount: 0, toolSteps: 0, rounds: 0 }}
+         onOpen={() => undefined}
+         onNewTask={() => undefined}
+         onOpenPalette={() => undefined}
+--- before/apps/desktop/tests/session-list-polish.test.tsx
++++ after/apps/desktop/tests/session-list-polish.test.tsx
+@@ -45,6 +45,9 @@
+       waitingIds={new Set<string>()}
+       outcomes={new Map<string, "ok" | "failed">()}
+       providerOk={null}
++      theme="system"
++      onThemeChange={() => undefined}
++      usage={{ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, usageCount: 0, toolSteps: 0, rounds: 0 }}
+       onOpen={() => undefined}
+       onNewTask={() => undefined}
+       onOpenPalette={() => undefined}
+--- before/apps/desktop/src/renderer/App.tsx
++++ after/apps/desktop/src/renderer/App.tsx
+@@ -2460,7 +2460,7 @@
+ 
+   // 统一工具栏 · 右组（批 129）：对话目录 + 窗格入口（Terminal / Changes / Browser）+ ⋯ + 专注模式。
+   // 窄窗（≤920px）三钮收进 ⋮（CSS 收口）；⋯ 恒列全部窗格。
+-  const toolbarRight = (
++  const toolbarRight = !settingsOpen && (
+     <>
+       {activeId !== null && (
+         <div className="tb-cluster">
+@@ -2543,14 +2543,14 @@
+   return (
+     <div className="app" data-sidebar={sidebarCollapsed ? "collapsed" : "expanded"}>
+       <TitleBar
+-        center={toolbarCenter}
+-        aside={toolbarAside}
++        center={settingsOpen ? <span className="tb-brand">设置</span> : toolbarCenter}
++        aside={settingsOpen ? undefined : toolbarAside}
+         sidebarCollapsed={sidebarCollapsed}
+         onToggleSidebar={toggleSidebar}
+         right={toolbarRight}
+       />
+       <div className="shell">
+-        <div className="side-wrap" style={{ width: sidebarWidth }}>
++        <div className="side-wrap" data-dsh-claude-part="sidebar-column" style={{ width: sidebarWidth }}>
+         <Sidebar
+           projects={projects}
+           sessions={sessions}
+@@ -2616,7 +2616,7 @@
+         </div>
+         <Group orientation="horizontal" id="cairn-main" className="main-group" elementRef={mainGroupRef}>
+           <Panel minSize={420}>
+-        <main className="main" data-empty={showEmpty ? "true" : "false"}>
++        <main className="main" data-dsh-claude-part="center-column" data-empty={showEmpty ? "true" : "false"}>
+           <FindBar ref={findRef} open={findOpen && !showEmpty} container={streamEl} onClose={closeFind} />
+           {showEmpty ? (
+             /* 空屏（P2-1）：品牌字标 → 问候 → 项目 chip →（输入区居中枢位见 zone-composer）→ 建议行。
+@@ -2647,7 +2647,7 @@
+                 {/* 2026-10-18 对照 Claude 桌面端：hero 不是「字标 + 问候」两行，而是珊瑚星标与
+                     问候同一行、衬线大字（Claude 的「✳ You're here!」）。品牌名仍在窗口顶栏，
+                     这里不再叠一个 CAIRN 字标。 */}
+-                <h1 className="empty-greet">
++                <h1 className="empty-greet" data-dsh-claude-part="hero-headline" data-dsh-claude-holds="hero-mark">
+                   <Sparkles size={26} strokeWidth={2.2} className="empty-greet-mark" aria-hidden="true" />
+                   <span>{greetingFor(new Date().getHours())}，{STR.empty.greetingAsk}</span>
+                 </h1>
+--- before/apps/desktop/src/renderer/strings.ts
++++ after/apps/desktop/src/renderer/strings.ts
+@@ -154,7 +154,8 @@
+   footer: {
+     settings: "设置",
+     settingsTip: "设置",
+-    accountTip: "账户、外观与用量",
++    accountTip: "设置、外观与用量",
++    preferences: "设置与偏好",
+     about: "关于与更新",
+     providerOk: "模型服务可用",
+     providerBad: "模型服务不可用——点击去设置",
+--- before/apps/desktop/src/renderer/main.tsx
++++ after/apps/desktop/src/renderer/main.tsx
+@@ -5,6 +5,11 @@
+ import { ToastHost } from "./components/ToastHost";
+ import "./tokens.css";
+ import "./styles.css";
++import "./dsh-claude-style.css";
++
++document.body.setAttribute("data-dsh-claude-style", "");
++document.body.setAttribute("data-dsh-claude-palette", "claude");
++document.body.setAttribute("data-dsh-claude-brand", "claude");
+ 
+ const PopoutApp = lazy(() => import("./components/PopoutApp").then((m) => ({ default: m.PopoutApp })));
+ 
+--- before/apps/desktop/src/renderer/styles.css
++++ after/apps/desktop/src/renderer/styles.css
+@@ -306,7 +306,7 @@
+ 
+ .session {
+   position: relative; display: flex; align-items: center; gap: 8px;
+-  height: var(--h-row); padding: 0 var(--space-xs) 0 7px; margin: 0 2px;
++  min-height: 48px; padding: 6px var(--space-xs) 6px 7px; margin: 2px;
+   border-radius: var(--radius-sm); font-size: var(--fs-body-md); color: hsl(var(--text-200));
+   cursor: pointer;
+ }
+@@ -322,6 +322,8 @@
+ /* 置顶钉形标记（第十四遍，ui-spec §2.1「标题前 12px 钉形 icon」）——中性 text-400，
+    只在 pinned 时渲染；颜色随主题，不抢会话名焦点。 */
+ .s-pin { flex: none; color: hsl(var(--text-400)); }
++.s-summary { flex: 1; min-width: 0; padding-right: 18px; display: flex; flex-direction: column; gap: 2px; }
++.s-meta { display: flex; align-items: center; gap: var(--space-xs); min-height: 14px; line-height: 1.3; }
+ .s-title {
+   flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+   /* 业主四图批（23.16 截图）：此处原抄了「末端渐隐」，实为误读——brief §2.1 明示
+@@ -333,7 +335,7 @@
+    「…」留位（不叠字）。 */
+ .s-draft { display: inline-flex; align-items: center; color: hsl(var(--text-400)); flex: none; }
+ .s-draft { animation: sp-flash-in var(--t-fast); }
+-.s-time { flex: none; font-size: var(--fs-caption-xs); color: hsl(var(--text-400)); font-variant-numeric: tabular-nums; padding-right: 18px; }
++.s-time { flex: none; font-size: var(--fs-caption-xs); color: hsl(var(--text-400)); font-variant-numeric: tabular-nums; }
+ /* hover 才出现的「…」（蓝本 §2.1 行内元素）：行尾绝对位；时间戳已为它留出右边距（不叠字） */
+ .s-more {
+   position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+@@ -356,20 +358,19 @@
+ .dot.error { background: hsl(var(--color-danger)); }
+ 
+ .side-foot {
+-  display: flex; align-items: center; justify-content: flex-end;
++  display: flex; align-items: center; gap: var(--space-xs);
+   height: 48px; flex: none;
+   padding: 0 var(--space-sm); border-top: 1px solid var(--hairline);
+ }
+ .avatar {
+-  /* v7.2 业主截图批：头像中性化（去珊瑚——「人的身份」不用品牌色抢焦，同完成键/分组圆点先例）；
+-     26px 命中区更从容；hover 提亮一档并给出标题提示（它同时是设置与关于的入口）。 */
+-  width: 26px; height: 26px; border-radius: 50%;
+-  background: var(--alpha-3); color: hsl(var(--text-000));
+-  font-size: var(--fs-caption-sm); font-weight: var(--fw-bold);
+-  display: inline-flex; align-items: center; justify-content: center;
++  width: 100%; height: 34px; padding: 0 var(--space-xs); border-radius: var(--radius-sm);
++  color: hsl(var(--text-200));
++  font-size: var(--fs-body-sm); font-weight: var(--fw-medium);
++  display: inline-flex; align-items: center; gap: var(--space-sm);
+   transition: background var(--t-fast), color var(--t-fast);
+ }
+-.avatar:hover { background: var(--alpha-4); color: hsl(var(--text-000)); }
++.avatar span { flex: 1; text-align: left; }
++.avatar:hover { background: var(--alpha-2); color: hsl(var(--text-000)); }
+ .menu-note { padding: var(--space-xs) var(--space-sm); font-size: var(--fs-footnote); line-height: 1.5; color: hsl(var(--text-400)); white-space: normal; max-width: 260px; }
+ .fl-row { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: var(--space-md); }
+ .fl-row[data-on="true"] { color: hsl(var(--text-000)); }
+@@ -680,11 +681,15 @@
+ 
+ /* 居中枢位：hero 贴 zone-stream 底（紧贴输入区上方），输入区下方留 .empty-tail 弹性空带，
+    flex 比例 2.5:1 ⇒ 输入区落在视觉中心偏上（顶层空档 s、底带 2.5s）。 */
+-.main[data-empty="true"] .empty { justify-content: flex-end; gap: var(--space-sm); padding: var(--space-md) var(--space-xl) 0; }
++.main[data-empty="true"] .empty {
++  justify-content: flex-end; align-items: flex-start; gap: var(--space-md);
++  width: 100%; max-width: min(var(--reading), 100%); margin: 0 auto;
++  padding: var(--space-md) 41px var(--space-md);
++}
+ /* hero（2026-10-18 对照 Claude 桌面端）：珊瑚星标与问候同一行、衬线显示大字。
+    Claude 的「✳ You're here!」就是这个形制；中文走 Songti/STSong，正文仍是系统无衬线。 */
+ .empty h1.empty-greet {
+-  display: flex; align-items: center; justify-content: center; gap: 0.45em;
++  display: flex; align-items: center; justify-content: flex-start; gap: 0.45em;
+   margin: 0; font-family: "Iowan Old Style", "Palatino", "Songti SC", "STSong", Georgia, serif;
+   font-size: clamp(2rem, 4vw, 2.5rem); font-weight: var(--fw-medium);
+   letter-spacing: -0.01em; line-height: 1.3;
+@@ -988,7 +993,7 @@
+ }
+ /* 拖放高亮（§3.1）：文件悬在卡片上时 */
+ .composer-card[data-dragging="true"] { border-color: hsl(var(--text-400)); background: var(--alpha-1); }
+-.row3 { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-xs); padding: var(--space-xs) var(--space-sm) var(--space-sm) var(--space-sm); min-width: 0; }
++.row3 { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); padding: var(--space-xs) var(--space-sm) var(--space-sm) var(--space-sm); min-width: 0; }
+ .spacer { flex: 1 1 0; min-width: 0; }
+ .attach-btn {
+   display: inline-flex; align-items: center; justify-content: center;
+@@ -1220,12 +1225,13 @@
+ .mp { position: relative; flex: 0 1 auto; min-width: 0; }
+ .mp-trigger {
+   display: inline-flex; align-items: center; gap: 5px;
++  max-width: 100%;
+   height: 28px; padding: 0 var(--space-sm); border-radius: var(--radius-pill);
+   color: hsl(var(--text-200)); font-size: var(--fs-caption-md); font-weight: var(--fw-medium);
+ }
+ .mp-trigger:hover { background: var(--alpha-1); color: hsl(var(--text-000)); }
+ .mp-trigger[disabled] { opacity: 0.55; cursor: default; }
+-.mp-trigger .mp-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.mp-trigger .mp-name { min-width: 0; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ .mp-trigger .mp-caret { color: hsl(var(--text-400)); }
+ .mp-dot { width: 5px; height: 5px; border-radius: 50%; background: hsl(var(--accent-brand)); flex: none; }
+ .mp-pop { min-width: 300px; max-width: 380px; max-height: min(480px, 62vh); overflow-y: auto; overscroll-behavior: contain; }
+@@ -1576,8 +1582,13 @@
+ @keyframes sp-flash-in { from { opacity: 0; transform: translateY(4px); } }
+ /* A（2026-10-16 模型/通道页重做）：滚动容器撑满窗口（原 max-width:760px 把滚动条钉在窗口 ~82% 处、
+    右缘留死区）；内容列（设置页 .ss-page / 工作台 .ap-body）960px 水平居中。顶部 24px 起标题。 */
+-.sp-body { overflow-y: auto; padding: var(--space-lg) var(--space-xl) var(--space-xl); min-height: 0; }
++.sp-body { overflow-y: auto; padding: var(--space-lg) var(--space-xl) var(--space-xl); min-height: 0; container-type: inline-size; }
+ .sp-body > .ss-page, .sp-body > .ap-body { max-width: 960px; margin: 0 auto; width: 100%; }
++.sp-body > .ss-page { max-width: 800px; }
++@container (max-width: 640px) {
++  .ss-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-xs); }
++  .ss-row-main { padding-top: 0; }
++}
+ .sp-sec h2 { margin: 0 0 var(--space-md); font-size: var(--fs-heading-xl); font-weight: var(--fw-bold); }
+ /* ── 控件契约（2026-10-16 模型/通道页重做）：36px 高 / 8px 圆角（--radius-field）/ 焦点描边 / 禁用区分；
+    Field 宽度四档（sm 160 / md 240 / lg 320 / full ≤420）——「控件宽度不统一」的修法收敛到一处。 ── */
+@@ -2139,7 +2150,7 @@
+   .zone-gate, .zone-composer { padding-left: 16px; padding-right: 16px; }
+   /* 起手行与输入卡同宽：composer 在窄窗改 16px 气沟，建议行不能还留 41px。 */
+   .empty-below { padding-left: 16px; padding-right: 16px; }
+-  .mp-trigger .mp-name { max-width: 110px; }
++  .main[data-empty="true"] .empty { padding-left: 16px; padding-right: 16px; }
+   .tb-quick { display: none; } /* 蓝本 §2.3：窗口过窄时按钮收进 ⋮（⋮ 恒列全部窗格） */
+ }
+ @media (max-width: 760px) {
+@@ -2210,16 +2221,14 @@
+ .group-head:hover .g-more, .g-more:focus-visible { opacity: 1; }
+ .g-more:hover { background: var(--alpha-1); color: hsl(var(--text-000)); }
+ 
+-/* 页脚（批 130）：模型服务状态点 + 头像。
+-   原 .foot-settings（设置文字钮）已撤——设置入口收进头像菜单（见 .foot-avatar-wrap）。 */
+-.foot-spacer { flex: 1 1 auto; }
+-.provider-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 10px; background: hsl(var(--text-400) / 40%); transition: background var(--t-fast); }
++/* 设置菜单保持单一入口，以文字标明用途；状态点仍直达模型配置。 */
++.provider-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: hsl(var(--text-400) / 40%); transition: background var(--t-fast); }
+ .provider-dot[data-ok="ok"] { background: var(--ok); }
+ .provider-dot[data-ok="bad"] { background: hsl(var(--color-danger)); }
+ 
+ /* 头像 + 用量统计面板（2026-10-20 批 130）：
+    头像是侧栏的「账户/外观/用量」枢纽（设置入口也收在这里，见 Sidebar 页脚）。 */
+-.foot-avatar-wrap { position: relative; display: inline-flex; flex: none; }
++.foot-avatar-wrap { position: relative; display: inline-flex; flex: 1; min-width: 0; }
+ /* 锚：0×0 的定位点，**贴在侧栏右下角**（不是头像旁）——面板宽 184px，侧栏最窄 200px，
+    贴头像锚会把面板推到窗口左缘外（被裁掉标题行）。面板在锚里 ⇒ 外点判定
+    （usePopoverDismiss）不会把「点面板内部」判成外点。
+@@ -2326,4 +2335,4 @@
+   box-shadow: var(--shadow-pop); color: hsl(var(--text-200)); font-size: var(--fs-body-sm);
+ }
+ 
+-@keyframes gc-in { from { opacity: 0; transform: translateY(3px); } }+@keyframes gc-in { from { opacity: 0; transform: translateY(3px); } }
+--- before/apps/desktop/src/renderer/markdown.tsx
++++ after/apps/desktop/src/renderer/markdown.tsx
+@@ -335,7 +335,7 @@
+       return <MarkdownImage alt={b.alt} src={b.src} />;
+     case "table":
+       return (
+-        <div className="md-table-wrap">
++        <div className="md-table-wrap" data-dsh-claude-part="table-scroll">
+           <table className="md-table">
+             <thead><tr>{b.header.map((h, i) => <th key={i}>{renderInline(h)}</th>)}</tr></thead>
+             <tbody>{b.rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{renderInline(c)}</td>)}</tr>)}</tbody>
+@@ -366,7 +366,7 @@
+   const blocks = parseBlocks(props.text);
+   const last = blocks.length - 1;
+   return (
+-    <div className="md-body">
++    <div className="md-body" data-dsh-claude-part="markdown">
+       {blocks.map((b, i) => (
+         <BlockView key={i} block={b}
+           {...(props.onCopy !== undefined ? { onCopy: props.onCopy } : {})}
+--- before/apps/desktop/src/renderer/tokens.css
++++ after/apps/desktop/src/renderer/tokens.css
+@@ -46,8 +46,8 @@
+        --cds-role-accent-250: var(--cds-blue-250);
+        --cds-role-accent-fill: var(--cds-role-accent-450);
+        --cds-role-accent-fill-hover: var(--cds-role-accent-400);
+-       --cds-role-accent-on: var(--cds-gray-0);      /* accent/danger/pro 用浅字 */
+-       --cds-role-success-on: var(--cds-gray-900);   /* success/warning 用深字 */
++       --cds-role-accent-on: var(--cds-gray-0);      （accent/danger/pro 用浅字）
++       --cds-role-success-on: var(--cds-gray-900);   （success/warning 用深字）
+ 
+      刻度命名对齐 Claude：50/100/250/300/400/450/600/700/800（9 档）+ fill/fill-hover/on。
+      组件**不许**直接引用 role-*（那是第三层的事），也不需要——见下面 ② 的语义位。 */
+--- before/apps/desktop/src/renderer/theme.ts
++++ after/apps/desktop/src/renderer/theme.ts
+@@ -24,7 +24,10 @@
+ export function browserThemeEnv(): ThemeEnv {
+   const mq = window.matchMedia("(prefers-color-scheme: dark)");
+   return {
+-    setDataTheme: (v) => { document.documentElement.setAttribute("data-theme", v); },
++    setDataTheme: (v) => {
++      document.documentElement.setAttribute("data-theme", v);
++      document.body.toggleAttribute("data-ds-dark-theme", v === "dark");
++    },
+     systemDark: () => mq.matches,
+     watchSystemDark: (onChange) => {
+       mq.addEventListener("change", onChange);
+--- before/apps/desktop/src/renderer/components/Composer.tsx
++++ after/apps/desktop/src/renderer/components/Composer.tsx
+@@ -647,6 +647,8 @@
+       <div
+         ref={cardRef}
+         className="composer-card"
++        data-composer-card="true"
++        data-phase={props.activeId === null ? "hero" : "conversation"}
+         data-disabled={disabled ? "true" : "false"}
+         data-dragging={dragging ? "true" : "false"}
+         onDragOver={(e) => {
+@@ -793,6 +795,7 @@
+         )}
+         <div className="row2">
+           <textarea
++            data-composer-input="true"
+             ref={taRef}
+             rows={1}
+             value={text}
+--- before/apps/desktop/src/renderer/components/Sidebar.tsx
++++ after/apps/desktop/src/renderer/components/Sidebar.tsx
+@@ -13,7 +13,7 @@
+ // 文案一律走 STR（strings.ts——源文扫描判卷钉死）；图标 = lucide（ADR 0003）；会话行菜单 = Radix。
+ import { useCallback, useEffect, useRef, useState } from "react";
+ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+-import { Archive, Check, ChevronRight, Folder, GitBranch, Loader2, MoreHorizontal, Pencil, Pin, Plus, Search, X } from "lucide-react";
++import { Archive, Check, ChevronRight, Folder, GitBranch, Loader2, MoreHorizontal, Pencil, Pin, Plus, Search, Settings2, X } from "lucide-react";
+ import type { ProjectRecord } from "../../../../../src/main/ipc-protocol";
+ import { relativeTime } from "../projections";
+ import type { UsageSummary } from "../projections";
+@@ -195,16 +195,18 @@
+       ) : (
+         <>
+           {s.pinned === true && <Pin size={11} className="s-pin" aria-label={STR.sidebar.pinned} />}
+-          <span className="s-title" title={title} onDoubleClick={() => { props.onRenameStart(); }}>{title}</span>
+-          {props.hasDraft === true && (
+-            <span className="s-draft" aria-label={STR.sidebar.draftLabel} title={STR.sidebar.draftLabel}><Pencil size={9} /></span>
+-          )}
+-          {/* 隔离工作区（§3.7 · G4）：不动声色的一枚分支图标——不然「这轮改的是哪棵树」只能靠
+-              打开行菜单才知道。复用草稿那支样式（行内小图标恒灰，不抢注意力）。 */}
+-          {s.isolated === true && (
+-            <span className="s-draft" aria-label={STR.sidebar.isolatedLabel} title={STR.sidebar.isolatedLabel}><GitBranch size={9} /></span>
+-          )}
+-          {Number.isFinite(t) && <span className="s-time">{relativeTime(now, t)}</span>}
++          <div className="s-summary">
++            <span className="s-title" title={title} onDoubleClick={() => { props.onRenameStart(); }}>{title}</span>
++            <div className="s-meta">
++              {Number.isFinite(t) && <span className="s-time">{relativeTime(now, t)}</span>}
++              {props.hasDraft === true && (
++                <span className="s-draft" aria-label={STR.sidebar.draftLabel} title={STR.sidebar.draftLabel}><Pencil size={9} /></span>
++              )}
++              {s.isolated === true && (
++                <span className="s-draft" aria-label={STR.sidebar.isolatedLabel} title={STR.sidebar.isolatedLabel}><GitBranch size={9} /></span>
++              )}
++            </div>
++          </div>
+           {a !== null && (
+             <DropdownMenu.Root open={ctxOpen} onOpenChange={setCtxOpen}>
+               <DropdownMenu.Trigger asChild>
+@@ -760,7 +762,6 @@
+           同一个语义两处入口是本仓反复要治的病（批 #128 同类：主页叠两个同名项目 chip）。
+           状态点仍在页脚常驻：它是「模型服务可用/不可用」的常驻事实位，不是设置入口的重复。 */}
+       <footer className="side-foot">
+-        <span className="foot-spacer" />
+         <button
+           className="provider-dot"
+           data-ok={props.providerOk === null ? "unknown" : props.providerOk ? "ok" : "bad"}
+@@ -771,7 +772,11 @@
+         <div className="foot-avatar-wrap">
+           <DropdownMenu.Root>
+             <DropdownMenu.Trigger asChild>
+-              <button className="avatar" aria-label={STR.footer.accountTip} title={STR.footer.accountTip}>Z</button>
++              <button className="avatar" aria-label={STR.footer.accountTip} title={STR.footer.accountTip}>
++                <Settings2 size={15} aria-hidden="true" />
++                <span>{STR.footer.preferences}</span>
++                <ChevronRight size={12} aria-hidden="true" />
++              </button>
+             </DropdownMenu.Trigger>
+             <DropdownMenu.Content
+               className="pop-rd pop-account"
+@@ -786,7 +791,7 @@
+                 <DropdownMenu.SubTrigger className="menu-item">
+                   <span>{STR.footer.appearance}</span>
+                 </DropdownMenu.SubTrigger>
+-                <DropdownMenu.SubContent className="pop-rd" side="right" align="start" sideOffset={2}>
++                <DropdownMenu.SubContent className="pop-rd" sideOffset={2}>
+                   {THEME_CHOICES.map((t) => (
+                     <DropdownMenu.Item key={t.id} className="menu-item" onSelect={() => { props.onThemeChange(t.id); }}>
+                       <span>{t.label}</span>
+--- before/src/providers/provider-config.ts
++++ after/src/providers/provider-config.ts
+@@ -12,21 +12,15 @@
+ //
+ // 本文件是纯逻辑：读文件、发请求、注入环境变量都不在这里（那是接线层的事）。判卷直接喂 JSON。
+ 
+-// 临时本地实现（构建期）：node:net 被 Vite 外部化，等 owner 会话处理后再还原
+-function isIP(h: string): 0 | 4 | 6 {
+-  if (/^d{1,3}(.d{1,3}){3}$/.test(h)) return 4;
+-  if (/^[0-9a-fA-F:.]+$/.test(h) && h.includes(":")) return 6;
+-  return 0;
+-}
++import { isIP } from "node:net";
++import { MODEL_ID_RE, RESERVED_PROVIDER_IDS } from "./provider-identifiers";
++export { isValidModelId, RESERVED_PROVIDER_IDS } from "./provider-identifiers";
+ import { DEFAULT_MODEL_TABLE, type ModelSpec, type ModelTier } from "./registry";
+ import type { CatalogPricing } from "./catalog";
+ import { DISCOVERY_PROTOCOLS, type DiscoveryProtocol } from "./discovery";
+ 
+ /** 用户侧配置文件名（工作区级，与 `.agent/config.json` / `.agent/lsp.json` 同族先例）。 */
+ export const CUSTOM_PROVIDERS_RELATIVE_PATH = [".agent", "providers.json"] as const;
+-
+-/** 内置 provider id：自定义的不许叫这些名字（否则路由/注入面分不清谁是内置的）。 */
+-export const RESERVED_PROVIDER_IDS = ["demo", "glm", "openai", "anthropic", "gemini"] as const;
+ 
+ /** 目录里能替用户填的字段名（与 catalog.ts 的 CATALOG_FILLABLE_MODEL_FIELDS 同族；
+  *  这里只用于**报错文案**，别处不要再抄一份）。 */
+@@ -93,18 +87,12 @@
+   | { ok: false; problems: readonly CustomProviderProblem[] };
+ 
+ const PROVIDER_ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
+-const MODEL_ID_RE = /^[A-Za-z0-9._:/-]{1,128}$/;
+ const ENV_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
+ const TIERS: readonly ModelTier[] = ["cheap", "standard", "strong"];
+ const PRICE_KEYS = ["inputPerMTok", "outputPerMTok", "cacheReadPerMTok", "cacheWritePerMTok"] as const;
+ /** 出现这些字段名 = 用户想把 key 值写进文件。不是「忽略」，是**判错**：
+  *  静默忽略会让人以为钥匙已经配好了，而实际上一轮真跑会以「没配 key」失败。 */
+ const FORBIDDEN_KEY_FIELDS = ["apikey", "key", "token", "secret", "apikeyvalue", "bearertoken", "password"];
+-
+-/** 模型 id 是否合法（与配置校验同一把尺；草稿生成器也要用它，否则会产出「自己都不合法」的片段）。 */
+-export function isValidModelId(id: unknown): id is string {
+-  return typeof id === "string" && MODEL_ID_RE.test(id);
+-}
+ 
+ function isRecord(v: unknown): v is Record<string, unknown> {
+   return typeof v === "object" && v !== null && !Array.isArray(v);
+--- before/src/providers/provider-draft.ts
++++ after/src/providers/provider-draft.ts
+@@ -11,7 +11,7 @@
+ import type { CatalogPricing, CatalogSnapshot, CatalogSuggestion } from "./catalog";
+ import { suggestFromCatalog } from "./catalog";
+ import type { DiscoveredModel, DiscoveryProtocol } from "./discovery";
+-import { RESERVED_PROVIDER_IDS, isValidModelId } from "./provider-config";
++import { RESERVED_PROVIDER_IDS, isValidModelId } from "./provider-identifiers";
+ 
+ /** 模型级字段里「目录可能替我们填」的那几个（与 catalog.ts 的 CATALOG_FILLABLE_MODEL_FIELDS 同义，
+  *  这里是给用户看的**配置字段名**：price / contextWindow / maxOutputTokens / reasoningEfforts）。 */

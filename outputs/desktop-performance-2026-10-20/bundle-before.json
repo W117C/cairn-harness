@@ -1,0 +1,1145 @@
+{
+  "initialBytes": 517956,
+  "initialChunks": [
+    "assets/index-DhsSJW71.js"
+  ],
+  "chunks": [
+    {
+      "file": "assets/index-DhsSJW71.js",
+      "entry": true,
+      "initial": true,
+      "imports": [],
+      "dynamicImports": [
+        "assets/index-DVYRY3Kq.js",
+        "assets/PaneDock-0PY8NABs.js",
+        "assets/CommandPalette-DudaWJzf.js",
+        "assets/SettingsPanel-CB0QvGST.js",
+        "assets/Stream-DSl7WkQG.js",
+        "assets/PopoutApp-DhRSHkpw.js"
+      ],
+      "bytes": 517956,
+      "modules": [
+        {
+          "id": "../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.production.min.js",
+          "bytes": 133838
+        },
+        {
+          "id": "src/renderer/App.tsx",
+          "bytes": 129405
+        },
+        {
+          "id": "../../node_modules/.pnpm/react-resizable-panels@4.14.5_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/react-resizable-panels/dist/react-resizable-panels.js",
+          "bytes": 94300
+        },
+        {
+          "id": "src/renderer/components/Composer.tsx",
+          "bytes": 50004
+        },
+        {
+          "id": "src/renderer/components/Sidebar.tsx",
+          "bytes": 38804
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-menu@2.2.1_@types+react-dom@18.3.7_@types+react@18.3.31__@types+react@1_cf640c3104773ee0118b3f88db3d70de/node_modules/@radix-ui/react-menu/dist/index.mjs",
+          "bytes": 32427
+        },
+        {
+          "id": "../../node_modules/.pnpm/@floating-ui+core@1.8.0/node_modules/@floating-ui/core/dist/floating-ui.core.mjs",
+          "bytes": 27058
+        },
+        {
+          "id": "../../node_modules/.pnpm/@floating-ui+dom@1.8.0/node_modules/@floating-ui/dom/dist/floating-ui.dom.mjs",
+          "bytes": 26088
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-collection@1.2.0_@types+react-dom@18.3.7_@types+react@18.3.31__@types+r_29ff9f1d1dc2d646c02cf72aa2caa6cf/node_modules/@radix-ui/react-collection/dist/index.mjs",
+          "bytes": 21645
+        },
+        {
+          "id": "src/renderer/projections.ts",
+          "bytes": 18481
+        },
+        {
+          "id": "src/renderer/components/ModelPicker.tsx",
+          "bytes": 14723
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-dismissable-layer@1.2.1_@types+react-dom@18.3.7_@types+react@18.3.31__@_7f80169c1096be130bb059a20d9f48ce/node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs",
+          "bytes": 13860
+        },
+        {
+          "id": "src/renderer/strings.ts",
+          "bytes": 11595
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-popper@1.4.0_@types+react-dom@18.3.7_@types+react@18.3.31__@types+react_893915cd1714ba74e2d4540a2df2b42f/node_modules/@radix-ui/react-popper/dist/index.mjs",
+          "bytes": 11577
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-focus-scope@1.3.1_@types+react-dom@18.3.7_@types+react@18.3.31__@types+_846e62c79fa44f5ecfb65df4e5e1baa4/node_modules/@radix-ui/react-focus-scope/dist/index.mjs",
+          "bytes": 10873
+        },
+        {
+          "id": "../../node_modules/.pnpm/@floating-ui+react-dom@2.1.9_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/@floating-ui/react-dom/dist/floating-ui.react-dom.mjs",
+          "bytes": 9953
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-roving-focus@1.2.1_@types+react-dom@18.3.7_@types+react@18.3.31__@types_92b11a6196ada4ce7bdd3831b1470c07/node_modules/@radix-ui/react-roving-focus/dist/index.mjs",
+          "bytes": 9737
+        },
+        {
+          "id": "src/renderer/components/AddProjectMenu.tsx",
+          "bytes": 9011
+        },
+        {
+          "id": "src/renderer/components/ChangeSummaryCard.tsx",
+          "bytes": 8970
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-dropdown-menu@2.2.1_@types+react-dom@18.3.7_@types+react@18.3.31__@type_a5bea6319ba8707de8f70d3d95ffbe4f/node_modules/@radix-ui/react-dropdown-menu/dist/index.mjs",
+          "bytes": 8287
+        },
+        {
+          "id": "src/renderer/components/NewProjectDialog.tsx",
+          "bytes": 8172
+        },
+        {
+          "id": "../../node_modules/.pnpm/react-remove-scroll@2.7.2_@types+react@18.3.31_react@18.3.1/node_modules/react-remove-scroll/dist/es2015/SideEffect.js",
+          "bytes": 7798
+        },
+        {
+          "id": "../../node_modules/.pnpm/react@18.3.1/node_modules/react/cjs/react.production.min.js",
+          "bytes": 7672
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-slot@1.5.0_@types+react@18.3.31_react@18.3.1/node_modules/@radix-ui/react-slot/dist/index.mjs",
+          "bytes": 6623
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-presence@1.1.11_@types+react-dom@18.3.7_@types+react@18.3.31__@types+re_fae32a37301141d15ee78232699c545a/node_modules/@radix-ui/react-presence/dist/index.mjs",
+          "bytes": 6436
+        },
+        {
+          "id": "src/renderer/components/Inspector.tsx",
+          "bytes": 6190
+        },
+        {
+          "id": "src/renderer/components/panes.ts",
+          "bytes": 6022
+        },
+        {
+          "id": "src/renderer/components/ApprovalCard.tsx",
+          "bytes": 5579
+        },
+        {
+          "id": "../../node_modules/.pnpm/@floating-ui+utils@0.2.12/node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs",
+          "bytes": 5485
+        },
+        {
+          "id": "../../node_modules/.pnpm/aria-hidden@1.2.6/node_modules/aria-hidden/dist/es2015/index.js",
+          "bytes": 5359
+        },
+        {
+          "id": "../../node_modules/.pnpm/scheduler@0.23.2/node_modules/scheduler/cjs/scheduler.production.min.js",
+          "bytes": 4616
+        },
+        {
+          "id": "../../node_modules/.pnpm/react-remove-scroll@2.7.2_@types+react@18.3.31_react@18.3.1/node_modules/react-remove-scroll/dist/es2015/handleScroll.js",
+          "bytes": 4398
+        },
+        {
+          "id": "src/renderer/components/ModalSurface.tsx",
+          "bytes": 4388
+        },
+        {
+          "id": "src/renderer/components/PermissionMenu.tsx",
+          "bytes": 4225
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-context@1.3.0_@types+react@18.3.31_react@18.3.1/node_modules/@radix-ui/react-context/dist/index.mjs",
+          "bytes": 4220
+        },
+        {
+          "id": "src/renderer/components/PlanCard.tsx",
+          "bytes": 4060
+        },
+        {
+          "id": "src/renderer/components/ClarifyCard.tsx",
+          "bytes": 3962
+        },
+        {
+          "id": "src/renderer/useMessageAnnotations.ts",
+          "bytes": 3954
+        },
+        {
+          "id": "../../node_modules/.pnpm/@floating-ui+utils@0.2.12/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs",
+          "bytes": 3895
+        },
+        {
+          "id": "src/renderer/components/DiffView.tsx",
+          "bytes": 3876
+        },
+        {
+          "id": "src/renderer/components/FindBar.tsx",
+          "bytes": 3842
+        },
+        {
+          "id": "src/renderer/sessions-view.ts",
+          "bytes": 3546
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-use-controllable-state@1.3.0_@types+react@18.3.31_react@18.3.1/node_modules/@radix-ui/react-use-controllable-state/dist/index.mjs",
+          "bytes": 3506
+        },
+        {
+          "id": "../../node_modules/.pnpm/react-remove-scroll-bar@2.3.8_@types+react@18.3.31_react@18.3.1/node_modules/react-remove-scroll-bar/dist/es2015/component.js",
+          "bytes": 3150
+        },
+        {
+          "id": "src/renderer/components/TitleBar.tsx",
+          "bytes": 2847
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/shared/src/build/buildLucideIconNode.mjs",
+          "bytes": 2795
+        },
+        {
+          "id": "src/renderer/components/Outline.tsx",
+          "bytes": 2585
+        },
+        {
+          "id": "src/renderer/components/GoalChip.tsx",
+          "bytes": 2579
+        },
+        {
+          "id": "src/renderer/components/ImportDiagnosisCard.tsx",
+          "bytes": 2434
+        },
+        {
+          "id": "../../node_modules/.pnpm/use-sidecar@1.1.3_@types+react@18.3.31_react@18.3.1/node_modules/use-sidecar/dist/es2015/medium.js",
+          "bytes": 2376
+        },
+        {
+          "id": "src/renderer/components/cards.ts",
+          "bytes": 2241
+        },
+        {
+          "id": "src/renderer/components/Popover.tsx",
+          "bytes": 2236
+        },
+        {
+          "id": "../../node_modules/.pnpm/tslib@2.8.1/node_modules/tslib/tslib.es6.mjs",
+          "bytes": 2189
+        },
+        {
+          "id": "src/renderer/shortcuts.ts",
+          "bytes": 2179
+        },
+        {
+          "id": "\u0000vite/preload-helper.js",
+          "bytes": 2135
+        },
+        {
+          "id": "../../node_modules/.pnpm/react-remove-scroll@2.7.2_@types+react@18.3.31_react@18.3.1/node_modules/react-remove-scroll/dist/es2015/UI.js",
+          "bytes": 2024
+        },
+        {
+          "id": "src/renderer/useStickyScroll.ts",
+          "bytes": 1961
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+primitive@1.2.0/node_modules/@radix-ui/primitive/dist/index.mjs",
+          "bytes": 1862
+        },
+        {
+          "id": "src/renderer/components/SendQueueStrip.tsx",
+          "bytes": 1788
+        },
+        {
+          "id": "../../node_modules/.pnpm/use-callback-ref@1.3.3_@types+react@18.3.31_react@18.3.1/node_modules/use-callback-ref/dist/es2015/useMergeRef.js",
+          "bytes": 1654
+        },
+        {
+          "id": "src/renderer/transcript.ts",
+          "bytes": 1573
+        },
+        {
+          "id": "src/renderer/send-queue.ts",
+          "bytes": 1571
+        },
+        {
+          "id": "src/renderer/change-diff-state.ts",
+          "bytes": 1559
+        },
+        {
+          "id": "src/renderer/components/SidebarRail.tsx",
+          "bytes": 1557
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/Icon.mjs",
+          "bytes": 1513
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-use-size@1.1.5_@types+react@18.3.31_react@18.3.1/node_modules/@radix-ui/react-use-size/dist/index.mjs",
+          "bytes": 1474
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-focus-guards@1.2.0_@types+react@18.3.31_react@18.3.1/node_modules/@radix-ui/react-focus-guards/dist/index.mjs",
+          "bytes": 1343
+        },
+        {
+          "id": "src/renderer/toast.ts",
+          "bytes": 1321
+        },
+        {
+          "id": "../../node_modules/.pnpm/react-style-singleton@2.2.3_@types+react@18.3.31_react@18.3.1/node_modules/react-style-singleton/dist/es2015/singleton.js",
+          "bytes": 1240
+        },
+        {
+          "id": "src/renderer/pane-shortcuts.ts",
+          "bytes": 1222
+        },
+        {
+          "id": "../../node_modules/.pnpm/react@18.3.1/node_modules/react/cjs/react-jsx-runtime.production.min.js",
+          "bytes": 1201
+        },
+        {
+          "id": "../../node_modules/.pnpm/use-callback-ref@1.3.3_@types+react@18.3.31_react@18.3.1/node_modules/use-callback-ref/dist/es2015/useRef.js",
+          "bytes": 1182
+        },
+        {
+          "id": "\u0000vite/modulepreload-polyfill.js",
+          "bytes": 1168
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-compose-refs@1.1.5_@types+react@18.3.31_react@18.3.1/node_modules/@radix-ui/react-compose-refs/dist/index.mjs",
+          "bytes": 1107
+        },
+        {
+          "id": "src/renderer/components/TimelinePane.tsx",
+          "bytes": 1099
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-primitive@2.2.0_@types+react-dom@18.3.7_@types+react@18.3.31__@types+re_287b08646cf222d74794c4d70561c54c/node_modules/@radix-ui/react-primitive/dist/index.mjs",
+          "bytes": 1051
+        },
+        {
+          "id": "../../src/agent/goal-trace.ts",
+          "bytes": 1036
+        },
+        {
+          "id": "src/renderer/components/QuickStarts.tsx",
+          "bytes": 1030
+        },
+        {
+          "id": "src/renderer/components/ConfirmDialog.tsx",
+          "bytes": 987
+        },
+        {
+          "id": "../../node_modules/.pnpm/react-remove-scroll-bar@2.3.8_@types+react@18.3.31_react@18.3.1/node_modules/react-remove-scroll-bar/dist/es2015/utils.js",
+          "bytes": 983
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-use-is-hydrated@0.1.3_@types+react@18.3.31_react@18.3.1/node_modules/@radix-ui/react-use-is-hydrated/dist/index.mjs",
+          "bytes": 929
+        },
+        {
+          "id": "src/renderer/main.tsx",
+          "bytes": 915
+        },
+        {
+          "id": "src/renderer/quick-starts.ts",
+          "bytes": 903
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-use-effect-event@0.0.5_@types+react@18.3.31_react@18.3.1/node_modules/@radix-ui/react-use-effect-event/dist/index.mjs",
+          "bytes": 880
+        },
+        {
+          "id": "src/renderer/useNow.ts",
+          "bytes": 846
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/sparkles.mjs",
+          "bytes": 833
+        },
+        {
+          "id": "src/renderer/theme.ts",
+          "bytes": 827
+        },
+        {
+          "id": "src/renderer/goal-dismiss.ts",
+          "bytes": 809
+        },
+        {
+          "id": "src/renderer/mention.ts",
+          "bytes": 791
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/settings.mjs",
+          "bytes": 782
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/atom.mjs",
+          "bytes": 775
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/clipboard-list.mjs",
+          "bytes": 761
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/shield-off.mjs",
+          "bytes": 743
+        },
+        {
+          "id": "src/renderer/goal-command.ts",
+          "bytes": 737
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/file-text.mjs",
+          "bytes": 709
+        },
+        {
+          "id": "src/renderer/components/ProviderBanner.tsx",
+          "bytes": 703
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-portal@1.2.0_@types+react-dom@18.3.7_@types+react@18.3.31__@types+react_ca9bb6b0dc50d1fb47e133e431ac573f/node_modules/@radix-ui/react-portal/dist/index.mjs",
+          "bytes": 693
+        },
+        {
+          "id": "src/renderer/drafts.ts",
+          "bytes": 684
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/createLucideIcon.mjs",
+          "bytes": 673
+        },
+        {
+          "id": "src/renderer/speech.ts",
+          "bytes": 671
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-use-callback-ref@1.1.5_@types+react@18.3.31_react@18.3.1/node_modules/@radix-ui/react-use-callback-ref/dist/index.mjs",
+          "bytes": 668
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/shield-alert.mjs",
+          "bytes": 658
+        },
+        {
+          "id": "src/renderer/suggest.ts",
+          "bytes": 657
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/file-diff.mjs",
+          "bytes": 645
+        },
+        {
+          "id": "src/renderer/components/ErrorStrip.tsx",
+          "bytes": 636
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/pin.mjs",
+          "bytes": 632
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/focus.mjs",
+          "bytes": 623
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/shield-check.mjs",
+          "bytes": 614
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/folder-plus.mjs",
+          "bytes": 610
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/triangle-alert.mjs",
+          "bytes": 603
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/list.mjs",
+          "bytes": 593
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/book-open.mjs",
+          "bytes": 580
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/layout-template.mjs",
+          "bytes": 578
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/folder-open.mjs",
+          "bytes": 574
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/pencil.mjs",
+          "bytes": 565
+        },
+        {
+          "id": "../../node_modules/.pnpm/react-remove-scroll@2.7.2_@types+react@18.3.31_react@18.3.1/node_modules/react-remove-scroll/dist/es2015/aggresiveCapture.js",
+          "bytes": 560
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/chart-column.mjs",
+          "bytes": 555
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/square-terminal.mjs",
+          "bytes": 552
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/shared/src/utils/toCamelCase.mjs",
+          "bytes": 551
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/shield.mjs",
+          "bytes": 550
+        },
+        {
+          "id": "../../node_modules/.pnpm/react-style-singleton@2.2.3_@types+react@18.3.31_react@18.3.1/node_modules/react-style-singleton/dist/es2015/component.js",
+          "bytes": 549
+        },
+        {
+          "id": "../../node_modules/.pnpm/use-callback-ref@1.3.3_@types+react@18.3.31_react@18.3.1/node_modules/use-callback-ref/dist/es2015/assignRef.js",
+          "bytes": 548
+        },
+        {
+          "id": "../../node_modules/.pnpm/react-style-singleton@2.2.3_@types+react@18.3.31_react@18.3.1/node_modules/react-style-singleton/dist/es2015/hook.js",
+          "bytes": 546
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/eye.mjs",
+          "bytes": 546
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/image.mjs",
+          "bytes": 542
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/rotate-ccw-clock.mjs",
+          "bytes": 538
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/settings-2.mjs",
+          "bytes": 534
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/shared/src/build/buildLucideIconForReact.mjs",
+          "bytes": 532
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/ellipsis.mjs",
+          "bytes": 532
+        },
+        {
+          "id": "../../node_modules/.pnpm/use-sidecar@1.1.3_@types+react@18.3.31_react@18.3.1/node_modules/use-sidecar/dist/es2015/exports.js",
+          "bytes": 528
+        },
+        {
+          "id": "src/renderer/workspace-rel.ts",
+          "bytes": 525
+        },
+        {
+          "id": "../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/index.js",
+          "bytes": 524
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-id@1.1.4_@types+react@18.3.31_react@18.3.1/node_modules/@radix-ui/react-id/dist/index.mjs",
+          "bytes": 523
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/archive.mjs",
+          "bytes": 522
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/message-square.mjs",
+          "bytes": 518
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/timer.mjs",
+          "bytes": 513
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/folder.mjs",
+          "bytes": 506
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/globe.mjs",
+          "bytes": 505
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/git-branch.mjs",
+          "bytes": 500
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/target.mjs",
+          "bytes": 498
+        },
+        {
+          "id": "src/renderer/slash.ts",
+          "bytes": 487
+        },
+        {
+          "id": "src/renderer/components/stream-model.ts",
+          "bytes": 477
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/shared/src/utils/toLucideIconData.mjs",
+          "bytes": 473
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/panel-left.mjs",
+          "bytes": 471
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/info.mjs",
+          "bytes": 466
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/search.mjs",
+          "bytes": 427
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/arrow-up-right.mjs",
+          "bytes": 422
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/clock.mjs",
+          "bytes": 421
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-direction@1.2.0_@types+react@18.3.31_react@18.3.1/node_modules/@radix-ui/react-direction/dist/index.mjs",
+          "bytes": 418
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/arrow-down.mjs",
+          "bytes": 417
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/shared/src/build/defaultAttributes.mjs",
+          "bytes": 414
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/terminal.mjs",
+          "bytes": 413
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/arrow-up.mjs",
+          "bytes": 412
+        },
+        {
+          "id": "src/renderer/view-mode.ts",
+          "bytes": 406
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/loader-circle.mjs",
+          "bytes": 405
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/plus.mjs",
+          "bytes": 400
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/x.mjs",
+          "bytes": 392
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/shared/src/utils/mergeClasses.mjs",
+          "bytes": 370
+        },
+        {
+          "id": "src/renderer/components/popover-keys.ts",
+          "bytes": 369
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/chevron-right.mjs",
+          "bytes": 366
+        },
+        {
+          "id": "src/renderer/components/ToastHost.tsx",
+          "bytes": 365
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/chevron-down.mjs",
+          "bytes": 363
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/chevron-up.mjs",
+          "bytes": 361
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/shared/src/utils/hasA11yProp.mjs",
+          "bytes": 358
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/check.mjs",
+          "bytes": 353
+        },
+        {
+          "id": "../../node_modules/.pnpm/react-remove-scroll-bar@2.3.8_@types+react@18.3.31_react@18.3.1/node_modules/react-remove-scroll-bar/dist/es2015/constants.js",
+          "bytes": 346
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/shared/src/utils/toPascalCase.mjs",
+          "bytes": 317
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/shared/src/utils/toKebabCase.mjs",
+          "bytes": 266
+        },
+        {
+          "id": "../../node_modules/.pnpm/react@18.3.1/node_modules/react/jsx-runtime.js",
+          "bytes": 243
+        },
+        {
+          "id": "../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/client.js",
+          "bytes": 242
+        },
+        {
+          "id": "../../node_modules/.pnpm/react-remove-scroll@2.7.2_@types+react@18.3.31_react@18.3.1/node_modules/react-remove-scroll/dist/es2015/Combination.js",
+          "bytes": 235
+        },
+        {
+          "id": "../../node_modules/.pnpm/scheduler@0.23.2/node_modules/scheduler/index.js",
+          "bytes": 230
+        },
+        {
+          "id": "src/renderer/components/overlay-focus.ts",
+          "bytes": 201
+        },
+        {
+          "id": "../../node_modules/.pnpm/react@18.3.1/node_modules/react/index.js",
+          "bytes": 198
+        },
+        {
+          "id": "../../node_modules/.pnpm/get-nonce@1.0.1/node_modules/get-nonce/dist/es2015/index.js",
+          "bytes": 145
+        },
+        {
+          "id": "\u0000commonjsHelpers.js",
+          "bytes": 140
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/context.mjs",
+          "bytes": 124
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-use-layout-effect@1.1.4_@types+react@18.3.31_react@18.3.1/node_modules/@radix-ui/react-use-layout-effect/dist/index.mjs",
+          "bytes": 116
+        },
+        {
+          "id": "\u0000/Users/ze/Downloads/Cairn/deepseek harness/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/index.js?commonjs-es-import",
+          "bytes": 112
+        },
+        {
+          "id": "\u0000/Users/ze/Downloads/Cairn/deepseek harness/node_modules/.pnpm/react@18.3.1/node_modules/react/index.js?commonjs-es-import",
+          "bytes": 100
+        },
+        {
+          "id": "src/renderer/components/format-tokens.ts",
+          "bytes": 99
+        },
+        {
+          "id": "../../node_modules/.pnpm/react-remove-scroll@2.7.2_@types+react@18.3.31_react@18.3.1/node_modules/react-remove-scroll/dist/es2015/sidecar.js",
+          "bytes": 62
+        },
+        {
+          "id": "\u0000/Users/ze/Downloads/Cairn/deepseek harness/node_modules/.pnpm/react@18.3.1/node_modules/react/jsx-runtime.js?commonjs-es-import",
+          "bytes": 44
+        },
+        {
+          "id": "\u0000/Users/ze/Downloads/Cairn/deepseek harness/node_modules/.pnpm/react@18.3.1/node_modules/react/cjs/react-jsx-runtime.production.min.js?commonjs-exports",
+          "bytes": 40
+        },
+        {
+          "id": "../../node_modules/.pnpm/react-remove-scroll@2.7.2_@types+react@18.3.31_react@18.3.1/node_modules/react-remove-scroll/dist/es2015/medium.js",
+          "bytes": 38
+        },
+        {
+          "id": "\u0000/Users/ze/Downloads/Cairn/deepseek harness/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/client.js?commonjs-es-import",
+          "bytes": 36
+        },
+        {
+          "id": "\u0000/Users/ze/Downloads/Cairn/deepseek harness/node_modules/.pnpm/scheduler@0.23.2/node_modules/scheduler/cjs/scheduler.production.min.js?commonjs-exports",
+          "bytes": 34
+        },
+        {
+          "id": "\u0000/Users/ze/Downloads/Cairn/deepseek harness/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.production.min.js?commonjs-exports",
+          "bytes": 33
+        },
+        {
+          "id": "\u0000/Users/ze/Downloads/Cairn/deepseek harness/node_modules/.pnpm/react@18.3.1/node_modules/react/jsx-runtime.js?commonjs-module",
+          "bytes": 31
+        },
+        {
+          "id": "\u0000/Users/ze/Downloads/Cairn/deepseek harness/node_modules/.pnpm/react@18.3.1/node_modules/react/cjs/react.production.min.js?commonjs-exports",
+          "bytes": 30
+        },
+        {
+          "id": "\u0000/Users/ze/Downloads/Cairn/deepseek harness/node_modules/.pnpm/scheduler@0.23.2/node_modules/scheduler/index.js?commonjs-module",
+          "bytes": 30
+        },
+        {
+          "id": "\u0000/Users/ze/Downloads/Cairn/deepseek harness/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/index.js?commonjs-module",
+          "bytes": 29
+        },
+        {
+          "id": "\u0000/Users/ze/Downloads/Cairn/deepseek harness/node_modules/.pnpm/react@18.3.1/node_modules/react/index.js?commonjs-module",
+          "bytes": 26
+        },
+        {
+          "id": "\u0000/Users/ze/Downloads/Cairn/deepseek harness/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/client.js?commonjs-exports",
+          "bytes": 16
+        },
+        {
+          "id": "src/renderer/tokens.css",
+          "bytes": 0
+        },
+        {
+          "id": "src/renderer/styles.css",
+          "bytes": 0
+        },
+        {
+          "id": "src/renderer/dsh-claude-style.css",
+          "bytes": 0
+        },
+        {
+          "id": "src/renderer/index.html",
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "file": "assets/PopoutApp-DhRSHkpw.js",
+      "entry": false,
+      "initial": false,
+      "imports": [
+        "assets/index-DhsSJW71.js",
+        "assets/PaneDock-0PY8NABs.js"
+      ],
+      "dynamicImports": [],
+      "bytes": 873,
+      "modules": [
+        {
+          "id": "src/renderer/components/PopoutApp.tsx",
+          "bytes": 1379
+        }
+      ]
+    },
+    {
+      "file": "assets/PaneDock-0PY8NABs.js",
+      "entry": false,
+      "initial": false,
+      "imports": [
+        "assets/index-DhsSJW71.js"
+      ],
+      "dynamicImports": [
+        "assets/xterm-B-qIQCd3.js",
+        "assets/addon-fit-DX4qG4td.js"
+      ],
+      "bytes": 35212,
+      "modules": [
+        {
+          "id": "src/renderer/components/PaneDock.tsx",
+          "bytes": 50638
+        },
+        {
+          "id": "src/renderer/components/SidechatPane.tsx",
+          "bytes": 8147
+        },
+        {
+          "id": "src/renderer/components/PathMenu.tsx",
+          "bytes": 2690
+        },
+        {
+          "id": "src/renderer/pane-layout.ts",
+          "bytes": 1917
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/grip-vertical.mjs",
+          "bytes": 694
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/crosshair.mjs",
+          "bytes": 666
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/message-circle-plus.mjs",
+          "bytes": 629
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/send.mjs",
+          "bytes": 571
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/panels-top-left.mjs",
+          "bytes": 526
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/external-link.mjs",
+          "bytes": 517
+        },
+        {
+          "id": "../../node_modules/.pnpm/@xterm+xterm@6.0.0/node_modules/@xterm/xterm/css/xterm.css",
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "file": "assets/CommandPalette-DudaWJzf.js",
+      "entry": false,
+      "initial": false,
+      "imports": [
+        "assets/index-DhsSJW71.js",
+        "assets/settings-nav-MnJByVyA.js"
+      ],
+      "dynamicImports": [],
+      "bytes": 29347,
+      "modules": [
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-dismissable-layer@1.2.0_@types+react-dom@18.3.7_@types+react@18.3.31__@_a4cdbf145fe94202b2f4798401ee3c75/node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs",
+          "bytes": 13854
+        },
+        {
+          "id": "../../node_modules/.pnpm/cmdk@1.1.1_@types+react-dom@18.3.7_@types+react@18.3.31__@types+react@18.3.31_react-dom_97e75a3ab323022d7998e58a36c32fb5/node_modules/cmdk/dist/index.mjs",
+          "bytes": 11691
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-focus-scope@1.3.0_@types+react-dom@18.3.7_@types+react@18.3.31__@types+_f2624c69abcc936343ee0798666acb6b/node_modules/@radix-ui/react-focus-scope/dist/index.mjs",
+          "bytes": 10857
+        },
+        {
+          "id": "../../node_modules/.pnpm/@radix-ui+react-dialog@1.3.0_@types+react-dom@18.3.7_@types+react@18.3.31__@types+react_780adf480b5fa3dc29be26487bb4d449/node_modules/@radix-ui/react-dialog/dist/index.mjs",
+          "bytes": 10344
+        },
+        {
+          "id": "src/renderer/components/CommandPalette.tsx",
+          "bytes": 6774
+        },
+        {
+          "id": "../../node_modules/.pnpm/cmdk@1.1.1_@types+react-dom@18.3.7_@types+react@18.3.31__@types+react@18.3.31_react-dom_97e75a3ab323022d7998e58a36c32fb5/node_modules/cmdk/dist/chunk-NZJY6EH4.mjs",
+          "bytes": 920
+        }
+      ]
+    },
+    {
+      "file": "assets/SettingsPanel-CB0QvGST.js",
+      "entry": false,
+      "initial": false,
+      "imports": [
+        "assets/index-DhsSJW71.js",
+        "assets/markdown-C-L0I1K8.js",
+        "assets/settings-nav-MnJByVyA.js"
+      ],
+      "dynamicImports": [],
+      "bytes": 60591,
+      "modules": [
+        {
+          "id": "src/renderer/components/AppPage.tsx",
+          "bytes": 50274
+        },
+        {
+          "id": "src/renderer/components/settings-sections.tsx",
+          "bytes": 21608
+        },
+        {
+          "id": "src/renderer/components/CustomProviderForm.tsx",
+          "bytes": 13617
+        },
+        {
+          "id": "src/renderer/components/SettingsPanel.tsx",
+          "bytes": 12053
+        },
+        {
+          "id": "src/renderer/components/settings-ui.tsx",
+          "bytes": 4655
+        },
+        {
+          "id": "src/renderer/components/provider-form.ts",
+          "bytes": 1219
+        },
+        {
+          "id": "src/renderer/memory-view.ts",
+          "bytes": 1140
+        },
+        {
+          "id": "src/renderer/components/Switch.tsx",
+          "bytes": 1003
+        },
+        {
+          "id": "../../src/providers/provider-draft.ts",
+          "bytes": 839
+        },
+        {
+          "id": "../../src/providers/env-keys.ts",
+          "bytes": 272
+        },
+        {
+          "id": "src/renderer/components/a11y-activate.ts",
+          "bytes": 120
+        },
+        {
+          "id": "../../src/providers/provider-identifiers.ts",
+          "bytes": 79
+        }
+      ]
+    },
+    {
+      "file": "assets/settings-nav-MnJByVyA.js",
+      "entry": false,
+      "initial": false,
+      "imports": [
+        "assets/index-DhsSJW71.js"
+      ],
+      "dynamicImports": [],
+      "bytes": 4301,
+      "modules": [
+        {
+          "id": "src/renderer/components/settings-nav.tsx",
+          "bytes": 2251
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/brain.mjs",
+          "bytes": 891
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/puzzle.mjs",
+          "bytes": 849
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/keyboard.mjs",
+          "bytes": 789
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/sliders-horizontal.mjs",
+          "bytes": 761
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/key-round.mjs",
+          "bytes": 652
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/wrench.mjs",
+          "bytes": 575
+        }
+      ]
+    },
+    {
+      "file": "assets/Stream-DSl7WkQG.js",
+      "entry": false,
+      "initial": false,
+      "imports": [
+        "assets/index-DhsSJW71.js",
+        "assets/markdown-C-L0I1K8.js"
+      ],
+      "dynamicImports": [],
+      "bytes": 17835,
+      "modules": [
+        {
+          "id": "src/renderer/components/Stream.tsx",
+          "bytes": 28481
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/circle-dashed.mjs",
+          "bytes": 895
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/file-code-corner.mjs",
+          "bytes": 707
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/volume-2.mjs",
+          "bytes": 685
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/thumbs-down.mjs",
+          "bytes": 596
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/thumbs-up.mjs",
+          "bytes": 593
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/rotate-ccw.mjs",
+          "bytes": 452
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/rotate-cw.mjs",
+          "bytes": 452
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/square.mjs",
+          "bytes": 385
+        }
+      ]
+    },
+    {
+      "file": "assets/markdown-C-L0I1K8.js",
+      "entry": false,
+      "initial": false,
+      "imports": [
+        "assets/index-DhsSJW71.js"
+      ],
+      "dynamicImports": [],
+      "bytes": 7132,
+      "modules": [
+        {
+          "id": "src/renderer/markdown.tsx",
+          "bytes": 12971
+        },
+        {
+          "id": "../../node_modules/.pnpm/lucide-react@1.56.0_@types+react@18.3.31_react@18.3.1/node_modules/lucide-react/dist/esm/icons/copy.mjs",
+          "bytes": 487
+        }
+      ]
+    },
+    {
+      "file": "assets/index-DVYRY3Kq.js",
+      "entry": false,
+      "initial": false,
+      "imports": [
+        "assets/index-DhsSJW71.js"
+      ],
+      "dynamicImports": [],
+      "bytes": 34799,
+      "modules": [
+        {
+          "id": "../../node_modules/.pnpm/sonner@2.0.8_@types+react@18.3.31_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/sonner/dist/index.mjs",
+          "bytes": 69672
+        }
+      ]
+    },
+    {
+      "file": "assets/xterm-B-qIQCd3.js",
+      "entry": false,
+      "initial": false,
+      "imports": [],
+      "dynamicImports": [],
+      "bytes": 329310,
+      "modules": [
+        {
+          "id": "../../node_modules/.pnpm/@xterm+xterm@6.0.0/node_modules/@xterm/xterm/lib/xterm.mjs",
+          "bytes": 334097
+        }
+      ]
+    },
+    {
+      "file": "assets/addon-fit-DX4qG4td.js",
+      "entry": false,
+      "initial": false,
+      "imports": [],
+      "dynamicImports": [],
+      "bytes": 1214,
+      "modules": [
+        {
+          "id": "../../node_modules/.pnpm/@xterm+addon-fit@0.11.0/node_modules/@xterm/addon-fit/lib/addon-fit.mjs",
+          "bytes": 1908
+        }
+      ]
+    }
+  ]
+}

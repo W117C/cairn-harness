@@ -122,6 +122,31 @@ export function buildGraph(files: FileTagsInput[], opts: GraphBuildOptions = {})
     }
   }
 
+  // **成员位独占**的名字（这个文件里，同名 def 全部挂在成员位上）⇒ 它不可跨文件链接。
+  // 闸这一族的理由：成员名只能经 `obj.name` 被别处触到，而那种写法走属性/选择器纪律、
+  // 根本不进图（`parse.ts` 的 PATTERNS 上方有那段设计边界）⇒ 连上去就是凭空造的依赖。
+  // 真仓读数（2026-10-02 全量图构建）：一个 `private readFile` 吸了 **107 个文件**的同名 ref，
+  // 另一个 `run` 吸 23 个——成员定义横跨上百个文件，还把地图前排占成假枢纽。
+  //
+  // ⚠️ 口径比「抽到一个成员位就算」**严一格**：同一个文件里若还有一个**非成员位**的同名 def，
+  // 这个名字在那个文件里就是模块级可得的（名字图分不出位置，同名即同一节点）⇒ 不闸它。
+  // 闸严了会把**真依赖**一起闸掉（那比假边更坏）；这一格是「宁可留一条假边，不许砍掉一条真边」。
+  //
+  // 位置放在 import 面**之前**：import 精确边也会钉到一个 def 上，而被钉的那个 def 若是成员位独占，
+  // 那条 import 本来就无解（模块导不出一个私有方法）⇒ 该走「对面没这个名字」那一支，不许硬钉。
+  const defTotal = new Map<string, number>(); // (file,name) → 该文件里这个名字的 def 次数
+  const memberTotal = new Map<string, number>(); // (file,name) → 其中挂在成员位的次数
+  for (const f of files) {
+    for (const t of f.tags) {
+      if (t.kind !== "def") continue;
+      const k = nodeKey(f.file, t.name, "def");
+      defTotal.set(k, (defTotal.get(k) ?? 0) + 1);
+      if (t.crossFile === false) memberTotal.set(k, (memberTotal.get(k) ?? 0) + 1);
+    }
+  }
+  const memberOnlyDefs = new Set<string>();
+  for (const [k, m] of memberTotal) if (m === defTotal.get(k)) memberOnlyDefs.add(k);
+
   // ---- import 面：把「本文件从对面取走了哪个名字」做成**精确边** ----
   // 三条设计决定，各钉一态：
   // ⑴ 只吃**解析得到且对面真有同名 def**的那一条 ⇒ 精确。解析不到（外部包）或对面没这个名字
@@ -149,6 +174,13 @@ export function buildGraph(files: FileTagsInput[], opts: GraphBuildOptions = {})
       if (!index.has(defKey)) {
         importStats.resolvedNoDef++;
         continue; // 对面没这个名字（re-export 链等）：留给你原来的样子，别把真依赖换成假精确
+      }
+      if (memberOnlyDefs.has(defKey)) {
+        // 对面这个名字只挂在成员位上（类方法/类字段/接口成员）⇒ 模块导不出它，
+        // 这条 import 本来就无解（TS 里 import 一个 private 方法是编译错误）。
+        // 硬钉上去＝把一条「解不开」伪装成「精确」，比不钉更坏 ⇒ 走「对面没这个名字」那一支。
+        importStats.resolvedNoDef++;
+        continue;
       }
       const local = ir.localName ?? ir.name; // 本文件里的引用名（alias）
       const refKey = nodeKey(f.file, local, "ref");
@@ -192,6 +224,9 @@ export function buildGraph(files: FileTagsInput[], opts: GraphBuildOptions = {})
       continue;
     }
     for (const defKey of defsByName.get(n.name) ?? []) {
+      // 成员位独占的 def 不接**跨文件**的边（理由见上面 memberOnlyDefs 那段）。
+      // 同文件内的那一条照旧连：类内自调用是真依赖。
+      if (defKey !== nodeKey(n.file, n.name, "def") && memberOnlyDefs.has(defKey)) continue;
       addEdge(k, defKey, w);
       referencedDefs.add(defKey);
     }

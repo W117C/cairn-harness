@@ -10,7 +10,7 @@ import { remember } from "../tools/remember";
 import { run_shell } from "../tools/run_shell";
 import { write_file } from "../tools/write_file";
 import type { Tool } from "../tools/base";
-import { evaluate, gateBase, scopeKey, type AskScope, type AutonomySession, type EvaluateDecision, type ToolResultWithAudit } from "../permissions";
+import { evaluate, gateBase, getPlanState, planGateBlocks, rememberDecision, scopeKey, type AskScope, type AutonomySession, type EvaluateDecision, type ToolResultWithAudit } from "../permissions";
 import { WORKER_IMPACT_TOOL } from "./orchestrator-config";
 import type { Orchestrator } from "./orchestrator";
 import type { WorkerHandle } from "./orchestrator-types";
@@ -92,20 +92,68 @@ export function buildWorkerToolTable(
     table.write_file = gatedWorkerTool("write_file", clearAnchorsWrite, w, orch, { autonomy: w.toolAutonomy });
     table.edit_file = gatedWorkerTool("edit_file", snapshotEdit, w, orch, { autonomy: w.toolAutonomy });
     table.shell_rw = gatedWorkerTool("shell_rw", makeShellRw(opts.shell), w, orch, { autonomy: w.toolAutonomy });
-    table.remember = gatedWorkerTool("remember", rememberMain, w, orch); // 记忆面走 clampTier 档位（主 checkout 是共享面）
+    // remember 走**共用那份范围裁决**（`permissions/rememberDecision`），不是通用 evaluate：
+    // 旧形状 worker 的 remember 只过 evaluate，而 `remember` 不在 SIDE_EFFECT_TOOLS 里
+    // ⇒ 既不是写向（方案门/只读档都不管它）、风险也是 none ⇒ **L4-pass 放行**。
+    // 后果（2026-10-20 独立评审实测）：worker 一次 `remember {scope:"global"}` **连卡都不出**，
+    // 就把模型控制的文本写进了全局层——而全局索引会被注入到**每一个项目**的每一场会话
+    // （跨项目注入），主会话对同一件事却是要问人的。**同一个工具、同一个出口，两个结论。**
+    // 口径与主会话逐条一致（共用那一份函数，不是各写一份）：方案门 → 只读档 → 全局层要人点头；
+    // 项目层免批（2026-10-15 业主裁决）。
+    table.remember = gatedWorkerTool("remember", rememberMain, w, orch, {
+      decide: (args, auto) => {
+        const decision = rememberDecision({
+          scope: args.scope,
+          mode: auto.mode,
+          // 方案门的**活委托**（每次调用现读当前态）——与主会话同一份读法
+          // （`src/main/agent-runner.ts` 的 `isPlanBlocked: () => planGateBlocks(getPlanState())`）。
+          // 传闭包而不是快照：快照会把方案门退回成一次性开关，那正是
+          // `tests/plan-required.test.ts` 那条复发闸要挡的写法。
+          isPlanBlocked: () => planGateBlocks(getPlanState()),
+        });
+        if (decision === "allow") return evaluate("remember" as never, args, auto);
+        if (decision === "deny") {
+          return {
+            verdict: "deny",
+            layer: "L0-hard",
+            reason: planGateBlocks(getPlanState())
+              ? "方案门：先批后写（当前没有已批准的方案）"
+              : "只读档拒写向工具（记忆写入也是写）",
+          };
+        }
+        return {
+          verdict: "ask",
+          layer: "L3-mode",
+          reason: "全局层记忆写入要逐次审批（跨项目回注：它会被注入到每个项目的每场会话）",
+          risk: "medium",
+          riskReasons: ["remember{scope:\"global\"}：写入全局记忆索引（跨项目、跨会话生效）"],
+        };
+      },
+    });
   }
   return table;
 }
 
 /** worker 工具门：evaluate 管线（档位/风险/规则全生效）→ ask 走 worker 审批协议（与 turn 解耦）。
  *  M3b：可传独立 autonomy（write mode 文件面/shell 面用 toolAutonomy=auto——worktree 完全可写 §4.4.5；
- *  critical 静态风险与 ask/deny 规则仍全生效）。 */
-function gatedWorkerTool(name: string, inner: Tool, w: WorkerHandle, orch: Orchestrator, opts: { autonomy?: AutonomySession } = {}): Tool {
+ *  critical 静态风险与 ask/deny 规则仍全生效）。
+ *
+ *  `decide` 是**裁决口的替换**（不是叠加）：默认走通用 `evaluate`；
+ *  需要「同一次调用按别的口径判」时（remember 的 scope 语义——`evaluate` 不认 scope，
+ *  而 `remember` 又不是写向工具 ⇒ 方案门/只读档/全局层审批全都不管它），
+ *  那一族自己给出一个 `EvaluateDecision`，**留痕仍走同一条门**（同一张卡、同一个 verdict 出口）。 */
+function gatedWorkerTool(
+  name: string,
+  inner: Tool,
+  w: WorkerHandle,
+  orch: Orchestrator,
+  opts: { autonomy?: AutonomySession; decide?: (args: Record<string, unknown>, auto: AutonomySession) => EvaluateDecision } = {},
+): Tool {
   return {
     name,
     async run(args, ctx) {
       const auto = opts.autonomy ?? w.autonomy;
-      const d: EvaluateDecision = evaluate(name as never, args, auto);
+      const d: EvaluateDecision = opts.decide ? opts.decide(args, auto) : evaluate(name as never, args, auto);
       if (d.verdict === "deny") {
         return {
           ok: false,

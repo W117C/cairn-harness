@@ -88,6 +88,21 @@ describe("④ Inspector SSR", () => {
   });
 });
 
+describe("⑤b 关闭钮（2026-10-20 真机：「右边侧栏打开就没有关闭」）", () => {
+  it("给了 onClose 才摆 × 钮；没给不摆（判卷/嵌用面没有右 Panel 可关）", () => {
+    const withClose = renderToStaticMarkup(<Inspector events={events} onClose={() => undefined} />);
+    expect(withClose).toContain('aria-label="关闭检查器"');
+    expect(withClose).toContain("关闭检查器（⌘⌥B）"); // 键位写在 title 里，鼠标用户也能学会
+    expect(withClose).toContain("lucide-x");
+    const withoutClose = renderToStaticMarkup(<Inspector events={events} />);
+    expect(withoutClose).not.toContain('aria-label="关闭检查器"');
+  });
+
+  it("App 把 × 接到 toggleInspector（开合 + 跨重启记忆同一出口，不另造一条关闭路径）", () => {
+    expect(appSrc).toContain("onClose={toggleInspector}");
+  });
+});
+
 describe("⑤ App 接线哨兵（右 Panel / ⌘⌥B / 跳转锚 / 快照撤销）", () => {
   it("右 Panel 换检查器：collapsible + collapsedSize 0 + 360/320/420 + 初始收起", () => {
     expect(appSrc).toContain("panelRef={inspectorRef}");
@@ -128,8 +143,11 @@ describe("⑤ App 接线哨兵（右 Panel / ⌘⌥B / 跳转锚 / 快照撤销�
     expect(appSrc).toContain("const INSPECTOR_SIDEBAR_COLLAPSE_BELOW = 744");
     expect(appSrc).toContain("mainGroupRef.current.getBoundingClientRect().width");
     expect(appSrc).toContain("setSidebarCollapsed(true)");
-    expect((appSrc.match(/window\.requestAnimationFrame\(/g) ?? []).length).toBeGreaterThanOrEqual(2);
-    expect(appSrc).toContain("window.requestAnimationFrame(() => { inspectorRef.current?.expand(); })");
+    // 2026-10-20：expand 改到侧栏 240ms 收起过渡之后（旧两个 rAF 会抢跑被夹回 0，真机
+    // 窄窗 ⌘⌥B 第一次只写 storage 不展开）。判据跟着实现走，不保留旧针脚。
+    expect(appSrc).toContain('const expandDelay = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 260;');
+    expect(appSrc).toContain("window.setTimeout(() => { inspectorRef.current?.expand(); setInspectorCollapsed(false); }, expandDelay);");
+    expect(appSrc).not.toContain("window.requestAnimationFrame(() => { inspectorRef.current?.expand(); })");
     expect(appSrc).toContain("sidebarAutoCollapsedRef.current = true");
     expect(appSrc).toContain("setSidebarCollapsed(false)");
     expect(appSrc).toContain("onToggleSidebar={toggleSidebar}");
@@ -145,9 +163,37 @@ describe("⑤ App 接线哨兵（右 Panel / ⌘⌥B / 跳转锚 / 快照撤销�
     expect(appSrc).toContain('<Separator className="pane-handle" aria-label="调整检查器宽度" />');
   });
 
+  it("检查器开合状态与 imperative collapse 同步（inert 不靠 Panel onResize）", () => {
+    // 2026-10-20 真机：带窗格重载后 Panel 实际宽 ~293，但 inspectorCollapsed 初值 true ⇒
+    // inert 挂在可见面板上；开合状态必须与布局同一个事实源。
+    expect(appSrc).toContain("setInspectorCollapsed(false);");
+    expect(appSrc).toContain("setInspectorCollapsed(true);");
+    const layoutStart = appSrc.indexOf("// 初始收起（brief 七「默认收起」）");
+    expect(layoutStart).toBeGreaterThan(-1);
+    const layout = appSrc.slice(layoutStart, layoutStart + 900);
+    expect(layout).toContain("setInspectorCollapsed(false);");
+    expect(layout).toContain("setInspectorCollapsed(true);");
+    const toggle = appSrc.slice(appSrc.indexOf("const toggleInspector = useCallback"), appSrc.indexOf("const toggleFocusMode = useCallback"));
+    expect(toggle).toContain("setInspectorCollapsed(true);");
+  });
+
+  it("减少动态偏好下不再白等 240/260ms", () => {
+    expect(appSrc).toContain('window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 260');
+    expect(appSrc).toContain('window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 240');
+  });
+
   it("timeline 跳转锚（data-event-id → scrollIntoView）与快照撤销接线", () => {
     expect(appSrc).toContain("const jumpToEvent = useCallback");
     expect(appSrc).toContain('querySelector(`[data-event-id="${String(eventId)}"]`)');
-    expect(appSrc).toContain("window.agent.snapshotRestore({ path, snapshotId })");
+    // 还原要带上 sessionId（2026-10-19）：主进程据此往**这个会话**的事件流落 file_restored，
+    //  否则改动面（改动 Tab / 变更窗格 / Changes 徽标 / 交付卡的「改动已验证」）还当文件没撤。
+    // 这一条比旧的"只认 `{ path, snapshotId }`"更严：少了 sessionId 就不许过。
+    expect(appSrc).toContain("window.agent.snapshotRestore({");
+    expect(appSrc).toContain("path, snapshotId,");
+    expect(appSrc).toContain("...(sid !== null ? { sessionId: sid } : {}),");
+    // 2026-10-20：主进程直接 append file_restored、不推给渲染层 ⇒ 还原成功后必须本地补一条，
+    // 否则 Inspector 仍摆着撤销钮、徽标仍数着这个文件，直到切走再开（真机复现）。
+    expect(appSrc).toContain('setEvents((prev) => [...prev, { type: "file_restored", path, snapshotId } as AgentEvent]);');
+    expect(appSrc).toContain("if (sid !== null && activeIdRef.current === sid)");
   });
 });

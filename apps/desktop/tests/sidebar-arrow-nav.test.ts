@@ -60,6 +60,20 @@ describe("↑↓ 在会话之间移动焦点", () => {
     expect(sidebar).not.toContain('".session:not([inert])"');
   });
 
+  it("Shift+F10 / ContextMenu 可从键盘打开行菜单（右键等价）", () => {
+    expect(sidebar).toContain('if ((e.key === "F10" && e.shiftKey) || e.key === "ContextMenu")');
+    expect(sidebar).toContain("setCtxOpen(true)");
+    expect(sidebar).toContain("ctxByKeyboard.current = true");
+    expect(sidebar).toContain("onCloseAutoFocus");
+    expect(sidebar).toContain("rowRef.current?.focus()");
+    expect(sidebar).toContain("置顶会重排列表");
+  });
+
+  it("Home/End 跳到可见列表首尾（标准 listbox 语义）", () => {
+    expect(sidebar).toContain('if (e.key === "Home" || e.key === "End")');
+    expect(sidebar).toContain('e.key === "Home" ? rows[0] : rows[rows.length - 1]');
+  });
+
   it("到边界不环绕（rows[at±1] 为 undefined 时静默不动）", () => {
     expect(sidebar).toContain("next?.focus()");
     // 没有取模 ⇒ 首行按 ↑、末行按 ↓ 都是 no-op，不跳到另一端

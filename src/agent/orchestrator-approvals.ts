@@ -342,7 +342,14 @@ export class ApprovalsChainsSupervise {
         stageCount,
         maxStages,
         budgetBlocked: this.deps.budgetBlocked(),
-        repeatCount,
+        // 重复闸数的是"**同一件事反复失败**"（supervisor-check B2 那三格用的都是 verdict:"fail"）。
+        // 这一环**通过了** ⇒ 没有可防的循环（这一环就是终点）⇒ 传 0。
+        // 旧实现把上一环的失败计数原样递给这一环 ⇒ 连败三环之后的**第四环即使通过**也被 escalate：
+        // 父会话拿到"已升级人工裁决"（一份"失败"的回执），而那一环明明做对了，它的 worktree
+        // 被留着等人工合并 ⇒ **主干永远拿不到这次改动**（实测 end-to-end：主仓没有那个文件）。
+        // 决策函数本身**逐字未动**（它的单元契约由 supervisor-check 的 A 段钉着）：
+        // 改的是**这一环该递什么数**——通过了就没有"重复"可言。
+        repeatCount: verdict === "pass" ? 0 : repeatCount,
         lastAgentId,
         lastFailure,
         nextRole: "implement",

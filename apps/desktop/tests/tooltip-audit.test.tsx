@@ -39,6 +39,9 @@ describe("tooltip 审计：重做面所有 <button> 都有 title 或 aria-label"
         waitingIds={new Set<string>()}
         outcomes={new Map([["s1", "ok"]])}
         providerOk={null}
+        theme="system"
+        onThemeChange={() => undefined}
+        usage={{ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, usageCount: 0, toolSteps: 0, rounds: 0 }}
         onOpen={() => undefined}
         onNewTask={() => undefined}
         onOpenPalette={() => undefined}

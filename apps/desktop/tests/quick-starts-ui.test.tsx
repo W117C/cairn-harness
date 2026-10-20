@@ -13,12 +13,24 @@ const appSrc = read("../src/renderer/App.tsx");
 const css = read("../src/renderer/styles.css");
 
 describe("QuickStarts（空屏建议行 SSR）", () => {
-  it("建议在场、按序、都是 pill 钮", () => {
+  it("建议在场、按序、都是编号起手行", () => {
     const items = ["继续上次：修登录页", "帮我看看这 3 个没提交的改动", "跑一遍测试，把失败修到绿"];
     const h = renderToStaticMarkup(<QuickStarts items={items} firstRunSub={null} onPick={() => undefined} />);
     expect(h).toContain('class="empty-below"');
-    const pills = [...h.matchAll(/<button class="pill">([^<]*)<\/button>/g)].map((m) => m[1]);
-    expect(pills).toEqual(items);
+    expect((h.match(/class="start"/g) ?? []).length).toBe(3);
+    const qs = [...h.matchAll(/class="start-q">([^<]*)<\/span>/g)].map((m) => m[1]);
+    expect(qs).toEqual(items);
+    expect(h).not.toContain('class="pill"');
+  });
+
+  it("起手行不是胶囊：编号/说明/箭头三列，hover 才露箭头，进入错峰上浮", () => {
+    expect(css).toContain(".starts {");
+    expect(css).toMatch(/\.start\s*{[^}]*grid-template-columns:\s*26px minmax\(0, 1fr\) 16px/s);
+    expect(css).toContain(".start:hover .start-go");
+    expect(css).toContain("@keyframes rise-in");
+    expect(css).toContain(".empty-below { padding-left: 16px; padding-right: 16px; }");
+    expect(css).toMatch(/\.empty h1\.empty-greet\s*{[^}]*animation:\s*rise-in/s);
+    expect(css).not.toContain(".pill {");
   });
 
   it("副标题条件：null 不渲染；给了就渲染（仅首启由 App 传）", () => {
@@ -39,6 +51,22 @@ describe("空屏（App 源文哨兵 · P2-1）", () => {
     expect(appSrc).toContain("STR.empty.greetingAsk");
     expect(appSrc).toContain("empty-chip");
     expect(appSrc).toContain("GitBranch");
+  });
+
+  it("主页项目 chip 只出现一次（composer 的 ctx-chip 在空态让位）", () => {
+    expect(appSrc).toContain('workspaceLabel={!showEmpty && activeWorkspace ?');
+    expect(appSrc).toContain('className="empty-chip"');
+  });
+
+  it("会话名只出现在工具栏中栏一处（会话条已并入顶栏，不重复两处）", () => {
+    // 2026-10-20 批 129：会话条并入统一工具栏 ⇒ 会话名落在 .tb-title（工具栏中栏），
+    // 主页时同一位置显示品牌名 .tb-brand。旧不变量「顶栏只有 Cairn、会话名只在会话条」
+    // 已被合并取代；新不变量更强：**会话名只此一处**，且旧的第二条栏已经不存在。
+    expect(appSrc).toContain('className="tb-title"');
+    expect((appSrc.match(/className="tb-title"/g) ?? []).length).toBe(1);
+    expect(appSrc).toContain('className="tb-brand"');
+    expect(appSrc).not.toContain('className="chat-bar"');
+    expect(appSrc).not.toContain('title={activeId !== null ? sessionTitle : "Cairn"}');
   });
 
   it("项目 chip 弹层：搜索 + 最近清单 + 复用 AddProjectMenu + 空态提示", () => {
@@ -112,7 +140,7 @@ describe("空屏字级层级", () => {
   it("衬线大字 + 珊瑚星标（对照 Claude 桌面端 hero）", () => {
     const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
     expect(css).toMatch(/\.empty h1\.empty-greet\s*{[^}]*font-family:[^}]*Songti SC/s);
-    expect(css).toMatch(/\.empty h1\.empty-greet\s*{[^}]*font-size:\s*2\.25rem/s);
+    expect(css).toMatch(/\.empty h1\.empty-greet\s*{[^}]*font-size:\s*clamp\(2rem, 4vw, 2\.5rem\)/s);
     expect(css).toMatch(/\.empty-greet-mark\s*{[^}]*color:\s*hsl\(var\(--accent-brand\)\)/s);
     expect(appSrc).toContain('className="empty-greet-mark"');
   });

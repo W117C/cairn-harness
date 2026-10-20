@@ -161,8 +161,8 @@ describe("⑧ App 接线哨兵（滚动记忆 / 回放链）", () => {
 
   it("回放链：fork → 切换 → 注入该轮输入不发送（round/userText 从事件投影）", () => {
     expect(appSrc).toContain("const handleReplay = useCallback((eventId: number)");
-    expect(appSrc).toContain("roundOfEvent(events, eventId)");
-    expect(appSrc).toContain("userTextOfRound(events, round)");
+    expect(appSrc).toContain("roundOfEvent(eventsRef.current, eventId)");
+    expect(appSrc).toContain("userTextOfRound(eventsRef.current, round)");
     expect(appSrc).toContain("setInjectedText(text)");
   });
 });

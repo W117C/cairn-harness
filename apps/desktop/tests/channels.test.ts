@@ -10,8 +10,9 @@ import { INVOKE_CHANNELS, PUSH_CHANNELS, type PushChannel } from "../src/main/ch
 // 静态裁决。运行时用例只验推送三键与 invoke 表非空。
 
 describe("通道名表完整性", () => {
-  it("推送通道恰为七条且通道名非空", () => {
-    expect(Object.keys(PUSH_CHANNELS).sort()).toEqual(["onAsk", "onAskDone", "onBrowserState", "onEvent", "onPreviewState", "onTerminalData", "onTerminalExit"]);
+  it("推送通道恰为八条且通道名非空", () => {
+    // 2026-10-20：＋onMenu（原生菜单栏 → 渲染层命令分发，蓝本 §5.2 菜单树）。
+    expect(Object.keys(PUSH_CHANNELS).sort()).toEqual(["onAsk", "onAskDone", "onBrowserState", "onEvent", "onMenu", "onPreviewState", "onTerminalData", "onTerminalExit"]);
     for (const channel of Object.values(PUSH_CHANNELS)) expect(channel).toBeTruthy();
   });
 
@@ -44,8 +45,10 @@ describe("通道名表完整性", () => {
     // 2026-10-18：＋listSkills（斜杠菜单技能清单）⇒ 87。
     // 2026-10-18：＋skillBody（技能抽屉读正文，§8 #15）⇒ 88；＋attachmentThumb（图片 chip 缩略图）⇒ 89。
     // 2026-10-19：＋browserSetAllowedHosts（授权清单同步到主进程的逐跳导航闸）⇒ 90；
-    // ＋pluginUserConfigSet（插件配置写入面）⇒ 91。
-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(91);
+    // ＋pluginUserConfigSet（插件配置写入面）⇒ 91；
+    // ＋setMessagePinned / listMessagePins（2026-10-20 消息置顶，销 G6）⇒ 93。
+    // 2026-10-20：＋sessionWorktree（会话级 worktree 隔离，销 G4：create/merge/discard 共用一条）⇒ 94。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(94);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
@@ -103,6 +106,9 @@ describe("通道名表完整性", () => {
       "exportTranscript",
       "listSkills",
       "skillBody",
+      // 2026-10-20 消息置顶（销 G6）：三面同步直接接真（wired 行 + AgentApi + channels）。
+      "setMessagePinned",
+      "listMessagePins",
       "assignSessionProject",
       "deleteMemory",
       "pluginDecide",
@@ -128,6 +134,9 @@ describe("通道名表完整性", () => {
       // v9：Tab 想下一条（按上下文单发模型调用）——三面同步直接接真。
       "suggestNext",
       "forkSession",
+      // 2026-10-20 §3.7 · G4 会话级 worktree 隔离：wired 行直调 kernel-host（归属解析/在跑拒绝
+      // 都在 host 里），core 侧创建/合并/清理见 src/main/session-worktree.ts。
+      "sessionWorktree",
       // v2.16 三面同批的在飞键（channels.ts/index.ts 已有 wired 行，名单在此补齐）。
       "revertTurn",
       "submitFeedback",

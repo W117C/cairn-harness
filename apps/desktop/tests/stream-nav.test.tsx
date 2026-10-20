@@ -181,20 +181,38 @@ describe("第十九遍：输出完光标不陪跑尾部（usage 落定 × Stream
 });
 
 // 2026-10-17：目录入口从流内浮片迁入会话条（真机目验：absolute 浮片压住第一条工具行）。
-describe("对话目录入口落点（会话条，不再浮在流上）", () => {
+// 2026-10-20 批 129：会话条并入统一工具栏 ⇒ 落点改为「工具栏动作组 .tb-cluster」这一段源码。
+// 落点容器换了，**不变量不变**：目录按钮必须与 Terminal / Changes / Browser / ⋮ 同栏
+// （同一处工具栏），不能有第二个落点浮在流上。
+describe("对话目录入口落点（工具栏动作组，不再浮在流上）", () => {
   const app = readFileSync(new URL("../src/renderer/App.tsx", import.meta.url), "utf8");
   const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
-  it("入口按钮在 .chat-bar 段内（与 Terminal/Changes/Browser 同族）", () => {
-    const barStart = app.indexOf('<div className="chat-bar">');
-    const barEnd = app.indexOf("{showEmpty ? (", barStart);
+  it("入口按钮在工具栏动作组段内（与 Terminal/Changes/Browser/⋮ 同族）", () => {
+    const barStart = app.indexOf('<div className="tb-cluster">');
+    // 组内没有嵌套 div ⇒ 首个 </div> 即组尾。
+    const barEnd = app.indexOf("</div>", barStart);
     expect(barStart).toBeGreaterThan(-1);
     expect(barEnd).toBeGreaterThan(barStart);
     const bar = app.slice(barStart, barEnd);
     expect(bar).toContain('aria-label="对话目录"');
     expect(bar).toContain("outlineTurns.length >= 2");
     expect(bar).toContain("data-on={outlineOpen}");
+    // 「同族」此前只靠「同一容器」隐含表达；容器改名后把它写成显式断言（不变量更强，不是更弱）。
+    expect(bar).toContain('aria-label="终端窗格"');
+    expect(bar).toContain('aria-label="变更窗格"');
+    expect(bar).toContain('aria-label="浏览器窗格"');
+    expect(bar).toContain('aria-label="更多窗格"');
+  });
+  it("动作组挂在窗口顶栏（工具栏是第一行，不在主栏里）", () => {
+    expect(app.indexOf("<TitleBar")).toBeGreaterThan(-1);
+    expect(app.indexOf("<TitleBar")).toBeLessThan(app.indexOf('<div className="shell">'));
+    expect(app).toContain('right={toolbarRight}');
   });
   it("旧浮片类名从样式层撤净（没有第二条落点）", () => {
     expect(css).not.toMatch(/\.outline-btn\s*\{/);
+  });
+  it("会话条已并入工具栏：不再有第二条栏（否则标题会出现两次）", () => {
+    expect(app).not.toContain('className="chat-bar"');
+    expect(css).not.toMatch(/\.chat-bar\s*\{/);
   });
 });

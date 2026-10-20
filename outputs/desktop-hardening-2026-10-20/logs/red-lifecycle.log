@@ -1,0 +1,64 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness/apps/desktop
+
+ ❯ tests/tool-lifecycle.test.tsx (3 tests | 2 failed) 6ms
+   × 未返回的调用在运行时显示执行中，停转后明确未收到结果 4ms
+   × 历史主会话终态关闭未结调用，新一轮运行也不会重新转圈 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/tool-lifecycle.test.tsx > 未返回的调用在运行时显示执行中，停转后明确未收到结果
+AssertionError: expected { kind: 'tool', …(6) } to match object { pending: false, interrupted: true }
+(6 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "interrupted": true,
+-   "pending": false,
++   "pending": true,
+  }
+
+ ❯ tests/tool-lifecycle.test.tsx:10:19
+      8|   expect(projectStream([call], true)[0]).toMatchObject({ pending: true…
+      9|   const rows = projectStream([call], false);
+     10|   expect(rows[0]).toMatchObject({ pending: false, interrupted: true });
+       |                   ^
+     11|   const html = renderToStaticMarkup(<Stream rows={rows} view="normal" …
+     12|   expect(html).toContain("未收到结果");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/tool-lifecycle.test.tsx > 历史主会话终态关闭未结调用，新一轮运行也不会重新转圈
+AssertionError: expected { kind: 'tool', …(6) } to match object { pending: false, interrupted: true }
+(6 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "interrupted": true,
+-   "pending": false,
++   "pending": true,
+  }
+
+ ❯ tests/tool-lifecycle.test.tsx:19:19
+     17|   const rows = projectStream([call, { type: "agent_status", status: "c…
+     18|     { type: "tool_call", id: "b", name: "list_dir", args: {} }] as Age…
+     19|   expect(rows[0]).toMatchObject({ pending: false, interrupted: true });
+       |                   ^
+     20|   expect(rows[1]).toMatchObject({ pending: true });
+     21| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  22:02:39
+   Duration  229ms (transform 51%, import 45%, tests 3%, worker 1%)
+
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts tests/tool-lifecycle.test.tsx
