@@ -10,6 +10,7 @@ import { runAgent } from "../src/main/agent-runner";
 import { AskGate } from "../src/main/ask-gate";
 import type { WebFetchDeps } from "../src/tools/web_fetch";
 import type { HostResolver } from "../src/tools/web-fetch-policy";
+import { alwaysRulesPath } from "../src/permissions/rules";
 import type { AskScope } from "../src/permissions";
 import type { AgentEvent } from "../src/events";
 
@@ -226,6 +227,12 @@ describe("出网工具门接线（web_fetch + AskGate）", () => {
       webFetchDeps: OFFLINE_FETCH_DEPS,
     });
     expect(firstAsked).toEqual(["web_fetch"]);
+    // **出网类的 scope 被钉成 `once`** ⇒ 这次点「总是允许」**不落任何永久规则**
+    // （2026-10-20 补上这一格：从前只测「下一轮照样要问」，而那条被**另一道带子**
+    // （L4-risk 的高风险不放行）兜住了 ⇒ 真正承重的那道带子（scope 钉 once）**没有观测者**。
+    // 这里直接看那份规则库：出网工具压根不该在里面留一条 allow。
+    const alwaysRaw = await readFile(alwaysRulesPath(dir), "utf8").catch(() => "<<没有这个文件>>");
+    expect(alwaysRaw.includes("web_fetch"), "always 文件内容：" + alwaysRaw).toBe(false);
 
     // 第二轮：全新会话、全新的门，重新 load 上一轮落库的规则库。
     const secondAsked: string[] = [];

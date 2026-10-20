@@ -138,7 +138,7 @@ describe("判卷面硬闸端到端（runAgent → gatedTool → evaluate → 不
     }
 
     // `AgentEvent` 是联合类型，`ok` / `output` 只在 tool_result 那支上存在 ⇒ 收窄一次，别到处 cast。
-    type ToolResultLike = { callId: string; ok: boolean; output: string };
+    type ToolResultLike = { callId: string; ok: boolean; output: string; gate?: { layer?: string; verdict?: string } };
     const resultFor = (id: string): ToolResultLike | undefined =>
       log.find((e) => e.type === "tool_result" && (e as { callId?: string }).callId === id) as ToolResultLike | undefined;
     const denied = resultFor("j1");
@@ -147,6 +147,12 @@ describe("判卷面硬闸端到端（runAgent → gatedTool → evaluate → 不
     expect(denied!.ok).toBe(false);
     expect(denied!.output).toContain("判卷文件冻结");
     expect(denied!.output).toContain("BLOCKED.md");
+    // 这次拒绝**必须来自权限层**（L0-hard）：工具层（`src/tools/base.ts` 的 `assertNotFrozenReal`）
+    // 也有一道同名的冻结闸（它查的是**软链后的真实落点**）⇒ 只断言"输出里有『判卷文件冻结』"
+    // **分不出是哪一道拒的** ⇒ 权限层那行装配（`frozenJudgePaths: frozenJudgePathSet(...)`）
+    // 就没有观测者（2026-10-20 变异表实测：摘掉它，判卷全绿——锚点指向了一道**不再承重**的带子）。
+    // 判据落在**结构列**上（gate.layer），不靠文案：工具层那条路径根本不带 gate ⇒ 分得开。
+    expect(denied!.gate?.layer, "拒绝必须来自权限层（L0-hard）——否则权限层那行装配没有观测者").toBe("L0-hard");
     expect(await readFile(join(ws, "out", "judge.txt"), "utf8")).toBe("原样未动");
     expect(allowed?.ok).toBe(true); // 同 run 非判卷路径 ⇒ 零行为，不能连坐
     expect(await readFile(join(ws, "src", "ok.txt"), "utf8").catch(() => null)).toBe("放行");
@@ -198,13 +204,16 @@ describe("判卷面硬闸在 worker 面（并行写路径不得少一道闸）",
       const agentId = (JSON.parse(spawned.output) as { agent_id: string }).agent_id;
       await orch.waitAll(60_000);
 
-      const resultFor = (id: string): { ok: boolean; output: string } | undefined =>
+      const resultFor = (id: string): { ok: boolean; output: string; gate?: { layer?: string; verdict?: string } } | undefined =>
         events.find((e) => e.type === "tool_result" && (e as { callId?: string }).callId === id) as
-          { ok: boolean; output: string } | undefined;
+          { ok: boolean; output: string; gate?: { layer?: string; verdict?: string } } | undefined;
       const denied = resultFor("wj-1");
       expect(denied, "判卷那次调用必须有回执（没回执＝它根本没跑到闸前，下面断言全是空的）").toBeTruthy();
       expect(denied!.ok).toBe(false);
       expect(denied!.output).toContain("判卷文件冻结");
+      // 与主会话那条同一条纪律：拒绝必须来自**权限层**（L0-hard）——工具层那道同名闸
+      // （真实落点复查）会给出一样的文案 ⇒ 只钉文案就分不出谁拒的 ⇒ worker 那两行装配没有观测者。
+      expect(denied!.gate?.layer, "worker 侧的拒绝也必须来自权限层（L0-hard）").toBe("L0-hard");
       const allowed = resultFor("wj-2");
       // 配对那一半：同 run 的普通写必须**真发生并被放行**，否则「被拒」可能只是整条 worker 路径没跑起来
       expect(allowed?.ok, "同 run 的普通写必须放行").toBe(true);

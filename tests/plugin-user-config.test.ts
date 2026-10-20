@@ -106,7 +106,13 @@ describe("userConfig 进激活面（§9.5 的三条通道）", () => {
     }, null, 2), "utf8");
     await writeFile(join(pluginRoot(), ".lsp.json"), JSON.stringify({
       servers: {
-        stub: { command: "node", args: ["${user_config.TOKEN}/srv.mjs"], extensionToLanguage: { ".ts": "typescript" } },
+        // 两个引用：**敏感**的 TOKEN 与**非敏感**的 PROFILE（2026-10-20 补：只钉敏感那一个 ⇒
+        // 「非敏感值根本没被展开」这一格**没有观测者**——把 argvValues 清空的变异照样全绿）。
+        stub: {
+          command: "node",
+          args: ["${user_config.TOKEN}/srv.mjs", "--profile", "${user_config.PROFILE}"],
+          extensionToLanguage: { ".ts": "typescript" },
+        },
       },
     }), "utf8");
     // 宿主 LSP 总开关：插件不能替用户打开它（既有判据），开着才能看第三激活面
@@ -208,7 +214,12 @@ describe("userConfig 进激活面（§9.5 的三条通道）", () => {
     const e = await loadPlugin({ withValue: true, preWrite: true });
     e.activateLsp();
     const cfg = loadLspConfig(dir);
-    expect(cfg.servers["cfg:stub"]?.args).toEqual(["${user_config.TOKEN}/srv.mjs"]);
+    // 敏感值：留占位符（进程表可读 ⇒ 绝不能把明文塞进 argv）。
+    expect(cfg.servers["cfg:stub"]?.args?.[0]).toBe("${user_config.TOKEN}/srv.mjs");
+    // 非敏感值：**照常展开**（2026-10-20 补上这一格：从前只断言敏感那一个 ⇒
+    // 「第三激活面根本没把值递进去」也是全绿——变异表实测那条变异存活，
+    // 因为它清空的是 argvValues（非敏感那一份），而判卷只看敏感那一个）。
+    expect(cfg.servers["cfg:stub"]?.args?.[2], "非敏感值必须展开成真值").toBe("prod");
   });
 
   it("getPluginSecret 不再零调用者：读侧确实经过它取敏感值（后端被拿掉 → 进 missing）", async () => {
