@@ -103,14 +103,25 @@ describe("certLevel：半把尺不许冒充认证（第 119 页，起因是第 1
   // 纯函数钉不住接线（第 118 页的同一课）：这里**真跑一次 CLI** 钉住"脚本确实按 ok 退出 2"。
   // 放在 guard 之后 ⇒ 不建 worktree、不装依赖，秒级。
   it("真跑：`--skip-test` 不带 `--why` ⇒ 脚本 exit 2，且不建 worktree", () => {
-    const before = listWorktrees(repoRoot).length;
+    // 判据认的是「**它建过树**的那句话」（`worktree add exit=` / `checkout exit=`）——
+    // 脚本每次碰树都会打这一句 ⇒ 认它就等于直接看"有没有建过树" ✓。
+    //
+    // ⚠️ 为什么不用「worktree 总数没变」当判据（2026-10-21 修，两条理由）：
+    //  ① **不稳**：判卷**并行**跑时，别的用例（`tests/mutate-shards.test.ts` 会
+    //     `git worktree add` 到**同一个仓**）在两读之间插进来 ⇒ 总数变了 ⇒ **假红**。
+    //     这一次它在 head-cert 那趟整树认证里真红过（`expected 4 to be 3`）——
+    //     一条**判据自己不稳**的用例，和一条恒真的判卷一样坏（会让人开始不信这条门）。
+    //  ② **恒真**：脚本走完会把自己那棵**收掉** ⇒ 建了树与没建树**都不留残留** ⇒
+    //     "总数没变"两种形状都过 ⇒ 它**根本抓不到**自己要抓的那个事故（恒真的判卷）。
     const r = spawnSync(process.execPath, ["--import", "tsx", "scripts/head-cert.ts", "--at=HEAD", "--skip-test"], {
       cwd: repoRoot,
       encoding: "utf8",
     });
     expect(r.status).toBe(2);
     expect(r.stdout + r.stderr).toContain("--why");
-    expect(listWorktrees(repoRoot).length).toBe(before); // 抱怨之前不许先花两分钟建树
+    // 抱怨之前不许先花两分钟建树 ⇒ 脚本的输出里**不许**出现它碰过树的那两句。
+    expect(r.stdout + r.stderr, "抱怨之前不许先建树（脚本一碰树就会打这两句之一）").not.toContain("worktree add exit=");
+    expect(r.stdout + r.stderr).not.toContain("checkout exit=");
   });
 
   // 反向那一半（"完整认证也被逼着写 --why"）跑不了全量验证（那要建一棵真树），
