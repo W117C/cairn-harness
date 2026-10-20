@@ -37,6 +37,10 @@ async function main(): Promise<void> {
       console.error("  开法：sudo ifconfig lo0 alias 127.0.0.2");
       console.error("  退出码 2 = 跑不了（不是 0：没跑不等于过了）");
       app.exit(2);
+      // ⚠️ 这里**不许**再 `throw err`（2026-10-21 真机冒烟实测）：`app.exit` 是异步退出的，
+      // 紧接着 throw 会让外层 `main().catch` 接手 ⇒ 原始错误被原样印出来、外层再退 1
+      // ⇒ 「跑不了」被读成「跑挂了」，退出码也不是那个 2。直接 return（本函数就此收束）。
+      return;
     }
     throw err;
   }

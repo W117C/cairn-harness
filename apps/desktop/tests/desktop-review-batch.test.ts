@@ -69,6 +69,12 @@ describe("测量脚本要有预算（量过了 ≠ 没变）", () => {
     expect(native).toContain('if (code === "EADDRNOTAVAIL") {');
     expect(native).toContain("ifconfig lo0 alias 127.0.0.2");
     expect(native).toContain("app.exit(2)");
+    // 「跑不了」那一支**不许再 throw**（2026-10-21 真机冒烟实测）：`app.exit` 是异步退出的，
+    // 紧接着 throw ⇒ 外层 `main().catch` 接手 ⇒ 原始错误被原样印出来、外层再退 1
+    // ⇒ 「跑不了」被读成「跑挂了」，退出码也不是那个 2。这一格钉住"return 收束"。
+    const branch = native.slice(native.indexOf('if (code === "EADDRNOTAVAIL") {'));
+    const beforeThrow = branch.slice(0, branch.indexOf("throw err;"));
+    expect(beforeThrow, "EADDRNOTAVAIL 分支里必须以 return 收束（不许再 throw 给外层）").toContain("return;");
     // 反向对照：跑不了不许走"全过"那个出口
     expect(native).not.toMatch(/EADDRNOTAVAIL[\s\S]{0,600}app\.exit\(0\)/);
   });
