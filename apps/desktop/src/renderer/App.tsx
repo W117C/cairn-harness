@@ -28,7 +28,6 @@ import { buildQuickStarts, greetingFor, type QuickStartInput } from "./quick-sta
 import type { WorkspaceSession } from "./sessions-view";
 import type { MenuCommandId } from "../shared/menu-commands";
 import { classifyDrop } from "./sessions-view";
-import { moveDraftBetweenSessions } from "./drafts";
 import { commandAllowed, isEditableTarget, overlayBlocked, readGateInput } from "./command-gate";
 import { STR } from "./strings";
 import { toast } from "./toast";
@@ -249,7 +248,10 @@ export function App() {
     setInjectedText(text);
     setInjectedTextSeq(++injectedSeqRef.current);
   }, []);
-  // 重命名换 id：草稿桶跟着搬家（否则 Composer 在渲染期把字存回旧 id、再读新 id 的空桶）。
+  // 草稿桶搬家通道（`{from, to, seq}`）：Composer's 草稿桶跟着换键。
+  // ① 重命名换 id：否则 Composer 在渲染期把字存回旧 id、再读新 id 的空桶；
+  // ② 「回到原会话」删掉第 1 轮编辑建的空分支：那份未发出去的稿得跟着用户走
+  //    （2026-10-20 独立评审追出，LOW-MEDIUM）——删会话不删草稿 ⇒ 稿子变孤儿。
   const [draftRemap, setDraftRemap] = useState<{ from: string; to: string; seq: number } | undefined>(undefined);
   const draftRemapSeq = useRef(0);
   // 发送失败回滚：Composer 提交即清空输入框，失败时把原文/附件还回去（按会话归属，切走了只存桶）。
@@ -2937,7 +2939,9 @@ export function App() {
                       // 删之前先把**用户还没发出去的编辑稿**搬到 origin（2026-10-20 独立评审追出，
                       // LOW-MEDIUM）：那份稿存在空分支的草稿键下 ⇒ 删会话不删草稿 ⇒ 稿子变孤儿
                       // （那条会话没了，谁也读不到它）⇒ 用户以为写的字还在，其实没了。
-                      moveDraftBetweenSessions(ctx.forkId, ctx.originId);
+                      // 走**既有的草稿搬家通道**（draftRemap）：Composer 那侧是草稿桶的**唯一写手**，
+                      // 另起一条直写 localStorage 的路会被它的内存桶盖回去（等于没搬）。
+                      setDraftRemap({ from: ctx.forkId, to: ctx.originId, seq: ++draftRemapSeq.current });
                       void window.agent.deleteSession(ctx.forkId).then(() => { void refreshSessions(); }, (err: unknown) => {
                         setLastError(`空分支清理失败：${err instanceof Error ? err.message : String(err)}`, ctx.originId);
                       });

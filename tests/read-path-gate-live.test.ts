@@ -183,3 +183,34 @@ describe("接线棘轮（源文本对账）", () => {  it("读侧三把在 insta
     expect(unwrappedIn(fake, ["read_file", "grep", "glob"])).toEqual(["grep", "glob"]);
   });
 });
+
+describe("读侧不享受写向待遇（动作融合只对写向工具跑）", () => {
+  it("read_file 过门时不触发动作融合；write_file 照旧触发", async () => {
+    // 动作融合 = 写完跑一次配置好的 lint（2026-10-20 独立评审追出，随读侧接进门而暴露）：
+    // 读侧三把接进门后若不设限 ⇒ **每一次读**都去起一遍 lint 命令，
+    // 并把 lint 输出拼进读的输出（模型上下文里多一段与读无关的噪声，读的耗时也被拖住）。
+    const { gatedTool, setToolGateDeps } = await import("../src/main/tool-gates");
+    const { newAutonomySession } = await import("../src/permissions");
+    // auto 档：写不逐次审批（default 档的写会因无审批口而 fail-closed ⇒ 工具根本不跑，融合自然也不跑）
+    const autonomy = newAutonomySession("auto", { rules: [], planBlocked: () => false });
+    let fusionCalls = 0;
+    setToolGateDeps({
+      currentSession: () => ({
+        askGate: null,
+        autonomy,
+        sandbox: null,
+        actionFusion: (async (r: unknown) => {
+          fusionCalls++;
+          return r;
+        }) as never,
+      }),
+    });
+    const inner = { name: "read_file", run: async () => ({ ok: true, output: "内容" }) };
+    const gated = gatedTool("read_file", inner as never);
+    await gated.run({ path: "a.ts" }, { workspace: process.cwd() } as never);
+    expect(fusionCalls, "读不该触发融合（会起 lint 并把输出拼进读的输出）").toBe(0);
+    const writer = gatedTool("write_file", { name: "write_file", run: async () => ({ ok: true, output: "写好了" }) } as never);
+    await writer.run({ path: "a.ts", content: "x" }, { workspace: process.cwd() } as never);
+    expect(fusionCalls, "写仍要触发融合（那是它的本分）").toBe(1);
+  });
+});

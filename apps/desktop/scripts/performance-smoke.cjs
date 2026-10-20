@@ -7,6 +7,14 @@ const profile = mkdtempSync(join(tmpdir(), 'cairn-perf-profile-'));
 app.setPath('userData', profile);
 nativeTheme.themeSource = 'light';
 app.on('quit', () => rmSync(profile, { recursive: true, force: true }));
+// 预算面（帽 = 现状上取整；实测基线 p50 25–47ms / p95 37–91ms / max 39–108ms / 启动 266–553ms，
+// 取料 outputs/desktop-performance-2026-10-20/runtime-*.json）。可用环境变量调
+// （CI 机慢时把帽抬上去，而不是把闸删掉）。
+const budgets={
+  p95Ms:Number(process.env.CAIRN_PERF_P95_BUDGET_MS??200),
+  maxMs:Number(process.env.CAIRN_PERF_MAX_BUDGET_MS??500),
+  startupMs:Number(process.env.CAIRN_PERF_STARTUP_BUDGET_MS??1500),
+};
 const out = resolve(process.argv[2] ?? 'performance.json');
 const turns = Number(process.argv[3] ?? 400);
 const samples = Number(process.argv[4] ?? 40);
@@ -69,11 +77,19 @@ async function main() {
   const sorted=[...frames].sort((a,b)=>a-b);
   const finalMetrics=await metrics();
   const metricDelta=(before,after)=>Object.fromEntries(['TaskDuration','ScriptDuration','LayoutDuration','RecalcStyleDuration','LayoutCount','RecalcStyleCount'].map(key=>[key,(after[key]??0)-(before[key]??0)]));
-  const report={turns,samples,startupMs,openMs,runningStarted,metrics:{open:metricDelta(startupMetrics,openMetrics),stream:metricDelta(streamMetrics,finalMetrics)},frameMs:{p50:sorted[Math.floor(sorted.length*.5)],p95:sorted[Math.floor(sorted.length*.95)],max:sorted.at(-1),all:frames},dom,errors};
+  const report={turns,samples,startupMs,openMs,runningStarted,metrics:{open:metricDelta(startupMetrics,openMetrics),stream:metricDelta(streamMetrics,finalMetrics)},frameMs:{p50:sorted[Math.floor(sorted.length*.5)],p95:sorted[Math.floor(sorted.length*.95)],max:sorted.at(-1),all:frames},dom,errors,budgets};
   mkdirSync(require('node:path').dirname(out),{recursive:true});
   writeFileSync(out,JSON.stringify(report,null,2));
   console.log(JSON.stringify(report));
-  app.exit(runningStarted && errors.length===0 && dom.historyPresent && dom.lastPresent ? 0:1);
+  // 预算面（2026-10-20 独立评审追出，LOW-MEDIUM）：旧形状把 p50/p95/max 量出来就完事，
+  // **退出码不看它们** ⇒ 一次 3× 的回归照样 exit 0（"量过了"读成"没变"）。
+  const overBudget=[
+    ...(report.frameMs.p95>budgets.p95Ms?[`帧时间 p95 ${report.frameMs.p95.toFixed(1)}ms > 帽 ${budgets.p95Ms}ms`]:[]),
+    ...(report.frameMs.max>budgets.maxMs?[`帧时间 max ${report.frameMs.max.toFixed(1)}ms > 帽 ${budgets.maxMs}ms`]:[]),
+    ...(report.startupMs>budgets.startupMs?[`启动 ${report.startupMs.toFixed(1)}ms > 帽 ${budgets.startupMs}ms`]:[]),
+  ];
+  if(overBudget.length>0) console.error('[performance-smoke] 超预算：'+overBudget.join('；'));
+  app.exit(runningStarted && errors.length===0 && dom.historyPresent && dom.lastPresent && overBudget.length===0 ? 0:1);
 }
 setTimeout(()=>{console.error('performance-smoke 超时');app.exit(1);},90000).unref();
 main().catch(e=>{console.error(e);app.exit(1);});

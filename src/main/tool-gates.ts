@@ -281,7 +281,12 @@ export function gatedTool(
         return withGate(annotateExecCause(sand, { timedOut: sand.timedOut === true, exitCode: sand.exitCode ?? null }));
       }
       let result = await original.run(args, ctx);
-      if (name !== "run_shell" && result.ok && s.actionFusion) {
+      // 动作融合是**写向**功能（写完跑一次配置好的 lint；lint 失败不回滚那次写）。
+      // ⚠️ 2026-10-20：读侧三把（read_file/grep/glob）接进门之后，这条若不设限 ⇒
+      // **每一次读**都会去起一遍 lint 命令，并把 lint 输出拼进读的输出
+      // （模型上下文里多出一段与读无关的噪声，且读的耗时被 lint 拖住）。
+      // 口径用权限层那一份「算不算写向」（`isWriteCall`）——不另造一张表。
+      if (isWriteCall(name as ToolName) && name !== "run_shell" && result.ok && s.actionFusion) {
         result = await s.actionFusion(result, args.path, ctx);
       }
       // 判定留痕进 tool_result（loop 透传并由 autoOf 派生 auto，零新事件类型）

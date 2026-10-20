@@ -23,7 +23,23 @@ async function main(): Promise<void> {
   const check = (name: string, ok: boolean, detail?: unknown): void => { checks.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}`); };
   let foreignHits = 0;
   const foreign = createServer((_req,res)=>{foreignHits++;res.end("foreign");});
-  await new Promise<void>((done,reject)=>{foreign.once("error",reject);foreign.listen(0,"127.0.0.2",done);});
+  // 「外来回环」这一支要绑 127.0.0.2（一个**与本地服务不同地址**的 host，用来验"外来 host 被拦"）。
+  // ⚠️ macOS 默认**不把整个 127/8 绑到 lo0**（只有 127.0.0.1）⇒ 这台机器上 `listen` 直接
+  // EADDRNOTAVAIL ⇒ 旧形状在一道检查都没跑之前就死了（2026-10-20 独立评审追出，LOW-MEDIUM）。
+  // 修法：认得这个错、说清怎么开（`sudo ifconfig lo0 alias 127.0.0.2`），
+  // 并以**独立退出码 2**表示「跑不了」——**不许 exit 0**（"没跑"读成"过了"比红更坏）。
+  try {
+    await new Promise<void>((done,reject)=>{foreign.once("error",reject);foreign.listen(0,"127.0.0.2",done);});
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EADDRNOTAVAIL") {
+      console.error("[native-host-smoke] 这台机器的 lo0 没绑 127.0.0.2（macOS 默认只绑 127.0.0.1）⇒ 本脚本跑不了。");
+      console.error("  开法：sudo ifconfig lo0 alias 127.0.0.2");
+      console.error("  退出码 2 = 跑不了（不是 0：没跑不等于过了）");
+      app.exit(2);
+    }
+    throw err;
+  }
   console.log("native: foreign loopback ready");
   const addr = foreign.address();
   if (addr === null || typeof addr === "string") throw new Error("本地地址未就绪");
