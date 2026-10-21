@@ -160,7 +160,13 @@ export async function loadExternalRefState(
     if (!Array.isArray(raw.approved) || !Array.isArray(raw.declined)) {
       throw new Error("approved/declined 字段不是数组");
     }
-    return { approved: raw.approved, declined: raw.declined };
+    // 读侧归一：旧实现只追加不撤销，盘上可能已有同一引用同时出现在两集里。
+    // 方向取 fail-closed（拒绝优先）——正常流程只会先批后拒；清理后注入器不会再把
+    // 用户后说的「不」当成已批准。重复项一并去掉。
+    const declined = [...new Set(raw.declined)];
+    const declinedSet = new Set(declined);
+    const approved = [...new Set(raw.approved)].filter((r) => !declinedSet.has(r));
+    return { approved, declined };
   } catch (err) {
     if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") {
       onCorrupt("外部引用审批状态损坏，已按空态继续（决议记录丢失，需重新确认）：" + path + "：" + (err instanceof Error ? err.message : String(err)));
@@ -186,14 +192,22 @@ function serializeOn<T>(key: string, job: () => Promise<T>): Promise<T> {
   return next;
 }
 
+/** 一条决议是**互斥**的：后一次决议撤销前一次，同一引用不许同时出现在两集里。
+ *  旧实现只往对应集合追加、不撤销另一边 ⇒ 先批后拒时 `approved` 与 `declined` 并存，
+ *  而注入器先看 `approved` ⇒ 用户后说的「不」被静默忽略（数据面还留下两条相反记录）。
+ *  纯函数：调用方拿旧状态，返回新状态，方便判卷与突变锚点单独钉这一格。 */
+export function withExternalRefDecision(state: ExternalRefState, ref: string, approved: boolean): ExternalRefState {
+  const approvedList = state.approved.filter((r) => r !== ref);
+  const declinedList = state.declined.filter((r) => r !== ref);
+  if (approved) approvedList.push(ref);
+  else declinedList.push(ref);
+  return { approved: approvedList, declined: declinedList };
+}
+
 export async function saveExternalRefDecision(ref: string, approved: boolean): Promise<void> {
   return await serializeOn("external-refs", async () => {
     const state = await loadExternalRefState();
-    const next: ExternalRefState = {
-      approved: approved ? [...new Set([...state.approved, ref])] : state.approved,
-      declined: approved ? state.declined : [...new Set([...state.declined, ref])],
-    };
-    await writeFileAtomic(externalRefsPath(), JSON.stringify(next, null, 2));
+    await writeFileAtomic(externalRefsPath(), JSON.stringify(withExternalRefDecision(state, ref, approved), null, 2));
   });
 }
 

@@ -1327,6 +1327,43 @@ export const MUTATIONS = [
     expectFail: "状态文件损坏 ⇒ 空态 + onCorrupt 显式告警（fail-visible，不再静默蒸发）",
   },
   {
+    id: "external-ref-decision-not-exclusive",
+    src: "src/agent/memory/store.ts",
+    test: "tests/memory-store-pure.test.ts",
+    desc: "外部引用审批决议退回「只追加不撤销」⇒ 先批后拒时同一引用同时留在 approved 与 declined 两集，"
+      + "而注入器先看 approved ⇒ 用户后说的『不』被静默忽略（持久态还留着两条相反记录）。"
+      + "**这一条是 2026-10-21 那笔修复的本体**：修法是纯函数 withExternalRefDecision（先删两边再入一边）",
+    apply: (s) => s.replace(
+      "  const approvedList = state.approved.filter((r) => r !== ref);\n  const declinedList = state.declined.filter((r) => r !== ref);\n  if (approved) approvedList.push(ref);\n  else declinedList.push(ref);\n  return { approved: approvedList, declined: declinedList };",
+      "  const approvedList = approved ? [...new Set([...state.approved, ref])] : state.approved;\n  const declinedList = approved ? state.declined : [...new Set([...state.declined, ref])];\n  return { approved: approvedList, declined: declinedList };",
+    ),
+    expectFail: "后一次拒绝撤销先前的批准：后说的『不』算数，持久态不并存",
+  },
+  {
+    id: "external-ref-read-side-not-decline-first",
+    src: "src/agent/memory/store.ts",
+    test: "tests/memory-store-pure.test.ts",
+    desc: "读侧不再做「拒绝优先」的归一 ⇒ 旧版本已经写进盘的并存记录（同一引用同时在两集里）"
+      + "在注入面上原样读回 ⇒ 用户说过的『不』被 approved 那一集盖过去。存量文件也要能自愈",
+    apply: (s) => s.replace(
+      "    const declined = [...new Set(raw.declined)];\n    const declinedSet = new Set(declined);\n    const approved = [...new Set(raw.approved)].filter((r) => !declinedSet.has(r));\n    return { approved, declined };",
+      "    return { approved: raw.approved, declined: raw.declined };",
+    ),
+    expectFail: "盘上遗留的同一引用并存 ⇒ 读侧按拒绝优先归一，并去掉重复项",
+  },
+  {
+    id: "external-ref-inround-state-not-written-back",
+    src: "src/agent/memory/inject.ts",
+    test: "tests/memory.test.ts",
+    desc: "注入面不在第一次决议后回写本趟视图 ⇒ 同一引用在 ARCH 与索引两段各出现一次时，"
+      + "两段都拿构建开始时的旧快照判断 ⇒ 问两次、落两次决议（两次答案相反时又留下两条相反记录）",
+    apply: (s) => s.replace(
+      "      const next = withExternalRefDecision(state, ref, approved);\n      state.approved = next.approved;\n      state.declined = next.declined;",
+      "      // [变异] 摘掉本趟状态写回",
+    ),
+    expectFail: "同一趟构建内同一引用只问一次，后续段复用第一次的决议",
+  },
+  {
     id: "memory-external-ref-shape-unchecked",
     src: "src/agent/memory/store.ts",
     test: "tests/memory-store-pure.test.ts",

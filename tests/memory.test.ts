@@ -127,6 +127,25 @@ describe("记忆安全（任务8）", () => {
     expect(askedAgain).toBe(0); // 拒绝后停用，不再询问
     expect(declined.project).toContain("[外部引用已停用: @/etc/hosts]");
   });
+
+  // 同一趟构建里同一引用出现在两段（ARCH + 索引）时，旧实现每段都拿**构建开始时的快照**判断
+  // ⇒ 问两次、落两次决议；若两次答案相反，持久态就留下 approved+declined 两条。
+  // 「后说算数」必须覆盖这一整趟：第一次决议后立刻更新本轮视图，后续段不再问。
+  it("同一趟构建内同一引用只问一次，后续段复用第一次的决议", async () => {
+    seed(".agent/ARCHITECTURE.md", "# 架构\n见 @/etc/hosts\n");
+    seed(".agent/memory/MEMORY.md", "- ref · reference · 2026 · 又见 @/etc/hosts\n");
+    let asked = 0;
+    const persisted: Array<[string, boolean]> = [];
+    const r = await buildMemoryInjection({
+      workspace: ws,
+      refState: { approved: [], declined: [] },
+      onExternalRef: () => { asked++; return false; },
+      persistRefDecision: (ref, approved) => { persisted.push([ref, approved]); },
+    });
+    expect(asked).toBe(1);
+    expect(persisted).toEqual([["/etc/hosts", false]]);
+    expect((r.project ?? "").match(/\[外部引用已停用: @\/etc\/hosts\]/g)).toHaveLength(2);
+  });
 });
 
 // M0 复盘 E-3：记忆块用 <memory source="…">…</memory> 包裹，而 `memory` 不在控制标签转义

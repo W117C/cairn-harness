@@ -19,6 +19,7 @@ import {
   readTextOrNull,
   readTopicBody,
   saveExternalRefDecision,
+  withExternalRefDecision,
   rootFilePath,
   listTopics,
   isCompliantTopic,
@@ -75,12 +76,19 @@ async function sanitizeRefs(
   let out = text;
   for (const ref of refs) {
     if (state.approved.includes(ref)) continue; // 已批准：原样保留
+    // 「未决」要在问之前定下：同一趟构建里同一引用可能在 ARCH/索引两段各出现一次，
+    // 旧实现每段都用构建开始时的快照判断 ⇒ 问两次、落两次决议；两次答案相反时
+    // 持久态就留下 approved+declined 两条。第一次决议后立刻更新本轮视图。
+    const undecided = !state.declined.includes(ref) && !state.approved.includes(ref);
     let approved = false;
-    if (!state.declined.includes(ref) && opts.onExternalRef) {
+    if (undecided && opts.onExternalRef) {
       approved = await opts.onExternalRef(ref); // 首次批准对话框；无回调 = fail-closed 停用
     }
-    if (opts.persistRefDecision && !state.declined.includes(ref) && !state.approved.includes(ref)) {
-      await opts.persistRefDecision(ref, approved);
+    if (undecided) {
+      if (opts.persistRefDecision) await opts.persistRefDecision(ref, approved);
+      const next = withExternalRefDecision(state, ref, approved);
+      state.approved = next.approved;
+      state.declined = next.declined;
     }
     if (!approved) {
       out = out.split("@" + ref).join("[外部引用已停用: @" + ref + "]");
@@ -252,7 +260,10 @@ function renderBlock(source: "project" | "global", sections: Section[], charsLim
 export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promise<MemoryInjection> {
   const tokenBudget = opts.tokenBudget ?? MEMORY_TOKEN_BUDGET_DEFAULT;
   const charsLimit = tokenBudget * CHARS_PER_TOKEN;
-  const state = opts.refState ?? (await loadExternalRefState());
+  const loaded = opts.refState ?? (await loadExternalRefState());
+  // 本轮构建的可变视图：决议后由 sanitizeRefs 写回这里（不改调用方传进来的对象），
+  // 让同一引用在后续段复用第一次的决议，而不是每段都拿构建开始时的快照重问。
+  const state: ExternalRefState = { approved: [...loaded.approved], declined: [...loaded.declined] };
   const persist = opts.persistRefDecision ?? saveExternalRefDecision;
   const sanitize = (t: string): Promise<string> => sanitizeRefs(t, opts.workspace, state, { onExternalRef: opts.onExternalRef, persistRefDecision: persist });
 

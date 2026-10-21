@@ -19214,3 +19214,55 @@ typecheck 0 报错｜八份判卷 **101 条全绿**（含两条反过拟合用�
 - 文档类门（docs-check / prose-needle-scan / text-reader-check / agents-command-face）全绿。
 - **未证**：`mutate-verify` 整表未因本轮重跑（本轮只动文档与一份新文件，不碰任何变异锚点）；
   `head-cert` 整树认证在入库后跑（见下一笔的读数）。
+
+## 2026-10-21 · 第 623 页：外部引用审批决议改为**互斥**——先批后拒不再并存（5 条判卷 ＋ 3 台造红机）
+
+先补上一页欠的读数：`head-cert @8c3252d6` **绿**——445 文件 / 6182 用例 exit=0、墙钟 137.78s、
+常驻残留树 0、判决输入六维全过；证据 `outputs/head-cert-8c3252d-2026-10-21-0214/provenance.md`。
+这笔认证量的是 **8c3252d6 提交**，不含本页的未提交修复。
+
+### 一、修的是什么（STATE 旧账里的「记忆：先批后拒」）
+
+- **形状**：`saveExternalRefDecision(ref, approved)` 只往对应集合追加，不撤销另一边 ⇒
+  先批后拒时 `approved` 与 `declined` 同时留下该引用；注入器 `sanitizeRefs` 又先看 `approved`
+  ⇒ 用户后说的「不」被静默忽略。
+- **第二个出口，同一根因**：`buildMemoryInjection` 每趟只读一次状态快照，同一引用在 ARCH 与索引
+  两段各出现一次时，两段都拿旧快照判断 ⇒ 问两次、落两次决议；两次答案相反时同样留下两条。
+- **修法**：store 新增纯函数 `withExternalRefDecision(state, ref, approved)`——先删两边再入一边；
+  `saveExternalRefDecision` 用它落盘；`loadExternalRefState` 读侧也做同一归一（拒绝优先、去重），
+  把旧版本已经写进盘的并存记录清掉。注入器把本趟状态复制成可变视图，第一次决议后立刻写回，
+  后续段复用；**不改调用方传进来的 `refState` 对象**。一次决议只有一个事实：后说的算数。
+- **范围**：只动 `src/agent/memory/store.ts`、`src/agent/memory/inject.ts` 与两条判卷；
+  没有新增持久字段、没有改外部引用识别的语义。
+
+### 二、判卷（先红后绿，5 条新增）
+
+- `tests/memory-store-pure.test.ts`：
+  ① 先批后拒 ⇒ `approved=[]`、`declined=[ref]`；
+  ② 先拒后批 ⇒ `approved=[ref]`、`declined=[]`；
+  ③ 互斥只作用于目标引用 ⇒ 其他引用的决议原样保留；
+  ④ 盘上遗留的同一引用并存 ⇒ 读侧按拒绝优先归一、去重（存量文件也要恢复互斥）。
+- `tests/memory.test.ts`：同一趟构建内同一引用出现在 ARCH 与索引两段 ⇒ 只问 1 次、
+  只落 1 次决议、两处都替换成停用标记。
+- 红证据（修前）：5 条全红（`expected [ '/etc/hosts' ] to deeply equal []`；
+  注入面 `expected 2 to be 1`；存量归一 `expected [ '/a', '/b', '/a' ] to deeply equal [ '/b' ]`）。
+  绿后：`memory-store-pure` + `memory` 2 文件全绿。
+- **造红机（手工三处，逐字节复原）**：
+  ① 把 store 退回「只追加不撤销」的旧形状 ⇒ 前三条判卷全红；
+  ② 摘掉注入器的本趟状态写回 ⇒ 注入面那条红；
+  ③ 摘掉读侧的拒绝优先过滤 ⇒ 存量归一那条红。
+  复原后 store 文件哈希与改前一致。三处都**没有**往 `scripts/lib/mutations/**` 加锚点——本笔未提交，
+  `mutate-verify` 量 HEAD，加了也测不到（如实登记，不把手工造红说成整表变异）。
+
+### 三、读数与边界
+
+- core **445 文件 / 6187 用例全绿**（上一页 6182 ⇒ +5 条新判卷）；桌面 **156 文件 / 1150 用例全绿**
+  （本轮没动 `apps/desktop/**`，跑全套只为确认核心改动无回归）；双端 typecheck 0；`desktop-boundary-check` 绿。
+- 没有重建 dist / 重开应用：核心侧改动，桌面壳无需换产物。
+- `docs-check` / `prose-needle-scan` / `text-reader-check` 三张文档门全绿；`mutate-verify` 整表未跑
+  （本笔未提交且没有新增变异锚点）；`head-cert` 未覆盖本笔（见页首边界）。
+- **入库形状**：未提交、未推送；工作树 = 4 个改动文件（store / inject / 两条判卷）＋ `STATE.md`、
+  `PROGRESS.md` 本页。本页落盘期间，另一笔 `b027a650` 只把 head-cert 的 provenance 入库并推送到
+  origin；本笔没有代提交，也没有把别人的改动卷进来。
+- 仍开着的债：桌面两条授权面（第 618 页）、canary 生产接线（第 619 页）、页号存量重复（第 621 页）；
+  本页不动它们。

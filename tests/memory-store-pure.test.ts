@@ -76,6 +76,53 @@ describe("外部引用审批状态", () => {
     });
   });
 
+  // 审计未修项（STATE.md「还有什么没裁」）：先批后拒时，旧实现只往 declined 追加，
+  // 不撤销 approved ⇒ 持久态同时留下两条，而注入器先看 approved ⇒ 用户后说的「不」被忽略。
+  it("后一次拒绝撤销先前的批准：后说的『不』算数，持久态不并存", async () => {
+    await withHome(async () => {
+      await saveExternalRefDecision("/etc/hosts", true);
+      await saveExternalRefDecision("/etc/hosts", false);
+      const s = await loadExternalRefState();
+      expect(s.approved).toEqual([]);
+      expect(s.declined).toEqual(["/etc/hosts"]);
+    });
+  });
+
+  // 另一半：批准也要撤销先前的拒绝，否则「重新批准」同样会被 declined 挡住。
+  it("后一次批准撤销先前的拒绝：重新批准后恢复，持久态不并存", async () => {
+    await withHome(async () => {
+      await saveExternalRefDecision("~/secret", false);
+      await saveExternalRefDecision("~/secret", true);
+      const s = await loadExternalRefState();
+      expect(s.approved).toEqual(["~/secret"]);
+      expect(s.declined).toEqual([]);
+    });
+  });
+
+  it("决议互斥只作用于目标引用：其他引用各自保留", async () => {
+    await withHome(async () => {
+      await saveExternalRefDecision("/a", true);
+      await saveExternalRefDecision("/b", false);
+      await saveExternalRefDecision("/a", false);
+      const s = await loadExternalRefState();
+      expect(s.approved).toEqual([]);
+      expect(s.declined).toEqual(["/b", "/a"]);
+    });
+  });
+
+  // 旧实现可能已经把 approved+declined 写进盘了：读侧也要恢复互斥，否则修完仍会
+  // 「存量文件里先批后拒被忽略」。方向取 fail-closed：拒绝优先（正常流程只有先批后拒）。
+  it("盘上遗留的同一引用并存 ⇒ 读侧按拒绝优先归一，并去掉重复项", async () => {
+    await withHome(async (home) => {
+      const p = join(home, ".config", "cairn", "memory", "external-refs.json");
+      await mkdir(join(home, ".config", "cairn", "memory"), { recursive: true });
+      await writeFile(p, JSON.stringify({ approved: ["/a", "/b", "/a"], declined: ["/a", "/c", "/c"] }), "utf8");
+      const s = await loadExternalRefState();
+      expect(s.approved).toEqual(["/b"]);
+      expect(s.declined).toEqual(["/a", "/c"]);
+    });
+  });
+
   it("首次使用（文件不存在）⇒ 空态：这是正常首启，不是损坏", async () => {
     await withHome(async () => {
       expect(await loadExternalRefState()).toEqual({ approved: [], declined: [] });

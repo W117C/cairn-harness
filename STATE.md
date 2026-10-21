@@ -1,6 +1,6 @@
 # Cairn / DSH —— 现态
 
-rev: ec5b9fad362bac2a4014077ea934a23e9769b599
+rev: 8c3252d6640c795c8b6357632ec0e075d7d7c14a
 
 > 本文件是**现态层**：**整体重写，永不追加**。要留当时的判断，写进 `PROGRESS.md` 的对应页；
 > 要留"为什么现在是这样"，写进 `docs/adr/`。
@@ -33,8 +33,9 @@ rev: ec5b9fad362bac2a4014077ea934a23e9769b599
 
 ## 在飞什么
 
-- 本仓当前没有在飞的活。下一轮从 `PROGRESS.md` 尾部接着写一页；页号是引用单位（D-13 守唯一性，
-  存量重复已立案，新撞的会红）。
+- 外部引用审批决议已改为**互斥**（先批后拒不再并存，用户后说的"不"算数）——
+  证据、判卷与边界见 `PROGRESS.md` 第 623 页。
+- 其他面没有在飞的活。
 - 桌面面第二轮独立评审已落账；core 面那轮的三条真缺陷与四条"变异存活"的成因见 `PROGRESS.md` 尾部各页。
 
 ## 还有什么没裁
@@ -43,10 +44,8 @@ rev: ec5b9fad362bac2a4014077ea934a23e9769b599
 |---|---|
 | 桌面：`projectCreate` / `projectCreateFromTemplate` 接受渲染层给的 `parentDir`，无"已知根"闸 | `PROGRESS.md` 第 618 页 |
 | 桌面：`listSkills` / `skillBody` / `pluginDecide` 接受渲染层给的 `workspace`（只读、既有形态） | `PROGRESS.md` 第 618 页 |
-| 记忆：`saveExternalRefDecision` 先批后拒的次序（后说的"不"被忽略，持久态留下两条） | `PROGRESS.md` 第 619 页 |
 | 进化面：canary 控制器尚未在生产接线 | `PROGRESS.md` 第 619 页 |
 | 台账层：页号存量重复（D-13 已立案，棘轮只许下降） | `PROGRESS.md` 第 621 页 |
-| 文档分层的这次裁决（提案 → 今天仓的落法） | `PROGRESS.md` 第 622 页 |
 
 ## 怎么验
 
