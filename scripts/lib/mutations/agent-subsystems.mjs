@@ -1337,7 +1337,10 @@ export const MUTATIONS = [
       "  const approvedList = state.approved.filter((r) => r !== ref);\n  const declinedList = state.declined.filter((r) => r !== ref);\n  if (approved) approvedList.push(ref);\n  else declinedList.push(ref);\n  return { approved: approvedList, declined: declinedList };",
       "  const approvedList = approved ? [...new Set([...state.approved, ref])] : state.approved;\n  const declinedList = approved ? state.declined : [...new Set([...state.declined, ref])];\n  return { approved: approvedList, declined: declinedList };",
     ),
-    expectFail: "后一次拒绝撤销先前的批准：后说的『不』算数，持久态不并存",
+    // 指针改指 2026-10-21 补的那一条：原来这条判卷读的是**读侧归一后**的结果 ⇒
+    // 读侧把写侧的洞补上了（两个出口互相抵消）⇒ 写侧这一半没有观测者，变异存活。
+    // 新那条直接看**盘上那份原始 JSON** ⇒ 写侧退回旧形状就红。
+    expectFail: "持久态本身不并存：先批后拒之后，盘上那份 JSON 里该引用不在 approved 里",
   },
   {
     id: "external-ref-read-side-not-decline-first",

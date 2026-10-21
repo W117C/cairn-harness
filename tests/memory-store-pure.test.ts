@@ -78,6 +78,25 @@ describe("外部引用审批状态", () => {
 
   // 审计未修项（STATE.md「还有什么没裁」）：先批后拒时，旧实现只往 declined 追加，
   // 不撤销 approved ⇒ 持久态同时留下两条，而注入器先看 approved ⇒ 用户后说的「不」被忽略。
+  // 2026-10-21 补：这一格盯的是**盘上那份原始 JSON**，不是读侧归一后的结果。
+  // 为什么必须盯原始面：读侧现在会做「拒绝优先 + 去重」的归一（存量自愈）⇒
+  // 写侧退回「只追加不撤销」时，**读出来照样是对的** ⇒ 写侧那一半没有观测者
+  // （实测：变异 `external-ref-decision-not-exclusive` 存活——读侧把写侧的洞补上了，
+  //  两个出口互相抵消，这条不变量就没有任何人在看）。
+  // ⇒ 持久态这个不变量必须落在**盘上那一份**上看。
+  it("持久态本身不并存：先批后拒之后，盘上那份 JSON 里该引用不在 approved 里", async () => {
+    await withHome(async (home) => {
+      await saveExternalRefDecision("/etc/hosts", true);
+      await saveExternalRefDecision("/etc/hosts", false);
+      const raw = JSON.parse(await readFile(join(home, ".config", "cairn", "memory", "external-refs.json"), "utf8")) as {
+        approved: string[];
+        declined: string[];
+      };
+      expect(raw.approved, "盘上那份不许同时留着被撤销的批准").not.toContain("/etc/hosts");
+      expect(raw.declined).toContain("/etc/hosts");
+    });
+  });
+
   it("后一次拒绝撤销先前的批准：后说的『不』算数，持久态不并存", async () => {
     await withHome(async () => {
       await saveExternalRefDecision("/etc/hosts", true);
