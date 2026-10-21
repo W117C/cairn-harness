@@ -1,5 +1,21 @@
 # Cairn / DSH repository
 
+## Documentation layers
+
+- `AGENTS.md` (this file) — rules only: what you would get wrong this turn without them. Add new
+  rules here; do not append paragraphs that argue with the old ones.
+- `STATE.md` — the current state: where the work stands, what is in flight, what is undecided.
+  **Rewritten wholesale, never appended to.** Measured numbers do not belong here — point at
+  `pnpm facts` instead.
+- `PROGRESS.md` — the ledger: one page per batch, appended only, never rewritten. Page numbers are
+  the citation unit.
+- `archive/` — where conclusions that are no longer current go.
+- `docs/README.md` / `docs/CODE-WIKI.md` — entry points and the symbol-name index (also current-layer
+  pages, under the same two rules as `STATE.md`).
+
+`docs-check` enforces these mechanically: D-1 (byte budget), D-2 (no hand-copied measurements in the
+current layer), D-4 (no append-to-refute in the current layer), D-5 (`STATE.md` must name a real commit).
+
 ## Architecture
 
 - The agent/core lives in `src/` and stays free of Electron and UI imports, including
