@@ -451,6 +451,9 @@ export class PluginRuntime {
           command: expand(cfg.command),
           args: (cfg.args ?? []).map(expand),
           extensions,
+          // extensionToLanguage 的**值**此前在这里被丢掉（只用 Object.keys 取扩展名）⇒
+          // didOpen 的 languageId 落回 TS 启发式，非 JS 语言的插件 server 静默失效。
+          ...(cfg.extensionToLanguage !== undefined ? { extensionToLanguage: cfg.extensionToLanguage } : {}),
           ...(cfg.initializationOptions !== undefined ? { initializationOptions: cfg.initializationOptions } : {}),
           ...(cfg.diagnostics?.enabled === false ? { diagnosticsEnabled: false } : {}),
         };

@@ -138,6 +138,18 @@ worker 卡在审批上时，父 turn 已经结束，审批应答与取消必须�
 先读它，别把钉子当冗余拔了。视觉自查走 `scripts/ui-gallery.cjs`（离屏 capturePage + 假
 AgentApi，不跑真模型、不触发系统录屏权限）。
 
+## ⑤ LSP 的 `languageId` 契约（2026-10-23，第 675 页）
+
+`src/tools/lsp.ts` 的 `didOpen` 必须送**服务器声明的那一个** `languageId`：
+`LspServerConfig.extensionToLanguage`（`.py → python`）优先，缺格回落 `defaultLanguageId()`
+（六个 JS/TS 后缀 ⇒ `typescript`，其余 ⇒ `plaintext`）。两个入口——宿主 `.agent/lsp.json`
+（`loadLspConfig` 解析）与插件 `.lsp.json`（`plugins/index.ts` 的 `activateLsp`）——**都必须把这一格的值带到运行时**；
+只传键（当扩展名清单用）而丢值，非 JS 语言的 server 会整条静默失效：六操作无一处出声。
+
+查表按**原样键**，不做大小写归一——静默归一会把"配错了扩展名"藏起来。
+判卷：`tests/lsp-language-id.test.ts`（探针 server 把 didOpen 的 languageId 原样交回，判的是真发出去的值）＋
+`tests/plugin-lsp-activation.test.ts` 的同名断言。**两个入口各有一条**：只钉一个入口的判据是半个判据。
+
 ## Verification
 
 Use the root `typecheck` and Vitest commands. The gate manifest contains only core checks in this checkout.
