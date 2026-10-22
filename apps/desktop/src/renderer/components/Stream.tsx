@@ -377,6 +377,9 @@ const UserRowView = memo(function UserRowView({ actions, canFold, flash, eventRe
   return (
   <div className={"row user" + (flash ? " flash" : "")} data-event-id={String(r.seq + 1)} {...(eventRef !== undefined ? { "data-event-ref": eventRefKey(eventRef), "data-source-session": eventRef.sessionId } : {})} style={{ scrollMarginTop: 14 }}>
     <span className="t" data-round-anchor={String(r.round)}>{r.text}</span>
+    {/* 第 9 点·轮中插话：这一句是同一轮里补的话，不是新任务。标出来，否则用户会以为
+        自己又开了一个任务（而它恰恰**没有**开新轮——见 derived/stream.ts 的轮界分流）。 */}
+    {r.steering === true && <span className="ur-steer" title="这一轮进行中补的话（没开新任务）">插话</span>}
     <SourceTag at={eventRef} inherited={sourceRow} />
     {/* 用户消息的附件（2026-10-18）：此前发出去就再也看不见——本轮起 user_message 事件带引用，
         历史/重放都能显示“这条消息带了哪些文件”。 */}

@@ -24,7 +24,15 @@ export const MUTATIONS = [
     apply: (s) => s.replace('        const steering = e.origin?.kind === "steering";', '        const steering = false;'),
     expectFail: "★ 插话不推轮号：同一轮里的一条插话，round 仍是 1",
   },
-  {
+    {
+    id: "desktop-steering-badge-not-rendered",
+    src: "apps/desktop/src/renderer/components/Stream.tsx",
+    test: "apps/desktop/tests/stream-steering-round.test.tsx",
+    desc: "投影标了 steering:true 而组件不渲染徽标 ⇒ 用户看到的那句话与普通新任务一模一样（分不清「我补了一句」与「我又开了个任务」）",
+    apply: (s) => s.replace('    {r.steering === true && <span className="ur-steer" title="这一轮进行中补的话（没开新任务）">插话</span>}', '    {/* mutated */}'),
+    expectFail: "SSR：插话行带出「插话」徽标，普通用户行没有",
+  },
+{
     id: "desktop-steering-row-dropped",
     src: "apps/desktop/src/renderer/derived/stream.ts",
     test: "apps/desktop/tests/stream-steering-round.test.ts",

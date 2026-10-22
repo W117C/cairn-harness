@@ -536,6 +536,9 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
   color: hsl(var(--text-000));
   white-space: pre-wrap; overflow-wrap: anywhere;
 }
+/* 第 9 点·轮中插话的标记：同一条 user 行上的小徽标。用 hairline 与 caption 档（不动色板），
+   理由与 .ur-attach 同族——它只是"这句话的来路"，不是新的视觉层级。 */
+.ur-steer { display: inline-block; margin-left: 6px; padding: 0 5px; border: 1px solid var(--hairline); border-radius: var(--radius-xs); color: hsl(var(--text-300)); font-size: var(--fs-caption-xs); vertical-align: baseline; }
 .ur-attach { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .ur-attach-chip { display: inline-flex; font: inherit; background: transparent; cursor: pointer; align-items: center; gap: 4px; max-width: 220px; padding: 1px 6px; border: 1px solid var(--hairline); border-radius: var(--radius-xs); color: hsl(var(--text-300)); font-size: var(--fs-caption-xs); }
 .ur-attach-chip:hover { color: hsl(var(--text-000)); border-color: hsl(var(--text-400)); }

@@ -54,3 +54,19 @@ describe("转录里的插话：显示，但不开新轮", () => {
     expect(Math.max(...rows.map((r) => r.round ?? 0))).toBe(2);
   });
 });
+
+describe("插话标记真的上屏（标了不渲染 = 标了没用）", () => {
+  it("SSR：插话行带出「插话」徽标，普通用户行没有", async () => {
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { Stream } = await import("../src/renderer/components/Stream");
+    const rows = projectStream(ev([
+      { type: "user_message", content: "任务：改 a.ts" },
+      steer("插话：先别改"),
+    ]), false);
+    const html = renderToStaticMarkup(<Stream rows={rows} />);
+    expect(html, "标了 steering 却没渲染徽标 = 用户分不清插话与新任务").toContain("ur-steer");
+    // 只有插话那条带徽标：无插话的转录里不许出现
+    const plainRows = projectStream(ev([{ type: "user_message", content: "只有任务" }]), false);
+    expect(renderToStaticMarkup(<Stream rows={plainRows} />)).not.toContain("ur-steer");
+  });
+});
