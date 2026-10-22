@@ -22174,3 +22174,29 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
 - `evidence-typecheck-check`：危险码 12 / 帽 12（存量，与本笔无关）。
 - `pnpm docs-check`：**D-5=21**（同一组）；页号唯一面新增 0 撞号，下一个未占用页号 677。
   本笔先撞了两条 D-10（引用的适配器位置只写裸文件名）⇒ 改成 `path#symbol` 后归零。
+
+### 八、HEAD 认证读数（`419fb33a`）——以及一次**我自己的假绿被抓**
+
+第一趟 `head-cert-check`（`TREE=1121c86`）**红在 typecheck**：
+`tests/provider-instream-retry.test.ts(37,24)` / `(154,48)` 两处 TS 错。
+这是本轮最值得记的一条，因为它推翻了我自己前一步写下的读数：
+
+- 我此前跑 `node --import tsx scripts/typecheck.ts` 得到的原话是「tracked 面没有报错 ⇒ 0 报错」，
+  而那份脚本对**未跟踪草稿只点名、不判**（它的 stdout 明明写着「未跟踪草稿（不属 HEAD 回归，属在飞改动）」）。
+  ⇒ **「0 报错」是脚本的覆盖面，不是我的新文件干净。** 同一句读数被读成两件事，正是本仓反复记的那个形状。
+- 两处错本身都很浅（`mergeAssistantDeltas` 收的是 `AssistantDeltaEvent[]` 而不是 `AgentEvent[]`；
+  `names: [{}]` 不在联合类型里）。**浅错更要紧**：它们说明我写完判卷后没在有类型判定的地方跑过它。
+
+修好后复认（`419fb33a`，同一进程 hrtime，两端独占：起前 0 套／跑完 0 套判卷）：
+
+- 门面 **25 道跑到 25**，红 **1** 道（`docs-check`，就是那 21 条 D-5 存量）。
+- 判卷 **480 文件 / 6547 条，2 failed** —— 两条仍是 `docs-check` 的 D-5 21 条与
+  `mutate-needles-check` 的 `1f16bea` 归因（均为第 666 页已裁决的诚实红）。
+- typecheck 在 **HEAD 面上 0 条**（`HEAD 内 1 → 0`）。
+- 墙钟 105.15s；贴帽读数：6547 条里 **0 条**用时 ≥ 有效预算 80%。
+- 认证树自回收 `exit=0`；常驻残留树 1（别人那棵 `gate-mutate-verify@5481ea8`，规则 120 判定为残留）。
+- 原始读数：`outputs/head-cert-419fb33-2026-10-22-1954/provenance.md`（**引墙钟/门耗时前先读它**，
+  别引本页正文）。
+
+**仍未跑**：`pnpm mutate-verify`（全表变异实跑，半小时量级）。本页因此只声明「HEAD 认证过、门面红 1 道是存量」，
+不声明「全表变异通过」。
