@@ -672,7 +672,7 @@ export const MUTATIONS = [
     src: "src/agent/loop.ts",
     test: "tests/worker-hooks.test.ts",
     desc: "loop 收到了 agentId 却不写进 PreToolUse 载荷 ⇒ 同一格「两头断」的另一头：编排端接了、执行端没传",
-    apply: (s) => s.replace("            tool_use_id: output.id,\n            agent_id: opts.agentId,\n          });\n          if (pre.blocked) {", "            tool_use_id: output.id,\n            agent_id: undefined,\n          });\n          if (pre.blocked) {"),
+    apply: (s) => s.replace("                tool_use_id: output.id,\n                agent_id: opts.agentId,\n              });\n              if (pre.blocked) {", "                tool_use_id: output.id,\n                agent_id: undefined,\n              });\n              if (pre.blocked) {"),
     expectFail: "钩子拿到 agent_id = 该 worker 的 id 与模型实下的参数（§4.4 归因）",
   },
   {
@@ -1480,7 +1480,7 @@ export const MUTATIONS = [
     test: "tests/tool-block-witness.test.ts",
     desc: "权限门那一格只留散文不留结构 ⇒ 「被哪道闸拦」与「旧日志」「工具自己失败」再次同形（规则 300 的缺席三因）。" +
       "这一族的从来不是改文案，而是让落盘面自己说得出是谁拦的",
-    apply: (s) => s.replace("\n          blockedBy: \"permission\",", ""),
+    apply: (s) => s.replace("\n            blockedBy: \"permission\",", ""),
     expectFail: "权限门拒绝：这一闸拦下的那次调用带 blockedBy",
   },
   {
@@ -1489,7 +1489,7 @@ export const MUTATIONS = [
     test: "tests/tool-block-witness.test.ts",
     desc: "六道里最靠前的那道（只读白名单摘除）没落 ⇒ 它与档位拒绝在事件流里同形。次序上排在 verify 系统门之前，" +
       "少了这一格，「表里没有却被执行」那条权限旁路在读盘面上看不出来",
-    apply: (s) => s.replace("\n          blockedBy: \"tool-table\",", ""),
+    apply: (s) => s.replace("\n            blockedBy: \"tool-table\",", ""),
     expectFail: "工具表白名单摘除：这一闸拦下的那次调用带 blockedBy",
   },
   {
