@@ -31,9 +31,31 @@ export interface GoalTurnOrigin {
   turn: number;
   max_turns: number;
 }
-/** `user_message.origin` 的两种来源：sidechat 提升 / goal 自动续跑。消费端一律按 kind 分支，
- *  不许再无条件读 `.session_id`——那会把另一种来源在类型上假装成不存在。 */
-export type UserMessageOrigin = PromoteOrigin | GoalTurnOrigin;
+/** 第 9 点「用户干预注入」的第三条来源：**轮中插话（steering）**。
+ *
+ *  语义与另外两种来源**根本不同**，这也是它必须自带一个 kind 的原因：
+ *  另外两种都**开启新一轮 run**（sidechat 提升＝人此刻发起的新任务；goal＝harness 续跑的新一轮），
+ *  而 steering 发生在**同一轮 run 内部**——用户在人正在跑的时候补一句话，harness 把它插进
+ *  模型的下一轮请求里，**轮次边界不变**。
+ *
+ *  ⇒ `eventsForCurrentRun()` 必须把 `kind: "steering"` 的那条**跳过**不当成 run 起点。
+ *  这不是风格问题：那个函数是交付断言（能力 12）、幽灵交付、空转判定、进化信号、收尾复核
+ *  与 round 读数**共同的**轮界取料口；把插话当成新 run 起点，会让它之前那一段的承诺与证据
+ *  整整一段静默失效（2026-10-23 实测：plan 承诺 create a.ts 却未落盘时，插一条插话
+ *  ⇒ `findPhantomDelivery` 由 `{missing:["a.ts"]}` 变成 `null`，假绿）。
+ *
+ *  重放无损：仍走既有 `user_message` + origin 通道，零新增事件类型（M2f 先例）。
+ *  `step` 是**插话发生时的轮次序号**（0-based，与 loop 的 `currentStep` 同源），只作展示与审计——
+ *  判定不信它（判定读 kind 与事件流位置）。 */
+export interface SteeringOrigin {
+  kind: "steering";
+  /** 插话发生在第几轮循环之后（0-based）：展示用，判定不读。 */
+  step: number;
+}
+/** `user_message.origin` 的三种来源：sidechat 提升 / goal 自动续跑 / 轮中插话。
+ *  消费端一律按 kind 分支，不许再无条件读 `.session_id`——那会把另一种来源在类型上假装成不存在。
+ *  **轮界消费者（`eventsForCurrentRun`）必须显式处理 `steering`**：它不开新轮。 */
+export type UserMessageOrigin = PromoteOrigin | GoalTurnOrigin | SteeringOrigin;
 /** 用户消息附带的文件/目录引用（2026-10-18）：只记引用，不含内容；缺省 = 无附件，既有事件字节不变。
  *  kind 与主进程 RunAttachmentKind 同字面量；事件层不反向依赖 main，故就地声明。 */
 export interface UserMessageAttachment { path: string; kind: "file" | "directory" }

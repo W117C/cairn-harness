@@ -328,6 +328,15 @@ export interface AgentApi {
    *  M3-5：补可选 sessionId 走会话级取消（kernel-host cancel(sessionId)，T2 per-session controller）；
    *  缺省无参 = 兼容旧调用（host 侧 fail-visible：{ok:false,"会话不在运行"}）。 */
   runCancel(sessionId?: string): Promise<{ ok: boolean; error?: string }>;
+  /** 第 9 点·轮中插话（steering）：把用户这一句话递进**正在跑**的那一轮。
+   *
+   *  与 `runCancel` 同一族但语义相反：cancel 收束这一轮，steer 让这一轮**继续**但多知道一件事。
+   *  它落成一条带 `origin:{kind:"steering"}` 的 `user_message`，**不开新轮**（轮界取料口
+   *  `eventsForCurrentRun` 会跳过它，否则本轮之前的交付承诺会静默失效）。
+   *
+   *  会话不在跑 ⇒ `{ok:false, error}` fail-visible：渲染层据此把这句话转成「入队」
+   *  （下一轮首发），而不是假装已经送进去了。`queued` = 盒子里当前待取条数（观测用）。 */
+  runSteer(sessionId: string, text: string): Promise<{ ok: boolean; error?: string; queued?: number }>;
   /** M1d 手动压缩入口（M1e 起 preload 暴露：token 面板按钮）。 */
   compact?(sessionId?: string, workspace?: string): Promise<CompactResponse>;
   onEvent(cb: (e: AgentEvent) => void): () => void;

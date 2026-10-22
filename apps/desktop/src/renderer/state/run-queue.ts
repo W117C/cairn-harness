@@ -137,6 +137,18 @@ export function useRunQueue(deps: RunQueueDeps) {
         void window.agent.decide(pendingAsk.askId, false).catch(() => undefined);
         setLastNotice("已跳过本轮全局记忆写入（你在继续对话；下次收尾再试）", sid);
       }
+      // ---- 第 9 点·轮中插话：先试着**送进正在跑的那一轮** ----
+      // 顺序很重要：先入队再快速失败没有意义（用户会看到「等待发送」却其实已经送达）。
+      // 判据以主进程的应答为准（`ok:true` = 这一轮真收到了），而不是渲染层自己的 runningSet：
+      // runningSet 可能比主进程早一瞬收束（或晚一拍），那一瞬的差正好决定这句话是插话还是下一条任务。
+      // 主进程说「不在运行」⇒ 落回下面那条入队，**一个字都不丢**。
+      //
+      // 纯文本才走插话：附件（图片/文件引用）那条路要过引用校验与附件装载，属下一次 run 的入口，
+      // 半路塞进当前轮会把校验绕开。带附件的消息照旧入队。
+      if (attachments.length === 0) {
+        const steered = await window.agent.runSteer(sid, text).catch(() => ({ ok: false as const }));
+        if (steered.ok === true) return;
+      }
       setQueueFor(sid, [...(sendQueue.current.get(keyOf(sid)) ?? []), { id: ++queueSeq.current, text, attachments }]);
       return;
     }

@@ -12,6 +12,7 @@ import { runLoop } from "../agent/loop";
 // 断面补落（finally 那一格）要用同一枚哨兵 id 与同一份判据——不重抄字符串、不重写谓词。
 import { DELIVERY_GUARD_CALL_ID, describePhantomDelivery, eventsForCurrentRun, findPhantomDelivery } from "../agent/delivery-guard";
 import { createImageChannel } from "../agent/image-channel";
+import type { SteeringChannel } from "../agent/steering-channel";
 import { runCompaction } from "../agent/compaction";
 import { buildMap } from "../agent/map/build";
 import { computePrune, writePruneAttachments } from "../agent/prune";
@@ -731,6 +732,8 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
    *  `tests/verify-trust-fingerprint.test.ts`）。IPC 白名单里没有这个键、也不该有：
    *  它不是一个「用户可以从界面打开的开关」，而是一次一问的决议。 */
   trustedRepo?: boolean;
+  /** 第 9 点·轮中插话的收件盒（同上：由持有 IPC 会话表的调用方递进来；缺省 = 零行为）。 */
+  steering?: SteeringChannel;
   workspace: string;
   message: string;
   mode: PermissionMode;
@@ -1310,6 +1313,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       events: { append: pipeline },
       // 识图的 loop 侧：只负责把 read_image 读到的图存进盒子（取走发生在 provider 组装请求时）。
       pendingImages: imageChannel,
+      // 第 9 点·轮中插话的 loop 侧：只在轮界取料（缺省 undefined = 零行为，见 RunOverrides.steering）。
+      ...(opts.steering !== undefined ? { steering: opts.steering } : {}),
     // 下一行是 tests/tool-surface-parity.test.ts 的取料面：那个门按行文本认注入键，
     // 所以覆盖表的键必须都留在同一行，别为了排版拆成 helper（拆了它就一个都认不出）。
     ...(webFetchOverride !== undefined || recall || impactTool || diagnoseTool || searchTool
@@ -1586,6 +1591,11 @@ export interface RunOverrides
   actionFusion?: boolean;
   /** 能力 5 收束闸 runtime override（同 actionFusion 口径：settings 与 IPC 开闸另议）。 */
   autoVerify?: boolean;
+  /** 第 9 点·用户干预注入：本 run 的插话收件盒（由持有 IPC 会话登记表的调用方递进来）。
+   *  **缺省 undefined = 零行为**：没有盒子的 run（CLI / worker / 靶场 / 定时）既不会取料、
+   *  也不会因此多落一条事件——字节与请求次数都不变。
+   *  盒子是 per-run 的：上一场的插话绝不漏进下一场（那是把 A 任务的补充当 B 任务的指令）。 */
+  steering?: SteeringChannel;
   /** CLI `--delivery-repair`：交付断言落红后再向模型要一轮补做。 */
   deliveryRepair?: boolean;
   /** M5b 路由 bandit runtime override（同 actionFusion 口径：settings 与 IPC 开闸另议）。
@@ -1722,6 +1732,10 @@ export async function handleAgentRun(
           ? { routing: { routingBandit: over.routingBandit, routingCascade: over.routingCascade } }
           : {}),
         trustedRepo: over.trustedRepo ?? false, // S3：IPC 路径不置位 = 不走调用方断言，交给 runAgent 里的「查表 + 首问」（不是缺省即永远拒绝）
+        // 第 9 点·轮中插话：盒子由 IPC 侧按会话登记（`kernel-host` 的 per-session steering）。
+        // 缺省 undefined = 零行为；**不随 goal 续跑重建**——续跑是同一个任务的下一轮，
+        // 用户在这期间说的插话理应送达，所以整段 handleAgentRun 共用一个盒子。
+        ...(over.steering !== undefined ? { steering: over.steering } : {}),
         // 这一段会话有没有武装长任务目标：CLI 在 `--goal` 时显式传（它在 run 之前就把
         // `goal_set` 写进日志了），goal 续跑轮由 `goalTurn` 在场推定。只喂 refine_goal 的挂/摘。
         goalArmed: over.goalArmed ?? goalTurn !== undefined,

@@ -23,6 +23,8 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   decidePlan: "agent:plan-decide",
   setGoal: "agent:goal-set",
   runCancel: "agent:run-cancel",
+  // 第 9 点：轮中插话（与 run-cancel 相邻，语义相反：一个收束、一个继续）。
+  runSteer: "agent:run-steer",
   compact: "agent:compact",
   getState: "agent:state",
   getProviderInfo: "agent:provider-info",

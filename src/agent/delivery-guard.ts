@@ -128,7 +128,15 @@ export interface PhantomDelivery {
 }
 
 /** 缺省只保留当前用户轮次的主会话事件；统计并行开销时可保留本轮 worker 子流。
- * worker 的 user_message 不能开启父会话的新轮次。 */
+ * worker 的 user_message 不能开启父会话的新轮次。
+ *
+ * **轮中插话（`kind: "steering"`）也不算新轮次**（2026-10-23，第 9 点）：用户在 run 跑到一半时
+ * 补的一句话，是插进**同一轮**的下一拍请求里的，不是重新发起任务。把它当成 run 起点会让
+ * 它之前那一段的承诺与证据整段静默失效——那条判据本是交付断言/幽灵交付/空转/进化信号/
+ * 收尾复核共同的轮界取料口，错一格就是**假绿**（实测形状见 `SteeringOrigin` 的注释）。
+ *
+ * 判据按 `kind` 分支，不用「content 里有没有某句话」这类文本启发式：后者在用户真的打出
+ * 那句话时会把正常的新轮次判成插话。 */
 export function eventsForCurrentRun(
   events: readonly AgentEvent[],
   options: { includeWorkers?: boolean } = {},
@@ -136,10 +144,15 @@ export function eventsForCurrentRun(
   let start = 0;
   for (let i = 0; i < events.length; i++) {
     const event = events[i]!;
-    if (event.type === "user_message" && !isWorkerEvent(event)) start = i;
+    if (event.type === "user_message" && !isWorkerEvent(event) && !isSteeringMessage(event)) start = i;
   }
   const current = events.slice(start);
   return options.includeWorkers === true ? current : current.filter((event) => !isWorkerEvent(event));
+}
+
+/** 轮中插话的判定（单一出口）：消费端要问「这条开不开新轮」时只走这里，别各写一份 kind 比较。 */
+export function isSteeringMessage(event: AgentEvent): boolean {
+  return event.type === "user_message" && event.origin?.kind === "steering";
 }
 
 function existsInWorkspace(workspace: string, path: string): boolean {

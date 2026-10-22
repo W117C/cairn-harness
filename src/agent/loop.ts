@@ -127,6 +127,25 @@ export interface LoopOptions {
    *  - sidechat：只读问答，重复便宜。
    *  所以只有人直用的主会话（agent-runner）显式开。 */
   stuckNudge?: boolean;
+  /** 第 9 点·用户干预注入（steering）：**轮中**取一条用户插话。
+   *
+   *  与 `pendingImages` 同一形状（收件盒由调用方持有），但时序不同：图片只能等到**下一轮**请求
+   *  （provider 在本轮调工具前就已经发出了消息），而插话**就是要在下一拍请求里出现**——
+   *  两者都落在「轮界」这一拍，所以都从盒子取。
+   *
+   *  **安全边界（为什么是轮界而不是随时）**：这一拍之前所有在途工具都已结算、事件已落盘
+   *  （`for await` 循环已退到轮末），所以插入一条新 user 消息不会把 tool_call/tool_result 对
+   *  拆开、也不会与正在执行的工具抢写；取消信号也在同一个位置被复查。
+   *
+   *  **它不开新轮**：插话落成带 `origin:{kind:"steering",step}` 的 `user_message`，
+   *  `eventsForCurrentRun()` 明确跳过它（否则整轮之前的承诺与证据会静默失效）。
+   *  它也不额外买步：一次 `run` 的步数帽仍是那一个帽，插话不增加 `maxSteps` 的计数语义。
+   *
+   *  缺省 undefined = 零行为（既有路径字节与调用次数都不变）。 */
+  steering?: {
+    /** 有插话就取走（take 即清空：同一条不会被两拍各付一遍 token）。空/undefined = 没有。 */
+    take: () => readonly string[] | undefined;
+  };
 }
 
 // agent loop：事件流 → 模型 → 工具 → 事件流。
@@ -450,6 +469,32 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     // 被取消 / 验证通过或达上限 / 模型自然收束——这三条出去时承诺都还没对过账。
     if (opts.signal?.aborted) return; // M3a：取消信号于轮界收束（终态由编排器分类：cancelled）
     currentStep = step;
+    // ---- 第 9 点：轮中插话的注入位（**只在轮界，绝不在 for-await 里**）----
+    // 位置要求①：必须在 `currentStep = step` **之后**——`streamFn(projectContext(seen))` 是在
+    // 下面那句被调用的，它当场快照历史；写在它之前注入才进得了**这一拍**请求。
+    // 位置要求②：必须在 for-await 之外——上一拍的每个 tool_call 都已配上 tool_result 落盘、
+    // 循环已退到轮末，因此插一条 user 消息不会把 tool 配对拆开、也不会与在途工具抢写。
+    // 取料排在本轮第一次请求**之前**也是对的：那时盒子里是空的（没人能在本轮开始前插话），
+    // 而 `take()` 一次取走 ⇒ 之后各拍都不会把同一条再付一遍 token。
+    // 取消与取料的先后：**取消优先**，用户刚按了停止就不该再为一句插话落事件、更不该多花一次请求。
+    // 这条保证由**多处 abort 复查共同给**（本轮顶那个、每步末那个、工具执行前后那几个），
+    // 不是单靠某一行——所以判据钉的是**行为**（`steering-injection` 的「取消后迟到的那条插话」：
+    // 盒子里的那条必须**没被取走**、也**没换来第 2 次请求**），而不是某个行号。
+    // 别把这条注释读成「挪走紧邻那行 abort 就破功」：单挪那行，循环仍会在步末那道 abort 收束。
+    if (opts.steering !== undefined) {
+      const injections = opts.steering.take();
+      if (injections !== undefined) {
+        for (const text of injections) {
+          if (text.trim() === "") continue; // 空插话不落事件：它不是指令，只是一次误触
+          await events.append({
+            type: "user_message",
+            content: text,
+            // 轮次序号是**展示/审计**用（判定不读它，见 `SteeringOrigin` 的注释）。
+            origin: { kind: "steering", step },
+          });
+        }
+      }
+    }
     let sawToolCall = false;
     let onlyVerifyReplays = true;
     for await (const output of streamFn(projectContext(seen))) {

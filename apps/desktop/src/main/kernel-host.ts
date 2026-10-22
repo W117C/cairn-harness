@@ -13,6 +13,7 @@
 // run 启动前重读 stat，不一致 ⇒ 拒绝该次 run（不静默覆盖），快照比对只对 sessionMode 生效。
 // M3 T2（每会话取消）：run 建 per-session AbortController 经 RunOverrides.signal 注入（零 core 改动），
 // cancel(sessionId) 只 abort 该会话的 controller；run 响应带 aborted 真值（desktop 扩展字段）。
+import { createSteeringChannel, type SteeringChannel } from "../../../../src/agent/steering-channel";
 import { realpathSync } from "node:fs";
 import { readFile, rm, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
@@ -338,6 +339,12 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
   //  + 长驻工具 loop.ts:484 全语义，实测见 task-2-report 勘误裁决）；run 收束清 map。
   //  同会话并发 run 被 core 的 isSessionLogBusy 拒（第二场速死），首场的 controller 保持 canonical
   //  ——set 只在缺位时发生、清只在还是自己时发生，cancel 永远指向真正在跑的那一场。
+  // ---- 第 9 点·轮中插话（steering）：每会话一只收件盒 ----
+  // 与 runControllers 同一个生命周期：run 起来时建、收束时清。**为什么按会话而不是按 run**：
+  // 用户在两次 run 之间（上一轮刚收束、下一轮还没起来）说的那句话，语义上仍属于同一段对话；
+  // 但它**不能跨 run 泄漏**成「下一轮的首条任务」——盒子里没被取走的插话随 run 收束一起丢弃，
+  // 不会静默变成另一个任务的指令（`steering-channel` 头注释同一条纪律）。
+  const runSteering = new Map<string, SteeringChannel>();
   const runControllers = new Map<string, AbortController>();
   /** v14 用量账本的单文件缓存：跨面板开合复用，文件变了（size/mtime）才重读。 */
   const usageCache: UsageFileCache = new Map();
@@ -491,6 +498,9 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       const controller = new AbortController();
       runControllers.set(sessionId, controller);
       runStartedAt.set(sessionId, Date.now());
+      // 插话盒随 run 建：收件箱是 per-run 的（见上方 runSteering 处注释）。
+      const steering = createSteeringChannel();
+      runSteering.set(sessionId, steering);
       // 第十八遍：首条消息自动命名——空会话（0 字节）才出手；装饰性增强不挡跑（sidecar 写不上
       // 就留戳名，catch 不吞 run）。落名后 push-only 合成事件（同收束终态先例，不落 JSONL）让
       // 渲染层秒级刷新侧栏标题。**刻意排在 controller 注册之后**：demo 剧本 21ms 就收束，
@@ -510,7 +520,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       let activeAudit: Promise<void> | undefined;
       try {
         const res = await handleAgentRun(req, {
-          sessionId, logPath, workspace: runWs, signal: controller.signal,
+          sessionId, logPath, workspace: runWs, signal: controller.signal, steering,
           onEvent: (event) => {
             // 只有本 run 真正接收了主面用户轮才记 active；请求校验/busy 拒绝没有这拍。
             if (!accepted && event.type === "user_message" &&
@@ -529,6 +539,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
           if (accepted) await writeSessionAudit(sessionId, "markIdle");
           runControllers.delete(sessionId);
           runStartedAt.delete(sessionId);
+          runSteering.delete(sessionId); // 未取走的插话随 run 一起丢弃（不跨 run 变成「首条任务」）
         }
         // 收束补发合成终态（push-only，不落 JSONL、不进漂移计数）：main-session 的 run 只发业务
         // 事件、从不发 agent_status——渲染层摘「运行中」只认终态 agent_status 或自家 run promise
@@ -556,6 +567,15 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       if (controller === undefined) return { ok: false, error: "会话不在运行" };
       controller.abort();
       return { ok: true };
+    },
+    // 第 9 点·轮中插话：把用户这句话递进**正在跑**的那一轮的收件盒。
+    // 不在跑 ⇒ fail-visible（渲染层据此把消息转成「入队」而不是假装送进去了）：
+    // 「送进去了但其实没人收」比明说「这一轮已经结束」坏得多。
+    steer: async (sessionId, text) => {
+      const box = runSteering.get(sessionId);
+      if (box === undefined) return { ok: false, error: "会话不在运行（插话无人接收）" };
+      box.push(text);
+      return { ok: true, queued: box.size() };
     },
     listSessions: async () => {
       // pinned/archived/projectId 合并（第三遍真机复检勘定）：core listSessions 只在传 metadataById

@@ -2,6 +2,33 @@
 // 每条 = 一处语义突变 + 期望被它杀死的具体用例标题。追加条目时放进对应域的文件；
 // **组间顺序不影响任何判据**（每条独立），同一文件内保持原顺序以便 diff。
 export const MUTATIONS = [
+  // ---- 第 9 点·轮中插话（steering，2026-10-23）----
+  {
+    id: "steering-resets-run-boundary",
+    src: "src/agent/delivery-guard.ts",
+    test: "tests/steering-injection.test.ts",
+    desc: "把轮中插话当成新 run 起点（`eventsForCurrentRun` 不跳过 steering）⇒ 插话之前那一段的交付承诺与证据整段静默失效：ghost delivery 由『缺 a.ts』变成『没问题』，假绿",
+    apply: (s) => s.replace(
+      'if (event.type === "user_message" && !isWorkerEvent(event) && !isSteeringMessage(event)) start = i;',
+      'if (event.type === "user_message" && !isWorkerEvent(event)) start = i;'),
+    expectFail: "★ 带 origin:steering 的 user_message 之后，本轮承诺仍然算数",
+  },
+  {
+    id: "steering-take-not-clearing",
+    src: "src/agent/steering-channel.ts",
+    test: "tests/steering-injection.test.ts",
+    desc: "取料后不清空盒子（同一条插话在两拍里各付一遍 token，模型还会以为自己看漏了）",
+    apply: (s) => s.replace("      pending = [];\n      return out;", "      return out;"),
+    expectFail: "push/take 的取出即清空：同一条不会被两拍各付一遍 token",
+  },
+  {
+    id: "steering-empty-text-accepted",
+    src: "src/agent/steering-channel.ts",
+    test: "tests/steering-injection.test.ts",
+    desc: "纯空白/空串也进货（误触变成一条空洞的指令，白付 token 且污染转录）",
+    apply: (s) => s.replace('      if (trimmed === "") return; // 误触不进货', "      // 误触也进货"),
+    expectFail: "纯空白 / 空串不进货（误触不该变成一条空洞的指令）",
+  },
   {
     id: "verify-fail-closed-empty",
     src: "src/agent/verify.ts",
