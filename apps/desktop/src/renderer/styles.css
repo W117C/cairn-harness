@@ -790,20 +790,15 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
    空屏里建议行才是主角，这块只在首启摆一次，压到一行标题 + 四行编号的样子。 */
 .onboard {
   /* 与 .empty-below 同一个盒子（居中 ＋ 阅读列宽 ＋ 41px 左内距）——
-     否则它会贴着主区左缘，与上面的建议行不在一条基线上（真机目验时看出来的）。 */
+     否则它会贴着主区左缘，与上面的建议行不在一条基线上（真机目验时看出来的）。
+     顶上那条横线与 .starts 的那条同源：两块是同族的（都能点的行），不是两个世界。 */
   width: 100%; max-width: min(var(--reading), 100%);
-  margin: 0 auto; padding: 0 41px;
-  display: flex; flex-direction: column; gap: 2px;
+  margin: 0 auto; padding: var(--space-sm) 41px 0;
+  border-top: 1px solid var(--hairline);
+  display: flex; flex-direction: column; gap: var(--space-xs);
 }
-.onboard-t {
-  color: hsl(var(--text-400)); font-size: var(--fs-caption-xs);
-  letter-spacing: 0.04em; padding-bottom: 4px;
-}
-.onboard-step { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: baseline; gap: 12px; }
-.onboard-n {
-  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em;
-  color: hsl(var(--text-400)); font-variant-numeric: tabular-nums;
-}
+/* 分组交给行距说，不给步号（步号是「说给读者听的中间标签」）。 */
+.onboard-step { display: block; }
 .onboard-items { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
 .onboard-item {
   display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px;

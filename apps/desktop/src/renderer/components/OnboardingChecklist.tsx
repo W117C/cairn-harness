@@ -56,11 +56,12 @@ export function OnboardingChecklist(props: {
   if (groups.length === 0) return null;
   const steps = groupByStep(groups);
   return (
+    // 不摆标题、不摆步号：这一块**自己**就是那七格，步号是「说给读者听的中间标签」——
+    // 同一屏上方的建议行已经有一套 01/02/03，再来一套就是两列互相打架的编号。
+    // 分组交给**行距**（四行，行间留白）说；无障碍名留在 aria-label（读屏要，屏幕上不要）。
     <div className="onboard" role="group" aria-label={STR.onboarding.title}>
-      <div className="onboard-t">{STR.onboarding.title}</div>
       {steps.map((s) => (
         <div className="onboard-step" key={s.step}>
-          <span className="onboard-n" aria-hidden="true">{String(s.step).padStart(2, "0")}</span>
           <div className="onboard-items">
             {s.groups.map((g) => (
               <button

@@ -65,7 +65,16 @@ describe("首启设置检查：七组覆盖面", () => {
       expect(html, `组 ${g.id} 的标题没上屏`).toContain(g.label);
       expect(html, `组 ${g.id} 的说明没上屏（title 承载）`).toContain(g.entry);
     }
-    // 四步 ⇒ 四个步号
-    expect(html.match(/onboard-n/g)?.length).toBe(4);
+    // 四步 ⇒ 四行（分组由行距说，不给步号）
+    expect(html.match(/onboard-step/g)?.length).toBe(4);
+  });
+
+  it("不摆中间标签：没有可见标题、没有步号（分组交给行距说）", () => {
+    const html = renderToStaticMarkup(<OnboardingChecklist groups={groups} onOpen={() => undefined} />);
+    // 可见的标题行与步号列都撤了——同一屏上方的建议行已经有一套编号，再来一套就是两列打架的编号。
+    expect(html).not.toContain("onboard-t");
+    expect(html).not.toContain("onboard-n");
+    // 无障碍名仍要留（读屏要，屏幕上不要）
+    expect(html).toContain('aria-label="设置检查"');
   });
 });
