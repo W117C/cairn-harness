@@ -22554,3 +22554,11 @@ if (!userCancelled) { /* 落 error */ }
 - `truncation-repair` 那组新增的两条撞帽交互判据，我在文件里**如实标注**了它们分辨不了
   「续跑吞掉撞帽」那类改法（两台变异都存活，因为撞帽只在末步发生）——保留它们钉的是行为口径，
   不假装它们守的是那个不存在的顺序差。
+
+### 六、HEAD 认证读数（`f50ed2aa`）
+
+- 门面 **25/25** 跑到，红 **1** 道：`docs-check`（21 条 D-5 存量）。
+- `typecheck` HEAD 面 **0 报错**。
+- 判卷 **6575 条 / 2 failed**：`docs-check` 的 D-5、`mutate-needles-check` 的 `1f16bea` 归因。
+- 认证树自回收 `exit=0`；**常驻残留树 0**。
+- 原始读数：`outputs/head-cert-f50ed2a-2026-10-22-2334/provenance.md`。
