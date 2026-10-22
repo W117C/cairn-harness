@@ -9,6 +9,8 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { writeFileAtomic } from "../atomic-write";
+import { eventRefKey, isEventRef } from "../events/session-ref";
+import type { EventRef } from "../events";
 
 export type FeedbackRating = "up" | "down" | "none";
 
@@ -22,6 +24,9 @@ export interface FeedbackRecord {
   note?: string;
   /** 记录时间（ISO）。 */
   at: string;
+  /** 指针分叉：反馈指向**来源事件**（可能是祖先文件的行）。旧记录没有这个字段 ⇒ eventId 解释为
+   *  当前 owner 会话自己的行号。 */
+  eventRef?: EventRef;
 }
 
 /** 生效的反馈（撤销 `none` 已被剔除）：界面据此点亮赞/踩。 */
@@ -31,6 +36,7 @@ export interface ResolvedFeedback {
   rating: "up" | "down";
   note?: string;
   at: string;
+  eventRef?: EventRef;
 }
 
 const MAX_SESSION_ID_LENGTH = 80;
@@ -75,12 +81,14 @@ function parseLine(line: string): FeedbackRecord | null {
   if (r.rating !== "up" && r.rating !== "down" && r.rating !== "none") return null;
   if (r.note !== undefined && (typeof r.note !== "string" || r.note.length > MAX_NOTE_LENGTH)) return null;
   if (typeof r.at !== "string" || r.at === "") return null;
+  if (r.eventRef !== undefined && !isEventRef(r.eventRef)) return null;
   return {
     sessionId: r.sessionId,
     eventId: r.eventId,
     rating: r.rating,
     ...(r.note !== undefined ? { note: r.note } : {}),
     at: r.at,
+    ...(r.eventRef !== undefined ? { eventRef: r.eventRef as EventRef } : {}),
   };
 }
 
@@ -98,11 +106,14 @@ export class FeedbackStore {
   }
 
   /** 追加一条反馈。校验在写之前——非法入参不落盘、不建文件。 */
-  async append(input: { sessionId: unknown; eventId: unknown; rating: unknown; note?: unknown }): Promise<FeedbackRecord> {
+  async append(input: { sessionId: unknown; eventId: unknown; rating: unknown; note?: unknown; eventRef?: unknown }): Promise<FeedbackRecord> {
     return await this.enqueue(async () => {
       if (!isSessionId(input.sessionId)) throw new Error(`反馈 sessionId 非法: ${JSON.stringify(input.sessionId)}`);
       assertEventId(input.eventId);
       assertRating(input.rating);
+      if (input.eventRef !== undefined && !isEventRef(input.eventRef)) {
+        throw new Error(`反馈 eventRef 非法: ${JSON.stringify(input.eventRef)}`);
+      }
       if (input.note !== undefined) {
         if (typeof input.note !== "string" || input.note.length > MAX_NOTE_LENGTH) {
           throw new Error(`反馈 note 非法：须为 ≤${String(MAX_NOTE_LENGTH)} 字符的字符串`);
@@ -115,6 +126,7 @@ export class FeedbackStore {
         rating: input.rating,
         ...(input.note !== undefined && input.note !== "" ? { note: input.note } : {}),
         at,
+        ...(input.eventRef !== undefined ? { eventRef: input.eventRef as EventRef } : {}),
       };
       await mkdir(dirname(this.filePath), { recursive: true });
       await appendFile(this.filePath, JSON.stringify(record) + "\n", "utf8");
@@ -126,15 +138,21 @@ export class FeedbackStore {
   async listForSession(sessionId: string): Promise<ResolvedFeedback[]> {
     if (!isSessionId(sessionId)) throw new Error(`反馈 sessionId 非法: ${JSON.stringify(sessionId)}`);
     const { records } = await this.listAll();
-    const latest = new Map<number, FeedbackRecord>();
+    // 解析键必须带来源：同一个子会话里，「父第 2 行」与「本地第 2 行」是两格，不能按 eventId 互相覆盖。
+    const latest = new Map<string, FeedbackRecord>();
     for (const r of records) {
       if (r.sessionId !== sessionId) continue;
-      latest.set(r.eventId, r); // 文件按追加顺序读 ⇒ 后写覆盖先写
+      const key = r.eventRef !== undefined ? eventRefKey(r.eventRef) : `#${String(r.eventId)}`;
+      latest.set(key, r); // 文件按追加顺序读 ⇒ 后写覆盖先写
     }
     return [...latest.values()]
       .filter((r): r is FeedbackRecord & { rating: "up" | "down" } => r.rating === "up" || r.rating === "down")
-      .map((r) => ({ sessionId: r.sessionId, eventId: r.eventId, rating: r.rating, ...(r.note !== undefined ? { note: r.note } : {}), at: r.at }))
-      .sort((a, b) => a.eventId - b.eventId);
+      .map((r) => ({
+        sessionId: r.sessionId, eventId: r.eventId, rating: r.rating,
+        ...(r.note !== undefined ? { note: r.note } : {}), at: r.at,
+        ...(r.eventRef !== undefined ? { eventRef: r.eventRef } : {}),
+      }))
+      .sort((a, b) => a.eventId - b.eventId || a.sessionId.localeCompare(b.sessionId));
   }
 
   /** 全部原始记录（审计面）：`skipped` = 丢弃的坏行数（丢的事件必须能被数出来，不静默）。 */

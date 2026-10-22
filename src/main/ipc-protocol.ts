@@ -1,7 +1,7 @@
 // IPC 协议：main / preload / renderer 共享的类型（除协议版本常量外全部 type-only，跨层引用
 // 不产生运行时依赖；版本常量是唯一运行时出口，SEMA §3.5/§12——src-execution-path 棘轮的
 // 纯类型面豁免随 Phase 3 版本化撤名，执行路径由 tests/ipc-protocol-version.test.ts 供给）。
-import type { AgentEvent, SessionRef, SessionView } from "../events";
+import type { AgentEvent, EventRef, SessionRef, SessionView } from "../events";
 import type { PermissionMode } from "../permissions";
 import type { ToolName } from "../tools/base";
 import type { SandboxStatus } from "./sandbox";
@@ -469,14 +469,14 @@ export interface AgentApi {
   attachmentThumb(path: string): Promise<{ ok: boolean; dataUrl?: string; error?: string }>;
   /** v2.16 用户反馈沉淀（赞/踩）：落 sidecar `feedback.jsonl`（append-only，不进事件流）。
    *  `rating:"none"` = 撤销（读时取最后一条生效）。未接线前界面只选中、不假提交。 */
-  submitFeedback(req: { sessionId: string; eventId: number; rating: "up" | "down" | "none"; note?: string; workspace?: string }): Promise<{ ok: boolean; error?: string }>;
+  submitFeedback(req: { sessionId: string; eventId: number; rating: "up" | "down" | "none"; note?: string; workspace?: string; eventRef?: EventRef }): Promise<{ ok: boolean; error?: string }>;
   /** 当前生效的反馈（按 eventId 去重、撤销的不返回）：界面据此点亮赞/踩。 */
-  listFeedback(sessionId: string, workspace?: string): Promise<{ sessionId: string; eventId: number; rating: "up" | "down"; note?: string; at: string }[]>;
+  listFeedback(sessionId: string, workspace?: string): Promise<{ sessionId: string; eventId: number; rating: "up" | "down"; note?: string; at: string; eventRef?: EventRef }[]>;
   /** 2026-10-20 消息置顶（规范 §3.11 操作条 pin）：sidecar `pins.jsonl`，append-only、不进事件流。
    *  `pinned:false` = 取消置顶（追加一条撤销行，读时取最后一条生效）。 */
-  setMessagePinned(req: { sessionId: string; eventId: number; pinned: boolean; workspace?: string }): Promise<{ ok: boolean; error?: string }>;
+  setMessagePinned(req: { sessionId: string; eventId: number; pinned: boolean; workspace?: string; eventRef?: EventRef }): Promise<{ ok: boolean; error?: string }>;
   /** 某会话当前生效的置顶锚点（eventId 升序）。 */
-  listMessagePins(sessionId: string): Promise<number[]>;
+  listMessagePins(sessionId: string): Promise<{ eventId: number; eventRef?: EventRef }[]>;
   /** 会话级 worktree 隔离（§3.7 · G4）：一条会话可以在自己的 git worktree 里跑，做完合并回来。
    *  三动作一个通道——它们共用同一条事实（磁盘上那棵树在不在），拆成三条只是把同一份状态抄三遍。 */
   sessionWorktree(req: SessionWorktreeRequest): Promise<SessionWorktreeResult>;

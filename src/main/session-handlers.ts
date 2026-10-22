@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { rename, rm, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { createEventLog, forkSession, replay, type AgentEvent } from "../events";
+import { createEventLog, forkSession, replay, type AgentEvent, type EventRef } from "../events";
 import { scanStreamEvent } from "../agent/worker-projection";
 import { forkPointOf, forkSessionName } from "../agent/fork-cli";
 import { applyTurnRevert, planTurnRevert, type FileRevertResult } from "../agent/file-revert";
@@ -340,6 +340,7 @@ export async function handleFeedbackSubmit(req: {
   eventId: number;
   rating: FeedbackRating;
   note?: string;
+  eventRef?: EventRef;
 }, sessionsRoot?: string): Promise<{ ok: boolean; error?: string }> {
   try {
     await requireExistingSession(req.sessionId, sessionsRoot);
@@ -348,6 +349,7 @@ export async function handleFeedbackSubmit(req: {
       eventId: req.eventId,
       rating: req.rating,
       ...(req.note !== undefined ? { note: req.note } : {}),
+      ...(req.eventRef !== undefined ? { eventRef: req.eventRef } : {}),
     });
     return { ok: true };
   } catch (err) {
@@ -367,10 +369,14 @@ export async function handlePinSet(req: {
   sessionId: string;
   eventId: number;
   pinned: boolean;
+  eventRef?: EventRef;
 }, sessionsRoot?: string): Promise<{ ok: boolean; error?: string }> {
   try {
     await requireExistingSession(req.sessionId, sessionsRoot);
-    await requirePinStore().append({ sessionId: req.sessionId, eventId: req.eventId, pinned: req.pinned });
+    await requirePinStore().append({
+      sessionId: req.sessionId, eventId: req.eventId, pinned: req.pinned,
+      ...(req.eventRef !== undefined ? { eventRef: req.eventRef } : {}),
+    });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -378,8 +384,8 @@ export async function handlePinSet(req: {
 }
 
 /** 某会话当前生效的置顶锚点（界面据此点亮 pin 钮、大纲里置顶项排前）。 */
-export async function handlePinList(sessionId: string): Promise<number[]> {
-  return await requirePinStore().listForSession(sessionId);
+export async function handlePinList(sessionId: string): Promise<{ eventId: number; eventRef?: EventRef }[]> {
+  return await requirePinStore().listForSessionWithRefs(sessionId);
 }
 
 // ---- CX-01：项目注册表 + Session-plane 组织记录 ----

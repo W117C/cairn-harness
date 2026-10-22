@@ -1,12 +1,13 @@
+import type { AnchoredEvent } from "./state/session-identity";
 import type { StreamRow } from "./projections";
 export interface StreamActions {
   /** eventId → 当前生效评分（listFeedback 投影）；缺席 = 未评。 */
-  feedback?: ReadonlyMap<number, "up" | "down">;
-  feedbackBusy?: (eventId: number) => boolean;
-  pinBusy?: (eventId: number) => boolean;
-  annotationPending?: (eventId: number) => boolean;
+  feedback?: ReadonlyMap<string, "up" | "down">;
+  feedbackBusy?: (anchor: AnchoredEvent) => boolean;
+  pinBusy?: (anchor: AnchoredEvent) => boolean;
+  annotationPending?: (anchor: AnchoredEvent) => boolean;
   /** 赞/踩真提交（core submitFeedback 落 sidecar）；rating=null = 撤销。 */
-  onFeedback?: (eventId: number, rating: "up" | "down" | null) => void;
+  onFeedback?: (anchor: AnchoredEvent, rating: "up" | "down" | null) => void;
   /** 文件级回滚（core revertTurn；确认与结果提示在 App）。 */
   onRevertTurn?: (round: number) => void;
   /** 复制行文本（剪贴板与失败面在 App）。 */
@@ -39,7 +40,7 @@ export interface StreamActions {
   onRetryRound?: (round: number) => void;
   /** 消息置顶（2026-10-20 · 销 G6 / 规范 §3.11 操作条 pin）：落 sidecar pins.jsonl。
    *  缺席 = 不渲染 pin 钮（老调用方与判卷不受影响）。 */
-  onPin?: (eventId: number, pinned: boolean) => void;
+  onPin?: (anchor: AnchoredEvent, pinned: boolean) => void;
   /** 当前已置顶的锚点（eventId 集合）；缺席 = 无置顶。渲染即挂载（eager），靠 CSS 显隐。 */
-  pinnedEventIds?: ReadonlySet<number>;
+  pinnedEventIds?: ReadonlySet<string>;
 }

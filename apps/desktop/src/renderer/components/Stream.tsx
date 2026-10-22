@@ -16,6 +16,7 @@ import { AlertTriangle,Check,ChevronRight,ChevronUp,CircleDashed,Copy,Eye,FileCo
 import { Fragment,memo,useEffect,useId,useState } from "react";
 import type { ChangeDiffPayload } from "../../../../../src/main/change-diff";
 import { eventRefKey, type EventRef } from "../../../../../src/events/session-ref";
+import { anchorKeyOf, type AnchoredEvent } from "../state/session-identity";
 import { Markdown } from "../markdown";
 import { relativeTime,type StreamRow } from "../projections";
 import { userMessageCopy } from "../transcript";
@@ -231,15 +232,18 @@ function ToolCluster(props: { rows: Extract<StreamRow, { kind: "tool" }>[]; view
 
 import type { StreamActions } from "../stream-actions";
 
-function AssistantActions(props: { text: string; eventId: number; round: number; speaking: boolean; actions: StreamActions }) {
-  const current = props.actions.feedback?.get(props.eventId) ?? null;
+function AssistantActions(props: { text: string; eventId: number; eventRef?: EventRef; round: number; speaking: boolean; actions: StreamActions }) {
+  // 注释锚点：本地行只有 eventId；祖先行带来源引用（父第 2 行与子第 2 行不能共键）。
+  const anchor: AnchoredEvent = { eventId: props.eventId, ...(props.eventRef !== undefined ? { eventRef: props.eventRef } : {}) };
+  const key = anchorKeyOf(anchor);
+  const current = props.actions.feedback?.get(key) ?? null;
   const { onCopyText, onFeedback, onReplay, onSpeak, onRetryRound, onPin } = props.actions;
-  const pinned = props.actions.pinnedEventIds?.has(props.eventId) === true;
-  const feedbackBusy = props.actions.feedbackBusy?.(props.eventId) === true;
-  const pinBusy = props.actions.pinBusy?.(props.eventId) === true;
+  const pinned = props.actions.pinnedEventIds?.has(key) === true;
+  const feedbackBusy = props.actions.feedbackBusy?.(anchor) === true;
+  const pinBusy = props.actions.pinBusy?.(anchor) === true;
   const running = props.actions.running === true;
   return (
-    <span className="row-actions" data-saving={props.actions.annotationPending?.(props.eventId) === true}>
+    <span className="row-actions" data-saving={props.actions.annotationPending?.(anchor) === true}>
       <button className="row-action" aria-label="复制这行输出" title="复制" onClick={() => onCopyText?.(props.text)}>
         <Copy size={12} />
       </button>
@@ -251,7 +255,7 @@ function AssistantActions(props: { text: string; eventId: number; round: number;
           disabled={pinBusy}
           aria-busy={pinBusy}
           title={pinned ? "已置顶（再点取消）" : "置顶：钉在会话大纲里，长对话好找"}
-          onClick={() => onPin(props.eventId, !pinned)}
+          onClick={() => onPin(anchor, !pinned)}
         >{pinBusy ? <Loader2 size={12} /> : <Pin size={12} />}</button>
       )}
       {onRetryRound !== undefined && !running && (
@@ -286,7 +290,7 @@ function AssistantActions(props: { text: string; eventId: number; round: number;
         disabled={feedbackBusy}
         aria-busy={feedbackBusy}
         title={current === "up" ? "已赞（再点撤销）" : "赞"}
-        onClick={() => onFeedback?.(props.eventId, current === "up" ? null : "up")}
+        onClick={() => onFeedback?.(anchor, current === "up" ? null : "up")}
       >{feedbackBusy ? <Loader2 size={12} /> : <ThumbsUp size={12} />}</button>
       <button
         className={`row-action${current === "down" ? " on" : ""}`}
@@ -295,7 +299,7 @@ function AssistantActions(props: { text: string; eventId: number; round: number;
         disabled={feedbackBusy}
         aria-busy={feedbackBusy}
         title={current === "down" ? "已踩（再点撤销）" : "踩"}
-        onClick={() => onFeedback?.(props.eventId, current === "down" ? null : "down")}
+        onClick={() => onFeedback?.(anchor, current === "down" ? null : "down")}
       >{feedbackBusy ? <Loader2 size={12} /> : <ThumbsDown size={12} />}</button>
     </span>
   );
@@ -469,6 +473,7 @@ const AssistantRowView = memo(function AssistantRowView({ actions, caret, eventR
       <AssistantActions
         text={r.text}
         eventId={r.eventId}
+        {...(eventRef !== undefined ? { eventRef } : {})}
         round={r.round}
         speaking={actions.speakingEventId === r.eventId}
         actions={actions}

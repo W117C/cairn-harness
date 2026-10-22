@@ -47,3 +47,11 @@ export function isStaleForActive(args: {
 export function runKey(workspace: string | null | undefined, sessionId: string): string {
   return sessionKeyOf(workspace, sessionId) ?? sessionId;
 }
+
+/** 注释锚点（反馈/置顶）：本地行只有 eventId，祖先行带来源引用。 */
+export interface AnchoredEvent { eventId: number; eventRef?: EventRef }
+
+/** 注释的解析键：有来源用 eventRefKey，否则 `#eventId`（旧数字记录按 owner 自己的行号解释）。 */
+export function anchorKeyOf(anchor: AnchoredEvent): string {
+  return anchor.eventRef === undefined ? `#${String(anchor.eventId)}` : eventRefKey(anchor.eventRef);
+}
