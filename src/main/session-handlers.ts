@@ -338,6 +338,22 @@ export async function handleSessionRevert(
     return { ok: false, error: `第 ${String(round)} 轮没有可回滚的文件改动（这一轮没写过盘，或改动都取不到覆盖前原件）`, ...empty };
   }
   const r = await applyTurnRevert(workspace, plan);
+  // 留痕：每条真正还原/删除的文件落一条 file_restored（只写当前会话；祖先行带 source_ref）。
+  // 落流失败不把已完成的回滚反签成失败——盘上的事实优先，事件面只是读数；但要出声。
+  const refByPath = new Map(plan.entries.map((entry) => [entry.path, entry.sourceRef] as const));
+  try {
+    const log = createEventLog(pathOf(dir, sessionId));
+    for (const path of [...r.restored, ...r.deleted]) {
+      const sourceRef = refByPath.get(path);
+      await log.append({
+        type: "file_restored", path,
+        ...(sourceRef !== undefined ? { source_ref: sourceRef } : {}),
+      } as AgentEvent);
+    }
+    await log.close?.();
+  } catch (err) {
+    console.warn("[changes] 回滚成功但落 file_restored 事件失败:", err instanceof Error ? err.message : String(err));
+  }
   return { ok: true, ...r };
 }
 
