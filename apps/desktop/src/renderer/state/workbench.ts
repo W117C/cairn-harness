@@ -8,6 +8,8 @@ import { inheritedDisplayIndexes, mergeViewEvents, refsByDisplayIndex } from "..
 import { runKey } from "./session-identity";
 import type { SessionRef, SessionView } from "../../../../../src/events";
 import { useSessionSubscription } from "./session-subscription";
+import { composerThinking, thinkingChangeTarget } from "./thinking-selection";
+import type { ThinkingEffort } from "../../../../../src/providers/capabilities";
 // App 根（Claude 蓝本 v1 重建）：外壳（TitleBar + Sidebar + Main）+ 覆盖层（设置页）。
 // 状态编排/事件驱动/运行链全部沿用既有实现（逻辑资产原样搬运）：
 //   · 会话清单同步、竞态守卫（openSeq）、运行集（runningSet）、按会话错误/提示条
@@ -97,6 +99,9 @@ export function useWorkbenchModel() {
   const queueSeq = useRef(0);
   // 思考档位（每会话一份；缺省 off = 不向发请求体里加思考参数）
   const thinkingBySession = useRef(new Map<string, string>());
+  // 空屏上的选择（下一条新会话的起点）：旧实现 onThinkingChange 在 activeId === null 时直接 return
+  // ⇒ 芯片能拨、数据不动——用户以为「这轮用强思考」，第一条消息实际按 off 发。见 thinking-selection.ts。
+  const [pendingThinking, setPendingThinking] = useState<ThinkingEffort>("off");
   // onEvent 闭包只建一次 ⇒ 用 ref 存当前活跃会话，避免读到过期 activeId。
   const activeIdRef = useRef<string | null>(null);
   const [, force] = useState(0);
@@ -754,7 +759,7 @@ export function useWorkbenchModel() {
   // ---- v2.17 运行中可沟通：按会话发送队列 ----
   // 队列语义全在 send-queue.ts（本文件只存表与接线）；表是 Map<sessionId, 队列>，
   // 这样后台会话的排队不因切换会话而丢失，自动派发也只认原会话。
-  const { setQueueFor, send, sendWithGoal, handleRetryLast, handleRetryRound, resumeQueue, cancelRunHeal } = useRunQueue({ setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, modeRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef });
+  const { setQueueFor, send, sendWithGoal, handleRetryLast, handleRetryRound, resumeQueue, cancelRunHeal } = useRunQueue({ setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef });
 
     const { lastError, lastNotice, runningActive, pendingClarify, pendingPlan, askForActive, phase, stopped, phaseLabel, chosen, pickerValue } = useRunReadings({ sessionErrors, activeId, sessionNotices, runningSet, setElapsedSec, runStartBySession, events, askBySid, stoppedIds, lastDeltaAt, selections, providerInfo, activeWorkspace });
 
@@ -1082,6 +1087,8 @@ export function useWorkbenchModel() {
     sendWithGoal,
     configuredProviders,
     thinkingBySession,
+    pendingThinking,
+    setPendingThinking,
     force,
     selections,
     refreshProviderInfo,

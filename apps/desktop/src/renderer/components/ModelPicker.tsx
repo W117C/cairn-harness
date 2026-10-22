@@ -3,11 +3,19 @@
 // 旧两视图（思考面 × 换模型面）作废：一屏说全——上列表、下思考段，少一次翻面。
 // 触发条 = 单芯片形态：`deepseek-chat · 思考 关 ⌄`（档词 = 关/低/中/强；未声明支持不带思考段）。
 // 数据面不变（唯一事实源仍是 `getProviderInfo()`，本层不造第二份）；文案全出处 STR。
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChevronDown, Eye, Info, Settings } from "lucide-react";
 import type { ProviderInfo } from "../../../../../src/main/ipc-protocol";
 import { STR } from "../strings";
 import { Popover, usePopoverDismiss } from "./Popover";
+
+/** 向上弹的菜单最多能有多高：触发条上沿到窗口顶（扣 38px 标题栏 + 6px 间隙）。
+ *  空屏的输入卡在屏幕中部，菜单 393px 高会顶穿标题栏——真机实测第一行「deepseek-chat」
+ *  被窗口上沿切掉。这条把可用高度算出来交给 style.maxHeight，超出的部分在菜单内滚动。
+ *  240 是下限（再矮就连搜索框+两行都放不下，宁可让菜单贴边也不能压成一条缝）。 */
+export function modelMenuMaxHeight(triggerTop: number): number {
+  return Math.max(240, Math.min(560, Math.floor(triggerTop - 44)));
+}
 
 /** 菜单项：registryId = null 即「演示」（run 时不透传 model，走 settings 缺省）。 */
 export interface ModelOption {
@@ -191,6 +199,18 @@ export function ModelPicker(props: {
 }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  // 菜单向上开，高度必须让出标题栏：空屏输入卡在中部，393px 菜单会顶穿窗口上沿。
+  const [menuMax, setMenuMax] = useState<number | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (!open) { setMenuMax(undefined); return; }
+    const update = (): void => {
+      const top = box.current?.getBoundingClientRect().top;
+      if (top !== undefined) setMenuMax(modelMenuMaxHeight(top));
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => { window.removeEventListener("resize", update); };
+  }, [open]);
   // 信号开菜单：seq 前进且未被**硬锁**（disabled：门槛/排队读回）才开。
   // v7.2 业主裁后 running 不再折进 disabled ⇒ ⌘⇧E 运行中也能开（思考档要能调）。
   //
@@ -252,6 +272,7 @@ export function ModelPicker(props: {
         <ModelMenu
           options={options}
           value={props.value}
+          maxHeight={menuMax}
           {...(props.disabled === true || props.running === true ? { running: true } : {})}
           initialFocus={props.initialFocus ?? "model"}
           keyNotice={notice}
@@ -287,6 +308,8 @@ export function ModelMenu(props: {
   keyNotice?: string | null;
   onPick: (registryId: string | null) => void;
   onOpenSettings?: () => void;
+  /** 向上开时允许的最大高度（px）；undefined = 不限制（测试/旧调用）。 */
+  maxHeight?: number;
   /** 当前思考档位（缺省 off）。 */
   thinking?: string;
   /** 当前模型是否**声明**支持思考档位；未声明 ⇒ 整区禁用 + 注记 + 配置折叠（fail-visible）。 */
@@ -340,7 +363,15 @@ export function ModelMenu(props: {
   };
 
   return (
-    <Popover open up className="mp-pop" role="listbox" aria-label={STR.modelPicker.menuAria} onKeyDown={onKeyNav}>
+    <Popover
+      open
+      up
+      className="mp-pop"
+      role="listbox"
+      aria-label={STR.modelPicker.menuAria}
+      onKeyDown={onKeyNav}
+      {...(props.maxHeight !== undefined ? { style: { maxHeight: props.maxHeight } } : {})}
+    >
       <div className="mp-search">
         <input
           ref={searchRef}

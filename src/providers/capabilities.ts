@@ -37,9 +37,11 @@ export interface ProviderCapability {
 /**
  * 当前运行时能力的事实表。
  *
- * 目前四个 adapter 尚未把 reasoning/thinking 参数接入请求体，因此不能把
- * “厂商有该模型”伪装成“DSH 已支持该档位”。等 wire 实现和测试落地后，再把
- * 对应条目的 supported/values 打开；renderer 只消费这张表。
+ * 接线与证据是两件事：四个 adapter 都已把 reasoning/thinking 参数接到请求体
+ * （唯一映射处 `providers/reasoning.ts`，由 `registry.ts` 分发），但**内置档位没有带凭据实测**，
+ * 所以 `supported: false` 在这里的含义是「没有证据说明上游收这个参数」，不是「接线没做」。
+ * 只有用户在 `.agent/providers.json` 写了 `reasoningEfforts`（或上游 `/models` 自述）时才开门；
+ * renderer 只消费这张表。
  */
 function capability(modelId: string, provider: string): ProviderCapability {
   if (!isKnownProviderId(provider)) {

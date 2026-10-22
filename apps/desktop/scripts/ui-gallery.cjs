@@ -138,14 +138,14 @@ async function main() {
   await js(`document.querySelector(".mp-trigger")?.click()`);
   await shot("02-model-menu.png", 400);
 
-  // 思考分段控件（deepseek-chat 声明支持 ⇒ 可点开）
-  await js(`document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))`);
-  await js(`[...document.querySelectorAll(".ctl")].find(b=>b.getAttribute("aria-label")==="思考档位")?.click()`);
+  // 思考强度（2026-10-22 契约：P2-2 起思考与模型合并成单芯片菜单，旧的 `.ctl[aria-label=思考档位]`
+  // 已不存在——旧选择器让 03/04 两张图静默退化成 01 的副本，而脚本只报 done）。
+  await js(`document.querySelector('.mp-pop .th-row button[data-e="medium"]')?.click()`);
   await shot("03-thinking.png", 400);
 
-  // 空态 pill 填入 composer
+  // 空态起手行（QuickStarts；2026-10-20 起由 `.pill` 改成 `.start`）填入 composer，不发送。
   await js(`document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))`);
-  await js(`document.querySelector(".pill")?.click()`);
+  await js(`document.querySelector(".start")?.click()`);
   await shot("04-composer-draft.png", 300);
 
   // 打开演示会话 → markdown 流 + 变更卡

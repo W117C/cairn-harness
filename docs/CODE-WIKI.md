@@ -1,6 +1,6 @@
 # Core code wiki
 
-This checkout is core-first: the agent kernel (`src/`) is electron-free. The former Electron shell, renderer, preload, desktop gates, and UI acceptance layers were removed on 2026-09-27 (`69fbb0d`); a new desktop shell has since been reintroduced under `apps/desktop/` (2026-10-02, M1 slices) and is **not** scanned by the root gates. Its status and disposition are decided in [`adr/0001-core-only-vs-desktop.md`](adr/0001-core-only-vs-desktop.md).
+This checkout is core-first: the agent kernel (`src/`) is electron-free. The former Electron shell, renderer, preload, desktop gates, and UI acceptance layers were removed on 2026-09-27 (`69fbb0d`); a new desktop shell has since been reintroduced under `apps/desktop/` (2026-10-02, M1 slices). Since 2026-10-12 that shell is **inside** the root gate manifest: `desktop-test` (desktop suite + `desktop-boundary-check`) is listed in both `GATES` and `CERT_GATES`. The [`adr/0001` scope ruling](adr/0001-core-only-vs-desktop.md) still governs **scope** — desktop is not a v1 delivery surface — but "not a delivery surface" no longer means "unscanned"; do not read the scope ruling backwards.
 
 > 定位按**符号名**而非行号（沿用 `docs/m5-proposal.md` v3 修订的纪律：行号会腐，符号名不会）。
 > 本文只写**已核实**的事实；未核实的推测一律不写进来。

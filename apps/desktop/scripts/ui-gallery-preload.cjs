@@ -245,7 +245,9 @@ if (process.argv.includes("--cairn-hardening-fixture")) {
     { type: "assistant_message", content: "第二条回复：失败只回滚当前条目。", ts: now - 3000 },
   ] });
   stub.listFeedback = async (sid) => [...(ratings.get(sid) ?? new Map())].map(([eventId, rating]) => ({ sessionId: sid, eventId, rating, at: new Date().toISOString() }));
-  stub.listMessagePins = async (sid) => [...(pins.get(sid) ?? new Set())];
+  // v19（指针分叉）：协议形状已从 `number[]` 收成 `{eventId, eventRef?}[]`。夹具晚改一步，
+  // state-smoke 会在「置顶按钮的 aria-label」那一格静默读到 false——不是产品回归，是证人陈旧。
+  stub.listMessagePins = async (sid) => [...(pins.get(sid) ?? new Set())].map((eventId) => ({ eventId }));
   stub.submitFeedback = (req) => new Promise((resolve) => { requests.feedback.push({ req, resolve }); });
   stub.setMessagePinned = (req) => new Promise((resolve) => { requests.pin.push({ req, resolve }); });
   contextBridge.exposeInMainWorld("__cairnFixture", {

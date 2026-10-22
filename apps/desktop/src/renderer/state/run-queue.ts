@@ -8,6 +8,8 @@ import { continueAfterRun,drainQueue,isSessionEndDistillAsk,shouldHealStaleRun,t
 import { STR } from "../strings";
 import { toast } from "../toast";
 import { runKey } from "./session-identity";
+import { seedNewSessionThinking } from "./thinking-selection";
+import type { ThinkingEffort } from "../../../../../src/providers/capabilities";
 
 interface RunQueueDeps {
   setQueueLocal: (sid: string, list: QueuedSend[]) => void;
@@ -21,6 +23,8 @@ interface RunQueueDeps {
   runStartBySession: MutableRefObject<Map<string, number>>;
   force: Dispatch<SetStateAction<number>>;
   thinkingBySession: MutableRefObject<Map<string, string>>;
+  /** 空屏上选的思考档：新会话落成时用它填 thinkingBySession（旧实现直接丢）。 */
+  pendingThinking: ThinkingEffort;
   modeRef: MutableRefObject<"default" | "read-only" | "guided" | "auto">;
   selections: MutableRefObject<Map<string, string | null>>;
   activeId: string | null;
@@ -42,7 +46,7 @@ interface RunQueueDeps {
 }
 
 export function useRunQueue(deps: RunQueueDeps) {
-  const { setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, modeRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef } = deps;
+  const { setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef } = deps;
   const keyOf = (id: string): string => runKey(activeWorkspace, id);
   const setQueueFor = useCallback((sid: string, list: QueuedSend[]) => {
     const key = keyOf(sid);
@@ -146,7 +150,12 @@ export function useRunQueue(deps: RunQueueDeps) {
       // 工作区里。不从回包采纳 ⇒ 文件/终端/diff/回滚整路「工作区未知」，侧栏也不高亮这一行。
       if (activeWorkspace === null) setActiveWorkspace(created.workspace);
       id = newId;
-      if (isNew) { activate(newId); refreshSessions(); }
+      if (isNew) {
+        // 空屏上选的思考档必须落在**这条**新会话上；否则芯片显示「思考 强」、请求里没有 thinking。
+        seedNewSessionThinking(newId, pendingThinking, thinkingBySession.current);
+        activate(newId);
+        refreshSessions();
+      }
       const goalCmd = pendingGoal.current;
       if (goalCmd !== null) {
         pendingGoal.current = null;
@@ -166,7 +175,7 @@ export function useRunQueue(deps: RunQueueDeps) {
       setPendingSend(false);
       force((n) => n + 1);
     }
-  }, [activeId, activeWorkspace, activate, refreshSessions, runOn, setQueueFor, setLastError, setLastNotice]);
+  }, [activeId, activeWorkspace, activate, refreshSessions, runOn, setQueueFor, setLastError, setLastNotice, pendingThinking]);
   /** /goal <目标>（2026-10-18）：先把目标写进会话（setGoal），再用目标原文起第一轮。
    *  此前斜杠项只往输入框塞字，发出去就是一条普通消息，目标从未被设过。 */
   // 首页发 /goal 时还没有会话可挂目标：先记下来，等 send 建好会话、拿到 id 再 setGoal。
