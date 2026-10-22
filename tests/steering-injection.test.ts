@@ -16,6 +16,7 @@ import { runLoop } from "../src/agent/loop";
 import { projectContext } from "../src/agent/context";
 import { eventsForCurrentRun, findPhantomDelivery, isSteeringMessage } from "../src/agent/delivery-guard";
 import { createSteeringChannel, STEERING_TEXT_MAX_CHARS } from "../src/agent/steering-channel";
+import { keepFirstSet } from "../src/agent/compaction";
 import type { AgentEvent } from "../src/events";
 import type { Provider, ProviderMessage } from "../src/providers";
 
@@ -268,5 +269,32 @@ describe("第 9 点与 R1（验证停滞）的交点", () => {
     const log = await run(false);
     expect(log.filter((e) => isSteeringMessage(e))).toHaveLength(0);
     expect(noProgressNotes(log), "判据本体必须还在：否则这一格就变成了恒绿").toBeGreaterThan(0);
+  });
+});
+
+describe("插话与压缩：它必须活过每一次压缩", () => {
+  it("★ keepFirstSet 受护集含插话（它靠 user_message 这条广义判据，不是靠运气）", () => {
+    const evs = ev([
+      { type: "user_message", content: "任务" },
+      { type: "user_message", content: "插话：改 b.ts", origin: { kind: "steering", step: 1 } },
+      { type: "tool_call", id: "t1", name: "read_file", args: {} },
+      { type: "tool_result", callId: "t1", ok: true, output: "x" },
+    ]);
+    const keep = keepFirstSet(evs);
+    // 事件 id = 1-based 行号：第 2 条（那条插话）必须在受护集里
+    expect(keep.has(2), "插话被压缩吃掉 = 用户改写的目标连同载体一起消失").toBe(true);
+    expect(keep.has(1)).toBe(true);
+    expect(keep.has(3)).toBe(false);
+  });
+
+  it("真实压缩之后，插话仍在模型面（不是只在受护名单里挂着）", () => {
+    const evs = ev([
+      { type: "user_message", content: "任务：改 a.ts" },
+      { type: "user_message", content: "插话：别改 a.ts，改 b.ts", origin: { kind: "steering", step: 1 } },
+      { type: "assistant_message", content: "好" },
+      { type: "compaction", trigger: "auto", reason: "threshold", compressed_event_ids: [3], summary_offset: 4, summary: "早前工作", tokens_before: 100, tokens_after: 20 },
+    ]);
+    const projected = projectContext(evs).map((m) => String(m.content ?? ""));
+    expect(projected.some((c) => c.includes("改 b.ts")), "压缩把用户的改写吃掉了").toBe(true);
   });
 });

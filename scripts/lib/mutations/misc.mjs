@@ -16,7 +16,23 @@ export const MUTATIONS = [
     ),
     expectFail: "归属已知：只认本会话那张卡，别人的卡不上屏（此前是渲染最后到达的那张）",
   },
+    {
+    id: "desktop-steering-splits-turn",
+    src: "apps/desktop/src/renderer/derived/stream.ts",
+    test: "apps/desktop/tests/stream-steering-round.test.ts",
+    desc: "轮中插话被当成新轮（projectStream 的 rounds += 1 不再跳过 steering）⇒ 同一轮被劈成两轮：轮号错位、上一轮气泡提前落定、按轮跳转全错",
+    apply: (s) => s.replace('        const steering = e.origin?.kind === "steering";', '        const steering = false;'),
+    expectFail: "★ 插话不推轮号：同一轮里的一条插话，round 仍是 1",
+  },
   {
+    id: "desktop-steering-row-dropped",
+    src: "apps/desktop/src/renderer/derived/stream.ts",
+    test: "apps/desktop/tests/stream-steering-round.test.ts",
+    desc: "插话那一行直接丢掉（不渲染）⇒ 用户说过的话在转录里消失，而模型那边确实收到了它：界面在说谎",
+    apply: (s) => s.replace('        const steering = e.origin?.kind === "steering";', '        const steering = e.origin?.kind === "steering";\n        if (steering) break;'),
+    expectFail: "★ 插话仍显示，且被标成插话（不是悄悄丢掉）",
+  },
+{
     // 桌面层第二条锚点（第 485 页）：projections.ts 11 个导出函数、409 行、27 条用例，
     // 而变异表里桌面侧此前只有 send-queue 那一条 ⇒ 整份投影层是「有判据、无分辨力证据」。
     // 挑这一格是因为它**可以静默地丢**：思考桶在终稿到达时被 clear，若不同时把正文挂到

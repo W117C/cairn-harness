@@ -76,15 +76,25 @@ export function projectStream(events: readonly AgentEvent[], running: boolean = 
     // 全序编号，行序与流序一致，不因过滤错位。
     if (isWorkerSubflowEvent(e)) continue;
     switch (e.type) {
-      case "user_message":
-        // 轮界：上一轮还没被终稿收走的桶在此落定（新消息开头 = 旧轮已说完）。
-        flushBuckets(true);
-        rounds += 1;
+      case "user_message": {
+        // 第 9 点·轮中插话（`origin.kind === "steering"`）**不是轮界**：它是同一轮里
+        // 用户补的一句话，模型在**这一轮的下一拍**就看到了（见 `SteeringOrigin` 的注释）。
+        // 若把它当新轮：轮号会 +1（同一轮被劈成两轮 ⇒ 轮次跳转、上一轮气泡提前落定全错位），
+        // 而转录里那条插话还会被画成"用户又开了一个任务"。
+        // 它**仍要显示**（用户说过的话不许在转录里消失）——只是挂在**当前轮**上。
+        const steering = e.origin?.kind === "steering";
+        if (!steering) {
+          // 轮界：上一轮还没被终稿收走的桶在此落定（新消息开头 = 旧轮已说完）。
+          flushBuckets(true);
+          rounds += 1;
+        }
         rows.push({
           kind: "user", text: userVisibleText(e), ts: e.ts, seq, round: rounds,
+          ...(steering ? { steering: true } : {}),
           ...(e.attachments !== undefined && e.attachments.length > 0 ? { attachments: e.attachments } : {}),
         });
         break;
+      }
       case "assistant_message":
         // 终稿到达：AssistantMessageEvent 无 callId，无法按桶匹配 ⇒ 全部未结桶被终稿行取代
         //（live=false），此后不再输出这些桶的 live 行。
