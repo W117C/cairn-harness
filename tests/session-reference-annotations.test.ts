@@ -114,7 +114,7 @@ describe("侧聊提升的来源形式", () => {
     const events = await replay(mainLog);
     const promoted = events.find((e) => e.type === "user_message");
     expect(promoted?.type === "user_message" ? promoted.content : "").toBe("PARENT_CONCLUSION");
-    expect(promoted?.type === "user_message" ? promoted.origin?.source_event_refs : undefined).toEqual([ref]);
+    expect(promoted?.type === "user_message" && promoted.origin?.kind === "sidechat" ? promoted.origin.source_event_refs : undefined).toEqual([ref]);
   });
 
   it("数字 id 与来源引用混用 / 坏引用都 fail closed", async () => {
