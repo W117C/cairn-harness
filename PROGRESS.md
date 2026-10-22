@@ -21889,3 +21889,46 @@ node bin/cairn.mjs --workspace <run-dir> --mode auto --model <模型> \
 
 - 本分支（`agent/pointer-session-refs`，HEAD `b122d2a5` 之后又加了本页）尚未合并；合并是业主的裁。
 - 合并时 PROGRESS/STATE 会与共享树的第 665/666 页冲突（页号与现态页都是"整体重写"口径），需按台账规则解冲突。
+
+## 2026-10-22 · 第 671 页：指针批并入共享分支（`f25e09d1`）后的 HEAD 认证与整表变异验证——两条事故红照旧、1 条存活已定位为针脚漂移
+
+### 一、合并本身
+
+- `agent/pointer-session-refs`（第 669 页那批，基线 `2fe791c6`）合入共享分支 `fix/spec-summary-double-count`，
+  合并提交 **`f25e09d1`**；随后 **`c2807a71`** 把现态页 `rev` 指到合并提交。
+- 冲突只在 `PROGRESS.md` / `STATE.md` 两处：共享树的第 665/666/667 页整页保留在前，分支的第 669/670 页追加在后；
+  `STATE.md` 取分支版本（含指针批的现态描述）。合并树上重跑全量测试与轻门，见第 669 页同口径读数。
+- **页号**：667 归仓外 `pel-runs/` 会话、672 起归邻会话（它已把 667 那条「后续追加从 671 起」改口）。
+  本会话用 **671**（本页）与 **673**（草稿/卡片批的读数），不占 672。
+
+### 二、head-cert（HEAD = `c2807a7`）
+
+- `node --import tsx scripts/head-cert.ts`：TREE=`c2807a717e047265f84f25f3ad50efc9a5e0a58a`、判卷四面在飞 0、
+  依赖完整（声明 10 项，缺 0）、import 面 5413 条边悬空 0、收尾复核同一笔。
+- **认证门面 25 道跑满，红 1 道**：`docs-check` exit=1（D-5 的 21 条丢失 sha，业主裁「不登记」，诚实足迹）；
+  超预算 2 道只出声（`evidence-typecheck-check` 5354ms>5300、`desktop-test` 11143ms>10000）。
+- 认证树上的全量判卷：**476 文件 / 6518 项，2 失败**——`tests/docs-check.test.ts` 的 D-5 那条与
+  `tests/mutate-needles-check.test.ts` 的 `1f16bea` 归因；墙钟 **156.78s**；贴帽 0 条。
+- 原始读数：`outputs/head-cert-c2807a7-2026-10-22-1242/provenance.md`（工具自己落的；本页只引用）。
+
+### 三、mutate-verify（HEAD = `c2807a71`，隔离树 `.worktrees/gate-mutate-verify`，整表）
+
+- **1589/1589 跑满**，耗时 **2024.0s**；成本分母：判卷 spawn 3178 次（每条 2 次），单次中位 0.4s，
+  最贵一条 `orchestrator-project-rules-not-passed` 32.0s；selector 拍 3174、坏拍 0。
+- **红 1 条**：`REDKINDS=survived:1,misattributed:0,baseline-red:0,no-effect:0,syntax:0,restore-mismatch:0,vacuous:0`
+  ⇒ `loop-does-not-forward-agent-id` **变异存活**（测试仍全绿）。
+- **根因是针脚漂移，不是不变量失守**：合并进来的 verify 反射循环在 `src/agent/loop.ts` 里插了一段与普通工具
+  **逐字相同**的 `tool_use_id / agent_id` PreToolUse 载荷；旧针脚只锚后两行（`String.replace` 命中第一处），
+  改到的是 **verify 那段**，而这条锚点的 killer 用例 `tests/worker-hooks.test.ts·钩子拿到 agent_id = …`
+  走的是 `read_file`（普通工具那段）⇒ 对被测行为是**空操作**，测试自然全绿。
+- 处置：针脚连 `tool_name: output.name,` 一起锚定（`scripts/lib/mutations/agent-runtime.mjs`），
+  实测该锚点在 `loop.ts` 唯一命中（1 处）。**本页不给「已转绿」的读数**——整表要在含此修正的提交上重跑，
+  读数记第 673 页。
+- 这一趟同时说明：合并带来的**同形载荷复制**会让旧锚点静默换靶，`--check-needles` 那种静态尺看不出来
+  （它只核「锚点文字在不在」，不核「改的是不是那一处」）⇒ 整表跑一遍仍是唯一能发现这类漂移的尺。
+
+### 四、边界
+
+- 两笔事故红（D-5 的 21 条、`1f16bea`）**照旧红着**，不登记、不冒充；本页不把它们说成全绿。
+- 本页只引用工具自己落的读数，不改写；时间量按 head-cert 的「两端独占」口径可引用。
+- 共享分支 upstream 仍处解除状态（第 666 页已记），与本笔无关。
