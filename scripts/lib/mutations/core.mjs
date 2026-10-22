@@ -251,7 +251,7 @@ export const MUTATIONS = [
     src: "src/providers/anthropic.ts",
     test: "tests/provider-cache-usage.test.ts",
     desc: "只认 message_delta 的缓存字段（对端在 message_start 起报、delta 不再回时，整次命中被判成零）",
-    apply: (s) => s.replace("        if (event.message?.usage?.cache_read_input_tokens !== undefined) cacheRead = event.message.usage.cache_read_input_tokens;\n        if (event.message?.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.message.usage.cache_creation_input_tokens;\n", ""),
+    apply: (s) => s.replace("          if (event.message?.usage?.cache_read_input_tokens !== undefined) cacheRead = event.message.usage.cache_read_input_tokens;\n          if (event.message?.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.message.usage.cache_creation_input_tokens;\n", ""),
     expectFail: "缓存量只出现在 message_start（delta 不回缓存字段）时同样要认",
   },
   {
@@ -259,7 +259,7 @@ export const MUTATIONS = [
     src: "src/providers/anthropic.ts",
     test: "tests/provider-cache-usage.test.ts",
     desc: "不认累计帧 message_delta 里的缓存字段（末帧才是权威累计值，漏读即分块恒缺）",
-    apply: (s) => s.replace("        if (event.usage?.cache_read_input_tokens !== undefined) cacheRead = event.usage.cache_read_input_tokens;\n        if (event.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.usage.cache_creation_input_tokens;\n", ""),
+    apply: (s) => s.replace("          if (event.usage?.cache_read_input_tokens !== undefined) cacheRead = event.usage.cache_read_input_tokens;\n          if (event.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.usage.cache_creation_input_tokens;\n", ""),
     expectFail: "缓存量只出现在 message_delta（累计帧）时也认，且不跨帧累加",
   },
   {
@@ -554,7 +554,7 @@ export const MUTATIONS = [
     src: "src/providers/anthropic.ts",
     test: "tests/turn-truncated.test.ts",
     desc: "Anthropic 这一路摘掉发射 ⇒ 它单独回到「缺失与正常不可分」",
-    apply: (s) => s.replace("    const stopMissing = turnStopMissingEvent(callId, stopReason, outputTokens);\n    if (stopMissing) yield stopMissing;\n", ""),
+    apply: (s) => s.replace("      const stopMissing = turnStopMissingEvent(callId, stopReason, outputTokens);\n      if (stopMissing) yield stopMissing;\n", ""),
     expectFail: "anthropic：流结束而 message_delta 没带 stop_reason ⇒ 落一条 turn_stop_missing",
   },
   {
@@ -562,7 +562,7 @@ export const MUTATIONS = [
     src: "src/providers/gemini.ts",
     test: "tests/turn-truncated.test.ts",
     desc: "Gemini 这一路摘掉发射 ⇒ 它单独回到「缺失与正常不可分」",
-    apply: (s) => s.replace("    const stopMissing = turnStopMissingEvent(callId, finishReason ?? blockReason, outputTokens);\n    if (stopMissing) yield stopMissing;\n", ""),
+    apply: (s) => s.replace("        const stopMissing = turnStopMissingEvent(callId, finishReason ?? blockReason, outputTokens);\n        if (stopMissing) yield stopMissing;\n", ""),
     expectFail: "gemini：流结束而 finishReason 缺席 ⇒ 落一条 turn_stop_missing",
   },
   {
