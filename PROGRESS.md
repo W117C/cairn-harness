@@ -21979,3 +21979,198 @@ node bin/cairn.mjs --workspace <run-dir> --mode auto --model <模型> \
 - 桌面真机证据是离屏 gallery / state-smoke（真 renderer + 合成 AgentApi），不覆盖真 provider；
   思考档真正进请求体的那一跳由 `seedNewSessionThinking` 的单测与接线判据覆盖，未发真模型请求。
 - 仓外审计另见 `/Users/ze/Downloads/Cairn/项目审计-2026-10-22.md`（不进本仓台账）。
+## 2026-10-23 · 第 675 页：LSP 的 `languageId` 此前把非 JS 语言的服务器**整条静默废掉**——`extensionToLanguage` 的值一路被丢掉
+
+### 一、缺陷（先量后动，有复现）
+
+现象不是"报错"，是**六操作全静默失效**：配一个 Python/Go/Rust 的 language server（pyright /
+gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plaintext"`——真服务器要么拒绝、
+要么返回空，而 `lsp` 工具的六个操作没有一处会为这件事出声。
+
+根因三处，全部现读到代码（不是推断）：
+
+1. **契约格里没有这一项**。`src/tools/lsp.ts` 的 `LspServerConfig`（宿主 `.agent/lsp.json` 的解析目标）
+   只有 `command / args / extensions / initializationOptions / diagnosticsEnabled`，
+   **没有 `extensionToLanguage`** ⇒ 宿主配置里写了也会在解析时被丢掉。
+2. **插件侧只取键、丢掉值**。`src/agent/plugins/index.ts` 的 `activateLsp()` 写的是
+   `const extensions = Object.keys(cfg.extensionToLanguage ?? {})`——拿这份表的**键**当扩展名清单，
+   而**值**（`.py → python`）一个字都没往运行时传。
+3. **languageId 是硬编码的二值启发式**。`openFile` 里
+   `[".ts",".tsx",".js",".jsx",".mjs",".cjs"].includes(extname(abs)) ? "typescript" : "plaintext"`
+   ⇒ 六个 JS 后缀之外一律 `plaintext`。
+
+复现（不是推理）：造一个只声明 `.py` 的 server，`loadLspConfig` 之后
+`"extensionToLanguage" in cfg.servers.py === false`（第 1 处的直接读数）。
+插件侧那条（第 2 处）**没有任何用例覆盖**——第四台变异先造出来时才暴露，见第三节。
+
+### 二、改法（四处，全在运行时面）
+
+| 位置 | 改了什么 |
+|---|---|
+| `src/tools/lsp.ts` `LspServerConfig` | 新增 `extensionToLanguage?: Record<string,string>`（字段名向 CC 对齐，`src/agent/plugins/types.ts` 早有同名格） |
+| `src/tools/lsp.ts` `loadLspConfig` | 解析时把这一格带出来（此前整格丢弃） |
+| `src/tools/lsp.ts` `LspClient` | 构造多收一个 `languageIds` 表；`openFile` 改走 `languageIdFor(absPath)`＝**表优先，缺省回落** |
+| `src/tools/lsp.ts` 新导出 | `defaultLanguageId(absPath)`（旧启发式原样抽成纯函数）与 `languageIdMap(server)`（坏形状按缺格，不抛） |
+| `src/agent/plugins/index.ts` `activateLsp` | 把 `extensionToLanguage` 的**值**一起传给运行时 |
+
+两条刻意的不变量：
+
+- **存量配置行为一个字不变**：没配这一格 ⇒ 走 `defaultLanguageId`，六个 JS 后缀照旧 `typescript`、
+  其余照旧 `plaintext`。判卷里有一条正面钉住这个回落。
+- **查表按原样键、不做大小写归一**：配置写 `.py` 只命中 `.py`；`.pyi` 回落 `plaintext` 而不是猜。
+  静默归一会把"配错了扩展名"这件事藏起来。
+
+### 三、判卷与造红（六台变异，条条杀死）
+
+新增 `tests/lsp-language-id.test.ts`（6 条）＋ `tests/plugin-lsp-activation.test.ts` 补 1 条断言。
+探针 server 是**新夹具** `fixtures/lsp/languageid-probe-server.mjs`：把每个 `didOpen` 的 `languageId`
+记下来，用自定义请求 `probe/languageIds` 原样交回 ⇒ 判的是**线上真发出去的那个值**，
+不是"配置对象里有没有这个字段"。（没改既有的 `fixtures/lsp/stub-server.mjs`——那一族判卷靠它的行标记约定。）
+
+| # | 变异（改一处，跑完逐字节复原） | 红几条 | 红在哪 |
+|---|---|---:|---|
+| 1 | `openFile` 回落到 `defaultLanguageId` | 2 | 非 JS 拿到声明的 id ／ .go·.rs 两 server 不串 |
+| 2 | `loadLspConfig` 丢掉这一格 | 2 | 配置面断言 ／ 同上 |
+| 3 | `languageIdMap` 收空串值 | 1 | 坏形状按缺格 |
+| 4 | 插件侧再丢掉值（**回归原缺陷**） | 1 | `plugin-lsp-activation` 的 extensionToLanguage 断言 |
+| 5 | `languageIdFor` 不查表 | 2 | 同 1 |
+| 6 | `LspClient` 构造不接表（接线） | 2 | 同 1 |
+
+**第 4 台是第一版判卷漏掉的**：初版只用宿主配置面造红，插件那条路径零覆盖 ⇒ 变异 4 全绿存活。
+补上那条断言之后才杀死。这条本身是教训——**同一条契约有两个入口时，只钉一个入口的判据是半个判据**。
+
+### 四、读数（工作树级，未落库 ⇒ 不是 HEAD 认证）
+
+- `tests/lsp-language-id.test.ts`＋LSP 全家（`lsp` / `lsp-argv` / `lsp-diagnostics-freshness` /
+  `lsp-permission-gate` / `lsp-request-lifecycle` / `lsp-trust-gate` / `plugin-lsp-activation`）：
+  **8 文件 / 82 条全绿**（`--maxWorkers=2`）。
+- `node --import tsx scripts/typecheck.ts`：**0 报错**。
+- `pnpm desktop-boundary-check`：绿。`repo-hygiene-check` 四面绿（`src` 最大 1812 行 / 帽 2600）。
+- `evidence-typecheck-check`：危险码 **12 条／帽 12 条**（正贴线，与本笔无关的存量）。
+- 核心全量（`pnpm test:capped`，`--maxWorkers=2`）：**479 文件 / 6528 条，2 failed**。
+  基线读数是 **478 文件 / 6522 条，2 failed** ⇒ 增量恰为 **+1 文件 / +6 条**（本笔新增），
+  两条红与基线**逐条同一处**（`tests/docs-check.test.ts` 的 D-5 21 条、`tests/mutate-needles-check.test.ts`
+  的 `1f16bea` 归因），均为第 666 页已裁决的诚实红，与本笔无关。
+- `pnpm docs-check`：**21 项违规 D-5=21**（与本笔改动前逐字同一组）；页号唯一面 723 → **724** 张
+  ⇒ 第 675 页已登记，新撞号 0。
+
+### 五、边界（不冒充的）
+
+- 本页落库为两笔：`e9b9624c`（LSP 那一簇的收尾，同笔带 CODE-WIKI）、`3413632a`（本页主体）。
+  落库后重跑 `pnpm mutate-needles-check`：**阻断 0／钉在飞文本 0／全部锚点针脚可判定 ✅**
+  （落库前是「阻断 4、钉在飞文本 4」——那 4 条正是因为实现还没进 HEAD）。
+- **仍未跑** `mutate-verify` / `head-cert-check`（量 HEAD 的两道全量门，各自半小时量级）⇒ 本页不冒充 HEAD 认证。
+- 未发真模型请求；未跑真 language server（pyright / gopls 本机未装）⇒ 这条修的是
+  **协议面的 languageId 契约**，"真服务器会因此开始返回结果"是**推论，未实测**。
+- 真机观感不涉及本页（纯内核改动）。
+
+## 2026-10-23 · 第 676 页：流内重试只修了一家——Anthropic 与 Gemini 一次过载打死整轮（含沙箱实测与原判据的三家补齐）
+
+### 一、缺陷（先量后动，同一支探针只换适配器）
+
+`src/providers/openai.ts` 自 2026-09-30 起有一条**流内重试**：对端把 5xx **塞进 SSE 体**
+（HTTP 200 + 一帧 `{"error":…}`）时 `establishStream` 管不着，于是适配器自己按「还没吐过输出」重放。
+但同一族缺陷在另两家**从来没修**——`src/providers/anthropic.ts#handleEvent`、`src/providers/gemini.ts#streamGemini` 遇到 `overloaded_error` /
+`RESOURCE_EXHAUSTED` 直接 `throw`，一次过载就把整轮任务打死。
+
+实测（一次性探针 `.tmp/probes/probe-{anthropic,gemini,openai}-retry.mts`：同一形状——首帧报可重试错、次帧正常。
+**探针本身 `.tmp/` 是 gitignored、不入库**；持久证人是同笔的 `tests/provider-instream-retry.test.ts`，
+它把同一组边界钉进判卷，下面的 before/after 读数只是当时的现场）：
+
+| 适配器 | 首帧 | 修前 FETCH CALLS | 修前结局 |
+|---|---|---:|---|
+| OpenAI 兼容 | `server_error`（502） | **2** | 正常收尾（已修） |
+| Anthropic | `overloaded_error` | **1** | `THREW: 流错误 overloaded_error` |
+| Gemini | `RESOURCE_EXHAUSTED`（429） | **1** | `THREW: 流错误 RESOURCE_EXHAUSTED` |
+
+根因不是"忘了"这么简单，是**判据被抄成了两份**：`StreamFailure` 类与名字表
+`RETRYABLE_ERROR_TYPES` 都住在 `openai.ts` 里（`:16`、`:27`），另两家要用就得从 openai 反向 import
+一个私有形状。这种「同一条契约只在一支适配器上有实现」正是第 675 页那条教训的镜像形状
+（同一契约有两个入口时只钉一个＝半个判据）。
+
+### 二、改法（判据搬进共用叶子，三家各接一次）
+
+| 位置 | 改了什么 |
+|---|---|
+| `src/providers/retry.ts` | 新增 `StreamFailure`、`retryableStreamErrorFrame`（数值优先 + 名字表）、`retryableStreamFailure`（catch 处唯一出口） |
+| `src/providers/openai.ts` | 只为兼容再导出 `StreamFailure`；error 帧判据改调共用的那一支（字段行为逐字不变） |
+| `src/providers/anthropic.ts` | 流式主体搬进 `streamOnce`，接 `STREAM_ATTEMPTS=3` + 同一组安全边界 |
+| `src/providers/gemini.ts` | 同上；`callSeq` 改为**逐尝试重置**（重放是同一逻辑请求，缺省 id 不许漂） |
+
+名字表按三家的真实形状一次收全（大小写不敏感）：`server_error` / `overloaded_error` /
+`api_error` / `rate_limit_error|exceeded` / `timeout`（OpenAI 系）、`RESOURCE_EXHAUSTED` /
+`UNAVAILABLE` / `INTERNAL` / `DEADLINE_EXCEEDED`（Gemini）。**请求本身的问题不收**
+（`invalid_request_error` / `authentication_error` / `permission_error` / `INVALID_ARGUMENT`、
+400/401/403/404/422/451）——重放只会再错一次并白烧预算。
+
+四条不变量的口径与 openai 侧**逐字同源**（不是"看起来一样"）：① 本次尝试一个输出都没吐出去；
+② 还有次数；③ 不是调用方取消；④ 停滞守卫触发不重放。`emitted` 跨尝试累积，判在**尝试内部**。
+
+### 三、判卷与造红（19 条新判据，4 台变异条条杀死）
+
+新增 `tests/provider-instream-retry.test.ts`：用 `describe.each` 把**同一组五条不变量在三家各钉一次**
+（首帧可重试错 ⇒ 重试并正常收尾 ／ ★吐过正文不许重放 ／ 请求级错误不重试 ／ 次数有上限 ／
+退避期间取消不再打第二次），外加 4 条判据函数本身（数值优先、名字表三家覆盖、请求级错误、`StreamFailure` 出口）。
+
+| # | 变异（改一处，跑完逐字节复原） | 红几条 | 红在哪 |
+|---|---|---:|---|
+| 1 | Anthropic 去掉重试（`throw err` 无条件） | 2 | 首帧可重试 ／ 次数上限 |
+| 2 | Anthropic 忽略 `emitted`（吐过也重放） | 1 | ★ 反向哨兵 |
+| 3 | Gemini 忽略 `emitted` | 1 | ★ 反向哨兵（**另一家也要钉**） |
+| 4 | 名字表删掉 Gemini 那四个形状 | 1 | 名字表覆盖 |
+
+复原后 `diff -q` 三份备份逐字节相同（`ALL RESTORED BYTE-IDENTICAL`）。
+
+### 四、读数（工作树级，未落库 ⇒ 不是 HEAD 认证）
+
+- `tests/provider-instream-retry.test.ts`：**19 条全绿**；连既有 provider 全家
+  （providers / http-retry / provider-stream-lifecycle / provider-cache-usage /
+  provider-submission-identity / http-error-body / http-retry-cancellation）
+  = **8 文件 / 139 条全绿**（`--maxWorkers=2`）。
+- `node --import tsx scripts/typecheck.ts`：tracked 面 **0 报错**（唯一告警是本笔**未跟踪**的新判卷文件）。
+- `pnpm repo-hygiene-check` 四面绿（src 最大 1812 行 / 帽 2600）；`pnpm desktop-boundary-check` 绿。
+- 探针三条同跑：三家的 `FETCH CALLS` 都从 1 变成 **2**，且都拿到第二次的内容。
+
+### 五、边界（不冒充的）
+
+- 本页落库为两笔：`e9b9624c`（LSP 那一簇的收尾，同笔带 CODE-WIKI）、`3413632a`（本页主体）。
+  落库后重跑 `pnpm mutate-needles-check`：**阻断 0／钉在飞文本 0／全部锚点针脚可判定 ✅**
+  （落库前是「阻断 4、钉在飞文本 4」——那 4 条正是因为实现还没进 HEAD）。
+- **仍未跑** `mutate-verify` / `head-cert-check`（量 HEAD 的两道全量门，各自半小时量级）⇒ 本页不冒充 HEAD 认证。
+- 未发真模型请求：本页证的是**协议面**的重试契约，"真 Anthropic/Gemini 端点会因此少死几趟"是推论，未实测。
+- 只补了「流内 error 帧」这一支的重试；**流内半途断连**（SSE 读完但没收到收尾事件）三家仍不重试——
+  那需要另一条判据（怎么可靠地认出"断在半截"而不是"正常短回答"），本页不碰。
+
+### 六、四条既有变异锚点跟着搬了针脚（没撤锚点）
+
+搬进 `streamOnce` 之后有 4 条既有锚点的针脚失效（缩进变了），`mutate-needles-check` 当场点名：
+`anthropic-start-cache-frame-ignored`、`anthropic-delta-cache-frame-ignored`、
+`anthropic-never-emits-stop-missing`、`gemini-never-emits-stop-missing`。
+**改的是针脚文本，不是删锚点**（`scripts/lib/mutations/core.mjs` 四条 `apply` 各 +2 空格缩进）。
+
+逐条在工作树上实跑造红（改一处、跑完 `diff -q` 复原成逐字节相同）：
+
+| 锚点 | 摘掉什么 | 红在哪 |
+|---|---|---|
+| `anthropic-start-cache-frame-ignored` | message_start 的两个缓存读取 | `provider-cache-usage`「只出现在 message_start 时同样要认」 |
+| `anthropic-delta-cache-frame-ignored` | message_delta 的两个缓存读取 | `provider-cache-usage`「累计帧也认，且不跨帧累加」 |
+| `anthropic-never-emits-stop-missing` | 流尾 `turn_stop_missing` 发射 | `turn-truncated`「anthropic：没带 stop_reason ⇒ 落一条」 |
+| `gemini-never-emits-stop-missing` | 同上（Gemini 侧） | `turn-truncated`「gemini：finishReason 缺席 ⇒ 落一条」 |
+
+**`pnpm mutate-needles-check` 仍然红 4 条**，形态是工具自己命名的「**钉在飞文本 4**」：
+盘上判得通过、而 HEAD 那份里针脚 0 处——因为本笔**尚未提交**。工具的修法原话是「等那次实现入库
+（或撤这条锚点），**不要**把针脚改成 HEAD 里的旧写法」，照办：不改回去、不撤锚点，落库后这 4 条自然归零。
+**这不算本笔的绿**，如实记成红。
+
+### 七、本轮判卷读数（全量，`--maxWorkers=2`）
+
+- 根套件：**480 文件 / 6547 条，2 failed**（落库前的工作树读数）。基线（第 675 页）**478 / 6522，2 failed**
+  ⇒ 增量恰 **+2 文件 / +25 条**（本笔 19 条；另一文件的 +6 条是 LSP 那一簇的 `lsp-language-id`，同轮落库）。两条红与基线**逐条同一处**（`docs-check` 的 D-5 21 条、`mutate-needles-check` 的
+  `1f16bea` 归因），均为第 666 页已裁决的诚实红。
+  **反证做过**：把本页的 `PROGRESS.md`/`STATE.md` 改动 stash 掉重跑 `docs-check.test.ts`，仍是
+  `expected […(21)] to deeply equal []` ⇒ 那 21 条与我的页无关。
+- 桌面套件：**203 文件 / 1394 条全绿**；`desktop-boundary-check` 绿。
+- `renderer-layer-check` 绿（120 文件）；`repo-hygiene-check` 四面绿。
+- `evidence-typecheck-check`：危险码 12 / 帽 12（存量，与本笔无关）。
+- `pnpm docs-check`：**D-5=21**（同一组）；页号唯一面新增 0 撞号，下一个未占用页号 677。
+  本笔先撞了两条 D-10（引用的适配器位置只写裸文件名）⇒ 改成 `path#symbol` 后归零。
