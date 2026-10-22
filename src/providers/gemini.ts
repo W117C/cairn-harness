@@ -4,6 +4,7 @@
 // 一个 chunk 可含多个 functionCall（并行调用，全部解析成一条条 tool_call）；
 // usageMetadata 含 promptTokenCount / candidatesTokenCount / thoughtsTokenCount / totalTokenCount
 //（chunk 间累计，末 chunk 为准——直接覆盖不累加）。解析直接消费 Gemini 原生字段，不经 OpenAI 中间格式。
+import { randomUUID } from "node:crypto";
 import { DEFAULT_STALL_MS, type StallGuard } from "../net";
 import { establishStream } from "./retry";
 import { turnStopMissingEvent, turnTruncatedEvent } from "./stop-reason";
@@ -183,6 +184,7 @@ export async function* streamGemini(
   const model = opts.model ?? process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
   const baseURL = opts.baseURL ?? "https://generativelanguage.googleapis.com";
   const doFetch = opts.fetchImpl ?? fetch;
+  const toolRequestScope = randomUUID(); // 不同请求的缺省调用 id 不能共用从零开始的序号。
 
   // 根因 4：停滞守卫改由 establishStream 逐次新建（静默窗口，不是总时长），成功建连后交回
   // 本函数继续管流体。建连期失败（429/5xx/网络抖动）按指数退避 + full jitter 重试；
@@ -274,7 +276,7 @@ export async function* streamGemini(
             const fc = part.functionCall;
             yield {
               type: "tool_call",
-              id: fc.id ?? `gemini-call-${String(callSeq++)}`,
+              id: fc.id ?? `gemini-call-${toolRequestScope}-${String(callSeq++)}`,
               name: fc.name ?? "",
               args: parseArgs(fc.args, label),
             };

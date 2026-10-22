@@ -88,6 +88,7 @@ import {
   resolveProvidedWorkspace,
 } from "./project-path-gate";
 import { isAppShellUrl } from "./shell-url";
+import { WindowWorkspaceContext } from "./window-workspace-context";
 import { ProjectRegistry } from "../../../../src/main/project-registry";
 import { loadCustomProviders } from "../../../../src/main/custom-provider-store";
 import { installCustomProviders, installedCustomProviders } from "../../../../src/providers/registry";
@@ -189,11 +190,11 @@ if (app.isPackaged && process.env.CAIRN_DESKTOP_WORKSPACE === undefined) {
   mkdirSync(join(userData, "workspace"), { recursive: true });
 }
 
-/** 活动工作区上下文（2026-10-17）：渲染层切项目/开会话时经 IPC 上报。工作区类操作
- *  （diff / 文件窗格 / 回滚 / 快照还原 / 路径动作）优先用它，缺省才回落「最近一次 run」。
- *  修的是冷启动实证：没跑过 run 时这些面板全部报「没有已知的工作区」。 */
-let workspaceContext: string | null = null;
-const resolveWorkspace = (): string | null => workspaceContext ?? getLastWorkspace();
+// 工作区由可信 IPC sender 所属窗口保存；弹窗继承打开时的选择，之后独立。
+// 缺少窗口上下文时，文件/回滚/终端操作拒绝执行，不能回落到别的窗口最近跑过的项目。
+const windowWorkspaces = new WindowWorkspaceContext(canonicalKnownProjectPath);
+const workspaceContext = (): string | null => windowWorkspaces.current();
+const resolveWorkspace = (): string => windowWorkspaces.require();
 
 // 自定义 provider（工作区的 `.agent/providers.json`）：与 CLI **同一条装载路径**，而且必须在
 // 任何一次 run 之前装上（provider 解析、档位表、适配器 baseURL 三处都读它）。
@@ -488,13 +489,13 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // 斜杠菜单技能清单（2026-10-18）：显式传工作区，切项目时不吃竞态。
   listSkills: async (workspace) => {
     // 批 133：workspace 是"去哪棵树里读技能"的根；只认已登记根。空参数回落到上下文。
-    const gate = resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext);
+    const gate = resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext());
     if (!gate.ok) throw new Error(gate.error);
     return await handleListSkills(gate.workspace);
   },
   // 技能正文（§8 #15）：同上按显式工作区读取。
   skillBody: async (name, workspace) => {
-    const gate = resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext);
+    const gate = resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext());
     if (!gate.ok) return { ok: false, error: gate.error };
     return await handleSkillBody(String(name ?? ""), gate.workspace);
   },
@@ -562,7 +563,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
       return { ok: false as const, reason: "error" as const, message: brief, hint: `想建议失败（${brief.slice(0, 60)}）——去设置检查模型，或再按一次 Tab。` };
     }
   },
-  getState: () => handleAgentState(workspaceContext),
+  getState: () => handleAgentState(workspaceContext()),
   getOnboarding: () => onboardingGroups(),
   getSettings: () => getSettings(),
   setSettings: async (patch) => {
@@ -587,29 +588,17 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   forkSession: (id, round, unique) => handleSessionFork(id as string, round as number, unique === true),
   // #7 文件级回滚（v2.16）：把第 N 轮主会话改过的文件还原成该轮之前的原件（源自 D7 覆盖前快照）。
   // 活动工作区上下文（desktop 专用）：空串清除；写入口只收字符串，非法值留给后续操作 fail-visible。
-  setWorkspaceContext: async (path) => {
-    const p = String(path ?? "");
-    if (p === "") { workspaceContext = null; return { ok: true as const }; }
-    // 只接受**已注册**的工作区：`/` 也是合法路径，不校验就把整盘变成文件窗格/预览的边界
-    // （workspaceReadText("etc/hosts")、workspacePathAction("Applications/X.app","open")）。
-    const canonical = await canonicalKnownProjectPath(p);
-    if (canonical === null) {
-      return { ok: false as const, error: `未注册的工作区，已拒绝：${p}` };
-    }
-    workspaceContext = canonical;
-    return { ok: true as const };
-  },
-  revertTurn: (id, round) => handleSessionRevert(id as string, round as number, workspaceContext),
+  setWorkspaceContext: (path) => windowWorkspaces.select(String(path ?? "")),
+  revertTurn: (id, round) => handleSessionRevert(id as string, round as number, resolveWorkspace()),
   // v4 变更审阅（diff 窗格逐 hunk）。
-  changeDiff: (req) => handleChangeDiff(req as never, workspaceContext),
+  changeDiff: (req) => handleChangeDiff(req as never, resolveWorkspace()),
   // v5 file 窗格（只读浏览）。
-  workspaceListDir: (relPath) => handleWorkspaceListDir(relPath as string, workspaceContext),
-  workspaceReadText: (relPath) => handleWorkspaceReadText(relPath as string, workspaceContext),
+  workspaceListDir: (relPath) => handleWorkspaceListDir(relPath as string, resolveWorkspace()),
+  workspaceReadText: (relPath) => handleWorkspaceReadText(relPath as string, resolveWorkspace()),
   // v7 路径动作（§2.3 右键菜单）：解析段（存在性 + 越界拒绝）在 workspace-fs（纯 Node 判卷面），
   // shell 调用留在壳。openPath 空串 = 成功（Electron 口径）。
   workspacePathAction: async (relPath, action) => {
     const ws = resolveWorkspace();
-    if (ws === null) return { ok: false, error: "工作区未知（先跑一场会话或选工作区）" };
     const resolved = await resolveEntry(ws, String(relPath ?? ""));
     if (!resolved.ok) return { ok: false, error: resolved.error };
     const act = String(action);
@@ -644,7 +633,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     return Promise.resolve({ ok: true });
   },
   // v5 terminal 窗格（PTY 宿主见 terminal-host.ts）。
-  // 与 diff/文件窗格/回滚同一条工作区解析：活动上下文优先，最近 run 只做兜底。
+  // 与 diff/文件窗格/回滚同一条工作区解析：只使用当前调用窗口的上下文。
   terminalStart: (owner) => terminalHost.start(resolveWorkspace(), process.env, owner as BrowserWindow),
   terminalWrite: (id, data) => Promise.resolve(terminalHost.write(id as string, data as string)),
   terminalResize: (id, cols, rows) => Promise.resolve(terminalHost.resize(id as string, cols as number, rows as number)),
@@ -658,6 +647,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
       backgroundColor: bootBackground(),
       webPreferences: { preload: join(distElectron, "preload.cjs"), contextIsolation: true, nodeIntegration: false },
     });
+    windowWorkspaces.inherit(win.webContents);
     hardenAppWindow(win);
     const hash = `pane=${encodeURIComponent(kind as string)}${typeof sessionId === "string" && sessionId !== "" ? `&session=${encodeURIComponent(sessionId)}` : ""}`;
     if (process.env.VITE_DEV_SERVER_URL) void win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#${hash}`);
@@ -688,9 +678,9 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // §3.7 · G4 会话级 worktree 隔离：解析归属/在跑拒绝/创建合并清理全在 kernel-host 与 core 侧。
   sessionWorktree: (req) => host.sessionWorktree(req as never),
   assignSessionProject: (sessionId, projectId) => handleSessionAssignProject(sessionId as string, projectId as string | null),
-  deleteMemory: (scope, topic) => handleMemoryDelete(scope as never, topic as string, workspaceContext),
+  deleteMemory: (scope, topic) => handleMemoryDelete(scope as never, topic as string, scope === "project" ? resolveWorkspace() : workspaceContext()),
   pluginDecide: async (plugin, trusted, workspace) => {
-    const gate = resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext);
+    const gate = resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext());
     if (!gate.ok) return { ok: false };
     return await handlePluginDecide(plugin as string, trusted as boolean, gate.workspace);
   },
@@ -797,7 +787,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // SEMA §3.5/§12：协议版本握手（同步返回 number，ipcMain.handle 自动包成 resolve）。
   protocolVersion: () => IPC_PROTOCOL_VERSION,
   // 能力在场性：搜索端点配没配。口径与 CLI --doctor 的 search 那一格同源（同一个 loadSearchConfig）。
-  capabilities: async () => await readCapabilities(resolveWorkspace() ?? workspace, join(app.getPath("userData"), "settings.json")),
+  capabilities: async () => await readCapabilities(workspaceContext() ?? workspace, join(app.getPath("userData"), "settings.json")),
   // v11 主界面重做批（七行）——
   // git 两闸：读数无副作用；克隆 URL 白名单 + 目标已存在即拒（都在 core 模块内判）。
   gitStatus: (path) => gitStatus(String(path)),
@@ -818,7 +808,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // 项目内模糊搜索（@ 引用数据面；只读文件名，不读文件内容）。
   // 2026-10-21 评审修：它同样收渲染层给的目录，必须过已登记根闸（只读名字也是泄露面）。
   workspaceSearch: async (ws, query) => {
-    const gate = resolveProvidedWorkspace(ws, await knownProjectRoots(), workspaceContext);
+    const gate = resolveProvidedWorkspace(ws, await knownProjectRoots(), workspaceContext());
     if (!gate.ok) throw new Error(gate.error);
     if (gate.workspace === null) throw new Error("工作区未知——先打开一个项目");
     return await searchWorkspace(gate.workspace, String(query));
@@ -829,7 +819,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // 结果三态由 core 给（ok / partial / unavailable），这里**原样传回**——
   // 「没量到」不许在主进程被折成空数组。
   sessionSearch: async (ws, query, options) => {
-    const gate = resolveProvidedWorkspace(ws, await knownProjectRoots(), workspaceContext);
+    const gate = resolveProvidedWorkspace(ws, await knownProjectRoots(), workspaceContext());
     if (!gate.ok) throw new Error(gate.error);
     if (gate.workspace === null) throw new Error("工作区未知——先打开一个项目");
     const o = options as { budgetBytes?: unknown; maxSessions?: unknown } | undefined;
@@ -844,7 +834,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     return saveTempFile(String(r.name ?? ""), r.bytes);
   },
   // 快照还原（检查器「撤销此文件改动」；工作区口径与 changeDiff 同——最近一次 run 的工作区）。
-  snapshotRestore: (req) => handleSnapshotRestore(req as { path?: string; snapshotId?: string }, workspaceContext),
+  snapshotRestore: (req) => handleSnapshotRestore(req as { path?: string; snapshotId?: string }, resolveWorkspace()),
   // Finder 显示（项目右键菜单 / 项目外附件 chip 的落点）。只显示不打开；绝对路径 + 存在性前置。
   attachmentThumb: (path) => handleAttachmentThumb(path as string),
   revealInFinder: async (path) => {
@@ -877,14 +867,16 @@ for (const [key, channel] of Object.entries(INVOKE_CHANNELS) as [InvokeChannel, 
     if (!isTrustedIpcSender(event)) {
       throw new Error(`IPC 来源不可信，已拒绝：${channel}`);
     }
-    // 后台弹窗恢复页面时焦点可能还在主窗；视图归属取发起 IPC 的窗口。
-    if (key === "browserOpen") return handler(args[0], args[1], BrowserWindow.fromWebContents(event.sender));
-    if (key === "terminalStart") {
-      const owner = BrowserWindow.fromWebContents(event.sender);
-      if (owner === null || owner.isDestroyed()) return { ok: false, error: "调用窗口已关闭" };
-      return handler(owner); // 窗口归属只由可信 sender 提供，忽略 renderer 自报参数。
-    }
-    return handler(...args);
+    return windowWorkspaces.run(event.sender, () => {
+      // 后台弹窗恢复页面时焦点可能还在主窗；视图归属取发起 IPC 的窗口。
+      if (key === "browserOpen") return handler(args[0], args[1], BrowserWindow.fromWebContents(event.sender));
+      if (key === "terminalStart") {
+        const owner = BrowserWindow.fromWebContents(event.sender);
+        if (owner === null || owner.isDestroyed()) return { ok: false, error: "调用窗口已关闭" };
+        return handler(owner); // 窗口归属只由可信 sender 提供，忽略 renderer 自报参数。
+      }
+      return handler(...args);
+    });
   });
 }
 void webContents; // 显式留痕：推送经 BrowserWindow.getAllWindows()
@@ -914,6 +906,7 @@ function openExternalSafe(raw: string): void {
 }
 function hardenAppWindow(win: BrowserWindow): void {
   const wc = win.webContents;
+  wc.once("destroyed", () => windowWorkspaces.forget(wc));
   wc.setWindowOpenHandler(({ url }) => {
     openExternalSafe(url);
     return { action: "deny" };

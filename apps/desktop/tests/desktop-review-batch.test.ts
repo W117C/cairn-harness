@@ -26,8 +26,8 @@ describe("改名绑定到发起时那条会话（切会话不能改错对象）"
     expect(app).not.toContain("void renameSessionById(activeId, v);");
   });
 
-  it("切会话 ⇒ 取消改名（输入框不跨会话活着）", () => {
-    expect(app).toContain("setBarRenaming(null);\n  }, [activeId]);");
+  it("切会话（含跨工作区同名会话）⇒ 取消改名（输入框不跨会话活着）", () => {
+    expect(app).toContain("setBarRenaming(null);\n  }, [activeId, activeWorkspace]);");
   });
 });
 

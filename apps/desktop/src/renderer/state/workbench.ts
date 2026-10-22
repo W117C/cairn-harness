@@ -414,9 +414,18 @@ export function useWorkbenchModel() {
   // 工作区上下文上报（2026-10-17）：主进程侧的 diff / 文件窗格 / 回滚 / 快照还原 / 路径动作
   // 优先用「当前活动项目」，不再只认「最近一次 run 的工作区」——冷启动没跑过 run 时，
   // 打开旧会话看改动会报「没有已知的工作区」，切项目后还可能拿上一个项目的根去解析路径。
+  // 选择被拒（项目已从注册表移除等）⇒ 主进程仍停在上一个项目；留着就是跨项目读，
+  // 显式清空并把原因说出来（fail closed，不静默沿用旧根）。
+  const applyWorkspaceContext = useCallback((workspace: string | null): void => {
+    void window.agent.setWorkspaceContext(workspace ?? "").then((r) => {
+      if (r.ok) return;
+      void window.agent.setWorkspaceContext("");
+      toast.error(r.error ?? "工作区不可用，已清空窗口上下文");
+    });
+  }, []);
   useEffect(() => {
-    void window.agent.setWorkspaceContext(activeWorkspace ?? "");
-  }, [activeWorkspace]);
+    applyWorkspaceContext(activeWorkspace);
+  }, [activeWorkspace, applyWorkspaceContext]);
   useEffect(() => {
     knownSessionIds.current = new Set(sessions.map((s) => s.id));
   }, [sessions]);
@@ -494,7 +503,7 @@ export function useWorkbenchModel() {
     // 2026-10-18：**渲染层状态也要跟**——此前只通知了主进程，activeWorkspace 仍停在旧项目：
     // 空屏项目 chip、预览、斜杠技能清单都会读错工作区。会话归属已知即以它为准。
     if (sessionWs !== null) setActiveWorkspace(sessionWs);
-    void window.agent.setWorkspaceContext(sessionWs ?? "");
+    void applyWorkspaceContext(sessionWs);
     const seq = ++openSeq.current;
     // 立刻清掉上一会话的转录/门卡数据面：此前要等 openSession 回包才整体替换，窗口内
     // B 的标题下仍挂着 A 的转录、A 的澄清/方案门与行内「重试/还原」——用户可操作且会发错会话。
@@ -650,18 +659,18 @@ export function useWorkbenchModel() {
    *  标题不从 sessionTitle 取（它在本回调之后才声明，TDZ）——直接由 sessions + activeId 派生。 */
   const copyTranscript = useCallback((): void => {
     if (activeId === null) { toast.error("先打开一个会话再复制"); return; }
-    const title = sessions.find((s) => s.id === activeId)?.title ?? activeId;
+    const title = findSessionByRef(sessions, activeId, activeWorkspace ?? undefined)?.title ?? activeId;
     const text = transcriptMarkdown(events, title);
     void navigator.clipboard.writeText(text).then(
       () => { toast.success("已复制整段对话"); },
       (err: unknown) => { toast.error(`复制失败：${err instanceof Error ? err.message : String(err)}`); },
     );
-  }, [activeId, events, sessions]);
+  }, [activeId, activeWorkspace, events, sessions]);
 
   /** 导出整段对话为 .md（2026-10-18）：原生保存面板在 main；取消 = 合法结果，不报错误。 */
   const exportTranscriptFile = useCallback((): void => {
     if (activeId === null) { toast.error("先打开一个会话再导出"); return; }
-    const title = sessions.find((s) => s.id === activeId)?.title ?? activeId;
+    const title = findSessionByRef(sessions, activeId, activeWorkspace ?? undefined)?.title ?? activeId;
     void window.agent.exportTranscript(transcriptMarkdown(events, title), transcriptFileName(title)).then((r) => {
       if (r.ok) { toast.success(`已导出：${r.path ?? ""}`); return; }
       if (r.canceled === true) { toast("已取消导出"); return; }
@@ -669,7 +678,7 @@ export function useWorkbenchModel() {
     }).catch((err: unknown) => {
       toast.error(`导出失败：${err instanceof Error ? err.message : String(err)}`);
     });
-  }, [activeId, events, sessions]);
+  }, [activeId, activeWorkspace, events, sessions]);
 
   /** 命令面板操作分发（P3-3）：动作全部复用既有能力（不另起炉灶）；新会话经 ref（TDZ 口径同 dialog）。 */
   const handlePaletteAction = useCallback((action: PaletteAction): void => {
@@ -737,7 +746,7 @@ export function useWorkbenchModel() {
   // ---- v2.17 运行中可沟通：按会话发送队列 ----
   // 队列语义全在 send-queue.ts（本文件只存表与接线）；表是 Map<sessionId, 队列>，
   // 这样后台会话的排队不因切换会话而丢失，自动派发也只认原会话。
-  const { setQueueFor, send, sendWithGoal, handleRetryLast, handleRetryRound, resumeQueue, cancelRunHeal } = useRunQueue({ setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, modeRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef });
+  const { setQueueFor, send, sendWithGoal, handleRetryLast, handleRetryRound, resumeQueue, cancelRunHeal } = useRunQueue({ setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, modeRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef });
 
     const { lastError, lastNotice, runningActive, pendingClarify, pendingPlan, askForActive, phase, stopped, phaseLabel, chosen, pickerValue } = useRunReadings({ sessionErrors, activeId, sessionNotices, runningSet, setElapsedSec, runStartBySession, events, askBySid, stoppedIds, lastDeltaAt, selections, providerInfo });
 
@@ -783,7 +792,7 @@ export function useWorkbenchModel() {
     [streamRows],
   );
   // 会话条标题（§2.2 会话名 13px）：取会话真实标题；索引未到时退 id（不编名字）。
-  const sessionTitle = activeId === null ? "" : (sessions.find((s) => s.id === activeId)?.title ?? activeId);
+  const sessionTitle = activeId === null ? "" : (findSessionByRef(sessions, activeId, activeWorkspace ?? undefined)?.title ?? activeId);
   const { cycleView, toggleFoldRound, foldAllTurns, unfoldAllTurns, jumpToRound, jumpToEvent } = useConversationNavigation({ viewRef, hasThinking, setViewMode, setViewToast, viewToastTimer, foldedBySession, activeId, setFoldedRounds, outlineTurns, setFlashRound, streamEl, flashRound, events, activeIdRef, stick, setOutlineOpen, setOutlineCurrent, outlineOpen, streamRows, foldedRounds });
 
     // 切会话 ⇒ **取消改名**（2026-10-20 独立评审追出，MEDIUM 的第二道保险）：
@@ -792,7 +801,7 @@ export function useWorkbenchModel() {
   // 这一道保证「界面不撒谎」（输入框直接收起来，不留一个改不动的框）。
   useEffect(() => {
     setBarRenaming(null);
-  }, [activeId]);
+  }, [activeId, activeWorkspace]);
 
   // ── 蓝本 §3.6 快捷键全表（一处挂载；latest-ref 模式——监听器只订阅一次，闭包每次渲染取最新值）──
   /** F2 重命名当前会话（2026-10-18）：桌面端肌肉记忆；点会话名也能改，这里补键盘入口。
@@ -800,7 +809,7 @@ export function useWorkbenchModel() {
   const startBarRename = useCallback((): boolean => {
     const sid = activeIdRef.current;
     if (sid === null) return false;
-    setBarRenaming({ id: sid, text: sessions.find((s) => s.id === sid)?.title ?? sid });
+    setBarRenaming({ id: sid, text: findSessionByRef(sessions, sid, activeWorkspaceRef.current ?? undefined)?.title ?? sid });
     return true;
   }, [sessions]);
   // 输入区锁因（2026-10-18 唯一处）：快捷键提示、Composer disabled、占位文案三面共用同一判据，

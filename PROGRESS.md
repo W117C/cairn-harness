@@ -21539,3 +21539,59 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 - 仍照抄不美化：那 6 项未证（gate-check / autonomy-check / compaction-check / provider:check /
   plugins-check / gym-check 各 1）是**没量到**，不是通过。
 
+
+## 2026-10-22 · 第 663 页：三处「看着对、真机上会串」的收口——窗口工作区归属、同名会话身份、提交幂等
+
+这一批是「完成所有未完成项」里先落地的那一半：三处都不是新功能，是**同一条身份键只用了 session id**
+在不同入口上各自漏气的收口。产品指针分叉仍未接线（见「边界」）。
+
+### 一、窗口工作区：不再从「最近一次 run」借
+
+- 旧实现是一个模块级 `workspaceContext: string | null`，缺省回落 `getLastWorkspace()`。
+  真机复现（`apps/desktop/scripts/workspace-owner-smoke.cjs`，真实 main + 真实 preload + 构建后的 renderer，
+  两个临时项目、不调模型）：从 A 弹出文件窗格 → 主窗切 B ⇒ 弹窗误读 **B**；主窗清空 ⇒ 弹窗跟着失明。
+- 新实现 `apps/desktop/src/main/window-workspace-context.ts`：以**可信 IPC sender** 为键（WeakMap），
+  每次调用把选择快照进 Node 原生 `AsyncLocalStorage`；弹窗在创建时**继承**调用窗口那一刻的快照，之后独立。
+  - 晚到的慢校验不能覆盖较新的选择（版本号）；清空也使在飞校验失效；关窗后不再复活旧状态。
+  - 未登记路径仍拒绝；隐式文件操作在无上下文时**显式拒绝**，不再回落到别的窗口最近跑过的项目。
+  - `terminalStart` 的窗口归属仍只由可信 sender 给，renderer 自报参数继续忽略。
+- 红面 6 项里 3 项失败；修后同一脚本 **13/13**（含根闸、同名跨项目 KernelHost open、命令面板正文检索/打开）。
+  新增单测 7/7。
+
+### 二、同名会话身份：标题、高亮、活动行不再借别的工作区
+
+- 正文搜索的 `unavailable` 状态改成「中文说明 ＋ 原始诊断」（此前可能只剩 ENOENT 一行）；没有匹配仍不冒充不可用。
+- 侧栏活动行只在**当前工作区**：`activeId` 对别的项目的同名行一律 `null`；搜索打开一个未列出的旧会话时，
+  不借用另一项目的同名行高亮。
+- 真机复验（`session-search-renderer-smoke`）：**23/23、0 skipped**；定向 9 文件 / 72 测试（`maxWorkers=2`）。
+
+### 三、提交幂等：整条工具流水线，包括验证门与钩子
+
+- `SubmissionLedger` 以 `agentId + toolCallId` 为键（JSON 元组，不做分隔符拼接）包住**整条**提交：
+  落盘、工具表硬闸、skill 摘除、verify 反射、权限门、hook、工具执行、结果落盘。
+  重复 id 回用原提交；参数或工具名变化也不算新调用——**终态失败粘滞**，不重做副作用。
+- 三个适配器（Anthropic / Gemini / OpenAI）在 provider 缺原生调用 id 时，把缺省 id 加上**每请求一次的随机作用域**：
+  重试沿用同一前缀（刻意的），新请求不再从零序号碰撞。
+- 收束路径：旧测试提供方持续重发同一条**环境红**验证时，工具不再重复执行，循环却会撞步数上限——
+  现在只在「整轮都是已记录的环境红重发、没有新提交」时于流结束后收束；同轮后续的新工具/新验证照常执行，
+  原判卷未改。首次核心全量 469 文件 / 6475 用例中仅 `verify-cause` 这一条失败；修复后 **469 / 6477、exit=0**。
+
+### 四、读数（量的是工作树，不是 HEAD）
+
+- 核心：**469 文件 / 6477 用例全绿**（`--maxWorkers=2`，出沙箱，exit=0）。
+- 桌面：**199 文件 / 1371 用例全绿** ＋ `desktop-boundary-check` 绿（出沙箱）。
+- `node --import tsx scripts/typecheck.ts`：**0 报错**；`renderer-layer-check` 绿；`docs-check` 受检项全绿；
+  `repo-hygiene-check` 四面全绿。
+- 两条**源文本判卷锚点**随生产代码更新（`rename-shortcut`、`desktop-review-batch`）：改的是锚到的新形状
+  （`findSessionByRef(..., activeWorkspaceRef.current ?? undefined)`、`[activeId, activeWorkspace]`），
+  意图不变、没有删断言。
+
+### 五、边界
+
+- **产品指针分叉仍未接线**：CLI 与桌面仍用复制原语。完整接入的方向、书面设计与实施计划已获业主批准
+  （`docs/superpowers/specs|plans/2026-10-22-pointer-session-integration*`），下一步在隔离工作树里按计划实施；
+  不把 helper 与 43 项契约测试当产品已接线。
+- `ab.py` 与另一会话的两个 HEAD 认证目录未动、未提交。
+- 门表那 6 项未证（gate-check / autonomy-check / compaction-check / provider:check / plugins-check / gym-check 各 1）
+  仍是**没量到**，不是通过。
+- 真实模型收益仍要凭据与付费授权；本页不声称任何模型侧收益。

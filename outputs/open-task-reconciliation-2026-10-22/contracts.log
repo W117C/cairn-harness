@@ -1,0 +1,46 @@
+$ node --import tsx scripts/session-semantics-check.ts
+[session-semantics-check] 目录 /var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/adr0005-session-semantics-OUYgKI
+  ✅ 游标往返无损（会话 id + 位置 + 种类）
+  ✅ 游标不透明（载荷里不出现明文会话 id 与位置）
+  ✅ 手改过的游标 → malformed（校验和不符）
+  ✅ 解不开的游标 → malformed
+  ✅ 版本不对的游标 → malformed
+  ✅ 种类不支持的游标 → unsupported-kind
+  ✅ 会话不匹配 → session-mismatch
+  ✅ 位置越界 → out-of-range
+  ✅ 坏游标抛错，不回落成别的位置
+  ✅ 游标 → 分叉点 = lastIncluded（游标位置，含）
+  ✅ 重放范围含指针那条
+  ✅ 分叉点：会话不匹配 → 抛
+  ✅ 分叉点：位置越界 → 抛
+  ✅ 指针分叉：子会话 raw 文件只有一行（不复制父事件）
+  ✅ 子首行保存规范父路径、含边界与父会话身份
+  ✅ 解析器合成父前缀 + 子事件（包含边界、不包含父后缀）
+  ✅ 分叉与子会话追加后，父文件 sha256 保持不变
+  ✅ raw replay 仍逐行返回各自物理文件，不偷偷展开父历史
+  ✅ 边界 0：父存在，但不继承任何消息
+  ✅ 嵌套分叉边界取父 raw 第 1 行，而不是展开后第 1 项
+  ✅ 已收尾工具调用可继承，父在飞调用不继承（worker 同 id 不能替主流收尾）；子在飞调用保留
+  ✅ 父澄清、方案、审批的未收尾请求不继承
+  ✅ 创建分叉：边界越界 → 拒绝
+  ✅ 创建分叉：负数边界 → 拒绝
+  ✅ 创建分叉：非整数边界 → 拒绝
+  ✅ 非法分叉不留下子会话文件
+  ✅ 读取分叉：父边界越界 → 抛，不回落
+  ✅ 读取分叉：父缺失即抛，边界 0 也不掩盖坏血缘
+  ✅ 读取分叉：父链自环 → 抛
+  ✅ 读取分叉：多会话父链成环 → 抛
+  ✅ 可信根校验覆盖父链，不能借分叉读允许目录外的日志
+  ✅ submit：重复的在飞提交返回同一 promise
+  ✅ submit：并发重放只执行一次工作
+  ✅ submit：完成后重放返回既有结果，不重做副作用
+  ✅ submit：同步错误原样返回
+  ✅ submit：失败也粘滞，重放重抛同一错误且不重跑
+  ✅ submit：异步拒绝也保留终态，不重跑
+  ✅ submitOnce：在飞提交共享同一 promise
+  ✅ submitOnce：成功完成后允许下一次执行
+  ✅ submitOnce：失败前的并发重放也共享同一 promise
+  ✅ submitOnce：失败不粘滞，之后可以重试
+  ✅ requestId 按会话分域，同名工具调用不串会话
+  ✅ requestId 元组编码无分隔符碰撞
+[session-semantics-check] 全部断言通过（43 项）

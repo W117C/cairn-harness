@@ -2,6 +2,7 @@
 // baseURL / model / 额外 body 参数（extraBody）/ 环境变量名均可配，GLM 是它的一组预设（见 glm.ts）。
 // 解码规则与迁移前逐字一致：增量在 choices[0].delta.content；tool_calls 按 index 跨块累积
 //（id 首块、name 非空即记、arguments 拼接）；末 chunk 带 usage（后到覆盖）；data: [DONE] 结束。
+import { randomUUID } from "node:crypto";
 import { DEFAULT_STALL_MS } from "../net";
 import { backoffMs, establishStream, retryableStatus, waitRetryDelay } from "./retry";
 import { turnStopMissingEvent, turnTruncatedEvent } from "./stop-reason";
@@ -187,6 +188,8 @@ export async function* streamOpenAI(
   );
   const stream = opts.stream ?? true;
   const rawFetch = opts.fetchImpl ?? fetch;
+  // 缺失原生 id 时，序号只在这一逻辑请求内有效；重试沿用同一前缀，新请求不得碰撞。
+  const toolRequestScope = randomUUID();
 
   const body: Record<string, unknown> = { model, messages: toWireMessages(messages), stream };
   // C8（审查 P2）：流式计量——OpenAI 兼容端点默认不回 usage，须显式开启 stream_options.include_usage，
@@ -261,10 +264,10 @@ export async function* streamOpenAI(
       const callId = data.id ?? "a-0";
       const msg = data.choices?.[0]?.message;
       if (msg?.content) yield { type: "assistant_delta", callId, text: msg.content };
-      for (const c of msg?.tool_calls ?? []) {
+      for (const [index, c] of (msg?.tool_calls ?? []).entries()) {
         yield {
           type: "tool_call",
-          id: c.id ?? `call-${String(c.index)}`,
+          id: c.id ?? `call-${toolRequestScope}-${String(c.index ?? index)}`,
           name: c.function?.name ?? "",
           args: parseArgs(c.function?.arguments, label),
         };
@@ -400,7 +403,7 @@ export async function* streamOpenAI(
         for (const [index, acc] of ordered) {
           yield {
             type: "tool_call",
-            id: acc.id ?? `call-${String(index)}`,
+            id: acc.id ?? `call-${toolRequestScope}-${String(index)}`,
             name: acc.name,
             args: parseArgs(acc.args, label),
           };

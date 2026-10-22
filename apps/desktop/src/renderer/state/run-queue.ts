@@ -30,6 +30,7 @@ interface RunQueueDeps {
   queueSeq: MutableRefObject<number>;
   setPendingSend: Dispatch<SetStateAction<boolean>>;
   activeWorkspace: string | null;
+  setActiveWorkspace: (workspace: string) => void;
   activate: (id: string | null) => void;
   refreshSessions: () => Promise<void>;
   setDraftRestore: (v: { forSession: string | null; text: string; attachments: RunAttachmentReference[]; seq: number; } | undefined) => void;
@@ -40,7 +41,7 @@ interface RunQueueDeps {
 }
 
 export function useRunQueue(deps: RunQueueDeps) {
-  const { setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, modeRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef } = deps;
+  const { setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, modeRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef } = deps;
   const setQueueFor = useCallback((sid: string, list: QueuedSend[]) => {
     setQueueLocal(sid, list);
     const prev = queueWrites.current.get(sid) ?? Promise.resolve();
@@ -136,7 +137,11 @@ export function useRunQueue(deps: RunQueueDeps) {
     if (isNew) setPendingSend(true);
     let id: string | undefined;
     try {
-      const newId = sid ?? (await window.agent.createSession(activeWorkspace ?? undefined)).id;
+      const created = await window.agent.createSession(activeWorkspace ?? undefined);
+      const newId = created.id;
+      // 空屏直接发任务：渲染层 activeWorkspace 还是 null，而主进程已把会话建在它的默认
+      // 工作区里。不从回包采纳 ⇒ 文件/终端/diff/回滚整路「工作区未知」，侧栏也不高亮这一行。
+      if (activeWorkspace === null) setActiveWorkspace(created.workspace);
       id = newId;
       if (isNew) { activate(newId); refreshSessions(); }
       const goalCmd = pendingGoal.current;

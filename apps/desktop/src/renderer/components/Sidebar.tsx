@@ -569,7 +569,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                     <SessionRow
                       key={s.id}
                       session={s}
-                      activeId={props.activeId}
+                      activeId={s.workspace === props.activeWorkspace ? props.activeId : null}
                       status={statusOf(s.id)}
                       onOpen={props.onOpen}
                       posInSet={flatOrder.indexOf(s) + 1}

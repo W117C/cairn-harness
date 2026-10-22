@@ -112,7 +112,7 @@ export interface KernelHost {
    *  M3 终审：显式传入的 workspace 须 ∈ workspaces（含 addWorkspace 动态并入），
    *  未注册 ⇒ throw（与构造期 activeWorkspace 校验同式 fail-visible）——堵 IPC 注入面
    *  （否则 renderer 可指任意路径，会话目录被凭空 mkdir）。 */
-  createSession(workspace?: string): Promise<{ id: string }>;
+  createSession(workspace?: string): Promise<{ id: string; workspace: string }>;
   /** 动态并入一个工作区（M3-3 修复轮）：push 进扫描面（去重幂等）——新工作区的会话立即经
    *  listSessions 出现，归属表解析的兜底扫描同步生效。仅在 main 进程内由 addProject handler
    *  成功后调用（同进程直调，不经 IPC、renderer 无感知自动生效）；入参须为 canonical 绝对路径
@@ -721,7 +721,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
           }
           owner.set(id, ws);
         }
-        return { id };
+        return { id, workspace: ws };
       } catch (error) {
         owner.delete(name); // 建失败不留幽灵占位
         throw error;

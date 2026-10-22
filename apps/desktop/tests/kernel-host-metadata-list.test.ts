@@ -26,6 +26,13 @@ const host = createKernelHost({
 });
 
 describe("listSessions × 会话 metadata 合并（第三遍真机复检勘定回归）", () => {
+  it("createSession 回传实际归属工作区（空屏默认工作区路径的采纳依据）", async () => {
+    const created = await host.createSession();
+    expect(created.workspace).toBe(canonicalWorkspacePath(workspace));
+    const listed = (await host.listSessions()).find((s) => s.id === created.id);
+    expect(listed?.workspace).toBe(canonicalWorkspacePath(workspace));
+  });
+
   it("未组织过：pinned/archived 不出现（不补造假字段）", async () => {
     const { id } = await host.createSession();
     const listed = (await host.listSessions()).find((s) => s.id === id);

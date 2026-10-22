@@ -193,7 +193,7 @@ describe("接线：createProject / 模板建项 / 技能三通道都走闸", () 
     const i = main.indexOf("workspaceSearch: async (ws, query)");
     expect(i).toBeGreaterThan(-1);
     const fn = main.slice(i, i + 600);
-    expect(fn).toContain("resolveProvidedWorkspace(ws, await knownProjectRoots(), workspaceContext)");
+    expect(fn).toContain("resolveProvidedWorkspace(ws, await knownProjectRoots(), workspaceContext())");
     expect(fn.indexOf("resolveProvidedWorkspace(")).toBeLessThan(fn.indexOf("searchWorkspace("));
   });
 
@@ -206,7 +206,7 @@ describe("接线：createProject / 模板建项 / 技能三通道都走闸", () 
       const i = main.indexOf(start);
       expect(i, start).toBeGreaterThan(-1);
       const fn = main.slice(i, i + 700);
-      expect(fn).toContain("resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext)");
+      expect(fn).toContain("resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext())");
       expect(fn.indexOf("resolveProvidedWorkspace(")).toBeLessThan(fn.indexOf(end));
     }
     // 旧形状（任意 workspace 直通）必须绝迹

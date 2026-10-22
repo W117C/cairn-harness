@@ -1,0 +1,12 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness/apps/desktop
+
+
+ Test Files  198 passed (198)
+      Tests  1369 passed (1369)
+   Start at  16:40:50
+   Duration  33.25s (tests 39%, import 38%, transform 21%, worker 2%)
+
+    Isolate  198 workers spawned · ~107ms startup each (spawn + environment, per file)
+             at least ~10.45s faster with isolate: false — reuses workers across files instead of one per file
+

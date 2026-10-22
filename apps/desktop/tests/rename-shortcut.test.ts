@@ -13,7 +13,7 @@ describe("F2 重命名", () => {
     expect(app).toContain("if (!h.startRename()) toast(STR.shortcut.renameNeedsSession);");
     // 2026-10-20：改名状态**绑定到发起时那条会话**（{id, text}）——
     // 提交时用绑定的 id，不用 activeId（否则切过会话会把 B 改名成 A 的标题）。
-    expect(app).toContain("setBarRenaming({ id: sid, text: sessions.find((s) => s.id === sid)?.title ?? sid });");
+    expect(app).toContain("setBarRenaming({ id: sid, text: findSessionByRef(sessions, sid, activeWorkspaceRef.current ?? undefined)?.title ?? sid });");
     // 有会话才 return true；主页 return false（快捷键层据此给回执，不再静默吞键）。
     expect(app).toContain("if (sid === null) return false;");
     expect(app).toContain("return true;");

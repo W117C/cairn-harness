@@ -350,7 +350,9 @@ export interface AgentApi {
   usageLedger(): Promise<UsageLedgerPayload>;
   /** v15：读该会话日志的尾部（只读；`tailLines` 缺省 400，上限 2000）。 */
   sessionLog(id: string, tailLines?: number): Promise<SessionLogPayload>;
-  createSession(name?: string): Promise<{ id: string }>;
+  /** 新建会话；`workspace` = 该会话实际落点的规范工作区（缺省 = host 的 activeWorkspace）。
+   *  回传归属：渲染层空屏直接发任务时 activeWorkspace 仍是 null，不回传就只能靠猜。 */
+  createSession(name?: string): Promise<{ id: string; workspace: string }>;
   /** v16：workspace 显式给出会话归属（同名 id 跨项目时按它定位）；缺省 = host 自行解析。 */
   openSession(id: string, workspace?: string): Promise<{ events: AgentEvent[] }>;
   /** 恢复闭环：读回 / 覆盖写该会话的发送队列 sidecar。队列不是 AgentEvent，不混入 JSONL；

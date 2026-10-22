@@ -19,6 +19,13 @@ describe("会话正文搜索的可见状态", () => {
     expect(unavailable).not.toContain("没有匹配");
     expect(render({ status: "error", error: "读取失败" })).toContain("读取失败");
   });
+  it("不可用状态有明确中文提示，保留原始诊断而不是仅显示系统异常", () => {
+    const html = render({ status: "ready", result: { kind: "unavailable", reason: "root-missing", detail: "ENOENT: no such file or directory" } });
+    expect(html).toContain("当前项目的对话正文暂时无法搜索");
+    expect(html).toContain("ENOENT: no such file or directory");
+    expect(html).toContain("重试搜索");
+    expect(html).not.toContain("没有匹配");
+  });
   it("完整空结果与预算不完整可区分", () => {
     expect(render({ status: "ready", result: empty })).toContain("正文中没有匹配");
     const partial = render({ status: "ready", result: { ...empty, kind: "partial", budgetBytes: 20, budgetExhaustedAt: "bytes", unreadableSessions: 0, badLines: 0, truncatedSessions: [] } });

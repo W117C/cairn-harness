@@ -92,6 +92,8 @@ describe("设计面·减法", () => {
   it("④ 错误正文降到正文色，失败标记仍然在（红三角 + 危险色重试钮 + 危险色的「N 次失败」）", () => {
     // 标记留在行色（红三角继承行色）
     expect(block(".row.error-row")).toContain("color: hsl(var(--color-danger-ink))");
+    // 运行级错误正文降到正文色（这一条在工具失败那两路之前就有，别让新增断言把它替掉）
+    expect(block(".row.error-row .t")).toContain("color: hsl(var(--text-200))");
     // 重试钮仍是危险色（它自带色，不受 .meta 影响）
     expect(block(".err-retry")).toContain("color: hsl(var(--color-danger-ink))");
 

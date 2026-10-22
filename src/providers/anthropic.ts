@@ -5,6 +5,7 @@
 // message_delta 里的 usage 是【累计值】——直接取最后一条，不得跨事件累加。
 // 解析直接消费 Anthropic 原生字段（content_block_delta.delta.text_delta 等），
 // 不经过任何 OpenAI 中间格式。
+import { randomUUID } from "node:crypto";
 import { DEFAULT_STALL_MS, type StallGuard } from "../net";
 import { establishStream } from "./retry";
 import { turnStopMissingEvent, turnTruncatedEvent } from "./stop-reason";
@@ -183,6 +184,7 @@ export async function* streamAnthropic(
   const maxTokens =
     thinkingBudget !== undefined && thinkingBudget > 0 ? Math.max(baseMaxTokens, thinkingBudget + 4096) : baseMaxTokens;
   const doFetch = opts.fetchImpl ?? fetch;
+  const toolRequestScope = randomUUID(); // 缺失原生 id 的序号只在本请求内复用。
 
   // 根因 4：停滞守卫改由 establishStream 逐次新建（静默窗口，不是总时长），成功建连后交回
   // 本函数继续管流体。建连期失败（429/5xx/网络抖动）按指数退避 + full jitter 重试；
@@ -247,7 +249,7 @@ export async function* streamAnthropic(
           const seed = cb.input !== undefined && cb.input !== null && Object.keys(cb.input as object).length > 0
             ? JSON.stringify(cb.input)
             : "";
-          blocks.set(event.index, { id: cb.id ?? `toolu-${String(event.index)}`, name: cb.name ?? "", json: seed });
+          blocks.set(event.index, { id: cb.id ?? `toolu-${toolRequestScope}-${String(event.index)}`, name: cb.name ?? "", json: seed });
         }
         return;
       }

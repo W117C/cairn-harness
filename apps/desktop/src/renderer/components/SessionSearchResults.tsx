@@ -16,9 +16,11 @@ export function SessionSearchResults(props: {
   const { state, workspace } = props;
   if (state.status === "idle") return null;
   if (state.status === "loading") return <div className="cp-empty" role="status">正在搜索当前项目的对话正文…</div>;
-  const error = state.status === "error" ? state.error
-    : state.status === "ready" && state.result.kind === "unavailable"
-      ? state.result.detail ?? "当前项目的对话正文暂时无法搜索" : null;
+  let error: string | null = null;
+  if (state.status === "error") error = state.error;
+  else if (state.status === "ready" && state.result.kind === "unavailable") {
+    error = ["当前项目的对话正文暂时无法搜索", state.result.detail].filter(Boolean).join("：");
+  }
   if (error !== null) return (
     <div className="cp-empty" role="status">
       <span>{error}</span>{" "}

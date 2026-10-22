@@ -27,7 +27,7 @@ const opened: { id: string; workspace: string | undefined }[] = [];
 const contexts: string[] = [];
 const errors: string[] = [];
 const check = (name: string, ok: boolean, detail?: unknown): void => {
-  checks.push({ name, ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${detail === undefined ? '' : JSON.stringify(detail)}`);
+  checks.push({ name, ok, detail: structuredClone(detail) }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${detail === undefined ? '' : JSON.stringify(detail)}`);
 };
 const save = (): void => writeFileSync(join(output, 'checks.json'), JSON.stringify({ checks, skipped, calls, opened, contexts, errors, protocolVersion: IPC_PROTOCOL_VERSION }, null, 2));
 const pause = (ms: number): Promise<void> => new Promise(done => setTimeout(done, ms));
@@ -128,7 +128,10 @@ async function main(): Promise<void> {
   win.webContents.on('console-message', d => { if (d.level === 'error') errors.push(d.message); });
   const js = (source: string) => win.webContents.executeJavaScript(source);
   const frame = () => js('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
-  const shot = async (name: string) => { await frame(); writeFileSync(join(output, name + '.png'), (await win.webContents.capturePage()).toPNG()); };
+  const shot = async (name: string) => {
+    await js(`Promise.all(document.getAnimations().filter(a=>Number.isFinite(a.effect?.getComputedTiming().endTime)).map(a=>a.finished.catch(()=>undefined)))`);
+    await frame(); writeFileSync(join(output, name + '.png'), (await win.webContents.capturePage()).toPNG());
+  };
   const query = async (text: string) => {
     await js(`(()=>{const input=document.querySelector('.cp-input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(text)}); input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     await frame();
@@ -208,6 +211,8 @@ async function main(): Promise<void> {
   check('键盘打开正文匹配携带准确workspace，同名会话不串项目', opened.at(-1)?.id === 'shared-session' && opened.at(-1)?.workspace === workspace, opened.at(-1));
   await waitFor(() => js(`document.body.textContent.includes('检索样本')&&!document.querySelector('.cp-input')`), '正确项目正文实际上屏');
   check('搜索打开当前项目真实JSONL并关闭命令面板', await js(`document.body.textContent.includes('Nebula 与紫罗兰')&&!document.body.textContent.includes('禁止开错')&&!document.querySelector('.cp-input')`));
+  check('正文结果不借用另一项目同名会话的标题', await js(`document.querySelector('.tb-title')?.textContent==='shared-session'`));
+  check('搜索打开未列出的旧会话不高亮另一项目的同名行', await js(`document.querySelectorAll('.session.active').length===0`));
   await shot('06-opened-correct-workspace');
   check('渲染过程无控制台错误', errors.length === 0, errors);
   save(); win.destroy(); await closeAllEventLogs(); app.exit(checks.every(c => c.ok) ? 0 : 1);

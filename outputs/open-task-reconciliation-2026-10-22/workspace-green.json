@@ -1,0 +1,132 @@
+{
+  "checks": [
+    {
+      "name": "生产 main 检索 A 命中 A 的正文",
+      "ok": true,
+      "detail": {
+        "kind": "ok",
+        "matches": [
+          {
+            "sessionId": "same-session",
+            "matchCount": 1,
+            "snippets": [
+              {
+                "kind": "user_message",
+                "keyword": "real_main_search_needle_A",
+                "excerpt": "real_main_search_needle_A",
+                "index": 0
+              }
+            ],
+            "bytes": 128,
+            "complete": true,
+            "badLines": 0
+          }
+        ],
+        "scannedSessions": 1,
+        "scannedBytes": 128,
+        "totalSessions": 1
+      }
+    },
+    {
+      "name": "生产 main 同名 B 不借用 A 正文",
+      "ok": true,
+      "detail": {
+        "kind": "ok",
+        "matches": [],
+        "scannedSessions": 1,
+        "scannedBytes": 128,
+        "totalSessions": 1
+      }
+    },
+    {
+      "name": "生产 KernelHost 按 workspace 打开同名会话",
+      "ok": true
+    },
+    {
+      "name": "弹窗继承打开时的项目 A",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "path": "same.txt",
+        "text": "PROJECT_A\n",
+        "truncated": false,
+        "size": 10
+      }
+    },
+    {
+      "name": "主窗切到项目 B",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "path": "same.txt",
+        "text": "PROJECT_B\n",
+        "truncated": false,
+        "size": 10
+      }
+    },
+    {
+      "name": "主窗切项目不改变已弹窗的项目",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "path": "same.txt",
+        "text": "PROJECT_A\n",
+        "truncated": false,
+        "size": 10
+      }
+    },
+    {
+      "name": "弹窗路径动作也绑定项目 A",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "path": "/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-workspace-owner-QIh9Ad/A/same.txt"
+      }
+    },
+    {
+      "name": "按窗口存储仍拒绝未注册的工作区根",
+      "ok": true,
+      "detail": {
+        "ok": false,
+        "error": "未注册的工作区，已拒绝：/"
+      }
+    },
+    {
+      "name": "拒绝非法根后保留弹窗自己的项目",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "path": "same.txt",
+        "text": "PROJECT_A\n",
+        "truncated": false,
+        "size": 10
+      }
+    },
+    {
+      "name": "清除主窗上下文后不回落到另一窗项目",
+      "ok": true,
+      "detail": {
+        "error": "Error invoking remote method 'agent:workspace-read-text': Error: 工作区未知——先在当前窗口打开一个项目"
+      }
+    },
+    {
+      "name": "主窗清空不影响弹窗",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "path": "same.txt",
+        "text": "PROJECT_A\n",
+        "truncated": false,
+        "size": 10
+      }
+    },
+    {
+      "name": "真实命令面板通过生产 main 显示正文结果",
+      "ok": true
+    },
+    {
+      "name": "真实搜索结果打开 A 正文且不显示 B",
+      "ok": true
+    }
+  ]
+}

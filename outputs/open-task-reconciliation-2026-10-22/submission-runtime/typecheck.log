@@ -1,0 +1,3 @@
+typecheck: tsc --noEmit 通过（0 条报错）✅
+
+exitCode=0

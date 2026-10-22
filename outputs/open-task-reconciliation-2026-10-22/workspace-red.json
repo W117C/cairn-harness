@@ -1,0 +1,63 @@
+{
+  "checks": [
+    {
+      "name": "弹窗继承打开时的项目 A",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "path": "same.txt",
+        "text": "PROJECT_A\n",
+        "truncated": false,
+        "size": 10
+      }
+    },
+    {
+      "name": "主窗切到项目 B",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "path": "same.txt",
+        "text": "PROJECT_B\n",
+        "truncated": false,
+        "size": 10
+      }
+    },
+    {
+      "name": "主窗切项目不改变已弹窗的项目",
+      "ok": false,
+      "detail": {
+        "ok": true,
+        "path": "same.txt",
+        "text": "PROJECT_B\n",
+        "truncated": false,
+        "size": 10
+      }
+    },
+    {
+      "name": "弹窗路径动作也绑定项目 A",
+      "ok": false,
+      "detail": {
+        "ok": true,
+        "path": "/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-workspace-owner-WISOkK/B/same.txt"
+      }
+    },
+    {
+      "name": "清除主窗上下文后不回落到另一窗项目",
+      "ok": true,
+      "detail": {
+        "r": {
+          "ok": false,
+          "error": "没有已知的工作区（本进程还没跑过 run）⇒ 无法读取文件"
+        }
+      }
+    },
+    {
+      "name": "主窗清空不影响弹窗",
+      "ok": false,
+      "detail": {
+        "ok": false,
+        "error": "没有已知的工作区（本进程还没跑过 run）⇒ 无法读取文件"
+      }
+    }
+  ]
+}

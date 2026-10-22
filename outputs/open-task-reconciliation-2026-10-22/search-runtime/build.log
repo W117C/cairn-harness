@@ -1,0 +1,35 @@
+$ pnpm run build:preload && vite build && tsc -p tsconfig.json --noEmit
+$ esbuild src/preload/index.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs
+
+  dist-electron/preload.cjs  8.1kb
+
+⚡ Done in 13ms
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 2120 modules transformed.
+rendering chunks...
+computing gzip size...
+../../dist/index.html                                         3.09 kB │ gzip:  1.44 kB
+../../dist/assets/NotoSerifVariable-f932DlCQ.woff2           76.55 kB
+../../dist/assets/InterVariable-DJwk3cVO.woff2              137.26 kB
+../../dist/assets/JetBrainsMonoVariable-DgTxpPXt.ttf        303.14 kB
+../../dist/assets/JetBrainsMonoItalicVariable-BPH9J9VZ.ttf  308.89 kB
+../../dist/assets/PaneDock-DDGTF8rc.css                       3.62 kB │ gzip:  0.99 kB
+../../dist/assets/index-DGrxCi08.css                        175.96 kB │ gzip: 28.62 kB
+../../dist/assets/index-D3F8SPzX.js                           0.09 kB │ gzip:  0.10 kB
+../../dist/assets/PopoutApp-B-OWv4-Y.js                       0.95 kB │ gzip:  0.54 kB
+../../dist/assets/addon-fit-DX4qG4td.js                       1.21 kB │ gzip:  0.51 kB
+../../dist/assets/settings-nav-BZW49NpI.js                    3.84 kB │ gzip:  1.95 kB
+../../dist/assets/ConfirmDialog-CWwtcCeo.js                   5.33 kB │ gzip:  2.33 kB
+../../dist/assets/markdown-Bwc08WUw.js                        6.99 kB │ gzip:  2.71 kB
+../../dist/assets/Stream-B6MfzCR5.js                         18.19 kB │ gzip:  6.48 kB
+../../dist/assets/SettingsPanel-CErVoPhM.js                  31.56 kB │ gzip: 11.24 kB
+../../dist/assets/AppPage-CgYuxWcC.js                        31.98 kB │ gzip:  8.94 kB
+../../dist/assets/index-BOKYhtNo.js                          34.83 kB │ gzip:  9.89 kB
+../../dist/assets/CommandPalette-DZgLLwFM.js                 37.43 kB │ gzip: 13.04 kB
+../../dist/assets/PaneDock-BWHzcq4b.js                       38.13 kB │ gzip: 13.03 kB
+../../dist/assets/index-C2bgMi82.js                         153.04 kB │ gzip: 50.41 kB
+../../dist/assets/PluginSurface-Mwr2OvgQ.js                 178.00 kB │ gzip: 62.64 kB
+../../dist/assets/App-DNj0OftS.js                           223.97 kB │ gzip: 68.87 kB
+../../dist/assets/xterm-B-qIQCd3.js                         329.31 kB │ gzip: 83.04 kB
+✓ built in 8.82s
