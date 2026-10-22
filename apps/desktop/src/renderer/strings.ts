@@ -346,6 +346,9 @@ export const STR = {
     stopTitle: "停止（⌘.）",
     queueAria: "加入队列",
     queueTitle: "加入队列：本轮结束后自动发送（⌘↩ 打断并立即发送）",
+    // 第 9 点·轮中插话：运行中按 ⏎ 的那句话**当场就送达了**（不是排队）。回执必须说清是哪一种，
+    // 否则用户分不清「我这句话现在生效」与「它排在下一轮」——两种后果差一整轮的工作。
+    steerSent: "已插话到本轮（模型下一拍就会看到）",
     compactNoSession: "先打开一个会话再压缩历史",
     compactDone: "历史已压缩",
     compactUnavailable: "当前版本没有压缩通道",

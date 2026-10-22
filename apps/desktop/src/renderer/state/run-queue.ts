@@ -147,7 +147,11 @@ export function useRunQueue(deps: RunQueueDeps) {
       // 半路塞进当前轮会把校验绕开。带附件的消息照旧入队。
       if (attachments.length === 0) {
         const steered = await window.agent.runSteer(sid, text).catch(() => ({ ok: false as const }));
-        if (steered.ok === true) return;
+        if (steered.ok === true) {
+          // 回执必须说清是「已插话」还是「已排队」：两种后果差一整轮的工作。
+          setLastNotice(STR.composer.steerSent, sid);
+          return;
+        }
       }
       setQueueFor(sid, [...(sendQueue.current.get(keyOf(sid)) ?? []), { id: ++queueSeq.current, text, attachments }]);
       return;
