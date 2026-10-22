@@ -21932,3 +21932,50 @@ node bin/cairn.mjs --workspace <run-dir> --mode auto --model <模型> \
 - 两笔事故红（D-5 的 21 条、`1f16bea`）**照旧红着**，不登记、不冒充；本页不把它们说成全绿。
 - 本页只引用工具自己落的读数，不改写；时间量按 head-cert 的「两端独占」口径可引用。
 - 共享分支 upstream 仍处解除状态（第 666 页已记），与本笔无关。
+
+## 2026-10-22 · 第 674 页：空屏思考档从「装饰」变成真选择；模型菜单不再顶穿标题栏；两条陈旧证人跟上 v19
+
+### 一、业主可见的两个问题
+
+1. **空屏的思考档是死控件**。`WorkbenchView` 的 `onThinkingChange` 第一行是 `if (activeId === null) return;`，
+   而空屏（尚未建会话）正是用户第一次拨它的地方；`thinking` 也传 `undefined`。真机目验：空屏打开模型菜单
+   点「中」，触发条仍是「思考 关」；随后首条消息的 `run` 请求里没有 `thinking`——用户以为强思考，
+   实际按 off 发。修法：新增 `state/thinking-selection.ts` 三个纯函数（`composerThinking` /
+   `thinkingChangeTarget` / `seedNewSessionThinking`），空屏选择落 `pendingThinking`，`send` 建会话时
+   写进该会话的 `thinkingBySession`；芯片读 `composerThinking`。旧分支 `activeId === null ? undefined : …`
+   已从应用外壳面消失（判卷钉住）。
+2. **模型菜单顶穿标题栏**。空屏输入卡在屏幕中部，模型菜单自然高 392.8px、向上开；真机量得菜单
+   `top=10.9`（标题栏 38px）——第一行「deepseek-chat」被窗口上沿切掉。修法：`modelMenuMaxHeight(triggerTop)`
+   按触发条上沿算可用高度（扣标题栏 38 + 间隙 6，下限 240 / 上限 560），打开与窗口 resize 时测量，
+   经 `style.maxHeight` 传给菜单；`.mp-pop` 原本就有 `overflow-y:auto`。修后 `top=38.7`。
+   残留（如实记）：菜单内容仍比可视区高约 17px，底部的思考提示行要滚动才看全——是滚动，不是截断。
+
+### 二、两条陈旧证人（不是产品回归，是证人失真）
+
+- `state-smoke` 的夹具 `listMessagePins` 仍返回 `number[]`；v19 已把协议收成 `{eventId, eventRef?}[]`
+  （`src/main/ipc-protocol.ts` 的 `listMessagePins`）⇒ 置顶读不回来，脚本跑到第 5 条就抛
+  「Script failed to execute」。夹具改为返回对象后 **11/11 PASS**。
+- `ui-gallery` 的 03/04 还在点 `.ctl[aria-label="思考档位"]` 与 `.pill`（P2-2 合并菜单 / 2026-10-20
+  QuickStarts 之后都已不存在）⇒ 两张截图与 01 逐字节相同（md5 同），目验时看不出状态没发生。
+  改用 `.mp-pop .th-row button[data-e="medium"]` 与 `.start` 后，01/02/03/04 四张 md5 互异。
+- 两处只改冒烟/夹具，不改产品判据。
+
+### 三、判卷与读数
+
+- 桌面 **203 文件 / 1394 用例全绿**；`desktop-boundary-check` 绿。
+- 根 `pnpm test:capped`（=`--maxWorkers=2`）：**478 文件 / 6522 条，2 失败**——`tests/docs-check.test.ts`
+  的 D-5 21 条与 `tests/mutate-needles-check.test.ts` 的 `1f16bea` 归因，均为第 666 页已裁决的诚实红。
+  首跑另有 2 条 `render-image` 负载假红，复跑消失（如实记，不当作绿）。
+- `node --import tsx scripts/typecheck.ts` 0 条；`renderer-layer-check` 绿（120 个渲染层源文件）。
+- `pnpm docs-check`：D-5 21 项照旧红；`CODE-WIKI` 与本页无新增违规。
+- interaction-smoke **23/23**；state-smoke **11/11**；ui-gallery first-run 的 03 实测 `top=38.7`（修前 10.9）。
+- 新增判据：`thinking-selection.test.ts` 5 条、`model-menu-fit.test.ts` 3 条。**未做变异验证/未亲验单测红**
+  ——空屏红是真机目验的（拨中不变），两条单测属事后补钉；本页不把它说成先红后绿。
+
+### 四、边界与未跑
+
+- 未跑 `pnpm gates` / `mutate-verify` / `head-cert-check`；本页只覆盖提交 `dc9a8033` 的工作树内容，
+  不冒充 HEAD 认证。
+- 桌面真机证据是离屏 gallery / state-smoke（真 renderer + 合成 AgentApi），不覆盖真 provider；
+  思考档真正进请求体的那一跳由 `seedNewSessionThinking` 的单测与接线判据覆盖，未发真模型请求。
+- 仓外审计另见 `/Users/ze/Downloads/Cairn/项目审计-2026-10-22.md`（不进本仓台账）。
