@@ -19,7 +19,7 @@ export const MUTATIONS = [
     {
     id: "desktop-steering-splits-turn",
     src: "apps/desktop/src/renderer/derived/stream.ts",
-    test: "apps/desktop/tests/stream-steering-round.test.ts",
+    test: "apps/desktop/tests/stream-steering-round.test.tsx",
     desc: "轮中插话被当成新轮（projectStream 的 rounds += 1 不再跳过 steering）⇒ 同一轮被劈成两轮：轮号错位、上一轮气泡提前落定、按轮跳转全错",
     apply: (s) => s.replace('        const steering = e.origin?.kind === "steering";', '        const steering = false;'),
     expectFail: "★ 插话不推轮号：同一轮里的一条插话，round 仍是 1",
@@ -35,7 +35,7 @@ export const MUTATIONS = [
 {
     id: "desktop-steering-row-dropped",
     src: "apps/desktop/src/renderer/derived/stream.ts",
-    test: "apps/desktop/tests/stream-steering-round.test.ts",
+    test: "apps/desktop/tests/stream-steering-round.test.tsx",
     desc: "插话那一行直接丢掉（不渲染）⇒ 用户说过的话在转录里消失，而模型那边确实收到了它：界面在说谎",
     apply: (s) => s.replace('        const steering = e.origin?.kind === "steering";', '        const steering = e.origin?.kind === "steering";\n        if (steering) break;'),
     expectFail: "★ 插话仍显示，且被标成插话（不是悄悄丢掉）",
