@@ -266,6 +266,12 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
    *  免得"循环这条路的判据"与"门／语料那条路的判据"各看一份数据（第十三族：同一谓词两份）。 */
   const verifyBeats: VerifyBeat[] = [];
   let wroteSinceVerifyBeat = false;
+  /** 与 `wroteSinceVerifyBeat` 同一个语汇：上一次 verify 之后**用户有没有说过话**。
+   *  为什么与写动作分开记：写＝「模型在换路子试」，说话＝「**用户把目标改写了**」。
+   *  两件事都让「同一条结论再红一次」不再是同一件事，但理由相反，判据里也是两条独立抑制项。
+   *  第 9 点接上轮中插话之前这个位**恒为 false**（用户不可能中途说话，那时是对的）；
+   *  现在它有了真生产者，不接就等于让插话在无进展判据里**不可见**。 */
+  let userSpokeSinceVerifyBeat = false;
   const nudgedNoProgress = new Set<string>();
   /** 跑一拍 verify 系统门。两种形态：
    *  - manual（模型自调）：有配对的 tool_call ⇒ 失败原文注入同轮继续修，环境红另标以识别无进展重发。
@@ -317,10 +323,11 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       verifyBeats.push({
         index: verifyAttempts, attempt, maxAttempts: maxVerify, ok: outcome.ok,
         signature: outcome.ok ? "ok" : signature, named,
-        wroteSinceLast: wroteSinceVerifyBeat, userSpokeSinceLast: false,
+        wroteSinceLast: wroteSinceVerifyBeat, userSpokeSinceLast: userSpokeSinceVerifyBeat,
       });
       if (verifyBeats.length > 8) verifyBeats.shift();
       wroteSinceVerifyBeat = false;
+      userSpokeSinceVerifyBeat = false; // 与写那一位置同源同时刻清：一拍只算一次
     }
     if (outcome.ok) {
       // 成功的 verify 也必须留配对的 tool_result：旧实现只落 verify_result 就 return，
@@ -492,6 +499,10 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
             // 轮次序号是**展示/审计**用（判定不读它，见 `SteeringOrigin` 的注释）。
             origin: { kind: "steering", step },
           });
+          // 第 9 点与 R1 的交点：用户插了话 ⇒ 目标可能已被改写 ⇒「同一条结论再红一次」
+          // 不再是同一件事。判据（`detectVerifyStagnation`）早就有这一条抑制项，
+          // 但生产端此前恒发 false（用户不可能中途说话），这条抑制永远走不到。
+          userSpokeSinceVerifyBeat = true;
         }
       }
     }

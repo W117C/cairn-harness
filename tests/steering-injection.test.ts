@@ -222,3 +222,51 @@ describe("通道（界面 → loop 那只盒子）", () => {
     expect(box.take()).toEqual(["改下 README"]);
   });
 });
+
+describe("第 9 点与 R1（验证停滞）的交点", () => {
+  /** 跑一趟：verify 连红两次、签名相同；可选择在第 1 拍与第 2 拍之间插话。 */
+  async function run(steerBetween: boolean) {
+    const log: AgentEvent[] = [];
+    const box = { pending: [] as string[] };
+    let round = 0;
+    const provider: Provider = {
+      async *stream() {
+        round += 1;
+        if (round <= 2) yield { type: "tool_call", id: `v${String(round)}`, name: "verify", args: {} };
+      },
+    };
+    await runLoop({
+      provider,
+      events: { async append(e: AgentEvent) { log.push(e); } },
+      workspace: "/tmp",
+      userMessage: "跑验证",
+      verify: {
+        run: async () => ({ ok: false, results: [{ command: "test", ok: false, output: "同一处红 a.test.ts" }] }),
+        maxAttempts: 3,
+      },
+      steering: {
+        // 第 1 拍请求发出后、第 2 拍之前把话塞进盒子（真实时序）
+        take: () => {
+          if (steerBetween && round === 1) box.pending.push("别管那个红了，先做别的");
+          const out = box.pending; box.pending = [];
+          return out.length > 0 ? out : undefined;
+        },
+      },
+    });
+    return log;
+  }
+  const noProgressNotes = (log: AgentEvent[]): number =>
+    log.filter((e) => e.type === "tool_result" && String((e as { output?: unknown }).output ?? "").includes("[no-progress]")).length;
+
+  it("★ 两次同签名红之间用户插了话 ⇒ **不喊停滞**（目标可能已被改写）", async () => {
+    const log = await run(true);
+    expect(log.filter((e) => isSteeringMessage(e))).toHaveLength(1); // 插话确实送到了
+    expect(noProgressNotes(log), "插话之后还喊「同一条路再走一遍不会变」= 把用户的改写当没看见").toBe(0);
+  });
+
+  it("★ 反面：中间没插话 ⇒ 照旧喊停滞（这条抑制不是把判据关掉）", async () => {
+    const log = await run(false);
+    expect(log.filter((e) => isSteeringMessage(e))).toHaveLength(0);
+    expect(noProgressNotes(log), "判据本体必须还在：否则这一格就变成了恒绿").toBeGreaterThan(0);
+  });
+});

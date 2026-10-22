@@ -14,6 +14,14 @@ export const MUTATIONS = [
     expectFail: "★ 带 origin:steering 的 user_message 之后，本轮承诺仍然算数",
   },
   {
+    id: "steering-does-not-count-as-user-spoke",
+    src: "src/agent/loop.ts",
+    test: "tests/steering-injection.test.ts",
+    desc: "插话不置 userSpokeSinceVerifyBeat ⇒ R1（验证停滞）里那条『用户说过话就不算停滞』的抑制项永远走不到；用户明明已经改写了目标，harness 还在喊『同一条路再走一遍不会变』",
+    apply: (s) => s.replace("          userSpokeSinceVerifyBeat = true;", "          // mutated: 不记用户说过话"),
+    expectFail: "★ 两次同签名红之间用户插了话 ⇒ **不喊停滞**（目标可能已被改写）",
+  },
+  {
     id: "steering-take-not-clearing",
     src: "src/agent/steering-channel.ts",
     test: "tests/steering-injection.test.ts",
