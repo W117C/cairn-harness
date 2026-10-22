@@ -1,0 +1,9 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-evo-fix.lock）
+变异验证：1 条
+✅ registry-replay-drops-own-declared-gates — 重建（重放账本）时不把**账本自己定格的 declaredGates** 并进 knownGates ⇒ 生产读面（src 侧不抄门名单，那份是空集）拿空 knownGates 去卡这些门 ⇒ 一份完全合法的账本被判死（RegistryLogCorruptError）⇒ content-pack 注入与 canary 收束 tick 同时熄火，且每次重建都撞同一行（**自愈不了**） ｜本机实测 0.9s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 1.1s · 跑了 1/1 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 2 次／1 条（每条次数分布 2×1）· 单次中位 第1次 0.5s／第2次 0.5s· 最贵一条 registry-replay-drops-own-declared-gates 0.9s
+跑法单价：selector 2 拍·中位 0.47s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-evo-fix.lock）

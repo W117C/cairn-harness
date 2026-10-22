@@ -51,3 +51,50 @@ export async function resolveKnownProjectTarget(p: string, roots: readonly strin
   }
   return null;
 }
+
+/** 新建项目的父目录闸（2026-10-21 批 133）：与 gitClone 的落点门同一条口径。
+ *
+ *  `createProject` / `projectCreateFromTemplate` 原先直接把渲染层给的 `parentDir` 交给
+ *  `mkdirSync` —— 与 gitClone 修掉的那个洞同形（`parentDir:"/Users/me/.ssh"` 就能往那里建项目）。
+ *  允许面：**用户真的用系统对话框选过**的目录 ∪ **已知项目根**（当前/最近工作区、注册项目）。
+ *  缺省（不传）走 core 的 `~/CairnProjects`，那是应用自己的固定落点，不受渲染层控制。
+ *  返回值里的 parentDir 是规范路径，调用方只把**它**交给 core。 */
+export type CreateParentGate =
+  | { ok: true; parentDir?: string }
+  | { ok: false; message: string };
+
+export function resolveCreateParent(
+  raw: string | undefined,
+  picked: ReadonlySet<string>,
+  roots: readonly string[],
+): CreateParentGate {
+  if (typeof raw !== "string" || raw.trim() === "") return { ok: true };
+  let canonical: string;
+  try { canonical = canonicalWorkspacePath(raw); } catch { return { ok: false, message: `目标目录不可解析：${raw}` }; }
+  if (picked.has(canonical) || roots.includes(canonical)) return { ok: true, parentDir: canonical };
+  return {
+    ok: false,
+    message: `新建项目的目标目录未经选择，已拒绝：${raw}（请用「更改…」选一个目录，或放进已登记的项目里）`,
+  };
+}
+
+/** 渲染层传进来的 workspace 参数闸（批 133）：只认**已登记的根**，不接受任意路径。
+ *
+ *  为什么是精确相等而不是包含：这里的 workspace 是「去哪一棵树里读技能/插件/信任」的**根**，
+ *  子目录会让侧边菜单读到一个项目里的子目录技能，和界面上的项目语义不一致。
+ *  空参数 = 用当前工作区上下文（`setWorkspaceContext` 写入时已校验过）。 */
+export type ProvidedWorkspaceGate =
+  | { ok: true; workspace: string | null }
+  | { ok: false; error: string };
+
+export function resolveProvidedWorkspace(
+  raw: unknown,
+  roots: readonly string[],
+  fallback: string | null,
+): ProvidedWorkspaceGate {
+  const value = String(raw ?? "");
+  if (value === "") return { ok: true, workspace: fallback };
+  const exact = canonicalKnownProjectPath(value, roots);
+  if (exact === null) return { ok: false, error: `工作区未经登记，已拒绝：${value}` };
+  return { ok: true, workspace: exact };
+}

@@ -1,0 +1,311 @@
+# Files (53 reviewable / 305 total)
+
+- mode: workspace
+- total_insertions: 52481
+- total_deletions: 340
+
+~~- `BLOCKED.md` [modified] +11/-0 (excluded: unsupported_ext)~~
+~~- `PROGRESS.md` [modified] +472/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/design/desktop-design-spec.md` [modified] +463/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/scripts/bundle-audit.mjs` [modified] +25/-3
+  - `apps/desktop/scripts/interaction-smoke.cjs` [modified] +22/-0
+  - `apps/desktop/scripts/native-host-smoke.ts` [modified] +16/-24
+  - `apps/desktop/scripts/performance-smoke.cjs` [modified] +23/-2
+  - `apps/desktop/scripts/ui-gallery-preload.cjs` [modified] +40/-2
+  - `apps/desktop/src/main/browser-host.ts` [modified] +20/-11
+  - `apps/desktop/src/main/channels.ts` [modified] +4/-0
+  - `apps/desktop/src/main/index.ts` [modified] +49/-12
+  - `apps/desktop/src/main/kernel-host.ts` [modified] +58/-0
+  - `apps/desktop/src/main/project-path-gate.ts` [modified] +47/-0
+  - `apps/desktop/src/main/terminal-host.ts` [modified] +3/-1
+  - `apps/desktop/src/renderer/App.tsx` [modified] +165/-22
+  - `apps/desktop/src/renderer/components/CommandPalette.tsx` [modified] +161/-25
+  - `apps/desktop/src/renderer/components/Composer.tsx` [modified] +0/-9
+  - `apps/desktop/src/renderer/components/ErrorStrip.tsx` [modified] +9/-3
+  - `apps/desktop/src/renderer/components/Inspector.tsx` [modified] +89/-3
+  - `apps/desktop/src/renderer/components/SettingsPanel.tsx` [modified] +14/-8
+  - `apps/desktop/src/renderer/components/Sidebar.tsx` [modified] +25/-27
+  - `apps/desktop/src/renderer/components/Stream.tsx` [modified] +1/-1
+  - `apps/desktop/src/renderer/components/TitleBar.tsx` [modified] +15/-8
+  - `apps/desktop/src/renderer/components/settings-ui.tsx` [modified] +2/-1
+  - `apps/desktop/src/renderer/main.tsx` [modified] +10/-10
+  - `apps/desktop/src/renderer/projections.ts` [modified] +5/-17
+  - `apps/desktop/src/renderer/sessions-view.ts` [modified] +10/-0
+  - `apps/desktop/src/renderer/strings.ts` [modified] +35/-2
+  - `apps/desktop/src/renderer/styles.css` [modified] +146/-16
+  - `apps/desktop/src/renderer/tokens.css` [modified] +1/-1
+~~- `apps/desktop/tests/channels.test.ts` [modified] +7/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/command-palette.test.tsx` [modified] +108/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/composer-attach.test.tsx` [modified] +0/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/composer-commands.test.ts` [modified] +2/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/composer-rework.test.tsx` [modified] +0/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/composer-running.test.tsx` [modified] +0/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/composer-suggestion.test.tsx` [modified] +0/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/composer-usage-ring.test.tsx` [modified] +0/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/desktop-review-batch.test.ts` [modified] +22/-15 (excluded: default_path)~~
+~~- `apps/desktop/tests/focus-mode.test.ts` [modified] +1/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/inspector-width.test.ts` [modified] +14/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/inspector.test.tsx` [modified] +54/-18 (excluded: default_path)~~
+~~- `apps/desktop/tests/interaction-deadends.test.ts` [modified] +5/-5 (excluded: default_path)~~
+~~- `apps/desktop/tests/kernel-host.test.ts` [modified] +13/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/last-session-restore.test.ts` [modified] +9/-6 (excluded: default_path)~~
+~~- `apps/desktop/tests/pane-persistence.test.ts` [modified] +4/-3 (excluded: default_path)~~
+~~- `apps/desktop/tests/plugin-trust-wiring.test.ts` [modified] +5/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/project-path-gate.test.ts` [modified] +93/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/protocol-version.test.ts` [modified] +4/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/quick-starts-ui.test.tsx` [modified] +6/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-stream-isolation.test.ts` [modified] +1/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/settings-ui.test.tsx` [modified] +9/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/sidebar-arrow-nav.test.ts` [modified] +1/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/sidebar-session-search.test.ts` [modified] +1/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/titlebar.test.tsx` [modified] +48/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/tokens.test.ts` [modified] +2/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/tool-rows.test.tsx` [modified] +11/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/transcript.test.ts` [modified] +2/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/usage-summary.test.ts` [modified] +1/-0 (excluded: default_path)~~
+  - `src/agent/action-fusion.ts` [modified] +2/-0
+  - `src/agent/loop.ts` [modified] +7/-1
+  - `src/agent/session-provider.ts` [modified] +3/-1
+  - `src/agent/sidechat.ts` [modified] +40/-10
+  - `src/agent/tool-choice.ts` [modified] +1/-1
+  - `src/agent/worker-report.ts` [modified] +2/-2
+  - `src/events/types.ts` [modified] +4/-0
+  - `src/main/agent-runner.ts` [modified] +38/-10
+  - `src/main/ipc-protocol.ts` [modified] +43/-3
+  - `src/main/sandbox.ts` [modified] +28/-4
+  - `src/main/session-assembly.ts` [modified] +1/-1
+  - `src/main/sessions.ts` [modified] +47/-1
+  - `src/main/sidechat-handlers.ts` [modified] +66/-6
+  - `src/main/tool-gates.ts` [modified] +29/-8
+  - `src/main/verify-trust-gate.ts` [modified] +1/-1
+  - `src/tools/base.ts` [modified] +4/-0
+  - `src/tools/diagnose.ts` [modified] +23/-2
+~~- `tests/action-fusion.test.ts` [modified] +28/-0 (excluded: default_path)~~
+~~- `tests/diagnose.test.ts` [modified] +28/-7 (excluded: default_path)~~
+~~- `tests/ipc-protocol-version.test.ts` [modified] +5/-2 (excluded: default_path)~~
+~~- `tests/remember.test.ts` [modified] +17/-0 (excluded: default_path)~~
+~~- `tests/sidechat-core.test.ts` [modified] +25/-0 (excluded: default_path)~~
+~~- `tests/worker-sandbox-wiring.test.ts` [modified] +4/-2 (excluded: default_path)~~
+~~- `tests/write-face.test.ts` [modified] +15/-0 (excluded: default_path)~~
+  - `apps/desktop/scripts/cross-workspace-restore.cjs` [added] +94/-0
+  - `apps/desktop/scripts/route-smoke.cjs` [added] +60/-0
+  - `apps/desktop/src/renderer/components/SessionLogDialog.tsx` [added] +127/-0
+  - `apps/desktop/src/renderer/components/UsagePanel.tsx` [added] +116/-0
+  - `apps/desktop/src/renderer/inspector-pref.ts` [added] +17/-0
+  - `apps/desktop/src/renderer/last-session.ts` [added] +73/-0
+~~- `apps/desktop/tests/boot-rehydrate.test.ts` [added] +21/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/browser-local-ipv6.test.ts` [added] +20/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/inspector-initial-state.test.ts` [added] +23/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/inspector-missing-usage.test.tsx` [added] +27/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/last-session-decision.test.ts` [added] +77/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-log-host.test.ts` [added] +53/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-log-viewer.test.tsx` [added] +72/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-open-workspace.test.ts` [added] +27/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-target.test.ts` [added] +26/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/terminal-drain.test.ts` [added] +48/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/usage-ledger-host.test.ts` [added] +83/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/usage-panel.test.tsx` [added] +54/-0 (excluded: default_path)~~
+~~- `outputs/command-palette-2026-10-21/base-session.png` [added] +641/-0 (excluded: user_exclude)~~
+~~- `outputs/command-palette-2026-10-21/dark.png` [added] +452/-0 (excluded: user_exclude)~~
+~~- `outputs/command-palette-2026-10-21/home-context.png` [added] +437/-0 (excluded: user_exclude)~~
+~~- `outputs/command-palette-2026-10-21/readings.md` [added] +26/-0 (excluded: user_exclude)~~
+~~- `outputs/command-palette-2026-10-21/recent.png` [added] +666/-0 (excluded: user_exclude)~~
+~~- `outputs/command-palette-2026-10-21/search-keys.png` [added] +846/-0 (excluded: user_exclude)~~
+~~- `outputs/command-palette-skills-2026-10-21/inserted-into-composer.png` [added] +460/-0 (excluded: user_exclude)~~
+~~- `outputs/command-palette-skills-2026-10-21/readings.md` [added] +20/-0 (excluded: user_exclude)~~
+~~- `outputs/command-palette-skills-2026-10-21/skills-group.png` [added] +387/-0 (excluded: user_exclude)~~
+~~- `outputs/core-review-fixes-2026-10-21/readings.md` [added] +52/-0 (excluded: user_exclude)~~
+~~- `outputs/cross-workspace-restore-2026-10-21/checks.json` [added] +74/-0 (excluded: user_exclude)~~
+~~- `outputs/design-shell-2026-10-21/home-1440.png` [added] +471/-0 (excluded: user_exclude)~~
+~~- `outputs/design-shell-2026-10-21/readings.md` [added] +33/-0 (excluded: user_exclude)~~
+~~- `outputs/design-shell-2026-10-21/session-880.png` [added] +652/-0 (excluded: user_exclude)~~
+~~- `outputs/design-shell-2026-10-21/session-dark-1440.png` [added] +1774/-0 (excluded: user_exclude)~~
+~~- `outputs/design-shell-2026-10-21/session-inspector-1440.png` [added] +1863/-0 (excluded: user_exclude)~~
+~~- `outputs/design-shell-2026-10-21/settings-1440.png` [added] +475/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-performance-2026-10-20/logs/ocr-preview.log` [added] +149/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-performance-2026-10-20/logs/ocr-rules.log` [added] +84/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/QUALITY-ROADMAP.md` [added] +16/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/REPORT.md` [added] +59/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/budget-bundle-red.json` [added] +1259/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/budget-runtime-red.json` [added] +51/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/build-control.mjs` [added] +25/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/bundle-after.json` [added] +1259/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/bundle-before.json` [added] +1197/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/bundle-final.json` [added] +1259/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-1.json` [added] +86/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-2.json` [added] +86/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-3.json` [added] +86/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/CommandPalette-DaYIza0v.js` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/InterVariable-DJwk3cVO.woff2` [added] +580/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/JetBrainsMonoItalicVariable-BPH9J9VZ.ttf` [added] +3594/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/JetBrainsMonoVariable-DgTxpPXt.ttf` [added] +3475/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/NotoSerifVariable-f932DlCQ.woff2` [added] +278/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/PaneDock-DDGTF8rc.css` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/PaneDock-DsrmB6id.js` [added] +4/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/PopoutApp-DPSS7RCD.js` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/SettingsPanel-3R-P92i-.js` [added] +3/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/Stream-BJVggDF-.js` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/addon-fit-DX4qG4td.js` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/index-DI3uc8pR.js` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/index-DPVGZPsa.css` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/index-DzPm9nsF.js` [added] +69/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/markdown-CZ6gAk9N.js` [added] +6/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/settings-nav-7XpyBRjD.js` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/xterm-B-qIQCd3.js` [added] +16/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/index.html` [added] +8/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/licenses/dsh-claude-style/AUTHORS.txt` [added] +10/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/licenses/dsh-claude-style/LICENSE` [added] +50/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/licenses/dsh-claude-style/OFL-Inter.txt` [added] +93/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/licenses/dsh-claude-style/OFL-NotoSerif.txt` [added] +93/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/licenses/dsh-claude-style/OFL.txt` [added] +93/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/licenses/dsh-claude-style/THIRD_PARTY_NOTICES.md` [added] +347/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/interactions/01-tools-folded.png` [added] +483/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/interactions/02-tools-expanded.png` [added] +640/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/interactions/03-focused-panel.png` [added] +369/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/interactions/04-split-panels.png` [added] +384/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/interactions/05-narrow.png` [added] +407/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/interactions/06-dark.png` [added] +424/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/interactions/checks.json` [added] +145/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/latest-actions.json` [added] +55/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/browser-targeted.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/budget-bundle-red.log` [added] +5/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/budget-runtime-red.log` [added] +5/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/build-after.log` [added] +33/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/build-control.log` [added] +6/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/build-final.log` [added] +33/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/build-inspector.log` [added] +33/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/build.log` [added] +35/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/bundle-after.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/bundle-before.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/bundle-final.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/control-1.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/control-2.log` [added] +6/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/control-3.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/core-tests-repeat.log` [added] +43/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/core-tests.log` [added] +77/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/desktop-final-all.log` [added] +15/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/desktop-tests-final.log` [added] +15/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/desktop-tests.log` [added] +144/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/desktop-worktree-final.log` [added] +15/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/docs-check.log` [added] +7/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/docs-final.log` [added] +7/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/final-targeted.log` [added] +13/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/inspector-usage-green.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/inspector-usage-red.log` [added] +34/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/interaction-smoke.log` [added] +25/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/invalid-runtime-red.log` [added] +14/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/ipv6-red.log` [added] +37/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/latest-actions.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/lsp-repeat-1.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/lsp-repeat-2.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/lsp-repeat-3.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/lsp-repeat-4.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/lsp-repeat-5.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/lsp-repeat-6.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/lsp-targeted.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/native-before.log` [added] +15/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/native-owner-green.log` [added] +18/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/native-owner-red.log` [added] +21/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/native-script-types.log` [added] +0/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/new-types.log` [added] +5/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/ocr-rules-extra.log` [added] +83/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/ocr-rules-inspector.log` [added] +48/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/product-smoke.log` [added] +29/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/review-batch-green.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/routes-after.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/routes-before-fixed.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/routes-before.log` [added] +5/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/routes-final.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/runtime-1.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/runtime-2.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/runtime-3.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/runtime-final.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/state-final.log` [added] +13/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/state-smoke.log` [added] +13/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/terminal-drain-red.log` [added] +37/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/terminal-green.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/typecheck-final.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/logs/typecheck.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/native-before.json` [added] +59/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/native-owner-green.json` [added] +71/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/native-owner-red.json` [added] +71/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/performance-comparison.json` [added] +81/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/routes-after.json` [added] +64/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/routes-before.json` [added] +44/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/routes-final.json` [added] +64/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/runtime-1.json` [added] +86/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/runtime-2.json` [added] +86/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/runtime-3.json` [added] +86/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/runtime-final.json` [added] +90/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/source-manifest.json` [added] +20/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/state-final/01-feedback-pending.png` [added] +472/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/state-final/02-independent-session-marks.png` [added] +459/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/state-final/checks.json` [added] +47/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/state/01-feedback-pending.png` [added] +533/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/state/02-independent-session-marks.png` [added] +485/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/state/checks.json` [added] +47/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-polish-2026-10-21/task.diff` [added] +620/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-terminal-2026-10-21/logs/ocr-preview.log` [added] +0/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/design.md` [added] +316/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/evidence.md` [added] +388/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/experiment/check-pack.mjs` [added] +22/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/experiment/consumer.ts` [added] +39/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/experiment/judge.mjs` [added] +27/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/experiment/run.ts` [added] +258/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/logs/A-vitest.log` [added] +13/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/logs/B-typecheck.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/logs/C-feasibility.log` [added] +21/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/logs/D-empty-set.log` [added] +5/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/logs/experiment-phase1.log` [added] +17/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/logs/experiment-phase2.log` [added] +4/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/logs/experiment-rerun.log` [added] +23/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/logs/experiment-workspace.txt` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/run-artifacts/artifacts/bad.json` [added] +6/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/run-artifacts/artifacts/baseline.json` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/run-artifacts/artifacts/good.json` [added] +10/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/run-artifacts/artifacts/restored.json` [added] +10/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/run-artifacts/canary-lesson.md` [added] +8/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/run-artifacts/canary-record.json` [added] +23/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/run-artifacts/candidates/content-pack.report-recipe/1.1.0.json` [added] +31/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/run-artifacts/candidates/content-pack.report-recipe/1.2.0.json` [added] +46/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/run-artifacts/registry.jsonl` [added] +10/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/sources/dgm-abs.html` [added] +622/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/sources/gepa-abs.html` [added] +624/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/sources/mirofish-readme.md` [added] +203/-0 (excluded: user_exclude)~~
+~~- `outputs/evolution-kernel-study-2026-10-21/sources/mirofish-repo.json` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-initial-state-2026-10-21/01-tools-folded.png` [added] +489/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-initial-state-2026-10-21/02-tools-expanded.png` [added] +611/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-initial-state-2026-10-21/03-focused-panel.png` [added] +376/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-initial-state-2026-10-21/04-split-panels.png` [added] +391/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-initial-state-2026-10-21/05-narrow.png` [added] +407/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-initial-state-2026-10-21/06-dark.png` [added] +424/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-initial-state-2026-10-21/checks.json` [added] +145/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-overview-2026-10-21/default-1200.png` [added] +1017/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-overview-2026-10-21/readings.md` [added] +20/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-overview-2026-10-21/wide-1440-dark.png` [added] +1129/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-overview-2026-10-21/wide-1440-light.png` [added] +1064/-0 (excluded: user_exclude)~~
+~~- `outputs/review-fixes-2026-10-21/interaction-smoke/checks.json` [added] +118/-0 (excluded: user_exclude)~~
+~~- `outputs/review-fixes-2026-10-21/readings.md` [added] +25/-0 (excluded: user_exclude)~~
+~~- `outputs/review-fixes-2026-10-21/settings-back-in-surface.png` [added] +495/-0 (excluded: user_exclude)~~
+~~- `outputs/session-log-2026-10-21/log-dark.png` [added] +1423/-0 (excluded: user_exclude)~~
+~~- `outputs/session-log-2026-10-21/log-light.png` [added] +1573/-0 (excluded: user_exclude)~~
+~~- `outputs/session-log-2026-10-21/log-tail-error.png` [added] +1561/-0 (excluded: user_exclude)~~
+~~- `outputs/session-log-2026-10-21/readings.md` [added] +36/-0 (excluded: user_exclude)~~
+~~- `outputs/settings-shell-2026-10-21/general-dark-1440.png` [added] +453/-0 (excluded: user_exclude)~~
+~~- `outputs/settings-shell-2026-10-21/general-light-1440.png` [added] +496/-0 (excluded: user_exclude)~~
+~~- `outputs/settings-shell-2026-10-21/readings.md` [added] +16/-0 (excluded: user_exclude)~~
+~~- `outputs/usage-ledger-2026-10-21/readings.md` [added] +38/-0 (excluded: user_exclude)~~
+~~- `outputs/usage-ledger-2026-10-21/usage-all-dark.png` [added] +911/-0 (excluded: user_exclude)~~
+~~- `outputs/usage-ledger-2026-10-21/usage-all-light.png` [added] +886/-0 (excluded: user_exclude)~~
+~~- `outputs/workspace-cleanup-2026-10-21/README.md` [added] +24/-0 (excluded: user_exclude)~~
+  - `src/main/session-log.ts` [added] +66/-0
+  - `src/main/usage-ledger-scan.ts` [added] +88/-0
+  - `src/main/usage-ledger.ts` [added] +59/-0
+~~- `tests/sandbox-abort-before-spawn.test.ts` [added] +40/-0 (excluded: default_path)~~
+~~- `tests/sandbox-abort.test.ts` [added] +41/-0 (excluded: default_path)~~
+~~- `tests/session-list-ids.test.ts` [added] +32/-0 (excluded: default_path)~~
+~~- `tests/session-log.test.ts` [added] +62/-0 (excluded: default_path)~~
+~~- `tests/sidechat-parent-workspace.test.ts` [added] +118/-0 (excluded: default_path)~~
+~~- `tests/sidechat-tool-gate.test.ts` [added] +84/-0 (excluded: default_path)~~
+~~- `tests/usage-ledger-scan.test.ts` [added] +68/-0 (excluded: default_path)~~
+~~- `tests/usage-ledger.test.ts` [added] +45/-0 (excluded: default_path)~~

@@ -1,0 +1,5 @@
+{"turns":40,"samples":5,"startupMs":267.046875,"openMs":90.77004099999999,"runningStarted":true,"metrics":{"open":{"TaskDuration":0.07737200000000001,"ScriptDuration":0.037389,"LayoutDuration":0.012153,"RecalcStyleDuration":0.01042,"LayoutCount":7,"RecalcStyleCount":9},"stream":{"TaskDuration":0.034206,"ScriptDuration":0.016007999999999994,"LayoutDuration":0.002522999999999999,"RecalcStyleDuration":0.004036000000000001,"LayoutCount":6,"RecalcStyleCount":6}},"frameMs":{"p50":8.273084000000154,"p95":8.435124999999971,"max":8.435124999999971,"all":[6.276916000000028,7.557540999999901,8.397083000000066,8.273084000000154,8.435124999999971]},"dom":{"nodes":4508,"users":41,"assistants":41,"tools":40,"historyPresent":true,"lastPresent":true},"errors":[],"budgets":{"p95Ms":1,"maxMs":500,"startupMs":1500}}
+[performance-smoke] 超预算：帧时间 p95 8.4ms > 帽 1ms
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron scripts/performance-smoke.cjs '/Users/ze/Downloads/Cairn/deepseek harness/outputs/desktop-polish-2026-10-21/budget-runtime-red.json' 40 5

@@ -3,7 +3,7 @@
 // 新建/切换/重命名/删除；删除当前会话回退到最近一个（mtime 降序）。
 // electron-free（root 由调用方传入：app 用 userData，验收脚本用临时目录），可 headless 单测。
 import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { basename, join, dirname } from "node:path";
 import type { AgentEvent } from "../events";
 import { createEventLog, replay } from "../events";
 import { tmpPathFor, writeFileAtomic } from "../atomic-write";
@@ -355,6 +355,10 @@ export async function listSessions(
               pinned: organization.pinned,
               archived: organization.archived,
               ...(organization.projectId !== undefined ? { projectId: organization.projectId } : {}),
+              ...(organization.viewedAt !== undefined ? { viewedAt: organization.viewedAt } : {}),
+              ...(organization.archivedAt !== undefined ? { archivedAt: organization.archivedAt } : {}),
+              ...(organization.idleSince !== undefined ? { idleSince: organization.idleSince } : {}),
+              ...(organization.resumeAttempts !== undefined ? { resumeAttempts: organization.resumeAttempts } : {}),
               createdAt: organization.createdAt,
               updatedAt: organization.updatedAt,
             }
@@ -405,6 +409,15 @@ export function deriveSessionTitle(message: string, maxWidth = 32): string | nul
     width += w;
   }
   return out;
+}
+
+/** 会话根 → 工作区：CLI 与桌面都把根放在 `<workspace>/.agent/sessions`（同一形态）。
+ *  只给「多根归属已经由解析器确定」的调用方用——拿任意临时目录来推工作区不是本函数的承诺。 */
+export function workspaceOfSessionsRoot(root: string): string | null {
+  const agent = dirname(root);
+  if (basename(root) !== "sessions" || basename(agent) !== ".agent") return null;
+  const workspace = dirname(agent);
+  return workspace === agent ? null : workspace;
 }
 
 /** 新建会话：名字缺省 = 时间戳；撞名自动加序号。可选 sidecar 写入失败时回滚空 JSONL。 */
@@ -620,6 +633,43 @@ export async function sessionExists(root: string, id: string): Promise<boolean> 
   } catch {
     return false;
   }
+}
+
+/** 这个文件是不是**真会话日志**（不是 pins/feedback 这类 UI sidecar）。
+ *  只读首行；空文件按会话算（新建后还没有事件）。 */
+async function isSessionFile(path: string): Promise<boolean> {
+  const head = await readHeadLine(path);
+  return head === null ? true : !isUiSidecarLine(head);
+}
+
+/** 精确到单个 id 的真会话检查（不需要扫整目录）：sessionLog 这类只读一条日志的通道用。
+ *  比 sessionExists 多挡一层 sidecar——pins/feedback 与事件同为 .jsonl。 */
+export async function isSessionInRoot(root: string, id: string): Promise<boolean> {
+  if (!(await sessionExists(root, id))) return false;
+  return await isSessionFile(sessionPath(root, id));
+}
+
+/** 只做「会话 id 清单」的轻量扫描（2026-10-21 评审修）：只 stat + 读首行，
+ *  **不整份读文件数行**。用量账本/日志查看只关心有哪些真会话，不需要 listSessions 的全量投影；
+ *  侧栏的 icon/line 数仍走 listSessions。 */
+export async function listSessionIds(root: string): Promise<string[]> {
+  let names: string[];
+  try {
+    names = await readdir(root);
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for (const name of names) {
+    if (!name.endsWith(".jsonl")) continue;
+    const p = join(root, name);
+    try {
+      if (!(await stat(p)).isFile()) continue;
+      if (!(await isSessionFile(p))) continue;
+      out.push(name.slice(0, -".jsonl".length));
+    } catch { /* 单个文件读不了：跳过；调用方的 skipped 面会按读取失败另行计数 */ }
+  }
+  return out;
 }
 
 // ---- M2f：sidechat 会话（独立 JSONL 文件组）----

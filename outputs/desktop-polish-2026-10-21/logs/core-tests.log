@@ -1,0 +1,77 @@
+$ vitest run --config tests/vitest.config.ts
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness
+
+fatal: not a git repository (or any of the parent directories): .git
+拒跑：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-HeKKw6/repo —— 工作树有 1 项在飞
+拒跑：/Users/ze/Downloads/Cairn/deepseek harness —— 工作树有 125 项在飞
+取料坏：2/2 棵树不合格 ⇒ 一条不跑（这不是「没有红」，是没尺）
+取料坏：--trees 里有重复路径 ⇒ 同树两个进程会互改源文件（.mutbak 会互相踩），一条不跑
+取料坏：认不出的参数 ⇒ 一条不跑：--shardz=2
+用法：node --import tsx scripts/mutate-shards.ts --trees 树1,树2[,…] [--changed-since=<rev> | id…] [--budget-ms N] [--serial-seconds N] [--lock-tag-base …] [--cost-logs 机器原文,…] [--dry-run]（带值的旗标两种写法都收）
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+Preparing worktree (detached HEAD 6af24734)
+Updating files:  39% (1891/4835)Updating files:  40% (1934/4835)Updating files:  41% (1983/4835)Updating files:  42% (2031/4835)Updating files:  43% (2080/4835)Updating files:  44% (2128/4835)Updating files:  45% (2176/4835)Updating files:  46% (2225/4835)Updating files:  47% (2273/4835)Updating files:  48% (2321/4835)Updating files:  49% (2370/4835)Updating files:  50% (2418/4835)Updating files:  50% (2430/4835)Updating files:  51% (2466/4835)Updating files:  52% (2515/4835)Updating files:  53% (2563/4835)Updating files:  54% (2611/4835)Updating files:  55% (2660/4835)Updating files:  56% (2708/4835)Updating files:  57% (2756/4835)Updating files:  58% (2805/4835)Updating files:  59% (2853/4835)Updating files:  60% (2901/4835)Updating files:  61% (2950/4835)Updating files:  62% (2998/4835)Updating files:  63% (3047/4835)Updating files:  64% (3095/4835)Updating files:  65% (3143/4835)Updating files:  66% (3192/4835)Updating files:  67% (3240/4835)Updating files:  68% (3288/4835)Updating files:  69% (3337/4835)Updating files:  70% (3385/4835)Updating files:  71% (3433/4835)Updating files:  72% (3482/4835)Updating files:  73% (3530/4835)Updating files:  74% (3578/4835)Updating files:  75% (3627/4835)Updating files:  75% (3640/4835)Updating files:  76% (3675/4835)Updating files:  77% (3723/4835)Updating files:  78% (3772/4835)Updating files:  79% (3820/4835)Updating files:  80% (3868/4835)Updating files:  81% (3917/4835)Updating files:  82% (3965/4835)Updating files:  83% (4014/4835)Updating files:  84% (4062/4835)Updating files:  85% (4110/4835)Updating files:  86% (4159/4835)Updating files:  87% (4207/4835)Updating files:  88% (4255/4835)Updating files:  89% (4304/4835)Updating files:  89% (4337/4835)Updating files:  90% (4352/4835)Updating files:  91% (4400/4835)Updating files:  92% (4449/4835)Updating files:  93% (4497/4835)Updating files:  94% (4545/4835)Updating files:  95% (4594/4835)Updating files:  96% (4642/4835)Updating files:  97% (4690/4835)Updating files:  98% (4739/4835)Updating files:  99% (4787/4835)Updating files: 100% (4835/4835)Updating files: 100% (4835/4835), done.
+取料坏：给了 1 条不在这张表上的 id ⇒ 一条不跑：this-anchor-does-not-exist
+Preparing worktree (detached HEAD 6af24734)
+Updating files:  44% (2166/4835)Updating files:  45% (2176/4835)Updating files:  46% (2225/4835)Updating files:  47% (2273/4835)Updating files:  48% (2321/4835)Updating files:  49% (2370/4835)Updating files:  50% (2418/4835)Updating files:  51% (2466/4835)Updating files:  52% (2515/4835)Updating files:  53% (2563/4835)Updating files:  54% (2611/4835)Updating files:  55% (2660/4835)Updating files:  56% (2708/4835)Updating files:  57% (2756/4835)Updating files:  58% (2805/4835)Updating files:  59% (2853/4835)Updating files:  60% (2901/4835)Updating files:  61% (2950/4835)Updating files:  62% (2998/4835)Updating files:  63% (3047/4835)Updating files:  64% (3095/4835)Updating files:  65% (3143/4835)Updating files:  66% (3192/4835)Updating files:  67% (3240/4835)Updating files:  68% (3288/4835)Updating files:  69% (3337/4835)Updating files:  70% (3385/4835)Updating files:  71% (3433/4835)Updating files:  72% (3482/4835)Updating files:  73% (3530/4835)Updating files:  74% (3578/4835)Updating files:  75% (3627/4835)Updating files:  76% (3675/4835)Updating files:  77% (3723/4835)Updating files:  78% (3772/4835)Updating files:  79% (3820/4835)Updating files:  80% (3868/4835)Updating files:  81% (3917/4835)Updating files:  82% (3965/4835)Updating files:  83% (4014/4835)Updating files:  84% (4062/4835)Updating files:  85% (4110/4835)Updating files:  86% (4159/4835)Updating files:  87% (4207/4835)Updating files:  88% (4255/4835)Updating files:  89% (4304/4835)Updating files:  90% (4352/4835)Updating files:  91% (4400/4835)Updating files:  92% (4449/4835)Updating files:  93% (4497/4835)Updating files:  94% (4545/4835)Updating files:  95% (4594/4835)Updating files:  96% (4642/4835)Updating files:  97% (4690/4835)Updating files:  98% (4739/4835)Updating files:  99% (4787/4835)Updating files: 100% (4835/4835)Updating files: 100% (4835/4835), done.
+Preparing worktree (detached HEAD 6af24734)
+Updating files:  42% (2060/4835)Updating files:  43% (2080/4835)Updating files:  44% (2128/4835)Updating files:  45% (2176/4835)Updating files:  46% (2225/4835)Updating files:  47% (2273/4835)Updating files:  48% (2321/4835)Updating files:  49% (2370/4835)Updating files:  50% (2418/4835)Updating files:  51% (2466/4835)Updating files:  52% (2515/4835)Updating files:  53% (2563/4835)Updating files:  54% (2611/4835)Updating files:  55% (2660/4835)Updating files:  56% (2708/4835)Updating files:  57% (2756/4835)Updating files:  58% (2805/4835)Updating files:  59% (2853/4835)Updating files:  60% (2901/4835)Updating files:  61% (2950/4835)Updating files:  62% (2998/4835)Updating files:  63% (3047/4835)Updating files:  64% (3095/4835)Updating files:  65% (3143/4835)Updating files:  66% (3192/4835)Updating files:  67% (3240/4835)Updating files:  68% (3288/4835)Updating files:  69% (3337/4835)Updating files:  70% (3385/4835)Updating files:  71% (3433/4835)Updating files:  72% (3482/4835)Updating files:  73% (3530/4835)Updating files:  74% (3578/4835)Updating files:  75% (3627/4835)Updating files:  76% (3675/4835)Updating files:  77% (3723/4835)Updating files:  78% (3772/4835)Updating files:  79% (3820/4835)Updating files:  80% (3868/4835)Updating files:  81% (3917/4835)Updating files:  82% (3965/4835)Updating files:  83% (4014/4835)Updating files:  84% (4062/4835)Updating files:  85% (4110/4835)Updating files:  86% (4159/4835)Updating files:  87% (4207/4835)Updating files:  88% (4255/4835)Updating files:  89% (4304/4835)Updating files:  90% (4352/4835)Updating files:  91% (4400/4835)Updating files:  92% (4449/4835)Updating files:  93% (4497/4835)Updating files:  94% (4545/4835)Updating files:  95% (4594/4835)Updating files:  96% (4642/4835)Updating files:  97% (4690/4835)Updating files:  98% (4739/4835)Updating files:  99% (4787/4835)Updating files: 100% (4835/4835)Updating files: 100% (4835/4835), done.
+Preparing worktree (detached HEAD 6af24734)
+取料坏：1 个判卷宿主被摊到两片以上 ⇒ 会并发真跑同一份判卷，一条不跑：tests/mutate-shards.test.ts
+Preparing worktree (detached HEAD 6af24734)
+Updating files:  52% (2533/4835)Updating files:  53% (2563/4835)Updating files:  54% (2611/4835)Updating files:  55% (2660/4835)Updating files:  56% (2708/4835)Updating files:  57% (2756/4835)Updating files:  58% (2805/4835)Updating files:  59% (2853/4835)Updating files:  60% (2901/4835)Updating files:  61% (2950/4835)Updating files:  62% (2998/4835)Updating files:  63% (3047/4835)Updating files:  64% (3095/4835)Updating files:  65% (3143/4835)Updating files:  66% (3192/4835)Updating files:  67% (3240/4835)Updating files:  68% (3288/4835)Updating files:  69% (3337/4835)Updating files:  70% (3385/4835)Updating files:  71% (3433/4835)Updating files:  72% (3482/4835)Updating files:  73% (3530/4835)Updating files:  74% (3578/4835)Updating files:  75% (3627/4835)Updating files:  76% (3675/4835)Updating files:  77% (3723/4835)Updating files:  78% (3772/4835)Updating files:  79% (3820/4835)Updating files:  80% (3868/4835)Updating files:  81% (3917/4835)Updating files:  82% (3965/4835)Updating files:  83% (4014/4835)Updating files:  84% (4062/4835)Updating files:  85% (4110/4835)Updating files:  86% (4159/4835)Updating files:  87% (4207/4835)Updating files:  87% (4231/4835)Updating files:  88% (4255/4835)Updating files:  89% (4304/4835)Updating files:  90% (4352/4835)Updating files:  91% (4400/4835)Updating files:  92% (4449/4835)Updating files:  93% (4497/4835)Updating files:  94% (4545/4835)Updating files:  95% (4594/4835)Updating files:  96% (4642/4835)Updating files:  97% (4690/4835)Updating files:  98% (4739/4835)Updating files:  99% (4787/4835)Updating files: 100% (4835/4835)Updating files: 100% (4835/4835), done.
+Preparing worktree (detached HEAD 6af24734)
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+ ❯ tests/lsp-request-lifecycle.test.ts (23 tests | 1 failed) 2240ms
+   ❯ 官方 JSON-RPC 链路的超时重试 (6)
+     × 一个请求超时只取消自己，其他并发请求仍能正常完成 316ms
+node: bad option: --token
+node: bad option: --port
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/lsp-request-lifecycle.test.ts > 官方 JSON-RPC 链路的超时重试 > 一个请求超时只取消自己，其他并发请求仍能正常完成
+AssertionError: expected { count: 2, pending: [ 1, 2 ], …(1) } to deeply equal { count: 2, pending: [ 2 ], …(1) }
+
+- Expected
++ Received
+
+  {
+-   "cancelled": [
+-     1,
+-   ],
++   "cancelled": [],
+    "count": 2,
+    "pending": [
++     1,
+      2,
+    ],
+  }
+
+ ❯ tests/lsp-request-lifecycle.test.ts:204:19
+    202|     await client.request("fixture/release", { index: 2 });
+    203|     expect(await other).toEqual({ request: 2 });
+    204|     expect(state).toEqual({ count: 2, pending: [2], cancelled: [1] });
+       |                   ^
+    205|   });
+    206|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 452 passed (453)
+      Tests  1 failed | 6222 passed (6223)
+   Start at  16:50:05
+   Duration  119.74s (tests 86%, import 10%, transform 4%)
+
+    Isolate  453 workers spawned · ~131ms startup each (spawn + environment, per file)
+             at least ~8.34s faster with isolate: false — reuses workers across files instead of one per file
+
+[ELIFECYCLE] Test failed. See above for more details.

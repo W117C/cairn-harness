@@ -1,0 +1,7 @@
+scripts/session-semantics-check.ts(70,13): error TS2339: Property 'c' does not exist on type '{ kind: string; }'.
+scripts/session-semantics-check.ts(71,39): error TS2339: Property 'v' does not exist on type '{ kind: string; }'.
+scripts/session-semantics-check.ts(71,68): error TS2339: Property 'sid' does not exist on type '{ kind: string; }'.
+scripts/session-semantics-check.ts(71,83): error TS2339: Property 'eid' does not exist on type '{ kind: string; }'.
+src/agent/sidechat.ts(118,47): error TS2366: Function lacks ending return statement and return type does not include 'undefined'.
+[typecheck] 报错文件归因：HEAD 内 1／在飞改动中的 tracked 0／未跟踪草稿 1／工作树状态取不到 0（四档相加＝2，与分母 2 不等就是归因坏了）
+[typecheck] ⚠️ 未跟踪草稿（不属 HEAD 回归，属在飞改动）: scripts/session-semantics-check.ts

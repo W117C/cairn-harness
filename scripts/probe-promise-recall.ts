@@ -521,6 +521,34 @@ export const CLAIM_BINDINGS: readonly ClaimBinding[] = [
     why: "hintFor 的 unsupported 分支就是这句话；用例让 /models 返回 404，断言 reason=unsupported 且 hint 允许继续用，"
       + "⇒ 这句文案有执行端观测者，不是只写在提示里。",
   },
+  /* 2026-10-22：会话语义面（`src/agent/session-cursor.ts`，ADR 0005 那一批）新增的游标入口。
+     游标是**不透明且 fail-closed** 的契约（AGENTS.md「Event log」段），所以「不认识就拒」这句承诺
+     必须有观测者——否则它只是一句注释。三条各由一条真用例兜住，且**互不重叠**：
+     解码入口的「版本不对」「种类不认识」，与结构化入口（绕过 decode）的「版本或种类不对」。 */
+  {
+    face: "src/agent/session-cursor.ts#decodeCursor｜游标版本不支持",
+    symbol: "decodeCursor",
+    testFile: "tests/session-semantics.test.ts",
+    testCase: "坏游标一律抛 `malformed`：不是 base64url / 不是 JSON / 校验和不符 / 版本不对",
+    why: "那条用例的四种坏法里有一种把载荷的 `v` 改成 99（校验和随载荷重算）⇒ 走到版本那一支，"
+      + "并断言抛出的是 `malformed` 且是 `CursorError` ⇒ 「版本不对就拒、绝不用另一个位置顶上」这句由它兜住。",
+  },
+  {
+    face: "src/agent/session-cursor.ts#decodeCursor｜游标种类不支持",
+    symbol: "decodeCursor",
+    testFile: "tests/session-semantics.test.ts",
+    testCase: "种类不支持 ⇒ `unsupported-kind`（解得开、校验也对，只是种类不认识）",
+    why: "那条用例把 `kind` 换成一个不存在的种类并**重算校验和**（让载荷本身合法）⇒ 剩下的唯一变量就是种类，"
+      + "并断言码是 `unsupported-kind` ⇒ 「解得开但种类不认识」这一档不会退化成 `malformed`、也不会被悄悄接受。",
+  },
+  {
+    face: "src/agent/session-cursor.ts#forkPointFromCursor｜游标种类不支持",
+    symbol: "forkPointFromCursor",
+    testFile: "tests/session-semantics.test.ts",
+    testCase: "结构化游标也验kind/version；不允许绕过decode",
+    why: "结构化入口收的是**已解码的对象**，所以它自己也得验 kind/version——否则绕开 decode 就能塞进一个错种类。"
+      + "那条用例把解码出来的游标的 `kind` 改成别的值再喂进去，断言必须抛 ⇒ 「不许绕过 decode」由它兜住。",
+  },
 ];
 
 /** 存量帽（计数类**不留余量**，同 `prose-needle-scan` 那族）。三态各自出声：

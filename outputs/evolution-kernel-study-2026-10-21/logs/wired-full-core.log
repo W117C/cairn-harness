@@ -1,0 +1,1577 @@
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+$ vitest run --config tests/vitest.config.ts
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness
+
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ ❯ tests/project-preview.test.ts (17 tests | 6 failed) 64ms
+   ❯ 单文件 HTML 直接预览（不需要 .cairn/project.json） (4)
+     × 起预览直接 ready，URL 指向那个文件（不是目录根） 13ms
+     × 文件名带空格/中文也能serve（URL 编码，不让浏览器把它当成两段路径） 3ms
+   ❯ serveStaticProject：静态预览的真实 HTTP 行为 (2)
+     × 根路径回 index.html（text/html、no-store），嵌套文件按扩展名给 MIME 3ms
+     × 目录请求回落 index.html；缺失 404；穿越根目录 403 4ms
+   ❯ PreviewRuntime：状态机与失败分类 (7)
+     × static：起服务即 ready，停止后端口回收 4ms
+   ❯ 已有目录的受控纳管（没有 .cairn/project.json 也能进） (4)
+     × 零依赖静态目录：诊断放行 ⇒ 直接 ready，URL 服务入口页；不写用户目录 3ms
+fatal: not a git repository (or any of the parent directories): .git
+拒跑：/tmp/claude-501/mutate-shards-YctzV0/repo —— 工作树有 1 项在飞
+拒跑：/Users/ze/Downloads/Cairn/deepseek harness —— 工作树有 137 项在飞
+取料坏：2/2 棵树不合格 ⇒ 一条不跑（这不是「没有红」，是没尺）
+取料坏：--trees 里有重复路径 ⇒ 同树两个进程会互改源文件（.mutbak 会互相踩），一条不跑
+取料坏：认不出的参数 ⇒ 一条不跑：--shardz=2
+用法：node --import tsx scripts/mutate-shards.ts --trees 树1,树2[,…] [--changed-since=<rev> | id…] [--budget-ms N] [--serial-seconds N] [--lock-tag-base …] [--cost-logs 机器原文,…] [--dry-run]（带值的旗标两种写法都收）
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+Preparing worktree (detached HEAD 6af24734)
+Updating files:  65% (3183/4835)Updating files:  66% (3192/4835)Updating files:  67% (3240/4835)Updating files:  68% (3288/4835)Updating files:  69% (3337/4835)Updating files:  70% (3385/4835)Updating files:  71% (3433/4835)Updating files:  72% (3482/4835)Updating files:  73% (3530/4835)Updating files:  74% (3578/4835)Updating files:  75% (3627/4835)Updating files:  76% (3675/4835)Updating files:  77% (3723/4835)Updating files:  78% (3772/4835)Updating files:  79% (3820/4835)Updating files:  80% (3868/4835)Updating files:  81% (3917/4835)Updating files:  82% (3965/4835)Updating files:  83% (4014/4835)Updating files:  84% (4062/4835)Updating files:  85% (4110/4835)Updating files:  86% (4159/4835)Updating files:  87% (4207/4835)Updating files:  88% (4255/4835)Updating files:  89% (4304/4835)Updating files:  90% (4352/4835)Updating files:  91% (4400/4835)Updating files:  92% (4449/4835)Updating files:  93% (4497/4835)Updating files:  94% (4545/4835)Updating files:  95% (4594/4835)Updating files:  96% (4642/4835)Updating files:  97% (4690/4835)Updating files:  98% (4739/4835)Updating files:  99% (4787/4835)Updating files: 100% (4835/4835)Updating files: 100% (4835/4835), done.
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+取料坏：给了 1 条不在这张表上的 id ⇒ 一条不跑：this-anchor-does-not-exist
+Preparing worktree (detached HEAD 6af24734)
+Updating files:  72% (3521/4835)Updating files:  73% (3530/4835)Updating files:  74% (3578/4835)Updating files:  75% (3627/4835)Updating files:  76% (3675/4835)Updating files:  77% (3723/4835)Updating files:  78% (3772/4835)Updating files:  79% (3820/4835)Updating files:  80% (3868/4835)Updating files:  81% (3917/4835)Updating files:  82% (3965/4835)Updating files:  83% (4014/4835)Updating files:  84% (4062/4835)Updating files:  85% (4110/4835)Updating files:  86% (4159/4835)Updating files:  87% (4207/4835)Updating files:  88% (4255/4835)Updating files:  89% (4304/4835)Updating files:  90% (4352/4835)Updating files:  91% (4400/4835)Updating files:  92% (4449/4835)Updating files:  93% (4497/4835)Updating files:  94% (4545/4835)Updating files:  95% (4594/4835)Updating files:  96% (4642/4835)Updating files:  97% (4690/4835)Updating files:  98% (4739/4835)Updating files:  99% (4787/4835)Updating files: 100% (4835/4835)Updating files: 100% (4835/4835), done.
+Preparing worktree (detached HEAD 6af24734)
+Preparing worktree (detached HEAD 6af24734)
+Updating files:  82% (3965/4835)Updating files:  83% (4014/4835)Updating files:  84% (4062/4835)Updating files:  85% (4110/4835)Updating files:  86% (4159/4835)Updating files:  87% (4207/4835)Updating files:  88% (4255/4835)Updating files:  89% (4304/4835)Updating files:  90% (4352/4835)Updating files:  91% (4400/4835)Updating files:  92% (4449/4835)Updating files:  93% (4497/4835)Updating files:  94% (4545/4835)Updating files:  95% (4594/4835)Updating files:  96% (4642/4835)Updating files:  97% (4690/4835)Updating files:  98% (4739/4835)Updating files:  99% (4787/4835)Updating files: 100% (4835/4835)Updating files: 100% (4835/4835), done.
+取料坏：1 个判卷宿主被摊到两片以上 ⇒ 会并发真跑同一份判卷，一条不跑：tests/mutate-shards.test.ts
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+Preparing worktree (detached HEAD 6af24734)
+Updating files:  56% (2723/4835)Updating files:  57% (2756/4835)Updating files:  58% (2805/4835)Updating files:  59% (2853/4835)Updating files:  60% (2901/4835)Updating files:  61% (2950/4835)Updating files:  62% (2998/4835)Updating files:  63% (3047/4835)Updating files:  64% (3095/4835)Updating files:  65% (3143/4835)Updating files:  66% (3192/4835)Updating files:  67% (3240/4835)Updating files:  68% (3288/4835)Updating files:  69% (3337/4835)Updating files:  70% (3385/4835)Updating files:  71% (3433/4835)Updating files:  72% (3482/4835)Updating files:  73% (3530/4835)Updating files:  74% (3578/4835)Updating files:  74% (3616/4835)Updating files:  75% (3627/4835)Updating files:  76% (3675/4835)Updating files:  77% (3723/4835)Updating files:  78% (3772/4835)Updating files:  79% (3820/4835)Updating files:  80% (3868/4835)Updating files:  81% (3917/4835)Updating files:  82% (3965/4835)Updating files:  83% (4014/4835)Updating files:  84% (4062/4835)Updating files:  85% (4110/4835)Updating files:  86% (4159/4835)Updating files:  87% (4207/4835)Updating files:  88% (4255/4835)Updating files:  89% (4304/4835)Updating files:  90% (4352/4835)Updating files:  91% (4400/4835)Updating files:  92% (4449/4835)Updating files:  93% (4497/4835)Updating files:  94% (4545/4835)Updating files:  95% (4594/4835)Updating files:  96% (4642/4835)Updating files:  97% (4690/4835)Updating files:  98% (4739/4835)Updating files:  99% (4787/4835)Updating files: 100% (4835/4835)Updating files: 100% (4835/4835), done.
+Preparing worktree (detached HEAD 6af24734)
+Updating files:  62% (3011/4835)Updating files:  63% (3047/4835)Updating files:  64% (3095/4835)Updating files:  65% (3143/4835)Updating files:  66% (3192/4835)Updating files:  67% (3240/4835)Updating files:  68% (3288/4835)Updating files:  69% (3337/4835)Updating files:  70% (3385/4835)Updating files:  71% (3433/4835)Updating files:  72% (3482/4835)Updating files:  73% (3530/4835)Updating files:  74% (3578/4835)Updating files:  75% (3627/4835)Updating files:  76% (3675/4835)Updating files:  77% (3723/4835)Updating files:  78% (3772/4835)Updating files:  79% (3820/4835)Updating files:  80% (3868/4835)Updating files:  81% (3917/4835)Updating files:  82% (3965/4835)Updating files:  83% (4014/4835)Updating files:  84% (4062/4835)Updating files:  85% (4110/4835)Updating files:  86% (4159/4835)Updating files:  87% (4207/4835)Updating files:  88% (4255/4835)Updating files:  89% (4304/4835)Updating files:  90% (4352/4835)Updating files:  91% (4400/4835)Updating files:  92% (4449/4835)Updating files:  93% (4497/4835)Updating files:  94% (4545/4835)Updating files:  95% (4594/4835)Updating files:  96% (4642/4835)Updating files:  97% (4690/4835)Updating files:  98% (4739/4835)Updating files:  99% (4787/4835)Updating files: 100% (4835/4835)Updating files: 100% (4835/4835), done.
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ ❯ tests/render-image.test.ts (20 tests | 1 failed) 553ms
+   ❯ 真渲染（用本仓那份 pelican-bicycle.html） (1)
+     × Chrome 在 ⇒ 1.2s 量级出图，且是一张真的 PNG 454ms
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ ❯ tests/cli-surface.test.ts (74 tests | 4 failed) 34787ms
+   ❯ cairn CLI：产品面存在且可执行 (5)
+     × 真跑：--version 打印 cairn <version>，与 package.json 同源（单一事实源），exit 0 711ms
+   ❯ cairn CLI：默认档位是 fail-closed 的那一档 (4)
+     × 支二：只多给一个 --mode auto ⇒ 同一拍写得下去（否则支一钉的是「CLI 根本不会写」） 678ms
+   ❯ cairn CLI：走应用壳（handleAgentRun），不裸调 runAgent (4)
+     × 支二：只把那一个键去掉 ⇒ 同一拍同一份剧本写下去了（否则支一钉的是「CLI 什么也不干」） 839ms
+   ❯ cairn CLI：clarify / propose_plan 两扇门在真跑里都收得住（不悬挂） (5)
+     × 同一行只渲染一遍：行为层无相邻重复行，结构层渲染器只接一个出口 2ms
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+ ❯ tests/cli-exit-code.test.ts (16 tests | 1 failed) 3716ms
+   ❯ 真跑 bin：demo 通道的退出码（零凭据、离线、确定性） (7)
+     × --delivery-repair 从 CLI 穿到 runner：补写真实文件后 exit 0 484ms
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ ❯ tests/docs-check.test.ts (115 tests | 1 failed) 5649ms
+   ❯ D-10 源码行号引用面：两半都钉，存量按集合登记 (4)
+     × 真仓那一趟：74 条存量今天仍全部命中，所以 D-10 现在是绿的（登记不是凭空写的） 662ms
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+node: bad option: --token
+node: bad option: --port
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ ❯ tests/ledger-manifest.test.ts (22 tests | 13 failed) 13ms
+   ❯ ① manifest 逐条校验：畸形都要 ECORRUPT (13)
+     × 键是路径穿越 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象） 3ms
+     × 键格式不合法 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象） 1ms
+     × 键超长 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象） 1ms
+     × sha256 非 hex ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象） 0ms
+     × bytes 是负数 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象） 0ms
+     × bytes 超单对象上限 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象） 0ms
+     × lines > bytes ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象） 0ms
+     × lines 非整数 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象） 0ms
+     × version 不是 1 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象） 0ms
+     × sessionId 与本会话不符 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象） 1ms
+     × epoch 不是 UUID ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象） 0ms
+     × entries 是数组 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象） 0ms
+     × 对照组：原始 manifest 读得回来（守卫不能变成永真） 0ms
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ ❯ tests/body-cap-regression.test.ts (15 tests | 1 failed) 30052ms
+   ❯ 网页截断和更新清单严格上限各按原契约执行 (7)
+     × 真实 HTTP 声明 3MiB 但不结束正文：取到有界前缀后立即关闭连接 30012ms
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ ❯ tests/dead-script-refs.test.ts (12 tests | 1 failed) 71ms
+   ❯ 真仓面：这条判据现在必须绿 (2)
+     × 源码散文里没有一处点名盘上不存在的脚本 57ms
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ ❯ tests/net.test.ts (10 tests | 2 failed) 60766ms
+   ❯ 出网停滞 → 真实 socket 上按窗口收束（旧实现永久挂起） (2)
+     × 建连后对端不响应：fetch 被 abort（Anthropic 适配器） 30008ms
+     × 流中途静默：先收到分片，随后 reader.read() 被 abort（OpenAI 适配器） 30006ms
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ ❯ tests/web-fetch.test.ts (36 tests | 3 failed) 60241ms
+   ❯ web_fetch 传输层（注入 fetchImpl / resolveHost） (17)
+     × 真 loopback 服务：分块中文不乱码、体积帽截断后仍交出正文 30006ms
+   ❯ 截断提示里的「锚点」是假出路（第 309 页：句子有证人，半句没有） (5)
+     × 换锚点不改变取回的内容：三件事由复现器量（片段不上线／正文相同／换 path 必须不同） 191ms
+     × 这句要真从 web_fetch 那一支交出去（改了常量而出口不接＝模型读到的还是旧的） 30008ms
+ ❯ tests/web-search-pinning.test.ts (18 tests | 2 failed) 60073ms
+   ❯ 搜索连接必须使用已校验的地址快照 (18)
+     × 真实 HTTP 本地端点在显式许可后保留原 Host，并正确处理 HTTP 200 30019ms
+     × 真实 HTTP 本地端点在显式许可后保留原 Host，并正确处理 HTTP 302 30008ms
+ ❯ tests/provider-stream-lifecycle.test.ts (23 tests | 2 failed) 60309ms
+   ❯ 真实 HTTP 响应连接回收 (1)
+     × 消费者提前结束后，服务端能观察到响应连接关闭 30214ms
+   ❯ 请求计量逐笔覆盖真实传输尝试 (8)
+     × 本地 HTTP 服务收到两次请求时，计量也准确记录两笔 30009ms
+ ❯ tests/web-tool-cancellation.test.ts (23 tests | 6 failed) 180232ms
+   ❯ web_fetch 的会话取消 (10)
+     × 真实 HTTP 的 headers 阶段取消：请求 signal 中止，连接关闭并保留原因 30012ms
+     × 真实 HTTP 的 body 阶段取消：请求 signal 中止，连接关闭并保留原因 30007ms
+     × 真实 HTTP 的 gzip 阶段取消：请求 signal 中止，连接关闭并保留原因 30011ms
+   ❯ web_search 的会话取消 (10)
+     × 真实 HTTP 的 headers 阶段取消：请求 signal 中止，连接关闭并保留原因 30030ms
+     × 真实 HTTP 的 body 阶段取消：请求 signal 中止，连接关闭并保留原因 30018ms
+     × 真实 HTTP 的 gzip 阶段取消：请求 signal 中止，连接关闭并保留原因 30033ms
+ ❯ tests/web-fetch-stream-lifecycle.test.ts (14 tests | 14 failed) 420158ms
+   ❯ 压缩网页流的取消与背压 (14)
+     × gzip：消费方取消后，HTTP 输入和 socket 都关闭 30004ms
+     × deflate：消费方取消后，HTTP 输入和 socket 都关闭 30004ms
+     × br：消费方取消后，HTTP 输入和 socket 都关闭 30003ms
+     × 尚未收到第一块数据时取消，也会终止整条下载解码链 30005ms
+     × 消费方暂不读取时，上游保留背压；恢复读取后仍完整交付 30015ms
+     × gzip：正常结束仍交付原文 30009ms
+     × deflate：正常结束仍交付原文 30009ms
+     × br：正常结束仍交付原文 30042ms
+     × gzip：损坏的正文仍返回可读的编码错误 30004ms
+     × deflate：损坏的正文仍返回可读的编码错误 30010ms
+     × br：损坏的正文仍返回可读的编码错误 30024ms
+     × gzip：web_fetch 达到 2MiB 读取上限后，返回可用正文并终止上游 30005ms
+     × deflate：web_fetch 达到 2MiB 读取上限后，返回可用正文并终止上游 30008ms
+     × br：web_fetch 达到 2MiB 读取上限后，返回可用正文并终止上游 30008ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 57 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/body-cap-regression.test.ts > 网页截断和更新清单严格上限各按原契约执行 > 真实 HTTP 声明 3MiB 但不结束正文：取到有界前缀后立即关闭连接
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/body-cap-regression.test.ts:109:3
+    107|   });
+    108|
+    109|   it("真实 HTTP 声明 3MiB 但不结束正文：取到有界前缀后立即关闭连接", async () => {
+       |   ^
+    110|     let outgoing: ServerResponse | undefined;
+    111|     const server = createServer((_req, res) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/57]⎯
+
+ FAIL  tests/cli-exit-code.test.ts > 真跑 bin：demo 通道的退出码（零凭据、离线、确定性） > --delivery-repair 从 CLI 穿到 runner：补写真实文件后 exit 0
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/cli-exit-code.test.ts:191:22
+    189|   it("--delivery-repair 从 CLI 穿到 runner：补写真实文件后 exit 0", () => {
+    190|     const r = runAgentCli(PLAN_THEN_WRITE, ["--delivery-repair"]);
+    191|     expect(r.status).toBe(0);
+       |                      ^
+    192|     expect(existsSync(join(r.workspace, "a.html")), "返修开关没传到 runLoop ⇒…
+    193|     expect(readFileSync(join(r.workspace, "a.html"), "utf8")).toBe("<h…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/57]⎯
+
+ FAIL  tests/cli-surface.test.ts > cairn CLI：产品面存在且可执行 > 真跑：--version 打印 cairn <version>，与 package.json 同源（单一事实源），exit 0
+AssertionError: expected 'cairn 0.1.0\nERROR: failed to copy tr…' to be 'cairn 0.1.0' // Object.is equality
+
+- Expected
++ Received
+
+  cairn 0.1.0
++ ERROR: failed to copy trust settings of system certificate-25291
++ ERROR: failed to copy trust settings of system certificate-25291
++ ERROR: failed to copy trust settings of system certificate-25291
++ ERROR: failed to copy trust settings of system certificate-25291
+
+ ❯ tests/cli-surface.test.ts:68:26
+     66|     expect(r.status).toBe(0);
+     67|     const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "u…
+     68|     expect(r.out.trim()).toBe("cairn " + pkg.version);
+       |                          ^
+     69|   });
+     70|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/57]⎯
+
+ FAIL  tests/cli-surface.test.ts > cairn CLI：默认档位是 fail-closed 的那一档 > 支二：只多给一个 --mode auto ⇒ 同一拍写得下去（否则支一钉的是「CLI 根本不会写」）
+AssertionError: auto 档下没写下去 ⇒ 这一拍的失败与缺省档无关：  ⚙ write_file payload.txt
+  ✗ [unattended] [permission denied] write_file 在 auto 档下被门拒绝（无人值守 fail-closed：这一轮没有任何人能回应审批，审批请求被立即拒绝——该工具没有执行。这不是档位…
+写完了。
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+事件日志：/tmp/claude-501/cairn-shell-ZOawEj/.agent/sessions/cli-1792573966474.jsonl
+在桌面打开：cli-1792573966474
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+[cairn] 沙箱不可用（自检失败: sandbox-exec: sandbox_apply: Operation not permitted
+
+[exit code: 71]）——run_shell 将不过 Seatbelt
+[cairn] stdin 非交互（管道 / CI）——审批一律 fail-closed 拒绝；需要审批请在终端里跑，或显式 --mode auto
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/cli-surface.test.ts:253:58
+    251|   it("支二：只多给一个 --mode auto ⇒ 同一拍写得下去（否则支一钉的是「CLI 根本不会写」）", () => {
+    252|     const { out, written } = runWriteScript({ mode: "auto" });
+    253|     expect(written, `auto 档下没写下去 ⇒ 这一拍的失败与缺省档无关：${out}`).toBe(true);
+       |                                                          ^
+    254|     expect(out).not.toContain("permission denied");
+    255|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/57]⎯
+
+ FAIL  tests/cli-surface.test.ts > cairn CLI：走应用壳（handleAgentRun），不裸调 runAgent > 支二：只把那一个键去掉 ⇒ 同一拍同一份剧本写下去了（否则支一钉的是「CLI 什么也不干」）
+AssertionError: auto 档下没写下去，这一拍的失败与 plan 门无关：  ⚙ write_file payload.txt
+  ✗ [unattended] [permission denied] write_file 在 auto 档下被门拒绝（无人值守 fail-closed：这一轮没有任何人能回应审批，审批请求被立即拒绝——该工具没有执行。这不是档位…
+写完了。
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+事件日志：/tmp/claude-501/cairn-shell-XVifZ3/.agent/sessions/cli-1792573968093.jsonl
+在桌面打开：cli-1792573968093
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+[cairn] 沙箱不可用（自检失败: sandbox-exec: sandbox_apply: Operation not permitted
+
+[exit code: 71]）——run_shell 将不过 Seatbelt
+[cairn] stdin 非交互（管道 / CI）——审批一律 fail-closed 拒绝；需要审批请在终端里跑，或显式 --mode auto
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/cli-surface.test.ts:336:60
+    334|   it("支二：只把那一个键去掉 ⇒ 同一拍同一份剧本写下去了（否则支一钉的是「CLI 什么也不干」）", () => {
+    335|     const { out, ws, written } = runWriteScript({ mode: "auto", planRe…
+    336|     expect(written, `auto 档下没写下去，这一拍的失败与 plan 门无关：${out}`).toBe(true);
+       |                                                            ^
+    337|     expect(readFileSync(join(ws, "payload.txt"), "utf8")).toBe("写下来了\n…
+    338|     // 对照组的反面：这一拍没有门拦它 ⇒ 没有那句拒绝。这两支只差一个维度，结论却换人。
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/57]⎯
+
+ FAIL  tests/cli-surface.test.ts > cairn CLI：clarify / propose_plan 两扇门在真跑里都收得住（不悬挂） > 同一行只渲染一遍：行为层无相邻重复行，结构层渲染器只接一个出口
+AssertionError: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "ERROR: failed to copy trust settings of system certificate-25291",
++   "ERROR: failed to copy trust settings of system certificate-25291",
++   "ERROR: failed to copy trust settings of system certificate-25291",
++ ]
+
+ ❯ tests/cli-surface.test.ts:567:21
+    565|     const doubled = lines.filter((line, i) => i > 0 && line.trim() !==…
+    566|     // 幂等成对出现 ⇒ 0（真跑量过）；把每一行复制一遍模拟复发 ⇒ 34。所以这条不是「跑得过就算」。
+    567|     expect(doubled).toEqual([]);
+       |                     ^
+    568|
+    569|     // 去注释后再数：注释里讨论 onEvent 是应该的，把注释算进来会让人不敢改注释。
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/57]⎯
+
+ FAIL  tests/dead-script-refs.test.ts > 真仓面：这条判据现在必须绿 > 源码散文里没有一处点名盘上不存在的脚本
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "scripts/evolution-eval.ts:15 ⇒ scripts/my-runner.ts",
++ ]
+
+ ❯ tests/dead-script-refs.test.ts:84:79
+     82|   it("源码散文里没有一处点名盘上不存在的脚本", () => {
+     83|     const dead = findDeadScriptRefs(face, (p) => existsSync(p));
+     84|     expect(dead.map((d) => d.file + ":" + String(d.line) + " ⇒ " + d.t…
+       |                                                                               ^
+     85|   });
+     86| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/57]⎯
+
+ FAIL  tests/docs-check.test.ts > D-10 源码行号引用面：两半都钉，存量按集合登记 > 真仓那一趟：74 条存量今天仍全部命中，所以 D-10 现在是绿的（登记不是凭空写的）
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/docs-check.test.ts:828:47
+    826|     expect(LEGACY_SOURCE_CITATIONS.length).toBeGreaterThan(0);
+    827|     const face = runDocsCheck();
+    828|     expect(hit(face.findings, "D-10").length).toBe(0);
+       |                                               ^
+    829|   });
+    830| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/57]⎯
+
+ FAIL  tests/ledger-manifest.test.ts > ① manifest 逐条校验：畸形都要 ECORRUPT > 键是路径穿越 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象）
+Error: EPERM: operation not permitted, mkdtemp '/Users/ze/dsh-ledger-PeilTw'
+ ❯ seeded tests/ledger-manifest.test.ts:56:16
+     54|   cleanup: () => Promise<void>;
+     55| }> {
+     56|   const root = await mkdtemp(join(homedir(), "dsh-ledger-"));
+       |                ^
+     57|   const store = new ObservationLedger({ sessionDataDir: root, sessionI…
+     58|   const rec = (await store.archive({
+ ❯ tests/ledger-manifest.test.ts:87:56
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/57]⎯
+
+ FAIL  tests/ledger-manifest.test.ts > ① manifest 逐条校验：畸形都要 ECORRUPT > 键格式不合法 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象）
+Error: EPERM: operation not permitted, mkdtemp '/Users/ze/dsh-ledger-LNHPYP'
+ ❯ seeded tests/ledger-manifest.test.ts:56:16
+     54|   cleanup: () => Promise<void>;
+     55| }> {
+     56|   const root = await mkdtemp(join(homedir(), "dsh-ledger-"));
+       |                ^
+     57|   const store = new ObservationLedger({ sessionDataDir: root, sessionI…
+     58|   const rec = (await store.archive({
+ ❯ tests/ledger-manifest.test.ts:87:56
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/57]⎯
+
+ FAIL  tests/ledger-manifest.test.ts > ① manifest 逐条校验：畸形都要 ECORRUPT > 键超长 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象）
+Error: EPERM: operation not permitted, mkdtemp '/Users/ze/dsh-ledger-Byxz6X'
+ ❯ seeded tests/ledger-manifest.test.ts:56:16
+     54|   cleanup: () => Promise<void>;
+     55| }> {
+     56|   const root = await mkdtemp(join(homedir(), "dsh-ledger-"));
+       |                ^
+     57|   const store = new ObservationLedger({ sessionDataDir: root, sessionI…
+     58|   const rec = (await store.archive({
+ ❯ tests/ledger-manifest.test.ts:87:56
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/57]⎯
+
+ FAIL  tests/ledger-manifest.test.ts > ① manifest 逐条校验：畸形都要 ECORRUPT > sha256 非 hex ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象）
+Error: EPERM: operation not permitted, mkdtemp '/Users/ze/dsh-ledger-n6JfrM'
+ ❯ seeded tests/ledger-manifest.test.ts:56:16
+     54|   cleanup: () => Promise<void>;
+     55| }> {
+     56|   const root = await mkdtemp(join(homedir(), "dsh-ledger-"));
+       |                ^
+     57|   const store = new ObservationLedger({ sessionDataDir: root, sessionI…
+     58|   const rec = (await store.archive({
+ ❯ tests/ledger-manifest.test.ts:87:56
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/57]⎯
+
+ FAIL  tests/ledger-manifest.test.ts > ① manifest 逐条校验：畸形都要 ECORRUPT > bytes 是负数 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象）
+Error: EPERM: operation not permitted, mkdtemp '/Users/ze/dsh-ledger-iv659T'
+ ❯ seeded tests/ledger-manifest.test.ts:56:16
+     54|   cleanup: () => Promise<void>;
+     55| }> {
+     56|   const root = await mkdtemp(join(homedir(), "dsh-ledger-"));
+       |                ^
+     57|   const store = new ObservationLedger({ sessionDataDir: root, sessionI…
+     58|   const rec = (await store.archive({
+ ❯ tests/ledger-manifest.test.ts:87:56
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/57]⎯
+
+ FAIL  tests/ledger-manifest.test.ts > ① manifest 逐条校验：畸形都要 ECORRUPT > bytes 超单对象上限 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象）
+Error: EPERM: operation not permitted, mkdtemp '/Users/ze/dsh-ledger-3Z5qQH'
+ ❯ seeded tests/ledger-manifest.test.ts:56:16
+     54|   cleanup: () => Promise<void>;
+     55| }> {
+     56|   const root = await mkdtemp(join(homedir(), "dsh-ledger-"));
+       |                ^
+     57|   const store = new ObservationLedger({ sessionDataDir: root, sessionI…
+     58|   const rec = (await store.archive({
+ ❯ tests/ledger-manifest.test.ts:87:56
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/57]⎯
+
+ FAIL  tests/ledger-manifest.test.ts > ① manifest 逐条校验：畸形都要 ECORRUPT > lines > bytes ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象）
+Error: EPERM: operation not permitted, mkdtemp '/Users/ze/dsh-ledger-7BNZd9'
+ ❯ seeded tests/ledger-manifest.test.ts:56:16
+     54|   cleanup: () => Promise<void>;
+     55| }> {
+     56|   const root = await mkdtemp(join(homedir(), "dsh-ledger-"));
+       |                ^
+     57|   const store = new ObservationLedger({ sessionDataDir: root, sessionI…
+     58|   const rec = (await store.archive({
+ ❯ tests/ledger-manifest.test.ts:87:56
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/57]⎯
+
+ FAIL  tests/ledger-manifest.test.ts > ① manifest 逐条校验：畸形都要 ECORRUPT > lines 非整数 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象）
+Error: EPERM: operation not permitted, mkdtemp '/Users/ze/dsh-ledger-F5IkAB'
+ ❯ seeded tests/ledger-manifest.test.ts:56:16
+     54|   cleanup: () => Promise<void>;
+     55| }> {
+     56|   const root = await mkdtemp(join(homedir(), "dsh-ledger-"));
+       |                ^
+     57|   const store = new ObservationLedger({ sessionDataDir: root, sessionI…
+     58|   const rec = (await store.archive({
+ ❯ tests/ledger-manifest.test.ts:87:56
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/57]⎯
+
+ FAIL  tests/ledger-manifest.test.ts > ① manifest 逐条校验：畸形都要 ECORRUPT > version 不是 1 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象）
+Error: EPERM: operation not permitted, mkdtemp '/Users/ze/dsh-ledger-7Cl5ry'
+ ❯ seeded tests/ledger-manifest.test.ts:56:16
+     54|   cleanup: () => Promise<void>;
+     55| }> {
+     56|   const root = await mkdtemp(join(homedir(), "dsh-ledger-"));
+       |                ^
+     57|   const store = new ObservationLedger({ sessionDataDir: root, sessionI…
+     58|   const rec = (await store.archive({
+ ❯ tests/ledger-manifest.test.ts:87:56
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/57]⎯
+
+ FAIL  tests/ledger-manifest.test.ts > ① manifest 逐条校验：畸形都要 ECORRUPT > sessionId 与本会话不符 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象）
+Error: EPERM: operation not permitted, mkdtemp '/Users/ze/dsh-ledger-a3ddPd'
+ ❯ seeded tests/ledger-manifest.test.ts:56:16
+     54|   cleanup: () => Promise<void>;
+     55| }> {
+     56|   const root = await mkdtemp(join(homedir(), "dsh-ledger-"));
+       |                ^
+     57|   const store = new ObservationLedger({ sessionDataDir: root, sessionI…
+     58|   const rec = (await store.archive({
+ ❯ tests/ledger-manifest.test.ts:87:56
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/57]⎯
+
+ FAIL  tests/ledger-manifest.test.ts > ① manifest 逐条校验：畸形都要 ECORRUPT > epoch 不是 UUID ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象）
+Error: EPERM: operation not permitted, mkdtemp '/Users/ze/dsh-ledger-Qz5tmv'
+ ❯ seeded tests/ledger-manifest.test.ts:56:16
+     54|   cleanup: () => Promise<void>;
+     55| }> {
+     56|   const root = await mkdtemp(join(homedir(), "dsh-ledger-"));
+       |                ^
+     57|   const store = new ObservationLedger({ sessionDataDir: root, sessionI…
+     58|   const rec = (await store.archive({
+ ❯ tests/ledger-manifest.test.ts:87:56
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/57]⎯
+
+ FAIL  tests/ledger-manifest.test.ts > ① manifest 逐条校验：畸形都要 ECORRUPT > entries 是数组 ⇒ recall 抛 ECORRUPT（不许读盘外/超大/畸形对象）
+Error: EPERM: operation not permitted, mkdtemp '/Users/ze/dsh-ledger-6jmn0z'
+ ❯ seeded tests/ledger-manifest.test.ts:56:16
+     54|   cleanup: () => Promise<void>;
+     55| }> {
+     56|   const root = await mkdtemp(join(homedir(), "dsh-ledger-"));
+       |                ^
+     57|   const store = new ObservationLedger({ sessionDataDir: root, sessionI…
+     58|   const rec = (await store.archive({
+ ❯ tests/ledger-manifest.test.ts:87:56
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/57]⎯
+
+ FAIL  tests/ledger-manifest.test.ts > ① manifest 逐条校验：畸形都要 ECORRUPT > 对照组：原始 manifest 读得回来（守卫不能变成永真）
+Error: EPERM: operation not permitted, mkdtemp '/Users/ze/dsh-ledger-Ney4t9'
+ ❯ seeded tests/ledger-manifest.test.ts:56:16
+     54|   cleanup: () => Promise<void>;
+     55| }> {
+     56|   const root = await mkdtemp(join(homedir(), "dsh-ledger-"));
+       |                ^
+     57|   const store = new ObservationLedger({ sessionDataDir: root, sessionI…
+     58|   const rec = (await store.archive({
+ ❯ tests/ledger-manifest.test.ts:100:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/57]⎯
+
+ FAIL  tests/net.test.ts > 出网停滞 → 真实 socket 上按窗口收束（旧实现永久挂起） > 建连后对端不响应：fetch 被 abort（Anthropic 适配器）
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/net.test.ts:111:3
+    109|
+    110| describe("出网停滞 → 真实 socket 上按窗口收束（旧实现永久挂起）", () => {
+    111|   it("建连后对端不响应：fetch 被 abort（Anthropic 适配器）", async () => {
+       |   ^
+    112|     // 接受连接、读掉请求，但永不写响应头 → fetch 永远等不到 headers。
+    113|     const base = await listen((req, _res) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/57]⎯
+
+ FAIL  tests/net.test.ts > 出网停滞 → 真实 socket 上按窗口收束（旧实现永久挂起） > 流中途静默：先收到分片，随后 reader.read() 被 abort（OpenAI 适配器）
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/net.test.ts:123:3
+    121|   });
+    122|
+    123|   it("流中途静默：先收到分片，随后 reader.read() 被 abort（OpenAI 适配器）", async () => {
+       |   ^
+    124|     const base = await listen((_req, res) => {
+    125|       res.writeHead(200, { "content-type": "text/event-stream" });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/57]⎯
+
+ FAIL  tests/project-preview.test.ts > 单文件 HTML 直接预览（不需要 .cairn/project.json） > 起预览直接 ready，URL 指向那个文件（不是目录根）
+AssertionError: expected 'failed' to be 'ready' // Object.is equality
+
+Expected: "ready"
+Received: "failed"
+
+ ❯ tests/project-preview.test.ts:71:25
+     69|     const rt = new PreviewRuntime();
+     70|     const snap = await rt.start(html);
+     71|     expect(snap.status).toBe("ready");
+       |                         ^
+     72|     expect(snap.kind).toBe("static");
+     73|     expect(snap.url).toBeDefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/57]⎯
+
+ FAIL  tests/project-preview.test.ts > 单文件 HTML 直接预览（不需要 .cairn/project.json） > 文件名带空格/中文也能serve（URL 编码，不让浏览器把它当成两段路径）
+AssertionError: expected 'failed' to be 'ready' // Object.is equality
+
+Expected: "ready"
+Received: "failed"
+
+ ❯ tests/project-preview.test.ts:89:25
+     87|     const rt = new PreviewRuntime();
+     88|     const snap = await rt.start(html);
+     89|     expect(snap.status).toBe("ready");
+       |                         ^
+     90|     const res = await fetch(snap.url!);
+     91|     expect(res.status).toBe(200);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/57]⎯
+
+ FAIL  tests/project-preview.test.ts > serveStaticProject：静态预览的真实 HTTP 行为 > 根路径回 index.html（text/html、no-store），嵌套文件按扩展名给 MIME
+ FAIL  tests/project-preview.test.ts > serveStaticProject：静态预览的真实 HTTP 行为 > 目录请求回落 index.html；缺失 404；穿越根目录 403
+Error: listen EPERM: operation not permitted 127.0.0.1
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/57]⎯
+
+ FAIL  tests/project-preview.test.ts > PreviewRuntime：状态机与失败分类 > static：起服务即 ready，停止后端口回收
+AssertionError: expected 'failed' to be 'ready' // Object.is equality
+
+Expected: "ready"
+Received: "failed"
+
+ ❯ tests/project-preview.test.ts:156:26
+    154|     const runtime = new PreviewRuntime({}, (s) => changes.push(s.statu…
+    155|     const ready = await runtime.start(root);
+    156|     expect(ready.status).toBe("ready");
+       |                          ^
+    157|     expect(ready.url).toBeTruthy();
+    158|     expect(await (await fetch(ready.url ?? "")).text()).toContain("ok"…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/57]⎯
+
+ FAIL  tests/project-preview.test.ts > 已有目录的受控纳管（没有 .cairn/project.json 也能进） > 零依赖静态目录：诊断放行 ⇒ 直接 ready，URL 服务入口页；不写用户目录
+AssertionError: expected { …(5) } to match object { status: 'ready', kind: 'static' }
+(4 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "kind": "static",
+-   "status": "ready",
++   "status": "failed",
+  }
+
+ ❯ tests/project-preview.test.ts:288:19
+    286|     const runtime = new PreviewRuntime();
+    287|     const ready = await runtime.start(root);
+    288|     expect(ready).toMatchObject({ status: "ready", kind: "static" });
+       |                   ^
+    289|     expect(await (await fetch(ready.url ?? "")).text()).toContain("imp…
+    290|     expect(existsSync(join(root, ".cairn"))).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/57]⎯
+
+ FAIL  tests/provider-stream-lifecycle.test.ts > 真实 HTTP 响应连接回收 > 消费者提前结束后，服务端能观察到响应连接关闭
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/provider-stream-lifecycle.test.ts:132:3
+    130|
+    131| describe("真实 HTTP 响应连接回收", () => {
+    132|   it("消费者提前结束后，服务端能观察到响应连接关闭", async () => {
+       |   ^
+    133|     let closed!: () => void;
+    134|     const responseClosed = new Promise<void>((resolve) => { closed = r…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/57]⎯
+
+ FAIL  tests/provider-stream-lifecycle.test.ts > 请求计量逐笔覆盖真实传输尝试 > 本地 HTTP 服务收到两次请求时，计量也准确记录两笔
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/provider-stream-lifecycle.test.ts:243:3
+    241|   });
+    242|
+    243|   it("本地 HTTP 服务收到两次请求时，计量也准确记录两笔", async () => {
+       |   ^
+    244|     const received: string[] = [];
+    245|     const meter = new RequestMeter();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/57]⎯
+
+ FAIL  tests/render-image.test.ts > 真渲染（用本仓那份 pelican-bicycle.html） > Chrome 在 ⇒ 1.2s 量级出图，且是一张真的 PNG
+Error: ENOENT: no such file or directory, open '/tmp/claude-501/cairn-render-KYEJYs/frame.png'
+ ❯ Object.run src/tools/render_image.ts:180:21
+    178|       try {
+    179|         await shoot(chrome, abs, out, { width, height, ...(atMs !== un…
+    180|         const buf = await readFile(out);
+       |                     ^
+    181|         if (buf.length === 0) {
+    182|           return { ok: false, output: "render_image: 渲染出来是空文件（Chrome 可…
+ ❯ tests/render-image.test.ts:217:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/57]⎯
+
+ FAIL  tests/web-fetch-stream-lifecycle.test.ts > 压缩网页流的取消与背压 > gzip：消费方取消后，HTTP 输入和 socket 都关闭
+ FAIL  tests/web-fetch-stream-lifecycle.test.ts > 压缩网页流的取消与背压 > deflate：消费方取消后，HTTP 输入和 socket 都关闭
+ FAIL  tests/web-fetch-stream-lifecycle.test.ts > 压缩网页流的取消与背压 > br：消费方取消后，HTTP 输入和 socket 都关闭
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/web-fetch-stream-lifecycle.test.ts:72:18
+     70|
+     71| describe("压缩网页流的取消与背压", () => {
+     72|   it.each(codecs)("$encoding：消费方取消后，HTTP 输入和 socket 都关闭", async ({ enc…
+       |                  ^
+     73|     const s = await stream(encoding);
+     74|     const reader = s.decoded.getReader();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/57]⎯
+
+ FAIL  tests/web-fetch-stream-lifecycle.test.ts > 压缩网页流的取消与背压 > 尚未收到第一块数据时取消，也会终止整条下载解码链
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/web-fetch-stream-lifecycle.test.ts:86:3
+     84|   });
+     85|
+     86|   it("尚未收到第一块数据时取消，也会终止整条下载解码链", async () => {
+       |   ^
+     87|     const s = await stream("gzip");
+     88|     await s.decoded.cancel();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/57]⎯
+
+ FAIL  tests/web-fetch-stream-lifecycle.test.ts > 压缩网页流的取消与背压 > 消费方暂不读取时，上游保留背压；恢复读取后仍完整交付
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/web-fetch-stream-lifecycle.test.ts:92:3
+     90|   });
+     91|
+     92|   it("消费方暂不读取时，上游保留背压；恢复读取后仍完整交付", async () => {
+       |   ^
+     93|     const payload = randomBytes(2 * 1024 * 1024);
+     94|     const encoded = gzipSync(payload);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/57]⎯
+
+ FAIL  tests/web-fetch-stream-lifecycle.test.ts > 压缩网页流的取消与背压 > gzip：正常结束仍交付原文
+ FAIL  tests/web-fetch-stream-lifecycle.test.ts > 压缩网页流的取消与背压 > deflate：正常结束仍交付原文
+ FAIL  tests/web-fetch-stream-lifecycle.test.ts > 压缩网页流的取消与背压 > br：正常结束仍交付原文
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/web-fetch-stream-lifecycle.test.ts:111:18
+    109|   });
+    110|
+    111|   it.each(codecs)("$encoding：正常结束仍交付原文", async ({ encoding, encode }) …
+       |                  ^
+    112|     const s = await stream(encoding);
+    113|     const payload = Buffer.from("中文文档与完整正文\n".repeat(128));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/57]⎯
+
+ FAIL  tests/web-fetch-stream-lifecycle.test.ts > 压缩网页流的取消与背压 > gzip：损坏的正文仍返回可读的编码错误
+ FAIL  tests/web-fetch-stream-lifecycle.test.ts > 压缩网页流的取消与背压 > deflate：损坏的正文仍返回可读的编码错误
+ FAIL  tests/web-fetch-stream-lifecycle.test.ts > 压缩网页流的取消与背压 > br：损坏的正文仍返回可读的编码错误
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/web-fetch-stream-lifecycle.test.ts:118:18
+    116|   });
+    117|
+    118|   it.each(codecs)("$encoding：损坏的正文仍返回可读的编码错误", async ({ encoding }) =>…
+       |                  ^
+    119|     const s = await stream(encoding);
+    120|     s.end(Buffer.from("invalid compressed document"));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/57]⎯
+
+ FAIL  tests/web-fetch-stream-lifecycle.test.ts > 压缩网页流的取消与背压 > gzip：web_fetch 达到 2MiB 读取上限后，返回可用正文并终止上游
+ FAIL  tests/web-fetch-stream-lifecycle.test.ts > 压缩网页流的取消与背压 > deflate：web_fetch 达到 2MiB 读取上限后，返回可用正文并终止上游
+ FAIL  tests/web-fetch-stream-lifecycle.test.ts > 压缩网页流的取消与背压 > br：web_fetch 达到 2MiB 读取上限后，返回可用正文并终止上游
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/web-fetch-stream-lifecycle.test.ts:124:18
+    122|   });
+    123|
+    124|   it.each(codecs)("$encoding：web_fetch 达到 2MiB 读取上限后，返回可用正文并终止上游", asy…
+       |                  ^
+    125|     const s = await stream(encoding);
+    126|     const tool = makeWebFetch({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/57]⎯
+
+ FAIL  tests/web-fetch.test.ts > web_fetch 传输层（注入 fetchImpl / resolveHost） > 真 loopback 服务：分块中文不乱码、体积帽截断后仍交出正文
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/web-fetch.test.ts:390:3
+    388|
+    389|   // 真 socket：证明流式读、多块 UTF-8 与体积帽在真响应体上成立（stub 的 Response 证不了解码路径）。
+    390|   it("真 loopback 服务：分块中文不乱码、体积帽截断后仍交出正文", async () => {
+       |   ^
+    391|     const big = "文".repeat(40_000);
+    392|     const addr = await serve(() => ({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[38/57]⎯
+
+ FAIL  tests/web-fetch.test.ts > 截断提示里的「锚点」是假出路（第 309 页：句子有证人，半句没有） > 换锚点不改变取回的内容：三件事由复现器量（片段不上线／正文相同／换 path 必须不同）
+AssertionError: 复现器退 1：
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EPERM: operation not permitted 127.0.0.1
+    at Server.set: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/web-fetch.test.ts:434:98
+    432|     });
+    433|     const out = String(r.stdout ?? "").replace(/\x1b\[[0-9;]*m/gu, "");
+    434|     expect(r.status, `复现器退 ${String(r.status)}：${out}\n${String(r.stde…
+       |                                                                                                  ^
+    435|     // 三行都要在：少一行就是那一格没量（退 0 也可能是复现器自己短路了）。
+    436|     expect(out).toContain("四种写法上线的请求行里都没有 `#`");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39/57]⎯
+
+ FAIL  tests/web-fetch.test.ts > 截断提示里的「锚点」是假出路（第 309 页：句子有证人，半句没有） > 这句要真从 web_fetch 那一支交出去（改了常量而出口不接＝模型读到的还是旧的）
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/web-fetch.test.ts:457:3
+    455|   });
+    456|
+    457|   it("这句要真从 web_fetch 那一支交出去（改了常量而出口不接＝模型读到的还是旧的）", async () => {
+       |   ^
+    458|     const addr = await serve(() => ({ body: longBody }));
+    459|     const tool = makeWebFetch({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[40/57]⎯
+
+ FAIL  tests/web-search-pinning.test.ts > 搜索连接必须使用已校验的地址快照 > 真实 HTTP 本地端点在显式许可后保留原 Host，并正确处理 HTTP 200
+ FAIL  tests/web-search-pinning.test.ts > 搜索连接必须使用已校验的地址快照 > 真实 HTTP 本地端点在显式许可后保留原 Host，并正确处理 HTTP 302
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/web-search-pinning.test.ts:185:22
+    183|   });
+    184|
+    185|   it.each([200, 302])("真实 HTTP 本地端点在显式许可后保留原 Host，并正确处理 HTTP %s", asyn…
+       |                      ^
+    186|     const actual = await vi.importActual<typeof import("node:http")>("…
+    187|     hooks.http.mockImplementation(actual.request);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[41/57]⎯
+
+ FAIL  tests/web-tool-cancellation.test.ts > web_fetch 的会话取消 > 真实 HTTP 的 headers 阶段取消：请求 signal 中止，连接关闭并保留原因
+ FAIL  tests/web-tool-cancellation.test.ts > web_fetch 的会话取消 > 真实 HTTP 的 body 阶段取消：请求 signal 中止，连接关闭并保留原因
+ FAIL  tests/web-tool-cancellation.test.ts > web_fetch 的会话取消 > 真实 HTTP 的 gzip 阶段取消：请求 signal 中止，连接关闭并保留原因
+ FAIL  tests/web-tool-cancellation.test.ts > web_search 的会话取消 > 真实 HTTP 的 headers 阶段取消：请求 signal 中止，连接关闭并保留原因
+ FAIL  tests/web-tool-cancellation.test.ts > web_search 的会话取消 > 真实 HTTP 的 body 阶段取消：请求 signal 中止，连接关闭并保留原因
+ FAIL  tests/web-tool-cancellation.test.ts > web_search 的会话取消 > 真实 HTTP 的 gzip 阶段取消：请求 signal 中止，连接关闭并保留原因
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/web-tool-cancellation.test.ts:139:48
+    137|   });
+    138|
+    139|   it.each(["headers", "body", "gzip"] as const)("真实 HTTP 的 %s 阶段取消：请求 …
+       |                                                ^
+    140|     const dir = await workspace();
+    141|     const controller = new AbortController();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[42/57]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 29 unhandled errors during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-fetch-stream-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "gzip：消费方取消后，HTTP 输入和 socket 都关闭". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/net.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "建连后对端不响应：fetch 被 abort（Anthropic 适配器）". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-tool-cancellation.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "真实 HTTP 的 headers 阶段取消：请求 signal 中止，连接关闭并保留原因". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-fetch-stream-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "deflate：消费方取消后，HTTP 输入和 socket 都关闭". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-fetch.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "真 loopback 服务：分块中文不乱码、体积帽截断后仍交出正文". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-search-pinning.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "真实 HTTP 本地端点在显式许可后保留原 Host，并正确处理 HTTP 200". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/body-cap-regression.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "真实 HTTP 声明 3MiB 但不结束正文：取到有界前缀后立即关闭连接". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/provider-stream-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "消费者提前结束后，服务端能观察到响应连接关闭". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/net.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "流中途静默：先收到分片，随后 reader.read() 被 abort（OpenAI 适配器）". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-tool-cancellation.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "真实 HTTP 的 body 阶段取消：请求 signal 中止，连接关闭并保留原因". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-fetch-stream-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "br：消费方取消后，HTTP 输入和 socket 都关闭". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-fetch.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "这句要真从 web_fetch 那一支交出去（改了常量而出口不接＝模型读到的还是旧的）". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-search-pinning.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "真实 HTTP 本地端点在显式许可后保留原 Host，并正确处理 HTTP 302". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/provider-stream-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "本地 HTTP 服务收到两次请求时，计量也准确记录两笔". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-tool-cancellation.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "真实 HTTP 的 gzip 阶段取消：请求 signal 中止，连接关闭并保留原因". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-fetch-stream-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "尚未收到第一块数据时取消，也会终止整条下载解码链". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-tool-cancellation.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "真实 HTTP 的 headers 阶段取消：请求 signal 中止，连接关闭并保留原因". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-fetch-stream-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "消费方暂不读取时，上游保留背压；恢复读取后仍完整交付". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-tool-cancellation.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "真实 HTTP 的 body 阶段取消：请求 signal 中止，连接关闭并保留原因". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-fetch-stream-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "gzip：正常结束仍交付原文". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-tool-cancellation.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "真实 HTTP 的 gzip 阶段取消：请求 signal 中止，连接关闭并保留原因". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-fetch-stream-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "deflate：正常结束仍交付原文". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-fetch-stream-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "br：正常结束仍交付原文". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-fetch-stream-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "gzip：损坏的正文仍返回可读的编码错误". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-fetch-stream-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "deflate：损坏的正文仍返回可读的编码错误". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-fetch-stream-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "br：损坏的正文仍返回可读的编码错误". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-fetch-stream-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "gzip：web_fetch 达到 2MiB 读取上限后，返回可用正文并终止上游". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-fetch-stream-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "deflate：web_fetch 达到 2MiB 读取上限后，返回可用正文并终止上游". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+Error: listen EPERM: operation not permitted 127.0.0.1
+ ❯ Server.setupListenHandle [as _listen2] node:net:2145:21
+ ❯ listenInCluster node:net:2224:12
+ ❯ node:net:2448:7
+ ❯ processTicksAndRejections node:internal/process/task_queues:90:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'EPERM', errno: -1, syscall: 'listen', address: '127.0.0.1' }
+This error originated in "tests/web-fetch-stream-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "br：web_fetch 达到 2MiB 读取上限后，返回可用正文并终止上游". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  14 failed | 440 passed (454)
+      Tests  57 failed | 6178 passed (6235)
+     Errors  29 errors
+   Start at  17:12:24
+   Duration  452.83s (tests 96%, import 3%, transform 1%)
+
+[ELIFECYCLE] Test failed. See above for more details.

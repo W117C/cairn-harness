@@ -1,0 +1,740 @@
+[
+  {
+    "run": 0,
+    "firstState": {
+      "count": 2,
+      "pending": [
+        1,
+        2
+      ],
+      "cancelled": []
+    },
+    "laterState": {
+      "count": 2,
+      "pending": [
+        1
+      ],
+      "cancelled": []
+    },
+    "otherResult": {
+      "request": 2
+    },
+    "trace": [
+      {
+        "event": "block"
+      },
+      {
+        "event": "unblock"
+      },
+      {
+        "event": "query",
+        "id": 1,
+        "alreadyCancelled": true
+      },
+      {
+        "event": "query",
+        "id": 2,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [
+          1,
+          2
+        ],
+        "cancelled": []
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [
+          1
+        ],
+        "cancelled": []
+      }
+    ]
+  },
+  {
+    "run": 1,
+    "firstState": {
+      "count": 2,
+      "pending": [
+        2
+      ],
+      "cancelled": [
+        1
+      ]
+    },
+    "laterState": {
+      "count": 2,
+      "pending": [],
+      "cancelled": [
+        1
+      ]
+    },
+    "otherResult": {
+      "request": 2
+    },
+    "trace": [
+      {
+        "event": "block"
+      },
+      {
+        "event": "unblock"
+      },
+      {
+        "event": "query",
+        "id": 1,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "cancelCallback",
+        "id": 1
+      },
+      {
+        "event": "query",
+        "id": 2,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [
+          2
+        ],
+        "cancelled": [
+          1
+        ]
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [],
+        "cancelled": [
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "run": 2,
+    "firstState": {
+      "count": 2,
+      "pending": [
+        2
+      ],
+      "cancelled": [
+        1
+      ]
+    },
+    "laterState": {
+      "count": 2,
+      "pending": [],
+      "cancelled": [
+        1
+      ]
+    },
+    "otherResult": {
+      "request": 2
+    },
+    "trace": [
+      {
+        "event": "block"
+      },
+      {
+        "event": "unblock"
+      },
+      {
+        "event": "query",
+        "id": 1,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "cancelCallback",
+        "id": 1
+      },
+      {
+        "event": "query",
+        "id": 2,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [
+          2
+        ],
+        "cancelled": [
+          1
+        ]
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [],
+        "cancelled": [
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "run": 3,
+    "firstState": {
+      "count": 2,
+      "pending": [
+        2
+      ],
+      "cancelled": [
+        1
+      ]
+    },
+    "laterState": {
+      "count": 2,
+      "pending": [],
+      "cancelled": [
+        1
+      ]
+    },
+    "otherResult": {
+      "request": 2
+    },
+    "trace": [
+      {
+        "event": "block"
+      },
+      {
+        "event": "unblock"
+      },
+      {
+        "event": "query",
+        "id": 1,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "cancelCallback",
+        "id": 1
+      },
+      {
+        "event": "query",
+        "id": 2,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [
+          2
+        ],
+        "cancelled": [
+          1
+        ]
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [],
+        "cancelled": [
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "run": 4,
+    "firstState": {
+      "count": 2,
+      "pending": [
+        2
+      ],
+      "cancelled": [
+        1
+      ]
+    },
+    "laterState": {
+      "count": 2,
+      "pending": [],
+      "cancelled": [
+        1
+      ]
+    },
+    "otherResult": {
+      "request": 2
+    },
+    "trace": [
+      {
+        "event": "block"
+      },
+      {
+        "event": "unblock"
+      },
+      {
+        "event": "query",
+        "id": 1,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "cancelCallback",
+        "id": 1
+      },
+      {
+        "event": "query",
+        "id": 2,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [
+          2
+        ],
+        "cancelled": [
+          1
+        ]
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [],
+        "cancelled": [
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "run": 5,
+    "firstState": {
+      "count": 2,
+      "pending": [
+        2
+      ],
+      "cancelled": [
+        1
+      ]
+    },
+    "laterState": {
+      "count": 2,
+      "pending": [],
+      "cancelled": [
+        1
+      ]
+    },
+    "otherResult": {
+      "request": 2
+    },
+    "trace": [
+      {
+        "event": "block"
+      },
+      {
+        "event": "unblock"
+      },
+      {
+        "event": "query",
+        "id": 1,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "cancelCallback",
+        "id": 1
+      },
+      {
+        "event": "query",
+        "id": 2,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [
+          2
+        ],
+        "cancelled": [
+          1
+        ]
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [],
+        "cancelled": [
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "run": 6,
+    "firstState": {
+      "count": 2,
+      "pending": [
+        2
+      ],
+      "cancelled": [
+        1
+      ]
+    },
+    "laterState": {
+      "count": 2,
+      "pending": [],
+      "cancelled": [
+        1
+      ]
+    },
+    "otherResult": {
+      "request": 2
+    },
+    "trace": [
+      {
+        "event": "block"
+      },
+      {
+        "event": "unblock"
+      },
+      {
+        "event": "query",
+        "id": 1,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "cancelCallback",
+        "id": 1
+      },
+      {
+        "event": "query",
+        "id": 2,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [
+          2
+        ],
+        "cancelled": [
+          1
+        ]
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [],
+        "cancelled": [
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "run": 7,
+    "firstState": {
+      "count": 2,
+      "pending": [
+        2
+      ],
+      "cancelled": [
+        1
+      ]
+    },
+    "laterState": {
+      "count": 2,
+      "pending": [],
+      "cancelled": [
+        1
+      ]
+    },
+    "otherResult": {
+      "request": 2
+    },
+    "trace": [
+      {
+        "event": "block"
+      },
+      {
+        "event": "unblock"
+      },
+      {
+        "event": "query",
+        "id": 1,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "cancelCallback",
+        "id": 1
+      },
+      {
+        "event": "query",
+        "id": 2,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [
+          2
+        ],
+        "cancelled": [
+          1
+        ]
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [],
+        "cancelled": [
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "run": 8,
+    "firstState": {
+      "count": 2,
+      "pending": [
+        2
+      ],
+      "cancelled": [
+        1
+      ]
+    },
+    "laterState": {
+      "count": 2,
+      "pending": [],
+      "cancelled": [
+        1
+      ]
+    },
+    "otherResult": {
+      "request": 2
+    },
+    "trace": [
+      {
+        "event": "block"
+      },
+      {
+        "event": "unblock"
+      },
+      {
+        "event": "query",
+        "id": 1,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "cancelCallback",
+        "id": 1
+      },
+      {
+        "event": "query",
+        "id": 2,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [
+          2
+        ],
+        "cancelled": [
+          1
+        ]
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [],
+        "cancelled": [
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "run": 9,
+    "firstState": {
+      "count": 2,
+      "pending": [
+        2
+      ],
+      "cancelled": [
+        1
+      ]
+    },
+    "laterState": {
+      "count": 2,
+      "pending": [],
+      "cancelled": [
+        1
+      ]
+    },
+    "otherResult": {
+      "request": 2
+    },
+    "trace": [
+      {
+        "event": "block"
+      },
+      {
+        "event": "unblock"
+      },
+      {
+        "event": "query",
+        "id": 1,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "cancelCallback",
+        "id": 1
+      },
+      {
+        "event": "query",
+        "id": 2,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [
+          2
+        ],
+        "cancelled": [
+          1
+        ]
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [],
+        "cancelled": [
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "run": 10,
+    "firstState": {
+      "count": 2,
+      "pending": [
+        2
+      ],
+      "cancelled": [
+        1
+      ]
+    },
+    "laterState": {
+      "count": 2,
+      "pending": [],
+      "cancelled": [
+        1
+      ]
+    },
+    "otherResult": {
+      "request": 2
+    },
+    "trace": [
+      {
+        "event": "block"
+      },
+      {
+        "event": "unblock"
+      },
+      {
+        "event": "query",
+        "id": 1,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "cancelCallback",
+        "id": 1
+      },
+      {
+        "event": "query",
+        "id": 2,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [
+          2
+        ],
+        "cancelled": [
+          1
+        ]
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [],
+        "cancelled": [
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "run": 11,
+    "firstState": {
+      "count": 2,
+      "pending": [
+        2
+      ],
+      "cancelled": [
+        1
+      ]
+    },
+    "laterState": {
+      "count": 2,
+      "pending": [],
+      "cancelled": [
+        1
+      ]
+    },
+    "otherResult": {
+      "request": 2
+    },
+    "trace": [
+      {
+        "event": "block"
+      },
+      {
+        "event": "unblock"
+      },
+      {
+        "event": "query",
+        "id": 1,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "cancelCallback",
+        "id": 1
+      },
+      {
+        "event": "query",
+        "id": 2,
+        "alreadyCancelled": false
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [
+          2
+        ],
+        "cancelled": [
+          1
+        ]
+      },
+      {
+        "event": "state",
+        "count": 2,
+        "pending": [],
+        "cancelled": [
+          1
+        ]
+      }
+    ]
+  }
+]

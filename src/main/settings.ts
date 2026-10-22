@@ -109,6 +109,9 @@ export interface AppSettings {
   /** plan 模式默认档：新对话是否默认武装「未批准方案即写禁」（composer 里的即时开关以此为初值）。
    *  缺省 false = 逐字同武装前（写禁只在模型自愿 propose_plan 后成立）。零 token 成本，只是谓词。 */
   planRequiredByDefault: boolean;
+  /** 实验：macOS 窗口材质（侧栏半透明）。默认关；改动需重启窗口才生效。
+   *  未做视觉验收前不默认开，避免把原型当 Claude 对齐。 */
+  windowVibrancy: boolean;
   /** 桌面蓝本 §3.6：Ctrl+Tab / Ctrl+Shift+Tab 循环会话开关。缺省**开**（文档把这对键列为主力）；
    *  §7.3.3 点名「别做成不可关闭」——误触用户可在此关掉，只留 ⌘⇧[ / ]。 */
   ctrlTabCycle: boolean;
@@ -166,6 +169,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoVerify: true,
   autoVerifyRepair: false,
   planRequiredByDefault: false,
+  windowVibrancy: false,
   ctrlTabCycle: true,
   textSize: "md",
   uiSize: "2",
@@ -267,6 +271,7 @@ export function validateSettings(raw: unknown): AppSettings {
     autoVerifyRepair: r.autoVerifyRepair === true,
     planRequiredByDefault: r.planRequiredByDefault === true,
     // 缺省开的键走 `d.` 回退（promptCache 同族）：老 settings.json 无此键时保持「开」，不被静默关掉。
+    windowVibrancy: r.windowVibrancy === true,
     ctrlTabCycle: typeof r.ctrlTabCycle === "boolean" ? r.ctrlTabCycle : d.ctrlTabCycle,
     // 2026-10-18 字号档：白名单外（含旧档案没这个键）回退 "md" = --rem-scale 1 = 与今天逐像素一致。
     textSize: TEXT_SIZES.includes(r.textSize as TextSizeSetting) ? (r.textSize as TextSizeSetting) : d.textSize,

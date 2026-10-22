@@ -17,7 +17,7 @@ import { ShortcutsSection } from "../src/renderer/components/settings-sections";
 import { SHORTCUTS, keysOf } from "../src/renderer/shortcuts";
 import type { WorkspaceSession } from "../src/renderer/sessions-view";
 
-const appSrc = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const appSrc = readAppSurface();
 const sidebarSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url)), "utf8");
 const stringsSrc = readFileSync(fileURLToPath(new URL("../src/renderer/strings.ts", import.meta.url)), "utf8");
 const paletteSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/CommandPalette.tsx", import.meta.url)), "utf8");
@@ -29,6 +29,7 @@ const projects = [{ id: "p1", name: "cairn", path: "/tmp/cairn" }];
 const base = {
   sessions,
   projects,
+  activeSessionId: "s1",
   onOpenSession: () => undefined,
   onSwitchWorkspace: () => undefined,
   onOpenSettings: () => undefined,
@@ -50,13 +51,15 @@ describe("① PaletteContent SSR（命令面板内容面）", () => {
     expect(html).toContain("切换主题");
     expect(html).toContain("切换权限档");
     expect(html).toContain("开合检查器");
-    // 键位提示与 SHORTCUTS 同源（新任务 ⌘N / 打开文件夹 ⌘O / 开合侧栏 ⌘B / 开合检查器 ⌘⌥B）
+    // 键位提示与 SHORTCUTS 同源（新任务 ⌘N / 打开文件夹 ⌘O / 开合侧栏 ⌘B / 开合检查器 ⌘⌥I）
     expect(html).toContain("⌘N");
     expect(html).toContain("⌘O");
-    expect(html).toContain("⌘⌥B");
+    expect(html).toContain("⌘⌥I");
     // 2026-10-20：开合侧栏此前 shortcutId 误指 palette ⇒ 面板把 ⌘K（命令面板的键）
     // 显示成开合侧栏的快捷键，照着按会打开面板而不是收起侧栏。
     expect(html).toContain("开合侧栏");
+    // 2026-10-21 批 132：「查看日志」进操作组（错误条之外的可发现入口）。
+    expect(html).toContain("查看当前会话日志");
     expect(html).toContain("⌘B");
     expect(html).not.toContain("⌘K");
     // 会话与项目组：标题 / 项目名在场
@@ -69,13 +72,17 @@ describe("① PaletteContent SSR（命令面板内容面）", () => {
   it("无会话无项目：操作与设置组仍在（空数据不摆空组也不空屏）", () => {
     const html = renderToStaticMarkup(
       <Command>
-        <PaletteContent {...base} sessions={[]} projects={[]} />
+        <PaletteContent {...base} sessions={[]} projects={[]} activeSessionId={null} />
       </Command>,
     );
     expect(html).toContain("操作");
     expect(html).toContain("新任务");
     expect(html).not.toContain("改登录页");
     expect(html).not.toContain("cairn");
+    // 无活动会话：会话专属动作不摆（不再给必然报错的入口）
+    expect(html).not.toContain("复制整段对话");
+    expect(html).not.toContain("压缩当前会话历史");
+    expect(html).not.toContain("查看当前会话日志");
   });
 });
 
@@ -120,6 +127,12 @@ describe("④ App 哨兵（键位 → 面板）", () => {
     expect(appSrc).toContain("h.openSettings()");
     expect(appSrc).toContain('case "Period"');
     expect(appSrc).toContain('case "Comma"');
+  });
+
+  it("查看日志：命令面板动作接到 App 的日志查看器", () => {
+    expect(appSrc).toContain('case "view-log"');
+    expect(appSrc).toContain("<SessionLogDialog");
+    expect(appSrc).toContain("onViewLog");
   });
 
   it("面板真开（替换 comingSoon）：setPaletteOpen(true) + 挂载 <CommandPalette>", () => {
@@ -193,6 +206,100 @@ describe("⑥ 命令面板布局契约（真机量得的缺陷）", () => {
 describe("设置条目可被「设置」搜到", () => {
   it("每个设置条目 value 以「设置 」开头", () => {
     const src = readFileSync2(fileURLToPath2(new URL("../src/renderer/components/CommandPalette.tsx", import.meta.url)), "utf8");
-    expect(src).toContain('value={`设置 ${s.label}`}');
+    expect(src).toContain('value={`设置 ${s.label} ${SECTION_KEYWORDS[s.id]');
+  });
+});
+
+// 2026-10-21 命令面板 2.0：最近使用 / 上下文动作 / 图标与搜索同义词。
+import { pushRecentAction, visibleRecentActions, PALETTE_RECENT_LIMIT, uniqueSkills } from "../src/renderer/components/CommandPalette";
+import { readAppSurface } from "./helpers/app-surface";
+
+describe("命令面板 2.0", () => {
+  it("最近使用：去重置顶、上限 4 条", () => {
+    let list: ReturnType<typeof pushRecentAction> = [];
+    for (const id of ["new-session", "view-log", "toggle-theme", "compact", "new-session"] as const) {
+      list = pushRecentAction(list, id);
+    }
+    expect(list).toEqual(["new-session", "compact", "toggle-theme", "view-log"]);
+    expect(list).toHaveLength(PALETTE_RECENT_LIMIT);
+  });
+
+  it("主页过滤会话专属最近项；未知 id 丢弃", () => {
+    const raw = ["view-log", "compact", "toggle-theme", "bogus"] as unknown as Parameters<typeof visibleRecentActions>[0];
+    expect(visibleRecentActions(raw, false)).toEqual(["toggle-theme"]);
+    expect(visibleRecentActions(raw, true)).toEqual(["view-log", "compact", "toggle-theme"]);
+  });
+
+  it("有活动会话才摆会话动作（复制/查找/压缩/日志/导出）", () => {
+    const html = renderToStaticMarkup(<Command><PaletteContent {...base} /></Command>);
+    for (const label of ["复制整段对话", "在当前会话中查找", "压缩当前会话历史", "查看当前会话日志", "导出整段对话"]) {
+      expect(html).toContain(label);
+    }
+  });
+
+  it("每条动作都有图标容器（`.cp-ico`）；设置条目带同义词、项目/会话按 id/路径可搜", () => {
+    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/CommandPalette.tsx", import.meta.url)), "utf8");
+    expect(src).toContain('className="cp-ico"');
+    expect(src).toContain("SECTION_KEYWORDS[s.id]");
+    expect(src).toContain("value={`${s.title ?? s.id} ${s.id}`}");
+    expect(src).toContain("value={`${p.name} ${p.path}`}");
+    expect(src).toContain("最近");
+  });
+
+  it("面板加宽以容纳图标：620px / 560px 高（仍在 80px 视口边距内）", () => {
+    const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
+    expect(css).toMatch(/\.cp-panel\s*{[^}]*width:\s*min\(620px, calc\(100vw - 80px\)\)/s);
+    expect(css).toMatch(/\.cp-panel\s*{[^}]*max-height:\s*min\(640px, 76vh\)/s);
+    expect(css).toMatch(/\.cp-ico\s*{[^}]*width:\s*16px/s);
+  });
+});
+
+// 2026-10-21 批 136：技能/插件命令进 ⌘K（与斜杠菜单同一条 skills 数据面）。
+describe("命令面板 · 技能组", () => {
+  const skills = [
+    { invoke: "/demo", description: "演示技能：把当前项目跑起来", trust: "pending" },
+    { invoke: "/plugin:cmd", description: "插件命令：生成变更摘要", trust: "trusted" },
+  ];
+
+  it("有技能才摆「技能」组；待批准出 chip，已信任不出", () => {
+    const html = renderToStaticMarkup(
+      <Command><PaletteContent {...base} skills={skills} onUseSkill={() => undefined} /></Command>,
+    );
+    expect(html).toContain("技能");
+    expect(html).toContain("/demo");
+    expect(html).toContain("演示技能");
+    expect(html).toContain("待批准");
+    expect(html).toContain("/plugin:cmd");
+    expect((html.match(/cp-trust/g) ?? []).length).toBeGreaterThanOrEqual(1);
+    // 已信任不出 chip（组内只有一个 cp-trust）
+    expect((html.match(/class="cp-trust"/g) ?? []).length).toBe(1);
+  });
+
+  it("无技能不摆空组（与 P3 同一纪律）", () => {
+    const html = renderToStaticMarkup(<Command><PaletteContent {...base} /></Command>);
+    expect(html).not.toContain(">技能<");
+  });
+
+  it("接线：App 传 skills/onUseSkill；选中只填入不发送；描述可搜", () => {
+    expect(appSrc).toContain("skills={skills}");
+    expect(appSrc).toContain("onUseSkill={(invoke) =>");
+    expect(appSrc).toContain("injectText(");
+    expect(paletteSrc).toContain("value={`技能 ${sk.invoke} ${sk.description}`}");
+    const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
+    expect(css).toMatch(/\.cp-stack\s*{[^}]*flex-direction:\s*column/s);
+    expect(css).toMatch(/\.cp-trust\s*{[^}]*border-radius:\s*var\(--radius-pill\)/s);
+  });
+});
+
+describe("技能去重（评审修）", () => {
+  it("同一 invoke 的插件技能/命令只保留首条（React key/选择歧义）", () => {
+    expect(uniqueSkills([
+      { invoke: "/p:demo", description: "skill", trust: "pending" },
+      { invoke: "/p:demo", description: "command", trust: "pending" },
+      { invoke: "/other", description: "x", trust: "trusted" },
+    ])).toEqual([
+      { invoke: "/p:demo", description: "skill", trust: "pending" },
+      { invoke: "/other", description: "x", trust: "trusted" },
+    ]);
   });
 });

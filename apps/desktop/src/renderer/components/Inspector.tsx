@@ -2,14 +2,16 @@
 //（不放占位假数据）。「＋」菜单打开既有七种窗格（文件/终端/浏览器/旁路…；组件与数据面不动，
 // 只换一个入口）。改动行点击懒加载逐 hunk diff（v4 changeDiff 通道，复用既有 DiffView）；
 // 有快照的行提供「撤销此文件改动」（snapshotRestore，v11 通道在渲染层的消费者）。
-// 宽度与开合收口在 App 的右 Panel（320–420，默认收起，⌘⌥B 开合）——本组件只管内容。
-import { useState } from "react";
+// 宽度与开合收口在 App 的右 Panel（320–420，默认收起，⌘⌥I 开合）——本组件只管内容。
+import { useEffect, useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronRight, Plus, X } from "lucide-react";
 import type { AgentEvent } from "../../../../../src/events";
 import { timelineItems } from "../projections";
 import { diffCount, useLazyChangeDiff } from "../change-diff-state";
 import { changedFilesOf, PANE_META, PANE_OPENABLE, projectPlans, type PaneKind } from "./panes";
+import { usageSummary } from "../projections";
+import { formatTokens } from "./format-tokens";
 import { DiffView } from "./DiffView";
 import { TimelinePane } from "./TimelinePane";
 
@@ -18,6 +20,27 @@ const CHANGE_WORD: Record<"created" | "modified" | "unknown", string> = {
   modified: "修改",
   unknown: "变更",
 };
+
+/** 概览里的一个数字：值变了就闪一下（2026-10-22 动效面）。
+ *
+ *  为什么是这里：概览是运行中**盯着看**的面，数字自己在变；此前只有"变了"这一事实、
+ *  没有"刚刚变"的提示 ⇒ 数字悄悄跳一下，人得自己前后对比才发现。闪一下就是那句提示。
+ *  克制：只闪**数值本身**（颜色一闪，不位移、不放大）；标签不动；页面不可见时不闪。
+ *  降级：`prefers-reduced-motion: reduce` 下全局把动画时长压到 0.01ms ⇒ 自然不闪。
+ */
+function StatValue(props: { value: string }): React.JSX.Element {
+  const [flash, setFlash] = useState(false);
+  const prev = useRef(props.value);
+  useEffect(() => {
+    if (prev.current === props.value) return;
+    prev.current = props.value;
+    setFlash(true);
+    // 闪烁时长跟 CSS 的 --t-slow（300ms）对齐：这里多留一点余量再摘掉类名。
+    const id = setTimeout(() => setFlash(false), 420);
+    return () => { clearTimeout(id); };
+  }, [props.value]);
+  return <dd className={"num" + (flash ? " isp-ov-value-flash" : "")}>{props.value}</dd>;
+}
 
 /** 改动 Tab：文件行（点击展开 diff；有快照的行可撤销——撤销后收起旧 diff，下次点开重新拉）。 */
 function ChangesTab(props: {
@@ -82,24 +105,95 @@ export interface InspectorProps {
   onOpenPane?: (kind: PaneKind) => void;
   /** 「撤销此文件改动」（snapshotRestore；成功/失败面在 App）。 */
   onRestore?: (path: string, snapshotId: string) => void;
-  /** 判卷/深链预留：强制初始 Tab（缺省 = 第一个有数据的）。 */
-  initialTab?: "changes" | "plan" | "timeline";
+  /** 判卷/深链预留：强制初始 Tab（缺省 = 概览）。 */
+  initialTab?: "overview" | "changes" | "plan" | "timeline";
+  /** 概览页的会话事实（可选；判卷/嵌用面没有就不摆）。 */
+  sessionTitle?: string;
+  workspacePath?: string;
+  modelLabel?: string;
+  modeLabel?: string;
+  running?: boolean;
   /** 关闭检查器（App 的 toggleInspector：开合 + 跨重启记忆同一出口）。
    *  缺省不摆按钮——判卷/嵌用面没有右 Panel 可关，摆一枚点了没反应的 × 更糟。 */
   onClose?: () => void;
+}
+
+/** 概览页（2026-10-21）：右栏的「现在在哪」——会话/工作区/状态 + 六格用量。
+ *  全部从 AgentEvent 与 App 传入的事实投影，不另存一份；空会话不摆假数据。 */
+function OverviewTab(props: {
+  events: readonly AgentEvent[];
+  usage: ReturnType<typeof usageSummary>;
+  fileCount: number;
+  planCount: number;
+  sessionTitle?: string;
+  workspacePath?: string;
+  modelLabel?: string;
+  modeLabel?: string;
+  running?: boolean;
+}): React.JSX.Element {
+  const wsName = props.workspacePath !== undefined && props.workspacePath !== ""
+    ? props.workspacePath.slice(props.workspacePath.lastIndexOf("/") + 1)
+    : null;
+  const rows: readonly (readonly [string, string])[] = [
+    ["输入", props.usage.usageCount > 0 ? formatTokens(props.usage.inputTokens) : "未返回"],
+    ["输出", props.usage.usageCount > 0 ? formatTokens(props.usage.outputTokens) : "未返回"],
+    ["工具步数", String(props.usage.toolSteps)],
+    ["对话轮数", String(props.usage.rounds)],
+    ["文件改动", String(props.fileCount)],
+    ["用量次数", String(props.usage.usageCount)],
+  ];
+  return (
+    <div className="isp-ov">
+      <div className="isp-ov-head">
+        <div className="isp-ov-title">
+          <span className="isp-ov-name" title={props.sessionTitle ?? undefined}>{props.sessionTitle ?? "当前会话"}</span>
+          {props.running !== undefined && (
+            <span className="isp-ov-status" data-running={props.running ? "true" : "false"}>
+              {props.running ? "运行中" : "空闲"}
+            </span>
+          )}
+        </div>
+        {wsName !== null && (
+          <div className="isp-ov-path" title={props.workspacePath}>{wsName}</div>
+        )}
+      </div>
+      <dl className="isp-ov-stats">
+        {rows.map(([label, value]) => (
+          <div className="isp-ov-stat" key={label}>
+            <dt>{label}</dt>
+            <StatValue value={value} />
+          </div>
+        ))}
+      </dl>
+      {(props.modelLabel !== undefined || props.modeLabel !== undefined || props.planCount > 0) && (
+        <div className="isp-ov-meta">
+          {props.modelLabel !== undefined && <span className="chip">{props.modelLabel}</span>}
+          {props.modeLabel !== undefined && <span className="chip">{props.modeLabel}</span>}
+          {props.planCount > 0 && <span className="chip num">{props.planCount} 份计划</span>}
+        </div>
+      )}
+      {props.events.length === 0 && (
+        <div className="isp-empty">还没有活动——对话开始后，用量、改动、计划与时间线会在这里长出来。</div>
+      )}
+    </div>
+  );
 }
 
 export function Inspector(props: InspectorProps): React.JSX.Element {
   const changes = changedFilesOf(props.events);
   const plans = projectPlans(props.events);
   const items = timelineItems(props.events);
+  const usage = usageSummary(props.events);
+  // 概览恒在（2026-10-21 三栏工作台）：它是右栏的「现在在哪」，不是假占位——
+  // 空会话给 0 与一句诚实的「还没开始」，有数据时给输入/输出/步数/轮数/文件/用量。
   const available = [
+    { id: "overview" as const, label: "概览" },
     ...(changes.length > 0 ? [{ id: "changes" as const, label: "改动" }] : []),
     ...(plans.length > 0 ? [{ id: "plan" as const, label: "计划" }] : []),
     ...(items.length > 0 ? [{ id: "timeline" as const, label: "时间线" }] : []),
   ];
   const [tab, setTab] = useState<InspectorProps["initialTab"] | null>(
-    props.initialTab !== undefined && available.some((t) => t.id === props.initialTab) ? props.initialTab : (available[0]?.id ?? null),
+    props.initialTab !== undefined && available.some((t) => t.id === props.initialTab) ? props.initialTab : "overview",
   );
   // 渲染期回落：数据面变化（切会话/数据消失）致选中项失效时，自动回到第一个可用——不留死选中。
   const selected = tab !== null && available.some((t) => t.id === tab) ? tab : (available[0]?.id ?? null);
@@ -129,15 +223,28 @@ export function Inspector(props: InspectorProps): React.JSX.Element {
             ))}
           </DropdownMenu.Content>
         </DropdownMenu.Root>
-        {/* 关闭钮（2026-10-20 真机：「右边侧栏打开就没有关闭」）：此前只有 ⌘⌥B 一条路，
+        {/* 关闭钮（2026-10-20 真机：「右边侧栏打开就没有关闭」）：此前只有 ⌘⌥I 一条路，
             鼠标用户把面板打开了却找不到出口。复用 .isp-add 的图标钮样式——同排同形，不新造一套。 */}
         {props.onClose !== undefined && (
-          <button className="isp-add isp-close" aria-label="关闭检查器" title="关闭检查器（⌘⌥B）" onClick={() => { props.onClose?.(); }}>
+          <button className="isp-add isp-close" aria-label="关闭检查器" title="关闭检查器（⌘⌥I）" onClick={() => { props.onClose?.(); }}>
             <X size={13} />
           </button>
         )}
       </div>
       <div className="isp-body">
+        {selected === "overview" && (
+          <OverviewTab
+            events={props.events}
+            usage={usage}
+            fileCount={changes.length}
+            planCount={plans.length}
+            sessionTitle={props.sessionTitle}
+            workspacePath={props.workspacePath}
+            modelLabel={props.modelLabel}
+            modeLabel={props.modeLabel}
+            running={props.running}
+          />
+        )}
         {selected === "changes" && <ChangesTab items={changes} onRestore={props.onRestore} />}
         {selected === "plan" && (
           <div className="isp-plan">

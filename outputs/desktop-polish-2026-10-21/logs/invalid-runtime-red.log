@@ -1,0 +1,14 @@
+Error: 必须至少一轮历史、两次独立增量
+    at main (/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop/scripts/performance-smoke.cjs:24:97)
+    at Object.<anonymous> (/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop/scripts/performance-smoke.cjs:116:1)
+    at Module._compile (node:internal/modules/cjs/loader:1937:14)
+    at Object..js (node:internal/modules/cjs/loader:2070:10)
+    at Module.load (node:internal/modules/cjs/loader:1658:32)
+    at Module._load (node:internal/modules/cjs/loader:1450:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:268:19)
+    at loadCJSModuleWithModuleLoad (node:internal/modules/esm/translators:378:15)
+    at ModuleWrap.<anonymous> (node:internal/modules/esm/translators:246:9)
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron scripts/performance-smoke.cjs '/Users/ze/Downloads/Cairn/deepseek harness/outputs/desktop-polish-2026-10-21/invalid-runtime-red.json' 0 0

@@ -1,0 +1,5 @@
+import ts from 'typescript';import fs from 'node:fs';import path from 'node:path';
+const configPath=ts.findConfigFile('apps/desktop',ts.sys.fileExists,'tsconfig.json');const cfg=ts.readConfigFile(configPath,ts.sys.readFile);const parsed=ts.parseJsonConfigFileContent(cfg.config,ts.sys,path.dirname(configPath));
+const host={getScriptFileNames:()=>parsed.fileNames,getScriptVersion:()=> '0',getScriptSnapshot:f=>fs.existsSync(f)?ts.ScriptSnapshot.fromString(fs.readFileSync(f,'utf8')):undefined,getCurrentDirectory:()=>process.cwd(),getCompilationSettings:()=>parsed.options,getDefaultLibFileName:o=>ts.getDefaultLibFilePath(o),fileExists:ts.sys.fileExists,readFile:ts.sys.readFile,readDirectory:ts.sys.readDirectory};
+const service=ts.createLanguageService(host);
+for(const name of process.argv.slice(2)) { const f=path.resolve(name);const edits=service.organizeImports({type:'file',fileName:f},{},{});let s=fs.readFileSync(f,'utf8');for(const e of edits.flatMap(x=>x.textChanges).sort((a,b)=>b.span.start-a.span.start)) s=s.slice(0,e.span.start)+e.newText+s.slice(e.span.start+e.span.length);fs.writeFileSync(f,s); }

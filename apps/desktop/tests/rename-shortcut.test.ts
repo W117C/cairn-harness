@@ -2,8 +2,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
-const app = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const app = readAppSurface();
 const shortcuts = readFileSync(fileURLToPath(new URL("../src/renderer/shortcuts.ts", import.meta.url)), "utf8");
 
 describe("F2 重命名", () => {

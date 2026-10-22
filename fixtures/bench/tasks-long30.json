@@ -13,6 +13,7 @@
   "expects": [
    "verifyOk",
    "judgeUntouched"
-  ]
+  ],
+  "judge": {"failToPass":["clamp：把 v 夹在 [lo, hi] 之间","sum：求和（含第一个元素）","unique：去重且**保持首次出现顺序**","chunk：按 size 切块，**末块不足也保留**","titleCase：每词首字母大写，**其余转小写**","parseIntSafe：解析失败返回 fallback，不是 NaN","mean：平均值（除以个数）","zip：**按较长者**配对，缺的用 null 填","flatten：**递归**展平到最深层","groupBy：分组：同键的**累积**成数组（不是覆盖）","sortBy：按**数值**升序（不是字符串序）","trimAll：**每一条**都去掉首尾空白","escapeHtml：转义 & < > 三个字符","splitLines：按","percent：返回**百分数**（0-100）","roundTo：四舍五入到 n 位小数，**返回数字**","pickKeys：挑出**指定**的键（当前挑反了）","deepMerge：**深**合并（嵌套对象不整个覆盖）","lastN：取**最后** n 个","repeatEach：每个元素重复 n 次","last：取最后一个；空数组 undefined","count：数出现次数","maxnum：数值最大值（不是字典序）","revwords：词序倒置，词内字母不动","capfirst：只首字母大写","pairs：两两配对","palindrome：忽略大小写与空格","sumdigits：各位相加","range：闭区间 [a,b]","uniqsorted：去重且升序"],"passToPass":[]}
  }
 ]

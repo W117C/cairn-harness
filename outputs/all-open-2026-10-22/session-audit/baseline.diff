@@ -1,0 +1,104 @@
+diff --git a/apps/desktop/src/main/kernel-host.ts b/apps/desktop/src/main/kernel-host.ts
+index b764d05f..7d8b53b0 100644
+--- a/apps/desktop/src/main/kernel-host.ts
++++ b/apps/desktop/src/main/kernel-host.ts
+@@ -24,6 +24,7 @@ import type {
+   SessionWorktreeRequest,
+   SessionWorktreeResult,
+   SessionLogPayload,
++  SessionSearchResult,
+   UsageLedgerPayload,
+ } from "../../../../src/main/ipc-protocol";
+ // 会话级 worktree 隔离（§3.7 · G4）：创建/合并/清理全在 core 侧（src/main/session-worktree.ts），
+@@ -61,6 +62,7 @@ import {
+   listSessionIds,
+   type SessionQueueEntry,
+ } from "../../../../src/main/sessions";
++import { searchSessions } from "../../../../src/main/session-search";
+ import type { SessionMetadataRepository } from "../../../../src/main/session-metadata";
+ import { addUsageTotals, emptyUsageTotals } from "../../../../src/main/usage-ledger";
+ import { scanUsageFile, type UsageFileCache } from "../../../../src/main/usage-ledger-scan";
+@@ -98,6 +100,13 @@ export interface KernelHost {
+   usageLedger(): Promise<UsageLedgerPayload>;
+   /** v15：读该会话日志尾部（只读；会话归属由本 host 解析——不接受渲染层传路径）。 */
+   sessionLog(id: string, tailLines?: number): Promise<SessionLogPayload>;
++  /** v18：会话正文全文检索（只读；工作区归属由本 host 解析——渲染层不传路径）。
++   *  结果是三态（ok / partial / unavailable）：「没量到」不许被折成「没有匹配」。 */
++  sessionSearch(
++    workspace: string,
++    query: string,
++    options?: { budgetBytes?: number; maxSessions?: number },
++  ): Promise<SessionSearchResult>;
+   /** 新建会话；缺省落 activeWorkspace。参数是工作区不是会话名
+    *  （M3 起 id 恒为时间戳名——秒级粒度、host 级唯一，命名走 rename）。
+    *  M3 终审：显式传入的 workspace 须 ∈ workspaces（含 addWorkspace 动态并入），
+@@ -567,6 +576,25 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
+         return { ok: false, error: error instanceof Error ? error.message : String(error) };
+       }
+     },
++    // v18：会话**正文**全文检索（只读）。逐工作区扫会话 JSONL——结果三态由 core 判别式联合给出
++    // （ok / partial / unavailable），这里**不重写**那套语义，也不把 unavailable 折成空数组：
++    // 「没量到」必须一路传到渲染层，否则界面会说「没有匹配」——那是谎报。
++    sessionSearch: async (workspace, query, options) => {
++      // 工作区归属由 host 自己判：渲染层传的是工作区名，不是路径（路径面是泄露面）。
++      const known = workspaces.find((ws) => ws === workspace);
++      if (known === undefined) {
++        return { kind: "unavailable", reason: "workspace-unknown", detail: `工作区未登记：${workspace}` };
++      }
++      const records = await requireSessionMetadata().list();
++      const metadataById = new Map(records.map((record) => [record.id, record]));
++      return await searchSessions({
++        root: wsRoot(known),
++        query,
++        metadataById,
++        ...(options?.budgetBytes !== undefined ? { budgetBytes: options.budgetBytes } : {}),
++        ...(options?.maxSessions !== undefined ? { maxSessions: options.maxSessions } : {}),
++      });
++    },
+     sessionLog: async (id, tailLines) => {
+       try {
+         const ws = await resolveSessionWs(id);
+diff --git a/src/main/ipc-protocol.ts b/src/main/ipc-protocol.ts
+index 80e53d5b..972b0433 100644
+--- a/src/main/ipc-protocol.ts
++++ b/src/main/ipc-protocol.ts
+@@ -42,6 +42,9 @@ import type { DiscoveredRow } from "../providers/provider-draft";
+ import type { PreviewSnapshot } from "./project-preview";
+ // v12：导入诊断三态的形状事实源在 project-templates（判定与文案同源）；这里只转发类型。
+ import type { ProjectDiagnosis } from "./project-templates";
++// v18：会话正文检索的结果类型（三态联合）。`import type` 编译期擦除 ⇒ 渲染层产物零运行时 import src。
++import type { SessionSearchResult } from "./session-search";
++export type { SessionSearchResult } from "./session-search";
+ import type { ProviderConnectionResult } from "./provider-connection";
+ 
+ // ---- SEMA §3.5/§12：IPC 协议版本化 ----
+@@ -60,8 +63,10 @@ import type { ProviderConnectionResult } from "./provider-connection";
+  *  v14 = 跨会话用量批（usageLedger——头像菜单「用量统计」的「全部会话」口径）；
+  *  v15 = 会话日志批（sessionLog——错误条/命令面板「查看日志」的只读尾部）。
+  *  v16 = 会话定位批（openSession 增可选 workspace——跨项目同名 id 必须开对转录）；
+- *  v17 = 终端尺寸批（terminalResize——xterm 行列同步到真实 PTY）。 */
+-export const IPC_PROTOCOL_VERSION = 17;
++ *  v17 = 终端尺寸批（terminalResize——xterm 行列同步到真实 PTY）；
++ *  v18 = 会话全文检索批（sessionSearch——搜**会话正文**而不是文件；结果是三态，
++ *  「没量到 ≠ 没有」由类型层面分开，见 src/main/session-search.ts）。 */
++export const IPC_PROTOCOL_VERSION = 18;
+ 
+ // ---- v11：主界面重做批的载荷（git 读数 / 克隆 / 项目内搜索）----
+ /** git 在场读数：branch 为 null = detached HEAD（如实，不拿 "HEAD" 冒充分支名）。 */
+@@ -429,6 +434,16 @@ export interface AgentApi {
+   /** v11：项目内文件模糊搜索（@ 引用补全）：命中 = workspace 相对路径 + 文件/目录；
+    *  跳过 .git/node_modules 等，扫描与命中双帽截断如实标注。 */
+   workspaceSearch(workspace: string, query: string): Promise<WorkspaceSearchPayload>;
++  /** v18：**会话正文**全文检索（不是文件检索）——只读，扫该工作区下的会话 JSONL。
++   *  结果是**三态**：`ok`（扫完了；空数组＝量过了没命中）／`partial`（预算用尽，命中为真但可能还有）／
++   *  `unavailable`（**没量**——会话根读不到；绝不能被渲染成「没有匹配」）。
++   *  可见语料 = 用户看得见的正文（用户消息 + 助手消息 + 按 callId 合并的流式片段）；模型自己的思考
++   *  与工具载荷**不进语料**。逐工作区检索（工作区由主进程解析归属，渲染层不传路径）。 */
++  sessionSearch(
++    workspace: string,
++    query: string,
++    options?: { budgetBytes?: number; maxSessions?: number },
++  ): Promise<SessionSearchResult>;
+   /** v11：标记项目「最近打开」（打开会话 / 切换项目时调用）；未知 id 拒绝。 */
+   touchProject(id: string): Promise<ProjectRecord>;
+   /** v11：⌘V 粘贴素材落临时文件（截图等）；字节帽 20MB，返回路径此后走既有附件引用链。 */

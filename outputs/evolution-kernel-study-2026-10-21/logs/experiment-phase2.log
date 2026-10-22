@@ -1,0 +1,4 @@
+[exp] restart tick 1.2.0 red#3 => [{"id":"content-pack.report-recipe","outcome":"resumed","observation":{"version":1,"id":"content-pack.report-recipe","candidateVersion":"1.2.0","previousVersion":"1.1.0","state":"rolled-back","samples":3,"consecutiveFailures":2,"baselineTokensPerBoundary":null,"maxSamples":10,"maxConsecutiveFailures":2,"costDegradeFactor":2,"degradations":[{"rule":"consecutive-failures","detail":"连续 2 个样本 verify 未转绿"}],"startedAt":"2026-10-21T09:03:10.188Z","rollbackTo":"1.1.0","endedAt":"2026-10-21T09:03:14.432Z","lessonWritten":true,"recordWritten":true},"acted":true}]
+[exp] registry after rollback: active=1.1.0 previous=1.2.0
+[exp] restored artifact producer=1.1.0 judge={"ok":true,"checks":{"summary":true,"citations":true,"status":true},"producerVersion":"1.1.0","artifactDigest":"sha256:f3d77085068b1d4ccc9e760591538f7fe5b2bcab75eb9c2db0fd6280064b1c6f"}
+[exp] repo root = /Users/ze/Downloads/Cairn/deepseek harness

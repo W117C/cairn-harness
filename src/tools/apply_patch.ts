@@ -297,7 +297,18 @@ export const apply_patch: Tool = {
         }
         raw = decoded;
         originalMode = (await stat(abs)).mode & 0o777;
-      } catch {
+      } catch (error) {
+        // ENOENT 是**可证明的不存在**；其它读失败（EACCES / EISDIR / EIO …）只能说「看不见」。
+        // 把「看不见」当成「不存在」⇒ op=create 把这个文件当新建写掉 ⇒ 原内容静默丢失。
+        // 与 write_file.ts 的三态纪律同源（existed = true / false / null）：
+        // **只有 ENOENT 才等于「不存在」，其它读失败一律 fail-visible**。
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== "ENOENT") {
+          failures.push(
+            `${f.path} 读取失败（${code ?? "未知错误"}）：无法确认它是新建还是已有文件，补丁已拒绝（不把「读不到」当成「不存在」）`,
+          );
+          continue;
+        }
         raw = null;
       }
       const existed = raw !== null;

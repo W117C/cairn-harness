@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { GoalChip } from "../src/renderer/components/GoalChip";
 import type { GoalTrace } from "../../../src/agent/goal-trace";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const trace = (over: Partial<GoalTrace>): GoalTrace => ({
@@ -27,7 +28,7 @@ describe("GoalChip", () => {
   });
 
   it("App 接线：traceGoal、/goal 拦截、首页补建会话、隐藏已停目标", () => {
-    const app = read("../src/renderer/App.tsx");
+    const app = readAppSurface();
     expect(app).toContain("const goalTrace = useMemo(() => traceGoal(events), [events]);");
     expect(app).toContain("const cmd = parseGoalCommand(text);");
     expect(app).toContain("pendingGoal.current = cmd;");

@@ -20,6 +20,7 @@
     "observe-surface": "node --import tsx scripts/observe-surface.ts",
     "typecheck": "node --import tsx scripts/typecheck.ts",
     "test": "vitest run --config tests/vitest.config.ts",
+    "test:capped": "vitest run --config tests/vitest.config.ts --maxWorkers=2",
     "e2e": "node --import tsx scripts/e2e.ts",
     "agent": "node --import tsx scripts/agent.ts",
     "sandbox:check": "node --import tsx scripts/sandbox-check.ts",
@@ -56,7 +57,13 @@
     "eval-report": "node --import tsx scripts/eval/report.ts",
     "bench:long30": "node --import tsx scripts/loop-eval.ts --tasks fixtures/bench/tasks-long30.json --reps 1 --max-steps 35 --out outputs/bench-long30",
     "bench:chain32": "node --import tsx scripts/loop-eval.ts --tasks fixtures/bench/tasks-chain32.json --reps 1 --max-steps 40 --out outputs/bench-chain32",
-    "bench:chain48": "node --import tsx scripts/loop-eval.ts --tasks fixtures/bench/tasks-chain48.json --reps 1 --max-steps 55 --out outputs/bench-chain48"
+    "bench:chain48": "node --import tsx scripts/loop-eval.ts --tasks fixtures/bench/tasks-chain48.json --reps 1 --max-steps 55 --out outputs/bench-chain48",
+    "bench-judge-spec-check": "node --import tsx scripts/bench-judge-spec.ts --check",
+    "renderer-layer-check": "node --import tsx scripts/renderer-layer-check.ts",
+    "event-semantics-check": "node --import tsx scripts/event-semantics-check.ts",
+    "session-semantics-check": "node --import tsx scripts/session-semantics-check.ts",
+    "session-search-check": "node --import tsx scripts/session-search-check.ts",
+    "motion-policy-check": "node --import tsx scripts/motion-policy-check.ts"
   },
   "devDependencies": {
     "@types/node": "^26.5.0",

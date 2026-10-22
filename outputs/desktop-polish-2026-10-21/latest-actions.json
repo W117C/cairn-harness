@@ -1,0 +1,55 @@
+{
+  "turns": 40,
+  "samples": 5,
+  "startupMs": 366.94575,
+  "openMs": 110.88425000000007,
+  "runningStarted": true,
+  "metrics": {
+    "open": {
+      "TaskDuration": 0.095815,
+      "ScriptDuration": 0.041857,
+      "LayoutDuration": 0.016182,
+      "RecalcStyleDuration": 0.016632,
+      "LayoutCount": 8,
+      "RecalcStyleCount": 10
+    },
+    "stream": {
+      "TaskDuration": 0.039884999999999976,
+      "ScriptDuration": 0.017199,
+      "LayoutDuration": 0.0032440000000000004,
+      "RecalcStyleDuration": 0.0041080000000000005,
+      "LayoutCount": 6,
+      "RecalcStyleCount": 7
+    }
+  },
+  "frameMs": {
+    "p50": 9.094458000000031,
+    "p95": 9.859290999999985,
+    "max": 9.859290999999985,
+    "all": [
+      9.859290999999985,
+      9.285541000000194,
+      8.142207999999982,
+      9.094458000000031,
+      7.17145800000003
+    ]
+  },
+  "dom": {
+    "nodes": 4508,
+    "users": 41,
+    "assistants": 41,
+    "tools": 40,
+    "historyPresent": true,
+    "lastPresent": true
+  },
+  "errors": [],
+  "budgets": {
+    "p95Ms": 200,
+    "maxMs": 500,
+    "startupMs": 1500
+  },
+  "actions": {
+    "replayLatest": true,
+    "retryLatest": true
+  }
+}

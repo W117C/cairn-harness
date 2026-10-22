@@ -8,6 +8,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { isSessionEndDistillAsk } from "../src/renderer/send-queue";
+import { readAppShell } from "./helpers/app-surface";
 
 describe("isSessionEndDistillAsk（沉淀审批辨识）", () => {
   it("distill 合并审批（args.trigger=session_end_distill）命中", () => {
@@ -28,7 +29,7 @@ describe("isSessionEndDistillAsk（沉淀审批辨识）", () => {
 });
 
 describe("接线哨兵（源码级）", () => {
-  const appSrc = readFileSync(new URL("../src/renderer/App.tsx", import.meta.url), "utf8");
+  const appSrc = readAppShell();
   const hostSrc = readFileSync(new URL("../src/main/kernel-host.ts", import.meta.url), "utf8");
   const queueSrc = readFileSync(new URL("../src/renderer/send-queue.ts", import.meta.url), "utf8");
 

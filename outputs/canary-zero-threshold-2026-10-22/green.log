@@ -1,0 +1,10 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness
+
+ ✓ tests/evolution-canary.test.ts (38 tests) 458ms
+
+ Test Files  1 passed (1)
+      Tests  38 passed (38)
+   Start at  00:22:51
+   Duration  1.11s (tests 45%, transform 44%, import 11%)
+

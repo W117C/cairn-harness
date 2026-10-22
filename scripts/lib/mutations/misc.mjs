@@ -22,7 +22,10 @@ export const MUTATIONS = [
     // 挑这一格是因为它**可以静默地丢**：思考桶在终稿到达时被 clear，若不同时把正文挂到
     // 终稿行上，「思考过程」就只在流式那几秒可见——功能还在、信息没了，没有任何门会红。
     id: "desktop-thinking-not-carried-onto-final",
-    src: "apps/desktop/src/renderer/projections.ts",
+    // 2026-10-22：实现从 `projections.ts` 搬进 `derived/stream.ts`（App 拆分批）——
+    // `projections.ts` 变成再导出桶，针脚跟着实现走（规则 217/255）。判卷侧仍走
+    // `projections` 那个桶（用例没搬，钉的还是同一格行为）。
+    src: "apps/desktop/src/renderer/derived/stream.ts",
     test: "apps/desktop/tests/projections.test.ts",
     config: "apps/desktop/vitest.config.ts",
     desc: "终稿到达时清掉思考桶却**不把正文挂到终稿行上** ⇒ 输出结束后思考过程消失（清空后不可见，等于没展示）",
@@ -55,7 +58,10 @@ export const MUTATIONS = [
     // 文案照旧），只有版本真失配时才分得开，而那时失配的渲染层会带着旧契约继续跑。
     // 桌面 17 个判卷文件里此前只有 3 个有锚点。
     id: "desktop-protocol-mismatch-gate-inverted",
-    src: "apps/desktop/src/renderer/App.tsx",
+    // 2026-10-22：闸从 `App.tsx` 搬进 `state/workbench.ts`（App 拆分批）⇒ 针脚改指新家。
+    // 判卷侧 `apps/desktop/tests/protocol-version.test.ts` 走的是 `readAppSurface()`
+    // （读整个渲染层面，不只一个文件）⇒ 搬走后它照样能看见这行，钉的还是同一格。
+    src: "apps/desktop/src/renderer/state/workbench.ts",
     test: "apps/desktop/tests/protocol-version.test.ts",
     config: "apps/desktop/vitest.config.ts",
     desc: "版本失配的判据反过来（!== 写成 ===）⇒ 失配的渲染层照旧挂载，带着旧 IPC 契约继续调主进程；"

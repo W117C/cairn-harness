@@ -40,14 +40,18 @@ import type { AskGate } from "./ask-gate";
 import { annotateNetworkDenial, buildSandboxProfile, networkProfileFor, runInSandbox, type SandboxStatus } from "./sandbox";
 import { MODEL_SHELL_TEST_ALIASES, mapSandboxTestCommandForWorkspace } from "./sandbox-test-command";
 
+/** 门评估所需的会话态。主会话从 run scope/全局活读；没有 run scope 的独立面（sidechat）
+ *  可以**显式**带一份进来——见 `gatedTool` 的 `fixedSession` 与 `readOnlyGateSession`。 */
+export interface GateSession {
+  askGate: AskGate | null;
+  autonomy: ReturnType<typeof newAutonomySession>;
+  sandbox: SandboxStatus | null;
+  actionFusion?: ReturnType<typeof createActionFusion>;
+}
+
 export interface ToolGateDeps {
   /** 会话审批/自治状态（活读；无会话 = null ⇒ 工具门 fail-closed）。 */
-  currentSession: () => {
-    askGate: AskGate | null;
-    autonomy: ReturnType<typeof newAutonomySession>;
-    sandbox: SandboxStatus | null;
-    actionFusion?: ReturnType<typeof createActionFusion>;
-  } | null;
+  currentSession: () => GateSession | null;
 }
 
 let deps: ToolGateDeps | null = null;
@@ -141,11 +145,15 @@ export function gatedTool(
   original: Tool,
   beforeExecute?: () => Promise<ToolResult | null>,
   cardExtra?: CardExtra,
+  /** 显式会话：只有**不经过 runAgent**的独立面（sidechat 只读旁路）才该给。
+   *  给定时不读 run scope/全局会话——旁路不得借主会话的档位与审批门；主会话的所有调用点
+   *  都省这一位（行为逐字不变）。 */
+  fixedSession?: GateSession,
 ): Tool {
   return {
     name,
     async run(args, ctx) {
-      const s = D().currentSession();
+      const s = fixedSession ?? D().currentSession();
       if (!s) return denied(name, "default", "工具门未接线（fail-closed）");
       // 方案门不再每次刷进 session 入参：权限会话里那份是**活委托**（permissions/plan-state），
       // worker 与主会话读同一份——上一版只在这三处主会话路径刷新镜像，worker 那条路从不刷 ⇒ 先批后写可绕。
@@ -275,7 +283,7 @@ export function gatedTool(
           // 这条出口经 run_shell 工具而非 runInSandbox，故同一判据的提示在这里补（两处共用一只函数）。
           return withGate(annotateNetworkDenial(await original.run({ command }, ctx), network));
         }
-        const sand = await runInSandbox(mapped, { cwd: ctx.workspace, network });
+        const sand = await runInSandbox(mapped, { cwd: ctx.workspace, network, ...(ctx.signal ? { signal: ctx.signal } : {}) });
         // 上面那条注释说的是「经 run_shell 的那条出口」；这一条不经，故同一只归因函数在这里补
         // （verify 不走这条路，所以不会与它那句「测试脚本未被执行」叠两层）。
         return withGate(annotateExecCause(sand, { timedOut: sand.timedOut === true, exitCode: sand.exitCode ?? null }));
@@ -292,6 +300,19 @@ export function gatedTool(
       // 判定留痕进 tool_result（loop 透传并由 autoOf 派生 auto，零新事件类型）
       return withGate(result);
     },
+  };
+}
+
+/** 独立只读面的门会话（sidechat）：不借主会话的 run scope/全局档位，也**不装审批门**——
+ *  旁路无人值守，需要问人的调用一律 fail-closed，而不是悄悄放行或挂 60s。
+ *  规则库照载（项目的 deny/allow 与主会话同源）；解析失败向外抛，由调用方显式拒绝这一轮。 */
+export function readOnlyGateSession(workspace: string): GateSession {
+  return {
+    askGate: null,
+    autonomy: newAutonomySession("read-only", {
+      rules: loadPermissionRules(join(workspace, ".agent", "permissions.json"), globalPermissionsPath()),
+    }),
+    sandbox: null,
   };
 }
 

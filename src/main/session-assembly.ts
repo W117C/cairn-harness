@@ -83,7 +83,7 @@ export function workerShellRunnerFor(sandbox: SandboxStatus | null): Orchestrato
   if (sandbox === null || !sandbox.available) return undefined;
   return async (command, ctx) => {
     const mapped = mapSandboxTestCommandForWorkspace(command, ctx.workspace);
-    return runInSandbox(mapped, { cwd: ctx.workspace, network: "deny" });
+    return runInSandbox(mapped, { cwd: ctx.workspace, network: "deny", ...(ctx.signal ? { signal: ctx.signal } : {}) });
   };
 }
 

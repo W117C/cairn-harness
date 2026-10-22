@@ -11,6 +11,7 @@ import { assistantTurnsFromEvents, goalDriftCell, goalDriftFindings } from "../a
 import { costPerProgress } from "../agent/cost-per-progress";
 import { eventsForCurrentRun } from "../agent/delivery-guard";
 import { runEvolution } from "../agent/evolution";
+import { tickCanaryFromSignals } from "./evolution/activation-host";
 import { replay, type AgentEvent } from "../events";
 
 export interface PostRunReadingInput {
@@ -71,6 +72,19 @@ export async function emitPostRunReadings(input: PostRunReadingInput): Promise<v
     const evo = await runEvolution(events, input.workspace, input.sessionId ?? input.logPath);
     if (evo.persistedTo !== null && evo.patches.length > 0) {
       console.warn("[evolution] 本跑产出 " + evo.patches.length + " 条策略补丁，已落 " + String(evo.persistedTo));
+    }
+    // 观察期收束：工作区没有还开着的 canary 档 ⇒ 零行为；有档 ⇒ 用本轮同一份读数续档，
+    // 命中退化规则会在 CanaryController 内自动回退。失败只出声，不影响这一场的结果。
+    try {
+      const ticks = await tickCanaryFromSignals(input.workspace, evo.signals, input.sessionId ?? input.logPath);
+      for (const tick of ticks) {
+        if (tick.observation !== null) {
+          console.warn("[canary] " + tick.id + " · " + tick.outcome + " · state=" + tick.observation.state
+            + " · samples=" + String(tick.observation.samples));
+        }
+      }
+    } catch (err) {
+      console.warn("[canary] 观察期读数失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
     }
   } catch (err) {
     console.warn("[evolution] 读数/落盘失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));

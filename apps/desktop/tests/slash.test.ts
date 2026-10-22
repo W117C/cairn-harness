@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { slashItems } from "../src/renderer/slash";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const base = [
@@ -38,7 +39,7 @@ describe("slashItems", () => {
 
   it("接线：Composer 消费 slashItems；App 拉 listSkills", () => {
     expect(read("../src/renderer/components/Composer.tsx")).toContain("slashItems([");
-    const app = read("../src/renderer/App.tsx");
+    const app = readAppSurface();
     expect(app).toContain("window.agent.listSkills(activeWorkspace");
     // 打开会话时渲染层 activeWorkspace 跟着会话归属走（否则技能清单/预览/chip 读旧项目）
     expect(app).toContain("if (sessionWs !== null) setActiveWorkspace(sessionWs)");

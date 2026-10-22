@@ -95,6 +95,34 @@ describe("C1 actual main runner integration (local scripts, no model calls)", ()
     await absent("never");
   });
 
+  // 回归：融合把 lint 红编码成工具 ok:false，但写已经落盘。收束闸若只看 ok 就会跳过
+  // auto-verify —— 这棵树明明被改过，却没有任何人补验。判据必须认 [fused_write:succeeded]。
+  it("lint failure still counts as a persisted write ⇒ auto-verify runs", async () => {
+    await config(["printf BAD; exit 7"]);
+    const events = await run([
+      writeCall(),
+      { type: "assistant_message", content: "收工" },
+    ], { autoVerify: true });
+    const [result] = toolResults(events);
+    expect(result?.ok).toBe(false);
+    expect(result?.output).toContain("[fused_write:succeeded]");
+    expect(result?.output).toContain("[fused_lint:failed]");
+    const auto = events.filter(e => e.type === "verify_result" && e.auto === true);
+    expect(auto.length, "lint 红之后的自动验证拍被跳过 ⇒ 落盘事实被 ok:false 吞了").toBe(1);
+  });
+
+  it("别的工具输出里出现同样字样，不算融合写盘（不让 auto-verify 被字符串骗）", async () => {
+    await config(["printf LINT"]);
+    const events = await run([
+      { type: "tool_call", id: "shell", name: "run_shell", args: { command: "printf '[fused_write:succeeded]'; exit 7" } },
+      { type: "assistant_message", content: "收工" },
+    ], { autoVerify: true });
+    const shell = toolResults(events).find((e) => e.callId === "shell");
+    expect(shell?.ok).toBe(false);
+    expect(shell?.output).toContain("[fused_write:succeeded]");
+    expect(events.filter((e) => e.type === "verify_result" && e.auto === true).length).toBe(0);
+  });
+
   it("failed or permission-denied writes never launch checks", async () => {
     await config(["printf RAN > lint-ran"]);
     const invalid = { ...writeCall(), args: { path: "target.txt", content: 42 } };

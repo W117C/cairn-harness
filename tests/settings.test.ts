@@ -57,6 +57,13 @@ describe("settings 存储（M1e 布局持久化）", () => {
     expect(validateSettings({ currentSession: 42 }).currentSession).toBeNull();
   });
 
+  it("windowVibrancy 默认关：缺键回退 false，显式 true 才开", () => {
+    expect(DEFAULT_SETTINGS.windowVibrancy).toBe(false);
+    expect(validateSettings({}).windowVibrancy).toBe(false);
+    expect(validateSettings({ windowVibrancy: true }).windowVibrancy).toBe(true);
+    expect(validateSettings({ windowVibrancy: "yes" }).windowVibrancy).toBe(false);
+  });
+
   it("locale 往返：写入后新实例读回；白名单外的值回退缺省（面板白名单放行它才谈得上落库）", async () => {
     const file = join(dir, "locale.json");
     const s = new SettingsStore(file);

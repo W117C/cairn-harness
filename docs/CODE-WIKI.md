@@ -30,6 +30,14 @@ This checkout is core-first: the agent kernel (`src/`) is electron-free. The for
 3. **新增能力优先走既有字段的 origin 通道，而不是新增事件类型**。两处先例：
    `user_message.origin` 承载 sidechat 提升与 goal 续跑（`PromoteOrigin` / `GoalTurnOrigin`）；
    `tool_result.gate` 承载全部权限判定留痕。新增一种事件会让每条旧日志的重放都多一个分支。
+4. **例外是「日志结构控制记录」**（`docs/adr/0005-log-structural-records.md`）：描述的是**日志本身被怎么了**
+   （回退指针、会话元数据更新），不是「agent 做了什么」，也没有 origin 通道可挂。
+   这类记录只允许 `session_meta` / `compaction` 那两种既有形状。
+   配套三条协议（真身在 `src/agent/session-cursor.ts`、`src/events/session.ts`、`src/agent/submission-ledger.ts`）：
+   - `replay()` 保持**笨且逐字**：控制记录原样读回，解释它是**投影**的活（`src/events/projection.ts`）。
+   - **分叉是指针不是拷贝**：子会话只写一行血缘（`{parent, boundary}`），不拷父事件，也不继承父的在飞状态。
+   - **游标不透明且 fail-closed**：kind 不认、载荷坏、位置越界、session 不对，一律拒——绝不用另一个游标顶上。
+   - **提交带 `requestId` 幂等键**：同一个 `requestId` 再交一次，返回既有那次，不把活跑第二遍。
 
 **枚举即事实源**：`TOOL_BLOCK_REASONS`、`HARNESS_HOLD_REASONS`、`GATE_VERDICTS`、`GATE_LAYERS`
 都是**运行时数组**（不是只存在于类型里）。理由一致：复跑面按它铺矩阵，
@@ -101,7 +109,14 @@ worker 卡在审批上时，父 turn 已经结束，审批应答与取消必须�
 
 ## Desktop renderer 的三个自研底座（2026-10-07 UI 产品化）
 
-桌面端（`apps/desktop/src/renderer/`）按 spec
+桌面端（`apps/desktop/src/renderer/`）的**分层**（2026-10-22 App 拆分批落地）：
+`state/`（state-cluster hooks）→ `derived/`（纯投影）→ `components/` ＋ `panes/`（props in, events out）→
+`App.tsx`（组合根）。机器面是 `pnpm renderer-layer-check`（它钉：组件层不回流 `App.tsx`、
+状态层不 import 组件层、派生层纯、每源文件 ≤1,200 行且 `App.tsx` ≤900 行）。
+**判卷读渲染层源码时读整个面**（`apps/desktop/tests/helpers/app-surface.ts`）——
+指着一个文件做 `not.toContain` 的断言，代码一搬就空转通过；空转不是通过，是断言被削弱了。
+
+按 spec
 [`docs/superpowers/specs/2026-10-07-desktop-ui-productization-design.md`](superpowers/specs/2026-10-07-desktop-ui-productization-design.md)
 重排后，有三个"只有一处"的底座，动 UI 前先认路：
 

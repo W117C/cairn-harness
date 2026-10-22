@@ -19,7 +19,7 @@ import { isEnvVerifyCause } from "../../src/events";
 import { mayHaveWrittenDisk } from "../../src/agent/write-face";
 import { bucketsSpendUsd, priceForModel, type SpendBucket } from "../../src/agent/orchestrator-join";
 import { readJsonl, scanCorpus, zeroCorpusProblem } from "./corpus";
-import { armOfPath, groupPairs, magnitudeOfAb, parseArm, taskKey, abRowLine, repRowLine, signTestToken, type ArmOf } from "../lib/eval-arms";
+import { armOfPath, groupPairs, magnitudeOfAb, parseArm, taskKey, abRowLine, repRowLine, signTestToken, SIGN_ALPHA, type ArmOf } from "../lib/eval-arms";
 
 export type RunOutcome =
   | "green-first-try"
@@ -456,7 +456,15 @@ function main(): void {
       : "「" + st.tokenDirection.sign + "」（以排序靠前的变体为参照）" +
         String(st.tokenDirection.agree) + "/" + String(st.pairs) + " 格同向" +
         " · 反向 " + String(st.tokenDirection.against) + " · 同值 " + String(st.ties) +
-        " · 证据缺席 " + String(st.skipped) + " ⇒ 方向可报，倍率仍按上行判"),
+        " · 证据缺席 " + String(st.skipped) +
+        // 方向**能不能当结论**是另一件事：由 p 值说，不由「几比几同向」说。
+        // 「5/5 同向」的精确 p 值是 0.0625 ⇒ 在 α=0.05 下**不显著**——只报「5/5」会把它读成定论。
+        " · p=" + (st.pValue === null ? "—" : String(Math.round(st.pValue * 1e9) / 1e9)) +
+        "（α=" + String(SIGN_ALPHA) + " ⇒ " +
+        (st.verdict === "significant" ? "够格当结论" : st.verdict === "not-significant" ? "不够格当结论（与随机同向分不开）" : "无从判") +
+        "）" +
+        (st.agreementCi === null ? "" : " · 同向比例 95% 区间 [" + st.agreementCi.lower.toFixed(3) + ", " + st.agreementCi.upper.toFixed(3) + "]（下界才是能引用的那个数）") +
+        " ⇒ 方向可报，倍率仍按上行判"),
   );
   if (abPairs.length === 0) {
     console.log("    （没有可配对的 A/B 格 ⇒ 策略差要等各臂把任务补齐；不许拿两条不同任务的臂算差值）");

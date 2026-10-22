@@ -30,6 +30,10 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   getSettings: "agent:settings-get",
   setSettings: "agent:settings-set",
   listSessions: "agent:sessions-list",
+  // v14：跨会话用量账本（头像菜单「用量统计」→「全部会话」；main 只读扫描各工作区日志）。
+  usageLedger: "agent:usage-ledger",
+  // v15：会话日志尾部（错误条 / 命令面板「查看日志」；main 只读）。
+  sessionLog: "agent:session-log",
   createSession: "agent:sessions-create",
   openSession: "agent:sessions-open",
   queueGet: "agent:session-queue-get",
@@ -52,6 +56,7 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   // v5 窗格后端：terminal 窗格（PTY 起停 + 输入）。
   terminalStart: "agent:terminal-start",
   terminalWrite: "agent:terminal-write",
+  terminalResize: "agent:terminal-resize",
   terminalKill: "agent:terminal-kill",
   // v5 窗格弹出：独立窗口路由。
   panePopout: "agent:pane-popout",
@@ -126,6 +131,8 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   gitStatus: "agent:git-status",
   gitClone: "agent:git-clone",
   workspaceSearch: "agent:workspace-search",
+  // v18：会话正文全文检索（只读；主进程扫会话 JSONL，渲染层不碰盘）。
+  sessionSearch: "agent:session-search",
   touchProject: "agent:project-touch",
   saveTempFile: "agent:save-temp-file",
   snapshotRestore: "agent:snapshot-restore",

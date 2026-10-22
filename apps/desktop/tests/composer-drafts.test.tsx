@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const src = read("../src/renderer/components/Composer.tsx");
@@ -36,7 +37,7 @@ describe("Composer 每会话草稿", () => {
     const sidebar = read("../src/renderer/components/Sidebar.tsx");
     expect(sidebar).toContain('className="s-draft"');
     expect(sidebar).toContain("hasDraft={props.draftIds?.has(s.id) === true}");
-    const app = read("../src/renderer/App.tsx");
+    const app = readAppSurface();
     expect(app).toContain("useState<Set<string>>(() => readDraftIds())");
     expect(app).toContain("onDraftPresence={noteDraft}");
     expect(app).toContain("draftIds={draftIds}");

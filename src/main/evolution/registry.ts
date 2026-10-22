@@ -420,6 +420,14 @@ export class ModuleRegistry {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return await this.persistIndex(index);
       throw err;
     }
+    // 重放时的 knownGates = 调用方补充 + **账本自己定格的 declaredGates**。
+    // 这一半必须在重放**之前**就齐：这些门在注册时（registerStaged ⇒ parseBundleManifest）
+    // 已对照真名单校验过，所以重放同一份账本时它们是**已知门**。拿调用方那一份去卡它们
+    // （生产读面那份是空集——src 侧不抄门名单）⇒ 重建当场抛 RegistryLogCorruptError
+    // ⇒ 一份完全合法的账本被判死 ⇒ content-pack 注入与 canary 收束 tick 同时熄火，
+    // 而且**再也起不来**：每次重建都撞同一行。**自愈不了的自愈路径**。
+    const replayGates = new Set(this.opts.knownGates);
+    for (const gate of this.declaredGatesOf(text)) replayGates.add(gate);
     const lines = text.split("\n");
     // **尾部半写行**（进程被硬杀在单次 append 中途）：文件不以换行结尾、且最后一行解析失败
     // ⇒ 这一行**从未成行**（读者本来也看不见它）。旧实现让它当场抛 ⇒ **注册表永久打不开**
@@ -433,7 +441,7 @@ export class ModuleRegistry {
       if (trimmed === "") continue;
       let ev: RegistryEvent;
       try {
-        ev = this.parseEventLine(trimmed, i + 1);
+        ev = this.parseEventLine(trimmed, i + 1, replayGates);
       } catch (err) {
         if (!tornTail || i !== lines.length - 1) throw err;
         const cut = Buffer.byteLength(text.slice(0, text.lastIndexOf("\n") + 1), "utf8");
@@ -512,9 +520,32 @@ export class ModuleRegistry {
     await this.persistIndex(index);
   }
 
+  /** 账本自己定格的 declaredGates（重放时的 knownGates 之一半）。
+   *  只认 register 事件里形状合法的门名字符串；坏行/坏 JSON 一律跳过，交给重放那一步点名，
+   *  这里不替它判生死（两遍扫描各司其职：一遍取名，一遍验行）。 */
+  private declaredGatesOf(text: string): Set<string> {
+    const out = new Set<string>();
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed === "") continue;
+      let raw: unknown;
+      try {
+        raw = JSON.parse(trimmed);
+      } catch {
+        continue;
+      }
+      if (!isRecord(raw) || raw.op !== "register") continue;
+      const gates = raw.gates;
+      if (!Array.isArray(gates)) continue;
+      for (const gate of gates) if (typeof gate === "string") out.add(gate);
+    }
+    return out;
+  }
+
   /** 日志行的形状校验（坏行 = 账本不可信）。register 事件的凭据字段复用 manifest 契约校验——
-   *  同一份 parseBundleManifest，不给重放面留第二种口径。 */
-  private parseEventLine(line: string, lineNo: number): RegistryEvent {
+   *  同一份 parseBundleManifest，不给重放面留第二种口径。
+   *  knownGates 由重放面传入（调用方补充 + 账本自己定格的 declaredGates），见 rebuildInner。 */
+  private parseEventLine(line: string, lineNo: number, knownGates: ReadonlySet<string>): RegistryEvent {
     const corrupt = (why: string): RegistryLogCorruptError =>
       new RegistryLogCorruptError(`registry.jsonl 第 ${String(lineNo)} 行损坏（${why}）`);
     let raw: unknown;
@@ -533,7 +564,7 @@ export class ModuleRegistry {
         try {
           manifest = parseBundleManifest(
             { id, version: raw.version, kind: raw.kind, entry: raw.entry, permissions: raw.permissions, gates: raw.gates },
-            this.opts.knownGates,
+            knownGates,
           );
         } catch (err) {
           throw corrupt(err instanceof Error ? err.message : String(err));

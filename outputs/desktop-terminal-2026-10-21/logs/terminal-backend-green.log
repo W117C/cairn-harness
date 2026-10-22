@@ -1,0 +1,9 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness/apps/desktop
+
+
+ Test Files  4 passed (4)
+      Tests  16 passed (16)
+   Start at  17:10:56
+   Duration  775ms (tests 81%, transform 14%, import 4%, worker 1%)
+

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { toolVerb } from "../src/renderer/components/Stream";
 import { isNearBottom } from "../src/renderer/useStickyScroll";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
@@ -44,7 +45,7 @@ describe("工具行样式钉（2026-10-20 批 130：一行一步，不再是通�
   });
   it("静息无底、悬停才起淡底（不再是常驻胶囊）", () => {
     expect(css).not.toMatch(/\.tool-head\s*{[^}]*background:/s);
-    expect(css).toMatch(/\.tool-head:hover\s*{\s*background:\s*var\(--alpha-1\)/);
+    expect(css).toMatch(/\.tool-head:hover\s*{\s*background:\s*hsl\(from hsl\(var\(--text-000\)\) h s l \/ var\(--alpha-hover\)\)/);
   });
   it("摘要走正文字体（整段 mono 才是「终端转储」观感的来源）", () => {
     expect(css).not.toMatch(/\.tsum\s*{[^}]*font-family/s);
@@ -96,7 +97,7 @@ describe("回底钮挂载竞态（阶段 2 真机复检抓到并修复）", () =
     // 代码行锚（注释里的历史说明不算——第 24 遍 suggest-ghost 同款误伤先例）
     expect(hook).not.toMatch(/=\s*ref\.current/);
     expect(hook).not.toMatch(/RefObject</);
-    const app = read("../src/renderer/App.tsx");
+    const app = readAppSurface();
     expect(app).toContain("useStickyScroll(streamEl)");
     expect(app).toContain("ref={setStreamEl}");
     expect(app).not.toContain("streamRef");
@@ -105,7 +106,7 @@ describe("回底钮挂载竞态（阶段 2 真机复检抓到并修复）", () =
 
 describe("回到底部 = 居中浮钮（业主 10.07 裁：正中间；v3-lite「回到最新」margin:0 auto 同口径）", () => {
   const css = read("../src/renderer/styles.css");
-  const app = read("../src/renderer/App.tsx");
+  const app = readAppSurface();
   it("圆形图标钮：水平居中定位 + 淡入动画", () => {
     expect(css).toMatch(/\.jump-latest\s*{[^}]*border-radius:\s*var\(--radius-pill\)/s);
     // 居中 = left:50% + translateX(-50%)（宽窗下不再贴右缘孤悬——旧 right 锚已废）。
@@ -131,5 +132,16 @@ describe("工具行折叠态信息量（2026-10-17：去掉重复的绝对时间
     const head = stream.slice(start, end);
     expect(head).toContain("formatDuration");
     expect(head).not.toContain("<RowTime");
+  });
+});
+
+describe("失败摘要可读（2026-10-21 设计重做）", () => {
+  const css = read("../src/renderer/styles.css");
+  const stream = read("../src/renderer/components/Stream.tsx");
+  it("失败摘要独占一行并换行，不截成 80 字单行省略", () => {
+    expect(css).toMatch(/\.tool-group-failure\s*{[^}]*flex:\s*1 1 100%/s);
+    expect(css).toMatch(/\.tool-group-failure\s*{[^}]*white-space:\s*normal/s);
+    expect(stream).toContain("truncateSummary(failure.output, 240)");
+    expect(stream).not.toContain("truncateSummary(failure.output, 80)");
   });
 });

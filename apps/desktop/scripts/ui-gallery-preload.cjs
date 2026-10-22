@@ -73,6 +73,33 @@ const SETTINGS = {
   routingBandit: false, routingCascade: false, maxBudgetUsd: 0, scheduleConcurrencyCap: 4,
 };
 
+// 文件窗格夹具（2026-10-21）：只给离屏画廊用，让树的键盘/重试/预览有真实行可走。
+const FAKE_TREE = {
+  "": [{ name: "src", kind: "dir", size: null }, { name: "README.md", kind: "file", size: 2140 }, { name: "package.json", kind: "file", size: 880 }],
+  src: [{ name: "main.ts", kind: "file", size: 5120 }, { name: "renderer", kind: "dir", size: null }],
+  "src/renderer": [{ name: "App.tsx", kind: "file", size: 8800 }],
+};
+const FAKE_TEXT = {
+  "README.md": "# Demo workspace\n\n用于文件窗格的键盘与预览验收。\n",
+  "package.json": '{"name":"demo","private":true}\n',
+  "src/main.ts": "export const desktop = true;\n",
+  "src/renderer/App.tsx": "export function App() { return null; }\n",
+};
+// 插件窗格夹具（2026-10-21）：让右列插件页在画廊里也有真实列表/技能/命令可看。
+const PLUGIN_SNAPSHOT = {
+  plugins: [{
+    name: "demo-plugin", scope: "workspace", trust: "trusted", root: "/tmp/demo-ws/.agent/plugins/demo-plugin",
+    counts: { skills: 1, commands: 1, agents: 0, hooks: 0, mcp: 1, lsp: 0, lspActive: 0 },
+    skills: [{ name: "审查改动", invoke: "demo-plugin:review", description: "按仓库规矩审一遍改动" }],
+    commands: [{ name: "跑测试", invoke: "demo-plugin:test", description: "跑相关判卷并汇总失败" }],
+    userConfig: [],
+    errors: [], warnings: [],
+  }],
+  looseSkills: [],
+  mcpServers: [{ plugin: "demo-plugin", server: "demo-mcp", state: "connected", tools: ["search"] }],
+  toolScopes: [],
+  errors: [], warnings: [],
+};
 const stub = {
   protocolVersion: reply(1),
   getSettings: reply(SETTINGS),
@@ -85,6 +112,18 @@ const stub = {
   listProjects: reply([{ path: "/tmp/demo-ws" }]),
   addProject: reply({ path: "/tmp/demo-ws" }),
   createProject: reply({ ok: true, path: "/tmp/demo-ws/new" }),
+  workspaceListDir: (rel) => new Promise((res) => setTimeout(() => {
+    const entries = FAKE_TREE[rel];
+    res(entries === undefined
+      ? { ok: false, error: `目录不存在：${rel}` }
+      : { ok: true, path: rel, entries, truncated: rel === "src" });
+  }, 30)),
+  workspaceReadText: (rel) => new Promise((res) => setTimeout(() => {
+    const text = FAKE_TEXT[rel];
+    res(text === undefined
+      ? { ok: false, error: `文件不存在：${rel}` }
+      : { ok: true, path: rel, text, truncated: false, size: Buffer.byteLength(text) });
+  }, 30)),
   pickDirectory: reply(null),
   openSession: reply({ events: EVENTS }),
   createSession: reply({ id: "s2" }),
@@ -98,7 +137,11 @@ const stub = {
   revertTurn: reply({ ok: true, restored: [], deleted: [], manual: [], failed: [] }),
   compact: reply({ ok: true }),
   checkUpdate: reply({ configured: false }),
-  getState: reply({}),
+  getState: reply({ plugins: PLUGIN_SNAPSHOT }),
+  listSkills: reply({
+    skills: [{ invoke: "demo-plugin:review", description: "按仓库规矩审一遍改动", trust: "trusted" }],
+    commands: [{ invoke: "demo-plugin:test", description: "跑相关判卷并汇总失败", trust: "trusted" }],
+  }),
   getOnboarding: reply([]),
   setGoal: reply({ ok: true }),
   pluginDecide: reply({ ok: true }),
@@ -212,6 +255,8 @@ if (process.argv.includes("--cairn-performance-fixture")) {
   const turns = Number(argOf("--cairn-performance-turns=", "400"));
   const listeners = new Set();
   let finishRun;
+  let liveText = "";
+  const calls = { runs: [], forks: [] };
   const events = [];
   for (let i = 0; i < turns; i++) {
     events.push({ type: "user_message", content: `第 ${i+1} 轮：检查模块 ${i}`, ts: now - (turns-i)*60000 });
@@ -223,15 +268,65 @@ if (process.argv.includes("--cairn-performance-fixture")) {
   stub.openSession = reply({ events });
   stub.onEvent = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
   const emit = (e) => { for (const listener of listeners) listener({ ...e, session_id: "s1", ts: Date.now() }); };
-  stub.run = () => new Promise((resolve) => {
+  stub.forkSession = (sessionId, round, keepWorkspace) => {
+    calls.forks.push({ sessionId, round, keepWorkspace });
+    return Promise.resolve({ ok: false, error: "夹具已记录回放请求" });
+  };
+  stub.run = (request) => new Promise((resolve) => {
+    calls.runs.push(request);
+    liveText = "PERF-LIVE-0";
     finishRun = resolve;
     emit({ type: "user_message", content: "逐帧流式性能检查" });
     emit({ type: "assistant_delta", callId: "perf-live", text: "PERF-LIVE-0" });
   });
   contextBridge.exposeInMainWorld("__cairnPerf", {
-    step: (index) => emit({ type: "assistant_delta", callId: "perf-live", text: ` PERF-LIVE-${index}` }),
+    calls: () => calls,
+    step: (index) => {
+      const text = ` PERF-LIVE-${index}`;
+      liveText += text;
+      emit({ type: "assistant_delta", callId: "perf-live", text });
+    },
+    complete: () => emit({ type: "assistant_message", callId: "perf-live", content: liveText }),
     finish: () => { emit({ type: "agent_status", status: "done" }); finishRun?.({ ok: true }); },
   });
+}
+
+// 终端尺寸夹具（terminal-resize-smoke.cjs 专用；不进产品链路）：
+// 记录渲染层发给主进程的 terminalResize 行列，用来证明「面板尺寸变化 ⇒ 行列跟着变」这条
+// 渲染段链路真的在跑（主进程→PTY 那一段由 tests/terminal-size.test.ts 用 stty 量）。
+if (process.argv.includes("--cairn-terminal-fixture")) {
+  const calls = { resize: [], start: 0, write: [] };
+  stub.terminalStart = reply(() => { calls.start += 1; return { ok: true, id: "term-fixture-1" }; });
+  stub.terminalWrite = (id, data) => { calls.write.push({ id, data }); return Promise.resolve(true); };
+  stub.terminalKill = reply(true);
+  stub.terminalResize = (id, cols, rows) => { calls.resize.push({ id, cols, rows }); return Promise.resolve(true); };
+  stub.onTerminalData = () => () => undefined;
+  stub.onTerminalExit = () => () => undefined;
+  contextBridge.exposeInMainWorld("__cairnTerminal", { calls: () => ({ ...calls, resize: [...calls.resize] }) });
+}
+
+// 跨工作区恢复夹具（cross-workspace-restore.cjs 专用；不进产品链路）：
+// 侧栏清单含另一项目的会话，openSession/setWorkspaceContext 记录调用，证明启动恢复走的是它。
+if (process.argv.includes("--cairn-cross-workspace-fixture")) {
+  const calls = { open: [], workspace: [] };
+  stub.listSessions = reply([
+    { id: "s-current", title: "当前项目会话", mtimeMs: now - 60_000, lines: 2, workspace: "/tmp/demo-ws" },
+    { id: "s-other", title: "跨工作区 · 另一项目", mtimeMs: now, lines: 2, workspace: "/tmp/demo-ws-other" },
+  ]);
+  stub.listProjects = reply([{ path: "/tmp/demo-ws" }, { path: "/tmp/demo-ws-other" }]);
+  stub.openSession = async (id, workspace) => {
+    calls.open.push({ id, workspace });
+    return {
+      events: id === "s-other"
+        ? [
+            { type: "user_message", content: "看看另一个项目", ts: now - 2000 },
+            { type: "assistant_message", content: "跨工作区会话内容已恢复", ts: now - 1000 },
+          ]
+        : [{ type: "assistant_message", content: "当前项目内容", ts: now - 1000 }],
+    };
+  };
+  stub.setWorkspaceContext = async (workspace) => { calls.workspace.push(workspace); return {}; };
+  contextBridge.exposeInMainWorld("__cairnCrossWorkspace", { calls: () => ({ ...calls }) });
 }
 
 contextBridge.exposeInMainWorld("agent", stub);

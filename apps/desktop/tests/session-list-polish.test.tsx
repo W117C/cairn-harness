@@ -12,10 +12,11 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Sidebar } from "../src/renderer/components/Sidebar";
 import type { ProjectRecord } from "../../../src/main/ipc-protocol";
+import { readAppSurface } from "./helpers/app-surface";
 
 const styles = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
 const sidebarSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url)), "utf8");
-const appSrc = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const appSrc = readAppSurface();
 
 /** 取 CSS 规则块正文（简单匹配：`.sel {` 到首个 `}`）。 */
 function block(css: string, sel: string): string {

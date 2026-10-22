@@ -8,8 +8,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
-const APP = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const APP = readAppSurface();
 
 describe("Esc 与门卡（不让「关掉卡」变成「杀掉任务」）", () => {
   it("审批/澄清/计划卡在场时，Esc 在取消运行之前短路", () => {

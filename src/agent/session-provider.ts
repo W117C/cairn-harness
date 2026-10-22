@@ -166,8 +166,10 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         ),
       },
     },
-    // P-1 补漏：lsp 在可执行面真实存在（TOOLS / toolTableFor / sidechat 白名单都在表内），
+    // P-1 补漏：lsp 在可执行面真实存在（TOOLS / toolTableFor 都在表内），
     // 但模型可见面此前没有它 ⇒ 模型永远调不到一个已接线的工具。二者必须同源。
+    // sidechat 不在表内：它无人值守、没有审批门，而 lsp 会 spawn `.agent/lsp.json` 的命令
+    // （风险 high）⇒ 旁路只装 read_file/grep/glob，不摆一个永远点不动的入口。
     {
       type: "function",
       function: {

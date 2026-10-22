@@ -1,0 +1,74 @@
+[
+  {
+    "name": "正常启动清单里有两个项目的会话",
+    "ok": true
+  },
+  {
+    "name": "启动恢复跨工作区会话（侧栏行 active 且是另一项目）",
+    "ok": true,
+    "detail": {
+      "active": "跨工作区 · 另一项目刚刚",
+      "group": "/tmp/demo-ws-other",
+      "body": "看看另一个项目\n刚刚\n\n跨工作区会话内容已恢复\n\n刚刚\n第 1 轮 · 无文件改动",
+      "pref": {
+        "id": "s-other",
+        "workspace": "/tmp/demo-ws-other"
+      },
+      "calls": {
+        "open": [
+          {
+            "id": "s-other",
+            "workspace": "/tmp/demo-ws-other"
+          }
+        ],
+        "workspace": [
+          "",
+          "/tmp/demo-ws-other",
+          "/tmp/demo-ws-other"
+        ]
+      },
+      "keyOpen": true,
+      "keyWorkspace": true
+    }
+  },
+  {
+    "name": "活动项目组切到会话归属的工作区",
+    "ok": true,
+    "detail": "/tmp/demo-ws-other"
+  },
+  {
+    "name": "主区加载的是该会话正文",
+    "ok": true,
+    "detail": "看看另一个项目\n刚刚\n\n跨工作区会话内容已恢复\n\n刚刚\n第 1 轮 · 无文件改动"
+  },
+  {
+    "name": "恢复走 openSession 且工作区上下文同步",
+    "ok": true,
+    "detail": {
+      "open": [
+        {
+          "id": "s-other",
+          "workspace": "/tmp/demo-ws-other"
+        }
+      ],
+      "workspace": [
+        "",
+        "/tmp/demo-ws-other",
+        "/tmp/demo-ws-other"
+      ]
+    }
+  },
+  {
+    "name": "恢复成功后 lastSession key 仍带 id + workspace",
+    "ok": true,
+    "detail": {
+      "id": "s-other",
+      "workspace": "/tmp/demo-ws-other"
+    }
+  },
+  {
+    "name": "渲染过程无控制台错误",
+    "ok": true,
+    "detail": []
+  }
+]

@@ -48,7 +48,11 @@ describe("通道名表完整性", () => {
     // ＋pluginUserConfigSet（插件配置写入面）⇒ 91；
     // ＋setMessagePinned / listMessagePins（2026-10-20 消息置顶，销 G6）⇒ 93。
     // 2026-10-20：＋sessionWorktree（会话级 worktree 隔离，销 G4：create/merge/discard 共用一条）⇒ 94。
-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(94);
+    // v14（2026-10-21）：＋usageLedger（头像菜单「用量统计」的「全部会话」账本）⇒ 95；
+    // v15（2026-10-21）：＋sessionLog（错误条 / 命令面板「查看日志」的只读尾部）⇒ 96。
+    // v17：＋terminalResize ⇒ 97。
+    // v18：＋sessionSearch（会话正文全文检索；结果三态，「没量到 ≠ 没有」）⇒ 98。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(98);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
@@ -95,6 +99,10 @@ describe("通道名表完整性", () => {
       "listSessions",
       "createSession",
       "openSession",
+      // v14：跨会话用量账本（只读扫描，接真有 wired 行）。
+      "usageLedger",
+      // v15：会话日志尾部（只读；会话归属由 host 解析，接真有 wired 行）。
+      "sessionLog",
       "renameSession",
       "deleteSession",
       "listProjects",
@@ -159,6 +167,7 @@ describe("通道名表完整性", () => {
       // v5：terminal 窗格（PTY 宿主；三面同步直接接真）。
       "terminalStart",
       "terminalWrite",
+      "terminalResize",
       "terminalKill",
       // v5：browser 窗格（WebContentsView 宿主；三面同步直接接真）。
       "browserOpen",
@@ -191,6 +200,8 @@ describe("通道名表完整性", () => {
       "gitStatus",
       "gitClone",
       "workspaceSearch",
+      // v18：会话正文全文检索（core session-search；主进程扫会话 JSONL，渲染层不碰盘）——三面同步直接接真。
+      "sessionSearch",
       "touchProject",
       "saveTempFile",
       "snapshotRestore",

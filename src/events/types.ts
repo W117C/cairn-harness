@@ -88,6 +88,10 @@ export interface ToolResultEvent { type: "tool_result"; callId: string; ok: bool
    *  桌面端也就无从显示。缺席 = 这次调用没有交付物（绝大多数调用）。 */
   artifact?: { kind: "image" | "html" | "svg" | "text"; path: string; note?: string };
   change?: "created" | "modified";
+  /** 动作融合的结构事实：写已落盘，随后的 lint 可能失败（因此 `ok` 可能是 false）。
+   *  写盘证据的读者（goal / worker-report / tool-choice）必须把它与 `ok` 一起看；
+   *  缺席 = 旧事件或非融合写（仍由 `ok` 判定）。 */
+  fusedWrite?: boolean;
   /** 多文件写工具成功落盘的 workspace 相对路径清单；缺席表示没有结构化清单。 */
   changedPaths?: string[]; /** 进程退出码（run_shell / worker shell / 沙箱出口才有）。
    *  **缺席 = 这一笔不是跑进程的工具**（或旧日志），绝不等于 0；`null` 才是"进程没起来/被强杀"。
@@ -120,6 +124,43 @@ export interface SessionMetaEvent {
   origin?: "scheduled";
   automation_id?: string;
   automation_name?: string;
+  /** 指针分叉的血缘（ADR 0005：分叉是**指针**不是拷贝）。
+   *
+   *  **缺席 = 这是个独立/根会话**（不是「边界 0」）——两者必须分得开：
+   *  「没有 fork 字段」说的是「压根没有父会话」，不是「父会话存在但边界在 0」。
+   *  一旦把缺席读成「边界 0」，独立会话就会被当成"分叉自某个空前缀"，血缘树整个歪掉。
+   *
+   *  `from_session_path` = 父会话 events.jsonl 的路径（与 `branch_of` 同一口径：绝对路径）。
+   *  `boundary_event_id` = 继承的父事件前缀长度（**含**该 id，1-based 行号口径）。
+   *  `from_session_id` = 父会话 id（可选）：路径改名/移动时仍有一个人读的身份。 */
+  fork?: { from_session_path: string; boundary_event_id: number; from_session_id?: string };
+}
+
+/** 日志结构控制记录（ADR 0005）：**关于日志本身**的记录，不是「agent 做了什么」。
+ *
+ *  §①.3「新增能力优先走既有字段的 origin 通道」管的是**描述 agent 行为**的能力；
+ *  它不管**日志结构控制记录**——回退指针、元数据补丁这类东西没有 origin 通道可挂：
+ *  它们不是某个 user_message 的来源标注，而是**对日志本身的改写**。
+ *  先例已在仓内：`compaction`（关于日志的记录）与 `session_meta`（关于会话身份的记录）都是既有事件型。
+ *
+ *  **`replay()` 不解释它们**（逐字原样返回，含控制记录）：解释控制记录是**投影**的活
+ *  （`src/events/projection.ts` 的 `effectiveEvents` / `sessionMetaPatch`）。
+ *  这正是「JSONL 逐字重放」与「事件 id = 1-based 行号」能同时为真的原因。 */
+export interface SessionRewindEvent {
+  type: "session_rewind";
+  /** 回退到哪条事件（1-based 行号口径，**含**该条）。语义见 ADR 0005。 */
+  to_event_id: number;
+  /** 回退理由（自由文本，可缺席）。**缺席 = 没记理由**，不等于「没有理由存在」。 */
+  reason?: string;
+}
+
+/** 会话元数据的增量补丁（ADR 0005）：改**会话的身份/属性**，不改消息历史。
+ *
+ *  `patch` = 键值对。**缺席的键 = 该键不变**（不是"清空"）；空 patch = 什么都没改
+ *  （记录存在，但这一笔不改变任何东西）。 */
+export interface SessionMetaUpdateEvent {
+  type: "session_meta_update";
+  patch: Record<string, string>;
 }
 
 // ---- M1b 三门事件（澄清门 / 方案门 / 验证门）----
@@ -744,6 +785,8 @@ export type AgentEvent = (
   | TurnStopMissingEvent
   | SurfaceAccountEvent
   | FileRestoredEvent
+  | SessionRewindEvent
+  | SessionMetaUpdateEvent
   | RunErrorEvent
 ) & { /** M2 §3.5：事件真值时间戳（毫秒）。core 自 8361657 起在落盘处统一盖戳——写调用方同一对象，live 与盘同式（tests/events.test.ts 三用例钉死），新事件恒在场；旧 JSONL 缺席，读侧按可选兼容（投影留空不造假）。 */ ts?: number };
 
@@ -794,5 +837,7 @@ export const KNOWN_TYPES: Record<AgentEvent["type"], true> = {
   turn_stop_missing: true,
   surface_account: true,
   file_restored: true,
+  session_rewind: true,
+  session_meta_update: true,
   error: true,
 };

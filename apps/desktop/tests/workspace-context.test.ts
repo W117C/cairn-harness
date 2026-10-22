@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { handleWorkspaceListDir, handleWorkspaceReadText } from "../../../src/main/session-handlers";
 import { memorySnapshot } from "../../../src/main/memory-handlers";
 import { projectMemoryDir } from "../../../src/agent/memory/store";
+import { readAppSurface } from "./helpers/app-surface";
 
 const dir = mkdtempSync(join(tmpdir(), "cairn-wsctx-"));
 mkdirSync(join(dir, "src"), { recursive: true });
@@ -34,7 +35,7 @@ describe("活动工作区上下文（override）", () => {
     expect(main).toContain("let workspaceContext: string | null = null");
     expect(main).toContain("resolveWorkspace");
     expect(main).toContain("handleChangeDiff(req as never, workspaceContext)");
-    const app = read("apps/desktop/src/renderer/App.tsx");
+    const app = readAppSurface();
     expect(app).toContain('window.agent.setWorkspaceContext(activeWorkspace ?? "")');
   });
 });

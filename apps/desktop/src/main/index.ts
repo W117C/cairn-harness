@@ -1,8 +1,10 @@
 // Electron main 装配根（M1-6）：kernel-host 单点装配 + IPC 薄映射。
 // 装载通道：entry.cjs 注册 repo 根 tsx 后 require 本 TS 源——core 链零打包零漂移
 // （esbuild 打包会把 agent-runner 的 ROOT 漂进 <repo>/apps，fixtures 运行时静默落空）。
-import { app, BrowserWindow, dialog, ipcMain, Notification, safeStorage, screen, shell, webContents, type IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, Notification, safeStorage, screen, shell, webContents, type IpcMainInvokeEvent } from "electron";
 import { clampToWorkArea, readWindowState, writeWindowState } from "./window-state";
+import { bootBackgroundFor, normalizeThemePreference, resolveBootTheme, type ThemePreference } from "./boot-theme";
+import { windowVibrancyOptions } from "./window-vibrancy";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
@@ -81,7 +83,9 @@ import { createKernelHost, canonicalWorkspacePath } from "./kernel-host";
 import {
   canonicalKnownProjectPath as canonicalKnownProjectPathIn,
   canonicalKnownRoots,
+  resolveCreateParent,
   resolveKnownProjectTarget as resolveKnownProjectTargetIn,
+  resolveProvidedWorkspace,
 } from "./project-path-gate";
 import { isAppShellUrl } from "./shell-url";
 import { ProjectRegistry } from "../../../../src/main/project-registry";
@@ -110,6 +114,31 @@ const reinjectSavedProviderKey = injectStoredProviderKey;
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const distElectron = join(here, "..", "..", "dist-electron");
+let mainWindow: BrowserWindow | null = null;
+
+// 首帧底色（2026-10-21）：在 renderer 的 CSS/React 到达前，BrowserWindow 先铺一块与
+// Claude Desktop v3 的 surface-1 同值的底色——亮 #fcfcfb / 暗 #151515，避免白闪。
+// settings.json 的 theme 是唯一真相：启动时把它同步给 nativeTheme，让 backgroundColor 与
+// index.html 的 `prefers-color-scheme` 占位用同一判据（系统暗、应用亮时不再先闪暗底）。
+// 读不到/字段非法一律回 system，不阻断启动。
+const readThemePreference = (): ThemePreference => {
+  try {
+    const raw = JSON.parse(readFileSync(join(app.getPath("userData"), "settings.json"), "utf8")) as { theme?: unknown };
+    return normalizeThemePreference(raw.theme);
+  } catch {
+    return "system";
+  }
+};
+const bootBackground = (): string =>
+  bootBackgroundFor(resolveBootTheme(readThemePreference(), nativeTheme.shouldUseDarkColors));
+const readWindowVibrancyPreference = (): boolean => {
+  try {
+    const raw = JSON.parse(readFileSync(join(app.getPath("userData"), "settings.json"), "utf8")) as { windowVibrancy?: unknown };
+    return raw.windowVibrancy === true;
+  } catch {
+    return false;
+  }
+};
 
 // ---- v7 朗读宿主（§2.2 消息操作条 read aloud）----
 // macOS 系统 say：无 npm 依赖、无网络、进程随应用退出清理；重复调用先停上一条（一次只念一条）。
@@ -227,9 +256,9 @@ const terminalHost = new TerminalHost((e) => {
   }
 });
 
-// v5 browser 窗格：WebContentsView 宿主（独立干净 profile）；视图挂在当前主窗口上。
+// browser 窗格：WebContentsView 宿主；产品调用按可信 IPC sender 绑定窗口。
 const browserHost = new BrowserHost(
-  // 优先当前聚焦窗口：弹出窗格里的浏览器页必须挂到 popout，而不是恒挂主窗（getAllWindows()[0]）。
+  // 仅供直接宿主调用兜底；browserOpen IPC 始终传入调用窗口，不依赖焦点。
   () => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null,
   (state) => {
     for (const win of BrowserWindow.getAllWindows()) win.webContents.send(PUSH_CHANNELS.onBrowserState, state);
@@ -304,7 +333,10 @@ let stopDesktopScheduler: (() => void) | null = null;
 // list() 默认不返回，不复活。fail-soft：ProjectRegistry 构造不抛（纯字段存储），损坏在
 // 异步 load() 显式抛 ProjectRegistryCorruptError——在此捕获 console.error 不阻启动
 // （projects.json 损坏时 listProjects/addProject 通道仍 fail-visible，rehydrate 缺席只影响旧分组）。
-void (async () => {
+// 保留 Promise 给 IPC 面：渲染层首屏的 listSessions 必须等回灌完成再扫。
+// 旧实现是裸 `void` IIFE ⇒ 首屏若抢在 list 完成前到达，另一个项目的会话不在清单里，
+// 启动恢复会把它判成「不存在」并永久清 key（跨区恢复在冷启动时随机失效）。
+const projectRehydrate = (async () => {
   try {
     for (const p of await projectRegistry.list()) host.addWorkspace(p.path);
   } catch (error) {
@@ -348,10 +380,14 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // host.cancel 形参必选 string ⇒ 直传必红；此洗参是 wired 表房式（同 decide/createSession），
   // 非 T5 遗留——传参语义已是真实可选参透传，cast 只发生在类型面。
   runCancel: (sessionId) => host.cancel(sessionId as string),
-  listSessions: () => host.listSessions(),
+  listSessions: async () => { await projectRehydrate; return host.listSessions(); },
+  // v14：跨会话用量账本（只读；面板点「全部会话」才调）。
+  usageLedger: () => host.usageLedger(),
+  // v15：会话日志尾部（只读；会话归属由 host 解析，renderer 不传路径）。
+  sessionLog: (id, tailLines) => host.sessionLog(id as string, typeof tailLines === "number" ? tailLines : undefined),
   // createSession 首参 M3 起是工作区（原 name 槽位被 M3 接口接管）；渲染层现不传 ⇒ 缺省 activeWorkspace
   createSession: (workspace) => host.createSession(workspace as string | undefined),
-  openSession: (id) => host.openSession(id as string),
+  openSession: (id, workspace) => host.openSession(id as string, workspace as string | undefined),
   queueGet: (sessionId) => host.queueGet(sessionId as string),
   queueSet: (sessionId, items) => host.queueSet(sessionId as string, items as SessionQueueEntry[]),
   // M3 小修（M1 六通道清单遗留缺口）：channels.ts 有 getProviderInfo 通道、preload 程序化桥自动
@@ -368,9 +404,12 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // 而且登记失败时目录**已经建好了** —— 消息里必须给出那个路径，否则用户找不到它。
   createProject: async (req) => {
     const r = req as { name?: string; parentDir?: string };
+    // 批 133：parentDir 是写入落点，不是"看一眼"——只认用户选过的目录 ∪ 已知项目根。
+    const parent = resolveCreateParent(r.parentDir, pickedDirs, await knownProjectRoots());
+    if (!parent.ok) return { ok: false, reason: "unpicked-parent", message: parent.message };
     const made = createProjectFolder({
       name: String(r.name ?? ""),
-      ...(typeof r.parentDir === "string" && r.parentDir !== "" ? { parentDir: r.parentDir } : {}),
+      ...(parent.parentDir !== undefined ? { parentDir: parent.parentDir } : {}),
     });
     if (!made.ok) return { ok: false, reason: made.reason, message: made.message };
     try {
@@ -390,10 +429,13 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   projectTemplates: () => Promise.resolve(templateCatalog()),
   projectCreateFromTemplate: async (req) => {
     const r = req as { name?: string; templateId?: string; parentDir?: string };
+    // 批 133：与 createProject 同一条父目录闸（同形漏洞，不各写一套）。
+    const parent = resolveCreateParent(r.parentDir, pickedDirs, await knownProjectRoots());
+    if (!parent.ok) return { ok: false, reason: "unpicked-parent", message: parent.message };
     const made = createProjectFromTemplate({
       name: String(r.name ?? ""),
       templateId: String(r.templateId ?? ""),
-      ...(typeof r.parentDir === "string" && r.parentDir !== "" ? { parentDir: r.parentDir } : {}),
+      ...(parent.parentDir !== undefined ? { parentDir: parent.parentDir } : {}),
     });
     if (!made.ok) return { ok: false, reason: made.reason, message: made.message };
     try {
@@ -444,9 +486,18 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // v6 连接自检：GET 模型清单（不产生 token 费用）。
   providerCheck: (provider) => checkProviderConnection({ provider: String(provider) }),
   // 斜杠菜单技能清单（2026-10-18）：显式传工作区，切项目时不吃竞态。
-  listSkills: (workspace) => handleListSkills(String(workspace ?? "") || workspaceContext),
+  listSkills: async (workspace) => {
+    // 批 133：workspace 是"去哪棵树里读技能"的根；只认已登记根。空参数回落到上下文。
+    const gate = resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext);
+    if (!gate.ok) throw new Error(gate.error);
+    return await handleListSkills(gate.workspace);
+  },
   // 技能正文（§8 #15）：同上按显式工作区读取。
-  skillBody: (name, workspace) => handleSkillBody(String(name ?? ""), String(workspace ?? "") || workspaceContext),
+  skillBody: async (name, workspace) => {
+    const gate = resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext);
+    if (!gate.ok) return { ok: false, error: gate.error };
+    return await handleSkillBody(String(name ?? ""), gate.workspace);
+  },
   // 导出对话为 .md（2026-10-18）：原生保存面板；取消是合法结果（canceled），不是错误。
   exportTranscript: async (markdown, suggestedName) => {
     const raw = String(suggestedName ?? "").trim();
@@ -514,7 +565,19 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   getState: () => handleAgentState(workspaceContext),
   getOnboarding: () => onboardingGroups(),
   getSettings: () => getSettings(),
-  setSettings: (patch) => setSettings(patch as never),
+  setSettings: async (patch) => {
+    const next = await setSettings(patch as never);
+    // 主题切到 light/dark/system 时同步原生窗口 chrome；下次启动的 bootBackground 也读同一字段。
+    const theme = (patch as { theme?: unknown }).theme;
+    if (theme === "light" || theme === "dark" || theme === "system") nativeTheme.themeSource = theme;
+    // 窗口材质：运行期先 best-effort 应用；透明窗口的完整材质仍以重启为准。
+    const vibrancy = (patch as { windowVibrancy?: unknown }).windowVibrancy;
+    if (process.platform === "darwin" && typeof vibrancy === "boolean" && mainWindow !== null) {
+      mainWindow.setVibrancy(vibrancy ? "sidebar" : null);
+      mainWindow.setBackgroundColor(vibrancy ? "#00000000" : bootBackground());
+    }
+    return next;
+  },
   compact: (sessionId) => handleCompact({ sessionId: sessionId as string | undefined }),
   setGoal: (req) => handleGoalSet(req as never),
   cardAction: (req) => handleCardAction(req as never),
@@ -582,8 +645,9 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   },
   // v5 terminal 窗格（PTY 宿主见 terminal-host.ts）。
   // 与 diff/文件窗格/回滚同一条工作区解析：活动上下文优先，最近 run 只做兜底。
-  terminalStart: () => terminalHost.start(resolveWorkspace()),
+  terminalStart: (owner) => terminalHost.start(resolveWorkspace(), process.env, owner as BrowserWindow),
   terminalWrite: (id, data) => Promise.resolve(terminalHost.write(id as string, data as string)),
+  terminalResize: (id, cols, rows) => Promise.resolve(terminalHost.resize(id as string, cols as number, rows as number)),
   terminalKill: (id) => { terminalHost.kill(id as string); return Promise.resolve(); },
   // v5 窗格弹出：独立窗口（同壳参数；#pane=<kind>[&session=<id>] 路由）。
   panePopout: (kind, sessionId) => {
@@ -591,6 +655,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
       width: 760,
       height: 620,
       titleBarStyle: "hiddenInset",
+      backgroundColor: bootBackground(),
       webPreferences: { preload: join(distElectron, "preload.cjs"), contextIsolation: true, nodeIntegration: false },
     });
     hardenAppWindow(win);
@@ -600,7 +665,8 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     return Promise.resolve({ ok: true });
   },
   // v5 browser 窗格（WebContentsView 宿主见 browser-host.ts）。
-  browserOpen: (id, url) => Promise.resolve(browserHost.open(id as string, url as string)),
+  // owner 只由下方可信 IPC sender 解析，不能接受 renderer 自报的窗口。
+  browserOpen: (id, url, owner) => Promise.resolve(browserHost.open(id as string, url as string, owner as BrowserWindow | null)),
   browserBounds: (id, rect) => { browserHost.setBounds(id as string, rect as { x: number; y: number; width: number; height: number }); return Promise.resolve(); },
   browserNav: (id, action) => { browserHost.navigate(id as string, action as "back" | "forward" | "reload"); return Promise.resolve(); },
   browserClose: (id) => { browserHost.close(id as string); return Promise.resolve(); },
@@ -623,7 +689,11 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   sessionWorktree: (req) => host.sessionWorktree(req as never),
   assignSessionProject: (sessionId, projectId) => handleSessionAssignProject(sessionId as string, projectId as string | null),
   deleteMemory: (scope, topic) => handleMemoryDelete(scope as never, topic as string, workspaceContext),
-  pluginDecide: (plugin, trusted, workspace) => handlePluginDecide(plugin as string, trusted as boolean, String(workspace ?? "") || workspaceContext),
+  pluginDecide: async (plugin, trusted, workspace) => {
+    const gate = resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext);
+    if (!gate.ok) return { ok: false };
+    return await handlePluginDecide(plugin as string, trusted as boolean, gate.workspace);
+  },
   pluginUserConfigSet: (plugin, values) => {
     const rt = currentPluginRuntime();
     if (rt === null) return Promise.resolve({ ok: false, error: "插件运行时未装载（先跑一场会话）" });
@@ -746,7 +816,28 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     return gitClone(String(r.url ?? ""), canonical);
   },
   // 项目内模糊搜索（@ 引用数据面；只读文件名，不读文件内容）。
-  workspaceSearch: (ws, query) => searchWorkspace(String(ws), String(query)),
+  // 2026-10-21 评审修：它同样收渲染层给的目录，必须过已登记根闸（只读名字也是泄露面）。
+  workspaceSearch: async (ws, query) => {
+    const gate = resolveProvidedWorkspace(ws, await knownProjectRoots(), workspaceContext);
+    if (!gate.ok) throw new Error(gate.error);
+    if (gate.workspace === null) throw new Error("工作区未知——先打开一个项目");
+    return await searchWorkspace(gate.workspace, String(query));
+  },
+  // v18：会话正文全文检索（只读）。**主进程扫会话 JSONL，渲染层不碰盘**——
+  // 检索是 IO 密集面，放在渲染进程会卡 UI 也会把会话目录摸进前端。
+  // 工作区归属先过已登记根闸（同 workspaceSearch：渲染层给的目录必须 ∈ 已登记工作区）。
+  // 结果三态由 core 给（ok / partial / unavailable），这里**原样传回**——
+  // 「没量到」不许在主进程被折成空数组。
+  sessionSearch: async (ws, query, options) => {
+    const gate = resolveProvidedWorkspace(ws, await knownProjectRoots(), workspaceContext);
+    if (!gate.ok) throw new Error(gate.error);
+    if (gate.workspace === null) throw new Error("工作区未知——先打开一个项目");
+    const o = options as { budgetBytes?: unknown; maxSessions?: unknown } | undefined;
+    return await host.sessionSearch(gate.workspace, String(query), {
+      ...(typeof o?.budgetBytes === "number" ? { budgetBytes: o.budgetBytes } : {}),
+      ...(typeof o?.maxSessions === "number" ? { maxSessions: o.maxSessions } : {}),
+    });
+  },
   // ⌘V 粘贴落临时文件（字节帽 20MB 在核心模块内判；校验先于 electron 动态导入）。
   saveTempFile: (req) => {
     const r = req as { name?: string; bytes?: unknown };
@@ -785,6 +876,13 @@ for (const [key, channel] of Object.entries(INVOKE_CHANNELS) as [InvokeChannel, 
   ipcMain.handle(channel, (event, ...args: unknown[]) => {
     if (!isTrustedIpcSender(event)) {
       throw new Error(`IPC 来源不可信，已拒绝：${channel}`);
+    }
+    // 后台弹窗恢复页面时焦点可能还在主窗；视图归属取发起 IPC 的窗口。
+    if (key === "browserOpen") return handler(args[0], args[1], BrowserWindow.fromWebContents(event.sender));
+    if (key === "terminalStart") {
+      const owner = BrowserWindow.fromWebContents(event.sender);
+      if (owner === null || owner.isDestroyed()) return { ok: false, error: "调用窗口已关闭" };
+      return handler(owner); // 窗口归属只由可信 sender 提供，忽略 renderer 自报参数。
     }
     return handler(...args);
   });
@@ -832,6 +930,7 @@ const createWindow = () => {
   const statePath = join(app.getPath("userData"), "window-state.json");
   const saved = readWindowState(statePath);
   const bounds = saved === null ? null : clampToWorkArea(saved, screen.getDisplayMatching(saved).workArea);
+  const vibrancy = windowVibrancyOptions(process.platform, process.env, readWindowVibrancyPreference());
   const win = new BrowserWindow({
     ...(bounds === null ? {} : { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }),
     ...(bounds === null ? { width: 1200, height: 800 } : {}),
@@ -847,7 +946,13 @@ const createWindow = () => {
     // 也就无所谓「覆盖」。真正防覆盖的是下面 createWindow 里 bounds 显式传入 + clampToWorkArea。
     // 因此：删掉这个不存在的键，typecheck 恢复绿；行为不变（本来就没开系统恢复）。
     titleBarStyle: "hiddenInset",
-    webPreferences: { preload: join(distElectron, "preload.cjs"), contextIsolation: true, nodeIntegration: false },
+    ...(vibrancy === null ? { backgroundColor: bootBackground() } : vibrancy),
+    webPreferences: {
+      preload: join(distElectron, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      ...(vibrancy === null ? {} : { additionalArguments: ["--cairn-vibrancy"] }),
+    },
   });
   if (saved?.maximized === true) win.maximize();
   // 拖动/缩放防抖 400ms 落盘；关闭前再写一次（正常退出一定留住最后位置）。
@@ -863,6 +968,8 @@ const createWindow = () => {
   win.on("resize", scheduleSave);
   win.on("move", scheduleSave);
   win.on("close", persistBounds);
+  mainWindow = win;
+  win.on("closed", () => { if (mainWindow === win) mainWindow = null; });
   hardenAppWindow(win);
   if (process.env.VITE_DEV_SERVER_URL) void win.loadURL(process.env.VITE_DEV_SERVER_URL);
   else void win.loadFile(join(distElectron, "..", "dist", "index.html"));
@@ -1131,6 +1238,8 @@ const createWindow = () => {
   }
 };
 app.whenReady().then(() => {
+  // 主题真相在 settings.json；ready 后先同步，再建窗（createWindow 里的 bootBackground 也读同一字段）。
+  nativeTheme.themeSource = readThemePreference();
   // 应用菜单（蓝本 §5.2 菜单树）：App → 文件 → 编辑 → 视图 → 前往 → 窗口 → 帮助。
   // 模板在 ./menu-template.ts（纯数据、可判卷），这里只装 + 给一条出口：渲染层拥有键位的项
   // 经 push 通道 `onMenu` 转交，accelerator 只显示不注册（否则菜单 push 与渲染层 keydown 双发）。

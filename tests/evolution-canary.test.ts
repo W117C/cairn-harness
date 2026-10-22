@@ -168,6 +168,60 @@ describe("canary 观察期（退化自动回退 + lesson 沉淀）", () => {
     expect((await reg.readIndex()).bundles["tool.demo-fetch"]?.active?.version).toBe("0.2.0");
   });
 
+  // 缺证据不许晋升（本仓已入库的规则：canary.ts「none」注释 + 提交 46b4afc5）：
+  // maxSamples=0 时「conclusiveSamples(0) >= maxSamples(0)」成立 ⇒ 第一个「none」样本
+  // （一个 verify 拍都没有）就把候选判成 promoted，零证据被读成「证据够了」。
+  // 判据落在 beginLocked（门槛的值从外面进来 ⇒ 入口就要拒，不让坏门槛流到判决那格）。
+  it("maxSamples 不是 ≥1 的整数 ⇒ 拒绝开档（零门槛 = 没有证据也算够了）", async () => {
+    const reg = registry();
+    await stageBundle("tool.demo-fetch", "0.1.0");
+    await installBundle(reg, "tool.demo-fetch", "0.1.0");
+    await stageBundle("tool.demo-fetch", "0.2.0");
+    await installBundle(reg, "tool.demo-fetch", "0.2.0");
+    const ctl = new CanaryController({ registry: reg, workspace: root });
+    await expect(ctl.begin({ id: "tool.demo-fetch", maxSamples: 0 })).rejects.toThrow(/maxSamples/);
+    await expect(ctl.begin({ id: "tool.demo-fetch", maxSamples: 2.5 })).rejects.toThrow(/maxSamples/);
+    await expect(ctl.begin({ id: "tool.demo-fetch", maxConsecutiveFailures: 0 })).rejects.toThrow(/maxConsecutiveFailures/);
+    // 拒绝后不留半档：盘上观察档目录应当还是空的（不许「拒了却写了档」）。
+    expect(existsSync(join(root, ".agent", "canary", "tool.demo-fetch.json"))).toBe(false);
+  });
+
+  // 同一族判据的另一半：门槛还会从**盘上文件**进来（.agent/canary/<id>.json 人/模型可写），
+  // 所以 parseCanaryRecord 读回这一格就要验形状——不许把坏门槛带进判决。
+  it("盘上观察档的门槛是 0 ⇒ 读不动（不晋升，也不折成「没有档」）", async () => {
+    const reg = registry();
+    await stageBundle("tool.demo-fetch", "0.1.0");
+    await installBundle(reg, "tool.demo-fetch", "0.1.0");
+    const dir = join(root, ".agent", "canary");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, "tool.demo-fetch.json"),
+      JSON.stringify({
+        version: 1,
+        id: "tool.demo-fetch",
+        candidateVersion: "0.1.0",
+        previousVersion: null,
+        state: "observing",
+        samples: 0,
+        conclusiveSamples: 0,
+        consecutiveFailures: 0,
+        baselineTokensPerBoundary: null,
+        maxSamples: 0,
+        maxConsecutiveFailures: 2,
+        costDegradeFactor: 2,
+        degradations: [],
+        startedAt: new Date().toISOString(),
+      }),
+      "utf8",
+    );
+    const ctl = new CanaryController({ registry: reg, workspace: root });
+    const ticks = await ctl.tickAll(greenSample());
+    expect(ticks).toHaveLength(1);
+    expect(ticks[0]!.outcome).toBe("refused");
+    expect(ticks[0]!.observation).toBeNull();
+    expect(ticks[0]!.refused).toMatch(/maxSamples/);
+  });
+
   it("连续失败 ×2 ⇒ 自动回退 previous，并落 lesson（带 evidence-line 与读数）", async () => {
     const reg = registry();
     await stageBundle("tool.demo-fetch", "0.1.0");

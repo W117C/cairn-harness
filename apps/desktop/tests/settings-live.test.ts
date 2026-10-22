@@ -4,8 +4,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
-const app = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const app = readAppSurface();
 
 describe("设置保存的 live 回灌", () => {
   it("onSettingsSaved 回灌 mode / theme / ctrlTabCycle", () => {

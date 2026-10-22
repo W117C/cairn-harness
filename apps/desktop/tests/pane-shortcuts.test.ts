@@ -7,8 +7,9 @@ import { describe, expect, it } from "vitest";
 import { PANE_SHORTCUTS, paneShortcutFor, paneShortcutKeys, type PaneKeyMods } from "../src/renderer/pane-shortcuts";
 import { PANE_OPENABLE } from "../src/renderer/components/panes";
 import { SHORTCUT_GROUPS } from "../src/renderer/shortcuts";
+import { readAppSurface } from "./helpers/app-surface";
 
-const app = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const app = readAppSurface();
 const mods = (p: Partial<PaneKeyMods>): PaneKeyMods => ({ meta: false, ctrl: false, shift: false, alt: false, ...p });
 const rows = SHORTCUT_GROUPS.find((g) => g.title === "窗格")?.rows ?? [];
 
@@ -23,7 +24,7 @@ it("窗格 tooltip 的键位只从 PANE_SHORTCUTS 取（不再手抄）", () => 
   expect(app).toContain('<span className="sub">{paneShortcutKeys(k)}</span>');
 });
 
-describe("PANE_SHORTCUTS：七窗格一表全覆盖", () => {
+describe("PANE_SHORTCUTS：八窗格一表全覆盖", () => {
   it("每个可开窗格恰有一条键位；code + 修饰组合不重复", () => {
     expect([...PANE_SHORTCUTS.map((s) => s.kind)].sort()).toEqual([...PANE_OPENABLE].sort());
     const combos = PANE_SHORTCUTS.map((s) => `${s.code}|${s.mod}|${String(s.shift)}|${String(s.alt)}`);
@@ -55,9 +56,10 @@ describe("paneShortcutFor：物理键 + 修饰键精确匹配", () => {
     expect(paneShortcutFor("Backquote", mods({ meta: true, ctrl: true }))).toBeNull();
     expect(paneShortcutFor("Backquote", mods({ meta: true }))).toBeNull();
     expect(paneShortcutFor("Semicolon", mods({ meta: true }))).toBe("sidechat");
+    expect(paneShortcutFor("KeyU", mods({ meta: true, shift: true }))).toBe("plugins");
   });
 
-  it("修饰键多按/少按都不匹配（⌘F 查找、⌘B 侧栏、⌘⌥B 检查器不被抢）", () => {
+  it("修饰键多按/少按都不匹配（⌘F 查找、⌘B 侧栏、⌘⌥B 插件侧栏、⌘⌥I 检查器不被抢）", () => {
     expect(paneShortcutFor("KeyF", mods({ meta: true }))).toBeNull();
     expect(paneShortcutFor("KeyB", mods({ meta: true }))).toBeNull();
     expect(paneShortcutFor("KeyB", mods({ meta: true, alt: true }))).toBeNull();
@@ -75,8 +77,9 @@ describe("App 接线：窗格键不再各写一条 case", () => {
     }
   });
 
-  it("⌘F 查找、⌘B 侧栏、⌘⌥B 检查器的既有分流仍在", () => {
+  it("⌘F 查找、⌘B 侧栏、⌘⌥B 插件侧栏、⌘⌥I 检查器的分流仍在", () => {
     expect(app).toMatch(/case "KeyF":[\s\S]{0,400}h\.openFind\(\); findRef\.current\?\.focus\(\)/);
-    expect(app).toMatch(/case "KeyB":[\s\S]{0,200}h\.toggleInspector\(\)[\s\S]{0,200}h\.toggleSidebar\(\)/);
+    expect(app).toMatch(/case "KeyB":[\s\S]{0,200}h\.togglePluginSidebar\(\)[\s\S]{0,200}h\.toggleSidebar\(\)/);
+    expect(app).toMatch(/case "KeyI":[\s\S]{0,200}h\.toggleInspector\(\)/);
   });
 });

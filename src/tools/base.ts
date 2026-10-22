@@ -70,6 +70,10 @@ export interface ToolResult {
   /** D7 覆盖前快照落成的路径（workspace 相对）。缺席 = 没落快照（新建 / 空文件 / 快照自身失败）。
    *  同一个事实有两个读者：正文里那句给模型看（它得知道去哪儿找回原件），这个字段给事件流与界面看。 */
   snapshotId?: string;
+  /** 动作融合的内部标记：写已落盘，随后的 lint 可能失败。
+   *  只给 loop 的收束闸读（决定 auto-verify），**不进事件流**。不用输出里的字符串判：
+   *  失败的 shell/diagnose 也可能打印同一行字，那会把「没写盘」读成「写过盘」。 */
+  fusedWrite?: boolean;
   /** 写工具的结构化变更类型；缺席时事件消费者必须显示 unknown，不能从工具名猜。 */
   change?: "created" | "modified";
   /** 一次工具实际落盘的 workspace 相对路径（多文件工具使用）；缺席表示工具未提供清单。 */

@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentEvent } from "../../../src/events";
 import { Stream } from "../src/renderer/components/Stream";
 import { projectStream } from "../src/renderer/projections";
+import { readAppSurface } from "./helpers/app-surface";
 
 const events = [
   { type: "user_message", content: "你好", ts: 1 },
@@ -98,7 +99,7 @@ describe("错误行重试", () => {
 
 // 复制回执（2026-10-17）：此前复制静默，用户按了不知道成没成；Claude 形制是有一声「已复制」。
 describe("复制回执", () => {
-  const appSrc = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+  const appSrc = readAppSurface();
   const stringsSrc = readFileSync(fileURLToPath(new URL("../src/renderer/strings.ts", import.meta.url)), "utf8");
   it("成功路径给 toast.success，失败仍走错误条（不吞）", () => {
     const start = appSrc.indexOf("const handleCopyText");
@@ -132,7 +133,7 @@ describe("重跑这一轮", () => {
     expect(html).not.toContain("重跑第");
   });
   it("App 接线：取该轮输入 + runningSet 兜底", () => {
-    const appSrc = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+    const appSrc = readAppSurface();
     const start = appSrc.indexOf("const handleRetryRound");
     expect(start).toBeGreaterThan(-1);
     const block = appSrc.slice(start, start + 420);

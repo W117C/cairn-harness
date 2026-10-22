@@ -268,7 +268,14 @@ export interface HeadEdge {
 }
 
 export interface HeadFace {
+  /** **量面**：这一版里属于本尺口径（src/scripts/tests 的 .ts/.tsx/.mts）的文件——**读谁的 import**。
+   *  它不是「这一版有哪些文件」：桌面层（apps/）不在量面里。 */
   headFiles: Set<string>;
+  /** **这一版的全部文件**（不限目录）：判「被 import 的模块在不在这一版」时用这张表。
+   *  量面只管「读谁」，存在性要问整版——否则量面里的文件 import 桌面层（apps/）时，
+   *  那个模块明明在版内，却因为不在量面里被读成「悬空」（`971fe18c` 引入
+   *  `tests/readme-invoke-channel-count.test.ts` ⇒ 尺子对着一个**已入库**的文件报了「漏 git add」）。 */
+  revFiles: Set<string>;
   edges: HeadEdge[];
   /** rev 里的正文（符号判据的读面）。单测走注入，不必有它。 */
   texts: Map<string, string>;
@@ -278,7 +285,9 @@ export interface HeadFace {
 export function collectHeadEdges(at: string = "HEAD"): HeadFace | null {
   const listed = git(["ls-tree", "-r", "--name-only", at]);
   if (listed === null) return null;
-  const headFiles = new Set(listed.split("\n").filter((p) => FACE_RE.test(p)));
+  const allPaths = listed.split("\n").filter(Boolean);
+  const headFiles = new Set(allPaths.filter((p) => FACE_RE.test(p)));
+  const revFiles = new Set(allPaths);
   const paths = [...headFiles];
   const texts = readHeadBlobs(at, paths);
   if (texts === null) return null;
@@ -289,7 +298,7 @@ export function collectHeadEdges(at: string = "HEAD"): HeadFace | null {
       edges.push({ from, spec: s.spec, names: s.clause.opaque ? [] : s.clause.names });
     }
   }
-  return { headFiles, edges, texts };
+  return { headFiles, revFiles, edges, texts };
 }
 
 // ---- 判据 ①：模块存在性 ----------------------------------------------------
@@ -303,16 +312,21 @@ export interface DanglingImport {
   onDisk: boolean;
 }
 
-/** 纯判据：喂 HEAD 的文件表 ＋ 边 ⇒ 悬空边。`existsOnDisk` 注入 ⇒ 单测能造两态。 */
+/** 纯判据：喂**这一版的文件表** ＋ 边 ⇒ 悬空边。`existsOnDisk` 注入 ⇒ 单测能造两态。
+ *
+ *  第二个参数是「这一版有哪些文件」，**不是量面**（量面只管「读谁的 import」）。
+ *  这一版里的桌面层（apps/）不在量面里，但**在版内**——量面里的文件 import 它时，
+ *  用量面去判存在性会把一个已入库的模块读成「悬空 / 漏 git add」（`971fe18c` 那次的实况）。
+ *  存在性问整版、读面问量面，两件事分开；真正不在版内的模块照样报悬空（见 `tests/head-import-face.test.ts`）。 */
 export function findDanglingImports(
   edges: readonly { from: string; spec: string }[],
-  headFiles: ReadonlySet<string>,
+  revFiles: ReadonlySet<string>,
   existsOnDisk: (rel: string) => boolean,
 ): DanglingImport[] {
   const byTarget = new Map<string, string[]>();
   for (const e of edges) {
-    const t = resolveRelativeSpec(e.from, e.spec, headFiles);
-    if (t === null || headFiles.has(t) || e.from === t) continue;
+    const t = resolveRelativeSpec(e.from, e.spec, revFiles);
+    if (t === null || revFiles.has(t) || e.from === t) continue;
     byTarget.set(t, [...(byTarget.get(t) ?? []), e.from]);
   }
   return [...byTarget.entries()]
@@ -439,7 +453,9 @@ function main(): void {
     console.error("head-import-face：git 取不到 " + at + " ⇒ 没尺，不判（exit 2）");
     process.exit(2);
   }
-  const dangling = findDanglingImports(got.edges, got.headFiles, (rel) => existsSync(join(ROOT, rel)));
+  // 悬空那一半问**整版**（revFiles）：被 import 的模块在不在这一版。
+  // 符号那一半问**量面**（headFiles）：目标的导出面要读得出来才判——读不出来就「看不全 ⇒ 不判」。
+  const dangling = findDanglingImports(got.edges, got.revFiles, (rel) => existsSync(join(ROOT, rel)));
   const missing = findMissingExports(got.edges, got.headFiles, (rel) => got.texts.get(rel) ?? null);
   const findings = [...checkHeadImportFace(dangling, waivers), ...checkMissingSymbols(missing, symbolWaivers)];
   const waivedCount = dangling.filter((d) => waivers[d.target] !== undefined).length

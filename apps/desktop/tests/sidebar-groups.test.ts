@@ -96,7 +96,7 @@ describe("置顶于组内（第十四遍：原型 §2.1「置顶于组内」）"
 // P1 主界面重做：词面单源迁至 strings.ts（源文禁裸中文），哨兵改指 STR 键序 + 值断言（口径不变）。
 describe("对话菜单对齐原型 v3-lite（第十四遍；词面单源 STR——P1 重订）", () => {
   const sidebarSrc = readFileSync(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url), "utf8");
-  const appSrc = readFileSync(new URL("../src/renderer/App.tsx", import.meta.url), "utf8");
+  const appSrc = readAppSurface();
 
   it("五项菜单俱在且顺序同原型 ['置顶','重命名','分叉','归档','删除']", async () => {
     const { STR } = await import("../src/renderer/strings");
@@ -174,6 +174,7 @@ describe("文件夹行整行展开/收起（第二十二遍；P1 合同重订—
 // 与「筛选已归档可找回」当时都是空话。splitArchived 是分区判据（纯函数），侧栏两处消费。
 import { fileURLToPath } from "node:url";
 import { splitArchived } from "../src/renderer/sessions-view";
+import { readAppSurface } from "./helpers/app-surface";
 
 describe("splitArchived（归档分区）", () => {
   it("active / archived 互斥且并集完整、保输入序、不改入参", () => {

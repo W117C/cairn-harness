@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ModalSurface } from "../src/renderer/components/ModalSurface";
+import { readAppShell, readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
@@ -68,14 +69,15 @@ describe("ModalSurface（统一模态边界）", () => {
       "../src/renderer/components/NewProjectDialog.tsx",
       "../src/renderer/components/Sidebar.tsx",
       "../src/renderer/components/CustomProviderForm.tsx",
-      "../src/renderer/App.tsx",
     ]) {
       expect(read(rel), rel).toContain("<ModalSurface");
     }
+    // App 本体：拆分后 App.tsx 只是编排层，模态面落在 panes/ ⇒ 读**编排层**（App + state/ + derived/ + panes/）。
+    expect(readAppShell(), "App 编排层").toContain("<ModalSurface");
     // 2026-10-20：这条从「源码里有一行字面量」改成「走共享门」——
     // 判断本身搬进了 src/renderer/command-gate.ts（**行为**判据在 tests/command-gate.test.ts：
     // 真造一个模态面、真把焦点放进输入框），这里钉的是
     // **App 的全局快捷键路径确实走那道门**（键盘与菜单两条入口同源，别再各判各的）。
-    expect(read("../src/renderer/App.tsx")).toContain("overlayBlocked(readGateInput(");
+    expect(readAppSurface()).toContain("overlayBlocked(readGateInput(");
   });
 });

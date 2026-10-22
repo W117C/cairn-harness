@@ -24,12 +24,14 @@ const VISION = { state: "undeclared" as const, modelId: "cn:hy3", declaredModali
 
 describe("批 6：通用段（外观 / 语言 / 字号 / 快捷键 四卡）", () => {
   const menu = (over: Partial<AppSettings> = {}, textSize: TextSizeSetting = "md", uiSize: UiSizeSetting = "2"): string =>
-    renderToStaticMarkup(<GeneralSection settings={S(over)} textSize={textSize} uiSize={uiSize} onSave={noop} onCtrlTab={noop} onTextSize={noop} onUiSize={noop} />);
+    renderToStaticMarkup(<GeneralSection settings={S(over)} textSize={textSize} uiSize={uiSize} onSave={noop} onCtrlTab={noop} onTextSize={noop} onUiSize={noop} onWindowVibrancy={noop} />);
 
-  it("四组标题在场（ss-sec 卡式分组）", () => {
+  it("六组标题在场（ss-sec 卡式分组，含窗口实验）", () => {
     const h = menu();
-    for (const t of ["外观", "语言", "字号", "组件尺寸", "快捷键"]) expect(h).toContain(t);
-    expect((h.match(/class="ss-sec"/g) ?? []).length).toBe(5);
+    for (const t of ["外观", "窗口", "语言", "字号", "组件尺寸", "快捷键"]) expect(h).toContain(t);
+    expect((h.match(/class="ss-sec"/g) ?? []).length).toBe(6);
+    expect(h).toContain("窗口材质");
+    expect(h).toContain("默认关");
   });
 
   it("主题 = 3 个带小预览图的选项卡；选中项恰一枚 on（强调描边交给 CSS 哨兵）", () => {
@@ -293,7 +295,7 @@ describe("批 6：关于与更新段", () => {
 describe("批 6：样式哨兵（主题选项卡/段落样式）", () => {
   const styles = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
   it(".theme-opt 选中 = 强调描边 + 淡底；preview 图三态在", () => {
-    expect(styles).toMatch(/\.theme-opt\.on \{[^}]*accent-brand[^}]*\}/);
+    expect(styles).toMatch(/\.theme-opt\.on \{[^}]*accent-control[^}]*\}/);
     expect(styles).toContain(".theme-thumb");
     expect(styles).toContain(".theme-opt.on .theme-thumb");
   });

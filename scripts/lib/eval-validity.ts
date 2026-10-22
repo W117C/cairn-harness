@@ -12,6 +12,8 @@
 // 否则修完就成了"把红跑藏起来"——本仓点过名的形状。所以只有白名单里的
 // provider/传输层错误才算无效；"改了判卷面""verify 未通过"这类**模型行为**的失败照旧计入分母。
 
+import { wilsonInterval } from "./eval-arms";
+
 /** 一趟跑里我们关心的最小面（从 `Reading` 与判卷的 `fails` 里取，不复制整个结构）。 */
 export interface RunFace {
   requests: number;
@@ -145,6 +147,116 @@ export function tally(
     if (x.g.ok) pass += 1;
   }
   return { pass, total, invalid: invalidWhy.length, refuse: total === 0, invalidWhy };
+}
+
+/** 一条任务在「任务级」汇总里要的那张脸（`r` 只需要 `RunFace` 那两格）。 */
+export interface TaskFace {
+  taskId: string;
+  r: RunFace;
+  g: { ok: boolean; fails: string[] };
+}
+
+/** 没跑满的任务（缺遍或有无效 rep）——**单列出来，不藏**。 */
+export interface PartialTask {
+  taskId: string;
+  /** 这条任务应当跑几遍。 */
+  expected: number;
+  /** 算数（进了观测）的遍数。 */
+  valid: number;
+  /** 达标（进了分子）的遍数。 */
+  passed: number;
+  /** 不可知的遍数（无效 rep 或缺遍）。 */
+  unknown: number;
+  /** 对 pass@k 的结局已知吗（false ⇒ 这条不进 pass@k 的分母）。 */
+  atKKnown: boolean;
+  /** 对 pass^k 的结局已知吗（false ⇒ 这条不进 pass^k 的分母）。 */
+  kKnown: boolean;
+}
+
+export interface TaskRollup {
+  /** pass@k 的分母：结局已定的任务数。 */
+  passAtKTotal: number;
+  /** pass@k 的分子：至少一遍达标的任务数。 */
+  passAtK: number;
+  /** pass@k 的 95% 区间（Wilson；任务是独立单位）。 */
+  passAtKCi: { lower: number; upper: number } | null;
+  /** pass^k 的分母：结局已定的任务数。 */
+  passKTotal: number;
+  /** pass^k 的分子：每一遍都达标的任务数。 */
+  passK: number;
+  /** pass^k 的 95% 区间。 */
+  passKCi: { lower: number; upper: number } | null;
+  /** 没跑满的任务——单列（结局不可知的那一面不进分母）。 */
+  partial: PartialTask[];
+  /** 两个分母都空 ⇒ true（不许印 0/0 当读数）。 */
+  refuse: boolean;
+}
+
+/**
+ * 任务级的一层汇总：**独立单位是「任务」，不是「趟次」**。
+ *
+ * 为什么（2026-10-22 补的）：`--reps N` 把同一条任务跑 N 遍，而**同一条任务的 N 遍不独立**
+ * （同一份任务难度、同一族种子、同一模型）⇒ 把 N×M 趟当成 M 个独立二项样本去算区间，
+ * **区间会偏窄**（自相关把方差压小），于是「12 任务 × 3 rep」被读成比它实际更可靠的样子。
+ * 而「这条配置在**没见过的任务**上还灵不灵」问的正是**任务** ⇒ 独立单位取任务。
+ *
+ * 两个读数一起印（τ-bench 那对指标）：
+ *   · pass@k＝这条任务的 k 遍里**至少一遍**达标；
+ *   · pass^k＝这条任务的 k 遍里**全部**达标（＝稳不抖）。
+ * 只看 pass@k 会把「1/3 蒙对」与「3/3 全对」当成同一件事；只看 pass^k 又分不清「抖」与「不行」。
+ *
+ * **两个指标的分母各自算，因为「不可知」对它们的含义相反**（这一格最容易抄错）：
+ *   · pass@k：见着**一遍**达标就是定局（至少一遍中了 ⇒ 与别的遍无关）；
+ *     一遍都没见着、而还有不知道的遍 ⇒ 不可知 ⇒ 不进分母。
+ *   · pass^k：见着**一遍**不达标就是定局（这一条已经不算 pass^k 了）；
+ *     没见着不达标、而还有不知道的遍 ⇒ 不可知 ⇒ 不进分母。
+ * ⇒ 一条「2 遍败 + 1 遍无效」的任务：pass@k 不可知（那一遍可能赢），
+ *   但 pass^k **已经确定是败** ⇒ 它要**留在 pass^k 的分母里当败**。
+ * 若把「没跑满」的任务从两个分母里一并剔掉，就等于**把一次已知的败藏起来** ⇒ 比率被抬高，
+ *   那是**不安全**的方向（本仓「把红跑藏起来」那一族）。所以只有真不可知的才剔。
+ *
+ * 区间用的是 Wilson 闭式（与 `eval-arms` 的 `wilsonInterval` 同一份，**不重抄第二份**：
+ * 同一谓词两份副本宽度不同＝本仓第十三族）。
+ */
+export function taskRollup(rows: readonly TaskFace[], repsPerTask: number): TaskRollup {
+  const empty: TaskRollup = {
+    passAtKTotal: 0, passAtK: 0, passAtKCi: null,
+    passKTotal: 0, passK: 0, passKCi: null,
+    partial: [], refuse: true,
+  };
+  if (repsPerTask < 1) return empty;
+  const byTask = new Map<string, { valid: number; passed: number; failed: number }>();
+  for (const x of rows) {
+    let e = byTask.get(x.taskId);
+    if (e === undefined) { e = { valid: 0, passed: 0, failed: 0 }; byTask.set(x.taskId, e); }
+    const v = runValidity(x.r, x.g.fails);
+    if (!v.valid) continue;
+    e.valid += 1;
+    if (x.g.ok) e.passed += 1; else e.failed += 1;
+  }
+  const partial: PartialTask[] = [];
+  let passAtK = 0;
+  let passAtKTotal = 0;
+  let passK = 0;
+  let passKTotal = 0;
+  for (const [taskId, e] of byTask) {
+    const unknown = Math.max(0, repsPerTask - e.valid);
+    const atKKnown = e.passed >= 1 || unknown === 0;
+    const kKnown = e.failed >= 1 || unknown === 0;
+    if (unknown > 0) {
+      partial.push({ taskId, expected: repsPerTask, valid: e.valid, passed: e.passed, unknown, atKKnown, kKnown });
+    }
+    if (atKKnown) { passAtKTotal += 1; if (e.passed >= 1) passAtK += 1; }
+    if (kKnown) { passKTotal += 1; if (e.failed === 0) passK += 1; }
+  }
+  return {
+    passAtKTotal, passAtK,
+    passAtKCi: passAtKTotal > 0 ? wilsonInterval(passAtK, passAtKTotal) : null,
+    passKTotal, passK,
+    passKCi: passKTotal > 0 ? wilsonInterval(passK, passKTotal) : null,
+    partial,
+    refuse: passAtKTotal === 0 && passKTotal === 0,
+  };
 }
 
 /** 钱的那一面：`cny` 由调用方从 `Reading` 里取来（这里不复制结构）。 */

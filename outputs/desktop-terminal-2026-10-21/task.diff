@@ -1,0 +1,908 @@
+--- a/apps/desktop/src/main/terminal-host.ts
++++ b/apps/desktop/src/main/terminal-host.ts
+@@ -1,4 +1,4 @@
+-// terminal 窗格的主进程宿主：macOS 用 python3 的 pty.spawn 分配 PTY 起登录 shell。
++// terminal 窗格的主进程宿主：macOS 用 Python 标准库分配 PTY，起登录 shell。
+ // 为什么不是 node-pty：它需要按 Electron ABI 编译 native 模块（构建链风险高）。
+ // 为什么不是 script(1)：BSD script 要求自身 stdin 是 tty（`tcgetattr: Operation not supported
+ // on socket`——实测），我们的 stdin 是管道 ⇒ 它起不来。pty.spawn 从管道 IO 转发亦工作（实测：
+@@ -9,12 +9,19 @@
+ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+ import { randomUUID } from "node:crypto";
+ import { StringDecoder } from "node:string_decoder";
++import { Writable } from "node:stream";
++import { PTY_BRIDGE } from "./pty-bridge";
+ 
+ export type TerminalPush =
+   | { kind: "data"; id: string; data: string }
+   | { kind: "exit"; id: string; code: number | null };
+ 
+-interface Session { proc: ChildProcessWithoutNullStreams }
++/** 宿主窗口只提供生命周期；PTY 实现不依赖 Electron，Node 判卷可直接运行。 */
++interface TerminalOwner {
++  isDestroyed(): boolean;
++  once(event: "closed", listener: () => void): unknown;
++}
++interface Session { proc: ChildProcessWithoutNullStreams; control: Writable | null; owner?: TerminalOwner }
+ 
+ /** UTF-8 跨块解码（终端输出面）。
+  *
+@@ -38,29 +45,50 @@
+   }
+ }
+ 
+-/** PTY 桥（python3 单行）：把当前进程 stdin/stdout 转发到子 shell 的 pty 主端。 */
+-const PTY_BRIDGE = "import pty,os;pty.spawn([os.environ.get('SHELL','/bin/zsh'),'-l'])";
+ 
+ export class TerminalHost {
+   private readonly sessions = new Map<string, Session>();
++  private readonly starting = new Set<ChildProcessWithoutNullStreams>();
++  private readonly observedOwners = new WeakSet<TerminalOwner>();
+   constructor(private readonly push: (event: TerminalPush) => void) {}
+ 
+-  /** 起一个新终端（cwd = 工作区；PTY 尺寸默认——resize 通道留后续）。 */
+-  start(cwd: string | null, env: NodeJS.ProcessEnv = process.env): { ok: true; id: string } | { ok: false; error: string } {
++  /** 起一个新终端（cwd = 工作区；初始 80×24，随后跟随 xterm 实际行列）。 */
++  async start(cwd: string | null, env: NodeJS.ProcessEnv = process.env, owner?: TerminalOwner): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
++    if (owner?.isDestroyed()) return { ok: false, error: "调用窗口已关闭" };
+     if (process.platform !== "darwin") {
+-      return { ok: false, error: "terminal 窗格当前仅支持 macOS（PTY 经 python3 pty.spawn 分配）" };
++      return { ok: false, error: "终端窗格当前仅支持 macOS" };
+     }
+     let proc: ChildProcessWithoutNullStreams;
+     try {
+       proc = spawn("python3", ["-c", PTY_BRIDGE], {
+         ...(cwd !== null ? { cwd } : {}),
+         env: { ...env, TERM: "xterm-256color" },
++        stdio: ["pipe", "pipe", "pipe", "pipe"],
+       });
+     } catch (err) {
+       return { ok: false, error: `终端启动失败：${err instanceof Error ? err.message : String(err)}` };
+     }
++    this.starting.add(proc);
++    try {
++      // spawn 先于所有输出事件；启动失败直接回到调用方，不发送一个尚未被 UI 接管的 id。
++      await new Promise<void>((resolve, reject) => {
++        const spawned = (): void => { proc.off("error", failed); resolve(); };
++        const failed = (err: Error): void => { proc.off("spawn", spawned); reject(err); };
++        proc.once("spawn", spawned);
++        proc.once("error", failed);
++      });
++    } catch (err) {
++      return { ok: false, error: `终端启动失败：${err instanceof Error ? err.message : String(err)}` };
++    } finally {
++      this.starting.delete(proc);
++    }
++    if (owner?.isDestroyed() || proc.killed) {
++      proc.kill("SIGTERM");
++      return { ok: false, error: "终端启动已取消（调用窗口已关闭或应用正在退出）" };
++    }
+     const id = randomUUID();
+     let finished = false;
++    const control = proc.stdio?.[3] instanceof Writable ? proc.stdio[3] : null;
+     // stdout / stderr 各持一份解码器（两条独立字节流，见 Utf8ChunkDecoder 的注释）。
+     const outDec = new Utf8ChunkDecoder();
+     const errDec = new Utf8ChunkDecoder();
+@@ -76,24 +104,45 @@
+     proc.stdout.on("data", (chunk: Buffer) => { this.push({ kind: "data", id, data: outDec.write(chunk) }); });
+     proc.stderr.on("data", (chunk: Buffer) => { this.push({ kind: "data", id, data: errDec.write(chunk) }); });
+     proc.on("error", (err) => {
+-      this.push({ kind: "data", id, data: `\r\n[terminal] 启动失败：${err.message}（需要系统装有 python3，且工作目录可进入）\r\n` });
+-      // ENOENT（python3 不在 / cwd 已删除）只会发 error + close，**不会发 exit**：
+-      // 旧实现只摘 exit ⇒ 会话永久留在表里、UI 卡在「运行中」、write 静默丢失。
++      this.push({ kind: "data", id, data: `\r\n[terminal] 进程错误：${err.message}\r\n` });
++      // 启动错误已由上方握手返回；运行期 error 也须结束会话，不仅依赖 exit。
+       finish(null);
+     });
+     // exit 只代表进程结束，stdout/stderr 仍可能在排空；此时 end() 会拆坏跨块中文。
+     // 立即拒绝后续输入，等 close（所有管道关闭）再收解码器并通知 UI。
+     proc.on("exit", () => { this.sessions.delete(id); });
+     proc.on("close", (code) => finish(code));
+-    this.sessions.set(id, { proc });
++    const transportFailed = (err: Error): void => {
++      if (!this.sessions.has(id)) return;
++      this.push({ kind: "data", id, data: `\r\n[terminal] 连接已关闭：${err.message}\r\n` });
++      this.kill(id);
++    };
++    proc.stdin.on("error", transportFailed);
++    control?.on("error", transportFailed);
++    this.sessions.set(id, { proc, control, ...(owner !== undefined ? { owner } : {}) });
++    if (owner !== undefined && !this.observedOwners.has(owner)) {
++      this.observedOwners.add(owner);
++      owner.once("closed", () => {
++        for (const [terminalId, session] of this.sessions) if (session.owner === owner) this.kill(terminalId);
++      });
++    }
+     return { ok: true, id };
+   }
+ 
+   /** 用户输入 → shell 的 stdin。未知 id 返回 false（fail-visible，不静默丢）。 */
+   write(id: string, data: string): boolean {
+     const s = this.sessions.get(id);
+-    if (s === undefined) return false;
++    if (s === undefined || s.proc.stdin.destroyed || s.proc.stdin.writableEnded) return false;
+     s.proc.stdin.write(data);
++    return true;
++  }
++
++  /** 控制流只接受内核 winsize 可表示的正整数；隐藏面板的零尺寸不覆盖最后可用行列。 */
++  resize(id: string, cols: number, rows: number): boolean {
++    if (![cols, rows].every(n => Number.isInteger(n) && n > 0 && n <= 65535)) return false;
++    const control = this.sessions.get(id)?.control;
++    if (control === undefined || control === null || control.destroyed || control.writableEnded) return false;
++    control.write(JSON.stringify({ cols, rows }) + "\n");
+     return true;
+   }
+ 
+@@ -106,6 +155,7 @@
+ 
+   /** 应用退出对账：不留孤儿 shell。 */
+   killAll(): void {
++    for (const proc of this.starting) proc.kill("SIGTERM");
+     for (const id of [...this.sessions.keys()]) this.kill(id);
+   }
+ }
+--- a/apps/desktop/src/main/index.ts
++++ b/apps/desktop/src/main/index.ts
+@@ -606,8 +606,9 @@
+   },
+   // v5 terminal 窗格（PTY 宿主见 terminal-host.ts）。
+   // 与 diff/文件窗格/回滚同一条工作区解析：活动上下文优先，最近 run 只做兜底。
+-  terminalStart: () => terminalHost.start(resolveWorkspace()),
++  terminalStart: (owner) => terminalHost.start(resolveWorkspace(), process.env, owner as BrowserWindow),
+   terminalWrite: (id, data) => Promise.resolve(terminalHost.write(id as string, data as string)),
++  terminalResize: (id, cols, rows) => Promise.resolve(terminalHost.resize(id as string, cols as number, rows as number)),
+   terminalKill: (id) => { terminalHost.kill(id as string); return Promise.resolve(); },
+   // v5 窗格弹出：独立窗口（同壳参数；#pane=<kind>[&session=<id>] 路由）。
+   panePopout: (kind, sessionId) => {
+@@ -823,6 +824,11 @@
+     }
+     // 后台弹窗恢复页面时焦点可能还在主窗；视图归属取发起 IPC 的窗口。
+     if (key === "browserOpen") return handler(args[0], args[1], BrowserWindow.fromWebContents(event.sender));
++    if (key === "terminalStart") {
++      const owner = BrowserWindow.fromWebContents(event.sender);
++      if (owner === null || owner.isDestroyed()) return { ok: false, error: "调用窗口已关闭" };
++      return handler(owner); // 窗口归属只由可信 sender 提供，忽略 renderer 自报参数。
++    }
+     return handler(...args);
+   });
+ }
+--- a/apps/desktop/src/main/channels.ts
++++ b/apps/desktop/src/main/channels.ts
+@@ -56,6 +56,7 @@
+   // v5 窗格后端：terminal 窗格（PTY 起停 + 输入）。
+   terminalStart: "agent:terminal-start",
+   terminalWrite: "agent:terminal-write",
++  terminalResize: "agent:terminal-resize",
+   terminalKill: "agent:terminal-kill",
+   // v5 窗格弹出：独立窗口路由。
+   panePopout: "agent:pane-popout",
+--- a/apps/desktop/src/renderer/components/PaneDock.tsx
++++ b/apps/desktop/src/renderer/components/PaneDock.tsx
+@@ -428,11 +428,13 @@
+   );
+ }
+ 
+-/** 终端窗格（v5，macOS）：xterm.js 渲染 + PTY（主进程 script(1) 宿主）。
++declare const __IPC_PROTOCOL_VERSION__: number;
++
++/** 终端窗格（macOS）：xterm.js 渲染 + Python PTY 宿主，行列随面板尺寸同步。
+  *  xterm 动态 import（SSR/判卷环境不加载 DOM 依赖）；卸载即 kill 终端（不留孤儿 shell）。 */
+ function TerminalPane(): React.JSX.Element {
+   const hostRef = useRef<HTMLDivElement | null>(null);
+-  const [notice, setNotice] = useState<string | null>(null);
++  const [notice, setNotice] = useState<{ message: string; canRetry: boolean } | null>(null);
+   // 退出后可就地重启（2026-10-18）：此前只把“已退出”写进终端，唯一出路是关窗格再开。
+   // gen 递增触发 effect 重跑：旧 xterm 在 cleanup 里 dispose + kill，新会话接在同一 host 上。
+   const [exited, setExited] = useState<string | null>(null);
+@@ -441,13 +443,17 @@
+     const host = hostRef.current;
+     if (host === null) return;
+     let alive = true;
+-    let term: { dispose: () => void; write: (d: string) => void; onData: (cb: (d: string) => void) => { dispose: () => void } } | null = null;
++    const showError = (message: string, canRetry = true): void => { if (alive) setNotice({ message, canRetry }); };
++    let term: import("@xterm/xterm").Terminal | null = null;
+     let termId: string | null = null;
+     let offData: (() => void) | null = null;
+     let offExit: (() => void) | null = null;
+     let dataSub: { dispose: () => void } | null = null;
+-    void Promise.all([import("@xterm/xterm"), import("@xterm/addon-fit")]).then(([{ Terminal }, { FitAddon }]) => {
++    let resizeSub: { dispose: () => void } | null = null;
++    let resizeObserver: ResizeObserver | null = null;
++    void Promise.all([window.agent.protocolVersion(), import("@xterm/xterm"), import("@xterm/addon-fit")]).then(([version, { Terminal }, { FitAddon }]) => {
+       if (!alive) return;
++      if (version !== __IPC_PROTOCOL_VERSION__) { showError("桌面协议版本不一致，请关闭并重新打开应用", false); return; }
+       const t = new Terminal({
+         fontSize: 12,
+         cursorBlink: true,
+@@ -481,45 +487,64 @@
+       });
+       term = t;
+       t.open(host);
++      const syncSize = (): void => {
++        const id = termId;
++        if (!alive || id === null || host.clientWidth === 0 || host.clientHeight === 0) return;
++        void window.agent.terminalResize(id, t.cols, t.rows).then((ok) => {
++          if (alive && termId === id && !ok) showError("终端尺寸未能同步，请重新启动终端");
++        }, (error: unknown) => {
++          if (alive && termId === id) showError(`终端尺寸同步失败：${error instanceof Error ? error.message : String(error)}`);
++        });
++      };
++      resizeSub = t.onResize(syncSize);
+       // 列数自适应容器宽（此前固定 80 列在窄格被右缘裁切）；容器尺寸变化跟随。
+       try { fit.fit(); } catch { /* 容器尺寸为 0 时忽略 */ }
+-      const ro = new ResizeObserver(() => { try { fit.fit(); } catch { /* 同上 */ } });
+-      ro.observe(host);
+-      (t as unknown as { __ro?: ResizeObserver }).__ro = ro;
++      resizeObserver = new ResizeObserver(() => { try { fit.fit(); } catch { /* 同上 */ } });
++      resizeObserver.observe(host);
+       offData = window.agent.onTerminalData((e) => { if (termId !== null && e.id === termId) t.write(e.data); });
+       offExit = window.agent.onTerminalExit((e) => {
+         if (termId !== null && e.id === termId) {
+           const why = e.code === null ? "信号终止" : `code ${String(e.code)}`;
+           t.write(`\r\n[terminal] 已退出（${why}）——点上方「重新启动」或重开窗格\r\n`);
++          termId = null;
+           setExited(why);
+         }
+       });
+-      dataSub = t.onData((d) => { if (termId !== null) void window.agent.terminalWrite(termId, d); });
++      dataSub = t.onData((d) => {
++        const id = termId;
++        if (id === null) return;
++        void window.agent.terminalWrite(id, d).then((ok) => {
++          if (alive && termId === id && !ok) showError("终端已不可写，请重新启动终端");
++        }, (error: unknown) => {
++          if (alive && termId === id) showError(`终端输入失败：${error instanceof Error ? error.message : String(error)}`);
++        });
++      });
+       void window.agent.terminalStart().then((r) => {
+-        if (r === undefined) { setNotice("通道无应答（主进程未返回终端）"); return; }
++        if (r === undefined) { showError("通道无应答（主进程未返回终端）"); return; }
+         if (!alive) { if (r.ok) void window.agent.terminalKill(r.id); return; }
+-        if (!r.ok) { setNotice(r.error); t.write(`[terminal] ${r.error}\r\n`); return; }
++        if (!r.ok) { showError(r.error); t.write(`[terminal] ${r.error}\r\n`); return; }
+         termId = r.id;
++        syncSize(); // fit 可能早于 IPC 返回 id；创建完成后必须补初次同步。
+       }).catch((err: unknown) => {
+-        setNotice(err instanceof Error ? err.message : String(err));
++        showError(err instanceof Error ? err.message : String(err));
+       });
+     }).catch((err: unknown) => {
+-      setNotice(`终端组件加载失败：${err instanceof Error ? err.message : String(err)}`);
++      if (alive) showError(`终端无法启动：${err instanceof Error ? err.message : String(err)}`);
+     });
+     return () => {
+       alive = false;
+-      offData?.(); offExit?.(); dataSub?.dispose();
+-      (term as unknown as { __ro?: ResizeObserver })?.__ro?.disconnect();
++      offData?.(); offExit?.(); dataSub?.dispose(); resizeSub?.dispose();
++      resizeObserver?.disconnect();
+       if (termId !== null) void window.agent.terminalKill(termId);
+       term?.dispose();
+     };
+   }, [gen]);
+   return (
+     <div className="term-pane">
+-      {notice !== null && <div className="fp-note err" role="alert">{notice}</div>}
+-      {exited !== null && (
++      {notice !== null && <div className="fp-note err" role="alert">{notice.message}</div>}
++      {(exited !== null || notice?.canRetry === true) && (
+         <div className="fp-note" role="status">
+-          <span>终端已退出（{exited}）</span>
++          {exited !== null && <span>终端已退出（{exited}）</span>}
+           <button
+             className="mini-btn ghost"
+             onClick={() => { setExited(null); setNotice(null); setGen((g) => g + 1); }}
+--- a/src/main/ipc-protocol.ts
++++ b/src/main/ipc-protocol.ts
+@@ -59,8 +59,9 @@
+  *  v13 = 记忆正文批（MemoryTopicPayload 增 body——「主题正文」快照面接通，§8 #15 销账）；
+  *  v14 = 跨会话用量批（usageLedger——头像菜单「用量统计」的「全部会话」口径）；
+  *  v15 = 会话日志批（sessionLog——错误条/命令面板「查看日志」的只读尾部）。
+- *  v16 = 会话定位批（openSession 增可选 workspace——跨项目同名 id 必须开对转录）。 */
+-export const IPC_PROTOCOL_VERSION = 16;
++ *  v16 = 会话定位批（openSession 增可选 workspace——跨项目同名 id 必须开对转录）；
++ *  v17 = 终端尺寸批（terminalResize——xterm 行列同步到真实 PTY）。 */
++export const IPC_PROTOCOL_VERSION = 17;
+ 
+ // ---- v11：主界面重做批的载荷（git 读数 / 克隆 / 项目内搜索）----
+ /** git 在场读数：branch 为 null = detached HEAD（如实，不拿 "HEAD" 冒充分支名）。 */
+@@ -383,6 +384,8 @@
+   terminalStart(): Promise<{ ok: true; id: string } | { ok: false; error: string }>;
+   /** 用户输入 → shell stdin（未知 id 返回 false，不静默丢）。 */
+   terminalWrite(id: string, data: string): Promise<boolean>;
++  /** v17：同步真实 PTY 行列；非法尺寸、未知或已关闭终端返回 false。 */
++  terminalResize(id: string, cols: number, rows: number): Promise<boolean>;
+   /** 杀终端（幂等）。 */
+   terminalKill(id: string): Promise<void>;
+   /** v5 terminal 窗格推送：pty 输出（按 id 归因）。 */
+--- a/apps/desktop/tests/protocol-version.test.ts
++++ b/apps/desktop/tests/protocol-version.test.ts
+@@ -44,6 +44,7 @@
+     // v13 → v14（跨会话用量批：＋usageLedger——头像菜单「用量统计」→「全部会话」）。
+     // v14 → v15（会话日志批：＋sessionLog——错误条/命令面板「查看日志」的只读尾部）。
+     // v15 → v16（会话定位批：openSession 增可选 workspace——跨项目同名 id 开对转录）。
+-    expect(IPC_PROTOCOL_VERSION).toBe(16);
++    // v16 → v17（终端尺寸同步：＋terminalResize）。
++    expect(IPC_PROTOCOL_VERSION).toBe(17);
+   });
+ });
+--- a/tests/ipc-protocol-version.test.ts
++++ b/tests/ipc-protocol-version.test.ts
+@@ -10,7 +10,7 @@
+     expect(IPC_PROTOCOL_VERSION).toBeGreaterThanOrEqual(1);
+   });
+ 
+-  it("bump 版本必须有意为之：现钉 15——改协议形状（AgentApi 增删/字段语义变）= bump 常量 + 同步本格，desktop-panel 提案走同一流水线", () => {
++  it("bump 版本必须有意为之：现钉 17——改协议形状（AgentApi 增删/字段语义变）= bump 常量 + 同步本格，desktop-panel 提案走同一流水线", () => {
+     // v8 → v9（2026-10-16 建议批）：＋suggestNext（「Tab 想下一条」按上下文单发模型调用）。
+     // v9 → v10（2026-10-16 能力在场性批）：＋capabilities（搜索端点配没配——让「模型为什么少一把工具」上屏）。
+     // v10 → v11（2026-10-16 主界面重做批）：＋gitStatus / gitClone / workspaceSearch / touchProject /
+@@ -20,6 +20,7 @@
+     // v13 → v14（2026-10-21 跨会话用量批）：＋usageLedger（头像菜单「用量统计」→「全部会话」）。
+     // v14 → v15（2026-10-21 会话日志批）：＋sessionLog（错误条/命令面板「查看日志」的只读尾部）。
+     // v15 → v16（2026-10-21 会话定位批）：openSession 增可选 workspace（跨项目同名 id 开对转录）。
+-    expect(IPC_PROTOCOL_VERSION).toBe(16);
++    // v16 → v17（终端尺寸同步）：＋terminalResize，真实 PTY 跟随 xterm 行列。
++    expect(IPC_PROTOCOL_VERSION).toBe(17);
+   });
+ });
+--- a/apps/desktop/tests/channels.test.ts
++++ b/apps/desktop/tests/channels.test.ts
+@@ -50,7 +50,8 @@
+     // 2026-10-20：＋sessionWorktree（会话级 worktree 隔离，销 G4：create/merge/discard 共用一条）⇒ 94。
+     // v14（2026-10-21）：＋usageLedger（头像菜单「用量统计」的「全部会话」账本）⇒ 95；
+     // v15（2026-10-21）：＋sessionLog（错误条 / 命令面板「查看日志」的只读尾部）⇒ 96。
+-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(96);
++    // v17：＋terminalResize ⇒ 97。
++    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(97);
+     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
+     expect(keys.length).toBeGreaterThan(0);
+     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
+@@ -165,6 +166,7 @@
+       // v5：terminal 窗格（PTY 宿主；三面同步直接接真）。
+       "terminalStart",
+       "terminalWrite",
++      "terminalResize",
+       "terminalKill",
+       // v5：browser 窗格（WebContentsView 宿主；三面同步直接接真）。
+       "browserOpen",
+--- a/tests/lsp-request-lifecycle.test.ts
++++ b/tests/lsp-request-lifecycle.test.ts
+@@ -125,17 +125,34 @@
+   });
+ });
+ 
+-async function requestServerWorkspace(stderrOnInitialize = 0, failInitialize = false) {
++async function requestServerWorkspace(stderrOnInitialize = 0, failInitialize = false, gateInput = false) {
+   const dir = await mkdtemp(join(tmpdir(), "lsp-request-lifecycle-"));
+   dirs.push(dir);
+   const script = join(dir, "server.mjs");
+   const protocol = pathToFileURL(createRequire(import.meta.url).resolve("vscode-languageserver-protocol/node")).href;
+   await writeFile(script, `
+ import { createProtocolConnection, StreamMessageReader, StreamMessageWriter, InitializeRequest, ShutdownRequest, ExitNotification } from ${JSON.stringify(protocol)};
+-const conn = createProtocolConnection(new StreamMessageReader(process.stdin), new StreamMessageWriter(process.stdout));
++// 控制公开 MessageReader 的交付时机，明确把 request/cancel 同步交给 SDK；不赌两个定时器的先后。
++const source = new StreamMessageReader(process.stdin);
++let held = false;
++const messages = [];
++const input = ${gateInput} ? {
++  onError: source.onError, onClose: source.onClose, onPartialMessage: source.onPartialMessage,
++  dispose: () => source.dispose(),
++  listen: (callback) => source.listen((message) => {
++    if (message.method === "fixture/release-input") {
++      held = false;
++      for (const pending of messages.splice(0)) callback(pending);
++    } else if (held) messages.push(message);
++    else callback(message);
++  }),
++} : source;
++const conn = createProtocolConnection(input, new StreamMessageWriter(process.stdout));
+ let count = 0;
+ const pending = new Map();
+ const cancelled = [];
++const cancelledAtEntry = [];
++conn.onRequest("fixture/hold-input", () => { held = true; return null; });
+ const writeStderr = (bytes) => new Promise((resolve, reject) => {
+   process.stderr.write(Buffer.alloc(bytes, 120), (error) => error ? reject(error) : resolve());
+ });
+@@ -151,12 +168,17 @@
+ conn.onRequest("fixture/query", (params, token) => new Promise((resolve, reject) => {
+   const index = ++count;
+   pending.set(index, { resolve, reject });
+-  token.onCancellationRequested(() => {
++  if (token.isCancellationRequested) cancelledAtEntry.push(index);
++  const cancel = () => {
+     cancelled.push(index);
+     if (params.cancelOnToken) { pending.delete(index); resolve({ cancelled: true }); }
+-  });
++  };
++  // 同批取消可先于 handler；先检查当前状态，再订阅后续事件。
++  if (token.isCancellationRequested) cancel();
++  else token.onCancellationRequested(cancel);
+ }));
+ conn.onRequest("fixture/count", () => count);
++conn.onRequest("fixture/cancelledAtEntry", () => cancelledAtEntry);
+ conn.onRequest("fixture/state", () => ({ count, pending: [...pending.keys()], cancelled }));
+ conn.onRequest("fixture/release", (params) => {
+   const request = pending.get(params.index);
+@@ -201,6 +223,23 @@
+     const state = await client.request("fixture/state", {});
+     await client.request("fixture/release", { index: 2 });
+     expect(await other).toEqual({ request: 2 });
++    expect(state).toEqual({ count: 2, pending: [2], cancelled: [1] });
++  });
++
++  it("请求与取消同批到达，handler 开始前已取消也只释放自己的任务", async () => {
++    const dir = await requestServerWorkspace(0, false, true);
++    setLspTrustedRepos([dir]);
++    const client = await getLspClient(dir, loadLspConfig(dir), "fixture");
++    await client.request("fixture/hold-input", {});
++    const expired = expect(client.request("fixture/query", { query: "batched", cancelOnToken: true }, 20)).rejects.toThrow("超时（20ms）");
++    const other = client.request("fixture/query", { query: "other" });
++    await expired;
++    const statePromise = client.request("fixture/state", {});
++    await client.notify("fixture/release-input", {});
++    const state = await statePromise;
++    await client.request("fixture/release", { index: 2 });
++    expect(await other).toEqual({ request: 2 });
++    expect(await client.request("fixture/cancelledAtEntry", {})).toEqual([1]);
+     expect(state).toEqual({ count: 2, pending: [2], cancelled: [1] });
+   });
+ 
+--- a/apps/desktop/tests/terminal-host.test.ts
++++ b/apps/desktop/tests/terminal-host.test.ts
+@@ -26,10 +26,10 @@
+ };
+ 
+ describe("TerminalHost", () => {
+-  it("非 darwin ⇒ 明确拒绝（不冒充可用）；write 未知 id ⇒ false", () => {
++  it("非 darwin ⇒ 明确拒绝（不冒充可用）；write 未知 id ⇒ false", async () => {
+     const { host } = makeHost();
+     if (process.platform !== "darwin") {
+-      const r = host.start(null);
++      const r = await host.start(null);
+       expect(r.ok).toBe(false);
+       if (!r.ok) expect(r.error).toContain("macOS");
+     }
+@@ -39,7 +39,7 @@
+   it.runIf(process.platform === "darwin")("真起 PTY：echo 标记经推送回来；kill 后不再有输出", async () => {
+     const dir = await mkdtemp(join(tmpdir(), "cairn-term-"));
+     const { host, events } = makeHost();
+-    const r = host.start(dir);
++    const r = await host.start(dir);
+     expect(r.ok).toBe(true);
+     if (!r.ok) return;
+     expect(host.write(r.id, "echo CAIRN-TERM-MARKER-42\n")).toBe(true);
+@@ -53,13 +53,12 @@
+ });
+ 
+ describe("TerminalHost 启动失败（2026-10-19）", () => {
+-  it.runIf(process.platform === "darwin")("cwd 不存在 ⇒ 发 exit 并摘表（不永久泄漏）", async () => {
++  it.runIf(process.platform === "darwin")("cwd 不存在 ⇒ 启动直接失败，不产生失联的终端 id", async () => {
+     const { host, events } = makeHost();
+-    const r = host.start("/definitely/not/a/real/dir-cairn-test");
+-    expect(r.ok).toBe(true); // spawn 本身异步失败，start 仍返回 id
+-    if (!r.ok) return;
+-    const exited = await waitFor(() => events.some((e) => e.kind === "exit" && e.id === r.id));
+-    expect(exited).toBe(true);
+-    expect(host.write(r.id, "echo x\n")).toBe(false); // 已摘表
++    const r = await host.start("/definitely/not/a/real/dir-cairn-test");
++    expect(r.ok).toBe(false);
++    if (r.ok) throw new Error("启动失败不应返回终端 id");
++    expect(r.error).toContain("启动失败");
++    expect(events).toEqual([]);
+   }, 10000);
+ });
+--- a/apps/desktop/tests/terminal-drain.test.ts
++++ b/apps/desktop/tests/terminal-drain.test.ts
+@@ -7,19 +7,21 @@
+ vi.mock('node:child_process', () => ({ spawn: vi.fn() }));
+ 
+ function child() {
+-  return Object.assign(new EventEmitter(), {
++  const proc = Object.assign(new EventEmitter(), {
+     stdout: new PassThrough(), stderr: new PassThrough(), stdin: new PassThrough(), kill: vi.fn(),
+   });
++  queueMicrotask(() => proc.emit('spawn'));
++  return proc;
+ }
+ beforeEach(() => vi.mocked(spawn).mockReset());
+ 
+ describe.runIf(process.platform === 'darwin')('PTY 进程退出与管道排空', () => {
+-  it('exit 后 close 前仍可能有字节：先读完整中文，再发终端退出', () => {
++  it('exit 后 close 前仍可能有字节：先读完整中文，再发终端退出', async () => {
+     const proc = child();
+     vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
+     const events: TerminalPush[] = [];
+     const host = new TerminalHost(e => events.push(e));
+-    const started = host.start(null);
++    const started = await host.start(null);
+     expect(started.ok).toBe(true);
+     if (!started.ok) throw new Error('测试终端未启动');
+     const bytes = Buffer.from('你好');
+@@ -33,12 +35,12 @@
+     expect(events.at(-1)).toEqual({ kind: 'exit', id: started.id, code: 0 });
+     expect(events.filter(e => e.kind === 'exit')).toHaveLength(1);
+   });
+-  it('启动错误与随后的 close 只发一次退出', () => {
++  it('进程错误与随后的 close 只发一次退出', async () => {
+     const proc = child();
+     vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
+     const events: TerminalPush[] = [];
+     const host = new TerminalHost(e => events.push(e));
+-    const started = host.start(null);
++    const started = await host.start(null);
+     if (!started.ok) throw new Error('测试终端未启动');
+     proc.emit('error', new Error('ENOENT'));
+     proc.emit('close', -2);
+--- a/apps/desktop/scripts/native-host-smoke.ts
++++ b/apps/desktop/scripts/native-host-smoke.ts
+@@ -84,7 +84,7 @@
+   check("宿主窗口销毁时释放视图及登记",background?.isDestroyed()===true&&host.webContentsForAudit("background-popup")===null);
+   const terminalEvents: TerminalPush[]=[];
+   const terminal=new TerminalHost(e=>terminalEvents.push(e));
+-  const started=terminal.start(profile,{...process.env,SHELL:"/bin/sh",ENV:"/dev/null"});
++  const started=await terminal.start(profile,{...process.env,SHELL:"/bin/sh",ENV:"/dev/null"});
+   check("真实 PTY 启动成功",started.ok);
+   if(started.ok){
+     terminal.write(started.id,"printf '\\344\\275\\240\\345\\245\\275 PTY-OUTPUT-ONLY\\n'\n");
+--- /dev/null
++++ b/apps/desktop/src/main/pty-bridge.ts
+@@ -0,0 +1,80 @@
++// Python 标准库 PTY 转发程序；作为 TS 字符串随主进程打包，无额外运行时资源。
++/** fd 0/1 保留原始终端字节，fd 3 独立传尺寸；有界非阻塞队列避免大段粘贴与回显互相堵住。 */
++export const PTY_BRIDGE = String.raw`
++import errno,fcntl,json,os,pty,select,struct,sys,termios
++
++def resize(fd,cols,rows):
++    fcntl.ioctl(fd,termios.TIOCSWINSZ,struct.pack('HHHH',rows,cols,0,0))
++
++ready_read,ready_write=os.pipe()
++pid,master=pty.fork()
++if pid==0:
++    os.close(ready_read)
++    os.close(3)
++    resize(0,80,24)
++    os.write(ready_write,b'1')
++    os.close(ready_write)
++    shell=os.environ.get('SHELL','/bin/zsh')
++    os.execvp(shell,[shell,'-l'])
++
++os.close(ready_write)
++os.read(ready_read,1)
++os.close(ready_read)
++os.set_blocking(master,False)
++os.set_blocking(1,False)
++incoming=bytearray()
++outgoing=bytearray()
++control=b''
++stdin_open=control_open=master_open=True
++limit=65536
++try:
++    while master_open or outgoing:
++        readers=([3] if control_open and master_open else [])
++        if stdin_open and master_open and len(incoming)<limit: readers.append(0)
++        if master_open and len(outgoing)<limit: readers.append(master)
++        writers=([1] if outgoing else [])+([master] if master_open and incoming else [])
++        readable,writable,_=select.select(readers,writers,[])
++        # 同一批里先处理尺寸，再转发命令，避免 stty/tui 先读到旧行列。
++        if 3 in readable:
++            data=os.read(3,4096)
++            if not data: control_open=False
++            control+=data
++            while b'\n' in control:
++                line,control=control.split(b'\n',1)
++                try:
++                    size=json.loads(line)
++                    cols,rows=size['cols'],size['rows']
++                    if type(cols) is int and type(rows) is int and 0<cols<=65535 and 0<rows<=65535:
++                        resize(master,cols,rows)
++                except (ValueError,TypeError,KeyError): pass
++            if len(control)>4096: control=b''
++        if 0 in readable:
++            data=os.read(0,min(8192,limit-len(incoming)))
++            if data: incoming.extend(data)
++            else: stdin_open=False
++        if master in readable:
++            try: data=os.read(master,min(8192,limit-len(outgoing)))
++            except BlockingIOError: continue
++            except OSError as error:
++                if error.errno!=errno.EIO: raise
++                data=b''
++            if data: outgoing.extend(data)
++            else:
++                master_open=False
++                incoming.clear()
++        if 1 in writable:
++            try: del outgoing[:os.write(1,outgoing)]
++            except BlockingIOError: pass
++        if master_open and master in writable:
++            try: del incoming[:os.write(master,incoming)]
++            except BlockingIOError: pass
++            except OSError as error:
++                if error.errno!=errno.EIO: raise
++                master_open=False
++                incoming.clear()
++        if not stdin_open and not control_open: break
++finally:
++    os.close(master)
++_,status=os.waitpid(pid,0)
++sys.exit(os.WEXITSTATUS(status) if os.WIFEXITED(status) else 128+os.WTERMSIG(status))
++`;
+--- /dev/null
++++ b/apps/desktop/tests/terminal-size.test.ts
+@@ -0,0 +1,92 @@
++import { tmpdir } from 'node:os';
++import { EventEmitter } from 'node:events';
++import { afterEach, describe, expect, it } from 'vitest';
++import { TerminalHost, type TerminalPush } from '../src/main/terminal-host';
++
++const hosts: TerminalHost[] = [];
++afterEach(() => { for (const host of hosts.splice(0)) host.killAll(); });
++const waitFor = async (test: () => boolean) => {
++  const start = Date.now();
++  while (Date.now() - start < 6000) {
++    if (test()) return;
++    await new Promise(resolve => setTimeout(resolve, 20));
++  }
++  throw new Error('真实 PTY 未返回预期结果');
++};
++async function terminal(owner?: Parameters<TerminalHost['start']>[2]) {
++  const events: TerminalPush[] = [];
++  const host = new TerminalHost(e => events.push(e));
++  hosts.push(host);
++  const result = await host.start(tmpdir(), { ...process.env, SHELL: '/bin/sh', ENV: '/dev/null' }, owner);
++  if (!result.ok) throw new Error(result.error);
++  const output = () => events.filter((e): e is Extract<TerminalPush, {kind:'data'}> => e.kind === 'data' && e.id === result.id).map(e => e.data).join('');
++  const size = async (tag: string) => {
++    // 标记用八进制生成，输入回显不可能冒充真实输出。
++    const prefix = Array.from(`SIZE_${tag}:`).map(c => '\\' + c.charCodeAt(0).toString(8).padStart(3,'0')).join('');
++    host.write(result.id, `printf '${prefix}'; stty size\n`);
++    const pattern = new RegExp(`SIZE_${tag}:(\\d+) (\\d+)`);
++    await waitFor(() => pattern.test(output()));
++    const match = output().match(pattern)!;
++    return { rows: Number(match[1]), cols: Number(match[2]) };
++  };
++  return { host, id: result.id, events, size };
++}
++describe.runIf(process.platform === 'darwin')('真实 PTY 的窗口尺寸与退出状态', () => {
++  it('初始行列不是 0×0，登录 shell 从第一条命令就有有效尺寸', async () => {
++    const t = await terminal();
++    expect(await t.size('INITIAL')).toEqual({ rows: 24, cols: 80 });
++  });
++  it('缩窄再放大都更新内核尺寸，非法输入和已关闭 ID 不写入控制流', async () => {
++    const t = await terminal();
++    expect(t.host.resize(t.id, 61, 11)).toBe(true);
++    expect(await t.size('NARROW')).toEqual({ rows: 11, cols: 61 });
++    expect(t.host.resize(t.id, 103, 29)).toBe(true);
++    expect(await t.size('WIDE')).toEqual({ rows: 29, cols: 103 });
++    for (const [cols,rows] of [[0,10],[-1,10],[10,0],[1.5,10],[Infinity,10],[NaN,10],[65536,10]]) {
++      expect(t.host.resize(t.id, cols, rows)).toBe(false);
++    }
++    expect(await t.size('UNCHANGED')).toEqual({ rows: 29, cols: 103 });
++    t.host.kill(t.id);
++    expect(t.host.resize(t.id, 80, 24)).toBe(false);
++    expect(t.host.resize('unknown', 80, 24)).toBe(false);
++  });
++  it('退出码来自 shell，exit 7 不会显示成成功的 0', async () => {
++    const t = await terminal();
++    t.host.write(t.id, 'exit 7\n');
++    await waitFor(() => t.events.some(e => e.kind === 'exit' && e.id === t.id));
++    expect(t.events.find(e => e.kind === 'exit' && e.id === t.id)).toEqual({ kind: 'exit', id: t.id, code: 7 });
++  });
++  it('同一窗口只订阅一次关闭事件，关闭它不会杀掉另一个窗口的终端', async () => {
++    let closed = false;
++    const owner = Object.assign(new EventEmitter(), { isDestroyed: () => closed });
++    const otherOwner = Object.assign(new EventEmitter(), { isDestroyed: () => false });
++    const t = await terminal(owner);
++    const env = { ...process.env, SHELL: '/bin/sh', ENV: '/dev/null' };
++    const sibling = await t.host.start(tmpdir(), env, owner);
++    const other = await t.host.start(tmpdir(), env, otherOwner);
++    if (!sibling.ok || !other.ok) throw new Error('测试终端未启动');
++    expect(owner.listenerCount('closed')).toBe(1);
++    closed = true;
++    owner.emit('closed');
++    await waitFor(() => t.events.some(e => e.kind === 'exit' && e.id === t.id));
++    expect(t.host.write(t.id, '')).toBe(false);
++    expect(t.host.write(sibling.id, '')).toBe(false);
++    expect(t.host.write(other.id, '')).toBe(true);
++    expect((await t.host.start(tmpdir(), env, owner)).ok).toBe(false);
++  });
++  it.each(['window', 'application'])('初始化中 %s 关闭时取消启动，不产生失联会话', async (kind) => {
++    let closed = false;
++    const owner = Object.assign(new EventEmitter(), { isDestroyed: () => closed });
++    const events: TerminalPush[] = [];
++    const host = new TerminalHost(e => events.push(e));
++    hosts.push(host);
++    const pending = host.start(tmpdir(), { ...process.env, SHELL: '/bin/sh', ENV: '/dev/null' }, owner);
++    if (kind === 'window') { closed = true; owner.emit('closed'); }
++    else host.killAll();
++    const result = await pending;
++    expect(result.ok).toBe(false);
++    if (result.ok) throw new Error('已取消的启动不能返回终端 id');
++    expect(result.error).toContain('取消');
++    expect(events).toEqual([]);
++  });
++});
+--- /dev/null
++++ b/apps/desktop/scripts/terminal-renderer-smoke.cjs
+@@ -0,0 +1,4 @@
++const path = require('node:path');
++const root = path.resolve(__dirname, '..', '..', '..');
++require(require.resolve('tsx/cjs', { paths: [root] }));
++require(path.join(__dirname, 'terminal-renderer-smoke.ts'));
+--- /dev/null
++++ b/apps/desktop/scripts/terminal-renderer-smoke.ts
+@@ -0,0 +1,171 @@
++// 真实 renderer + 生产 preload + Electron IPC + 真实 PTY；只在隔离配置里执行自建检查命令。
++import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron';
++import { createHash } from 'node:crypto';
++import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
++import { dirname, join, resolve } from 'node:path';
++import { tmpdir } from 'node:os';
++import { TerminalHost } from '../src/main/terminal-host';
++import { INVOKE_CHANNELS, PUSH_CHANNELS } from '../src/main/channels';
++import { IPC_PROTOCOL_VERSION } from '../../../src/main/ipc-protocol';
++
++const profile = mkdtempSync(join(tmpdir(),'cairn-terminal-renderer-'));
++app.setPath('userData',profile);
++nativeTheme.themeSource='light';
++app.on('window-all-closed',()=>{});
++app.on('quit',()=>rmSync(profile,{recursive:true,force:true}));
++const output=resolve(process.argv[2]??'terminal-renderer.json');
++let activeHost: TerminalHost | null = null;
++const checks:{name:string;ok:boolean;detail?:unknown}[]=[];
++const check=(name:string,ok:boolean,detail?:unknown)=>{checks.push({name,ok,detail});console.log(`${ok?'PASS':'FAIL'} ${name}`);};
++const waitFor=async(test:()=>boolean|Promise<boolean>,title:string,ms=15000)=>{
++  const start=Date.now();
++  while(Date.now()-start<ms){if(await test())return;await new Promise(r=>setTimeout(r,20));}
++  throw new Error(`超时：${title}`);
++};
++async function main(){
++  await app.whenReady();
++  let reportedVersion=IPC_PROTOCOL_VERSION;
++  let startupCwd=profile;
++  const starts:string[]=[];
++  const sizes:{id:string;cols:number;rows:number;ok:boolean}[]=[];
++  const writes:{id:string;bytes:number}[]=[];
++  const transcripts=new Map<string,string>();
++  const exits=new Set<string>();
++  const host=new TerminalHost(event=>{
++    if(event.kind==='data') transcripts.set(event.id,(transcripts.get(event.id)??'')+event.data);
++    else exits.add(event.id);
++    for(const win of BrowserWindow.getAllWindows())win.webContents.send(
++      PUSH_CHANNELS[event.kind==='data'?'onTerminalData':'onTerminalExit'],
++      event.kind==='data'?{id:event.id,data:event.data}:{id:event.id,code:event.code},
++    );
++  });
++  activeHost=host;
++  app.on('will-quit',()=>host.killAll());
++  ipcMain.handle(INVOKE_CHANNELS.getSettings,()=>({theme:'light'}));
++  ipcMain.handle(INVOKE_CHANNELS.protocolVersion,()=>reportedVersion);
++  ipcMain.handle(INVOKE_CHANNELS.terminalStart,async(event)=>{
++    const owner=BrowserWindow.fromWebContents(event.sender);
++    if(owner===null)return {ok:false,error:'调用窗口已关闭'};
++    const result=await host.start(startupCwd,{...process.env,SHELL:'/bin/sh',ENV:'/dev/null'},owner);
++    if(result.ok)starts.push(result.id);
++    return result;
++  });
++  ipcMain.handle(INVOKE_CHANNELS.terminalResize,(_event,id:string,cols:number,rows:number)=>{
++    const ok=host.resize(id,cols,rows);sizes.push({id,cols,rows,ok});return ok;
++  });
++  ipcMain.handle(INVOKE_CHANNELS.terminalWrite,(_event,id:string,data:string)=>{
++    writes.push({id,bytes:Buffer.byteLength(data)});return host.write(id,data);
++  });
++  ipcMain.handle(INVOKE_CHANNELS.terminalKill,(_event,id:string)=>host.kill(id));
++  const errors:string[]=[];
++  const makeWindow=()=>{
++    const window=new BrowserWindow({width:820,height:620,show:false,webPreferences:{
++      preload:join(__dirname,'../dist-electron/preload.cjs'),contextIsolation:true,nodeIntegration:false,backgroundThrottling:false,
++    }});
++    window.webContents.on('console-message',d=>{if(d.level==='error')errors.push(d.message);});
++    return window;
++  };
++  const win=makeWindow();
++  const js=(code:string)=>win.webContents.executeJavaScript(code);
++  await win.loadFile(join(__dirname,'../dist/index.html'),{hash:'pane=terminal'});
++  await waitFor(()=>starts.length===1&&sizes.some(s=>s.id===starts[0]&&s.ok),'终端创建和初次尺寸同步');
++  const id=starts[0];
++  const text=()=>transcripts.get(id)??'';
++  const type=async(command:string,target:BrowserWindow=win)=>{
++    await target.webContents.executeJavaScript(`document.querySelector('.xterm-helper-textarea').focus()`);
++    await target.webContents.insertText(command);
++    target.webContents.sendInputEvent({type:'keyDown',keyCode:'Enter'});
++    target.webContents.sendInputEvent({type:'keyUp',keyCode:'Enter'});
++  };
++  const query=async(tag:string)=>{
++    const prefix=Array.from(`UI_SIZE_${tag}:`).map(c=>'\\'+c.charCodeAt(0).toString(8).padStart(3,'0')).join('');
++    await type(`printf '${prefix}'; stty size`);
++    const pattern=new RegExp(`UI_SIZE_${tag}:(\\d+) (\\d+)`);
++    await waitFor(()=>pattern.test(text()),`真实命令回传 ${tag}`);
++    const found=text().match(pattern)!;
++    const actual={rows:Number(found[1]),cols:Number(found[2])};
++    const expected=sizes.filter(s=>s.id===id&&s.ok).at(-1)!;
++    check(`${tag}：xterm 行列与内核 PTY 一致`,actual.rows===expected.rows&&actual.cols===expected.cols,{actual,expected});
++    return expected;
++  };
++  const initial=await query('INITIAL');
++  const resizeCount=sizes.length;
++  win.setSize(500,400);
++  await waitFor(()=>sizes.length>resizeCount&&sizes.at(-1)!.cols<initial.cols,'窄窗同步');
++  const narrow=await query('NARROW');
++  await type(`python3 -c 'import signal,sys,time; signal.signal(signal.SIGWINCH,lambda *_:(print("WINCH_RECEIVED",flush=True),sys.exit(0))); print("WINCH_READY",flush=True); time.sleep(10)'`);
++  await waitFor(()=>/[\r\n]WINCH_READY\r?\n/.test(text()),'前台程序等待 SIGWINCH');
++  win.setSize(1060,780);
++  await waitFor(()=>sizes.at(-1)!.cols>narrow.cols&&/[\r\n]WINCH_RECEIVED\r?\n/.test(text()),'前台程序收到尺寸信号');
++  check('改变面板尺寸时前台程序收到 SIGWINCH',true);
++  await query('WIDE');
++  await type(`python3 -c 'import time; print("INTERRUPT_READY",flush=True); time.sleep(30)'`);
++  await waitFor(()=>/[\r\n]INTERRUPT_READY\r?\n/.test(text()),'前台命令确实已开始');
++  win.webContents.sendInputEvent({type:'keyDown',keyCode:'C',modifiers:['control']});
++  win.webContents.sendInputEvent({type:'keyUp',keyCode:'C',modifiers:['control']});
++  await query('AFTER_SIGINT');
++  check('Ctrl+C 中断前台命令后 shell 仍可用',true);
++  // 双向大流量：前台程序边读边回显，能抓住“阻塞写入导致无法排空回显”的死锁。
++  const payload='你好🌍'.repeat(16384);
++  const bytes=Buffer.byteLength(payload);
++  const digest=createHash('sha256').update(payload).digest('hex');
++  const program=`import os,termios,tty,hashlib; old=termios.tcgetattr(0); tty.setraw(0); print("BULK_READY",flush=True); data=bytearray(); remaining=${bytes}\nwhile remaining:\n chunk=os.read(0,min(4096,remaining)); data.extend(chunk); remaining-=len(chunk); os.write(1,chunk)\ntermios.tcsetattr(0,termios.TCSANOW,old); print("\\nBULK_RESULT:"+str(len(data))+":"+hashlib.sha256(data).hexdigest(),flush=True)`;
++  const encoded=Buffer.from(program).toString('base64');
++  await type(`python3 -c 'import base64;exec(base64.b64decode("${encoded}"))'`);
++  await waitFor(()=>/[\r\n]BULK_READY\r?\n/.test(text()),'大段输入检查就绪');
++  await win.webContents.insertText(payload);
++  await waitFor(()=>text().includes(`BULK_RESULT:${bytes}:${digest}`),'大段中文输入完整往返',25000);
++  check('160KB 中文与 emoji 双向传输不死锁、不丢字节',text().includes(payload),{bytes,sha256:digest});
++  await type('exit 7');
++  await waitFor(()=>js(`document.querySelector('.term-pane')?.textContent.includes('code 7')`),'真实退出码上屏');
++  check('shell 非零退出码显示正确，退出后可就地重启',await js(`!![...document.querySelectorAll('.term-pane button')].find(b=>b.textContent==='重新启动')`));
++  await js(`[...document.querySelectorAll('.term-pane button')].find(b=>b.textContent==='重新启动').click()`);
++  await waitFor(()=>starts.length===2&&sizes.some(s=>s.id===starts[1]&&s.ok),'重新启动并补初始尺寸');
++  check('重新启动使用新会话并同步当前面板尺寸',starts[1]!==id&&sizes.filter(s=>s.id===starts[1]).at(-1)?.cols===sizes.filter(s=>s.id===id).at(-1)?.cols);
++  const banner=Array.from('RESTART_UI_READY\n').map(c=>'\\'+c.charCodeAt(0).toString(8).padStart(3,'0')).join('');
++  await type(`printf '${banner}'`);
++  await waitFor(()=>js(`document.querySelector('.xterm-screen')?.textContent.includes('RESTART_UI_READY')`),'重启后的终端文字实际渲染');
++  check('真实 PTY 输出已经画到终端视图',true);
++  mkdirSync(dirname(output),{recursive:true});
++  writeFileSync(join(dirname(output),'terminal-wide.png'),(await win.webContents.capturePage()).toPNG());
++  win.destroy();
++  const closed=!host.write(starts[1],'');
++  check('关闭弹出窗口后终端立即不可写',closed);
++  if(closed)await waitFor(()=>exits.has(starts[1]),'窗口关闭后真实 PTY 退出');
++  check('窗口关闭后真实 PTY 进程已退出',exits.has(starts[1]));
++  const count=starts.length;
++  reportedVersion=IPC_PROTOCOL_VERSION-1;
++  const old=makeWindow();
++  await old.loadFile(join(__dirname,'../dist/index.html'),{hash:'pane=terminal'});
++  await waitFor(()=>old.webContents.executeJavaScript(`document.body.textContent.includes('桌面协议版本不一致')`),'旧协议终端阻断');
++  check('主进程协议不匹配时不启动 PTY，提示重启应用',starts.length===count);
++  old.destroy();
++  reportedVersion=IPC_PROTOCOL_VERSION;
++  startupCwd=join(profile,'directory-that-does-not-exist');
++  const broken=makeWindow();
++  await broken.loadFile(join(__dirname,'../dist/index.html'),{hash:'pane=terminal'});
++  let failureVisible=true;
++  try { await waitFor(()=>broken.webContents.executeJavaScript(`document.body.textContent.includes('启动失败')`),'启动失败原因可见',3000); }
++  catch { failureVisible=false; }
++  check('工作目录消失时界面显示真实启动失败原因',failureVisible);
++  await broken.webContents.executeJavaScript('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
++  writeFileSync(join(dirname(output),'terminal-startup-failure.png'),(await broken.webContents.capturePage()).toPNG());
++  const canRetry=await broken.webContents.executeJavaScript(`!![...document.querySelectorAll('.term-pane button')].find(b=>b.textContent==='重新启动')`);
++  check('启动失败后提供就地重启入口',canRetry);
++  if(canRetry){
++    startupCwd=profile;
++    const beforeRestart=starts.length;
++    await broken.webContents.executeJavaScript(`[...document.querySelectorAll('.term-pane button')].find(b=>b.textContent==='重新启动').click()`);
++    await waitFor(()=>starts.length===beforeRestart+1&&sizes.some(s=>s.id===starts.at(-1)&&s.ok),'失败后的重新启动');
++    const ready=Array.from('RECOVERY_OK\n').map(c=>'\\'+c.charCodeAt(0).toString(8).padStart(3,'0')).join('');
++    await type(`printf '${ready}'`,broken);
++    await waitFor(()=>broken.webContents.executeJavaScript(`document.querySelector('.xterm-screen')?.textContent.includes('RECOVERY_OK')`),'失败恢复后实际输入输出');
++    check('启动失败后重启恢复真实输入输出',true);
++  }
++  broken.destroy();host.killAll();
++  check('渲染过程无控制台错误',errors.length===0,errors);
++  writeFileSync(output,JSON.stringify({checks,sizes,writes,protocolVersion:IPC_PROTOCOL_VERSION},null,2));
++  app.exit(checks.every(c=>c.ok)?0:1);
++}
++setTimeout(()=>{console.error('terminal-renderer-smoke 超时');activeHost?.killAll();app.exit(1);},60000).unref();
++main().catch(error=>{console.error(error);activeHost?.killAll();app.exit(1);});

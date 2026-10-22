@@ -12,6 +12,7 @@ import type { MemorySnapshot } from "../../../../../src/main/ipc-protocol";
 import type { AutomationDefinition, AutomationSchedule } from "../../../../../src/main/automations";
 import type { ScheduleSnapshot, HistoryEntry } from "../../../../../src/main/scheduler";
 import type { PluginPanelSnapshot } from "../../../../../src/agent/plugins";
+import { STR } from "../strings";
 import { Switch } from "./Switch";
 import { EmptyState } from "./settings-ui";
 import { activates } from "./a11y-activate";
@@ -117,7 +118,7 @@ function Notice(props: { text: string | null }): React.JSX.Element | null {
 
 // ── 插件页 ────────────────────────────────────────────────────────
 
-export function PluginsPane(props: { snap: PluginPanelSnapshot; onError: (m: string) => void; refresh: () => void }): React.JSX.Element {
+export function PluginsPane(props: { snap: PluginPanelSnapshot; onError: (m: string) => void; refresh: () => void; onInvoke?: (invoke: string) => void }): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [sel, setSel] = useState<string | null>(null);
@@ -214,7 +215,7 @@ export function PluginsPane(props: { snap: PluginPanelSnapshot; onError: (m: str
               {(selected.commands ?? []).length === 0
                 ? <div className="ap-empty">该插件没有命令条目</div>
                 : (selected.commands ?? []).map((c) => (
-                  <div key={c.invoke} className="ap-li"><span className="kind mono-k">{c.invoke}</span><span className="p">{c.description}</span></div>
+                  <div key={c.invoke} className="ap-li"><span className="kind mono-k">{c.invoke}</span><span className="p">{c.description}</span>{props.onInvoke !== undefined && <button className="mini-btn" onClick={() => { props.onInvoke?.(c.invoke); }}>{STR.pluginSurface.fill}</button>}</div>
                 ))}
             </section>
             <section className="ap-sec">

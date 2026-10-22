@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { askBelongsToSession, composerLockReason, composerLocked, continueAfterRun, drainQueue, dropQueued, fromSessionQueueEntries, promoteQueued, shouldHealStaleRun, takeQueued, toSessionQueueEntries, type QueuedSend } from "../src/renderer/send-queue";
+import { readAppSurface } from "./helpers/app-surface";
 
 const item = (id: number): QueuedSend => ({ id, text: `消息${String(id)}`, attachments: [] });
 
@@ -145,7 +146,7 @@ describe("shouldHealStaleRun（「打断/停止」陈旧旗自愈，第十三遍
 });
 
 describe("打断接线哨兵（源码级，第十三遍）", () => {
-  const appSrc = readFileSync(new URL("../src/renderer/App.tsx", import.meta.url), "utf8");
+  const appSrc = readAppSurface();
   const queueSrc = readFileSync(new URL("../src/renderer/send-queue.ts", import.meta.url), "utf8");
 
   it("runCancel 直呼只剩 cancelRunHeal 内一处：void 掉结果的旧静默点全收编", () => {
@@ -157,7 +158,10 @@ describe("打断接线哨兵（源码级，第十三遍）", () => {
   });
 
   it("三处入口全走 cancelRunHeal：打断并发送 / 停止钮 / Esc 智慧停止（hotkeysRef 两联）", () => {
-    expect(appSrc.match(/cancelRunHeal/g)?.length).toBe(6);
+    // 函数定义、两次快捷键赋值、两个 UI 调用分别计数；注释和模块间传参都不算入口。
+    expect(appSrc.match(/const cancelRunHeal = useCallback/g)).toHaveLength(1);
+    expect(appSrc.match(/cancelRun: cancelRunHeal/g)).toHaveLength(2);
+    expect(appSrc.match(/cancelRunHeal\((?:sid|activeId)\)/g)).toHaveLength(2);
     expect(appSrc).toContain("cancelRunHeal(sid)");
     expect(appSrc).toContain("cancelRunHeal(activeId)");
     expect(appSrc).toContain("cancelRun: cancelRunHeal");

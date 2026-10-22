@@ -28,7 +28,7 @@ import { aggregateFeasibility, deriveVerifierProbe, feasibility, fromSweBenchJso
 import { ClarifyGate, PlanGate } from "../src/agent/gates";
 // 「这趟跑算不算数」——纯函数、可单测。分母口径见那边的模块头：
 // **未起步 / 被 provider 打断的趟次不许进分母**（限流打断不能记成"模型没做到"）。
-import { autoVerifyBeats, costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally, verifyBeatFace, verifyRecovery } from "./lib/eval-validity";
+import { autoVerifyBeats, costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally, taskRollup, verifyBeatFace, verifyRecovery } from "./lib/eval-validity";
 import type { VerifyRecovery } from "./lib/eval-validity";
 // 逐名那一格的读者（第 416 页）：`TaskSpec.judge` 由数据层产出、`src/agent/eval/test-results` 负责解析与裁决，
 // 这里只把**最后一次 verify 拍**的原文交给它并把裁决带回读数。跑器不认格式、不拼 pytest 命令行。
@@ -851,7 +851,7 @@ await mkdir(ROOT + "/" + OUT, { recursive: true });
 // 一趟只读一次钟：run.json 的时刻、盖进每条读数的 ranAt 身份键（#90）、以及失败轨迹留档那个
 // dated 目录的名字，三者取**同一个**值——省得多处各 `new Date()` 漂出两个时刻、事后对账对不上。
 const ranAt = new Date().toISOString();
-const rows: { r: Reading; g: { ok: boolean; fails: string[] } }[] = [];
+const rows: { taskId: string; r: Reading; g: { ok: boolean; fails: string[] } }[] = [];
 const traceKeeps: TraceKeepOutcome[] = [];
 for (let rep = 1; rep <= REPS; rep++) {
   for (const t of tasks) {
@@ -867,7 +867,7 @@ for (let rep = 1; rep <= REPS; rep++) {
     );
     const r = { ...retried.value, attempts: retried.attempts, retryWaitMs: retried.waitedMs, retryWhy: retried.stoppedWhy };
     const g = grade(r, t);
-    rows.push({ r, g });
+    rows.push({ r, g, taskId: t.id });
     // 未起步 / 被 provider 打断的趟次**不叫 FAIL**：那会把"跑不成"记成"模型没做到"。
     // 判据在 `lib/eval-validity.ts`（纯函数、可单测）；分母口径同见那边。
     const v = runValidity(r, g.fails);
@@ -918,6 +918,33 @@ if (t0.refuse) {
     + ` · 实付≈¥${cny.toFixed(3)}（其中没算数的趟次花 ¥${money.wastedSpend.toFixed(4)}）`
     + ` · 每达标任务 ¥${t0.pass > 0 ? (money.validSpend / t0.pass).toFixed(4) : "∞"}`
     + `〔按算数趟次 ¥${money.validSpend.toFixed(4)} ÷ 达标 ${String(t0.pass)} 算〕`);
+}
+/* 任务级那一层（2026-10-22）：**独立单位是「任务」，不是「趟次」**。
+ * `--reps N` 把同一条任务跑 N 遍，而同一条任务的 N 遍**不独立**（同一份任务难度、同一族种子）
+ * ⇒ 把 N×M 趟当成 M 个独立样本算区间会把区间算**窄** ⇒ 「这条配置在**没见过的任务**上还灵不灵」
+ * 问的正是**任务**。口径与函数在 `lib/eval-validity.ts` 的 `taskRollup`（不完整任务单列，不混进分母）。
+ * 这一层**不改**上面那行 `合计 N/M 达标` 的口径（那一行是趟次面，这一行是任务面，两个分母各自标名）。 */
+const tr = taskRollup(rows, REPS);
+if (tr.refuse) {
+  console.error(`[loop-eval] 任务级：pass@k 与 pass^k 的分母都空（${String(tr.partial.length)} 条没跑满）⇒ **拒绝出数**（分母为空时任何分数都是假的）`);
+} else {
+  const ciText = (c: { lower: number; upper: number } | null): string =>
+    c === null ? "—" : `[${c.lower.toFixed(3)}, ${c.upper.toFixed(3)}]`;
+  // 分母为 0 ⇒ 印「不可知」，**不印 0/0**（同族纪律：不可知 ≠ 0）。
+  const rate = (num: number, den: number): string =>
+    den === 0 ? "不可知（分母 0）" : `${String(num)}/${String(den)}`;
+  const partialText = tr.partial.map((t) => {
+    const names: string[] = [];
+    if (!t.atKKnown) names.push("pass@k");
+    if (!t.kKnown) names.push("pass^k");
+    return `${t.taskId} ${String(t.passed)}/${String(t.valid)}` + (names.length > 0 ? `（${names.join("、")} 不可知）` : "");
+  }).join("，");
+  console.log(`[loop-eval] 任务级（独立单位＝任务，rep 之间相关）：`
+    + `pass@${String(REPS)} = ${rate(tr.passAtK, tr.passAtKTotal)}`
+    + ` · pass^${String(REPS)} = ${rate(tr.passK, tr.passKTotal)}`
+    + ` · pass@${String(REPS)} 95% 区间 ${ciText(tr.passAtKCi)}`
+    + ` · pass^${String(REPS)} 95% 区间 ${ciText(tr.passKCi)}`
+    + (tr.partial.length > 0 ? ` · 没跑满 ${String(tr.partial.length)} 条：${partialText}` : ""));
 }
 /* ---- 调用面落盘（#63／#68，2026-10-05 第 379 页）----
  * 为什么非有不可：读数行只记结果，**不记"这一趟是怎么跑的"** ⇒ 同样的 `readings.json`，

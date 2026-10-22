@@ -1,0 +1,14 @@
+$ vitest run --config vitest.config.ts && node --import tsx ../../scripts/desktop-boundary-check.ts
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness/apps/desktop
+
+
+ Test Files  194 passed (194)
+      Tests  1337 passed (1337)
+   Start at  12:37:43
+   Duration  7.89s (tests 41%, import 34%, transform 23%, worker 2%)
+
+    Isolate  194 workers spawned · ~73ms startup each (spawn + environment, per file)
+             at least ~1.94s faster with isolate: false — reuses workers across files instead of one per file
+
+desktop-boundary-check: 绿（src 无反向依赖、无 UI import）

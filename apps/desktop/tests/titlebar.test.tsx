@@ -15,6 +15,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TitleBar } from "../src/renderer/components/TitleBar";
+import { readAppSurface } from "./helpers/app-surface";
 
 const CSS = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
 
@@ -25,14 +26,23 @@ const html = renderToStaticMarkup(
     center={<button className="tb-title" aria-keyshortcuts="F2">你好</button>}
     aside={<span className="goal-chip">目标</span>}
     right={<button className="iconbtn sm" aria-label="进入专注模式">◎</button>}
+    context={<span className="tb-workspace">cairn · 本地</span>}
   />,
 );
 
 describe("统一工具栏 · 结构", () => {
-  it("左组：红绿灯避让 + 侧栏开关（窗口 chrome 在最左）", () => {
+  it("左组：红绿灯避让 + 侧栏开关 + 工作区上下文（窗口 chrome 在最左）", () => {
     expect(html).toContain('class="tb-left"');
     expect(html).toContain('class="traffic"');
     expect(html).toContain('aria-label="折叠侧栏"');
+    // 2026-10-21 设计重做：工作区上下文从输入区搬来，住在左组、侧栏开关之后。
+    const toggle = html.indexOf("折叠侧栏");
+    const ws = html.indexOf('class="tb-workspace"');
+    const center = html.indexOf('class="tb-center"');
+    expect(ws).toBeGreaterThan(toggle);
+    expect(center).toBeGreaterThan(ws);
+    // 窄窗收起（侧栏分组名仍在，不丢信息）
+    expect(CSS).toMatch(/@media \(max-width: 1080px\) \{ \.tb-workspace \{ display: none; \} \}/);
   });
 
   it("中栏三段齐：lead / title-slot / trail（两翼等宽 ⇒ 标题恒在正中）", () => {
@@ -76,5 +86,43 @@ describe("统一工具栏 · 拖拽区与可交互件", () => {
 
   it("几何：中栏带是绝对定位（left/width 由 JS 算，写死像素就是错）", () => {
     expect(CSS).toMatch(/\.tb-center\s*\{[^}]*position:\s*absolute;/s);
+  });
+});
+
+describe("设置页返回（2026-10-21，评审后修正）", () => {
+  const app = readAppSurface();
+  const panel = readFileSync(fileURLToPath(new URL("../src/renderer/components/SettingsPanel.tsx", import.meta.url)), "utf8");
+
+  it("设置打开时工具栏只留 chrome：不摆侧栏开关、也不摆工具栏返回", () => {
+    const hidden = renderToStaticMarkup(
+      <TitleBar
+        sidebarCollapsed={false}
+        onToggleSidebar={() => undefined}
+        showToggle={false}
+        center={<span className="tb-brand">设置</span>}
+      />,
+    );
+    expect(hidden).not.toContain("折叠侧栏");
+    expect(hidden).not.toContain("展开侧栏");
+    expect(hidden).not.toContain("tb-back");
+    expect(app).toContain("showToggle={!settingsOpen}");
+    expect(app).not.toContain("onBack:");
+    expect(CSS).not.toMatch(/\.tb-back\s*{/);
+  });
+
+  it("返回在 ModalSurface 内部（工具栏是 sibling，会被 isolateOutside 标成 inert）", () => {
+    expect(panel).toContain('className="sp-back"');
+    expect(panel).toContain('aria-label="关闭设置（Esc）"');
+    // 返回按钮必须出现在 <ModalSurface> 与 </ModalSurface> 之间
+    const surface = panel.indexOf("<ModalSurface");
+    const close = panel.indexOf('className="sp-back"');
+    const end = panel.indexOf("</ModalSurface>");
+    expect(close).toBeGreaterThan(surface);
+    expect(close).toBeLessThan(end);
+    expect(CSS).toMatch(/\.sp-back\s*{[^}]*border:/s);
+  });
+
+  it("设置导航选中图标不再用品牌色（中性用色法）", () => {
+    expect(CSS).toMatch(/\.sp-nav-item\.on \.sp-ni-ico\s*{[^}]*text-000/s);
   });
 });

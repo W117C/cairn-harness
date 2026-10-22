@@ -1,5 +1,5 @@
 // 真实 Electron 浏览器与 PTY；仅访问自建回环 HTTP，不调用模型或用户 profile。
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, WebContentsView } from "electron";
 import { createServer } from "node:http";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,31 +23,13 @@ async function main(): Promise<void> {
   const check = (name: string, ok: boolean, detail?: unknown): void => { checks.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}`); };
   let foreignHits = 0;
   const foreign = createServer((_req,res)=>{foreignHits++;res.end("foreign");});
-  // 「外来回环」这一支要绑 127.0.0.2（一个**与本地服务不同地址**的 host，用来验"外来 host 被拦"）。
-  // ⚠️ macOS 默认**不把整个 127/8 绑到 lo0**（只有 127.0.0.1）⇒ 这台机器上 `listen` 直接
-  // EADDRNOTAVAIL ⇒ 旧形状在一道检查都没跑之前就死了（2026-10-20 独立评审追出，LOW-MEDIUM）。
-  // 修法：认得这个错、说清怎么开（`sudo ifconfig lo0 alias 127.0.0.2`），
-  // 并以**独立退出码 2**表示「跑不了」——**不许 exit 0**（"没跑"读成"过了"比红更坏）。
-  try {
-    await new Promise<void>((done,reject)=>{foreign.once("error",reject);foreign.listen(0,"127.0.0.2",done);});
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "EADDRNOTAVAIL") {
-      console.error("[native-host-smoke] 这台机器的 lo0 没绑 127.0.0.2（macOS 默认只绑 127.0.0.1）⇒ 本脚本跑不了。");
-      console.error("  开法：sudo ifconfig lo0 alias 127.0.0.2");
-      console.error("  退出码 2 = 跑不了（不是 0：没跑不等于过了）");
-      app.exit(2);
-      // ⚠️ 这里**不许**再 `throw err`（2026-10-21 真机冒烟实测）：`app.exit` 是异步退出的，
-      // 紧接着 throw 会让外层 `main().catch` 接手 ⇒ 原始错误被原样印出来、外层再退 1
-      // ⇒ 「跑不了」被读成「跑挂了」，退出码也不是那个 2。直接 return（本函数就此收束）。
-      return;
-    }
-    throw err;
-  }
+  // 用另一个主机名访问自己控制的回环服务：不需要 macOS lo0 alias，也不触碰外网。
+  // IPv4 映射 IPv6 地址可连到此服务，但不属于产品默认允许的 localhost/127.0.0.1/::1。
+  await new Promise<void>((done,reject)=>{foreign.once("error",reject);foreign.listen(0,"127.0.0.1",done);});
   console.log("native: foreign loopback ready");
   const addr = foreign.address();
   if (addr === null || typeof addr === "string") throw new Error("本地地址未就绪");
-  const foreignUrl = `http://127.0.0.2:${addr.port}/blocked`;
+  const foreignUrl = new URL(`http://[::ffff:127.0.0.1]:${addr.port}/blocked`).href;
   const server = createServer((req,res)=>{
     if(req.url === "/redirect") {res.writeHead(302,{location:foreignUrl});res.end();return;}
     res.setHeader("content-type","text/html; charset=utf-8");
@@ -90,9 +72,19 @@ async function main(): Promise<void> {
   host.close("real");
   await new Promise(r=>setTimeout(r,100));
   check("窗口焦点变化后仍从原宿主释放视图",mainWindow.contentView.children.length===0&&wc.isDestroyed(),{children:mainWindow.contentView.children.length,destroyed:wc.isDestroyed()});
+  // 后台弹窗恢复页面时，聚焦窗口仍可能是主窗；归属必须来自发起调用的窗口。
+  owner=mainWindow;
+  host.open("background-popup",base,popup);
+  const background=host.webContentsForAudit("background-popup");
+  check("后台弹窗页面挂到调用窗口而非聚焦窗口",popup.contentView.children.some(v=>v instanceof WebContentsView&&v.webContents===background)&&mainWindow.contentView.children.length===0);
+  const foreignOwner=host.open("background-popup",base,mainWindow);
+  check("另一个窗口不能复用已有视图 ID",!foreignOwner.ok);
+  popup.destroy();
+  await new Promise(r=>setTimeout(r,100));
+  check("宿主窗口销毁时释放视图及登记",background?.isDestroyed()===true&&host.webContentsForAudit("background-popup")===null);
   const terminalEvents: TerminalPush[]=[];
   const terminal=new TerminalHost(e=>terminalEvents.push(e));
-  const started=terminal.start(profile,{...process.env,SHELL:"/bin/sh",ENV:"/dev/null"});
+  const started=await terminal.start(profile,{...process.env,SHELL:"/bin/sh",ENV:"/dev/null"});
   check("真实 PTY 启动成功",started.ok);
   if(started.ok){
     terminal.write(started.id,"printf '\\344\\275\\240\\345\\245\\275 PTY-OUTPUT-ONLY\\n'\n");
@@ -102,7 +94,7 @@ async function main(): Promise<void> {
     await waitFor(()=>terminalEvents.some(e=>e.kind==="exit"&&e.id===started.id),"PTY 关闭");
     check("关闭终端后不可继续写入",!terminal.write(started.id,"echo after-close\n"));
   }
-  terminal.killAll();host.closeAll();mainWindow.destroy();popup.destroy();server.close();foreign.close();
+  terminal.killAll();host.closeAll();mainWindow.destroy();server.close();foreign.close();
   mkdirSync(dirname(output),{recursive:true});writeFileSync(output,JSON.stringify(checks,null,2));
   app.exit(checks.every(c=>c.ok)?0:1);
 }

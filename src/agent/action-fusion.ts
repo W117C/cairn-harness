@@ -43,6 +43,8 @@ export function createActionFusion(runShell: FusionShell) {
     const finish = (status: "succeeded" | "failed" | "skipped", detail: string): ToolResult => ({
       ...write,
       ok: status !== "failed",
+      // 结构化事实给 loop：落盘已经发生，lint 的成败不改变这一点。
+      fusedWrite: true,
       output: `${write.output}\n\n[fused_write:succeeded] File changes persist; lint does not roll them back.\n[fused_lint:${status}]\n${detail}`,
     });
     const skipped = (reason: string) => finish("skipped", reason);

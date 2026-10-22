@@ -1,0 +1,63 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness/apps/desktop
+
+ ❯ tests/session-search-ui.test.tsx (3 tests | 3 failed) 8ms
+   ❯ 会话正文搜索的可见状态 (3)
+     × 未测与错误不显示没有匹配，失败有重试入口 6ms
+     × 完整空结果与预算不完整可区分 1ms
+     × 展示真实标题和摘录，保留会话与工作区身份 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/session-search-ui.test.tsx > 会话正文搜索的可见状态 > 未测与错误不显示没有匹配，失败有重试入口
+AssertionError: expected '<div tabindex="-1" cmdk-root=""><labe…' to contain '正在搜索当前项目的对话正文'
+
+Expected: "正在搜索当前项目的对话正文"
+Received: "<div tabindex="-1" cmdk-root=""><label cmdk-label="" for="radix-:R0H2:" id="radix-:R0H1:" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0, 0, 0, 0);white-space:nowrap;border-width:0"></label></div>"
+
+ ❯ tests/session-search-ui.test.tsx:14:21
+     12|     expect(render({ status: "idle" })).not.toContain("当前项目正文");
+     13|     const loading = render({ status: "loading" });
+     14|     expect(loading).toContain("正在搜索当前项目的对话正文");
+       |                     ^
+     15|     expect(loading).not.toContain("没有匹配");
+     16|     const unavailable = render({ status: "ready", result: { kind: "una…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/session-search-ui.test.tsx > 会话正文搜索的可见状态 > 完整空结果与预算不完整可区分
+AssertionError: expected '<div tabindex="-1" cmdk-root=""><labe…' to contain '正文中没有匹配'
+
+Expected: "正文中没有匹配"
+Received: "<div tabindex="-1" cmdk-root=""><label cmdk-label="" for="radix-:R0H2:" id="radix-:R0H1:" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0, 0, 0, 0);white-space:nowrap;border-width:0"></label></div>"
+
+ ❯ tests/session-search-ui.test.tsx:23:56
+     21|   });
+     22|   it("完整空结果与预算不完整可区分", () => {
+     23|     expect(render({ status: "ready", result: empty })).toContain("正文中没…
+       |                                                        ^
+     24|     const partial = render({ status: "ready", result: { ...empty, kind…
+     25|     expect(partial).toContain("搜索尚未完成，可能还有结果");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/session-search-ui.test.tsx > 会话正文搜索的可见状态 > 展示真实标题和摘录，保留会话与工作区身份
+AssertionError: expected '<div tabindex="-1" cmdk-root=""><labe…' to contain '旧会话'
+
+Expected: "旧会话"
+Received: "<div tabindex="-1" cmdk-root=""><label cmdk-label="" for="radix-:R0H2:" id="radix-:R0H1:" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0, 0, 0, 0);white-space:nowrap;border-width:0"></label></div>"
+
+ ❯ tests/session-search-ui.test.tsx:30:18
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  11:30:42
+   Duration  161ms (import 65%, transform 25%, tests 8%, worker 2%)
+
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts tests/session-search-ui.test.tsx

@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { elapsedSecondsFor } from "../src/renderer/projections";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
@@ -41,7 +42,7 @@ describe("运行秒表读数（elapsedSecondsFor）", () => {
 });
 
 describe("运行秒表接线：起点按会话存，不用单个 ref", () => {
-  const app = read("../src/renderer/App.tsx");
+  const app = readAppSurface();
 
   it("起点存在**按会话**的表里（与 runGen 同一形状）", () => {
     expect(app).toContain("const runStartBySession = useRef(new Map<string, number>());");

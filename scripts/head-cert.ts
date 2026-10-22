@@ -244,7 +244,9 @@ if (importFace === null || faceEmpty) {
     + (importFace === null ? "git 读不到 " + TARGET.slice(0, 7) : "取到空面：文件 " + String(importFace.headFiles.size) + " 个、边 " + String(importFace.edges.length) + " 条")
     + "）⇒ 不等于 import 面自洽");
 } else {
-  const dang = findDanglingImports(importFace.edges, importFace.headFiles, (rel) => existsSync(join(MAIN, rel)));
+  // 存在性问**整版**（revFiles），不是量面（headFiles）——量面只管「读谁的 import」。
+  // 用量面判存在性会把一个明明在版内、只是住在桌面层（apps/）的模块读成「悬空 / 漏 git add」。
+  const dang = findDanglingImports(importFace.edges, importFace.revFiles, (rel) => existsSync(join(MAIN, rel)));
   const face = checkHeadImportFace(dang);
   say(`import 面：${String(importFace.edges.length)} 条边｜悬空 ${String(dang.length)}（其中存量已豁免 ${String(dang.length - face.filter((f) => f.kind === "dangling").length)}）`);
   for (const f of face) say(`  ${f.kind === "dangling" ? "❌" : "⚠️"} ${f.target} — ${f.detail}`);

@@ -201,7 +201,7 @@ describe("动效刻度（2026-10-20 · Claude 实测 5 档时长 × 4 缓动）"
   });
 });
 
-describe("字重刻度（2026-10-20 · Claude 实测非标准字重 + 暗色减重补偿）", () => {
+describe("字重刻度（2026-10-22 按 Claude v3 暗色轴实测更正 · 亮色 2026-10-20 建）", () => {
   it("五档语义字重齐备，semibold = 580（不是 600）", () => {
     expect(tokens).toMatch(/--fw-regular:\s*400;/);
     expect(tokens).toMatch(/--fw-medium:\s*500;/);
@@ -210,16 +210,28 @@ describe("字重刻度（2026-10-20 · Claude 实测非标准字重 + 暗色减�
     expect(tokens).toMatch(/--fw-heavy:\s*700;/);
   });
 
-  it("暗色整体减重（regular 360 / bold 580），换主题自动补偿", () => {
+  it("暗色换的是**可变字体轴实例** 360/460/540/560（四档各减 40），不是逐档减 20", () => {
+    // 实测源：/Applications/Claude.app v3.1623.0（app.asar sha 760e7cbb…）的
+    // `.vite/renderer/main_window/assets/MainWindowPage-Bbug2Ph5.css`：
+    //   亮色作用域 `--cds-font-weight-*` = 400 / 500 / 580 / 600；
+    //   暗色作用域 `--cds-font-wght-*` = "wght" 360 / 460 / 540 / 560
+    //   （三个暗色作用域一致：[data-mode=dark] .cds-root、prefers-color-scheme:dark + [data-mode=system]、
+    //    .cds-dark-scope[data-mode=dark]）。
+    // 本仓此前写成 360/480/560/580 —— medium 与 semibold 仍是按「逐档减 20」推的，与蓝本不符。
     const dark = tokens.slice(tokens.search(/\[data-theme="dark"\]\s*\{/));
     expect(dark).toMatch(/--fw-regular:\s*360;/);
-    expect(dark).toMatch(/--fw-semibold:\s*560;/);
-    expect(dark).toMatch(/--fw-bold:\s*580;/);
+    expect(dark).toMatch(/--fw-medium:\s*460;/);
+    expect(dark).toMatch(/--fw-semibold:\s*540;/);
+    expect(dark).toMatch(/--fw-bold:\s*560;/);
     // 暗色每一档都必须 ≤ 亮色同名档（减重，不是加重）
     const light = tokens.slice(0, tokens.search(/\[data-theme="dark"\]\s*\{/));
     const pick = (src: string, n: string) => Number(new RegExp(`${n}:\\s*(\\d+);`).exec(src)?.[1] ?? -1);
     for (const n of ["--fw-regular", "--fw-medium", "--fw-semibold", "--fw-bold", "--fw-heavy"]) {
       expect(pick(dark, n), n).toBeLessThanOrEqual(pick(light, n));
+    }
+    // 蓝本四档**各减 40**（heavy 是 Cairn 自有档，蓝本没有 ⇒ 不参与这条断言）。
+    for (const n of ["--fw-regular", "--fw-medium", "--fw-semibold", "--fw-bold"]) {
+      expect(pick(light, n) - pick(dark, n), n).toBe(40);
     }
   });
 });
@@ -231,9 +243,17 @@ describe("刻度重钉：4px 栅格 / 圆角三档 / 正文字号 / 阅读列 / 
     expect(tokens).toMatch(/--radius-composer:\s*calc\(0\.875rem \* var\(--size-scale\)\);/); // 14
   });
 
-  it("正文 14.5 / 辅助 12.5 / 间距下探到 4 档", () => {
-    expect(tokens).toMatch(/--fs-body-md:\s*calc\(0\.90625rem \* var\(--rem-scale\)\);/); // 14.5
-    expect(tokens).toMatch(/--fs-caption-md:\s*calc\(0\.78125rem \* var\(--rem-scale\)\);/); // 12.5
+  it("正文 14 / caption 四档 10·11·12·13 / 间距下探到 4 档（业主 §4.4 刻度，2026-10-21 更正）", () => {
+    // 业主 §4.4：caption .625/.6875/.75/.8125（10/11/12/13）＋ body .75/.8125/.875/.9375（12/13/14/15）。
+    // 此前实现把 caption 三档压平成 12.5、body-md 落 14.5（不在四档里）⇒ 按规格与 v3 实测改回。
+    expect(tokens).toMatch(/--fs-body-md:\s*calc\(0\.875rem \* var\(--rem-scale\)\);/); // 14
+    expect(tokens).toMatch(/--fs-body-sm:\s*calc\(0\.8125rem \* var\(--rem-scale\)\);/); // 13
+    expect(tokens).toMatch(/--fs-caption-2xs:\s*calc\(0\.625rem \* var\(--rem-scale\)\);/); // 10
+    expect(tokens).toMatch(/--fs-caption-xs:\s*calc\(0\.6875rem \* var\(--rem-scale\)\);/); // 11
+    expect(tokens).toMatch(/--fs-caption-sm:\s*calc\(0\.75rem \* var\(--rem-scale\)\);/); // 12
+    expect(tokens).toMatch(/--fs-caption-md:\s*calc\(0\.8125rem \* var\(--rem-scale\)\);/); // 13
+    expect(tokens).toMatch(/--fs-footnote:\s*calc\(0\.75rem \* var\(--rem-scale\)\);/); // 12
+    expect(tokens).toMatch(/--fs-code:\s*calc\(0\.8125rem \* var\(--rem-scale\)\);/); // 13
     expect(tokens).toMatch(/--space-xs:\s*calc\(0\.25rem \* var\(--size-scale\)\);/); // 4
   });
 
@@ -255,8 +275,8 @@ describe("刻度重钉：4px 栅格 / 圆角三档 / 正文字号 / 阅读列 / 
     expect(styles).toContain(".theme-thumb { width: var(--w-theme-thumb); height: var(--h-theme-thumb)");
   });
 
-  it("阅读列 760px（P3-1 收口：brief 六 · 内容列限宽 760）；过渡 140ms ease-out（120–160ms 区间内）", () => {
-    expect(tokens).toMatch(/--reading:\s*47\.5rem;/);
+  it("阅读列 832px（2026-10-21 设计重做：1440 下 760 留白过大）；过渡 140ms ease-out（120–160ms 区间内）", () => {
+    expect(tokens).toMatch(/--reading:\s*52rem;/);
     // 2026-10-20：缓动改走 --ease-out 令牌（Claude --cds-ease-out 实测值），
     // 断言「时长 140ms」这个真正的行为契约，不再钉 ease-out 的拼写。
     expect(tokens).toMatch(/--t-fast:\s*140ms var\(--ease-out\);/);

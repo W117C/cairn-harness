@@ -1,0 +1,25 @@
+== pnpm gates ==
+门清单（5 道，清单即事实源）：renderer-layer-check event-semantics-check session-semantics-check session-search-check motion-policy-check
+执行器：pnpm run
+  清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）
+
+  ▶ renderer-layer-check …  ✅ renderer-layer-check exit=0  340ms
+      └ renderer-layer-check: 绿（115 个渲染层源文件；I1 组件层不回流 App / I2 状态层不 import 组件 / I3 派生层纯 / I4 行数帽 1200·App 900）
+  ▶ event-semantics-check …  ✅ event-semantics-check exit=0  314ms
+      └ ✅ 投影是纯函数（同输入同输出、不改入参）
+  ▶ session-semantics-check …  ✅ session-semantics-check exit=0  313ms
+      └ ✅ 分叉点：位置越界 → 抛
+  ▶ session-search-check …  ✅ session-search-check exit=0  295ms
+      └ ✅ 空查询 ⇒ kind=unavailable（没有可匹配的词 ≠ 没有匹配）
+  ▶ motion-policy-check …  ✅ motion-policy-check exit=0  287ms
+      └ ✅ M7 降级块之外无 !important
+
+== 断言体检（空断言 / 恒真式 / 暗卷段零断言 / 析取式弱断言）==
+  扫描面：150 个已跟踪且在盘的脚本（未跟踪草稿不判，口径同 tests/assertion-health-scan.test.ts）
+  ✅ 零命中
+
+== 汇总 ==
+  绿 5 / 5，红 0
+  逐道退出码：renderer-layer-check=0 event-semantics-check=0 session-semantics-check=0 session-search-check=0 motion-policy-check=0
+  认证面 = **工作树，不是 HEAD**：判卷四面（src/scripts/tests/fixtures）在飞 24 项｜全仓在飞 138 项 ⇒ 本表全 0 **不等于 HEAD 全 0**；要 HEAD 认证请在 HEAD 的隔离 worktree 里跑整表（`git worktree add --detach <tmp> HEAD`；注意 `pnpm gates --direct` 只换执行器〔`pnpm run X` → `/bin/sh -c <script>`〕，**不改取料树**）
+  ✅ pnpm gates 全部通过 （子集 5/40 道门——非全量运行，不等于全量全绿）

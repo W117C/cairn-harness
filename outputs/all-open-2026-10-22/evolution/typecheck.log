@@ -1,0 +1,4 @@
+tests/evolution-open-closeout.test.ts(42,81): error TS2783: 'id' is specified more than once, so this usage will be overwritten.
+[typecheck] 报错文件归因：HEAD 内 0／在飞改动中的 tracked 0／未跟踪草稿 1／工作树状态取不到 0（四档相加＝1，与分母 1 不等就是归因坏了）
+[typecheck] ⚠️ 未跟踪草稿（不属 HEAD 回归，属在飞改动）: tests/evolution-open-closeout.test.ts
+[typecheck] tracked 面没有报错 ⇒ HEAD 态类型干净（全部报错都在未跟踪草稿里；同 HEAD 开 worktree 跑 tsc 可复核）

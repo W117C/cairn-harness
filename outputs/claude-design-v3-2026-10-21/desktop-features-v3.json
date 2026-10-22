@@ -1,0 +1,431 @@
+{
+  "source": "Claude 3.1623.0 / Claude Helper --desktop-features argv",
+  "capturedAt": "2026-10-21",
+  "count": 135,
+  "statusCounts": {
+    "supported": 77,
+    "unsupported": 7,
+    "unavailable": 51
+  },
+  "features": {
+    "launch": {
+      "status": "supported"
+    },
+    "coworkBrowser": {
+      "status": "unsupported",
+      "reason": "cowork_browser_disabled",
+      "unsupportedCode": "unknown"
+    },
+    "artifactsPane": {
+      "status": "unavailable"
+    },
+    "nativeQuickEntry": {
+      "status": "supported"
+    },
+    "quickEntryDictation": {
+      "status": "supported"
+    },
+    "quickEntryGlobalShortcut": {
+      "status": "supported"
+    },
+    "trayIcon": {
+      "status": "supported"
+    },
+    "customQuickEntryDictationShortcut": {
+      "status": "supported"
+    },
+    "ultrareviewErrorCategories": {
+      "status": "supported"
+    },
+    "spawnTaskPendingPop": {
+      "status": "supported"
+    },
+    "spawnTaskInFlightIds": {
+      "status": "supported"
+    },
+    "folderWorktrees": {
+      "status": "supported"
+    },
+    "folderWorktreesRemote": {
+      "status": "supported"
+    },
+    "folderWorktreesListedDiscard": {
+      "status": "supported"
+    },
+    "sableOtter": {
+      "status": "unavailable"
+    },
+    "telescopeBridge": {
+      "status": "unavailable"
+    },
+    "mcpFinishInApp": {
+      "status": "unavailable"
+    },
+    "copperLarkA": {
+      "status": "supported"
+    },
+    "copperLarkB": {
+      "status": "supported"
+    },
+    "copperLarkC": {
+      "status": "unavailable"
+    },
+    "copperLarkD": {
+      "status": "supported"
+    },
+    "copperLarkH": {
+      "status": "supported"
+    },
+    "quietPenguin": {
+      "status": "unavailable"
+    },
+    "rubberDuck": {
+      "status": "unavailable"
+    },
+    "chillingSlothFeat": {
+      "status": "supported"
+    },
+    "chillingSlothSshShell": {
+      "status": "supported"
+    },
+    "terminalShellReported": {
+      "status": "supported"
+    },
+    "sshBrowserPane": {
+      "status": "unavailable"
+    },
+    "chillingSlothSshWorktreeLocation": {
+      "status": "supported"
+    },
+    "chillingSlothSshPuttyKeyConversion": {
+      "status": "unavailable"
+    },
+    "chillingSlothRemoteFilePreview": {
+      "status": "supported"
+    },
+    "chillingSlothEnterprise": {
+      "status": "supported"
+    },
+    "chillingSlothLocal": {
+      "status": "supported"
+    },
+    "yukonSilver": {
+      "status": "supported"
+    },
+    "yukonSilverGems": {
+      "status": "supported"
+    },
+    "yukonSilverGemsCache": {
+      "status": "supported"
+    },
+    "wakeScheduler": {
+      "status": "unavailable"
+    },
+    "keepAwake": {
+      "status": "supported"
+    },
+    "codeSessionKeepAwake": {
+      "status": "supported"
+    },
+    "ccdPromptSuggestionsSetting": {
+      "status": "unavailable"
+    },
+    "ccdLandingTools": {
+      "status": "supported"
+    },
+    "ccdMcpVerbsMidTurn": {
+      "status": "supported"
+    },
+    "ccdMcpTurnOnSshHost": {
+      "status": "supported"
+    },
+    "ccdRestartRemoteClaudeCode": {
+      "status": "supported"
+    },
+    "ccdSshStartsWithoutBlockedPlugins": {
+      "status": "supported"
+    },
+    "openWithConsentAnyLanding": {
+      "status": "supported"
+    },
+    "desktopTopBar": {
+      "status": "supported"
+    },
+    "ccdPlugins": {
+      "status": "supported"
+    },
+    "ccdPluginSourceRouting": {
+      "status": "supported"
+    },
+    "computerUse": {
+      "status": "supported"
+    },
+    "computerUseRollout": {
+      "status": "unavailable"
+    },
+    "computerUseComplianceGate": {
+      "status": "supported"
+    },
+    "computerUseAppScoped": {
+      "status": "unsupported",
+      "reason": "Background app-scoped mode is not yet supported on this macOS version",
+      "unsupportedCode": "os_version_too_new"
+    },
+    "computerUsePerAppAccess": {
+      "status": "supported"
+    },
+    "coworkWatchRecord": {
+      "status": "unavailable"
+    },
+    "coworkCopperHeron": {
+      "status": "unavailable"
+    },
+    "coworkWatchers": {
+      "status": "unavailable"
+    },
+    "coworkKappa": {
+      "status": "unavailable"
+    },
+    "coworkArtifacts": {
+      "status": "unavailable"
+    },
+    "trustedFolderSettingsConsent": {
+      "status": "unavailable"
+    },
+    "coworkAutoModeAlwaysAllowOverride": {
+      "status": "unavailable"
+    },
+    "framebufferPreview": {
+      "status": "unavailable"
+    },
+    "iosSimulator": {
+      "status": "unsupported",
+      "reason": "iOS Simulator is disabled by its rollout flag",
+      "unsupportedCode": "unknown"
+    },
+    "androidEmulator": {
+      "status": "unsupported",
+      "reason": "Android emulator is disabled by its rollout flag",
+      "unsupportedCode": "unknown"
+    },
+    "iosSimulatorH264": {
+      "status": "unsupported",
+      "reason": "iOS Simulator is disabled by its rollout flag",
+      "unsupportedCode": "unknown"
+    },
+    "iosSimulatorAccessibilityReader": {
+      "status": "unsupported",
+      "reason": "iOS Simulator is disabled by its rollout flag",
+      "unsupportedCode": "unknown"
+    },
+    "iosSimulatorDuo": {
+      "status": "unavailable"
+    },
+    "simulatorScreenshotEditor": {
+      "status": "unavailable"
+    },
+    "simulatorMiniView": {
+      "status": "unavailable"
+    },
+    "grandPrix": {
+      "status": "unavailable"
+    },
+    "chromeExtensionInstall": {
+      "status": "supported"
+    },
+    "ccdGitEngine": {
+      "status": "unavailable"
+    },
+    "sessionPrOwnership": {
+      "status": "unavailable"
+    },
+    "sessionFolderFileAccess": {
+      "status": "supported"
+    },
+    "conversationFolderGrants": {
+      "status": "supported"
+    },
+    "localSessionsWithoutGit": {
+      "status": "supported"
+    },
+    "tearOffHalo": {
+      "status": "supported"
+    },
+    "coworkArtifactPopout": {
+      "status": "supported"
+    },
+    "sidePanePopoutNativeViews": {
+      "status": "supported"
+    },
+    "simulatorNativeViewPopout": {
+      "status": "supported"
+    },
+    "simulatorPopoutShortcuts": {
+      "status": "supported"
+    },
+    "simulatorNativeViewPerPane": {
+      "status": "supported"
+    },
+    "popoutZoom": {
+      "status": "supported"
+    },
+    "popoutTitleBarOverlay": {
+      "status": "unsupported",
+      "reason": "Pop-out title bar overlay requires Windows or Linux",
+      "unsupportedCode": "unsupported_platform"
+    },
+    "filePreviewNativeViewRouting": {
+      "status": "supported"
+    },
+    "claudeDesignWindow": {
+      "status": "supported"
+    },
+    "coworkRemoteSessionSpaces": {
+      "status": "supported"
+    },
+    "spaceMemoryBridge": {
+      "status": "unavailable"
+    },
+    "multiAccount": {
+      "status": "unavailable"
+    },
+    "grandPrixRequest": {
+      "status": "unavailable"
+    },
+    "bootPlaceholder": {
+      "status": "supported"
+    },
+    "coworkBranchSession": {
+      "status": "supported"
+    },
+    "coworkScheduledTaskProjects": {
+      "status": "supported"
+    },
+    "coworkLocalSessionProjects": {
+      "status": "supported"
+    },
+    "coworkScheduledTaskRepoint": {
+      "status": "supported"
+    },
+    "sshAttachmentTransport": {
+      "status": "supported"
+    },
+    "coworkSeededSummon": {
+      "status": "supported"
+    },
+    "seededKind": {
+      "status": "supported"
+    },
+    "coworkTextNotTyped": {
+      "status": "unavailable"
+    },
+    "sendNowEscalation": {
+      "status": "supported"
+    },
+    "steerDetachField": {
+      "status": "supported"
+    },
+    "sessionMentions": {
+      "status": "supported"
+    },
+    "inlinePastes": {
+      "status": "supported"
+    },
+    "turnDiscardedEvent": {
+      "status": "supported"
+    },
+    "turnBoxAtReplies": {
+      "status": "supported"
+    },
+    "wslForkSession": {
+      "status": "unavailable"
+    },
+    "wslTerminal": {
+      "status": "unavailable"
+    },
+    "wslMcp": {
+      "status": "unavailable"
+    },
+    "wslPreview": {
+      "status": "unavailable"
+    },
+    "wslLocalFiles": {
+      "status": "unavailable"
+    },
+    "wslRoutines": {
+      "status": "unavailable"
+    },
+    "humbleSky": {
+      "status": "unavailable"
+    },
+    "violinBow": {
+      "status": "unavailable"
+    },
+    "violinBowHomeSettings": {
+      "status": "unavailable"
+    },
+    "coworkThinkingInSend": {
+      "status": "supported"
+    },
+    "bootstrapConfig": {
+      "status": "supported"
+    },
+    "chatIn3p": {
+      "status": "supported"
+    },
+    "chatTab": {
+      "status": "unavailable"
+    },
+    "selfHostedSessions": {
+      "status": "unavailable"
+    },
+    "selfHostedCowork": {
+      "status": "unavailable"
+    },
+    "desktopHome": {
+      "status": "unavailable"
+    },
+    "chatCodeExecution": {
+      "status": "unavailable"
+    },
+    "mcpPersistentAlwaysAllow": {
+      "status": "supported"
+    },
+    "mcpScheduledTaskAlwaysAllow": {
+      "status": "supported"
+    },
+    "mcpScheduledTaskApprovalLifetime": {
+      "status": "unavailable"
+    },
+    "epitaxyMcpApps": {
+      "status": "supported"
+    },
+    "sideSessionProposalPicks": {
+      "status": "supported"
+    },
+    "sideSessionProposalWorktreePick": {
+      "status": "supported"
+    },
+    "sideSessionOfferCloudStart": {
+      "status": "supported"
+    },
+    "sideSessions": {
+      "status": "unavailable"
+    },
+    "btwChildSessions": {
+      "status": "unavailable"
+    },
+    "nestedArchiveKeepsFamily": {
+      "status": "unavailable"
+    },
+    "epitaxyMcpAppPane": {
+      "status": "unavailable"
+    },
+    "ccdConnectorTools": {
+      "status": "unavailable"
+    },
+    "ccdTeleportSnapshot": {
+      "status": "unavailable"
+    }
+  }
+}

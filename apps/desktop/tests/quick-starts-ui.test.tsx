@@ -7,9 +7,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { QuickStarts } from "../src/renderer/components/QuickStarts";
 import { STR } from "../src/renderer/strings";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
-const appSrc = read("../src/renderer/App.tsx");
+const appSrc = readAppSurface();
 const css = read("../src/renderer/styles.css");
 
 describe("QuickStarts（空屏建议行 SSR）", () => {
@@ -53,8 +54,12 @@ describe("空屏（App 源文哨兵 · P2-1）", () => {
     expect(appSrc).toContain("GitBranch");
   });
 
-  it("主页项目 chip 只出现一次（composer 的 ctx-chip 在空态让位）", () => {
-    expect(appSrc).toContain('workspaceLabel={!showEmpty && activeWorkspace ?');
+  it("工作区上下文只出现一处（会话内住工具栏左翼；输入区不再有 ctx-chip）", () => {
+    // 2026-10-21 设计重做：原先会话内 composer 上方有一枚 `cairn-... 本地` chip，
+    // 与侧栏/项目名重复；现在工作区标记收进唯一一条工具栏的左翼，输入区只剩写作面。
+    expect(appSrc).not.toContain("workspaceLabel={");
+    expect(appSrc).not.toContain('className="ctx-chip"');
+    expect(appSrc).toContain('className="tb-workspace"');
     expect(appSrc).toContain('className="empty-chip"');
   });
 

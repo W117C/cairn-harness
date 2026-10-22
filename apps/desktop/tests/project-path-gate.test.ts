@@ -18,7 +18,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   canonicalKnownProjectPath,
   canonicalKnownRoots,
+  resolveCreateParent,
   resolveKnownProjectTarget,
+  resolveProvidedWorkspace,
 } from "../src/main/project-path-gate";
 
 const dirs: string[] = [];
@@ -119,5 +121,96 @@ describe("接线：previewStart / projectExport / gitClone 都走这道门", () 
     expect(fn).toContain("if (!pickedDirs.has(canonical))");
     expect(fn).toContain("克隆目标目录未经选择，已拒绝");
     expect(fn.indexOf("pickedDirs.has(canonical)")).toBeLessThan(fn.indexOf("gitClone(String(r.url"));
+  });
+});
+
+// 2026-10-21 批 133：两条**同形但当时没走这道门**的授权面。
+// 形状完全一样：渲染层给路径 → 主进程拿它当写入落点/读取根 ⇒ 必须落到同一套已知面。
+describe("新建项目父目录闸", () => {
+  it("用户真选过的目录 / 已知项目根 ⇒ 放行，返回值是规范路径", async () => {
+    const ws = await tmp("cairn-ws-");
+    const canonical = canonicalKnownRoots([ws])[0]!;
+    expect(resolveCreateParent(canonical, new Set([canonical]), [])).toEqual({ ok: true, parentDir: canonical });
+    expect(resolveCreateParent(canonical, new Set(), [canonical])).toEqual({ ok: true, parentDir: canonical });
+    // 传原串（/var/...）也会被规范化成同一路径
+    expect(resolveCreateParent(ws, new Set([canonical]), [])).toEqual({ ok: true, parentDir: canonical });
+  });
+
+  it("任意路径 ⇒ 拒（`/Users/me/.ssh` 那种写入落点）", async () => {
+    const ws = await tmp("cairn-ws-");
+    const evil = await tmp("cairn-outside-");
+    const roots = canonicalKnownRoots([ws]);
+    const r = resolveCreateParent(evil, new Set(), roots);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toContain("未经选择");
+  });
+
+  it("缺省（不传/空串）⇒ 交给 core 的固定默认根，不是任意路径", () => {
+    expect(resolveCreateParent(undefined, new Set(), [])).toEqual({ ok: true });
+    expect(resolveCreateParent("", new Set(), [])).toEqual({ ok: true });
+  });
+});
+
+describe("workspace 参数闸（技能/插件读取根）", () => {
+  it("空参数 ⇒ 回落到调用方给的上下文（含 null）", async () => {
+    expect(resolveProvidedWorkspace("", [], "/ctx")).toEqual({ ok: true, workspace: "/ctx" });
+    expect(resolveProvidedWorkspace(undefined, [], null)).toEqual({ ok: true, workspace: null });
+  });
+
+  it("已登记根 ⇒ 放行并规范化；子目录/任意路径 ⇒ 拒", async () => {
+    const ws = await tmp("cairn-ws-");
+    const canonical = canonicalKnownRoots([ws])[0]!;
+    expect(resolveProvidedWorkspace(ws, [canonical], null)).toEqual({ ok: true, workspace: canonical });
+    const sub = resolveProvidedWorkspace(join(ws, "sub"), [canonical], null);
+    expect(sub.ok).toBe(false);
+    const outside = await tmp("cairn-outside-");
+    const any = resolveProvidedWorkspace(outside, [canonical], null);
+    expect(any.ok).toBe(false);
+    if (!any.ok) expect(any.error).toContain("未经登记");
+  });
+});
+
+describe("接线：createProject / 模板建项 / 技能三通道都走闸", () => {
+  const main = readFileSync(fileURLToPath(new URL("../src/main/index.ts", import.meta.url)), "utf8");
+  const call = "resolveCreateParent(r.parentDir, pickedDirs, await knownProjectRoots())";
+
+  it("createProject 先判父目录再 mkdir", () => {
+    const i = main.indexOf("createProject: async (req)");
+    const fn = main.slice(i, i + 1100);
+    expect(fn).toContain(call);
+    expect(fn.indexOf(call)).toBeLessThan(fn.indexOf("createProjectFolder("));
+    expect(fn).toContain('reason: "unpicked-parent"');
+  });
+
+  it("projectCreateFromTemplate 同一条闸（同形漏洞不各写一套）", () => {
+    const i = main.indexOf("projectCreateFromTemplate: async (req)");
+    const fn = main.slice(i, i + 1100);
+    expect(fn).toContain(call);
+    expect(fn.indexOf(call)).toBeLessThan(fn.indexOf("createProjectFromTemplate("));
+  });
+
+  it("workspaceSearch 先判已登记根，再读文件名", () => {
+    const i = main.indexOf("workspaceSearch: async (ws, query)");
+    expect(i).toBeGreaterThan(-1);
+    const fn = main.slice(i, i + 600);
+    expect(fn).toContain("resolveProvidedWorkspace(ws, await knownProjectRoots(), workspaceContext)");
+    expect(fn.indexOf("resolveProvidedWorkspace(")).toBeLessThan(fn.indexOf("searchWorkspace("));
+  });
+
+  it("listSkills / skillBody / pluginDecide 都先判 workspace 再碰插件运行时", () => {
+    for (const [start, end] of [
+      ["listSkills: async (workspace)", "handleListSkills("],
+      ["skillBody: async (name, workspace)", "handleSkillBody("],
+      ["pluginDecide: async (plugin, trusted, workspace)", "handlePluginDecide("],
+    ] as const) {
+      const i = main.indexOf(start);
+      expect(i, start).toBeGreaterThan(-1);
+      const fn = main.slice(i, i + 700);
+      expect(fn).toContain("resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext)");
+      expect(fn.indexOf("resolveProvidedWorkspace(")).toBeLessThan(fn.indexOf(end));
+    }
+    // 旧形状（任意 workspace 直通）必须绝迹
+    expect(main).not.toContain('String(workspace ?? "") || workspaceContext');
+    expect(main).not.toContain('typeof r.parentDir === "string"');
   });
 });

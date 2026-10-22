@@ -8,7 +8,7 @@
 //   底部「添加项目」四入口（打开文件夹…/新建项目…/从 Git 仓库克隆…/最近打开）；
 //   页脚 48px：模型服务状态点（绿=可用，红=不可用，点击直达「模型与 Provider」分区）+ 头像。
 //     头像是侧栏的「账户/外观/用量」枢纽（2026-10-20 批 130）：点开有 外观（主题三选一）/
-//     用量统计（当前会话面板）/ 设置 / 关于与更新。**页脚不再常驻「⚙ 设置」钮**——
+//     用量统计（当前会话 + 全部会话双口径，批 131）/ 设置 / 关于与更新。**页脚不再常驻「⚙ 设置」钮**——
 //     同一个语义两处入口是本仓反复要治的病（批 #128 同款）。
 // 文案一律走 STR（strings.ts——源文扫描判卷钉死）；图标 = lucide（ADR 0003）；会话行菜单 = Radix。
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -18,10 +18,10 @@ import type { ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import { relativeTime } from "../projections";
 import type { UsageSummary } from "../projections";
 import { keysOf } from "../shortcuts";
-import { filterSessions, groupByWorkspace, projectSections, sessionStatus, sessionTime, splitArchived, workspaceLabel, OTHER_WORKSPACE, type TimeBucket, type WorkspaceSession } from "../sessions-view";
+import { filterSessions, groupByWorkspace, projectLabelFor, projectMenuItems, projectSections, sessionStatus, sessionTime, splitArchived, workspaceLabel, OTHER_WORKSPACE, type TimeBucket, type WorkspaceSession } from "../sessions-view";
 import { STR } from "../strings";
-import { formatTokens } from "./format-tokens";
 import { Popover, usePopoverDismiss } from "./Popover";
+import { UsagePanel, type UsageAllState, type UsageScope } from "./UsagePanel";
 import { useNow } from "../useNow";
 import type { ThemePref } from "../theme";
 import { ModalSurface } from "./ModalSurface";
@@ -68,7 +68,7 @@ function SessionRow(props: {
   session: WorkspaceSession;
   activeId: string | null;
   status: ReturnType<typeof sessionStatus>;
-  onOpen: (id: string) => void;
+  onOpen: (id: string, workspace?: string) => void;
   renaming: boolean;
   renameValue: string;
   onRenameValue: (v: string) => void;
@@ -80,6 +80,11 @@ function SessionRow(props: {
   /** listbox 语义的位置读数（2026-10-18）：读屏据此报「第几项 / 共几项」。 */
   posInSet?: number;
   setSize?: number;
+  /** 会话已归到的项目名（null = 未归属）。行上的标签据此画——**归属必须看得见**，
+   *  看不见的归属等于没接：用户改完什么都不知道。 */
+  projectName: string | null;
+  /** 可归属的项目（子菜单用；空 = 没有可选项 ⇒ 子菜单不摆）。 */
+  projectOptions: readonly { id: string; name: string }[];
   actions: {
     onPin: (pinned: boolean) => void;
     onFork: () => void;
@@ -89,10 +94,14 @@ function SessionRow(props: {
     onOpenInCli: () => void;
     /** 会话级 worktree 隔离（§3.7 · G4）：隔离 / 合并回主工作区 / 丢弃。 */
     onWorktree: (kind: "create" | "merge" | "discard") => void;
+    /** 归到某个项目 / 取消归属（null = 取消）。主进程校验项目 id 存在。 */
+    onAssignProject: (projectId: string | null) => void;
   } | null;
 }): React.JSX.Element {
   const s = props.session;
   const title = s.title ?? s.id;
+  // 子菜单条目（纯函数算：菜单是关着的 Radix 弹层，静态渲染里看不见 ⇒ 逻辑必须可判）。
+  const menuItems = projectMenuItems(s, props.projectOptions);
   const t = sessionTime(s);
   const a = props.actions;
   const now = useNow();
@@ -117,7 +126,7 @@ function SessionRow(props: {
       className={"session" + (s.id === props.activeId ? " active" : "")}
       data-active={s.id === props.activeId}
       data-session-id={s.id}
-      onClick={props.renaming ? undefined : () => { props.onOpen(s.id); }}
+      onClick={props.renaming ? undefined : () => { props.onOpen(s.id, s.workspace); }}
       // 右键开会话菜单（2026-10-18 补）：只在有行操作可做时接管；没有 actions 时让默认右键菜单出来。
       // 不 stopPropagation 会让整行的 onClick 跟着触发（React 合成事件冒泡回本行）=> 先开菜单也换了会话。
       onContextMenu={(e) => {
@@ -140,7 +149,7 @@ function SessionRow(props: {
       // 焦点移动不做选择——选中仍是 Enter/Space，与原生 listbox 语义一致。
       onKeyDown={(e) => {
         if (props.renaming || e.target !== e.currentTarget) return;
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); props.onOpen(s.id); return; }
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); props.onOpen(s.id, s.workspace); return; }
         // Shift+F10 / ContextMenu：键盘打开行菜单（右键的等价入口）。没有 actions 时让路。
         if ((e.key === "F10" && e.shiftKey) || e.key === "ContextMenu") {
           if (a !== null) { e.preventDefault(); ctxByKeyboard.current = true; setCtxOpen(true); }
@@ -205,6 +214,10 @@ function SessionRow(props: {
               {s.isolated === true && (
                 <span className="s-draft" aria-label={STR.sidebar.isolatedLabel} title={STR.sidebar.isolatedLabel}><GitBranch size={9} /></span>
               )}
+              {/* 归属项目的标签（会话已归到某个项目时才有）。归属若看不见就等于没接。 */}
+              {props.projectName !== null && (
+                <span className="s-project" aria-label={`${STR.sessionProject.tag}：${props.projectName}`} title={props.projectName}>{props.projectName}</span>
+              )}
             </div>
           </div>
           {a !== null && (
@@ -252,6 +265,26 @@ function SessionRow(props: {
                   </>
                 ) : (
                   <DropdownMenu.Item className="menu-item" onSelect={() => { a.onWorktree("create"); }}>{STR.sessionMenu.wtIsolate}</DropdownMenu.Item>
+                )}
+                {/* 归到项目：子菜单列可归属的项目 ＋ 「取消归属」（已归属时才有）。
+                    归到一个**不存在的**项目 id 会被主进程拒（getActive），所以选项只从项目清单里取。 */}
+                {menuItems.length > 0 && (
+                  <DropdownMenu.Sub>
+                    <DropdownMenu.SubTrigger className="menu-item">
+                      <span>{STR.sessionProject.assign}</span>
+                    </DropdownMenu.SubTrigger>
+                    <DropdownMenu.SubContent className="pop-rd" sideOffset={2}>
+                      {menuItems.map((m) => (
+                        <DropdownMenu.Item
+                          key={m.projectId ?? "unassign"}
+                          className="menu-item"
+                          onSelect={() => { a.onAssignProject(m.projectId); }}
+                        >
+                          <span>{m.label}</span>
+                        </DropdownMenu.Item>
+                      ))}
+                    </DropdownMenu.SubContent>
+                  </DropdownMenu.Sub>
                 )}
                 <DropdownMenu.Item className="menu-item" onSelect={() => { a.onArchive(s.archived !== true); }}>
                   {s.archived === true ? STR.sessionMenu.unarchive : STR.sessionMenu.archive}
@@ -409,7 +442,7 @@ export interface SidebarProps {
   onRetryLoad?: () => void;
   /** 模型服务状态点：true=可用绿 / false=不可用红 / null=未检测灰。 */
   providerOk: boolean | null;
-  onOpen: (id: string) => void;
+  onOpen: (id: string, workspace?: string) => void;
   onNewTask: () => void;
   onOpenPalette: () => void;
   onSwitchWorkspace: (path: string) => void;
@@ -424,6 +457,9 @@ export interface SidebarProps {
   onPinSession?: (id: string, pinned: boolean) => Promise<void>;
   onArchiveSession?: (s: WorkspaceSession, archived: boolean) => void;
   onOpenInCliSession?: (s: WorkspaceSession) => void;
+  /** 把会话归到某个项目 / 取消归属（null = 取消）。归属要**看得见**（行上的标签），
+   *  否则用户改完什么都不知道——那是「算出来不接」那一族。 */
+  onAssignSessionProject?: (sessionId: string, projectId: string | null) => void;
   /** §3.7 · G4：丢弃由 App 侧先弹确认卡（未提交改动会消失）。 */
   onSessionWorktree?: (kind: "create" | "merge" | "discard", s: WorkspaceSession) => void;
   onDeleteSession?: (s: WorkspaceSession) => void;
@@ -439,6 +475,10 @@ export interface SidebarProps {
   onThemeChange: (t: ThemePref) => void;
   /** 当前会话用量（头像菜单「用量统计」面板读它）；null = 没有会话。 */
   usage: UsageSummary | null;
+  /** 全部会话账本（v14）：状态由 App 持有；缺省 = 未接（面板仍可显示当前会话）。 */
+  usageAll?: UsageAllState;
+  /** 切到「全部会话」时拉取/刷新账本；主进程按 mtime 缓存，重复打开成本低。 */
+  onLoadUsageAll?: () => void;
   /** 系统目录选择（「打开文件夹…」「选择克隆位置」「项目设置·更改」共用）。 */
   onPickDirectory: () => Promise<string | null>;
 }
@@ -459,10 +499,16 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; project: ProjectRecord } | null>(null);
   const [settingsFor, setSettingsFor] = useState<ProjectRecord | null>(null);
   // 用量统计面板（批 130）：头像菜单点开；锚在头像上，外点/Esc 关。
+  // 批 131：面板内双口径（当前会话 / 全部会话）；关面板回到当前会话，不把上次口径当默认。
   const [usageOpen, setUsageOpen] = useState(false);
+  const [usageScope, setUsageScope] = useState<UsageScope>("session");
   const usageAnchorRef = useRef<HTMLDivElement | null>(null);
-  const closeUsage = useCallback(() => { setUsageOpen(false); }, []);
+  const closeUsage = useCallback(() => { setUsageOpen(false); setUsageScope("session"); }, []);
   usePopoverDismiss(usageOpen, closeUsage, usageAnchorRef);
+  const changeUsageScope = (next: UsageScope): void => {
+    setUsageScope(next);
+    if (next === "all") props.onLoadUsageAll?.();
+  };
   // 侧栏会话搜索（2026-10-18 接通）：筛选纯函数与词表（filterSessions / SESSION_FILTERS）
   // 从 P3-3 起就在 sessions-view.ts 里、也有判卷，但一直没有调用方——侧栏顶的放大镜实际打开
   // 的是 ⌘K 命令面板（整屏模态），用户点「搜索」想收窄列表，得到的却是盖住整个应用的弹窗。
@@ -503,7 +549,12 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
   const hasRowActions =
     props.onRenameSession !== undefined || props.onPinSession !== undefined ||
     props.onArchiveSession !== undefined || props.onDeleteSession !== undefined ||
-    props.onOpenInCliSession !== undefined || props.onSessionWorktree !== undefined;
+    props.onOpenInCliSession !== undefined || props.onSessionWorktree !== undefined ||
+    props.onAssignSessionProject !== undefined;
+  // 归属项目的两条数据面：可选项（子菜单用） ＋ 行上标签（把 projectId 翻成项目名）。
+  // 项目被移除而归属还在时，标签退回**原始 id**（如实地显示它还指着什么），不编一个名字。
+  const projectOptions = props.projects.map((p) => ({ id: p.id, name: p.name }));
+  const projectNameOf = (s: WorkspaceSession): string | null => projectLabelFor(s, projectOptions);
   // 扁平可见序（2026-10-18）：给 role=option 的 aria-posinset/setsize 用，也是 ↑↓ 键的依据。
   // 与渲染顺序同源：常规组（按项目 → 组内置顶/时间桶）在前，「已归档」组在末尾。
   // 注意这是**渲染序**，不是「打开顺序」——被折叠的组其行仍在 DOM 里（高度过渡），
@@ -526,6 +577,8 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                       renaming={renaming !== null && renaming.id === s.id}
                       renameValue={renaming !== null && renaming.id === s.id ? renaming.value : (s.title ?? s.id)}
                       hasDraft={props.draftIds?.has(s.id) === true}
+                      projectName={projectNameOf(s)}
+                      projectOptions={projectOptions}
                       onRenameValue={(v) => { setRenaming((cur) => (cur !== null && cur.id === s.id ? { id: cur.id, value: v } : cur)); }}
                       onRenameStart={() => { setRenaming({ id: s.id, value: s.title ?? s.id }); }}
                       onRenameCommit={() => {
@@ -544,6 +597,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                         onDelete: () => { props.onDeleteSession?.(s); },
                         onOpenInCli: () => { props.onOpenInCliSession?.(s); },
                         onWorktree: (kind) => { props.onSessionWorktree?.(kind, s); },
+                        onAssignProject: (projectId) => { props.onAssignSessionProject?.(s.id, projectId); },
                       } : null}
                     />
   );
@@ -588,7 +642,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
             }
             if (e.key === "Enter") {
               const first = visibleActive[0] ?? visibleArchived[0];
-              if (first !== undefined) { e.preventDefault(); props.onOpen(first.id); }
+              if (first !== undefined) { e.preventDefault(); props.onOpen(first.id, first.workspace); }
             }
           }}
         />
@@ -837,25 +891,13 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
              不会把「点面板内部」判成外点。 */
           <div className="usage-anchor" ref={usageAnchorRef}>
             <Popover open up className="usage-pop" role="dialog" aria-label={STR.footer.usageTitle}>
-              <div className="pop-label">{STR.footer.usageTitle}</div>
-              {props.usage === null ? (
-                <p className="usage-empty">{STR.footer.usageEmpty}</p>
-              ) : (
-                <dl className="usage-grid">
-                  <dt>{STR.footer.usageInput}</dt>
-                  <dd className="num">{formatTokens(props.usage.inputTokens)}</dd>
-                  <dt>{STR.footer.usageOutput}</dt>
-                  <dd className="num">{formatTokens(props.usage.outputTokens)}</dd>
-                  <dt>{STR.footer.usageCache}</dt>
-                  <dd className="num">{formatTokens(props.usage.cacheReadTokens)}</dd>
-                  <dt>{STR.footer.usageSteps}</dt>
-                  <dd className="num">{String(props.usage.toolSteps)}</dd>
-                  <dt>{STR.footer.usageRounds}</dt>
-                  <dd className="num">{String(props.usage.rounds)}</dd>
-                  <dt>{STR.footer.usageCalls}</dt>
-                  <dd className="num">{String(props.usage.usageCount)}</dd>
-                </dl>
-              )}
+              <UsagePanel
+                scope={usageScope}
+                onScopeChange={changeUsageScope}
+                usage={props.usage}
+                all={props.usageAll ?? { status: "idle" }}
+                onRetry={() => { props.onLoadUsageAll?.(); }}
+              />
             </Popover>
           </div>
         )}

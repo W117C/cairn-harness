@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FindBar } from "../src/renderer/components/FindBar";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
@@ -27,7 +28,7 @@ describe("FindBar 面板", () => {
   });
 
   it("App 接线：⌘F 有会话才开；Esc 先关查找；切会话收起", () => {
-    const app = read("../src/renderer/App.tsx");
+    const app = readAppSurface();
     expect(app).toContain('case "KeyF"');
     expect(app).toContain("h.openFind()");
     // 命令面板同一入口（2026-10-18）：不另起炉灶，复用 findRef

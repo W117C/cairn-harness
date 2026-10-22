@@ -1,0 +1,77 @@
+--- outputs/all-open-2026-10-22/files/file-pane-before.tsx	2026-10-22 11:23:04
++++ apps/desktop/src/renderer/components/FilePane.tsx	2026-10-22 11:21:47
+@@ -1,5 +1,9 @@
++import { Fragment, useEffect, useRef, useState } from "react";
++import { ChevronRight, FileText, Folder } from "lucide-react";
++import type { DirEntryView } from "../../../../../src/main/workspace-fs";
++
+ /** 文件窗格（v5 只读浏览）：左树懒加载 + 下方文本预览（帽/二进制由通道侧拒，界面如实呈现）。 */
+-function FilePane(props: {
++export function FilePane(props: {
+   onPathMenu?: (rel: string, kind: "file" | "directory", x: number, y: number) => void;
+ }): React.JSX.Element {
+   type DirNode = { entries: DirEntryView[]; truncated: boolean } | { error: string };
+@@ -10,6 +14,8 @@
+   // 请求归属（2026-10-21）：同一目录/预览的旧响应晚到，不能覆盖新请求的结果。
+   const dirSeq = useRef(new Map<string, number>());
+   const previewSeq = useRef(0);
++  const root = dirs[""];
++  const firstPath = root !== undefined && "entries" in root ? root.entries[0]?.name : undefined;
+ 
+   const loadDir = (rel: string): void => {
+     const seq = (dirSeq.current.get(rel) ?? 0) + 1;
+@@ -43,8 +49,6 @@
+       const next = new Set(prev);
+       if (next.has(rel)) {
+         next.delete(rel);
+-        // 收起时若焦点在子树里，把 roving focus 拉回被收起的目录行。
+-        setFocusPath((fp) => (fp !== null && fp.startsWith(rel + "/") ? rel : fp));
+       } else { next.add(rel); if (dirs[rel] === undefined) loadDir(rel); }
+       return next;
+     });
+@@ -88,7 +92,8 @@
+     if (e.key === "ArrowRight" && row.dataset.kind === "dir") {
+       e.preventDefault();
+       if (row.getAttribute("aria-expanded") !== "true") row.click();
+-      else rows[idx + 1]?.focus();
++      // 空、加载中或失败目录没有子行；右键只能进入它自己的直属子行。
++      else if (rows[idx + 1]?.dataset.parent === row.dataset.path) rows[idx + 1]?.focus();
+       return;
+     }
+     if (e.key === "ArrowLeft") {
+@@ -136,9 +141,9 @@
+                     data-path={p}
+                     data-parent={rel}
+                     data-kind="dir"
+-                    tabIndex={focusPath === p || (focusPath === null && depth === 0) ? 0 : -1}
++                    tabIndex={focusPath === p || (focusPath === null && p === firstPath) ? 0 : -1}
+                     onFocus={() => { setFocusPath(p); }}
+-                    onClick={() => { toggleDir(p); }}
++                    onClick={(ev) => { ev.currentTarget.focus(); toggleDir(p); }}
+                     onContextMenu={(ev) => { ev.preventDefault(); props.onPathMenu?.(p, "directory", ev.clientX, ev.clientY); }}
+                   >
+                     <ChevronRight size={10} className="fp-chev" aria-hidden="true" />
+@@ -160,9 +165,9 @@
+                 data-path={p}
+                 data-parent={rel}
+                 data-kind="file"
+-                tabIndex={focusPath === p || (focusPath === null && depth === 0) ? 0 : -1}
++                tabIndex={focusPath === p || (focusPath === null && p === firstPath) ? 0 : -1}
+                 onFocus={() => { setFocusPath(p); }}
+-                onClick={() => { openFile(p); }}
++                onClick={(ev) => { ev.currentTarget.focus(); openFile(p); }}
+                 onContextMenu={(ev) => { ev.preventDefault(); props.onPathMenu?.(p, "file", ev.clientX, ev.clientY); }}
+               >
+                 <FileText size={12} aria-hidden="true" />
+@@ -181,7 +186,10 @@
+       <div className="file-preview">
+         {preview === null && <div className="fp-note">点文件预览（只读；写入由 agent 走审批）</div>}
+         {preview !== null && (
+-          <div className="fp-preview-path" title={preview.path}>{preview.path}</div>
++          <div className="fp-preview-head">
++            <div className="fp-preview-path" title={preview.path}>{preview.path}</div>
++            <span className="fp-readonly">只读</span>
++          </div>
+         )}
+         {preview !== null && preview.loading && <div className="fp-note">读取中…</div>}
+         {preview !== null && !preview.loading && preview.error !== undefined && (

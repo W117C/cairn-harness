@@ -1,3 +1,4 @@
+import { readAppSurface } from "./helpers/app-surface";
 // 浮层能关掉（2026-10-19 独立评审追出的真缺陷）：用量环的明细浮层两个手势都不认。
 //
 // 缺陷形状：Composer 只给附件/权限两个菜单接了 usePopoverDismiss，用量浮层（menu === "meter"）
@@ -13,7 +14,7 @@ import { describe, expect, it } from "vitest";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const composer = read("../src/renderer/components/Composer.tsx");
-const popover = read("../src/renderer/components/Popover.tsx");
+const popover = readAppSurface();
 
 describe("Composer 的浮层：三个自绘菜单都认外点 + Esc", () => {
   it("meter 也接了 usePopoverDismiss（旧实现只有 attach/perm 两支）", () => {

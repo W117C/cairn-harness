@@ -169,6 +169,7 @@ export function GeneralSection(props: {
   /** 2026-10-20：组件尺寸档（尺寸轴）；同样走单键直调，理由同上。 */
   uiSize: UiSizeSetting;
   onUiSize: (next: UiSizeSetting) => void;
+  onWindowVibrancy: (next: boolean) => void;
 }): React.JSX.Element {
   return (
     <>
@@ -189,6 +190,18 @@ export function GeneralSection(props: {
               </button>
             ))}
           </div>
+        </SettingsRow>
+      </SettingsSection>
+
+      <SettingsSection title="窗口" hint="实验">
+        <SettingsRow label="窗口材质" desc="macOS 侧栏半透明；默认关，改动需重启窗口。未做视觉验收前不建议开。">
+          <Switch
+            label="窗口材质"
+            checked={props.settings.windowVibrancy === true}
+            onChange={props.onWindowVibrancy}
+            onText="开"
+            offText="关"
+          />
         </SettingsRow>
       </SettingsSection>
 

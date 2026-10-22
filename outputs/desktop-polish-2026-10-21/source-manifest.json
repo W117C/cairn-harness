@@ -1,0 +1,20 @@
+{
+  "head": "6af24734ba957838e5584e01228499e5e77b61e9",
+  "scope": "working tree; task.diff excludes unrelated dirty hunks",
+  "sha256": {
+    "apps/desktop/src/main/browser-host.ts": "416323475da3cada1ceb97268a75f8bb07a21789040e03582ccc9916fb516316",
+    "apps/desktop/src/main/terminal-host.ts": "7cfe8bdc63cad2ce241a2a1216eb41873487cb272aec872e462aed05beee3c7c",
+    "apps/desktop/src/renderer/main.tsx": "39e256ece81a33a3f304bebb28d59c2c4228429ef2cf1e06c49f66f14464a71f",
+    "apps/desktop/src/renderer/components/Inspector.tsx": "d08226381cf4337517fc01a40d10c03893045ad7d61c878ac9cd6388a5f60b6c",
+    "apps/desktop/scripts/native-host-smoke.ts": "2a90cfd7cd848abccc36f5e615f883fb110bc4f772149ae96758924162bab57f",
+    "apps/desktop/scripts/performance-smoke.cjs": "203bad5de6d57ee703164a19ace0408d7942160b3c02b40b88464842fa62c719",
+    "apps/desktop/scripts/bundle-audit.mjs": "17487104dc2a02dacaed5635372e3725925a21991ffadc5b09c067b72ffadf93",
+    "apps/desktop/scripts/ui-gallery-preload.cjs": "cb060afaf66f4531804382913fbcb6c65c56e126721db8ee35f36f9d5dae7139",
+    "apps/desktop/tests/desktop-review-batch.test.ts": "d2a931a514d079d145f082cfed401ece8517563ce213ab539f319ac150496bd6",
+    "apps/desktop/scripts/route-smoke.cjs": "310172e5d1e9fc7e59a1fea1420381f3340f805e5d44c7b0b2172755f7aa7b2e",
+    "apps/desktop/tests/browser-local-ipv6.test.ts": "b28f88f40226a232dc4cc0e1d72dbd20cdcb5e105d628a85a032963f3ea7ede0",
+    "apps/desktop/tests/terminal-drain.test.ts": "40fa8805cf34872fb63d1e26f6573bfc99e26e43fbcabd66ee40fbf281c1abfb",
+    "apps/desktop/tests/inspector-missing-usage.test.tsx": "d3c8337ae6af438d5669d0efd8c75829906be3ab9fce52e1cedc90679cd56c91",
+    "apps/desktop/src/main/index.ts": "675560b2b35c6645b5a14d9edbbb7618f911935f3a6915748143461e79be09f3"
+  }
+}

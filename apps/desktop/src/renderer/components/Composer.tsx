@@ -20,7 +20,7 @@ import { toast } from "../toast";
 import { relInWorkspace } from "../workspace-rel";
 import type { PermissionMode, ProviderInfo, RunAttachmentReference, SuggestNextResult } from "../../../../../src/main/ipc-protocol";
 import type { RunPhase } from "../projections";
-import { ArrowUp, ChevronDown, ChevronRight, Clock, FileText, Folder, Image as ImageIcon, Loader2, Plus, Shield, ShieldAlert, X } from "lucide-react";
+import { ArrowUp, ChevronDown, ChevronRight, Clock, FileText, Folder, Image as ImageIcon, Loader2, Plus, Puzzle, Shield, ShieldAlert, X } from "lucide-react";
 import { classifyDrop } from "../sessions-view";
 import { formatTokens } from "./format-tokens";
 import { ModelPicker, THINKING_LEVELS } from "./ModelPicker";
@@ -147,7 +147,6 @@ export function Composer(props: {
   runSteps?: number;
   /** 所选模型的上下文窗口（算水位用；未知 = 不显那一格）。 */
   ctxWindow?: number;
-  workspaceLabel: string | null;
   /** 当前工作区绝对路径（@ 搜索范围 / 项目内外判定 / 项目内文件「点开」）——未选项目 = null/缺省。 */
   workspacePath?: string | null;
   /** 本会话已引用文件（最近在前）：＋菜单「引用最近文件」子菜单数据面（App 内存级维护）。 */
@@ -634,14 +633,27 @@ export function Composer(props: {
     ? STR.composer.ringAriaPct.replace("{pct}", String(ctxPct))
     : ctxWindowDeclared ? STR.composer.ringAriaNoData : STR.composer.ringAriaUnknown;
   const recentRefs = props.recentRefs ?? [];
+  // 插件命令带（G1 的按钮带半边，2026-10-21）：只列已信任、带命名空间的命令；
+  // 点一下填入 `/plugin:command `，不直接发送（沿用 C-24 的「填入不发送」口径）。
+  const pluginSkills = (props.skills ?? []).filter((s) => s.trust === "trusted" && s.invoke.includes(":")).slice(0, 4);
   return (
     <>
-      {props.workspaceLabel !== null && (
-        <div className="ctx-row">
-          <span className="ctx-chip" aria-label={STR.composer.workspaceAria}>
-            <Folder size={12} />
-            {props.workspaceLabel}<span className="wt-tag">{STR.composer.workspaceLocal}</span>
-          </span>
+      {pluginSkills.length > 0 && (
+        <div className="plugin-strip" aria-label={STR.composer.pluginStripAria}>
+          <span className="plugin-strip-label"><Puzzle size={11} aria-hidden="true" />{STR.composer.pluginStripLabel}</span>
+          {pluginSkills.map((s) => {
+            const invoke = s.invoke.replace(/^\/+/, "");
+            return (
+              <button
+                key={s.invoke}
+                className="plugin-chip"
+                title={s.description.trim() === "" ? invoke : s.description}
+                onClick={() => { chooseSlash({ invoke: `/${invoke}`, desc: s.description }); }}
+              >
+                {invoke}
+              </button>
+            );
+          })}
         </div>
       )}
       <div

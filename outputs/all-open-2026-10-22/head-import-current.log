@@ -1,0 +1,3 @@
+head-import-face（HEAD）：文件 857 个｜import 边 5195 条｜符号缺失 0｜模块悬空 1（存量已豁免 0）
+  ❌ dangling apps/desktop/src/main/channels.ts — 这一版里 tests/readme-invoke-channel-count.test.ts import 了它，而它不在这一版 ⇒ **漏 `git add`**（盘上有但未入库）
+head-import-face: ❌ 1 项（两张存量表在本文件，只准带理由登记）

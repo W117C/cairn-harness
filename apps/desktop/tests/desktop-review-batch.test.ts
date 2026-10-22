@@ -5,10 +5,17 @@
 // 相位文案 = tests/phase-label.test.ts（纯函数，真跑）；草稿搬移 = 本文件末尾的通道对账）。
 // 它钉的是**接线**：修法真的落在那条路上，而不是"某处有个一样的字符串"。
 import { readFileSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppShell } from "./helpers/app-surface";
 
-const app = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const app = readAppShell();
 const kernel = readFileSync(fileURLToPath(new URL("../src/main/kernel-host.ts", import.meta.url)), "utf8");
 
 describe("改名绑定到发起时那条会话（切会话不能改错对象）", () => {
@@ -63,19 +70,26 @@ describe("测量脚本要有预算（量过了 ≠ 没变）", () => {
     expect(bundle).toContain("process.exitCode=1");
   });
 
-  it("原生宿主冒烟：认得 lo0 没绑 127.0.0.2 ⇒ 说清怎么开 + 独立退出码（不许 exit 0）", () => {
-    const native = readFileSync(fileURLToPath(new URL("../scripts/native-host-smoke.ts", import.meta.url)), "utf8");
-    // 判据要钉**分支真的在**（只钉"文件里有这几个字"= 恒真：把条件改成 if(false) 也照样全绿）
-    expect(native).toContain('if (code === "EADDRNOTAVAIL") {');
-    expect(native).toContain("ifconfig lo0 alias 127.0.0.2");
-    expect(native).toContain("app.exit(2)");
-    // 「跑不了」那一支**不许再 throw**（2026-10-21 真机冒烟实测）：`app.exit` 是异步退出的，
-    // 紧接着 throw ⇒ 外层 `main().catch` 接手 ⇒ 原始错误被原样印出来、外层再退 1
-    // ⇒ 「跑不了」被读成「跑挂了」，退出码也不是那个 2。这一格钉住"return 收束"。
-    const branch = native.slice(native.indexOf('if (code === "EADDRNOTAVAIL") {'));
-    const beforeThrow = branch.slice(0, branch.indexOf("throw err;"));
-    expect(beforeThrow, "EADDRNOTAVAIL 分支里必须以 return 收束（不许再 throw 给外层）").toContain("return;");
-    // 反向对照：跑不了不许走"全过"那个出口
-    expect(native).not.toMatch(/EADDRNOTAVAIL[\s\S]{0,600}app\.exit\(0\)/);
-  });
+  it.runIf(process.platform === "darwin")("原生宿主实际运行：无系统配置前提，完整验证导航、窗口归属和 PTY", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cairn-native-regression-"));
+    try {
+      const electron = createRequire(import.meta.url)("electron") as string;
+      const output = join(dir, "checks.json");
+      // 子进程**不许**继承 ELECTRON_RUN_AS_NODE：那个变量把 Electron 降级成纯 Node
+      // （require("electron") 返回二进制路径字符串、app 为 undefined），原生宿主一启动
+      // 就死在 app.setPath 上。开发本仓的宿主（DSH）会把该变量注入每个 shell ⇒ 不清掉
+      // 这一格就是**恒红**，而恒红会被读成"产品坏了"——真因却与产品无关。
+      const env = { ...process.env };
+      delete env.ELECTRON_RUN_AS_NODE;
+      await promisify(execFile)(electron, [fileURLToPath(new URL("../scripts/native-host-smoke.cjs", import.meta.url)), output], { timeout: 30000, env });
+      const checks = JSON.parse(readFileSync(output, "utf8")) as { name: string; ok: boolean; detail?: { foreignHits?: number } }[];
+      expect(checks.length).toBeGreaterThanOrEqual(14);
+      expect(checks.filter(c => !c.ok)).toEqual([]);
+      expect(checks.find(c => c.name === "未授权重定向没有发到目标服务")?.detail?.foreignHits).toBe(0);
+      expect(checks.find(c => c.name === "后台弹窗页面挂到调用窗口而非聚焦窗口")?.ok).toBe(true);
+      expect(checks.find(c => c.name === "宿主窗口销毁时释放视图及登记")?.ok).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 35000);
 });

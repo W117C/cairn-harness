@@ -1,0 +1,13 @@
+PASS 提交中的同一条反馈禁止重复发送 undefined
+PASS 等待中的重复点击不发送第二个反馈请求 undefined
+PASS 请求未完成时操作条保持可见，移开鼠标也能看到保存状态 undefined
+PASS 反馈失败只回滚本条，不清空其他已成功标记 undefined
+PASS 提交中的置顶按钮同样有等待状态 undefined
+PASS 置顶失败只回滚本条，不清空其他已成功标记 undefined
+PASS 另一会话先展示自己的反馈与置顶 undefined
+PASS 旧会话迟到失败不覆盖当前会话的标记 undefined
+PASS 旧会话的提交错误不显示到当前会话 undefined
+PASS 切走再切回同一会话，旧请求也不能回滚新加载的状态 undefined
+PASS 渲染过程无控制台错误 []
+截图与读数：/Users/ze/Downloads/Cairn/deepseek harness/outputs/desktop-polish-2026-10-21/state-final
+隔离测试配置：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-state-profile-dsoR0h

@@ -18,8 +18,11 @@ const budgets={
 const out = resolve(process.argv[2] ?? 'performance.json');
 const turns = Number(process.argv[3] ?? 400);
 const samples = Number(process.argv[4] ?? 40);
+const rendererDir = resolve(process.env.CAIRN_PERF_RENDERER_DIR ?? join(__dirname, '../dist'));
 const pause = (ms) => new Promise(r => setTimeout(r, ms));
 async function main() {
+  if (!Number.isInteger(turns) || turns < 1 || !Number.isInteger(samples) || samples < 2) throw new Error('必须至少一轮历史、两次独立增量');
+  if (Object.values(budgets).some(value => !Number.isFinite(value) || value <= 0)) throw new Error('性能预算必须为有限正数');
   await app.whenReady();
   const protocol = readFileSync(join(__dirname, '../../../src/main/ipc-protocol.ts'), 'utf8');
   const version = Number(protocol.match(/IPC_PROTOCOL_VERSION\s*=\s*(\d+)/)[1]);
@@ -40,7 +43,7 @@ async function main() {
     throw new Error('等待超时: '+expression);
   };
   const t0=performance.now();
-  await win.loadFile(join(__dirname,'../dist/index.html'));
+  await win.loadFile(join(rendererDir,'index.html'));
   await waitFor(`!!document.querySelector('.session') && !!document.querySelector('.composer-card textarea')`);
   const startupMs=performance.now()-t0;
   win.webContents.debugger.attach('1.3');
@@ -78,6 +81,22 @@ async function main() {
   const finalMetrics=await metrics();
   const metricDelta=(before,after)=>Object.fromEntries(['TaskDuration','ScriptDuration','LayoutDuration','RecalcStyleDuration','LayoutCount','RecalcStyleCount'].map(key=>[key,(after[key]??0)-(before[key]??0)]));
   const report={turns,samples,startupMs,openMs,runningStarted,metrics:{open:metricDelta(startupMetrics,openMetrics),stream:metricDelta(streamMetrics,finalMetrics)},frameMs:{p50:sorted[Math.floor(sorted.length*.5)],p95:sorted[Math.floor(sorted.length*.95)],max:sorted.at(-1),all:frames},dom,errors,budgets};
+  if (process.env.CAIRN_PERF_CHECK_ACTIONS === '1') {
+    // 在计时结束后点击刚生成一轮的动作，验证缓存没有把事件闭包冻结在旧历史。
+    await js('window.__cairnPerf.complete()');
+    const round = turns + 1;
+    await waitFor(`!!document.querySelector('[aria-label="回放到第 ${round} 轮"]') && document.querySelector('.gen-bar')?.dataset.running === 'false'`);
+    await js(`document.querySelector('[aria-label="回放到第 ${round} 轮"]').click()`);
+    await waitFor('window.__cairnPerf.calls().forks.length === 1');
+    await js(`document.querySelector('[aria-label="重跑第 ${round} 轮"]').click()`);
+    await waitFor('window.__cairnPerf.calls().runs.length === 2');
+    const calls = await js('window.__cairnPerf.calls()');
+    report.actions = {
+      replayLatest: calls.forks[0].sessionId === 's1' && calls.forks[0].round === round && calls.forks[0].keepWorkspace === true,
+      retryLatest: calls.runs[1].message === '逐帧流式性能检查',
+    };
+    await js('window.__cairnPerf.finish()');
+  }
   mkdirSync(require('node:path').dirname(out),{recursive:true});
   writeFileSync(out,JSON.stringify(report,null,2));
   console.log(JSON.stringify(report));
@@ -89,7 +108,9 @@ async function main() {
     ...(report.startupMs>budgets.startupMs?[`启动 ${report.startupMs.toFixed(1)}ms > 帽 ${budgets.startupMs}ms`]:[]),
   ];
   if(overBudget.length>0) console.error('[performance-smoke] 超预算：'+overBudget.join('；'));
-  app.exit(runningStarted && errors.length===0 && dom.historyPresent && dom.lastPresent && overBudget.length===0 ? 0:1);
+  const completeHistory = dom.users === turns+1 && dom.assistants === turns+1 && dom.tools === turns;
+  const validActions = report.actions === undefined || Object.values(report.actions).every(Boolean);
+  app.exit(runningStarted && errors.length===0 && dom.historyPresent && dom.lastPresent && completeHistory && validActions && overBudget.length===0 ? 0:1);
 }
 setTimeout(()=>{console.error('performance-smoke 超时');app.exit(1);},90000).unref();
 main().catch(e=>{console.error(e);app.exit(1);});

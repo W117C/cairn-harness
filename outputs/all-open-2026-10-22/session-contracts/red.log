@@ -1,0 +1,369 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness
+
+ ✓ tests/session-semantics.test.ts > 游标：不透明 + fail-closed > 编解码往返：内容面原样回来（会话 id + 位置 + 种类） 1ms
+ ✓ tests/session-semantics.test.ts > 游标：不透明 + fail-closed > 游标是**不透明**的：载荷里不出现明文会话 id 与位置 0ms
+ ✓ tests/session-semantics.test.ts > 游标：不透明 + fail-closed > 坏游标一律抛 `malformed`：不是 base64url / 不是 JSON / 校验和不符 / 版本不对 0ms
+ ✓ tests/session-semantics.test.ts > 游标：不透明 + fail-closed > 种类不支持 ⇒ `unsupported-kind`（解得开、校验也对，只是种类不认识） 0ms
+ ✓ tests/session-semantics.test.ts > 游标：不透明 + fail-closed > 会话不匹配 ⇒ `session-mismatch`；位置越界 ⇒ `out-of-range` 0ms
+ ✓ tests/session-semantics.test.ts > 游标：不透明 + fail-closed > 坏游标**绝不**被换成另一个位置（抛，不回落成「最后一条」） 0ms
+ ✓ tests/session-semantics.test.ts > 游标：不透明 + fail-closed > 游标的位置是**含**的：forkPointFromCursor 返回 lastIncluded = 游标位置 3ms
+ ✓ tests/session-semantics.test.ts > 游标：不透明 + fail-closed > 游标指向别的会话 / 越界 ⇒ 抛（分叉点也不许兜底） 1ms
+ × tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > 子文件仅一行血缘；父字节不变；继承含边界，之后接本地事件 4ms
+   → expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+ × tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > 边界 0 是有父但无继承，与根会话分得开 0ms
+   → expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+ × tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > 嵌套分叉的边界取父 raw 第2行，而不是扁平数组第2项 0ms
+   → expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+ × tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > 父前缀先应用控制记录；不把 raw 行号重排后再应用回退 0ms
+   → expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+ × tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > 只过滤继承的在飞状态；边界后的结果不能替父请求收尾 0ms
+   → expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+ × tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > 已收尾的澄清、方案、审批保持原样；worker同id结果不能解除主流在飞状态 0ms
+   → expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+ × tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > 父缺失 / 边界越界 / 非整数 / 负数全都拒绝且不创建子文件 0ms
+   → expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+ × tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > 自环、祖先环、坏血缘拒绝；既有目标保持字节不变 0ms
+   → expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+ × tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > allowedRoot把父链读限制在真实路径下，软链不能绕过 0ms
+   → expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+ × tests/session-semantics.test.ts > 提交幂等：实例内的会话分域账本 > submit并发与完成后重放共用同一Promise；工作只执行一次 4ms
+   → promise rejected "Error: Cannot find module '/src/agent/sub… { …(2) }" instead of resolving
+ × tests/session-semantics.test.ts > 提交幂等：实例内的会话分域账本 > submit同步抛错也粘滞；重复提交重抛同一个错误而不重跑 2ms
+   → promise rejected "Error: Cannot find module '/src/agent/sub… { …(2) }" instead of resolving
+ × tests/session-semantics.test.ts > 提交幂等：实例内的会话分域账本 > submit异步拒绝也粘滞；在飞重入在run执行前已登记 1ms
+   → promise rejected "Error: Cannot find module '/src/agent/sub… { …(2) }" instead of resolving
+ × tests/session-semantics.test.ts > 提交幂等：实例内的会话分域账本 > submitOnce只共享在飞Promise，成功与失败后都可以重新执行 1ms
+   → promise rejected "Error: Cannot find module '/src/agent/sub… { …(2) }" instead of resolving
+ × tests/session-semantics.test.ts > 提交幂等：实例内的会话分域账本 > requestId按会话分域且分隔符不碰撞；新账本不声称跨重启去重 1ms
+   → promise rejected "Error: Cannot find module '/src/agent/sub… { …(2) }" instead of resolving
+ × tests/session-semantics.test.ts > 游标入口额外fail-closed边界 > Buffer宽松接收的非规范base64url不得当成有效游标 0ms
+   → expected function to throw an error, but it didn't
+ × tests/session-semantics.test.ts > 游标入口额外fail-closed边界 > 结构化游标也验kind/version；不允许绕过decode 0ms
+   → expected function to throw an error, but it didn't
+ × tests/session-semantics.test.ts > 游标入口额外fail-closed边界 > 小于1的位置按ADR给out-of-range；非整数载荷仍为malformed 1ms
+   → expected 'malformed' to be 'out-of-range' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 17 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > 子文件仅一行血缘；父字节不变；继承含边界，之后接本地事件
+AssertionError: expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+
+- Expected:
+Any<Function>
+
++ Received:
+undefined
+
+ ❯ pointerApi tests/session-semantics.test.ts:156:22
+    154|
+    155| async function pointerApi() {
+    156|   expect(sessionApi).toHaveProperty("forkSessionPointer", expect.any(F…
+       |                      ^
+    157|   expect(sessionApi).toHaveProperty("replaySession", expect.any(Functi…
+    158|   return sessionApi;
+ ❯ tests/session-semantics.test.ts:176:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/17]⎯
+
+ FAIL  tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > 边界 0 是有父但无继承，与根会话分得开
+AssertionError: expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+
+- Expected:
+Any<Function>
+
++ Received:
+undefined
+
+ ❯ pointerApi tests/session-semantics.test.ts:156:22
+    154|
+    155| async function pointerApi() {
+    156|   expect(sessionApi).toHaveProperty("forkSessionPointer", expect.any(F…
+       |                      ^
+    157|   expect(sessionApi).toHaveProperty("replaySession", expect.any(Functi…
+    158|   return sessionApi;
+ ❯ tests/session-semantics.test.ts:195:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/17]⎯
+
+ FAIL  tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > 嵌套分叉的边界取父 raw 第2行，而不是扁平数组第2项
+AssertionError: expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+
+- Expected:
+Any<Function>
+
++ Received:
+undefined
+
+ ❯ pointerApi tests/session-semantics.test.ts:156:22
+    154|
+    155| async function pointerApi() {
+    156|   expect(sessionApi).toHaveProperty("forkSessionPointer", expect.any(F…
+       |                      ^
+    157|   expect(sessionApi).toHaveProperty("replaySession", expect.any(Functi…
+    158|   return sessionApi;
+ ❯ tests/session-semantics.test.ts:205:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/17]⎯
+
+ FAIL  tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > 父前缀先应用控制记录；不把 raw 行号重排后再应用回退
+AssertionError: expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+
+- Expected:
+Any<Function>
+
++ Received:
+undefined
+
+ ❯ pointerApi tests/session-semantics.test.ts:156:22
+    154|
+    155| async function pointerApi() {
+    156|   expect(sessionApi).toHaveProperty("forkSessionPointer", expect.any(F…
+       |                      ^
+    157|   expect(sessionApi).toHaveProperty("replaySession", expect.any(Functi…
+    158|   return sessionApi;
+ ❯ tests/session-semantics.test.ts:217:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/17]⎯
+
+ FAIL  tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > 只过滤继承的在飞状态；边界后的结果不能替父请求收尾
+AssertionError: expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+
+- Expected:
+Any<Function>
+
++ Received:
+undefined
+
+ ❯ pointerApi tests/session-semantics.test.ts:156:22
+    154|
+    155| async function pointerApi() {
+    156|   expect(sessionApi).toHaveProperty("forkSessionPointer", expect.any(F…
+       |                      ^
+    157|   expect(sessionApi).toHaveProperty("replaySession", expect.any(Functi…
+    158|   return sessionApi;
+ ❯ tests/session-semantics.test.ts:227:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/17]⎯
+
+ FAIL  tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > 已收尾的澄清、方案、审批保持原样；worker同id结果不能解除主流在飞状态
+AssertionError: expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+
+- Expected:
+Any<Function>
+
++ Received:
+undefined
+
+ ❯ pointerApi tests/session-semantics.test.ts:156:22
+    154|
+    155| async function pointerApi() {
+    156|   expect(sessionApi).toHaveProperty("forkSessionPointer", expect.any(F…
+       |                      ^
+    157|   expect(sessionApi).toHaveProperty("replaySession", expect.any(Functi…
+    158|   return sessionApi;
+ ❯ tests/session-semantics.test.ts:246:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/17]⎯
+
+ FAIL  tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > 父缺失 / 边界越界 / 非整数 / 负数全都拒绝且不创建子文件
+AssertionError: expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+
+- Expected:
+Any<Function>
+
++ Received:
+undefined
+
+ ❯ pointerApi tests/session-semantics.test.ts:156:22
+    154|
+    155| async function pointerApi() {
+    156|   expect(sessionApi).toHaveProperty("forkSessionPointer", expect.any(F…
+       |                      ^
+    157|   expect(sessionApi).toHaveProperty("replaySession", expect.any(Functi…
+    158|   return sessionApi;
+ ❯ tests/session-semantics.test.ts:262:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/17]⎯
+
+ FAIL  tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > 自环、祖先环、坏血缘拒绝；既有目标保持字节不变
+AssertionError: expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+
+- Expected:
+Any<Function>
+
++ Received:
+undefined
+
+ ❯ pointerApi tests/session-semantics.test.ts:156:22
+    154|
+    155| async function pointerApi() {
+    156|   expect(sessionApi).toHaveProperty("forkSessionPointer", expect.any(F…
+       |                      ^
+    157|   expect(sessionApi).toHaveProperty("replaySession", expect.any(Functi…
+    158|   return sessionApi;
+ ❯ tests/session-semantics.test.ts:277:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/17]⎯
+
+ FAIL  tests/session-semantics.test.ts > 指针分叉：独立读侧，不改 raw replay > allowedRoot把父链读限制在真实路径下，软链不能绕过
+AssertionError: expected { …(23), …(1) } to have property "forkSessionPointer" with value Any<Function>
+
+- Expected:
+Any<Function>
+
++ Received:
+undefined
+
+ ❯ pointerApi tests/session-semantics.test.ts:156:22
+    154|
+    155| async function pointerApi() {
+    156|   expect(sessionApi).toHaveProperty("forkSessionPointer", expect.any(F…
+       |                      ^
+    157|   expect(sessionApi).toHaveProperty("replaySession", expect.any(Functi…
+    158|   return sessionApi;
+ ❯ tests/session-semantics.test.ts:296:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/17]⎯
+
+ FAIL  tests/session-semantics.test.ts > 提交幂等：实例内的会话分域账本 > submit并发与完成后重放共用同一Promise；工作只执行一次
+AssertionError: promise rejected "Error: Cannot find module '/src/agent/sub… { …(2) }" instead of resolving
+ ❯ ledgerApi tests/session-semantics.test.ts:163:23
+    161| async function ledgerApi() {
+    162|   const loaded = import("../src/agent/submission-ledger");
+    163|   await expect(loaded).resolves.toHaveProperty("SubmissionLedger", exp…
+       |                       ^
+    164|   return loaded;
+    165| }
+ ❯ tests/session-semantics.test.ts:311:40
+
+Caused by: Error: Cannot find module '/src/agent/submission-ledger' imported from /Users/ze/Downloads/Cairn/deepseek harness/tests/session-semantics.test.ts
+ ❯ ledgerApi tests/session-semantics.test.ts:163:3
+ ❯ tests/session-semantics.test.ts:311:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/17]⎯
+
+ FAIL  tests/session-semantics.test.ts > 提交幂等：实例内的会话分域账本 > submit同步抛错也粘滞；重复提交重抛同一个错误而不重跑
+AssertionError: promise rejected "Error: Cannot find module '/src/agent/sub… { …(2) }" instead of resolving
+ ❯ ledgerApi tests/session-semantics.test.ts:163:23
+    161| async function ledgerApi() {
+    162|   const loaded = import("../src/agent/submission-ledger");
+    163|   await expect(loaded).resolves.toHaveProperty("SubmissionLedger", exp…
+       |                       ^
+    164|   return loaded;
+    165| }
+ ❯ tests/session-semantics.test.ts:323:40
+
+Caused by: Error: Cannot find module '/src/agent/submission-ledger' imported from /Users/ze/Downloads/Cairn/deepseek harness/tests/session-semantics.test.ts
+ ❯ ledgerApi tests/session-semantics.test.ts:163:3
+ ❯ tests/session-semantics.test.ts:323:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/17]⎯
+
+ FAIL  tests/session-semantics.test.ts > 提交幂等：实例内的会话分域账本 > submit异步拒绝也粘滞；在飞重入在run执行前已登记
+AssertionError: promise rejected "Error: Cannot find module '/src/agent/sub… { …(2) }" instead of resolving
+ ❯ ledgerApi tests/session-semantics.test.ts:163:23
+    161| async function ledgerApi() {
+    162|   const loaded = import("../src/agent/submission-ledger");
+    163|   await expect(loaded).resolves.toHaveProperty("SubmissionLedger", exp…
+       |                       ^
+    164|   return loaded;
+    165| }
+ ❯ tests/session-semantics.test.ts:333:40
+
+Caused by: Error: Cannot find module '/src/agent/submission-ledger' imported from /Users/ze/Downloads/Cairn/deepseek harness/tests/session-semantics.test.ts
+ ❯ ledgerApi tests/session-semantics.test.ts:163:3
+ ❯ tests/session-semantics.test.ts:333:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/17]⎯
+
+ FAIL  tests/session-semantics.test.ts > 提交幂等：实例内的会话分域账本 > submitOnce只共享在飞Promise，成功与失败后都可以重新执行
+AssertionError: promise rejected "Error: Cannot find module '/src/agent/sub… { …(2) }" instead of resolving
+ ❯ ledgerApi tests/session-semantics.test.ts:163:23
+    161| async function ledgerApi() {
+    162|   const loaded = import("../src/agent/submission-ledger");
+    163|   await expect(loaded).resolves.toHaveProperty("SubmissionLedger", exp…
+       |                       ^
+    164|   return loaded;
+    165| }
+ ❯ tests/session-semantics.test.ts:350:40
+
+Caused by: Error: Cannot find module '/src/agent/submission-ledger' imported from /Users/ze/Downloads/Cairn/deepseek harness/tests/session-semantics.test.ts
+ ❯ ledgerApi tests/session-semantics.test.ts:163:3
+ ❯ tests/session-semantics.test.ts:350:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/17]⎯
+
+ FAIL  tests/session-semantics.test.ts > 提交幂等：实例内的会话分域账本 > requestId按会话分域且分隔符不碰撞；新账本不声称跨重启去重
+AssertionError: promise rejected "Error: Cannot find module '/src/agent/sub… { …(2) }" instead of resolving
+ ❯ ledgerApi tests/session-semantics.test.ts:163:23
+    161| async function ledgerApi() {
+    162|   const loaded = import("../src/agent/submission-ledger");
+    163|   await expect(loaded).resolves.toHaveProperty("SubmissionLedger", exp…
+       |                       ^
+    164|   return loaded;
+    165| }
+ ❯ tests/session-semantics.test.ts:365:61
+
+Caused by: Error: Cannot find module '/src/agent/submission-ledger' imported from /Users/ze/Downloads/Cairn/deepseek harness/tests/session-semantics.test.ts
+ ❯ ledgerApi tests/session-semantics.test.ts:163:3
+ ❯ tests/session-semantics.test.ts:365:55
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/17]⎯
+
+ FAIL  tests/session-semantics.test.ts > 游标入口额外fail-closed边界 > Buffer宽松接收的非规范base64url不得当成有效游标
+AssertionError: expected function to throw an error, but it didn't
+ ❯ tests/session-semantics.test.ts:382:43
+    380|     const raw = encodeCursor({ sessionId: "s1", eventId: 1 });
+    381|     for (const changed of [raw + "=", raw + "\n", " " + raw]) {
+    382|       expect(() => decodeCursor(changed)).toThrow(CursorError);
+       |                                           ^
+    383|     }
+    384|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/17]⎯
+
+ FAIL  tests/session-semantics.test.ts > 游标入口额外fail-closed边界 > 结构化游标也验kind/version；不允许绕过decode
+AssertionError: expected function to throw an error, but it didn't
+ ❯ tests/session-semantics.test.ts:388:104
+    386|   it("结构化游标也验kind/version；不允许绕过decode", () => {
+    387|     const cursor = decodeCursor(encodeCursor({ sessionId: "s1", eventI…
+    388|     expect(() => forkPointFromCursor([msg("一")], { ...cursor, kind: "o…
+       |                                                                                                        ^
+    389|     expect(() => replayFromCursor([msg("一")], { ...cursor, version: 99…
+    390|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/17]⎯
+
+ FAIL  tests/session-semantics.test.ts > 游标入口额外fail-closed边界 > 小于1的位置按ADR给out-of-range；非整数载荷仍为malformed
+AssertionError: expected 'malformed' to be 'out-of-range' // Object.is equality
+
+Expected: "out-of-range"
+Received: "malformed"
+
+ ❯ tests/session-semantics.test.ts:398:41
+    396|         expect.unreachable("越界必须抛");
+    397|       } catch (e) {
+    398|         expect((e as CursorError).code).toBe("out-of-range");
+       |                                         ^
+    399|       }
+    400|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/17]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  17 failed | 8 passed (25)
+   Start at  11:32:27
+   Duration  138ms (transform 53%, tests 29%, import 15%, worker 2%)
+

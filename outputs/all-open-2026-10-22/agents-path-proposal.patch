@@ -1,0 +1,18 @@
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -52,11 +52,11 @@
+ 
+ ## Renderer layering
+ 
+-- The desktop renderer is layered: `state/` (state-cluster hooks) → `derived/` (pure projections) →
+-  `components/` + `panes/` (props in, events out) → `App.tsx` (composition root).
++- The desktop renderer is layered: `apps/desktop/src/renderer/state/` (state-cluster hooks) → `apps/desktop/src/renderer/derived/` (pure projections) →
++  `apps/desktop/src/renderer/components/` + `apps/desktop/src/renderer/panes/` (props in, events out) → `App.tsx` (composition root).
+   The machine face is `pnpm renderer-layer-check`; the rules it pins:
+-  - `components/` and `panes/` must not import `App.tsx`; `state/` must not import `components/`.
+-  - `derived/` is pure: no IO, no clock, no randomness, no module-level mutable state.
++  - `apps/desktop/src/renderer/components/` and `apps/desktop/src/renderer/panes/` must not import `App.tsx`; `apps/desktop/src/renderer/state/` must not import `apps/desktop/src/renderer/components/`.
++  - `apps/desktop/src/renderer/derived/` is pure: no IO, no clock, no randomness, no module-level mutable state.
+   - Line caps: every renderer source file ≤ 1,200 lines, and `App.tsx` ≤ 900 lines. A cap only
+     ratchets down. When a file must grow past its cap, split it first.
+ - A judge that asserts on renderer **source text** must read the whole app surface

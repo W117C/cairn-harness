@@ -12,18 +12,19 @@
 // data-round-anchor、think-live/think-body/think-elapsed/aria 全套、复制/还原 aria-label ——
 // 全部逐字保留（本文件换形态与图标，不动锚）。
 // 图标 = lucide-react（ADR 0003）。
-import { Fragment, memo, useEffect, useId, useState } from "react";
-import { AlertTriangle, Check, ChevronRight, ChevronUp, CircleDashed, Copy, Download, Eye, FileCode2, FileText, Folder, GitBranch, History, Image as ImageIcon, Loader2, Pencil, Pin, RotateCcw, RotateCw, Sparkles, Square, ThumbsDown, ThumbsUp, Volume2 } from "lucide-react";
-import { relativeTime, type StreamRow } from "../projections";
+import { AlertTriangle,Check,ChevronRight,ChevronUp,CircleDashed,Copy,Eye,FileCode2,FileText,Folder,GitBranch,History,Image as ImageIcon,Loader2,Pencil,Pin,RotateCcw,RotateCw,Sparkles,Square,ThumbsDown,ThumbsUp,Volume2 } from "lucide-react";
+import { Fragment,memo,useEffect,useId,useState } from "react";
+import type { ChangeDiffPayload } from "../../../../../src/main/change-diff";
+import { Markdown } from "../markdown";
+import { relativeTime,type StreamRow } from "../projections";
 import { userMessageCopy } from "../transcript";
 import { useNow } from "../useNow";
-import { Markdown } from "../markdown";
 import type { ViewMode } from "../view-mode";
 import { DiffView } from "./DiffView";
-import { canFoldRound, truncateSummary } from "./stream-model";
-import type { ChangeDiffPayload } from "../../../../../src/main/change-diff";
+import { canFoldRound,truncateSummary } from "./stream-model";
 
-export { canFoldRound, foldAllButLast, truncateSummary, turnSummaries } from "./stream-model";
+export type { StreamActions } from "../stream-actions";
+export { canFoldRound,foldAllButLast,truncateSummary,turnSummaries } from "./stream-model";
 
 /** 写文件类工具（展开区行内 diff 的判定面；与 ApprovalCard toolIcon 的写族一致）。 */
 const WRITE_TOOLS = new Set(["write_file", "edit_file", "apply_patch"]);
@@ -207,7 +208,7 @@ function ToolCluster(props: { rows: Extract<StreamRow, { kind: "tool" }>[]; view
           <span>{props.rows.length} 次工具调用</span>
           {latest !== undefined && <span className="tool-group-detail">执行中 · {toolVerb(latest.tool) ?? latest.tool} {latest.summary}</span>}
           {interrupted.length > 0 && <span className="tool-group-detail">{interrupted.length} 次未收到结果</span>}
-          {failures.length > 0 && <span className="tool-group-failure">{failures.length} 次失败{!open && failure?.output ? ` · ${truncateSummary(failure.output, 80)}` : ""}</span>}
+          {failures.length > 0 && <span className="tool-group-failure">{failures.length} 次失败{!open && failure?.output ? ` · ${truncateSummary(failure.output, 240)}` : ""}</span>}
         </button>
       )}
       <div id={id} className="tool-group-body" hidden={!open}>
@@ -219,50 +220,7 @@ function ToolCluster(props: { rows: Extract<StreamRow, { kind: "tool" }>[]; view
   );
 }
 
-export interface StreamActions {
-  /** eventId → 当前生效评分（listFeedback 投影）；缺席 = 未评。 */
-  feedback?: ReadonlyMap<number, "up" | "down">;
-  feedbackBusy?: (eventId: number) => boolean;
-  pinBusy?: (eventId: number) => boolean;
-  annotationPending?: (eventId: number) => boolean;
-  /** 赞/踩真提交（core submitFeedback 落 sidecar）；rating=null = 撤销。 */
-  onFeedback?: (eventId: number, rating: "up" | "down" | null) => void;
-  /** 文件级回滚（core revertTurn；确认与结果提示在 App）。 */
-  onRevertTurn?: (round: number) => void;
-  /** 复制行文本（剪贴板与失败面在 App）。 */
-  onCopyText?: (text: string) => Promise<boolean> | void;
-  /** 打开用户消息里的附件（2026-10-18）：芯片从纯展示变成可点——点了用系统默认应用打开。 */
-  onOpenAttachment?: (path: string) => void;
-  /** 分叉（P3-1 操作条）：从 user 这条消息所在轮 fork 出新会话（core forkSession；原会话不动）。 */
-  onBranch?: (round: number) => void;
-  /** 编辑并重发（2026-10-18）：在前一轮上下文的**新分支**里填入这条消息原文，用户改完再发；
-   *  原会话不动。第 1 轮没有前置上下文 ⇒ App 侧新建空会话后填入。 */
-  onEditRound?: (round: number, text: string) => void;
-  /** 回放（P3-1 操作条，agent 行）：fork 到该轮 + 切到新会话 + 把该轮用户输入注入输入框（不自动发送）。
-   *  传事件 id（1-based 行号）——轮号与输入原文由 App 从事件日志投影（roundOfEvent/userTextOfRound）。 */
-  onReplay?: (eventId: number) => void;
-  /** 朗读（§2.2 操作条 read aloud）：macOS say；speakingEventId 控按钮态。 */
-  onSpeak?: (eventId: number, text: string) => void;
-  /** 正在朗读的那条（eventId）；缺席/null = 没有在念。 */
-  speakingEventId?: number | null;
-  /** 轮折叠开合（v7.2）：折叠钮与展开钮共用；缺席 = 不渲染折叠面。 */
-  onToggleFold?: (round: number) => void;
-  /** 错误行「重试」（brief 六：「错误态：清晰原因 + 重试」）：用最后一轮的输入再跑一轮
-   *  （追加为新轮，不改写历史；运行中不摆——App 侧同样以 runningSet 兜底）。 */
-  onRetryLast?: () => void;
-  /** 是否正在跑（重试按钮的显隐依据之一；缺席按未运行处理）。 */
-  running?: boolean;
-  /** 打开产物（工具交付物直达）。缺席 = 不渲染产物入口（老调用方与判卷不受影响）。 */
-  onOpenArtifact?: (a: { kind: "image" | "html" | "svg" | "text"; path: string; note?: string }) => void;
-  /** 重跑该轮（Claude 式重试，2026-10-17）：用这一轮的用户输入再发一次（追加为新轮）。
-   *  运行中不渲染——此刻再排一轮语义含糊；App 侧另以 runningSet 兜底。 */
-  onRetryRound?: (round: number) => void;
-  /** 消息置顶（2026-10-20 · 销 G6 / 规范 §3.11 操作条 pin）：落 sidecar pins.jsonl。
-   *  缺席 = 不渲染 pin 钮（老调用方与判卷不受影响）。 */
-  onPin?: (eventId: number, pinned: boolean) => void;
-  /** 当前已置顶的锚点（eventId 集合）；缺席 = 无置顶。渲染即挂载（eager），靠 CSS 显隐。 */
-  pinnedEventIds?: ReadonlySet<number>;
-}
+import type { StreamActions } from "../stream-actions";
 
 function AssistantActions(props: { text: string; eventId: number; round: number; speaking: boolean; actions: StreamActions }) {
   const current = props.actions.feedback?.get(props.eventId) ?? null;
@@ -500,7 +458,17 @@ const AssistantRowView = memo(function AssistantRowView({ actions, caret, ...r }
   );
 });
 
-export function Stream(props: {
+/** 流本体（会话消息流）。
+ *
+ *  **为什么整棵包一层 memo**（2026-10-22 性能面）：这棵树在长会话里能到四万七千个 DOM 节点，
+ *  而 App 是它的父级、每有一个与流无关的状态变化（每秒的计时器、输入框一个字、侧栏拖宽…）
+ *  就会重渲染一次 App ⇒ 整棵树被重新 diff 一遍。实测形态：运行中每秒一跳的计时器，
+ *  让一棵**没有新消息**的流每秒重算一次。
+ *  ⇒ 这里用 memo 把「与流无关的父级重渲染」挡在门外：**props 全部稳定**（rows/actions 在 App 侧
+ *  已是 useMemo，view/streaming/foldedRounds/flashRound 都是 state）⇒ props 没变就不重渲染。
+ *  切会话仍按 App 侧那个 `key` 重挂（行内局部状态不跨会话复用，见 App.tsx 的注释）。
+ *  流里唯一自己跳的计时器在 `ThinkingLive` 子组件里（它自己管自己），不受这一层影响。 */
+export const Stream = memo(function Stream(props: {
   rows: StreamRow[];
   actions?: StreamActions;
   view?: ViewMode;
@@ -674,4 +642,4 @@ export function Stream(props: {
       {out.map((o) => <Fragment key={o.key}>{o.node}</Fragment>)}
     </>
   );
-}
+});

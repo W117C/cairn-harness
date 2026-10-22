@@ -333,7 +333,7 @@ export const MUTATIONS = [
     src: "src/agent/worker-report.ts",
     test: "tests/worker-evidence.test.ts",
     desc: "被权限门拒掉的写也算「改过盘」⇒ 一次没落盘的 tool_call 就把绿证据打成 stale（读数反过来不诚实）",
-    apply: (s) => s.replace("      if (e.ok && c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;", "      if (c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;"),
+    apply: (s) => s.replace("      if ((e.ok || e.fusedWrite === true) && c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;", "      if (c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;"),
     expectFail: "被拒的写（ok:false）不构成过期证据",
   },
     // ---- W3② 价格标签（tests/worker-spent-usd.test.ts）：钱的话只准一处说，且不可知 ≠ 免费 ----
@@ -806,7 +806,9 @@ export const MUTATIONS = [
     src: "src/agent/orchestrator.ts",
     test: "tests/worker-role.test.ts",
     desc: "重派改回逐字段列写（漏掉 role 等四位）⇒ 映射端补了、转发端没跟上，这一跳静默丢参数",
-    apply: (s) => s.replace("    return await this.spawn(respawnSpawnArgs(args), ctx);", "    return await this.spawn({ task: args.task, mode: args.mode }, ctx);"),
+    // 2026-10-22：`971fe18c` 给这一跳加了 recovery 承载（`carried`）⇒ 针脚跟着实现走：
+    // 旧行整行不再逐字存在，突变会变成空操作（no-effect），表就少了一条分辨力。
+    apply: (s) => s.replace("    return await this.spawn(respawnSpawnArgs(args), carried === undefined ? ctx : { ...ctx, recovery: carried });", "    return await this.spawn({ task: args.task, mode: args.mode }, carried === undefined ? ctx : { ...ctx, recovery: carried });"),
     expectFail: "真链：落流的角色 → respawnArgsFrom → respawn() 的新 agent_spawned 仍带同一角色（全新 agent_id）",
   },
   // 署名（规则 57：没有锚点的那一格要有名字与理由）：worker 侧**非工具档**那行 `frozenJudgePaths`

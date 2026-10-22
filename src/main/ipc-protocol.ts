@@ -42,6 +42,9 @@ import type { DiscoveredRow } from "../providers/provider-draft";
 import type { PreviewSnapshot } from "./project-preview";
 // v12：导入诊断三态的形状事实源在 project-templates（判定与文案同源）；这里只转发类型。
 import type { ProjectDiagnosis } from "./project-templates";
+// v18：会话正文检索的结果类型（三态联合）。`import type` 编译期擦除 ⇒ 渲染层产物零运行时 import src。
+import type { SessionSearchResult } from "./session-search";
+export type { SessionSearchResult } from "./session-search";
 import type { ProviderConnectionResult } from "./provider-connection";
 
 // ---- SEMA §3.5/§12：IPC 协议版本化 ----
@@ -56,8 +59,14 @@ import type { ProviderConnectionResult } from "./provider-connection";
  *  v10 = 能力在场性批（capabilities——搜索端点配没配，让「模型为什么少一把工具」上屏）；
  *  v11 = 主界面重做批（git 两闸 / 项目内模糊搜索 / 最近打开 / 粘贴落盘 / 快照还原 / Finder 显示）；
  *  v12 = 导入诊断批（projectDiagnose——导入已有文件夹先给三态诊断，ADR 0004 §4）；
- *  v13 = 记忆正文批（MemoryTopicPayload 增 body——「主题正文」快照面接通，§8 #15 销账）。 */
-export const IPC_PROTOCOL_VERSION = 13;
+ *  v13 = 记忆正文批（MemoryTopicPayload 增 body——「主题正文」快照面接通，§8 #15 销账）；
+ *  v14 = 跨会话用量批（usageLedger——头像菜单「用量统计」的「全部会话」口径）；
+ *  v15 = 会话日志批（sessionLog——错误条/命令面板「查看日志」的只读尾部）。
+ *  v16 = 会话定位批（openSession 增可选 workspace——跨项目同名 id 必须开对转录）；
+ *  v17 = 终端尺寸批（terminalResize——xterm 行列同步到真实 PTY）；
+ *  v18 = 会话全文检索批（sessionSearch——搜**会话正文**而不是文件；结果是三态，
+ *  「没量到 ≠ 没有」由类型层面分开，见 src/main/session-search.ts）。 */
+export const IPC_PROTOCOL_VERSION = 18;
 
 // ---- v11：主界面重做批的载荷（git 读数 / 克隆 / 项目内搜索）----
 /** git 在场读数：branch 为 null = detached HEAD（如实，不拿 "HEAD" 冒充分支名）。 */
@@ -67,6 +76,38 @@ export type GitCloneResult = { ok: true; path: string } | { ok: false; error: st
 /** 项目内搜索：hits 为 workspace 相对路径（正斜杠）；truncated = 扫描或命中超帽（不假装完整）。 */
 export type WorkspaceSearchPayload =
   | { ok: true; hits: { path: string; kind: "file" | "directory" }[]; truncated: boolean }
+  | { ok: false; error: string };
+
+/** v14：跨会话用量账本（头像菜单「用量统计」→「全部会话」）。
+ *  口径与渲染层 `usageSummary` 同源（core 纯函数 `usage-ledger.ts` 折叠，面板不再另算一套）：
+ *  token 累加、缓存缺字段不计、工具步数与对话轮数只数主会话（worker 子流不计）。
+ *  `sessions` / `workspaces` 是**有会话的**数量（不是已注册项目数——空项目不冒充工作量）；
+ *  `skipped` = 读不了的会话文件数，`badLines` = 坏行数：统计不全时界面如实提示，不假装完整。 */
+export interface UsageLedgerTotalsPayload {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  usageCount: number;
+  toolSteps: number;
+  rounds: number;
+}
+
+export type UsageLedgerPayload =
+  | {
+      ok: true;
+      totals: UsageLedgerTotalsPayload;
+      sessions: number;
+      workspaces: number;
+      skipped: number;
+      badLines: number;
+    }
+  | { ok: false; error: string };
+
+/** v15：会话日志尾部（错误条/命令面板「查看日志」）。`path` 是**本会话日志的真实落点**
+ *  （只经主进程按会话归属解析，不接受渲染层传任意路径）；`truncated` = 不是整份文件
+ *  （字节窗口或行数截断），界面必须如实提示。 */
+export type SessionLogPayload =
+  | { ok: true; path: string; text: string; truncated: boolean; bytes: number; lines: number }
   | { ok: false; error: string };
 
 /** S7：探测结果（表单据此渲染那张可勾选的表）。 */
@@ -232,6 +273,11 @@ export interface SessionInfoPayload {
   pinned?: boolean;
   archived?: boolean;
   projectId?: string;
+  /** 审计 sidecar 字段；缺席 = 未记录，不能补成 epoch/0。 */
+  viewedAt?: string;
+  archivedAt?: string;
+  idleSince?: string;
+  resumeAttempts?: number;
   createdAt?: string;
   updatedAt?: string;
   /** 这条会话有自己的 git worktree（§3.7 · G4）。读侧由目录存在与否给真值，不另存状态。 */
@@ -300,8 +346,13 @@ export interface AgentApi {
   setSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
   // ---- M1e：会话列表（JSONL 即会话）----
   listSessions(): Promise<SessionInfoPayload[]>;
+  /** v14：跨全部已登记工作区的用量账本（只读；按会话日志投影，不触发 openSession）。 */
+  usageLedger(): Promise<UsageLedgerPayload>;
+  /** v15：读该会话日志的尾部（只读；`tailLines` 缺省 400，上限 2000）。 */
+  sessionLog(id: string, tailLines?: number): Promise<SessionLogPayload>;
   createSession(name?: string): Promise<{ id: string }>;
-  openSession(id: string): Promise<{ events: AgentEvent[] }>;
+  /** v16：workspace 显式给出会话归属（同名 id 跨项目时按它定位）；缺省 = host 自行解析。 */
+  openSession(id: string, workspace?: string): Promise<{ events: AgentEvent[] }>;
   /** 恢复闭环：读回 / 覆盖写该会话的发送队列 sidecar。队列不是 AgentEvent，不混入 JSONL；
    *  重启后由 renderer 读回并显式继续发送，仍走原有权限与沙箱链路。 */
   queueGet(sessionId: string): Promise<{ items: SessionQueueEntry[] }>;
@@ -343,6 +394,8 @@ export interface AgentApi {
   terminalStart(): Promise<{ ok: true; id: string } | { ok: false; error: string }>;
   /** 用户输入 → shell stdin（未知 id 返回 false，不静默丢）。 */
   terminalWrite(id: string, data: string): Promise<boolean>;
+  /** v17：同步真实 PTY 行列；非法尺寸、未知或已关闭终端返回 false。 */
+  terminalResize(id: string, cols: number, rows: number): Promise<boolean>;
   /** 杀终端（幂等）。 */
   terminalKill(id: string): Promise<void>;
   /** v5 terminal 窗格推送：pty 输出（按 id 归因）。 */
@@ -386,6 +439,16 @@ export interface AgentApi {
   /** v11：项目内文件模糊搜索（@ 引用补全）：命中 = workspace 相对路径 + 文件/目录；
    *  跳过 .git/node_modules 等，扫描与命中双帽截断如实标注。 */
   workspaceSearch(workspace: string, query: string): Promise<WorkspaceSearchPayload>;
+  /** v18：**会话正文**全文检索（不是文件检索）——只读，扫该工作区下的会话 JSONL。
+   *  结果是**三态**：`ok`（扫完了；空数组＝量过了没命中）／`partial`（预算用尽，命中为真但可能还有）／
+   *  `unavailable`（**没量**——会话根读不到；绝不能被渲染成「没有匹配」）。
+   *  可见语料 = 用户看得见的正文（用户消息 + 助手消息 + 按 callId 合并的流式片段）；模型自己的思考
+   *  与工具载荷**不进语料**。逐工作区检索（工作区由主进程解析归属，渲染层不传路径）。 */
+  sessionSearch(
+    workspace: string,
+    query: string,
+    options?: { budgetBytes?: number; maxSessions?: number },
+  ): Promise<SessionSearchResult>;
   /** v11：标记项目「最近打开」（打开会话 / 切换项目时调用）；未知 id 拒绝。 */
   touchProject(id: string): Promise<ProjectRecord>;
   /** v11：⌘V 粘贴素材落临时文件（截图等）；字节帽 20MB，返回路径此后走既有附件引用链。 */

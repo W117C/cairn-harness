@@ -1,0 +1,78 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness/apps/desktop
+
+ ❯ tests/terminal-size.test.ts (3 tests | 3 failed) 1002ms
+   ❯ 真实 PTY 的窗口尺寸与退出状态 (3)
+     × 初始行列不是 0×0，登录 shell 从第一条命令就有有效尺寸 831ms
+     × 缩窄再放大都更新内核尺寸，非法输入和已关闭 ID 不写入控制流 2ms
+     × 退出码来自 shell，exit 7 不会显示成成功的 0 167ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/terminal-size.test.ts > 真实 PTY 的窗口尺寸与退出状态 > 初始行列不是 0×0，登录 shell 从第一条命令就有有效尺寸
+AssertionError: expected { rows: +0, cols: +0 } to deeply equal { rows: 24, cols: 80 }
+
+- Expected
++ Received
+
+  {
+-   "cols": 80,
+-   "rows": 24,
++   "cols": 0,
++   "rows": 0,
+  }
+
+ ❯ tests/terminal-size.test.ts:36:37
+     34|   it('初始行列不是 0×0，登录 shell 从第一条命令就有有效尺寸', async () => {
+     35|     const t = terminal();
+     36|     expect(await t.size('INITIAL')).toEqual({ rows: 24, cols: 80 });
+       |                                     ^
+     37|   });
+     38|   it('缩窄再放大都更新内核尺寸，非法输入和已关闭 ID 不写入控制流', async () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/terminal-size.test.ts > 真实 PTY 的窗口尺寸与退出状态 > 缩窄再放大都更新内核尺寸，非法输入和已关闭 ID 不写入控制流
+TypeError: t.host.resize is not a function
+ ❯ tests/terminal-size.test.ts:40:19
+     38|   it('缩窄再放大都更新内核尺寸，非法输入和已关闭 ID 不写入控制流', async () => {
+     39|     const t = terminal();
+     40|     expect(t.host.resize(t.id, 61, 11)).toBe(true);
+       |                   ^
+     41|     expect(await t.size('NARROW')).toEqual({ rows: 11, cols: 61 });
+     42|     expect(t.host.resize(t.id, 103, 29)).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/terminal-size.test.ts > 真实 PTY 的窗口尺寸与退出状态 > 退出码来自 shell，exit 7 不会显示成成功的 0
+AssertionError: expected { kind: 'exit', …(2) } to deeply equal { kind: 'exit', …(2) }
+
+- Expected
++ Received
+
+  {
+-   "code": 7,
++   "code": 0,
+    "id": "8c7c2b94-c8eb-443b-98a1-f0e766800388",
+    "kind": "exit",
+  }
+
+ ❯ tests/terminal-size.test.ts:56:68
+     54|     t.host.write(t.id, 'exit 7\n');
+     55|     await waitFor(() => t.events.some(e => e.kind === 'exit' && e.id =…
+     56|     expect(t.events.find(e => e.kind === 'exit' && e.id === t.id)).toE…
+       |                                                                    ^
+     57|   });
+     58| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  17:08:31
+   Duration  1.14s (tests 95%, transform 4%, import 1%)
+
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts tests/terminal-size.test.ts

@@ -1,0 +1,350 @@
+{
+  "source": "/Applications/Claude.app/Contents/Resources/app.asar",
+  "cssEntry": ".vite/renderer/main_window/assets/MainWindowPage-Bbug2Ph5.css",
+  "cssBytes": 233932,
+  "extractedAt": "2026-10-21T17:26:19.997Z",
+  "ourTokensFile": "/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop/src/renderer/tokens.css",
+  "ourTokenCount": 266,
+  "fontWeightAxis": [
+    {
+      "token": "--cds-font-weight-regular",
+      "value": "400",
+      "scope": ":root"
+    },
+    {
+      "token": "--cds-font-weight-medium",
+      "value": "500",
+      "scope": ":root"
+    },
+    {
+      "token": "--cds-font-weight-semibold",
+      "value": "580",
+      "scope": ":root"
+    },
+    {
+      "token": "--cds-font-weight-bold",
+      "value": "600",
+      "scope": ":root"
+    },
+    {
+      "token": "--cds-font-weight-regular",
+      "value": "400",
+      "scope": ".cds-root"
+    },
+    {
+      "token": "--cds-font-weight-medium",
+      "value": "500",
+      "scope": ".cds-root"
+    },
+    {
+      "token": "--cds-font-weight-semibold",
+      "value": "580",
+      "scope": ".cds-root"
+    },
+    {
+      "token": "--cds-font-weight-bold",
+      "value": "600",
+      "scope": ".cds-root"
+    },
+    {
+      "token": "--cds-font-weight-body",
+      "value": "initial",
+      "scope": ".cds-root"
+    },
+    {
+      "token": "--cds-font-weight-control",
+      "value": "initial",
+      "scope": ".cds-root"
+    },
+    {
+      "token": "--cds-font-weight-header",
+      "value": "initial",
+      "scope": ".cds-root"
+    },
+    {
+      "token": "--cds-font-wght-regular",
+      "value": "normal",
+      "scope": ".cds-root"
+    },
+    {
+      "token": "--cds-font-wght-medium",
+      "value": "normal",
+      "scope": ".cds-root"
+    },
+    {
+      "token": "--cds-font-wght-semibold",
+      "value": "normal",
+      "scope": ".cds-root"
+    },
+    {
+      "token": "--cds-font-wght-bold",
+      "value": "normal",
+      "scope": ".cds-root"
+    },
+    {
+      "token": "--cds-font-wght-body",
+      "value": "initial",
+      "scope": ".cds-root"
+    },
+    {
+      "token": "--cds-font-wght-control",
+      "value": "initial",
+      "scope": ".cds-root"
+    },
+    {
+      "token": "--cds-font-wght-header",
+      "value": "initial",
+      "scope": ".cds-root"
+    },
+    {
+      "token": "--cds-font-wght-regular",
+      "value": "\"wght\" 360",
+      "scope": "@media screen{[data-mode=dark] .cds-root:not([data-mode=light]):not([data-mode=system]),.cds-root[data-mode=dark]"
+    },
+    {
+      "token": "--cds-font-wght-medium",
+      "value": "\"wght\" 460",
+      "scope": "@media screen{[data-mode=dark] .cds-root:not([data-mode=light]):not([data-mode=system]),.cds-root[data-mode=dark]"
+    },
+    {
+      "token": "--cds-font-wght-semibold",
+      "value": "\"wght\" 540",
+      "scope": "@media screen{[data-mode=dark] .cds-root:not([data-mode=light]):not([data-mode=system]),.cds-root[data-mode=dark]"
+    },
+    {
+      "token": "--cds-font-wght-bold",
+      "value": "\"wght\" 560",
+      "scope": "@media screen{[data-mode=dark] .cds-root:not([data-mode=light]):not([data-mode=system]),.cds-root[data-mode=dark]"
+    },
+    {
+      "token": "--cds-font-wght-regular",
+      "value": "\"wght\" 360",
+      "scope": "@media screen and (prefers-color-scheme:dark){[data-mode=system] .cds-root:not([data-mode=light]):not([data-mode=dark]),.cds-root[data-mode=system],.cds-root:not([data-mode]):not([data-mode] *)"
+    },
+    {
+      "token": "--cds-font-wght-medium",
+      "value": "\"wght\" 460",
+      "scope": "@media screen and (prefers-color-scheme:dark){[data-mode=system] .cds-root:not([data-mode=light]):not([data-mode=dark]),.cds-root[data-mode=system],.cds-root:not([data-mode]):not([data-mode] *)"
+    },
+    {
+      "token": "--cds-font-wght-semibold",
+      "value": "\"wght\" 540",
+      "scope": "@media screen and (prefers-color-scheme:dark){[data-mode=system] .cds-root:not([data-mode=light]):not([data-mode=dark]),.cds-root[data-mode=system],.cds-root:not([data-mode]):not([data-mode] *)"
+    },
+    {
+      "token": "--cds-font-wght-bold",
+      "value": "\"wght\" 560",
+      "scope": "@media screen and (prefers-color-scheme:dark){[data-mode=system] .cds-root:not([data-mode=light]):not([data-mode=dark]),.cds-root[data-mode=system],.cds-root:not([data-mode]):not([data-mode] *)"
+    },
+    {
+      "token": "--cds-font-wght-regular",
+      "value": "\"wght\" 360",
+      "scope": "@media screen{.cds-dark-scope[data-mode=dark]"
+    },
+    {
+      "token": "--cds-font-wght-medium",
+      "value": "\"wght\" 460",
+      "scope": "@media screen{.cds-dark-scope[data-mode=dark]"
+    },
+    {
+      "token": "--cds-font-wght-semibold",
+      "value": "\"wght\" 540",
+      "scope": "@media screen{.cds-dark-scope[data-mode=dark]"
+    },
+    {
+      "token": "--cds-font-wght-bold",
+      "value": "\"wght\" 560",
+      "scope": "@media screen{.cds-dark-scope[data-mode=dark]"
+    }
+  ],
+  "assistantMessageText": [
+    {
+      "token": "--cds-assistant-message-text-inset",
+      "value": "4px",
+      "scope": ".cds-root [data-cds=AssistantMessage]"
+    },
+    {
+      "token": "--cds-assistant-message-text-inset",
+      "value": "0px",
+      "scope": ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[data-cds=CommentCard],[data-cds=ChartContainer],[data-cds=PointChartContainer],[data-cds=FileDiff],[data-cds=UserMessage])"
+    },
+    {
+      "token": "--cds-assistant-message-text-inset",
+      "value": "var(--cds-message-bubble-pad-x)",
+      "scope": ".cds-root [data-cds=AssistantMessage][data-variant=bubble]"
+    },
+    {
+      "token": "--cds-assistant-message-text-stop",
+      "value": "0px",
+      "scope": ".cds-root [data-cds=AssistantMessage][data-variant=bubble]"
+    },
+    {
+      "token": "--cds-assistant-message-text-inset",
+      "value": "0px",
+      "scope": ".cds-root [data-cds=AssistantMessage][data-variant=bubble] [data-cds=Prose]:not([data-cds=AssistantMessage][data-variant=bubble] :where([data-cds]:not([data-cds=AssistantMessage][data-variant=bubble])) *)"
+    }
+  ],
+  "scrollFadeSize": [
+    {
+      "token": "--cds-scroll-fade-size",
+      "value": "28px",
+      "scope": "*,:before,:after,::backdrop"
+    }
+  ],
+  "gapTable": {
+    "leading": {
+      "claudeTokenCount": 78,
+      "ourRepoHasCounterpart": false,
+      "samples": [
+        {
+          "token": "--cds-leading-caption",
+          "value": "calc(1.0625rem * var(--cds-rem-scale,1))"
+        },
+        {
+          "token": "--cds-leading-footnote",
+          "value": "calc(.9375rem * var(--cds-rem-scale,1))"
+        },
+        {
+          "token": "--cds-leading-code",
+          "value": "calc(1.0625rem * var(--cds-rem-scale,1))"
+        },
+        {
+          "token": "--cds-leading-body",
+          "value": "calc(1.1875rem * var(--cds-rem-scale,1))"
+        }
+      ]
+    },
+    "gap": {
+      "claudeTokenCount": 10,
+      "ourRepoHasCounterpart": true,
+      "samples": [
+        {
+          "token": "--cds-gap-xs",
+          "value": "calc(.375rem * var(--cds-rem-scale,1))"
+        },
+        {
+          "token": "--cds-gap-sm",
+          "value": "calc(.5rem * var(--cds-rem-scale,1))"
+        },
+        {
+          "token": "--cds-gap-md",
+          "value": "calc(.75rem * var(--cds-rem-scale,1))"
+        },
+        {
+          "token": "--cds-gap-lg",
+          "value": "calc(1.25rem * var(--cds-rem-scale,1))"
+        }
+      ]
+    },
+    "pad": {
+      "claudeTokenCount": 85,
+      "ourRepoHasCounterpart": true,
+      "samples": [
+        {
+          "token": "--cds-pad-xs",
+          "value": "inherit"
+        },
+        {
+          "token": "--cds-pad-sm",
+          "value": "inherit"
+        },
+        {
+          "token": "--cds-pad-md",
+          "value": "inherit"
+        },
+        {
+          "token": "--cds-pad-lg",
+          "value": "inherit"
+        }
+      ]
+    },
+    "z-": {
+      "claudeTokenCount": 5,
+      "ourRepoHasCounterpart": true,
+      "samples": [
+        {
+          "token": "--cds-z-modal",
+          "value": "40"
+        },
+        {
+          "token": "--cds-z-coachmark",
+          "value": "35"
+        },
+        {
+          "token": "--cds-z-popover",
+          "value": "50"
+        },
+        {
+          "token": "--cds-z-tooltip",
+          "value": "50"
+        }
+      ]
+    },
+    "message-bubble": {
+      "claudeTokenCount": 4,
+      "ourRepoHasCounterpart": true,
+      "samples": [
+        {
+          "token": "--cds-message-bubble-radius",
+          "value": "calc(var(--cds-radius) + calc(.25rem * var(--cds-rem-scale,1)))"
+        },
+        {
+          "token": "--cds-message-bubble-pad-x",
+          "value": "var(--cds-pad-lg)"
+        },
+        {
+          "token": "--cds-message-bubble-pad-y",
+          "value": "var(--cds-pad-md)"
+        },
+        {
+          "token": "--cds-message-bubble-stack-gap",
+          "value": "2px"
+        }
+      ]
+    },
+    "message-actions": {
+      "claudeTokenCount": 18,
+      "ourRepoHasCounterpart": true,
+      "samples": [
+        {
+          "token": "--cds-message-actions-opacity",
+          "value": "1"
+        },
+        {
+          "token": "--cds-message-actions-reveal-in-duration",
+          "value": "var(--cds-dur-snap)"
+        },
+        {
+          "token": "--cds-message-actions-reveal-in-ease",
+          "value": "var(--cds-ease-snap)"
+        },
+        {
+          "token": "--cds-message-actions-reveal-in-delay",
+          "value": ".1s"
+        }
+      ]
+    },
+    "font-size-": {
+      "claudeTokenCount": 98,
+      "ourRepoHasCounterpart": true,
+      "samples": [
+        {
+          "token": "--cds-font-size-caption",
+          "value": "calc(.6875rem * var(--cds-rem-scale,1))"
+        },
+        {
+          "token": "--cds-font-size-footnote",
+          "value": "calc(.75rem * var(--cds-rem-scale,1))"
+        },
+        {
+          "token": "--cds-font-size-code",
+          "value": "calc(.75rem * var(--cds-rem-scale,1))"
+        },
+        {
+          "token": "--cds-font-size-body",
+          "value": "calc(.8125rem * var(--cds-rem-scale,1))"
+        }
+      ]
+    }
+  }
+}

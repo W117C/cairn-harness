@@ -6,20 +6,10 @@ import { turnChanges } from "../projections";
 
 // ── 窗格集合与路由（唯一事实源；PaneDock 与独立窗口路由共用）────────
 
-export type PaneKind = "changes" | "plan" | "tasks" | "file" | "terminal" | "browser" | "sidechat";
-
-export const PANE_META: Record<PaneKind, { label: string }> = {
-  changes: { label: "变更" },
-  plan: { label: "方案" },
-  tasks: { label: "任务" },
-  file: { label: "文件" },
-  terminal: { label: "终端" },
-  browser: { label: "浏览器" },
-  sidechat: { label: "旁路" },
-};
-
-/** 顶栏 ⋮ 菜单的列表面（App 消费；保持与 PaneKind 同集）。 */
-export const PANE_OPENABLE: readonly PaneKind[] = ["changes", "plan", "tasks", "file", "terminal", "browser", "sidechat"];
+import { PANE_META, PANE_OPENABLE, type PaneKind } from "../pane-registry";
+// 窗格登记表（类型/标签表/重排/⌘\ 选窗格）已搬到顶层 pane-registry.ts（Phase 2 · 批 2.3）：
+// state/ 不许 import components/，而那份是数据与纯函数、不是组件。导出面照旧从本文件转出。
+export { PANE_META, PANE_OPENABLE, lastOpenedPane, movePane, type PaneKind } from "../pane-registry";
 
 /** 独立窗口路由：`#pane=<kind>[&session=<id>]` → 目标窗格；非该形状（含未知 kind）返回 null
  *  （主窗口模式——不猜、不部分匹配）。 */
@@ -160,14 +150,7 @@ export function projectWorkers(events: readonly AgentEvent[]): WorkerPaneItem[] 
   return out;
 }
 
-/** 变更审阅指示器：当前会话改动过的去重文件数（顶栏 Changes 徽标的数据源）。
- *  数据面 = turnChanges（它已把 tool_call 的 path 与 tool_result 的 change 配对投影）；
- *  同一文件改两次算一个（审阅的对象是文件，不是编辑次数）。 */
-export function changedFileCount(events: readonly AgentEvent[]): number {
-  const paths = new Set<string>();
-  for (const t of turnChanges(events)) for (const f of t.files) paths.add(f.path);
-  return paths.size;
-}
+export { changedFileCount } from "../changed-files";
 
 /** 检查器「改动」Tab 的数据面（P3-2）：全轮写工具改动的跨轮去重——同一文件取**最新**轮次与快照
  *  （撤销要撤到最近一次覆盖前的原件）；顺序 = 首现序（与 changedFileCount 的 Set 序同口径）。 */
@@ -213,15 +196,6 @@ export function composeReviewMessage(comments: ReadonlyMap<string, string>): str
   return parts.join("\n");
 }
 
-/** 窗格重排（拖标题栏换位，蓝本 §3.4）：把 from 位的元素移动到 to 位，其余相对次序不变。
- *  越界/同位原样返回（不抛、不吞——与 send-queue 的越界口径一致）。 */
-export function movePane<T>(items: readonly T[], from: number, to: number): T[] {
-  if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) return [...items];
-  const next = [...items];
-  const [moved] = next.splice(from, 1);
-  next.splice(to, 0, moved!);
-  return next;
-}
 
 /** 键盘换位（2026-10-18）：窗格头焦点上按 ⌥↑ / ⌥↓ 的目标下标；到头返回 null（不环绕）。
  *  与拖拽共用 movePane——换位语义只许一处。 */
@@ -230,23 +204,6 @@ export function reorderTarget(index: number, key: "ArrowUp" | "ArrowDown", count
   return to < 0 || to >= count ? null : to;
 }
 
-/** ⌘\ 「关闭最近打开的窗格」该关哪一个（2026-10-18 修）：
- *  旧实现直接 `tabs.slice(0, -1)`——数组尾项。追加开的顺序确实如此，但数组顺序是可变的
- *  （拖标题栏换位 / ⌥↑⌥↓ 都走 movePane 重排），重排之后尾项就不再是「最近打开」的那个，
- *  文档承诺与实行为两件事。而空数组时 slice(0,-1) 还是空数组，键被 preventDefault 吃掉，
- *  按了没反应。
- *  解法：App 另记一条打开顺序（openOrder，只增不重排），这里从后往前找第一个仍在场的窗格。
- *  没记/openOrder 为空 ⇒ 退化为数组尾（旧行为，仍是「最后一项」这个合理猜测）。
- *  全部不在场（已被逐个关掉）⇒ null，让调用方知道「无可关」，别静默吞键。 */
-export function lastOpenedPane<T>(tabs: readonly T[], openOrder?: readonly T[]): T | null {
-  if (tabs.length === 0) return null;
-  if (openOrder === undefined || openOrder.length === 0) return tabs[tabs.length - 1] ?? null;
-  for (let i = openOrder.length - 1; i >= 0; i--) {
-    const candidate = openOrder[i];
-    if (candidate !== undefined && tabs.includes(candidate)) return candidate;
-  }
-  return tabs[tabs.length - 1] ?? null;
-}
 
 /** 浏览器窗格的站点授权判定（蓝本 §3.5）：本地（localhost/回环/*.local）免问；
  *  已记住的域放行；其余要问（Allow once / 记住该域 / 拒绝）。解析失败按"要问"（宁可多问）。

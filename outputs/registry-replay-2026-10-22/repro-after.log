@@ -1,0 +1,6 @@
+[evolution-pack] content-pack.demo@0.1.0 没有候选档案，拒绝注入（无法核验内容摘要）
+A) 索引新鲜 ⇒ 生产读面： ""
+B) 索引已删 ⇒ 触发重建路径：
+[evolution-pack] content-pack.demo@0.1.0 没有候选档案，拒绝注入（无法核验内容摘要）
+   ⇒ 返回： "" （没报错）
+C) canary 收束 tick ⇒ []

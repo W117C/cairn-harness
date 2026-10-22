@@ -1,0 +1,31 @@
+=== 造红：判卷跑在修前（暗色 360/480/560/580）上 ===
+    --text-400: var(--text-200);
+    --text-500: var(--text-200);
+  }
+}
+
+/* ── 平台可达性 · 降低透明度（2026-10-20 批 129）─────────────────────────────
+   对位 macOS「降低透明度」。**本仓当前是 no-op**：全仓无 backdrop-filter、无半透明
+   材质（grep 命中 0），没有可降级的东西。
+   登记在此是为了将来：若哪一批引入半透明材质，**必须**同时引入本查询，
+   否则「降低透明度」的用户会拿到一层他不想要的毛玻璃。
+   与 prefers-reduced-motion 同类——reduced-motion 那一族在 styles.css 里已有实装，
+   本族等有实装对象时再补。 */
+"
+
+ ❯ tests/tokens.test.ts:223:18
+    221|     const dark = tokens.slice(tokens.search(/\[data-theme="dark"\]\s*\…
+    222|     expect(dark).toMatch(/--fw-regular:\s*360;/);
+    223|     expect(dark).toMatch(/--fw-medium:\s*460;/);
+       |                  ^
+    224|     expect(dark).toMatch(/--fw-semibold:\s*540;/);
+    225|     expect(dark).toMatch(/--fw-bold:\s*560;/);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 27 passed (28)
+   Start at  06:04:24
+   Duration  95ms (transform 53%, tests 25%, import 16%, worker 5%)
+

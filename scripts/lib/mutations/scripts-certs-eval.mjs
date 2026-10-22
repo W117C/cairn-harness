@@ -1208,6 +1208,46 @@ export const MUTATIONS = [
     expectFail: "★接线② 被剔掉那些趟花的钱要单独印出来（是真钱，修正不等于把它藏起来）",
   },
   {
+    // ↓ 任务级那一层（10-22）：独立单位是「任务」而不是「趟次」——同一条任务的 N 遍**不独立**。
+    // 这一族三根：两根钉判据（语义半），一根钉接缝（消费半）。分开的理由是本仓第 12 次同族：
+    // 纯函数有判据 ≠ 跑器在用它。
+    id: "task-rollup-atk-known-flip",
+    src: "scripts/lib/eval-validity.ts",
+    test: "tests/eval-validity.test.ts",
+    desc: "pass@k 的「结局已知」判据翻面 ⇒ 「见着一遍达标就是定局」被读成「见着一遍达标**且**没有不可知遍」，" +
+      "于是「1 遍赢＋1 遍未起步」的任务被踢出分母：一条**已经赢过**的任务被算成不可知",
+    apply: (s) => s.replace(
+      "const atKKnown = e.passed >= 1 || unknown === 0;",
+      "const atKKnown = e.passed >= 1 && unknown === 0;",
+    ),
+    expectFail: "★反向那一格：1 遍赢＋1 遍未起步 ⇒ pass@k 已定局是赢，但 pass^k 不可知",
+  },
+  {
+    id: "task-rollup-passk-known-flip",
+    src: "scripts/lib/eval-validity.ts",
+    test: "tests/eval-validity.test.ts",
+    desc: "pass^k 的「结局已知」判据翻面 ⇒ 「见着一遍不达标就是定局」被读成「见着一遍不达标**且**没有不可知遍」，" +
+      "于是「2 遍败＋1 遍未起步」的任务被踢出分母 ⇒ **一次已知的败被藏起来**" +
+      "（分母越少比率越高＝不安全的方向，本仓「把红跑藏起来」那一族）",
+    apply: (s) => s.replace(
+      "const kKnown = e.failed >= 1 || unknown === 0;",
+      "const kKnown = e.failed >= 1 && unknown === 0;",
+    ),
+    expectFail: "★不可知的两面：2 遍败＋1 遍未起步 ⇒ pass@k 不可知，但 pass^k 已定局是败（不许藏）",
+  },
+  {
+    id: "task-rollup-runner-reps-wrong",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-validity.test.ts",
+    desc: "跑器把 rep 数传错 ⇒ 任务层的「每条任务应当几遍」全错 ⇒ 每条任务都成缺遍，" +
+      "整层读数要么空要么全错，而纯函数那条判卷照旧绿——这条锚点钉的就是这个接缝",
+    apply: (s) => s.replace(
+      "const tr = taskRollup(rows, REPS);",
+      "const tr = taskRollup(rows, REPS + 1);",
+    ),
+    expectFail: "★接线：跑器必须真的把这两个读数印出来（算出来不接＝没出口）",
+  },
+  {
     // ↓ 归因键这一族（10-02 第二笔）：基准跑器从前不建盖章器 ⇒ 整条评估链的 usage 没有模型名。
     id: "bench-usage-stamp-dropped",
     src: "scripts/loop-eval.ts",
@@ -1272,6 +1312,51 @@ export const MUTATIONS = [
       + "凭成本类「变好」被整表读成改善，而这张表从来只有这一个误读面",
     apply: (s) => s.replace("  const blocked = degraded.length > 0;", "  const blocked = false && degraded.length > 0;"),
     expectFail: "故意退化的候选 ⇒ 出口码 4（合取闸咬），且禁止改善那一句必须印出来",
+  },
+
+  // ── 逐名判卷面（第 640 页补）：`ok` 把「该转绿的没绿」与「该保住的坏了」压成同一个 false ──
+  // 三条各钉一半：no-face 不许算绿／unreadable 不许并进 fail／CLI 算出来必须印。
+  {
+    id: "named-set-no-face-counted-as-pass",
+    src: "scripts/eval/report.ts",
+    test: "tests/eval-report.test.ts",
+    desc: "没有 judge 规格的任务（no-face）被并进 pass 桶 ⇒「没有尺」读成「绿了」；"
+      + "存量语料与 2026-10-22 之前的所有基准都落在这一桶，于是这一格从此恒绿",
+    apply: (s) => s.replace(
+      `  if (typeof v !== "object" || v === null) return "no-face";
+  const state = (v as Record<string, unknown>)["state"];`,
+      `  if (typeof v !== "object" || v === null) return "pass";
+  const state = (v as Record<string, unknown>)["state"];`,
+    ),
+    // 指向**真标题**（`mutate-anchor-titles` 那把尺逐字比 expectFail 与判卷源文本）：
+    // 「没盖 ⇒ no-face」这一半正是那条用例的标题。写「取不到 ≠ 没问题」会 drift——
+    // 那句话只出现在同一条用例的断言消息里，不是标题。
+    expectFail: "parseReadings 读得出这一格；没盖（存量语料）⇒ no-face，不抛",
+  },
+  {
+    id: "named-set-unreadable-folded-into-fail",
+    src: "scripts/eval/report.ts",
+    test: "tests/eval-report.test.ts",
+    desc: "尺接了线却没接住料（unreadable）被并进 fail ⇒ 两种修法并成一种："
+      + "真相在取料面（输出认不出/派生不完整），修的人却被指去改模型",
+    apply: (s) => s.replace(
+      `  return state === "pass" || state === "fail" || state === "unreadable" ? state : "no-face";`,
+      `  return state === "pass" || state === "unreadable" ? state : "fail";`,
+    ),
+    expectFail: "判据自己也要被审：盖了但形状不对 ⇒ no-face，不是 pass/fail 任何一桶",
+  },
+  {
+    id: "named-set-face-not-printed",
+    src: "scripts/eval/report.ts",
+    test: "tests/eval-report.test.ts",
+    desc: "CLI 算出了逐名面却不喂进成表那次调用 ⇒ 与没算同形（本仓「能力发货、入口不通」那一族）",
+    // 针脚里那个 `\n` 必须写成**转义序列**（模板串中的两个字符），不是真换行——
+    // 写成真换行时 `replace` 找不到源文本 ⇒ 突变未生效（no-effect），锚点缴械。
+    apply: (s) => s.replace(
+      `  process.stdout.write(renderReport(cmp, bandSource, { namedSet }) + "\\n");`,
+      `  process.stdout.write(renderReport(cmp, bandSource) + "\\n");`,
+    ),
+    expectFail: "接线：CLI 把逐名面喂进成表那次调用（算出来不印 ＝ 与没算同形）",
   },
   {
     // ↓ 钱的**出处**（10-02 第二族第三次命中：09-23 闸与回执分叉、09-27 usage 无归因键、这次是缺省价替所有人猜）。
@@ -2032,5 +2117,61 @@ export const MUTATIONS = [
       + "以后加一维只会改一处，而另一处静默不认——第二份事实源",
     apply: (s) => s.replace(`const code = certExitCode(outcome);`, `const code = tc.status === 0 && gateReds.length === 0 ? 0 : 1;`),
     expectFail: "⑩ 退出码只有一条算式，且它调的是那份共用函数（不许留第二条 `&&` 串）",
+  },
+
+  // ── 逐名判卷规格的取料与配平（2026-10-22：`fixtures/bench/` 12/12 条一条 judge 都没有那笔债）
+  // 四条各钉一半：两列谁进谁（判据反了 ⇒ 恒真）／没料不许出规格（空尺）／
+  // 半份料不许出规格（把读不到的按缺席算成该保住）／门必须真的比内容而不只比形状。
+  {
+    id: "bench-judge-columns-inverted",
+    src: "scripts/lib/bench-judge-spec.ts",
+    test: "tests/bench-judge-spec.test.ts",
+    desc: "两列判据反过来（把本来就绿的列进 failToPass）⇒ 这一格恒真：它们不用改也是绿的，"
+      + "「该转绿的没绿」从此永远报 pass，而形状谓词看不出这种自造绿（两列仍不重叠、仍非空）",
+    apply: (s) => s.replace(
+      `  const failToPass = parsed.tests.filter((t) => t.outcome !== "passed").map((t) => t.name);\n  const passToPass = parsed.tests.filter((t) => t.outcome === "passed").map((t) => t.name);`,
+      `  const failToPass = parsed.tests.filter((t) => t.outcome === "passed").map((t) => t.name);\n  const passToPass = parsed.tests.filter((t) => t.outcome !== "passed").map((t) => t.name);`,
+    ),
+    // 期望用例名必须同时满足两把尺，而它们比的面**不同**：
+    //  · `mutate-anchor-titles`（标题体检）比的是**判卷源文本** ⇒ 要写模板串 `$rel $t.id：…`；
+    //  · `killerAttributionOk`（归因）比的是 **vitest 输出里红掉的标题** ⇒ 那已是渲染后的具体串。
+    // 同一枚 expectFail 喂不进两张面 ⇒ 这条锚点另配一个**不插值**的观测者：
+    // `tests/bench-judge-spec.test.ts` 里那条「三支分开」的用例标题是字面量，两张面都认。
+    // 观测者是**字面量标题**那条（`it.each` 那条比不出来：两把尺各比源文本与 vitest 输出，
+    // 而 expectFail 只有一枚 ⇒ 会 misattributed）。它手工复现「两列对调」并断言判据咬得住。
+    expectFail: "两列判据反过来 ⇒ 恒真（该转绿的那一列里全是本来就绿的）",
+  },
+  {
+    id: "bench-judge-empty-parse-not-refused",
+    src: "scripts/lib/bench-judge-spec.ts",
+    test: "tests/bench-judge-spec.test.ts",
+    desc: "「一条逐名都没读到 ⇒ 拒出规格」那一支恒假 ⇒ 交一份空两列出去，"
+      + "下游会把空尺读成「没有该转绿的」或更糟的恒过——「没解析到」≠「没问题」",
+    apply: (s) => s.replace(`  if (parsed.tests.length === 0) {`, `  if (false) {`),
+    // 观测者是那条「三支分开」的判据：它喂三种输入，断言第二种**只**触发这一支
+    // （另两支的话不许出现）。指向个别的空计划线用例会 misattributed——那条用例只查
+    // 「成因含这句话」，而另两支被改坏时它照样绿（三个分支的成因会同时出现）。
+    expectFail: "三个 fail-closed 分支各有一个**只走它自己**的坏输入（否则改坏任一条，另一条会替它红 ⇒ 突变存活）",
+  },
+  {
+    id: "bench-judge-incomplete-not-refused",
+    src: "scripts/lib/bench-judge-spec.ts",
+    test: "tests/bench-judge-spec.test.ts",
+    desc: "「派生不完整 ⇒ 拒」那一支恒假 ⇒ 拿半份料分列，读不到的那些按缺席算进 PASS_TO_PASS，"
+      + "而没人喊——半份尺比没有尺更坏（它看起来在守）",
+    apply: (s) => s.replace(`  if (!parsed.complete) reasons.push`, `  if (false) reasons.push`),
+    expectFail: "三个 fail-closed 分支各有一个**只走它自己**的坏输入（否则改坏任一条，另一条会替它红 ⇒ 突变存活）",
+  },
+  {
+    id: "bench-judge-check-compares-shape-only",
+    src: "scripts/bench-judge-spec.ts",
+    test: "tests/bench-judge-spec.test.ts",
+    desc: "`--check` 门改成只比「有没有 judge」不比内容 ⇒ 漂掉的那一列（加了条幻影测试名、"
+      + "或两列互换）照样退 0；这道门就只剩一道形状闸，而形状恰恰看不出恒真那种漂",
+    apply: (s) => s.replace(
+      `  if (sameSpec(t.judge, r.spec)) {\n      out.push(t);\n      continue;\n    }\n    drift += 1;`,
+      `  if (t.judge !== undefined) {\n      out.push(t);\n      continue;\n    }\n    drift += 1;`,
+    ),
+    expectFail: "漂一份副本 ⇒ 门退 1 并点名（比的是内容，不是「有没有 judge」）",
   },
 ];

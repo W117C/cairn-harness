@@ -1,3 +1,4 @@
+import { dirname, join } from "node:path";
 import {
   deleteProviderKey,
   providerKeyStatus,
@@ -40,9 +41,17 @@ export function setSettingsHostDeps(deps: SettingsHostDeps): void {
 
 let settingsStore: SettingsStore | null = null;
 
-/** shell 启动时初始化 settings 存储（文件路径）。 */
-export function initSettingsStore(filePath: string): void {
+/** shell 启动时初始化 settings 存储（文件路径）。
+ *
+ *  M4b license 状态面随这条**真实初始化路径**一起挂上（2026-10-22 修登记缺陷「产品 P1：
+ *  initLicenseStore 零调用点 ⇒ license 状态恒 inactive」）：license.json 与 settings.json 同目录
+ *  ——桌面 <userData>/license.json、headless <ws>/.agent/license.json，正是 license.ts 文档里的
+ *  「<appData>/license.json」那一格。此前只有 initLicenseStore 这个死锚点，没有任何真实初始化路径
+ *  调它，agent:state 应答里的 license 因此永远是 {state:"inactive"}。
+ */
+export function initSettingsStore(filePath: string, opts: { licensePublicKey?: string } = {}): void {
   settingsStore = new SettingsStore(filePath);
+  initLicenseStore(join(dirname(filePath), "license.json"), { publicKey: opts.licensePublicKey });
 }
 
 export function store(): SettingsStore {
@@ -127,15 +136,19 @@ export async function handleProviderKeyStatus(): Promise<{ available: boolean; s
 }
 
 let licenseFilePath: string | null = null;
+/** 验签公钥（缺省 = 内置公钥；自建签发链与判卷可注入，与 verifyLicenseFile 的可测性口径一致：
+ *  「公钥/时间可注入」是 license.ts 自己写下的可测性契约，settings 这一层此前没把它接出来）。 */
+let licensePublicKey: string | undefined;
 
 /** shell 启动时初始化 license 文件路径（<appData>/license.json）。 */
-export function initLicenseStore(filePath: string): void {
+export function initLicenseStore(filePath: string, opts: { publicKey?: string } = {}): void {
   licenseFilePath = filePath;
+  licensePublicKey = opts.publicKey;
 }
 
 export async function handleLicenseStatus(): Promise<LicenseState> {
   if (!licenseFilePath) return { state: "inactive" };
-  return await verifyLicenseFile(licenseFilePath);
+  return await verifyLicenseFile(licenseFilePath, licensePublicKey !== undefined ? { publicKey: licensePublicKey } : {});
 }
 
 let appVersion = "0.0.1";

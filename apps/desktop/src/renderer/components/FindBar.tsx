@@ -6,10 +6,8 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 
 /** 命令式入口：⌘G / ⇧⌘G 在输入框失去焦点后也要能步进（Claude Edit > Find Next/Previous 的标准键）。 */
-export interface FindBarHandle {
-  step: (dir: 1 | -1) => void;
-  focus: () => void;
-}
+import type { FindBarHandle } from "../app-controls";
+export type { FindBarHandle } from "../app-controls";
 
 export interface FindBarProps {
   open: boolean;

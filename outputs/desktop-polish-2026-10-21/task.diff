@@ -1,0 +1,620 @@
+--- a/apps/desktop/src/main/browser-host.ts
++++ b/apps/desktop/src/main/browser-host.ts
+@@ -21,7 +21,7 @@
+   pending?: { url: string };
+ }
+ 
+-interface Entry { view: WebContentsView }
++interface Entry { view: WebContentsView; owner: BrowserWindow }
+ 
+ /** 一次导航的处置（纯函数面；判卷直接钉，不靠源码断言）。 */
+ export type NavigationDecision =
+@@ -40,7 +40,7 @@
+     const u = new URL(raw);
+     if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+     const host = u.hostname.toLowerCase();
+-    return host === "localhost" || host === "127.0.0.1" || host === "::1" || allowedHosts.has(host);
++    return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || allowedHosts.has(host);
+   } catch {
+     return false;
+   }
+@@ -65,6 +65,7 @@
+   /** 已授权站点（host）。只由 open() 的显式导航写入——渲染层在地址栏提交前已问过用户。 */
+   private readonly allowedHosts = new Set<string>();
+   private readonly entries = new Map<string, Entry>();
++  private readonly observedOwners = new WeakSet<BrowserWindow>();
+   constructor(
+     private readonly getWindow: () => BrowserWindow | null,
+     private readonly push: (state: BrowserState) => void,
+@@ -120,7 +121,7 @@
+   }
+ 
+   /** 创建（或复用后导航）某 id 的浏览器视图。 */
+-  open(id: string, url: string): { ok: true } | { ok: false; error: string } {
++  open(id: string, url: string, owner: BrowserWindow | null = this.getWindow()): { ok: true } | { ok: false; error: string } {
+     let host: string;
+     try {
+       const u = new URL(url);
+@@ -131,11 +132,12 @@
+     } catch {
+       return { ok: false, error: `不是合法 URL：${url}` };
+     }
+-    // 地址栏提交前渲染层已经问过用户（sitePermissionFor）⇒ 这里把 host 记为授权。
++    const win = owner;
++    if (win === null || win.isDestroyed()) return { ok: false, error: "调用窗口已关闭（浏览器视图无处安放）" };
++    let e = this.entries.get(id);
++    if (e !== undefined && e.owner !== win) return { ok: false, error: "浏览器视图属于另一个窗口" };
++    // 地址栏提交前渲染层已经问过用户；只有窗口归属有效时才记为授权。
+     this.allowedHosts.add(host);
+-    const win = this.getWindow();
+-    if (win === null) return { ok: false, error: "主窗口不在（浏览器视图无处安放）" };
+-    let e = this.entries.get(id);
+     if (e === undefined) {
+       const view = new WebContentsView({
+         webPreferences: {
+@@ -147,8 +149,15 @@
+         },
+       });
+       win.contentView.addChildView(view);
+-      e = { view };
++      e = { view, owner: win };
+       this.entries.set(id, e);
++      // 同一窗口不论开多少标签只订阅一次；窗口销毁不依赖 renderer 的卸载 IPC。
++      if (!this.observedOwners.has(win)) {
++        this.observedOwners.add(win);
++        win.once("closed", () => {
++          for (const [viewId, entry] of this.entries) if (entry.owner === win) this.close(viewId);
++        });
++      }
+       const wc = view.webContents;
+       // 远端页面权限默认**全拒**：Electron 缺省会对 getUserMedia/geolocation/notifications/
+       // clipboard-read 等请求自动批准，页内一行 JS 就能开摄像头/麦克风或读剪贴板。
+@@ -251,11 +260,11 @@
+     if (e === undefined) return;
+     this.entries.delete(id);
+     try {
+-      this.getWindow()?.contentView.removeChildView(e.view);
+-      e.view.webContents.close();
++      if (!e.owner.isDestroyed()) e.owner.contentView.removeChildView(e.view);
+     } catch {
+-      // 窗口已在关闭途中的竞态：吞掉（资源随窗口走）。
+-    }
++      // 宿主关闭过程可能已摘除视图；仍须单独释放 webContents。
++    }
++    if (!e.view.webContents.isDestroyed()) e.view.webContents.close();
+   }
+ 
+   /** v7 清除浏览数据（§2.4 ⋮ 菜单）：清独立干净 profile（persist:cairn-browser——所有 browser
+--- a/apps/desktop/src/main/terminal-host.ts
++++ b/apps/desktop/src/main/terminal-host.ts
+@@ -81,7 +81,9 @@
+       // 旧实现只摘 exit ⇒ 会话永久留在表里、UI 卡在「运行中」、write 静默丢失。
+       finish(null);
+     });
+-    proc.on("exit", (code) => finish(code));
++    // exit 只代表进程结束，stdout/stderr 仍可能在排空；此时 end() 会拆坏跨块中文。
++    // 立即拒绝后续输入，等 close（所有管道关闭）再收解码器并通知 UI。
++    proc.on("exit", () => { this.sessions.delete(id); });
+     proc.on("close", (code) => finish(code));
+     this.sessions.set(id, { proc });
+     return { ok: true, id };
+--- a/apps/desktop/src/renderer/main.tsx
++++ b/apps/desktop/src/renderer/main.tsx
+@@ -1,6 +1,5 @@
+ import { lazy, Suspense } from "react";
+ import { createRoot } from "react-dom/client";
+-import { App } from "./App";
+ import { parsePaneHash } from "./components/panes";
+ import { ToastHost } from "./components/ToastHost";
+ import "./tokens.css";
+@@ -12,19 +11,20 @@
+ document.body.setAttribute("data-dsh-claude-brand", "claude");
+ 
+ const PopoutApp = lazy(() => import("./components/PopoutApp").then((m) => ({ default: m.PopoutApp })));
++const App = lazy(() => import("./App").then((m) => ({ default: m.App })));
+ 
+ // 路由：`#pane=<kind>[&session=<id>]` = 独立窗格窗口（弹出）；其余 = 主窗口。
+ // 主窗口专属 ToastHost：首次成功/失败提示时才加载 sonner；弹窗窗格没有发 toast 的调用面。
+ const popout = parsePaneHash(window.location.hash);
+ createRoot(document.getElementById("root")!).render(
+-  popout !== null ? (
+-    <Suspense fallback={null}>
++  <Suspense fallback={null}>
++    {popout !== null ? (
+       <PopoutApp kind={popout.kind} sessionId={popout.sessionId} />
+-    </Suspense>
+-  ) : (
+-    <>
+-      <App />
+-      <ToastHost />
+-    </>
+-  ),
++    ) : (
++      <>
++        <App />
++        <ToastHost />
++      </>
++    )}
++  </Suspense>,
+ );
+--- a/apps/desktop/src/renderer/components/Inspector.tsx
++++ b/apps/desktop/src/renderer/components/Inspector.tsx
+@@ -114,8 +114,8 @@
+     ? props.workspacePath.slice(props.workspacePath.lastIndexOf("/") + 1)
+     : null;
+   const rows: readonly (readonly [string, string])[] = [
+-    ["输入", formatTokens(props.usage.inputTokens)],
+-    ["输出", formatTokens(props.usage.outputTokens)],
++    ["输入", props.usage.usageCount > 0 ? formatTokens(props.usage.inputTokens) : "未返回"],
++    ["输出", props.usage.usageCount > 0 ? formatTokens(props.usage.outputTokens) : "未返回"],
+     ["工具步数", String(props.usage.toolSteps)],
+     ["对话轮数", String(props.usage.rounds)],
+     ["文件改动", String(props.fileCount)],
+--- a/apps/desktop/scripts/native-host-smoke.ts
++++ b/apps/desktop/scripts/native-host-smoke.ts
+@@ -1,5 +1,5 @@
+ // 真实 Electron 浏览器与 PTY；仅访问自建回环 HTTP，不调用模型或用户 profile。
+-import { app, BrowserWindow } from "electron";
++import { app, BrowserWindow, WebContentsView } from "electron";
+ import { createServer } from "node:http";
+ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+ import { tmpdir } from "node:os";
+@@ -23,31 +23,13 @@
+   const check = (name: string, ok: boolean, detail?: unknown): void => { checks.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}`); };
+   let foreignHits = 0;
+   const foreign = createServer((_req,res)=>{foreignHits++;res.end("foreign");});
+-  // 「外来回环」这一支要绑 127.0.0.2（一个**与本地服务不同地址**的 host，用来验"外来 host 被拦"）。
+-  // ⚠️ macOS 默认**不把整个 127/8 绑到 lo0**（只有 127.0.0.1）⇒ 这台机器上 `listen` 直接
+-  // EADDRNOTAVAIL ⇒ 旧形状在一道检查都没跑之前就死了（2026-10-20 独立评审追出，LOW-MEDIUM）。
+-  // 修法：认得这个错、说清怎么开（`sudo ifconfig lo0 alias 127.0.0.2`），
+-  // 并以**独立退出码 2**表示「跑不了」——**不许 exit 0**（"没跑"读成"过了"比红更坏）。
+-  try {
+-    await new Promise<void>((done,reject)=>{foreign.once("error",reject);foreign.listen(0,"127.0.0.2",done);});
+-  } catch (err) {
+-    const code = (err as NodeJS.ErrnoException).code;
+-    if (code === "EADDRNOTAVAIL") {
+-      console.error("[native-host-smoke] 这台机器的 lo0 没绑 127.0.0.2（macOS 默认只绑 127.0.0.1）⇒ 本脚本跑不了。");
+-      console.error("  开法：sudo ifconfig lo0 alias 127.0.0.2");
+-      console.error("  退出码 2 = 跑不了（不是 0：没跑不等于过了）");
+-      app.exit(2);
+-      // ⚠️ 这里**不许**再 `throw err`（2026-10-21 真机冒烟实测）：`app.exit` 是异步退出的，
+-      // 紧接着 throw 会让外层 `main().catch` 接手 ⇒ 原始错误被原样印出来、外层再退 1
+-      // ⇒ 「跑不了」被读成「跑挂了」，退出码也不是那个 2。直接 return（本函数就此收束）。
+-      return;
+-    }
+-    throw err;
+-  }
++  // 用另一个主机名访问自己控制的回环服务：不需要 macOS lo0 alias，也不触碰外网。
++  // IPv4 映射 IPv6 地址可连到此服务，但不属于产品默认允许的 localhost/127.0.0.1/::1。
++  await new Promise<void>((done,reject)=>{foreign.once("error",reject);foreign.listen(0,"127.0.0.1",done);});
+   console.log("native: foreign loopback ready");
+   const addr = foreign.address();
+   if (addr === null || typeof addr === "string") throw new Error("本地地址未就绪");
+-  const foreignUrl = `http://127.0.0.2:${addr.port}/blocked`;
++  const foreignUrl = new URL(`http://[::ffff:127.0.0.1]:${addr.port}/blocked`).href;
+   const server = createServer((req,res)=>{
+     if(req.url === "/redirect") {res.writeHead(302,{location:foreignUrl});res.end();return;}
+     res.setHeader("content-type","text/html; charset=utf-8");
+@@ -90,6 +72,16 @@
+   host.close("real");
+   await new Promise(r=>setTimeout(r,100));
+   check("窗口焦点变化后仍从原宿主释放视图",mainWindow.contentView.children.length===0&&wc.isDestroyed(),{children:mainWindow.contentView.children.length,destroyed:wc.isDestroyed()});
++  // 后台弹窗恢复页面时，聚焦窗口仍可能是主窗；归属必须来自发起调用的窗口。
++  owner=mainWindow;
++  host.open("background-popup",base,popup);
++  const background=host.webContentsForAudit("background-popup");
++  check("后台弹窗页面挂到调用窗口而非聚焦窗口",popup.contentView.children.some(v=>v instanceof WebContentsView&&v.webContents===background)&&mainWindow.contentView.children.length===0);
++  const foreignOwner=host.open("background-popup",base,mainWindow);
++  check("另一个窗口不能复用已有视图 ID",!foreignOwner.ok);
++  popup.destroy();
++  await new Promise(r=>setTimeout(r,100));
++  check("宿主窗口销毁时释放视图及登记",background?.isDestroyed()===true&&host.webContentsForAudit("background-popup")===null);
+   const terminalEvents: TerminalPush[]=[];
+   const terminal=new TerminalHost(e=>terminalEvents.push(e));
+   const started=terminal.start(profile,{...process.env,SHELL:"/bin/sh",ENV:"/dev/null"});
+@@ -102,7 +94,7 @@
+     await waitFor(()=>terminalEvents.some(e=>e.kind==="exit"&&e.id===started.id),"PTY 关闭");
+     check("关闭终端后不可继续写入",!terminal.write(started.id,"echo after-close\n"));
+   }
+-  terminal.killAll();host.closeAll();mainWindow.destroy();popup.destroy();server.close();foreign.close();
++  terminal.killAll();host.closeAll();mainWindow.destroy();server.close();foreign.close();
+   mkdirSync(dirname(output),{recursive:true});writeFileSync(output,JSON.stringify(checks,null,2));
+   app.exit(checks.every(c=>c.ok)?0:1);
+ }
+--- a/apps/desktop/scripts/performance-smoke.cjs
++++ b/apps/desktop/scripts/performance-smoke.cjs
+@@ -18,8 +18,11 @@
+ const out = resolve(process.argv[2] ?? 'performance.json');
+ const turns = Number(process.argv[3] ?? 400);
+ const samples = Number(process.argv[4] ?? 40);
++const rendererDir = resolve(process.env.CAIRN_PERF_RENDERER_DIR ?? join(__dirname, '../dist'));
+ const pause = (ms) => new Promise(r => setTimeout(r, ms));
+ async function main() {
++  if (!Number.isInteger(turns) || turns < 1 || !Number.isInteger(samples) || samples < 2) throw new Error('必须至少一轮历史、两次独立增量');
++  if (Object.values(budgets).some(value => !Number.isFinite(value) || value <= 0)) throw new Error('性能预算必须为有限正数');
+   await app.whenReady();
+   const protocol = readFileSync(join(__dirname, '../../../src/main/ipc-protocol.ts'), 'utf8');
+   const version = Number(protocol.match(/IPC_PROTOCOL_VERSION\s*=\s*(\d+)/)[1]);
+@@ -40,7 +43,7 @@
+     throw new Error('等待超时: '+expression);
+   };
+   const t0=performance.now();
+-  await win.loadFile(join(__dirname,'../dist/index.html'));
++  await win.loadFile(join(rendererDir,'index.html'));
+   await waitFor(`!!document.querySelector('.session') && !!document.querySelector('.composer-card textarea')`);
+   const startupMs=performance.now()-t0;
+   win.webContents.debugger.attach('1.3');
+@@ -78,6 +81,22 @@
+   const finalMetrics=await metrics();
+   const metricDelta=(before,after)=>Object.fromEntries(['TaskDuration','ScriptDuration','LayoutDuration','RecalcStyleDuration','LayoutCount','RecalcStyleCount'].map(key=>[key,(after[key]??0)-(before[key]??0)]));
+   const report={turns,samples,startupMs,openMs,runningStarted,metrics:{open:metricDelta(startupMetrics,openMetrics),stream:metricDelta(streamMetrics,finalMetrics)},frameMs:{p50:sorted[Math.floor(sorted.length*.5)],p95:sorted[Math.floor(sorted.length*.95)],max:sorted.at(-1),all:frames},dom,errors,budgets};
++  if (process.env.CAIRN_PERF_CHECK_ACTIONS === '1') {
++    // 在计时结束后点击刚生成一轮的动作，验证缓存没有把事件闭包冻结在旧历史。
++    await js('window.__cairnPerf.complete()');
++    const round = turns + 1;
++    await waitFor(`!!document.querySelector('[aria-label="回放到第 ${round} 轮"]') && document.querySelector('.gen-bar')?.dataset.running === 'false'`);
++    await js(`document.querySelector('[aria-label="回放到第 ${round} 轮"]').click()`);
++    await waitFor('window.__cairnPerf.calls().forks.length === 1');
++    await js(`document.querySelector('[aria-label="重跑第 ${round} 轮"]').click()`);
++    await waitFor('window.__cairnPerf.calls().runs.length === 2');
++    const calls = await js('window.__cairnPerf.calls()');
++    report.actions = {
++      replayLatest: calls.forks[0].sessionId === 's1' && calls.forks[0].round === round && calls.forks[0].keepWorkspace === true,
++      retryLatest: calls.runs[1].message === '逐帧流式性能检查',
++    };
++    await js('window.__cairnPerf.finish()');
++  }
+   mkdirSync(require('node:path').dirname(out),{recursive:true});
+   writeFileSync(out,JSON.stringify(report,null,2));
+   console.log(JSON.stringify(report));
+@@ -89,7 +108,9 @@
+     ...(report.startupMs>budgets.startupMs?[`启动 ${report.startupMs.toFixed(1)}ms > 帽 ${budgets.startupMs}ms`]:[]),
+   ];
+   if(overBudget.length>0) console.error('[performance-smoke] 超预算：'+overBudget.join('；'));
+-  app.exit(runningStarted && errors.length===0 && dom.historyPresent && dom.lastPresent && overBudget.length===0 ? 0:1);
++  const completeHistory = dom.users === turns+1 && dom.assistants === turns+1 && dom.tools === turns;
++  const validActions = report.actions === undefined || Object.values(report.actions).every(Boolean);
++  app.exit(runningStarted && errors.length===0 && dom.historyPresent && dom.lastPresent && completeHistory && validActions && overBudget.length===0 ? 0:1);
+ }
+ setTimeout(()=>{console.error('performance-smoke 超时');app.exit(1);},90000).unref();
+ main().catch(e=>{console.error(e);app.exit(1);});
+--- a/apps/desktop/scripts/bundle-audit.mjs
++++ b/apps/desktop/scripts/bundle-audit.mjs
+@@ -20,9 +20,26 @@
+         chunk.imports.forEach(visit);
+       };
+       chunks.filter((chunk) => chunk.isEntry).forEach((chunk) => visit(chunk.fileName));
++      // 入口变小不等于主工作台变小：分别统计两条路由及其静态依赖的总量。
++      const routeBytes = {};
++      for (const [route, modulePath] of Object.entries({ main: "src/renderer/App.tsx", popout: "src/renderer/components/PopoutApp.tsx" })) {
++        const root = chunks.find(chunk => Object.keys(chunk.modules).some(id => relative(process.cwd(), id) === modulePath));
++        if (!root) throw new Error(`缺少路由模块：${modulePath}`);
++        const names = new Set(initial);
++        const collect = name => {
++          if (names.has(name)) return;
++          const chunk = byName.get(name);
++          if (!chunk) throw new Error(`缺少依赖 chunk：${name}`);
++          names.add(name);
++          chunk.imports.forEach(collect);
++        };
++        collect(root.fileName);
++        routeBytes[route] = [...names].reduce((sum, name) => sum + Buffer.byteLength(byName.get(name).code), 0);
++      }
+       const report = {
+         initialBytes: [...initial].reduce((sum, name) => sum + Buffer.byteLength(byName.get(name).code), 0),
+         initialChunks: [...initial],
++        routeBytes,
+         chunks: chunks.map((chunk) => ({
+           file: chunk.fileName, entry: chunk.isEntry, initial: initial.has(chunk.fileName),
+           imports: chunk.imports, dynamicImports: chunk.dynamicImports, bytes: Buffer.byteLength(chunk.code),
+@@ -37,10 +54,15 @@
+       // bundle-before.json）⇒ 帽 = 800,000B（≈1.5 倍）：站得住 today，又能逮住一次 3× 回归。
+       // 可用环境变量调（真要临时抬帽时抬它，而不是把闸删掉）。
+       const budget=Number(process.env.CAIRN_BUNDLE_INITIAL_BUDGET_BYTES??800000);
+-      const overBudget=report.initialBytes>budget;
+-      console.log(JSON.stringify({ initialBytes: report.initialBytes, chunks: report.initialChunks, budgetBytes: budget, overBudget, output }));
++      const routeBudgets = {
++        main: Number(process.env.CAIRN_BUNDLE_MAIN_BUDGET_BYTES ?? 600000),
++        popout: Number(process.env.CAIRN_BUNDLE_POPOUT_BUDGET_BYTES ?? 400000),
++      };
++      if ([budget, ...Object.values(routeBudgets)].some(value => !Number.isFinite(value) || value <= 0)) throw new Error("JS 预算必须为有限正数");
++      const overBudget=report.initialBytes>budget || Object.entries(routeBudgets).some(([route, cap]) => routeBytes[route] > cap);
++      console.log(JSON.stringify({ initialBytes: report.initialBytes, chunks: report.initialChunks, budgetBytes: budget, routeBytes, routeBudgets, overBudget, output }));
+       if(overBudget) {
+-        console.error(`[bundle-audit] 首屏 JS ${report.initialBytes}B > 帽 ${budget}B（一次真实的膨胀，不是噪声）`);
++        console.error(`[bundle-audit] 路由 JS 超预算：${JSON.stringify({ initial: report.initialBytes, routeBytes, budget, routeBudgets })}`);
+         process.exitCode=1;
+       }
+     },
+--- a/apps/desktop/scripts/ui-gallery-preload.cjs
++++ b/apps/desktop/scripts/ui-gallery-preload.cjs
+@@ -212,6 +212,8 @@
+   const turns = Number(argOf("--cairn-performance-turns=", "400"));
+   const listeners = new Set();
+   let finishRun;
++  let liveText = "";
++  const calls = { runs: [], forks: [] };
+   const events = [];
+   for (let i = 0; i < turns; i++) {
+     events.push({ type: "user_message", content: `第 ${i+1} 轮：检查模块 ${i}`, ts: now - (turns-i)*60000 });
+@@ -223,13 +225,25 @@
+   stub.openSession = reply({ events });
+   stub.onEvent = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
+   const emit = (e) => { for (const listener of listeners) listener({ ...e, session_id: "s1", ts: Date.now() }); };
+-  stub.run = () => new Promise((resolve) => {
++  stub.forkSession = (sessionId, round, keepWorkspace) => {
++    calls.forks.push({ sessionId, round, keepWorkspace });
++    return Promise.resolve({ ok: false, error: "夹具已记录回放请求" });
++  };
++  stub.run = (request) => new Promise((resolve) => {
++    calls.runs.push(request);
++    liveText = "PERF-LIVE-0";
+     finishRun = resolve;
+     emit({ type: "user_message", content: "逐帧流式性能检查" });
+     emit({ type: "assistant_delta", callId: "perf-live", text: "PERF-LIVE-0" });
+   });
+   contextBridge.exposeInMainWorld("__cairnPerf", {
+-    step: (index) => emit({ type: "assistant_delta", callId: "perf-live", text: ` PERF-LIVE-${index}` }),
++    calls: () => calls,
++    step: (index) => {
++      const text = ` PERF-LIVE-${index}`;
++      liveText += text;
++      emit({ type: "assistant_delta", callId: "perf-live", text });
++    },
++    complete: () => emit({ type: "assistant_message", callId: "perf-live", content: liveText }),
+     finish: () => { emit({ type: "agent_status", status: "done" }); finishRun?.({ ok: true }); },
+   });
+ }
+--- a/apps/desktop/tests/desktop-review-batch.test.ts
++++ b/apps/desktop/tests/desktop-review-batch.test.ts
+@@ -5,6 +5,12 @@
+ // 相位文案 = tests/phase-label.test.ts（纯函数，真跑）；草稿搬移 = 本文件末尾的通道对账）。
+ // 它钉的是**接线**：修法真的落在那条路上，而不是"某处有个一样的字符串"。
+ import { readFileSync } from "node:fs";
++import { mkdtemp, rm } from "node:fs/promises";
++import { execFile } from "node:child_process";
++import { createRequire } from "node:module";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { promisify } from "node:util";
+ import { fileURLToPath } from "node:url";
+ import { describe, expect, it } from "vitest";
+ 
+@@ -63,19 +69,20 @@
+     expect(bundle).toContain("process.exitCode=1");
+   });
+ 
+-  it("原生宿主冒烟：认得 lo0 没绑 127.0.0.2 ⇒ 说清怎么开 + 独立退出码（不许 exit 0）", () => {
+-    const native = readFileSync(fileURLToPath(new URL("../scripts/native-host-smoke.ts", import.meta.url)), "utf8");
+-    // 判据要钉**分支真的在**（只钉"文件里有这几个字"= 恒真：把条件改成 if(false) 也照样全绿）
+-    expect(native).toContain('if (code === "EADDRNOTAVAIL") {');
+-    expect(native).toContain("ifconfig lo0 alias 127.0.0.2");
+-    expect(native).toContain("app.exit(2)");
+-    // 「跑不了」那一支**不许再 throw**（2026-10-21 真机冒烟实测）：`app.exit` 是异步退出的，
+-    // 紧接着 throw ⇒ 外层 `main().catch` 接手 ⇒ 原始错误被原样印出来、外层再退 1
+-    // ⇒ 「跑不了」被读成「跑挂了」，退出码也不是那个 2。这一格钉住"return 收束"。
+-    const branch = native.slice(native.indexOf('if (code === "EADDRNOTAVAIL") {'));
+-    const beforeThrow = branch.slice(0, branch.indexOf("throw err;"));
+-    expect(beforeThrow, "EADDRNOTAVAIL 分支里必须以 return 收束（不许再 throw 给外层）").toContain("return;");
+-    // 反向对照：跑不了不许走"全过"那个出口
+-    expect(native).not.toMatch(/EADDRNOTAVAIL[\s\S]{0,600}app\.exit\(0\)/);
+-  });
++  it.runIf(process.platform === "darwin")("原生宿主实际运行：无系统配置前提，完整验证导航、窗口归属和 PTY", async () => {
++    const dir = await mkdtemp(join(tmpdir(), "cairn-native-regression-"));
++    try {
++      const electron = createRequire(import.meta.url)("electron") as string;
++      const output = join(dir, "checks.json");
++      await promisify(execFile)(electron, [fileURLToPath(new URL("../scripts/native-host-smoke.cjs", import.meta.url)), output], { timeout: 30000 });
++      const checks = JSON.parse(readFileSync(output, "utf8")) as { name: string; ok: boolean; detail?: { foreignHits?: number } }[];
++      expect(checks.length).toBeGreaterThanOrEqual(14);
++      expect(checks.filter(c => !c.ok)).toEqual([]);
++      expect(checks.find(c => c.name === "未授权重定向没有发到目标服务")?.detail?.foreignHits).toBe(0);
++      expect(checks.find(c => c.name === "后台弹窗页面挂到调用窗口而非聚焦窗口")?.ok).toBe(true);
++      expect(checks.find(c => c.name === "宿主窗口销毁时释放视图及登记")?.ok).toBe(true);
++    } finally {
++      await rm(dir, { recursive: true, force: true });
++    }
++  }, 35000);
+ });
+--- /dev/null
++++ b/apps/desktop/scripts/route-smoke.cjs
+@@ -0,0 +1,60 @@
++// 真实 renderer 的路由加载与资源闭包：弹出窗不得先加载主聊天工作台。
++const { app, BrowserWindow } = require('electron');
++const { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync, statSync } = require('node:fs');
++const { tmpdir } = require('node:os');
++const { join, resolve, dirname } = require('node:path');
++const { fileURLToPath } = require('node:url');
++const profile = mkdtempSync(join(tmpdir(), 'cairn-route-'));
++app.setPath('userData', profile);
++app.on('window-all-closed', () => {});
++app.on('quit', () => rmSync(profile, { recursive: true, force: true }));
++const output = resolve(process.argv[2]);
++const waitFor = async (win, condition) => {
++  const start = Date.now();
++  while (Date.now() - start < 15000) {
++    if (await win.webContents.executeJavaScript(condition)) return;
++    await new Promise(resolve => setTimeout(resolve, 10));
++  }
++  throw new Error(`路由未就绪：${condition}`);
++};
++async function main() {
++  await app.whenReady();
++  const protocol = readFileSync(join(__dirname, '../../../src/main/ipc-protocol.ts'), 'utf8');
++  const version = Number(protocol.match(/IPC_PROTOCOL_VERSION\s*=\s*(\d+)/)[1]);
++  const start = protocol.indexOf('export interface AgentApi');
++  const body = protocol.slice(start, protocol.indexOf('\n}', start));
++  const starts = [...body.matchAll(/^\s{2}(\w+)\??\s*[(<]/gm)];
++  const members = starts.map((s,i) => ({ name:s[1], isArray:/Promise<[^>]*\[\]/.test(body.slice(s.index, starts[i+1]?.index??body.length)) }));
++  const reports = [];
++  for (const route of ['', 'pane=plan']) {
++    const win = new BrowserWindow({ show: false, width: 1440, height: 900, webPreferences: {
++      preload: join(__dirname, 'ui-gallery-preload.cjs'),
++      additionalArguments: ['--cairn-api-members='+JSON.stringify(members), '--cairn-protocol-version='+version],
++    }});
++    const errors = [];
++    const resources = new Set();
++    win.webContents.on('console-message', detail => { if (detail.level === 'error') errors.push(detail.message); });
++    // Chromium 目标须先就绪，再启用网络采集；首次文件导航仍在采集之后。
++    await win.loadURL('about:blank');
++    win.webContents.debugger.attach('1.3');
++    win.webContents.debugger.on('message', (_event, method, params) => {
++      if (method === 'Network.requestWillBeSent' && new URL(params.request.url).pathname.endsWith('.js')) resources.add(params.request.url);
++    });
++    await win.webContents.debugger.sendCommand('Network.enable');
++    const started = performance.now();
++    await win.loadFile(join(__dirname, '../dist/index.html'), { hash: route });
++    await waitFor(win, route ? `!!document.querySelector('.popout-app .pane-workbench')` : `!!document.querySelector('.composer-card textarea')`);
++    const readyMs = performance.now() - started;
++    await win.webContents.executeJavaScript('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
++    const dom = await win.webContents.executeJavaScript(`({ popout:!!document.querySelector('.popout-app'), composer:!!document.querySelector('.composer-card'), title:document.title })`);
++    const files = [...new Set(resources)].map(url => ({ file: fileURLToPath(url), bytes: statSync(fileURLToPath(url)).size }));
++    reports.push({ route: route || 'main', readyMs, dom, files, jsBytes: files.reduce((sum, f) => sum + f.bytes, 0), errors });
++    win.destroy();
++  }
++  mkdirSync(dirname(output), { recursive: true });
++  writeFileSync(output, JSON.stringify(reports, null, 2));
++  console.log(JSON.stringify(reports));
++  app.exit(reports.length === 2 && reports.every(r => r.files.length > 0 && r.errors.length === 0 && (r.route === 'main' ? r.dom.composer && !r.dom.popout : r.dom.popout && !r.dom.composer)) ? 0 : 1);
++}
++setTimeout(()=>{console.error('route-smoke 超时');app.exit(1);},45000).unref();
++main().catch(error=>{console.error(error);app.exit(1);});
+--- /dev/null
++++ b/apps/desktop/tests/browser-local-ipv6.test.ts
+@@ -0,0 +1,20 @@
++import { describe, expect, it } from 'vitest';
++import { hostAllowed } from '../src/main/browser-host';
++import { sitePermissionFor } from '../src/renderer/components/panes';
++
++describe('浏览器 IPv6 本地预览', () => {
++  it('URL 标准解析得到带括号的 hostname，主进程与地址栏都视为本地', () => {
++    const url = 'http://[::1]:5173/preview';
++    expect(new URL(url).hostname).toBe('[::1]');
++    expect(sitePermissionFor(url, new Set())).toBe('local');
++    expect(hostAllowed(url, new Set())).toBe(true);
++  });
++  it('IPv4 映射地址与外站仍需显式授权', () => {
++    expect(hostAllowed('http://[::ffff:127.0.0.1]:5173/', new Set())).toBe(false);
++    expect(hostAllowed('https://outside.example/', new Set())).toBe(false);
++  });
++  it('本地主机名不放行非网页协议', () => {
++    expect(hostAllowed('file://[::1]/private', new Set())).toBe(false);
++    expect(hostAllowed('ftp://[::1]/private', new Set())).toBe(false);
++  });
++});
+--- /dev/null
++++ b/apps/desktop/tests/terminal-drain.test.ts
+@@ -0,0 +1,48 @@
++import { EventEmitter } from 'node:events';
++import { PassThrough } from 'node:stream';
++import { spawn } from 'node:child_process';
++import { beforeEach, describe, expect, it, vi } from 'vitest';
++import { TerminalHost, type TerminalPush } from '../src/main/terminal-host';
++
++vi.mock('node:child_process', () => ({ spawn: vi.fn() }));
++
++function child() {
++  return Object.assign(new EventEmitter(), {
++    stdout: new PassThrough(), stderr: new PassThrough(), stdin: new PassThrough(), kill: vi.fn(),
++  });
++}
++beforeEach(() => vi.mocked(spawn).mockReset());
++
++describe.runIf(process.platform === 'darwin')('PTY 进程退出与管道排空', () => {
++  it('exit 后 close 前仍可能有字节：先读完整中文，再发终端退出', () => {
++    const proc = child();
++    vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
++    const events: TerminalPush[] = [];
++    const host = new TerminalHost(e => events.push(e));
++    const started = host.start(null);
++    expect(started.ok).toBe(true);
++    if (!started.ok) throw new Error('测试终端未启动');
++    const bytes = Buffer.from('你好');
++    proc.stdout.emit('data', bytes.subarray(0, 4));
++    proc.emit('exit', 0);
++    expect(host.write(started.id, 'after-exit')).toBe(false);
++    expect(events.filter(e => e.kind === 'exit')).toHaveLength(0);
++    proc.stdout.emit('data', bytes.subarray(4));
++    proc.emit('close', 0);
++    expect(events.filter(e => e.kind === 'data').map(e => e.data).join('')).toBe('你好');
++    expect(events.at(-1)).toEqual({ kind: 'exit', id: started.id, code: 0 });
++    expect(events.filter(e => e.kind === 'exit')).toHaveLength(1);
++  });
++  it('启动错误与随后的 close 只发一次退出', () => {
++    const proc = child();
++    vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
++    const events: TerminalPush[] = [];
++    const host = new TerminalHost(e => events.push(e));
++    const started = host.start(null);
++    if (!started.ok) throw new Error('测试终端未启动');
++    proc.emit('error', new Error('ENOENT'));
++    proc.emit('close', -2);
++    expect(events.filter(e => e.kind === 'exit')).toEqual([{ kind: 'exit', id: started.id, code: null }]);
++    expect(host.write(started.id, 'x')).toBe(false);
++  });
++});
+--- /dev/null
++++ b/apps/desktop/tests/inspector-missing-usage.test.tsx
+@@ -0,0 +1,27 @@
++import { describe, expect, it } from 'vitest';
++import { renderToStaticMarkup } from 'react-dom/server';
++import type { AgentEvent } from '../../../src/events';
++import { Inspector } from '../src/renderer/components/Inspector';
++
++function stat(html: string, label: string): string | undefined {
++  return html.match(new RegExp(`<dt>${label}</dt><dd[^>]*>([^<]*)</dd>`))?.[1];
++}
++const conversation: AgentEvent[] = [
++  { type: 'user_message', content: '检查界面' },
++  { type: 'assistant_message', content: '完成' },
++];
++describe('概览中的未返回用量与实际零用量', () => {
++  it('有消息但未收到 usage：输入输出显示未返回，仍展示已知的轮数', () => {
++    const html = renderToStaticMarkup(<Inspector events={conversation} />);
++    expect(stat(html, '输入')).toBe('未返回');
++    expect(stat(html, '输出')).toBe('未返回');
++    expect(stat(html, '对话轮数')).toBe('1');
++    expect(stat(html, '用量次数')).toBe('0');
++  });
++  it('明确收到零用量：保留真实的 0', () => {
++    const html = renderToStaticMarkup(<Inspector events={[...conversation, { type: 'usage', inputTokens: 0, outputTokens: 0 }]} />);
++    expect(stat(html, '输入')).toBe('0');
++    expect(stat(html, '输出')).toBe('0');
++    expect(stat(html, '用量次数')).toBe('1');
++  });
++});
+diff --git a/apps/desktop/src/main/index.ts b/apps/desktop/src/main/index.ts
+index d8b41e5a..a59930b1 100644
+--- a/apps/desktop/src/main/index.ts
++++ b/apps/desktop/src/main/index.ts
+@@ -227,9 +229,9 @@ const terminalHost = new TerminalHost((e) => {
+   }
+ });
+ 
+-// v5 browser 窗格：WebContentsView 宿主（独立干净 profile）；视图挂在当前主窗口上。
++// browser 窗格：WebContentsView 宿主；产品调用按可信 IPC sender 绑定窗口。
+ const browserHost = new BrowserHost(
+-  // 优先当前聚焦窗口：弹出窗格里的浏览器页必须挂到 popout，而不是恒挂主窗（getAllWindows()[0]）。
++  // 仅供直接宿主调用兜底；browserOpen IPC 始终传入调用窗口，不依赖焦点。
+   () => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null,
+   (state) => {
+     for (const win of BrowserWindow.getAllWindows()) win.webContents.send(PUSH_CHANNELS.onBrowserState, state);
+@@ -600,7 +624,8 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
+     return Promise.resolve({ ok: true });
+   },
+   // v5 browser 窗格（WebContentsView 宿主见 browser-host.ts）。
+-  browserOpen: (id, url) => Promise.resolve(browserHost.open(id as string, url as string)),
++  // owner 只由下方可信 IPC sender 解析，不能接受 renderer 自报的窗口。
++  browserOpen: (id, url, owner) => Promise.resolve(browserHost.open(id as string, url as string, owner as BrowserWindow | null)),
+   browserBounds: (id, rect) => { browserHost.setBounds(id as string, rect as { x: number; y: number; width: number; height: number }); return Promise.resolve(); },
+   browserNav: (id, action) => { browserHost.navigate(id as string, action as "back" | "forward" | "reload"); return Promise.resolve(); },
+   browserClose: (id) => { browserHost.close(id as string); return Promise.resolve(); },
+@@ -786,6 +821,8 @@ for (const [key, channel] of Object.entries(INVOKE_CHANNELS) as [InvokeChannel,
+     if (!isTrustedIpcSender(event)) {
+       throw new Error(`IPC 来源不可信，已拒绝：${channel}`);
+     }
++    // 后台弹窗恢复页面时焦点可能还在主窗；视图归属取发起 IPC 的窗口。
++    if (key === "browserOpen") return handler(args[0], args[1], BrowserWindow.fromWebContents(event.sender));
+     return handler(...args);
+   });
+ }

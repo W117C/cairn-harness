@@ -38,3 +38,7 @@ export {
   DEFAULT_ENTROPY, secretFindings,
 } from "./redact";
 export type { EntropyOptions, RedactResult, ScanOptions } from "./redact";
+// 日志结构控制记录的**投影**（ADR 0005）：控制记录由这一层解释，`replay()` 逐字不动它们。
+export { effectiveEvents, sessionMetaPatch } from "./projection";
+export { forkSessionPointer, replaySession, SessionReplayError } from "./session";
+export type { PointerForkResult, ReplaySessionOptions, SessionReplayErrorCode } from "./session";

@@ -31,6 +31,8 @@ function session(init: Partial<AutonomySession> = {}): AutonomySession {
     frozenJudgePaths: (init.frozenJudgePaths as Set<string>) ?? new Set<string>(),
   });
   s.planBlocked = init.planBlocked ?? (() => false);
+  // 断路器那一因要能复现：它与「逐次审批」同层（L3-mode），只靠层分不出来。
+  if (init.breakerTripped) s.breakerTripped = true;
   return s;
 }
 
@@ -44,43 +46,90 @@ const rule = (r: Partial<PermissionRule>): PermissionRule => ({
 
 const JUDGE = "tests/todo.test.ts";
 
-/** 每个出口 → 期望的判据层。加一层不往这张表里写用例，最后那条穷尽断言就红。 */
-const LAYER_CASES: readonly { name: string; expected: GateLayer; run: () => unknown }[] = [
-  { name: "只读档摘除写向工具", expected: "L0-hard", run: () => evaluate("write_file", { path: "a.ts" }, session({ mode: "read-only" })) },
-  { name: "方案门未批即写禁", expected: "L0-hard", run: () => evaluate("write_file", { path: "a.ts" }, session({ mode: "auto", planBlocked: () => true })) },
-  { name: "判卷文件冻结", expected: "L0-hard", run: () => evaluate("write_file", { path: JUDGE }, session({ mode: "auto", frozenJudgePaths: new Set([JUDGE]) })) },
-  { name: "deny 规则命中", expected: "L1-deny", run: () => evaluate("run_shell", { command: "rm x.txt" }, session({ mode: "auto", rules: [rule({ behavior: "deny", pattern: "rm" })] })) },
-  { name: "ask 规则命中", expected: "L2-ask-rule", run: () => evaluate("run_shell", { command: "git push origin" }, session({ mode: "auto", rules: [rule({ behavior: "ask", pattern: "git push" })] })) },
-  { name: "allow 规则放行", expected: "L3-rule", run: () => evaluate("run_shell", { command: "pnpm lint" }, session({ mode: "auto", rules: [rule({ behavior: "allow", pattern: "pnpm lint" })] })) },
-  { name: "session_kind 记忆放行", expected: "L3-scope", run: () => evaluate("run_shell", { command: "pnpm test" }, session({ mode: "default", sessionScopes: new Set([scopeKey("run_shell", { command: "pnpm test" })]) })) },
-  { name: "默认档写向逐次审批", expected: "L3-mode", run: () => evaluate("write_file", { path: "a.ts" }, session({ mode: "default" })) },
-  { name: "allow 规则批不掉 critical", expected: "L4-critical", run: () => evaluate("run_shell", { command: "rm -rf /" }, session({ mode: "auto", rules: [rule({ behavior: "allow", pattern: "rm" })] })) },
-  { name: "critical 任何档强制审批", expected: "L4-critical", run: () => evaluate("run_shell", { command: "rm -rf ~" }, session({ mode: "auto" })) },
-  { name: "自主档 risk≥high 送审", expected: "L4-risk", run: () => evaluate("run_shell", { command: "rm -rf build" }, session({ mode: "auto" })) },
-  { name: "非自主档 risk≥high 送审", expected: "L4-risk", run: () => evaluate("read_file", { path: "a.ts", requires_approval: true }, session({ mode: "default" })) },
-  { name: "MCP 无注解按写 fail-closed", expected: "L4-mcp-unannotated", run: () => evaluate("mcp__srv__do" as never, {}, session({ mode: "auto" })) },
+/** 每个出口 → 期望的判据层 + **凭哪一条判据**。加一层不往这张表里写用例，最后那条穷尽断言就红。
+ *
+ *  为什么加「凭哪一条」这一维（2026-10-22 实测）：`evaluate` 的出口是 **17 处**（`src/permissions/autonomy.ts`
+ *  的 17 个 return），而层只有 **12 个** ⇒ 层是好几处因的合流，`L0-hard` 一层就有四因
+ *  （只读档摘除／方案门／判卷文件冻结／判卷面取不出目标），四者**结构上完全一样**
+ *  （verdict=deny、不带 risk、无 auto），只有散文 reason 不同 ⇒ 只钉层的判据**分不出它们**。
+ *  同族缺陷：「只有正例的判据读起来像覆盖、其实证明不了什么」
+ *  （Anthropic《Demystifying evals for AI agents》：「One-sided evals create one-sided optimization」；
+ *   AG-UI 的 fixture 纪律：「a fixture that cannot fail is worse than no fixture」——
+ *   它说这句话的场合正是「一份 fixture 钉不出任何失败」）。
+ *  ⇒ 每条用例多钉两样：`cause`（结构化事实：裁决／风险级／命中哪条规则）与
+ *  `reasonEquals`/`reasonContains`（生产文案里那一小段**唯一**能分开同层几种因的话，逐字取自生产文案，
+ *  由 `scripts/prose-needle-scan.ts` 对账）。少钉的后果是量出来的：**因错而层对**的错案今天照样绿。
+ */
+const LAYER_CASES: readonly {
+  name: string;
+  expected: GateLayer;
+  /** 结构化的因。字段缺席是**真值**（L0/L1 出口不带 risk），不是漏填。 */
+  cause?: { verdict?: string; risk?: string; auto?: { source?: string; ruleId?: string } };
+  /** 同层里只有散文能把几种因分开时，钉生产文案里那一小段（逐字）。 */
+  reasonEquals?: string;
+  reasonContains?: string;
+  run: () => unknown;
+}[] = [
+  { name: "只读档摘除写向工具", expected: "L0-hard", cause: { verdict: "deny" }, reasonEquals: "只读档摘除写向工具", run: () => evaluate("write_file", { path: "a.ts" }, session({ mode: "read-only" })) },
+  { name: "方案门未批即写禁", expected: "L0-hard", cause: { verdict: "deny" }, reasonEquals: "方案门：先批后写（当前没有已批准的方案）", run: () => evaluate("write_file", { path: "a.ts" }, session({ mode: "auto", planBlocked: () => true })) },
+  { name: "判卷文件冻结", expected: "L0-hard", cause: { verdict: "deny" }, reasonContains: "判卷文件冻结", run: () => evaluate("write_file", { path: JUDGE }, session({ mode: "auto", frozenJudgePaths: new Set([JUDGE]) })) },
+  // ★ 第四种 L0 因（原来没有用例）：认不出补丁要写哪儿 ⇒ 按 fail-closed 拒绝。
+  // 「读不到目标」不等于「目标安全」——这条闸一软，畸形补丁就成了绕过冻结表的第二道门。
+  { name: "判卷面取不出目标：认不出补丁写哪儿 ⇒ fail-closed 拒绝", expected: "L0-hard", cause: { verdict: "deny" }, reasonContains: "判卷面冻结闸没法判", run: () => evaluate("apply_patch", { patch: "这不是 diff" }, session({ mode: "auto", frozenJudgePaths: new Set([JUDGE]) })) },
+  { name: "deny 规则命中", expected: "L1-deny", cause: { verdict: "deny" }, reasonContains: "deny 规则命中", run: () => evaluate("run_shell", { command: "rm x.txt" }, session({ mode: "auto", rules: [rule({ behavior: "deny", pattern: "rm" })] })) },
+  { name: "ask 规则命中", expected: "L2-ask-rule", cause: { verdict: "ask", risk: "none" }, reasonContains: "ask 规则命中", run: () => evaluate("run_shell", { command: "git push origin" }, session({ mode: "auto", rules: [rule({ behavior: "ask", pattern: "git push" })] })) },
+  { name: "allow 规则放行", expected: "L3-rule", cause: { verdict: "approve", risk: "none", auto: { source: "rule", ruleId: "allow:run_shell:pnpm lint#1" } }, run: () => evaluate("run_shell", { command: "pnpm lint" }, session({ mode: "auto", rules: [rule({ behavior: "allow", pattern: "pnpm lint", id: "allow:run_shell:pnpm lint#1" })] })) },
+  { name: "session_kind 记忆放行", expected: "L3-scope", cause: { verdict: "approve", risk: "none", auto: { source: "session_scope", ruleId: scopeKey("run_shell", { command: "pnpm test" }) } }, run: () => evaluate("run_shell", { command: "pnpm test" }, session({ mode: "default", sessionScopes: new Set([scopeKey("run_shell", { command: "pnpm test" })]) })) },
+  { name: "默认档写向逐次审批", expected: "L3-mode", cause: { verdict: "ask", risk: "none" }, reasonEquals: "默认档逐次审批", run: () => evaluate("write_file", { path: "a.ts" }, session({ mode: "default" })) },
+  // ★ 断路器那一因（原来没有用例）：连续自动放行达上限后降级为逐次审批。
+  // 与上面那条**同层同 verdict**，只靠层分不出来 ⇒ 分它的是那句「断路器触发」。
+  { name: "断路器触发：连续自动放行达上限 ⇒ 降级为逐次审批", expected: "L3-mode", cause: { verdict: "ask", risk: "none" }, reasonContains: "断路器触发", run: () => evaluate("write_file", { path: "a.ts" }, session({ mode: "default", breakerTripped: true })) },
+  { name: "allow 规则批不掉 critical", expected: "L4-critical", cause: { verdict: "ask", risk: "critical" }, reasonEquals: "critical 任何档位强制审批（allow 规则不豁免）", run: () => evaluate("run_shell", { command: "rm -rf /" }, session({ mode: "auto", rules: [rule({ behavior: "allow", pattern: "rm" })] })) },
+  { name: "critical 任何档强制审批", expected: "L4-critical", cause: { verdict: "ask", risk: "critical" }, reasonEquals: "critical 任何档位强制审批", run: () => evaluate("run_shell", { command: "rm -rf ~" }, session({ mode: "auto" })) },
+  { name: "自主档 risk≥high 送审", expected: "L4-risk", cause: { verdict: "ask", risk: "high" }, reasonEquals: "风险≥high 送审（自主档）", run: () => evaluate("run_shell", { command: "rm -rf build" }, session({ mode: "auto" })) },
+  { name: "非自主档 risk≥high 送审", expected: "L4-risk", cause: { verdict: "ask", risk: "high" }, reasonEquals: "风险≥high 送审", run: () => evaluate("read_file", { path: "a.ts", requires_approval: true }, session({ mode: "default" })) },
+  // ★ 第二种 L4-risk 因（原来没有用例）：裸 allow 规则（「总是允许该工具」）不带走高风险路径。
+  // 少了它，一次普通的 write_file 批准会把 .env / .git/hooks 一起免批。
+  { name: "裸 allow 规则不带走高风险路径（非 shell）", expected: "L4-risk", cause: { verdict: "ask", risk: "high" }, reasonEquals: "高风险路径不随「总是允许该工具」一起放行：仍需逐次确认", run: () => evaluate("write_file", { path: ".env" }, session({ mode: "auto", rules: [rule({ behavior: "allow", tool: "write_file" })] })) },
+  { name: "MCP 无注解按写 fail-closed", expected: "L4-mcp-unannotated", cause: { verdict: "ask", risk: "none" }, reasonEquals: "MCP 无注解：按写处理，自主档亦逐次（§11.7.2 fail-closed）", run: () => evaluate("mcp__srv__do" as never, {}, session({ mode: "auto" })) },
   // M7：未登记工具名与上面那条**同层同裁决**——都属「工具面没为自己作证」，所以复用该层而不是新增一层
   // （新增会在 layer×verdict 矩阵里多出一列，而它在任何真实语料里都恒为 0）。
   // 代价已知：`L4-mcp-unannotated` 的读数此后不再只关于 MCP，两种情形在复跑面上并进同一格。
-  { name: "未登记工具名按写 fail-closed（M7）", expected: "L4-mcp-unannotated", run: () => evaluate("never_registered_tool" as never, {}, session({ mode: "auto" })) },
-  { name: "自主档网络类 risk≥medium 送审", expected: "L4-network", run: () => evaluate("run_shell", { command: "curl http://api.example.com" }, session({ mode: "auto" })) },
-  { name: "自主档末行放行（今天零痕迹的那条）", expected: "L4-pass", run: () => evaluate("run_shell", { command: "echo hi" }, session({ mode: "auto" })) },
+  // ⇒ 层既然合成一格，「因」就得分开钉：上面那条钉「MCP 无注解」，这条钉「未登记工具名」。
+  { name: "未登记工具名按写 fail-closed（M7）", expected: "L4-mcp-unannotated", cause: { verdict: "ask", risk: "none" }, reasonContains: "未登记工具名", run: () => evaluate("never_registered_tool" as never, {}, session({ mode: "auto" })) },
+  { name: "自主档网络类 risk≥medium 送审", expected: "L4-network", cause: { verdict: "ask", risk: "medium" }, reasonEquals: "网络类命令 risk≥medium 送审（自主档，出网审计）", run: () => evaluate("run_shell", { command: "curl http://api.example.com" }, session({ mode: "auto" })) },
+  { name: "自主档末行放行（今天零痕迹的那条）", expected: "L4-pass", cause: { verdict: "approve", risk: "none" }, run: () => evaluate("run_shell", { command: "echo hi" }, session({ mode: "auto" })) },
   // `X-distill`：沉淀轮的四类判定不在 `evaluate` 里发生，因此这里钉的是**它的登记形状**（层名单列、
   // 四型不塌成一格；`auto` 档=项目层分层免批）；真发出去的那份留痕由 `tests/distill.test.ts` 从真入口判。
-  { name: "沉淀轮结局（判定在 evaluate 之外）", expected: "X-distill", run: () => DISTILL_GATE.unapproved },
-  { name: "沉淀轮项目层免批（判定在 evaluate 之外）", expected: "X-distill", run: () => DISTILL_GATE.auto },
+  { name: "沉淀轮结局（判定在 evaluate 之外）", expected: "X-distill", cause: { verdict: "rejected" }, run: () => DISTILL_GATE.unapproved },
+  // ★ 第三种 X-distill 结局（原来没有用例）：已批那一支与上面两支同层，只靠层分不出来。
+  { name: "沉淀轮已批（判定在 evaluate 之外）", expected: "X-distill", cause: { verdict: "approved" }, run: () => DISTILL_GATE.approved },
+  { name: "沉淀轮项目层免批（判定在 evaluate 之外）", expected: "X-distill", cause: { verdict: "auto-approved" }, run: () => DISTILL_GATE.auto },
 ];
 
 describe("evaluate 的每个出口自报判据层", () => {
   for (const c of LAYER_CASES) {
     it(`${c.name} ⇒ layer=${c.expected}`, () => {
-      expect(c.run()).toMatchObject({ layer: c.expected });
+      const r = c.run() as { layer?: string; reason?: string };
+      expect(r).toMatchObject({ layer: c.expected, ...(c.cause ?? {}) });
+      if (c.reasonEquals !== undefined) expect(r.reason).toBe(c.reasonEquals);
+      if (c.reasonContains !== undefined) expect(String(r.reason ?? "")).toContain(c.reasonContains);
     });
   }
 
   it("穷尽：GATE_LAYERS 里每层都有用例（新增层不许没有判据）", () => {
     const covered = new Set(LAYER_CASES.map((c) => c.expected));
     expect(GATE_LAYERS.filter((l) => !covered.has(l))).toEqual([]);
+  });
+
+  // 只钉层的判据分不出同层的几种因（L0-hard 一层四因、出口 17 处 vs 层 12 个），
+  // 于是「因错而层对」的错案照样绿 ⇒ 每条用例都得钉住因。
+  // 这条断言同时堵住「加一条只钉层的用例，把上面那条豁免掉」这个后门。
+  it("穷尽：每条用例都钉住了「凭哪一条判据」（只钉层 ⇒ 同层换因照样过）", () => {
+    const bare = LAYER_CASES
+      .filter((c) => c.cause === undefined && c.reasonEquals === undefined && c.reasonContains === undefined)
+      .map((c) => c.name);
+    expect(bare).toEqual([]);
   });
 
   it("gateBase 的产物必带 mode（`X-` 面才允许缺）", () => {

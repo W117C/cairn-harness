@@ -1,0 +1,170 @@
+{
+  "checks": [
+    {
+      "name": "INITIAL：xterm 行列与内核 PTY 一致",
+      "ok": true,
+      "detail": {
+        "actual": {
+          "rows": 35,
+          "cols": 107
+        },
+        "expected": {
+          "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+          "cols": 107,
+          "rows": 35,
+          "ok": true
+        }
+      }
+    },
+    {
+      "name": "NARROW：xterm 行列与内核 PTY 一致",
+      "ok": true,
+      "detail": {
+        "actual": {
+          "rows": 19,
+          "cols": 63
+        },
+        "expected": {
+          "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+          "cols": 63,
+          "rows": 19,
+          "ok": true
+        }
+      }
+    },
+    {
+      "name": "改变面板尺寸时前台程序收到 SIGWINCH",
+      "ok": true
+    },
+    {
+      "name": "WIDE：xterm 行列与内核 PTY 一致",
+      "ok": true,
+      "detail": {
+        "actual": {
+          "rows": 46,
+          "cols": 140
+        },
+        "expected": {
+          "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+          "cols": 140,
+          "rows": 46,
+          "ok": true
+        }
+      }
+    },
+    {
+      "name": "160KB 中文与 emoji 双向传输不死锁、不丢字节",
+      "ok": true,
+      "detail": {
+        "bytes": 163840,
+        "sha256": "15a3f20508a3189d65a549cd4e5bed7aabc2bc4051da7bcd106a824489f433a7"
+      }
+    },
+    {
+      "name": "shell 非零退出码显示正确，退出后可就地重启",
+      "ok": true
+    },
+    {
+      "name": "重新启动使用新会话并同步当前面板尺寸",
+      "ok": true
+    },
+    {
+      "name": "关闭弹出窗口后终端立即不可写",
+      "ok": false
+    },
+    {
+      "name": "窗口关闭后真实 PTY 进程已退出",
+      "ok": false
+    },
+    {
+      "name": "主进程协议不匹配时不启动 PTY，提示重启应用",
+      "ok": true
+    },
+    {
+      "name": "渲染过程无控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "sizes": [
+    {
+      "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+      "cols": 107,
+      "rows": 35,
+      "ok": true
+    },
+    {
+      "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+      "cols": 63,
+      "rows": 19,
+      "ok": true
+    },
+    {
+      "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+      "cols": 140,
+      "rows": 46,
+      "ok": true
+    },
+    {
+      "id": "9d5199b8-b212-4c79-86bd-c28335bc70c4",
+      "cols": 140,
+      "rows": 46,
+      "ok": true
+    }
+  ],
+  "writes": [
+    {
+      "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+      "bytes": 84
+    },
+    {
+      "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+      "bytes": 1
+    },
+    {
+      "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+      "bytes": 80
+    },
+    {
+      "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+      "bytes": 1
+    },
+    {
+      "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+      "bytes": 175
+    },
+    {
+      "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+      "bytes": 1
+    },
+    {
+      "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+      "bytes": 72
+    },
+    {
+      "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+      "bytes": 1
+    },
+    {
+      "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+      "bytes": 565
+    },
+    {
+      "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+      "bytes": 1
+    },
+    {
+      "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+      "bytes": 163840
+    },
+    {
+      "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+      "bytes": 6
+    },
+    {
+      "id": "e2167b89-ba7a-4280-8313-7bd968fdd819",
+      "bytes": 1
+    }
+  ],
+  "protocolVersion": 17
+}

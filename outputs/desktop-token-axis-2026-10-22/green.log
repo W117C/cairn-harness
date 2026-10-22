@@ -1,0 +1,11 @@
+=== 复验：判卷跑在修后（暗色 360/460/540/560）上 ===
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness/apps/desktop
+
+ ✓ tests/tokens.test.ts (28 tests) 8ms
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  06:07:53
+   Duration  89ms (transform 57%, tests 22%, import 17%, worker 4%)
+

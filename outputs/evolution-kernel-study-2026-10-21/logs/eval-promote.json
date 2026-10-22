@@ -1,0 +1,287 @@
+{
+  "baselineVersion": "1.1.0",
+  "candidateVersion": "1.2.0",
+  "taskSet": {
+    "digest": "sha256:f272a91feaef39a1936368c5980dbbdd9edaae91c7bfea068f056097a0a7c61f",
+    "tasks": 12,
+    "validation": 2
+  },
+  "configDigest": null,
+  "result": {
+    "baselineRuns": [
+      {
+        "runId": "1.1.0:B1-bugfix-crossfile",
+        "taskId": "B1-bugfix-crossfile",
+        "split": "search",
+        "ok": true,
+        "costUsd": 1,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.1.0:B2-feature-export",
+        "taskId": "B2-feature-export",
+        "split": "search",
+        "ok": true,
+        "costUsd": 1,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.1.0:B3-refactor-callsite",
+        "taskId": "B3-refactor-callsite",
+        "split": "search",
+        "ok": true,
+        "costUsd": 1,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.1.0:B4-bugfix-pagination",
+        "taskId": "B4-bugfix-pagination",
+        "split": "search",
+        "ok": true,
+        "costUsd": 1,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.1.0:B5-bugfix-async",
+        "taskId": "B5-bugfix-async",
+        "split": "search",
+        "ok": true,
+        "costUsd": 1,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.1.0:B6-feature-flag",
+        "taskId": "B6-feature-flag",
+        "split": "search",
+        "ok": true,
+        "costUsd": 1,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.1.0:B7-feature-csv",
+        "taskId": "B7-feature-csv",
+        "split": "search",
+        "ok": true,
+        "costUsd": 1,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.1.0:B8-feature-memo",
+        "taskId": "B8-feature-memo",
+        "split": "search",
+        "ok": true,
+        "costUsd": 1,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.1.0:B9-refactor-rename",
+        "taskId": "B9-refactor-rename",
+        "split": "validation",
+        "ok": true,
+        "costUsd": 1,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.1.0:B10-refactor-dedupe",
+        "taskId": "B10-refactor-dedupe",
+        "split": "validation",
+        "ok": true,
+        "costUsd": 1,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.1.0:B11-refactor-signature",
+        "taskId": "B11-refactor-signature",
+        "split": "search",
+        "ok": true,
+        "costUsd": 1,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.1.0:B12-long-horizon",
+        "taskId": "B12-long-horizon",
+        "split": "search",
+        "ok": true,
+        "costUsd": 1,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      }
+    ],
+    "candidateRuns": [
+      {
+        "runId": "1.2.0:B1-bugfix-crossfile",
+        "taskId": "B1-bugfix-crossfile",
+        "split": "search",
+        "ok": true,
+        "costUsd": 0.5,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.2.0:B2-feature-export",
+        "taskId": "B2-feature-export",
+        "split": "search",
+        "ok": true,
+        "costUsd": 0.5,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.2.0:B3-refactor-callsite",
+        "taskId": "B3-refactor-callsite",
+        "split": "search",
+        "ok": true,
+        "costUsd": 0.5,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.2.0:B4-bugfix-pagination",
+        "taskId": "B4-bugfix-pagination",
+        "split": "search",
+        "ok": true,
+        "costUsd": 0.5,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.2.0:B5-bugfix-async",
+        "taskId": "B5-bugfix-async",
+        "split": "search",
+        "ok": true,
+        "costUsd": 0.5,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.2.0:B6-feature-flag",
+        "taskId": "B6-feature-flag",
+        "split": "search",
+        "ok": true,
+        "costUsd": 0.5,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.2.0:B7-feature-csv",
+        "taskId": "B7-feature-csv",
+        "split": "search",
+        "ok": true,
+        "costUsd": 0.5,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.2.0:B8-feature-memo",
+        "taskId": "B8-feature-memo",
+        "split": "search",
+        "ok": true,
+        "costUsd": 0.5,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.2.0:B9-refactor-rename",
+        "taskId": "B9-refactor-rename",
+        "split": "validation",
+        "ok": true,
+        "costUsd": 0.5,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.2.0:B10-refactor-dedupe",
+        "taskId": "B10-refactor-dedupe",
+        "split": "validation",
+        "ok": true,
+        "costUsd": 0.5,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.2.0:B11-refactor-signature",
+        "taskId": "B11-refactor-signature",
+        "split": "search",
+        "ok": true,
+        "costUsd": 0.5,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      },
+      {
+        "runId": "1.2.0:B12-long-horizon",
+        "taskId": "B12-long-horizon",
+        "split": "search",
+        "ok": true,
+        "costUsd": 0.5,
+        "tokens": 100,
+        "durationMs": 1000,
+        "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "failureReason": null
+      }
+    ],
+    "baselineCostUsd": 12,
+    "candidateCostUsd": 6,
+    "costMeasurable": true,
+    "configDigest": null,
+    "status": "passed",
+    "decision": "promote",
+    "reason": "正确性不劣；成本 6 ≤ 基线 12 的 0.95 倍"
+  }
+}

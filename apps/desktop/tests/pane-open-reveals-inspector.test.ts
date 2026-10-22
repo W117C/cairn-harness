@@ -10,8 +10,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
-const appSrc = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const appSrc = readAppSurface();
 
 /** 抽出某个 useCallback 的函数体（按函数名定位到配平的花括号）。 */
 function bodyOf(src: string, decl: string): string {

@@ -18,7 +18,7 @@ import { PROVIDER_KINDS } from "../../../src/main/settings";
 import { envKeyOf } from "../../../src/providers/env-keys";
 
 const panelSrc = readFileSync(new URL("../src/renderer/components/SettingsPanel.tsx", import.meta.url), "utf8");
-const appSrc = readFileSync(new URL("../src/renderer/App.tsx", import.meta.url), "utf8");
+const appSrc = readAppSurface();
 const modalSurfaceSrc = readFileSync(new URL("../src/renderer/components/ModalSurface.tsx", import.meta.url), "utf8");
 
 describe("providerStatusLabel（凭据段状态行，三态文案判卷）", () => {
@@ -186,6 +186,7 @@ describe("设置页模态边界（背景不可达 + 焦点环绕 + 关闭恢复�
 // 2026-10-17：设置分区切换的进场（Claude 质感：短淡入，不弹跳）。
 import { readFileSync as readFs } from "node:fs";
 import { fileURLToPath as fileUrl } from "node:url";
+import { readAppSurface } from "./helpers/app-surface";
 describe("设置页切换动效", () => {
   it(".ss-page 首绘淡入（120–160ms 区间）", () => {
     const css = readFs(fileUrl(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");

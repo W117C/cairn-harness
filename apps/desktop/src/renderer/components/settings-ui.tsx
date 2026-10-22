@@ -13,10 +13,11 @@
 // 页面标题承担 20px/600（总纲阶段 2 的「15px/600 分组标题」按对账口径并入细则版——克制小标签）。
 import type { ReactNode } from "react";
 
-export function SettingsPage(props: { title: string; children: ReactNode }): React.JSX.Element {
+export function SettingsPage(props: { title: string; desc?: string; children: ReactNode }): React.JSX.Element {
   return (
     <div className="ss-page">
       <h1 className="ss-title">{props.title}</h1>
+      {props.desc !== undefined && <p className="ss-desc">{props.desc}</p>}
       <div className="ss-content">{props.children}</div>
     </div>
   );
@@ -35,13 +36,16 @@ export function SettingsSection(props: { title: string; hint?: string; children:
 }
 
 export function SettingsRow(props: { label: ReactNode; desc?: string; children: ReactNode }): React.JSX.Element {
+  // 说明文字**独占整行**（2026-10-22 排版减法）：此前它被关在 220px 的标题列里，
+  // 中文句子折成两行、末行只剩一个字（「…尚未接 / 入。」），而右边大片空着。
+  // ⇒ 说明改为行内第二个 grid item，跨两列独占一行；标题与控件仍在第一行。
   return (
     <div className="ss-row">
       <div className="ss-row-main">
         <span className="ss-row-label">{props.label}</span>
-        {props.desc !== undefined && <span className="ss-row-desc">{props.desc}</span>}
       </div>
       <div className="ss-row-ctl">{props.children}</div>
+      {props.desc !== undefined && <span className="ss-row-desc">{props.desc}</span>}
     </div>
   );
 }

@@ -10,10 +10,11 @@ import { Composer, fileIconKind } from "../src/renderer/components/Composer";
 import { ModelMenu, ModelPicker, type ModelOption } from "../src/renderer/components/ModelPicker";
 import { MODE_DOT, PermissionMenu } from "../src/renderer/components/PermissionMenu";
 import { STR } from "../src/renderer/strings";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const composerSrc = read("../src/renderer/components/Composer.tsx");
-const appSrc = read("../src/renderer/App.tsx");
+const appSrc = readAppSurface();
 
 const base = {
   mode: "default" as const,
@@ -26,7 +27,6 @@ const base = {
   phase: "tool" as const,
   elapsedSec: 3,
   steps: 2,
-  workspaceLabel: "proj",
   workspacePath: "/w/proj",
   onSend: () => undefined,
   onCancel: () => undefined,

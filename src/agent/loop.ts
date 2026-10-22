@@ -702,6 +702,8 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         ...(change !== undefined ? { change } : {}),
         ...(artifact !== undefined ? { artifact } : {}),
         ...(result.changedPaths !== undefined ? { changedPaths: result.changedPaths } : {}),
+        // 融合写盘的结构事实：ok:false 时下游仍须知道「盘已经改了」。
+        ...(result.fusedWrite === true ? { fusedWrite: true } : {}),
         // 跑进程类工具的结局必须**结构地**活到落盘面：从前 `ok:false` ＋一句文案就是全部，
         // 于是"工具链没装（127）／被墙钟杀掉／模型代码真错了"三件事在事件流里长得一模一样，
         // 下游（额度、按档升级、沉淀、失败轨迹评估）只能回去匹配文案。缺席＝这一笔不是跑进程的工具。
@@ -711,7 +713,11 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         // 于是「因钱不起」与「worker 跑挂了」在事件流上长得一模一样（`spawn_agent` 的拒绝返回体自带 `hold`）。
         ...(result.hold !== undefined ? { hold: result.hold } : {}),
       });
-      if (result.ok && mayHaveWrittenDisk(name, output.args ?? {})) {
+      // 动作融合把「写已落盘、随后的配置 lint 红了」编码成 ok:false + fusedWrite。
+      // 落盘事实与检查结局是两件事：只看 ok 会把前者读丢 ⇒ 收束闸跳过 auto-verify。
+      // 读**结构字段**而不是 output 字样——失败的 shell/diagnose 也能打印同一行字。
+      const persistedWrite = result.ok || result.fusedWrite === true;
+      if (persistedWrite && mayHaveWrittenDisk(name, output.args ?? {})) {
         wroteThisRun = true;
         wroteSinceAutoBeat = true; // 返修是否算「真去修了」只看这一位；没改盘就不配再验一遍
         wroteSinceVerifyBeat = true; // M10②：判据的另一位——两拍同签名红之间**有过成功的写**就算在换路子试

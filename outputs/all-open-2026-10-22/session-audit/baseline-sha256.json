@@ -1,0 +1,5 @@
+{
+  "apps/desktop/src/main/kernel-host.ts": "3a06f1d9d17542194f53d1420a3e26edca99193fe1aac1a6b00db7404bc77849",
+  "src/main/sessions.ts": "4064c7b49d9e88ae5929bed1dc8147b949f79ef81def99b17a540755d7e291f3",
+  "src/main/ipc-protocol.ts": "90f276eeb93f8195ffb215594c70de329c2dfb1ba29c776af42e2c12a79d864f"
+}

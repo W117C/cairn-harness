@@ -1,0 +1,12 @@
+=== desktop 全套 · 2026-10-22 · 工作树 ===
+      Tests  1299 passed (1299)
+   Start at  05:01:13
+   Duration  7.87s (tests 44%, import 31%, transform 23%, worker 2%)
+
+    Isolate  188 workers spawned · ~68ms startup each (spawn + environment, per file)
+             at least ~1.76s faster with isolate: false — reuses workers across files instead of one per file
+
+desktop-boundary-check: 绿（src 无反向依赖、无 UI import）
+
+=== typecheck ===
+typecheck: tsc --noEmit 通过（0 条报错）✅

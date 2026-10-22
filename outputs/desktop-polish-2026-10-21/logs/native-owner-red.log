@@ -1,0 +1,21 @@
+native: waiting for Electron
+native: Electron ready
+native: foreign loopback ready
+native: local loopback ready
+PASS 真实浏览器视图可以打开
+PASS 页面在隔离视图中实际执行
+PASS 远端页面权限默认拒绝
+PASS 浏览器尺寸随面板同步
+PASS 收起面板隐藏原生视图
+PASS 实际元素选择回传选择器与片段
+PASS 未授权重定向没有发到目标服务
+PASS 窗口焦点变化后仍从原宿主释放视图
+FAIL 后台弹窗页面挂到调用窗口而非聚焦窗口
+FAIL 另一个窗口不能复用已有视图 ID
+FAIL 宿主窗口销毁时释放视图及登记
+PASS 真实 PTY 启动成功
+PASS PTY 中文输出经过真实管道返回
+PASS 关闭终端后不可继续写入
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron scripts/native-host-smoke.cjs '/Users/ze/Downloads/Cairn/deepseek harness/outputs/desktop-polish-2026-10-21/native-owner-red.json'

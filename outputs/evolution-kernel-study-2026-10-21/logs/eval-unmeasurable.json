@@ -1,0 +1,287 @@
+{
+  "baselineVersion": "1.1.0",
+  "candidateVersion": "1.2.0",
+  "taskSet": {
+    "digest": "sha256:f272a91feaef39a1936368c5980dbbdd9edaae91c7bfea068f056097a0a7c61f",
+    "tasks": 12,
+    "validation": 2
+  },
+  "configDigest": null,
+  "result": {
+    "baselineRuns": [
+      {
+        "runId": "1.1.0:B1-bugfix-crossfile",
+        "taskId": "B1-bugfix-crossfile",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B1-bugfix-crossfile"
+      },
+      {
+        "runId": "1.1.0:B2-feature-export",
+        "taskId": "B2-feature-export",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B2-feature-export"
+      },
+      {
+        "runId": "1.1.0:B3-refactor-callsite",
+        "taskId": "B3-refactor-callsite",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B3-refactor-callsite"
+      },
+      {
+        "runId": "1.1.0:B4-bugfix-pagination",
+        "taskId": "B4-bugfix-pagination",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B4-bugfix-pagination"
+      },
+      {
+        "runId": "1.1.0:B5-bugfix-async",
+        "taskId": "B5-bugfix-async",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B5-bugfix-async"
+      },
+      {
+        "runId": "1.1.0:B6-feature-flag",
+        "taskId": "B6-feature-flag",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B6-feature-flag"
+      },
+      {
+        "runId": "1.1.0:B7-feature-csv",
+        "taskId": "B7-feature-csv",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B7-feature-csv"
+      },
+      {
+        "runId": "1.1.0:B8-feature-memo",
+        "taskId": "B8-feature-memo",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B8-feature-memo"
+      },
+      {
+        "runId": "1.1.0:B9-refactor-rename",
+        "taskId": "B9-refactor-rename",
+        "split": "validation",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B9-refactor-rename"
+      },
+      {
+        "runId": "1.1.0:B10-refactor-dedupe",
+        "taskId": "B10-refactor-dedupe",
+        "split": "validation",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B10-refactor-dedupe"
+      },
+      {
+        "runId": "1.1.0:B11-refactor-signature",
+        "taskId": "B11-refactor-signature",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B11-refactor-signature"
+      },
+      {
+        "runId": "1.1.0:B12-long-horizon",
+        "taskId": "B12-long-horizon",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B12-long-horizon"
+      }
+    ],
+    "candidateRuns": [
+      {
+        "runId": "1.2.0:B1-bugfix-crossfile",
+        "taskId": "B1-bugfix-crossfile",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B1-bugfix-crossfile"
+      },
+      {
+        "runId": "1.2.0:B2-feature-export",
+        "taskId": "B2-feature-export",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B2-feature-export"
+      },
+      {
+        "runId": "1.2.0:B3-refactor-callsite",
+        "taskId": "B3-refactor-callsite",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B3-refactor-callsite"
+      },
+      {
+        "runId": "1.2.0:B4-bugfix-pagination",
+        "taskId": "B4-bugfix-pagination",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B4-bugfix-pagination"
+      },
+      {
+        "runId": "1.2.0:B5-bugfix-async",
+        "taskId": "B5-bugfix-async",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B5-bugfix-async"
+      },
+      {
+        "runId": "1.2.0:B6-feature-flag",
+        "taskId": "B6-feature-flag",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B6-feature-flag"
+      },
+      {
+        "runId": "1.2.0:B7-feature-csv",
+        "taskId": "B7-feature-csv",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B7-feature-csv"
+      },
+      {
+        "runId": "1.2.0:B8-feature-memo",
+        "taskId": "B8-feature-memo",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B8-feature-memo"
+      },
+      {
+        "runId": "1.2.0:B9-refactor-rename",
+        "taskId": "B9-refactor-rename",
+        "split": "validation",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B9-refactor-rename"
+      },
+      {
+        "runId": "1.2.0:B10-refactor-dedupe",
+        "taskId": "B10-refactor-dedupe",
+        "split": "validation",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B10-refactor-dedupe"
+      },
+      {
+        "runId": "1.2.0:B11-refactor-signature",
+        "taskId": "B11-refactor-signature",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B11-refactor-signature"
+      },
+      {
+        "runId": "1.2.0:B12-long-horizon",
+        "taskId": "B12-long-horizon",
+        "split": "search",
+        "ok": null,
+        "costUsd": null,
+        "tokens": null,
+        "durationMs": null,
+        "artifactDigest": null,
+        "failureReason": "runner exit=1 · scripted runner failure for B12-long-horizon"
+      }
+    ],
+    "baselineCostUsd": null,
+    "candidateCostUsd": null,
+    "costMeasurable": false,
+    "configDigest": null,
+    "status": "unmeasurable",
+    "decision": "keep-old",
+    "reason": "有 24 个 run 没有可判证据（B1-bugfix-crossfile、B2-feature-export、B3-refactor-callsite、B4-bugfix-pagination、B5-bugfix-async、B6-feature-flag、B7-feature-csv、B8-feature-memo、B9-refactor-rename、B10-refactor-dedupe、B11-refactor-signature、B12-long-horizon、B1-bugfix-crossfile、B2-feature-export、B3-refactor-callsite、B4-bugfix-pagination、B5-bugfix-async、B6-feature-flag、B7-feature-csv、B8-feature-memo、B9-refactor-rename、B10-refactor-dedupe、B11-refactor-signature、B12-long-horizon）——不可测不许晋升"
+  }
+}

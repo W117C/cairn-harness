@@ -19313,3 +19313,1891 @@ typecheck 0 报错｜八份判卷 **101 条全绿**（含两条反过拟合用�
 - **入库形状**：四笔（87d9d8df 修复入库 / 17826ace rev 改指 / 680fb24d 原始面判卷 / c6e350be provenance），
   **已推送** `origin/fix/spec-summary-double-count`。
 - **仍开着的债**（见 `STATE.md` 的「还有什么没裁」）：桌面两条授权面、canary 生产接线、页号存量重复。
+
+## 2026-10-21 · 第 625 页：两条桌面授权面收口——新建项目父目录与技能三通道不再直通任意路径
+
+本页销的是 `STATE.md`「还有什么没裁」里的两条桌面债（第 618 页登记的同一族）：
+`projectCreate` / `projectCreateFromTemplate` 的 `parentDir` 无已知根闸；
+`listSkills` / `skillBody` / `pluginDecide` 的 `workspace` 收渲染层给的任意路径（只读、既有形态）。
+
+### 一、形状：与 gitClone 是同一个洞的另外两个出口
+
+`gitClone` 在 2026-10-19 已经收口（`pickedDirs`：只认用户用系统对话框真的选过的目录）。
+但同一个 `index.ts` 里：
+
+- `createProjectFolder` / `createProjectFromTemplate` 直接把 `parentDir` 交给 `mkdirSync`——
+  `parentDir:"/Users/me/.ssh"` 就能往那里建一个项目目录；
+- 技能/插件三通道把 `workspace` 直接交给 `PluginRuntime.load`——任意路径都能成为「去哪棵树里
+  读技能/信任」的根。二者都绕过了 `knownProjectRoots()` 已有的面。
+
+### 二、修法：判决收进 `project-path-gate.ts`，`index.ts` 只做接线
+
+- `resolveCreateParent(raw, picked, roots)`：缺省（不传/空串）⇒ 交给 core 的固定默认根
+  `~/CairnProjects`；给了 ⇒ 只认**用户选过的目录 ∪ 已知项目根**，返回规范路径；其余拒。
+- `resolveProvidedWorkspace(raw, roots, fallback)`：空参数 ⇒ 回落到 `workspaceContext`；
+  给了 ⇒ 必须**恰好**等于某个已知根（子目录也拒——它是读取/信任的根，不是根里的东西）。
+- `createProject` / `projectCreateFromTemplate` 在 `mkdirSync` 前判；拒绝返回
+  `reason:"unpicked-parent"` + 可操作消息（用「更改…」选目录，或放进已登记项目）。
+- `listSkills` / `skillBody` / `pluginDecide` 在碰插件运行时前判；非法工作区分别
+  reject（菜单读不到就空）/ `{ok:false,error}` / `{ok:false}`，不静默读别的树。
+
+### 三、判卷与真机
+
+- `project-path-gate.test`：13 → **19** 例。新增父目录闸（选过/已知根/任意路径/缺省）与
+  workspace 闸（空回落/精确根/子目录拒/任意路径拒），以及两条**接线**判据（先判后写/读）。
+- `plugin-trust-wiring.test` 的旧源码钉按新形状改写：仍钉「workspace 参数必须被传给
+  `handlePluginDecide`」，并新增「必须先过 `resolveProvidedWorkspace`」；旧直通形状断言绝迹。
+- 桌面 **160 文件 / 1173 用例全绿**；双端 typecheck 0；boundary 绿；docs-check 绿。
+- 真机（隔离 9353，协议 15）：
+  · `createProject({parentDir:"/tmp"})` ⇒ `{ok:false, reason:"unpicked-parent"}`；
+  · `projectCreateFromTemplate(..., "/tmp")` ⇒ 同一拒绝；
+  · `createProject({parentDir:"/tmp/cairn-b133-ws"})`（已知根）⇒ `ok:true`，落
+    `/private/tmp/cairn-b133-ws/gate-ok`；
+  · `listSkills("/tmp")` ⇒ reject「工作区未经登记，已拒绝：/tmp」；已知根 ⇒ 正常返回；
+  · `skillBody("x","/tmp")` ⇒ `{ok:false,error}`；`pluginDecide(...,"/tmp")` ⇒ `{ok:false}`。
+
+### 四、边界与读法
+
+- **不改协议**（v15 不动），因此无需重建 preload/dist；主进程 TS 重启即生效。
+  判卷是全量桌面套件 + 真机 IPC，不是只读源码。
+- `createProject` 的已知根面包含「已登记项目根」⇒ 允许在项目里再建子项目；这是有意的产品面
+  （用户可能把一组项目放在同一个已登记目录下），不是任意路径。要更严只需把 roots 收成 picked 一支。
+- `listSkills` 的非法路径是 **reject**（App 侧 catch 后空菜单，fail-visible 在控制台）；
+  若以后要给它加错误 UI，再走协议形状变更。
+- STATE 的两条债**尚未从现态页删掉**：现态页的 `rev` 必须指向一笔真提交，而本笔未提交。
+  入库后把这两行移出「还有什么没裁」——这是交接动作，不是漏做。
+- 未跑全量 `pnpm gates` / `mutate-verify` / `head-cert`；改动未提交。
+
+## 2026-10-21 · 第 626 页：核心评审两条 Critical——沙箱不接 abort、diagnose 绕过 verify 信任门
+
+这一轮把独立评审从桌面面转到 **agent core**（loop / tools / permissions）。评审结论：闸架构与
+append-only/redaction 设计是硬的，但发货缺省路径上有一处取消漏洞、一处仓库命令执行旁路。
+
+### 一、Critical 1：macOS 沙箱执行不接取消信号
+
+- **形状**：`runInSandbox` 没有 signal；调用面三处把取消丢掉——`tool-gates` 的 run_shell 沙箱支、
+  `verifyExec`（`verify.ts` 明明传了第 4 参）、`workerShellRunnerFor`（忽略 `ctx.signal`）。
+  ⇒ `runCancel` 后 `sleep 60` 仍在跑，loop 干等超时；verify 最长可等 900s，沙箱进程还可能在
+  「已取消」之后继续写盘。
+- **修法**：`SandboxRunOptions` 增 `signal`；abort ⇒ `killGroup` + 幂等 `finish`，输出
+  `[cancelled] 会话已取消，沙箱命令已中止`，`ok:false`；已 abort 的入口根本不 spawn。
+  三个调用面全部把 signal 穿进去（run_shell 支 / verifyExec / worker shell）。
+- **判卷（真沙箱）**：`tests/sandbox-abort.test.ts` 3 例。abort 一条 `sleep 30`：**217ms 收束**
+  （修前要等 60s 超时），`ok:false` 且输出点名取消；`verifyExec` 的注入执行器收到的
+  `opts.signal` 同一对象；tool-gates/session-assembly 两处接线源码钉。
+- 钉反转点名：`worker-sandbox-wiring` 的旧断言只钉 `network:"deny"` 整串；改为
+  「deny 仍在 + signal 并列传入」——不是放宽，是加一条不变量。
+
+### 二、Critical 2：diagnose 执行仓库命令没过 S3 信任门
+
+- **形状**：`diagnose` 从 `.agent/config.json` / `package.json` 读命令并用 `verifyExec` 真跑，
+  但只过了 `evaluate` 权限层；guided/auto 下 L4-pass 即可执行。verify 那条路有
+  `VerifyTrustResolver`（内容指纹 + 首问 + 同指纹免问 + 持久化），diagnose 完全没有。
+  ⇒ 克隆仓库自带 `curl … | sh` 就能无卡执行；default 档卡片也只显示 `{face}`，人看不到命令。
+- **修法**：`DiagnoseDeps.authorize` **必填**（漏传编译期红）；工具在跑任何命令前调用。
+  `agent-runner` 复用同一枚 `verifyTrust` resolver + `verifySurfaceFingerprint`：
+  已信任 ⇒ 跑；未信任 ⇒ 发同一张信任卡（卡上带 commands）；拒/超时/无人值守 ⇒ 一条不跑、
+  回执点名未授权与下一步。信任卡文案改「自动验证/诊断拍」。
+- **判卷**：`tests/diagnose.test.ts` 17 → **19**：deny 时 exec 调用数 0、回执含「未经授权」；
+  allow 时命令照跑；原有 17 条（解析/面/兜底/容量）全保留。
+- 范围：diagnose 没有新增通道/事件；信任表仍是插件/verify 共用那一个 `TrustStore`。
+
+### 三、读数与边界
+
+- 根 **450 文件 / 6210 用例全绿**（上一轮 449/6205：+1 文件，+5 例）；桌面 **160 / 1192 全绿**；
+  双端 typecheck 0；boundary / docs-check / repo-hygiene 绿（本页落盘后跑）。
+- 无协议变更、无 renderer 改动 ⇒ 不重建 dist；主进程 TS 重启即生效。
+- **本页未修**（评审 Important，已在页内登记）：sidechat 读工具在主进程首次 run 前绕过 risk
+  包装、首次 run 后被「门未接线」拒绝；action-fusion 把 lint 失败写进写工具 `ok`，会跳过
+  auto-verify；`createGatedRemember` 的 ask 未带 signal（取消要等 60s 门）。这三条下一轮按序处理。
+- `STATE.md` 两条桌面授权债**代码已修**，但现态页要等入库后改写（rev 必须指真提交）；canary
+  生产接线仍是登记债。未跑 `pnpm gates` / `mutate-verify` / `head-cert`；改动未提交。
+
+## 2026-10-21 · 第 627 页：core 评审三条 Important——写盘事实、旁路只读门、记忆审批取消
+
+三条都先做变异验证（去掉修法看新用例是否红），再做全量。逐条证据与命令读数写在本页正文；
+本笔未提交，故不点名未入库的取料目录（D-11）。
+
+### 一、action-fusion 的 lint 红不能吞掉落盘事实
+
+- **形状**：融合把「写已落盘 + 配置 lint 红」编码成写工具 `ok:false`，但输出带
+  `[fused_write:succeeded]`。`loop` 的收束闸只看 `result.ok` ⇒ `wroteThisRun` 不置位 ⇒
+  auto-verify 整段跳过：这棵树明明被改过，却没有任何人补验。
+- **修法**：`src/agent/loop.ts` 的写盘判据改为 `result.ok || output.includes("[fused_write:succeeded]")`；
+  三个位（`wroteThisRun / wroteSinceAutoBeat / wroteSinceVerifyBeat`）仍同源。融合自身的 ok 语义
+  与既有 22 例不动——**不改融合，改读它的人**。
+- **判卷**：`tests/action-fusion.test.ts` 新增 lint 红写 ⇒ 恰好 1 条 `verify_result{auto:true}`。
+  变异：判据退回 `result.ok` ⇒ 新用例红（0≠1）；已复原。
+
+### 二、sidechat 读工具的两种时序用同一张只读门
+
+- **形状**：sidechat 不跑 runAgent、没有 run scope，旧实现直接用全局 `TOOLS`：
+  ① 首场主 run 前，`TOOLS` 还是裸实现 ⇒ `read_file .env` 连敏感路径判据都不跑，凭据可进旁路
+  上下文并发往外部 provider；
+  ② 首场后，`installAppTools` 已把 `TOOLS.*` 换成 `gatedTool` 闭包 ⇒ 旁路每次读都撞
+  「工具门未接线（fail-closed）」。同一间旁路，前后两种错法。
+- **修法**：`tool-gates` 导出 `GateSession` 与 `readOnlyGateSession(workspace)`（read-only 档、
+  同源规则库、**无 askGate** ⇒ 需要问人的调用 fail-closed），`gatedTool` 增可选 `fixedSession`；
+  `sidechat-handlers` 的 `sidechatToolTable` 从**原始实现**建四把只读工具并显式带该会话；
+  `runSidechatTurn` 增 `tools` 执行面透传。旁路不借主会话档位，也不随其安装时序变化。
+- **判卷**：`tests/sidechat-tool-gate.test.ts` 2 例——首场前正常读成功、`.env` 被拒且输出无密钥；
+  `installAppTools` 之后正常读仍成功。变异：移除显式 `tools` ⇒ 两例均红（`.env` 被执行、
+  安装后读被门未接线拒绝）；已复原。`sidechat-core` 既有 15 例零改动且绿。
+
+### 三、remember 的审批卡随取消收束
+
+- **形状**：`createGatedRemember.getAsk` 只收 args，`ctx.signal` 在门口丢掉 ⇒ run 取消后卡仍驻留
+  到 60s 看门狗，会话挂到超时。
+- **修法**：`getAsk(args, signal?)`；run 传 `ctx.signal`；生产闭包交给
+  `AskGate.request({ ...reason, risk, signal })`。既有调用形状兼容（signal 可选）。
+- **判卷**：`tests/remember.test.ts` 新增「审批等待带上运行取消信号」，断言 ask 收到的 signal
+  与工具上下文同一对象。
+
+### 四、读数与边界
+
+- 根 **451 文件 / 6214 用例全绿**（第 626 页 450/6210：+1 文件、+4 例）；桌面 **160 / 1192 全绿**；
+  双端 typecheck 0；boundary / docs-check / repo-hygiene 绿。
+- 无 IPC/协议/渲染层改动 ⇒ 不重建 dist；桌面端不重启也能沿用现包（本轮只影响主进程 TS）。
+- 未跑 `pnpm gates` / `mutate-verify` / `head-cert`；改动未提交。
+- `STATE.md` 仍要等入库后整体重写（rev 必须指真提交）；canary 生产接线仍是登记债。
+
+## 2026-10-21 · 第 628 页：sidechat 只读面的两个尾巴——缺省空表、不摆永远调不到的 lsp
+
+第 627 页把生产入口接上了显式只读门，本页补两条同类尾巴。两条都不是新功能，是让旁路的
+「看得见的工具 = 调得动的工具」和「缺门 = 能力降级而不是安全降级」成立。
+
+### 一、缺省工具表 = 空表，不回落全局 `TOOLS`
+
+- **形状**：`runSidechatTurn` 的 `tools` 仍是可选，缺省时 loop 会读全局 `TOOLS`——首场主 run 前是
+  未包装的裸实现、之后是需要主会话的闭包。生产入口已显式给表，但下一个直接调用方还能把旧洞带回来。
+- **修法**：`tools: opts.tools ?? {}`；缺省时任何工具调用走 loop 既有的「unknown tool」fail-closed，
+  不读全局表。调用方忘给门 → 旁路失去工具能力，而不是失去安全边界。
+- **判卷**：`sidechat-core` 新增「未注入只读工具表 ⇒ 工具调用 fail-closed」：不给 `tools`、模型调
+  `read_file`，结果 `blockedBy:"unknown-tool"` 且输出不含文件正文。
+
+### 二、lsp 不进旁路（不只是门拒，而是不摆）
+
+- **形状**：`SIDECHAT_TOOL_WHITELIST` 含 lsp，模型规格面也发得出去；但 lsp 会 spawn 工作区
+  `.agent/lsp.json` 里写的命令（风险 high），而旁路无人值守、没有审批门 ⇒ 在只读门装好后它必然
+  被拒。这就是本仓反复点名的「看得见、永远调不到」的假入口。
+- **修法**：白名单与 `sidechatToolTable` 收成三把（read_file / grep / glob）；系统提示删去「查符号」，
+  明确不能启动语言服务器。要符号级导航请回主会话用 lsp（那里有审批卡）。
+- **判卷**：`sidechat-core` 的工具表用例新增 `not.toContain("lsp")`。顺带修正一处**能力断言证人面**：
+  系统提示那句的最长中文段必须仍是「写向工具已从你的工具表摘除」，否则
+  `promise-recall-inventory` 的绑定会白登记——本轮先把文案改坏、该判卷当场红，再按原文骨架复原。
+
+### 三、读数
+
+- 根 **451 文件 / 6215 用例全绿**（第 627 页 451/6214：+1 例）；桌面 **160 / 1192 全绿**；
+  双端 typecheck 0；boundary 绿。
+- 无 IPC/协议/渲染层改动 ⇒ 不重建 dist；未重启业主应用。
+- 未跑 `pnpm gates` / `mutate-verify` / `head-cert`；改动未提交。
+
+## 2026-10-21 · 第 629 页：检查器「显式关闭」不再被恢复窗格掰开
+
+### 一、缺陷
+
+启动时 `useLayoutEffect` 的条件是 `paneTabs.length > 0 || inspectorDefaultOpen`：只要盘上还有恢复的窗格，
+即使用户上一轮明确按 ⌘⌥B 关掉了检查器（`cairn.inspector.open.v1 = "0"`），下一次启动仍会强行展开。
+显式偏好被恢复内容覆盖——用户的选择被当成「没说过」。
+
+### 二、修法
+
+新增纯函数 `initialInspectorOpen({ prefSet, defaultOpen, paneCount })`（`apps/desktop/src/renderer/inspector-pref.ts`），
+优先级固定为 **显式偏好 > 恢复内容 > 默认收起**；App 的 layout effect 改为调用它。
+无偏好且有窗格仍展开（否则窗格挂在 width 0 的右栏里等于没恢复）；无偏好无窗格仍收起。
+
+### 三、判卷
+
+- 新增 `apps/desktop/tests/inspector-initial-state.test.ts` 4 例：显式开（无窗格）、显式关（有窗格）、
+  无偏好有窗格、无偏好无窗格。第二例就是旧实现翻车的形状。
+- 两条源码哨兵（`inspector-width` / `pane-persistence`）改钉新的 `initialInspectorOpen({ ... paneCount: paneTabs.length })`
+  接线，不再钉旧条件字符串。
+- 桌面 **161 文件 / 1196 用例全绿**；双端 typecheck 0；interaction-smoke **18/18 PASS**（真实 renderer，
+  设置返回命中/前景切换/窄窗无溢出/控制台 0 错误均含）。根套件未因本页改动重跑（本页只动 renderer）。
+- 产物：`dist/assets/index-Bu7yetLr.js` / `index-DPVGZPsa.css`。
+- **未证**：没有在真机上手工构造「localStorage 关 + 恢复窗格 + 重启」这一条路径；行为判据在纯函数与接线哨兵，
+  真机冒烟覆盖的是其余交互面。
+- 未跑 `pnpm gates` / `mutate-verify` / `head-cert`；改动未提交，业主应用未重启。
+
+## 2026-10-21 · 第 630 页：把「显式关闭压过恢复窗格」补进真实 renderer 冒烟
+
+第 629 页的「未证」只剩一条：没有真机走完「localStorage 关 + 恢复窗格 + 重启」。本页补上，
+不再只靠纯函数与源码哨兵。
+
+### 一、冒烟新增四步（真实 renderer + 真实 localStorage + reload）
+
+1. 文件窗格开着时按 ⌘⌥B：断言窗格仍在、`cairn.inspector.open.v1 === "0"`。
+2. `win.reload()`：断言窗格恢复（`[data-pane="file"]` 仍在）、检查器列宽 **0** 且带 `inert`；
+   旧实现这一格会是「窗格在、检查器被强行展开」。
+3. 再按 ⌘⌥B：断言偏好回 `"1"`、检查器宽度 >300、`inert` 已摘，证明关闭没有把开合锁死。
+
+### 二、冒烟自身的一个状态坑
+
+reload 会把侧栏恢复到启动态（展开），而后续窄窗检查量的是**收起快捷栏**——第一版新场景跑完后，
+`.sidebar-rail` 不存在，脚本在最后一条读宽时直接抛错。修法：场景结束检测 rail 是否存在，不在则按 ⌘B
+恢复收起，并新增一条断言钉住「可回到收起态」。这不是产品缺陷，是冒烟场景之间的状态依赖。
+
+### 三、读数
+
+- interaction-smoke **23/23 PASS**（原 19 条 + 4 条新检查：关闭、重载保持关、再打开、侧栏恢复）。
+  控制台 0 错误；新增读数：`{"pref":"0","pane":true,"width":0,"inert":true}` 与
+  `{"pref":"1","width":420,"inert":false}`。
+- 本页只改冒烟脚本，不改产品代码/协议/构建；dist 仍为第 629 页的 `index-Bu7yetLr.js`。
+- 未跑 `pnpm gates` / `mutate-verify` / `head-cert`；改动未提交，业主应用未重启。
+
+## 2026-10-21 · 第 631 页：业主应用重启，载入第 629 页 dist
+
+- 旧实例 PID 45787 以 SIGTERM 收束（等待退出，非强杀）；随后 `pnpm --filter cairn-desktop exec electron .`
+  重开，新主进程 PID 35377、renderer PID 35382。
+- 版本链：`apps/desktop/dist/index.html` 引用 `index-Bu7yetLr.js` / `index-DPVGZPsa.css`，renderer 进程
+  启动时刻晚于该次构建 ⇒ 运行中的壳加载的是第 629 页产物。启动日志走到调度器常驻接线与 BYOK 注入，
+  无启动错误。
+- **未做**：本轮没有以 CDP 连接运行中的业主窗口复核具体 DOM/资产请求（未开 remote debugging）；
+  版本判定用的是 dist 引用 + 进程启动时序，不冒充页面级读数。
+- 冒烟仍是第 630 页的 **23/23 PASS**；未跑 `pnpm gates` / `mutate-verify` / `head-cert`；改动未提交。
+
+## 2026-10-21 · 第 632 页：跨工作区恢复上次会话——复核为「已具备」，补判据与真机守卫
+
+第 593 页记的缺口是「跨区不恢复」，当时的理由是「sessions 只含当前工作区」。这一理由**已过期**：
+桌面宿主的 `listSessions` 现在逐根扫描全部已注册工作区并带 `workspace` 字段，`openSession` 又有
+归属解析器。本页不新造功能，先把那条旧结论按现态复核，再把它钉住。
+
+### 一、判据显式化（测试先行）
+
+- 新增 `apps/desktop/src/renderer/last-session.ts` 的 `decideLastSessionRestore`：
+  **已打开会话 ⇒ skip（不清 key）> 清单里找到（不论哪个工作区）⇒ restore > 找不到 ⇒ clear**。
+- 先写 `last-session-decision.test.ts`（5 例：跨区恢复、同区恢复、已打开跳过、会话消失清 key、没有记录清 key），
+  首跑因模块不存在而红；再实现并接线，App 的启动 effect 改为消费这个判据。
+- 旧注释「跨工作区不恢复」与源码哨兵同步改写，避免下一个人照着过期结论再“修”一遍。
+
+### 二、真正跑一遍跨区链路
+
+- 后端：`kernel-host.test.ts` 的多工作区用例补一条——`activeWorkspace` 仍是 A 时，只给 B 的 id 调
+  `openSession`，必须读回 B 的事件（归属解析不许回落到 activeWorkspace）。
+- 真机：新增 `apps/desktop/scripts/cross-workspace-restore.cjs`（真实 renderer + 合成 AgentApi）。
+  夹具里两个项目各一条会话；把 `cairn.lastSession.v1` 指向另一项目的 `s-other` 后 reload，读到：
+  侧栏该行 `data-active`、活动项目组 `title="/tmp/demo-ws-other"`、主区正文「跨工作区会话内容已恢复」、
+  `openSession("s-other")` 与 `setWorkspaceContext("/tmp/demo-ws-other")` 都发生、lastSession key 仍保留。
+  **7/7 PASS**，控制台 0 错误。
+- 夹具开关 `--cairn-cross-workspace-fixture` 只在专用脚本里加；普通 interaction-smoke 仍是 **23/23 PASS**。
+
+### 三、读数与边界
+
+- 桌面 **162 文件 / 1201 用例全绿**；双端 typecheck 0；boundary / docs-check 绿（本页落盘后跑）。
+- 根套件本轮未重跑（只动 renderer/tests/preload/scripts；上一轮 451/6215 仍对应未变的 core）。
+- 产物：`dist/assets/index-B-0l_T92.js` / `index-DPVGZPsa.css`；业主应用**待重启**载入。
+- 未跑 `pnpm gates` / `mutate-verify` / `head-cert`；改动未提交。
+
+## 2026-10-21 · 第 633 页：业主应用重启载入跨区恢复产物
+
+- 旧实例 PID 35377 以 SIGTERM 收束；`pnpm --filter cairn-desktop exec electron .` 重开，新主进程 PID 44670。
+- 版本链：`apps/desktop/dist/index.html` 引用 `index-B-0l_T92.js` / `index-DPVGZPsa.css`，新实例启动晚于
+  该次构建；启动日志走到调度器常驻接线与 BYOK 注入，无启动错误。
+- 未做：没有以 CDP 连接运行中的业主窗口做页面级资产复核；判定依据仍是 dist 引用 + 进程启动时序。
+- 未跑 `pnpm gates` / `mutate-verify` / `head-cert`；改动未提交。
+
+## 2026-10-21 · 第 634 页：独立评审第二遍——旁路工作区/@ 引用、会话 key 歧义、启动竞态、沙箱取消窗
+
+对未提交改动做了一轮独立只读评审（不采信“测试绿”本身）。七条可复现缺陷逐条先红后绿；
+其中两条是安全/外泄面，另外三条是冷启动或取消窗口的时序洞。
+
+### 一、sidechat 用“最近 run 的工作区”而不是父会话（Important）
+
+- 复现：父会话在 B、最近 run 在 A ⇒ 规则库、@ 引用、主会话投影全读 A。一个项目的问题被另一个
+  项目的文件回答。
+- 修法：`handleSidechatAsk` 经宿主 `resolveSessionRoot(parentId)` 定位父会话根；工作区由
+  `workspaceOfSessionsRoot(root)`（`<ws>/.agent/sessions` 同一形态）推出；日志用该根下的真实路径。
+  父会话解析不到 ⇒ 显式失败，不回落 currentWorkspace。
+- 判卷：`tests/sidechat-parent-workspace.test.ts` 两例（B 的文件与投影、A 的文件不得出现）。
+
+### 二、`@` 引用绕过只读门与大小写（Important）
+
+- 复现：`.ENV` 在 macOS APFS 上就是 `.env`，旧实现按原串匹配 `.env` ⇒ 直穿；`.agent/config.json`
+  不在硬编码名单；项目规则 deny read_file 也挡不住 @ 引用。
+- 修法：
+  - `readAtRef` 改用全仓唯一一份 `SENSITIVE_PATH_SEGMENTS`，并加旁路专属 `.agent/`、`.git/`
+    整目录闸；**统一小写后匹配**。
+  - 新增 `atRefGate`：宿主用 sidechat 的同一只读会话跑 `evaluate("read_file", …)`，只有 approve
+    才读；ask/deny 一律不读（旁路无审批门）。预算估算与上下文注入都走同一判据。
+- 判卷：同文件新增「大小写变体 / .agent/config.json / deny 规则」三合一一例，三条内容均不得进上下文。
+
+### 三、上次会话 key 只有 id，跨项目撞名会开错转录（Important）
+
+- 根因：`createSession` 的 id 是分钟级时间戳，两个项目同一分钟可得到同一 id；恢复只按 id 取第一条。
+- 修法：key 升级为 `{id, workspace}`（旧裸 id 仍可读）。恢复必须 **id + workspace 同时命中**；
+  旧格式同名多条 ⇒ 直接清 key（歧义不猜）；workspace 指向已移除项目 ⇒ 清，不退回同名会话。
+- 判卷：`last-session-decision.test.ts` 9 例（含编解码/坏 JSON）；真机夹具改写新格式并断言 key 仍带
+  两字段；`cross-workspace-restore.cjs` **7/7 PASS**。
+
+### 四、启动回灌竞态会误清跨区 key（Important）
+
+- 根因：项目注册表回灌是裸 `void` IIFE；渲染层首屏 listSessions 抢跑 ⇒ 另一项目的会话不在清单 ⇒
+  恢复判成“不存在”并清 key。
+- 修法：保留 `projectRehydrate` Promise，`listSessions` 先 `await projectRehydrate` 再扫。
+- 判卷：`boot-rehydrate.test.ts` 两条源码时序哨兵（Electron 装配根无可注入缝，如实标注这是哨兵）。
+
+### 五、沙箱取消窗口（Important）
+
+- 根因：入口检查 abort 后 `await mkdir(.tmp)`，监听在 spawn 之后才挂；取消落在 mkdir 期间就错过，
+  命令照跑。
+- 修法：mkdir 后再查一次；挂监听后再补查一次（已 abort 的 signal 不会触发新监听）。
+- 判卷：`sandbox-abort-before-spawn.test.ts` 用受控 mkdir 在等待点触发 abort，要求 **1s 内**以取消
+  收束且不 spawn；修前 1.5s 超时路径失败。
+
+### 六、融合写盘用字符串判据（Minor）
+
+- 根因：loop 认 `[fused_write:succeeded]` 子串；失败的 shell/diagnose 打印同一行也会触发 auto-verify。
+- 修法：`ToolResult.fusedWrite` 结构化字段（不进事件流），融合完成时置位；loop 只读字段。
+- 判卷：`action-fusion` 新增“shell 打印同字样 + 失败” ⇒ auto 拍必须为 0。
+
+### 七、首屏自动展开读启动快照（Minor）
+
+- 根因：第一个会话前按 ⌘⌥B 关掉检查器，写进 storage，但 `inspectorPrefSet` 快照仍是 false ⇒
+  宽屏首会话把它掰开。
+- 修法：`inspectorPrefSetRef` 实时位，toggle 时置真；自动展开读 ref。初始 layout 仍用启动快照（正确）。
+- 判卷：`inspector-width` 新增实时位哨兵。
+
+### 八、读数
+
+- 根 **453 文件 / 6219 用例全绿**（+2 文件/+4 例）；桌面 **163 文件 / 1208 用例全绿**（+2 文件/+7 例）；
+  双端 typecheck 0；boundary / docs-check / repo-hygiene 绿。
+- 冒烟：cross-workspace **7/7 PASS**、interaction-smoke **23/23 PASS**，控制台 0 错误。
+- 产物：`dist/assets/index-DZc1CLUC.js` / `index-DPVGZPsa.css`；业主应用重启见下页。
+- 未跑 `pnpm gates` / `mutate-verify` / `head-cert`；改动未提交。
+
+## 2026-10-21 · 第 635 页：业主应用重启载入第 634 页产物
+
+- 旧实例 PID 44670 以 SIGTERM 收束；重开后新主进程 PID 94687。
+- 版本链：`dist/index.html` 引用 `index-DZc1CLUC.js` / `index-DPVGZPsa.css`，新实例启动晚于构建；
+  启动日志走到调度器常驻接线与 BYOK 注入，无启动错误。
+- 未做 CDP 页面级资产复核；判定依据仍是 dist 引用 + 进程启动时序。
+- 冒烟：cross-workspace **7/7**、interaction-smoke **23/23**（均为构造前构建产物）。
+- 未跑 `pnpm gates` / `mutate-verify` / `head-cert`；改动未提交。
+
+## 2026-10-21 · 第 636 页：第二遍评审的六条修法——打开会话真正带 workspace、提升落父根、写盘证据结构化
+
+第 634 页的修法经第二遍独立评审，又抓出六条。最重的一条是：key 虽然升级成 `{id, workspace}`，
+但**打开时仍按裸 id 重找**，同名 id 会开错项目——等于前一条修法只修了 key，没修开。
+
+### 一、openSession 的 workspace 贯穿全链（协议 v16）
+
+- 显式定位：`sessions-view.findSessionByRef(sessions, id, workspace?)`（id + workspace 都对上；
+  给 workspace 不命中就 `undefined`，**不退回同名 id**）。
+- 接线：Sidebar 行点击/Enter/Space/搜索首个命中、CommandPalette 会话项、启动恢复都传 `s.workspace`
+  或 `decision.workspace`；App → `window.agent.openSession(id, workspace?)` → wired → host.openSession。
+- 协议 v16（`AgentApi.openSession` 增可选 workspace）；两条版本钉 15→16。
+- 判卷：`session-target` 3 例（同名 id 精确选择/缺省旧行为/不倒退）；`session-open-workspace` 3 条接线哨兵；
+  `kernel-host` 新增「A/B 各有 dup.jsonl，openSession(dup, B) 只读 B」；真机 smoke 的 openSession 调用
+  记录为 `{id, workspace}` 并断言 B。
+
+### 二、sidechat 的写主会话路径也跟父根
+
+- `/promote` 之前仍用单例根 append ⇒ 父会话在 B 时往 A 造一条同 id 幽灵会话。修法：`promoteToMain` 前
+  经 `resolveSessionRoot(parentId)` + `sessionExists` 定位父根；解析不到显式失败（不回落）。
+- 面板已提升记录同样从父会话根投影（找不到才退单例根）。
+- 判卷：`sidechat-parent-workspace` 新增「promote 写 B、A 不出现幽灵、状态面板能看到」。
+
+### 三、会话根 → 工作区：不把任意目录当项目
+
+- `workspaceOfSessionsRoot` 从「上溯两级」改为**严格校验**：末尾必须是 `<ws>/.agent/sessions`，
+  否则返回 `null`；sidechat 拿到 null 显式拒绝（不把 `/tmp` 当成项目）。
+- 判卷：标准根 / 自定义根 / 根目录三态。
+
+### 四、融合写盘的结构证据进入事件流
+
+- `ToolResultEvent.fusedWrite?: boolean`：loop 落盘；goal 的 `hasSessionWrites`、worker 的
+  `workerVerificationEvidence`、`tool-choice` 的写盘计数都按 `ok || fusedWrite` 判。
+- 这样 actionFusion 开、autoVerify 关、lint 红时，goal 不会把「已经改盘」读成「压根没产出」，
+  绿拍后的融合写也会正确变成 `stale` 而不是 `verified`。
+- 判卷：`write-face` 两例（有产出 / stale）。
+
+### 五、启动不再销毁「暂不可见」的 key
+
+- 判据新增 `keep`：有记录但这次清单没命中（项目暂不可见/扫描失败/旧格式歧义）⇒ **保留 key**，
+  下次启动再试；不再删 key。用户主动 ⌘N/newSession 才清。
+- 写效应在 activeId 为空时直接 return，不再把启动阶段的 null 当「用户回主页」。
+- 判卷：`last-session-decision` 改钉 keep；`last-session-restore` 改钉「newSession 才清」。
+
+### 六、专注模式不被首屏自动展开打断
+
+- 首次会话自动展开检查器前先看 `focusModeRef.current`；专注中不抢（否则 revealInspector 会顺手退出专注，
+  用户没按键却丢了专注）。
+- 判卷：`inspector-width` 实时偏好 + 专注双哨兵。
+
+### 七、读数
+
+- 根 **453 文件 / 6223 用例全绿**（+4 例）；桌面 **165 文件 / 1214 用例全绿**（+6 例）；
+  双端 typecheck 0；boundary / docs-check / repo-hygiene 绿。
+- 冒烟：cross-workspace **7/7**、interaction-smoke **23/23**，控制台 0 错误；openSession 读数含 workspace。
+- 产物：`dist/assets/index-Cb9d-pXl.js` / `index-DPVGZPsa.css`；协议 v16。业主应用重启见下页。
+- 未跑 `pnpm gates` / `mutate-verify` / `head-cert`；改动未提交。
+
+## 2026-10-21 · 第 637 页：自进化内核路线调研——先接运行面观察闭环，能力收益未验证
+
+本轮业主指令：只论证路线并做最小实验，不改生产代码。新增仅 `outputs/evolution-kernel-study-2026-10-21/**`；
+生产代码、判卷、fixtures、门脚本、权限与全局配置零改动；工作树 127 项他人改动未触碰。
+
+### 一、基线（工作树，非 HEAD 认证）
+
+- A 进化判卷 6 文件 / **150 用例全绿**，exit 0；B typecheck **0 报错**，exit 0。
+- C feasibility：缺模型凭据，可跑 **0/12**；逐名 judge 规格 **0/12**，exit 0（只代表检查完成）。
+- D 空任务集：exit 1，正确拒绝。
+- HEAD=`6af24734...`；任务写的路径根 `/Users/ze/Downloads/Cairn` 不是仓库，真实根是 `deepseek harness/`。
+
+### 二、真实断点（四级判定：存在组件 / 真实执行 / 影响下一轮 / 证明收益）
+
+- `src/agent/evolution/*`：真实执行；收束落 `.agent/evolution.json`，下一轮经 `evolutionPromptNote`
+  拼进 system prompt（`src/main/agent-runner.ts` 的装配点）；但无配对评价，收益未证。
+- `src/main/evolution/*`（manifest/registry/gate-runner/installer/plane/canary）：有实现、150 条判卷覆盖，
+  但生产零消费者；`EvolutionPlane`、`RuntimeLoader`、`CanaryController` 仅 tests 引用。
+  `STATE.md:47` 已登记「canary 控制器尚未在生产接线」。
+- 断点顺序：装载（active 包没进 prompt/工具表）→ 观察（收束无人 tickAll）→ 证据（sidecar 缺父版本/摘要/
+  配置/任务集/成本/失败原因；`signedBy` 不是完整性证明）→ 评价（bench 0/12 有逐名 judge 规格）。
+
+### 三、路线比较与选型
+
+- A 扩展现有建议闭环：零新运行时，但单候选、不可执行、无配对证据、无回滚。
+- B 多候选可执行 + 配对实测择优：复用 SEMA 契约/账本/门/安装/回滚/canary，补生成、档案、评价、装载、tick。
+- C DGM 式开放式自改代码：暂不采用（搜索空间、成本、TCB 风险、当前无 judge 规格/凭据）。
+- MiroFish 只借「多 agent 作为候选生成手段」，不引入平台本体。
+- 选择 B：按「可信可恢复 > 成功率 > 范围 > 成本」，B 是唯一能产出配对证据并自动回退的路线；
+  A 保留为候选种子，C 后置。
+
+### 四、最小机制实验（复用真实组件；候选与任务为手写脚本化 demo）
+
+- 临时工作区跑通：提交 → 门 → 安装 → RuntimeLoader 装载 → 任务产物 → 独立判据 → canary 观察 → 回退 → 重启续跑。
+- 1.1.0 正确候选：产物 `producerVersion=1.1.0`、判据全绿、观察期满 promoted。
+- 1.2.0 故意退化：先因缺门证据被安装序拒绝（原始 `InstallRefusedError: ... 未过全门（pack-check）`）；
+  过门后运行期判据 `summary=false, citations=false`；red#1、none#2（缺证据不判）、新进程 red#3 续档
+  `samples=3`、`consecutiveFailures=2` → 自动回退；回退后真实产物 `producerVersion=1.1.0`、判据全绿。
+- 结论只证明管线与治理机制；**不发模型请求，能力收益未验证**，不写成功率 0%。
+
+### 五、首期最小接线（设计，未施工）
+
+- `post-run-readings.ts`：runEvolution 后把同一份 signals 喂 `CanaryController.tickAll`。
+- `agent-runner.ts`：在 evolutionNote 同一缝经 RuntimeLoader 装载 active content-pack（零包零行为）。
+- 新增 `candidate-record.ts` / `evaluator.ts` / `activation-host.ts` / `scripts/evolution-eval.ts` 与判卷。
+- 权限、验收规则、内核变更：旧监督器独立验收 + 独立批准 + 交接；候选不得自批、不得改评价规则。
+
+### 六、读数与边界
+
+- 交付：`outputs/evolution-kernel-study-2026-10-21/{design.md,evidence.md,experiment/,logs/,sources/}`。
+- 未跑 `pnpm gates` / `mutate-verify` / `head-cert`（本轮无提交，且它们量 HEAD）；未动生产工作树。
+- 仍未验证：真实任务成功率、成本/耗时收益、代码/工具候选、多 agent 生成器是否更优。
+
+## 2026-10-21 · 第 638 页：首期自进化接线施工——装载、收束 tick、候选档案与配对评价入口
+
+按第 637 页 `design.md` §6.1 白名单施工。仍未提交：工作树含他人 127 项改动，提交等业主明确指示。
+
+### 一、落了什么
+
+- 新增 `src/main/evolution/candidate-record.ts`：候选 sidecar（父版本、排序逐文件 sha256、生成器配置、
+  任务集摘要、实际成本/耗时/失败原因、评价状态），原子写、fail-closed 解析；`signedBy` 不作完整性证明。
+- 新增 `src/main/evolution/evaluator.ts`：旧新配对评价。正确性优先；缺证据 `unmeasurable` 不晋升；
+  没有 holdout 验证任务不许晋升；成本/耗时差异不足保留旧版。
+- 新增 `src/main/evolution/activation-host.ts`：active content-pack 的 `prompt.md` / `system.md`
+  拼进 system prompt；收束时 `tickCanaryFromSignals` 用本轮同一份 `EvolutionSignals` 续观察档。
+  工作区没有 `modules/` 或没有观察档 ⇒ 零行为。
+- 新增 `scripts/evolution-eval.ts`：TCB 配对评价入口，真实执行面由 `--runner` 注入；缺 runner 退出 2。
+- 修改 `src/main/post-run-readings.ts`：`runEvolution` 后接 `tickCanaryFromSignals`；
+  修改 `src/main/agent-runner.ts`：content-pack 文本并入 `evolutionNote`（保持 provider 行既有行锚定）。
+- 新增 `tests/evolution-kernel.test.ts` 12 条判卷。
+
+### 二、读数（工作树）
+
+- typecheck **0 报错**，exit 0。
+- 进化面 7 文件 / **162 用例**全绿；改动接缝 7 文件 / **116 用例**全绿。
+- 全量核心（出沙箱）**454 文件 / 6236 用例全绿**；沙箱内 29 个 `listen EPERM` 假红（已知端口限制）。
+- 桌面（出沙箱）**169 文件 / 1224 用例全绿**；边界检查绿；docs-check 绿。
+- 诚实记录：全量出沙箱首跑有 1 条 LSP 取消竞态失败，单跑 3 次均 24/24 通过 ⇒ 并发抖动，
+  与本轮改动无调用关系；随后全量复跑全绿。
+
+### 三、机制实验（走新生产缝）
+
+机制实验（走新生产缝）phase1/phase2 均 exit 0（原始输出在交付目录）：
+1.1.0 判据全绿并 promoted；1.2.0 先因缺门证据被安装序拒绝，过门后运行期判据红；
+`none` 样本让 samples 1→2 但 `consecutiveFailures` 保持 1；新进程 red#3 续档 samples=3 并自动回退，
+回退后真实产物 `producerVersion=1.1.0`、判据全绿。候选档案与收束 tick 均走新模块。
+
+配对评价入口三种行为：缺 runner exit 2；脚本化 runner 成本 6 ≤ 基线 12 ⇒ promote；
+runner 全失败 ⇒ `unmeasurable / keep-old`。
+
+### 四、边界与未完成
+
+- 未提交；`pnpm gates` 读到 28 道绿，`head-cert-check` 在**未改动的 HEAD** 上因
+  `tests/main-run-routing.test.ts` 超时红；`mutate-verify` 只量 HEAD、约 35 分钟，已停止。
+- 未发模型请求；`--runner` 是脚本化 demo ⇒ **能力收益仍未验证**。
+- bench 12/12 任务无逐名 judge 规格 ⇒ 真实任务配对评价仍缺第二半尺。
+- `STATE.md` 的「canary 控制器尚未在生产接线」需等提交后按真 commit 重写现态页，不在本轮改。
+
+## 2026-10-21 · 第 639 页：Claude Desktop v3 设计令牌复核；用量构成条与启动占位
+
+本轮业主指令：「利用 rea 持续研究 claude 的桌面设计、外观，还有各种，然后优化我们的项目」。
+先复核对象版本，再做一处可判卷的视觉增量；未提交，结论只覆盖工作树。
+
+### 一、版本事实（本轮先纠正上一轮的现值）
+
+- `/Applications/Claude.app` 已从上一轮报告的 **v2.42304.2** 升到 **v3.1623.0**；
+  `app.asar` 56,088,935 B（sha `2b0ebaec…`）→ **50,725,286 B（sha `760e7cbb…`）**，文件清单 511 → **553**。
+- REA `inspect_artifact`（`integrity_policy=record-and-continue`）读到 **575 节点 / 601 条出现 / 600 条边**；
+  8 条 integrity contradiction 全是 unpacked 原生二进制签名剥离，`source_complete=true`。
+- `inspect_electron_fuses`：RunAsNode / NodeCliInspectArguments 关闭；asar 完整性、仅从 asar 装载开启。
+- 主窗口 CSS 233,932 B；`--cds-*` **956 个名 / 904 个定义**（上一轮文档只记 364 个名）。
+- v3 圆角差：输入卡 `--cds-radius-composer` `.75rem`（12px，v2 是 14px）、面板 `--cds-panel-radius`
+  `.625rem`（10px）；Cairn 对应 14px/14px。只登记，不改（设计规范已定，等 owner 裁决）。
+- IPC 通道面（静态提取，非 REA 语义图）：v3 **1438 条 / 14 命名空间**，v2 是 1327 条 / 15；
+  按 `Controller+method` 去重 **97 新增 / 0 删除**（其中 48 条是 `_$store$_getState/update` 对）。
+  新能力面含 `CoworkArtifactBridge_*` 6、`CoworkFilePreview_*` 3、`Launch_serveRemoteBrowserSession` 等 4、
+  `LimitAutoResume_*` 4、`WindowVibrancy_*` 4、`WindowControl_reportBootPlaceholderColors`。
+  详见本轮交付目录的 `CHANNELS-DELTA.md`。
+- 隔离 profile 启动 v3，从 Claude Helper argv 取到 `--desktop-features` **135 项：77 supported / 51 unavailable /
+  7 unsupported**；`desktopTopBar`、`claudeDesignWindow`、`bootPlaceholder`、`tearOffHalo`、`popoutZoom` 等在
+  supported，`artifactsPane` / `desktopHome` / `chatTab` / `sideSessions` 在 unavailable。只登记状态，不当行为承诺。
+  新增完整 35 阶族：orange / violet / magenta / aqua（加上原有 gray/neutral/blue/red/green/yellow 共 10 族）；
+  新增 chart 32 条、editor 6、slider 6、segmented 3、skeleton 4、shimmer 6、scroll 17、z 5 等组。
+- **结构面**：全量 `analyze_javascript_application` 240s 超时。限 `index.pre.js`（943,349 B）得到
+  247,274 AST 节点 / 176 findings，但 browser_windows / ipc.operations / context_bridge_apis 全为 0；
+  7.0 MB 的 `index.chunk-BLvpT1n4.js` 让 REA worker **堆耗尽**；2.2 MB 的 `index.chunk-Cses962f.js`
+  有 544,131 AST 节点 / 393 findings，但语义图超父结果预算。结论：当前 REA 读不动 v3 主进程图。
+  本轮不引用任何 v3 的模块/IPC/contextBridge 数；上一轮 1327 条通道是 v2 读数，不当 v3 现值。
+
+### 二、落地（工作树）
+
+- `apps/desktop/src/renderer/tokens.css#--chart-1` 新增 `--chart-1…8`（Claude 分类色序 blue-450/orange-350/aqua-350/yellow-250/
+  magenta-300/green-500/violet-500/red-400，按本仓纪律存 HSL 三元组）与 `--chart-axis/grid/muted`。
+- `apps/desktop/src/renderer/components/UsagePanel.tsx#Composition` 新增 `Composition`：**只画输入/输出两段**
+  （cacheRead 在 Anthropic 是独立计数、在 OpenAI 已含在 prompt_tokens，并进分母会重复计数），
+  缓存只作独立附注；零总量不画条；`role="img"` 的 aria-label 报两段百分比（颜色不单独传意）。
+- `apps/desktop/src/renderer/styles.css#.usage-comp`、`apps/desktop/src/renderer/strings.ts#footer.usageComposition` 两处接线；
+  新判卷 `apps/desktop/tests/usage-composition.test.tsx` 7 条。
+- 研究工具落成：`extract-tokens.mjs` / `diff-tokens.mjs`（令牌 904 个、复跑 0 差异）与
+  `extract-channels.mjs` / `diff-channels.mjs`（通道 1438 条、v2→v3 97 新增/0 删除）。
+  下次 Claude 升级可一条命令得到令牌与通道两张 delta。
+- 用量失败空串：全部会话 `error=""` 时补「未知原因」（`usage-panel.test.tsx` 第 4 条扩展）。
+- 卡片投影按 v3 改正：亮色单层 `1px 2px 5%`、暗色两层 `1px 2px 6% + 2px 8px 24%`（此前暗色是 none）；`v3-shadow-tokens.test.ts` 增一条。
+- 核心全量读数校正：8 GB 机器上**默认并发**（455 worker）导致 13 文件 16 条红（11 条 Test timed out + render-image Chrome 渲染超时 + 少量 5s 预算超时）；逐条单跑全部绿 ⇒ **负载型失败不是逻辑回归**。
+  限并发后拿到可信读数：`vitest run --config tests/vitest.config.ts --maxWorkers=2` ⇒ **455 文件 / 6288 用例全绿**（507.4s，负载平均 23）。
+  ⇒ 本仓的 `pnpm test` 默认并发在 8 GB 机器上不可复现全绿；读数一律注明并发档。
+- 字号刻度校回：业主 §4.4 的 caption 四档（10/11/12/13）与 body 四档（12/13/14/15）在实现里被压平成
+  12.5 与 14.5 ⇒ 按规格与 v3 实测（caption 12/body 14/prose 16/heading 15/title 22）改回；
+  判据 `tokens.test.ts` 改为逐档钉住。
+- 读数口径固化：`AGENTS.md` 验证段写明「8 GB 机器上默认 worker 会过载 ⇒ 出现的是负载型假红，
+  逐条单跑全绿；可复现的全量读数用 `pnpm test:capped`（＝`--maxWorkers=2`），
+  **任何核心判卷计数都必须注明并发档**」；package.json 新增 `test:capped` 脚本。
+- 暂存树命名对账修归属面：挂在**分支**上的活工作树（`.worktrees/cap-20261021` 等）名字是分支工作名、
+  HEAD 随分支移动，本来就不编码提交 ⇒ 不参与命名对账（只量 detached 树）。
+  注意 `cap-20261021` 的日期段恰好是 8 位十六进制，正则会读成前缀 `cap` ＋ sha `20261021` ⇒ 这正是
+  必须按 detached 行排除、不能靠「名字里有没有 sha」猜的原因。
+  另：真仓里那棵 **detached** 的 `cap-clean-20261021` 名字确实不合约定（日期当 sha）⇒ 尺子**该**点名它；
+  真仓面判据改成「该报的都报了、没漏」而不是「一条都不许多报」。
+  新增变异锚点 `scratch-tree-live-branch-measured`；`scratch-tree-naming.test.ts` 19 条全绿。
+- 弹层投影按 v3 改正：亮 `8px 24px 12% + 2px 6px 8%`、暗 `8px 24px 32% + 2px 6px 20%`（此前 28px/8px）；新判卷 `v3-shadow-tokens.test.ts` 3 条。
+- 输入框底分主题：v3 `--cds-fill-field` 亮色白半透、暗色 5% 亮墨；新增 `--fill-field` 两态，设置页输入框改吃它；新判卷 `field-fill-token.test.ts` 2 条。
+- hover/选中淡底分主题：v3 暗色 scope 把 ghost-hover 提到 7.5%、ghost-selected 提到 15%（亮 5%/10%）；新增 `--alpha-hover`/`--alpha-selected`，74 处 hover/选中底改吃它们；新判卷 `alpha-hover-tokens.test.ts` 3 条。
+- 焦点环外发光分主题：v3 `--cds-bg-accent` 亮色 blue-100 / 暗色 blue-800；新增 `--accent-control-glow` 分主题取用，`:focus-visible` 第三层改吃它。
+- 强调文字分主题：v3 暗色 scope 的 `--cds-text-accent` 是 role-accent-300（blue-300），暗底上 blue-600 只有 4.6:1；`[data-theme="dark"]` 覆盖 `--accent-control-text` 为 blue-300，真 DOM 读数亮 24/79/149、暗 44/132/219。
+- 强调色三分：新增 `--accent-control-text`（blue-600）；选中态/链接/菜单勾走控件蓝与 blue-600 文字色，品牌陶土橙只留主按钮/品牌图标/会话强调条；新判卷 `control-accent.test.ts` 5 条。
+- 焦点环拆分：v3 `--cds-focus-shadow` 用 blue-450，新增 `--accent-control`；全局焦点环/composer/设置字段/侧栏拖手/会话日志改用控件蓝，品牌按钮仍陶土橙；`focus-ring.test.ts` 4 条。
+- 插件快照读取：`PluginSurface` 加 `seq` 防旧响应覆盖重试结果；`plugins-pane.test.ts` 判据补两条。
+- 侧栏关闭焦点归还：关闭前 active=关闭插件侧栏，关闭后 active=插件侧栏；点外部不抢焦点。
+- 窗口材质默认关判据：`settings.test.ts` 补 `windowVibrancy` 缺键回退 false、显式 true 才开、非布尔回退 false；该文件 21 条。
+- 窗口材质对比度：side 底从 55% 提到 75%，按 token 算 text-400/500 反向桌面底最差约 4.7:1；真实亮色主窗口单点采样侧栏底 251/正文 20，对比约 17.8:1；暗色开/关侧栏采样同为 20，材质差异不可见；启动日志 `getBackgroundColor()=#000000`（配置 #00000000，可能只是读值归一化；不能据此断言 broken）；去掉 backgroundColor 的对照采样仍为 20，已回退；默认关。
+- 窗口材质实验开关：设置页「窗口材质」开关（默认关、重启生效；变更时 best-effort `setVibrancy`）+ macOS-only `CAIRN_WINDOW_VIBRANCY=sidebar|1`，默认不透明；preload 实测 dataset=sidebar；body/#root 透明（计算值 rgba(0,0,0,0)）；暗色截图已拍但材质不可见；未做视觉验收。
+- 状态页纠偏：`STATE.md`「还有什么没裁」删掉已收口的 `projectCreate` 父目录闸与 `listSkills`/`skillBody`/`pluginDecide` workspace 闸两行（两处实现已在 index.ts 过 `resolveCreateParent` / `resolveProvidedWorkspace`），只留页号存量债。
+- 状态页同步：`STATE.md`「在飞什么」补桌面 Claude v3 未提交工作树，避免“无在飞”假现态。
+- 窄窗点外部收起：1440 点主栏不关、1050 点主栏关闭；`plugin-sidebar.test.ts` 7 条。
+- 窄窗自适应：≤1120px 时 mod 侧栏固定覆盖，1440 relative/340 主栏521 → 1050 fixed/top38。
+- 键位冲突收口：`⌘⌥B` 插件侧栏、`⌘⌥I` 检查器、`⌘⌥M` 兼容别名；真实 DOM B 开侧栏、I 把检查器 360→0。
+- mod 侧栏布局挤窄版：`.shell` 第三列，主栏 821→521、侧栏 340/top 38；`⌘⌥M`/localStorage；
+  真实 DOM 工具栏按钮可开、`aria-expanded` 翻转、焦点落关闭钮、Esc 关闭；宽度 340→350 键盘可调并写回；命令「填入」实测 textarea `/demo-plugin:test `；拖手双击 350→340 复位；`plugin-sidebar.test.ts` 6 条。设计稿 Option+Cmd+B 仍未重排。
+- 消息操作条 reveal：淡入 + 下沉 2px，走 `--t-fast`；`row-actions-reveal.test.ts` 2 条。
+- 插件命令带：`.plugin-strip` 只列已信任命名空间命令，点击填 `/plugin:command ` 不发送；
+  真实 DOM 两条芯片、点击后 textarea 值已验；`plugin-strip.test.ts` 3 条。
+- 插件窗格：`PaneKind="plugins"` + `⌘⇧U` + ⋮ 菜单；`getState().plugins` 缺失可重试；
+  真实 DOM 菜单八项、窗格可开；夹具快照后能看到统计、插件、技能 `demo-plugin:review`、命令
+  `demo-plugin:test` 与 MCP 连接态；`plugins-pane.test.ts` 3 条。真正 mod 侧栏仍未做。
+- 菜单/设置卡圆角：`--radius-pop-v3` 10px 应用到 `.pop/.path-menu/.pop-rd/.ss-card`；
+  真实 DOM `.pop=10px`、composer `12px`；`popover-radius.test.ts` 2 条；`settings-ui`/`menu-unify` 旧 14px 钉同步。
+- Composer 圆角：`--radius-composer-card` 12px；vendored skin 的 18px 被覆盖层压回，真实 DOM 计算值 12px；
+  `composer-radius.test.ts` 3 条。
+- 文件窗格：目录/预览请求序号防旧响应覆盖；truncated 如实提示；目录/预览失败原地重试；
+  `aria-expanded`/`aria-pressed` 与完整路径；`file-pane-improvements.test.ts` 4 条（树键盘已接；真实画廊补假树后实测：→ 展开、↓ 到子行、← 回父、再 ← 收起，truncated 与预览均可见）。
+- 侧栏骨架微光：`.side-skeleton-row::after` 低对比扫光，reduced-motion 停掉；
+  `skeleton-shimmer.test.ts` 3 条。
+- 按钮按压缩放：`--press-btn: 0.975`（v3 btn-press），`.btn/.send-btn:active` 统一消费；
+  `press-scale.test.ts` 2 条，`motion.test.ts` 旧 0.97 钉改指令牌。
+- 流顶/流底渐隐：`--scroll-fade` 28px + `.stream-fade-top`（`!stick.atTop`）+ `.stream-fade-bottom`
+  （`!stick.stuck`），判卷 `stream-fade.test.ts` 4 条；真实 DOM 顶边滚离 120px 后 1、回顶 0；
+  底边贴底 0、离开底部 1。
+- 启动占位：`apps/desktop/src/renderer/index.html` 在 CSS/React 之前内联 clay 标记 + 进度线 +
+  `role="status"`，`#root:not(:empty) + #boot` 淡出；`apps/desktop/src/main/index.ts` 两处
+  BrowserWindow 加 `backgroundColor`（surface-1 #fcfcfb / #151515）。主题真相是 settings.json 的
+  theme：启动与切换时同步 `nativeTheme.themeSource`，让底色与 `prefers-color-scheme` 同判据；
+  纯函数 `apps/desktop/src/main/boot-theme.ts`，判卷 boot-placeholder 3 条 + boot-theme 4 条；
+  暗/亮截图各一张（JS 关闭）。
+
+### 三、读数（工作树）
+
+- 相关判卷 **15 文件 / 80 用例全绿**；根 typecheck **0 报错**；桌面构建通过。
+- 核心全量 `pnpm test`：**454 文件 / 6239 用例全绿**（本轮补跑）。
+- 桌面全量（`env -u ELECTRON_RUN_AS_NODE`）：**182 文件 / 1275 用例全绿**，`desktop-boundary-check: 绿`。
+  直接跑会因本会话预置 `ELECTRON_RUN_AS_NODE=1` 让原生宿主子进程 `app.setPath` 判空——1 条环境假红，不是回归。
+- 真 Electron 截图（本轮工作树未入库）：用量条两段实色 blue `rgb(42,120,214)`（输入 87.1%）+
+  aqua `rgb(27,175,122)`（输出 12.9%）；启动占位暗/亮各一张（JS 关闭）。
+- 启动占位淡出（真实 DOM）：React 挂载后 rootChildren=1，`#boot` visibility=hidden / opacity=0。
+
+### 四、边界
+
+- 未启动 Claude 真机（避免读用户会话），v3 的聊天主界面几何与视觉未测；本地 asar 只有壳，聊天区在远端。
+- 未跑核心全量 / `pnpm gates` / `mutate-verify` / `head-cert-check`；未提交，不冒充 HEAD 认证。
+- 交付目录（本轮工作树未跟踪，待随提交入库）：README、CHANNELS-DELTA.md、tokens-v3.json、
+  channels-v2/v3.txt、extract/diff 四个 mjs、usage-popover.png、boot-placeholder-{dark,light}.png。
+
+## 2026-10-22 · 第 640 页：逐名判卷那一格在本仓自己的基准上通电——`fixtures/bench/` 12/12 条一条 `judge` 都没有那笔债
+
+本轮业主指令：「不断调研优化发现，我们项目的缺点还有未完成的部分……做到顶尖 agent 的水平」。
+先拿 `BLOCKED.md` 第 637/638 页登记的那两条「已定位、未解」开刀：第二条是
+「`fixtures/bench/tasks.json` 12/12 无逐名 judge 规格 ⇒ 『该转绿的没绿』与『该保住的坏了』仍同形」。
+它同时是「机制在、生产零流量」这个本仓最忌形状的**现存实例**，所以先修它。
+
+### 一、病灶现读（修前）
+
+`src/agent/eval/test-results.ts`（解析＋裁决）、`src/agent/eval/task-set.ts`（数据层产出 `judge`）、
+`scripts/lib/eval-named-sets.ts`（读者）三截都通，`scripts/loop-eval.ts` 也在最后一次 verify 拍上调它。
+可 `--feasibility` 印的是：
+
+```
+[feasibility] 逐名格：0 / 12 条带 judge 规格（FAIL_TO_PASS 合计 0 条／PASS_TO_PASS 合计 0 条）
+⇒ 这一批**没有一条**有第二半尺 ⇒「该转绿的没绿」与「该保住的坏了」仍只在同一枚退出码上同形
+```
+
+也就是说：这条链**从第 415 页起就是通的，却从来没有一条任务喂给它**。机制在、生产零流量。
+
+### 二、落地：规格由盘上跑出来，不由人写
+
+- `scripts/lib/bench-judge-spec.ts`（新）：在靶子目录里跑它的判卷命令，把原文交给**生产的**
+  `parseTestResults`，按种子态分两列——`failToPass` = 种子里**非绿**的，`passToPass` = 种子里**绿**的。
+  三条 fail-closed：认不出格式 / 一条逐名都没读到 / 派生不完整 ⇒ **拒出规格**（交空尺等于把
+  「没有尺」读成「全绿」）；种子态全绿也拒（`failToPass` 会是空列 ⇒ 这一格退化成只查不许坏，恒真）。
+- `scripts/bench-judge-spec.ts`（新）：`--write` 把规格写进五份清单（**只换 `judge` 那一格，
+  文件其余字节逐字不动**），`--check` 当门跑（漂了就退 1 并点名）。
+- 五份清单 15/15 条拿到规格，`--feasibility` 从 `0/12` 变成：
+
+```
+[feasibility] 逐名格：12 / 12 条带 judge 规格（FAIL_TO_PASS 合计 43 条／PASS_TO_PASS 合计 13 条）
+⇒ 跑器会在最后一次 verify 拍上按逐名裁决，两件事从此分列
+```
+
+- 端到端证人（`--scripted` 剧本面，零 key 零网络）：B1 那趟现在印的是
+  `逐名判卷红〔同一枚退出码分不出这两件事〕：该转绿的没绿：券后金额跌破包邮线，应当收运费`
+  ——正是这一格买来的分辨力。
+
+### 三、为什么规格不许手抄（这一格自己踩到的三个坑）
+
+1. **纯文本手术连翻三次**：`renderManifest` 只换 `judge` 那一格，第一版用 `JSON.stringify(...,null,2)`
+   整份重排（diff 从「+15 行」变成「5 个文件全改」）；改成文本手术后连踩三脚——
+   ① `body` 内下标与全文下标混用 ⇒ 逗号飞到右花括号后面；② 插入点从 `close` 起跳，
+   把右花括号一起吃掉；③ 边扫边改，第二处 edit 拿第一处改完后的下标当原文下标。
+   ⇒ 修法：**先扫全部区间、再从后往前落**（`planEdits` + 逆序套娃）。
+2. **判据自己弄脏了自己要守的面**： drift 那条判据把整个 `fixtures/bench` **软链**进临时目录，
+   `writeFileSync` 顺着软链写进了真仓的 `tasks.json`——跑完判据，被度量面已经变成漂过的版本。
+   ⇒ 修法：副本里只软链 `bench-*` 靶子（它们只读），五份清单写真拷贝；并加一条
+   「真仓五份清单逐字节未动」的断言守着（突变验证：把软链改回整棵 ⇒ 该断言红）。
+3. **一条坏输入喂饱三条分支 ⇒ 另两条的突变存活**：把「一条逐名都没读到 ⇒ 拒」改成 `if (false)`
+   时，29 条判据全绿——因为盘上 16 条靶子**一条都走不到那个分支**（全都能解析）。
+   ⇒ 修法：造三种**各自只触发一条**的坏输入（噪音 ⇒ 三支齐来；`TAP version 13` + `1..0`
+   ⇒ 只触发「没读到」；计划 3 条只印 1 条 ⇒ 只触发「不完整」），并断言另两支的话**不许出现**。
+
+### 四、判据与突变锚点（本轮新增）
+
+- `tests/bench-judge-spec.test.ts`（新，36 条）：五清单每条都带 judge 且形状合法；两列与盘上现读
+  **逐字一致**（16 条靶子各 spawn 一次）；同一枚退出码下两种逐名结局必须给出不同的
+  `notGreen`／`broken`；**退出码那一格在两种输入下同值**（证明新增的是第二格，不是把旧格子换面）；
+  spec 缺席 ⇒ `undefined`（无面，不是「读不出」也不是「过了」）；门脚本的形状与分辨力。
+- 四条常驻变异锚点（`scripts/lib/mutations/scripts-certs-eval.mjs`），在干净 worktree 里逐条实测：
+
+| 锚点 | 突变 | 结果 |
+|---|---|---|
+| `bench-judge-columns-inverted` | 两列判据反过来（把本来就绿的列进 failToPass）⇒ 恒真 | ✅ 杀（33.7s／2 拍） |
+| `bench-judge-empty-parse-not-refused` | 「一条逐名都没读到 ⇒ 拒」恒假 ⇒ 交空尺 | ✅ 杀（2.4s／2 拍） |
+| `bench-judge-incomplete-not-refused` | 「派生不完整 ⇒ 拒」恒假 ⇒ 半份尺 | ✅ 杀（1.0s／2 拍） |
+| `bench-judge-check-compares-shape-only` | `--check` 只比「有没有 judge」不比内容 | ✅ 杀（11.6s／2 拍） |
+
+  第四条第一跑是**存活**：只验证「配平盘上退 0」的判据在那种改法下照样全绿
+  （配平的盘上本来就一致）。⇒ 补了「漂一份副本 ⇒ 门必须退 1 并点名」那条行为格判据才杀掉。
+  **教训**：判「一道门有用」不能只跑它绿的那一次，必须造一个它该红的输入。
+
+### 五、第二笔：对账表也看得见逐名那一格（`scripts/eval/report.ts`）
+
+逐名规格进了语料，可 `pnpm eval-report` 那张对照表**读不到它**——`ok`（退出码 0）把「该转绿的
+没绿」与「该保不住的坏了」压成同一个 false，一次「跑废了」和一次「修坏了别的」在成功率里同形。
+
+- `Row` 加一枚 `namedSetState`（`pass`／`fail`／`unreadable`／`no-face`），由 `parseReadings` 从
+  `r.namedSets.state` 现读；**没盖（存量语料）⇒ `no-face`，不抛也不猜**（取不到 ≠ 没问题）。
+- 新增 `namedSetFace(baseline, candidate)`：四个桶各数一次，`no-face` 单列。三条口径：
+  ① 没尺的任务**不算绿也不算红**；② `unreadable` **不许并进 fail**（修法在取料面，不在模型）；
+  ③ 两侧都 `no-face` ⇒ 印「没有量」，不是印「没问题」。
+- `renderReport` 加**可选**第三参 `faces`——不塞进 `Comparison`：那个结构是纯逐指标对账（可复算、
+  与行无关），它的判卷只喂 Totals；塞进去会让它同时背两件事。不给 `faces` 时那一行**不印**
+  （不是印成绿）。
+- CLI 接线后实测（`--scripted` 两趟同配置 ＋ 一趟候选）：表尾多出
+  `逐名判卷面：动了（基线 pass 0／fail 2／… ↔ 改动 pass 0／fail 1／…；变动的桶：fail）`。
+
+三条新锚点（连同前四条共**七条**，干净 worktree 里逐条实测全杀）：
+
+| 锚点 | 突变 | 结果 |
+|---|---|---|
+| `named-set-no-face-counted-as-pass` | 没盖 ⇒ 落 pass 桶 ⇒「没有尺」读成「绿了」 | ✅ 杀（0.7s） |
+| `named-set-unreadable-folded-into-fail` | `unreadable` 并进 `fail` ⇒ 两种修法并成一种 | ✅ 杀（0.6s） |
+| `named-set-face-not-printed` | CLI 算出逐名面却不喂进成表 ⇒ 与没算同形 | ✅ 杀（0.6s） |
+
+### 六、本轮判据自己踩到的两个新坑（都可复用）
+
+1. **同一枚 `expectFail` 喂不进两张面**：`mutate-anchor-titles` 比的是**判卷源文本**，而
+   `killerAttributionOk` 比的是 **vitest 输出里红掉的标题**。判据用 `it.each([...])("$rel $t.id：…")`
+   时，源文本里只有模板、输出里只有渲染后的具体串 ⇒ 写哪个都另一把尺红
+   （实测：先 `misattributed`，改成模板串又 `survived`——因为归因那把尺根本不认模板）。
+   ⇒ 修法：**给锚点配一个不插值的字面量标题观测者**（本轮为 `bench-judge-columns-inverted`
+   补了「两列判据反过来 ⇒ 恒真」那条），而不是让两把尺去迁就一个字符串。
+2. **python heredoc 把 `\n` 写成了真换行**：锚点针脚里的 `+ "\n"` 变成真换行后
+   `s.replace(...)` 找不到源文本 ⇒ 突变**未生效**（`no-effect`），而那条锚点看起来"跑了"。
+   ⇒ 症状是「REDKINDS=no-effect:1」，修法是看针脚在源文件里到底在不在
+   （本轮直接 `grep -c` 数出来才发现）。
+
+### 七、顺带订正一条**过期债**（读代码读出来的，不是新缺陷）
+
+`BLOCKED.md` 第 637 页写着「`CanaryController` / `RuntimeLoader` / `EvolutionPlane` 生产零消费者」。
+现读：**前两个自第 638 页起就有生产消费者**——`src/main/agent-runner.ts:57,1254`（content-pack
+注进 system prompt）与 `src/main/post-run-readings.ts:14,79`（收束缝喂 canary tick）。
+原文那句是接线**之前**的读数，已订正。真正仍只有判卷消费者的是
+`EvolutionPlane` / `GateRunner` / `Installer` / `PermissionBroker` / `GrantsStore`——
+而那是 `docs/sema-proposal.md` §11 **立案的刻意分期**（Phase 4 才放开自动安装），不是漏接。
+**教训**：`STATE.md`／`BLOCKED.md` 里的债会过期；引用之前先 `grep` 一次消费者。
+
+### 八、边界（本轮不冒充的）
+
+- 未提交：工作树含他人 185 项改动（含另一个会话在飞的桌面活）。本页结论只覆盖工作树。
+- 未跑 `pnpm gates` / `mutate-verify` 整表 / `head-cert-check`；上面四条锚点是在一棵一次性
+  worktree 里逐条跑的，不是整表认证。
+- 能力收益仍不可测：无 `CAIRN_API_KEY` / `CAIRN_ENDPOINT`，bench 12/12 不可跑。
+  本轮证明的是**机制与判据**，不是成功率或成本收益（解除条件不变）。
+- `--check` 进门（`bench-judge-spec-check`）但**不进 CERT_GATES**：实测 1.76s 虽落在 1.5s 线内，
+  但同源观测者（`tests/bench-judge-spec.test.ts`）已在 `test` 那道门里，双买等于付两次同样的账。
+
+## 2026-10-22 · 第 641 页：桌面路由体积面——弹出窗甩掉整页工作台，那道新闸门从红转绿
+
+本轮业主指令：「帮我优化我们的桌面端，有问题问我」。
+先按现态取读数（不猜），把**已经是红的**那道闸门修绿，再把方向交回业主裁。
+
+### 一、现状现读（本轮开工时）
+
+- 桌面判卷全量：**187 文件 / 1294 用例，1293 绿**；唯一的红是原生宿主冒烟。
+- 根 typecheck：**0 报错**。
+- bundle 审计：**红（exit 1）**——红的正是工作树里这道**本轮之前新加的**路由闸门。
+- 性能冒烟与原生冒烟：**本机起不来**（外层沙箱拒了 Electron 的 Mach port 注册），
+  ⇒ 性能读数只能用仓里上一轮的基线，本轮**不复测**（见第六节边界）。
+
+### 二、病灶现读：红的不是「产品变胖了」，是依赖图的形状
+
+`apps/desktop/scripts/bundle-audit.mjs` 现有三道帽：首屏 800,000B / main 600,000B / popout 400,000B。
+修前现读：
+
+| 面 | 实测 | 帽 | 读法 |
+|---|---|---|---|
+| initial（首屏） | 160,685B | 800,000B | 远在帽内 |
+| main 路由 | 579,838B | 600,000B | 只剩 20,162B 余量 |
+| **popout 路由** | **423,130B** | 400,000B | **超 23,130B ⇒ 红** |
+
+根因是**每条路由的静态闭包**里混进了整页工作台：
+`PaneDock` 静态 import `PluginSurface` ⇒ `PluginSurface` 静态 import `AppPage` ⇒
+`AppPage` 连带 `react-resizable-panels`（94,300B）、`@radix-ui/react-menu`（32,427B）、
+floating-ui 一族、`markdown.tsx`、`settings-ui` 一起进闭包。
+弹出窗（`PopoutApp`）**只渲染一个窗格**，是个人畜无害的小窗口，却静态拖进了整页工作台。
+
+### 三、修法：懒加载边界放进 `PluginSurface` **内部**
+
+- `apps/desktop/src/renderer/components/PluginSurface.tsx`：`AppPage` 的 `PluginsPane` 改
+  `lazy(() => import("./AppPage"))`。边界放在**这个文件内部**（不是调用方）⇒
+  `PaneDock` 与 `PluginSidebar` 的接线**一行未改**，加载占位也只有插件面板那一格会亮，
+  不牵连同屏其它窗格；既有的判卷断言（读源码文本的那些）也**一条不用动**。
+- `apps/desktop/src/renderer/strings.ts`：新增 `pluginSurface.paneLoading`。
+  与既有 `pluginSurface.loading` 分开：占位那一刻快照**已经**读到了，缺的是那一块界面，
+  两件事不共用一句话。
+- 现读：**initial 160,685B（不动）／main 538,062B（−41,776B）／popout 375,981B（−47,149B）⇒ 闸门绿（exit 0）**。
+  剩下的 376KB 是弹出窗的**合理地板**：react-dom 133,838B + react-resizable-panels 94,300B
+  都是 `PaneDock` 真需要的，不是白拖。
+
+### 四、防回归判卷（新增，且**承重**已实测）
+
+`apps/desktop/tests/route-bundle-closure.test.ts`（5 条）读**源文件的静态 import 图**（不是产物体积）：
+钉住「弹出窗/主窗的静态闭包不含 AppPage」＋「`PluginSurface` 用**动态** import 取 AppPage」
+＋「AppPage 仍可达（设置页静态引用它，不是消失）」。
+**反空转设计**：同时钉住「解析器确实走得到 `PaneDock`/`PluginSurface`」——
+免得解析器坏掉时闭包恒空、断言恒绿（那是本仓最忌的假绿形状）。
+**承重实测**：把 `PluginSurface` 改回静态 import ⇒ 3 条立刻红；改回懒加载 ⇒ 全绿。（已复验、已复原。）
+
+### 五、那两条红的成因（逐条查清了，**都不是产品回归**）
+
+1. `tests/desktop-review-batch.test.ts` 的原生宿主冒烟：Electron 起不来
+   （`bootstrap_check_in com.github.Electron.MachPortRendezvousServer: Permission denied (1100)`）
+   ⇒ 外层沙箱拒了 Mach port 注册。与产品无关。
+2. `tests/terminal-host.test.ts` 的 stty 尺寸那条：PTY 里命令**只回显不执行**。
+   逐层二分（python `pty.fork` + 真 shell 实跑）：`zsh -f` 0.01s 出提示符；
+   `ZDOTDIR` 指到空目录也 0.01s；只有**读本机用户真实 `~/.zshrc`** 时挂 25s、零字节输出。
+   而**字节等值**的副本放在别处 ⇒ 正常。⇒ 差异不在配置的**内容**，在**那个文件本身**：
+   只有 `~/.zshrc` 带 `com.apple.quarantine`（值 `0081;6a993f2d;ego lite;`），`.zprofile` 没有。
+   ⇒ **不是 Cairn 的回归**：HEAD 的旧桥（`pty.spawn` 单行）在本机同样只回显不执行。
+   ⇒ 但它确实让**本机桌面端的终端窗格是坏的**（回显在、命令不跑）——**本机环境债，不是应用债**。
+
+### 六、边界（本轮不冒充的）
+
+- **未提交**：工作树 206 项（124 已跟踪改动 + 82 未跟踪，含另一个会话在飞的桌面活），
+  其中本轮动了 3 个文件（`PluginSurface.tsx` / `strings.ts` / 新判卷）。本页结论只覆盖工作树。
+- **本轮的改动无法单独提交**：`PluginSurface.tsx` 本身是未跟踪文件，且 `PaneDock`→`panes.ts`
+  （`"plugins"` 窗格）与 `PluginSidebar.tsx` 同属那一笔 ⇒ 单提本轮会得到一个编译不过的提交。
+  要落库必须整笔落（是否落、何时落 ⇒ 业主裁）。
+- 未跑 `pnpm gates` / `mutate-verify` / `head-cert-check`；**性能读数本机量不了**
+  （Electron 起不来），仓里上一轮的基线（启动 377ms／打开 536ms／帧 p50 24.9 p95 36.6 max 39.4）
+  本轮**未复测**，不得当成本轮的数。
+- 尚可再压：main 路由距帽只剩 61,938B（538,062 vs 600,000）；
+  `App.tsx` 是 **3,524 行单体**（79 useState / 106 useCallback / 32 useEffect），
+  是下一轮性能面（重渲染成本）的头号对象。
+
+## 2026-10-22 · 第 642 页：两条死锚点改成诚实红；桌面门恒红的真因是环境；canary 的零门槛
+
+本轮业主指令同前页。起手先量一件不一样的事：本仓判定「改好了没有」的那三把尺
+（`mutate-verify` / `head-cert-check` / `mutate-needles-check`）在 `pnpm facts` 的读数里**都是红的**。
+尺坏着的时候，别的绿都可能是假的。于是第一刀砍在尺上，第二刀砍在「恒红但没人说」的门上，
+第三刀砍在本仓安全面最重、却唯一没有变异锚点的那块自进化面上。
+
+取料目录：`outputs/anchor-registry-landing-2026-10-21/`（尺面与认证）、
+`outputs/canary-zero-threshold-2026-10-22/`（canary 修法与造红）、
+`outputs/head-cert-d2a4c54-2026-10-21-1631/`（认证读数原样）。
+
+### 一、病灶一：两条变异锚点钉在旧写法上 ⇒ 假绿
+
+针脚在盘上找不到 ⇒ 改法**没生效** ⇒ 变异等于「什么都没改」⇒ killer 用例照样通过
+⇒ **这条锚点什么都没守住**。比死锚点更坏的一格：它看起来在守。
+
+修法不是把针脚指回 HEAD 的旧写法（那等于把这���锚点要守护的东西废掉），而是**指回盘上现在
+的那份实现**（实现已到位、只是没入库）：
+
+| 锚点 | 盘上实现 | 旧针脚 | 引入改动 |
+|---|---|---|---|
+| `evidence-counts-failed-writes`（`scripts/lib/mutations/agent-orchestration.mjs`） | `src/agent/worker-report.ts:99` 已是 `(e.ok \|\| e.fusedWrite === true) && …` | 旧的 `e.ok && …` | 提交 `6a7ab4ea` |
+| `verify-exec-timeout-not-forwarded`（`scripts/lib/mutations/main.mjs`） | `src/main/agent-runner.ts:797` 已是 `{ cwd, ...(timeoutMs ? { timeoutMs } : {}), ...(signal ? { signal } : {}) }` | 不带 signal 的旧写法 | 提交 `f45219bf` |
+
+⚠️ 第二条修时特意**只摘掉 `timeoutMs` 那一半、保留 `signal`**：signal 那一跳另有
+`tests/sandbox-abort.test.ts`（信号那一跳另有判卷） 守着，一起摘掉会连累那条锚点「杀错因」（红的不是它要守的东西）。
+
+修完 `--check-needles` 的类别变化：这两条从「针脚已不在源文件里」改成**「钉在飞文本」**——
+盘上那面通得过（实现到位）、HEAD 那面 0 命中 ⇒ **诚实的红**，等那次实现入库就自己转绿。
+死锚点 0 条。
+
+### 二、病灶二：桌面门恒红，真因是环境变量泄漏，不是产品坏了
+
+在一棵镜像工作树的一次性树上认证时，25 道门面里**只有一道红**：`desktop-test`。
+逐层剥：187 个文件里只有 1 条用例红，而那条用例**根本起不来**。
+
+`apps/desktop/tests/desktop-review-batch.test.ts:72` 那条新用例把 Electron **当子进程**拉起来
+（`execFile(electron, […])`），而本仓的开发宿主（DSH）给每个 shell 注入
+`ELECTRON_RUN_AS_NODE=1` ⇒ 子进程里的 Electron 降级成纯 Node（`require("electron")` 返回
+二进制路径字符串、`app` 为 undefined）⇒ 原生宿主一启动就死在 `app.setPath` 上。
+
+**这一格恒红，而恒红会被读成「产品坏了」——真因与产品无关。**
+全仓 `grep ELECTRON_RUN_AS_NODE` = **0 处**：从来没人管过这个变量会流进子进程。
+
+修法（两处子进程拉起点，各一处）：`apps/desktop/tests/desktop-review-batch.test.ts:75-84`
+（用例拉 Electron 时清掉）与 `apps/desktop/scripts/smoke.mjs:28-31`（一键冒烟同样清掉）。
+清掉之后：那条原生宿主用例 **14/14 检查全过**，桌面套件 **187 文件 / 1294 用例全绿**。
+
+### 三、病灶三：canary 的「零门槛 ⇒ 零证据也算够」
+
+自进化面是本仓安全面最重的一块（自动晋升／自动回退），却是**唯一零变异锚点**的面
+（`scripts/lib/mutations/*` 里指向 `src/main/evolution/*` 的条目 **0 条**，2026-10-22 审计实读）。
+
+这一轮在这面里读到一条真缺陷（`src/main/evolution/canary.ts`）：
+
+- 判决格的晋升门槛是 `conclusiveSamples >= maxSamples`，而 `begin` 对 `spec.maxSamples`
+  **零校验**、`parseCanaryRecord` 只验 `typeof === "number"` ⇒ `maxSamples: 0` 时「0 >= 0」成立
+  ⇒ **第一个「none」样本（一个 verify 拍都没有）就把候选判成 promoted**。
+- 这与本仓**已入库**的规则正面冲突：同文件「none」注释写着「只进 samples 审计，不进晋升门槛
+  （缺证据不许晋升）」，提交 `46b4afc5` 写着「canary 缺证据不晋升」。
+- 同一族的第二个面：`maxConsecutiveFailures: 0` ⇒ 「consecutiveFailures(0) >= 0」在**第一个**样本
+  就成立 ⇒ 健康候选被当场判成退化并回退。
+- 第三个面：门槛还会从**盘上文件**进来（`.agent/canary/<id>.json` 人／模型可写）
+  ⇒ 读回那一格必须验形状。
+
+修法（三面各一处，判据只有一份）：
+
+1. `beginLocked`：门槛不是 ≥1 的整数就**当场拒**（便宜检查放在装载之前，不花钱读包体）；
+2. `parseCanaryRecord`：读回时验门槛形状（坏门槛当「读不动」，不许折成「没有档」）；
+3. 判决格：晋升要**两半**同时成立——`conclusiveSamples > 0`（有证据）**且** `>= maxSamples`（够数）。
+
+造红证据（`make-red.log`）：只把实现还原成修前的样子、判卷留着新写的 ⇒ **恰好那 2 条新用例红**
+（38 条里 2 红 36 绿）。绿面（`green.log`）：38/38。
+
+三条新锚点（自进化面**首次**有锚点），干净 worktree 里逐条实测全杀（`kill-3-anchors.log`）：
+
+| 锚点 | 突变 | 结果 |
+|---|---|---|
+| `canary-max-samples-threshold-not-validated` | 开档不验 maxSamples ⇒ 零门槛让「0 >= 0」成立 ⇒ 零证据晋升 | ✅ 杀（1.2s／2 拍） |
+| `canary-max-consecutive-failures-threshold-not-validated` | 开档不验 maxConsecutiveFailures ⇒ 第一个样本就判退化 | ✅ 杀（1.1s／2 拍） |
+| `canary-record-threshold-not-validated` | 读回盘上观察档不验门槛 ⇒ 人/模型可写的零门槛档被带进判决 | ✅ 杀（1.1s／2 拍） |
+
+### 四、认证面：落地树上 25/25 全绿（本页的正面结论）
+
+在一棵**镜像了工作树**的一次性 worktree 上（HEAD ＋ 工作树改动 ＋ 本页三处修法）跑
+`scripts/head-cert.ts`：
+
+- 认证门面 **25 道跑到 25、绿 25 道**，退出码 0，判决输入六维全过；
+- 核心套件 **455 文件 / 6290 用例**全过；
+- 桌面套件 **187 文件 / 1294 用例**全过；
+- `mutate-needles-check` 绿（1580 条锚点全部可判定，阻断 0、钉在飞文本 0）。
+
+另：先前那 10 条「阻断」锚点（本轮修的 2 条 ＋ 8 条未入库面）在同一棵树上**逐条实测全部被杀**
+（`mutate-10-anchors.log`）。
+
+⇒ 结论：**本仓 HEAD 认证红，唯一原因是工作树没入库**（196 项在飞改动 ＋ 312 未跟踪；
+按 `BLOCKED.md`「提交等业主明确指示」与 `AGENTS.md`「不要把别人的改动裹进本任务的提交」，
+本轮**不落库**）。落地之后认证面是绿的——这句话是**在镜像工作树的一次性树上实测**的。
+
+### 五、三份只读审计的发现（未修的登记在案，不冒充已修）
+
+| 面 | 严重度 | 发现 | 关键证据 |
+|---|---|---|---|
+| 自进化 | P1 | 账本投影要重建时必报 `RegistryLogCorruptError` ⇒ content-pack 注入与 canary 收束 tick 同时熄火 | `src/main/evolution/activation-host.ts:38-52` ＋ `src/main/evolution/registry.ts:476,534-541` |
+| 自进化 | P1 | `CanaryController.begin` 生产零消费者 ⇒ 观察档无生产者，canary 自动回退整链不可达 | `src/main/evolution/canary.ts:484`（全仓 `src/ apps/ scripts/` 0 消费者） |
+| 自进化 | P2 | 声明的第三条退化规则 `no-progress` 永不触发（`spendAfterLastBoundary` 无人读） | `src/main/evolution/canary.ts:16,248,692-718` |
+| 核心 | P1 | 崩溃恢复重派丢 worktree/基线/usage_model ⇒ 重派 worker 的 diff 比错基线、token 成本无模型归属 | `src/agent/recovery.ts:89-99` ＋ `src/agent/spawn-surface.ts:16-18` ＋ `src/agent/orchestrator.ts` 零读者 |
+| 核心 | P2 | `apply_patch` 的「新建」段把**所有**读失败当成「文件不存在」⇒ 无提示数据丢失 | `src/tools/apply_patch.ts:285-302`（正确对照 `src/tools/write_file.ts:61-65`） |
+| 核心 | P2 | `run_shell` 的 spawn 失败路径丢了 `exitCode`/`timedOut` ⇒ 压缩摘要里「进程没起来」无声消失 | `src/tools/run_shell.ts:93-98`（契约见 `src/agent/loop.ts:707-711`） |
+| 产品 | P1 | license 校验整链是死代码：文件永不读、状态永不显示 | `src/main/settings-handlers.ts:132` 的 `initLicenseStore` 全仓零调用点 |
+| 产品 | P1 | `openExternal` 有主进程实现、无 UI 路径；更新流程静默丢弃下载页 URL | `apps/desktop/src/renderer/…/SettingsPanel.tsx:191-203` |
+| 产品 | P1 | 三个已接线 invoke 通道没有任何 UI 入口（`createProject`/`assignSessionProject`/`getOnboarding`） | `apps/desktop/tests/channels.test.ts` 的接线守卫只查源码里有一行 |
+| 产品 | P2 | README 通道数过期（自称「现读」却停在 50） | `README.md:347` ⟷ `channels.test.ts` 的表长断言 |
+
+**查过但没真问题的类别**（免得下一轮重查）：provider 适配器（重试/退避/stop_reason/思考档位接线）、
+权限与工具安全（L0 硬闸/规则形态/web_fetch 出网判据）、占位与未完成代码、无限循环、桌面渲染层
+死代码（80+ 文件 0 未引用）、CLI/doctor/install 面。
+
+### 六、边界（本轮不冒充的）
+
+- **未落库**：本页所有修法都在**工作树**上（`git status` 仍是别人的 196 项在飞 ＋ 本页新增几项）。
+  第四节那句「落地后认证绿」是**在镜像工作树的一次性树上实测**的，**不是**对当前 HEAD 的认证。
+- **未跑整表 `mutate-verify`**（现 1583 条）；本轮只逐条跑了 13 条（3 条新 ＋ 10 条前阻断）。
+- 能力收益仍不可测：无 `CAIRN_API_KEY` / `CAIRN_ENDPOINT` ⇒ bench 12/12 与「能力涨幅」不可跑。
+  本轮证明的是**机制与判据**，不是成功率或成本收益（解除条件不变）。
+- 第五节里**只有 canary 那一条动了代码**；其余 P1/P2 只登记、未修。
+- 超预算 3 道（`gym-check`/`e2e`/`desktop-test` 略过帽）只出声不判红，是本仓既有口径，未改。
+
+## 2026-10-22 · 第 643 页：蓝本复核第二轮（暗色字重轴对齐）＋ 两处核心真缺陷修掉
+
+> 本页三件事：**①** 用 REA 扩展蓝本语料（不是重做），读数落进**本仓的暗色字重**；
+> **②** 修 `apply_patch` 的一处**静默丢数据**路径；**③** 修 `run_shell` 的一处**结构面缺席**。
+> 全部落在**工作树**，未落库（见第五节边界）。
+
+### 一、蓝本复核第二轮：上一轮那份令牌表缺「作用域」这一维
+
+上一轮语料（2026-10-21 那份 dated 目录）把 904 个 `--cds-*` 抽成「同名取首次出现」的**字面表**：
+暗色轴 `--cds-font-wght-regular` 记成了 `normal`（首次出现处），真正生效的 `"wght" 360` 记在别处
+⇒ **暗色字重轴在旧表里根本读不出来**。本轮按 CSS 规则逐条解析（选择器 + 声明）后重读：
+
+| 作用域 | 令牌 | 值 |
+|---|---|---|
+| 亮色 `:root` / `.cds-root` | `--cds-font-weight-{regular,medium,semibold,bold}` | **400 / 500 / 580 / 600** |
+| 暗色 `[data-mode=dark] .cds-root` | `--cds-font-wght-{regular,medium,semibold,bold}` | **"wght" 360 / 460 / 540 / 560** |
+| 暗色 `prefers-color-scheme:dark` + `[data-mode=system]` | 同上 | **同上** |
+| 暗色 `.cds-dark-scope[data-mode=dark]` | 同上 | **同上** |
+
+⇒ 亮色用**静态字重**、暗色换**可变字体轴实例**；暗色四档相对亮色**各减 40**（400→360、500→460、
+580→540、600→560），**不是**「逐档减 20」；`semibold = 580` 本身是非标准档。
+
+对象身份现读（REA）：`/Applications/Claude.app` **3.1623.0**；`app.asar` sha256
+`760e7cbb6f861f0bc0e71e71fd9c6b721ba735f0f638b6ea623645daff4261a7`（与上一轮**同值** ⇒ 旧语料仍有效）；
+`extract_artifact` 证据 `ev_ef86b32224afc23aae16f887f2c3c94f0699420fe7c8ea9dd42547a18c1ac571`
+（575 节点 / 601 occurrences / 600 edges；8 条完整性矛盾＝解包原生二进制 + 去签名，与上一轮同型）。
+REA 的解包目录是临时目录不留存 ⇒ 本轮另写可复跑的只读抽取器（不执行 Claude 任何代码）：
+`extract-axis-and-gaps.mjs`（直接解 asar 头 + 取 CSS + 逐规则解析作用域），产物 `axis-and-gaps.json`
+（都在本轮工件目录 `outputs/claude-design-v3-2026-10-22/` 里）。蓝本复核报告见同一目录里的 README。
+
+**这一轮还加读了一个上一轮没碰的面**：app bundle 本身的 `Assets.car`（REA `inspect_asset_catalog`，
+证据 `ev_44a634901452f1da7b398ba68eff33c23b8b0ee955fd19f239c37c28a645ca7f`，32 条记录）——
+**Claude 的品牌珊瑚是 Display P3 存的**（`Claude_Assets/Color-2` = [0.851, 0.467, 0.341] p3
+⇒ P3 屏上是 `#D97757`，sRGB 屏上只有 `#E8704E`）；本仓 `--accent-brand` 写的是 sRGB `#D97757`
+⇒ **宽色域屏上比 Claude 淡**。本仓令牌文件里 `color(` / `display-p3` 命中 0（只说 sRGB）。
+**这一格只登记、不动令牌**（改品牌珊瑚要牵动 role-accent 全族与对比度判卷），逐条分量见同一目录的 README 第六节。
+
+### 二、这一轮落到本仓的：暗色字重轴对齐（设计面）
+
+`apps/desktop/src/renderer/tokens.css` 的暗色块此前是 **360 / 480 / 560 / 580**。对照上表：
+只有 `regular` 拿到了实测补偿；`medium`/`semibold`/`bold` 是按「逐档减 20」补的，
+而 `semibold: 560` 恰是蓝本**亮色 semibold** 的值、`bold: 580` 也是亮色 semibold 的值
+⇒ **最重的两档在暗色里几乎没减重**（补偿只落在两档上）。本轮按实测改齐 **360 / 460 / 540 / 560**
+（四档各减 40），并把判卷钉成这条规则：`apps/desktop/tests/tokens.test.ts` 断言四档**各减 40**
+（`heavy` 是 Cairn 自有档，蓝本无对应物，不参与该断言）；亮色四档（400/500/580/600）不动。
+
+⚠️ **口径（不许被读成「渲染结果与 Claude 一致」）**：360/460/540/560 是 **Anthropic 字体的轴取值**，
+本仓用**系统栈**（设计规范 §4.3 裁决：不做自研字体）⇒ 实际渲染出的字重由系统字体匹配决定。
+本轮对齐的是**档位映射与补偿规则**，不是渲染结果。设计规范 §4.3 那句「不复制 Anthropic 可变字重轴」
+已按事实更正（字体栈不变，字重档位照实测落齐；原文与本轮读数冲突，见该节）。
+
+**这一格也过了造红机**（2026-10-22 补做）：备份 → 把暗色块退回修前那三档
+（`--fw-medium: 480; --fw-semibold: 560; --fw-bold: 580;`）→ 判卷**红**（1 红 / 27 绿，
+红在暗色 460 那根钉上，正是本轮改的那条规则）→ 逐字节复原（`cmp -s` 通过）→ 判卷**全绿 28 例**。
+红面与绿面的原样日志在 dated 目录 `outputs/desktop-token-axis-2026-10-22/` 里（`make-red.log` / `green.log`）。
+
+### 三、核心真缺陷一：`apply_patch` 把「读不到」当成「不存在」⇒ 静默丢数据
+
+第 642 页第五节登记的 P2（`src/tools/apply_patch.ts:285-302`）本轮**修掉了**。原读失败分支是
+`catch { raw = null; }` —— **任何**读失败（EACCES / EISDIR / EIO …）都被折成「文件不存在」，
+于是 `op=create`（`--- /dev/null`）把一个「存在但读不到」的文件当成新建，写临时文件 + rename 覆盖
+⇒ **原内容静默丢失**。修法与写侧同纪律（`src/tools/write_file.ts` 的三态：
+`existed = true / false / null`，**只有 ENOENT 才等于「不存在」**）：非 ENOENT 的读失败一律 fail-visible。
+
+判卷（新文件 `tests/apply-patch-unreadable-target.test.ts`，4 例）：① 目标是目录（EISDIR）⇒ 干净拒绝、
+盘面不动；①b 目标存在但 `chmod 000`（EACCES，root 下显式跳过）⇒ 拒绝且**原内容仍在盘上**；
+② 正控：真不存在 ⇒ 新建照旧成功（不许修成「一律拒绝」）；③ 反向守卫：已存在 + create 补丁 ⇒ 仍报「已经存在」。
+
+**造红机**（证人：dated 目录 `outputs/core-read-failure-and-spawn-contract-2026-10-22/` 里的 `make-red.log`）：把**两处**实现同时还原成
+修前的样子、判卷留着新写的 ⇒ **3 例红**（apply_patch 判卷 2 红 ＋ exec-outcome 判卷 1 红，7 例绿）；
+红的那条正是数据丢失面：旧代码对不可读文件返回 `ok: true` / `change: "created"` /
+`changedPaths: ["secret.txt"]` ⇒ **覆盖确实发生了**（不是推断，是运行结果）。
+绿面是同目录的 `green.log`：修回后两份实现文件与修前备份
+`cmp` **逐字节一致**（复原不是靠记忆），10/10 绿。
+
+### 四、核心真缺陷二：`run_shell` 的 spawn 失败路径丢结构面
+
+第 642 页第五节登记的 P2（`src/tools/run_shell.ts:93-98`）本轮**修掉了**。spawn 失败（bash 找不到 /
+cwd 不存在 / EACCES）原本只返回 `{ ok:false, output:"run_shell: …" }`：**没有 `exitCode`、没有 `timedOut`**
+——那是**唯一一条结构面缺席的失败支**（成功支、退出码非零支、超时支都带这两个字段），
+下游只能回去匹配那句文案（正是本仓判为不可当判据的形状：文案面一变，判定就跟着漂）。
+修法：走同一条归因谓词（`classifyVerifyFailure`：`exitCode=null ⇒ not-run`），与超时/取消两条出口同款。
+
+判卷（`tests/exec-outcome-face.test.ts` 增 1 例）：cwd 不存在 ⇒ `ok=false`、`exitCode === null`
+（「没有跑成」与「没这一位」是两件事：前者 null，后者 undefined）、`timedOut === false`、正文带 `[exec:` 归因句。
+现读：6 例全过；造红证据同第三节那份 `make-red.log`（这一条判卷在旧实现下红 1）。
+
+### 五、读数（本轮实跑，量的是**工作树**，不是 HEAD）
+
+| 面 | 命令 | 读数 |
+|---|---|---|
+| core 全套 | `pnpm test:capped`（**`--maxWorkers=2`**） | **454 文件 / 6316 用例**过；**2 文件 / 2 用例红**（见下） |
+| desktop 全套 | `pnpm --filter cairn-desktop test` | **188 文件 / 1299 用例**全过；`desktop-boundary-check` 绿 |
+| 类型面 | `node --import tsx scripts/typecheck.ts` | 0 条报错 |
+| 定向 core | 本页改动相关的 7 个文件 | 7 文件 / 68 用例全过（含本页新判卷 4 例） |
+| 桌面令牌判卷 | `apps/desktop/tests/tokens.test.ts` | 28 例全过 |
+| 文档面 | `pnpm docs-check` | 只红 **D-11=5**（3 条是第 642 页的旧账 ＋ 2 条是本轮两个 dated 目录） |
+
+**两条红的归属（都不在本页改动的语义面里）**：
+
+1. `tests/docs-check.test.ts`（D-11）：台账点名的 dated 工件必须在 HEAD 里追得到。
+   本轮两个 dated 目录与第 642 页那三个**都还没入库**（本仓的提交等业主明确指示）⇒ 同一类红。
+2. `tests/scratch-tree-naming.test.ts`：**真仓里没有任何挂在分支上的暂存树** ⇒ 该条「此刻无对象（不是绿）」。
+   现读 `.worktrees/` 下只有一棵 `evo-fix`，其 HEAD 文件是**裸 sha**（detached）——
+   `.git/worktrees/evo-fix/HEAD` 的 mtime 是本轮跑测期间（另一会话把它重指成了 detached）。
+   本页的改动**不碰任何 worktree**（`git status` 里 worktree 相关为 0）⇒ 这条是**并发会话的环境面**，
+   不是本轮改动带出来的回归。（同一批里它在本轮第一次全量跑时还是绿的：那时有一棵挂在分支上的树。）
+
+**那条红不是本轮造成的**：D-11（台账点名的 dated 工件必须在 HEAD 里追得到）在本轮之前就有 3 条，
+指的是第 642 页点名的三个 dated 目录 —— 它们**一件工件都没入库**（`git ls-tree HEAD outputs/` 现读为空），
+而点名它们的那几页是**工作树上的未提交页**。本轮把页与工件一起写、一起留待同笔落库，
+D-11 按同一规则会多记本轮这两条（本轮两个 dated 目录）⇒ **提交即归零**
+（该规则的原话：别当成旧账登记掉）。
+
+**本轮另改了 `scripts/docs-check.ts` 一处**：`LEDGER_NON_REV` 加一条 `d2a4c54`（带理由）——
+第 642 页取料目录名 `head-cert-d2a4c54-2026-10-21-1631` 里那一节**不是任何提交**
+（`git cat-file -t d2a4c54` 现读：不是有效对象名；那一笔从未落库）⇒ 属「形状像 sha、实为夹具名」同族，
+与既有四条同形。加这条之前，台账 sha 面因 token 集合与 `cat-file` 行数对不上而**整面未检**（未检≠通过）；
+登记后该面**真被检了**，露出来的正是这处潜伏缺陷。豁免表条数**不写死**（判卷面问的是逐条机制，
+新增一条合法豁免不许逼着改判卷）——机制面现读 115 例中该条仍绿。
+
+### 六、边界（本轮不冒充的）
+
+- **未落库**：本页所有修法都在**工作树**上（仓库里另有前几轮的在飞改动 ⇒ 无法单独提交；
+  按 `BLOCKED.md`，提交等业主明确指示）。上表读数量的是**工作树**，不是任何提交。
+- **未跑整表 `mutate-verify` / `head-cert-check`**：两者都量**提交**，本轮没有提交可量。
+- **蓝本复核只到 CSS 令牌层**：REA 读不到 v3 主进程 JS 图（worker 堆耗尽）⇒ 交互行为面（快捷键表、
+  命令面板命令、侧栏结构）本轮**没读**。本轮量到 renderer 资产大小，给下一轮一条更小的入口
+  （`MainWindowPage-CkTqJGUa.js` 11,544 B / `main-uIZ6_Spc.js` 85,466 B），
+  走 per-module 而不是整包 7 MB 的入口 chunk。
+- **还没吸收的族**（下一轮候选，本轮只列不落）：行高刻度（蓝本 78 条，**我们零行高令牌**、
+  `styles.css` 51 处裸 `line-height`）、层叠刻度（蓝本 5 档，**我们 23 处裸 `z-index`**、含 115/116 贴脸值）、
+  间距/内边距双轴变体、消息操作条显隐动效令牌。逐条读数见蓝本复核那份 README 第四节。
+- 第 642 页第五节登记的其余各条（P1 自进化三条、P1 核心恢复重派、P1 产品三条、P2 README 通道数）
+  本轮**未动**。
+
+## 2026-10-22 · 第 644 页：账本重建自己把账本判死——自愈路径自愈不了
+
+上一页把三份只读审计的发现登记在案。本轮挑其中**最要命的一条**动手：自进化面那条
+「账本投影要重建时必报 `RegistryLogCorruptError`」。动手顺序照旧：**先量真实行为，再动手**。
+
+取料目录：`outputs/registry-replay-2026-10-22/`（复现脚本、造红、锚点杀）。
+
+### 一、量出来的东西：不是「重建会坏」，是「重建永远修不好」
+
+账本有两个面：`registry.jsonl`（日志，事实）与 `registry.index.json`（索引，投影）。
+投影缺了/坏了都从日志重建（`src/main/evolution/registry.ts#loadOrRebuild`）。这条自愈路径
+是自进化面的一部分——**content-pack 注入**与**canary 观察期收束**都靠它读账本。
+
+量之前先把设计意图摆出来（`src/main/evolution/activation-host.ts:7-8`）：
+
+> 门名单不在这里抄第二份：knownGates **从账本已定格的 declaredGates 取**（这些包在注册时
+> 已经对照过 `scripts/gate-manifest.ts` 的真名单），装载时再与账本逐项比对，漂移即拒。
+
+⇒ 意图很明确：**账本自己声明过的门，就是已知门**（它们注册时已对照真名单校验过）。
+
+量出来的实现不是这样。`src/main/evolution/activation-host.ts#openEvolutionRegistry` 把
+`extraGates` 装进 `known` 就先开了账本，**账本那一半要等 `readIndex()` 回来之后才补**；
+而 `readIndex()` 本身可能触发重建，重建里 `src/main/evolution/registry.ts#parseEventLine`
+拿 `this.opts.knownGates` 去校验每个 register 事件的 manifest，校验不过就抛
+（`src/main/evolution/manifest.ts:190-192`：「gates 里有未知门 X」）。
+
+而生产读面**不带门名单**：`src/main/agent-runner.ts:1254` 调 `activeContentPackNote(opts.workspace)`
+没传 `extraGates` ⇒ 那一刻的 knownGates 是**空集**。
+
+⇒ 端到端复现（`outputs/registry-replay-2026-10-22/repro.mts`，只用生产 API）：
+
+| 步骤 | 修前 | 修后 |
+|---|---|---|
+| 索引新鲜 ⇒ 读账本 | 正常 | 正常 |
+| **索引删掉（模拟「日志已 append、索引落盘前进程被杀」）⇒ 重建** | **抛 `RegistryLogCorruptError`：registry.jsonl 第 1 行损坏（gates 里有未知门 typecheck）** | 正常返回 |
+
+抛错那一步的代价：content-pack 注入在 `src/main/agent-runner.ts:1257` 被吞成一行告警；
+canary 收束 tick 在 `src/main/post-run-readings.ts:85` 同样被吞。**两个生产缝同时熄火。**
+
+更毒的一层：**抛错永远发生在第 1 行**，而那行是合法的（它就是当初注册时写下的那一行）。
+⇒ 每次重建都撞同一行 ⇒ 这条自愈路径**自愈不了**——除非有人手工把账本改掉。
+
+### 二、修法：重放时的 knownGates = 调用方补充 ＋ 账本自己定格的 declaredGates
+
+改一处：`src/main/evolution/registry.ts#rebuildInner` 在重放**之前**把账本自己声明过的门
+并进 knownGates（两遍扫描各司其职：一遍只取门名、坏行跳过；一遍验行、坏行照旧点名），
+`parseEventLine` 改成收这份集合，不再直接读 `this.opts.knownGates`。
+
+这**不是新设计，是把上面那段设计意图落到它该落的地方**——意图写在 activation-host，
+实现却差半步（补得太晚）。改动面：一个文件、35 行增 4 行删。
+
+### 三、安全面：放宽的只有「重放」这一格，升级路径不存在
+
+「不许声明没跑过的门」这条安全契约原样在：
+
+- **写入门**（`src/main/evolution/registry.ts#registerStaged`）没动：注册时仍用**调用方那份**
+  真名单（TCB 侧传 `scripts/gate-manifest.ts` 的 GATES）⇒ 声明一道不存在的门，当场就被拒。
+- **装出门**（`src/main/evolution/installer.ts:76`）没动：
+  `v.declaredGates.filter((gate) => v.gates[gate] !== "pass")` ⇒ **每道声明的门都要有 pass 记录**
+  才准装 ⇒ 账本里多出一道不存在的门 ⇒ 那个包**永远装不上**（没有那道门可跑，也就永远拿不到 pass）。
+- manifest 的形状/路径/权限/未知顶层字段的 fail-closed 一行没动
+  （`src/main/evolution/manifest.ts#parseBundleManifest` 本体没改）。
+
+⇒ 重放这一格放宽的后果上限 =「一份被篡改的账本可以声明任意门名」，而那扇门对应的包永远装不上。
+**开不出升级路径。** 换句话说：这一格原本挡的不是攻击，是**自己把自己判死**。
+
+### 四、造红与锚点
+
+- 判卷：`tests/evolution-kernel.test.ts` 新增两条，**一条对一条生产缝**（content-pack 注入缝、
+  canary 收束缝）。两条都只加了一句动作：把 `modules/registry.index.json` 删掉（模拟投影丢了），
+  然后断言结果与投影新鲜时**逐字节一致**。
+- 造红（`make-red.log`）：只把实现还原成修前的样子 ⇒ **恰好那 2 条新用例红**（2 failed | 15 passed）。
+- 锚点：`scripts/lib/mutations/main.mjs` 新增 `registry-replay-drops-own-declared-gates`
+  （把「并进 knownGates」改成「从里面删」）⇒ 干净树上实测**杀掉**（`kill-anchor.log`，1.0s／2 拍）。
+
+### 五、量出来的一条工序教训（给下一轮的镜子）
+
+认证用的镜像工作树**只镜像代码是不够的**：这一轮头一次镜像时忘了带 `package.json`，
+结果 `tests/gate-manifest.test.ts` 在镜子里红（门表对着 HEAD 的 package.json 对账），
+而主仓同一道是绿的 ⇒ 那一条红是**镜子自己造的**。同理 `PROGRESS.md`/`STATE.md` 与
+本轮点名的 dated 工件目录也得一起镜像，否则 D-5/D-11 两张面在镜子里会说另一套话。
+⇒ 镜像清单要按「这道门读盘上什么」来列，不是按「改了哪些文件」来列。
+
+### 六、边界（本轮不冒充的）
+
+- **未落库**：本轮三处改动（`src/main/evolution/registry.ts`、`tests/evolution-kernel.test.ts`、
+  `scripts/lib/mutations/main.mjs`）都在**工作树**上，业主指示「提交等明确指示」仍有效。
+- **认证范围**：绿的是**镜像工作树的一次性树**，不是主仓 HEAD。主仓另有两道红**不是本轮引入**：
+  一道是别的会话在真仓留了两棵挂在分支上的活工作树（`tests/scratch-tree-naming.test.ts` 的真仓面），
+  一道是 D-11（本页点名的工件目录还没入库，规则原文「提交即归零」）。
+- 本轮**只动了一处**缺陷。上一页登记的自进化 P1×2 P2×4、核心 P1×1、产品 P1×3 P2×3 仍在案；
+  其中核心两处 P2（`apply_patch` 静默丢数据、`run_shell` 丢结构面）已由并行会话单独修掉，
+  记在 `PROGRESS.md` 第 643 页。
+- 能力收益仍不可测：无 `CAIRN_API_KEY` / `CAIRN_ENDPOINT` ⇒ bench 12/12 不可跑。
+  本轮证的是**机制与判据**（自愈路径真的能自愈了），不是成功率或成本收益。
+- 未跑整表 `mutate-verify`（现 1584 条锚点）；本轮只逐条跑了本笔新锚点那一条。
+
+### 七、补记（同一轮内更正 ＋ 终读数）
+
+- **更正第六节第二句**：主仓那道 `tests/scratch-tree-naming.test.ts` 的红，真因**不是**
+  「别的会话留了活工作树」，而是**真仓一棵挂分支的活树都没有**（隔壁会话把它们的树收了）⇒
+  那道判卷按自己的口径判红：它要一个活对象才不是空跑（「这一条此刻无对象（不是绿）」）。
+  修法**不是改判卷**（判卷是冻结面）：把本轮的验证树挂到分支上
+  （`.worktrees/evo-fix` → `agent/evo-registry-replay`）⇒ 真仓重新有了活对象 ⇒ 该面转绿（19/19）。
+  规矩在 `scripts/lib/scratch-tree-naming.ts#checkScratchTreeNaming`：活树不参与命名对账，
+  **但判卷要有一个活对象才不是空跑**。⇒ 这也是「别把尺伸到别人的归属面」与「判卷不许空跑」
+  两件事的接缝。
+- **D-11 那几道红里有一部分是本轮带来的**（第 642/644 页点名的 dated 目录未入库），
+  规则原文「提交即归零」⇒ 落库即清；另两道的 dated 目录属并行会话那一笔。
+- **终读数**（量的是**镜像工作树的一次性树**，不是主仓 HEAD；工件见本页取料目录）：
+  认证门面 **25/25 绿**、核心 **456 文件 6318 用例 exit=0**、本次退出码 **0**、判决输入六维全过、
+  贴帽 0 条、墙钟 104.95s、常驻残留树 0。
+- **主仓工作树**（量的是工作树，不是提交）：typecheck **0 报错**；核心 **460 文件 6331 用例**，
+  **唯一一道红是 D-11 那一格**（点名的 dated 目录未入库，构造性）；桌面 **188 文件 1299 用例全绿**
+  ＋ 边界检查绿；针脚 **1587 条**——阻断 22、未入库面 8、钉在飞文本 13、
+  **killer 指针失效 0（其中 HEAD 侧 0）**、改法语法体检 1587/1587 合法。
+  本轮六条锚点（两条修好的 ＋ 四条新加）**全部落在「钉在飞文本」这一格** ⇒ 诚实红，落库即绿。
+- 本轮锚点总数从 1583 涨到 **1587**（四条新锚点里三条是 canary 门槛、一条是账本重放；
+  另三条属并行会话）。第六节末句「现 1584 条」是那一时刻的数，现读数以上面这行为准。
+
+## 2026-10-22 · 第 645 页：四条登记在案的缺陷修掉（含一条撞窗的同源修法）
+
+> 承第 642 页第五节那张表。本页修的是表里**还开着**的四条中的四条：自进化面 1 条、核心面 2 条、产品面 1 条。
+> 每条都配**运行期**判卷（不是源码 grep 冒充判卷），并各自跑过造红。
+> 蓝本复核第二轮（暗色字重轴）与补丁面/shell 面的两处核心修法记在第 643 页。
+
+### 一、四条修法各自钉住什么
+
+| 面 | 缺陷 | 修法（落点） | 判卷钉住的行为 |
+|---|---|---|---|
+| 产品 | `initLicenseStore` 全仓零调用点 ⇒ license 状态永不显示 | 接进**真实** settings store 初始化路径（`src/main/settings-handlers.ts`） | 走一遍真实初始化路径后，license 状态**真的**在 store/响应里（不是"函数被调用过"）；`tests/license-store-init.test.ts` 5 例 |
+| 核心 | 崩溃恢复重派丢 worktree/基线/usage_model ⇒ 重派 worker 的 diff 比错基线、token 成本无模型归属 | **落点经实测改判**：不在 `src/agent/recovery.ts`（`respawnArgsFrom` 干净、恢复卡载荷带着三字段），真落点是 `src/agent/orchestrator.ts` 的 `respawn → respawnSpawnArgs` | 重派产物的 `base_commit` / `usage_model` 与崩溃前**逐字相等**；`tests/recovery-respawn-baseline.test.ts` 3 例 |
+| 自进化 | 账本投影重建必报 `RegistryLogCorruptError` ⇒ content-pack 注入与 canary 收束 tick 两条链同时熄火 | 账本开口分**三态**（`absent / ok / broken`），`broken` **不在共享开口抛**，交回每条链自己降级、自己出声（`src/main/evolution/activation-host.ts`） | 坏档下共用开口**不抛**；收束链**照旧推进**（`state` 仍 `observing`、连败计数 0→1 **不许被清零**）；注入链只降级并出声「不是没有包」；好档下两条链照旧；没有账本的工作区**零行为且不出声**；`tests/evolution-ledger-degradation.test.ts` 3 例 |
+| 产品 | README 自称「现读」却停在 50 条通道 | README 的数**由判卷同一来源现读**（`Object.keys(INVOKE_CHANNELS).length`，与 `apps/desktop/tests/channels.test.ts` 同一个对象、同一个模块） | ① README 的数 == 运行时现读表长（漂了就红）；② README 里只许有**一个**通道数（不许影子事实）；③ 那个数旁边必须指着来源表与判据；`tests/readme-invoke-channel-count.test.ts` 2 例 |
+
+**重派那条的两处硬约束（都守住了）**：基线三件走 **ctx 内部通道**（不进 `SpawnArgs`）
+⇒ `RespawnArgs` 对外形状一个字未变、`src/agent/spawn-surface.ts` 未碰、
+`tests/recovery-respawn-args.test.ts`（2026-10-19 那次回归的钉子）**原样 3 例绿**。
+**worktree 语义裁决**：取**② 新树但基于原 base_commit 起**（`git reset --hard` 到原派活基线，
+失败即 fail-visible——宁可这次重派不派发，也不派一个基线对不上的 worker）；
+旧树不续用（进孤儿列表，与恢复卡文案一致）⇒ 重派是「从原基线重来一遍」，不是「在半截树上接着写」。
+归因模型**带走**原 worker 那一档，不按此刻的模型解析重算（重算就把这笔重试的成本记到别的模型名下）。
+
+### 二、撞窗：同一个登记缺陷，两条互不重叠的修法同时在树上
+
+第 644 页（另一会话）修的是**同一条**登记缺陷「账本重建必报 `RegistryLogCorruptError`」，
+但诊断与落点与本批**不同**，且**不重叠**：
+
+- 第 644 页：**根因修法**——重建时 `knownGates` 补得太晚（账本自己定格的 `declaredGates` 在重放之后才并进来，
+  于是重放撞上第 1 行那个**合法**的 register 事件 ⇒ 抛「gates 里有未知门」）⇒ 改在 `src/main/evolution/registry.ts` 的
+  `rebuildInner` 里**重放之前**并入门名单。
+- 本批：**失效面修法**——即便账本真的读不动（真坏行），两条链也**各降级各出声**、不一起熄火
+  （收束链按盘上观察档继续收样本：「候选是否还在位」降级为「无法核验」⇒ 按还在位处理，
+  因为答「不在位」会把连败计数清零 = 观察期被悄悄撤掉 = 退化版本永远装着退不下来）。
+
+两处改动落在**不同文件**、改的是**不同层** ⇒ 合起来是「根因不再触发 + 万一触发也不熄火」。
+现读复核：三处相关判卷同跑 **3 文件 / 22 用例全绿**（含既有 `tests/evolution-kernel.test.ts` 17 例），
+**没有**双份实现（`LedgerOpen` 类型与 `openEvolutionRegistry` 各只有一处）。
+
+### 三、读数（本轮实跑，量的是**工作树**，不是 HEAD）
+
+| 面 | 命令 | 读数 |
+|---|---|---|
+| 本批判卷合跑 | 六条新判卷 ＋ 三条既有回归 | **6 文件 / 33 用例**全过 |
+| core 全套 | `pnpm test:capped`（**`--maxWorkers=2`**） | **459 文件 / 6330 用例**过；**1 文件 / 1 用例红**（`tests/docs-check.test.ts` 的 D-11） |
+| desktop 全套 | `pnpm --filter cairn-desktop test` | **188 文件 / 1299 用例**全过；`desktop-boundary-check` 绿 |
+| 类型面 | `node --import tsx scripts/typecheck.ts` | 0 条报错 |
+| 文档面 | `pnpm docs-check` | 只红 **D-11**（台账点名的 dated 工件还没入库；同一类，提交即归零） |
+
+证人目录：`outputs/ledger-license-respawn-readme-2026-10-22/`（本批判卷合跑、core 全套、desktop 与类型面的原样日志）。
+
+### 四、边界（本轮不冒充的）
+
+- **未落库**：本页四条修法都在**工作树**上，与前几轮在飞改动纠缠 ⇒ 无法单独提交（按 `BLOCKED.md`，提交等业主明确指示）。
+- **README 那个数依赖别人的在飞改动**：`apps/desktop/src/main/channels.ts` 与 `apps/desktop/tests/channels.test.ts`
+  此刻在工作树里被另一位改过（HEAD 的表更长，判据也随它改）⇒ 本页那个数与那张表**必须同笔落库**，
+  否则撤掉那一笔时 README 与判卷会一起红（那正是「改表不改数当场红」该有的行为）。
+- **降级面的一处诚实边界（本批没修，因为要动在飞的 `canary.ts`）**：账本读不动期间若退化规则命中，
+  那次回退**写不动真账本** ⇒ 记录落成 `degraded` + `rollbackError`，该观察档就此**结案**，
+  账本修好后**不会自动重试**那次回退。要「回退因账本坏而未成」在账本修好后重试，得改 canary 的 settle/观察期续跑语义。
+- **导出签名变了**：`openEvolutionRegistry` 由 `ModuleRegistry | null` 改成三态 `LedgerOpen`；
+  全仓现读**无其它调用点**（`tests/evolution-kernel.test.ts` 只经 `activeContentPackNote` / `tickCanaryFromSignals` 用），
+  但它是共享模块的公开导出 ⇒ 仓外若有依赖需知会。
+- 第 642 页第五节登记的**其余各条**（自进化 `no-progress` 退化规则、产品的 `openExternal` UI 路径与三个
+  无 UI 入口的 invoke 通道）本轮**未动**：前者的落点在在飞的 `canary.ts`，后者的落点在在飞的
+  `apps/desktop/src/renderer/…/SettingsPanel.tsx` ⇒ 抢写会踩别人的在飞面。
+- **VOID 一条**：`CanaryController.begin`「生产零消费者」这条登记**本身是错的**（它有生产消费者），
+  按 `STATE.md` / `BLOCKED.md` 的标注**不修**、建议撤登记。
+
+## 2026-10-22 · 第 646 页：整笔落库——在飞的那一轮与路由体积面一起进 HEAD，落库前把红逐条归因
+
+本轮业主指令同前页；补一条：「还有设计方面也需要优化，要做的非常好看，简约，有动态效果」。
+本页只记**落库**这一件事：落库前体检、归因、以及落库时顺手修掉的一处真缺陷。
+下一轮（架构拆分 + 路由体积 + 设计动效）另起页。
+
+### 一、落库前体检（工作树 248 项：144 已跟踪改动 + 104 未跟踪）
+
+| 判据 | 读数 | 读法 |
+|---|---|---|
+| 根 typecheck | 0 报错 | ✅（先红过，见第三节） |
+| 桌面边界门 | 绿 | ✅ |
+| 桌面判卷 | 189 文件 / 1306 用例，**1305 绿** | 唯一红的红是原生宿主冒烟（Electron Mach port 被外层沙箱拒） |
+| 核心判卷（`--maxWorkers=2`） | 460 文件 / 6336 用例，**6299 绿、37 红** | 37 条**逐条归因，见第二节** |
+| bundle 审计 | 绿（exit 0） | 首屏 160,685B／main 538,062B／popout 375,981B |
+
+### 二、核心那 37 条红的归因（**没有一条是产品回归**）
+
+- **28 条＝沙箱挡文件操作**：EPERM 写临时目录的 `.lock`／`.mcp.json`／`.claude/agents/*`（20）、
+  ENOTDIR 写全局目录（2）、`git worktree add` 失败（5）、Chrome 出图（1）。
+- **3 条＝同一条链的下游**：`sandbox-exec` 自检失败（`sandbox_apply: Operation not permitted`）⇒
+  写操作落到审批门 ⇒ stdin 是管道（非交互）⇒ **无人值守 fail-closed 拒绝** ⇒ 文件没写成 ⇒
+  退出码与「文件存在」两格跟着红。**产品行为是对的**（沙箱不可用时明说、审批不假装通过）；
+  红的形状由环境造成：这些剧本在 `sandbox-exec` 可用的机器上是绿的。
+- **1 条＝判据此刻无对象**：`scratch-tree-naming` 钉「真仓里挂在分支上的暂存树确实不带 detached」，
+  而此刻真仓**一个分支暂存树都没有**（暂存树已被清干净）⇒ 判据自称「这一条此刻无对象（不是绿）」。
+- **5 条里的最后 1 条＝落库即归零**：文档门 D-11 的 9 条红全是**点名了未入库的 dated 证人工件**
+  （第 642/643/644/645 页点的 8 个 outputs 目录），证人在盘上、只是还没随页入库 ⇒
+  本页这笔落库把它们一并带进 HEAD ⇒ 提交即归零。
+
+### 三、落库时顺手修掉的一处**真缺陷**（在飞的那一笔里，不是我这轮的）
+
+`src/agent/evolution/patch-effect.ts` 调了 `costThrottleMeasurable(s)` 却**漏了 import** ⇒
+类型守卫没生效 ⇒ 连带两条「possibly null」。**只补 import 一处**（守卫本就在
+`strategy-patch` 里、签名已是 `s is EvolutionSignals & { tokensPerBoundary: number }`），
+三条错一起归零，typecheck 从 1 红到 0 绿。
+教训照本仓口径记：**类型收窄靠具名守卫时，守卫没 import 进来就等于没写**——
+收窄消失时报的是「possibly null」，不是「找不到名字」，很容易被当成两处无关的小毛病。
+
+### 四、本页与并发面的关系（如实记，不含糊）
+
+落库时工作树里**同时**有另一条会话的在飞面（第 642～645 页及其代码/证据）。
+按业主裁定「整笔落库」，本笔把两边的面一起带进 HEAD；
+落库前逐条归因（第二节）确保带进去的是**可判的**状态，而不是半成品。
+
+### 五、边界（本页不冒充的）
+
+- 本页的读数覆盖**工作树**；HEAD 认证另跑（量的是提交）。
+- 桌面侧的真机读数（帧时间、启动、原生冒烟）本机**量不了**（Electron 起不来）⇒ 不引用旧读数当本轮数。
+- 本轮没有跑 `pnpm gates` 整表与 `mutate-verify` 整表；只跑了上表那几道。
+
+## 2026-10-22 · 第 647 页：动效档位归位——「有动效」不等于「到处都在动」，微反馈该是 60ms
+
+业主补的一条：「还有设计方面也需要优化，要做的非常好看，简约，有动态效果」。
+本轮先做**动效**这一片（简约/好看另论）。先量，后改。
+
+### 一、量出来的东西：不是缺动效，是**档位漂移**
+
+本仓的动效底子其实已经很扎实：`tokens.css` 有一套对齐 Claude v3 实测值的时长/缓动令牌
+（`--t-instant` 60ms / `--t-fast` 140ms / `--t-med` 200ms / `--t-slow` 300ms / `--t-slowest` 450ms
+＋四档缓动），`styles.css` 有二十个 keyframes 与五十条 transition，
+另有一块全局 `prefers-reduced-motion` 降级面。**问题不在有没有，在档位**：
+
+- 令牌注释自己写着「**微反馈：hover / 按下 / 勾选（Claude dur-fast 60ms）**」；
+- 而实现里 **27 处微反馈族**（按钮族、行悬停、行选中、输入框、开关轨道、主题选项、拖手…）
+  全都压在 `--t-fast`（140ms）。
+- ⇒ **文档与实现的漂移**：微反馈比它该有的慢一倍以上 ⇒ 指针扫过界面时"发钝"，
+  这正是"简约但不灵敏"的来源。四处高频面则**根本没有过渡**（硬切）：
+  菜单项 `.menu-item`、命令面板项 `.cp-item`、设置行 `.ss-row`、全局焦点环 `:focus-visible`。
+
+### 二、修法
+
+- **微反馈族归位**：27 处 `--t-fast` ⇒ `--t-instant`（60ms），逐条按**规则块内**替换，
+  结构档（侧栏收展 `.side-wrap`、分组展开 `.group-body`、环形进度）**留在** `--t-fast`/`--t-med`
+  ——大面位移降到 60ms 会显得仓促，那不是"灵敏"是"抢"。
+- **补四个缺口**：`.menu-item` / `.cp-item` / `.ss-row` 各加颜色系过渡；
+  `:focus-visible` 加 `box-shadow` 过渡 ⇒ 焦点环是**亮起来**而不是啪地出现（离开焦点也一起淡出）。
+- `.ctl`（控件面）是本轮**判卷自己抓出来的**：它本来没有过渡，加进微反馈名单后当场红 ⇒ 补上。
+- 合计：CSS 改动 29 行规则（28 行档位 + 4 处新增），零字面色值、零新令牌。
+
+### 三、判卷（新，且承重已实测）
+
+`apps/desktop/tests/micro-interaction.test.ts`（7 条）钉三档纪律：
+① 微反馈族逐个走 `--t-instant`（不许 `--t-fast`）；② 微反馈族**只准过渡颜色系属性**
+（不许 width/height/top/left/margin/padding/inset/font-size/grid-template-* —— 那些会触发布局，
+悬停一扫就是一排重排）；③ 结构档留在 `--t-fast`/`--t-med`。
+另加两条**性能护栏**：全仓不许 `transition: all`；降级面必须仍全局中和
+（动效是加法，**减法必须随时能撤销**）。
+**承重实测**：把 `.iconbtn` 改回 `--t-fast` ⇒ 判卷立刻红（已复原）。
+
+### 四、读数（工作树）
+
+- 桌面判卷全量：**190 文件 / 1313 用例，1312 绿**。唯一红的红是原生宿主冒烟
+  （Electron Mach port 被外层沙箱拒）。**另有一条 `kernel-host` 的 e2e 在并行下偶发红**，
+  单跑 19/19 全绿、全量复跑也绿 ⇒ 负载型偶发，非回归（如实记，不藏）。
+- 桌面 typecheck：**0 报错**。
+
+### 五、边界（本页不冒充的）
+
+- **本机起不来 Electron** ⇒ 动效的**观感未验收**：本页证明的是"档位与判据"，不是"手感好不好"。
+  真机过一眼是必要的一步（业主侧）。
+- 两条 HEAD 认证门（`head-cert-check` / `mutate-verify`）**本机跑不了**：
+  它们在一次性 worktree 里检出 HEAD，而沙箱禁止在**新位置创建**点号文件
+  （`fixtures/plugins/project/echo-suite/.mcp.json`）⇒ `git worktree add` 退 128。
+  这与核心判卷里那 20 条 EPERM 同根，是环境限制，不是产品缺陷。
+- 「简约」与「好看」这两面（减法与视觉审美）本轮**没动**——动效只是其中一面。
+
+## 2026-10-22 · 第 648 页：架构面先量后动——「把 App.tsx 拆出去」这条路被 601 条断言堵着，真正的杠杆在别处
+
+业主裁定的架构轴是「拆 `App.tsx` 单体」。本轮**先量可行性**，再决定动哪里。
+
+### 一、量出来的第一件事：拆文件这条路，代价是改判卷
+
+`apps/desktop/src/renderer/App.tsx`：3,525 行 / 79 个 useState / 106 个 useCallback / 32 个 useEffect。
+读它源码的判卷共 **66 个文件**。把这 66 个文件断言过的字面量抽出来按**可迁移性**分类：
+
+| 类 | 条数 | 是什么 | 搬走代码后 |
+|---|---|---|---|
+| A：名字/标签 | 189（24%） | `onViewLog`、`<SessionLogDialog`、文案串… | 留一条薄别名即可继续命中 |
+| **B：实现细节** | **601（76%）** | `h.openPalette()`、`setPaletteOpen(true)`、`const pickAndAddProject = useCallback`、`overlayBlocked(readGateInput(`、`skills={skills}`、`value={...}`… | **钉的就是「代码在哪」** ⇒ 搬走就红 |
+
+⇒ 按行算，**551 行（15.6%）被钉住**；连续 ≥40 行的"自由区"只有 8 段，最长的一段还是 import 块。
+⇒ **结论（先量后动的价值）**：「把 App.tsx 拆成几个文件」不是一个切片，是一次
+**要重写 66 个判卷文件、601 条实现级断言**的迁移工程——而且它与并发会话正在改的那几个
+判卷文件正面撞车。**本轮不做**（做了也是把断言改弱，不是把产品改好）。
+
+### 二、量出来的第二件事：真正的杠杆不是"文件在哪"，是"重渲染在哪"
+
+`App` 是流（长会话四万七千个 DOM 节点）的**直接父级**。于是 App 每有一次
+**与流无关**的状态变化，整棵流都会被重新 diff 一遍。现读里就有这样一条：
+
+- `elapsedSec`（运行中**每秒一跳**的计时器）在 App 里 ⇒ **每秒**重渲染 App ⇒
+  **一棵没有新消息的流**每秒被重算一次。输入框打一个字、侧栏拖宽、命令面板开合，同理。
+
+⇒ 于是本轮做的是**不搬代码、只切断重渲染**的那一刀：给流本体套 `React.memo`。
+它的 props **已经全是稳定的**（`rows`/`actions` 在 App 侧已是 `useMemo`；`view`/`streaming`/
+`foldedRounds`/`flashRound` 是 state 或派生值）⇒ props 没变就不重渲染。
+切会话仍按 App 侧那个 `key` 重挂（行内局部状态不跨会话复用，这条既有修法没被吃掉）。
+
+### 三、一条**别踩**的记录：`Sidebar` 不能套 memo
+
+读 `Sidebar` 的 props 时发现两个"渲染期读 ref"：
+`running={runningSet.current}`、`outcomes={outcomes.current}`——**ref 的内容会变、身份不变**。
+今天它是对的，只因为 App 每次都重渲染、Sidebar 跟着重渲染 ⇒ 才看得到最新的运行态。
+**一旦给 Sidebar 套 memo，"运行中"的指示器会冻在旧值**（而且它还有一个内联箭头函数 prop，
+memo 本来也命中不了）。⇒ 这条写进账，是为了防"顺手优化"把运行态指示器改坏。
+
+### 四、判卷（新，4 条，含一条**运行时**断言）
+
+`apps/desktop/tests/stream-memo.test.ts`：
+① `Stream` 的导出**确实**是 memo 化的——断言导出值的 `$$typeof === Symbol.for("react.memo")`，
+   **不是**读源码文本（源码文本判卷会被人改字符串绕过）；② App 传给它的 props 全是稳定的
+   （且不许写成字面量数组/对象——那样 memo 恒不命中）；③ 切会话的 `key` 还在；
+   ④ 流里自己跳的计时器留在 `ThinkingLive` 子组件里（顶层 Stream 不许有定时器，
+   否则会被 memo 冻住、计时停在原地）。
+**承重实测**：把 `Stream` 改回非 memo ⇒ 第 ① 条立刻红（已复原）。
+
+### 五、读数（工作树）
+
+- 桌面判卷全量：**191 文件 / 1317 用例，1316 绿**；唯一红的红是原生宿主冒烟（Electron Mach port 被外层沙箱拒）。
+- 桌面 typecheck：**0 报错**。
+
+### 六、边界（本页不冒充的）
+
+- **本轮没有量到帧时间**：Electron 起不来 ⇒ 性能冒烟跑不了。
+  本页证明的是「重渲染这条路存在，且已被 memo 边界切断」，**不是**「省了多少毫秒」。
+  收益幅度要等真机（业主侧）跑一次性能冒烟才知。
+- 页面数与判卷数都会随并发会话继续长；本页的 66/601/551 是 2026-10-22 这一刻的读数。
+- 「把 App.tsx 拆成多文件」这条路**没被否掉**，只是被量出了它的真实代价
+  （重写 66 个判卷文件的 601 条实现级断言）⇒ 该做，但要当独立工程做，并配判卷迁移计划。
+
+## 2026-10-22 · 第 649 页：设计面减法——看了仓里的真机截图，改掉三处一眼可见的「不简约」
+
+业主：「还要设计方面也需要优化，要做的非常好看，简约，有动态效果」。
+第 647 页做了动效那一面；本页做**简约/好看**（减法 + 视觉审美）。
+
+### 一、先找到「眼睛」：仓里有上一轮的真机截图
+
+此前几轮都靠"读 CSS 猜长什么样"，但 `outputs/` 里躺着 **67 张真机 PNG**（主工作台亮/暗、
+设置页、命令面板、检查器各态）。读了四张（`inspector-overview` 的亮/暗、`settings-shell`、
+`command-palette`）⇒ "简约/好看"从主观形容词变成**可指认的具体形态**。
+
+### 二、截图上一眼可见的三处「不简约」
+
+1. **概览指标是六张带边框的小卡拼成的 Excel 表**（暗色下尤其重）。
+   机制在 CSS 里写着：`gap:1px` ＋ 容器 `background: var(--hairline)` 画格线 ＋ 每格不透明底色
+   ＋ 外框——经典的"表格"画法。
+2. **设置行的说明被关在 220px 的标题列里**：「目前只有中文界面；英文界面尚未接 / 入。」
+   ——末行只剩一个「入。」，而同一行右侧大片空着。
+3. **错误正文整段是危险色**：四行散文（permission denied 的解释）在阅读面里喊。
+
+### 三、两条**否定结论**（先量后动，如实记，省得下一个人白找）
+
+- 设计系统内部其实很干净：**字面色值 0 处**（文件头声明的纪律是真守着的）；
+  阴影只有 **2 个令牌**（22 处使用，零散用法都合理）⇒ **阴影不是噪音源**；
+  z-index 虽有 13 档散乱字面量，但**没有前后倒挂**（遮罩与面板是父子关系，靠 DOM 顺序压住）；
+  5 处"重复选择器"经查**全是合法的响应式/降级覆盖**（`@media` / `@container` / reduced-motion）。
+- ⇒ 没有"大扫除"可做；有的是上面三处**具体**的形态。（审计脚本留在
+  `apps/desktop/scripts/dup-selector-audit.mjs` 与 `zindex-map.mjs`，可复跑。）
+
+### 四、改法（三处都是**减法**）
+
+1. **概览指标去框**：去外框、去格线、去每格底色 ⇒ **无框指标网格**（标签弱、数字强），
+   结构靠留白与字重，不再靠框。
+2. **设置行说明独占整行**：说明从 `.ss-row-main` 挪出来，成为 `.ss-row` 的**同级**、
+   `grid-column: 1 / -1` 跨两列 ⇒ 不再折出孤字。
+3. **错误正文降到正文色**（`--text-200`）：失败的标记仍**三重**——左侧红三角（继承行色）、
+   上方「N 次失败」红字摘要、旁边的危险色「重试」钮；文案本身只是**内容**，不必再整段喊。
+4. 另加一处**有信息量的动效**：**概览里的数字刚变过闪一下**。概览是运行中盯着看的面，
+   数字自己在变；此前只有"变了"这个事实、没有"刚刚变"的提示。闪只碰**颜色**
+   （不位移、不放大、不动标签），时长走 `--t-slow` 令牌（**不写死毫秒**）。
+
+### 五、判卷（新，5 条，承重已实测）
+
+`apps/desktop/tests/design-minimal.test.tsx`：
+① 概览指标**不许**是带框表格（无外框/无格线/无每格底色，但仍是两列网格）；
+② 数字刚变过要闪（且动画**只碰颜色**，不许动 transform）；
+③ 设置行说明独占整行——用 **SSR 结构断言**（标题列在说明之前**已经闭合**），
+不是读源码文本；④ 错误正文降到正文色而红三角/重试钮仍是危险色；⑤ 不许写死毫秒时长。
+**承重实测**：把表格框加回去 ⇒ 第 ① 条立刻红（已复原）。
+
+### 六、读数与边界（如实记）
+
+- 桌面判卷全量：**192 文件 / 1322 用例，1320 绿**。两条红：① 原生宿主冒烟（Electron Mach port
+  被外层沙箱拒）② `kernel-host` 的 e2e **并行偶发**（单跑 19/19 全绿；上一轮也出现过同款）。
+- 桌面 typecheck：本轮动的文件 **0 报错**；全仓 typecheck 另有 1 处错在
+  `src/main/session-metadata.ts`——**并发会话的在飞改动**，非本轮。
+- **本机跑不了 Electron ⇒ 这一轮改了视觉，却没有新的截图做目验**：依据是上一轮的截图
+  ＋ 静态判卷。截图是 2026-10-21 的状态（比现在落后一批，焦点环已改控件蓝等），
+  ⇒ 我据以判断的是**形态**（框 / 格线 / 折行 / 整段红字），**不是精确色值**。
+  真机观感仍待业主过一眼。
+- 三处改动都**可逆**（都是 CSS 与一个 class 的局部改动），若业主觉得过度，单独回退其中一处即可。
+
+## 2026-10-22 · 第 650 页：设计面第二轮——弹出窗里的死按钮行、路由体积剩下的那 130KB、以及一条「别改」的裁决
+
+接着第 649 页：继续读仓内真机截图（这轮读了终端弹出窗、暗色设置页、命令面板），量路由体积。
+
+### 一、弹出窗里那行 chrome 是**死的**（截图实锤）
+
+`outputs/desktop-terminal-2026-10-21/terminal-wide.png`（独立窗格窗口）里叠着**两行同样的「终端」**：
+上行是面板导航行（`nav.pane-nav`：一个「聚焦终端窗格」钮 ＋ 一个「恢复多面板布局」钮），
+下行是窗格自己的标题行（标签 ＋ ×）。而在**单窗格**的弹出窗里：
+- 「聚焦某窗格」——只有一个窗格，聚焦它等于什么都不做；
+- 「恢复多面板布局」——弹出窗里根本没有多面板布局可恢复。
+⇒ 那一行在弹出窗里是**一排死按钮**，还把唯一的标题重复了一遍。
+**修法**：`PaneDock` 增 `inPopout` 位（`PopoutApp` 传）⇒ 独立窗格窗口不渲染面板导航行。
+主窗口那行原样保留（判卷 `pane-disclosure` 钉的「恢复多面板布局」仍在）。
+
+### 二、路由体积：剩下的那 ~130KB 是 **Radix 下拉菜单的依赖树**，动它要先付一笔代价
+
+现读：首屏 152,837B／main 538,167B（帽 600,000）／popout 369,395B（帽 400,000）⇒ 三道帽都在。
+main 路由闭包里的大头是共享 vendor 块：`react-resizable-panels` 94,300B（PaneDock 真需要）
+＋ `@radix-ui/react-menu` 32,427B ＋ floating-ui 一族 53,146B ＋ radix 其余 ~80B，**全部由
+`@radix-ui/react-dropdown-menu` 拉进来**（渲染层只 import 这一个包，6 处）。
+量过了，动它的代价也量出来了：
+- 下拉菜单的**触发钮**必须常驻（按钮本身要画在界面上）⇒ 想让 vendor 树退出首屏，
+  就得让 6 处下拉的**整个 Radix 子树**（含触发钮）延迟加载 ⇒ 首次点开会有一次 chunk 往返；
+- 本仓**已经有**更轻的自绘弹层基座（`Popover` + `useMenuKeyboard` + `usePopoverDismiss`），
+  但 6 处里有子菜单/门户语义，替换 Radix 是另一个工程。
+⇒ **本轮不做**（为了 ~130KB 换来"首次点开闪一下"不划算）；记在这里，等业主裁「体积 vs 首次打开延迟」。
+
+### 三、一条**别改**的裁决（差点改错，记下来）
+
+主按钮在暗色下是「抬升暖面 ＋ 细描边」而不是实心近白——看起来像"主按钮在暗色掉级了"，
+但设计规范台账已裁：此前把 `text-000` 当底色 ⇒ 暗色里主钮翻成**白底黑字**，
+真机目验判为「视觉重心被抢」⇒ 改成抬升暖面 ＋ 细描边。**这是有意裁决，不是缺陷**。
+
+### 四、顺手帮了并发会话一个忙（不提交）
+
+并发会话新建的 `apps/desktop/src/renderer/panes/ConfirmScrims.tsx` 的 `ipc-protocol` 导入
+少了一层目录（`../../../../` 应为 `../../../../../`）⇒ 全仓 typecheck 报红。**已就地修好**，
+但**没有提交**（那是它在飞的新文件，归它入库）。
+
+### 五、判卷与读数
+
+- `apps/desktop/tests/design-minimal.test.tsx` 增第 ⑥ 条：独立窗格窗口不渲染面板导航行
+  （源码断言 ＋ `PopoutApp` 确实声明了 `inPopout`）。
+- 桌面判卷全量：**192 文件 / 1323 用例，1322 绿**；唯一红的红是原生宿主冒烟（Electron Mach port
+  被外层沙箱拒）。桌面 typecheck **0 报错**（含并发会话那份新文件）。
+
+### 六、边界
+
+- 弹出窗这一改**没有新的真机截图**（本机 Electron 起不来）⇒ 依据是仓内那张旧截图
+  ＋ 源码结构（那一行在单窗格里确实无对象）。
+- 路由体积那 ~130KB 的取舍（体积 vs 首次打开延迟）**是业主的裁**，不是我能单方面定的。
+
+## 2026-10-22 · 第 651 页：markdown 表格去网格；把 Radix 那笔账**量成数字**交给业主裁
+
+### 一、阅读面里还摆着一张 Excel：markdown 表格
+
+截图（`claude-design-v3-2026-10-21/usage-popover.png`）里主区那张表：**每个格子都有边框**。
+机制在 CSS：`.md-table td, .md-table th { border: 1px solid var(--hairline); }`
+⇒ 竖线把一列列文字切碎，读起来只剩格子。
+**修法**：**只留横线**（表头下一条重一点 ＋ 行与行之间一条轻一点），无竖线、无格子框——
+markdown 表格的通行做法，也安静得多。列靠左对齐（首列零左内边距，与正文左缘齐）。
+
+### 二、Radix 那笔账：量成数字（这是路由轴剩下的唯一实质动作）
+
+第 650 页只说了"代价要业主裁"，这轮把它**量出来**（`apps/desktop/scripts/radix-dropdown-cost.mjs`，
+口径：主路由**静态闭包**内、同模块**去重**）：
+
+| 项 | 数字 |
+|---|---|
+| 下拉专用依赖树（Radix dropdown-menu + radix-menu + floating-ui 一族 + remove-scroll + sidecar…） | **248,644 B / 49 个模块** |
+| 主路由现值 | 538,167 B |
+| 若 6 处下拉整体延迟 | 约 **289,523 B（−46.2%）** |
+| 弹出窗路由现值 → 延迟后 | 369,395 B → 约 120,751 B |
+
+**代价（也量过）**：① 6 处下拉的**触发钮**也得改成普通按钮——否则 Radix 的 `Root`/`Trigger`
+已经把整棵 vendor 树拉进首屏（只延迟 `Content` 没用）；② 首次点开多取一个 chunk
+（**本地磁盘读**，量级在十几毫秒，不是网络往返）＋一帧空窗；③ 6 处要改 ⇒ 独立工程。
+
+⇒ 结论：**这笔其实比第 650 页估的划算**（省的是近一半主路由，代价是本地磁盘的一次读），
+但它要动 6 处下拉，而**并发会话此刻正在改 `App.tsx`（正在抽 `state/chrome.ts`）** ⇒ 撞车。
+⇒ **本轮不做**（不抢别人的面），账摆在这里，等业主裁「做不做」。
+
+### 三、两条核过但**不改**的
+
+- **主按钮在暗色用「抬升暖面 ＋ 细描边」**：设计规范台账已裁（此前白底黑字被真机目验判为
+  「视觉重心被抢」）⇒ 有意裁决，不是缺陷（已记在第 650 页，本轮再核一次）。
+- **启动占位**：进度线**有**动画（`boot-slide` 无限循环），且 reduced-motion 下会停并铺满 100%
+  ⇒ 截图只是抓到动画中间帧，不是"坏了的进度条"。**不用改**。
+
+### 四、读数与归因（如实记）
+
+- 本轮动的文件：桌面判卷里与 markdown/设计相关的 **38 条全绿**；
+  `design-minimal.test.tsx` 增第 ⑦ 条（markdown 表格不许有格子边框），
+  **承重实测**：把格子边框加回去 ⇒ 第 ⑦ 条立刻红（已复原）。
+- **全量桌面判卷此刻是红的，但红在并发会话的在飞重构**：
+  它正把 `openPreview` 从 `App.tsx` 抽进新模块 `src/renderer/state/chrome.ts`，
+  于是 `preview-order` / `pane-open-reveals-inspector` 两条源文本判卷找不到旧位置 ⇒ 红的。
+  本轮这笔**与那些红无关**（只动 `.md-table` 的 CSS ＋ 一条新判卷），但**不冒充全量绿**。
+- 并发会话新建的 `panes/ConfirmScrims.tsx` 导入路径少一层（已在第 650 页就地修好、未提交）。
+
+## 2026-10-22 · 第 652 页：收掉 Codex 中断的那一批——App 拆分收官、会话正文检索（IPC v18）、审计生命周期；外加**三处先于本轮就红着**的真缺陷
+
+### 一、接手的现场
+
+Codex Desktop 的线程「完成我们现在所有还没有完成的任务」（`01a16199`）在 2026-10-22 03:33 UTC 撞上用量上限中断，
+两个子代理同刻死。中断时工作树里躺着**一批未提交的改动**（已跟踪 105 支 ＋ 新文件 46 支），它自己的计划写在
+`outputs/all-open-2026-10-22/PLAN.md`，三份子批报告在同目录下（`files/REPORT.md`、`evolution/REPORT.md`、`runtime/REPORT.md`）。
+
+它最后一条实测：**核心全量 6439 条里 5 条红**。接手后逐条查完，**这 5 条里 3 条先于本轮就红着**（不是它改坏的），
+另 2 条是它那批改动带来的；**全量门表 40 道里 3 道红**，而那 3 道的根因只落在两处（第五、六节）。
+
+### 二、接手时那 5 条核心红，逐条归因
+
+| 红的那条 | 归属 | 处置 |
+|---|---|---|
+| `tests/agents-command-face.test.ts` | `AGENTS.md` 里的 `state/`、`derived/`、`components/`、`panes/` 被当成**仓根**路径 | 业主已批准「仅展开这四类路径」；规则语义一字未动 |
+| `tests/ipc-protocol-version.test.ts` | 协议升到 v18（会话正文检索通道），断言仍钉 17 | 同步到 18 |
+| `tests/readme-invoke-channel-count.test.ts` | README 写 97 个 invoke 通道，实读 98 | 同步到 98 |
+| `tests/head-import-face.test.ts` | **先于本轮**：那把尺把「不在量面里」读成了「不在这一版里」 | 改尺（第五节）＋ 同笔造专破它的坏输入 |
+| `tests/scratch-tree-naming.test.ts` | **先于本轮**：真仓里没有一棵挂在分支上的暂存树 ⇒ 判据自称「此刻无对象（不是绿）」 | 恢复活对象（第六节） |
+
+另有两处是它遗留的**类型面**问题（`tests/session-semantics.test.ts` 三条 tsc 错）与一处**平台面**问题：
+macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath` 后的真身（软链不许越界那道闸的形状），
+判卷却拿盘面字面比 ⇒ 改成比真身。
+
+### 三、App 拆分：现态层挂了两轮的那件，落地了
+
+`App.tsx` 从三千行单体降到 **17 行**；渲染层按 `state/` → `derived/` → `components/` ＋ `panes/` → `App.tsx` 分层，
+`pnpm renderer-layer-check` 在 1200/900 两道帽下绿。
+
+**代价那一格也变了**：第 648 页记的是「读它源码的判卷 66 个文件、601 条实现级断言钉着代码的位置 ⇒ 独立工程」。
+本轮的做法不是搬断言，而是**让断言改读整个渲染层面**（`apps/desktop/tests/helpers/app-surface.ts`）——
+指着一个文件做 `not.toContain` 的判卷，代码一搬就**空转通过**；空转不是通过，是断言被削弱了。
+
+### 四、会话正文检索（IPC v18）与审计生命周期
+
+新增的是**会话正文**的全文检索（不是文件检索），结果三态：`ok`（扫完了，空数组＝量过了没命中）／
+`partial`（预算用尽，命中为真但可能还有）／`unavailable`（**没量到**——会话根读不到）。
+「没量到」绝不能被渲染成「没有匹配」：那是谎报，那份谎报由**类型层面**分开，不靠调用点自觉。
+
+- core：`src/main/session-search.ts`（判定式联合）；宿主 `apps/desktop/src/main/kernel-host.ts` 解析工作区归属，
+  渲染层不传路径；渲染层 `CommandPalette.tsx` → 新组件 `SessionSearchResults.tsx`。
+- 审计字段此前**只有定义、没有生产消费者**（`markViewed` / `markIdle` / `markActive` / `recordResumeAttempt`）。
+  现在接上了：打开尝试记 resume attempt、成功后记 viewed；run 真正接下主面用户轮那拍记 active，收束记 idle。
+  审计是 sidecar——写失败**出声但不反签**主任务（已成功的打开/run 不因审计写不上变成失败）。
+- 顺带把 run 的 controller 所有权收紧：旧 run 的收束还在写 sidecar 时，不接受下一代 run
+  （否则 core 已释放日志、旧 `finally` 还在写，会把新 run 标成空闲）。
+
+### 五、把 `head-import-face` 那把尺修对（量面 ≠ 整版）
+
+尺子量的是**核心面**（`src` / `scripts` / `tests` 的 `.ts`/`.tsx`/`.mts`），判「悬空」时用的却是**同一张面**当
+「这一版有哪些文件」。于是 `tests/readme-invoke-channel-count.test.ts` import `../apps/desktop/src/main/channels` 时——
+那个文件**明明在 HEAD 里**（`git ls-tree` 查得到），只因不在量面里，就被报成「**漏 `git add`**」。
+
+这条红**先于本轮**：在 `971fe18c~1` 现读是 0 条悬空，在 `971fe18c`（引入那条 import 的那一笔）现读是 1 条。
+
+修法：**量面只管「读谁的 import」，存在性问整版**。两件事分开之后——
+
+- 真正不在版内的模块**照样报悬空**（含桌面层那一支）；
+- 量面内的模块没入库**照样报悬空**；
+- 已在版内、只是不在量面的模块**不再被误报**。
+
+同笔补了三条**专破它的坏输入**（跨面且存在 ⇒ 不报；跨面且真不存在 ⇒ 报；量面内真不存在 ⇒ 报），
+免得这把尺被改成「看不见跨面就不报」的瞎子。
+
+### 六、三条**针脚**跟着实现走（mutate 那张表）
+
+`mutate-needles-check` 报 3 条锚点失效，逐条查完都是**实现搬走了、针脚没跟着搬**：
+
+| 锚点 | 原址 | 现居 | 备注 |
+|---|---|---|---|
+| `respawn-forward-back-to-field-list` | `src/agent/orchestrator.ts` 那一行 `respawn` 转发 | 同一文件、**同一行** | `971fe18c` 给这一跳加了 recovery 承载（`carried`）⇒ 整行不再逐字存在，突变退化成空操作 |
+| `desktop-thinking-not-carried-onto-final` | `apps/desktop/src/renderer/projections.ts` | `apps/desktop/src/renderer/derived/stream.ts` | App 拆分批：`projections.ts` 变成再导出桶，判卷仍走那个桶 |
+| `desktop-protocol-mismatch-gate-inverted` | `apps/desktop/src/renderer/App.tsx` | `apps/desktop/src/renderer/state/workbench.ts` | 同上；判卷侧走 `readAppSurface()`（读整个渲染层面）⇒ 搬走后照样看得见 |
+
+`respawn` 那条**先于本轮就失效**（`971fe18c` 起就是空操作）；另两条是本轮拆分带来的。
+修法都是**改指新家**（规则 217/255：针脚跟着实现走），不是撤锚点——撤了就少一条分辨力。
+
+### 七、读数（如实记，含分母与并发档）
+
+- **核心全量**（`--maxWorkers=2`，出沙箱跑）：**467 文件 / 6459 用例全绿**；日志 `outputs/all-open-2026-10-22/core-suite-capped.log`。
+  沙箱里跑会多出 30 条 `listen EPERM` 假红（端口绑定被挡）⇒ 报「全绿」前先出沙箱。
+- **桌面全量**：**194 文件 / 1337 用例全绿** ＋ `desktop-boundary-check` 绿；日志 `outputs/all-open-2026-10-22/desktop-suite.log`。
+- **全量门表**（`pnpm gates`，40 道）：**绿 37 / 红 3**。红的 3 道是 `head-cert-check`、`mutate-verify`、`mutate-needles-check`，
+  而三道的根因只落在第五、六节那两处；日志 `outputs/all-open-2026-10-22/gates-run.log`。
+  - `mutate-verify` 整表跑完：**跑了 1589/1589 条**，分类计数 `survived:0, misattributed:0, baseline-red:0, no-effect:1`——
+    那 1 条就是第六节第一条（空操作）。**不是「没跑」，是「跑了且只有一条空操作」**。
+  - `head-cert-check` 量的是 **HEAD**（`6455bb2`，不是工作树）：全量 **1 failed | 6335 passed (6336)**，
+    认证门面 25 道里红 2 道（`head-import-check` ＝ 第五节那条；`mutate-needles-check` ＝ 第六节）。
+    ⇒ 这道门的红**是本轮修的那两处本身**，修完并落库后重跑才是新的读数。
+- **类型面**：`node --import tsx scripts/typecheck.ts` ＝ 0 报错（接手时是 3 条，全在未跟踪草稿里）。
+- **新增五道契约门**（`renderer-layer-check` / `event-semantics-check` / `session-semantics-check` /
+  `session-search-check` / `motion-policy-check`）已登记进门表并逐道绿。
+
+### 八、边界与仍开着的东西（如实记）
+
+- **`scratch-tree-naming` 那条红不是产品缺陷**：它钉的是「真仓里挂在分支上的暂存树不参与命名对账」，
+  此刻真仓一棵都没有 ⇒ 判据自称「这一条此刻无对象（不是绿）」——它**拒绝空转通过**。
+  处置是按台账既有做法**恢复活对象**（在 `.worktrees/` 下开一棵挂分支的暂存树），恢复后该面 **19/19**。
+  这是**机器状态**：清掉暂存树就会再红一次，不是不红的产品保证。
+- **认证只到「工作树」这一层**：`mutate-verify` 与 `head-cert-check` 量的是 HEAD。本页记的这一轮**尚未落库**，
+  落库后必须重跑这两道门，才能把「工作树绿」升级成「这一笔绿」。
+- **子代理那两份报告的边界照抄，不代它担保**：文件面板批的 25/25 是**真实 Electron renderer** 的红绿对照
+  （`files/REPORT.md`）；自进化批证的是「**已经合法开档后**」的收束与恢复，**没有**证明生产路径会自动开新档
+  （`evolution/REPORT.md`）；运行期批的交互 23/23 里，首轮 3 条红来自**脚本用了陈旧快捷键**，只改了脚本两行键位、
+  原断言与 fixture 未动（`runtime/REPORT.md`）。
+- **`ab.py` 未入库**：它是**另一个会话**的未跟踪脏项（见 `outputs/dsh-align-2026-10-22/split-plan.md` 的脏项清单），
+  本轮不碰、不提交。
+
+## 2026-10-22 · 第 653 页：把那一批落库，再把它在**认证树**上暴露的三处红收掉
+
+### 一、落库
+
+第 652 页那一批进了 `508bd2de`（已跟踪 105 支 ＋ 新文件 46 支 ＋ 凭证目录）。
+`ab.py` 仍未入库（另一个会话的脏项）。**落库不等于认证**：`mutate-verify` 与 `head-cert-check` 量的是 HEAD，
+所以落库后必须在这棵树上重跑——那一跑又抓出三处**只在认证面上才看得见**的问题（下面三条）。
+
+### 二、认证那一笔的三处红
+
+`head-cert-check` 在 `508bd2de` 上（干净认证树、两端独占）：全量 **1 failed | 6458 passed (6459)**，
+认证门面 25 道里红 1 道。逐条查完，三处红的根因各不相同，但都**不是产品缺陷**：
+
+1. **认证脚本自己还有一处旧调用点**：`scripts/head-cert.ts` 判 import 面时，仍把**量面**当「这一版有哪些文件」用
+   ⇒ 同一个误报（对着一个明明在版内、只是住在桌面层的模块报「漏 `git add`」）。
+   第 652 页改了尺（`scripts/head-import-face.ts`），**没改调用它的那一处** ⇒ 尺修好了，尺的调用方还拿着旧口径。
+   修法同前：存在性问整版（`revFiles`），量面只管「读谁的 import」。
+2. **新模块的能力断言欠证人**：`tests/promise-recall-inventory.test.ts` 钉「一句都不曾被点过才算欠」，
+   而那一顶帽是 **0**（零容忍）。`src/agent/session-cursor.ts`（ADR 0005 那一批）带来三条新断言：
+   `decodeCursor` 的「游标版本不支持」「游标种类不支持」，与 `forkPointFromCursor` 的「游标种类不支持」。
+   它们是**真的能力承诺**（游标 fail-closed：kind 不认、版本不对一律拒，绝不用另一个位置顶上），
+   所以要有观测者，不是该改写的措辞。修法：三条各登记进 `CLAIM_BINDINGS`（`scripts/probe-promise-recall.ts`），
+   指到 `tests/session-semantics.test.ts` 里**三条互不重叠**的真用例（解码入口的版本 / 解码入口的种类 /
+   结构化入口绕过 decode）。
+3. **把源码副本提交进 `outputs/`，把证据面的类型检查毒了**：`evidence-typecheck-check` 量的是**证据面**的危险码
+   （探针若带危险类型码，就会把 `undefined` 当读数交出去）。而 `tsconfig.evidence.json` 的 include 就是 `outputs`
+   ⇒ 提交进去的**源码副本**在新位置上被真编译一遍，它们相对导入全都不解析 ⇒ 凭空多出 250 条「危险码」，
+   棘轮（只准调低）当场红。**处置不是往登记表里加名字**（门自己写着「不要往登记表里加名字，先修它」），
+   修法是**把那批源码副本从证据面里拿掉**：它们是落库前的安全网拷贝，而那一批**已经落库**了
+   ⇒ git 历史就是备份，副本是冗余的，而冗余恰好是毒源。留下的还有 `baseline-manifest.json`（逐文件 sha256）、
+   `baseline.diff`、日志、报告与截图。
+
+### 三、读数
+
+- 核心全量（`--maxWorkers=2`，出沙箱）：**467 文件 / 6459 用例全绿**（日志 `outputs/all-open-2026-10-22/core-suite-capped.log`）。
+- `node --import tsx scripts/typecheck.ts`：**0 报错**。
+- `evidence-typecheck-check`：危险码回到 **12 条／帽 12 条**（正贴线），全量报错从 2163 降到 146。
+- `docs-check`：受检项全绿。
+- 认证那一笔（`508bd2de`）的原文留档：`outputs/head-cert-508bd2d-2026-10-22-0443/provenance.md`；
+  落库前那一笔（旧基线）留档：`outputs/head-cert-6455bb2-2026-10-22-0354/provenance.md`。
+  **两笔都不是「全绿」**：旧那笔红 2 道认证门与 1 条用例，新那笔红 1 道与 1 条——上面三处就是它们的全部内容。
+
+### 四、边界
+
+- 本页记的是**工作树**读数与**两笔 HEAD 认证的读数**；第三处修完之后的认证读数在第 654 页
+  （认证量的是提交 ⇒ 那一页的 rev 必须先落库才有新读数）。
+- 移除源码副本**没有丢工作**：落库前的状态在 `508bd2de` 的父提交与本仓 git 历史里；
+  未跟踪新文件的「中途态」本来就不是交付物。
+
+## 2026-10-22 · 第 654 页：那一笔的**认证**全绿——HEAD 上全量 467/467、认证门面 25/25、变异表 1589/1589
+
+### 一、认证那一笔
+
+`3017e88c`（第 653 页那一批，提交说明带「删除备案：」）在干净认证树上（两端独占）：
+
+| 面 | 读数 |
+|---|---|
+| 判卷全量（HEAD，不是工作树） | **467 文件 / 6459 用例，exit=0** |
+| 认证门面 | **25 道，绿 25 道，超预算 0** |
+| import 面 | 5288 条边｜**悬空 0**（存量已豁免 0） |
+| 本趟墙钟 | 131.98s |
+
+**「悬空 0」这一格是第 652–653 页那条尺修完的直接读数**：那把尺此前对着一个明明在版内、只是住在桌面层
+（`apps/`）的模块报「漏 `git add`」。改法是量面只管「读谁的 import」、存在性问整版——
+**尺**（`scripts/head-import-face.ts`）与**尺的调用方**（`scripts/head-cert.ts`）两边都改了才转绿。
+
+### 二、变异表：1589/1589
+
+`pnpm mutate-verify`（一次性 detached 树，量的是 HEAD）：**跑了 1589/1589 条**，
+出口是「**全部变异被正确杀死（断言非恒真）**」，exit=0。
+原文留档：`outputs/all-open-2026-10-22/mutate-verify-48cc04ab.log`。
+
+⚠️ **这一趟量的树与最终那一笔是同一棵树**：它跑的时候 HEAD 是 `48cc04ab`，随后只改了**提交说明**
+（`--amend`，为第 653 页那笔 117 支删除补「删除备案：」）⇒ **tree sha 逐字未变** ⇒ 读数对 `3017e88c` 同样成立。
+落库后另有认证那一跑的原文：`outputs/head-cert-3017e88-2026-10-22-0532/provenance.md`。
+
+第 652–653 页改指的三条针脚，**每条都咬住了**（不是「不报」而是「报红」）：
+
+| 针脚 | 改指 | 本次读数 |
+|---|---|---|
+| `respawn-forward-back-to-field-list` | 同一文件同一行（`971fe18c` 给这一跳加了 recovery 承载，旧整行不再逐字存在） | ✅ 杀掉 |
+| `desktop-thinking-not-carried-onto-final` | `apps/desktop/src/renderer/projections.ts` → `apps/desktop/src/renderer/derived/stream.ts` | ✅ 杀掉 |
+| `desktop-protocol-mismatch-gate-inverted` | `apps/desktop/src/renderer/App.tsx` → `apps/desktop/src/renderer/state/workbench.ts` | ✅ 杀掉 |
+
+**「针脚跟着实现走」不是改针脚就完事**：改完必须重跑整表确认它**还咬得住**——
+一条改成新家的针脚若在新宿主上打空，那是一条恒绿针（表里就多了一条从不判红的装饰）。
+
+### 三、一笔被门挡下的落库（备案机制）
+
+第 653 页那一笔删了 117 支文件（源码副本），`repo-hygiene-check` 面③当场挡下
+（「一笔里从树消失的文件 ≤ 4 支」——这一维防的是**退回别人夹带的文件**）。
+处置有两条：退回那一笔，或**在说明里写「删除备案：<为什么>」**再落。本仓选了第二条，理由写进提交说明：
+那 117 支是**本会话上一笔自己刚加进 `outputs/` 的备份副本**，不是谁夹带的在飞文件；
+逐文件 sha256 留档在 `outputs/all-open-2026-10-22/baseline-manifest.json`，完整差异在同目录 `baseline.diff`。
+
+### 四、一条**新踩到的坑**（留给下一个人的形状）
+
+`outputs/` 整个目录是**证据面**，`tsconfig.evidence.json` 的 include 就是它 ⇒ **提交进 `outputs/` 的每个
+`.ts`/`.tsx`/`.mts` 都会在那里被真编译一遍**。于是「把源码拷贝存进 `outputs/` 当备份」这个动作
+会在新位置上把相对导入全部打断 ⇒ 凭空多出几百条「危险码」⇒ `evidence-typecheck-check` 的棘轮（只准调低）当场红。
+**落库前的源码拷贝不能进 `outputs/`**；要么不进 git，要么存成非 TS 后缀。备份的正解是 git 历史本身。
+
+### 五、现态页与剩下的边界
+
+- `STATE.md` 整体重写，`rev` 指到 `3017e88c`（产品代码与本笔一致；这一页与现态页是纯文档提交）。
+- **本轮没有声称「全量门表全绿」**：第 652 页那次整跑是 **40 道里绿 37 红 3**，那 3 道的根因已全部收掉，
+  但整表**没有在最后一笔上重跑**（`mutate-verify` 一趟 1931.5s，整表要再跑一趟）。
+  本页能声称的是：**HEAD 认证绿**（467/467 用例 ＋ 认证门面 25/25）＋ **变异表 1589/1589** ＋
+  工作树侧的 `repo-hygiene-check` / `evidence-typecheck-check` / `docs-check` / `typecheck` 全绿。
+- **仍未验证的**：真实模型的能力收益（无 `CAIRN_API_KEY` / `CAIRN_ENDPOINT`）；
+  自进化面的自动开档（只证了「已合法开档后」的收束与恢复）；设计面改动的目验截图。
+
+## 2026-10-22 · 第 655 页：`AGENTS.md` 增一条——`outputs/` 是**被真编译的证据面**，源码副本不许存进去
+
+### 一、这条规则记的是什么
+
+第 653 页那笔「把 117 支源码副本从 `outputs/` 里拿掉」的动作，根因是这条**形状**：
+`tsconfig.evidence.json` 的 include 就是 `outputs` ⇒ **提交进 `outputs/` 的每个 `.ts`/`.tsx`/`.mts`
+都会在它的新位置上被真编译一遍**。于是「落库前把源码拷一份进 `outputs/` 当安全网」这个动作
+⇒ 副本的相对导入全部解析不到 ⇒ `evidence-typecheck-check` 凭空多出 250 条「危险码」
+⇒ 它的棘轮（只准调低，登记表不许加名字）当场红。
+
+**它当初会以什么形状回来**：下一个会话为了「保险」把改动过的源文件拷一份进 `outputs/` 存档，
+于是同一道门在别的题上再红一次，而红字读起来像「证据面里有探针带危险码」——**指错了方向**。
+
+### 二、处置
+
+按仓里「改 agent 规则前须批准」那条，业主已同意加这一条 ⇒ `AGENTS.md`「Working tree」段增一条：
+**`outputs/` 是证据面且被真编译 ⇒ 不许在里面存源码副本**；备份的正解是 **git 历史**，
+要在仓内留档就留成非 TS（`.md` / `.json` / `.log`）。
+
+改动只有那一条规则，别的一字未动（`AGENTS.md` 现 6481 字节，帽 8000）。
+`pnpm docs-check`：**受检项全绿**（D-1 字节、D-2 手抄观测值、D-4 追注、D-5 `rev` 真伪四张面都在受检里）。
+
+### 三、边界
+
+- 这条只管**源码副本**；`outputs/` 里的**探针**（`.mts`）照旧可以放，只是它自己得类型干净——
+  那正是 `evidence-typecheck-check` 在量的东西。
+- 台账层记的删除备案机制（`repo-hygiene-check` 面③：一笔里删掉 > 4 支要在说明里写「删除备案：」）
+  **没有**进 `AGENTS.md`：那道门的红字自己写着修法，属于「做时看得到」的一格。
+

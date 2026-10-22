@@ -1,0 +1,29 @@
+$ node scripts/smoke.mjs
+[byok-inject] 启动注入：无可注入 key（未存或 env 优先）
+[m4a] 调度器已启动（桌面端常驻接线：快照/CRUD/触发同实例）
+[cairn-smoke] window.agent type: object
+[cairn-smoke] session: 会话 2026-10-21 17:40:06 #1
+[cairn-smoke] queue probe: {"read":{"items":[{"text":"恢复探针","attachments":[]}]},"cleared":{"items":[]}}
+[cairn-smoke] product chain: {"created":true,"preview":"ready","pageOk":true,"stopped":"stopped"}
+[cairn-smoke] think row: {"rows":0}
+[cairn-smoke] idle picker: {"found":true,"disabledBefore":false,"opened":true,"options":1,"enabled":1,"before":"模型：演示（预录剧本 · 不产生真实调用 · 结果与你的任务无关）","after":null,"switched":false,"pick":null,"saved":"demo|","errStrip":null}
+[renderer] [cairn-smoke] event 1: session_titled
+[renderer] [cairn-smoke] event 2: user_message
+[renderer] [cairn-smoke] event 3: assistant_message
+[renderer] [cairn-smoke] event 4: tool_call
+[renderer] [cairn-smoke] event 5: agent_spawned
+[renderer] [cairn-smoke] event 6: agent_status
+[renderer] [cairn-smoke] event 7: tool_result
+[renderer] [cairn-smoke] event 8: tool_call
+[renderer] [cairn-smoke] event 9: usage
+[renderer] [cairn-smoke] event 10: tool_call
+[renderer] [cairn-smoke] event 11: agent_spawned
+[renderer] [cairn-smoke] event 12: agent_status
+[memory] 会话结束沉淀: {"kind":"no_content"}
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+[cairn-smoke] run: {"ok":true}
+[cairn-smoke] events: 23 asks auto-approved: 0
+[cairn-smoke] ui sidebar rows: 1 clicked: true listSessions: 1 text: "新任务临时对话今天demo刚刚添加项目设置与偏好"
+[cairn-smoke] picker probe: {"found":true,"diag":{"count":1,"tag":"BUTTON","cls":"mp-trigger","disabledAttr":false,"disabledProp":false,"rect":[60,28,747],"pointerEvents":"auto","visible":"visible/inline-flex"},"title":"模型：演示（预录剧本 · 不产生真实调用 · 结果与你的任务无关）","expanded":"true","menuVisible":true,"options":1,"enabledOptions":1,"pickedLabel":null,"afterTitle":null}
+[cairn-smoke] ui picker title: 模型：演示（预录剧本 · 不产生真实调用 · 结果与你的任务无关）
+[cairn-smoke] PASS in 2476 ms

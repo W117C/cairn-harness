@@ -18,7 +18,6 @@ const base = {
   phase: "tool" as const,
   elapsedSec: 0,
   steps: 0,
-  workspaceLabel: null,
   onSend: () => undefined,
   onCancel: () => undefined,
   onModeChange: () => undefined,
@@ -115,6 +114,6 @@ describe("批 4 输入区：状态条拆入环 / 强调发送 / 运行中红底�
   });
 
   it("聚焦：输入卡描边强调 40%（brief「聚焦描边强调 40%」）", () => {
-    expect(css).toMatch(/\.composer-card:focus-within\s*{[^}]*border-color:\s*hsl\(var\(--accent-brand\)\s*\/\s*40%\)/s);
+    expect(css).toMatch(/\.composer-card:focus-within\s*{[^}]*border-color:\s*hsl\(var\(--accent-control\)\s*\/\s*40%\)/s);
   });
 });

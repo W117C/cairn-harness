@@ -1,7 +1,8 @@
 // 设置导航的轻量单源：命令面板只需要分区 id/标签，不应因此把设置页正文与工作台一起拉进首屏。
 import { BookOpen, Brain, Clock, Globe, KeyRound, Keyboard, Puzzle, Shield, SlidersHorizontal, Wrench } from "lucide-react";
 
-export type PageId = "plugins" | "automation" | "skills" | "memory";
+import type { PageId } from "../app-controls";
+export type { PageId } from "../app-controls";
 
 /** 页面顺序（导航与图标/标题事实源）：设置页的四个分区按此渲染，不再各抄一份。 */
 export const PAGE_ORDER: readonly PageId[] = ["plugins", "automation", "skills", "memory"];
@@ -13,7 +14,8 @@ export const PAGE_META: Record<PageId, { label: string; icon: React.JSX.Element 
   memory: { label: "记忆系统", icon: <Brain size={14} /> },
 };
 
-export type SectionId = "general" | "provider" | "permissions" | "advanced" | "shortcuts" | PageId | "about";
+import type { SectionId } from "../app-controls";
+export type { SectionId } from "../app-controls";
 
 const PAGE_SECTIONS = PAGE_ORDER.map((id) => ({ id, label: PAGE_META[id].label, icon: PAGE_META[id].icon }));
 

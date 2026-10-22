@@ -41,6 +41,10 @@ body[data-dsh-claude-style] .md-code { background: var(--dsw-alias-markdown-code
 body[data-dsh-claude-style] .md-code-head { background: var(--dsw-alias-markdown-code-block-banner); }
 body[data-dsh-claude-style] .md-body { font-size: var(--fs-body-lg); }
 body[data-dsh-claude-style] [data-composer-card] { color: var(--dsw-alias-label-primary); background: var(--dsw-specific-input-major); }
+/* 2026-10-21：皮肤自带的 composer 是 18px，会盖住 tokens.css 的 12px；这里用同特异性、后加载的
+   覆盖层压回 v3 的 --radius-composer-card（12px）。伪元素焦点环同步，否则环与卡片错位。 */
+body[data-dsh-claude-style] [data-composer-card],
+body[data-dsh-claude-style] [data-composer-card]::after { border-radius: var(--radius-composer-card); }
 body[data-dsh-claude-style] .composer-card[data-disabled="true"] { opacity: .72; }
 body[data-dsh-claude-style] .pop-rd, body[data-dsh-claude-style] .pop { background: var(--dsh-claude-card); }
 
