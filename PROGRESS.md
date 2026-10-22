@@ -21633,3 +21633,49 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 - 本页不把任何门读数说成通过；事故之后的重跑读数分别写在各自页上。
 - 未动用户脚本与另一会话的两个 HEAD 认证证据目录。
+
+## 2026-10-22 · 第 667 页：指针分叉完整接入（Task 1–8）＋真机冒烟——来源视图、压缩联合、根级锁、IPC v19、UI 来源键、注释/搜索/回滚、CLI 与桌面切换
+
+本批在隔离工作树 `.worktrees/pointer-plan` 的分支 `agent/pointer-session-refs` 上完成，基线 `2fe791c6`；
+共享树（`fix/spec-summary-double-count`）在本批期间未被写入。
+
+### 一、落地了什么
+
+- **来源类型与物理视图**（`c01b95a4`）：`EventRef`/`SessionRef`（JSON 元组键、eventId 正安全整数）、
+  `readSessionView`（逐文件按 raw 边界截、各自解释控制记录、父前缀丢弃未收尾请求）、`forkPointInView`
+  （选中祖先行时返回祖先来源与物理边界）。`replaySession`/`forkSessionPointer` 走同一条血缘验证。
+- **模型投影与压缩来源**（`b1947206`）：`CompactionEvent` 新旧互斥联合；`projectViewContext` 把视图编译成
+  raw 形状合成表再交给原投影（数字位置只在编译期活）；tool-call wire id 按「工作区+会话+agent 域+原 id」分域；
+  `buildSessionHistory`/provider assemble 对有 fork 头的会话走视图；`runCompaction` 可选 view 并产出来源形式。
+- **会话根与父依赖**（`9d653e20`、`0ed3e02b`）：`resolveSessionRef`（同名会话无归属即拒绝）、
+  `withSessionMutation`（进程内串行 + `.session-mutation.lock`）、`dependentSessions`（直接+传递，读不动即抛）；
+  改名/删除先查依赖再动文件，同处一个临界区。
+- **IPC v19 与 KernelHost**（`dd584d04`）：`openSession` 回传 `events + session + view`；显式 workspace 过登记根闸；
+  会话 mutation/队列/注释补 workspace；host 与 core 的归属解析器同一条歧义判据。
+- **UI 来源身份**（`e3077a53`、`93a6ff02`、`8c6c8faf`、`bd4521a1`）：渲染层视图 + 实时增量（水位从快照本地长度推）、
+  Stream 按 `eventRefKey` 出键并给祖先行挂「来自 …」；推送带 workspace、跨根迟到事件不进当前转录；
+  running/outcomes/队列按来源键；sidebar 行状态按该行 workspace 取键。
+- **注释/侧聊/卡片/diff**（`90d79d9b`、`fc8ea794`）：反馈与置顶记录可带 `eventRef`、解析按来源键（旧数字记录仍是
+  `#eventId`）；`listMessagePins` 回传锚点；侧聊提升支持 `source_event_refs`（与数字形式互斥，引用形式从视图重建正文）；
+  card_action / diff_comment 可记录 `source_event_ref`/`source_ref`。
+- **搜索与回滚**（`3f34e532`）：搜索命中带 `SessionRef` + `EventRef`，分叉会话按视图取料、预算按父链计、不够读完即 partial；
+  `planTurnRevertView` 以物理行号 + EventRef 记账；`file_restored` 记 `source_ref`。
+- **产品指针启用**（`8d49c4fb`）：`createProductFork` 为 CLI 与桌面唯一创建入口；CLI `--fork/--from` 不再复制父事件，
+  `--replay` 先打来源视图；gym 保留复制原语。
+- **真机冒烟**（`9e120496`）：`apps/desktop/scripts/session-reference-smoke.cjs`，真实 main+preload+renderer、
+  临时 profile/两个项目、不调模型；`710a4aa8` 为测试判别联合收窄。
+
+### 二、读数
+
+- core：**476 文件 / 6518 项**（`--maxWorkers=2`，出沙箱），仅 D-5 与 `1f16bea` 两条事故红。
+- desktop：**201 文件 / 1382 项**全绿；`renderer-layer-check`、`desktop-boundary-check` 绿；两套 typecheck 0 报错。
+- 真机冒烟：**14/14 PASS**（Electron 44.7.0）。
+- `scripts/compaction-check.ts`：断言全过；真实 GLM 暗卷 1 项未证（无 `CAIRN_API_KEY`），不冒充通过。
+
+### 三、边界
+
+- **D-5 的 21 条真红按业主裁决保留**（不登记豁免）：本地独有提交对象在 2026-10-22 的对象库事故中永久丢失。
+  `mutate-needles` 的 `1f16bea` 归因同因。
+- 草稿（drafts/draftIds）仍按裸 id；卡片/diff 的**渲染层**尚未把行的事件引用送进请求（协议与 store 已就绪）。
+- 真实模型收益仍要凭据与付费授权；本页不声称任何模型侧收益。
+- 本页在隔离分支上；第 665/666 页属于共享树的邻会话，合分支时页号以共享树为准。
