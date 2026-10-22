@@ -1,0 +1,30 @@
+// 渲染层的会话/事件身份键（计划 Task 5）。
+// 键必须与 core 同族（JSON 元组）：`session id` 在两个已登记工作区里可能同名，
+// 只用 id 做 map/timer 的键会把 A 的迟到状态写进 B。工作区未知时**不生成裸 id 键**（返回 null）。
+import { eventRefKey, sessionRefKey } from "../../../../../src/events/session-ref";
+import type { EventRef, SessionRef } from "../../../../../src/events";
+
+export { eventRefKey, sessionRefKey };
+
+/** 有可信 workspace 才给键；缺省/空工作区返回 null（调用方必须走「无键不写」的支路）。 */
+export function sessionKeyOf(workspace: string | null | undefined, sessionId: string | null | undefined): string | null {
+  if (workspace === null || workspace === undefined || workspace === "") return null;
+  if (sessionId === null || sessionId === undefined || sessionId === "") return null;
+  return sessionRefKey({ workspace, sessionId });
+}
+
+export function refOf(workspace: string | null | undefined, sessionId: string): SessionRef | null {
+  if (workspace === null || workspace === undefined || workspace === "") return null;
+  return { workspace, sessionId };
+}
+
+/** 行级 DOM/跳转键：有来源引用就用事件引用，否则退回显示序号（旧行为）。 */
+export function rowKeyOf(seq: number, ref: EventRef | null | undefined): string {
+  return ref === null || ref === undefined ? `s${String(seq)}` : `e${eventRefKey(ref)}`;
+}
+
+/** 祖先行：来源会话与当前本地会话不同（或显式标了 inherited）。 */
+export function isInheritedRef(current: SessionRef | null, ref: EventRef | null | undefined): boolean {
+  if (ref === null || ref === undefined || current === null) return false;
+  return ref.workspace !== current.workspace || ref.sessionId !== current.sessionId;
+}
