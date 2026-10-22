@@ -45,20 +45,21 @@ export function useRunQueue(deps: RunQueueDeps) {
   const { setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, modeRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef } = deps;
   const keyOf = (id: string): string => runKey(activeWorkspace, id);
   const setQueueFor = useCallback((sid: string, list: QueuedSend[]) => {
-    setQueueLocal(sid, list);
-    const prev = queueWrites.current.get(sid) ?? Promise.resolve();
-    const next = prev.catch(() => undefined).then(() => window.agent.queueSet(sid, toSessionQueueEntries(list)));
-    queueWrites.current.set(sid, next);
+    const key = keyOf(sid);
+    setQueueLocal(key, list);
+    const prev = queueWrites.current.get(key) ?? Promise.resolve();
+    const next = prev.catch(() => undefined).then(() => window.agent.queueSet(sid, toSessionQueueEntries(list), activeWorkspace ?? undefined));
+    queueWrites.current.set(key, next);
     void next.then(
       (r) => { if (!r.ok) setLastError(`发送队列保存失败：${r.error ?? "未知错误"}`, sid); },
       (err: unknown) => setLastError(`发送队列保存失败：${err instanceof Error ? err.message : String(err)}`, sid),
     ).finally(() => {
-      if (queueWrites.current.get(sid) === next) queueWrites.current.delete(sid);
+      if (queueWrites.current.get(key) === next) queueWrites.current.delete(key);
     });
   }, [setLastError, setQueueLocal]);
   /** 本轮收束后出队：队首出表并返回；空队列 null（调用方停表）。 */
   const takeQueuedHead = useCallback((sid: string): QueuedSend | null => {
-    const { head, rest } = takeQueued(sendQueue.current.get(sid) ?? []);
+    const { head, rest } = takeQueued(sendQueue.current.get(keyOf(sid)) ?? []);
     if (head !== null) setQueueFor(sid, rest);
     return head;
   }, [setQueueFor]);
@@ -132,7 +133,7 @@ export function useRunQueue(deps: RunQueueDeps) {
         void window.agent.decide(pendingAsk.askId, false).catch(() => undefined);
         setLastNotice("已跳过本轮全局记忆写入（你在继续对话；下次收尾再试）", sid);
       }
-      setQueueFor(sid, [...(sendQueue.current.get(sid) ?? []), { id: ++queueSeq.current, text, attachments }]);
+      setQueueFor(sid, [...(sendQueue.current.get(keyOf(sid)) ?? []), { id: ++queueSeq.current, text, attachments }]);
       return;
     }
     const isNew = sid === null;

@@ -1,3 +1,4 @@
+import { runKey } from "../state/session-identity";
 import type { Dispatch,MutableRefObject,PointerEvent,SetStateAction } from "react";
 import type { GoalTrace } from "../../../../../src/agent/goal-trace";
 import type { ClarifyQuestion,PlanProposal } from "../../../../../src/events";
@@ -691,7 +692,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                     // 回到原会话后屏上是空流（rows=0）。必须走 openSession 重新载入。
                     const emptyBranch = activeIdRef.current === ctx.forkId
                       && events.length === 0
-                      && (sendQueue.current.get(ctx.forkId)?.length ?? 0) === 0;
+                      && (sendQueue.current.get(runKey(activeWorkspace, ctx.forkId))?.length ?? 0) === 0;
                     setEditCtx(null);
                     openSession(ctx.originId);
                     // 第 1 轮编辑建的空分支：回到原会话即无内容，顺手清掉，别留 0 字节会话。
@@ -713,7 +714,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
             )}
             {activeId !== null && (
               <SendQueueStrip
-                items={sendQueue.current.get(activeId) ?? []}
+                items={sendQueue.current.get(runKey(activeWorkspace, activeId)) ?? []}
                 running={runningActive}
                 onInterruptSend={(index) => {
                   // 「打断并发送」：先把它提到队首，再打断本轮——收束在轮界，runOn 随即先派它。

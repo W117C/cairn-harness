@@ -544,9 +544,9 @@ export function useWorkbenchModel() {
       if (openPending.current === pending) openPending.current = null;
       if (seq === openSeq.current) setLastError(`会话打开失败：${err instanceof Error ? err.message : String(err)}`, id);
     });
-    const queued = window.agent.queueGet(id).then(({ items }) => {
+    const queued = window.agent.queueGet(id, sessionWs ?? undefined).then(({ items }) => {
       if (seq !== openSeq.current) return;
-      setQueueLocal(id, fromSessionQueueEntries(items, () => ++queueSeq.current));
+      setQueueLocal(runKey(sessionWs ?? activeWorkspace, id), fromSessionQueueEntries(items, () => ++queueSeq.current));
     }).catch((err: unknown) => {
       if (seq === openSeq.current) setLastError(`发送队列读取失败：${err instanceof Error ? err.message : String(err)}`, id);
     });
