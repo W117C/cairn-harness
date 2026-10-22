@@ -216,7 +216,7 @@ interface WorkbenchViewDeps {
   recentRefsBySession: MutableRefObject<Map<string, string[]>>;
   noteRecentRef: (path: string) => void;
   promptHistory: string[];
-  noteDraft: (sessionId: string | null, has: boolean) => void;
+  noteDraft: (draftKey: string | null, has: boolean) => void;
   injectedText: string | undefined;
   injectedTextSeq: number;
   draftRemap: { from: string; to: string; seq: number; } | undefined;

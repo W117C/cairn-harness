@@ -29,7 +29,7 @@ import { Popover, usePopoverDismiss, useMenuKeyboard } from "./Popover";
 import { mentionBreadcrumb, parseMentionQuery, replaceMentionToken } from "../mention";
 import { STR } from "../strings";
 import { slashItems, type SlashSkill } from "../slash";
-import { DRAFTS_KEY, HOME_DRAFT_KEY } from "../drafts";
+import { DRAFTS_KEY, HOME_DRAFT_KEY, draftKeyFor, sessionIdOfDraftKey } from "../drafts";
 
 /** 用量环几何（v3-lite .ring 同比例：28px 钮、环径 23、环心 9.5px 数字）：
  *  r=11.5 ⇒ 2πr≈72.26；strokeDashoffset 按百分比折算弧长。 */
@@ -194,19 +194,44 @@ export function Composer(props: {
    *  走 agent:suggestNext 单发模型调用；结果只填不发、不覆盖已敲的字；失败上屏分类 hint。
    *  缺省不给 = 不摆键帽、Tab 无色（旧消费者零行为不变）。 */
   onSuggestNext?: () => Promise<SuggestNextResult>;
-  /** 草稿有无（2026-10-18）：给侧栏画“有草稿”标记；id=null 表示首页。 */
-  onDraftPresence?: (sessionId: string | null, hasDraft: boolean) => void;
+  /** 草稿有无（2026-10-18）：给侧栏画“有草稿”标记；值 = 草稿桶键（工作区引用键），首页 null。 */
+  onDraftPresence?: (draftKey: string | null, hasDraft: boolean) => void;
 }) {
   const [text, setText] = useState("");
   // 附件引用（RunRequest.attachments）：chip 列表 + ＋弹层；发送后清空。
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   // 每会话草稿（2026-10-18 真机抓到的串稿）：Composer 常驻不随会话重挂，旧实现切会话时
-  // 把 A 的草稿原样带到 B（还会把 B 的草稿写回 A）。按 activeId 分桶：切走存、切回取；
-  // 发送时删键（否则发完再切回又把它捞回来）。home 用常量键。
-  const draftKey = props.activeId ?? HOME_DRAFT_KEY;
+  // 把 A 的草稿原样带到 B（还会把 B 的草稿写回 A）。按会话键分桶：切走存、切回取；
+  // 发送时删键（否则发完再切回又把它捞回来）。键带工作区（draftKeyFor）：两个已登记工作区里
+  // 同秒同 id 的会话是两条会话，草稿不能互串。home 用常量键。
+  const draftKey = props.activeId === null ? HOME_DRAFT_KEY : draftKeyFor(props.workspacePath, props.activeId);
   const draftsRef = useRef<Map<string, string>>(storedDrafts());
   // 附件 chip 与草稿同病（切会话会带着别人选的附件去发）：同一把键分桶。
   const attachByKey = useRef(new Map<string, AttachmentItem[]>());
+  // 旧裸 id 桶的懒迁移：旧版落盘的键是裸会话 id；读到引用键的空桶时把同 id 的旧桶搬过来
+  // （一次性的，搬完删旧键，之后快照只写新键）。旧裸键本身无法区分工作区，先到先得。
+  const takeDraft = (key: string): string | undefined => {
+    const direct = draftsRef.current.get(key);
+    if (direct !== undefined) return direct;
+    const legacyId = sessionIdOfDraftKey(key);
+    if (legacyId === null || legacyId === key) return undefined;
+    const legacy = draftsRef.current.get(legacyId);
+    if (legacy === undefined) return undefined;
+    draftsRef.current.set(key, legacy);
+    draftsRef.current.delete(legacyId);
+    return legacy;
+  };
+  const takeAttach = (key: string): AttachmentItem[] | undefined => {
+    const direct = attachByKey.current.get(key);
+    if (direct !== undefined) return direct;
+    const legacyId = sessionIdOfDraftKey(key);
+    if (legacyId === null || legacyId === key) return undefined;
+    const legacy = attachByKey.current.get(legacyId);
+    if (legacy === undefined) return undefined;
+    attachByKey.current.set(key, legacy);
+    attachByKey.current.delete(legacyId);
+    return legacy;
+  };
   // 已发提示历史（2026-10-18）：↑ 取上一条、↓ 往回走；只在空输入框/正在翻历史时接管方向键，
   // 不抢多行草稿里的光标移动。按会话分桶（与草稿同一把键）。
   const historyRef = useRef(new Map<string, string[]>());
@@ -216,8 +241,8 @@ export function Composer(props: {
     draftsRef.current.set(draftKeyRef.current, text); // 渲染期调整（guard 后 setState 同组件合法）：先于 injectedText 效果
     attachByKey.current.set(draftKeyRef.current, attachments);
     draftKeyRef.current = draftKey;
-    setText(draftsRef.current.get(draftKey) ?? "");
-    setAttachments(attachByKey.current.get(draftKey) ?? []);
+    setText(takeDraft(draftKey) ?? "");
+    setAttachments(takeAttach(draftKey) ?? []);
   }
   // 旧会话历史回填：本地桶还没有这个会话时，用投影行填一次（之后以本地发送栈为准）。
   useEffect(() => {
@@ -245,7 +270,7 @@ export function Composer(props: {
 
   // 首次挂载：把上次退出时留下的当前会话草稿读回来（之后靠切会话/发送的正常流程）。
   useEffect(() => {
-    const saved = draftsRef.current.get(draftKey);
+    const saved = takeDraft(draftKey);
     if (saved !== undefined && saved !== "") setText((cur) => (cur === "" ? saved : cur));
     // 只在挂载时读一次；draftKey 的变化由上面的换桶逻辑负责。
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -260,7 +285,7 @@ export function Composer(props: {
         if (text !== "") snap[draftKey] = text;
         else delete snap[draftKey];
         window.localStorage.setItem(DRAFTS_KEY, JSON.stringify(snap));
-        props.onDraftPresence?.(props.activeId ?? null, text.trim() !== "");
+        props.onDraftPresence?.(props.activeId === null ? null : draftKey, text.trim() !== "");
       } catch { /* 存不下则本会话内生效 */ }
     }, 300);
     return () => window.clearTimeout(t);
@@ -281,19 +306,22 @@ export function Composer(props: {
     taRef.current?.focus();
   }, [props.injectedText, props.injectedTextSeq]);
   // 重命名换 id：渲染期已把字/附件存回旧桶并读了新桶（空），这里把旧桶搬到新键并回填。
+  // 信号带的是裸 id，落桶键要补上工作区（与 draftKey 同口径）。
   const lastRemap = useRef(0);
   useEffect(() => {
     const r = props.draftRemap;
     if (r === undefined || r.seq === lastRemap.current) return;
     lastRemap.current = r.seq;
-    const moved = draftsRef.current.get(r.from);
-    if (moved !== undefined && !draftsRef.current.has(r.to)) draftsRef.current.set(r.to, moved);
-    draftsRef.current.delete(r.from);
-    const movedAttach = attachByKey.current.get(r.from);
-    if (movedAttach !== undefined && !attachByKey.current.has(r.to)) attachByKey.current.set(r.to, movedAttach);
-    attachByKey.current.delete(r.from);
-    if (draftKeyRef.current === r.to && moved !== undefined) setText((cur) => (cur === "" ? moved : cur));
-    if (draftKeyRef.current === r.to && movedAttach !== undefined) {
+    const fromKey = draftKeyFor(props.workspacePath, r.from);
+    const toKey = draftKeyFor(props.workspacePath, r.to);
+    const moved = draftsRef.current.get(fromKey);
+    if (moved !== undefined && !draftsRef.current.has(toKey)) draftsRef.current.set(toKey, moved);
+    draftsRef.current.delete(fromKey);
+    const movedAttach = attachByKey.current.get(fromKey);
+    if (movedAttach !== undefined && !attachByKey.current.has(toKey)) attachByKey.current.set(toKey, movedAttach);
+    attachByKey.current.delete(fromKey);
+    if (draftKeyRef.current === toKey && moved !== undefined) setText((cur) => (cur === "" ? moved : cur));
+    if (draftKeyRef.current === toKey && movedAttach !== undefined) {
       setAttachments((cur) => (cur.length === 0 ? movedAttach : cur));
     }
   }, [props.draftRemap]);
@@ -304,7 +332,7 @@ export function Composer(props: {
     const r = props.restoreDraft;
     if (r === undefined || r.seq === lastRestore.current) return;
     lastRestore.current = r.seq;
-    const key = r.forSession ?? HOME_DRAFT_KEY;
+    const key = r.forSession === null ? HOME_DRAFT_KEY : draftKeyFor(props.workspacePath, r.forSession);
     if (key !== draftKeyRef.current) {
       if (r.text !== "") draftsRef.current.set(key, r.text);
       if (r.attachments.length > 0) attachByKey.current.set(key, [...r.attachments]);

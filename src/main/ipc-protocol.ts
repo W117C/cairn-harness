@@ -507,6 +507,8 @@ export interface AgentApi {
   cardAction(req: {
     cardId: string;
     sourceEventId: number;
+    /** 指针分叉的祖先行：数字 id 是该行在**来源**日志里的行号，落记录时用引用钉住来源。 */
+    eventRef?: EventRef;
     cardType: string;
     action: string;
     payload?: Record<string, unknown>;

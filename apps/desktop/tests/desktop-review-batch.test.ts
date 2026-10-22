@@ -40,9 +40,11 @@ describe("空分支删除前先搬走用户还没发出去的稿", () => {
 
   it("通道本身：Composer 侧搬的是桶里的那一格（不覆盖目标已有的稿）", () => {
     const composer = readFileSync(fileURLToPath(new URL("../src/renderer/components/Composer.tsx", import.meta.url)), "utf8");
-    expect(composer).toContain("const moved = draftsRef.current.get(r.from);");
-    expect(composer).toContain("if (moved !== undefined && !draftsRef.current.has(r.to)) draftsRef.current.set(r.to, moved);");
-    expect(composer).toContain("draftsRef.current.delete(r.from);");
+    expect(composer).toContain("const fromKey = draftKeyFor(props.workspacePath, r.from);");
+    expect(composer).toContain("const toKey = draftKeyFor(props.workspacePath, r.to);");
+    expect(composer).toContain("const moved = draftsRef.current.get(fromKey);");
+    expect(composer).toContain("if (moved !== undefined && !draftsRef.current.has(toKey)) draftsRef.current.set(toKey, moved);");
+    expect(composer).toContain("draftsRef.current.delete(fromKey);");
   });
 });
 

@@ -672,7 +672,13 @@ export const MUTATIONS = [
     src: "src/agent/loop.ts",
     test: "tests/worker-hooks.test.ts",
     desc: "loop 收到了 agentId 却不写进 PreToolUse 载荷 ⇒ 同一格「两头断」的另一头：编排端接了、执行端没传",
-    apply: (s) => s.replace("                tool_use_id: output.id,\n                agent_id: opts.agentId,\n              });\n              if (pre.blocked) {", "                tool_use_id: output.id,\n                agent_id: undefined,\n              });\n              if (pre.blocked) {"),
+    // 针脚必须连 `tool_name: output.name` 一起锚：verify 分支（2026-10-22）在同一文件里插了一段
+    // 一模一样的 `tool_use_id/agent_id` 载荷，只锚后两行会改成 verify 那段 ⇒ 对普通工具那一跳是空操作
+    // （实测变体存活：tests/worker-hooks.test.ts 用的是 read_file，走的是下面这段）。
+    apply: (s) => s.replace(
+      "              event: \"PreToolUse\",\n              tool_name: output.name,\n              tool_args: output.args,\n              tool_use_id: output.id,\n              agent_id: opts.agentId,",
+      "              event: \"PreToolUse\",\n              tool_name: output.name,\n              tool_args: output.args,\n              tool_use_id: output.id,\n              agent_id: undefined,",
+    ),
     expectFail: "钩子拿到 agent_id = 该 worker 的 id 与模型实下的参数（§4.4 归因）",
   },
   {

@@ -99,14 +99,15 @@ describe("Composer：失败回滚 / 重命名迁移 / 建议与注入的序号�
     expect(composer).toContain("props.restoreDraft");
     const effect = between(composer, "const lastRestore = useRef(0);", "const lastInjectedAttachment");
     expect(effect).toContain("key !== draftKeyRef.current");
+    expect(effect).toContain("draftKeyFor(props.workspacePath, r.forSession)");
     expect(effect).toContain("draftsRef.current.set(key, r.text)");
   });
 
   it("重命名换 id 时草稿/附件桶跟着搬家", () => {
     expect(composer).toContain("props.draftRemap");
     const effect = between(composer, "const lastRemap = useRef(0);", "const lastRestore = useRef(0);");
-    expect(effect).toContain("draftsRef.current.set(r.to, moved)");
-    expect(effect).toContain("attachByKey.current.set(r.to, movedAttach)");
+    expect(effect).toContain("draftsRef.current.set(toKey, moved)");
+    expect(effect).toContain("attachByKey.current.set(toKey, movedAttach)");
   });
 
   it("想下一条带会话代际号：切走后迟到结果作废", () => {

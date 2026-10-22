@@ -19,6 +19,7 @@ import { relativeTime } from "../projections";
 import type { UsageSummary } from "../projections";
 import { keysOf } from "../shortcuts";
 import { filterSessions, groupByWorkspace, projectLabelFor, projectMenuItems, projectSections, sessionStatus, sessionTime, splitArchived, workspaceLabel, OTHER_WORKSPACE, type TimeBucket, type WorkspaceSession } from "../sessions-view";
+import { draftKeyFor } from "../drafts";
 import { sessionKeyOf } from "../state/session-identity";
 import { STR } from "../strings";
 import { Popover, usePopoverDismiss } from "./Popover";
@@ -430,7 +431,8 @@ export interface SidebarProps {
   running: ReadonlySet<string>;
   /** 等门会话（ask 的 sessionId 映射；App 维护——只含本进程可见态）。 */
   waitingIds: ReadonlySet<string>;
-  /** 有未发送草稿的会话（2026-10-18）；缺省 = 不画标记。 */
+  /** 有未发送草稿的会话（2026-10-18）；缺省 = 不画标记。
+   *  集合里是草稿桶键（工作区引用键）；裸会话 id 只可能是升级前的旧桶，故留一条兜底匹配。 */
   draftIds?: ReadonlySet<string>;
   /** 本进程观察到的轮末结果（agent_status 终态记账）；重启归零是诚实行为。 */
   outcomes: ReadonlyMap<string, "ok" | "failed">;
@@ -579,7 +581,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                       setSize={flatOrder.length}
                       renaming={renaming !== null && renaming.id === s.id}
                       renameValue={renaming !== null && renaming.id === s.id ? renaming.value : (s.title ?? s.id)}
-                      hasDraft={props.draftIds?.has(s.id) === true}
+                      hasDraft={props.draftIds?.has(draftKeyFor(s.workspace, s.id)) === true || props.draftIds?.has(s.id) === true}
                       projectName={projectNameOf(s)}
                       projectOptions={projectOptions}
                       onRenameValue={(v) => { setRenaming((cur) => (cur !== null && cur.id === s.id ? { id: cur.id, value: v } : cur)); }}

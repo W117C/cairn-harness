@@ -32,8 +32,9 @@ export interface ComposerDraftsState {
   draftRestoreSeq: React.MutableRefObject<number>;
   setDraftRestore: (v: { forSession: string | null; text: string; attachments: RunAttachmentReference[]; seq: number } | undefined) => void;
   // 有草稿的会话（2026-10-18）：启动从 localStorage 读一次，之后 Composer 防抖上报；侧栏画铅笔。
+  // 键是草稿桶键（draftKeyFor：工作区引用键，首页 null 不记），不是裸会话 id。
   draftIds: Set<string>;
-  noteDraft: (sessionId: string | null, has: boolean) => void;
+  noteDraft: (draftKey: string | null, has: boolean) => void;
   // 编辑并重发的上下文（2026-10-18）：点「编辑」会立刻建新分支并切换会话，但界面上没有一句话
   // 说明“你现在在新分支里编辑第 N 轮，原会话不动”——静默切换最容易让人以为原会话被改了。
   editCtx: { originId: string; originTitle: string; forkId: string; round: number } | null;
@@ -73,12 +74,12 @@ export function useComposerDrafts(deps: ComposerDraftsDeps): ComposerDraftsState
   const draftRestoreSeq = useRef(0);
   // 有草稿的会话（2026-10-18）：启动从 localStorage 读一次，之后 Composer 防抖上报；侧栏画铅笔。
   const [draftIds, setDraftIds] = useState<Set<string>>(() => readDraftIds());
-  const noteDraft = useCallback((sessionId: string | null, has: boolean): void => {
-    if (sessionId === null) return;
+  const noteDraft = useCallback((draftKey: string | null, has: boolean): void => {
+    if (draftKey === null) return;
     setDraftIds((prev) => {
-      if (prev.has(sessionId) === has) return prev;
+      if (prev.has(draftKey) === has) return prev;
       const next = new Set(prev);
-      if (has) next.add(sessionId); else next.delete(sessionId);
+      if (has) next.add(draftKey); else next.delete(draftKey);
       return next;
     });
   }, []);
