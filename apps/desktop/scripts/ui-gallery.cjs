@@ -10,7 +10,10 @@ const { app, BrowserWindow } = require("electron");
 const { mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
 
-const OUT = "/tmp/cairn-gallery";
+// 首启那一趟单独落一个目录：两趟的 01-empty 长得不一样（一边有「设置检查」、一边没有），
+// 混在一个目录里会互相覆盖 ⇒ 目验时读到的是上一次那张。
+const FIRST_RUN = process.env.GALLERY_FIRST_RUN === "1";
+const OUT = FIRST_RUN ? "/tmp/cairn-gallery-first-run" : "/tmp/cairn-gallery";
 mkdirSync(OUT, { recursive: true });
 
 // 桩的兜底名单从**真接口**推导（src/main/ipc-protocol.ts 的 AgentApi 成员），
@@ -42,6 +45,19 @@ function agentApiSurface() {
   return { version, members };
 }
 
+/** 首启夹具：七组覆盖面取**真源**（`src/main/onboarding-groups.ts` 的那份数组字面量）。
+ *  不手抄：手抄一份就会随服务端那份漂——这正是本文件对 AgentApi 名单的处理理由。
+ *  这里是本地视觉工具、读的是本仓自己的源文件 ⇒ 在主进程里把那一个字面量求值出来。 */
+function onboardingGroupsSurface() {
+  const src = readFileSync(join(__dirname, "..", "..", "..", "src", "main", "onboarding-groups.ts"), "utf8");
+  const at = src.indexOf("ONBOARDING_GROUPS: readonly OnboardingGroup[] = ");
+  if (at < 0) throw new Error("ONBOARDING_GROUPS 未找到");
+  const from = src.indexOf("[", at);
+  const to = src.indexOf("] as const;", from);
+  if (from < 0 || to < 0) throw new Error("ONBOARDING_GROUPS 的数组字面量取不到");
+  return new Function("return " + src.slice(from, to + 1) + ";")();
+}
+
 async function main() {
   await app.whenReady();
   // 看门狗：视觉自查工具卡死时不能把会话一直挂在这儿（此前一次跑到第 5 张就无声挂住）。
@@ -56,7 +72,10 @@ async function main() {
   const apiArgs = [
     "--cairn-api-members=" + JSON.stringify(members),
     "--cairn-protocol-version=" + version,
+    // 七组覆盖面交给桩：首启那一趟要显示真清单（手抄一份会漂）。
+    "--cairn-onboarding-groups=" + JSON.stringify(onboardingGroupsSurface()),
   ];
+  if (FIRST_RUN) apiArgs.push("--cairn-first-run-fixture");
   console.log("[gallery] AgentApi 成员:", members.length, "协议版本:", version);
   const win = new BrowserWindow({
     width: 1440, height: 900, show: false,

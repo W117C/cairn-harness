@@ -6,7 +6,7 @@
 //
 // 纪律：组 id → 设置分区是**唯一一份**映射（七组全有落点 ⇒ 没有一格是「点不动的死行」）。
 // 清单本身由服务端给，渲染层只负责排版与导航——抄一份清单就多一份会各自漂的决策点。
-import type { OnboardingGroup } from "../../../../src/main/onboarding-groups";
+import type { OnboardingGroup } from "../../../../../src/main/onboarding-groups";
 import type { SectionId } from "../app-controls";
 import { STR } from "../strings";
 

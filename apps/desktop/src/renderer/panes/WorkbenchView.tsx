@@ -41,7 +41,7 @@ import { TitleBar } from "../components/TitleBar";
 import type { UsageAllState } from "../components/UsagePanel";
 import { movePane,type PaneKind } from "../components/panes";
 import type { SectionId } from "../components/settings-nav";
-import type { OnboardingGroup } from "../../../../src/main/onboarding-groups";
+import type { OnboardingGroup } from "../../../../../src/main/onboarding-groups";
 import { formatEmptyTrailNote } from "../projections";
 import { greetingFor,type QuickStartInput } from "../quick-starts";
 import { dropQueued,promoteQueued,type QueuedSend } from "../send-queue";

@@ -789,7 +789,10 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
    版式取「起手行」那一族（编号 + 弱化文字 + hover 才亮）——它是**附注**不是主角：
    空屏里建议行才是主角，这块只在首启摆一次，压到一行标题 + 四行编号的样子。 */
 .onboard {
+  /* 与 .empty-below 同一个盒子（居中 ＋ 阅读列宽 ＋ 41px 左内距）——
+     否则它会贴着主区左缘，与上面的建议行不在一条基线上（真机目验时看出来的）。 */
   width: 100%; max-width: min(var(--reading), 100%);
+  margin: 0 auto; padding: 0 41px;
   display: flex; flex-direction: column; gap: 2px;
 }
 .onboard-t {

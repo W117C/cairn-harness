@@ -184,6 +184,13 @@ for (const { name, isArray } of members) {
 // 协议版本必须与渲染层期望一致，否则渲染层亮「协议版本失配」fatal 面——画廊要的是产品面。
 stub.protocolVersion = reply(Number(argOf("--cairn-protocol-version=", "0")));
 
+// 首启夹具：空态的「设置检查」要看得见才叫目验（那一块只在 onboarded === false 时摆）。
+// 七组覆盖面由主进程从**真源**推导后交接（这里不复刻那份清单——手抄会随它漂）。
+if (process.argv.includes("--cairn-first-run-fixture")) {
+  stub.getOnboarding = reply(JSON.parse(argOf("--cairn-onboarding-groups=", "[]")));
+  stub.getSettings = reply({ ...SETTINGS, onboarded: false });
+}
+
 // 可选交互夹具：只在独立 smoke 窗口显式传参时启用，不进入产品桥。
 if (process.argv.includes("--cairn-interaction-fixture")) {
   const listeners = new Set();
