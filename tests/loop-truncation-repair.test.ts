@@ -93,3 +93,56 @@ describe("第 1 点：截断续跑（截断 ≠ 说完）", () => {
     expect(notes).toHaveLength(1);
   });
 });
+
+describe("撞帽与截断续跑不许互相顶掉", () => {
+  /** 跑一趟：前 n-1 拍调工具，最后一拍按参数决定「只截断」还是「继续调工具」。 */
+  async function run(opts: { lastStep: "truncate" | "tools"; cap: number }) {
+    const log: AgentEvent[] = [];
+    let round = 0;
+    const provider: Provider = {
+      async *stream() {
+        round += 1;
+        if (opts.lastStep === "truncate" && round >= opts.cap) {
+          yield { type: "assistant_delta", callId: "a" + String(round), text: "半句" };
+          yield {
+            type: "turn_truncated", callId: "a" + String(round),
+            stop_reason: "max_tokens", outcome: "output_budget", outputTokens: 4096,
+          } as never;
+          return;
+        }
+        yield { type: "tool_call", id: "t" + String(round), name: "read_file", args: { path: "a" } };
+      },
+    };
+    let threw = "";
+    try {
+      await runLoop({
+        provider,
+        events: { async append(e: AgentEvent) { log.push(e); } },
+        workspace: "/tmp",
+        userMessage: "w",
+        maxSteps: opts.cap,
+        tools: { read_file: { name: "read_file", async run() { return { ok: true, output: "A" }; } } },
+      });
+    } catch (err) { threw = (err as Error).message; }
+    return { round, threw, errors: log.filter((e) => e.type === "error").length };
+  }
+
+  it("撞帽那一拍同时被截断 ⇒ 撞帽照旧抛（续跑不许给撞帽多留一条命）", async () => {
+    const r = await run({ lastStep: "truncate", cap: 3 });
+    expect(r.round, "续跑越过 maxSteps = 步数帽在这条路上失效").toBeLessThanOrEqual(3);
+    expect(r.threw).toContain("maxSteps");
+    expect(r.errors, "撞帽必须落 error 事件（终态可见）").toBe(1);
+  });
+
+  it("纯撞帽（没有截断）同样是 throw + error，两路口径一致", async () => {
+    const r = await run({ lastStep: "tools", cap: 3 });
+    expect(r.threw).toContain("maxSteps");
+    expect(r.errors).toBe(1);
+  });
+
+  // 诚实标注（2026-10-23，两条变异实测）：这两条**不**能分辨「续跑把撞帽吞掉」那类改法——
+  // 撞帽只在 `step === maxSteps - 1` 设置，而那一刻无论 `continue` 还是 `return` 都到循环末尾，
+  // 之后都落回同一句 throw。我试过两台变异（清 capReached / 截断那拍直接 return 吞掉帽），
+  // **两台都存活**。保留这两条是因为它们钉的是**行为口径**（撞帽必抛 + 必落 error），
+  // 不假装它们能分辨那个不存在的顺序差。真要分辨得先让撞帽能在非末步发生（那是另一处改动）。
+});

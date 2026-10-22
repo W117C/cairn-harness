@@ -463,7 +463,16 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         if (opts.signal?.aborted) return;
       }
     } catch (err) {
-      if (!isAbortLike(err) && !opts.signal?.aborted) {
+      // 落不落这条 error，取决于「这一趟是**谁**叫停的」——两件相反的事不能共用一个条件：
+      //  · `opts.signal.aborted` = **用户/编排器取消**（终态由编排器分类为 cancelled）⇒ 不落，
+      //    那本来就是正常收束，落一条红会把"用户按了停止"读成"出错了"。
+      //  · provider 内部**停滞守卫**的 abort = **对端挂起**（`net.ts` 以 Error 作 abort reason：
+      //    「停滞超时：Nms 内无任何数据」）⇒ **必须落**。它不是取消，是这一趟被打断，
+      //    而这条 error 是"为什么停了"的唯一落盘证据（2026-10-23 实测：旧条件下这一趟
+      //    在事件流里只留一条 user_message 就戛然而止，用户与审计都看不到原因）。
+      // 判据：用户取消 ⇒ 不落；其余（含守卫停滞、协议错、断网）⇒ 落。
+      const userCancelled = opts.signal?.aborted === true;
+      if (!userCancelled) {
         await events.append({
           type: "error",
           message: err instanceof Error ? err.message : String(err),

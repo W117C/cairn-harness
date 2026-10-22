@@ -4,6 +4,22 @@
 export const MUTATIONS = [
   // ---- 第 9 点·轮中插话（steering，2026-10-23）----
   {
+    id: "loop-treats-stall-abort-as-user-cancel",
+    src: "src/agent/loop.ts",
+    test: "tests/loop-abort-attribution.test.ts",
+    desc: "把「谁叫停的」判回旧条件（isAbortLike && signal.aborted 共用一个判据）⇒ 对端停滞这一趟落 0 条 error，事件流只剩一条 user_message 就戛然而止；用户与审计都看不到「为什么停了」",
+    apply: (s) => s.replace("      const userCancelled = opts.signal?.aborted === true;\n      if (!userCancelled) {", "      if (!isAbortLike(err) && !opts.signal?.aborted) {"),
+    expectFail: "★ 对端停滞（provider 侧 abort）⇒ **必须**落 error：那是「为什么停了」的唯一证据",
+  },
+  {
+    id: "loop-records-error-on-user-cancel",
+    src: "src/agent/loop.ts",
+    test: "tests/loop-abort-attribution.test.ts",
+    desc: "用户取消也落 error ⇒ 把「用户按了停止」读成「出错了」，终态分类被污染（编排器按事件流分类 cancelled 的那一半会看到一条红）",
+    apply: (s) => s.replace("      if (!userCancelled) {", "      if (true) {"),
+    expectFail: "★ 反向哨兵：用户取消 ⇒ **不落** error（取消是正常收束，不是出错）",
+  },
+  {
     id: "truncation-treated-as-normal-finish",
     src: "src/agent/loop.ts",
     test: "tests/loop-truncation-repair.test.ts",
