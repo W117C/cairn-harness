@@ -89,13 +89,22 @@ describe("设计面·减法", () => {
     expect(block(".ss-row-desc")).toContain("grid-column: 1 / -1");
   });
 
-  it("④ 错误正文降到正文色，失败标记仍然在（红三角 + 危险色重试钮）", () => {
+  it("④ 错误正文降到正文色，失败标记仍然在（红三角 + 危险色重试钮 + 危险色的「N 次失败」）", () => {
     // 标记留在行色（红三角继承行色）
     expect(block(".row.error-row")).toContain("color: hsl(var(--color-danger-ink))");
-    // 正文降到正文色
-    expect(block(".row.error-row .t")).toContain("color: hsl(var(--text-200))");
     // 重试钮仍是危险色（它自带色，不受 .meta 影响）
     expect(block(".err-retry")).toContain("color: hsl(var(--color-danger-ink))");
+
+    // 工具失败那一路（2026-10-22 目验补上）：此前这一条只钉**运行级错误行**
+    // （`.row.error-row .t`），而**工具失败**的两个面还整段喊——判据对那一路是空转的。
+    // ① 折叠摘要：「N 次失败」是**标记**（仍危险色），它后面的失败正文降到正文色。
+    expect(block(".tool-group-failure"), "「N 次失败」这个标记必须仍危险色").toContain("color: hsl(var(--color-risk))");
+    expect(block(".tool-group-failure-detail"), "失败正文必须降到正文色").toContain("color: hsl(var(--text-200))");
+    // ② 展开后的失败输出正文：同样降到正文色（失败标记是那一行的红三角 + 折叠摘要）。
+    expect(block(".tool-output[data-failed=\"true\"] pre"), "失败输出正文必须降到正文色").toContain("color: hsl(var(--text-200))");
+    // 反向：把失败正文那条改回危险色 ⇒ 上面两条立刻红（证明它们不是恒真）。
+    const risky = block(".tool-output[data-failed=\"true\"] pre").replace("hsl(var(--text-200))", "hsl(var(--color-risk))");
+    expect(risky).not.toBe(block(".tool-output[data-failed=\"true\"] pre"));
   });
 
   it("⑤ 这一批不许把动效纪律破了（微反馈仍是 60ms 档）", () => {

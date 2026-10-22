@@ -2560,11 +2560,17 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
   color: hsl(var(--color-risk)); min-width: 0; flex: 1 1 100%;
   white-space: normal; overflow-wrap: anywhere; line-height: 1.55;
 }
+/* 失败摘要里的**正文**降到正文色：标记（左侧红三角 / 「N 次失败」/ 危险色重试钮）仍在，
+   失败照样显眼；而失败原因那几行散文回到「内容」的身份——整段用危险色是在阅读面里喊。
+   （2026-10-22 目验发现：第 649 页那笔降色只落在运行级错误行 `.row.error-row .t`，
+   工具失败这一路两处都还喊 ⇒ 判据 ④ 对这一路是空转的。此处补上。） */
+.tool-group-failure-detail { color: hsl(var(--text-200)); }
 .tool-group-body { display: flex; flex-direction: column; gap: 6px; }
 .tool-group-body[hidden] { display: none; }
 .tool-group-toggle + .tool-group-body { margin: 4px 0 6px 14px; max-height: min(400px, 50vh); overflow: auto; }
 .tool-body > .kv + .kv { margin-top: 10px; }
-.tool-output[data-failed="true"] pre { color: hsl(var(--color-risk)); }
+/* 失败工具的**输出正文**同样降到正文色（失败标记是那一行的红三角 + 折叠摘要，不靠正文喊）。 */
+.tool-output[data-failed="true"] pre { color: hsl(var(--text-200)); }
 .tool-output-note { display: block; margin-top: 4px; color: hsl(var(--text-400)); font-size: var(--fs-caption-sm); }
 .sidebar-rail { width: 48px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0; background: hsl(var(--bg-200)); border-right: 1px solid var(--hairline); }
 .shell:has(> .sidebar-rail) { grid-template-columns: 48px auto minmax(0, 1fr) auto; }

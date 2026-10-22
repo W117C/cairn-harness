@@ -208,7 +208,15 @@ function ToolCluster(props: { rows: Extract<StreamRow, { kind: "tool" }>[]; view
           <span>{props.rows.length} 次工具调用</span>
           {latest !== undefined && <span className="tool-group-detail">执行中 · {toolVerb(latest.tool) ?? latest.tool} {latest.summary}</span>}
           {interrupted.length > 0 && <span className="tool-group-detail">{interrupted.length} 次未收到结果</span>}
-          {failures.length > 0 && <span className="tool-group-failure">{failures.length} 次失败{!open && failure?.output ? ` · ${truncateSummary(failure.output, 240)}` : ""}</span>}
+          {/* 失败这一行分两截：**标记**（N 次失败）留在危险色，**正文**（失败摘要）降到正文色——
+              「四行散文整段用危险色是在阅读面里喊」；标记三重（左侧红三角 / N 次失败 / 重试钮）仍在，
+              失败照样显眼，而文案回到「内容」的身份（2026-10-22 目验后补上，见 PROGRESS 第 662 页）。 */}
+          {failures.length > 0 && (
+            <span className="tool-group-failure">
+              <span className="tool-group-failure-count">{failures.length} 次失败</span>
+              {!open && failure?.output ? <span className="tool-group-failure-detail"> · {truncateSummary(failure.output, 240)}</span> : null}
+            </span>
+          )}
         </button>
       )}
       <div id={id} className="tool-group-body" hidden={!open}>
