@@ -10,7 +10,7 @@
 // `StreamFailure`），所以本组判据也按「三家同一组边界」写：每一条不变量在三个适配器上各钉一次。
 // **只钉一家就是半个判据**（第 675 页那个教训的同一形状）。
 import { describe, expect, it } from "vitest";
-import { mergeAssistantDeltas, type AgentEvent, type AssistantDeltaEvent } from "../src/events";
+import { mergeAssistantDeltas, type AssistantDeltaEvent } from "../src/events";
 import type { ModelOutput, ProviderMessage } from "../src/providers";
 import { streamAnthropic } from "../src/providers/anthropic";
 import { streamGemini } from "../src/providers/gemini";
@@ -34,7 +34,7 @@ async function collect(iter: AsyncIterable<ModelOutput>): Promise<ModelOutput[]>
   return out;
 }
 const textOf = (events: ModelOutput[]): string =>
-  mergeAssistantDeltas(events.filter((e): e is AssistantDeltaEvent => e.type === "assistant_delta") as AgentEvent[]);
+  mergeAssistantDeltas(events.filter((e): e is AssistantDeltaEvent => e.type === "assistant_delta"));
 
 // ---- 三家各自的「成功收尾」与「未吐输出的可重试错误」帧 ----
 interface Arm {
@@ -151,7 +151,7 @@ describe("三家共用同一份判据（`retry.ts`），不许各抄一份名字
   it("数值优先：字符串形式的 502 也算可重试（OpenRouter 实测 `\"type\": \"502\"`）", () => {
     expect(retryableStreamErrorFrame({ names: ["502"] })).toBe(true);
     expect(retryableStreamErrorFrame({ names: [502] })).toBe(true);
-    expect(retryableStreamErrorFrame({ names: [{}, undefined, null] })).toBe(false);
+    expect(retryableStreamErrorFrame({ names: [undefined, null] })).toBe(false);
   });
 
   it("名字表覆盖三家的过载/限流/可用性形状（大小写不敏感）", () => {
