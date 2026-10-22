@@ -253,7 +253,7 @@ describe("三家适配器：把停止原因读出流", () => {
 });
 
 describe("落盘与投影", () => {
-  it("runLoop 原样落进 JSONL，且不改变收束语义（本轮只记账，不多要一轮）", async () => {
+  it("runLoop 原样落进 JSONL；截断那一拍**续跑一次**把话说完（2026-10-23 接线）", async () => {
     const d = await mkdtemp(join(tmpdir(), "dsh-trunc-"));
     try {
       const logPath = join(d, "s.jsonl");
@@ -273,9 +273,14 @@ describe("落盘与投影", () => {
         },
       });
       const events = await replay(logPath);
-      expect(events.map((e) => e.type)).toEqual(["user_message", "assistant_delta", "usage", "turn_truncated"]);
-      // 诚实边界：这一轮**只**记账。动作（接着说完）尚未接线，别用断言假装它接了。
-      expect(requests).toBe(1);
+      // 事件序前缀逐字不变：记账那一拍仍是 user_message → assistant_delta → usage → turn_truncated。
+      expect(events.slice(0, 4).map((e) => e.type)).toEqual(["user_message", "assistant_delta", "usage", "turn_truncated"]);
+      // ★ 这一格 2026-10-23 变了，理由写在这里而不是悄悄改数：
+      // 旧断言是 `requests === 1`，注释原文「动作（接着说完）尚未接线，别用断言假装它接了」——
+      // 它钉的是**当时没接**这个事实。第 1 点的截断续跑接上之后（`loop.ts` 的 `truncationRepair`），
+      // 「只记账」不再是真值：截断换来**一轮**续跑（给 `truncationNote` 一个真读者）。
+      // 上限与另两条返修环同形（至多一轮）⇒ 剧本永远截断时也只多要一次，不会无限。
+      expect(requests).toBe(2);
     } finally {
       await rm(d, { recursive: true, force: true });
     }

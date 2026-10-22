@@ -146,6 +146,16 @@ export interface LoopOptions {
     /** 有插话就取走（take 即清空：同一条不会被两拍各付一遍 token）。空/undefined = 没有。 */
     take: () => readonly string[] | undefined;
   };
+  /** 第 1 点·截断续跑：输出被预算/内容策略砍断时（`turn_truncated`），再要**一轮**把话说完。
+   *
+   *  为什么必须有：`context.ts` 的 `truncationNote` 早就生成了「那不是完整结论，别当成已答完」
+   *  这条 user 消息，但旧 loop 在截断那一拍直接 `return` ⇒ **没有任何下一轮去读它**
+   *  （实测：请求数=1、提示在最终投影里、零消费者）。一条没人读的提示与没有它等价。
+   *
+   *  边界与另两条返修环同形：**每 run 至多一轮**（续不出来就收束，不无限要）；
+   *  `false` = 逐字回到旧行为（不给它时缺省**开**：这是「把话说完」，不是可选增强）。
+   *  与 `autoVerifyRepair` / `deliveryRepair` 是三条**不同**的路，各自只解决自己那一类红。 */
+  truncationRepair?: boolean;
 }
 
 // agent loop：事件流 → 模型 → 工具 → 事件流。
@@ -252,6 +262,12 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   let repairPending = false;
   // 能力 12 交付断言的返修环：本 run 是否已为了补做而多要过一轮（至多一轮）。
   let deliveryRepairUsed = false;
+  /** 第 1 点·终止判定的另一半：本轮是否以「被输出预算/内容策略截断」结束。
+   *  与「模型自己说完」在事件流上**长得一模一样**（都是零 tool_call），但语义相反：
+   *  前者是**没说完**。见下面收束段那处 `truncationRepair`。 */
+  let truncatedThisRun = false;
+  /** 截断续跑是否已用过（至多一次，与另两条返修环同一上限形状）。 */
+  let truncationRepairUsed = false;
   let deliveryGuardRecorded = false;
   // 换路压力（能力 4/9）：同一调用连败/连抄同一结果时，在那条 tool_result 尾部追加一行提示。
   // 复用 worker 看门那颗纯函数（stuck.ts）与它的阈值，不另造检测器。差别在动作：编排器命中
@@ -511,6 +527,8 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     for await (const output of streamFn(projectContext(seen))) {
       if (output.type !== "tool_call") {
         await events.append(output);
+        // 截断是一个**收束语义**的事实，不是普通输出：记下来供收束段判「它其实没说完」。
+        if (output.type === "turn_truncated") truncatedThisRun = true;
         continue;
       }
       sawToolCall = true;
@@ -881,6 +899,21 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           deliveryRepairUsed = true;
           continue;
         }
+      }
+      // ---- 第 1 点：截断 ≠ 说完 ----
+      // 旧行为：`turn_truncated` 只落一条事件，然后这一轮照常 `return`——而投影侧的
+      // `truncationNote` 明明生成了「那不是完整结论，别当成已答完；接着做完」这条 user 消息，
+      // **却没有任何下一轮去读它**（实测：请求数=1、提示在最终投影里、零消费者）。
+      // 一条没人读的提示与没有这条提示等价：用户拿到的仍是半句，而 harness 以为收完了。
+      //
+      // 上限与另外两条返修环同形（deliveryRepair 至多一轮 / autoVerifyRepair 至多一次两拍）：
+      // **每 run 至多一轮续跑**，续不出来就收束，不无限要。
+      // 缺省开（与 `autoVerify` 同族：这是「把话说完」，不是可选增强）；
+      // 关掉它 `truncationRepair: false` 就逐字回到旧行为。
+      if (truncatedThisRun && opts.truncationRepair !== false && !truncationRepairUsed) {
+        truncationRepairUsed = true;
+        truncatedThisRun = false;
+        continue;
       }
       if (!capReached) return; // 模型认为任务结束（纯文本轮 / 事件源耗尽）；撞帽则落回循环外那条 throw
       // 撞帽路：证据已在上面落流，这里**不吞掉失败**——继续往下走，由循环外那句抛。

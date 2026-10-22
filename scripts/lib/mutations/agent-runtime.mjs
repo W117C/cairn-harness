@@ -4,6 +4,22 @@
 export const MUTATIONS = [
   // ---- 第 9 点·轮中插话（steering，2026-10-23）----
   {
+    id: "truncation-treated-as-normal-finish",
+    src: "src/agent/loop.ts",
+    test: "tests/loop-truncation-repair.test.ts",
+    desc: "截断当成说完（去掉截断续跑）⇒ `truncationNote` 那条『别当成已答完』生成了却没有任何下一轮去读；用户拿到半句，harness 以为收完了",
+    apply: (s) => s.replace("      if (truncatedThisRun && opts.truncationRepair !== false && !truncationRepairUsed) {", "      if (false) {"),
+    expectFail: "★ 截断后真的再要一轮，且那一轮**读到了**「别当成已答完」那条提示",
+  },
+  {
+    id: "truncation-repair-unbounded",
+    src: "src/agent/loop.ts",
+    test: "tests/loop-truncation-repair.test.ts",
+    desc: "截断续跑不记『已用过』⇒ 次次截断就无限续跑（与 deliveryRepair/autoVerifyRepair 的至多一轮口径分家，且是无上限花钱）",
+    apply: (s) => s.replace("      if (truncatedThisRun && opts.truncationRepair !== false && !truncationRepairUsed) {", "      if (truncatedThisRun && opts.truncationRepair !== false) {"),
+    expectFail: "★ 上限：次次截断也**至多续一轮**（不无限要，与 deliveryRepair/autoVerifyRepair 同形）",
+  },
+  {
     id: "steering-resets-run-boundary",
     src: "src/agent/delivery-guard.ts",
     test: "tests/steering-injection.test.ts",
