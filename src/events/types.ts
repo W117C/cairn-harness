@@ -14,8 +14,10 @@ export interface PromoteOrigin {
   kind: "sidechat";
   /** 来源 sidechat 会话 id（独立 JSONL 文件组的目录名）。 */
   session_id: string;
-  /** 来源 sidechat 事件 id（1-based 行号，可跳回源消息）。 */
+  /** 来源 sidechat 事件 id（1-based 行号，可跳回源消息）。来源引用形式下为空数组。 */
   source_event_ids: number[];
+  /** 来源引用形式（指针分叉）：与 source_event_ids 互斥；每条的 eventId 是所属文件的物理行号。 */
+  source_event_refs?: import("./session-ref").EventRef[];
   note?: string;
 }
 /** §9.3 的用户侧 skill 触发：正文是某个 skill 渲染后的结果，`skill` 记下「是哪个、当时给了什么参数」，
@@ -533,6 +535,8 @@ export interface CardActionEvent {
   payload?: Record<string, unknown>;
   scope?: "once" | "session_kind" | "always";
   target_agent_id?: string;
+  /** 卡片来源的**真实**归属（指针分叉：祖先行）。旧数字形式没有它 = 来源是当前会话自己的行。 */
+  source_event_ref?: import("./session-ref").EventRef;
 }
 
 /** M3b 评审闭环（§3.4 / §4.5）：diff 卡行级评论 → 定向 user_message 注入该 worker 子流 → 修正 → diff 卡 v2。
@@ -540,6 +544,8 @@ export interface CardActionEvent {
 export interface DiffCommentEvent {
   type: "diff_comment";
   agent_id: string;
+  /** 评论所依据的卡片来源（可选；祖先行时记录真实来源）。 */
+  source_ref?: import("./session-ref").EventRef;
   /** 评论落点文件（workspace 相对）。 */
   path: string;
   /** 行号（1-based，diff 卡行级定位）。 */

@@ -5,7 +5,7 @@
 // 让步序（任务书）：主会话不受打扰 > 结论可追溯 > 界面好看。
 import { closeSync, lstatSync, openSync, readFileSync, readSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { createEventLog, isNumericCompaction, replay, replayIncremental, type AgentEvent, type CompactionEvent, type PromoteOrigin, type UserMessageEvent } from "../events";
+import { createEventLog, eventRefKey, isNumericCompaction, readSessionView, replay, replayIncremental, type AgentEvent, type CompactionEvent, type EventRef, type PromoteOrigin, type UserMessageEvent } from "../events";
 import { SENSITIVE_PATH_SEGMENTS } from "../sensitive-paths";
 import type { ModelOutput, Provider } from "../providers";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../providers/glm";
@@ -533,6 +533,27 @@ export function derivePromotionContent(events: AgentEvent[], sourceEventIds: num
   return text === "" ? null : text;
 }
 
+/** 来源引用形式的正文重建：从各自受信 session 根读来源视图，按 EventRef 取对应事件。
+ *  与数字形式同口径——只取 assistant_message（流式会话没有终稿时：该 ref 无可提升正文）。 */
+async function derivePromotionContentFromRefs(refs: readonly EventRef[]): Promise<string | null> {
+  const parts: string[] = [];
+  for (const ref of refs) {
+    if (typeof ref?.workspace !== "string" || ref.workspace === "" ||
+      typeof ref.sessionId !== "string" || ref.sessionId === "" ||
+      typeof ref.eventId !== "number" || !Number.isSafeInteger(ref.eventId) || ref.eventId < 1) {
+      return null;
+    }
+    const root = `${ref.workspace}/.agent/sessions`;
+    const view = await readSessionView({ workspace: ref.workspace, sessionId: ref.sessionId }, root).catch(() => null);
+    const entry = view?.entries.find((e) => eventRefKey(e.ref) === eventRefKey(ref));
+    if (entry === undefined) return null;
+    const event = entry.event;
+    if (event.type === "assistant_message" && event.content.trim() !== "") parts.push(event.content);
+  }
+  const text = parts.join("\n\n").trim();
+  return text === "" ? null : text;
+}
+
 export interface PromoteResult {
   ok: boolean;
   error?: string;
@@ -543,6 +564,8 @@ export interface PromoteOptions {
   mainLogPath: string;
   sidechatId: string;
   sourceEventIds: number[];
+  /** 来源形式（指针分叉）：指向侧聊或其父链里的具体事件；与 sourceEventIds **互斥**。 */
+  sourceEventRefs?: EventRef[];
   note?: string;
   /** 来源 sidechat 的 events.jsonl 路径（content 缺省时用它重建正文）。 */
   sidechatLogPath?: string;
@@ -552,17 +575,28 @@ export interface PromoteOptions {
 
 /** /promote：渲染为主会话的一条 user_message（带完整 origin 四字段）；进主上下文前过输出扫描。 */
 export async function promoteToMain(opts: PromoteOptions): Promise<PromoteResult> {
-  if (!Array.isArray(opts.sourceEventIds) || opts.sourceEventIds.length === 0) {
-    return { ok: false, error: "promote: source_event_ids 不能为空（结论须可追溯）" };
+  const hasIds = Array.isArray(opts.sourceEventIds) && opts.sourceEventIds.length > 0;
+  const hasRefs = opts.sourceEventRefs !== undefined && opts.sourceEventRefs.length > 0;
+  if (hasIds && hasRefs) {
+    return { ok: false, error: "promote: 数字 id 与来源引用不能混用（歧义 fail closed）" };
+  }
+  if (!hasIds && !hasRefs) {
+    return { ok: false, error: "promote: 来源不能为空（结论须可追溯）" };
   }
   let content = opts.content;
   if (content === undefined) {
-    const sidechatLogPath = opts.sidechatLogPath ?? "";
-    if (sidechatLogPath === "") return { ok: false, error: "promote: 缺 sidechatLogPath（无法重建正文）" };
-    const events = await replay(sidechatLogPath).catch((): AgentEvent[] => []);
-    const derived = derivePromotionContent(events, opts.sourceEventIds);
-    if (derived === null) return { ok: false, error: "promote: 源事件里没有可提升的正文" };
-    content = derived;
+    if (hasRefs) {
+      const derived = await derivePromotionContentFromRefs(opts.sourceEventRefs!);
+      if (derived === null) return { ok: false, error: "promote: 来源引用里没有可提升的正文" };
+      content = derived;
+    } else {
+      const sidechatLogPath = opts.sidechatLogPath ?? "";
+      if (sidechatLogPath === "") return { ok: false, error: "promote: 缺 sidechatLogPath（无法重建正文）" };
+      const events = await replay(sidechatLogPath).catch((): AgentEvent[] => []);
+      const derived = derivePromotionContent(events, opts.sourceEventIds);
+      if (derived === null) return { ok: false, error: "promote: 源事件里没有可提升的正文" };
+      content = derived;
+    }
   }
   // §4.4.4 输出扫描（与 worker 回传同一份实现）：中和仿冒控制标签 + 角色行加 [harness] + 密钥脱敏。
   // 少做任何一件，旁路模型产出就会以「用户亲口说的话」的形态落进主转录（§10.8.2 明写两支同级风险）。
@@ -574,6 +608,7 @@ export async function promoteToMain(opts: PromoteOptions): Promise<PromoteResult
     kind: "sidechat",
     session_id: opts.sidechatId,
     source_event_ids: [...opts.sourceEventIds],
+    ...(hasRefs ? { source_event_refs: opts.sourceEventRefs!.map((r) => ({ ...r })) } : {}),
     ...(opts.note !== undefined && opts.note !== "" ? { note: opts.note } : {}),
   };
   const event: UserMessageEvent = { type: "user_message", content: scanned.text, origin };

@@ -11,6 +11,7 @@ import type { AgentEvent } from "../events";
 import { createMockSummarizer, type Summarizer } from "../agent/compaction";
 import { createSessionSummarizer } from "../agent/session-provider";
 import { promoteToMain, runSidechatTurn, scriptedSidechatModel, type SidechatModel } from "../agent/sidechat";
+import { isEventRef, type EventRef } from "../events";
 import { glob } from "../tools/glob";
 import { grep } from "../tools/grep";
 import { read_file } from "../tools/read_file";
@@ -178,10 +179,17 @@ export async function handleSidechatPromote(req: {
   sidechatId: string;
   parentSessionId: string;
   sourceEventIds: number[];
+  sourceEventRefs?: EventRef[];
   note?: string;
   content?: string;
 }): Promise<{ ok: boolean; error?: string; event?: AgentEvent }> {
   try {
+    const hasIds = Array.isArray(req.sourceEventIds) && req.sourceEventIds.length > 0;
+    const hasRefs = req.sourceEventRefs !== undefined && req.sourceEventRefs.length > 0;
+    if (hasIds && hasRefs) return { ok: false, error: "promote: 数字 id 与来源引用不能混用（歧义 fail closed）" };
+    if (hasRefs && !req.sourceEventRefs!.every((ref) => isEventRef(ref))) {
+      return { ok: false, error: "promote: 来源引用形状非法" };
+    }
     const dir = requireSessionsDir();
     // 提升是**写主会话**：必须落父会话自己的根。用单例根会在启动工作区造一条同 id 幽灵会话，
     // 真父会话里看不到这次提升（2026-10-21 独立评审实测）。
@@ -195,6 +203,7 @@ export async function handleSidechatPromote(req: {
       sidechatLogPath: sidechatEventsPath(dir, req.sidechatId),
       sidechatId: req.sidechatId,
       sourceEventIds: req.sourceEventIds,
+      ...(req.sourceEventRefs !== undefined ? { sourceEventRefs: req.sourceEventRefs } : {}),
       ...(req.note !== undefined ? { note: req.note } : {}),
       ...(req.content !== undefined ? { content: req.content } : {}),
     });

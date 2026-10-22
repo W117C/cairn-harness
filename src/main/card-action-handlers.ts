@@ -2,7 +2,8 @@
 // 拆分面（同 provider-key-inject 先例）：实现从 agent-runner.ts 搬来本轻模块，装配根按原路径继续导出。
 // 审批解耦（§4.4.3）：父 turn 结束后仍可应答——落流与路由走编排器绑定管线，不依赖活动 session。
 // 本模块不反向依赖装配根：它需要七处活状态（三门 / 会话 emit / 编排器两路 / 取消信号），按回调注入。
-import type { AgentEvent, ClarifyAnswerMap } from "../events";
+import { isEventRef } from "../events";
+import type { AgentEvent, ClarifyAnswerMap, EventRef } from "../events";
 import { ClarifyGate, PlanGate } from "../agent/gates";
 import { Orchestrator, orchestratorForAgent, orchestratorForApproval, orchestratorForMerge } from "../agent/orchestrator";
 import type { RespawnArgs } from "../agent/recovery";
@@ -52,6 +53,8 @@ export interface CardActionRequest {
   payload?: Record<string, unknown>;
   scope?: AskScope;
   targetAgentId?: string;
+  /** 卡片来源的真实引用（祖先行时给；旧调用不给 = 来源是当前会话自己的行）。 */
+  eventRef?: EventRef;
 }
 
 /** card_action 处理：落流（card_action 事件）→ 路由（worker 审批决议 / agent 取消）。
@@ -67,6 +70,9 @@ export async function handleCardAction(req: CardActionRequest): Promise<{ ok: bo
     typeof req.action !== "string" || req.action === ""
   ) {
     return { ok: false, error: "card-action: req 非法（需 cardId/sourceEventId(int)/cardType/action 均为非空合法值）" };
+  }
+  if (req.eventRef !== undefined && !isEventRef(req.eventRef)) {
+    return { ok: false, error: "card-action: eventRef 形状非法" };
   }
   if (req.scope === "always" && req.targetAgentId) {
     return {
@@ -101,6 +107,7 @@ export async function handleCardAction(req: CardActionRequest): Promise<{ ok: bo
     ...(req.payload ? { payload: req.payload } : {}),
     ...(req.scope ? { scope: req.scope } : {}),
     ...(req.targetAgentId ? { target_agent_id: req.targetAgentId } : {}),
+    ...(req.eventRef !== undefined ? { source_event_ref: req.eventRef } : {}),
   };
   await emit(event);
   // ---- M3b：合并控制塔 + 评审闭环（diff 卡动作经同一 card_action 协议；合并唯一出口 = git 面板，§4.3）----
@@ -124,7 +131,7 @@ export async function handleCardAction(req: CardActionRequest): Promise<{ ok: bo
       return { ok: false, error: "comment 需要 payload{path, line>=1, body 非空}" };
     }
     // diff_comment 落流（§3.4 新事件）→ 定向 user_message 注入 worker 子流（评审闭环；评论回传不挂 turn）
-    await emit({ type: "diff_comment", agent_id: req.targetAgentId, path, line: line as number, body, ts: Date.now() } as AgentEvent);
+    await emit({ type: "diff_comment", agent_id: req.targetAgentId, path, line: line as number, body, ts: Date.now(), ...(req.eventRef !== undefined ? { source_ref: req.eventRef } : {}) } as AgentEvent);
     const r = await owner.injectComment(req.targetAgentId, path, line as number, body);
     /* injected:false 是真事实，不是失败：worker 取消中 / 已终态且 worktree 已收尾 ⇒ 评论只落流、
        没有进它的子流。这一面曾经被吞成 {ok:true}——界面就只剩「已送进子流」可说，等于把没送达说成送达。 */

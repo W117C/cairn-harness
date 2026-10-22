@@ -11,7 +11,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { FeedbackStore } from "../src/main/feedback";
 import { PinStore } from "../src/main/pins";
 import { handleFeedbackSubmit, initSessionsDir } from "../src/main/session-handlers";
-import type { EventRef } from "../src/events";
+import { replay, type EventRef } from "../src/events";
+import { promoteToMain } from "../src/agent/sidechat";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((r) => rm(r, { recursive: true, force: true }))); });
@@ -95,5 +96,35 @@ describe("生产入口：owner 是子会话，父日志与父 sidecar 不动", (
     expect(raw).toContain('"sessionId":"parent"'); // 作为来源引用出现，不是 owner
     expect(await sha(parentPath)).toBe(before);
     await expect(readFile(join(root, "parent.feedback.jsonl"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
+describe("侧聊提升的来源形式", () => {
+  it("只用 EventRef 时从来源视图重建正文，origin 记下来源引用", async () => {
+    const { ws, root } = await setup();
+    await writeFile(join(root, "parent.jsonl"), [
+      JSON.stringify({ type: "user_message", content: "P1" }),
+      JSON.stringify({ type: "assistant_message", content: "PARENT_CONCLUSION" }),
+    ].join("\n") + "\n");
+    const mainLog = join(root, "main.jsonl");
+    await writeFile(mainLog, "");
+    const ref: EventRef = { workspace: ws, sessionId: "parent", eventId: 2 };
+    const res = await promoteToMain({ mainLogPath: mainLog, sidechatId: "sc", sourceEventIds: [], sourceEventRefs: [ref] });
+    expect(res.ok).toBe(true);
+    const events = await replay(mainLog);
+    const promoted = events.find((e) => e.type === "user_message");
+    expect(promoted?.type === "user_message" ? promoted.content : "").toBe("PARENT_CONCLUSION");
+    expect(promoted?.type === "user_message" ? promoted.origin?.source_event_refs : undefined).toEqual([ref]);
+  });
+
+  it("数字 id 与来源引用混用 / 坏引用都 fail closed", async () => {
+    const { ws, root } = await setup();
+    const mainLog = join(root, "main.jsonl");
+    await writeFile(mainLog, "");
+    const ref: EventRef = { workspace: ws, sessionId: "parent", eventId: 1 };
+    expect(await promoteToMain({ mainLogPath: mainLog, sidechatId: "sc", sourceEventIds: [1], sourceEventRefs: [ref] }))
+      .toMatchObject({ ok: false, error: expect.stringContaining("混用") });
+    expect(await promoteToMain({ mainLogPath: mainLog, sidechatId: "sc", sourceEventIds: [], sourceEventRefs: [{ workspace: ws, sessionId: "parent", eventId: 0 }] }))
+      .toMatchObject({ ok: false, error: expect.stringContaining("没有可提升的正文") });
   });
 });
