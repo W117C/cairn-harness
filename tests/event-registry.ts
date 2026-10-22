@@ -40,8 +40,7 @@ export function unionTypes(): string[] {
   const out: string[] = [];
   const unresolved: string[] = [];
   for (const n of names) {
-    const i = src.indexOf(`export interface ${n} `);
-    const lit = i < 0 ? null : src.slice(i, i + 1200).match(/\btype:\s*"([a-z_]+)"/)?.[1] ?? null;
+    const lit = typeLiteralOf(n);
     if (lit === null) unresolved.push(n);
     else out.push(lit);
   }
@@ -49,4 +48,30 @@ export function unionTypes(): string[] {
     throw new Error(`AgentEvent 成员解析不出 type 字面量（拒绝当成“没有这个类型”）：${unresolved.join(", ")}`);
   }
   return out;
+}
+
+/** 成员名 → 它声明的 `type` 字面量。
+ *  成员可能是 interface，也可能是**别名联合**（如 `CompactionEvent = NumericCompaction | ReferencedCompaction`）：
+ *  别名要逐个成员解析，且所有成员必须声明**同一个** type 字面量；解析不出就返回 null（上层 fail-loud）。 */
+function typeLiteralOf(name: string, depth = 0): string | null {
+  if (depth > 4) return null;
+  const src = read(EVENTS);
+  const iface = src.indexOf(`export interface ${name} `);
+  if (iface >= 0) {
+    const chunk = src.slice(iface, iface + 1600);
+    const own = chunk.match(/\btype:\s*"([a-z_]+)"/)?.[1];
+    if (own !== undefined) return own;
+    // 成员接口可能把 `type` 字面量放在公共基接口里（`CompactionEvent` 的两种形式都 extends CompactionCommon）。
+    const base = chunk.match(/extends\s+([A-Za-z0-9_]+)/)?.[1];
+    return base === undefined ? null : typeLiteralOf(base, depth + 1);
+  }
+  const alias = src.indexOf(`export type ${name} =`);
+  if (alias < 0) return null;
+  const aliasBody = src.slice(alias + `export type ${name} =`.length, src.indexOf(";", alias));
+  const members = [...aliasBody.matchAll(/(?:^|\|)\s*([A-Za-z0-9_]+)/g)]
+    .map((m) => m[1]!)
+    .filter((m) => m !== "undefined" && m !== "true" && m !== "false");
+  const lits = members.map((m) => typeLiteralOf(m, depth + 1));
+  const unique = [...new Set(lits.filter((l): l is string => l !== null))];
+  return unique.length === 1 && lits.every((l) => l !== null) ? unique[0]! : null;
 }

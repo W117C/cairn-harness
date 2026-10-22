@@ -82,14 +82,18 @@ describe("withSessionMutation：根级临界区", () => {
     const { root } = await setup();
     const order: string[] = [];
     let release!: () => void;
+    let markStarted!: () => void;
     const gate = new Promise<void>((r) => { release = r; });
+    const started = new Promise<void>((r) => { markStarted = r; });
     const first = withSessionMutation(root, async () => {
       order.push("first-start");
+      markStarted();
       await gate;
       order.push("first-end");
     });
     const second = withSessionMutation(root, async () => { order.push("second"); });
-    await new Promise((r) => setTimeout(r, 20));
+    await started; // 等第一段真的开跑，再判第二段没抢跑（不靠固定 sleep 赌负载）
+    await new Promise((r) => setTimeout(r, 0));
     expect(order).toEqual(["first-start"]);
     release();
     await Promise.all([first, second]);
