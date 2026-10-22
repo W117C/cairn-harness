@@ -14,6 +14,7 @@
 
 - `outputs/` 66M：已跟踪证据，`repo-hygiene-check` 面①按 70% 帽度量；历史取料不追溯删除。
 - `dsh-refs/` 59M、`pel-runs/` 1M、`agent-canon/`：PROGRESS 第 18715 页明定「参考面与实验证据，只读参考」。
+  （**后话**：业主于 2026-10-22 改裁「全部删除」，`pel-runs/` 已整目录删掉，见 PROGRESS 第 667 页。本条记录的是 2026-10-21 当时的裁决，**不追改**。）
 - `node_modules/`、`fixtures/`：构建与判卷输入。
 - `oh-src/README-moved.md`：指向 `dsh-refs/oh-src` 的迁移指针，文档历史引用仍可达。
 
