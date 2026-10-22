@@ -14,7 +14,7 @@
  *  的插话不会在日志里留下一句没人回应的话——这与 `pendingImages` 同一条纪律。 */
 
 export interface SteeringChannel {
-  /** 界面侧：用户在这一轮跑着的时候补了一句话。空串/纯空白会被丢掉（它不是指令）。 */
+  /** 界面侧：用户在这一轮跑着的时候补了一句话。空串与纯空白在这里被丢弃——它们是误触，不是人要说的话。 */
   push: (text: string) => void;
   /** loop 侧：轮界取料。一次取走全部（含同一拍里连说的几句），取完即空。 */
   take: () => string[] | undefined;
@@ -35,7 +35,7 @@ export function createSteeringChannel(): SteeringChannel & { push: (text: string
       // 超帽**截断并保留**而不是拒收：插话是人的即时意图，丢掉它比截断它更坏。
       // 截断边界写进正文尾部，让模型知道这里被截过（不静默截）。
       const body = trimmed.length > STEERING_TEXT_MAX_CHARS
-        ? trimmed.slice(0, STEERING_TEXT_MAX_CHARS) + "\n[插话已按 " + String(STEERING_TEXT_MAX_CHARS) + " 字符上限截断]"
+        ? trimmed.slice(0, STEERING_TEXT_MAX_CHARS) + "\n[插话超过 " + String(STEERING_TEXT_MAX_CHARS) + " 字符，尾部被截断]"
         : trimmed;
       pending = [...pending, body];
     },
