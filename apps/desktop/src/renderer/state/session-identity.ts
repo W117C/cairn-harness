@@ -42,3 +42,8 @@ export function isStaleForActive(args: {
   if (eventWorkspace === undefined || eventWorkspace === "" || activeWorkspace === null) return false;
   return eventWorkspace !== activeWorkspace;
 }
+
+/** 运行/结果等状态 map 的键：有 workspace 用 ref 键，没有就退回裸 id（旧行为）。 */
+export function runKey(workspace: string | null | undefined, sessionId: string): string {
+  return sessionKeyOf(workspace, sessionId) ?? sessionId;
+}

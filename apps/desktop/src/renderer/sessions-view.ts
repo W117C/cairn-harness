@@ -1,6 +1,7 @@
 // P1 主界面重做：会话侧栏视图纯函数（分组 / 时间桶 / 状态合成 / 段结构）。
 // groupByWorkspace / OTHER_WORKSPACE / WorkspaceGroup 自 Sidebar.tsx 迁出——判据一字未动
 // （判卷资产原样保留）；新增面全部纯函数、无 React 依赖、可判卷。
+import { runKey } from "./state/session-identity";
 import type { SessionInfoPayload } from "../../../../src/main/ipc-protocol";
 import { STR } from "./strings";
 
@@ -222,7 +223,7 @@ export type SessionFilterId = (typeof SESSION_FILTERS)[number]["id"];
 export const SESSION_FILTER_NOTE = STR.filter.note;
 
 export function matchSession(
-  s: { id: string; title?: string; pinned?: boolean; archived?: boolean; origin?: "scheduled" },
+  s: { id: string; title?: string; pinned?: boolean; archived?: boolean; origin?: "scheduled"; workspace?: string },
   input: { search: string; filter: SessionFilterId; running?: ReadonlySet<string> },
 ): boolean {
   const q = input.search.trim().toLowerCase();
@@ -234,7 +235,7 @@ export function matchSession(
     case "all":
       return true;
     case "running":
-      return input.running?.has(s.id) === true;
+      return input.running?.has(runKey(s.workspace, s.id)) === true;
     case "pinned":
       return s.pinned === true;
     case "archived":

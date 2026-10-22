@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import type { AgentEvent,AskPayload,ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import { isMainSessionTerminalEvent } from "../projections";
 import { isSessionEndDistillAsk,type QueuedSend } from "../send-queue";
-import { isStaleForActive } from "./session-identity";
+import { isStaleForActive, runKey } from "./session-identity";
 
 interface SessionSubscriptionDeps {
   refreshSessions: () => Promise<void>;
@@ -70,23 +70,25 @@ export function useSessionSubscription(deps: SessionSubscriptionDeps) {
       // 运行集口径（2026-10-06 收口）：活动会话不由事件置位（置位只走发送那条路）；
       // 任何会话收到**主会话**终态 agent_status 摘位；worker 子流的终态不摘主会话旗
       // （二者同型且同带 session_id，唯一判据在 projections.isMainSessionTerminalEvent）。
+      const evWorkspace = (e as { workspace?: string }).workspace ?? activeWorkspaceRef.current;
+      const statusKey = sid === undefined ? undefined : runKey(evWorkspace, sid);
       const deltaSid = sid ?? (e.type === "assistant_delta" ? activeIdRef.current : null);
       if (e.type === "assistant_delta" && deltaSid !== null) lastDeltaAt.current.set(deltaSid, Date.now());
       const terminal = isMainSessionTerminalEvent(e);
       if (sid && terminal) {
-        runningSet.current.delete(sid);
+        runningSet.current.delete(statusKey!);
         lastDeltaAt.current.delete(sid);
         // P1 侧栏状态记账（诚实边界）：done ⇒ 对勾、failed ⇒ 红点、cancelled ⇒ 清位
         // （用户主动停的不冒充完成也不报失败）。会话终态不落盘 ⇒ 本进程记账，重启归零如实。
         const status = (e as { status?: string }).status;
-        if (status === "done") outcomes.current.set(sid, "ok");
-        else if (status === "failed") outcomes.current.set(sid, "failed");
-        else outcomes.current.delete(sid);
+        if (status === "done") outcomes.current.set(statusKey!, "ok");
+        else if (status === "failed") outcomes.current.set(statusKey!, "failed");
+        else outcomes.current.delete(statusKey!);
         force((n) => n + 1);
       }
       if (sid && sid !== activeIdRef.current) {
         // 后台会话仍在跑：只在非终态时点亮（终态刚在上面摘过，别又补上）
-        if (!terminal) runningSet.current.add(sid);
+        if (!terminal) runningSet.current.add(statusKey!);
         force((n) => n + 1);
         return;
       }

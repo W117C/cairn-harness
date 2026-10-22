@@ -19,6 +19,7 @@ import { relativeTime } from "../projections";
 import type { UsageSummary } from "../projections";
 import { keysOf } from "../shortcuts";
 import { filterSessions, groupByWorkspace, projectLabelFor, projectMenuItems, projectSections, sessionStatus, sessionTime, splitArchived, workspaceLabel, OTHER_WORKSPACE, type TimeBucket, type WorkspaceSession } from "../sessions-view";
+import { sessionKeyOf } from "../state/session-identity";
 import { STR } from "../strings";
 import { Popover, usePopoverDismiss } from "./Popover";
 import { UsagePanel, type UsageAllState, type UsageScope } from "./UsagePanel";
@@ -528,12 +529,14 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
     });
   };
 
-  const statusOf = (id: string): ReturnType<typeof sessionStatus> =>
-    sessionStatus({
-      running: props.running.has(id),
-      waiting: props.waitingIds.has(id),
-      lastOutcome: props.outcomes.get(id),
+  const statusOf = (id: string, workspace?: string): ReturnType<typeof sessionStatus> => {
+    const key = sessionKeyOf(workspace, id) ?? id;
+    return sessionStatus({
+      running: props.running.has(key),
+      waiting: props.waitingIds.has(key),
+      lastOutcome: props.outcomes.get(key),
     });
+  };
 
   // 归档会话单列（2026-10-17）：常规项目组只吃 active；已归档进底部「已归档」分组找回。
   const { active: activeSessions, archived: archivedSessions } = splitArchived(props.sessions);
@@ -570,7 +573,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                       key={s.id}
                       session={s}
                       activeId={s.workspace === props.activeWorkspace ? props.activeId : null}
-                      status={statusOf(s.id)}
+                      status={statusOf(s.id, s.workspace)}
                       onOpen={props.onOpen}
                       posInSet={flatOrder.indexOf(s) + 1}
                       setSize={flatOrder.length}

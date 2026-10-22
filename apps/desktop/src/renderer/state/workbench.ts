@@ -5,7 +5,8 @@ import { useProjectActions } from "./projects";
 import { useRunQueue } from "./run-queue";
 import { useRunReadings } from "./run-readings";
 import { inheritedDisplayIndexes, mergeViewEvents, refsByDisplayIndex } from "../derived/event-reference";
-import type { SessionView } from "../../../../../src/events";
+import { runKey } from "./session-identity";
+import type { SessionRef, SessionView } from "../../../../../src/events";
 import { useSessionSubscription } from "./session-subscription";
 // App 根（Claude 蓝本 v1 重建）：外壳（TitleBar + Sidebar + Main）+ 覆盖层（设置页）。
 // 状态编排/事件驱动/运行链全部沿用既有实现（逻辑资产原样搬运）：
@@ -521,14 +522,15 @@ export function useWorkbenchModel() {
     // 先例，不动 ipc-protocol）：main 侧运行实况。换渲染层实例（HMR/重载）后陈旧的「运行中」
     // 标记没有主人（收束时旧实例的 finally 已随实例销毁），打开即用 main 真值收敛：在跑补上、
     // 已收束摘掉。收束补发终态是正路，这条是每次开会话自愈一次的兜底，两者互不依赖。
-    const opened = (window.agent.openSession(id, sessionWs ?? undefined) as Promise<{ events: AgentEvent[]; view?: SessionView; running?: boolean; startedAt?: number }>).then((r) => {
+    const opened = (window.agent.openSession(id, sessionWs ?? undefined) as Promise<{ events: AgentEvent[]; view?: SessionView; session?: SessionRef; running?: boolean; startedAt?: number }>).then((r) => {
       if (seq !== openSeq.current) return;
       if (openPending.current === pending) openPending.current = null;
       setSessionView(r.view ?? null);
       setEvents(mergeSessionSnapshot(r.events, pending.events));
       if (typeof r.running === "boolean") {
-        const was = runningSet.current.has(id);
-        if (r.running) runningSet.current.add(id); else runningSet.current.delete(id);
+        const runId = runKey(r.session?.workspace ?? sessionWs ?? activeWorkspace, id);
+        const was = runningSet.current.has(runId);
+        if (r.running) runningSet.current.add(runId); else runningSet.current.delete(runId);
         if (was !== r.running) force((n) => n + 1);
       }
       // 换渲染层实例后接管一场**在跑**的 run：秒表起点本机没有（起点在 send() 里盖，
@@ -710,7 +712,7 @@ export function useWorkbenchModel() {
       }      case "cycle-perm": {
         const order: PermissionMode[] = ["read-only", "default", "guided", "auto"];
         const next = order[(order.indexOf(mode) + 1) % order.length] ?? "default";
-        const runningHere = activeId !== null && runningSet.current.has(activeId); // runningActive 的同一读法（TDZ 口径在其定义之前不可引用）
+        const runningHere = activeId !== null && runningSet.current.has(runKey(activeWorkspace, activeId)); // runningActive 的同一读法（TDZ 口径在其定义之前不可引用）
         void window.agent.setSettings({ mode: next }).then(() => {
           setMode(next);
           const info = MODE_LABEL[next];
@@ -754,7 +756,7 @@ export function useWorkbenchModel() {
   // 这样后台会话的排队不因切换会话而丢失，自动派发也只认原会话。
   const { setQueueFor, send, sendWithGoal, handleRetryLast, handleRetryRound, resumeQueue, cancelRunHeal } = useRunQueue({ setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, modeRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef });
 
-    const { lastError, lastNotice, runningActive, pendingClarify, pendingPlan, askForActive, phase, stopped, phaseLabel, chosen, pickerValue } = useRunReadings({ sessionErrors, activeId, sessionNotices, runningSet, setElapsedSec, runStartBySession, events, askBySid, stoppedIds, lastDeltaAt, selections, providerInfo });
+    const { lastError, lastNotice, runningActive, pendingClarify, pendingPlan, askForActive, phase, stopped, phaseLabel, chosen, pickerValue } = useRunReadings({ sessionErrors, activeId, sessionNotices, runningSet, setElapsedSec, runStartBySession, events, askBySid, stoppedIds, lastDeltaAt, selections, providerInfo, activeWorkspace });
 
     const usage = usageAggregate(events);
   // 头像菜单「用量统计」面板的数据（批 130）：当前会话口径，纯投影 ⇒ 判卷可测。
