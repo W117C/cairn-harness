@@ -21405,7 +21405,9 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 收尾核对工作树时发现：主检出里有**不是我这一轮**的改动在飞
 （`src/agent/loop.ts` 大改 ＋ `apps/desktop/src/main/window-workspace-context.ts`、
-`tests/loop-submission-idempotency.test.ts` 等新文件 ＋ `outputs/open-task-reconciliation-2026-10-22/`）。
+`tests/loop-submission-idempotency.test.ts` 等新文件 ＋ 它自己的 outputs 目录）。
+**这里不点名它的 dated 目录**：那不是本页的证人，而 D-11 会要求「点名的 dated 目录随页入库」⇒
+点它就等于把它的产物绑进本轮。
 
 ⇒ 三件事按规矩做了：
 1. **不碰、不提交**：仓里 AGENTS.md 明写「别的会话的脏改动不许 reset/stash，也不许带进本任务的提交」。
