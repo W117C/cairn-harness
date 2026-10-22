@@ -22200,3 +22200,23 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
 
 **仍未跑**：`pnpm mutate-verify`（全表变异实跑，半小时量级）。本页因此只声明「HEAD 认证过、门面红 1 道是存量」，
 不声明「全表变异通过」。
+
+### 九、全表变异实跑（`54cd5f33`）：**1589/1589 全杀**
+
+`pnpm mutate-verify`（量 HEAD，在一次性 worktree 里跑，退出码由脚本自己取，不接管道）：
+
+```
+全部变异被正确杀死（断言非恒真）
+本次耗时 1841.7s · 跑了 1589/1589 条 · 未设预算
+成本分母：判卷 spawn 3178 次／1589 条（每条 2×）· 单次中位 第1 次 0.4s／第2 次 0.4s
+跑法单价：selector 3174 拍·中位 0.39s·坏拍（选中≠1）0 vs whole 4 拍
+```
+
+- 本页新加的 4 条针脚（`anthropic-start/delta-cache-frame-ignored`、
+  `anthropic/gemini-never-emits-stop-missing`）在**落库后的 HEAD** 上都可判定且被杀——
+  这正好闭合了第八节那条「落库前钉在飞文本 4」的悬念。
+- 最贵一条仍是 `orchestrator-project-rules-not-passed`（32.0s），与本笔无关。
+- 锁：本进程持有 `.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock`（两端独占）。
+
+⇒ 本页到此为止的两道 HEAD 门（`head-cert-check` + `mutate-verify`）都有读数了：
+**门面红 1 道（D-5 存量）+ 判卷红 2 条（同两条存量）+ 变异 1589/1589 全杀**。
