@@ -57,7 +57,29 @@ export interface Projection {
  * · `to_event_id` < 1（含 0 与负数）→ `rewind-invalid-target`；
  * · `to_event_id` 越过当前边界（指到还没发生的行，或指到已被前一次回退丢弃的行）→ `rewind-out-of-range`。
  */
+/** 一条有效历史事件 + 它在**原文件**里的 1-based 行号（来源视图用；不重编号）。 */
+export interface ProjectedEvent {
+  event: AgentEvent;
+  eventId: number;
+}
+
+interface RawProjection {
+  /** 有效历史候选（含元数据补丁），带原行号。 */
+  kept: { id: number; event: AgentEvent }[];
+  patch: Record<string, string>;
+  boundary: number;
+}
+
 function project(events: readonly AgentEvent[]): Projection {
+  const raw = projectRaw(events);
+  return {
+    events: raw.kept.filter((k) => !isMetaUpdate(k.event)).map((k) => k.event),
+    patch: raw.patch,
+    boundary: raw.boundary,
+  };
+}
+
+function projectRaw(events: readonly AgentEvent[]): RawProjection {
   // kept = 有效历史**候选**：除回退标记外的所有行（按 id 升序，恒为日志前缀）。
   // 元数据补丁也留在里面：补丁要从**有效集合**里累积（回退砍掉后缀 ⇒ 补丁随之回滚）。
   const kept: { id: number; event: AgentEvent }[] = [];
@@ -114,11 +136,16 @@ function project(events: readonly AgentEvent[]): Projection {
     }
   }
 
-  return {
-    events: kept.filter((k) => !isMetaUpdate(k.event)).map((k) => k.event),
-    patch,
-    boundary,
-  };
+  return { kept, patch, boundary };
+}
+
+/** 有效历史 + 各事件在原文件里的 1-based 行号（来源视图用）。
+ *  与 `effectiveEvents` 同一份投影：控制记录照旧过滤，只是**不重编号**——
+ *  拼接后数组的下标不是任何文件的物理行号。 */
+export function effectiveEntries(events: readonly AgentEvent[]): ProjectedEvent[] {
+  return projectRaw(events).kept
+    .filter((k) => !isMetaUpdate(k.event))
+    .map((k) => ({ event: k.event, eventId: k.id }));
 }
 
 /**
