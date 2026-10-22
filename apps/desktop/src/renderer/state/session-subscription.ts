@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import type { AgentEvent,AskPayload,ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import { isMainSessionTerminalEvent } from "../projections";
 import { isSessionEndDistillAsk,type QueuedSend } from "../send-queue";
+import { isStaleForActive } from "./session-identity";
 
 interface SessionSubscriptionDeps {
   refreshSessions: () => Promise<void>;
@@ -15,6 +16,7 @@ interface SessionSubscriptionDeps {
   refetching: MutableRefObject<boolean>;
   openPending: MutableRefObject<{ id: string; events: AgentEvent[]; } | null>;
   activeIdRef: MutableRefObject<string | null>;
+  activeWorkspaceRef: MutableRefObject<string | null>;
   lastDeltaAt: MutableRefObject<Map<string, number>>;
   runningSet: MutableRefObject<Set<string>>;
   outcomes: MutableRefObject<Map<string, "ok" | "failed">>;
@@ -29,7 +31,7 @@ interface SessionSubscriptionDeps {
 }
 
 export function useSessionSubscription(deps: SessionSubscriptionDeps) {
-  const { refreshSessions, refreshProviderInfo, refreshProviderKeys, setProjects, setRegistryNotice, knownSessionIds, refetching, openPending, activeIdRef, lastDeltaAt, runningSet, outcomes, force, setEvents, sendQueue, setLastNotice, askById, setAskBySid, waitingByAsk, waitingCounts } = deps;
+  const { refreshSessions, refreshProviderInfo, refreshProviderKeys, setProjects, setRegistryNotice, knownSessionIds, refetching, openPending, activeIdRef, activeWorkspaceRef, lastDeltaAt, runningSet, outcomes, force, setEvents, sendQueue, setLastNotice, askById, setAskBySid, waitingByAsk, waitingCounts } = deps;
   useEffect(() => {
     refreshSessions();
     void refreshProviderInfo();
@@ -48,6 +50,13 @@ export function useSessionSubscription(deps: SessionSubscriptionDeps) {
         return;
       }
       const sid = (e as { session_id?: string }).session_id;
+      // 同名 id 的另一棵根的迟到事件：不得进当前转录、不得点当前运行灯（推送带 workspace 才判）。
+      if (isStaleForActive({
+        activeId: activeIdRef.current,
+        activeWorkspace: activeWorkspaceRef.current,
+        eventSessionId: sid,
+        eventWorkspace: (e as { workspace?: string }).workspace,
+      })) return;
       if (sid && !knownSessionIds.current.has(sid) && !refetching.current) {
         refetching.current = true;
         refreshSessions().finally(() => { refetching.current = false; });

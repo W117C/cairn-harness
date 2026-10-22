@@ -450,7 +450,7 @@ export function useWorkbenchModel() {
     [providerKeys],
   );
 
-  useSessionSubscription({ refreshSessions, refreshProviderInfo, refreshProviderKeys, setProjects, setRegistryNotice, knownSessionIds, refetching, openPending, activeIdRef, lastDeltaAt, runningSet, outcomes, force, setEvents, sendQueue, setLastNotice, askById, setAskBySid, waitingByAsk, waitingCounts });
+  useSessionSubscription({ refreshSessions, refreshProviderInfo, refreshProviderKeys, setProjects, setRegistryNotice, knownSessionIds, refetching, openPending, activeIdRef, activeWorkspaceRef, lastDeltaAt, runningSet, outcomes, force, setEvents, sendQueue, setLastNotice, askById, setAskBySid, waitingByAsk, waitingCounts });
 
     const activate = useCallback((id: string | null) => {
     activeIdRef.current = id;

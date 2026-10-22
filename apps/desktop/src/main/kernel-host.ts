@@ -357,13 +357,20 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
   // 并发尾随时，计数互相抬高 ⇒ 归因保守偏「拒」（不静默覆盖是底线方向），openSession 刷新即恢复。
   const ownAppends = new Map<string, number>();
 
+  // 推送带归属工作区（计划 Task 5b）：渲染层不能只拿 session id 分同名会话。
+  // owner 表是同步 Map（open/create/run 登记过），推送点拿不到归属就原样发、不编。
+  const withWorkspace = <T extends object>(payload: T, sessionId: string | undefined): T => {
+    if (sessionId === undefined || sessionId === "") return payload;
+    const ws = owner.get(sessionId);
+    return ws === undefined ? payload : { ...payload, workspace: ws };
+  };
   setAppHooks({
     onEvent: (e) => {
       const sid = (e as { session_id?: unknown }).session_id;
       if (typeof sid === "string") ownAppends.set(sid, (ownAppends.get(sid) ?? 0) + 1);
-      deps.outbox("onEvent", e);
+      deps.outbox("onEvent", withWorkspace(e, typeof sid === "string" ? sid : undefined));
     },
-    onAsk: (p) => deps.outbox("onAsk", p),
+    onAsk: (p) => deps.outbox("onAsk", withWorkspace(p, p.sessionId)),
     onAskOutcome: (p) => deps.outbox("onAskDone", p),
   });
 
@@ -496,7 +503,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
         req.message,
       ).catch(() => null);
       if (titled !== null) {
-        deps.outbox("onEvent", { type: "session_titled", session_id: sessionId, title: titled, ts: Date.now() });
+        deps.outbox("onEvent", withWorkspace({ type: "session_titled", session_id: sessionId, title: titled, ts: Date.now() }, sessionId));
       }
       let settledOk = false;
       let accepted = false;
@@ -530,6 +537,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
         // 「会话不在运行」，渲染层仍在转、消息卡队列）。此推送经 deps.outbox → 全窗口到达每个
         // 活实例，任何来源的陈旧 running 标记都被摘掉；形状与 worker 的 agent_status 一致。
         deps.outbox("onEvent", {
+          workspace: ws,
           type: "agent_status",
           // 不带 agent_id：它是主会话终态，而渲染层把任何带 agent_id 的 agent_status 当 worker 子流
           // （isMainSessionTerminalEvent 会返回 false），运行旗永远摘不掉。

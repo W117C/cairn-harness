@@ -28,3 +28,17 @@ export function isInheritedRef(current: SessionRef | null, ref: EventRef | null 
   if (ref === null || ref === undefined || current === null) return false;
   return ref.workspace !== current.workspace || ref.sessionId !== current.sessionId;
 }
+
+/** 活动会话的迟到事件：同名 id、但来自另一个已登记工作区 ⇒ 不得写进当前转录/运行灯。
+ *  推送不带 workspace（旧 host）时返回 false —— 保持旧行为，不靠猜。 */
+export function isStaleForActive(args: {
+  activeId: string | null;
+  activeWorkspace: string | null;
+  eventSessionId: string | undefined;
+  eventWorkspace: string | undefined;
+}): boolean {
+  const { activeId, activeWorkspace, eventSessionId, eventWorkspace } = args;
+  if (activeId === null || eventSessionId !== activeId) return false;
+  if (eventWorkspace === undefined || eventWorkspace === "" || activeWorkspace === null) return false;
+  return eventWorkspace !== activeWorkspace;
+}

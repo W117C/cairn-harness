@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import type { AgentEvent, EventRef, SessionView } from "../../../src/events";
 import { eventRefKey } from "../../../src/events/session-ref";
 import { inheritedDisplayIndexes, mergeViewEvents, refsByDisplayIndex } from "../src/renderer/derived/event-reference";
-import { isInheritedRef, sessionKeyOf } from "../src/renderer/state/session-identity";
+import { isInheritedRef, isStaleForActive, sessionKeyOf } from "../src/renderer/state/session-identity";
 import { projectStream } from "../src/renderer/projections";
 import { Stream } from "../src/renderer/components/Stream";
 
@@ -77,5 +77,12 @@ describe("会话键：没有可信工作区就不写裸 id 键", () => {
     expect(sessionKeyOf("", "same")).toBeNull();
     expect(isInheritedRef({ workspace: W, sessionId: "child" }, { workspace: W, sessionId: "parent", eventId: 1 })).toBe(true);
     expect(isInheritedRef({ workspace: W, sessionId: "child" }, { workspace: W, sessionId: "child", eventId: 1 })).toBe(false);
+  });
+
+  it("同名 id 的另一棵根的迟到推送不进当前会话；旧 host 不带 workspace 时保持旧行为", () => {
+    expect(isStaleForActive({ activeId: "same", activeWorkspace: "/A", eventSessionId: "same", eventWorkspace: "/B" })).toBe(true);
+    expect(isStaleForActive({ activeId: "same", activeWorkspace: "/B", eventSessionId: "same", eventWorkspace: "/B" })).toBe(false);
+    expect(isStaleForActive({ activeId: "other", activeWorkspace: "/A", eventSessionId: "same", eventWorkspace: "/B" })).toBe(false);
+    expect(isStaleForActive({ activeId: "same", activeWorkspace: "/A", eventSessionId: "same", eventWorkspace: undefined })).toBe(false);
   });
 });
