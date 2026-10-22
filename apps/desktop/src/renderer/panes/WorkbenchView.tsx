@@ -765,7 +765,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
               injectedTextSeq={injectedTextSeq}
               draftRemap={draftRemap}
               {...(draftRestore !== undefined ? { restoreDraft: draftRestore } : {})}
-              onSend={(t, attachments) => { sendWithGoal(t, attachments); }}
+              onSend={(t, attachments, forceQueue) => { sendWithGoal(t, attachments, forceQueue); }}
               onCancel={() => { if (activeId !== null) cancelRunHeal(activeId); }}
               onPickDirectory={() => window.agent.pickDirectory()}
               onPickFiles={() => window.agent.pickFiles()}

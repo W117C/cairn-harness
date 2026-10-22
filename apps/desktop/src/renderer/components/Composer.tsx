@@ -167,7 +167,11 @@ export function Composer(props: {
   injectedAttachment?: { path: string; kind: "file" | "directory"; seq: number };
   /** v7 文本追加注入（元素选择结果等）：seq 递增触发一次 append 到草稿尾（不覆盖——与覆盖式 injectedText 分工）。 */
   injectedAppend?: { text: string; seq: number };
-  onSend: (text: string, attachments: RunAttachmentReference[]) => void;
+  /** 第三个参数 `forceQueue`：**只入队、不插话**。
+   *  为什么需要它：运行中的回车现在默认插话到本轮（第 9 点），但「加入队列」那颗钮点下去
+   *  必须**真的排队**——按钮写着「加入队列」却把话插进当前轮，按钮就在说谎。
+   *  缺省 undefined = 走默认语义（先试插话、不在跑则回落排队）。 */
+  onSend: (text: string, attachments: RunAttachmentReference[], forceQueue?: boolean) => void;
   onCancel: () => void;
   onModeChange: (mode: PermissionMode) => void;
   onModelChange: (registryId: string | null) => void;
@@ -559,9 +563,9 @@ export function Composer(props: {
   };
   // v2.17 运行中可沟通：运行中 onSend 走 App 的按会话队列（回车=入队）；
   // interrupt=true（⌘/Ctrl+Enter）时先入队再打断本轮——收束在轮界，队列随即派发（App 侧语义）。
-  const submit = (opts?: { interrupt?: boolean }) => {
+  const submit = (opts?: { interrupt?: boolean; forceQueue?: boolean }) => {
     if (!canSend) return;
-    props.onSend(text.trim(), stripRenderFields(attachments));
+    props.onSend(text.trim(), stripRenderFields(attachments), opts?.forceQueue);
     const sent = text.trim();
     if (sent !== "") {
       const hist = historyRef.current.get(draftKeyRef.current) ?? [];
@@ -1162,7 +1166,7 @@ export function Composer(props: {
               className="send-btn queue"
               aria-label={STR.composer.queueAria}
               title={STR.composer.queueTitle}
-              onClick={() => { submit(); }}
+              onClick={() => { submit({ forceQueue: true }); }}
             >
               <Clock size={13} />
             </button>

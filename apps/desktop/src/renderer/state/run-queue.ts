@@ -121,7 +121,9 @@ export function useRunQueue(deps: RunQueueDeps) {
     }, () => takeQueuedHead(sid));
   }, [setLastError, takeQueuedHead]);
 
-  const send = useCallback(async (text: string, attachments: RunAttachmentReference[] = []) => {
+  /** `forceQueue`（第 9 点）：只入队、不插话。运行中那颗「加入队列」钮点下去必须真的排队——
+   *  按钮写着「加入队列」却把话插进当前轮，就是按钮在说谎。 */
+  const send = useCallback(async (text: string, attachments: RunAttachmentReference[] = [], forceQueue = false) => {
     const sid = activeId;
     if (sid !== null && editCtxRef.current?.forkId === sid) setEditCtx(null);
     // 运行中发送 = 入队（收束后 runOn 的循环自动派下一条）。判据用 ref 不用渲染态：
@@ -145,7 +147,7 @@ export function useRunQueue(deps: RunQueueDeps) {
       //
       // 纯文本才走插话：附件（图片/文件引用）那条路要过引用校验与附件装载，属下一次 run 的入口，
       // 半路塞进当前轮会把校验绕开。带附件的消息照旧入队。
-      if (attachments.length === 0) {
+      if (forceQueue !== true && attachments.length === 0) {
         const steered = await window.agent.runSteer(sid, text).catch(() => ({ ok: false as const }));
         if (steered.ok === true) {
           // 回执必须说清是「已插话」还是「已排队」：两种后果差一整轮的工作。
@@ -196,7 +198,7 @@ export function useRunQueue(deps: RunQueueDeps) {
    *  此前斜杠项只往输入框塞字，发出去就是一条普通消息，目标从未被设过。 */
   // 首页发 /goal 时还没有会话可挂目标：先记下来，等 send 建好会话、拿到 id 再 setGoal。
   const pendingGoal = useRef<GoalCommand | null>(null);
-  const sendWithGoal = useCallback((text: string, attachments: RunAttachmentReference[]): void => {
+  const sendWithGoal = useCallback((text: string, attachments: RunAttachmentReference[], forceQueue = false): void => {
     // /compact 是**命令**，不是消息（2026-10-18 同 /goal 病）：此前斜杠项把字塞进输入框，
     // 发出去只是一条普通消息，从没调用过 compact 通道；菜单里的「压缩历史…」才是真入口。
     if (text.trim() === "/compact") {
@@ -204,7 +206,7 @@ export function useRunQueue(deps: RunQueueDeps) {
       return;
     }
     const cmd = parseGoalCommand(text);
-    if (cmd === null) { void send(text, attachments); return; }
+    if (cmd === null) { void send(text, attachments, forceQueue); return; }
     const sid = activeIdRef.current;
     if (cmd.objective === "") { toast.error(STR.goal.emptyObjective); return; }
     if (sid === null) {
