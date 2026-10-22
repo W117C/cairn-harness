@@ -16,7 +16,7 @@
 //      绝不把"看不见"说成"能回滚"。
 import { copyFile, mkdir, rm, stat } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
-import type { AgentEvent } from "../events";
+import type { AgentEvent, EventRef, SessionView } from "../events";
 import { SNAPSHOT_ROOT } from "../tools/snapshot";
 import { WORKTREE_ROOT_DIR } from "./worktree";
 
@@ -30,8 +30,11 @@ export interface FileRevertEntry {
   snapshotId?: string;
   /** undo=manual：为什么这一条不自动还原。 */
   why?: string;
-  /** 这一条来自哪条 tool_result（1-based 事件序号，界面锚点与审计都读它）。 */
+  /** 这一条来自哪条 tool_result（1-based 事件序号，界面锚点与审计都读它）。
+   *  来源视图下 = 该事件在**所属文件**里的物理行号。 */
   sourceEventId: number;
+  /** 来源视图下该条 tool_result 的精确来源（祖先行时指向父文件；raw 调用缺席）。 */
+  sourceRef?: EventRef;
 }
 
 export interface FileRevertPlan {
@@ -64,12 +67,13 @@ interface WriteTouch {
   path: string;
   snapshotId: string | null;
   created: boolean;
+  ref?: EventRef;
 }
 
 /** 一条主会话成功的写回执 → 它改到的**全部**文件接触点。
  *  旧实现只取 snapshotId/单一路径：`apply_patch` 的 args 没有 path，`changedPaths` 里其余文件
  *  被整段静默漏掉（"回滚成功"却留着 b.ts）。取不到任何路径才返回空数组（调用方无条目）。 */
-function touchesOf(result: Extract<AgentEvent, { type: "tool_result" }>, eventId: number, callPath: string | null): WriteTouch[] {
+function touchesOf(result: Extract<AgentEvent, { type: "tool_result" }>, eventId: number, callPath: string | null, ref?: EventRef): WriteTouch[] {
   const snapshotId = typeof result.snapshotId === "string" && result.snapshotId !== "" ? result.snapshotId : null;
   const fromSnapshot = snapshotId === null ? null : pathFromSnapshotId(snapshotId);
   const paths = new Set<string>();
@@ -79,6 +83,7 @@ function touchesOf(result: Extract<AgentEvent, { type: "tool_result" }>, eventId
   const created = result.change === "created";
   return [...paths].map((path) => ({
     eventId,
+    ...(ref !== undefined ? { ref } : {}),
     path,
     // 快照只覆盖 snapshotId 指出的那一份（apply_patch 只带第一份）；其余文件按 manual 如实报。
     snapshotId: path === fromSnapshot ? snapshotId : null,
@@ -103,6 +108,19 @@ function turnSlice(events: readonly AgentEvent[], round: number): { from: number
 
 /** 事件流 → 某一轮的**文件回滚计划**（纯函数，零 I/O：判卷直接喂事件数组）。 */
 export function planTurnRevert(events: readonly AgentEvent[], round: number): FileRevertPlan | { error: string } {
+  return planCore(events, () => undefined, round);
+}
+
+/** 来源视图 → 同一条计划：祖先行以物理行号 + EventRef 记账，本地行同 raw 口径。 */
+export function planTurnRevertView(view: SessionView, round: number): FileRevertPlan | { error: string } {
+  return planCore(view.entries.map((entry) => entry.event), (index) => view.entries[index]?.ref, round);
+}
+
+function planCore(
+  events: readonly AgentEvent[],
+  refAt: (index: number) => EventRef | undefined,
+  round: number,
+): FileRevertPlan | { error: string } {
   const slice = turnSlice(events, round);
   if ("error" in slice) return slice;
 
@@ -120,7 +138,7 @@ export function planTurnRevert(events: readonly AgentEvent[], round: number): Fi
     const isWrite = e.snapshotId !== undefined || e.change !== undefined;
     if (!isWrite) continue;
     const callPath = e.callId === undefined ? null : callPaths.get(e.callId) ?? null;
-    touches.push(...touchesOf(e, i + 1, callPath));
+    touches.push(...touchesOf(e, refAt(i)?.eventId ?? i + 1, callPath, refAt(i)));
   }
 
   // 同一路径取最早一份快照（轮内中间态不算「这一轮之前」）
@@ -135,24 +153,24 @@ export function planTurnRevert(events: readonly AgentEvent[], round: number): Fi
     const isWrite = e.snapshotId !== undefined || e.change !== undefined;
     if (!isWrite) continue;
     const callPath = e.callId === undefined ? null : callPaths.get(e.callId) ?? null;
-    for (const t of touchesOf(e, i + 1, callPath)) touchedAfter.add(t.path);
+    for (const t of touchesOf(e, refAt(i)?.eventId ?? i + 1, callPath, refAt(i))) touchedAfter.add(t.path);
   }
 
   const entries: FileRevertEntry[] = [];
   for (const [path, t] of firstByPath) {
     if (touchedAfter.has(path)) {
-      entries.push({ path, undo: "manual", sourceEventId: t.eventId, why: "该文件在这一轮之后又被改过 ⇒ 回滚会把后来的改动一起抹掉；请回滚最近改动它的那一轮" });
+      entries.push({ path, undo: "manual", sourceEventId: t.eventId, ...(t.ref !== undefined ? { sourceRef: t.ref } : {}), why: "该文件在这一轮之后又被改过 ⇒ 回滚会把后来的改动一起抹掉；请回滚最近改动它的那一轮" });
       continue;
     }
     if (t.snapshotId !== null) {
-      entries.push({ path, undo: "restore", snapshotId: t.snapshotId, sourceEventId: t.eventId });
+      entries.push({ path, undo: "restore", snapshotId: t.snapshotId, sourceEventId: t.eventId, ...(t.ref !== undefined ? { sourceRef: t.ref } : {}) });
       continue;
     }
     if (t.created) {
-      entries.push({ path, undo: "delete", sourceEventId: t.eventId });
+      entries.push({ path, undo: "delete", sourceEventId: t.eventId, ...(t.ref !== undefined ? { sourceRef: t.ref } : {}) });
       continue;
     }
-    entries.push({ path, undo: "manual", sourceEventId: t.eventId, why: "这次写入没有留下覆盖前原件（覆盖的是空文件 / 快照层失败）⇒ 撤不回来" });
+    entries.push({ path, undo: "manual", sourceEventId: t.eventId, ...(t.ref !== undefined ? { sourceRef: t.ref } : {}), why: "这次写入没有留下覆盖前原件（覆盖的是空文件 / 快照层失败）⇒ 撤不回来" });
   }
   entries.sort((a, b) => a.sourceEventId - b.sourceEventId);
   return { round, totalRounds: slice.totalRounds, entries };

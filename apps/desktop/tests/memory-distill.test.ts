@@ -56,7 +56,7 @@ describe("接线哨兵（源码级）", () => {
   it("openSession 开会对账：running 实况收敛陈旧标记（在跑补上、已收束摘掉）", () => {
     expect(appSrc).toContain("running?: boolean");
     expect(appSrc).toContain('typeof r.running === "boolean"');
-    expect(appSrc).toContain("runningSet.current.delete(id)");
+    expect(appSrc).toContain("runningSet.current.delete(runId)");
   });
 
   it("kernel-host 收束补发合成终态：三态映射 + openSession.running 实况", () => {

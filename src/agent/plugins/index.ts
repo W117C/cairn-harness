@@ -23,7 +23,7 @@ import { loadUserAgentRoles, userAgentInvoke, type UserAgentRole } from "../role
 import {
   registerPluginLspServers, unregisterPluginLspServers, closePluginLspClients, type LspServerConfig as LspRuntimeConfig,
 } from "../../tools/lsp";
-import type { AgentEvent, ToolCallEvent, ToolResultEvent, UserMessageEvent } from "../../events";
+import { isNumericCompaction, type AgentEvent, type ToolCallEvent, type ToolResultEvent, type UserMessageEvent } from "../../events";
 import { userConfigValuesErrors } from "./manifest";
 import type {
   DiscoveredPlugin, LoadedHookDef, LooseSkill, PluginsManifest, SkillEntry, McpServerStatus,
@@ -591,7 +591,7 @@ export class PluginRuntime {
     });
     const excluded = new Set<number>();
     for (const e of events) {
-      if (e.type === "compaction") for (const id of e.compressed_event_ids) excluded.add(id);
+      if (e.type === "compaction" && isNumericCompaction(e)) for (const id of e.compressed_event_ids) excluded.add(id);
     }
     return skillRemount(activated, (id) => excluded.has(id));
   }

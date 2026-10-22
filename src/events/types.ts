@@ -14,8 +14,10 @@ export interface PromoteOrigin {
   kind: "sidechat";
   /** 来源 sidechat 会话 id（独立 JSONL 文件组的目录名）。 */
   session_id: string;
-  /** 来源 sidechat 事件 id（1-based 行号，可跳回源消息）。 */
+  /** 来源 sidechat 事件 id（1-based 行号，可跳回源消息）。来源引用形式下为空数组。 */
   source_event_ids: number[];
+  /** 来源引用形式（指针分叉）：与 source_event_ids 互斥；每条的 eventId 是所属文件的物理行号。 */
+  source_event_refs?: import("./session-ref").EventRef[];
   note?: string;
 }
 /** §9.3 的用户侧 skill 触发：正文是某个 skill 渲染后的结果，`skill` 记下「是哪个、当时给了什么参数」，
@@ -258,21 +260,66 @@ export interface VerifyResultEvent {
 /** 压缩发生记录：trigger=auto（比例阈值）/ manual（/compact）/ overflow（硬兜底紧急截断）。
  *  usage 缺省 = 摘要器无 API 用量（mock/紧急截断不伪造）；model 缺省 = 会话同模型。 */
 export interface CompactionUsage { inputTokens: number; outputTokens: number }
-export interface CompactionEvent {
+/** 摘要注入锚点（来源形式）：在某个事件之前，或明确的末尾。 */
+export type SummaryAnchor = { before: import("./session-ref").EventRef } | { end: true };
+
+/** 压缩记录的公共字段（两种引用形式共享；新旧互斥）。 */
+export interface CompactionCommon {
   type: "compaction";
   trigger: "auto" | "manual" | "overflow";
   reason: "threshold" | "hard_buffer" | "user_request";
-  /** 被摘除事件的 id（1-based 行号）；永不含 compaction 事件本体（摘要不二次被压）。 */
-  compressed_event_ids: number[];
   summary: string;
-  /** 注入位置：投影在该 id 的事件之前插一条 user 角色摘要消息（fresh start）。 */
-  summary_offset: number;
   tokens_before: number;
   tokens_after: number;
   usage?: CompactionUsage;
   model?: string;
   /** M3c：worker 归因（§7.5 worker 压缩事件落子流；主会话压缩无此字段）。 */
   agent_id?: string;
+}
+
+/** 旧数字形式：`compressed_event_ids` 是**本文件**的 1-based 行号，`summary_offset` 是**本文件**的注入位置。
+ *  继续可读；跨文件写回一律使用来源形式。 */
+export interface NumericCompaction extends CompactionCommon {
+  compressed_event_ids: number[];
+  summary_offset: number;
+  reference_version?: undefined;
+  compressed_event_refs?: undefined;
+  summary_anchor?: undefined;
+  superseded_summary_refs?: undefined;
+}
+
+/** 来源形式（ADR 0005 产品接入）：跨文件压缩只认 EventRef，数字位置不在拼接数组上解释。
+ *  完整来源集合与锚点必须成套在场；旧摘要若进入新摘要输入，其来源须列入 `superseded_summary_refs`。 */
+export interface ReferencedCompaction extends CompactionCommon {
+  reference_version: 1;
+  compressed_event_refs: import("./session-ref").EventRef[];
+  summary_anchor: SummaryAnchor;
+  superseded_summary_refs: import("./session-ref").EventRef[];
+  compressed_event_ids?: undefined;
+  summary_offset?: undefined;
+}
+
+export type CompactionEvent = NumericCompaction | ReferencedCompaction;
+
+/** 形状判别：新旧互斥，不会同时为真（类型上就互斥）。 */
+export function isReferencedCompaction(e: CompactionEvent): e is ReferencedCompaction {
+  return "reference_version" in e && e.reference_version === 1;
+}
+
+export function isNumericCompaction(e: CompactionEvent): e is NumericCompaction {
+  return "compressed_event_ids" in e;
+}
+
+/** 旧数字形式的行号集合；来源形式没有「本文件行号集合」这回事 ⇒ 显式抛，不返回空数组。 */
+export function numericCompactionIds(e: CompactionEvent): number[] {
+  if (!isNumericCompaction(e)) throw new Error("压缩记录不是旧数字形式：来源形式没有本文件行号集合");
+  return e.compressed_event_ids;
+}
+
+/** 旧数字形式的注入位置（本文件 1-based 行号）；来源形式用 `summary_anchor`。 */
+export function numericCompactionOffset(e: CompactionEvent): number {
+  if (!isNumericCompaction(e)) throw new Error("压缩记录不是旧数字形式：来源形式没有本文件 summary_offset");
+  return e.summary_offset;
 }
 
 // ---- M2f 产出代码安全 report（§11.6 定稿，本轮只做 off/report）----
@@ -488,6 +535,8 @@ export interface CardActionEvent {
   payload?: Record<string, unknown>;
   scope?: "once" | "session_kind" | "always";
   target_agent_id?: string;
+  /** 卡片来源的**真实**归属（指针分叉：祖先行）。旧数字形式没有它 = 来源是当前会话自己的行。 */
+  source_event_ref?: import("./session-ref").EventRef;
 }
 
 /** M3b 评审闭环（§3.4 / §4.5）：diff 卡行级评论 → 定向 user_message 注入该 worker 子流 → 修正 → diff 卡 v2。
@@ -495,6 +544,8 @@ export interface CardActionEvent {
 export interface DiffCommentEvent {
   type: "diff_comment";
   agent_id: string;
+  /** 评论所依据的卡片来源（可选；祖先行时记录真实来源）。 */
+  source_ref?: import("./session-ref").EventRef;
   /** 评论落点文件（workspace 相对）。 */
   path: string;
   /** 行号（1-based，diff 卡行级定位）。 */
@@ -578,6 +629,8 @@ export interface FileRestoredEvent {
   path: string;
   /** 还原所用的覆盖前快照 id（可选；同一份事件流里能对回是哪一次覆盖）。 */
   snapshotId?: string;
+  /** 被撤销对象在来源视图里的真实归属（祖先行时指向父文件；旧事件缺席）。 */
+  source_ref?: import("./session-ref").EventRef;
   ts?: number;
 }
 

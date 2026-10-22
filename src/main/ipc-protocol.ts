@@ -1,7 +1,7 @@
 // IPC 协议：main / preload / renderer 共享的类型（除协议版本常量外全部 type-only，跨层引用
 // 不产生运行时依赖；版本常量是唯一运行时出口，SEMA §3.5/§12——src-execution-path 棘轮的
 // 纯类型面豁免随 Phase 3 版本化撤名，执行路径由 tests/ipc-protocol-version.test.ts 供给）。
-import type { AgentEvent } from "../events";
+import type { AgentEvent, EventRef, SessionRef, SessionView } from "../events";
 import type { PermissionMode } from "../permissions";
 import type { ToolName } from "../tools/base";
 import type { SandboxStatus } from "./sandbox";
@@ -65,8 +65,10 @@ import type { ProviderConnectionResult } from "./provider-connection";
  *  v16 = 会话定位批（openSession 增可选 workspace——跨项目同名 id 必须开对转录）；
  *  v17 = 终端尺寸批（terminalResize——xterm 行列同步到真实 PTY）；
  *  v18 = 会话全文检索批（sessionSearch——搜**会话正文**而不是文件；结果是三态，
- *  「没量到 ≠ 没有」由类型层面分开，见 src/main/session-search.ts）。 */
-export const IPC_PROTOCOL_VERSION = 18;
+ *  「没量到 ≠ 没有」由类型层面分开，见 src/main/session-search.ts）。
+ *  v19 = 指针分叉来源批（openSession 附 SessionRef + SessionView；会话 mutation/队列/注释
+ *  增加可选 workspace——两个工作区同名 id 必须精确寻址，歧义拒绝）。 */
+export const IPC_PROTOCOL_VERSION = 19;
 
 // ---- v11：主界面重做批的载荷（git 读数 / 克隆 / 项目内搜索）----
 /** git 在场读数：branch 为 null = detached HEAD（如实，不拿 "HEAD" 冒充分支名）。 */
@@ -327,7 +329,7 @@ export interface AgentApi {
    *  缺省无参 = 兼容旧调用（host 侧 fail-visible：{ok:false,"会话不在运行"}）。 */
   runCancel(sessionId?: string): Promise<{ ok: boolean; error?: string }>;
   /** M1d 手动压缩入口（M1e 起 preload 暴露：token 面板按钮）。 */
-  compact?(sessionId?: string): Promise<CompactResponse>;
+  compact?(sessionId?: string, workspace?: string): Promise<CompactResponse>;
   onEvent(cb: (e: AgentEvent) => void): () => void;
   onAsk(cb: (p: AskPayload) => void): () => void;
   /** 原生菜单命令（main → 渲染层）：id 见 apps/desktop/src/shared/menu-commands.ts。
@@ -353,19 +355,20 @@ export interface AgentApi {
   /** 新建会话；`workspace` = 该会话实际落点的规范工作区（缺省 = host 的 activeWorkspace）。
    *  回传归属：渲染层空屏直接发任务时 activeWorkspace 仍是 null，不回传就只能靠猜。 */
   createSession(name?: string): Promise<{ id: string; workspace: string }>;
-  /** v16：workspace 显式给出会话归属（同名 id 跨项目时按它定位）；缺省 = host 自行解析。 */
-  openSession(id: string, workspace?: string): Promise<{ events: AgentEvent[] }>;
+  /** v19：`events` = 本地 raw；`session`/`view` = 来源视图（父前缀 + 物理行号）。
+   *  workspace 显式给出会话归属（同名 id 跨项目时按它定位）；缺省 = host 自行解析，歧义拒绝。 */
+  openSession(id: string, workspace?: string): Promise<{ events: AgentEvent[]; session: SessionRef; view: SessionView }>;
   /** 恢复闭环：读回 / 覆盖写该会话的发送队列 sidecar。队列不是 AgentEvent，不混入 JSONL；
    *  重启后由 renderer 读回并显式继续发送，仍走原有权限与沙箱链路。 */
-  queueGet(sessionId: string): Promise<{ items: SessionQueueEntry[] }>;
-  queueSet(sessionId: string, items: SessionQueueEntry[]): Promise<{ ok: boolean; error?: string }>;
-  renameSession(oldId: string, newName: string): Promise<{ id: string }>;
-  deleteSession(id: string): Promise<{ currentSession: string | null }>;
+  queueGet(sessionId: string, workspace?: string): Promise<{ items: SessionQueueEntry[] }>;
+  queueSet(sessionId: string, items: SessionQueueEntry[], workspace?: string): Promise<{ ok: boolean; error?: string }>;
+  renameSession(oldId: string, newName: string, workspace?: string): Promise<{ id: string }>;
+  deleteSession(id: string, workspace?: string): Promise<{ currentSession: string | null }>;
   /** M8 分叉（v2.15 IPC 接线）：保留前 N 轮（含）→ 新会话 `<id>-f<N>`；源会话只读、字节不变。 */
-  forkSession(sessionId: string, round: number, unique?: boolean): Promise<{ ok: boolean; id?: string; error?: string }>;
+  forkSession(sessionId: string, round: number, unique?: boolean, workspace?: string): Promise<{ ok: boolean; id?: string; error?: string }>;
   /** #7 文件级回滚（v2.16 IPC 接线）：把第 N 轮主会话改过的文件还原成该轮之前的原件（源自 D7 覆盖前快照）。
    *  只动主会话直写；worker 改动在各自 worktree（另有合并控制塔）。取不到原件 / 轮后又改过的逐条 manual 报出。 */
-  revertTurn(sessionId: string, round: number): Promise<{
+  revertTurn(sessionId: string, round: number, workspace?: string): Promise<{
     ok: boolean;
     error?: string;
     restored: string[];
@@ -466,14 +469,14 @@ export interface AgentApi {
   attachmentThumb(path: string): Promise<{ ok: boolean; dataUrl?: string; error?: string }>;
   /** v2.16 用户反馈沉淀（赞/踩）：落 sidecar `feedback.jsonl`（append-only，不进事件流）。
    *  `rating:"none"` = 撤销（读时取最后一条生效）。未接线前界面只选中、不假提交。 */
-  submitFeedback(req: { sessionId: string; eventId: number; rating: "up" | "down" | "none"; note?: string }): Promise<{ ok: boolean; error?: string }>;
+  submitFeedback(req: { sessionId: string; eventId: number; rating: "up" | "down" | "none"; note?: string; workspace?: string; eventRef?: EventRef }): Promise<{ ok: boolean; error?: string }>;
   /** 当前生效的反馈（按 eventId 去重、撤销的不返回）：界面据此点亮赞/踩。 */
-  listFeedback(sessionId: string): Promise<{ sessionId: string; eventId: number; rating: "up" | "down"; note?: string; at: string }[]>;
+  listFeedback(sessionId: string, workspace?: string): Promise<{ sessionId: string; eventId: number; rating: "up" | "down"; note?: string; at: string; eventRef?: EventRef }[]>;
   /** 2026-10-20 消息置顶（规范 §3.11 操作条 pin）：sidecar `pins.jsonl`，append-only、不进事件流。
    *  `pinned:false` = 取消置顶（追加一条撤销行，读时取最后一条生效）。 */
-  setMessagePinned(req: { sessionId: string; eventId: number; pinned: boolean }): Promise<{ ok: boolean; error?: string }>;
+  setMessagePinned(req: { sessionId: string; eventId: number; pinned: boolean; workspace?: string; eventRef?: EventRef }): Promise<{ ok: boolean; error?: string }>;
   /** 某会话当前生效的置顶锚点（eventId 升序）。 */
-  listMessagePins(sessionId: string): Promise<number[]>;
+  listMessagePins(sessionId: string): Promise<{ eventId: number; eventRef?: EventRef }[]>;
   /** 会话级 worktree 隔离（§3.7 · G4）：一条会话可以在自己的 git worktree 里跑，做完合并回来。
    *  三动作一个通道——它们共用同一条事实（磁盘上那棵树在不在），拆成三条只是把同一份状态抄三遍。 */
   sessionWorktree(req: SessionWorktreeRequest): Promise<SessionWorktreeResult>;

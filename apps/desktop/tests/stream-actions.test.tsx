@@ -143,7 +143,7 @@ describe("重跑这一轮", () => {
     // （这一格 2026-10-20 从 `userTextOfRound(events, round)` 改过来：实现早已改用 ref，
     // 钉子还钉着旧写法 ⇒ 判卷红的是钉子，不是实现。）
     expect(block).toContain("userTextOfRound(eventsRef.current, round)");
-    expect(block).toContain("runningSet.current.has(sid)");
+    expect(block).toContain("runningSet.current.has(keyOf(sid))");
     expect(appSrc).toContain("onRetryRound: handleRetryRound");
   });
 });

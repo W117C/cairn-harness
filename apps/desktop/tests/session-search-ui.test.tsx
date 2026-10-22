@@ -33,7 +33,7 @@ describe("会话正文搜索的可见状态", () => {
     expect(partial).not.toContain("正文中没有匹配");
   });
   it("展示真实标题和摘录，保留会话与工作区身份", () => {
-    const html = render({ status: "ready", result: { ...empty, matches: [{ sessionId: "s1", title: "旧会话", matchCount: 1, snippets: [{ kind: "user_message", keyword: "中文", excerpt: "一条中文正文", index: 0 }], bytes: 20, complete: true, badLines: 0 }] } });
+    const html = render({ status: "ready", result: { ...empty, matches: [{ sessionId: "s1", session: { workspace: "/w/s1", sessionId: "s1" }, title: "旧会话", matchCount: 1, snippets: [{ kind: "user_message", keyword: "中文", excerpt: "一条中文正文", index: 0 }], bytes: 20, complete: true, badLines: 0 }] } });
     expect(html).toContain("旧会话");
     expect(html).toContain("一条中文正文");
     expect(html).toContain('data-session-search-result="s1"');

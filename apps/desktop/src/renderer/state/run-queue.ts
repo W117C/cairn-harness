@@ -7,6 +7,7 @@ import { userTextOfRound } from "../projections";
 import { continueAfterRun,drainQueue,isSessionEndDistillAsk,shouldHealStaleRun,takeQueued,toSessionQueueEntries,type QueuedSend } from "../send-queue";
 import { STR } from "../strings";
 import { toast } from "../toast";
+import { runKey } from "./session-identity";
 
 interface RunQueueDeps {
   setQueueLocal: (sid: string, list: QueuedSend[]) => void;
@@ -42,21 +43,23 @@ interface RunQueueDeps {
 
 export function useRunQueue(deps: RunQueueDeps) {
   const { setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, modeRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef } = deps;
+  const keyOf = (id: string): string => runKey(activeWorkspace, id);
   const setQueueFor = useCallback((sid: string, list: QueuedSend[]) => {
-    setQueueLocal(sid, list);
-    const prev = queueWrites.current.get(sid) ?? Promise.resolve();
-    const next = prev.catch(() => undefined).then(() => window.agent.queueSet(sid, toSessionQueueEntries(list)));
-    queueWrites.current.set(sid, next);
+    const key = keyOf(sid);
+    setQueueLocal(key, list);
+    const prev = queueWrites.current.get(key) ?? Promise.resolve();
+    const next = prev.catch(() => undefined).then(() => window.agent.queueSet(sid, toSessionQueueEntries(list), activeWorkspace ?? undefined));
+    queueWrites.current.set(key, next);
     void next.then(
       (r) => { if (!r.ok) setLastError(`发送队列保存失败：${r.error ?? "未知错误"}`, sid); },
       (err: unknown) => setLastError(`发送队列保存失败：${err instanceof Error ? err.message : String(err)}`, sid),
     ).finally(() => {
-      if (queueWrites.current.get(sid) === next) queueWrites.current.delete(sid);
+      if (queueWrites.current.get(key) === next) queueWrites.current.delete(key);
     });
   }, [setLastError, setQueueLocal]);
   /** 本轮收束后出队：队首出表并返回；空队列 null（调用方停表）。 */
   const takeQueuedHead = useCallback((sid: string): QueuedSend | null => {
-    const { head, rest } = takeQueued(sendQueue.current.get(sid) ?? []);
+    const { head, rest } = takeQueued(sendQueue.current.get(keyOf(sid)) ?? []);
     if (head !== null) setQueueFor(sid, rest);
     return head;
   }, [setQueueFor]);
@@ -72,7 +75,7 @@ export function useRunQueue(deps: RunQueueDeps) {
         fresh.delete(sid);
         return fresh;
       });
-      runningSet.current.add(sid);
+      runningSet.current.add(keyOf(sid));
       lastDeltaAt.current.delete(sid);
       // 代际号（2026-10-18 真机：打断并发送后新 run 在跑、running 却为 false）：旧 run 的
       // finally 会把**新 run**刚置上的旗摘掉——经典“旧清理清掉新状态”。每次起跑领一个号，
@@ -106,7 +109,7 @@ export function useRunQueue(deps: RunQueueDeps) {
         return false;
       }
       finally {
-        if ((runGen.current.get(sid) ?? 0) === myGen) runningSet.current.delete(sid);
+        if ((runGen.current.get(sid) ?? 0) === myGen) runningSet.current.delete(keyOf(sid));
         // 起点随这一轮一起收掉（收之前先判代际：新 run 已经起跑时不能把它的起点删了）。
         if ((runGen.current.get(sid) ?? 0) === myGen) runStartBySession.current.delete(sid);
         force((n) => n + 1);
@@ -119,7 +122,7 @@ export function useRunQueue(deps: RunQueueDeps) {
     if (sid !== null && editCtxRef.current?.forkId === sid) setEditCtx(null);
     // 运行中发送 = 入队（收束后 runOn 的循环自动派下一条）。判据用 ref 不用渲染态：
     // 收束与点击在同一拍竞争时，runningSet 是唯一真值。
-    if (sid !== null && runningSet.current.has(sid)) {
+    if (sid !== null && runningSet.current.has(keyOf(sid))) {
       // 对话优先跳沉（owner 实证 2026-10-15「记忆沉淀挡住正常对话了」）：本轮收尾的自动沉淀
       // 正卡在合并审批时，用户按下发送 = 「接着聊」的最高信号——立即拒掉该审批让 run 收束、
       // 队列开派；否则这条消息会排在记忆审批后面（distill 在 runAgent 尾部，run 不 settle
@@ -130,7 +133,7 @@ export function useRunQueue(deps: RunQueueDeps) {
         void window.agent.decide(pendingAsk.askId, false).catch(() => undefined);
         setLastNotice("已跳过本轮全局记忆写入（你在继续对话；下次收尾再试）", sid);
       }
-      setQueueFor(sid, [...(sendQueue.current.get(sid) ?? []), { id: ++queueSeq.current, text, attachments }]);
+      setQueueFor(sid, [...(sendQueue.current.get(keyOf(sid)) ?? []), { id: ++queueSeq.current, text, attachments }]);
       return;
     }
     const isNew = sid === null;
@@ -198,7 +201,7 @@ export function useRunQueue(deps: RunQueueDeps) {
    *  running 隐按钮，这里再兜一次，防键盘/程序化触发双发。 */
   const handleRetryLast = useCallback(() => {
     const sid = activeIdRef.current;
-    if (sid === null || runningSet.current.has(sid)) return;
+    if (sid === null || runningSet.current.has(keyOf(sid))) return;
     let rounds = 0;
     for (const e of eventsRef.current) if (e.type === "user_message") rounds += 1;
     const text = rounds === 0 ? null : userTextOfRound(eventsRef.current, rounds);
@@ -210,7 +213,7 @@ export function useRunQueue(deps: RunQueueDeps) {
    *  与「回放」的区别：回放 = fork 新会话 + 只填不发；重跑 = 当前会话原地再来一轮。运行中不动作。 */
   const handleRetryRound = useCallback((round: number) => {
     const sid = activeIdRef.current;
-    if (sid === null || runningSet.current.has(sid)) return;
+    if (sid === null || runningSet.current.has(keyOf(sid))) return;
     const text = userTextOfRound(eventsRef.current, round);
     if (text === null) { setLastError("重跑失败：找不到该轮的输入原文", sid); return; }
     void send(text);
@@ -219,7 +222,7 @@ export function useRunQueue(deps: RunQueueDeps) {
   /** 重启恢复：不自动执行，用户显式点「继续发送」才把队首交给同一条 runOn/权限/沙箱链路。
    *  （第十三遍拆出按 sid 版：陈旧旗自愈要按点击时的会话派发，不随 activeId 漂。） */
   const resumeQueueFor = useCallback((sid: string) => {
-    if (runningSet.current.has(sid)) return;
+    if (runningSet.current.has(keyOf(sid))) return;
     const first = takeQueuedHead(sid);
     if (first === null) return;
     void runOn(sid, first).catch((err: unknown) => {
@@ -242,10 +245,10 @@ export function useRunQueue(deps: RunQueueDeps) {
         cancelOk: res.ok,
         genAtClick,
         genNow: runGen.current.get(sid) ?? 0,
-        flagPresent: runningSet.current.has(sid),
+        flagPresent: runningSet.current.has(keyOf(sid)),
       });
       if (!heal) return;
-      runningSet.current.delete(sid);
+      runningSet.current.delete(keyOf(sid));
       force((n) => n + 1);
       resumeQueueFor(sid); // 无队列 ⇒ 自然 no-op
     }).catch(() => undefined);

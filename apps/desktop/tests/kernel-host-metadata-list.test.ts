@@ -76,7 +76,8 @@ describe("跨工作区同 id 不串 sidecar", () => {
       writeFileSync(join(ws, ".agent", "sessions", id + ".jsonl"), JSON.stringify({ type: "user_message", content: "x" }) + "\n");
     }
     const h2 = createKernelHost({ workspaces: [wsA, wsB], activeWorkspace: wsA, userDataDir: userData2, outbox: () => undefined });
-    await handleSessionSetPinned(id, true); // 写进装配根（wsA）的单例 sidecar
+    // 同名 id 两个登记根都有 ⇒ 归属解析必须拒绝（不猜第一个根，也就不写任何一边的 sidecar）。
+    await expect(handleSessionSetPinned(id, true)).rejects.toThrow(/多个工作区/);
     const listed = await h2.listSessions();
     const a = listed.find((s) => s.workspace === canonicalWorkspacePath(wsA) && s.id === id);
     const b = listed.find((s) => s.workspace === canonicalWorkspacePath(wsB) && s.id === id);

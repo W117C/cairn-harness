@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import type { AgentEvent,AskPayload,ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import { isMainSessionTerminalEvent } from "../projections";
 import { isSessionEndDistillAsk,type QueuedSend } from "../send-queue";
+import { isStaleForActive, runKey } from "./session-identity";
 
 interface SessionSubscriptionDeps {
   refreshSessions: () => Promise<void>;
@@ -15,6 +16,7 @@ interface SessionSubscriptionDeps {
   refetching: MutableRefObject<boolean>;
   openPending: MutableRefObject<{ id: string; events: AgentEvent[]; } | null>;
   activeIdRef: MutableRefObject<string | null>;
+  activeWorkspaceRef: MutableRefObject<string | null>;
   lastDeltaAt: MutableRefObject<Map<string, number>>;
   runningSet: MutableRefObject<Set<string>>;
   outcomes: MutableRefObject<Map<string, "ok" | "failed">>;
@@ -29,7 +31,7 @@ interface SessionSubscriptionDeps {
 }
 
 export function useSessionSubscription(deps: SessionSubscriptionDeps) {
-  const { refreshSessions, refreshProviderInfo, refreshProviderKeys, setProjects, setRegistryNotice, knownSessionIds, refetching, openPending, activeIdRef, lastDeltaAt, runningSet, outcomes, force, setEvents, sendQueue, setLastNotice, askById, setAskBySid, waitingByAsk, waitingCounts } = deps;
+  const { refreshSessions, refreshProviderInfo, refreshProviderKeys, setProjects, setRegistryNotice, knownSessionIds, refetching, openPending, activeIdRef, activeWorkspaceRef, lastDeltaAt, runningSet, outcomes, force, setEvents, sendQueue, setLastNotice, askById, setAskBySid, waitingByAsk, waitingCounts } = deps;
   useEffect(() => {
     refreshSessions();
     void refreshProviderInfo();
@@ -48,6 +50,13 @@ export function useSessionSubscription(deps: SessionSubscriptionDeps) {
         return;
       }
       const sid = (e as { session_id?: string }).session_id;
+      // 同名 id 的另一棵根的迟到事件：不得进当前转录、不得点当前运行灯（推送带 workspace 才判）。
+      if (isStaleForActive({
+        activeId: activeIdRef.current,
+        activeWorkspace: activeWorkspaceRef.current,
+        eventSessionId: sid,
+        eventWorkspace: (e as { workspace?: string }).workspace,
+      })) return;
       if (sid && !knownSessionIds.current.has(sid) && !refetching.current) {
         refetching.current = true;
         refreshSessions().finally(() => { refetching.current = false; });
@@ -61,23 +70,25 @@ export function useSessionSubscription(deps: SessionSubscriptionDeps) {
       // 运行集口径（2026-10-06 收口）：活动会话不由事件置位（置位只走发送那条路）；
       // 任何会话收到**主会话**终态 agent_status 摘位；worker 子流的终态不摘主会话旗
       // （二者同型且同带 session_id，唯一判据在 projections.isMainSessionTerminalEvent）。
+      const evWorkspace = (e as { workspace?: string }).workspace ?? activeWorkspaceRef.current;
+      const statusKey = sid === undefined ? undefined : runKey(evWorkspace, sid);
       const deltaSid = sid ?? (e.type === "assistant_delta" ? activeIdRef.current : null);
       if (e.type === "assistant_delta" && deltaSid !== null) lastDeltaAt.current.set(deltaSid, Date.now());
       const terminal = isMainSessionTerminalEvent(e);
       if (sid && terminal) {
-        runningSet.current.delete(sid);
+        runningSet.current.delete(statusKey!);
         lastDeltaAt.current.delete(sid);
         // P1 侧栏状态记账（诚实边界）：done ⇒ 对勾、failed ⇒ 红点、cancelled ⇒ 清位
         // （用户主动停的不冒充完成也不报失败）。会话终态不落盘 ⇒ 本进程记账，重启归零如实。
         const status = (e as { status?: string }).status;
-        if (status === "done") outcomes.current.set(sid, "ok");
-        else if (status === "failed") outcomes.current.set(sid, "failed");
-        else outcomes.current.delete(sid);
+        if (status === "done") outcomes.current.set(statusKey!, "ok");
+        else if (status === "failed") outcomes.current.set(statusKey!, "failed");
+        else outcomes.current.delete(statusKey!);
         force((n) => n + 1);
       }
       if (sid && sid !== activeIdRef.current) {
         // 后台会话仍在跑：只在非终态时点亮（终态刚在上面摘过，别又补上）
-        if (!terminal) runningSet.current.add(sid);
+        if (!terminal) runningSet.current.add(statusKey!);
         force((n) => n + 1);
         return;
       }

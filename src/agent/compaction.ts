@@ -2,9 +2,10 @@
 // 压缩只是组装时的投影：runCompaction 只产出 compaction 事件（摘除 id 集 + offset 注入），
 // 事件流永不删改；调用方 append 进日志即完成一次压缩（压缩必出卡，不静默）。
 // 事件 id = 1-based 行号（M1a 定稿，append-only 永不漂移）。
-import type { AgentEvent, CompactionEvent, CompactionUsage } from "../events";
-import { isEnvVerifyCause } from "../events";
+import type { AgentEvent, CompactionEvent, CompactionUsage, EventRef, SessionView } from "../events";
+import { isEnvVerifyCause, isNumericCompaction } from "../events";
 import { eventIdAt, excludedIds, hasWorkerAttribution, isWorkerCompaction, projectContext, type ContextMessage } from "./context";
+import { projectViewContext } from "./session-view-context";
 import { classifyResult, shapeLog, shapeResult, summaryTruncate } from "./shape";
 import { setTimeout as delay } from "node:timers/promises";
 import { deriveBoundaries, snapToProgressBoundary, economicGate, type EconomicState } from "./economics";
@@ -632,6 +633,9 @@ export type CompactionOutcome =
 export interface RunCompactionArgs {
   signal?: AbortSignal;
   events: AgentEvent[];
+  /** 指针分叉的来源视图（可选）：给了它就产出**来源形式**压缩记录，且预算按完整模型历史估算。
+   *  缺省 = 原来的单文件数字形式，逐字不变。 */
+  view?: SessionView;
   trigger: "auto" | "manual" | "overflow";
   reason: "threshold" | "hard_buffer" | "user_request";
   /** overflow 路径不需要。 */
@@ -675,7 +679,36 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
   const units = atomicUnits(events);
   const lastUserMsgId = lastUserMessageId(events);
   const overhead = args.overhead ?? {};
-  const tokensBefore = estimateContextTokens(projectContext(events), overhead, factor);
+  const view = args.view;
+  const localRef = (eventId: number): EventRef => ({
+    workspace: view!.session.workspace, sessionId: view!.session.sessionId, eventId,
+  });
+  const estimateAfter = (event: CompactionEvent): number => {
+    if (view === undefined) return estimateContextTokens(projectContext([...events, event]), overhead, factor);
+    const after: SessionView = {
+      ...view,
+      entries: [...view.entries, { event, ref: localRef(events.length + 1), inherited: false }],
+      localEvents: [...view.localEvents, event],
+    };
+    return estimateContextTokens(projectViewContext(after), overhead, factor);
+  };
+  // 最新一份主摘要（滚动输入）与它的来源：来源形式要把它列进 superseded_summary_refs。
+  let priorSummary: string | undefined;
+  let priorRef: EventRef | undefined;
+  if (view !== undefined) {
+    for (const entry of view.entries) {
+      if (entry.event.type === "compaction" && !isWorkerCompaction(entry.event)) {
+        priorSummary = entry.event.summary;
+        priorRef = entry.ref;
+      }
+    }
+  } else {
+    const prior = events.filter((e): e is CompactionEvent => e.type === "compaction" && !isWorkerCompaction(e));
+    if (prior.length > 0) priorSummary = prior[prior.length - 1]!.summary;
+  }
+  const tokensBefore = estimateContextTokens(
+    view !== undefined ? projectViewContext(view) : projectContext(events), overhead, factor,
+  );
   const ctx: CutContext = { availableTokens: config.inputLimit - config.maxOutputReserve, factor, keepFirst, excluded, lastUserMsgId, units };
 
   // overflow 紧急：半分截断兜底，不调摘要器
@@ -683,21 +716,33 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
     const t = selectTruncation(events, ctx);
     if (!t) return { ok: false, kind: "failed", why: "overflow 截断：无可安全摘除的事件" };
     const droppedSet = new Set(t.compressedIds);
-    const event: CompactionEvent = {
+    const overflowSummary =
+      "[overflow 紧急截断] 已按半分截断摘除 " + t.compressedIds.length + " 条最旧事件（原子单元整丢、最近 typed 用户消息未动）。" +
+      "本条为降级兜底标记，非模型摘要；原始事件仍在事件流中。" +
+      // 紧急截断恰恰发生在长任务快撑不住的时候：这一段在这里比在常规摘要里更贵。
+      triedRejectedNote(events.filter((_, i) => droppedSet.has(eventIdAt(i))));
+    const event: CompactionEvent = view === undefined ? {
       type: "compaction",
       trigger: "overflow",
       reason: args.reason,
       compressed_event_ids: t.compressedIds,
-      summary:
-        "[overflow 紧急截断] 已按半分截断摘除 " + t.compressedIds.length + " 条最旧事件（原子单元整丢、最近 typed 用户消息未动）。" +
-        "本条为降级兜底标记，非模型摘要；原始事件仍在事件流中。" +
-        // 紧急截断恰恰发生在长任务快撑不住的时候：这一段在这里比在常规摘要里更贵。
-        triedRejectedNote(events.filter((_, i) => droppedSet.has(eventIdAt(i)))),
+      summary: overflowSummary,
       summary_offset: t.offset,
       tokens_before: tokensBefore,
       tokens_after: 0,
+    } : {
+      type: "compaction",
+      trigger: "overflow",
+      reason: args.reason,
+      reference_version: 1,
+      compressed_event_refs: t.compressedIds.map(localRef),
+      summary_anchor: t.offset <= events.length ? { before: localRef(t.offset) } : { end: true },
+      superseded_summary_refs: priorRef === undefined ? [] : [priorRef],
+      summary: overflowSummary,
+      tokens_before: tokensBefore,
+      tokens_after: 0,
     };
-    event.tokens_after = estimateContextTokens(projectContext([...events, event]), overhead, factor);
+    event.tokens_after = estimateAfter(event);
     return { ok: true, event };
   }
 
@@ -740,8 +785,7 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
   const compressedEvents = cut.compressedIds.map((id) => events[id - 1]);
   // worker 子流压缩事件也落在主 JSONL 且同为 type="compaction"：把它当 priorSummary 会让主摘要
   // 以「worker 的任务交接摘要」为滚动基线，真正的主摘要被丢弃（excludedIds/projectContext 都排除了它）。
-  const compactions = events.filter((e): e is CompactionEvent => e.type === "compaction" && !isWorkerCompaction(e));
-  const priorSummary = compactions.length > 0 ? compactions[compactions.length - 1].summary : undefined;
+  // （priorSummary / priorRef 已在上面按「视图优先」取好。）
   // M2b：摘要输入的工具结果走类型化整形（同一份规则表 §6.2/§7.4）
   const callName = new Map<string, string>();
   const callArgs = new Map<string, Record<string, unknown>>();
@@ -777,7 +821,7 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
       if (estimateTokens(text.length, factor) > config.summaryCapTokens) {
         return { ok: false, kind: "rejected", why: "摘要超输出帽（> " + config.summaryCapTokens + " token）" };
       }
-      const event: CompactionEvent = {
+      const event: CompactionEvent = view === undefined ? {
         type: "compaction",
         trigger: args.trigger,
         reason: args.reason,
@@ -788,8 +832,21 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
         tokens_after: 0,
         ...(out.usage ? { usage: out.usage } : {}),
         ...(out.model ? { model: out.model } : {}),
+      } : {
+        type: "compaction",
+        trigger: args.trigger,
+        reason: args.reason,
+        reference_version: 1,
+        compressed_event_refs: cut.compressedIds.map(localRef),
+        summary_anchor: cut.offset <= events.length ? { before: localRef(cut.offset) } : { end: true },
+        superseded_summary_refs: priorRef === undefined ? [] : [priorRef],
+        summary: applyTriedRejectedFallback(text, compressedEvents),
+        tokens_before: tokensBefore,
+        tokens_after: 0,
+        ...(out.usage ? { usage: out.usage } : {}),
+        ...(out.model ? { model: out.model } : {}),
       };
-      event.tokens_after = estimateContextTokens(projectContext([...events, event]), overhead, factor);
+      event.tokens_after = estimateAfter(event);
       if (event.tokens_after >= event.tokens_before) {
         return { ok: false, kind: "rejected", why: "膨胀拒绝（tokens_after " + event.tokens_after + " ≥ tokens_before " + event.tokens_before + "）" };
       }
@@ -835,12 +892,13 @@ export class CompactionCoordinator {
   async maybeCompact(
     events: AgentEvent[],
     decision: CompactDecision | null,
-    options: Pick<RunCompactionArgs, "overhead" | "signal" | "economics"> & { config?: Partial<CompactionConfig> } = {},
+    options: Pick<RunCompactionArgs, "overhead" | "signal" | "economics" | "view"> & { config?: Partial<CompactionConfig> } = {},
   ): Promise<CompactionOutcome | null> {
     if (!decision) return null;
     if (decision.trigger !== "overflow" && this.summarizerDisabled) return null;
     const outcome = await runCompaction({
       events,
+      ...(options.view !== undefined ? { view: options.view } : {}),
       trigger: decision.trigger,
       reason: decision.reason,
       summarizer: decision.trigger === "overflow" ? undefined : this.summarizer,
@@ -858,13 +916,15 @@ export class CompactionCoordinator {
 
 // ---- 压缩卡 payload（触发方式 / 被压范围 / 前后 token；卡由 renderer 注册表投影）----
 export function compactionCardPayload(e: CompactionEvent): Record<string, unknown> {
-  const ids = e.compressed_event_ids;
-  const range = ids.length > 0 ? { from: Math.min(...ids), to: Math.max(...ids) } : null;
+  // 来源形式的范围跨文件：行号区间没有意义（父第 2 行与子第 2 行不是同一格）⇒ 只给条数。
+  const ids = isNumericCompaction(e) ? e.compressed_event_ids : e.compressed_event_refs.map((r) => r.eventId);
+  const compressedCount = isNumericCompaction(e) ? e.compressed_event_ids.length : e.compressed_event_refs.length;
+  const range = isNumericCompaction(e) && ids.length > 0 ? { from: Math.min(...ids), to: Math.max(...ids) } : null;
   return {
     type: "compaction",
     trigger: e.trigger,
     reason: e.reason,
-    compressedCount: ids.length,
+    compressedCount,
     compressedRange: range,
     tokensBefore: e.tokens_before,
     tokensAfter: e.tokens_after,

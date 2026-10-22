@@ -1,3 +1,4 @@
+import { runKey } from "./session-identity";
 import type { Dispatch,MutableRefObject,SetStateAction } from 'react';
 // useRunReadings: extracted without changing event or callback behavior.
 import { useEffect } from "react";
@@ -17,13 +18,14 @@ interface RunReadingsDeps {
   lastDeltaAt: MutableRefObject<Map<string, number>>;
   selections: MutableRefObject<Map<string, string | null>>;
   providerInfo: ProviderInfo | null;
+  activeWorkspace: string | null;
 }
 
 export function useRunReadings(deps: RunReadingsDeps) {
-  const { sessionErrors, activeId, sessionNotices, runningSet, setElapsedSec, runStartBySession, events, askBySid, stoppedIds, lastDeltaAt, selections, providerInfo } = deps;
+  const { sessionErrors, activeId, sessionNotices, runningSet, setElapsedSec, runStartBySession, events, askBySid, stoppedIds, lastDeltaAt, selections, providerInfo, activeWorkspace } = deps;
   const lastError = sessionErrors.get(activeId ?? "") ?? null;
   const lastNotice = sessionNotices.get(activeId ?? "") ?? null;
-  const runningActive = activeId !== null && runningSet.current.has(activeId);
+  const runningActive = activeId !== null && runningSet.current.has(runKey(activeWorkspace, activeId));
   // 运行秒表：起点在 send() 里按会话盖；这里只负责 interval 的开与关（终态由 runningActive 翻假收掉）。
   // 依赖里有 activeId：切会话时重算起点（否则切回一个还在跑的会话，秒表会接着别人的起点算）。
   useEffect(() => {

@@ -15,6 +15,8 @@
 import { AlertTriangle,Check,ChevronRight,ChevronUp,CircleDashed,Copy,Eye,FileCode2,FileText,Folder,GitBranch,History,Image as ImageIcon,Loader2,Pencil,Pin,RotateCcw,RotateCw,Sparkles,Square,ThumbsDown,ThumbsUp,Volume2 } from "lucide-react";
 import { Fragment,memo,useEffect,useId,useState } from "react";
 import type { ChangeDiffPayload } from "../../../../../src/main/change-diff";
+import { eventRefKey, type EventRef } from "../../../../../src/events/session-ref";
+import { anchorKeyOf, type AnchoredEvent } from "../state/session-identity";
 import { Markdown } from "../markdown";
 import { relativeTime,type StreamRow } from "../projections";
 import { userMessageCopy } from "../transcript";
@@ -230,15 +232,18 @@ function ToolCluster(props: { rows: Extract<StreamRow, { kind: "tool" }>[]; view
 
 import type { StreamActions } from "../stream-actions";
 
-function AssistantActions(props: { text: string; eventId: number; round: number; speaking: boolean; actions: StreamActions }) {
-  const current = props.actions.feedback?.get(props.eventId) ?? null;
+function AssistantActions(props: { text: string; eventId: number; eventRef?: EventRef; round: number; speaking: boolean; actions: StreamActions }) {
+  // 注释锚点：本地行只有 eventId；祖先行带来源引用（父第 2 行与子第 2 行不能共键）。
+  const anchor: AnchoredEvent = { eventId: props.eventId, ...(props.eventRef !== undefined ? { eventRef: props.eventRef } : {}) };
+  const key = anchorKeyOf(anchor);
+  const current = props.actions.feedback?.get(key) ?? null;
   const { onCopyText, onFeedback, onReplay, onSpeak, onRetryRound, onPin } = props.actions;
-  const pinned = props.actions.pinnedEventIds?.has(props.eventId) === true;
-  const feedbackBusy = props.actions.feedbackBusy?.(props.eventId) === true;
-  const pinBusy = props.actions.pinBusy?.(props.eventId) === true;
+  const pinned = props.actions.pinnedEventIds?.has(key) === true;
+  const feedbackBusy = props.actions.feedbackBusy?.(anchor) === true;
+  const pinBusy = props.actions.pinBusy?.(anchor) === true;
   const running = props.actions.running === true;
   return (
-    <span className="row-actions" data-saving={props.actions.annotationPending?.(props.eventId) === true}>
+    <span className="row-actions" data-saving={props.actions.annotationPending?.(anchor) === true}>
       <button className="row-action" aria-label="复制这行输出" title="复制" onClick={() => onCopyText?.(props.text)}>
         <Copy size={12} />
       </button>
@@ -250,7 +255,7 @@ function AssistantActions(props: { text: string; eventId: number; round: number;
           disabled={pinBusy}
           aria-busy={pinBusy}
           title={pinned ? "已置顶（再点取消）" : "置顶：钉在会话大纲里，长对话好找"}
-          onClick={() => onPin(props.eventId, !pinned)}
+          onClick={() => onPin(anchor, !pinned)}
         >{pinBusy ? <Loader2 size={12} /> : <Pin size={12} />}</button>
       )}
       {onRetryRound !== undefined && !running && (
@@ -285,7 +290,7 @@ function AssistantActions(props: { text: string; eventId: number; round: number;
         disabled={feedbackBusy}
         aria-busy={feedbackBusy}
         title={current === "up" ? "已赞（再点撤销）" : "赞"}
-        onClick={() => onFeedback?.(props.eventId, current === "up" ? null : "up")}
+        onClick={() => onFeedback?.(anchor, current === "up" ? null : "up")}
       >{feedbackBusy ? <Loader2 size={12} /> : <ThumbsUp size={12} />}</button>
       <button
         className={`row-action${current === "down" ? " on" : ""}`}
@@ -294,7 +299,7 @@ function AssistantActions(props: { text: string; eventId: number; round: number;
         disabled={feedbackBusy}
         aria-busy={feedbackBusy}
         title={current === "down" ? "已踩（再点撤销）" : "踩"}
-        onClick={() => onFeedback?.(props.eventId, current === "down" ? null : "down")}
+        onClick={() => onFeedback?.(anchor, current === "down" ? null : "down")}
       >{feedbackBusy ? <Loader2 size={12} /> : <ThumbsDown size={12} />}</button>
     </span>
   );
@@ -357,10 +362,22 @@ export function ThinkingLive(props: { seq: number; thinking?: string; running?: 
 }
 
 // 历史行按字段复用；增量只更新真正改变的行，完整 DOM 与定位锚继续保留。
-const UserRowView = memo(function UserRowView({ actions, canFold, flash, ...r }: Extract<StreamRow, { kind: "user" }> & { actions?: StreamActions; canFold: boolean; flash: boolean }) {
+/** 祖先行来源标记（计划 Task 5）：这一行属于父/祖会话文件，不是当前子会话自己的行。 */
+function SourceTag(props: { at?: EventRef; inherited?: boolean }) {
+  const ref = props.at;
+  if (ref === undefined || props.inherited !== true) return null;
   return (
-  <div className={"row user" + (flash ? " flash" : "")} data-event-id={String(r.seq + 1)} style={{ scrollMarginTop: 14 }}>
+    <span className="row-source" title={`继承自会话 ${ref.sessionId}（第 ${String(ref.eventId)} 行）`}>
+      来自 {ref.sessionId}
+    </span>
+  );
+}
+
+const UserRowView = memo(function UserRowView({ actions, canFold, flash, eventRef, sourceRow, ...r }: Extract<StreamRow, { kind: "user" }> & { actions?: StreamActions; canFold: boolean; flash: boolean; eventRef?: EventRef; sourceRow?: boolean }) {
+  return (
+  <div className={"row user" + (flash ? " flash" : "")} data-event-id={String(r.seq + 1)} {...(eventRef !== undefined ? { "data-event-ref": eventRefKey(eventRef), "data-source-session": eventRef.sessionId } : {})} style={{ scrollMarginTop: 14 }}>
     <span className="t" data-round-anchor={String(r.round)}>{r.text}</span>
+    <SourceTag at={eventRef} inherited={sourceRow} />
     {/* 用户消息的附件（2026-10-18）：此前发出去就再也看不见——本轮起 user_message 事件带引用，
         历史/重放都能显示“这条消息带了哪些文件”。 */}
     {r.attachments !== undefined && r.attachments.length > 0 && (
@@ -436,9 +453,9 @@ const UserRowView = memo(function UserRowView({ actions, canFold, flash, ...r }:
   );
 });
 
-const AssistantRowView = memo(function AssistantRowView({ actions, caret, ...r }: Extract<StreamRow, { kind: "assistant" }> & { actions?: StreamActions; caret: boolean }) {
+const AssistantRowView = memo(function AssistantRowView({ actions, caret, eventRef, sourceRow, ...r }: Extract<StreamRow, { kind: "assistant" }> & { actions?: StreamActions; caret: boolean; eventRef?: EventRef; sourceRow?: boolean }) {
   return (
-  <div className="row assistant" data-event-id={String(r.eventId)}>
+  <div className="row assistant" data-event-id={String(r.eventId)} {...(eventRef !== undefined ? { "data-event-ref": eventRefKey(eventRef), "data-source-session": eventRef.sessionId } : {})}>
     <span className="spark" aria-hidden="true"><Sparkles size={13} /></span>
     <span className="t">
       {/* 追字光标在正文末尾行内（caret 进最后一个文本块），终稿到达或会话停转即消失。 */}
@@ -456,11 +473,13 @@ const AssistantRowView = memo(function AssistantRowView({ actions, caret, ...r }
       <AssistantActions
         text={r.text}
         eventId={r.eventId}
+        {...(eventRef !== undefined ? { eventRef } : {})}
         round={r.round}
         speaking={actions.speakingEventId === r.eventId}
         actions={actions}
       />
     )}
+    <SourceTag at={eventRef} inherited={sourceRow} />
     <span className="meta"><RowTime ts={r.ts} /></span>
   </div>
   );
@@ -485,10 +504,19 @@ export const Stream = memo(function Stream(props: {
   foldedRounds?: ReadonlySet<number>;
   /** 刚跳到的轮：该轮用户行闪一下（目录跳转的落点反馈）。 */
   flashRound?: number | null;
+  /** 显示序 → 来源引用（指针分叉）：有它就按 eventRefKey 做 DOM 键与来源标记。 */
+  refs?: ReadonlyMap<number, EventRef> | null;
+  /** 祖先行的显示序（来源标记由此挂）。 */
+  inherited?: ReadonlySet<number> | null;
 }) {
   const actions = props.actions;
   const view = props.view;
   const folded = props.foldedRounds;
+  const refOfRow = (seq: number): EventRef | undefined => props.refs?.get(seq);
+  const keyOf = (prefix: string, seq: number): string => {
+    const ref = refOfRow(seq);
+    return ref === undefined ? `${prefix}${String(seq)}` : `${prefix}${eventRefKey(ref)}`;
+  };
   // 追字光标只在**本会话真在跑**时亮：历史里未结的桶（被中断没落终稿）照实渲染文本，
   // 但不摆一个"正在输入"的活光标——那是把停当成了动（诚实口径）。undefined = 旧默认（亮）。
   const caretOn = props.streaming !== false;
@@ -507,7 +535,7 @@ export const Stream = memo(function Stream(props: {
   const groups: Array<{ key: string; round: number | null; rows: StreamRow[] }> = [];
   for (const r of props.rows) {
     if (r.kind === "user") {
-      groups.push({ key: `g${String(r.seq)}`, round: r.round, rows: [r] });
+      groups.push({ key: keyOf("g", r.seq), round: r.round, rows: [r] });
     } else {
       const cur = groups[groups.length - 1];
       if (cur === undefined) groups.push({ key: "g0", round: null, rows: [r] });
@@ -548,9 +576,9 @@ export const Stream = memo(function Stream(props: {
         case "user": {
           flush();
           out.push({
-            key: `u${r.seq}`,
+            key: keyOf("u", r.seq),
             node: (
-              <UserRowView {...r} canFold={canFold} flash={props.flashRound === r.round} {...(actions !== undefined ? { actions } : {})} />
+              <UserRowView {...r} canFold={canFold} flash={props.flashRound === r.round} {...(refOfRow(r.seq) !== undefined ? { eventRef: refOfRow(r.seq), sourceRow: props.inherited?.has(r.seq) === true } : {})} {...(actions !== undefined ? { actions } : {})} />
             ),
           });
           break;
@@ -572,9 +600,9 @@ export const Stream = memo(function Stream(props: {
             });
           }
           out.push({
-            key: `a${r.seq}`,
+            key: keyOf("a", r.seq),
             node: (
-              <AssistantRowView {...r} caret={r.live === true && caretOn && r.seq === lastLiveSeq} {...(actions !== undefined ? { actions } : {})} />
+              <AssistantRowView {...r} caret={r.live === true && caretOn && r.seq === lastLiveSeq} {...(refOfRow(r.seq) !== undefined ? { eventRef: refOfRow(r.seq), sourceRow: props.inherited?.has(r.seq) === true } : {})} {...(actions !== undefined ? { actions } : {})} />
             ),
           });
           break;

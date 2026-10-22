@@ -10,6 +10,7 @@
 // pickerKeyNotice / describeSelection / validateProjectName），并在真窗口冒烟里走一遍主路径。
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { runKey } from "../src/renderer/state/session-identity";
 import { ModelMenu, ModelPicker, type ModelOption } from "../src/renderer/components/ModelPicker";
 import type { ProviderInfo } from "../../../src/main/ipc-protocol";
 
@@ -289,7 +290,8 @@ describe("⑤ 左栏筛选：只列有数据支撑的项，并把缺的那半边
   });
 
   it("「运行中」按本进程在跑的会话过滤（不是空壳项）", () => {
-    expect(filterSessions(SESSIONS, { search: "", filter: "running", running: new Set(["s2"]) }).map((s) => s.id)).toEqual(["s2"]);
+    const runningKey = runKey("/tmp/ws", "s2");
+    expect(filterSessions(SESSIONS, { search: "", filter: "running", running: new Set([runningKey]) }).map((s) => s.id)).toEqual(["s2"]);
     expect(filterSessions(SESSIONS, { search: "", filter: "running", running: new Set<string>() })).toHaveLength(0);
   });
 

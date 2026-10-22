@@ -17,8 +17,9 @@ describe("/compact 命令", () => {
   it("协议与 wired 表把活动会话 id 传给主进程（不再落到 lastLogPath）", () => {
     const proto = read("../../../src/main/ipc-protocol.ts");
     const wired = read("../src/main/index.ts");
-    expect(proto).toContain("compact?(sessionId?: string): Promise<CompactResponse>;");
-    expect(wired).toContain("compact: (sessionId) => handleCompact({ sessionId: sessionId as string | undefined })");
+    expect(proto).toContain("compact?(sessionId?: string, workspace?: string): Promise<CompactResponse>;");
+    expect(wired).toContain("compact: async (sessionId, workspace) => {");
+    expect(wired).toContain("return handleCompact({ sessionId: sessionId as string | undefined");
   });
 
   it("三处入口共用 compactNow（斜杠 / 上下文菜单 / 命令面板）", () => {

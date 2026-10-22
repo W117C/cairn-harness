@@ -26,7 +26,7 @@ import {
   sidechatHistoryBudget,
   sidechatToolSpecs,
 } from "../src/agent/sidechat";
-import { createEventLog, replay, type AgentEvent, type UserMessageEvent } from "../src/events";
+import { createEventLog, numericCompactionIds, replay, type AgentEvent, type UserMessageEvent } from "../src/events";
 import { projectContext } from "../src/agent/context";
 import { composeTurnMessages } from "../src/agent/session-provider";
 
@@ -412,7 +412,7 @@ describe("M2g sidechat 自身历史预算 + 压缩（§7.5）", () => {
     });
     const compactions = events.filter((e) => e.type === "compaction");
     expect(compactions.length).toBe(1);
-    expect(compactions[0]!.compressed_event_ids.length).toBeGreaterThan(0);
+    expect(numericCompactionIds(compactions[0]!).length).toBeGreaterThan(0);
     // 主会话零写入（字节逐字不变）
     expect((await readFile(mainLog)).equals(mainBefore)).toBe(true);
     // 压缩事件确实落在自己的 JSONL（重放可见），且本轮 user/assistant 照常

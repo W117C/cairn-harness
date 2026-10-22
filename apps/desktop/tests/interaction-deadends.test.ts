@@ -20,7 +20,7 @@ describe("快捷键静默死点（F6/F7 + F5）", () => {
     // 判据跟着从「键位块里有这两行」升到「出口里有这两行 + 两个入口都走它」。
     expect(app).toContain("const closeSessionToHome = useCallback((): void => {");
     expect(app).toContain("toast(STR.shortcut.alreadyHome)");
-    expect(app).toContain("const wasRunning = runningSet.current.has(sid);");
+    expect(app).toContain("const wasRunning = runningSet.current.has(runKey(activeWorkspaceRef.current, sid));");
     expect(app).toContain("if (wasRunning) toast(STR.shortcut.leftRunning);");
     expect(app).toContain("h.closeSessionToHome();");
     expect(app).toContain('"close-session": closeSessionToHome,');

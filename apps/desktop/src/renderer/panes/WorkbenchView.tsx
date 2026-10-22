@@ -1,3 +1,4 @@
+import { runKey } from "../state/session-identity";
 import type { Dispatch,MutableRefObject,PointerEvent,SetStateAction } from "react";
 import type { GoalTrace } from "../../../../../src/agent/goal-trace";
 import type { ClarifyQuestion,PlanProposal } from "../../../../../src/events";
@@ -165,6 +166,8 @@ interface WorkbenchViewDeps {
   setStreamEl: Dispatch<SetStateAction<HTMLDivElement | null>>;
   stick: StickyScroll;
   streamRows: StreamRow[];
+  rowRefs: ReadonlyMap<number, import("../../../../../src/events").EventRef> | null;
+  inheritedSeqs: ReadonlySet<number> | null;
   viewMode: ViewMode;
   runningActive: boolean;
   foldedRounds: ReadonlySet<number>;
@@ -287,7 +290,7 @@ interface WorkbenchViewDeps {
 }
 
 export function WorkbenchView(deps: WorkbenchViewDeps) {
-  const { activeWorkspace, projects, pickerValue, providerInfo, settingsOpen, activeId, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, togglePane, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, sidebarCollapsed, toggleSidebar, newSession, handleOpenPalette, openPane, setSettingsSection, setSettingsOpen, sidebarWidth, runningSet, waitingIdSet, draftIds, outcomes, registryNotice, sessionsLoaded, sessionsLoadError, retrySessions, providerOk, openSession, setActiveWorkspace, activeWorkspaceRef, touchWorkspace, handleAddProject, handleCloneProject, setNewProjectOpen, handleUpdateProject, handleRemoveProject, handleRevealProject, pinSessionById, forkSessionFromMenu, requestArchiveSession, openSessionInCli, setWtDiscard, sessionWorktreeOp, requestDeleteSession, themePref, changeTheme, usageStats, usageAll, loadUsageAll, startSidebarDrag, persistSidebarWidth, sidebarWidthRef, mainGroupRef, showEmpty, findRef, findOpen, streamEl, closeFind, lastError, clearLastError, setLogTarget, lastNotice, clearLastNotice, importDiagnosis, setImportDiagnosis, chipRef, chipOpen, openChipPopover, emptyData, chipQuery, setChipQuery, chipRecent, chipList, closeChip, setLastError, setStreamEl, stick, streamRows, viewMode, runningActive, foldedRounds, flashRound, streamActions, deliveryTrailItems, deliveryExpandedFor, openPreview, exportActiveProject, lastDeliveryRound, handleRevertTurn, setDeliveryExpandedFor, outlineCurrent, jumpToRound, unfoldAllTurns, foldAllTurns, askForActive, setMode, setLastNotice, pendingClarify, pendingPlan, composerZoneRef, editCtx, events, sendQueue, setEditCtx, setDraftRemap, draftRemapSeq, refreshSessions, setQueueFor, cancelRunHeal, queueLoading, pendingSend, resumeQueue, skills, composerLock, mode, stopped, usage, phaseLabel, phase, elapsedSec, steps, runSteps, chosenCtx, recentRefsBySession, noteRecentRef, promptHistory, noteDraft, injectedText, injectedTextSeq, draftRemap, draftRestore, sendWithGoal, configuredProviders, thinkingBySession, force, selections, refreshProviderInfo, compactNow, composerMenuSignal, onSuggestNext, injectedAttachment, injectedAppend, onboarded, onboarding, injectText, inspectorRef, inspectorDefault, setInspectorCollapsed, inspectorSaveTimer, inspectorColRef, jumpToEvent, handleRestoreSnapshot, toggleInspector, attachFromPane, pickSignal, handlePickResult, preview, closePane, send, setPaneTabs, pluginSidebarWidth, setPluginSidebarWidthPersist, closePluginSidebar, fillPluginCommand, viewToast, cheatOpen, closeCheat, revertConfirm, setRevertConfirm, doRevertTurn, projectRemoveConfirm, setProjectRemoveConfirm, doRemoveProject, archiveConfirm, setArchiveConfirm, doArchiveSession, deleteConfirm, setDeleteConfirm, doDeleteSession, wtDiscard, paletteOpen, setPaletteOpen, focusComposer, handlePaletteAction, startBarRename, logTarget, settingsSection, refreshProviderKeys, setThemePref, setTextSize, setUiSize, setCtrlTabCycle, dragOverApp, newProjectOpen, templates, handleCreateFromDialog } = deps;
+  const { activeWorkspace, projects, pickerValue, providerInfo, settingsOpen, activeId, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, togglePane, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, sidebarCollapsed, toggleSidebar, newSession, handleOpenPalette, openPane, setSettingsSection, setSettingsOpen, sidebarWidth, runningSet, waitingIdSet, draftIds, outcomes, registryNotice, sessionsLoaded, sessionsLoadError, retrySessions, providerOk, openSession, setActiveWorkspace, activeWorkspaceRef, touchWorkspace, handleAddProject, handleCloneProject, setNewProjectOpen, handleUpdateProject, handleRemoveProject, handleRevealProject, pinSessionById, forkSessionFromMenu, requestArchiveSession, openSessionInCli, setWtDiscard, sessionWorktreeOp, requestDeleteSession, themePref, changeTheme, usageStats, usageAll, loadUsageAll, startSidebarDrag, persistSidebarWidth, sidebarWidthRef, mainGroupRef, showEmpty, findRef, findOpen, streamEl, closeFind, lastError, clearLastError, setLogTarget, lastNotice, clearLastNotice, importDiagnosis, setImportDiagnosis, chipRef, chipOpen, openChipPopover, emptyData, chipQuery, setChipQuery, chipRecent, chipList, closeChip, setLastError, setStreamEl, stick, streamRows, rowRefs, inheritedSeqs, viewMode, runningActive, foldedRounds, flashRound, streamActions, deliveryTrailItems, deliveryExpandedFor, openPreview, exportActiveProject, lastDeliveryRound, handleRevertTurn, setDeliveryExpandedFor, outlineCurrent, jumpToRound, unfoldAllTurns, foldAllTurns, askForActive, setMode, setLastNotice, pendingClarify, pendingPlan, composerZoneRef, editCtx, events, sendQueue, setEditCtx, setDraftRemap, draftRemapSeq, refreshSessions, setQueueFor, cancelRunHeal, queueLoading, pendingSend, resumeQueue, skills, composerLock, mode, stopped, usage, phaseLabel, phase, elapsedSec, steps, runSteps, chosenCtx, recentRefsBySession, noteRecentRef, promptHistory, noteDraft, injectedText, injectedTextSeq, draftRemap, draftRestore, sendWithGoal, configuredProviders, thinkingBySession, force, selections, refreshProviderInfo, compactNow, composerMenuSignal, onSuggestNext, injectedAttachment, injectedAppend, onboarded, onboarding, injectText, inspectorRef, inspectorDefault, setInspectorCollapsed, inspectorSaveTimer, inspectorColRef, jumpToEvent, handleRestoreSnapshot, toggleInspector, attachFromPane, pickSignal, handlePickResult, preview, closePane, send, setPaneTabs, pluginSidebarWidth, setPluginSidebarWidthPersist, closePluginSidebar, fillPluginCommand, viewToast, cheatOpen, closeCheat, revertConfirm, setRevertConfirm, doRevertTurn, projectRemoveConfirm, setProjectRemoveConfirm, doRemoveProject, archiveConfirm, setArchiveConfirm, doArchiveSession, deleteConfirm, setDeleteConfirm, doDeleteSession, wtDiscard, paletteOpen, setPaletteOpen, focusComposer, handlePaletteAction, startBarRename, logTarget, settingsSection, refreshProviderKeys, setThemePref, setTextSize, setUiSize, setCtrlTabCycle, dragOverApp, newProjectOpen, templates, handleCreateFromDialog } = deps;
   // 统一工具栏 · 左翼工作区上下文（2026-10-21 设计重做）：会话内把工作区名从输入区
   // 搬到这里——同一语义只留一处，输入区回到纯粹的写作面。
   const activeProjectLabel = activeWorkspace === null ? null
@@ -542,6 +545,8 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                       // 重挂 Stream 本体是可靠边界（.stream 滚动容器与 sticky 观察对象都不动）。
                       key={activeId ?? "home"}
                       rows={streamRows}
+                      refs={rowRefs}
+                      inherited={inheritedSeqs}
                       view={viewMode}
                       streaming={runningActive}
                       foldedRounds={foldedRounds}
@@ -687,7 +692,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                     // 回到原会话后屏上是空流（rows=0）。必须走 openSession 重新载入。
                     const emptyBranch = activeIdRef.current === ctx.forkId
                       && events.length === 0
-                      && (sendQueue.current.get(ctx.forkId)?.length ?? 0) === 0;
+                      && (sendQueue.current.get(runKey(activeWorkspace, ctx.forkId))?.length ?? 0) === 0;
                     setEditCtx(null);
                     openSession(ctx.originId);
                     // 第 1 轮编辑建的空分支：回到原会话即无内容，顺手清掉，别留 0 字节会话。
@@ -709,7 +714,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
             )}
             {activeId !== null && (
               <SendQueueStrip
-                items={sendQueue.current.get(activeId) ?? []}
+                items={sendQueue.current.get(runKey(activeWorkspace, activeId)) ?? []}
                 running={runningActive}
                 onInterruptSend={(index) => {
                   // 「打断并发送」：先把它提到队首，再打断本轮——收束在轮界，runOn 随即先派它。

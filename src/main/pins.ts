@@ -11,6 +11,8 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { writeFileAtomic } from "../atomic-write";
+import { eventRefKey, isEventRef } from "../events/session-ref";
+import type { EventRef } from "../events";
 
 const MAX_SESSION_ID_LENGTH = 80;
 
@@ -23,6 +25,8 @@ export interface PinRecord {
   pinned: boolean;
   /** 记录时间（ISO）。 */
   at: string;
+  /** 指针分叉：置顶指向来源事件（可为祖先行）；旧记录没有 ⇒ eventId 是 owner 自己的行号。 */
+  eventRef?: EventRef;
 }
 
 function isSessionId(value: unknown): value is string {
@@ -56,7 +60,11 @@ function parseLine(line: string): PinRecord | null {
   if (typeof r.eventId !== "number" || !Number.isInteger(r.eventId) || r.eventId < 1) return null;
   if (typeof r.pinned !== "boolean") return null;
   if (typeof r.at !== "string" || r.at === "") return null;
-  return { sessionId: r.sessionId, eventId: r.eventId, pinned: r.pinned, at: r.at };
+  if (r.eventRef !== undefined && !isEventRef(r.eventRef)) return null;
+  return {
+    sessionId: r.sessionId, eventId: r.eventId, pinned: r.pinned, at: r.at,
+    ...(r.eventRef !== undefined ? { eventRef: r.eventRef as EventRef } : {}),
+  };
 }
 
 /** 原子追加、进程内串行的置顶日志。缺文件 = 空；损坏行跳过并计数。 */
@@ -69,16 +77,20 @@ export class PinStore {
   }
 
   /** 追加一条置顶/取消记录。校验在写之前——非法入参不落盘、不建文件。 */
-  async append(input: { sessionId: unknown; eventId: unknown; pinned: unknown }): Promise<PinRecord> {
+  async append(input: { sessionId: unknown; eventId: unknown; pinned: unknown; eventRef?: unknown }): Promise<PinRecord> {
     return await this.enqueue(async () => {
       if (!isSessionId(input.sessionId)) throw new Error(`置顶 sessionId 非法: ${JSON.stringify(input.sessionId)}`);
       assertEventId(input.eventId);
       if (typeof input.pinned !== "boolean") throw new Error(`置顶 pinned 非法: ${JSON.stringify(input.pinned)}`);
+      if (input.eventRef !== undefined && !isEventRef(input.eventRef)) {
+        throw new Error(`置顶 eventRef 非法: ${JSON.stringify(input.eventRef)}`);
+      }
       const record: PinRecord = {
         sessionId: input.sessionId,
         eventId: input.eventId,
         pinned: input.pinned,
         at: this.now().toISOString(),
+        ...(input.eventRef !== undefined ? { eventRef: input.eventRef as EventRef } : {}),
       };
       await mkdir(dirname(this.filePath), { recursive: true });
       await appendFile(this.filePath, JSON.stringify(record) + "\n", "utf8");
@@ -86,16 +98,26 @@ export class PinStore {
     });
   }
 
-  /** 某会话**当前生效**的置顶锚点（按 eventId 取最后一条；pinned:false 的撤销行不返回）。 */
-  async listForSession(sessionId: string): Promise<number[]> {
+  /** 某会话**当前生效**的置顶锚点（按来源键取最后一条；pinned:false 的撤销行不返回）。
+   *  旧记录没有 eventRef ⇒ 以 `#eventId` 作解析键，语义仍是 owner 自己的行号。 */
+  async listForSessionWithRefs(sessionId: string): Promise<{ eventId: number; eventRef?: EventRef }[]> {
     if (!isSessionId(sessionId)) throw new Error(`置顶 sessionId 非法: ${JSON.stringify(sessionId)}`);
     const { records } = await this.listAll();
-    const latest = new Map<number, PinRecord>();
+    const latest = new Map<string, PinRecord>();
     for (const r of records) {
       if (r.sessionId !== sessionId) continue;
-      latest.set(r.eventId, r); // 文件按追加顺序读 ⇒ 后写覆盖先写
+      const key = r.eventRef !== undefined ? eventRefKey(r.eventRef) : `#${String(r.eventId)}`;
+      latest.set(key, r); // 文件按追加顺序读 ⇒ 后写覆盖先写
     }
-    return [...latest.values()].filter((r) => r.pinned).map((r) => r.eventId).sort((a, b) => a - b);
+    return [...latest.values()]
+      .filter((r) => r.pinned)
+      .map((r) => ({ eventId: r.eventId, ...(r.eventRef !== undefined ? { eventRef: r.eventRef } : {}) }))
+      .sort((a, b) => a.eventId - b.eventId);
+  }
+
+  /** 兼容读法：只给行号（旧消费者）。新消费者用 listForSessionWithRefs 保留来源。 */
+  async listForSession(sessionId: string): Promise<number[]> {
+    return (await this.listForSessionWithRefs(sessionId)).map((a) => a.eventId);
   }
 
   /** 全部原始记录（审计面）；`skipped` = 丢弃的坏行数（丢的要能数出来，不静默）。 */

@@ -316,6 +316,14 @@ async function canonicalKnownProjectPath(p: string): Promise<string | null> {
   return canonicalKnownProjectPathIn(p, await knownProjectRoots());
 }
 
+/** 显式 workspace → 该工作区的会话目录（**已登记根闸**）；缺省/空 = 交给 host 自行解析（唯一才认）。 */
+async function explicitSessionsRoot(workspace: unknown): Promise<string | undefined> {
+  if (workspace === undefined || workspace === null || workspace === "") return undefined;
+  const canonical = await canonicalKnownProjectPath(String(workspace));
+  if (canonical === null) throw new Error(`未注册的工作区，已拒绝：${String(workspace)}`);
+  return join(canonical, ".agent", "sessions");
+}
+
 /** 包含版：等于某个根**或**落在某个根之内就放行。
  *  落在根之内这一支是给"工作区里 agent 交付的单文件交付物也要能预览"留的
  *  （产品明确支持的一路，不能顺手砍掉）。软链逐段解析后再判
@@ -579,17 +587,20 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     }
     return next;
   },
-  compact: (sessionId) => handleCompact({ sessionId: sessionId as string | undefined }),
+  compact: async (sessionId, workspace) => {
+    const root = await explicitSessionsRoot(workspace);
+    return handleCompact({ sessionId: sessionId as string | undefined, ...(root !== undefined ? { sessionsRoot: root } : {}) });
+  },
   setGoal: (req) => handleGoalSet(req as never),
   cardAction: (req) => handleCardAction(req as never),
-  renameSession: (oldId, newName) => handleSessionRename(oldId as string, newName as string),
-  deleteSession: (id) => handleSessionDelete(id as string),
+  renameSession: async (oldId, newName, workspace) => handleSessionRename(oldId as string, newName as string, await explicitSessionsRoot(workspace)),
+  deleteSession: async (id, workspace) => handleSessionDelete(id as string, await explicitSessionsRoot(workspace)),
   // M8 分叉（v2.15）：保留前 N 轮 → 新会话 `<id>-f<N>`；与 CLI --fork/--from 同口径（fork-cli 单源）。
-  forkSession: (id, round, unique) => handleSessionFork(id as string, round as number, unique === true),
+  forkSession: async (id, round, unique, workspace) => handleSessionFork(id as string, round as number, unique === true, await explicitSessionsRoot(workspace)),
   // #7 文件级回滚（v2.16）：把第 N 轮主会话改过的文件还原成该轮之前的原件（源自 D7 覆盖前快照）。
   // 活动工作区上下文（desktop 专用）：空串清除；写入口只收字符串，非法值留给后续操作 fail-visible。
   setWorkspaceContext: (path) => windowWorkspaces.select(String(path ?? "")),
-  revertTurn: (id, round) => handleSessionRevert(id as string, round as number, resolveWorkspace()),
+  revertTurn: async (id, round, workspace) => handleSessionRevert(id as string, round as number, resolveWorkspace(), await explicitSessionsRoot(workspace)),
   // v4 变更审阅（diff 窗格逐 hunk）。
   changeDiff: (req) => handleChangeDiff(req as never, resolveWorkspace()),
   // v5 file 窗格（只读浏览）。
@@ -668,10 +679,10 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   },
   browserPickElement: (id) => browserHost.pickElement(String(id)),
   // v2.16 用户反馈沉淀（赞/踩）：sidecar feedback.jsonl，append-only、不进事件流。
-  submitFeedback: (req) => handleFeedbackSubmit(req as never),
-  listFeedback: (sessionId) => handleFeedbackList(sessionId as string),
+  submitFeedback: async (req) => handleFeedbackSubmit(req as never, await explicitSessionsRoot((req as { workspace?: unknown } | null)?.workspace)),
+  listFeedback: async (sessionId, workspace) => handleFeedbackList(sessionId as string, await explicitSessionsRoot(workspace)),
   // 2026-10-20 消息置顶（销 G6）：sidecar pins.jsonl，append-only、不进事件流。
-  setMessagePinned: (req) => handlePinSet(req as never),
+  setMessagePinned: async (req) => handlePinSet(req as never, await explicitSessionsRoot((req as { workspace?: unknown } | null)?.workspace)),
   listMessagePins: (sessionId) => handlePinList(sessionId as string),
   setSessionPinned: (sessionId, pinned) => handleSessionSetPinned(sessionId as string, pinned as boolean),
   setSessionArchived: (sessionId, archived) => handleSessionSetArchived(sessionId as string, archived as boolean),

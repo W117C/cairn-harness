@@ -12,6 +12,7 @@ import type { AgentEvent } from "../../../../../src/main/ipc-protocol";
 import type { WorkspaceSession } from "../sessions-view";
 import { STR } from "../strings";
 import { toast } from "../toast";
+import { runKey } from "./session-identity";
 
 export interface SessionOpsDeps {
   /** 当前会话（id 可能是 null）。 */
@@ -111,7 +112,7 @@ export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
   const closeSessionToHome = useCallback((): void => {
     const sid = activeIdRef.current;
     if (sid !== null) {
-      const wasRunning = runningSet.current.has(sid);
+      const wasRunning = runningSet.current.has(runKey(activeWorkspaceRef.current, sid));
       newSession();
       if (wasRunning) toast(STR.shortcut.leftRunning);
     } else {

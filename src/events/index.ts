@@ -12,7 +12,7 @@ export type {
   ClarifyQuestion, ClarifyAnswerMap, ClarifyRequestedEvent,
   PlanFileChange, PlanProposal, PlanProposedEvent, PlanApprovedEvent,
   VerifyCause, VerifyCommandResult, VerifyResultEvent,
-  CompactionUsage, CompactionEvent,
+  CompactionUsage, CompactionEvent, CompactionCommon, NumericCompaction, ReferencedCompaction, SummaryAnchor,
   SecuritySeverity, SecurityConfidence, SecurityCategory, SecurityFinding, SecurityChangeRef,
   SecurityReportEvent, ImpactReportEvent,
   AgentMode, AgentStatus, AgentPermissionMode,
@@ -25,7 +25,7 @@ export type {
   TurnTruncatedEvent, TurnStopMissingEvent, SurfaceAccountEvent,
   AgentEvent,
 } from "./types";
-export { AGENT_PERMISSION_MODES, HARNESS_HOLD_PROSE_TOKEN, HARNESS_HOLD_REASONS, TOOL_BLOCK_REASONS, isEnvVerifyCause } from "./types";
+export { AGENT_PERMISSION_MODES, HARNESS_HOLD_PROSE_TOKEN, HARNESS_HOLD_REASONS, isNumericCompaction, isReferencedCompaction, numericCompactionIds, numericCompactionOffset, TOOL_BLOCK_REASONS, isEnvVerifyCause } from "./types";
 export type { EventLog, ForkResult } from "./log";
 export {
   closeAllEventLogs, createEventLog, forkSession, hasEventLogHandle, invalidateEventLogHandle,
@@ -39,6 +39,14 @@ export {
 } from "./redact";
 export type { EntropyOptions, RedactResult, ScanOptions } from "./redact";
 // 日志结构控制记录的**投影**（ADR 0005）：控制记录由这一层解释，`replay()` 逐字不动它们。
-export { effectiveEvents, sessionMetaPatch } from "./projection";
-export { forkSessionPointer, replaySession, SessionReplayError } from "./session";
-export type { PointerForkResult, ReplaySessionOptions, SessionReplayErrorCode } from "./session";
+export { effectiveEntries, effectiveEvents, sessionMetaPatch } from "./projection";
+export type { ProjectedEvent } from "./projection";
+export { forkSessionPointer, replaySession, resolveSessionChain, SessionReplayError, unfinishedIndexes } from "./session";
+export type { PointerForkResult, ReplaySessionOptions, SessionChainFile, SessionReplayErrorCode } from "./session";
+// 来源引用与来源视图（ADR 0005 产品接入）：EventRef / SessionView 的公开面。
+export {
+  eventRefKey, isEventRef, isSessionRef, sameEventRef, sameSession, sessionRefKey,
+} from "./session-ref";
+export type { EventRef, SessionRef } from "./session-ref";
+export { forkPointInView, readSessionView } from "./session-view";
+export type { ForkPointInView, SessionView, SessionViewEntry } from "./session-view";
