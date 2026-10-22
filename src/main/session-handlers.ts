@@ -176,10 +176,11 @@ export async function applyCrashRecovery(logPath: string, emit?: (e: AgentEvent)
   return out;
 }
 
-export async function handleSessionRename(oldId: string, newName: string): Promise<{ id: string }> {
+export async function handleSessionRename(oldId: string, newName: string, sessionsRoot?: string): Promise<{ id: string }> {
   // 归属根来自解析器（多根面）：项目工作区里的会话不在单例根下，
   // 用单例根去改名 = 改不到（或改到同 id 的另一条）——桌面端「改名」对项目会话整条失效。
-  const dir = await resolveSessionRoot(oldId);
+  // `sessionsRoot` = 调用方已过登记根闸的显式根（两个工作区同名 id 必须精确寻址）。
+  const dir = sessionsRoot ?? await resolveSessionRoot(oldId);
   if (dir === null) throw new Error(`会话不存在: ${oldId}`);
   return await withSessionMutation(dir, async () => {
     await assertNoDependents({ workspace: workspaceOfSessionsRoot(dir) ?? dir, sessionId: oldId }, dir);
@@ -191,8 +192,8 @@ export async function handleSessionRename(oldId: string, newName: string): Promi
 }
 
 /** 删除会话：若删的是当前会话 → 回退到最近一个（列表 mtime 降序首个）；无会话 → null。 */
-export async function handleSessionDelete(id: string): Promise<{ currentSession: string | null }> {
-  const dir = await resolveSessionRoot(id);
+export async function handleSessionDelete(id: string, sessionsRoot?: string): Promise<{ currentSession: string | null }> {
+  const dir = sessionsRoot ?? await resolveSessionRoot(id);
   if (dir === null) throw new Error(`会话不存在: ${id}`);
   const logPath = pathOf(dir, id);
   return await withSessionMutation(dir, async () => {
@@ -239,8 +240,9 @@ export async function handleSessionFork(
   sessionId: string,
   round: number,
   unique = false,
+  sessionsRoot?: string,
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
-  const dir = requireSessionsDir();
+  const dir = sessionsRoot ?? requireSessionsDir();
   if (!(await sessionExists(dir, sessionId))) return { ok: false, error: `源会话不存在：${sessionId}` };
   const srcPath = pathOf(dir, sessionId);
   let events: AgentEvent[];
@@ -308,9 +310,10 @@ export async function handleSessionRevert(
   sessionId: string,
   round: number,
   workspaceOverride: string | null = null,
+  sessionsRoot?: string,
 ): Promise<FileRevertResult & { ok: boolean; error?: string }> {
   const empty: FileRevertResult = { restored: [], deleted: [], manual: [], failed: [] };
-  const dir = requireSessionsDir();
+  const dir = sessionsRoot ?? requireSessionsDir();
   if (!(await sessionExists(dir, sessionId))) return { ok: false, error: `会话不存在：${sessionId}`, ...empty };
   const workspace = workspaceOverride ?? getLastWorkspace();
   if (workspace === null) return { ok: false, error: "没有已知的工作区（本进程还没跑过 run）⇒ 无法定位要回滚的文件", ...empty };
@@ -337,9 +340,9 @@ export async function handleFeedbackSubmit(req: {
   eventId: number;
   rating: FeedbackRating;
   note?: string;
-}): Promise<{ ok: boolean; error?: string }> {
+}, sessionsRoot?: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    await requireExistingSession(req.sessionId);
+    await requireExistingSession(req.sessionId, sessionsRoot);
     await requireFeedbackStore().append({
       sessionId: req.sessionId,
       eventId: req.eventId,
@@ -353,7 +356,7 @@ export async function handleFeedbackSubmit(req: {
 }
 
 /** 某会话当前生效的反馈（界面据此点亮赞/踩）。 */
-export async function handleFeedbackList(sessionId: string): Promise<ResolvedFeedback[]> {
+export async function handleFeedbackList(sessionId: string, _sessionsRoot?: string): Promise<ResolvedFeedback[]> {
   return await requireFeedbackStore().listForSession(sessionId);
 }
 
@@ -364,9 +367,9 @@ export async function handlePinSet(req: {
   sessionId: string;
   eventId: number;
   pinned: boolean;
-}): Promise<{ ok: boolean; error?: string }> {
+}, sessionsRoot?: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    await requireExistingSession(req.sessionId);
+    await requireExistingSession(req.sessionId, sessionsRoot);
     await requirePinStore().append({ sessionId: req.sessionId, eventId: req.eventId, pinned: req.pinned });
     return { ok: true };
   } catch (err) {
@@ -395,10 +398,11 @@ export async function handleProjectRemove(id: string): Promise<ProjectRecord> {
   return await requireProjectRegistry().remove(id);
 }
 
-async function requireExistingSession(id: string): Promise<void> {
+async function requireExistingSession(id: string, sessionsRoot?: string): Promise<void> {
   // 归属根由解析器给（多根面）；**存在性仍然当场查**——解析器只说"去哪儿找"，
   // 不替它说"存在"（否则解析器的一次误判就变成一次静默放行）。
-  const root = await resolveSessionRoot(id);
+  // `sessionsRoot` = 调用方已过登记根闸的显式根（同名 id 精确寻址）。
+  const root = sessionsRoot ?? await resolveSessionRoot(id);
   if (root === null || !(await sessionExists(root, id))) throw new Error(`会话不存在: ${id}`);
 }
 

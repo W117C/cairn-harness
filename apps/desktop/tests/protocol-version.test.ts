@@ -47,6 +47,6 @@ describe("协议版本握手接线（§3.5/§12）", () => {
     // v15 → v16（会话定位批：openSession 增可选 workspace——跨项目同名 id 开对转录）。
     // v16 → v17（终端尺寸同步：＋terminalResize）。
     // v17 → v18（会话正文全文检索：＋sessionSearch——结果三态，「没量到 ≠ 没有」由类型层面分开）。
-    expect(IPC_PROTOCOL_VERSION).toBe(18);
+    expect(IPC_PROTOCOL_VERSION).toBe(19);
   });
 });

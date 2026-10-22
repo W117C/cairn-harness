@@ -16,6 +16,7 @@
 import { realpathSync } from "node:fs";
 import { readFile, rm, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
+import { readSessionView } from "../../../../src/events";
 import type { AgentEvent } from "../../../../src/events";
 import type {
   RunRequest,
@@ -130,13 +131,13 @@ export interface KernelHost {
   /** 读回会话事件并登记归属/漂移基线；workspace 缺省时按归属表 → 全工作区扫描解析。
    *  返回值带 running（desktop 扩展字段，同 aborted 先例不动 ipc-protocol 必填面）：
    *  main 侧 runControllers 实况——渲染层开会对账用（换实例后旧标记没有主人，真值只在 main）。 */
-  openSession(id: string, workspace?: string): Promise<{ events: AgentEvent[]; running: boolean; startedAt?: number }>;
+  openSession(id: string, workspace?: string): Promise<{ events: AgentEvent[]; session: import("../../../../src/events").SessionRef; view: import("../../../../src/events").SessionView; running: boolean; startedAt?: number }>;
   /** 在跑会话数（per-session runController 键数）——§3.3 退出告知闸的判据（main 内直调，不经 IPC）。 */
   runningCount(): number;
   /** 发送队列 sidecar 读回（重启恢复的数据面）；会话不存在 fail-visible。 */
-  queueGet(sessionId: string): Promise<{ items: SessionQueueEntry[] }>;
+  queueGet(sessionId: string, workspace?: string): Promise<{ items: SessionQueueEntry[] }>;
   /** 覆盖写发送队列 sidecar（空数组 = 删除 sidecar）；非法载荷 fail-visible。 */
-  queueSet(sessionId: string, items: SessionQueueEntry[]): Promise<{ ok: boolean; error?: string }>;
+  queueSet(sessionId: string, items: SessionQueueEntry[], workspace?: string): Promise<{ ok: boolean; error?: string }>;
 }
 
 /** 漂移拒绝文案（计划 Global Constraints 原文，逐字）。 */
@@ -322,11 +323,14 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
   // ⚠️ 找不到就返回 null（**不回落 activeWorkspace**）：回落 = 往别人的日志里写 = 造幽灵会话。
   setSessionRootResolver(async (sessionId) => {
     const known = owner.get(sessionId);
-    if (known !== undefined) return wsRoot(known);
-    for (const ws of workspaces) {
-      if (await sessionExists(wsRoot(ws), sessionId)) return wsRoot(ws);
+    const hits: string[] = [];
+    for (const ws of workspaces) if (await sessionExists(wsRoot(ws), sessionId)) hits.push(ws);
+    // 同名 id 在多个登记根里同时存在 ⇒ 不猜；显式 workspace 的调用方走 sessionsRoot 参数绕过这里。
+    if (hits.length > 1) {
+      throw new Error(`会话 id 在多个工作区同时存在（${hits.join("、")}），必须显式指定 workspace：${sessionId}`);
     }
-    return null;
+    if (hits.length === 1) return wsRoot(hits[0]!);
+    return known === undefined ? null : wsRoot(known);
   });
 
   // ---- 每会话取消（M3 T2）：run 启动建 per-session AbortController，经 RunOverrides.signal 注入
@@ -442,17 +446,23 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
   const resolveSessionWs = async (sessionId: string, explicit?: string): Promise<string> => {
     if (explicit !== undefined) {
       const ws = canonicalWorkspacePath(explicit);
+      // 显式 workspace 同样过已登记根闸：否则 openSession/run 的 workspace 参数就是一个任意目录读面。
+      if (!workspaces.includes(ws)) throw new Error(`workspace 不在 workspaces 里: ${explicit}`);
       owner.set(sessionId, ws);
       return ws;
     }
     const known = owner.get(sessionId);
-    if (known !== undefined) return known;
-    for (const ws of workspaces) {
-      if (await sessionExists(wsRoot(ws), sessionId)) {
-        owner.set(sessionId, ws);
-        return ws;
-      }
+    // 同名 id 在多个登记根里同时存在时**不猜**（旧实现扫到第一个就用 ⇒ 读/写别的项目的日志）。
+    const hits: string[] = [];
+    for (const ws of workspaces) if (await sessionExists(wsRoot(ws), sessionId)) hits.push(ws);
+    if (hits.length > 1) {
+      throw new Error(`会话 id 在多个工作区同时存在（${hits.join("、")}），必须显式指定 workspace：${sessionId}`);
     }
+    if (hits.length === 1) {
+      owner.set(sessionId, hits[0]!);
+      return hits[0]!;
+    }
+    if (known !== undefined) return known;
     return activeWorkspace;
   };
 
@@ -745,16 +755,18 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       // 「运行中」标记收敛到 main 真值（真在跑 ⇒ 补上；已收束 ⇒ 摘掉）。收束补发终态是正路，
       // 这条是开一条会话就自愈一次的兜底（两者互不依赖）。
       // startedAt：这一轮 run 的起点（渲染层换实例后秒表接着真值算；不在场 = 起点未知）
-      return { events, running: runControllers.has(id), startedAt: runStartedAt.get(id) };
+      const session = { workspace: ws, sessionId: id };
+      const view = await readSessionView(session, root);
+      return { events, session, view, running: runControllers.has(id), startedAt: runStartedAt.get(id) };
     },
-    queueGet: async (sessionId) => {
-      const ws = await resolveSessionWs(sessionId);
+    queueGet: async (sessionId, workspace) => {
+      const ws = await resolveSessionWs(sessionId, workspace);
       const root = wsRoot(ws);
       if (!(await sessionExists(root, sessionId))) throw new Error(`会话不存在: ${sessionId}`);
       return { items: await readSessionQueue(root, sessionId) };
     },
-    queueSet: async (sessionId, items) => {
-      const ws = await resolveSessionWs(sessionId);
+    queueSet: async (sessionId, items, workspace) => {
+      const ws = await resolveSessionWs(sessionId, workspace);
       const root = wsRoot(ws);
       if (!(await sessionExists(root, sessionId))) throw new Error(`会话不存在: ${sessionId}`);
       try {

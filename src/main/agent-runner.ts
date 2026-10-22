@@ -424,11 +424,11 @@ let lastLogPath: string | null = null;
  *     压缩卡当场看得见，下次 run 重放又是全文 ⇒ 花了一次摘要的钱换个零效果。
  *     compaction-check 走的是演示那条支，所以这条产品支红过也没人看见。 */
 export async function handleCompact(
-  over: { sessionId?: string } = {},
+  over: { sessionId?: string; sessionsRoot?: string } = {},
 ): Promise<{ ok: boolean; error?: string; cardPayload?: Record<string, unknown> }> {
   let logPath: string | null;
   if (over.sessionId !== undefined) {
-    const dir = requireSessionsDir();
+    const dir = over.sessionsRoot ?? requireSessionsDir();
     if (!(await sessionExists(dir, over.sessionId))) return { ok: false, error: "会话不存在，未压缩" };
     logPath = pathOf(dir, over.sessionId);
   } else {
