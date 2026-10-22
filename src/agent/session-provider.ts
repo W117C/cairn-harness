@@ -13,7 +13,9 @@
 // （scripts/provider-check.ts / tests/glm.test.ts）也是从 providers/glm 导入，与本文件无关。
 // 职责：从事件日志重建中立对话历史（含 tool_calls / tool 角色），把工具结果反馈回模型，
 // 使真实 GLM 能多轮调用 clarify / propose_plan / write_file / verify。
-import { createEventLog, replayIncremental, type AgentEvent, type CompactionUsage } from "../events";
+import { createEventLog, eventRefKey, readSessionView, replayIncremental, type AgentEvent, type CompactionUsage, type SessionView } from "../events";
+import { realpath } from "node:fs/promises";
+import { projectViewContext } from "./session-view-context";
 import { isSideEffectTool, isWriteCall, type McpGrade, type PermissionMode } from "../permissions";
 import { streamGlm, type GlmMessage, type GlmOptions, type GlmToolSpec } from "../providers/glm";
 import { SUPERVISE_MODEL_FIELDS } from "./supervise-contract";
@@ -614,9 +616,17 @@ export function sessionToolSpecs(
 
 /** 事件日志 → OpenAI 兼容消息序列。
  *  M1d：改走组装器投影 projectContext——compaction 感知（跳过被压 id、offset 注入摘要、fresh start），
- *  assistant_delta 合并与 tool 角色映射逻辑与旧版逐字同构。 */
+ *  assistant_delta 合并与 tool 角色映射逻辑与旧版逐字同构。
+ *  指针分叉：从日志对应的受信 session 根建立来源视图（父前缀 + 本地），模型历史由视图投影；
+ *  `replay()` / raw 游标仍只认各自文件（本函数不改变 raw 语义）。 */
 export async function buildSessionHistory(logPath: string): Promise<RawMessage[]> {
-  return projectContext(await replayIncremental(logPath)) as unknown as RawMessage[];
+  const root = dirname(logPath);
+  const agent = dirname(root);
+  const bare = basename(agent) === ".agent" ? dirname(agent) : root;
+  const workspace = await realpath(bare);
+  const sessionId = basename(logPath).replace(/\.jsonl$/u, "");
+  const view = await readSessionView({ workspace, sessionId }, root);
+  return projectViewContext(view) as unknown as RawMessage[];
 }
 
 export type SessionTransport = (
@@ -873,7 +883,7 @@ export function createSessionProvider(
   // 本轮前缀是否已被压缩打断（见 `prune-batching.ts` 的 freeRide 注释）：
   // 在压缩后的那次 fresh-start 重组装**之前**置位，由 assemble() 取用并清零。
   let pruneFreeRide = false;
-  const assemble = async (): Promise<{ events: AgentEvent[]; history: ReturnType<typeof projectContext> }> => {
+  const assemble = async (): Promise<{ events: AgentEvent[]; history: ReturnType<typeof projectContext>; view?: SessionView }> => {
     // A5（审查根因 5）：增量重放——每轮只解析追加段（旧实现全量读盘+全量投影，整会话 O(n²)）
     const events = await replayIncremental(logPath);
     // M2b prune：本地计算裁剪投影（异常静默 → 无裁剪）
@@ -915,7 +925,25 @@ export function createSessionProvider(
       console.debug("[prune] 计算失败，本轮跳过裁剪:", err instanceof Error ? err.message : String(err));
     }
     if (opts.solpi?.ledger) replacements = await opts.solpi.project(events, replacements);
-    return { events, history: projectContext(events, replacements) };
+    // 指针分叉：本地 raw 事件仍是 `events`（游标/回滚/审计只认它）；模型历史从来源视图生成，
+    // 父前缀按各自文件的行号解释。没分叉的会话走原路径，逐字不变。
+    const head = events[0];
+    let history: ReturnType<typeof projectContext>;
+    let view: SessionView | undefined;
+    if (head !== undefined && head.type === "session_meta" && head.fork !== undefined) {
+      const root = dirname(logPath);
+      const bare = basename(dirname(root)) === ".agent" ? dirname(dirname(root)) : root;
+      const workspace = await realpath(bare);
+      view = await readSessionView({ workspace, sessionId: pruneSessionId }, root);
+      const byRef = new Map<string, string>();
+      for (const [id, replaced] of replacements ?? []) {
+        byRef.set(eventRefKey({ workspace, sessionId: pruneSessionId, eventId: id }), replaced);
+      }
+      history = projectViewContext(view, byRef);
+    } else {
+      history = projectContext(events, replacements);
+    }
+    return { events, history, ...(view !== undefined ? { view } : {}) };
   };
   // M2b 地图：上下文文件 = 最近 2 个 user_message 里提到的 workspace 相对路径 + 最近 read/edit 的文件
   const contextFilesFromEvents = (events: AgentEvent[]): string[] => {
@@ -1029,7 +1057,7 @@ export function createSessionProvider(
   async function* turnGenerator(call?: ProviderCall): AsyncGenerator<ModelOutput> {
       call?.signal?.throwIfAborted();
       const attempt = ++attemptSeq;
-      let { events, history } = await assemble();
+      let { events, history, view } = await assemble();
       // 逐请求工具面：给了 requestFace 就每轮现算（run 中途激活的 skill 下一轮就不再出现在清单里），
       // 否则沿用构造时那份。整轮只用这一个 `tools`——散落着读 opts.tools 会出现同轮两种口径。
       let compactedThisRound = false;
@@ -1148,6 +1176,7 @@ export function createSessionProvider(
         });
         const boundaries = opts.solpi?.flags.economicCompaction ? deriveProgressBoundaries(events) : [];
         const outcome = await coordinator.maybeCompact(events, decision, { overhead, signal: call?.signal,
+          ...(view !== undefined ? { view } : {}),
           ...(amortize ? { config: amortize } : {}),
           ...(opts.solpi?.flags.economicCompaction ? { economics: {
             state: opts.solpi.economics(events), requestsPerBoundary: boundarySamples,
@@ -1170,7 +1199,7 @@ export function createSessionProvider(
           }
           compactedThisRound = true;
           pruneFreeRide = true; // 头已经断了：紧接着的那次重组装顺手把该剪的一刀剪掉
-          ({ events, history } = await assemble()); // fresh start：重组装（摘要 + tail）
+          ({ events, history, view } = await assemble()); // fresh start：重组装（摘要 + tail）
           skillsBlock = pluginContext(events, liveNote);
           mapText = await buildMapText(history);
         } else if (outcome && outcome.kind === "failed" && coordinator.summarizerDisabled) {

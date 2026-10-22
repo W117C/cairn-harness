@@ -5,7 +5,7 @@
 // 让步序（任务书）：主会话不受打扰 > 结论可追溯 > 界面好看。
 import { closeSync, lstatSync, openSync, readFileSync, readSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { createEventLog, replay, replayIncremental, type AgentEvent, type CompactionEvent, type PromoteOrigin, type UserMessageEvent } from "../events";
+import { createEventLog, isNumericCompaction, replay, replayIncremental, type AgentEvent, type CompactionEvent, type PromoteOrigin, type UserMessageEvent } from "../events";
 import { SENSITIVE_PATH_SEGMENTS } from "../sensitive-paths";
 import type { ModelOutput, Provider } from "../providers";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../providers/glm";
@@ -198,7 +198,7 @@ export function buildMainProjection(
   // ——sidechat 看到的视图会一直过期到下次压缩。
   const excluded = excludedIds(events);
   let latest: CompactionEvent | null = null;
-  for (const e of events) if (isCompaction(e) && !isWorkerCompaction(e)) latest = e;
+  for (const e of events) if (isCompaction(e) && !isWorkerCompaction(e) && isNumericCompaction(e)) latest = e;
   const tailFrom = latest ? Math.max(0, latest.summary_offset - 1) : 0;
   // 轮 = 以 user_message 起的一段；窗口只在尾部内计（摘要已覆盖其前面包）
   const starts: number[] = [];

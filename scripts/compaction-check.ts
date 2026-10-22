@@ -4,7 +4,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createEventLog, replay, type AgentEvent } from "../src/events";
+import { createEventLog, numericCompactionIds, numericCompactionOffset, replay, type AgentEvent } from "../src/events";
 import { projectContext, summaryEnvelope } from "../src/agent/context";
 import {
   DEFAULT_COMPACTION_CONFIG,
@@ -149,7 +149,7 @@ async function main(): Promise<void> {
     });
     await check("长会话②：tail 长度落在 clamp(可用×0.25, 2k, 15k) 区间", () => {
       const st = state();
-      const offset = st.event.summary_offset;
+      const offset = numericCompactionOffset(st.event);
       const factor = calibrateFactor(st.all); // 与切点同一校准口径（生产函数）
       let tail = 0;
       st.all.forEach((e, i) => {
@@ -162,7 +162,7 @@ async function main(): Promise<void> {
       const st = state();
       const kf = keepFirstSet(st.all);
       assert(kf.has(1), "用户目标未被识别为 keep-first");
-      for (const id of st.event.compressed_event_ids) assert(!kf.has(id), "keep-first 事件 " + id + " 被压缩");
+      for (const id of numericCompactionIds(st.event)) assert(!kf.has(id), "keep-first 事件 " + id + " 被压缩");
       // 原为 `includes(4) === false || !kf.has(4)`：实测 **kf={1,2,3,763} 不含 4** → 恒为 `A || true`，
       // 这道门**从未测过任何东西**（H-1 析取式弱断言的典型形态）。
       // 根因是**指错了 id**：eventIdAt(i)=i+1，fixture 里 plan_proposed/plan_approved 在 index 1/2 →
@@ -209,7 +209,7 @@ async function main(): Promise<void> {
       });
       assert(outcome.ok, "第二次压缩被拒: " + (!outcome.ok ? outcome.why : ""));
       if (!outcome.ok) return;
-      assert(!outcome.event.compressed_event_ids.includes(compactionId), "旧 compaction 事件 " + compactionId + " 被新压缩吞掉");
+      assert(!numericCompactionIds(outcome.event).includes(compactionId), "旧 compaction 事件 " + compactionId + " 被新压缩吞掉");
       await log.append(outcome.event);
       const proj = projectContext(await replay(logPath));
       const text = JSON.stringify(proj);
@@ -301,9 +301,9 @@ async function main(): Promise<void> {
       if (!outcome || !outcome.ok) return;
       assert(summarizerCalls === 0, "紧急路径不应调摘要器");
       assert(outcome.event.trigger === "overflow", "trigger 应为 overflow");
-      assert(outcome.event.compressed_event_ids.length >= 6, "半分截断应摘除约一半");
+      assert(numericCompactionIds(outcome.event).length >= 6, "半分截断应摘除约一半");
       const kf = keepFirstSet(events);
-      for (const id of outcome.event.compressed_event_ids) assert(!kf.has(id), "keep-first 被截断");
+      for (const id of numericCompactionIds(outcome.event)) assert(!kf.has(id), "keep-first 被截断");
       assert(outcome.event.tokens_after < outcome.event.tokens_before, "截断未省 token");
       // M2g 修正（闭合 §1.4-6）：旧版 `shouldCompact(...) === null || true` 是伪装成断言的恒真式。
       // 改成真断言：给一个足够宽的预算，截断后的估算必须落到阈值以下（shouldCompact → null）。
@@ -341,7 +341,7 @@ async function main(): Promise<void> {
         if (!outcome.ok) return;
         assert(outcome.event.summary.trim().length > 0, "GLM 摘要为空");
         assert(outcome.event.tokens_after < outcome.event.tokens_before, "暗卷膨胀");
-        assert(outcome.event.compressed_event_ids.length >= events.length * 0.1, "暗卷最小进度不足");
+        assert(numericCompactionIds(outcome.event).length >= events.length * 0.1, "暗卷最小进度不足");
         console.log("     GLM 摘要 " + outcome.event.summary.length + " chars，" + (outcome.event.tokens_before) + "→" + (outcome.event.tokens_after) + " tokens");
       });
     }

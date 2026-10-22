@@ -12,7 +12,7 @@ export type {
   ClarifyQuestion, ClarifyAnswerMap, ClarifyRequestedEvent,
   PlanFileChange, PlanProposal, PlanProposedEvent, PlanApprovedEvent,
   VerifyCause, VerifyCommandResult, VerifyResultEvent,
-  CompactionUsage, CompactionEvent,
+  CompactionUsage, CompactionEvent, CompactionCommon, NumericCompaction, ReferencedCompaction, SummaryAnchor,
   SecuritySeverity, SecurityConfidence, SecurityCategory, SecurityFinding, SecurityChangeRef,
   SecurityReportEvent, ImpactReportEvent,
   AgentMode, AgentStatus, AgentPermissionMode,
@@ -25,7 +25,7 @@ export type {
   TurnTruncatedEvent, TurnStopMissingEvent, SurfaceAccountEvent,
   AgentEvent,
 } from "./types";
-export { AGENT_PERMISSION_MODES, HARNESS_HOLD_PROSE_TOKEN, HARNESS_HOLD_REASONS, TOOL_BLOCK_REASONS, isEnvVerifyCause } from "./types";
+export { AGENT_PERMISSION_MODES, HARNESS_HOLD_PROSE_TOKEN, HARNESS_HOLD_REASONS, isNumericCompaction, isReferencedCompaction, numericCompactionIds, numericCompactionOffset, TOOL_BLOCK_REASONS, isEnvVerifyCause } from "./types";
 export type { EventLog, ForkResult } from "./log";
 export {
   closeAllEventLogs, createEventLog, forkSession, hasEventLogHandle, invalidateEventLogHandle,

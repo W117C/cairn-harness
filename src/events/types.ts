@@ -258,21 +258,66 @@ export interface VerifyResultEvent {
 /** 压缩发生记录：trigger=auto（比例阈值）/ manual（/compact）/ overflow（硬兜底紧急截断）。
  *  usage 缺省 = 摘要器无 API 用量（mock/紧急截断不伪造）；model 缺省 = 会话同模型。 */
 export interface CompactionUsage { inputTokens: number; outputTokens: number }
-export interface CompactionEvent {
+/** 摘要注入锚点（来源形式）：在某个事件之前，或明确的末尾。 */
+export type SummaryAnchor = { before: import("./session-ref").EventRef } | { end: true };
+
+/** 压缩记录的公共字段（两种引用形式共享；新旧互斥）。 */
+export interface CompactionCommon {
   type: "compaction";
   trigger: "auto" | "manual" | "overflow";
   reason: "threshold" | "hard_buffer" | "user_request";
-  /** 被摘除事件的 id（1-based 行号）；永不含 compaction 事件本体（摘要不二次被压）。 */
-  compressed_event_ids: number[];
   summary: string;
-  /** 注入位置：投影在该 id 的事件之前插一条 user 角色摘要消息（fresh start）。 */
-  summary_offset: number;
   tokens_before: number;
   tokens_after: number;
   usage?: CompactionUsage;
   model?: string;
   /** M3c：worker 归因（§7.5 worker 压缩事件落子流；主会话压缩无此字段）。 */
   agent_id?: string;
+}
+
+/** 旧数字形式：`compressed_event_ids` 是**本文件**的 1-based 行号，`summary_offset` 是**本文件**的注入位置。
+ *  继续可读；跨文件写回一律使用来源形式。 */
+export interface NumericCompaction extends CompactionCommon {
+  compressed_event_ids: number[];
+  summary_offset: number;
+  reference_version?: undefined;
+  compressed_event_refs?: undefined;
+  summary_anchor?: undefined;
+  superseded_summary_refs?: undefined;
+}
+
+/** 来源形式（ADR 0005 产品接入）：跨文件压缩只认 EventRef，数字位置不在拼接数组上解释。
+ *  完整来源集合与锚点必须成套在场；旧摘要若进入新摘要输入，其来源须列入 `superseded_summary_refs`。 */
+export interface ReferencedCompaction extends CompactionCommon {
+  reference_version: 1;
+  compressed_event_refs: import("./session-ref").EventRef[];
+  summary_anchor: SummaryAnchor;
+  superseded_summary_refs: import("./session-ref").EventRef[];
+  compressed_event_ids?: undefined;
+  summary_offset?: undefined;
+}
+
+export type CompactionEvent = NumericCompaction | ReferencedCompaction;
+
+/** 形状判别：新旧互斥，不会同时为真（类型上就互斥）。 */
+export function isReferencedCompaction(e: CompactionEvent): e is ReferencedCompaction {
+  return "reference_version" in e && e.reference_version === 1;
+}
+
+export function isNumericCompaction(e: CompactionEvent): e is NumericCompaction {
+  return "compressed_event_ids" in e;
+}
+
+/** 旧数字形式的行号集合；来源形式没有「本文件行号集合」这回事 ⇒ 显式抛，不返回空数组。 */
+export function numericCompactionIds(e: CompactionEvent): number[] {
+  if (!isNumericCompaction(e)) throw new Error("压缩记录不是旧数字形式：来源形式没有本文件行号集合");
+  return e.compressed_event_ids;
+}
+
+/** 旧数字形式的注入位置（本文件 1-based 行号）；来源形式用 `summary_anchor`。 */
+export function numericCompactionOffset(e: CompactionEvent): number {
+  if (!isNumericCompaction(e)) throw new Error("压缩记录不是旧数字形式：来源形式没有本文件 summary_offset");
+  return e.summary_offset;
 }
 
 // ---- M2f 产出代码安全 report（§11.6 定稿，本轮只做 off/report）----
