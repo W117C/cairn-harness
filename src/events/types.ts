@@ -629,6 +629,8 @@ export interface FileRestoredEvent {
   path: string;
   /** 还原所用的覆盖前快照 id（可选；同一份事件流里能对回是哪一次覆盖）。 */
   snapshotId?: string;
+  /** 被撤销对象在来源视图里的真实归属（祖先行时指向父文件；旧事件缺席）。 */
+  source_ref?: import("./session-ref").EventRef;
   ts?: number;
 }
 

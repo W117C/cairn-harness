@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { createEventLog, forkSession, replay, type AgentEvent, type EventRef } from "../events";
 import { scanStreamEvent } from "../agent/worker-projection";
 import { forkPointOf, forkSessionName } from "../agent/fork-cli";
-import { applyTurnRevert, planTurnRevert, type FileRevertResult } from "../agent/file-revert";
+import { applyTurnRevert, planTurnRevert, planTurnRevertView, type FileRevertResult } from "../agent/file-revert";
+import { isEventRef, readSessionView } from "../events";
 import { getLastWorkspace } from "./runner-workspace";
 import { readChangeDiff, restoreSnapshot } from "./change-diff";
 import { listDir, readTextFile } from "./workspace-fs";
@@ -323,7 +324,16 @@ export async function handleSessionRevert(
   } catch (err) {
     return { ok: false, error: `读会话失败：${err instanceof Error ? err.message : String(err)}`, ...empty };
   }
-  const plan = planTurnRevert(events, round);
+  // 指针分叉：轮次与写回执都要在来源视图里解释（父前缀的轮也是可见轮）。
+  let plan;
+  const head = events[0];
+  if (head !== undefined && head.type === "session_meta" && head.fork !== undefined) {
+    const ws = workspaceOfSessionsRoot(dir) ?? workspace;
+    const view = await readSessionView({ workspace: ws, sessionId }, dir).catch(() => null);
+    plan = view === null ? planTurnRevert(events, round) : planTurnRevertView(view, round);
+  } else {
+    plan = planTurnRevert(events, round);
+  }
   if ("error" in plan) return { ok: false, error: plan.error, ...empty };
   if (plan.entries.length === 0) {
     return { ok: false, error: `第 ${String(round)} 轮没有可回滚的文件改动（这一轮没写过盘，或改动都取不到覆盖前原件）`, ...empty };
@@ -447,7 +457,7 @@ export async function handleChangeDiff(req: { path: string; snapshotId?: string 
  *  全部从事件流投影 ⇒ 还原之后那一行仍写着"修改"、仍提供"撤销"、徽标仍数着它，
  *  而那个改动在盘上已经不存在了。落流之后改动面才能如实反映"这一项被撤了"。 */
 export async function handleSnapshotRestore(
-  req: { path?: string; snapshotId?: string; sessionId?: string },
+  req: { path?: string; snapshotId?: string; sessionId?: string; eventRef?: EventRef },
   workspaceOverride: string | null = null,
 ) {
   const workspace = workspaceOverride ?? getLastWorkspace();
@@ -477,6 +487,7 @@ export async function handleSnapshotRestore(
           type: "file_restored",
           path: String(req.path ?? ""),
           ...(req.snapshotId !== undefined ? { snapshotId: String(req.snapshotId) } : {}),
+          ...(req.eventRef !== undefined && isEventRef(req.eventRef) ? { source_ref: req.eventRef } : {}),
         } as AgentEvent));
       }
     } catch (err) {

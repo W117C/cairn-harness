@@ -27,8 +27,8 @@
 // ============================ 不做的（留给 profiler 说话）============================
 // 没有索引、没有倒排、没有增量缓存：这一版是**线性扫描 + 字节帽**。索引等 profiler 说话（台账 §3b E3）。
 import { open, readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
-import type { AgentEvent } from "../events";
+import { basename, dirname, join } from "node:path";
+import { readSessionView, resolveSessionChain, type AgentEvent, type EventRef, type SessionRef } from "../events";
 import type { SessionMetadataRecord } from "./session-metadata";
 
 // ---- 语料口径：可见事件种类（唯一事实源）----
@@ -45,6 +45,8 @@ export function isVisibleEventKind(type: string): type is VisibleEventKind {
 export interface VisibleMessage {
   kind: VisibleEventKind;
   text: string;
+  /** 该消息在**所属文件**里的物理行号（来源引用）；纯函数语料没有来源时缺席。 */
+  ref?: EventRef;
 }
 
 // ---- 预算与摘录的缺省值（文档化常量：别处不许再抄一份数字）----
@@ -74,15 +76,20 @@ class VisibleCorpus {
   private readonly messages: VisibleMessage[] = [];
   private readonly deltaBuf = new Map<string, string>();
   private readonly deltaOrder: string[] = [];
+  /** 每条 delta 组首段的来源（合并后的消息指向它）。 */
+  private readonly deltaRef = new Map<string, EventRef | undefined>();
 
-  push(event: AgentEvent): void {
+  push(event: AgentEvent, ref?: EventRef): void {
     if (event.type === "user_message" || event.type === "assistant_message") {
       this.flushDeltas();
-      this.messages.push({ kind: event.type, text: event.content });
+      this.messages.push({ kind: event.type, text: event.content, ...(ref !== undefined ? { ref } : {}) });
       return;
     }
     if (event.type === "assistant_delta") {
-      if (!this.deltaBuf.has(event.callId)) this.deltaOrder.push(event.callId);
+      if (!this.deltaBuf.has(event.callId)) {
+        this.deltaOrder.push(event.callId);
+        this.deltaRef.set(event.callId, ref);
+      }
       this.deltaBuf.set(event.callId, (this.deltaBuf.get(event.callId) ?? "") + event.text);
       return;
     }
@@ -92,10 +99,12 @@ class VisibleCorpus {
   /** 待并的 delta 段落落位（按首次出现次序）。 */
   private flushDeltas(): void {
     for (const callId of this.deltaOrder) {
-      this.messages.push({ kind: "assistant_delta", text: this.deltaBuf.get(callId) ?? "" });
+      const ref = this.deltaRef.get(callId);
+      this.messages.push({ kind: "assistant_delta", text: this.deltaBuf.get(callId) ?? "", ...(ref !== undefined ? { ref } : {}) });
     }
     this.deltaBuf.clear();
     this.deltaOrder.length = 0;
+    this.deltaRef.clear();
   }
 
   finish(): VisibleMessage[] {
@@ -194,11 +203,15 @@ export interface SessionSearchSnippet {
   excerpt: string;
   /** 该消息在可见语料中的序号（0-based）。 */
   index: number;
+  /** 命中的**来源**（所属文件 + 物理行号）；祖先命中时仍指父文件的行。 */
+  ref?: EventRef;
 }
 
 /** 一个会话的聚合结果（**一个会话一条**，不是每条消息一条）。 */
 export interface SessionSearchMatch {
   sessionId: string;
+  /** 结果所属会话的精确来源（workspace + sessionId）：两个工作区同名 id 必须分得开。 */
+  session: SessionRef;
   /** sidecar 标题。**缺席 = 没有 sidecar 记录（标题未知）**，不是「空标题」。 */
   title?: string;
   /** 命中消息条数（可见语料里命中任一关键词的消息数）。 */
@@ -326,6 +339,7 @@ export async function searchSessions(opts: SessionSearchOptions): Promise<Sessio
   }
   candidates.sort((a, b) => b.mtimeMs - a.mtimeMs || a.id.localeCompare(b.id));
 
+  const workspace = workspaceOfSearchRoot(opts.root);
   let totalSessions = candidates.length;
   let scannedSessions = 0;
   let scannedBytes = 0;
@@ -345,7 +359,10 @@ export async function searchSessions(opts: SessionSearchOptions): Promise<Sessio
       budgetExhaustedAt = "bytes";
       break;
     }
-    const outcome = await scanSessionFile(candidate.path, budgetBytes - scannedBytes);
+    const sessionRef: SessionRef = { workspace, sessionId: candidate.id };
+    const outcome = await hasForkHead(candidate.path)
+      ? await scanSessionView(opts.root, sessionRef, budgetBytes - scannedBytes)
+      : await scanSessionFile(candidate.path, budgetBytes - scannedBytes, sessionRef);
     if (outcome.kind === "error") {
       unreadableSessions += 1;
       continue;
@@ -363,7 +380,7 @@ export async function searchSessions(opts: SessionSearchOptions): Promise<Sessio
       // 被字节帽切断：这个会话的命中数只是下界。
       truncatedSessions.push(candidate.id);
     }
-    const hit = aggregateMatch(candidate.id, outcome, keywords, maxSnippets, opts.metadataById);
+    const hit = aggregateMatch(sessionRef, outcome, keywords, maxSnippets, opts.metadataById);
     if (hit !== null) matches.push(hit);
     if (!outcome.complete) {
       // 预算在这一份上用完了：后面的一律没扫。
@@ -405,7 +422,7 @@ interface FileScanOk {
 }
 type FileScan = FileScanOk | { kind: "error"; error: string };
 
-async function scanSessionFile(path: string, maxBytes: number): Promise<FileScan> {
+async function scanSessionFile(path: string, maxBytes: number, ref: SessionRef): Promise<FileScan> {
   let fh;
   try {
     fh = await open(path, "r");
@@ -420,6 +437,7 @@ async function scanSessionFile(path: string, maxBytes: number): Promise<FileScan
     let bytes = 0;
     let badLines = 0;
     let contentLines = 0;
+    let lineNo = 0;
     let truncated = false;
     for (;;) {
       const remaining = maxBytes - bytes;
@@ -438,7 +456,8 @@ async function scanSessionFile(path: string, maxBytes: number): Promise<FileScan
       while (nl >= 0) {
         const line = pending.slice(0, nl);
         pending = pending.slice(nl + 1);
-        const verdict = consumeLine(line, contentLines, corpus);
+        lineNo += 1;
+        const verdict = consumeLine(line, contentLines, corpus, { workspace: ref.workspace, sessionId: ref.sessionId, eventId: lineNo });
         if (verdict === "sidecar") {
           return { kind: "ok", messages: [], bytes, complete: false, badLines, sidecar: true };
         }
@@ -451,7 +470,8 @@ async function scanSessionFile(path: string, maxBytes: number): Promise<FileScan
     if (!truncated) {
       // 尾段（文件最后一行没有换行）：它是完整的一行，要算。
       const tail = pending + decoder.decode();
-      const verdict = consumeLine(tail, contentLines, corpus);
+      lineNo += 1;
+      const verdict = consumeLine(tail, contentLines, corpus, { workspace: ref.workspace, sessionId: ref.sessionId, eventId: lineNo });
       if (verdict === "bad") badLines += 1;
     }
     return { kind: "ok", messages: corpus.finish(), bytes, complete: !truncated, badLines, sidecar: false };
@@ -467,6 +487,7 @@ function consumeLine(
   rawLine: string,
   contentLinesBefore: number,
   corpus: VisibleCorpus,
+  ref: EventRef,
 ): "empty" | "ok" | "bad" | "sidecar" {
   const line = rawLine.trim();
   if (line === "") return "empty";
@@ -484,7 +505,7 @@ function consumeLine(
     if (contentLinesBefore === 0 && isUiSidecarRecord(record)) return "sidecar";
     return "bad";
   }
-  corpus.push(parsed as AgentEvent);
+  corpus.push(parsed as AgentEvent, ref);
   return "ok";
 }
 
@@ -499,12 +520,13 @@ function isUiSidecarRecord(record: Record<string, unknown>): boolean {
 
 /** 一个会话的聚合（命中消息计数 + 有界的摘录）。没有命中 ⇒ null。 */
 function aggregateMatch(
-  sessionId: string,
+  session: SessionRef,
   scan: FileScanOk,
   keywords: readonly string[],
   maxSnippets: number,
   metadataById: ReadonlyMap<string, SessionMetadataRecord> | undefined,
 ): SessionSearchMatch | null {
+  const sessionId = session.sessionId;
   let matchCount = 0;
   const snippets: SessionSearchSnippet[] = [];
   scan.messages.forEach((message, index) => {
@@ -513,12 +535,16 @@ function aggregateMatch(
     matchCount += 1;
     if (snippets.length >= maxSnippets) return;
     const keyword = hits[0]!;
-    snippets.push({ kind: message.kind, keyword, excerpt: snippetOf(message.text, keyword), index });
+    snippets.push({
+      kind: message.kind, keyword, excerpt: snippetOf(message.text, keyword), index,
+      ...(message.ref !== undefined ? { ref: message.ref } : {}),
+    });
   });
   if (matchCount === 0) return null;
   const record = metadataById?.get(sessionId);
   return {
     sessionId,
+    session,
     ...(record !== undefined ? { title: record.title } : {}),
     matchCount,
     snippets,
@@ -526,6 +552,52 @@ function aggregateMatch(
     complete: scan.complete,
     badLines: scan.badLines,
   };
+}
+
+/** 会话根 → 工作区（`<ws>/.agent/sessions`）；非标准布局退回根本身。 */
+function workspaceOfSearchRoot(root: string): string {
+  return basename(root) === "sessions" && basename(dirname(root)) === ".agent" ? dirname(dirname(root)) : root;
+}
+
+/** 首行是不是指针分叉的 session_meta（只读首块，不整份读）。 */
+async function hasForkHead(path: string): Promise<boolean> {
+  const fh = await open(path, "r").catch(() => null);
+  if (fh === null) return false;
+  try {
+    const buf = Buffer.alloc(4096);
+    const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
+    const first = buf.subarray(0, bytesRead).toString("utf8").split("\n")[0] ?? "";
+    try {
+      const value = JSON.parse(first) as { type?: unknown; fork?: unknown };
+      return value.type === "session_meta" && value.fork !== undefined;
+    } catch { return false; }
+  } finally {
+    await fh.close().catch(() => undefined);
+  }
+}
+
+/** 分叉会话：按来源视图取料（父前缀 + 本地有效历史），预算按整条链的 raw 字节记。 */
+async function scanSessionView(root: string, session: SessionRef, maxBytes: number): Promise<FileScan | FileScanOk> {
+  let chain;
+  try {
+    chain = await resolveSessionChain(join(root, session.sessionId + ".jsonl"), undefined, root);
+  } catch (error) {
+    return { kind: "error", error: errorText(error) };
+  }
+  let bytes = 0;
+  for (const file of chain) bytes += (await stat(file.path).catch(() => ({ size: 0 }))).size;
+  if (bytes > maxBytes) {
+    // 预算不足以读完这条父链：这个会话只是**没量完**，不是零命中。
+    return { kind: "ok", messages: [], bytes: Math.max(0, maxBytes), complete: false, badLines: 0, sidecar: false };
+  }
+  try {
+    const view = await readSessionView(session, root);
+    const corpus = new VisibleCorpus();
+    for (const entry of view.entries) corpus.push(entry.event, entry.ref);
+    return { kind: "ok", messages: corpus.finish(), bytes, complete: true, badLines: 0, sidecar: false };
+  } catch (error) {
+    return { kind: "error", error: errorText(error) };
+  }
 }
 
 // ---- 小工具 ----
