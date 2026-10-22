@@ -21595,3 +21595,41 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 - 门表那 6 项未证（gate-check / autonomy-check / compaction-check / provider:check / plugins-check / gym-check 各 1）
   仍是**没量到**，不是通过。
 - 真实模型收益仍要凭据与付费授权；本页不声称任何模型侧收益。
+
+## 2026-10-22 · 第 664 页：本地对象库事故——`node_modules` 大件与 `.git` pack 同时被削；能重建的已重建，丢掉的显式记账
+
+### 一、现象与推断
+
+- 17:18 在同一次沙箱内 `pnpm exec vitest` 之后，`node_modules` 里的大文件（typescript 的 `lib/*.js` 大件、
+  esbuild / rolldown 的原生二进制、Electron Framework）与 `.git/objects/pack/*.pack` **同时消失**；
+  相关目录 mtime 都是 17:18。`.git` 只剩 `.idx/.rev/multi-pack-index`，pack 本体没了。
+- 推断（无旁证）：沙箱的网络受限使 pnpm 的「运行前依赖校验/自动修复」半途失败——先删后拉，拉不回来。
+  **教训**：依赖命令一律出沙箱跑；这次是我在沙箱里跑了 `pnpm exec`。
+
+### 二、已恢复的
+
+- `node_modules` 缺件按官方 tarball 与本机缓存逐件重放：typescript 5.9.3 全量 `lib/`（含 `typescript.js`、
+  `_tsc.js`）、esbuild 0.28.2 与 0.25.12 的平台二进制、`@rolldown/binding-darwin-arm64@1.2.7`、
+  lightningcss 1.33.0、Electron 44.7.0 `dist/`（从 `~/Library/Caches/electron` 的 zip 解回）。
+  `pnpm install --frozen-lockfile`（含 `--force`）两次都报 “Already up to date” —— pnpm 不校验文件在场，
+  **不能靠它修这种缺件**。
+- git 侧：`git fetch --refetch` 从 origin 找回可 advertised 的历史（一个 58MB pack）；逐个删掉 25 个
+  指向已丢对象的断 ref（`packed-refs` 原文已备份到仓库外的临时目录）；按 index 重建全部缺失 tree，
+  重建后的根树 OID 与 HEAD 原树逐字节相同（`bf3c9bc0`）；盘上文件重算缺失 blob（331 个）；
+  两处被改文件的 HEAD 版本用评审留存的 diff 反推，哈希与原对象（`4c05459d`、`72c0e5af`）逐字节相符后写回。
+  `git worktree add --detach HEAD` 恢复可用（head 系的量尺重新有料可取）。
+- 诊断脚本：`git fsck --connectivity-only`、逐对象 `cat-file --batch-check`、`mktree --missing` 与根树比对。
+
+### 三、仍然丢失的（显式记账，不美化）
+
+- 本地独有历史的 **21 个提交对象**（`refs/dsh/cluster-*` 一族与部分 `local verification` 提交）不在 origin
+  任何 advertised ref 上，**无法恢复**。
+- 因此 `docs-check` 的 D-5 台账 sha 面会把台账里 21 条引用（第 5745–5902、7553、7760 行附近）报成
+  「指向不存在的提交」；`mutate-needles-check` 对 `1f16bea` 的归因也缺料。
+- **这两条是环境事故的真红，不是代码回归**。不把提交 sha 加进豁免名单、不改判据、不把「读不到」说成通过；
+  要不要补记或豁免是业主的裁。第 663 页那批的代码与判卷读数不受影响（量的是工作树与新提交）。
+
+### 四、边界
+
+- 本页不把任何门读数说成通过；事故之后的重跑读数分别写在各自页上。
+- 未动用户脚本与另一会话的两个 HEAD 认证证据目录。
