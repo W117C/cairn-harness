@@ -21736,6 +21736,16 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 那 21 个 sha 在对方那笔的台账里**已经都在** ⇒ 这一条红自事故起就在，是事故的诚实足迹。
 等外部备份把那批对象找回，它会自己转绿（那时 D-5 的 21 条也会一起归零）。
 
+### 七、顺带修掉的一个共享树故障（`git status` / `git commit` 在算 ahead/behind 时 fatal）
+
+断缝让 **merge-base 走不动** ⇒ 凡要算「本地领先远端几笔」的命令都 fatal：
+`fatal: bad revision '9414a592…6af24734…'`（那个 `...` 就是 ahead/behind 的对称差）。
+⇒ 在**断缝修好之前**，本分支的 upstream 被**解除**（`git branch --unset-upstream`），
+`git status` / `git add` / `git commit` 随即正常。**钩子照跑，没有用 `--no-verify` 绕**——
+那个绕法会把钩子里的判据一起绕掉，事故的账就更难算了。
+**怎么设回**：接缝修好之后 `git branch --set-upstream-to=origin/fix/spec-summary-double-count`
+（`origin/fix/…` 指的是已发布那 1760 笔的 tip `6af24734`；它与本地那 22 笔**不连通**，正是因为断缝）。
+
 ### 六、这一段经过记下的一件事
 
 **两处指令相左时的处置纪律**：两边都停在「等业主一句话」，没人替业主裁；最终裁决落到「**不豁免**」这一边，
