@@ -22,8 +22,11 @@ import {
   readSessionEvents,
   renameSession,
   sessionExists,
+  workspaceOfSessionsRoot,
   type SessionInfo,
 } from "./sessions";
+import { withSessionMutation } from "./session-repository";
+import { assertNoDependents } from "./session-dependencies";
 import { ProjectRegistry, type AddProjectInput, type ProjectRecord } from "./project-registry";
 import { SessionMetadataRepository, type SessionMetadataRecord } from "./session-metadata";
 import { FeedbackStore, type FeedbackRating, type ResolvedFeedback } from "./feedback";
@@ -178,10 +181,13 @@ export async function handleSessionRename(oldId: string, newName: string): Promi
   // 用单例根去改名 = 改不到（或改到同 id 的另一条）——桌面端「改名」对项目会话整条失效。
   const dir = await resolveSessionRoot(oldId);
   if (dir === null) throw new Error(`会话不存在: ${oldId}`);
-  const id = await renameSession(dir, oldId, newName, requireSessionMetadata());
-  const cur = await store().get();
-  if (cur.currentSession === oldId) await store().set({ currentSession: id });
-  return { id };
+  return await withSessionMutation(dir, async () => {
+    await assertNoDependents({ workspace: workspaceOfSessionsRoot(dir) ?? dir, sessionId: oldId }, dir);
+    const id = await renameSession(dir, oldId, newName, requireSessionMetadata());
+    const cur = await store().get();
+    if (cur.currentSession === oldId) await store().set({ currentSession: id });
+    return { id };
+  });
 }
 
 /** 删除会话：若删的是当前会话 → 回退到最近一个（列表 mtime 降序首个）；无会话 → null。 */
@@ -189,37 +195,40 @@ export async function handleSessionDelete(id: string): Promise<{ currentSession:
   const dir = await resolveSessionRoot(id);
   if (dir === null) throw new Error(`会话不存在: ${id}`);
   const logPath = pathOf(dir, id);
-  await deleteSession(dir, id, requireSessionMetadata());
-  // 删除会话要连私有观测数据 / 反馈 / 裁剪附件一起清：它们都以会话 id 为锚，留着会让同 id
-  // 新会话继承旧反馈（eventId 指向不存在的转录），且隐私面残留在盘上。
-  // 清理失败不把已完成的删除反签成失败（与 deleteSession 的队列清理同口径），但要出声。
-  await removePrivateSessionData(logPath).catch((err: unknown) => {
-    console.warn("[session-delete] 私有观测数据清理失败:", err instanceof Error ? err.message : String(err));
-  });
-  await requireFeedbackStore().removeSession(id).catch((err: unknown) => {
-    console.warn("[session-delete] 反馈清理失败:", err instanceof Error ? err.message : String(err));
-  });
-  // 置顶记录同样以会话 id 为锚：留着会让同 id 新会话继承旧 eventId 的高亮（指向不存在的转录）。
-  await requirePinStore().removeSession(id).catch((err: unknown) => {
-    console.warn("[session-delete] 置顶清理失败:", err instanceof Error ? err.message : String(err));
-  });
-  try {
-    const pruneDir = join(dir, "prune-attachments");
-    const prefix = attachmentPrefixFor(id);
-    for (const name of await readdir(pruneDir)) {
-      if (name.startsWith(prefix)) await rm(join(pruneDir, name), { force: true });
+  return await withSessionMutation(dir, async () => {
+    await assertNoDependents({ workspace: workspaceOfSessionsRoot(dir) ?? dir, sessionId: id }, dir);
+    await deleteSession(dir, id, requireSessionMetadata());
+    // 删除会话要连私有观测数据 / 反馈 / 裁剪附件一起清：它们都以会话 id 为锚，留着会让同 id
+    // 新会话继承旧反馈（eventId 指向不存在的转录），且隐私面残留在盘上。
+    // 清理失败不把已完成的删除反签成失败（与 deleteSession 的队列清理同口径），但要出声。
+    await removePrivateSessionData(logPath).catch((err: unknown) => {
+      console.warn("[session-delete] 私有观测数据清理失败:", err instanceof Error ? err.message : String(err));
+    });
+    await requireFeedbackStore().removeSession(id).catch((err: unknown) => {
+      console.warn("[session-delete] 反馈清理失败:", err instanceof Error ? err.message : String(err));
+    });
+    // 置顶记录同样以会话 id 为锚：留着会让同 id 新会话继承旧 eventId 的高亮（指向不存在的转录）。
+    await requirePinStore().removeSession(id).catch((err: unknown) => {
+      console.warn("[session-delete] 置顶清理失败:", err instanceof Error ? err.message : String(err));
+    });
+    try {
+      const pruneDir = join(dir, "prune-attachments");
+      const prefix = attachmentPrefixFor(id);
+      for (const name of await readdir(pruneDir)) {
+        if (name.startsWith(prefix)) await rm(join(pruneDir, name), { force: true });
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        console.warn("[session-delete] 裁剪附件清理失败:", err instanceof Error ? err.message : String(err));
+      }
     }
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-      console.warn("[session-delete] 裁剪附件清理失败:", err instanceof Error ? err.message : String(err));
-    }
-  }
-  const cur = await store().get();
-  if (cur.currentSession !== id) return { currentSession: cur.currentSession };
-  const rest = await listSessions(dir);
-  const next = rest[0]?.id ?? null;
-  await store().set({ currentSession: next });
-  return { currentSession: next };
+    const cur = await store().get();
+    if (cur.currentSession !== id) return { currentSession: cur.currentSession };
+    const rest = await listSessions(dir);
+    const next = rest[0]?.id ?? null;
+    await store().set({ currentSession: next });
+    return { currentSession: next };
+  });
 }
 
 /** M8 分叉 IPC 接线（v2.15）：保留前 N 轮（含）→ 新会话 `<id>-f<N>`；源会话只读、字节不变。
