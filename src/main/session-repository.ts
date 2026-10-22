@@ -93,14 +93,26 @@ async function releaseRootLock(root: string): Promise<void> {
   await unlink(join(root, SESSION_MUTATION_LOCK)).catch(() => undefined);
 }
 
+/** 「算键 + 入链」这一步的队列：链键要等 `realpath`，而两次 `realpath` 的**回程顺序不受调用顺序保证**
+ *  （2026-10-22 实测：`tests/session-reference-repository.test.ts` 的「进程内串行」3 次里红 1 次——
+ *  旧实现先 `await realpath` 再读 `chains`，回程颠倒时后来的调用先入链，串行就此失守）。
+ *  队列是在调用那一刻**同步**挂上去的，所以入链顺序 = 调用顺序，与文件系统回程快慢无关。 */
+let reserveQueue: Promise<void> = Promise.resolve();
+
 /** 在会话根的临界区里执行 `operation`：进程内串行 + 跨进程文件锁。 */
 export async function withSessionMutation<T>(sessionsRoot: string, operation: () => Promise<T>): Promise<T> {
-  const root = await realpath(sessionsRoot);
-  const previous = chains.get(root) ?? Promise.resolve();
-  let release!: () => void;
-  const gate = new Promise<void>((resolveGate) => { release = resolveGate; });
-  const tail = previous.then(() => gate);
-  chains.set(root, tail);
+  const reserved = reserveQueue.then(async () => {
+    const root = await realpath(sessionsRoot);
+    const previous = chains.get(root) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolveGate) => { release = resolveGate; });
+    const tail = previous.then(() => gate);
+    chains.set(root, tail);
+    return { root, previous, release, tail };
+  });
+  // 队列本身不许因为某一次 realpath 失败而卡死（调用方照旧收得到那一条 rejection）。
+  reserveQueue = reserved.then(() => undefined, () => undefined);
+  const { root, previous, release, tail } = await reserved;
   await previous.catch(() => undefined);
   try {
     await acquireRootLock(root);
