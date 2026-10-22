@@ -37,6 +37,10 @@ const EVENTS = [
   { type: "tool_result", callId: "t2", ok: true, change: "modified", snapshotId: "snap-4081", ts: now - 85_000 },
   { type: "usage", inputTokens: 12400, outputTokens: 1830, ts: now - 84_000 },
   { type: "assistant_message", content: mkMarkdown, ts: now - 83_000 },
+  // 一条**失败**的工具调用：失败正文那格要有东西可看（错误正文降到正文色、失败标记仍危险色）。
+  // 文案是四行散文——那一格原先整段用危险色，在阅读面里喊。
+  { type: "tool_call", id: "t3", name: "run_shell", args: { command: "pnpm test" }, ts: now - 82_000 },
+  { type: "tool_result", callId: "t3", ok: false, output: "Permission denied: 写操作被拒\n被拒的动作：pnpm test（写 .git 之外的路径）\n这一档权限不许写工作区\n要继续请换只读命令，或调高权限档位", ts: now - 81_000 },
 ];
 
 const MODEL = (id, provider, name, tier, ctx, image, thinking) => ({
@@ -160,10 +164,17 @@ const stub = {
     vision: { state: "undeclared", modelId: null, declaredModalities: [] },
     workspace: "/tmp/demo-ws",
   }),
-  onEvent: () => () => undefined,
   onAsk: () => () => undefined,
   onAskDone: () => () => undefined,
 };
+
+// 事件订阅**真收集**：概览里的数字刚变过会闪一下（那是「刚刚变」的提示），
+// 要目验那格就得**能推事件进去**。主进程经 executeJavaScript 调 __cairnPushEvent。
+const eventListeners = new Set();
+stub.onEvent = (fn) => { eventListeners.add(fn); return () => eventListeners.delete(fn); };
+contextBridge.exposeInMainWorld("__cairnPushEvent", (event) => {
+  for (const fn of eventListeners) { try { fn(event); } catch { /* 一个订阅者抛了不该挡住别人 */ } }
+});
 
 // 桩的兜底名单由主进程从**真接口**（src/main/ipc-protocol.ts 的 AgentApi）推导后经
 // additionalArguments 交接（preload 是 sandboxed 独立进程：拿不到主进程对象，也 require

@@ -152,6 +152,62 @@ async function main() {
   await js(`document.querySelector(".session")?.click()`);
   await shot("05-stream.png", 900);
 
+  // ⑬ 概览里的数字**刚变过**闪一下：推一个 usage 事件让「输入」变，随即在闪的窗口里截。
+  // 闪只有 300ms（--t-slow）⇒ 截晚了就只剩「已经变过」的常态，看不出那一下。
+  // 自查：推事件后**立刻**问「闪的那一格在不在、它是什么颜色」——
+  // 截图看颜色是主观的，读计算样式是客观的（���图只证明「那一刻长这样」）。
+  // ⚠️ 推事件后不能**立刻**问：React 的重绘是异步的 ⇒ 那一刻 DOM 还是旧的 ⇒ 会读成「没闪」。
+  // 要等一两帧（闪的窗口有 420ms，等 60ms 还在窗口里）。
+  const flashProbe = await js(`(async () => {
+    window.__cairnPushEvent && window.__cairnPushEvent({ type: "usage", inputTokens: 15800, outputTokens: 2140, ts: Date.now() });
+    await new Promise(r => setTimeout(r, 60));
+    const el = document.querySelector(".isp-ov-value-flash");
+    const num = document.querySelector(".num");
+    return JSON.stringify({
+      flashing: document.querySelectorAll(".isp-ov-value-flash").length,
+      // animationName 若为 "none" ⇒ 那条 animation 简写**整条不成立**（类加了、动画没跑）。
+      animName: el ? getComputedStyle(el).animationName : null,
+      animDuration: el ? getComputedStyle(el).animationDuration : null,
+      flashColor: el ? getComputedStyle(el).color : null,
+      numColor: num ? getComputedStyle(num).color : null,
+    });
+  })()`);
+  console.log("[gallery] 概览数字闪动自查:", flashProbe);
+  await shot("13-overview-value-flash.png", 60);
+
+  // 自查：失败正文**是不是**正文色（--text-200），失败标记（红三角/失败摘要）是不是仍危险色。
+  const errorProbe = await js(`(() => {
+    // 不预设类名：先找到**含那句散文的最内层元素**，再连着祖先的类名与颜色一起报出来。
+    const all = [...document.querySelectorAll("body *")].filter(n => (n.textContent || "").includes("Permission denied"));
+    const body = all.length ? all[all.length - 1] : null;
+    const chain = [];
+    for (let n = body; n && n !== document.body; n = n.parentElement) {
+      chain.push({ cls: n.className, color: getComputedStyle(n).color });
+      if (chain.length >= 4) break;
+    }
+    const mark = [...document.querySelectorAll("body *")].find(n => (n.textContent || "").trim() === "1 次失败");
+    return JSON.stringify({ chain, markColor: mark ? getComputedStyle(mark).color : null });
+  })()`);
+  console.log("[gallery] 失败正文配色自查:", errorProbe);
+
+  // ⑭ 弹出的**单窗格**窗口（#pane=file）：那行「面板导航」不该在这里——
+  // 弹窗里没有多面板可导航/可恢复，那一行是一排**死按钮**，还把唯一的标题重复了一遍。
+  const pop = new BrowserWindow({
+    width: 900, height: 640, show: false,
+    webPreferences: { preload: join(__dirname, "ui-gallery-preload.cjs"), additionalArguments: apiArgs },
+  });
+  await pop.loadFile(join(__dirname, "..", "dist", "index.html"), { hash: "pane=file" });
+  await new Promise((r) => setTimeout(r, 900));
+  const popImg = await pop.webContents.capturePage();
+  require("node:fs").writeFileSync(join(OUT, "14-popout-pane.png"), popImg.toPNG());
+  console.log("[gallery] 14-popout-pane.png");
+  // 自查：弹窗里**不该**有那行面板导航（`.pane-nav`）。
+  const navProbe = await pop.webContents.executeJavaScript(
+    `JSON.stringify({ nav: document.querySelectorAll(".pane-nav").length, titles: [...document.querySelectorAll(".pane-title,.tp-title,.tb-title")].map(e => e.textContent) })`,
+  );
+  console.log("[gallery] 弹窗面板导航自查:", navProbe);
+  pop.destroy();
+
   // 窄窗（产品 minWidth 880）：三窗格按钮收进 ⋮（CSS 收口 @media max-width:920px）。
   // 这一档此前只写在 CSS 里，没被看过。
   await win.setContentSize(880, 900);

@@ -16,6 +16,16 @@ import { SettingsRow } from "../src/renderer/components/settings-ui";
 
 const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
 const inspector = readFileSync(fileURLToPath(new URL("../src/renderer/components/Inspector.tsx", import.meta.url)), "utf8");
+const tokens = readFileSync(fileURLToPath(new URL("../src/renderer/tokens.css", import.meta.url)), "utf8");
+
+/** 一条规则里 animation 简写点名的 var(...)（动画简写里一个 var 就够：令牌自带时长与缓动）。 */
+const animationVars = (rule: string): string[] =>
+  [...rule.matchAll(/var\(--[a-z0-9-]+\)/g)].map((m) => m[0]);
+/** var(--x) → --x（去壳，要去令牌表里查它自己的定义）。 */
+const tokenName = (v: string): string => v.replace(/^var\((--[a-z0-9-]+)\)$/, "$1");
+/** 令牌自己的定义正文（tokens.css 里那一行）。 */
+const tokenBody = (name: string): string =>
+  tokens.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1] ?? "";
 
 /** 取一个选择器规则块的内容。 */
 function block(sel: string): string {
@@ -49,6 +59,21 @@ describe("设计面·减法", () => {
     expect(inspector).not.toMatch(/<dd className="num">\{value\}<\/dd>/);
   });
 
+  it("②b 承重：那条 animation 简写**要真成立**（两个缓动 ⇒ 整条不成立 ⇒ 类加了、动画没跑）", () => {
+    // 坑（2026-10-22 真机自查抓到的）：`--t-slow` 本身已经是「300ms ＋ 缓动」，
+    // 简写里再写一次缓动 ⇒ 展开成「300ms cubic-bezier(...) cubic-bezier(...)」
+    // ⇒ 第二个缓动落在 **delay 槽位**（那儿只收 <time>）⇒ **整条简写不成立**
+    // ⇒ 类加上了、动画一帧没跑（真机读计算样式：animationName="none"）。
+    // 而上面 ② 那条只钉「规则里**写着** animation: isp-ov-flash」⇒ 文本对、效果没有 ⇒ 判据空转。
+    const rule = block(".isp-ov-value-flash");
+    const vars = animationVars(rule);
+    expect(vars, "简写里只许一个 var(...)（那个令牌自带时长与缓动）").toHaveLength(1);
+    // 且那个令牌必须真的自带缓动，否则简写连 timing-function 都没有（那是不闪，不是简写不成立）。
+    expect(tokenBody(tokenName(vars[0]!)), `${vars[0]} 要自带时长与缓动`).toMatch(/var\(--ease-/);
+    // 反向：坏形状确实有两个 var（证明上面那条不是恒真）。
+    expect(animationVars("animation: isp-ov-flash var(--t-slow) var(--ease-out);")).toHaveLength(2);
+  });
+
   it("③ 设置行说明独占整行（结构断言：它是 .ss-row 的同级，不是 .ss-row-main 的子级）", () => {
     const h = renderToStaticMarkup(
       <SettingsRow label="界面语言" desc="目前只有中文界面；英文界面尚未接入。">
@@ -74,7 +99,12 @@ describe("设计面·减法", () => {
   });
 
   it("⑤ 这一批不许把动效纪律破了（微反馈仍是 60ms 档）", () => {
-    expect(block(".isp-ov-value-flash")).toContain("var(--ease-out)");
+    // 缓动：规则**自己**带，或它点的那个令牌带（--t-slow 自带 var(--ease-out)——
+    // 简写里**不能**再写一遍：两个缓动会让整条简写不成立，见 ②b）。
+    const flashRule = block(".isp-ov-value-flash");
+    const easingSomewhere = /var\(--ease-/.test(flashRule)
+      || animationVars(flashRule).some((v) => /var\(--ease-/.test(tokenBody(tokenName(v))));
+    expect(easingSomewhere, "闪动要有缓动（规则自己带，或它点的令牌带）").toBe(true);
     // 数字闪烁是**数据反馈**（不属 hover/按下微反馈族），用时长 token 表达，不写死毫秒
     expect(css).not.toMatch(/isp-ov-value-flash\s*{[^}]*\d+ms/s);
   });

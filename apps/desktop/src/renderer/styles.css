@@ -2653,7 +2653,12 @@ body[data-dsh-claude-style] .app[data-sidebar="collapsed"] .side-wrap { border: 
 .isp-ov-stat dt { font-size: var(--fs-caption-2xs); color: hsl(var(--text-400)); }
 .isp-ov-stat dd { margin: 0; font-size: var(--fs-body-sm); color: hsl(var(--text-000)); }
 /* 数字刚变过：闪一下（只闪数值本身——不位移、不放大、不动标签）。 */
-.isp-ov-value-flash { animation: isp-ov-flash var(--t-slow) var(--ease-out); }
+.isp-ov-value-flash { animation: isp-ov-flash var(--t-slow); }
+/* ⚠️ 简写里**只许一个 var**：--t-slow 本身已经是「300ms ＋ 缓动」。
+   从前这里写成 `animation: isp-ov-flash var(--t-slow) var(--ease-out)` ⇒ 展开后是
+   「300ms cubic-bezier(...) cubic-bezier(...)」⇒ 第二个缓动落在 **delay 槽位**（那儿只收 <time>）
+   ⇒ **整条简写不成立** ⇒ 类加上了、动画一帧没跑（真机自查看见 animationName="none"）。
+   判据在 apps/desktop/tests/design-minimal.test.tsx ②b：它数简写里 var 的个数。 */
 @keyframes isp-ov-flash { 0% { color: hsl(var(--accent-control)); } 100% { color: hsl(var(--text-000)); } }
 .isp-ov-meta { display: flex; flex-wrap: wrap; gap: 4px; }
 
