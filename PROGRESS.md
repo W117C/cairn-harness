@@ -21679,3 +21679,28 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 - 草稿（drafts/draftIds）仍按裸 id；卡片/diff 的**渲染层**尚未把行的事件引用送进请求（协议与 store 已就绪）。
 - 真实模型收益仍要凭据与付费授权；本页不声称任何模型侧收益。
 - 本页在隔离分支上；第 665/666 页属于共享树的邻会话，合分支时页号以共享树为准。
+
+## 2026-10-22 · 第 668 页：本批的 HEAD 认证读数（b122d2a5）——两笔事故红是唯一红；mutate-verify 量的是主检出 HEAD，不在本分支上冒充读数
+
+### 一、head-cert（HEAD = `b122d2a5`）
+
+- `node --import tsx scripts/head-cert.ts --tree=.worktrees/gate-head-cert`：TREE=`b122d2a`、判卷四面在飞 0、
+  依赖完整、收尾复核同一笔；**认证门面 25 道跑满，红 1 道**（`docs-check` exit=1，原因 = D-5 的 21 条，
+  业主裁「不登记」的诚实足迹）；超预算 2 道只出声（evidence-typecheck-check 5357ms>5300、desktop-test 11379ms>10000）。
+- 认证树上的全量判卷：**476 文件 / 6518 项，2 失败**——就是 D-5 与 `mutate-needles` 的 `1f16bea` 归因，
+  与工作树读数一致；墙钟 160.36s。**不把这两条说成全绿**。
+- 原始读数：`outputs/head-cert-b122d2a-2026-10-22-1230/provenance.md`（工具自己落的）；本页只引用、不改写。
+
+### 二、mutate-verify：这一趟不构成本分支的读数
+
+- 该门按设计读**主检出**（`git -C <mainRoot> rev-parse HEAD`）并把它切进隔离树；当前主检出 HEAD 是
+  `7e1fdcf`（共享分支，**不含本批**），所以在本分支上跑它量的是别的树。
+- 这趟尝试还停在依赖面：共享树的 `.worktrees/gate-mutate-verify/node_modules` 里 `typescript.js` 不可读
+  （对象库事故的余波，那个工作树是事故前 `cp -al` 出来的旧拷贝），子进程 import 失败退出 1。
+- ⇒ **不给读数、不冒充通过**。正确顺序是：本分支合入共享分支后，在**含实现的同一提交**上重跑
+  `mutate-verify` 与 `head-cert-check`，届时两笔事故红仍会把 head-cert 判红（业主已知并接受）。
+
+### 三、边界
+
+- 本分支（`agent/pointer-session-refs`，HEAD `b122d2a5` 之后又加了本页）尚未合并；合并是业主的裁。
+- 合并时 PROGRESS/STATE 会与共享树的第 665/666 页冲突（页号与现态页都是"整体重写"口径），需按台账规则解冲突。
