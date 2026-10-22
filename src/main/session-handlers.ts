@@ -26,7 +26,7 @@ import {
   workspaceOfSessionsRoot,
   type SessionInfo,
 } from "./sessions";
-import { withSessionMutation } from "./session-repository";
+import { createProductFork, withSessionMutation } from "./session-repository";
 import { assertNoDependents } from "./session-dependencies";
 import { ProjectRegistry, type AddProjectInput, type ProjectRecord } from "./project-registry";
 import { SessionMetadataRepository, type SessionMetadataRecord } from "./session-metadata";
@@ -245,24 +245,20 @@ export async function handleSessionFork(
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
   const dir = sessionsRoot ?? requireSessionsDir();
   if (!(await sessionExists(dir, sessionId))) return { ok: false, error: `源会话不存在：${sessionId}` };
-  const srcPath = pathOf(dir, sessionId);
-  let events: AgentEvent[];
+  const workspace = workspaceOfSessionsRoot(dir) ?? dir;
+  // 轮数按**可见历史**数（父前缀的轮也算），名字与 CLI `--from <轮数>` 同源。
+  let view;
   try {
-    events = await replay(srcPath);
+    view = await readSessionView({ workspace, sessionId }, dir);
   } catch (err) {
     return { ok: false, error: `读源会话失败：${err instanceof Error ? err.message : String(err)}` };
   }
-  // round = 0（第十四遍，desktop 侧扩展，对话菜单「分叉…」）：**全量分叉**——保留到最后一轮。
-  // 总轮数从同一份 forkPointOf 算术取（round=1 的返回带 totalRounds，不另抄一份计数）；
-  // 名字仍按实际轮数拼 <id>-f<总轮数>，与 CLI `--from <总轮数>` 同源。CLI 仍只收正整数（fork-cli 校验不动）。
-  let effective = round;
-  if (effective === 0) {
-    const probe = forkPointOf(events, 1);
-    if ("error" in probe) return { ok: false, error: probe.error };
-    effective = probe.totalRounds;
-  }
-  const point = forkPointOf(events, effective);
-  if ("error" in point) return { ok: false, error: point.error };
+  const totalRounds = view.entries.filter((entry) => entry.event.type === "user_message").length;
+  if (totalRounds === 0) return { ok: false, error: "这条会话还没有任何一轮（0 条 user_message），没有可分叉的点" };
+  // round = 0（desktop 扩展，对话菜单「分叉…」）：全量分叉——保留到最后一轮。
+  const effective = round === 0 ? totalRounds : round;
+  if (!Number.isInteger(effective) || effective < 1) return { ok: false, error: `分叉轮次非法：${String(round)}` };
+  if (effective > totalRounds) return { ok: false, error: `第 ${String(effective)} 轮超出会话轮数（该会话共 ${String(totalRounds)} 轮）` };
   const baseId = forkSessionName(sessionId, effective);
   let newId = baseId;
   let suffix = 1;
@@ -290,15 +286,18 @@ export async function handleSessionFork(
     srcRecord !== undefined && srcRecord.title !== sessionId ? `${srcRecord.title}-f${String(effective)}` : null;
   const forkTitle = baseTitle === null ? null : (suffix > 1 ? `${baseTitle}-${String(suffix)}` : baseTitle);
   if (forkTitle !== null) await meta.create(newId, forkTitle);
-  const scratch = join(dir, ".fork-" + newId);
   try {
-    const made = await forkSession(srcPath, String(point.lastIncluded), scratch);
-    await rename(made.eventsPath, target);
-    await rm(scratch, { recursive: true, force: true });
+    // 产品指针分叉的唯一创建入口（CLI 与桌面共用）：父日志只读、目标排他、依赖检查与创建同一临界区。
+    const created = await createProductFork({ workspace, sessionId }, effective, { workspace, sessionId: newId }, { sessionsRoot: dir });
+    if (!created.ok) {
+      if (forkTitle !== null) await meta.remove(newId).catch(() => undefined);
+      return { ok: false, error: created.error };
+    }
   } catch (error) {
     if (forkTitle !== null) await meta.remove(newId).catch(() => undefined);
     throw error;
   }
+  void target;
   return { ok: true, id: newId };
 }
 

@@ -7,10 +7,11 @@
 //      否则「检查时没有子会话、检查完又被建了一个」会把父日志改成断链。进程内用 promise 链串行，
 //      跨进程（CLI + desktop）用会话根里的 `.session-mutation.lock`（O_EXCL）。锁被活人占着或
 //      崩溃遗留时**显式报错并给出锁路径**，不凭超时自动删锁。
-import { open, readFile, realpath, unlink, type FileHandle } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { open, readFile, realpath, rename, rm, unlink, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
-import type { SessionRef } from "../events";
-import { isSessionInRoot } from "./sessions";
+import { forkSessionPointer, readSessionView, forkPointInView, type SessionRef } from "../events";
+import { isSessionInRoot, workspaceOfSessionsRoot } from "./sessions";
 
 export const SESSION_MUTATION_LOCK = ".session-mutation.lock";
 
@@ -111,5 +112,84 @@ export async function withSessionMutation<T>(sessionsRoot: string, operation: ()
   } finally {
     release();
     if (chains.get(root) === tail) chains.delete(root);
+  }
+}
+
+export interface ProductForkCreated {
+  ok: true;
+  /** 新会话（target 的精确来源）。 */
+  session: SessionRef;
+  /** 新会话文件路径。 */
+  eventsPath: string;
+  /** 实际被指向的父会话（可能是 source 的某个祖先）。 */
+  parent: SessionRef;
+  /** 父文件里的物理边界（含）。 */
+  boundaryEventId: number;
+  totalRounds: number;
+}
+
+export type ProductForkResult = ProductForkCreated | { ok: false; error: string };
+
+/** 产品指针分叉（CLI 与桌面共用的唯一创建入口）。
+ *  - 轮次在**可见历史**里选，再由 `forkPointInView` 映射到真实来源与物理边界；
+ *  - 父日志只读；新会话首行只有 `session_meta.fork`（不复制父事件）；
+ *  - 目标排他创建；依赖检查与创建在同一个会话根临界区里完成（并发删除不会留下断链）；
+ *  - 目标工作区必须与来源相同（产品分叉不跨项目搬家）。 */
+export async function createProductFork(
+  source: SessionRef, round: number, target: SessionRef,
+  options?: { sessionsRoot?: string },
+): Promise<ProductForkResult> {
+  let sourceRoot: string;
+  let targetRoot: string;
+  let workspace: string;
+  try {
+    const rawSource = options?.sessionsRoot ?? join(await realpath(source.workspace), ".agent", "sessions");
+    const rawTarget = options?.sessionsRoot ?? join(await realpath(target.workspace), ".agent", "sessions");
+    sourceRoot = await realpath(rawSource);
+    targetRoot = await realpath(rawTarget);
+    // 来源引用里的 workspace：标准布局从根反推；非标准根（测试/userData）退回调用方给的。
+    workspace = workspaceOfSessionsRoot(sourceRoot) ?? source.workspace;
+  } catch (error) {
+    return { ok: false, error: `会话根不可用：${error instanceof Error ? error.message : String(error)}` };
+  }
+  if (sourceRoot !== targetRoot) {
+    return { ok: false, error: `分叉目标必须在同一会话根（${sourceRoot} ≠ ${targetRoot}）` };
+  }
+  try {
+    return await withSessionMutation(sourceRoot, async (): Promise<ProductForkResult> => {
+      if (!(await isSessionInRoot(sourceRoot, source.sessionId))) {
+        return { ok: false, error: `源会话不存在：${source.sessionId}` };
+      }
+      let view;
+      try {
+        view = await readSessionView({ workspace, sessionId: source.sessionId }, sourceRoot);
+      } catch (error) {
+        return { ok: false, error: `读源会话失败：${error instanceof Error ? error.message : String(error)}` };
+      }
+      const point = forkPointInView(view, round);
+      if ("error" in point) return { ok: false, error: point.error };
+      const targetPath = join(targetRoot, target.sessionId + ".jsonl");
+      if (existsSync(targetPath)) return { ok: false, error: `目标会话已存在：${target.sessionId}（不覆盖既有转录）` };
+      const parentPath = join(sourceRoot, point.source.sessionId + ".jsonl");
+      const scratch = join(targetRoot, ".fork-" + target.sessionId);
+      try {
+        const made = await forkSessionPointer(parentPath, point.boundaryEventId, scratch, point.source.sessionId);
+        await rename(made.eventsPath, targetPath);
+        return {
+          ok: true,
+          session: { workspace, sessionId: target.sessionId },
+          eventsPath: targetPath,
+          parent: point.source,
+          boundaryEventId: point.boundaryEventId,
+          totalRounds: point.totalRounds,
+        };
+      } catch (error) {
+        return { ok: false, error: `创建分叉失败：${error instanceof Error ? error.message : String(error)}` };
+      } finally {
+        await rm(scratch, { recursive: true, force: true }).catch(() => undefined);
+      }
+    });
+  } catch (error) {
+    return { ok: false, error: `会话根被占用或不可用：${error instanceof Error ? error.message : String(error)}` };
   }
 }

@@ -1,8 +1,8 @@
-import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createEventLog, replay } from "../src/events";
+import { createEventLog, replay, replaySession } from "../src/events";
 import {
   handleProjectAdd,
   handleProjectList,
@@ -95,7 +95,7 @@ describe("CX-01 session/project organization handlers", () => {
     expect(listed).toEqual([expect.objectContaining({ id: "新名", title: "新名", pinned: true })]);
   });
 
-  it("forks at round N（v2.15 IPC）：源只读、前缀一致、末条 branch_of，越界 fail-visible 不留半成品", async () => {
+  it("forks at round N（v2.15 IPC）：指针语义——子文件只有血缘、父文件只读、视图保留前 N 轮；越界 fail-visible 不留半成品", async () => {
     const { id } = await handleSessionCreate("源会话");
     const logPath = pathOf(sessionsDir, id);
     const log = createEventLog(logPath);
@@ -113,17 +113,21 @@ describe("CX-01 session/project organization handlers", () => {
     expect(await readFile(logPath)).toEqual(before);
 
     const forked = await replay(pathOf(sessionsDir, r.id!));
-    // 前缀一致 + 末条 = session_meta{branch_of: 源路径}
-    expect(forked.slice(0, -1)).toEqual(srcEvents.slice(0, forked.length - 1));
-    expect(forked[forked.length - 1]).toMatchObject({ type: "session_meta", branch_of: logPath });
-    // 只保留第 1 轮（含）：各 1 条 user/assistant
-    expect(forked.filter((e) => e.type === "user_message")).toHaveLength(1);
-    expect(forked.filter((e) => e.type === "assistant_message")).toHaveLength(1);
+    // 指针：子文件只有首行血缘，不复制父事件
+    expect(forked).toHaveLength(1);
+    expect(forked[0]).toMatchObject({
+      type: "session_meta",
+      fork: { from_session_path: await realpath(logPath), boundary_event_id: 2, from_session_id: id },
+    });
+    // 视图保留前 1 轮：各 1 条 user/assistant
+    const view = await replaySession(pathOf(sessionsDir, r.id!), { allowedRoot: sessionsDir });
+    expect(view.filter((e) => e.type === "user_message")).toHaveLength(1);
+    expect(view.filter((e) => e.type === "assistant_message")).toHaveLength(1);
 
     // 越界轮次：fail-visible，且不落任何文件（无半成品、无 .fork- 残渣）
     const bad = await handleSessionFork(id, 9);
     expect(bad.ok).toBe(false);
-    expect(bad.error).toContain("超出会话轮数");
+    expect(bad.error).toMatch(/超出可见历史|超出会话轮数/);
     expect(await exists(pathOf(sessionsDir, id + "-f9"))).toBe(false);
     // 重复分叉同名目标：不覆盖既有转录
     const again = await handleSessionFork(id, 1);
@@ -135,7 +139,7 @@ describe("CX-01 session/project organization handlers", () => {
     expect(uniq.ok, uniq.error).toBe(true);
     expect(uniq.id).toBe(id + "-f1-2");
     const forkedUnique = await replay(pathOf(sessionsDir, uniq.id!));
-    expect(forkedUnique.filter((e) => e.type === "user_message")).toHaveLength(1);
+    expect(forkedUnique).toHaveLength(1); // 指针：仍只有血缘一行
     const uniq2 = await handleSessionFork(id, 1, true);
     expect(uniq2.id).toBe(id + "-f1-3");
   });
@@ -156,8 +160,14 @@ describe("CX-01 session/project organization handlers", () => {
     expect(r.id).toBe(id + "-f2"); // 全量 = 总轮数 2，与 CLI `--from 2` 同名同源
     expect(await readFile(logPath)).toEqual(before); // 源会话仍只读
     const forked = await replay(pathOf(sessionsDir, r.id!));
-    expect(forked.slice(0, -1)).toEqual(srcEvents); // 全量：前缀 = 源全部事件
-    expect(forked[forked.length - 1]).toMatchObject({ type: "session_meta", branch_of: logPath });
+    expect(forked).toHaveLength(1); // 指针：全量分叉也只写血缘
+    expect(forked[0]).toMatchObject({
+      type: "session_meta",
+      fork: { from_session_path: await realpath(logPath), boundary_event_id: 4, from_session_id: id },
+    });
+    const fullView = await replaySession(pathOf(sessionsDir, r.id!), { allowedRoot: sessionsDir });
+    expect(fullView.filter((e) => e.type === "user_message")).toHaveLength(2);
+    void srcEvents;
 
     // 零轮会话：没有可分叉的点 ⇒ fail-visible，且不留任何半成品文件
     const { id: emptyId } = await handleSessionCreate("空会话");
@@ -222,7 +232,7 @@ describe("CX-01 session/project organization handlers", () => {
     setRunWorkspace(workspace);
     const bad = await handleSessionRevert(id, 9);
     expect(bad.ok).toBe(false);
-    expect(bad.error).toContain("超出会话轮数");
+    expect(bad.error).toMatch(/超出可见历史|超出会话轮数/);
     setRunWorkspace(null);
   });
 
