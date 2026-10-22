@@ -1,6 +1,6 @@
 # Cairn / DSH —— 现态
 
-rev: 50563dcf41cc1bbeea4d81d187757c26d895156f
+rev: 0f74ca87e7c64c322ef6f57cb606ac3e1b1c77f4
 
 > 本文件是**现态层**：**整体重写，永不追加**。要留当时的判断，写进 `PROGRESS.md` 的对应页；
 > 要留"为什么现在是这样"，写进 `docs/adr/`。
