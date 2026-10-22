@@ -22220,3 +22220,91 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
 
 ⇒ 本页到此为止的两道 HEAD 门（`head-cert-check` + `mutate-verify`）都有读数了：
 **门面红 1 道（D-5 存量）+ 判卷红 2 条（同两条存量）+ 变异 1589/1589 全杀**。
+
+## 2026-10-23 · 第 677 页：第 9 点·轮中插话接进主 loop——命门不是「塞进去」，是**轮界不许被推走**
+
+### 一、这一格此前是**明确记着不做**的
+
+第 479 页把「实时投喂（轮中把消息喂给模型）」写成刻意不开，理由一句话：
+**「取消与门等待的边界都在轮界，轮中注入要另立安全接收边界」**。
+本轮补的就是那条边界。目标里第 9 点（用户干预注入）与它正面冲突，而它不是「忘了做」。
+
+### 二、先找到命门：不是 UI，是轮界取料口
+
+动手前先量「把一条 user_message 插进轮中会发生什么」（`.tmp/probes/probe-boundary*.mts`，不入库）：
+
+| 场景 | `eventsForCurrentRun` 取到 | `findPhantomDelivery` |
+|---|---|---|
+| 本轮承诺 create `a.ts` 且没落盘 | 3 条（含 plan） | **`{missing:["a.ts"]}`** ✅ |
+| 同上，再插一条普通 user_message | **1 条**（plan 被切到范围外） | **`null`** ❌ 假绿 |
+
+根因不在 UI，在 `src/agent/delivery-guard.ts#eventsForCurrentRun`：它把**每一条** user_message
+都当成新一轮 run 的起点。而它是六个消费者的**同一个**轮界取料口——
+交付断言（能力 12）、幽灵交付、空转判定、进化信号、收尾复核、round 读数。
+插话若推走轮界，**本轮之前的承诺与证据整段静默失效**。
+⇒ 这就是第 479 页那句「另立安全接收边界」的实际含义：**先让轮界认得什么是插话**。
+
+### 三、改法（三层，判据放在最里面那层）
+
+| 位置 | 改了什么 |
+|---|---|
+| `src/events/types.ts` | `user_message.origin` 增第三支 `SteeringOrigin{kind:"steering", step}`（零新增事件类型，M2f 先例，重放无损） |
+| `src/agent/delivery-guard.ts` | `eventsForCurrentRun` 跳过 steering；新增 `isSteeringMessage` 单一出口（按 kind 分支，**不按文本**——用户真打出「插话」二字时不该被误判） |
+| `src/agent/loop.ts` | 注入口在**轮界**：for-await 之外、`currentStep` 之后（否则进不了本拍请求）、cancel 复查之后；取料即清空 |
+| `src/agent/steering-channel.ts` | 界面→loop 的盒子（`push`/`take`/`size`；空白丢弃，超 8k **截断并声明**） |
+| 接线 | `RunOverrides/RunOptions.steering` → `runLoop`；`kernel-host` 每会话一只盒子（run 建、**收束清**）；IPC `runSteer`（不在跑 ⇒ fail-visible） |
+
+**三条刻意的不变量**：
+1. **插话不开新轮**，也不额外买步（`maxSteps` 语义一字未动）。
+2. **不跨 run 泄漏**：盒子里没被取走的插话随 run 收束一起丢弃——它绝不静默变成下一轮的首条任务。
+3. **不在跑就明说**：`runSteer` 返回 `{ok:false}`，渲染层据此回落为入队，**一个字都不丢**。
+
+### 四、界面：三种意图必须各有入口（插话 / 排队 / 停止）
+
+改完之后同一个 `onSend` 被两种意图共用——点「加入队列」的人会看到话被插进当前轮，
+而**两种结局在界面上长得一模一样**。所以同批补 `forceQueue` 第三参：队列钮传 true，
+回车与发送钮不传（缺省＝先试插话、不在跑则回落排队）。
+同时把 `apps/desktop/design/desktop-design-spec.md` §3.2 与必抄清单第 2 条改写——
+设计契约里原本写的是「Enter=排队」，不跟着改就是规范与实现两张脸。
+
+### 五、判卷与造红
+
+`tests/steering-injection.test.ts` **15 条** + `apps/desktop/tests/composer-steer.test.tsx` **4 条**。
+五台变异逐条杀死（跑完逐字节复原）：
+
+| # | 变异 | 红在哪 |
+|---|---|---|
+| 1 | `eventsForCurrentRun` 不再跳过 steering（**回归原缺陷**） | ★ 轮界那两条 + 投影次序（3 条） |
+| 2 | `origin.step` 写死 0 | 「事件序在 tool_result 之后」 |
+| 3 | 只在 step 0 取料 | 同上 + 投影次序（2 条） |
+| 4 | 取料后不清空盒子 | 通道「取出即清空」 |
+| 5 | 空串也进货 | 通道「纯空白不进货」／loop「空插话不落事件」 |
+
+**一台被我抓住又诚实记下的空转**：最初的「取消后不再多花一次请求」那条判据，**把取消复查挪到
+取料之后仍然全绿**——因为盒子里当时是空的，第 2 次请求本来就不会发生。改成「盒子里真有一条待取
+插话」之后才有分辨力；而同一条注释里我原先写的「取消判定排在取料之前」也属**归错成因**
+（本轮顶、步末、工具前后共有多处 abort 复查，单挪一处不破功），已改成按行为口径描述。
+
+### 六、读数（工作树 → 已落库 → HEAD 面）
+
+- `mutate-needles-check`：**阻断 0／钉在飞文本 0**（落库前是阻断 6：3 条新锚点的被测面与判卷都还没进 HEAD）。
+- `mutate-verify`（`39427bdc` 上跑，**全表 1592/1592 全杀**，1858.0s，退出码 0）——
+  三条新 steering 锚点都在这张表里被杀死。
+- 根套件与桌面套件读数见 §七。
+
+### 七、判卷读数与两道被顶到头的存量帽
+
+- 桌面套件：**1398 条全绿**（基线 1394 ⇒ +4，本笔新增 `composer-steer.test.tsx` 4 条）；
+  `desktop-boundary-check` 绿。
+- 根套件（`--maxWorkers=2`）：**481 文件 / 6562 条，2 failed**。基线（第 676 页）**480 / 6547，2 failed**
+  ⇒ 增量恰 **+1 文件 / +15 条**；两条红与基线**逐条同一处**（D-5 21 条、`1f16bea` 归因）。
+- `typecheck` 0 条；`repo-hygiene-check` 四面绿；`renderer-layer-check` 绿。
+
+**两道存量计数被本笔顶到头，两处都已改口径而不是改帽**：
+
+| 面 | 红成什么样 | 改法 |
+|---|---|---|
+| `readme-invoke-channel-count` | README 写 98，加 `runSteer` 后表长 99 | 改 README 那一个数（判卷的分子分母同源，不许改判卷） |
+| 能力断言尺「尺读不出」 | 我的截断提示写「已按 N 字符…」，撞上标记词又挑不出可判中文 ⇒ 6 对帽 5 | 改成可判措辞，回 5/5；**帽没上调**（只准调低） |
+
+⇒ 这两条都是「新增一条能力时要跟着改它的计数面」，不是产品缺陷。第 676 页同族教训的第二次出现。
