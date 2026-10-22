@@ -21374,6 +21374,52 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 - ②（失败正文那一路）**未改**：业主的裁，见第二节。
 - 弹窗那一窗出的是**文件窗格**；其余窗格（改动/方案/时间线…）没各出一窗。
 
+## 2026-10-22 · 第 661 页：最后一笔的认证读数；外加一条本机纪律——**此刻有另一个会话在同一棵树上在飞**
+
+### 一、最后一笔（`d059c02d`）的认证读数
+
+取料是**干净 detached 树**（`git worktree add --detach` ＋ 硬链依赖），不是主检出——
+主检出此刻**不干净**（见第三节）。
+
+| 面 | 读数 |
+|---|---|
+| 核心全量（`--maxWorkers=2`，封顶档） | **467 文件 / 6459 用例，exit=0** |
+| 变异针脚体检 | **1589 条，全部可判定**（阻断 0）；改法语法体检 1589/1589 合法 |
+
+原文留档：`outputs/head-read-capped-d059c02d/core-suite-capped.log`、`outputs/head-read-capped-d059c02d/mutate-needles-check.log`。
+
+### 二、本机读数的一条纪律：`head-cert-check` **不封顶**
+
+`head-cert` 跑判卷时**不封 worker**（`vitest.mjs run --pool=threads --config …` ⇒ 8 核机器上 8 套并行）。
+在这台 8 GB 机器上、且**另一个会话同时在跑**时，它会间歇报 4–5 条红：
+`prose-needle-scan` 的 hook 超时（30s）、`evidence-typecheck` 超时（60s）、
+`prose-needle-scan` 的单价 1233ms 越 1s 预算、`render-image` 的 Chrome 出图超时 20s、
+`web-fetch-stream-lifecycle` 超时 30s。
+
+**红的那批每次不一样**（两次跑红的集合不同），**每一条单独跑都过** ⇒ 仓里 AGENTS.md 写的那一类
+「**负载产物、不是逻辑回归**」（默认 worker 数在 8 GB 机器上把盒子压垮了）。
+⇒ **本机的可复现口径是封顶那一条**（`--maxWorkers=2`）：它在负载 6.97 时 467/467 全绿，
+在负载 12–17 时会掉 2 条（`tests/replay-faces.test.ts` 那对，单独跑也过）。
+
+### 三、**另一个会话在同一棵树上在飞**（本轮的一个新事实）
+
+收尾核对工作树时发现：主检出里有**不是我这一轮**的改动在飞
+（`src/agent/loop.ts` 大改 ＋ `apps/desktop/src/main/window-workspace-context.ts`、
+`tests/loop-submission-idempotency.test.ts` 等新文件 ＋ `outputs/open-task-reconciliation-2026-10-22/`）。
+
+⇒ 三件事按规矩做了：
+1. **不碰、不提交**：仓里 AGENTS.md 明写「别的会话的脏改动不许 reset/stash，也不许带进本任务的提交」。
+   本页与现态页这一笔**只按路径提交**（`git add PROGRESS.md STATE.md outputs/…`），
+   **不是 `git add -A`**——`-A` 会把它的在飞改动一起扫进来。
+2. **核对过我的两笔提交**：`508bd2de`／`3017e88c`／`85fdec3b`／`bffcd6cf`／`5fc2eacf`／`50563dcf`／
+   `0f74ca87`／`d059c02d` 逐笔看过内容，**没有一笔**含它的文件。
+3. **那 3 条断针脚不是我的**：工作树上 `mutate-needles-check` 报 3 条断（都在 `src/agent/loop.ts`，
+   是它在飞的重构把实现搬走了、针脚还没跟着搬）⇒ **HEAD 上是绿的**（1589 条全可判定）。
+   ⇒ 那一笔归在飞的那一轮，不归本轮。
+
+⇒ 也正因如此：**认证读数只能取干净 detached 树**——主检出此刻被别人的在飞改动污染，
+在工作树上读到的红，既有可能是我的、也可能是它的，**分不清就不算读数**。
+
 ## 2026-10-22 · 第 658 页：在最后一笔上整跑全量门表——**40 道退出码全 0**（6 项未证）；并按业主的话把中间标签撤掉
 
 ### 一、门表整跑（最后一笔上）
