@@ -187,6 +187,16 @@ export const MUTATIONS = [
     expectFail: "valid / expired / invalid / inactive 各有话说，未读取不冒充未激活",
   },
   {
+    id: "diff-patch-add-lines-dropped",
+    src: "apps/desktop/src/renderer/diff-patch.ts",
+    test: "apps/desktop/tests/diff-patch.test.ts",
+    config: "apps/desktop/vitest.config.ts",
+    desc: "统一 diff 解析不认 + 行 ⇒ worker 改动预览只剩删除/上下文，新增内容整片消失："
+      + "用户看着「没有新增」去点合并，实际合进去的是没看过的代码",
+    apply: (s) => s.replace('    if (line.startsWith("+")) {', "    if (false) {"),
+    expectFail: "文件头跳过；+/-/空格三类行与两侧行号正确",
+  },
+  {
     id: "worker-diff-ref-path-traversal-allowed",
     src: "src/agent/worktree.ts",
     test: "tests/worktree-pure.test.ts",
