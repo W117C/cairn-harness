@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { AppPageBody, PAGE_META, PAGE_ORDER, buildSchedule, scheduleLabel } from "../src/renderer/components/AppPage";
+import { WorktreesPane } from "../src/renderer/components/WorktreesPane";
 
 describe("scheduleLabel（七 kind 人话）", () => {
   it("每种 kind 一句人话，不编造字段", () => {
@@ -35,8 +36,16 @@ describe("buildSchedule（表单四 kind 映射）", () => {
 
 describe("页体并入设置（v7.1 业主裁）：AppPageBody + 事实源", () => {
   it("PAGE_ORDER 顺序固定、PAGE_META 标签齐备（设置页导航从这里渲染，不许各抄一份）", () => {
-    expect(PAGE_ORDER).toEqual(["plugins", "automation", "skills", "memory"]);
-    expect(PAGE_ORDER.map((p) => PAGE_META[p].label)).toEqual(["插件", "自动化任务", "技能中心", "记忆系统"]);
+    expect(PAGE_ORDER).toEqual(["plugins", "automation", "skills", "memory", "worktrees"]);
+    expect(PAGE_ORDER.map((p) => PAGE_META[p].label)).toEqual(["插件", "自动化任务", "技能中心", "记忆系统", "工作树"]);
+  });
+
+  it("工作树页：孤儿逐条列出 + 清理按钮；空态不摆假列表", () => {
+    const html = renderToStaticMarkup(<WorktreesPane snap={{ orphans: ["worker-3"] }} onError={() => undefined} refresh={() => undefined} />);
+    expect(html).toContain("wt-worker-3");
+    expect(html).toContain("清理");
+    const empty = renderToStaticMarkup(<WorktreesPane snap={{ orphans: [] }} onError={() => undefined} refresh={() => undefined} />);
+    expect(empty).toContain("没有遗留的工作树");
   });
 
   it("SSR 首帧：页体带 aria-label 与诚实占位（快照未到时说明，不摆空壳内容）", () => {

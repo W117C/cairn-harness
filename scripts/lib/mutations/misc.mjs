@@ -164,6 +164,16 @@ export const MUTATIONS = [
   },
   // ---- 2026-10-05：R2 的「一致性判据」随判卷同笔配的锚点 ----
   {
+    id: "worktrees-page-orphan-list-emptied",
+    src: "apps/desktop/src/renderer/components/WorktreesPane.tsx",
+    test: "apps/desktop/tests/app-page.test.tsx",
+    config: "apps/desktop/vitest.config.ts",
+    desc: "工作树页把孤儿列表恒当空 ⇒ 协议里明明有 orphans、界面只显示「没有遗留的工作树」："
+      + "用户看不到可清理的树，clean 入口等于没接（假空态比不显示更坏）",
+    apply: (s) => s.replace("props.snap.orphans.length === 0 ?", "true ?"),
+    expectFail: "工作树页：孤儿逐条列出 + 清理按钮；空态不摆假列表",
+  },
+  {
     id: "engines-floor-below-feature-requirement",
     src: "package.json",
     test: "tests/engines-consistency.test.ts",

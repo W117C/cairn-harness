@@ -39,6 +39,8 @@ import {
   mergeSessionWorktree,
   sessionWorktreePath,
 } from "../../../../src/main/session-worktree";
+import { cleanOrphanWorktree } from "../../../../src/agent/worktree";
+import { ownedWorktreeAgentIds } from "../../../../src/agent/orchestrator";
 import { scheduledRunCount } from "../../../../src/main/scheduler-runtime";
 import {
   handleAgentDecide,
@@ -98,6 +100,8 @@ export interface KernelHost {
    *  三条都先按会话归属解析工作区（与 run 同一张归属表），并在该会话**正在跑**时拒绝——
    *  run 正在那棵树里写东西，此刻合并/删除等于把脚下的地板抽走。 */
   sessionWorktree(req: SessionWorktreeRequest): Promise<SessionWorktreeResult>;
+  /** 孤儿 worktree 清理：按当前工作区解析、仍有归属则拒绝（与 card_action clean 同一道闸）。 */
+  worktreeClean(name: string): Promise<{ ok: boolean; error?: string }>;
   /** 全工作区合并的会话清单，每条带 workspace 归组标记（T3 分组侧栏的数据源）；
    *  并合并单例 sidecar 的 pinned/archived/projectId（与写路径同源，见实现处注释）。 */
   listSessions(): Promise<(SessionInfoPayload & { workspace: string })[]>;
@@ -702,6 +706,10 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
         return r;
       }
       return await discardSessionWorktree(ws, sessionId);
+    },
+    worktreeClean: async (name) => {
+      const r = await cleanOrphanWorktree(activeWorkspace, name, { ownedAgentIds: new Set(ownedWorktreeAgentIds()) });
+      return r.removed ? { ok: true } : { ok: false, error: r.error ?? "worktree 清理失败" };
     },
     addWorkspace: (wsInput) => {
       // 动态并入扫描面（M3-3 修复轮）：唯一调用方是 main 进程 addProject handler（registry.add

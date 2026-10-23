@@ -53,7 +53,8 @@ describe("通道名表完整性", () => {
     // v17：＋terminalResize ⇒ 97。
     // v18：＋sessionSearch（会话正文全文检索；结果三态，「没量到 ≠ 没有」）⇒ 98。
     // 2026-10-23（第 676 页同族，第 9 点）：＋runSteer（轮中插话进正在跑的那一轮；不开新轮）⇒ 99。
-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(99);
+    // 2026-10-23（第 689 页）：＋worktreeClean（孤儿工作树页的显式清理；主进程仍判归属）⇒ 100。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(100);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
@@ -215,6 +216,8 @@ describe("通道名表完整性", () => {
       // RunOverrides.steering → loop 轮界取料。**必须接真**：它不是可选面板而是「运行中再交代一句话」，
       // 落进 fail-loud 白名单就等于让用户以为说出去了。
       "runSteer",
+      // 2026-10-23（第 689 页）：孤儿工作树页的显式清理——三面同步直接接真（主进程再判归属）。
+      "worktreeClean",
     ];
     // ④ fail-loud 白名单（带理由的未接）：B3 修复后为空——39 条全部接真。要留白须在此
     //    逐条列名并注记理由，且 index.ts 的 UNWIRED_FAIL_LOUD 同步加键（下方断言钉死两者一致）。

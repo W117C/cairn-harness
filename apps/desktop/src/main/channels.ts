@@ -94,6 +94,7 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   setSessionPinned: "agent:session-pin",
   setSessionArchived: "agent:session-archive",
   sessionWorktree: "agent:session-worktree",
+  worktreeClean: "agent:worktree-clean",
   assignSessionProject: "agent:session-assign",
   deleteMemory: "agent:memory-delete",
   pluginDecide: "agent:plugin-decide",

@@ -6,6 +6,6 @@ export interface FindBarHandle {
   focus: () => void;
 }
 
-export type PageId = "plugins" | "automation" | "skills" | "memory";
+export type PageId = "plugins" | "automation" | "skills" | "memory" | "worktrees";
 
 export type SectionId = "general" | "provider" | "permissions" | "advanced" | "shortcuts" | PageId | "about";

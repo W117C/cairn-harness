@@ -382,10 +382,10 @@ describe("插件信任开关：pluginDecide 双向（源码哨兵）", () => {
 });
 
 describe("设置页左侧导航：一处事实源，不许重复", () => {
-  it("八个分区各出现一次、顺序固定（导航只从 SECTIONS 渲染；工作台四分区并入）", () => {
+  it("九个分区各出现一次、顺序固定（导航只从 SECTIONS 渲染；工作台五分区并入）", () => {
     const html = renderToStaticMarkup(<SettingsPanel onClose={() => undefined} />);
     const nav = html.slice(html.indexOf('aria-label="设置分区"'), html.indexOf('class="sp-nav-foot"'));
-    const labels = ["通用", "模型与 Provider", "权限与安全", "插件", "自动化任务", "技能中心", "记忆系统", "关于与更新"];
+    const labels = ["通用", "模型与 Provider", "权限与安全", "插件", "自动化任务", "技能中心", "记忆系统", "工作树", "关于与更新"];
     for (const label of labels) {
       const n = (nav.match(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) ?? []).length;
       expect(n, `${label} 出现了 ${String(n)} 次`).toBe(1);
