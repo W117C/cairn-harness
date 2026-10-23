@@ -355,7 +355,9 @@ export const MUTATIONS = [
     src: "src/agent/loop.ts",
     test: "tests/loop-repeat-nudge.test.ts",
     desc: "检测照跑、提示却没落进 tool_result（模型看到的仍是裸错误 ⇒ 换路压力为零，重复照旧烧到 maxSteps）",
-    apply: (s) => s.replace("output: redactSecrets(result.output + postContext + repeatNote).text,", "output: redactSecrets(result.output + postContext).text,"),
+    // 针脚随 f6ed0552 重指：落盘那一行改成 readToolOutput(result.output) 取料（畸形结构守卫），
+    // 变异体仍是「照旧取料但不追换路提示」——被守护的东西没变，只是取料那一半换了形态。
+    apply: (s) => s.replace("output: redactSecrets(readToolOutput(result.output) + postContext + repeatNote).text,", "output: redactSecrets(readToolOutput(result.output) + postContext).text,"),
     expectFail: "同一调用连败 3 次：提示挂在那条 tool_result 尾部，前两次一字不加",
   },
   {
