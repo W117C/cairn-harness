@@ -22636,3 +22636,51 @@ if (!userCancelled) { /* 落 error */ }
 - 桌面套件 **1403 条全绿**（第 679 页是 1398 ⇒ +5）。
 - 认证树自回收 `exit=0`；**常驻残留树 0**。
 - 原始读数：`outputs/head-cert-da7cbf4-2026-10-23-0003/provenance.md`。
+
+## 2026-10-23 · 第 681 页：**build 门比 test 门严**——第 9 点接线漏了三处类型，以及一条没跑通的冒烟
+
+本页记两件事，第二件是**没做到**。
+
+### 一、第 5 轮那三笔只跑了 test 门，而 build 门更严
+
+`pnpm --filter cairn-desktop test`（1403 条全绿）在 `pnpm --filter cairn-desktop build` 面前**漏掉了三个真类型错**：
+
+| 位置 | 错 |
+|---|---|
+| `apps/desktop/src/main/kernel-host.ts` | `KernelHost` **接口**没声明 `steer`（实现里写了、接口没写）⇒ TS2353 |
+| `apps/desktop/src/renderer/derived/stream.ts` | `StreamRow` 的 user 分支**没声明 `steering`**（投影写了、类型没写）⇒ TS2339 |
+| `apps/desktop/src/renderer/panes/WorkbenchView.tsx` | `WorkbenchViewDeps.sendWithGoal` **第三参没穿透**（Composer 传了、上层类型只收两个）⇒ TS2554 |
+
+另有一处 `wired` 表的洗参：`runSteer` 的 `sessionId/text` 是上下文 `unknown`，必须与 `runCancel` 走同一条 `unknown → string` cast（TS2345）。
+
+⇒ 三条都是"实现写了、声明的另一边没跟上"，**单测跑得通是因为它不经过那层类型检查**。
+**教训**：动 desktop 的接线，`test` 绿不等于接线对——`build` 才是那道门。
+
+### 二、冒烟：**没跑通**，如实记在这里
+
+目标是补第 680 页自报的最大未证项（插话全链没真机冒烟）。本轮写了
+`apps/desktop/scripts/steer-smoke.cjs`（真 renderer + 可控 AgentApi，离屏），
+**它今天不通**，卡在：
+
+> 活动会话的 `running` **只由 `send()` 那条路置位**（`session-subscription.ts` 的「运行集口径」注释：
+> "活动会话不由事件置位"）。桩侧让 `run` 挂住之后，`stop` 钮仍**从不出现**
+> （逐拍 200ms×6 观测：`trail = "------"`），⇒ "运行中按回车"这一拍根本走不到。
+
+我没有为了让判据变绿去改产品代码，也没有把这个脚本写成"过了"。脚本头部标了 ⛔ 与卡点。
+
+**但它仍然真跑出三件有价值的事**：
+
+1. 上面那一格：build 门抓到的三个类型错（这条价值最大）。
+2. **桩里 `runSteer` 原本落到兜底 `reply({})`** ⇒ 渲染层读 `steered.ok === true` 得 `undefined`
+   ⇒ 运行中回车**永远走队列**，插话那条路在画廊界面里一次都走不到——而所有单测照样全绿。
+   已补真实现。这形状与第 677 页那个"提示生成了却没人读"是同一族：**兜底值把一条路悄悄关死**。
+3. 桩记录器第一版写在 `globalThis`（preload 与 renderer **不共享**上下文）⇒ 调用成功而记录恒 `null`。
+   改走 `contextBridge` 暴露。
+
+### 三、这条冒烟要接着做，缺的是什么
+
+缺的不是判据，是**让 gallery 里的 running 真的成立**：
+渲染层的键是 `runKey(activeWorkspace, sessionId)`，而新会话建出来之前 `activeWorkspace` 是 `null`
+——一键之差就会让 `runningSet.current.has(...)` 永远为假。这一格需要先观测 `activeWorkspace`
+在发送前后的取值，再决定是补桩的 workspace 回包、还是改用 `createSession` 预置会话。
+**这是下一轮的第一步，不是本轮能收敛的。**
