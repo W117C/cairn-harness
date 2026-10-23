@@ -23929,3 +23929,49 @@ TasksPane 的 modal：有 hunks ⇒ `<DiffView hunks={...} />`；否则仍显示
 - **取料（与页同笔入库）**：`outputs/worker-diff-view-2026-10-24/targeted-anchor-e9cfb134.log`、
   `outputs/worker-diff-view-2026-10-24/supervisor-check-e9cfb134.log`；
   认证读数在 `outputs/head-cert-e9cfb13-2026-10-23-1613/provenance.md`。
+## 2026-10-23 · 第 700 页：worker diff 预览的 32MB 面加 UI 帽——超长 patch 不再整段进 DOM
+
+### 一、第 699 页留下的体积边界
+
+第 698 页的 `worktreeDiff` 通道允许 core 侧到 **32MB**；第 699 页把 patch 解析成 hunk 交给
+`DiffView` 逐行渲染。两者单独看都对，合起来缺一格：**渲染层没有自己的显示帽**。
+一个 32MB 的 patch 会整段 parse + 整段 DOM；界面不会说「截断了」，用户会把「只显示了一部分」
+读成「改动就这么多」。
+
+### 二、改法：`clipDiff` 200k 字符帽
+
+`apps/desktop/src/renderer/diff-patch.ts`：
+
+- `DIFF_VIEW_CHAR_CAP = 200_000`（UI 显示帽，与 core 的 32MB 传输帽分开：一个管「能不能拿到」，一个管「要不要全画」）；
+- `clipDiff(text, cap)`：不超帽原样；超帽 `slice(0, cap)` 并 `truncated:true`；
+- TasksPane 的 modal 先 `clipDiff` 再 `parseUnifiedPatch`：超帽时 `DiffView truncated` 显示既有
+  「已截断比对」语义；pre fallback 也显示「patch 超过 200000 字符，预览已截断」提示。
+
+### 三、判卷与读数
+
+| 面 | 读数 |
+|---|---|
+| `apps/desktop/tests/diff-patch.test.ts` | 不超帽原样、超帽截到帽并 `truncated:true`、边界等长不截 |
+| 锚点 `diff-view-cap-ignored` | 定向 **1／1 杀死**（帽恒失效 ⇒ 32MB 整段进 DOM 且不说截断） |
+| `pnpm --filter cairn-desktop test` | **209 文件／1423 条全绿** |
+| `pnpm mutate-needles-check` | 1621 条针脚全部可判定 |
+| `pnpm supervisor-check` | **81✅／0❌** |
+| 全表 `pnpm mutate-verify` | 最近一次 `0d534db4`：**1616／1616**；本页表长 1621，只定向跑新锚点 **1／1** |
+
+### 四、HEAD 认证读数（`45dfeb72`）
+
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`45dfeb7`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- 认证树全量判卷：**487 文件／6603 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
+- 本趟墙钟 **109.52s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-45dfeb7-2026-10-23-1617/provenance.md`）。
+- 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
+
+### 五、边界（不冒充的部分）
+
+- **200k 字符是拍的，不是量的**：没有用真实大 patch 测过「200k 解析+渲染」的帧时间；
+  这个数只保证「不会把 32MB 全画」，不代表 200k 一定流畅。要报帧时间得另开真机/大 patch 实验。
+- **截断只发生在预览**：合并动作仍读完整 worktree，不因预览截断而少提交；截断提示里已引导
+  去变更窗格/命令行看全文。
+- **真实 worker 未验**：判卷只测 `clipDiff` 纯函数与桌面全量；没有在真 worker 的大 patch 上开过 modal。
+- **取料（与页同笔入库）**：`outputs/worker-diff-cap-2026-10-24/targeted-anchor-45dfeb72.log`、
+  `outputs/worker-diff-cap-2026-10-24/supervisor-check-45dfeb72.log`；
+  认证读数在 `outputs/head-cert-45dfeb7-2026-10-23-1617/provenance.md`。
