@@ -95,6 +95,13 @@ function nextAgentId(): string {
   return "worker-" + String(++globalAgentSeq);
 }
 
+/** 进程内仍归属某个编排器的 agent id：运行中（`agentOwners`）或待合并/待清理（`mergeOwners`）。
+ *  给孤儿 worktree 扫描用：目录是 workspace 级，事件流是 session 级——多会话共用一个 workspace 时，
+ *  另一会话**正在跑**或**刚跑完还没合并**的 worker 在当前会话日志里没有终态，不能因此被判成可清理。 */
+export function ownedWorktreeAgentIds(): string[] {
+  return [...new Set([...agentOwners.keys(), ...mergeOwners.keys()])];
+}
+
 export function orchestratorForAgent(agentId: string): Orchestrator | null {
   return agentOwners.get(agentId) ?? null;
 }

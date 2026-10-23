@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import { projectAgentPath } from "../app-data";
 import { replay } from "../events";
 import { PluginRuntime, currentPluginRuntime, pluginDataRootOf, type PluginPanelSnapshot } from "../agent/plugins";
+import { ownedWorktreeAgentIds } from "../agent/orchestrator";
 import { listWorktreeDirs, orphanWorktrees } from "../agent/worktree";
 import type { MemorySnapshot, SidechatPanelSnapshot } from "./ipc-protocol";
 import type { LicenseState } from "./license";
@@ -143,6 +144,9 @@ export async function scanOrphanWorktrees(workspace?: string): Promise<string[]>
   return orphanWorktrees(
     dirs,
     events.map((e) => e as { type: string; agent_id?: string; status?: string; callId?: string }),
+    // 多会话共用一个 workspace：另一会话运行中/待合并的 worker 在本会话日志里没有终态，
+    // 不能因此进「可清理」面板（目录是 workspace 级，事件流是 session 级）。
+    new Set(ownedWorktreeAgentIds()),
   );
 }
 

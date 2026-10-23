@@ -68,6 +68,16 @@ describe("orphanWorktrees：谁进「可清理」面板（删除决策的第一�
     expect(out).toContain("w1");
   });
 
+  it("进程内仍有归属（运行中/待合并）⇒ 不算孤儿；未归属的 running 仍算（崩溃遗留仍要捞）", () => {
+    // 跨会话：目录是 workspace 级，事件流是 session 级。另一会话的活 worker 在本会话日志里没有终态，
+    // 但它在 orchestrator 的 agentOwners/mergeOwners 里仍有归属 ⇒ 不许进「可清理」。
+    expect(orphanWorktrees(["wt-w1", "wt-w2"], [], new Set(["w1"]))).toEqual(["w2"]);
+    const running = [{ type: "agent_status", agent_id: "w1", status: "running" }];
+    expect(orphanWorktrees(["wt-w1"], running, new Set(["w1"]))).toEqual([]);
+    // 反向哨兵：没有归属的 running 仍算孤儿——进程被杀留下的树正是这一格要捞的。
+    expect(orphanWorktrees(["wt-w1"], running)).toEqual(["w1"]);
+  });
+
   it("merge- / wt-cleanup- 收尾记录 ⇒ 不算孤儿（两条前缀都要认）", () => {
     expect(orphanWorktrees(dirs, [{ type: "tool_result", callId: "merge-w1" }])).not.toContain("w1");
     expect(orphanWorktrees(dirs, [{ type: "tool_result", callId: "wt-cleanup-w1" }])).not.toContain("w1");

@@ -1128,6 +1128,24 @@ export const MUTATIONS = [
     expectFail: "折叠到空 ⇒ 落 `task`（不许产出空分支名）",
   },
   {
+    id: "orphan-ignores-owned-agents",
+    src: "src/agent/worktree.ts",
+    test: "tests/worktree-pure.test.ts",
+    desc: "孤儿过滤不看 orchestrator 归属 ⇒ 另一会话运行中/待合并的 worker 在本会话日志里没有终态，"
+      + "目录却是 workspace 级，于是被列进「可清理」面板——用户一点就删掉别人正在干活的树",
+    apply: (s) => s.replace("!ownedAgentIds.has(agentId) && ", ""),
+    expectFail: "进程内仍有归属（运行中/待合并）⇒ 不算孤儿；未归属的 running 仍算（崩溃遗留仍要捞）",
+  },
+  {
+    id: "orphan-scan-drops-owned-wiring",
+    src: "src/main/state-handlers.ts",
+    test: "tests/orphan-cross-session.test.ts",
+    desc: "扫描入口不把归属集合接进去 ⇒ 纯函数那一格写对了但这一格永远传空集：跨会话活 worker 照样进清理面板"
+      + "（规则 230：只写纯函数不接＝没有读数）",
+    apply: (s) => s.replace("    new Set(ownedWorktreeAgentIds()),", "    new Set(),"),
+    expectFail: "orchestrator 仍归属的 w1 ⇒ 即使本会话日志没有终态，也不列孤儿",
+  },
+  {
     id: "worktree-slug-dangling-hyphen-kept",
     src: "src/agent/worktree.ts",
     test: "tests/worktree-pure.test.ts",

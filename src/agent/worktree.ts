@@ -406,7 +406,12 @@ export async function listWorktreeDirs(root: string): Promise<string[]> {
 
 /** 孤儿 worktree（§4.4.9）：目录存在、但事件流里该 agent 无终态（done/failed/cancelled 的 agent_status）
  *  **且** 无合并控制塔收尾记录（merge/cleanup tool_result）——进程被杀遗留，列「可清理」，不自动删。 */
-export function orphanWorktrees(dirNames: string[], events: { type: string; agent_id?: string; status?: string; callId?: string }[]): string[] {
+export function orphanWorktrees(
+  dirNames: string[],
+  events: { type: string; agent_id?: string; status?: string; callId?: string }[],
+  /** 进程内仍有归属的 agent id（见 `ownedWorktreeAgentIds`）：运行中/待合并的树不进清理面板。 */
+  ownedAgentIds: ReadonlySet<string> = new Set(),
+): string[] {
   const terminalAgents = new Set<string>();
   for (const e of events) {
     if (e.type === "agent_status" && (e.status === "done" || e.status === "failed" || e.status === "cancelled") && typeof e.agent_id === "string") {
@@ -418,7 +423,7 @@ export function orphanWorktrees(dirNames: string[], events: { type: string; agen
   }
   return dirNames
     .map((n) => n.slice("wt-".length))
-    .filter((agentId) => !terminalAgents.has(agentId));
+    .filter((agentId) => !ownedAgentIds.has(agentId) && !terminalAgents.has(agentId));
 }
 
 /** 孤儿手动清理（§4.4.9：面板只列不自动删，清理 = 用户显式动作）：移除 worktree + 按后缀删 agent/*-<id> 分支。
