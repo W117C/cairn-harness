@@ -1146,6 +1146,15 @@ export const MUTATIONS = [
     expectFail: "orchestrator 仍归属的 w1 ⇒ 即使本会话日志没有终态，也不列孤儿",
   },
   {
+    id: "orphan-clean-ignores-live-owner",
+    src: "src/agent/worktree.ts",
+    test: "tests/worktree-branch-reuse.test.ts",
+    desc: "显式 clean 不看归属 ⇒ 旧界面/脚本直接调 clean 就能删掉运行中/待合并的活树；"
+      + "展示层过滤不是删除决策的闸，clean 自己必须再拒一次",
+    apply: (s) => s.replace("  if (opts.ownedAgentIds?.has(agentId)) {", "  if (false) {"),
+    expectFail: "仍归属的 agent：cleanOrphanWorktree 也拒绝，文件原样保留（clean 不假定调用方筛过）",
+  },
+  {
     id: "worktree-slug-dangling-hyphen-kept",
     src: "src/agent/worktree.ts",
     test: "tests/worktree-pure.test.ts",

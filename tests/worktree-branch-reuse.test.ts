@@ -155,4 +155,17 @@ describe("createWorktree：worker 的 agentId 跨进程重号，不许挂载旧�
     expect(readFileSync(join(wt, "user.txt"), "utf8")).toBe("keep me\n");
   });
 
+
+  it("仍归属的 agent：cleanOrphanWorktree 也拒绝，文件原样保留（clean 不假定调用方筛过）", async () => {
+    const root = repo();
+    await createWorktree(root, "worker-10", "同一任务");
+    const wt = worktreePathFor(root, "worker-10");
+    writeFileSync(join(wt, "wip.txt"), "keep me\n", "utf8");
+
+    const r = await cleanOrphanWorktree(root, "worker-10", { ownedAgentIds: new Set(["worker-10"]) });
+    expect(r.removed).toBe(false);
+    expect(r.error).toContain("仍有归属");
+    expect(readFileSync(join(wt, "wip.txt"), "utf8")).toBe("keep me\n");
+  });
+
 });

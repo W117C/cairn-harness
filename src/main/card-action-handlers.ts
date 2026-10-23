@@ -5,7 +5,7 @@
 import { isEventRef } from "../events";
 import type { AgentEvent, ClarifyAnswerMap, EventRef } from "../events";
 import { ClarifyGate, PlanGate } from "../agent/gates";
-import { Orchestrator, orchestratorForAgent, orchestratorForApproval, orchestratorForMerge } from "../agent/orchestrator";
+import { Orchestrator, orchestratorForAgent, orchestratorForApproval, orchestratorForMerge, ownedWorktreeAgentIds } from "../agent/orchestrator";
 import type { RespawnArgs } from "../agent/recovery";
 import { cleanOrphanWorktree, type WorktreeCleanupResult } from "../agent/worktree";
 import type { AskScope } from "../permissions";
@@ -142,7 +142,7 @@ export async function handleCardAction(req: CardActionRequest): Promise<{ ok: bo
     const name = typeof req.payload?.name === "string" ? req.payload.name : "";
     if (name === "" || !/^[A-Za-z0-9_-]+$/.test(name)) return { ok: false, error: "orphan clean 需要 payload{name（wt- 后的 agent_id）}" };
     const ws = await currentWorkspace();
-    const r: WorktreeCleanupResult = await cleanOrphanWorktree(ws, name);
+    const r: WorktreeCleanupResult = await cleanOrphanWorktree(ws, name, { ownedAgentIds: new Set(ownedWorktreeAgentIds()) });
     return r.removed ? { ok: true } : { ok: false, error: "孤儿 worktree 清理失败：" + (r.error ?? "未知") };
   }
   // ---- M3c 卡死出口一（§4.4.8）：「继续」= card_action(resume) 清除 stuck 态（worker 恢复运行）----

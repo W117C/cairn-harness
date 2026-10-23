@@ -429,9 +429,19 @@ export function orphanWorktrees(
 /** 孤儿手动清理（§4.4.9：面板只列不自动删，清理 = 用户显式动作）：移除 worktree + 按后缀删 agent/*-<id> 分支。
  *  A6（审查）：agentId 先过字符白名单——目录名含 glob 元字符（[ ? *）拼进 `branch --list`
  *  会匹配全部 agent 分支并循环删除；列出的分支名还须**精确以后缀 -<id> 结尾**才删（双保险）。 */
-export async function cleanOrphanWorktree(root: string, agentId: string): Promise<WorktreeCleanupResult> {
+export async function cleanOrphanWorktree(
+  root: string,
+  agentId: string,
+  opts: { ownedAgentIds?: ReadonlySet<string> } = {},
+): Promise<WorktreeCleanupResult> {
   if (!/^[A-Za-z0-9_-]+$/.test(agentId)) {
     return { removed: false, branchDeleted: false, error: "agentId 含非法字符（只允许 [A-Za-z0-9_-]），已拒绝清理" };
+  }
+  // 归属仍在（运行中/待合并）⇒ 显式清理也必须拒绝：这是最后一道闸，不假定调用方已经筛过。
+  // 第 687 页把「活树不进面板」修了，但 clean 是一个可被旧界面/脚本直接调的动作；只靠展示层过滤
+  // 等于把删除决策押在「没人绕过 UI」上。名字白名单先跑：非法 id 的拒绝理由不能被归属盖掉。
+  if (opts.ownedAgentIds?.has(agentId)) {
+    return { removed: false, branchDeleted: false, error: "该 worktree 仍有归属（运行中/待合并），拒绝清理：" + agentId };
   }
   const r = await removeWorktree(root, agentId);
   if (r.removed) {
