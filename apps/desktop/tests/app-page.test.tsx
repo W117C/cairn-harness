@@ -44,6 +44,8 @@ describe("页体并入设置（v7.1 业主裁）：AppPageBody + 事实源", () 
     const html = renderToStaticMarkup(<WorktreesPane snap={{ workspace: "/tmp/ws", orphans: ["worker-3"] }} onError={() => undefined} refresh={() => undefined} />);
     expect(html).toContain("wt-worker-3");
     expect(html).toContain("清理");
+    // 清理目标必须带快照的工作区：切项目后 activeWorkspace 是旧值，clean 不能拿它去删。
+    expect(html).toContain('data-workspace="/tmp/ws"');
     const empty = renderToStaticMarkup(<WorktreesPane snap={{ workspace: "/tmp/ws", orphans: [] }} onError={() => undefined} refresh={() => undefined} />);
     expect(empty).toContain("没有遗留的工作树");
   });

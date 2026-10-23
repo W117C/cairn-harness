@@ -28,7 +28,7 @@ export function WorktreesPane(props: {
   };
 
   return (
-    <>
+    <div className="ap-worktrees" data-workspace={props.snap.workspace}>
       <div className="ap-toolbar">
         <div className="ap-note">孤儿 worktree 只在没有归属时列出；运行中或待合并的树不会出现在这里。</div>
       </div>
@@ -60,6 +60,6 @@ export function WorktreesPane(props: {
           onConfirm={() => clean(ask)}
         />
       )}
-    </>
+    </div>
   );
 }
