@@ -22693,3 +22693,69 @@ if (!userCancelled) { /* 落 error */ }
 - 桌面套件 **1403 条全绿**；`desktop-boundary-check` 绿；`pnpm --filter cairn-desktop build` **通过**
   （这一条是本页的主角：它比 test 门严）。
 - 认证树自回收；**常驻残留树 0**。
+
+## 2026-10-23 · 第 682 页：把插话的三条路从 `send()` 里抽出来——**判据不该被运行态包住**
+
+第 681 页记了那条冒烟没跑通，并写下下一步："先观测 `activeWorkspace` 在发送前后的取值"。
+本页**照做了，然后把方向改了**——因为量出来的结论是：那一层根本不该是判据的落点。
+
+### 一、照着上一页的下一步量，量出的是三个环境假设错误
+
+连续四支探针，逐支记录（都不入库）：
+
+| 探针 | 结论 |
+|---|---|
+| `createSession` 的桩回包 | `{ id: "s2" }`，**不含 `workspace`** ⇒ `setActiveWorkspace(undefined)` ⇒ `activeWorkspace` 恒 `null` |
+| 点会话后 | `.session.active` 有了、`streamRows=5`，但回车后 `runs=[]`、`createSession` 也没被调 ⇒ **根本没进 `send`** |
+| 页内超时竞速（每步 2s） | `clickSession:ok / type:ok / enter:ok` 全过，`stop=false`、`runs=[]` |
+| 桩的 `run` 挂住 + 直接调 `runSteer` | 桩**可用**（`{ok:true,queued:1}`，记录也拿到了） |
+
+⇒ 结论：**产品那段逻辑没被证伪**，被证伪的是"离屏 gallery 能复现运行态"这个假设。
+渲染层的 `running` 只由 `send()` 自己置位（`session-subscription.ts`「活动会话不由事件置位」），
+而 `send()` 的入口还要过 `activeId` / `runningSet` / `composerLock` 三层——**三层都依赖真实交互时序**。
+
+### 二、所以改做法：把判据从运行态那层挪出来
+
+插话三条路的分岔原本内联在 `send()` 里：
+
+```ts
+if (forceQueue !== true && attachments.length === 0) { /* 试 runSteer */ }
+```
+
+它被"会话在不在跑""主进程怎么答"两层状态各切一刀，而那两层在离屏界面里立不住。
+**把分岔抽成纯函数**，判据就与 DOM/运行态解耦，可以被钉死：
+
+```ts
+export function steerRouteOf({ sessionId, running, forceQueue, attachmentCount }): "run" | "queue" | "steer"
+export function steerAccepted(res): boolean  // 只认 ok === true
+```
+
+`send()` 只负责执行。三条路的语义：
+· `steer` —— 送进正在跑的那一轮（不新开 run、不改轮次）；
+· `queue` —— 排到本轮结束（用户显式要排队 / 带附件 / 主进程说不在运行）；
+· `run`   —— 空闲，起新一轮。
+
+### 三、判卷 7 条 + 四台变异
+
+| 判据 | 钉的是 |
+|---|---|
+| ★ 运行中 + 纯文本 + 没要求排队 ⇒ `steer` | 主路 |
+| ★ 空闲 ⇒ `run` | 不能把"起新一轮"错当插话 |
+| ★ 空屏（`sessionId === null`）⇒ `run` | 插话必须有会话可挂 |
+| ★ `forceQueue` ⇒ `queue` | **按钮写着「加入队列」就必须真排队** |
+| ★ 带附件 ⇒ `queue` | 附件要过引用校验，半路塞进当前轮会绕开它 |
+| `forceQueue` + 附件同给 ⇒ 仍 `queue` | 两条理由不互相顶掉 |
+| ★ `steerAccepted` 只认 `ok === true` | **桩/协议兜底的 `{}` 读成 `undefined` = 吞消息** |
+
+四台变异逐条杀死：① 忽略 `running` ② 忽略 `forceQueue` ③ 忽略空屏 ④ `undefined` 当成功。
+
+第④台最要紧：它就是第 681 页那个桩兜底（`reply({})`）的**同一形状**，
+而在真代码里"协议兜底给 `{}`"同样会发生——把 `undefined` 读成成功，用户会看到
+「已插话到本轮」而那一轮根本没收到。这条不是在修桩，是在修**读应答的那一侧**。
+
+### 四、这条冒烟还要不要
+
+要，但它现在缺的是**一个能立住运行态的夹具**，不是判据。判据已经落到纯函数上（本页），
+所以冒烟即使跑通也不再是这三条路的唯一证人。下一步若要接：
+先给 gallery 一个"预置运行中会话"的夹具（而不是靠点击+回车把状态撞出来），
+再谈端到端。
