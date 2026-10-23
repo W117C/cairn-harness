@@ -14,12 +14,14 @@ import type { AgentEvent } from "../../../../../src/events";
 import { turnDelivery } from "../projections";
 import { diffCount, useLazyChangeDiff } from "../change-diff-state";
 import { MIN_PANE_PCT, loadPaneRows, mergePaneRows, paneRowLayout, savePaneRows } from "../pane-layout";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { toast } from "../toast";
 import { DiffView } from "./DiffView";
 import { FilePane } from "./FilePane";
 import { PluginSurface } from "./PluginSurface";
 import { SidechatPane } from "./SidechatPane";
 import { PathMenu } from "./PathMenu";
-import { changedFileCount, composeReviewMessage, PANE_META, PANE_OPENABLE, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, type PaneKind, type WorkerPaneItem } from "./panes";
+import { changedFileCount, composeReviewMessage, PANE_META, PANE_OPENABLE, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, workerCardAction, type PaneKind, type WorkerPaneItem } from "./panes";
 
 // PaneKind / PANE_META 的唯一事实源在 panes.ts（独立窗口路由同用）；此处 re-export 保接口。
 export { PANE_META, PANE_OPENABLE, type PaneKind } from "./panes";
@@ -734,6 +736,7 @@ function PlanPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
 /** 任务窗格：多 agent 状态（worker 簇）。 */
 function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
   const workers = projectWorkers(props.events);
+  const [ask, setAsk] = useState<{ w: WorkerPaneItem; action: "merge" | "reject" } | null>(null);
   if (workers.length === 0) {
     return <div className="pane-empty">本会话还没有派过子任务。<br />agent 派出 worker 后会在这里列出。</div>;
   }
@@ -746,7 +749,16 @@ function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element 
     : "已取消";
   const verifiedWord = (v: NonNullable<WorkerPaneItem["verified"]>): string =>
     v === "verified" ? "验证通过" : v === "failed" ? "验证失败" : v === "stale" ? "证据过期" : "无验证";
+  const settle = async (w: WorkerPaneItem, action: "merge" | "reject"): Promise<void> => {
+    setAsk(null);
+    const r = await window.agent.cardAction({
+      ...workerCardAction(w.agentId, w.resultEventId ?? 0, action),
+    });
+    if (!r.ok) toast.error(`${action === "merge" ? "合并" : "拒绝"}失败：${r.error ?? "未知原因"}`);
+    else toast.success(action === "merge" ? "已合并回主工作区" : "已拒绝并清理 worktree");
+  };
   return (
+    <>
     <div className="pane-list">
       {workers.map((w) => (
         <section className="pane-card" key={w.agentId} data-status={w.status}>
@@ -780,9 +792,28 @@ function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element 
             <div className="evidence-body wk-summary">{w.summary}</div>
           )}
           {w.reason !== undefined && <div className="consequence danger-text">{w.reason}</div>}
+          {w.mode === "write" && w.status === "done" && w.resultEventId !== undefined && (
+            <div className="wk-actions">
+              <button className="mini-btn primary" onClick={() => setAsk({ w, action: "merge" })}>合并…</button>
+              <button className="mini-btn ghost" onClick={() => setAsk({ w, action: "reject" })}>拒绝…</button>
+            </div>
+          )}
         </section>
       ))}
     </div>
+    {ask !== null && (
+      <ConfirmDialog
+        title={ask.action === "merge" ? `合并 ${ask.w.agentId} 的改动？` : `拒绝 ${ask.w.agentId} 的改动？`}
+        note={ask.action === "merge"
+          ? "把该 worker 的 worktree 变更提交并合并回主工作区；冲突时保留 worktree 供人工处理。"
+          : "删除该 worker 的 worktree 与分支；未合并的改动无法恢复。"}
+        confirmLabel={ask.action === "merge" ? "合并" : "拒绝"}
+        danger={ask.action === "reject"}
+        onClose={() => setAsk(null)}
+        onConfirm={() => { if (ask !== null) void settle(ask.w, ask.action); }}
+      />
+    )}
+    </>
   );
 }
 

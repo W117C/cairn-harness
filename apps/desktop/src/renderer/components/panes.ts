@@ -87,14 +87,24 @@ export interface WorkerPaneItem {
   spentUsd?: number;
   summary?: string;
   usage?: { inputTokens: number; outputTokens: number };
+  /** agent_result 在会话事件流里的 1-based 行号（card_action 的 sourceEventId；worker 合并/拒绝用）。 */
+  resultEventId?: number;
 }
 
 /** worker 四事件（spawned/status/message/result）按 agent_id 归组。spawned 缺席的孤儿事件忽略
  *  （没有派活记录就没有可信的任务面——不编一个空任务）。终态时长 = ended − started（缺一不算）。 */
+/** worker 合并/拒绝的 card_action 请求（sourceEventId 必须是 agent_result 的行号；
+ *  主进程的 merge/reject 路由按 targetAgentId 找 mergeOwners，cardId 只作审计标识）。 */
+export function workerCardAction(agentId: string, sourceEventId: number, action: "merge" | "reject"): {
+  cardId: string; sourceEventId: number; cardType: "diff"; action: "merge" | "reject"; targetAgentId: string;
+} {
+  return { cardId: "worker-diff-" + agentId, sourceEventId, cardType: "diff", action, targetAgentId: agentId };
+}
+
 export function projectWorkers(events: readonly AgentEvent[]): WorkerPaneItem[] {
   const out: WorkerPaneItem[] = [];
   const byId = new Map<string, WorkerPaneItem>();
-  for (const e of events) {
+  for (const [eventIndex, e] of events.entries()) {
     const agentId = (e as { agent_id?: string }).agent_id;
     if (typeof agentId !== "string") continue;
     if (e.type === "agent_spawned") {
@@ -139,6 +149,7 @@ export function projectWorkers(events: readonly AgentEvent[]): WorkerPaneItem[] 
       if (r.artifacts.verified !== undefined) item.verified = r.artifacts.verified;
       if (r.artifacts.spent_usd !== undefined) item.spentUsd = r.artifacts.spent_usd;
       if (r.usage !== undefined) item.usage = { inputTokens: r.usage.inputTokens, outputTokens: r.usage.outputTokens };
+      item.resultEventId = eventIndex + 1;
     }
   }
   // 终态时长（缺 started 或 ended 不算——不编）。

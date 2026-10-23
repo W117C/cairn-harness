@@ -3,7 +3,7 @@
 // 改动文件去重计数。
 import { describe, expect, it } from "vitest";
 import type { AgentEvent } from "../../../src/events";
-import { changedFileCount, projectPlans, projectWorkers } from "../src/renderer/components/panes";
+import { changedFileCount, projectPlans, projectWorkers, workerCardAction } from "../src/renderer/components/panes";
 
 const ev = (e: unknown) => e as AgentEvent;
 
@@ -65,6 +65,8 @@ describe("projectWorkers：worker 四事件归组", () => {
     expect(w?.verified).toBe("verified");
     expect(w?.spentUsd).toBe(0.12);
     expect(w?.filesChanged).toEqual(["src/duration.ts"]);
+    // card_action 的 sourceEventId 必须是 agent_result 在会话流里的 1-based 行号（第 7 条）。
+    expect(w?.resultEventId).toBe(7);
   });
 
   it("缺席不编：无 started 或 ended ⇒ 无时长；无 spent_usd ⇒ undefined（不是 0）", () => {
@@ -204,5 +206,13 @@ describe("sitePermissionFor", () => {
   it("解析失败按「要问」（宁可多问，不静默放行）", async () => {
     const { sitePermissionFor } = await import("../src/renderer/components/panes");
     expect(sitePermissionFor("不是地址", new Set())).toBe("ask");
+  });
+});
+describe("workerCardAction：合并/拒绝的 card_action 形状", () => {
+  it("sourceEventId 用 agent_result 行号，cardType=diff，targetAgentId 原样", () => {
+    expect(workerCardAction("w1", 7, "merge")).toEqual({
+      cardId: "worker-diff-w1", sourceEventId: 7, cardType: "diff", action: "merge", targetAgentId: "w1",
+    });
+    expect(workerCardAction("w1", 7, "reject").action).toBe("reject");
   });
 });

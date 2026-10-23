@@ -187,6 +187,16 @@ export const MUTATIONS = [
     expectFail: "valid / expired / invalid / inactive 各有话说，未读取不冒充未激活",
   },
   {
+    id: "worker-card-action-cardtype-drift",
+    src: "apps/desktop/src/renderer/components/panes.ts",
+    test: "apps/desktop/tests/panes.test.ts",
+    config: "apps/desktop/vitest.config.ts",
+    desc: "合并/拒绝请求的 cardType 漂成 merge_tower ⇒ 主进程 merge/reject 路由虽然也认它，"
+      + "但审计面与既有 diff 卡来源分家；更坏的是以后收窄路由只认 diff 时，界面按钮静默失效",
+    apply: (s) => s.replace('return { cardId: "worker-diff-" + agentId, sourceEventId, cardType: "diff", action, targetAgentId: agentId };', 'return { cardId: "worker-diff-" + agentId, sourceEventId, cardType: "merge_tower", action, targetAgentId: agentId };'),
+    expectFail: "sourceEventId 用 agent_result 行号，cardType=diff，targetAgentId 原样",
+  },
+  {
     id: "blank-project-routes-to-template",
     src: "apps/desktop/src/renderer/state/projects.ts",
     test: "apps/desktop/tests/new-project-blank.test.tsx",
