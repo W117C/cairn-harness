@@ -23831,3 +23831,52 @@ worker 在任务窗格里能看到 task、状态、花费、验证券与摘要�
 - **取料（与页同笔入库）**：`outputs/invoke-census-2026-10-24/targeted-anchor-220013af.log`、
   `outputs/invoke-census-2026-10-24/supervisor-check-220013af.log`；
   认证读数在 `outputs/head-cert-220013a-2026-10-23-1603/provenance.md`。
+## 2026-10-23 · 第 698 页：worker 改动可预览——`worktreeDiff` 通道与「看过再合」
+
+### 一、第 696 页只补了按钮，没补「看」
+
+第 696 页给 done write worker 加了「合并… / 拒绝…」，但用户仍看不到这棵 worktree 改了什么：
+任务卡只有 `filesChanged` 与摘要，合并前没有逐 hunk 预览。`agent_result.artifacts.diff_ref`
+（`<worktree>@<baseCommit>`）已经落流，却没有任何渲染层消费者。
+
+### 二、改法：一条受形状闸保护的 `worktreeDiff` 通道
+
+- `parseWorktreeRef(ref)`：只认 `^\.agents/wt-<id>@<hex>$`，路径穿越/非 hex/空串 ⇒ `null`；
+- 新 IPC `worktreeDiff(ref, workspace?)`：主进程按登记工作区解析，校验路径仍在 `<ws>/.agents/` 下，
+  再调 core 的 `worktreeDiff(wt, baseCommit)`（真跑 `git diff`，含未提交改动）；
+- `WorkerPaneItem` 记 `diffRef`；TasksPane 的 done write 卡加「查看改动…」，
+  `ModalSurface` 里渲染 patch（空 patch 回落 `stat`）；
+- 通道数 **100 → 101**，README 与 `channels.test.ts` 同步；`invoke-consumer-census` 自然覆盖新通道。
+
+### 三、判卷与读数
+
+| 面 | 读数 |
+|---|---|
+| `tests/worktree-pure.test.ts` | `parseWorktreeRef` 正例；`../`、路径穿越、非 hex、空串全 `null` |
+| `tests/worktree-branch-reuse.test.ts` | 真建 worktree、改 `a.txt`，`worktreeDiff` 返回 `files` 含 `a.txt`、patch 含 `+changed` |
+| `apps/desktop/tests/panes.test.ts` | `diffRef` 从 `agent_result.artifacts.diff_ref` 投影到 WorkerPaneItem |
+| `apps/desktop/tests/channels.test.ts` | 通道数 **101**；`worktreeDiff` 在 mustWire 名单 |
+| 锚点 `worker-diff-ref-path-traversal-allowed` | 定向 **1／1 杀死**（放开前缀 ⇒ 路径穿越字符串被解析） |
+| `pnpm --filter cairn-desktop test` | **208 文件／1419 条全绿** |
+| `pnpm mutate-needles-check` | 1619 条针脚全部可判定 |
+| `pnpm supervisor-check` | **81✅／0❌** |
+| 全表 `pnpm mutate-verify` | 最近一次 `0d534db4`：**1616／1616**；本页表长 1619，只定向跑新锚点 **1／1** |
+
+### 四、HEAD 认证读数（`b0948d6a`）
+
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`b0948d6`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- 认证树全量判卷：**487 文件／6603 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
+- 本趟墙钟 **139.64s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-b0948d6-2026-10-23-1609/provenance.md`）。
+- 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
+
+### 五、边界（不冒充的部分）
+
+- **预览是原始 patch**：modal 里是 `git diff` 文本（`<pre>`），没有逐 hunk 折叠/行级评注；
+  大 patch（core 侧 32MB 帽）会整段塞进 DOM，未做虚拟滚动——这一格没量过极端体积。
+- **没有真实 worker 端到端**：判卷覆盖 ref 形状、真 worktree diff 数据面与投影；没有在真 worker 上
+  点过一次「查看改动」看 modal 的真机排版。
+- **路径闸有两道**：`parseWorktreeRef` 与 kernel-host 的 `startsWith(ws/.agents/)`；本页只锚了第一道，
+  第二道由既有 `cleanOrphanWorktree` 同族判卷与代码审查守，未单独造红。
+- **取料（与页同笔入库）**：`outputs/worker-diff-preview-2026-10-24/targeted-anchor-b0948d6a.log`、
+  `outputs/worker-diff-preview-2026-10-24/supervisor-check-b0948d6a.log`；
+  认证读数在 `outputs/head-cert-b0948d6-2026-10-23-1609/provenance.md`。

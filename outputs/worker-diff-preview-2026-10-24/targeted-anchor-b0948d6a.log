@@ -1,0 +1,11 @@
+$ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify worker-diff-ref-path-traversal-allowed
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → b0948d6
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
+变异验证：1 条
+✅ worker-diff-ref-path-traversal-allowed — diff_ref 解析放开 .agents/wt-* 前缀 ⇒ `../` 或任意路径能进「查看 worker 改动」；主进程虽然随后有 startsWith 兜底，但形状闸是第一道也是唯一贴着解析器的闸（别把安全押在第二道） ｜本机实测 0.6s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 0.8s · 跑了 1/1 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 2 次／1 条（每条次数分布 2×1）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 worker-diff-ref-path-traversal-allowed 0.6s
+跑法单价：selector 2 拍·中位 0.30s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
