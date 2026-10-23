@@ -22684,3 +22684,12 @@ if (!userCancelled) { /* 落 error */ }
 ——一键之差就会让 `runningSet.current.has(...)` 永远为假。这一格需要先观测 `activeWorkspace`
 在发送前后的取值，再决定是补桩的 workspace 回包、还是改用 `createSession` 预置会话。
 **这是下一轮的第一步，不是本轮能收敛的。**
+
+### 四、HEAD 认证读数（`5ee9030a`）
+
+- 门面 **25/25** 跑到，红 **1** 道：`docs-check`（21 条 D-5 存量）。
+- `typecheck` HEAD 面 **0 报错**（本页那三处类型漏修完之后）。
+- 判卷 **6577 条 / 2 failed**：`docs-check` 的 D-5、`mutate-needles-check` 的 `1f16bea` 归因。
+- 桌面套件 **1403 条全绿**；`desktop-boundary-check` 绿；`pnpm --filter cairn-desktop build` **通过**
+  （这一条是本页的主角：它比 test 门严）。
+- 认证树自回收；**常驻残留树 0**。
