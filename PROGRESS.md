@@ -23578,3 +23578,52 @@ for (const rel of paths) {
 - **取料（与页同笔入库）**：`outputs/worktrees-dirty-2026-10-23/targeted-anchor-b14220f9.log`、
   `outputs/worktrees-dirty-2026-10-23/supervisor-check-b14220f9.log`；
   认证读数在 `outputs/head-cert-b14220f-2026-10-23-1450/provenance.md`。
+## 2026-10-23 · 第 693 页：`createProject` 通道不再是死路——新建项目补「空白项目」卡
+
+### 一、第 642 页审计留下的 P1
+
+第 642 页第五节登记过一条产品 P1：`createProject` 有主进程实现、有 invoke 通道、
+`channels.test.ts` 的 wired 守卫也把它算作「已接」，但**渲染层零调用点**。用户能新建的只有模板项目，
+想建一个空文件夹当项目只能先建目录再走「添加已有文件夹」。
+
+`channels.test.ts` 的守卫只查「源码里有这一行 handler」，不查「有没有人调它」——这正是本仓点过的
+「接线不等于可达」。本页补的是**调用点**。
+
+### 二、改法：模板列表末尾加「空白项目」，选择它走 `createProject`
+
+- `strings.ts` 新增 `newProject.blankName/blankDesc`；
+- `WorkbenchView` 把空白卡**追加在模板列表末尾**（不抢默认模板的第一位）：
+  `[...templates, { id: "blank", name: "空白项目", description: "不套模板，只建一个普通文件夹并登记" }]`；
+- `projects.ts` 的 `createProjectKind(templateId)` 单源判定：`blank` ⇒ `window.agent.createProject`
+  （只建目录 + 登记，不套模板）；其余仍走 `projectCreateFromTemplate`；
+- 失败仍按原路径 `throw new Error(r.message)`，`refreshProjects / refreshSessions / setActiveWorkspace`
+  与模板建项完全同一条收尾。
+
+### 三、判卷与读数
+
+| 面 | 读数 |
+|---|---|
+| `apps/desktop/tests/new-project-blank.test.tsx` | 弹窗渲染「空白项目」卡；`createProjectKind("blank") === "blank"`、`"react-vite" === "template"` |
+| 锚点 `blank-project-routes-to-template` | 定向 **1／1 杀死**（把 blank 也路由到模板 ⇒ 卡在而落盘仍是模板） |
+| `pnpm --filter cairn-desktop test` | **207 文件／1416 条全绿** |
+| `pnpm mutate-needles-check` | 1615 条针脚全部可判定 |
+| `pnpm supervisor-check` | **81✅／0❌** |
+| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**；本页表长 1615，只定向跑新锚点 **1／1** |
+
+### 四、HEAD 认证读数（`db977cf5`）
+
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`db977cf`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
+- 本趟墙钟 **126.88s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-db977cf-2026-10-23-1455/provenance.md`）。
+- 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
+
+### 五、边界（不冒充的部分）
+
+- **只补了「空白项目」这一条入口**：`createProject` 的 `parentDir` 仍走既有 `resolveCreateParent`
+  （只认用户选过的目录 ∪ 已知项目根），没有放宽路径白名单。
+- **未真机目验**：空白卡在弹窗里的排版、选中态与暗色对比度只在 SSR/桌面全量判卷里看过。
+- **模板列表来自服务端**：本页在渲染层追加虚拟卡，没有改 `projectTemplates` 返回的目录；
+  若将来服务端也出 `id:"blank"`，这里会出现两张同名卡（当前服务端不产这个 id，未加去重）。
+- **取料（与页同笔入库）**：`outputs/blank-project-2026-10-23/targeted-anchor-db977cf5.log`、
+  `outputs/blank-project-2026-10-23/supervisor-check-db977cf5.log`；
+  认证读数在 `outputs/head-cert-db977cf-2026-10-23-1455/provenance.md`。
