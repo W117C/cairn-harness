@@ -23268,3 +23268,76 @@ export function ownedWorktreeAgentIds(): string[] {
 
 > 勘误（2026-10-23，同页）：第五节原写「本页新增的 3 条判卷全绿」有误。本页新增判卷是 **2 条**
 > （`worktree-pure` 1 条 ＋ `orphan-cross-session` 1 条）；head-cert 总数 6596 → 6598 的 +2 就是它们。
+## 2026-10-23 · 第 688 页：显式 `clean` 也不许删仍有归属的活树——最后一道闸不能押在展示层
+
+### 一、第 687 页修的是「不列」，不是「不删」
+
+第 687 页让活树不进孤儿面板，但**删除动作本身**仍是敞开的：
+
+```ts
+// src/main/card-action-handlers.ts（旧）
+if (req.action === "clean" && req.cardType === "orphan") {
+  const name = ...; // wt- 后的 agent_id
+  const r = await cleanOrphanWorktree(ws, name); // → worktree remove --force
+}
+```
+
+`cleanOrphanWorktree` 只校验名字字符白名单，不知道这个 agent 现在还有没有归属。面板不列它，
+不等于旧界面、脚本、或一条迟到的 `card_action` 不会直接拿一个 `agent_id` 调 `clean`。
+把删除决策押在「没人绕过 UI」上，不是闸，是约定。
+
+### 二、改法：clean 自己再拒一次
+
+`cleanOrphanWorktree(root, agentId, opts)` 多收 `ownedAgentIds`，顺序刻意排在名字白名单**之后**：
+
+1. 名字含非法字符 ⇒ 仍报「非法字符」（拒绝理由不被归属盖掉）；
+2. 归属仍在（`agentOwners` 运行中 ∪ `mergeOwners` 待合并）⇒ **拒绝，一个 git 调用都不发**；
+3. 其余照旧走 `removeWorktree`。
+
+`card-action-handlers` 的 clean 分支把 `new Set(ownedWorktreeAgentIds())` 接进去；纯函数层的这一格
+与第 687 页共用同一份归属谓词，不另抄一张表。
+
+### 三、判卷：真建树 + 未提交文件
+
+`tests/worktree-branch-reuse.test.ts` 新增：
+
+```
+真建 worker-10 的 worktree → 写入 wip.txt
+cleanOrphanWorktree(root, "worker-10", { ownedAgentIds: new Set(["worker-10"]) })
+  ⇒ removed:false
+  ⇒ error 含「仍有归属」
+  ⇒ wip.txt 原样还在
+```
+
+把守卫摘掉（`if (false)`）⇒ 这条 **1 红**，其余 8 条绿。反向那一半由既有「撞名产生的 -2 分支也能被
+孤儿清理收走」继续钉住：**未归属**的孤儿仍可清理，不是把 clean 写成一律拒绝。
+
+### 四、判卷与变异读数
+
+| 面 | 读数 |
+|---|---|
+| `tests/worktree-branch-reuse.test.ts` | **9 条全绿**（原 8 ＋ 归属拒绝 1） |
+| 旧实现造红 | 摘掉守卫 ⇒ **1 条红**（wip.txt 被删） |
+| 锚点 `orphan-clean-ignores-live-owner` | 定向 **1／1 杀死**（1.0s） |
+| `pnpm mutate-needles-check` | 1611 条针脚全部可判定（阻断 0） |
+| `pnpm supervisor-check` | **81✅／0❌** |
+| 全表 `pnpm mutate-verify` | 上一笔 `ccf021da` 上 **1610／1610 杀死，0 vacuous**（第 687 页）；本笔只加 1 条守卫 ＋ 1 处接线，未重跑全表，本笔新锚点定向 **1／1** |
+
+### 五、HEAD 认证读数（`3b00b164`）
+
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`3b00b16`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- 认证树全量判卷：**487 文件／6599 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增 1 条判卷全绿。
+- 本趟墙钟 **127.68s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-3b00b16-2026-10-23-1421/provenance.md`）。
+- 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
+
+### 六、边界（不冒充的部分）
+
+- **未归属的孤儿仍会被显式 clean 强删**：这是用户主动动作的既有语义，本页没有改；改的是「有归属也照删」。
+- **孤儿面板仍未接 UI**：`ipc-protocol.ts` 的 `worktree.orphans` 在渲染层没有消费者（第 687 页边界），
+  所以本页的 clean 闸目前防的是脚本/旧通道；可见入口是下一轮桌面端候选。
+- **多进程不覆盖**：`ownedWorktreeAgentIds` 是进程级内存；两个 App 实例共用 workspace 时，
+  另一进程的活树仍会被本页的 clean 放行。当前是单实例语义，但没有判卷。
+- **真机未验**：本页是 worktree 文件系统与 card action 的行为，不涉及 Electron 观感。
+- **取料（与页同笔入库）**：`outputs/orphan-clean-guard-2026-10-23/targeted-anchor-3b00b164.log`、
+  `outputs/orphan-clean-guard-2026-10-23/supervisor-check-3b00b164.log`；
+  认证读数在 `outputs/head-cert-3b00b16-2026-10-23-1421/provenance.md`。
