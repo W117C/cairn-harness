@@ -23524,3 +23524,57 @@ for (const rel of paths) {
 - **取料（与页同笔入库）**：`outputs/read-batch-concurrency-2026-10-23/targeted-anchor-099d5905.log`、
   `outputs/read-batch-concurrency-2026-10-23/supervisor-check-099d5905.log`；
   认证读数在 `outputs/head-cert-099d590-2026-10-23-1445/provenance.md`。
+## 2026-10-23 · 第 692 页：孤儿面板只报名字不报「会丢什么」——未提交改动必须上屏
+
+### 一、第 689 页的面还差一格信息
+
+工作树页列出 `wt-<agent>` 后，用户点「清理」只看到一句泛泛的
+「会删除该 worktree 目录与对应 agent 分支；未提交的改动无法恢复」。
+但**当前这一棵到底有没有未提交改动**，界面一个字不说：
+
+- 干净的孤儿：点清理是纯收垃圾；
+- 脏的孤儿：点清理会丢掉没有第二份的工作。两种局面在界面上长得一模一样。
+
+这是删除决策的信息缺口，不是审美问题。第 688 页已在后端拦「有归属」的树，但**未归属的脏孤儿**
+仍需用户自己判断——判断需要读数。
+
+### 二、改法：state 快照逐棵带 `dirty`
+
+- `src/agent/worktree.ts` 新增 `worktreeDirty(root, agentId)`：对 worktree 真跑
+  `git status --porcelain`；读不出（目录不在/不是 worktree/git 失败）**按 true**——看不见就不许说干净。
+- `state-handlers.ts` 的 worktree 快照在 `orphans` 之外加 `details: { name, dirty }[]`；
+- `WorktreesPane` 按 name 查 `dirty`，行上显示「有未提交改动」标签、`data-dirty` 属性；
+- 确认框按 `dirty` 换文案：脏树明确写「该 worktree 有未提交改动；清理会删除目录与对应 agent 分支，
+  未提交内容无法恢复」。
+
+### 三、判卷与读数
+
+| 面 | 读数 |
+|---|---|
+| `tests/worktree-branch-reuse.test.ts` | **10 条全绿**（新增 `worktreeDirty` 真 git 三态：干净 false → `wip.txt` true → 清掉 false） |
+| `apps/desktop/tests/app-page.test.tsx` | 脏孤儿渲染「有未提交改动」＋ `data-dirty="true"` |
+| 锚点 `worktrees-dirty-badge-hidden` | 定向 **1／1 杀死**（把 dirty 恒置 false ⇒ 标签消失） |
+| 锚点 `worktrees-page-orphan-list-emptied` | 同批 **1／1 杀死** |
+| `pnpm --filter cairn-desktop test` | **206 文件／1414 条全绿** |
+| `pnpm mutate-needles-check` | 1614 条针脚全部可判定 |
+| `pnpm supervisor-check` | **81✅／0❌** |
+| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**；本页表长 1614，只定向跑新锚点 **1／1** |
+
+### 四、HEAD 认证读数（`b14220f9`）
+
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`b14220f`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
+- 本趟墙钟 **127.96s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-b14220f-2026-10-23-1450/provenance.md`）。
+- 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
+
+### 五、边界（不冒充的部分）
+
+- **`dirty` 是取快照那一刻的读数**：页面打开后 worker 继续写，标签不会自己更新；要最新读数得刷新
+  （下一次 `getState`）。没有做文件监听/轮询。
+- **每棵孤儿一次 `git status`**：`getState` 时逐棵 spawn git；孤儿通常个位数，没量过上百棵的成本，
+  也没做缓存。若将来孤儿面板成常驻高频面，这一格要另设预算。
+- **仍是当前工作区**：第 690 页的显式 workspace 只解决「删哪个仓」；跨工作区汇总仍未做。
+- **真机未验**：标签与确认框只在 SSR/桌面全量判卷里看过，没开 Electron 目验暗色对比度与行宽。
+- **取料（与页同笔入库）**：`outputs/worktrees-dirty-2026-10-23/targeted-anchor-b14220f9.log`、
+  `outputs/worktrees-dirty-2026-10-23/supervisor-check-b14220f9.log`；
+  认证读数在 `outputs/head-cert-b14220f-2026-10-23-1450/provenance.md`。
