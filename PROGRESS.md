@@ -23407,3 +23407,52 @@ cleanOrphanWorktree(root, "worker-10", { ownedAgentIds: new Set(["worker-10"]) }
 - **取料（与页同笔入库）**：`outputs/worktrees-page-2026-10-23/targeted-anchor-324fcc2e.log`、
   `outputs/worktrees-page-2026-10-23/supervisor-check-324fcc2e.log`；
   认证读数在 `outputs/head-cert-324fcc2-2026-10-23-1429/provenance.md`。
+## 2026-10-23 · 第 690 页：工作树清理必须带工作区——切项目后不许拿旧 `activeWorkspace` 删错仓
+
+### 一、第 689 页自己引进来的那个洞
+
+第 689 页的工作树页从 `getState()` 取快照，而 `handleAgentState` 解析工作区用的是
+`windowWorkspaces.current()`（**当前窗口此刻**的项目）；`KernelHost.worktreeClean` 却读
+`activeWorkspace`——它是 host 构造期固定下来的默认值。用户在设置页切过项目之后：
+
+- 页面列的是**新工作区**的孤儿（`scanOrphanWorktrees` 用的是当前窗口工作区）；
+- 点「清理」时 `worktreeClean` 用**旧 activeWorkspace** 解析 ⇒ 要么找不到、报一个看不懂的失败，
+  要么更坏：旧仓里恰有一个同名 `wt-worker-N`，就删了**另一个仓**的树。
+
+这不是推的：`activeWorkspace` 在 `normalizeWorkspaces` 里只赋值一次（`kernel-host.ts` 构造段），
+而 `workspaceContext()` 是 `windowWorkspaces.current()`（`index.ts:196`）——两条读法本来就不同源。
+
+### 二、改法：快照带工作区，clean 按快照回传
+
+- `worktree?: { workspace: string; orphans: string[] }`（`ipc-protocol.ts` 与 `state-handlers.ts`）；
+- `worktreeClean(name, workspace?)`：`kernel-host` 先 `canonicalWorkspacePath` + `workspaces.includes`
+  校验（未登记 ⇒ `{ok:false, error:"工作区未登记"}`），再 `cleanOrphanWorktree(ws, ...)`；
+- `WorktreesPane` 根节点带 `data-workspace`，点击时 `worktreeClean(name, props.snap.workspace)`；
+- IPC 通道数不变（只多一个可选参，preload 程序化透传），`channels.test.ts` 的表长仍是 100。
+
+### 三、判卷与读数
+
+| 面 | 读数 |
+|---|---|
+| `apps/desktop/tests/app-page.test.tsx` | 工作树页带 `data-workspace="/tmp/ws"`；孤儿逐条渲染与空态两条仍绿 |
+| `pnpm --filter cairn-desktop test` | **206 文件／1414 条全绿** |
+| 锚点 `worktrees-page-orphan-list-emptied` | 定向 **1／1 杀死** |
+| `pnpm mutate-needles-check` | 1612 条针脚全部可判定 |
+| `pnpm supervisor-check` | **81✅／0❌** |
+| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**（第 687 页）；本页表长 1612，只定向跑新锚点 **1／1** |
+
+### 四、HEAD 认证读数（`8ffb6b62`）
+
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`8ffb6b6`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- 认证树全量判卷：**487 文件／6599 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增/改动的界面判卷全绿。
+- 本趟墙钟 **126.02s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-8ffb6b6-2026-10-23-1439/provenance.md`）。
+- 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
+
+### 五、边界（不冒充的部分）
+
+- **仍未做工作树切换**：本页只保证「看到哪个工作区，就清哪个工作区」；C-35 的主工作树/worker 切换菜单仍未落。
+- **未真机目验**：设置页第五分区的真实布局、暗色对比度仍未开 Electron 看；判卷是 SSR 与桌面全量。
+- **显式清理仍强删**：未归属的孤儿按既有语义 `worktree remove --force`；第 688 页只拦「有归属」。
+- **取料（与页同笔入库）**：`outputs/worktrees-workspace-2026-10-23/targeted-anchor-8ffb6b62.log`、
+  `outputs/worktrees-workspace-2026-10-23/supervisor-check-8ffb6b62.log`；
+  认证读数在 `outputs/head-cert-8ffb6b6-2026-10-23-1439/provenance.md`。
