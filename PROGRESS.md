@@ -22780,3 +22780,65 @@ export function steerAccepted(res): boolean  // 只认 ok === true
 
 ⇒ 本页不宣称"HEAD 全绿"。可引用的结论只有两条：typecheck 0、判卷里 6574 条通过；
 第三条红是并发压出来的，单跑与半并发都绿。
+
+## 2026-10-23 · 第 683 页：桌面端设计的第一笔实测——**一份永不加载的字体**
+
+前七轮几乎全在 loop 内核。目标里「优化桌面端设计」这一半，本轮开始用读数说话。
+
+### 一、先说清楚我怎么找到它的
+
+`apps/desktop/scripts/bundle-audit.mjs` 只审 **JS**（initial / main / popout 三个账），
+所以它报 `overBudget:false` 之后，**字体资产不在任何一道门的视野里**。
+本轮构造产物的最大文件清单，最大的三项是字体：
+
+```
+JetBrainsMonoItalicVariable.ttf   308.89 kB
+JetBrainsMonoVariable.ttf         303.14 kB
+InterVariable.woff2               137.26 kB
+```
+
+### 二、量出结论：斜体那一档**永远不会被加载**
+
+三支证据（都是离屏真 renderer 里读出来的，不是读代码推的）：
+
+| 证据 | 读数 |
+|---|---|
+| `document.fonts` 全表 | `{"family":"JetBrains Mono","style":"italic","status":"unloaded"}` |
+| 全表扫「有没有元素算出斜体 + 等宽」 | `italicUsed: false` |
+| 全仓自有 CSS 里有没有等宽语境下的斜体规则 | **一条都没有** |
+
+⇒ 那份 TTF 随构建产物发出去，**浏览器永远不会下载它**。
+
+### 三、改法：只动**我们自己的**那一半
+
+`apps/desktop/src/renderer/vendor/dsh-claude-style/` 是上游原样包（`UPSTREAM.json` 里逐文件带 sha256）。
+**字体文件不删**——删了会破坏上游溯源。要改的是**声明**：那条 `@font-face` 住在
+`apps/desktop/src/renderer/dsh-claude-style.css`（我们的 adapter 文件，**不在**上游清单里）。
+
+删掉斜体那一行后重建，产物里已无该 TTF（构建日志 `.ttf` 行只剩 `JetBrainsMonoVariable` 303.14 kB）。
+
+**口径要说准**：`bundle-audit` 的三个账（initial 152734 / main 563628 / popout 369755）
+在清理前后**逐字节相同**——因为那些账只算 JS。省下的是**产物里的字体字节**，
+不是那三个账里的数。把它记成"main 少了 300KB"就是虚报。
+
+### 四、判据 3 条（正反俱全）
+
+| 判据 | 挡什么 |
+|---|---|
+| ★ adapter 里没有声明斜体等宽 | 把那份永不加载的 TTF 加回来 |
+| ★ 方向二：正体等宽那条**必须还在** | **为过判据删光**（代码字体是产品面的一部分） |
+| 将来若真有「等宽 + 斜体」的规则 ⇒ 点名出来 | 反向兜底：真要用时该把声明加回来 |
+
+**造红两台手工验过**（加回斜体 ⇒ 红 2；删正体 ⇒ 红 1）。
+但**没有登记成 JS 变异锚点**：被测面是 `.css`，而 `mutate-needles-check` 的
+"改法语法体检"按 **JS** 解析 `@font-face`，直接判 `Expression expected`。
+我先按常规登记，工具报「改法把源文件改坏」，于是**撤回那两条**——
+这是工具的适用面边界，不是判据弱。这段经过写进了判卷文件的注释里，谁接手都能看见为什么没有锚点。
+
+### 五、留一个给下一轮的钩子
+
+同一支探针还能回答一个更大的问题：**三个字体族里哪些权重真的被用到**。
+`Inter` 是可变字体（一个文件覆盖 100..900），而 `JetBrainsMono` 也是可变——
+这两个都是合理形态。真要继续瘦，下一个靶子是：
+`bundle-audit` 完全不看非 JS 资产 ⇒ **产物里的图片/字体/许可证有没有整块无用的**，
+目前没有任何一道门回答这个问题。那不是本页能收敛的，登记为下一轮的候选。
