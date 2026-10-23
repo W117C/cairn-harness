@@ -23457,3 +23457,70 @@ cleanOrphanWorktree(root, "worker-10", { ownedAgentIds: new Set(["worker-10"]) }
 - **取料（与页同笔入库）**：`outputs/worktrees-workspace-2026-10-23/targeted-anchor-8ffb6b62.log`、
   `outputs/worktrees-workspace-2026-10-23/supervisor-check-8ffb6b62.log`；
   认证读数在 `outputs/head-cert-8ffb6b6-2026-10-23-1439/provenance.md`。
+## 2026-10-23 · 第 691 页：`read_file` 的 `paths` 批量仍是串行——省了模型步数，没省墙钟
+
+### 一、第 477 页那条原语只做了一半
+
+`read_file` 的 `paths` 是为「模型一轮发 10 支单份读」加的：一次调用交回多份，省的是**模型步数**。
+但实现是：
+
+```ts
+for (const rel of paths) {
+  text = await readOne(ctx, rel, offsetRaw, limitRaw); // 一份读完才读下一份
+}
+```
+
+步数省了，墙钟没省：模型一次给 10 份，工具仍一份一份排队；而回执写着「一次多份」，
+用户/模型都以为这些读是并发的。第 3 点（循环内工具调度：并行、批量、失败隔离）里
+「批量」这一格只落了格式，没落调度。
+
+### 二、改法：8 路并发内核，格式与失败语义原样
+
+新增 `readBatchConcurrent(paths, read, limit = 8)`：
+
+- 固定 8 个 worker 从共享下标取下一份 ⇒ **上限有界**（磁盘与 fd 都要有界，不能 100 份全开）；
+- 每条结果按**入参下标回填** ⇒ 输出顺序仍是 `paths` 的顺序；
+- 每份 `read` 各自 try/catch，失败在原槽位写 `[读取失败] …` ⇒ 一份失败不拖整批；
+- `readBatch` 只在外面做原有的 block 抬头、50KB 总额帽、`delivered > 0` 判成功——**交付格式一字不改**。
+
+### 三、判卷：数「同时在飞几路」，不靠墙钟
+
+`tests/read-shape.test.ts` 新增：20 份假读、每份 `setTimeout(5ms)`，reader 自己记
+`active` 峰值与顺序：
+
+- 峰值 **> 1** 且 **≤ 8**（串行版峰值恒 1，这条当场红）；
+- `f7` 抛错 ⇒ `out[7].ok === false`、文案含「读取失败」，其余 19 份照常；
+- `out.map(x => x.rel)` 与入参逐字相等（并发不回填错位）。
+
+把内核的 `Math.min(limit, paths.length)` 换成 `Math.min(1, paths.length)`：这条 **1 红**；
+其余 15 条 read-shape 全绿。锚点 `read-batch-concurrency-serialized` 定向 **1／1 杀死**。
+
+### 四、读数
+
+| 面 | 读数 |
+|---|---|
+| `tests/read-shape.test.ts` | **16 条全绿** |
+| 串行版造红 | 并发峰值 1 ⇒ **1 条红** |
+| 锚点 `read-batch-concurrency-serialized` | 定向 **1／1 杀死** |
+| `pnpm mutate-needles-check` | 1613 条针脚全部可判定 |
+| `pnpm supervisor-check` | **81✅／0❌** |
+| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**；本页表长 1613，只定向跑新锚点 **1／1** |
+
+### 五、HEAD 认证读数（`099d5905`）
+
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`099d590`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- 认证树全量判卷：**487 文件／6600 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
+- 本趟墙钟 **126.10s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-099d590-2026-10-23-1445/provenance.md`）。
+- 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
+
+### 六、边界（不冒充的部分）
+
+- **没有量真实磁盘墙钟**：判卷数的是并发峰值，不是 `readOne` 的实际耗时；本地缓存会把 20 份小文件的差异抹平，
+  所以本页不声称「快了多少倍」。要报倍数，得用同一批大文件在冷缓存下量，另开一格。
+- **只并发一个 `read_file(paths)` 调用内部**：模型在同一轮发**多条独立 tool_call** 时，loop 仍是
+  `for await` 消费一条、执行一条（`src/agent/loop.ts` 顶部注释写明的既有语义）。跨 tool_call 的调度
+  本页没动；那是权限门、事件顺序与审批面一起动的另一笔，不在这一格冒充。
+- **真机未验**：这是 core 工具行为，不涉及 Electron 观感。
+- **取料（与页同笔入库）**：`outputs/read-batch-concurrency-2026-10-23/targeted-anchor-099d5905.log`、
+  `outputs/read-batch-concurrency-2026-10-23/supervisor-check-099d5905.log`；
+  认证读数在 `outputs/head-cert-099d590-2026-10-23-1445/provenance.md`。
