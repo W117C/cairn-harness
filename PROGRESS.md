@@ -23083,3 +23083,85 @@ REDKINDS=survived:0,misattributed:0,baseline-red:0,no-effect:0,syntax:0,restore-
 - **同路径残留树仍会自动删**：`createWorktree` 开头对 `wt-<agentId>` 的 `rm -rf` 是既有行为；如果那棵树里
   有未提交改动，仍会被清掉。本页没有改这一格——它是下一轮的候选，需要先量「孤儿保留」与「同 id 重试」
   两条语义怎么合。
+## 2026-10-23 · 第 686 页：同路径残留 worktree 被下一次 spawn 静默 `rm -rf`——孤儿保留语义补上最后一格
+
+### 一、同族的下一格：不是分支，是目录
+
+第 685 页修了「撞名分支被挂载」。同一条 `createWorktree` 开头还有一句更硬的：
+
+```ts
+await git(root, "worktree", "remove", "--force", rel).catch(() => {});
+await rm(worktreePathFor(root, agentId), { recursive: true, force: true });
+```
+
+注释叫「残留自愈」，理由是「同 id 撞车/上次清理失败」。但 worker 的 agentId 是**进程内**序列
+（`src/agent/orchestrator.ts:94`），进程重启后从 `worker-1` 重来；上一次崩溃留下的
+`.agents/wt-worker-1` 如果里有未提交改动，下一次 spawn 会在建新树之前把它整片删掉。
+`orphanWorktrees`（`src/agent/worktree.ts`）的本意恰恰是「列出来、**只列不自动删**，让用户决定」；
+自动 `rm -rf` 把这条语义从另一头拆了：commit 过的还在分支上，**未提交的没有第二份**。
+
+### 二、旧行为：两条判卷当场红
+
+新增两条真跑 git 的判卷（`tests/worktree-branch-reuse.test.ts`）：
+
+1. 同一 `worker-7` 先建树，写入 `a.txt` 改动与未跟踪 `wip.txt`，再调一次 `createWorktree`；
+2. 同路径先放一个普通目录 `wt-worker-8/user.txt`，再调 `createWorktree`。
+
+把守卫摘掉（回到旧实现）后：
+
+```
+× 同路径残留有未提交改动：拒绝 spawn，文件原样保留（不自动 rm -rf）
+× 同路径是认不出的普通目录：拒绝而不是删掉用户文件
+Tests  2 failed | 6 passed (8)
+```
+
+旧实现两条都会先把目录删掉再建；第一条把用户未提交的工作抹掉，第二条把用户自己的文件当垃圾。
+
+### 三、改法：脏残留 fail-visible，干净残留照旧自愈
+
+`createWorktree` 在任何删除之前先看同路径现状（新 `residueState`）：
+
+| 现状 | 判据 | 行为 |
+|---|---|---|
+| `none` | 路径不存在 | 正常建树 |
+| `clean` | 是已登记 worktree 且 `git status --porcelain` 为空 | 照旧 remove + 重建（自愈） |
+| `dirty` | `git status --porcelain` 非空（含未跟踪；读不出也算） | **抛 `WorktreeError`**，不删 |
+| `unrecognized` | 目录在但不是已登记 worktree，且非空 | **抛 `WorktreeError`**，不碰用户文件 |
+
+「是不是已登记 worktree」用第 685 页加的 `isWorktreeRoot`（`--show-toplevel` 与自身路径比对），
+不能只看 `currentBranch`（普通子目录也能读出主分支名）。会话隔离的早返回路径不受影响：
+`createSessionWorktree` 已隔离时根本不进 `createWorktree`。
+
+### 四、判卷与变异读数
+
+| 面 | 读数 |
+|---|---|
+| `tests/worktree-branch-reuse.test.ts` | **8 条全绿**（原 6 条 ＋ 脏残留/普通目录 2 条），真跑 git |
+| 旧实现造红 | 摘掉守卫 ⇒ **2 条红**，逐条见上 |
+| 锚点 `worktree-overwrites-dirty-residue` | 定向 **1／1 杀死**（0.9s） |
+| `pnpm mutate-needles-check` | 1608 条针脚全部可判定（阻断 0） |
+| `pnpm supervisor-check` | **81✅／0❌** |
+| `pnpm mutate-verify`（HEAD `a6d60ee3`，全表） | **1608／1608 杀死，0 vacuous**（1968.4s） |
+| 定向复跑（`worktree-overwrites-dirty-residue`） | **1／1 杀死** |
+
+### 五、HEAD 认证读数（`a6d60ee3`）
+
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`a6d60ee`）：25 道认证门面跑满，**红 1 道**（`docs-check`，D-5 的 21 条既有真红）；**超预算 1 道只出声**（`e2e` 5542ms > 4000ms，按规则不翻判定）。
+- 认证树全量判卷：**486 文件／6596 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增的 2 条判卷全绿。
+- 本趟墙钟 **137.29s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-a6d60ee-2026-10-23-1227/provenance.md`）。
+- 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
+
+### 六、边界（不冒充的部分）
+
+- **显式清理仍会强删**：孤儿面板的「清理」走 `cleanOrphanWorktree` → `removeWorktree` 的
+  `worktree remove --force`，本页**没有**改这条用户主动动作的语义；本页只堵「spawn 自动覆盖」。
+  要不要给显式清理加二次确认/脏树拒绝，是下一轮的裁。
+- **跨会话孤儿可见性仍未改**：`.agents/wt-*` 是 **workspace 级**目录，`scanOrphanWorktrees`
+  却只拿 `lastLogPath()` 这一个会话的事件流判终态（`src/main/state-handlers.ts`）。多会话共用
+  一个 workspace 时，另一会话正在跑的 worker 可能被列成「可清理」。本页没有量这条的现读，
+  也没改它——下一轮先量跨会话命中率，再决定按 session 分域还是按活进程过滤。
+- **真机未验**：本页全部是 worktree 文件系统与 git 行为，不涉及 Electron 观感。
+- **取料（与页同笔入库）**：`outputs/worktree-residue-2026-10-23/targeted-anchor-a6d60ee3.log`、
+  `outputs/worktree-residue-2026-10-23/mutate-verify-a6d60ee3.log`、
+  `outputs/worktree-residue-2026-10-23/supervisor-check-a6d60ee3.log`；
+  认证读数在 `outputs/head-cert-a6d60ee-2026-10-23-1227/provenance.md`。
