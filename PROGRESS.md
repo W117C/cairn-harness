@@ -22627,3 +22627,12 @@ if (!userCancelled) { /* 落 error */ }
 另外：`keepFirstSet` 把**全部 user_message** 计入受护集，插话多时压缩效率会降
 （实测每 2 拍插一句 ⇒ 受护集占 21%）。这是**有意取舍**（用户写过的话永不压缩），
 且真实使用里插话不会那么密，**不改**。
+
+### 六、HEAD 认证读数（`da7cbf40`）
+
+- 门面 **25/25** 跑到，红 **1** 道：`docs-check`（21 条 D-5 存量）。
+- `typecheck` HEAD 面 **0 报错**。
+- 判卷 **6577 条 / 2 failed**：`docs-check` 的 D-5、`mutate-needles-check` 的 `1f16bea` 归因。
+- 桌面套件 **1403 条全绿**（第 679 页是 1398 ⇒ +5）。
+- 认证树自回收 `exit=0`；**常驻残留树 0**。
+- 原始读数：`outputs/head-cert-da7cbf4-2026-10-23-0003/provenance.md`。
