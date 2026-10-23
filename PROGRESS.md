@@ -23728,3 +23728,54 @@ for (const rel of paths) {
 - **真机未验**：685–694 的桌面面仍只有 SSR/桌面全量判卷，没有 Electron 真机目验。
 - **取料（与页同笔入库）**：`outputs/full-sweep-2026-10-23/mutate-verify-0d534db4.log`；
   认证读数在 `outputs/head-cert-0d534db-2026-10-23-1545/provenance.md`。
+## 2026-10-23 · 第 696 页：任务窗格补 worker 合并/拒绝入口——`cardAction` 不再是死通道
+
+### 一、子 agent 收尾缺了最后一个按钮
+
+worker 在任务窗格里能看到 task、状态、花费、验证券与摘要；write worker 跑完后，
+`agent_result.artifacts.diff_ref` 也落了流。但渲染层**没有任何合并/拒绝入口**：
+`cardAction` 这条 invoke 通道在主进程接得齐齐整整（merge/reject/comment/clean 四路），
+渲染层却零调用点。用户看得到「改好了」，却按不了「合并」。
+
+对第 7 点（主 Loop 与子 Agent / Fork 调度）来说，这不是少一个按钮：子 agent 的产物
+在 UI 上**不可收尾**，worktree 只能留在盘上等命令行。
+
+### 二、改法：把 `agent_result` 的行号带进任务窗格
+
+- `WorkerPaneItem` 多记 `resultEventId`（`agent_result` 在会话流里的 **1-based 行号**）；
+  `projectWorkers` 遍历时用 `events.entries()` 记下；
+- `workerCardAction(agentId, sourceEventId, action)` 纯函数统一请求形状：
+  `cardId:"worker-diff-<id>"`、`cardType:"diff"`、`action:"merge"|"reject"`、`targetAgentId`；
+- `TasksPane` 对 `mode==="write" && status==="done" && resultEventId` 的卡显示「合并… / 拒绝…」，
+  二次确认后调 `window.agent.cardAction(...)`；成功/失败走 toast，不静默；
+- 确认文案分叉：合并说明「提交并合并回主工作区，冲突保留 worktree 供人工处理」；
+  拒绝说明「删除 worktree 与分支，未合并改动无法恢复」。
+
+### 三、判卷与读数
+
+| 面 | 读数 |
+|---|---|
+| `apps/desktop/tests/panes.test.ts` | 完整生命周期里 `resultEventId === 7`；`workerCardAction` 的 cardId/sourceEventId/cardType/action/targetAgentId 逐字 |
+| 锚点 `worker-card-action-cardtype-drift` | 定向 **1／1 杀死**（cardType 漂成 merge_tower） |
+| `pnpm --filter cairn-desktop test` | **207 文件／1418 条全绿** |
+| `pnpm mutate-needles-check` | 1617 条针脚全部可判定 |
+| `pnpm supervisor-check` | **81✅／0❌** |
+| 全表 `pnpm mutate-verify` | 最近一次 `0d534db4`：**1616／1616**（第 695 页）；本页表长 1617，只定向跑新锚点 **1／1** |
+
+### 四、HEAD 认证读数（`e6d6918c`）
+
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`e6d6918`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
+- 本趟墙钟 **139.14s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-e6d6918-2026-10-23-1557/provenance.md`）。
+- 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
+
+### 五、边界（不冒充的部分）
+
+- **没有做真实 merge 端到端**：判卷钉的是「请求形状 + 行号 + UI 入口」；`mergeWorker` 的真提交/冲突路径
+  仍由既有 orchestrator 判卷覆盖，本页没有在真 worker 上点过一次合并。
+- **没有 diff 预览**：任务窗格只显示 `filesChanged` 与摘要，不渲染 worker worktree 的逐 hunk diff；
+  要看 diff 得走变更窗格/命令行。合并前的「看过再合」这一格仍未接。
+- **真机未验**：按钮与二次确认的排版、暗色对比度没开 Electron 看。
+- **取料（与页同笔入库）**：`outputs/worker-merge-ui-2026-10-23/targeted-anchor-e6d6918c.log`、
+  `outputs/worker-merge-ui-2026-10-23/supervisor-check-e6d6918c.log`；
+  认证读数在 `outputs/head-cert-e6d6918-2026-10-23-1557/provenance.md`。
