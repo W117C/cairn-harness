@@ -22958,3 +22958,128 @@ TypeError: Cannot read properties of undefined (reading 'slice')
 同一台机器，差别在**当时有没有别的认证树在并行**。
 ⇒ 这佐证了第 683 页登记的那个候选：**认证读数必须带"当时有没有并行"这一维**，
 否则两次读数不可比。本页不提判据（那是另一件事），只记下这个对照。
+## 2026-10-23 · 第 685 页：三处「身份/依赖」撞车——worker 挂旧分支、会话隔离删未提交改动、六条锚点从未跑过
+
+本页从一条门红开始，最后收到验证面自己身上。三件事同属一族：**跨进程留下来的名字，被当成了
+跨进程稳定的身份**。
+
+### 一、起点：`supervisor-check` 的三条红，根不在 supervisor
+
+`pnpm supervisor-check` 稳定 **78✅／3❌**（E3／E3b／E3c）。E3 的回执只印前 60 字：
+
+```
+spawn_agent(supervise): 环 3 spawn 失败：spawn_agent: worktree 创…
+```
+
+把截断放开后是：
+
+```
+spawn_agent: worktree 创建失败（fail-visible，未造半成品 worker）：git worktree add
+.agents/wt-worker-12 agent/修复-todo-的-completedcount-worker-12 失败：
+Preparing worktree (checking out 'agent/修复-todo-的-completedcount-worker-12')
+fatal: unable to read tree (d2fc8a7278db4630b6d98a820acf7ca24f8fc8a0)
+```
+
+`d2fc8a72` 是提交 `6455bb20` 的 `src/events` 子树 —— 2026-10-22 对象库事故里永久丢失的那批对象之一
+（第 664／665／666 页已裁「接受断缝、不重写历史」）。分支本身还在，所以 `git branch --list` 看得见它、
+`git worktree add` 一碰就死。
+
+**为什么这次 spawn 会去碰一个 12 号的老分支？** 因为 `createWorktree` 的旧语义是「同名分支已存在 ⇒
+挂载它」，注释写的理由是「同 agent 重启语义」。但 worker 的 agentId 是**进程内**序列
+（`src/agent/orchestrator.ts:94` 的 `nextAgentId()`：`worker-1`、`worker-2`…，进程重启后从 1 重来），
+而分支是**跨进程**留在仓库里的。同一条任务文本在重启后再跑一次，就会撞上上次留下的
+`agent/<slug>-worker-N`——这不是「同 agent 重启」，是**两个不同的 agent 恰好重号**。
+
+### 二、撞名的两个后果，第二个更坏
+
+| 旧分支的状态 | 旧实现的行为 | 后果 |
+|---|---|---|
+| 对象已损坏（本仓现状） | `git worktree add <rel> <branch>` 失败 | 整次 spawn fail-visible（本页起点那条门红） |
+| 对象完好、但停在旧提交 | 挂载成功，`baseCommit` 却取**此刻 HEAD** | worker 在旧提交上干活；`worktreeDiff` 相对 HEAD ⇒ 把两次之间所有别人的提交算成本次「删除」，合并即回滚 |
+
+第二行不是推的：`createWorktree` 先 `rev-parse HEAD` 写 `baseCommit`，再决定挂不挂旧分支；
+`worktreeDiff` 的口径是 `git diff <baseCommit>`（`src/agent/worktree.ts` 顶部铁律与 `worktreeDiff` 注释）。
+旧分支的 tip 与 baseCommit 不一致时，diff 里必然躺着别人后来的改动。
+
+**改法**：`CreateWorktreeOptions.reuseExistingBranch` 缺省 **false**。撞名时换一个未占用的分支名
+（`agent/<slug>-2-worker-1`、`-3`…），新树恒从当前 HEAD 起。序号插在 **slug 与 agentId 之间**而不是
+追加在 id 之后，是为了让名字仍以 `-<agentId>` 结尾——`cleanOrphanWorktree` 的清理面按
+`agent/*-<agentId>` 扫并过滤 `endsWith("-" + agentId)`，追加在 id 后面会让撞名分支永远删不掉。
+会话级 worktree（`s-<sessionId>` 是稳定身份）显式传 `reuseExistingBranch: true`，保留「找回自己那棵」。
+
+### 三、同族的第二格：会话隔离的「幂等」会删掉未提交改动
+
+`createSessionWorktree` 的注释写着「幂等（残留自愈在 createWorktree 里）」，实现却是无条件走
+`createWorktree`；后者第一件事是 `git worktree remove --force` + `rm -rf` 同路径。实测探针：
+
+```
+worktree 里写下 wip.txt              ⇒ before: true
+再调一次 createSessionWorktree       ⇒ recreate ok: true
+                                     ⇒ after wip exists: false
+```
+
+一次「再点一次隔离」就把隔离树里未提交的改动整片删掉，还回 `ok:true`。这不是幂等，是数据丢失。
+
+**改法**：已隔离就**原样返回现状**（分支从树自己读）；目录在但读不出分支（坏树／半截树）⇒ **拒绝并说清**，
+让用户走「丢弃」这条显式路径，`create` 不静默重建。判断「这是一棵已登记的 worktree」不能只看
+`currentBranch`：它跑 `git rev-parse --abbrev-ref HEAD`，而 git 会**向上找**仓库根——主 checkout 里一个
+普通子目录照样能读出 `main`。新增 `isWorktreeRoot`：`--show-toplevel` 必须等于该路径本身。
+
+### 四、全表跑抓到的假守护：六条桌面插话锚点从未真正跑过
+
+`pnpm mutate-verify`（HEAD `ebeb2b49`）跑完 **1607 条**：**1601 条被杀死、6 条 vacuous**，六条正是
+上一轮加的 `desktop-steer-*`／`desktop-steering-*`：
+
+```
+REDKINDS=survived:0,misattributed:0,baseline-red:0,no-effect:0,syntax:0,restore-mismatch:0,vacuous:6
+❌ 判红·那一拍没真选中用例 ⇒ 这一条根本没判（取料坏）（6 条）
+```
+
+**根因有两层，缺一层都修不好**：
+
+1. 六条锚点没写 `config` ⇒ 脚本按**核心** `tests/vitest.config.ts` 去跑 `apps/desktop/tests/**`
+   ⇒ `No test files found`、退出码 0、选中 0 条。同文件里更早的桌面锚点都写了
+   `config: "apps/desktop/vitest.config.ts"`，这六条是后来加的，漏了。
+2. 补上 config 之后，三条 `.tsx` 锚点仍然 vacuous：变异树的依赖准备只 `cp -al node_modules` 根目录，
+   而 `apps/desktop/node_modules` 是 pnpm workspace 的包内链接（react/react-dom），树里没有它
+   ⇒ `.tsx` 判卷 import `react/jsx-dev-runtime` 直接失败、没有 `Tests` 汇总行 ⇒ 被读成「selected 未取到」。
+
+**改法**：六条补 `config`；`scripts/mutate-verify.mjs` 在切树后把 `apps/desktop/node_modules` 一并
+`cp -al`（判「装好了没」看 `.bin`，不看目录空不空——跑过一次 vitest 会留下 `.vite` 缓存，空判据会恒假）。
+
+### 五、判卷与变异读数
+
+| 面 | 读数 |
+|---|---|
+| 新增判卷 | `tests/worktree-branch-reuse.test.ts` 6 条 ＋ `tests/session-worktree-idempotent.test.ts` 2 条（真跑 git，不 mock） |
+| 撞名旧行为造红 | 回旧「挂载同名分支」⇒ **3 条红**（换名/后缀避让/别处占用各一条）；正常命名与会话复用两条反向哨兵仍绿 |
+| 幂等旧行为造红 | 去掉早返回 ⇒ **2 条红**（未提交改动消失、坏树被重建） |
+| `pnpm supervisor-check` | **78✅／3❌ → 81✅／0❌** |
+| `pnpm mutate-needles-check` | 1607 条针脚全部可判定（阻断 0） |
+| `pnpm mutate-verify`（HEAD `ebeb2b49`，全表） | 1601／1607 杀死，6 vacuous（全是上面那六条） |
+| 定向复跑（HEAD `7eb53c9f`，8 条：六条桌面插话 ＋ 本页两条） | **8／8 杀死**，selector 坏拍 0 |
+| `pnpm mutate-verify`（HEAD `ca675c20`，全表） | **1607／1607 杀死，0 vacuous**（1881.9s） |
+| 定向复跑（HEAD `ca675c20`，同 8 条） | **8／8 杀死**，selector 坏拍 0（6.5s） |
+
+### 六、HEAD 认证读数（`ca675c20`）
+
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`ca675c2`）：25 道认证门面跑满，**红 1 道**（`docs-check`，原因＝D-5 的 21 条，业主已裁保留）；**超预算 0 道**。
+- 认证树上的全量判卷：**486 文件／6594 项，2 失败**——`docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因，两笔都是 2026-10-22 对象库事故的既有真红，不是本页引入（第 664／670 页同形）。
+- 本趟墙钟 **113.33s**（同一进程 hrtime，口径＝起跑→汇总；引用前先读 `outputs/head-cert-ca675c2-2026-10-23-1133/provenance.md`）。
+- 退出码 1：这是 head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），**不把这条读成本页的绿**。
+
+### 七、边界（不冒充的部分）
+
+- **对象库不修**：`d2fc8a72` 等丢失对象来自 2026-10-22 事故，业主已裁「接受断缝、不重写、不 graft」
+  （第 665／666 页）。本页只让新 worker 不再撞上那根断枝；那条坏分支原样留着。
+- **真机未验**：本页的桌面部分只跑无头判卷（`.tsx` SSR／纯函数），没有 Electron 真机帧时间或观感读数。
+- **全表口径**：`mutate-verify` 量的是提交 `ca675c20` 的树；工作树里 `outputs/` 未跟踪件与 `ab.py` 未参与。
+- **取料（与页同笔入库）**：`outputs/worktree-identity-2026-10-23/mutate-verify-ebeb2b49.log`、
+  `outputs/worktree-identity-2026-10-23/mutate-verify-7eb53c9f.log`、
+  `outputs/worktree-identity-2026-10-23/mutate-verify-ca675c20.log`、
+  `outputs/worktree-identity-2026-10-23/targeted-anchors-ca675c20.log`、
+  `outputs/worktree-identity-2026-10-23/supervisor-check-ca675c20.log`；
+  认证读数在 `outputs/head-cert-ca675c2-2026-10-23-1133/provenance.md`。
+- **同路径残留树仍会自动删**：`createWorktree` 开头对 `wt-<agentId>` 的 `rm -rf` 是既有行为；如果那棵树里
+  有未提交改动，仍会被清掉。本页没有改这一格——它是下一轮的候选，需要先量「孤儿保留」与「同 id 重试」
+  两条语义怎么合。
