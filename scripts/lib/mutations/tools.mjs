@@ -1014,6 +1014,15 @@ export const MUTATIONS = [
     expectFail: "path 与 paths 同时给 ⇒ 拒绝（两条路读出来的东西不一样，不许静默选一条）",
   },
   {
+    id: "read-batch-concurrency-serialized",
+    src: "src/tools/read_file.ts",
+    test: "tests/read-shape.test.ts",
+    desc: "并发内核退回 1 路 ⇒ `paths` 只省模型步数、不省墙钟；模型一次给 10 份仍然一份一份排队，"
+      + "而界面与回执都写着「一次多份」，用户以为读完了其实还在磁盘上排队",
+    apply: (s) => s.replace("Math.min(limit, paths.length)", "Math.min(1, paths.length)"),
+    expectFail: "并发内核：保序、并发上限 8、一份失败不拖整批（数同时在飞的路数，不靠墙钟）",
+  },
+  {
     id: "read-batch-all-failed-still-ok",
     src: "src/tools/read_file.ts",
     test: "tests/read-shape.test.ts",
