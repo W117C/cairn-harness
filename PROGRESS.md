@@ -23678,3 +23678,53 @@ for (const rel of paths) {
 - **取料（与页同笔入库）**：`outputs/license-status-2026-10-23/targeted-anchor-ebb2ece3.log`、
   `outputs/license-status-2026-10-23/supervisor-check-ebb2ece3.log`；
   认证读数在 `outputs/head-cert-ebb2ece-2026-10-23-1504/provenance.md`。
+## 2026-10-23 · 第 695 页：十页之后的全表扫回——1616 条锚点与 685–694 的改动面
+
+### 一、为什么要有这一页
+
+第 687 页的全表跑停在 `ccf021da` 的 **1610 条**。此后又落了七页、加了六条锚点：
+
+| 页 | 落点 | 新增锚点 |
+|---|---|---|
+| 688 | `cleanOrphanWorktree` 的归属闸 | `orphan-clean-ignores-live-owner` |
+| 689 | 工作树页（`worktree.orphans` 接 UI） | `worktrees-page-orphan-list-emptied` |
+| 691 | `read_file(paths)` 8 路并发 | `read-batch-concurrency-serialized` |
+| 692 | 孤儿面板 dirty 标签 | `worktrees-dirty-badge-hidden` |
+| 693 | 空白项目入口 | `blank-project-routes-to-template` |
+| 694 | 许可证状态上屏 | `license-label-always-inactive` |
+
+表长 **1616**。这些改动跨 core（worktree/read_file）与 desktop（三处 UI），单条定向跑只能证明「新锚点杀得死」，
+证明不了「旧锚点没被这十页的改动碰坏」。所以这一页只做一件事：**在最终 HEAD 上重跑全表**。
+
+### 二、全表读数
+
+| 面 | 读数 |
+|---|---|
+| `pnpm mutate-verify`（HEAD `0d534db4`，全表） | ****1616／1616 杀死，0 vacuous**（2219.5s）** |
+| `pnpm mutate-needles-check` | 1616 条针脚全部可判定（阻断 0） |
+| `pnpm supervisor-check` | **81✅／0❌** |
+| `pnpm --filter cairn-desktop test` | **207 文件／1417 条全绿** |
+
+### 三、HEAD 认证读数（`0d534db4`）
+
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`0d534db`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页没有新增判卷。
+- 本趟墙钟 **139.45s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-0d534db-2026-10-23-1545/provenance.md`）。
+- 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
+
+### 四、这十页改了什么（一句话版）
+
+- **685–688**：worker 撞名不挂旧分支、会话隔离不删未提交、脏残留不自动 `rm -rf`、`clean` 不删仍有归属的树；
+- **689–690**：`worktree.orphans` 从死协议接成工作树页，清理带显式 workspace；
+- **691**：`read_file(paths)` 批量从串行改 8 路并发（保序、失败隔离、50KB 帽不变）；
+- **692**：孤儿面板显示每棵树有没有未提交改动；
+- **693**：新建项目补「空白项目」卡，`createProject` 通道不再死；
+- **694**：关于页显示许可证四态。
+
+### 五、边界（不冒充的部分）
+
+- **全表量的是提交 `0d534db4`**：工作树里 `outputs/` 未跟踪件与 `ab.py` 未参与；`mutate-verify` 改的是提交的树。
+- **没有新增代码**：这一页只跑读数；任何红都在本节之前处理，不把全表当「新功能」。
+- **真机未验**：685–694 的桌面面仍只有 SSR/桌面全量判卷，没有 Electron 真机目验。
+- **取料（与页同笔入库）**：`outputs/full-sweep-2026-10-23/mutate-verify-0d534db4.log`；
+  认证读数在 `outputs/head-cert-0d534db-2026-10-23-1545/provenance.md`。
