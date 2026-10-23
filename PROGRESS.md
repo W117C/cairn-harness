@@ -23880,3 +23880,52 @@ worker 在任务窗格里能看到 task、状态、花费、验证券与摘要�
 - **取料（与页同笔入库）**：`outputs/worker-diff-preview-2026-10-24/targeted-anchor-b0948d6a.log`、
   `outputs/worker-diff-preview-2026-10-24/supervisor-check-b0948d6a.log`；
   认证读数在 `outputs/head-cert-b0948d6-2026-10-23-1609/provenance.md`。
+## 2026-10-23 · 第 699 页：worker 改动预览从整段 `<pre>` 进到逐 hunk——`parseUnifiedPatch` 接既有 DiffView
+
+### 一、第 698 页的预览只是「把 patch 原样倒出来」
+
+第 698 页给任务窗格加了「查看改动…」，modal 里是 `<pre>{patch}</pre>`：
+能看，但看不出 hunk 边界、行号、增删符号；大 patch 是一堵墙。既有 `DiffView`
+（色盲冗余：颜色之外 +/−/空格始终在场；行号；截断语义）已经写好，缺的只是
+「git patch → DiffHunkView」这一层纯解析。
+
+### 二、改法：`parseUnifiedPatch` 纯函数
+
+`apps/desktop/src/renderer/diff-patch.ts`：
+
+- `@@ -a,b +c,d @@` 解析成 hunk 头，记两侧起始行号；
+- `+` / `-` / 空格三类行分别成 `add` / `del` / `ctx`，`oldNo`/`newNo` 按行推进；
+- `\ No newline at end of file` 跳过；`diff --git` / `---` / `+++` / `index` 文件头不进 hunk；
+- 解析不出任何 hunk ⇒ 返回 `[]`，界面**回落原文 `<pre>`**——不把「没解析」说成「没有差异」。
+
+TasksPane 的 modal：有 hunks ⇒ `<DiffView hunks={...} />`；否则仍显示原 patch。
+
+### 三、判卷与读数
+
+| 面 | 读数 |
+|---|---|
+| `apps/desktop/tests/diff-patch.test.ts` | 文件头跳过、三类行与行号、多 hunk、`\ No newline`、空输入回落 |
+| 锚点 `diff-patch-add-lines-dropped` | 定向 **1／1 杀死**（不认 + 行 ⇒ 新增内容整片消失） |
+| `pnpm --filter cairn-desktop test` | **209 文件／1422 条全绿** |
+| `pnpm mutate-needles-check` | 1620 条针脚全部可判定 |
+| `pnpm supervisor-check` | **81✅／0❌** |
+| 全表 `pnpm mutate-verify` | 最近一次 `0d534db4`：**1616／1616**；本页表长 1620，只定向跑新锚点 **1／1** |
+
+### 四、HEAD 认证读数（`e9cfb134`）
+
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`e9cfb13`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- 认证树全量判卷：**487 文件／6603 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
+- 本趟墙钟 **110.42s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-e9cfb13-2026-10-23-1613/provenance.md`）。
+- 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
+
+### 五、边界（不冒充的部分）
+
+- **只认 unified diff**：二进制补丁（`Binary files differ`）没有 hunk，会回落 `<pre>` 原文；
+  `\ No newline` 只跳过、不单独标注。解析器不校验 hunk 头里的行数，坏 patch 可能少行——
+  调用方仍能看原文，不会假报「没有差异」。
+- **大 patch 仍是整段 DOM**：DiffView 会逐 hunk/逐行渲染，但没有虚拟滚动；第 698 页记的
+  32MB 帽与这个成本都还在。
+- **真机未验**：hunk 视图的暗色对比度/长行换行没开 Electron 看。
+- **取料（与页同笔入库）**：`outputs/worker-diff-view-2026-10-24/targeted-anchor-e9cfb134.log`、
+  `outputs/worker-diff-view-2026-10-24/supervisor-check-e9cfb134.log`；
+  认证读数在 `outputs/head-cert-e9cfb13-2026-10-23-1613/provenance.md`。
