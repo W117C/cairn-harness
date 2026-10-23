@@ -20,6 +20,7 @@ import {
   commitAndMerge,
   createWorktree,
   currentBranch,
+  isWorktreeRoot,
   removeWorktree,
   type MergeOutcome,
 } from "../agent/worktree";
@@ -75,7 +76,14 @@ export interface SessionWorktreeCreated {
   error?: string;
 }
 
-/** 建隔离工作区：base = 当前 HEAD，分支 `agent/<slug>-s-<sid>`。幂等（残留自愈在 createWorktree 里）。 */
+/** 建隔离工作区：base = 当前 HEAD，分支 `agent/<slug>-s-<sid>`。
+ *
+ *  **幂等 = 已隔离就原样返回，绝不重建**（2026-10-23 实测修正）：旧实现无条件调 `createWorktree`，
+ *  而它第一件事是 `git worktree remove --force` + `rm -rf` 同路径 —— 于是“再点一次隔离”
+ *  会把那棵树里**未提交的改动**整片删掉，还回 `ok:true`。实测：worktree 里写下 wip.txt，
+ *  第二次 createSessionWorktree 之后 `existsSync(wip.txt) === false`。
+ *  ⇒ 已隔离且能读出分支 ⇒ 直接返回现状；目录在但读不出分支（坏树/半截树）⇒ **拒绝并说清**，
+ *  让用户走「丢弃」这条显式路径，而不是让 create 静默删掉可能有用的文件。 */
 export async function createSessionWorktree(
   root: string,
   sessionId: string,
@@ -84,10 +92,21 @@ export async function createSessionWorktree(
   if (!isSafeWorktreeSessionId(sessionId)) {
     return { ok: false, error: `会话 id 不适合进 git 分支名：${sessionId}` };
   }
+  const wtPath = sessionWorktreePath(root, sessionId);
+  if (await isSessionIsolated(root, sessionId)) {
+    const branch = (await isWorktreeRoot(wtPath)) ? await currentBranch(wtPath) : null;
+    if (branch !== null) {
+      return { ok: true, path: wtPath, branch };
+    }
+    return {
+      ok: false,
+      error: `隔离目录已存在但不是可识别的 git worktree：${wtPath}——先检查或丢弃，create 不会静默重建（那会删掉里面的文件）`,
+    };
+  }
   try {
     // 主 checkout 的 `.agent` 必须先存在才链得上；不存在就建（它本来也是首跑就会建的那只目录）。
     await mkdir(join(root, ".agent"), { recursive: true });
-    const created = await createWorktree(root, sessionAgentId(sessionId), title, [".agent"]);
+    const created = await createWorktree(root, sessionAgentId(sessionId), title, [".agent"], { reuseExistingBranch: true });
     return {
       ok: true,
       path: join(root, created.worktree),

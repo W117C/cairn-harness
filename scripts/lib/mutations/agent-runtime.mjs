@@ -69,6 +69,23 @@ export const MUTATIONS = [
     apply: (s) => s.replace('      if (trimmed === "") return; // 误触不进货', "      // 误触也进货"),
     expectFail: "纯空白 / 空串不进货（误触不该变成一条空洞的指令）",
   },
+  // ---- worker worktree 分支撞名（2026-10-23）：agentId 是进程内序列，分支是跨进程的 ----
+  {
+    id: "session-worktree-recreate-destroys-wip",
+    src: "src/main/session-worktree.ts",
+    test: "tests/session-worktree-idempotent.test.ts",
+    desc: "已隔离仍走重建（createWorktree 开头 rm -rf 同路径）⇒ 隔离树里未提交的改动被整片删掉，还回 ok:true——「幂等」名义下的一次数据丢失",
+    apply: (s) => s.replace("  if (await isSessionIsolated(root, sessionId)) {", "  if (false) {"),
+    expectFail: "已隔离再调用：返回现状，未提交改动还在（旧实现会删掉并回 ok）",
+  },
+  {
+    id: "worktree-reuses-stale-agent-branch",
+    src: "src/agent/worktree.ts",
+    test: "tests/worktree-branch-reuse.test.ts",
+    desc: "撞名时挂载旧分支（旧语义）⇒ 进程重启后重号的 worker 站在旧提交上干活，baseCommit 却是当前 HEAD（diff 反向吃掉别人的提交）；旧分支对象损坏时整次 spawn 直接失败",
+    apply: (s) => s.replace("    if (opts.reuseExistingBranch === true) {", "    if (true) {"),
+    expectFail: "撞名：换名新建，新树从当前 HEAD 起，旧分支原样不动",
+  },
   // ---- 工具返回畸形结构（2026-10-23）：插件/MCP 工具是运行期对象，类型上的 output:string 管不到 ----
   {
     id: "stuck-observation-trusts-string-type",

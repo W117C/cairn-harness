@@ -112,25 +112,59 @@ export interface CreatedWorktree {
   symlinkWarnings: string[];
 }
 
+export interface CreateWorktreeOptions {
+  /** 同名分支已存在时是否挂载它（缺省 **false**）。
+   *
+   *  为什么缺省不许复用：worker 的 agentId 是**进程内**序列（`worker-1`、`worker-2`…，
+   *  `orchestrator.ts#nextAgentId`），进程重启后从 1 重来；而分支是**跨进程**留在仓库里的。
+   *  同一条任务文本再跑一次 ⇒ `agent/<slug>-worker-1` 撞上上次留下的同名分支：
+   *  挂载它会让 worker 在**旧提交**上干活，而 `baseCommit` 取的是此刻 HEAD ⇒ 产出的 diff 把
+   *  两次之间所有别人的提交都“反向”算进本次改动（合并即回滚），或在该分支仍被别的 worktree
+   *  占用时直接 `already checked out` 失败。两种都比“换一个分支名”坏。
+   *  ⇒ 缺省改为**给撞名的树换一个未占用的分支名**（`-2`/`-3`…），新树恒从当前 HEAD 起。
+   *
+   *  会话级 worktree 是另一回事：`s-<sessionId>` 是**稳定身份**，调用方明确要“找回自己那棵”
+   *  时才传 true（见 `session-worktree.ts`）。 */
+  reuseExistingBranch?: boolean;
+}
+
 /** spawn 批准后的 worktree 创建：base = 当前 HEAD → worktree add -b → symlink gitignored 目录。
- *  幂等加固：同路径残留（同 id 撞车/上次清理失败）先清 git 注册与目录再建；分支已存在则挂载而非重建。 */
+ *  幂等加固：同路径残留（同 id 撞车/上次清理失败）先清 git 注册与目录再建；同名分支按
+ *  `CreateWorktreeOptions.reuseExistingBranch` 决定“挂载”还是“换名新建”（缺省后者）。 */
 export async function createWorktree(
   root: string,
   agentId: string,
   task: string,
   /** 额外要链回主 checkout 的目录（会话层用它链 `.agent`：配置/权限/记忆/会话根必须同源）。 */
   extraSymlinks: readonly string[] = [],
+  opts: CreateWorktreeOptions = {},
 ): Promise<CreatedWorktree> {
   const baseCommit = (await git(root, "rev-parse", "HEAD")).trim();
-  const branch = branchForAgent(task, agentId);
   const rel = join(WORKTREE_ROOT_DIR, "wt-" + agentId);
   // 残留自愈（fail-visible 于 add 失败）：先清 git 注册（ignore 失败）再清目录
   await git(root, "worktree", "remove", "--force", rel).catch(() => {});
   await rm(worktreePathFor(root, agentId), { recursive: true, force: true });
-  // 分支已存在（同 agent 重启语义）→ 挂载既有分支；否则 -b 新建
-  const branchExists = await git(root, "rev-parse", "--verify", "--quiet", branch).then(() => true, () => false);
-  if (branchExists) await git(root, "worktree", "add", rel, branch);
-  else await git(root, "worktree", "add", rel, "-b", branch);
+  const preferred = branchForAgent(task, agentId);
+  const exists = async (name: string): Promise<boolean> =>
+    git(root, "rev-parse", "--verify", "--quiet", name).then(() => true, () => false);
+  let branch = preferred;
+  if (await exists(preferred)) {
+    if (opts.reuseExistingBranch === true) {
+      await git(root, "worktree", "add", rel, preferred);
+    } else {
+      // 撞名 ⇒ 换一个没被占用的分支名（不挂载旧分支：见 CreateWorktreeOptions 的注释）。
+      // 序号插在 **slug 之后、agentId 之前**（`agent/<slug>-2-worker-1`），不是追加在 id 后面：
+      // 孤儿清理按 `agent/*-<agentId>` 扫并过滤 `endsWith("-" + agentId)`，名字仍以 id 结尾才收得走。
+      const idTail = "-" + agentId;
+      const stem = preferred.endsWith(idTail) ? preferred.slice(0, -idTail.length) : preferred;
+      let n = 2;
+      while (await exists(stem + "-" + String(n) + idTail)) n++;
+      branch = stem + "-" + String(n) + idTail;
+      await git(root, "worktree", "add", rel, "-b", branch);
+    }
+  } else {
+    await git(root, "worktree", "add", rel, "-b", branch);
+  }
   const symlinkWarnings = await linkGitignoredDirs(root, worktreePathFor(root, agentId), extraSymlinks);
   await ensureGitignoreAgents(root);
   return { worktree: rel, branch, baseCommit, symlinkWarnings };
@@ -292,6 +326,22 @@ export async function removeWorktree(root: string, agentId: string, opts: { keep
     }
   }
   return { removed, branchDeleted, ...(error ? { error } : {}) };
+}
+
+/** 这个路径本身是不是一棵已登记的 worktree 的根（而不是主 checkout 里的普通子目录）。
+ *
+ *  为什么不能只看 `currentBranch`：它跑 `git rev-parse --abbrev-ref HEAD`，而 git 会**向上找**仓库根——
+ *  一个位于主 checkout 内、没登记为 worktree 的普通目录，照样能读出主分支名（实测返回 `main`）。
+ *  拿它当「这是我们的隔离树」的证据，就等于把用户随手建的目录认成自己的（随后可能被重建删掉）。
+ *  ⇒ 用 `--show-toplevel` 与实际路径比：普通子目录会得到主 checkout 根，两者不等。 */
+export async function isWorktreeRoot(wtPath: string): Promise<boolean> {
+  try {
+    const { realpath } = await import("node:fs/promises");
+    const top = (await git(wtPath, "rev-parse", "--show-toplevel")).trim();
+    return top !== "" && (await realpath(top)) === (await realpath(wtPath));
+  } catch {
+    return false;
+  }
 }
 
 /** worktree 当前分支（会话合并卡用：分支名里带任务 slug，记不住就别猜——从树自己读）。
