@@ -9,7 +9,10 @@ import { isMainSessionTerminalEvent, isWorkerSubflowEvent, userVisibleText } fro
 // 事件不成轮）；assistant 行带 eventId（事件在会话 JSONL 里的 1-based 行号，赞/踩的锚）。
 // v7 行面补钉：assistant 行也带 round（它所属的用户轮——「从这条回复分支」= fork 保留到该轮）。
 export type StreamRow =
-  | { kind: "user"; text: string; ts?: number; seq: number; round: number; attachments?: readonly { path: string; kind: "file" | "directory" }[] }
+  | { kind: "user"; text: string; ts?: number; seq: number; round: number; attachments?: readonly { path: string; kind: "file" | "directory" }[]
+      /** 第 9 点·轮中插话：这条是同一轮里补的话，不是新任务（见文件头轮界分流那段）。
+       *  缺席 = 普通用户轮次（既有形状，字节不变）。 */
+      steering?: true }
   | { kind: "assistant"; text: string; live?: boolean; thinking?: string; ts?: number; seq: number; eventId: number; round: number } // live=true = delta 流式中尚未被终稿取代的未结桶行；thinking = 同一 callId 下累计的思考正文
   | { kind: "tool"; tool: string; summary: string; path?: string; args?: string; output?: string; outputTruncated?: boolean; pending?: boolean; interrupted?: boolean; ok?: boolean; ts?: number; seq: number
       /** tool_result 收口的到达时间（P3-1 折叠行耗时 = then − ts；拿不到不显）。 */

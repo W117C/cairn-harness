@@ -24,7 +24,7 @@ describe("转录里的插话：显示，但不开新轮", () => {
     ]), true);
     const userRows = rows.filter((r) => r.kind === "user");
     expect(userRows).toHaveLength(2); // 显示：两条都在
-    expect(Math.max(...rows.map((r) => r.round ?? 0)), "同一轮被劈成两轮").toBe(1);
+    expect(Math.max(...rows.map((r) => (r.kind === "user" || r.kind === "assistant" ? r.round ?? 0 : 0))), "同一轮被劈成两轮").toBe(1);
   });
 
   it("★ 插话仍显示，且被标成插话（不是悄悄丢掉）", () => {
@@ -43,7 +43,7 @@ describe("转录里的插话：显示，但不开新轮", () => {
       { type: "assistant_message", content: "完" },
       { type: "user_message", content: "第二轮" },
     ]), true);
-    expect(Math.max(...rows.map((r) => r.round ?? 0))).toBe(2);
+    expect(Math.max(...rows.map((r) => (r.kind === "user" || r.kind === "assistant" ? r.round ?? 0 : 0)))).toBe(2);
   });
 
   it("sidechat / goal 来源照旧推轮（只有 steering 是例外）", () => {
@@ -51,7 +51,7 @@ describe("转录里的插话：显示，但不开新轮", () => {
       { type: "user_message", content: "第一轮" },
       { type: "user_message", content: "提升过来的", origin: { kind: "sidechat", session_id: "s", source_event_ids: [1] } },
     ]), true);
-    expect(Math.max(...rows.map((r) => r.round ?? 0))).toBe(2);
+    expect(Math.max(...rows.map((r) => (r.kind === "user" || r.kind === "assistant" ? r.round ?? 0 : 0)))).toBe(2);
   });
 });
 

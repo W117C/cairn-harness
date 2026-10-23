@@ -223,7 +223,8 @@ interface WorkbenchViewDeps {
   injectedTextSeq: number;
   draftRemap: { from: string; to: string; seq: number; } | undefined;
   draftRestore: { forSession: string | null; text: string; attachments: RunAttachmentReference[]; seq: number; } | undefined;
-  sendWithGoal: (text: string, attachments: RunAttachmentReference[]) => void;
+  /** 第三参 `forceQueue`（第 9 点）：只入队、不插话（「加入队列」钮专用）。 */
+  sendWithGoal: (text: string, attachments: RunAttachmentReference[], forceQueue?: boolean) => void;
   configuredProviders: Set<string> | undefined;
   thinkingBySession: MutableRefObject<Map<string, string>>;
   /** 空屏上选的思考档（下一条新会话起点）；activeId 为 null 时 Composer 显示它。 */
@@ -765,7 +766,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
               injectedTextSeq={injectedTextSeq}
               draftRemap={draftRemap}
               {...(draftRestore !== undefined ? { restoreDraft: draftRestore } : {})}
-              onSend={(t, attachments, forceQueue) => { sendWithGoal(t, attachments, forceQueue); }}
+              onSend={(t, attachments, forceQueue) => { sendWithGoal(t, attachments, forceQueue ?? false); }}
               onCancel={() => { if (activeId !== null) cancelRunHeal(activeId); }}
               onPickDirectory={() => window.agent.pickDirectory()}
               onPickFiles={() => window.agent.pickFiles()}

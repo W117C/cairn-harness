@@ -3,6 +3,12 @@
 const { contextBridge } = require("electron");
 
 const reply = (v) => () => new Promise((res) => setTimeout(() => res(typeof v === "function" ? v() : v), 30));
+// 第 9 点冒烟的断言面：渲染层调过 runSteer 的**原始参数**。走 contextBridge 暴露
+// （preload 与 renderer 不共享 globalThis，直接挂 globalThis 在 renderer 侧读不到——第一版就错在这里）。
+const cairnSteers = [];
+/** 第 9 点冒烟：真 run 的调用记录（判「空闲回车起了一轮 / 运行中回车没起新一轮」）。 */
+const cairnRuns = [];
+let cairnHoldRun = null;
 
 const now = Date.now();
 const mkMarkdown = [
@@ -131,7 +137,17 @@ const stub = {
   pickDirectory: reply(null),
   openSession: reply({ events: EVENTS }),
   createSession: reply({ id: "s2" }),
-  run: reply({ ok: true }),
+  // 第 9 点冒烟：`run` **可以挂住不返回**（`--cairn-steer-fixture` 时）。
+  // 为什么必须挂住：活动会话的 running 置位只在 `send()` 那条路里、run 返回后立刻摘掉
+  // （session-subscription.ts 的注释：「运行集口径」）。桩若 30ms 就返回，运行态根本立不住，
+  // 于是"运行中按回车"永远测不到——第一版冒烟就死在这里，而它看起来像产品缺陷。
+  run: process.argv.includes("--cairn-steer-fixture")
+    ? (req) => new Promise((res) => {
+        // 记录每次真 run（冒烟据此判「这一拍到底有没有起新一轮」）
+        cairnRuns.push({ message: req && req.message, sessionId: req && req.sessionId });
+        cairnHoldRun = res; // 冒烟可手动放行
+      })
+    : reply({ ok: true }),
   runCancel: reply({ ok: true }),
   decide: reply(true),
   decidePlan: reply(true),
@@ -156,6 +172,16 @@ const stub = {
   // 发送队列 sidecar：返回数组字段，否则渲染层 .map 会炸（此前落在兜底 {} ⇒ 首屏挂错误条）。
   queueGet: reply({ items: [] }),
   queueSet: reply({ ok: true }),
+  // 第 9 点·轮中插话：**必须有真实现**，否则落到下方兜底 `reply({})` ⇒ 渲染层读
+  // `steered.ok === true` 得 undefined ⇒ 运行中回车永远走「入队」，插话那条路在离屏界面里
+  // 一次都走不到（实测形态：gallery 里按回车只会看到队列条，看不到「已插话到本轮」）。
+  // 这里把每次调用记进 window.__cairnSteers，供 smoke 断言"渲染层真的调了它、且带了什么话"。
+  runSteer: (sessionId, text) => new Promise((res) => setTimeout(() => {
+    // 记录写在 **contextBridge 暴露的那个**对象上：preload 与 renderer 是两个上下文，
+    // `globalThis` 不共享（第一版就写错在这里：调用成功而 __cairnSteers 恒 null）。
+    cairnSteers.push({ sessionId, text });
+    res({ ok: true, queued: 1 });
+  }, 30)),
   // 能力读数（设置页「模型与 Provider」分区读它）：search/vision 是必填字段，
   // 兜底的 {} 会让渲染层读 cap.search.kind 时抛 "reading 'kind'"。
   capabilities: reply({
@@ -172,6 +198,9 @@ const stub = {
 // 要目验那格就得**能推事件进去**。主进程经 executeJavaScript 调 __cairnPushEvent。
 const eventListeners = new Set();
 stub.onEvent = (fn) => { eventListeners.add(fn); return () => eventListeners.delete(fn); };
+contextBridge.exposeInMainWorld("__cairnSteers", () => cairnSteers.slice());
+contextBridge.exposeInMainWorld("__cairnRuns", () => cairnRuns.slice());
+contextBridge.exposeInMainWorld("__cairnReleaseRun", (v) => { if (cairnHoldRun) { const r = cairnHoldRun; cairnHoldRun = null; r(v ?? { ok: true }); } });
 contextBridge.exposeInMainWorld("__cairnPushEvent", (event) => {
   for (const fn of eventListeners) { try { fn(event); } catch { /* 一个订阅者抛了不该挡住别人 */ } }
 });

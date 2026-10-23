@@ -390,7 +390,8 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // 非 T5 遗留——传参语义已是真实可选参透传，cast 只发生在类型面。
   runCancel: (sessionId) => host.cancel(sessionId as string),
   // 第 9 点·轮中插话：host.steer 只在会话真在跑时返回 ok（否则 fail-visible，渲染层转「入队」）。
-  runSteer: (sessionId, text) => host.steer(sessionId, text),
+  // 洗参与 runCancel 同一条房式（wired 表形参上下文是 unknown；cast 只发生在类型面）。
+  runSteer: (sessionId, text) => host.steer(sessionId as string, text as string),
   listSessions: async () => { await projectRehydrate; return host.listSessions(); },
   // v14：跨会话用量账本（只读；面板点「全部会话」才调）。
   usageLedger: () => host.usageLedger(),

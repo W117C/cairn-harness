@@ -90,6 +90,10 @@ export interface KernelHost {
    *  该会话不在运行 ⇒ { ok:false, error:"会话不在运行" }。不再走 M2 全局缝 handleRunCancel
    *  （那只认最后注册的 interactiveRunAbort——并发会话下取消的是最后启动的那场，杀错对象）。 */
   cancel(sessionId: string): Promise<{ ok: boolean; error?: string }>;
+  /** 第 9 点·轮中插话：把用户这句话递进**正在跑**的那一轮（不发新 run、不改轮次）。
+   *  会话不在跑 ⇒ `{ ok:false, error }` fail-visible：渲染层据此回落为「入队」，
+   *  而不是假装送进去了（两种结局在界面上必须分得开）。 */
+  steer(sessionId: string, text: string): Promise<{ ok: boolean; error?: string; queued?: number }>;
   /** 会话级 worktree 隔离（§3.7 · G4）：create / merge / discard。
    *  三条都先按会话归属解析工作区（与 run 同一张归属表），并在该会话**正在跑**时拒绝——
    *  run 正在那棵树里写东西，此刻合并/删除等于把脚下的地板抽走。 */
@@ -571,7 +575,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
     // 第 9 点·轮中插话：把用户这句话递进**正在跑**的那一轮的收件盒。
     // 不在跑 ⇒ fail-visible（渲染层据此把消息转成「入队」而不是假装送进去了）：
     // 「送进去了但其实没人收」比明说「这一轮已经结束」坏得多。
-    steer: async (sessionId, text) => {
+    steer: async (sessionId: string, text: string) => {
       const box = runSteering.get(sessionId);
       if (box === undefined) return { ok: false, error: "会话不在运行（插话无人接收）" };
       box.push(text);
