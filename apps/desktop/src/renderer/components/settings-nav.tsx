@@ -47,6 +47,7 @@ export const SECTION_KEYWORDS: Readonly<Record<SectionId, string>> = {
   automation: "自动化 定时 任务 调度 计划任务 cron",
   skills: "技能 skill 命令 斜杠",
   memory: "记忆 memory 上下文",
+  worktrees: "工作树 worktree 孤儿 清理 分支",
   about: "关于 更新 版本 诊断 日志 更新源 manifest",
 };
 
