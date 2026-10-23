@@ -174,6 +174,19 @@ export const MUTATIONS = [
     expectFail: "工作树页：孤儿逐条列出 + 清理按钮；空态不摆假列表",
   },
   {
+    id: "license-label-always-inactive",
+    src: "apps/desktop/src/renderer/components/settings-sections.tsx",
+    test: "apps/desktop/tests/settings-sections.test.tsx",
+    config: "apps/desktop/vitest.config.ts",
+    desc: "许可证有效也显示「未激活」⇒ 用户以为自己的 license 没生效，而主进程其实验过了；"
+      + "四态被压成一态，设置页的「许可证」行就成了装饰",
+    apply: (s) => s.replace(
+      'case "valid": return state.expiresAt === null ? "有效 · " + state.licensee : "有效 · " + state.licensee + " · 至 " + state.expiresAt;',
+      'case "valid": return "未激活";',
+    ),
+    expectFail: "valid / expired / invalid / inactive 各有话说，未读取不冒充未激活",
+  },
+  {
     id: "blank-project-routes-to-template",
     src: "apps/desktop/src/renderer/state/projects.ts",
     test: "apps/desktop/tests/new-project-blank.test.tsx",

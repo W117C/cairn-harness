@@ -127,6 +127,7 @@ export function SettingsPanel(props: {
   const [settings, setS] = useState<AppSettings | null>(null);
   const [status, setStatus] = useState<{ available: boolean; stored: string[]; envActive: boolean }>({ available: true, stored: [], envActive: false });
   const [about, setAbout] = useState<{ version: string } | null>(null);
+  const [license, setLicense] = useState<import("../../../../../src/main/license").LicenseState | null>(null);
   // 能力在场性读数（搜索端点配没配）。null = 还没问到 / 问失败——那一格显示「读不到」，
   // 不显示「已配」：把读不到当成配好，正是这个面板要修的那类假象。
   const [cap, setCap] = useState<CapabilityReadout | null>(null);
@@ -169,7 +170,7 @@ export function SettingsPanel(props: {
 
   useEffect(() => {
     refresh();
-    void window.agent.getState().then((s) => setAbout(s.about ?? null)).catch(() => setAbout(null));
+    void window.agent.getState().then((s) => { setAbout(s.about ?? null); setLicense(s.license ?? null); }).catch(() => setAbout(null));
     void window.agent.capabilities().then(setCap).catch(() => setCap(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -430,6 +431,7 @@ export function SettingsPanel(props: {
                 updateMsg={updateMsg}
                 onCheckUpdate={checkUpdate}
                 updateManifestUrl={settings?.updateManifestUrl ?? ""}
+                license={license}
                 onSaveManifest={(url) => { void saveSettingKey("updateManifestUrl", url); }}
               />
               {/* 有新版时给出**去处**：版本 + 更新说明 + 打开下载页（只走主进程通道）。 */}

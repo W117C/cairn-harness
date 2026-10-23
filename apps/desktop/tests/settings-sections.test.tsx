@@ -10,6 +10,7 @@ import {
   GeneralSection,
   PermissionsSection,
   ProviderSection,
+  licenseLabel,
   providerStatusLabel,
   providerStatusParts,
 } from "../src/renderer/components/settings-sections";
@@ -301,5 +302,15 @@ describe("批 6：样式哨兵（主题选项卡/段落样式）", () => {
   });
   it(".ss-banner 样式在（信息/警告两 tone）", () => {
     expect(styles).toMatch(/\.ss-banner\.warn \{[^}]*color-risk/);
+  });
+});
+describe("许可证状态一行话（四态全显式）", () => {
+  it("valid / expired / invalid / inactive 各有话说，未读取不冒充未激活", () => {
+    expect(licenseLabel({ state: "valid", licensee: "Acme", expiresAt: null })).toBe("有效 · Acme");
+    expect(licenseLabel({ state: "valid", licensee: "Acme", expiresAt: "2027-01-01" })).toContain("至 2027-01-01");
+    expect(licenseLabel({ state: "expired", licensee: "Acme", expiresAt: "2026-01-01" })).toBe("已过期 · Acme");
+    expect(licenseLabel({ state: "invalid", reason: "签名不符" })).toBe("无效 · 签名不符");
+    expect(licenseLabel({ state: "inactive" })).toBe("未激活");
+    expect(licenseLabel(null)).toBe("未读取");
   });
 });

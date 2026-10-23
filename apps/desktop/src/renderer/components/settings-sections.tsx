@@ -12,6 +12,7 @@
 import { useRef, useState } from "react";
 import type { MutableRefObject, ReactNode } from "react";
 import { Copy, Image as ImageIcon } from "lucide-react";
+import type { LicenseState } from "../../../../../src/main/license";
 import type { AppSettings, PermissionMode } from "../../../../../src/main/ipc-protocol";
 import type { TextSizeSetting, UiSizeSetting } from "../../../../../src/main/settings";
 import { envKeyOf } from "../../../../../src/providers/env-keys";
@@ -581,6 +582,17 @@ export function AdvancedSection(props: {
 
 // ── 关于与更新段 ─────────────────────────────────────────────────────────
 
+/** 许可证状态 → 一行给人看的话（四态全显式；不把「没校验」说成「有效」）。 */
+export function licenseLabel(state: LicenseState | null | undefined): string {
+  if (state === null || state === undefined) return "未读取";
+  switch (state.state) {
+    case "valid": return state.expiresAt === null ? "有效 · " + state.licensee : "有效 · " + state.licensee + " · 至 " + state.expiresAt;
+    case "expired": return "已过期 · " + state.licensee;
+    case "invalid": return "无效 · " + state.reason;
+    case "inactive": return "未激活";
+  }
+}
+
 export function AboutSection(props: {
   version: string | null;
   updateMsg: string | null;
@@ -591,11 +603,16 @@ export function AboutSection(props: {
   onSaveManifest?: (url: string) => void;
   /** 诊断信息（术语收容所）；缺省用 DIAGNOSTICS_TEXT。 */
   diagnostics?: string;
+  /** 许可证状态（getState().license；缺省 undefined 显示「未读取」而不是「未激活」）。 */
+  license?: LicenseState | null;
 }): React.JSX.Element {
   return (
     <SettingsSection title="关于与更新">
       <SettingsRow label="版本">
         <span className="sp-tag">{props.version ?? "—"}</span>
+      </SettingsRow>
+      <SettingsRow label="许可证">
+        <span className="sp-tag">{licenseLabel(props.license)}</span>
       </SettingsRow>
       <SettingsRow label="更新">
         <button className="mini-btn ghost" onClick={props.onCheckUpdate}>检查更新</button>
