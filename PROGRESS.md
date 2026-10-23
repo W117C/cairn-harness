@@ -23627,3 +23627,54 @@ for (const rel of paths) {
 - **取料（与页同笔入库）**：`outputs/blank-project-2026-10-23/targeted-anchor-db977cf5.log`、
   `outputs/blank-project-2026-10-23/supervisor-check-db977cf5.log`；
   认证读数在 `outputs/head-cert-db977cf-2026-10-23-1455/provenance.md`。
+## 2026-10-23 · 第 694 页：许可证状态只有协议字段、没有界面——关于页补四态一行
+
+### 一、第 642 页审计的另一条 P1 还留着一半
+
+第 642 页登记「license 校验整链是死代码：文件永不读、状态永不显示」。前一半后来修了：
+`initLicenseStore` 已在装配根调用，`handleLicenseStatus` 每次 `getState()` 都真验签。
+但**后一半**还在：`apps/desktop/src/renderer` 里搜 `license` 只有字体许可文件，
+`getState().license` 没有任何消费者——用户看不到自己的许可证是有效、过期、无效还是未激活。
+
+协议字段存在、主进程算得出、界面不显示：这不是「没有功能」，是「功能不可见」。
+
+### 二、改法：`AboutSection` 加「许可证」行，四态全显式
+
+- `settings-sections.tsx` 新增纯函数 `licenseLabel(state)`：
+  - `valid` ⇒ `有效 · <licensee>`（有到期日再带 `· 至 <date>`）
+  - `expired` ⇒ `已过期 · <licensee>`
+  - `invalid` ⇒ `无效 · <reason>`
+  - `inactive` ⇒ `未激活`
+  - `null/undefined` ⇒ `未读取`（**不冒充未激活**：没读到与读到了但没有是两件事）
+- `AboutSection` 多收可选 `license`，在「版本」下面渲染一行 `sp-tag`；
+- `SettingsPanel` 的 `getState()` 回填 `setLicense(s.license ?? null)`，与 `about` 同一趟。
+
+### 三、判卷与读数
+
+| 面 | 读数 |
+|---|---|
+| `apps/desktop/tests/settings-sections.test.tsx` | `licenseLabel` 五态：valid（有/无到期）、expired、invalid、inactive、null |
+| 锚点 `license-label-always-inactive` | 定向 **1／1 杀死**（valid 也印「未激活」⇒ 用户以为 license 没生效） |
+| `pnpm --filter cairn-desktop test` | **207 文件／1417 条全绿** |
+| `pnpm mutate-needles-check` | 1616 条针脚全部可判定 |
+| `pnpm supervisor-check` | **81✅／0❌** |
+| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**；本页表长 1616，只定向跑新锚点 **1／1** |
+
+### 四、HEAD 认证读数（`ebb2ece3`）
+
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`ebb2ece`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 9 道只出声**（本轮机器负载高，见下）。
+- 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
+- 本趟墙钟 **277.20s**（同一进程 hrtime，口径＝起跑→汇总；比前几轮 126–127s 慢一倍，是机器负载，不是本页代码；
+  9 道超预算同源，规则 256：秒数只出声、不翻判定）。
+- 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
+
+### 五、边界（不冒充的部分）
+
+- **只显示，不提供导入/激活入口**：license 文件仍由外部签发放到 `<appData>/license.json`；本页没有做导入按钮，
+  也没有把 `valid` 当成解锁某功能的开关（当前没有这样的功能，不造一个假开关）。
+- **没跑真 license 文件**：判卷只测 `licenseLabel` 纯函数与既有 `verifyLicenseFile` 契约；没有生成一份签名 license
+  做端到端真机验证。
+- **真机未验**：关于页新增行的排版、暗色对比度没开 Electron 看。
+- **取料（与页同笔入库）**：`outputs/license-status-2026-10-23/targeted-anchor-ebb2ece3.log`、
+  `outputs/license-status-2026-10-23/supervisor-check-ebb2ece3.log`；
+  认证读数在 `outputs/head-cert-ebb2ece-2026-10-23-1504/provenance.md`。
