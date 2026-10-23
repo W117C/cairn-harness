@@ -54,6 +54,8 @@ describe("createSessionWorktree：幂等 = 不动那棵树", () => {
     const r = await createSessionWorktree(root, "sess-idem-2", "标题");
     expect(r.ok).toBe(false);
     expect(r.error).toContain("不是可识别的 git worktree");
+    // 这句话是给用户的能力边界（「create 不会静默重建」）——判卷同时点住它，别让回执改写成一个模糊的失败。
+    expect(r.error).toContain("不会静默重建");
     expect(readFileSync(join(wt, "user-file.txt"), "utf8")).toBe("keep me\n");
   });
 });
