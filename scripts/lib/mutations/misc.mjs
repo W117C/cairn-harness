@@ -174,6 +174,16 @@ export const MUTATIONS = [
     expectFail: "工作树页：孤儿逐条列出 + 清理按钮；空态不摆假列表",
   },
   {
+    id: "blank-project-routes-to-template",
+    src: "apps/desktop/src/renderer/state/projects.ts",
+    test: "apps/desktop/tests/new-project-blank.test.tsx",
+    config: "apps/desktop/vitest.config.ts",
+    desc: "空白项目卡也走模板建项 ⇒ createProject 通道仍是死路，用户点「空白项目」却拿到模板文件"
+      + "（界面承诺与真实落盘相反，且删掉模板还得手动清）",
+    apply: (s) => s.replace('return templateId === "blank" ? "blank" : "template";', 'return "template";'),
+    expectFail: "通道选择：blank 走 createProject，其余走模板",
+  },
+  {
     id: "worktrees-page-orphan-list-emptied",
     src: "apps/desktop/src/renderer/components/WorktreesPane.tsx",
     test: "apps/desktop/tests/app-page.test.tsx",

@@ -150,6 +150,8 @@ export const STR = {
     nameEmpty: "请先起一个项目名",
     nameInvalid: "名字里不能有斜杠或特殊符号",
     nameTaken: "已经有同名项目了，换一个名字",
+    blankName: "空白项目",
+    blankDesc: "不套模板，只建一个普通文件夹并登记",
     failed: "创建失败：{reason}",
   },
   footer: {

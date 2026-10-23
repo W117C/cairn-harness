@@ -17,6 +17,12 @@ interface ProjectActionsDeps {
   newSessionRef: MutableRefObject<(() => void) | null>;
 }
 
+/** 新建项目的两条通道：`blank` 只建目录+登记（createProject），其余走模板（projectCreateFromTemplate）。
+ *  单源给渲染层与判卷看，别在两处各写一个 templateId === "blank"。 */
+export function createProjectKind(templateId: string): "blank" | "template" {
+  return templateId === "blank" ? "blank" : "template";
+}
+
 export function useProjectActions(deps: ProjectActionsDeps) {
   const { setProjects, setRegistryNotice, setImportDiagnosis, setLastError, refreshSessions, setActiveWorkspace, activeWorkspaceRef, setProjectRemoveConfirm, newSessionRef } = deps;
   const refreshProjects = useCallback(async (): Promise<void> => {
@@ -92,7 +98,11 @@ export function useProjectActions(deps: ProjectActionsDeps) {
 
   /** 新建项目 Dialog 提交：建项 → 刷新 → 切过去 → Toast → 聚焦输入框（brief 第四节）。 */
   const handleCreateFromDialog = useCallback(async (input: { name: string; templateId: string; parentDir?: string }): Promise<void> => {
-    const r = await window.agent.projectCreateFromTemplate(input);
+    // 「空白项目」走 createProject（只建目录 + 登记，不套模板）；其余仍走模板建项。
+    // 这条通道此前在渲染层零调用点（第 642 页审计的 P1），空白项目卡是它的可见入口。
+    const r = createProjectKind(input.templateId) === "blank"
+      ? await window.agent.createProject({ name: input.name, ...(input.parentDir !== undefined ? { parentDir: input.parentDir } : {}) })
+      : await window.agent.projectCreateFromTemplate(input);
     if (!r.ok) throw new Error(r.message);
     await refreshProjects();
     refreshSessions();

@@ -1040,7 +1040,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
       )}
       {newProjectOpen && (
         <NewProjectDialog
-          templates={templates}
+          templates={[...templates, { id: "blank", name: STR.newProject.blankName, description: STR.newProject.blankDesc }]}
           existingNames={projects.map((p) => p.name)}
           onClose={() => { setNewProjectOpen(false); }}
           onPickDirectory={() => window.agent.pickDirectory()}
