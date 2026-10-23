@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { branchForAgent, cleanOrphanWorktree, createWorktree, removeWorktree, worktreePathFor } from "../src/agent/worktree";
+import { branchForAgent, cleanOrphanWorktree, createWorktree, removeWorktree, worktreeDirty, worktreePathFor } from "../src/agent/worktree";
 
 const git = (cwd: string, ...args: string[]): string =>
   execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -166,6 +166,18 @@ describe("createWorktree：worker 的 agentId 跨进程重号，不许挂载旧�
     expect(r.removed).toBe(false);
     expect(r.error).toContain("仍有归属");
     expect(readFileSync(join(wt, "wip.txt"), "utf8")).toBe("keep me\n");
+  });
+
+
+  it("worktreeDirty：未提交改动为 true，清干净为 false（清理面板的「会丢什么」读数）", async () => {
+    const root = repo();
+    await createWorktree(root, "worker-11", "同一任务");
+    const wt = worktreePathFor(root, "worker-11");
+    expect(await worktreeDirty(root, "worker-11")).toBe(false);
+    writeFileSync(join(wt, "wip.txt"), "x\n", "utf8");
+    expect(await worktreeDirty(root, "worker-11")).toBe(true);
+    rmSync(join(wt, "wip.txt"));
+    expect(await worktreeDirty(root, "worker-11")).toBe(false);
   });
 
 });

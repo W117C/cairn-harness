@@ -426,6 +426,18 @@ export function orphanWorktrees(
     .filter((agentId) => !ownedAgentIds.has(agentId) && !terminalAgents.has(agentId));
 }
 
+/** 孤儿树是否有未提交改动（含未跟踪）：给清理面板显示「会丢什么」。
+ *  读不出（目录不在/不是 worktree/git 失败）按 true 处理——看不见就不许说干净。 */
+export async function worktreeDirty(root: string, agentId: string): Promise<boolean> {
+  const wt = worktreePathFor(root, agentId);
+  try {
+    const out = await git(wt, "status", "--porcelain");
+    return out.trim() !== "";
+  } catch {
+    return true;
+  }
+}
+
 /** 孤儿手动清理（§4.4.9：面板只列不自动删，清理 = 用户显式动作）：移除 worktree + 按后缀删 agent/*-<id> 分支。
  *  A6（审查）：agentId 先过字符白名单——目录名含 glob 元字符（[ ? *）拼进 `branch --list`
  *  会匹配全部 agent 分支并循环删除；列出的分支名还须**精确以后缀 -<id> 结尾**才删（双保险）。 */

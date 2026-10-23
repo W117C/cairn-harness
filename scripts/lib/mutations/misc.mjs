@@ -164,6 +164,16 @@ export const MUTATIONS = [
   },
   // ---- 2026-10-05：R2 的「一致性判据」随判卷同笔配的锚点 ----
   {
+    id: "worktrees-dirty-badge-hidden",
+    src: "apps/desktop/src/renderer/components/WorktreesPane.tsx",
+    test: "apps/desktop/tests/app-page.test.tsx",
+    config: "apps/desktop/vitest.config.ts",
+    desc: "孤儿行的未提交改动标记恒假 ⇒ 清理前看不见自己会丢什么：确认框只有一句泛泛的「未提交改动无法恢复」，"
+      + "而当前这棵树到底是干净还是攒着活，界面一个字不说（数据丢失面的信息缺口）",
+    apply: (s) => s.replace("const dirty = props.snap.details?.find((d) => d.name === name)?.dirty === true;", "const dirty = false;"),
+    expectFail: "工作树页：孤儿逐条列出 + 清理按钮；空态不摆假列表",
+  },
+  {
     id: "worktrees-page-orphan-list-emptied",
     src: "apps/desktop/src/renderer/components/WorktreesPane.tsx",
     test: "apps/desktop/tests/app-page.test.tsx",

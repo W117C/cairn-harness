@@ -8,7 +8,7 @@ import { GitBranch } from "lucide-react";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 export function WorktreesPane(props: {
-  snap: { workspace: string; orphans: string[] };
+  snap: { workspace: string; orphans: string[]; details?: { name: string; dirty: boolean }[] };
   onError: (message: string) => void;
   refresh: () => void;
 }): React.JSX.Element {
@@ -36,24 +36,30 @@ export function WorktreesPane(props: {
         <div className="ap-empty">没有遗留的工作树。</div>
       ) : (
         <div className="ap-list" aria-label="孤儿工作树">
-          {props.snap.orphans.map((name) => (
-            <div className="ap-item" key={name} data-orphan={name}>
+          {props.snap.orphans.map((name) => {
+            const dirty = props.snap.details?.find((d) => d.name === name)?.dirty === true;
+            return (
+            <div className="ap-item" key={name} data-orphan={name} data-dirty={dirty ? "true" : "false"}>
               <GitBranch size={14} aria-hidden="true" />
               <span className="nm">wt-{name}</span>
               <span className="sub">孤儿 worktree</span>
+              {dirty && <span className="sp-tag" style={{ color: "hsl(var(--color-risk-ink))" }}>有未提交改动</span>}
               <button
                 className="mini-btn danger"
                 disabled={busy === name}
                 onClick={() => setAsk(name)}
               >{busy === name ? "清理中…" : "清理"}</button>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
       {ask !== null && (
         <ConfirmDialog
           title={`清理 wt-${ask}？`}
-          note="会删除该 worktree 目录与对应 agent 分支；未提交的改动无法恢复。"
+          note={props.snap.details?.find((d) => d.name === ask)?.dirty === true
+            ? "该 worktree 有未提交改动；清理会删除目录与对应 agent 分支，未提交内容无法恢复。"
+            : "会删除该 worktree 目录与对应 agent 分支；未提交的改动无法恢复。"}
           confirmLabel="清理"
           danger
           onClose={() => setAsk(null)}

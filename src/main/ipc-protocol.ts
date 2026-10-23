@@ -224,7 +224,7 @@ export interface StateResponse {
   /** M2f：辅助对话面板快照（sidechat 会话清单 + 已提升记录；缺省 = 无会话目录）。 */
   sidechat?: SidechatPanelSnapshot;
   /** M3b：孤儿 worktree 扫描（§4.4.9 只列不自动删；git 面板「可清理」列表数据源）。 */
-  worktree?: { workspace: string; orphans: string[] };
+  worktree?: { workspace: string; orphans: string[]; details?: { name: string; dirty: boolean }[] };
   /** M4a：定时任务面板快照（任务定义 + 运行历史投影 + 并发计数；journal/会话纯投影）。 */
   schedule?: ScheduleSnapshot;
   /** M4b：license 状态（valid/expired/inactive/invalid；inactive → 引导横幅，§2.2）。 */

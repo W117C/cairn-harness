@@ -41,9 +41,11 @@ describe("页体并入设置（v7.1 业主裁）：AppPageBody + 事实源", () 
   });
 
   it("工作树页：孤儿逐条列出 + 清理按钮；空态不摆假列表", () => {
-    const html = renderToStaticMarkup(<WorktreesPane snap={{ workspace: "/tmp/ws", orphans: ["worker-3"] }} onError={() => undefined} refresh={() => undefined} />);
+    const html = renderToStaticMarkup(<WorktreesPane snap={{ workspace: "/tmp/ws", orphans: ["worker-3"], details: [{ name: "worker-3", dirty: true }] }} onError={() => undefined} refresh={() => undefined} />);
     expect(html).toContain("wt-worker-3");
     expect(html).toContain("清理");
+    expect(html).toContain("有未提交改动");
+    expect(html).toContain('data-dirty="true"');
     // 清理目标必须带快照的工作区：切项目后 activeWorkspace 是旧值，clean 不能拿它去删。
     expect(html).toContain('data-workspace="/tmp/ws"');
     const empty = renderToStaticMarkup(<WorktreesPane snap={{ workspace: "/tmp/ws", orphans: [] }} onError={() => undefined} refresh={() => undefined} />);

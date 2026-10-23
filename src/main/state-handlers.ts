@@ -8,7 +8,7 @@ import { projectAgentPath } from "../app-data";
 import { replay } from "../events";
 import { PluginRuntime, currentPluginRuntime, pluginDataRootOf, type PluginPanelSnapshot } from "../agent/plugins";
 import { ownedWorktreeAgentIds } from "../agent/orchestrator";
-import { listWorktreeDirs, orphanWorktrees } from "../agent/worktree";
+import { listWorktreeDirs, orphanWorktrees, worktreeDirty } from "../agent/worktree";
 import type { MemorySnapshot, SidechatPanelSnapshot } from "./ipc-protocol";
 import type { LicenseState } from "./license";
 import { memorySnapshot } from "./memory-handlers";
@@ -109,7 +109,7 @@ export async function handleSkillBody(name: string, workspaceOverride: string | 
 }
 
 /** IPC "agent:state" 的处理函数。 */
-export async function handleAgentState(workspaceOverride: string | null = null): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot; plugins?: PluginPanelSnapshot; sidechat?: SidechatPanelSnapshot; worktree?: { workspace: string; orphans: string[] }; schedule?: ScheduleSnapshot; license?: LicenseState; providerKeys?: { available: boolean; stored: string[]; envActive: boolean }; about?: { version: string } }> {
+export async function handleAgentState(workspaceOverride: string | null = null): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot; plugins?: PluginPanelSnapshot; sidechat?: SidechatPanelSnapshot; worktree?: { workspace: string; orphans: string[]; details?: { name: string; dirty: boolean }[] }; schedule?: ScheduleSnapshot; license?: LicenseState; providerKeys?: { available: boolean; stored: string[]; envActive: boolean }; about?: { version: string } }> {
   const memory = await optionalPanel(() => memorySnapshot(workspaceOverride));
   const plugins = await optionalPanel(async () => {
     // 工作区对不上就现发现：在档快照只服务它自己的项目（见 pluginSnapshotWorkspace）。
@@ -124,7 +124,13 @@ export async function handleAgentState(workspaceOverride: string | null = null):
   // M3b 孤儿 worktree 扫描（§4.4.9：启动/会话重开语义 = state 拉取时现算；只列不自动删）
   const worktree = await optionalPanel(async () => {
     const ws = workspaceOverride ?? (await currentWorkspace());
-    return { workspace: ws, orphans: await scanOrphanWorktrees(ws) };
+    const orphans = await scanOrphanWorktrees(ws);
+    return {
+      workspace: ws,
+      orphans,
+      // 逐棵读「有没有未提交改动」：清理是不可逆动作，界面必须先说清会丢什么。
+      details: await Promise.all(orphans.map(async (name) => ({ name, dirty: await worktreeDirty(ws, name) }))),
+    };
   });
   // M4a schedule 面板快照（真缺陷修复，半托截图路径抓出：schedule 通道挂了 IPC handler 但从未进 state 应答，
   // 面板 getState().schedule 恒 undefined → 任务列表/运行历史永久为空）
