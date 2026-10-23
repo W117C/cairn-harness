@@ -23419,8 +23419,9 @@ cleanOrphanWorktree(root, "worker-10", { ownedAgentIds: new Set(["worker-10"]) }
 - 点「清理」时 `worktreeClean` 用**旧 activeWorkspace** 解析 ⇒ 要么找不到、报一个看不懂的失败，
   要么更坏：旧仓里恰有一个同名 `wt-worker-N`，就删了**另一个仓**的树。
 
-这不是推的：`activeWorkspace` 在 `normalizeWorkspaces` 里只赋值一次（`kernel-host.ts` 构造段），
-而 `workspaceContext()` 是 `windowWorkspaces.current()`（`index.ts:196`）——两条读法本来就不同源。
+这不是推的：`activeWorkspace` 在 `normalizeWorkspaces` 里只赋值一次
+（`apps/desktop/src/main/kernel-host.ts#normalizeWorkspaces`），而 `workspaceContext()` 是
+`windowWorkspaces.current()`（`apps/desktop/src/main/index.ts#workspaceContext`）——两条读法本来就不同源。
 
 ### 二、改法：快照带工作区，clean 按快照回传
 
