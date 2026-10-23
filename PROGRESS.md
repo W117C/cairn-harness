@@ -23779,3 +23779,55 @@ worker 在任务窗格里能看到 task、状态、花费、验证券与摘要�
 - **取料（与页同笔入库）**：`outputs/worker-merge-ui-2026-10-23/targeted-anchor-e6d6918c.log`、
   `outputs/worker-merge-ui-2026-10-23/supervisor-check-e6d6918c.log`；
   认证读数在 `outputs/head-cert-e6d6918-2026-10-23-1557/provenance.md`。
+## 2026-10-23 · 第 697 页：接完最后两条死通道——`scheduleSnapshot` / `previewStatus`，并补消费面人口普查
+
+### 一、第 642 页那类缺陷还剩两条
+
+第 693／696 页把 `createProject` 与 `cardAction` 从「主进程接了、渲染层零调用点」里救出来。
+按同一口径扫剩下 100 条 invoke 通道，还有两条：
+
+- `scheduleSnapshot`：自动化页一直走整份 `getState()`，这条专用通道没人调；
+- `previewStatus`：`openPreview` 每次都直接 `previewStart`，从不问已有预览的状态。
+
+它们和 `createProject` 一样：`channels.test.ts` 的 wired 守卫只查主进程有没有一行 handler，
+查不出「有没有人调」。
+
+### 二、改法
+
+- `AppPageBody` 的自动化页改走 `window.agent.scheduleSnapshot()`，只取调度快照，
+  不再为了一个 schedule 拉整份 getState（插件/记忆/工作树都跟着算一遍）；
+- `openPreview` 先 `previewStatus(target)`：`preparing / starting / ready` 直接复用，
+  `idle / stopped / failed` 才 `previewStart`。重复点「预览」不再重启服务；
+- 新增 `apps/desktop/tests/invoke-consumer-census.test.ts`：扫渲染层源码，
+  `INVOKE_CHANNELS` 每一条至少有一个 `<key>(` 调用点；例外只有 `previewStop`
+  （主进程生成的预览页脚本调用），并反向钉 allowlist 不空转（有调用点时豁免必须删）。
+
+### 三、判卷与读数
+
+| 面 | 读数 |
+|---|---|
+| `apps/desktop/tests/invoke-consumer-census.test.ts` | 100 条通道全部有消费者；唯一 allowlist `previewStop`；反向 stale 检查 |
+| 锚点 `invoke-census-schedule-consumer-dropped` | 定向 **1／1 杀死**（自动化页退回 getState ⇒ 普查点名 scheduleSnapshot） |
+| `pnpm --filter cairn-desktop test` | **208 文件／1419 条全绿** |
+| `pnpm mutate-needles-check` | 1618 条针脚全部可判定 |
+| `pnpm supervisor-check` | **81✅／0❌** |
+| 全表 `pnpm mutate-verify` | 最近一次 `0d534db4`：**1616／1616**（第 695 页）；本页表长 1618，只定向跑新锚点 **1／1** |
+
+### 四、HEAD 认证读数（`220013af`）
+
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`220013a`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
+- 本趟墙钟 **137.08s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-220013a-2026-10-23-1603/provenance.md`）。
+- 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
+
+### 五、边界（不冒充的部分）
+
+- **普查是源码级**：正则 `\bkey\s*\(` 会被注释/字符串里的同名文字满足；它挡的是「零调用点」，
+  不是「调用点真能跑通」。运行时可达性仍由各面判卷与真机冒烟负责。
+- **`previewStop` 仍是 allowlist**：它由主进程生成的预览页脚本调用，不在渲染层；这不是死通道，
+  但也没有渲染层消费者，故单列理由。
+- **`previewStatus` 复用没有真机验证**：只用类型与既有预览 runtime 契约确认状态枚举；
+  没有开 Electron 连续点两次预览看端口是否复用。
+- **取料（与页同笔入库）**：`outputs/invoke-census-2026-10-24/targeted-anchor-220013af.log`、
+  `outputs/invoke-census-2026-10-24/supervisor-check-220013af.log`；
+  认证读数在 `outputs/head-cert-220013a-2026-10-23-1603/provenance.md`。
