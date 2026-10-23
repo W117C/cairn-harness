@@ -23341,3 +23341,69 @@ cleanOrphanWorktree(root, "worker-10", { ownedAgentIds: new Set(["worker-10"]) }
 - **取料（与页同笔入库）**：`outputs/orphan-clean-guard-2026-10-23/targeted-anchor-3b00b164.log`、
   `outputs/orphan-clean-guard-2026-10-23/supervisor-check-3b00b164.log`；
   认证读数在 `outputs/head-cert-3b00b16-2026-10-23-1421/provenance.md`。
+## 2026-10-23 · 第 689 页：把死掉的 `worktree.orphans` 接成可见可清理的面
+
+### 一、缺口：协议里有，界面里没有
+
+`src/main/ipc-protocol.ts` 早就声明 `worktree?: { orphans: string[] }`，`state-handlers.ts` 每次
+`getState()` 都真算一遍；但全渲染层搜不到一个消费者。结果是：
+
+- 用户看不到任何「遗留 worktree」——孤儿只能靠命令行 `git worktree list` 发现；
+- `card_action(clean, cardType:"orphan")` 这条通道存在，界面没有入口 ⇒ 等于不可达；
+- 第 687／688 页修的是**判定与防线**，但「谁来看见它、谁来按清理」这一层是空的。
+
+这是设计稿 C-35 `ContextRow`（文件夹／工作树 chip，工作树菜单列孤儿）一直没落的那一格。
+本页先落最小可用面：设置页新增第五分区「工作树」，只列孤儿、显式二次确认后清理。
+
+### 二、接线：一条新 IPC，三道既有闸
+
+- `AgentApi.worktreeClean(name)` + `INVOKE_CHANNELS["worktreeClean"] = "agent:worktree-clean"`；
+- `KernelHost.worktreeClean` 用**当前工作区**解析，调
+  `cleanOrphanWorktree(ws, name, { ownedAgentIds: new Set(ownedWorktreeAgentIds()) })`——
+  第 688 页的归属闸原样复用，不另抄一份；
+- 主进程 `wired` 表接真（`channels.test.ts` 的 wired 覆盖守卫会抓漏行）；
+- 通道数 **99 → 100**，README 与 `channels.test.ts` 同步（README 的数由
+  `tests/readme-invoke-channel-count.test.ts` 现读表长钉住）。
+
+### 三、界面：`WorktreesPane`
+
+设置页第五分区「工作树」（`PAGE_ORDER` 加 `worktrees`，`PAGE_META` 标签/图标同源）：
+
+- 有孤儿 ⇒ 逐条 `wt-<agent>` 行 + 「清理」按钮；
+- 无孤儿 ⇒ 空态「没有遗留的工作树。」（不摆假列表）；
+- 点清理 ⇒ `ConfirmDialog` 二次确认，正文写明「会删除目录与对应 agent 分支；未提交改动无法恢复」；
+- 确认后调 `window.agent.worktreeClean(name)`，失败走 `onError` 上屏，不静默；
+- 页顶一行说明「运行中或待合并的树不会出现在这里」——把第 687／688 页的语义写给用户看。
+
+分区搜索词表补 `worktrees: "工作树 worktree 孤儿 清理 分支"`，否则设置搜索里这个新分区
+搜不到（`settings-section-search.test.ts` 的「词表覆盖全部 SectionId」会当场红）。
+
+### 四、判卷与读数
+
+| 面 | 读数 |
+|---|---|
+| `apps/desktop/tests/app-page.test.tsx` | 页序/标签含「工作树」；孤儿逐条渲染、空态不摆假列表 |
+| `apps/desktop/tests/channels.test.ts` | 通道数 **100**；`worktreeClean` 在 mustWire 名单、wired 表有真行 |
+| `apps/desktop/tests/settings-section-search.test.ts` | **9 条全绿**（词表覆盖新分区） |
+| `pnpm --filter cairn-desktop test` | **206 文件／1414 条全绿** |
+| 锚点 `worktrees-page-orphan-list-emptied` | 定向 **1／1 杀死**（把列表恒当空 ⇒ 假空态） |
+| `pnpm mutate-needles-check` | 1612 条针脚全部可判定（阻断 0） |
+| `pnpm supervisor-check` | **81✅／0❌** |
+| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**（第 687 页）；本页表长 1612，只定向跑新锚点 **1／1**，没有把旧全表冒充本页 |
+
+### 五、HEAD 认证读数（`324fcc2e`）
+
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`324fcc2`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- 认证树全量判卷：**487 文件／6599 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增的界面判卷全绿。
+- 本趟墙钟 **127.23s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-324fcc2-2026-10-23-1429/provenance.md`）。
+- 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
+
+### 六、边界（不冒充的部分）
+
+- **只列当前工作区**：`KernelHost.worktreeClean` 用 `activeWorkspace`；多工作区同时有孤儿时，其他工作区的树
+  要切过去才看得到。设计稿 C-35 的「工作树切换」仍未落。
+- **没有真机目验**：本页只跑 SSR/单元判卷与桌面全量，未开 Electron 看真实布局、字体与暗色下的对比度。
+- **显式清理仍强删**：未归属的孤儿按既有语义 `worktree remove --force`；第 688 页只拦「有归属」。
+- **取料（与页同笔入库）**：`outputs/worktrees-page-2026-10-23/targeted-anchor-324fcc2e.log`、
+  `outputs/worktrees-page-2026-10-23/supervisor-check-324fcc2e.log`；
+  认证读数在 `outputs/head-cert-324fcc2-2026-10-23-1429/provenance.md`。
