@@ -22869,3 +22869,73 @@ InterVariable.woff2               137.26 kB
 留给下一轮的候选（不在本页收敛）：head-cert 在多棵认证树并行时会把绿用例压红，
 这个现象的判据（例如"超预算项数 ≥ N 时报告标注为压力读数"）今天不存在——
 它会让每一次认证的可比性打折，而那正是凭证面最该可比的地方。
+
+## 2026-10-23 · 第 684 页：工具返回畸形结构——**炸整轮**，与修好之后的**糊成 "undefined"**
+
+本页两个缺陷是同一件事的两半，都在「工具返回体不是我们以为的那个形状」时发生。
+
+### 一、第一半：一条诊断读数把整轮任务打死
+
+实测（`.tmp/probes/probe-malformed-result.mts`，不入库）：工具返回 `{ ok: true }`（缺 `output`）⇒
+
+```
+TypeError: Cannot read properties of undefined (reading 'slice')
+    at stuckObservationOf (src/agent/stuck.ts:100:17)
+    at async runLoop (src/agent/loop.ts:548:23)
+```
+
+**整轮任务死在这一格**，而这一格只是「判卡死用的观察串」——为一条诊断读数赔掉整轮，本末倒置。
+
+为什么类型没拦住：`src/tools/base.ts` 的 `ToolResult.output: string` 是必填，但它只约束
+**我们自己的**工具。插件工具、MCP 工具、脚本化工具都是**运行期**才拿到的，跨进程边界没有任何
+编译期保证。`{ok:true}` 缺 output、`output:null`、`output:{…}` 都完全可能。
+
+### 二、第二半：修掉崩溃之后，落盘糊成字面量 `"undefined"`
+
+把崩溃修掉之后再量一次，看**模型面**收到了什么：
+
+| 工具返回 | 旧落盘（模型看到的） |
+|---|---|
+| `{ok:true}` | `"undefined"` ← 字面量串 |
+| `{ok:true, output:null}` | `"null"` |
+| `{ok:true, output:{a:1}}` | `"[object Object]"` |
+
+根因是 `loop.ts` 落盘那一行的**隐式字符串化**：`redactSecrets(result.output + postContext + …)`。
+`undefined + ""` 得到 `"undefined"`。模型会把这条当成**真实输出**读——
+而它其实是"这条回执没有正文"。**两者必须分得开**：前者是有内容的错误，后者是没有内容的事实。
+
+### 三、改法（两处，都是"取料而不是信任"）
+
+| 位置 | 改了什么 |
+|---|---|
+| `stuck.ts#stuckObservationOf` | 入参 `string` → `unknown`；缺失 / null / 对象 / 无法序列化各给**可读且互不相同**的占位串 |
+| `loop.ts` | 新增 `readToolOutput` 单一出口，替掉隐式 `result.output + …` |
+
+`set` 不同是关键：若两种畸形折成同一个串，**卡死判定会把「缺失」当成「重复同一动作」**——
+那是把"工具坏了"误判成"模型在原地打转"，方向完全相反。
+
+### 四、判卷 9 条（正反俱全）
+
+★ 缺 output 不许炸 + 回执可读 ／ ★ null 可读且与缺失分得开 ／ ★ 对象**序列化出来**
+（不是 `[object Object]`）／ ★ **正向哨兵：正常字符串逐字不变**（挡"为了安全全包一层"）／
+真空串 ≠ 缺失（空串是"真的没输出"这一事实，不许被占位符顶替）／
+`stuckObservationOf` 不抛（含环形对象）／ 不同畸形给不同观察串 ／ 正常串照旧截 200 字。
+
+两台变异逐条杀死：① 回旧 `.slice` ⇒ 红 6；② 回隐式 `String()` ⇒ 红 2。
+
+### 五、连带：一条既有锚点被我的改名搬走，重指之后**单独验证它仍能杀死**
+
+`loop-repeat-nudge-note-dropped` 的针脚钉在落盘那一行，而我改了那一行 ⇒ 工具报
+「针脚已不在源文件里（多半是被锚定的实现搬走了）」。**变异体本身没变**（照旧取料但不追换路提示），
+所以是重指而不是撤离：改指向 `readToolOutput(result.output) + …`，并**单独跑一遍确认它仍红**
+（11 条里红 7）——只改路径不验证，等于把这条锚点悄悄变成空操作。
+
+### 六、同轮量过、判定**不动**的三格
+
+| 格 | 读数 | 判定 |
+|---|---|---|
+| 3·失败隔离（非 Error 异常） | 抛字符串 / `null` / 数字三种，`c1` 全 `ok:false`、`c2` 照旧 `ok:true`、loop 不被炸 | 已经很好，不动 |
+| 3·未知工具 | `unknown tool: no_such_tool` 落成 `ok:false` 可读回执 | 不动 |
+| 非 JS 资产（第 683 页登记） | `NotoSerifVariable` 被 markdown h1–h4 消费（`--dsh-claude-font-prose`）；可变字体，一个文件覆盖全权重 | **有用**，此项候选关闭；真无用的只有斜体档，已在上页处理 |
+
+⇒ 第 683 页留下的候选**已关**：产物里唯一的无用资产就是那 309KB 斜体字体。
