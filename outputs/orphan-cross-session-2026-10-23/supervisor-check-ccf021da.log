@@ -1,0 +1,87 @@
+$ node --import tsx scripts/supervisor-check.ts
+[supervisor-check] A 受限 Supervisor 封闭性（任意输入 → 枚举；畸形 → escalate）
+  ✅ A1 封闭枚举（kind=accept）
+  ✅ A2 预期动作 accept（实得 accept）
+  ✅ A1 封闭枚举（kind=retry）
+  ✅ A2 预期动作 retry（实得 retry）
+  ✅ A1 封闭枚举（kind=spawn）
+  ✅ A2 预期动作 spawn（实得 spawn）
+  ✅ A1 封闭枚举（kind=escalate）
+  ✅ A2 预期动作 escalate（实得 escalate）
+  ✅ A1 封闭枚举（kind=escalate）
+  ✅ A2 预期动作 escalate（实得 escalate）
+  ✅ A1 封闭枚举（kind=escalate）
+  ✅ A2 预期动作 escalate（实得 escalate）
+  ✅ A1 封闭枚举（kind=abort）
+  ✅ A2 预期动作 abort（实得 abort）
+  ✅ A1 封闭枚举（kind=abort）
+  ✅ A2 预期动作 abort（实得 abort）
+  ✅ A1 封闭枚举（kind=escalate）
+  ✅ A2 预期动作 escalate（实得 escalate）
+  ✅ A1 封闭枚举（kind=spawn）
+  ✅ A2 预期动作 spawn（实得 spawn）
+  ✅ A3 supervise 审批契约 = {goal,budget,forbidden,maxStages}（与 stages 全表分开）
+[supervisor-check] B 有界性（maxStages / 防死循环）
+  ✅ B1 永远 fail → 第 6 环后必 abort（有界，不无限爬）
+  ✅ B1b 事件流有 retry×5 + abort 决策记录
+  ✅ B2a 前两次允许 retry
+  ✅ B2b 第三次出现 → 强制 escalate（防死循环）
+[supervisor-check] C/D Best-of-N（N=3 选中全绿 / 早停省钱）
+  ✅ C1 race 受理
+  ✅ C 选中项为全绿者（candidate-1）
+  ✅ Cb 早停触发（3 候选）
+  ✅ D1 race 早停受理
+  ✅ D2 早停后其余 worker 终态 cancelled（≥2）
+  ✅ D3 对照：never-pass judge → 全收敛无胜者
+  ✅ D4 早停 accountable usage 严格小于跑满（80 < 1080）
+[supervisor-check] E supervise 模式运行时（审批双轨契约 / 受限循环 / 有界中止 / 接受路径）
+  ✅ E1a supervise 审批落流
+  ✅ E1 审批卡批准 {goal,budget,forbidden,maxStages}（双轨契约，非 stages 全表）
+  ✅ E1b 双轨标注：与 pipeline stages 全表审批分开
+  ✅ E1c 决议受理
+  ✅ E3 永远 fail → maxStages=3 有界中止（spawn_agent(supervise): maxStages 耗尽（3），编排中止（现场已保留：worktree=）
+  ✅ E3b 恰好 3 环（≤ maxStages，不无限爬）
+  ✅ E3c 事件流有 [supervisor] abort 决策记录
+  ✅ E3d approval_resolved(approved) 落流
+  ✅ E4a 审批落流
+  ✅ E4b 拒绝决议受理
+  ✅ E4c 拒绝 → fail-closed 不启动循环
+  ✅ E4d 拒绝后零环 worker
+  ✅ E5a 审批落流
+  ✅ E5b 决议受理
+  ✅ E5c 单环 verdict:pass → 接受（gate loopback 闭合）
+  ✅ E5d 恰好 1 环
+  ✅ E6a 审批落流
+  ✅ E6b 决议受理
+  ✅ E6 shell_rw-only 改动 → accept 合并落盘（不再静默清理）
+  ✅ E6b [merged] 审计事件落流
+  ✅ E6c 成果真实落盘（主 checkout 出现 note.txt）
+  ✅ E7a 审批落流
+  ✅ E7b 决议受理
+  ✅ E7 forbidden 触碰 → verdict 不采信 → 有界中止（不 accept）
+  ✅ E7b 恰好 3 环（每环触碰禁改面 → 全部按 fail 处理，防死循环兜底不变）
+  ✅ E7c 零合并（禁改面改动不落盘）
+  ✅ E7d [supervisor] 违反决策落流
+  ✅ E7e 提示词层：constraints 含 supervise-forbidden（禁改面）
+  ✅ E8a 审批落流
+  ✅ E8b 决议受理
+  ✅ E8c 收束闸绿拍真落流（凭据不是读成了 undefined）
+  ✅ E8 绿凭据 + 无 verdict 行 → 判据=pass（凭据优先于散文）
+  ✅ E8d accept 后合并落盘（旧实现在这一格恒 escalate，成果被删）
+  ✅ E8e 主 checkout 真出现 note.txt
+  ✅ E9a 审批落流
+  ✅ E9b 决议受理
+  ✅ E9c 红拍真落流（凭据=failed 确实存在，不是没验）
+  ✅ E9 红凭据 + 自报 pass ⇒ 零合并（散文不得顶机器）
+  ✅ E9d 交人判的出口点名了保留的现场（worktree/分支地址在回执里）
+  ✅ E9e 裁决发生时证据还在盘上（旧实现先删 worktree 再问人）
+  ✅ E9f 主 checkout 零污染
+  ✅ E10a 审批落流
+  ✅ E10b 决议受理
+  ✅ E10 无凭据且无契约行 ⇒ escalate（不静默 accept）
+  ✅ E10c escalate 的回执点名了保留的现场
+  ✅ E10d 零合并
+  ✅ E10e 升级到人时 worktree 还在（旧实现先删证据再问人）
+  ✅ E10f 主 checkout 零污染
+  ✅ E-F 门跑完靶子零残留（冻结目录里不许留 worktree——它会被靶子自己的 vitest 收成整仓测试）
+[supervisor-check] 全部断言通过 ✅（81 ✅ / 0 ❌）

@@ -23165,3 +23165,103 @@ Tests  2 failed | 6 passed (8)
   `outputs/worktree-residue-2026-10-23/mutate-verify-a6d60ee3.log`、
   `outputs/worktree-residue-2026-10-23/supervisor-check-a6d60ee3.log`；
   认证读数在 `outputs/head-cert-a6d60ee-2026-10-23-1227/provenance.md`。
+## 2026-10-23 · 第 687 页：跨会话的「孤儿」不是孤儿——workspace 级目录 × session 级事件流
+
+### 一、上一页留下的那一格，量出来是真缺陷
+
+第 686 页的边界里写着：「`.agents/wt-*` 是 workspace 级目录，`scanOrphanWorktrees` 却只拿
+`lastLogPath()` 这一个会话的事件流判终态」。把它当候选而不是结论，先读调用面：
+
+```ts
+// src/main/state-handlers.ts
+export async function scanOrphanWorktrees(workspace?: string): Promise<string[]> {
+  const ws = workspace ?? (await currentWorkspace());
+  const dirs = await listWorktreeDirs(ws);
+  if (dirs.length === 0) return [];
+  const lp = D().lastLogPath();
+  const events = lp ? await replay(lp).catch(() => []) : [];
+  return orphanWorktrees(dirs, events.map(...));
+}
+```
+
+`listWorktreeDirs` 扫的是 `<workspace>/.agents/wt-*`，**不区分会话**；`lastLogPath()` 是「最近一次 run
+的日志」，**只有一个会话**。多会话共用一个 workspace 时，另一会话运行中的 `wt-worker-N` 在
+当前日志里当然没有 `agent_status: done/failed/cancelled`，也没有 `merge-`/`wt-cleanup-` 记录
+⇒ `orphanWorktrees` 把它判成「可清理」。用户在孤儿面板点一下，`cleanOrphanWorktree` 就
+`worktree remove --force` 删掉另一会话正在干活的树。
+
+根因不是 `orphanWorktrees` 的判定逻辑（第 686 页那两条刻意契约仍在），而是**目录的域比事件流的域宽**：
+目录是 workspace 级，事件是 session 级，拿窄域的事件去证明宽域的目录「没人要」，中间缺一层**进程内归属**。
+
+### 二、改法：把「谁还活着」从事件流里拿出来
+
+`src/agent/orchestrator.ts` 里本来就有两张跨编排器的路由表：
+
+- `agentOwners`：spawn 注册、终态/回滚/清理时注销 —— 运行中的 worker 在这里；
+- `mergeOwners`：write worker 注册，直到 merge/reject/failed/cancelled 四路清理完成才注销 —— **跑完待合并**的树在这里。
+
+新增：
+
+```ts
+export function ownedWorktreeAgentIds(): string[] {
+  return [...new Set([...agentOwners.keys(), ...mergeOwners.keys()])];
+}
+```
+
+`orphanWorktrees(dirNames, events, ownedAgentIds = new Set())` 多收一个归属集合，
+过滤条件变成 `!ownedAgentIds.has(agentId) && !terminalAgents.has(agentId)`；
+`scanOrphanWorktrees` 把 `new Set(ownedWorktreeAgentIds())` 接进去。
+
+两个方向都留着：
+
+- 归属集合里有 ⇒ **不算孤儿**，哪怕当前会话日志里一条事件都没有（跨会话活树）；
+- 归属集合里没有、事件里也没有终态 ⇒ **仍算孤儿**（进程被杀留下的树正是这一格要捞的）。
+  这是第 686 页那条「running 仍算孤儿」契约的反向哨兵，不能被这次改动顺手抹掉。
+
+进程重启后两张表都为空 ⇒ 所有 `wt-*` 照旧进面板（那时确实没有活 worker）；这是有意的。
+
+### 三、判卷：纯函数两向 ＋ 接线一条
+
+| 判卷 | 钉的形状 | 旧实现 |
+|---|---|---|
+| `tests/worktree-pure.test.ts` 新增 | `orphanWorktrees(["wt-w1","wt-w2"], [], new Set(["w1"]))` ⇒ `["w2"]`；带 `running` 事件时 owned 排除、unowned 仍返回 `["w1"]` | 旧签名忽略第三参 ⇒ w1 被列出，红 |
+| `tests/orphan-cross-session.test.ts` 新增 | mock `ownedWorktreeAgentIds() => ["w1"]`，真建 `<ws>/.agents/wt-w1` + 空日志，`scanOrphanWorktrees(ws)` 必须 `[]` | 把接线换成 `new Set()` ⇒ 返回 `["w1"]`，红 |
+
+接线那条是刻意加的：只测纯函数会漏掉「纯函数写对了但生产入口传空集」——本仓点过名的
+「只写纯函数不接＝没有读数」（规则 230）。实测把 `new Set(ownedWorktreeAgentIds())` 换成
+`new Set()`，这条当场红。
+
+### 四、判卷与变异读数
+
+| 面 | 读数 |
+|---|---|
+| `tests/worktree-pure.test.ts` | **13 条全绿**（新增 1 条两向哨兵） |
+| `tests/orphan-cross-session.test.ts` | **1 条全绿**（真建目录 + mock 归属） |
+| 三文件合跑（worktree-pure / orphan-cross-session / worktree-branch-reuse） | **22 条全绿** |
+| 锚点 `orphan-ignores-owned-agents` | 定向 **1／1 杀死** |
+| 锚点 `orphan-scan-drops-owned-wiring` | 定向 **1／1 杀死** |
+| `pnpm mutate-needles-check` | 1610 条针脚全部可判定（阻断 0） |
+| `pnpm supervisor-check` | **81✅／0❌** |
+| `pnpm mutate-verify`（HEAD `ccf021da`，全表） | **1610／1610 杀死，0 vacuous**（2560.5s） |
+
+### 五、HEAD 认证读数（`ccf021da`）
+
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`ccf021d`）：25 道认证门面跑满，**红 1 道**（`docs-check`，D-5 的 21 条既有真红）；**超预算 1 道只出声**（`e2e` 7470ms > 4000ms，按规则不翻判定）。
+- 认证树全量判卷：**487 文件／6598 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增的 3 条判卷全绿。
+- 本趟墙钟 **130.63s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-ccf021d-2026-10-23-1412/provenance.md`）。
+- 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
+
+### 六、边界（不冒充的部分）
+
+- **进程内归属表可能藏住真孤儿**：`agentOwners`/`mergeOwners` 若在异常路径漏删，那棵树会一直「有归属」、
+  永远不进孤儿面板。本页没有量这两张表的清理完备性——下一轮应逐条核对 spawn/终态/回滚/合并四路的
+  `delete`，并用一条「失败路径后表为空」的判卷钉住。
+- **跨进程不覆盖**：两张表是进程级内存；两个 App 实例共用同一 workspace 时，另一进程的活树仍会被列成孤儿。
+  本仓当前是单实例语义，但这一格没有判卷。
+- **显式清理仍强删**：孤儿面板的 `clean` 仍走 `removeWorktree` 的 `--force`（第 686 页边界）；
+  本页只保证「活树不被列进去」，没改用户主动清理的语义。
+- **真机未验**：本页是 worktree 目录/事件流/内存路由表的行为，不涉及 Electron 观感。
+- **取料（与页同笔入库）**：`outputs/orphan-cross-session-2026-10-23/targeted-anchors-ccf021da.log`、
+  `outputs/orphan-cross-session-2026-10-23/mutate-verify-ccf021da.log`、
+  `outputs/orphan-cross-session-2026-10-23/supervisor-check-ccf021da.log`；
+  认证读数在 `outputs/head-cert-ccf021d-2026-10-23-1412/provenance.md`。
