@@ -823,7 +823,7 @@ export function MemoryPane(props: { snap: MemorySnapshot; onError: (m: string) =
 // v7.1 业主裁：四个入口不再自带整页宿主与页内导航——只导出「页体」，由设置页按分区渲染；
 // 数据面不变（getState() 真快照），标题与图标事实源仍是 PAGE_META。
 
-type Snapshot = { plugins?: PluginPanelSnapshot; schedule?: ScheduleSnapshot; memory?: MemorySnapshot; worktree?: { orphans: string[] } };
+type Snapshot = { plugins?: PluginPanelSnapshot; schedule?: ScheduleSnapshot; memory?: MemorySnapshot; worktree?: { workspace: string; orphans: string[] } };
 
 /** 页体：按 page 自取一份 getState() 快照并渲染对应面板（宿主只管分区切换，不管数据）。 */
 export function AppPageBody(props: {

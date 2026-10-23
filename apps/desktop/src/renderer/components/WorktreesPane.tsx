@@ -8,7 +8,7 @@ import { GitBranch } from "lucide-react";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 export function WorktreesPane(props: {
-  snap: { orphans: string[] };
+  snap: { workspace: string; orphans: string[] };
   onError: (message: string) => void;
   refresh: () => void;
 }): React.JSX.Element {
@@ -18,7 +18,7 @@ export function WorktreesPane(props: {
   const clean = (name: string) => {
     setAsk(null);
     setBusy(name);
-    void window.agent.worktreeClean(name)
+    void window.agent.worktreeClean(name, props.snap.workspace)
       .then((r) => {
         if (!r.ok) props.onError(r.error ?? "清理失败");
         else props.refresh();

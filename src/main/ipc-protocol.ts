@@ -224,7 +224,7 @@ export interface StateResponse {
   /** M2f：辅助对话面板快照（sidechat 会话清单 + 已提升记录；缺省 = 无会话目录）。 */
   sidechat?: SidechatPanelSnapshot;
   /** M3b：孤儿 worktree 扫描（§4.4.9 只列不自动删；git 面板「可清理」列表数据源）。 */
-  worktree?: { orphans: string[] };
+  worktree?: { workspace: string; orphans: string[] };
   /** M4a：定时任务面板快照（任务定义 + 运行历史投影 + 并发计数；journal/会话纯投影）。 */
   schedule?: ScheduleSnapshot;
   /** M4b：license 状态（valid/expired/inactive/invalid；inactive → 引导横幅，§2.2）。 */
@@ -490,7 +490,7 @@ export interface AgentApi {
    *  三动作一个通道——它们共用同一条事实（磁盘上那棵树在不在），拆成三条只是把同一份状态抄三遍。 */
   sessionWorktree(req: SessionWorktreeRequest): Promise<SessionWorktreeResult>;
   /** 孤儿 worktree 清理（显式动作）：主进程按当前工作区解析、仍有归属则拒绝（第 688 页）。 */
-  worktreeClean(name: string): Promise<{ ok: boolean; error?: string }>;
+  worktreeClean(name: string, workspace?: string): Promise<{ ok: boolean; error?: string }>;
   setSessionPinned(sessionId: string, pinned: boolean): Promise<SessionMetadataRecord>;
   setSessionArchived(sessionId: string, archived: boolean): Promise<SessionMetadataRecord>;
   assignSessionProject(sessionId: string, projectId: string | null): Promise<SessionMetadataRecord>;

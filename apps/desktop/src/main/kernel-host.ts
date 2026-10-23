@@ -101,7 +101,7 @@ export interface KernelHost {
    *  run 正在那棵树里写东西，此刻合并/删除等于把脚下的地板抽走。 */
   sessionWorktree(req: SessionWorktreeRequest): Promise<SessionWorktreeResult>;
   /** 孤儿 worktree 清理：按当前工作区解析、仍有归属则拒绝（与 card_action clean 同一道闸）。 */
-  worktreeClean(name: string): Promise<{ ok: boolean; error?: string }>;
+  worktreeClean(name: string, workspace?: string): Promise<{ ok: boolean; error?: string }>;
   /** 全工作区合并的会话清单，每条带 workspace 归组标记（T3 分组侧栏的数据源）；
    *  并合并单例 sidecar 的 pinned/archived/projectId（与写路径同源，见实现处注释）。 */
   listSessions(): Promise<(SessionInfoPayload & { workspace: string })[]>;
@@ -707,8 +707,12 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       }
       return await discardSessionWorktree(ws, sessionId);
     },
-    worktreeClean: async (name) => {
-      const r = await cleanOrphanWorktree(activeWorkspace, name, { ownedAgentIds: new Set(ownedWorktreeAgentIds()) });
+    worktreeClean: async (name, workspace) => {
+      // 显式传工作区（与 getState 的 workspace 同源）：activeWorkspace 是构造期固定的默认值，
+      // 用户切项目后 getState 列的是新工作区的孤儿；拿 activeWorkspace 去删会删错仓/找不到。
+      const ws = canonicalWorkspacePath(workspace ?? activeWorkspace);
+      if (!workspaces.includes(ws)) return { ok: false, error: `工作区未登记：${ws}` };
+      const r = await cleanOrphanWorktree(ws, name, { ownedAgentIds: new Set(ownedWorktreeAgentIds()) });
       return r.removed ? { ok: true } : { ok: false, error: r.error ?? "worktree 清理失败" };
     },
     addWorkspace: (wsInput) => {

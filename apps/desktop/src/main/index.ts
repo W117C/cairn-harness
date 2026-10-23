@@ -691,7 +691,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   setSessionArchived: (sessionId, archived) => handleSessionSetArchived(sessionId as string, archived as boolean),
   // §3.7 · G4 会话级 worktree 隔离：解析归属/在跑拒绝/创建合并清理全在 kernel-host 与 core 侧。
   sessionWorktree: (req) => host.sessionWorktree(req as never),
-  worktreeClean: (name) => host.worktreeClean(name as string),
+  worktreeClean: (name, workspace) => host.worktreeClean(name as string, workspace as string | undefined),
   assignSessionProject: (sessionId, projectId) => handleSessionAssignProject(sessionId as string, projectId as string | null),
   deleteMemory: (scope, topic) => handleMemoryDelete(scope as never, topic as string, scope === "project" ? resolveWorkspace() : workspaceContext()),
   pluginDecide: async (plugin, trusted, workspace) => {

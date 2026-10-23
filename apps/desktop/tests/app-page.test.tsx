@@ -41,10 +41,10 @@ describe("页体并入设置（v7.1 业主裁）：AppPageBody + 事实源", () 
   });
 
   it("工作树页：孤儿逐条列出 + 清理按钮；空态不摆假列表", () => {
-    const html = renderToStaticMarkup(<WorktreesPane snap={{ orphans: ["worker-3"] }} onError={() => undefined} refresh={() => undefined} />);
+    const html = renderToStaticMarkup(<WorktreesPane snap={{ workspace: "/tmp/ws", orphans: ["worker-3"] }} onError={() => undefined} refresh={() => undefined} />);
     expect(html).toContain("wt-worker-3");
     expect(html).toContain("清理");
-    const empty = renderToStaticMarkup(<WorktreesPane snap={{ orphans: [] }} onError={() => undefined} refresh={() => undefined} />);
+    const empty = renderToStaticMarkup(<WorktreesPane snap={{ workspace: "/tmp/ws", orphans: [] }} onError={() => undefined} refresh={() => undefined} />);
     expect(empty).toContain("没有遗留的工作树");
   });
 
