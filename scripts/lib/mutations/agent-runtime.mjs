@@ -69,6 +69,23 @@ export const MUTATIONS = [
     apply: (s) => s.replace('      if (trimmed === "") return; // 误触不进货', "      // 误触也进货"),
     expectFail: "纯空白 / 空串不进货（误触不该变成一条空洞的指令）",
   },
+  // ---- 工具返回畸形结构（2026-10-23）：插件/MCP 工具是运行期对象，类型上的 output:string 管不到 ----
+  {
+    id: "stuck-observation-trusts-string-type",
+    src: "src/agent/stuck.ts",
+    test: "tests/tool-result-malformed.test.ts",
+    desc: "观察摘要直接 .slice 信任 output 是字符串 ⇒ 工具返回 {ok:true}（缺 output）时 `undefined.slice` 抛 TypeError，**把整轮任务打死**——为一条诊断读数赔掉整轮是本末倒置",
+    apply: (s) => s.replace('  if (typeof output === "string") return output.slice(0, 200);', "  return (output as string).slice(0, 200);"),
+    expectFail: "★ 缺 output（`{ok:true}`）⇒ 不许炸整轮，且回执可读",
+  },
+  {
+    id: "tool-result-implicit-string-coercion",
+    src: "src/agent/loop.ts",
+    test: "tests/tool-result-malformed.test.ts",
+    desc: "落盘回执用隐式 String() ⇒ 缺 output 落成字面量 undefined、对象落成 [object Object]：模型拿到一条『有回执但读不懂』的 tool_result",
+    apply: (s) => s.replace("          output: redactSecrets(readToolOutput(result.output) + postContext + repeatNote).text,", "          output: redactSecrets(String(result.output) + postContext + repeatNote).text,"),
+    expectFail: "★ output = 对象 ⇒ **序列化出来**（不是 [object Object]）",
+  },
   {
     id: "verify-fail-closed-empty",
     src: "src/agent/verify.ts",

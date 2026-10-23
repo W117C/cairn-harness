@@ -158,6 +158,23 @@ export interface LoopOptions {
   truncationRepair?: boolean;
 }
 
+/** tool_result 正文的**取料**（单一出口）：工具返回体是运行期对象，`output` 可能缺、为 null、
+ *  或根本不是字符串（插件 / MCP / 脚本化工具都不受本仓类型约束）。
+ *
+ *  为什么单开一个而不是就地 `String()`：`String(undefined)` 得到字面量 `"undefined"`——
+ *  模型会把它当成真实输出读，而它其实是"这条回执没有正文"。两者必须分得开：
+ *  前者是**有内容的**错误，后者是**没有内容**的事实。空字符串同理不许拿来顶替。 */
+function readToolOutput(output: unknown): string {
+  if (typeof output === "string") return output;
+  if (output === undefined) return "[这条工具回执没有正文]";
+  if (output === null) return "[工具回执的正文是 null]";
+  try {
+    return "[非字符串正文] " + JSON.stringify(output);
+  } catch {
+    return "[非字符串正文·无法序列化]";
+  }
+}
+
 // agent loop：事件流 → 模型 → 工具 → 事件流。
 // 每轮向 provider 要一轮事件流（stream(messages, tools)），逐事件落日志：拉取与工具执行交错
 //（for-await 语义：消费一条、执行一条、再拉下一条），与旧 next() 逐条拉取的日志逐字节同序。
@@ -791,7 +808,11 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           type: "tool_result",
           callId: output.id,
           ok: result.ok,
-          output: redactSecrets(result.output + postContext + repeatNote).text,
+          // 取料而不是硬拼：`result.output + …` 对非字符串会做**隐式**字符串化，
+          // 于是缺 output 的工具落盘成字面量 `"undefined"`、对象落成 `"[object Object]"`——
+          // 模型拿到一条"有回执但读不懂"的 tool_result，比明确说"这条回执没有正文"更坏。
+          // （2026-10-23 实测：插件/MCP 工具是运行期才拿到的，类型上的 `output: string` 管不到它们。）
+          output: redactSecrets(readToolOutput(result.output) + postContext + repeatNote).text,
           // 执行面没有这把工具：上面 `if (!tool)` 只造了 `result`，落盘在这一格 ⇒ 原因也在这里补，
           // 而不是在分支里改 `result`（那是工具的返回体，不是闸的留痕）。
           ...(tool === undefined ? { blockedBy: "unknown-tool" } : {}),

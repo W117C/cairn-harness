@@ -95,7 +95,26 @@ export function stuckActionOf(name: string, args: Record<string, unknown>): stri
   return name + " " + safeJsonSummary(args).slice(0, 200);
 }
 
-/** 观察摘要（tool_result → 稳定可比的 observation 串；截断防长输出抖动）。 */
-export function stuckObservationOf(output: string): string {
-  return output.slice(0, 200);
+/** 观察摘要（tool_result → 稳定可比的 observation 串；截断防长输出抖动）。
+ *
+ *  **入参在这里做的是「取料」而不是「信任」**（2026-10-23 实测的崩溃）：
+ *  类型上 `ToolResult.output` 是必填 `string`，但那只约束**我们自己的**工具——
+ *  插件工具、MCP 工具与脚本化工具都是运行期才拿到的，它们返回 `{ok:true}`（缺 output）、
+ *  `output:null` 或 `output:{…}` 都完全可能。旧实现直接 `.slice` ⇒
+ *  `TypeError: Cannot read properties of undefined (reading 'slice')` **把整轮任务打死**，
+ *  而这一格只是「判卡死用的观察串」——为了一条诊断读数赔掉整轮，是本末倒置。
+ *
+ *  ⇒ 任何非字符串都折成**可读的占位串**（不抛、不吞成空串）：空串会让"缺失"与"真空输出"
+ *  两种情形在比较里长得一样，而它们该被区分开。 */
+export function stuckObservationOf(output: unknown): string {
+  if (typeof output === "string") return output.slice(0, 200);
+  // 缺 / null / undefined / 对象 / 数字：说清是哪一种，别与空串混起来。
+  if (output === undefined) return "[输出的字段缺失]";
+  if (output === null) return "[输出是 null]";
+  try {
+    return ("[非字符串输出] " + JSON.stringify(output)).slice(0, 200);
+  } catch {
+    // 环形/大对象：JSON.stringify 会抛。这里的用途只是"够判卡死"，不值得为它再抛一次。
+    return "[非字符串输出·无法序列化]";
+  }
 }
