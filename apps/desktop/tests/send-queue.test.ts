@@ -3,7 +3,7 @@
 // 组件与 App 只消费这三个出口，不各算一份。
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { askBelongsToSession, composerLockReason, composerLocked, continueAfterRun, drainQueue, dropQueued, fromSessionQueueEntries, promoteQueued, shouldHealStaleRun, takeQueued, toSessionQueueEntries, type QueuedSend } from "../src/renderer/send-queue";
+import { askBelongsToSession, composerLockReason, composerLocked, continueAfterRun, drainQueue, dropQueued, fromSessionQueueEntries, promoteQueued, shouldHealStaleRun, steerAccepted, steerRouteOf, takeQueued, toSessionQueueEntries, type QueuedSend } from "../src/renderer/send-queue";
 import { readAppSurface } from "./helpers/app-surface";
 
 const item = (id: number): QueuedSend => ({ id, text: `消息${String(id)}`, attachments: [] });
@@ -171,5 +171,39 @@ describe("打断接线哨兵（源码级，第十三遍）", () => {
     // 2026-10-18：代际号先落到局部 myGen（finally / stopped 写入按它守卫），再写回表。
     expect(appSrc).toContain("const myGen = (runGen.current.get(sid) ?? 0) + 1;");
     expect(appSrc).toContain("runGen.current.set(sid, myGen);");
+  });
+});
+
+describe("第 9 点·插话的三条路（纯函数判据，不依赖 DOM/运行态）", () => {
+  const baseInput = { sessionId: "s1", running: true, forceQueue: false, attachmentCount: 0 };
+
+  it("★ 运行中 + 纯文本 + 没要求排队 ⇒ steer（送进这一轮，不新开 run）", () => {
+    expect(steerRouteOf(baseInput)).toBe("steer");
+  });
+
+  it("★ 空闲 ⇒ run（不能把「起新一轮」错当插话）", () => {
+    expect(steerRouteOf({ ...baseInput, running: false })).toBe("run");
+  });
+
+  it("★ 空屏（无会话）⇒ run：插话必须有会话可挂，否则无处可送", () => {
+    expect(steerRouteOf({ ...baseInput, sessionId: null })).toBe("run");
+  });
+
+  it("★ forceQueue（点「加入队列」钮）⇒ queue：按钮写着「加入队列」就必须真排队", () => {
+    expect(steerRouteOf({ ...baseInput, forceQueue: true })).toBe("queue");
+  });
+
+  it("★ 带附件 ⇒ queue：附件要过引用校验与装载，半路塞进当前轮会绕开校验", () => {
+    expect(steerRouteOf({ ...baseInput, attachmentCount: 1 })).toBe("queue");
+  });
+
+  it("forceQueue 连附件一起给 ⇒ 仍 queue（两条都指向同一结论，不许互相顶掉）", () => {
+    expect(steerRouteOf({ ...baseInput, forceQueue: true, attachmentCount: 2 })).toBe("queue");
+  });
+
+  it("★ 应答判据：只认 ok === true；桩/协议兜底的 {} 读成 undefined = 吞消息", () => {
+    expect(steerAccepted({ ok: true })).toBe(true);
+    expect(steerAccepted({})).toBe(false); // ← 兜底值这条必须判成"没送进去"
+    expect(steerAccepted({ ok: false })).toBe(false);
   });
 });

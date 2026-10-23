@@ -4,7 +4,7 @@ import { useCallback,useRef } from "react";
 import type { AgentEvent,AskPayload,RunAttachmentReference,RunResponse } from "../../../../../src/main/ipc-protocol";
 import { parseGoalCommand,type GoalCommand } from "../goal-command";
 import { userTextOfRound } from "../projections";
-import { continueAfterRun,drainQueue,isSessionEndDistillAsk,shouldHealStaleRun,takeQueued,toSessionQueueEntries,type QueuedSend } from "../send-queue";
+import { continueAfterRun,drainQueue,isSessionEndDistillAsk,shouldHealStaleRun,steerAccepted,steerRouteOf,takeQueued,toSessionQueueEntries,type QueuedSend } from "../send-queue";
 import { STR } from "../strings";
 import { toast } from "../toast";
 import { runKey } from "./session-identity";
@@ -147,9 +147,11 @@ export function useRunQueue(deps: RunQueueDeps) {
       //
       // 纯文本才走插话：附件（图片/文件引用）那条路要过引用校验与附件装载，属下一次 run 的入口，
       // 半路塞进当前轮会把校验绕开。带附件的消息照旧入队。
-      if (forceQueue !== true && attachments.length === 0) {
+      // 三条路的分岔在纯函数里（`steerRouteOf`），这里只执行：判据不依赖 DOM/运行态那一层，
+      // 才能被判卷钉死（第 681 页记的冒烟失败的根因就是那一层在离屏界面里立不住）。
+      if (steerRouteOf({ sessionId: sid, running: true, forceQueue, attachmentCount: attachments.length }) === "steer") {
         const steered = await window.agent.runSteer(sid, text).catch(() => ({ ok: false as const }));
-        if (steered.ok === true) {
+        if (steerAccepted(steered)) {
           // 回执必须说清是「已插话」还是「已排队」：两种后果差一整轮的工作。
           setLastNotice(STR.composer.steerSent, sid);
           return;
