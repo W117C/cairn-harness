@@ -95,6 +95,7 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   setSessionArchived: "agent:session-archive",
   sessionWorktree: "agent:session-worktree",
   worktreeClean: "agent:worktree-clean",
+  worktreeDiff: "agent:worktree-diff",
   assignSessionProject: "agent:session-assign",
   deleteMemory: "agent:memory-delete",
   pluginDecide: "agent:plugin-decide",

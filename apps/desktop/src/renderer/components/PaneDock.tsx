@@ -15,6 +15,7 @@ import { turnDelivery } from "../projections";
 import { diffCount, useLazyChangeDiff } from "../change-diff-state";
 import { MIN_PANE_PCT, loadPaneRows, mergePaneRows, paneRowLayout, savePaneRows } from "../pane-layout";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { ModalSurface } from "./ModalSurface";
 import { toast } from "../toast";
 import { DiffView } from "./DiffView";
 import { FilePane } from "./FilePane";
@@ -737,6 +738,7 @@ function PlanPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
 function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
   const workers = projectWorkers(props.events);
   const [ask, setAsk] = useState<{ w: WorkerPaneItem; action: "merge" | "reject" } | null>(null);
+  const [diff, setDiff] = useState<{ agentId: string; text: string } | null>(null);
   if (workers.length === 0) {
     return <div className="pane-empty">本会话还没有派过子任务。<br />agent 派出 worker 后会在这里列出。</div>;
   }
@@ -749,6 +751,12 @@ function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element 
     : "已取消";
   const verifiedWord = (v: NonNullable<WorkerPaneItem["verified"]>): string =>
     v === "verified" ? "验证通过" : v === "failed" ? "验证失败" : v === "stale" ? "证据过期" : "无验证";
+  const showDiff = async (w: WorkerPaneItem): Promise<void> => {
+    if (w.diffRef === undefined) return;
+    const r = await window.agent.worktreeDiff(w.diffRef);
+    if (!r.ok) toast.error(`读取改动失败：${r.error}`);
+    else setDiff({ agentId: w.agentId, text: r.patch.trim() === "" ? r.stat : r.patch });
+  };
   const settle = async (w: WorkerPaneItem, action: "merge" | "reject"): Promise<void> => {
     setAsk(null);
     const r = await window.agent.cardAction({
@@ -794,6 +802,7 @@ function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element 
           {w.reason !== undefined && <div className="consequence danger-text">{w.reason}</div>}
           {w.mode === "write" && w.status === "done" && w.resultEventId !== undefined && (
             <div className="wk-actions">
+              {w.diffRef !== undefined && <button className="mini-btn ghost" onClick={() => void showDiff(w)}>查看改动…</button>}
               <button className="mini-btn primary" onClick={() => setAsk({ w, action: "merge" })}>合并…</button>
               <button className="mini-btn ghost" onClick={() => setAsk({ w, action: "reject" })}>拒绝…</button>
             </div>
@@ -801,6 +810,12 @@ function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element 
         </section>
       ))}
     </div>
+    {diff !== null && (
+      <ModalSurface className="diff-modal" label={`${diff.agentId} 的改动`} onClose={() => setDiff(null)}>
+        <div className="diff-modal-head">{diff.agentId} · 改动</div>
+        <pre className="diff-patch">{diff.text}</pre>
+      </ModalSurface>
+    )}
     {ask !== null && (
       <ConfirmDialog
         title={ask.action === "merge" ? `合并 ${ask.w.agentId} 的改动？` : `拒绝 ${ask.w.agentId} 的改动？`}

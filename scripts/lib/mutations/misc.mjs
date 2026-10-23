@@ -187,6 +187,15 @@ export const MUTATIONS = [
     expectFail: "valid / expired / invalid / inactive 各有话说，未读取不冒充未激活",
   },
   {
+    id: "worker-diff-ref-path-traversal-allowed",
+    src: "src/agent/worktree.ts",
+    test: "tests/worktree-pure.test.ts",
+    desc: "diff_ref 解析放开 .agents/wt-* 前缀 ⇒ `../` 或任意路径能进「查看 worker 改动」；"
+      + "主进程虽然随后有 startsWith 兜底，但形状闸是第一道也是唯一贴着解析器的闸（别把安全押在第二道）",
+    apply: (s) => s.replace('/^(\\.agents\\/wt-[A-Za-z0-9_-]+)@([0-9a-f]{7,40})$/', '/^(.+)@([0-9a-f]{7,40})$/'),
+    expectFail: "只认 .agents/wt-<id>@<hex>；路径穿越/非 hex/空串一律 null",
+  },
+  {
     id: "invoke-census-schedule-consumer-dropped",
     src: "apps/desktop/src/renderer/components/AppPage.tsx",
     test: "apps/desktop/tests/invoke-consumer-census.test.ts",

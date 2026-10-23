@@ -1932,6 +1932,9 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .plugin-pane .ap-split.has-drawer { grid-template-columns: minmax(0, 1fr); }
 .pane-card { border: 1px solid var(--hairline-strong); border-radius: var(--radius-lg); background: hsl(var(--bg-000)); overflow: hidden; }
 .wk-actions { display: flex; gap: var(--space-xs); padding-top: var(--space-xs); }
+.diff-patch { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 62vh; overflow: auto; margin: 0; padding: var(--space-sm) var(--space-md); font-family: var(--mono); font-size: var(--fs-caption-xs); line-height: 1.55; background: hsl(var(--bg-000)); }
+.diff-modal { max-width: 880px; }
+.diff-modal-head { padding: var(--space-sm) var(--space-md); font-weight: var(--fw-bold); border-bottom: 1px solid var(--hairline); }
 .pane-card-head { display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--hairline); min-width: 0; }
 .pc-title { font-size: var(--fs-body-sm); font-weight: var(--fw-bold); flex: none; }
 .pc-goal { font-size: var(--fs-body-sm); color: hsl(var(--text-200)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }

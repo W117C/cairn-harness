@@ -89,6 +89,8 @@ export interface WorkerPaneItem {
   usage?: { inputTokens: number; outputTokens: number };
   /** agent_result 在会话事件流里的 1-based 行号（card_action 的 sourceEventId；worker 合并/拒绝用）。 */
   resultEventId?: number;
+  /** worker 的 diff_ref（`<worktree>@<baseCommit>`）；有了它才能「看过再合」。 */
+  diffRef?: string;
 }
 
 /** worker 四事件（spawned/status/message/result）按 agent_id 归组。spawned 缺席的孤儿事件忽略
@@ -140,7 +142,7 @@ export function projectWorkers(events: readonly AgentEvent[]): WorkerPaneItem[] 
       if (item === undefined) continue;
       const r = e as {
         status: "done" | "failed"; summary: string;
-        artifacts: { files_changed?: string[]; verified?: WorkerVerified; spent_usd?: number };
+        artifacts: { files_changed?: string[]; diff_ref?: string; verified?: WorkerVerified; spent_usd?: number };
         usage?: { inputTokens: number; outputTokens: number };
       };
       item.status = r.status;
@@ -150,6 +152,7 @@ export function projectWorkers(events: readonly AgentEvent[]): WorkerPaneItem[] 
       if (r.artifacts.spent_usd !== undefined) item.spentUsd = r.artifacts.spent_usd;
       if (r.usage !== undefined) item.usage = { inputTokens: r.usage.inputTokens, outputTokens: r.usage.outputTokens };
       item.resultEventId = eventIndex + 1;
+      if (r.artifacts.diff_ref !== undefined) item.diffRef = r.artifacts.diff_ref;
     }
   }
   // 终态时长（缺 started 或 ended 不算——不编）。

@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { branchForAgent, cleanOrphanWorktree, createWorktree, removeWorktree, worktreeDirty, worktreePathFor } from "../src/agent/worktree";
+import { branchForAgent, cleanOrphanWorktree, createWorktree, removeWorktree, worktreeDiff, worktreeDirty, worktreePathFor } from "../src/agent/worktree";
 
 const git = (cwd: string, ...args: string[]): string =>
   execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -178,6 +178,16 @@ describe("createWorktree：worker 的 agentId 跨进程重号，不许挂载旧�
     expect(await worktreeDirty(root, "worker-11")).toBe(true);
     rmSync(join(wt, "wip.txt"));
     expect(await worktreeDirty(root, "worker-11")).toBe(false);
+  });
+
+
+  it("worktreeDiff：读到真实 patch（worker 改动预览的数据面）", async () => {
+    const root = repo();
+    const created = await createWorktree(root, "worker-13", "同一任务");
+    writeFileSync(join(worktreePathFor(root, "worker-13"), "a.txt"), "changed\n", "utf8");
+    const d = await worktreeDiff(worktreePathFor(root, "worker-13"), created.baseCommit);
+    expect(d.files).toContain("a.txt");
+    expect(d.patch).toContain("+changed");
   });
 
 });

@@ -491,6 +491,8 @@ export interface AgentApi {
   sessionWorktree(req: SessionWorktreeRequest): Promise<SessionWorktreeResult>;
   /** 孤儿 worktree 清理（显式动作）：主进程按当前工作区解析、仍有归属则拒绝（第 688 页）。 */
   worktreeClean(name: string, workspace?: string): Promise<{ ok: boolean; error?: string }>;
+  /** 读 worker worktree 的 diff（`diff_ref` = `<worktree>@<baseCommit>`）：只认 .agents/wt-* 与 hex 基线。 */
+  worktreeDiff(ref: string, workspace?: string): Promise<{ ok: true; stat: string; patch: string; files: string[] } | { ok: false; error: string }>;
   setSessionPinned(sessionId: string, pinned: boolean): Promise<SessionMetadataRecord>;
   setSessionArchived(sessionId: string, archived: boolean): Promise<SessionMetadataRecord>;
   assignSessionProject(sessionId: string, projectId: string | null): Promise<SessionMetadataRecord>;

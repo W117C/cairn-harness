@@ -261,6 +261,15 @@ async function ensureGitignoreAgents(root: string): Promise<void> {
   }
 }
 
+/** `diff_ref`（`<worktree>@<baseCommit>`）的解析：路径只认 `.agents/wt-<id>`，base 只认 hex。
+ *  这是渲染层要求「查看 worker 改动」时的入口；路径进 git 前必须过这道形状闸，别让
+ *  一个任意字符串变成任意目录读。 */
+export interface WorktreeRef { worktree: string; baseCommit: string }
+export function parseWorktreeRef(ref: string): WorktreeRef | null {
+  const m = /^(\.agents\/wt-[A-Za-z0-9_-]+)@([0-9a-f]{7,40})$/.exec(ref);
+  return m === null ? null : { worktree: m[1]!, baseCommit: m[2]! };
+}
+
 /** worker 产出 diff（裁决 3 口径：worktree 工作树 vs base_commit，含未提交改动）。
  *  先 `git add -N .`（intent-to-add 让未跟踪文件进 diff），再 `git diff <base>`。 */
 export async function worktreeDiff(wtPath: string, baseCommit: string): Promise<{ stat: string; patch: string; files: string[] }> {

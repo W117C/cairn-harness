@@ -39,7 +39,7 @@ import {
   mergeSessionWorktree,
   sessionWorktreePath,
 } from "../../../../src/main/session-worktree";
-import { cleanOrphanWorktree } from "../../../../src/agent/worktree";
+import { cleanOrphanWorktree, parseWorktreeRef, worktreeDiff as readWorktreeDiff } from "../../../../src/agent/worktree";
 import { ownedWorktreeAgentIds } from "../../../../src/agent/orchestrator";
 import { scheduledRunCount } from "../../../../src/main/scheduler-runtime";
 import {
@@ -102,6 +102,8 @@ export interface KernelHost {
   sessionWorktree(req: SessionWorktreeRequest): Promise<SessionWorktreeResult>;
   /** 孤儿 worktree 清理：按当前工作区解析、仍有归属则拒绝（与 card_action clean 同一道闸）。 */
   worktreeClean(name: string, workspace?: string): Promise<{ ok: boolean; error?: string }>;
+  /** 读 worker worktree 的 diff（`diff_ref`）：路径/基线先过形状闸，绝不接受任意路径。 */
+  worktreeDiff(ref: string, workspace?: string): Promise<{ ok: true; stat: string; patch: string; files: string[] } | { ok: false; error: string }>;
   /** 全工作区合并的会话清单，每条带 workspace 归组标记（T3 分组侧栏的数据源）；
    *  并合并单例 sidecar 的 pinned/archived/projectId（与写路径同源，见实现处注释）。 */
   listSessions(): Promise<(SessionInfoPayload & { workspace: string })[]>;
@@ -714,6 +716,21 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       if (!workspaces.includes(ws)) return { ok: false, error: `工作区未登记：${ws}` };
       const r = await cleanOrphanWorktree(ws, name, { ownedAgentIds: new Set(ownedWorktreeAgentIds()) });
       return r.removed ? { ok: true } : { ok: false, error: r.error ?? "worktree 清理失败" };
+    },
+    worktreeDiff: async (ref, workspace) => {
+      const parsed = parseWorktreeRef(ref);
+      if (parsed === null) return { ok: false, error: "diff_ref 形状非法（只认 .agents/wt-<id>@<hex>）：" + ref };
+      const ws = canonicalWorkspacePath(workspace ?? activeWorkspace);
+      if (!workspaces.includes(ws)) return { ok: false, error: `工作区未登记：${ws}` };
+      const wt = join(ws, parsed.worktree);
+      const prefix = join(ws, ".agents") + sep;
+      if (!wt.startsWith(prefix)) return { ok: false, error: "diff_ref 逃出 .agents： " + ref };
+      try {
+        const r = await readWorktreeDiff(wt, parsed.baseCommit);
+        return { ok: true, ...r };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
     },
     addWorkspace: (wsInput) => {
       // 动态并入扫描面（M3-3 修复轮）：唯一调用方是 main 进程 addProject handler（registry.add
