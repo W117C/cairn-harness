@@ -16,7 +16,7 @@ export const MUTATIONS = [
     ),
     expectFail: "归属已知：只认本会话那张卡，别人的卡不上屏（此前是渲染最后到达的那张）",
   },
-    {
+        {
     id: "desktop-steer-route-ignores-running",
     src: "apps/desktop/src/renderer/send-queue.ts",
     test: "apps/desktop/tests/send-queue.test.ts",
