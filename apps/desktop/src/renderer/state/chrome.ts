@@ -510,7 +510,12 @@ export function useChrome(deps: ChromeDeps): ChromeState {
   const openPreview = useCallback(async (target: string): Promise<void> => {
     let snapshot: PreviewSnapshot;
     try {
-      snapshot = await window.agent.previewStart(target);
+      // 已有预览（preparing/starting/ready）就复用，重复点「预览」不重启服务；
+      // idle/stopped/failed 才走 start。previewStatus 这条通道由此有了真实消费点。
+      const existing = await window.agent.previewStatus(target).catch(() => null);
+      snapshot = existing !== null && (existing.status === "preparing" || existing.status === "starting" || existing.status === "ready")
+        ? existing
+        : await window.agent.previewStart(target);
     } catch (err) {
       setLastError(`预览启动失败：${err instanceof Error ? err.message : String(err)}`);
       return;

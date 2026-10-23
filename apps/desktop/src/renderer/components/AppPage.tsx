@@ -833,10 +833,18 @@ export function AppPageBody(props: {
   const [snap, setSnap] = useState<Snapshot | null>(null);
 
   const refresh = useCallback(() => {
+    // 自动化页只需要 schedule：走专用的 scheduleSnapshot 通道，不再用整份 getState
+    // （那条整份快照还要算插件/记忆/工作树；也为 invoke 消费面留下一处真实调用点）。
+    if (props.page === "automation") {
+      void window.agent.scheduleSnapshot().then((schedule) => setSnap({ schedule })).catch((err: unknown) => {
+        props.onError(`调度快照读取失败：${err instanceof Error ? err.message : String(err)}`);
+      });
+      return;
+    }
     void window.agent.getState().then(setSnap).catch((err: unknown) => {
       props.onError(`快照读取失败：${err instanceof Error ? err.message : String(err)}`);
     });
-  }, [props.onError]);
+  }, [props.onError, props.page]);
   useEffect(() => { refresh(); }, [refresh]);
 
   return (

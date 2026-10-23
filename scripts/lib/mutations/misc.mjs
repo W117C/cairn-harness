@@ -187,6 +187,16 @@ export const MUTATIONS = [
     expectFail: "valid / expired / invalid / inactive 各有话说，未读取不冒充未激活",
   },
   {
+    id: "invoke-census-schedule-consumer-dropped",
+    src: "apps/desktop/src/renderer/components/AppPage.tsx",
+    test: "apps/desktop/tests/invoke-consumer-census.test.ts",
+    config: "apps/desktop/vitest.config.ts",
+    desc: "自动化页退回整份 getState ⇒ scheduleSnapshot 又成零消费通道：主进程接得通、UI 没人调，"
+      + "而人口普查守卫会把这条当场点名（第 642 页 createProject/cardAction 的同一形状）",
+    apply: (s) => s.replace("window.agent.scheduleSnapshot()", "window.agent.getState()"),
+    expectFail: "100 条通道全部有消费者；例外只有带理由的 allowlist",
+  },
+  {
     id: "worker-card-action-cardtype-drift",
     src: "apps/desktop/src/renderer/components/panes.ts",
     test: "apps/desktop/tests/panes.test.ts",
