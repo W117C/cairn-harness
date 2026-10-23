@@ -15,7 +15,7 @@ import { turnDelivery } from "../projections";
 import { diffCount, useLazyChangeDiff } from "../change-diff-state";
 import { MIN_PANE_PCT, loadPaneRows, mergePaneRows, paneRowLayout, savePaneRows } from "../pane-layout";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { parseUnifiedPatch } from "../diff-patch";
+import { clipDiff, parseUnifiedPatch } from "../diff-patch";
 import { ModalSurface } from "./ModalSurface";
 import { toast } from "../toast";
 import { DiffView } from "./DiffView";
@@ -739,7 +739,7 @@ function PlanPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
 function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
   const workers = projectWorkers(props.events);
   const [ask, setAsk] = useState<{ w: WorkerPaneItem; action: "merge" | "reject" } | null>(null);
-  const [diff, setDiff] = useState<{ agentId: string; text: string; hunks: ReturnType<typeof parseUnifiedPatch> } | null>(null);
+  const [diff, setDiff] = useState<{ agentId: string; text: string; hunks: ReturnType<typeof parseUnifiedPatch>; truncated: boolean } | null>(null);
   if (workers.length === 0) {
     return <div className="pane-empty">本会话还没有派过子任务。<br />agent 派出 worker 后会在这里列出。</div>;
   }
@@ -757,8 +757,8 @@ function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element 
     const r = await window.agent.worktreeDiff(w.diffRef);
     if (!r.ok) toast.error(`读取改动失败：${r.error}`);
     else {
-      const text = r.patch.trim() === "" ? r.stat : r.patch;
-      setDiff({ agentId: w.agentId, text, hunks: parseUnifiedPatch(r.patch) });
+      const clipped = clipDiff(r.patch.trim() === "" ? r.stat : r.patch);
+      setDiff({ agentId: w.agentId, text: clipped.text, hunks: parseUnifiedPatch(clipped.text), truncated: clipped.truncated });
     }
   };
   const settle = async (w: WorkerPaneItem, action: "merge" | "reject"): Promise<void> => {
@@ -817,7 +817,8 @@ function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element 
     {diff !== null && (
       <ModalSurface className="diff-modal" label={`${diff.agentId} 的改动`} onClose={() => setDiff(null)}>
         <div className="diff-modal-head">{diff.agentId} · 改动</div>
-        {diff.hunks.length > 0 ? <DiffView hunks={diff.hunks} /> : <pre className="diff-patch">{diff.text}</pre>}
+        {diff.hunks.length > 0 ? <DiffView hunks={diff.hunks} truncated={diff.truncated} /> : <pre className="diff-patch">{diff.text}</pre>}
+        {diff.truncated && <div className="diff-note">patch 超过 {String(200000)} 字符，预览已截断；完整内容请走变更窗格/命令行。</div>}
       </ModalSurface>
     )}
     {ask !== null && (

@@ -1,6 +1,6 @@
 // worker 改动预览的 patch 解析判卷（2026-10-23）。
 import { describe, expect, it } from "vitest";
-import { parseUnifiedPatch } from "../src/renderer/diff-patch";
+import { clipDiff, parseUnifiedPatch } from "../src/renderer/diff-patch";
 
 describe("parseUnifiedPatch：git patch → DiffView hunks", () => {
   it("文件头跳过；+/-/空格三类行与两侧行号正确", () => {
@@ -42,5 +42,13 @@ describe("parseUnifiedPatch：git patch → DiffView hunks", () => {
   it("解析不出来 ⇒ []（调用方回落原文，不把没解析说成没差异）", () => {
     expect(parseUnifiedPatch("not a diff\n")).toEqual([]);
     expect(parseUnifiedPatch("")).toEqual([]);
+  });
+});
+describe("clipDiff：预览 UI 帽", () => {
+  it("不超帽原样；超帽截到帽并标 truncated（不假装完整）", () => {
+    expect(clipDiff("abc", 10)).toEqual({ text: "abc", truncated: false });
+    const long = "x".repeat(11);
+    expect(clipDiff(long, 10)).toEqual({ text: "x".repeat(10), truncated: true });
+    expect(clipDiff("abc", 3)).toEqual({ text: "abc", truncated: false });
   });
 });

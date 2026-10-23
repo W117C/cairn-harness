@@ -187,6 +187,16 @@ export const MUTATIONS = [
     expectFail: "valid / expired / invalid / inactive 各有话说，未读取不冒充未激活",
   },
   {
+    id: "diff-view-cap-ignored",
+    src: "apps/desktop/src/renderer/diff-patch.ts",
+    test: "apps/desktop/tests/diff-patch.test.ts",
+    config: "apps/desktop/vitest.config.ts",
+    desc: "预览帽失效 ⇒ 32MB patch 整段进解析与 DOM，渲染层卡死；而界面不会说「截断了」，"
+      + "用户以为看到的就是全部（把「没显示」读成「没有」）",
+    apply: (s) => s.replace("if (text.length <= cap) return { text, truncated: false };", "if (true) return { text, truncated: false };"),
+    expectFail: "不超帽原样；超帽截到帽并标 truncated（不假装完整）",
+  },
+  {
     id: "diff-patch-add-lines-dropped",
     src: "apps/desktop/src/renderer/diff-patch.ts",
     test: "apps/desktop/tests/diff-patch.test.ts",

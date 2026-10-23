@@ -7,6 +7,14 @@ import type { DiffHunkView } from "../../../../src/main/change-diff";
 
 const HUNK = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/u;
 
+/** worker diff 预览的 UI 帽：core 侧 worktreeDiff 允许到 32MB，整段进 DOM/解析会把渲染层卡死。
+ *  200k 字符足够看多数改动；超帽只截显示，**不假装完整**（界面必须标 truncated）。 */
+export const DIFF_VIEW_CHAR_CAP = 200_000;
+export function clipDiff(text: string, cap = DIFF_VIEW_CHAR_CAP): { text: string; truncated: boolean } {
+  if (text.length <= cap) return { text, truncated: false };
+  return { text: text.slice(0, cap), truncated: true };
+}
+
 export function parseUnifiedPatch(patch: string): DiffHunkView[] {
   const out: DiffHunkView[] = [];
   let cur: DiffHunkView | null = null;
