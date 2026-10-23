@@ -23265,3 +23265,6 @@ export function ownedWorktreeAgentIds(): string[] {
   `outputs/orphan-cross-session-2026-10-23/mutate-verify-ccf021da.log`、
   `outputs/orphan-cross-session-2026-10-23/supervisor-check-ccf021da.log`；
   认证读数在 `outputs/head-cert-ccf021d-2026-10-23-1412/provenance.md`。
+
+> 勘误（2026-10-23，同页）：第五节原写「本页新增的 3 条判卷全绿」有误。本页新增判卷是 **2 条**
+> （`worktree-pure` 1 条 ＋ `orphan-cross-session` 1 条）；head-cert 总数 6596 → 6598 的 +2 就是它们。
