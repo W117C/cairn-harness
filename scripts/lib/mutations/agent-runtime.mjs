@@ -71,6 +71,14 @@ export const MUTATIONS = [
   },
   // ---- worker worktree 分支撞名（2026-10-23）：agentId 是进程内序列，分支是跨进程的 ----
   {
+    id: "worktree-overwrites-dirty-residue",
+    src: "src/agent/worktree.ts",
+    test: "tests/worktree-branch-reuse.test.ts",
+    desc: "同路径残留有未提交改动仍自动 rm -rf ⇒ 上一次崩溃留下的孤儿 working tree 被静默抹掉：commit 过的还在分支上，未提交的没有第二份",
+    apply: (s) => s.replace('  if (residue.state === "dirty") {', "  if (false) {"),
+    expectFail: "同路径残留有未提交改动：拒绝 spawn，文件原样保留（不自动 rm -rf）",
+  },
+  {
     id: "session-worktree-recreate-destroys-wip",
     src: "src/main/session-worktree.ts",
     test: "tests/session-worktree-idempotent.test.ts",

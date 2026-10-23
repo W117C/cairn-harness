@@ -8,7 +8,7 @@
 // 于是新 worker 会站在**旧提交**上干活（baseCommit 却是当前 HEAD），或者旧分支本身坏了就整次 spawn 失败。
 // 这条判卷钉的是：撞名 ⇒ 换名新建，恒从当前 HEAD 起；旧分支原样不动。
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -124,6 +124,35 @@ describe("createWorktree：worker 的 agentId 跨进程重号，不许挂载旧�
     expect(cleaned.removed).toBe(true);
     expect(git(root, "branch", "--list", first.branch).trim()).toBe("");
     expect(git(root, "branch", "--list", second.branch).trim()).toBe("");
+  });
+
+
+  it("同路径残留有未提交改动：拒绝 spawn，文件原样保留（不自动 rm -rf）", async () => {
+    const root = repo();
+    await createWorktree(root, "worker-7", "同一任务");
+    const wt = worktreePathFor(root, "worker-7");
+    writeFileSync(join(wt, "a.txt"), "dirty\n", "utf8");
+    writeFileSync(join(wt, "wip.txt"), "uncommitted\n", "utf8");
+
+    await expect(createWorktree(root, "worker-7", "同一任务")).rejects.toThrow(/未提交改动/);
+    expect(readFileSync(join(wt, "a.txt"), "utf8")).toBe("dirty\n");
+    expect(readFileSync(join(wt, "wip.txt"), "utf8")).toBe("uncommitted\n");
+
+    // 手工清干净之后，自愈路径仍然可用（不是把整条重建封死）
+    writeFileSync(join(wt, "a.txt"), "base\n", "utf8");
+    rmSync(join(wt, "wip.txt"));
+    const again = await createWorktree(root, "worker-7", "同一任务");
+    expect(again.baseCommit).toBe(head(root));
+  });
+
+  it("同路径是认不出的普通目录：拒绝而不是删掉用户文件", async () => {
+    const root = repo();
+    const wt = worktreePathFor(root, "worker-8");
+    mkdirSync(wt, { recursive: true });
+    writeFileSync(join(wt, "user.txt"), "keep me\n", "utf8");
+
+    await expect(createWorktree(root, "worker-8", "同一任务")).rejects.toThrow(/不是可识别的 git worktree/);
+    expect(readFileSync(join(wt, "user.txt"), "utf8")).toBe("keep me\n");
   });
 
 });

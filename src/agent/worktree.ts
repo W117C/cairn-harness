@@ -128,6 +128,31 @@ export interface CreateWorktreeOptions {
   reuseExistingBranch?: boolean;
 }
 
+/** 同路径残留下的现状：none＝什么都没有；clean＝可安全清掉；dirty＝有未提交改动（含未跟踪）；
+ *  unrecognized＝目录在但不是可识别的 worktree（可能是用户自己的目录）。
+ *
+ *  为什么要在 `worktree remove --force` 之前问：worker 的 agentId 是进程内序列，重启后重号 ⇒
+ *  上一次崩溃留下的 `.agents/wt-worker-1` 会在下一次 spawn 被同路径删掉。孤儿面板的本意是
+ *  「列出来让用户决定」，而 spawn 静默 `rm -rf` 会把那棵树里未提交的改动整片抹掉——commit 过的
+ *  还在分支上，未提交的没有第二份。所以脏残留一律 fail-visible，不自动清。 */
+async function residueState(wtPath: string): Promise<{ state: "none" | "clean" | "dirty" | "unrecognized"; detail?: string }> {
+  try {
+    await lstat(wtPath);
+  } catch {
+    return { state: "none" };
+  }
+  if (await isWorktreeRoot(wtPath)) {
+    try {
+      const out = await git(wtPath, "status", "--porcelain");
+      return out.trim() === "" ? { state: "clean" } : { state: "dirty" };
+    } catch (err) {
+      return { state: "dirty", detail: err instanceof Error ? err.message : String(err) };
+    }
+  }
+  const entries = await readdir(wtPath).catch(() => []);
+  return entries.length === 0 ? { state: "clean" } : { state: "unrecognized" };
+}
+
 /** spawn 批准后的 worktree 创建：base = 当前 HEAD → worktree add -b → symlink gitignored 目录。
  *  幂等加固：同路径残留（同 id 撞车/上次清理失败）先清 git 注册与目录再建；同名分支按
  *  `CreateWorktreeOptions.reuseExistingBranch` 决定“挂载”还是“换名新建”（缺省后者）。 */
@@ -141,9 +166,21 @@ export async function createWorktree(
 ): Promise<CreatedWorktree> {
   const baseCommit = (await git(root, "rev-parse", "HEAD")).trim();
   const rel = join(WORKTREE_ROOT_DIR, "wt-" + agentId);
+  const wtPath = worktreePathFor(root, agentId);
+  // 同路径残留：脏的/认不出的 fail-visible，绝不自动覆盖（见 residueState 的注释）。
+  const residue = await residueState(wtPath);
+  if (residue.state === "dirty") {
+    throw new WorktreeError(
+      `残留 worktree 有未提交改动，拒绝自动清掉：${wtPath}（先合并/丢弃或人工检查；spawn 不会覆盖未提交的工作）` +
+        (residue.detail ? `｜状态读不出：${residue.detail}` : ""),
+    );
+  }
+  if (residue.state === "unrecognized") {
+    throw new WorktreeError(`路径已存在但不是可识别的 git worktree，拒绝自动清掉：${wtPath}（先人工检查/移走）`);
+  }
   // 残留自愈（fail-visible 于 add 失败）：先清 git 注册（ignore 失败）再清目录
   await git(root, "worktree", "remove", "--force", rel).catch(() => {});
-  await rm(worktreePathFor(root, agentId), { recursive: true, force: true });
+  await rm(wtPath, { recursive: true, force: true });
   const preferred = branchForAgent(task, agentId);
   const exists = async (name: string): Promise<boolean> =>
     git(root, "rev-parse", "--verify", "--quiet", name).then(() => true, () => false);
