@@ -51,19 +51,48 @@ export async function readCommandEntries(root: string, dirName: string, plugin: 
   const out: PromptCommandEntry[] = [];
   for (const f of (await readdir(commandsRoot)).sort()) {
     if (!f.endsWith(".md")) continue;
-    const abs = join(commandsRoot, f);
-    const text = await readFile(abs, "utf8").catch(() => "");
-    const { frontmatter, body } = parseFrontmatter(text);
-    out.push({
-      plugin,
-      name: f.slice(0, -3),
-      description: fmString(frontmatter, "description") ?? "",
-      path: abs,
-      frontmatter,
-      body,
-    });
+    const entry = await readCommandFile(join(commandsRoot, f), f.slice(0, -3), plugin);
+    if (entry) out.push(entry);
   }
   return out;
+}
+
+/** 递归读命令目录（Claude / Qoder 允许 `commands/<ns>/<name>.md`）。
+ *  命令名取相对路径、`/` 换成 `:`：`opsx/new.md` → `opsx:new`（调用名 `/plugin:opsx:new`）。
+ *  软链目录不跟随（Dirent 不是目录 ⇒ 跳过），与插件内容的软链 fail-closed 口径一致。 */
+export async function readCommandEntriesDeep(root: string, dirName: string, plugin: string | null): Promise<PromptCommandEntry[]> {
+  const commandsRoot = join(root, dirName);
+  if (!(await dirExists(commandsRoot))) return [];
+  const out: PromptCommandEntry[] = [];
+  const walk = async (dir: string, prefix: string): Promise<void> => {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const ent of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const abs = join(dir, ent.name);
+      if (ent.isDirectory()) {
+        await walk(abs, prefix + ent.name + ":");
+        continue;
+      }
+      if (!ent.isFile() || !ent.name.endsWith(".md")) continue;
+      const entry = await readCommandFile(abs, prefix + ent.name.slice(0, -3), plugin);
+      if (entry) out.push(entry);
+    }
+  };
+  await walk(commandsRoot, "");
+  return out;
+}
+
+async function readCommandFile(abs: string, name: string, plugin: string | null): Promise<PromptCommandEntry | null> {
+  let text: string;
+  try { text = await readFile(abs, "utf8"); } catch { return null; }
+  const { frontmatter, body } = parseFrontmatter(text);
+  return {
+    plugin,
+    name,
+    description: fmString(frontmatter, "description") ?? "",
+    path: abs,
+    frontmatter,
+    body,
+  };
 }
 
 /** agents/*.md → AgentRoleEntry（name 缺省回退文件名）。 */

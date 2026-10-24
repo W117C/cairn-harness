@@ -186,7 +186,7 @@ export function pluginRuntimeOpts(workspace: string): Omit<Parameters<typeof Plu
     ...(process.env.M2E_USER_PLUGINS ? { userPluginsDir: process.env.M2E_USER_PLUGINS } : {}),
     projectPluginsDir: projectAgentPath(workspace, "plugins"),
     ...(process.env.M2E_LOOSE_SKILLS ? { looseRoots: [process.env.M2E_LOOSE_SKILLS] } : {}),
-    // 外部声明式来源：项目级恒扫；用户级（~/.config/opencode、~/.pi/agent）只在装配面显式带 home。
+    // 外部声明式来源：项目级恒扫（.opencode/.pi/.agents/.qoder/.claude）；用户级目录只在装配面显式带 home。
     // `M2E_FOREIGN_SOURCES=off` 关掉整顶——判卷要可复现，不能让结果取决于跑测试那台机器的 home。
     foreignSources: process.env.M2E_FOREIGN_SOURCES === "off" ? [] : defaultForeignSources(workspace, homedir()),
     workspace,

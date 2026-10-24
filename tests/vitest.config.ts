@@ -19,6 +19,11 @@ mkdirSync(process.env.PI_SCRATCH_DIR, { recursive: true });
 if (!process.env.M7_IMPACT_TAGS_DIR) process.env.M7_IMPACT_TAGS_DIR = join(tmpdir(), "dsh-impact-tags");
 mkdirSync(process.env.M7_IMPACT_TAGS_DIR, { recursive: true });
 
+// 外部声明式来源（opencode/pi/codex/qoder/claude）：生产装配面会扫用户级 ~/.claude 等；
+// 判卷必须可复现，不能让结果取决于跑测试那台机器的 home。这里关掉整顶；要验外部来源的用例
+// 直接给 discoverPlugins 传 foreignSources（或自己设 M2E_FOREIGN_SOURCES=1 覆盖）。
+if (!process.env.M2E_FOREIGN_SOURCES) process.env.M2E_FOREIGN_SOURCES = "off";
+
 // 只跑根 tests/ 下的用例；fixtures/todo-app 是独立靶子，由它目录里的 pnpm test 负责。
 export default defineConfig({
   test: {

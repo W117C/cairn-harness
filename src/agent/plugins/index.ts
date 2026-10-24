@@ -79,9 +79,8 @@ export interface PluginRuntimeOptions {
    *  显式给空串＝关掉这一顶根（判卷与「只想看别的根」的脚本用）。 */
   projectSkillsDir?: string;
   looseRoots?: string[];
-  /** 外部声明式来源（opencode / pi）。缺省 = `defaultForeignSources(workspace, home)`：
-   *  项目级 `<ws>/.opencode`、`<ws>/.pi` + 用户级 `~/.config/opencode`、`~/.pi/agent`。
-   *  显式给 `[]` = 关掉外部导入。 */
+  /** 外部声明式来源（opencode / pi / codex / qoder / claude）。缺省 =
+   *  `defaultForeignSources(workspace, home)`：项目级五顶根，带 home 时再加用户级。 */
   foreignSources?: ForeignSource[];
   workspace: string;
   /** 插件数据根（PLUGIN_DATA / 超限落盘）。 */

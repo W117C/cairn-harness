@@ -133,11 +133,87 @@ describe("外部声明式来源：pi", () => {
   });
 });
 
+describe("外部声明式来源：qoder", () => {
+  it("skills / 嵌套 commands / agents 导入，CC 风格工具名归一化；rules 出声未导入", async () => {
+    const root = await ws();
+    await put(root, ".qoder/skills/q/SKILL.md", "---\nname: q\ndescription: q skill\n---\nbody\n");
+    await put(root, ".qoder/commands/opsx/new.md", "---\ndescription: Start a change\n---\nrun /opsx:new $ARGUMENTS\n");
+    await put(root, ".qoder/agents/reviewer.md", "---\nname: reviewer\ndescription: Reviews code\ntools: Read, Grep, Bash\n---\nreview\n");
+    await put(root, ".qoder/rules/r.md", "---\ntrigger: always_on\n---\nrule\n");
+    const source: ForeignSource = { kind: "qoder", root: join(root, ".qoder"), scope: "project", name: "qoder-project" };
+    const m = await discoverPlugins({ foreignSources: [source], trustStatus: () => "pending" });
+    const p = m.plugins.find((x) => x.name === "qoder-project");
+    expect(p).toBeDefined();
+    expect(p!.skills.map((s) => s.name)).toEqual(["q"]);
+    expect(p!.commands.map((c) => c.name)).toEqual(["opsx:new"]);
+    expect(p!.agents.map((a) => a.name)).toEqual(["reviewer"]);
+    expect(p!.agents[0]!.frontmatter.tools).toEqual(["read_file", "grep", "run_shell"]);
+    expect(resolvePluginRole({ name: "reviewer", body: p!.agents[0]!.body, frontmatter: p!.agents[0]!.frontmatter }).warnings).toEqual([]);
+    expect(m.warnings.some((w) => w.message.includes("rules/") && w.message.includes("未导入"))).toBe(true);
+  });
+
+  it("CC 工具白名单含本仓没有的工具 ⇒ 跳过角色并出声", async () => {
+    const root = await ws();
+    await put(root, ".qoder/skills/q/SKILL.md", "---\nname: q\ndescription: d\n---\nbody\n");
+    await put(root, ".qoder/agents/tasky.md", "---\nname: tasky\ntools: Read, Task\n---\nbody\n");
+    const source: ForeignSource = { kind: "qoder", root: join(root, ".qoder"), scope: "project", name: "qoder-project" };
+    const m = await discoverPlugins({ foreignSources: [source], trustStatus: () => "trusted" });
+    expect(m.plugins[0]!.agents).toEqual([]);
+    expect(m.warnings.some((w) => w.message.includes("Task"))).toBe(true);
+  });
+});
+
+describe("外部声明式来源：codex", () => {
+  it("只导入 .agents/skills（Codex 没有声明式 commands/agents）", async () => {
+    const root = await ws();
+    await put(root, ".agents/skills/c/SKILL.md", "---\nname: c\ndescription: codex skill\n---\nbody\n");
+    const source: ForeignSource = { kind: "codex", root: join(root, ".agents"), scope: "project", name: "codex-project" };
+    const m = await discoverPlugins({ foreignSources: [source], trustStatus: () => "trusted" });
+    const p = m.plugins.find((x) => x.name === "codex-project");
+    expect(p).toBeDefined();
+    expect(p!.skills.map((s) => s.name)).toEqual(["c"]);
+    expect(p!.commands).toEqual([]);
+    expect(p!.agents).toEqual([]);
+  });
+});
+
+describe("外部声明式来源：claude", () => {
+  it("项目 .claude 的 skills/commands/agents 导入，工具名归一化", async () => {
+    const root = await ws();
+    await put(root, ".claude/skills/c/SKILL.md", "---\nname: c\ndescription: d\n---\nbody\n");
+    await put(root, ".claude/commands/deploy.md", "---\ndescription: Deploy\n---\ndeploy $ARGUMENTS\n");
+    await put(root, ".claude/agents/reviewer.md", "---\ndescription: Reviews\ntools: Read, Glob, WebFetch\n---\nreview\n");
+    const source: ForeignSource = { kind: "claude", root: join(root, ".claude"), scope: "project", name: "claude-project" };
+    const m = await discoverPlugins({ foreignSources: [source], trustStatus: () => "trusted" });
+    const p = m.plugins.find((x) => x.name === "claude-project");
+    expect(p).toBeDefined();
+    expect(p!.skills.map((s) => s.name)).toEqual(["c"]);
+    expect(p!.commands.map((c) => c.name)).toEqual(["deploy"]);
+    expect(p!.agents[0]!.frontmatter.tools).toEqual(["read_file", "glob", "web_fetch"]);
+  });
+
+  it("用户级 .claude 不重复导入 agents（user-agents 通道已拥有 ~/.claude/agents）", async () => {
+    const root = await ws();
+    await put(root, ".claude/skills/c/SKILL.md", "---\nname: c\ndescription: d\n---\nbody\n");
+    await put(root, ".claude/agents/reviewer.md", "---\ndescription: Reviews\n---\nreview\n");
+    const source: ForeignSource = { kind: "claude", root: join(root, ".claude"), scope: "user", name: "claude-user" };
+    const m = await discoverPlugins({ foreignSources: [source], trustStatus: () => "pending" });
+    const p = m.plugins.find((x) => x.name === "claude-user");
+    expect(p).toBeDefined();
+    expect(p!.trust).toBe("trusted");
+    expect(p!.skills.map((s) => s.name)).toEqual(["c"]);
+    expect(p!.agents).toEqual([]);
+  });
+});
+
 describe("装配层接线", () => {
   it("PluginRuntime.load 默认扫描项目级 .opencode / .pi（不是只有 discover 能收参数）", async () => {
     const workspace = await ws();
     await put(workspace, ".opencode/skills/oc/SKILL.md", "---\nname: oc\ndescription: d\n---\nbody\n");
     await put(workspace, ".pi/skills/pi-s/SKILL.md", "---\nname: pi-s\ndescription: d\n---\nbody\n");
+    await put(workspace, ".agents/skills/cx/SKILL.md", "---\nname: cx\ndescription: d\n---\nbody\n");
+    await put(workspace, ".qoder/skills/qd/SKILL.md", "---\nname: qd\ndescription: d\n---\nbody\n");
+    await put(workspace, ".claude/skills/cl/SKILL.md", "---\nname: cl\ndescription: d\n---\nbody\n");
     const rt = await PluginRuntime.load({
       workspace,
       projectSkillsDir: "",
@@ -148,6 +224,9 @@ describe("装配层接线", () => {
       const names = rt.manifest.plugins.map((p) => p.name);
       expect(names).toContain("opencode-project");
       expect(names).toContain("pi-project");
+      expect(names).toContain("codex-project");
+      expect(names).toContain("qoder-project");
+      expect(names).toContain("claude-project");
     } finally {
       await rt.shutdown();
     }

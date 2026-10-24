@@ -187,12 +187,12 @@ export interface PluginScanRoots {
   foreignSources?: ForeignSource[];
 }
 
-/** 外部 harness 的声明式插件来源。两边目录布局不同，映射见 `foreign.ts` 的 FOREIGN_LAYOUTS。 */
-export type ForeignSourceKind = "opencode" | "pi";
+/** 外部 harness 的声明式插件来源。各家的目录布局映射见 `foreign.ts` 的 FOREIGN_LAYOUTS。 */
+export type ForeignSourceKind = "opencode" | "pi" | "codex" | "qoder" | "claude";
 
 export interface ForeignSource {
   kind: ForeignSourceKind;
-  /** 来源根（绝对路径）：opencode = `<ws>/.opencode` / `~/.config/opencode`；pi = `<ws>/.pi` / `~/.pi/agent`。 */
+  /** 来源根（绝对路径），如 `<ws>/.opencode`、`<ws>/.pi`、`<ws>/.agents`、`<ws>/.qoder`、`<ws>/.claude`。 */
   root: string;
   scope: PluginScope;
   /** 合成插件名（决定 `/<name>:<command>` 与 skill 路由的命名空间）。 */
