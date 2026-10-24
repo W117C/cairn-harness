@@ -142,8 +142,8 @@ function mapCcAgent(entry: AgentRoleEntry, warn: (message: string) => void): Age
   }
   if (allowDeclared && !allowAll) {
     const effective = [...allow].filter((t) => !deny.has(t));
-    if (effective.length === 0 && deny.size > 0) {
-      warn("agent「" + entry.name + "」的工具白名单与剔除面相交后为空 ⇒ 跳过该角色（空白名单会让执行端退回默认面）");
+    if (effective.length === 0) {
+      warn("agent「" + entry.name + "」的工具白名单为空（或与剔除面相交后为空）⇒ 跳过该角色（空数组会让执行端退回默认面）");
       return null;
     }
     fm.tools = effective;
@@ -204,10 +204,24 @@ function mapOpencodeAgent(entry: AgentRoleEntry, warn: (message: string) => void
   const denied = new Set<string>(permissionDeny);
 
   const rawTools = fm.tools;
-  if (rawTools !== undefined && typeof rawTools === "object" && !Array.isArray(rawTools)) {
+  if (rawTools !== undefined) {
+    if (rawTools === null || typeof rawTools !== "object" || Array.isArray(rawTools)) {
+      warn("agent「" + entry.name + "」的 tools 不是映射对象 ⇒ 无法映射，跳过该角色（不按更宽的工具面导入）");
+      return null;
+    }
     const map = rawTools as Record<string, unknown>;
     const entries = Object.keys(map).filter((k) => k !== "*");
-    if (map["*"] === false) {
+    const bad = entries.find((k) => typeof map[k] !== "boolean");
+    if (bad !== undefined) {
+      warn("agent「" + entry.name + "」的 tools." + bad + " 不是布尔值 ⇒ 无法判断白名单/剔除语义，跳过该角色");
+      return null;
+    }
+    const star = map["*"];
+    if (star !== undefined && typeof star !== "boolean") {
+      warn("agent「" + entry.name + "」的 tools.\"*\" 不是布尔值 ⇒ 无法判断白名单/剔除语义，跳过该角色");
+      return null;
+    }
+    if (star === false) {
       const allow: string[] = [];
       const missing: string[] = [];
       for (const name of entries) {
@@ -222,8 +236,8 @@ function mapOpencodeAgent(entry: AgentRoleEntry, warn: (message: string) => void
         return null;
       }
       const allowed = allow.filter((t) => !denied.has(t));
-      if (allowed.length === 0 && denied.size > 0) {
-        warn("agent「" + entry.name + "」的 tools 白名单与 permission 收窄后为空 ⇒ 跳过该角色（空白名单会让执行端退回默认面）");
+      if (allowed.length === 0) {
+        warn("agent「" + entry.name + "」的 tools 白名单为空（或与 permission 收窄后为空）⇒ 跳过该角色（空数组会让执行端退回默认面）");
         return null;
       }
       fm.tools = allowed;
@@ -337,6 +351,7 @@ export async function scanForeignSource(
       errors: [],
       warnings: [],
       trust,
+      fingerprint: { fp, bounded },
     },
     errors,
     warnings,

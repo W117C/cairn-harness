@@ -4,7 +4,7 @@
 //   · 反例/边界：主 agent、无法忠实映射的 permission/tools 白名单必须**跳过并出声**，
 //     不能按比申报更宽的工具面导入；代码插件目录不导入但要提醒；指纹只绑定被导入的目录。
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { discoverPlugins, PluginRuntime } from "../src/agent/plugins";
@@ -206,6 +206,57 @@ describe("外部声明式来源：claude", () => {
   });
 });
 
+describe("高危回归：空白名单与坏目录", () => {
+  it("opencode 全禁工具 / Claude 空块列表不导入角色（不许退回默认面）", async () => {
+    const root = await ws();
+    await put(root, ".opencode/skills/s/SKILL.md", "---\nname: s\ndescription: d\n---\nbody\n");
+    await put(root, ".opencode/agent/none.md", "---\nmode: subagent\ntools:\n  \"*\": false\n---\nbody\n");
+    await put(root, ".claude/skills/s/SKILL.md", "---\nname: s\ndescription: d\n---\nbody\n");
+    await put(root, ".claude/agents/block.md", "---\ntools:\n  - Read\n---\nbody\n");
+    const m = await discoverPlugins({
+      foreignSources: [
+        { kind: "opencode", root: join(root, ".opencode"), scope: "project", name: "oc" },
+        { kind: "claude", root: join(root, ".claude"), scope: "project", name: "cl" },
+      ],
+      trustStatus: () => "trusted",
+    });
+    for (const p of m.plugins) expect(p.agents).toEqual([]);
+    expect(m.warnings.filter((w) => w.message.includes("白名单为空"))).toHaveLength(2);
+  });
+
+  it("非布尔通配值无法判断语义 ⇒ 跳过角色", async () => {
+    const root = await ws();
+    await put(root, ".opencode/skills/s/SKILL.md", "---\nname: s\ndescription: d\n---\nbody\n");
+    await put(root, ".opencode/agent/ask.md", "---\nmode: subagent\ntools:\n  \"*\": ask\n  read: true\n---\nbody\n");
+    const m = await discoverPlugins({ foreignSources: [ocSource(join(root, ".opencode"))], trustStatus: () => "trusted" });
+    expect(m.plugins[0]!.agents).toEqual([]);
+    expect(m.warnings.some((w) => w.message.includes("不是布尔值"))).toBe(true);
+  });
+
+  it("一个来源目录不可读只进 errors，不拖垮其它来源", async () => {
+    const root = await ws();
+    await put(root, ".claude/skills/s/SKILL.md", "---\nname: s\ndescription: d\n---\nbody\n");
+    await put(root, ".claude/commands/locked/x.md", "---\ndescription: x\n---\nbody\n");
+    await put(root, ".pi/skills/p/SKILL.md", "---\nname: p\ndescription: d\n---\nbody\n");
+    await chmod(join(root, ".claude/commands/locked"), 0o000);
+    try {
+      const m = await discoverPlugins({
+        foreignSources: [
+          { kind: "claude", root: join(root, ".claude"), scope: "project", name: "claude-project" },
+          piSource(join(root, ".pi")),
+        ],
+        trustStatus: () => "trusted",
+      });
+      expect(m.plugins.map((p) => p.name)).toContain("pi-project");
+      const err = m.errors.find((e) => e.plugin === "claude-project");
+      expect(err).toBeDefined();
+      expect(err!.message).toContain("已隔离");
+    } finally {
+      await chmod(join(root, ".claude/commands/locked"), 0o755);
+    }
+  });
+});
+
 describe("装配层接线", () => {
   it("PluginRuntime.load 默认扫描项目级 .opencode / .pi（不是只有 discover 能收参数）", async () => {
     const workspace = await ws();
@@ -246,6 +297,33 @@ describe("装配层接线", () => {
       expect(rt.manifest.plugins).toEqual([]);
     } finally {
       await rt.shutdown();
+    }
+  });
+
+  it("信任批准复用发现侧子集指纹：根里有非导入内容也能真正生效", async () => {
+    const workspace = await ws();
+    await put(workspace, ".opencode/skills/s/SKILL.md", "---\nname: s\ndescription: d\n---\nbody\n");
+    await put(workspace, ".opencode/plugins/x.ts", "export const Plugin = async () => ({});\n");
+    const opts = {
+      workspace,
+      projectSkillsDir: "",
+      pluginDataRoot: join(workspace, "data"),
+      home: join(workspace, "home"),
+      foreignSources: [ocSource(join(workspace, ".opencode"))],
+    };
+    const rt = await PluginRuntime.load(opts);
+    try {
+      expect(rt.manifest.plugins.find((p) => p.name === "opencode-project")?.trust).toBe("pending");
+      expect(await rt.trustDecide("opencode-project", true)).toBe(true);
+      expect(rt.manifest.plugins.find((p) => p.name === "opencode-project")?.trust).toBe("trusted");
+    } finally {
+      await rt.shutdown();
+    }
+    const again = await PluginRuntime.load(opts);
+    try {
+      expect(again.manifest.plugins.find((p) => p.name === "opencode-project")?.trust).toBe("trusted");
+    } finally {
+      await again.shutdown();
     }
   });
 });

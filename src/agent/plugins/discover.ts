@@ -51,7 +51,9 @@ async function scanScopeRoot(
         // 内容有界/无界形态互换或指纹变化都自然不命中 = 重新出卡。
         const { fp, bounded } = await pluginFingerprintEx(abs);
         if (bounded) warnings.push({ plugin: name, message: "内容指纹不完整（含软链 / 超出上限 / 有文件读不出）⇒ 不可批准（fail-closed）；请改成普通文件布局" });
-        plugins.push(await loadContainer(abs, scope, trustOf(abs, fp, bounded)));
+        const plugin = await loadContainer(abs, scope, trustOf(abs, fp, bounded));
+        plugin.fingerprint = { fp, bounded };
+        plugins.push(plugin);
       } catch (err) {
         // 单插件失败隔离：坏 manifest 只影响自身
         errors.push({ plugin: name, message: err instanceof Error ? err.message : String(err) });
@@ -64,7 +66,7 @@ async function scanScopeRoot(
       const { fp, bounded } = await pluginFingerprintEx(abs);
       if (bounded) warnings.push({ plugin: name, message: "内容指纹不完整（含软链 / 超出上限 / 有文件读不出）⇒ 不可批准（fail-closed）" });
       const entry = await loadSkillEntry(null, name, abs);
-      if (entry) loose.push({ name, root: abs, entry, trust: trustOf(abs, fp, bounded), scope });
+      if (entry) loose.push({ name, root: abs, entry, trust: trustOf(abs, fp, bounded), scope, fingerprint: { fp, bounded } });
     }
   }
   return { plugins, loose, errors, warnings };
@@ -251,10 +253,19 @@ export async function discoverPlugins(opts: DiscoverOptions): Promise<PluginsMan
     errors.push(...r.errors);
   }
   for (const source of opts.foreignSources ?? []) {
-    const r = await scanForeignSource(source, trustOf);
-    if (r.plugin !== null) plugins.push(r.plugin);
-    errors.push(...r.errors);
-    warnings.push(...r.warnings);
+    try {
+      const r = await scanForeignSource(source, trustOf);
+      if (r.plugin !== null) plugins.push(r.plugin);
+      errors.push(...r.errors);
+      warnings.push(...r.warnings);
+    } catch (err) {
+      // 单来源失败隔离（与容器插件的 scanScopeRoot 同一口径）：外部目录的 EACCES/ENOENT
+      // 只让这一支进 errors，不许把整份发现面（含容器插件/hook/MCP）一起打掉。
+      errors.push({
+        plugin: source.name,
+        message: "外部来源扫描失败（已隔离）：" + (err instanceof Error ? err.message : String(err)),
+      });
+    }
   }
 
   // 扁平化警告与 ${user_config.*} 违规提示

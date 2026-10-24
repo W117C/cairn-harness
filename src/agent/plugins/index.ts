@@ -388,12 +388,14 @@ export class PluginRuntime {
     // 旧实现取扫描序第一个 ⇒ 用户批的是 A，落信任的可能是 B 的执行面。
     // 判不准就不落：歧义时拒绝本次决议（fail-closed），面板仍显示待信任。
     const matches = [
-      ...this.manifest.plugins.map((x) => ({ name: x.name, root: x.root })),
-      ...this.manifest.looseSkills.map((x) => ({ name: x.name, root: x.root })),
+      ...this.manifest.plugins.map((x) => ({ name: x.name, root: x.root, fingerprint: x.fingerprint })),
+      ...this.manifest.looseSkills.map((x) => ({ name: x.name, root: x.root, fingerprint: x.fingerprint })),
     ].filter((x) => x.name === pluginName);
     if (matches.length !== 1) return false;
     const target = matches[0]!;
-    const { fp, bounded } = await pluginFingerprintEx(target.root);
+    // 指纹必须与**发现侧**算的是同一份：外部来源按被导入目录算子集指纹，这里若另算全量根指纹，
+    // 写下的 `abs@fp` 永远不被重载查询命中（批准了还弹卡）。旧快照/手写夹具没有这一格才回退。
+    const { fp, bounded } = target.fingerprint ?? await pluginFingerprintEx(target.root);
     await this.trust.decide(target.root, trusted, fp, bounded);
     const reloaded = await PluginRuntime.load(this.opts);
     const inactive = this.manifest.plugins.filter((plugin) =>
@@ -410,7 +412,12 @@ export class PluginRuntime {
       cleanups.push(this.mcp.disconnectPlugin(plugin.name), closePluginLspClients(this.opts.workspace, ids));
     }
     await Promise.all(cleanups);
-    return true;
+    // 决议是否真的落地：重载后仍 pending 就说没生效，不拿「已批准」冒充。
+    const applied = [
+      ...reloaded.manifest.plugins.map((x) => ({ name: x.name, trust: x.trust })),
+      ...reloaded.manifest.looseSkills.map((x) => ({ name: x.name, trust: x.trust })),
+    ].find((x) => x.name === pluginName);
+    return trusted ? applied?.trust === "trusted" : applied?.trust === "declined";
   }
 
   /** 激活全部受信插件的 MCP server（未信任/declined 不连接）。 */
