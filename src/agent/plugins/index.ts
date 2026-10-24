@@ -6,6 +6,7 @@ import type { PermissionMode } from "../../permissions/modes";
 import {
   discoverPlugins, activeHooks, pendingPlugins,
 } from "./discover";
+import { defaultForeignSources, type ForeignSource } from "./foreign";
 import { TrustStore, pluginFingerprint, pluginFingerprintEx } from "./trust";
 import { HookEngine } from "./hooks";
 import { McpManager, type McpToolInfo } from "./mcp";
@@ -30,6 +31,7 @@ import type {
 } from "./types";
 
 export * from "./types";
+export { defaultForeignSources, FOREIGN_LAYOUTS } from "./foreign";
 export {
   parseUserConfigFields,
   sensitiveUserConfigKeys,
@@ -77,6 +79,10 @@ export interface PluginRuntimeOptions {
    *  显式给空串＝关掉这一顶根（判卷与「只想看别的根」的脚本用）。 */
   projectSkillsDir?: string;
   looseRoots?: string[];
+  /** 外部声明式来源（opencode / pi）。缺省 = `defaultForeignSources(workspace, home)`：
+   *  项目级 `<ws>/.opencode`、`<ws>/.pi` + 用户级 `~/.config/opencode`、`~/.pi/agent`。
+   *  显式给 `[]` = 关掉外部导入。 */
+  foreignSources?: ForeignSource[];
   workspace: string;
   /** 插件数据根（PLUGIN_DATA / 超限落盘）。 */
   pluginDataRoot: string;
@@ -253,6 +259,7 @@ export class PluginRuntime {
       // 缺省取装配面那个唯一算法（不在调用方拼路径）；显式空串＝关掉这一顶（`??` 不把 "" 当没给）。
       projectSkillsDir: opts.projectSkillsDir ?? projectSkillsRootOf(opts.workspace),
       ...(opts.looseRoots ? { looseRoots: opts.looseRoots } : {}),
+      foreignSources: opts.foreignSources ?? defaultForeignSources(opts.workspace, opts.home),
       trustStatus: (abs, fp, bounded) => trust.statusSync(abs, fp, bounded),
     });
     const rt = new PluginRuntime(manifest, opts);

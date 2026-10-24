@@ -182,6 +182,21 @@ export interface PluginScanRoots {
   projectPluginsDir: string | null;
   projectSkillsDir: string | null;
   looseRoots: string[];
+  /** 外部声明式来源（opencode / pi）：只导入 skills、commands、agents，不含进程内代码插件。
+   *  旧快照没带这一格 = 未记录（不是「没扫」）。 */
+  foreignSources?: ForeignSource[];
+}
+
+/** 外部 harness 的声明式插件来源。两边目录布局不同，映射见 `foreign.ts` 的 FOREIGN_LAYOUTS。 */
+export type ForeignSourceKind = "opencode" | "pi";
+
+export interface ForeignSource {
+  kind: ForeignSourceKind;
+  /** 来源根（绝对路径）：opencode = `<ws>/.opencode` / `~/.config/opencode`；pi = `<ws>/.pi` / `~/.pi/agent`。 */
+  root: string;
+  scope: PluginScope;
+  /** 合成插件名（决定 `/<name>:<command>` 与 skill 路由的命名空间）。 */
+  name: string;
 }
 
 /** 加载清单（会话启动静态扫描产物；不新增事件类型，面板/脚本直接消费）。 */
