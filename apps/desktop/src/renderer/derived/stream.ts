@@ -61,13 +61,24 @@ export function projectStream(events: readonly AgentEvent[], running: boolean = 
   // 落定未结桶（v7.1 修）：真实 provider 的**一轮只发 assistant_delta**（aggregate 的 assistant_message
   // 是 mock/demo 通道才有的东西，见 src/cli.ts 的刻意注释）——所以「桶什么时候算说完」不能只靠
   // assistant_message。轮界（下一条 user_message）与停转（running=false）都是落定点：以终稿形态
-  // （live=false）吐行，操作条与光标据此归位。settled=true 时空文本桶（只想过没说的半轮）不产行。
+  // （live=false）吐行，操作条与光标据此归位。settled=true 的空文本桶：有思考正文落 thinking-only 行，真空的仍不产行。
   const flushBuckets = (settled: boolean): void => {
     for (const [callId, bucket] of buckets) {
-      if (settled && bucket.text === "") continue;
+      const thinking = thinkingBuckets.get(callId);
+      if (settled && bucket.text === "") {
+        // 只想过没说：思考正文不能跟着空桶一起丢（业主 2026-10-24：工具调用前的思考消失——
+        // 旧口径把空文本桶整桶弃行，桶上挂着的思考正文随之蒸发）。有思考就落一条 thinking-only
+        // 行（渲染层只画思考折叠行，不画空气泡）；真连思考都没有的空桶仍然不产行。
+        if (thinking !== undefined && thinking !== "") {
+          rows.push({
+            kind: "assistant", text: "", live: false, ts: bucket.ts, seq: bucket.seq, eventId: bucket.seq + 1, round: rounds, thinking,
+          });
+        }
+        continue;
+      }
       rows.push({
         kind: "assistant", text: bucket.text, live: settled ? false : true, ts: bucket.ts, seq: bucket.seq, eventId: bucket.seq + 1, round: rounds,
-        ...(thinkingBuckets.get(callId) ? { thinking: thinkingBuckets.get(callId) } : {}),
+        ...(thinking !== undefined ? { thinking } : {}),
       });
     }
     buckets.clear();

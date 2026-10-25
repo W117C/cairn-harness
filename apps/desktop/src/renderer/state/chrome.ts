@@ -439,7 +439,8 @@ export function useChrome(deps: ChromeDeps): ChromeState {
       const valid = new Set<string>(Object.keys(PANE_META));
       const seen = new Set<string>();
       return list.filter((k): k is PaneKind => {
-        if (typeof k !== "string" || !valid.has(k) || seen.has(k)) return false;
+        // session 是「⌘+点击某个会话」的临时预览目标，目标本身不落盘；恢复一个空预览没有意义。
+        if (typeof k !== "string" || k === "session" || !valid.has(k) || seen.has(k)) return false;
         seen.add(k);
         return true;
       });
@@ -465,7 +466,7 @@ export function useChrome(deps: ChromeDeps): ChromeState {
   const togglePane = useCallback((kind: PaneKind) => {
     const opening = !paneTabs.includes(kind);
     setPaneTabs((tabs) => (tabs.includes(kind) ? tabs.filter((k) => k !== kind) : [...tabs, kind]));
-    if (opening) { notePaneOpened(kind); revealInspector(); } // 打开窗格 ⇒ 检查器区必须可见（collapsed 时展开）
+    if (opening) { notePaneOpened(kind); revealInspector(); } // 打开窗格 ⇒ 右栏可见；检查器内容由 data-panes-open 让位（2026-10-24）
   }, [paneTabs, notePaneOpened, revealInspector]);
   const closePane = useCallback((kind: PaneKind) => {
     setPaneTabs((tabs) => tabs.filter((k) => k !== kind));
@@ -486,6 +487,7 @@ export function useChrome(deps: ChromeDeps): ChromeState {
     setPaneTabs((tabs) => (tabs.includes(kind) ? tabs : [...tabs, kind]));
     notePaneOpened(kind);
     revealInspector();
+    // 2026-10-24：reveal 保证右栏可见；栏内检查器内容让位（data-panes-open），窗格占满整条侧栏。
   }, [notePaneOpened, revealInspector]);
 
   // v6 预览：先开浏览器窗格再起服务（就绪后由快照推着导航）；失败按分类文案落到错误条，
@@ -530,9 +532,7 @@ export function useChrome(deps: ChromeDeps): ChromeState {
       );
       return;
     }
-    // 同 requestPickElement（2026-10-18 修）：开浏览器窗格必须同时展开检查器，
-    // 否则预览起来却落在 width 0 且 inert 的列里——「预览已就绪」与「看得见」是两件事。
-    // revealInspector 在下方声明（TDZ），与本文件既有的 newSessionRef 同一解法：经 ref 引用。
+    // 2026-10-24：reveal 保证右栏可见；栏内检查器内容让位（data-panes-open），浏览器窗格占满。
     setPaneTabs((tabs) => (tabs.includes("browser") ? tabs : [...tabs, "browser"]));
     notePaneOpened("browser");
     revealInspectorRef.current?.();
@@ -558,11 +558,7 @@ export function useChrome(deps: ChromeDeps): ChromeState {
     setPaneTabs((t) => (t.includes("browser") ? t : [...t, "browser"]));
     notePaneOpened("browser");
     setPickSignal((s) => s + 1);
-    // 必须展开检查器（2026-10-18 修）：此前与 togglePane/openPane 不同，这里没有 revealInspector()。
-    // 检查器默认收起（inspectorCollapsed 初值 true，paneTabs 为 0 时 layoutEffect 也保持收起），
-    // 于是 ⌘⇧S 新开的浏览器窗格落在 width 0 且 inert 的列里 ⇒ 用户看不见任何东西，
-    // 而 pick 的失败回执（「本标签页还没有视图」）只渲染在那个不可见窗格内部，连错都看不到。
-    // 文档承诺「⌘⇧S 浏览器：选择页面元素（结果进输入框）」，落空且无任何反馈。
+    // 2026-10-24：reveal 保证右栏可见；栏内检查器内容让位（data-panes-open），浏览器窗格占满。
     revealInspector();
   }, [notePaneOpened, revealInspector]);
 

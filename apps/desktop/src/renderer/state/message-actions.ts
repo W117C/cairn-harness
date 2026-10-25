@@ -8,7 +8,7 @@
 // 为什么住一起：它们都作用在**某一条消息/某一轮**上，且共用同两件东西——事件流与当前会话 id。
 import { useCallback, useState } from "react";
 import type { AgentEvent } from "../../../../../src/main/ipc-protocol";
-import { roundOfEvent, userTextOfRound } from "../projections";
+import { userTextOfRound } from "../projections";
 import { stripMarkdownForSpeech } from "../speech";
 import { STR } from "../strings";
 import { toast } from "../toast";
@@ -24,6 +24,9 @@ export interface MessageActionsDeps {
   activeWorkspaceRef: React.MutableRefObject<string | null>;
   refreshSessions: () => Promise<void>;
   openSession: (id: string, workspace?: string) => void;
+  /** 撤回前先停掉原会话的生成（走统一停止通道：陈旧旗自愈在里面）。
+   *  经 ref 晚绑（cancelRunHeal 在 workbench 里声明在本钩子之后——与 revealInspectorRef 同一解法）。 */
+  cancelRunHealRef: React.MutableRefObject<((sid: string) => void) | null>;
   injectText: (text: string) => void;
   setEditCtx: (v: { originId: string; originTitle: string; forkId: string; round: number } | null) => void;
   setLastError: (message: string, sessionId?: string) => void;
@@ -38,7 +41,6 @@ export interface MessageActionsState {
   compactNow: () => void;
   goalAct: (req: { pause?: boolean; resume?: boolean; clear?: boolean }) => void;
   handleEditUser: (round: number, text: string) => void;
-  handleReplay: (eventId: number) => void;
   handleRestoreSnapshot: (path: string, snapshotId: string) => void;
   handleSpeak: (eventId: number, text: string) => void;
 }
@@ -46,10 +48,10 @@ export interface MessageActionsState {
 export function useMessageActions(deps: MessageActionsDeps): MessageActionsState {
   const {
     activeIdRef, eventsRef, sessions, activeWorkspaceRef,
-    refreshSessions, openSession, injectText, setEditCtx, setLastError, setEvents,
+    refreshSessions, openSession, cancelRunHealRef, injectText, setEditCtx, setLastError, setEvents,
   } = deps;
 
-  // ---- v7 消息操作条：分叉（forkSession 到该轮，P3-1 挪到 user 行）+ 回放（agent 行）+ 朗读（macOS say）----
+  // ---- v7 消息操作条：分叉（forkSession 到该轮，P3-1 挪到 user 行）+ 朗读（macOS say）----
   const [speakingEventId, setSpeakingEventId] = useState<number | null>(null);
   const handleBranch = useCallback((round: number) => {
     const sid = activeIdRef.current;
@@ -87,6 +89,10 @@ export function useMessageActions(deps: MessageActionsDeps): MessageActionsState
   const handleEditUser = useCallback((round: number, text: string): void => {
     const sid = activeIdRef.current;
     if (sid === null) return;
+    // 撤回语义（2026-10-24 业主）：先把原会话正在跑的生成停下（暂停对话），再 fork 到该轮之前——
+    // 不停的话原会话继续吐 token，fork 出来的「撤回版」与它并行，看起来像没撤。
+    // 走 cancelRunHeal（收编纪律：陈旧旗自愈在那边；直呼 runCancel 会把 runningSet 留成脏状态）。
+    cancelRunHealRef.current?.(sid);
     const originTitle = sessions.find((s) => s.id === sid)?.title ?? sid;
     const inject = (id: string): void => {
       refreshSessions();
@@ -108,22 +114,7 @@ export function useMessageActions(deps: MessageActionsDeps): MessageActionsState
     }, (err: unknown) => {
       setLastError(`编辑失败：${err instanceof Error ? err.message : String(err)}`, sid);
     });
-  }, [refreshSessions, openSession, injectText, setLastError, sessions]);
-  const handleReplay = useCallback((eventId: number) => {
-    const sid = activeIdRef.current;
-    if (sid === null) return;
-    const round = roundOfEvent(eventsRef.current, eventId);
-    if (round === null) { setLastError("回放失败：这条消息不在事件日志的轮次里", sid); return; }
-    const text = userTextOfRound(eventsRef.current, round);
-    void window.agent.forkSession(sid, round, true).then((r) => {
-      if (r.ok !== true || r.id === undefined) { setLastError(`回放失败：${r.error ?? "未知原因"}`, sid); return; }
-      void refreshSessions();
-      openSession(r.id); // 同分叉：只 activate 会显示原会话的旧转录
-      if (text !== null) injectText(text); // 注入不发送（Composer 覆盖草稿并聚焦）
-    }, (err: unknown) => {
-      setLastError(`回放失败：${err instanceof Error ? err.message : String(err)}`, sid);
-    });
-  }, [refreshSessions, openSession, injectText, setLastError]);
+  }, [refreshSessions, openSession, injectText, setLastError, sessions, cancelRunHealRef]);
   /** P3-2 检查器「撤销此文件改动」：snapshotRestore（v11 通道，渲染层首个消费者）。
    *  成功 toast（STR 文案 v11 就位）；失败 fail-visible 原文上屏（不装成功）。
    *  带上 sessionId：主进程还原成功后要往**这个会话**的事件流落一条 `file_restored`，
@@ -173,7 +164,6 @@ export function useMessageActions(deps: MessageActionsDeps): MessageActionsState
     compactNow,
     goalAct,
     handleEditUser,
-    handleReplay,
     handleRestoreSnapshot,
     handleSpeak,
   };

@@ -8,7 +8,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 const SECRET = "sk-test-secret-never-return-this";
 
-describe("builtinConnectionTarget：内置四家端点（环境变量覆盖与适配器同源）", () => {
+describe("builtinConnectionTarget：内置五家端点（环境变量覆盖与适配器同源）", () => {
   it("glm 缺省落到 bigmodel /v4，CAIRN_ENDPOINT 覆盖时去掉 chat/completions 后缀", () => {
     expect(builtinConnectionTarget("glm", {})?.baseURL).toBe("https://open.bigmodel.cn/api/paas/v4");
     expect(builtinConnectionTarget("glm", { CAIRN_ENDPOINT: "https://relay.example.com/v1/chat/completions" })?.baseURL).toBe(
@@ -20,20 +20,27 @@ describe("builtinConnectionTarget：内置四家端点（环境变量覆盖与�
     expect(builtinConnectionTarget("openai", {})).toEqual({ protocol: "openai", baseURL: "https://api.openai.com/v1" });
     expect(builtinConnectionTarget("anthropic", {})?.protocol).toBe("anthropic");
     expect(builtinConnectionTarget("gemini", {})?.protocol).toBe("gemini");
-    expect(builtinConnectionTarget("deepseek", {})).toBeNull();
+    expect(builtinConnectionTarget("not-a-provider", {})).toBeNull();
+  });
+
+  it("deepseek（2026-10-25 起内置）：openai 协议 + 官方端点；DEEPSEEK_ENDPOINT 覆盖同源", () => {
+    expect(builtinConnectionTarget("deepseek", {})).toEqual({ protocol: "openai", baseURL: "https://api.deepseek.com" });
+    expect(builtinConnectionTarget("deepseek", { DEEPSEEK_ENDPOINT: "https://ds-relay.example.com/v1/chat/completions" })?.baseURL).toBe(
+      "https://ds-relay.example.com/v1",
+    );
   });
 });
 
 describe("checkProviderConnection：保存成功 ≠ 服务可用", () => {
   it("未知 provider：不瞎猜，指回自定义表单", async () => {
-    const r = await checkProviderConnection({ provider: "deepseek", env: {} });
+    const r = await checkProviderConnection({ provider: "not-a-provider", env: {} });
     expect(r).toMatchObject({ ok: false, reason: "unknown-provider" });
     if (r.ok) return;
     expect(r.hint).toContain("自定义");
   });
 
   it("没存 key：no-key，并告诉用户先去哪一步", async () => {
-    const r = await checkProviderConnection({ provider: "openai", env: {} });
+    const r = await checkProviderConnection({ provider: "deepseek", env: {} });
     expect(r).toMatchObject({ ok: false, reason: "no-key" });
     if (r.ok) return;
     expect(r.hint).toContain("保存 key");

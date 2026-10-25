@@ -7,18 +7,27 @@
 //
 // 三支共同的纪律（原文随块搬来，未改一字）：**只观测、不驱动任何决策**，所以只印 stderr、不落事件流
 // （落流要新增事件类型，而事件流是重放契约）；失败**不许静默**——「没量到」不许被读成「没问题」。
+// （闭环 v2 的两处例外都有各自的理由：反思位的 usage 照落流——花掉的 token 必须记账，
+// 与沉淀轮同一裁决；反思正文不落流——它的产物是补丁措辞，落在 evolution.json/账本里，不是对话。）
 import { assistantTurnsFromEvents, goalDriftCell, goalDriftFindings } from "../agent/goal-drift";
 import { costPerProgress } from "../agent/cost-per-progress";
 import { eventsForCurrentRun } from "../agent/delivery-guard";
-import { runEvolution } from "../agent/evolution";
+import { runEvolution, type ReflectFn } from "../agent/evolution";
 import { tickCanaryFromSignals } from "./evolution/activation-host";
+import { distillWorkflows, writeWorkflows } from "../agent/memory/workflow";
+import { maybeGraduateWorkflows } from "./evolution/workflow-graduate";
+import { runAssess } from "./evolution/assess";
 import { replay, type AgentEvent } from "../events";
+import type { Provider } from "../providers";
 
 export interface PostRunReadingInput {
   logPath: string;
   workspace: string;
   /** 会话 id（自进化那一支的归属键）；缺席时退回 logPath。 */
   sessionId?: string;
+  /** 反思位（闭环 v2 · 批次 A2）：读真实轨迹改写本轮补丁措辞的 provider 构造口。
+   *  缺省不传 = 纯规则补丁（既有行为）。由装配根递进来（provider 闭包在那边）。 */
+  reflectProviderFor?: (instruction: string) => Provider;
 }
 
 /** 收束时调一次。**任何一支失败都不抛**——它不参与这一场的结果。 */
@@ -67,9 +76,12 @@ export async function emitPostRunReadings(input: PostRunReadingInput): Promise<v
   } catch (err) {
     console.warn("[cost-per-progress] 读数失败（这一格未检）: " + (err instanceof Error ? err.message : String(err)));
   }
-  // 自进化闭环：抽信号 → 生补丁 → 落 .agent/evolution.json。失败不阻塞主流程。
+  // 自进化闭环：抽信号 → 评旧账 → 生补丁（反思位可选改写）→ 过门 → 落盘。失败不阻塞主流程。
   try {
-    const evo = await runEvolution(events, input.workspace, input.sessionId ?? input.logPath);
+    const reflect: ReflectFn | undefined = input.reflectProviderFor === undefined
+      ? undefined
+      : async (req) => consumeReflectOutput(input.reflectProviderFor!(req.instruction));
+    const evo = await runEvolution(events, input.workspace, input.sessionId ?? input.logPath, reflect === undefined ? undefined : { reflect });
     if (evo.persistedTo !== null && evo.patches.length > 0) {
       console.warn("[evolution] 本跑产出 " + evo.patches.length + " 条策略补丁，已落 " + String(evo.persistedTo));
     }
@@ -86,7 +98,59 @@ export async function emitPostRunReadings(input: PostRunReadingInput): Promise<v
     } catch (err) {
       console.warn("[canary] 观察期读数失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
     }
+    // 正向打法蒸馏（批次 B1）：成功复现的工具组合 → project 记忆（落 .agent/memory/，
+    // 经 M7 索引/检索/强度账回注）。复现 < 2 次 ⇒ 零条目零写入。
+    try {
+      const workflows = distillWorkflows(events, input.logPath);
+      if (workflows.length > 0) {
+        const written = await writeWorkflows(input.workspace, workflows, new Date().toISOString());
+        console.warn("[workflow] 本跑蒸馏 " + String(written) + " 条打法（复现≥2 且收尾绿 verify）");
+      }
+    } catch (err) {
+      console.warn("[workflow] 打法蒸馏失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
+    }
+    // 打法毕业（批次 B2）+ 周期 Assess（批次 C2）：modules/ 缺席 ⇒ 各自零行为。
+    try {
+      for (const g of await maybeGraduateWorkflows(input.workspace)) {
+        if (g.outcome === "submitted") console.warn("[workflow-graduate] " + g.topic + " 已提为 content-pack 提案（staging 待门）");
+        else if (g.outcome === "refused") console.warn("[workflow-graduate] " + g.topic + " 提案被拒: " + String(g.detail));
+      }
+    } catch (err) {
+      console.warn("[workflow-graduate] 毕业检查失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
+    }
+    try {
+      const assess = await runAssess(input.workspace);
+      if (assess !== null && assess.report.findings.length > 0) {
+        const counts: Record<string, number> = {};
+        for (const f of assess.report.findings) counts[f.kind] = (counts[f.kind] ?? 0) + 1;
+        console.warn("[assess] 体检报告 " + String(assess.reportPath) + "：" + Object.entries(counts).map(([k, n]) => k + "×" + String(n)).join("、"));
+      }
+    } catch (err) {
+      console.warn("[assess] 体检失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
+    }
   } catch (err) {
     console.warn("[evolution] 读数/落盘失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
+  }
+}
+
+/** 反思位的流消费：只收正文（usage 已由 provider 内部记账面处理或随 provider 配置走；
+ *  工具调用一律忽略——反思轮不给工具面，模型若仍发起调用按无产出处理）。
+ *  有的 provider 会**同时**发 delta 流与合并后的 assistant_message——两边都收正文会翻倍
+ *  （parse 必炸 ⇒ 全拒 ⇒ 白花一次反思），所以有 delta 用 delta、没有才落 message。
+ *  正文剥 ```json 围栏后 parse；parse 不动 ⇒ 原文返回（parseReflectProposals 会全拒 → 规则兜底）。 */
+async function consumeReflectOutput(provider: Provider): Promise<unknown> {
+  let deltas = "";
+  let message: string | null = null;
+  for await (const out of provider.stream([], [])) {
+    if (out.type === "assistant_delta" && typeof out.text === "string") deltas += out.text;
+    else if (out.type === "assistant_message" && typeof out.content === "string") message = out.content;
+  }
+  const text = deltas.length > 0 ? deltas : message ?? "";
+  const trimmed = text.trim().replace(/^```(?:json)?\s*/u, "").replace(/\s*```$/u, "").trim();
+  if (trimmed.length === 0) return null;
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return trimmed;
   }
 }

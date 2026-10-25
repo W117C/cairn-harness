@@ -18,6 +18,7 @@ import { realpath } from "node:fs/promises";
 import { projectViewContext } from "./session-view-context";
 import { isSideEffectTool, isWriteCall, type McpGrade, type PermissionMode } from "../permissions";
 import { streamGlm, type GlmMessage, type GlmOptions, type GlmToolSpec } from "../providers/glm";
+import type { ThinkingEffort } from "../providers/capabilities";
 import { SUPERVISE_MODEL_FIELDS } from "./supervise-contract";
 import { effectiveModelTable, findSpecByNameOrId } from "../providers/registry";
 import type { ModelOutput, Provider, ProviderCall } from "../providers";
@@ -793,6 +794,8 @@ export function createSessionProvider(
     };
     /** 真实通道模型名（缺省 = provider 层读 CAIRN_MODEL env；settings.model 在场时优先）。 */
     model?: string;
+    /** Explicit effort reaches transport; native off differs from an unspecified upstream default. */
+    thinking?: ThinkingEffort;
     /** 调用方**已经解析好**的模型窗口（如 `--model` 自由档位合成 spec 上的那个）。
      *  `opts.model` 那条查表的路只认得表内模型；自由档位的名字按定义不在表里，查表恒为 undefined ⇒
      *  窗口得由调用方递进来，否则这一路的预算只能吃 `DEFAULT_COMPACTION_CONFIG` 的硬编码。 */
@@ -805,6 +808,8 @@ export function createSessionProvider(
      *  会话末沉淀轮用它把指令送进请求——既不落日志（否则下一轮会被当用户发言重放），
      *  又能真正到达模型。缺省 undefined = 零行为。 */
     ephemeralUserTurn?: string;
+    /** Optional host-owned experimental instruction, assembled before the final context budget check. */
+    requestIntervention?: (events: readonly AgentEvent[]) => string | undefined;
     /** 识图通道（`read_image` → 下一轮请求）：provider 每轮组装时从这里取待发的图片。
      *  与 `ephemeralImages` 的区别是**时机**：那个是「这一轮就附上」的一次性块（调用方自己算好），
      *  这个是「loop 什么时候读到图，下一轮就附上」的活盒子。两者都缺省 = 零行为。 */
@@ -1075,7 +1080,8 @@ export function createSessionProvider(
       // M2d 固定回注（§8.1.5/§8.1.9）：每轮组装重读两层记忆并重注（压缩后自然重注）。
       // 出口在 `buildMemoryInjectionSafe` 那一道（第 315 页）：这里从前是自己的 catch ＋ `console.debug`
       // ⇒ 一次异常把整段 LESSONS/索引变成**无痕**丢失，而模型读到的"没有记忆"与"这仓库没写过记忆"同形。
-      const mem = await buildMemoryInjectionSafe({ workspace });
+      // M7：带上本轮问话做词面检索（RECALL 段）——问句取料与符号地图共用 `lastUserContent` 这一支。
+      const mem = await buildMemoryInjectionSafe({ workspace, queryText: lastUserContent(events) });
       const memory = mem.injection;
       const memoryNote = mem.unavailable;
       const memoryChars = (memory.project?.length ?? 0) + (memory.global?.length ?? 0);
@@ -1209,6 +1215,8 @@ export function createSessionProvider(
       // 识图：盒子里有图就取出来附到本轮请求末尾（take 即清空 ⇒ 同一张图不会在两轮里各付一遍 token）。
       // 空盒时这个参数缺席 ⇒ 消息序列逐字不变，不读图的会话一个字节都不多付。
       const liveImages = opts.imageChannel?.take() ?? [];
+      const ephemeralUserTurn = [opts.ephemeralUserTurn, opts.requestIntervention?.(events)]
+        .filter((text): text is string => text !== undefined && text !== "").join("\n\n");
       const msgs = composeTurnMessages({
         system: opts.system,
         mapText,
@@ -1218,7 +1226,7 @@ export function createSessionProvider(
         ...(skillsBlock ? { skills: skillsBlock } : {}),
         ...(surfaceNoteText ? { surfaceNote: surfaceNoteText } : {}),
         ...(opts.attachmentContext ? { attachmentContext: opts.attachmentContext } : {}),
-        ...(opts.ephemeralUserTurn !== undefined ? { ephemeralUserTurn: opts.ephemeralUserTurn } : {}),
+        ...(ephemeralUserTurn !== "" ? { ephemeralUserTurn } : {}),
         ...(liveImages.length > 0 ? { ephemeralImages: liveImages } : {}),
         ...(opts.ephemeralImages !== undefined ? { ephemeralImages: opts.ephemeralImages } : {}),
       });
@@ -1242,6 +1250,7 @@ export function createSessionProvider(
       }
       call?.signal?.throwIfAborted();
       yield* (opts.transport ?? streamGlm)(msgs, { ...(opts.model ? { model: opts.model } : {}),
+        ...(opts.thinking !== undefined ? { reasoningEffort: opts.thinking } : {}),
         ...(opts.solpi?.meter ? { metering: { meter: opts.solpi.meter, category: "main" as const } } : {}) }, tools, call);
       successfulRequests++;
       opts.solpi?.sent(msgs, events);

@@ -10,7 +10,7 @@ import { createActionFusion } from "../agent/action-fusion";
 import { AUTOMATION_TOOL_NAMES } from "../agent/automation-surface";
 import { sessionToolSpecs, type SessionPluginTool } from "../agent/session-provider";
 import { currentPluginRuntime, type PluginRuntime } from "../agent/plugins";
-import type { McpToolInfo } from "../agent/plugins/mcp";
+import { MCP_ACTIVE_TOOL_LIMIT, mcpServerKey, type McpToolInfo } from "../agent/plugins/mcp";
 import { annotateExecCause } from "../agent/verify";
 import {
   downgradeSuggestion,
@@ -325,6 +325,10 @@ function gatedMcpTool(name: string, rt: PluginRuntime): Tool {
       if (!s) return denied(name, "default", "工具门未接线（fail-closed）");
       const info = rt.mcpTools.get(name);
       if (!info) return denied(name, s.autonomy.mode, "插件工具已停用或未注册");
+      // 懒加载的防手滑：未激活 server / 未按工具激活的 scoped 名即使还残留在旧表里，也不许执行。
+      if (!scopedToolActive(rt, name, info)) {
+        return denied(name, s.autonomy.mode, "MCP 工具未激活（先用 mcp_activate）");
+      }
       // 安全模式 gate 必须覆盖 MCP 写工具：旧实现只在 gatedTool 里加这道闸，
       // 把写操作搬到 MCP（annotations:{} = 非只读）就能在 guided/auto 下整体绕开「写前强制审批」。
       if (process.env.M1E_SAFE_MODE === "gate" && isWriteCall(name, info.grade)) {
@@ -385,7 +389,118 @@ function gatedMcpTool(name: string, rt: PluginRuntime): Tool {
   };
 }
 
-/** M2e：把插件面装进统一注册表——skill 工具 + 各 MCP 工具（scoped 名）；返回注入名清单（会话结束摘除）。 */
+/** 模型面/执行面/权限门共用的 active 判定：优先按工具（子集模式），退回家 server，最后宽容旧测试桩。 */
+function scopedToolActive(
+  rt: { isMcpToolActive?: (scoped: string) => boolean; isMcpServerActive?: (key: string) => boolean },
+  scoped: string,
+  info: { plugin: string; server: string },
+): boolean {
+  if (typeof rt.isMcpToolActive === "function") return rt.isMcpToolActive(scoped);
+  if (typeof rt.isMcpServerActive === "function") return rt.isMcpServerActive(mcpServerKey(info.plugin, info.server));
+  return true;
+}
+
+function mcpCatalogLine(rt: PluginRuntime): string {
+  const rows = rt.mcpServerSummaries();
+  if (rows.length === 0) return "当前没有已连接的 MCP server。";
+  const shown = rows.slice(0, 20).map((s) => {
+    const active = s.activeMode === "server"
+      ? "（整台已激活）"
+      : s.activeMode === "tools" ? "（按工具激活 " + String(s.activeToolCount) + " 把）" : "";
+    const oversize = s.toolCount > MCP_ACTIVE_TOOL_LIMIT ? "（大 server：用 tools 子集激活）" : "";
+    return "- " + s.key + " — " + String(s.toolCount) + " 把工具" + active + oversize;
+  });
+  const more = rows.length > 20 ? "\n（还有 " + String(rows.length - 20) + " 台未列出）" : "";
+  return "MCP servers（先 mcp_list <server> 看工具名，再 mcp_activate；大 server 用 tools 只激活子集）：\n" +
+    shown.join("\n") + more;
+}
+
+function mcpToolLines(rt: PluginRuntime, server: string): string {
+  const tools = rt.mcpServerTools(server);
+  if (!tools) {
+    const available = rt.mcpServerSummaries().map((s) => s.key).join(", ") || "（无）";
+    return "未找到 MCP server: " + server + "；可用：" + available;
+  }
+  const summary = rt.mcpServerSummaries().find((s) => s.key === server);
+  const state = summary?.activeMode === "server"
+    ? "（整台已激活）"
+    : summary?.activeMode === "tools"
+      ? "（按工具激活 " + String(summary.activeToolCount) + " 把）"
+      : "（未激活；调用 mcp_activate 后下一轮请求可见）";
+  const shown = tools.slice(0, 20).map((t) =>
+    "- " + t.scopedName + (t.active ? "（已激活）" : "") + " — " + t.description);
+  const more = tools.length > 20 ? "\n（还有 " + String(tools.length - 20) + " 把未列出）" : "";
+  const oversize = tools.length > MCP_ACTIVE_TOOL_LIMIT
+    ? "\n（该 server 有 " + String(tools.length) + " 把工具，整台激活会超过总帽；用 mcp_activate 的 tools 参数选择子集）"
+    : "";
+  return "MCP server " + server + state + "：\n" + shown.join("\n") + more + oversize;
+}
+
+/** 服务器级懒加载的三个元工具。它们只改 active 集，不执行外部 MCP 工具；
+ *  真正的 scoped 工具仍走 `gatedMcpTool` 的同一条权限/审批管线。 */
+function mcpListTool(rt: PluginRuntime): Tool {
+  return {
+    name: "mcp_list",
+    async run(args) {
+      const server = typeof args.server === "string" ? args.server.trim() : "";
+      return { ok: true, output: server === "" ? mcpCatalogLine(rt) : mcpToolLines(rt, server) };
+    },
+  };
+}
+
+function mcpActivateTool(rt: PluginRuntime): Tool {
+  return {
+    name: "mcp_activate",
+    async run(args) {
+      const server = typeof args.server === "string" ? args.server.trim() : "";
+      if (server === "") return { ok: false, output: "mcp_activate: server 参数必填（plugin/server，从 mcp_list 取）" };
+      const one = typeof args.tool === "string" ? args.tool.trim() : "";
+      const many = Array.isArray(args.tools)
+        ? args.tools.filter((x): x is string => typeof x === "string").map((x) => x.trim()).filter((x) => x !== "")
+        : [];
+      if (one !== "" && many.length > 0) {
+        return { ok: false, output: "mcp_activate: tool 与 tools 二选一（只激活一把用 tool，多把用 tools）" };
+      }
+      const selected = one !== "" ? [one] : many;
+      const r = selected.length > 0
+        ? rt.activateMcpTools(server, selected)
+        : rt.activateMcpServer(server);
+      if (!r.ok) return { ok: false, output: r.error ?? "激活失败" };
+      const activeTools = r.tools.filter((t) => t.active);
+      const shown = activeTools.slice(0, 20).map((t) => "- " + t.scopedName);
+      const more = activeTools.length > 20 ? "\n（还有 " + String(activeTools.length - 20) + " 把未列出）" : "";
+      return {
+        ok: true,
+        output: "已激活 " + server + "（" + String(activeTools.length) + " 把工具；当前 active " +
+          String(rt.activeMcpToolCount()) + "/" + String(MCP_ACTIVE_TOOL_LIMIT) +
+          " 把；schema 在下一轮请求进入模型面，本轮不要凭名字猜参数）：\n" + shown.join("\n") + more,
+      };
+    },
+  };
+}
+
+function mcpReleaseTool(rt: PluginRuntime): Tool {
+  return {
+    name: "mcp_release",
+    async run(args) {
+      const server = typeof args.server === "string" ? args.server.trim() : "";
+      if (server === "") return { ok: false, output: "mcp_release: server 参数必填（plugin/server）" };
+      const tool = typeof args.tool === "string" ? args.tool.trim() : "";
+      if (tool !== "") {
+        const r = rt.releaseMcpTool(server, tool);
+        return { ok: r.ok, output: r.ok ? "已释放 " + server + " / " + tool + "（下一轮不再出现）" : (r.error ?? "释放失败") };
+      }
+      const r = rt.releaseMcpServer(server);
+      return {
+        ok: r.ok,
+        output: r.ok ? "已释放 " + server + "（移除 " + String(r.removed ?? 0) + " 把工具；下一轮不再出现）" : (r.error ?? "释放失败"),
+      };
+    },
+  };
+}
+
+/** M2e：把插件面装进统一注册表——skill + MCP 目录/激活元工具 + **已激活**的 scoped MCP 工具。
+ *  返回注入名清单（会话结束摘除）。未激活 server 的工具不装表：模型看不见，也不该调得动。 */
 export function installPluginTools(rt: PluginRuntime): string[] {
   const injected: string[] = [];
   const table = TOOLS as unknown as Record<string, Tool>;
@@ -403,7 +518,15 @@ export function installPluginTools(rt: PluginRuntime): string[] {
     };
     injected.push("skill");
   }
-  for (const scoped of rt.mcpTools.keys()) {
+  if (rt.mcpTools.size > 0) {
+    table["mcp_list"] = mcpListTool(rt);
+    table["mcp_activate"] = mcpActivateTool(rt);
+    table["mcp_release"] = mcpReleaseTool(rt);
+    injected.push("mcp_list", "mcp_activate", "mcp_release");
+  }
+  for (const [scoped, info] of rt.mcpTools) {
+    // 最小测试桩没有 active 语义 ⇒ 保持旧行为（全部可执行）；生产 PluginRuntime 必有。
+    if (!scopedToolActive(rt, scoped, info)) continue;
     table[scoped] = gatedMcpTool(scoped, rt);
     injected.push(scoped);
   }
@@ -422,7 +545,17 @@ export function installPluginTools(rt: PluginRuntime): string[] {
  *  不另写一条执行路径。只补 `rt.mcpTools` 里**已经有**的名字：表里没有的仍由 loop 落
  *  `unknown tool`（fail-closed 方向不变，不会因为补表就放行一个没注册的工具）。 */
 export function resolveLivePluginTool(name: string, rt: PluginRuntime): Tool | undefined {
-  if (!rt.mcpTools.has(name)) return undefined;
+  // 元工具也可能是 run 中途才「长出来」的（起点无插件 → 中途批准后才 connectMcp）：
+  // 模型面由 requestFace 现算会列出它们，执行表却是起点快照 ⇒ 不补这一手，
+  // 模型会看到 mcp_list/mcp_activate 却吃 unknown tool。与 scoped 工具同一条补表入口。
+  if (rt.mcpTools.size > 0) {
+    if (name === "mcp_list") return mcpListTool(rt);
+    if (name === "mcp_activate") return mcpActivateTool(rt);
+    if (name === "mcp_release") return mcpReleaseTool(rt);
+  }
+  const info = rt.mcpTools.get(name);
+  if (!info) return undefined;
+  if (!scopedToolActive(rt, name, info)) return undefined;
   return gatedMcpTool(name, rt);
 }
 
@@ -432,20 +565,30 @@ export function resolveLivePluginTool(name: string, rt: PluginRuntime): Tool | u
 export interface PluginToolSource {
   skills(): readonly unknown[];
   mcpTools: Map<string, McpToolInfo & { plugin: string; server: string }>;
+  /** 生产实现必有；最小测试桩缺省时按「全部已激活」处理（保持旧测试的显式输入面）。
+   *  按工具模式的判定优先于整台 server。 */
+  isMcpToolActive?: (scoped: string) => boolean;
+  isMcpServerActive?: (key: string) => boolean;
 }
 
 /** §9.3 的工具面：一次算出「模型可见规格 + 摘除说明 + 活闸谓词」三件，同源同刻。
  *  规格面与活闸必须一份谓词：两处各判一份就是「模型看到的工具 ≠ 能执行的工具」的镜像缺陷
  *  （这边是能看到却被拒）。纯算、不出声——告警由调用点在 run 起点喊一次，逐请求重算时不该反复刷屏。
  *  导出是为了让这条接线有判据：provider 那条分支要真 key 才走得到，接线本身不能因此永远没证据。 */
+/** 插件工具面的两种喂法：一次性数组（run 起点快照）或 provider（每请求现算）。
+ *  模型面若只认前者，run 中途新增的 MCP/插件工具就永远进不了清单——执行面能补表，
+ *  模型面看不见，仍然是「能执行但看不见」。 */
+export type PluginToolProvider = readonly SessionPluginTool[] | (() => readonly SessionPluginTool[]);
+
 export function sessionToolFace(
   rt: { skillDenial(tool: string): string | null } | null,
-  opts: { mode: PermissionMode; pluginTools?: readonly SessionPluginTool[]; automationTools?: boolean; omitTools?: readonly string[] },
+  opts: { mode: PermissionMode; pluginTools?: PluginToolProvider; automationTools?: boolean; omitTools?: readonly string[] },
 ): { tools: GlmToolSpec[]; note: string; skipped: string[]; removed: { name: string; by: string }[]; skillDenial: ((tool: string) => string | null) | undefined } {
   const skillDenial = rt ? (tool: string): string | null => rt.skillDenial(tool) : undefined;
+  const pluginTools = typeof opts.pluginTools === "function" ? opts.pluginTools() : opts.pluginTools ?? [];
   const face = sessionToolSpecs({
     mode: opts.mode,
-    pluginTools: opts.pluginTools ?? [],
+    pluginTools,
     // 能力没开就不挂说明书（见 OPTIONAL_TOOL_NAMES）：与执行面 installAppTools 同进同退。
     ...(opts.omitTools !== undefined && opts.omitTools.length > 0 ? { omitTools: opts.omitTools } : {}),
     ...(skillDenial ? { skillDenial } : {}),
@@ -488,7 +631,56 @@ export function pluginToolSpecsFromRuntime(rt: PluginToolSource | null): Session
       },
     });
   }
+  // 懒加载：目录/激活/释放三个小工具常驻；真正的 scoped 工具只在 active（整台或按工具）上出现。
+  // 最小测试桩没有 active 语义时保持旧行为（不塞元工具、全部工具可见），
+  // 这样 `session-tools.test.ts` 的显式 SessionPluginTool 输入面不被生产策略污染。
+  const lazy = typeof rt.isMcpServerActive === "function" || typeof rt.isMcpToolActive === "function";
+  if (lazy && rt.mcpTools.size > 0) {
+    out.push(
+      {
+        name: "mcp_list",
+        description: "列出已连接的 MCP server；给 server 时列出工具名（不加载 schema）。先取 key，再 mcp_activate。",
+        parameters: {
+          type: "object",
+          properties: { server: { type: "string", description: "可选：plugin/server；省略则只列 server" } },
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "mcp_activate",
+        description: "激活 MCP 工具；下一轮请求生效。默认整台 server；大 server 用 tool/tools 只激活子集。",
+        parameters: {
+          type: "object",
+          properties: {
+            server: { type: "string", description: "plugin/server" },
+            tool: { type: "string", description: "可选：只激活这一把（bare 名或 scoped 名）" },
+            tools: {
+              type: "array",
+              items: { type: "string" },
+              description: "可选：只激活这些工具（与 tool 二选一）；server 超过总工具帽时用这个",
+            },
+          },
+          required: ["server"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "mcp_release",
+        description: "释放整台 server 或其中一把工具；下一轮不再出现在工具面。",
+        parameters: {
+          type: "object",
+          properties: {
+            server: { type: "string", description: "plugin/server" },
+            tool: { type: "string", description: "可选：只释放这一把（bare 名或 scoped 名）" },
+          },
+          required: ["server"],
+          additionalProperties: false,
+        },
+      },
+    );
+  }
   for (const [scoped, info] of rt.mcpTools) {
+    if (!scopedToolActive(rt, scoped, info)) continue;
     // grade 随规格一起带出：档位对 MCP 的白名单在 sessionToolSpecs 那一处统一生效（同 isWriteCall 谓词），
     // 这里不再按 mode 各判一份——两处各判就是「模型看到的」与「门会拒的」重新分家的地方。
     out.push({ name: scoped, description: info.description, parameters: info.inputSchema, grade: info.grade });

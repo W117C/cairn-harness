@@ -58,7 +58,7 @@ describe("交付卡默认收起（2026-10-18 业主截图批）", () => {
   });
 });
 
-describe("批 3：交付卡纵向清单（去四宫格）+ 空轮弱行（文档阶段 3·对话页①）", () => {
+describe("批 3：交付卡纵向清单（去四宫格）+ 空轮弱行撤下（文档阶段 3·对话页①）", () => {
   const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
   const appSrc = readAppSurface();
 
@@ -72,11 +72,12 @@ describe("批 3：交付卡纵向清单（去四宫格）+ 空轮弱行（文档
     expect(css).not.toMatch(/\.delivery-cell\s*{/);
   });
 
-  it("空轮弱行：tertiary 小字样式；App 经 deliveryTrail 渲染、运行中末轮不预告", () => {
-    expect(css).toMatch(/\.round-note\s*{[^}]*color:\s*hsl\(var\(--text-400\)\)/s);
-    expect(css).toMatch(/\.round-note\s*{[^}]*font-size:\s*var\(--fs-caption-xs\)/s);
+  it("空轮弱行已整体撤下（2026-10-24 业主）：代码与样式层零残留，App 仍经 deliveryTrail 出卡", () => {
     expect(appSrc).toContain("deliveryTrail(");
-    expect(appSrc).toContain('className="round-note"');
-    expect(appSrc).toContain("formatEmptyTrailNote(");
+    expect(appSrc).not.toContain("formatEmptyTrailNote");
+    expect(appSrc).not.toContain('className="round-note"');
+    // 钉弱行特有格式（「第 N 轮 · 无文件改动」）；卡展开态的零文件明细「无文件改动」是另一处合法文案。
+    expect(appSrc).not.toContain("· 无文件改动");
+    expect(css).not.toMatch(/\.round-note\s*{/);
   });
 });

@@ -134,35 +134,39 @@ describe("批 6：设置页公共组件（SSR 结构）", () => {
 });
 
 describe("批 6：设置页公共组件（CSS 口径哨兵）", () => {
-  it(".ss-title = 20px / --fw-bold；内容列 960px 水平居中（2026-10-16 重做 A：滚动容器撑满、内容列收口）", () => {
+  it(".ss-title = 28px 大字标题（2026-10-24 参照 ChatGPT 设置）；内容列 860px 居中", () => {
     const t = block(styles, ".ss-title");
-    expect(t).toContain("font-size: var(--fs-title-md)");
+    expect(t).toContain("font-size: 28px");
     expect(t).toContain("font-weight: var(--fw-bold)");
-    // 宽度与居中的单一落点：sp-body 的内容列包装规则（原 .ss-page 自带 720 上限已下架）
-    expect(styles).toContain(".sp-body > .ss-page, .sp-body > .ap-body { max-width: 960px; margin: 0 auto; width: 100%; }");
+    expect(t).toContain("letter-spacing: -0.01em");
+    // 宽度与居中的单一落点：sp-body 的内容列包装规则（设置页收窄到 860，工作台保持 960）
+    expect(styles).toContain(".sp-body > .ss-page { max-width: 860px; margin: 0 auto; width: 100%; }");
+    expect(styles).toContain(".sp-body > .ap-body { max-width: 960px; margin: 0 auto; width: 100%; }");
     expect(block(styles, ".sp-body")).not.toContain("max-width"); // 滚动容器自身不再设宽（A 的根因）
     expect(block(styles, ".ss-page")).not.toContain("max-width");
   });
 
-  it(".ss-sec-head 组标题 = caption 档 tertiary；.ss-card = surface + 描边 + v3 10 圆角 + 20 内距", () => {
+  it(".ss-sec-head 组标题 = caption 档 tertiary；.ss-card = surface + hairline 描边 + pop 14 圆角（2026-10-24）", () => {
     expect(block(styles, ".ss-sec-head")).toContain("font-size: var(--fs-caption-xs)");
     expect(block(styles, ".ss-sec-head")).toContain("color: hsl(var(--text-400))");
     const card = block(styles, ".ss-card");
-    expect(card).toContain("border-radius: var(--radius-pop-v3)"); // 10（v3 panel-radius）
+    expect(card).toContain("border-radius: var(--radius-pop)"); // 14（设置卡/大面板）
     expect(card).toContain("hsl(var(--bg-000))");
-    expect(card).toContain("1px solid var(--hairline-strong)");
+    expect(card).toContain("1px solid var(--hairline)");
     expect(card).toContain("padding: 0");
   });
 
-  it(".ss-row = 220px 标题列 + 弹性控件列（左对齐，2026-10-16 C）；行间 1px 分隔线；窄宽单列", () => {
+  it(".ss-row = 左列（标题+说明上下排）+ 控件靠右垂直居中（2026-10-24 参照 ChatGPT）；行间 1px 分隔线", () => {
     const row = block(styles, ".ss-row");
-    expect(row).toContain("grid-template-columns: 220px minmax(0, 1fr)");
+    expect(row).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(row).toContain("align-items: center");
     expect(row).toContain("min-height: 56px");
     expect(row).toContain("border-top: 1px solid var(--hairline)");
     expect(styles).toContain(".ss-card > .ss-row:first-child { border-top: 0; }");
-    // 控件列不再右对齐（「控件被挤到右半边」的反向钉）
-    expect(block(styles, ".ss-row-ctl")).not.toContain("justify-content: flex-end");
-    // 窄宽媒体查询：标题列收进单列（800px 窗口仍两列，控件换行不溢出）
+    // 说明拿到整条左列宽度（中文长句不碎行），不再跨两列
+    expect(block(styles, ".ss-row-desc")).not.toContain("grid-column");
+    // 控件列靠右（ChatGPT 参考页的行观感）；窄宽媒体查询回落单列左对齐
+    expect(block(styles, ".ss-row-ctl")).toContain("justify-content: flex-end");
     expect(styles).toMatch(/@media \(max-width: 640px\)[\s\S]{0,300}\.ss-row \{ grid-template-columns: minmax\(0, 1fr\)/);
   });
 

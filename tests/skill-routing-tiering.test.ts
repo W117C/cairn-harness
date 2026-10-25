@@ -4,9 +4,12 @@
 import { describe, expect, it } from "vitest";
 import {
   SKILL_ROUTING_CHAR_LIMIT,
+  SKILL_ROUTING_DESC_CHAR_LIMIT,
   buildSkillRoutingList,
+  capRoutingText,
   routingQueryTokens,
   routingRelevance,
+  skillRoutingLine,
   type RoutingSkillInput,
 } from "../src/agent/plugins/skills";
 
@@ -76,6 +79,38 @@ describe("超预算那一档", () => {
     const r = buildSkillRoutingList(mk(40, "d".repeat(200)), [role]);
     const listed = r.text.split("\n").filter((l) => l.startsWith("- ")).length;
     expect(r.dropped + listed).toBe(41); // 40 条 skill + 1 条角色行，一个数
+  });
+});
+
+describe("单条描述帽（300 字符）", () => {
+  it("长描述只占一条 300 帽，短条目仍保留完整行（不整条吃光总预算）", () => {
+    const r = buildSkillRoutingList([
+      { plugin: "big", name: "verbose", description: "长".repeat(2000) },
+      { plugin: "small", name: "tiny", description: "短描述" },
+    ]);
+    const line = r.text.split("\n").find((l) => l.startsWith("- /big:verbose"))!;
+    const desc = line.slice("- /big:verbose — ".length);
+    expect(desc.length).toBeLessThanOrEqual(SKILL_ROUTING_DESC_CHAR_LIMIT);
+    expect(desc.endsWith("…")).toBe(true);
+    expect(r.text).toContain("- /small:tiny — 短描述");
+    expect(r.truncated).toBe(false); // 两条都在总帽内，单条帽不是总帽的替代
+  });
+
+  it("description + when_to_use 合并后仍只占一条 300 帽", () => {
+    const line = skillRoutingLine({
+      plugin: null,
+      name: "x",
+      description: "d".repeat(200),
+      frontmatter: { when_to_use: "w".repeat(200) },
+    });
+    const desc = line.slice("- /x — ".length);
+    expect(desc.length).toBeLessThanOrEqual(SKILL_ROUTING_DESC_CHAR_LIMIT);
+    expect(desc).toContain("…");
+  });
+
+  it("短文本逐字不变（零回归），角色行同一份归一口径", () => {
+    expect(capRoutingText("短 描述")).toBe("短 描述");
+    expect(capRoutingText("x".repeat(1000))).toHaveLength(SKILL_ROUTING_DESC_CHAR_LIMIT);
   });
 });
 

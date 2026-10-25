@@ -12,6 +12,13 @@
 import type { EvolutionSignals } from "./signal";
 import { COST_PER_BOUNDARY_LIMIT, recordedAtStamp } from "./strategy-patch";
 
+/** 「提前压缩」的旋钮值（compaction 触发 ratio 从缺省 0.9 压到这一档）。
+ *  事实源只在这里：advice 产建议、装配缝（agent-runner 的 compaction config）取值——
+ *  两处各抄一个数就会得到「建议说压、闸还在 0.9」的账。
+ *  刻意**不进 EvolutionAdvice 形状**：盘上旧记录没有这一格，进形状会让 store 的验形状
+ *  把旧记录读成坏档（不可逆的兼容破口）；旋钮值是消费侧取料，不是建议本身。 */
+export const COMPRESS_EARLY_RATIO = 0.7;
+
 export interface EvolutionAdvice {
   /** 路由降档建议；null = 本轮读数不支持任何路由偏好。 */
   preferredTier: "cheap" | null;

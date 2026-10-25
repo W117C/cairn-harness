@@ -18,7 +18,8 @@ afterAll(async () => {
   for (const d of cleanups) await rm(d, { recursive: true, force: true });
 });
 
-/** 三条 skill：描述都长到任意两条就破 1536 ⇒ 「谁被完整列出」只能由相关性决定。 */
+/** 六条 skill：单条描述被 300 字符帽收窄后，三条仍装得下 ⇒ 用六条把总帽撑破，
+ *  「谁被完整列出」才继续只能由相关性决定。 */
 async function loadTrustedRuntime(): Promise<PluginRuntime> {
   const dir = await mkdtemp(join(tmpdir(), "dsh-routing-query-"));
   cleanups.push(dir);
@@ -38,6 +39,9 @@ async function loadTrustedRuntime(): Promise<PluginRuntime> {
     ["csv-import", "把外部 CSV 表格导入成仓储内的记录，处理字段映射、编码与去重，并给出导入后的一致性校验报告。"],
     ["weekly-report", "汇总一周内的改动生成周报草稿，按人、按主题分组，并把没有证据支撑的句子标成待确认。"],
     ["db-migrate", "生成数据库 schema 迁移脚本，处理 postgres 与 sqlite 的方言差异、回滚顺序与锁表窗口。"],
+    ["inbox-triage", "整理收件箱里的待办与通知，按紧急度和主题分组，并给出下一步处理建议。"],
+    ["release-check", "发布前检查清单：版本号、变更日志、构建产物与回滚方案逐项核对。"],
+    ["pdf-export", "把当前内容导出为 PDF，处理分页、字体嵌入与目录生成。"],
   ];
   for (const [name, desc] of entries) {
     await mkdir(join(pluginDir, "skills", name), { recursive: true });
@@ -61,10 +65,10 @@ describe("装配面：routingList(query) 把相关性递到清单里", () => {
     rt = await loadTrustedRuntime();
   });
 
-  it("分母非零：三条都进了清单，但完整行装不下三条（否则这条判卷是空载）", () => {
-    expect(rt.skills().length).toBe(3);
+  it("分母非零：六条都进了清单，但完整行装不下六条（否则这条判卷是空载）", () => {
+    expect(rt.skills().length).toBe(6);
     const plain = rt.routingList();
-    expect(plain.truncated, "三条长描述必然超预算").toBe(true);
+    expect(plain.truncated, "六条长描述必然超预算").toBe(true);
     expect(plain.text.length).toBeLessThanOrEqual(SKILL_ROUTING_CHAR_LIMIT);
     expect(plain.dropped + plain.nameOnly).toBeGreaterThan(0);
   });
@@ -76,7 +80,7 @@ describe("装配面：routingList(query) 把相关性递到清单里", () => {
     // 分母形状：三条都在（完整行 or 只列名字），且完整行数不超预算给的量
     for (const r of [byMigration, byReport]) {
       expect(r.text.length).toBeLessThanOrEqual(SKILL_ROUTING_CHAR_LIMIT);
-      expect(r.dropped + r.nameOnly + fullLineCount(r.text)).toBe(3);
+      expect(r.dropped + r.nameOnly + fullLineCount(r.text)).toBe(6);
     }
     // 断言"排序"而不是"缺席"：预算装得下两条完整行，被问到的那条必须在另一条之前
     //（另一条也可能只降到"只列名字"那一档 ⇒ 缺席同样算排得靠后，用 === -1 收进同一个判据）。

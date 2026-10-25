@@ -39,6 +39,10 @@ export const INJECTED_TOOLS: readonly InjectedToolSurface[] = [
   { name: "web_search", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
   // 插件 skill：实例面在 agent-runner 里 `table["skill"] =`，规格走运行期（插件装载了才有）
   { name: "skill", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  // MCP 服务器级懒加载的三个元工具：只改 active 集，不执行外部工具 ⇒ 只读档也保留。
+  { name: "mcp_list", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
+  { name: "mcp_activate", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
+  { name: "mcp_release", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
   // 定时任务五件（§12.2.5）：实现一直有，规格第 42 页才补上 ⇒ 登记进表，让 G-B 从此盯着这一族。
   // worker 面不给（它们已在 WORKER_FORBIDDEN_TOOLS 里）；只读档也不给（只读会话不该排下一次无人值守的写）。
   { name: "automation_create", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },

@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { projectAgentPath } from "../../app-data";
 import { writeFileAtomic } from "../../atomic-write";
+import type { MemoryStat } from "./strength.js";
 
 // ---- 布局常量（§8.1.3 定稿文件名）----
 export const ROOT_FILES = {
@@ -131,6 +132,32 @@ export function upsertIndexLine(current: string, topic: string, line: string): s
     .filter((l) => l.trim().length > 0 && !l.startsWith("- " + topic + " ·"));
   kept.push(line);
   return kept.join("\n") + "\n";
+}
+
+/** 解析一条索引行回四元组（与 `indexLine` 同一份格式的**读侧**，单一事实源）。
+ *  digest 是最后一段、允许自身含「·」；行不是 `- topic · type · modified · digest` 形状 → null。
+ *  M7 检索（retrieval.ts）吃它当词面语料，注入侧吃它做休眠行过滤——两边都不自己再写一份切分。 */
+export interface IndexEntry {
+  topic: string;
+  type: string;
+  modified: string;
+  digest: string;
+}
+
+export function parseIndexLine(line: string): IndexEntry | null {
+  const m = line.match(/^- (\S{1,64}) · (\S+) · (\S+) · (.+)$/u);
+  if (m === null) return null;
+  return { topic: m[1]!, type: m[2]!, modified: m[3]!, digest: m[4]! };
+}
+
+/** 把整份 MEMORY.md 解析成条目列表（只收认得出的行；认不出的行留给注入面原文照印，不在这里丢）。 */
+export function parseIndex(raw: string): IndexEntry[] {
+  const out: IndexEntry[] = [];
+  for (const line of raw.split("\n")) {
+    const e = parseIndexLine(line);
+    if (e !== null) out.push(e);
+  }
+  return out;
 }
 
 async function readIndex(dir: string): Promise<string> {
@@ -438,5 +465,73 @@ export async function deleteTopic(dir: string, topic: string): Promise<boolean> 
     const kept = cur.split("\n").filter((l) => l.trim().length > 0 && !l.startsWith("- " + topic + " ·"));
     await writeFileAtomic(join(dir, MEMORY_INDEX), kept.length > 0 ? kept.join("\n") + "\n" : "");
     return true;
+  });
+}
+
+// ---- M7 强度账本（memory-stats.json；算术在 strength.ts，这里只有布局与 IO）----
+// 与索引/正文不同，这份文件是**harness 自己的缓存**，不是用户可见资产（记忆面板不列它）：
+// · 坏了 → 按空账继续（强度全是缺省值 = 行为回到「无强度模型」，不会更坏）——所以走
+//   onCorrupt 告警 + 空态，而不是像 index 那样抛 ECORRUPT；
+// · 与 topic 写入**松耦合**：writeTopic 不动它（新条目首次命中或首次巩固时建账），
+//   已删 topic 的陈账在巩固 pass 里清（有界：entries 数 ≤ 2× 现存 topic 数）。
+export const MEMORY_STATS_FILE = "memory-stats.json";
+
+export interface MemoryStatsFile {
+  version: 1;
+  entries: Record<string, MemoryStat>;
+}
+
+export async function readStats(
+  dir: string,
+  onCorrupt: (reason: string) => void = (reason) => console.warn("[memory] " + reason),
+): Promise<Record<string, MemoryStat>> {
+  let raw: string | null;
+  try {
+    raw = await readFile(join(dir, MEMORY_STATS_FILE), "utf8");
+  } catch {
+    return {}; // 首启无账：正常静默
+  }
+  try {
+    const parsed = JSON.parse(raw) as Partial<MemoryStatsFile>;
+    if (parsed === null || typeof parsed !== "object" || parsed.version !== 1 || typeof parsed.entries !== "object" || parsed.entries === null || Array.isArray(parsed.entries)) {
+      throw new Error("version/entries 字段形状不对");
+    }
+    const out: Record<string, MemoryStat> = {};
+    for (const [topic, s] of Object.entries(parsed.entries)) {
+      if (typeof s?.hits === "number" && typeof s.lastRetrieved === "string" && typeof s.strength === "number") {
+        out[topic] = { topic, hits: s.hits, lastRetrieved: s.lastRetrieved, strength: s.strength, ...(s.dormant === true ? { dormant: true } : {}) };
+      }
+    }
+    return out;
+  } catch (err) {
+    onCorrupt("强度账本损坏，已按空账继续（命中计数丢失，强度回到缺省；记忆正文不受影响）：" + join(dir, MEMORY_STATS_FILE) + "：" + (err instanceof Error ? err.message : String(err)));
+    return {};
+  }
+}
+
+/** 落账（与 writeTopic 同一把 dir 锁 + 原子替换；schema 恒 version 1）。 */
+export async function writeStats(dir: string, entries: Record<string, MemoryStat>): Promise<void> {
+  return await serializeOn(dir, async () => {
+    const file: MemoryStatsFile = { version: 1, entries };
+    await writeFileAtomic(join(dir, MEMORY_STATS_FILE), JSON.stringify(file, null, 2));
+  });
+}
+
+/** 锁内的读-改-写（命中落账与巩固共用这一支）：整段在 dir 锁里，读到的账与写回的账之间
+ *  不会有并发更新被夹掉——分头「readStats → 改 → writeStats」的话，两笔并发落账会互相
+ *  覆盖（后写者带着旧账，先写者的命中丢失），与 appendTopic 当年那个漏口同构。
+ *  mutate 返回 `next === null` ⇒ 一个字节都不写（纯读会话不 touch 盘）。 */
+export async function updateStats<T>(
+  dir: string,
+  mutate: (stats: Record<string, MemoryStat>) => Promise<{ value: T; next: Record<string, MemoryStat> | null }>,
+): Promise<T> {
+  return await serializeOn(dir, async () => {
+    const stats = await readStats(dir);
+    const { value, next } = await mutate(stats);
+    if (next !== null) {
+      const file: MemoryStatsFile = { version: 1, entries: next };
+      await writeFileAtomic(join(dir, MEMORY_STATS_FILE), JSON.stringify(file, null, 2));
+    }
+    return value;
   });
 }

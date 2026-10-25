@@ -4,7 +4,7 @@
 // 而「窗格是哪几种、叫什么、怎么重排」是**数据与纯函数**，不是组件——它住在 components/ 只是
 // 历史偶然。搬到这里之后：state 层拿窗格类型/登记表不用越过组件层，组件层照旧从
 // components/panes.ts 转出（导出面一字未改，调用点零改动）。
-export type PaneKind = "changes" | "plan" | "tasks" | "file" | "terminal" | "browser" | "sidechat" | "plugins";
+export type PaneKind = "changes" | "plan" | "tasks" | "file" | "terminal" | "browser" | "sidechat" | "plugins" | "session";
 
 export const PANE_META: Record<PaneKind, { label: string }> = {
   changes: { label: "变更" },
@@ -15,6 +15,7 @@ export const PANE_META: Record<PaneKind, { label: string }> = {
   browser: { label: "浏览器" },
   sidechat: { label: "旁路" },
   plugins: { label: "插件" },
+  session: { label: "会话预览" },
 };
 
 /** 顶栏 ⋮ 菜单的列表面（App 消费；保持与 PaneKind 同集）。 */

@@ -74,19 +74,22 @@ describe("设计面·减法", () => {
     expect(animationVars("animation: isp-ov-flash var(--t-slow) var(--ease-out);")).toHaveLength(2);
   });
 
-  it("③ 设置行说明独占整行（结构断言：它是 .ss-row 的同级，不是 .ss-row-main 的子级）", () => {
+  it("③ 设置行：标题/说明同列上下排（说明在 .ss-row-main 内），控件靠右垂直居中（2026-10-24 参照 ChatGPT 设置）", () => {
     const h = renderToStaticMarkup(
       <SettingsRow label="界面语言" desc="目前只有中文界面；英文界面尚未接入。">
         <select aria-label="locale"><option>中文</option></select>
       </SettingsRow>,
     );
-    // 说明紧跟在控件列之后 ⇒ 与标题列、控件列**平级**（独占一行）
-    expect(h).toMatch(/class="ss-row-ctl"[\s\S]*?<\/div><span class="ss-row-desc">/);
-    // 且标题列在说明之前**已经闭合** ⇒ 说明不在 .ss-row-main 里面
-    const between = h.slice(h.indexOf('class="ss-row-main"'), h.indexOf('class="ss-row-desc"'));
-    expect(between).toContain("</div>");
-    // CSS：跨两列
-    expect(block(".ss-row-desc")).toContain("grid-column: 1 / -1");
+    // 说明在标题之后、同在 .ss-row-main 里（拿到整条左列宽度，中文长句不碎行）
+    const main = h.slice(h.indexOf('class="ss-row-main"'), h.indexOf('class="ss-row-ctl"'));
+    expect(main.indexOf("ss-row-label")).toBeGreaterThan(-1);
+    expect(main.indexOf("ss-row-desc")).toBeGreaterThan(main.indexOf("ss-row-label"));
+    expect(main).toContain("目前只有中文界面");
+    // CSS：左列 1fr、控件列 auto 靠右垂直居中；说明不再跨两列
+    expect(block(".ss-row")).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(block(".ss-row")).toContain("align-items: center");
+    expect(block(".ss-row-desc")).not.toContain("grid-column");
+    expect(block(".ss-row-ctl")).toContain("justify-content: flex-end");
   });
 
   it("④ 错误正文降到正文色，失败标记仍然在（红三角 + 危险色重试钮 + 危险色的「N 次失败」）", () => {
@@ -127,8 +130,8 @@ describe("设计面·减法", () => {
     expect(dock).toMatch(/props\.inPopout !== true && \(\s*<nav className="pane-nav"/);
     // 独立窗格窗口确实声明了它
     expect(popout).toMatch(/<PaneDock[\s\S]{0,400}?inPopout/);
-    // 「恢复多面板布局」这个按钮在独立窗格窗口里没有对象（只有一个窗格）
-    expect(dock).toContain('aria-label="恢复多面板布局"');
+    // 2026-10-24 单窗格模式：「恢复多面板布局」按钮随网格整体撤下（主窗也没有了）。
+    expect(dock).not.toContain('aria-label="恢复多面板布局"');
   });
 
   it("⑦ markdown 表格只留横线（阅读面里不摆 Excel）", () => {

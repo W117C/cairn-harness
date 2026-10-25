@@ -145,8 +145,22 @@ export interface AtomicUnit { lo: number; hi: number; ids: number[] }
  *  verify_result 同 callId 归一组；区间重叠再合并；不在任何区间的事件是单例。 */
 export function atomicUnits(events: AgentEvent[]): AtomicUnit[] {
   const groups = new Map<string, number[]>();
+  const nativeByCall = new Map<string, string>();
+  const group = (key: string, id: number): void => {
+    const prior = groups.get(key);
+    if (prior) prior.push(id); else groups.set(key, [id]);
+  };
   events.forEach((e, i) => {
     const id = eventIdAt(i);
+    if (e.type === "user_message" || e.type === "usage") nativeByCall.clear();
+    if (e.type === "thinking_delta" && e.reasoning) {
+      nativeByCall.set(e.callId, e.reasoning.id);
+      group("r:" + e.reasoning.id, id);
+    } else if (e.type === "assistant_delta" && nativeByCall.has(e.callId)) {
+      group("r:" + nativeByCall.get(e.callId)!, id);
+    } else if (e.type === "tool_call" && e.reasoningId) {
+      group("r:" + e.reasoningId, id);
+    }
     let key: string | null = null;
     if (e.type === "tool_call") key = "c:" + e.id;
     else if (
@@ -159,9 +173,7 @@ export function atomicUnits(events: AgentEvent[]): AtomicUnit[] {
       key = "c:" + e.callId;
     }
     if (!key) return;
-    const g = groups.get(key);
-    if (g) g.push(id);
-    else groups.set(key, [id]);
+    group(key, id);
   });
   const spans = [...groups.values()].map((ids) => ({ lo: Math.min(...ids), hi: Math.max(...ids) }));
   spans.sort((a, b) => a.lo - b.lo);

@@ -82,16 +82,19 @@ describe("④ 生成中顶栏细进度条（.gen-bar[data-running]）", () => {
   });
 });
 
-describe("⑤ hover 操作：user 复制+分叉 / agent 复制+回放（tooltip 同句说明）", () => {
-  it("tooltip 句「从该轮起新建会话，原会话不动」在两处各 2 枚", () => {
+describe("⑤ hover 操作：user 复制+分叉+撤回 / agent 复制+撤回+分叉（2026-10-24 业主：不要回放/重跑）", () => {
+  it("tooltip 句「从该轮起新建会话，原会话不动」在两处各 2 枚；撤回同数；回放/重跑零残留", () => {
     const html = renderToStaticMarkup(
       <Stream
         rows={projectStream(events)}
-        actions={{ onCopyText: () => undefined, onBranch: () => undefined, onReplay: () => undefined }}
+        actions={{ onCopyText: () => undefined, onBranch: () => undefined, onRevertTurn: () => undefined }}
       />,
     );
-    expect(html.match(/title="分叉：从该轮起新建会话，原会话不动"/g)?.length).toBe(2);
-    expect(html.match(/title="回放：从该轮起新建会话并填入当时的输入，原会话不动"/g)?.length).toBe(2);
+    // 分叉在 user 行与 agent 行都有（2026-10-24 起代理行也带）⇒ 2 行 × 2 条 = 4；撤回在 agent 行 2 枚
+    expect(html.match(/title="分叉：从该轮起新建会话，原会话不动"/g)?.length).toBe(4);
+    expect(html.match(/title="撤回：把这一轮改过的文件还原"/g)?.length).toBe(2);
+    expect(html).not.toContain("回放");
+    expect(html).not.toContain("重跑");
   });
 });
 
@@ -140,7 +143,7 @@ describe("⑦ 纯函数：roundOfEvent / userTextOfRound（事件日志 fork/rep
   });
 });
 
-describe("⑧ App 接线哨兵（滚动记忆 / 回放链）", () => {
+describe("⑧ App 接线哨兵（滚动记忆）", () => {
   it("滚动记忆：Map(sessionId → scrollTop) 离场存回场取；owner 守卫 + 可达等帧（回底钮逻辑不动）", () => {
     expect(appSrc).toContain("const scrollMemory = useRef(new Map<string, number>())");
     // owner 守卫：没滚动过的会话不落盘（lastScrollTop 揣着上个会话的数，直接存会记错人头）。
@@ -160,11 +163,9 @@ describe("⑧ App 接线哨兵（滚动记忆 / 回放链）", () => {
     expect(src).toContain("restoreTo: (top: number, behavior?: ScrollBehavior) => void");
   });
 
-  it("回放链：fork → 切换 → 注入该轮输入不发送（round/userText 从事件投影）", () => {
-    expect(appSrc).toContain("const handleReplay = useCallback((eventId: number)");
-    expect(appSrc).toContain("roundOfEvent(eventsRef.current, eventId)");
-    expect(appSrc).toContain("userTextOfRound(eventsRef.current, round)");
-    expect(appSrc).toContain("setInjectedText(text)");
+  it("回放/重跑链已整体撤下（2026-10-24 业主）：App 面不再有 handleReplay/handleRetryRound", () => {
+    expect(appSrc).not.toContain("handleReplay");
+    expect(appSrc).not.toContain("handleRetryRound");
   });
 });
 

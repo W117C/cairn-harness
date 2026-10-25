@@ -48,7 +48,7 @@ const MICRO = [
   ".tpl-card", ".start", ".err-retry", ".tool-head", ".avatar", ".side-new", ".sp-back",
   ".side-search", ".side-search-x", ".sp-nav-search", ".sp-nav-search-x",
   ".sw", ".composer-card", ".usage-scope button", ".provider-dot",
-  ".pane-handle", ".pane-gridline", ".mod-sidebar-resize::after",
+  ".pane-handle", ".mod-sidebar-resize::after",
 ];
 
 /** 颜色系白名单：这些属性过渡不触发布局（transform/stroke 走合成器）。 */

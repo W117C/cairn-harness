@@ -180,6 +180,7 @@
   --color-mode-default: 218 19% 44%;     /* #5C6B85 蓝灰 */
   --color-mode-guided: 32.1 94.6% 43.7%; /* #D97706 黄 */
   --color-mode-auto: 0 72.2% 50.6%;      /* #DC2626 红 */
+  --color-mode-full: 292 65% 49%;       /* #9333EA 紫（完全允许 = 档位机之外，色相上也要一眼分出来） */
   --color-diff-add-bg: 137 43.8% 93.7%;/* #E8F6EC */
   --color-diff-del-bg: 0 75% 95.3%;    /* #FCEAEA */
   --color-diff-add-ink: 142.4 71.8% 29.2%;
@@ -215,8 +216,6 @@
      并排画出来给人挑的——在暗色主题下看「亮色」那一格，它也得是亮的，否则色板
      两半一样、这个控件就白画了。⇒ 定值只放在 :root（不进 [data-theme="dark"]
      块），两个主题下恒定；命名说的是「这块色板在展示什么」，不是「什么颜色」。 */
-  --swatch-light: 0 0% 100%;    /* 色板·亮色一侧 = 亮色 surface */
-  --swatch-dark: 240 3% 12%;     /* 色板·暗色一侧 = 暗色 surface */
 
   /* ── alpha 阶（2026-10-20 改「从单一基色派生」，规范 §4.2 明文）
      此前是 10 条手写字面透明度（全仓 hsl(from 命中 0）。改为 HSL 相对色语法：
@@ -296,8 +295,6 @@
   --h-switch: calc(18px * var(--size-scale));
   --d-switch-knob: calc(14px * var(--size-scale));         /* 开关圆点 */
   --sw-knob-inset: calc(2px * var(--size-scale));
-  --w-theme-thumb: calc(42px * var(--size-scale));         /* 设置页主题小预览 */
-  --h-theme-thumb: calc(26px * var(--size-scale));
   --w-row-action: calc(28px * var(--size-scale));          /* 行操作条宽 */
   --h-row-action: calc(22px * var(--size-scale));          /* 行操作条高 / 折叠钮 */
   --h-send: calc(32px * var(--size-scale));                /* 发送/打断圆钮 */
@@ -361,6 +358,7 @@
   --mode-default: hsl(var(--color-mode-default));
   --mode-guided: hsl(var(--color-mode-guided));
   --mode-auto: hsl(var(--color-mode-auto));
+  --mode-full: hsl(var(--color-mode-full));
   --diff-add-bg: hsl(var(--color-diff-add-bg));
   --diff-del-bg: hsl(var(--color-diff-del-bg));
   --diff-add-ink: hsl(var(--color-diff-add-ink));
@@ -571,6 +569,7 @@
   --color-mode-default: 218 24% 66%;     /* #93A7C4 蓝灰 */
   --color-mode-guided: 38.3 89.9% 61.4%; /* #F5B544 黄 */
   --color-mode-auto: 0 90.6% 70.8%;      /* #F87171 红 */
+  --color-mode-full: 292 60% 72%;       /* #C084FC 紫（暗色提亮同构） */
   --color-diff-add-bg: 140 29% 12.2%; /* #16281C */
   --color-diff-del-bg: 0 28.8% 14.3%; /* #2F1A1A */
   --color-diff-add-ink: 142 69.2% 58%;

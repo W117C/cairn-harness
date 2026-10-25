@@ -20,21 +20,17 @@ import { toast } from "../toast";
 import { relInWorkspace } from "../workspace-rel";
 import type { PermissionMode, ProviderInfo, RunAttachmentReference, SuggestNextResult } from "../../../../../src/main/ipc-protocol";
 import type { RunPhase } from "../projections";
-import { ArrowUp, ChevronDown, ChevronRight, Clock, FileText, Folder, Image as ImageIcon, Loader2, Plus, Puzzle, Shield, ShieldAlert, X } from "lucide-react";
+import { ArrowUp, ChevronDown, ChevronRight, Clock, FileText, Folder, Image as ImageIcon, ListChecks, Loader2, Plus, Puzzle, Shield, ShieldAlert, X } from "lucide-react";
 import { classifyDrop } from "../sessions-view";
-import { formatTokens } from "./format-tokens";
 import { ModelPicker, THINKING_LEVELS } from "./ModelPicker";
+import { UsageMeter } from "./UsageMeter";
 import { MODE_LABEL, ModeDot, PermissionMenu } from "./PermissionMenu";
 import { Popover, usePopoverDismiss, useMenuKeyboard } from "./Popover";
 import { mentionBreadcrumb, parseMentionQuery, replaceMentionToken } from "../mention";
 import { STR } from "../strings";
-import { slashItems, type SlashSkill } from "../slash";
+import { slashItems, slashMatches, type SlashSkill } from "../slash";
 import { DRAFTS_KEY, HOME_DRAFT_KEY, draftKeyFor, sessionIdOfDraftKey } from "../drafts";
-
-/** 用量环几何（v3-lite .ring 同比例：28px 钮、环径 23、环心 9.5px 数字）：
- *  r=11.5 ⇒ 2πr≈72.26；strokeDashoffset 按百分比折算弧长。 */
-const USAGE_RING_R = 11.5;
-const USAGE_RING_C = 2 * Math.PI * USAGE_RING_R;
+import "./composer-plan.css";
 
 /** @ 模糊搜索的 debounce（P2-4：输入停顿 120ms 才发通道查询）。 */
 const MENTION_DEBOUNCE_MS = 120;
@@ -130,6 +126,9 @@ export function Composer(props: {
    *  缺省（旧调用面）沿用 disabled+running 的旧推断。 */
   disabledReason?: "gate" | "queue" | "creating";
   mode: PermissionMode;
+  /** v23 Plan 模式：默认来自设置，Composer 的「方案」开关按轮覆盖。缺省不摆按钮（旧调用面）。 */
+  planRequired?: boolean;
+  onPlanRequiredChange?: (next: boolean) => void;
   running: boolean;
   stopped: boolean;
   activeId: string | null;
@@ -358,11 +357,9 @@ export function Composer(props: {
   // 它一直钉在输入框上方盖着内容，用户只能再点一次环、或点里面的「压缩历史…」、或切会话。
   // 每一个别的浮层（附件/权限/模型/芯片/mention/slash）都两个手势都关，这一支独自关不掉
   // 读起来就是坏控件。
-  const meterWrapRef = useRef<HTMLDivElement | null>(null);
   const closeMenu = useCallback(() => { setMenu("none"); }, []);
   usePopoverDismiss(menu === "attach", closeMenu, attachWrapRef);
   usePopoverDismiss(menu === "perm", closeMenu, permWrapRef);
-  usePopoverDismiss(menu === "meter", closeMenu, meterWrapRef);
   // 键盘导航（2026-10-18）：两个自绘菜单支持 ↓/↑ / Home / End，焦点在触发钮上时 ↓ 也能开菜单；
   // 此前只有 Tab 能进菜单，与模型菜单/命令面板的手感不一致。
   const setAttachOpen = useCallback((open: boolean) => { setMenu(open ? "attach" : "none"); }, []);
@@ -406,8 +403,45 @@ export function Composer(props: {
     { invoke: "/compact", desc: STR.composer.slashCompact },
     { invoke: "/goal", desc: STR.composer.slashGoal },
   ], props.skills ?? []);
-  const slashHits = slashQuery === null || menuDismissed === "slash" ? [] : SLASH_ITEMS.filter((s) => s.invoke.slice(1).startsWith(slashQuery));
+  const slashHits = slashQuery === null || menuDismissed === "slash" ? [] : SLASH_ITEMS.filter((s) => slashMatches(s.invoke, slashQuery));
   useEffect(() => { setSlashActive(0); }, [slashQuery]);
+  // 键盘换行必须把高亮项带进视口（2026-10-24）：菜单加内滚后，↑↓ 走到第 8 项之后
+  // 高亮会停在可视区外——按键像没反应。直接改 scrollTop，不用 scrollIntoView（它会连带滚祖先）。
+  const slashMenuRef = useRef<HTMLDivElement | null>(null);
+  // 菜单贴哪边、最高多少，按输入卡上下**实测**的空间定（2026-10-24 第二版）：
+  // 只写 max-height: 480px 在会话页够（卡在底部），首页空屏卡在屏幕中部，480px 仍会顶出窗外——
+  // 截图复现：菜单 top=-212，前 7 行够不着。这里取上下较大的一侧，向下时挂 .down。
+  const placeSlashMenu = useCallback((): void => {
+    const menu = slashMenuRef.current;
+    const card = cardRef.current;
+    if (menu === null || card === null) return;
+    const r = card.getBoundingClientRect();
+    const above = r.top - 16;
+    const below = window.innerHeight - r.bottom - 10;
+    const down = below > above;
+    menu.classList.toggle("down", down);
+    menu.style.maxHeight = `${String(Math.max(160, Math.min(480, down ? below : above)))}px`;
+  }, []);
+  useEffect(() => {
+    const menu = slashMenuRef.current;
+    if (menu === null || slashHits.length === 0) return;
+    const item = menu.children[Math.min(slashActive, slashHits.length - 1)] as HTMLElement | undefined;
+    if (item === undefined) return;
+    const top = item.offsetTop;
+    const bottom = top + item.offsetHeight;
+    if (top < menu.scrollTop) menu.scrollTop = top;
+    else if (bottom > menu.scrollTop + menu.clientHeight) menu.scrollTop = bottom - menu.clientHeight;
+  }, [slashActive, slashQuery, slashHits.length]);
+  // 窗口/输入卡尺寸一变就重新量（多行草稿、附件 chip、窗口拖动都会改可用空间）。
+  useEffect(() => {
+    if (slashHits.length === 0) return;
+    const card = cardRef.current;
+    if (card === null) return;
+    const ro = new ResizeObserver(() => { placeSlashMenu(); });
+    ro.observe(card);
+    window.addEventListener("resize", placeSlashMenu);
+    return () => { ro.disconnect(); window.removeEventListener("resize", placeSlashMenu); };
+  }, [slashHits.length, placeSlashMenu]);
   const chooseSlash = (item: { invoke: string; desc: string }): void => {
     setText(`${item.invoke} `);
     requestAnimationFrame(() => { taRef.current?.focus(); autoResize(); });
@@ -637,33 +671,6 @@ export function Composer(props: {
     const spec = props.providerInfo?.models.find((m) => m.id === props.pickerValue);
     return spec?.capability.thinking.supported === true;
   })();
-  // 批 4：状态条整行已拆——轮/步/tok/缓存的读数并入环 tooltip（hover 明细）与用量弹层；
-  // 环心仍是上下文水位百分数。只报拿得到的数据，未知分开说清。
-  const usage = props.usage;
-  const totalTok = usage.inputTokens + usage.outputTokens;
-  const cachePct = usage.cacheReadTokens > 0 && usage.inputTokens > 0
-    ? Math.min(99, Math.round((usage.cacheReadTokens / (usage.cacheReadTokens + usage.inputTokens)) * 100))
-    : null;
-  const ctxPct = props.ctxWindow !== undefined && props.ctxWindow > 0 && usage.lastInputTokens > 0
-    ? Math.min(100, Math.round((usage.lastInputTokens / props.ctxWindow) * 100))
-    : null;
-  // 环心读数口径（v3-lite：环心=上下文水位百分数；拿不到读数就「—」，且两种「未知」分开说清——
-  // 窗口没声明 vs 本会话还没跑过，故障排查时是两回事）。
-  const ctxWindowDeclared = props.ctxWindow !== undefined && props.ctxWindow > 0;
-  const ringFacts: string[] = [];
-  if (totalTok > 0) ringFacts.push(STR.composer.ringTokens.replace("{n}", formatTokens(totalTok)));
-  if (usage.usageCount > 0) ringFacts.push(STR.composer.ringRounds.replace("{n}", String(usage.usageCount)));
-  if (props.steps > 0) ringFacts.push(STR.composer.ringSteps.replace("{n}", String(props.steps)));
-  if (cachePct !== null) ringFacts.push(STR.composer.ringCache.replace("{n}", String(cachePct)));
-  const ringTail = ringFacts.length > 0 ? ` · ${ringFacts.join(" · ")}` : "";
-  const ringTitle = ctxPct !== null
-    ? STR.composer.ringTitlePct.replace("{pct}", String(ctxPct)).replace("{tail}", ringTail)
-    : ctxWindowDeclared
-      ? STR.composer.ringTitleNoData.replace("{tail}", ringTail)
-      : STR.composer.ringTitleUnknown.replace("{tail}", ringTail);
-  const ringAria = ctxPct !== null
-    ? STR.composer.ringAriaPct.replace("{pct}", String(ctxPct))
-    : ctxWindowDeclared ? STR.composer.ringAriaNoData : STR.composer.ringAriaUnknown;
   const recentRefs = props.recentRefs ?? [];
   // 插件命令带（G1 的按钮带半边，2026-10-21）：只列已信任、带命名空间的命令；
   // 点一下填入 `/plugin:command `，不直接发送（沿用 C-24 的「填入不发送」口径）。
@@ -754,16 +761,24 @@ export function Composer(props: {
         )}
         {/* C-37 斜杠菜单（内置两条 + 工作区 loose skills；2026-10-18 接通 §8 #14） */}
         {slashHits.length > 0 && (
-          <div className="slash-menu pop show" role="menu">
+          <div
+            className="slash-menu pop show"
+            role="menu"
+            ref={(el) => { slashMenuRef.current = el; if (el !== null) placeSlashMenu(); }}
+          >
             {slashHits.map((s, idx) => (
               <button
                 key={s.invoke}
                 className={"menu-item" + (idx === Math.min(slashActive, slashHits.length - 1) ? " on" : "")}
                 role="menuitem"
+                title={s.desc}
                 onClick={() => { chooseSlash(s); }}
               >
-                <span>{s.invoke}</span>
+                <span title={s.invoke}>{s.invoke}</span>
                 <span className="sub">{s.desc}</span>
+                {s.trust !== undefined && s.trust !== "trusted" && (
+                  <span className="si-trust">{s.trust === "declined" ? STR.composer.slashDeclined : STR.composer.slashPending}</span>
+                )}
               </button>
             ))}
           </div>
@@ -1086,6 +1101,22 @@ export function Composer(props: {
               )}
             </Popover>
           </div>
+          {/* v23 Plan 模式一等入口：与权限档同排的开关；按轮覆盖 settings 默认，不写回设置。 */}
+          {props.onPlanRequiredChange !== undefined && (
+            <button
+              type="button"
+              className="ctl plan-ctl"
+              data-on={props.planRequired === true}
+              aria-pressed={props.planRequired === true}
+              aria-label={STR.composer.planAria}
+              title={props.planRequired === true ? STR.composer.planOnTip : STR.composer.planOffTip}
+              disabled={disabled}
+              onClick={() => { props.onPlanRequiredChange?.(props.planRequired !== true); }}
+            >
+              <ListChecks size={13} aria-hidden="true" />
+              <span>{STR.composer.planLabel}</span>
+            </button>
+          )}
           <ModelPicker
             // 切会话重挂（2026-10-18）：模型菜单是 Composer 之外的局部开合状态，不重挂的话
             // 会悬在新会话上（真机：@/附件/权限菜单已收，模型搜索框还开着）。
@@ -1112,54 +1143,14 @@ export function Composer(props: {
           <span className="spacer" />
           {/* 用量环（v3-lite .ring：环心带上下文百分数；环钉在发送/中断钮左侧——原型 .bar 列序
               模型芯片弹性、ctxRing 与 send 贴右。「模型选择器旁」§3.5 语义随同一控件行保持）。 */}
-          <div className="usage-slot" ref={meterWrapRef}>
-            <button
-              className="usage-ring"
-              aria-label={ringAria}
-              title={ringTitle}
-              aria-expanded={menu === "meter"}
-              onClick={() => setMenu(menu === "meter" ? "none" : "meter")}
-            >
-              <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
-                <circle className="ur-track" cx="14" cy="14" r={USAGE_RING_R} />
-                <circle
-                  className="ur-bar"
-                  cx="14" cy="14" r={USAGE_RING_R}
-                  style={{
-                    strokeDasharray: USAGE_RING_C,
-                    strokeDashoffset: USAGE_RING_C * (1 - (ctxPct ?? 0) / 100),
-                  }}
-                />
-              </svg>
-              {/* 环心数字=上下文水位（原型 <b>62</b> 同式；拿不到读数=「—」，不假报 0） */}
-              <b className="ur-num">{ctxPct !== null ? String(ctxPct) : STR.composer.dash}</b>
-            </button>
-            <Popover open={menu === "meter"} up role="menu" style={{ left: "auto", right: 0 }}>
-              <div className="meter-detail">
-                <div className="pop-label">{STR.composer.meterTitle}</div>
-                <div className="mt-row"><span>{STR.composer.meterInput}</span><b>{formatTokens(usage.inputTokens)}</b></div>
-                <div className="mt-row"><span>{STR.composer.meterOutput}</span><b>{formatTokens(usage.outputTokens)}</b></div>
-                <div className="mt-row"><span>{STR.composer.meterCacheRead}</span><b>{usage.cacheReadTokens > 0 ? formatTokens(usage.cacheReadTokens) : STR.composer.dash}</b></div>
-                <div className="mt-row"><span>{STR.composer.meterRounds}</span><b>{String(usage.usageCount)}</b></div>
-                {/* 批 4：状态条拆进来——步数与上下文行（环 hover 之外的常驻明细）。 */}
-                <div className="mt-row"><span>{STR.composer.meterSteps}</span><b>{String(props.steps)}</b></div>
-                <div className="mt-row">
-                  <span>{STR.composer.meterCtx}</span>
-                  <b>
-                    {ctxPct !== null && props.ctxWindow !== undefined
-                      ? STR.composer.meterCtxDetail
-                          .replace("{pct}", String(ctxPct))
-                          .replace("{used}", formatTokens(usage.lastInputTokens))
-                          .replace("{max}", formatTokens(props.ctxWindow))
-                      : ctxWindowDeclared ? STR.composer.meterCtxNoData : STR.composer.meterCtxUnknown}
-                  </b>
-                </div>
-                <div className="menu-note">{STR.composer.meterNote}</div>
-                <div className="menu-sep" />
-                <button className="menu-item" onClick={() => { props.onCompact(); setMenu("none"); }}>{STR.composer.meterCompact}</button>
-              </div>
-            </Popover>
-          </div>
+          <UsageMeter
+            usage={props.usage}
+            steps={props.steps}
+            {...(props.ctxWindow !== undefined ? { ctxWindow: props.ctxWindow } : {})}
+            open={menu === "meter"}
+            onOpenChange={(open) => { setMenu(open ? "meter" : "none"); }}
+            onCompact={props.onCompact}
+          />
           {/* 加入队列钮（运行中）：**有话说才出现**——空输入下只留打断钮，不摆禁用的灰钟（v7.1 业主裁）。 */}
           {showQueueButton(props.running, canSend) && (
             <button

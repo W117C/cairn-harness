@@ -16,7 +16,9 @@ const GOOD = {
   version: 1,
   providers: [
     {
-      id: "deepseek",
+      // 自定义家用 "mydeepseek"：id "deepseek" 自 2026-10-25 起是内置家名（保留名单），
+      // 会被校验拒收——那条判据在下面「保留名拒收」用例里单独立着。
+      id: "mydeepseek",
       label: "DeepSeek",
       protocol: "openai",
       baseURL: "https://api.deepseek.com/v1",
@@ -67,17 +69,29 @@ describe("好配置：解析通过并派生", () => {
   it("派生出的档位 id = <provider>-<model>，provider 指向自定义 id，tier 缺省 standard", () => {
     const file = okFile(GOOD);
     const [d] = deriveCustomProviders(file, { builtinTable: TABLE });
-    expect(d.id).toBe("deepseek");
+    expect(d.id).toBe("mydeepseek");
     expect(d.label).toBe("DeepSeek");
     expect(d.apiKeyEnv).toBe("DEEPSEEK_API_KEY");
     expect(d.specs).toEqual([
       {
-        id: "deepseek-chat", provider: "deepseek", model: "deepseek-chat", tier: "standard", ctxWindow: 131072,
+        id: "mydeepseek-chat", provider: "mydeepseek", model: "deepseek-chat", tier: "standard", ctxWindow: 131072,
         reasoningEfforts: ["low", "high"],
       },
     ]);
-    expect(d.prices).toEqual({ "deepseek-chat": { inputPerMTok: 0.28, outputPerMTok: 0.42 } });
+    expect(d.prices).toEqual({ "mydeepseek-chat": { inputPerMTok: 0.28, outputPerMTok: 0.42 } });
     expect(d.warnings).toEqual([]);
+  });
+
+  it("保留名拒收：自定义家占用内置家名（deepseek 等）是判错，不是提示", () => {
+    // 2026-10-25 起深求是一等内置家；同名自定义家会被 registry 的 switch 先命中内置分支、
+    // 自定义配置被静默忽略——所以这道门必须在配置校验期就关上。
+    const kinds = kindsOf(mutate((f, p) => {
+      p.id = "deepseek";
+    }));
+    expect(kinds).toContain("provider-id");
+    for (const builtin of ["glm", "openai", "anthropic", "gemini", "demo"]) {
+      expect(kindsOf(mutate((_f, p) => { p.id = builtin; }))).toContain("provider-id");
+    }
   });
 
   it("registryId 可以显式指定全局档位 id", () => {

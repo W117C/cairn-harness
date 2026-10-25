@@ -28,6 +28,7 @@ import {
   providerInfo,
   resolveRunWorkspace,
   runAgent,
+  sessionToolFace,
   setSettings,
   type PluginToolSource,
 } from "../src/main/agent-runner";
@@ -61,6 +62,21 @@ it.each([...PERMISSION_MODES])(
     expect(new Set(names).size).toBe(names.length);
   },
 );
+
+it("插件工具面 provider 逐请求重算：run 中途新增的 MCP 工具下一轮可见", () => {
+  let live = false;
+  const tool = (name: string): SessionPluginTool => ({
+    name,
+    description: "动态注入",
+    parameters: { type: "object", properties: {} },
+  });
+  const provider = () => (live ? [tool("mcp__plugin_demo_srv__new")] : []);
+  const first = sessionToolFace(null, { mode: "default", pluginTools: provider });
+  expect(first.tools.map((s) => s.function.name)).not.toContain("mcp__plugin_demo_srv__new");
+  live = true;
+  const next = sessionToolFace(null, { mode: "default", pluginTools: provider });
+  expect(next.tools.map((s) => s.function.name)).toContain("mcp__plugin_demo_srv__new");
+});
 
 it("MCP/插件工具规格复用 server inputSchema，同名冲突 fail-visible 跳过", () => {
   const inputSchema = { type: "object", properties: { q: { type: "string" } }, required: ["q"] };

@@ -7,9 +7,9 @@
 //   · 缺的字段摆出来（missing 明说"得你自己补"，绝不替用户填假数）。
 // 本地端点判定（isLocalEndpointURL）必须被"拉取"与"保存"两处用同一份——这是 2026-10-06
 // 「能探测、存不进」事故的回归面（源码级哨兵在 render-structure.test 里钉着）。
-import { useCallback, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { suggestApiKeyEnv, suggestProviderId, type DiscoveredRow } from "../../../../../src/providers/provider-draft";
-import { envNameHint, isLocalEndpointURL, selectAllRows } from "./provider-form";
+import { isLocalEndpointURL, selectAllRows } from "./provider-form";
 import { ModalSurface } from "./ModalSurface";
 import { Field, SettingsRow } from "./settings-ui";
 
@@ -93,9 +93,11 @@ export function ModelPickModal(props: {
 export function CustomProviderForm(props: {
   /** 保存成功后通知外层：设置页据此重拉 provider 清单，App 据此重拉模型面。 */
   onSaved?: () => void;
+  /** 编辑模式（2026-10-24 业主：自定义供应商在右详情就地编辑）：预填已存配置，保存按同名覆盖。
+   *  null/缺席 = 新增模式（原行为）。 */
+  editing?: { id: string; label: string; protocol: string; baseURL: string; apiKeyEnv: string; modelIds: readonly string[] } | null;
 }): React.JSX.Element {
   const [baseURL, setBaseURL] = useState("");
-  const [keyEnv, setKeyEnv] = useState("");
   const [protocol, setProtocol] = useState<Protocol>("openai");
   const [busy, setBusy] = useState(false);
   const [discovered, setDiscovered] = useState<DiscoverState | null>(null);
@@ -105,13 +107,12 @@ export function CustomProviderForm(props: {
   const [notice, setNotice] = useState<string | null>(null);
   const keyInput = useRef<HTMLInputElement>(null);
   const pickerButton = useRef<HTMLButtonElement | null>(null);
-
-  const onUrlBlur = useCallback(() => {
-    if (baseURL.trim() === "" || keyEnv.trim() !== "") return;
-    const id = suggestProviderId(baseURL);
-    setKeyEnv(suggestApiKeyEnv(id.id));
-    if (id.note !== undefined) setNotice(id.note);
-  }, [baseURL, keyEnv]);
+  // 编辑模式预填：baseURL/protocol 从已存配置回填；key 留空 = 不修改（保存时 keyValue 空串即不改）。
+  useEffect(() => {
+    if (props.editing === null || props.editing === undefined) return;
+    setBaseURL(props.editing.baseURL);
+    setProtocol(props.editing.protocol as Protocol);
+  }, [props.editing?.id]);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -121,10 +122,7 @@ export function CustomProviderForm(props: {
       setError("先填接口地址（如 https://api.deepseek.com/v1）");
       return;
     }
-    if (keyEnv.trim() === "") {
-      setError("先填 key 的环境变量名（如 DEEPSEEK_API_KEY）——我们按变量名读，不把钥匙写进配置文件");
-      return;
-    }
+    const keyEnv = suggestApiKeyEnv(suggestProviderId(baseURL).id);
     setBusy(true);
     try {
       const keyValue = keyInput.current?.value ?? "";
@@ -140,8 +138,9 @@ export function CustomProviderForm(props: {
         return;
       }
       setDiscovered({ ...r, baseURL: baseURL.trim(), keyEnv: keyEnv.trim(), protocol });
+      const savedIds = props.editing?.modelIds;
       const all: Record<string, boolean> = {};
-      for (const row of r.rows) all[row.id] = true;
+      for (const row of r.rows) all[row.id] = savedIds === undefined ? true : savedIds.includes(row.id);
       setSelected(all);
       setPickerOpen(true); // 拉到清单直接弹选择窗，别让用户在表单里翻一整面墙
     } catch (err) {
@@ -149,7 +148,7 @@ export function CustomProviderForm(props: {
     } finally {
       setBusy(false);
     }
-  }, [baseURL, keyEnv, protocol]);
+  }, [baseURL, protocol]);
 
   const save = useCallback(async () => {
     if (discovered === null) return;
@@ -173,7 +172,7 @@ export function CustomProviderForm(props: {
       const keyValue = keyInput.current?.value ?? "";
       const r = await window.agent.providerSave({
         providerId: suggestProviderId(discovered.baseURL).id,
-        label: suggestProviderId(discovered.baseURL).id,
+        label: props.editing?.label ?? suggestProviderId(discovered.baseURL).id,
         protocol: discovered.protocol,
         baseURL: discovered.baseURL,
         apiKeyEnv: discovered.keyEnv,
@@ -188,7 +187,8 @@ export function CustomProviderForm(props: {
         return;
       }
       // 保存完直接把它设成当前通道；但这一步必须与"保存"分开报（保存已落盘，只是切没切过去是两件事）。
-      const providerId = suggestProviderId(discovered.baseURL).id;
+      // 编辑模式沿用原 id/label（同名覆盖）；新增模式按 baseURL 推导。
+      const providerId = props.editing?.id ?? suggestProviderId(discovered.baseURL).id;
       const firstModel = models[0]?.id ?? "";
       let switchNote = "，并已设为当前通道";
       try {
@@ -197,14 +197,15 @@ export function CustomProviderForm(props: {
         switchNote = `。但**没能自动切过去**（${err instanceof Error ? err.message : String(err)}）——可以在模型菜单里手动选它`;
       }
       setNotice(
-        `已保存：${providerId}（文件 ${r.path}，${String(r.providers.length)} 家，本次装上 ${String(r.installed)} 家；默认模型 ${firstModel === "" ? "未指定" : firstModel}）${switchNote}。key 走 safeStorage，明文不落盘。`,
+        `已保存 ${String(models.length)} 个模型${switchNote}。可在对话输入框选择使用，密钥已安全保存在本机。`,
       );
       props.onSaved?.();
-      // 保存成功 = 这一家的事办完了，整份表单归零（地址/变量名尤其不能留给下一家——两家共用一个 env 会互相覆盖）。
+      // 保存后清空表单（新增模式），避免把上一家的密钥带到另一家；编辑模式保留预填继续改。
       if (keyInput.current) keyInput.current.value = "";
-      setBaseURL("");
-      setKeyEnv("");
-      setProtocol("openai");
+      if (props.editing === null || props.editing === undefined) {
+        setBaseURL("");
+        setProtocol("openai");
+      }
       setDiscovered(null);
       setSelected({});
     } catch (err) {
@@ -223,12 +224,15 @@ export function CustomProviderForm(props: {
   return (
     <section className="ap-sec">
       <div className="cp-intro">
-        <p className="cp-intro-line">填地址与 key 的环境变量名 → 拉取模型 → 勾选要用的 → 保存。</p>
+        <p className="cp-intro-line">
+          {(props.editing === null || props.editing === undefined)
+            ? "填写接口地址和 API Key，获取模型后勾选保存。"
+            : `编辑「${props.editing.label}」：改完重新「获取模型」勾选保存（同名覆盖，输入框的模型选择不受影响）。`}
+        </p>
         <details className="ss-help">
           <summary>帮助</summary>
           <div className="ss-help-body">
-            表单会写进本工作区的 <code>.agent/providers.json</code>；「拉取」不改任何文件（要存必须再点「保存」）。
-            生成的接口可直接接自己的模型，不改源码；key 只存本机钥匙串，明文不落盘。
+            支持兼容 OpenAI、Anthropic 和 Gemini 的模型服务。密钥通过系统安全存储保存，获取到模型后选择要启用的项目即可。
           </div>
         </details>
       </div>
@@ -241,10 +245,9 @@ export function CustomProviderForm(props: {
             placeholder="https://api.deepseek.com/v1"
             disabled={busy}
             onChange={(e) => setBaseURL(e.target.value)}
-            onBlur={onUrlBlur}
           />
         </Field>
-        {localHint && <span className="sp-tag">本地端点 · 保存时将带 allowLocalEndpoint</span>}
+        {localHint && <span className="sp-tag">本地模型服务</span>}
       </SettingsRow>
       <SettingsRow label={step(2, "协议")}>
         <Field width="full" select>
@@ -255,25 +258,12 @@ export function CustomProviderForm(props: {
           </select>
         </Field>
       </SettingsRow>
-      <SettingsRow label={step(3, "key 环境变量名")}>
-        <Field width="full">
-          <input
-            type="text"
-            aria-label="自定义接口 key 环境变量名"
-            value={keyEnv}
-            placeholder="DEEPSEEK_API_KEY"
-            disabled={busy}
-            onChange={(e) => setKeyEnv(e.target.value)}
-          />
-        </Field>
-        {envNameHint(keyEnv) !== null && <span className="sp-note warn">{envNameHint(keyEnv)}</span>}
-      </SettingsRow>
-      <SettingsRow label={step(4, "自定义接口密钥")}>
+      <SettingsRow label={step(3, "API Key")}>
         <Field width="full">
           <input ref={keyInput} type="password" aria-label="自定义接口 API key" placeholder="粘贴 API key（可选）" disabled={busy} />
         </Field>
-        <button className="mini-btn" disabled={busy} onClick={() => void refresh()}>拉取模型</button>
-        <span className="ss-hint">只存本机钥匙串；本地端点多数不校验，也可留空只设环境变量。</span>
+        <button className="mini-btn" disabled={busy} onClick={() => void refresh()}>获取模型</button>
+        <span className="ss-hint">密钥只保存在本机安全存储中。本地免密服务可留空。</span>
       </SettingsRow>
 
       {discovered !== null && (
@@ -285,14 +275,14 @@ export function CustomProviderForm(props: {
             {discovered.truncated > 0 ? `｜另有 ${String(discovered.truncated)} 条未列出` : ""}
           </div>
           {discovered.catalogNote !== undefined && <div className="sp-note">目录：{discovered.catalogNote}</div>}
-          <SettingsRow label={step(5, "启用模型")}>
+          <SettingsRow label={step(4, "启用模型")}>
             <button ref={pickerButton} className="mini-btn" disabled={busy} onClick={() => setPickerOpen(true)}>选择模型…</button>
             <span className="ss-hint">
               已选 {String(discovered.rows.filter((row) => selected[row.id] === true).length)} / {String(discovered.rows.length)}
             </span>
           </SettingsRow>
           {discovered.missing.length > 0 && (
-            <div className="sp-note">这几项目录也查不到，存下来之后得你自己补：{discovered.missing.join(" / ")}</div>
+            <div className="sp-note">服务未提供以下模型信息：{discovered.missing.join(" / ")}</div>
           )}
           {discovered.warnings.map((w) => (
             <div key={w} className="sp-note">注意：{w}</div>

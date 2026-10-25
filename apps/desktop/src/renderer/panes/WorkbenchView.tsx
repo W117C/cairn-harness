@@ -9,10 +9,11 @@ import type { ComposerLockReason } from "../send-queue";
 import type { StickyScroll } from "../useStickyScroll";
 import { renderAppToolbar } from "./AppToolbar";
 // WorkbenchView: extracted without changing event or callback behavior.
-import { ArrowDown,ChevronDown,Folder,FolderPlus,GitBranch,Sparkles,X } from "lucide-react";
-import { lazy,Suspense } from "react";
+import { ArrowDown,ChevronDown,Folder,FolderPlus,GitBranch,X } from "lucide-react";
+import { CairnMark } from "../components/CairnMark";
+import { lazy,Suspense,useEffect,useState } from "react";
 import { Group,Panel,Separator,type PanelImperativeHandle } from "react-resizable-panels";
-import type { AgentEvent,AskPayload,ProjectDiagnosis,ProjectRecord,ProviderInfo,RunAttachmentReference,SuggestNextResult } from "../../../../../src/main/ipc-protocol";
+import type { AgentEvent,AskPayload,PermissionMode,ProjectDiagnosis,ProjectRecord,ProviderInfo,RunAttachmentReference,SuggestNextResult } from "../../../../../src/main/ipc-protocol";
 import type { PreviewSnapshot } from "../../../../../src/main/project-preview";
 import type { TextSizeSetting,UiSizeSetting } from "../../../../../src/main/settings";
 import { AddProjectMenu } from "../components/AddProjectMenu";
@@ -45,7 +46,6 @@ import type { UsageAllState } from "../components/UsagePanel";
 import { movePane,type PaneKind } from "../components/panes";
 import type { SectionId } from "../components/settings-nav";
 import type { OnboardingGroup } from "../../../../../src/main/onboarding-groups";
-import { formatEmptyTrailNote } from "../projections";
 import { greetingFor,type QuickStartInput } from "../quick-starts";
 import { dropQueued,promoteQueued,type QueuedSend } from "../send-queue";
 import type { WorkspaceSession } from "../sessions-view";
@@ -187,7 +187,7 @@ interface WorkbenchViewDeps {
   unfoldAllTurns: () => void;
   foldAllTurns: () => void;
   askForActive: AskPayload | null;
-  setMode: Dispatch<SetStateAction<"default" | "read-only" | "guided" | "auto">>;
+  setMode: Dispatch<SetStateAction<PermissionMode>>;
   setLastNotice: (message: string, sessionId?: string | undefined) => void;
   pendingClarify: { callId: string; questions: ClarifyQuestion[]; } | null;
   pendingPlan: { callId: string; plan: PlanProposal; } | null;
@@ -206,7 +206,10 @@ interface WorkbenchViewDeps {
   resumeQueue: () => void;
   skills: readonly SlashSkill[];
   composerLock: ComposerLockReason | null;
-  mode: "default" | "read-only" | "guided" | "auto";
+  mode: PermissionMode;
+  /** 当前 Plan 模式（默认来自 settings，Composer「方案」开关按轮覆盖）。 */
+  planRequired: boolean;
+  onPlanRequiredChange: (next: boolean) => void;
   stopped: boolean;
   usage: { inputTokens: number; outputTokens: number; usageCount: number; cacheReadTokens: number; lastInputTokens: number; };
   phaseLabel: string;
@@ -296,7 +299,37 @@ interface WorkbenchViewDeps {
 }
 
 export function WorkbenchView(deps: WorkbenchViewDeps) {
-  const { activeWorkspace, projects, pickerValue, providerInfo, settingsOpen, activeId, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, togglePane, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, sidebarCollapsed, toggleSidebar, newSession, handleOpenPalette, openPane, setSettingsSection, setSettingsOpen, sidebarWidth, runningSet, waitingIdSet, draftIds, outcomes, registryNotice, sessionsLoaded, sessionsLoadError, retrySessions, providerOk, openSession, setActiveWorkspace, activeWorkspaceRef, touchWorkspace, handleAddProject, handleCloneProject, setNewProjectOpen, handleUpdateProject, handleRemoveProject, handleRevealProject, pinSessionById, forkSessionFromMenu, requestArchiveSession, openSessionInCli, setWtDiscard, sessionWorktreeOp, requestDeleteSession, themePref, changeTheme, usageStats, usageAll, loadUsageAll, startSidebarDrag, persistSidebarWidth, sidebarWidthRef, mainGroupRef, showEmpty, findRef, findOpen, streamEl, closeFind, lastError, clearLastError, setLogTarget, lastNotice, clearLastNotice, importDiagnosis, setImportDiagnosis, chipRef, chipOpen, openChipPopover, emptyData, chipQuery, setChipQuery, chipRecent, chipList, closeChip, setLastError, setStreamEl, stick, streamRows, rowRefs, inheritedSeqs, viewMode, runningActive, foldedRounds, flashRound, streamActions, deliveryTrailItems, deliveryExpandedFor, openPreview, exportActiveProject, lastDeliveryRound, handleRevertTurn, setDeliveryExpandedFor, outlineCurrent, jumpToRound, unfoldAllTurns, foldAllTurns, askForActive, setMode, setLastNotice, pendingClarify, pendingPlan, composerZoneRef, editCtx, events, sendQueue, setEditCtx, setDraftRemap, draftRemapSeq, refreshSessions, setQueueFor, cancelRunHeal, queueLoading, pendingSend, resumeQueue, skills, composerLock, mode, stopped, usage, phaseLabel, phase, elapsedSec, steps, runSteps, chosenCtx, recentRefsBySession, noteRecentRef, promptHistory, noteDraft, injectedText, injectedTextSeq, draftRemap, draftRestore, sendWithGoal, configuredProviders, thinkingBySession, pendingThinking, setPendingThinking, force, selections, refreshProviderInfo, compactNow, composerMenuSignal, onSuggestNext, injectedAttachment, injectedAppend, onboarded, onboarding, injectText, inspectorRef, inspectorDefault, setInspectorCollapsed, inspectorSaveTimer, inspectorColRef, jumpToEvent, handleRestoreSnapshot, toggleInspector, attachFromPane, pickSignal, handlePickResult, preview, closePane, send, setPaneTabs, pluginSidebarWidth, setPluginSidebarWidthPersist, closePluginSidebar, fillPluginCommand, viewToast, cheatOpen, closeCheat, revertConfirm, setRevertConfirm, doRevertTurn, projectRemoveConfirm, setProjectRemoveConfirm, doRemoveProject, archiveConfirm, setArchiveConfirm, doArchiveSession, deleteConfirm, setDeleteConfirm, doDeleteSession, wtDiscard, paletteOpen, setPaletteOpen, focusComposer, handlePaletteAction, startBarRename, logTarget, settingsSection, refreshProviderKeys, setThemePref, setTextSize, setUiSize, setCtrlTabCycle, dragOverApp, newProjectOpen, templates, handleCreateFromDialog } = deps;
+  // 空屏问候语（2026-10-24）：按时段分组、组内轮换，每次挂载取定一句——
+  // 重渲染不再重抽（文字闪变），换会话/重开才有机会换词。
+  const [greeting] = useState(() => greetingFor(new Date().getHours()));
+  // 命令面板快速打开的文件目标（本地信号；递增 seq 允许连续打开同一文件）。
+  const [fileTarget, setFileTarget] = useState<{ path: string; seq: number } | null>(null);
+  // ⌘+点击侧栏会话：右侧只读预览目标（seq 允许连续预览同一会话）。
+  const [sessionPreview, setSessionPreview] = useState<{ id: string; workspace?: string; title: string; seq: number } | null>(null);
+  const { activeWorkspace, projects, pickerValue, providerInfo, settingsOpen, activeId, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, togglePane, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, sidebarCollapsed, toggleSidebar, newSession, handleOpenPalette, openPane, setSettingsSection, setSettingsOpen, sidebarWidth, runningSet, waitingIdSet, draftIds, outcomes, registryNotice, sessionsLoaded, sessionsLoadError, retrySessions, providerOk, openSession, setActiveWorkspace, activeWorkspaceRef, touchWorkspace, handleAddProject, handleCloneProject, setNewProjectOpen, handleUpdateProject, handleRemoveProject, handleRevealProject, pinSessionById, forkSessionFromMenu, requestArchiveSession, openSessionInCli, setWtDiscard, sessionWorktreeOp, requestDeleteSession, themePref, changeTheme, usageStats, usageAll, loadUsageAll, startSidebarDrag, persistSidebarWidth, sidebarWidthRef, mainGroupRef, showEmpty, findRef, findOpen, streamEl, closeFind, lastError, clearLastError, setLogTarget, lastNotice, clearLastNotice, importDiagnosis, setImportDiagnosis, chipRef, chipOpen, openChipPopover, emptyData, chipQuery, setChipQuery, chipRecent, chipList, closeChip, setLastError, setStreamEl, stick, streamRows, rowRefs, inheritedSeqs, viewMode, runningActive, foldedRounds, flashRound, streamActions, deliveryTrailItems, deliveryExpandedFor, openPreview, exportActiveProject, lastDeliveryRound, handleRevertTurn, setDeliveryExpandedFor, outlineCurrent, jumpToRound, unfoldAllTurns, foldAllTurns, askForActive, setMode, setLastNotice, pendingClarify, pendingPlan, composerZoneRef, editCtx, events, sendQueue, setEditCtx, setDraftRemap, draftRemapSeq, refreshSessions, setQueueFor, cancelRunHeal, queueLoading, pendingSend, resumeQueue, skills, composerLock, mode, planRequired, onPlanRequiredChange, stopped, usage, phaseLabel, phase, elapsedSec, steps, runSteps, chosenCtx, recentRefsBySession, noteRecentRef, promptHistory, noteDraft, injectedText, injectedTextSeq, draftRemap, draftRestore, sendWithGoal, configuredProviders, thinkingBySession, pendingThinking, setPendingThinking, force, selections, refreshProviderInfo, compactNow, composerMenuSignal, onSuggestNext, injectedAttachment, injectedAppend, onboarded, onboarding, injectText, inspectorRef, inspectorDefault, setInspectorCollapsed, inspectorSaveTimer, inspectorColRef, jumpToEvent, handleRestoreSnapshot, toggleInspector, attachFromPane, pickSignal, handlePickResult, preview, closePane, send, setPaneTabs, pluginSidebarWidth, setPluginSidebarWidthPersist, closePluginSidebar, fillPluginCommand, viewToast, cheatOpen, closeCheat, revertConfirm, setRevertConfirm, doRevertTurn, projectRemoveConfirm, setProjectRemoveConfirm, doRemoveProject, archiveConfirm, setArchiveConfirm, doArchiveSession, deleteConfirm, setDeleteConfirm, doDeleteSession, wtDiscard, paletteOpen, setPaletteOpen, focusComposer, handlePaletteAction, startBarRename, logTarget, settingsSection, refreshProviderKeys, setThemePref, setTextSize, setUiSize, setCtrlTabCycle, dragOverApp, newProjectOpen, templates, handleCreateFromDialog } = deps;
+  // 项目弹层（2026-10-24 第二版）：向上开时按 chip 行上方的**实测空间**封顶。
+  // 只给列表 240px 上限不够——搜索框 + 列表 + 页脚一起仍可能高于可用空间，弹层顶到
+  // 窗口上沿（截图复现：top=0，圆角/阴影被裁）。封顶后列表自己缩，搜索与页脚始终可见。
+  useEffect(() => {
+    if (!chipOpen) return;
+    const row = chipRef.current;
+    if (row === null) return;
+    const place = (): void => {
+      const pop = row.querySelector<HTMLElement>(".chip-pop");
+      if (pop === null) return;
+      const r = row.getBoundingClientRect();
+      const above = r.top - 58; // 顶栏 48 + 10 留白：弹层压到标题栏同样算被裁
+      const below = window.innerHeight - r.bottom - 10;
+      const down = below > above;
+      pop.classList.toggle("down", down);
+      pop.style.maxHeight = `${String(Math.max(160, Math.min(480, down ? below : above)))}px`;
+    };
+    place();
+    window.addEventListener("resize", place);
+    const ro = new ResizeObserver(place);
+    ro.observe(row);
+    return () => { window.removeEventListener("resize", place); ro.disconnect(); };
+  }, [chipOpen, chipRef]);
   // 统一工具栏 · 左翼工作区上下文（2026-10-21 设计重做）：会话内把工作区名从输入区
   // 搬到这里——同一语义只留一处，输入区回到纯粹的写作面。
   const activeProjectLabel = activeWorkspace === null ? null
@@ -341,6 +374,18 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
           onRetryLoad={retrySessions}
           providerOk={providerOk}
           onOpen={openSession}
+          onPreviewSession={(s) => {
+            // 当前会话没有「预览」可看（主体就是它）。⌘+点击自己时保持无操作，
+            // 不开一块与左边同内容的只读副本。
+            if (s.id === activeId) return;
+            openPane("session");
+            setSessionPreview((prev) => ({
+              id: s.id,
+              ...(s.workspace !== undefined ? { workspace: s.workspace } : {}),
+              title: s.title ?? s.id,
+              seq: (prev?.seq ?? 0) + 1,
+            }));
+          }}
           onNewTask={newSession}
           onOpenPalette={handleOpenPalette}
           onSwitchWorkspace={(p) => { setActiveWorkspace(p); activeWorkspaceRef.current = p; touchWorkspace(p); }}
@@ -379,6 +424,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
           usage={activeId === null ? null : usageStats}
           usageAll={usageAll}
           onLoadUsageAll={loadUsageAll}
+          onOpenUsage={() => { setSettingsSection("usage"); setSettingsOpen(true); }}
         />
           <div
             className="side-handle"
@@ -434,13 +480,14 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                   />
                 )}
               </div>
-              <div className="empty">
+              {/* 弹层开着时给 hero 打 data-picking：问候语淡出让焦点（弹层向上开会压到问候线，2026-10-24）。 */}
+              <div className="empty" {...(chipOpen ? { "data-picking": "true" } : {})}>
                 {/* 2026-10-18 对照 Claude 桌面端：hero 不是「字标 + 问候」两行，而是珊瑚星标与
                     问候同一行、衬线大字（Claude 的「✳ You're here!」）。品牌名仍在窗口顶栏，
                     这里不再叠一个 CAIRN 字标。 */}
                 <h1 className="empty-greet" data-dsh-claude-part="hero-headline" data-dsh-claude-holds="hero-mark">
-                  <Sparkles size={26} strokeWidth={2.2} className="empty-greet-mark" aria-hidden="true" />
-                  <span>{greetingFor(new Date().getHours())}，{STR.empty.greetingAsk}</span>
+                  <CairnMark className="empty-greet-mark" />
+                  <span>{greeting}，{STR.empty.greetingAsk}</span>
                 </h1>
                 {/* 项目 chip：📁 名 · 分支；点开 = 搜索 + 最近项目 + 复用 AddProjectMenu 四入口。 */}
                 <div className="empty-chip-row" ref={chipRef}>
@@ -560,20 +607,15 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                       actions={streamActions}
                     />
                   </Suspense>
-                  {/* 交付摘要卡（批 3）：有交付的轮各一张、空轮一行弱提示（连续空轮并一段），流尾展示。
+                  {/* 交付摘要卡（批 3）：有交付的轮各一张，流尾展示；空轮不出内容（2026-10-24 弱行撤下）。
                       2026-10-18 业主截图批：默认只渲染最新一张卡；早期记录收进一行「查看早期交付」，
                       展开状态按会话记（deliveryExpandedFor），切走再回来不会又铺开。 */}
                   {(() => {
-                    let lastCard = -1;
-                    deliveryTrailItems.forEach((it, i) => { if (it.kind === "card") lastCard = i; });
-                    // 最新卡**及其后的空轮弱行**一起留在流尾（此前只取那一个 card，末尾的
-                    // 「第 N–M 轮 · 无文件改动」会被整段吞掉——最新几轮没改文件时反而什么都看不到）。
-                    const tailItems = lastCard >= 0 ? deliveryTrailItems.slice(lastCard) : deliveryTrailItems;
-                    const olderItems = lastCard >= 0 ? deliveryTrailItems.slice(0, lastCard) : [];
-                    const earlierCards = olderItems.filter((it) => it.kind === "card").length;
+                    const lastIdx = deliveryTrailItems.length - 1;
+                    const tailItems = lastIdx >= 0 ? deliveryTrailItems.slice(lastIdx) : [];
+                    const olderItems = lastIdx >= 0 ? deliveryTrailItems.slice(0, lastIdx) : [];
                     const showEarlier = activeId !== null && deliveryExpandedFor === activeId;
-                    const renderItem = (item: (typeof deliveryTrailItems)[number]): React.ReactNode =>
-                      item.kind === "card" ? (
+                    const renderItem = (item: (typeof deliveryTrailItems)[number]): React.ReactNode => (
                       <ChangeSummaryCard
                         key={`d${String(item.delivery.round)}`}
                         delivery={item.delivery}
@@ -587,10 +629,6 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                             }
                           : {})}
                       />
-                    ) : (
-                      <div key={`e${String(item.from)}-${String(item.to)}`} className="round-note">
-                        {formatEmptyTrailNote(item.from, item.to)}
-                      </div>
                     );
                     return (
                       <>
@@ -603,7 +641,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                           >
                             {showEarlier
                               ? "收起早期交付"
-                              : `查看早期交付（${String(earlierCards)} 张卡 / ${String(olderItems.length)} 项）`}
+                              : `查看早期交付（${String(olderItems.length)} 张卡）`}
                           </button>
                         )}
                         {showEarlier && olderItems.map(renderItem)}
@@ -745,6 +783,8 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
               disabled={composerLock !== null}
               {...(composerLock !== null ? { disabledReason: composerLock } : {})}
               mode={mode}
+              planRequired={planRequired}
+              onPlanRequiredChange={onPlanRequiredChange}
               running={runningActive}
               stopped={stopped}
               activeId={activeId}
@@ -834,7 +874,8 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                 onPick={(t) => { injectText(t); }}
               />
               {/* 首启「设置检查」：七组覆盖面来自主进程（不抄清单）；点一格跳到对应设置分区。
-                  只在 onboarded === false 时摆——已 onboarded 的用户不必看这张清单。 */}
+                  只在 onboarded === false 时摆——已 onboarded 的用户不必看这张清单。
+                  （2026-10-25：空屏重做时这段挂载被连带删掉，而取数仍在跑；已恢复并加判据。） */}
               {onboarded === false && (
                 <OnboardingChecklist
                   groups={onboarding}
@@ -877,7 +918,9 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                 的 HTMLAttributes 还没有 inert 这个 prop，写成 JSX 属性会直接编译红。
                 收起瞬间若仍能 Tab 进检查器，是因为过渡还在跑（width > 0）——此刻控件在屏上，
                 可聚焦是正确的；inert 在宽度归 0 的那一刻由 onResize 置上。 */}
-            <div className="inspector-col" ref={inspectorColRef}>
+            {/* 单窗格占满侧栏（2026-10-24 业主）：开着窗格 → 栏内检查器内容让位（CSS 隐藏 .isp），
+                  窗格独占整条侧栏；全关 → 检查器内容回位。⌘⌥I 的整栏开合不受影响。 */}
+            <div className="inspector-col" ref={inspectorColRef} {...(paneTabs.length > 0 ? { "data-panes-open": "true" } : {})}>
               <Inspector
                 key={activeId ?? "home"} // 切会话即重挂：内部 openKey/diff 状态不能跨会话复用
                 events={events}
@@ -899,6 +942,15 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                       events={events}
                       sessionId={activeId}
                       workspace={activeWorkspace}
+                      {...(fileTarget !== null ? { fileTarget } : {})}
+                      {...(sessionPreview !== null ? { sessionPreview } : {})}
+                      onSwitchSession={(id, workspace) => {
+                        openSession(id, workspace);
+                        // 切过去后主体与预览是同一场会话：留一块只读副本既占宽又像故障。
+                        // 预览是「看一眼」的临时面，切走即收。
+                        setSessionPreview(null);
+                        closePane("session");
+                      }}
                       onAttach={attachFromPane}
                       pickSignal={pickSignal}
                       onPickResult={handlePickResult}
@@ -976,6 +1028,12 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
             onOpenSession={(id, workspace) => { setPaletteOpen(false); openSession(id, workspace); }}
             onSwitchWorkspace={(path) => { setPaletteOpen(false); setActiveWorkspace(path); activeWorkspaceRef.current = path; touchWorkspace(path); }}
             onOpenSettings={(section) => { setPaletteOpen(false); setSettingsSection(section); setSettingsOpen(true); }}
+            onOpenFile={(path) => {
+              setPaletteOpen(false);
+              openPane("file");
+              setFileTarget((prev) => ({ path, seq: (prev?.seq ?? 0) + 1 }));
+              focusComposer();
+            }}
             onAction={(action) => { setPaletteOpen(false); handlePaletteAction(action); }}
             skills={skills}
             onUseSkill={(invoke) => {

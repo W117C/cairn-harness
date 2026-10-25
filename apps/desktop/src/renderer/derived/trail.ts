@@ -199,47 +199,13 @@ export function turnDelivery(events: readonly AgentEvent[]): TurnDelivery[] {
   });
 }
 
-/** 批 3 交付卡流尾的条目：有交付的轮出卡，空轮出一行弱提示（连续空轮并一段）。 */
-export type DeliveryTrailItem =
-  | { kind: "card"; delivery: TurnDelivery }
-  | { kind: "empty"; from: number; to: number };
+/** 批 3 交付卡流尾的条目：有交付的轮出卡。空轮弱行（连续空轮并一行的那个小字条目）
+ *  已于 2026-10-24 按业主反馈整体撤下——空轮不再产出任何内容，序列里只剩卡。 */
+export type DeliveryTrailItem = { kind: "card"; delivery: TurnDelivery };
 
-/** 空轮弱行文案（单轮「第 N 轮」；区间「第 M–N 轮」）。 */
-export function formatEmptyTrailNote(from: number, to: number): string {
-  return from === to ? `第 ${String(from)} 轮 · 无文件改动` : `第 ${String(from)}–${String(to)} 轮 · 无文件改动`;
-}
-
-/** 交付卡流尾序列（批 3 · 文档阶段 3·对话页①）：按轮序把「有交付的卡」与「空轮弱行」交错铺开，
- *  连续空轮合并为一段（第 M–N 轮）。`currentRoundRunning` = 末轮还在跑：即便它此刻没有交付也
- *  不预告弱行——轮还没收束，「无文件改动」断言不成立（写盘随时可能发生）；末轮已有交付时卡照出
- *  （live 卡与运行中流式并存是既有行为）。总轮数取 max(totalRounds, 末卡轮号) 防御失配。 */
-export function deliveryTrail(
-  deliveries: readonly TurnDelivery[],
-  totalRounds: number,
-  currentRoundRunning: boolean,
-): DeliveryTrailItem[] {
-  const byRound = new Map<number, TurnDelivery>();
-  for (const d of deliveries) byRound.set(d.round, d);
-  const last = deliveries.length > 0 ? deliveries[deliveries.length - 1]!.round : 0;
-  const total = Math.max(totalRounds, last);
-  const out: DeliveryTrailItem[] = [];
-  let emptyFrom: number | null = null;
-  const flushEmpty = (end: number): void => {
-    if (emptyFrom !== null) out.push({ kind: "empty", from: emptyFrom, to: end });
-    emptyFrom = null;
-  };
-  for (let r = 1; r <= total; r++) {
-    const card = byRound.get(r);
-    if (card !== undefined) {
-      flushEmpty(r - 1);
-      out.push({ kind: "card", delivery: card });
-      continue;
-    }
-    if (r === total && currentRoundRunning) { flushEmpty(total - 1); break; } // 运行中末轮不预告（见上注）
-    emptyFrom ??= r;
-  }
-  flushEmpty(total);
-  return out;
+/** 交付卡流尾序列：按轮序只铺「有交付的卡」，轮与轮之间的空轮不占位。 */
+export function deliveryTrail(deliveries: readonly TurnDelivery[]): DeliveryTrailItem[] {
+  return deliveries.map((delivery) => ({ kind: "card" as const, delivery }));
 }
 
 export function turnChanges(events: readonly AgentEvent[]): Array<{

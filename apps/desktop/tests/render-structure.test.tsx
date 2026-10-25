@@ -446,10 +446,13 @@ describe("自定义接口：本地端点（用户实测那条路的判据）", (
 import { ThinkingLive } from "../src/renderer/components/Stream";
 
 describe("C-31 思考行（live）：有计时、可点开", () => {
-  it("渲染出来带走秒位（初始 0s）、三点动画容器、折叠体，并且行本身可点", () => {
+  it("渲染出来带走秒位（初始 0s）、逐格加载标（启动屏同款）、折叠体，并且行本身可点", () => {
     const html = renderToStaticMarkup(<ThinkingLive seq={1} />);
     expect(html).toContain(">思考中<");
     expect(html).toContain("think-live");
+    // 2026-10-24：等待动效换成本品牌逐格加载标（与启动屏同一图形同一动效），三点 <i/> 已废。
+    expect(html).toContain("cairn-loader");
+    expect(html).not.toContain("<i />");
     expect(html).toContain('role="button"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain("0s");
@@ -462,6 +465,21 @@ describe("C-31 思考行（live）：有计时、可点开", () => {
     expect(html).toContain("think-elapsed");
     expect(html).toContain('aria-live="polite"');
     expect(html).toContain('aria-label="模型思考中，点击展开说明"');
+  });
+
+  it("对话流里的加载动效在助手行标记上（流式 = CairnLoader，停转 = CairnMark），不在输入框", () => {
+    const streamSrc = readFileSync(new URL("../src/renderer/components/Stream.tsx", import.meta.url), "utf8");
+    expect(streamSrc).toContain("{caret ? <CairnLoader /> : <CairnMark />}");
+  });
+
+  it("等待动效与启动屏同款：7 格顺时针逐格点亮、图形不转、reduced-motion 停格全色", () => {
+    const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
+    expect(css).toContain("animation: cairn-cell 1.68s linear infinite");
+    expect(css).toContain(".cairn-loader path:nth-child(7) { animation-delay: .24s; }");
+    expect(css).toContain(".cairn-loader path:nth-child(2) { animation-delay: 1.44s; }");
+    expect(css).not.toMatch(/cairn-loader[^}]*rotate/s);
+    // 停格规则在全局 reduced-motion 块里（styles-motion 纪律：该 media 全文件只许出现一次）。
+    expect(css).toContain(".cairn-loader path { animation: none; opacity: 1; }");
   });
 });
 

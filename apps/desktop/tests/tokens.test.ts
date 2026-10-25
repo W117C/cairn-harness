@@ -258,7 +258,7 @@ describe("刻度重钉：4px 栅格 / 圆角三档 / 正文字号 / 阅读列 / 
   });
 
   it("尺寸轴落到外壳/按钮：固定行高也乘 --size-scale（不再只有 1 处菜单项吃令牌）", () => {
-    for (const name of ["--h-row", "--h-btn", "--h-btn-sm", "--h-btn-lg", "--h-btn-xs", "--h-btn-2xs", "--w-row-action", "--h-row-action", "--w-switch", "--h-switch", "--d-switch-knob", "--sw-knob-inset", "--w-theme-thumb", "--h-theme-thumb", "--h-send"]) {
+    for (const name of ["--h-row", "--h-btn", "--h-btn-sm", "--h-btn-lg", "--h-btn-xs", "--h-btn-2xs", "--w-row-action", "--h-row-action", "--w-switch", "--h-switch", "--d-switch-knob", "--sw-knob-inset", "--h-send"]) {
       expect(tokens).toMatch(new RegExp(`${name}:\\s*calc\\([^)]*\\* var\\(--size-scale\\)\\)`));
     }
     expect(styles).toContain("height: var(--h-row)");
@@ -272,7 +272,6 @@ describe("刻度重钉：4px 栅格 / 圆角三档 / 正文字号 / 阅读列 / 
     expect(styles).toContain("width: 100%; height: 100%; transform: rotate(-90deg)");
     expect(styles).toContain("width: var(--w-switch); height: var(--h-switch)");
     expect(styles).toContain("left: calc(100% - var(--d-switch-knob) - var(--sw-knob-inset))");
-    expect(styles).toContain(".theme-thumb { width: var(--w-theme-thumb); height: var(--h-theme-thumb)");
   });
 
   it("阅读列 832px（2026-10-21 设计重做：1440 下 760 留白过大）；过渡 140ms ease-out（120–160ms 区间内）", () => {

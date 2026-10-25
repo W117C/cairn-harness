@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { PluginRuntime } from "../src/agent/plugins";
 import { McpManager } from "../src/agent/plugins/mcp";
 import { AskGate } from "../src/main/ask-gate";
-import { installPluginTools, resolveLivePluginTool, setToolGateDeps } from "../src/main/tool-gates";
+import { installPluginTools, pluginToolSpecsFromRuntime, resolveLivePluginTool, setToolGateDeps } from "../src/main/tool-gates";
 import { newAutonomySession, type PermissionMode, type ToolResultWithAudit } from "../src/permissions";
 import { TOOLS } from "../src/tools";
 import type { Tool } from "../src/tools/base";
@@ -59,6 +59,8 @@ async function setup(mode: PermissionMode, initial = definition(true), gate: Ask
   }, 1000, 1000);
   expect(await runtime.trustDecide("changing", true)).toBe(true);
   await runtime.connectMcp();
+  // 服务器级懒加载：先激活 changing/stub，scoped 工具才会进模型面与执行表。
+  expect(runtime.activateMcpServer("changing/stub").ok).toBe(true);
   injected.push(...installPluginTools(runtime));
   const autonomy = newAutonomySession(mode, { planBlocked: () => false });
   setToolGateDeps({ currentSession: () => ({ autonomy, askGate: gate, sandbox: null }) });
@@ -69,6 +71,8 @@ async function setup(mode: PermissionMode, initial = definition(true), gate: Ask
     definitions = next;
     expect(await runtime.trustDecide("changing", true)).toBe(true);
     await runtime.connectMcp();
+    // 撤销信任会清掉 active 集；重连后要重新激活，scoped 工具才回到模型面/执行面。
+    if (next.length > 0) expect(runtime.activateMcpServer("changing/stub").ok).toBe(true);
   };
   return { runtime, calls, tool, reconnect, ctx: { workspace: dir } };
 }
@@ -213,17 +217,28 @@ describe("run 中途批准的插件：模型看得见，执行面也必须动得
     expect(resolveLivePluginTool(lateName, s.runtime)).toBeUndefined();
   });
 
-  it("批准后：模型面已列出它（mcpTools 有它），解析器补上执行入口 ⇒ 真能跑，不是 unknown tool", async () => {
+  it("批准后：目录里有它；激活后模型面与执行面同时补上 ⇒ 真能跑，不是 unknown tool", async () => {
     const s = await setupPending();
     // 用户在这时候点了「信任」：handlePluginDecide 走的就是这两步
     expect(await s.runtime.trustDecide("late", true)).toBe(true);
     await s.runtime.connectMcp();
-    // 模型面这一侧：requestFace 逐请求重算，此刻起下一轮就看得见这把工具
+    // 目录这一侧：server 目录已可见，但 scoped 工具还没有 schema/模型面位置。
     expect(s.runtime.mcpTools.has(lateName)).toBe(true);
-    // 执行面那一侧：起点快照里没有它，靠 resolveTool 补表才动得了
+    expect(pluginToolSpecsFromRuntime(s.runtime).map((t) => t.name)).not.toContain(lateName);
+    // 元工具也是起点快照里没有的（起点 0 个 MCP 工具）⇒ 解析器必须补上，否则模型看得见调不动。
+    const listTool = resolveLivePluginTool("mcp_list", s.runtime);
+    expect(listTool, "中途长出的 mcp_list 也必须补执行入口").toBeDefined();
+    expect((await listTool!.run({}, s.ctx)).output).toContain("late/stub");
+    // 显式激活：下一轮 requestFace 才能列出它（服务器级懒加载的语义）。
+    const activateTool = resolveLivePluginTool("mcp_activate", s.runtime);
+    expect(activateTool, "中途长出的 mcp_activate 也必须补执行入口").toBeDefined();
+    const activated = await activateTool!.run({ server: "late/stub" }, s.ctx);
+    expect(activated.ok).toBe(true);
+    expect(pluginToolSpecsFromRuntime(s.runtime).map((t) => t.name)).toContain(lateName);
+    // 执行面那一侧：起点快照里没有它，靠 resolveTool 补表才动得了。
     expect((TOOLS as unknown as Record<string, Tool>)[lateName]).toBeUndefined();
     const resolved = resolveLivePluginTool(lateName, s.runtime);
-    expect(resolved, "批准后必须补得上执行入口，否则模型看到的是把跑不起来的工具").toBeDefined();
+    expect(resolved, "激活后必须补得上执行入口，否则模型看到的是把跑不起来的工具").toBeDefined();
     const result = await resolved!.run({}, s.ctx);
     expect(result.ok).toBe(true);
     expect(s.calls).toEqual([{ plugin: "late", tool: "work" }]);
@@ -249,6 +264,8 @@ describe("run 中途批准的插件：模型看得见，执行面也必须动得
     expect(await s.runtime.trustDecide("late", true)).toBe(true);
     await s.runtime.connectMcp();
     expect(s.runtime.mcpTools.has(lateName)).toBe(true);
+    expect(s.runtime.activateMcpServer("late/stub").ok).toBe(true);
+    expect(resolveLivePluginTool(lateName, s.runtime)).toBeDefined();
     expect(await s.runtime.trustDecide("late", false)).toBe(true);
     expect(s.runtime.mcpTools.has(lateName)).toBe(false);
     expect(resolveLivePluginTool(lateName, s.runtime)).toBeUndefined();

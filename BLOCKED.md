@@ -1,5 +1,84 @@
 # Blocked
 
+## 2026-10-25 00:19 · cn:hy4-preview 没有可用的 low 档
+
+- 模型表写明：`only_reasoning: true`、`reasoning_supported_efforts: ["high"]`、默认 `high`；没有 low。
+- 实测探针：low 的 reasoning_tokens 22/33/91，high 53/105/44；`off` 46/52、不传字段 25/63。
+  三档都还在推理，且 low/high 区间重叠 ⇒ low 不能当独立低档臂，跑出来的“low”是假的。
+- 按「API/模型报 reasoning 不支持就停」处理：**未启动 pilot，未写任何读数**。要 low/high 对照，
+  换 `cn:minimax-m3.1-flash`、`cn:deepseek-v4-flash` 或 `cn:step-5-preview`（三者都声明 low+high）。
+
+## 2026-10-25 00:01 · L32 3 对 rep：单趟差异是噪声
+
+- L32 @60 各 3 对：low **3/3**（262,949 / 232,440 / 66,096 tokens），high **3/3**
+  （98,148 / 145,451 / 62,974）。之前单趟「low 0/32、high 32/32」不可复现，已从主结论撤回。
+- **high 没有多修好任何一条**；token 代理 low 平均 187,162、high 102,191（−45.40%），但 B12 −48.29%、
+  B1 +55.30%，方向不一致；实付 `cny=0`，`$/success` 百分比不可知。
+- 结论：这套题对该模型没有成功率上的 thinking 收益；主实验若只看「多修几条」，3 对已够。
+  要检测几个百分点的差异，需要更多题/更多任务，不是只加 L32 rep。没有新的阻塞项。
+- 预算：GLM 累计 **3,383,233 in / 96,417 out**；用户明确「没有预算」，不再按 2M 帽停。
+
+## 2026-10-24 23:42 · L32 @60 找到差异；外部适配器不再是必需
+
+- **L32 @60 配对**：low FAIL 0/32（60 请求，1,092,735 in / 14,057 out，撞 `maxSteps=60`）；
+  high PASS 32/32（8 请求，60,782 in / 5,129 out，86s）。同模型、同 `max-steps`，只换 thinking。
+  这是本轮唯一「low 失败、high 成功」的配对；high 同时少用约 94% token。n=1，尚无方差。
+- **主实验**：同一 L32、同 `max-steps=60`，low/high 各 3 对 rep；3 是预注册最低档，不是从这对
+  读数算出的方差。B12/B1 已封顶，不应作为主实验题。
+- **外部集**：仍受 `scripts/loop-eval.ts:473`（`t.external` 直接抛）与 `:829`（含 external 直接
+  exit 1）限制，要外推需另立适配器；但回答本问题已不必先做外部适配器。
+- **预算**：GLM 累计 **2,515,175 in / 57,920 out**，越过 2M input 帽；停止。
+
+## 2026-10-24 23:35 · 外部集接不了；L48 也封顶
+
+- **L48-long-chain low 也 48/48**（`max-steps=55`，11 请求，96,037 in / 8,212 out，150s）⇒ 预注册的
+  L48 也是天花板，high 上界同为 48/48，未跑 high；不再在仓库 16 题里换题。
+- **外部题集（SWE-bench 类）当前跑器接不了**：`scripts/loop-eval.ts:473` 对 `t.external` 直接抛
+  「本跑器跑不了」，`:829` 在任务集含 external 时 exit 1；`--feasibility` 只能量缺口。
+  `outputs/eval-benchmark-adapter-2026-09-24/swebench-sample.jsonl` 只有两行样本且第二行缺
+  `FAIL_TO_PASS`；`docs/optimization-plan-2026-10-02.md:185` 已裁「缺快照 fetch + 语言侧判卷适配」。
+  要真跑外部集，需新增外部快照/仓库、pytest/语言适配、任务生成器和预算——是新流程/新依赖，
+  按任务规矩只登记，不在本笔擅自加。
+- **预算**：GLM 累计 **2,454,393 in / 52,791 out**，越过 2M input 帽；停止。此前 hy3/OpenRouter 另计。
+- **可选但未做**：换一个会在 B12/L30/L48 掉分的模型，或授权外部基准适配器；二者都需要用户拍板。
+
+## 2026-10-24 23:03 · 停止换题：L30 也封顶，继续挑题就是过拟合
+
+- 收到「注意不要过拟合」后不再 task shopping。最后一个预注册替代 L30-long-horizon low 跑出 **30/30**
+  （`namedSets.notGreen=0`，8 请求，78,433 in / 4,949 out，92s）；low 已封顶，high 上界也是 30/30，
+  不可能多修好，故不跑 high，也不再试 B5/B6/L48。
+- B4/B7/B2 的三次探测只作换题探测记录，不进入主结论；若拿它们挑出「看起来有差异」的题再跑 high，
+  就是按结果挑样本，不能回答 thinking 的因果问题。
+- 现有题集对该模型没有可区分的部分成功样本；主实验应换**预注册的更难外部题集**，而不是继续在 12 题里挑。
+- 预算：GLM 累计 **2,358,356 in / 44,579 out**，越过 2M input 帽；停止。
+
+## 2026-10-24 23:00 · 换题探测：没有「部分成功」的题
+
+- B4-low PASS（2/2）、B7-low PASS（5/5）⇒ 低档已满分，high 没有可提升空间，故不跑 high；这不是 high 的读数。
+- B2-low 产品面 `verifyOkLast=true`、held-out 绿，但逐名判据 `unreadable`：judge 规格写 `tests/fit.test.js`，测试输出里对不上号（`unmatched=1`）。这是判据坏，不是模型失败；按任务规矩只登记不改判据。
+- 结果：现有 12 题里，B4/B7 封顶、B12 封顶、L32 两臂撞步数帽、B2 判据不可读；没有一条能产生「low 失败、high 成功」的配对。继续加 rep 或换小工具题都不会回答 thinking 值不值。
+- 预算：GLM 主线 2,163,176 in；换题探测后累计 **2,279,923 in / 39,630 out**，越过 2M input 帽；停止。
+
+## 2026-10-24 22:50 · GLM-5.3-Flash pilot：B12 封顶 + L32 撞帽 + 预算越界
+
+- **B12 两臂都 20/20**（`notGreen=0`），high 多修 0 条；B1 两臂都过。题集对 GLM-5.3-Flash 仍封顶。
+- **L32 是地板不是刻度**：`max-steps=35` 两臂都因 `maxSteps` 中止；把 low 抬到 60 仍因 `maxSteps` 中止（60 请求，1,092,735 in / 14,057 out）。没有出现「一臂过、一臂不过」的部分成功样本，无法估 thinking 的边际收益；主实验应换一条能出现部分成功的题，而不是加 rep。
+- **预算越界，已停**：GLM pilot 累计 **2,163,176 input / 37,333 output**，越过 2,000,000 input 帽；L32-high 60 未跑。此前 hy3/OpenRouter 的消耗另计，合计更高。该越界是执行事实，不冒充「仍在预算内」。
+- **端点成本为 0**：`usage.credit=0`、模型表 `credits=x0.08`（仅倍率，不是账单），四趟 `cny=0`；`$/success` 实付为 0→0，百分比无分母；token 代理方向在 B1/B12 相反（+55.30% / −48.29%），不能当稳定结论。
+- **模型别名**：用户给的 `glm5.3flash` 在上游返回 401 `no_healthy_account`；改用模型表精确 id `cn:glm-5.3-flash` 才跑通，读数只对该 id 有效。
+
+## 2026-10-24 22:24 · hy3 pilot 的天花板（第 701 页）
+
+- **B12 与 L32 都封顶，pilot 无法回答「多想值不值」**：B12-low/high 都是 20/20（`notGreen=0`），
+  按止损加跑 L32-long-chain low，仍 32/32（`readings-l32-low.json`）。题集对 `hy3` 太容易，
+  两臂没有可区分的失败样本；主实验若继续用这套题，增加 rep 只会重复满分。需要更难的题集，或
+  换一个会在 B12/L32 上掉分的模型，才能量出 thinking 的边际收益。
+- **原 OpenRouter 配额阻塞已由用户提供的本地端点解除**：`http://127.0.0.1:7863/v1`、模型 `hy3`；
+  该端点 `usage.credit=0`、模型表 `credits=x0.00`，所以四趟 `cny=0`，`$/success` 的百分比没有
+  非零分母；token 口径只能作代理（B12 high 比 low 少 7.07%），不能当美元账单。
+- **原默认模型仍不可用**：`stealth/space-bunny-alpha` 404；`mimo-v2.6-flash` 403 未实名；
+  `z-ai/glm-5.2` 402 无 credits。hy3 是用户明确指定后的替代，读数只对该模型有效。
+
 The desktop layer removal of 2026-09-27 (`69fbb0d`) was followed by a reintroduced desktop shell
 under `apps/desktop/` on 2026-10-02 (M1 slices), so this file's "core-only" premise had stopped holding;
 doc alignment landed in README.md / docs/CODE-WIKI.md / docs/DOCS-MAP.md / docs/README.md.

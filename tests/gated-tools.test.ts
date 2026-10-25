@@ -1,6 +1,6 @@
 // 工具门接线测试（任务 3）：default 档 ask → 批准才执行；拒绝不执行；沙箱不可用时写工具强制审批。
 // runAgent 即 main 暴露的同一入口；AskGate 用即时决议的 stub 模拟 UI 点击。
-import { cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -71,7 +71,14 @@ const OFFLINE_FETCH_DEPS: WebFetchDeps = {
 // （全量判卷是文件级并行的，无锁时 replay-faces 的「整树逐字节不变」会被这里的写入打断）。
 let releaseAppFixture: (() => Promise<void>) | undefined;
 beforeAll(async () => { releaseAppFixture = await acquireAppFixtureLock(); }, 360_000);
-afterAll(async () => { await releaseAppFixture?.(); });
+afterAll(async () => {
+  // 收束缝（post-run-readings）会把自进化账本写进靶子的 .agent/（evolution.json 一族运行态，
+  // 目录本身 gitignore）。但 evolution-ledger.jsonl 是 fixtures 下的 **.jsonl**——projection-invariant
+  // 的语料尺只认「git 看得见」的语料，留着它 = 干净树与脏树两把不同的尺。跑完清掉这一份
+  // （evolution.json/memory 等 .json/.md 运行态沿既有约定保留，那把尺看不见它们）。
+  await rm(join(APP, ".agent", "evolution-ledger.jsonl"), { force: true });
+  await releaseAppFixture?.();
+});
 
 describe("工具门接线（runAgent + AskGate）", () => {
   it(

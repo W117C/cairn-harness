@@ -25,6 +25,38 @@
 - 工具差异入口读取保留的结构化路径；参数展示截断不再影响大文件编辑后的差异入口。
 - 关闭窗格后将键盘焦点交还剩余窗格导航；拖动/弹出操作使用同一套图标。验证记录见 `outputs/desktop-hardening-2026-10-20/REPORT.md`。
 
+## 2026-10-25 单窗格标签页与渲染韧性
+
+以下增量优先于旧窗格描述；§3.4 的 2026-10-15「网格化纵向堆叠」实现状态不再现行，
+窗格类型、审阅、终端、浏览器等**产品条款继续适用**。
+
+- **单窗格标签页（2026-10-24 业主重定）**：右栏一次只显示一个窗格、占满整列；标签条切换。
+  **切换标签只切可见性，不卸载内容**——所有已开窗格常驻挂载；终端 PTY、浏览器内嵌标签、
+  文件树展开/滚动、旁路对话与表单状态都不因切标签重建。原生 `WebContentsView` 在非激活
+  窗格显式收成零矩形（CSS 隐藏管不到原生层），切回再按容器矩形放回。
+- **标签条溢出**：激活标签自动滚进标签条可视区（只滚标签条，不带动整页）；`prefers-reduced-motion`
+  下即时定位，不播平滑滚动。
+- **渲染错误边界**：根、设置分区、窗格内容三处各自成界。一个分区/窗格在渲染期抛错时，
+  其余区域与左导航仍在；内联兜底给「重试」，页面级另给「重新载入」。切换分区自动重挂恢复。
+- **首启「设置检查」**：空屏在 `onboarded === false` 时恢复七组覆盖面清单（点一格进对应设置分区）。
+  该挂载在此前空屏重做时被连带删除，取数却仍在跑；已恢复并加判据。
+- **窄容器工作台页**：设置/插件等页面按**容器宽**而不是窗口宽收口；右栏 360 宽时标题区竖排、
+  搜索吃满、卡片单列（窗口很宽也会出现窄右栏，媒体查询不适用）。
+- **侧栏会话筛选**：`SESSION_FILTERS / filterSessions` 此前只有搜索在用、且侧栏硬编码 `filter:"all"`；
+  现由顶栏漏斗菜单提供 **全部 / 运行中 / 已置顶 / 已归档 / 定时任务** 五档（带计数、键选、持久化），
+  与搜索叠加。收窄态无命中时不摆空项目组，改给「「X」下没有会话」+ 清除筛选；「运行中」只认本进程
+  在场会话，菜单脚注如实说明实时状态族为何未做。
+- **命令面板文件快速打开**：⌘K 输入文件名 → 「文件」组列出当前工作区命中（复用 `workspaceSearch`，
+  160ms 防抖、只列文件、错误/截断如实）；选中后打开右侧文件窗格，自动展开父目录、补拉未加载目录、
+  打开只读预览并激活「文件」标签。命令面板自身补了错误边界：正文/文件搜索结果畸形不再拖垮整个应用。
+- **完成通知可点击**：会话 run 收束且窗口失焦时的 OS 通知，点击后聚焦应用并经新 push
+  `onNotificationOpen` 打开目标会话（带 workspace 精确寻址）；正文取任务首行、最多 80 码点。
+  通知点击是 OS 层行为——离屏 renderer 只能验「收到推送后开会话」，真实系统通知点击仍需真机。
+- **Plan 模式一等入口**：Composer 上与权限档同排的「方案」开关，默认取
+  `settings.planRequiredByDefault`，用户可按轮显式覆盖；`RunRequest.planRequired`（协议 v23）经
+  kernel-host 的 overrides 进入既有核心方案门——未获批不写文件。开关有 `aria-pressed`、轻底珊瑚态、
+  开启/关闭回执；设置页那行改为说明「这是默认值，输入框旁可按轮覆盖」。
+
 ---
 
 # Cairn 桌面端设计规范（v1.0 · Claude 蓝本）
@@ -3457,3 +3489,234 @@ P3-3 起命令面板就注明「技能组不摆——preload 无 plugin/skill �
 - 专注模式中首屏不再自动展开检查器（不再顺手退出专注）。
 - 读数：根 **453 / 6223**、桌面 **165 / 1214**、双端 typecheck 0；cross-workspace **7/7**、
   interaction-smoke **23/23**；dist `index-Cb9d-pXl.js`。未提交、未跑全量门。
+
+### 2026-10-25 · 单窗格标签页保状态 + 渲染错误边界 + 首启检查恢复
+
+#### A. 三处回归（都是「最近改版打翻旧保证」）
+
+1. **切标签会销毁窗格**：2026-10-24 单窗格重做把内容渲染成 `{active !== null && …}`，只挂载激活那块。
+   `TerminalPane` 卸载清理会 `terminalKill`，`BrowserPane` 卸载清理会 `browserClose`（关掉全部内嵌标签），
+   文件树/旁路对话/表单状态也一起丢。标签页的语义应是「换页面」，不是「销毁再新建」。
+2. **一个分区抛错打回启动占位**：设置页没有错误边界；联网搜索分区在畸形快照下渲染期抛错时，
+   React 根被卸载，整窗只剩启动占位。用户失去左导航、其他分区和正在做的事。
+3. **首启「设置检查」挂载丢失**：工作树空屏重做删掉了 `OnboardingChecklist` 的 import/prop/mount，
+   但 `workbench` 仍在取 `getOnboarding` 并导出 `onboarding`；首启只剩一行副标题。
+
+#### B. 改法
+
+- 所有已开窗格常驻挂载，`visibility` 切可见性；`.pane-stack` 绝对叠放，非激活块 `pointer-events:none`。
+  `BrowserPane` 新增 `active`，非激活时把每张原生视图 `browserBounds` 收成零矩形（父容器 `visibility`
+  挡不住 WebContentsView），切回按容器矩形放回。
+- 标签条 `scrollWidth > clientWidth` 时，active 标签用 `scrollIntoView` 的等价手算滚动进入可视区；
+  reduced-motion 用 `auto`，否则 `smooth`；只滚 `.pane-nav-items`，不带动页面。
+- 新增 `RenderErrorBoundary`（无错时返回 Fragment，不产生 wrapper）：根（页面级，重试/重新载入）、
+  设置分区（`key={section}`，切分区自动恢复）、窗格内容（每块各自成界）。兜底错误详情可展开。
+- 恢复 `OnboardingChecklist` 挂载；仅在 `onboarded === false && groups` 非空时出现，点一格进对应设置分区。
+- 右栏工作台页改用**容器查询**（`container-type: inline-size`）：≤520px 时标题区竖排、搜索吃满、卡片单列。
+  用窗口媒体查询会在 1440 窗口 + 360 右栏时失效（本项目真实形态）。
+
+#### C. 判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 桌面套件（默认并发） | 1457/1458；唯一红为 `terminal-login-shell` 的登录 shell 真执行判据（单跑 3/3 绿；按本仓已知的并发环境债归因，不计本批） |
+| 桌面套件（`--maxWorkers=2`） | **1458/1458 绿**；命令 `npx vitest run --config vitest.config.ts --maxWorkers=2` |
+| 根 typecheck | 0 报错 |
+| `interaction-smoke` | **24/24 PASS**（已把旧的 `.pane-grid` 判据改成单窗格标签页；新增「切标签只换可见性、状态保留」，并补命令面板 ⌘K 开/聚焦/Esc 关） |
+| `pane-tabs-smoke`（新增） | **6/6 PASS**：两块常驻/只一块 active、文件与方案状态跨切换保留、8 块全开、active 标签滚入可视区、关 active 只移除那一块 |
+| `error-boundary-smoke`（新增，畸形 search settings 夹具） | **4/4 PASS**：内联兜底 role=alert、整窗不白屏、左导航仍在、切到通用自动恢复 |
+| 画廊首启夹具 | `.onboard` 在场，7 个 `.onboard-item`，111px 高、底 699 < 视口 865（1440×900） |
+| 画廊新增设置页 | 联网搜索 / 用量统计在合法桩下正常出图（此前畸形兜底 `{}` 会让整页白屏） |
+| `bundle-audit`（工作树 dist） | 首屏 **175,124 / 800,000**、main **548,237 / 600,000**、popout **316,445 / 400,000**；`overBudget:false`。错误边界静态进首屏 2,987B；三账均在帽内 |
+
+新增判卷：
+- `tests/render-resilience.test.tsx`：兜底面 SSR（无错无 wrapper / page 级两个动作 / inline 级不摆重新载入 /
+  错误详情保留）+ 三处接线面 + 首启挂载 + 窗格常驻挂载。
+- `tests/panes-structure.test.tsx` / `tests/pane-rows.test.tsx` / `tests/pane-disclosure.test.tsx`：
+  从「只渲染一块」改为「都挂载、只一块 active、关闭钮属于 active」；未削弱，新增了 active 计数与状态保留断言。
+- `tests/plugins-pane.test.ts`：源断言跟随 `kind === "plugins"`（可见性切换后的渲染变量）。
+
+#### D. 边界（不冒充的部分）
+
+- **原生 WebContentsView 未在真机验证**：离屏画廊用合成 AgentApi，没有真实 Electron 原生视图；
+  「非激活即零矩形」只有代码路径与 `browserBounds` 调用逻辑，没有真窗口观感/层级读数。
+- **没有启动业主应用**：本轮证据覆盖工作树与离屏真实 renderer，不覆盖真机窗口、原生菜单、真实 provider。
+- **桌面构建脚本的 tsc 红非本批**：`pnpm --filter cairn-desktop build` 的 Vite 产物通过；随后 `tsc -p`
+  在 `tests/app-empty-terms.test.tsx` 报 3 条既有 `activeMcpServers` 类型缺字段（同树他批在飞）；
+  根 typecheck 0。
+- **renderer-layer-check 红非本批**：`Composer.tsx` 当前 1237 行 > 1200 帽（HEAD 1191，工作树他批在改）；
+  本批未改 Composer，不通过改帽/削断言变绿。
+- 错误边界的 `componentDidCatch` 会向控制台写一条诊断；`error-boundary-smoke` 不为这条预期日志判红。
+- 本轮**未提交**；`mutate-verify` / `head-cert-check` 量提交，不适用、未跑。
+
+### 2026-10-25 · 侧栏会话筛选入口接通（词表终于有调用方）
+
+#### A. 缺口
+
+`SESSION_FILTERS / matchSession / filterSessions` 从 P3-3 起就在 `sessions-view.ts`，也有纯函数判卷；
+但 Sidebar 只把它们用于**搜索**，且两处 `filterSessions(...)` 都硬编码 `filter: "all"`。
+结果是「运行中 / 已置顶 / 已归档 / 定时任务」四档只存在于代码与测试里，用户没有任何入口。
+这正属于设计规范 §3.7 明写的「侧栏筛选/分组」条款没有落地。
+
+#### B. 改法
+
+- 侧栏顶栏加漏斗按钮（右侧头像/搜索同族），打开 Radix `RadioGroup` 菜单：
+  五档 + 每档计数 + 当前档珊瑚勾选；有筛选时按钮留珊瑚小点，常态不铺一排标签。
+- 选择持久化在 `cairn.sidebar.filter.v1`；筛选变化展开全部项目组（命中项不藏在旧折叠里）。
+- 筛选与搜索叠加，两处 `filterSessions` 都吃真实 `filter`，不再是 `"all"`。
+- 空态判据从「有没有项目组」改为「有没有会话」：`groupByWorkspace` 会为已登记项目保留空组，
+  只看 `groups.length` 会把「全部被筛掉」误读成「列表有内容」。收窄态无命中时隐藏空组头，
+  显示「「X」下没有会话」+「清除筛选」。普通 all 态仍保留空项目组（可继续在该项目下开新任务）。
+- 菜单脚注复用 `SESSION_FILTER_NOTE`：运行中只认本进程在场会话；等待/出错/完成等实时状态
+  要等会话索引接上，不摆空壳。
+
+#### C. 判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 桌面套件（`--maxWorkers=2`） | **1460/1460 绿**（新增 2 条接线判据） |
+| `interaction-smoke`（真实 renderer） | **27/27 PASS**：菜单五档/当前勾选/计数、切到已归档出现专属空态且不摆空组头、选择落 localStorage、清除后会话恢复且折叠组展开；含前一轮 24 条 |
+| 根 typecheck | 本批 tracked 文件无报错；当前树另有同树未跟踪测试两处红（`evolution-reflect` 的 `StrategyPatch.times`、`memory-workflow` 的 `AgentEvent` 赋值），非本批 |
+| `desktop-boundary-check` | 绿 |
+| `bundle-audit`（工作树 dist） | 首屏 175,203 / 800,000；main 551,345 / 600,000；popout 317,479 / 400,000；`overBudget:false` |
+| 视觉 | 菜单与空态出图：五档计数、勾选、脚注、空态+清除筛选均可见；见本轮临时截图（未入库） |
+
+判据落点：
+- `tests/sidebar-session-search.test.ts`：筛选状态进入两处 `filterSessions`（反向钉不再硬编码 all）、
+  菜单/持久化/脚注存在、专属空态与清除筛选、旧空态只在 all 下出现。
+- `interaction-smoke.cjs`：真实指针开菜单、选择已归档、空态、清除筛选、折叠组展开、localStorage 写入。
+
+#### D. 边界
+
+- 运行中只统计本进程可见会话（既有口径，脚注如实说明）；等待决定 / 出错 / 完成不新增筛选档。
+- 只做侧栏筛选，不改命令面板的会话全文搜索；两者职责分开。
+- 未启动业主应用；真机观感仍只有离屏真实 renderer 截图。
+- 未提交；`mutate-verify` / `head-cert-check` 量提交，不适用、未跑。
+
+### 2026-10-25 · 命令面板文件快速打开（⌘K → 文件 → 预览）
+
+#### A. 缺口
+
+命令面板能搜会话正文、项目、设置、操作、技能，却没有**文件**一个入口；而 `workspaceSearch`
+通道与右侧文件窗格（树 + 只读预览）早已存在。对 Codex/Claude 级桌面端，用户按 ⌘K 输入文件名
+直接打开右侧预览是基本动作。
+
+#### B. 改法
+
+- `PaletteContent` 增文件搜索：当前工作区、`workspaceSearch`、160ms 防抖；只收 `kind:"file"`，
+  最多 8 条；结果项显示文件名 + 父目录；**错误与截断如实显示**，搜索失败不伪装成没有匹配。
+- 选中文件回调 `onOpenFile` → WorkbenchView 关面板、`openPane("file")`、写 `fileTarget {path, seq}`。
+  `seq` 递增允许连续打开同一文件。
+- PaneDock 收到 `fileTarget` 即 `setFocusedPane("file")`（文件标签早已开着但不是前台时也能切过去）；
+  FilePane 消费 `openTarget`：`ancestorDirsOf` 展开父目录、对未加载目录 `loadDir`、`openFile` 预览、
+  `setFocusPath` 定 roving 焦点。
+- **冒烟抓到的连带缺陷**：画廊的 `sessionSearch` 兜底 `{}` 让正文结果组件在 `.map` 上抛错，
+  而命令面板没有局部错误边界 ⇒ 整块面板被根边界兜走。补：命令面板内容包
+  `RenderErrorBoundary variant="inline"`；画廊给 `sessionSearch` 一个形状完整的三态桩。
+- 新判卷：`tests/palette-file-open.test.ts`（ancestorDirsOf + 三处接线 + 面板边界）；
+  真实 renderer 端到端两条（文件组出现；选中后窗格激活、父目录展开、预览到位）。
+
+#### C. 判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 桌面套件（`--maxWorkers=2`） | **1469/1469 绿（218 文件；含同树他笔新增测试）** |
+| `interaction-smoke`（真实 renderer） | **29/29 PASS**：⌘K → 输入 main → 文件组 `main.ts / src` → 真实指针选中 → 面板关、文件标签激活、`src` 展开、`src/main.ts` 预览、无控制台错误；含前两轮 27 条 |
+| 根 typecheck | 本批 tracked 文件无报错；当前树另有同树未跟踪测试两处红（`evolution-reflect` / `memory-workflow`），非本批 |
+| `desktop-boundary-check` | 绿 |
+| `bundle-audit`（工作树 dist） | 首屏 175,203 / 800,000；main 551,472 / 600,000；popout 317,956 / 400,000；`overBudget:false` |
+| 视觉 | 文件组（main.ts / src）与选中后的文件树 + 预览各一张离屏真实 renderer 截图；未入库 |
+
+#### D. 边界
+
+- 文件搜索只搜**文件名/路径**，不搜文件正文；正文检索仍是会话全文搜索（搜索范围与语义分开）。
+- 只搜**当前工作区**；跨项目文件检索未做。
+- 目录命中不列入快速打开（打开目录没有单文件预览语义）；预览/截断/二进制拒绝仍走既有 IPC 帽。
+- 未启动业主应用；原生菜单、真实 provider、真机观感未覆盖。
+- 未提交；`mutate-verify` / `head-cert-check` 不适用、未跑。
+
+### 2026-10-25 · 完成通知点击直达会话（OS 通知 → push → 打开目标会话）
+
+#### A. 缺口
+
+完成通知此前只有 `new Notification({title, body}).show()`：正文是裸 sessionId，点击没有任何动作。
+用户看到「会话完成」后还得自己回窗口、找会话。Codex/Claude 级桌面端应支持点通知直达任务。
+
+#### B. 改法
+
+- 把「发不发 / 发什么 / 点开谁」拆进 `apps/desktop/src/main/run-notification.ts` 纯函数并单测：
+  `shouldNotifyRunSettled`（支持通知 + 窗口失焦 + sessionId 非空）、`runNotificationCopy`
+  （正文取任务首行、折叠空白、最多 80 码点；成功/失败各有兜底）、`runNotificationTarget`
+  （sessionId + 规范化 workspace）。
+- `main/index.ts` 只留 Electron 壳：Notification 入 live 集合防 GC；`click` 时聚焦主窗
+  （macOS `app.focus({steal:true})` + restore/show/focus），经 **v21 新 push
+  `onNotificationOpen`** 转发目标。run 收束时把 workspace 与任务原文带进通知。
+- preload 薄转发；AgentApi 增 `onNotificationOpen`（协议当前 v22：v21 是本条，v22 是同树他笔的
+  插件面板 MCP 激活态）；push 通道从 8 增至 9（`channels.test` 同步）。
+- renderer 订阅：校验载荷、同会话不重载、workspace 只接受字符串；调既有 `openSession`。
+  renderer 收到推送时 main 已把窗口拉到前台。
+
+#### C. 判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 桌面套件（`--maxWorkers=2`） | **1476/1476 绿（220 文件）** |
+| `notification-open-smoke`（新增，真实 renderer） | **5/5 PASS**：先开 s1 → ⌘W 回主页 → 畸形载荷被忽略 → 合法载荷 `{s1,/tmp/demo-ws}` 重新打开会话（会话行 active、主区退出空屏）→ 控制台 0 错误；截图见临时证据（未入库） |
+| `run-notification.test.ts`（新增） | 4/4：决策三条件、首行/80 码点/代理对、成功失败文案、workspace 规范化 |
+| `notification-open-wiring.test.ts`（新增） | 3/3：push 映射/协议、main click 接线、preload + renderer 校验/同会话守卫 |
+| `interaction-smoke`（同一构建） | 29/29 绿（前一批记录） |
+| 根 typecheck | 本批 tracked 文件无报错；同树未跟踪测试两处红（`evolution-reflect` / `memory-workflow`），非本批 |
+| `desktop-boundary-check` | 绿 |
+| `bundle-audit`（工作树 dist） | 首屏 175,203 / 800,000；main 551,757 / 600,000；popout 317,956 / 400,000；`overBudget:false` |
+
+#### D. 边界
+
+- **真实 OS 通知的浮现与点击未验证**：离屏 Electron 造不出系统通知点击；本轮验证的是
+  纯决策/文案/接线与 renderer 收到推送后的开会话路径。真机点通知这一格明确未验收。
+- 通知只在窗口整体失焦时发；同会话通知点击不重载（避免重置正在看的流）。
+- macOS 用 `app.focus({steal:true})` 拉前；其他平台只 show/focus，未在真机验证前台行为。
+- 未提交；`mutate-verify` / `head-cert-check` 不适用、未跑。
+
+### 2026-10-25 · Plan 模式一等入口（Composer「方案」开关 → RunRequest.planRequired）
+
+#### A. 缺口
+
+Plan 模式此前只有设置页的 `planRequiredByDefault` 一个入口：用户想临时“先出方案”必须离开对话去设置、
+改完再回来；而 agent-runner 的注释早已写明“composer 的即时开关随 goal 模式一起改”。
+核心方案门（未批准不写文件）存在且已有 `tests/plan-required.test.ts`，缺的是用户入口与按轮覆盖。
+
+#### B. 改法
+
+- `RunRequest` 增可选 `planRequired`（协议 **v23**）；`run-request` 白名单 + 布尔校验 + 原样保留；
+  kernel-host 非会话/会话两路都把它透进 `handleAgentRun` 的 `over.planRequired`。
+- renderer：`planDefault` 来自 settings；`planOverride`（boolean|null）+ ref 决定本轮；
+  run-queue 只在 override 非 null 时带字段（null = 主进程继续按设置默认判）。
+- Composer：权限档右侧加「方案」开关，`aria-pressed`/`data-on`、轻底珊瑚态、
+  开启/关闭回执；缺省不摆（旧调用面零行为）。设置页说明改为“这是默认值；输入框旁可按轮覆盖”。
+- 冒烟顺带修了画廊 `createSession` 桩：真接口回 `{id, workspace}` 且 listSessions 能看到新会话；
+  只给 `{id}` 会让“首页直接发”的渲染路径拿到 undefined（根边界看起来像产品崩了）。
+- 架构副产物：为给 Plan 开关腾行数，把用量环 + 明细浮层抽成 `UsageMeter.tsx`；
+  `Composer.tsx` 1256 → **1182**，`renderer-layer-check` 由红转绿（此前 1237~1256 的存量帽红）。
+
+#### C. 判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 桌面套件（`--maxWorkers=2`） | **1480/1480 绿（221 文件）** |
+| `plan-mode-smoke`（新增，真实 renderer） | **6/6 PASS**：默认关 → 点开（aria/pressed/回执）→ 发送请求 `planRequired:true` → 首轮后开关仍在/无根错误 → 关掉 → 下一轮 `false`；截图未入库 |
+| 核心方案门 | `tests/plan-required.test.ts` **11/11**；`main-run-routing` + `ipc-protocol-version` **19/19**（validator 正反例 + v23） |
+| `interaction-smoke` | 29/29（同一构建） |
+| 根 typecheck | 本批 tracked 文件无报错；同树未跟踪测试两处红（`evolution-reflect` / `memory-workflow`），非本批 |
+| `desktop-boundary-check` | 绿 |
+| `bundle-audit`（工作树 dist） | 首屏 175,609 / 800,000；main 553,435 / 600,000；popout 318,362 / 400,000；`overBudget:false` |
+| `renderer-layer-check` | **绿**：本轮把 `Composer.tsx` 从 1256 行拆到 **1182**（抽出 `UsageMeter.tsx`），消掉此前一直挂着的 1200 行帽红；130 个渲染层源文件全部过 |
+
+#### D. 边界
+
+- **未跑真模型**：没有 provider，无法验证“模型真的先出方案、批准后才写”的完整回合；本轮验的是
+  UI→RunRequest→overrides 的接线与既有核心方案门判据。真方案卡/批准流程仍由真实会话验收。
+- override 是**本窗口内存态**，不写 settings、不跨重启；切会话后仍沿用当前 override（不是每会话独立）。
+  如果用户在设置页改默认值，通信器不会热同步（本次启动内仍用旧 planDefault；override=null 时主进程
+  仍按最新 settings 判，因此只影响芯片显示）。
+- 方案开关在运行中仍可按（下一条消息生效），当前轮不受影响；回执文案已说明“下一条消息起”。
+- 未提交；`mutate-verify` / `head-cert-check` 不适用、未跑。

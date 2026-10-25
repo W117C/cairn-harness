@@ -64,17 +64,19 @@ export interface UserMessageEvent { type: "user_message"; content: string; origi
 export interface AssistantMessageEvent { type: "assistant_message"; content: string }
 /** 流式增量片段：callId 标识同一轮回复，text 为逐字追加的一小段。 */
 export interface AssistantDeltaEvent { type: "assistant_delta"; callId: string; text: string }
+/** Native continuation state is scoped to one endpoint/model, never general answer text. */
+export interface ProviderReasoningState { source: string; content: string }
 /** 模型的**思考正文**（reasoning / thinking）增量。
  *
  *  与 assistant_delta 的区别：那段是"答给用户的话"，这段是"它自己怎么想的"。
  *  两者必须分开 —— 混进正文会让转录与重放变脏（思考块在多数家不可回传）。
  *  callId 与 assistant_delta 同源（同一次请求里的同一段输出），渲染层据此把思考挂在对应回答行前。
  *  2026-10-07 用户要求显示思考过程：以前适配器是**刻意忽略**推理增量的。 */
-export interface ThinkingDeltaEvent { type: "thinking_delta"; callId: string; text: string }
+export interface ThinkingDeltaEvent { type: "thinking_delta"; callId: string; text: string; reasoning?: { id: string; source: string } }
 
 /** M3a：worker 子流的工具调用（§4.4.9 落主流口径）——agent_id 在场 = 该事件属于该 worker 子流，
  *  主上下文投影（projectContext）跳过带 agent_id 的事件（父上下文唯一接收物 = agent_result，§4.4.4）。 */
-export interface ToolCallEvent { type: "tool_call"; id: string; name: string; args: Record<string, unknown>; agent_id?: string }
+export interface ToolCallEvent { type: "tool_call"; id: string; name: string; args: Record<string, unknown>; agent_id?: string; reasoningId?: string }
 /** 执行前就被拦下的工具调用：哪道闸拦的（唯一事实源；下面六处出口共用，别各写一份字符串）。
  *  为什么不塞进 `gate: GateMeta`——这六道闸都不在档位机里，没有 layer/risk/mode 可言，
  *  编一个就会污染 `gate-outcomes` 的 layer×verdict 免批率（`GateMeta.mode` 那句「宁缺不编」是纪律不是注释）。
@@ -132,7 +134,10 @@ export interface ToolResultEvent { type: "tool_result"; callId: string; ok: bool
 export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number; /** 缓存分列（可选）：**缺字段 = 该 provider 没上报，不等于 0**。约定 `inputTokens` 是含缓存的总输入，
    *  下面两个是其中的分块——不得再与 inputTokens 相加（metering 的 MeterUsage 要互斥桶，适配器换算后再交）。
    *  写侧断点（Anthropic cache_control / 稳定前缀排布）尚未接线：先把「命中没有」测出来，再谈制造命中。 */
-  cacheReadInputTokens?: number; cacheWriteInputTokens?: number; /** M3a §4.4.10：usage 按 agent 归因（主 loop usage 无此字段）。 */ agent_id?: string; /** 产生这笔用量的模型名（provider 名或档位 id 两态都收，价表键由 `priceForModel` 反查）。
+  cacheReadInputTokens?: number; cacheWriteInputTokens?: number;
+  /** Reported subset of outputTokens, never added to the total again; absent means unknown. */
+  reasoningOutputTokens?: number;
+  /** M3a §4.4.10：usage 按 agent 归因（主 loop usage 无此字段）。 */ agent_id?: string; /** 产生这笔用量的模型名（provider 名或档位 id 两态都收，价表键由 `priceForModel` 反查）。
    *  **缺字段 = 这一笔定不了价**（旧日志、剧本/demo 通道、worker 没在流里留过档）⇒ 消费方按「价格不可知」记，
    *  绝不折成 $0（评估面的 `$ / 成功任务` 一直报不可测，缺的就是这一列，见 2026-09-27 第 148 页）。
    *  写侧只有一个盖章点：会话落盘的漏斗 `runAgent` 的 pipeline（主会话与 worker 子流都过它）。 */
@@ -204,7 +209,7 @@ export interface PlanFileChange { path: string; action: "create" | "edit" | "del
 export interface PlanProposal {
   goal: string;
   files: PlanFileChange[];
-  /** Versioned orchestration graph; absent on legacy proposals. */
+  /** Versioned task graph; absent on legacy single-turn proposals. */
   orchestration?: import("../orchestration/types").OrchPlan;
   approach?: string;
   verify?: { lint?: string[]; test?: string[] };
@@ -426,7 +431,7 @@ export type AgentStatus = "running" | "waiting_approval" | "waiting_input" | "do
 /** 权限档（与 src/permissions 的 PermissionMode 同字面量；events 层零依赖不自引）。
  *  导出**运行时元组**是为了让"两份抄本必须同集"这件事可判卷
  *  （见 `tests/permission-mode-single-source.test.ts`；抄本不可见 = 加一档时只有一份会改）。 */
-export const AGENT_PERMISSION_MODES = ["read-only", "default", "guided", "auto"] as const;
+export const AGENT_PERMISSION_MODES = ["read-only", "default", "guided", "auto", "full-access"] as const; // 与 permissions/modes.ts 同步（2026-10-24 完全允许档）
 export type AgentPermissionMode = (typeof AGENT_PERMISSION_MODES)[number];
 
 export interface AgentSpawnedEvent {
@@ -531,7 +536,6 @@ export interface AgentResultEvent {
 // ---- 审批事件协议（§4.4.3 与 turn 解耦）：请求（落流）与等待（订阅 approval_resolved by id）两段 ----
 export interface ApprovalRequestedEvent {
   type: "approval_requested";
-  orchestration?: import("../orchestration/types").OrchestrationStamp;
   id: string;
   /** 发起 worker 的归因（主会话审批不落此事件，走 IPC AskGate 通道）。 */
   agent_id?: string;
@@ -546,7 +550,6 @@ export interface ApprovalRequestedEvent {
 
 export interface ApprovalResolvedEvent {
   type: "approval_resolved";
-  orchestration?: import("../orchestration/types").OrchestrationStamp;
   id: string;
   agent_id?: string;
   decision: "approved" | "rejected";

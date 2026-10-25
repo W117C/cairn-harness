@@ -46,8 +46,12 @@ rev: 45dfeb72
 - **已入库**：第 639–645 页；第 652 页（桌面拆分＋检索＋审计）；第 663 页（窗口／同名会话／幂等）；第 685–700 页（worktree／批读／产品）。
 - **在飞**：指针分叉完整接入已在隔离分支 `agent/pointer-session-refs` 落地（Task 1–8 ＋ 真机冒烟，第 669 页），
   **尚未合并**到共享分支；合并后需在包含实现的同一提交上跑 head-cert / mutate-verify。
-- 外部引用审批决议已改为**互斥**（先批后拒不再并存，用户后说的"不"算数）——见 `PROGRESS.md` 第 623 页。
-- 其余面没有在飞的活。
+- 外部引用审批决议已改**互斥**（后说的"不"算数）——第 623 页。
+- 记忆批次（RECALL 注入＋强度/巩固）判卷已过、未提交——第 702 页。
+- **DeepSeek 升一等家并对 V4.1 Flash 校准**（第 710 页）判卷已过、未提交：内置五家，
+  `DEEPSEEK_API_KEY` 即通；官方三契约已校准（thinking 缺省反着开⇒显式开关、effort 入
+  `thinking.reasoning_effort`、`reasoning_content` 输入仅 `/beta` 回放），缓存读数双口径、
+  峰时价已标定；真连读数（availability verified）待 key 实测。
 
 ## 还有什么没裁
 

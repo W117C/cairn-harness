@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNow } from "../useNow";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { WorktreesPane } from "./WorktreesPane";
-import { BookOpen, Brain, Clock, Puzzle } from "lucide-react";
+import { BookOpen, Brain, Check, CircleDashed, Clock, Puzzle, RotateCw, Search } from "lucide-react";
 import type { MemorySnapshot } from "../../../../../src/main/ipc-protocol";
 import type { AutomationDefinition, AutomationSchedule } from "../../../../../src/main/automations";
 import type { ScheduleSnapshot, HistoryEntry } from "../../../../../src/main/scheduler";
@@ -16,6 +16,7 @@ import type { PluginPanelSnapshot } from "../../../../../src/agent/plugins";
 import { STR } from "../strings";
 import { Switch } from "./Switch";
 import { EmptyState } from "./settings-ui";
+import { McpServerRow } from "./McpServerRow";
 import { activates } from "./a11y-activate";
 import { bodyLines, fullTime, indexLines, relativeTime } from "../memory-view";
 import { renderInline } from "../markdown";
@@ -56,6 +57,63 @@ export function buildSchedule(kind: string, time: string, everyMinutes: string, 
     case "weekly": return { kind: "weekly", weekdays, time };
     default: return { kind: "once", at };
   }
+}
+
+/** 页头（2026-10-24 参照 Codex 自定义页）：大标题 + 一句话描述 + 右侧操作簇（搜索/刷新）。
+ *  取代原 Stats 统计条 + Toolbar 的组合——数字统计挪去详情抽屉，页头只留「这是什么、怎么找」。 */
+function PageHead(props: {
+  title: string; desc: string; searchLabel: string;
+  query: string; onQuery: (q: string) => void; onRefresh: () => void;
+}): React.JSX.Element {
+  return (
+    <div className="ap-head">
+      <div className="ap-head-main">
+        <h2 className="ap-head-title">{props.title}</h2>
+        <p className="ap-head-desc">{props.desc}</p>
+      </div>
+      <div className="ap-head-acts">
+        <div className="ap-head-search">
+          <Search size={13} aria-hidden="true" />
+          <input value={props.query} placeholder={props.searchLabel} aria-label={props.searchLabel}
+            onChange={(e) => props.onQuery(e.target.value)} />
+        </div>
+        <button className="iconbtn sm" aria-label="刷新" title="刷新" onClick={props.onRefresh}><RotateCw size={14} /></button>
+      </div>
+    </div>
+  );
+}
+
+/** 筛选药丸行（公开/个人、全部/已信任 这类二级筛选，摆在大标题描述之下）。 */
+function PanePills(props: { filters: readonly { id: string; label: string }[]; filter: string; onFilter: (f: string) => void }): React.JSX.Element {
+  return (
+    <div className="ap-pills" role="tablist" aria-label="筛选">
+      {props.filters.map((f) => (
+        <button key={f.id} className={"ap-pill" + (props.filter === f.id ? " on" : "")}
+          aria-pressed={props.filter === f.id}
+          onClick={() => props.onFilter(f.id)}>{f.label}</button>
+      ))}
+    </div>
+  );
+}
+
+/** 双列卡片网格（图标 + 名称 + 一句话描述 + 右侧动作）——Codex 自定义页的卡片形制。 */
+function PaneCard(props: {
+  ico: string; name: string; sub: string; nameTitle?: string;
+  trusted: boolean; trustTitle: string;
+  selected?: boolean; onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <button className={"ap-card" + (props.selected === true ? " on" : "")} onClick={props.onOpen}>
+      <span className="ap-card-ico" aria-hidden="true">{props.ico}</span>
+      <span className="ap-card-main">
+        <span className="ap-card-nm" {...(props.nameTitle !== undefined ? { title: props.nameTitle } : {})}>{props.name}</span>
+        <span className="ap-card-sub" title={props.sub}>{props.sub !== "" ? props.sub : "（无描述）"}</span>
+      </span>
+      <span className={"ap-card-act" + (props.trusted ? " ok" : "")} title={props.trustTitle} aria-hidden="true">
+        {props.trusted ? <Check size={15} /> : <CircleDashed size={15} />}
+      </span>
+    </button>
+  );
 }
 
 function Stats(props: { items: Array<{ k: string; v: string | number; warn?: boolean }> }): React.JSX.Element {
@@ -143,6 +201,11 @@ export function PluginsPane(props: { snap: PluginPanelSnapshot; onError: (m: str
     });
   };
   const plugins = props.snap;
+  const mcpSummaries = plugins.mcpServerSummaries ?? [];
+  const activeMcpTools = plugins.activeMcpTools ?? [];
+  // 旧快照/手写夹具没有这三格时显示「未记录」，不把缺席读成「没有激活」。
+  const hasMcpActiveData = plugins.mcpServerSummaries !== undefined
+    || plugins.activeMcpServers !== undefined || plugins.activeMcpTools !== undefined;
   const q = query.trim().toLowerCase();
   const rows = plugins.plugins
     .filter((p) => (filter === "all" ? true : filter === "trusted" ? p.trust === "trusted" : p.trust !== "trusted"))
@@ -159,36 +222,52 @@ export function PluginsPane(props: { snap: PluginPanelSnapshot; onError: (m: str
       />
     );
   }
+  // 双列卡片默认铺 6 张，其余收进「查看…另有 N 项」（与技能中心同款，2026-10-24）。
+  const [showAll, setShowAll] = useState(false);
+  const shown = showAll ? rows : rows.slice(0, 6);
+  const hidden = rows.length - shown.length;
   return (
     <>
-      <Stats items={[
-        { k: "已加载", v: plugins.plugins.length },
-        { k: "已信任", v: plugins.plugins.filter((p) => p.trust === "trusted").length },
-        { k: "未信任", v: plugins.plugins.filter((p) => p.trust !== "trusted").length, warn: plugins.plugins.some((p) => p.trust !== "trusted") },
-        { k: "MCP 连接", v: `${String(plugins.mcpServers.filter((m) => m.state === "connected").length)}/${String(plugins.mcpServers.length)}` },
-      ]} />
-      <Toolbar
-        query={query} onQuery={setQuery} filter={filter} onFilter={setFilter}
+      <PageHead
+        title="插件" desc="连接插件，让 agent 在你的各类工具中协同工作。"
+        searchLabel="搜索插件" query={query} onQuery={setQuery} onRefresh={props.refresh}
+      />
+      <PanePills
+        filter={filter} onFilter={setFilter}
         filters={[{ id: "all", label: "全部" }, { id: "trusted", label: "已信任" }, { id: "untrusted", label: "未信任" }]}
       />
       <div className={"ap-split" + (selected !== null ? " has-drawer" : "")}>
-        <div className="ap-list">
+        <div className="ap-gridcol">
           {rows.length === 0 && <div className="ap-empty">没有匹配的插件</div>}
-          {rows.map((p) => (
-            <div key={p.name} className={"ap-item" + (sel === p.name ? " on" : "")} onClick={() => setSel(p.name)} role="button" tabIndex={0}
-              onKeyDown={(e) => { if (activates(e)) { e.preventDefault(); setSel(p.name); } }}>
-              <span className="nm">{p.name}</span>
-              <span className={"sp-tag" + (p.trust === "trusted" ? " ok" : "")}>{p.trust === "trusted" ? "已信任" : "未信任"}</span>
-              <span className="sub">{p.scope} · 技能 {String(p.counts.skills)} · MCP {String(p.counts.mcp)}</span>
-            </div>
-          ))}
+          <div className="ap-grid">
+            {shown.map((p) => {
+              const activeForPlugin = mcpSummaries.filter((s) => s.plugin === p.name && s.active).length;
+              return (
+                <PaneCard
+                  key={p.name}
+                  ico={p.name.slice(0, 1).toUpperCase()}
+                  name={p.name}
+                  sub={`${p.scope} · 技能 ${String(p.counts.skills)} · MCP ${String(p.counts.mcp)}${activeForPlugin > 0 ? " · 已激活 " + String(activeForPlugin) : ""}`}
+                  trusted={p.trust === "trusted"}
+                  trustTitle={p.trust === "trusted" ? "已信任" : "未信任——点卡片查看并决定"}
+                  selected={sel === p.name}
+                  onOpen={() => setSel(p.name)}
+                />
+              );
+            })}
+          </div>
+          {hidden > 0 && (
+            <button className="ap-more" onClick={() => setShowAll(true)}>
+              查看{shown.slice(-2).map((p) => p.name).join("、")}，另有 {String(hidden)} 项
+            </button>
+          )}
         </div>
         {selected !== null && (
           <Drawer title={selected.name} sub={`${selected.scope} · 信任态：${selected.trust}`} onClose={() => setSel(null)}>
             <section className="ap-sec">
               <h3>组成</h3>
               <div className="ap-kv">
-                <span>技能 {String(selected.counts.skills)} · 命令 {String(selected.counts.commands)} · agents {String(selected.counts.agents)} · hooks {String(selected.counts.hooks)} · MCP {String(selected.counts.mcp)} · LSP {String(selected.counts.lspActive)}/{String(selected.counts.lsp)}</span>
+                <span>技能 {String(selected.counts.skills)} · 命令 {String(selected.counts.commands)} · agents {String(selected.counts.agents)} · hooks {String(selected.counts.hooks)} · MCP {String(selected.counts.mcp)}（激活 {hasMcpActiveData ? String(mcpSummaries.filter((s) => s.plugin === selected.name && s.active).length) : "—"}） · LSP {String(selected.counts.lspActive)}/{String(selected.counts.lsp)}</span>
               </div>
             </section>
             <section className="ap-sec">
@@ -294,12 +373,33 @@ export function PluginsPane(props: { snap: PluginPanelSnapshot; onError: (m: str
             <section className="ap-sec">
               <h3>该插件 MCP</h3>
               {plugins.mcpServers.filter((m) => m.plugin === selected.name).length === 0 && <div className="ap-empty">无 MCP 服务</div>}
-              {plugins.mcpServers.filter((m) => m.plugin === selected.name).map((m) => (
-                <div key={m.server} className="ap-li">
-                  <span className={"kind" + (m.state === "connected" ? " ok" : "")}>{m.state}</span>
-                  <span className="p">{m.server} · {String(m.tools.length)} 工具{m.error !== undefined ? ` · ${m.error}` : ""}</span>
-                </div>
-              ))}
+              {plugins.mcpServers.filter((m) => m.plugin === selected.name).map((m) => {
+                const key = selected.name + "/" + m.server;
+                const toolPrefix = "mcp__plugin_" + selected.name + "_" + m.server + "__";
+                const activeNames = activeMcpTools
+                  .filter((s) => s.startsWith(toolPrefix))
+                  .map((s) => s.slice(toolPrefix.length));
+                // 旧快照可能只有 activeMcpServers / activeMcpTools 没有 summaries：按原始集回退，
+                // 不把「有 active 记录但缺汇总」显示成未激活。
+                const summary = mcpSummaries.find((s) => s.key === key)
+                  ?? ((plugins.activeMcpServers ?? []).includes(key)
+                    ? { key, plugin: selected.name, server: m.server, toolCount: m.tools.length, active: true, activeMode: "server" as const, activeToolCount: m.tools.length }
+                    : activeNames.length > 0
+                      ? { key, plugin: selected.name, server: m.server, toolCount: m.tools.length, active: true, activeMode: "tools" as const, activeToolCount: activeNames.length }
+                      : undefined);
+                return (
+                  <McpServerRow
+                    key={m.server}
+                    server={m.server}
+                    state={m.state}
+                    toolCount={m.tools.length}
+                    {...(summary !== undefined ? { summary } : {})}
+                    activeToolNames={activeNames}
+                    {...(m.error !== undefined ? { error: m.error } : {})}
+                    hasData={hasMcpActiveData}
+                  />
+                );
+              })}
             </section>
           </Drawer>
         )}
@@ -604,29 +704,42 @@ export function SkillsPane(props: { snap: PluginPanelSnapshot; onError: (m: stri
       />
     );
   }
+  // 双列卡片默认铺 6 张（3 行 × 2 列），其余收进「查看…另有 N 项」——参照 Codex 自定义页。
+  const [showAll, setShowAll] = useState(false);
+  const shown = showAll ? rows : rows.slice(0, 6);
+  const hidden = rows.length - shown.length;
   return (
     <>
-      <Stats items={[
-        { k: "可用技能", v: plugins.looseSkills.length },
-        { k: "已信任", v: plugins.looseSkills.filter((s) => s.trust === "trusted").length },
-        { k: "未信任", v: plugins.looseSkills.filter((s) => s.trust !== "trusted").length, warn: plugins.looseSkills.some((s) => s.trust !== "trusted") },
-        { k: "MCP", v: plugins.mcpServers.length },
-      ]} />
-      <Toolbar
-        query={query} onQuery={setQuery} filter={filter} onFilter={setFilter}
+      <PageHead
+        title="技能中心" desc="通过任务专用技能扩展 agent。点卡片看指令正文与信任态。"
+        searchLabel="搜索技能" query={query} onQuery={setQuery} onRefresh={props.refresh}
+      />
+      <PanePills
+        filter={filter} onFilter={setFilter}
         filters={[{ id: "all", label: "全部" }, { id: "trusted", label: "已信任" }, { id: "untrusted", label: "未信任" }]}
       />
       <div className={"ap-split" + (selected !== null ? " has-drawer" : "")}>
-        <div className="ap-list">
+        <div className="ap-gridcol">
           {rows.length === 0 && <div className="ap-empty">没有匹配的技能</div>}
-          {rows.map((s) => (
-            <div key={s.invoke} className={"ap-item" + (sel === s.invoke ? " on" : "")} onClick={() => setSel(s.invoke)} role="button" tabIndex={0}
-              onKeyDown={(e) => { if (activates(e)) { e.preventDefault(); setSel(s.invoke); } }}>
-              <span className="nm mono-k">{s.invoke}</span>
-              <span className={"sp-tag" + (s.trust === "trusted" ? " ok" : "")}>{s.trust === "trusted" ? "已信任" : "未信任"}</span>
-              <span className="sub">{s.description}</span>
-            </div>
-          ))}
+          <div className="ap-grid">
+            {shown.map((s) => (
+              <PaneCard
+                key={s.invoke}
+                ico={s.invoke.slice(0, 1).toUpperCase()}
+                name={s.invoke}
+                sub={s.description}
+                trusted={s.trust === "trusted"}
+                trustTitle={s.trust === "trusted" ? "已信任" : "未信任——点卡片查看并决定"}
+                selected={sel === s.invoke}
+                onOpen={() => setSel(s.invoke)}
+              />
+            ))}
+          </div>
+          {hidden > 0 && (
+            <button className="ap-more" onClick={() => setShowAll(true)}>
+              查看{shown.slice(-2).map((s) => s.invoke).join("、")}，另有 {String(hidden)} 项
+            </button>
+          )}
         </div>
         {selected !== null && (
           <Drawer title={selected.invoke} sub={selected.description} onClose={() => setSel(null)}>

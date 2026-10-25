@@ -13,6 +13,11 @@
 //     3.8-Flash $0.75/$3.75 cache read $0.075、2.5-Pro $1.25/$10 cache read $0.125。
 //   · 智谱 docs.bigmodel.cn 的定价页是 JS 渲染，**官方数字没抓到** ⇒ GLM 三行仍是占位（未证）。
 //     第三方报道的「GLM-5.2 输入 8 元 / 输出 28 元 每百万 tokens」按未证处理，不写进数表。
+//   · DeepSeek api-docs.deepseek.com/quick_start/pricing（2026-10-25 实读）——分**峰谷**两档，
+//     谷时价恰为峰时一半；这里取**峰时**（美元闸宁可高估一半，不低估一半）：
+//     flash 未命中输入 $0.30 / 输出 $1.20 / 命中读 $0.006；pro $1.32 / $3.96 / $0.044。
+//     写侧价 = 未命中输入价（官方口径：miss 段按输入价计，自动前缀缓存无单独写价；
+//     usage 也从不报写桶，该值只在远端哪天开始上报写桶时才参与折算）。
 import { DEFAULT_MODEL_TABLE, installedCustomProviders } from "../providers/registry";
 
 export interface ModelPrice {
@@ -70,6 +75,9 @@ export const DEFAULT_PRICE_TABLE: Readonly<Record<string, ModelPrice>> = {
   "gemini-cheap": { inputPerMTok: 0.3, outputPerMTok: 2.5, cacheReadPerMTok: 0.03, cacheWritePerMTok: null, calibrated: true },
   "gemini-standard": { inputPerMTok: 0.75, outputPerMTok: 3.75, cacheReadPerMTok: 0.075, cacheWritePerMTok: null, calibrated: true },
   "gemini-strong": { inputPerMTok: 1.25, outputPerMTok: 10.0, cacheReadPerMTok: 0.125, cacheWritePerMTok: null, calibrated: true },
+  // DeepSeek（峰时价，谷时恰为一半——见文件头 2026-10-25 实读注）
+  "deepseek-cheap": { inputPerMTok: 0.3, outputPerMTok: 1.2, cacheReadPerMTok: 0.006, cacheWritePerMTok: 0.3, calibrated: true },
+  "deepseek-strong": { inputPerMTok: 1.32, outputPerMTok: 3.96, cacheReadPerMTok: 0.044, cacheWritePerMTok: 1.32, calibrated: true },
 };
 
 /** 有效价表 = 内置 12 行 + 已装自定义 provider 给的那些行（`.agent/providers.json` 的 price）。

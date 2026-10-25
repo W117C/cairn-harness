@@ -14,7 +14,6 @@
 // M3 T2（每会话取消）：run 建 per-session AbortController 经 RunOverrides.signal 注入（零 core 改动），
 // cancel(sessionId) 只 abort 该会话的 controller；run 响应带 aborted 真值（desktop 扩展字段）。
 import { createSteeringChannel, type SteeringChannel } from "../../../../src/agent/steering-channel";
-import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { readFile, rm, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
@@ -71,7 +70,9 @@ import { searchSessions } from "../../../../src/main/session-search";
 import type { SessionMetadataRepository } from "../../../../src/main/session-metadata";
 import { addUsageTotals, emptyUsageTotals } from "../../../../src/main/usage-ledger";
 import { scanUsageFile, type UsageFileCache } from "../../../../src/main/usage-ledger-scan";
+import { emptyUsageAnalytics, mergeUsageAnalytics, usageAnalyticsSnapshot } from "../../../../src/main/usage-analytics";
 import { readSessionLogTail } from "../../../../src/main/session-log";
+import { createHash } from "node:crypto";
 import { OrchestrationService, type OrchestrationAddress, type OrchestrationSubmitRequest, type OrchestrationControlRequest, type OrchestrationResponse } from "../../../../src/main/orchestration-service";
 import { createWorkspaceOrchestrationBackend } from "../../../../src/main/orchestration-backend";
 
@@ -113,7 +114,6 @@ export interface KernelHost {
   /** v14：跨全部已登记工作区的用量账本（只读；不触发 openSession 的恢复/漂移副作用）。
    *  按「路径 + size + mtime」缓存单文件读数——重复打开面板只重读变过的会话。 */
   usageLedger(): Promise<UsageLedgerPayload>;
-  /** v20：编排预览、提交与控制；地址 = 显式工作区 + 会话。 */
   orchestrationView(address: OrchestrationAddress): Promise<OrchestrationResponse>;
   orchestrationSubmit(request: OrchestrationSubmitRequest): Promise<OrchestrationResponse>;
   orchestrationControl(request: OrchestrationControlRequest): Promise<OrchestrationResponse>;
@@ -510,7 +510,10 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
     orchestrationClose: () => orchestration.close(),
     run: async (req) => {
       const sessionId = req.sessionId;
-      if (sessionId === undefined) return handleAgentRun(req); // 非会话模式：临时日志，无归属无漂移无可取消缝
+      if (sessionId === undefined) {
+        // 非会话模式：临时日志，无归属无漂移无可取消缝；plan 覆盖仍随请求透传。
+        return handleAgentRun(req, req.planRequired !== undefined ? { planRequired: req.planRequired } : {});
+      }
       const ws = await resolveSessionWs(sessionId);
       const logPath = pathOf(wsRoot(ws), sessionId);
       // 会话级 worktree 隔离（§3.7 · G4）：隔离会话的 run 工作区 = 它自己那棵 worktree
@@ -548,6 +551,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       try {
         const res = await handleAgentRun(req, {
           sessionId, logPath, workspace: runWs, signal: controller.signal, steering,
+          ...(req.planRequired !== undefined ? { planRequired: req.planRequired } : {}),
           onEvent: (event) => {
             // 只有本 run 真正接收了主面用户轮才记 active；请求校验/busy 拒绝没有这拍。
             if (!accepted && event.type === "user_message" &&
@@ -647,6 +651,9 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       try {
         // 评审修：不再经 listSessions（它会整份读文件数行）也不读 metadata（这里根本用不上）。
         const totals = emptyUsageTotals();
+        const analyticsAcc = emptyUsageAnalytics();
+        let sessionsWithUsage = 0;
+        let sessionsWithoutUsage = 0;
         const seenWorkspaces = new Set<string>();
         let sessions = 0;
         let skipped = 0;
@@ -660,6 +667,9 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
             try {
               const scan = await scanUsageFile(pathOf(root, id), usageCache);
               addUsageTotals(totals, scan.totals);
+              mergeUsageAnalytics(analyticsAcc, scan.analytics);
+              if (scan.totals.usageCount > 0) sessionsWithUsage += 1;
+              else sessionsWithoutUsage += 1;
               badLines += scan.badLines;
             } catch {
               // 单个会话读不了（权限/删除竞态/损坏）不拖垮整本账：计数后如实上报。
@@ -667,7 +677,10 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
             }
           }
         }
-        return { ok: true, totals, sessions, workspaces: seenWorkspaces.size, skipped, badLines };
+        return {
+          ok: true, totals, sessions, workspaces: seenWorkspaces.size, skipped, badLines,
+          analytics: { ...usageAnalyticsSnapshot(analyticsAcc), sessionsWithUsage, sessionsWithoutUsage, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt: Date.now() },
+        };
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
       }

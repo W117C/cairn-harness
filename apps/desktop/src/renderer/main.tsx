@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { parsePaneHash } from "./components/panes";
+import { RenderErrorBoundary } from "./components/RenderErrorBoundary";
 import { ToastHost } from "./components/ToastHost";
 import "./tokens.css";
 import "./styles.css";
@@ -17,14 +18,16 @@ const App = lazy(() => import("./App").then((m) => ({ default: m.App })));
 // 主窗口专属 ToastHost：首次成功/失败提示时才加载 sonner；弹窗窗格没有发 toast 的调用面。
 const popout = parsePaneHash(window.location.hash);
 createRoot(document.getElementById("root")!).render(
-  <Suspense fallback={null}>
-    {popout !== null ? (
-      <PopoutApp kind={popout.kind} sessionId={popout.sessionId} />
-    ) : (
-      <>
-        <App />
-        <ToastHost />
-      </>
-    )}
-  </Suspense>,
+  <RenderErrorBoundary variant="page">
+    <Suspense fallback={null}>
+      {popout !== null ? (
+        <PopoutApp kind={popout.kind} sessionId={popout.sessionId} />
+      ) : (
+        <>
+          <App />
+          <ToastHost />
+        </>
+      )}
+    </Suspense>
+  </RenderErrorBoundary>,
 );

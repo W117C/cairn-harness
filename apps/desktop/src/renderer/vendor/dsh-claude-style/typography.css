@@ -98,9 +98,12 @@ body[data-dsh-claude-style] [data-dsh-claude-part~="table-scroll"] table {
   padding-right: 0 !important;
   border-spacing: 0 !important;
   border-collapse: collapse !important;
-  width: max-content !important;
-  min-width: 100% !important;
-  max-width: max-content !important;
+  /* 2026-10-24 业主：max-content 让宽表铺到 3260px（Codex 对比表实测），左右拖没法读——
+     改回随容器收口：styles.css 的 .md-table 已设 table-layout:fixed，列宽均分、单元格内换行。
+     wrapper 的 overflow-x:auto 保留，兜真正的不可收窄内容。 */
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
 }
 
 /* Every first/last cell, whatever element the renderer used. */

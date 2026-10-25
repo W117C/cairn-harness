@@ -20,6 +20,7 @@ export async function loadSkillEntry(plugin: string | null, dirName: string, dir
     return null;
   }
   const { frontmatter, body } = parseFrontmatter(text);
+  const resources = await readSkillResources(dir);
   return {
     plugin,
     name: fmString(frontmatter, "name") ?? dirName,
@@ -27,7 +28,40 @@ export async function loadSkillEntry(plugin: string | null, dirName: string, dir
     path,
     frontmatter,
     body,
+    ...(resources.length > 0 ? { resources } : {}),
   };
+}
+
+/** L2 资源索引的边界：只 stat、不读内容；不跟软链；最多 60 个。
+ *  顶层只下探约定目录（references/scripts/assets/templates），顶层散文件也登记；
+ *  更深层目录允许下探到 RESOURCE_MAX_DEPTH，避免把 node_modules/隐藏目录带进来。 */
+const RESOURCE_MAX_FILES = 60;
+const RESOURCE_MAX_DEPTH = 3;
+const RESOURCE_TOP_DIRS = new Set(["references", "scripts", "assets", "templates"]);
+
+async function readSkillResources(dir: string): Promise<{ path: string; bytes: number }[]> {
+  const out: { path: string; bytes: number }[] = [];
+  const walk = async (current: string, prefix: string, depth: number): Promise<void> => {
+    if (out.length >= RESOURCE_MAX_FILES) return;
+    const entries = await readdir(current, { withFileTypes: true }).catch(() => []);
+    for (const ent of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (out.length >= RESOURCE_MAX_FILES) break;
+      if (ent.name === "SKILL.md" || ent.name.startsWith(".") || ent.name === "node_modules") continue;
+      if (ent.isSymbolicLink()) continue; // 与插件内容软链 fail-closed 口径一致
+      const rel = prefix === "" ? ent.name : prefix + "/" + ent.name;
+      const abs = join(current, ent.name);
+      if (ent.isDirectory()) {
+        if (depth === 0 && !RESOURCE_TOP_DIRS.has(ent.name)) continue;
+        await walk(abs, rel, depth + 1);
+        continue;
+      }
+      if (!ent.isFile()) continue;
+      const st = await stat(abs).catch(() => null);
+      if (st) out.push({ path: rel, bytes: st.size });
+    }
+  };
+  await walk(dir, "", 0);
+  return out;
 }
 
 /** skills/<name>/SKILL.md 整个目录的条目（目录不存在 = 空表）。 */

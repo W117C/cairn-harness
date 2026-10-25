@@ -110,16 +110,67 @@ const PLUGIN_SNAPSHOT = {
   toolScopes: [],
   errors: [], warnings: [],
 };
+// 联网搜索 / 用量页的合法桩（2026-10-25）：新设置分区一旦读到畸形形状就会在渲染期抛错，
+// 画廊的兜底 `{}` 会让整页白成启动占位。这里给足字段让视觉自查能看到真页面；
+// 要验错误边界时显式传 --cairn-crash-network-fixture（见下方覆盖）。
+const SEARCH_SETTINGS = {
+  workspace: "/tmp/demo-ws",
+  enabled: true,
+  provider: "tavily",
+  endpoint: "https://api.tavily.com/search",
+  allowLocalEndpoint: false,
+  hasKey: true,
+  keySource: "stored",
+  secureStorageAvailable: true,
+};
+const USAGE_DAY = new Date(now).toISOString().slice(0, 10);
+const USAGE_LEDGER = {
+  ok: true,
+  totals: { inputTokens: 12400, outputTokens: 1830, cacheReadTokens: 0, usageCount: 1, toolSteps: 3, rounds: 1 },
+  sessions: 1,
+  workspaces: 1,
+  skipped: 0,
+  badLines: 0,
+  analytics: {
+    buckets: [{
+      day: USAGE_DAY, model: "deepseek-chat",
+      inputTokens: 12400, outputTokens: 1830, cacheReadTokens: 0, usageCount: 1, workerUsageCount: 0,
+      inputMeasured: 1, outputMeasured: 1, cacheReadMeasured: 0,
+    }],
+    activity: [{ day: USAGE_DAY, sessions: 1, rounds: 1, toolSteps: 3 }],
+    sessionsWithUsage: 1,
+    sessionsWithoutUsage: 0,
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    generatedAt: now,
+  },
+};
+
+// 画廊会话桩：createSession 后 listSessions 要能看见新会话（真接口返回 workspace；
+// 只给 {id} 会让「首页直接发」的渲染路径拿到 undefined，根边界看起来像产品崩了）。
+const DEMO_SESSION = { id: "s1", title: "接 routing 开关并跑全量验证", mtimeMs: now - 60000, lines: 12, workspace: "/tmp/demo-ws" };
+const DEMO_SESSION_2 = { id: "s2", title: "整理竞品对照册", mtimeMs: now - 120000, lines: 8, workspace: "/tmp/demo-ws" };
+let createdSession = null;
+
 const stub = {
   protocolVersion: reply(1),
+  searchSettingsGet: reply(process.argv.includes("--cairn-crash-network-fixture") ? {} : SEARCH_SETTINGS),
+  searchSettingsSave: reply({ ok: true, settings: SEARCH_SETTINGS }),
+  searchSettingsTest: reply({ ok: true, elapsedMs: 42, resultCount: 3 }),
+  usageLedger: reply(USAGE_LEDGER),
   getSettings: reply(SETTINGS),
   setSettings: reply(SETTINGS),
   getProviderInfo: reply(PROVIDER_INFO),
   providerKeyStatus: reply({ available: true, stored: ["deepseek", "glm"], envActive: true, envProviders: ["glm"] }),
   providerKeySet: reply({ ok: true }),
   providerKeyDelete: reply({ ok: true }),
-  listSessions: reply([{ id: "s1", title: "接 routing 开关并跑全量验证", mtimeMs: now - 60000, lines: 12, workspace: "/tmp/demo-ws" }]),
+  listSessions: reply(() => {
+    const base = process.argv.includes("--cairn-session-preview-fixture") ? [DEMO_SESSION, DEMO_SESSION_2] : [DEMO_SESSION];
+    return createdSession === null ? base : [...base, createdSession];
+  }),
   listProjects: reply([{ path: "/tmp/demo-ws" }]),
+  // 工作区上下文上报：真接口回 {ok}；缺桩时兜底 {} 会让 renderer 读 r.ok === false
+  // 而弹「工作区不可用，已清空窗口上下文」——画廊每张开机都带一条假错误（2026-10-25 修）。
+  setWorkspaceContext: reply({ ok: true }),
   addProject: reply({ path: "/tmp/demo-ws" }),
   createProject: reply({ ok: true, path: "/tmp/demo-ws/new" }),
   workspaceListDir: (rel) => new Promise((res) => setTimeout(() => {
@@ -134,6 +185,19 @@ const stub = {
       ? { ok: false, error: `文件不存在：${rel}` }
       : { ok: true, path: rel, text, truncated: false, size: Buffer.byteLength(text) });
   }, 30)),
+  // 命令面板正文搜索（v18）三态之一的最小合法桩：不搜真会话，但形状必须完整；
+  // 空对象兜底会让 SessionSearchResults 在 .map 上抛错（真机冒烟抓到的）。
+  sessionSearch: reply({ kind: "ok", matches: [], scannedSessions: 0, scannedBytes: 0, totalSessions: 1 }),
+  // 命令面板文件快速打开（2026-10-25）：真实 workspaceSearch 通道的最小桩。
+  workspaceSearch: (_workspace, query) => new Promise((res) => setTimeout(() => {
+    const q = String(query).toLowerCase();
+    const hits = q.includes("main")
+      ? [{ path: "src/main.ts", kind: "file" }, { path: "src", kind: "directory" }]
+      : q.includes("readme")
+        ? [{ path: "README.md", kind: "file" }]
+        : [];
+    res({ ok: true, hits, truncated: false });
+  }, 30)),
   pickDirectory: reply(null),
   openSession: reply({ events: EVENTS }),
   createSession: reply({ id: "s2" }),
@@ -141,13 +205,15 @@ const stub = {
   // 为什么必须挂住：活动会话的 running 置位只在 `send()` 那条路里、run 返回后立刻摘掉
   // （session-subscription.ts 的注释：「运行集口径」）。桩若 30ms 就返回，运行态根本立不住，
   // 于是"运行中按回车"永远测不到——第一版冒烟就死在这里，而它看起来像产品缺陷。
-  run: process.argv.includes("--cairn-steer-fixture")
-    ? (req) => new Promise((res) => {
-        // 记录每次真 run（冒烟据此判「这一拍到底有没有起新一轮」）
-        cairnRuns.push({ message: req && req.message, sessionId: req && req.sessionId });
-        cairnHoldRun = res; // 冒烟可手动放行
-      })
-    : reply({ ok: true }),
+  run: (req) => new Promise((res) => {
+    // 记录每次真 run（插话冒烟判「这一拍到底有没有起新一轮」；Plan 冒烟读 planRequired）。
+    cairnRuns.push({ message: req && req.message, sessionId: req && req.sessionId, planRequired: req && req.planRequired });
+    if (process.argv.includes("--cairn-steer-fixture")) {
+      cairnHoldRun = res; // 冒烟可手动放行
+      return;
+    }
+    setTimeout(() => res({ ok: true }), 30);
+  }),
   runCancel: reply({ ok: true }),
   decide: reply(true),
   decidePlan: reply(true),
@@ -193,11 +259,23 @@ const stub = {
   onAsk: () => () => undefined,
   onAskDone: () => () => undefined,
 };
+// 新建会话桩：真接口回 {id, workspace}，且随后的 listSessions 能看到它。
+stub.createSession = (workspace) => {
+  const ws = typeof workspace === "string" && workspace !== "" ? workspace : "/tmp/demo-ws";
+  createdSession = { id: "s2", title: "新任务", mtimeMs: Date.now(), lines: 0, workspace: ws };
+  return Promise.resolve({ id: "s2", workspace: ws });
+};
 
 // 事件订阅**真收集**：概览里的数字刚变过会闪一下（那是「刚刚变」的提示），
 // 要目验那格就得**能推事件进去**。主进程经 executeJavaScript 调 __cairnPushEvent。
 const eventListeners = new Set();
 stub.onEvent = (fn) => { eventListeners.add(fn); return () => eventListeners.delete(fn); };
+// v21 完成通知点击：桩只做事件收集；真实 main 的 Notification click 在离屏环境不可造。
+const notificationListeners = new Set();
+stub.onNotificationOpen = (fn) => { notificationListeners.add(fn); return () => notificationListeners.delete(fn); };
+contextBridge.exposeInMainWorld("__cairnPushNotification", (payload) => {
+  for (const fn of notificationListeners) { try { fn(payload); } catch { /* 一个订阅者抛了不该挡住别人 */ } }
+});
 contextBridge.exposeInMainWorld("__cairnSteers", () => cairnSteers.slice());
 contextBridge.exposeInMainWorld("__cairnRuns", () => cairnRuns.slice());
 contextBridge.exposeInMainWorld("__cairnReleaseRun", (v) => { if (cairnHoldRun) { const r = cairnHoldRun; cairnHoldRun = null; r(v ?? { ok: true }); } });

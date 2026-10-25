@@ -36,16 +36,16 @@ export function SettingsSection(props: { title: string; hint?: string; children:
 }
 
 export function SettingsRow(props: { label: ReactNode; desc?: string; children: ReactNode }): React.JSX.Element {
-  // 说明文字**独占整行**（2026-10-22 排版减法）：此前它被关在 220px 的标题列里，
-  // 中文句子折成两行、末行只剩一个字（「…尚未接 / 入。」），而右边大片空着。
-  // ⇒ 说明改为行内第二个 grid item，跨两列独占一行；标题与控件仍在第一行。
+  // 参照 ChatGPT 桌面端设置行（2026-10-24 业主）：标题 + 说明**同列上下排**（左列），
+  // 控件靠右垂直居中。说明拿到整条左列宽度——2026-10-22「独占整行」要解的中文碎行
+  // 问题由本布局一并解决，且观感与参考页一致。
   return (
     <div className="ss-row">
       <div className="ss-row-main">
         <span className="ss-row-label">{props.label}</span>
+        {props.desc !== undefined && <span className="ss-row-desc">{props.desc}</span>}
       </div>
       <div className="ss-row-ctl">{props.children}</div>
-      {props.desc !== undefined && <span className="ss-row-desc">{props.desc}</span>}
     </div>
   );
 }

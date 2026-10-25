@@ -134,6 +134,26 @@ async function main() {
 
   await shot("01-empty.png", 1200);
 
+  // 首启「设置检查」：七组覆盖面只在 onboarded === false 时摆；mount 曾被空屏重做误删。
+  if (FIRST_RUN) {
+    const onboard = await js(`(() => {
+      const block = document.querySelector(".onboard");
+      const r = block?.getBoundingClientRect();
+      return JSON.stringify({
+        block: !!block,
+        items: document.querySelectorAll(".onboard-item").length,
+        h: r ? Math.round(r.height) : 0,
+        bottom: r ? Math.round(r.bottom) : 0,
+        viewport: innerHeight,
+      });
+    })()`);
+    console.log("[gallery] 首启设置检查:", onboard);
+    const parsed = JSON.parse(onboard);
+    if (!parsed.block || parsed.items !== 7 || parsed.h < 20 || parsed.bottom > parsed.viewport) {
+      throw new Error("首启「设置检查」不在场或不可见：" + onboard);
+    }
+  }
+
   // 模型菜单（搜索 + 分组 + 徽标 + 管理入口）
   await js(`document.querySelector(".mp-trigger")?.click()`);
   await shot("02-model-menu.png", 400);
@@ -311,6 +331,11 @@ async function main() {
   await new Promise((r) => setTimeout(r, 700));
   await js(`${byText(".sp-nav-item", "模型与 Provider")}?.click()`);
   await shot("06-settings-provider.png", 600);
+  // 新分区也进视觉自查（合法桩见 ui-gallery-preload 的 SEARCH_SETTINGS / USAGE_LEDGER）。
+  await js(`${byText(".sp-nav-item", "联网搜索")}?.click()`);
+  await shot("06b-settings-network.png", 650);
+  await js(`${byText(".sp-nav-item", "用量统计")}?.click()`);
+  await shot("06c-settings-usage.png", 700);
 
   const errs = await win.webContents.executeJavaScript(`window.__galleryErrors ?? []`);
   if (Array.isArray(errs) && errs.length > 0) {

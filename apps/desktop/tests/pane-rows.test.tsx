@@ -89,42 +89,46 @@ describe("mergePaneRows：关着的窗格也记得", () => {
   });
 });
 
-describe("PaneDock 接线：行轨 id = kind，只有用户拖动才回写", () => {
-  it("Grid 用 useGridRef + 行轨 id/minSize + defaultLayout + onLayoutChanged", () => {
-    expect(paneDock).toContain("const gridRef = useGridRef();");
-    expect(paneDock).toContain("rows={rowTracks}");
-    expect(paneDock).toContain("id: kind, minSize: `${MIN_PANE_PCT}%`");
-    expect(paneDock).toContain("defaultLayout={{ rows: defaultRows }}");
-    expect(paneDock).toContain("onLayoutChanged={(layout, meta) => {");
-    expect(paneDock).toContain("if (!meta.isUserInteraction) return;");
-    expect(paneDock).toContain("savePaneRows(mergePaneRows(loadPaneRows(), layout.rows, props.tabs));");
+// 2026-10-24 单窗格模式：Grid 纵向堆叠撤下，行高记忆 helpers 保留为纯函数（本文件上半继续判卷），
+// 「PaneDock 接线」改为钉单窗格契约（激活派生 / 新开即露出 / 只显示激活块）。
+// 2026-10-25：可见性切换 ≠ 条件渲染——所有已开窗格常驻挂载，切标签不杀终端/浏览器/文件树状态。
+describe("PaneDock 接线（单窗格模式）", () => {
+  it("激活窗格 = 手动聚焦的那个，否则最新打开的一个（新开即露出）", () => {
+    expect(paneDock).toContain("const active = focusedPane !== null && props.tabs.includes(focusedPane)");
+    expect(paneDock).toContain("props.tabs[props.tabs.length - 1] ?? null");
   });
 
-  it("窗格集变化时重放记忆（关掉再开回来是这个窗格的旧高度）", () => {
-    expect(paneDock).toContain("grid.setLayout({ rows: paneRowLayout(props.tabs, loadPaneRows()) });");
-    expect(paneDock).toContain("}, [tabsSig]);");
+  it("新开窗格自动激活；激活窗格被关则回落到最新窗格", () => {
+    expect(paneDock).toContain("if (added !== undefined) setFocusedPane(added);");
+    expect(paneDock).toContain("else if (focusedPane !== null && !props.tabs.includes(focusedPane)) setFocusedPane(null);");
   });
 
   it("钩子必须在空窗格早退之前（否则 tabs 清空时 hooks 数量变化会崩）", () => {
-    expect(paneDock.indexOf("const gridRef = useGridRef();"))
+    expect(paneDock.indexOf("const [focusedPane, setFocusedPane]"))
       .toBeLessThan(paneDock.indexOf("if (props.tabs.length === 0) {"));
   });
 
-  it("SSR 渲染不因 localStorage 缺席抛错", () => {
+  it("SSR 渲染不因 localStorage 缺席抛错；两块都挂载但只有一块 active", () => {
     const html = renderToStaticMarkup(
       <PaneDock tabs={["changes", "plan"]} events={[]} onClose={() => undefined} />,
     );
-    expect(html).toContain("pane-grid");
+    expect((html.match(/data-pane=/g) ?? []).length).toBe(2);
+    expect((html.match(/data-active="true"/g) ?? []).length).toBe(1);
+    expect(html).toMatch(/data-pane="plan" data-active="true"/);
   });
 });
 
 describe("TokenPanel 死组件清理", () => {
-  it("Composer 改从 format-tokens 取纯函数；TokenPanel.tsx 已删", () => {
+  it("用量环组件改从 format-tokens 取纯函数；TokenPanel.tsx 已删", () => {
     const composer = readFileSync(
       fileURLToPath(new URL("../src/renderer/components/Composer.tsx", import.meta.url)),
       "utf8",
     );
-    expect(composer).toContain('import { formatTokens } from "./format-tokens";');
+    const meter = readFileSync(
+      fileURLToPath(new URL("../src/renderer/components/UsageMeter.tsx", import.meta.url)),
+      "utf8",
+    );
+    expect(meter).toContain('import { formatTokens } from "./format-tokens";');
     expect(composer).not.toContain("./TokenPanel");
     expect(() => readFileSync(
       fileURLToPath(new URL("../src/renderer/components/TokenPanel.tsx", import.meta.url)),

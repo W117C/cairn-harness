@@ -2,9 +2,20 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { ChevronRight, FileText, Folder } from "lucide-react";
 import type { DirEntryView } from "../../../../../src/main/workspace-fs";
 
-/** 文件窗格（v5 只读浏览）：左树懒加载 + 下方文本预览（帽/二进制由通道侧拒，界面如实呈现）。 */
+/** 快速打开的目标路径 → 需要预展开的祖先目录（不含文件本身）。
+ *  纯函数，判卷可直接钉；命令面板的文件快速打开与 FilePane 的树展开共用这一把尺。 */
+export function ancestorDirsOf(path: string): string[] {
+  const parts = path.split("/").filter((part) => part !== "");
+  const dirs: string[] = [];
+  for (let i = 1; i < parts.length; i += 1) dirs.push(parts.slice(0, i).join("/"));
+  return dirs;
+}
+
+/** 文件窗格（v5 只读浏览）：左树懒加载 + 下方文本预览（帽/二进制由通道侧拒，界面如实呈现）。
+ *  `openTarget`：命令面板快速打开的信号——展开父目录、加载尚未取过的目录、打开预览并聚焦行。 */
 export function FilePane(props: {
   onPathMenu?: (rel: string, kind: "file" | "directory", x: number, y: number) => void;
+  openTarget?: { path: string; seq: number };
 }): React.JSX.Element {
   type DirNode = { entries: DirEntryView[]; truncated: boolean } | { error: string };
   const [dirs, setDirs] = useState<Record<string, DirNode>>({});
@@ -42,6 +53,27 @@ export function FilePane(props: {
   };
   // 首次挂载拉根目录（懒加载树的唯一根；子层展开时才拉）。
   useEffect(() => { loadDir(""); }, []);
+
+  // 命令面板快速打开：把父目录一路展开、把还没取过的目录补拉，再打开文件预览。
+  // 只随 target 对象（seq）变化，不随 dirs/函数身份重跑；旧请求有各自序号守卫。
+  useEffect(() => {
+    const target = props.openTarget;
+    if (target === undefined) return;
+    const parents = ancestorDirsOf(target.path);
+    if (parents.length > 0) {
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        for (const parent of parents) next.add(parent);
+        return next;
+      });
+      for (const parent of parents) {
+        if (dirs[parent] === undefined) loadDir(parent);
+      }
+    }
+    openFile(target.path);
+    setFocusPath(target.path);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.openTarget]);
 
   const child = (rel: string, name: string): string => (rel === "" ? name : `${rel}/${name}`);
   const toggleDir = (rel: string): void => {

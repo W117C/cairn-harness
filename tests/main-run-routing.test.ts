@@ -110,6 +110,10 @@ describe("RunRequest boundary", () => {
       }),
     ).toMatchObject({ ok: false });
     expect(validateRunRequestEnvelope({ message: "x", mode: "default", model: "openai-standard", thinking: "off" })).toMatchObject({ ok: true });
+    // v23 Plan 模式：显式 true/false 都放行并原样保留；非布尔拒绝（缺省 = 交给 settings 默认）。
+    expect(validateRunRequestEnvelope({ message: "x", mode: "default", planRequired: true })).toMatchObject({ ok: true, value: { planRequired: true } });
+    expect(validateRunRequestEnvelope({ message: "x", mode: "default", planRequired: false })).toMatchObject({ ok: true, value: { planRequired: false } });
+    expect(validateRunRequestEnvelope({ message: "x", mode: "default", planRequired: "yes" })).toMatchObject({ ok: false });
   });
 
   it("handleAgentRun repeats boundary validation and rejects unsupported thinking before dialing", async () => {

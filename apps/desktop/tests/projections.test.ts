@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countRunSteps, deliveryTrail, deriveRunPhase, formatEmptyTrailNote, formatRevertNotice, hasAssistantTextThisRun, isMainSessionTerminalEvent, mergeSessionSnapshot, pendingClarifyOf, pendingPlanOf, projectStream, relativeTime, roundTimeline, turnChanges, usageAggregate } from "../src/renderer/projections";
+import { countRunSteps, deliveryTrail, deriveRunPhase, formatRevertNotice, hasAssistantTextThisRun, isMainSessionTerminalEvent, mergeSessionSnapshot, pendingClarifyOf, pendingPlanOf, projectStream, relativeTime, roundTimeline, turnChanges, usageAggregate } from "../src/renderer/projections";
 import type { AgentEvent } from "../../../src/main/ipc-protocol";
 import type { TurnDelivery } from "../src/renderer/projections";
 
@@ -345,12 +345,12 @@ describe("v7.1 落定语义（真实 provider 只发 delta——桶的「说完�
     expect(settled.filter((r) => r.kind === "assistant")[0]).toMatchObject({ live: false, text: "答", round: 1 });
   });
 
-  it("停转落定带走思考正文；空文本桶（只想过没说的半轮）不产空行", () => {
+  it("停转落定带走思考正文；空文本桶（只想过没说的半轮）落 thinking-only 行（思考不再跟着空桶蒸发，2026-10-24 业主）", () => {
     const settled = projectStream([
       ev({ type: "user_message", content: "问" }),
       ev({ type: "thinking_delta", callId: "c1", text: "想了一半" }),
     ], false);
-    expect(settled.filter((r) => r.kind === "assistant")).toHaveLength(0);
+    expect(settled.filter((r) => r.kind === "assistant")[0]).toMatchObject({ text: "", live: false, thinking: "想了一半" });
     const withText = projectStream([
       ev({ type: "user_message", content: "问" }),
       ev({ type: "thinking_delta", callId: "c1", text: "想" }),
@@ -415,13 +415,29 @@ describe("投影 第十九遍：usage = 模型调用说完的落定点（输出�
     expect(asst[1]).toMatchObject({ text: "查到了", live: true });
   });
 
-  it("只想过没说的桶在 usage 落定即弃行（既有空桶口径，不前移也不后移）", () => {
+  it("只想过没说的桶在 usage 落定为 thinking-only 行（思考保留；2026-10-24 业主）", () => {
     const rows = projectStream([
       ev({ type: "user_message", content: "问" }),
       ev({ type: "thinking_delta", callId: "c1", text: "想想" }),
       ev({ type: "usage", inputTokens: 10, outputTokens: 3 }),
     ]);
-    expect(rows.filter((r) => r.kind === "assistant")).toHaveLength(0);
+    expect(rows.filter((r) => r.kind === "assistant")[0]).toMatchObject({ text: "", thinking: "想想" });
+  });
+
+  it("工具轮分段思考各自成行：工具前的思考不因后续工具调用与第二段思考而消失（业主 2026-10-24 抓到的形态）", () => {
+    const rows = projectStream([
+      ev({ type: "user_message", content: "问" }),
+      ev({ type: "thinking_delta", callId: "c1", text: "先想清楚再动手" }),
+      ev({ type: "tool_call", id: "t1", name: "run_shell", args: { command: "ls" } }),
+      ev({ type: "tool_result", callId: "t1", ok: true, output: "x" }),
+      ev({ type: "usage", inputTokens: 1, outputTokens: 2 }),
+      ev({ type: "thinking_delta", callId: "c2", text: "看完结果再想一步" }),
+      ev({ type: "assistant_delta", callId: "c2", text: "结论是…" }),
+    ], false);
+    const thinks = rows.filter((r) => r.kind === "assistant" && r.thinking !== undefined);
+    expect(thinks).toHaveLength(2);
+    expect(thinks[0]).toMatchObject({ text: "", thinking: "先想清楚再动手" });
+    expect(thinks[1]).toMatchObject({ text: "结论是…", thinking: "看完结果再想一步" });
   });
 });
 
@@ -469,9 +485,9 @@ describe("工具行原始参数（阶段 2 · 展开区数据源）", () => {
   });
 });
 
-// 批 3（文档阶段 3·对话页①）：空轮不摆全卡，改一行弱提示；连续空轮并一段；运行中的末轮
-// 不预告（还没写完的轮不能断言「无文件改动」——写盘随时可能发生，弱行只落定已收束的轮）。
-describe("deliveryTrail（批 3：空轮弱行 + 连续空轮合并 + 运行中末轮不预告）", () => {
+// 批 3（文档阶段 3·对话页①）：按轮序铺有交付的卡。空轮弱行（「第 N 轮 · 无文件改动」）
+// 已于 2026-10-24 按业主反馈整体撤下——空轮不产出任何内容，序列里只剩卡。
+describe("deliveryTrail（批 3：只出卡，空轮不占位）", () => {
   const card = (round: number): TurnDelivery => ({
     round,
     files: [{ path: `src/${String(round)}.ts`, change: "modified" }],
@@ -480,26 +496,17 @@ describe("deliveryTrail（批 3：空轮弱行 + 连续空轮合并 + 运行中�
     nextAction: "跑验证",
   });
   const shape = (trail: ReturnType<typeof deliveryTrail>): string[] =>
-    trail.map((t) => (t.kind === "card" ? `c${String(t.delivery.round)}` : `e${String(t.from)}-${String(t.to)}`));
+    trail.map((t) => `c${String(t.delivery.round)}`);
 
-  it("卡片按轮序交错；被隔开的空轮各成一段", () => {
-    expect(shape(deliveryTrail([card(1), card(3)], 3, false))).toEqual(["c1", "e2-2", "c3"]);
+  it("卡按轮序铺开；中间的空轮不产出任何条目", () => {
+    expect(shape(deliveryTrail([card(1), card(3)]))).toEqual(["c1", "c3"]);
+    expect(deliveryTrail([card(1), card(3)])).toHaveLength(2);
   });
-  it("连续空轮并一段", () => {
-    const trail = deliveryTrail([card(1)], 4, false);
-    expect(shape(trail)).toEqual(["c1", "e2-4"]);
-    expect(trail[1]).toEqual({ kind: "empty", from: 2, to: 4 });
+  it("尾部连续空轮同样不占位（流尾只剩最新卡）", () => {
+    expect(shape(deliveryTrail([card(1)]))).toEqual(["c1"]);
   });
-  it("运行中：末轮为空不预告弱行；末轮有卡照出（live 卡不压）", () => {
-    // 第 3 轮还在跑且尚无交付 ⇒ 只出第 2 轮的弱行
-    expect(shape(deliveryTrail([card(1)], 3, true))).toEqual(["c1", "e2-2"]);
-    // 末轮已有交付（写盘中）⇒ 卡照出；第 2 轮已收束为空 ⇒ 其弱行照常
-    expect(shape(deliveryTrail([card(1), card(3)], 3, true))).toEqual(["c1", "e2-2", "c3"]);
-  });
-  it("无轮=空；弱行文案：单轮与区间（en 破折）", () => {
-    expect(deliveryTrail([], 0, false)).toEqual([]);
-    expect(formatEmptyTrailNote(3, 3)).toBe("第 3 轮 · 无文件改动");
-    expect(formatEmptyTrailNote(2, 4)).toBe("第 2–4 轮 · 无文件改动");
+  it("无交付=空序列", () => {
+    expect(deliveryTrail([])).toEqual([]);
   });
 });
 

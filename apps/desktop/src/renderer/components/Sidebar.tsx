@@ -13,21 +13,22 @@
 // 文案一律走 STR（strings.ts——源文扫描判卷钉死）；图标 = lucide（ADR 0003）；会话行菜单 = Radix。
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Archive, Check, ChevronRight, Folder, GitBranch, Loader2, MoreHorizontal, Pencil, Pin, Plus, Search, Settings2, X } from "lucide-react";
+import { Archive, Check, ChevronRight, Filter, Folder, GitBranch, Loader2, MoreHorizontal, Pencil, Pin, Plus, Search, Settings2, X } from "lucide-react";
 import type { ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import { relativeTime } from "../projections";
 import type { UsageSummary } from "../projections";
 import { keysOf } from "../shortcuts";
-import { filterSessions, groupByWorkspace, projectLabelFor, projectMenuItems, projectSections, sessionStatus, sessionTime, splitArchived, workspaceLabel, OTHER_WORKSPACE, type TimeBucket, type WorkspaceSession } from "../sessions-view";
+import { filterSessions, groupByWorkspace, projectLabelFor, projectMenuItems, projectSections, sessionStatus, sessionTime, splitArchived, workspaceLabel, OTHER_WORKSPACE, SESSION_FILTERS, SESSION_FILTER_NOTE, type SessionFilterId, type TimeBucket, type WorkspaceSession } from "../sessions-view";
 import { draftKeyFor } from "../drafts";
 import { sessionKeyOf } from "../state/session-identity";
 import { STR } from "../strings";
-import { Popover, usePopoverDismiss } from "./Popover";
-import { UsagePanel, type UsageAllState, type UsageScope } from "./UsagePanel";
+import { CairnMark } from "./CairnMark";
+import type { UsageAllState } from "./UsagePanel";
 import { useNow } from "../useNow";
 import type { ThemePref } from "../theme";
 import { ModalSurface } from "./ModalSurface";
 import { AddProjectMenu } from "./AddProjectMenu";
+import "./sidebar-filter.css";
 
 /** 头像菜单的「外观」三档（2026-10-20 批 130）。与设置页 GeneralSection 的 THEME_OPTIONS
  *  同三档同措辞——**同一个语义两处措辞不许各写一份**（这里直接引用 STR.footer 的文案）。 */
@@ -36,6 +37,12 @@ const THEME_CHOICES: readonly { id: ThemePref; label: string }[] = [
   { id: "light", label: STR.footer.themeLight },
   { id: "dark", label: STR.footer.themeDark },
 ];
+
+/** 会话筛选（2026-10-25）：词表/纯函数在 sessions-view.ts，侧栏此前硬编码 filter:"all"。
+ *  选择持久化；筛选变化后展开全部项目组，避免命中项藏在旧折叠状态里（搜索用的是同一原则）。 */
+const SESSION_FILTER_KEY = "cairn.sidebar.filter.v1";
+const isSessionFilter = (value: string | null): value is SessionFilterId =>
+  SESSION_FILTERS.some((f) => f.id === value);
 
 /** 时间桶标签（业主四图批：brief §2.1 的「今天/昨天/过去7天/更早」要读得出来——
  *  原「间隔即分组」只剩无声空白，业主截图里读不出桶界）。文案走 STR（判卷钉）。 */
@@ -71,6 +78,8 @@ function SessionRow(props: {
   activeId: string | null;
   status: ReturnType<typeof sessionStatus>;
   onOpen: (id: string, workspace?: string) => void;
+  /** ⌘/Ctrl+点击：在右侧只读预览这个会话，不切走当前会话。 */
+  onPreview?: (s: WorkspaceSession) => void;
   renaming: boolean;
   renameValue: string;
   onRenameValue: (v: string) => void;
@@ -128,7 +137,15 @@ function SessionRow(props: {
       className={"session" + (s.id === props.activeId ? " active" : "")}
       data-active={s.id === props.activeId}
       data-session-id={s.id}
-      onClick={props.renaming ? undefined : () => { props.onOpen(s.id, s.workspace); }}
+      onClick={props.renaming ? undefined : (e) => {
+        if ((e.metaKey || e.ctrlKey) && props.onPreview !== undefined) {
+          e.preventDefault();
+          props.onPreview(s);
+          return;
+        }
+        props.onOpen(s.id, s.workspace);
+      }}
+      title={props.onPreview !== undefined ? `${statusTitle}（⌘+点击在侧栏预览）` : undefined}
       // 右键开会话菜单（2026-10-18 补）：只在有行操作可做时接管；没有 actions 时让默认右键菜单出来。
       // 不 stopPropagation 会让整行的 onClick 跟着触发（React 合成事件冒泡回本行）=> 先开菜单也换了会话。
       onContextMenu={(e) => {
@@ -259,6 +276,13 @@ function SessionRow(props: {
                   {s.pinned === true ? STR.sessionMenu.unpin : STR.sessionMenu.pin}
                 </DropdownMenu.Item>
                 <DropdownMenu.Item className="menu-item" onSelect={props.onRenameStart}>{STR.sessionMenu.rename}</DropdownMenu.Item>
+                {/* 预览入口（2026-10-25）：⌘+点击是快捷径，但只靠隐藏手势等于没接线——
+                    行菜单里给同一条动作，右键/⋯ 都能发现。当前会话不摆（预览自己没意义）。 */}
+                {props.onPreview !== undefined && s.id !== props.activeId && (
+                  <DropdownMenu.Item className="menu-item" onSelect={() => { props.onPreview?.(s); }}>
+                    {STR.sessionMenu.preview}
+                  </DropdownMenu.Item>
+                )}
                 <DropdownMenu.Item className="menu-item" onSelect={() => { a.onFork(); }}>{STR.sessionMenu.fork}</DropdownMenu.Item>
                 {s.isolated === true ? (
                   <>
@@ -446,6 +470,8 @@ export interface SidebarProps {
   /** 模型服务状态点：true=可用绿 / false=不可用红 / null=未检测灰。 */
   providerOk: boolean | null;
   onOpen: (id: string, workspace?: string) => void;
+  /** ⌘/Ctrl+点击会话行：右侧只读预览（不切主体会话）。 */
+  onPreviewSession?: (s: WorkspaceSession) => void;
   onNewTask: () => void;
   onOpenPalette: () => void;
   onSwitchWorkspace: (path: string) => void;
@@ -469,6 +495,7 @@ export interface SidebarProps {
   onForkSession?: (s: WorkspaceSession) => void;
   onOpenSettings: () => void;
   onOpenAbout?: () => void;
+  onOpenUsage?: () => void;
   /** 状态点：直接进「模型与 Provider」分区（它就是为修模型服务而存在的入口，
    *  笼统地开设置页等于让用户自己找那一格）。 */
   onOpenProviderSettings?: () => void;
@@ -501,17 +528,6 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
   const [renamingProject, setRenamingProject] = useState<{ id: string; value: string } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; project: ProjectRecord } | null>(null);
   const [settingsFor, setSettingsFor] = useState<ProjectRecord | null>(null);
-  // 用量统计面板（批 130）：头像菜单点开；锚在头像上，外点/Esc 关。
-  // 批 131：面板内双口径（当前会话 / 全部会话）；关面板回到当前会话，不把上次口径当默认。
-  const [usageOpen, setUsageOpen] = useState(false);
-  const [usageScope, setUsageScope] = useState<UsageScope>("session");
-  const usageAnchorRef = useRef<HTMLDivElement | null>(null);
-  const closeUsage = useCallback(() => { setUsageOpen(false); setUsageScope("session"); }, []);
-  usePopoverDismiss(usageOpen, closeUsage, usageAnchorRef);
-  const changeUsageScope = (next: UsageScope): void => {
-    setUsageScope(next);
-    if (next === "all") props.onLoadUsageAll?.();
-  };
   // 侧栏会话搜索（2026-10-18 接通）：筛选纯函数与词表（filterSessions / SESSION_FILTERS）
   // 从 P3-3 起就在 sessions-view.ts 里、也有判卷，但一直没有调用方——侧栏顶的放大镜实际打开
   // 的是 ⌘K 命令面板（整屏模态），用户点「搜索」想收窄列表，得到的却是盖住整个应用的弹窗。
@@ -521,6 +537,24 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
   const [sessionQuery, setSessionQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchOpen = sessionQuery.trim() !== "";
+  const [filter, setFilter] = useState<SessionFilterId>(() => {
+    try {
+      if (typeof window === "undefined") return "all";
+      const saved = window.localStorage.getItem(SESSION_FILTER_KEY);
+      return isSessionFilter(saved) ? saved : "all";
+    } catch { return "all"; }
+  });
+  const filterInfo = SESSION_FILTERS.find((f) => f.id === filter) ?? SESSION_FILTERS[0];
+  const filterCounts = SESSION_FILTERS.map((f) => ({
+    ...f,
+    count: filterSessions(props.sessions, { search: "", filter: f.id, running: props.running }).length,
+  }));
+  const changeFilter = (next: SessionFilterId): void => {
+    setFilter(next);
+    // 筛选下组一律先展开：命中项藏在折叠组里等于没筛。搜索路径同一原则。
+    if (next !== "all") setCollapsed(new Set());
+    try { window.localStorage.setItem(SESSION_FILTER_KEY, next); } catch { /* 存不下本窗口仍生效 */ }
+  };
 
   const toggleGroup = (key: string): void => {
     if (searchOpen) setSessionQuery("");
@@ -542,13 +576,19 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
 
   // 归档会话单列（2026-10-17）：常规项目组只吃 active；已归档进底部「已归档」分组找回。
   const { active: activeSessions, archived: archivedSessions } = splitArchived(props.sessions);
-  // 搜索收窄（2026-10-18）：先过 filterSessions 再分组。空查询时 filterSessions 原样返回
-  // （判卷钉过：search "" + filter all ⇒ 全量），所以常态零成本、无行为变化。
-  // 搜索时归档分组也参与——用户搜一个已归档的旧会话，应该能搜到并在归档组里看到它。
+  // 搜索/筛选收窄（2026-10-18 / 2026-10-25）：先过 filterSessions 再分组。空查询 + all 时
+  // filterSessions 原样返回（判卷钉过），所以常态零成本、无行为变化。
+  // 搜索/筛选时归档分组也参与——已归档的旧会话也要能被搜到/筛到。
   const searchTerm = sessionQuery.trim();
-  const visibleActive = filterSessions(activeSessions, { search: searchTerm, filter: "all", running: props.running });
-  const visibleArchived = filterSessions(archivedSessions, { search: searchTerm, filter: "all", running: props.running });
-  const groups = groupByWorkspace(visibleActive, props.projects.map((p) => p.path));
+  const visibleActive = filterSessions(activeSessions, { search: searchTerm, filter, running: props.running });
+  const visibleArchived = filterSessions(archivedSessions, { search: searchTerm, filter, running: props.running });
+  // 空态判「有没有会话」，不是判「有没有项目组」：groupByWorkspace 会为已登记项目保留空组，
+  // 只看 groups.length 会把「筛掉/搜掉全部会话」错读成「列表有内容」（2026-10-25 真机冒烟抓到的）。
+  const visibleCount = visibleActive.length + visibleArchived.length;
+  // 收窄态（搜索/筛选）没有 active 命中时，不再摆空项目组：空态文案与空组头会互相打架。
+  const groups = (searchOpen || filter !== "all") && visibleActive.length === 0
+    ? []
+    : groupByWorkspace(visibleActive, props.projects.map((p) => p.path));
   const byPath = new Map(props.projects.map((p) => [p.path, p]));
   const now = Date.now();
   const hasRowActions =
@@ -577,6 +617,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                       activeId={s.workspace === props.activeWorkspace ? props.activeId : null}
                       status={statusOf(s.id, s.workspace)}
                       onOpen={props.onOpen}
+                      {...(props.onPreviewSession !== undefined ? { onPreview: props.onPreviewSession } : {})}
                       posInSet={flatOrder.indexOf(s) + 1}
                       setSize={flatOrder.length}
                       renaming={renaming !== null && renaming.id === s.id}
@@ -611,6 +652,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
     <aside className="side" aria-label={STR.app.brand}>
       {/* 顶栏 48px（brief：＋ 新任务 ⌘N + 搜索 ⌘K；旧四图标行与行内表单在此下架） */}
       <div className="side-head">
+        <CairnMark outline className="side-brand-mark" />
         <button className="btn-primary side-new" title={withKeys(STR.sidebar.newTaskTip, "new-session")} onClick={props.onNewTask}>
           <Plus size={13} />
           {STR.sidebar.newTask}
@@ -622,6 +664,34 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
         <button className="iconbtn" aria-label={STR.sidebar.search} title={withKeys(STR.sidebar.searchTip, "palette")} onClick={() => { searchInputRef.current?.focus(); searchInputRef.current?.select(); }}>
           <Search size={14} />
         </button>
+        {/* 会话筛选：词表/纯函数早就存在，此前入口为零。菜单用 Radix RadioGroup（键盘/外点/读屏免费）。 */}
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button
+              className="iconbtn side-filter-btn"
+              data-active={filter !== "all"}
+              aria-label={`${STR.filter.title}：${filterInfo.label}`}
+              title={`${STR.filter.title}：${filterInfo.label}`}
+            >
+              <Filter size={14} />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content className="pop-rd side-filter-menu" align="end" sideOffset={5}>
+              <div className="pop-label">{STR.filter.title}</div>
+              <DropdownMenu.RadioGroup value={filter} onValueChange={(value) => { if (isSessionFilter(value)) changeFilter(value); }}>
+                {filterCounts.map((f) => (
+                  <DropdownMenu.RadioItem key={f.id} value={f.id} data-filter={f.id} className="menu-item" aria-label={`${f.label}（${String(f.count)}）`}>
+                    <span className="side-filter-check" aria-hidden="true">{filter === f.id ? <Check size={12} /> : null}</span>
+                    <span>{f.label}</span>
+                    <span className="sub num">{f.count}</span>
+                  </DropdownMenu.RadioItem>
+                ))}
+              </DropdownMenu.RadioGroup>
+              <div className="menu-note side-filter-note">{SESSION_FILTER_NOTE}</div>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
       </div>
 
       {/* 侧栏会话搜索（2026-10-18 接通）：常驻一行，有内容才显示清空钮；Esc 两级语义——
@@ -684,12 +754,19 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
             )}
           </div>
         )}
-        {props.loading !== true && props.loadError !== true && groups.length === 0 && visibleArchived.length === 0 && !searchOpen && (
+        {props.loading !== true && props.loadError !== true && visibleCount === 0 && !searchOpen && filter === "all" && (
           <div className="side-empty">{STR.sidebar.emptyList}</div>
+        )}
+        {/* 筛选无命中：不能说「还没有任务」——列表里可能有任务，只是不在这个筛选下。 */}
+        {props.loading !== true && props.loadError !== true && visibleCount === 0 && !searchOpen && filter !== "all" && (
+          <div className="side-empty side-filter-empty">
+            <span>{STR.filter.empty.replace("{label}", filterInfo.label)}</span>
+            <button className="btn-ghost side-retry" onClick={() => { changeFilter("all"); }}>{STR.filter.clear}</button>
+          </div>
         )}
         {/* 搜索无命中：说清「没有匹配的会话 + 当前搜索词」，不能闪回空列表——
             那会被读成「你什么都没有」，与事实不符（只是没匹配上）。 */}
-        {props.loading !== true && props.loadError !== true && searchOpen && groups.length === 0 && visibleArchived.length === 0 && (
+        {props.loading !== true && props.loadError !== true && searchOpen && visibleCount === 0 && (
           <div className="side-empty">{STR.sidebar.noMatch.replace("{q}", sessionQuery.trim())}</div>
         )}
         {groups.map((g) => {
@@ -783,13 +860,30 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                 {/* 收/开做高度过渡（2026-10-18）：此前 display:none 瞬切。包一层 inner 是
                     grid-template-rows 0fr→1fr 动画的前提（直接多行子项不会整体收）。 */}
                 <div className="group-body-inner">
-                  {sections.map((sec) => (
-                    <div key={sec.kind === "pinned" ? "pinned" : sec.bucket} className="sess-section">
-                      {/* 置顶段不摆标签（钉形图标已自证）；时间桶摆标签 */}
-                      {sec.kind === "time" && <div className="s-bucket">{BUCKET_LABEL[sec.bucket]}</div>}
-                      {sec.sessions.map((s) => rowFor(s))}
-                    </div>
-                  ))}
+                  {sections.map((sec) => {
+                    // 时间桶可折叠（2026-10-24 业主：一个项目对话太多，别的项目不好找）。
+                    // 折叠键复用同一张持久化集合（组键 + 桶 id）；搜索时恒展开（与项目组同口径）。
+                    const bucketKey = sec.kind === "time" ? `${key}#${sec.bucket}` : null;
+                    const bucketCollapsed = bucketKey !== null && !searchOpen && collapsed.has(bucketKey);
+                    return (
+                      <div key={sec.kind === "pinned" ? "pinned" : sec.bucket} className="sess-section">
+                        {/* 置顶段不摆标签（钉形图标已自证）；时间桶标签 = 折叠开关（带枚数与朝向） */}
+                        {sec.kind === "time" && (
+                          <button
+                            className="s-bucket"
+                            aria-expanded={!bucketCollapsed}
+                            title={STR.sidebar.collapseTip}
+                            onClick={() => { if (bucketKey !== null) toggleGroup(bucketKey); }}
+                          >
+                            <span>{BUCKET_LABEL[sec.bucket]}</span>
+                            <span className="s-bucket-count">{sec.sessions.length}</span>
+                            <ChevronRight size={10} className="s-bucket-chev" aria-hidden="true" />
+                          </button>
+                        )}
+                        {!bucketCollapsed && sec.sessions.map((s) => rowFor(s))}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -869,8 +963,8 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                   ))}
                 </DropdownMenu.SubContent>
               </DropdownMenu.Sub>
-              {/* 用量统计：开一个贴着头像的面板（当前会话口径，面板自己写明口径）。 */}
-              <DropdownMenu.Item className="menu-item" onSelect={() => { setUsageOpen(true); }}>
+              {/* 用量入口直达设置中的完整统计页。 */}
+              <DropdownMenu.Item className="menu-item" onSelect={() => { (props.onOpenUsage ?? props.onOpenSettings)(); }}>
                 <span>{STR.footer.usage}</span>
               </DropdownMenu.Item>
               <DropdownMenu.Separator className="menu-sep" />
@@ -889,23 +983,6 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         </div>
-        {/* 用量统计面板：锚在**侧栏**右下角（不是头像旁）——面板宽 184px、侧栏最窄 200px，
-            贴头像锚会把它推到窗口左缘外裁掉标题行。 */}
-        {usageOpen && (
-          /* 锚：0×0 的定位点。面板本体在锚里 ⇒ 外点判定（usePopoverDismiss）
-             不会把「点面板内部」判成外点。 */
-          <div className="usage-anchor" ref={usageAnchorRef}>
-            <Popover open up className="usage-pop" role="dialog" aria-label={STR.footer.usageTitle}>
-              <UsagePanel
-                scope={usageScope}
-                onScopeChange={changeUsageScope}
-                usage={props.usage}
-                all={props.usageAll ?? { status: "idle" }}
-                onRetry={() => { props.onLoadUsageAll?.(); }}
-              />
-            </Popover>
-          </div>
-        )}
       </footer>
 
       {ctxMenu !== null && (

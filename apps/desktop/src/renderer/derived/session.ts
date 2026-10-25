@@ -90,7 +90,7 @@ export function mergeSessionSnapshot(
   return [...snapshot, ...pending];
 }
 
-/** 事件 id（1-based 行号，assistant 行 eventId 同口径）→ 所属轮号（1-based）。P3-1 回放/分叉的
+/** 事件 id（1-based 行号，assistant 行 eventId 同口径）→ 所属轮号（1-based）。P3-1 分叉的
  *  轮号自事件日志投影（hover 操作对「事件日志的 fork/replay」的接口）。轮界口径与 projectStream
  *  的 rounds 计数同一份：主会话 user_message 计数（worker 子流先滤）；事件在首个用户消息之前
  *  或 id 越界（<1 / > events.length）→ null（不猜）。 */
@@ -105,7 +105,7 @@ export function roundOfEvent(events: readonly AgentEvent[], eventId: number): nu
   return rounds === 0 ? null : rounds;
 }
 
-/** 第 N 轮的用户输入原文（回放 = fork 到该轮后把它注入新会话输入框）。拿不到 → null，不编。 */
+/** 第 N 轮的用户输入原文（编辑并重发要用）。拿不到 → null，不编。 */
 /** 用户面原文（2026-10-18）：技能调用轮的事件 content 是**展开后的技能提示词**（模型面），
  *  直接显示会把整份 SKILL.md 当成用户说的话。skill 元信息在 ⇒ 还原成用户敲的 `<invoke> <args>`；
  *  缺席（普通消息）⇒ 原样。事件本身不改：重放/续跑要的是展开后的上下文。 */

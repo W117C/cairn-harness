@@ -18,6 +18,7 @@ export interface ContextMessage {
   content: string | null;
   tool_calls?: { id: string; type: "function"; function: { name: string; arguments: string } }[];
   tool_call_id?: string;
+  reasoning?: import("../events/types").ProviderReasoningState;
 }
 
 /** 最新一份摘要的注入包装：交接叙事 + 免疫声明（§7.3(g)，分析用户意图时排除本消息）。
@@ -259,9 +260,16 @@ export function projectContext(
 
   const deltaBuf = new Map<string, string>();
   const deltaOrder: string[] = [];
+  const reasoning = new Map<string, import("../events/types").ProviderReasoningState>();
+  const reasoningByCall = new Map<string, string>();
+  const reasoningMessages = new Map<string, number>();
   const flushDeltas = (): void => {
     for (const callId of deltaOrder) {
-      msgs.push({ role: "assistant", content: deltaBuf.get(callId) ?? "" });
+      const reasoningId = reasoningByCall.get(callId);
+      const state = reasoningId === undefined ? undefined : reasoning.get(reasoningId);
+      if (reasoningId !== undefined) reasoningMessages.set(reasoningId, msgs.length);
+      msgs.push({ role: "assistant", content: deltaBuf.get(callId) ?? "", ...(state ? { reasoning: { ...state } } : {}) });
+      reasoningByCall.delete(callId);
     }
     deltaBuf.clear();
     deltaOrder.length = 0;
@@ -281,28 +289,50 @@ export function projectContext(
     ) {
       return; // 编排/审批协议事件：语义在面板与卡片侧，模型上下文不需要（与 clarify/plan 同口径）
     }
-    if (id >= offset) {
+    if (!injected && id >= offset) {
       flushDeltas(); // offset 之前的待并 delta 先落位，保证注入点次序
       injectOnce(); // 到达注入位（首个 tail 事件或末尾）
     }
     if (e.type === "user_message") {
       flushDeltas();
+      reasoningByCall.clear();
       msgs.push({ role: "user", content: e.content });
     } else if (e.type === "assistant_message") {
       flushDeltas();
       msgs.push({ role: "assistant", content: e.content });
+    } else if (e.type === "thinking_delta") {
+      if (e.reasoning && typeof e.reasoning.id === "string" && typeof e.reasoning.source === "string") {
+        const prior = reasoning.get(e.reasoning.id);
+        reasoning.set(e.reasoning.id, {
+          source: e.reasoning.source,
+          content: (prior?.source === e.reasoning.source ? prior.content : "") + e.text,
+        });
+        reasoningByCall.set(e.callId, e.reasoning.id);
+      }
     } else if (e.type === "assistant_delta") {
       if (!deltaBuf.has(e.callId)) deltaOrder.push(e.callId);
       deltaBuf.set(e.callId, (deltaBuf.get(e.callId) ?? "") + e.text);
     } else if (e.type === "tool_call") {
       flushDeltas();
-      msgs.push({
+      const state = e.reasoningId === undefined ? undefined : reasoning.get(e.reasoningId);
+      const previousAt = e.reasoningId === undefined ? undefined : reasoningMessages.get(e.reasoningId);
+      const previous = previousAt === undefined ? undefined : msgs[previousAt];
+      const tool = { id: e.id, type: "function" as const, function: { name: e.name, arguments: JSON.stringify(e.args) } };
+      // Reconstruct the native assistant batch; do not repeat its reasoning once per tool.
+      const answeredIds = new Set(previous?.tool_calls?.map(call => call.id) ?? []);
+      if (state && previous?.role === "assistant" && previousAt !== undefined &&
+          msgs.slice(previousAt + 1).every(msg => msg.role === "tool" && answeredIds.has(msg.tool_call_id ?? ""))) {
+        previous.tool_calls = [...(previous.tool_calls ?? []), tool];
+      } else {
+        if (state && e.reasoningId !== undefined) reasoningMessages.set(e.reasoningId, msgs.length);
+        msgs.push({
         role: "assistant",
         content: null,
-        tool_calls: [
-          { id: e.id, type: "function", function: { name: e.name, arguments: JSON.stringify(e.args) } },
-        ],
-      });
+        tool_calls: [tool],
+        ...(state ? { reasoning: { ...state } } : {}),
+        });
+      }
+      if (state) reasoningByCall.clear();
     } else if (e.type === "tool_result") {
       flushDeltas();
       const pruned = replacements?.get(id);
@@ -325,7 +355,11 @@ export function projectContext(
       if (i === lastAutoIdx) msgs.push({ role: "user", content: autoVerifyNote(e.results, autoIdx.length - 1) });
     } else if (e.type === "turn_truncated") {
       flushDeltas(); // 先把那段被砍断的正文落位，「上一条」才指得清是哪条
+      reasoningByCall.clear();
       msgs.push({ role: "user", content: truncationNote(e) });
+    } else if (e.type === "usage") {
+      flushDeltas();
+      reasoningByCall.clear();
     }
     // clarify_requested / plan_proposed / plan_approved / usage / session_meta：
     // 语义已在 tool_result / 卡片侧，模型上下文不需要（与既有 buildSessionHistory 口径一致）

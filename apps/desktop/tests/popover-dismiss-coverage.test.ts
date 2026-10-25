@@ -14,22 +14,24 @@ import { describe, expect, it } from "vitest";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const composer = read("../src/renderer/components/Composer.tsx");
+const meter = read("../src/renderer/components/UsageMeter.tsx");
 const popover = readAppSurface();
 
 describe("Composer 的浮层：三个自绘菜单都认外点 + Esc", () => {
   it("meter 也接了 usePopoverDismiss（旧实现只有 attach/perm 两支）", () => {
-    expect(composer).toContain("usePopoverDismiss(menu === \"meter\", closeMenu, meterWrapRef);");
+    expect(meter).toContain("usePopoverDismiss(props.open, close, wrapRef);");
   });
 
-  it("meter 的浮层挂在 meterWrapRef 上（没有 ref，contains 永远假 ⇒ 外点判据形同虚设）", () => {
-    expect(composer).toContain("const meterWrapRef = useRef<HTMLDivElement | null>(null);");
-    expect(composer).toContain('<div className="usage-slot" ref={meterWrapRef}>');
+  it("用量浮层挂在 wrapRef 上（没有 ref，contains 永远假 ⇒ 外点判据形同虚设）", () => {
+    expect(meter).toContain("const wrapRef = useRef<HTMLDivElement | null>(null);");
+    expect(meter).toContain('<div className="usage-slot" ref={wrapRef}>');
   });
 
   it("反向锚：三个自绘菜单各有自己的一支 usePopoverDismiss（少一支就有一个关不掉）", () => {
-    const calls = composer.match(/usePopoverDismiss\(menu === "(attach|perm|meter)"/g) ?? [];
-    expect(calls).toHaveLength(3);
-    expect(new Set(calls).size).toBe(3);
+    const calls = composer.match(/usePopoverDismiss\(menu === "(attach|perm)"/g) ?? [];
+    expect(calls).toHaveLength(2);
+    expect(new Set(calls).size).toBe(2);
+    expect(meter).toContain("usePopoverDismiss(props.open, close, wrapRef);");
   });
 });
 

@@ -120,9 +120,9 @@ export const MUTATIONS = [
     id: "typecheck-parse-trims-at-whitespace",
     src: "scripts/lib/typecheck-triage.ts",
     test: "tests/typecheck-triage.test.ts",
-    desc: "解析报错行改回按非空白切路径 ⇒ 目录名带空格（本仓目录就叫 deepseek harness）时截出半个路径，整列归因作废",
+    desc: "解析报错行改回按非空白切路径 ⇒ 目录名带空格（本仓历史目录名 deepseek harness 就带空格）时截出半个路径，整列归因作废",
     apply: (s) => s.replace("const TSC_ERROR_LINE = /^(.+?)\\(\\d+,\\d+\\): error TS\\d+/u;", "const TSC_ERROR_LINE = /^(\\S+?)\\(\\d+,\\d+\\): error TS\\d+/u;"),
-    expectFail: "路径含空格也能解析（本仓目录名就有空格；按空白切会截出半个路径）",
+    expectFail: "路径含空格也能解析（历史目录名有空格；按空白切会截出半个路径）",
   },
   {
     id: "typecheck-clean-verdict-unearned",

@@ -243,7 +243,7 @@ function MarkdownImage(props: { alt: string; src: string }): React.JSX.Element {
   );
 }
 
-const CodeBlock = memo(function CodeBlock(props: { lang: string | null; content: string; onCopy?: (code: string) => Promise<boolean> | boolean | void }) {
+const CodeBlock = memo(function CodeBlock(props: { lang: string | null; content: string; onCopy?: (code: string) => Promise<boolean> | boolean | void; caret?: boolean }) {
   // 就地反馈（2026-10-18）：复制后只有远处 toast，按钮本身毫无变化——用户不确定点没点中。
   // 成功态 1.2s 后自还原；onCopy 缺席时不假装成功。
   const [copied, setCopied] = useState(false);
@@ -279,13 +279,15 @@ const CodeBlock = memo(function CodeBlock(props: { lang: string | null; content:
           <span>{copied ? "已复制" : "复制"}</span>
         </button>
       </div>
-      <pre><code>{props.content}</code></pre>
+      {/* 流式时光标跟在代码末行行尾（收掉结尾空行让它贴字）；非流式原样。 */}
+      <pre><code>{props.caret === true ? props.content.replace(/\n+$/, "") : props.content}{props.caret === true && <Caret />}</code></pre>
     </div>
   );
 });
 
 /** 流式追字光标（原型同款语义：跟在正文末尾行内，不是独立一行）。
- *  只往"能写字"的块里放（p/标题/引用/列表末项）；代码块、表格收尾时不放（写了也怪）。 */
+ *  2026-10-24 业主：光标要**跟着文字出现**——代码块/表格流式时光标消失像卡死。
+ *  ⇒ p/标题/引用/列表末项之外，代码块收到末行行尾、表格落到末行末格。 */
 function Caret() {
   return <span className="cursor" aria-hidden="true" />;
 }
@@ -299,7 +301,7 @@ function BlockView(props: { block: Block; onCopy?: (code: string) => void; caret
       return <Tag className={`md-h md-h${String(b.level)}`}>{renderInline(b.text)}{caret}</Tag>;
     }
     case "code":
-      return <CodeBlock lang={b.lang} content={b.content} {...(props.onCopy !== undefined ? { onCopy: props.onCopy } : {})} />;
+      return <CodeBlock lang={b.lang} content={b.content} {...(props.onCopy !== undefined ? { onCopy: props.onCopy } : {})} {...(caret !== null ? { caret: true } : {})} />;
     case "tasklist":
       return (
         <ul className="md-tasks">
@@ -338,7 +340,7 @@ function BlockView(props: { block: Block; onCopy?: (code: string) => void; caret
         <div className="md-table-wrap" data-dsh-claude-part="table-scroll">
           <table className="md-table">
             <thead><tr>{b.header.map((h, i) => <th key={i}>{renderInline(h)}</th>)}</tr></thead>
-            <tbody>{b.rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{renderInline(c)}</td>)}</tr>)}</tbody>
+            <tbody>{b.rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{renderInline(c)}{caret !== null && i === b.rows.length - 1 && j === r.length - 1 ? caret : null}</td>)}</tr>)}</tbody>
           </table>
         </div>
       );

@@ -54,8 +54,8 @@ describe("打开会话：先清旧流，读盘期间的增量要合并", () => {
     expect(app).toContain("openPending.current.events.push(e);");
   });
 
-  it("分叉 / 编辑 / 回放走 openSession（裸 activate 会把旧转录留在屏上）", () => {
-    for (const marker of ["handleBranch", "handleEditUser", "handleReplay"]) {
+  it("分叉 / 编辑走 openSession（裸 activate 会把旧转录留在屏上）；回放已撤（2026-10-24）", () => {
+    for (const marker of ["handleBranch", "handleEditUser"]) {
       const block = between(app, `const ${marker} = useCallback`, "\n  }, [");
       expect(block).toContain("openSession(");
     }

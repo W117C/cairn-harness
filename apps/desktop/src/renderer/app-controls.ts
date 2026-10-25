@@ -8,4 +8,4 @@ export interface FindBarHandle {
 
 export type PageId = "plugins" | "automation" | "skills" | "memory" | "worktrees";
 
-export type SectionId = "general" | "provider" | "permissions" | "advanced" | "shortcuts" | PageId | "about";
+export type SectionId = "general" | "provider" | "network" | "usage" | "permissions" | "advanced" | "shortcuts" | PageId | "about";

@@ -84,6 +84,10 @@ const GOLDEN: Readonly<Record<string, Golden>> = {
   remember: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
   obs_recall: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
   skill: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
+  // MCP 服务器级懒加载元工具：只改 active 集，不执行外部工具 ⇒ 四档均按无副作用工具放行。
+  mcp_list: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
+  mcp_activate: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
+  mcp_release: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
   automation_create: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
   automation_update: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
   automation_delete: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],

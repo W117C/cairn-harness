@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   parseFrontmatter, buildSkillRoutingList, substituteVars, renderPromptCommand,
-  skillRemount, clampSkillBody, estimateTokens, activationsFromEvents,
+  skillRemount, clampSkillBody, estimateTokens, activationsFromEvents, skillResourceSuffix,
   SKILL_ROUTING_CHAR_LIMIT, SKILL_REMOUNT_TOKENS_PER_SKILL, SKILL_REMOUNT_TOKENS_TOTAL,
   PluginRuntime,
 } from "../src/agent/plugins";
@@ -52,6 +52,8 @@ describe("M2e skill：frontmatter 与路由清单（任务 3）", () => {
       { plugin: "a", name: "two", description: "x".repeat(2000) },
       { plugin: "b", name: "three", description: "y".repeat(2000) },
       { plugin: null, name: "loose", description: "散装" },
+      // 单条描述帽落地后，原四条（约 1.2k）已装得下；补四条同量级条目，继续验总帽那条路径。
+      ...Array.from({ length: 6 }, (_, i) => ({ plugin: "fill", name: "f" + String(i), description: "z".repeat(200) })),
     ];
     const r = buildSkillRoutingList(skills);
     expect(r.truncated).toBe(true);
@@ -143,6 +145,67 @@ describe("M2e skill：渐进披露与触发全文（任务 3）", () => {
     const miss = rt.triggerSkill("/nope");
     expect(miss.ok).toBe(false);
     await rt.shutdown();
+  });
+});
+
+describe("M2e skill：L2 资源索引（只列路径，不读内容）", () => {
+  it("触发时列出工作区内可读资源；资源正文不自动进入上下文", async () => {
+    const ws = await mkdtemp(join(tmpdir(), "m2e-skill-res-"));
+    const skillDir = join(ws, ".agent", "skills", "resourceful");
+    await mkdir(join(skillDir, "references"), { recursive: true });
+    await mkdir(join(skillDir, "scripts"), { recursive: true });
+    await mkdir(join(skillDir, "assets"), { recursive: true });
+    await writeFile(join(skillDir, "SKILL.md"),
+      "---\nname: resourceful\ndescription: 带资源的技能\n---\n正文只写步骤。\n", "utf8");
+    await writeFile(join(skillDir, "references", "guide.md"), "RESOURCE_SECRET_BODY_GUIDE", "utf8");
+    await writeFile(join(skillDir, "scripts", "run.sh"), "#!/bin/sh\necho hi\n", "utf8");
+    await writeFile(join(skillDir, "assets", "pic.bin"), Buffer.from([0, 1, 2, 3]));
+    const rt = await PluginRuntime.load({
+      projectSkillsDir: join(ws, ".agent", "skills"),
+      workspace: ws,
+      pluginDataRoot: join(ws, "data"),
+      trustFile: join(ws, "trust.json"),
+    });
+    await rt.trustDecide("resourceful", true);
+    const out = rt.triggerSkill("/resourceful");
+    expect(out.ok).toBe(true);
+    expect(out.output).toContain("[可用资源");
+    expect(out.output).toContain("references/guide.md");
+    expect(out.output).toContain("scripts/run.sh");
+    expect(out.output).toContain("assets/pic.bin");
+    expect(out.output).not.toContain("RESOURCE_SECRET_BODY_GUIDE"); // L2 不自动读内容
+    expect(out.output).not.toContain(ws); // 只递工作区相对路径，不递绝对路径
+    await rt.shutdown();
+    await rm(ws, { recursive: true, force: true });
+  }, 30_000);
+
+  it("工作区外的插件资源只报数量、不递绝对路径", async () => {
+    const ws = await mkdtemp(join(tmpdir(), "m2e-skill-ws-"));
+    const outside = await mkdtemp(join(tmpdir(), "m2e-skill-outside-"));
+    await mkdir(join(outside, "references"), { recursive: true });
+    await writeFile(join(outside, "references", "a.md"), "x", "utf8");
+    const suffix = skillResourceSuffix([{ path: "references/a.md", bytes: 1 }], outside, ws);
+    expect(suffix).toContain("模型侧不可读");
+    expect(suffix).not.toContain(outside);
+    await rm(ws, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  });
+
+  it("资源过多时有上限与「只列前 N 个」说明", async () => {
+    const ws = await mkdtemp(join(tmpdir(), "m2e-skill-many-"));
+    const skillDir = join(ws, ".agent", "skills", "many");
+    await mkdir(join(skillDir, "references"), { recursive: true });
+    for (let i = 0; i < 25; i++) await writeFile(join(skillDir, "references", String(i) + ".md"), "x", "utf8");
+    const suffix = skillResourceSuffix(
+      Array.from({ length: 25 }, (_, i) => ({ path: "references/" + String(i) + ".md", bytes: 1 })),
+      skillDir,
+      ws,
+    );
+    expect(suffix).toContain("资源过多，只列前");
+    const listed = suffix.split("\n").filter((l) => l.startsWith("- ")).length;
+    expect(listed).toBeGreaterThan(0);
+    expect(listed).toBeLessThanOrEqual(20);
+    await rm(ws, { recursive: true, force: true });
   });
 });
 

@@ -55,6 +55,26 @@ describe("Sidebar 搜索接线", () => {
     expect(sidebarSrc).toContain("filterSessions(archivedSessions");
   });
 
+  it("筛选状态进入两处 filterSessions（不再硬编码 all），其余四档有菜单入口", () => {
+    expect(sidebarSrc).toMatch(/filterSessions\(activeSessions, \{ search: searchTerm, filter, running: props\.running \}\)/);
+    expect(sidebarSrc).toMatch(/filterSessions\(archivedSessions, \{ search: searchTerm, filter, running: props\.running \}\)/);
+    expect(sidebarSrc).not.toContain('filter: "all", running: props.running');
+    expect(sidebarSrc).toContain("DropdownMenu.RadioGroup");
+    expect(sidebarSrc).toContain("filterCounts.map");
+    expect(sidebarSrc).toContain("changeFilter");
+    expect(sidebarSrc).toContain("SESSION_FILTER_KEY");
+    expect(sidebarSrc).toContain("SESSION_FILTER_NOTE");
+    expect(sidebarSrc).toContain("data-filter={f.id}");
+  });
+
+  it("筛选无命中给专属空态 + 清除筛选，不谎报「还没有任务」", () => {
+    expect(sidebarSrc).toContain('STR.filter.empty.replace("{label}", filterInfo.label)');
+    expect(sidebarSrc).toContain('changeFilter("all")');
+    expect(sidebarSrc).toContain('STR.filter.clear');
+    // 旧空态只在 all 下出现，避免「有任务但被筛掉」说成「一个都没有」
+    expect(sidebarSrc).toMatch(/!searchOpen && filter === "all"/);
+  });
+
   it("放大镜改为聚焦侧栏搜索框（此前打开的是 ⌘K 整屏模态）", () => {
     expect(sidebarSrc).toContain("searchInputRef.current?.focus()");
     // 反向：那个按钮不再直接打开命令面板

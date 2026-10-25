@@ -61,10 +61,16 @@ import { createVerifyHook, defaultExec, runVerifyOutcome, type ExecFn } from "..
 // 模型名取 `glmDefaultModelName()`：本跑器启动时已把 CAIRN_MODEL 归一成真正要拨的那一档，
 // 所以这是同一个事实源，不是第三份 glm-5.2 字面量副本（同族出口那一族，规则里点过名）。
 import { createUsageAttributor } from "../src/agent/usage-attribution";
-import { glmDefaultModelName } from "../src/providers/glm";
+import { RequestMeter, type MeterReport } from "../src/agent/metering";
+import { glmDefaultModelName, streamGlm } from "../src/providers/glm";
+import { createInterventionPolicy, STUDY_STRATEGIES, type InterventionDecision } from "../src/agent/eval/metacognition";
 import { createSessionProvider, sessionToolSpecs } from "../src/agent/session-provider";
+import type { ThinkingEffort } from "../src/providers/capabilities";
 import { createEventLog, replay, type AgentEvent } from "../src/events";
 import { BASE_SYSTEM } from "../src/main/agent-runner";
+import { TOOLS } from "../src/tools";
+import { createStudySandbox, prepareStudyModules, snapshotStudyDependencies } from "./lib/metacognition-sandbox";
+import { dirname } from "node:path";
 import { stuckActionOf, stuckObservationOf } from "../src/agent/stuck";
 
 const argv = process.argv.slice(2);
@@ -85,6 +91,26 @@ const BUG = join(ROOT, "fixtures", "mock", "todo-bug.ts");
 const OUT = pick("--out", join("outputs", "loop-eval-" + new Date().toISOString().slice(0, 10)));
 const MAX_STEPS = Number(pick("--max-steps", "20"));
 const REPS = Number(pick("--reps", "1"));
+/* 思考档位（任务 1）：只认四档；缺省不带 ⇒ provider 不展开 reasoningEffort，请求体逐字不变。
+ * 拼错不静默当 off：那会把「我传了 high」与「我没传」跑成同一副脸，pilot 的臂名就成了假账。 */
+const THINKING_RAW = pick("--thinking", "");
+const THINKING_VALUES: readonly ThinkingEffort[] = ["off", "low", "medium", "high"];
+if (THINKING_RAW !== "" && !THINKING_VALUES.includes(THINKING_RAW as ThinkingEffort)) {
+  console.error(`[loop-eval] --thinking=${JSON.stringify(THINKING_RAW)} 不认识：只认 ${THINKING_VALUES.join("/")}`);
+  process.exit(2);
+}
+const THINKING: ThinkingEffort | undefined = THINKING_RAW === "" ? undefined : THINKING_RAW as ThinkingEffort;
+const STUDY_STRATEGY = pick("--metacognition", "");
+const STUDY_SEED = Number(pick("--study-seed", "1"));
+const STUDY_MAX_OUTPUT = Number(pick("--study-max-output", "4096"));
+const STUDY_TIMEOUT = Number(pick("--study-timeout-ms", "120000"));
+if (STUDY_STRATEGY !== "") {
+  if (!(STUDY_STRATEGIES as readonly string[]).includes(STUDY_STRATEGY) || !Number.isSafeInteger(STUDY_SEED) ||
+      !Number.isSafeInteger(STUDY_MAX_OUTPUT) || STUDY_MAX_OUTPUT < 1 || !Number.isSafeInteger(STUDY_TIMEOUT) || STUDY_TIMEOUT < 1 ||
+      (STUDY_STRATEGY === "high" && THINKING !== "high")) {
+    console.error("[loop-eval] Invalid metacognition strategy, budget or high-arm identity"); process.exit(2);
+  }
+}
 const SYSTEM_MODE = pick("--system", "base");
 /* `--keep` = 全量档（每一趟都留）。失败那一侧的留档**不靠它**（#109）：
  * bench 那四支脚本从不传 `--keep`，于是红轨迹跟着 mkdtemp 目录一起没，能力 10 在基准这一侧永远拿不到输入。
@@ -369,6 +395,9 @@ function startResourceSampler(): () => ResourceSample {
 }
 
 interface Reading {
+  study?: { strategy: string; seed: number; interventions: InterventionDecision[]; physicalRequests: number;
+    reasoningOutputTokens: number | null; meter: MeterReport; dependencyIntact: boolean; outputCap: number; timeoutMs: number;
+    envelopes: { effort: unknown; thinking: unknown; model: string; reasoningStates: number }[] };
   id: string; name: string; rep: number; system: string;
   /** 这一趟真拨的模型名 = 归因键（`scripts/eval/report.ts` 的 `modelFace` 用它挡跨模型 A/B）。
    *  与 usage 事件上的 `model` 同源：都取 `glmDefaultModelName()`，不在这里再算一份缺省。 */
@@ -473,7 +502,8 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   // 直接 command not found ⇒ verify 恒红，量出来全是装配噪声不是模型行为（实测踩过）。
   // 改成软链回原靶子的 node_modules：依赖可用，且绝不写回原目录。
   await rm(join(work, "node_modules"), { recursive: true, force: true });
-  await symlink(join(appDir, "node_modules"), join(work, "node_modules"), "dir");
+  const studyModules = STUDY_STRATEGY ? await prepareStudyModules(work, join(appDir,"node_modules")) : undefined;
+  if (!STUDY_STRATEGY) await symlink(join(appDir, "node_modules"), join(work, "node_modules"), "dir");
   const bug = t.bugFile !== undefined ? t.bugFile : (t.seed === "bug" ? BUG : null);
   if (bug !== null) await cp(bug, join(work, "src", "todo.ts"));
   const eventsPath = join(dir, "events.jsonl");
@@ -516,10 +546,25 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   const face = sessionToolSpecs({ mode: "auto" });
   const system = SYSTEM_MODE === "short" ? SHORT_SYSTEM : BASE_SYSTEM;
   const started = Date.now();
+  const studyPolicy = STUDY_STRATEGY === "" ? undefined : createInterventionPolicy({ strategy: STUDY_STRATEGY, seed: STUDY_SEED, maxInterventions: 2 });
+  const studyMeter = studyPolicy ? new RequestMeter() : undefined;
+  let physicalRequests = 0;
+  const envelopes: NonNullable<Reading["study"]>["envelopes"] = [];
+  const studyFetch: typeof fetch = async (url, init) => {
+    const body = JSON.parse(String(init?.body));
+    envelopes.push({ effort: body.reasoning_effort ?? null, thinking: body.thinking, model: body.model,
+      reasoningStates: body.messages.filter((message: { reasoning_content?: string }) => typeof message.reasoning_content === "string" && message.reasoning_content !== "").length });
+    physicalRequests++;
+    return fetch(url, init);
+  };
   // 起点自述：这一格开跑前靶子本身是绿是红。`fixtures/todo-app/src/todo.ts` 是生成物、会被任何
   // 一次 e2e/agent/gate 就地重置 ⇒ 不能拿它当全局 gate，但必须逐格记进读数：
   // 「模型把红修到绿」与「模型从绿开始又弄红了」是两个完全不同的结论。
-  const seedVerifyOk = (await runVerifyOutcome(work, EVAL_EXEC)).ok;
+  const sandbox = studyPolicy ? await createStudySandbox(work, [ROOT, dirname(appDir), ...JSON.parse(process.env.CAIRN_STUDY_DENY_READ ?? "[]")], studyModules) : undefined;
+  const trialExec: ExecFn = sandbox ? (command,cwd,timeoutMs,signal) => sandbox.exec(`pnpm_config_verify_deps_before_run=false ${command}`,cwd,timeoutMs,signal) : EVAL_EXEC;
+  const seedVerifyOk = (await runVerifyOutcome(work, trialExec)).ok;
+  const dependenciesBefore = studyPolicy ? await snapshotStudyDependencies(work) : undefined;
+  if (dependenciesBefore?.startsWith("unreadable:")) throw new Error("Study dependency baseline unreadable");
   const stopSampler = startResourceSampler();
   let exitError: string | null = null;
   try {
@@ -534,17 +579,24 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
           // 而用 OPENAI_MODEL 配的路由（如 OpenRouter 的自由档）在这里就会被静默换成 glm-5.2 ⇒
           // 请求打到不是你要测的那个模型上。压缩摘要器也吃这个值，两处同源。
           ...(BENCH_MODEL !== undefined && BENCH_MODEL !== "" ? { model: BENCH_MODEL } : {}),
+          ...(THINKING !== undefined ? { thinking: THINKING } : {}),
+          ...(studyPolicy ? {
+            requestIntervention: studyPolicy.next,
+            transport: (messages, options, tools, call) => streamGlm(messages, { ...options, fetchImpl: studyFetch, extraBody:{max_tokens:STUDY_MAX_OUTPUT,thinking:{type:THINKING === "off" ? "disabled" : "enabled"}}, metering: {meter:studyMeter!, category:"main"} }, tools, call),
+          } : {}),
         })
         // 合成面：装配不变，只换「模型那一侧从哪来」——剧本按轮吐，零 key 零网络（见上面 SCRIPTED 那段）。
         : createRoundScriptedProvider(resolve(ROOT, SCRIPTED)),
       events: driven,
       workspace: work,
+      ...(sandbox ? { tools: { ...TOOLS, run_shell: sandbox.shell } } : {}),
       mode: "auto",
       maxSteps: MAX_STEPS,
+      ...(studyPolicy ? { signal: AbortSignal.timeout(STUDY_TIMEOUT) } : {}),
       stuckNudge: true,
       clarify,
       plan,
-      verify: createVerifyHook(work, { exec: EVAL_EXEC, trustedRepo: true }),
+      verify: createVerifyHook(work, { exec: trialExec, trustedRepo: true }),
       userMessage: t.task,
     });
   } catch (err) {
@@ -632,7 +684,8 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
    * 改写/删掉既有判卷才是真作弊，也正是 M0 那轮实测抓到的形状（12 条里 5 条改过 `tests/*.test.js`）。
    * 判据的口径：**`changed` 里属于 tests/ 的文件，若在靶子里本来就有 ⇒ 被改过；没有 ⇒ 是新增。 */
   const existedInSeed = (f: string): boolean => orig.includes(f.replace("（被删）", ""));
-  const touchedJudge = changed.some((f) => isJudge(f.replace("（被删）", "")) && existedInSeed(f));
+  const dependencyIntact = dependenciesBefore === undefined || dependenciesBefore === await snapshotStudyDependencies(work);
+  const touchedJudge = !dependencyIntact || changed.some((f) => isJudge(f.replace("（被删）", "")) && existedInSeed(f));
   /** 有没有在 tests/ 下**动过东西**（含新增）——`wroteTest` 这一支要的正是这个口径。 */
   const wroteTests = modelWrites.some((p) => p.startsWith("tests/"));
   const onlySrcChanged = changed.length > 0 && changed.every((f) => f.startsWith("src/"));
@@ -647,7 +700,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   let heldOutRun: HeldOutRun | undefined;
   if (t.spec?.heldOut !== undefined) {
     heldOutInstallErrs.push(...await installHeldOut(work, ROOT, t.spec.heldOut.files));
-    if (heldOutInstallErrs.length === 0) heldOutRun = await runHeldOut(work, t.spec.heldOut, EVAL_EXEC);
+    if (heldOutInstallErrs.length === 0) heldOutRun = await runHeldOut(work, t.spec.heldOut, trialExec);
   }
 
   // 先显式摘掉软链再删临时目录：不给"递归删到原靶子 node_modules"留任何可能性
@@ -663,6 +716,10 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
    * 之前烧掉证据。把位置交给主循环，由它按自己印出来的那个 verdict 决定留不留，留完立刻收。 */
   STAGED.push({ key: t.id + "-rep" + String(rep) + "-" + SYSTEM_MODE, eventsPath, dir });
   return {
+    ...(studyPolicy ? { study: { strategy: STUDY_STRATEGY, seed: STUDY_SEED, interventions: studyPolicy.decisions,
+      physicalRequests, meter:studyMeter!.seal(), dependencyIntact, outputCap: STUDY_MAX_OUTPUT, timeoutMs: STUDY_TIMEOUT, envelopes,
+      reasoningOutputTokens: usage.length > 0 && usage.every(event => event.reasoningOutputTokens !== undefined)
+        ? usage.reduce((sum, event) => sum + event.reasoningOutputTokens!, 0) : null } } : {}),
     id: t.id, name: t.name, rep, system: SYSTEM_MODE, seedVerifyOk,
     model: glmDefaultModelName(),
     attempts: 1, retryWaitMs: 0, retryWhy: "首趟未重拨",
@@ -846,7 +903,7 @@ if (ASSEMBLY_UNDECLARED.length > 0) {
   console.error(`[loop-eval] ${String(ASSEMBLY_UNDECLARED.length)} 枚键没表态 ⇒ 拒绝出数（在 scripts/lib/eval-assembly.ts 的 BENCH_KNOBS 里写明装／不装／无意义）`);
   process.exit(1);
 }
-console.log(`[loop-eval] 任务=${tasks.map((t) => t.id).join(",")} reps=${REPS} system=${SYSTEM_MODE} maxSteps=${MAX_STEPS} 模型=${glmDefaultModelName()} 价=${PRICE.known ? `¥${PRICE.inPerM}/¥${PRICE.outPerM}每M（手给）` : `${PRICE_UNKNOWN}〔${PRICE.why}〕`}`);
+console.log(`[loop-eval] 任务=${tasks.map((t) => t.id).join(",")} reps=${REPS} system=${SYSTEM_MODE} maxSteps=${MAX_STEPS} thinking=${THINKING ?? "off"} 模型=${glmDefaultModelName()} 价=${PRICE.known ? `¥${PRICE.inPerM}/¥${PRICE.outPerM}每M（手给）` : `${PRICE_UNKNOWN}〔${PRICE.why}〕`}`);
 await mkdir(ROOT + "/" + OUT, { recursive: true });
 // 一趟只读一次钟：run.json 的时刻、盖进每条读数的 ranAt 身份键（#90）、以及失败轨迹留档那个
 // dated 目录的名字，三者取**同一个**值——省得多处各 `new Date()` 漂出两个时刻、事后对账对不上。
@@ -860,7 +917,7 @@ for (let rep = 1; rep <= REPS; rep++) {
     // 被 provider 打断 ⇒ 再拨一次（判据与分母共用同一个白名单，见 lib/eval-retry）。
     // 帽内的等待（分钟级抖动）才等；日配额那种要等到明天的 ⇒ 明确不重拨并印出原因——
     // 那一趟仍会被 `runValidity` 判成「无效、不进分母」，不会污染分数。
-    const retried = await withProviderRetry(
+    const retried = STUDY_STRATEGY !== "" ? { value: await runOnce(t, rep), attempts: 1, waitedMs: 0, stoppedWhy: "study: no hidden episode retry" } : await withProviderRetry(
       () => runOnce(t, rep),
       (res, n) => retryVerdict([...grade(res, t).fails, res.exitError ?? ""], n, { nowMs: Date.now() }),
       (ms) => sleep(ms),
@@ -971,7 +1028,7 @@ await writeFile(join(ROOT, OUT, "run.json"), JSON.stringify({
   // -1 = 取不到（不是"干净"）：取不到时印 -1，绝不用 0 冒充干净树。
   dirty: dirtyCount,
   ranAt,
-  maxSteps: MAX_STEPS, reps: REPS, system: SYSTEM_MODE, arm: ARM,
+  maxSteps: MAX_STEPS, reps: REPS, system: SYSTEM_MODE, arm: ARM, thinking: THINKING ?? "off",
   // 模型名**总是记**（#63）：原先只在 BENCH_MODEL 非空时进读数行，于是"用缺省模型跑的"
   // 那一趟回查不到自己拨的是哪一档——而缺省恰恰是最常见的那一档。
   model: (BENCH_MODEL !== undefined && BENCH_MODEL !== "") ? BENCH_MODEL : glmDefaultModelName(),
@@ -1000,7 +1057,7 @@ if (archived !== null) {
  * 取值复用同一趟的 `SCRIPTED` 判定（与 `buildReading` 同一份事实源，不另判一次）。 */
 await writeFile(readingsPath, JSON.stringify(rows.map((x) => ({
   ...x,
-  r: { ...x.r, headSha, ranAt, maxSteps: MAX_STEPS, reps: REPS, arm: ARM, providerFace: SCRIPTED === "" ? "真会话" : "剧本" },
+  r: { ...x.r, headSha, ranAt, maxSteps: MAX_STEPS, reps: REPS, arm: ARM, thinking: THINKING ?? "off", providerFace: SCRIPTED === "" ? "真会话" : "剧本" },
 })), null, 1), "utf8");
 /* 返修那一环的可读出口：`≥2 拍` 才是「第一拍代码红 ⇒ 模型真改过盘 ⇒ 再验一次」那条链路走通的样子。
  *  全 0 时先看装配面那一行——是闸没装（off-here），还是装了而没触发（模型自己验过了）。 */

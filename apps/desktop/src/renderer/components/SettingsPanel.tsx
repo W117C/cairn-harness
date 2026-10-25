@@ -18,13 +18,15 @@ import {
   GeneralSection,
   PermissionsSection,
   ProviderSection,
-  SEARCH_CONFIG_HINT,
   ShortcutsSection,
   defaultKeyProvider,
   panelPatch,
 } from "./settings-sections";
 import { AppPageBody, type PageId } from "./AppPage";
 import { ModalSurface } from "./ModalSurface";
+import { RenderErrorBoundary } from "./RenderErrorBoundary";
+import { UsageSection } from "./settings/UsageSection";
+import { NetworkSection } from "./settings/NetworkSection";
 import { PAGE_ORDER, SECTIONS, filterSections, type SectionId } from "./settings-nav";
 
 export { SECTIONS, type SectionId };
@@ -131,6 +133,8 @@ export function SettingsPanel(props: {
   // 能力在场性读数（搜索端点配没配）。null = 还没问到 / 问失败——那一格显示「读不到」，
   // 不显示「已配」：把读不到当成配好，正是这个面板要修的那类假象。
   const [cap, setCap] = useState<CapabilityReadout | null>(null);
+  // 供应商清单（内置 + 已装自定义）与全量模型——供应商管理列表的数据面（参照 Codex 供应商页）。
+  const [pvInfo, setPvInfo] = useState<ProviderInfo | null>(null);
   const [update, setUpdate] = useState<UpdateState>({ kind: "idle" });
   const [keyProvider, setKeyProvider] = useState(defaultKeyProvider);
   // 「检查连接」的三态回执：保存成功 ≠ 服务可用，两件事分开显示（主进程只 GET 模型清单，不耗额度）。
@@ -166,6 +170,7 @@ export function SettingsPanel(props: {
       setError(err instanceof Error ? err.message : String(err));
     });
     void window.agent.providerKeyStatus().then((s) => setStatus({ available: s.available, stored: s.stored, envActive: s.envActive })).catch(() => undefined);
+    void window.agent.getProviderInfo().then(setPvInfo).catch(() => setPvInfo(null));
   };
 
   useEffect(() => {
@@ -283,14 +288,6 @@ export function SettingsPanel(props: {
     : update.kind === "up-to-date" ? "已是最新"
     : `发现新版本 ${update.version}`;
 
-  /** 复制搜索配法（clipboard 访问留在壳层，ProviderSection 纯展示）。 */
-  const copyHint = () => {
-    void navigator.clipboard.writeText(SEARCH_CONFIG_HINT).then(
-      () => pulse("已复制配置片段 ✓"),
-      () => setError("复制失败：剪贴板不可用，请手动选中复制"),
-    );
-  };
-
   return (
     <ModalSurface className="sp-page" label="设置" onClose={props.onClose}>
       <div className="sp-shell">
@@ -363,8 +360,11 @@ export function SettingsPanel(props: {
         </nav>
         <div className="sp-body">
           {error !== null && <div className="sp-note err" role="alert">{error}</div>}
-          {settings === null && section !== "about" && !PAGE_SECTION_IDS.has(section) && <div className="sp-note">正在载入设置…</div>}
+          {settings === null && !["about", "usage", "network"].includes(section) && !PAGE_SECTION_IDS.has(section) && <div className="sp-note">正在载入设置…</div>}
 
+          {/* 分区各自成界：一个分区渲染炸了不许把整窗打回启动占位。
+              key={section}：切分区即重挂，换到好分区自动恢复，不需要先点重试。 */}
+          <RenderErrorBoundary key={section} variant="inline">
           {/* 工作台四分区（并入页体）：自取 getState() 快照，错误走同一错误条。 */}
           {PAGE_SECTION_IDS.has(section) && <AppPageBody page={section as PageId} onError={setError} />}
 
@@ -388,6 +388,8 @@ export function SettingsPanel(props: {
               <ProviderSection
                 settings={settings}
                 status={status}
+                providers={pvInfo?.providers ?? []}
+                models={pvInfo?.models ?? []}
                 cap={cap}
                 keyProvider={keyProvider}
                 onKeyProviderChange={setKeyProvider}
@@ -398,10 +400,17 @@ export function SettingsPanel(props: {
                 checkMsg={checkMsg}
                 onCheck={runCheck}
                 onCustomSaved={() => { refresh(); props.onSettingsSaved?.(); }}
-                onCopyHint={copyHint}
+                onOpenSearch={() => setSection("network")}
               />
             </SettingsPage>
           )}
+
+          {section === "network" && <NetworkSection onSaved={() => {
+            void window.agent.capabilities().then(setCap).catch(() => setCap(null));
+            props.onSettingsSaved?.();
+          }} />}
+
+          {section === "usage" && <UsageSection />}
 
           {section === "permissions" && settings !== null && (
             <SettingsPage title="权限与安全" desc="审批档位、网络与写入边界。">
@@ -446,6 +455,7 @@ export function SettingsPanel(props: {
               )}
             </SettingsPage>
           )}
+          </RenderErrorBoundary>
         </div>
         {flash !== null && (
           <div className="sp-save-flash" role="status" aria-live="polite">{flash}</div>

@@ -96,8 +96,8 @@ describe("Markdown 渲染面：XSS 纪律（全部文本节点，不注入 HTML�
     // caret 在 <p> 内部、跟在正文后面
     expect(html).toMatch(/<p class="md-p">正在写第二<span class="cursor"/);
     const html2 = renderToStaticMarkup(<Markdown text={"```ts\nconst a=1;"} caret={true} />);
-    // 末块是代码块时不放 caret（放进去反而怪）
-    expect(html2).not.toContain('class="cursor"');
+    // 2026-10-24 业主：光标要跟字走——末块是代码块时收到末行行尾（不消失、不独立一行）
+    expect(html2).toMatch(/<pre><code>const a=1;<span class="cursor"/);
   });
 });
 

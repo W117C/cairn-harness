@@ -64,7 +64,7 @@ describe("MCP 注解抵达权限门（runAgent 真入口 + 真 stub server）", 
   // 这一条是 `evaluate(name, args, s, info.grade)` 那个实参的唯一测试侧判据：
   // 摘掉它 ⇒ 门按「无注解」处理 ⇒ echo 也被拒 ⇒ 本条红。
   it("带 readOnlyHint 的工具体在自主档自动执行（注解真抵达了门）", async () => {
-    const events = await run("mcp-flow.jsonl", "auto", "annotated-echo");
+    const events = await run("mcp-lazy-flow.jsonl", "auto", "annotated-echo");
     const r = resultOf(events, "c-mcp");
     expect(r?.ok).toBe(true);
     expect(r?.output).toContain("echo: 你好");
@@ -72,7 +72,7 @@ describe("MCP 注解抵达权限门（runAgent 真入口 + 真 stub server）", 
   }, 120_000);
 
   it("无注解的工具体在自主档不自动执行，且拒绝原因指明依据（stub 未被调用）", async () => {
-    const events = await run("mcp-unannotated.jsonl", "auto", "noann");
+    const events = await run("mcp-lazy-unannotated.jsonl", "auto", "noann");
     const r = resultOf(events, "c-mcp-noann");
     expect(r?.ok).toBe(false);
     expect(r?.output).toContain("[permission denied]");
@@ -84,9 +84,9 @@ describe("MCP 注解抵达权限门（runAgent 真入口 + 真 stub server）", 
 
   // 成对锁：排除「只读档一律放行 MCP」这种把白名单写成豁免的读法
   it("只读档：带 readOnlyHint 的照常放行，无注解的按白名单依据拒", async () => {
-    const okEv = await run("mcp-flow.jsonl", "read-only", "ro-echo");
+    const okEv = await run("mcp-lazy-flow.jsonl", "read-only", "ro-echo");
     expect(resultOf(okEv, "c-mcp")?.ok).toBe(true);
-    const noEv = await run("mcp-unannotated.jsonl", "read-only", "ro-noann");
+    const noEv = await run("mcp-lazy-unannotated.jsonl", "read-only", "ro-noann");
     const bad = resultOf(noEv, "c-mcp-noann");
     expect(bad?.ok).toBe(false);
     expect(bad?.output).toContain("只读注解白名单");

@@ -224,9 +224,12 @@ export function decodeResponseBody(message: IncomingMessage, headers: Headers, l
 export async function pinnedHttpFetch(
   input: string, init: RequestInit, addresses: readonly string[], label = "web_fetch",
 ): Promise<Response> {
+  if (init.body !== undefined && init.body !== null && typeof init.body !== "string") {
+    throw new Error(`${label}: 请求正文必须是字符串`);
+  }
   const url = new URL(input);
   const options: RequestOptions = {
-    method: "GET",
+    method: init.method ?? "GET",
     headers: nodeHeaders(init.headers),
     signal: init.signal ?? undefined,
     agent: false,
@@ -260,7 +263,7 @@ export async function pinnedHttpFetch(
       socket.destroy();
       reject(new Error(`${label}: 不接受 HTTP 协议升级`));
     });
-    req.end();
+    req.end(init.body ?? undefined);
   });
 }
 

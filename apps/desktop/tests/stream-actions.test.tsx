@@ -1,7 +1,7 @@
-// 消息操作条判卷（§2.2：copy / fork / replay / read aloud；§7.3.1：**禁延迟构建**——DOM 首绘即在，
+// 消息操作条判卷（copy / fork / replay；§7.3.1：**禁延迟构建**——DOM 首绘即在，
 // hover 只控 CSS 显隐，不做「首次 hover 才挂载」的 JS 惰性）。
 // 分叉/回放锚（P3-1 收口）：user 行带 round（分叉到该轮）；assistant 行带 eventId（回放经事件投影轮号）；
-// 朗读锚：按钮与按钮态从第一帧就有。
+// 2026-10-24：用户移除朗读入口；旧 handler 兼容保留也不再渲染按钮。
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -19,35 +19,36 @@ const events = [
 ] as unknown as AgentEvent[];
 
 describe("消息操作条（§2.2 / §7.3.1 禁延迟构建）", () => {
-  it("actions 在场 ⇒ 复制/分叉/回放/朗读按钮从首帧就在 DOM（不是 hover 才构建）", () => {
+  it("actions 在场 ⇒ 复制/分叉/撤回按钮从首帧就在 DOM，朗读入口已移除", () => {
     const rows = projectStream(events);
     const html = renderToStaticMarkup(
-      <Stream rows={rows} actions={{ onCopyText: () => undefined, onBranch: () => undefined, onReplay: () => undefined, onSpeak: () => undefined }} />,
+      <Stream rows={rows} actions={{ onCopyText: () => undefined, onBranch: () => undefined, onRevertTurn: () => undefined, onSpeak: () => undefined }} />,
     );
     // 第一条回复（round 1）与第二条（round 2）都带全套按钮
     expect(html.match(/aria-label="复制这行输出"/g)?.length).toBe(2);
-    expect(html).toContain('aria-label="回放到第 1 轮"');
-    expect(html).toContain('aria-label="回放到第 2 轮"');
+    expect(html).toContain('aria-label="撤回第 1 轮的文件改动"');
+    expect(html).toContain('aria-label="撤回第 2 轮的文件改动"');
     // user 行「从此处分叉」（P3-1：分叉落 user 行，轮号自数据面）
     expect(html).toContain('aria-label="从这条消息分叉新会话（到第 1 轮）"');
     expect(html).toContain('aria-label="从这条消息分叉新会话（到第 2 轮）"');
-    expect(html.match(/aria-label="朗读这条输出"/g)?.length).toBe(2);
+    expect(html).not.toContain('aria-label="朗读这条输出"');
     // 赞/踩仍在（旧锚不破）
     expect(html).toContain('aria-label="赞这条输出"');
   });
 
-  it("speakingEventId 命中 ⇒ 该条按钮变「停止朗读」（其余保持「朗读」）", () => {
+  it("兼容 handler 与 speakingEventId 仍在时，也不渲染朗读或停止朗读入口", () => {
     const rows = projectStream(events);
     const first = rows.find((r) => r.kind === "assistant");
     const eventId = first !== undefined && first.kind === "assistant" ? first.eventId : -1;
     const html = renderToStaticMarkup(
       <Stream rows={rows} actions={{ onSpeak: () => undefined, speakingEventId: eventId }} />,
     );
-    expect(html.match(/aria-label="停止朗读"/g)?.length).toBe(1);
-    expect(html.match(/aria-label="朗读这条输出"/g)?.length).toBe(1);
+    expect(html).not.toContain('aria-label="停止朗读"');
+    expect(html).not.toContain('aria-label="朗读这条输出"');
+    expect(html).toContain('aria-label="复制这行输出"');
   });
 
-  it("不给 onBranch/onReplay/onSpeak ⇒ 分叉/回放/朗读不渲染（旧判卷夹具口径不受扰）", () => {
+  it("不给 onBranch/onSpeak ⇒ 分叉/朗读不渲染；回放已撤（2026-10-24，负向锚口径不变）", () => {
     const rows = projectStream(events);
     const html = renderToStaticMarkup(<Stream rows={rows} actions={{ onCopyText: () => undefined }} />);
     expect(html).not.toContain("分叉新会话");
@@ -113,37 +114,22 @@ describe("复制回执", () => {
   });
 });
 
-// 2026-10-17「重跑这一轮」（Claude 式重试）：用该轮输入原地再发一次（追加新轮），运行中不摆。
-describe("重跑这一轮", () => {
+// 2026-10-24 业主：不要回放/重跑——代理行操作条这一格给 撤回（文件还原）与 分叉（从该轮新会话）。
+describe("代理行操作条：撤回 + 分叉", () => {
   const rows = projectStream(events);
-  it("给了 onRetryRound 且未运行 ⇒ 每条 assistant 行都有「重跑第 N 轮」", () => {
-    const html = renderToStaticMarkup(<Stream rows={rows} actions={{ onRetryRound: () => undefined }} />);
-    expect(html).toContain('aria-label="重跑第 1 轮"');
-    expect(html).toContain('aria-label="重跑第 2 轮"');
-    expect(html).toContain("再发一次");
+  it("给了 onRevertTurn/onBranch ⇒ 每条 assistant 行都有 撤回/分叉", () => {
+    const html = renderToStaticMarkup(<Stream rows={rows} actions={{ onRevertTurn: () => undefined, onBranch: () => undefined }} />);
+    expect(html).toContain('aria-label="撤回第 1 轮的文件改动"');
+    expect(html).toContain('aria-label="撤回第 2 轮的文件改动"');
+    expect(html).toContain('aria-label="从第 1 轮分叉新会话"');
+    expect(html).toContain('aria-label="从第 2 轮分叉新会话"');
   });
-  it("运行中 ⇒ 不渲染（避免再排一轮的含糊语义）", () => {
-    const html = renderToStaticMarkup(
-      <Stream rows={rows} actions={{ onRetryRound: () => undefined, running: true }} />,
-    );
-    expect(html).not.toContain("重跑第");
-  });
-  it("缺 handler ⇒ 不渲染（旧调用方与判卷夹具不受扰）", () => {
+  it("回放/重跑已整体下架：旧按钮与 App 接线都不许回流", () => {
     const html = renderToStaticMarkup(<Stream rows={rows} actions={{ onCopyText: () => undefined }} />);
     expect(html).not.toContain("重跑第");
-  });
-  it("App 接线：取该轮输入 + runningSet 兜底", () => {
+    expect(html).not.toContain("回放");
     const appSrc = readAppSurface();
-    const start = appSrc.indexOf("const handleRetryRound");
-    expect(start).toBeGreaterThan(-1);
-    const block = appSrc.slice(start, start + 420);
-    // 该轮输入要取**活的那份**事件（`eventsRef.current`），不是闭包里那份 `events`：
-    // `handleRetryRound` 的 useCallback 依赖表里**没有 events** ⇒ 用闭包那份就是陈旧闭包，
-    // 任何不是首屏就存在的轮次都会读成「找不到该轮的输入原文」。
-    // （这一格 2026-10-20 从 `userTextOfRound(events, round)` 改过来：实现早已改用 ref，
-    // 钉子还钉着旧写法 ⇒ 判卷红的是钉子，不是实现。）
-    expect(block).toContain("userTextOfRound(eventsRef.current, round)");
-    expect(block).toContain("runningSet.current.has(keyOf(sid))");
-    expect(appSrc).toContain("onRetryRound: handleRetryRound");
+    expect(appSrc).not.toContain("handleRetryRound");
+    expect(appSrc).not.toContain("handleReplay");
   });
 });

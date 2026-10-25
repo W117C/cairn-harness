@@ -21,6 +21,8 @@ const pushApi = {
   onPreviewState: (cb: (p: unknown) => void) => subscribe(PUSH_CHANNELS.onPreviewState, cb),
   // 载荷是命令 id 字符串（main 侧只发 id）；subscribe 的入参是 unknown，这里显式过一手。
   onMenu: (cb: (id: string) => void) => subscribe(PUSH_CHANNELS.onMenu, (v) => { cb(String(v)); }),
+  // v21：完成通知点击（main 已聚焦窗口）；载荷形状由 renderer 侧校验，这里原样透传。
+  onNotificationOpen: (cb: (p: unknown) => void) => subscribe(PUSH_CHANNELS.onNotificationOpen, cb),
 };
 
 function subscribe(channel: string, cb: (v: unknown) => void): () => void {

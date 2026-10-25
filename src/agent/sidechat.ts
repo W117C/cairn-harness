@@ -325,12 +325,15 @@ export async function buildSidechatContext(opts: {
     mainEvents = [];
   }
   const mainProjection = buildMainProjection(mainEvents, opts.rounds ?? SIDECHAT_PROJECTION_ROUNDS);
+  // @ 引用与 M7 的 RECALL 问句取同一条：最近一条自身 user_message（先取再用，两处不各扫一遍）。
+  const lastUser = [...own].reverse().find((e) => e.type === "user_message");
+  const lastUserText = lastUser && lastUser.type === "user_message" ? lastUser.content : undefined;
   // 两层记忆（固定回注，每轮重注）。出口共用 `buildMemoryInjectionSafe`（第 315 页）：
-  // 从前这里是空 catch ⇒ 一次异常把整段记忆变成无痕丢失，旁路模型读到的"没有记忆"与"这仓库没写过记忆"同形。
-  const mem = await buildMemoryInjectionSafe({ workspace: opts.workspace });
+  // 从前这里是空 catch ⇒ 一次异常把整段记忆变成无痕丢失，旁路模型读到的"没有记忆"与"这个工作区没写过记忆"同形。
+  // M7：旁路问句也做 RECALL 词面检索（取料与 @ 引用同一条用户消息）。
+  const mem = await buildMemoryInjectionSafe({ workspace: opts.workspace, queryText: lastUserText });
   const memory = { project: mem.injection.project, global: mem.injection.global };
   // @ 引用（取最近一条 user_message）
-  const lastUser = [...own].reverse().find((e) => e.type === "user_message");
   const refs =
     lastUser && lastUser.type === "user_message"
       ? (() => {
@@ -457,7 +460,7 @@ export async function runSidechatTurn(opts: SidechatTurnOptions): Promise<AgentE
     // 估算要含每轮重注的面：记忆 + 主会话投影 + @ 引用。只算自身历史会「估算没超、实际 400」。
     let reserveChars = 0;
     try {
-      const mem = await buildMemoryInjectionSafe({ workspace: opts.workspace });
+      const mem = await buildMemoryInjectionSafe({ workspace: opts.workspace, queryText: opts.message });
       reserveChars += (mem.injection.project ?? "").length + (mem.injection.global ?? "").length;
     } catch { /* 记忆不可用 = 不注入，不占预算 */ }
     try {

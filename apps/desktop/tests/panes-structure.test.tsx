@@ -22,15 +22,23 @@ const workerEvents: AgentEvent[] = [
   ev({ type: "agent_result", agent_id: "w1", status: "done", summary: "4/4 绿", artifacts: { verified: "verified" }, usage: { inputTokens: 1, outputTokens: 1 } }),
 ];
 
-describe("PaneDock 容器（真 HTML，网格化）", () => {
-  it("每个窗格各占一格、标题与关闭钮在场", () => {
+describe("PaneDock 容器（真 HTML，单窗格占满）", () => {
+  it("两个窗格都开时常驻挂载、只显示激活块（最新打开的 tasks）；关闭钮属于激活窗格", () => {
     const html = renderToStaticMarkup(
       <PaneDock tabs={["changes", "tasks"]} events={[]} onClose={noop} />,
     );
-    expect(html).toContain(">变更<");
-    expect(html).toContain(">任务<");
-    expect(html).toContain('aria-label="关闭变更窗格"');
+    // 标签条上两个都在
+    expect(html).toContain('aria-label="切换到变更窗格"');
+    expect(html).toContain('aria-label="切换到任务窗格"');
+    // 两块都挂载（切标签不销毁内容：终端/浏览器/文件树状态要保留）；
+    // 但同一时刻只有一块 data-active，关闭钮也只属于激活那块。
+    expect((html.match(/data-pane=/g) ?? []).length).toBe(2);
+    expect(html).toContain('data-pane="changes"');
+    expect(html).toContain('data-pane="tasks"');
+    expect((html.match(/data-active="true"/g) ?? []).length).toBe(1);
+    expect(html).toMatch(/data-pane="tasks" data-active="true"/);
     expect(html).toContain('aria-label="关闭任务窗格"');
+    expect(html).not.toContain('aria-label="关闭变更窗格"');
   });
 
   it("tabs 为空 ⇒ 空态说明（不静默、不摆假内容）", () => {

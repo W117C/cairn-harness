@@ -23,6 +23,9 @@ describe("运行状态条", () => {
   it("仅运行/已停时出现，读 phaseLabel + elapsedSec + 累计步数", () => {
     expect(src).toContain("{(props.running || props.stopped) && (");
     expect(src).toContain('className="cc-phase" role="status" aria-live="polite"');
+    // 2026-10-24 业主：输入框不放加载动效（只有呼吸点）；动效在对话流的助手行标记上（Stream .spark）。
+    expect(src).toContain('<span className="cc-phase-dot" data-running={props.running ? "true" : "false"} aria-hidden="true" />');
+    expect(src).not.toContain("CairnLoader");
     expect(src).toContain("{props.phaseLabel}");
     expect(src).toContain("{(props.runSteps ?? 0) > 0 &&");
     expect(src).toContain("{String(props.runSteps)} 步");

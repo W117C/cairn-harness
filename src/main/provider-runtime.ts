@@ -53,6 +53,31 @@ export function selectionProviderId(selection: MainModelSelection): string {
   return selection.kind === "custom" ? selection.providerId : selection.kind;
 }
 
+/** 自进化「便宜档偏置」（闭环 v2 · 批次 A4）：上一轮读数说贵 ⇒ 主会话拨号向便宜方向降一档。
+ *
+ *  刻意的三条边界（每条都是「偏置不许越权」的一格）：
+ *  · **显式选择不动**：`modelExplicit`（用户在设置/请求里点名了模型）或 demo ⇒ 原样返回——
+ *    偏置只降「按缺省表选出来的」那一档，用户点名的档不归它管；
+ *  · **只降不升、只降一档**：沿 strong→standard→cheap 方向退一步，不跳档、绝不升档
+ *    （升档有自己的路：级联升级的客观判据，见 routing/cascade.ts）；
+ *  · **同家内找**：只在同一 provider（`selectionProviderId`）的档位表里找目标档 spec——
+ *    跨家换拨号是配置层的事，偏置不越这个权；目标档无 spec（该家没有更便宜的档）⇒ 原样返回。 */
+export function preferCheapSelection(selection: MainModelSelection): MainModelSelection {
+  if (selection.kind === "demo") return selection;
+  if (selection.modelExplicit) return selection;
+  const order: readonly ModelSpec["tier"][] = ["strong", "standard", "cheap"];
+  const idx = order.indexOf(selection.spec.tier);
+  if (idx < 0 || idx === order.length - 1) return selection; // 已是 cheap 或未知档：不动
+  const targetTier = order[idx + 1]!;
+  const demoted = effectiveModelTable().find(
+    (s) => s.tier === targetTier && s.provider === selectionProviderId(selection),
+  );
+  if (demoted === undefined) return selection;
+  return selection.kind === "custom"
+    ? { kind: "custom", providerId: selection.providerId, spec: demoted, modelExplicit: false }
+    : { kind: selection.kind, spec: demoted, modelExplicit: false };
+}
+
 /** 按 provider id 造一支选择：内置走字面量分支，自定义走 custom 分支。 */
 function selectionFor(provider: string, spec: ModelSpec, modelExplicit: boolean): MainModelSelection {
   return isBuiltinProviderId(provider)
@@ -69,6 +94,7 @@ const PROVIDER_LABELS: Record<EnvKeyedProvider, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
   gemini: "Gemini",
+  deepseek: "DeepSeek",
 };
 
 /** provider 的展示名：内置四家有固定文案，自定义家用自己的 label，兜底回 id。

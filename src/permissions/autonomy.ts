@@ -71,7 +71,7 @@ export interface GateMeta {
 /** 自动放行来源审计（§11.7.5）：**由 gate 派生**，语义与历史逐字一致——只有规则库 allow 与
  *  scope 记忆两种放行记 auto；末行放行、人工批准、拒绝一律不记。留痕统一由 gate 承担。 */
 export interface AutoMeta {
-  source: "rule" | "session_scope";
+  source: "rule" | "session_scope" | "mode";
   ruleId?: string;
 }
 
@@ -143,16 +143,19 @@ export interface ModePolicy {
   readonly scopeMemory: boolean;
   /** 风险层送审线。 */
   readonly riskAskAt: RiskLevel;
+  /** 完全允许档 = 没有审批卡（L2 ask 规则/断路器/风险线/critical 全部放行）。硬边界（L0/L1 deny）不受它管。 */
+  readonly askNothing: boolean;
   /** 卡面文案里的档位名。 */
   readonly label: string;
 }
 
 const MODE_POLICY: Record<PermissionMode, ModePolicy> = {
   // 只读档的写向在 L0 就被摘除，这一行只兜住"写向漏到 L3"的路径（同默认档口径，不静默放行）。
-  "read-only": { writeAsk: true, scopeMemory: true, riskAskAt: "high", label: "只读档" },
-  default: { writeAsk: true, scopeMemory: true, riskAskAt: "high", label: "默认档" },
-  guided: { writeAsk: false, scopeMemory: true, riskAskAt: "medium", label: "引导档" },
-  auto: { writeAsk: false, scopeMemory: false, riskAskAt: "high", label: "自主档" },
+  "read-only": { writeAsk: true, scopeMemory: true, riskAskAt: "high", askNothing: false, label: "只读档" },
+  default: { writeAsk: true, scopeMemory: true, riskAskAt: "high", askNothing: false, label: "默认档" },
+  guided: { writeAsk: false, scopeMemory: true, riskAskAt: "medium", askNothing: false, label: "引导档" },
+  auto: { writeAsk: false, scopeMemory: false, riskAskAt: "high", askNothing: false, label: "自主档" },
+  "full-access": { writeAsk: false, scopeMemory: false, riskAskAt: "critical", askNothing: true, label: "完全允许档" },
 };
 
 /** 导出给对账判卷：表必须**恰好**覆盖 `PERMISSION_MODES`（少一档 = 编译不过 + 判卷红）。 */
@@ -161,7 +164,7 @@ export function modePolicyTable(): Record<PermissionMode, ModePolicy> {
 }
 
 function policyOf(mode: PermissionMode): ModePolicy {
-  // 类型内四档都已列表；走到兜底只可能是未升级的持久化值或外部构造者 ⇒ 按默认档，不按最松档。
+  // 类型内五档都已列表；走到兜底只可能是未升级的持久化值或外部构造者 ⇒ 按默认档，不按最松档。
   return MODE_POLICY[mode] ?? MODE_POLICY.default;
 }
 
@@ -499,6 +502,14 @@ export function evaluate(
   const chain = judgeChain(s.rules, tool, cmd);
   if (chain.verdict === "deny") {
     return { verdict: "deny", layer: "L1-deny", reason: ruleHitReason("deny 规则命中", chain) };
+  }
+
+  // ---- 完全允许档（2026-10-24 业主新增）：L1 deny 之后、一切审批之前短路放行 ----
+  // 保留的硬边界：L0 方案门/判卷面冻结闸（上面已判）、L1 deny 规则（用户自己写的「永远别做」）。
+  // 撤下的：L2 ask 规则、L3 断路器、L4 风险/critical/MCP 未注解——本档没有审批卡。
+  // 出网例外：§11.4 红线（网络放行永不免批）⇒ 网络命令不短路，仍走既有 ask→approved 一次性放行。
+  if (policyOf(s.mode).askNothing === true && !isNetworkCommandCall(tool, args)) {
+    return { verdict: "approve", risk, layer: "L3-mode", auto: { source: "mode" } };
   }
 
   // ---- L2 ask 规则：命中即强制审批，任何档位含自主档都绕不过 ----

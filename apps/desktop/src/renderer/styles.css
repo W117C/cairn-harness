@@ -134,9 +134,18 @@ svg { display: block; }
 .tb-center .tb-title, .tb-center .tb-rename, .tb-center .goal-chip { pointer-events: auto; }
 /* 品牌名（首页无会话时）：与旧顶栏同一档字重/字号，位置也仍对中栏居中。 */
 .tb-brand {
+  display: inline-flex; align-items: center; gap: 7px;
   font-size: var(--fs-body-md); font-weight: var(--fw-medium); color: hsl(var(--text-000));
   white-space: nowrap;
 }
+.cairn-mark {
+  display: inline-block; width: 20px; height: 20px; flex: none;
+  background-color: currentColor;
+  mask: url("./public/brand/cairn-mark.svg") center / contain no-repeat;
+}
+.cairn-mark-outline { mask-image: url("./public/brand/cairn-outline.svg"); }
+.side-brand-mark { color: hsl(var(--text-200)); }
+.tb-brand .cairn-mark { color: hsl(var(--accent-brand)); }
 
 /* ══ 侧栏（242px 起、可拖到 480；顶 48 / 工具行 / 列表 / 脚 48）═══════════ */
 /* flex column（不是固定轨数 grid）：可选行（搜索/添加/新建项目/notice）随开随合，
@@ -419,6 +428,7 @@ body[data-resizing="sidebar"] .side-wrap { transition: none; }
 .cc-phase { display: flex; align-items: center; gap: 6px; padding: 7px 12px 0; font-size: var(--fs-caption-sm); color: hsl(var(--text-300)); }
 .cc-phase-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: hsl(var(--text-400)); }
 .cc-phase-dot[data-running="true"] { background: hsl(var(--accent-brand)); animation: breathe 1.6s ease-in-out infinite; }
+/* 2026-10-24 业主：加载动效不摆输入框——对话流里助手行标记才是它的位置（见 Stream 的 .spark）。 */
 .cc-phase-dim { color: hsl(var(--text-400)); font-variant-numeric: tabular-nums; }
 .goal-chip {
   animation: gc-in var(--t-fast);
@@ -566,6 +576,8 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 
 .row.assistant { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; margin: 24px 0 0; }
 .row.assistant .spark { color: hsl(var(--accent-brand)); margin-top: 3px; }
+/* 助手行标 = Cairn 品牌轮形标（2026-10-24 换掉 lucide Sparkles）；流式中变同款逐格加载动效。 */
+.row.assistant .spark .cairn-mark, .row.assistant .spark .cairn-loader { width: 14px; height: 14px; }
 /* 蓝本 §2.2 回复「阅读停顿」右侧留白。
    2026-10-20 改为 Claude 实测的**流体 clamp**（原 `min(56px, 8%)` 是猜的）：
      --cds-assistant-message-text-stop: clamp(0px, (100% - 384px) * .175, 56px)
@@ -629,10 +641,24 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .row.think:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); }
 .think-line { display: flex; align-items: center; gap: 6px; color: hsl(var(--text-400)); font-size: var(--fs-caption-sm); }
 .think-label { font-weight: var(--fw-medium); }
-.think-live { display: inline-flex; gap: 2px; }
-.think-live i { width: 3px; height: 3px; border-radius: 50%; background: hsl(var(--text-400)); animation: breathe 1.2s ease-in-out infinite; }
-.think-live i:nth-child(2) { animation-delay: var(--t-stagger-think-2); }
-.think-live i:nth-child(3) { animation-delay: var(--t-stagger-think-3); }
+.think-live { display: inline-flex; color: hsl(var(--accent-brand)); }
+/* 思考等待标（2026-10-24）：启动屏同款逐格点亮轮形标，替掉三点呼吸。 */
+.think-live .cairn-loader { width: 12px; height: 12px; }
+/* Cairn 逐格加载标（与启动屏同款）：图形不转，颜色沿 7 格顺时针逐格点亮（每格 0.24s 时隙，
+   一圈 1.68s；关键帧无 transform）。颜色 currentColor，尺寸由挂载处覆盖。 */
+.cairn-loader { display: block; width: 14px; height: 14px; }
+.cairn-loader path { fill: currentColor; opacity: .18; animation: cairn-cell 1.68s linear infinite; }
+.cairn-loader path:nth-child(1) { animation-delay: 0s; }
+.cairn-loader path:nth-child(7) { animation-delay: .24s; }
+.cairn-loader path:nth-child(6) { animation-delay: .48s; }
+.cairn-loader path:nth-child(5) { animation-delay: .72s; }
+.cairn-loader path:nth-child(4) { animation-delay: .96s; }
+.cairn-loader path:nth-child(3) { animation-delay: 1.2s; }
+.cairn-loader path:nth-child(2) { animation-delay: 1.44s; }
+@keyframes cairn-cell {
+  0%, 14% { opacity: 1; }
+  22%, 100% { opacity: .18; }
+}
 .think-done { color: hsl(var(--text-400)); display: inline-flex; }
 .think-elapsed { font-variant-numeric: tabular-nums; font-size: var(--fs-caption-xs); }
 .think-body { display: none; margin: 4px 0 4px 18px; padding-left: 8px; border-left: 2px solid var(--hairline); font-size: var(--fs-caption-md); line-height: 1.75; color: hsl(var(--text-400)); }
@@ -741,7 +767,18 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
   animation: rise-in var(--t-rise-in-long) both;
 }
 .empty-greet-mark { color: hsl(var(--accent-brand)); flex: none; width: 0.68em; height: 0.68em; }
+/* 项目弹层向上开会压到问候线（2026-10-17 上开 vs 2026-10-18 hero 大字的布局相撞）：
+   弹层开着时问候语淡出——焦点让给选择弹层，关闭即恢复；不动弹层定位（向下开会盖 composer）。
+   淡出打在 h1 的子元素上：h1 自身被 rise-in(fill both) 锁住 opacity，动画级联会压过普通声明。 */
+/* 只有弹层真的向上盖到问候线时才淡出（2026-10-24 第二版）：首页改为向下开后，
+   问候语上面没有东西，还淡着就像坏了。 */
+.empty[data-picking]:has(.chip-pop.up.show:not(.down)) .empty-greet > * { opacity: .15; }
+.empty .empty-greet > * { transition: opacity var(--t-med); }
 .empty-chip-row { position: relative; margin-top: var(--space-xs); animation: rise-in var(--t-rise-in-long) var(--t-stagger-chip) both; }
+/* 弹层开着时把 chip 行抬成独立层（2026-10-24）：rise-in 的 fill both 让这一行成了
+   层叠上下文（z-index 只在内部生效），向下开的弹层会被后面的 composer 卡盖住 —— 文字互相
+   透出来像半透明。抬到 60 后弹层正常盖在 composer 之上。 */
+.empty-chip-row:has(.chip-pop.show) { z-index: 60; }
 .plugin-strip {
   display: flex; align-items: center; gap: 6px; padding: 0 var(--space-sm) 6px;
   overflow-x: auto; scrollbar-width: none;
@@ -768,6 +805,14 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .empty-chip .chip-sep { color: hsl(var(--text-400)); }
 .empty-chip .chip-caret { color: hsl(var(--text-400)); }
 .chip-pop { min-width: 300px; max-width: 380px; }
+/* 2026-10-24：弹层整体按 chip 上方实测空间封顶后，改纵向 flex——列表吃剩余高度并内滚，
+   搜索框与页脚（添加项目 / 拖入提示）始终可见；此前三项固定高相加可顶出窗口上沿。 */
+.pop.chip-pop.show { display: flex; flex-direction: column; }
+/* 上方空间不足时向下开（2026-10-24）：首页 chip 贴着问候语，向上只剩 ~140px，
+   列表只露一行；改为贴上/下较大的一侧，动画方向同时翻。 */
+.pop.chip-pop.down { top: calc(100% + 6px); bottom: auto; left: 0; }
+.pop.chip-pop.down.show { animation-name: pop-in; }
+.chip-pop .chip-search, .chip-pop .chip-foot { flex: none; }
 .chip-search {
   width: 100%; box-sizing: border-box; margin-bottom: 6px;
   border: 1px solid var(--hairline); border-radius: var(--radius-sm);
@@ -775,7 +820,7 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
   background: hsl(var(--surface)); color: hsl(var(--text-000)); outline: 0;
 }
 .chip-search:focus { border-color: var(--hairline-strong); }
-.chip-list { max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; }
+.chip-list { max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .chip-list .menu-item.on { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-selected)); }
 .chip-list .menu-item > span:nth-child(2) { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip-list .menu-item .sub { max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1235,8 +1280,24 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .perm-confirm-title { font-size: var(--fs-body-md); font-weight: var(--fw-bold); color: hsl(var(--text-000)); }
 .perm-confirm-desc { margin-top: 4px; font-size: var(--fs-caption-xs); color: hsl(var(--text-300)); line-height: 1.6; }
 .perm-confirm-actions { display: flex; justify-content: flex-end; gap: var(--space-sm); margin-top: 10px; }
-.slash-menu { top: auto; bottom: calc(100% + 6px); left: var(--space-md); }
+/* 斜杠菜单（2026-10-24 版式修）：技能描述动辄 300+ 字，整段铺开会把菜单撑到 1000px 高、
+   顶出窗口上沿（实测 1440×900 下 top=-251，前两项鼠标够不着）。这里按命令面板的读法收成
+   一行一条：左列调用名定宽对齐、右列描述单行截断（全量进 title），菜单自身在 480px 内滚。
+   宽度同时钉 right：只给 left 时绝对定位按 max-content 撑开（实测 3458px），截断也就永远不触发。 */
+.slash-menu { top: auto; bottom: calc(100% + 6px); left: var(--space-md); right: var(--space-md); max-height: min(480px, 62vh); overflow-y: auto; overscroll-behavior: contain; }
+.slash-menu .menu-item { min-height: 26px; padding-top: 3px; padding-bottom: 3px; }
+.slash-menu .menu-item > span:first-child { flex: 0 0 clamp(160px, 40%, 300px); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.slash-menu .menu-item .sub { flex: 1 1 auto; min-width: 0; margin-left: 0; padding-left: var(--space-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .slash-menu .menu-item.on { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-selected)); }
+/* 首页空屏的输入卡在屏幕中部，向下开比向上开有更多空间（2026-10-24 第二版）：
+   贴哪边由 Composer 实测后挂 .down，动画方向也跟着翻。 */
+.slash-menu.down { top: calc(100% + 6px); bottom: auto; left: var(--space-md); right: var(--space-md); }
+.slash-menu.down.show { animation-name: pop-in; }
+/* 待批准 / 已拒绝 chip（§9.8）：不拼进描述（会被截断吃掉），钉在行尾，截断与它无关。 */
+.slash-menu .si-trust {
+  flex: none; margin-left: var(--space-sm); padding: 1px 6px; border-radius: var(--radius-pill);
+  border: 1px solid hsl(var(--color-wait) / 35%); color: hsl(var(--color-wait)); font-size: var(--fs-caption-2xs);
+}
 
 /* @mention 补全（§3.1）：贴 composer 卡上方、占满卡宽（与斜杠菜单同式）；条目行复用 .menu-item。 */
 .mention-menu { top: auto; bottom: calc(100% + 6px); left: var(--space-md); right: var(--space-md); max-height: 300px; overflow-y: auto; }
@@ -1315,8 +1376,6 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .delivery-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: var(--space-md); row-gap: 5px; padding: 8px var(--space-md); border-top: 1px solid var(--hairline); }
 .dg-k { font-size: var(--fs-caption-xs); color: hsl(var(--text-400)); padding-top: 1px; }
 .dg-v { font-size: var(--fs-caption-sm); color: hsl(var(--text-200)); overflow-wrap: anywhere; }
-/* 空轮弱行（第 N 轮 · 无文件改动）：tertiary 小字，不摆卡。 */
-.round-note { margin: 6px 0 var(--space-sm); color: hsl(var(--text-400)); font-size: var(--fs-caption-xs); }
 .delivery-evidence { border-top: 1px solid var(--hairline); }
 .delivery-evidence summary { cursor: pointer; padding: 6px var(--space-md); font-size: var(--fs-caption-sm); color: hsl(var(--text-400)); }
 .evidence-body { padding: 0 var(--space-md) var(--space-sm); }
@@ -1415,19 +1474,17 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .sw-state { font-size: var(--fs-caption-sm); color: hsl(var(--text-400)); }
 .sw-state.on { color: hsl(var(--text-200)); }
 
-/* ══ 设置页公共组件（批 6 · settings-ui；2026-10-16 模型/通道页重做）════════════
-   页面 20px 标题 + ≤960px 内容列（居中在 .sp-body > .ss-page）；分组 = 12.5px tertiary
-   小标签 + surface 卡（描边 + 14 圆角）；行 = 220px 标题列（标题+说明）/ 弹性控件列左对齐，
-   56px 行高、行间 1px 分隔线、窄宽单列。 */
-/* 2026-10-16（模型/通道页重做 · 全局布局 A/B）：内容列宽度与居中上移到 .sp-body > .ss-page
-   （960px 居中）；本档只留纵向节奏——标题上方留白由 .sp-body 的 24px 顶距承担（原 24+32 叠加=56px）。 */
+/* ══ 设置页公共组件（批 6 · settings-ui；2026-10-24 参照 ChatGPT 桌面端设置重排）════
+   大字页标题（28px/700）+ ≤860px 内容列；分组 = 小标签 + 圆角卡（hairline 描边、行间 1px
+   分隔线）；行 = 左列（标题 + 说明上下排）/ 控件靠右垂直居中——说明拿到整条左列宽度，
+   中文长句不再折成碎行（2026-10-22 独占整行方案由本布局取代，问题同解）。 */
 .ss-page { padding: 0 0 var(--space-xl); animation: fade-in var(--t-fast); }
 .ss-static { color: hsl(var(--text-200)); font-size: var(--fs-caption-sm); }
 /* 控件 + 行内提示/报错（2026-10-18 高级段）：控件与旁边的说明/红字同一行，
    红字不占版式——只在真有错时出现（SettingsRow 的控件列是 flex，包一层才好对齐）。 */
 .ss-inline { display: inline-flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
 .ss-err { font-size: var(--fs-caption-xs); color: hsl(var(--color-danger-ink)); }
-.ss-title { margin: 0 0 var(--space-lg); font-size: var(--fs-title-md); font-weight: var(--fw-bold); color: hsl(var(--text-000)); }
+.ss-title { margin: 0 0 var(--space-lg); font-size: 28px; font-weight: var(--fw-bold); letter-spacing: -0.01em; line-height: 1.2; color: hsl(var(--text-000)); }
 .ss-content { display: flex; flex-direction: column; gap: var(--space-lg); }
 .ss-sec { display: flex; flex-direction: column; gap: var(--space-sm); }
 .ss-sec-head { display: flex; align-items: baseline; gap: var(--space-sm); padding: 0 2px; font-size: var(--fs-caption-xs); color: hsl(var(--text-400)); }
@@ -1435,13 +1492,13 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .ss-sec-hint { color: hsl(var(--text-400)); }
 .ss-sec-hint::before { content: "·"; margin-right: 6px; }
 .ss-card {
-  border: 1px solid var(--hairline-strong); border-radius: var(--radius-pop-v3);
-  background: hsl(var(--bg-000)); box-shadow: var(--shadow-card);
+  border: 1px solid var(--hairline); border-radius: var(--radius-pop);
+  background: hsl(var(--bg-000));
   padding: 0; overflow: hidden;
 }
 /* 2026-10-16（模型/通道页重做 · 追加问题 C）：标题列定 220px、控件列吃余量且**左对齐**
    （原 flex + 控件列右对齐 max 60% ⇒ 控件被挤到右半边、标签区虚胖）。 */
-.ss-row { display: grid; grid-template-columns: 220px minmax(0, 1fr); align-items: start; gap: var(--space-md); min-height: 56px; padding: 12px 20px; border-top: 1px solid var(--hairline); transition: background var(--t-instant); }
+.ss-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-lg); min-height: 56px; padding: 13px 20px; border-top: 1px solid var(--hairline); transition: background var(--t-instant); }
 .ss-card > .ss-row:first-child { border-top: 0; }
 /* 快捷键速查（2026-10-20 批 115）：此前 .kx-* 一整族没有 CSS，11 行裸 span 挤成
    「⌘N新任务」一列，卡里大片空白。现在两列网格：键帽列定宽、说明列吃余量；
@@ -1479,16 +1536,37 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
   .kx-row:nth-last-child(2) { border-bottom: 1px solid var(--hairline); }
   .kx-row:last-child { border-bottom: 0; }
 }
-.ss-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-top: 6px; }
-.ss-row-label { font-size: var(--fs-body-md); color: hsl(var(--text-000)); }
-/* 说明独占整行（2026-10-22 排版减法）：此前关在 220px 标题列里，中文句子折行、末行只剩一个字，
-   而右侧大片空着。⇒ grid item 跨两列，落成标题/控件下面的一整行。 */
-.ss-row-desc { grid-column: 1 / -1; min-width: 0; font-size: var(--fs-caption-xs); color: hsl(var(--text-400)); line-height: 1.55; }
-.ss-row-ctl { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; min-width: 0; }
-/* 窄宽：标题列收进单列、控件上下排（800px 窗口仍走两列，控件换行不溢出） */
+.ss-row-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ss-row-label { font-size: var(--fs-body-md); font-weight: var(--fw-medium); color: hsl(var(--text-000)); }
+/* 说明在标题正下方（左列内），拿到整条左列宽度；限宽让超长句仍保持可读的行长。 */
+.ss-row-desc { min-width: 0; max-width: 56ch; font-size: var(--fs-caption-sm); color: hsl(var(--text-400)); line-height: 1.55; }
+.ss-row-ctl { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-sm); flex-wrap: wrap; min-width: 0; max-width: min(100%, 540px); }
+/* 供应商管理 split（2026-10-24 参照 Codex 供应商页）：左列表选通道（状态点=已存 key）+ 右详情表单。 */
+.pv-split { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+.pv-list { display: flex; flex-direction: column; gap: 2px; }
+.pv-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--radius-sm); font-size: var(--fs-body-sm); color: hsl(var(--text-200)); text-align: left; }
+.pv-item:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); }
+.pv-item.on { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-selected)); color: hsl(var(--text-000)); }
+.pv-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-list-label { padding: 8px 10px 2px; font-size: var(--fs-caption-xs); font-weight: var(--fw-bold); letter-spacing: 0.02em; color: hsl(var(--text-400)); }
+.pv-add { display: flex; align-items: center; gap: 6px; margin-top: 4px; padding: 7px 10px; border-radius: var(--radius-sm); font-size: var(--fs-body-sm); color: hsl(var(--text-400)); border: 1px dashed var(--hairline-strong); }
+.pv-add:hover { color: hsl(var(--text-000)); border-color: hsl(var(--text-400)); }
+.pv-detail { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.pv-detail-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+.pv-detail-name { font-size: var(--fs-body-md); font-weight: var(--fw-medium); color: hsl(var(--text-000)); }
+/* 堆叠字段块（2026-10-24 参照 Codex 供应商页）：标签在上、字段整行——宽表单（密钥/URL 类）的归宿，
+   侧排 row 的 auto 控件列装不下 685px 的表单（标签曾被挤成一字一行的事故）。 */
+.ss-row.ss-fstack { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
+.ss-fstack .ss-row-main { padding-bottom: 0; }
+.ss-field-block { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ss-flabel { font-size: var(--fs-caption-sm); color: hsl(var(--text-400)); }
+.ss-fstack .ss-field[data-w="full"] { flex: none; width: 100%; max-width: 560px; } /* 纵向容器里别吃 flex-basis（否则字段被撑成 240px 高） */
+.ss-frow { display: flex; gap: var(--space-sm); align-items: stretch; max-width: 560px; }
+.ss-fstack .ss-frow .ss-field { flex: 1 1 0; width: auto; max-width: none; min-width: 0; } /* 特异性压过 data-w=full 的 width:100%（否则按钮被挤出行） */
+/* 窄宽：控件落到标题/说明下方左对齐（640px 以下单列） */
 @media (max-width: 640px) {
-  .ss-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-xs); }
-  .ss-row-main { padding-top: 0; }
+  .ss-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-sm); }
+  .ss-row-ctl { justify-content: flex-start; }
 }
 
 /* 空态：垂直居中；图标 + 标题 + 说明 + 主按钮；不摆统计卡 */
@@ -1546,20 +1624,15 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 
 /* 主题选项卡（3 颗带小预览图；选中 = 强调描边 + 淡底） */
 .theme-opts { display: flex; gap: var(--space-sm); }
+/* 主题选项 = 纯文字药丸（2026-10-24 业主：色块小预览撤下，文字直给）。 */
 .theme-opt {
-  display: flex; flex-direction: column; align-items: center; gap: 5px;
-  padding: 8px 14px; border-radius: var(--radius-md);
-  border: 1px solid var(--hairline-strong); font-size: var(--fs-caption-xs); color: hsl(var(--text-200));
+  display: inline-flex; align-items: center;
+  padding: 6px 14px; border-radius: var(--radius-pill);
+  border: 1px solid transparent; font-size: var(--fs-body-sm); color: hsl(var(--text-200));
   transition: border-color var(--t-instant), background var(--t-instant);
 }
 .theme-opt:hover { border-color: hsl(var(--text-400)); }
 .theme-opt.on { border-color: hsl(var(--accent-control) / 60%); background: hsl(var(--accent-control) / 8%); color: hsl(var(--text-000)); }
-.theme-thumb { width: var(--w-theme-thumb); height: var(--h-theme-thumb); border-radius: var(--radius-xs); border: 1px solid var(--hairline-strong); overflow: hidden; flex: none; }
-/* 主题小预览图三态：白 / 近黑（对应暗色分层声明里的 hsl 等价形式）——tokens.test 零字面量纪律不接受 hex。 */
-.theme-thumb[data-thumb="light"] { background: hsl(var(--swatch-light)); }
-.theme-thumb[data-thumb="dark"] { background: hsl(var(--swatch-dark)); }
-.theme-thumb[data-thumb="system"] { background: linear-gradient(105deg, hsl(var(--swatch-light)) 0 50%, hsl(var(--swatch-dark)) 50% 100%); }
-.theme-opt.on .theme-thumb { border-color: hsl(var(--accent-control) / 45%); }
 /* 字号档小预览（2026-10-18）：一个「A」按档变字号——点下去之前就看见差别，不靠猜。
    用 --fs-body-* 三档自身做预览（同一个 token 体系的三个值），不另造缩放系数。 */
 .ts-thumb {
@@ -1700,7 +1773,8 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 /* A（2026-10-16 模型/通道页重做）：滚动容器撑满窗口（原 max-width:760px 把滚动条钉在窗口 ~82% 处、
    右缘留死区）；内容列（设置页 .ss-page / 工作台 .ap-body）960px 水平居中。顶部 24px 起标题。 */
 .sp-body { overflow-y: auto; padding: var(--space-lg) var(--space-xl) var(--space-xl); min-height: 0; container-type: inline-size; }
-.sp-body > .ss-page, .sp-body > .ap-body { max-width: 960px; margin: 0 auto; width: 100%; }
+.sp-body > .ss-page { max-width: 860px; margin: 0 auto; width: 100%; }
+.sp-body > .ap-body { max-width: 960px; margin: 0 auto; width: 100%; }
 .sp-body > .ss-page { max-width: 800px; }
 @container (max-width: 640px) {
   .ss-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-xs); }
@@ -1804,8 +1878,10 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 /* markdown 表格（2026-10-22 减法）：此前**每个格子**都有边框 ⇒ 一张 Excel 表落在阅读面里，
    竖线把一列列文字切碎，读起来只剩格子。改成**只留横线**（表头下一条 ＋ 行与行之间一条），
    靠列对齐与横线表达结构——这是 markdown 表格的通行做法，也更安静。 */
-.md-table { border-collapse: collapse; font-size: var(--fs-caption-md); }
-.md-table th, .md-table td { border: 0; padding: 5px 14px 5px 0; text-align: left; vertical-align: top; }
+/* 定宽布局（2026-10-24 业主：宽表把阅读面撑出横向滚动，读表要左右拖）：列宽随容器均分、
+   单元格内换行——宽表变高不变宽。wrapper 的 overflow-x:auto 保留作最后防线。 */
+.md-table { width: 100%; max-width: 100%; min-width: 0; table-layout: fixed; border-collapse: collapse; font-size: var(--fs-caption-md); }
+.md-table th, .md-table td { border: 0; padding: 5px 14px 5px 0; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
 .md-table th:first-child, .md-table td:first-child { padding-left: 0; }
 .md-table thead th {
   border-bottom: 1px solid var(--hairline-strong);
@@ -1828,10 +1904,12 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .pane-handle:hover, .pane-handle[data-resize-handle-active], .pane-handle[data-panel-resize-handle-active] { background: var(--alpha-3); }
 .pane-panel { min-width: 0; }
 .pane-dock { height: 100%; background: hsl(var(--bg-200)); border-left: 1px solid var(--hairline); }
-.pane-grid { height: 100%; min-width: 0; }
 
 /* ══ P3-2 右侧检查器（Inspector）+ 时间线 ═══════════════════════════ */
 .inspector-col { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+/* 单窗格占满（2026-10-24 业主）：有开着的窗格时检查器内容整体让位，窗格区独占整条侧栏。 */
+.inspector-col[data-panes-open="true"] .isp { display: none; }
+.inspector-col[data-panes-open="true"] .pane-dock-zone { border-top: none; }
 /* 收起态（2026-10-18 改）：不再用 [hidden]{display:none}。那是把 react-resizable-panels
    正在做的宽度收起动画一刀砍掉（⌘⌥B 变成硬切），而且 display:none 一旦加上，
    Panel 的 onResize 回调与过渡都失去意义。
@@ -1881,16 +1959,9 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .tl-kind.user { color: hsl(var(--text-000)); }
 .tl-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-caption-md); color: hsl(var(--text-200)); }
 .tl-at { flex: none; font-size: var(--fs-caption-xs); color: hsl(var(--text-400)); font-variant-numeric: tabular-nums; }
-.pane-cell { min-height: 0; }
-.pane-gridline { height: 3px; background: var(--hairline); transition: background var(--t-instant); }
-.pane-gridline:hover, .pane-gridline[data-resize-handle-active] { background: var(--alpha-3); }
-.pane-chunk { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
-.pane-chunk-head { display: flex; align-items: center; gap: var(--space-xs); padding: 4px var(--space-sm); border-bottom: 1px solid var(--hairline); }
-.pane-chunk-head[draggable="true"] { cursor: grab; }
-.pane-chunk-head[data-dragging="true"] { opacity: 0.45; }
-.pc-grip { color: hsl(var(--text-400)); font-size: 9px; letter-spacing: -1px; cursor: grab; flex: none; }
-.pc-label { flex: 1; min-width: 0; font-size: var(--fs-caption-sm); font-weight: var(--fw-bold); color: hsl(var(--text-200)); }
-.pane-chunk-body { overflow-y: auto; min-height: 0; padding: var(--space-sm); }
+.pane-chunk { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+/* 窗格头已并入标签条（2026-10-24）：激活标签自带 弹出/关闭，标题不再重复第二遍。 */
+.pane-chunk-body { flex: 1; overflow-y: auto; min-height: 0; padding: var(--space-sm); }
 .pt-x { display: inline-flex; align-items: center; justify-content: center; width: var(--h-btn-2xs); height: var(--h-btn-2xs); border-radius: var(--radius-xs); color: hsl(var(--text-400)); }
 .pt-x:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-selected)); color: hsl(var(--text-000)); }
 .pane-empty { padding: var(--space-lg) var(--space-md); font-size: var(--fs-body-sm); line-height: 1.8; color: hsl(var(--text-400)); text-align: center; }
@@ -2088,6 +2159,30 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .ap-fchips { display: flex; gap: var(--space-xs); flex-wrap: wrap; }
 .ap-actions-row { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
 .ap-notice { font-size: var(--fs-caption-sm); color: hsl(var(--color-diff-add-ink)); }
+/* 页头 + 双列卡片网格（2026-10-24 参照 Codex 自定义页：技能中心/插件）。 */
+.ap-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-lg); }
+.ap-head-title { margin: 0; font-size: 28px; font-weight: var(--fw-bold); letter-spacing: -0.01em; color: hsl(var(--text-000)); }
+.ap-head-desc { margin: 4px 0 0; font-size: var(--fs-body-sm); color: hsl(var(--text-400)); }
+.ap-head-acts { display: flex; align-items: center; gap: var(--space-sm); flex: none; padding-top: 4px; }
+.ap-head-search { display: flex; align-items: center; gap: 6px; width: 240px; padding: 7px 12px; border: 1px solid var(--hairline-strong); border-radius: var(--radius-pill); background: hsl(var(--bg-000)); color: hsl(var(--text-400)); }
+.ap-head-search input { border: 0; outline: 0; background: transparent; color: hsl(var(--text-000)); font: inherit; font-size: var(--fs-body-sm); width: 100%; padding: 0; }
+.ap-pills { display: flex; gap: 6px; }
+.ap-pill { padding: 6px 14px; border-radius: var(--radius-pill); font-size: var(--fs-body-sm); color: hsl(var(--text-200)); border: 1px solid transparent; }
+.ap-pill:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); }
+.ap-pill.on { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-selected)); color: hsl(var(--text-000)); border-color: var(--hairline); }
+.ap-gridcol { display: flex; flex-direction: column; gap: var(--space-sm); min-width: 0; }
+.ap-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ap-card { display: flex; align-items: center; gap: var(--space-sm); padding: 10px 12px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: hsl(var(--bg-000)); text-align: left; cursor: pointer; transition: border-color var(--t-instant), background var(--t-instant); }
+.ap-card:hover { border-color: var(--hairline-strong); background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); }
+.ap-card.on { border-color: hsl(var(--accent-brand)); }
+.ap-card-ico { flex: none; width: 34px; height: 34px; border-radius: var(--radius-sm); display: inline-flex; align-items: center; justify-content: center; background: hsl(from hsl(var(--accent-brand)) h s l / 0.16); color: hsl(var(--accent-brand)); font-size: 15px; font-weight: var(--fw-bold); }
+.ap-card-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.ap-card-nm { font-size: var(--fs-body-md); font-weight: var(--fw-medium); color: hsl(var(--text-000)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-card-sub { font-size: var(--fs-caption-sm); color: hsl(var(--text-400)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-card-act { flex: none; color: hsl(var(--text-400)); display: inline-flex; }
+.ap-card-act.ok { color: hsl(var(--accent-brand)); }
+.ap-more { align-self: flex-start; font-size: var(--fs-body-sm); color: hsl(var(--text-400)); padding: 4px 2px; }
+.ap-more:hover { color: hsl(var(--text-000)); }
 .ap-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-md); align-items: start; }
 .ap-split.has-drawer { grid-template-columns: minmax(0, 1fr) 340px; }
 .ap-list { display: flex; flex-direction: column; gap: 2px; }
@@ -2208,6 +2303,7 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
     transition-duration: 0.01ms !important; scroll-behavior: auto !important;
   }
   .dot.running, .dot.waiting::after, .cursor { animation: none; }
+  .cairn-loader path { animation: none; opacity: 1; }  /* 逐格加载标停格为全色（启动屏同款纪律） */
   .glyph.pending svg { animation: none; }
   .side-skeleton-row::after { animation: none; transform: translateX(100%); }
   /* P3-1 生成中细条：静态实色（不做跑马灯） */
@@ -2387,7 +2483,16 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
    业主截图读不出桶界）。段间仍留一拍；标签字阶对齐行内时间戳（caption-xs/text-400，不抢标题焦点）。 */
 .sess-section { display: flex; flex-direction: column; }
 .sess-section + .sess-section { margin-top: 6px; }
-.s-bucket { padding: 6px 8px 2px; font-size: var(--fs-caption-xs); font-weight: var(--fw-bold); color: hsl(var(--text-400)); }
+/* 时间桶标签 = 折叠开关（2026-10-24 业主：组内对话也要能收）：枚数 + 朝向，展开时朝下。 */
+.s-bucket {
+  display: flex; align-items: center; gap: 5px; width: 100%;
+  padding: 6px 8px 2px; border-radius: var(--radius-xs);
+  font-size: var(--fs-caption-xs); font-weight: var(--fw-bold); color: hsl(var(--text-400));
+}
+.s-bucket:hover { color: hsl(var(--text-200)); background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); }
+.s-bucket-count { font-weight: var(--fw-normal); color: hsl(var(--text-400) / 70%); }
+.s-bucket-chev { margin-left: auto; transition: transform var(--t-instant); }
+.s-bucket[aria-expanded="true"] .s-bucket-chev { transform: rotate(90deg); }
 
 /* 项目行 hover 两钮（⋯ 项目菜单 / ＋ 新任务）：与 .g-new 同现形纪律（hover / 键盘焦点） */
 .g-more {
@@ -2588,10 +2693,16 @@ body[data-dsh-claude-style] .app[data-sidebar="collapsed"] .side-wrap { border: 
 .pane-workbench { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .pane-nav { display: flex; align-items: center; gap: 3px; padding: 5px 7px; border-bottom: 1px solid var(--hairline); flex: none; }
 .pane-nav-items { display: flex; flex: 1; min-width: 0; overflow-x: auto; gap: 3px; }
-.pane-nav-item { flex: none; font-size: var(--fs-caption-sm); color: hsl(var(--text-400)); padding: 5px 8px; border-radius: var(--radius-sm); }
-.pane-nav-item:hover, .pane-nav-item[aria-pressed="true"] { color: hsl(var(--text-100)); background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-selected)); }
+.pane-tab { display: inline-flex; align-items: center; gap: 1px; flex: none; padding: 0 3px 0 0; border-radius: var(--radius-sm); }
+.pane-tab .pane-nav-item { padding: 5px 7px; border-radius: var(--radius-sm); background: transparent; }
+.pane-tab .pane-nav-item:hover { color: hsl(var(--text-100)); background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); }
+.pane-tab.on { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-selected)); }
+.pane-tab.on .pane-nav-item { color: hsl(var(--text-100)); }
+.pane-tab-act { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 4px; color: hsl(var(--text-400)); }
+.pane-tab-act:hover { color: hsl(var(--text-000)); background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); }
 .pane-nav > .iconbtn { flex: none; }
-.pane-workbench > .pane-grid { flex: 1; min-height: 0; height: auto; }
+/* 单窗格占满（2026-10-24）：激活窗格是 pane-workbench 里 nav 之下的唯一子块。 */
+.pane-workbench > .pane-chunk { flex: 1; min-height: 0; }
 /* 同一棵内容树：聚焦仅改变可见布局，终端、浏览器与表单不重挂载。 */
 .pane-grid[data-focused] { display: block !important; position: relative; }
 .pane-grid[data-focused] > .pane-gridline { display: none; }

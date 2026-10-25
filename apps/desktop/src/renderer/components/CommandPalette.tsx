@@ -6,6 +6,7 @@ import { Command } from "cmdk";
 import { useNow } from "../useNow";
 import { Archive, Copy, Download, FileText, Folder, FolderOpen, FolderPlus, MessageSquare, PanelLeft, PanelRight, Pencil, Plus, Search, Shield, Sun, Trash2, Wand2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import { SessionSearchResults, type SessionSearchState } from "./SessionSearchResults";
 import { relativeTime } from "../projections";
 import { sessionTime, type WorkspaceSession } from "../sessions-view";
@@ -85,6 +86,17 @@ function rememberRecentAction(prev: readonly PaletteAction[], id: PaletteAction)
   return next;
 }
 
+type FileSearchState =
+  | { status: "loading" }
+  | { status: "ready"; hits: readonly { path: string; kind: "file" | "directory" }[]; truncated: boolean }
+  | { status: "error"; error: string };
+
+const baseNameOf = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
+const parentOf = (path: string): string => {
+  const at = path.lastIndexOf("/");
+  return at < 0 ? "" : path.slice(0, at);
+};
+
 export interface PaletteContentProps {
   /** 正文搜索只读当前已选择的项目；标题检索仍覆盖会话清单。 */
   activeWorkspace?: string | null;
@@ -97,6 +109,8 @@ export interface PaletteContentProps {
   onOpenSession: (id: string, workspace?: string) => void;
   onSwitchWorkspace: (path: string) => void;
   onOpenSettings: (section: SectionId) => void;
+  /** 文件快速打开：只对当前工作区搜文件名；选中后由 App 打开文件窗格并预览该文件。 */
+  onOpenFile?: (path: string) => void;
   onAction: (action: PaletteAction) => void;
   /** 单会话动作（2026-10-18 补）：改名 / 归档 / 删除此前只在侧栏行内 ⋯ 菜单里，
    *  命令面板列得出会话却不给动作——用户搜到某个会话后想改名，得关掉面板去侧栏找那一行。
@@ -135,7 +149,32 @@ export function PaletteContent(props: PaletteContentProps): React.JSX.Element {
     }, 200);
     return () => { alive = false; window.clearTimeout(timer); };
   }, [searchQuery, searchWorkspace, retrySearch]);
+  // 文件快速打开：与正文搜索同一条输入、同一工作区；只取文件名/路径命中（不搜正文）。
+  // 160ms 防抖；错误与截断都如实呈现，不用空组冒充「没有匹配」。
+  const [fileSearch, setFileSearch] = useState<FileSearchState | null>(null);
+  useEffect(() => {
+    if (searchQuery === "" || searchWorkspace === null) { setFileSearch(null); return; }
+    let alive = true;
+    setFileSearch({ status: "loading" });
+    const timer = window.setTimeout(() => {
+      void Promise.resolve().then(() => window.agent.workspaceSearch(searchWorkspace, searchQuery)).then(
+        (result) => {
+          if (!alive) return;
+          if (result === undefined) setFileSearch({ status: "error", error: "文件搜索没有返回结果，请重试" });
+          else if (result.ok) setFileSearch({ status: "ready", hits: result.hits, truncated: result.truncated });
+          else setFileSearch({ status: "error", error: result.error });
+        },
+        (error: unknown) => {
+          if (alive) setFileSearch({ status: "error", error: `文件搜索失败：${error instanceof Error ? error.message : String(error)}` });
+        },
+      );
+    }, 160);
+    return () => { alive = false; window.clearTimeout(timer); };
+  }, [searchQuery, searchWorkspace]);
   const searchActive = searchQuery !== "" && searchWorkspace !== null;
+  const fileHits = props.onOpenFile === undefined || fileSearch?.status !== "ready"
+    ? []
+    : fileSearch.hits.filter((hit) => hit.kind === "file").slice(0, 8);
   const searchState: SessionSearchState = bodySearch?.query === searchQuery && bodySearch.workspace === searchWorkspace
     ? bodySearch.state : { status: "loading" };
 
@@ -221,6 +260,34 @@ export function PaletteContent(props: PaletteContentProps): React.JSX.Element {
                 </Command.Item>
               );
             })}
+          </Command.Group>
+        )}
+        {searchActive && props.onOpenFile !== undefined && fileSearch?.status === "error" && (
+          <Command.Group heading="文件" className="cp-group">
+            <div className="cp-empty" role="status">文件搜索失败：{fileSearch.error}</div>
+          </Command.Group>
+        )}
+        {searchActive && fileHits.length > 0 && (
+          <Command.Group heading="文件" className="cp-group">
+            {fileHits.map((hit) => {
+              const dir = parentOf(hit.path);
+              return (
+                <Command.Item
+                  key={`file-${hit.path}`}
+                  value={`文件 ${hit.path}`}
+                  className="cp-item"
+                  data-file={hit.path}
+                  onSelect={() => props.onOpenFile?.(hit.path)}
+                >
+                  <span className="cp-ico" aria-hidden="true"><FileText size={14} /></span>
+                  <span className="cp-label" title={hit.path}>{baseNameOf(hit.path)}</span>
+                  <span className="cp-at">{dir === "" ? "工作区根" : dir}</span>
+                </Command.Item>
+              );
+            })}
+            {fileSearch?.status === "ready" && fileSearch.truncated && (
+              <div className="cp-empty">文件结果已截断（只显示前若干项）</div>
+            )}
           </Command.Group>
         )}
         {searchActive && (
@@ -332,7 +399,9 @@ export function CommandPalette(props: PaletteContentProps & { open: boolean; onC
       overlayClassName="cp-scrim"
       contentClassName="cp-panel"
     >
-      <PaletteContent {...rest} />
+      <RenderErrorBoundary variant="inline">
+        <PaletteContent {...rest} />
+      </RenderErrorBoundary>
     </Command.Dialog>
   );
 }

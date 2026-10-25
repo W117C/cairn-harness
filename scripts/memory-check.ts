@@ -1,9 +1,11 @@
 // M2d 验收脚本（pnpm memory-check）——记忆两层全链明卷：
 //   A 两层布局与读写/frontmatter（任务1）  B 操作集与分型/metadata 越权防线（任务2/3）
-//   C 注入预算/超限保尾/元数据/大纲（任务4） D 索引硬上限写入端拒绝（任务5）
+//   C 注入预算/超限保尾/元数据/大纲（任务4）  D 索引硬上限写入端拒绝（任务5）
 //   E 安全：仿冒标签转义 + 外部引用批准/停用（任务8）
 //   F 双轨触发：开关关闭不触发 / 合并一次审批 / provider 失败分型（任务6）
 //   G 生命周期 + 压缩接缝：取代旧条保留、模型无删除、压缩前后记忆块都在、压缩器不触记忆（任务7/9）
+//   H（M7）RECALL 检索化注入：词面命中正文进预算、无问句零注入回归、无关主题不占位
+//   I（M7）强度账/休眠/巩固：命中落账、休眠墓碑行、强命中唤醒、巩固 canary、查重条子
 // 退出码 0 = 全部断言通过。
 import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -18,7 +20,9 @@ import {
   recentDecisionEntries,
   renderTopicDoc,
 } from "../src/agent/memory/store";
-import { buildMemoryInjection, extractExternalRefs } from "../src/agent/memory/inject";
+import { buildMemoryInjection, extractExternalRefs, flushRecallHits } from "../src/agent/memory/inject";
+import { consolidateMemoryDir, consolidationDigest } from "../src/agent/memory/consolidate";
+import { readStats, writeStats } from "../src/agent/memory/store";
 import { escapeControlTags } from "../src/agent/control-tags";
 import { runSessionEndDistill } from "../src/agent/memory/distill";
 import { createGatedRemember } from "../src/main/agent-runner";
@@ -278,10 +282,71 @@ async function main(): Promise<void> {
   // 反向自证：字面量清单非空（尺没退化成「永远不匹配」）。
   check(stringLiterals(compactionSrc).length > 5, "G6b 字面量抽取非空（尺没退化成恒绿）");
 
+  // ---------- H（M7）RECALL 检索化注入 ----------
+  console.log("[memory-check] H RECALL：问话词面命中的正文进注入");
+  const wsH = await mkdtemp(join(tmpdir(), "m2d-memory-wsH-"));
+  const ctxH: ToolContext = { workspace: wsH };
+  await remember.run({ scope: "project", kind: "memory", type: "project", topic: "deploy-timeout", content: "部署超时阈值：网关统一 30 秒，重试两次；超过即告警" }, ctxH);
+  await remember.run({ scope: "project", kind: "memory", type: "project", topic: "git-style", content: "提交信息用中文祈使句，一行不超过 72 字符" }, ctxH);
+  await remember.run({ scope: "project", kind: "decision", content: "小决策：RECALL 段放索引之后" }, ctxH);
+  const h1 = await buildMemoryInjection({ workspace: wsH, queryText: "部署超时阈值怎么定的" });
+  const h1proj = h1.project ?? "";
+  check(h1proj.includes("[RECALL 按本轮问话词面命中的记忆正文") && h1proj.includes("deploy-timeout") && h1proj.includes("〔命中:"), "H1 问话命中 ⇒ RECALL 段带正文与命中词", h1.recall.join(","));
+  check(h1.recall.includes("deploy-timeout") && !h1.recall.includes("git-style"), "H2 无关主题不进 RECALL（只选相关的，不搬库）", h1.recall.join(","));
+  check(Math.ceil(h1.charsCurrent / 4) <= 6000 && h1.tokens <= 6000, "H3 加了 RECALL 预算仍守（6K token）", String(h1.tokens) + " tokens");
+  const h2 = await buildMemoryInjection({ workspace: wsH });
+  check(!(h2.project ?? "").includes("[RECALL"), "H4 无问句 ⇒ 无 RECALL 段（老调用方零注入回归）");
+  // H5 坏名字索引行（手改 MEMORY.md 是真实入口）：只丢那一条，不把整段注入打成「不可用」。
+  const badIndexPath = join(wsH, ".agent", "memory", "MEMORY.md");
+  await writeFile(badIndexPath, (await readFile(badIndexPath, "utf8")) + "- ../escape · project · 2026-10-25T00:00:00.000Z · 部署超时阈值与告警策略\n", "utf8");
+  const h5 = await buildMemoryInjection({ workspace: wsH, queryText: "部署超时阈值怎么定" });
+  check((h5.project ?? "").includes("[RECALL") && h5.recall.includes("deploy-timeout") && !h5.recall.includes("../escape"), "H5 坏名字索引行只丢那一条（读不动的那份不牵连整段）", h5.recall.join(","));
+
+  // ---------- I（M7）强度账 / 休眠 / 巩固 ----------
+  console.log("[memory-check] I 强度账落账 / 休眠墓碑 / 唤醒 / 巩固 canary / 查重");
+  await flushRecallHits(); // H1 的命中此刻落账
+  const statsH = await readStats(join(wsH, ".agent", "memory"));
+  const st = statsH["deploy-timeout"];
+  check(st !== undefined && st.hits === 1 && st.dormant === undefined && st.strength > 0, "I1 命中落账：hits=1、已建强度账", JSON.stringify(st));
+  // 休眠墓碑：手工把 deploy-timeout 标休眠 ⇒ 索引行不注 + 点名行在场；正文不进 RECALL。
+  await writeStats(join(wsH, ".agent", "memory"), { ...statsH, "deploy-timeout": { topic: "deploy-timeout", hits: 1, lastRetrieved: st?.lastRetrieved ?? new Date().toISOString(), strength: 0.05, dormant: true } });
+  const i2 = await buildMemoryInjection({ workspace: wsH, queryText: "随便聊聊别的" });
+  const i2proj = i2.project ?? "";
+  check(!i2proj.includes("- deploy-timeout ·") && i2proj.includes("休眠条目未列"), "I2 休眠条目索引行不注、墓碑点名行在场", "");
+  check(!i2.recall.includes("deploy-timeout"), "I2b 休眠正文不进 RECALL", i2.recall.join(","));
+  // 唤醒：同一休眠条目 + 强命中问话 ⇒ RECALL 带唤醒标注，落账后休眠清除、强度 ≥ 0.6。
+  const i3 = await buildMemoryInjection({ workspace: wsH, queryText: "部署超时阈值与告警策略要不要调" });
+  check(i3.recall.includes("deploy-timeout") && (i3.project ?? "").includes("休眠条目·本轮强命中唤醒"), "I3 强命中唤醒休眠条目（如实标注）", i3.recall.join(","));
+  await flushRecallHits();
+  const woke = (await readStats(join(wsH, ".agent", "memory")))["deploy-timeout"];
+  check(woke !== undefined && woke.dormant === undefined && woke.strength >= 0.6 && woke.hits === 2, "I3b 唤醒落账：休眠清除、强度重置、命中 +1", JSON.stringify(woke));
+  // 巩固：canary（正文/索引逐字不变）+ 查重条子只指 remember op=replace。
+  const i4IndexBefore = await readFile(join(wsH, ".agent", "memory", "MEMORY.md"), "utf8");
+  const i4BodyBefore = await readFile(join(wsH, ".agent", "memory", "deploy-timeout.md"), "utf8");
+  await writeStats(join(wsH, ".agent", "memory"), {}); // 清账：巩固对无账条目走「新建账」支
+  const report = await consolidateMemoryDir({ dir: join(wsH, ".agent", "memory"), nowISO: new Date().toISOString() });
+  check(await readFile(join(wsH, ".agent", "memory", "MEMORY.md"), "utf8") === i4IndexBefore && await readFile(join(wsH, ".agent", "memory", "deploy-timeout.md"), "utf8") === i4BodyBefore, "I4 巩固 canary：索引与正文逐字不变", "");
+  check(report.dormantMarked.length === 0 && report.tracked === 2, "I4b 年轻库不标休眠、账目收敛到现存 topic", JSON.stringify({ dormant: report.dormantMarked, tracked: report.tracked }));
+  await remember.run({ scope: "project", kind: "memory", type: "project", topic: "deploy-timeout-2", content: "部署超时阈值：网关统一 30 秒，重试两次；超过即告警（补记）" }, ctxH);
+  const report2 = await consolidateMemoryDir({ dir: join(wsH, ".agent", "memory"), nowISO: new Date().toISOString() });
+  const digest = consolidationDigest([{ scope: "project", report: report2 }]);
+  check(report2.duplicates.length === 1 && digest.includes("op=replace") && digest.includes("deploy-timeout ↔ deploy-timeout-2"), "I5 近重复报对，条子只指 remember op=replace", digest.slice(0, 80));
+  // I6 预算淘汰的 RECALL 不记账：tiny 预算 ⇒ RECALL 整段被丢（含段首孤儿摘录清理）⇒
+  // 观测面为空、强度账无记录——「检索练习」只记真进了模型的命中（账实相符）。
+  const wsI = await mkdtemp(join(tmpdir(), "m2d-memory-wsI-"));
+  await remember.run({ scope: "project", kind: "memory", type: "project", topic: "deploy-timeout", content: "部署超时阈值：网关统一 30 秒，重试两次；超过即告警" }, { workspace: wsI });
+  const i6 = await buildMemoryInjection({ workspace: wsI, queryText: "部署超时阈值怎么定", tokenBudget: 120 });
+  check(i6.recall.length === 0 && !(i6.project ?? "").includes("[RECALL"), "I6 预算淘汰把 RECALL 整段丢掉 ⇒ 观测面为空、无孤儿摘录", JSON.stringify(i6.recall));
+  await flushRecallHits();
+  check(Object.keys(await readStats(join(wsI, ".agent", "memory"))).length === 0, "I6b 被淘汰的命中不记账（没进模型不算检索练习）", "");
+  await rm(wsI, { recursive: true, force: true });
+  await flushRecallHits(); // 清掉 I3/I5 之间可能攒下的 pending，避免清理目录后定时器空写
+
   await rm(ws, { recursive: true, force: true });
   await rm(ws2, { recursive: true, force: true });
   await rm(wsC, { recursive: true, force: true });
   await rm(wsE, { recursive: true, force: true });
+  await rm(wsH, { recursive: true, force: true });
   await rm(home, { recursive: true, force: true });
 }
 
@@ -296,4 +361,4 @@ if (failures > 0) {
   console.log("❌ memory-check 失败 " + String(failures) + " 项");
   process.exit(1);
 }
-console.log("✅ memory-check 全部通过（两层布局/remember/注入预算/索引上限/安全/双轨/压缩接缝）");
+console.log("✅ memory-check 全部通过（两层布局/remember/注入预算/索引上限/安全/双轨/压缩接缝/RECALL 检索/强度与巩固）");

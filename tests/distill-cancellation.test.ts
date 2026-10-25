@@ -146,7 +146,9 @@ describe("取消阻止新的自动沉淀副作用", () => {
     const s = await setup();
     hooks.afterDraft = () => s.controller.abort(new Error("cancel-after-draft"));
     expect(await s.run()).toEqual({ kind: "failed", why: "cancel-after-draft" });
-    expect(await memoryFiles(s.memoryDir)).toEqual(["MEMORY.md", "lesson-verify-red-1.md"]);
+    // M7：巩固 pass 排在草稿**之前**且已完整跑完 ⇒ memory-stats.json 是"已完成的副作用"，
+    // 与已落盘的教训同地位（取消不清算已完成动作）；provider 仍不许构造。
+    expect(await memoryFiles(s.memoryDir)).toEqual(["MEMORY.md", "lesson-verify-red-1.md", "memory-stats.json"]);
     expect(s.providerFor).not.toHaveBeenCalled();
     expect(s.stream).not.toHaveBeenCalled();
   });
@@ -154,7 +156,8 @@ describe("取消阻止新的自动沉淀副作用", () => {
   it("未取消时教训仍全部写入，provider 正常构造并调用", async () => {
     const s = await setup(3);
     expect(await s.run()).toEqual({ kind: "no_content" });
-    expect(await memoryFiles(s.memoryDir)).toEqual(["MEMORY.md", "lesson-verify-red-1.md", "lesson-verify-red-2.md", "lesson-verify-red-3.md"]);
+    // M7：会话收尾的巩固 pass 落 strength 账（memory-stats.json），清单仍精确相等。
+    expect(await memoryFiles(s.memoryDir)).toEqual(["MEMORY.md", "lesson-verify-red-1.md", "lesson-verify-red-2.md", "lesson-verify-red-3.md", "memory-stats.json"]);
     expect(s.providerFor).toHaveBeenCalledTimes(1);
     expect(s.stream).toHaveBeenCalledTimes(1);
   });
