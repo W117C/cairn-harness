@@ -1,0 +1,3 @@
+{"type":"tool_call","id":"c-mcp-activate","name":"mcp_activate","args":{"server":"echo-suite/stub"}}
+{"type":"tool_call","id":"c-mcp-noann","name":"mcp__plugin_echo-suite_stub__fail","args":{}}
+{"type":"assistant_message","content":"mcp 无注解场景完成"}
