@@ -10,14 +10,14 @@ fatal: not a git repository (or any of the parent directories): .git
 取料坏：--trees 里有重复路径 ⇒ 同树两个进程会互改源文件（.mutbak 会互相踩），一条不跑
 取料坏：认不出的参数 ⇒ 一条不跑：--shardz=2
 用法：node --import tsx scripts/mutate-shards.ts --trees 树1,树2[,…] [--changed-since=<rev> | id…] [--budget-ms N] [--serial-seconds N] [--lock-tag-base …] [--cost-logs 机器原文,…] [--dry-run]（带值的旗标两种写法都收）
-Preparing worktree (detached HEAD 508bd2de)
+Preparing worktree (detached HEAD d0708a0)
 取料坏：给了 1 条不在这张表上的 id ⇒ 一条不跑：this-anchor-does-not-exist
-Preparing worktree (detached HEAD 508bd2de)
-Preparing worktree (detached HEAD 508bd2de)
-Preparing worktree (detached HEAD 508bd2de)
+Preparing worktree (detached HEAD d0708a0)
+Preparing worktree (detached HEAD d0708a0)
+Preparing worktree (detached HEAD d0708a0)
 取料坏：1 个判卷宿主被摊到两片以上 ⇒ 会并发真跑同一份判卷，一条不跑：tests/mutate-shards.test.ts
-Preparing worktree (detached HEAD 508bd2de)
-Preparing worktree (detached HEAD 508bd2de)
+Preparing worktree (detached HEAD d0708a0)
+Preparing worktree (detached HEAD d0708a0)
 [cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
 [cairn] 用法：cairn <任务描述>（-h 看全部选项）
 [cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）

@@ -1,0 +1,11 @@
+$ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify worker-card-action-cardtype-drift
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → b2a6270
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
+变异验证：1 条
+✅ worker-card-action-cardtype-drift — 合并/拒绝请求的 cardType 漂成 merge_tower ⇒ 主进程 merge/reject 路由虽然也认它，但审计面与既有 diff 卡来源分家；更坏的是以后收窄路由只认 diff 时，界面按钮静默失效 ｜本机实测 0.7s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 0.8s · 跑了 1/1 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 2 次／1 条（每条次数分布 2×1）· 单次中位 第1次 0.3s／第2次 0.4s· 最贵一条 worker-card-action-cardtype-drift 0.7s
+跑法单价：selector 2 拍·中位 0.35s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）

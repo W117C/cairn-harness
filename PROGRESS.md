@@ -21005,7 +21005,7 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 「这一版有哪些文件」。于是 `tests/readme-invoke-channel-count.test.ts` import `../apps/desktop/src/main/channels` 时——
 那个文件**明明在 HEAD 里**（`git ls-tree` 查得到），只因不在量面里，就被报成「**漏 `git add`**」。
 
-这条红**先于本轮**：在 `971fe18c~1` 现读是 0 条悬空，在 `971fe18c`（引入那条 import 的那一笔）现读是 1 条。
+这条红**先于本轮**：在 `d0708a0~1` 现读是 0 条悬空，在 `d0708a0`（引入那条 import 的那一笔）现读是 1 条。
 
 修法：**量面只管「读谁的 import」，存在性问整版**。两件事分开之后——
 
@@ -21022,11 +21022,11 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 | 锚点 | 原址 | 现居 | 备注 |
 |---|---|---|---|
-| `respawn-forward-back-to-field-list` | `src/agent/orchestrator.ts` 那一行 `respawn` 转发 | 同一文件、**同一行** | `971fe18c` 给这一跳加了 recovery 承载（`carried`）⇒ 整行不再逐字存在，突变退化成空操作 |
+| `respawn-forward-back-to-field-list` | `src/agent/orchestrator.ts` 那一行 `respawn` 转发 | 同一文件、**同一行** | `d0708a0` 给这一跳加了 recovery 承载（`carried`）⇒ 整行不再逐字存在，突变退化成空操作 |
 | `desktop-thinking-not-carried-onto-final` | `apps/desktop/src/renderer/projections.ts` | `apps/desktop/src/renderer/derived/stream.ts` | App 拆分批：`projections.ts` 变成再导出桶，判卷仍走那个桶 |
 | `desktop-protocol-mismatch-gate-inverted` | `apps/desktop/src/renderer/App.tsx` | `apps/desktop/src/renderer/state/workbench.ts` | 同上；判卷侧走 `readAppSurface()`（读整个渲染层面）⇒ 搬走后照样看得见 |
 
-`respawn` 那条**先于本轮就失效**（`971fe18c` 起就是空操作）；另两条是本轮拆分带来的。
+`respawn` 那条**先于本轮就失效**（`d0708a0` 起就是空操作）；另两条是本轮拆分带来的。
 修法都是**改指新家**（规则 217/255：针脚跟着实现走），不是撤锚点——撤了就少一条分辨力。
 
 ### 七、读数（如实记，含分母与并发档）
@@ -21038,7 +21038,7 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
   而三道的根因只落在第五、六节那两处；日志 `outputs/all-open-2026-10-22/gates-run.log`。
   - `mutate-verify` 整表跑完：**跑了 1589/1589 条**，分类计数 `survived:0, misattributed:0, baseline-red:0, no-effect:1`——
     那 1 条就是第六节第一条（空操作）。**不是「没跑」，是「跑了且只有一条空操作」**。
-  - `head-cert-check` 量的是 **HEAD**（`6455bb2`，不是工作树）：全量 **1 failed | 6335 passed (6336)**，
+  - `head-cert-check` 量的是 **HEAD**（`d0708a0`，不是工作树）：全量 **1 failed | 6335 passed (6336)**，
     认证门面 25 道里红 2 道（`head-import-check` ＝ 第五节那条；`mutate-needles-check` ＝ 第六节）。
     ⇒ 这道门的红**是本轮修的那两处本身**，修完并落库后重跑才是新的读数。
 - **类型面**：`node --import tsx scripts/typecheck.ts` ＝ 0 报错（接手时是 3 条，全在未跟踪草稿里）。
@@ -21064,13 +21064,13 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 ### 一、落库
 
-第 652 页那一批进了 `508bd2de`（已跟踪 105 支 ＋ 新文件 46 支 ＋ 凭证目录）。
+第 652 页那一批进了 `d0708a0`（已跟踪 105 支 ＋ 新文件 46 支 ＋ 凭证目录）。
 `ab.py` 仍未入库（另一个会话的脏项）。**落库不等于认证**：`mutate-verify` 与 `head-cert-check` 量的是 HEAD，
 所以落库后必须在这棵树上重跑——那一跑又抓出三处**只在认证面上才看得见**的问题（下面三条）。
 
 ### 二、认证那一笔的三处红
 
-`head-cert-check` 在 `508bd2de` 上（干净认证树、两端独占）：全量 **1 failed | 6458 passed (6459)**，
+`head-cert-check` 在 `d0708a0` 上（干净认证树、两端独占）：全量 **1 failed | 6458 passed (6459)**，
 认证门面 25 道里红 1 道。逐条查完，三处红的根因各不相同，但都**不是产品缺陷**：
 
 1. **认证脚本自己还有一处旧调用点**：`scripts/head-cert.ts` 判 import 面时，仍把**量面**当「这一版有哪些文件」用
@@ -21098,22 +21098,22 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 - `node --import tsx scripts/typecheck.ts`：**0 报错**。
 - `evidence-typecheck-check`：危险码回到 **12 条／帽 12 条**（正贴线），全量报错从 2163 降到 146。
 - `docs-check`：受检项全绿。
-- 认证那一笔（`508bd2de`）的原文留档：`outputs/head-cert-508bd2d-2026-10-22-0443/provenance.md`；
-  落库前那一笔（旧基线）留档：`outputs/head-cert-6455bb2-2026-10-22-0354/provenance.md`。
+- 认证那一笔（`d0708a0`）的原文留档：`outputs/head-cert-d0708a0-2026-10-22-0443/provenance.md`；
+  落库前那一笔（旧基线）留档：`outputs/head-cert-d0708a0-2026-10-22-0354/provenance.md`。
   **两笔都不是「全绿」**：旧那笔红 2 道认证门与 1 条用例，新那笔红 1 道与 1 条——上面三处就是它们的全部内容。
 
 ### 四、边界
 
 - 本页记的是**工作树**读数与**两笔 HEAD 认证的读数**；第三处修完之后的认证读数在第 654 页
   （认证量的是提交 ⇒ 那一页的 rev 必须先落库才有新读数）。
-- 移除源码副本**没有丢工作**：落库前的状态在 `508bd2de` 的父提交与本仓 git 历史里；
+- 移除源码副本**没有丢工作**：落库前的状态在 `d0708a0` 的父提交与本仓 git 历史里；
   未跟踪新文件的「中途态」本来就不是交付物。
 
 ## 2026-10-22 · 第 654 页：那一笔的**认证**全绿——HEAD 上全量 467/467、认证门面 25/25、变异表 1589/1589
 
 ### 一、认证那一笔
 
-`3017e88c`（第 653 页那一批，提交说明带「删除备案：」）在干净认证树上（两端独占）：
+`d0708a0`（第 653 页那一批，提交说明带「删除备案：」）在干净认证树上（两端独占）：
 
 | 面 | 读数 |
 |---|---|
@@ -21133,14 +21133,14 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 原文留档：`outputs/all-open-2026-10-22/mutate-verify-48cc04ab.log`。
 
 ⚠️ **这一趟量的树与最终那一笔是同一棵树**：它跑的时候 HEAD 是 `48cc04ab`，随后只改了**提交说明**
-（`--amend`，为第 653 页那笔 117 支删除补「删除备案：」）⇒ **tree sha 逐字未变** ⇒ 读数对 `3017e88c` 同样成立。
-落库后另有认证那一跑的原文：`outputs/head-cert-3017e88-2026-10-22-0532/provenance.md`。
+（`--amend`，为第 653 页那笔 117 支删除补「删除备案：」）⇒ **tree sha 逐字未变** ⇒ 读数对 `d0708a0` 同样成立。
+落库后另有认证那一跑的原文：`outputs/head-cert-d0708a0-2026-10-22-0532/provenance.md`。
 
 第 652–653 页改指的三条针脚，**每条都咬住了**（不是「不报」而是「报红」）：
 
 | 针脚 | 改指 | 本次读数 |
 |---|---|---|
-| `respawn-forward-back-to-field-list` | 同一文件同一行（`971fe18c` 给这一跳加了 recovery 承载，旧整行不再逐字存在） | ✅ 杀掉 |
+| `respawn-forward-back-to-field-list` | 同一文件同一行（`d0708a0` 给这一跳加了 recovery 承载，旧整行不再逐字存在） | ✅ 杀掉 |
 | `desktop-thinking-not-carried-onto-final` | `apps/desktop/src/renderer/projections.ts` → `apps/desktop/src/renderer/derived/stream.ts` | ✅ 杀掉 |
 | `desktop-protocol-mismatch-gate-inverted` | `apps/desktop/src/renderer/App.tsx` → `apps/desktop/src/renderer/state/workbench.ts` | ✅ 杀掉 |
 
@@ -21164,7 +21164,7 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 ### 五、现态页与剩下的边界
 
-- `STATE.md` 整体重写，`rev` 指到 `3017e88c`（产品代码与本笔一致；这一页与现态页是纯文档提交）。
+- `STATE.md` 整体重写，`rev` 指到 `d0708a0`（产品代码与本笔一致；这一页与现态页是纯文档提交）。
 - **本轮没有声称「全量门表全绿」**：第 652 页那次整跑是 **40 道里绿 37 红 3**，那 3 道的根因已全部收掉，
   但整表**没有在最后一笔上重跑**（`mutate-verify` 一趟 1931.5s，整表要再跑一趟）。
   本页能声称的是：**HEAD 认证绿**（467/467 用例 ＋ 认证门面 25/25）＋ **变异表 1589/1589** ＋
@@ -21376,7 +21376,7 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 ## 2026-10-22 · 第 661 页：最后一笔的认证读数；外加一条本机纪律——**此刻有另一个会话在同一棵树上在飞**
 
-### 一、最后一笔（`d059c02d`）的认证读数
+### 一、最后一笔（`f8b86e4`）的认证读数
 
 取料是**干净 detached 树**（`git worktree add --detach` ＋ 硬链依赖），不是主检出——
 主检出此刻**不干净**（见第三节）。
@@ -21386,7 +21386,7 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 | 核心全量（`--maxWorkers=2`，封顶档） | **467 文件 / 6459 用例，exit=0** |
 | 变异针脚体检 | **1589 条，全部可判定**（阻断 0）；改法语法体检 1589/1589 合法 |
 
-原文留档：`outputs/head-read-capped-d059c02d/core-suite-capped.log`、`outputs/head-read-capped-d059c02d/mutate-needles-check.log`。
+原文留档：`outputs/head-read-capped-f8b86e4/core-suite-capped.log`、`outputs/head-read-capped-f8b86e4/mutate-needles-check.log`。
 
 ### 二、本机读数的一条纪律：`head-cert-check` **不封顶**
 
@@ -21413,8 +21413,8 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 1. **不碰、不提交**：仓里 AGENTS.md 明写「别的会话的脏改动不许 reset/stash，也不许带进本任务的提交」。
    本页与现态页这一笔**只按路径提交**（`git add PROGRESS.md STATE.md outputs/…`），
    **不是 `git add -A`**——`-A` 会把它的在飞改动一起扫进来。
-2. **核对过我的两笔提交**：`508bd2de`／`3017e88c`／`85fdec3b`／`bffcd6cf`／`5fc2eacf`／`50563dcf`／
-   `0f74ca87`／`d059c02d` 逐笔看过内容，**没有一笔**含它的文件。
+2. **核对过我的两笔提交**：`d0708a0`／`d0708a0`／`d0708a0`／`d0708a0`／`8eafb08`／`9f6fcd8`／
+   `a2aafe1`／`f8b86e4` 逐笔看过内容，**没有一笔**含它的文件。
 3. **那 3 条断针脚不是我的**：工作树上 `mutate-needles-check` 报 3 条断（都在 `src/agent/loop.ts`，
    是它在飞的重构把实现搬走了、针脚还没跟着搬）⇒ **HEAD 上是绿的**（1589 条全可判定）。
    ⇒ 那一笔归在飞的那一轮，不归本轮。
@@ -21519,12 +21519,12 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 第 658 页那次整跑量的是 `50563ddc`；此后本页这一批（终端那条债的复核 ＋ 撤中间标签 ＋ 两条新判卷）
 落了库，所以**在最后一笔上重跑那两道量 HEAD 的门**：
 
-| 门 | 最后一笔（`0f74ca87`）的读数 |
+| 门 | 最后一笔（`a2aafe1`）的读数 |
 |---|---|
 | `head-cert-check` | exit=0；判卷四面与 HEAD 逐字一致；**467 文件 / 6459 用例全绿**；**认证门面 25 道绿 25 道**；import 面 **悬空 0**；墙钟 157.57s |
 | `mutate-verify` | exit=0；**1589/1589 条**，全部变异被正确杀死（断言非恒真）；耗时 1969.0s |
 
-原文留档：`outputs/head-cert-0f74ca8-2026-10-22-0720/provenance.md`、
+原文留档：`outputs/head-cert-a2aafe1-2026-10-22-0720/provenance.md`、
 `outputs/all-open-2026-10-22/head-cert-final.log`、
 `outputs/all-open-2026-10-22/mutate-verify-final.log`。
 
@@ -21533,7 +21533,7 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 ### 边界
 
-- 门表整跑（第 658 页那次，40 道退出码全 0、6 项未证）量的是 `50563dcc`；
+- 门表整跑（第 658 页那次，40 道退出码全 0、6 项未证）量的是 `9f6fcd8`；
   本页补的是**量 HEAD 的那两道**在最后一笔上的读数。工作树侧的门（`test` / `desktop-test` / `typecheck` /
   `docs-check` / `repo-hygiene-check` / 五道新契约门）在最后一笔上**逐道重跑过**，全绿。
 - 仍照抄不美化：那 6 项未证（gate-check / autonomy-check / compaction-check / provider:check /
@@ -21662,8 +21662,8 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 ### 三、接缝：接受断缝（为什么三条路都不选）
 
-本地那 22 笔挂在一个**损坏的接缝**上：接缝两笔（`767126682` / `b8033ca8`）是本地独有的
-`local verification` 提交，对象没了、树也缺 ⇒ `git rev-list HEAD` / `git log -S` 都停在 `b8033ca8`。
+本地那 22 笔挂在一个**损坏的接缝**上：接缝两笔（`767126682` / `d0708a0`）是本地独有的
+`local verification` 提交，对象没了、树也缺 ⇒ `git rev-list HEAD` / `git log -S` 都停在 `d0708a0`。
 
 | 路 | 为什么不走 |
 |---|---|
@@ -21679,8 +21679,8 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 `head-cert-check` 跑判卷**不封 worker**（8 核 8 GB 机器上 8 套并行）。本机在那两个会话同时在跑的时段，
 它两次报的**红的集合不同**、每条**单独跑都过** ⇒ 负载产物、不是逻辑回归（AGENTS.md 已有这条）。
-原始读数留档：`outputs/head-cert-d059c02-2026-10-22-0824/`、`outputs/head-cert-d059c02-2026-10-22-0831/`；
-对照的**封顶档**读数在 `outputs/head-read-capped-d059c02d/`（467 文件 / 6459 用例，全绿）。
+原始读数留档：`outputs/head-cert-f8b86e4-2026-10-22-0824/`、`outputs/head-cert-f8b86e4-2026-10-22-0831/`；
+对照的**封顶档**读数在 `outputs/head-read-capped-f8b86e4/`（467 文件 / 6459 用例，全绿）。
 ⇒ **本机的可复现口径是封顶那一条**（`--maxWorkers=2`）。
 
 ### 五、读数
@@ -21702,21 +21702,21 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 ### 一、经过（三步；台账只追加，所以这段经过本身就是记录）
 
-1. 第 665 页那一笔（`a6314976`）：业主在本会话里直接指示「把那 21 条登记进 `LEDGER_NON_REV`，docs-check 归零」
+1. 第 665 页那一笔（`334ad3e`）：业主在本会话里直接指示「把那 21 条登记进 `LEDGER_NON_REV`，docs-check 归零」
    ⇒ 当时照办了，docs-check 归零。
 2. 另一会话同时收到的是**相反**的一句（「接受断缝：不重写、不 graft、**不登记豁免**」）
    ⇒ 两句相左；两边都**没有替业主裁**（一边没撤、一边没动对方的提交），把两句话原样摆到业主面前。
 3. 业主最终裁决：「以你在本会话给我的那句为准：**撤掉 21 条登记**，D-5 恢复真红并如实记账。」
 
-### 二、处置：**只撤登记这一项**（`bdc200b9`）
+### 二、处置：**只撤登记这一项**（`ebfa01d`）
 
 - 撤 `scripts/docs-check.ts` 的那 33 行登记，豁免表回到 5 条既有存量。
-- **不是**整笔 revert `a6314976`：那一笔里另有两样必须留下——
+- **不是**整笔 revert `334ad3e`：那一笔里另有两样必须留下——
   台账第 665 页（台账只追加、不改写页；那页记的是「当时业主在本会话里直接指示登记」这一段经过），
-  以及 `outputs/head-cert-d059c02-2026-10-22-0824/` 与 `outputs/head-cert-d059c02-2026-10-22-0831/` 两支证据目录
+  以及 `outputs/head-cert-f8b86e4-2026-10-22-0824/` 与 `outputs/head-cert-f8b86e4-2026-10-22-0831/` 两支证据目录
   （第 665 页第四节点名了它们——head-cert 不封 worker ⇒ 间歇报假红的原始读数；
   整笔 revert 会把这两支删掉 ⇒ D-11 反过来红）。
-- 现态页 `rev` 改指 `bdc200b9`：`8ab7bd50` 那笔指过 `a6314976`，而那一笔的登记效果已被撤
+- 现态页 `rev` 改指 `ebfa01d`：`9963074` 那笔指过 `334ad3e`，而那一笔的登记效果已被撤
   ⇒ 不留着一个会被读成「登记仍生效」的指针。
 
 ### 三、现在的读数（如实，不美化）
@@ -21732,14 +21732,14 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 在这 21 条恢复真红时**跟着红**——它要的是「除豁免外零红」，而业主的裁决是**不豁免**。
 ⇒ **核心套件现在有 1 条红**，成因与上面 21 条同源（对象被削、读不到）。
 
-核对过这不是本轮引入的：`tests/docs-check.test.ts` 与对方那笔（`2fe791c6`）**逐字一致**，
+核对过这不是本轮引入的：`tests/docs-check.test.ts` 与对方那笔（`739c1c5`）**逐字一致**，
 那 21 个 sha 在对方那笔的台账里**已经都在** ⇒ 这一条红自事故起就在，是事故的诚实足迹。
 等外部备份把那批对象找回，它会自己转绿（那时 D-5 的 21 条也会一起归零）。
 
 ### 七、顺带修掉的一个共享树故障（`git status` / `git commit` 在算 ahead/behind 时 fatal）
 
 断缝让 **merge-base 走不动** ⇒ 凡要算「本地领先远端几笔」的命令都 fatal：
-`fatal: bad revision '9414a592…6af24734…'`（那个 `...` 就是 ahead/behind 的对称差）。
+`fatal: bad revision 'b886f4a…6af24734…'`（那个 `...` 就是 ahead/behind 的对称差）。
 ⇒ 在**断缝修好之前**，本分支的 upstream 被**解除**（`git branch --unset-upstream`），
 `git status` / `git add` / `git commit` 随即正常。**钩子照跑，没有用 `--no-verify` 绕**——
 那个绕法会把钩子里的判据一起绕掉，事故的账就更难算了。
@@ -21821,34 +21821,34 @@ node bin/cairn.mjs --workspace <run-dir> --mode auto --model <模型> \
 
 ## 2026-10-22 · 第 669 页：指针分叉完整接入（Task 1–8）＋真机冒烟——来源视图、压缩联合、根级锁、IPC v19、UI 来源键、注释/搜索/回滚、CLI 与桌面切换
 
-本批在隔离工作树 `.worktrees/pointer-plan` 的分支 `agent/pointer-session-refs` 上完成，基线 `2fe791c6`；
+本批在隔离工作树 `.worktrees/pointer-plan` 的分支 `agent/pointer-session-refs` 上完成，基线 `739c1c5`；
 共享树（`fix/spec-summary-double-count`）在本批期间未被写入。
 
 ### 一、落地了什么
 
-- **来源类型与物理视图**（`c01b95a4`）：`EventRef`/`SessionRef`（JSON 元组键、eventId 正安全整数）、
+- **来源类型与物理视图**（`2c7867b`）：`EventRef`/`SessionRef`（JSON 元组键、eventId 正安全整数）、
   `readSessionView`（逐文件按 raw 边界截、各自解释控制记录、父前缀丢弃未收尾请求）、`forkPointInView`
   （选中祖先行时返回祖先来源与物理边界）。`replaySession`/`forkSessionPointer` 走同一条血缘验证。
-- **模型投影与压缩来源**（`b1947206`）：`CompactionEvent` 新旧互斥联合；`projectViewContext` 把视图编译成
+- **模型投影与压缩来源**（`583636d`）：`CompactionEvent` 新旧互斥联合；`projectViewContext` 把视图编译成
   raw 形状合成表再交给原投影（数字位置只在编译期活）；tool-call wire id 按「工作区+会话+agent 域+原 id」分域；
   `buildSessionHistory`/provider assemble 对有 fork 头的会话走视图；`runCompaction` 可选 view 并产出来源形式。
-- **会话根与父依赖**（`9d653e20`、`0ed3e02b`）：`resolveSessionRef`（同名会话无归属即拒绝）、
+- **会话根与父依赖**（`8473ee1`、`e8bf8e0`）：`resolveSessionRef`（同名会话无归属即拒绝）、
   `withSessionMutation`（进程内串行 + `.session-mutation.lock`）、`dependentSessions`（直接+传递，读不动即抛）；
   改名/删除先查依赖再动文件，同处一个临界区。
-- **IPC v19 与 KernelHost**（`dd584d04`）：`openSession` 回传 `events + session + view`；显式 workspace 过登记根闸；
+- **IPC v19 与 KernelHost**（`d3d4e83`）：`openSession` 回传 `events + session + view`；显式 workspace 过登记根闸；
   会话 mutation/队列/注释补 workspace；host 与 core 的归属解析器同一条歧义判据。
-- **UI 来源身份**（`e3077a53`、`93a6ff02`、`8c6c8faf`、`bd4521a1`）：渲染层视图 + 实时增量（水位从快照本地长度推）、
+- **UI 来源身份**（`36a5aed`、`4993c87`、`41a952d`、`dd0e490`）：渲染层视图 + 实时增量（水位从快照本地长度推）、
   Stream 按 `eventRefKey` 出键并给祖先行挂「来自 …」；推送带 workspace、跨根迟到事件不进当前转录；
   running/outcomes/队列按来源键；sidebar 行状态按该行 workspace 取键。
-- **注释/侧聊/卡片/diff**（`90d79d9b`、`fc8ea794`）：反馈与置顶记录可带 `eventRef`、解析按来源键（旧数字记录仍是
+- **注释/侧聊/卡片/diff**（`b24ce4f`、`ba9842b`）：反馈与置顶记录可带 `eventRef`、解析按来源键（旧数字记录仍是
   `#eventId`）；`listMessagePins` 回传锚点；侧聊提升支持 `source_event_refs`（与数字形式互斥，引用形式从视图重建正文）；
   card_action / diff_comment 可记录 `source_event_ref`/`source_ref`。
-- **搜索与回滚**（`3f34e532`）：搜索命中带 `SessionRef` + `EventRef`，分叉会话按视图取料、预算按父链计、不够读完即 partial；
+- **搜索与回滚**（`8ce9a38`）：搜索命中带 `SessionRef` + `EventRef`，分叉会话按视图取料、预算按父链计、不够读完即 partial；
   `planTurnRevertView` 以物理行号 + EventRef 记账；`file_restored` 记 `source_ref`。
-- **产品指针启用**（`8d49c4fb`）：`createProductFork` 为 CLI 与桌面唯一创建入口；CLI `--fork/--from` 不再复制父事件，
+- **产品指针启用**（`f6cb957`）：`createProductFork` 为 CLI 与桌面唯一创建入口；CLI `--fork/--from` 不再复制父事件，
   `--replay` 先打来源视图；gym 保留复制原语。
-- **真机冒烟**（`9e120496`）：`apps/desktop/scripts/session-reference-smoke.cjs`，真实 main+preload+renderer、
-  临时 profile/两个项目、不调模型；`710a4aa8` 为测试判别联合收窄。
+- **真机冒烟**（`4a9b7f2`）：`apps/desktop/scripts/session-reference-smoke.cjs`，真实 main+preload+renderer、
+  临时 profile/两个项目、不调模型；`674f58b` 为测试判别联合收窄。
 
 ### 二、读数
 
@@ -21865,21 +21865,21 @@ node bin/cairn.mjs --workspace <run-dir> --mode auto --model <模型> \
 - 真实模型收益仍要凭据与付费授权；本页不声称任何模型侧收益。
 - 本页在隔离分支上；第 665/666 页属于共享树的邻会话，合分支时页号以共享树为准。
 
-## 2026-10-22 · 第 670 页：本批的 HEAD 认证读数（b122d2a5）——两笔事故红是唯一红；mutate-verify 量的是主检出 HEAD，不在本分支上冒充读数
+## 2026-10-22 · 第 670 页：本批的 HEAD 认证读数（598118d）——两笔事故红是唯一红；mutate-verify 量的是主检出 HEAD，不在本分支上冒充读数
 
-### 一、head-cert（HEAD = `b122d2a5`）
+### 一、head-cert（HEAD = `598118d`）
 
-- `node --import tsx scripts/head-cert.ts --tree=.worktrees/gate-head-cert`：TREE=`b122d2a`、判卷四面在飞 0、
+- `node --import tsx scripts/head-cert.ts --tree=.worktrees/gate-head-cert`：TREE=`598118d`、判卷四面在飞 0、
   依赖完整、收尾复核同一笔；**认证门面 25 道跑满，红 1 道**（`docs-check` exit=1，原因 = D-5 的 21 条，
   业主裁「不登记」的诚实足迹）；超预算 2 道只出声（evidence-typecheck-check 5357ms>5300、desktop-test 11379ms>10000）。
 - 认证树上的全量判卷：**476 文件 / 6518 项，2 失败**——就是 D-5 与 `mutate-needles` 的 `1f16bea` 归因，
   与工作树读数一致；墙钟 160.36s。**不把这两条说成全绿**。
-- 原始读数：`outputs/head-cert-b122d2a-2026-10-22-1230/provenance.md`（工具自己落的）；本页只引用、不改写。
+- 原始读数：`outputs/head-cert-598118d-2026-10-22-1230/provenance.md`（工具自己落的）；本页只引用、不改写。
 
 ### 二、mutate-verify：这一趟不构成本分支的读数
 
 - 该门按设计读**主检出**（`git -C <mainRoot> rev-parse HEAD`）并把它切进隔离树；当前主检出 HEAD 是
-  `7e1fdcf`（共享分支，**不含本批**），所以在本分支上跑它量的是别的树。
+  `d8c8cea`（共享分支，**不含本批**），所以在本分支上跑它量的是别的树。
 - 这趟尝试还停在依赖面：共享树的 `.worktrees/gate-mutate-verify/node_modules` 里 `typescript.js` 不可读
   （对象库事故的余波，那个工作树是事故前 `cp -al` 出来的旧拷贝），子进程 import 失败退出 1。
 - ⇒ **不给读数、不冒充通过**。正确顺序是：本分支合入共享分支后，在**含实现的同一提交**上重跑
@@ -21887,31 +21887,31 @@ node bin/cairn.mjs --workspace <run-dir> --mode auto --model <模型> \
 
 ### 三、边界
 
-- 本分支（`agent/pointer-session-refs`，HEAD `b122d2a5` 之后又加了本页）尚未合并；合并是业主的裁。
+- 本分支（`agent/pointer-session-refs`，HEAD `598118d` 之后又加了本页）尚未合并；合并是业主的裁。
 - 合并时 PROGRESS/STATE 会与共享树的第 665/666 页冲突（页号与现态页都是"整体重写"口径），需按台账规则解冲突。
 
-## 2026-10-22 · 第 671 页：指针批并入共享分支（`f25e09d1`）后的 HEAD 认证与整表变异验证——两条事故红照旧、1 条存活已定位为针脚漂移
+## 2026-10-22 · 第 671 页：指针批并入共享分支（`52c8788`）后的 HEAD 认证与整表变异验证——两条事故红照旧、1 条存活已定位为针脚漂移
 
 ### 一、合并本身
 
-- `agent/pointer-session-refs`（第 669 页那批，基线 `2fe791c6`）合入共享分支 `fix/spec-summary-double-count`，
-  合并提交 **`f25e09d1`**；随后 **`c2807a71`** 把现态页 `rev` 指到合并提交。
+- `agent/pointer-session-refs`（第 669 页那批，基线 `739c1c5`）合入共享分支 `fix/spec-summary-double-count`，
+  合并提交 **`52c8788`**；随后 **`d739002`** 把现态页 `rev` 指到合并提交。
 - 冲突只在 `PROGRESS.md` / `STATE.md` 两处：共享树的第 665/666/667 页整页保留在前，分支的第 669/670 页追加在后；
   `STATE.md` 取分支版本（含指针批的现态描述）。合并树上重跑全量测试与轻门，见第 669 页同口径读数。
 - **页号**：667 归仓外 `pel-runs/` 会话、672 起归邻会话（它已把 667 那条「后续追加从 671 起」改口）。
   本会话用 **671**（本页）与 **673**（草稿/卡片批的读数），不占 672。
 
-### 二、head-cert（HEAD = `c2807a7`）
+### 二、head-cert（HEAD = `d739002`）
 
-- `node --import tsx scripts/head-cert.ts`：TREE=`c2807a717e047265f84f25f3ad50efc9a5e0a58a`、判卷四面在飞 0、
+- `node --import tsx scripts/head-cert.ts`：TREE=`d739002`、判卷四面在飞 0、
   依赖完整（声明 10 项，缺 0）、import 面 5413 条边悬空 0、收尾复核同一笔。
 - **认证门面 25 道跑满，红 1 道**：`docs-check` exit=1（D-5 的 21 条丢失 sha，业主裁「不登记」，诚实足迹）；
   超预算 2 道只出声（`evidence-typecheck-check` 5354ms>5300、`desktop-test` 11143ms>10000）。
 - 认证树上的全量判卷：**476 文件 / 6518 项，2 失败**——`tests/docs-check.test.ts` 的 D-5 那条与
   `tests/mutate-needles-check.test.ts` 的 `1f16bea` 归因；墙钟 **156.78s**；贴帽 0 条。
-- 原始读数：`outputs/head-cert-c2807a7-2026-10-22-1242/provenance.md`（工具自己落的；本页只引用）。
+- 原始读数：`outputs/head-cert-d739002-2026-10-22-1242/provenance.md`（工具自己落的；本页只引用）。
 
-### 三、mutate-verify（HEAD = `c2807a71`，隔离树 `.worktrees/gate-mutate-verify`，整表）
+### 三、mutate-verify（HEAD = `d739002`，隔离树 `.worktrees/gate-mutate-verify`，整表）
 
 - **1589/1589 跑满**，耗时 **2024.0s**；成本分母：判卷 spawn 3178 次（每条 2 次），单次中位 0.4s，
   最贵一条 `orchestrator-project-rules-not-passed` 32.0s；selector 拍 3174、坏拍 0。
@@ -21974,7 +21974,7 @@ node bin/cairn.mjs --workspace <run-dir> --mode auto --model <模型> \
 
 ### 四、边界与未跑
 
-- 未跑 `pnpm gates` / `mutate-verify` / `head-cert-check`；本页只覆盖提交 `dc9a8033` 的工作树内容，
+- 未跑 `pnpm gates` / `mutate-verify` / `head-cert-check`；本页只覆盖提交 `a178b49` 的工作树内容，
   不冒充 HEAD 认证。
 - 桌面真机证据是离屏 gallery / state-smoke（真 renderer + 合成 AgentApi），不覆盖真 provider；
   思考档真正进请求体的那一跳由 `seedNewSessionThinking` 的单测与接线判据覆盖，未发真模型请求。
@@ -22056,7 +22056,7 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
 
 ### 五、边界（不冒充的）
 
-- 本页落库为两笔：`e9b9624c`（LSP 那一簇的收尾，同笔带 CODE-WIKI）、`3413632a`（本页主体）。
+- 本页落库为两笔：`e1b9819`（LSP 那一簇的收尾，同笔带 CODE-WIKI）、`fcd1437`（本页主体）。
   落库后重跑 `pnpm mutate-needles-check`：**阻断 0／钉在飞文本 0／全部锚点针脚可判定 ✅**
   （落库前是「阻断 4、钉在飞文本 4」——那 4 条正是因为实现还没进 HEAD）。
 - **仍未跑** `mutate-verify` / `head-cert-check`（量 HEAD 的两道全量门，各自半小时量级）⇒ 本页不冒充 HEAD 认证。
@@ -22133,7 +22133,7 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
 
 ### 五、边界（不冒充的）
 
-- 本页落库为两笔：`e9b9624c`（LSP 那一簇的收尾，同笔带 CODE-WIKI）、`3413632a`（本页主体）。
+- 本页落库为两笔：`e1b9819`（LSP 那一簇的收尾，同笔带 CODE-WIKI）、`fcd1437`（本页主体）。
   落库后重跑 `pnpm mutate-needles-check`：**阻断 0／钉在飞文本 0／全部锚点针脚可判定 ✅**
   （落库前是「阻断 4、钉在飞文本 4」——那 4 条正是因为实现还没进 HEAD）。
 - **仍未跑** `mutate-verify` / `head-cert-check`（量 HEAD 的两道全量门，各自半小时量级）⇒ 本页不冒充 HEAD 认证。
@@ -22175,9 +22175,9 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
 - `pnpm docs-check`：**D-5=21**（同一组）；页号唯一面新增 0 撞号，下一个未占用页号 677。
   本笔先撞了两条 D-10（引用的适配器位置只写裸文件名）⇒ 改成 `path#symbol` 后归零。
 
-### 八、HEAD 认证读数（`419fb33a`）——以及一次**我自己的假绿被抓**
+### 八、HEAD 认证读数（`3c75737`）——以及一次**我自己的假绿被抓**
 
-第一趟 `head-cert-check`（`TREE=1121c86`）**红在 typecheck**：
+第一趟 `head-cert-check`（`TREE=7cd7733`）**红在 typecheck**：
 `tests/provider-instream-retry.test.ts(37,24)` / `(154,48)` 两处 TS 错。
 这是本轮最值得记的一条，因为它推翻了我自己前一步写下的读数：
 
@@ -22187,21 +22187,21 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
 - 两处错本身都很浅（`mergeAssistantDeltas` 收的是 `AssistantDeltaEvent[]` 而不是 `AgentEvent[]`；
   `names: [{}]` 不在联合类型里）。**浅错更要紧**：它们说明我写完判卷后没在有类型判定的地方跑过它。
 
-修好后复认（`419fb33a`，同一进程 hrtime，两端独占：起前 0 套／跑完 0 套判卷）：
+修好后复认（`3c75737`，同一进程 hrtime，两端独占：起前 0 套／跑完 0 套判卷）：
 
 - 门面 **25 道跑到 25**，红 **1** 道（`docs-check`，就是那 21 条 D-5 存量）。
 - 判卷 **480 文件 / 6547 条，2 failed** —— 两条仍是 `docs-check` 的 D-5 21 条与
   `mutate-needles-check` 的 `1f16bea` 归因（均为第 666 页已裁决的诚实红）。
 - typecheck 在 **HEAD 面上 0 条**（`HEAD 内 1 → 0`）。
 - 墙钟 105.15s；贴帽读数：6547 条里 **0 条**用时 ≥ 有效预算 80%。
-- 认证树自回收 `exit=0`；常驻残留树 1（别人那棵 `gate-mutate-verify@5481ea8`，规则 120 判定为残留）。
-- 原始读数：`outputs/head-cert-419fb33-2026-10-22-1954/provenance.md`（**引墙钟/门耗时前先读它**，
+- 认证树自回收 `exit=0`；常驻残留树 1（别人那棵 `gate-mutate-verify@396adbd`，规则 120 判定为残留）。
+- 原始读数：`outputs/head-cert-3c75737-2026-10-22-1954/provenance.md`（**引墙钟/门耗时前先读它**，
   别引本页正文）。
 
 **仍未跑**：`pnpm mutate-verify`（全表变异实跑，半小时量级）。本页因此只声明「HEAD 认证过、门面红 1 道是存量」，
 不声明「全表变异通过」。
 
-### 九、全表变异实跑（`54cd5f33`）：**1589/1589 全杀**
+### 九、全表变异实跑（`8d57329`）：**1589/1589 全杀**
 
 `pnpm mutate-verify`（量 HEAD，在一次性 worktree 里跑，退出码由脚本自己取，不接管道）：
 
@@ -22288,7 +22288,7 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
 ### 六、读数（工作树 → 已落库 → HEAD 面）
 
 - `mutate-needles-check`：**阻断 0／钉在飞文本 0**（落库前是阻断 6：3 条新锚点的被测面与判卷都还没进 HEAD）。
-- `mutate-verify`（`39427bdc` 上跑，**全表 1592/1592 全杀**，1858.0s，退出码 0）——
+- `mutate-verify`（`0abd939` 上跑，**全表 1592/1592 全杀**，1858.0s，退出码 0）——
   三条新 steering 锚点都在这张表里被杀死。
 - 根套件与桌面套件读数见 §七。
 
@@ -22309,7 +22309,7 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
 
 ⇒ 这两条都是「新增一条能力时要跟着改它的计数面」，不是产品缺陷。第 676 页同族教训的第二次出现。
 
-### 八、HEAD 认证读数（`6d7c6253`）
+### 八、HEAD 认证读数（`578099e`）
 
 同一进程 hrtime，两端独占（起前 0 套／跑完 0 套判卷）：
 
@@ -22319,7 +22319,7 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
   与第 666 页裁决的那两条逐条同一处。
 - 墙钟 109.31s；贴帽读数：6562 条里 **0 条**用时 ≥ 有效预算 80%。
 - 认证树自回收 `exit=0`；**常驻残留树 0**（我这轮把自己那棵也清干净了）。
-- 原始读数：`outputs/head-cert-6d7c625-2026-10-22-2225/provenance.md`（引墙钟前先读它）。
+- 原始读数：`outputs/head-cert-578099e-2026-10-22-2225/provenance.md`（引墙钟前先读它）。
 
 ### 九、本页边界（不冒充的）
 
@@ -22327,7 +22327,7 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
   离屏 SSR 结构判据与主进程侧判卷覆盖，**没有在真窗口里跑过一遍**。这是本页最大的未证项：
   「渲染层 runningSet 与主进程 runControllers 之间那一瞬谁说了算」只在代码上推过，没量过。
 - **没有真模型读数**：插话到底有没有被模型照做（还是被它忽略），要真 provider 才能量。
-- `mutate-verify` 那一趟（1592/1592）量的是 `39427bdc`，**不含**后来那两笔计数修正（`6fdaddbf`）与文档笔；
+- `mutate-verify` 那一趟（1592/1592）量的是 `0abd939`，**不含**后来那两笔计数修正（`614026a`）与文档笔；
   那两笔只改一个数字与一句措辞，各自有门当场钉（`readme-invoke-channel-count`、能力断言尺）。
 
 ## 2026-10-23 · 第 678 页：第 9 点接上之后暴露的一条**存量死字段**（R1 的「用户说过话」抑制项恒 false）
@@ -22464,14 +22464,14 @@ CLI 无旗标、`settings.ts` 无字段、桌面无入口、`agent-runner.ts` �
 ★反向哨兵「没截断不许白多要一轮」（否则每场收束都白烧一次请求）／ 工具轮不误判 ／ 投影只注一次。
 两台变异逐条杀死：去掉续跑（红 2 条）、去掉上限（红 1 条）。
 
-### 八、HEAD 认证读数（`ee66ca0`）
+### 八、HEAD 认证读数（`674e6f7`）
 
 - 门面 **25/25** 跑到，红 **1** 道：`docs-check`（那 21 条 D-5 存量）。
 - `typecheck` HEAD 面 **0 报错**。
 - 判卷 **6570 条 / 2 failed**：`docs-check` 的 D-5 21 条、`mutate-needles-check` 的 `1f16bea` 归因。
 - 贴帽读数：6570 条里 **0 条**用时 ≥ 有效预算 80%。
 - 认证树自回收 `exit=0`；**常驻残留树 0**。
-- 原始读数：`outputs/head-cert-ee66ca0-2026-10-22-2309/provenance.md`。
+- 原始读数：`outputs/head-cert-674e6f7-2026-10-22-2309/provenance.md`。
 
 ### 九、本页边界
 
@@ -22555,13 +22555,13 @@ if (!userCancelled) { /* 落 error */ }
   「续跑吞掉撞帽」那类改法（两台变异都存活，因为撞帽只在末步发生）——保留它们钉的是行为口径，
   不假装它们守的是那个不存在的顺序差。
 
-### 六、HEAD 认证读数（`f50ed2aa`）
+### 六、HEAD 认证读数（`8e5e778`）
 
 - 门面 **25/25** 跑到，红 **1** 道：`docs-check`（21 条 D-5 存量）。
 - `typecheck` HEAD 面 **0 报错**。
 - 判卷 **6575 条 / 2 failed**：`docs-check` 的 D-5、`mutate-needles-check` 的 `1f16bea` 归因。
 - 认证树自回收 `exit=0`；**常驻残留树 0**。
-- 原始读数：`outputs/head-cert-f50ed2a-2026-10-22-2334/provenance.md`。
+- 原始读数：`outputs/head-cert-8e5e778-2026-10-22-2334/provenance.md`。
 
 ## 2026-10-23 · 第 680 页：插话把**同一轮劈成两轮**——转录层与 UI 层的两个缺口
 
@@ -22628,14 +22628,14 @@ if (!userCancelled) { /* 落 error */ }
 （实测每 2 拍插一句 ⇒ 受护集占 21%）。这是**有意取舍**（用户写过的话永不压缩），
 且真实使用里插话不会那么密，**不改**。
 
-### 六、HEAD 认证读数（`da7cbf40`）
+### 六、HEAD 认证读数（`9bd2107`）
 
 - 门面 **25/25** 跑到，红 **1** 道：`docs-check`（21 条 D-5 存量）。
 - `typecheck` HEAD 面 **0 报错**。
 - 判卷 **6577 条 / 2 failed**：`docs-check` 的 D-5、`mutate-needles-check` 的 `1f16bea` 归因。
 - 桌面套件 **1403 条全绿**（第 679 页是 1398 ⇒ +5）。
 - 认证树自回收 `exit=0`；**常驻残留树 0**。
-- 原始读数：`outputs/head-cert-da7cbf4-2026-10-23-0003/provenance.md`。
+- 原始读数：`outputs/head-cert-9bd2107-2026-10-23-0003/provenance.md`。
 
 ## 2026-10-23 · 第 681 页：**build 门比 test 门严**——第 9 点接线漏了三处类型，以及一条没跑通的冒烟
 
@@ -22685,7 +22685,7 @@ if (!userCancelled) { /* 落 error */ }
 在发送前后的取值，再决定是补桩的 workspace 回包、还是改用 `createSession` 预置会话。
 **这是下一轮的第一步，不是本轮能收敛的。**
 
-### 四、HEAD 认证读数（`5ee9030a`）
+### 四、HEAD 认证读数（`b93f2c6`）
 
 - 门面 **25/25** 跑到，红 **1** 道：`docs-check`（21 条 D-5 存量）。
 - `typecheck` HEAD 面 **0 报错**（本页那三处类型漏修完之后）。
@@ -22760,7 +22760,7 @@ export function steerAccepted(res): boolean  // 只认 ok === true
 先给 gallery 一个"预置运行中会话"的夹具（而不是靠点击+回车把状态撞出来），
 再谈端到端。
 
-### 五、HEAD 认证读数（`fb121f5`）——**这一趟不是干净的绿，要如实记**
+### 五、HEAD 认证读数（`7bbd2b4`）——**这一趟不是干净的绿，要如实记**
 
 | 项 | 读数 | 判读 |
 |---|---|---|
@@ -22843,7 +22843,7 @@ InterVariable.woff2               137.26 kB
 `bundle-audit` 完全不看非 JS 资产 ⇒ **产物里的图片/字体/许可证有没有整块无用的**，
 目前没有任何一道门回答这个问题。那不是本页能收敛的，登记为下一轮的候选。
 
-### 六、HEAD 认证读数（`e10b83c`）——**两趟都是并发压出来的假红，不写成绿**
+### 六、HEAD 认证读数（`adb6b2c`）——**两趟都是并发压出来的假红，不写成绿**
 
 | 项 | 本趟 | 上一次（第 682 页） | 普通跑道（`--maxWorkers=2`） |
 |---|---|---|---|
@@ -22940,7 +22940,7 @@ TypeError: Cannot read properties of undefined (reading 'slice')
 
 ⇒ 第 683 页留下的候选**已关**：产物里唯一的无用资产就是那 309KB 斜体字体。
 
-### 七、HEAD 认证读数（`7e83ced`）——**这一趟是干净的**
+### 七、HEAD 认证读数（`c368858`）——**这一趟是干净的**
 
 | 项 | 读数 |
 |---|---|
@@ -22980,7 +22980,7 @@ Preparing worktree (checking out 'agent/修复-todo-的-completedcount-worker-12
 fatal: unable to read tree (d2fc8a7278db4630b6d98a820acf7ca24f8fc8a0)
 ```
 
-`d2fc8a72` 是提交 `6455bb20` 的 `src/events` 子树 —— 2026-10-22 对象库事故里永久丢失的那批对象之一
+`d2fc8a72` 是提交 `d0708a0` 的 `src/events` 子树 —— 2026-10-22 对象库事故里永久丢失的那批对象之一
 （第 664／665／666 页已裁「接受断缝、不重写历史」）。分支本身还在，所以 `git branch --list` 看得见它、
 `git worktree add` 一碰就死。
 
@@ -23027,7 +23027,7 @@ worktree 里写下 wip.txt              ⇒ before: true
 
 ### 四、全表跑抓到的假守护：六条桌面插话锚点从未真正跑过
 
-`pnpm mutate-verify`（HEAD `ebeb2b49`）跑完 **1607 条**：**1601 条被杀死、6 条 vacuous**，六条正是
+`pnpm mutate-verify`（HEAD `7429acf`）跑完 **1607 条**：**1601 条被杀死、6 条 vacuous**，六条正是
 上一轮加的 `desktop-steer-*`／`desktop-steering-*`：
 
 ```
@@ -23056,16 +23056,16 @@ REDKINDS=survived:0,misattributed:0,baseline-red:0,no-effect:0,syntax:0,restore-
 | 幂等旧行为造红 | 去掉早返回 ⇒ **2 条红**（未提交改动消失、坏树被重建） |
 | `pnpm supervisor-check` | **78✅／3❌ → 81✅／0❌** |
 | `pnpm mutate-needles-check` | 1607 条针脚全部可判定（阻断 0） |
-| `pnpm mutate-verify`（HEAD `ebeb2b49`，全表） | 1601／1607 杀死，6 vacuous（全是上面那六条） |
-| 定向复跑（HEAD `7eb53c9f`，8 条：六条桌面插话 ＋ 本页两条） | **8／8 杀死**，selector 坏拍 0 |
-| `pnpm mutate-verify`（HEAD `ca675c20`，全表） | **1607／1607 杀死，0 vacuous**（1881.9s） |
-| 定向复跑（HEAD `ca675c20`，同 8 条） | **8／8 杀死**，selector 坏拍 0（6.5s） |
+| `pnpm mutate-verify`（HEAD `7429acf`，全表） | 1601／1607 杀死，6 vacuous（全是上面那六条） |
+| 定向复跑（HEAD `deafde8`，8 条：六条桌面插话 ＋ 本页两条） | **8／8 杀死**，selector 坏拍 0 |
+| `pnpm mutate-verify`（HEAD `a44fd3c`，全表） | **1607／1607 杀死，0 vacuous**（1881.9s） |
+| 定向复跑（HEAD `a44fd3c`，同 8 条） | **8／8 杀死**，selector 坏拍 0（6.5s） |
 
-### 六、HEAD 认证读数（`ca675c20`）
+### 六、HEAD 认证读数（`a44fd3c`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`ca675c2`）：25 道认证门面跑满，**红 1 道**（`docs-check`，原因＝D-5 的 21 条，业主已裁保留）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`a44fd3c`）：25 道认证门面跑满，**红 1 道**（`docs-check`，原因＝D-5 的 21 条，业主已裁保留）；**超预算 0 道**。
 - 认证树上的全量判卷：**486 文件／6594 项，2 失败**——`docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因，两笔都是 2026-10-22 对象库事故的既有真红，不是本页引入（第 664／670 页同形）。
-- 本趟墙钟 **113.33s**（同一进程 hrtime，口径＝起跑→汇总；引用前先读 `outputs/head-cert-ca675c2-2026-10-23-1133/provenance.md`）。
+- 本趟墙钟 **113.33s**（同一进程 hrtime，口径＝起跑→汇总；引用前先读 `outputs/head-cert-a44fd3c-2026-10-23-1133/provenance.md`）。
 - 退出码 1：这是 head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），**不把这条读成本页的绿**。
 
 ### 七、边界（不冒充的部分）
@@ -23073,13 +23073,13 @@ REDKINDS=survived:0,misattributed:0,baseline-red:0,no-effect:0,syntax:0,restore-
 - **对象库不修**：`d2fc8a72` 等丢失对象来自 2026-10-22 事故，业主已裁「接受断缝、不重写、不 graft」
   （第 665／666 页）。本页只让新 worker 不再撞上那根断枝；那条坏分支原样留着。
 - **真机未验**：本页的桌面部分只跑无头判卷（`.tsx` SSR／纯函数），没有 Electron 真机帧时间或观感读数。
-- **全表口径**：`mutate-verify` 量的是提交 `ca675c20` 的树；工作树里 `outputs/` 未跟踪件与 `ab.py` 未参与。
-- **取料（与页同笔入库）**：`outputs/worktree-identity-2026-10-23/mutate-verify-ebeb2b49.log`、
-  `outputs/worktree-identity-2026-10-23/mutate-verify-7eb53c9f.log`、
-  `outputs/worktree-identity-2026-10-23/mutate-verify-ca675c20.log`、
-  `outputs/worktree-identity-2026-10-23/targeted-anchors-ca675c20.log`、
-  `outputs/worktree-identity-2026-10-23/supervisor-check-ca675c20.log`；
-  认证读数在 `outputs/head-cert-ca675c2-2026-10-23-1133/provenance.md`。
+- **全表口径**：`mutate-verify` 量的是提交 `a44fd3c` 的树；工作树里 `outputs/` 未跟踪件与 `ab.py` 未参与。
+- **取料（与页同笔入库）**：`outputs/worktree-identity-2026-10-23/mutate-verify-7429acf.log`、
+  `outputs/worktree-identity-2026-10-23/mutate-verify-deafde8.log`、
+  `outputs/worktree-identity-2026-10-23/mutate-verify-a44fd3c.log`、
+  `outputs/worktree-identity-2026-10-23/targeted-anchors-a44fd3c.log`、
+  `outputs/worktree-identity-2026-10-23/supervisor-check-a44fd3c.log`；
+  认证读数在 `outputs/head-cert-a44fd3c-2026-10-23-1133/provenance.md`。
 - **同路径残留树仍会自动删**：`createWorktree` 开头对 `wt-<agentId>` 的 `rm -rf` 是既有行为；如果那棵树里
   有未提交改动，仍会被清掉。本页没有改这一格——它是下一轮的候选，需要先量「孤儿保留」与「同 id 重试」
   两条语义怎么合。
@@ -23141,14 +23141,14 @@ Tests  2 failed | 6 passed (8)
 | 锚点 `worktree-overwrites-dirty-residue` | 定向 **1／1 杀死**（0.9s） |
 | `pnpm mutate-needles-check` | 1608 条针脚全部可判定（阻断 0） |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| `pnpm mutate-verify`（HEAD `a6d60ee3`，全表） | **1608／1608 杀死，0 vacuous**（1968.4s） |
+| `pnpm mutate-verify`（HEAD `100f380`，全表） | **1608／1608 杀死，0 vacuous**（1968.4s） |
 | 定向复跑（`worktree-overwrites-dirty-residue`） | **1／1 杀死** |
 
-### 五、HEAD 认证读数（`a6d60ee3`）
+### 五、HEAD 认证读数（`100f380`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`a6d60ee`）：25 道认证门面跑满，**红 1 道**（`docs-check`，D-5 的 21 条既有真红）；**超预算 1 道只出声**（`e2e` 5542ms > 4000ms，按规则不翻判定）。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`100f380`）：25 道认证门面跑满，**红 1 道**（`docs-check`，D-5 的 21 条既有真红）；**超预算 1 道只出声**（`e2e` 5542ms > 4000ms，按规则不翻判定）。
 - 认证树全量判卷：**486 文件／6596 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增的 2 条判卷全绿。
-- 本趟墙钟 **137.29s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-a6d60ee-2026-10-23-1227/provenance.md`）。
+- 本趟墙钟 **137.29s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-100f380-2026-10-23-1227/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
 
 ### 六、边界（不冒充的部分）
@@ -23161,10 +23161,10 @@ Tests  2 failed | 6 passed (8)
   一个 workspace 时，另一会话正在跑的 worker 可能被列成「可清理」。本页没有量这条的现读，
   也没改它——下一轮先量跨会话命中率，再决定按 session 分域还是按活进程过滤。
 - **真机未验**：本页全部是 worktree 文件系统与 git 行为，不涉及 Electron 观感。
-- **取料（与页同笔入库）**：`outputs/worktree-residue-2026-10-23/targeted-anchor-a6d60ee3.log`、
-  `outputs/worktree-residue-2026-10-23/mutate-verify-a6d60ee3.log`、
-  `outputs/worktree-residue-2026-10-23/supervisor-check-a6d60ee3.log`；
-  认证读数在 `outputs/head-cert-a6d60ee-2026-10-23-1227/provenance.md`。
+- **取料（与页同笔入库）**：`outputs/worktree-residue-2026-10-23/targeted-anchor-100f380.log`、
+  `outputs/worktree-residue-2026-10-23/mutate-verify-100f380.log`、
+  `outputs/worktree-residue-2026-10-23/supervisor-check-100f380.log`；
+  认证读数在 `outputs/head-cert-100f380-2026-10-23-1227/provenance.md`。
 ## 2026-10-23 · 第 687 页：跨会话的「孤儿」不是孤儿——workspace 级目录 × session 级事件流
 
 ### 一、上一页留下的那一格，量出来是真缺陷
@@ -23242,13 +23242,13 @@ export function ownedWorktreeAgentIds(): string[] {
 | 锚点 `orphan-scan-drops-owned-wiring` | 定向 **1／1 杀死** |
 | `pnpm mutate-needles-check` | 1610 条针脚全部可判定（阻断 0） |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| `pnpm mutate-verify`（HEAD `ccf021da`，全表） | **1610／1610 杀死，0 vacuous**（2560.5s） |
+| `pnpm mutate-verify`（HEAD `9681fea`，全表） | **1610／1610 杀死，0 vacuous**（2560.5s） |
 
-### 五、HEAD 认证读数（`ccf021da`）
+### 五、HEAD 认证读数（`9681fea`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`ccf021d`）：25 道认证门面跑满，**红 1 道**（`docs-check`，D-5 的 21 条既有真红）；**超预算 1 道只出声**（`e2e` 7470ms > 4000ms，按规则不翻判定）。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`9681fea`）：25 道认证门面跑满，**红 1 道**（`docs-check`，D-5 的 21 条既有真红）；**超预算 1 道只出声**（`e2e` 7470ms > 4000ms，按规则不翻判定）。
 - 认证树全量判卷：**487 文件／6598 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增的 3 条判卷全绿。
-- 本趟墙钟 **130.63s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-ccf021d-2026-10-23-1412/provenance.md`）。
+- 本趟墙钟 **130.63s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-9681fea-2026-10-23-1412/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
 
 ### 六、边界（不冒充的部分）
@@ -23261,10 +23261,10 @@ export function ownedWorktreeAgentIds(): string[] {
 - **显式清理仍强删**：孤儿面板的 `clean` 仍走 `removeWorktree` 的 `--force`（第 686 页边界）；
   本页只保证「活树不被列进去」，没改用户主动清理的语义。
 - **真机未验**：本页是 worktree 目录/事件流/内存路由表的行为，不涉及 Electron 观感。
-- **取料（与页同笔入库）**：`outputs/orphan-cross-session-2026-10-23/targeted-anchors-ccf021da.log`、
-  `outputs/orphan-cross-session-2026-10-23/mutate-verify-ccf021da.log`、
-  `outputs/orphan-cross-session-2026-10-23/supervisor-check-ccf021da.log`；
-  认证读数在 `outputs/head-cert-ccf021d-2026-10-23-1412/provenance.md`。
+- **取料（与页同笔入库）**：`outputs/orphan-cross-session-2026-10-23/targeted-anchors-9681fea.log`、
+  `outputs/orphan-cross-session-2026-10-23/mutate-verify-9681fea.log`、
+  `outputs/orphan-cross-session-2026-10-23/supervisor-check-9681fea.log`；
+  认证读数在 `outputs/head-cert-9681fea-2026-10-23-1412/provenance.md`。
 
 > 勘误（2026-10-23，同页）：第五节原写「本页新增的 3 条判卷全绿」有误。本页新增判卷是 **2 条**
 > （`worktree-pure` 1 条 ＋ `orphan-cross-session` 1 条）；head-cert 总数 6596 → 6598 的 +2 就是它们。
@@ -23321,13 +23321,13 @@ cleanOrphanWorktree(root, "worker-10", { ownedAgentIds: new Set(["worker-10"]) }
 | 锚点 `orphan-clean-ignores-live-owner` | 定向 **1／1 杀死**（1.0s） |
 | `pnpm mutate-needles-check` | 1611 条针脚全部可判定（阻断 0） |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 上一笔 `ccf021da` 上 **1610／1610 杀死，0 vacuous**（第 687 页）；本笔只加 1 条守卫 ＋ 1 处接线，未重跑全表，本笔新锚点定向 **1／1** |
+| 全表 `pnpm mutate-verify` | 上一笔 `9681fea` 上 **1610／1610 杀死，0 vacuous**（第 687 页）；本笔只加 1 条守卫 ＋ 1 处接线，未重跑全表，本笔新锚点定向 **1／1** |
 
-### 五、HEAD 认证读数（`3b00b164`）
+### 五、HEAD 认证读数（`8278142`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`3b00b16`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`8278142`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6599 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增 1 条判卷全绿。
-- 本趟墙钟 **127.68s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-3b00b16-2026-10-23-1421/provenance.md`）。
+- 本趟墙钟 **127.68s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-8278142-2026-10-23-1421/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
 
 ### 六、边界（不冒充的部分）
@@ -23338,9 +23338,9 @@ cleanOrphanWorktree(root, "worker-10", { ownedAgentIds: new Set(["worker-10"]) }
 - **多进程不覆盖**：`ownedWorktreeAgentIds` 是进程级内存；两个 App 实例共用 workspace 时，
   另一进程的活树仍会被本页的 clean 放行。当前是单实例语义，但没有判卷。
 - **真机未验**：本页是 worktree 文件系统与 card action 的行为，不涉及 Electron 观感。
-- **取料（与页同笔入库）**：`outputs/orphan-clean-guard-2026-10-23/targeted-anchor-3b00b164.log`、
-  `outputs/orphan-clean-guard-2026-10-23/supervisor-check-3b00b164.log`；
-  认证读数在 `outputs/head-cert-3b00b16-2026-10-23-1421/provenance.md`。
+- **取料（与页同笔入库）**：`outputs/orphan-clean-guard-2026-10-23/targeted-anchor-8278142.log`、
+  `outputs/orphan-clean-guard-2026-10-23/supervisor-check-8278142.log`；
+  认证读数在 `outputs/head-cert-8278142-2026-10-23-1421/provenance.md`。
 ## 2026-10-23 · 第 689 页：把死掉的 `worktree.orphans` 接成可见可清理的面
 
 ### 一、缺口：协议里有，界面里没有
@@ -23389,13 +23389,13 @@ cleanOrphanWorktree(root, "worker-10", { ownedAgentIds: new Set(["worker-10"]) }
 | 锚点 `worktrees-page-orphan-list-emptied` | 定向 **1／1 杀死**（把列表恒当空 ⇒ 假空态） |
 | `pnpm mutate-needles-check` | 1612 条针脚全部可判定（阻断 0） |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**（第 687 页）；本页表长 1612，只定向跑新锚点 **1／1**，没有把旧全表冒充本页 |
+| 全表 `pnpm mutate-verify` | 最近一次 `9681fea`：**1610／1610**（第 687 页）；本页表长 1612，只定向跑新锚点 **1／1**，没有把旧全表冒充本页 |
 
-### 五、HEAD 认证读数（`324fcc2e`）
+### 五、HEAD 认证读数（`488ae77`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`324fcc2`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`488ae77`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6599 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增的界面判卷全绿。
-- 本趟墙钟 **127.23s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-324fcc2-2026-10-23-1429/provenance.md`）。
+- 本趟墙钟 **127.23s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-488ae77-2026-10-23-1429/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
 
 ### 六、边界（不冒充的部分）
@@ -23404,9 +23404,9 @@ cleanOrphanWorktree(root, "worker-10", { ownedAgentIds: new Set(["worker-10"]) }
   要切过去才看得到。设计稿 C-35 的「工作树切换」仍未落。
 - **没有真机目验**：本页只跑 SSR/单元判卷与桌面全量，未开 Electron 看真实布局、字体与暗色下的对比度。
 - **显式清理仍强删**：未归属的孤儿按既有语义 `worktree remove --force`；第 688 页只拦「有归属」。
-- **取料（与页同笔入库）**：`outputs/worktrees-page-2026-10-23/targeted-anchor-324fcc2e.log`、
-  `outputs/worktrees-page-2026-10-23/supervisor-check-324fcc2e.log`；
-  认证读数在 `outputs/head-cert-324fcc2-2026-10-23-1429/provenance.md`。
+- **取料（与页同笔入库）**：`outputs/worktrees-page-2026-10-23/targeted-anchor-488ae77.log`、
+  `outputs/worktrees-page-2026-10-23/supervisor-check-488ae77.log`；
+  认证读数在 `outputs/head-cert-488ae77-2026-10-23-1429/provenance.md`。
 ## 2026-10-23 · 第 690 页：工作树清理必须带工作区——切项目后不许拿旧 `activeWorkspace` 删错仓
 
 ### 一、第 689 页自己引进来的那个洞
@@ -23440,13 +23440,13 @@ cleanOrphanWorktree(root, "worker-10", { ownedAgentIds: new Set(["worker-10"]) }
 | 锚点 `worktrees-page-orphan-list-emptied` | 定向 **1／1 杀死** |
 | `pnpm mutate-needles-check` | 1612 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**（第 687 页）；本页表长 1612，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `9681fea`：**1610／1610**（第 687 页）；本页表长 1612，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`8ffb6b62`）
+### 四、HEAD 认证读数（`c7d3d48`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`8ffb6b6`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`c7d3d48`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6599 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增/改动的界面判卷全绿。
-- 本趟墙钟 **126.02s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-8ffb6b6-2026-10-23-1439/provenance.md`）。
+- 本趟墙钟 **126.02s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-c7d3d48-2026-10-23-1439/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
 
 ### 五、边界（不冒充的部分）
@@ -23454,9 +23454,9 @@ cleanOrphanWorktree(root, "worker-10", { ownedAgentIds: new Set(["worker-10"]) }
 - **仍未做工作树切换**：本页只保证「看到哪个工作区，就清哪个工作区」；C-35 的主工作树/worker 切换菜单仍未落。
 - **未真机目验**：设置页第五分区的真实布局、暗色对比度仍未开 Electron 看；判卷是 SSR 与桌面全量。
 - **显式清理仍强删**：未归属的孤儿按既有语义 `worktree remove --force`；第 688 页只拦「有归属」。
-- **取料（与页同笔入库）**：`outputs/worktrees-workspace-2026-10-23/targeted-anchor-8ffb6b62.log`、
-  `outputs/worktrees-workspace-2026-10-23/supervisor-check-8ffb6b62.log`；
-  认证读数在 `outputs/head-cert-8ffb6b6-2026-10-23-1439/provenance.md`。
+- **取料（与页同笔入库）**：`outputs/worktrees-workspace-2026-10-23/targeted-anchor-c7d3d48.log`、
+  `outputs/worktrees-workspace-2026-10-23/supervisor-check-c7d3d48.log`；
+  认证读数在 `outputs/head-cert-c7d3d48-2026-10-23-1439/provenance.md`。
 ## 2026-10-23 · 第 691 页：`read_file` 的 `paths` 批量仍是串行——省了模型步数，没省墙钟
 
 ### 一、第 477 页那条原语只做了一半
@@ -23504,13 +23504,13 @@ for (const rel of paths) {
 | 锚点 `read-batch-concurrency-serialized` | 定向 **1／1 杀死** |
 | `pnpm mutate-needles-check` | 1613 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**；本页表长 1613，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `9681fea`：**1610／1610**；本页表长 1613，只定向跑新锚点 **1／1** |
 
-### 五、HEAD 认证读数（`099d5905`）
+### 五、HEAD 认证读数（`fb8fd21`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`099d590`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`fb8fd21`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6600 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
-- 本趟墙钟 **126.10s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-099d590-2026-10-23-1445/provenance.md`）。
+- 本趟墙钟 **126.10s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-fb8fd21-2026-10-23-1445/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
 
 ### 六、边界（不冒充的部分）
@@ -23521,9 +23521,9 @@ for (const rel of paths) {
   `for await` 消费一条、执行一条（`src/agent/loop.ts` 顶部注释写明的既有语义）。跨 tool_call 的调度
   本页没动；那是权限门、事件顺序与审批面一起动的另一笔，不在这一格冒充。
 - **真机未验**：这是 core 工具行为，不涉及 Electron 观感。
-- **取料（与页同笔入库）**：`outputs/read-batch-concurrency-2026-10-23/targeted-anchor-099d5905.log`、
-  `outputs/read-batch-concurrency-2026-10-23/supervisor-check-099d5905.log`；
-  认证读数在 `outputs/head-cert-099d590-2026-10-23-1445/provenance.md`。
+- **取料（与页同笔入库）**：`outputs/read-batch-concurrency-2026-10-23/targeted-anchor-fb8fd21.log`、
+  `outputs/read-batch-concurrency-2026-10-23/supervisor-check-fb8fd21.log`；
+  认证读数在 `outputs/head-cert-fb8fd21-2026-10-23-1445/provenance.md`。
 ## 2026-10-23 · 第 692 页：孤儿面板只报名字不报「会丢什么」——未提交改动必须上屏
 
 ### 一、第 689 页的面还差一格信息
@@ -23558,13 +23558,13 @@ for (const rel of paths) {
 | `pnpm --filter cairn-desktop test` | **206 文件／1414 条全绿** |
 | `pnpm mutate-needles-check` | 1614 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**；本页表长 1614，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `9681fea`：**1610／1610**；本页表长 1614，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`b14220f9`）
+### 四、HEAD 认证读数（`41749b8`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`b14220f`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`41749b8`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
-- 本趟墙钟 **127.96s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-b14220f-2026-10-23-1450/provenance.md`）。
+- 本趟墙钟 **127.96s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-41749b8-2026-10-23-1450/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
 
 ### 五、边界（不冒充的部分）
@@ -23575,9 +23575,9 @@ for (const rel of paths) {
   也没做缓存。若将来孤儿面板成常驻高频面，这一格要另设预算。
 - **仍是当前工作区**：第 690 页的显式 workspace 只解决「删哪个仓」；跨工作区汇总仍未做。
 - **真机未验**：标签与确认框只在 SSR/桌面全量判卷里看过，没开 Electron 目验暗色对比度与行宽。
-- **取料（与页同笔入库）**：`outputs/worktrees-dirty-2026-10-23/targeted-anchor-b14220f9.log`、
-  `outputs/worktrees-dirty-2026-10-23/supervisor-check-b14220f9.log`；
-  认证读数在 `outputs/head-cert-b14220f-2026-10-23-1450/provenance.md`。
+- **取料（与页同笔入库）**：`outputs/worktrees-dirty-2026-10-23/targeted-anchor-41749b8.log`、
+  `outputs/worktrees-dirty-2026-10-23/supervisor-check-41749b8.log`；
+  认证读数在 `outputs/head-cert-41749b8-2026-10-23-1450/provenance.md`。
 ## 2026-10-23 · 第 693 页：`createProject` 通道不再是死路——新建项目补「空白项目」卡
 
 ### 一、第 642 页审计留下的 P1
@@ -23608,13 +23608,13 @@ for (const rel of paths) {
 | `pnpm --filter cairn-desktop test` | **207 文件／1416 条全绿** |
 | `pnpm mutate-needles-check` | 1615 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**；本页表长 1615，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `9681fea`：**1610／1610**；本页表长 1615，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`db977cf5`）
+### 四、HEAD 认证读数（`fd6edb1`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`db977cf`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`fd6edb1`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
-- 本趟墙钟 **126.88s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-db977cf-2026-10-23-1455/provenance.md`）。
+- 本趟墙钟 **126.88s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-fd6edb1-2026-10-23-1455/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
 
 ### 五、边界（不冒充的部分）
@@ -23624,9 +23624,9 @@ for (const rel of paths) {
 - **未真机目验**：空白卡在弹窗里的排版、选中态与暗色对比度只在 SSR/桌面全量判卷里看过。
 - **模板列表来自服务端**：本页在渲染层追加虚拟卡，没有改 `projectTemplates` 返回的目录；
   若将来服务端也出 `id:"blank"`，这里会出现两张同名卡（当前服务端不产这个 id，未加去重）。
-- **取料（与页同笔入库）**：`outputs/blank-project-2026-10-23/targeted-anchor-db977cf5.log`、
-  `outputs/blank-project-2026-10-23/supervisor-check-db977cf5.log`；
-  认证读数在 `outputs/head-cert-db977cf-2026-10-23-1455/provenance.md`。
+- **取料（与页同笔入库）**：`outputs/blank-project-2026-10-23/targeted-anchor-fd6edb1.log`、
+  `outputs/blank-project-2026-10-23/supervisor-check-fd6edb1.log`；
+  认证读数在 `outputs/head-cert-fd6edb1-2026-10-23-1455/provenance.md`。
 ## 2026-10-23 · 第 694 页：许可证状态只有协议字段、没有界面——关于页补四态一行
 
 ### 一、第 642 页审计的另一条 P1 还留着一半
@@ -23658,11 +23658,11 @@ for (const rel of paths) {
 | `pnpm --filter cairn-desktop test` | **207 文件／1417 条全绿** |
 | `pnpm mutate-needles-check` | 1616 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**；本页表长 1616，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `9681fea`：**1610／1610**；本页表长 1616，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`ebb2ece3`）
+### 四、HEAD 认证读数（`57dbb4d`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`ebb2ece`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 9 道只出声**（本轮机器负载高，见下）。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`57dbb4d`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 9 道只出声**（本轮机器负载高，见下）。
 - 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
 - 本趟墙钟 **277.20s**（同一进程 hrtime，口径＝起跑→汇总；比前几轮 126–127s 慢一倍，是机器负载，不是本页代码；
   9 道超预算同源，规则 256：秒数只出声、不翻判定）。
@@ -23675,14 +23675,14 @@ for (const rel of paths) {
 - **没跑真 license 文件**：判卷只测 `licenseLabel` 纯函数与既有 `verifyLicenseFile` 契约；没有生成一份签名 license
   做端到端真机验证。
 - **真机未验**：关于页新增行的排版、暗色对比度没开 Electron 看。
-- **取料（与页同笔入库）**：`outputs/license-status-2026-10-23/targeted-anchor-ebb2ece3.log`、
-  `outputs/license-status-2026-10-23/supervisor-check-ebb2ece3.log`；
-  认证读数在 `outputs/head-cert-ebb2ece-2026-10-23-1504/provenance.md`。
+- **取料（与页同笔入库）**：`outputs/license-status-2026-10-23/targeted-anchor-57dbb4d.log`、
+  `outputs/license-status-2026-10-23/supervisor-check-57dbb4d.log`；
+  认证读数在 `outputs/head-cert-57dbb4d-2026-10-23-1504/provenance.md`。
 ## 2026-10-23 · 第 695 页：十页之后的全表扫回——1616 条锚点与 685–694 的改动面
 
 ### 一、为什么要有这一页
 
-第 687 页的全表跑停在 `ccf021da` 的 **1610 条**。此后又落了七页、加了六条锚点：
+第 687 页的全表跑停在 `9681fea` 的 **1610 条**。此后又落了七页、加了六条锚点：
 
 | 页 | 落点 | 新增锚点 |
 |---|---|---|
@@ -23700,16 +23700,16 @@ for (const rel of paths) {
 
 | 面 | 读数 |
 |---|---|
-| `pnpm mutate-verify`（HEAD `0d534db4`，全表） | ****1616／1616 杀死，0 vacuous**（2219.5s）** |
+| `pnpm mutate-verify`（HEAD `164f90d`，全表） | ****1616／1616 杀死，0 vacuous**（2219.5s）** |
 | `pnpm mutate-needles-check` | 1616 条针脚全部可判定（阻断 0） |
 | `pnpm supervisor-check` | **81✅／0❌** |
 | `pnpm --filter cairn-desktop test` | **207 文件／1417 条全绿** |
 
-### 三、HEAD 认证读数（`0d534db4`）
+### 三、HEAD 认证读数（`164f90d`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`0d534db`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`164f90d`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页没有新增判卷。
-- 本趟墙钟 **139.45s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-0d534db-2026-10-23-1545/provenance.md`）。
+- 本趟墙钟 **139.45s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-164f90d-2026-10-23-1545/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
 
 ### 四、这十页改了什么（一句话版）
@@ -23723,11 +23723,11 @@ for (const rel of paths) {
 
 ### 五、边界（不冒充的部分）
 
-- **全表量的是提交 `0d534db4`**：工作树里 `outputs/` 未跟踪件与 `ab.py` 未参与；`mutate-verify` 改的是提交的树。
+- **全表量的是提交 `164f90d`**：工作树里 `outputs/` 未跟踪件与 `ab.py` 未参与；`mutate-verify` 改的是提交的树。
 - **没有新增代码**：这一页只跑读数；任何红都在本节之前处理，不把全表当「新功能」。
 - **真机未验**：685–694 的桌面面仍只有 SSR/桌面全量判卷，没有 Electron 真机目验。
-- **取料（与页同笔入库）**：`outputs/full-sweep-2026-10-23/mutate-verify-0d534db4.log`；
-  认证读数在 `outputs/head-cert-0d534db-2026-10-23-1545/provenance.md`。
+- **取料（与页同笔入库）**：`outputs/full-sweep-2026-10-23/mutate-verify-164f90d.log`；
+  认证读数在 `outputs/head-cert-164f90d-2026-10-23-1545/provenance.md`。
 ## 2026-10-23 · 第 696 页：任务窗格补 worker 合并/拒绝入口——`cardAction` 不再是死通道
 
 ### 一、子 agent 收尾缺了最后一个按钮
@@ -23760,13 +23760,13 @@ worker 在任务窗格里能看到 task、状态、花费、验证券与摘要�
 | `pnpm --filter cairn-desktop test` | **207 文件／1418 条全绿** |
 | `pnpm mutate-needles-check` | 1617 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `0d534db4`：**1616／1616**（第 695 页）；本页表长 1617，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `164f90d`：**1616／1616**（第 695 页）；本页表长 1617，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`e6d6918c`）
+### 四、HEAD 认证读数（`b2a6270`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`e6d6918`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`b2a6270`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
-- 本趟墙钟 **139.14s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-e6d6918-2026-10-23-1557/provenance.md`）。
+- 本趟墙钟 **139.14s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-b2a6270-2026-10-23-1557/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
 
 ### 五、边界（不冒充的部分）
@@ -23776,9 +23776,9 @@ worker 在任务窗格里能看到 task、状态、花费、验证券与摘要�
 - **没有 diff 预览**：任务窗格只显示 `filesChanged` 与摘要，不渲染 worker worktree 的逐 hunk diff；
   要看 diff 得走变更窗格/命令行。合并前的「看过再合」这一格仍未接。
 - **真机未验**：按钮与二次确认的排版、暗色对比度没开 Electron 看。
-- **取料（与页同笔入库）**：`outputs/worker-merge-ui-2026-10-23/targeted-anchor-e6d6918c.log`、
-  `outputs/worker-merge-ui-2026-10-23/supervisor-check-e6d6918c.log`；
-  认证读数在 `outputs/head-cert-e6d6918-2026-10-23-1557/provenance.md`。
+- **取料（与页同笔入库）**：`outputs/worker-merge-ui-2026-10-23/targeted-anchor-b2a6270.log`、
+  `outputs/worker-merge-ui-2026-10-23/supervisor-check-b2a6270.log`；
+  认证读数在 `outputs/head-cert-b2a6270-2026-10-23-1557/provenance.md`。
 ## 2026-10-23 · 第 697 页：接完最后两条死通道——`scheduleSnapshot` / `previewStatus`，并补消费面人口普查
 
 ### 一、第 642 页那类缺陷还剩两条
@@ -23811,13 +23811,13 @@ worker 在任务窗格里能看到 task、状态、花费、验证券与摘要�
 | `pnpm --filter cairn-desktop test` | **208 文件／1419 条全绿** |
 | `pnpm mutate-needles-check` | 1618 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `0d534db4`：**1616／1616**（第 695 页）；本页表长 1618，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `164f90d`：**1616／1616**（第 695 页）；本页表长 1618，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`220013af`）
+### 四、HEAD 认证读数（`9a82d4e`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`220013a`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`9a82d4e`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
-- 本趟墙钟 **137.08s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-220013a-2026-10-23-1603/provenance.md`）。
+- 本趟墙钟 **137.08s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-9a82d4e-2026-10-23-1603/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
 
 ### 五、边界（不冒充的部分）
@@ -23828,9 +23828,9 @@ worker 在任务窗格里能看到 task、状态、花费、验证券与摘要�
   但也没有渲染层消费者，故单列理由。
 - **`previewStatus` 复用没有真机验证**：只用类型与既有预览 runtime 契约确认状态枚举；
   没有开 Electron 连续点两次预览看端口是否复用。
-- **取料（与页同笔入库）**：`outputs/invoke-census-2026-10-24/targeted-anchor-220013af.log`、
-  `outputs/invoke-census-2026-10-24/supervisor-check-220013af.log`；
-  认证读数在 `outputs/head-cert-220013a-2026-10-23-1603/provenance.md`。
+- **取料（与页同笔入库）**：`outputs/invoke-census-2026-10-24/targeted-anchor-9a82d4e.log`、
+  `outputs/invoke-census-2026-10-24/supervisor-check-9a82d4e.log`；
+  认证读数在 `outputs/head-cert-9a82d4e-2026-10-23-1603/provenance.md`。
 ## 2026-10-23 · 第 698 页：worker 改动可预览——`worktreeDiff` 通道与「看过再合」
 
 ### 一、第 696 页只补了按钮，没补「看」
@@ -23860,13 +23860,13 @@ worker 在任务窗格里能看到 task、状态、花费、验证券与摘要�
 | `pnpm --filter cairn-desktop test` | **208 文件／1419 条全绿** |
 | `pnpm mutate-needles-check` | 1619 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `0d534db4`：**1616／1616**；本页表长 1619，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `164f90d`：**1616／1616**；本页表长 1619，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`b0948d6a`）
+### 四、HEAD 认证读数（`8eb3f29`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`b0948d6`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`8eb3f29`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6603 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
-- 本趟墙钟 **139.64s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-b0948d6-2026-10-23-1609/provenance.md`）。
+- 本趟墙钟 **139.64s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-8eb3f29-2026-10-23-1609/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
 
 ### 五、边界（不冒充的部分）
@@ -23877,9 +23877,9 @@ worker 在任务窗格里能看到 task、状态、花费、验证券与摘要�
   点过一次「查看改动」看 modal 的真机排版。
 - **路径闸有两道**：`parseWorktreeRef` 与 kernel-host 的 `startsWith(ws/.agents/)`；本页只锚了第一道，
   第二道由既有 `cleanOrphanWorktree` 同族判卷与代码审查守，未单独造红。
-- **取料（与页同笔入库）**：`outputs/worker-diff-preview-2026-10-24/targeted-anchor-b0948d6a.log`、
-  `outputs/worker-diff-preview-2026-10-24/supervisor-check-b0948d6a.log`；
-  认证读数在 `outputs/head-cert-b0948d6-2026-10-23-1609/provenance.md`。
+- **取料（与页同笔入库）**：`outputs/worker-diff-preview-2026-10-24/targeted-anchor-8eb3f29.log`、
+  `outputs/worker-diff-preview-2026-10-24/supervisor-check-8eb3f29.log`；
+  认证读数在 `outputs/head-cert-8eb3f29-2026-10-23-1609/provenance.md`。
 ## 2026-10-23 · 第 699 页：worker 改动预览从整段 `<pre>` 进到逐 hunk——`parseUnifiedPatch` 接既有 DiffView
 
 ### 一、第 698 页的预览只是「把 patch 原样倒出来」
@@ -23909,13 +23909,13 @@ TasksPane 的 modal：有 hunks ⇒ `<DiffView hunks={...} />`；否则仍显示
 | `pnpm --filter cairn-desktop test` | **209 文件／1422 条全绿** |
 | `pnpm mutate-needles-check` | 1620 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `0d534db4`：**1616／1616**；本页表长 1620，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `164f90d`：**1616／1616**；本页表长 1620，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`e9cfb134`）
+### 四、HEAD 认证读数（`d796e0d`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`e9cfb13`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`d796e0d`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6603 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
-- 本趟墙钟 **110.42s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-e9cfb13-2026-10-23-1613/provenance.md`）。
+- 本趟墙钟 **110.42s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-d796e0d-2026-10-23-1613/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
 
 ### 五、边界（不冒充的部分）
@@ -23926,9 +23926,9 @@ TasksPane 的 modal：有 hunks ⇒ `<DiffView hunks={...} />`；否则仍显示
 - **大 patch 仍是整段 DOM**：DiffView 会逐 hunk/逐行渲染，但没有虚拟滚动；第 698 页记的
   32MB 帽与这个成本都还在。
 - **真机未验**：hunk 视图的暗色对比度/长行换行没开 Electron 看。
-- **取料（与页同笔入库）**：`outputs/worker-diff-view-2026-10-24/targeted-anchor-e9cfb134.log`、
-  `outputs/worker-diff-view-2026-10-24/supervisor-check-e9cfb134.log`；
-  认证读数在 `outputs/head-cert-e9cfb13-2026-10-23-1613/provenance.md`。
+- **取料（与页同笔入库）**：`outputs/worker-diff-view-2026-10-24/targeted-anchor-d796e0d.log`、
+  `outputs/worker-diff-view-2026-10-24/supervisor-check-d796e0d.log`；
+  认证读数在 `outputs/head-cert-d796e0d-2026-10-23-1613/provenance.md`。
 ## 2026-10-23 · 第 700 页：worker diff 预览的 32MB 面加 UI 帽——超长 patch 不再整段进 DOM
 
 ### 一、第 699 页留下的体积边界
@@ -23956,13 +23956,13 @@ TasksPane 的 modal：有 hunks ⇒ `<DiffView hunks={...} />`；否则仍显示
 | `pnpm --filter cairn-desktop test` | **209 文件／1423 条全绿** |
 | `pnpm mutate-needles-check` | 1621 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `0d534db4`：**1616／1616**；本页表长 1621，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `164f90d`：**1616／1616**；本页表长 1621，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`45dfeb72`）
+### 四、HEAD 认证读数（`1d05bac`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`45dfeb7`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`1d05bac`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6603 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
-- 本趟墙钟 **109.52s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-45dfeb7-2026-10-23-1617/provenance.md`）。
+- 本趟墙钟 **109.52s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-1d05bac-2026-10-23-1617/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
 
 ### 五、边界（不冒充的部分）
@@ -23972,13 +23972,13 @@ TasksPane 的 modal：有 hunks ⇒ `<DiffView hunks={...} />`；否则仍显示
 - **截断只发生在预览**：合并动作仍读完整 worktree，不因预览截断而少提交；截断提示里已引导
   去变更窗格/命令行看全文。
 - **真实 worker 未验**：判卷只测 `clipDiff` 纯函数与桌面全量；没有在真 worker 的大 patch 上开过 modal。
-- **取料（与页同笔入库）**：`outputs/worker-diff-cap-2026-10-24/targeted-anchor-45dfeb72.log`、
-  `outputs/worker-diff-cap-2026-10-24/supervisor-check-45dfeb72.log`；
-  认证读数在 `outputs/head-cert-45dfeb7-2026-10-23-1617/provenance.md`。
+- **取料（与页同笔入库）**：`outputs/worker-diff-cap-2026-10-24/targeted-anchor-1d05bac.log`、
+  `outputs/worker-diff-cap-2026-10-24/supervisor-check-1d05bac.log`；
+  认证读数在 `outputs/head-cert-1d05bac-2026-10-23-1617/provenance.md`。
 
 ## 2026-10-25 · 第 711 页：多智能体编排 P0–P4 本地纵切（独立提交树）
 
-业主原话是「完成 codex 没完成的多智能体编排」；此前工作树里有一版停在 provider 摘要空转与 typecheck 红的纵切。本笔在独立树 `feat/orchestration-platform` 从 `f4bffa3a` 单笔落地，不把共享工作树其他会话的 hunk 带进提交。
+业主原话是「完成 codex 没完成的多智能体编排」；此前工作树里有一版停在 provider 摘要空转与 typecheck 红的纵切。本笔在独立树 `feat/orchestration-platform` 从 `146743c` 单笔落地，不把共享工作树其他会话的 hunk 带进提交。
 
 **交付**：`src/orchestration/` 的领域/Flow 校验、事件投影、调度、JSONL 存储、引擎、内容寻址工件、本地受限后端；`src/main/orchestration-{service,backend}.ts`；桌面 `OrchestrationPane` 与 IPC v20 三通道。事件只加可选 `orchestration` 命名空间，旧日志逐字回放。
 

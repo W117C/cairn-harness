@@ -1,5 +1,5 @@
 $ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify
-[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → 0f74ca8
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → a2aafe1
 [mutate-verify] 锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
 变异验证：1589 条
 ✅ user-agent-duplicate-name-silent-override — 两个来源同名时静默覆盖 ⇒ 用户改了文件却没生效，而且没人吭声（清单与查找还各自剩一条） ｜本机实测 1.6s／2 拍

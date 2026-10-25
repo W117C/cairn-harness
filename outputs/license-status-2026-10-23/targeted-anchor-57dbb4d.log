@@ -1,0 +1,11 @@
+$ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify license-label-always-inactive
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → 57dbb4d
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
+变异验证：1 条
+✅ license-label-always-inactive — 许可证有效也显示「未激活」⇒ 用户以为自己的 license 没生效，而主进程其实验过了；四态被压成一态，设置页的「许可证」行就成了装饰 ｜本机实测 2.0s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 2.4s · 跑了 1/1 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 2 次／1 条（每条次数分布 2×1）· 单次中位 第1次 1.0s／第2次 1.0s· 最贵一条 license-label-always-inactive 2.0s
+跑法单价：selector 0 拍·这一支本次没有 spawn ⇒ 没有分母 vs whole 2 拍·中位 1.02s·坏拍（没量到或 0 条） 0
+锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
