@@ -47,7 +47,7 @@ describe("patch-gates 同步门", () => {
   it("反向：本轮跑了 verify 且该 cause 零失败 ⇒ 拒（没犯这个病不开这个方）", () => {
     const out = gatePatchesSync([verifyPatch("pkg-manager")], { signals });
     expect(out.admitted).toEqual([]);
-    expect(out.refused[0]!.reason).toContain("pkg-manager 零失败");
+    expect(out.refused[0]!.reason).toContain("零失败——没犯这个病不开这个方");
   });
 
   it("接续语义：verify 没跑（读数缺席）⇒ 旧补丁照过（不可测不等于已消解）", () => {
