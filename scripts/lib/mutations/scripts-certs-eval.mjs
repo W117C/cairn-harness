@@ -1533,8 +1533,8 @@ export const MUTATIONS = [
     desc: "隐藏文件装了一半也照跑 ⇒ 半份验收跑出的绿被当成整份过了" +
       "（装齐那道闸一变真，这一格的分子就比实际验证过的多）",
     apply: (s) => s.replace(
-      "    if (heldOutInstallErrs.length === 0) heldOutRun = await runHeldOut(work, t.spec.heldOut, EVAL_EXEC);",
-      "    heldOutRun = await runHeldOut(work, t.spec.heldOut, EVAL_EXEC);",
+      "    if (heldOutInstallErrs.length === 0) heldOutRun = await runHeldOut(work, t.spec.heldOut, trialExec);",
+      "    heldOutRun = await runHeldOut(work, t.spec.heldOut, trialExec);",
     ),
     expectFail: "装不全就不跑：半份隐藏验收得出的绿是假绿",
   },
@@ -1975,7 +1975,7 @@ export const MUTATIONS = [
       + "整批落进 unknown-face，配对那一格等于没接上写侧",
     // 第 455 页同步：身份章那一行现在多盖 `providerFace`，改法文本要跟着走（同上，不然是空改）。
     apply: (s) => s.replace(
-      `  r: { ...x.r, headSha, ranAt, maxSteps: MAX_STEPS, reps: REPS, arm: ARM, providerFace: SCRIPTED === "" ? "真会话" : "剧本" },`,
+      `  r: { ...x.r, headSha, ranAt, maxSteps: MAX_STEPS, reps: REPS, arm: ARM, thinking: THINKING ?? "off", providerFace: SCRIPTED === "" ? "真会话" : "剧本" },`,
       `  r: { ...x.r },`,
     ),
     expectFail: "写 readings.json 时逐条盖 headSha／ranAt／maxSteps／reps／arm（不是只盖 run.json 那一份旁证）",

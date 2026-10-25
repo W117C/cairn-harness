@@ -266,7 +266,7 @@ export const MUTATIONS = [
     src: "src/agent/plugins/skills.ts",
     test: "tests/skill-invocation-faces.test.ts",
     desc: "路由清单只留 description ⇒ 模型知道「有这个 skill」却不知道「什么时候该用」，§9.3 的 (+when_to_use) 没落地，触发靠猜",
-    apply: (s) => s.replace("  return \"- \" + skillInvokeName(s) + (desc ? \" — \" + desc : \"\") + (when ? \"（适用：\" + when + \"）\" : \"\");", "  return \"- \" + skillInvokeName(s) + (desc ? \" — \" + desc : \"\");"),
+    apply: (s) => s.replace("  const combined = capRoutingText(desc + (when ? \"（适用：\" + when + \"）\" : \"\"));", "  const combined = capRoutingText(desc);"),
     expectFail: "when_to_use 在场时并入同一行：模型据此判断何时触发，而不只是知道有个 skill",
   },
   {
@@ -387,7 +387,7 @@ export const MUTATIONS = [
     src: "src/agent/plugins/index.ts",
     test: "tests/skill-invocation-faces.test.ts",
     desc: "压缩后重挂时不重放当年那次调用的参数 ⇒ 同一个 skill 第一次进上下文是替换过的、重挂回来是裸模板，模型看到两份不一样的「权威正文」",
-    apply: (s) => s.replace('      return { body: substituteVars(entry.body, { ...this.substitutionFor(entry), args: callArgs }) };', '      return { body: entry.body };'),
+    apply: (s) => s.replace('        body: substituteVars(entry.body, { ...this.substitutionFor(entry), args: callArgs }),', '        body: entry.body,'),
     expectFail: "压缩后重挂重放当年那次调用的参数 ⇒ 同一 skill 两次进上下文内容一致",
   },
   {
@@ -587,7 +587,7 @@ export const MUTATIONS = [
     src: "src/agent/plugins/skills.ts",
     test: "tests/skill-user-invocation.test.ts",
     desc: "用户那条 face 不设顶帽 ⇒ 敲一次 /skill 就把 200KB 的 SKILL.md 原样买进上下文，而它整段会话都要付费（模型那条有帽、这头没有）",
-    apply: (s) => s.replace('    text: clampSkillBody(\n      renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}),\n      SKILL_REMOUNT_TOKENS_PER_SKILL,\n      skillRecallSuffix(hit.path, workspace)),', "    text: renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}),"),
+    apply: (s) => s.replace('    text: clampSkillBodyWithResources(\n      renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}),\n      SKILL_REMOUNT_TOKENS_PER_SKILL,\n      skillRecallSuffix(hit.path, workspace),\n      skillResourceSuffix(hit.resources, dirname(hit.path), workspace)),', "    text: renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}),"),
     expectFail: "超预算的正文按模型侧同一顶帽裁掉",
   },
   {

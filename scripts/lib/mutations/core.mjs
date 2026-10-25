@@ -867,7 +867,7 @@ export const MUTATIONS = [
     src: "src/events/types.ts",
     test: "tests/permission-mode-single-source.test.ts",
     desc: "events 那份抄本少一档 ⇒ 对账判卷若测不出来，「唯一事实源」就是假的：permissions 加了档、events/IPC/worker 侧仍按旧集走，且没人报错",
-    apply: (s) => s.replace('export const AGENT_PERMISSION_MODES = ["read-only", "default", "guided", "auto"] as const;', 'export const AGENT_PERMISSION_MODES = ["read-only", "default", "auto"] as const;'),
+    apply: (s) => s.replace('export const AGENT_PERMISSION_MODES = ["read-only", "default", "guided", "auto", "full-access"] as const;', 'export const AGENT_PERMISSION_MODES = ["read-only", "default", "guided", "auto"] as const;'),
     expectFail: "events 的抄本与 permissions 的事实源逐位相同（顺序=松紧序，clampTier 依赖它）",
   },
   {
