@@ -3,7 +3,6 @@
 > 一个事件溯源（event-sourced）的 agent 内核：每一步都落成 JSONL 事件，因此**同一份日志可以被重放、分叉、审计**。
 
 [![verify](https://github.com/W117C/cairn-harness/actions/workflows/verify.yml/badge.svg?branch=main)](https://github.com/W117C/cairn-harness/actions/workflows/verify.yml)
-[![CodeQL](https://github.com/W117C/cairn-harness/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/W117C/cairn-harness/actions/workflows/codeql.yml)
 [![release](https://img.shields.io/github/v/release/W117C/cairn-harness?label=release&color=blue)](https://github.com/W117C/cairn-harness/releases)
 [![license](https://img.shields.io/badge/license-%E4%B8%93%E6%9C%89-proprietary-blue)](./LICENSE)
 [![node](https://img.shields.io/badge/node-%3E%3D20.11%20%3C25-5FA04E?logo=node.js)](https://nodejs.org)
@@ -14,6 +13,8 @@
 
 内核侧**没有构建步骤**：克隆下来装完依赖就有一条 `cairn` 命令。
 桌面壳是另一条路，`apps/desktop/` 下走 Electron + Vite，需要单独构建（见[仓库结构](#仓库结构)）。
+
+当前分支职责、未完成事项、待开工与优化项见 [项目路线与仓库状态](docs/ROADMAP.md)。
 
 ---
 
@@ -452,8 +453,8 @@ worker 要联网只能回主会话发。
 | [`SECURITY.md`](SECURITY.md) | **安全漏洞私密报告**（不要开公开 Issue） |
 | [`SUPPORT.md`](SUPPORT.md) | 按问题类型选渠道 |
 
-CI 跑在 `macos-latest`（沙箱与平台分支的判卷按它写）；静态安全分析由 CodeQL 承担，
-告警不自动阻断合并——本仓的沙箱与 fail-closed 路径天生长成「看起来危险」的样子。
+CI 跑在 `macos-latest`（沙箱与平台分支的判卷按它写）。
+[CodeQL 工作流](.github/workflows/codeql.yml) 仅手动触发，运行前提见该文件；不代表持续扫描已启用。
 CI 说明与取舍见 [`scripts/ci/README.md`](scripts/ci/README.md)。
 
 ---

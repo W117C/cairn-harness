@@ -19313,3 +19313,20 @@ typecheck 0 报错｜八份判卷 **101 条全绿**（含两条反过拟合用�
 - **入库形状**：四笔（87d9d8df 修复入库 / 17826ace rev 改指 / 680fb24d 原始面判卷 / c6e350be provenance），
   **已推送** `origin/fix/spec-summary-double-count`。
 - **仍开着的债**（见 `STATE.md` 的「还有什么没裁」）：桌面两条授权面、canary 生产接线、页号存量重复。
+
+
+## 2026-10-26 · 第 713 页：GitHub 仓库整理与分支状态入口
+
+本批基于默认分支 `41f226e53f37c5809ae130ac568f90f5cb6c4336` 的独立 checkout，
+复用 `chore/repo-standardization` 为评审分支；不混入开发线或共享本地工作树。
+
+- README / docs 索引接入 `docs/ROADMAP.md`；STATE 整体重写，明确 main、开发线、本地成果与发布 tag 的边界。
+- Dependabot 重复更新块先证红后删除；缺失的 `test:capped` 脚本先证红后补齐，复用原 Vitest 配置。
+  配置唯一性复验通过，所引用的 dependencies/npm/github-actions/desktop 标签已在远端建立。
+- 删除备案：`gen_legs.py`、`pel_verify.py`、`pelican_gen.py`、`pelican-bike.html`；
+  均为无执行消费者的一次性生成/验算/演示材料。测试读取的正确标本保留，既有测试和冻结输入未改。
+- 工作树复验：核心专项 5 文件 / 78 测试、桌面投影 1 文件 / 53 测试通过，均 maxWorkers=2；
+  根 typecheck 零报错。单分支拉取导致的历史引用红，在完整获取远端 ref/tag 后消失，docs-check 通过。
+- GitHub main 的 verify 任务未启动，annotation 指明账户付款/支出限制；没有伪造 CI 绿。
+  全量 core、desktop、build、gates 和 HEAD 认证本轮未跑；合并与交付仍需这些边界的实际证据。
+- 不删 rescue/历史分支、tag 或历史工件，不改许可/可见性/付费计划；依赖告警留独立兼容修复任务。

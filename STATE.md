@@ -1,53 +1,37 @@
 # Cairn / DSH —— 现态
 
-rev: 87d9d8df787931bb660274e96c963385766ae15b
+rev: 41f226e53f37c5809ae130ac568f90f5cb6c4336
 
-> 本文件是**现态层**：**整体重写，永不追加**。要留当时的判断，写进 `PROGRESS.md` 的对应页；
-> 要留"为什么现在是这样"，写进 `docs/adr/`。
-> `docs-check` 的 D-2（不抄观测值）与 D-4（不以新增段落代替改写）两张面机械守这两条。
-
-## 四层文档各放什么
-
-| 层 | 落点 | 放什么 | 写法 |
-|---|---|---|---|
-| 规矩层 | `AGENTS.md` | 不知道就会这一轮做错事的规则 | 只加新规则 |
-| 现态层 | `STATE.md`（本文件）、`docs/README.md`、`docs/CODE-WIKI.md` | 现在在哪、在飞什么、还有什么没裁 | **整体重写** |
-| 台账层 | `PROGRESS.md` | 历史与审计链：备案、裁决全文、各轮实录 | **只追加**，不改写 |
-| 档案层 | `archive/` | 不再现行的结论与历史图 | 归档 |
-
-**台账层不搬进 `archive/`**：门有多张面（D-5/D-9/D-10/D-11/D-12/D-13）直接拿 `PROGRESS.md` 当事实源，
-搬走会让那些面**停止覆盖历史那半**——"读不到"被读成"没问题"，是本仓最忌的假绿形状。
-台账会变大（它是审计链，不是现态页）；现态页的瘦法是**把结论迁进 `archive/`**，不是把台账搬走。
+本页描述 GitHub 默认分支的实现基线。开发线、本地未提交成果与发布 tag 分别取证，
+不把一边的实现或绿灯写成另一边已经交付。分支快照、未完成/待开工/优化事项统一见
+[项目路线与仓库状态](docs/ROADMAP.md)；实时验证见 GitHub Actions。
 
 ## 现在在哪
 
-- **core**（`src/`，不含 Electron 与 UI 依赖）：agent 循环在 `src/agent/loop.ts`，工具在 `src/tools/`，
-  权限门在 `src/permissions/`，provider 适配在 `src/providers/`，事件与落盘在 `src/events/`，
-  面向主进程的应用服务在 `src/main/`（core 侧不得反向依赖 `apps/desktop/`）。
-- **desktop**（`apps/desktop/`）：main / preload / renderer 三层，可 import `src/`，反向禁止
-  （`scripts/desktop-boundary-check.ts` 守这条）。共享 IPC 类型在 `src/main/ipc-protocol.ts`。
-- **产品面**：桌面是 Claude 蓝本式的壳（意图稿在 `apps/desktop/design/desktop-design-spec.md`）；
-  选型与受众的裁决在 `docs/adr/`。
-- **门与读数**：门表是 `scripts/gate-manifest.ts`（清单即事实源），实测读数在 `pnpm facts`，
-  **不抄进文档**（D-2 守这条）。测 HEAD 的门量的是**提交**而不是工作树——引读数要写清量的是哪一笔提交。
+- **core**：`src/agent/`、`src/tools/`、`src/providers/`、`src/permissions/`、`src/events/`；
+  `src/main/` 是 electron-free 的应用服务，核心不得反向依赖 `apps/desktop/`。
+- **desktop**：`apps/desktop/` 的 main / preload / renderer，可 import core；
+  IPC 契约在 `src/main/ipc-protocol.ts`，边界由 `scripts/desktop-boundary-check.ts` 检查。
+- **交付与受众**：默认分支保留 B1 核心/CLI 定位与桌面开发壳；范围裁决在 `docs/adr/`。
+- **事实入口**：门表是 `scripts/gate-manifest.ts`，实测用 `pnpm facts` 和对应证据；
+  历史保留在 `PROGRESS.md` 与 `outputs/`，不搬走台账或删除历史来使门禁变绿。
 
-## 在飞什么
+## 正在收口
 
-- 外部引用审批决议已改为**互斥**（先批后拒不再并存，用户后说的"不"算数）——
-  证据、判卷与边界见 `PROGRESS.md` 第 623 页。
-- 其他面没有在飞的活。
-- 桌面面第二轮独立评审已落账；core 面那轮的三条真缺陷与四条"变异存活"的成因见 `PROGRESS.md` 尾部各页。
+- GitHub 治理文件已经具备；本轮补齐依赖标签、修复重复更新配置与缺失验证命令，整理任务入口和闲置样本。
+- 开发线与默认分支已经分叉，开发线的新功能尚未因此进入 main；集成要保留两边有效改动并单独验证。
+- 本地仍有未提交的功能批次，需逐批检查归属与依赖，不能用共享工作树的结果替代远端提交认证。
+- 当前 CI 的执行受账户付款/支出限制阻塞；先解除账户限制，再对拟交付提交跑完整验证。
 
-## 还有什么没裁
+## 待验与待决
 
-| 债 | 细节在哪 |
-|---|---|
-| 桌面：`projectCreate` / `projectCreateFromTemplate` 接受渲染层给的 `parentDir`，无"已知根"闸 | `PROGRESS.md` 第 618 页 |
-| 桌面：`listSkills` / `skillBody` / `pluginDecide` 接受渲染层给的 `workspace`（只读、既有形态） | `PROGRESS.md` 第 618 页 |
-| 进化面：canary 控制器尚未在生产接线 | `PROGRESS.md` 第 619 页 |
-| 台账层：页号存量重复（D-13 已立案，棘轮只许下降） | `PROGRESS.md` 第 621 页 |
+- main 基线保留的桌面根路径授权与自进化接线债见 `PROGRESS.md` 第 618、619 页；
+  开发线是否已修及最终集成证据另行核对，不能仅凭旧状态重复施工。
+- 文档引用检查须获取完整远端 ref 与 tag；台账页号重复与依赖告警仍保留，本轮不修改冻结判据或擅自升级依赖。
+- 连续发送、分叉、插话、多窗口与编排控制面须在拟交付构建真实复验；收益与真连测量另立受控任务。
+- 远程编排、开放面、B2 分发及性能优化按路线图的启动条件推进；恢复分支和历史工件保持可回取。
 
 ## 怎么验
 
-- core 与桌面两套判卷分开跑，命令在 `AGENTS.md` 的 Verification 段。
-- 改了本文件要跑 `pnpm docs-check`：D-1 量预算、D-2 查手抄观测值、D-4 查新增段落、D-5 查 `rev` 真伪。
+命令与边界见 `AGENTS.md`；core 与 desktop 分开验证。`test:capped` 是同一核心套件的并发受限入口。
+`mutate-verify` / `head-cert-check` 只证明测量提交。账户限制或既有红未解除时，不声称完整 gates 通过。

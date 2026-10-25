@@ -20,6 +20,7 @@
     "observe-surface": "node --import tsx scripts/observe-surface.ts",
     "typecheck": "node --import tsx scripts/typecheck.ts",
     "test": "vitest run --config tests/vitest.config.ts",
+    "test:capped": "vitest run --config tests/vitest.config.ts --maxWorkers=2",
     "e2e": "node --import tsx scripts/e2e.ts",
     "agent": "node --import tsx scripts/agent.ts",
     "sandbox:check": "node --import tsx scripts/sandbox-check.ts",

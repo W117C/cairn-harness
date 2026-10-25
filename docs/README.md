@@ -16,6 +16,7 @@ D-4 no append-to-refute, D-5 `STATE.md` names a real commit).
 
 Useful entry points:
 
+- [`ROADMAP.md`](ROADMAP.md) — branch roles, unfinished work, queued work, and optimization priorities
 - `src/agent/loop.ts` — agent loop
 - `src/tools/` — tool implementations
 - `src/providers/` — provider adapters
