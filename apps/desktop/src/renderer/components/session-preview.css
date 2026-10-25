@@ -1,0 +1,51 @@
+/* 会话预览窗格（只读）：头部标题/只读徽标/运行中/切换按钮 + 复用 .stream 的滚动正文。 */
+.session-preview { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.svp-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 6px var(--space-sm);
+  border-bottom: 1px solid var(--hairline);
+}
+.svp-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-semibold);
+  color: hsl(var(--text-000));
+}
+.svp-readonly {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-caption-2xs);
+  color: hsl(var(--text-400));
+}
+.svp-live {
+  flex: none;
+  font-size: var(--fs-caption-2xs);
+  color: hsl(var(--accent-brand));
+}
+.svp-switch { flex: none; height: var(--h-btn-sm); font-size: var(--fs-caption-xs); }
+.svp-stream { padding: 6px var(--space-sm) var(--space-md); }
+.svp-note {
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--fs-caption-md);
+  color: hsl(var(--text-400));
+  line-height: 1.7;
+}
+.svp-note.err { color: hsl(var(--color-danger-ink)); }
+.svp-note .mini-btn { margin-left: 8px; }
+.svp-empty {
+  padding: var(--space-lg) var(--space-md);
+  color: hsl(var(--text-400));
+  font-size: var(--fs-body-sm);
+  line-height: 1.8;
+}
+.svp-empty p { margin: 0 0 6px; }
+.svp-dim { color: hsl(var(--text-400)); font-size: var(--fs-caption-md); }

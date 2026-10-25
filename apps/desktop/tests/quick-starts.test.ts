@@ -112,18 +112,27 @@ describe("buildQuickStarts（空屏建议纯函数）", () => {
   });
 });
 
-describe("greetingFor（问候语按时段）", () => {
-  it("三档边界：0–11 早上好 / 12–17 下午好 / 18–23 晚上好", () => {
-    expect(greetingFor(0)).toBe(STR.empty.greetingMorning);
-    expect(greetingFor(11)).toBe(STR.empty.greetingMorning);
-    expect(greetingFor(12)).toBe(STR.empty.greetingAfternoon);
-    expect(greetingFor(17)).toBe(STR.empty.greetingAfternoon);
-    expect(greetingFor(18)).toBe(STR.empty.greetingEvening);
-    expect(greetingFor(23)).toBe(STR.empty.greetingEvening);
+describe("greetingFor（问候语按时段 + 组内轮换）", () => {
+  it("四档边界：0–4 深夜 / 5–11 早上 / 12–17 下午 / 18–23 晚上", () => {
+    expect(greetingFor(0, () => 0)).toBe(STR.empty.greetingNight[0]);
+    expect(greetingFor(4, () => 0)).toBe(STR.empty.greetingNight[0]);
+    expect(greetingFor(5, () => 0)).toBe(STR.empty.greetingMorning[0]);
+    expect(greetingFor(11, () => 0)).toBe(STR.empty.greetingMorning[0]);
+    expect(greetingFor(12, () => 0)).toBe(STR.empty.greetingAfternoon[0]);
+    expect(greetingFor(17, () => 0)).toBe(STR.empty.greetingAfternoon[0]);
+    expect(greetingFor(18, () => 0)).toBe(STR.empty.greetingEvening[0]);
+    expect(greetingFor(23, () => 0)).toBe(STR.empty.greetingEvening[0]);
   });
 
   it("越界小时数也落在合理档（取模防 NaN/负值造成空串）", () => {
-    expect(greetingFor(24)).toBe(STR.empty.greetingMorning);
-    expect(greetingFor(-1)).toBe(STR.empty.greetingEvening);
+    expect(greetingFor(24, () => 0)).toBe(STR.empty.greetingNight[0]);
+    expect(greetingFor(-1, () => 0)).toBe(STR.empty.greetingEvening[0]);
+  });
+
+  it("组内轮换：不同 rand 出不同文案；rand 越界（NaN / 1）回落组内合法文案", () => {
+    expect(greetingFor(9, () => 0)).not.toBe(greetingFor(9, () => 0.99));
+    for (const r of [0, 0.3, 0.5, 0.99, NaN]) {
+      expect(STR.empty.greetingMorning).toContain(greetingFor(9, () => r));
+    }
   });
 });

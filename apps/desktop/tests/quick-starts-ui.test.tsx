@@ -128,6 +128,16 @@ describe("项目选择弹层方向", () => {
   it("chip 弹层向上开", () => {
     expect(appSrc).toMatch(/<Popover open=\{chipOpen\} up className="chip-pop"/);
   });
+
+  // 2026-10-24 业主截图：上开弹层压到 hero 问候线（10-18 大字 hero 正好悬在弹层路径上）。
+  // 焦点礼让：弹层向上盖到问候线时才淡出（向下开时不淡，2026-10-24 第二版）。
+  it("弹层向上盖到问候线时才淡出（data-picking → 子元素 opacity）", () => {
+    const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
+    expect(appSrc).toContain('{...(chipOpen ? { "data-picking": "true" } : {})}');
+    expect(css).toMatch(/\.empty\[data-picking\]:has\(\.chip-pop\.up\.show:not\(\.down\)\) \.empty-greet > \* \{ opacity: \.15; \}/);
+    // 淡出必须打在子元素上：h1 自身被 rise-in(fill both) 锁 opacity，动画级联压过普通声明。
+    expect(css).not.toMatch(/\.empty\[data-picking\] \.empty-greet \{/);
+  });
 });
 
 

@@ -78,6 +78,7 @@ describe("用量环（v3-lite .ring：环心数字 + 贴发送侧）", () => {
 describe("批 4 输入区：状态条拆入环 / 强调发送 / 运行中红底转圈 / 聚焦强调描边", () => {
   const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
   const src = readFileSync(new URL("../src/renderer/components/Composer.tsx", import.meta.url), "utf8");
+  const meterSrc = readFileSync(new URL("../src/renderer/components/UsageMeter.tsx", import.meta.url), "utf8");
 
   it("状态条整行已拆：组件与样式层无 status-strip 残留；环 title 带 轮/步/tok/缓存", () => {
     expect(src).not.toContain("status-strip");
@@ -102,8 +103,8 @@ describe("批 4 输入区：状态条拆入环 / 强调发送 / 运行中红底�
 
   it("用量明细弹层补 步数 / 上下文 两行（弹层静态不开、SSR 不渲染——源码哨兵钉）", () => {
     // P2 重做后两行文案走 STR（同一组「步数 / 上下文」词条），哨兵钉键名引用。
-    expect(src).toMatch(/<span>\{STR\.composer\.meterSteps\}<\/span>/);
-    expect(src).toMatch(/<span>\{STR\.composer\.meterCtx\}<\/span>/);
+    expect(meterSrc).toMatch(/<span>\{STR\.composer\.meterSteps\}<\/span>/);
+    expect(meterSrc).toMatch(/<span>\{STR\.composer\.meterCtx\}<\/span>/);
   });
 
   it("发送 = 强调橙圆钮；停止 = 危险红底 + 转圈内嵌（Loader2 旋转，不是静方块）", () => {

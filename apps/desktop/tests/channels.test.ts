@@ -10,9 +10,10 @@ import { INVOKE_CHANNELS, PUSH_CHANNELS, type PushChannel } from "../src/main/ch
 // 静态裁决。运行时用例只验推送三键与 invoke 表非空。
 
 describe("通道名表完整性", () => {
-  it("推送通道恰为八条且通道名非空", () => {
+  it("推送通道恰为九条且通道名非空", () => {
     // 2026-10-20：＋onMenu（原生菜单栏 → 渲染层命令分发，蓝本 §5.2 菜单树）。
-    expect(Object.keys(PUSH_CHANNELS).sort()).toEqual(["onAsk", "onAskDone", "onBrowserState", "onEvent", "onMenu", "onPreviewState", "onTerminalData", "onTerminalExit"]);
+    // 2026-10-25（v21）：＋onNotificationOpen（完成通知点击直达会话）。
+    expect(Object.keys(PUSH_CHANNELS).sort()).toEqual(["onAsk", "onAskDone", "onBrowserState", "onEvent", "onMenu", "onNotificationOpen", "onPreviewState", "onTerminalData", "onTerminalExit"]);
     for (const channel of Object.values(PUSH_CHANNELS)) expect(channel).toBeTruthy();
   });
 
@@ -55,7 +56,9 @@ describe("通道名表完整性", () => {
     // 2026-10-23（第 676 页同族，第 9 点）：＋runSteer（轮中插话进正在跑的那一轮；不开新轮）⇒ 99。
     // 2026-10-23（第 689 页）：＋worktreeClean（孤儿工作树页的显式清理；主进程仍判归属）⇒ 100。
     // 2026-10-23（第 698 页）：＋worktreeDiff（worker 改动预览；ref 形状闸在主进程）⇒ 101。
-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(101);
+    // 2026-10-24 业主：＋providerCustomList（自定义供应商就地编辑的预填数据面）⇒ 105。
+    // 编排平台：＋orchestrationView / orchestrationSubmit / orchestrationControl。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(108);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
@@ -106,6 +109,9 @@ describe("通道名表完整性", () => {
       "usageLedger",
       // v15：会话日志尾部（只读；会话归属由 host 解析，接真有 wired 行）。
       "sessionLog",
+      "orchestrationView",
+      "orchestrationSubmit",
+      "orchestrationControl",
       "renameSession",
       "deleteSession",
       "listProjects",
@@ -157,6 +163,8 @@ describe("通道名表完整性", () => {
       // S7：自定义接口——拉取（零副作用）与存盘（写工作区配置 + 存钥匙），三面同步直接接真。
       "providerDiscover",
       "providerSave",
+      // 2026-10-24 业主：自定义供应商在右详情就地编辑——已装配置的预填数据面（只读）。
+      "providerCustomList",
       // ③：新建项目（建同名文件夹 + 登记），三面同步直接接真。
       "createProject",
       // 恢复闭环：发送队列 sidecar 读回与覆盖写。
@@ -197,6 +205,9 @@ describe("通道名表完整性", () => {
       "browserPickElement",
       // v10：能力在场性（搜索端点配没配；口径同 CLI --doctor 的 search 那一格）——三面同步直接接真。
       "capabilities",
+      "searchSettingsGet",
+      "searchSettingsSave",
+      "searchSettingsTest",
       // v11：主界面重做批（七条）——git 两闸（core git-ops）/ 项目内模糊搜索（core workspace-search）/
       //   最近打开（touchProject + listProjects options）/ 粘贴落盘（desktop temp-file）/ 快照还原 /
       //   Finder 显示——三面同步直接接真。

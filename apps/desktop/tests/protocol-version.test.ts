@@ -47,7 +47,10 @@ describe("协议版本握手接线（§3.5/§12）", () => {
     // v15 → v16（会话定位批：openSession 增可选 workspace——跨项目同名 id 开对转录）。
     // v16 → v17（终端尺寸同步：＋terminalResize）。
     // v17 → v18（会话正文全文检索：＋sessionSearch——结果三态，「没量到 ≠ 没有」由类型层面分开）。
-    // v19 → v20（多智能体编排：＋orchestrationView/Submit/Control——地址 = 工作区 + 会话）。
-    expect(IPC_PROTOCOL_VERSION).toBe(20);
+    // v20 → v21（完成通知点击直达：push onNotificationOpen——点击载荷带 sessionId + workspace）。
+    // v21 → v22（插件面板 MCP 激活态：PluginPanelSnapshot 增 activeMcpServers / activeMcpTools / mcpServerSummaries）。
+    // v22 → v23（Plan 模式一等入口：RunRequest 增 planRequired）。
+    // v23 → v24：编排 submit/control/view（独立于旧 PlanGate）。
+    expect(IPC_PROTOCOL_VERSION).toBe(24);
   });
 });

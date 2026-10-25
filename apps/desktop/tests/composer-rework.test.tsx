@@ -79,23 +79,24 @@ describe("P2-2 权限 chip（档位名 + 色点 data-mode）", () => {
     expect(chip).toContain(MODE_DOT.default);
   });
 
-  it("弹层四档：每档 data-mode + 色点 + 一句说明；当前档恰一枚对勾", () => {
+  it("弹层五档：每档 data-mode + 色点 + 一句说明；当前档恰一枚对勾", () => {
     const html = renderToStaticMarkup(<PermissionMenu mode="guided" onModeChange={() => undefined} onClose={() => undefined} />);
-    for (const m of ["read-only", "default", "guided", "auto"] as const) {
+    for (const m of ["read-only", "default", "guided", "auto", "full-access"] as const) {
       expect(html).toContain(`data-mode="${m}"`);
     }
     expect(html).toContain(STR.permissionModes.readOnlyDesc);
     expect(html).toContain(STR.permissionModes.defaultDesc);
     expect(html).toContain(STR.permissionModes.guidedDesc);
     expect(html).toContain(STR.permissionModes.autoDesc);
+    expect(html).toContain(STR.permissionModes.fullAccessDesc);
     expect((html.match(/class="check">✓</g) ?? []).length).toBe(1);
-    // 色点四枚全用 token（component 零字面色值）
-    expect((html.match(/class="mode-dot"/g) ?? []).length).toBe(4);
+    // 色点五枚全用 token（component 零字面色值）
+    expect((html.match(/class="mode-dot"/g) ?? []).length).toBe(5);
     expect(html).toContain(MODE_DOT.auto);
   });
 
-  it("MODE_DOT 记录：四键齐全且全为 token 引用", () => {
-    for (const m of ["read-only", "default", "guided", "auto"] as const) {
+  it("MODE_DOT 记录：五键齐全且全为 token 引用", () => {
+    for (const m of ["read-only", "default", "guided", "auto", "full-access"] as const) {
       expect(MODE_DOT[m]).toContain("var(--mode-");
     }
   });

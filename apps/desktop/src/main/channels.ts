@@ -2,7 +2,7 @@
 // AgentApi 新增方法而这里不加行 ⇒ typecheck 红（ipc-protocol 删键同理）。
 import type { AgentApi } from "../../../../src/main/ipc-protocol";
 
-export type PushChannel = "onEvent" | "onAsk" | "onAskDone" | "onTerminalData" | "onTerminalExit" | "onBrowserState" | "onPreviewState" | "onMenu";
+export type PushChannel = "onEvent" | "onAsk" | "onAskDone" | "onTerminalData" | "onTerminalExit" | "onBrowserState" | "onPreviewState" | "onMenu" | "onNotificationOpen";
 export type InvokeChannel = Exclude<keyof AgentApi, PushChannel>;
 
 export const PUSH_CHANNELS: { [K in PushChannel]: string } = {
@@ -14,6 +14,7 @@ export const PUSH_CHANNELS: { [K in PushChannel]: string } = {
   onBrowserState: "agent:browser-state",
   onPreviewState: "agent:preview-state",
   onMenu: "agent:menu-command",
+  onNotificationOpen: "agent:notification-open",
 };
 
 export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
@@ -31,10 +32,12 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   getOnboarding: "agent:onboarding",
   getSettings: "agent:settings-get",
   setSettings: "agent:settings-set",
+  searchSettingsGet: "agent:search-settings-get",
+  searchSettingsSave: "agent:search-settings-save",
+  searchSettingsTest: "agent:search-settings-test",
   listSessions: "agent:sessions-list",
   // v14：跨会话用量账本（头像菜单「用量统计」→「全部会话」；main 只读扫描各工作区日志）。
   usageLedger: "agent:usage-ledger",
-  // v20：多智能体编排——预览 / 提交 / 控制，地址 = 工作区 + 会话。
   orchestrationView: "agent:orchestration-view",
   orchestrationSubmit: "agent:orchestration-submit",
   orchestrationControl: "agent:orchestration-control",
@@ -119,6 +122,7 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   createProject: "agent:project-create",
   providerDiscover: "agent:provider-discover",
   providerSave: "agent:provider-save",
+  providerCustomList: "agent:provider-custom-list",
   checkUpdate: "agent:check-update",
   openExternal: "agent:open-external",
   // M4-5：dialog 选目录（M3 deferred 收口）——main 端 dialog.showOpenDialog({ openDirectory })，

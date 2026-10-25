@@ -11,8 +11,10 @@
 //   ③ 反向：不能再有「只有 onClick 没有 onKeyDown」的 div[role=button]。
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { activates } from "../src/renderer/components/a11y-activate";
+import { ThinkingLive } from "../src/renderer/components/Stream";
 
 const appPage = readFileSync(fileURLToPath(new URL("../src/renderer/components/AppPage.tsx", import.meta.url)), "utf8");
 
@@ -71,15 +73,21 @@ describe("role=button 元素的键盘可达", () => {
     }
   });
 
-  it("Sidebar / Stream 的既有手写实现与公件同口径（不倒退）", () => {
+  it("Sidebar 的既有手写实现与公件同口径（不倒退）", () => {
     const sidebar = readFileSync(fileURLToPath(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url)), "utf8");
-    const stream = readFileSync(fileURLToPath(new URL("../src/renderer/components/Stream.tsx", import.meta.url)), "utf8");
-    for (const src of [sidebar, stream]) {
-      // Enter 与 Space 都激活（与 activates 同口径；Native button 的两键语义）
-      expect(src).toContain('e.key === "Enter" || e.key === " "');
-    }
+    // Enter 与 Space 都激活（与 activates 同口径；Native button 的两键语义）
+    expect(sidebar).toContain('e.key === "Enter" || e.key === " "');
     // Sidebar 会话行内有真 button（「…」），必须只在宿主自身聚焦时处理，
     // 否则行内按钮的 Enter 会顺带切会话——一次按键做两件事。
     expect(sidebar).toContain("e.target !== e.currentTarget");
+  });
+
+  it("Stream 思考开关渲染为 type=button 的原生按钮，由浏览器提供 Enter / Space 语义", () => {
+    const html = renderToStaticMarkup(<ThinkingLive seq={1} thinking="检查输入。" running={false} view="normal" />);
+    const toggle = html.match(/<button\b[^>]*class="think-toggle think-line"[^>]*>/)?.[0];
+    expect(toggle).toBeDefined();
+    expect(toggle).toContain('type="button"');
+    expect(toggle).toContain('aria-expanded="false"');
+    expect(toggle).toContain("aria-controls=");
   });
 });

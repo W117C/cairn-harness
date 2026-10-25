@@ -9,4 +9,6 @@ export const MODE_LABEL: Record<PermissionMode, { label: string; desc: string; w
   // 风险 ≥ high 的动作（沙箱降级时的写向、出网、critical）照样送审。
   // 业主实测 2026-10-16 因此以为切换失效。文案改成它真的做的事。
   auto: { label: STR.permissionModes.auto, desc: STR.permissionModes.autoDesc, warn: true },
+  // 完全允许（2026-10-24 业主）：连风险线/critical 的审批卡都没有——本仓真正的最松档。
+  "full-access": { label: STR.permissionModes.fullAccess, desc: STR.permissionModes.fullAccessDesc, warn: true },
 };

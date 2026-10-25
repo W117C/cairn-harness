@@ -57,27 +57,27 @@ describe("批 5：权限菜单（图标 + 两行 + 危险标签 + 自动二次�
       <PermissionMenu mode={mode} onModeChange={() => undefined} onClose={() => undefined} />,
     );
 
-  it("四档每项：图标（perm-ico×4）+ 标题 + 副标题两行；无旧 risk-dot", () => {
+  it("五档每项：图标（perm-ico×5）+ 标题 + 副标题两行；无旧 risk-dot", () => {
     const h = html();
-    for (const s of ["只读", "默认", "引导", "自动"]) expect(h).toContain(s);
+    for (const s of ["只读", "默认", "引导", "自动", "完全允许"]) expect(h).toContain(s);
     // auto 那行的副标题口径 2026-10-16 改过：旧文案「全部放行（出网仍审批）」是名不副实的
     // （MODE_POLICY 里 auto 是 writeAsk:false 而 riskAskAt:"high"，高风险动作照样送审），
     // 业主据此判「切换没用」。现在判的是"它真的做什么"。
-    for (const d of ["写工具一律拒", "写/跑逐次审批出卡", "低风险自动、高风险出卡", "低风险免批；高风险仍出卡"]) {
+    for (const d of ["写工具一律拒", "写/跑逐次审批出卡", "低风险自动、高风险出卡", "低风险免批；高风险仍出卡", "不再出任何审批卡"]) {
       expect(h).toContain(d);
     }
     // 反向钉：那句谎话不许回来
     expect(h).not.toContain("全部放行");
-    expect((h.match(/class="perm-ico/g) ?? []).length).toBe(4);
-    expect((h.match(/class="perm-text"/g) ?? []).length).toBe(4);
-    for (const m of ["read-only", "default", "guided", "auto"]) expect(h).toContain(`data-mode="${m}"`);
+    expect((h.match(/class="perm-ico/g) ?? []).length).toBe(5);
+    expect((h.match(/class="perm-text"/g) ?? []).length).toBe(5);
+    for (const m of ["read-only", "default", "guided", "auto", "full-access"]) expect(h).toContain(`data-mode="${m}"`);
     expect(h).not.toContain("risk-dot");
   });
 
-  it("「自动」= warning 图标（perm-ico warn）+「危险」小标签恰一枚，不整行变色", () => {
+  it("危险档（自动/完全允许）= warning 图标 +「危险」小标签恰两枚，不整行变色", () => {
     const h = html();
     expect(h).toContain('class="perm-ico warn"');
-    expect((h.match(/危险<\/span>/g) ?? []).length).toBe(1);
+    expect((h.match(/危险<\/span>/g) ?? []).length).toBe(2);
     expect(h).toContain('class="tag-warn"');
   });
 
@@ -90,17 +90,19 @@ describe("批 5：权限菜单（图标 + 两行 + 危险标签 + 自动二次�
     expect(h.indexOf('class="check"')).toBeLessThan(autoAt);
   });
 
-  it("二次确认：点「自动」先置 confirming（未确认不动权限），确认后才调 onModeChange(\"auto\") + 关菜单", () => {
-    // 列表行分支：auto 且非当前档 ⇒ 只开确认，绝不直调
-    expect(permSrc).toContain('if (m === "auto" && props.mode !== "auto")');
-    expect(permSrc).toContain("setConfirming(true)");
-    expect(permSrc).toContain('props.onModeChange("auto")');
+  it("二次确认：点危险档先置 confirming（未确认不动权限），确认后才调 onModeChange + 关菜单", () => {
+    // 列表行分支：危险档（自动/完全允许）且非当前档 ⇒ 只开确认，绝不直调
+    expect(permSrc).toContain('if ((m === "auto" || m === "full-access") && props.mode !== m)');
+    expect(permSrc).toContain("setConfirming(m)");
+    expect(permSrc).toContain("props.onModeChange(target)");
     // 确认按钮才带 onModeChange + onClose 串联
-    expect(permSrc).toMatch(/onConfirm[\s\S]{0,160}props\.onModeChange\("auto"\)[\s\S]{0,60}props\.onClose\(\)/);
+    expect(permSrc).toMatch(/onConfirm[\s\S]{0,160}props\.onModeChange\(target\)[\s\S]{0,60}props\.onClose\(\)/);
+    // 完全允许档有自己的确认文案
+    expect(permSrc).toContain('props.mode === "full-access"');
   });
 
   it("确认卡文案：标题 + 危险说明 +〔取消 / 确认切换（danger）〕", () => {
-    const h = renderToStaticMarkup(<PermissionConfirm onCancel={() => undefined} onConfirm={() => undefined} />);
+    const h = renderToStaticMarkup(<PermissionConfirm mode="auto" onCancel={() => undefined} onConfirm={() => undefined} />);
     expect(h).toContain("切到「自动」权限档？");
     expect(h).toContain("不再逐次出卡");
     expect(h).toContain("出网仍要审批");
@@ -115,7 +117,7 @@ describe("批 5：权限菜单（图标 + 两行 + 危险标签 + 自动二次�
     expect(composerSrc).toContain('{menu === "perm" && (');
     expect(composerSrc).toContain("<PermissionMenu");
     // ② 确认路径也显式清（防御：将来若改回常驻挂载，state 也不残留）
-    expect(permSrc).toMatch(/onConfirm=\{\(\) => \{[\s\S]{0,240}setConfirming\(false\);/);
+    expect(permSrc).toMatch(/onConfirm=\{\(\) => \{[\s\S]{0,240}setConfirming\(null\);/);
   });
 });
 

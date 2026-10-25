@@ -36,7 +36,6 @@ export { roundTimeline, timelineItems } from "./derived/timeline";
 export type { TimelineItem } from "./derived/timeline";
 export {
   deliveryTrail,
-  formatEmptyTrailNote,
   restoredPathsOf,
   turnChanges,
   turnDelivery,

@@ -21,6 +21,7 @@ describe("插件窗格", () => {
   it("窗格复用 PluginSurface，从 getState 取插件快照，失败可重试", () => {
     const dock = read("PaneDock.tsx");
     const surface = read("PluginSurface.tsx");
+    // 2026-10-25：单窗格改常驻挂载后，按 kind 渲染（只切可见性，不卸载内容）。
     expect(dock).toContain("{kind === \"plugins\" && <PluginSurface />}");
     expect(surface).toContain("window.agent.getState()");
     expect(surface).toContain("s.plugins === undefined");

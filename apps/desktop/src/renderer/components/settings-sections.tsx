@@ -9,13 +9,12 @@
 // SettingsPanel 重导出保旧 import 面（settings-panel.test 判卷锚不动）。
 // 2026-10-16（模型/通道页重做）：控件走 settings-ui 的 Field（36px/8px/四态）、徽章走 Badge、
 // 状态走 StatusDot；旧 sp-key-row / sp-key-chip 一族随重做下架（判卷钉已同步改名点名）。
-import { useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { MutableRefObject, ReactNode } from "react";
-import { Copy, Image as ImageIcon } from "lucide-react";
+import { Image as ImageIcon, Plus } from "lucide-react";
 import type { LicenseState } from "../../../../../src/main/license";
 import type { AppSettings, PermissionMode } from "../../../../../src/main/ipc-protocol";
 import type { TextSizeSetting, UiSizeSetting } from "../../../../../src/main/settings";
-import { envKeyOf } from "../../../../../src/providers/env-keys";
 import { Badge, Banner, Field, OptionCard, SettingsSection, SettingsRow, StatusDot } from "./settings-ui";
 import { Switch } from "./Switch";
 import { CustomProviderForm } from "./CustomProviderForm";
@@ -38,7 +37,7 @@ export function panelPatch(patch: Record<string, unknown>): Partial<AppSettings>
 
 /** provider 选项集（同形再推导：settings.ts 拖 node:fs，不能进 renderer bundle；
  *  与 settings.PROVIDER_KINDS 的逐位等值由 settings-panel.test 对账钉死）。 */
-export const PANEL_PROVIDER_KINDS: readonly string[] = ["demo", "glm", "openai", "anthropic", "gemini"];
+export const PANEL_PROVIDER_KINDS: readonly string[] = ["demo", "glm", "openai", "anthropic", "gemini", "deepseek"];
 
 /** 该 provider 是否需要 key（demo 免；未知一律按要 key 判——fail-visible 而不是当 demo 放行）。 */
 export function providerNeedsKey(kind: string): boolean {
@@ -186,7 +185,7 @@ export function GeneralSection(props: {
                 className={"theme-opt" + (props.settings.theme === t.id ? " on" : "")}
                 onClick={() => props.onSave({ theme: t.id })}
               >
-                <span className="theme-thumb" data-thumb={t.id} aria-hidden="true" />
+                {/* 2026-10-24 业主：不要色块小预览——主题选择就是三个词，文字直给。 */}
                 <span>{t.label}</span>
               </button>
             ))}
@@ -278,10 +277,23 @@ export function GeneralSection(props: {
 
 // ── 模型与 Provider 三段（当前通道与密钥 / 联网搜索 / 自定义接口）──────────
 
+/** 供应商显示名（2026-10-24 参照 Codex 供应商页的左列表）：kind id 是机器名，界面上给人话。 */
+const PROVIDER_LABELS: Record<string, string> = {
+  demo: "Demo",
+  glm: "智谱 GLM",
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  gemini: "Gemini",
+  deepseek: "DeepSeek",
+};
+
 export function ProviderSection(props: {
   settings: AppSettings | null;
   status: { available: boolean; stored: string[]; envActive: boolean };
-  /** 能力读数只消费 search/searchEndpoint 两格（结构子集，同 searchCapabilityLabel 的口径）。 */
+  /** 已知供应商清单（内置 + 已装自定义）——来自 getProviderInfo，不再写死四个。 */
+  providers: readonly { id: string; label: string; custom: boolean }[];
+  /** 全量真模型（按 provider 归数给自定义供应商的详情用）。 */
+  models: readonly { id: string; provider: string }[];
   /** 能力读数只消费 search/searchEndpoint/vision 三格（结构子集，同 searchCapabilityLabel 的口径）。
    *  vision 是 2026-10-16 加的：把「模型声明了图片输入」与「上游真的看得懂」分开——
      *  前者是配置事实，后者要带凭据实测，而后者今天一次都没有做过。 */
@@ -296,107 +308,152 @@ export function ProviderSection(props: {
   checkMsg: { tone: "wait" | "ok" | "err"; text: string; hint?: string } | null;
   onCheck: () => void;
   onCustomSaved: () => void;
-  /** 复制配法（clipboard 访问留在壳层，本段纯展示）。 */
-  onCopyHint: () => void;
+  /** 直接进入可填写和测试的联网设置。 */
+  onOpenSearch: () => void;
 }): React.JSX.Element {
   const provider = props.settings?.provider ?? "—";
   const statusParts = providerStatusParts(props.status);
-  // 「去配置」= 展开详情折叠（含配法 + 复制片段）——原生 details 只被掰开，零新逻辑零新通道。
-  const searchHelp = useRef<HTMLDetailsElement | null>(null);
+  // 换选中的供应商即清空 key 输入框：输入框里残留的是**上一个通道**的半截输入，留着必出错。
+  useEffect(() => {
+    if (props.keyInputRef.current !== null) props.keyInputRef.current.value = "";
+  }, [props.keyProvider, props.keyInputRef]);
+  // 自定义供应商的选中态：点列表里的自定义行 = 在右详情**就地编辑**（表单预填，同名覆盖）。
+  const [customSelId, setCustomSelId] = useState<string | null>(null);
+  const customs = props.providers.filter((p) => p.custom);
+  const activeCustom = customSelId !== null && customs.some((p) => p.id === customSelId) ? customSelId : null;
+  // 新增模式：点「添加供应商」= 详情里出一张空白自定义表单（原独立卡合并进详情，2026-10-24 业主）。
+  const [addMode, setAddMode] = useState(false);
+  // 已装自定义供应商的预填数据（编辑表单的回填源；不含 key 明文）。
+  const [customEntries, setCustomEntries] = useState<readonly { id: string; label: string; protocol: string; baseURL: string; apiKeyEnv: string; modelIds: readonly string[] }[]>([]);
+  useEffect(() => {
+    if (activeCustom === null && !addMode) return;
+    void window.agent.providerCustomList().then((r) => { if (r.ok) setCustomEntries(r.entries); }).catch(() => undefined);
+  }, [activeCustom, addMode, props.onCustomSaved]);
+  const editingEntry = activeCustom !== null ? customEntries.find((e) => e.id === activeCustom) ?? null : null;
   return (
     <>
       <SettingsSection title="当前通道与密钥">
+        {/* 供应商管理（2026-10-24 参照 Codex 供应商页）：左列表（状态点=已存 key）选通道，
+            右侧详情 = 该通道的密钥表单（标签在上、字段整行）。换选中即清空 key 输入框。 */}
+        <div className="pv-split">
+          <div className="pv-list" role="tablist" aria-label="供应商">
+            {(props.providers.filter((p) => !p.custom && providerNeedsKey(p.id))).map((p) => (
+              <button
+                key={p.id}
+                className={"pv-item" + (activeCustom === null && props.keyProvider === p.id ? " on" : "")}
+                role="tab"
+                aria-selected={activeCustom === null && props.keyProvider === p.id}
+                onClick={() => { setCustomSelId(null); setAddMode(false); props.onKeyProviderChange(p.id); }}
+              >
+                <StatusDot tone={props.status.stored.includes(p.id) ? "ok" : "off"} />
+                <span className="pv-item-name">{PROVIDER_LABELS[p.id] ?? p.label}</span>
+                {props.settings?.provider === p.id && <span className="sp-tag">当前</span>}
+              </button>
+            ))}
+            {customs.length > 0 && <div className="pv-list-label">自定义</div>}
+            {customs.map((p) => (
+              <button
+                key={p.id}
+                className={"pv-item" + (activeCustom === p.id ? " on" : "")}
+                role="tab"
+                aria-selected={activeCustom === p.id}
+                onClick={() => { setAddMode(false); setCustomSelId(p.id); }}
+              >
+                <StatusDot tone={props.status.stored.includes(p.id) ? "ok" : "off"} />
+                <span className="pv-item-name">{p.label}</span>
+                {props.settings?.provider === p.id && <span className="sp-tag">当前</span>}
+              </button>
+            ))}
+            <button
+              className={"pv-add" + (addMode ? " on" : "")}
+              aria-pressed={addMode}
+              onClick={() => { setCustomSelId(null); setAddMode(true); }}
+            >
+              <Plus size={12} aria-hidden="true" />
+              <span>添加供应商</span>
+            </button>
+          </div>
+          <div className="pv-detail">
+            {activeCustom !== null ? (
+              <>
+                <div className="pv-detail-head">
+                  <span className="pv-detail-name">{customs.find((p) => p.id === activeCustom)?.label ?? activeCustom}</span>
+                </div>
+                {/* 就地编辑：表单预填已存配置，保存按同名覆盖（2026-10-24 业主：两块合并）。
+                    key = 编辑/新增分支各持独立实例——条件链同位复用会把上一家的预填带进新增表单。 */}
+                {editingEntry === null ? (
+                  <div className="ap-empty">正在读取配置…</div>
+                ) : (
+                  <CustomProviderForm key={`edit-${activeCustom}`} editing={editingEntry} onSaved={() => { props.onCustomSaved(); }} />
+                )}
+              </>
+            ) : addMode ? (
+              <>
+                <div className="pv-detail-head">
+                  <span className="pv-detail-name">添加供应商</span>
+                </div>
+                <CustomProviderForm key="add" onSaved={() => { setAddMode(false); props.onCustomSaved(); }} />
+              </>
+            ) : (
+              <>
+                <div className="pv-detail-head">
+                  <span className="pv-detail-name">{PROVIDER_LABELS[props.keyProvider] ?? props.keyProvider}</span>
+                  <button
+                    type="button"
+                    className="mini-btn"
+                    disabled={props.checkMsg?.tone === "wait"}
+                    title={`向 ${props.keyProvider} 拉一次模型清单（不消耗模型额度）`}
+                    onClick={props.onCheck}
+                  >
+                    检查连接
+                  </button>
+                </div>
+                {/* key 只进系统钥匙串，不落明文文件。 */}
+                <div className="ss-field-block">
+                  <span className="ss-flabel">API Key</span>
+                  <div className="ss-frow">
+                    <Field width="full">
+                      <input ref={props.keyInputRef} type="password" aria-label="API key" placeholder="粘贴 key（不落明文文件）" />
+                    </Field>
+                    <button className="mini-btn primary" disabled={props.busy} onClick={props.onSaveKey}>
+                      {props.busy ? "保存中…" : "保存到钥匙串"}
+                    </button>
+                  </div>
+                </div>
+                <div className="ss-key-status">
+                  {statusParts.stored.filter((p) => p === props.keyProvider).map((p) => (
+                    <Badge key={p} onRemove={() => props.onDeleteKey(p)} removeLabel={`删除 ${p} 的 key`}>{p}</Badge>
+                  ))}
+                  {statusParts.line !== "" && (
+                    <span className={"ss-hint" + (statusParts.tone === "warn" ? " err" : "")}>{statusParts.line}</span>
+                  )}
+                  {statusParts.envHint !== null && <span className="ss-hint tip">{statusParts.envHint}</span>}
+                </div>
+                {props.checkMsg !== null && (
+                  <div className={`sp-note ${props.checkMsg.tone === "ok" ? "ok" : props.checkMsg.tone === "err" ? "err" : ""}`} role="status">
+                    {props.checkMsg.text}
+                    {props.checkMsg.hint !== undefined && <div className="sp-dim">{props.checkMsg.hint}</div>}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
         <SettingsRow label="当前通道" desc="模型与思考档位在输入框处切换（下一轮派活生效）。">
           <span className="sp-tag">{provider}</span>
-        </SettingsRow>
-        <SettingsRow label="当前通道密钥" desc="key 只进系统钥匙串，不落明文文件。">
-          <div className="ss-ctl-row">
-            <Field width="lg" select>
-              <select
-                aria-label="选择 provider"
-                value={props.keyProvider}
-                onChange={(e) => props.onKeyProviderChange(e.target.value)}
-              >
-                {PANEL_PROVIDER_KINDS.filter((k) => providerNeedsKey(k)).map((k) => (
-                  <option key={k} value={k}>{k}{envKeyOf(k) !== null ? `（env：${envKeyOf(k) ?? ""}）` : ""}</option>
-                ))}
-              </select>
-            </Field>
-            {/* 第二行容器（ss-ctl-sub）：输入 + 按钮必须同行（总纲控件要求）；
-                三者相加 685px > 控件列 634px，不加这条换行容器按钮会被挤到孤行。 */}
-            <div className="ss-ctl-sub">
-              <Field width="md">
-                <input ref={props.keyInputRef} type="password" aria-label="API key" placeholder="粘贴 key（不落明文文件）" />
-              </Field>
-              <button className="mini-btn primary" disabled={props.busy} onClick={props.onSaveKey}>
-                {props.busy ? "保存中…" : "保存到钥匙串"}
-              </button>
-            </div>
-          </div>
-          <div className="ss-key-status">
-            {statusParts.stored.map((p) => (
-              <Badge key={p} onRemove={() => props.onDeleteKey(p)} removeLabel={`删除 ${p} 的 key`}>{p}</Badge>
-            ))}
-            {statusParts.line !== "" && (
-              <span className={"ss-hint" + (statusParts.tone === "warn" ? " err" : "")}>{statusParts.line}</span>
-            )}
-            {statusParts.envHint !== null && <span className="ss-hint tip">{statusParts.envHint}</span>}
-          </div>
-        </SettingsRow>
-        {/* 检查连接放分组底部（总纲阶段 3-1「按钮放在分组底部，点击后行内显示成功/失败」）。 */}
-        <SettingsRow label="连接检查">
-          <button
-            type="button"
-            className="mini-btn"
-            disabled={props.checkMsg?.tone === "wait"}
-            title={`向 ${props.keyProvider} 拉一次模型清单（不消耗模型额度）`}
-            onClick={props.onCheck}
-          >
-            检查连接
-          </button>
-          {props.checkMsg !== null && (
-            <div className={`sp-note ${props.checkMsg.tone === "ok" ? "ok" : props.checkMsg.tone === "err" ? "err" : ""}`} role="status" style={{ width: "100%" }}>
-              {props.checkMsg.text}
-              {props.checkMsg.hint !== undefined && <div className="sp-dim">{props.checkMsg.hint}</div>}
-            </div>
-          )}
         </SettingsRow>
       </SettingsSection>
 
       <SettingsSection title="联网搜索">
-        <SettingsRow label="状态">
-          {props.cap === null ? (
-            <div className="ss-search">
-              <StatusDot tone="off" />
-              <span className="ss-search-line">读不到能力读数（不当作「已配」）。</span>
-            </div>
-          ) : (
-            <div className="ss-search">
-              <StatusDot tone={props.cap.search.kind === "ok" ? "ok" : "warn"} />
-              <span className="ss-search-line">{searchCapabilityLabel(props.cap)}</span>
-              {props.cap.search.kind === "unset" && (
-                <button
-                  className="mini-btn primary"
-                  onClick={() => { if (searchHelp.current !== null) searchHelp.current.open = true; }}
-                >去配置</button>
-              )}
-              <details className="ss-help" ref={searchHelp}>
-                <summary>查看详情</summary>
-                <div className="ss-help-body">
-                  <code>{SEARCH_CONFIG_HINT}</code>
-                  <button type="button" className="mini-btn ghost" onClick={props.onCopyHint}><Copy size={11} />复制配置片段</button>
-                </div>
-              </details>
-            </div>
-          )}
+        <SettingsRow label="搜索服务" desc="在设置中选择服务、填写密钥并测试连接。">
+          <div className="ss-search">
+            <StatusDot tone={props.cap?.search.kind === "ok" ? "ok" : "off"} />
+            <span className="ss-search-line">{props.cap === null ? "正在读取配置…" : props.cap.search.kind === "ok" ? "已配置联网搜索" : "尚未配置可用的搜索服务"}</span>
+            <button type="button" className="mini-btn" onClick={props.onOpenSearch}>配置联网搜索</button>
+          </div>
         </SettingsRow>
       </SettingsSection>
 
-      <SettingsSection title="自定义接口">
-        <div className="cp-in-card">
-          <CustomProviderForm onSaved={props.onCustomSaved} />
-        </div>
-      </SettingsSection>
       {/* 识图能力一行：把「图进了请求体」与「上游看得懂」分开。undeclared 时给 warn 条而不是
           弱化的一行——这一格实测被误读过（render_image 成功 ⇒ 认为模型看过并理解了）。 */}
       <SettingsSection title="识图能力">
@@ -454,7 +511,7 @@ export function PermissionsSection(props: {
       </SettingsSection>
 
       <SettingsSection title="安全">
-        <SettingsRow label="写文件前先提交方案，等我批准">
+        <SettingsRow label="写文件前先提交方案，等我批准" desc="这是默认值；输入框旁的「方案」开关可按轮覆盖。">
           <Switch
             label="写文件前先提交方案，等我批准"
             checked={props.settings.planRequiredByDefault}

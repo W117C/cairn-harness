@@ -19,7 +19,9 @@ describe("浮层圆角", () => {
       const block = css.slice(start, css.indexOf("}", start));
       expect(block, sel).toContain("border-radius: var(--radius-pop-v3);");
     }
+    // 设置卡不走菜单的 10px（v3）：--radius-pop（14 · 设置卡/大面板）才是它的 token（2026-10-24）
     const card = css.slice(css.indexOf(".ss-card"), css.indexOf("}", css.indexOf(".ss-card")));
-    expect(card).toContain("border-radius: var(--radius-pop-v3);");
+    expect(card).toContain("border-radius: var(--radius-pop);");
+    expect(card).not.toContain("var(--radius-pop-v3)");
   });
 });

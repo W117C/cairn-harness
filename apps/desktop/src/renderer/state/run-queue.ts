@@ -1,3 +1,4 @@
+import type { PermissionMode } from "../../../../../src/main/ipc-protocol";
 import type { Dispatch,MutableRefObject,SetStateAction } from 'react';
 // useRunQueue: extracted without changing event or callback behavior.
 import { useCallback,useRef } from "react";
@@ -25,7 +26,9 @@ interface RunQueueDeps {
   thinkingBySession: MutableRefObject<Map<string, string>>;
   /** 空屏上选的思考档：新会话落成时用它填 thinkingBySession（旧实现直接丢）。 */
   pendingThinking: ThinkingEffort;
-  modeRef: MutableRefObject<"default" | "read-only" | "guided" | "auto">;
+  modeRef: MutableRefObject<PermissionMode>;
+  /** v23：null = 不覆盖，交给 settings.planRequiredByDefault；boolean = 本轮显式覆盖。 */
+  planRequiredRef?: MutableRefObject<boolean | null>;
   selections: MutableRefObject<Map<string, string | null>>;
   activeId: string | null;
   editCtxRef: MutableRefObject<{ originId: string; originTitle: string; forkId: string; round: number; } | null>;
@@ -46,7 +49,7 @@ interface RunQueueDeps {
 }
 
 export function useRunQueue(deps: RunQueueDeps) {
-  const { setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef } = deps;
+  const { setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, planRequiredRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef } = deps;
   const keyOf = (id: string): string => runKey(activeWorkspace, id);
   const setQueueFor = useCallback((sid: string, list: QueuedSend[]) => {
     const key = keyOf(sid);
@@ -90,10 +93,12 @@ export function useRunQueue(deps: RunQueueDeps) {
       force((n) => n + 1);
       try {
         const thinking = thinkingBySession.current.get(sid);
+        const planRequired = planRequiredRef?.current ?? null;
         const res = (await window.agent.run({
           message: msg.text, mode: modeRef.current, sessionId: sid, model: selections.current.get(sid) ?? undefined,
           ...(thinking !== undefined ? { thinking: thinking as "off" | "low" | "medium" | "high" } : {}),
           ...(msg.attachments.length > 0 ? { attachments: msg.attachments } : {}),
+          ...(planRequired !== null ? { planRequired } : {}),
         })) as RunResponse & { aborted?: boolean };
         if ((runGen.current.get(sid) ?? 0) === myGen) {
           setStoppedIds((prev) => {
@@ -162,15 +167,16 @@ export function useRunQueue(deps: RunQueueDeps) {
     }
     const isNew = sid === null;
     if (isNew) setPendingSend(true);
-    let id: string | undefined;
+    let id = sid;
     try {
-      const created = await window.agent.createSession(activeWorkspace ?? undefined);
-      const newId = created.id;
-      // 空屏直接发任务：渲染层 activeWorkspace 还是 null，而主进程已把会话建在它的默认
-      // 工作区里。不从回包采纳 ⇒ 文件/终端/diff/回滚整路「工作区未知」，侧栏也不高亮这一行。
-      if (activeWorkspace === null) setActiveWorkspace(created.workspace);
-      id = newId;
-      if (isNew) {
+      let newId = sid;
+      // 续聊、重试和重跑都追加到当前会话；只有首页首发才创建会话。
+      if (newId === null) {
+        const created = await window.agent.createSession(activeWorkspace ?? undefined);
+        newId = created.id;
+        id = newId;
+        // 空屏首发采纳主进程实际使用的默认工作区。
+        if (activeWorkspace === null) setActiveWorkspace(created.workspace);
         // 空屏上选的思考档必须落在**这条**新会话上；否则芯片显示「思考 强」、请求里没有 thinking。
         seedNewSessionThinking(newId, pendingThinking, thinkingBySession.current);
         activate(newId);
@@ -238,16 +244,6 @@ export function useRunQueue(deps: RunQueueDeps) {
     void send(text);
   }, [send, setLastError]);
 
-  /** 消息操作条「重跑这一轮」（2026-10-17，Claude 式重试）：取该轮用户输入再发一次，追加为新轮。
-   *  与「回放」的区别：回放 = fork 新会话 + 只填不发；重跑 = 当前会话原地再来一轮。运行中不动作。 */
-  const handleRetryRound = useCallback((round: number) => {
-    const sid = activeIdRef.current;
-    if (sid === null || runningSet.current.has(keyOf(sid))) return;
-    const text = userTextOfRound(eventsRef.current, round);
-    if (text === null) { setLastError("重跑失败：找不到该轮的输入原文", sid); return; }
-    void send(text);
-  }, [send, setLastError]);
-
   /** 重启恢复：不自动执行，用户显式点「继续发送」才把队首交给同一条 runOn/权限/沙箱链路。
    *  （第十三遍拆出按 sid 版：陈旧旗自愈要按点击时的会话派发，不随 activeId 漂。） */
   const resumeQueueFor = useCallback((sid: string) => {
@@ -284,5 +280,5 @@ export function useRunQueue(deps: RunQueueDeps) {
   }, [resumeQueueFor]);
 
 
-  return { setQueueFor, send, sendWithGoal, handleRetryLast, handleRetryRound, resumeQueue, cancelRunHeal };
+  return { setQueueFor, send, sendWithGoal, handleRetryLast, resumeQueue, cancelRunHeal };
 }

@@ -3,9 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <title>Cairn</title>
+    <link rel="icon" type="image/png" href="./brand/favicon.png" />
     <!-- 启动占位（2026-10-21）：在 CSS bundle 与 React 之前就画出底色与品牌标记，
          避免 Electron 首帧白闪。颜色取 Claude Desktop v3.1623.0 的 surface-1：
-         亮 #fcfcfb / 暗 #151515；品牌 clay #d97757。root 一旦有子节点即淡出。 -->
+         亮 #fcfcfb / 暗 #151515；品牌 clay #d97757。root 一旦有子节点即淡出。
+         2026-10-24 业主：标记改成逐格加载——图形不转，颜色沿格子顺时针逐格点亮
+         （6 段环 + 右上火花共 7 格，内联 SVG 才能按格上色，外链 img 做不到）。 -->
     <style>
       html, body { margin: 0; background: #fcfcfb; }
       #boot {
@@ -16,35 +19,32 @@
         pointer-events: none;
         transition: opacity .18s ease, visibility 0s linear .18s;
       }
-      #boot .boot-mark {
-        display: grid; place-items: center; width: 30px; height: 30px;
-        border-radius: 9px; background: #d97757; color: #fff;
-        font-size: 17px; font-weight: 600; line-height: 1;
-      }
+      #boot .boot-mark { display: block; width: 48px; height: 48px; }
+      /* 逐格点亮：每格在自己的 0.24s 时隙亮起再回落，延时按顺时针位次排
+         （SVG 子元素顺序是 12 点→10 点，顺时针应是 12 点→火花→2 点→…→10 点），
+         转满一圈 1.68s；关键帧里没有 transform，图形本身恒定不动。 */
+      #boot .boot-mark path { fill: #c16c50; opacity: .18; animation: boot-cell 1.68s linear infinite; }
+      #boot .boot-mark path:nth-child(1) { animation-delay: 0s; }
+      #boot .boot-mark path:nth-child(7) { animation-delay: .24s; }
+      #boot .boot-mark path:nth-child(6) { animation-delay: .48s; }
+      #boot .boot-mark path:nth-child(5) { animation-delay: .72s; }
+      #boot .boot-mark path:nth-child(4) { animation-delay: .96s; }
+      #boot .boot-mark path:nth-child(3) { animation-delay: 1.2s; }
+      #boot .boot-mark path:nth-child(2) { animation-delay: 1.44s; }
       #boot .boot-name { font-size: 14px; font-weight: 600; letter-spacing: .02em; }
-      #boot .boot-line {
-        position: relative; width: 96px; height: 2px; overflow: hidden;
-        border-radius: 999px; background: rgb(0 0 0 / 8%);
-      }
-      #boot .boot-line::after {
-        content: ""; position: absolute; inset: 0; width: 40%;
-        border-radius: inherit; background: #d97757;
-        animation: boot-slide 1.1s ease-in-out infinite;
-      }
       #boot .boot-hint { font-size: 12px; color: #8a887f; }
       #root:not(:empty) + #boot { opacity: 0; visibility: hidden; }
-      @keyframes boot-slide {
-        0% { transform: translateX(-110%); }
-        100% { transform: translateX(260%); }
+      @keyframes boot-cell {
+        0%, 14% { opacity: 1; }
+        22%, 100% { opacity: .18; }
       }
       @media (prefers-color-scheme: dark) {
         html, body { background: #151515; }
         #boot { background: #151515; color: #b8b6ad; }
-        #boot .boot-line { background: rgb(255 255 255 / 10%); }
         #boot .boot-hint { color: #8a887f; }
       }
       @media (prefers-reduced-motion: reduce) {
-        #boot .boot-line::after { animation: none; width: 100%; }
+        #boot .boot-mark path { animation: none; opacity: 1; }
         #boot { transition: none; }
       }
     </style>
@@ -52,9 +52,16 @@
   <body>
     <div id="root"></div>
     <div id="boot" role="status" aria-live="polite">
-      <span class="boot-mark" aria-hidden="true">C</span>
+      <svg class="boot-mark" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+        <path d="M 35.31 11.72 A 41 41 0 0 1 64.69 11.72 L 57.17 31.33 A 20 20 0 0 0 42.83 31.33 Z"/>
+        <path d="M 10.79 38.01 A 41 41 0 0 1 28.88 14.86 L 39.70 32.86 A 20 20 0 0 0 30.87 44.15 Z"/>
+        <path d="M 16.41 73.52 A 41 41 0 0 1 9.31 45.00 L 30.15 47.56 A 20 20 0 0 0 33.62 61.47 Z"/>
+        <path d="M 47.85 90.94 A 41 41 0 0 1 21.01 78.99 L 35.86 64.14 A 20 20 0 0 0 48.95 69.97 Z"/>
+        <path d="M 80.94 76.90 A 41 41 0 0 1 55.00 90.69 L 52.44 69.85 A 20 20 0 0 0 65.09 63.12 Z"/>
+        <path d="M 90.25 42.18 A 41 41 0 0 1 85.14 71.12 L 67.14 60.30 A 20 20 0 0 0 69.63 46.18 Z"/>
+        <path d="M 65 36 L 91 9 L 80 34 L 63 43 Z"/>
+      </svg>
       <span class="boot-name">Cairn</span>
-      <span class="boot-line" aria-hidden="true"></span>
       <span class="boot-hint">正在启动…</span>
     </div>
     <script type="module" src="./main.tsx"></script>

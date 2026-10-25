@@ -1,5 +1,5 @@
 // 设置导航的轻量单源：命令面板只需要分区 id/标签，不应因此把设置页正文与工作台一起拉进首屏。
-import { BookOpen, Brain, Clock, GitBranch, Globe, KeyRound, Keyboard, Puzzle, Shield, SlidersHorizontal, Wrench } from "lucide-react";
+import { BarChart3, BookOpen, Brain, Clock, GitBranch, Globe, KeyRound, Keyboard, Puzzle, Shield, SlidersHorizontal, Wrench } from "lucide-react";
 
 import type { PageId } from "../app-controls";
 export type { PageId } from "../app-controls";
@@ -24,6 +24,8 @@ const PAGE_SECTIONS = PAGE_ORDER.map((id) => ({ id, label: PAGE_META[id].label, 
 export const SECTIONS: readonly { id: SectionId; label: string; icon: React.JSX.Element }[] = [
   { id: "general", label: "通用", icon: <SlidersHorizontal size={14} /> },
   { id: "provider", label: "模型与 Provider", icon: <KeyRound size={14} /> },
+  { id: "network", label: "联网搜索", icon: <Globe size={14} /> },
+  { id: "usage", label: "用量统计", icon: <BarChart3 size={14} /> },
   { id: "permissions", label: "权限与安全", icon: <Shield size={14} /> },
   // 2026-10-18 补：AppSettings 里一直在生效、却没有开关的字段（记忆沉淀 / 跨文件波及 /
   // prompt 缓存 / 花费上限 / 隐私）——用户看不见也改不了，等于悄悄替他决定。
@@ -39,7 +41,9 @@ export const SECTIONS: readonly { id: SectionId; label: string; icon: React.JSX.
  *  收录口径：用户会打、但分区名里没有的字（如「暗模式」「密钥」「预算」）。 */
 export const SECTION_KEYWORDS: Readonly<Record<SectionId, string>> = {
   general: "主题 暗 亮 深色 夜间 外观 界面 语言 ctrl tab 循环 会话切换",
-  provider: "模型 通道 api key 密钥 token 接口 glm openai anthropic gemini deepseek 自定义 识图 视觉 联网 搜索",
+  provider: "模型 通道 api key 密钥 接口 glm openai anthropic gemini deepseek 自定义 识图 视觉",
+  network: "联网 搜索 网络 检索 brave tavily searxng 服务地址 api key",
+  usage: "用量 统计 token 活动 趋势 模型消耗 缓存 调用 账单",
   permissions: "权限 档位 模式 只读 自动 引导 审批 安全 沙箱 网络 方案 计划 写文件",
   advanced: "记忆 沉淀 波及 缓存 prompt 花费 预算 上限 成本 价格 隐私 遥测 统计",
   shortcuts: "快捷键 按键 键盘 键位 热键",

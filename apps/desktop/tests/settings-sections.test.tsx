@@ -5,6 +5,8 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { readAppSurface } from "./helpers/app-surface";
 import {
   AboutSection,
   GeneralSection,
@@ -41,7 +43,8 @@ describe("批 6：通用段（外观 / 语言 / 字号 / 快捷键 四卡）", (
     const themeGroup = h.slice(h.indexOf('aria-label="主题"'), h.indexOf('aria-label="文字大小"'));
     expect((themeGroup.match(/class="theme-opt[ "]/g) ?? []).length).toBe(3);
     expect((themeGroup.match(/class="theme-opt on"/g) ?? []).length).toBe(1);
-    expect((themeGroup.match(/class="theme-thumb/g) ?? []).length).toBe(3);
+    // 2026-10-24 业主：色块小预览撤下，纯文字选项（theme-thumb 零残留）
+    expect((themeGroup.match(/class="theme-thumb/g) ?? []).length).toBe(0);
     for (const t of ["跟随系统", "亮", "暗"]) expect(h).toContain(t);
     // 选中者 = dark 那颗（索引序：system/light/dark）
     const opts = [...themeGroup.matchAll(/class="theme-opt( on)?"/g)];
@@ -120,11 +123,20 @@ describe("批 6：模型与 Provider 三段", () => {
     cap?: { search: { kind: "unset" } | { kind: "ok" } | { kind: "broken"; message: string }; searchEndpoint?: string;
       vision: { state: "declared" | "undeclared" | "unverified"; modelId: string | null; declaredModalities: readonly string[] } } | null;
     checkMsg?: { tone: "wait" | "ok" | "err"; text: string; hint?: string } | null;
+    providers?: readonly { id: string; label: string; custom: boolean }[];
+    models?: readonly { id: string; provider: string }[];
   } = {}): string =>
     renderToStaticMarkup(
       <ProviderSection
         settings={S({ provider: "glm" })}
         status={over.status ?? STATUS}
+        providers={over.providers ?? [
+          { id: "glm", label: "glm", custom: false },
+          { id: "openai", label: "openai", custom: false },
+          { id: "anthropic", label: "anthropic", custom: false },
+          { id: "gemini", label: "gemini", custom: false },
+        ]}
+        models={over.models ?? []}
         cap={over.cap === undefined ? null : over.cap}
         keyProvider="glm"
         onKeyProviderChange={noop}
@@ -135,15 +147,16 @@ describe("批 6：模型与 Provider 三段", () => {
         checkMsg={over.checkMsg ?? null}
         onCheck={noop}
         onCustomSaved={noop}
-        onCopyHint={noop}
+        onOpenSearch={noop}
       />,
     );
 
-  it("四卡标题：当前通道与密钥 / 联网搜索 / 自定义接口 / 识图能力", () => {
+  it("三卡标题：当前通道与密钥 / 联网搜索 / 识图能力（自定义接口已合并进详情，2026-10-24 业主）", () => {
     const h = provider();
-    for (const t of ["当前通道与密钥", "联网搜索", "自定义接口", "识图能力"]) expect(h).toContain(t);
-    // 3 → 4（2026-10-16 加「识图能力」）：这一格同时钉"加了卡"与"卡数说得准"。
-    expect((h.match(/class="ss-sec"/g) ?? []).length).toBe(4);
+    for (const t of ["当前通道与密钥", "联网搜索", "识图能力"]) expect(h).toContain(t);
+    expect(h).not.toContain("自定义接口");
+    // 4 → 3（2026-10-24：自定义接口合并进右详情的编辑/新增表单，独立卡撤下）。
+    expect((h.match(/class="ss-sec"/g) ?? []).length).toBe(3);
   });
 
   it("当前通道行：provider 名 + 查看说明；检查连接（结果就地显示在这卡内）", () => {
@@ -156,40 +169,73 @@ describe("批 6：模型与 Provider 三段", () => {
     expect(h).toContain("向 glm 拉一次模型清单（不消耗模型额度）");
   });
 
-  it("密钥行（2026-10-16 重做）：一行等高控件 + 已存 key 徽章可删 + env 提示色小字", () => {
+  it("供应商管理（2026-10-24 参照 Codex 供应商页）：左列表选通道 + 右详情表单（堆叠字段）+ 徽章可删", () => {
     const h = provider({ status: { available: true, stored: ["glm"], envActive: true } });
-    expect(h).toContain("当前通道密钥");
+    expect(h).toContain("pv-split");        // 左列表 + 右详情
+    expect(h).toContain("pv-item");        // 供应商行（状态点 + 名称）
+    expect(h).toContain("智谱 GLM");        // kind id 上屏前翻人话
+    expect(h).toContain("pv-detail-name"); // 详情头 = 选中供应商名
     expect(h).toContain("保存到钥匙串");
-    expect(h).toContain("ss-ctl-row");      // 选择器 + 密码框 + 保存钮 = 同一行（原 sp-key-row 下架）
-    expect(h).toContain('data-w="lg"');     // 选择器宽度档
-    // 真机实测（1200 窗口）：三者相加 685px > 控件列 634px，按钮会被挤到孤行；
-    // 第二行容器 ss-ctl-sub 强制换行 ⇒ 输入 + 按钮恒同行（总纲「输入+按钮同一行」）。
-    expect(h).toContain('class="ss-ctl-sub"');
-    expect(h.indexOf("ss-ctl-sub") < h.indexOf('type="password"')).toBe(true); // 容器包住输入框
-    expect(h.indexOf('type="password"') < h.indexOf("保存到钥匙串")).toBe(true); // 且按钮在其后
-    expect(h).toContain("ss-badge");        // 徽章（原 sp-key-chip 下架，判卷钉同步点名）
+    expect(h).toContain("添加供应商");       // 列表底部添加入口（详情里出空白新增表单）
+    // API Key 字段：标签在上、输入 + 保存按钮同一行
+    expect(h).toContain("ss-flabel");
+    expect(h).toContain('class="ss-frow"');
+    expect(h.indexOf("ss-frow") < h.indexOf('type="password"')).toBe(true);
+    expect(h.indexOf('type="password"') < h.indexOf("保存到钥匙串")).toBe(true);
+    // 已存 key 的徽章（按选中通道过滤）+ env 提示色小字
+    expect(h).toContain("ss-badge");
     expect(h).toContain('aria-label="删除 glm 的 key"');
-    expect(h).toContain("ss-hint tip");     // 「检测到环境变量」走提示色小字位
+    expect(h).toContain("ss-hint tip");
     expect(h).toContain("检测到环境变量，将优先使用");
-    expect(h).not.toContain("已存 key：");   // 徽章已表达，不再重复摆一整句
+    expect(h).not.toContain("已存 key：");
+  });
+
+  it("自定义供应商进左列表（用户可添加更多大模型供应商，2026-10-24 业主）", () => {
+    const h = provider({
+      providers: [
+        { id: "glm", label: "glm", custom: false },
+        { id: "openai", label: "openai", custom: false },
+        { id: "anthropic", label: "anthropic", custom: false },
+        { id: "gemini", label: "gemini", custom: false },
+        { id: "agnes", label: "agnes", custom: true },
+        { id: "deepseek-x", label: "DeepSeek 中转", custom: true },
+      ],
+      models: [
+        { id: "agnes-2.5-flash", provider: "agnes" },
+        { id: "deepseek-chat", provider: "deepseek-x" },
+      ],
+    });
+    expect(h).toContain("自定义");           // 分组标签
+    expect(h).toContain("agnes");           // 自定义行进列表
+    expect(h).toContain("DeepSeek 中转");
+  });
+
+  it("自定义详情分支：右详情就地编辑（表单预填 + 同名覆盖），独立「自定义接口」卡已撤（2026-10-24 业主：两块合并）", () => {
+    const stream = readAppSurface();
+    expect(stream).toContain("const activeCustom = customSelId !== null && customs.some((p) => p.id === customSelId) ? customSelId : null;");
+    // 选中自定义 → 详情内嵌编辑表单（预填 editing；key 分支隔离，预填不带进新增）；添加供应商 → 空白表单。
+    expect(stream).toContain('<CustomProviderForm key={`edit-${activeCustom}`} editing={editingEntry}');
+    expect(stream).toContain('<CustomProviderForm key="add"');
+    expect(stream).toContain('<span className="pv-detail-name">添加供应商</span>');
+    // 编辑表单的回填源 = providerCustomList（新 IPC）。
+    expect(stream).toContain("window.agent.providerCustomList()");
   });
 
   it("联网搜索（2026-10-16 重做）：状态点行 + 去配置 + 查看详情折叠含配法原文；已配 = 绿点、无去配置", () => {
     const unset = provider({ cap: { search: { kind: "unset" }, vision: VISION } });
     // 只看**联网搜索那一段**（识图能力段自己有 warn 条，不能让它替搜索段背锅）。
-    const unsetSec = unset.slice(unset.indexOf("联网搜索"), unset.indexOf("自定义接口"));
-    expect(unsetSec).toContain('data-tone="warn"');       // 未配 = 橙点
-    expect(unsetSec).toContain("web_search 工具不会出现");
-    expect(unsetSec).toContain("去配置");                  // 明确的主按钮入口
-    expect(unsetSec).toContain("查看详情");
-    expect(unsetSec).toContain("endpoint 必须含 {query} 占位符");
-    expect(unsetSec).not.toContain("ss-banner");          // 旧 Banner 形态下架（业主裁）
+    const unsetSec = unset.slice(unset.indexOf("联网搜索"), unset.indexOf("识图能力"));
+    expect(unsetSec).toContain("尚未配置可用的搜索服务");
+    expect(unsetSec).toContain("配置联网搜索");
+    expect(unsetSec).not.toContain("复制配置片段");
+    expect(unsetSec).not.toContain(".agent/config.json");
+    expect(unsetSec).not.toContain("{query}");
     const ok = provider({ cap: { search: { kind: "ok" }, searchEndpoint: "https://searx.example", vision: VISION } });
-    const okSec = ok.slice(ok.indexOf("联网搜索"), ok.indexOf("自定义接口"));
+    const okSec = ok.slice(ok.indexOf("联网搜索"), ok.indexOf("识图能力"));
     expect(okSec).toContain('data-tone="ok"');            // 已配 = 绿点
-    expect(okSec).not.toContain("去配置");                 // 已配不摆「去配置」
+    expect(okSec).toContain("配置联网搜索");
     expect(okSec).not.toContain("ss-banner warn");
-    expect(ok).toContain("联网搜索已配");
+    expect(ok).toContain("已配置联网搜索");
   });
 
   // 识图能力（2026-10-16）：undeclared 必须出 warn 条，且那句要把「调用成功 ≠ 看得懂」说出来。
@@ -210,10 +256,10 @@ describe("批 6：模型与 Provider 三段", () => {
     expect(unknown).toContain("未验证");
   });
 
-  it("自定义接口：表单在场（接口地址输入锚在场）", () => {
-    const h = provider();
-    expect(h).toContain("自定义接口");
-    expect(h).toContain('aria-label="自定义接口地址"');
+  it("自定义表单在场（合并进详情后组件仍渲染——由编辑/新增分支挂载）", () => {
+    const stream = readAppSurface();
+    expect(stream).toContain('aria-label="自定义接口地址"');
+    expect(stream).toContain('placeholder="https://api.deepseek.com/v1"');
   });
 });
 
@@ -295,10 +341,9 @@ describe("批 6：关于与更新段", () => {
 
 describe("批 6：样式哨兵（主题选项卡/段落样式）", () => {
   const styles = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
-  it(".theme-opt 选中 = 强调描边 + 淡底；preview 图三态在", () => {
+  it(".theme-opt = 纯文字药丸（2026-10-24 业主：色块撤下）；选中 = 强调描边 + 淡底", () => {
     expect(styles).toMatch(/\.theme-opt\.on \{[^}]*accent-control[^}]*\}/);
-    expect(styles).toContain(".theme-thumb");
-    expect(styles).toContain(".theme-opt.on .theme-thumb");
+    expect(styles).not.toContain(".theme-thumb");
   });
   it(".ss-banner 样式在（信息/警告两 tone）", () => {
     expect(styles).toMatch(/\.ss-banner\.warn \{[^}]*color-risk/);

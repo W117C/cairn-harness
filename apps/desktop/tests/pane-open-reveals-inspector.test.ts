@@ -1,12 +1,10 @@
-// 「开窗格必须同时展开检查器」判卷（2026-10-18 修的真 bug）。
+// 「开窗格 ⇒ 右栏可见 + 检查器内容让位」判卷（2026-10-24 业主：单窗格占满整条侧栏）。
 //
-// 缺陷：⌘⇧S（浏览器：选择页面元素）与预览启动这两条路径会往 paneTabs 里加 "browser"，
-// 但**没有调 revealInspector()**。而检查器默认收起（inspectorCollapsed 初值 true，
-// paneTabs 为 0 时 layoutEffect 也保持收起），PaneDock 又渲染在那个 collapsedSize={0}
-// 且 inert 的列里 ⇒ 新开的浏览器窗格宽度 0、不可见、不可交互。
-// 用户按 ⌘⇧S 什么也看不见；pick 的失败回执（「本标签页还没有视图」）只渲染在
-// 那个不可见窗格内部，连错都看不到。速查表承诺「结果进输入框」，完全落空。
-// 对照组：togglePane / openPane 都有 `if (opening) revealInspector()`，这两条漏了。
+// 旧行为（2026-10-18）：开窗格要 revealInspector() 展开检查器列——当时窗格渲染在检查器
+// 下半区，不展开就落在 width 0 的列里。
+// 新行为：PaneDock 单窗格占满后，reveal 的职责变成「保证右栏本身可见」（四条开窗格路径
+// 保留 revealInspector）；栏内的检查器内容（.isp）由 data-panes-open 隐藏，窗格独占
+// 整条侧栏；全关后内容回位。⌘⌥I 的整栏开合语义不变。
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -30,25 +28,30 @@ function bodyOf(src: string, decl: string): string {
   return "";
 }
 
-describe("开窗格的路径都要展开检查器", () => {
-  it("requestPickElement（⌘⇧S）加 browser 后必须 revealInspector", () => {
+describe("开窗格的路径都要 reveal 右栏；栏内检查器内容让位", () => {
+  it("requestPickElement（⌘⇧S）加 browser 且 reveal", () => {
     const body = bodyOf(appSrc, "const requestPickElement = useCallback");
     expect(body).toContain('"browser"');
     expect(body).toContain("revealInspector()");
   });
 
-  it("openPreview（预览就绪）加 browser 后必须展开检查器", () => {
+  it("openPreview（预览就绪）加 browser 且 reveal（经 ref，TDZ 同解法）", () => {
     const body = bodyOf(appSrc, "const openPreview = useCallback");
     expect(body).toContain('"browser"');
-    // 经 ref 调用（revealInspector 在下方声明，TDZ）——与 newSessionRef 同一解法
     expect(body).toContain("revealInspectorRef.current?.()");
   });
 
-  it("togglePane / openPane 两条既有路径保持展开（不倒退）", () => {
+  it("togglePane / openPane 保持 reveal（不倒退）", () => {
     const toggle = bodyOf(appSrc, "const togglePane = useCallback");
     const open = bodyOf(appSrc, "const openPane = useCallback");
     expect(toggle).toContain("revealInspector()");
     expect(open).toContain("revealInspector()");
+  });
+
+  it("让位开关：panesOpen 时 inspector-col 挂 data-panes-open，CSS 隐藏 .isp 让窗格占满", () => {
+    expect(appSrc).toContain('data-panes-open');
+    const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
+    expect(css).toMatch(/\.inspector-col\[data-panes-open="true"\] \.isp\s*{\s*display: none;/);
   });
 
   it("四条开窗格路径都记打开顺序（⌘\ 靠它找「最近打开」）", () => {

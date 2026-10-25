@@ -5,6 +5,7 @@ import { app, BrowserWindow, dialog, ipcMain, nativeTheme, Notification, safeSto
 import { clampToWorkArea, readWindowState, writeWindowState } from "./window-state";
 import { bootBackgroundFor, normalizeThemePreference, resolveBootTheme, type ThemePreference } from "./boot-theme";
 import { windowVibrancyOptions } from "./window-vibrancy";
+import { runNotificationCopy, runNotificationTarget, shouldNotifyRunSettled } from "./run-notification";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
@@ -98,6 +99,7 @@ import { createProjectFromTemplate, diagnoseProjectDirectory, templateCatalog } 
 import { PreviewRuntime } from "../../../../src/main/project-preview";
 import { exportProject } from "../../../../src/main/project-export";
 import { checkProviderConnection } from "../../../../src/main/provider-connection";
+import { getSearchSettings, saveSearchSettings, testSearchSettings } from "../../../../src/main/search-settings";
 import { resolveEntry } from "../../../../src/main/workspace-fs";
 import { readCapabilities } from "../../../../src/main/doctor";
 import { gitClone, gitStatus } from "../../../../src/main/git-ops";
@@ -105,7 +107,7 @@ import { searchWorkspace } from "../../../../src/main/workspace-search";
 import { saveTempFile, cleanupPasteTempFiles } from "./temp-file";
 import { quitWarningMessage, shouldWarnBeforeQuit } from "./quit-guard";
 import type { DiscoveryProtocol } from "../../../../src/providers/discovery";
-import type { ProviderSaveRequest } from "../../../../src/main/ipc-protocol";
+import type { ProviderSaveRequest, SearchSettingsInput } from "../../../../src/main/ipc-protocol";
 
 // M4-5 即时重注别名（providerKeySet 保存成功 → 免重启生效）：wired 表在装配段（whenReady）之前，
 // 若 wired 行直写 injectStoredProviderKey 调用，会把 T1 装配守卫（provider-keys.test 次序红线：
@@ -115,6 +117,7 @@ const reinjectSavedProviderKey = injectStoredProviderKey;
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const distElectron = join(here, "..", "..", "dist-electron");
+const appIcon = join(here, "..", "renderer", "public", "brand", "cairn.png");
 let mainWindow: BrowserWindow | null = null;
 
 // 首帧底色（2026-10-21）：在 renderer 的 CSS/React 到达前，BrowserWindow 先铺一块与
@@ -154,13 +157,41 @@ function stopSpeakingNow(): void {
 // ---- §2.1 完成通知：会话 run 收束且窗口整体失焦时发 OS 通知 ----
 // 近似口径（如实记）：渲染层没有「你正在看哪个会话」的主进程镜像，这里用「窗口整体失焦 = 你不在看」
 // 作判据——聚焦时不发（你就在跟前看）；失焦时哪怕看的是别家窗口也发（宁可多一条不丢一条）。
-function maybeNotifyRunSettled(sessionId: string, ok: boolean, error?: string): void {
-  if (Notification.isSupported() === false) return;
-  if (BrowserWindow.getAllWindows().some((w) => w.isFocused())) return;
-  const title = ok ? "Cairn · 会话完成" : "Cairn · 会话未完成";
-  const body = ok ? `会话「${sessionId}」本轮已收束。` : `会话「${sessionId}」本轮未完成：${error ?? "未知原因"}`;
+// 2026-10-25：通知可点击——聚焦主窗并经 push 通道让 renderer 打开目标会话。
+// 决策/文案/目标在 ./run-notification 纯函数里单测；这里只留 Electron 壳。
+const liveNotifications = new Set<Notification>();
+function maybeNotifyRunSettled(input: {
+  sessionId: string;
+  workspace?: string;
+  message?: string;
+  ok: boolean;
+  error?: string;
+}): void {
+  const supported = Notification.isSupported();
+  if (!shouldNotifyRunSettled({
+    ...input,
+    supported,
+    anyWindowFocused: BrowserWindow.getAllWindows().some((w) => w.isFocused()),
+  })) return;
+  const copy = runNotificationCopy(input);
+  const target = runNotificationTarget(input);
   try {
-    new Notification({ title, body }).show();
+    const notification = new Notification({ title: copy.title, body: copy.body });
+    liveNotifications.add(notification);
+    notification.on("close", () => { liveNotifications.delete(notification); });
+    notification.on("click", () => {
+      liveNotifications.delete(notification);
+      const win = mainWindow !== null && !mainWindow.isDestroyed()
+        ? mainWindow
+        : BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null;
+      if (win === null) return;
+      if (process.platform === "darwin") app.focus({ steal: true });
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+      if (!win.webContents.isDestroyed()) win.webContents.send(PUSH_CHANNELS.onNotificationOpen, target);
+    });
+    notification.show();
   } catch (err) {
     console.error("[notify] 系统通知失败（不阻运行）:", err instanceof Error ? err.message : String(err));
   }
@@ -363,12 +394,23 @@ const projectRehydrate = (async () => {
 // addProject 一行仍记 M3-3 修复轮的语义：透传之外在成功后同步 host.addWorkspace(record.path)，
 // 新工作区并入 host 扫描面（main 进程内直调，不经 IPC、renderer 无感知自动生效）。
 const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
+  // 当前调用窗口的可信工作区；不接受 renderer 自报的目录。
+  searchSettingsGet: () => getSearchSettings(resolveWorkspace()),
+  searchSettingsSave: (input) => saveSearchSettings(resolveWorkspace(), input as SearchSettingsInput),
+  searchSettingsTest: (input) => testSearchSettings(resolveWorkspace(), input as SearchSettingsInput | undefined),
   // §2.1 完成通知的挂点：run 收束后（会话模式）窗口失焦则发系统通知；不改变 run 的任何语义。
   run: async (req) => {
-    const sessionId = (req as { sessionId?: string } | null)?.sessionId;
+    const request = req as { sessionId?: string; workspace?: unknown; message?: unknown } | null;
+    const sessionId = request?.sessionId;
     const res = await host.run(req as never);
     if (typeof sessionId === "string" && sessionId !== "") {
-      maybeNotifyRunSettled(sessionId, res.ok === true, res.error);
+      maybeNotifyRunSettled({
+        sessionId,
+        ...(typeof request?.workspace === "string" ? { workspace: request.workspace } : {}),
+        ...(typeof request?.message === "string" ? { message: request.message } : {}),
+        ok: res.ok === true,
+        ...(res.error !== undefined ? { error: res.error } : {}),
+      });
     }
     return res;
   },
@@ -395,7 +437,6 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   listSessions: async () => { await projectRehydrate; return host.listSessions(); },
   // v14：跨会话用量账本（只读；面板点「全部会话」才调）。
   usageLedger: () => host.usageLedger(),
-  // v20：编排预览/提交/控制；地址由渲染层显式给出，host 侧再验工作区归属。
   orchestrationView: address => host.orchestrationView(address as never),
   orchestrationSubmit: request => host.orchestrationSubmit(request as never),
   orchestrationControl: request => host.orchestrationControl(request as never),
@@ -659,6 +700,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // v5 窗格弹出：独立窗口（同壳参数；#pane=<kind>[&session=<id>] 路由）。
   panePopout: (kind, sessionId) => {
     const win = new BrowserWindow({
+      icon: appIcon,
       width: 760,
       height: 620,
       titleBarStyle: "hiddenInset",
@@ -791,6 +833,22 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
       providers: [...prepared.file.providers.map((p) => p.id)],
       installed: prepared.derived.length,
       warnings: [...prepared.warnings],
+    };
+  },
+  // 自定义供应商编辑模式的预填数据面：DerivedCustomProvider 的界面投影（不含 key 明文）。
+  providerCustomList: async () => {
+    const loaded = loadCustomProviders(workspace);
+    if (loaded.kind !== "ok") return { ok: true, entries: [] };
+    return {
+      ok: true,
+      entries: loaded.derived.map((d) => ({
+        id: d.id,
+        label: d.label,
+        protocol: d.protocol,
+        baseURL: d.baseURL,
+        apiKeyEnv: d.apiKeyEnv,
+        modelIds: d.specs.map((sp) => sp.id),
+      })),
     };
   },
   checkUpdate: () => handleUpdateCheck(),
@@ -945,6 +1003,7 @@ const createWindow = () => {
   const bounds = saved === null ? null : clampToWorkArea(saved, screen.getDisplayMatching(saved).workArea);
   const vibrancy = windowVibrancyOptions(process.platform, process.env, readWindowVibrancyPreference());
   const win = new BrowserWindow({
+    icon: appIcon,
     ...(bounds === null ? {} : { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }),
     ...(bounds === null ? { width: 1200, height: 800 } : {}),
     minWidth: 880,
@@ -1251,6 +1310,7 @@ const createWindow = () => {
   }
 };
 app.whenReady().then(() => {
+  if (process.platform === "darwin") app.dock?.setIcon(appIcon);
   // 主题真相在 settings.json；ready 后先同步，再建窗（createWindow 里的 bootBackground 也读同一字段）。
   nativeTheme.themeSource = readThemePreference();
   // 应用菜单（蓝本 §5.2 菜单树）：App → 文件 → 编辑 → 视图 → 前往 → 窗口 → 帮助。

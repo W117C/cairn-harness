@@ -1,28 +1,29 @@
-// 窗格区（蓝本 §3.4 窗格系统，D1 全采纳）：
-//   右列容器——**多窗格同屏、纵向堆叠**（react-resizable-panels v4 的 Grid/Cell/Gridline：
-//   每格一个窗格、格间分割线可拖行高）。每格自带标题头（标签 + 关闭钮），重开/关闭单一入口。
-//   「堆叠要翻」的批评由"格少 + 每格常显标题"回应：≤4 个窗格全可见，没有翻找成本。
+// 窗格区（蓝本 §3.4 窗格系统；2026-10-24 业主重定为**单窗格占满 + 标签页切换**）：
+//   右列容器——一次只显示一个窗格、占满整列；顶部 pane-nav 即标签条（点标签切换，
+//   「＋」开新窗格并激活，标签上的关闭钮关窗格；⌥↑/⌥↓ 调标签顺序）。原 Grid 纵向
+//   堆叠模型（react-resizable-panels Grid/Cell/Gridline）整体撤下。
 //   本轮窗格：变更（diff 审阅，含逐 hunk 展开）/ 方案 / 任务（多 agent）。subagent 详情并入任务窗格。
 //   空态诚实：无数据即说明（不摆空壳）；价格不可知显式写"价格不可知"（不当 0）。
 // 数据面全部来自 panes.ts 纯投影 + turnDelivery（既有）+ changeDiff（v4 通道，懒加载）。
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
-import { AlertTriangle, Check, ChevronRight, Crosshair, ExternalLink, GripVertical, Loader2, MoreHorizontal, PanelsTopLeft, Plus, X } from "lucide-react";
+import "./pane-tabs.css";
+import { AlertTriangle, Check, ChevronRight, Crosshair, ExternalLink, Loader2, MoreHorizontal, Plus, X } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Cell, Grid, Gridline, useGridRef } from "react-resizable-panels";
 import type { AgentEvent } from "../../../../../src/events";
 import { turnDelivery } from "../projections";
 import { diffCount, useLazyChangeDiff } from "../change-diff-state";
-import { MIN_PANE_PCT, loadPaneRows, mergePaneRows, paneRowLayout, savePaneRows } from "../pane-layout";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { clipDiff, parseUnifiedPatch } from "../diff-patch";
 import { ModalSurface } from "./ModalSurface";
+import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import { toast } from "../toast";
 import { DiffView } from "./DiffView";
 import { FilePane } from "./FilePane";
-import { OrchestrationPane } from "./OrchestrationPane";
 import { PluginSurface } from "./PluginSurface";
+import { SessionPreviewPane } from "./SessionPreviewPane";
 import { SidechatPane } from "./SidechatPane";
+import { OrchestrationPane } from "./OrchestrationPane";
 import { PathMenu } from "./PathMenu";
 import { changedFileCount, composeReviewMessage, PANE_META, PANE_OPENABLE, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, workerCardAction, type PaneKind, type WorkerPaneItem } from "./panes";
 
@@ -53,6 +54,8 @@ type BpPickResult = { ok: boolean; selector?: string; snippet?: string; url?: st
  *  外站 first-visit 询问。⌘⇧S / 工具钮 = 元素选择（页内按键由主进程捕获、经 browserState.pick 回程；
  *  结果经 onPickResult 回 App 填入输入框）。清除数据只及本独立 profile（persist:cairn-browser）。 */
 function BrowserPane(props: {
+  /** 窗格标签是否在前台。非前台时原生视图必须收成零矩形（隐藏父容器管不到 WebContentsView）。 */
+  active: boolean;
   initialUrl?: string;
   /** 元素选择信号（App ⌘⇧S 递增；seq 变化触发一次）。 */
   pickSignal?: number;
@@ -89,6 +92,7 @@ function BrowserPane(props: {
   const activeViewId = tabs.find((t) => t.key === activeKey)?.viewId ?? null;
   const activeViewRef = useRef<string | null>(null); activeViewRef.current = activeViewId;
   const activeKeyRef = useRef(activeKey); activeKeyRef.current = activeKey;
+  const paneActiveRef = useRef(props.active); paneActiveRef.current = props.active;
 
   // 站点授权弹出时把焦点送进对话框（2026-10-18）：否则键盘用户还停在地址栏，
   // Tab 要穿过整条工具栏才能到「允许/拒绝」。默认聚焦允许本次（与浏览器首访语义一致）。
@@ -104,7 +108,13 @@ function BrowserPane(props: {
     void window.agent.browserSetAllowedHosts([...hosts]).catch(() => undefined);
   }, []);
 
+  const hideAllViews = (): void => {
+    for (const tab of tabsRef.current) void window.agent.browserBounds(tab.viewId, { x: 0, y: 0, width: 0, height: 0 });
+  };
   const boundsSync = (): void => {
+    // 原生 WebContentsView 不参与 CSS 层叠：窗格标签切走后父容器 visibility:hidden
+    // 挡不住它。必须显式把每张视图收成零矩形，回到前台再按容器矩形放回。
+    if (!paneActiveRef.current) { hideAllViews(); return; }
     const vid = activeViewRef.current;
     const el = containerRef.current;
     if (vid === null || el === null) return;
@@ -145,6 +155,14 @@ function BrowserPane(props: {
     boundsSync();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeViewId]);
+  // 窗格标签切走/切回：原生视图整组藏/显。隐藏父容器不够（见 boundsSync 注释）。
+  useEffect(() => {
+    if (!props.active) { hideAllViews(); return; }
+    const raf = requestAnimationFrame(() => { boundsSync(); });
+    return () => cancelAnimationFrame(raf);
+    // hideAllViews/boundsSync 都是 latest-ref 读取，不随渲染换身份。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.active]);
 
   // 选中结果处理（两条来路共用：browserPickElement 直返、页内 ⌘⇧S 经 browserState.pick 回程）。
   const handlePickResult = (r: BpPickResult): void => {
@@ -856,11 +874,16 @@ export function PaneDock(props: {
    *  且和窗格自己的标题行叠成两行同样的字（真机截图：弹出窗里两行「终端」）。
    *  ⇒ 独立窗格窗口不渲染那一行。 */
   inPopout?: boolean;
+  /** 命令面板快速打开：文件路径 + 递增序号；PaneDock 激活文件标签，FilePane 展开并预览。 */
+  fileTarget?: { path: string; seq: number };
+  /** ⌘+点击侧栏会话：只读预览目标（seq 递增；新目标自动激活「会话」标签）。 */
+  sessionPreview?: { id: string; workspace?: string; title: string; seq: number } | null;
+  /** 预览头部「切到会话」：把主体会话换过去（预览窗格保留）。 */
+  onSwitchSession?: (id: string, workspace?: string) => void;
   /** v6 预览地址：browser 窗格就绪后自动导航到这里（缺省 = 只显示手动地址栏）。 */
   browserUrl?: string;
   /** v7 当前会话 id（sidechat 窗格的父会话面；缺省 = 旁路空态提示先开会话）。 */
   sessionId?: string | null;
-  /** v20 当前工作区（编排窗格按工作区 + 会话寻址；缺省 = 编排窗格提示先选工作区）。 */
   workspace?: string | null;
   /** v7 附为上下文（§2.3 右键菜单）：工作区相对路径 → App 解析绝对路径后进 composer 附件。 */
   onAttach?: (rel: string, kind: "file" | "directory") => void;
@@ -869,12 +892,37 @@ export function PaneDock(props: {
   /** v7 元素选择结果（选择器/片段/页面 URL）→ App 拼文进输入框。 */
   onPickResult?: (r: { selector: string; snippet: string; url: string }) => void;
 }): React.JSX.Element {
-  // 拖拽换位状态（HTML5 DnD；拖动中的格子给视觉反馈）。
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [focusedPane, setFocusedPane] = useState<PaneKind | null>(null);
-  const focused = focusedPane !== null && props.tabs.includes(focusedPane) ? focusedPane : null;
+  // 单窗格模式（2026-10-24 业主）：侧栏一次只显示一个窗格、占满整列；标签页即窗格切换。
+  // 激活窗格 = 手动点选的那个（仍开着时），否则最新打开的一个——新开窗格自动露出。
+  const active = focusedPane !== null && props.tabs.includes(focusedPane)
+    ? focusedPane
+    : props.tabs[props.tabs.length - 1] ?? null;
   const previousTabs = useRef(props.tabs);
   const navRef = useRef<HTMLElement | null>(null);
+  const navItemsRef = useRef<HTMLDivElement | null>(null);
+  const activeTabRef = useRef<HTMLSpanElement | null>(null);
+  const tabsSig = props.tabs.join("\u0001");
+  // 多标签时激活标签必须自己滚进可视区：新开第 6–8 个窗格时标签条会横向溢出，
+  // 内容切过去了但标签还藏在右边，用户会以为没开。滚动只发生在标签条内部（不带动整页）。
+  useEffect(() => {
+    if (active === null) return;
+    const scroller = navItemsRef.current;
+    const tab = activeTabRef.current;
+    if (scroller === null || tab === null) return;
+    const raf = window.requestAnimationFrame(() => {
+      const pad = 4;
+      const left = tab.offsetLeft;
+      const right = left + tab.offsetWidth;
+      const viewLeft = scroller.scrollLeft;
+      const viewRight = viewLeft + scroller.clientWidth;
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const behavior: ScrollBehavior = reduced ? "auto" : "smooth";
+      if (left < viewLeft + pad) scroller.scrollTo({ left: Math.max(0, left - pad), behavior });
+      else if (right > viewRight - pad) scroller.scrollTo({ left: right - scroller.clientWidth + pad, behavior });
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [active, tabsSig]);
   const closePane = (kind: PaneKind): void => {
     props.onClose(kind);
     // 关闭按钮卸载后将焦点交给剩余窗格，避免键盘用户掉回文档起点。
@@ -884,36 +932,23 @@ export function PaneDock(props: {
   };
   useEffect(() => {
     const added = props.tabs.find((kind) => !previousTabs.current.includes(kind));
-    if (focusedPane !== null) setFocusedPane(added ?? (props.tabs.includes(focusedPane) ? focusedPane : null));
+    if (added !== undefined) setFocusedPane(added);
+    else if (focusedPane !== null && !props.tabs.includes(focusedPane)) setFocusedPane(null);
     previousTabs.current = props.tabs;
   }, [props.tabs, focusedPane]);
+  // 命令面板快速打开：即使文件标签早已开着但不在前台，也要切过去（openPane 只保证标签存在）。
+  useEffect(() => {
+    if (props.fileTarget !== undefined) setFocusedPane("file");
+  }, [props.fileTarget]);
+  // ⌘+点击侧栏会话：新目标即激活「会话」标签（即使它早已开着但不在前台）。
+  useEffect(() => {
+    if (props.sessionPreview !== undefined && props.sessionPreview !== null) setFocusedPane("session");
+  }, [props.sessionPreview]);
   // 右键路径菜单（§2.3）：窗格内坐标 + 目标；渲染层自绘（见 PathMenu）。
   const [pathMenu, setPathMenu] = useState<{ x: number; y: number; rel: string; kind: "file" | "directory" } | null>(null);
   const openPathMenu = (rel: string, kind: "file" | "directory", x: number, y: number): void => {
     setPathMenu({ x, y, rel, kind });
   };
-  // 行高记忆：Grid 的行轨 id 用窗格 kind（不是行下标），重排/关开后尺寸跟着窗格走。
-  const gridRef = useGridRef();
-  const tabsSig = props.tabs.join("\u0001");
-  const rowTracks = useMemo(
-    () => props.tabs.map((kind) => ({ id: kind, minSize: `${MIN_PANE_PCT}%` })),
-    // 数组每次渲染都是新引用；tabsSig 是内容签名，等价于「窗格集变了没有」。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tabsSig],
-  );
-  const defaultRows = useMemo(
-    () => paneRowLayout(props.tabs, loadPaneRows()),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tabsSig],
-  );
-  // 窗格集变化（恢复上次布局 / 新开 / 关闭）时把记下的行高放回去。
-  // setLayout 触发的 onLayoutChanged 带 isUserInteraction=false，不会回写存储。
-  useEffect(() => {
-    const grid = gridRef.current;
-    if (grid === null || props.tabs.length === 0) return;
-    grid.setLayout({ rows: paneRowLayout(props.tabs, loadPaneRows()) });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabsSig]);
   if (props.tabs.length === 0) {
     return (
       <aside className="pane-dock" aria-label="窗格区">
@@ -926,13 +961,35 @@ export function PaneDock(props: {
     {/* 面板导航行只对「多窗格同屏」有意义：独立窗格窗口里它是死按钮（见 inPopout 注释）。 */}
     {props.inPopout !== true && (
     <nav className="pane-nav" aria-label="面板导航" ref={navRef}>
-      <div className="pane-nav-items">
-        {props.tabs.map((kind) => <button key={kind} className="pane-nav-item"
-          aria-label={`聚焦${PANE_META[kind].label}窗格`} aria-pressed={focused === kind}
-          onClick={() => setFocusedPane(kind)}>{PANE_META[kind].label}</button>)}
+      <div className="pane-nav-items" ref={navItemsRef}>
+        {props.tabs.map((kind) => (
+          <span key={kind} ref={kind === active ? activeTabRef : undefined} className={"pane-tab" + (kind === active ? " on" : "")}>
+            <button className="pane-nav-item" aria-label={`切换到${PANE_META[kind].label}窗格`}
+              aria-pressed={kind === active}
+              title={props.onReorder !== undefined ? "⌥↑ / ⌥↓ 调整标签顺序" : undefined}
+              onKeyDown={(e) => {
+                if (props.onReorder === undefined || e.target !== e.currentTarget) return;
+                if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+                const i = props.tabs.indexOf(kind);
+                const to = reorderTarget(i, e.key, props.tabs.length);
+                if (to === null) return;
+                e.preventDefault();
+                props.onReorder?.(i, to);
+              }}
+              onClick={() => setFocusedPane(kind)}>{PANE_META[kind].label}</button>
+            {/* 临时预览窗格（session）没有独立窗口路由：弹出后 PopoutApp 拿不到预览目标，
+                只会开一个空壳。可选窗格集合才是「能脱离主窗存在」的那一组。 */}
+            {kind === active && props.onPopout !== undefined && PANE_OPENABLE.includes(kind) && (
+              <button className="pane-tab-act" aria-label={`弹出${PANE_META[kind].label}窗格`} title="弹出为独立窗口"
+                onClick={() => { props.onPopout?.(kind); }}><ExternalLink size={11} /></button>
+            )}
+            {kind === active && (
+              <button className="pane-tab-act" aria-label={`关闭${PANE_META[kind].label}窗格`}
+                onClick={() => { closePane(kind); }}><X size={11} /></button>
+            )}
+          </span>
+        ))}
       </div>
-      <button className="iconbtn sm" aria-label="恢复多面板布局" title="恢复多面板布局" aria-pressed={focused === null}
-        onClick={() => setFocusedPane(null)}><PanelsTopLeft size={15} /></button>
       {props.onOpen !== undefined && <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild><button className="iconbtn sm" aria-label="添加面板" title="添加面板"><Plus size={15} /></button></DropdownMenu.Trigger>
         <DropdownMenu.Portal><DropdownMenu.Content className="pop-rd" sideOffset={5} align="end">
@@ -944,99 +1001,58 @@ export function PaneDock(props: {
       </DropdownMenu.Root>}
     </nav>
     )}
-    <Grid
-      gridRef={gridRef}
-      columns={1}
-      rows={rowTracks}
-      defaultLayout={{ rows: defaultRows }}
-      onLayoutChanged={(layout, meta) => {
-        if (focused !== null) return;
-        if (!meta.isUserInteraction) return;
-        savePaneRows(mergePaneRows(loadPaneRows(), layout.rows, props.tabs));
-      }}
-      className="pane-grid"
-      id="cairn-panes"
-      data-focused={focused ?? undefined}
-    >
-      {props.tabs.map((kind, i) => (
-        <Fragment key={kind}>
-          {i > 0 && <Gridline type="row" row={i} className="pane-gridline" />}
-          <Cell column={0} row={i} className="pane-cell" data-pane={kind} data-focused={focused === kind}>
-            <section className="pane-chunk" aria-label={`${PANE_META[kind].label}窗格`}>
-              <div
-                className="pane-chunk-head"
-                draggable={props.onReorder !== undefined}
-                data-dragging={dragIndex === i}
-                onDragStart={(e) => {
-                  if (props.onReorder === undefined) return;
-                  setDragIndex(i);
-                  e.dataTransfer.effectAllowed = "move";
-                }}
-                onDragOver={(e) => {
-                  if (dragIndex !== null && dragIndex !== i) e.preventDefault();
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  if (dragIndex !== null && dragIndex !== i) props.onReorder?.(dragIndex, i);
-                  setDragIndex(null);
-                }}
-                onDragEnd={() => setDragIndex(null)}
-                // 键盘换位（2026-10-18）：拖拽此前是唯一的换位路径，键盘用户够不着「⋮⋮」。
-                // 焦点在窗格头本身时 ⌥↑/⌥↓ 与拖拽同语义（共用 movePane）；方向键留给内部控件。
-                tabIndex={props.onReorder !== undefined ? 0 : undefined}
-                onKeyDown={(e) => {
-                  if (props.onReorder === undefined || e.target !== e.currentTarget) return;
-                  if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
-                  const to = reorderTarget(i, e.key, props.tabs.length);
-                  if (to === null) return;
-                  e.preventDefault();
-                  props.onReorder(i, to);
-                }}
-                title={props.onReorder !== undefined ? "拖动换位（键盘：⌥↑ / ⌥↓）" : undefined}
-              >
-                {props.onReorder !== undefined && <span className="pc-grip" aria-hidden="true"><GripVertical size={12} /></span>}
-                <span className="pc-label">{PANE_META[kind].label}</span>
-                {props.onPopout !== undefined && (
-                  <button
-                    className="pt-x"
-                    aria-label={`弹出${PANE_META[kind].label}窗格`}
-                    title="弹出为独立窗口"
-                    onClick={() => { props.onPopout?.(kind); }}
-                  ><ExternalLink size={12} /></button>
-                )}
-                <button
-                  className="pt-x"
-                  aria-label={`关闭${PANE_META[kind].label}窗格`}
-                  onClick={() => { closePane(kind); }}
-                ><X size={11} /></button>
-              </div>
-              <div className="pane-chunk-body">
-                {kind === "changes" && (
-                  <ChangesPane
-                    events={props.events}
-                    {...(props.onReview !== undefined ? { onReview: props.onReview } : {})}
-                    onPathMenu={openPathMenu}
-                  />
-                )}
-                {kind === "plan" && <PlanPane events={props.events} />}
-                {kind === "tasks" && <><OrchestrationPane workspace={props.workspace ?? null} sessionId={props.sessionId ?? null} /><TasksPane events={props.events} /></>}
-                {kind === "file" && <FilePane onPathMenu={openPathMenu} />}
-                {kind === "terminal" && <TerminalPane />}
-                {kind === "browser" && (
-                  <BrowserPane
-                    {...(props.browserUrl !== undefined ? { initialUrl: props.browserUrl } : {})}
-                    {...(props.pickSignal !== undefined ? { pickSignal: props.pickSignal } : {})}
-                    {...(props.onPickResult !== undefined ? { onPickResult: props.onPickResult } : {})}
-                  />
-                )}
-                {kind === "sidechat" && <SidechatPane sessionId={props.sessionId ?? null} />}
-                {kind === "plugins" && <PluginSurface />}
-              </div>
-            </section>
-          </Cell>
-        </Fragment>
-      ))}
-    </Grid>
+    {active !== null && (
+      <div className="pane-stack">
+        {props.tabs.map((kind) => (
+          <section
+            key={kind}
+            className="pane-chunk"
+            aria-label={`${PANE_META[kind].label}窗格`}
+            data-pane={kind}
+            data-active={kind === active}
+          >
+            <div className="pane-chunk-body">
+              {/* 每个窗格各自成界：一个窗格炸掉不牵连标签条与其他窗格；
+                  无错时边界返回 Fragment，直接子元素关系不变。 */}
+              <RenderErrorBoundary variant="inline">
+              {kind === "changes" && (
+                <ChangesPane
+                  events={props.events}
+                  {...(props.onReview !== undefined ? { onReview: props.onReview } : {})}
+                  onPathMenu={openPathMenu}
+                />
+              )}
+              {kind === "plan" && <PlanPane events={props.events} />}
+              {kind === "tasks" && <><OrchestrationPane workspace={props.workspace ?? null} sessionId={props.sessionId ?? null} active={kind === active} /><TasksPane events={props.events} /></>}
+              {kind === "file" && (
+                <FilePane
+                  onPathMenu={openPathMenu}
+                  {...(props.fileTarget !== undefined ? { openTarget: props.fileTarget } : {})}
+                />
+              )}
+              {kind === "terminal" && <TerminalPane />}
+              {kind === "browser" && (
+                <BrowserPane
+                  active={kind === active}
+                  {...(props.browserUrl !== undefined ? { initialUrl: props.browserUrl } : {})}
+                  {...(props.pickSignal !== undefined ? { pickSignal: props.pickSignal } : {})}
+                  {...(props.onPickResult !== undefined ? { onPickResult: props.onPickResult } : {})}
+                />
+              )}
+              {kind === "sidechat" && <SidechatPane sessionId={props.sessionId ?? null} />}
+              {kind === "plugins" && <PluginSurface />}
+              {kind === "session" && (
+                <SessionPreviewPane
+                  target={props.sessionPreview ?? null}
+                  {...(props.onSwitchSession !== undefined ? { onSwitch: props.onSwitchSession } : {})}
+                />
+              )}
+              </RenderErrorBoundary>
+            </div>
+          </section>
+        ))}
+      </div>
+    )}
     {pathMenu !== null && (
       <PathMenu
         x={pathMenu.x}

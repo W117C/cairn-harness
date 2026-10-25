@@ -12,6 +12,7 @@ import type { TextSizeSetting,UiSizeSetting } from "../../../../../src/main/sett
 import type { PaletteAction } from "../components/CommandPalette";
 import { type FindBarHandle } from "../components/FindBar";
 import { GoalChip } from "../components/GoalChip";
+import { CairnMark } from "../components/CairnMark";
 import type { StreamActions } from "../components/Stream";
 import type { UsageAllState } from "../components/UsagePanel";
 import { PANE_META,PANE_OPENABLE,type PaneKind } from "../components/panes";
@@ -81,7 +82,7 @@ export function renderAppToolbar(deps: AppToolbarProps) {
   // 首页无会话 ⇒ 品牌名；会话内 ⇒ 可重命名的会话名。
   // **任何时刻只有一个标题**——批 120/121 的「标题出现两次」争点随两栏合并自然消解。
   const toolbarCenter = activeId === null ? (
-    <span className="tb-brand">Cairn</span>
+    <span className="tb-brand"><CairnMark />Cairn</span>
   ) : (
     <>
       {/* 会话名可点重命名（蓝本 §2.1「点工具栏会话名可重命名」）：Enter/失焦提交，Esc 取消。 */}

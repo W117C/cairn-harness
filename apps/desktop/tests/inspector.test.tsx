@@ -155,7 +155,7 @@ describe("⑤ App 接线哨兵（右 Panel / ⌘⌥I / 跳转锚 / 快照撤销�
     // 正在做的宽度收起动画一刀砍掉（⌘⌥I 开合退化成硬切）。inert 同样把内部控件移出
     // Tab 序与无障碍树，但保留布局、过渡照常播完。诉求不变（屏外不劫持键盘/不被读屏念到），
     // 实现换成不打断动画的那一个。
-    expect(appSrc).toContain("<div className=\"inspector-col\" ref={inspectorColRef}>");
+    expect(appSrc).toContain("<div className=\"inspector-col\" ref={inspectorColRef}"); // 2026-10-24：追加 data-panes-open 让位开关，ref 接线不变
     expect(appSrc).toContain('el.setAttribute("inert", "")');
     expect(appSrc).toContain('el.removeAttribute("inert")');
     // 反向：不许回退到 hidden（那正是硬切的根因）

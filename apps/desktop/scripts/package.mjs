@@ -63,10 +63,13 @@ for (const [key, value] of [
   ["CFBundleExecutable", "Cairn"],
   ["CFBundleName", "Cairn"],
   ["CFBundleIdentifier", "com.cairn.desktop"],
+  ["CFBundleIconFile", "cairn.icns"],
 ]) {
   const set = spawnSync("/usr/libexec/PlistBuddy", ["-c", `Set :${key} ${value}`, plist]);
   if (set.status !== 0) run("/usr/libexec/PlistBuddy", ["-c", `Add :${key} string ${value}`, plist]);
 }
+
+cpSync(join(desktopDir, "src", "renderer", "public", "brand", "cairn.icns"), join(appDir, "Contents", "Resources", "cairn.icns"));
 
 // ③ 运行期布局：Resources/app = 仓库布局的运行期子集。
 //    package.json 的 "main" 指 entry.cjs；dependencies 带上根包全部生产依赖 + tsx（loader 本体，

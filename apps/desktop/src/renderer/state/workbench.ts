@@ -269,6 +269,17 @@ export function useWorkbenchModel() {
   // 用户在运行中切档后排队消息仍按旧档执行（与「下一条消息起生效」的文案相反）。
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  // Plan 模式（v23）：settings.planRequiredByDefault 是默认；Composer 的「方案」开关按轮覆盖。
+  // override=null ⇒ RunRequest 不带字段，主进程继续按设置默认判；显式 true/false ⇒ 覆盖。
+  const [planDefault, setPlanDefault] = useState(false);
+  const [planOverride, setPlanOverride] = useState<boolean | null>(null);
+  const planRequired = planOverride ?? planDefault;
+  const planOverrideRef = useRef<boolean | null>(null);
+  planOverrideRef.current = planOverride;
+  const changePlanRequired = useCallback((next: boolean): void => {
+    setPlanOverride(next);
+    setLastNotice(next ? STR.composer.planOnNotice : STR.composer.planOffNotice);
+  }, [setLastNotice]);
   // P3-3 命令面板（⌘K / 侧栏搜索钮）。
   const [paletteOpen, setPaletteOpen] = useState(false);
   // 会话日志查看器（批 132）：错误条 / 命令面板共用；只存 id，标题在渲染时从 sessions 派生。
@@ -345,7 +356,15 @@ export function useWorkbenchModel() {
   const stick = useStickyScroll(streamEl);
   // 载入设置：打开即进主界面（不拿向导拦在门口）。
   useEffect(() => {
-    void window.agent.getSettings().then((s) => { setMode(s.mode); setThemePref(s.theme); setCtrlTabCycle(s.ctrlTabCycle); setTextSize(s.textSize); setUiSize(s.uiSize); setOnboarded(s.onboarded); }).catch(() => undefined);
+    void window.agent.getSettings().then((s) => {
+      setMode(s.mode);
+      setThemePref(s.theme);
+      setCtrlTabCycle(s.ctrlTabCycle);
+      setTextSize(s.textSize);
+      setUiSize(s.uiSize);
+      setOnboarded(s.onboarded);
+      setPlanDefault(s.planRequiredByDefault === true);
+    }).catch(() => undefined);
   }, []);
   // v6 模板目录：入口下拉的数据面（拉不到 = 空表，入口禁用而不是摆一个点不动的按钮）。
   useEffect(() => {
@@ -560,6 +579,23 @@ export function useWorkbenchModel() {
     });
   }, [activate, setLastError, setQueueLocal, touchWorkspace]);
 
+  // 完成通知点击（v21）：主进程已把窗口拉到前台，这里只负责打开目标会话。
+  // 同会话不重载（避免把正在看的流重置）；workspace 只接受字符串，跨项目同名 id 由 main 带上。
+  const openSessionRef = useRef(openSession);
+  openSessionRef.current = openSession;
+  useEffect(() => {
+    return window.agent.onNotificationOpen((payload) => {
+      const target = payload as { sessionId?: unknown; workspace?: unknown } | null;
+      if (target === null || typeof target !== "object") return;
+      if (typeof target.sessionId !== "string" || target.sessionId.trim() === "") return;
+      if (activeIdRef.current === target.sessionId) return;
+      openSessionRef.current(
+        target.sessionId,
+        typeof target.workspace === "string" ? target.workspace : undefined,
+      );
+    });
+  }, []);
+
   // 会话操作簇（Phase 2 · 批 2.3）：会话级动作 / 会话循环 / 关会话回主页 / 回主页。
   const {
     newSession, newSessionRef, cycleSession, cycleSessionOrToast, closeSessionToHome,
@@ -570,12 +606,14 @@ export function useWorkbenchModel() {
     setLastError, setLastNotice, setDraftRemap, draftRemapSeq, setEvents, setQueueLoading,
     openSeq, activeWorkspaceRef, touchWorkspace, runningSet, setArchiveConfirm, setDeleteConfirm,
   });
-  // 消息级动作簇（Phase 2 · 批 2.3）：分叉 / 编辑并重发 / 回放 / 朗读 / 压缩 / 目标动作 / 快照还原。
+  // 消息级动作簇（Phase 2 · 批 2.3）：分叉 / 撤回（编辑并重发）/ 朗读 / 压缩 / 目标动作 / 快照还原。
+  // 撤回（编辑）前停生成：cancelRunHeal 声明在后，经 ref 晚绑（revealInspectorRef 同款）。
+  const cancelRunHealRef = useRef<((sid: string) => void) | null>(null);
   const {
     speakingEventId, setSpeakingEventId, handleBranch, compactNow, goalAct,
-    handleEditUser, handleReplay, handleRestoreSnapshot, handleSpeak,
+    handleEditUser, handleRestoreSnapshot, handleSpeak,
   } = useMessageActions({
-    activeIdRef, eventsRef, sessions, activeWorkspaceRef, refreshSessions, openSession,
+    activeIdRef, eventsRef, sessions, activeWorkspaceRef, refreshSessions, openSession, cancelRunHealRef,
     injectText, setEditCtx, setLastError, setEvents,
   });
 
@@ -759,7 +797,8 @@ export function useWorkbenchModel() {
   // ---- v2.17 运行中可沟通：按会话发送队列 ----
   // 队列语义全在 send-queue.ts（本文件只存表与接线）；表是 Map<sessionId, 队列>，
   // 这样后台会话的排队不因切换会话而丢失，自动派发也只认原会话。
-  const { setQueueFor, send, sendWithGoal, handleRetryLast, handleRetryRound, resumeQueue, cancelRunHeal } = useRunQueue({ setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef });
+  const { setQueueFor, send, sendWithGoal, handleRetryLast, resumeQueue, cancelRunHeal } = useRunQueue({ setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, planRequiredRef: planOverrideRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef });
+  cancelRunHealRef.current = cancelRunHeal; // 撤回（编辑）晚绑
 
     const { lastError, lastNotice, runningActive, pendingClarify, pendingPlan, askForActive, phase, stopped, phaseLabel, chosen, pickerValue } = useRunReadings({ sessionErrors, activeId, sessionNotices, runningSet, setElapsedSec, runStartBySession, events, askBySid, stoppedIds, lastDeltaAt, selections, providerInfo, activeWorkspace });
 
@@ -884,10 +923,10 @@ export function useWorkbenchModel() {
     // v6 交付卡：同一份投影同时供卡片与"最后一轮"判定（恢复上一版只对最后一轮有意义）。
   const deliveries = useMemo(() => turnDelivery(events), [events]);
   const lastDeliveryRound = deliveries.length > 0 ? deliveries[deliveries.length - 1]?.round : undefined;
-  // 批 3：流尾序列 = 有交付的轮出卡 + 空轮一行弱提示（连续空轮并一段）；运行中的末轮不预告。
+  // 批 3：流尾序列 = 有交付的轮出卡；空轮不出内容（2026-10-24 弱行撤下）。
   const deliveryTrailItems = useMemo(
-    () => deliveryTrail(deliveries, outlineTurns.length, runningActive),
-    [deliveries, outlineTurns, runningActive],
+    () => deliveryTrail(deliveries),
+    [deliveries],
   );
 
   const handleOpenArtifact = useCallback<NonNullable<StreamActions["onOpenArtifact"]>>((a) => {
@@ -909,20 +948,18 @@ export function useWorkbenchModel() {
   onOpenAttachment: openAttachment,
   onBranch: handleBranch,
   onEditRound: handleEditUser,
-  onReplay: handleReplay,
   onSpeak: handleSpeak,
   speakingEventId,
   onToggleFold: toggleFoldRound,
   // 错误行「重试」：最后一轮输入再跑一轮（追加；运行中 Stream 侧不摆按钮）
   onRetryLast: handleRetryLast,
-  onRetryRound: handleRetryRound,
   running: runningActive,
   // 产物直达（2026-10-16）：工具交付的东西给一个入口，指向**落盘那一份**
   // （不是模型在回复里重新抄的那份）。可预览的走 openPreview，其余回落 Finder。
   onOpenArtifact: handleOpenArtifact,
   }), [feedback, feedbackBusy, pinBusy, annotationPending, handlePin, pinnedEventIds, handleFeedback,
-    handleRevertTurn, handleCopyText, openAttachment, handleBranch, handleEditUser, handleReplay,
-    handleSpeak, speakingEventId, toggleFoldRound, handleRetryLast, handleRetryRound, runningActive, handleOpenArtifact]);
+    handleRevertTurn, handleCopyText, openAttachment, handleBranch, handleEditUser,
+    handleSpeak, speakingEventId, toggleFoldRound, handleRetryLast, runningActive, handleOpenArtifact]);
 
   // P1 侧栏数据面（诚实边界：只同步本进程可见态）：等门集合 + 服务状态点
   //（demo 演示恒可用；真家看 keyConfigured。null = 还没探测到，点标「未检测」不摆假绿）。
@@ -1068,6 +1105,8 @@ export function useWorkbenchModel() {
     skills,
     composerLock,
     mode,
+    planRequired,
+    onPlanRequiredChange: changePlanRequired,
     stopped,
     usage,
     phaseLabel,

@@ -26,6 +26,15 @@ describe("filterSections（分区搜索）", () => {
     expect(filterSections("关于")).toEqual(["about"]);
   });
 
+  it("用量与联网配置有独立、可搜索的设置入口", () => {
+    expect(filterSections("用量")).toContain("usage");
+    expect(filterSections("Token 活动")).toContain("usage");
+    expect(filterSections("联网搜索")).toContain("network");
+    expect(filterSections("Tavily")).toContain("network");
+    expect(SECTIONS.find((s) => s.id === "usage")?.label).toBe("用量统计");
+    expect(SECTIONS.find((s) => s.id === "network")?.label).toBe("联网搜索");
+  });
+
   it("按同义词命中（分区名里没有的字）", () => {
     // 「模型」在 provider 的分区名里没有（它叫「模型与 Provider」——其实有，换一个真的没有的）
     expect(filterSections("密钥")).toContain("provider");

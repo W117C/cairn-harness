@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark"><head><meta charset="UTF-8" />
+<link rel="stylesheet" href="/tokens.css" /><link rel="stylesheet" href="/styles.css" />
+<style>html,body{margin:0;background:#0d0d0d;} body{padding:30px 0 60px;} .lucide{width:13px;height:13px;}</style>
+</head><body>
+<div class="sp-body"><div class="ss-page">
+  <h1 class="ss-title">模型与 Provider</h1>
+  <div class="ss-content">
+    <section class="ss-sec">
+      <div class="ss-sec-head"><span class="ss-sec-title">当前通道与密钥</span></div>
+      <div class="ss-card">
+        <div class="ss-row">
+          <div class="ss-row-main"><span class="ss-row-label">当前通道</span><span class="ss-row-desc">模型与思考档位在输入框处切换（下一轮派活生效）。</span></div>
+          <div class="ss-row-ctl"><span class="sp-tag">custom</span></div>
+        </div>
+        <div class="ss-row ss-fstack">
+          <div class="ss-row-main"><span class="ss-row-label">当前通道密钥</span><span class="ss-row-desc">key 只进系统钥匙串，不落明文文件。</span></div>
+          <div class="ss-field-block"><span class="ss-flabel">通道</span>
+            <span class="ss-field" data-w="full" data-select="true"><select><option>glm</option></select></span>
+          </div>
+          <div class="ss-field-block"><span class="ss-flabel">API Key</span>
+            <div class="ss-frow">
+              <span class="ss-field" data-w="full"><input type="password" placeholder="粘贴 key（不落明文文件）" /></span>
+              <button class="mini-btn primary">保存到钥匙串</button>
+            </div>
+          </div>
+          <div class="ss-key-status"><span class="ss-badge neutral">custom ×</span><span class="ss-hint tip">检测到环境变量，将优先使用</span></div>
+        </div>
+        <div class="ss-row">
+          <div class="ss-row-main"><span class="ss-row-label">连接检查</span></div>
+          <div class="ss-row-ctl"><button class="mini-btn">检查连接</button></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div></div>
+</body></html>

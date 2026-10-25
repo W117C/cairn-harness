@@ -48,7 +48,7 @@ describe("批 6：四页空状态（数据为 0 只显示 EmptyState，不摆统
     expect(h).not.toContain("ap-stats");
   });
 
-  it("有数据时统计行照旧（空状态不越权吞正常视图）", () => {
+  it("有数据时正常视图照旧（空状态不越权吞正常视图）；技能中心为页头+卡片网格（2026-10-24 参照 Codex 自定义页，统计条下架）", () => {
     const h = renderToStaticMarkup(
       <SkillsPane
         snap={{ ...PLUGINS_EMPTY, looseSkills: [{ name: "n", invoke: "demo:x", description: "d", trust: "trusted" }] }}
@@ -56,7 +56,9 @@ describe("批 6：四页空状态（数据为 0 只显示 EmptyState，不摆统
         refresh={noop}
       />,
     );
-    expect(h).toContain("ap-stats");
+    expect(h).toContain("ap-head");
+    expect(h).toContain("ap-grid");
+    expect(h).not.toContain("ap-stats");
     expect(h).not.toContain("还没有技能");
   });
 });

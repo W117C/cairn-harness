@@ -50,7 +50,9 @@ async function main() {
   })()`);
   check("首页标题、项目与输入区共用阅读起点", Math.abs(home.headingLeft - home.composerLeft) <= 24, home);
   check("设置入口有可见文字，未伪装成用户头像", home.footer.includes("设置"), home.footer);
-  check("已加载上游 Claude 主题与输入卡样式", home.upstream && home.canvas === "rgb(252, 252, 251)" && home.radius === "18px", home);
+  // 2026-10-25：输入卡圆角按设计规范 §4.5 回到 12px（上游 18px 被 adapter 覆盖层压回 v3 档）；
+  // 这条读数原先钉 18px，是改版后没跟上，不是产品回归。
+  check("已加载上游 Claude 主题与输入卡样式", home.upstream && home.canvas === "rgb(252, 252, 251)" && home.radius === "12px", home);
   await js("document.querySelector('.session').click()");
   await shot("02-session");
   const row = await js(`(() => {
