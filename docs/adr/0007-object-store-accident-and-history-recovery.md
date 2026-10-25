@@ -90,3 +90,29 @@
 - **12 笔的内容永久不可恢复**——不是「暂不可读」，是不可恢复。
 - 重建让本地线每一笔的地址都变了 ⇒ **旧的地址在远端不再存在**；
   本地库若 `git gc --prune` 掉旧对象，那些旧地址在本地也会失效（引用已对齐，无残留依赖）。
+
+## 附记（2026-10-26）：重建前分支的归档与隔离
+
+重建完成后，库里仍留着 25 个指向重建前 DAG 的本地分支。它们让 `git log --all` exit 128、
+`git fsck` exit 2，但其中 23 个分支的 tip tree 已经在重建后的 HEAD 对象集里，内容没有丢失。
+
+处置顺序（先取证、再归档、最后删 ref）：
+
+1. `/Users/ze/Downloads/Cairn/git-quarantine-20261026/` 归档 35 个 ref 的 1820 个唯一文件
+   （112,247,049 字节，逐文件重算 blob SHA 校验 1820/1820 通过），另存 25 个分支的逐笔
+   commit 原始元数据、306 条失败 reflog、39 个缺失对象清单与 16 个受影响提交。
+2. `codex/pointer-final-closeout` 有 70 个 HEAD 外 blob；归档完整后才删。
+3. `agent/evo-registry-replay` 与 `agent/修复-todo-的-completedcount-worker-12` 的 tip tree
+   不可读（各缺 2/1 棵 subtree）；先导出可读唯一文件（110/123），再从
+   `archive-stale-worktrees-2026-10-25/wt-evo-registry-replay-*.tar.gz` 提取缺失的
+   `src/agent` / `src/events` 子树（113 个文件），然后删 ref。
+4. `.worktrees/orchestration-kernel` 是重建前那一版编排纵切，先归档 tracked.patch 与
+   untracked.tar.gz，再 `git worktree remove` + 删分支。
+5. 删除 `.git/logs/HEAD` 第 1 行指向 `76712668` 的无效条目（原件存
+   `git-quarantine-20261026/HEAD.reflog.before`）。
+
+结果：37 个命名 ref 全部可遍历，`git log --all` 正常。`git fsck` 仍有 37 条
+broken link / missing，但全部是**不可达**的重建前对象（39 个缺失对象中 2 个 blob
+`1141e863` / `0466bbf7` 无任何副本，6 棵 missing tree 无 tree 对象副本）；不运行
+`gc/prune`，因为仓外归档是这些旧 DAG 痕迹的唯一保留面。本附记不改变 ADR 0007 的
+「12 笔内容永久不可恢复」裁决。

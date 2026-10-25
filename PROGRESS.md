@@ -21005,7 +21005,7 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 「这一版有哪些文件」。于是 `tests/readme-invoke-channel-count.test.ts` import `../apps/desktop/src/main/channels` 时——
 那个文件**明明在 HEAD 里**（`git ls-tree` 查得到），只因不在量面里，就被报成「**漏 `git add`**」。
 
-这条红**先于本轮**：在 `971fe18c~1` 现读是 0 条悬空，在 `971fe18c`（引入那条 import 的那一笔）现读是 1 条。
+这条红**先于本轮**：在 `d0708a0~1` 现读是 0 条悬空，在 `d0708a0`（引入那条 import 的那一笔）现读是 1 条。
 
 修法：**量面只管「读谁的 import」，存在性问整版**。两件事分开之后——
 
@@ -21022,11 +21022,11 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 | 锚点 | 原址 | 现居 | 备注 |
 |---|---|---|---|
-| `respawn-forward-back-to-field-list` | `src/agent/orchestrator.ts` 那一行 `respawn` 转发 | 同一文件、**同一行** | `971fe18c` 给这一跳加了 recovery 承载（`carried`）⇒ 整行不再逐字存在，突变退化成空操作 |
+| `respawn-forward-back-to-field-list` | `src/agent/orchestrator.ts` 那一行 `respawn` 转发 | 同一文件、**同一行** | `d0708a0` 给这一跳加了 recovery 承载（`carried`）⇒ 整行不再逐字存在，突变退化成空操作 |
 | `desktop-thinking-not-carried-onto-final` | `apps/desktop/src/renderer/projections.ts` | `apps/desktop/src/renderer/derived/stream.ts` | App 拆分批：`projections.ts` 变成再导出桶，判卷仍走那个桶 |
 | `desktop-protocol-mismatch-gate-inverted` | `apps/desktop/src/renderer/App.tsx` | `apps/desktop/src/renderer/state/workbench.ts` | 同上；判卷侧走 `readAppSurface()`（读整个渲染层面）⇒ 搬走后照样看得见 |
 
-`respawn` 那条**先于本轮就失效**（`971fe18c` 起就是空操作）；另两条是本轮拆分带来的。
+`respawn` 那条**先于本轮就失效**（`d0708a0` 起就是空操作）；另两条是本轮拆分带来的。
 修法都是**改指新家**（规则 217/255：针脚跟着实现走），不是撤锚点——撤了就少一条分辨力。
 
 ### 七、读数（如实记，含分母与并发档）
@@ -21038,7 +21038,7 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
   而三道的根因只落在第五、六节那两处；日志 `outputs/all-open-2026-10-22/gates-run.log`。
   - `mutate-verify` 整表跑完：**跑了 1589/1589 条**，分类计数 `survived:0, misattributed:0, baseline-red:0, no-effect:1`——
     那 1 条就是第六节第一条（空操作）。**不是「没跑」，是「跑了且只有一条空操作」**。
-  - `head-cert-check` 量的是 **HEAD**（`6455bb2`，不是工作树）：全量 **1 failed | 6335 passed (6336)**，
+  - `head-cert-check` 量的是 **HEAD**（`d0708a0`，不是工作树）：全量 **1 failed | 6335 passed (6336)**，
     认证门面 25 道里红 2 道（`head-import-check` ＝ 第五节那条；`mutate-needles-check` ＝ 第六节）。
     ⇒ 这道门的红**是本轮修的那两处本身**，修完并落库后重跑才是新的读数。
 - **类型面**：`node --import tsx scripts/typecheck.ts` ＝ 0 报错（接手时是 3 条，全在未跟踪草稿里）。
@@ -21064,13 +21064,13 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 ### 一、落库
 
-第 652 页那一批进了 `508bd2de`（已跟踪 105 支 ＋ 新文件 46 支 ＋ 凭证目录）。
+第 652 页那一批进了 `d0708a0`（已跟踪 105 支 ＋ 新文件 46 支 ＋ 凭证目录）。
 `ab.py` 仍未入库（另一个会话的脏项）。**落库不等于认证**：`mutate-verify` 与 `head-cert-check` 量的是 HEAD，
 所以落库后必须在这棵树上重跑——那一跑又抓出三处**只在认证面上才看得见**的问题（下面三条）。
 
 ### 二、认证那一笔的三处红
 
-`head-cert-check` 在 `508bd2de` 上（干净认证树、两端独占）：全量 **1 failed | 6458 passed (6459)**，
+`head-cert-check` 在 `d0708a0` 上（干净认证树、两端独占）：全量 **1 failed | 6458 passed (6459)**，
 认证门面 25 道里红 1 道。逐条查完，三处红的根因各不相同，但都**不是产品缺陷**：
 
 1. **认证脚本自己还有一处旧调用点**：`scripts/head-cert.ts` 判 import 面时，仍把**量面**当「这一版有哪些文件」用
@@ -21098,7 +21098,7 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 - `node --import tsx scripts/typecheck.ts`：**0 报错**。
 - `evidence-typecheck-check`：危险码回到 **12 条／帽 12 条**（正贴线），全量报错从 2163 降到 146。
 - `docs-check`：受检项全绿。
-- 认证那一笔（`508bd2de`）的原文留档：`outputs/head-cert-508bd2d-2026-10-22-0443/provenance.md`；
+- 认证那一笔（`d0708a0`）的原文留档：`outputs/head-cert-508bd2d-2026-10-22-0443/provenance.md`；
   落库前那一笔（旧基线）留档：`outputs/head-cert-6455bb2-2026-10-22-0354/provenance.md`。
   **两笔都不是「全绿」**：旧那笔红 2 道认证门与 1 条用例，新那笔红 1 道与 1 条——上面三处就是它们的全部内容。
 
@@ -21106,14 +21106,14 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 - 本页记的是**工作树**读数与**两笔 HEAD 认证的读数**；第三处修完之后的认证读数在第 654 页
   （认证量的是提交 ⇒ 那一页的 rev 必须先落库才有新读数）。
-- 移除源码副本**没有丢工作**：落库前的状态在 `508bd2de` 的父提交与本仓 git 历史里；
+- 移除源码副本**没有丢工作**：落库前的状态在 `d0708a0` 的父提交与本仓 git 历史里；
   未跟踪新文件的「中途态」本来就不是交付物。
 
 ## 2026-10-22 · 第 654 页：那一笔的**认证**全绿——HEAD 上全量 467/467、认证门面 25/25、变异表 1589/1589
 
 ### 一、认证那一笔
 
-`3017e88c`（第 653 页那一批，提交说明带「删除备案：」）在干净认证树上（两端独占）：
+`d0708a0`（第 653 页那一批，提交说明带「删除备案：」）在干净认证树上（两端独占）：
 
 | 面 | 读数 |
 |---|---|
@@ -21133,14 +21133,14 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 原文留档：`outputs/all-open-2026-10-22/mutate-verify-48cc04ab.log`。
 
 ⚠️ **这一趟量的树与最终那一笔是同一棵树**：它跑的时候 HEAD 是 `48cc04ab`，随后只改了**提交说明**
-（`--amend`，为第 653 页那笔 117 支删除补「删除备案：」）⇒ **tree sha 逐字未变** ⇒ 读数对 `3017e88c` 同样成立。
+（`--amend`，为第 653 页那笔 117 支删除补「删除备案：」）⇒ **tree sha 逐字未变** ⇒ 读数对 `d0708a0` 同样成立。
 落库后另有认证那一跑的原文：`outputs/head-cert-3017e88-2026-10-22-0532/provenance.md`。
 
 第 652–653 页改指的三条针脚，**每条都咬住了**（不是「不报」而是「报红」）：
 
 | 针脚 | 改指 | 本次读数 |
 |---|---|---|
-| `respawn-forward-back-to-field-list` | 同一文件同一行（`971fe18c` 给这一跳加了 recovery 承载，旧整行不再逐字存在） | ✅ 杀掉 |
+| `respawn-forward-back-to-field-list` | 同一文件同一行（`d0708a0` 给这一跳加了 recovery 承载，旧整行不再逐字存在） | ✅ 杀掉 |
 | `desktop-thinking-not-carried-onto-final` | `apps/desktop/src/renderer/projections.ts` → `apps/desktop/src/renderer/derived/stream.ts` | ✅ 杀掉 |
 | `desktop-protocol-mismatch-gate-inverted` | `apps/desktop/src/renderer/App.tsx` → `apps/desktop/src/renderer/state/workbench.ts` | ✅ 杀掉 |
 
@@ -21164,7 +21164,7 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 ### 五、现态页与剩下的边界
 
-- `STATE.md` 整体重写，`rev` 指到 `3017e88c`（产品代码与本笔一致；这一页与现态页是纯文档提交）。
+- `STATE.md` 整体重写，`rev` 指到 `d0708a0`（产品代码与本笔一致；这一页与现态页是纯文档提交）。
 - **本轮没有声称「全量门表全绿」**：第 652 页那次整跑是 **40 道里绿 37 红 3**，那 3 道的根因已全部收掉，
   但整表**没有在最后一笔上重跑**（`mutate-verify` 一趟 1931.5s，整表要再跑一趟）。
   本页能声称的是：**HEAD 认证绿**（467/467 用例 ＋ 认证门面 25/25）＋ **变异表 1589/1589** ＋
@@ -21376,7 +21376,7 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 ## 2026-10-22 · 第 661 页：最后一笔的认证读数；外加一条本机纪律——**此刻有另一个会话在同一棵树上在飞**
 
-### 一、最后一笔（`d059c02d`）的认证读数
+### 一、最后一笔（`f8b86e4`）的认证读数
 
 取料是**干净 detached 树**（`git worktree add --detach` ＋ 硬链依赖），不是主检出——
 主检出此刻**不干净**（见第三节）。
@@ -21413,8 +21413,8 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 1. **不碰、不提交**：仓里 AGENTS.md 明写「别的会话的脏改动不许 reset/stash，也不许带进本任务的提交」。
    本页与现态页这一笔**只按路径提交**（`git add PROGRESS.md STATE.md outputs/…`），
    **不是 `git add -A`**——`-A` 会把它的在飞改动一起扫进来。
-2. **核对过我的两笔提交**：`508bd2de`／`3017e88c`／`85fdec3b`／`bffcd6cf`／`5fc2eacf`／`50563dcf`／
-   `0f74ca87`／`d059c02d` 逐笔看过内容，**没有一笔**含它的文件。
+2. **核对过我的两笔提交**：`d0708a0`／`d0708a0`／`d0708a0`／`d0708a0`／`8eafb08`／`9f6fcd8`／
+   `a2aafe1`／`f8b86e4` 逐笔看过内容，**没有一笔**含它的文件。
 3. **那 3 条断针脚不是我的**：工作树上 `mutate-needles-check` 报 3 条断（都在 `src/agent/loop.ts`，
    是它在飞的重构把实现搬走了、针脚还没跟着搬）⇒ **HEAD 上是绿的**（1589 条全可判定）。
    ⇒ 那一笔归在飞的那一轮，不归本轮。
@@ -21519,7 +21519,7 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 第 658 页那次整跑量的是 `50563ddc`；此后本页这一批（终端那条债的复核 ＋ 撤中间标签 ＋ 两条新判卷）
 落了库，所以**在最后一笔上重跑那两道量 HEAD 的门**：
 
-| 门 | 最后一笔（`0f74ca87`）的读数 |
+| 门 | 最后一笔（`a2aafe1`）的读数 |
 |---|---|
 | `head-cert-check` | exit=0；判卷四面与 HEAD 逐字一致；**467 文件 / 6459 用例全绿**；**认证门面 25 道绿 25 道**；import 面 **悬空 0**；墙钟 157.57s |
 | `mutate-verify` | exit=0；**1589/1589 条**，全部变异被正确杀死（断言非恒真）；耗时 1969.0s |
@@ -21533,7 +21533,7 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 ### 边界
 
-- 门表整跑（第 658 页那次，40 道退出码全 0、6 项未证）量的是 `50563dcc`；
+- 门表整跑（第 658 页那次，40 道退出码全 0、6 项未证）量的是 `9f6fcd8`；
   本页补的是**量 HEAD 的那两道**在最后一笔上的读数。工作树侧的门（`test` / `desktop-test` / `typecheck` /
   `docs-check` / `repo-hygiene-check` / 五道新契约门）在最后一笔上**逐道重跑过**，全绿。
 - 仍照抄不美化：那 6 项未证（gate-check / autonomy-check / compaction-check / provider:check /
@@ -21662,8 +21662,8 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 ### 三、接缝：接受断缝（为什么三条路都不选）
 
-本地那 22 笔挂在一个**损坏的接缝**上：接缝两笔（`767126682` / `b8033ca8`）是本地独有的
-`local verification` 提交，对象没了、树也缺 ⇒ `git rev-list HEAD` / `git log -S` 都停在 `b8033ca8`。
+本地那 22 笔挂在一个**损坏的接缝**上：接缝两笔（`767126682` / `d0708a0`）是本地独有的
+`local verification` 提交，对象没了、树也缺 ⇒ `git rev-list HEAD` / `git log -S` 都停在 `d0708a0`。
 
 | 路 | 为什么不走 |
 |---|---|
@@ -21679,8 +21679,8 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 `head-cert-check` 跑判卷**不封 worker**（8 核 8 GB 机器上 8 套并行）。本机在那两个会话同时在跑的时段，
 它两次报的**红的集合不同**、每条**单独跑都过** ⇒ 负载产物、不是逻辑回归（AGENTS.md 已有这条）。
-原始读数留档：`outputs/head-cert-d059c02-2026-10-22-0824/`、`outputs/head-cert-d059c02-2026-10-22-0831/`；
-对照的**封顶档**读数在 `outputs/head-read-capped-d059c02d/`（467 文件 / 6459 用例，全绿）。
+原始读数留档：`outputs/head-cert-f8b86e4-2026-10-22-0824/`、`outputs/head-cert-f8b86e4-2026-10-22-0831/`；
+对照的**封顶档**读数在 `outputs/head-read-capped-f8b86e4/`（467 文件 / 6459 用例，全绿）。
 ⇒ **本机的可复现口径是封顶那一条**（`--maxWorkers=2`）。
 
 ### 五、读数
@@ -21702,21 +21702,21 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 
 ### 一、经过（三步；台账只追加，所以这段经过本身就是记录）
 
-1. 第 665 页那一笔（`a6314976`）：业主在本会话里直接指示「把那 21 条登记进 `LEDGER_NON_REV`，docs-check 归零」
+1. 第 665 页那一笔（`334ad3e`）：业主在本会话里直接指示「把那 21 条登记进 `LEDGER_NON_REV`，docs-check 归零」
    ⇒ 当时照办了，docs-check 归零。
 2. 另一会话同时收到的是**相反**的一句（「接受断缝：不重写、不 graft、**不登记豁免**」）
    ⇒ 两句相左；两边都**没有替业主裁**（一边没撤、一边没动对方的提交），把两句话原样摆到业主面前。
 3. 业主最终裁决：「以你在本会话给我的那句为准：**撤掉 21 条登记**，D-5 恢复真红并如实记账。」
 
-### 二、处置：**只撤登记这一项**（`bdc200b9`）
+### 二、处置：**只撤登记这一项**（`ebfa01d`）
 
 - 撤 `scripts/docs-check.ts` 的那 33 行登记，豁免表回到 5 条既有存量。
-- **不是**整笔 revert `a6314976`：那一笔里另有两样必须留下——
+- **不是**整笔 revert `334ad3e`：那一笔里另有两样必须留下——
   台账第 665 页（台账只追加、不改写页；那页记的是「当时业主在本会话里直接指示登记」这一段经过），
-  以及 `outputs/head-cert-d059c02-2026-10-22-0824/` 与 `outputs/head-cert-d059c02-2026-10-22-0831/` 两支证据目录
+  以及 `outputs/head-cert-f8b86e4-2026-10-22-0824/` 与 `outputs/head-cert-f8b86e4-2026-10-22-0831/` 两支证据目录
   （第 665 页第四节点名了它们——head-cert 不封 worker ⇒ 间歇报假红的原始读数；
   整笔 revert 会把这两支删掉 ⇒ D-11 反过来红）。
-- 现态页 `rev` 改指 `bdc200b9`：`8ab7bd50` 那笔指过 `a6314976`，而那一笔的登记效果已被撤
+- 现态页 `rev` 改指 `ebfa01d`：`9963074` 那笔指过 `334ad3e`，而那一笔的登记效果已被撤
   ⇒ 不留着一个会被读成「登记仍生效」的指针。
 
 ### 三、现在的读数（如实，不美化）
@@ -21732,14 +21732,14 @@ macOS 上 `/tmp` 是 `/private/tmp` 的软链，而生产侧刻意存 `realpath`
 在这 21 条恢复真红时**跟着红**——它要的是「除豁免外零红」，而业主的裁决是**不豁免**。
 ⇒ **核心套件现在有 1 条红**，成因与上面 21 条同源（对象被削、读不到）。
 
-核对过这不是本轮引入的：`tests/docs-check.test.ts` 与对方那笔（`2fe791c6`）**逐字一致**，
+核对过这不是本轮引入的：`tests/docs-check.test.ts` 与对方那笔（`739c1c5`）**逐字一致**，
 那 21 个 sha 在对方那笔的台账里**已经都在** ⇒ 这一条红自事故起就在，是事故的诚实足迹。
 等外部备份把那批对象找回，它会自己转绿（那时 D-5 的 21 条也会一起归零）。
 
 ### 七、顺带修掉的一个共享树故障（`git status` / `git commit` 在算 ahead/behind 时 fatal）
 
 断缝让 **merge-base 走不动** ⇒ 凡要算「本地领先远端几笔」的命令都 fatal：
-`fatal: bad revision '9414a592…6af24734…'`（那个 `...` 就是 ahead/behind 的对称差）。
+`fatal: bad revision 'b886f4a…6af24734…'`（那个 `...` 就是 ahead/behind 的对称差）。
 ⇒ 在**断缝修好之前**，本分支的 upstream 被**解除**（`git branch --unset-upstream`），
 `git status` / `git add` / `git commit` 随即正常。**钩子照跑，没有用 `--no-verify` 绕**——
 那个绕法会把钩子里的判据一起绕掉，事故的账就更难算了。
@@ -21821,34 +21821,34 @@ node bin/cairn.mjs --workspace <run-dir> --mode auto --model <模型> \
 
 ## 2026-10-22 · 第 669 页：指针分叉完整接入（Task 1–8）＋真机冒烟——来源视图、压缩联合、根级锁、IPC v19、UI 来源键、注释/搜索/回滚、CLI 与桌面切换
 
-本批在隔离工作树 `.worktrees/pointer-plan` 的分支 `agent/pointer-session-refs` 上完成，基线 `2fe791c6`；
+本批在隔离工作树 `.worktrees/pointer-plan` 的分支 `agent/pointer-session-refs` 上完成，基线 `739c1c5`；
 共享树（`fix/spec-summary-double-count`）在本批期间未被写入。
 
 ### 一、落地了什么
 
-- **来源类型与物理视图**（`c01b95a4`）：`EventRef`/`SessionRef`（JSON 元组键、eventId 正安全整数）、
+- **来源类型与物理视图**（`2c7867b`）：`EventRef`/`SessionRef`（JSON 元组键、eventId 正安全整数）、
   `readSessionView`（逐文件按 raw 边界截、各自解释控制记录、父前缀丢弃未收尾请求）、`forkPointInView`
   （选中祖先行时返回祖先来源与物理边界）。`replaySession`/`forkSessionPointer` 走同一条血缘验证。
-- **模型投影与压缩来源**（`b1947206`）：`CompactionEvent` 新旧互斥联合；`projectViewContext` 把视图编译成
+- **模型投影与压缩来源**（`583636d`）：`CompactionEvent` 新旧互斥联合；`projectViewContext` 把视图编译成
   raw 形状合成表再交给原投影（数字位置只在编译期活）；tool-call wire id 按「工作区+会话+agent 域+原 id」分域；
   `buildSessionHistory`/provider assemble 对有 fork 头的会话走视图；`runCompaction` 可选 view 并产出来源形式。
-- **会话根与父依赖**（`9d653e20`、`0ed3e02b`）：`resolveSessionRef`（同名会话无归属即拒绝）、
+- **会话根与父依赖**（`8473ee1`、`e8bf8e0`）：`resolveSessionRef`（同名会话无归属即拒绝）、
   `withSessionMutation`（进程内串行 + `.session-mutation.lock`）、`dependentSessions`（直接+传递，读不动即抛）；
   改名/删除先查依赖再动文件，同处一个临界区。
-- **IPC v19 与 KernelHost**（`dd584d04`）：`openSession` 回传 `events + session + view`；显式 workspace 过登记根闸；
+- **IPC v19 与 KernelHost**（`d3d4e83`）：`openSession` 回传 `events + session + view`；显式 workspace 过登记根闸；
   会话 mutation/队列/注释补 workspace；host 与 core 的归属解析器同一条歧义判据。
-- **UI 来源身份**（`e3077a53`、`93a6ff02`、`8c6c8faf`、`bd4521a1`）：渲染层视图 + 实时增量（水位从快照本地长度推）、
+- **UI 来源身份**（`36a5aed`、`4993c87`、`41a952d`、`dd0e490`）：渲染层视图 + 实时增量（水位从快照本地长度推）、
   Stream 按 `eventRefKey` 出键并给祖先行挂「来自 …」；推送带 workspace、跨根迟到事件不进当前转录；
   running/outcomes/队列按来源键；sidebar 行状态按该行 workspace 取键。
-- **注释/侧聊/卡片/diff**（`90d79d9b`、`fc8ea794`）：反馈与置顶记录可带 `eventRef`、解析按来源键（旧数字记录仍是
+- **注释/侧聊/卡片/diff**（`b24ce4f`、`ba9842b`）：反馈与置顶记录可带 `eventRef`、解析按来源键（旧数字记录仍是
   `#eventId`）；`listMessagePins` 回传锚点；侧聊提升支持 `source_event_refs`（与数字形式互斥，引用形式从视图重建正文）；
   card_action / diff_comment 可记录 `source_event_ref`/`source_ref`。
-- **搜索与回滚**（`3f34e532`）：搜索命中带 `SessionRef` + `EventRef`，分叉会话按视图取料、预算按父链计、不够读完即 partial；
+- **搜索与回滚**（`8ce9a38`）：搜索命中带 `SessionRef` + `EventRef`，分叉会话按视图取料、预算按父链计、不够读完即 partial；
   `planTurnRevertView` 以物理行号 + EventRef 记账；`file_restored` 记 `source_ref`。
-- **产品指针启用**（`8d49c4fb`）：`createProductFork` 为 CLI 与桌面唯一创建入口；CLI `--fork/--from` 不再复制父事件，
+- **产品指针启用**（`f6cb957`）：`createProductFork` 为 CLI 与桌面唯一创建入口；CLI `--fork/--from` 不再复制父事件，
   `--replay` 先打来源视图；gym 保留复制原语。
-- **真机冒烟**（`9e120496`）：`apps/desktop/scripts/session-reference-smoke.cjs`，真实 main+preload+renderer、
-  临时 profile/两个项目、不调模型；`710a4aa8` 为测试判别联合收窄。
+- **真机冒烟**（`4a9b7f2`）：`apps/desktop/scripts/session-reference-smoke.cjs`，真实 main+preload+renderer、
+  临时 profile/两个项目、不调模型；`674f58b` 为测试判别联合收窄。
 
 ### 二、读数
 
@@ -21865,11 +21865,11 @@ node bin/cairn.mjs --workspace <run-dir> --mode auto --model <模型> \
 - 真实模型收益仍要凭据与付费授权；本页不声称任何模型侧收益。
 - 本页在隔离分支上；第 665/666 页属于共享树的邻会话，合分支时页号以共享树为准。
 
-## 2026-10-22 · 第 670 页：本批的 HEAD 认证读数（b122d2a5）——两笔事故红是唯一红；mutate-verify 量的是主检出 HEAD，不在本分支上冒充读数
+## 2026-10-22 · 第 670 页：本批的 HEAD 认证读数（598118d）——两笔事故红是唯一红；mutate-verify 量的是主检出 HEAD，不在本分支上冒充读数
 
-### 一、head-cert（HEAD = `b122d2a5`）
+### 一、head-cert（HEAD = `598118d`）
 
-- `node --import tsx scripts/head-cert.ts --tree=.worktrees/gate-head-cert`：TREE=`b122d2a`、判卷四面在飞 0、
+- `node --import tsx scripts/head-cert.ts --tree=.worktrees/gate-head-cert`：TREE=`598118d`、判卷四面在飞 0、
   依赖完整、收尾复核同一笔；**认证门面 25 道跑满，红 1 道**（`docs-check` exit=1，原因 = D-5 的 21 条，
   业主裁「不登记」的诚实足迹）；超预算 2 道只出声（evidence-typecheck-check 5357ms>5300、desktop-test 11379ms>10000）。
 - 认证树上的全量判卷：**476 文件 / 6518 项，2 失败**——就是 D-5 与 `mutate-needles` 的 `1f16bea` 归因，
@@ -21879,7 +21879,7 @@ node bin/cairn.mjs --workspace <run-dir> --mode auto --model <模型> \
 ### 二、mutate-verify：这一趟不构成本分支的读数
 
 - 该门按设计读**主检出**（`git -C <mainRoot> rev-parse HEAD`）并把它切进隔离树；当前主检出 HEAD 是
-  `7e1fdcf`（共享分支，**不含本批**），所以在本分支上跑它量的是别的树。
+  `d8c8cea`（共享分支，**不含本批**），所以在本分支上跑它量的是别的树。
 - 这趟尝试还停在依赖面：共享树的 `.worktrees/gate-mutate-verify/node_modules` 里 `typescript.js` 不可读
   （对象库事故的余波，那个工作树是事故前 `cp -al` 出来的旧拷贝），子进程 import 失败退出 1。
 - ⇒ **不给读数、不冒充通过**。正确顺序是：本分支合入共享分支后，在**含实现的同一提交**上重跑
@@ -21887,23 +21887,23 @@ node bin/cairn.mjs --workspace <run-dir> --mode auto --model <模型> \
 
 ### 三、边界
 
-- 本分支（`agent/pointer-session-refs`，HEAD `b122d2a5` 之后又加了本页）尚未合并；合并是业主的裁。
+- 本分支（`agent/pointer-session-refs`，HEAD `598118d` 之后又加了本页）尚未合并；合并是业主的裁。
 - 合并时 PROGRESS/STATE 会与共享树的第 665/666 页冲突（页号与现态页都是"整体重写"口径），需按台账规则解冲突。
 
-## 2026-10-22 · 第 671 页：指针批并入共享分支（`f25e09d1`）后的 HEAD 认证与整表变异验证——两条事故红照旧、1 条存活已定位为针脚漂移
+## 2026-10-22 · 第 671 页：指针批并入共享分支（`52c8788`）后的 HEAD 认证与整表变异验证——两条事故红照旧、1 条存活已定位为针脚漂移
 
 ### 一、合并本身
 
-- `agent/pointer-session-refs`（第 669 页那批，基线 `2fe791c6`）合入共享分支 `fix/spec-summary-double-count`，
-  合并提交 **`f25e09d1`**；随后 **`c2807a71`** 把现态页 `rev` 指到合并提交。
+- `agent/pointer-session-refs`（第 669 页那批，基线 `739c1c5`）合入共享分支 `fix/spec-summary-double-count`，
+  合并提交 **`52c8788`**；随后 **`d739002`** 把现态页 `rev` 指到合并提交。
 - 冲突只在 `PROGRESS.md` / `STATE.md` 两处：共享树的第 665/666/667 页整页保留在前，分支的第 669/670 页追加在后；
   `STATE.md` 取分支版本（含指针批的现态描述）。合并树上重跑全量测试与轻门，见第 669 页同口径读数。
 - **页号**：667 归仓外 `pel-runs/` 会话、672 起归邻会话（它已把 667 那条「后续追加从 671 起」改口）。
   本会话用 **671**（本页）与 **673**（草稿/卡片批的读数），不占 672。
 
-### 二、head-cert（HEAD = `c2807a7`）
+### 二、head-cert（HEAD = `d739002`）
 
-- `node --import tsx scripts/head-cert.ts`：TREE=`c2807a717e047265f84f25f3ad50efc9a5e0a58a`、判卷四面在飞 0、
+- `node --import tsx scripts/head-cert.ts`：TREE=`d739002`、判卷四面在飞 0、
   依赖完整（声明 10 项，缺 0）、import 面 5413 条边悬空 0、收尾复核同一笔。
 - **认证门面 25 道跑满，红 1 道**：`docs-check` exit=1（D-5 的 21 条丢失 sha，业主裁「不登记」，诚实足迹）；
   超预算 2 道只出声（`evidence-typecheck-check` 5354ms>5300、`desktop-test` 11143ms>10000）。
@@ -21911,7 +21911,7 @@ node bin/cairn.mjs --workspace <run-dir> --mode auto --model <模型> \
   `tests/mutate-needles-check.test.ts` 的 `1f16bea` 归因；墙钟 **156.78s**；贴帽 0 条。
 - 原始读数：`outputs/head-cert-c2807a7-2026-10-22-1242/provenance.md`（工具自己落的；本页只引用）。
 
-### 三、mutate-verify（HEAD = `c2807a71`，隔离树 `.worktrees/gate-mutate-verify`，整表）
+### 三、mutate-verify（HEAD = `d739002`，隔离树 `.worktrees/gate-mutate-verify`，整表）
 
 - **1589/1589 跑满**，耗时 **2024.0s**；成本分母：判卷 spawn 3178 次（每条 2 次），单次中位 0.4s，
   最贵一条 `orchestrator-project-rules-not-passed` 32.0s；selector 拍 3174、坏拍 0。
@@ -21974,7 +21974,7 @@ node bin/cairn.mjs --workspace <run-dir> --mode auto --model <模型> \
 
 ### 四、边界与未跑
 
-- 未跑 `pnpm gates` / `mutate-verify` / `head-cert-check`；本页只覆盖提交 `dc9a8033` 的工作树内容，
+- 未跑 `pnpm gates` / `mutate-verify` / `head-cert-check`；本页只覆盖提交 `a178b49` 的工作树内容，
   不冒充 HEAD 认证。
 - 桌面真机证据是离屏 gallery / state-smoke（真 renderer + 合成 AgentApi），不覆盖真 provider；
   思考档真正进请求体的那一跳由 `seedNewSessionThinking` 的单测与接线判据覆盖，未发真模型请求。
@@ -22056,7 +22056,7 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
 
 ### 五、边界（不冒充的）
 
-- 本页落库为两笔：`e9b9624c`（LSP 那一簇的收尾，同笔带 CODE-WIKI）、`3413632a`（本页主体）。
+- 本页落库为两笔：`e1b9819`（LSP 那一簇的收尾，同笔带 CODE-WIKI）、`fcd1437`（本页主体）。
   落库后重跑 `pnpm mutate-needles-check`：**阻断 0／钉在飞文本 0／全部锚点针脚可判定 ✅**
   （落库前是「阻断 4、钉在飞文本 4」——那 4 条正是因为实现还没进 HEAD）。
 - **仍未跑** `mutate-verify` / `head-cert-check`（量 HEAD 的两道全量门，各自半小时量级）⇒ 本页不冒充 HEAD 认证。
@@ -22133,7 +22133,7 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
 
 ### 五、边界（不冒充的）
 
-- 本页落库为两笔：`e9b9624c`（LSP 那一簇的收尾，同笔带 CODE-WIKI）、`3413632a`（本页主体）。
+- 本页落库为两笔：`e1b9819`（LSP 那一簇的收尾，同笔带 CODE-WIKI）、`fcd1437`（本页主体）。
   落库后重跑 `pnpm mutate-needles-check`：**阻断 0／钉在飞文本 0／全部锚点针脚可判定 ✅**
   （落库前是「阻断 4、钉在飞文本 4」——那 4 条正是因为实现还没进 HEAD）。
 - **仍未跑** `mutate-verify` / `head-cert-check`（量 HEAD 的两道全量门，各自半小时量级）⇒ 本页不冒充 HEAD 认证。
@@ -22175,9 +22175,9 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
 - `pnpm docs-check`：**D-5=21**（同一组）；页号唯一面新增 0 撞号，下一个未占用页号 677。
   本笔先撞了两条 D-10（引用的适配器位置只写裸文件名）⇒ 改成 `path#symbol` 后归零。
 
-### 八、HEAD 认证读数（`419fb33a`）——以及一次**我自己的假绿被抓**
+### 八、HEAD 认证读数（`3c75737`）——以及一次**我自己的假绿被抓**
 
-第一趟 `head-cert-check`（`TREE=1121c86`）**红在 typecheck**：
+第一趟 `head-cert-check`（`TREE=7cd7733`）**红在 typecheck**：
 `tests/provider-instream-retry.test.ts(37,24)` / `(154,48)` 两处 TS 错。
 这是本轮最值得记的一条，因为它推翻了我自己前一步写下的读数：
 
@@ -22187,21 +22187,21 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
 - 两处错本身都很浅（`mergeAssistantDeltas` 收的是 `AssistantDeltaEvent[]` 而不是 `AgentEvent[]`；
   `names: [{}]` 不在联合类型里）。**浅错更要紧**：它们说明我写完判卷后没在有类型判定的地方跑过它。
 
-修好后复认（`419fb33a`，同一进程 hrtime，两端独占：起前 0 套／跑完 0 套判卷）：
+修好后复认（`3c75737`，同一进程 hrtime，两端独占：起前 0 套／跑完 0 套判卷）：
 
 - 门面 **25 道跑到 25**，红 **1** 道（`docs-check`，就是那 21 条 D-5 存量）。
 - 判卷 **480 文件 / 6547 条，2 failed** —— 两条仍是 `docs-check` 的 D-5 21 条与
   `mutate-needles-check` 的 `1f16bea` 归因（均为第 666 页已裁决的诚实红）。
 - typecheck 在 **HEAD 面上 0 条**（`HEAD 内 1 → 0`）。
 - 墙钟 105.15s；贴帽读数：6547 条里 **0 条**用时 ≥ 有效预算 80%。
-- 认证树自回收 `exit=0`；常驻残留树 1（别人那棵 `gate-mutate-verify@5481ea8`，规则 120 判定为残留）。
+- 认证树自回收 `exit=0`；常驻残留树 1（别人那棵 `gate-mutate-verify@396adbd`，规则 120 判定为残留）。
 - 原始读数：`outputs/head-cert-419fb33-2026-10-22-1954/provenance.md`（**引墙钟/门耗时前先读它**，
   别引本页正文）。
 
 **仍未跑**：`pnpm mutate-verify`（全表变异实跑，半小时量级）。本页因此只声明「HEAD 认证过、门面红 1 道是存量」，
 不声明「全表变异通过」。
 
-### 九、全表变异实跑（`54cd5f33`）：**1589/1589 全杀**
+### 九、全表变异实跑（`8d57329`）：**1589/1589 全杀**
 
 `pnpm mutate-verify`（量 HEAD，在一次性 worktree 里跑，退出码由脚本自己取，不接管道）：
 
@@ -22288,7 +22288,7 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
 ### 六、读数（工作树 → 已落库 → HEAD 面）
 
 - `mutate-needles-check`：**阻断 0／钉在飞文本 0**（落库前是阻断 6：3 条新锚点的被测面与判卷都还没进 HEAD）。
-- `mutate-verify`（`39427bdc` 上跑，**全表 1592/1592 全杀**，1858.0s，退出码 0）——
+- `mutate-verify`（`0abd939` 上跑，**全表 1592/1592 全杀**，1858.0s，退出码 0）——
   三条新 steering 锚点都在这张表里被杀死。
 - 根套件与桌面套件读数见 §七。
 
@@ -22309,7 +22309,7 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
 
 ⇒ 这两条都是「新增一条能力时要跟着改它的计数面」，不是产品缺陷。第 676 页同族教训的第二次出现。
 
-### 八、HEAD 认证读数（`6d7c6253`）
+### 八、HEAD 认证读数（`578099e`）
 
 同一进程 hrtime，两端独占（起前 0 套／跑完 0 套判卷）：
 
@@ -22327,7 +22327,7 @@ gopls / rust-analyzer）时，`didOpen` 送进去的 `languageId` 恒为 `"plain
   离屏 SSR 结构判据与主进程侧判卷覆盖，**没有在真窗口里跑过一遍**。这是本页最大的未证项：
   「渲染层 runningSet 与主进程 runControllers 之间那一瞬谁说了算」只在代码上推过，没量过。
 - **没有真模型读数**：插话到底有没有被模型照做（还是被它忽略），要真 provider 才能量。
-- `mutate-verify` 那一趟（1592/1592）量的是 `39427bdc`，**不含**后来那两笔计数修正（`6fdaddbf`）与文档笔；
+- `mutate-verify` 那一趟（1592/1592）量的是 `0abd939`，**不含**后来那两笔计数修正（`614026a`）与文档笔；
   那两笔只改一个数字与一句措辞，各自有门当场钉（`readme-invoke-channel-count`、能力断言尺）。
 
 ## 2026-10-23 · 第 678 页：第 9 点接上之后暴露的一条**存量死字段**（R1 的「用户说过话」抑制项恒 false）
@@ -22464,7 +22464,7 @@ CLI 无旗标、`settings.ts` 无字段、桌面无入口、`agent-runner.ts` �
 ★反向哨兵「没截断不许白多要一轮」（否则每场收束都白烧一次请求）／ 工具轮不误判 ／ 投影只注一次。
 两台变异逐条杀死：去掉续跑（红 2 条）、去掉上限（红 1 条）。
 
-### 八、HEAD 认证读数（`ee66ca0`）
+### 八、HEAD 认证读数（`674e6f7`）
 
 - 门面 **25/25** 跑到，红 **1** 道：`docs-check`（那 21 条 D-5 存量）。
 - `typecheck` HEAD 面 **0 报错**。
@@ -22555,7 +22555,7 @@ if (!userCancelled) { /* 落 error */ }
   「续跑吞掉撞帽」那类改法（两台变异都存活，因为撞帽只在末步发生）——保留它们钉的是行为口径，
   不假装它们守的是那个不存在的顺序差。
 
-### 六、HEAD 认证读数（`f50ed2aa`）
+### 六、HEAD 认证读数（`8e5e778`）
 
 - 门面 **25/25** 跑到，红 **1** 道：`docs-check`（21 条 D-5 存量）。
 - `typecheck` HEAD 面 **0 报错**。
@@ -22628,7 +22628,7 @@ if (!userCancelled) { /* 落 error */ }
 （实测每 2 拍插一句 ⇒ 受护集占 21%）。这是**有意取舍**（用户写过的话永不压缩），
 且真实使用里插话不会那么密，**不改**。
 
-### 六、HEAD 认证读数（`da7cbf40`）
+### 六、HEAD 认证读数（`9bd2107`）
 
 - 门面 **25/25** 跑到，红 **1** 道：`docs-check`（21 条 D-5 存量）。
 - `typecheck` HEAD 面 **0 报错**。
@@ -22685,7 +22685,7 @@ if (!userCancelled) { /* 落 error */ }
 在发送前后的取值，再决定是补桩的 workspace 回包、还是改用 `createSession` 预置会话。
 **这是下一轮的第一步，不是本轮能收敛的。**
 
-### 四、HEAD 认证读数（`5ee9030a`）
+### 四、HEAD 认证读数（`b93f2c6`）
 
 - 门面 **25/25** 跑到，红 **1** 道：`docs-check`（21 条 D-5 存量）。
 - `typecheck` HEAD 面 **0 报错**（本页那三处类型漏修完之后）。
@@ -22760,7 +22760,7 @@ export function steerAccepted(res): boolean  // 只认 ok === true
 先给 gallery 一个"预置运行中会话"的夹具（而不是靠点击+回车把状态撞出来），
 再谈端到端。
 
-### 五、HEAD 认证读数（`fb121f5`）——**这一趟不是干净的绿，要如实记**
+### 五、HEAD 认证读数（`7bbd2b4`）——**这一趟不是干净的绿，要如实记**
 
 | 项 | 读数 | 判读 |
 |---|---|---|
@@ -22843,7 +22843,7 @@ InterVariable.woff2               137.26 kB
 `bundle-audit` 完全不看非 JS 资产 ⇒ **产物里的图片/字体/许可证有没有整块无用的**，
 目前没有任何一道门回答这个问题。那不是本页能收敛的，登记为下一轮的候选。
 
-### 六、HEAD 认证读数（`e10b83c`）——**两趟都是并发压出来的假红，不写成绿**
+### 六、HEAD 认证读数（`adb6b2c`）——**两趟都是并发压出来的假红，不写成绿**
 
 | 项 | 本趟 | 上一次（第 682 页） | 普通跑道（`--maxWorkers=2`） |
 |---|---|---|---|
@@ -22940,7 +22940,7 @@ TypeError: Cannot read properties of undefined (reading 'slice')
 
 ⇒ 第 683 页留下的候选**已关**：产物里唯一的无用资产就是那 309KB 斜体字体。
 
-### 七、HEAD 认证读数（`7e83ced`）——**这一趟是干净的**
+### 七、HEAD 认证读数（`c368858`）——**这一趟是干净的**
 
 | 项 | 读数 |
 |---|---|
@@ -22980,7 +22980,7 @@ Preparing worktree (checking out 'agent/修复-todo-的-completedcount-worker-12
 fatal: unable to read tree (d2fc8a7278db4630b6d98a820acf7ca24f8fc8a0)
 ```
 
-`d2fc8a72` 是提交 `6455bb20` 的 `src/events` 子树 —— 2026-10-22 对象库事故里永久丢失的那批对象之一
+`d2fc8a72` 是提交 `d0708a0` 的 `src/events` 子树 —— 2026-10-22 对象库事故里永久丢失的那批对象之一
 （第 664／665／666 页已裁「接受断缝、不重写历史」）。分支本身还在，所以 `git branch --list` 看得见它、
 `git worktree add` 一碰就死。
 
@@ -23027,7 +23027,7 @@ worktree 里写下 wip.txt              ⇒ before: true
 
 ### 四、全表跑抓到的假守护：六条桌面插话锚点从未真正跑过
 
-`pnpm mutate-verify`（HEAD `ebeb2b49`）跑完 **1607 条**：**1601 条被杀死、6 条 vacuous**，六条正是
+`pnpm mutate-verify`（HEAD `7429acf`）跑完 **1607 条**：**1601 条被杀死、6 条 vacuous**，六条正是
 上一轮加的 `desktop-steer-*`／`desktop-steering-*`：
 
 ```
@@ -23056,14 +23056,14 @@ REDKINDS=survived:0,misattributed:0,baseline-red:0,no-effect:0,syntax:0,restore-
 | 幂等旧行为造红 | 去掉早返回 ⇒ **2 条红**（未提交改动消失、坏树被重建） |
 | `pnpm supervisor-check` | **78✅／3❌ → 81✅／0❌** |
 | `pnpm mutate-needles-check` | 1607 条针脚全部可判定（阻断 0） |
-| `pnpm mutate-verify`（HEAD `ebeb2b49`，全表） | 1601／1607 杀死，6 vacuous（全是上面那六条） |
-| 定向复跑（HEAD `7eb53c9f`，8 条：六条桌面插话 ＋ 本页两条） | **8／8 杀死**，selector 坏拍 0 |
-| `pnpm mutate-verify`（HEAD `ca675c20`，全表） | **1607／1607 杀死，0 vacuous**（1881.9s） |
-| 定向复跑（HEAD `ca675c20`，同 8 条） | **8／8 杀死**，selector 坏拍 0（6.5s） |
+| `pnpm mutate-verify`（HEAD `7429acf`，全表） | 1601／1607 杀死，6 vacuous（全是上面那六条） |
+| 定向复跑（HEAD `deafde8`，8 条：六条桌面插话 ＋ 本页两条） | **8／8 杀死**，selector 坏拍 0 |
+| `pnpm mutate-verify`（HEAD `a44fd3c`，全表） | **1607／1607 杀死，0 vacuous**（1881.9s） |
+| 定向复跑（HEAD `a44fd3c`，同 8 条） | **8／8 杀死**，selector 坏拍 0（6.5s） |
 
-### 六、HEAD 认证读数（`ca675c20`）
+### 六、HEAD 认证读数（`a44fd3c`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`ca675c2`）：25 道认证门面跑满，**红 1 道**（`docs-check`，原因＝D-5 的 21 条，业主已裁保留）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`a44fd3c`）：25 道认证门面跑满，**红 1 道**（`docs-check`，原因＝D-5 的 21 条，业主已裁保留）；**超预算 0 道**。
 - 认证树上的全量判卷：**486 文件／6594 项，2 失败**——`docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因，两笔都是 2026-10-22 对象库事故的既有真红，不是本页引入（第 664／670 页同形）。
 - 本趟墙钟 **113.33s**（同一进程 hrtime，口径＝起跑→汇总；引用前先读 `outputs/head-cert-ca675c2-2026-10-23-1133/provenance.md`）。
 - 退出码 1：这是 head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），**不把这条读成本页的绿**。
@@ -23073,7 +23073,7 @@ REDKINDS=survived:0,misattributed:0,baseline-red:0,no-effect:0,syntax:0,restore-
 - **对象库不修**：`d2fc8a72` 等丢失对象来自 2026-10-22 事故，业主已裁「接受断缝、不重写、不 graft」
   （第 665／666 页）。本页只让新 worker 不再撞上那根断枝；那条坏分支原样留着。
 - **真机未验**：本页的桌面部分只跑无头判卷（`.tsx` SSR／纯函数），没有 Electron 真机帧时间或观感读数。
-- **全表口径**：`mutate-verify` 量的是提交 `ca675c20` 的树；工作树里 `outputs/` 未跟踪件与 `ab.py` 未参与。
+- **全表口径**：`mutate-verify` 量的是提交 `a44fd3c` 的树；工作树里 `outputs/` 未跟踪件与 `ab.py` 未参与。
 - **取料（与页同笔入库）**：`outputs/worktree-identity-2026-10-23/mutate-verify-ebeb2b49.log`、
   `outputs/worktree-identity-2026-10-23/mutate-verify-7eb53c9f.log`、
   `outputs/worktree-identity-2026-10-23/mutate-verify-ca675c20.log`、
@@ -23141,12 +23141,12 @@ Tests  2 failed | 6 passed (8)
 | 锚点 `worktree-overwrites-dirty-residue` | 定向 **1／1 杀死**（0.9s） |
 | `pnpm mutate-needles-check` | 1608 条针脚全部可判定（阻断 0） |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| `pnpm mutate-verify`（HEAD `a6d60ee3`，全表） | **1608／1608 杀死，0 vacuous**（1968.4s） |
+| `pnpm mutate-verify`（HEAD `100f380`，全表） | **1608／1608 杀死，0 vacuous**（1968.4s） |
 | 定向复跑（`worktree-overwrites-dirty-residue`） | **1／1 杀死** |
 
-### 五、HEAD 认证读数（`a6d60ee3`）
+### 五、HEAD 认证读数（`100f380`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`a6d60ee`）：25 道认证门面跑满，**红 1 道**（`docs-check`，D-5 的 21 条既有真红）；**超预算 1 道只出声**（`e2e` 5542ms > 4000ms，按规则不翻判定）。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`100f380`）：25 道认证门面跑满，**红 1 道**（`docs-check`，D-5 的 21 条既有真红）；**超预算 1 道只出声**（`e2e` 5542ms > 4000ms，按规则不翻判定）。
 - 认证树全量判卷：**486 文件／6596 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增的 2 条判卷全绿。
 - 本趟墙钟 **137.29s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-a6d60ee-2026-10-23-1227/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
@@ -23242,11 +23242,11 @@ export function ownedWorktreeAgentIds(): string[] {
 | 锚点 `orphan-scan-drops-owned-wiring` | 定向 **1／1 杀死** |
 | `pnpm mutate-needles-check` | 1610 条针脚全部可判定（阻断 0） |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| `pnpm mutate-verify`（HEAD `ccf021da`，全表） | **1610／1610 杀死，0 vacuous**（2560.5s） |
+| `pnpm mutate-verify`（HEAD `9681fea`，全表） | **1610／1610 杀死，0 vacuous**（2560.5s） |
 
-### 五、HEAD 认证读数（`ccf021da`）
+### 五、HEAD 认证读数（`9681fea`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`ccf021d`）：25 道认证门面跑满，**红 1 道**（`docs-check`，D-5 的 21 条既有真红）；**超预算 1 道只出声**（`e2e` 7470ms > 4000ms，按规则不翻判定）。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`9681fea`）：25 道认证门面跑满，**红 1 道**（`docs-check`，D-5 的 21 条既有真红）；**超预算 1 道只出声**（`e2e` 7470ms > 4000ms，按规则不翻判定）。
 - 认证树全量判卷：**487 文件／6598 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增的 3 条判卷全绿。
 - 本趟墙钟 **130.63s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-ccf021d-2026-10-23-1412/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
@@ -23321,11 +23321,11 @@ cleanOrphanWorktree(root, "worker-10", { ownedAgentIds: new Set(["worker-10"]) }
 | 锚点 `orphan-clean-ignores-live-owner` | 定向 **1／1 杀死**（1.0s） |
 | `pnpm mutate-needles-check` | 1611 条针脚全部可判定（阻断 0） |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 上一笔 `ccf021da` 上 **1610／1610 杀死，0 vacuous**（第 687 页）；本笔只加 1 条守卫 ＋ 1 处接线，未重跑全表，本笔新锚点定向 **1／1** |
+| 全表 `pnpm mutate-verify` | 上一笔 `9681fea` 上 **1610／1610 杀死，0 vacuous**（第 687 页）；本笔只加 1 条守卫 ＋ 1 处接线，未重跑全表，本笔新锚点定向 **1／1** |
 
-### 五、HEAD 认证读数（`3b00b164`）
+### 五、HEAD 认证读数（`8278142`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`3b00b16`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`8278142`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6599 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增 1 条判卷全绿。
 - 本趟墙钟 **127.68s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-3b00b16-2026-10-23-1421/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
@@ -23389,11 +23389,11 @@ cleanOrphanWorktree(root, "worker-10", { ownedAgentIds: new Set(["worker-10"]) }
 | 锚点 `worktrees-page-orphan-list-emptied` | 定向 **1／1 杀死**（把列表恒当空 ⇒ 假空态） |
 | `pnpm mutate-needles-check` | 1612 条针脚全部可判定（阻断 0） |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**（第 687 页）；本页表长 1612，只定向跑新锚点 **1／1**，没有把旧全表冒充本页 |
+| 全表 `pnpm mutate-verify` | 最近一次 `9681fea`：**1610／1610**（第 687 页）；本页表长 1612，只定向跑新锚点 **1／1**，没有把旧全表冒充本页 |
 
-### 五、HEAD 认证读数（`324fcc2e`）
+### 五、HEAD 认证读数（`488ae77`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`324fcc2`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`488ae77`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6599 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增的界面判卷全绿。
 - 本趟墙钟 **127.23s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-324fcc2-2026-10-23-1429/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
@@ -23440,11 +23440,11 @@ cleanOrphanWorktree(root, "worker-10", { ownedAgentIds: new Set(["worker-10"]) }
 | 锚点 `worktrees-page-orphan-list-emptied` | 定向 **1／1 杀死** |
 | `pnpm mutate-needles-check` | 1612 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**（第 687 页）；本页表长 1612，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `9681fea`：**1610／1610**（第 687 页）；本页表长 1612，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`8ffb6b62`）
+### 四、HEAD 认证读数（`c7d3d48`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`8ffb6b6`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`c7d3d48`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6599 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增/改动的界面判卷全绿。
 - 本趟墙钟 **126.02s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-8ffb6b6-2026-10-23-1439/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
@@ -23504,11 +23504,11 @@ for (const rel of paths) {
 | 锚点 `read-batch-concurrency-serialized` | 定向 **1／1 杀死** |
 | `pnpm mutate-needles-check` | 1613 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**；本页表长 1613，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `9681fea`：**1610／1610**；本页表长 1613，只定向跑新锚点 **1／1** |
 
-### 五、HEAD 认证读数（`099d5905`）
+### 五、HEAD 认证读数（`fb8fd21`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`099d590`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`fb8fd21`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6600 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
 - 本趟墙钟 **126.10s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-099d590-2026-10-23-1445/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
@@ -23558,11 +23558,11 @@ for (const rel of paths) {
 | `pnpm --filter cairn-desktop test` | **206 文件／1414 条全绿** |
 | `pnpm mutate-needles-check` | 1614 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**；本页表长 1614，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `9681fea`：**1610／1610**；本页表长 1614，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`b14220f9`）
+### 四、HEAD 认证读数（`41749b8`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`b14220f`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`41749b8`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
 - 本趟墙钟 **127.96s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-b14220f-2026-10-23-1450/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
@@ -23608,11 +23608,11 @@ for (const rel of paths) {
 | `pnpm --filter cairn-desktop test` | **207 文件／1416 条全绿** |
 | `pnpm mutate-needles-check` | 1615 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**；本页表长 1615，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `9681fea`：**1610／1610**；本页表长 1615，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`db977cf5`）
+### 四、HEAD 认证读数（`fd6edb1`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`db977cf`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`fd6edb1`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
 - 本趟墙钟 **126.88s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-db977cf-2026-10-23-1455/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
@@ -23658,11 +23658,11 @@ for (const rel of paths) {
 | `pnpm --filter cairn-desktop test` | **207 文件／1417 条全绿** |
 | `pnpm mutate-needles-check` | 1616 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `ccf021da`：**1610／1610**；本页表长 1616，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `9681fea`：**1610／1610**；本页表长 1616，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`ebb2ece3`）
+### 四、HEAD 认证读数（`57dbb4d`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`ebb2ece`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 9 道只出声**（本轮机器负载高，见下）。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`57dbb4d`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 9 道只出声**（本轮机器负载高，见下）。
 - 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
 - 本趟墙钟 **277.20s**（同一进程 hrtime，口径＝起跑→汇总；比前几轮 126–127s 慢一倍，是机器负载，不是本页代码；
   9 道超预算同源，规则 256：秒数只出声、不翻判定）。
@@ -23682,7 +23682,7 @@ for (const rel of paths) {
 
 ### 一、为什么要有这一页
 
-第 687 页的全表跑停在 `ccf021da` 的 **1610 条**。此后又落了七页、加了六条锚点：
+第 687 页的全表跑停在 `9681fea` 的 **1610 条**。此后又落了七页、加了六条锚点：
 
 | 页 | 落点 | 新增锚点 |
 |---|---|---|
@@ -23700,14 +23700,14 @@ for (const rel of paths) {
 
 | 面 | 读数 |
 |---|---|
-| `pnpm mutate-verify`（HEAD `0d534db4`，全表） | ****1616／1616 杀死，0 vacuous**（2219.5s）** |
+| `pnpm mutate-verify`（HEAD `164f90d`，全表） | ****1616／1616 杀死，0 vacuous**（2219.5s）** |
 | `pnpm mutate-needles-check` | 1616 条针脚全部可判定（阻断 0） |
 | `pnpm supervisor-check` | **81✅／0❌** |
 | `pnpm --filter cairn-desktop test` | **207 文件／1417 条全绿** |
 
-### 三、HEAD 认证读数（`0d534db4`）
+### 三、HEAD 认证读数（`164f90d`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`0d534db`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`164f90d`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页没有新增判卷。
 - 本趟墙钟 **139.45s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-0d534db-2026-10-23-1545/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
@@ -23723,7 +23723,7 @@ for (const rel of paths) {
 
 ### 五、边界（不冒充的部分）
 
-- **全表量的是提交 `0d534db4`**：工作树里 `outputs/` 未跟踪件与 `ab.py` 未参与；`mutate-verify` 改的是提交的树。
+- **全表量的是提交 `164f90d`**：工作树里 `outputs/` 未跟踪件与 `ab.py` 未参与；`mutate-verify` 改的是提交的树。
 - **没有新增代码**：这一页只跑读数；任何红都在本节之前处理，不把全表当「新功能」。
 - **真机未验**：685–694 的桌面面仍只有 SSR/桌面全量判卷，没有 Electron 真机目验。
 - **取料（与页同笔入库）**：`outputs/full-sweep-2026-10-23/mutate-verify-0d534db4.log`；
@@ -23760,11 +23760,11 @@ worker 在任务窗格里能看到 task、状态、花费、验证券与摘要�
 | `pnpm --filter cairn-desktop test` | **207 文件／1418 条全绿** |
 | `pnpm mutate-needles-check` | 1617 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `0d534db4`：**1616／1616**（第 695 页）；本页表长 1617，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `164f90d`：**1616／1616**（第 695 页）；本页表长 1617，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`e6d6918c`）
+### 四、HEAD 认证读数（`b2a6270`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`e6d6918`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`b2a6270`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
 - 本趟墙钟 **139.14s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-e6d6918-2026-10-23-1557/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
@@ -23811,11 +23811,11 @@ worker 在任务窗格里能看到 task、状态、花费、验证券与摘要�
 | `pnpm --filter cairn-desktop test` | **208 文件／1419 条全绿** |
 | `pnpm mutate-needles-check` | 1618 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `0d534db4`：**1616／1616**（第 695 页）；本页表长 1618，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `164f90d`：**1616／1616**（第 695 页）；本页表长 1618，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`220013af`）
+### 四、HEAD 认证读数（`9a82d4e`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`220013a`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`9a82d4e`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6601 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
 - 本趟墙钟 **137.08s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-220013a-2026-10-23-1603/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
@@ -23860,11 +23860,11 @@ worker 在任务窗格里能看到 task、状态、花费、验证券与摘要�
 | `pnpm --filter cairn-desktop test` | **208 文件／1419 条全绿** |
 | `pnpm mutate-needles-check` | 1619 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `0d534db4`：**1616／1616**；本页表长 1619，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `164f90d`：**1616／1616**；本页表长 1619，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`b0948d6a`）
+### 四、HEAD 认证读数（`8eb3f29`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`b0948d6`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`8eb3f29`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6603 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
 - 本趟墙钟 **139.64s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-b0948d6-2026-10-23-1609/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
@@ -23909,11 +23909,11 @@ TasksPane 的 modal：有 hunks ⇒ `<DiffView hunks={...} />`；否则仍显示
 | `pnpm --filter cairn-desktop test` | **209 文件／1422 条全绿** |
 | `pnpm mutate-needles-check` | 1620 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `0d534db4`：**1616／1616**；本页表长 1620，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `164f90d`：**1616／1616**；本页表长 1620，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`e9cfb134`）
+### 四、HEAD 认证读数（`d796e0d`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`e9cfb13`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`d796e0d`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6603 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
 - 本趟墙钟 **110.42s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-e9cfb13-2026-10-23-1613/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
@@ -23956,11 +23956,11 @@ TasksPane 的 modal：有 hunks ⇒ `<DiffView hunks={...} />`；否则仍显示
 | `pnpm --filter cairn-desktop test` | **209 文件／1423 条全绿** |
 | `pnpm mutate-needles-check` | 1621 条针脚全部可判定 |
 | `pnpm supervisor-check` | **81✅／0❌** |
-| 全表 `pnpm mutate-verify` | 最近一次 `0d534db4`：**1616／1616**；本页表长 1621，只定向跑新锚点 **1／1** |
+| 全表 `pnpm mutate-verify` | 最近一次 `164f90d`：**1616／1616**；本页表长 1621，只定向跑新锚点 **1／1** |
 
-### 四、HEAD 认证读数（`45dfeb72`）
+### 四、HEAD 认证读数（`1d05bac`）
 
-- `pnpm head-cert-check`（`--at=HEAD`，TREE=`45dfeb7`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
+- `pnpm head-cert-check`（`--at=HEAD`，TREE=`1d05bac`）：25 道认证门面跑满，**红 1 道**（`docs-check` 的 D-5 既有 21 条）；**超预算 0 道**。
 - 认证树全量判卷：**487 文件／6603 项，2 失败**——仍是 `docs-check` 的 D-5 与 `mutate-needles` 的 `1f16bea` 归因；本页新增判卷全绿。
 - 本趟墙钟 **109.52s**（同一进程 hrtime，口径＝起跑→汇总；引用前读 `outputs/head-cert-45dfeb7-2026-10-23-1617/provenance.md`）。
 - 退出码 1：head-cert 门自己的码（判卷 exit=1 ＋ 认证门面红 1 道），不是本页的绿。
@@ -23976,9 +23976,630 @@ TasksPane 的 modal：有 hunks ⇒ `<DiffView hunks={...} />`；否则仍显示
   `outputs/worker-diff-cap-2026-10-24/supervisor-check-45dfeb72.log`；
   认证读数在 `outputs/head-cert-45dfeb7-2026-10-23-1617/provenance.md`。
 
+
+## 2026-10-24 · 第 701 页：thinking 预算实验装置（任务 0–3）
+
+- 目标：把 `--thinking low|high` 真接到请求体，跑 B1/B12 × low/high 四趟，回答「每轮多想值不值」——B12 多修几条、$/success 变化、主实验 rep 数。
+- 顺序：任务 0 核对 → 任务 1 接线＋3 条测试＋删展开红/还原绿 → 任务 2 四趟 pilot（同模型同步数）→ 任务 3 一页结论＋复算命令。
+- 最大风险：默认模型不可用（`OPENAI_MODEL=stealth/space-bunny-alpha` 已 404；`~/.config/cairn/env` 的 `mimo-v2.6-flash` 被实名认证 403）；pilot 若换模型，两臂仍同模型，偏差记 BLOCKED。
+- 模型：`z-ai/glm-5.2`（OpenRouter，同 `.env.local` key；默认模型 404 后的替代，见 BLOCKED.md）。价：`EVAL_PRICE_IN=7.0`、`EVAL_PRICE_OUT=8.4` CNY/百万（手给，按实测路由 USD 价 ×7.1；跑器不核对）。
+- 任务 0 读数：doctor 四 key 未设；typecheck 0 错/6s；reasoning-wire 13/13 绿；`outputs/bench/readings.json` B1 75,406/2,882/55.777s、B2/B3 ok、cny=0；L32 287,531/12,830/135.747s/21 请求；L30 132,961/11,368/108.27s/11 请求——均与任务书一致。
+
+
+### 701 执行记录（截至 2026-10-24 21:56）
+
+- 任务 1 已落：`session-provider.ts` opts 增 `thinking?: ThinkingEffort`，1244 行展开 `reasoningEffort`（`off`/缺省不展开）；`loop-eval.ts` 增 `--thinking` 四档校验（坏值退 2），并把 `thinking` 记进 `run.json`/每条读数。
+- 判卷：`tests/thinking-plumbing.test.ts` 3 条全绿；删 1244 展开后 high/low 两条红（`expected undefined to be 'high'/'low'`），还原后全绿；`--thinking bogus` 退 2 并打印「只认 off/low/medium/high」；`pnpm typecheck` 0。
+- 任务 2 只完成 1/4：B1-low（`nvidia/nemotron-3-ultra-550b-a55b:free`）PASS，12 请求 / 117,944 in / 1,227 out / 55s，读数在 `outputs/bench-thinking/readings-146743c-2026-10-24T13-49-13-080Z.json`（当时 EVAL_PRICE=0，cny=0）。
+- B12-low 尝试：39 请求 / 690,285 in / 6,458 out / 340s 后 HTTP 429「free-models-per-day」；日配额 50 已用满（54/50），重置 `2026-10-25 08:00`（X-RateLimit-Reset=1792886400）；该趟记无效，已归档 `readings-146743c-2026-10-24T13-56-02-711Z.json`，轨迹 `B12-long-horizon-rep1-base.events.jsonl`。
+- 该段的未完成状态已被下方「701 最终读数」覆盖：用户随后提供 `hy3` 本地端点，四趟主读数已补齐；上面的 OpenRouter 配额阻塞仅作历史证据保留。
+
+
+### 701 最终读数（2026-10-24 22:24，用户提供的 hy3 本地端点）
+
+- 用户给了 `http://127.0.0.1:7863/v1` + key，模型 `hy3`（模型表 id `cn:hy3`，192k ctx，支持 low/high reasoning）；key 未写入任何文件。
+- B1-low：PASS，6 请求，42,379 in / 1,811 out，29s；B1-high：PASS，6 请求，41,914 in / 1,390 out，25s。
+- B12-low：PASS，20/20（`namedSets.notGreen=0`），19 请求，236,236 in / 5,136 out，78s；B12-high：PASS，20/20（`notGreen=0`），19 请求，217,797 in / 6,508 out，94s。
+- 止损：B12-low 一次 20/20 ⇒ 加跑 L32-low，结果 PASS 32/32（8 请求，85,560 in / 18,054 out，178s）；按「仍全过就停」停止，不再跑 L32-high。
+- `outputs/bench-thinking/readings.json` 已按跑器原始归档合并 4 条（B1-low/B1-high/B12-low/B12-high），L32-low 单独在 `readings-l32-low.json`；合并未改任何字段。
+- 反向验证：同一 B1-low 不给 `EVAL_PRICE` 时 `cny=null`（读数 `reverse-check/readings.json`）；补 `EVAL_PRICE_IN=0/EVAL_PRICE_OUT=0` 重跑后 `cny=0`。
+- 价格：端点 `usage.credit=0`、模型表 `credits=x0.00`，四趟 `cny=0`；实付 `$/success` 为 0→0（变化率不可知），token 口径 B12 high 比 low 少 7.07%。
+- 结论：B12/B1 两臂全过、L32-low 也全过 ⇒ 题集对 hy3 封顶，无法区分 thinking 档位；主实验应换更难题，不是加 rep。详见 `outputs/bench-thinking/README.md`。
+
+
+### 701 追加：GLM-5.3-Flash 复跑（2026-10-24 22:50）
+
+- 模型 `cn:glm-5.3-flash`（用户指定；别名 `glm5.3flash` 在上游 401，改用模型表精确 id）。B1 两臂 `max-steps=25`，B12 两臂 `max-steps=60`。
+- B1-low PASS 6 请求 40,663/424 39s；B1-high PASS 9 请求 62,655/1,153 70s。
+- B12-low PASS 20/20（`notGreen=0`）13 请求 141,345/6,118 136s；B12-high PASS 20/20（`notGreen=0`）8 请求 72,624/3,622 84s。
+- 止损：B12-low 20/20 ⇒ L32-low `max-steps=35` FAIL（35 请求，328,895/2,557，撞 maxSteps）；补 L32-high 35 也 FAIL（35 请求，424,259/9,402，撞 maxSteps）；再把 L32-low 抬到 60 仍 FAIL（60 请求，1,092,735/14,057，撞 maxSteps）。L32-high 60 未跑：GLM pilot 累计 **2,163,176 in / 37,333 out**，已越过 2,000,000 input 帽，按「先到即停」停止。
+- 读数：`outputs/bench-thinking/glm53flash/readings.json` 4 条主读数（B1/B12，由四份原始归档按原样合并）；L32 三条单独存 `readings-l32-low-60.json`、`readings-l32-high-35.json`、`readings-146743c-2026-10-24T14-41-39-210Z.json`；结论页 `glm53flash/README.md`。
+- 结论：B12 两臂 20/20（high 多修 0 条）；B1 两臂均过；L32 35/60 步两臂/单臂都撞 maxSteps（地板），没有可区分样本；token 方向 B1 +55.30%、B12 −48.29%（n=1，不稳定）。仍回答不了「多想值不值」。
+
+
+### 701 追加：换题探测（2026-10-24 23:00）
+
+- B4-bugfix-pagination low：PASS，2/2 判据全绿（7 请求，44,521/419，32s）⇒ low 已满分，high 不可能多修好，未跑 high。
+- B7-feature-csv low：PASS，5/5 判据全绿（4 请求，25,282/301，19s）⇒ 同上，未跑 high。
+- B2-feature-export low：产品面 `verifyOkLast=true`、held-out 绿，但逐名判卷 `unreadable`——judge 里写的 `tests/fit.test.js` 在测试输出里对不上号（`unmatched=1`）。这是判据规格坏，不是模型没做到；按「顺手活写 BLOCKED、不改判据」处理，未跑 high。
+- 结论：B4/B7 低档已封顶，B2 判据不可读；没有找到「low 部分成功、high 能补」的题。继续换题不是加 rep 能解决的。
+- 预算：GLM 主线 2,163,176 in；换题探测再加 B4 44,521 + B7 25,282 + B2 46,944 = **2,279,923 in / 39,630 out**，总 input 已越过 2M 帽；停止，不再跑。
+
+
+### 701 追加：L30 预注册替代（2026-10-24 23:03，收到「不要过拟合」后停止换题）
+
+- L30-long-horizon low（`fixtures/bench/tasks-long30.json`，`max-steps=60`）：PASS，**30/30**（`namedSets.notGreen=0`，`sources[0].tests=30`），8 请求，78,433 in / 4,949 out，92s。
+- low 已封顶 ⇒ high 的上界也是 30/30，不可能多修好；未跑 high。**不再为寻找「能出差异」的题继续试 B5/B6/L48 等**——那会变成按结果挑题，属过拟合，不做了。
+- B4/B7/B2 的三次探测只作「换题探测」记录，不进入主结论；主结论仍以 B1/B12 + L30 预注册替代为准：题集对该模型封顶。
+- 预算：GLM 累计 **2,358,356 in / 44,579 out**（含 L30），越过 2M input 帽；停止。
+
+
+### 701 追加：L48 预注册更难集（2026-10-24 23:35）
+
+- L48-long-chain low（`fixtures/bench/tasks-chain48.json`，`max-steps=55`，README 的 `bench:chain48` 口径）：PASS，**48/48**（`namedSets` 全绿），11 请求，96,037 in / 8,212 out，150s。
+- low 已封顶 ⇒ high 上界也是 48/48，不可能多修好；未跑 high，不再换 L 系列题。
+- 外部集（SWE-bench 类）：当前跑器明确接不了——`scripts/loop-eval.ts:473` 对 `t.external` 直接抛「本跑器跑不了」，`:829` 在任务集含 external 时 exit 1；`--feasibility` 只能看缺口。`outputs/eval-benchmark-adapter-2026-09-24` 只有两行样本且第二行缺 `FAIL_TO_PASS`。要真跑外部集需外部快照/仓库、pytest/语言侧适配、任务生成器与新预算——是新流程/新依赖，按任务规矩只登记不做。
+- 预算：GLM 累计 **2,454,393 in / 52,791 out**（含 L48），越过 2M input 帽；停止。
+
+
+### 701 追加：L32 @60 出现唯一差异（2026-10-24 23:42）
+
+- `L32-long-chain`，同模型 `cn:glm-5.3-flash`，同 `max-steps=60`：
+  - low：FAIL 0/32，60 请求，1,092,735 in / 14,057 out，撞 `maxSteps=60`；
+  - high：PASS 32/32，8 请求，60,782 in / 5,129 out，86s。
+- 这是整轮 pilot 唯一「low 失败、high 成功」的配对；high 同时少用约 94% token。n=1，尚无方差。
+- 主实验建议：同一 L32、同 `max-steps=60`，low/high 各 3 对 rep（3 是预注册最低档，不是从这对算出的方差）。
+- 外部适配器不再是回答本问题的必要条件：边界题已在现有装置上出现差异；外部集仍受 `scripts/loop-eval.ts:473/829` 限制，若要外推另立。
+- 预算：GLM 累计 **2,515,175 in / 57,920 out**，越过 2M input 帽；停止。
+
+
+### 701 主实验：L32 @60 各 3 对 rep（2026-10-25 00:01）
+
+- low 3 趟：rep1 262,949 tokens（32 请求）、rep2 232,440（21 请求）、rep3 66,096（8 请求），**3/3 PASS**。
+- high 3 趟：rep1 98,148（8 请求）、rep2 145,451（14 请求）、rep3 62,974（7 请求），**3/3 PASS**。
+- **之前单趟的「low 0/32、high 32/32」是单趟异常，已撤回**；3 对复跑后 low 也 3/3，high 没有多修好
+  任何一条。单趟记录保留在 `glm53flash-l32-60/`，只作异常追溯。
+- 成本代理：low 平均 187,162 tokens/成功，high 平均 102,191，**−45.40%**（3 对里 high 都比 low 低）；
+  B12 −48.29%、B1 +55.30%，方向不一致。实付 `cny=0`，`$/success` 百分比不可知。
+- 主实验结论：**high 不买正确率**；token 轴在 L32/B12 上省、B1 上更贵，不是普适收益。3 对已足够
+  排除单趟异常；要检测几个百分点的差异需要更多题，不是只加 L32 的 rep。
+- 读数：`outputs/bench-thinking/glm53flash-l32-60-main/readings.json`（6 条，原始跑器输出合并）。
+- 预算：GLM 累计 **3,383,233 in / 96,417 out**；无预算帽（用户明确「没有预算」）。
+
+
+### 701 追加：cn:hy4-preview 不能做 low/high 对照（2026-10-25 00:19）
+
+- 模型表：`cn:hy4-preview` = `only_reasoning: true`、`reasoning_supported_efforts: ["high"]`、
+  `reasoning_default_effort: "high"`；没有 low 档。
+- 实测 3 次算术探针：low 的 reasoning_tokens 22/33/91，high 53/105/44；`off` 46/52、不传字段 25/63
+  ——都仍在推理，且两档区间重叠。结论：low 被上游忽略/落到默认 high，不能作为独立低档臂。
+- 因此没有启动 pilot；没有新增读数。要 low/high 对照，必须换一个 `reasoning_supported_efforts`
+  同时含 low 与 high 的模型（如 `cn:minimax-m3.1-flash`、`cn:deepseek-v4-flash`、`cn:step-5-preview`）。
+
+
+### 701 追加：MiniMax-M3.1-Flash 3 对 rep（2026-10-25 00:35）
+
+- 模型 `cn:minimax-m3.1-flash`，L32 @60，low/high 各 3 趟：两臂都 **3/3**，high 没有多修好任何一条。
+- tokens/成功：low 104,228 / 83,578 / 126,318，平均 **104,708**；high 385,315 / 445,397 / 551,856，
+  平均 **460,856**；high **+340.13%**（同样全过，贵 4.4 倍）。
+- 结论：这条模型/题上 **high 不买正确率，且显著更贵**；默认不开。3 对已足够说明单趟差异不是 thinking
+  收益；要检测更小差异需要更多题。
+- 读数：`outputs/bench-thinking/minimax-l32-60-main/readings.json`（6 条，原始跑器输出合并）。
+- 预算：GLM+MiniMax 累计 **5,079,925 in / 207,810 out**；用户明确无预算。
+
+## 2026-10-25 · 第 702 页：记忆模块 M7——词面 RECALL 注入、强度账与休眠、会话尾巩固（仿脑最小完备集）
+
+### 一、动因（先调研后动手）
+
+对标输入两条线：① 2026-05《Human-Inspired Memory Architecture for LLM Agents》（arXiv 2605.08538）
+六机制（睡眠期巩固五因子打分、干扰性遗忘、记忆成熟 sigmoid、再巩固、实体知识图谱、混合多线索检索）
+及其消融读数——**实体图在 <1000 条库上不涨点（74.8% vs 78.4%）、recency 判别力 AUC≈0.51**；
+② SOTA 共性（Mem0 写后整理、Zep 时序失效而非删除、Letta 分页自编辑、HippoRAG 索引、
+Generative Agents 三因子）归纳出的一致形状：**两阶段写入（即时快写＋延迟整理）、
+评分检索、墓碑/失效而非删除**。据此对本仓 M2d 记忆面立三笔账：
+**注入是固定名单（相关性盲）、条目无强度（遗忘盲）、库无整理（重复与陈账盲）**。
+
+### 二、机制映射（每条指得出处，不凑数）
+
+| 机制 | 神经/系统出处 | 落点 |
+|---|---|---|
+| 工作记忆 | 前额叶/Baddeley | 上下文窗口本身（未动） |
+| 情景记忆（快写全保真） | 海马/CLS 快通道 | 会话 JSONL＋lessons 证据指针（既有） |
+| 语义记忆（慢整理） | 新皮层/CLS 慢通道 | `.agent/memory` 主题库（既有）＋本页巩固 |
+| 提取线索/编码特异性 | Tulving | `retrieval.ts`：问话词面 → top-k **正文**进注入（RECALL 段），切词/idf 复用 `map/retrieve` 同一把尺 |
+| 检索练习（testing effect） | Bjork/间隔效应 | `strength.ts`＋`memory-stats.json`：命中即 hits+1、强度回升、锚点重置 |
+| 遗忘曲线/突触稳态 | Ebbinghaus/Tononi/Richards&Bhatt | 29 天半衰期衰减；又弱又久未命中 ⇒ **休眠**（索引行不注、正文不注、留墓碑点名行） |
+| 扩散激活（弱化版） | Collins&Quillian | 休眠条目词面分 ≥4.0（高于入选线 1.5）⇒ 唤醒并如实标注 |
+| 睡眠 replay/系统巩固 | McClelland CLS | `consolidate.ts`：会话尾确定性 pass（衰减、休眠、查重、陈账收敛），零模型调用 |
+| 再巩固 | Nader | 巩固**不合并不删除**（删除仅用户 §8.1.7）；查重结果作为「条子」并入沉淀指令，模型经 remember op=replace 在原审批面下合并 |
+
+### 三、改法
+
+- 新增 `src/agent/memory/{strength,retrieval,consolidate}.ts`：强度算术、词面选材、巩固 pass；
+  均纯函数为主＋单一 IO 面。
+- `store.ts` 扩展：`parseIndex(Line)`（索引行读侧唯一事实源）、`memory-stats.json` 读写、
+  `updateStats` 锁内读-改-写（与命中落账并发不丢更新——appendTopic 同族漏口的预防）。
+- `inject.ts`：RECALL 段（索引后、教训前——教训带证据指针丢了更难自救）、休眠行过滤＋
+  「另有 K 条休眠未列」点名、命中记账 3s 去抖落账；问句缺失 ⇒ 逐字零注入回归。
+- `distill.ts` 收尾新增：flush 命中账 → 项目层/全局层各巩固一次（失败分层 fail-visible）→
+  查重条子并入指令；巩固排在 provider 之前（纯会话即触发，trivial 轮也整理）。
+- 三消费方接问话：主会话（`lastUserContent`）、worker（任务书）、旁路（自身最近 user_message）。
+- 不变量：正文与 MEMORY.md 的巩固 canary（逐字不变）；RECALL 段经既有脱敏/转义/外部引用闸；
+  摘录按码点截断；同分次序按字典序不交给 readdir。
+- **自查修正（同日二审）三处**：① 命中记账从选材时移到**预算淘汰之后**——被淘汰的 RECALL
+  没进模型，记「检索练习」就是账实不符（观测面 `recall` 同源改为实发）；② 手改索引里的坏
+  topic 名走 `readTopicBody` 校验会抛，把整段注入打成「不可用」——改为逐份兜底、按「无正文
+  不注」只丢那一条；③ 淘汰可能停在抬头与摘录之间留下**无主摘录行**，淘汰后清段首孤儿行。
+  修正 ② 的 wrap 重构一度只包 RECALL 段、漏了固定回注名单的脱敏/转义——**E 门（外部引用
+  fail-closed）当场红**，全段统一过 wrap 后回绿：门抓住的，不是手看出来的。
+
+### 四、判卷与读数（**工作树读数，未提交**；并发=--maxWorkers=2）
+
+| 面 | 读数 |
+|---|---|
+| `node --import tsx scripts/typecheck.ts` | 0 红 |
+| 新增 `tests/memory-strength.test.ts` | 10/10 绿（半衰期数值、回升有界、休眠双条件、唤醒重置） |
+| 新增 `tests/memory-recall.test.ts` | 13/13 绿（词面次序、双门槛、休眠不挡强命中、无正文不占位、码点安全；全链两格：淘汰不记账、坏索引行只丢那一条） |
+| 新增 `tests/memory-consolidation.test.ts` | 10/10 绿（canary、休眠幂等、陈账收敛、同 type 查重、条子只指 op=replace） |
+| 既有记忆/蒸馏面 | memory×6（54 条）、distill×5（50 条）全绿；`distill-cancellation` 两处目录清单判据按新契约更新（多出 `memory-stats.json`，清单仍精确相等，非弱化） |
+| `pnpm memory-check` | A–I 全绿（新增 H×5、I×10，含 H5 坏索引行 / I6 淘汰不记账）；墙钟 0.75s（门预算 1300ms） |
+| 全量 core `pnpm test:capped` | 6657/6689 绿、32 红；**32 红逐门归因零笔属本批**：HEAD 干净 worktree 复核——docs-check(D-5 既有 21 条备案)/head-cert-deps(scratch 机器态)/promise-recall(帽) 三门在 HEAD 同红；其余 29 条为同工作树他批在飞（权限第五档、motion-policy、web-search、channels 计数、typecheck-triage 锚点漂移）或备案机器态（scratch-tree、1f16bea 死针脚） |
+| `pnpm desktop-boundary-check` | 绿 |
+| mutate-verify / supervisor-check / head-cert / 桌面套件 | **未跑**：前三个测提交不测工作树；桌面套件被同树他批在飞改动污染，读数不可归因 |
+
+### 五、边界（不冒充的部分）
+
+- 词面检索买不到同义改写（问「卡死」注「停滞」接不上）——那一档归将来接 embedding，本批不冒充。
+- 全部数值（半衰期 29d、增益 0.3、休眠线 0.25/45d、唤醒 0.6、入选/唤醒分 1.5/4.0、查重 Jaccard 0.6）
+  是论文校准值＋拍的，**不是本仓量出的**；要量需长真机使用轨迹。
+- 巩固排在蒸馏 provider 之前：本会话模型刚写的条目要下一场会话尾才进查重（六小时批式的那种延迟，刻意）。
+- 查重不跨层（项目层↔全局层互不比对）、不跨 type；唤醒只认词面强度，没有语义唤醒。
+- RECALL 只对索引行过线候选读正文（帽 12 份）——超帽时强度重排只在有界集内，这是刻意的省 IO 边界。
+- 真机（Electron）冒烟未做；记忆面板未展示强度账（后续可加，不属本批）。
+
+## 2026-10-25 · 第 703 页：单窗格标签页切回不再杀状态；设置分区炸了不再打回启动占位；首启检查恢复
+
+### 一、审计发现（先量后改）
+
+对真实 renderer 做离屏审计时读到三处回退，均不是「风格偏好」：
+
+1. **切标签 = 卸载**：2026-10-24 单窗格重做只渲染 active 一块。`TerminalPane` 的卸载清理
+   会 `terminalKill`，`BrowserPane` 的卸载清理会 `browserClose`（关掉全部内嵌标签），
+   文件树展开/滚动、旁路对话、表单状态一起丢。标签页语义应是换页面，不是销毁再建。
+2. **设置分区错误打穿整窗**：用畸形 search settings 快照复现——点击「联网搜索」后
+   React 根被卸载，整窗只剩启动占位；左导航、其他分区、正在做的事全没了。设置页没有错误边界。
+3. **首启检查失踪**：`workbench` 仍在 `getOnboarding` 并导出 `onboarding`，但空屏重做把
+   `OnboardingChecklist` 的 import/prop/mount 一并删了；首启只剩一行副标题。
+
+另有一处窄容器版式：插件窗格在 360 宽右栏里标题被挤成竖排、卡片被双列压到只剩省略号
+（窗口 1440 宽也会出现，媒体查询按窗口宽不适用）。
+
+### 二、改法
+
+- 所有已开窗格常驻挂载，只切 `visibility`；`.pane-stack` 绝对叠放。`BrowserPane` 新增
+  `active`，非激活时把每张 WebContentsView 的 bounds 收成零矩形（CSS 隐藏管不到原生层），
+  切回按容器矩形放回。
+- 标签条溢出时 active 标签滚进可视区（只滚标签条；reduced-motion 用 auto）。
+- 新增 `RenderErrorBoundary`：根 / 设置分区（key=section）/ 每块窗格内容各自成界；
+  无错时 Fragment 不产生 wrapper，兜底可重试、页面级可重新载入。
+- 恢复首启清单挂载（onboarded=false 且 groups 非空）。
+- 右栏工作台页用容器查询：≤520px 标题区竖排、搜索吃满、卡片单列。
+- 真实 renderer 冒烟对齐到单窗格模型；新增 `pane-tabs-smoke`、`error-boundary-smoke`；
+  画廊补合法 search/usage 桩（畸形桩另开 flag），新分区不再把视觉自查打白。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 桌面套件（`--maxWorkers=2`） | **1458/1458 绿**；默认并发下唯一红是 `terminal-login-shell` 的登录 shell 真执行判据（单跑 3/3 绿，按本仓已知并发环境债归因） |
+| 根 typecheck | **0 报错**（最终复跑；中途另一笔在飞改动落进 `src/main/agent-runner.ts` 时曾短暂报 `providerSettings`，已由其作者在同树修复，不记作本批的绿） |
+| `desktop-boundary-check` | 绿 |
+| `interaction-smoke`（真实 renderer） | **24/24 PASS**（旧 `.pane-grid` 判据已按单窗格重写；新增状态保留与命令面板 ⌘K 开/聚焦/Esc 关） |
+| `pane-tabs-smoke`（新增） | **6/6 PASS**：两块常驻/一块 active、文件与方案状态跨切换保留、8 块全开、active 标签可见、关 active 只移除那一块 |
+| `error-boundary-smoke`（新增，畸形 search settings） | **4/4 PASS**：内联兜底、整窗不白屏、左导航仍在、切到通用自动恢复 |
+| 画廊首启 | `.onboard` 在场、7 项、111px 高、底 699 < 视口 865（1440×900） |
+| 画廊设置页 | 联网搜索 / 用量统计在合法桩下正常出图 |
+| `bundle-audit`（工作树 dist） | 首屏 175,124 / 800,000、main 548,237 / 600,000、popout 316,445 / 400,000；`overBudget:false`（错误边界进首屏 2,987B；没有调预算） |
+| `renderer-layer-check` | **红，非本批**：`Composer.tsx` 当前 1236 行 > 1200（HEAD 1191；工作树他批 +49 行）。未改帽、未削断言 |
+| 桌面包 `build` | Vite 产物通过；随后 `tsc -p` 在 `tests/app-empty-terms.test.tsx` 报 3 条既有 `activeMcpServers` 缺字段（同树他批在飞） |
+
+新增/更新的判据：`tests/render-resilience.test.tsx`；`panes-structure` / `pane-rows` /
+`pane-disclosure` 从「只渲染一块」改为「都挂载、一块 active、关闭钮属于 active」（未削弱）；
+`plugins-pane` 源断言跟随 `kind === "plugins"`。
+
+### 四、边界（不冒充）
+
+- **未启动业主应用、未真机验证**：证据是离屏真实 renderer + 合成 AgentApi，不覆盖真机窗口、
+  原生 WebContentsView 层级/观感、真实 provider。浏览器「非激活零矩形」只有代码路径与
+  bounds 调用逻辑，没有真原生视图读数。
+- 错误边界的预期诊断会写控制台；`error-boundary-smoke` 只判界面与恢复，不拿控制台噪声当失败。
+- `mutate-verify` / `head-cert-check` 量的是提交；本轮未提交，两项不适用、未跑。
+- 未点名未入库的临时截图；证据覆盖**工作树**，不是任何提交。
+- 同树他批在飞：`src/main/agent-runner.ts`（01:32 仍在改）与本页文件之外；本页未碰。
+
+### 五、文档面
+
+`pnpm docs-check`：**D-5 21 条真红**（全部是历史 `PROGRESS.md` 引用不存在 sha 的存量，
+按业主裁决保留，不登记豁免；不是本页引入）；页号唯一面**新撞号 0**，下一个未占用页号 704；
+本轮未点名未入库的截图/取料目录。`docs-check` 没有全绿，不写成绿。
+
+## 2026-10-25 · 第 704 页：侧栏会话筛选终于有入口——五档 + 计数 + 持久化，空态不再谎报「还没有任务」
+
+### 一、缺口
+
+`SESSION_FILTERS / matchSession / filterSessions` 从 P3-3 起就在 `sessions-view.ts`，也有纯函数判卷；
+但 Sidebar 只把它用于搜索，两处调用都硬编码 `filter: "all"`。**运行中 / 已置顶 / 已归档 / 定时任务**
+四档没有用户入口——设计规范 §3.7 的「侧栏筛选」条款实际只落了一半。
+
+### 二、改法
+
+- 侧栏顶栏加漏斗按钮 + Radix RadioGroup 菜单：五档、每档计数、当前档珊瑚勾选；
+  有筛选时按钮留珊瑚点，不铺一排标签。
+- 选择持久化 `cairn.sidebar.filter.v1`；筛选变化展开项目组，命中项不藏在旧折叠里；
+  搜索与筛选用同一 `filter` 叠加。
+- 空态判据从 `groups.length` 改为**会话数** `visibleCount`。真机冒烟当场抓到这个：
+  `groupByWorkspace` 为已登记项目保留空组，只看组数会把「全部被筛掉」读成「列表有内容」，
+  导致空态不出现。收窄态无命中时隐藏空组头，给「「X」下没有会话」+「清除筛选」；
+  all 态保留空项目组（仍可在该项目下开新任务）。
+- 菜单脚注复用既有 `SESSION_FILTER_NOTE`：运行中只认本进程在场会话；等待/出错/完成
+  等实时状态等会话索引接上，不摆空壳。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 桌面套件（`--maxWorkers=2`） | **1460/1460 绿**（新增 2 条筛选接线判据） |
+| `interaction-smoke`（真实 renderer） | **27/27 PASS**：五档/勾选/计数、已归档空态、不摆空组头、localStorage、清除后恢复；含前一轮 24 条 |
+| 根 typecheck | 本批**tracked 文件无报错**；同树未跟踪测试有两处红（`evolution-reflect` 的 `StrategyPatch.times`、`memory-workflow` 的 `AgentEvent` 赋值），属他笔在飞，不认作本批绿 |
+| `desktop-boundary-check` | 绿 |
+| `bundle-audit`（工作树 dist） | 首屏 175,203 / 800,000；main 551,345 / 600,000；popout 317,479 / 400,000；`overBudget:false` |
+| 视觉 | 菜单（五档/计数/勾选/脚注）与已归档空态各一张离屏真实 renderer 截图；未入库 |
+
+判据：`tests/sidebar-session-search.test.ts` 新增「真实 filter 进入两处调用」「菜单/持久化/脚注」
+「专属空态 + 清除筛选」三条；`interaction-smoke` 用真实指针走完开菜单→选档→空态→清除。
+
+### 四、边界
+
+- 「运行中」按既有口径只统计本进程可见会话；不新增等待决定/出错/完成的筛选档。
+- 不改命令面板的会话全文搜索，职责保持分开。
+- 未启动业主应用；真机观感只有离屏真实 renderer 截图，原生菜单/真实 provider 未覆盖。
+- 未提交；`mutate-verify` / `head-cert-check` 不适用、未跑。
+
+## 2026-10-25 · 第 705 页：命令面板文件快速打开——⌘K 搜文件名、右侧展开预览；面板自己也不再一炸到底
+
+### 一、缺口
+
+命令面板能搜会话正文、项目、设置、操作、技能，却没有文件入口；`workspaceSearch` 通道与文件窗格
+（树 + 只读预览）早已存在。补齐「⌘K 输入文件名 → 打开右侧文件预览」这条 Codex/Claude 级基本动作。
+
+### 二、改法
+
+- 命令面板文件组：当前工作区、`workspaceSearch`、160ms 防抖；只列 `kind:"file"`、最多 8 条；
+  文件名 + 父目录；错误与截断如实显示（失败不伪装成没有匹配）。
+- 选中 → App 关面板、`openPane("file")`、写 `fileTarget {path, seq}`；PaneDock 收到即
+  `setFocusedPane("file")`；FilePane 按 `ancestorDirsOf` 展开父目录、补拉未加载目录、打开预览、定焦点。
+- **连带缺陷**：冒烟用畸形 `sessionSearch` 兜底 `{}` 触发正文结果组件 `.map` 抛错；命令面板原先只有
+  根边界，整块面板被兜走。补面板内 `RenderErrorBoundary variant="inline"`，并给画廊正文搜索一个
+  形状完整的三态桩。
+- 新增 `tests/palette-file-open.test.ts`（祖先目录纯函数 + 三处接线 + 面板边界）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 桌面套件（`--maxWorkers=2`） | **1469/1469 绿（218 文件；含同树他笔新增测试）** |
+| `interaction-smoke`（真实 renderer） | **29/29 PASS**：文件组 `main.ts / src`、真实指针选中、面板关闭、文件标签激活、父目录展开、`src/main.ts` 预览、控制台 0 错误；含前两轮 27 条 |
+| 根 typecheck | 本批 tracked 文件无报错；同树未跟踪测试两处红（`evolution-reflect` / `memory-workflow`），非本批 |
+| `desktop-boundary-check` | 绿 |
+| `bundle-audit`（工作树 dist） | 首屏 175,203 / 800,000；main 551,472 / 600,000；popout 317,956 / 400,000；`overBudget:false` |
+| 视觉 | 文件组与选中后的树 + 预览各一张离屏真实 renderer 截图；未入库 |
+
+### 四、边界
+
+- 文件搜索只搜文件名/路径，不搜正文；只搜当前工作区，跨项目未做；目录命中不列入快速打开。
+- 预览截断/二进制拒绝走既有 IPC 帽，不另造。
+- 未启动业主应用；原生菜单/真实 provider/真机观感未覆盖。
+- 未提交；`mutate-verify` / `head-cert-check` 不适用、未跑。
+
+## 2026-10-25 · 第 706 页：完成通知点击直达会话——v21 push、任务首行正文、同会话不重载
+
+### 一、缺口
+
+完成通知此前只有 `Notification.show()`：正文是裸 sessionId，点击没有任何动作。用户看到通知后
+还得回窗口、找会话；这不是 Codex/Claude 级桌面端的完成通知。
+
+### 二、改法
+
+- `apps/desktop/src/main/run-notification.ts` 纯函数：发不发（支持通知 + 窗口失焦 + id 非空）、
+  正文（任务首行、空白折叠、80 码点、成功/失败兜底）、点击目标（sessionId + workspace 规范化）。
+- main 只留壳：Notification 入 live 集合防 GC；click 聚焦主窗（macOS `app.focus({steal:true})`，
+  restore/show/focus），经新 push `onNotificationOpen` 发目标；run 收束时带 workspace 与任务原文。
+- preload 薄转发；AgentApi 增 `onNotificationOpen`；push 通道 8→9。协议：**v21 是本条**；
+  同树他笔把常量继续推到 **v22**（PluginPanelSnapshot MCP 激活态），本轮按 v22 钉测试。
+- renderer 校验载荷、同会话不重载、workspace 只收字符串，再调既有 `openSession`。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 桌面套件（`--maxWorkers=2`） | **1476/1476 绿（220 文件）** |
+| `notification-open-smoke`（新增） | **5/5 PASS**：开 s1 → ⌘W 回主页 → 畸形载荷忽略 → `{s1,/tmp/demo-ws}` 推送重开会话；控制台 0 错误；截图未入库 |
+| `run-notification.test.ts`（新增 4） | 决策三条件、首行/80 码点/代理对、成功失败文案、workspace 规范化 |
+| `notification-open-wiring.test.ts`（新增 3） | push/协议、main click 接线、preload + renderer 校验/同会话守卫 |
+| `interaction-smoke`（同一构建） | 29/29 绿（第 705 页记录） |
+| 根 typecheck | 本批 tracked 文件无报错；同树未跟踪测试两处红（`evolution-reflect` / `memory-workflow`），非本批 |
+| `desktop-boundary-check` | 绿 |
+| `bundle-audit`（工作树 dist） | 首屏 175,203 / 800,000；main 551,757 / 600,000；popout 317,956 / 400,000；`overBudget:false` |
+
+### 四、边界
+
+- **真实 OS 通知的浮现与点击未验证**：离屏 Electron 造不出系统通知点击；本轮只验纯决策/文案/接线
+  与 renderer 收到推送后的开会话路径。真机点通知明确未验收。
+- 只在窗口整体失焦时发；同会话通知点击不重载；非 macOS 的 `app.focus` 行为未真机验证。
+- 未提交；`mutate-verify` / `head-cert-check` 不适用、未跑。
+
+## 2026-10-25 · 第 707 页：自进化闭环 v2——账本+反思位+补丁门 / 打法蒸馏+毕业 / SEMA Phase 4+5 最小落地
+
+对标调研（GEPA 反思式进化 / Voyager 技能库 / AWM 工作流记忆，结论：不引框架、取机制自研）后的三批加强，
+全部贴既有纪律（纯函数、证据指针、fail-closed、判卷配反向验证）。
+
+### 一、批次 A：会话级闭环 v2（`src/agent/evolution/`）
+
+- **账本化**（`ledger.ts` 新增）：emit/observe 进追加式 `.agent/evolution-ledger.jsonl`（与 registry 账本
+  同族纪律：O_APPEND 单写、坏行只丢那一条并计数、投影纯 fold 可重建）。投影出每 key 的复发连击，
+  连击 ≥2 时措辞自动升级「（第 N 次复发）」（`escalateNote`）——旧实现单记录覆盖，「发出→看似消解→
+  再复发」的振荡账面不可见。run 事件带 tokensPerBoundary（canary 基线取料）。
+  `evolution.json` 逐字不动（装配面读料，旧读者零影响）；两份写都在 `withEvolutionLock` 串行段内。
+- **反思位**（`reflect.ts` 新增，GEPA 式）：有补丁要发且有失败面时，请注入的 ReflectFn（装配根用
+  createProvider 闭包构造，与沉淀轮同款 ephemeralUserTurn 形态）读真实轨迹改写 note。**kind 集封闭**
+  （只有既有三种，结构化字段反思碰不到）；产出必须带 evidenceCallIds 且逐个指得到事件流——无出处
+  不收（拒因出声）；失败/全拒 ⇒ 规则 note 兜底（fail-open 到既有行为）。
+- **补丁门**（`patch-gates.ts` 新增）：两个来源（规则/反思）过同一道确定性门。判据方向是**拦矛盾、
+  放缺席**：本轮跑了 verify 且该 cause 零失败 ⇒ 拒；漂移可测且记数不符 ⇒ 拒；成本可测且回落 ⇒ 拒；
+  读数缺席（verify 没跑/漂移不可测/成本不可测）⇒ 接续补丁照过——否则会把 patch-effect 的
+  inconclusive-接续语义打穿。同轮去重、单跑帽拒尾出声、可插 gym 回放位（回放面抛错按不可判拒）。
+- **advice 死出口接线**（批次 A4）：`preferredTier:"cheap"` 真正驱动主会话拨号降档
+  （`preferCheapSelection`：显式点名不动、只降一档、同家内找档）；`contextAction:"compress-early"`
+  透传到 compaction config（ratio 压到 `COMPRESS_EARLY_RATIO=0.7`，事实源在 advice.ts）。
+  读料口 `evolutionRoutingBias` 与 `evolutionPromptNote` 同一份记录——渲染面与决策面不各读各的。
+
+### 二、批次 B：正向打法蒸馏（Voyager/AWM 的最小本仓版）
+
+- `src/agent/memory/workflow.ts`（新增）：**连续工具序列 + 紧跟绿 verify**、同签名（工具名+参数键集，
+  不带值）复现 ≥2 次才蒸馏为 project 记忆（topic=`workflow-<签名哈希>`，跨会话稳定去重）。
+  证据纪律同 lessons（evidence-line + session-line）；worker 子流不替父会话表态；段中夹散文即打断。
+  零新机制落盘——走既有 writeTopic，M7 索引/RECALL/强度账直接可命中。
+- `src/main/evolution/workflow-graduate.ts`（新增）：强度账 hits ≥3 的 workflow 毕业为 content-pack
+  提案走 SEMA `submitProposal`（gates=prompt-surface-check+prefix-churn-check；已注册不重提）。
+  **这是进化平面第一条非测试的真实提案流量**——`evolution-check` 门立门的条件从此开始积累。
+
+### 三、批次 C：SEMA Phase 4+5 最小落地
+
+- `src/main/evolution/autonomy.ts`（新增，Phase 4）：档位文件 `modules/autonomy.json`
+  （manual 缺省 fail-closed / gated-auto）。gated-auto 只放**零权限 content-pack** 免人工装
+  （`autoInstallEligible` 单一出口）；tool/desktop-panel/带权包仍全量人工。TCB 不自改：档位文件
+  不在模型提案面里。
+- `src/main/evolution/assess.ts`（新增，Phase 5）：三路喂料（registry 账 / evolution 账本 /
+  canary 回退档）折成 `.agent/assess-report.json`（recurring-patch 名单就是喂未来 Planner 的接口）。
+  gated-auto 时执行自动安装 + **canary begin 开观察期**（基线=账本 tokensPerBoundary 中位数，
+  无读数不编造）——`begin()` 从此有了生产调用方，Phase 4「运行面装载」的断链接上了。
+- 收束缝接线（`post-run-readings.ts`）：反思 provider 注入口、打法蒸馏、毕业检查、周期 Assess
+  四支全部 best-effort（失败出声不阻塞）；`gated-tools.test.ts` afterAll 补清靶子里的
+  evolution-ledger.jsonl（.jsonl 会让 projection-invariant 的语料尺读出两把不同的尺）。
+
+### 四、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 根 typecheck | **0 报错** |
+| 新判卷 6 文件 60 条（含每判据反向验证） | **60/60 绿**：ledger / reflect / patch-gates / memory-workflow / autonomy / assess(+loop-v2 集成) |
+| evolution+memory 邻域 | **367/367 绿**（既有 evolution*.test / memory*.test 全绿，装配面逐字兼容得证） |
+| 根全量 | 6728 绿 / 32 红——**32 红全部归因为他批在飞或备案存量**（motion×15、权限第五档×6、web-search×1、channels×1、PROGRESS sha/docs×5、projection-invariant×1〔剩 2 条均为他批 mcp-lazy 文件〕、promise-recall×1〔M7/foreign.ts 面〕）；本批面零红，本批曾贡献的第 3 条语料已修（gated-tools 跑后清理） |
+| 桌面套件 | **220 文件 / 1476 条全绿** + desktop-boundary-check 绿 |
+| gated-tools（共享靶子） | 7/7 绿，跑后无 .jsonl 残留 |
+
+### 五、边界
+
+- 反思位的 gym 回放注入位已留（`RunEvolutionOptions.replay`），生产 gym 回放接线待真实补丁流量后再上
+  ——现在接只会空转（有补丁的会话才有得回放）。
+- 自动安装只动「从未装过」的 bundle（首装）；已装包的升级提案仍走人工（常驻提示词面的变更频率
+  自己得有节制）。`evolution-check` 门仍未立——等真实 staging 流量攒够判据。
+- 数值（RECURRENCE_ESCALATE_MIN_STREAK=2、RECUR_MIN=2、WORKFLOW_GRADUATE_MIN_HITS=3、
+  COMPRESS_EARLY_RATIO=0.7）沿 lessons/gym 同档思路拍定，没量过。
+- 未提交；HEAD 门（mutate-verify/supervisor/head-cert）未跑，提交后需补。
+
+## 2026-10-25 · 第 708 页：Plan 模式一等入口——Composer「方案」开关按轮覆盖，RunRequest v23 进既有方案门
+
+### 一、缺口
+
+Plan 模式此前只有设置页的 `planRequiredByDefault` 一个入口；用户想临时“先出方案”必须离开对话去设置。
+核心方案门（未批准不写文件）已有 `tests/plan-required.test.ts`，缺的是 Composer 入口与按轮覆盖。
+
+### 二、改法
+
+- `RunRequest` 增 `planRequired?: boolean`（协议 v23）；`run-request` 白名单/布尔校验/原样保留；
+  kernel-host 非会话与会话两路都透进 `handleAgentRun` 的 overrides。核心 `over.planRequired` 的
+  `?? settings.planRequiredByDefault` 语义不动。
+- renderer：`planDefault`（settings）+ `planOverride`（null/true/false）+ ref；run-queue 只在
+  override 非 null 时带字段。Composer 加「方案」开关：`aria-pressed`/`data-on`、轻底珊瑚态、
+  开启/关闭回执；缺省不摆（旧调用面零行为）。设置页补一句“这是默认值；输入框旁可按轮覆盖”。
+- 冒烟顺手修画廊 `createSession` 桩：真接口回 `{id, workspace}`，且 listSessions 能看到新会话。
+  只给 `{id}` 会让“首页直接发”的渲染路径拿到 undefined（根边界看起来像产品崩了）。
+- 架构副产物：为给 Plan 开关腾行数，用量环 + 明细浮层抽成 `UsageMeter.tsx`；
+  Composer **1182** 行、`renderer-layer-check` 转绿（存量帽红销账）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 桌面套件（`--maxWorkers=2`） | **1480/1480 绿（221 文件）** |
+| `plan-mode-smoke`（新增） | **6/6 PASS**：默认关、点开态/回执、发送 `planRequired:true`、首轮后仍可用、关掉后 `false`、控制台 0 错误 |
+| 核心方案门 | `plan-required` **11/11**；`main-run-routing` + `ipc-protocol-version` **19/19**（validator true/false/非布尔 + v23） |
+| `interaction-smoke` | 29/29（同一构建） |
+| 根 typecheck | 本批 tracked 文件无报错；同树未跟踪测试两处红（`evolution-reflect` / `memory-workflow`），非本批 |
+| `desktop-boundary-check` | 绿 |
+| `bundle-audit`（工作树 dist） | 首屏 175,609 / 800,000；main 553,435 / 600,000；popout 318,362 / 400,000；`overBudget:false` |
+| `renderer-layer-check` | **绿**：Composer 1256 → **1182**（UsageMeter 抽出），130 个渲染层源文件全过；此前 1237~1256 的存量帽红销账 |
+
+### 四、边界
+
+- **未跑真模型**：无 provider，无法验证“模型真的先出方案、批准后才写”的完整回合；本轮验
+  UI → RunRequest → overrides 的接线与既有核心方案门判据。真方案卡/批准流程仍需真实会话验收。
+- override 是本窗口内存态，不写 settings、不跨重启；切会话沿用当前 override，不是每会话独立。
+  设置页改默认值不会在本启动内热同步芯片（override=null 时主进程仍按最新 settings 判，只影响显示）。
+- 方案开关运行中仍可按（下一条消息生效），当前轮不受影响；回执已说明。
+- 未提交；`mutate-verify` / `head-cert-check` 不适用、未跑。
+
+## 2026-10-25 · 第 709 页：自进化闭环 v2 复查轮——抓到一个生产空转实锤 + 三处小修 + 判卷补齐
+
+业主指示「再全面检查一遍」后的全量复查。**自查抓到一个会让整支批次 B 空转的实锤 bug**，
+另修三处小问题、补两组判卷、纠正一处读数口径。
+
+### 一、实锤（已修）：workflow 蒸馏在生产形状的事件流上永远蒸馏 0 条
+
+- 症结：真实事件流里 tool_call 与 tool_result **交错**（t1 call → t1 result → t2 call → …），
+  而扫描器把 tool_result 当「别的事件」⇒ 每步之后段被 flush 清空 ⇒ `≥2 步` 永远不成立。
+- 为什么第 707 页的 60 条判卷没抓住：合成序列只放了 tool_call，没放 result——**判卷的事件形状
+  不是生产形状，绿了也只证了玩具**。用 outputs/ 里的真实会话日志（ga-strategy-2026-09-20）
+  核对形状后才确认。修法：result 是步的一部分，不打断段（收尾绿 verify 才是判据，段内失败-重试
+  本就是打法的形状）；补 `interleavedSequence` 回归针，断言语写明「交错形状下蒸馏 0 条 = 旧 bug 复发」。
+
+### 二、小修三处 + 判卷补齐
+
+- `evolution/index.ts`：`escalatePatchNote` 内联重推定位键（`kind:cause` 拼法）——patchKeyOf 的
+  第二份抄法，两处漂了连击就对不上账。改走具名出口。
+- `post-run-readings.ts` 的 `consumeReflectOutput`：有的 provider 会同时发 delta 流与合并
+  assistant_message，两边都收正文会翻倍（parse 必炸 ⇒ 反思白花一次）。有 delta 用 delta。
+- `assess.ts`：读账不在 evolution 那把锁内（旁路观测），最后一行可能是并发追加的半行——
+  坏行数出声（与 index.ts 同口径），投影按读到的事件折。
+- 判卷补齐：`preferCheapSelection` 三条（同家降一档 / 显式点名与 demo 不动 / 已是 cheap 与
+  无目标档原样——第 707 页漏了这张判卷）；交错回归针一条。
+
+### 三、读数纠正与补记
+
+- 第 707 页「根 typecheck 0 报错」的读数**在测试文件写完之后没有复跑过**：本轮复查抓出
+  测试面 7 处类型错（联合窄化三族：`StrategyPatch.times`、`MainModelSelection.spec`、
+  `AgentEvent→Record`）。vitest 过是因为 esbuild 不查类型——**typecheck 与判卷是两道门，绿了
+  一道不等于另一道绿**。已全修，现 0 报错。
+- 运行态 ignore 补账：`.agent/evolution-ledger.jsonl` / `.agent/assess-report.json` / `.agent/canary/`
+  进 .gitignore（口径同 `.agent/evolution.json`：机器本地状态不随仓库分发；业主桌面端真实使用
+  已在本仓根写出 ledger，不 ignore 会一直躺在 `git status` 里）。
+
+### 四、复查后读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 根 typecheck | **0 报错**（含测试面；本轮真跑） |
+| 触达邻域（evolution / memory- / main-provider-runtime / gated-tools / post-run，31 文件） | **397/397 绿**（含新增 4 条） |
+| 根全量（复查轮终跑） | 6731 绿 / 33 红——红面与第 707 页同族（motion×15、权限第五档×6、web-search×1、
+  channels×1、PROGRESS sha/docs×5、projection-invariant×1〔**仅剩他批 2 条 mcp-lazy**，本批
+  文件已从抱怨名单消失〕、promise-recall×1、render-image×1 抖动/他批）；本批面零红 |
+| 桌面套件（复查轮终跑） | 1477 绿 / 3 红：strings×1（他批渲染层在飞改动的确定性红）+ approval-e2e×2
+  （**单独复跑通过**——全量红为负载时序抖动或他批 02:46 改 tool-gates.ts〔ask 面〕的在飞态；
+  本批改动全在收束路径，够不着 mid-run 的 ask） |
+| 残留物 | fixtures 树无 .jsonl；根 .agent 运行态三支已进 ignore（业主桌面端真实使用已写出账本） |
+
+- 未提交；HEAD 门仍未跑。
+
+## 2026-10-25 · 第 710 页：DeepSeek 升一等家并对 V4.1 Flash 深度校准——thinking 默认反着开、effort 官方形状、缓存读数双口径、/beta 回放边界
+
+### 动因
+
+业主点名「针对 deepseek v4.1flash 做深度优化」。此前 DeepSeek 只能借
+`OPENAI_BASE_URL` 走 OpenAI 兼容通道（第 640 页「无 API key/endpoint，bench 不可跑」的欠账）。
+2026-10-25 联网实读官方 api-docs（create-chat-completion / quick_start/pricing 两页）拿到现行契约，
+四条与「最佳性能」直接相撞的事实全在本仓既有行为的反面：
+
+1. **V4.1 的 `thinking.type` 缺省 enabled（effort 缺省 high）**——别家「不发字段＝不思考」，
+   这家「不表态＝开思考」：更慢、按思考档计费、输出上限抬到 64K。本仓缺省 effort 是 off
+   且装配层 off 不传字段 ⇒ 每一次未点名思考的调用都在被服务端默认开思考烧钱。
+2. **effort 的官方形状是 `thinking.reasoning_effort`**（none/low/high/max；minimal/medium/xhigh
+   由服务端兼容映射），顶层 `reasoning_effort` 是 OpenAI 家形状——旧适配器给 DeepSeek 发的是
+   顶层字段＋空 `thinking:{type:"enabled"}`。
+3. **`reasoning_content` 作为输入是 `/beta` 通道的 Chat Prefix Completion 能力**；
+   reasoner 时代标准端点对输入里的 reasoning_content 是 400。本仓的回放机制
+   （第 675–682 页「模型 wire id 按来源分域」）会在同源同模型时把它发回标准端点。
+4. **usage 缓存命中双口径**（`prompt_cache_hit_tokens` ＝ `prompt_tokens_details.cached_tokens`）
+   且价差 50 倍（flash 峰时未命中 $0.30 vs 命中 $0.006 每百万）——漏读命中量＝成本闸系统性高估。
+
+### 一、一等家落地（数据面五张表同步）
+
+- `providers/deepseek.ts`（新）：`streamDeepSeek` 预设（glm.ts 同族）。端点
+  `https://api.deepseek.com/chat/completions`；`DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` /
+  `DEEPSEEK_ENDPOINT`；缺省模型 `deepseek-flash`（＝DeepSeek-V4.1-Flash-1017 的对外调用名）。
+  预设身份自述 `deepseekNative:true`——端点被镜像/中转覆盖时 wire 形状仍按官方发，不靠 hostname 猜。
+- registry：`PROVIDER_IDS` 追加 deepseek（在尾：表序＝档位缺省优先级，新增不改既有缺省）；
+  档位表两行——`deepseek-cheap`（deepseek-flash，1M，文本+图像）与
+  `deepseek-strong`（deepseek-v4-pro，1M，仅文本）。**官方现行只有这两个调用名，没有
+  standard 可登，不造第三行占位**；`defaultModelFor`/`preferCheapSelection` 对缺档的兜底
+  已有（选家缺省落 cheap＝flash，降档 strong→cheap 直达）。两行带
+  `reasoningEfforts:["low","high","max"]`＋`inputModalities`——这是 capability「上游自述」
+  证据通道**第一次**在内置行上被官方文档填上（`mapUpstreamEfforts`：max→high，medium 不给选）。
+- env-keys / provider-identifiers / provider-runtime 标签 / provider-connection 一键检查 /
+  settings-sections 面板选项集（`PROVIDER_KINDS`＝`["demo",...ENV_KEYED_PROVIDERS]` 派生，
+  PANEL 对账判卷钉着逐位等值）/ cli key 推断与提示，六处同步。CLI 提示从「走
+  OPENAI_BASE_URL 兼容通道」改为「export DEEPSEEK_API_KEY（缺省 deepseek-flash）」。
+- 保留名单拒收：自定义家用 `id:"deepseek"` 会被 registry switch 先命中内置分支静默忽略
+  （`suggestProviderId` 自动让开成 `deepseek-compat`）；判卷从「用 deepseek 当自定义 fixture」
+  改为「用 mydeepseek＋显式保留名拒收断言」。
+
+### 二、V4.1 Flash 行为校准（openai.ts 的 native DeepSeek 分支）
+
+- **思考缺省反转**：native DeepSeek 永远写显式开关——off/未表态 ⇒ `thinking:{type:"disabled"}`；
+  档位在场 ⇒ `thinking:{type:"enabled",reasoning_effort:<档>}`，顶层 `reasoning_effort` 不发。
+  档位词汇兼容映射（minimal→low、medium/xhigh→high）是服务端行为，照发不折。
+  非 DeepSeek 家逐字不动（off＝不发字段）。
+- **回放边界**：`wireReasoningSource` ——native DeepSeek 且路径非 `/beta` ⇒ 剥掉出站
+  reasoning_content（标准端点防 400）；`/beta` 路径照常回放（官方 Chat Prefix Completion）。
+  事件层留档（thinking_delta 的 source 域）不受影响：状态仍在，只是不回传标准端点。
+- **缓存读数**：`cacheReadTokens()` 统一读法（`prompt_tokens_details.cached_tokens` 优先、
+  `prompt_cache_hit_tokens` 兜底，都缺报仍算未上报不折 0），流式/非流式/计量三张脸共用。
+- **雷区字段**：`tool_choice`（required/具名在 thinking 模式 400）与已弃用的
+  `frequency_penalty`/`presence_penalty` 本仓从不发送——判卷钉死不许回。
+- 前缀缓存是 DeepSeek 自动行为（无写侧标记）：命中率的护持是既有门在守——纯文本消息
+  逐字保形（openai.ts 头注）、工具序 core-first（model-surface-check）、前缀稳定
+  （prefix-churn-check），本批不改不动。
+
+### 三、价格面（routing/pricing.ts）
+
+- 官方 pricing 页 2026-10-25 实读，分峰谷两档（谷＝峰半价）：**取峰时**（美元闸宁可高估一半，
+  不低估一半）。deepseek-cheap $0.30/$1.20/命中 $0.006；deepseek-strong $1.32/$3.96/命中 $0.044；
+  两行 `calibrated:true`。写侧价＝未命中输入价（官方口径 miss 段按输入价计、自动缓存无单独
+  写价，usage 也不报写桶——该值只在远端哪天报写桶时才参与折算）。F2d 未标定清单仍恰为
+  GLM 三行（智谱 JS 渲染页抓不到数的旧账不动）。
+
+### 四、判卷（改 11 个既有文件＋新增 1 组；计数以本页「读数」为准）
+
+- providers：白名单/档位表/每档家数按五家改口径；新增「DeepSeek 预设 wire 形状」describe
+  四条（缺省显式 disabled＋include_usage＋雷区字段不发 / effort 入 thinking 对象 /
+  缓存命中双口径各喂一帧＋缺报不折 0 / DEEPSEEK_ENDPOINT 覆盖后 wire 形状不变＋
+  reasoning_content 走独立 thinking_delta）。
+- capabilities / main-provider-runtime：全称断言改为「DeepSeek 两行是唯一例外（官方自述开门），
+  其余照旧无证据不开门」；flash 识图 true、pro false；medium 仍被拒。
+- reasoning-continuity：回放正例改走 `/beta`；新增「标准 /v1 剥回放但投影留档仍在」判据
+  （来源分域机制不动，变的只是标准端点的出站形状）。
+- config/setup/store/wiring/desktop-model-surface/draft：自定义 fixture 迁离保留名
+  （mydeepseek），并立保留名拒收断言；connection 深度判卷翻成内置家（含
+  DEEPSEEK_ENDPOINT 覆盖同源）；routing-pricing 补两行标定值＋命中价真折算（$0.006 非 $0.30）；
+  cli-surface 提示判据跟新文案。
+
+### 五、读数（工作树；未提交；全量 core＝`--maxWorkers=2` 并发）
+
+| 面 | 读数 |
+|---|---|
+| 触达面判卷（providers/capabilities/wire/continuity/config/setup/connection/store/wiring/surface/runtime/pricing/draft/cli-surface/metacognition/stream-lifecycle，16 文件） | 全绿 |
+| 根 typecheck | 0 报错 |
+| routing-check | 39 ✅ / 0 ❌（F1 覆盖 14 id；F2d 未标定恰为 glm 三行） |
+| desktop-boundary-check | 绿 |
+| 桌面套件 | 1479 绿 / 1 红：strings×1 在 Sidebar.tsx（他批渲染层在飞脏文件，非本批触达面；本批 renderer 改动仅 settings-sections.tsx，过 strings 判卷） |
+| 全量 core 终跑 | 红集＝14 文件：3 个 HEAD 既有债（D-5 业主保留红、死针脚 1f16bea、promise-recall 真仓面——干净 HEAD worktree 复核同红）＋11 个他批脏改动面（motion/权限/投影/web-search 等，判卷零引用本批路径、其读面源文件均在他人脏改清单）；本批面零新增红 |
+| 归因方法 | 一次性 HEAD worktree 跑 14 文件：11 绿 3 红 ⇒ 11 个「HEAD 绿脏树红」与本批无涉（其判卷零引用本批改动的任何路径） |
+
+- 未提交；真模型读数（真连延迟/命中率/思考档对照）仍欠一把 `DEEPSEEK_API_KEY`——机制与
+  判据已备齐，待带凭据实测后回填 `availability:"verified"`（选择器安全入口的唯一钥匙）。
 ## 2026-10-25 · 第 711 页：多智能体编排 P0–P4 本地纵切（独立提交树）
 
-业主原话是「完成 codex 没完成的多智能体编排」；此前工作树里有一版停在 provider 摘要空转与 typecheck 红的纵切。本笔在独立树 `feat/orchestration-platform` 从 `f4bffa3a` 单笔落地，不把共享工作树其他会话的 hunk 带进提交。
+业主原话是「完成 codex 没完成的多智能体编排」；此前工作树里有一版停在 provider 摘要空转与 typecheck 红的纵切。本笔在独立树 `feat/orchestration-platform` 从 `146743c` 单笔落地，不把共享工作树其他会话的 hunk 带进提交。
 
 **交付**：`src/orchestration/` 的领域/Flow 校验、事件投影、调度、JSONL 存储、引擎、内容寻址工件、本地受限后端；`src/main/orchestration-{service,backend}.ts`；桌面 `OrchestrationPane` 与 IPC v20 三通道。事件只加可选 `orchestration` 命名空间，旧日志逐字回放。
 
@@ -23987,3 +24608,74 @@ TasksPane 的 modal：有 hunks ⇒ `<DiffView hunks={...} />`；否则仍显示
 **独立审查后加固**：needs_you 可重试；done 不可 cancel/重复交付；异常不再全局停机；取消不再把预留记成花费；后端数据目录按会话隔离；预算/交付锁可回收死进程；交付 journal 可崩溃恢复；凭证路径不进入 overlay。
 
 **边界**：provider wire gateway 深测依赖未提交的 DeepSeek provider 批，留在共享工作树；本树只保留 fail-closed 覆盖。真实模型凭据未实测；桌面未做真指针冒烟；本地后端 `max_concurrency: 1`；P3 的 race/动态控制与远程 worker 未实现，静态展开不支持的节点 fail-closed。证据见 `outputs/orchestration-delivery-2026-10-25/FINAL.md`；计划见 `docs/superpowers/plans/2026-10-25-orchestration-delivery.md`。
+
+
+## 2026-10-26 · 第 712 页：仓库整理盘点与现态收口（工作树）
+
+业主要求清理无用材料，并分别列出未完成、待开工与优化事项；进一步授权由执行者按内容选主线。
+本批以 `cairn/` 当前功能工作树为主，同级 staging 只读保留；没有覆盖、重置或提交其他会话改动。
+
+- 任务入口：`docs/REPOSITORY-STATUS.md`。`STATE.md` 整体重写并更新实际基线身份，文档索引接入。
+- 清理预览：`gen_legs.py`、`pel_verify.py`、`pelican-bike.html`、`de.md`、`jev.html`；
+  候选字节与 HEAD 一致，补丁适用检查通过，正式删除待业主看完报告确认。读取中的动画正确标本保留。
+- 本轮复验：根类型检查与文档门通过；清理相关核心回归（maxWorkers=2）和桌面投影回归通过。
+  完整门输出、断言数及未运行边界在任务入口；不宣称全量 gates、HEAD 认证或运行中应用已通过。
+- 两份仓库全引用 fsck 失败，当前 HEAD 的对象遍历均无缺失；旧 ref/历史缺口仍待核对。
+  旧分支、工作树、补丁与备份保持原样；未运行 gc、prune 或清理恢复副本。
+- 复核现场存仓外临时目录，位置见任务入口；未向 outputs 复制源码或整仓快照。
+  未改 AGENTS、全局配置、Codex 记忆、冻结表与既有测试；无发布、部署或新模型费用。
+
+### 同日清场补记（第 712 页）
+
+业主看完完整盘点、删除理由与验证边界后明确答复“确认删除这 5 个文件”。
+已按清单删除 `gen_legs.py`、`pel_verify.py`、`pelican-bike.html`、`de.md`、`jev.html`；
+执行前再次核对字节指纹与暂存差量，删除补丁与反向恢复补丁适用检查均通过。
+被读取的动画正确标本、其他会话改动、staging、旧 ref/worktree 与恢复备份保持原样。
+删除后的专项复验和最终审计见 `docs/REPOSITORY-STATUS.md`。
+
+## 2026-10-26 · 第 713 页：仓库整理收口——Git 事故残留处置、13 笔批次入库与全量复验
+
+业主要求「完成 REPOSITORY-STATUS.md 里的所有内容」。本页只记本轮实际做了什么、读数与边界；
+任务入口见 `docs/REPOSITORY-STATUS.md`（已重写为收口版）。
+
+### 一、Git 完整性：从 25 个坏 ref 到全部可遍历
+
+- 事故背景见 ADR 0007：2026-10-25 丢失一个 pack，39 个对象缺失（1 commit + 6 tree + 32 blob），
+  历史已重建。残留的 25 个本地分支（23 个 `agent/*` + `codex/pointer-final-closeout` +
+  `feat/orchestration-kernel`）仍指向重建前 DAG，导致 `git log --all` exit 128、`git fsck` exit 2。
+- 先取证后动手：`/Users/ze/Downloads/Cairn/git-quarantine-20261026/` 归档 35 个 ref 的 1820 个
+  唯一文件 / 112,247,049 字节（逐文件 blob 重算 SHA 校验 1820/1820 通过），另存 25 个分支的
+  逐笔原始 commit 元数据、306 条失败 reflog、39 个缺失对象清单、16 个受影响提交。
+- 处置：21 个 tip tree 已在 HEAD 对象集的 agent 分支直接删；`codex/pointer-final-closeout`
+  的 70 个 HEAD 外 blob 归档完整后删；`evo-registry-replay` 与 `worker-12` 两棵不可读 tree
+  先导出 110/123 个可读唯一文件、再从外置 tarball 提取缺失的 `src/agent` / `src/events` 子树，
+  然后删。`.worktrees/orchestration-kernel` 的 tracked.patch（35K）与 untracked.tar.gz（63K）
+  先归档再移除。
+- 结果：37 个命名 ref 全部 `git rev-list --objects` 通过（broken_refs=0），`git log --all` 正常；
+  无效 HEAD reflog 行已删（原件存 `HEAD.reflog.before`）。`git fsck` 仍有 37 条 broken link /
+  missing——全部是**不可达**的重建前对象，ADR 0007 已判永久不可恢复；不跑 gc/prune 以免
+  把仓外归档之外的旧对象一并删掉。
+
+### 二、未提交批次：13 笔提交
+
+`99675a23` 引用对齐 → `62d102f6` 记忆/进化 → `d22f538c` DeepSeek → `76942fdf` 权限第五档 →
+`f8ab28ae` 搜索/用量 → `51a9856f` 元认知 → `9706bf98` 证人补库 → `19909d78` 裸词断言收紧 →
+`b072e2c0` 插件懒激活 → `4c38b08c` 桌面 703–708/品牌/设置/用量 → `7465bd68` CLI/会话/IPC →
+`1f462871` 449 件取料 → `8f68b1cb` 工具面读数。共享文件整文件入库，跨批 hunk 在各提交说明点名。
+
+### 三、判卷与真实交互
+
+- 根 typecheck 0；桌面 223 文件 1483 条 + boundary 绿；桌面 build 绿；docs-check 绿。
+- 编排 10 文件 154；记忆/进化 27 文件 332；provider 11 文件 170；权限 4 文件 112；
+  搜索/用量 5 文件 64；插件 5 文件 58；元认知 5 文件 26。
+- 连续发送 smoke 7/7 PASS（三次发送单日志、重启恢复、续发追加、新建任务分叉、无控制台错误）。
+- 插话 smoke 1/6：gallery 桩无法把活动会话的 `running` 置起来（脚本头注已写明），
+  组件级插话判卷在桌面套件内全绿；不宣称端到端已证。
+- core 终跑与 `pnpm gates` 读数见任务入口第七节；`promise-recall-inventory` 2 条在干净 HEAD
+  worktree 复核同红，属既有债。`mutate-verify` / `head-cert-check` 本轮未认证。
+
+### 四、仍阻塞 / 未做
+
+- DeepSeek 真连：无 `DEEPSEEK_API_KEY`，官方端点 401；stub wire 判卷绿不等于厂商可用。
+- 远程 worker / P3 动态 Flow / P5 评测 / P6 SDK：按设计仍待开工（条件未变）。
+- `ab.py` 仍未跟踪；来源与用途待裁。

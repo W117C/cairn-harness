@@ -65,7 +65,13 @@ async function main() {
   await waitFor(() => js('!!document.querySelector(".composer-card textarea")'), 'composer');
   await waitFor(() => js('document.querySelector(".mp-trigger")?.textContent.includes("演示")'), 'demo provider settings');
   await waitFor(() => js('!document.getElementById("boot") || getComputedStyle(document.getElementById("boot")).visibility === "hidden"'), 'startup overlay dismissed');
-  check('首启首页不再展示设置检查按钮组', await js('!document.querySelector(".onboard") && !document.body.innerText.includes("BYOK key")'));
+  // 2026-10-25 空屏重做把设置检查块连带删掉、10-26 恢复（见 WorkbenchView 的注释）。
+  // 这条不再要求「不展示」，改为钉恢复后的形状：块在就每一格都能点（不许死行），且旧 BYOK 检查不再出现。
+  check('首启首页的设置检查块每一格都可操作（无死行）', await js(`(() => {
+    const items = [...document.querySelectorAll('.onboard-item')];
+    const actionable = items.every((el) => el.tagName === 'BUTTON' || el.getAttribute('role') === 'button');
+    return items.length > 0 && actionable;
+  })()`));
   writeFileSync(join(out, '01-home.png'), (await win.webContents.capturePage()).toPNG());
 
   async function send(text, count) {

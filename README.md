@@ -344,7 +344,7 @@ worker 要联网只能回主会话发。
 
 内核质量很高、**产品面刚补上**的一棵树：strict 零报错，fail-closed 是设计意图而非事后补丁，
 变异测试的判红标准很硬。桌面层曾于 2026-09-27（`69fbb0d`）整体移除，2026-10-02 起以 M1 切片
-重新入库于 `apps/desktop/`（Electron + React + Vite），此后持续接线：104 个 invoke 通道（现读
+重新入库于 `apps/desktop/`（Electron + React + Vite），此后持续接线：108 个 invoke 通道（现读
 `apps/desktop/src/main/channels.ts` 的 `INVOKE_CHANNELS`；判据在 `apps/desktop/tests/channels.test.ts`
 的表长断言，改表不改数当场红——核心套件的 `tests/readme-invoke-channel-count.test.ts` 也把
 这个数与那张表钉在一起）

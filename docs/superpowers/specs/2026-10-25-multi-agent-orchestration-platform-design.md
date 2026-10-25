@@ -1,6 +1,6 @@
 # 多智能体编排平台设计（Orchestration Kernel）
 
-状态：方向已裁决（2026-10-25），本文件待审阅，尚未实施。
+状态：P0–P4 本地纵切已实施（2026-10-25，提交 `100fc3b`…`014ac0e3`）；P3 的 race/gather any/quorum 与远程 worker 未实现，静态展开 fail-closed。现役实现与边界见 `outputs/orchestration-delivery-2026-10-25/FINAL.md` 与 `PROGRESS.md` 第 711 页。
 代码核对起点：`f4bffa3a`（HEAD）。仓库中其它会话的未提交改动不在本设计范围内。
 交付目标：P0–P4 全量（内核 + 控制面），P5 持续评测，P6 开放面留门。
 
@@ -672,3 +672,17 @@ P0 的“完成”不是“能跑多 agent”，而是**上层可以安全地长
 3. **全自动边界**：R0–R2 沙箱内自动；R3 默认通知/按策略审批；R4 默认拒绝或强制人工；自动合并只在契约+证据+策略全满足时。
 4. **Flow 先 JSON AST**：不执行任意代码；动态能力靠 `map/loop/branch` + 硬上限，不靠 eval。
 5. **编码包先行**：Task/Contract/Capability/Artifact 不绑 git；远程后端 P3，100+ 指计划规模而非同时拨号。
+
+
+## 实施状态（2026-10-26 复核）
+
+| 层 | 状态 | 证据 |
+|---|---|---|
+| P0 领域/Flow 校验 | 已实现 | `src/orchestration/flow.ts` / `validate.ts` / `types.ts`；`tests/orchestration-plan.test.ts` |
+| P1 调度与持久化 | 已实现（本地串行后端） | `src/orchestration/{engine,schedule,store}.ts`；`tests/orchestration-*.test.ts` |
+| P2 独立 verifier 与工件 | 已实现 | `src/orchestration/local-backend.ts` / `artifacts.ts`；producer ≠ verifier 判据 |
+| P3 动态 Flow / 远程 worker | **未实现，fail-closed** | `flow.ts` 对 `race` 与 `gather any/quorum` 显式抛错；`local-backend.ts` 对 network/shell/git 能力拒收 |
+| P4 桌面控制面 | 已实现 | `OrchestrationPane`、IPC v24；`apps/desktop/tests/orchestration-*.test.*` |
+| P5 真实评测 / P6 SDK、A2A | 未开工（见任务清单「待开工」） | — |
+
+**范围裁决**：P3 不在本轮交付内。理由不是「做不动」，而是下列前提未成立：远程 worker 需要短期能力令牌、断线重连与幂等回执的完整协议，当前没有真实外部 worker 与网络面；在没有这些的前提下实现 race/gather 的动态取消，只能得到不可验证的假语义。因此本仓选择显式 fail-closed，并把「补齐或正式缩范围」记录在 `docs/REPOSITORY-STATUS.md`。

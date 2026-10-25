@@ -1,74 +1,40 @@
 # Cairn / DSH —— 现态
 
-rev: 45dfeb72
+rev: 8f68b1cb138fe2fd2ba968b2ba1fe94ab6f23a69
 
-> 本文件是**现态层**：**整体重写，永不追加**。要留当时的判断，写进 `PROGRESS.md` 的对应页；
-> 要留"为什么现在是这样"，写进 `docs/adr/`。
-> `docs-check` 的 D-2（不抄观测值）与 D-4（不以新增段落代替改写）两张面机械守这两条。
+本页描述 `cairn/` 当前工作树，不代表同级 staging、远端或已发布应用。
+任务、阻塞与待开工统一见 [仓库整理与任务清单](docs/REPOSITORY-STATUS.md)；
+逐批读数见 `PROGRESS.md` 第 713 页，历史证据保留在 `PROGRESS.md` 与 `outputs/`。
+本页整体重写，台账只追加。
 
-## 四层文档各放什么
+## 当前实现
 
-| 层 | 落点 | 放什么 | 写法 |
-|---|---|---|---|
-| 规矩层 | `AGENTS.md` | 不知道就会这一轮做错事的规则 | 只加新规则 |
-| 现态层 | `STATE.md`（本文件）、`docs/README.md`、`docs/CODE-WIKI.md` | 现在在哪、在飞什么、还有什么没裁 | **整体重写** |
-| 台账层 | `PROGRESS.md` | 历史与审计链：备案、裁决全文、各轮实录 | **只追加**，不改写 |
-| 档案层 | `archive/` | 不再现行的结论与历史图 | 归档 |
+- **core**：`src/agent/`、`src/tools/`、`src/providers/`、`src/permissions/`、`src/events/`；
+  `src/main/` 是 electron-free 的应用服务。核心不得反向依赖 `apps/desktop/`。
+- **desktop**：`apps/desktop/` 的 main / preload / renderer；渲染层分 `state/`、`derived/`、
+  `components/`、`panes/` 与组合根 `App.tsx`。IPC 契约在 `src/main/ipc-protocol.ts`。
+- **会话**：CLI 已调用 `createProductFork`；桌面 Stream 已有来源引用（`EventRef`），
+  协议与行为以 ADR 0005 与对应测试为准。
+- **编排**：`src/orchestration/` 与桌面控制面已有本地可执行纵切；P0–P4 已实现并判卷，
+  P3 的 `race` / `gather any/quorum` / 远程 worker 未实现，静态展开显式 fail-closed。
+- **记忆 / 自进化 / provider**：记忆强度与巩固、自进化账本/反思/补丁门/毕业/Assess、
+  DeepSeek 专用适配均已入库；运行产物不入库（`.agent/evolution-*` 等已忽略）。
 
-**台账层不搬进 `archive/`**：门有多张面（D-5/D-9/D-10/D-11/D-12/D-13）直接拿 `PROGRESS.md` 当事实源，
-搬走会让那些面**停止覆盖历史那半**——"读不到"被读成"没问题"，是本仓最忌的假绿形状。
-现态页的瘦法是**把结论迁进 `archive/`**，不是把台账搬走。
+## 正在收口
 
-## 现在在哪
+- 真实 DeepSeek 连接需要 `DEEPSEEK_API_KEY`；wire 判卷只证明请求形状。
+- 插话的端到端 smoke 受 gallery 桩限制（`running` 立不住），组件级判卷已绿。
+- `mutate-verify` / `head-cert-check` / `pnpm gates` 需在目标提交上另行认证。
+- 远程 worker、P5 真实评测、P6 SDK 与对外分发按任务清单的条件待开工。
 
-- **core**（`src/`，不含 Electron 与 UI 依赖）：agent 循环在 `src/agent/loop.ts`，工具在 `src/tools/`，
-  权限门在 `src/permissions/`，provider 适配在 `src/providers/`，事件与落盘在 `src/events/`，
-  面向主进程的应用服务在 `src/main/`（core 侧不得反向依赖 `apps/desktop/`）。
-- **会话语义**（ADR 0005）：分叉是**指针不是拷贝**（CLI/桌面走 `createProductFork`）；跨文件读取经 `SessionView`
-  （每文件物理行号 + EventRef，模型 wire id 按来源分域）；游标不透明且 fail-closed；提交带 `requestId`；
-  检索三态并带来源；反馈/置顶/回滚按来源键。
-- **desktop**（`apps/desktop/`）：main / preload / renderer 三层，可 import `src/`，反向禁止
-  （`scripts/desktop-boundary-check.ts` 守这条）。共享 IPC 类型在 `src/main/ipc-protocol.ts`。
-  渲染层分 `state/` → `derived/` → `components/` ＋ `panes/` → `App.tsx`（组合根），
-  机器面是 `scripts/renderer-layer-check.ts`。
-- **产品面**：桌面是 Claude 蓝本式的壳（意图稿在 `apps/desktop/design/desktop-design-spec.md`）；
-  选型与受众的裁决在 `docs/adr/`。
-- **门与读数**：门表是 `scripts/gate-manifest.ts`（清单即事实源），实测读数在 `pnpm facts`，
-  **不抄进文档**（D-2 守这条）。测 HEAD 的门量的是**提交**而不是工作树——引读数要写清量的是哪一笔提交。
+## 待验与待决
 
-## 在飞什么
+- 同一活跃会话的取消/恢复、跨窗口与编排控制面真机交互。
+- 自进化新接线的真实收益（配对读数），不能用判卷绿替代。
+- Radix 首开延迟、长会话/长列表/大 diff 的渲染长尾、FilePane/设置的真机可发现性。
+- 取料归档治理与 `ab.py` 的归属。
 
-- **桌面端下一轮（三条轴，业主已裁）**：① **性能与架构**；② **路由体积**；③ **设计面**。
-  **已做**：③ 的动效档位归位与减法两片；① 的 memo 边界与**把 `App.tsx` 拆成多文件**（它现为组合根，
-  代价那一格改判卷读整个渲染层面，而不是搬断言）；② 的弹出窗甩掉整页工作台。
-  **未做**：② 剩下的 Radix 下拉依赖树（账已量成数字，是业主的裁）。
-  见 `PROGRESS.md` 第 641、646–652 页。
-- **已入库**：第 639–645 页；第 652 页（桌面拆分＋检索＋审计）；第 663 页（窗口／同名会话／幂等）；第 685–700 页（worktree／批读／产品）。
-- **在飞**：指针分叉完整接入已在隔离分支 `agent/pointer-session-refs` 落地（Task 1–8 ＋ 真机冒烟，第 669 页），
-  **尚未合并**到共享分支；合并后需在包含实现的同一提交上跑 head-cert / mutate-verify。
-- 外部引用审批决议已改为**互斥**（先批后拒不再并存，用户后说的"不"算数）——见 `PROGRESS.md` 第 623 页。
-- 其余面没有在飞的活。
+## 验证入口
 
-## 还有什么没裁
-
-| 债 | 细节在哪 |
-|---|---|
-| 设计面七处已目验；两处是「看过才发现不对」（数字闪动已修、失败正文已按裁降色）。性能收益幅度仍未量 | 648、649、656、660、662 页 |
-| 路由体积剩 Radix 下拉依赖树：6 处下拉整棵子树延迟加载 ⇒ 体积 vs 首开延迟是业主的裁 | 650、651 页 |
-| 能力收益不可测：无 API key/endpoint，bench 不可跑；已证机制与判据 | 640 页 |
-| 终端窗格曾坏过（PTY 只回显）——2026-10-22 不复现 ⇒ 环境态、非应用债；已补判卷 | 641、657 页 |
-| 台账层页号存量重复（D-13 棘轮只许下降） | 621 页 |
-| 自进化面能力收益仍未验证 | `BLOCKED.md` 637/638 页 |
-| 自进化控制平面五件仍只有判卷消费者——**刻意分期**（Phase 4 才放开自动安装） | `docs/sema-proposal.md` §11 |
-| 认证门要出沙箱（沙箱内 `git worktree add` 退 128、全量多假红） | 647、652 页 |
-| `scratch-tree-naming` 真仓面需挂分支的暂存树；清掉会再红（机器状态） | 652 页 |
-| 三面审计其余真缺陷仍在案；已修核心两条、自进化一条、产品两条 | 642–645 页 |
-| **D-5 的 21 条真红按业主裁决保留**（对象库事故、不登记豁免） | 664、666 页 |
-| 卡片/diff 渲染层未送引用（协议/store 已就绪）；草稿桶键已带工作区（`aca558f9`，旧桶懒迁移） | 669 页 |
-| 轮中插话（steering）**已接**：轮界取料、不开新轮、取消后不落事件、已接进 R1 的「用户说过话」抑制；界面三意图各有入口。未做：真机冒烟与真模型读数 | 677、678 页 |
-| 已修但真机未实测：LSP languageId、流内重试、截断续跑、停滞留证；插话贯到转录/UI，且三条路由已抽成纯函数判据；全链冒烟仍未跑通（gallery 立不住 running） | 675–682 页 |
-
-## 怎么验
-
-- core 与桌面两套判卷分开跑，命令在 `AGENTS.md` 的 Verification 段。
-- 改了本文件要跑 `pnpm docs-check`（D-1 预算、D-2 手抄观测值、D-4 新增段落、D-5 `rev` 真伪）。
+命令与边界见 `AGENTS.md`；本轮读数见 `docs/REPOSITORY-STATUS.md` 第七节。
+core 与 desktop 分开验证；`mutate-verify` / `head-cert-check` 只证明被测量的那个提交。

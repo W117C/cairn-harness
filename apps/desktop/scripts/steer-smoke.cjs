@@ -19,7 +19,6 @@
 //       ELECTRON_RUN_AS_NODE= pnpm --filter cairn-desktop exec electron scripts/steer-smoke.cjs [out]
 //      （本仓宿主会注入 ELECTRON_RUN_AS_NODE，不清掉会把 Electron 降级成纯 Node）
 
-const { app
 const { app, BrowserWindow, nativeTheme } = require("electron");
 const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
