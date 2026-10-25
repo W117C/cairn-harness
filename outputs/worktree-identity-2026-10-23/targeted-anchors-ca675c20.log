@@ -1,0 +1,18 @@
+$ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify desktop-steer-route-ignores-running desktop-steer-route-ignores-forcequeue desktop-steer-accept-undefined-as-ok desktop-steering-splits-turn desktop-steering-badge-not-rendered desktop-steering-row-dropped worktree-reuses-stale-agent-branch session-worktree-recreate-destroys-wip
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → ca675c2
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
+变异验证：8 条
+✅ session-worktree-recreate-destroys-wip — 已隔离仍走重建（createWorktree 开头 rm -rf 同路径）⇒ 隔离树里未提交的改动被整片删掉，还回 ok:true——「幂等」名义下的一次数据丢失 ｜本机实测 0.9s／2 拍
+✅ worktree-reuses-stale-agent-branch — 撞名时挂载旧分支（旧语义）⇒ 进程重启后重号的 worker 站在旧提交上干活，baseCommit 却是当前 HEAD（diff 反向吃掉别人的提交）；旧分支对象损坏时整次 spawn 直接失败 ｜本机实测 0.9s／2 拍
+✅ desktop-steer-route-ignores-running — 分岔不看「是否运行中」⇒ 空闲时把「起新一轮」错当插话（消息会被送进一个不存在的 run，用户看到「已插话」而什么都没发生） ｜本机实测 0.6s／2 拍
+✅ desktop-steer-route-ignores-forcequeue — 分岔忽略 forceQueue ⇒ 「加入队列」钮点下去实际把话插进当前轮：按钮在说谎，而两种结局在界面上长得一样 ｜本机实测 0.6s／2 拍
+✅ desktop-steer-accept-undefined-as-ok — 把协议/桩兜底的 {} 读成成功 ⇒ 消息被吞：回执说「已插话到本轮」，而那一轮根本没收到（第 681 页桩兜底的同一形状） ｜本机实测 0.6s／2 拍
+✅ desktop-steering-splits-turn — 轮中插话被当成新轮（projectStream 的 rounds += 1 不再跳过 steering）⇒ 同一轮被劈成两轮：轮号错位、上一轮气泡提前落定、按轮跳转全错 ｜本机实测 0.8s／2 拍
+✅ desktop-steering-badge-not-rendered — 投影标了 steering:true 而组件不渲染徽标 ⇒ 用户看到的那句话与普通新任务一模一样（分不清「我补了一句」与「我又开了个任务」） ｜本机实测 0.8s／2 拍
+✅ desktop-steering-row-dropped — 插话那一行直接丢掉（不渲染）⇒ 用户说过的话在转录里消失，而模型那边确实收到了它：界面在说谎 ｜本机实测 0.8s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 6.5s · 跑了 8/8 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 16 次／8 条（每条次数分布 2×8）· 单次中位 第1次 0.4s／第2次 0.4s· 最贵一条 session-worktree-recreate-destroys-wip 0.9s
+跑法单价：selector 10 拍·中位 0.33s·坏拍（选中≠1） 0 vs whole 6 拍·中位 0.41s·坏拍（没量到或 0 条） 0
+锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
