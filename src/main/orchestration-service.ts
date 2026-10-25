@@ -29,6 +29,8 @@ export class OrchestrationService {
   constructor(private readonly config: {
     dataDir: string;
     allowedWorkspaces: () => readonly string[];
+    /** Optional authority check: the session must exist in the workspace, not just be a safe string. */
+    sessionExists?: (workspace: string, sessionId: string) => boolean | Promise<boolean>;
     backendFor?: (address: OrchestrationAddress) => ExecutionBackend | null | Promise<ExecutionBackend | null>;
   }) {}
   private async address(value: OrchestrationAddress): Promise<OrchestrationAddress> {
@@ -37,6 +39,7 @@ export class OrchestrationService {
     const workspace = await realpath(value.workspace);
     const allowed = await Promise.all(this.config.allowedWorkspaces().map(ws => realpath(ws)));
     if (!allowed.includes(workspace)) throw new Error("workspace is not registered");
+    if (this.config.sessionExists && !(await this.config.sessionExists(workspace, value.sessionId))) throw new Error("session does not exist in workspace");
     return { workspace, sessionId: value.sessionId };
   }
   private async entry(address: OrchestrationAddress): Promise<Entry> {
