@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FlowTask, OrchestrationView, PlanView, TaskPhase } from "../src/orchestration/types";
-import { nextActions } from "../src/orchestration/schedule";
+import { DEPENDENCY_ESCALATION_REASON, nextActions } from "../src/orchestration/schedule";
 
 function task(id: string, extra: Partial<FlowTask> = {}): FlowTask {
   return { task_id: id, goal: id, non_goals: [], agent_spec: "worker", lane: "write", depends_on: [], write_scopes: [`src/${id}.ts`], inputs: [], contract: { acceptance: [], effect: "workspace" }, budget: { usd: 2 }, max_attempts: 2, priority: 0, ...extra };
@@ -45,7 +45,7 @@ describe("orchestration scheduling", () => {
     p.tasks.a.phase = "failed"; p.tasks.a.attempt = 1;
     const actions = nextActions(view(p));
     expect(actions.every(a => a.kind === "escalate")).toBe(true);
-    expect(actions.find(a => a.task_id === "b")?.reason).toContain("dependency");
+    expect(actions.find(a => a.task_id === "b")?.reason).toBe(DEPENDENCY_ESCALATION_REASON);
   });
   it("does not dispatch paused, needs_you or unapproved tasks", () => {
     for (const phase of ["proposed", "paused", "rejected"] as const) {

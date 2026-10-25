@@ -3,6 +3,8 @@ import type { FlowTask, OrchestrationView, PlanView, ScheduleAction, TaskView } 
 const terminal = (task: TaskView) => ["done", "failed", "cancelled"].includes(task.phase);
 const live = (task: TaskView) => !!task.run_id && !terminal(task);
 const compare = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
+/** Single source for the dependency failure reason; tests import it instead of copying prose. */
+export const DEPENDENCY_ESCALATION_REASON = "dependency failed, was cancelled or requires user action";
 const order = (a: TaskView, b: TaskView) => b.task.priority - a.task.priority || compare(a.task.task_id, b.task.task_id);
 
 function prefix(scope: string): string {
@@ -67,7 +69,7 @@ export function nextActions(view: OrchestrationView, options: { max_concurrency?
       if (!["planned", "queued"].includes(task.phase)) continue;
       const dependencies = task.task.depends_on.map(id => plan.tasks[id]);
       if (dependencies.some(dep => !dep || ["failed", "cancelled", "needs_you"].includes(dep.phase))) {
-        emit("escalate", plan, task, "dependency failed, was cancelled or requires user action"); continue;
+        emit("escalate", plan, task, DEPENDENCY_ESCALATION_REASON); continue;
       }
       if (dependencies.some(dep => dep.phase !== "done")) continue;
       if (task.task.deadline_ms !== undefined && task.task.deadline_ms <= view.now) { emit("escalate", plan, task, "task deadline exceeded"); continue; }
