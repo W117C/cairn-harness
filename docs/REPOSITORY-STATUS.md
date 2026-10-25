@@ -68,7 +68,7 @@
 | P1 | 活跃会话连续发送与插话 | **连续发送已实测**：`session-continuity-smoke.cjs` 7/7 PASS（三次发送只建一个日志、重启恢复、续发追加、新建任务分叉、无控制台错误）。**插话 e2e 仍不可跑**：`steer-smoke.cjs` 1/6，根因是 gallery 桩无法把活动会话的 `running` 置起来（脚本头注已写明）；组件级插话判卷 `composer-steer` / `stream-steering-round` 在桌面 1483 条里全绿。未宣称端到端已证。 |
 | P1 | 记忆、自进化新接线验收 | **已收口到判卷层**：27 个 memory/evolution 判卷文件 332 条全绿；`post-run-readings.ts` 的反思/蒸馏/毕业/Assess/canary 调用点在场。**收益**（真实配对读数）仍未取，不能由判卷绿替代。 |
 | P1 | DeepSeek 真连与契约核验 | **阻塞**：`https://api.deepseek.com/chat/completions` 无 key 返回 401；本机未找到 `DEEPSEEK_API_KEY`。wire/定价/续聊/缓存判卷 11 文件 170 条全绿，但这是 stub，不是真实厂商可用性。需要一把 key 才能完成本项。 |
-| P1 | 当前完整验证和交付 | **部分完成**：根 typecheck 0；桌面 223 文件 1483 条 + boundary 绿；桌面 build 绿；docs-check 绿；编排 154、记忆/进化 332、provider 170、权限 112、搜索/用量 64、插件 58、元认知 26。core 终跑与 `pnpm gates` 见第七节；`mutate-verify` / `head-cert-check` 未在本轮认证。 |
+| P1 | 当前完整验证和交付 | **主体完成**：根 typecheck 0；core 518 文件 6971 条全绿（`--maxWorkers=2`，exit 0）；桌面 223 文件 1483 条 + boundary 绿；桌面 build 绿；docs-check 绿；编排 154、记忆/进化 332、provider 170、权限 112、搜索/用量 64、插件 58、元认知 26。`pnpm gates` 的 27 道非 HEAD 门全绿；`head-cert-check` 见第七节；`mutate-verify` 锚点全表本轮未跑完，不宣称。 |
 
 ## 四、待开工（条件未变，不启动）
 
@@ -126,8 +126,9 @@
 | 元认知判卷 | 5 文件 26 条全绿 |
 | 连续发送 smoke | 7/7 PASS（真 Electron，当前构建） |
 | 插话 smoke | 1/6（gallery 桩的 running 立不住；组件级判卷全绿） |
-| core 终跑 | 见 `.tmp/goal-20261026/core-final-2.log`；`promise-recall-inventory` 2 条在干净 HEAD worktree 复核同红，属既有债 |
-| `pnpm gates` / `mutate-verify` / `head-cert-check` | 未在本轮认证；不把历史报告里的绿当当前结果 |
+| core 终跑 | **518 文件 6971 条全绿，exit 0**（`pnpm test:capped` = `--maxWorkers=2`）｜日志 `.tmp/goal-20261026/core-final-5.log` |
+| `pnpm gates` | 30 道门：27 道非 HEAD 门全绿；`test` 的 2 条既有债已在本轮修掉（core 转全绿）；`web-fetch-check` 的五档缺口已修并复跑 7/7；`head-cert-check` 见下；`mutate-verify` 未跑完 |
+| `head-cert-check` / `mutate-verify` | `head-cert-check` 在 `f2ccc6ce` 上复跑（日志 `.tmp/goal-20261026/head-cert-final.log`）；`mutate-verify` 锚点全表本轮未跑完，不把部分读数当认证 |
 
 ## 八、未做的边界
 

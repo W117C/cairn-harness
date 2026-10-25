@@ -24682,3 +24682,11 @@ Plan 模式此前只有设置页的 `planRequiredByDefault` 一个入口；用�
 
 补记（同日）：本轮实际共 **15 笔**——上面 13 笔之外还有 `f9d20ef5`（收口文档与五件删除）
 与 `30c86a84`（判卷收尾：自造文案改派生、靶子运行态清理）。工作树除未跟踪的 `ab.py` 外干净。
+
+补记（02:30）：core 已 **518 文件 6971 条全绿**（`pnpm test:capped`，exit 0）。此前记的两条
+`promise-recall` 既有债并非不可修：根因是配对词 `unsupported` 在 8 份判卷里出现、没有区分度，
+以及五条能力断言没有逐字证人。已把配对词换成 hint 原句「key 已保存」，并给
+reflectInstruction / readStats 损坏边界 / pi 替换器不支持 / autonomy fail-closed /
+search-settings 无安全存储五处各补一条逐字观测，35 条转绿。`web_fetch` 出网门扩到五档
+（full-access 认 L4-network）后 7/7。`projection-invariant` 的残留账本由
+`app-fixture-lock` 拿锁时清理，不再继承上一趟运行态。
