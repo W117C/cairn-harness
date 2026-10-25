@@ -1,0 +1,105 @@
+name: Bug 报告
+description: 行为与预期不符，或某条路走不通
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        谢谢你来提这个。
+
+        **先看三件事**（每一条都能省掉一整轮往返）：
+
+        1. `pnpm facts` 给的是**当下**的读数，不是你手抄进正文的那份。
+        2. 核心套件的读数**请带并发档位**——8GB 机器上默认并发会超订，
+           报出来的超时是负载假象；可复现读数用 `pnpm test:capped`。
+        3. 说清读数覆盖的是**工作树**还是**某个提交**——
+           `pnpm mutate-verify` / `pnpm head-cert-check` 量的是 HEAD。
+
+        **安全漏洞不要用这个模板**，请走 `SECURITY.md` 的私密通道。
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 实际发生了什么
+      description: 描述你看到的现象，不要写你对成因的猜测。
+      placeholder: |
+        跑 `cairn --mode default "…"`，工具调用全部成功，但事件流停在 `assistant_message`，
+        退出码是 1。
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 你期望什么
+      description: 如果这是缺陷，写清期望的行为；如果是用法问题，写清你原本想达成的目标。
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      description: 从干净状态开始的最小步骤。命令请给完整可粘贴的一行。
+      placeholder: |
+        1. `pnpm install --frozen-lockfile`
+        2. `export OPENAI_API_KEY=…`
+        3. `./bin/cairn.mjs --mode default "…"`
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: 发生在哪个面
+      options:
+        - CLI（`src/cli.ts` / `bin/`）
+        - 事件内核（`src/agent/`、`src/events/`）
+        - 工具面（`src/tools/`）
+        - 权限与沙箱（`src/permissions/`、`src/main/sandbox.ts`）
+        - provider / 路由（`src/providers/`、`src/routing/`）
+        - 桌面端（`apps/desktop/`）
+        - 门禁 / 脚本（`scripts/`）
+        - 文档层
+        - 不确定
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 版本与提交
+      description: "`cairn --version` 的输出，以及 `git rev-parse --short HEAD`。"
+      placeholder: "cairn 0.1.0 / a1b2c3d"
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: 环境
+      description: 操作系统、Node 版本、pnpm 版本、包管理器。**不要贴凭据。**
+      placeholder: "macOS 15 / Node 22.11.0 / pnpm 11.21.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或读数
+      description: |
+        相关的事件日志片段或门禁输出。**贴之前先删掉凭据**——
+        事件日志会做脱敏，但不要依赖它，你的第一道防线是不贴出来。
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 自检
+      options:
+        - label: 我确认过这里没有凭据、token 或个人路径
+          required: true
+        - label: 我搜过现有 Issue，没有重复
+        - label: 这是安全漏洞（我改用 `SECURITY.md` 的私密通道）
+          required: false

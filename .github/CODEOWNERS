@@ -1,0 +1,41 @@
+# 代码所有者
+#
+# 现状：本仓由单一维护者（@W117C）拥有，因此默认规则覆盖全部路径。
+# 保留这张文件是为了**让归属显式**——将来引入第二位维护者时，
+# 只需要在下面加规则，不必从头设计评审面。
+#
+# 维护者本人不给自己开评审（单人仓库开不出第二个人评审），
+# 所以本仓的评审靠**门禁读数**而不是人眼评审；见 CONTRIBUTING.md §5。
+
+# ── 全部路径 ──
+*                               @W117C
+
+# ── 内核：事件溯源、工具面、权限与 provider ──
+# 这些是设计前提所在（fail-closed、可重放、边界闸），改动需要额外小心。
+src/agent/                     @W117C
+src/events/                    @W117C
+src/tools/                     @W117C
+src/permissions/               @W117C
+src/providers/                 @W117C
+src/routing/                   @W117C
+
+# ── 桌面壳：与内核的分层边界由 desktop-boundary-check 守着 ──
+apps/desktop/                  @W117C
+
+# ── 门禁与仪式层：改这里等于改判卷标准 ──
+scripts/                       @W117C
+tests/                         @W117C
+
+# ── 身份面与现行层文档 ──
+README.md                      @W117C
+LICENSE                        @W117C
+CHANGELOG.md                   @W117C
+AGENTS.md                      @W117C
+STATE.md                       @W117C
+docs/                          @W117C
+.github/                       @W117C
+
+# ── 取料面与夹具：历史证据与判卷输入，不接受直接改动 ──
+# 改这里等于改判卷依据；要改先在 docs/adr/ 里落一条裁决。
+outputs/                       @W117C
+fixtures/                      @W117C

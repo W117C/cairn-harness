@@ -1,0 +1,82 @@
+# 依赖与 Actions 自动更新
+#
+# 落地口径（与本仓既有纪律一致）：
+#   · 锁文件是**事实源**——依赖更新走 PR，不直接改 `pnpm-lock.yaml`。
+#   · pnpm 的版本**单点声明**在 package.json 的 packageManager 字段，
+#     Dependabot 不去动它（动了会与 pnpm/action-setup 的读法打架）。
+#   · `outputs/` 与 `fixtures/` 不参与更新（历史证据与判卷输入）。
+
+version: 2
+
+updates:
+  # ── 运行时与开发依赖 ──
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - npm
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # 同族一起升，避免锁文件被拆成一串碎片 PR
+      typescript:
+        patterns:
+          - "typescript"
+          - "@types/*"
+      electron:
+        patterns:
+          - "electron"
+      vite:
+        patterns:
+          - "vite"
+          - "vitest"
+          - "@vitejs/*"
+
+  # ── 桌面壳的依赖单独一组（独立的 workspace 包） ──
+  - package-ecosystem: npm
+    directory: /apps/desktop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - npm
+      - desktop
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ── GitHub Actions ──
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  # ── Dependabot 自身的配置 ──
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies

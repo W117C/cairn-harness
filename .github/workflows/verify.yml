@@ -10,6 +10,20 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+
+# 并发组：同一个 ref 上只留最新的一趟在跑，旧的被取消。
+# 为什么加这一格（2026-10-25）：本仓每趟 verify 要跑完整判卷 + 25 道快门，
+# 连续推送时会叠出好几趟并行——重复的是同一份树，浪费的是计费分钟。
+# 取消的是**被取代**的那一趟，不是最新那趟：最新那趟仍会跑完并给出读数。
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# 最小权限：这道门只需要读仓库（checkout + 跑判卷）。
+# 历史上 workflows 默认拿到写权限，那是**能用上但用不到**的权限面。
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: macos-latest

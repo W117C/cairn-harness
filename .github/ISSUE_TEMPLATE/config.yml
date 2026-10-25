@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞（私密报告）
+    url: https://github.com/W117C/cairn-harness/security/advisories/new
+    about: 漏洞不要开公开 Issue——请走 GitHub 私密漏洞报告通道。响应口径见仓库内的 SECURITY.md。
+  - name: 贡献与门禁问题
+    url: https://github.com/W117C/cairn-harness/blob/main/CONTRIBUTING.md
+    about: 提交规范、四层文档、门禁怎么跑——先看贡献指南，Issues 里问提交规范多半没人回。
+  - name: 架构与符号索引
+    url: https://github.com/W117C/cairn-harness/blob/main/docs/CODE-WIKI.md
+    about: 现态层文档：现在在哪、在飞什么、符号索引。
