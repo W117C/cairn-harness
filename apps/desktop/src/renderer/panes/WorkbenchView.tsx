@@ -898,6 +898,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                       tabs={paneTabs}
                       events={events}
                       sessionId={activeId}
+                      workspace={activeWorkspace}
                       onAttach={attachFromPane}
                       pickSignal={pickSignal}
                       onPickResult={handlePickResult}

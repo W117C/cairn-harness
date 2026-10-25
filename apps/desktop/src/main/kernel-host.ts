@@ -14,6 +14,7 @@
 // M3 T2（每会话取消）：run 建 per-session AbortController 经 RunOverrides.signal 注入（零 core 改动），
 // cancel(sessionId) 只 abort 该会话的 controller；run 响应带 aborted 真值（desktop 扩展字段）。
 import { createSteeringChannel, type SteeringChannel } from "../../../../src/agent/steering-channel";
+import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { readFile, rm, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
@@ -71,6 +72,8 @@ import type { SessionMetadataRepository } from "../../../../src/main/session-met
 import { addUsageTotals, emptyUsageTotals } from "../../../../src/main/usage-ledger";
 import { scanUsageFile, type UsageFileCache } from "../../../../src/main/usage-ledger-scan";
 import { readSessionLogTail } from "../../../../src/main/session-log";
+import { OrchestrationService, type OrchestrationAddress, type OrchestrationSubmitRequest, type OrchestrationControlRequest, type OrchestrationResponse } from "../../../../src/main/orchestration-service";
+import { createWorkspaceOrchestrationBackend } from "../../../../src/main/orchestration-backend";
 
 export interface KernelHostDeps {
   /** 全部已注册工作区（绝对路径）；listSessions 按此清单逐根扫描。
@@ -110,6 +113,11 @@ export interface KernelHost {
   /** v14：跨全部已登记工作区的用量账本（只读；不触发 openSession 的恢复/漂移副作用）。
    *  按「路径 + size + mtime」缓存单文件读数——重复打开面板只重读变过的会话。 */
   usageLedger(): Promise<UsageLedgerPayload>;
+  /** v20：编排预览、提交与控制；地址 = 显式工作区 + 会话。 */
+  orchestrationView(address: OrchestrationAddress): Promise<OrchestrationResponse>;
+  orchestrationSubmit(request: OrchestrationSubmitRequest): Promise<OrchestrationResponse>;
+  orchestrationControl(request: OrchestrationControlRequest): Promise<OrchestrationResponse>;
+  orchestrationClose(): Promise<void>;
   /** v15：读该会话日志尾部（只读；会话归属由本 host 解析——不接受渲染层传路径）。 */
   sessionLog(id: string, tailLines?: number): Promise<SessionLogPayload>;
   /** v18：会话正文全文检索（只读；工作区归属由本 host 解析——渲染层不传路径）。
@@ -286,6 +294,10 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
   if (!workspaces.includes(activeWorkspace)) {
     throw new Error(`activeWorkspace 不在 workspaces 里: ${deps.activeWorkspace}`);
   }
+  const orchestration = new OrchestrationService({
+    dataDir: join(deps.userDataDir, "orchestration"), allowedWorkspaces: () => workspaces,
+    backendFor: address => createWorkspaceOrchestrationBackend(address.workspace, join(deps.userDataDir, "orchestration-backends", createHash("sha256").update(JSON.stringify(address)).digest("hex"))),
+  });
   // 会话根按工作区解析（spec §4.1）：与 CLI 同根 <ws>/.agent/sessions。
   // 单例 initSessionsDir 仍指 activeWorkspace：core 里 requireSessionsDir 的兜底路径
   // （压缩/调度器等未接线通道）需要一个 coherent 根；本文件的所有会话 IO 都显式传 root，不依赖它。
@@ -491,6 +503,10 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
   };
 
   return {
+    orchestrationView: address => orchestration.view(address),
+    orchestrationSubmit: request => orchestration.submit(request),
+    orchestrationControl: request => orchestration.control(request),
+    orchestrationClose: () => orchestration.close(),
     run: async (req) => {
       const sessionId = req.sessionId;
       if (sessionId === undefined) return handleAgentRun(req); // 非会话模式：临时日志，无归属无漂移无可取消缝

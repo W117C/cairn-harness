@@ -23975,3 +23975,15 @@ TasksPane 的 modal：有 hunks ⇒ `<DiffView hunks={...} />`；否则仍显示
 - **取料（与页同笔入库）**：`outputs/worker-diff-cap-2026-10-24/targeted-anchor-45dfeb72.log`、
   `outputs/worker-diff-cap-2026-10-24/supervisor-check-45dfeb72.log`；
   认证读数在 `outputs/head-cert-45dfeb7-2026-10-23-1617/provenance.md`。
+
+## 2026-10-25 · 第 711 页：多智能体编排 P0–P4 本地纵切（独立提交树）
+
+业主原话是「完成 codex 没完成的多智能体编排」；此前工作树里有一版停在 provider 摘要空转与 typecheck 红的纵切。本笔在独立树 `feat/orchestration-platform` 从 `f4bffa3a` 单笔落地，不把共享工作树其他会话的 hunk 带进提交。
+
+**交付**：`src/orchestration/` 的领域/Flow 校验、事件投影、调度、JSONL 存储、引擎、内容寻址工件、本地受限后端；`src/main/orchestration-{service,backend}.ts`；桌面 `OrchestrationPane` 与 IPC v20 三通道。事件只加可选 `orchestration` 命名空间，旧日志逐字回放。
+
+**读数（本树复跑）**：编排 9 文件 / 143 条全绿；事件兼容与门 7 文件 / 71 条全绿；桌面 3 文件 / 8 条全绿；根 typecheck 0；桌面 tsc 0、esbuild + vite build 绿；boundary / renderer-layer 绿；arch-cycle 登记债 1、新圈 0。
+
+**独立审查后加固**：needs_you 可重试；done 不可 cancel/重复交付；异常不再全局停机；取消不再把预留记成花费；后端数据目录按会话隔离；预算/交付锁可回收死进程；交付 journal 可崩溃恢复；凭证路径不进入 overlay。
+
+**边界**：provider wire gateway 深测依赖未提交的 DeepSeek provider 批，留在共享工作树；本树只保留 fail-closed 覆盖。真实模型凭据未实测；桌面未做真指针冒烟；本地后端 `max_concurrency: 1`；P3 的 race/动态控制与远程 worker 未实现，静态展开不支持的节点 fail-closed。证据见 `outputs/orchestration-delivery-2026-10-25/FINAL.md`；计划见 `docs/superpowers/plans/2026-10-25-orchestration-delivery.md`。

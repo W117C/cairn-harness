@@ -395,6 +395,10 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   listSessions: async () => { await projectRehydrate; return host.listSessions(); },
   // v14：跨会话用量账本（只读；面板点「全部会话」才调）。
   usageLedger: () => host.usageLedger(),
+  // v20：编排预览/提交/控制；地址由渲染层显式给出，host 侧再验工作区归属。
+  orchestrationView: address => host.orchestrationView(address as never),
+  orchestrationSubmit: request => host.orchestrationSubmit(request as never),
+  orchestrationControl: request => host.orchestrationControl(request as never),
   // v15：会话日志尾部（只读；会话归属由 host 解析，renderer 不传路径）。
   sessionLog: (id, tailLines) => host.sessionLog(id as string, typeof tailLines === "number" ? tailLines : undefined),
   // createSession 首参 M3 起是工作区（原 name 槽位被 M3 接口接管）；渲染层现不传 ⇒ 缺省 activeWorkspace
@@ -1335,6 +1339,23 @@ app.on("before-quit", (e) => {
     // 不让应用停在「无窗可操作、在跑会话看不见」的悬空态。
     createWindow();
   }
+});
+// Let the durable executor acknowledge cancellation and release its journal locks before exit.
+let orchestrationClosing = false;
+let orchestrationClosed = false;
+app.on("before-quit", (event) => {
+  if (event.defaultPrevented || orchestrationClosed) return;
+  event.preventDefault();
+  if (orchestrationClosing) return;
+  orchestrationClosing = true;
+  void host.orchestrationClose().then(() => {
+    orchestrationClosed = true;
+    app.quit();
+  }).catch(error => {
+    orchestrationClosing = false;
+    console.error("[orchestration] shutdown failed:", error);
+    dialog.showErrorBox("任务编排尚未安全停止", String(error instanceof Error ? error.message : error));
+  });
 });
 // 调度器随应用退出停表（清 timer；与 CLI SIGINT → stop 同语义）。
 app.on("will-quit", () => {

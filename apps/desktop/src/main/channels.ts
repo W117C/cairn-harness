@@ -34,6 +34,10 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   listSessions: "agent:sessions-list",
   // v14：跨会话用量账本（头像菜单「用量统计」→「全部会话」；main 只读扫描各工作区日志）。
   usageLedger: "agent:usage-ledger",
+  // v20：多智能体编排——预览 / 提交 / 控制，地址 = 工作区 + 会话。
+  orchestrationView: "agent:orchestration-view",
+  orchestrationSubmit: "agent:orchestration-submit",
+  orchestrationControl: "agent:orchestration-control",
   // v15：会话日志尾部（错误条 / 命令面板「查看日志」；main 只读）。
   sessionLog: "agent:session-log",
   createSession: "agent:sessions-create",

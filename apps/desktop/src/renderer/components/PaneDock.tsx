@@ -20,6 +20,7 @@ import { ModalSurface } from "./ModalSurface";
 import { toast } from "../toast";
 import { DiffView } from "./DiffView";
 import { FilePane } from "./FilePane";
+import { OrchestrationPane } from "./OrchestrationPane";
 import { PluginSurface } from "./PluginSurface";
 import { SidechatPane } from "./SidechatPane";
 import { PathMenu } from "./PathMenu";
@@ -859,6 +860,8 @@ export function PaneDock(props: {
   browserUrl?: string;
   /** v7 当前会话 id（sidechat 窗格的父会话面；缺省 = 旁路空态提示先开会话）。 */
   sessionId?: string | null;
+  /** v20 当前工作区（编排窗格按工作区 + 会话寻址；缺省 = 编排窗格提示先选工作区）。 */
+  workspace?: string | null;
   /** v7 附为上下文（§2.3 右键菜单）：工作区相对路径 → App 解析绝对路径后进 composer 附件。 */
   onAttach?: (rel: string, kind: "file" | "directory") => void;
   /** v7 元素选择信号（§3.6 ⌘⇧S，App 递增 seq）：browser 窗格据此对活动标签发起一次选择。 */
@@ -1016,7 +1019,7 @@ export function PaneDock(props: {
                   />
                 )}
                 {kind === "plan" && <PlanPane events={props.events} />}
-                {kind === "tasks" && <TasksPane events={props.events} />}
+                {kind === "tasks" && <><OrchestrationPane workspace={props.workspace ?? null} sessionId={props.sessionId ?? null} /><TasksPane events={props.events} /></>}
                 {kind === "file" && <FilePane onPathMenu={openPathMenu} />}
                 {kind === "terminal" && <TerminalPane />}
                 {kind === "browser" && (

@@ -22,6 +22,7 @@ describe("IPC 协议版本（§3.5/§12）", () => {
     // v15 → v16（2026-10-21 会话定位批）：openSession 增可选 workspace（跨项目同名 id 开对转录）。
     // v16 → v17（终端尺寸同步）：＋terminalResize，真实 PTY 跟随 xterm 行列。
     // v17 → v18：会话正文搜索通道与三态结果。
-    expect(IPC_PROTOCOL_VERSION).toBe(19);
+    // v19 → v20：编排预览/提交/控制（显式 workspace + session 地址）。
+    expect(IPC_PROTOCOL_VERSION).toBe(20);
   });
 });

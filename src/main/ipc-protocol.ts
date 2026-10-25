@@ -19,6 +19,8 @@ import type { SessionQueueEntry } from "./sessions";
 import type { ThinkingEffort } from "../providers/capabilities";
 import type { ProviderInfo } from "./provider-runtime";
 import type { CapabilityReadout } from "./doctor";
+import type { OrchestrationAddress, OrchestrationSubmitRequest, OrchestrationControlRequest, OrchestrationResponse } from "./orchestration-service";
+export type { OrchestrationAddress, OrchestrationSubmitRequest, OrchestrationControlRequest, OrchestrationResponse, OrchestrationSnapshot } from "./orchestration-service";
 // v9：建议单发的结果形状事实源在 suggest-next（分类 + hint 的构造与失败面同源）；这里只转发类型。
 import type { SuggestNextResult } from "./suggest-next";
 
@@ -67,8 +69,9 @@ import type { ProviderConnectionResult } from "./provider-connection";
  *  v18 = 会话全文检索批（sessionSearch——搜**会话正文**而不是文件；结果是三态，
  *  「没量到 ≠ 没有」由类型层面分开，见 src/main/session-search.ts）。
  *  v19 = 指针分叉来源批（openSession 附 SessionRef + SessionView；会话 mutation/队列/注释
- *  增加可选 workspace——两个工作区同名 id 必须精确寻址，歧义拒绝）。 */
-export const IPC_PROTOCOL_VERSION = 19;
+ *  增加可选 workspace——两个工作区同名 id 必须精确寻址，歧义拒绝）。
+ *  v20 = 多智能体编排（显式 workspace/session 的预览、提交与控制）。 */
+export const IPC_PROTOCOL_VERSION = 20;
 
 // ---- v11：主界面重做批的载荷（git 读数 / 克隆 / 项目内搜索）----
 /** git 在场读数：branch 为 null = detached HEAD（如实，不拿 "HEAD" 冒充分支名）。 */
@@ -359,6 +362,10 @@ export interface AgentApi {
   listSessions(): Promise<SessionInfoPayload[]>;
   /** v14：跨全部已登记工作区的用量账本（只读；按会话日志投影，不触发 openSession）。 */
   usageLedger(): Promise<UsageLedgerPayload>;
+  /** v20：编排预览、提交与控制；地址 = 显式工作区 + 会话，未知/越界地址 fail-closed。 */
+  orchestrationView(address: OrchestrationAddress): Promise<OrchestrationResponse>;
+  orchestrationSubmit(request: OrchestrationSubmitRequest): Promise<OrchestrationResponse>;
+  orchestrationControl(request: OrchestrationControlRequest): Promise<OrchestrationResponse>;
   /** v15：读该会话日志的尾部（只读；`tailLines` 缺省 400，上限 2000）。 */
   sessionLog(id: string, tailLines?: number): Promise<SessionLogPayload>;
   /** 新建会话；`workspace` = 该会话实际落点的规范工作区（缺省 = host 的 activeWorkspace）。

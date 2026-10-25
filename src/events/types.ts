@@ -204,13 +204,15 @@ export interface PlanFileChange { path: string; action: "create" | "edit" | "del
 export interface PlanProposal {
   goal: string;
   files: PlanFileChange[];
+  /** Versioned orchestration graph; absent on legacy proposals. */
+  orchestration?: import("../orchestration/types").OrchPlan;
   approach?: string;
   verify?: { lint?: string[]; test?: string[] };
 }
 /** 方案门：模型提交计划，等人批准；批准前写工具在权限层被拒。 */
 export interface PlanProposedEvent { type: "plan_proposed"; callId: string; plan: PlanProposal }
 /** 方案决议（批准 / 拒绝），落日志供 plan 卡显示状态。 */
-export interface PlanApprovedEvent { type: "plan_approved"; callId: string; approved: boolean }
+export interface PlanApprovedEvent { type: "plan_approved"; callId: string; approved: boolean; orchestration?: import("../orchestration/types").OrchestrationStamp }
 
 /**
  * verify 红的**归因**（judgment-layer §9.1 定案五值 + 2026-09-23 实测补的 `pkg-manager`）。
@@ -261,6 +263,7 @@ export interface VerifyCommandResult {
 /** 验证门：一次 lint/test 执行结果。attempt 从 1 起；失败时错误输出经 tool_result 注入同轮继续修。 */
 export interface VerifyResultEvent {
   type: "verify_result";
+  orchestration?: import("../orchestration/types").OrchestrationStamp;
   callId: string;
   /** 缺省（false/缺席）= 模型自调 verify；true = harness 在收束前补的自动验证拍
    *  （能力 5「写过盘必须有证据」）。审计与时间线靠它区分归属，不冒充模型行为。 */
@@ -428,6 +431,7 @@ export type AgentPermissionMode = (typeof AGENT_PERMISSION_MODES)[number];
 
 export interface AgentSpawnedEvent {
   type: "agent_spawned";
+  orchestration?: import("../orchestration/types").OrchestrationStamp;
   agent_id: string;
   /** 血缘：主流里 spawn_agent tool_call 的事件 id（1-based 行号）。 */
   parent_event_id: number;
@@ -468,6 +472,7 @@ export interface AgentSpawnedEvent {
 
 export interface AgentStatusEvent {
   type: "agent_status";
+  orchestration?: import("../orchestration/types").OrchestrationStamp;
   agent_id: string;
   status: AgentStatus;
   /** failed 的分型原因（max_turns / interrupted / 异常摘要）；cancelled 可带发起方注记。 */
@@ -489,6 +494,7 @@ export type WorkerEvidence = "verified" | "failed" | "stale" | "absent";
 /** 终态回传（§4.4.4）：父上下文唯一接收物。错误永不冒充结果——failed 走 status/reason 分型。 */
 export interface AgentResultEvent {
   type: "agent_result";
+  orchestration?: import("../orchestration/types").OrchestrationStamp;
   agent_id: string;
   status: "done" | "failed";
   reason?: string;
@@ -525,6 +531,7 @@ export interface AgentResultEvent {
 // ---- 审批事件协议（§4.4.3 与 turn 解耦）：请求（落流）与等待（订阅 approval_resolved by id）两段 ----
 export interface ApprovalRequestedEvent {
   type: "approval_requested";
+  orchestration?: import("../orchestration/types").OrchestrationStamp;
   id: string;
   /** 发起 worker 的归因（主会话审批不落此事件，走 IPC AskGate 通道）。 */
   agent_id?: string;
@@ -539,6 +546,7 @@ export interface ApprovalRequestedEvent {
 
 export interface ApprovalResolvedEvent {
   type: "approval_resolved";
+  orchestration?: import("../orchestration/types").OrchestrationStamp;
   id: string;
   agent_id?: string;
   decision: "approved" | "rejected";
@@ -550,6 +558,7 @@ export interface ApprovalResolvedEvent {
 /** 卡片回写协议（§10.3）：卡片动作的唯一事件形态。target_agent_id = 多 agent 归因。 */
 export interface CardActionEvent {
   type: "card_action";
+  orchestration?: import("../orchestration/types").OrchestrationStamp;
   card_id: string;
   source_event_id: number;
   card_type: string;
