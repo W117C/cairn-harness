@@ -3,8 +3,8 @@
 // 为什么不复用 `openSession`：那条路会做崩溃恢复、刷新漂移基线、把整份事件读进内存——
 // 只为统计数字而动这些状态，等于把「看一眼用量」变成一次写路径副作用。这里只读文件。
 //
-// 为什么按行流式：历史会话可能很大；面板只关心 usage / tool_call / user_message 三类行，
-// 其余行连 JSON.parse 都不做（先用子串粗筛，粗筛只放过不误杀——类型判定仍在解析后做）。
+// 为什么按行流式：历史会话可能很大；只保留 usage / tool_call / user_message 的累计值与
+// 日期/模型分桶，不把整份事件留在内存。每行仍要 parse，坏行计数才能覆盖整份日志。
 //
 // 失败口径：文件读不了由上层的 `skipped` 计数；文件里的坏行记 `badLines`，不静默当成 0。
 import { createReadStream } from "node:fs";
@@ -12,9 +12,11 @@ import { open, stat } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import type { AgentEvent } from "../events";
 import { emptyUsageTotals, foldUsageEvent, type UsageTotals } from "./usage-ledger";
+import { cloneUsageAnalytics, emptyUsageAnalytics, foldUsageAnalytics, usageAnalyticsSnapshot, type UsageFileAnalytics } from "./usage-analytics";
 
 export interface UsageFileScan {
   totals: UsageTotals;
+  analytics: UsageFileAnalytics;
   /** 非空、但 JSON 解析失败的行数（日志损坏/半行写入）——面板据此如实提示。 */
   badLines: number;
 }
@@ -49,10 +51,11 @@ export async function scanUsageFile(file: string, cache?: UsageFileCache): Promi
   const st = await stat(file);
   const cached = cache?.get(file);
   if (cached !== undefined && cached.size === st.size && cached.mtimeMs === st.mtimeMs) {
-    return { totals: { ...cached.totals }, badLines: cached.badLines };
+    return { totals: { ...cached.totals }, analytics: cloneUsageAnalytics(cached.analytics), badLines: cached.badLines };
   }
 
   const totals = emptyUsageTotals();
+  const analyticsAcc = emptyUsageAnalytics();
   const trailingNewline = await endsWithNewline(file, st.size);
   let badLines = 0;
   let lastLineBad = false;
@@ -76,6 +79,7 @@ export async function scanUsageFile(file: string, cache?: UsageFileCache): Promi
       const event = raw as AgentEvent;
       if (typeof (event as { type?: unknown }).type !== "string") continue;
       foldUsageEvent(totals, event);
+      foldUsageAnalytics(analyticsAcc, event);
     }
   } finally {
     rl.close();
@@ -83,6 +87,7 @@ export async function scanUsageFile(file: string, cache?: UsageFileCache): Promi
   // 在飞半行：文件没有尾换行且最后一行解析失败 ⇒ 这是写入中的半条，不是损坏。
   if (lastLineBad && !trailingNewline) badLines = Math.max(0, badLines - 1);
 
-  cache?.set(file, { totals: { ...totals }, badLines, size: st.size, mtimeMs: st.mtimeMs });
-  return { totals, badLines };
+  const analytics = usageAnalyticsSnapshot(analyticsAcc);
+  cache?.set(file, { totals: { ...totals }, analytics: cloneUsageAnalytics(analytics), badLines, size: st.size, mtimeMs: st.mtimeMs });
+  return { totals, analytics, badLines };
 }

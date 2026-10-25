@@ -175,7 +175,10 @@ describe("web_search 传输层（注入 fetchImpl / resolveHost）", () => {
     const r = await tool.run({ query: "x" }, ctx());
     expect(r.ok).toBe(false);
     expect(r.output).toContain("未配置搜索端点");
-    expect(r.output).toContain("{query}");
+    // 2026-10-25：提示改为可操作的设置路径（服务/地址/Key）——模型不需要从错误文案里学
+    // 工具签名，用户需要知道去哪配。下文「一次出网都没有」仍独立钉住 fail-closed。
+    expect(r.output).toContain("设置 → 联网搜索");
+    expect(r.output).toContain("本工具不做默认厂商");
   });
 
   // 上一条的标题写着「不做默认厂商」，正文却只核对文案——回落一个厂商这个动作本身没人看得见

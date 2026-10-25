@@ -24,6 +24,11 @@ function isWorkerSubflow(e: AgentEvent): boolean {
   return typeof id === "string";
 }
 
+/** 损坏/旧日志里的无效值不冒充负消耗，也不把 NaN 传播到整份账本。 */
+export function isMeasuredTokenCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
 /** 把一条事件折进累加器。口径逐条写死，别处不要再算第二遍：
  *  · usage：全部计入（含 worker——token 是真实花掉的，不分主/子）；缺字段当 0。
  *  · 工具步数：只数主会话 tool_call（worker 的步数在各自子流里，不算进这条对话）。
@@ -31,10 +36,10 @@ function isWorkerSubflow(e: AgentEvent): boolean {
 export function foldUsageEvent(acc: UsageTotals, e: AgentEvent): void {
   if (e.type === "usage") {
     acc.usageCount += 1;
-    acc.inputTokens += typeof e.inputTokens === "number" ? e.inputTokens : 0;
-    acc.outputTokens += typeof e.outputTokens === "number" ? e.outputTokens : 0;
+    acc.inputTokens += isMeasuredTokenCount(e.inputTokens) ? e.inputTokens : 0;
+    acc.outputTokens += isMeasuredTokenCount(e.outputTokens) ? e.outputTokens : 0;
     const cacheRead = (e as { cacheReadInputTokens?: unknown }).cacheReadInputTokens;
-    if (typeof cacheRead === "number") acc.cacheReadTokens += cacheRead;
+    if (isMeasuredTokenCount(cacheRead)) acc.cacheReadTokens += cacheRead;
     return;
   }
   if (isWorkerSubflow(e)) return;
