@@ -97,6 +97,8 @@ describe("reflect reflectInstruction", () => {
     expect(text).toContain("verify 失败按 cause（code×3）");
     expect(text).toContain("verify-escalate（现行措辞）");
     expect(text).toContain("evidenceCallIds");
+    // 硬规矩里的「事件流里真实存在的 callId」是句能力承诺：反思提不出证据就不许提案。
+    expect(text).toContain("至少一个且必须是本会话事件流里真实存在的");
     const none = reflectInstruction([], [], extractSignals([ev({ type: "user_message", content: "无验证" })]));
     expect(none).toContain("无");
   });

@@ -515,7 +515,9 @@ export const CLAIM_BINDINGS: readonly ClaimBinding[] = [
   },
   {
     face: "src/main/provider-connection.ts#hintFor｜这家服务不提供模型清单接口",
-    symbol: "unsupported",
+    // 配对词不能选 `unsupported`：它在 8 份判卷里都出现，等于没有区分度（门自己会红）。
+    // 选 hint 里那句只有这家会说的话，用例断言的也正是它。
+    symbol: "key 已保存",
     testFile: "tests/provider-connection.test.ts",
     testCase: "404：unsupported（这家没有模型清单接口），文案允许用户继续用",
     why: "hintFor 的 unsupported 分支就是这句话；用例让 /models 返回 404，断言 reason=unsupported 且 hint 允许继续用，"

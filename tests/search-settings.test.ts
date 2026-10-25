@@ -49,7 +49,10 @@ describe("search settings form service", () => {
 
   it("fails closed without encryption and persists encrypted endpoint-scoped keys across backend reinstall", async () => {
     const draft = input({ provider: "brave", endpoint: "", apiKey: "brave-test-secret" });
-    expect((await saveSearchSettings(dir, draft)).ok).toBe(false);
+    const noStore = await saveSearchSettings(dir, draft);
+    expect(noStore.ok).toBe(false);
+    // 没有安全存储时不许退化成明文：错误要说明「系统安全存储不可用」。
+    expect(noStore.ok === false ? noStore.error : "").toContain("系统安全存储不可用");
     const secrets = join(dir, "secrets.json");
     installSafeStorageBackend(safe, secrets);
     expect((await saveSearchSettings(dir, draft)).ok).toBe(true);

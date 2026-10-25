@@ -118,6 +118,8 @@ describe("外部声明式来源：pi", () => {
     expect(p!.commands.map((c) => c.name)).toEqual(["review"]);
     expect(p!.agents).toEqual([]);
     expect(m.warnings.some((w) => w.message.includes("${1:-默认}"))).toBe(true);
+    // 不只点名语法：还要说清「本仓替换器不支持、运行时会原样保留」这个能力边界。
+    expect(m.warnings.some((w) => w.message.includes("本仓替换器不支持"))).toBe(true);
   });
 
   it("用户级来源恒 trusted；目录不存在 = 不产条目", async () => {

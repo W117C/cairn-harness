@@ -57,6 +57,8 @@ describe("store：索引读侧与强度账 IO", () => {
       expect(empty).toEqual({});
       expect(warns.length).toBe(1);
       expect(warns[0]).toContain("损坏");
+      // 损坏时的承诺是「只丢命中计数，正文不受影响」——这是 fail-visible 的边界，必须逐字有观测者。
+      expect(warns[0]).toContain("记忆正文不受影响");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

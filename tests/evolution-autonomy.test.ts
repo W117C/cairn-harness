@@ -28,6 +28,8 @@ describe("autonomy loadAutonomy（fail-closed）", () => {
       expect((await loadAutonomy(root, onCorrupt)).tier).toBe("manual");
       expect(said.length).toBe(2);
       expect(said.every((s): boolean => s.includes("manual"))).toBe(true);
+      // 坏文件的承诺是 fail-closed 到 manual 且说清原因；这句原话要有观测者。
+      expect(said.every((s): boolean => s.includes("自治档位文件读不动"))).toBe(true);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
