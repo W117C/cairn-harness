@@ -10,7 +10,7 @@ function hash(value: unknown): string { return createHash("sha256").update(JSON.
 const own = <T>(record: Record<string, T>, key: string): T | undefined => Object.hasOwn(record, key) ? record[key] : undefined;
 function nonempty(value: unknown, name: string): asserts value is string { if (typeof value !== "string" || !value.trim() || value.length > 256) throw new Error(name + " is invalid"); }
 function cost(value: number): void { if (!Number.isFinite(value) || value < 0) throw new Error("backend returned invalid spent_usd"); }
-interface ActiveRun { request: ExecutionRequest; controller: AbortController; promise: Promise<void>; }
+interface ActiveRun { request: ExecutionRequest; controller: AbortController; promise: Promise<void>; pauseRequested?: boolean; }
 
 /** Durable intent precedes effects. Worker reports never directly grant completion. */
 export class OrchestrationEngine {
@@ -54,7 +54,7 @@ export class OrchestrationEngine {
       const view = await this.view(); const prior = own(view.plans, plan.plan_id);
       if (prior && prior.plan.version === plan.version && hash(prior.plan) !== hash(plan)) throw new Error("plan version is immutable");
       if (prior && prior.plan.version !== plan.version && plan.version !== prior.plan.version + 1) throw new Error("plan versions must increase by one");
-      if (prior && prior.plan.version !== plan.version && Object.values(prior.tasks).some(t => t.run_id && !["done", "failed", "cancelled"].includes(t.phase))) throw new Error("previous plan still owns live runs");
+      if (prior && prior.plan.version !== plan.version && Object.values(prior.tasks).some(t => t.run_id && !["done", "failed", "cancelled", "paused"].includes(t.phase))) throw new Error("previous plan still owns live runs");
       const cmd = { request_id: requestId, plan_id: plan.plan_id, version: plan.version, action: "submit_plan" };
       if (!previous.requested) await this.commandEvent(cmd, digest, "request");
       if (!prior || prior.plan.version !== plan.version) {
@@ -73,6 +73,12 @@ export class OrchestrationEngine {
       if (previous.done) return;
       const view = await this.view(); const plan = own(view.plans, command.plan_id);
       if (!plan || plan.plan.version !== command.version) throw new Error("unknown or stale plan version");
+      // Crash window: the state event landed, the control result did not. Retrying the same
+      // request id must record the result, not reject a transition that already happened.
+      if (previous.requested && ["approve_plan", "reject_plan"].includes(command.action)) {
+        const expected = command.action === "approve_plan" ? "approved" : "rejected";
+        if (plan.phase === expected) { await this.commandEvent(command, digest, "result"); return; }
+      }
       if (command.action.endsWith("_task") || ["merge_task", "reject_merge"].includes(command.action)) {
         if (!command.task_id || !own(plan.tasks, command.task_id)) throw new Error("unknown task");
       }
@@ -91,9 +97,12 @@ export class OrchestrationEngine {
       if (["merge_task", "reject_merge"].includes(command.action)) throw new Error("delivery is controlled by the verified execution queue; manual delivery is unavailable");
       if (command.action === "rollback_task" && (task?.phase !== "done" || !task.run_id || !this.options.backend.rollback)) throw new Error("verified delivered task with backend rollback support required");
       if (!previous.requested) await this.commandEvent(command, digest, "request");
-      if (["cancel_plan", "cancel_task", "takeover_task"].includes(command.action)) {
+      if (["cancel_plan", "cancel_task", "takeover_task", "pause_task"].includes(command.action)) {
         const targets = [...this.active.values()].filter(a => a.request.plan.plan_id === command.plan_id && a.request.plan.version === command.version && (!command.task_id || a.request.task.task_id === command.task_id));
-        for (const run of targets) run.controller.abort();
+        for (const run of targets) {
+          if (command.action === "pause_task") run.pauseRequested = true;
+          run.controller.abort(command.action === "pause_task" ? "pause" : undefined);
+        }
         // Execute never waits on this command queue: cancellation can await confirmed stop safely.
         await Promise.all(targets.map(run => run.promise));
       }
@@ -119,11 +128,18 @@ export class OrchestrationEngine {
     return this.serial(async () => {
       if (this.options.enabled !== true) return 0;
       const view = await this.view();
-      const actions = nextActions(view, { max_concurrency: this.options.backend.max_concurrency });
+      const actions = nextActions(view, { max_concurrency: this.options.backend.max_concurrency, now: Date.now() });
       let started = 0;
       for (const action of actions) {
         if (action.kind === "cancel") {
-          for (const run of this.active.values()) if (run.request.plan.plan_id === action.plan_id && run.request.task.task_id === action.task_id) run.controller.abort();
+          let aborted = false;
+          for (const run of this.active.values()) if (run.request.plan.plan_id === action.plan_id && run.request.task.task_id === action.task_id) { run.controller.abort(); aborted = true; }
+          if (!aborted) {
+            const p = own(view.plans, action.plan_id); const t = p ? own(p.tasks, action.task_id) : undefined;
+            if (t && !["done", "failed", "cancelled"].includes(t.phase)) {
+              await this.append({ type: "agent_status", agent_id: t.agent_id ?? "unspawned:" + action.task_id, status: "cancelled", reason: action.reason ?? "lease expired; confirmed no live executor", orchestration: { schema_version: 1, plan_id: action.plan_id, version: action.version, task_id: action.task_id, actor: "kernel", phase: "cancelled" } });
+            }
+          }
           continue;
         }
         if (action.kind === "escalate") {
@@ -209,10 +225,11 @@ export class OrchestrationEngine {
       // A user/kernel cancellation has no reported cost yet; do not turn the whole remaining
       // reservation into spend (that makes a cancelled task unretryable). A real backend error
       // keeps the reservation: it may have incurred unreported provider cost.
+      const paused = request.signal.aborted && request.signal.reason === "pause";
       const remaining = request.signal.aborted
         ? Math.max(0, charged - recorded)
         : Math.max(0, Math.max(request.context.budget.usd, charged) - recorded);
-      await this.status({ ...stamp, spent_usd: remaining }, request.signal.aborted ? "cancelled" : "failed", String(error instanceof Error ? error.message : error));
+      await this.status({ ...stamp, spent_usd: remaining }, paused ? "paused" : request.signal.aborted ? "cancelled" : "failed", paused ? "paused by user" : String(error instanceof Error ? error.message : error));
     }
   }
   /** Run until nothing can proceed. Blocked/needs-you tasks remain visible, not falsely completed. */
@@ -221,7 +238,8 @@ export class OrchestrationEngine {
       const started = await this.tick();
       const pending = [...this.active.values()].map(a => a.promise);
       if (!pending.length && !started) break;
-      await Promise.all(pending);
+      // Re-tick at least once a second so an expired lease can abort a hung backend.
+      await Promise.race([Promise.all(pending), new Promise<void>((resolve) => setTimeout(resolve, 1_000))]);
     }
     return this.view();
   }

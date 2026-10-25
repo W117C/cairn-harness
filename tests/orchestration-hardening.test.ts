@@ -60,6 +60,23 @@ it("cancelling a run before any result does not turn the reservation into spend"
   expect(task.phase).toBe("cancelled"); expect(task.spent_usd).toBe(0);
 });
 
+it("pause_task stops a live run and resume_task starts a fresh attempt", async () => {
+  let attempts = 0; let begin!: () => void; const started = new Promise<void>((resolve) => { begin = resolve; });
+  const b = backend({ execute: async (r) => {
+    attempts += 1;
+    if (attempts === 1) { begin(); await new Promise<void>((_, reject) => r.signal.addEventListener("abort", () => reject(new Error("paused")), { once: true })); }
+    return { agent_id: "producer:" + r.run_id, summary: "complete", revision: "hash", artifacts: [], evidence: { answer: "yes" }, spent_usd: 0.01 };
+  } });
+  const { engine } = await setup(b); await start(engine); await engine.tick(); await started;
+  await engine.control({ request_id: "pause", plan_id: "plan", version: 1, action: "pause_task", task_id: "t0" });
+  expect((await engine.view()).plans.plan!.tasks.t0!.phase).toBe("paused");
+  await engine.control({ request_id: "resume", plan_id: "plan", version: 1, action: "resume_task", task_id: "t0" });
+  expect((await engine.view()).plans.plan!.tasks.t0!.phase).toBe("queued");
+  await engine.runUntilIdle();
+  expect((await engine.view()).plans.plan!.tasks.t0!.phase).toBe("done");
+  expect(attempts).toBe(2);
+});
+
 it("does not freeze every plan because one plan has a projection anomaly", async () => {
   const { store, engine } = await setup(backend());
   await store.append({ type: "agent_status", agent_id: "ghost", status: "done", orchestration: { schema_version: 1, plan_id: "missing", version: 1 } } as never);

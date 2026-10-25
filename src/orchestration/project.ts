@@ -4,7 +4,7 @@ import { parsePlan } from "./validate";
 import type { ControlAction, OrchestrationStamp, OrchestrationView, PlanView, TaskView } from "./types";
 
 const terminal = (task: TaskView) => ["done", "failed", "cancelled"].includes(task.phase);
-const live = (task: TaskView) => !!task.run_id && !terminal(task);
+const live = (task: TaskView) => !!task.run_id && !terminal(task) && task.phase !== "paused";
 const money = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
 const own = <T>(record: Record<string, T>, key: string): T | undefined => Object.hasOwn(record, key) ? record[key] : undefined;
 const taskControls = new Set<ControlAction>(["pause_task", "resume_task", "cancel_task", "takeover_task", "retry_task", "merge_task", "reject_merge", "rollback_task"]);
@@ -137,7 +137,7 @@ export function projectOrchestration(events: readonly AgentEvent[]): Orchestrati
           } else valid = false;
           break;
         case "pause_task": if (task && !terminal(task)) { task.reason = "paused by user"; if (!live(task)) task.phase = "paused"; } else valid = false; break;
-        case "resume_task": if (task?.phase === "paused" && !task.run_id) { task.phase = "queued"; delete task.reason; } else if (task?.reason === "paused by user") delete task.reason; else valid = false; break;
+        case "resume_task": if (task?.phase === "paused") { task.phase = "queued"; delete task.reason; delete task.run_id; delete task.agent_id; delete task.lease_expires_at; } else if (task?.reason === "paused by user") delete task.reason; else valid = false; break;
         case "cancel_task": if (task && (task.phase === "needs_you" || task.phase === "cancelled" || (!live(task) && !terminal(task)))) stop(plan, task, "cancelled"); else valid = false; break;
         case "takeover_task": if (task && (task.phase === "needs_you" || !live(task))) { task.phase = "needs_you"; task.reason = "taken over by user"; delete task.run_id; delete task.agent_id; delete task.lease_expires_at; } else valid = false; break;
         case "retry_task":

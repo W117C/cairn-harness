@@ -135,7 +135,7 @@ async function copyOverlay(workspace: string, target: string, scopes: string[], 
 /** Table, provider specs and prompt names all derive from the very same selected entries. */
 function toolSurface(request: ExecutionRequest, root: string, verifier: boolean) {
   const capability = specFor(request).capability;
-  const selected = FILE_TOOLS.filter((tool) => verifier ? !WRITE_TOOLS.has(tool.name) : capability.tools.includes(tool.name));
+  const selected = FILE_TOOLS.filter((tool) => capability.tools.includes(tool.name) && (verifier ? !WRITE_TOOLS.has(tool.name) : true));
   const names = selected.map((tool) => tool.name as ToolName);
   const specs: ProviderToolSpec[] = selected.map((tool) => ({ name: tool.name, description: `${tool.name} in the isolated allowed file surface`, parameters: { type: "object", properties: { path: { type: "string" }, paths: { type: "array", items: { type: "string" } }, pattern: { type: "string" }, content: { type: "string" }, old_string: { type: "string" }, new_string: { type: "string" }, replace_all: { type: "boolean" }, offset: { type: "number" }, limit: { type: "number" }, context: { type: "number" }, fixed_strings: { type: "boolean" } } } }));
   const tools: Record<string, Tool> = {};

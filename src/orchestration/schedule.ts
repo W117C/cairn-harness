@@ -1,7 +1,7 @@
 import type { FlowTask, OrchestrationView, PlanView, ScheduleAction, TaskView } from "./types";
 
 const terminal = (task: TaskView) => ["done", "failed", "cancelled"].includes(task.phase);
-const live = (task: TaskView) => !!task.run_id && !terminal(task);
+const live = (task: TaskView) => !!task.run_id && !terminal(task) && task.phase !== "paused";
 const compare = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 /** Single source for the dependency failure reason; tests import it instead of copying prose. */
 export const DEPENDENCY_ESCALATION_REASON = "dependency failed, was cancelled or requires user action";
@@ -26,8 +26,9 @@ export function writeScopesConflict(a: FlowTask, b: FlowTask): boolean {
 }
 
 /** Deterministic suggestions. Only durable kernel events may reserve or execute them. */
-export function nextActions(view: OrchestrationView, options: { max_concurrency?: number } = {}): ScheduleAction[] {
+export function nextActions(view: OrchestrationView, options: { max_concurrency?: number; now?: number } = {}): ScheduleAction[] {
   const actions: ScheduleAction[] = [];
+  const now = options.now ?? view.now;
   const plans = Object.values(view.plans).sort((a, b) =>
     Object.values(a.tasks).reduce((n, t) => n + t.attempt, 0) - Object.values(b.tasks).reduce((n, t) => n + t.attempt, 0) ||
     compare(a.plan.plan_id, b.plan.plan_id));
@@ -53,7 +54,7 @@ export function nextActions(view: OrchestrationView, options: { max_concurrency?
     for (const task of tasks) {
       if (live(task)) {
         if (plan.phase === "cancelled") emit("cancel", plan, task, "plan cancelled; confirm the previous executor stopped");
-        else if (task.lease_expires_at !== undefined && task.lease_expires_at <= view.now) emit("cancel", plan, task, "lease expired; confirm the previous executor stopped");
+        else if (task.lease_expires_at !== undefined && task.lease_expires_at <= now) emit("cancel", plan, task, "lease expired; confirm the previous executor stopped");
         else if (plan.phase === "approved" && !overBudget && task.phase === "verifying") {
           if (task.evidence === "failed" || task.verdict === "fail" || task.verdict === "unverifiable") emit("escalate", plan, task, "verification failed or is unverifiable");
           else if (task.evidence === "verified" && task.verdict === "pass" && task.verifier_id && task.verifier_id !== (task.producer_id ?? task.agent_id) && task.revision) {
@@ -72,7 +73,7 @@ export function nextActions(view: OrchestrationView, options: { max_concurrency?
         emit("escalate", plan, task, DEPENDENCY_ESCALATION_REASON); continue;
       }
       if (dependencies.some(dep => dep.phase !== "done")) continue;
-      if (task.task.deadline_ms !== undefined && task.task.deadline_ms <= view.now) { emit("escalate", plan, task, "task deadline exceeded"); continue; }
+      if (task.task.deadline_ms !== undefined && task.task.deadline_ms <= now) { emit("escalate", plan, task, "task deadline exceeded"); continue; }
       if (task.attempt >= task.task.max_attempts) { emit("escalate", plan, task, "attempt limit reached"); continue; }
       ready.push(task);
     }
