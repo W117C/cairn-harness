@@ -1,4 +1,4 @@
-// M2d 注入器（§8.1.5 定稿）：固定回注名单 + 总预算 + 双端超限治理 + 安全四件。
+// M2d 注入器（§8.1.5 定稿）+ M7 检索化注入：固定回注名单 + 总预算 + 双端超限治理 + 安全四件。
 // 名单（记忆部分）：项目层 ARCHITECTURE.md（>4KB 只注大纲）+ DECISIONS.md 最近 N 条（默认 20）
 // + memory/MEMORY.md 索引；全局层 memory/MEMORY.md 索引。总预算默认 6K token（可配）。
 // 超限：整行丢弃保尾部 + 截断提示（OpenHands memory.py:39-53 同款）。**判定以 token 计**，
@@ -6,25 +6,45 @@
 // 预算元数据 chars_current/chars_limit 渲染进块（Letta memory.py:164-165 同款），
 // 另加 tokens_current/tokens_limit 报真正生效的那把尺。
 // 安全：块首立场声明 + 仿冒控制标签转义（§4.4.4 同款）+ @path 工作区外首次批准（拒绝即停用）。
+//
+// M7 新增两件事（仿脑：提取线索 + 检索练习）：
+// · RECALL 段——本轮问话词面命中的 top-k 主题**正文**直接注入（编码特异性：索引只是地图，
+//   命中正文才是「想起了那条记忆本身」）；选材口径见 retrieval.ts；
+// · 命中记账——被选入 RECALL 的条目记一笔强度账（testing effect），异步落 memory-stats.json；
+//   休眠条目（见 strength.ts/consolidate.ts）索引行不注、正文不注，词面强命中可唤醒。
+//   ⇒ 本模块不再是「零写入」：ref 决议与强度账两处副作用都**绝不抛进注入路径**（记完就走）。
 import { isAbsolute, relative, resolve } from "node:path";
 import { weightText } from "../text-budget.js";
 import { escapeControlTags } from "../control-tags.js";
 import { shapeDoc } from "../shape.js";
 import { LESSON_TOPIC_PREFIX, lessonLine, parseLessonDigest } from "./lessons.js";
 import {
+  MEMORY_INDEX,
   loadExternalRefState,
   globalMemoryDir,
   projectMemoryDir,
+  readStats,
+  readTopicBody,
   recentDecisionEntries,
   readTextOrNull,
-  readTopicBody,
   saveExternalRefDecision,
+  updateStats,
   withExternalRefDecision,
   rootFilePath,
   listTopics,
   isCompliantTopic,
+  parseIndex,
   type ExternalRefState,
 } from "./store.js";
+import {
+  RECALL_MIN_SCORE,
+  RECALL_MAX_TOPICS,
+  WAKE_MIN_SCORE,
+  scoreRecallCandidates,
+  selectRecall,
+  type RecallInput,
+} from "./retrieval.js";
+import { bumpStat } from "./strength.js";
 
 export const MEMORY_TOKEN_BUDGET_DEFAULT = 6_000;
 /** ASCII 口径的字符帽换算（仅用于 chars_limit 这一路**展示**；生效的闸是 token 预算本身）。 */
@@ -135,10 +155,180 @@ async function decisionsSection(workspace: string, limit: number): Promise<Secti
   return { header: "[DECISIONS 最近 " + entries.length + " 条]", lines };
 }
 
-async function indexSection(header: string, dir: string): Promise<Section | null> {
-  const raw = await readTextOrNull(dir + "/MEMORY.md");
+/** 索引段（M7 休眠感知版）：休眠条目的索引行**不注**（墓碑态省预算），但必须留下一句点名——
+ *  「索引少了 K 行」不说是谁干的，模型会把「没列出来」读成「没有」（与 memoryUnavailableText
+ *  同一族：不可用与不存在不许同形）。无休眠条目 ⇒ 逐字回到旧行为（零注入回归）。 */
+export function indexSectionFiltered(
+  header: string,
+  raw: string | null,
+  stats: Record<string, import("./strength.js").MemoryStat>,
+): Section | null {
   if (raw === null || raw.trim().length === 0) return null;
-  return { header, lines: raw.trimEnd().split("\n") };
+  const lines = raw.trimEnd().split("\n");
+  const kept: string[] = [];
+  let dropped = 0;
+  for (const line of lines) {
+    if (isDormantIndexLine(line, stats)) {
+      dropped += 1;
+      continue;
+    }
+    kept.push(line);
+  }
+  if (dropped > 0) {
+    kept.push("[另有 " + String(dropped) + " 条休眠条目未列（长期未命中已降优先级；正文仍在盘上，记忆面板可见，检索强命中会自动唤醒）]");
+  }
+  return { header, lines: kept };
+}
+
+function isDormantIndexLine(line: string, stats: Record<string, import("./strength.js").MemoryStat>): boolean {
+  const m = line.match(/^- (\S{1,64}) ·/u);
+  return m !== null && stats[m[1]!]?.dormant === true;
+}
+
+/** RECALL 段：词面选材 → 只给过线候选读正文 → 注入选中的 top-k（M7）。
+ *  问句缺失 / 索引为空 / 全不过线 ⇒ section=null（零注入回归：老调用方行为逐字不变）。
+ *  **这里不记命中账**：预算治理可能在后面把本段整段/部分丢掉，被丢掉的条目没进模型，
+ *  记了「检索练习」就是账实不符——落账点在 buildMemoryInjection 的淘汰之后（见
+ *  recordRecallHitsForSurvivors）。picked 一并返回，供淘汰后对账。 */
+async function recallSection(args: {
+  dir: string;
+  label: string;
+  queryText: string | undefined;
+  stats: Record<string, import("./strength.js").MemoryStat>;
+  limit: number;
+  nowISO: string;
+}): Promise<{ section: Section | null; picked: string[] }> {
+  const query = args.queryText?.trim();
+  if (query === undefined || query === "") return { section: null, picked: [] };
+  const raw = await readTextOrNull(args.dir + "/" + MEMORY_INDEX);
+  if (raw === null) return { section: null, picked: [] };
+  const entries = parseIndex(raw);
+  if (entries.length === 0) return { section: null, picked: [] };
+  const scored = new Map(scoreRecallCandidates(query, entries).map((s) => [s.topic, s]));
+  if (scored.size === 0) return { section: null, picked: [] };
+  // 预筛 + 有界读盘：只给「词面分已过线」的候选读正文（休眠条目按更高的唤醒门槛筛），
+  // 且最多读 RECALL_CANDIDATE_BODIES_MAX 份——selectRecall 的强度微调只能在这个有界集内重排，
+  // 这个界是**词面分降序**切的，不是遍历顺序（确定性不交给 readdir）。
+  const qualified = entries
+    .filter((e) => {
+      const s = scored.get(e.topic);
+      if (s === undefined) return false;
+      return s.score >= (args.stats[e.topic]?.dormant === true ? WAKE_MIN_SCORE : RECALL_MIN_SCORE);
+    })
+    .sort((a, b) => (scored.get(b.topic)!.score - scored.get(a.topic)!.score) || (a.topic < b.topic ? -1 : 1))
+    .slice(0, RECALL_CANDIDATE_BODIES_MAX);
+  const inputs: RecallInput[] = [];
+  for (const e of qualified) {
+    // 读不动的那一份只丢那一份：MEMORY.md 是外界可编辑文本，一行坏名字（路径穿越/非法字符）
+    // 走 readTopicBody 的校验会抛——不许把**整段记忆注入**打成「不可用」。body=null ⇒
+    // selectRecall 按「无正文不注」跳过那一条（与 lessons 的 splitLessonCandidates 同一道门）。
+    let body: string | null = null;
+    try {
+      body = await readTopicBody(args.dir, e.topic);
+    } catch {
+      body = null;
+    }
+    inputs.push({ ...e, stat: args.stats[e.topic], body });
+  }
+  const picks = selectRecall(query, inputs, { k: args.limit, nowISO: args.nowISO });
+  if (picks.length === 0) return { section: null, picked: [] };
+  const lines: string[] = [];
+  for (const p of picks) {
+    lines.push(
+      "- " + p.topic + " ｜ " + p.type + " ｜" + (p.woke ? "〔休眠条目·本轮强命中唤醒〕" : "") + "〔命中: " + p.matched.join("、") + "〕 " + p.headline,
+    );
+    for (const l of wrapExcerptLines(p.excerpt)) lines.push("  " + l);
+  }
+  return {
+    section: { header: "[RECALL 按本轮问话词面命中的记忆正文（" + args.label + " top " + String(picks.length) + "；词面命中≠重要性排名，命中词随行）]", lines },
+    picked: picks.map((p) => p.topic),
+  };
+}
+
+/** 淘汰之后给「活下来的命中」记账：一条 pick 的**抬头行**（`- topic ｜ …`）还在段里
+ *  ⇒ 它真的进了模型 ⇒ 记一笔；抬头被预算治理丢掉 ⇒ 那条没注入 ⇒ 不记。
+ *  返回活下来的 topic（MemoryInjection.recall 的观测面——观测量的是实发，不是选材）。 */
+function recordRecallHitsForSurvivors(section: Section, dir: string, picked: readonly string[]): string[] {
+  const survived: string[] = [];
+  for (const topic of picked) {
+    const prefix = "- " + topic + " ｜ ";
+    if (section.lines.some((l) => l.startsWith(prefix))) {
+      survived.push(topic);
+      recordRecallHit(dir, topic);
+    }
+  }
+  return survived;
+}
+
+/** 淘汰的收尾：从段首丢行可能停在某条 pick 的**抬头与摘录之间**，留下没有出处的孤儿摘录行
+ *  （「有正文、没说是谁」——比没有更误导）。段首连续的缩进行即孤儿，整段摘掉；
+ *  全摘空 ⇒ 这一段在 kept 过滤里自然消失。只对 RECALL 段调（别的段没有这种成块结构）。 */
+function trimOrphanExcerpts(section: Section): void {
+  while (section.lines.length > 0 && section.lines[0]!.startsWith("  ")) section.lines.splice(0, 1);
+}
+
+/** 有界预筛后最多读多少份正文。12 = 上限 3 条入选 × 4 倍余量（强度微调的重排空间）。 */
+export const RECALL_CANDIDATE_BODIES_MAX = 12;
+/** 摘录折行的码点帽：预算治理按**整行**丢弃，一行一整段 1200 字符会让丢弃粒度过粗。 */
+export const RECALL_WRAP_CODEPOINTS = 200;
+const RECALL_WRAP_MAX_LINES = 12;
+
+function wrapExcerptLines(excerpt: string): string[] {
+  const out: string[] = [];
+  for (const line of excerpt.split("\n")) {
+    const chars = Array.from(line);
+    if (chars.length <= RECALL_WRAP_CODEPOINTS) {
+      out.push(line);
+    } else {
+      for (let i = 0; i < chars.length; i += RECALL_WRAP_CODEPOINTS) out.push(chars.slice(i, i + RECALL_WRAP_CODEPOINTS).join(""));
+    }
+    if (out.length >= RECALL_WRAP_MAX_LINES) break;
+  }
+  const capped = out.slice(0, RECALL_WRAP_MAX_LINES);
+  if (out.length > RECALL_WRAP_MAX_LINES) capped.push("  …（摘录行数截断，原文见记忆文件）");
+  return capped;
+}
+
+// ---- 命中记账（检索练习）：先攒后落，绝不阻塞注入 ----
+const pendingRecallHits = new Map<string, Set<string>>();
+let recallFlushTimer: ReturnType<typeof setTimeout> | null = null;
+const RECALL_FLUSH_DEBOUNCE_MS = 3_000;
+
+function recordRecallHit(dir: string, topic: string): void {
+  let set = pendingRecallHits.get(dir);
+  if (set === undefined) {
+    set = new Set();
+    pendingRecallHits.set(dir, set);
+  }
+  set.add(topic);
+  if (recallFlushTimer !== null) return;
+  recallFlushTimer = setTimeout(() => {
+    recallFlushTimer = null;
+    void flushRecallHits().catch((err) => console.warn("[memory] 强度账延迟落账失败:", err));
+  }, RECALL_FLUSH_DEBOUNCE_MS);
+  recallFlushTimer.unref?.();
+}
+
+/** 把攒下的命中落进强度账（锁内读-改-写）。distill 会话收尾时显式 await 它；判卷/测试也直呼它。
+ *  单目录落账失败只 warn 不抛：强度账是启发式缓存，坏一笔不等于注入错一笔。 */
+export async function flushRecallHits(): Promise<void> {
+  if (recallFlushTimer !== null) {
+    clearTimeout(recallFlushTimer);
+    recallFlushTimer = null;
+  }
+  const taken = [...pendingRecallHits.entries()].map(([dir, s]) => [dir, [...s]] as const);
+  pendingRecallHits.clear();
+  const nowISO = new Date().toISOString();
+  for (const [dir, topics] of taken) {
+    try {
+      await updateStats(dir, async (stats) => {
+        for (const t of topics) stats[t] = bumpStat(stats[t] ?? null, t, nowISO);
+        return { value: undefined, next: stats };
+      });
+    } catch (err) {
+      console.warn("[memory] 强度账落账失败（下次命中或巩固会补建账目，不影响注入）:", err instanceof Error ? err.message : String(err));
+    }
+  }
 }
 
 /** 教训段（M6）：每条一行，**出处逐字可见**。
@@ -221,6 +411,10 @@ export interface MemoryInjectionOptions {
   lessonsLimit?: number;
   /** 总预算 token，缺省 6000。 */
   tokenBudget?: number;
+  /** M7 检索化注入的**问话线索**：本轮用户消息（或 worker 任务书）。缺失 ⇒ 不做 RECALL（老行为）。 */
+  queryText?: string;
+  /** RECALL 段每层最多选几条正文，缺省 RECALL_MAX_TOPICS。 */
+  recallLimit?: number;
   /** 外部引用审批状态；缺省从全局记忆目录读。 */
   refState?: ExternalRefState;
   /** 首次批准回调（缺省无 = fail-closed 停用）。 */
@@ -232,6 +426,8 @@ export interface MemoryInjectionOptions {
 export interface MemoryInjection {
   project: string | null;
   global: string | null;
+  /** M7：本轮 RECALL 选中的 topic（项目层+全局层；观测面/判卷用，注入文本里同样可见）。 */
+  recall: string[];
   charsCurrent: number;
   charsLimit: number;
   tokens: number;
@@ -256,7 +452,8 @@ function renderBlock(source: "project" | "global", sections: Section[], charsLim
   return lines.join("\n");
 }
 
-/** 构建两层记忆注入块：纯读 + 安全治理 + 预算整行丢弃保尾部。零写入（ref 决议除外）。 */
+/** 构建两层记忆注入块：纯读 + 安全治理 + 预算整行丢弃保尾部。副作用仅两处（ref 决议、强度账），
+ *  都不抛进注入路径。 */
 export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promise<MemoryInjection> {
   const tokenBudget = opts.tokenBudget ?? MEMORY_TOKEN_BUDGET_DEFAULT;
   const charsLimit = tokenBudget * CHARS_PER_TOKEN;
@@ -267,21 +464,49 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
   const persist = opts.persistRefDecision ?? saveExternalRefDecision;
   const sanitize = (t: string): Promise<string> => sanitizeRefs(t, opts.workspace, state, { onExternalRef: opts.onExternalRef, persistRefDecision: persist });
 
+  const projDir = projectMemoryDir(opts.workspace);
+  const globDir = opts.globalRoot ?? globalMemoryDir();
+  const nowISO = new Date().toISOString();
+  // 强度账与两层索引原文各读一次：休眠过滤（索引段）与 RECALL 选材共用同一份视图，
+  // 分开读会出现「索引里看见、RECALL 里休眠」的两端口径。
+  const [projStats, globStats, projIndexRaw, globIndexRaw] = await Promise.all([
+    readStats(projDir),
+    readStats(globDir),
+    readTextOrNull(projDir + "/" + MEMORY_INDEX),
+    readTextOrNull(globDir + "/" + MEMORY_INDEX),
+  ]);
+
   const arch = await archSection(opts.workspace);
   const decisions = await decisionsSection(opts.workspace, opts.decisionsLimit ?? DECISIONS_RECENT_DEFAULT);
-  const projIndex = await indexSection("[MEMORY.md 索引]", projectMemoryDir(opts.workspace));
-  const globIndex = await indexSection("[MEMORY.md 索引（全局）]", opts.globalRoot ?? globalMemoryDir());
+  const projIndex = indexSectionFiltered("[MEMORY.md 索引]", projIndexRaw, projStats);
+  const globIndex = indexSectionFiltered("[MEMORY.md 索引（全局）]", globIndexRaw, globStats);
+  const recallLimit = opts.recallLimit ?? RECALL_MAX_TOPICS;
+  const recallProj = await recallSection({ dir: projDir, label: "项目层", queryText: opts.queryText, stats: projStats, limit: recallLimit, nowISO });
+  const recallGlob = await recallSection({ dir: globDir, label: "全局层", queryText: opts.queryText, stats: globStats, limit: recallLimit, nowISO });
+
+  // 段内容统一过「脱敏 → 外部引用治理 → 控制标签转义」再进块；包装产生**新对象**，
+  // 预算淘汰改的是这些新对象——后面给命中记账必须认它们（认淘汰前的旧对象就是账实不符）。
+  // **每一段都要过 wrap**：只包 RECALL 不包其余，等于把 E 门钉的安全面（外部引用停用、
+  // 仿冒标签转义）从固定回注名单上摘掉——E2/E3/E4 当场红给你看。
+  const wrap = async (s: Section | null): Promise<Section | null> => {
+    if (s === null) return null;
+    return { header: s.header, lines: escapeControlTags(await sanitize(s.lines.join("\n"))).split("\n") };
+  };
+  const recallProjWrapped = await wrap(recallProj.section);
+  const recallGlobWrapped = await wrap(recallGlob.section);
 
   const projectSections: Section[] = [];
   // 教训段放**最后**：预算治理是从各段**首部**整行丢弃、保尾部（下面那个循环），放最后 ⇒
-  // 它是项目段里最后被丢的那一段。加在中间会让预算紧张时先被吃掉教训而留下架构大纲。
-  for (const s of [arch, decisions, projIndex, await lessonsSection(projectMemoryDir(opts.workspace), opts.lessonsLimit ?? LESSONS_RECENT_DEFAULT)]) {
-    if (!s) continue;
-    projectSections.push({ header: s.header, lines: escapeControlTags(await sanitize(s.lines.join("\n"))).split("\n") });
+  // 它是项目段里最后被丢的那一段。RECALL 放索引之后、教训之前：它是本轮任务最相关的正文，
+  // 但教训带证据指针、丢了更难自救，所以教训仍在它后面受保护。
+  for (const s of [await wrap(arch), await wrap(decisions), await wrap(projIndex), recallProjWrapped, await wrap(await lessonsSection(projDir, opts.lessonsLimit ?? LESSONS_RECENT_DEFAULT))]) {
+    if (s === null) continue;
+    projectSections.push(s);
   }
   const globalSections: Section[] = [];
-  if (globIndex) {
-    globalSections.push({ header: globIndex.header, lines: escapeControlTags(await sanitize(globIndex.lines.join("\n"))).split("\n") });
+  for (const s of [await wrap(globIndex), recallGlobWrapped]) {
+    if (s === null) continue;
+    globalSections.push(s);
   }
 
   // 预算治理：超限整行丢弃保尾部（投影顺序 = 项目 ARCH → DECISIONS → 项目索引 → 全局索引）。
@@ -320,15 +545,22 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
       }
     }
   }
-  const keptProject = projectSections.filter((s) => s.lines.length > 0);
-  const keptGlobal = globalSections.filter((s) => s.lines.length > 0);
   const evictedOf = (block: "project" | "global"): string[] =>
     before.filter((o) => o.block === block && o.had > 0 && o.sec.lines.length === 0).map((o) => o.label);
+  // 淘汰收尾：先摘掉 RECALL 段首的孤儿摘录行（抬头被丢、正文悬空），再做记账与 kept 过滤——
+  // 记账认「真进了模型的抬头行」，观测量的是实发，不是选材（账实相符）。
+  if (recallProjWrapped !== null) trimOrphanExcerpts(recallProjWrapped);
+  if (recallGlobWrapped !== null) trimOrphanExcerpts(recallGlobWrapped);
+  const keptProject = projectSections.filter((s) => s.lines.length > 0);
+  const keptGlobal = globalSections.filter((s) => s.lines.length > 0);
+  const survivedRecallProj = recallProjWrapped !== null ? recordRecallHitsForSurvivors(recallProjWrapped, projDir, recallProj.picked) : [];
+  const survivedRecallGlob = recallGlobWrapped !== null ? recordRecallHitsForSurvivors(recallGlobWrapped, globDir, recallGlob.picked) : [];
   const charsCurrent = totalChars();
   const tokensCurrent = Math.ceil(totalWeight());
   return {
     project: keptProject.length > 0 ? renderBlock("project", keptProject, charsLimit, charsCurrent, tokensCurrent, tokenBudget, truncated, evictedOf("project")) : null,
     global: keptGlobal.length > 0 ? renderBlock("global", keptGlobal, charsLimit, charsCurrent, tokensCurrent, tokenBudget, truncated, evictedOf("global")) : null,
+    recall: [...survivedRecallProj, ...survivedRecallGlob],
     charsCurrent,
     charsLimit,
     tokens: tokensCurrent,
@@ -337,7 +569,7 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
 }
 
 /** 一次注入都没有时的空壳（`buildMemoryInjectionSafe` 的降级支用它，别在三处调用点各造一份字面量）。 */
-export const EMPTY_MEMORY_INJECTION: MemoryInjection = { project: null, global: null, charsCurrent: 0, charsLimit: 0, tokens: 0, truncated: false };
+export const EMPTY_MEMORY_INJECTION: MemoryInjection = { project: null, global: null, recall: [], charsCurrent: 0, charsLimit: 0, tokens: 0, truncated: false };
 
 /** 「这轮没有记忆」与「这个工作区没写过记忆」从前同形：三处调用点各自 `try/catch`，异常只走
  *  `console.debug`（两处甚至是空 catch）就返回空壳 ⇒ 模型据"没有 LESSONS"决定要不要自己翻历史，

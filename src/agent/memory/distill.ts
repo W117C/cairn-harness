@@ -11,7 +11,9 @@ import type { Provider, ProviderMessage } from "../../providers";
 import type { Tool, ToolContext } from "../../tools/base";
 import type { GateMeta } from "../../permissions/autonomy";
 import { LESSON_MEMORY_TYPE, distillLessons, sessionOf } from "./lessons";
-import { projectMemoryDir, writeTopic } from "./store";
+import { globalMemoryDir, projectMemoryDir, writeTopic } from "./store";
+import { flushRecallHits } from "./inject";
+import { consolidateMemoryDir, consolidationDigest, type ConsolidationReport } from "./consolidate";
 // 能力 10 的落盘那一跳（失败轨迹 → 靶场草稿）；纯取料在 gym/draft，本模块只负责在会话结束时递上 events 与证据。
 import { writeDraftFromFailedSession } from "../gym/draft";
 
@@ -264,6 +266,27 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
      把已经算好的证据一起带走。失败不改变下面的结局（见 writeLessons 的取舍注释）。 */
   await writeLessons({ events, logPath: opts.logPath, workspace: opts.workspace, emit: opts.emit, signal: opts.signal });
   if (opts.signal?.aborted) return cancelledDistillOutcome(opts.signal);
+  /* M7 睡眠巩固（CLS/突触稳态）：与 writeLessons 同一格的确定性收尾。顺序刻在两行注释里：
+     ① 先 flushRecallHits——把本会话各轮 RECALL 攒下的命中落进强度账（巩固要在**最新账面**上衰减），
+     巩固读的就是它；② 再对项目层与全局层各跑一次巩固（衰减、休眠、查重）。
+     巩固失败**不改变结局**（同 writeLessons 的取舍），但必须出声（fail-visible）。
+     单层失败不连累另一层：两层各自 try/catch。查重结果（若有）并入下面的沉淀指令——
+     「合并重复」由模型经 remember op=replace 在原审批面下执行，本 pass 自己不写正文。 */
+  await flushRecallHits().catch((err: unknown) => {
+    void opts.emit({ type: "tool_result", callId: "", ok: false, output: "[memory] 强度账落账失败: " + (err instanceof Error ? err.message : String(err)) });
+  });
+  const consolidationNotes: { scope: "project" | "global"; report: ConsolidationReport }[] = [];
+  for (const scope of ["project", "global"] as const) {
+    if (opts.signal?.aborted) return cancelledDistillOutcome(opts.signal);
+    try {
+      const dir = scope === "project" ? projectMemoryDir(opts.workspace) : globalMemoryDir();
+      consolidationNotes.push({ scope, report: await consolidateMemoryDir({ dir, nowISO: new Date().toISOString() }) });
+    } catch (err) {
+      await opts.emit({ type: "tool_result", callId: "", ok: false, output: "[memory] " + (scope === "project" ? "项目层" : "全局层") + "记忆巩固失败（其余收尾照常）: " + (err instanceof Error ? err.message : String(err)) });
+    }
+  }
+  const dupDigest = consolidationDigest(consolidationNotes);
+  if (opts.signal?.aborted) return cancelledDistillOutcome(opts.signal);
   /* 能力 10 的另一半（2026-10-05 接通）：失败轨迹 ⇒ 靶场草稿。此前 `renderDraft` 只有手工 CLI
      （`scripts/gym-draft.ts`，缺省 dry run + 要 `--apply`）会调，判卷/bench 跑完一片红而
      `fixtures/gym/drafts/` 恒为 0 条。放在 `writeLessons` 同一格：同样**不经模型**的确定性落盘，
@@ -281,7 +304,9 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
   }
   if (opts.signal?.aborted) return cancelledDistillOutcome(opts.signal);
   if (isTrivialSession(events)) return { kind: "no_content" };
-  const instruction = digest.length > 0 ? digest + "\n\n" + DISTILL_INSTRUCTION : DISTILL_INSTRUCTION;
+  // 两份「条子」（失败轨迹 + 巩固查重）都空 ⇒ 指令逐字回到 DISTILL_INSTRUCTION（零注入回归）。
+  const lead = [digest, dupDigest].filter((s) => s.length > 0).join("\n\n");
+  const instruction = lead.length > 0 ? lead + "\n\n" + DISTILL_INSTRUCTION : DISTILL_INSTRUCTION;
   /* 真 session provider 以事件日志为唯一事实源（`stream(_messages,_tools)` 明确忽略入参），
    * 所以「只在内存塞一条指令」是发不出去的——那正是本模块长期存在的缺口（见 DistillOptions
    * 上 `providerFor` 的注释）。`providerFor` 在场时按**已算好的指令**现建 provider：
