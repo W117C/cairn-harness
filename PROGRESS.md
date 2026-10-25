@@ -24690,3 +24690,12 @@ reflectInstruction / readStats 损坏边界 / pi 替换器不支持 / autonomy f
 search-settings 无安全存储五处各补一条逐字观测，35 条转绿。`web_fetch` 出网门扩到五档
 （full-access 认 L4-network）后 7/7。`projection-invariant` 的残留账本由
 `app-fixture-lock` 拿锁时清理，不再继承上一趟运行态。
+
+### 凭证（2026-10-26 · 第 713 页收尾）
+
+- `head-cert-check` 在 **`f79077e2`** 上 **25/25 道认证门全绿，exit 0**（判决输入六维全过）。
+  认证树内 core 518 文件 6971 条全绿、desktop-test 绿、e2e 绿、docs-check 绿、web-fetch 7/7。
+- 此前两趟红保留取料：`d9eef10`（core 2 条既有债）与 `f2ccc6c`（mutate-needles 6 条锚点搬家）；
+  后者的 6 条锚点已改指新实现并逐条实跑，6/6 变异被杀死（`mutate-six.log`）。
+- `mutate-verify` **全表**本轮未跑完（锚点 1621 条，逐条 spawn 判卷，超出本轮时间预算）；
+  已跑的是静态针脚体检（阻断 0）与受改动影响的 6 条变异。不把这两项当全表认证。
