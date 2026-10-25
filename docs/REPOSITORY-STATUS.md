@@ -13,12 +13,12 @@
 |---|---|---|
 | Git 完整性 | 25 个指向重建前 DAG 的本地分支全部处置：23 个 tip tree 已在 HEAD 对象集，内容无丢失；`codex/pointer-final-closeout` 的 70 个 HEAD 外 blob 先完整归档再删；两棵树不可读的 `evo-registry-replay` / `worker-12` 先导出可读内容并保留 tarball 副本再删。审计时的 37 个命名 ref 中，25 个坏 ref 已处置，剩余 15 个全部可遍历；`git log --all` 正常。 | `/Users/ze/Downloads/Cairn/git-quarantine-20261026/REPORT.md`、`ARCHIVE-INDEX.json`、`deleted-refs-20261026.txt`、`quarantined-broken-refs.txt` |
 | 孤立工作树 | `.worktrees/orchestration-kernel` 的已跟踪差分与 26 个未跟踪文件先归档，再移除；该树是第 711 页之前那一版停在 provider 摘要空转的纵切，已被 `100fc3b` 的实现取代 | `git-quarantine-20261026/worktree-orchestration-kernel/{tracked.patch,untracked.tar.gz}` |
-| 未提交批次 | 工作树按功能拆成 15 笔提交（见下节），每笔都写明页面来源与复跑读数；共享文件整文件入库、跨批 hunk 在提交说明里点名 | `git log 014ac0e3..HEAD` |
+| 未提交批次 | 工作树按功能拆成 26 笔提交（15 笔批次主体 + 11 笔判卷/文档/凭证收尾，主体见下节），每笔都写明页面来源与复跑读数；共享文件整文件入库、跨批 hunk 在提交说明里点名 | `git log 014ac0e3..HEAD` |
 | 编排文档 | 设计稿状态从「尚未实施」改为 P0–P4 已实施 + P3 明确未实现；交付报告的两个全量读数按快照身份分开，「未提交」改为实际提交链 | `docs/superpowers/specs/2026-10-25-multi-agent-orchestration-platform-design.md`、`outputs/orchestration-delivery-2026-10-25/FINAL.md` |
 | 清理五件 | 用户确认后删除；删除补丁与反向恢复补丁均适用检查通过 | 本页「清理清单」 |
 | 文档门 | `docs-check` 全绿；D-11 的 82 条旧地址随取料目录改名同步，剩余 4 条由补入两笔 `head-cert` 原文归零 | `outputs/head-cert-f8b86e4-2026-10-22-{0824,0831}/provenance.md` |
 
-### 15 笔提交（`014ac0e3..HEAD`）
+### 批次主体 15 笔（`014ac0e3..HEAD`；另有 11 笔收尾）
 
 | 提交 | 内容 |
 |---|---|
@@ -61,7 +61,7 @@
 | 优先级 | 事项 | 结果 |
 |---|---|---|
 | P0 | Git 完整性与恢复副本核对 | **已收口（有边界）**：25 个坏 ref 全部归档后处置，所有命名 ref 与 `HEAD` 遍历通过；`git fsck` 仍有 37 条 broken link / missing，全部属于**不可达**的重建前对象（ADR 0007 已判永久不可恢复），不构成任何 ref 的缺口。未运行 `gc/prune`，避免把仓外归档之外的旧对象一并删掉。 |
-| P0 | 未提交功能批次集成 | **已收口**：工作树拆成 15 笔提交；`git status` 只剩 `ab.py`。每个批次在提交说明里列了页面来源、共享文件与复跑读数。 |
+| P0 | 未提交功能批次集成 | **已收口**：工作树拆成 26 笔提交；`git status` 只剩 `ab.py`。每个批次在提交说明里列了页面来源、共享文件与复跑读数。 |
 | P1 | 编排原设计缺口 | **已按允许的「正式缩范围」收口**：P0–P4 本地纵切已实现（154 条编排判卷全绿）；P3 的 `race`、`gather any/quorum`、动态控制与远程 worker 未实现，`flow.ts` 对它们显式 fail-closed；本地后端对 network/shell/git 能力拒收。设计稿新增「实施状态」表写明理由。 |
 | P1 | 编排文档与证据收口 | **已收口**：设计稿不再写「尚未实施」；FINAL 的两次全量读数按「提交树 `5dcb67b`」与「共享主树」分开标注；「未提交」改为实际提交链。 |
 | P1 | 指针会话集成状态 | **代码面已核**：CLI `src/cli.ts:1375` 调用 `createProductFork`；桌面 Stream 的 `EventRef` 在 `apps/desktop/src/renderer/components/Stream.tsx:269/393/405/488` 有渲染与 `data-event-ref` 落点。真实交互见下一行。 |
@@ -98,7 +98,7 @@
 
 ## 六、事实面
 
-- 代码/工作区：`verified-current`（本轮 15 笔提交均可复跑）。
+- 代码/工作区：`verified-current`（本轮 26 笔提交均可复跑）。
 - 文档：`changed-and-verified`（本页、STATE、PROGRESS 第 713 页、ADR 0007 后续）。
 - 规则：`verified-current`（读取未改）。
 - 运行/发布：`out-of-scope`（未打包、未部署）。
