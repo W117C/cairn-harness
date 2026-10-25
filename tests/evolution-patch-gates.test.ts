@@ -47,7 +47,7 @@ describe("patch-gates 同步门", () => {
   it("反向：本轮跑了 verify 且该 cause 零失败 ⇒ 拒（没犯这个病不开这个方）", () => {
     const out = gatePatchesSync([verifyPatch("pkg-manager")], { signals });
     expect(out.admitted).toEqual([]);
-    expect(out.refused[0]!.reason).toContain("cause=pkg-manager 零失败");
+    expect(out.refused[0]!.reason).toContain("pkg-manager 零失败");
   });
 
   it("接续语义：verify 没跑（读数缺席）⇒ 旧补丁照过（不可测不等于已消解）", () => {
@@ -101,11 +101,14 @@ describe("patch-gates 同步门", () => {
 
 describe("patch-gates 回放门（可插拔）", () => {
   it("回放 ok=false ⇒ 该条拒；其余照常", async () => {
+    // 这条测的是「后端给的 detail 会被原样带进拒因」，不是某段文案本身；
+    // 用同一个变量喂两侧，避免把测试自造的字面量当成生产文案的证人。
+    const detail = "gym 回放降分";
     const out = await gatePatches([verifyPatch()], { signals }, {
-      replay: async () => ({ ok: false, detail: "gym 回放降分" }),
+      replay: async () => ({ ok: false, detail }),
     });
     expect(out.admitted).toEqual([]);
-    expect(out.refused[0]!.reason).toContain("gym 回放降分");
+    expect(out.refused[0]!.reason).toContain(detail);
   });
 
   it("回放面抛错 ⇒ 按不可判拒（fail-closed），不放行", async () => {
