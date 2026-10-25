@@ -1,7 +1,7 @@
 # 多智能体编排交付证据（2026-10-25）
 
 基线 HEAD：`f4bffa3a3a399459c84d4c2dcf50ec2e62155560`
-提交：`c47a014a`（`ace0a0e3` 实现 + `cf0f8e09` 设计稿 + `a0ee6b73` 常量 + `4a1e9950` 读数 + `ec199d56` 暂停/租约加固 + `c47a014a` 会话地址授权）；工作树仍保留其他会话改动。
+提交：`9b666204`（`ace0a0e3` 实现 + `cf0f8e09` 设计稿 + `a0ee6b73` 常量 + `4a1e9950` 读数 + `ec199d56` 暂停/租约加固 + `c47a014a` 会话地址授权 + `9b666204` 清掉 kernel-host 混入的他批 hunk）；工作树仍保留其他会话改动。
 
 ## 结论
 
@@ -11,7 +11,7 @@ P0–P4 的本地可执行纵切已落地：领域/Flow 校验、事件投影与
 
 | 面 | 命令 | 读数 |
 |---|---|---|
-| 编排内核 | `npx vitest run --config tests/vitest.config.ts tests/orchestration-*.test.ts --maxWorkers=2` | 10 files / 154 tests passed |
+| 编排内核 | `npx vitest run --config tests/vitest.config.ts tests/orchestration-*.test.ts --maxWorkers=2` | 提交树 9 files / 144 tests passed；共享主树 10 files / 154（含 provider 深测） |
 | 桌面控制面 | `cd apps/desktop && npx vitest run tests/orchestration-host.test.ts tests/orchestration-pane.test.tsx tests/notification-open-wiring.test.ts tests/plan-mode-wiring.test.ts tests/protocol-version.test.ts` | 5 files / 15 tests passed |
 | 根类型 | `node --import tsx scripts/typecheck.ts` | 0 errors |
 | 桌面类型/构建 | `cd apps/desktop && npx tsc -p tsconfig.json --noEmit && pnpm build` | tsc 0；build green |

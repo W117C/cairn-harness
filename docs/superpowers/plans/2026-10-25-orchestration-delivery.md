@@ -27,8 +27,8 @@
 
 ## 当前进度（2026-10-25 收束）
 
-- **状态**：P0–P4 的本地可执行纵切已落在当前分支 `c47a014a`（`ace0a0e3` 实现 + `cf0f8e09` 设计稿 + `a0ee6b73` 常量 + `4a1e9950` 读数 + `ec199d56` 暂停/租约加固 + `c47a014a` 会话地址授权）；共享工作树保留其他会话改动。P5 真实收益与 P6 开放面不冒充完成。
-- **编排内核**：10 个测试文件 / **154 条全绿**（`tests/orchestration-*.test.ts`，`--maxWorkers=2`）。
+- **状态**：P0–P4 的本地可执行纵切已落在当前分支 `9b666204`（`ace0a0e3` 实现 + `cf0f8e09` 设计稿 + `a0ee6b73` 常量 + `4a1e9950` 读数 + `ec199d56` 暂停/租约加固 + `c47a014a` 会话地址授权 + `9b666204` 清掉 kernel-host 混入的他批 hunk）；共享工作树保留其他会话改动。P5 真实收益与 P6 开放面不冒充完成。
+- **编排内核**：提交树 9 个测试文件 / **144 条全绿**；共享主树含 provider 深测共 10 文件 / **154 条全绿**（均 `--maxWorkers=2`）。
 - **桌面控制面**：5 个测试文件 / **15 条全绿**（编排 pane/host、通知、Plan 模式、协议版本）；桌面 `tsc` 0 报错，`pnpm --filter cairn-desktop build` 绿。
 - **静态检查**：根 `typecheck` 0 报错；`desktop-boundary-check` 绿；`renderer-layer-check` 绿；`arch-cycle-check` 登记债 1、新圈 0。
 - **全量 core**：`pnpm test:capped` → **6937 passed / 33 failed / 6970**；13 个失败文件均不引用 orchestration，属共享工作树其他在飞改动（full-access 档位、motion token、台账 D-5、插件 fixture、搜索设置、metacognition 等）。
