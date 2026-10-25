@@ -47,7 +47,7 @@ describe("patch-gates 同步门", () => {
   it("反向：本轮跑了 verify 且该 cause 零失败 ⇒ 拒（没犯这个病不开这个方）", () => {
     const out = gatePatchesSync([verifyPatch("pkg-manager")], { signals });
     expect(out.admitted).toEqual([]);
-    expect(out.refused[0]!.reason).toContain("pkg-manager");
+    expect(out.refused[0]!.reason).toContain("cause=pkg-manager 零失败");
   });
 
   it("接续语义：verify 没跑（读数缺席）⇒ 旧补丁照过（不可测不等于已消解）", () => {
@@ -60,7 +60,7 @@ describe("patch-gates 同步门", () => {
   it("反向：漂移可测且与补丁记数不一致 ⇒ 拒；不可测 ⇒ 旧补丁照过", () => {
     const mismatch = gatePatchesSync([{ kind: "goal-reconfirm", driftCount: 5, note: "n" }], { signals: measurableCalm });
     expect(mismatch.admitted).toEqual([]);
-    expect(mismatch.refused[0]!.reason).toContain("不一致");
+    expect(mismatch.refused[0]!.reason).toContain("与本轮漂移真读数");
     // 红跑没有助手散文 ⇒ 漂移不可测：接续的 goal-reconfirm（旧读数 3 处）不据此销方。
     expect(signals.goalDriftMeasurable).toBe(false);
     const absent = gatePatchesSync([{ kind: "goal-reconfirm", driftCount: 3, note: "n" }], { signals });
@@ -70,7 +70,7 @@ describe("patch-gates 同步门", () => {
   it("反向：成本可测且已回落 ⇒ 拒（回落的账不挂节流方）；不可测 ⇒ 照过", () => {
     const calm = gatePatchesSync([{ kind: "cost-throttle", tokensPerBoundary: 41_000, note: "n" }], { signals: measurableCalm });
     expect(calm.admitted).toEqual([]);
-    expect(calm.refused[0]!.reason).toContain("回落");
+    expect(calm.refused[0]!.reason).toContain("成本已回落");
     const unmeasurable = gatePatchesSync([{ kind: "cost-throttle", tokensPerBoundary: 41_000, note: "n" }], { signals });
     expect(unmeasurable.admitted.length).toBe(1);
   });
@@ -115,7 +115,7 @@ describe("patch-gates 回放门（可插拔）", () => {
       },
     });
     expect(out.admitted).toEqual([]);
-    expect(out.refused[0]!.reason).toContain("不可判");
+    expect(out.refused[0]!.reason).toContain("按不可判拒");
   });
 
   it("不注入回放 ⇒ 同步门原样（零行为）", async () => {
