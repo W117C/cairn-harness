@@ -27,12 +27,12 @@
 
 ## 当前进度（2026-10-25 收束）
 
-- **状态**：P0–P4 的本地可执行纵切已落在当前分支 `a0ee6b73`（`ace0a0e3` 实现 + `cf0f8e09` 设计稿 + `a0ee6b73` 常量修正）；共享工作树保留其他会话改动。P5 真实收益与 P6 开放面不冒充完成。
-- **编排内核**：10 个测试文件 / **153 条全绿**（`tests/orchestration-*.test.ts`，`--maxWorkers=2`）。
+- **状态**：P0–P4 的本地可执行纵切已落在当前分支 `ec199d56`（`ace0a0e3` 实现 + `cf0f8e09` 设计稿 + `a0ee6b73` 常量 + `4a1e9950` 读数 + `ec199d56` 暂停/租约加固）；共享工作树保留其他会话改动。P5 真实收益与 P6 开放面不冒充完成。
+- **编排内核**：10 个测试文件 / **154 条全绿**（`tests/orchestration-*.test.ts`，`--maxWorkers=2`）。
 - **桌面控制面**：5 个测试文件 / **15 条全绿**（编排 pane/host、通知、Plan 模式、协议版本）；桌面 `tsc` 0 报错，`pnpm --filter cairn-desktop build` 绿。
 - **静态检查**：根 `typecheck` 0 报错；`desktop-boundary-check` 绿；`renderer-layer-check` 绿；`arch-cycle-check` 登记债 1、新圈 0。
-- **全量 core**：`pnpm test:capped` → **6936 passed / 33 failed / 6969**；13 个失败文件均不引用 orchestration，属共享工作树其他在飞改动（full-access 档位、motion token、台账 D-5、插件 fixture、搜索设置、metacognition 等）。
+- **全量 core**：`pnpm test:capped` → **6937 passed / 33 failed / 6970**；13 个失败文件均不引用 orchestration，属共享工作树其他在飞改动（full-access 档位、motion token、台账 D-5、插件 fixture、搜索设置、metacognition 等）。
 - **关键修**：真实 provider 只发 `assistant_delta`，回执摘要现按最后一轮 delta 聚合（此前只认 mock 的 `assistant_message`）；write 任务的 spawn 事件 `permission_mode` 按 lane 区分；编排请求体类型收窄。
 - **协议同步**：IPC v24（编排 view/submit/control 三通道）；受版本钉影响的桌面测试与 README 的 invoke 通道数（108）同步。
-- **独立审查后加固**：needs_you 可重试、done 不可 cancel/重复交付、异常不再全局停机、取消不再把预留记成花费、后端数据目录按会话隔离、预算/交付锁可回收死进程、交付 journal 可崩溃恢复、凭证路径不进入 overlay。
+- **独立审查后加固**：needs_you 可重试、done 不可 cancel/重复交付、异常不再全局停机、取消不再把预留记成花费、后端数据目录按会话隔离、预算/交付锁可回收死进程、交付 journal 可崩溃恢复、凭证路径不进入 overlay；`pause_task` 可停 live run、租约到点可 abort、verifier 工具面收缩到 capability。
 - **未测边界**：真实模型凭据未实测（provider 测试用 stub fetch）；桌面只有组件/主机测试与 build，未做真指针冒烟；本地后端 `max_concurrency: 1`（串行），引擎对具备并发能力的后端可到计划上限；P3 的 race/动态控制与远程 worker 未实现，静态展开不支持的节点 fail-closed。

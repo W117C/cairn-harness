@@ -1,7 +1,7 @@
 # 多智能体编排交付证据（2026-10-25）
 
 基线 HEAD：`f4bffa3a3a399459c84d4c2dcf50ec2e62155560`
-提交：`a0ee6b73`（`ace0a0e3` 实现 + `cf0f8e09` 设计稿 + `a0ee6b73` 常量修正）；工作树仍保留其他会话改动。
+提交：`ec199d56`（`ace0a0e3` 实现 + `cf0f8e09` 设计稿 + `a0ee6b73` 常量 + `4a1e9950` 读数 + `ec199d56` 暂停/租约加固）；工作树仍保留其他会话改动。
 
 ## 结论
 
@@ -11,7 +11,7 @@ P0–P4 的本地可执行纵切已落地：领域/Flow 校验、事件投影与
 
 | 面 | 命令 | 读数 |
 |---|---|---|
-| 编排内核 | `npx vitest run --config tests/vitest.config.ts tests/orchestration-*.test.ts --maxWorkers=2` | 10 files / 153 tests passed |
+| 编排内核 | `npx vitest run --config tests/vitest.config.ts tests/orchestration-*.test.ts --maxWorkers=2` | 10 files / 154 tests passed |
 | 桌面控制面 | `cd apps/desktop && npx vitest run tests/orchestration-host.test.ts tests/orchestration-pane.test.tsx tests/notification-open-wiring.test.ts tests/plan-mode-wiring.test.ts tests/protocol-version.test.ts` | 5 files / 15 tests passed |
 | 根类型 | `node --import tsx scripts/typecheck.ts` | 0 errors |
 | 桌面类型/构建 | `cd apps/desktop && npx tsc -p tsconfig.json --noEmit && pnpm build` | tsc 0；build green |
@@ -21,6 +21,10 @@ P0–P4 的本地可执行纵切已落地：领域/Flow 校验、事件投影与
 | 全量 core | `pnpm test:capped` | 6927 passed / 32 failed / 6959 |
 
 全量 core 的 13 个失败文件均不引用 orchestration：`docs-check`（D-5 21 条业主保留红 + STATE D-1）、`motion-policy`、`mutate-anchor-titles`、`mutate-needles-check`、`mutate-verify-gates`、`permission-mode-single-source`、`permissions-tool-registry`、`projection-invariant`、`promise-recall-inventory`、`prompt-surface-check`、`session-tools`、`src-execution-path`、`web-search`。均为共享工作树其他在飞改动或 HEAD 既有债。
+
+## 全量 core
+
+`pnpm test:capped` → **6937 passed / 33 failed / 6970**；13 个失败文件均不引用 orchestration。
 
 ## 未测边界
 
