@@ -95,12 +95,6 @@ export const ANIMATION_EXEMPTIONS: readonly ExemptionDef[] = [
       "（toContain 整串）与 apps/desktop/tests/skeleton-shimmer.test.ts:12（正则锚 breathe 1.6s）。" +
       "本批无权编辑 apps/desktop/tests/** ⇒ 保留字面量。改法：把那份判卷改成令牌形态后撤掉本条。",
   },
-  {
-    id: "E3",
-    what: "animation: breathe 1.2s ease-in-out infinite",
-    match: "breathe 1.2s ease-in-out infinite",
-    why: "与 E2 同族（breathe 动画不写两种拼法：同一动画名在库里要么全令牌、要么全字面量）。",
-  },
 ];
 
 /** M2：visibility 的 0s（规范指定的唯一时长豁免）。 */

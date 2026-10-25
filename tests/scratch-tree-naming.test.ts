@@ -200,10 +200,20 @@ describe("真仓面：注册表里的暂存树名字都没说谎", () => {
   // 后者必须编码且与 HEAD 相符。这一条把「活树不参与」钉在**真仓**上，
   // 而不只是合成面（合成面那两条只证明函数认 `detached` 字段）。
   it("真仓里的活工作树（挂在分支上）确实不带 detached ⇒ 不参与命名对账", () => {
-    const live = rows.filter((r) => r.detached === false && resolve(r.path).startsWith(mainRoot + "/.worktrees/"));
-    expect(live.length, "真仓里没有任何挂在分支上的暂存树 ⇒ 这一条此刻无对象（不是绿）").toBeGreaterThan(0);
-    for (const l of live) {
-      expect(checkScratchTreeNaming(mainRoot, [l]), `活工作树 ${l.path} 不该被命名对账点名`).toEqual([]);
+    // 这条原先靠「真仓里恰好有一棵活树」当对象：owner 清掉最后一棵活树后它就成了无对象红灯，
+    // 而测试对象其实不是「环境里有没有树」。改成自己造一棵、查完拆掉——不再依赖环境残留。
+    const path = join(mainRoot, ".worktrees", `scratch-naming-${process.pid}-${Date.now()}`);
+    const branch = `tmp/scratch-naming-${process.pid}-${Date.now()}`;
+    try {
+      git(["worktree", "add", "--quiet", path, "-b", branch, "HEAD"]);
+      const liveRows = parseWorktreePorcelain(git(["worktree", "list", "--porcelain"]))
+        .filter((r) => resolve(r.path) === resolve(path));
+      expect(liveRows.length, "刚造的活工作树没出现在 worktree list 里 ⇒ 取料坏了").toBe(1);
+      expect(liveRows[0]!.detached, "挂在分支上的树必须 detached=false").toBe(false);
+      expect(checkScratchTreeNaming(mainRoot, liveRows), `活工作树 ${path} 不该被命名对账点名`).toEqual([]);
+    } finally {
+      try { git(["worktree", "remove", "--force", path]); } catch { /* 下一步删分支即可 */ }
+      try { git(["branch", "-D", branch]); } catch { /* 已随树删除 */ }
     }
   });
 

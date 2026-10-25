@@ -22,7 +22,9 @@ const CONFIG = {
   version: 1,
   providers: [
     {
-      id: "deepseek",
+      // id 不用 "deepseek"：2026-10-25 起它是内置家名（校验拒收同名自定义家）。
+      // 端点/env 名照用 DeepSeek 的——自定义家指向别家端点本就是常态。
+      id: "mydeepseek",
       label: "DeepSeek",
       protocol: "openai",
       baseURL: "https://api.deepseek.com/v1",
@@ -54,41 +56,49 @@ afterEach(() => {
 
 describe("装上之后：映射面全部认它", () => {
   it("provider 已知、env 名可查、档位表与价表都带上它", () => {
-    expect(isKnownProviderId("deepseek")).toBe(false);
-    install();
-    expect(installedCustomProviders().map((p) => p.id)).toEqual(["deepseek"]);
+    // deepseek 现在是内置家：不装任何自定义也已知（这是 2026-10-25 升一等的意义）
     expect(isKnownProviderId("deepseek")).toBe(true);
-    expect(customProviderById("deepseek")?.label).toBe("DeepSeek");
     expect(envKeyOf("deepseek")).toBe("DEEPSEEK_API_KEY");
-    expect(effectiveModelTable().some((s) => s.id === "deepseek-chat")).toBe(true);
-    // 内置四家一个字都没变
+    expect(isKnownProviderId("mydeepseek")).toBe(false);
+    install();
+    expect(installedCustomProviders().map((p) => p.id)).toEqual(["mydeepseek"]);
+    expect(isKnownProviderId("mydeepseek")).toBe(true);
+    expect(customProviderById("mydeepseek")?.label).toBe("DeepSeek");
+    expect(envKeyOf("mydeepseek")).toBe("DEEPSEEK_API_KEY");
+    expect(effectiveModelTable().some((s) => s.id === "mydeepseek-chat")).toBe(true);
+    // 内置家一个字都没变（五家：glm/openai/anthropic/gemini + deepseek）
     expect(envKeyOf("openai")).toBe("OPENAI_API_KEY");
     expect(effectiveModelTable().filter((s) => s.provider === "openai").length).toBe(3);
+    expect(effectiveModelTable().filter((s) => s.provider === "deepseek").length).toBe(2);
   });
 
   it("价表：给了完整价的进表；只给一半的整条不进（拿另一样按 0 算就是记成半价）", () => {
     install();
-    expect(priceOf("deepseek-chat").inputPerMTok).toBe(0.28);
-    expect(costUsd("deepseek-chat", { inputTokens: 1_000_000, outputTokens: 0 })).toBe(0.28);
-    expect(effectivePriceTable()["deepseek-half-priced"]).toBeUndefined();
-    expect(() => priceOf("deepseek-half-priced")).toThrow(/未知 model 价格/);
+    expect(priceOf("mydeepseek-chat").inputPerMTok).toBe(0.28);
+    expect(costUsd("mydeepseek-chat", { inputTokens: 1_000_000, outputTokens: 0 })).toBe(0.28);
+    expect(effectivePriceTable()["mydeepseek-half-priced"]).toBeUndefined();
+    expect(() => priceOf("mydeepseek-half-priced")).toThrow(/未知 model 价格/);
     // 用户填的价不打 calibrated：它仍留在「待标定」清单里，不能当省钱证据
-    expect(priceOf("deepseek-chat").calibrated).toBeUndefined();
+    expect(priceOf("mydeepseek-chat").calibrated).toBeUndefined();
   });
 
-  it("卸掉之后一切回到内置行为（零装配 = 零改变）", () => {
+  it("卸掉之后一切回到内置行为（零装配 = 零改变；内置 deepseek 两行不受影响）", () => {
     install();
     installCustomProviders([]);
-    expect(isKnownProviderId("deepseek")).toBe(false);
-    expect(envKeyOf("deepseek")).toBeNull();
-    expect(effectiveModelTable()).toHaveLength(12);
-    expect(() => priceOf("deepseek-chat")).toThrow();
+    expect(isKnownProviderId("mydeepseek")).toBe(false);
+    expect(envKeyOf("mydeepseek")).toBeNull();
+    expect(effectiveModelTable()).toHaveLength(14); // 12（旧四家三档）+ deepseek 内置两行
+    expect(() => priceOf("mydeepseek-chat")).toThrow();
+    // 内置 deepseek 仍在：档位与价都在（这才是「卸掉自定义 ≠ 卸掉内置」）
+    expect(effectiveModelTable().some((s) => s.id === "deepseek-cheap")).toBe(true);
+    expect(priceOf("deepseek-cheap").inputPerMTok).toBe(0.3);
   });
 
   it("未知 provider 仍然 fail-visible（不许因为多了自定义这条路就放宽）", () => {
     install();
     expect(() => providerKindFromEnv("mistral")).toThrow(/未知 M0A_PROVIDER/);
-    expect(providerKindFromEnv("deepseek")).toBe("deepseek");
+    expect(providerKindFromEnv("deepseek")).toBe("deepseek"); // 现在走内置白名单
+    expect(providerKindFromEnv("mydeepseek")).toBe("mydeepseek");
     expect(providerKindFromEnv("demo")).toBe("demo");
   });
 });
@@ -96,26 +106,36 @@ describe("装上之后：映射面全部认它", () => {
 describe("选择与落盘", () => {
   it("resolveMainModel 走 custom 分支，并交回 providerId", () => {
     install();
-    const s = resolveMainModel({ configuredKind: "deepseek", settingsModel: "" });
+    const s = resolveMainModel({ configuredKind: "mydeepseek", settingsModel: "" });
     expect(s.kind).toBe("custom");
-    expect(selectionProviderId(s)).toBe("deepseek");
+    expect(selectionProviderId(s)).toBe("mydeepseek");
     if (s.kind === "demo") throw new Error("不该是 demo");
     expect(s.spec.model).toBe("deepseek-chat");
     expect(s.spec.ctxWindow).toBe(131_072);
     expect(s.modelExplicit).toBe(false);
   });
 
+  it("内置 deepseek 的缺省拨号：无 standard 档 ⇒ 落到第一行（cheap = deepseek-flash）", () => {
+    const s = resolveMainModel({ configuredKind: "deepseek", settingsModel: "" });
+    expect(s.kind).toBe("deepseek"); // 内置家，不再是 custom 分支
+    if (s.kind === "demo" || s.kind === "custom") throw new Error("不该是 demo/custom");
+    expect(s.spec.model).toBe("deepseek-flash");
+    expect(s.spec.ctxWindow).toBe(1_000_000);
+  });
+
   it("缺 key 时点名要配哪个变量（且不把值带进错误文本）", () => {
     install();
-    expect(() => assertProviderKeyConfigured("deepseek")).toThrow(/DEEPSEEK_API_KEY/);
+    expect(() => assertProviderKeyConfigured("mydeepseek")).toThrow(/DEEPSEEK_API_KEY/);
     process.env.DEEPSEEK_API_KEY = "sk-test";
-    expect(() => assertProviderKeyConfigured("deepseek")).not.toThrow();
+    expect(() => assertProviderKeyConfigured("mydeepseek")).not.toThrow();
   });
 
   it("设置：装上了才允许落盘，没装上的 id 仍被拒（否则用户以为切过去了却在拨 demo）", () => {
-    expect(validateSettings({ ...DEFAULT_SETTINGS, provider: "deepseek" }).provider).toBe("demo");
-    install();
+    expect(validateSettings({ ...DEFAULT_SETTINGS, provider: "mydeepseek" }).provider).toBe("demo");
+    // deepseek 是内置家：不装自定义也允许落盘（白名单来自 PROVIDER_KINDS）
     expect(validateSettings({ ...DEFAULT_SETTINGS, provider: "deepseek" }).provider).toBe("deepseek");
+    install();
+    expect(validateSettings({ ...DEFAULT_SETTINGS, provider: "mydeepseek" }).provider).toBe("mydeepseek");
     expect(validateSettings({ ...DEFAULT_SETTINGS, provider: "nope" }).provider).toBe("demo");
   });
 });
@@ -130,8 +150,8 @@ describe("真拨号：请求必须发去用户填的那个地址", () => {
       return new Response("data: [DONE]\n\n", { status: 200, headers: { "content-type": "text/event-stream" } });
     }) as unknown as typeof fetch;
 
-    const spec = effectiveModelTable().find((s) => s.id === "deepseek-chat");
-    if (spec === undefined) throw new Error("档位表里没有 deepseek-chat");
+    const spec = effectiveModelTable().find((s) => s.id === "mydeepseek-chat");
+    if (spec === undefined) throw new Error("档位表里没有 mydeepseek-chat");
     const transport = toWorkerModel(spec, { fetchImpl });
     for await (const _event of transport([{ role: "user", content: "hi" }], [], {})) break;
 

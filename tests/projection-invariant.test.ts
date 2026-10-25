@@ -19,6 +19,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentEvent } from "../src/events";
 import { projectContext, type ContextMessage } from "../src/agent/context";
+import { acquireAppFixtureLock } from "./app-fixture-lock";
 
 const user = (content: string): AgentEvent => ({ type: "user_message", content });
 const call = (id: string, name = "spawn_agent"): AgentEvent =>
@@ -165,7 +166,11 @@ describe("真语料回归（tracked 面）：孤儿必须 0，且分母自己出
     return disk.filter((p) => !seen.has(p));
   }
 
-  it("每个含 tool_call 的语料文件过真投影：孤儿 0 且悬空 0（两条合取）", () => {
+  it("每个含 tool_call 的语料文件过真投影：孤儿 0 且悬空 0（两条合取）", async () => {
+    // 共享靶子的写入方（gated-tools 等）会在测试中途把 .agent/evolution-ledger.jsonl 落到盘上，
+    // 收尾才清。这把锁让「读语料面」落在它们的临界区之外，否则读到的是一条正在写的运行态文件。
+    const release = await acquireAppFixtureLock();
+    try {
     // 两态各钉一次（第 354 页）：先证明这把新尺咬得住，再拿它去量真语料
     expect(untrackedOnDisk(["fixtures/a.jsonl"], ["fixtures/a.jsonl"])).toEqual([]);
     expect(untrackedOnDisk(["fixtures/x/.agent/snapshots/1--c/a.jsonl"], ["fixtures/a.jsonl"])).toEqual([
@@ -198,5 +203,6 @@ describe("真语料回归（tracked 面）：孤儿必须 0，且分母自己出
     }
     expect(withCalls, "含 tool_call 的语料为 0 ⇒ 没有尺").toBeGreaterThanOrEqual(10);
     expect(bad.join("\n"), `孤儿 ${String(orphanTotal)} / 悬空 ${String(danglingTotal)}`).toBe("");
+    } finally { await release(); }
   });
 });

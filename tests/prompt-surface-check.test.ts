@@ -92,7 +92,7 @@ describe("promptSurfaceFindings：两类发现分开", () => {
 describe("现读：真面、真文本、真注册", () => {
   it("真取料：四档面非空，文本里认得出工具名（0 个＝尺瞎了，不是没问题）", () => {
     const tables = tablesByMode();
-    expect(Object.keys(tables).sort()).toEqual(["auto", "default", "guided", "read-only"]);
+    expect(Object.keys(tables).sort()).toEqual(["auto", "default", "full-access", "guided", "read-only"]);
     for (const m of Object.keys(tables)) expect((tables[m] ?? []).length, `${m} 档工具面为空`).toBeGreaterThan(0);
     const tokens = [...new Set(proseFaces().flatMap((f) => toolNameTokens(f.text, TOOL_NAMES)))];
     expect(tokens.length, "BASE_SYSTEM 里一个工具名都没认出来 ⇒ 多半是面/名单没读到").toBeGreaterThan(0);
@@ -174,7 +174,7 @@ describe("按档拆文本（第 175 页，任务 #16）", () => {
   it("取料面由装配函数分组生成（不是手抄清单）：四档各属一面，且没有第五面", () => {
     const faces = proseFaces();
     const covered = faces.flatMap((f) => [...f.modes]).sort();
-    expect(covered).toEqual(["auto", "default", "guided", "read-only"]);
+    expect(covered).toEqual(["auto", "default", "full-access", "guided", "read-only"]);
     expect(faces.length, "面数＝不同文本的条数；今日现读是 2（共用一份 + read-only 自己一份）").toBe(2);
     for (const f of faces) expect(f.text).toBe(systemPromptFor(f.modes[0] as never));
   });
@@ -255,7 +255,7 @@ describe("工具描述也是模型可见文本（第 176 页）", () => {
     // 「少走一族参数」仍然绿（规则 222）。改规格的人跟着改这一格。
     expect(perMode.get("read-only"), "只读档参数描述面数（现读 21＝M2 那 16 份 + read_file.paths + read_image.path + render_image 三参）").toBe(21);
     expect(perMode.get("default"), "缺省档参数描述面数（现读 67＝第 179 页两把写向模板 + apply_patch.patch + read_file.paths + read_image.path + render_image 三参）").toBe(67);
-    for (const m of ["guided", "auto"]) {
+    for (const m of ["guided", "auto", "full-access"]) {
       expect(perMode.get(m), `${m} 与 default 档的工具面同日同表，参数面数不该分叉`).toBe(perMode.get("default"));
     }
     // 面上不许出现名单外的「幽灵工具」：出现＝名字拼错了或规格来自别处，那一份 prose 就没人认得它属于谁。
@@ -264,10 +264,11 @@ describe("工具描述也是模型可见文本（第 176 页）", () => {
       const tool = f.name.slice(pre.length).split(".")[0] as string;
       expect(tables[f.modes[0] as string] ?? [], `${f.name} 的工具名不在 ${f.modes[0]} 档的面上`).toContain(tool);
     }
-    // 递归的存在证人：现读有 6 份在**两层** properties 下（spawn_agent 的 supervise 子对象 × 三个可写档）。
+    // 递归的存在证人：现读有 8 份在**两层** properties 下（spawn_agent 的 supervise 子对象 × 四个可写档；
+    // full-access 与 auto 同面，故比旧读数 6 多两份）。
     // 只走顶层 properties 读到 183——所以「为什么要递归」有量出来的证人，不是假想需求（规则 243）。
     const nested = faces.filter((f) => (f.name.match(/\.properties\./gu) ?? []).length >= 2);
-    expect(nested.length, "两层嵌套下的参数描述面数为 0 ⇒ 这一族是靠递归读全的").toBe(6);
+    expect(nested.length, "两层嵌套下的参数描述面数为 0 ⇒ 这一族是靠递归读全的").toBe(8);
     for (const f of nested) expect(f.name, `${f.name} 不在两层 properties 下，判据形状变了`).toContain("supervise");
     // 反向哨兵：这一族的文本里确实点到了工具名（现读 `glob`），否则「0 发现」可能只是尺瞎了（规则 242）。
     const named = new Set(faces.flatMap((f) => toolNameTokens(f.text, TOOL_NAMES, { namesOnly: true })));
@@ -282,7 +283,7 @@ describe("工具描述也是模型可见文本（第 176 页）", () => {
     for (const f of faces) {
       expect(f.text.length, `${f.name} 渲染成空串 ⇒ 0 发现是假绿`).toBeGreaterThan(80);
       expect(f.text).toContain("goal 续跑");
-      expect(f.modes).toEqual(["read-only", "default", "guided", "auto"]);
+      expect(f.modes).toEqual(["read-only", "default", "guided", "auto", "full-access"]);
     }
   });
 
@@ -297,7 +298,7 @@ describe("工具描述也是模型可见文本（第 176 页）", () => {
       expect(toolNameTokens(f.text, TOOL_NAMES), `${f.name} 这一份提醒没告诉模型该调 verify`).toContain("verify");
     }
     for (const t of tokens) {
-      for (const m of ["read-only", "default", "guided", "auto"]) {
+      for (const m of ["read-only", "default", "guided", "auto", "full-access"]) {
         expect(tables[m], `提醒让模型调 ${t}，但 ${m} 档的面上没有它`).toContain(t);
       }
     }

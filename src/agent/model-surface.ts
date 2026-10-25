@@ -56,7 +56,11 @@ export type SurfaceTier =
   /** 插件与 MCP 带来的工具：可压描述、可从尾部整条丢。 */
   | "optional";
 
-export const PINNED_SURFACE_TOOLS: ReadonlySet<string> = new Set(["skill", "obs_recall", "impact_query"]);
+export const PINNED_SURFACE_TOOLS: ReadonlySet<string> = new Set([
+  "skill", "obs_recall", "impact_query",
+  // 懒加载目录/激活元工具：丢了它们，MCP 工具就再也进不来；体积很小，必须常驻。
+  "mcp_list", "mcp_activate", "mcp_release",
+]);
 
 /** core 的身份由调用方交给它（`gateToolSpecs()` 的名字集），本模块不另抄一份工具表——
  *  抄了就是一处「规格与实现两处手写」，正是本仓的缺陷族。 */

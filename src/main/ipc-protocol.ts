@@ -19,10 +19,10 @@ import type { SessionQueueEntry } from "./sessions";
 import type { ThinkingEffort } from "../providers/capabilities";
 import type { ProviderInfo } from "./provider-runtime";
 import type { CapabilityReadout } from "./doctor";
-import type { OrchestrationAddress, OrchestrationSubmitRequest, OrchestrationControlRequest, OrchestrationResponse } from "./orchestration-service";
-export type { OrchestrationAddress, OrchestrationSubmitRequest, OrchestrationControlRequest, OrchestrationResponse, OrchestrationSnapshot } from "./orchestration-service";
 // v9：建议单发的结果形状事实源在 suggest-next（分类 + hint 的构造与失败面同源）；这里只转发类型。
 import type { SuggestNextResult } from "./suggest-next";
+import type { OrchestrationAddress, OrchestrationSubmitRequest, OrchestrationControlRequest, OrchestrationResponse } from "./orchestration-service";
+export type { OrchestrationAddress, OrchestrationSubmitRequest, OrchestrationControlRequest, OrchestrationResponse, OrchestrationSnapshot } from "./orchestration-service";
 
 export type { AgentEvent } from "../events";
 export type { PermissionMode } from "../permissions";
@@ -48,6 +48,8 @@ import type { ProjectDiagnosis } from "./project-templates";
 import type { SessionSearchResult } from "./session-search";
 export type { SessionSearchResult } from "./session-search";
 import type { ProviderConnectionResult } from "./provider-connection";
+import type { SearchProvider } from "../tools/web-search";
+export type { SearchProvider } from "../tools/web-search";
 
 // ---- SEMA §3.5/§12：IPC 协议版本化 ----
 /** 协议兼容面唯一事实源：renderer 的期望版本经 vite define 构建期注入（App.tsx 挂载即比对
@@ -70,8 +72,43 @@ import type { ProviderConnectionResult } from "./provider-connection";
  *  「没量到 ≠ 没有」由类型层面分开，见 src/main/session-search.ts）。
  *  v19 = 指针分叉来源批（openSession 附 SessionRef + SessionView；会话 mutation/队列/注释
  *  增加可选 workspace——两个工作区同名 id 必须精确寻址，歧义拒绝）。
- *  v20 = 多智能体编排（显式 workspace/session 的预览、提交与控制）。 */
-export const IPC_PROTOCOL_VERSION = 20;
+ *  v20 = 联网搜索设置（窗口工作区内保存服务地址、安全密钥与显式单次检索测试）。
+ *  v21 = 完成通知点击直达（新增 push onNotificationOpen；点击载荷带 sessionId + workspace）。
+ *  v22 = 插件面板 MCP 激活态（PluginPanelSnapshot 增 activeMcpServers / activeMcpTools /
+ *  mcpServerSummaries——设置页显示整台/按工具激活的 server）。
+ *  v23 = Plan 模式一等入口（RunRequest 增可选 planRequired——按轮覆盖 settings 默认）。
+ *  v24 = 显式 workspace/session 的编排预览、提交与控制。 */
+export const IPC_PROTOCOL_VERSION = 24;
+
+/** 密钥只允许写入；读取面只报告状态，不回传明文。端点为空时 Brave/Tavily 使用官方地址。 */
+export interface SearchSettingsInput {
+  enabled: boolean;
+  provider: SearchProvider;
+  endpoint: string;
+  allowLocalEndpoint: boolean;
+  apiKey?: string;
+  clearApiKey?: boolean;
+}
+export interface SearchSettingsSnapshot {
+  workspace: string;
+  enabled: boolean;
+  provider: SearchProvider;
+  endpoint: string;
+  allowLocalEndpoint: boolean;
+  hasKey: boolean;
+  keySource: "stored" | "environment" | "none";
+  secureStorageAvailable: boolean;
+  error?: string;
+}
+export type SearchSettingsSaveResult =
+  | { ok: true; settings: SearchSettingsSnapshot }
+  | { ok: false; error: string };
+export interface SearchSettingsTestResult {
+  ok: boolean;
+  elapsedMs: number;
+  resultCount: number;
+  error?: string;
+}
 
 // ---- v11：主界面重做批的载荷（git 读数 / 克隆 / 项目内搜索）----
 /** git 在场读数：branch 为 null = detached HEAD（如实，不拿 "HEAD" 冒充分支名）。 */
@@ -97,6 +134,38 @@ export interface UsageLedgerTotalsPayload {
   rounds: number;
 }
 
+/** 按事件真实时间与模型分桶；null 是旧日志没有记录，不能推算补齐。 */
+export interface UsageLedgerBucketPayload {
+  day: string | null;
+  model: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  usageCount: number;
+  workerUsageCount: number;
+  /** 有有效字段的 usage 行数；显式 0 也算量到，缺字段不算。 */
+  inputMeasured: number;
+  outputMeasured: number;
+  cacheReadMeasured: number;
+}
+
+export interface UsageLedgerActivityPayload {
+  day: string | null;
+  sessions: number;
+  rounds: number;
+  toolSteps: number;
+}
+
+export interface UsageLedgerAnalyticsPayload {
+  buckets: UsageLedgerBucketPayload[];
+  activity: UsageLedgerActivityPayload[];
+  sessionsWithUsage: number;
+  sessionsWithoutUsage: number;
+  /** day 采用扫描主机时区，附带时区名使归日口径可见。 */
+  timeZone: string;
+  generatedAt: number;
+}
+
 export type UsageLedgerPayload =
   | {
       ok: true;
@@ -105,6 +174,8 @@ export type UsageLedgerPayload =
       workspaces: number;
       skipped: number;
       badLines: number;
+      /** 可选以兼容旧客户端；当前 host 总会返回这份只读投影。 */
+      analytics?: UsageLedgerAnalyticsPayload;
     }
   | { ok: false; error: string };
 
@@ -166,6 +237,9 @@ export interface RunRequest {
   thinking?: ThinkingEffort;
   /** Local references only. Main validates canonical location/type before the run starts. */
   attachments?: RunAttachmentReference[];
+  /** v23：本轮是否强制“先方案、批准后才写文件”。缺省 = 用 settings.planRequiredByDefault；
+   *  Composer 的「方案」开关按轮显式覆盖。 */
+  planRequired?: boolean;
 }
 
 export interface RunResponse {
@@ -173,6 +247,13 @@ export interface RunResponse {
   error?: string;
   /** Present only when validated references were consumed as path context. */
   attachmentCount?: number;
+}
+
+/** v21：完成通知点击后回传的目标会话。workspace 缺省 = 由 renderer 按唯一命中解析；
+ *  跨项目同名 id 必须带 workspace，否则 renderer 侧 fail-closed（不开错转录）。 */
+export interface RunNotificationPayload {
+  sessionId: string;
+  workspace?: string;
 }
 /** 会话级 worktree 动作（§3.7 · G4）。`sessionId` 由调用方给——main 侧按会话归属解析工作区。 */
 export type SessionWorktreeRequest =
@@ -349,6 +430,8 @@ export interface AgentApi {
    *  要读「本轮是否在跑」、要移动焦点），主进程没有那些状态。 */
   onMenu(cb: (id: string) => void): () => void;
   onAskDone(cb: (p: AskOutcomePayload) => void): () => void;
+  /** v21：用户点击完成通知 → 主进程已聚焦窗口，渲染层据此打开目标会话。 */
+  onNotificationOpen(cb: (p: RunNotificationPayload) => void): () => void;
   getState(): Promise<StateResponse>;
   /** Provider/model/capability catalog derived from the same registry used by workers. */
   getProviderInfo(): Promise<ProviderInfo>;
@@ -358,11 +441,15 @@ export interface AgentApi {
   // ---- M1e：settings（布局 + 设置页持久化，主进程 app data）----
   getSettings(): Promise<AppSettings>;
   setSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
+  /** v20：当前调用窗口的工作区；打开设置不会发送网络请求。 */
+  searchSettingsGet(): Promise<SearchSettingsSnapshot>;
+  searchSettingsSave(input: SearchSettingsInput): Promise<SearchSettingsSaveResult>;
+  /** 显式单次真实检索；传草稿只测试不保存，缺省使用已保存配置。 */
+  searchSettingsTest(input?: SearchSettingsInput): Promise<SearchSettingsTestResult>;
   // ---- M1e：会话列表（JSONL 即会话）----
   listSessions(): Promise<SessionInfoPayload[]>;
   /** v14：跨全部已登记工作区的用量账本（只读；按会话日志投影，不触发 openSession）。 */
   usageLedger(): Promise<UsageLedgerPayload>;
-  /** v20：编排预览、提交与控制；地址 = 显式工作区 + 会话，未知/越界地址 fail-closed。 */
   orchestrationView(address: OrchestrationAddress): Promise<OrchestrationResponse>;
   orchestrationSubmit(request: OrchestrationSubmitRequest): Promise<OrchestrationResponse>;
   orchestrationControl(request: OrchestrationControlRequest): Promise<OrchestrationResponse>;
@@ -567,6 +654,12 @@ export interface AgentApi {
   /** 把一家写进工作区 `.agent/providers.json`（按 id upsert，别的家原样保留）；
    *  给了 `keyValue` 就顺手存进 safeStorage（存失败则整件事失败，不写半个配置）。 */
   providerSave(req: ProviderSaveRequest): Promise<ProviderSaveResult>;
+  /** 已装自定义供应商的预填数据（编辑模式）：DerivedCustomProvider 的界面投影（不含 key 明文）。 */
+  providerCustomList(): Promise<{
+    ok: boolean;
+    error?: string;
+    entries: readonly { id: string; label: string; protocol: string; baseURL: string; apiKeyEnv: string; modelIds: readonly string[] }[];
+  }>;
   /** M4b §2.3：轻量更新检查（未配置 / 网络失败 / 已最新 / 有新版 全显式态）。 */
   checkUpdate(): Promise<UpdateCheckResult>;
   /** M4b §2.3：打开下载页（shell.openExternal，仅 http(s) 白名单——防 manifest 注入协议）。 */

@@ -179,10 +179,11 @@ describe("cairn CLI：缺 key 时 fail-closed，不静默换一家也不落 demo
     expect(r.out).not.toContain("事件日志：");
   });
 
-  it("提示里点名了要设哪个环境变量，含 DeepSeek 那条 OpenAI 兼容通道", () => {
+  it("提示里点名了要设哪个环境变量，含 DeepSeek 一等通道（2026-10-25 起 DEEPSEEK_API_KEY）", () => {
     const r = runCli(["做点事"], { isolate: true });
     expect(r.out).toContain("CAIRN_API_KEY");
-    expect(r.out).toContain("OPENAI_BASE_URL=https://api.deepseek.com/v1");
+    expect(r.out).toContain("DEEPSEEK_API_KEY=<你的 key>"); // 缺省模型也一并点名（deepseek-flash）
+    expect(r.out).toContain("deepseek-flash");
   });
 
   it("配置错不打「用法」行（那行会把人引到 argv 上去，而该配的是环境变量）", () => {

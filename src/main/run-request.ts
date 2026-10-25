@@ -15,6 +15,7 @@ const ALLOWED_FIELDS = new Set<keyof RunRequest>([
   "model",
   "thinking",
   "attachments",
+  "planRequired",
 ]);
 
 export type RunRequestValidation =
@@ -53,6 +54,9 @@ export function validateRunRequestEnvelope(raw: unknown): RunRequestValidation {
   if (value.thinking !== undefined && !THINKING_EFFORTS.includes(value.thinking as (typeof THINKING_EFFORTS)[number])) {
     return { ok: false, error: `RunRequest.thinking 非法: ${JSON.stringify(value.thinking)}` };
   }
+  if (value.planRequired !== undefined && typeof value.planRequired !== "boolean") {
+    return { ok: false, error: "RunRequest.planRequired 必须是布尔值" };
+  }
 
   let attachments: RunAttachmentReference[] | undefined;
   if (value.attachments !== undefined) {
@@ -75,6 +79,7 @@ export function validateRunRequestEnvelope(raw: unknown): RunRequestValidation {
       ...(value.model !== undefined ? { model: value.model } : {}),
       ...(value.thinking !== undefined ? { thinking: value.thinking as (typeof THINKING_EFFORTS)[number] } : {}),
       ...(attachments !== undefined ? { attachments } : {}),
+      ...(value.planRequired !== undefined ? { planRequired: value.planRequired as boolean } : {}),
     },
   };
 }

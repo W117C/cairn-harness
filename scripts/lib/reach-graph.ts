@@ -31,10 +31,11 @@ export function edgesOf(file: string, root: string): Edges {
     if (target === null) return;
     (TYPE_ONLY.test(stmt) ? type : value).push(target);
   };
-  // 静态 `import|export … from "…"`（[\s\S]{0,400}? 覆盖跨行的多命名导入）
-  for (const m of text.matchAll(/(?:^|\n)[ \t]*(import|export)\b([\s\S]{0,400}?)from[ \t]*"((?:\.[^"]|\/)[^"]*)"/g)) add(m[3]!, m[0]!);
-  for (const m of text.matchAll(/(?:await\s+)?import\(\s*"((?:\.[^"]|\/)[^"]*)"\s*\)/g)) add(m[1]!, "import");
-  for (const m of text.matchAll(/require\(\s*"((?:\.[^"]|\/)[^"]*)"\s*\)/g)) add(m[1]!, "import");
+  // 静态 `import|export … from "…"`（[\s\S]{0,400}? 覆盖跨行的多命名导入）。
+  // 单双引号都认：新测试文件由不同会话写成单引号，只认双引号会把一条真实值边读成「无覆盖」。
+  for (const m of text.matchAll(/(?:^|\n)[ \t]*(import|export)\b([\s\S]{0,400}?)from[ \t]*(["'])((?:\.[^"']|\/)[^"']*)\3/g)) add(m[4]!, m[0]!);
+  for (const m of text.matchAll(/(?:await\s+)?import\(\s*(["'])((?:\.[^"']|\/)[^"']*)\1\s*\)/g)) add(m[2]!, "import");
+  for (const m of text.matchAll(/require\(\s*(["'])((?:\.[^"']|\/)[^"']*)\1\s*\)/g)) add(m[2]!, "import");
   return { value, type };
 }
 

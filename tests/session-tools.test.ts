@@ -28,6 +28,7 @@ import {
   providerInfo,
   resolveRunWorkspace,
   runAgent,
+  sessionToolFace,
   setSettings,
   type PluginToolSource,
 } from "../src/main/agent-runner";
@@ -61,6 +62,21 @@ it.each([...PERMISSION_MODES])(
     expect(new Set(names).size).toBe(names.length);
   },
 );
+
+it("插件工具面 provider 逐请求重算：run 中途新增的 MCP 工具下一轮可见", () => {
+  let live = false;
+  const tool = (name: string): SessionPluginTool => ({
+    name,
+    description: "动态注入",
+    parameters: { type: "object", properties: {} },
+  });
+  const provider = () => (live ? [tool("mcp__plugin_demo_srv__new")] : []);
+  const first = sessionToolFace(null, { mode: "default", pluginTools: provider });
+  expect(first.tools.map((s) => s.function.name)).not.toContain("mcp__plugin_demo_srv__new");
+  live = true;
+  const next = sessionToolFace(null, { mode: "default", pluginTools: provider });
+  expect(next.tools.map((s) => s.function.name)).toContain("mcp__plugin_demo_srv__new");
+});
 
 it("MCP/插件工具规格复用 server inputSchema，同名冲突 fail-visible 跳过", () => {
   const inputSchema = { type: "object", properties: { q: { type: "string" } }, required: ["q"] };
@@ -166,7 +182,11 @@ it("provider/model 由 settings 决定，providerInfo 与 run 同源", async () 
   expect(info.model).toBe("glm-5.2");
   expect(info.modelId).toBe("glm-standard");
   expect(info.models.map((model) => model.id)).toEqual(expect.arrayContaining(["glm-standard", "openai-standard", "anthropic-standard", "gemini-standard"]));
-  expect(info.models.every((model) => !model.capability.thinking.supported)).toBe(true);
+  // 第 710 页：DeepSeek 是唯一在内置行上由官方文档自述思考档的家（两行 low/high，默认 off）；
+  // 其余家仍无上游证据 ⇒ thinking.supported=false。写成「只有这两行开」而不是「全部关」，
+  // 才能同时咬住「多开一家」与「DeepSeek 悄悄掉回关」两种漂移。
+  expect(info.models.filter((model) => model.capability.thinking.supported).map((model) => model.id).sort())
+    .toEqual(["deepseek-cheap", "deepseek-strong"]);
 
   vi.stubEnv("M0A_PROVIDER", "demo"); // env 覆盖仍然有效（既有 check/演示脚本依赖）
   expect((await providerInfo()).kind).toBe("demo");

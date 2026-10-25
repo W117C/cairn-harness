@@ -52,7 +52,7 @@ import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, goalWindowSpend, par
 import { emitPostRunReadings } from "./post-run-readings";
 // 自进化闭环的**装配侧**：下一轮装配时读回策略补丁并注进 system prompt（让「上一轮的经验」真正
 // 回流到下一轮的决策，而不是只记笔记）。落盘那一半随收尾读数搬去 post-run-readings。
-import { evolutionPromptNote } from "../agent/evolution";
+import { evolutionPromptNote, evolutionRoutingBias, COMPRESS_EARLY_RATIO } from "../agent/evolution";
 // 运行面装载：当前 active 的 content-pack（prompt.md / system.md）拼进同一段 system prompt。
 // 工作区没有 modules/ 或没有 active 内容包 ⇒ 空串，系统提示词逐字节不变。
 import { activeContentPackNote } from "./evolution/activation-host";
@@ -72,7 +72,7 @@ import { type ProviderKind } from "./settings";
 import { getLastWorkspace, setRunWorkspace } from "./runner-workspace";
 import { createSession, pathOf, sessionExists, type SessionInfo } from "./sessions";
 import { validateThinkingEffort } from "../providers/capabilities";
-import type { ModelOutput } from "../providers";
+import type { ModelOutput, Provider } from "../providers";
 import { validateRunRequestEnvelope } from "./run-request";
 import {
   MODEL_SHELL_TEST_ALIASES,
@@ -91,6 +91,7 @@ export {
 import { validateRunAttachments, type ValidatedRunAttachment } from "./run-attachments";
 import {
   providerKindFromEnv,
+  preferCheapSelection,
   resolveMainModel,
   type MainModelSelection,
 } from "./provider-runtime";
@@ -1022,6 +1023,9 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   // 所以这里给闭包不给快照；空串 = 「这一笔定不了价」（剧本 / demo 通道恒空，绝不拿档位名冒充真钱）。
   let mainUsageModel = "";
   const usageAttribution = createUsageAttributor(() => mainUsageModel);
+  // 反思位（闭环 v2 · 批次 A2）的构造口：modelSelection / pipeline 等只在 try 内可见，
+  // 而收束读数在 finally 之后调——所以闭包在 try 内赋值、在 try 外消费（同 mainUsageModel 的形状）。
+  let reflectProviderFor: ((instruction: string) => Provider) | undefined;
   try {
     // M1e 会话模式：sessionId 在场 = 会话列表里的既有会话，append（JSONL 即会话，重放无损）；
     // 无 sessionId = 旧行为（每轮新日志，e2e/ipc-check 等脚本路径字节不变）。
@@ -1182,7 +1186,28 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     const skillsRouting = skillsRoutingText !== "" ? skillsRoutingText : null;
     // One resolved registry selection is reused by the main turn and session-end distillation.
     const providerSettings = await store().get();
-    const modelSelection = opts.modelSelection ?? resolveRunModel(providerSettings);
+    // 自进化「便宜档偏置」（闭环 v2 · 批次 A4）：上一轮读数说贵 ⇒ 缺省拨号向同家便宜档降一档。
+    // 与下面的 evolutionPromptNote 读**同一份**记录（渲染面与决策面不各读各的）；读偏置失败 =
+    // 无偏置（零行为）。用户点名（opts.modelSelection）不走这支——偏置只降缺省档，
+    // 「显式选择不动 / 只降不升 / 同家内找」三条边界在 preferCheapSelection 的头注里。
+    let evolutionBias: Awaited<ReturnType<typeof evolutionRoutingBias>> = { preferredTier: null, contextAction: null };
+    try {
+      evolutionBias = await evolutionRoutingBias(opts.workspace);
+    } catch {
+      evolutionBias = { preferredTier: null, contextAction: null };
+    }
+    const resolvedRunModel = opts.modelSelection ?? resolveRunModel(providerSettings);
+    const modelSelection = evolutionBias.preferredTier === "cheap" ? preferCheapSelection(resolvedRunModel) : resolvedRunModel;
+    // 反思位闭包在这里才齐料（modelSelection / pipeline / promptText 都已定）。
+    reflectProviderFor = (instruction) => createProvider(promptText, BASE_SYSTEM, modelSelection, {
+      logPath: opts.logPath,
+      workspace: opts.workspace,
+      emit: pipeline,
+      promptCache: providerSettings.promptCache,
+      // 工具面给空：反思只出文本（runEvolution 只收正文），模型想调工具也无处调。
+      requestFace: () => ({ tools: [], note: "" }),
+      ephemeralUserTurn: instruction,
+    });
     // 归因用的档位名与美元闸同源（同一个 budgetPriceKeyOf，见第 145 页）；剧本通道置空＝这笔不折钱。
     mainUsageModel = mainUsageModelOf(modelSelection);
     // H3-P4（编排提示词审查 §一）：生产主会话必须有基座系统提示词——此前只有插件路由 + hook 上下文，
@@ -1261,13 +1286,23 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // 识图通道：loop 存 read_image 读到的图，provider 在下一轮请求里取走附上。
     // 建在 run 内（不跨 run）⇒ 上一场的图不会漏进下一场——那是把 A 任务的截图当 B 任务的上下文。
     const imageChannel = createImageChannel();
+    // 插件工具面必须是 provider，不是数组快照：run 中途批准插件 / 激活 MCP server 后，
+    // 下一轮 requestFace 要重新读 rt.mcpTools 才能把新工具送进模型面。
+    // 执行面仍由 installPluginTools + resolveLivePluginTool 负责；两面读同一份 rt。
+    const pluginToolsForFace = (): SessionPluginTool[] => [
+      ...(recall ? [observationRecallSpec] : []),
+      ...(impactTool ? [impactQuerySpec] : []),
+      ...(diagnoseTool ? [diagnoseSpec] : []),
+      ...(searchTool ? [webSearchSpec] : []),
+      ...pluginToolSpecsFromRuntime(rt).filter(t => !recall || t.name !== "obs_recall"),
+    ];
     const faceArgs = {
       mode: opts.mode,
       // 同一个字段喂给规格面（sessionToolFace）与执行面（installAppTools）——两面必须同时摘。
       automationTools: opts.automationTools,
       // 能力没开的可选工具：规格面摘说明书，执行面不注入实例。两处同源同一个数组。
       ...(omitTools.length > 0 ? { omitTools } : {}),
-      pluginTools: [...(recall ? [observationRecallSpec] : []), ...(impactTool ? [impactQuerySpec] : []), ...(diagnoseTool ? [diagnoseSpec] : []), ...(searchTool ? [webSearchSpec] : []), ...pluginToolSpecsFromRuntime(rt).filter(t => !recall || t.name !== "obs_recall")],
+      pluginTools: pluginToolsForFace,
     };
     // run 起点这份只管两件事：出声（同名冲突 / 摘了谁的哪把）+ 给 loop 一份稳定的活闸闭包。
     // 模型可见清单本身走 requestFace 逐请求重算 —— 模型在 run 中途点起的 skill，下一轮就不该再看见那把。
@@ -1299,6 +1334,9 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       ...(rt ? { resolveTool: (name: string) => resolveLivePluginTool(name, rt) } : {}),
       provider: createProvider(promptText, systemPromptFor(opts.mode) + evolutionNote, modelSelection, {
         ...opts, emit: pipeline, solpi, promptCache: providerSettings.promptCache,
+        // 自进化「提前压缩」（批次 A4）：上一轮读数说贵 ⇒ 自动压缩触发线从缺省 0.9 压到
+        // COMPRESS_EARLY_RATIO（值唯一事实源在 evolution/advice.ts）。缺省不传 = 逐字旧行为。
+        ...(evolutionBias.contextAction === "compress-early" ? { compactionConfig: { ratio: COMPRESS_EARLY_RATIO } } : {}),
         requestFace: () => sessionToolFace(rt, faceArgs),
         // §9.5：自动/溢出压缩的 PreCompact 只有这一条生产者（provider 每会话一个，钩子引擎在 rt 上）
         ...(rt ? { onPreCompact: (trigger: "manual" | "auto") => firePreCompactHook(rt?.hooks, trigger) } : {}),
@@ -1564,6 +1602,10 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     logPath: opts.logPath,
     workspace: opts.workspace,
     ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {}),
+    // 反思位（闭环 v2 · 批次 A2）：try 内造好的一次性反思 provider（见上面 reflectProviderFor 赋值处）。
+    // 与沉淀轮同款形态（指令走 ephemeralUserTurn 进请求末尾、不落日志；provider 读同一份事件日志，
+    // 模型看得到真实失败轨迹）。失败 / 产出全拒 ⇒ runEvolution 内 fail-open 回规则 note，这里不救。
+    ...(reflectProviderFor !== undefined ? { reflectProviderFor } : {}),
   });
   return replay(opts.logPath);
 }

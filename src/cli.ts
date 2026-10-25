@@ -17,8 +17,8 @@
 // 「存在 ≠ 接线」不是比喻：那 17 个入口一直都在，只是没人搭那层壳。
 //
 // 刻意不做的事：不引新依赖、不加构建步骤、不碰 src/agent 与 src/tools。
-// 目录名叫 deepseek harness，但 `src/` 里 "deepseek" 出现 0 次——DeepSeek 走
-// OPENAI_BASE_URL 就通（见 README）。
+// 目录名叫 deepseek harness：DeepSeek 自 2026-10-25 起是内置家（providers/deepseek.ts，
+// export DEEPSEEK_API_KEY 即通），不再需要借 OPENAI_BASE_URL 走兼容通道。
 
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
@@ -595,13 +595,13 @@ function resolveProviderSelection(flagProvider: string | undefined, flagModel?: 
       const value = (process.env[custom.apiKeyEnv] ?? "").trim();
       if (value !== "") return forward(custom.id);
     }
-    const names = (["glm", "openai", "anthropic", "gemini"] as const)
+    const names = (["glm", "openai", "anthropic", "gemini", "deepseek"] as const)
       .map((k) => envKeyOf(k))
       .filter((n): n is string => n !== null)
       .join(" / ");
     const custom = installedCustomProviders();
     const customHint =
-      "  DeepSeek 走 OpenAI 兼容通道：export OPENAI_BASE_URL=https://api.deepseek.com/v1\n" +
+      "  DeepSeek（V4.1 Flash）：export DEEPSEEK_API_KEY=<你的 key>（缺省模型 deepseek-flash）\n" +
       (custom.length > 0
         ? `  你已声明自定义 provider：${custom.map((p) => `${p.id}（需要 ${p.apiKeyEnv}）`).join("、")}\n`
         : "");

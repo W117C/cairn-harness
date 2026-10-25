@@ -56,7 +56,8 @@ export async function buildWorkerSystemMessages(
   messages.push({ role: "system", content: w.mode === "write" ? WORKER_WRITE_SYSTEM : WORKER_SYSTEM });
   // 两层记忆固定回注。出口与主会话/旁路共用一支 `buildMemoryInjectionSafe`（第 315 页）：
   // 从前这里是**空 catch** ⇒ worker 拿到的是"这仓库没有记忆"，而断在哪一行没人知道。
-  const mem = await buildMemoryInjectionSafe({ workspace });
+  // M7：worker 的任务书就是它的「问话」，拿去做 RECALL 词面检索。
+  const mem = await buildMemoryInjectionSafe({ workspace, queryText: w.task });
   if (mem.injection.project) messages.push({ role: "system", content: mem.injection.project });
   if (mem.injection.global) messages.push({ role: "system", content: mem.injection.global });
   if (mem.unavailable) messages.push({ role: "system", content: mem.unavailable });
