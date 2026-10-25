@@ -126,9 +126,11 @@ describe("宿主侧接线：沙箱可用时把沙箱出口递给 worker", () => 
     expect(src).toMatch(/\.\.\.\(workerShell \? \{ workerShell \} : \{\}\),/);
   });
 
-  it("沙箱出口默认断网（worker 门里没有 networkProfileFor 的审批上下文）", async () => {
+  it("沙箱出口默认断网（worker 门里没有 networkProfileFor 的审批上下文）且带取消信号", async () => {
     const src = await sources();
-    expect(src).toMatch(/runInSandbox\(mapped, \{ cwd: ctx\.workspace, network: "deny" \}\)/);
+    // 2026-10-21 核心评审：原来这里没有 signal ⇒ worker 的 runCancel 到沙箱边界就丢了。
+    // 断网仍是 deny；signal 是新增的**并列不变量**，不是替换。
+    expect(src).toMatch(/runInSandbox\(mapped, \{ cwd: ctx\.workspace, network: "deny", \.\.\.\(ctx\.signal \? \{ signal: ctx\.signal \} : \{\}\) \}\)/);
   });
 
   it("core 层不许反向依赖 src/main——所以出口只能是注入，不能是 worker-shell-tools 自己 import", async () => {

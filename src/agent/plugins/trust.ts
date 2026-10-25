@@ -2,7 +2,7 @@
 // hook/MCP/LSP 一律不激活；信任决议持久化（tmp+rename 原子写，仿 SettingsStore）。
 // 用户级插件免信任（用户自己装的）；散装 skill 免信任（纯 markdown，无执行面）。
 import { createHash } from "node:crypto";
-import { readFile, rm, readdir, stat } from "node:fs/promises";
+import { readFile, rm, readdir, stat, lstat } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { writeFileAtomic } from "../../atomic-write";
 
@@ -54,6 +54,27 @@ export interface PluginFingerprint {
  *  E2（审查）：walk 按 Dirent 判定软链——软链既不入指纹也不静默跳过，直接标记 bounded（加载侧
  *  跟随软链而指纹不 follow 的组合 = 「信任后新增软链 .mcp.json」绕过面）。 */
 export async function pluginFingerprintEx(root: string): Promise<PluginFingerprint> {
+  return await fingerprintDirs(root, [root]);
+}
+
+/** 只绑定根下若干相对目录的指纹（外部声明式来源用）：opencode/pi 的根目录里还可能有
+ *  `plugins/`、`extensions/` 这类**不导入**的代码面；把它们算进指纹会让改一个无关代码插件
+ *  也触发重新信任。相对路径仍从 `root` 起算（`skills/x/SKILL.md`），与完整指纹同一套命名。 */
+export async function pluginFingerprintSubsetEx(root: string, relDirs: readonly string[]): Promise<PluginFingerprint> {
+  const dirs = relDirs.map((d) => join(root, d)).sort();
+  let bounded = false;
+  const real: string[] = [];
+  for (const dir of dirs) {
+    const st = await lstat(dir).catch(() => null);
+    if (st === null) continue;
+    if (st.isSymbolicLink()) { bounded = true; continue; } // 与 walk 同口径：软链 fail-closed
+    if (st.isDirectory()) real.push(dir);
+  }
+  const res = await fingerprintDirs(root, real);
+  return bounded ? { ...res, bounded: true } : res;
+}
+
+async function fingerprintDirs(root: string, startDirs: readonly string[]): Promise<PluginFingerprint> {
   const parts: string[] = [];
   let count = 0;
   let bounded = false;
@@ -124,7 +145,10 @@ export async function pluginFingerprintEx(root: string): Promise<PluginFingerpri
       parts.push(relative(root, abs).replaceAll("\\", "/") + ":" + createHash("sha1").update(content).digest("hex"));
     }
   };
-  await walk(root);
+  for (const dir of startDirs) {
+    if (dir !== root && !(await stat(dir).then((s) => s.isDirectory(), () => false))) continue;
+    await walk(dir);
+  }
   return {
     fp: createHash("sha256").update(parts.sort().join("\n")).digest("hex").slice(0, 32),
     bounded,

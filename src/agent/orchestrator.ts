@@ -4,8 +4,10 @@
 // spawn_agent（非运行时报错）；worker 上下文 = task + context + 项目记忆注入，永不继承主对话。
 // 事件纪律（§4.4.9 / 任务书裁决 1）：worker 事件落主会话 JSONL（子流：agent_* + 带 agent_id 的
 // tool_call/tool_result/usage），agent_spawned 携 parent_event_id 建立血缘树；重放主流后投影一致。
+import { execFile } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import type { AgentEvent, HarnessHoldReason } from "../events";
 import { replay } from "../events";
 import type { ModelOutput, Provider } from "../providers";
@@ -93,6 +95,13 @@ function nextAgentId(): string {
   return "worker-" + String(++globalAgentSeq);
 }
 
+/** 进程内仍归属某个编排器的 agent id：运行中（`agentOwners`）或待合并/待清理（`mergeOwners`）。
+ *  给孤儿 worktree 扫描用：目录是 workspace 级，事件流是 session 级——多会话共用一个 workspace 时，
+ *  另一会话**正在跑**或**刚跑完还没合并**的 worker 在当前会话日志里没有终态，不能因此被判成可清理。 */
+export function ownedWorktreeAgentIds(): string[] {
+  return [...new Set([...agentOwners.keys(), ...mergeOwners.keys()])];
+}
+
 export function orchestratorForAgent(agentId: string): Orchestrator | null {
   return agentOwners.get(agentId) ?? null;
 }
@@ -101,12 +110,32 @@ export function orchestratorForApproval(approvalId: string): Orchestrator | null
   return approvalOwners.get(approvalId) ?? null;
 }
 
+/** 一次 git 调用（只给「重派基线复位」用；worktree 面的其余纪律仍在 worktree.ts）。 */
+const execFileP = promisify(execFile);
+
 /** 合并控制塔路由（§4.3：批准合并是唯一写主分支通道；路由面只给 card_action 协议，不给任何工具表）。 */
 export function orchestratorForMerge(agentId: string): Orchestrator | null {
   return mergeOwners.get(agentId) ?? null;
 }
 
 // ---- 编排器 ----
+
+/** 崩溃恢复重派带回来的基线三件（worktree / 基线提交 / 归因模型）。
+ *
+ *  走**模型可见参数面之外**的通道（ctx），不进 `SpawnArgs`：那面的闸（`unconsumedSpawnArgs`）把
+ *  不在 `SPAWN_ARG_KEYS` 里的键判成 unknown ⇒ 这三个键一旦回到模型可见参数面，重派会被整条拒掉
+ *  （2026-10-19 那次修法的由来：宁可丢参数也要让重派跑得起来）。那一面不能动，这三个字段又不能丢
+ *  ⇒ 只能走 ctx 这条内部通道：重派 worker 接着原派活基线、接着原归因模型。
+ *
+ *  字段来源：`RespawnArgs`（恢复卡载荷，`respawnArgsFrom` 从 `agent_spawned` 逐字取）⇒ 对外形状不变。 */
+export interface RecoveryBaseline {
+  /** 崩溃 worker 的 worktree（主 checkout 根相对路径）。 */
+  worktree?: string;
+  /** 崩溃 worker 的派活基线提交（重派 worker 的 diff 比对面）。 */
+  base_commit?: string;
+  /** 崩溃 worker 的归因模型名（token 成本归因键）。 */
+  usage_model?: string;
+}
 
 export class Orchestrator {
   private seq = 0;
@@ -279,7 +308,7 @@ export class Orchestrator {
 
   /** spawn_agent 工具体（loop 经 TOOLS 注入调用；验收脚本可携 ctx.callId 直调）。
    *  M3c：pipeline mode = 哑 sequencer（一个审批授权全链，零 LLM 展开）；depends_on 事件驱动依赖链。 */
-  async spawn(args: SpawnArgs, ctx: { callId?: string }): Promise<ToolResult> {
+  async spawn(args: SpawnArgs, ctx: { callId?: string; recovery?: RecoveryBaseline }): Promise<ToolResult> {
     const mode = typeof args.mode === "string" ? args.mode : "";
     if (!SPAWN_MODES.includes(mode)) {
       // 取值清单取自事实源：写死 "read|write|pipeline" 时 supervise 早已在册，
@@ -355,7 +384,12 @@ export class Orchestrator {
    *  `RespawnArgs` 里没有 `depends_on`（依赖链已断），所以展开不会把不该带上的参数带进来。 */
   async respawn(args: RespawnArgs, ctx: { callId?: string } = {}): Promise<ToolResult> {
     // 只转 spawn_agent 真正接受的顶层参数（见 respawnSpawnArgs 的注释：旧实现对真实 worker 必拒）。
-    return await this.spawn(respawnSpawnArgs(args), ctx);
+    // 基线三件（worktree / 基线提交 / 归因模型）**不走**模型可见参数面（那面会把它们判成 unknown 键
+    // ⇒ 整条重派被拒），走 ctx 这条内部通道：`RespawnArgs` 的对外形状一个字不变。
+    const carried = args.worktree !== undefined || args.base_commit !== undefined || args.usage_model !== undefined
+      ? { worktree: args.worktree, base_commit: args.base_commit, usage_model: args.usage_model }
+      : undefined;
+    return await this.spawn(respawnSpawnArgs(args), carried === undefined ? ctx : { ...ctx, recovery: carried });
   }
 
   /** M5c Best-of-N 竞争编排（§m5-proposal 步骤 12）：N 个候选并行，judge 命中即早停取消其余。
@@ -475,7 +509,7 @@ export class Orchestrator {
   private spawnReserve = 0;
 
   /** spawn 内核入口（模型面与 sequencer 逐环共用；stageRole 只由 sequencer 代码注入）。 */
-  private async spawnInternal(args: SpawnArgs, ctx: { callId?: string; cascadeFrom?: ModelTier }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
+  private async spawnInternal(args: SpawnArgs, ctx: { callId?: string; cascadeFrom?: ModelTier; recovery?: RecoveryBaseline }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
     const mode = typeof args.mode === "string" ? args.mode : "";
     // H2（审查 B-3）：入口 fail-closed——主会话已取消时不再派发任何 worker
     //（addEventListener 对已 abort 的 signal 不会触发，靠入口检查补上取消窗口）。
@@ -500,7 +534,7 @@ export class Orchestrator {
   /** spawn 预留段（占位后执行）。B2（审查）：read-only 父会话不允许派 write worker——
    *  worker 有效权限 ≤ 父（§11.7.6）：write worker 文件面/shell 面恒 auto，read-only 父放行
    *  等于把只读会话变成可写（permission_mode 记 read-only 实写 auto 的记录失真一并消除）。 */
-  private async spawnReserved(args: SpawnArgs, ctx: { callId?: string; cascadeFrom?: ModelTier }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
+  private async spawnReserved(args: SpawnArgs, ctx: { callId?: string; cascadeFrom?: ModelTier; recovery?: RecoveryBaseline }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
     const mode = typeof args.mode === "string" ? args.mode : "";
     if (mode === "write" && this.opts.parentMode === "read-only") {
       return { ok: false, output: "spawn_agent: 父会话为 read-only 档，不允许派 write worker（worker 权限 ≤ 父会话，§11.7.6）" };
@@ -595,6 +629,14 @@ export class Orchestrator {
       usageModel = usageNameOf(model) || routedSpec?.model || glmDefaultModelName();
       price = priceForModel(usageModel, routeDecision?.picked);
     }
+    // 崩溃恢复重派：归因模型**带走**原 worker 那一档，不按此刻的解析重算——重派发生在崩溃之后，
+    // 此刻的模型解析可能已经变了（路由/级联/注入面），重算就把这笔重试的成本记到别的模型名下
+    // （登记缺陷：崩溃恢复重派丢 usage_model ⇒ token 成本无模型归属）。
+    // 剧本通道原 worker 本来就不落 usage_model ⇒ 没有可带的东西，这里也就什么都不改。
+    if (ctx.recovery?.usage_model !== undefined) {
+      usageModel = ctx.recovery.usage_model;
+      price = priceForModel(usageModel, routeDecision?.picked);
+    }
     const requested = isPermissionMode(args.tier) ? args.tier : this.opts.parentMode;
     const { mode: tier, clamped, warning } = clampTier(requested, this.opts.parentMode);
     const maxTurns =
@@ -639,6 +681,29 @@ export class Orchestrator {
         symlinkWarnings = created.symlinkWarnings;
       } catch (err) {
         return { ok: false, output: "spawn_agent: worktree 创建失败（fail-visible，未造半成品 worker）：" + (err instanceof Error ? err.message : String(err)) };
+      }
+      // ---- 崩溃恢复重派：语义②「新树，但基于原 base_commit 起」----
+      // 新树的 HEAD 拨回原派活基线 ⇒ 重派 worker 的 diff 仍比**原基线**（不是比"此刻的 HEAD"）：
+      // 崩溃期间别人推的提交不会混进这次 worker 的 diff（登记缺陷：重派 worker 的 diff 比错基线）。
+      // 崩溃 worker 那棵旧树不续用（它进孤儿列表，语义与恢复卡的文案一致：旧 worktree 走孤儿列表、
+      // 可清理、不自动删）⇒ 重派是"从原基线重来一遍"，不是"在半截树上接着写"。
+      //
+      // 归宿说明：git 纪律的单一事实源在 worktree.ts，把「基线可指定」做成 createWorktree 的参数才是
+      // 正解（待收口）；这里只借一次 reset，不复制 worktree.ts 的其余纪律。失败即 fail-visible：
+      // 宁可这次重派不派发，也不派一个"基线对不上"的 worker。
+      const carriedBase = ctx.recovery?.base_commit;
+      if (carriedBase !== undefined && worktree !== undefined) {
+        try {
+          await execFileP("git", ["-C", join(this.opts.workspace, worktree), "reset", "--hard", carriedBase]);
+        } catch (err) {
+          return {
+            ok: false,
+            output:
+              "spawn_agent: 重派基线复位失败（fail-visible，不派发比错基线的 worker）：" +
+              (err instanceof Error ? err.message : String(err)),
+          };
+        }
+        baseCommit = carriedBase;
       }
     }
 

@@ -7,11 +7,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNow } from "../useNow";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { WorktreesPane } from "./WorktreesPane";
 import { BookOpen, Brain, Clock, Puzzle } from "lucide-react";
 import type { MemorySnapshot } from "../../../../../src/main/ipc-protocol";
 import type { AutomationDefinition, AutomationSchedule } from "../../../../../src/main/automations";
 import type { ScheduleSnapshot, HistoryEntry } from "../../../../../src/main/scheduler";
 import type { PluginPanelSnapshot } from "../../../../../src/agent/plugins";
+import { STR } from "../strings";
 import { Switch } from "./Switch";
 import { EmptyState } from "./settings-ui";
 import { activates } from "./a11y-activate";
@@ -117,7 +119,7 @@ function Notice(props: { text: string | null }): React.JSX.Element | null {
 
 // ── 插件页 ────────────────────────────────────────────────────────
 
-export function PluginsPane(props: { snap: PluginPanelSnapshot; onError: (m: string) => void; refresh: () => void }): React.JSX.Element {
+export function PluginsPane(props: { snap: PluginPanelSnapshot; onError: (m: string) => void; refresh: () => void; onInvoke?: (invoke: string) => void }): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [sel, setSel] = useState<string | null>(null);
@@ -214,7 +216,7 @@ export function PluginsPane(props: { snap: PluginPanelSnapshot; onError: (m: str
               {(selected.commands ?? []).length === 0
                 ? <div className="ap-empty">该插件没有命令条目</div>
                 : (selected.commands ?? []).map((c) => (
-                  <div key={c.invoke} className="ap-li"><span className="kind mono-k">{c.invoke}</span><span className="p">{c.description}</span></div>
+                  <div key={c.invoke} className="ap-li"><span className="kind mono-k">{c.invoke}</span><span className="p">{c.description}</span>{props.onInvoke !== undefined && <button className="mini-btn" onClick={() => { props.onInvoke?.(c.invoke); }}>{STR.pluginSurface.fill}</button>}</div>
                 ))}
             </section>
             <section className="ap-sec">
@@ -821,7 +823,7 @@ export function MemoryPane(props: { snap: MemorySnapshot; onError: (m: string) =
 // v7.1 业主裁：四个入口不再自带整页宿主与页内导航——只导出「页体」，由设置页按分区渲染；
 // 数据面不变（getState() 真快照），标题与图标事实源仍是 PAGE_META。
 
-type Snapshot = { plugins?: PluginPanelSnapshot; schedule?: ScheduleSnapshot; memory?: MemorySnapshot };
+type Snapshot = { plugins?: PluginPanelSnapshot; schedule?: ScheduleSnapshot; memory?: MemorySnapshot; worktree?: { workspace: string; orphans: string[] } };
 
 /** 页体：按 page 自取一份 getState() 快照并渲染对应面板（宿主只管分区切换，不管数据）。 */
 export function AppPageBody(props: {
@@ -831,10 +833,18 @@ export function AppPageBody(props: {
   const [snap, setSnap] = useState<Snapshot | null>(null);
 
   const refresh = useCallback(() => {
+    // 自动化页只需要 schedule：走专用的 scheduleSnapshot 通道，不再用整份 getState
+    // （那条整份快照还要算插件/记忆/工作树；也为 invoke 消费面留下一处真实调用点）。
+    if (props.page === "automation") {
+      void window.agent.scheduleSnapshot().then((schedule) => setSnap({ schedule })).catch((err: unknown) => {
+        props.onError(`调度快照读取失败：${err instanceof Error ? err.message : String(err)}`);
+      });
+      return;
+    }
     void window.agent.getState().then(setSnap).catch((err: unknown) => {
       props.onError(`快照读取失败：${err instanceof Error ? err.message : String(err)}`);
     });
-  }, [props.onError]);
+  }, [props.onError, props.page]);
   useEffect(() => { refresh(); }, [refresh]);
 
   return (
@@ -859,6 +869,11 @@ export function AppPageBody(props: {
         snap.memory === undefined
           ? <div className="ap-empty">记忆层未初始化</div>
           : <MemoryPane snap={snap.memory} onError={props.onError} refresh={refresh} />
+      )}
+      {snap !== null && props.page === "worktrees" && (
+        snap.worktree === undefined
+          ? <div className="ap-empty">工作区未解析（无可用工作区）</div>
+          : <WorktreesPane snap={snap.worktree} onError={props.onError} refresh={refresh} />
       )}
     </div>
   );

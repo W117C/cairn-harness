@@ -12,18 +12,21 @@
 // data-round-anchor、think-live/think-body/think-elapsed/aria 全套、复制/还原 aria-label ——
 // 全部逐字保留（本文件换形态与图标，不动锚）。
 // 图标 = lucide-react（ADR 0003）。
-import { Fragment, memo, useEffect, useId, useState } from "react";
-import { AlertTriangle, Check, ChevronRight, ChevronUp, CircleDashed, Copy, Download, Eye, FileCode2, FileText, Folder, GitBranch, History, Image as ImageIcon, Loader2, Pencil, Pin, RotateCcw, RotateCw, Sparkles, Square, ThumbsDown, ThumbsUp, Volume2 } from "lucide-react";
-import { relativeTime, type StreamRow } from "../projections";
+import { AlertTriangle,Check,ChevronRight,ChevronUp,CircleDashed,Copy,Eye,FileCode2,FileText,Folder,GitBranch,History,Image as ImageIcon,Loader2,Pencil,Pin,RotateCcw,RotateCw,Sparkles,Square,ThumbsDown,ThumbsUp,Volume2 } from "lucide-react";
+import { Fragment,memo,useEffect,useId,useState } from "react";
+import type { ChangeDiffPayload } from "../../../../../src/main/change-diff";
+import { eventRefKey, type EventRef } from "../../../../../src/events/session-ref";
+import { anchorKeyOf, type AnchoredEvent } from "../state/session-identity";
+import { Markdown } from "../markdown";
+import { relativeTime,type StreamRow } from "../projections";
 import { userMessageCopy } from "../transcript";
 import { useNow } from "../useNow";
-import { Markdown } from "../markdown";
 import type { ViewMode } from "../view-mode";
 import { DiffView } from "./DiffView";
-import { canFoldRound, truncateSummary } from "./stream-model";
-import type { ChangeDiffPayload } from "../../../../../src/main/change-diff";
+import { canFoldRound,truncateSummary } from "./stream-model";
 
-export { canFoldRound, foldAllButLast, truncateSummary, turnSummaries } from "./stream-model";
+export type { StreamActions } from "../stream-actions";
+export { canFoldRound,foldAllButLast,truncateSummary,turnSummaries } from "./stream-model";
 
 /** 写文件类工具（展开区行内 diff 的判定面；与 ApprovalCard toolIcon 的写族一致）。 */
 const WRITE_TOOLS = new Set(["write_file", "edit_file", "apply_patch"]);
@@ -207,7 +210,15 @@ function ToolCluster(props: { rows: Extract<StreamRow, { kind: "tool" }>[]; view
           <span>{props.rows.length} 次工具调用</span>
           {latest !== undefined && <span className="tool-group-detail">执行中 · {toolVerb(latest.tool) ?? latest.tool} {latest.summary}</span>}
           {interrupted.length > 0 && <span className="tool-group-detail">{interrupted.length} 次未收到结果</span>}
-          {failures.length > 0 && <span className="tool-group-failure">{failures.length} 次失败{!open && failure?.output ? ` · ${truncateSummary(failure.output, 80)}` : ""}</span>}
+          {/* 失败这一行分两截：**标记**（N 次失败）留在危险色，**正文**（失败摘要）降到正文色——
+              「四行散文整段用危险色是在阅读面里喊」；标记三重（左侧红三角 / N 次失败 / 重试钮）仍在，
+              失败照样显眼，而文案回到「内容」的身份（2026-10-22 目验后补上，见 PROGRESS 第 662 页）。 */}
+          {failures.length > 0 && (
+            <span className="tool-group-failure">
+              <span className="tool-group-failure-count">{failures.length} 次失败</span>
+              {!open && failure?.output ? <span className="tool-group-failure-detail"> · {truncateSummary(failure.output, 240)}</span> : null}
+            </span>
+          )}
         </button>
       )}
       <div id={id} className="tool-group-body" hidden={!open}>
@@ -219,60 +230,20 @@ function ToolCluster(props: { rows: Extract<StreamRow, { kind: "tool" }>[]; view
   );
 }
 
-export interface StreamActions {
-  /** eventId → 当前生效评分（listFeedback 投影）；缺席 = 未评。 */
-  feedback?: ReadonlyMap<number, "up" | "down">;
-  feedbackBusy?: (eventId: number) => boolean;
-  pinBusy?: (eventId: number) => boolean;
-  annotationPending?: (eventId: number) => boolean;
-  /** 赞/踩真提交（core submitFeedback 落 sidecar）；rating=null = 撤销。 */
-  onFeedback?: (eventId: number, rating: "up" | "down" | null) => void;
-  /** 文件级回滚（core revertTurn；确认与结果提示在 App）。 */
-  onRevertTurn?: (round: number) => void;
-  /** 复制行文本（剪贴板与失败面在 App）。 */
-  onCopyText?: (text: string) => Promise<boolean> | void;
-  /** 打开用户消息里的附件（2026-10-18）：芯片从纯展示变成可点——点了用系统默认应用打开。 */
-  onOpenAttachment?: (path: string) => void;
-  /** 分叉（P3-1 操作条）：从 user 这条消息所在轮 fork 出新会话（core forkSession；原会话不动）。 */
-  onBranch?: (round: number) => void;
-  /** 编辑并重发（2026-10-18）：在前一轮上下文的**新分支**里填入这条消息原文，用户改完再发；
-   *  原会话不动。第 1 轮没有前置上下文 ⇒ App 侧新建空会话后填入。 */
-  onEditRound?: (round: number, text: string) => void;
-  /** 回放（P3-1 操作条，agent 行）：fork 到该轮 + 切到新会话 + 把该轮用户输入注入输入框（不自动发送）。
-   *  传事件 id（1-based 行号）——轮号与输入原文由 App 从事件日志投影（roundOfEvent/userTextOfRound）。 */
-  onReplay?: (eventId: number) => void;
-  /** 朗读（§2.2 操作条 read aloud）：macOS say；speakingEventId 控按钮态。 */
-  onSpeak?: (eventId: number, text: string) => void;
-  /** 正在朗读的那条（eventId）；缺席/null = 没有在念。 */
-  speakingEventId?: number | null;
-  /** 轮折叠开合（v7.2）：折叠钮与展开钮共用；缺席 = 不渲染折叠面。 */
-  onToggleFold?: (round: number) => void;
-  /** 错误行「重试」（brief 六：「错误态：清晰原因 + 重试」）：用最后一轮的输入再跑一轮
-   *  （追加为新轮，不改写历史；运行中不摆——App 侧同样以 runningSet 兜底）。 */
-  onRetryLast?: () => void;
-  /** 是否正在跑（重试按钮的显隐依据之一；缺席按未运行处理）。 */
-  running?: boolean;
-  /** 打开产物（工具交付物直达）。缺席 = 不渲染产物入口（老调用方与判卷不受影响）。 */
-  onOpenArtifact?: (a: { kind: "image" | "html" | "svg" | "text"; path: string; note?: string }) => void;
-  /** 重跑该轮（Claude 式重试，2026-10-17）：用这一轮的用户输入再发一次（追加为新轮）。
-   *  运行中不渲染——此刻再排一轮语义含糊；App 侧另以 runningSet 兜底。 */
-  onRetryRound?: (round: number) => void;
-  /** 消息置顶（2026-10-20 · 销 G6 / 规范 §3.11 操作条 pin）：落 sidecar pins.jsonl。
-   *  缺席 = 不渲染 pin 钮（老调用方与判卷不受影响）。 */
-  onPin?: (eventId: number, pinned: boolean) => void;
-  /** 当前已置顶的锚点（eventId 集合）；缺席 = 无置顶。渲染即挂载（eager），靠 CSS 显隐。 */
-  pinnedEventIds?: ReadonlySet<number>;
-}
+import type { StreamActions } from "../stream-actions";
 
-function AssistantActions(props: { text: string; eventId: number; round: number; speaking: boolean; actions: StreamActions }) {
-  const current = props.actions.feedback?.get(props.eventId) ?? null;
+function AssistantActions(props: { text: string; eventId: number; eventRef?: EventRef; round: number; speaking: boolean; actions: StreamActions }) {
+  // 注释锚点：本地行只有 eventId；祖先行带来源引用（父第 2 行与子第 2 行不能共键）。
+  const anchor: AnchoredEvent = { eventId: props.eventId, ...(props.eventRef !== undefined ? { eventRef: props.eventRef } : {}) };
+  const key = anchorKeyOf(anchor);
+  const current = props.actions.feedback?.get(key) ?? null;
   const { onCopyText, onFeedback, onReplay, onSpeak, onRetryRound, onPin } = props.actions;
-  const pinned = props.actions.pinnedEventIds?.has(props.eventId) === true;
-  const feedbackBusy = props.actions.feedbackBusy?.(props.eventId) === true;
-  const pinBusy = props.actions.pinBusy?.(props.eventId) === true;
+  const pinned = props.actions.pinnedEventIds?.has(key) === true;
+  const feedbackBusy = props.actions.feedbackBusy?.(anchor) === true;
+  const pinBusy = props.actions.pinBusy?.(anchor) === true;
   const running = props.actions.running === true;
   return (
-    <span className="row-actions" data-saving={props.actions.annotationPending?.(props.eventId) === true}>
+    <span className="row-actions" data-saving={props.actions.annotationPending?.(anchor) === true}>
       <button className="row-action" aria-label="复制这行输出" title="复制" onClick={() => onCopyText?.(props.text)}>
         <Copy size={12} />
       </button>
@@ -284,7 +255,7 @@ function AssistantActions(props: { text: string; eventId: number; round: number;
           disabled={pinBusy}
           aria-busy={pinBusy}
           title={pinned ? "已置顶（再点取消）" : "置顶：钉在会话大纲里，长对话好找"}
-          onClick={() => onPin(props.eventId, !pinned)}
+          onClick={() => onPin(anchor, !pinned)}
         >{pinBusy ? <Loader2 size={12} /> : <Pin size={12} />}</button>
       )}
       {onRetryRound !== undefined && !running && (
@@ -319,7 +290,7 @@ function AssistantActions(props: { text: string; eventId: number; round: number;
         disabled={feedbackBusy}
         aria-busy={feedbackBusy}
         title={current === "up" ? "已赞（再点撤销）" : "赞"}
-        onClick={() => onFeedback?.(props.eventId, current === "up" ? null : "up")}
+        onClick={() => onFeedback?.(anchor, current === "up" ? null : "up")}
       >{feedbackBusy ? <Loader2 size={12} /> : <ThumbsUp size={12} />}</button>
       <button
         className={`row-action${current === "down" ? " on" : ""}`}
@@ -328,7 +299,7 @@ function AssistantActions(props: { text: string; eventId: number; round: number;
         disabled={feedbackBusy}
         aria-busy={feedbackBusy}
         title={current === "down" ? "已踩（再点撤销）" : "踩"}
-        onClick={() => onFeedback?.(props.eventId, current === "down" ? null : "down")}
+        onClick={() => onFeedback?.(anchor, current === "down" ? null : "down")}
       >{feedbackBusy ? <Loader2 size={12} /> : <ThumbsDown size={12} />}</button>
     </span>
   );
@@ -391,10 +362,25 @@ export function ThinkingLive(props: { seq: number; thinking?: string; running?: 
 }
 
 // 历史行按字段复用；增量只更新真正改变的行，完整 DOM 与定位锚继续保留。
-const UserRowView = memo(function UserRowView({ actions, canFold, flash, ...r }: Extract<StreamRow, { kind: "user" }> & { actions?: StreamActions; canFold: boolean; flash: boolean }) {
+/** 祖先行来源标记（计划 Task 5）：这一行属于父/祖会话文件，不是当前子会话自己的行。 */
+function SourceTag(props: { at?: EventRef; inherited?: boolean }) {
+  const ref = props.at;
+  if (ref === undefined || props.inherited !== true) return null;
   return (
-  <div className={"row user" + (flash ? " flash" : "")} data-event-id={String(r.seq + 1)} style={{ scrollMarginTop: 14 }}>
+    <span className="row-source" title={`继承自会话 ${ref.sessionId}（第 ${String(ref.eventId)} 行）`}>
+      来自 {ref.sessionId}
+    </span>
+  );
+}
+
+const UserRowView = memo(function UserRowView({ actions, canFold, flash, eventRef, sourceRow, ...r }: Extract<StreamRow, { kind: "user" }> & { actions?: StreamActions; canFold: boolean; flash: boolean; eventRef?: EventRef; sourceRow?: boolean }) {
+  return (
+  <div className={"row user" + (flash ? " flash" : "")} data-event-id={String(r.seq + 1)} {...(eventRef !== undefined ? { "data-event-ref": eventRefKey(eventRef), "data-source-session": eventRef.sessionId } : {})} style={{ scrollMarginTop: 14 }}>
     <span className="t" data-round-anchor={String(r.round)}>{r.text}</span>
+    {/* 第 9 点·轮中插话：这一句是同一轮里补的话，不是新任务。标出来，否则用户会以为
+        自己又开了一个任务（而它恰恰**没有**开新轮——见 derived/stream.ts 的轮界分流）。 */}
+    {r.steering === true && <span className="ur-steer" title="这一轮进行中补的话（没开新任务）">插话</span>}
+    <SourceTag at={eventRef} inherited={sourceRow} />
     {/* 用户消息的附件（2026-10-18）：此前发出去就再也看不见——本轮起 user_message 事件带引用，
         历史/重放都能显示“这条消息带了哪些文件”。 */}
     {r.attachments !== undefined && r.attachments.length > 0 && (
@@ -470,9 +456,9 @@ const UserRowView = memo(function UserRowView({ actions, canFold, flash, ...r }:
   );
 });
 
-const AssistantRowView = memo(function AssistantRowView({ actions, caret, ...r }: Extract<StreamRow, { kind: "assistant" }> & { actions?: StreamActions; caret: boolean }) {
+const AssistantRowView = memo(function AssistantRowView({ actions, caret, eventRef, sourceRow, ...r }: Extract<StreamRow, { kind: "assistant" }> & { actions?: StreamActions; caret: boolean; eventRef?: EventRef; sourceRow?: boolean }) {
   return (
-  <div className="row assistant" data-event-id={String(r.eventId)}>
+  <div className="row assistant" data-event-id={String(r.eventId)} {...(eventRef !== undefined ? { "data-event-ref": eventRefKey(eventRef), "data-source-session": eventRef.sessionId } : {})}>
     <span className="spark" aria-hidden="true"><Sparkles size={13} /></span>
     <span className="t">
       {/* 追字光标在正文末尾行内（caret 进最后一个文本块），终稿到达或会话停转即消失。 */}
@@ -490,17 +476,29 @@ const AssistantRowView = memo(function AssistantRowView({ actions, caret, ...r }
       <AssistantActions
         text={r.text}
         eventId={r.eventId}
+        {...(eventRef !== undefined ? { eventRef } : {})}
         round={r.round}
         speaking={actions.speakingEventId === r.eventId}
         actions={actions}
       />
     )}
+    <SourceTag at={eventRef} inherited={sourceRow} />
     <span className="meta"><RowTime ts={r.ts} /></span>
   </div>
   );
 });
 
-export function Stream(props: {
+/** 流本体（会话消息流）。
+ *
+ *  **为什么整棵包一层 memo**（2026-10-22 性能面）：这棵树在长会话里能到四万七千个 DOM 节点，
+ *  而 App 是它的父级、每有一个与流无关的状态变化（每秒的计时器、输入框一个字、侧栏拖宽…）
+ *  就会重渲染一次 App ⇒ 整棵树被重新 diff 一遍。实测形态：运行中每秒一跳的计时器，
+ *  让一棵**没有新消息**的流每秒重算一次。
+ *  ⇒ 这里用 memo 把「与流无关的父级重渲染」挡在门外：**props 全部稳定**（rows/actions 在 App 侧
+ *  已是 useMemo，view/streaming/foldedRounds/flashRound 都是 state）⇒ props 没变就不重渲染。
+ *  切会话仍按 App 侧那个 `key` 重挂（行内局部状态不跨会话复用，见 App.tsx 的注释）。
+ *  流里唯一自己跳的计时器在 `ThinkingLive` 子组件里（它自己管自己），不受这一层影响。 */
+export const Stream = memo(function Stream(props: {
   rows: StreamRow[];
   actions?: StreamActions;
   view?: ViewMode;
@@ -509,10 +507,19 @@ export function Stream(props: {
   foldedRounds?: ReadonlySet<number>;
   /** 刚跳到的轮：该轮用户行闪一下（目录跳转的落点反馈）。 */
   flashRound?: number | null;
+  /** 显示序 → 来源引用（指针分叉）：有它就按 eventRefKey 做 DOM 键与来源标记。 */
+  refs?: ReadonlyMap<number, EventRef> | null;
+  /** 祖先行的显示序（来源标记由此挂）。 */
+  inherited?: ReadonlySet<number> | null;
 }) {
   const actions = props.actions;
   const view = props.view;
   const folded = props.foldedRounds;
+  const refOfRow = (seq: number): EventRef | undefined => props.refs?.get(seq);
+  const keyOf = (prefix: string, seq: number): string => {
+    const ref = refOfRow(seq);
+    return ref === undefined ? `${prefix}${String(seq)}` : `${prefix}${eventRefKey(ref)}`;
+  };
   // 追字光标只在**本会话真在跑**时亮：历史里未结的桶（被中断没落终稿）照实渲染文本，
   // 但不摆一个"正在输入"的活光标——那是把停当成了动（诚实口径）。undefined = 旧默认（亮）。
   const caretOn = props.streaming !== false;
@@ -531,7 +538,7 @@ export function Stream(props: {
   const groups: Array<{ key: string; round: number | null; rows: StreamRow[] }> = [];
   for (const r of props.rows) {
     if (r.kind === "user") {
-      groups.push({ key: `g${String(r.seq)}`, round: r.round, rows: [r] });
+      groups.push({ key: keyOf("g", r.seq), round: r.round, rows: [r] });
     } else {
       const cur = groups[groups.length - 1];
       if (cur === undefined) groups.push({ key: "g0", round: null, rows: [r] });
@@ -572,9 +579,9 @@ export function Stream(props: {
         case "user": {
           flush();
           out.push({
-            key: `u${r.seq}`,
+            key: keyOf("u", r.seq),
             node: (
-              <UserRowView {...r} canFold={canFold} flash={props.flashRound === r.round} {...(actions !== undefined ? { actions } : {})} />
+              <UserRowView {...r} canFold={canFold} flash={props.flashRound === r.round} {...(refOfRow(r.seq) !== undefined ? { eventRef: refOfRow(r.seq), sourceRow: props.inherited?.has(r.seq) === true } : {})} {...(actions !== undefined ? { actions } : {})} />
             ),
           });
           break;
@@ -596,9 +603,9 @@ export function Stream(props: {
             });
           }
           out.push({
-            key: `a${r.seq}`,
+            key: keyOf("a", r.seq),
             node: (
-              <AssistantRowView {...r} caret={r.live === true && caretOn && r.seq === lastLiveSeq} {...(actions !== undefined ? { actions } : {})} />
+              <AssistantRowView {...r} caret={r.live === true && caretOn && r.seq === lastLiveSeq} {...(refOfRow(r.seq) !== undefined ? { eventRef: refOfRow(r.seq), sourceRow: props.inherited?.has(r.seq) === true } : {})} {...(actions !== undefined ? { actions } : {})} />
             ),
           });
           break;
@@ -674,4 +681,4 @@ export function Stream(props: {
       {out.map((o) => <Fragment key={o.key}>{o.node}</Fragment>)}
     </>
   );
-}
+});

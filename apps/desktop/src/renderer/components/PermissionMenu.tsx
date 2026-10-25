@@ -2,22 +2,14 @@
 // 列表态 = 每项色点 + 图标 + 标题 + 副标题两行；「自动」行 warning 图标 +「危险」小标签（不整行变色）；
 // 选「自动」先走二次确认（PermissionConfirm）——确认前绝不调 onModeChange（危险动作不静默）。
 // 词表（MODE_LABEL / MODE_DOT）与触发器共用，单一事实源在本文件；值全出处 STR（本文件零裸中文）。
+import { Shield,ShieldAlert,ShieldCheck,ShieldOff } from "lucide-react";
 import { useState } from "react";
-import { Shield, ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react";
 import type { PermissionMode } from "../../../../../src/main/ipc-protocol";
 import { STR } from "../strings";
 
 /** 权限档词表：label 短词（触发器与条目共用）、desc 一句人话说明、warn = 危险档标记。 */
-export const MODE_LABEL: Record<PermissionMode, { label: string; desc: string; warn?: boolean }> = {
-  "read-only": { label: STR.permissionModes.readOnly, desc: STR.permissionModes.readOnlyDesc },
-  default: { label: STR.permissionModes.default, desc: STR.permissionModes.defaultDesc },
-  guided: { label: STR.permissionModes.guided, desc: STR.permissionModes.guidedDesc },
-  // 「全部放行」是**名不副实**的旧文案：MODE_POLICY 里 auto 是 `writeAsk:false` 而
-  // `riskAskAt:"high"`（permissions/autonomy.ts:154）——它免的是"逐笔问写"这一层，
-  // 风险 ≥ high 的动作（沙箱降级时的写向、出网、critical）照样送审。
-  // 业主实测 2026-10-16 因此以为切换失效。文案改成它真的做的事。
-  auto: { label: STR.permissionModes.auto, desc: STR.permissionModes.autoDesc, warn: true },
-};
+import { MODE_LABEL } from "../permission-labels";
+export { MODE_LABEL } from "../permission-labels";
 
 /** 档位色点（P2-2 · brief 三节：只读=灰绿 / 默认=蓝灰 / 引导=黄 / 自动=红）。
  *  值 = tokens.css 四枚语义变量的引用（亮暗双主题各给值，组件零字面色值纪律不破）。 */

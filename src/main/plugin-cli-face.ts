@@ -85,6 +85,10 @@ export function pluginFaceText(ctx: PluginFaceContext): string {
       lines.push("    " + label + "：" + (v === null ? "没给这一顶（没扫）" : v));
     }
     lines.push("    免信任散装：" + (ctx.roots.looseRoots.length === 0 ? "没给这一顶（没扫）" : ctx.roots.looseRoots.join("、")));
+    const foreign = ctx.roots.foreignSources ?? [];
+    lines.push("    外部来源：" + (foreign.length === 0
+      ? "没给这一顶（没扫）"
+      : foreign.map((s) => s.name + "（" + s.kind + "、" + s.scope + "）：" + s.root).join("；")));
   }
   if (ctx.rows.length === 0) {
     lines.push("  发现面为空：给到的根里没有一支含 .claude-plugin 或 SKILL.md 的子目录");

@@ -1,0 +1,5 @@
+[evolution-pack] content-pack.demo@0.1.0 没有候选档案，拒绝注入（无法核验内容摘要）
+A) 索引新鲜 ⇒ 生产读面： ""
+B) 索引已删 ⇒ 触发重建路径：
+   ⇒ 抛错： RegistryLogCorruptError | registry.jsonl 第 1 行损坏（gates 里有未知门 typecheck——门名单以 scripts/gate-manifest.ts 的 GATES 为准）
+C) canary 收束 tick ⇒ []

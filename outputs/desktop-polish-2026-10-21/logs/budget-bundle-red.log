@@ -1,0 +1,5 @@
+{"initialBytes":160650,"chunks":["assets/index-CFGBy03p.js"],"budgetBytes":800000,"routeBytes":{"main":529840,"popout":356354},"routeBudgets":{"main":600000,"popout":1},"overBudget":true,"output":"/Users/ze/Downloads/Cairn/deepseek harness/outputs/desktop-polish-2026-10-21/budget-bundle-red.json"}
+[bundle-audit] 路由 JS 超预算：{"initial":160650,"routeBytes":{"main":529840,"popout":356354},"budget":800000,"routeBudgets":{"main":600000,"popout":1}}
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: node scripts/bundle-audit.mjs '/Users/ze/Downloads/Cairn/deepseek harness/outputs/desktop-polish-2026-10-21/budget-bundle-red.json'

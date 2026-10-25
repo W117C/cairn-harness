@@ -14,9 +14,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentEvent } from "../../../src/events";
 import { formatDuration, Stream, writeDiffPathOf } from "../src/renderer/components/Stream";
 import { projectStream, roundOfEvent, userTextOfRound } from "../src/renderer/projections";
+import { readAppSurface } from "./helpers/app-surface";
 
 const styles = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
-const appSrc = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const appSrc = readAppSurface();
 const streamSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/Stream.tsx", import.meta.url)), "utf8");
 
 // 六事件夹具：user/assistant/user/tool_call/tool_result/assistant（工具 ts 2100→3300 = 1.2s）。

@@ -1816,6 +1816,15 @@ export const MUTATIONS = [
     expectFail: "名字与 HEAD 相符 ⇒ 一条都不许多报（主树与暂存根外的树不参与）",
   },
   {
+    id: "scratch-tree-live-branch-measured",
+    src: "scripts/lib/scratch-tree-naming.ts",
+    test: "tests/scratch-tree-naming.test.ts",
+    desc: "去掉「活工作树不参与命名对账」那一跳 ⇒ 挂在分支上的 `.worktrees/cap-20261021` 被当成验证树："
+      + "它的日期段恰好是 8 位十六进制，正则把 `cap-20261021` 读成前缀 `cap` ＋ sha `20261021` ⇒ 名字被举报成说谎",
+    apply: (s) => s.replace("    if (t.detached === false) continue;\n", ""),
+    expectFail: "挂在分支上的活工作树（detached=false）不参与命名对账；detached 的同名树照旧响",
+  },
+  {
     id: "trim-token-keeps-trailing-punct",
     src: "scripts/lib/agents-command-face.ts",
     test: "tests/agents-command-face.test.ts",

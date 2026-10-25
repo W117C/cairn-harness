@@ -1,0 +1,151 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness/apps/desktop
+
+stderr | tests/session-audit-lifecycle.test.ts > SessionMetadata audit through the real KernelHost > marks an accepted run active, keeps it active after a rejected duplicate, then marks it idle
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+stderr | tests/session-audit-lifecycle.test.ts > SessionMetadata audit through the real KernelHost > an old run holds ownership until its idle write finishes, so a new run cannot be marked idle by it
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+ ❯ tests/session-audit-lifecycle.test.ts (8 tests | 7 failed) 1165ms
+   ❯ SessionMetadata audit through the real KernelHost (8)
+     × counts successful open attempts and persists viewedAt through a new host instance 35ms
+     × records a failed known-session open attempt without recording a successful view 12ms
+     × projects present audit fields and leaves unrecorded values absent 15ms
+     × marks an accepted run active, keeps it active after a rejected duplicate, then marks it idle 1053ms
+     × a real provider-script failure after the user turn still settles the accepted run as idle 16ms
+     × audit storage failure is visible and preserves the main open/run result and corrupt bytes 15ms
+     × an old run holds ownership until its idle write finishes, so a new run cannot be marked idle by it 11ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/session-audit-lifecycle.test.ts > SessionMetadata audit through the real KernelHost > counts successful open attempts and persists viewedAt through a new host instance
+Error: 会话 metadata 不存在: 会话 2026-10-22 11:31:50 #1
+ ❯ SessionMetadataRepository.get ../../src/main/session-metadata.ts:210:24
+    208|   async get(id: string): Promise<SessionMetadataRecord> {
+    209|     const record = await this.find(id);
+    210|     if (!record) throw new Error(`会话 metadata 不存在: ${id}`);
+       |                        ^
+    211|     return record;
+    212|   }
+ ❯ tests/session-audit-lifecycle.test.ts:83:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  tests/session-audit-lifecycle.test.ts > SessionMetadata audit through the real KernelHost > records a failed known-session open attempt without recording a successful view
+Error: 会话 metadata 不存在: 会话 2026-10-22 11:31:50 #1
+ ❯ SessionMetadataRepository.get ../../src/main/session-metadata.ts:210:24
+    208|   async get(id: string): Promise<SessionMetadataRecord> {
+    209|     const record = await this.find(id);
+    210|     if (!record) throw new Error(`会话 metadata 不存在: ${id}`);
+       |                        ^
+    211|     return record;
+    212|   }
+ ❯ tests/session-audit-lifecycle.test.ts:94:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  tests/session-audit-lifecycle.test.ts > SessionMetadata audit through the real KernelHost > projects present audit fields and leaves unrecorded values absent
+AssertionError: expected { …(9) } to match object { …(4) }
+(9 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "archivedAt": "2026-10-22T03:31:50.797Z",
+-   "idleSince": "2026-10-22T03:31:50.796Z",
+-   "resumeAttempts": 1,
+-   "viewedAt": "2026-10-22T03:31:50.795Z",
++   "archived": true,
++   "createdAt": "2026-10-22T03:31:50.795Z",
++   "id": "会话 2026-10-22 11:31:50 #1",
++   "lines": 0,
++   "mtimeMs": 1792639910795.4348,
++   "pinned": false,
++   "title": "会话 2026-10-22 11:31:50 #1",
++   "updatedAt": "2026-10-22T03:31:50.797Z",
++   "workspace": "/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-session-audit-DfopOS/workspace",
+  }
+
+ ❯ tests/session-audit-lifecycle.test.ts:111:51
+    109|     const external = await createSession(logRoot(), "external-session"…
+    110|     const list = await host.listSessions();
+    111|     expect(list.find((entry) => entry.id === id)).toMatchObject(expect…
+       |                                                   ^
+    112|     const unknown = list.find((entry) => entry.id === external)!;
+    113|     for (const field of ["viewedAt", "idleSince", "resumeAttempts", "a…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  tests/session-audit-lifecycle.test.ts > SessionMetadata audit through the real KernelHost > marks an accepted run active, keeps it active after a rejected duplicate, then marks it idle
+AssertionError: expected '2000-01-01T00:00:00.000Z' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"2000-01-01T00:00:00.000Z"
+
+ ❯ tests/session-audit-lifecycle.test.ts:123:83
+    121|     const first = run(id);
+    122|     await waitForAsk(id);
+    123|     await vi.waitFor(async () => expect((await readMetadata().get(id))…
+       |                                                                                   ^
+    124|     expect(host.runningCount()).toBe(1);
+    125|     const duplicate = await run(id);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  tests/session-audit-lifecycle.test.ts > SessionMetadata audit through the real KernelHost > a real provider-script failure after the user turn still settles the accepted run as idle
+AssertionError: expected '2000-01-01T00:00:00.000Z' not to be '2000-01-01T00:00:00.000Z' // Object.is equality
+ ❯ tests/session-audit-lifecycle.test.ts:157:58
+    155|     expect(result.ok).toBe(false);
+    156|     expect(await readFile(pathOf(logRoot(), id), "utf8")).toContain('"…
+    157|     expect((await readMetadata().get(id)).idleSince).not.toBe("2000-01…
+       |                                                          ^
+    158|     expect((await readMetadata().get(id)).idleSince).toEqual(expect.an…
+    159|     expect(host.runningCount()).toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  tests/session-audit-lifecycle.test.ts > SessionMetadata audit through the real KernelHost > audit storage failure is visible and preserves the main open/run result and corrupt bytes
+AssertionError: expected 0 to be greater than or equal to 4
+ ❯ tests/session-audit-lifecycle.test.ts:170:80
+    168|     expect(await host.openSession(id)).toMatchObject({ events: [], run…
+    169|     expect(await run(id)).toMatchObject({ ok: true });
+    170|     expect(warnings.filter((line) => line.includes("[session-audit]"))…
+       |                                                                                ^
+    171|     expect(await readFile(metadataPath(), "utf8")).toBe(corrupt);
+    172|     await expect(host.listSessions()).rejects.toThrow(/会话元数据损坏/);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  tests/session-audit-lifecycle.test.ts > SessionMetadata audit through the real KernelHost > an old run holds ownership until its idle write finishes, so a new run cannot be marked idle by it
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/session-audit-lifecycle.test.ts:191:87
+    189|     const first = run(id);
+    190|     try {
+    191|       expect(await Promise.race([entered.then(() => true), first.then(…
+       |                                                                                       ^
+    192|       expect(host.runningCount()).toBe(1);
+    193|       expect(await run(id)).toMatchObject({ ok: false });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  7 failed | 1 passed (8)
+   Start at  11:31:49
+   Duration  2.70s (tests 44%, transform 44%, import 11%)
+
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run tests/session-audit-lifecycle.test.ts --config vitest.config.ts '--maxWorkers=2'

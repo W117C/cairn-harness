@@ -1,0 +1,56 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness
+
+stderr | tests/evolution-kernel.test.ts > 运行面装载与收束 tick > 安装后盘上内容被改（摘要不符）⇒ 拒绝注入
+[evolution-pack] content-pack.prompt@1.0.0 内容摘要不符（档案 sha256:19285fc9a54dfac0e0325f1ae0f3f1c7ec089035f1750a054d1e613e8fa7d6fa / 盘上 sha256:c79133ee0bc8489bda8aa0abc8f41541cd875c70e25dff5549fe8980918d5c2a），拒绝注入
+
+stderr | tests/evolution-kernel.test.ts > 运行面装载与收束 tick > 没有候选档案 ⇒ 拒绝注入（无法核验摘要）
+[evolution-pack] content-pack.prompt@1.0.0 没有候选档案，拒绝注入（无法核验内容摘要）
+
+ ❯ tests/evolution-kernel.test.ts (17 tests | 2 failed) 61ms
+   ✓ 候选档案：完整性以摘要绑定，不以 signedBy 取信 (3)
+     ✓ 摘要与文件插入顺序无关，内容变化即变 2ms
+     ✓ 写入/读回保留父版本、生成器配置、任务集与实际成本 3ms
+     ✓ 缺文件 = null；坏档案/未知字段 fail-closed 2ms
+   ✓ 配对评价：先正确性，再成本/耗时；缺证据不晋升 (6)
+     ✓ 正确性不劣且成本下降 ≥ 阈值 ⇒ promote 1ms
+     ✓ 差异不足 ⇒ keep-old 0ms
+     ✓ 候选在任何任务（含 holdout）上不正确 ⇒ failed 0ms
+     ✓ 缺证据（ok=null）⇒ unmeasurable + keep-old 0ms
+     ✓ 没有 holdout 验证任务 ⇒ 正确性通过也不晋升 0ms
+     ✓ 修好基线未通过的任务 ⇒ 正确性优先，可晋升 0ms
+   ❯ 运行面装载与收束 tick (8)
+     ✓ active content-pack 的 prompt.md/system.md 进提示词；其它文件不进 13ms
+     × 索引丢了要重建 ⇒ 重建不许因为门名单把账本判死（注入结果与索引新鲜时逐字节一致） 8ms
+     ✓ 安装后盘上内容被改（摘要不符）⇒ 拒绝注入 6ms
+     ✓ 没有候选档案 ⇒ 拒绝注入（无法核验摘要） 6ms
+     ✓ 没有 modules/ ⇒ 空串（系统提示词逐字节不变） 0ms
+     ✓ none 样本只进审计，不计入晋升门槛 7ms
+     ✓ 收束 tick 用本轮读数续档；没有观察档 ⇒ 零行为 6ms
+     × 索引丢了要重建 ⇒ 收束 tick 仍能续档（不是被重建那一步炸掉） 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/evolution-kernel.test.ts > 运行面装载与收束 tick > 索引丢了要重建 ⇒ 重建不许因为门名单把账本判死（注入结果与索引新鲜时逐字节一致）
+ FAIL  tests/evolution-kernel.test.ts > 运行面装载与收束 tick > 索引丢了要重建 ⇒ 收束 tick 仍能续档（不是被重建那一步炸掉）
+RegistryLogCorruptError: registry.jsonl 第 1 行损坏（gates 里有未知门 typecheck——门名单以 scripts/gate-manifest.ts 的 GATES 为准）
+ ❯ corrupt src/main/evolution/registry.ts:519:7
+    517|   private parseEventLine(line: string, lineNo: number): RegistryEvent {
+    518|     const corrupt = (why: string): RegistryLogCorruptError =>
+    519|       new RegistryLogCorruptError(`registry.jsonl 第 ${String(lineNo)} …
+       |       ^
+    520|     let raw: unknown;
+    521|     try {
+ ❯ ModuleRegistry.parseEventLine src/main/evolution/registry.ts:539:17
+ ❯ ModuleRegistry.rebuildInner src/main/evolution/registry.ts:436:19
+ ❯ ModuleRegistry.loadOrRebuild src/main/evolution/registry.ts:485:12
+ ❯ src/main/evolution/registry.ts:383:54
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 15 passed (17)
+   Start at  02:17:32
+   Duration  401ms (transform 66%, tests 18%, import 16%)
+

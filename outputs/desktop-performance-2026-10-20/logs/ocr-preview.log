@@ -1,0 +1,149 @@
+# Files (26 reviewable / 143 total)
+
+- mode: workspace
+- total_insertions: 27643
+- total_deletions: 269
+
+~~- `PROGRESS.md` [modified] +419/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/design/desktop-design-spec.md` [modified] +463/-0 (excluded: user_exclude)~~
+  - `apps/desktop/scripts/interaction-smoke.cjs` [modified] +22/-0
+  - `apps/desktop/scripts/ui-gallery-preload.cjs` [modified] +24/-0
+  - `apps/desktop/src/main/channels.ts` [modified] +4/-0
+  - `apps/desktop/src/main/index.ts` [modified] +43/-9
+  - `apps/desktop/src/main/kernel-host.ts` [modified] +58/-0
+  - `apps/desktop/src/main/project-path-gate.ts` [modified] +47/-0
+  - `apps/desktop/src/renderer/App.tsx` [modified] +165/-22
+  - `apps/desktop/src/renderer/components/CommandPalette.tsx` [modified] +161/-25
+  - `apps/desktop/src/renderer/components/Composer.tsx` [modified] +0/-9
+  - `apps/desktop/src/renderer/components/ErrorStrip.tsx` [modified] +9/-3
+  - `apps/desktop/src/renderer/components/Inspector.tsx` [modified] +89/-3
+  - `apps/desktop/src/renderer/components/SettingsPanel.tsx` [modified] +14/-8
+  - `apps/desktop/src/renderer/components/Sidebar.tsx` [modified] +25/-27
+  - `apps/desktop/src/renderer/components/Stream.tsx` [modified] +1/-1
+  - `apps/desktop/src/renderer/components/TitleBar.tsx` [modified] +15/-8
+  - `apps/desktop/src/renderer/components/settings-ui.tsx` [modified] +2/-1
+  - `apps/desktop/src/renderer/projections.ts` [modified] +5/-17
+  - `apps/desktop/src/renderer/sessions-view.ts` [modified] +10/-0
+  - `apps/desktop/src/renderer/strings.ts` [modified] +35/-2
+  - `apps/desktop/src/renderer/styles.css` [modified] +146/-16
+  - `apps/desktop/src/renderer/tokens.css` [modified] +1/-1
+~~- `apps/desktop/tests/channels.test.ts` [modified] +7/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/command-palette.test.tsx` [modified] +108/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/composer-attach.test.tsx` [modified] +0/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/composer-commands.test.ts` [modified] +2/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/composer-rework.test.tsx` [modified] +0/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/composer-running.test.tsx` [modified] +0/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/composer-suggestion.test.tsx` [modified] +0/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/composer-usage-ring.test.tsx` [modified] +0/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/focus-mode.test.ts` [modified] +1/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/inspector-width.test.ts` [modified] +14/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/inspector.test.tsx` [modified] +54/-18 (excluded: default_path)~~
+~~- `apps/desktop/tests/interaction-deadends.test.ts` [modified] +5/-5 (excluded: default_path)~~
+~~- `apps/desktop/tests/kernel-host.test.ts` [modified] +13/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/last-session-restore.test.ts` [modified] +9/-6 (excluded: default_path)~~
+~~- `apps/desktop/tests/pane-persistence.test.ts` [modified] +4/-3 (excluded: default_path)~~
+~~- `apps/desktop/tests/plugin-trust-wiring.test.ts` [modified] +5/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/project-path-gate.test.ts` [modified] +93/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/protocol-version.test.ts` [modified] +4/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/quick-starts-ui.test.tsx` [modified] +6/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-stream-isolation.test.ts` [modified] +1/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/settings-ui.test.tsx` [modified] +9/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/sidebar-arrow-nav.test.ts` [modified] +1/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/sidebar-session-search.test.ts` [modified] +1/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/titlebar.test.tsx` [modified] +48/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/tokens.test.ts` [modified] +2/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/tool-rows.test.tsx` [modified] +11/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/transcript.test.ts` [modified] +2/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/usage-summary.test.ts` [modified] +1/-0 (excluded: default_path)~~
+~~- `src/agent/action-fusion.ts` [modified] +2/-0 (excluded: user_exclude)~~
+~~- `src/agent/loop.ts` [modified] +7/-1 (excluded: user_exclude)~~
+~~- `src/agent/session-provider.ts` [modified] +3/-1 (excluded: user_exclude)~~
+~~- `src/agent/sidechat.ts` [modified] +40/-10 (excluded: user_exclude)~~
+~~- `src/agent/tool-choice.ts` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `src/agent/worker-report.ts` [modified] +2/-2 (excluded: user_exclude)~~
+~~- `src/events/types.ts` [modified] +4/-0 (excluded: user_exclude)~~
+~~- `src/main/agent-runner.ts` [modified] +38/-10 (excluded: user_exclude)~~
+~~- `src/main/ipc-protocol.ts` [modified] +43/-3 (excluded: user_exclude)~~
+~~- `src/main/sandbox.ts` [modified] +28/-4 (excluded: user_exclude)~~
+~~- `src/main/session-assembly.ts` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `src/main/sessions.ts` [modified] +47/-1 (excluded: user_exclude)~~
+~~- `src/main/sidechat-handlers.ts` [modified] +66/-6 (excluded: user_exclude)~~
+~~- `src/main/tool-gates.ts` [modified] +29/-8 (excluded: user_exclude)~~
+~~- `src/main/verify-trust-gate.ts` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `src/tools/base.ts` [modified] +4/-0 (excluded: user_exclude)~~
+~~- `src/tools/diagnose.ts` [modified] +23/-2 (excluded: user_exclude)~~
+~~- `tests/action-fusion.test.ts` [modified] +28/-0 (excluded: user_exclude)~~
+~~- `tests/diagnose.test.ts` [modified] +28/-7 (excluded: user_exclude)~~
+~~- `tests/ipc-protocol-version.test.ts` [modified] +5/-2 (excluded: user_exclude)~~
+~~- `tests/remember.test.ts` [modified] +17/-0 (excluded: user_exclude)~~
+~~- `tests/sidechat-core.test.ts` [modified] +25/-0 (excluded: user_exclude)~~
+~~- `tests/worker-sandbox-wiring.test.ts` [modified] +4/-2 (excluded: user_exclude)~~
+~~- `tests/write-face.test.ts` [modified] +15/-0 (excluded: user_exclude)~~
+  - `apps/desktop/scripts/cross-workspace-restore.cjs` [added] +94/-0
+  - `apps/desktop/src/renderer/components/SessionLogDialog.tsx` [added] +127/-0
+  - `apps/desktop/src/renderer/components/UsagePanel.tsx` [added] +116/-0
+  - `apps/desktop/src/renderer/inspector-pref.ts` [added] +17/-0
+  - `apps/desktop/src/renderer/last-session.ts` [added] +73/-0
+~~- `apps/desktop/tests/boot-rehydrate.test.ts` [added] +21/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/inspector-initial-state.test.ts` [added] +23/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/last-session-decision.test.ts` [added] +77/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-log-host.test.ts` [added] +53/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-log-viewer.test.tsx` [added] +72/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-open-workspace.test.ts` [added] +27/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-target.test.ts` [added] +26/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/usage-ledger-host.test.ts` [added] +83/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/usage-panel.test.tsx` [added] +54/-0 (excluded: default_path)~~
+~~- `outputs/command-palette-2026-10-21/base-session.png` [added] +641/-0 (excluded: user_exclude)~~
+~~- `outputs/command-palette-2026-10-21/dark.png` [added] +452/-0 (excluded: user_exclude)~~
+~~- `outputs/command-palette-2026-10-21/home-context.png` [added] +437/-0 (excluded: user_exclude)~~
+~~- `outputs/command-palette-2026-10-21/readings.md` [added] +26/-0 (excluded: user_exclude)~~
+~~- `outputs/command-palette-2026-10-21/recent.png` [added] +666/-0 (excluded: user_exclude)~~
+~~- `outputs/command-palette-2026-10-21/search-keys.png` [added] +846/-0 (excluded: user_exclude)~~
+~~- `outputs/command-palette-skills-2026-10-21/inserted-into-composer.png` [added] +460/-0 (excluded: user_exclude)~~
+~~- `outputs/command-palette-skills-2026-10-21/readings.md` [added] +20/-0 (excluded: user_exclude)~~
+~~- `outputs/command-palette-skills-2026-10-21/skills-group.png` [added] +387/-0 (excluded: user_exclude)~~
+~~- `outputs/core-review-fixes-2026-10-21/readings.md` [added] +52/-0 (excluded: user_exclude)~~
+~~- `outputs/cross-workspace-restore-2026-10-21/checks.json` [added] +74/-0 (excluded: user_exclude)~~
+~~- `outputs/design-shell-2026-10-21/home-1440.png` [added] +471/-0 (excluded: user_exclude)~~
+~~- `outputs/design-shell-2026-10-21/readings.md` [added] +33/-0 (excluded: user_exclude)~~
+~~- `outputs/design-shell-2026-10-21/session-880.png` [added] +652/-0 (excluded: user_exclude)~~
+~~- `outputs/design-shell-2026-10-21/session-dark-1440.png` [added] +1774/-0 (excluded: user_exclude)~~
+~~- `outputs/design-shell-2026-10-21/session-inspector-1440.png` [added] +1863/-0 (excluded: user_exclude)~~
+~~- `outputs/design-shell-2026-10-21/settings-1440.png` [added] +475/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-performance-2026-10-20/logs/ocr-preview.log` [added] +0/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-initial-state-2026-10-21/01-tools-folded.png` [added] +489/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-initial-state-2026-10-21/02-tools-expanded.png` [added] +611/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-initial-state-2026-10-21/03-focused-panel.png` [added] +376/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-initial-state-2026-10-21/04-split-panels.png` [added] +391/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-initial-state-2026-10-21/05-narrow.png` [added] +407/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-initial-state-2026-10-21/06-dark.png` [added] +424/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-initial-state-2026-10-21/checks.json` [added] +145/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-overview-2026-10-21/default-1200.png` [added] +1017/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-overview-2026-10-21/readings.md` [added] +20/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-overview-2026-10-21/wide-1440-dark.png` [added] +1129/-0 (excluded: user_exclude)~~
+~~- `outputs/inspector-overview-2026-10-21/wide-1440-light.png` [added] +1064/-0 (excluded: user_exclude)~~
+~~- `outputs/review-fixes-2026-10-21/interaction-smoke/checks.json` [added] +118/-0 (excluded: user_exclude)~~
+~~- `outputs/review-fixes-2026-10-21/readings.md` [added] +25/-0 (excluded: user_exclude)~~
+~~- `outputs/review-fixes-2026-10-21/settings-back-in-surface.png` [added] +495/-0 (excluded: user_exclude)~~
+~~- `outputs/session-log-2026-10-21/log-dark.png` [added] +1423/-0 (excluded: user_exclude)~~
+~~- `outputs/session-log-2026-10-21/log-light.png` [added] +1573/-0 (excluded: user_exclude)~~
+~~- `outputs/session-log-2026-10-21/log-tail-error.png` [added] +1561/-0 (excluded: user_exclude)~~
+~~- `outputs/session-log-2026-10-21/readings.md` [added] +36/-0 (excluded: user_exclude)~~
+~~- `outputs/settings-shell-2026-10-21/general-dark-1440.png` [added] +453/-0 (excluded: user_exclude)~~
+~~- `outputs/settings-shell-2026-10-21/general-light-1440.png` [added] +496/-0 (excluded: user_exclude)~~
+~~- `outputs/settings-shell-2026-10-21/readings.md` [added] +16/-0 (excluded: user_exclude)~~
+~~- `outputs/usage-ledger-2026-10-21/readings.md` [added] +38/-0 (excluded: user_exclude)~~
+~~- `outputs/usage-ledger-2026-10-21/usage-all-dark.png` [added] +911/-0 (excluded: user_exclude)~~
+~~- `outputs/usage-ledger-2026-10-21/usage-all-light.png` [added] +886/-0 (excluded: user_exclude)~~
+~~- `outputs/workspace-cleanup-2026-10-21/README.md` [added] +24/-0 (excluded: user_exclude)~~
+~~- `src/main/session-log.ts` [added] +66/-0 (excluded: user_exclude)~~
+~~- `src/main/usage-ledger-scan.ts` [added] +88/-0 (excluded: user_exclude)~~
+~~- `src/main/usage-ledger.ts` [added] +59/-0 (excluded: user_exclude)~~
+~~- `tests/sandbox-abort-before-spawn.test.ts` [added] +40/-0 (excluded: user_exclude)~~
+~~- `tests/sandbox-abort.test.ts` [added] +41/-0 (excluded: user_exclude)~~
+~~- `tests/session-list-ids.test.ts` [added] +32/-0 (excluded: user_exclude)~~
+~~- `tests/session-log.test.ts` [added] +62/-0 (excluded: user_exclude)~~
+~~- `tests/sidechat-parent-workspace.test.ts` [added] +118/-0 (excluded: user_exclude)~~
+~~- `tests/sidechat-tool-gate.test.ts` [added] +84/-0 (excluded: user_exclude)~~
+~~- `tests/usage-ledger-scan.test.ts` [added] +68/-0 (excluded: user_exclude)~~
+~~- `tests/usage-ledger.test.ts` [added] +45/-0 (excluded: user_exclude)~~

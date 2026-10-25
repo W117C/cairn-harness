@@ -30,18 +30,61 @@ current layer), D-4 (no append-to-refute in the current layer), D-5 (`STATE.md` 
   sessions; do not reset or stash them, or include them in a commit for this task.
 - Do not modify frozen judge files or fixtures, weaken assertions, or lower verification
   requirements to make a failing check pass.
+- `outputs/` is the **evidence face** and is really type-checked: `tsconfig.evidence.json`
+  includes it, so every `.ts`/`.tsx`/`.mts` committed under `outputs/` gets compiled there.
+  A source **copy** parked there has relative imports that no longer resolve ⇒ phantom
+  dangerous codes ⇒ `pnpm evidence-typecheck-check` (ratchet: down only) goes red. Never park
+  source copies in `outputs/`: the backup is git history; if a record must stay in the repo,
+  keep it non-TS (`.md` / `.json` / `.log`).
 
 ## Verification
 
 Run commands from the repository root. Start with checks covering the changed behavior.
 
 - Core suite: `pnpm test` uses `tests/vitest.config.ts` and does not collect desktop tests.
+  On an 8 GB machine the default worker count oversubscribes the box: the run then reports
+  timeouts (`Test timed out`, Chrome render timeouts) that are **load artifacts, not logic
+  regressions** — every one of them passes when run alone. For a reproducible full-suite
+  reading on such a host, cap the workers and quote that command:
+  `pnpm test:capped` (＝`vitest run --config tests/vitest.config.ts --maxWorkers=2`).
+  Always state the concurrency level next to a core-suite count; a count without it is
+  not a reproducible reading.
 - Desktop suite: `pnpm --filter cairn-desktop test` uses its own config and checks the boundary.
 - Before handing off changes: `node --import tsx scripts/typecheck.ts`.
 - Core/desktop dependency changes: `pnpm desktop-boundary-check`.
 - Rule or documentation changes: `pnpm docs-check`.
 - Full gates: `pnpm gates`. The current manifest is `scripts/gate-manifest.ts`; it includes
   desktop tests and HEAD checks. A core-only test run does not prove the desktop passes.
+
+## Renderer layering
+
+- The desktop renderer is layered: `apps/desktop/src/renderer/state/` (state-cluster hooks) → `apps/desktop/src/renderer/derived/` (pure projections) →
+  `apps/desktop/src/renderer/components/` + `apps/desktop/src/renderer/panes/` (props in, events out) → `App.tsx` (composition root).
+  The machine face is `pnpm renderer-layer-check`; the rules it pins:
+  - `apps/desktop/src/renderer/components/` and `apps/desktop/src/renderer/panes/` must not import `App.tsx`; `apps/desktop/src/renderer/state/` must not import `apps/desktop/src/renderer/components/`.
+  - `apps/desktop/src/renderer/derived/` is pure: no IO, no clock, no randomness, no module-level mutable state.
+  - Line caps: every renderer source file ≤ 1,200 lines, and `App.tsx` ≤ 900 lines. A cap only
+    ratchets down. When a file must grow past its cap, split it first.
+- A judge that asserts on renderer **source text** must read the whole app surface
+  (`apps/desktop/tests/helpers/app-surface.ts`), not one file. Pointing such a judge at a single file
+  makes a `not.toContain` assertion pass vacuously the moment the code moves — a vacuous pass is a
+  weakened assertion, not a passing one. This holds for any "assert on source" judge.
+
+## Event log
+
+- A new event kind is only allowed for a **log-structural control record** (a record about the log
+  itself — a rewind pointer, a metadata patch). Anything that describes **what the agent did** goes
+  through an existing event's optional field. See `docs/adr/0005-log-structural-records.md`.
+- `replay()` stays dumb and verbatim: it returns logged events as they are, control records included.
+  Interpreting control records is a projection's job, never `replay()`'s. That is what keeps "a JSONL
+  replays byte-identically" and "event id = 1-based line number" true at the same time.
+- A session fork is a **pointer, not a copy**: it records `{parent, boundary}`, does not copy the
+  parent's events, and does not inherit the parent's in-flight state.
+- Cursors are opaque and **fail closed**: an unsupported cursor kind, a malformed cursor, a cursor
+  whose session does not match, and an out-of-range position are all rejected. Never substitute a
+  different cursor for a bad one.
+- A provider/tool submission carries a `requestId` idempotency key: resubmitting the same
+  `requestId` returns the existing submission and does not execute the work a second time.
 
 ## HEAD verification
 

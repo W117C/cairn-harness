@@ -93,6 +93,13 @@ export interface LspConfigFile {
   servers?: Record<string, LspServerConfig>;
 }
 
+/** 发现期算出的内容指纹。信任决议必须复用这一份：外部来源按「被导入目录」算子集指纹，
+ *  决议侧若另算全量根指纹，写下的键与发现侧查询的键永远不同（批准了还弹卡）。 */
+export interface PluginContentFingerprint {
+  fp: string;
+  bounded: boolean;
+}
+
 /** 解析后的插件（已发现未激活）。pending = 项目级插件等待信任。 */
 export interface DiscoveredPlugin {
   name: string;
@@ -116,6 +123,8 @@ export interface DiscoveredPlugin {
   warnings: string[];
   /** 项目级插件信任状态：trusted / pending / declined。user 级恒 trusted。 */
   trust: "trusted" | "pending" | "declined";
+  /** 发现期指纹；旧快照/手写夹具没有这一格时，决议侧回退到全量根指纹。 */
+  fingerprint?: PluginContentFingerprint;
 }
 
 /** 散装 skill（无 manifest 的 foo/SKILL.md = 独立 skill，免包装加载）。
@@ -130,6 +139,8 @@ export interface LooseSkill {
    *  `<ws>/.agent/skills`（走信任门）和摆在 `M2E_LOOSE_SKILLS`（恒 trusted）下，
    *  状态不同而名字相同——只报名字就说不出「为什么这条要批、那条不用」。 */
   scope: PluginScope;
+  /** 发现期指纹（决议侧复用；旧快照/手写夹具缺省时回退全量根指纹）。 */
+  fingerprint?: PluginContentFingerprint;
 }
 
 export interface SkillEntry {
@@ -182,6 +193,21 @@ export interface PluginScanRoots {
   projectPluginsDir: string | null;
   projectSkillsDir: string | null;
   looseRoots: string[];
+  /** 外部声明式来源（opencode / pi）：只导入 skills、commands、agents，不含进程内代码插件。
+   *  旧快照没带这一格 = 未记录（不是「没扫」）。 */
+  foreignSources?: ForeignSource[];
+}
+
+/** 外部 harness 的声明式插件来源。各家的目录布局映射见 `foreign.ts` 的 FOREIGN_LAYOUTS。 */
+export type ForeignSourceKind = "opencode" | "pi" | "codex" | "qoder" | "claude";
+
+export interface ForeignSource {
+  kind: ForeignSourceKind;
+  /** 来源根（绝对路径），如 `<ws>/.opencode`、`<ws>/.pi`、`<ws>/.agents`、`<ws>/.qoder`、`<ws>/.claude`。 */
+  root: string;
+  scope: PluginScope;
+  /** 合成插件名（决定 `/<name>:<command>` 与 skill 路由的命名空间）。 */
+  name: string;
 }
 
 /** 加载清单（会话启动静态扫描产物；不新增事件类型，面板/脚本直接消费）。 */

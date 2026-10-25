@@ -22,10 +22,15 @@ const workspace = mkdtempSync(join(tmpdir(), "cairn-smoke-ws-"));
 
 // electron 解析走 pnpm --filter exec（吃 cairn-desktop 自己 node_modules/.bin 的 electron），
 // 与手跑同一路径；stdio inherit 让 [cairn-smoke] 判卷行原样透到调用方终端。
+// ELECTRON_RUN_AS_NODE **不许**进子进程：它把 Electron 降级成纯 Node（app 为 undefined），
+// 冒烟会在 load 之前就挂掉。开发本仓的宿主（DSH）把该变量注入每个 shell ⇒ 不清掉就是恒红。
+const childEnv = { ...process.env, CAIRN_SMOKE: "1", CAIRN_DESKTOP_WORKSPACE: workspace };
+delete childEnv.ELECTRON_RUN_AS_NODE;
+
 const result = spawnSync("pnpm", ["--filter", "cairn-desktop", "exec", "electron", "."], {
   cwd: repoRoot,
   stdio: "inherit",
-  env: { ...process.env, CAIRN_SMOKE: "1", CAIRN_DESKTOP_WORKSPACE: workspace },
+  env: childEnv,
   timeout: 45_000,
 });
 

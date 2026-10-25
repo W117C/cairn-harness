@@ -1,0 +1,25 @@
+[byok-inject] 启动注入：无可注入 key（未存或 env 优先）
+[m4a] 调度器已启动（桌面端常驻接线：快照/CRUD/触发同实例）
+PASS 生产 main 检索 A 命中 A 的正文
+PASS 生产 main 同名 B 不借用 A 正文
+PASS 生产 KernelHost 按 workspace 打开同名会话
+PASS 弹窗继承打开时的项目 A
+PASS 主窗切到项目 B
+PASS 主窗切项目不改变已弹窗的项目
+PASS 弹窗路径动作也绑定项目 A
+PASS 按窗口存储仍拒绝未注册的工作区根
+PASS 拒绝非法根后保留弹窗自己的项目
+Error occurred in handler for 'agent:workspace-read-text': Error: 工作区未知——先在当前窗口打开一个项目
+    at WindowWorkspaceContext.require (/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop/src/main/window-workspace-context.ts:29:35)
+    at resolveWorkspace (/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop/src/main/index.ts:197:57)
+    at workspaceReadText (/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop/src/main/index.ts:597:78)
+    at <anonymous> (/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop/src/main/index.ts:878:14)
+    at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:65:14)
+    at WindowWorkspaceContext.run (/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop/src/main/window-workspace-context.ts:19:28)
+    at <anonymous> (/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop/src/main/index.ts:870:29)
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:119988)
+    at Session.emit (node:events:514:28)
+PASS 清除主窗上下文后不回落到另一窗项目
+PASS 主窗清空不影响弹窗
+PASS 真实命令面板通过生产 main 显示正文结果
+PASS 真实搜索结果打开 A 正文且不显示 B

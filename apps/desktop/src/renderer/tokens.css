@@ -136,8 +136,17 @@
   --text-400: 48 5.2% 37.8%;     /* #66655C（暖中性，正常字号 ≥4.5:1） */
   --text-500: 48 5.2% 37.8%;
 
-  /* 品牌陶土橙（brief：保留现有陶土橙 ≈#d97757，只用于选中/主按钮/焦点环） */
+  /* 品牌陶土橙（brief：保留现有陶土橙 ≈#d97757，只用于品牌/主按钮） */
   --accent-brand: 15 63.1% 59.6%;
+  /* 控件焦点/选中（Claude v3 `--cds-focus-shadow` 用 `--cds-fill-accent` = blue-450，
+     与品牌陶土橙分开；否则焦点环会被当成品牌色，蓝环的“控件态”语义丢失）。
+     `--accent-control` = blue-450（实心填充/环用）；`--accent-control-text` = blue-600
+     （**文字**用：v3 的 `--cds-text-accent` 就是 role-accent-600）——
+     450 当文字在亮底上只有约 5.4:1，600 有 14:1 以上。 */
+  --accent-control: 212.8 67.7% 50.2%;
+  --accent-control-text: 213.6 72.3% 33.9%;
+  /* 焦点环外发光（亮色）：v3 `--cds-bg-accent` = role-accent-100 = blue-100 #cde2fb。 */
+  --accent-control-glow: 210 70.9% 90%;
   /* 蓝（链接与信息强调）：100/200 同值，000/900 分主题——「等待决定」状态族在用 */
   --accent-000: 210 73.7% 40.2%;
   --accent-100: 210 70.9% 51.6%;
@@ -176,17 +185,48 @@
   --color-diff-add-ink: 142.4 71.8% 29.2%;
   --color-diff-del-ink: 0 73.7% 41.8%;
 
+  /* ── 数据可视化（2026-10-21 · Claude Desktop v3.1623.0 实测）────────────
+     来源：`/Applications/Claude.app` v3.1623.0 的 MainWindowPage CSS（233,932 B）
+     `--cds-chart-categorical-1…8` 逐条映射到其 35 阶色族：
+       blue-450 / orange-350 / aqua-350 / yellow-250 / magenta-300 / green-500 /
+       violet-500 / red-400。
+     取值按本仓存储纪律写成 HSL 三元组（与色族同源，不是另抄一套 hex）。
+     组件只消费 --chart-1…8；顺序即 Claude 的分类色顺序，不要按主题重排。 */
+  --chart-1: 212.8 67.7% 50.2%; /* #2a78d6 · blue-450 */
+  --chart-2: 17 82.1% 56.3%;    /* #eb6834 · orange-350 */
+  --chart-3: 158.5 73.3% 39.6%; /* #1baf7a · aqua-350 */
+  --chart-4: 41.4 89.5% 62.5%;  /* #eda100 · yellow-250 */
+  --chart-5: 324.8 59.6% 56.3%; /* #e87ba4 · magenta-300 */
+  --chart-6: 130 48.4% 36.5%;   /* #008300 · green-500 */
+  --chart-7: 255.7 59.8% 60%;   /* #6250d6 · violet-500 */
+  --chart-8: 0 68.4% 61.6%;     /* #e34948 · red-400 */
+  --chart-axis: 48 5.2% 37.8%;  /* gray-400 · 轴/参考线 */
+  --chart-grid: var(--alpha-2);
+  --chart-muted: 50 20.7% 88.6%; /* gray-200 · 空段/轨道 */
+
   /* ── 结构语义 ───────────────────────────────────────────────── */
   /* 描边随文字主色走（暖中性），不再写死纯黑/纯白——换色板时描边自动同族。 */
   --hairline: hsl(var(--text-000) / 8%);
   --hairline-strong: hsl(var(--text-000) / 13%);
   --scrim: hsl(60 6% 4% / 22%);
   --side-bg: hsl(var(--bg-200));
+  /* ── 主题小预览（设置页「亮色／暗色／跟随系统」那三枚色板）─────────────────
+     这两枚**故意不随主题翻转**：设置页那枚小预览是把「亮色外观」与「暗色外观」
+     并排画出来给人挑的——在暗色主题下看「亮色」那一格，它也得是亮的，否则色板
+     两半一样、这个控件就白画了。⇒ 定值只放在 :root（不进 [data-theme="dark"]
+     块），两个主题下恒定；命名说的是「这块色板在展示什么」，不是「什么颜色」。 */
+  --swatch-light: 0 0% 100%;    /* 色板·亮色一侧 = 亮色 surface */
+  --swatch-dark: 240 3% 12%;     /* 色板·暗色一侧 = 暗色 surface */
 
   /* ── alpha 阶（2026-10-20 改「从单一基色派生」，规范 §4.2 明文）
      此前是 10 条手写字面透明度（全仓 hsl(from 命中 0）。改为 HSL 相对色语法：
      基色仍是 --text-000（随主题自翻转），只有透明度是变量，改基色即全族跟着变。
      浏览器要求：Chrome 119+ / Safari 16.4+。本仓 Electron ^44.7（Chromium ~138）满足。 */
+  /* v3 亮色：hover 5%（= alpha-1）、选中 10%（= alpha-2）。 */
+  --alpha-hover: 5%;
+  --alpha-selected: 10%;
+  /* v3 亮色 `--cds-fill-field` = #ffffff80（白半透，压在页面底上）。 */
+  --fill-field: hsl(0 0% 100% / 50%);
   --alpha-0: hsl(from hsl(var(--text-000)) h s l / 0%);
   --alpha-1: hsl(from hsl(var(--text-000)) h s l / 5%);
   --alpha-2: hsl(from hsl(var(--text-000)) h s l / 10%);
@@ -208,13 +248,17 @@
   --rem-scale: 1;
   --size-scale: 1;
 
-  /* 字号（brief：正文 14.5·行高 1.7 / 辅助 12.5 / 标题 16–20·600；每个 calc 乘 --rem-scale） */
+  /* 字号（业主 §4.4 刻度：caption .625/.6875/.75/.8125（10/11/12/13）＋ body .75/.8125/.875/.9375
+     （12/13/14/15）＋ title 1.25/1.375（20/22）＋ prose 五档；每个 calc 乘 --rem-scale）。
+     2026-10-21 更正：caption 三档此前被压平成 12.5（§4.4 要 10/11/12/13 四档），
+     body-md 落 14.5（不在 §4.4 的四档里）——两处都按规格与 v3 实测改回。
+     v3 实测（comfortable/step-4）：caption 12 / body 14 / prose 16 / heading 15 / title 22。 */
   --fs-caption-2xs: calc(0.625rem * var(--rem-scale));   /* 10 · 微字（kbd/角标） */
-  --fs-caption-xs: calc(0.78125rem * var(--rem-scale));  /* 12.5 · 辅助 */
-  --fs-caption-sm: calc(0.78125rem * var(--rem-scale));  /* 12.5 · 辅助 */
-  --fs-caption-md: calc(0.78125rem * var(--rem-scale));  /* 12.5 · 辅助 */
-  --fs-body-sm: calc(0.78125rem * var(--rem-scale));     /* 12.5 · 辅助正文 */
-  --fs-body-md: calc(0.90625rem * var(--rem-scale));     /* 14.5 · 正文 */
+  --fs-caption-xs: calc(0.6875rem * var(--rem-scale));  /* 11 · 辅助 */
+  --fs-caption-sm: calc(0.75rem * var(--rem-scale));     /* 12 · 辅助 */
+  --fs-caption-md: calc(0.8125rem * var(--rem-scale));  /* 13 · 辅助 */
+  --fs-body-sm: calc(0.8125rem * var(--rem-scale));     /* 13 · 辅助正文 */
+  --fs-body-md: calc(0.875rem * var(--rem-scale));      /* 14 · 正文 */
   --fs-body-lg: calc(0.9375rem * var(--rem-scale));      /* 15 */
   --fs-body-xl: calc(1rem * var(--rem-scale));           /* 16 */
   --fs-heading-sm: calc(0.875rem * var(--rem-scale));    /* 14 */
@@ -224,11 +268,11 @@
   --fs-title-md: calc(1.25rem * var(--rem-scale));       /* 20 */
   --fs-title-lg: calc(1.375rem * var(--rem-scale));      /* 22 */
   --fs-prose-s: calc(0.8125rem * var(--rem-scale));      /* 13 */
-  --fs-prose-m: calc(0.90625rem * var(--rem-scale));     /* 14.5 */
+  --fs-prose-m: calc(0.875rem * var(--rem-scale));       /* 14 */
   --fs-prose-l: calc(0.9375rem * var(--rem-scale));      /* 15 */
   --fs-prose-xl: calc(1rem * var(--rem-scale));          /* 16 */
   --fs-prose-2xl: calc(1.125rem * var(--rem-scale));     /* 18 */
-  --fs-footnote: calc(0.78125rem * var(--rem-scale));    /* 12.5 */
+  --fs-footnote: calc(0.75rem * var(--rem-scale));       /* 12 */
   --fs-code: calc(0.8125rem * var(--rem-scale));         /* 13 */
   --fs-entry-floor: 16px;  /* 输入框字号下限（防移动端自动放大） */
 
@@ -247,6 +291,7 @@
   --h-btn-lg: calc(28px * var(--size-scale));              /* iconbtn / 新任务 */
   --h-btn-xs: calc(20px * var(--size-scale));              /* 行尾小按钮 */
   --h-btn-2xs: calc(18px * var(--size-scale));             /* 窗格头关闭/弹出 */
+  --press-btn: 0.975;                                      /* v3 btn-press-sx/sy（按钮按下缩放） */
   --w-switch: calc(30px * var(--size-scale));              /* 开关轨道 */
   --h-switch: calc(18px * var(--size-scale));
   --d-switch-knob: calc(14px * var(--size-scale));         /* 开关圆点 */
@@ -269,8 +314,10 @@
   --radius-sm: calc(0.375rem * var(--size-scale));        /* 6（并入 6 档） */
   --radius-md: calc(0.625rem * var(--size-scale));        /* 10 */
   --radius-lg: calc(0.625rem * var(--size-scale));        /* 10 */
-  --radius-composer: calc(0.875rem * var(--size-scale));  /* 14 */
-  --radius-pop: calc(0.875rem * var(--size-scale));       /* 14 · 弹层（批 5 细则 §五） */
+  --radius-composer: calc(0.875rem * var(--size-scale));  /* 14 · 用户气泡 */
+  --radius-composer-card: calc(0.75rem * var(--size-scale)); /* 12 · v3 composer（v2 是 14） */
+  --radius-pop: calc(0.875rem * var(--size-scale));       /* 14 · 设置卡/大面板 */
+  --radius-pop-v3: calc(0.625rem * var(--size-scale));    /* 10 · v3 panel-radius（菜单/浮层） */
   --radius-field: calc(0.5rem * var(--size-scale));       /* 8 · 设置页控件（2026-10-16 模型/通道页重做） */
   --radius-pill: 999px;
 
@@ -281,6 +328,7 @@
   --space-16: calc(1rem * var(--size-scale));             /* 16 · 栅格遗漏档补齐（2026-10-16 模型/通道页重做） */
   --space-lg: calc(1.5rem * var(--size-scale));           /* 24 */
   --space-xl: calc(2rem * var(--size-scale));             /* 32 */
+  --scroll-fade: calc(1.75rem * var(--size-scale));       /* 28 · v3 scroll-fade-size（流底渐隐） */
 
   /* 内边距（4px 栅格） */
   --pad-xs: calc(0.25rem * var(--size-scale));            /* 4 */
@@ -338,11 +386,18 @@
   --r-lg: var(--radius-composer);
   --r-pill: var(--radius-pill);
 
-  /* ── 字重刻度（2026-10-20 建 · Claude 实测字重非标准）───────────────────────
-     Claude 实测：semibold = **580**、bold = **600**（不是 600/700）；且暗色整体减重补偿
-     （regular 400→360、bold 600→560）——深色底上同样的字重看起来更重，故降一档。
-     本仓此前 61 处硬编码 400/500/550/600/700，改字重要动 61 处。
-     现收敛到 5 个语义档；暗色块只重定义这 5 个值 ⇒ 换主题自动补偿。
+  /* ── 字重刻度（2026-10-20 建 · 2026-10-22 按 v3 暗色轴实测更正 · Claude 字重非标准）──
+     Claude 实测（/Applications/Claude.app v3.1623.0，app.asar sha 760e7cbb…，
+     `.vite/renderer/main_window/assets/MainWindowPage-Bbug2Ph5.css`）：
+       亮色作用域（`:root` / `.cds-root`）= `--cds-font-weight-*`：
+         regular **400** / medium **500** / semibold **580** / bold **600**（semibold 580 非 600）；
+       暗色作用域（`[data-mode=dark] .cds-root` 与 `prefers-color-scheme:dark` + `[data-mode=system]`
+         与 `.cds-dark-scope[data-mode=dark]`）= `--cds-font-wght-*`（可变字体轴实例）：
+         regular **"wght" 360** / medium **"wght" 460** / semibold **"wght" 540** / bold **"wght" 560**。
+     ⇒ 暗色**不是**「亮色每档减 20」：它是另一组轴实例值（400→360、500→460、580→540、600→560，
+       四档各减 40）。本仓此前写成 360/480/560/580（medium 与 semibold 仍按 −20 推的）⇒ 与蓝本不符，
+       2026-10-22 按实测更正为 360/460/540/560。
+     `--fw-heavy` 是 **Cairn 自有档**（Claude 只有 4 档，没有 heavy 对应物）；暗色沿用同一条降档思路 660。
      迁移纪律：新代码一律用 --fw-*，存量裸值随改动逐步替换（不批量重写，避免无意义 diff）。 */
   --fw-regular: 400;
   --fw-medium: 500;
@@ -352,9 +407,11 @@
 
   /* 非色彩刻度 */
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 6px rgb(0 0 0 / 0.04);
-  --shadow-pop: 0 8px 28px rgb(0 0 0 / 0.12), 0 2px 8px rgb(0 0 0 / 0.07);
-  --reading: 47.5rem; /* 阅读列 760px（P3-1 收口 · brief 六：对话区内容列限宽 760px 居中） */
+  /* 卡片投影（v3 `--cds-shadow-sm` 亮色实测）：0 1px 2px 0 #0000000d。 */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.05);
+  /* 弹层投影（v3 `--cds-shadow-popover` 亮色实测）：8px 24px #0000001f + 2px 6px #00000014。 */
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.08);
+  --reading: 52rem; /* 阅读列 832px（2026-10-21 设计重做：1440 下 760 留白过大；实际正文 750） */
   /* 动效刻度（2026-10-18 建，2026-10-20 按 Claude 实测补全为 5 档时长 × 4 缓动）
      Claude 实测：--cds-dur-snap .12s / fast 60ms / base .2s / sheet .3s / slow .45s；
      --cds-ease-out cubic-bezier(.165,.84,.44,1)（另有 (0,0,.2,1) 一族）/
@@ -367,11 +424,43 @@
   --t-med: 200ms var(--ease-out);      /* 常态过渡（Claude dur-base .2s） */
   --t-slow: 300ms var(--ease-out);     /* 面板/模态进场（Claude dur-sheet .3s） */
   --t-slowest: 450ms var(--ease-out);  /* 大面位移（Claude dur-slow .45s） */
+  /* ── 动效 · 动作族（2026-10-22 Phase 4 · 语义令牌对齐补这一层）────────────
+     §4.10.2 的五档（--t-instant…--t-slowest）是**响应档**：一次交互该多快。
+     库里还有另一类动效——**动作自带节奏**：转圈、呼吸、跑马灯、入场抬升、命中
+     闪光……它们的周期由动作本身定（1.6s 的呼吸不是 450ms 的大面位移），五档装
+     不下；写死字面量则同一个动作在几处各写一遍（漂移源：同一个 spin 在四处各
+     写一遍 1s linear，改一处就忘了另一处）。
+     ⇒ 动效刻度分两族，**都是「一个令牌 = 时长 + 缓动」**，组件不许拆开写：
+        ① 响应档：--t-instant / --t-fast / --t-med / --t-slow / --t-slowest
+        ② 动作档：--t-<动作名>，该动作唯一的时长与缓动
+     错峰延迟是第三类（--t-stagger-*）：延迟位只收时长、收不了缓动。 */
+  --t-sheen: 1.8s var(--ease-in-out);         /* 骨架扫光（skeleton-sheen） */
+  --t-pulse-ring: 1.8s var(--ease-out);       /* 等待态扩散环（pulse-ring） */
+  --t-genbar-sweep: 1.1s var(--ease-in-out);  /* 生成中细条跑马灯（genbar-sweep） */
+  --t-spin: 1s var(--ease-linear);             /* 转圈（spin） */
+  --t-spin-slow: 1.1s var(--ease-linear);      /* 转圈·慢档（会话行状态图标 s-spin） */
+  --t-rise-in: 420ms var(--ease-rise);         /* 入场抬升·短档（新会话行 .start） */
+  --t-rise-in-long: 520ms var(--ease-rise);    /* 入场抬升·长档（空态问候/芯片/composer） */
+  --t-find-hit: 900ms var(--ease-out);         /* 查找命中闪烁（find-hit） */
+  --t-turn-flash: 1.3s var(--ease-out);        /* 目录跳转落点一闪（turn-flash） */
+  --t-sp-flash: 160ms var(--ease-out);         /* 提示浮层闪现（sp-flash-in） */
+  /* 错峰（纯时长：延迟位只收时长，不接受缓动） */
+  --t-stagger-chip: 50ms;                      /* 空态 chip 入场错峰 */
+  --t-stagger-composer: 90ms;                  /* 空态 composer 入场错峰 */
+  --t-stagger-think-2: 0.2s;                   /* 思考三点呼吸 · 2 号 */
+  --t-stagger-think-3: 0.4s;                   /* 思考三点呼吸 · 3 号 */
   /* 缓动四族（2026-10-20） */
   --ease-out: cubic-bezier(0.165, 0.84, 0.44, 1);      /* Claude --cds-ease-out */
   --ease-snap: cubic-bezier(0.32, 0.72, 0, 1);         /* 快速贴位 */
   --ease-overshoot: cubic-bezier(0.34, 1.3, 0.64, 1);  /* 弹入（带回弹） */
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);    /* 强收尾：浮层「快出慢收」*/
+  /* 动作族用到的三族缓动（2026-10-22）：§4.10.2 的四族是「界面手势」族；动作族
+     的三族曲线在库里本来就以字面量存在（ease-in-out / linear /
+     cubic-bezier(.2,.7,.2,1)），令牌化时**逐位照抄原曲线**（一个控制点都不改
+     ——改曲线就是改观感，不在「语义令牌对齐」这一笔的授权范围内）。 */
+  --ease-in-out: cubic-bezier(0.42, 0, 0.58, 1);  /* CSS ease-in-out 关键字的等价曲线 */
+  --ease-linear: linear;                          /* CSS linear 关键字 */
+  --ease-rise: cubic-bezier(0.2, 0.7, 0.2, 1);     /* 入场抬升（rise-in 家族） */
   --z: 1.25; /* 演示缩放（原型外壳；非产品） */
 }
 
@@ -385,6 +474,26 @@
    本块按同一方向重排：bg-000(最底) < bg-100(主区) < bg-200(侧栏/卡片) < bg-300(well)。
    旧值：bg-000 #30302E / bg-100 #262624 / bg-200 #1F1E1D / bg-300 #141413（已作废）*/
 [data-theme="dark"] {
+  /* 控件强调色也要分主题（2026-10-21 · v3 实测）：v3 暗色 scope 里
+     `--cds-text-accent` = role-accent-**300**（= blue-300 #6da7ec），
+     亮色才是 role-accent-600（blue-600 #184f95）。
+     暗底上继续用 blue-600 文字只有 4.6:1（bg-200 侧栏底），换 blue-300 后到 11:1 以上。 */
+  --accent-control-text: 210 70.9% 51.6%;
+  /* 暗色下焦点环的**外发光**：v3 暗色 scope 把 `--cds-bg-accent` 换成 role-accent-800
+     （blue-800 #032042），亮色是 role-accent-100（blue-100 #cde2fb）——
+     同一枚 token 在两个主题里明暗相反，环的「光晕」因此在暗底上是深蓝而非亮蓝。 */
+  --accent-control-glow: 210 82% 13%;
+  /* 暗色下 hover/选中底也要更实：v3 暗色 scope 把
+     `--cds-fill-ghost-hover` 提到 7.5%、`--cds-fill-ghost-selected` 提到 15%
+     （亮色是 5% / 10%）；本仓的 alpha 阶梯在暗底上因此整体偏淡，
+     这里补一枚暗色专用的「轻底」刻度给 hover/选中用。 */
+  --alpha-hover: 7.5%;
+  --alpha-selected: 15%;
+  /* 输入框底（v3 `--cds-fill-field`）：亮色 = #ffffff80（白半透），
+     暗色 = alpha-1（5% 亮墨）。本仓输入框/卡片用 bg-000 实体底，
+     这里补一枚「字段底」供输入类控件使用（暗色下比 bg-000 略亮，与 v3 一致）。 */
+  --fill-field: hsl(from hsl(var(--text-000)) h s l / 5%);
+
   /* ── 角色层 · 暗色分档（2026-10-20 新增）─────────────────────────
      关键机制：暗色块**只重定义 role-*，不碰语义层**。语义层（--success 等）
      在 :root 里已经写死成 `var(--role-success-450)` 这类引用，所以换主题时
@@ -472,16 +581,22 @@
   --hairline-strong: hsl(var(--text-000) / 13%);
   --scrim: hsl(60 6% 2% / 52%);
 
-  --shadow-card: none;
-  --shadow-pop: 0 8px 28px rgb(0 0 0 / 0.5), 0 2px 8px rgb(0 0 0 / 0.35);
+  /* v3 暗色 `--cds-shadow-sm`：0 1px 2px 0 hsl(gray-900 / 6%), 0 2px 8px 0 var(--cds-shadow-color)
+     —— 暗色下第二层用 shadow-color（= #0000003d）才有「浮起」感，故不置 none。 */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.06), 0 2px 8px rgb(0 0 0 / 0.24);
+  /* v3 暗色 `--cds-shadow-popover`：8px 24px #00000052 + 2px 6px #0003。 */
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.32), 0 2px 6px rgb(0 0 0 / 0.2);
 
-  /* 字重暗色补偿（2026-10-20 · Claude 实测 regular 400→360、bold 600→560）：
-     深色底上同样的字重看起来更重（浅字在深底上的光晕），故整体降一档。
+  /* 字重暗色补偿（2026-10-22 按 Claude v3 暗色轴实测更正 · 2026-10-20 初版只取了两档）：
+     亮色用静态字重 400/500/580/600；暗色换的是**可变字体轴实例** 360/460/540/560
+     （v3 CSS 三个暗色作用域一致：`[data-mode=dark] .cds-root`、
+      `prefers-color-scheme:dark` + `[data-mode=system]`、`.cds-dark-scope[data-mode=dark]`）。
+     四档**各减 40**（400→360、500→460、580→540、600→560），不是逐档减 20。
      只重定义这 5 个语义档，组件侧不用感知主题。 */
   --fw-regular: 360;
-  --fw-medium: 480;
-  --fw-semibold: 560;
-  --fw-bold: 580;
+  --fw-medium: 460;
+  --fw-semibold: 540;
+  --fw-bold: 560;
   --fw-heavy: 660;
 }
 

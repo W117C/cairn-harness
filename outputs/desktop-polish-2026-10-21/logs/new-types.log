@@ -1,0 +1,5 @@
+src/renderer/change-diff-state.ts(67,17): error TS2339: Property 'agent' does not exist on type 'Window & typeof globalThis'.
+src/renderer/change-diff-state.ts(70,10): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 2: tsc --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution Bundler --jsx react-jsx --esModuleInterop scripts/native-host-smoke.ts tests/browser-local-ipv6.test.ts tests/terminal-drain.test.ts tests/inspector-missing-usage.test.tsx tests/desktop-review-batch.test.ts

@@ -21,7 +21,7 @@ export interface BrowserState {
   pending?: { url: string };
 }
 
-interface Entry { view: WebContentsView }
+interface Entry { view: WebContentsView; owner: BrowserWindow }
 
 /** 一次导航的处置（纯函数面；判卷直接钉，不靠源码断言）。 */
 export type NavigationDecision =
@@ -40,7 +40,7 @@ export function hostAllowed(raw: string, allowedHosts: ReadonlySet<string>): boo
     const u = new URL(raw);
     if (u.protocol !== "http:" && u.protocol !== "https:") return false;
     const host = u.hostname.toLowerCase();
-    return host === "localhost" || host === "127.0.0.1" || host === "::1" || allowedHosts.has(host);
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || allowedHosts.has(host);
   } catch {
     return false;
   }
@@ -65,6 +65,7 @@ export class BrowserHost {
   /** 已授权站点（host）。只由 open() 的显式导航写入——渲染层在地址栏提交前已问过用户。 */
   private readonly allowedHosts = new Set<string>();
   private readonly entries = new Map<string, Entry>();
+  private readonly observedOwners = new WeakSet<BrowserWindow>();
   constructor(
     private readonly getWindow: () => BrowserWindow | null,
     private readonly push: (state: BrowserState) => void,
@@ -120,7 +121,7 @@ export class BrowserHost {
   }
 
   /** 创建（或复用后导航）某 id 的浏览器视图。 */
-  open(id: string, url: string): { ok: true } | { ok: false; error: string } {
+  open(id: string, url: string, owner: BrowserWindow | null = this.getWindow()): { ok: true } | { ok: false; error: string } {
     let host: string;
     try {
       const u = new URL(url);
@@ -131,11 +132,12 @@ export class BrowserHost {
     } catch {
       return { ok: false, error: `不是合法 URL：${url}` };
     }
-    // 地址栏提交前渲染层已经问过用户（sitePermissionFor）⇒ 这里把 host 记为授权。
-    this.allowedHosts.add(host);
-    const win = this.getWindow();
-    if (win === null) return { ok: false, error: "主窗口不在（浏览器视图无处安放）" };
+    const win = owner;
+    if (win === null || win.isDestroyed()) return { ok: false, error: "调用窗口已关闭（浏览器视图无处安放）" };
     let e = this.entries.get(id);
+    if (e !== undefined && e.owner !== win) return { ok: false, error: "浏览器视图属于另一个窗口" };
+    // 地址栏提交前渲染层已经问过用户；只有窗口归属有效时才记为授权。
+    this.allowedHosts.add(host);
     if (e === undefined) {
       const view = new WebContentsView({
         webPreferences: {
@@ -147,8 +149,15 @@ export class BrowserHost {
         },
       });
       win.contentView.addChildView(view);
-      e = { view };
+      e = { view, owner: win };
       this.entries.set(id, e);
+      // 同一窗口不论开多少标签只订阅一次；窗口销毁不依赖 renderer 的卸载 IPC。
+      if (!this.observedOwners.has(win)) {
+        this.observedOwners.add(win);
+        win.once("closed", () => {
+          for (const [viewId, entry] of this.entries) if (entry.owner === win) this.close(viewId);
+        });
+      }
       const wc = view.webContents;
       // 远端页面权限默认**全拒**：Electron 缺省会对 getUserMedia/geolocation/notifications/
       // clipboard-read 等请求自动批准，页内一行 JS 就能开摄像头/麦克风或读剪贴板。
@@ -251,11 +260,11 @@ export class BrowserHost {
     if (e === undefined) return;
     this.entries.delete(id);
     try {
-      this.getWindow()?.contentView.removeChildView(e.view);
-      e.view.webContents.close();
+      if (!e.owner.isDestroyed()) e.owner.contentView.removeChildView(e.view);
     } catch {
-      // 窗口已在关闭途中的竞态：吞掉（资源随窗口走）。
+      // 宿主关闭过程可能已摘除视图；仍须单独释放 webContents。
     }
+    if (!e.view.webContents.isDestroyed()) e.view.webContents.close();
   }
 
   /** v7 清除浏览数据（§2.4 ⋮ 菜单）：清独立干净 profile（persist:cairn-browser——所有 browser

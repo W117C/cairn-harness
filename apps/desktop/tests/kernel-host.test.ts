@@ -171,6 +171,19 @@ describe("M3 多工作区运行面", () => {
       // 每条会话都带着自己根的 workspace 标记进清单。
       expect(all.some((s) => s.id === a.id && s.workspace === real(wsA))).toBe(true);
       expect(all.some((s) => s.id === b.id && s.workspace === real(wsB))).toBe(true);
+      // 跨工作区恢复的**后端那一半**：activeWorkspace 仍是 A，openSession 只给 B 的 id
+      // （渲染层重启恢复就是这么调的）也必须读到 B 的事件——归属解析器不许回落到 activeWorkspace。
+      const openedB = await multi.openSession(b.id);
+      expect(openedB.events.some((e) => e.type === "user_message" && e.content === "demo")).toBe(true);
+      // 同名 id 跨项目：显式 workspace 必须决定读哪个根。只给 id 时 host 仍按旧规则解析，
+      // 所以 renderer 必须把决定里的 workspace 带进 IPC（App/会话面板接线另有哨兵）。
+      const dupA = join(wsA, ".agent", "sessions", "dup.jsonl");
+      const dupB = join(wsB, ".agent", "sessions", "dup.jsonl");
+      writeFileSync(dupA, JSON.stringify({ type: "user_message", content: "A-DUP" }) + "\n");
+      writeFileSync(dupB, JSON.stringify({ type: "user_message", content: "B-DUP" }) + "\n");
+      const dup = await multi.openSession("dup", real(wsB));
+      expect(dup.events.some((e) => e.type === "user_message" && e.content === "B-DUP")).toBe(true);
+      expect(dup.events.some((e) => e.type === "user_message" && e.content === "A-DUP")).toBe(false);
     },
     60_000,
   );

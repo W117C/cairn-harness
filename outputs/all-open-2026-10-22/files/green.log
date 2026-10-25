@@ -1,0 +1,27 @@
+PASS 首次加载只有一个树 Tab 停点 ["00-empty"]
+PASS 空目录再按右键不跳到无关兄弟 "00-empty"
+PASS 目录加载中按右键保持当前目录焦点 "01-delayed"
+PASS 同目录旧响应不覆盖后发请求 
+PASS 展开目录右键进入直属子行 "01-delayed/fresh.txt"
+PASS 子文件左键返回父目录 
+PASS 目录左键收起且保留焦点与 aria 状态 
+PASS 目录失败时右键不跳到无关兄弟 "02-retry"
+PASS 目录失败可原地重试恢复 
+PASS Home 到第一行 
+PASS 下键到相邻可见行 
+PASS 上键回到前一行 
+PASS End 到最后行 
+PASS 目录真实超过 500 项时明确显示截断和已显示数量 
+PASS 旧文件成功响应不覆盖新预览 
+Error occurred in handler for 'agent:workspace-read-text': Error: 旧文件失败响应
+    at main (/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop/scripts/file-pane-renderer-smoke.ts:130:26)
+PASS 旧文件异常响应不覆盖新预览 
+PASS 文件读取失败可原地重试恢复 
+PASS 真实二进制文件明确拒绝预览 
+PASS 真实超长文件显示截断提示 
+PASS Enter 打开文件，选中态与完整相对路径可读 
+PASS 打开预览后仍明确显示只读状态 
+PASS 窄面板长路径可换行完整阅读且无横向溢出 {"viewport":360,"body":360,"pathWidth":314,"pathScroll":314,"treeWidth":342,"treeScroll":342}
+PASS 文件右键路径菜单仍包含已有动作 
+PASS 路径菜单通过生产 preload 携带准确相对路径和动作 {"path":"src/很长的目录名称与中文路径/这是一个足够长以验证窄面板完整路径不会丢失的文件名称-你好-world.txt","action":"reveal"}
+PASS 渲染过程无控制台错误 []

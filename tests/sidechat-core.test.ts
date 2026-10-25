@@ -26,7 +26,7 @@ import {
   sidechatHistoryBudget,
   sidechatToolSpecs,
 } from "../src/agent/sidechat";
-import { createEventLog, replay, type AgentEvent, type UserMessageEvent } from "../src/events";
+import { createEventLog, numericCompactionIds, replay, type AgentEvent, type UserMessageEvent } from "../src/events";
 import { projectContext } from "../src/agent/context";
 import { composeTurnMessages } from "../src/agent/session-provider";
 
@@ -48,6 +48,31 @@ describe("M2f sidechat 只读白名单（工具表摘除）", () => {
     }
     expect(names).toContain("read_file");
     expect(names).toContain("grep");
+    // lsp 会 spawn 工作区配置里的命令；旁路无人值守、无审批门 ⇒ 不摆这个永远调不到的入口。
+    expect(names).not.toContain("lsp");
+  });
+
+  // 缺省工具表必须是空表而不是全局 TOOLS：直接调用方忘了注入只读门时，能力降级（unknown-tool），
+  // 而不是拿未包装/不可用的全局表去读敏感文件。
+  it("未注入只读工具表 ⇒ 工具调用 fail-closed，不回落全局 TOOLS", async () => {
+    const d = await mkTmp();
+    await writeFile(join(d, "note.txt"), "SECRET-NOTE-CONTENT", "utf8");
+    const scDir = join(d, "sidechats", "no-tools");
+    await mkdir(scDir, { recursive: true });
+    const events = await runSidechatTurn({
+      sidechatDir: scDir,
+      mainLogPath: join(d, "main.jsonl"),
+      workspace: d,
+      message: "读 note",
+      model: scriptedSidechatModel([
+        { type: "tool_call", id: "r1", name: "read_file", args: { path: "note.txt" } },
+        { type: "assistant_message", content: "结束" },
+      ]),
+    });
+    const result = events.find((e) => e.type === "tool_result");
+    expect(result && result.type === "tool_result" && result.ok).toBe(false);
+    expect(result && result.type === "tool_result" ? result.blockedBy : undefined).toBe("unknown-tool");
+    expect(result && result.type === "tool_result" ? result.output : "").not.toContain("SECRET-NOTE-CONTENT");
   });
 
   it("sidechat 事件落在自己的 JSONL，主会话文件字节不变（单测口径）", async () => {
@@ -387,7 +412,7 @@ describe("M2g sidechat 自身历史预算 + 压缩（§7.5）", () => {
     });
     const compactions = events.filter((e) => e.type === "compaction");
     expect(compactions.length).toBe(1);
-    expect(compactions[0]!.compressed_event_ids.length).toBeGreaterThan(0);
+    expect(numericCompactionIds(compactions[0]!).length).toBeGreaterThan(0);
     // 主会话零写入（字节逐字不变）
     expect((await readFile(mainLog)).equals(mainBefore)).toBe(true);
     // 压缩事件确实落在自己的 JSONL（重放可见），且本轮 user/assistant 照常

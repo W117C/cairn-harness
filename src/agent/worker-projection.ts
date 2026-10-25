@@ -117,6 +117,12 @@ export const SCANNED_TEXT_PATHS: Partial<Record<AgentEvent["type"], readonly (re
   // （文件名里带密钥时，一边被掩一边没被掩）⇒ 改动面按路径配不上，还原白落。
   // 扫法与 loop 那份同源（都是 redactSecrets 逐叶子），所以掩出来的结果逐字一致。
   file_restored: [["path"], ["snapshotId"]],
+  // ADR 0005 的日志结构控制记录：**理由**与人写的正文同源（人可能把 key 贴进理由里）⇒ 要扫；
+  // `to_event_id` 是计数，不扫。
+  session_rewind: [["reason"]],
+  // 元数据补丁的**值**是人写的自由文本（会话标题、别名、标签……）⇒ 逐叶子扫。
+  // `scanStringLeaves` 会递归进对象，所以 patch 里每个 value 都被扫到。
+  session_meta_update: [["patch"]],
 };
 
 /** 在**产出处**就已脱敏的事件（本表不参与扫描，判据只判「别再漏一处」）。 */

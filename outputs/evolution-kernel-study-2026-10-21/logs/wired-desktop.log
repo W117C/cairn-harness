@@ -1,0 +1,149 @@
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+$ vitest run --config vitest.config.ts && node --import tsx ../../scripts/desktop-boundary-check.ts
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness/apps/desktop
+
+ ❯ tests/desktop-review-batch.test.ts (8 tests | 1 failed) 656ms
+   ❯ 测量脚本要有预算（量过了 ≠ 没变） (3)
+     × 原生宿主实际运行：无系统配置前提，完整验证导航、窗口归属和 PTY 651ms
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ ❯ tests/terminal-host.test.ts (3 tests | 1 failed) 6103ms
+   ❯ TerminalHost (2)
+     × 真起 PTY：echo 标记经推送回来；kill 后不再有输出 6044ms
+ ❯ tests/terminal-size.test.ts (3 tests | 3 failed) 10076ms
+   ❯ 真实 PTY 的窗口尺寸与退出状态 (3)
+     × 初始行列不是 0×0，登录 shell 从第一条命令就有有效尺寸 5004ms
+     × 缩窄再放大都更新内核尺寸，非法输入和已关闭 ID 不写入控制流 5002ms
+     × 退出码来自 shell，exit 7 不会显示成成功的 0 68ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/desktop-review-batch.test.ts > 测量脚本要有预算（量过了 ≠ 没变） > 原生宿主实际运行：无系统配置前提，完整验证导航、窗口归属和 PTY
+Error: Command failed: /Users/ze/Downloads/Cairn/deepseek harness/node_modules/.pnpm/electron@44.7.0_supports-color@7.2.0/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron /Users/ze/Downloads/Cairn/deepseek harness/apps/desktop/scripts/native-host-smoke.cjs /tmp/claude-501/cairn-native-regression-lJJFET/checks.json
+sandbox_extension_issue_file_to_process failed for /Users/ze/Downloads/Cairn/deepseek harness/node_modules/.pnpm/electron@44.7.0_supports-color@7.2.0/node_modules/electron/dist/Electron.app: 1 (Operation not permitted)
+[7652:1021/172543.578317:FATAL:base/apple/mach_port_rendezvous_mac.cc:159] Check failed: kr == KERN_SUCCESS. bootstrap_check_in com.github.Electron.MachPortRendezvousServer.7652: Permission denied (1100)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/terminal-host.test.ts > TerminalHost > 真起 PTY：echo 标记经推送回来；kill 后不再有输出
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/terminal-host.test.ts:47:17
+     45|     expect(host.write(r.id, "echo CAIRN-TERM-MARKER-42\n")).toBe(true);
+     46|     const got = await waitFor(() => events.some((e) => e.kind === "dat…
+     47|     expect(got).toBe(true);
+       |                 ^
+     48|     host.kill(r.id);
+     49|     const exited = await waitFor(() => events.some((e) => e.kind === "…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/terminal-size.test.ts > 真实 PTY 的窗口尺寸与退出状态 > 初始行列不是 0×0，登录 shell 从第一条命令就有有效尺寸
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/terminal-size.test.ts:34:3
+     32| }
+     33| describe.runIf(process.platform === 'darwin')('真实 PTY 的窗口尺寸与退出状态', () …
+     34|   it('初始行列不是 0×0，登录 shell 从第一条命令就有有效尺寸', async () => {
+       |   ^
+     35|     const t = terminal();
+     36|     expect(await t.size('INITIAL')).toEqual({ rows: 24, cols: 80 });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/terminal-size.test.ts > 真实 PTY 的窗口尺寸与退出状态 > 缩窄再放大都更新内核尺寸，非法输入和已关闭 ID 不写入控制流
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/terminal-size.test.ts:38:3
+     36|     expect(await t.size('INITIAL')).toEqual({ rows: 24, cols: 80 });
+     37|   });
+     38|   it('缩窄再放大都更新内核尺寸，非法输入和已关闭 ID 不写入控制流', async () => {
+       |   ^
+     39|     const t = terminal();
+     40|     expect(t.host.resize(t.id, 61, 11)).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/terminal-size.test.ts > 真实 PTY 的窗口尺寸与退出状态 > 退出码来自 shell，exit 7 不会显示成成功的 0
+AssertionError: expected { kind: 'exit', …(2) } to deeply equal { kind: 'exit', …(2) }
+
+- Expected
++ Received
+
+  {
+-   "code": 7,
++   "code": 1,
+    "id": "97ef91a0-4eae-45f0-b417-406e996c6a79",
+    "kind": "exit",
+  }
+
+ ❯ tests/terminal-size.test.ts:56:68
+     54|     t.host.write(t.id, 'exit 7\n');
+     55|     await waitFor(() => t.events.some(e => e.kind === 'exit' && e.id =…
+     56|     expect(t.events.find(e => e.kind === 'exit' && e.id === t.id)).toE…
+       |                                                                    ^
+     57|   });
+     58| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  3 failed | 166 passed (169)
+      Tests  5 failed | 1219 passed (1224)
+   Start at  17:25:42
+   Duration  10.28s (tests 66%, import 19%, transform 14%, worker 1%)
+
+    Isolate  169 workers spawned · ~72ms startup each (spawn + environment, per file)
+             at least ~1.66s faster with isolate: false — reuses workers across files instead of one per file
+
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] cairn-desktop@0.1.0 test: `vitest run --config vitest.config.ts && node --import tsx ../../scripts/desktop-boundary-check.ts`
+Exit status 1

@@ -1,11 +1,22 @@
 // P1 主界面重做：会话侧栏视图纯函数（分组 / 时间桶 / 状态合成 / 段结构）。
 // groupByWorkspace / OTHER_WORKSPACE / WorkspaceGroup 自 Sidebar.tsx 迁出——判据一字未动
 // （判卷资产原样保留）；新增面全部纯函数、无 React 依赖、可判卷。
+import { runKey } from "./state/session-identity";
 import type { SessionInfoPayload } from "../../../../src/main/ipc-protocol";
 import { STR } from "./strings";
 
 /** host.listSessions() 的 desktop 扩展形状：每条带归属工作区（T1 合并清单的归组标记）。 */
 export type WorkspaceSession = SessionInfoPayload & { workspace: string };
+
+/** 按 id + workspace 定位会话。id 是分钟级时间戳，跨项目可撞名；给了 workspace 就必须
+ *  两个都对上，**不退回**同名 id（退回 = 打开另一个项目的转录）。缺省 workspace 保持旧行为。 */
+export function findSessionByRef<T extends { id: string; workspace?: string }>(
+  sessions: readonly T[],
+  id: string,
+  workspace?: string,
+): T | undefined {
+  return sessions.find((s) => s.id === id && (workspace === undefined || s.workspace === workspace));
+}
 
 export interface WorkspaceGroup {
   /** 注册工作区的 canonical 绝对路径；「其他」组＝OTHER_WORKSPACE 哨兵。 */
@@ -59,6 +70,41 @@ export function splitArchived<T extends { archived?: boolean }>(
 export function workspaceLabel(workspace: string): string {
   if (workspace === OTHER_WORKSPACE) return STR.sidebar.tempChats;
   return workspace.slice(workspace.lastIndexOf("/") + 1) || workspace;
+}
+
+/** 会话归属的**项目名**（行上标签用）。纯函数：查项目清单，把 `projectId` 翻成名字。
+ *  查不到（项目被移除而归属还在）⇒ 退回**原始 id**：如实地显示它还指着什么，
+ *  而不是编一个名字、也不是把标签藏起来（藏起来的归属等于没接）。
+ *  没归属（`projectId` 缺席）⇒ null＝不画标签。 */
+export function projectLabelFor(
+  session: { projectId?: string },
+  projects: readonly { id: string; name: string }[],
+): string | null {
+  const id = session.projectId;
+  if (id === undefined || id === "") return null;
+  return projects.find((p) => p.id === id)?.name ?? id;
+}
+
+/** 「归到项目」子菜单的条目。`projectId === null` 那一项是**取消归属**。 */
+export interface ProjectMenuItem {
+  /** 目标项目 id；取消归属那一条为 null。 */
+  projectId: string | null;
+  label: string;
+}
+
+/** 「归到项目」子菜单的条目表。纯函数（菜单是关着的 Radix 弹层，静态渲染里看不见 ⇒ 逻辑必须在这里可判）。
+ *  - 没有可归属的项目 ⇒ 空表（子菜单整个不摆：不摆一个点不动的入口）。
+ *  - 「取消归属」**只在已归属时**才有（没归属时摆它＝摆一个没用的动作）。 */
+export function projectMenuItems(
+  session: { projectId?: string },
+  projects: readonly { id: string; name: string }[],
+): ProjectMenuItem[] {
+  if (projects.length === 0) return [];
+  const items: ProjectMenuItem[] = projects.map((p) => ({ projectId: p.id, label: p.name }));
+  if (session.projectId !== undefined && session.projectId !== "") {
+    items.push({ projectId: null, label: STR.sessionProject.unassign });
+  }
+  return items;
 }
 
 // ---- 时间分组（brief 第二节：今天/昨天/过去7天/更早）----
@@ -177,7 +223,7 @@ export type SessionFilterId = (typeof SESSION_FILTERS)[number]["id"];
 export const SESSION_FILTER_NOTE = STR.filter.note;
 
 export function matchSession(
-  s: { id: string; title?: string; pinned?: boolean; archived?: boolean; origin?: "scheduled" },
+  s: { id: string; title?: string; pinned?: boolean; archived?: boolean; origin?: "scheduled"; workspace?: string },
   input: { search: string; filter: SessionFilterId; running?: ReadonlySet<string> },
 ): boolean {
   const q = input.search.trim().toLowerCase();
@@ -189,7 +235,7 @@ export function matchSession(
     case "all":
       return true;
     case "running":
-      return input.running?.has(s.id) === true;
+      return input.running?.has(runKey(s.workspace, s.id)) === true;
     case "pinned":
       return s.pinned === true;
     case "archived":

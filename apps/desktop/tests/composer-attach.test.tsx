@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Composer } from "../src/renderer/components/Composer";
 import { STR } from "../src/renderer/strings";
+import { readAppSurface } from "./helpers/app-surface";
 
 const base = {
   mode: "default" as const,
@@ -21,7 +22,6 @@ const base = {
   phase: "tool" as const,
   elapsedSec: 0,
   steps: 0,
-  workspaceLabel: null,
   onSend: () => undefined,
   onCancel: () => undefined,
   onModeChange: () => undefined,
@@ -60,7 +60,7 @@ describe("＋附件菜单四入口（P2-2：零路径手输）", () => {
   });
 
   it("renderer 真接线：App 把 window.agent.pickFiles 传给 Composer（摆入口没人给 = 点不开）", () => {
-    const appTsx = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+    const appTsx = readAppSurface();
     expect(appTsx).toContain("onPickFiles={() => window.agent.pickFiles()}");
   });
 });

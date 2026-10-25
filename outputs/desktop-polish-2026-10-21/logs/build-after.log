@@ -1,0 +1,33 @@
+$ pnpm run build:preload && vite build && tsc -p tsconfig.json --noEmit
+$ esbuild src/preload/index.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs
+
+  dist-electron/preload.cjs  7.6kb
+
+⚡ Done in 2ms
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 2086 modules transformed.
+rendering chunks...
+computing gzip size...
+../../dist/index.html                                         0.64 kB │ gzip:  0.38 kB
+../../dist/assets/NotoSerifVariable-f932DlCQ.woff2           76.55 kB
+../../dist/assets/InterVariable-DJwk3cVO.woff2              137.26 kB
+../../dist/assets/JetBrainsMonoVariable-DgTxpPXt.ttf        303.14 kB
+../../dist/assets/JetBrainsMonoItalicVariable-BPH9J9VZ.ttf  308.89 kB
+../../dist/assets/PaneDock-DDGTF8rc.css                       3.62 kB │ gzip:  0.99 kB
+../../dist/assets/index-DPVGZPsa.css                        163.95 kB │ gzip: 26.96 kB
+../../dist/assets/index-DmXZ-4pQ.js                           0.09 kB │ gzip:  0.10 kB
+../../dist/assets/PopoutApp-OxOf9UL2.js                       0.94 kB │ gzip:  0.53 kB
+../../dist/assets/addon-fit-DX4qG4td.js                       1.21 kB │ gzip:  0.51 kB
+../../dist/assets/settings-nav-CKOpr_4u.js                    4.37 kB │ gzip:  2.10 kB
+../../dist/assets/markdown-ww6s6bSS.js                        6.98 kB │ gzip:  2.70 kB
+../../dist/assets/Stream-BTp70xyx.js                         18.14 kB │ gzip:  6.44 kB
+../../dist/assets/index-YG2yjcN_.js                          34.83 kB │ gzip:  9.89 kB
+../../dist/assets/CommandPalette-CfmMpFRH.js                 34.95 kB │ gzip: 12.19 kB
+../../dist/assets/PaneDock-Bf2L-2WX.js                       35.25 kB │ gzip: 12.10 kB
+../../dist/assets/SettingsPanel-2UQ8B89g.js                  61.17 kB │ gzip: 18.52 kB
+../../dist/assets/DiffView-m4s8EcEq.js                      159.40 kB │ gzip: 54.15 kB
+../../dist/assets/index-CFGBy03p.js                         160.92 kB │ gzip: 52.95 kB
+../../dist/assets/App-CibVxGpn.js                           210.12 kB │ gzip: 66.40 kB
+../../dist/assets/xterm-B-qIQCd3.js                         329.31 kB │ gzip: 83.04 kB
+✓ built in 1.25s

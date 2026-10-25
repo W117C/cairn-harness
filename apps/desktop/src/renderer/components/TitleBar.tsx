@@ -25,8 +25,12 @@ export function TitleBar(props: {
   center: ReactNode;
   /** 紧随标题右侧的附属件（目标芯片）。 */
   aside?: ReactNode;
+  /** 左翼上下文（工作区名 + 本地标记）；窄窗由 CSS 收起。 */
+  context?: ReactNode;
   sidebarCollapsed: boolean;
   onToggleSidebar: () => void;
+  /** 全屏面板（设置）里不摆侧栏开关——它只会切换被盖住的侧栏；返回留在面板 surface 内。 */
+  showToggle?: boolean;
   /** 右端操作槽（窗格入口、专注模式等；no-drag）。 */
   right?: ReactNode;
 }) {
@@ -76,14 +80,17 @@ export function TitleBar(props: {
       {/* hiddenInset：红绿灯由系统绘制，这里只留 76px 避让位 */}
       <div className="tb-left" ref={leftRef}>
         <div className="traffic" aria-hidden="true"></div>
-        <button
-          className="iconbtn sm"
-          title={props.sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
-          aria-label={props.sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
-          onClick={props.onToggleSidebar}
-        >
-          <PanelLeft size={14} />
-        </button>
+        {props.showToggle !== false && (
+          <button
+            className="iconbtn sm"
+            title={props.sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
+            aria-label={props.sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
+            onClick={props.onToggleSidebar}
+          >
+            <PanelLeft size={14} />
+          </button>
+        )}
+        {props.context}
       </div>
       {/* 中栏带：只作定位与居中。本体不接管指针 ⇒ 工具栏的拖拽区照旧覆盖中栏；
           可交互子元素（重命名按钮/输入框、目标芯片）各自 pointer-events:auto + no-drag。 */}

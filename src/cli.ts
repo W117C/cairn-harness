@@ -53,6 +53,7 @@ import {
   setAppHooks,
 } from "./main/agent-runner";
 import { initSessionsDir } from "./main/session-handlers";
+import { createProductFork } from "./main/session-repository";
 import { initSettingsStore } from "./main/settings-handlers";
 import { isValidSessionName, pathOf } from "./main/sessions";
 import type { SandboxStatus } from "./main/sandbox";
@@ -93,6 +94,7 @@ import {
 import {
   forkSession,
   isEnvVerifyCause,
+  readSessionView,
   mergeAssistantDeltas,
   replay,
   type AgentEvent,
@@ -1284,7 +1286,24 @@ async function main(): Promise<number> {
       process.stderr.write(paint(RED, `[cairn] 读日志失败：${err instanceof Error ? err.message : String(err)}\n`));
       return EXIT_FAILED;
     }
-    process.stdout.write(formatReplay(events) + "\n");
+    // 指针分叉：显示序号不是 raw id。先打来源视图（每行属于哪个文件、哪个物理行），再回放有效历史。
+    let provenance = "";
+    const head = events[0];
+    if (head !== undefined && head.type === "session_meta" && head.fork !== undefined) {
+      try {
+        const view = await readSessionView(
+          { workspace: opts.workspace, sessionId: opts.replayId },
+          join(opts.workspace, ".agent", "sessions"),
+        );
+        events = view.entries.map((entry) => entry.event);
+        const rows = view.entries.map((entry, index) =>
+          `#${String(index + 1)} = ${entry.ref.sessionId} 第 ${String(entry.ref.eventId)} 行${entry.inherited ? "（继承）" : ""}`);
+        provenance = "[cairn] 来源视图（父前缀 + 本地；**显示序号 ≠ raw 行号**）：\n" + rows.join("\n") + "\n\n";
+      } catch (error) {
+        process.stderr.write(paint(YELLOW, `[cairn] 来源视图不可读（按 raw 回放）：${error instanceof Error ? error.message : String(error)}\n`));
+      }
+    }
+    process.stdout.write(provenance + formatReplay(events) + "\n");
     process.stdout.write(paint(DIM, `\n会话日志：${path}（${String(events.length)} 条事件）\n`));
     return EXIT_OK;
   }
@@ -1348,47 +1367,28 @@ async function main(): Promise<number> {
 
   // ---- M8：`--fork` 的落点动作（读源日志 → 算分叉点 → 写新会话；源会话只读，字节不变）----
   if (opts.fork !== null) {
-    const sessionsDir = join(opts.workspace, ".agent", "sessions");
-    const srcPath = pathOf(sessionsDir, opts.fork.source);
-    let srcEvents: AgentEvent[];
-    try {
-      srcEvents = await replay(srcPath);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        process.stderr.write(paint(RED, `[cairn] 源会话不存在：${opts.fork.source}（看了 ${srcPath}）\n`));
-        return EXIT_FAILED;
-      }
-      process.stderr.write(paint(RED, `[cairn] 读源会话失败：${err instanceof Error ? err.message : String(err)}\n`));
-      return EXIT_FAILED;
-    }
-    const point = forkPointOf(srcEvents, opts.fork.round);
-    if ("error" in point) {
-      process.stderr.write(paint(RED, `[cairn] 分叉点非法：${point.error}\n`));
-      return EXIT_USAGE;
-    }
     const newId = forkSessionName(opts.fork.source, opts.fork.round);
     if (!isValidSessionName(newId)) {
       process.stderr.write(paint(RED, `[cairn] 分叉出的会话名非法（多半过长）：${newId}\n`));
       return EXIT_USAGE;
     }
-    const target = pathOf(sessionsDir, newId);
-    if (existsSync(target)) {
-      process.stderr.write(paint(RED, `[cairn] 目标会话已存在：${newId}（换 --from 或先删掉它；**不覆盖**既有转录）\n`));
+    const created = await createProductFork(
+      { workspace: opts.workspace, sessionId: opts.fork.source },
+      opts.fork.round,
+      { workspace: opts.workspace, sessionId: newId },
+    );
+    if (!created.ok) {
+      process.stderr.write(paint(RED, `[cairn] 分叉失败：${created.error}\n`));
       return EXIT_USAGE;
     }
-    // forkSession 写的一定是 `<dir>/events.jsonl`，而 CLI 的会话文件命名是 `<id>.jsonl`——
-    // 先写 scrub 目录再 rename：两边各守各的命名纪律，也不给 sessions 目录留半成品。
-    const scratch = join(sessionsDir, ".fork-" + newId);
-    const made = await forkSession(srcPath, String(point.lastIncluded), scratch);
-    await rename(made.eventsPath, target);
-    await rm(scratch, { recursive: true, force: true });
     process.stderr.write(
       paint(
         DIM,
-        `[cairn] 已分叉：${opts.fork.source} 前 ${String(opts.fork.round)} 轮（共 ${String(point.totalRounds)} 轮）→ 新会话 ${newId}；原会话只读未动\n`,
+        `[cairn] 已分叉：${opts.fork.source} 前 ${String(opts.fork.round)} 轮（共 ${String(created.totalRounds)} 轮）→ 新会话 ${newId}；` +
+        `父边界 = ${created.parent.sessionId} 第 ${String(created.boundaryEventId)} 行（指针，不复制父事件）\n`,
       ),
     );
-    opts = { ...opts, sessionId: newId, logPath: target };
+    opts = { ...opts, sessionId: newId, logPath: created.eventsPath };
   }
 
   // 交互面能不能真的接上人：stdin 不是 TTY（管道 / CI / 重定向）时没人能答审批。

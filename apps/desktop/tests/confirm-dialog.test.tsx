@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ConfirmDialog } from "../src/renderer/components/ConfirmDialog";
+import { readAppShell } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
@@ -32,8 +33,10 @@ describe("ConfirmDialog（产品自绘二次确认）", () => {
   });
 
   it("App / AppPage 不再调用原生 window.confirm（弹窗语言与界面统一）", () => {
-    for (const rel of ["../src/renderer/App.tsx", "../src/renderer/components/AppPage.tsx"]) {
+    for (const rel of ["../src/renderer/components/AppPage.tsx"]) {
       expect(read(rel), rel).not.toMatch(/window\.confirm\(/);
     }
+    // App 本体（拆分后的编排层 = App.tsx + state/ + derived/ + panes/）同样不许有原生 confirm。
+    expect(readAppShell(), "App 编排层").not.toMatch(/window\.confirm\(/);
   });
 });

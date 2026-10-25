@@ -1,4 +1,4 @@
-// terminal 窗格的主进程宿主：macOS 用 python3 的 pty.spawn 分配 PTY 起登录 shell。
+// terminal 窗格的主进程宿主：macOS 用 Python 标准库分配 PTY，起登录 shell。
 // 为什么不是 node-pty：它需要按 Electron ABI 编译 native 模块（构建链风险高）。
 // 为什么不是 script(1)：BSD script 要求自身 stdin 是 tty（`tcgetattr: Operation not supported
 // on socket`——实测），我们的 stdin 是管道 ⇒ 它起不来。pty.spawn 从管道 IO 转发亦工作（实测：
@@ -9,12 +9,19 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { StringDecoder } from "node:string_decoder";
+import { Writable } from "node:stream";
+import { PTY_BRIDGE } from "./pty-bridge";
 
 export type TerminalPush =
   | { kind: "data"; id: string; data: string }
   | { kind: "exit"; id: string; code: number | null };
 
-interface Session { proc: ChildProcessWithoutNullStreams }
+/** 宿主窗口只提供生命周期；PTY 实现不依赖 Electron，Node 判卷可直接运行。 */
+interface TerminalOwner {
+  isDestroyed(): boolean;
+  once(event: "closed", listener: () => void): unknown;
+}
+interface Session { proc: ChildProcessWithoutNullStreams; control: Writable | null; owner?: TerminalOwner }
 
 /** UTF-8 跨块解码（终端输出面）。
  *
@@ -38,29 +45,50 @@ export class Utf8ChunkDecoder {
   }
 }
 
-/** PTY 桥（python3 单行）：把当前进程 stdin/stdout 转发到子 shell 的 pty 主端。 */
-const PTY_BRIDGE = "import pty,os;pty.spawn([os.environ.get('SHELL','/bin/zsh'),'-l'])";
 
 export class TerminalHost {
   private readonly sessions = new Map<string, Session>();
+  private readonly starting = new Set<ChildProcessWithoutNullStreams>();
+  private readonly observedOwners = new WeakSet<TerminalOwner>();
   constructor(private readonly push: (event: TerminalPush) => void) {}
 
-  /** 起一个新终端（cwd = 工作区；PTY 尺寸默认——resize 通道留后续）。 */
-  start(cwd: string | null, env: NodeJS.ProcessEnv = process.env): { ok: true; id: string } | { ok: false; error: string } {
+  /** 起一个新终端（cwd = 工作区；初始 80×24，随后跟随 xterm 实际行列）。 */
+  async start(cwd: string | null, env: NodeJS.ProcessEnv = process.env, owner?: TerminalOwner): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+    if (owner?.isDestroyed()) return { ok: false, error: "调用窗口已关闭" };
     if (process.platform !== "darwin") {
-      return { ok: false, error: "terminal 窗格当前仅支持 macOS（PTY 经 python3 pty.spawn 分配）" };
+      return { ok: false, error: "终端窗格当前仅支持 macOS" };
     }
     let proc: ChildProcessWithoutNullStreams;
     try {
       proc = spawn("python3", ["-c", PTY_BRIDGE], {
         ...(cwd !== null ? { cwd } : {}),
         env: { ...env, TERM: "xterm-256color" },
+        stdio: ["pipe", "pipe", "pipe", "pipe"],
       });
     } catch (err) {
       return { ok: false, error: `终端启动失败：${err instanceof Error ? err.message : String(err)}` };
     }
+    this.starting.add(proc);
+    try {
+      // spawn 先于所有输出事件；启动失败直接回到调用方，不发送一个尚未被 UI 接管的 id。
+      await new Promise<void>((resolve, reject) => {
+        const spawned = (): void => { proc.off("error", failed); resolve(); };
+        const failed = (err: Error): void => { proc.off("spawn", spawned); reject(err); };
+        proc.once("spawn", spawned);
+        proc.once("error", failed);
+      });
+    } catch (err) {
+      return { ok: false, error: `终端启动失败：${err instanceof Error ? err.message : String(err)}` };
+    } finally {
+      this.starting.delete(proc);
+    }
+    if (owner?.isDestroyed() || proc.killed) {
+      proc.kill("SIGTERM");
+      return { ok: false, error: "终端启动已取消（调用窗口已关闭或应用正在退出）" };
+    }
     const id = randomUUID();
     let finished = false;
+    const control = proc.stdio?.[3] instanceof Writable ? proc.stdio[3] : null;
     // stdout / stderr 各持一份解码器（两条独立字节流，见 Utf8ChunkDecoder 的注释）。
     const outDec = new Utf8ChunkDecoder();
     const errDec = new Utf8ChunkDecoder();
@@ -76,22 +104,45 @@ export class TerminalHost {
     proc.stdout.on("data", (chunk: Buffer) => { this.push({ kind: "data", id, data: outDec.write(chunk) }); });
     proc.stderr.on("data", (chunk: Buffer) => { this.push({ kind: "data", id, data: errDec.write(chunk) }); });
     proc.on("error", (err) => {
-      this.push({ kind: "data", id, data: `\r\n[terminal] 启动失败：${err.message}（需要系统装有 python3，且工作目录可进入）\r\n` });
-      // ENOENT（python3 不在 / cwd 已删除）只会发 error + close，**不会发 exit**：
-      // 旧实现只摘 exit ⇒ 会话永久留在表里、UI 卡在「运行中」、write 静默丢失。
+      this.push({ kind: "data", id, data: `\r\n[terminal] 进程错误：${err.message}\r\n` });
+      // 启动错误已由上方握手返回；运行期 error 也须结束会话，不仅依赖 exit。
       finish(null);
     });
-    proc.on("exit", (code) => finish(code));
+    // exit 只代表进程结束，stdout/stderr 仍可能在排空；此时 end() 会拆坏跨块中文。
+    // 立即拒绝后续输入，等 close（所有管道关闭）再收解码器并通知 UI。
+    proc.on("exit", () => { this.sessions.delete(id); });
     proc.on("close", (code) => finish(code));
-    this.sessions.set(id, { proc });
+    const transportFailed = (err: Error): void => {
+      if (!this.sessions.has(id)) return;
+      this.push({ kind: "data", id, data: `\r\n[terminal] 连接已关闭：${err.message}\r\n` });
+      this.kill(id);
+    };
+    proc.stdin.on("error", transportFailed);
+    control?.on("error", transportFailed);
+    this.sessions.set(id, { proc, control, ...(owner !== undefined ? { owner } : {}) });
+    if (owner !== undefined && !this.observedOwners.has(owner)) {
+      this.observedOwners.add(owner);
+      owner.once("closed", () => {
+        for (const [terminalId, session] of this.sessions) if (session.owner === owner) this.kill(terminalId);
+      });
+    }
     return { ok: true, id };
   }
 
   /** 用户输入 → shell 的 stdin。未知 id 返回 false（fail-visible，不静默丢）。 */
   write(id: string, data: string): boolean {
     const s = this.sessions.get(id);
-    if (s === undefined) return false;
+    if (s === undefined || s.proc.stdin.destroyed || s.proc.stdin.writableEnded) return false;
     s.proc.stdin.write(data);
+    return true;
+  }
+
+  /** 控制流只接受内核 winsize 可表示的正整数；隐藏面板的零尺寸不覆盖最后可用行列。 */
+  resize(id: string, cols: number, rows: number): boolean {
+    if (![cols, rows].every(n => Number.isInteger(n) && n > 0 && n <= 65535)) return false;
+    const control = this.sessions.get(id)?.control;
+    if (control === undefined || control === null || control.destroyed || control.writableEnded) return false;
+    control.write(JSON.stringify({ cols, rows }) + "\n");
     return true;
   }
 
@@ -104,6 +155,7 @@ export class TerminalHost {
 
   /** 应用退出对账：不留孤儿 shell。 */
   killAll(): void {
+    for (const proc of this.starting) proc.kill("SIGTERM");
     for (const id of [...this.sessions.keys()]) this.kill(id);
   }
 }

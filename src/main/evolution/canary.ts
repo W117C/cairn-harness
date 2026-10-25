@@ -10,7 +10,7 @@
 //  ② CanaryController：新版本激活后进入观察期（样本 = 每轮读数）。三条退化规则任一命中即
 //     自动回退 previous（Installer.rollbackInstalled），并把这次退化沉淀成 lesson
 //     （走 memory store，落 <workspace>/.agent/memory/，带 evidence-line）。
-//     观察期满且无退化 ⇒ promoted；回滚失败（没有 previous / previous 文件缺失）⇒ degraded。
+//     观察期满且无退化 ⇒ promoted；回滚失败 ⇒ degraded；账本损坏导致的失败保留待重试状态。
 //
 // 口径与既有模块对齐：
 //  · 判据三条按方案 §8：「连续失败样本」「no-progress（边界后仍花 token 且无新前进）」
@@ -32,7 +32,7 @@ import { EVIDENCE_LINE_PREFIX, LESSON_MEMORY_TYPE, LESSON_TOPIC_PREFIX, SESSION_
 import { projectMemoryDir, writeTopic } from "../../agent/memory/store";
 import { Installer } from "./installer";
 import { parseBundleManifest, type BundleKind, type BundleManifest } from "./manifest";
-import type { IndexVersion, ModuleRegistry } from "./registry";
+import { RegistryLogCorruptError, type IndexVersion, type ModuleRegistry } from "./registry";
 
 export class LoadRefusedError extends Error {
   constructor(message: string) {
@@ -264,7 +264,7 @@ export interface CanarySample {
 
 export interface CanarySpec {
   id: string;
-  /** 样本上限：达到且无退化 ⇒ promoted（缺省 5）。 */
+  /** 有效样本上限：达到且无退化 ⇒ promoted（缺省 5）。none 样本不计入。 */
   maxSamples?: number;
   /** 连续失败样本上限（缺省 2）。 */
   maxConsecutiveFailures?: number;
@@ -280,6 +280,9 @@ export interface CanaryObservation {
   previousVersion: string | null;
   state: CanaryState;
   samples: number;
+  /** 有效样本数（verifyOutcome 为 green/red）。none 只进 samples 审计，不进晋升门槛；
+   *  旧观察档没有这一格 ⇒ 0（升级后需新证据，不拿历史 none 当证据）。 */
+  conclusiveSamples?: number;
   consecutiveFailures: number;
   baselineTokensPerBoundary: number | null;
   maxSamples: number;
@@ -290,6 +293,10 @@ export interface CanaryObservation {
   rollbackTo?: string;
   /** 回滚未成时的原因（state = degraded 时必有）。 */
   rollbackError?: string;
+  /** 账本损坏使回滚未成：修好后续 tick 重试原裁决，不再收样本。其它拒绝不自动重试。 */
+  rollbackRetryPending?: boolean;
+  /** 首次命中退化的证据 run；重试不得把修账轮的样本冒充原失败证据。 */
+  degradationRunId?: string;
   /** lesson 有没有落盘（回滚失败也照写；写盘失败不阻塞回滚，只在这里记账）。 */
   lessonWritten?: boolean;
   lessonError?: string;
@@ -336,18 +343,41 @@ function parseCanaryRecord(raw: unknown): CanaryObservation {
   for (const key of ["samples", "consecutiveFailures", "maxSamples", "maxConsecutiveFailures", "costDegradeFactor"]) {
     if (typeof r[key] !== "number") throw new Error(`观察档缺 ${key}`);
   }
+  // 门槛格必须是 ≥1 的整数：maxSamples=0 时「0 个有效样本 >= 0 门槛」成立 ⇒ 零证据也够晋升。
+  // 这份档是**人/模型可写的盘上文件**（.agent/canary/<id>.json），所以读回这一格就验形状，
+  // 不把坏门槛带进决策（readRecordOf 遇抛错按「读不动」处置，不许折成「没有档」）。
+  for (const key of ["maxSamples", "maxConsecutiveFailures"]) {
+    const v = r[key] as number;
+    if (!Number.isInteger(v) || v < 1) throw new Error(`观察档 ${key} 非法（必须是 ≥1 的整数）：${JSON.stringify(v)}`);
+  }
+  // 旧档没有 conclusiveSamples ⇒ 按 0 处理；有则必须是非负有限数且不超过 samples。
+  if (r.conclusiveSamples !== undefined) {
+    if (typeof r.conclusiveSamples !== "number" || !Number.isFinite(r.conclusiveSamples) || r.conclusiveSamples < 0) {
+      throw new Error("观察档 conclusiveSamples 非法");
+    }
+    if (r.conclusiveSamples > (r.samples as number)) throw new Error("观察档 conclusiveSamples 大于 samples");
+  }
   if (r.baselineTokensPerBoundary !== null && typeof r.baselineTokensPerBoundary !== "number") {
     throw new Error("观察档 baselineTokensPerBoundary 既不是数字也不是 null");
   }
   if (!Array.isArray(r.degradations)) throw new Error("观察档缺 degradations");
+  if (r.rollbackRetryPending !== undefined && typeof r.rollbackRetryPending !== "boolean") {
+    throw new Error("观察档 rollbackRetryPending 非法");
+  }
+  if (r.degradationRunId !== undefined && typeof r.degradationRunId !== "string") {
+    throw new Error("观察档 degradationRunId 非法");
+  }
   if (typeof r.startedAt !== "string") throw new Error("观察档缺 startedAt");
-  return raw as CanaryObservation;
+  const obs = raw as CanaryObservation;
+  // 旧档没有这一格 ⇒ 显式归 0：升级后要新证据才晋升，不拿历史样本（可能是 none）当证据。
+  if (obs.conclusiveSamples === undefined) obs.conclusiveSamples = 0;
+  return obs;
 }
 
 export type CanaryTickOutcome =
-  /** 这次把账本上还开着的档接回内存并收了一个样本。 */
+  /** 这次把还开着的档接回内存收样本，或重试原退化裁决的回滚。 */
   | "resumed"
-  /** 档已经结案（promoted / rolled-back / degraded），不再喂样本。 */
+  /** 档已经结案（promoted / rolled-back / 不可重试的 degraded），不再喂样本。 */
   | "settled"
   /** 账本上这个候选已经不在位（回滚 / 又换了新版 / 清退）——档退场，不再喂样本。 */
   | "idle"
@@ -390,6 +420,14 @@ export function canaryLessonTopic(id: string, version: string): string {
 
 function cloneObservation(obs: CanaryObservation): CanaryObservation {
   return { ...obs, degradations: obs.degradations.map((d) => ({ ...d })) };
+}
+
+function rollbackNeedsRetry(obs: CanaryObservation): boolean {
+  return obs.state === "degraded" && obs.previousVersion !== null && obs.degradations.length > 0 && (
+    obs.rollbackRetryPending === true ||
+    // 升级前只存 Error.message：只认账本类历史错误的固定前缀，不猜其它 degraded 的成因。
+    (obs.rollbackRetryPending === undefined && /^registry\.jsonl 第 \d+ 行损坏（/u.test(obs.rollbackError ?? ""))
+  );
 }
 
 export class CanaryController {
@@ -477,6 +515,23 @@ export class CanaryController {
     if (existing !== undefined) {
       throw new CanaryRefusedError(`${spec.id} 已有一档观察记录（state=${existing.state}）——先收束再开新的`);
     }
+    // 晋升门槛必须是**≥1 的整数**：maxSamples=0 时「conclusiveSamples(0) >= maxSamples(0)」成立
+    // ⇒ 第一个「none」样本（一个 verify 拍都没有）就把候选判成「证据够了」⇒ 零证据晋升。
+    // 这与本仓已入库的规则正面冲突（canary.ts:560 注释「缺证据不许晋升」+ 提交 46b4afc5）。
+    // 便宜检查放在装载之前：不合法就当场拒，不花钱读包体、不写档。
+    if (spec.maxSamples !== undefined && (!Number.isInteger(spec.maxSamples) || spec.maxSamples < 1)) {
+      throw new CanaryRefusedError(
+        `${spec.id} 的 maxSamples 必须是 ≥1 的整数（收到 ${String(spec.maxSamples)}）——零门槛会把「没有证据」读成「证据够了」`,
+      );
+    }
+    if (
+      spec.maxConsecutiveFailures !== undefined &&
+      (!Number.isInteger(spec.maxConsecutiveFailures) || spec.maxConsecutiveFailures < 1)
+    ) {
+      throw new CanaryRefusedError(
+        `${spec.id} 的 maxConsecutiveFailures 必须是 ≥1 的整数（收到 ${String(spec.maxConsecutiveFailures)}）`,
+      );
+    }
     const index = await this.opts.registry.readIndex();
     const entry = index.bundles[spec.id];
     if (entry === undefined) throw new CanaryRefusedError(`${spec.id} 不在账本上——先注册、过门、安装`);
@@ -490,7 +545,7 @@ export class CanaryController {
     if (onDisk.kind === "corrupt") {
       throw new CanaryRefusedError(`${spec.id} 的观察档读不出来（${onDisk.detail}）——先查清这份档再开新的`);
     }
-    if (onDisk.kind === "ok" && onDisk.record.state === "observing" && onDisk.record.candidateVersion === candidate) {
+    if (onDisk.kind === "ok" && (onDisk.record.state === "observing" || rollbackNeedsRetry(onDisk.record)) && onDisk.record.candidateVersion === candidate) {
       throw new CanaryRefusedError(
         `${spec.id}@${candidate} 盘上已有一档没结案的观察记录（samples=${String(onDisk.record.samples)}）——续档走 tickAll，别重开`,
       );
@@ -502,6 +557,7 @@ export class CanaryController {
       previousVersion: entry.previous?.version ?? null,
       state: "observing",
       samples: 0,
+      conclusiveSamples: 0,
       consecutiveFailures: 0,
       baselineTokensPerBoundary: spec.baselineTokensPerBoundary ?? null,
       maxSamples: spec.maxSamples ?? 5,
@@ -536,15 +592,25 @@ export class CanaryController {
     if (obs.state !== "observing") return { observation: cloneObservation(obs), acted: false };
     let acted = false;
     obs.samples += 1;
-    if (sample.verifyOutcome === "red") obs.consecutiveFailures += 1;
-    else if (sample.verifyOutcome === "green") obs.consecutiveFailures = 0;
-    // "none"：没有 verify 拍，不计成败、也不打断连败——读数缺席不折成任何一边。
+    if (sample.verifyOutcome === "red") {
+      obs.consecutiveFailures += 1;
+      obs.conclusiveSamples = (obs.conclusiveSamples ?? 0) + 1;
+    } else if (sample.verifyOutcome === "green") {
+      obs.consecutiveFailures = 0;
+      obs.conclusiveSamples = (obs.conclusiveSamples ?? 0) + 1;
+    }
+    // "none"：没有 verify 拍，不计成败、也不打断连败——读数缺席不折成任何一边；
+    // 它只进 samples 审计，不进晋升门槛（缺证据不许晋升）。
     const degradations = this.judge(obs, sample);
     if (degradations.length > 0) {
       obs.degradations = degradations;
-      await this.settle(obs, sample, degradations);
+      if (sample.runId !== undefined) obs.degradationRunId = sample.runId;
+      await this.settle(obs, degradations);
       acted = true;
-    } else if (obs.samples >= obs.maxSamples) {
+    } else if ((obs.conclusiveSamples ?? 0) > 0 && (obs.conclusiveSamples ?? 0) >= obs.maxSamples) {
+      // 晋升门槛是**两半**：①**有**有效证据（conclusiveSamples > 0——缺证据不许晋升，见上面的
+      // 「none」注释与提交 46b4afc5）；②证据数够（>= maxSamples）。少 ① 那一半时，maxSamples=0
+      // 会让「0 >= 0」成立 ⇒ 零证据的候选也被读成「证据够了」。两半都写在这一格 ⇒ 判据只有一份。
       obs.state = "promoted";
       obs.endedAt = new Date().toISOString();
       acted = true;
@@ -572,7 +638,7 @@ export class CanaryController {
       refused: `观察档读不出来：${c.detail}`,
     }));
     for (const record of scanned.records) {
-      if (record.state !== "observing") {
+      if (record.state !== "observing" && !rollbackNeedsRetry(record)) {
         out.push({ id: record.id, outcome: "settled", observation: record, acted: false });
         continue;
       }
@@ -587,18 +653,26 @@ export class CanaryController {
       // 根因：O_EXCL 那把锁只串行化了**写**，没串行化"读-改-写"（另一个实例的 observe 落盘
       // 之后，本进程的内存副本并不会自动跟着变）。盘上那份才是真相（每次 observe 都回写）。
       this.observations.set(record.id, record);
+      if (rollbackNeedsRetry(record)) {
+        // 重试原裁决，不拿本轮的新样本重判、不补计有效样本；候选身份已在上面与真账本核对。
+        // 回退依然走 Installer 的 previous 校验，旧档不许覆盖后来装上的版本。
+        await this.settle(record, record.degradations);
+        await this.persistRecord(record);
+        out.push({ id: record.id, outcome: "resumed", observation: cloneObservation(record), acted: !rollbackNeedsRetry(record) });
+        continue;
+      }
       const res = await this.observe(record.id, sample);
       out.push({ id: record.id, outcome: "resumed", observation: res.observation, acted: res.acted });
     }
     return out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
 
-  /** 盘上还开着的观察档（state=observing 且账本上候选还在位）。只读：不喂样本、不改账、不动回滚。 */
+  /** 盘上还开着或待重试回滚的档，且账本上候选还在位。只读：不喂样本、不改账、不动回滚。 */
   async openObservations(): Promise<CanaryObservation[]> {
     const index = await this.opts.registry.readIndex();
     const scanned = await this.scanRecords();
     return scanned.records
-      .filter((r) => r.state === "observing" && index.bundles[r.id]?.active?.version === r.candidateVersion)
+      .filter((r) => (r.state === "observing" || rollbackNeedsRetry(r)) && index.bundles[r.id]?.active?.version === r.candidateVersion)
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
 
@@ -681,6 +755,20 @@ export class CanaryController {
     // verify 调用（verified 边界=0），此时 spendAfterLastBoundary 等于整跑 token。
     // 2026-10-16 已裁决「不可测 ≠ 无前进」（strategy-patch/patch-effect/advice 同口径）；
     // 旧规则会让健康版本被一次测量缺口直接回滚。
+    // 有可信边界时，尾部支出仍须越过基线 × 既有退化倍数才判 no-progress：
+    // 验证后的正常答复也会花 token，不能把 >0 当退化。没有正基线则不编造预算。
+    if (
+      sample.costMeasurable &&
+      sample.tokensPerBoundary !== null &&
+      obs.baselineTokensPerBoundary !== null &&
+      obs.baselineTokensPerBoundary > 0 &&
+      sample.spendAfterLastBoundary > obs.baselineTokensPerBoundary * obs.costDegradeFactor
+    ) {
+      out.push({
+        rule: "no-progress",
+        detail: `最后一次 verified 边界后又花 ${String(sample.spendAfterLastBoundary)} token，超过基线 ${String(obs.baselineTokensPerBoundary)} × ${String(obs.costDegradeFactor)}，期间没有新 verified 边界`,
+      });
+    }
     if (
       sample.costMeasurable &&
       sample.tokensPerBoundary !== null &&
@@ -699,9 +787,10 @@ export class CanaryController {
 
   private async settle(
     obs: CanaryObservation,
-    sample: CanarySample,
     degradations: readonly CanaryDegradation[],
   ): Promise<void> {
+    const retrying = rollbackNeedsRetry(obs);
+    obs.rollbackRetryPending = false;
     if (obs.previousVersion === null) {
       obs.state = "degraded";
       obs.rollbackError = `${obs.id} 没有 previous 版本可回退（这是它的首个激活版本）`;
@@ -712,16 +801,21 @@ export class CanaryController {
         await this.installer.rollbackInstalled(obs.id, this.actor, obs.previousVersion ?? undefined);
         obs.state = "rolled-back";
         obs.rollbackTo = obs.previousVersion;
+        delete obs.rollbackError;
       } catch (err) {
         obs.state = "degraded";
         obs.rollbackError = err instanceof Error ? err.message : String(err);
+        obs.rollbackRetryPending = err instanceof RegistryLogCorruptError;
       }
     }
+    // 同一个坏账本尚未修好：保留已写的失败 lesson，不重复结算或改写它的证据。
+    if (retrying && obs.rollbackRetryPending) return;
     obs.endedAt = new Date().toISOString();
     // lesson 与回滚是两笔账：回滚成没成都照写；写盘失败只记账，不改回滚结论。
     try {
-      await this.writeLesson(obs, sample, degradations);
+      await this.writeLesson(obs, degradations);
       obs.lessonWritten = true;
+      delete obs.lessonError;
     } catch (err) {
       obs.lessonWritten = false;
       obs.lessonError = err instanceof Error ? err.message : String(err);
@@ -730,7 +824,6 @@ export class CanaryController {
 
   private async writeLesson(
     obs: CanaryObservation,
-    sample: CanarySample,
     degradations: readonly CanaryDegradation[],
   ): Promise<void> {
     const why = degradations.map((d) => d.rule).join(" + ");
@@ -744,7 +837,7 @@ export class CanaryController {
       SESSION_LINE_PREFIX + "canary",
       ...degradations.map((d) => "- " + d.rule + "：" + d.detail),
       EVIDENCE_LINE_PREFIX +
-        `[canary] ${obs.id}@${obs.candidateVersion} · run=${sample.runId ?? "unknown"} · samples=${String(obs.samples)}`,
+        `[canary] ${obs.id}@${obs.candidateVersion} · run=${obs.degradationRunId ?? "unknown"} · samples=${String(obs.samples)}`,
     ].join("\n");
     const nowISO = obs.endedAt ?? new Date().toISOString();
     const workspace = this.workspace();

@@ -94,7 +94,14 @@ export const run_shell: Tool = {
         if (settled) return;
         settled = true;
         handle.dispose();
-        settle({ ok: false, output: `run_shell: ${err.message}` });
+        // spawn 失败（bash 找不到 / cwd 不存在 / EACCES …）= **命令根本没跑成**，不是「跑失败了」。
+        // 走同一条归因谓词（classifyVerifyFailure：exitCode=null ⇒ not-run），
+        // 与超时、取消两条出口一样把 exitCode / timedOut 落进结构——
+        // 否则这一条是**唯一一条结构面缺席的失败支**（下游只能回去匹配「run_shell: 」那句文案，
+        // 那正是本仓判为不可当判据的形状：文案面一变，判定就跟着漂）。
+        settle(
+          annotateExecCause({ ok: false, output: `run_shell: ${err.message}` }, { timedOut: false, exitCode: null }),
+        );
       });
       handle.child.on("close", (code) => finish(code));
     });

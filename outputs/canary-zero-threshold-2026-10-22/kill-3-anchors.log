@@ -1,0 +1,11 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-anchor-verify.lock）
+变异验证：3 条
+✅ canary-max-samples-threshold-not-validated — 开档时不验 maxSamples（0 或小数都收）⇒ 零门槛让「conclusiveSamples(0) >= maxSamples(0)」成立 ⇒ 第一个 none 样本（一个 verify 拍都没有）就把候选判成 promoted，零证据被读成「证据够了」 ｜本机实测 1.5s／2 拍
+✅ canary-max-consecutive-failures-threshold-not-validated — 开档时不验 maxConsecutiveFailures（0 也收）⇒ 零连败门槛让「consecutiveFailures(0) >= 0」在**第一个**样本就成立 ⇒ 健康候选被当场判成退化并回退 ｜本机实测 1.6s／2 拍
+✅ canary-record-threshold-not-validated — 读回盘上观察档时不验门槛（.agent/canary/<id>.json 是人/模型可写的文件）⇒ 零门槛档被当成合法档带进判决 ｜本机实测 1.6s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 5.2s · 跑了 3/3 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 0.8s／第2次 0.8s· 最贵一条 canary-max-consecutive-failures-threshold-not-validated 1.6s
+跑法单价：selector 6 拍·中位 0.79s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/Cairn/deepseek harness/.git/dsh-tool-locks/mutate-verify-anchor-verify.lock）

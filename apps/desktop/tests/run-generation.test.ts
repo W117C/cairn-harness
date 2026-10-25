@@ -4,14 +4,15 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
-const app = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const app = readAppSurface();
 
 describe("run 代际守卫", () => {
   it("起跑领代际号；finally 只在号未变时摘旗", () => {
     expect(app).toContain("const myGen = (runGen.current.get(sid) ?? 0) + 1;");
     expect(app).toContain("runGen.current.set(sid, myGen);");
-    expect(app).toContain("if ((runGen.current.get(sid) ?? 0) === myGen) runningSet.current.delete(sid);");
+    expect(app).toContain("if ((runGen.current.get(sid) ?? 0) === myGen) runningSet.current.delete(keyOf(sid));");
   });
 
   it("停止态写入同样按代际守卫（旧 run 的 aborted 不能改新 run 的 stopped）", () => {

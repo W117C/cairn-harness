@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { INVOKE_CHANNELS } from "../src/main/channels";
 import { IPC_PROTOCOL_VERSION } from "../../../src/main/ipc-protocol";
+import { readAppSurface } from "./helpers/app-surface";
 
 function repo(rel: string): string {
   return readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
@@ -29,7 +30,7 @@ describe("协议版本握手接线（§3.5/§12）", () => {
   });
 
   it("renderer 闸在：挂载比对实况版本，失配/查询失败 fail-closed 早退", () => {
-    const appTsx = repo("../src/renderer/App.tsx");
+    const appTsx = readAppSurface();
     expect(appTsx).toMatch(/declare const __IPC_PROTOCOL_VERSION__: number/);
     expect(appTsx).toMatch(/window\.agent\.protocolVersion\(\)/);
     expect(appTsx).toMatch(/live !== __IPC_PROTOCOL_VERSION__/);
@@ -41,6 +42,12 @@ describe("协议版本握手接线（§3.5/§12）", () => {
     // v10 → v11（主界面重做批：git 两闸 / 项目内搜索 / 最近打开 / 粘贴落盘 / 快照还原 / Finder 显示）；
     // v11 → v12（导入诊断批：导入已有文件夹先给三态诊断，ADR 0004 §4）；
     // v12 → v13（记忆正文批：MemoryTopicPayload 增 body——「主题正文」快照面接通，无新通道）。
-    expect(IPC_PROTOCOL_VERSION).toBe(13);
+    // v13 → v14（跨会话用量批：＋usageLedger——头像菜单「用量统计」→「全部会话」）。
+    // v14 → v15（会话日志批：＋sessionLog——错误条/命令面板「查看日志」的只读尾部）。
+    // v15 → v16（会话定位批：openSession 增可选 workspace——跨项目同名 id 开对转录）。
+    // v16 → v17（终端尺寸同步：＋terminalResize）。
+    // v17 → v18（会话正文全文检索：＋sessionSearch——结果三态，「没量到 ≠ 没有」由类型层面分开）。
+    // v19 → v20（多智能体编排：＋orchestrationView/Submit/Control——地址 = 工作区 + 会话）。
+    expect(IPC_PROTOCOL_VERSION).toBe(20);
   });
 });

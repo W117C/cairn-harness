@@ -1,11 +1,13 @@
 // 批 6（《全局 UI 视觉重构》总纲阶段 2 公共组件 + 细则 §六 设置页）：
 // SettingsPage（20px 标题 + ≤960px 内容列，2026-10-16 模型/通道页重做 A/B）/
-// SettingsSection（12.5px tertiary 组标题在卡上方 + surface 卡 14 圆角）/
+// SettingsSection（caption 档 tertiary 组标题在卡上方 + surface 卡 14 圆角）/
 // SettingsRow（220px 标题列 + 弹性控件列左对齐、56px 行高、1px 分隔线、窄宽单列，2026-10-16 C）/
 // Field/Badge/StatusDot（控件 36px/8px 四态、徽章、状态点，2026-10-16 新增）/
 // EmptyState（图标+标题+说明+主按钮）/ OptionCard（单选卡：选中强调描边淡底、danger 档危险色）/
 // Banner（信息/警告 + 可折叠「查看详情」）。
-// 组标题字号口径（细则三处一致「12.5px tertiary」优先于总纲「15px/600」——克制小标签式；页面标题承担 20px）。
+// 组标题字号口径（细则三处一致「caption 档 tertiary」优先于总纲「15px/600」——克制小标签式；页面标题承担 20px）。
+// 2026-10-21：caption-xs 按业主 §4.4 由 12.5 改回 11（`--fs-caption-xs` = 0.6875rem），
+// 于是本处不再钉死具体像素，只钉「吃 caption 刻度」这一事实。
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
@@ -29,7 +31,7 @@ describe("批 6：设置页公共组件（SSR 结构）", () => {
     expect(h).toContain('id="x"');
   });
 
-  it("SettingsSection：12.5px 组标题在卡上方（hint 可选）+ surface 卡容器", () => {
+  it("SettingsSection：caption 档组标题在卡上方（hint 可选）+ surface 卡容器", () => {
     const h = renderToStaticMarkup(
       <SettingsSection title="外观" hint="主题与密度">
         <div id="row" />
@@ -142,11 +144,11 @@ describe("批 6：设置页公共组件（CSS 口径哨兵）", () => {
     expect(block(styles, ".ss-page")).not.toContain("max-width");
   });
 
-  it(".ss-sec-head 组标题 = 12.5px tertiary；.ss-card = surface + 描边 + 14 圆角 + 20 内距", () => {
+  it(".ss-sec-head 组标题 = caption 档 tertiary；.ss-card = surface + 描边 + v3 10 圆角 + 20 内距", () => {
     expect(block(styles, ".ss-sec-head")).toContain("font-size: var(--fs-caption-xs)");
     expect(block(styles, ".ss-sec-head")).toContain("color: hsl(var(--text-400))");
     const card = block(styles, ".ss-card");
-    expect(card).toContain("border-radius: var(--radius-pop)"); // 14（与弹层同档）
+    expect(card).toContain("border-radius: var(--radius-pop-v3)"); // 10（v3 panel-radius）
     expect(card).toContain("hsl(var(--bg-000))");
     expect(card).toContain("1px solid var(--hairline-strong)");
     expect(card).toContain("padding: 0");
@@ -166,7 +168,7 @@ describe("批 6：设置页公共组件（CSS 口径哨兵）", () => {
 
   it(".ss-opt 选中 = 强调描边 + 淡底；danger 档 = 危险色描边（不铺大红底）", () => {
     const on = styles.match(/\.ss-opt\.on \{[^}]*\}/) ?? [""];
-    expect(on[0]).toContain("accent-brand");
+    expect(on[0]).toContain("accent-control");
     expect(styles).toContain(".ss-opt.danger .ss-opt-title");
     expect(styles).toMatch(/\.ss-opt\.danger \{[^}]*color-danger/);
   });
@@ -223,5 +225,14 @@ describe("2026-10-16：控件契约三件（Field / Badge / StatusDot）", () =>
     expect(dot).toContain('aria-hidden="true"');
     expect(styles).toMatch(/\.ss-dot\[data-tone="ok"\] \{ background: hsl\(var\(--success\)\); \}/);
     expect(styles).toMatch(/\.ss-dot\[data-tone="warn"\] \{ background: hsl\(var\(--color-risk\)\); \}/);
+  });
+});
+
+describe("SettingsPage 分区说明（2026-10-21）", () => {
+  it("desc 在位时渲染一行说明；缺省不摆空段落", () => {
+    const withDesc = renderToStaticMarkup(<SettingsPage title="通用" desc="外观、文字与输入习惯。"><div /></SettingsPage>);
+    expect(withDesc).toContain("外观、文字与输入习惯。");
+    const without = renderToStaticMarkup(<SettingsPage title="通用"><div /></SettingsPage>);
+    expect(without).not.toContain("ss-desc");
   });
 });

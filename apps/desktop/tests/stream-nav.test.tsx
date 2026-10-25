@@ -9,6 +9,7 @@ import { Stream, canFoldRound, foldAllButLast, truncateSummary, turnSummaries } 
 import { OutlinePanel } from "../src/renderer/components/Outline";
 import { projectStream } from "../src/renderer/projections";
 import { SHORTCUT_GROUPS } from "../src/renderer/shortcuts";
+import { readAppSurface } from "./helpers/app-surface";
 
 const EVENTS = [
   { type: "user_message", content: "第一轮：把测试跑绿", ts: 1 },
@@ -131,7 +132,7 @@ describe("对话目录面板（真 HTML）", () => {
 });
 
 describe("接线哨兵（源码级）", () => {
-  const appSrc = readFileSync(new URL("../src/renderer/App.tsx", import.meta.url), "utf8");
+  const appSrc = readAppSurface();
 
   it("App 热键：⌘↑/⌘↓ 在 switch 里，且输入框聚焦时让给文本编辑（不劫持）", () => {
     expect(appSrc).toContain('case "ArrowUp"');
@@ -185,7 +186,7 @@ describe("第十九遍：输出完光标不陪跑尾部（usage 落定 × Stream
 // 落点容器换了，**不变量不变**：目录按钮必须与 Terminal / Changes / Browser / ⋮ 同栏
 // （同一处工具栏），不能有第二个落点浮在流上。
 describe("对话目录入口落点（工具栏动作组，不再浮在流上）", () => {
-  const app = readFileSync(new URL("../src/renderer/App.tsx", import.meta.url), "utf8");
+  const app = readAppSurface();
   const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
   it("入口按钮在工具栏动作组段内（与 Terminal/Changes/Browser/⋮ 同族）", () => {
     const barStart = app.indexOf('<div className="tb-cluster">');

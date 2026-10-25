@@ -12,6 +12,7 @@ import { runLoop } from "../agent/loop";
 // 断面补落（finally 那一格）要用同一枚哨兵 id 与同一份判据——不重抄字符串、不重写谓词。
 import { DELIVERY_GUARD_CALL_ID, describePhantomDelivery, eventsForCurrentRun, findPhantomDelivery } from "../agent/delivery-guard";
 import { createImageChannel } from "../agent/image-channel";
+import type { SteeringChannel } from "../agent/steering-channel";
 import { runCompaction } from "../agent/compaction";
 import { buildMap } from "../agent/map/build";
 import { computePrune, writePruneAttachments } from "../agent/prune";
@@ -52,6 +53,9 @@ import { emitPostRunReadings } from "./post-run-readings";
 // 自进化闭环的**装配侧**：下一轮装配时读回策略补丁并注进 system prompt（让「上一轮的经验」真正
 // 回流到下一轮的决策，而不是只记笔记）。落盘那一半随收尾读数搬去 post-run-readings。
 import { evolutionPromptNote } from "../agent/evolution";
+// 运行面装载：当前 active 的 content-pack（prompt.md / system.md）拼进同一段 system prompt。
+// 工作区没有 modules/ 或没有 active 内容包 ⇒ 空串，系统提示词逐字节不变。
+import { activeContentPackNote } from "./evolution/activation-host";
 // 落流前的文本扫描表（`goal_stopped.reason` 已在表上）：异常原文是外部文本，而这条写入点不经
 // loop 那份 redactEventForLog，扫它就得取这张现成的表，不在这里再抄一遍「哪个字段该擦」。
 import { scanStreamEvent } from "../agent/worker-projection";
@@ -105,7 +109,7 @@ import { PluginRuntime, trustFilePathOf, setCurrentPluginRuntime, currentPluginR
 // 的再导出（只对外可见、不进本地作用域，本文件上面 BASE_SYSTEM 那次搬迁踩过同一个坑）。
 import { TrustStore } from "../agent/plugins/trust";
 import { createVerifyTrustGate } from "./verify-trust-gate";
-import type { VerifyTrustResolver } from "../agent/verify-trust";
+import { verifySurfaceFingerprint, type VerifyTrustResolver } from "../agent/verify-trust";
 import type { ScheduleSnapshot } from "./scheduler";
 import { validateAutomation, isUnattendedTier } from "./automations";
 import {
@@ -421,11 +425,11 @@ let lastLogPath: string | null = null;
  *     压缩卡当场看得见，下次 run 重放又是全文 ⇒ 花了一次摘要的钱换个零效果。
  *     compaction-check 走的是演示那条支，所以这条产品支红过也没人看见。 */
 export async function handleCompact(
-  over: { sessionId?: string } = {},
+  over: { sessionId?: string; sessionsRoot?: string } = {},
 ): Promise<{ ok: boolean; error?: string; cardPayload?: Record<string, unknown> }> {
   let logPath: string | null;
   if (over.sessionId !== undefined) {
-    const dir = requireSessionsDir();
+    const dir = over.sessionsRoot ?? requireSessionsDir();
     if (!(await sessionExists(dir, over.sessionId))) return { ok: false, error: "会话不存在，未压缩" };
     logPath = pathOf(dir, over.sessionId);
   } else {
@@ -461,8 +465,9 @@ let installedSubagents = true;
 export function createGatedRemember(deps: {
   getMode(): PermissionMode;
   isPlanBlocked(): boolean;
-  /** ask 裁决时的审批口；缺省 = 非交互 fail-closed 拒绝。 */
-  getAsk(): ((args: Record<string, unknown>) => Promise<boolean>) | undefined;
+  /** ask 裁决时的审批口；缺省 = 非交互 fail-closed 拒绝。
+   *  第二参是本次工具调用的取消信号：审批卡必须随会话取消收束，不能把 run 挂到 60s 超时。 */
+  getAsk(): ((args: Record<string, unknown>, signal?: AbortSignal) => Promise<boolean>) | undefined;
 }): Tool {
   return {
     name: "remember",
@@ -486,7 +491,7 @@ export function createGatedRemember(deps: {
         // （无审批口 ⇒ fail-closed）⇒ 下一场会话从零开始踩同一个坑。
         const ask = deps.getAsk();
         if (!ask) return denied("remember", mode, "非交互模式（fail-closed）");
-        if (!(await ask(args))) return denied("remember", mode, "未获批准");
+        if (!(await ask(args, ctx.signal))) return denied("remember", mode, "未获批准");
       }
       return remember.run(args, ctx);
     },
@@ -595,8 +600,10 @@ function injectOmitFaceTools(): void {
     getAsk: () => {
       const s = currentSession();
       if (!s?.askGate) return undefined;
-      return async (args: Record<string, unknown>) => {
-        const r = await s.askGate!.request("remember", args, { reason: "记忆写入（默认档逐次审批）", risk: "low" });
+      return async (args: Record<string, unknown>, signal?: AbortSignal) => {
+        const r = await s.askGate!.request("remember", args, {
+          reason: "记忆写入（默认档逐次审批）", risk: "low", ...(signal !== undefined ? { signal } : {}),
+        });
         return r.outcome === "approved";
       };
     },
@@ -725,6 +732,8 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
    *  `tests/verify-trust-fingerprint.test.ts`）。IPC 白名单里没有这个键、也不该有：
    *  它不是一个「用户可以从界面打开的开关」，而是一次一问的决议。 */
   trustedRepo?: boolean;
+  /** 第 9 点·轮中插话的收件盒（同上：由持有 IPC 会话表的调用方递进来；缺省 = 零行为）。 */
+  steering?: SteeringChannel;
   workspace: string;
   message: string;
   mode: PermissionMode;
@@ -785,10 +794,10 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
 // 换掉真 spawn 才测得到（沙箱不可用的宿主上分支 A 根本跑不起来）；缺省仍是 runInSandbox。
 export function verifyExec(sandbox: SandboxStatus | null, run: typeof runInSandbox = runInSandbox): ExecFn {
   if (!sandbox?.available) return defaultExec;
-  return async (command, cwd, timeoutMs) => {
+  return async (command, cwd, timeoutMs, signal) => {
     const mapped = mapSandboxTestCommandForWorkspace(command, cwd);
-    // 超时同样要穿过去：沙箱是发货缺省路径，这里不接就等于语言探测的 300s 白给。
-    const res = await run(mapped, { cwd, ...(timeoutMs ? { timeoutMs } : {}) });
+    // 超时与取消都要穿过去：沙箱是发货缺省路径，少接一个就等于那条路径上的 runCancel 失效。
+    const res = await run(mapped, { cwd, ...(timeoutMs ? { timeoutMs } : {}), ...(signal ? { signal } : {}) });
     // 归因不能只长在非沙箱那一支：沙箱是发货缺省路径，少这一半就等于"环境红只在降级时才不冤枉模型"。
     const cause = classifyVerifyFailure({ timedOut: res.timedOut === true, exitCode: res.exitCode ?? null, output: res.output });
     return {
@@ -1197,8 +1206,33 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // M3 诊断工具：按「本工作区真有可诊断面」注入（口径同 lsp 的按盘上配置摘除）——没配命令时
     // 挂着它只有成本。执行器与 verify 同源（`verifyExec(sandbox)`）：沙箱可用走 Seatbelt，
     // 降级时同一条 defaultExec；**写向类**由 gatedTool 包装（只读档摘除/方案门/沙箱降级强制审批）。
+    const authorizeDiagnose = async (req: {
+      repoDir: string;
+      config: Parameters<typeof verifySurfaceFingerprint>[0];
+      provenance: Parameters<typeof verifySurfaceFingerprint>[1];
+      commands: readonly string[];
+      signal?: AbortSignal;
+    }): Promise<{ run: boolean; reason: string }> => {
+      if (opts.trustedRepo === true || req.provenance === "host") return { run: true, reason: "" };
+      if (req.commands.length === 0) return { run: true, reason: "" };
+      const request = {
+        repoDir: req.repoDir,
+        fingerprint: verifySurfaceFingerprint(req.config, req.provenance),
+        commands: req.commands,
+        provenance: req.provenance,
+        ...(req.signal ? { signal: req.signal } : {}),
+      };
+      if (await verifyTrust.isTrusted(request)) return { run: true, reason: "" };
+      if (await verifyTrust.requestTrust(request)) return { run: true, reason: "" };
+      return {
+        run: false,
+        reason:
+          "[diagnose] 已跳过：诊断命令来自仓库自带配置，未经授权不执行（与 verify 同一张信任表）。"
+          + "要跑请用 run_shell（有审批与威胁表），或在信任卡上批准这批命令。",
+      };
+    };
     const diagnoseTool = (await diagnoseSurface(opts.workspace))
-      ? createDiagnoseTool({ exec: verifyExec(opts.sandbox ?? null) })
+      ? createDiagnoseTool({ exec: verifyExec(opts.sandbox ?? null), authorize: authorizeDiagnose })
       : undefined;
     // M3 检索工具：配了搜索端点才注入（口径同 lsp）。网络类 ⇒ gatedTool 包装 + staticRisk=high
     // （四档一律审批）+ isNetworkCommandCall 钉 once（一次"总是允许"不会把出网永久免批）。
@@ -1216,6 +1250,13 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       evolutionNote = await evolutionPromptNote(opts.workspace);
     } catch {
       evolutionNote = "";
+    }
+    // 运行面装载：active content-pack 的提示词正文，并入同一段演进注记。装载失败出声但保持空串——
+    // 与上面策略补丁同一条「零包 = 零行为」回归面；这里不把「读不到」静默成「没有包」。
+    try {
+      evolutionNote += await activeContentPackNote(opts.workspace);
+    } catch (err) {
+      console.warn("[evolution-pack] 装载失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
     }
     // 识图通道：loop 存 read_image 读到的图，provider 在下一轮请求里取走附上。
     // 建在 run 内（不跨 run）⇒ 上一场的图不会漏进下一场——那是把 A 任务的截图当 B 任务的上下文。
@@ -1272,6 +1313,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       events: { append: pipeline },
       // 识图的 loop 侧：只负责把 read_image 读到的图存进盒子（取走发生在 provider 组装请求时）。
       pendingImages: imageChannel,
+      // 第 9 点·轮中插话的 loop 侧：只在轮界取料（缺省 undefined = 零行为，见 RunOverrides.steering）。
+      ...(opts.steering !== undefined ? { steering: opts.steering } : {}),
     // 下一行是 tests/tool-surface-parity.test.ts 的取料面：那个门按行文本认注入键，
     // 所以覆盖表的键必须都留在同一行，别为了排版拆成 helper（拆了它就一个都认不出）。
     ...(webFetchOverride !== undefined || recall || impactTool || diagnoseTool || searchTool
@@ -1548,6 +1591,11 @@ export interface RunOverrides
   actionFusion?: boolean;
   /** 能力 5 收束闸 runtime override（同 actionFusion 口径：settings 与 IPC 开闸另议）。 */
   autoVerify?: boolean;
+  /** 第 9 点·用户干预注入：本 run 的插话收件盒（由持有 IPC 会话登记表的调用方递进来）。
+   *  **缺省 undefined = 零行为**：没有盒子的 run（CLI / worker / 靶场 / 定时）既不会取料、
+   *  也不会因此多落一条事件——字节与请求次数都不变。
+   *  盒子是 per-run 的：上一场的插话绝不漏进下一场（那是把 A 任务的补充当 B 任务的指令）。 */
+  steering?: SteeringChannel;
   /** CLI `--delivery-repair`：交付断言落红后再向模型要一轮补做。 */
   deliveryRepair?: boolean;
   /** M5b 路由 bandit runtime override（同 actionFusion 口径：settings 与 IPC 开闸另议）。
@@ -1684,6 +1732,10 @@ export async function handleAgentRun(
           ? { routing: { routingBandit: over.routingBandit, routingCascade: over.routingCascade } }
           : {}),
         trustedRepo: over.trustedRepo ?? false, // S3：IPC 路径不置位 = 不走调用方断言，交给 runAgent 里的「查表 + 首问」（不是缺省即永远拒绝）
+        // 第 9 点·轮中插话：盒子由 IPC 侧按会话登记（`kernel-host` 的 per-session steering）。
+        // 缺省 undefined = 零行为；**不随 goal 续跑重建**——续跑是同一个任务的下一轮，
+        // 用户在这期间说的插话理应送达，所以整段 handleAgentRun 共用一个盒子。
+        ...(over.steering !== undefined ? { steering: over.steering } : {}),
         // 这一段会话有没有武装长任务目标：CLI 在 `--goal` 时显式传（它在 run 之前就把
         // `goal_set` 写进日志了），goal 续跑轮由 `goalTurn` 在场推定。只喂 refine_goal 的挂/摘。
         goalArmed: over.goalArmed ?? goalTurn !== undefined,

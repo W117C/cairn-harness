@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ChangeSummaryCard } from "../src/renderer/components/ChangeSummaryCard";
 import type { TurnDelivery } from "../src/renderer/projections";
+import { readAppSurface } from "./helpers/app-surface";
 
 const failed: TurnDelivery = {
   round: 2,
@@ -59,7 +60,7 @@ describe("交付卡默认收起（2026-10-18 业主截图批）", () => {
 
 describe("批 3：交付卡纵向清单（去四宫格）+ 空轮弱行（文档阶段 3·对话页①）", () => {
   const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
-  const appSrc = readFileSync(new URL("../src/renderer/App.tsx", import.meta.url), "utf8");
+  const appSrc = readAppSurface();
 
   it("四格网格已废：卡内为纵向清单，样式层无 delivery-grid/cell 残留", () => {
     const html = renderToStaticMarkup(<ChangeSummaryCard delivery={failed} initialOpen />);

@@ -1,19 +1,22 @@
 // 设置导航的轻量单源：命令面板只需要分区 id/标签，不应因此把设置页正文与工作台一起拉进首屏。
-import { BookOpen, Brain, Clock, Globe, KeyRound, Keyboard, Puzzle, Shield, SlidersHorizontal, Wrench } from "lucide-react";
+import { BookOpen, Brain, Clock, GitBranch, Globe, KeyRound, Keyboard, Puzzle, Shield, SlidersHorizontal, Wrench } from "lucide-react";
 
-export type PageId = "plugins" | "automation" | "skills" | "memory";
+import type { PageId } from "../app-controls";
+export type { PageId } from "../app-controls";
 
 /** 页面顺序（导航与图标/标题事实源）：设置页的四个分区按此渲染，不再各抄一份。 */
-export const PAGE_ORDER: readonly PageId[] = ["plugins", "automation", "skills", "memory"];
+export const PAGE_ORDER: readonly PageId[] = ["plugins", "automation", "skills", "memory", "worktrees"];
 
 export const PAGE_META: Record<PageId, { label: string; icon: React.JSX.Element }> = {
   plugins: { label: "插件", icon: <Puzzle size={14} /> },
   automation: { label: "自动化任务", icon: <Clock size={14} /> },
   skills: { label: "技能中心", icon: <BookOpen size={14} /> },
   memory: { label: "记忆系统", icon: <Brain size={14} /> },
+  worktrees: { label: "工作树", icon: <GitBranch size={14} /> },
 };
 
-export type SectionId = "general" | "provider" | "permissions" | "advanced" | "shortcuts" | PageId | "about";
+import type { SectionId } from "../app-controls";
+export type { SectionId } from "../app-controls";
 
 const PAGE_SECTIONS = PAGE_ORDER.map((id) => ({ id, label: PAGE_META[id].label, icon: PAGE_META[id].icon }));
 
@@ -44,6 +47,7 @@ export const SECTION_KEYWORDS: Readonly<Record<SectionId, string>> = {
   automation: "自动化 定时 任务 调度 计划任务 cron",
   skills: "技能 skill 命令 斜杠",
   memory: "记忆 memory 上下文",
+  worktrees: "工作树 worktree 孤儿 清理 分支",
   about: "关于 更新 版本 诊断 日志 更新源 manifest",
 };
 

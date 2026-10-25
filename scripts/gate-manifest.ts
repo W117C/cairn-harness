@@ -150,9 +150,30 @@ export const GATES: readonly string[] = [
   //   **那句补偿在 4 笔之后被证伪**（我在 268/269/270/271 都没手动跑，于是自己入库的探针带着 TS7053 落了库）。
   //   第 272 页按「每笔交笔都要成立的判据」这一类把它买进 `CERT_GATES`（单价与预算的现读出处都在那张表里那道门旁边）。
   "evidence-typecheck-check",
+  // 逐名判卷规格与盘上现读的配平门（2026-10-22 登记的那笔债：`fixtures/bench/` 五份清单
+  //   12/12 条一条 `judge` 都没有 ⇒ 机制在、生产零流量，「该转绿的没绿」与「该保住的坏了」
+  //   在这批基准上同形于同一枚退出码）。进门理由不是「补了规格」，而是**规格会漂**：
+  //   靶子加一条测试、改一个标题，JSON 里那份不会跟着动，而漂掉的那一列要么恒真
+  //   （把本来就绿的写进 failToPass ⇒ 永远转绿成功）要么整格 unmatched。所以这道门每次现跑靶子。
+  //   实测（同笔，主树，独占）：**这道门 1.76s**（16 条靶子各跑一次判卷命令；B12/L30 那两条最贵，
+  //   各 20/30 个文件，合计约 1.2s）；`--check` 在配平的盘上退 0。
+  //   **为什么不进 CERT_GATES，尽管它落在 1.5s 那条线内**：那条线是「买得起」不是「必须买」，
+  //   而这一格有更便宜的同源观测者——`tests/bench-judge-spec.test.ts` 在 `test` 那道门里，
+  //   它判「形状成立 ＋ 两列与盘上现读逐字一致」（逐条 spawn 靶子，约 5s）。真正只在本门里量的
+  //   只剩「漂了但形状仍成立」这一种，而它已经被那条判据的同一次 spawn 覆盖 ⇒ 双买等于付两次同样的账。
+  //   登记在 GATES 而不在 CERT_GATES，理由换成：**它的价值在交笔那人跑一次 `--check`**，
+  //   而不是替 HEAD 遮红（HEAD 若漂了，`test` 那道门先红）。
+  //   判据宿主 `tests/bench-judge-spec.test.ts` 在 `test` 那道门里，规格漂到「形状不成立」会被它当场咬，
+  //   而「形状仍成立、内容与盘上不符」只在这一道门里量 ⇒ 这一格必须留人手跑，不许假装它在认证面上。
+  "bench-judge-spec-check",
   // 桌面端单向依赖红线（AGENTS.md 分层规则的机器面）：src → apps/desktop 或 electron 即红。
   // 原先只挂在 apps/desktop test 链尾——core-only 会话跑根门永远不触发；注册进默认门表补上这个洞
   // （终审 #4）。快尺：纯文本扫 src/，亚秒档；不进 CERT_GATES——门面预算线快到头（见那张表头），不再顺手多买。
+  "renderer-layer-check",
+  "event-semantics-check",
+  "session-semantics-check",
+  "session-search-check",
+  "motion-policy-check",
   "desktop-boundary-check",
   // SEMA Phase 3（docs/sema-proposal.md §12）登记：桌面判卷进 GATES。动因：desktop-panel 包
   // 进自进化流水线后，§3.5 的「必须通过 pnpm --filter cairn-desktop test」要能在账本上表达——

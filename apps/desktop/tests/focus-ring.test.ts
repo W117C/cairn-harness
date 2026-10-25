@@ -1,6 +1,7 @@
-// 焦点环口径（业主 2026-10-16 裁 B：强调色域）+ 2026-10-20 改为 Claude 实测三层结构。
-// 覆盖第十一遍「蓝→中性」的泛化——那一轮去的是**蓝**（焦点环不是信息强调），不是永禁强调色；
-// 本裁把焦点环归入强调色可用区（与选中态/主按钮同域）。实现必须以 token 表达，零字面色值。
+// 焦点环口径（2026-10-20 Claude 实测三层结构；2026-10-21 再按 v3 token 把控件焦点从品牌橙拆出）。
+// Claude v3 `--cds-focus-shadow` 用的是 `--cds-fill-accent` = blue-450，不是品牌陶土橙；
+// 因此这里钉 `--accent-control`（blue-450），主按钮/品牌仍用 `--accent-brand`。
+// 实现必须以 token 表达，零字面色值。
 //
 // 2026-10-20 更正：原单层 `outline: 2px solid` 改为 Claude 实测的 --cds-focus-shadow 三层
 //   inset 0 0 0 1px <页面底>   ← 隔离层：把环与元素本体隔开
@@ -12,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const CSS = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
+const TOKENS = readFileSync(fileURLToPath(new URL("../src/renderer/tokens.css", import.meta.url)), "utf8");
 /** 取出全局 :focus-visible 规则体（到第一个 } 为止）。 */
 function focusRule(): string {
   const m = /(?<![\w-]):focus-visible\s*\{([^}]*)\}/.exec(CSS);
@@ -21,13 +23,14 @@ function focusRule(): string {
 
 describe("焦点环（裁 B：强调色域 · 2026-10-20 三层结构）", () => {
   it("三层 box-shadow：隔离层 + 实环 + 外发光（Claude --cds-focus-shadow 形制）", () => {
+    expect(TOKENS).toContain("--accent-control: 212.8 67.7% 50.2%");
     const rule = focusRule();
     // ① 隔离层：inset 1px，用页面底色
     expect(rule).toMatch(/inset\s+0\s+0\s+0\s+1px\s+hsl\(var\(--bg-100\)\)/);
     // ② 实环：1px 强调色
-    expect(rule).toMatch(/0\s+0\s+0\s+1px\s+hsl\(var\(--accent-brand\)/);
+    expect(rule).toMatch(/0\s+0\s+0\s+1px\s+hsl\(var\(--accent-control\)/);
     // ③ 外发光：6px 扩散
-    expect(rule).toMatch(/0\s+0\s+6px\s+1px\s+hsl\(var\(--accent-brand\)/);
+    expect(rule).toMatch(/0\s+0\s+6px\s+1px\s+hsl\(var\(--accent-control-glow\)/);
   });
 
   it("三层顺序不能颠倒（inset 必须在前——它是最内层）", () => {

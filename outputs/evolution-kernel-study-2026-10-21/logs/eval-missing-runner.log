@@ -1,0 +1,1 @@
+[evolution-eval] 缺 --runner（真实执行面必须由 TCB 注入；本脚本不内置模型调用）

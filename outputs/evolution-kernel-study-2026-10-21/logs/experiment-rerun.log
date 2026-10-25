@@ -1,0 +1,23 @@
+[exp] submitted content-pack.report-recipe@1.0.0 staging=/tmp/claude-501/cairn-evo-rerun-DxeXr6/modules/staging/content-pack.report-recipe/1.0.0
+[exp] gates 1.0.0 => [{"gate":"pack-check","passed":true}]
+[exp] baseline artifact producer=1.0.0 judge={"ok":true,"checks":{"summary":true,"citations":true,"status":true},"producerVersion":"1.0.0","artifactDigest":"sha256:15617fa23e3aff34db4974867dd28fbb63a5a84106a60c2bdd9ad0f118f7b8ee"}
+[exp] submitted content-pack.report-recipe@1.1.0 staging=/tmp/claude-501/cairn-evo-rerun-DxeXr6/modules/staging/content-pack.report-recipe/1.1.0
+[exp] gates 1.1.0 => [{"gate":"pack-check","passed":true}]
+[exp] candidate 1.1.0 artifact producer=1.1.0 judge={"ok":true,"checks":{"summary":true,"citations":true,"status":true},"producerVersion":"1.1.0","artifactDigest":"sha256:f3d77085068b1d4ccc9e760591538f7fe5b2bcab75eb9c2db0fd6280064b1c6f"}
+[exp] canary begin 1.1.0 => {"id":"content-pack.report-recipe","candidateVersion":"1.1.0","previousVersion":"1.0.0","state":"observing","samples":0,"consecutiveFailures":0,"baselineTokensPerBoundary":null,"maxSamples":1,"maxConsecutiveFailures":2,"costDegradeFactor":2,"degradations":[],"startedAt":"2026-10-21T09:05:50.060Z","recordWritten":true}
+[exp] canary tick 1.1.0 => [{"id":"content-pack.report-recipe","outcome":"resumed","observation":{"version":1,"id":"content-pack.report-recipe","candidateVersion":"1.1.0","previousVersion":"1.0.0","state":"promoted","samples":1,"consecutiveFailures":0,"baselineTokensPerBoundary":null,"maxSamples":1,"maxConsecutiveFailures":2,"costDegradeFactor":2,"degradations":[],"startedAt":"2026-10-21T09:05:50.060Z","endedAt":"2026-10-21T09:05:50.061Z","recordWritten":true},"acted":true}]
+[exp] submitted content-pack.report-recipe@1.2.0 staging=/tmp/claude-501/cairn-evo-rerun-DxeXr6/modules/staging/content-pack.report-recipe/1.2.0
+[exp] missing-evidence install refused => InstallRefusedError: content-pack.report-recipe@1.2.0 未过全门（pack-check）——未过验证的包不进安装序
+[exp] gates 1.2.0 => [{"gate":"pack-check","passed":true}]
+[exp] candidate 1.2.0 artifact producer=1.2.0 judge={"ok":false,"checks":{"summary":false,"citations":false,"status":true},"producerVersion":"1.2.0","artifactDigest":"sha256:edddc8159143c690ca0dba4efc0165df7566cd2553d8f094a66413d3f19e496d"}
+[exp] canary begin 1.2.0 => {"id":"content-pack.report-recipe","candidateVersion":"1.2.0","previousVersion":"1.1.0","state":"observing","samples":0,"consecutiveFailures":0,"baselineTokensPerBoundary":null,"maxSamples":10,"maxConsecutiveFailures":2,"costDegradeFactor":2,"degradations":[],"startedAt":"2026-10-21T09:05:50.245Z","recordWritten":true}
+[exp] canary tick 1.2.0 red#1 => [{"id":"content-pack.report-recipe","outcome":"resumed","observation":{"version":1,"id":"content-pack.report-recipe","candidateVersion":"1.2.0","previousVersion":"1.1.0","state":"observing","samples":1,"consecutiveFailures":1,"baselineTokensPerBoundary":null,"maxSamples":10,"maxConsecutiveFailures":2,"costDegradeFactor":2,"degradations":[],"startedAt":"2026-10-21T09:05:50.245Z","recordWritten":true},"acted":false}]
+[exp] canary tick 1.2.0 none#2 => [{"id":"content-pack.report-recipe","outcome":"resumed","observation":{"version":1,"id":"content-pack.report-recipe","candidateVersion":"1.2.0","previousVersion":"1.1.0","state":"observing","samples":2,"consecutiveFailures":1,"baselineTokensPerBoundary":null,"maxSamples":10,"maxConsecutiveFailures":2,"costDegradeFactor":2,"degradations":[],"startedAt":"2026-10-21T09:05:50.245Z","recordWritten":true},"acted":false}]
+[exp] phase1 done; canary record on disk = /tmp/claude-501/cairn-evo-rerun-DxeXr6/.agent/canary/content-pack.report-recipe.json
+[exp] repo root = /Users/ze/Downloads/Cairn/deepseek harness
+PHASE1_EXIT:0
+[exp] restart tick 1.2.0 red#3 => [{"id":"content-pack.report-recipe","outcome":"resumed","observation":{"version":1,"id":"content-pack.report-recipe","candidateVersion":"1.2.0","previousVersion":"1.1.0","state":"rolled-back","samples":3,"consecutiveFailures":2,"baselineTokensPerBoundary":null,"maxSamples":10,"maxConsecutiveFailures":2,"costDegradeFactor":2,"degradations":[{"rule":"consecutive-failures","detail":"连续 2 个样本 verify 未转绿"}],"startedAt":"2026-10-21T09:05:50.245Z","rollbackTo":"1.1.0","endedAt":"2026-10-21T09:05:50.359Z","lessonWritten":true,"recordWritten":true},"acted":true}]
+[exp] registry after rollback: active=1.1.0 previous=1.2.0
+[exp] restored artifact producer=1.1.0 judge={"ok":true,"checks":{"summary":true,"citations":true,"status":true},"producerVersion":"1.1.0","artifactDigest":"sha256:f3d77085068b1d4ccc9e760591538f7fe5b2bcab75eb9c2db0fd6280064b1c6f"}
+[exp] repo root = /Users/ze/Downloads/Cairn/deepseek harness
+PHASE2_EXIT:0

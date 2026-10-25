@@ -19,6 +19,7 @@ import {
   readGateInput,
   type GateDom,
 } from "../src/renderer/command-gate";
+import { readAppSurface } from "./helpers/app-surface";
 
 /** 判卷要模拟「焦点在输入框」⇒ 需要浏览器里的 `Element` 全局（桌面端那套 vitest 是 node 环境，没有）。
  *  给它一个最小替身：`closest` 命中 = 可编辑元素。装完复原（不污染别的用例）。 */
@@ -45,7 +46,7 @@ function fakeDom(opts: { modal?: boolean; editable?: boolean } = {}): GateDom {
 }
 
 function appSrc(): string {
-  return readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+  return readAppSurface();
 }
 
 describe("命令门：浮层与焦点（键盘路径与菜单路径共用）", () => {

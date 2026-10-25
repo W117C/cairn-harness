@@ -1,0 +1,19 @@
+$ node --import tsx scripts/gates.ts --only=head-cert-check
+== pnpm gates ==
+门清单（1 道，清单即事实源）：head-cert-check
+执行器：pnpm run
+  清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）
+
+  ▶ head-cert-check …  ✅ head-cert-check    exit=0  160297ms
+      └ Test Files 467 passed (467)｜Tests 6459 passed (6459)｜exit=0（退出码直接取，不接管道）
+
+== 断言体检（空断言 / 恒真式 / 暗卷段零断言 / 析取式弱断言）==
+  扫描面：155 个已跟踪且在盘的脚本（未跟踪草稿不判，口径同 tests/assertion-health-scan.test.ts）
+  ✅ 零命中
+
+== 汇总 ==
+  绿 1 / 1，红 0
+  逐道退出码：head-cert-check=0
+  认证面：判卷四面与 HEAD 逐字一致（在飞 3 项全在四面之外） ⇒ 本表即 HEAD 认证
+  ✅ pnpm gates 全部通过 （子集 1/40 道门——非全量运行，不等于全量全绿）
+HEADCERT_EXIT=0

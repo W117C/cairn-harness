@@ -1,6 +1,6 @@
 # Cairn / DSH —— 现态
 
-rev: 87d9d8df787931bb660274e96c963385766ae15b
+rev: 45dfeb72
 
 > 本文件是**现态层**：**整体重写，永不追加**。要留当时的判断，写进 `PROGRESS.md` 的对应页；
 > 要留"为什么现在是这样"，写进 `docs/adr/`。
@@ -17,15 +17,20 @@ rev: 87d9d8df787931bb660274e96c963385766ae15b
 
 **台账层不搬进 `archive/`**：门有多张面（D-5/D-9/D-10/D-11/D-12/D-13）直接拿 `PROGRESS.md` 当事实源，
 搬走会让那些面**停止覆盖历史那半**——"读不到"被读成"没问题"，是本仓最忌的假绿形状。
-台账会变大（它是审计链，不是现态页）；现态页的瘦法是**把结论迁进 `archive/`**，不是把台账搬走。
+现态页的瘦法是**把结论迁进 `archive/`**，不是把台账搬走。
 
 ## 现在在哪
 
 - **core**（`src/`，不含 Electron 与 UI 依赖）：agent 循环在 `src/agent/loop.ts`，工具在 `src/tools/`，
   权限门在 `src/permissions/`，provider 适配在 `src/providers/`，事件与落盘在 `src/events/`，
   面向主进程的应用服务在 `src/main/`（core 侧不得反向依赖 `apps/desktop/`）。
+- **会话语义**（ADR 0005）：分叉是**指针不是拷贝**（CLI/桌面走 `createProductFork`）；跨文件读取经 `SessionView`
+  （每文件物理行号 + EventRef，模型 wire id 按来源分域）；游标不透明且 fail-closed；提交带 `requestId`；
+  检索三态并带来源；反馈/置顶/回滚按来源键。
 - **desktop**（`apps/desktop/`）：main / preload / renderer 三层，可 import `src/`，反向禁止
   （`scripts/desktop-boundary-check.ts` 守这条）。共享 IPC 类型在 `src/main/ipc-protocol.ts`。
+  渲染层分 `state/` → `derived/` → `components/` ＋ `panes/` → `App.tsx`（组合根），
+  机器面是 `scripts/renderer-layer-check.ts`。
 - **产品面**：桌面是 Claude 蓝本式的壳（意图稿在 `apps/desktop/design/desktop-design-spec.md`）；
   选型与受众的裁决在 `docs/adr/`。
 - **门与读数**：门表是 `scripts/gate-manifest.ts`（清单即事实源），实测读数在 `pnpm facts`，
@@ -33,21 +38,37 @@ rev: 87d9d8df787931bb660274e96c963385766ae15b
 
 ## 在飞什么
 
-- 外部引用审批决议已改为**互斥**（先批后拒不再并存，用户后说的"不"算数）——
-  证据、判卷与边界见 `PROGRESS.md` 第 623 页。
-- 其他面没有在飞的活。
-- 桌面面第二轮独立评审已落账；core 面那轮的三条真缺陷与四条"变异存活"的成因见 `PROGRESS.md` 尾部各页。
+- **桌面端下一轮（三条轴，业主已裁）**：① **性能与架构**；② **路由体积**；③ **设计面**。
+  **已做**：③ 的动效档位归位与减法两片；① 的 memo 边界与**把 `App.tsx` 拆成多文件**（它现为组合根，
+  代价那一格改判卷读整个渲染层面，而不是搬断言）；② 的弹出窗甩掉整页工作台。
+  **未做**：② 剩下的 Radix 下拉依赖树（账已量成数字，是业主的裁）。
+  见 `PROGRESS.md` 第 641、646–652 页。
+- **已入库**：第 639–645 页；第 652 页（桌面拆分＋检索＋审计）；第 663 页（窗口／同名会话／幂等）；第 685–700 页（worktree／批读／产品）。
+- **在飞**：指针分叉完整接入已在隔离分支 `agent/pointer-session-refs` 落地（Task 1–8 ＋ 真机冒烟，第 669 页），
+  **尚未合并**到共享分支；合并后需在包含实现的同一提交上跑 head-cert / mutate-verify。
+- 外部引用审批决议已改为**互斥**（先批后拒不再并存，用户后说的"不"算数）——见 `PROGRESS.md` 第 623 页。
+- 其余面没有在飞的活。
 
 ## 还有什么没裁
 
 | 债 | 细节在哪 |
 |---|---|
-| 桌面：`projectCreate` / `projectCreateFromTemplate` 接受渲染层给的 `parentDir`，无"已知根"闸 | `PROGRESS.md` 第 618 页 |
-| 桌面：`listSkills` / `skillBody` / `pluginDecide` 接受渲染层给的 `workspace`（只读、既有形态） | `PROGRESS.md` 第 618 页 |
-| 进化面：canary 控制器尚未在生产接线 | `PROGRESS.md` 第 619 页 |
-| 台账层：页号存量重复（D-13 已立案，棘轮只许下降） | `PROGRESS.md` 第 621 页 |
+| 设计面七处已目验；两处是「看过才发现不对」（数字闪动已修、失败正文已按裁降色）。性能收益幅度仍未量 | 648、649、656、660、662 页 |
+| 路由体积剩 Radix 下拉依赖树：6 处下拉整棵子树延迟加载 ⇒ 体积 vs 首开延迟是业主的裁 | 650、651 页 |
+| 能力收益不可测：无 API key/endpoint，bench 不可跑；已证机制与判据 | 640 页 |
+| 终端窗格曾坏过（PTY 只回显）——2026-10-22 不复现 ⇒ 环境态、非应用债；已补判卷 | 641、657 页 |
+| 台账层页号存量重复（D-13 棘轮只许下降） | 621 页 |
+| 自进化面能力收益仍未验证 | `BLOCKED.md` 637/638 页 |
+| 自进化控制平面五件仍只有判卷消费者——**刻意分期**（Phase 4 才放开自动安装） | `docs/sema-proposal.md` §11 |
+| 认证门要出沙箱（沙箱内 `git worktree add` 退 128、全量多假红） | 647、652 页 |
+| `scratch-tree-naming` 真仓面需挂分支的暂存树；清掉会再红（机器状态） | 652 页 |
+| 三面审计其余真缺陷仍在案；已修核心两条、自进化一条、产品两条 | 642–645 页 |
+| **D-5 的 21 条真红按业主裁决保留**（对象库事故、不登记豁免） | 664、666 页 |
+| 卡片/diff 渲染层未送引用（协议/store 已就绪）；草稿桶键已带工作区（`aca558f9`，旧桶懒迁移） | 669 页 |
+| 轮中插话（steering）**已接**：轮界取料、不开新轮、取消后不落事件、已接进 R1 的「用户说过话」抑制；界面三意图各有入口。未做：真机冒烟与真模型读数 | 677、678 页 |
+| 已修但真机未实测：LSP languageId、流内重试、截断续跑、停滞留证；插话贯到转录/UI，且三条路由已抽成纯函数判据；全链冒烟仍未跑通（gallery 立不住 running） | 675–682 页 |
 
 ## 怎么验
 
 - core 与桌面两套判卷分开跑，命令在 `AGENTS.md` 的 Verification 段。
-- 改了本文件要跑 `pnpm docs-check`：D-1 量预算、D-2 查手抄观测值、D-4 查新增段落、D-5 查 `rev` 真伪。
+- 改了本文件要跑 `pnpm docs-check`（D-1 预算、D-2 手抄观测值、D-4 新增段落、D-5 `rev` 真伪）。

@@ -3,9 +3,10 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
 const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/Composer.tsx", import.meta.url)), "utf8");
-const app = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const app = readAppSurface();
 
 describe("Composer 已发提示历史", () => {
   it("发送时入栈并重置游标；切换会话/打字都退出历史", () => {

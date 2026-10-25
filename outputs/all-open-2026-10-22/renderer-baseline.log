@@ -1,0 +1,29 @@
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 2102 modules transformed.
+rendering chunks...
+computing gzip size...
+../../dist/index.html                                         3.09 kB │ gzip:  1.44 kB
+../../dist/assets/NotoSerifVariable-f932DlCQ.woff2           76.55 kB
+../../dist/assets/InterVariable-DJwk3cVO.woff2              137.26 kB
+../../dist/assets/JetBrainsMonoVariable-DgTxpPXt.ttf        303.14 kB
+../../dist/assets/JetBrainsMonoItalicVariable-BPH9J9VZ.ttf  308.89 kB
+../../dist/assets/PaneDock-DDGTF8rc.css                       3.62 kB │ gzip:  0.99 kB
+../../dist/assets/index-DGaFWCWy.css                        174.54 kB │ gzip: 28.45 kB
+../../dist/assets/index-DxaLYhGh.js                           0.09 kB │ gzip:  0.10 kB
+../../dist/assets/PopoutApp-2RUTmaO5.js                       0.95 kB │ gzip:  0.54 kB
+../../dist/assets/addon-fit-DX4qG4td.js                       1.21 kB │ gzip:  0.51 kB
+../../dist/assets/settings-nav-D-6RaBXQ.js                    3.83 kB │ gzip:  1.95 kB
+../../dist/assets/useNow-CUCCPFg8.js                          5.33 kB │ gzip:  2.34 kB
+../../dist/assets/markdown-2EAC3I1k.js                        6.99 kB │ gzip:  2.71 kB
+../../dist/assets/Stream-DOy4Ecu8.js                         18.19 kB │ gzip:  6.47 kB
+../../dist/assets/SettingsPanel-BIYKyWgE.js                  31.55 kB │ gzip: 11.24 kB
+../../dist/assets/AppPage-BHzcHV4d.js                        31.98 kB │ gzip:  8.95 kB
+../../dist/assets/index-BxtM2s8D.js                          34.83 kB │ gzip:  9.89 kB
+../../dist/assets/CommandPalette-REE8zSbZ.js                 35.00 kB │ gzip: 12.21 kB
+../../dist/assets/PaneDock-DAsLCFdm.js                       37.91 kB │ gzip: 12.98 kB
+../../dist/assets/index-CDuYZJAI.js                         153.14 kB │ gzip: 50.43 kB
+../../dist/assets/PluginSurface-D4bnaRXj.js                 177.84 kB │ gzip: 62.58 kB
+../../dist/assets/App-D1UiHUAs.js                           207.81 kB │ gzip: 64.32 kB
+../../dist/assets/xterm-B-qIQCd3.js                         329.31 kB │ gzip: 83.04 kB
+✓ built in 1.47s

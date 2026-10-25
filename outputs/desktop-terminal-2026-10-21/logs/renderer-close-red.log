@@ -1,0 +1,14 @@
+PASS INITIAL：xterm 行列与内核 PTY 一致
+PASS NARROW：xterm 行列与内核 PTY 一致
+PASS 改变面板尺寸时前台程序收到 SIGWINCH
+PASS WIDE：xterm 行列与内核 PTY 一致
+PASS 160KB 中文与 emoji 双向传输不死锁、不丢字节
+PASS shell 非零退出码显示正确，退出后可就地重启
+PASS 重新启动使用新会话并同步当前面板尺寸
+FAIL 关闭弹出窗口后终端立即不可写
+FAIL 窗口关闭后真实 PTY 进程已退出
+PASS 主进程协议不匹配时不启动 PTY，提示重启应用
+PASS 渲染过程无控制台错误
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron scripts/terminal-renderer-smoke.cjs '/Users/ze/Downloads/Cairn/deepseek harness/outputs/desktop-terminal-2026-10-21/renderer-close-red.json'

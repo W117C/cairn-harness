@@ -7,18 +7,24 @@
 // 数据面全部来自 panes.ts 纯投影 + turnDelivery（既有）+ changeDiff（v4 通道，懒加载）。
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
-import { AlertTriangle, Check, ChevronRight, Crosshair, ExternalLink, FileText, Folder, GripVertical, Loader2, MoreHorizontal, PanelsTopLeft, Plus, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, Crosshair, ExternalLink, GripVertical, Loader2, MoreHorizontal, PanelsTopLeft, Plus, X } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Cell, Grid, Gridline, useGridRef } from "react-resizable-panels";
 import type { AgentEvent } from "../../../../../src/events";
-import type { DirEntryView } from "../../../../../src/main/workspace-fs";
 import { turnDelivery } from "../projections";
 import { diffCount, useLazyChangeDiff } from "../change-diff-state";
 import { MIN_PANE_PCT, loadPaneRows, mergePaneRows, paneRowLayout, savePaneRows } from "../pane-layout";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { clipDiff, parseUnifiedPatch } from "../diff-patch";
+import { ModalSurface } from "./ModalSurface";
+import { toast } from "../toast";
 import { DiffView } from "./DiffView";
+import { FilePane } from "./FilePane";
+import { OrchestrationPane } from "./OrchestrationPane";
+import { PluginSurface } from "./PluginSurface";
 import { SidechatPane } from "./SidechatPane";
 import { PathMenu } from "./PathMenu";
-import { changedFileCount, composeReviewMessage, PANE_META, PANE_OPENABLE, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, type PaneKind, type WorkerPaneItem } from "./panes";
+import { changedFileCount, composeReviewMessage, PANE_META, PANE_OPENABLE, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, workerCardAction, type PaneKind, type WorkerPaneItem } from "./panes";
 
 // PaneKind / PANE_META 的唯一事实源在 panes.ts（独立窗口路由同用）；此处 re-export 保接口。
 export { PANE_META, PANE_OPENABLE, type PaneKind } from "./panes";
@@ -428,11 +434,13 @@ function BrowserPane(props: {
   );
 }
 
-/** 终端窗格（v5，macOS）：xterm.js 渲染 + PTY（主进程 script(1) 宿主）。
+declare const __IPC_PROTOCOL_VERSION__: number;
+
+/** 终端窗格（macOS）：xterm.js 渲染 + Python PTY 宿主，行列随面板尺寸同步。
  *  xterm 动态 import（SSR/判卷环境不加载 DOM 依赖）；卸载即 kill 终端（不留孤儿 shell）。 */
 function TerminalPane(): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ message: string; canRetry: boolean } | null>(null);
   // 退出后可就地重启（2026-10-18）：此前只把“已退出”写进终端，唯一出路是关窗格再开。
   // gen 递增触发 effect 重跑：旧 xterm 在 cleanup 里 dispose + kill，新会话接在同一 host 上。
   const [exited, setExited] = useState<string | null>(null);
@@ -441,13 +449,17 @@ function TerminalPane(): React.JSX.Element {
     const host = hostRef.current;
     if (host === null) return;
     let alive = true;
-    let term: { dispose: () => void; write: (d: string) => void; onData: (cb: (d: string) => void) => { dispose: () => void } } | null = null;
+    const showError = (message: string, canRetry = true): void => { if (alive) setNotice({ message, canRetry }); };
+    let term: import("@xterm/xterm").Terminal | null = null;
     let termId: string | null = null;
     let offData: (() => void) | null = null;
     let offExit: (() => void) | null = null;
     let dataSub: { dispose: () => void } | null = null;
-    void Promise.all([import("@xterm/xterm"), import("@xterm/addon-fit")]).then(([{ Terminal }, { FitAddon }]) => {
+    let resizeSub: { dispose: () => void } | null = null;
+    let resizeObserver: ResizeObserver | null = null;
+    void Promise.all([window.agent.protocolVersion(), import("@xterm/xterm"), import("@xterm/addon-fit")]).then(([version, { Terminal }, { FitAddon }]) => {
       if (!alive) return;
+      if (version !== __IPC_PROTOCOL_VERSION__) { showError("桌面协议版本不一致，请关闭并重新打开应用", false); return; }
       const t = new Terminal({
         fontSize: 12,
         cursorBlink: true,
@@ -481,45 +493,64 @@ function TerminalPane(): React.JSX.Element {
       });
       term = t;
       t.open(host);
+      const syncSize = (): void => {
+        const id = termId;
+        if (!alive || id === null || host.clientWidth === 0 || host.clientHeight === 0) return;
+        void window.agent.terminalResize(id, t.cols, t.rows).then((ok) => {
+          if (alive && termId === id && !ok) showError("终端尺寸未能同步，请重新启动终端");
+        }, (error: unknown) => {
+          if (alive && termId === id) showError(`终端尺寸同步失败：${error instanceof Error ? error.message : String(error)}`);
+        });
+      };
+      resizeSub = t.onResize(syncSize);
       // 列数自适应容器宽（此前固定 80 列在窄格被右缘裁切）；容器尺寸变化跟随。
       try { fit.fit(); } catch { /* 容器尺寸为 0 时忽略 */ }
-      const ro = new ResizeObserver(() => { try { fit.fit(); } catch { /* 同上 */ } });
-      ro.observe(host);
-      (t as unknown as { __ro?: ResizeObserver }).__ro = ro;
+      resizeObserver = new ResizeObserver(() => { try { fit.fit(); } catch { /* 同上 */ } });
+      resizeObserver.observe(host);
       offData = window.agent.onTerminalData((e) => { if (termId !== null && e.id === termId) t.write(e.data); });
       offExit = window.agent.onTerminalExit((e) => {
         if (termId !== null && e.id === termId) {
           const why = e.code === null ? "信号终止" : `code ${String(e.code)}`;
           t.write(`\r\n[terminal] 已退出（${why}）——点上方「重新启动」或重开窗格\r\n`);
+          termId = null;
           setExited(why);
         }
       });
-      dataSub = t.onData((d) => { if (termId !== null) void window.agent.terminalWrite(termId, d); });
+      dataSub = t.onData((d) => {
+        const id = termId;
+        if (id === null) return;
+        void window.agent.terminalWrite(id, d).then((ok) => {
+          if (alive && termId === id && !ok) showError("终端已不可写，请重新启动终端");
+        }, (error: unknown) => {
+          if (alive && termId === id) showError(`终端输入失败：${error instanceof Error ? error.message : String(error)}`);
+        });
+      });
       void window.agent.terminalStart().then((r) => {
-        if (r === undefined) { setNotice("通道无应答（主进程未返回终端）"); return; }
+        if (r === undefined) { showError("通道无应答（主进程未返回终端）"); return; }
         if (!alive) { if (r.ok) void window.agent.terminalKill(r.id); return; }
-        if (!r.ok) { setNotice(r.error); t.write(`[terminal] ${r.error}\r\n`); return; }
+        if (!r.ok) { showError(r.error); t.write(`[terminal] ${r.error}\r\n`); return; }
         termId = r.id;
+        syncSize(); // fit 可能早于 IPC 返回 id；创建完成后必须补初次同步。
       }).catch((err: unknown) => {
-        setNotice(err instanceof Error ? err.message : String(err));
+        showError(err instanceof Error ? err.message : String(err));
       });
     }).catch((err: unknown) => {
-      setNotice(`终端组件加载失败：${err instanceof Error ? err.message : String(err)}`);
+      if (alive) showError(`终端无法启动：${err instanceof Error ? err.message : String(err)}`);
     });
     return () => {
       alive = false;
-      offData?.(); offExit?.(); dataSub?.dispose();
-      (term as unknown as { __ro?: ResizeObserver })?.__ro?.disconnect();
+      offData?.(); offExit?.(); dataSub?.dispose(); resizeSub?.dispose();
+      resizeObserver?.disconnect();
       if (termId !== null) void window.agent.terminalKill(termId);
       term?.dispose();
     };
   }, [gen]);
   return (
     <div className="term-pane">
-      {notice !== null && <div className="fp-note err" role="alert">{notice}</div>}
-      {exited !== null && (
+      {notice !== null && <div className="fp-note err" role="alert">{notice.message}</div>}
+      {(exited !== null || notice?.canRetry === true) && (
         <div className="fp-note" role="status">
-          <span>终端已退出（{exited}）</span>
+          {exited !== null && <span>终端已退出（{exited}）</span>}
           <button
             className="mini-btn ghost"
             onClick={() => { setExited(null); setNotice(null); setGen((g) => g + 1); }}
@@ -527,108 +558,6 @@ function TerminalPane(): React.JSX.Element {
         </div>
       )}
       <div className="term-host" ref={hostRef} aria-label="终端会话" />
-    </div>
-  );
-}
-
-/** 文件窗格（v5 只读浏览）：左树懒加载 + 下方文本预览（帽/二进制由通道侧拒，界面如实呈现）。 */
-function FilePane(props: {
-  onPathMenu?: (rel: string, kind: "file" | "directory", x: number, y: number) => void;
-}): React.JSX.Element {
-  type DirNode = DirEntryView[] | { error: string };
-  const [dirs, setDirs] = useState<Record<string, DirNode>>({});
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set([""]));
-  const [preview, setPreview] = useState<{ path: string; loading: boolean; text?: string; truncated?: boolean; error?: string } | null>(null);
-
-  const loadDir = (rel: string): void => {
-    void window.agent.workspaceListDir(rel).then((r) => {
-      setDirs((prev) => ({ ...prev, [rel]: r === undefined ? { error: "通道无应答" } : r.ok ? r.entries : { error: r.error } }));
-    }).catch((err: unknown) => {
-      setDirs((prev) => ({ ...prev, [rel]: { error: err instanceof Error ? err.message : String(err) } }));
-    });
-  };
-  // 首次挂载拉根目录（懒加载树的唯一根；子层展开时才拉）。
-  useEffect(() => { loadDir(""); }, []);
-
-  const child = (rel: string, name: string): string => (rel === "" ? name : `${rel}/${name}`);
-  const toggleDir = (rel: string): void => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(rel)) next.delete(rel);
-      else { next.add(rel); if (dirs[rel] === undefined) loadDir(rel); }
-      return next;
-    });
-  };
-  const openFile = (rel: string): void => {
-    setPreview({ path: rel, loading: true });
-    void window.agent.workspaceReadText(rel).then((r) => {
-      setPreview(r === undefined
-        ? { path: rel, loading: false, error: "通道无应答" }
-        : r.ok
-          ? { path: rel, loading: false, text: r.text, truncated: r.truncated }
-          : { path: rel, loading: false, error: r.error });
-    }).catch((err: unknown) => {
-      setPreview({ path: rel, loading: false, error: err instanceof Error ? err.message : String(err) });
-    });
-  };
-
-  const renderDir = (rel: string, depth: number): React.ReactNode => {
-    const node = dirs[rel];
-    if (node === undefined) return <div className="fp-note">读取中…</div>;
-    if (!Array.isArray(node)) return <div className="fp-note err" role="alert">{node.error}</div>;
-    if (node.length === 0) return <div className="fp-note">{rel === "" ? "工作区为空" : "空目录"}</div>;
-    return node.map((e) => {
-      const p = child(rel, e.name);
-      if (e.kind === "dir") {
-        const open = expanded.has(p);
-        return (
-          <Fragment key={p}>
-            <button
-              className={"fp-row dir" + (open ? " open" : "")}
-              style={{ paddingLeft: 6 + depth * 13 }}
-              onClick={() => { toggleDir(p); }}
-              onContextMenu={(e) => { e.preventDefault(); props.onPathMenu?.(p, "directory", e.clientX, e.clientY); }}
-            >
-              <ChevronRight size={10} className="fp-chev" aria-hidden="true" />
-              <Folder size={12} aria-hidden="true" />
-              <span className="fp-name">{e.name}</span>
-            </button>
-            {open && renderDir(p, depth + 1)}
-          </Fragment>
-        );
-      }
-      return (
-        <button
-          key={p}
-          className={"fp-row file" + (preview?.path === p ? " on" : "")}
-          style={{ paddingLeft: 6 + depth * 13 + 13 }}
-          onClick={() => { openFile(p); }}
-          onContextMenu={(e) => { e.preventDefault(); props.onPathMenu?.(p, "file", e.clientX, e.clientY); }}
-        >
-          <FileText size={12} aria-hidden="true" />
-          <span className="fp-name">{e.name}</span>
-          {e.size !== null && <span className="fp-size num">{e.size}</span>}
-        </button>
-      );
-    });
-  };
-
-  return (
-    <div className="file-pane">
-      <div className="file-tree" aria-label="文件树">{renderDir("", 0)}</div>
-      <div className="file-preview">
-        {preview === null && <div className="fp-note">点文件预览（只读；写入由 agent 走审批）</div>}
-        {preview !== null && preview.loading && <div className="fp-note">读取中…</div>}
-        {preview !== null && !preview.loading && preview.error !== undefined && (
-          <div className="fp-note err" role="alert">{preview.error}</div>
-        )}
-        {preview !== null && !preview.loading && preview.text !== undefined && (
-          <>
-            {preview.truncated === true && <div className="fp-note warn">已截断（超 512 KiB 帽）</div>}
-            <pre className="fp-text">{preview.text}</pre>
-          </>
-        )}
-      </div>
     </div>
   );
 }
@@ -810,6 +739,8 @@ function PlanPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
 /** 任务窗格：多 agent 状态（worker 簇）。 */
 function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
   const workers = projectWorkers(props.events);
+  const [ask, setAsk] = useState<{ w: WorkerPaneItem; action: "merge" | "reject" } | null>(null);
+  const [diff, setDiff] = useState<{ agentId: string; text: string; hunks: ReturnType<typeof parseUnifiedPatch>; truncated: boolean } | null>(null);
   if (workers.length === 0) {
     return <div className="pane-empty">本会话还没有派过子任务。<br />agent 派出 worker 后会在这里列出。</div>;
   }
@@ -822,7 +753,25 @@ function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element 
     : "已取消";
   const verifiedWord = (v: NonNullable<WorkerPaneItem["verified"]>): string =>
     v === "verified" ? "验证通过" : v === "failed" ? "验证失败" : v === "stale" ? "证据过期" : "无验证";
+  const showDiff = async (w: WorkerPaneItem): Promise<void> => {
+    if (w.diffRef === undefined) return;
+    const r = await window.agent.worktreeDiff(w.diffRef);
+    if (!r.ok) toast.error(`读取改动失败：${r.error}`);
+    else {
+      const clipped = clipDiff(r.patch.trim() === "" ? r.stat : r.patch);
+      setDiff({ agentId: w.agentId, text: clipped.text, hunks: parseUnifiedPatch(clipped.text), truncated: clipped.truncated });
+    }
+  };
+  const settle = async (w: WorkerPaneItem, action: "merge" | "reject"): Promise<void> => {
+    setAsk(null);
+    const r = await window.agent.cardAction({
+      ...workerCardAction(w.agentId, w.resultEventId ?? 0, action),
+    });
+    if (!r.ok) toast.error(`${action === "merge" ? "合并" : "拒绝"}失败：${r.error ?? "未知原因"}`);
+    else toast.success(action === "merge" ? "已合并回主工作区" : "已拒绝并清理 worktree");
+  };
   return (
+    <>
     <div className="pane-list">
       {workers.map((w) => (
         <section className="pane-card" key={w.agentId} data-status={w.status}>
@@ -856,9 +805,36 @@ function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element 
             <div className="evidence-body wk-summary">{w.summary}</div>
           )}
           {w.reason !== undefined && <div className="consequence danger-text">{w.reason}</div>}
+          {w.mode === "write" && w.status === "done" && w.resultEventId !== undefined && (
+            <div className="wk-actions">
+              {w.diffRef !== undefined && <button className="mini-btn ghost" onClick={() => void showDiff(w)}>查看改动…</button>}
+              <button className="mini-btn primary" onClick={() => setAsk({ w, action: "merge" })}>合并…</button>
+              <button className="mini-btn ghost" onClick={() => setAsk({ w, action: "reject" })}>拒绝…</button>
+            </div>
+          )}
         </section>
       ))}
     </div>
+    {diff !== null && (
+      <ModalSurface className="diff-modal" label={`${diff.agentId} 的改动`} onClose={() => setDiff(null)}>
+        <div className="diff-modal-head">{diff.agentId} · 改动</div>
+        {diff.hunks.length > 0 ? <DiffView hunks={diff.hunks} truncated={diff.truncated} /> : <pre className="diff-patch">{diff.text}</pre>}
+        {diff.truncated && <div className="diff-note">patch 超过 {String(200000)} 字符，预览已截断；完整内容请走变更窗格/命令行。</div>}
+      </ModalSurface>
+    )}
+    {ask !== null && (
+      <ConfirmDialog
+        title={ask.action === "merge" ? `合并 ${ask.w.agentId} 的改动？` : `拒绝 ${ask.w.agentId} 的改动？`}
+        note={ask.action === "merge"
+          ? "把该 worker 的 worktree 变更提交并合并回主工作区；冲突时保留 worktree 供人工处理。"
+          : "删除该 worker 的 worktree 与分支；未合并的改动无法恢复。"}
+        confirmLabel={ask.action === "merge" ? "合并" : "拒绝"}
+        danger={ask.action === "reject"}
+        onClose={() => setAsk(null)}
+        onConfirm={() => { if (ask !== null) void settle(ask.w, ask.action); }}
+      />
+    )}
+    </>
   );
 }
 
@@ -875,10 +851,17 @@ export function PaneDock(props: {
   onReorder?: (from: number, to: number) => void;
   /** 弹出为独立窗口（缺省 = 无弹出入口）。 */
   onPopout?: (kind: PaneKind) => void;
+  /** 独立窗格窗口（弹出的单窗格，PopoutApp 传）：**没有多面板可导航/可恢复**
+   *  ⇒ 面板导航行（聚焦某窗格 / 恢复多面板布局）在那里是**死按钮**，
+   *  且和窗格自己的标题行叠成两行同样的字（真机截图：弹出窗里两行「终端」）。
+   *  ⇒ 独立窗格窗口不渲染那一行。 */
+  inPopout?: boolean;
   /** v6 预览地址：browser 窗格就绪后自动导航到这里（缺省 = 只显示手动地址栏）。 */
   browserUrl?: string;
   /** v7 当前会话 id（sidechat 窗格的父会话面；缺省 = 旁路空态提示先开会话）。 */
   sessionId?: string | null;
+  /** v20 当前工作区（编排窗格按工作区 + 会话寻址；缺省 = 编排窗格提示先选工作区）。 */
+  workspace?: string | null;
   /** v7 附为上下文（§2.3 右键菜单）：工作区相对路径 → App 解析绝对路径后进 composer 附件。 */
   onAttach?: (rel: string, kind: "file" | "directory") => void;
   /** v7 元素选择信号（§3.6 ⌘⇧S，App 递增 seq）：browser 窗格据此对活动标签发起一次选择。 */
@@ -940,6 +923,8 @@ export function PaneDock(props: {
   }
   return (
     <div className="pane-workbench">
+    {/* 面板导航行只对「多窗格同屏」有意义：独立窗格窗口里它是死按钮（见 inPopout 注释）。 */}
+    {props.inPopout !== true && (
     <nav className="pane-nav" aria-label="面板导航" ref={navRef}>
       <div className="pane-nav-items">
         {props.tabs.map((kind) => <button key={kind} className="pane-nav-item"
@@ -958,6 +943,7 @@ export function PaneDock(props: {
         </DropdownMenu.Content></DropdownMenu.Portal>
       </DropdownMenu.Root>}
     </nav>
+    )}
     <Grid
       gridRef={gridRef}
       columns={1}
@@ -1033,7 +1019,7 @@ export function PaneDock(props: {
                   />
                 )}
                 {kind === "plan" && <PlanPane events={props.events} />}
-                {kind === "tasks" && <TasksPane events={props.events} />}
+                {kind === "tasks" && <><OrchestrationPane workspace={props.workspace ?? null} sessionId={props.sessionId ?? null} /><TasksPane events={props.events} /></>}
                 {kind === "file" && <FilePane onPathMenu={openPathMenu} />}
                 {kind === "terminal" && <TerminalPane />}
                 {kind === "browser" && (
@@ -1044,6 +1030,7 @@ export function PaneDock(props: {
                   />
                 )}
                 {kind === "sidechat" && <SidechatPane sessionId={props.sessionId ?? null} />}
+                {kind === "plugins" && <PluginSurface />}
               </div>
             </section>
           </Cell>

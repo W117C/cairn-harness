@@ -1,0 +1,1 @@
+renderer-layer-check: 绿（113 个渲染层源文件；I1 组件层不回流 App / I2 状态层不 import 组件 / I3 派生层纯 / I4 行数帽 1200·App 900）

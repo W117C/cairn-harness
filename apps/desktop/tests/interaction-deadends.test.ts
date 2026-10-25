@@ -4,9 +4,10 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { userMessageCopy } from "../src/renderer/transcript";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
-const app = read("../src/renderer/App.tsx");
+const app = readAppSurface();
 const composer = read("../src/renderer/components/Composer.tsx");
 const picker = read("../src/renderer/components/ModelPicker.tsx");
 const sidebar = read("../src/renderer/components/Sidebar.tsx");
@@ -19,7 +20,7 @@ describe("快捷键静默死点（F6/F7 + F5）", () => {
     // 判据跟着从「键位块里有这两行」升到「出口里有这两行 + 两个入口都走它」。
     expect(app).toContain("const closeSessionToHome = useCallback((): void => {");
     expect(app).toContain("toast(STR.shortcut.alreadyHome)");
-    expect(app).toContain("const wasRunning = runningSet.current.has(sid);");
+    expect(app).toContain("const wasRunning = runningSet.current.has(runKey(activeWorkspaceRef.current, sid));");
     expect(app).toContain("if (wasRunning) toast(STR.shortcut.leftRunning);");
     expect(app).toContain("h.closeSessionToHome();");
     expect(app).toContain('"close-session": closeSessionToHome,');
@@ -120,12 +121,12 @@ describe("侧栏首屏：加载 ≠ 空，失败 ≠ 空", () => {
 });
 
 describe("侧栏宽度把手（键盘 / 可读名 / 复位）", () => {
-  it("范围与复位值取自常量——不再手写 240–280 / 240px", () => {
-    // 2026-10-20 真机：常量已改成 200–280（缺省 200），把手上的 aria-label/title 还写着
-    // 240–280 / 双击回 240；读屏用户被告知一个不存在的下限，双击也会跳到非缺省值。
+  it("范围与复位值取自常量——不再手写固定像素", () => {
+    // 2026-10-21 设计重做：缺省 200 在 1440 宽下过窄（标题两行截断、画布失衡）⇒ 256；
+    // 上限 320 让多项目/长标题有伸展空间。三个数仍只从常量来，把手文案跟着走。
     expect(app).toContain("const SIDEBAR_MIN = 200;");
-    expect(app).toContain("const SIDEBAR_MAX = 280;");
-    expect(app).toContain("const SIDEBAR_DEFAULT = 200;");
+    expect(app).toContain("const SIDEBAR_MAX = 320;");
+    expect(app).toContain("const SIDEBAR_DEFAULT = 256;");
     expect(app).toContain("aria-label={`调整侧栏宽度（${SIDEBAR_MIN}–${SIDEBAR_MAX}px）`}");
     expect(app).toContain("title={`拖动调整侧栏宽度；双击回到 ${SIDEBAR_DEFAULT}px`}");
     expect(app).not.toContain("240–280px");

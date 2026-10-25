@@ -1,0 +1,107 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness
+
+ ❯ tests/evolution-canary.test.ts (38 tests | 2 failed) 410ms
+   ✓ 运行面装载（RuntimeLoader：只装已激活版本，逐层重验） (8)
+     ✓ 装载已激活 tool：entry 文本读到，deps 带出 15ms
+     ✓ 反向：未激活版本与账外的 id 都拒绝装载 12ms
+     ✓ 反向：安装后被改过 manifest（entry 漂移）或 entry 文件没了 ⇒ 拒绝装载 9ms
+     ✓ content-pack：除 manifest.json 外的文本全收（含子目录），按路径排序 17ms
+     ✓ desktop-panel：进得了装载面（kind 与 deps 带出） 10ms
+     ✓ 反向：service 这类不进运行面的 kind 直接拒绝 8ms
+     ✓ 装载帽：越帽的 entry 拒绝 6ms
+     ✓ 装载帽：content-pack 的文件数与总量两帽都拦得住 12ms
+   ❯ canary 观察期（退化自动回退 + lesson 沉淀） (10)
+     ✓ 观察期满无退化 ⇒ promoted（active 不动） 18ms
+     × maxSamples 不是 ≥1 的整数 ⇒ 拒绝开档（零门槛 = 没有证据也算够了） 23ms
+     × 盘上观察档的门槛是 0 ⇒ 读不动（不晋升，也不折成「没有档」） 11ms
+     ✓ 连续失败 ×2 ⇒ 自动回退 previous，并落 lesson（带 evidence-line 与读数） 16ms
+     ✓ 成本不可测 ⇒ 不判 no-progress（不可测 ≠ 无前进）；可测且便宜也不判 13ms
+     ✓ cost-per-progress：越过基线 ×2 ⇒ 回退并点名倍数 16ms
+     ✓ 没有基线 ⇒ 贵也不判（不编造基线），观察期满 promoted 14ms
+     ✓ 没有 previous 可回退 ⇒ degraded + 原因留档，lesson 照写 10ms
+     ✓ begin 先装载一次：entry 被删 ⇒ 拒绝进观察期 8ms
+     ✓ lesson 写盘失败 ⇒ 回滚照做，只记 lessonWritten=false / lessonError 13ms
+   ✓ 观察档跨进程续档（账本校验 + 续档，不靠时间戳推断候选） (10)
+     ✓ 进程 A 开档收一红；进程 B 只靠盘上的档接着数，第二个红即回滚 14ms
+     ✓ 观察档版本不认 ⇒ 点名 refused（读不动不许折成没有档） 13ms
+     ✓ 反向：盘上没有档 ⇒ tickAll 一条都不动（不替谁开档） 11ms
+     ✓ 反向：账本已经换过人（回滚过）⇒ 档退场，不再喂样本，active 不动 14ms
+     ✓ 反向：档读了坏 JSON ⇒ refused，既不喂样本也不覆盖（连败计数不许静默清零） 12ms
+     ✓ 反向：结案的档（promoted）不再被续档喂样本 14ms
+     ✓ 正向：重开同一候选的档被拒（续档走 tickAll），结案后再开可以 17ms
+     ✓ 反向：观察档写不下 ⇒ begin 拒绝（看不见的观察期不算观察期） 12ms
+     ✓ 正向：观察档写盘失败在 observe 上只记账，不改回滚结论 14ms
+     ✓ 正向：两个候选各收一个样本（tickAll 一轮喂全部开着的档） 25ms
+   ✓ staging ↔ 账本一致性（只读检查） (6)
+     ✓ 健康账面：ok、零 findings、staged 计数 7ms
+     ✓ 孤儿 staging 目录 ⇒ staging-unregistered 2ms
+     ✓ 注册后 staging manifest 被改 ⇒ staging-drift（点名字段） 5ms
+     ✓ staging 目录路径与 manifest 身份不符 ⇒ staging-identity-mismatch 4ms
+     ✓ staging manifest 坏了 ⇒ staging-manifest-invalid 5ms
+     ✓ 账本未清退版本的 staging 不见了 ⇒ ledger-staging-missing 2ms
+   ✓ canary 跨进程锁：探活优先于时钟（2026-10-19） (4)
+     ✓ 锁里写着一个**已不在**的 pid，且 mtime 是刚刚（时钟跳回的那一格）⇒ 必须能重取，不永久卡死 4ms
+     ✓ 锁里写着**本进程**的 pid（活着）⇒ 照旧拒绝（探活不能变成抢锁） 2ms
+     ✓ 锁文件读不出 pid（空 / 非数字）⇒ 不探活，退回 60s 时间兜底（不猜） 1ms
+     ✓ 零档取锁 ⇒ 不顺手建出 `.agent/canary/`（既有判据：没有档 = 目录不存在） 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/evolution-canary.test.ts > canary 观察期（退化自动回退 + lesson 沉淀） > maxSamples 不是 ≥1 的整数 ⇒ 拒绝开档（零门槛 = 没有证据也算够了）
+AssertionError: promise resolved "{ id: 'tool.demo-fetch', …(13) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "baselineTokensPerBoundary": null,
++   "candidateVersion": "0.2.0",
++   "conclusiveSamples": 0,
++   "consecutiveFailures": 0,
++   "costDegradeFactor": 2,
++   "degradations": [],
++   "id": "tool.demo-fetch",
++   "maxConsecutiveFailures": 2,
++   "maxSamples": 0,
++   "previousVersion": "0.1.0",
++   "recordWritten": true,
++   "samples": 0,
++   "startedAt": "2026-10-21T16:24:36.585Z",
++   "state": "observing",
+  }
+
+ ❯ tests/evolution-canary.test.ts:182:70
+    180|     await installBundle(reg, "tool.demo-fetch", "0.2.0");
+    181|     const ctl = new CanaryController({ registry: reg, workspace: root …
+    182|     await expect(ctl.begin({ id: "tool.demo-fetch", maxSamples: 0 })).…
+       |                                                                      ^
+    183|     await expect(ctl.begin({ id: "tool.demo-fetch", maxSamples: 2.5 })…
+    184|     await expect(ctl.begin({ id: "tool.demo-fetch", maxConsecutiveFail…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/evolution-canary.test.ts > canary 观察期（退化自动回退 + lesson 沉淀） > 盘上观察档的门槛是 0 ⇒ 读不动（不晋升，也不折成「没有档」）
+AssertionError: expected 'resumed' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "resumed"
+
+ ❯ tests/evolution-canary.test.ts:220:31
+    218|     const ticks = await ctl.tickAll(greenSample());
+    219|     expect(ticks).toHaveLength(1);
+    220|     expect(ticks[0]!.outcome).toBe("refused");
+       |                               ^
+    221|     expect(ticks[0]!.observation).toBeNull();
+    222|     expect(ticks[0]!.refused).toMatch(/maxSamples/);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 36 passed (38)
+   Start at  00:24:35
+   Duration  1.12s (transform 49%, tests 40%, import 11%)
+

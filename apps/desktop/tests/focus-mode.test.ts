@@ -4,8 +4,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { SHORTCUT_GROUPS } from "../src/renderer/shortcuts";
+import { readAppSurface } from "./helpers/app-surface";
 
-const app = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const app = readAppSurface();
 const rows = SHORTCUT_GROUPS.flatMap((g) => g.rows);
 
 describe("专注模式", () => {
@@ -33,7 +34,7 @@ describe("专注模式", () => {
   it("专注中开侧栏/检查器/窗格 = 放弃专注（exitFocusRef 三处接线）", () => {
     expect(app).toMatch(/const toggleSidebar = useCallback\(\(\): void => \{\n\s+exitFocusRef\.current\(\);/);
     expect(app).toMatch(/const revealInspector = useCallback\(\(\): void => \{\n\s+\/\/ 专注模式里打开窗格[\s\S]{0,80}exitFocusRef\.current\(\);/);
-    expect(app).toMatch(/const toggleInspector = useCallback\(\(\): void => \{\n\s+exitFocusRef\.current\(\);/);
+    expect(app).toMatch(/const toggleInspector = useCallback\(\(\): void => \{\n\s+inspectorPrefSetRef\.current = true;.*\n\s+exitFocusRef\.current\(\);/);
     // 放弃专注时不还原旧布局（清掉快照即可）
     expect(app).toMatch(/exitFocusRef\.current = \(\) => \{[\s\S]{0,200}focusRestoreRef\.current = null;/);
   });

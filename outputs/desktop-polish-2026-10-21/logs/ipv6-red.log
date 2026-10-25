@@ -1,0 +1,37 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness/apps/desktop
+
+ ❯ tests/browser-local-ipv6.test.ts (3 tests | 1 failed) 5ms
+   ❯ 浏览器 IPv6 本地预览 (3)
+     × URL 标准解析得到带括号的 hostname，主进程与地址栏都视为本地 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/browser-local-ipv6.test.ts > 浏览器 IPv6 本地预览 > URL 标准解析得到带括号的 hostname，主进程与地址栏都视为本地
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/browser-local-ipv6.test.ts:10:41
+      8|     expect(new URL(url).hostname).toBe('[::1]');
+      9|     expect(sitePermissionFor(url, new Set())).toBe('local');
+     10|     expect(hostAllowed(url, new Set())).toBe(true);
+       |                                         ^
+     11|   });
+     12|   it('IPv4 映射地址与外站仍需显式授权', () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  16:42:17
+   Duration  157ms (transform 77%, import 14%, tests 6%, worker 3%)
+
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts tests/browser-local-ipv6.test.ts

@@ -52,6 +52,11 @@ describe("插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面）", () => 
     expect(pluginLspServerIds(ws)).not.toContain("echo-suite:socket-only");
     const cfg = loadLspConfig(ws);
     expect(cfg.servers["echo-suite:stub-ts"]?.extensions).toEqual([".ts", ".tsx"]); // CC 的 extensionToLanguage 键集
+    // 2026-10-23：extensionToLanguage 的**值**必须一路带到运行时。此前 `activateLsp` 只取
+    // `Object.keys(cfg.extensionToLanguage)` 当 extensions、把值丢掉 ⇒ 非 JS 语言的插件 server
+    // （`.py`/`.go`/`.rs`）didOpen 时 languageId 落回 TS 启发式的 "plaintext"，六操作静默失效。
+    // 这条钉的是**值本身**（不是键集）：插件 server 与宿主 server 走同一条 languageId 契约。
+    expect(cfg.servers["echo-suite:stub-ts"]?.extensionToLanguage).toEqual({ ".ts": "typescript", ".tsx": "typescript" });
     // 面板口径：声明数与已注册数分开报（只看声明数就是"装载即陈列"的旧撒谎法）
     const snap = e.snapshot().plugins.find((p) => p.name === "echo-suite");
     expect(snap?.counts.lsp).toBe(1);

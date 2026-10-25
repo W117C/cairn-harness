@@ -1,0 +1,7 @@
+{
+  "apps/desktop/src/renderer/components/PaneDock.tsx": "6a158909eaf7d1df64e0bd78986cf1277cacecc4dd4a85c605f36978da563edd",
+  "apps/desktop/src/renderer/components/FilePane.tsx": "7390722be5666d8409a20414703ddc895bd9f6a2e5fa8a13574e4246a0295d67",
+  "apps/desktop/src/renderer/styles.css": "9f36f5fcff0aeaef70c263614e38701623bd9cae8f210e144c9fa03c3c8c439e",
+  "apps/desktop/scripts/file-pane-renderer-smoke.ts": "c09ef9aed336c9f2afcc9f09c703b2b7026bb58ca5605cdbd9298023a01fb87e",
+  "apps/desktop/scripts/file-pane-renderer-smoke.cjs": "2302186b84d4f9b6c37b704d1089093e8eeaa6f5f788f29b18a3fb5510230a97"
+}

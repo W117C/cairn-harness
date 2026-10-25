@@ -8,10 +8,10 @@
 // 纯函数资产（panelPatch / providerStatusLabel / …）随迁 settings-sections，
 // 本文件重导出保旧 import 面（settings-panel.test 判卷锚不动）。
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Search, X } from "lucide-react";
-import type { AppSettings, CapabilityReadout, ProviderInfo } from "../../../../../src/main/ipc-protocol";
+import { ChevronLeft, Search, X } from "lucide-react";
+import type { AgentApi, AppSettings, CapabilityReadout, ProviderInfo } from "../../../../../src/main/ipc-protocol";
 import type { TextSizeSetting, UiSizeSetting } from "../../../../../src/main/settings";
-import { SettingsPage } from "./settings-ui";
+import { SettingsPage, SettingsRow, SettingsSection } from "./settings-ui";
 import {
   AboutSection,
   AdvancedSection,
@@ -43,6 +43,81 @@ export {
 
 const PAGE_SECTION_IDS = new Set<string>(PAGE_ORDER);
 
+/* ── 更新区（P1 修复 · 2026-10-22）：「发现新版本」不能是一句死胡同 ────────────────
+   实测缺陷：旧实现只把检查结果的 version 拼成「发现新版本 X」⇒ manifest 里的下载页
+   URL 与更新说明被静默丢掉；渲染层对 openExternal 零调用点 ⇒ 用户看到"有新版"却无处可去。
+   现在：available 态带出版本 + 更新说明 + 一个可点动作，动作**只**走主进程通道
+   agent.openExternal（http(s) 白名单在主进程，manifest 注入协议进不来）。 */
+
+/** 主进程检查结果（从 AgentApi 派生——渲染层不直接引 updater 模块）。 */
+type UpdateCheckResult = Awaited<ReturnType<AgentApi["checkUpdate"]>>;
+
+/** 更新区读数。available 变体必须带 url/notes：丢掉它们＝把"有新版"变成死胡同。 */
+export type UpdateState =
+  | { kind: "idle" }
+  | { kind: "checking" }
+  | { kind: "unconfigured" }
+  | { kind: "error"; message: string }
+  | { kind: "up-to-date" }
+  | { kind: "available"; version: string; url: string; notes?: string; openError: string | null };
+
+/** 检查结果 → 读数（url/notes 原样带出，不在这一步丢）。 */
+export function updateStateOf(r: UpdateCheckResult): UpdateState {
+  if (r.state === "available") return { kind: "available", version: r.version, url: r.url, notes: r.notes, openError: null };
+  if (r.state === "error") return { kind: "error", message: r.message };
+  if (r.state === "unconfigured") return { kind: "unconfigured" };
+  return { kind: "up-to-date" };
+}
+
+/** 「检查更新」→ 读数（网络失败也是显式态，绝不静默）。 */
+export async function checkUpdateState(): Promise<UpdateState> {
+  try {
+    return updateStateOf(await window.agent.checkUpdate());
+  } catch (err) {
+    return { kind: "error", message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** 主进程拒绝打开时把原因并进读数（错误面要看得见，不能吞）。 */
+export function withOpenError(state: UpdateState, message: string): UpdateState {
+  return state.kind === "available" ? { ...state, openError: message } : state;
+}
+
+/** 打开下载页：只走主进程通道 agent.openExternal（http(s) 白名单在主进程）。
+ *  外链不经渲染层——渲染层不自己开浏览器、也不改地址栏。 */
+export async function openUpdateUrl(url: string, onError: (message: string) => void): Promise<void> {
+  let message: string | null = null;
+  try {
+    const r = await window.agent.openExternal(url);
+    if (!r.ok) message = r.error ?? "打开下载页失败";
+  } catch (err) {
+    message = `打开下载页失败：${err instanceof Error ? err.message : String(err)}`;
+  }
+  if (message !== null) onError(message);
+}
+
+/** 「发现新版本」卡：版本 + 更新说明 + 一个可点动作（打开下载页）。 */
+export function UpdateOffer(props: {
+  version: string;
+  url: string;
+  notes?: string;
+  /** 主进程拒绝时的错误文案；null = 无。 */
+  error: string | null;
+  /** 打开失败回调（面板接自己的读数）。 */
+  onError: (message: string) => void;
+}): React.JSX.Element {
+  return (
+    <SettingsSection title="新版本">
+      <SettingsRow label={`发现新版本 ${props.version}`} desc={props.notes}>
+        <button type="button" className="mini-btn" title={props.url} onClick={() => openUpdateUrl(props.url, props.onError)}>
+          打开下载页
+        </button>
+      </SettingsRow>
+      {props.error !== null && <div className="sp-note err" role="alert">{props.error}</div>}
+    </SettingsSection>
+  );
+}
+
 export function SettingsPanel(props: {
   onClose: () => void;
   initialSection?: SectionId;
@@ -52,10 +127,11 @@ export function SettingsPanel(props: {
   const [settings, setS] = useState<AppSettings | null>(null);
   const [status, setStatus] = useState<{ available: boolean; stored: string[]; envActive: boolean }>({ available: true, stored: [], envActive: false });
   const [about, setAbout] = useState<{ version: string } | null>(null);
+  const [license, setLicense] = useState<import("../../../../../src/main/license").LicenseState | null>(null);
   // 能力在场性读数（搜索端点配没配）。null = 还没问到 / 问失败——那一格显示「读不到」，
   // 不显示「已配」：把读不到当成配好，正是这个面板要修的那类假象。
   const [cap, setCap] = useState<CapabilityReadout | null>(null);
-  const [updateMsg, setUpdateMsg] = useState<string | null>(null);
+  const [update, setUpdate] = useState<UpdateState>({ kind: "idle" });
   const [keyProvider, setKeyProvider] = useState(defaultKeyProvider);
   // 「检查连接」的三态回执：保存成功 ≠ 服务可用，两件事分开显示（主进程只 GET 模型清单，不耗额度）。
   const [checkMsg, setCheckMsg] = useState<{ tone: "wait" | "ok" | "err"; text: string; hint?: string } | null>(null);
@@ -94,7 +170,7 @@ export function SettingsPanel(props: {
 
   useEffect(() => {
     refresh();
-    void window.agent.getState().then((s) => setAbout(s.about ?? null)).catch(() => setAbout(null));
+    void window.agent.getState().then((s) => { setAbout(s.about ?? null); setLicense(s.license ?? null); }).catch(() => setAbout(null));
     void window.agent.capabilities().then(setCap).catch(() => setCap(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -189,18 +265,23 @@ export function SettingsPanel(props: {
   };
 
   const checkUpdate = () => {
-    setUpdateMsg("检查中…");
-    void window.agent.checkUpdate().then((r) => {
-      setUpdateMsg(
-        r.state === "unconfigured" ? "未配置更新端点"
-        : r.state === "error" ? `检查未完成：${r.message}`
-        : r.state === "up-to-date" ? "已是最新"
-        : `发现新版本 ${r.version}`,
-      );
-    }).catch((err: unknown) => {
-      setUpdateMsg(`检查未完成：${err instanceof Error ? err.message : String(err)}`);
-    });
+    setUpdate({ kind: "checking" });
+    void checkUpdateState().then(setUpdate);
   };
+
+  /** 打开下载页被主进程拒绝：原因并进读数（错误面要看得见，不能吞）。 */
+  const onUpdateOpenError = (message: string) => {
+    setUpdate((prev) => withOpenError(prev, message));
+  };
+
+  // 「更新」行的文案（读数的唯一出口；措辞与旧实现逐字不变）。
+  const updateMsg =
+    update.kind === "idle" ? null
+    : update.kind === "checking" ? "检查中…"
+    : update.kind === "unconfigured" ? "未配置更新端点"
+    : update.kind === "error" ? `检查未完成：${update.message}`
+    : update.kind === "up-to-date" ? "已是最新"
+    : `发现新版本 ${update.version}`;
 
   /** 复制搜索配法（clipboard 访问留在壳层，ProviderSection 纯展示）。 */
   const copyHint = () => {
@@ -214,7 +295,13 @@ export function SettingsPanel(props: {
     <ModalSurface className="sp-page" label="设置" onClose={props.onClose}>
       <div className="sp-shell">
         <nav className="sp-nav" aria-label="设置分区">
-          <button className="mini-btn" onClick={props.onClose} aria-label="关闭设置（Esc）">← 返回</button>
+          {/* 返回必须在 ModalSurface 内部（2026-10-21 评审抓到的 Critical）：settings 打开时
+              isolateOutside 会把 titlebar/shell 标成 inert，鼠标点不到工具栏上的返回。
+              这里用面板内按钮；工具栏只负责 chrome（设置时不摆侧栏开关）。 */}
+          <button className="sp-back" onClick={props.onClose} aria-label="关闭设置（Esc）">
+            <ChevronLeft size={13} aria-hidden="true" />
+            <span>返回</span>
+          </button>
           {/* 分区搜索（2026-10-18 补）：此前九个分区只能靠肉眼扫——⌘K 是「跳到某分区」的导航，
               不是「在设置里找东西」。现在导航列顶部一行搜索，边打边收窄。
               口径诚实：匹配的是**分区名与同义词**（SECTION_KEYWORDS），不是每个开关的标签——
@@ -282,7 +369,7 @@ export function SettingsPanel(props: {
           {PAGE_SECTION_IDS.has(section) && <AppPageBody page={section as PageId} onError={setError} />}
 
           {section === "general" && settings !== null && (
-            <SettingsPage title="通用">
+            <SettingsPage title="通用" desc="外观、文字与输入习惯。">
               <GeneralSection
                 settings={settings}
                 textSize={textSize}
@@ -291,12 +378,13 @@ export function SettingsPanel(props: {
                 onCtrlTab={saveCtrlTab}
                 onTextSize={(next) => { setTextSize(next); void saveSettingKey("textSize", next); }}
                 onUiSize={(next) => { setUiSize(next); void saveSettingKey("uiSize", next); }}
+                onWindowVibrancy={(next) => { void saveSettingKey("windowVibrancy", next); }}
               />
             </SettingsPage>
           )}
 
           {section === "provider" && (
-            <SettingsPage title="模型与 Provider">
+            <SettingsPage title="模型与 Provider" desc="当前通道、密钥与自定义接口。">
               <ProviderSection
                 settings={settings}
                 status={status}
@@ -316,13 +404,13 @@ export function SettingsPanel(props: {
           )}
 
           {section === "permissions" && settings !== null && (
-            <SettingsPage title="权限与安全">
+            <SettingsPage title="权限与安全" desc="审批档位、网络与写入边界。">
               <PermissionsSection settings={settings} onSave={(patch) => { void save(patch); }} />
             </SettingsPage>
           )}
 
           {section === "shortcuts" && (
-            <SettingsPage title="快捷键">
+            <SettingsPage title="快捷键" desc="键盘入口与速查。">
               <ShortcutsSection />
             </SettingsPage>
           )}
@@ -331,20 +419,31 @@ export function SettingsPanel(props: {
               走 saveKey 单键直写（不走 panelPatch 白名单——那份白名单与其判卷口径保持原样，
               与 saveCtrlTab 同一条路）。 */}
           {section === "advanced" && settings !== null && (
-            <SettingsPage title="高级">
+            <SettingsPage title="高级" desc="记忆、成本与隐私。">
               <AdvancedSection settings={settings} onSaveKey={saveSettingKey} />
             </SettingsPage>
           )}
 
           {section === "about" && (
-            <SettingsPage title="关于与更新">
+            <SettingsPage title="关于与更新" desc="版本、更新与诊断。">
               <AboutSection
                 version={about?.version ?? null}
                 updateMsg={updateMsg}
                 onCheckUpdate={checkUpdate}
                 updateManifestUrl={settings?.updateManifestUrl ?? ""}
+                license={license}
                 onSaveManifest={(url) => { void saveSettingKey("updateManifestUrl", url); }}
               />
+              {/* 有新版时给出**去处**：版本 + 更新说明 + 打开下载页（只走主进程通道）。 */}
+              {update.kind === "available" && (
+                <UpdateOffer
+                  version={update.version}
+                  url={update.url}
+                  notes={update.notes}
+                  error={update.openError}
+                  onError={onUpdateOpenError}
+                />
+              )}
             </SettingsPage>
           )}
         </div>

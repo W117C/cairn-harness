@@ -1,10 +1,10 @@
 // 批 5（《全局 UI 视觉重构》细则 §五「弹层与菜单（统一组件）」）：
-// ① 底座统一：所有 popover = 14 圆角（--radius-pop）+ 8 内距（--space-sm）+ 条目 36px（--h-menu-item）；
+// ① 底座统一：所有 popover = v3 的 10 圆角（--radius-pop-v3）+ 8 内距（--space-sm）+ 条目 36px（--h-menu-item）；
 // ② 选中态统一：右侧对勾 + 条目文字变 primary（.menu-item:has(.check)）；
 // ③ 权限菜单：每项图标 + 两行（标题/副标题）、「自动」行 warning 图标 +「危险」小标签（不整行变色）、
 //    选「自动」先二次确认（未确认不调 onModeChange）；
 // ④ 模型弹层：思考分段选中 = elevated 背景 + primary 文字、未选 = secondary（不再用近隐灰）；
-//    「未声明 reasoningEfforts」= 一行 12.5px info 行（小图标 + 文案 + 「了解如何配置」折叠），
+//    「未声明 reasoningEfforts」= 一行 caption 档 info 行（小图标 + 文案 + 「了解如何配置」折叠），
 //    去掉大块棕底。
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -24,16 +24,16 @@ function block(css: string, sel: string): string {
   return css.slice(i, css.indexOf("}", i));
 }
 
-describe("批 5：弹层底座统一（14 圆角 / 8 内距 / 36 条目）", () => {
-  it("tokens：--radius-pop = 14、--h-menu-item = 36（rem 缩放制）", () => {
-    expect(tokens).toContain("--radius-pop: calc(0.875rem * var(--size-scale))");
+describe("批 5：弹层底座统一（10 圆角 / 8 内距 / 36 条目）", () => {
+  it("tokens：--radius-pop-v3 = 10、--h-menu-item = 36（rem 缩放制）", () => {
+    expect(tokens).toContain("--radius-pop-v3: calc(0.625rem * var(--size-scale))");
     expect(tokens).toContain("--h-menu-item: calc(2.25rem * var(--size-scale))");
   });
 
-  it(".pop / .pop-rd / .path-menu 三个浮层底座同口径：var(--radius-pop) + var(--space-sm) 内距", () => {
+  it(".pop / .pop-rd / .path-menu 三个浮层底座同口径：var(--radius-pop-v3) + var(--space-sm) 内距", () => {
     for (const sel of [".pop", ".pop-rd", ".path-menu"]) {
       const b = block(styles, sel);
-      expect(b, sel).toContain("border-radius: var(--radius-pop)");
+      expect(b, sel).toContain("border-radius: var(--radius-pop-v3)");
       expect(b, sel).toContain("padding: var(--space-sm)");
     }
   });

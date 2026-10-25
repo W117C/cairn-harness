@@ -50,3 +50,35 @@ rg 的 basename（`rg`）而不带绝对路径——但那改的是被测代码�
 ## 2026-10-01 · 第 261 页（影响面持久化索引＋准确率基准）
 
 无。本笔（任务 1/2/3：索引持久化＋增量、准确率基准、真仓探针固化）零阻塞项；「能力 10 真模型基准无凭据不做」沿用第 258 页裁决④，非新增阻塞。
+
+## 2026-10-21 · 自进化内核路线调研（第 637 页）
+
+- **能力收益不可测**：本机无 `CAIRN_API_KEY` / `CAIRN_ENDPOINT`，bench 12/12 不可跑；本轮只证明机制，
+  不证明成功率或成本收益。解除条件：提供凭据并显式授权花费。
+- **真实任务配对评价缺判据** —— ~~`fixtures/bench/tasks.json` 12/12 无逐名 judge 规格~~
+  **已解（2026-10-22，第 640 页，工作树未提交）**：五份清单 15/15 条拿到 `judge` 两列，
+  由盘上现读生成（`scripts/bench-judge-spec.ts`，不手抄），`--check` 门守漂移。
+  `--feasibility` 从 `逐名格：0 / 12` 变成 `12 / 12（FAIL_TO_PASS 43 条／PASS_TO_PASS 13 条）`。
+  ⚠️ **剩下的一半没解**：真实模型跑不出读数（见上一条「能力收益不可测」），
+  所以这一格现在证的是「尺子在、且分得开两件事」，不是「模型做得好不好」。
+- **路径前提差异**：任务写的 `/Users/ze/Downloads/Cairn` 不是 git 仓库；真实仓库根是
+  `/Users/ze/Downloads/Cairn/deepseek harness/`。HEAD 与任务给定 `6af24734...` 一致，故 A–D 结论不受影响。
+- **已知债（非本轮阻塞）**：`EvolutionPlane` / `GateRunner` / `Installer` / `PermissionBroker` / `GrantsStore`
+  仍**只有判卷消费者**（`tests/evolution-*.test.ts`）——它们不是"忘了接"，是
+  `docs/sema-proposal.md` §11 立案的**刻意分期**：Phase 4 才放开自动安装与自治分级，v1 的"跑通"定义到
+  "指针切上、账本可回滚"为止。**接线的接线位在方案里写着，不是没人认领**。
+  ⚠️ **同一条里另外三个名字已经不成立了**（2026-10-22 现读）：`CanaryController` / `RuntimeLoader` /
+  `activation-host` 自第 638 页首期接线起就有**生产消费者**——`src/main/agent-runner.ts:57,1254`
+  （content-pack 注进 system prompt）与 `src/main/post-run-readings.ts:14,79`（收束缝喂 canary tick）。
+  原文那句"生产零消费者"是接线**之前**的读数，别再引它。
+  `STATE.md` 的债表与第 640 页同笔改过。
+
+### 2026-10-21 · 首期接线施工（第 638 页）补充
+
+- **首期接线已落地、未提交**：`src/main/evolution/activation-host.ts`、`candidate-record.ts`、
+  `evaluator.ts`、`scripts/evolution-eval.ts` 与两条生产缝（`src/main/post-run-readings.ts`、
+  `src/main/agent-runner.ts`）。工作树含他人 127 项改动，提交等业主明确指示。
+- **能力收益仍不可测**：未发模型请求；评价入口的 `--runner` 目前只有脚本化 demo。
+  解除条件不变：提供凭据并显式授权花费。
+- **真实任务配对仍缺判据**：bench 12/12 无逐名 judge 规格；解除条件是补 FAIL_TO_PASS / PASS_TO_PASS。
+- **未跑 HEAD 面**：`mutate-verify` / `head-cert` 量的是提交；本轮未提交，故不冒充已认证。

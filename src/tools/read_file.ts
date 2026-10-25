@@ -169,20 +169,42 @@ async function readOne(ctx: ToolContext, rel: string, offsetRaw: unknown, limitR
  *     失败的在原地出声（`[读取失败] …`），全失败才算这次调用失败（工具失败面照旧真实）。
  *  ③ 总额帽与单份同一个数（50KB）：一次调用交付多少与读几份无关，账才可算。
  *  ④ 与单份**互斥**：`path` 与 `paths` 同时给就拒绝——两条路读出来的东西不一样，混成一份就分不出来源。 */
+/** 批量读的并发内核（导出给判卷：用假 reader 数「同时在飞几路」，不靠墙钟抖动）。
+ *  每条结果按入参下标回填 ⇒ 输出顺序仍是 paths 的顺序；失败仍在各自槽位出声，
+ *  一份失败不拖整批。上限 8：磁盘与文件描述符都要有界，不能因为模型一次给 100 条就全开。
+ *  为什么不是 `Promise.all(paths.map(...))`：那正是无界并发；`for await` 串行则是旧形状——
+ *  这一步只改调度，不改交付格式/总额帽/失败语义。 */
+export interface BatchReadResult { rel: string; text: string; ok: boolean }
+export async function readBatchConcurrent(
+  paths: readonly string[],
+  read: (rel: string) => Promise<string>,
+  limit = 8,
+): Promise<BatchReadResult[]> {
+  const out = new Array<BatchReadResult>(paths.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const i = next++;
+      if (i >= paths.length) return;
+      const rel = paths[i]!;
+      try {
+        out[i] = { rel, text: await read(rel), ok: true };
+      } catch (e) {
+        out[i] = { rel, text: "[读取失败] " + (e instanceof Error ? e.message : String(e)), ok: false };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, paths.length) }, worker));
+  return out;
+}
+
 async function readBatch(ctx: ToolContext, paths: readonly string[], offsetRaw: unknown, limitRaw: unknown): Promise<ToolResult> {
   const blocks: string[] = [];
   const notShown: string[] = [];
   let delivered = 0;
   let used = 0;
-  for (const rel of paths) {
-    let text: string;
-    let ok = true;
-    try {
-      text = await readOne(ctx, rel, offsetRaw, limitRaw);
-    } catch (e) {
-      text = "[读取失败] " + (e instanceof Error ? e.message : String(e));
-      ok = false;
-    }
+  const results = await readBatchConcurrent(paths, (rel) => readOne(ctx, rel, offsetRaw, limitRaw));
+  for (const { rel, text, ok } of results) {
     const block = "--- " + rel + " ---\n" + text;
     const bytes = Buffer.byteLength(block, "utf8") + (blocks.length > 0 ? 1 : 0);
     if (used + bytes > BATCH_LIMIT_BYTES) {

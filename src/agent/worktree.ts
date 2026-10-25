@@ -112,25 +112,96 @@ export interface CreatedWorktree {
   symlinkWarnings: string[];
 }
 
+export interface CreateWorktreeOptions {
+  /** 同名分支已存在时是否挂载它（缺省 **false**）。
+   *
+   *  为什么缺省不许复用：worker 的 agentId 是**进程内**序列（`worker-1`、`worker-2`…，
+   *  `orchestrator.ts#nextAgentId`），进程重启后从 1 重来；而分支是**跨进程**留在仓库里的。
+   *  同一条任务文本再跑一次 ⇒ `agent/<slug>-worker-1` 撞上上次留下的同名分支：
+   *  挂载它会让 worker 在**旧提交**上干活，而 `baseCommit` 取的是此刻 HEAD ⇒ 产出的 diff 把
+   *  两次之间所有别人的提交都“反向”算进本次改动（合并即回滚），或在该分支仍被别的 worktree
+   *  占用时直接 `already checked out` 失败。两种都比“换一个分支名”坏。
+   *  ⇒ 缺省改为**给撞名的树换一个未占用的分支名**（`-2`/`-3`…），新树恒从当前 HEAD 起。
+   *
+   *  会话级 worktree 是另一回事：`s-<sessionId>` 是**稳定身份**，调用方明确要“找回自己那棵”
+   *  时才传 true（见 `session-worktree.ts`）。 */
+  reuseExistingBranch?: boolean;
+}
+
+/** 同路径残留下的现状：none＝什么都没有；clean＝可安全清掉；dirty＝有未提交改动（含未跟踪）；
+ *  unrecognized＝目录在但不是可识别的 worktree（可能是用户自己的目录）。
+ *
+ *  为什么要在 `worktree remove --force` 之前问：worker 的 agentId 是进程内序列，重启后重号 ⇒
+ *  上一次崩溃留下的 `.agents/wt-worker-1` 会在下一次 spawn 被同路径删掉。孤儿面板的本意是
+ *  「列出来让用户决定」，而 spawn 静默 `rm -rf` 会把那棵树里未提交的改动整片抹掉——commit 过的
+ *  还在分支上，未提交的没有第二份。所以脏残留一律 fail-visible，不自动清。 */
+async function residueState(wtPath: string): Promise<{ state: "none" | "clean" | "dirty" | "unrecognized"; detail?: string }> {
+  try {
+    await lstat(wtPath);
+  } catch {
+    return { state: "none" };
+  }
+  if (await isWorktreeRoot(wtPath)) {
+    try {
+      const out = await git(wtPath, "status", "--porcelain");
+      return out.trim() === "" ? { state: "clean" } : { state: "dirty" };
+    } catch (err) {
+      return { state: "dirty", detail: err instanceof Error ? err.message : String(err) };
+    }
+  }
+  const entries = await readdir(wtPath).catch(() => []);
+  return entries.length === 0 ? { state: "clean" } : { state: "unrecognized" };
+}
+
 /** spawn 批准后的 worktree 创建：base = 当前 HEAD → worktree add -b → symlink gitignored 目录。
- *  幂等加固：同路径残留（同 id 撞车/上次清理失败）先清 git 注册与目录再建；分支已存在则挂载而非重建。 */
+ *  幂等加固：同路径残留（同 id 撞车/上次清理失败）先清 git 注册与目录再建；同名分支按
+ *  `CreateWorktreeOptions.reuseExistingBranch` 决定“挂载”还是“换名新建”（缺省后者）。 */
 export async function createWorktree(
   root: string,
   agentId: string,
   task: string,
   /** 额外要链回主 checkout 的目录（会话层用它链 `.agent`：配置/权限/记忆/会话根必须同源）。 */
   extraSymlinks: readonly string[] = [],
+  opts: CreateWorktreeOptions = {},
 ): Promise<CreatedWorktree> {
   const baseCommit = (await git(root, "rev-parse", "HEAD")).trim();
-  const branch = branchForAgent(task, agentId);
   const rel = join(WORKTREE_ROOT_DIR, "wt-" + agentId);
+  const wtPath = worktreePathFor(root, agentId);
+  // 同路径残留：脏的/认不出的 fail-visible，绝不自动覆盖（见 residueState 的注释）。
+  const residue = await residueState(wtPath);
+  if (residue.state === "dirty") {
+    throw new WorktreeError(
+      `残留 worktree 有未提交改动，拒绝自动清掉：${wtPath}（先合并/丢弃或人工检查；spawn 不会覆盖未提交的工作）` +
+        (residue.detail ? `｜状态读不出：${residue.detail}` : ""),
+    );
+  }
+  if (residue.state === "unrecognized") {
+    throw new WorktreeError(`路径已存在但不是可识别的 git worktree，拒绝自动清掉：${wtPath}（先人工检查/移走）`);
+  }
   // 残留自愈（fail-visible 于 add 失败）：先清 git 注册（ignore 失败）再清目录
   await git(root, "worktree", "remove", "--force", rel).catch(() => {});
-  await rm(worktreePathFor(root, agentId), { recursive: true, force: true });
-  // 分支已存在（同 agent 重启语义）→ 挂载既有分支；否则 -b 新建
-  const branchExists = await git(root, "rev-parse", "--verify", "--quiet", branch).then(() => true, () => false);
-  if (branchExists) await git(root, "worktree", "add", rel, branch);
-  else await git(root, "worktree", "add", rel, "-b", branch);
+  await rm(wtPath, { recursive: true, force: true });
+  const preferred = branchForAgent(task, agentId);
+  const exists = async (name: string): Promise<boolean> =>
+    git(root, "rev-parse", "--verify", "--quiet", name).then(() => true, () => false);
+  let branch = preferred;
+  if (await exists(preferred)) {
+    if (opts.reuseExistingBranch === true) {
+      await git(root, "worktree", "add", rel, preferred);
+    } else {
+      // 撞名 ⇒ 换一个没被占用的分支名（不挂载旧分支：见 CreateWorktreeOptions 的注释）。
+      // 序号插在 **slug 之后、agentId 之前**（`agent/<slug>-2-worker-1`），不是追加在 id 后面：
+      // 孤儿清理按 `agent/*-<agentId>` 扫并过滤 `endsWith("-" + agentId)`，名字仍以 id 结尾才收得走。
+      const idTail = "-" + agentId;
+      const stem = preferred.endsWith(idTail) ? preferred.slice(0, -idTail.length) : preferred;
+      let n = 2;
+      while (await exists(stem + "-" + String(n) + idTail)) n++;
+      branch = stem + "-" + String(n) + idTail;
+      await git(root, "worktree", "add", rel, "-b", branch);
+    }
+  } else {
+    await git(root, "worktree", "add", rel, "-b", branch);
+  }
   const symlinkWarnings = await linkGitignoredDirs(root, worktreePathFor(root, agentId), extraSymlinks);
   await ensureGitignoreAgents(root);
   return { worktree: rel, branch, baseCommit, symlinkWarnings };
@@ -188,6 +259,15 @@ async function ensureGitignoreAgents(root: string): Promise<void> {
   } catch {
     /* 自愈失败不阻断（worktree 已建成功；git status 噪音属可见失败面） */
   }
+}
+
+/** `diff_ref`（`<worktree>@<baseCommit>`）的解析：路径只认 `.agents/wt-<id>`，base 只认 hex。
+ *  这是渲染层要求「查看 worker 改动」时的入口；路径进 git 前必须过这道形状闸，别让
+ *  一个任意字符串变成任意目录读。 */
+export interface WorktreeRef { worktree: string; baseCommit: string }
+export function parseWorktreeRef(ref: string): WorktreeRef | null {
+  const m = /^(\.agents\/wt-[A-Za-z0-9_-]+)@([0-9a-f]{7,40})$/.exec(ref);
+  return m === null ? null : { worktree: m[1]!, baseCommit: m[2]! };
 }
 
 /** worker 产出 diff（裁决 3 口径：worktree 工作树 vs base_commit，含未提交改动）。
@@ -294,6 +374,22 @@ export async function removeWorktree(root: string, agentId: string, opts: { keep
   return { removed, branchDeleted, ...(error ? { error } : {}) };
 }
 
+/** 这个路径本身是不是一棵已登记的 worktree 的根（而不是主 checkout 里的普通子目录）。
+ *
+ *  为什么不能只看 `currentBranch`：它跑 `git rev-parse --abbrev-ref HEAD`，而 git 会**向上找**仓库根——
+ *  一个位于主 checkout 内、没登记为 worktree 的普通目录，照样能读出主分支名（实测返回 `main`）。
+ *  拿它当「这是我们的隔离树」的证据，就等于把用户随手建的目录认成自己的（随后可能被重建删掉）。
+ *  ⇒ 用 `--show-toplevel` 与实际路径比：普通子目录会得到主 checkout 根，两者不等。 */
+export async function isWorktreeRoot(wtPath: string): Promise<boolean> {
+  try {
+    const { realpath } = await import("node:fs/promises");
+    const top = (await git(wtPath, "rev-parse", "--show-toplevel")).trim();
+    return top !== "" && (await realpath(top)) === (await realpath(wtPath));
+  } catch {
+    return false;
+  }
+}
+
 /** worktree 当前分支（会话合并卡用：分支名里带任务 slug，记不住就别猜——从树自己读）。
  *  读不到（detached/目录没了）⇒ null，调用方按失败处理，不拿主 checkout 的分支顶上。 */
 export async function currentBranch(wtPath: string): Promise<string | null> {
@@ -319,7 +415,12 @@ export async function listWorktreeDirs(root: string): Promise<string[]> {
 
 /** 孤儿 worktree（§4.4.9）：目录存在、但事件流里该 agent 无终态（done/failed/cancelled 的 agent_status）
  *  **且** 无合并控制塔收尾记录（merge/cleanup tool_result）——进程被杀遗留，列「可清理」，不自动删。 */
-export function orphanWorktrees(dirNames: string[], events: { type: string; agent_id?: string; status?: string; callId?: string }[]): string[] {
+export function orphanWorktrees(
+  dirNames: string[],
+  events: { type: string; agent_id?: string; status?: string; callId?: string }[],
+  /** 进程内仍有归属的 agent id（见 `ownedWorktreeAgentIds`）：运行中/待合并的树不进清理面板。 */
+  ownedAgentIds: ReadonlySet<string> = new Set(),
+): string[] {
   const terminalAgents = new Set<string>();
   for (const e of events) {
     if (e.type === "agent_status" && (e.status === "done" || e.status === "failed" || e.status === "cancelled") && typeof e.agent_id === "string") {
@@ -331,15 +432,37 @@ export function orphanWorktrees(dirNames: string[], events: { type: string; agen
   }
   return dirNames
     .map((n) => n.slice("wt-".length))
-    .filter((agentId) => !terminalAgents.has(agentId));
+    .filter((agentId) => !ownedAgentIds.has(agentId) && !terminalAgents.has(agentId));
+}
+
+/** 孤儿树是否有未提交改动（含未跟踪）：给清理面板显示「会丢什么」。
+ *  读不出（目录不在/不是 worktree/git 失败）按 true 处理——看不见就不许说干净。 */
+export async function worktreeDirty(root: string, agentId: string): Promise<boolean> {
+  const wt = worktreePathFor(root, agentId);
+  try {
+    const out = await git(wt, "status", "--porcelain");
+    return out.trim() !== "";
+  } catch {
+    return true;
+  }
 }
 
 /** 孤儿手动清理（§4.4.9：面板只列不自动删，清理 = 用户显式动作）：移除 worktree + 按后缀删 agent/*-<id> 分支。
  *  A6（审查）：agentId 先过字符白名单——目录名含 glob 元字符（[ ? *）拼进 `branch --list`
  *  会匹配全部 agent 分支并循环删除；列出的分支名还须**精确以后缀 -<id> 结尾**才删（双保险）。 */
-export async function cleanOrphanWorktree(root: string, agentId: string): Promise<WorktreeCleanupResult> {
+export async function cleanOrphanWorktree(
+  root: string,
+  agentId: string,
+  opts: { ownedAgentIds?: ReadonlySet<string> } = {},
+): Promise<WorktreeCleanupResult> {
   if (!/^[A-Za-z0-9_-]+$/.test(agentId)) {
     return { removed: false, branchDeleted: false, error: "agentId 含非法字符（只允许 [A-Za-z0-9_-]），已拒绝清理" };
+  }
+  // 归属仍在（运行中/待合并）⇒ 显式清理也必须拒绝：这是最后一道闸，不假定调用方已经筛过。
+  // 第 687 页把「活树不进面板」修了，但 clean 是一个可被旧界面/脚本直接调的动作；只靠展示层过滤
+  // 等于把删除决策押在「没人绕过 UI」上。名字白名单先跑：非法 id 的拒绝理由不能被归属盖掉。
+  if (opts.ownedAgentIds?.has(agentId)) {
+    return { removed: false, branchDeleted: false, error: "该 worktree 仍有归属（运行中/待合并），拒绝清理：" + agentId };
   }
   const r = await removeWorktree(root, agentId);
   if (r.removed) {

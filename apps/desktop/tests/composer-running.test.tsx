@@ -20,7 +20,6 @@ const base = {
   phase: "tool" as const,
   elapsedSec: 3,
   steps: 2,
-  workspaceLabel: null,
   onSend: () => undefined,
   onCancel: () => undefined,
   onModeChange: () => undefined,

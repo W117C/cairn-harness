@@ -1,0 +1,150 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness
+
+stderr | tests/evolution-open-closeout.test.ts > canary open issues: real workspace and production signal seam > ledger repair retries the original rollback across restarts exactly once without inventing samples
+[canary] 账本读不动（RegistryLogCorruptError: registry.jsonl 第 2 行损坏（JSON.parse 失败））——观察期按盘上观察档继续收样本（「候选是否还在位」这一格无法核验，按还在位处理；连败计数照常前进，不许被清零）
+
+stderr | tests/evolution-open-closeout.test.ts > canary open issues: real workspace and production signal seam > ledger repair retries the original rollback across restarts exactly once without inventing samples
+[canary] 账本读不动（RegistryLogCorruptError: registry.jsonl 第 2 行损坏（JSON.parse 失败））——观察期按盘上观察档继续收样本（「候选是否还在位」这一格无法核验，按还在位处理；连败计数照常前进，不许被清零）
+
+stderr | tests/evolution-open-closeout.test.ts > canary open issues: real workspace and production signal seam > a pending old rollback cannot replace a newer active candidate
+[canary] 账本读不动（RegistryLogCorruptError: registry.jsonl 第 2 行损坏（JSON.parse 失败））——观察期按盘上观察档继续收样本（「候选是否还在位」这一格无法核验，按还在位处理；连败计数照常前进，不许被清零）
+
+stderr | tests/evolution-open-closeout.test.ts > canary open issues: real workspace and production signal seam > pre-upgrade degraded records with a known ledger corruption error recover after repair
+[canary] 账本读不动（RegistryLogCorruptError: registry.jsonl 第 2 行损坏（JSON.parse 失败））——观察期按盘上观察档继续收样本（「候选是否还在位」这一格无法核验，按还在位处理；连败计数照常前进，不许被清零）
+
+ ❯ tests/evolution-open-closeout.test.ts (7 tests | 4 failed) 87ms
+   ❯ canary open issues: real workspace and production signal seam (7)
+     × measurable tail above the baseline budget rolls back even when average cost is healthy 23ms
+     × ledger repair retries the original rollback across restarts exactly once without inventing samples 11ms
+     × a pending old rollback cannot replace a newer active candidate 13ms
+     × pre-upgrade degraded records with a known ledger corruption error recover after repair 9ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/evolution-open-closeout.test.ts > canary open issues: real workspace and production signal seam > measurable tail above the baseline budget rolls back even when average cost is healthy
+AssertionError: expected { id: 'content-pack.closeout', …(3) } to match object { outcome: 'resumed', …(2) }
+(14 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "acted": true,
++   "acted": false,
+    "observation": {
+-     "degradations": [
+-       {
+-         "rule": "no-progress",
+-       },
+-     ],
+-     "rollbackTo": "1.0.0",
+-     "state": "rolled-back",
++     "degradations": [],
++     "state": "observing",
+    },
+    "outcome": "resumed",
+  }
+
+ ❯ tests/evolution-open-closeout.test.ts:97:18
+     95|     expect(signals).toMatchObject({ costMeasurable: true, tokensPerBou…
+     96|     const [tick] = await tickCanaryFromSignals(root, signals, "tail-re…
+     97|     expect(tick).toMatchObject({ outcome: "resumed", acted: true,
+       |                  ^
+     98|       observation: { state: "rolled-back", rollbackTo: "1.0.0", degrad…
+     99|     expect((await registry().readIndex()).bundles[ID]?.active?.version…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/evolution-open-closeout.test.ts > canary open issues: real workspace and production signal seam > ledger repair retries the original rollback across restarts exactly once without inventing samples
+AssertionError: expected { id: 'content-pack.closeout', …(3) } to match object { acted: true, observation: { …(6) } }
+(15 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "acted": true,
++   "acted": false,
+    "observation": {
+      "conclusiveSamples": 1,
+      "consecutiveFailures": 1,
+-     "rollbackRetryPending": false,
+-     "rollbackTo": "1.0.0",
+      "samples": 1,
+-     "state": "rolled-back",
++     "state": "degraded",
+    },
+  }
+
+ ❯ tests/evolution-open-closeout.test.ts:140:21
+    138|     await repairLedger(clean);
+    139|     const [retried] = await tickCanaryFromSignals(root, measuredRun(0)…
+    140|     expect(retried).toMatchObject({ acted: true, observation: { state:…
+       |                     ^
+    141|       consecutiveFailures: 1, conclusiveSamples: 1, rollbackTo: "1.0.0…
+    142|     expect(retried?.observation?.rollbackError).toBeUndefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/evolution-open-closeout.test.ts > canary open issues: real workspace and production signal seam > a pending old rollback cannot replace a newer active candidate
+AssertionError: expected { id: 'content-pack.closeout', …(3) } to match object { outcome: 'idle', acted: false, …(1) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+@@ -2,7 +2,7 @@
+    "acted": false,
+    "observation": {
+      "samples": 1,
+      "state": "degraded",
+    },
+-   "outcome": "idle",
++   "outcome": "settled",
+  }
+
+ ❯ tests/evolution-open-closeout.test.ts:162:18
+    160|     await install("3.0.0");
+    161|     const [tick] = await tickCanaryFromSignals(root, measuredRun(0), "…
+    162|     expect(tick).toMatchObject({ outcome: "idle", acted: false, observ…
+       |                  ^
+    163|     expect((await registry().readIndex()).bundles[ID]?.active?.version…
+    164|     expect(await rollbackCount()).toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/evolution-open-closeout.test.ts > canary open issues: real workspace and production signal seam > pre-upgrade degraded records with a known ledger corruption error recover after repair
+AssertionError: expected { id: 'content-pack.closeout', …(3) } to match object { acted: true, observation: { …(3) } }
+(17 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "acted": true,
++   "acted": false,
+    "observation": {
+-     "rollbackTo": "1.0.0",
+      "samples": 1,
+-     "state": "rolled-back",
++     "state": "degraded",
+    },
+  }
+
+ ❯ tests/evolution-open-closeout.test.ts:188:18
+    186|     await repairLedger(clean);
+    187|     const [tick] = await tickCanaryFromSignals(root, measuredRun(0), "…
+    188|     expect(tick).toMatchObject({ acted: true, observation: { state: "r…
+       |                  ^
+    189|     expect((await registry().readIndex()).bundles[ID]?.active?.version…
+    190|     expect(await rollbackCount()).toBe(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 3 passed (7)
+   Start at  11:20:22
+   Duration  469ms (transform 63%, tests 21%, import 15%)
+

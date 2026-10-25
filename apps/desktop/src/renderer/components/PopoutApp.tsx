@@ -46,6 +46,7 @@ export function PopoutApp(props: { kind: PaneKind; sessionId: string | null }): 
         events={events}
         sessionId={props.sessionId}
         onClose={() => { window.close(); }}
+        inPopout
       />
     </div>
   );

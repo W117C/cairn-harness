@@ -1,0 +1,13 @@
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness
+
+
+ Test Files  1 passed (1)
+      Tests  24 passed (24)
+   Start at  17:24:10
+   Duration  1.65s (tests 94%, transform 4%, import 2%)
+

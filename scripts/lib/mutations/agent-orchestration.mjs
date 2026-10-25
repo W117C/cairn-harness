@@ -333,7 +333,7 @@ export const MUTATIONS = [
     src: "src/agent/worker-report.ts",
     test: "tests/worker-evidence.test.ts",
     desc: "被权限门拒掉的写也算「改过盘」⇒ 一次没落盘的 tool_call 就把绿证据打成 stale（读数反过来不诚实）",
-    apply: (s) => s.replace("      if (e.ok && c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;", "      if (c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;"),
+    apply: (s) => s.replace("      if ((e.ok || e.fusedWrite === true) && c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;", "      if (c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;"),
     expectFail: "被拒的写（ok:false）不构成过期证据",
   },
     // ---- W3② 价格标签（tests/worker-spent-usd.test.ts）：钱的话只准一处说，且不可知 ≠ 免费 ----
@@ -806,7 +806,9 @@ export const MUTATIONS = [
     src: "src/agent/orchestrator.ts",
     test: "tests/worker-role.test.ts",
     desc: "重派改回逐字段列写（漏掉 role 等四位）⇒ 映射端补了、转发端没跟上，这一跳静默丢参数",
-    apply: (s) => s.replace("    return await this.spawn(respawnSpawnArgs(args), ctx);", "    return await this.spawn({ task: args.task, mode: args.mode }, ctx);"),
+    // 2026-10-22：`971fe18c` 给这一跳加了 recovery 承载（`carried`）⇒ 针脚跟着实现走：
+    // 旧行整行不再逐字存在，突变会变成空操作（no-effect），表就少了一条分辨力。
+    apply: (s) => s.replace("    return await this.spawn(respawnSpawnArgs(args), carried === undefined ? ctx : { ...ctx, recovery: carried });", "    return await this.spawn({ task: args.task, mode: args.mode }, carried === undefined ? ctx : { ...ctx, recovery: carried });"),
     expectFail: "真链：落流的角色 → respawnArgsFrom → respawn() 的新 agent_spawned 仍带同一角色（全新 agent_id）",
   },
   // 署名（规则 57：没有锚点的那一格要有名字与理由）：worker 侧**非工具档**那行 `frozenJudgePaths`
@@ -1124,6 +1126,33 @@ export const MUTATIONS = [
     desc: "空 slug 的 `task` 兜底被摘 ⇒ 折叠到空的 task 会造出空分支名/空 slug 目录",
     apply: (s) => s.replace("return s === \"\" ? \"task\" : s;", "return s;"),
     expectFail: "折叠到空 ⇒ 落 `task`（不许产出空分支名）",
+  },
+  {
+    id: "orphan-ignores-owned-agents",
+    src: "src/agent/worktree.ts",
+    test: "tests/worktree-pure.test.ts",
+    desc: "孤儿过滤不看 orchestrator 归属 ⇒ 另一会话运行中/待合并的 worker 在本会话日志里没有终态，"
+      + "目录却是 workspace 级，于是被列进「可清理」面板——用户一点就删掉别人正在干活的树",
+    apply: (s) => s.replace("!ownedAgentIds.has(agentId) && ", ""),
+    expectFail: "进程内仍有归属（运行中/待合并）⇒ 不算孤儿；未归属的 running 仍算（崩溃遗留仍要捞）",
+  },
+  {
+    id: "orphan-scan-drops-owned-wiring",
+    src: "src/main/state-handlers.ts",
+    test: "tests/orphan-cross-session.test.ts",
+    desc: "扫描入口不把归属集合接进去 ⇒ 纯函数那一格写对了但这一格永远传空集：跨会话活 worker 照样进清理面板"
+      + "（规则 230：只写纯函数不接＝没有读数）",
+    apply: (s) => s.replace("    new Set(ownedWorktreeAgentIds()),", "    new Set(),"),
+    expectFail: "orchestrator 仍归属的 w1 ⇒ 即使本会话日志没有终态，也不列孤儿",
+  },
+  {
+    id: "orphan-clean-ignores-live-owner",
+    src: "src/agent/worktree.ts",
+    test: "tests/worktree-branch-reuse.test.ts",
+    desc: "显式 clean 不看归属 ⇒ 旧界面/脚本直接调 clean 就能删掉运行中/待合并的活树；"
+      + "展示层过滤不是删除决策的闸，clean 自己必须再拒一次",
+    apply: (s) => s.replace("  if (opts.ownedAgentIds?.has(agentId)) {", "  if (false) {"),
+    expectFail: "仍归属的 agent：cleanOrphanWorktree 也拒绝，文件原样保留（clean 不假定调用方筛过）",
   },
   {
     id: "worktree-slug-dangling-hyphen-kept",

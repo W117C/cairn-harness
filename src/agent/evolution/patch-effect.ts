@@ -15,7 +15,7 @@
 //  · **段落自报时刻**（2026-10-16）：这些句子是上一轮收尾时写的、下一轮开工时读的。正文里
 //    不写「本轮」这类会随时间读歪的代词——一律「上次读数」，配 renderEffects 的「（记于 X）」戳。
 import type { EvolutionSignals } from "./signal";
-import { COST_PER_BOUNDARY_LIMIT, recordedAtStamp, renderVerifyPatchNote, type StrategyPatch } from "./strategy-patch";
+import { COST_PER_BOUNDARY_LIMIT, costThrottleMeasurable, recordedAtStamp, renderVerifyPatchNote, type StrategyPatch } from "./strategy-patch";
 
 export type PatchEffectStatus = "resolved" | "recurred" | "inconclusive";
 
@@ -143,7 +143,10 @@ function goalReconfirmEffect(patch: Extract<StrategyPatch, { kind: "goal-reconfi
 
 function costThrottleEffect(patch: Extract<StrategyPatch, { kind: "cost-throttle" }>, s: EvolutionSignals): PatchEffect {
   const key = patchKeyOf(patch);
-  if (s.costMeasurable && s.tokensPerBoundary !== null) {
+  // 「可测」这一格走具名判据（strategy-patch 的 costThrottleMeasurable），不在这儿再抄一遍：
+  // 抄了就会和补丁出手处那份分叉——一边说贵、一边说已消解（阈值那格 COST_PER_BOUNDARY_LIMIT
+  // 早就是唯一事实源，这格也该是）。
+  if (costThrottleMeasurable(s)) {
     const now = s.tokensPerBoundary;
     if (now <= COST_PER_BOUNDARY_LIMIT) {
       return {

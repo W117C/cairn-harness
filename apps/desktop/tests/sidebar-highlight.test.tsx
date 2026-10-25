@@ -21,11 +21,11 @@ describe("#71 侧栏选中态（唯一 + 强调条 + hover 瞬时清除）", () 
     expect(bar[0]).toContain("hsl(var(--accent-brand))");
   });
 
-  it("hover 底色更淡（alpha-1 vs 选中 alpha-2），且过渡只在 :hover 里（离开即瞬时清除）", () => {
+  it("hover 底色更淡（--alpha-hover vs --alpha-selected），且过渡只在 :hover 里（离开即瞬时清除）", () => {
     const hover = block(".session:hover");
-    expect(hover).toContain("var(--alpha-1)");
+    expect(hover).toContain("var(--alpha-hover)");
     expect(hover).toContain("transition:");
-    expect(block(".session.active")).toContain("var(--alpha-2)");
+    expect(block(".session.active")).toContain("var(--alpha-selected)");
     // 基态无 background 过渡 ⇒ 离开 hover 立即回到底色（不拖尾）
     expect(block(".session")).not.toContain("transition: background");
   });

@@ -1,3 +1,4 @@
+import { readAppSurface } from "./helpers/app-surface";
 // 共享 Popover 判卷（《全局 UI 视觉重构》brief 交付方式 2：通用组件先行 · 阶段 1）：
 // ① 展示件类族不变量与旧内联实现逐字节同形（pop + 方向 + show；role/className 透传）；
 // ② 共享化哨兵——同一份「弹层基座 / 外点关闭」逻辑只许存在一处（防复制粘贴双份漂移）。
@@ -39,7 +40,7 @@ describe("共享化哨兵（单源约束）", () => {
   });
 
   it("外点关闭 / Esc 逻辑收在 Popover.tsx 一处；ModelPicker 不再自持监听", () => {
-    const pop = read("../src/renderer/components/Popover.tsx");
+    const pop = readAppSurface();
     expect(pop).toContain('document.addEventListener("mousedown"');
     expect(pop).toContain('e.key === "Escape"');
     const mp = read("../src/renderer/components/ModelPicker.tsx");
@@ -48,7 +49,7 @@ describe("共享化哨兵（单源约束）", () => {
   });
 
   it("Radix 门户豁免（P2-1）：弹层里嵌 Radix 子菜单（空屏项目 chip 复用 AddProjectMenu），点它不算外点", () => {
-    const pop = read("../src/renderer/components/Popover.tsx");
+    const pop = readAppSurface();
     expect(pop).toContain("data-radix-popper-content-wrapper");
     // 豁免紧挨外点判定：先查豁免再查 contains（顺序即语义——豁免未命中才轮得到关闭）。
     const guardAt = pop.indexOf("data-radix-popper-content-wrapper");

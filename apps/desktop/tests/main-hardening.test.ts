@@ -63,7 +63,8 @@ describe("主进程接线见证", () => {
   });
 
   it("工作区上下文只接受已注册路径（`/` 不再是合法边界）", () => {
-    expect(app).toContain("未注册的工作区，已拒绝");
+    expect(read("../src/main/window-workspace-context.ts")).toContain("未注册的工作区，已拒绝");
+    expect(app).toContain("new WindowWorkspaceContext(canonicalKnownProjectPath)");
     expect(app).toContain("projectRegistry.list()");
     // 反向：旧的「任意字符串直接落地」不许回来。
     expect(app).not.toContain("workspaceContext = p === \"\" ? null : p;");

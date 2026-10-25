@@ -1,0 +1,3 @@
+desktop-boundary-check: 绿（src 无反向依赖、无 UI import）
+
+exitCode=0

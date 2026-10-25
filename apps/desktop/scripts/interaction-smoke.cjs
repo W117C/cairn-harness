@@ -96,6 +96,28 @@ async function main() {
   await click('[aria-label="关闭方案窗格"]'); await pause();
   check('关闭面板后键盘焦点回到剩余面板导航', await read(`return document.activeElement.getAttribute('aria-label') === '聚焦文件窗格';`));
   check('关闭聚焦面板后回到剩余面板', await read(`return !document.querySelector('[data-pane="plan"]') && document.querySelector('[data-pane="file"]').getBoundingClientRect().height > 100;`));
+  // 2026-10-21 批 142：显式关闭必须压过恢复窗格。旧实现只看 paneTabs.length，
+  // 关闭检查器后带窗格重启会被强行掰开——这条在真实 renderer 里走一遍（含 localStorage 与 reload）。
+  await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'i', code: 'KeyI', metaKey: true, altKey: true, bubbles: true }))`); await pause();
+  check('显式关闭检查器：窗格仍开、偏好写成 0', await read(`return localStorage.getItem('cairn.inspector.open.v1') === '0' && !!document.querySelector('[data-pane="file"]');`));
+  await win.reload(); await pause();
+  state = await read(`const col = document.querySelector('.inspector-col'); return { pref: localStorage.getItem('cairn.inspector.open.v1'), pane: !!document.querySelector('[data-pane="file"]'), width: col?.getBoundingClientRect().width ?? -1, inert: col?.hasAttribute('inert') ?? false };`);
+  check('带恢复窗格重载后检查器保持关闭（显式偏好优先）', state.pref === '0' && state.pane && state.width < 1 && state.inert, state);
+  await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'i', code: 'KeyI', metaKey: true, altKey: true, bubbles: true }))`); await pause();
+  state = await read(`const col = document.querySelector('.inspector-col'); return { pref: localStorage.getItem('cairn.inspector.open.v1'), width: col?.getBoundingClientRect().width ?? -1, inert: col?.hasAttribute('inert') ?? false };`);
+  check('关闭后仍可重新打开检查器', state.pref === '1' && state.width > 300 && !state.inert, state);
+  // 上面的 reload 会回到「侧栏展开」的启动态；后续窄窗检查量的是收起快捷栏，先恢复收起。
+  if (!(await read(`return !!document.querySelector('.sidebar-rail');`))) {
+    await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', metaKey: true, bubbles: true }))`); await pause();
+  }
+  check('检查器场景结束后侧栏快捷栏可回到收起态', await read(`return document.querySelector('.sidebar-rail')?.getBoundingClientRect().width === 48;`));
+  // 2026-10-21 评审修：设置返回必须在 ModalSurface 内部、且真实指针可命中。
+  // 脚本 `.click()` 会绕过 inert/hit-test，不能作为"可点"的证据。
+  await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', code: 'Comma', metaKey: true, bubbles: true }))`); await pause();
+  state = await read(`const b = document.querySelector('.sp-back'); const r = b?.getBoundingClientRect(); const hit = r ? document.elementFromPoint(r.left + r.width/2, r.top + r.height/2) : null; return { page: !!document.querySelector('.sp-page'), back: !!b, hit: !!hit?.closest('.sp-back'), toggle: !!document.querySelector('.titlebar .iconbtn'), tbBack: !!document.querySelector('.tb-back') };`);
+  check('设置返回在 surface 内且命中测试可点', state.page && state.back && state.hit && !state.toggle && !state.tbBack, state);
+  await pointerClick('.sp-back'); await pause();
+  check('真实指针点击返回关闭设置', !(await read(`return !!document.querySelector('.sp-page');`)));
   await win.setContentSize(880, 700); await pause();
   state = await read(`return { overflow: document.documentElement.scrollWidth > innerWidth, rail: document.querySelector('.sidebar-rail').getBoundingClientRect().width };`);
   check('窄窗快捷栏和面板无横向溢出', !state.overflow && state.rail === 48, state);

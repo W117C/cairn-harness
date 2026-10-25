@@ -5,11 +5,14 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
-const app = read("../src/renderer/App.tsx");
+const app = readAppSurface();
 const composer = read("../src/renderer/components/Composer.tsx");
-const projections = read("../src/renderer/projections.ts");
+// 投影真身已搬进 derived/（Phase 2 · 批 2.2）：projections.ts 现在只是门面（逐名转发），
+// 判据要看的**函数体**在 derived/session.ts ⇒ 读那一份（读面迁移，不是改判据）。
+const projections = read("../src/renderer/derived/session.ts");
 
 const between = (src: string, start: string, end: string): string => {
   const i = src.indexOf(start);
@@ -38,7 +41,7 @@ describe("打开会话：先清旧流，读盘期间的增量要合并", () => {
     const open = between(app, "const openSession = useCallback", "const queued = window.agent.queueGet");
     const clearAt = open.indexOf("setEvents([]);");
     const pendingAt = open.indexOf("openPending.current = pending;");
-    const callAt = open.indexOf("window.agent.openSession(id)");
+    const callAt = open.indexOf("window.agent.openSession(id, sessionWs ?? undefined)");
     expect(clearAt).toBeGreaterThan(-1);
     expect(pendingAt).toBeGreaterThan(-1);
     expect(callAt).toBeGreaterThan(-1);
@@ -96,14 +99,15 @@ describe("Composer：失败回滚 / 重命名迁移 / 建议与注入的序号�
     expect(composer).toContain("props.restoreDraft");
     const effect = between(composer, "const lastRestore = useRef(0);", "const lastInjectedAttachment");
     expect(effect).toContain("key !== draftKeyRef.current");
+    expect(effect).toContain("draftKeyFor(props.workspacePath, r.forSession)");
     expect(effect).toContain("draftsRef.current.set(key, r.text)");
   });
 
   it("重命名换 id 时草稿/附件桶跟着搬家", () => {
     expect(composer).toContain("props.draftRemap");
     const effect = between(composer, "const lastRemap = useRef(0);", "const lastRestore = useRef(0);");
-    expect(effect).toContain("draftsRef.current.set(r.to, moved)");
-    expect(effect).toContain("attachByKey.current.set(r.to, movedAttach)");
+    expect(effect).toContain("draftsRef.current.set(toKey, moved)");
+    expect(effect).toContain("attachByKey.current.set(toKey, movedAttach)");
   });
 
   it("想下一条带会话代际号：切走后迟到结果作废", () => {

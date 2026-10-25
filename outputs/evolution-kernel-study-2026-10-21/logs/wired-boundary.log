@@ -1,0 +1,6 @@
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+$ node --import tsx scripts/desktop-boundary-check.ts
+desktop-boundary-check: 绿（src 无反向依赖、无 UI import）

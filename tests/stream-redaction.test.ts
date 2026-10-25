@@ -68,6 +68,13 @@ const SAMPLES: Record<string, { event: Record<string, unknown>; secrets: string[
     event: { type: "file_restored", path: `src/${S1}.ts`, snapshotId: `.agent/snapshots/${S2}/src/a.ts` },
     secrets: [S1, S2],
   },
+  // ADR 0005 的日志结构控制记录：回退理由是人写的自由文本 ⇒ 要扫（to_event_id 是计数，不扫）。
+  session_rewind: { event: { type: "session_rewind", to_event_id: 2, reason: T(S1) }, secrets: [S1] },
+  // 元数据补丁的值是人写的自由文本（会话标题/别名/标签…）⇒ 逐叶子扫（patch 是对象，扫描递归进去）。
+  session_meta_update: {
+    event: { type: "session_meta_update", patch: { title: T(S1), tag: T(S2) } },
+    secrets: [S1, S2],
+  },
 };
 
 describe("注册表每一型都必须对正文表过态", () => {

@@ -20,7 +20,7 @@ import { toast } from "../toast";
 import { relInWorkspace } from "../workspace-rel";
 import type { PermissionMode, ProviderInfo, RunAttachmentReference, SuggestNextResult } from "../../../../../src/main/ipc-protocol";
 import type { RunPhase } from "../projections";
-import { ArrowUp, ChevronDown, ChevronRight, Clock, FileText, Folder, Image as ImageIcon, Loader2, Plus, Shield, ShieldAlert, X } from "lucide-react";
+import { ArrowUp, ChevronDown, ChevronRight, Clock, FileText, Folder, Image as ImageIcon, Loader2, Plus, Puzzle, Shield, ShieldAlert, X } from "lucide-react";
 import { classifyDrop } from "../sessions-view";
 import { formatTokens } from "./format-tokens";
 import { ModelPicker, THINKING_LEVELS } from "./ModelPicker";
@@ -29,7 +29,7 @@ import { Popover, usePopoverDismiss, useMenuKeyboard } from "./Popover";
 import { mentionBreadcrumb, parseMentionQuery, replaceMentionToken } from "../mention";
 import { STR } from "../strings";
 import { slashItems, type SlashSkill } from "../slash";
-import { DRAFTS_KEY, HOME_DRAFT_KEY } from "../drafts";
+import { DRAFTS_KEY, HOME_DRAFT_KEY, draftKeyFor, sessionIdOfDraftKey } from "../drafts";
 
 /** 用量环几何（v3-lite .ring 同比例：28px 钮、环径 23、环心 9.5px 数字）：
  *  r=11.5 ⇒ 2πr≈72.26；strokeDashoffset 按百分比折算弧长。 */
@@ -147,7 +147,6 @@ export function Composer(props: {
   runSteps?: number;
   /** 所选模型的上下文窗口（算水位用；未知 = 不显那一格）。 */
   ctxWindow?: number;
-  workspaceLabel: string | null;
   /** 当前工作区绝对路径（@ 搜索范围 / 项目内外判定 / 项目内文件「点开」）——未选项目 = null/缺省。 */
   workspacePath?: string | null;
   /** 本会话已引用文件（最近在前）：＋菜单「引用最近文件」子菜单数据面（App 内存级维护）。 */
@@ -168,7 +167,11 @@ export function Composer(props: {
   injectedAttachment?: { path: string; kind: "file" | "directory"; seq: number };
   /** v7 文本追加注入（元素选择结果等）：seq 递增触发一次 append 到草稿尾（不覆盖——与覆盖式 injectedText 分工）。 */
   injectedAppend?: { text: string; seq: number };
-  onSend: (text: string, attachments: RunAttachmentReference[]) => void;
+  /** 第三个参数 `forceQueue`：**只入队、不插话**。
+   *  为什么需要它：运行中的回车现在默认插话到本轮（第 9 点），但「加入队列」那颗钮点下去
+   *  必须**真的排队**——按钮写着「加入队列」却把话插进当前轮，按钮就在说谎。
+   *  缺省 undefined = 走默认语义（先试插话、不在跑则回落排队）。 */
+  onSend: (text: string, attachments: RunAttachmentReference[], forceQueue?: boolean) => void;
   onCancel: () => void;
   onModeChange: (mode: PermissionMode) => void;
   onModelChange: (registryId: string | null) => void;
@@ -195,19 +198,44 @@ export function Composer(props: {
    *  走 agent:suggestNext 单发模型调用；结果只填不发、不覆盖已敲的字；失败上屏分类 hint。
    *  缺省不给 = 不摆键帽、Tab 无色（旧消费者零行为不变）。 */
   onSuggestNext?: () => Promise<SuggestNextResult>;
-  /** 草稿有无（2026-10-18）：给侧栏画“有草稿”标记；id=null 表示首页。 */
-  onDraftPresence?: (sessionId: string | null, hasDraft: boolean) => void;
+  /** 草稿有无（2026-10-18）：给侧栏画“有草稿”标记；值 = 草稿桶键（工作区引用键），首页 null。 */
+  onDraftPresence?: (draftKey: string | null, hasDraft: boolean) => void;
 }) {
   const [text, setText] = useState("");
   // 附件引用（RunRequest.attachments）：chip 列表 + ＋弹层；发送后清空。
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   // 每会话草稿（2026-10-18 真机抓到的串稿）：Composer 常驻不随会话重挂，旧实现切会话时
-  // 把 A 的草稿原样带到 B（还会把 B 的草稿写回 A）。按 activeId 分桶：切走存、切回取；
-  // 发送时删键（否则发完再切回又把它捞回来）。home 用常量键。
-  const draftKey = props.activeId ?? HOME_DRAFT_KEY;
+  // 把 A 的草稿原样带到 B（还会把 B 的草稿写回 A）。按会话键分桶：切走存、切回取；
+  // 发送时删键（否则发完再切回又把它捞回来）。键带工作区（draftKeyFor）：两个已登记工作区里
+  // 同秒同 id 的会话是两条会话，草稿不能互串。home 用常量键。
+  const draftKey = props.activeId === null ? HOME_DRAFT_KEY : draftKeyFor(props.workspacePath, props.activeId);
   const draftsRef = useRef<Map<string, string>>(storedDrafts());
   // 附件 chip 与草稿同病（切会话会带着别人选的附件去发）：同一把键分桶。
   const attachByKey = useRef(new Map<string, AttachmentItem[]>());
+  // 旧裸 id 桶的懒迁移：旧版落盘的键是裸会话 id；读到引用键的空桶时把同 id 的旧桶搬过来
+  // （一次性的，搬完删旧键，之后快照只写新键）。旧裸键本身无法区分工作区，先到先得。
+  const takeDraft = (key: string): string | undefined => {
+    const direct = draftsRef.current.get(key);
+    if (direct !== undefined) return direct;
+    const legacyId = sessionIdOfDraftKey(key);
+    if (legacyId === null || legacyId === key) return undefined;
+    const legacy = draftsRef.current.get(legacyId);
+    if (legacy === undefined) return undefined;
+    draftsRef.current.set(key, legacy);
+    draftsRef.current.delete(legacyId);
+    return legacy;
+  };
+  const takeAttach = (key: string): AttachmentItem[] | undefined => {
+    const direct = attachByKey.current.get(key);
+    if (direct !== undefined) return direct;
+    const legacyId = sessionIdOfDraftKey(key);
+    if (legacyId === null || legacyId === key) return undefined;
+    const legacy = attachByKey.current.get(legacyId);
+    if (legacy === undefined) return undefined;
+    attachByKey.current.set(key, legacy);
+    attachByKey.current.delete(legacyId);
+    return legacy;
+  };
   // 已发提示历史（2026-10-18）：↑ 取上一条、↓ 往回走；只在空输入框/正在翻历史时接管方向键，
   // 不抢多行草稿里的光标移动。按会话分桶（与草稿同一把键）。
   const historyRef = useRef(new Map<string, string[]>());
@@ -217,8 +245,8 @@ export function Composer(props: {
     draftsRef.current.set(draftKeyRef.current, text); // 渲染期调整（guard 后 setState 同组件合法）：先于 injectedText 效果
     attachByKey.current.set(draftKeyRef.current, attachments);
     draftKeyRef.current = draftKey;
-    setText(draftsRef.current.get(draftKey) ?? "");
-    setAttachments(attachByKey.current.get(draftKey) ?? []);
+    setText(takeDraft(draftKey) ?? "");
+    setAttachments(takeAttach(draftKey) ?? []);
   }
   // 旧会话历史回填：本地桶还没有这个会话时，用投影行填一次（之后以本地发送栈为准）。
   useEffect(() => {
@@ -246,7 +274,7 @@ export function Composer(props: {
 
   // 首次挂载：把上次退出时留下的当前会话草稿读回来（之后靠切会话/发送的正常流程）。
   useEffect(() => {
-    const saved = draftsRef.current.get(draftKey);
+    const saved = takeDraft(draftKey);
     if (saved !== undefined && saved !== "") setText((cur) => (cur === "" ? saved : cur));
     // 只在挂载时读一次；draftKey 的变化由上面的换桶逻辑负责。
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -261,7 +289,7 @@ export function Composer(props: {
         if (text !== "") snap[draftKey] = text;
         else delete snap[draftKey];
         window.localStorage.setItem(DRAFTS_KEY, JSON.stringify(snap));
-        props.onDraftPresence?.(props.activeId ?? null, text.trim() !== "");
+        props.onDraftPresence?.(props.activeId === null ? null : draftKey, text.trim() !== "");
       } catch { /* 存不下则本会话内生效 */ }
     }, 300);
     return () => window.clearTimeout(t);
@@ -282,19 +310,22 @@ export function Composer(props: {
     taRef.current?.focus();
   }, [props.injectedText, props.injectedTextSeq]);
   // 重命名换 id：渲染期已把字/附件存回旧桶并读了新桶（空），这里把旧桶搬到新键并回填。
+  // 信号带的是裸 id，落桶键要补上工作区（与 draftKey 同口径）。
   const lastRemap = useRef(0);
   useEffect(() => {
     const r = props.draftRemap;
     if (r === undefined || r.seq === lastRemap.current) return;
     lastRemap.current = r.seq;
-    const moved = draftsRef.current.get(r.from);
-    if (moved !== undefined && !draftsRef.current.has(r.to)) draftsRef.current.set(r.to, moved);
-    draftsRef.current.delete(r.from);
-    const movedAttach = attachByKey.current.get(r.from);
-    if (movedAttach !== undefined && !attachByKey.current.has(r.to)) attachByKey.current.set(r.to, movedAttach);
-    attachByKey.current.delete(r.from);
-    if (draftKeyRef.current === r.to && moved !== undefined) setText((cur) => (cur === "" ? moved : cur));
-    if (draftKeyRef.current === r.to && movedAttach !== undefined) {
+    const fromKey = draftKeyFor(props.workspacePath, r.from);
+    const toKey = draftKeyFor(props.workspacePath, r.to);
+    const moved = draftsRef.current.get(fromKey);
+    if (moved !== undefined && !draftsRef.current.has(toKey)) draftsRef.current.set(toKey, moved);
+    draftsRef.current.delete(fromKey);
+    const movedAttach = attachByKey.current.get(fromKey);
+    if (movedAttach !== undefined && !attachByKey.current.has(toKey)) attachByKey.current.set(toKey, movedAttach);
+    attachByKey.current.delete(fromKey);
+    if (draftKeyRef.current === toKey && moved !== undefined) setText((cur) => (cur === "" ? moved : cur));
+    if (draftKeyRef.current === toKey && movedAttach !== undefined) {
       setAttachments((cur) => (cur.length === 0 ? movedAttach : cur));
     }
   }, [props.draftRemap]);
@@ -305,7 +336,7 @@ export function Composer(props: {
     const r = props.restoreDraft;
     if (r === undefined || r.seq === lastRestore.current) return;
     lastRestore.current = r.seq;
-    const key = r.forSession ?? HOME_DRAFT_KEY;
+    const key = r.forSession === null ? HOME_DRAFT_KEY : draftKeyFor(props.workspacePath, r.forSession);
     if (key !== draftKeyRef.current) {
       if (r.text !== "") draftsRef.current.set(key, r.text);
       if (r.attachments.length > 0) attachByKey.current.set(key, [...r.attachments]);
@@ -532,9 +563,9 @@ export function Composer(props: {
   };
   // v2.17 运行中可沟通：运行中 onSend 走 App 的按会话队列（回车=入队）；
   // interrupt=true（⌘/Ctrl+Enter）时先入队再打断本轮——收束在轮界，队列随即派发（App 侧语义）。
-  const submit = (opts?: { interrupt?: boolean }) => {
+  const submit = (opts?: { interrupt?: boolean; forceQueue?: boolean }) => {
     if (!canSend) return;
-    props.onSend(text.trim(), stripRenderFields(attachments));
+    props.onSend(text.trim(), stripRenderFields(attachments), opts?.forceQueue);
     const sent = text.trim();
     if (sent !== "") {
       const hist = historyRef.current.get(draftKeyRef.current) ?? [];
@@ -634,14 +665,27 @@ export function Composer(props: {
     ? STR.composer.ringAriaPct.replace("{pct}", String(ctxPct))
     : ctxWindowDeclared ? STR.composer.ringAriaNoData : STR.composer.ringAriaUnknown;
   const recentRefs = props.recentRefs ?? [];
+  // 插件命令带（G1 的按钮带半边，2026-10-21）：只列已信任、带命名空间的命令；
+  // 点一下填入 `/plugin:command `，不直接发送（沿用 C-24 的「填入不发送」口径）。
+  const pluginSkills = (props.skills ?? []).filter((s) => s.trust === "trusted" && s.invoke.includes(":")).slice(0, 4);
   return (
     <>
-      {props.workspaceLabel !== null && (
-        <div className="ctx-row">
-          <span className="ctx-chip" aria-label={STR.composer.workspaceAria}>
-            <Folder size={12} />
-            {props.workspaceLabel}<span className="wt-tag">{STR.composer.workspaceLocal}</span>
-          </span>
+      {pluginSkills.length > 0 && (
+        <div className="plugin-strip" aria-label={STR.composer.pluginStripAria}>
+          <span className="plugin-strip-label"><Puzzle size={11} aria-hidden="true" />{STR.composer.pluginStripLabel}</span>
+          {pluginSkills.map((s) => {
+            const invoke = s.invoke.replace(/^\/+/, "");
+            return (
+              <button
+                key={s.invoke}
+                className="plugin-chip"
+                title={s.description.trim() === "" ? invoke : s.description}
+                onClick={() => { chooseSlash({ invoke: `/${invoke}`, desc: s.description }); }}
+              >
+                {invoke}
+              </button>
+            );
+          })}
         </div>
       )}
       <div
@@ -1122,7 +1166,7 @@ export function Composer(props: {
               className="send-btn queue"
               aria-label={STR.composer.queueAria}
               title={STR.composer.queueTitle}
-              onClick={() => { submit(); }}
+              onClick={() => { submit({ forceQueue: true }); }}
             >
               <Clock size={13} />
             </button>

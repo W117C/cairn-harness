@@ -5,8 +5,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
-const app = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const app = readAppSurface();
 
 describe("openPreview 顺序", () => {
   it("先 previewStart，失败在开窗格之前返回", () => {

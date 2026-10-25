@@ -1,0 +1,15 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness
+
+
+ Test Files  14 passed (14)
+      Tests  253 passed (253)
+   Start at  16:46:44
+   Duration  5.06s (tests 42%, transform 33%, import 24%, worker 1%)
+
+  Transform  transforming modules took 2.52s · 33% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+exitCode=0

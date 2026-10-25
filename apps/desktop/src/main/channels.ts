@@ -23,6 +23,8 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   decidePlan: "agent:plan-decide",
   setGoal: "agent:goal-set",
   runCancel: "agent:run-cancel",
+  // 第 9 点：轮中插话（与 run-cancel 相邻，语义相反：一个收束、一个继续）。
+  runSteer: "agent:run-steer",
   compact: "agent:compact",
   getState: "agent:state",
   getProviderInfo: "agent:provider-info",
@@ -30,6 +32,14 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   getSettings: "agent:settings-get",
   setSettings: "agent:settings-set",
   listSessions: "agent:sessions-list",
+  // v14：跨会话用量账本（头像菜单「用量统计」→「全部会话」；main 只读扫描各工作区日志）。
+  usageLedger: "agent:usage-ledger",
+  // v20：多智能体编排——预览 / 提交 / 控制，地址 = 工作区 + 会话。
+  orchestrationView: "agent:orchestration-view",
+  orchestrationSubmit: "agent:orchestration-submit",
+  orchestrationControl: "agent:orchestration-control",
+  // v15：会话日志尾部（错误条 / 命令面板「查看日志」；main 只读）。
+  sessionLog: "agent:session-log",
   createSession: "agent:sessions-create",
   openSession: "agent:sessions-open",
   queueGet: "agent:session-queue-get",
@@ -52,6 +62,7 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   // v5 窗格后端：terminal 窗格（PTY 起停 + 输入）。
   terminalStart: "agent:terminal-start",
   terminalWrite: "agent:terminal-write",
+  terminalResize: "agent:terminal-resize",
   terminalKill: "agent:terminal-kill",
   // v5 窗格弹出：独立窗口路由。
   panePopout: "agent:pane-popout",
@@ -87,6 +98,8 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   setSessionPinned: "agent:session-pin",
   setSessionArchived: "agent:session-archive",
   sessionWorktree: "agent:session-worktree",
+  worktreeClean: "agent:worktree-clean",
+  worktreeDiff: "agent:worktree-diff",
   assignSessionProject: "agent:session-assign",
   deleteMemory: "agent:memory-delete",
   pluginDecide: "agent:plugin-decide",
@@ -126,6 +139,8 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   gitStatus: "agent:git-status",
   gitClone: "agent:git-clone",
   workspaceSearch: "agent:workspace-search",
+  // v18：会话正文全文检索（只读；主进程扫会话 JSONL，渲染层不碰盘）。
+  sessionSearch: "agent:session-search",
   touchProject: "agent:project-touch",
   saveTempFile: "agent:save-temp-file",
   snapshotRestore: "agent:snapshot-restore",

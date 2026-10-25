@@ -1,0 +1,40 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness
+
+ ❯ tests/promise-recall-inventory.test.ts (35 tests | 1 failed) 2323ms
+   ❯ 能力断言的证人面：一句都不曾被点过才算欠（第 311 页） (16)
+     × 真仓那一趟：分母非零、存量在帽内、四态相加＝分母（这条尺不许恒红也不许空载） 620ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/promise-recall-inventory.test.ts > 能力断言的证人面：一句都不曾被点过才算欠（第 311 页） > 真仓那一趟：分母非零、存量在帽内、四态相加＝分母（这条尺不许恒红也不许空载）
+AssertionError: 「尺读不出」超出帽 ⇒ 又写了一句点不出名字的能力断言：
+src/agent/plugins/hooks.ts#run｜
+src/agent/sequencer.ts#resolvePluginRole｜
+src/main/agent-runner.ts#handleAgentRun｜
+src/main/evolution/candidate-record.ts#parseCandidateRecord｜
+src/main/scheduler.ts#scheduleTimeZoneNotes｜
+src/providers/provider-config.ts#deriveCustomProviders｜: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/promise-recall-inventory.test.ts:333:87
+    331|     expect(ceil.stale, `现读 ${String(ceil.read)} 低于帽 ${String(ceil.cap)…
+    332|     const needleCeil = claimCountCeiling(f.noNeedle.length, CLAIM_NO_N…
+    333|     expect(needleCeil.over, `「尺读不出」超出帽 ⇒ 又写了一句点不出名字的能力断言：\n${f.noNeedl…
+       |                                                                                       ^
+    334|     expect(needleCeil.stale, `现读 ${String(needleCeil.read)} 低于帽 ${Stri…
+    335|     expect(f.witnessed.length, "一条都没被判过＝这条尺没在工作").toBeGreaterThan(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 34 passed (35)
+   Start at  17:55:18
+   Duration  3.89s (tests 61%, import 23%, transform 15%)
+

@@ -1,0 +1,17 @@
+=== 本批四处修法 + 判卷的实跑读数（2026-10-22，工作树，非 HEAD）===
+
+--- 本批四条新判卷 + 三条既有回归 ---
+stderr | tests/evolution-kernel.test.ts > 运行面装载与收束 tick > 没有候选档案 ⇒ 拒绝注入（无法核验摘要）
+[evolution-pack] content-pack.prompt@1.0.0 没有候选档案，拒绝注入（无法核验内容摘要）
+
+ ✓ tests/evolution-kernel.test.ts (17 tests) 70ms
+ ✓ tests/license-store-init.test.ts (5 tests) 11ms
+ ✓ tests/recovery-respawn-baseline.test.ts (3 tests) 746ms
+   ✓ 崩溃恢复重派：基线（diff 比对面）与归因模型原样带走 (3)
+     ✓ 重派产物：base_commit / usage_model 与崩溃前逐字相等；新树但基于原 base_commit 起（语义②） 376ms
+
+ Test Files  6 passed (6)
+      Tests  33 passed (33)
+   Start at  04:54:35
+   Duration  1.26s (transform 55%, tests 30%, import 15%)
+

@@ -45,6 +45,13 @@ export interface LspServerConfig {
   command: string;
   args?: string[];
   extensions: string[];
+  /** 扩展名 → LSP `languageId` 的显式映射（CC 的 `extensionToLanguage`，字段名向 CC 对齐 §9.8）。
+   *  **为什么必须有这一格**：`didOpen` 的 `languageId` 是服务器判断「这是什么语言」的唯一线索。
+   *  此前它被硬编码成「`.ts/.tsx/.js/.jsx/.mjs/.cjs` ⇒ `typescript`，其余一律 `plaintext`」——
+   *  于是配一个 Python/Go/Rust 的 server（pyright / gopls / rust-analyzer）时，文件以 `plaintext`
+   *  送进去：真服务器要么拒绝、要么返回空。**六操作全静默失效，且没有任何一处出声。**
+   *  缺省 undefined = 走 `defaultLanguageId`（旧的 TS 启发式，存量配置行为不变）。 */
+  extensionToLanguage?: Record<string, string>;
   /** CC 的 initializationOptions：原样进 InitializeParams（§9.8 的字段映射，不是收下即丢的装饰）。 */
   initializationOptions?: Record<string, unknown>;
   /** §9.8 `diagnostics.enabled`：显式 false ⇒ 该 server 不参与写后诊断回流（六操作照旧可用）。
@@ -214,6 +221,7 @@ export function loadLspConfig(workspace: string): LspConfig {
     }
     servers[id] = {
       command: cfg.command, args: cfg.args ?? [], extensions: cfg.extensions,
+      ...(cfg.extensionToLanguage !== undefined ? { extensionToLanguage: cfg.extensionToLanguage } : {}),
       ...(cfg.initializationOptions !== undefined ? { initializationOptions: cfg.initializationOptions } : {}),
       ...(cfg.diagnosticsEnabled !== undefined ? { diagnosticsEnabled: cfg.diagnosticsEnabled } : {}),
     };
@@ -268,12 +276,31 @@ export async function closePluginLspClients(root: string, ids: readonly string[]
   }));
 }
 
+/** `didOpen` 的 languageId 缺省值（服务器没有 `extensionToLanguage` 表时）。
+ *  纯函数、可判卷：历史形状是「六个 JS/TS 后缀 ⇒ typescript，其余 plaintext」，原样保留 ——
+ *  存量配置（只配 .ts）的行为一个字不变。要别的语言走 `extensionToLanguage`（见接口字段注）。 */
+export function defaultLanguageId(absPath: string): string {
+  return [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"].includes(extname(absPath)) ? "typescript" : "plaintext";
+}
+
+/** 服务器配置 → languageId 查表。坏形状（值不是 string）按**缺格**处理而不是抛：
+ *  配置里多一个奇怪的键不该让整个 LSP 面起不来，而 `languageIdFor` 会为它回落到缺省值。 */
+export function languageIdMap(server: LspServerConfig): ReadonlyMap<string, string> {
+  const out = new Map<string, string>();
+  for (const [ext, id] of Object.entries(server.extensionToLanguage ?? {})) {
+    if (typeof id === "string" && id !== "") out.set(ext, id);
+  }
+  return out;
+}
+
 export class LspClient {
   readonly pid: number;
   readonly key: string;
   private conn: ReturnType<typeof createProtocolConnection>;
   private child: ChildProcess;
   private root: string;
+  /** 本 client 的扩展名 → languageId 表（缺省空表 = 走 TS 启发式 `defaultLanguageId`）。 */
+  private readonly languageIds: ReadonlyMap<string, string>;
   /** uri → { version, text }：didOpen/didChange 状态（openFile 幂等推送）。 */
   private openDocs = new Map<string, { version: number; text: string }>();
   /** 最新诊断与各 URI 最近一次推送的全局序号，其他文件的推送不能证明本文件已更新。 */
@@ -284,11 +311,18 @@ export class LspClient {
   private inflight = new Map<string, { promise: Promise<unknown>; reject: (e: Error) => void }>();
   private stopping = false;
 
-  constructor(child: ChildProcess, conn: ReturnType<typeof createProtocolConnection>, root: string, key: string) {
+  constructor(
+    child: ChildProcess,
+    conn: ReturnType<typeof createProtocolConnection>,
+    root: string,
+    key: string,
+    languageIds?: ReadonlyMap<string, string>,
+  ) {
     this.child = child;
     this.conn = conn;
     this.root = root;
     this.key = key;
+    this.languageIds = languageIds ?? new Map();
     this.pid = child.pid ?? 0;
     this.conn.onNotification(PublishDiagnosticsNotification.type, (params) => {
       const version = this.openDocs.get(params.uri)?.version;
@@ -342,7 +376,7 @@ export class LspClient {
     const content = text ?? readFileSync(absPath, "utf8");
     const known = this.openDocs.get(uri);
     if (!known) {
-      const languageId = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"].includes(extname(absPath)) ? "typescript" : "plaintext";
+      const languageId = this.languageIdFor(absPath);
       this.openDocs.set(uri, { version: 1, text: content });
       await this.conn.sendNotification(DidOpenTextDocumentNotification.type, {
         textDocument: { uri, languageId, version: 1, text: content },
@@ -355,6 +389,13 @@ export class LspClient {
         contentChanges: [{ text: content }],
       });
     }
+  }
+
+  /** 本文件的 languageId：服务器显式表优先，缺省走 TS 启发式。
+   *  查表用 `extname` 的**原样**键（配置里写 `.py` 就查 `.py`）——不做大小写归一：
+   *  那是配置方的责任，静默归一会把「配错了扩展名」这件事藏起来。 */
+  languageIdFor(absPath: string): string {
+    return this.languageIds.get(extname(absPath)) ?? defaultLanguageId(absPath);
   }
 
   /** 请求（in-flight 去重：同一 method+params 的并发请求共享一个 Promise），带超时。 */
@@ -523,7 +564,7 @@ async function startClient(root: string, server: LspServerConfig, key: string): 
     onClose: (l: () => void) => innerWriter.onClose(l),
   };
   const conn = createProtocolConnection(reader, writer as unknown as StreamMessageWriter);
-  const client = new LspClient(child, conn, root, key);
+  const client = new LspClient(child, conn, root, key, languageIdMap(server));
   conn.listen();
   // initialize 带超时（服务器起不来 = 失败进 broken，不悬挂）
   let timer: ReturnType<typeof setTimeout> | undefined;

@@ -31,9 +31,13 @@ function parseScalar(raw: string): unknown {
  *  这里显式拒绝：`__proto__` 是唯一的访问器键（必须拦），`constructor`/`prototype` 属卫生拦截。 */
 const UNSAFE_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
 
-/** 取安全的 frontmatter 键名；空键与原型链危险键一律返回 null（该行整体忽略）。 */
+/** 取安全的 frontmatter 键名；空键与原型链危险键一律返回 null（该行整体忽略）。
+ *  键两侧的引号按 YAML 语义剥掉：`"*": false`（opencode 的 tools 通配键）不能当成字面 `"*"`。 */
 function safeKey(raw: string): string | null {
-  const t = raw.trim();
+  let t = raw.trim();
+  if (t.length >= 2 && ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'")))) {
+    t = t.slice(1, -1);
+  }
   if (t === "" || UNSAFE_KEYS.has(t)) return null;
   return t;
 }

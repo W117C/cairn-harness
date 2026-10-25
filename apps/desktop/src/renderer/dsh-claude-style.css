@@ -9,7 +9,12 @@
 @font-face { font-family: "Claude Style Inter"; src: url("./vendor/dsh-claude-style/fonts/InterVariable.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
 @font-face { font-family: "Claude Style Noto Serif"; src: url("./vendor/dsh-claude-style/fonts/NotoSerifVariable.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
 @font-face { font-family: "JetBrains Mono"; src: url("./vendor/dsh-claude-style/fonts/JetBrainsMonoVariable.ttf") format("truetype"); font-weight: 100 800; font-display: swap; }
-@font-face { font-family: "JetBrains Mono"; src: url("./vendor/dsh-claude-style/fonts/JetBrainsMonoItalicVariable.ttf") format("truetype"); font-weight: 100 800; font-style: italic; font-display: swap; }
+/* 斜体那一档**不声明**（2026-10-23 实测）：全仓 CSS 里没有一处规则会选中斜体等宽字体
+   （`italicUsed: false`），而 `document.fonts` 也把它报成 `status: "unloaded"`——
+   即这份 TTF 随构建产物发出去、**永远不会被下载**。
+   不删 vendor 里的字体文件（它在 UPSTREAM.json 的清单里、带 sha256，删了会破坏上游溯源）；
+   不声明的那一半是**我们自己的** adapter 文件。省的是产物里的那份字节。
+   将来真要用斜体等宽，把这一行加回来即可。 */
 
 /* 原有组件消费 HSL 分量；用原生相对颜色接到上游值，避免再维护一套色值。 */
 body[data-dsh-claude-style] {
@@ -41,6 +46,10 @@ body[data-dsh-claude-style] .md-code { background: var(--dsw-alias-markdown-code
 body[data-dsh-claude-style] .md-code-head { background: var(--dsw-alias-markdown-code-block-banner); }
 body[data-dsh-claude-style] .md-body { font-size: var(--fs-body-lg); }
 body[data-dsh-claude-style] [data-composer-card] { color: var(--dsw-alias-label-primary); background: var(--dsw-specific-input-major); }
+/* 2026-10-21：皮肤自带的 composer 是 18px，会盖住 tokens.css 的 12px；这里用同特异性、后加载的
+   覆盖层压回 v3 的 --radius-composer-card（12px）。伪元素焦点环同步，否则环与卡片错位。 */
+body[data-dsh-claude-style] [data-composer-card],
+body[data-dsh-claude-style] [data-composer-card]::after { border-radius: var(--radius-composer-card); }
 body[data-dsh-claude-style] .composer-card[data-disabled="true"] { opacity: .72; }
 body[data-dsh-claude-style] .pop-rd, body[data-dsh-claude-style] .pop { background: var(--dsh-claude-card); }
 

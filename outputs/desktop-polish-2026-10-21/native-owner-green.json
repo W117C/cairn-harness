@@ -1,0 +1,71 @@
+[
+  {
+    "name": "真实浏览器视图可以打开",
+    "ok": true
+  },
+  {
+    "name": "页面在隔离视图中实际执行",
+    "ok": true
+  },
+  {
+    "name": "远端页面权限默认拒绝",
+    "ok": true
+  },
+  {
+    "name": "浏览器尺寸随面板同步",
+    "ok": true
+  },
+  {
+    "name": "收起面板隐藏原生视图",
+    "ok": true
+  },
+  {
+    "name": "实际元素选择回传选择器与片段",
+    "ok": true,
+    "detail": {
+      "ok": true,
+      "selector": "#target",
+      "snippet": "<button id=\"target\">真实浏览器测试</button>",
+      "url": "http://127.0.0.1:56286/"
+    }
+  },
+  {
+    "name": "未授权重定向没有发到目标服务",
+    "ok": true,
+    "detail": {
+      "foreignHits": 0
+    }
+  },
+  {
+    "name": "窗口焦点变化后仍从原宿主释放视图",
+    "ok": true,
+    "detail": {
+      "children": 0,
+      "destroyed": true
+    }
+  },
+  {
+    "name": "后台弹窗页面挂到调用窗口而非聚焦窗口",
+    "ok": true
+  },
+  {
+    "name": "另一个窗口不能复用已有视图 ID",
+    "ok": true
+  },
+  {
+    "name": "宿主窗口销毁时释放视图及登记",
+    "ok": true
+  },
+  {
+    "name": "真实 PTY 启动成功",
+    "ok": true
+  },
+  {
+    "name": "PTY 中文输出经过真实管道返回",
+    "ok": true
+  },
+  {
+    "name": "关闭终端后不可继续写入",
+    "ok": true
+  }
+]

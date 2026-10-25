@@ -1,0 +1,46 @@
+{
+  "id": "content-pack.report-recipe",
+  "version": "1.2.0",
+  "parentVersion": "1.1.0",
+  "contentDigest": "sha256:ddfab55d0574c9afbd670c4fa7ba9d607745da6c999feddffdfd0debf23e7aa0",
+  "generator": {
+    "kind": "handwritten-demo",
+    "model": null,
+    "tools": []
+  },
+  "taskSet": {
+    "id": "tiny-report",
+    "version": "1",
+    "digest": "sha256:handwritten-demo"
+  },
+  "transform": "bad",
+  "evaluation": {
+    "status": "rolled-back",
+    "runs": [
+      {
+        "runId": "run-bad-1",
+        "ok": false,
+        "artifactDigest": "sha256:6515d0ca4c56f90f7f42d0fd5feac749adf7cc145fc24ffea3096f0a0ace880f",
+        "costUsd": 0,
+        "failureReason": "judge red"
+      },
+      {
+        "runId": "run-bad-2-none",
+        "ok": null,
+        "artifactDigest": null,
+        "costUsd": 0,
+        "failureReason": "no evidence (none)"
+      },
+      {
+        "runId": "run-bad-3-after-restart",
+        "ok": false,
+        "artifactDigest": null,
+        "costUsd": 0,
+        "failureReason": "consecutive failure limit"
+      }
+    ],
+    "rollbackTo": "1.1.0"
+  },
+  "approvedBy": "owner-human",
+  "createdAt": "2026-10-21T09:03:14.610Z"
+}

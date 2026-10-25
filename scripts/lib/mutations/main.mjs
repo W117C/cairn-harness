@@ -332,7 +332,7 @@ export const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/verify-exec-sandbox.test.ts",
     desc: "沙箱出口把 timeoutMs 丢掉 ⇒ 语言探测的 300s 在发货缺省路径上不生效，冷编译照旧被 60s 掐死",
-    apply: (s) => s.replace("const res = await run(mapped, { cwd, ...(timeoutMs ? { timeoutMs } : {}) });", "const res = await run(mapped, { cwd });"),
+    apply: (s) => s.replace("const res = await run(mapped, { cwd, ...(timeoutMs ? { timeoutMs } : {}), ...(signal ? { signal } : {}) });", "const res = await run(mapped, { cwd, ...(signal ? { signal } : {}) });"),
     expectFail: "超时透传给 runInSandbox；未给时不写这个键（沿用沙箱自己的缺省，不越权改写）",
   },
   {
@@ -1190,5 +1190,40 @@ export const MUTATIONS = [
       `    return { state: "ok", trusted: 0, declined: 0 };`,
     ),
     expectFail: "文件不在 = absent",
+  },
+  // 自进化面此前**零**变异锚点（2026-10-22 审计实读：scripts/lib/mutations/* 里指向
+  // src/main/evolution/* 的条目 0 条）——而这一族恰好是「零阈值 ⇒ 零证据也够」那一族。
+  // 下面三条把 canary 的门槛三面（开档/读档/判决）各钉一钉：门槛必须是 ≥1 的整数。
+  {
+    id: "canary-max-samples-threshold-not-validated",
+    src: "src/main/evolution/canary.ts",
+    test: "tests/evolution-canary.test.ts",
+    desc: "开档时不验 maxSamples（0 或小数都收）⇒ 零门槛让「conclusiveSamples(0) >= maxSamples(0)」成立 ⇒ 第一个 none 样本（一个 verify 拍都没有）就把候选判成 promoted，零证据被读成「证据够了」",
+    apply: (s) => s.replace("(!Number.isInteger(spec.maxSamples) || spec.maxSamples < 1)", "(false)"),
+    expectFail: "maxSamples 不是 ≥1 的整数 ⇒ 拒绝开档（零门槛 = 没有证据也算够了）",
+  },
+  {
+    id: "canary-max-consecutive-failures-threshold-not-validated",
+    src: "src/main/evolution/canary.ts",
+    test: "tests/evolution-canary.test.ts",
+    desc: "开档时不验 maxConsecutiveFailures（0 也收）⇒ 零连败门槛让「consecutiveFailures(0) >= 0」在**第一个**样本就成立 ⇒ 健康候选被当场判成退化并回退",
+    apply: (s) => s.replace("(!Number.isInteger(spec.maxConsecutiveFailures) || spec.maxConsecutiveFailures < 1)", "(false)"),
+    expectFail: "maxSamples 不是 ≥1 的整数 ⇒ 拒绝开档（零门槛 = 没有证据也算够了）",
+  },
+  {
+    id: "canary-record-threshold-not-validated",
+    src: "src/main/evolution/canary.ts",
+    test: "tests/evolution-canary.test.ts",
+    desc: "读回盘上观察档时不验门槛（.agent/canary/<id>.json 是人/模型可写的文件）⇒ 零门槛档被当成合法档带进判决",
+    apply: (s) => s.replace("!Number.isInteger(v) || v < 1", "false"),
+    expectFail: "盘上观察档的门槛是 0 ⇒ 读不动（不晋升，也不折成「没有档」）",
+  },
+  {
+    id: "registry-replay-drops-own-declared-gates",
+    src: "src/main/evolution/registry.ts",
+    test: "tests/evolution-kernel.test.ts",
+    desc: "重建（重放账本）时不把**账本自己定格的 declaredGates** 并进 knownGates ⇒ 生产读面（src 侧不抄门名单，那份是空集）拿空 knownGates 去卡这些门 ⇒ 一份完全合法的账本被判死（RegistryLogCorruptError）⇒ content-pack 注入与 canary 收束 tick 同时熄火，且每次重建都撞同一行（**自愈不了**）",
+    apply: (s) => s.replace("replayGates.add(gate);", "replayGates.delete(gate);"),
+    expectFail: "索引丢了要重建 ⇒ 重建不许因为门名单把账本判死（注入结果与索引新鲜时逐字节一致）",
   },
 ];

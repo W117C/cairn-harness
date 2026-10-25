@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "id": "content-pack.report-recipe",
+  "candidateVersion": "1.2.0",
+  "previousVersion": "1.1.0",
+  "state": "rolled-back",
+  "samples": 3,
+  "consecutiveFailures": 2,
+  "baselineTokensPerBoundary": null,
+  "maxSamples": 10,
+  "maxConsecutiveFailures": 2,
+  "costDegradeFactor": 2,
+  "degradations": [
+    {
+      "rule": "consecutive-failures",
+      "detail": "连续 2 个样本 verify 未转绿"
+    }
+  ],
+  "startedAt": "2026-10-21T09:03:10.188Z",
+  "rollbackTo": "1.1.0",
+  "endedAt": "2026-10-21T09:03:14.432Z",
+  "lessonWritten": true
+}

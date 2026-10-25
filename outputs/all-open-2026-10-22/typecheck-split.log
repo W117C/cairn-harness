@@ -1,0 +1,9 @@
+$ tsc -p tsconfig.json --noEmit
+src/renderer/panes/WorkbenchView.tsx(3,15): error TS2305: Module '"../../../../../src/main/ipc-protocol"' has no exported member 'ClarifyQuestion'.
+src/renderer/panes/WorkbenchView.tsx(3,31): error TS2305: Module '"../../../../../src/main/ipc-protocol"' has no exported member 'PlanProposal'.
+src/renderer/state/app-commands.ts(2,15): error TS2305: Module '"../../../../../src/main/ipc-protocol"' has no exported member 'ClarifyQuestion'.
+src/renderer/state/app-commands.ts(2,31): error TS2305: Module '"../../../../../src/main/ipc-protocol"' has no exported member 'PlanProposal'.
+src/renderer/state/workbench.ts(24,10): error TS2305: Module '"../pane-registry"' has no exported member 'changedFileCount'.
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] cairn-desktop@0.1.0 typecheck: `tsc -p tsconfig.json --noEmit`
+Exit status 2

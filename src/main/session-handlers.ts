@@ -1,10 +1,11 @@
 import { existsSync } from "node:fs";
 import { rename, rm, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { createEventLog, forkSession, replay, type AgentEvent } from "../events";
+import { createEventLog, forkSession, replay, type AgentEvent, type EventRef } from "../events";
 import { scanStreamEvent } from "../agent/worker-projection";
 import { forkPointOf, forkSessionName } from "../agent/fork-cli";
-import { applyTurnRevert, planTurnRevert, type FileRevertResult } from "../agent/file-revert";
+import { applyTurnRevert, planTurnRevert, planTurnRevertView, type FileRevertResult } from "../agent/file-revert";
+import { isEventRef, readSessionView } from "../events";
 import { getLastWorkspace } from "./runner-workspace";
 import { readChangeDiff, restoreSnapshot } from "./change-diff";
 import { listDir, readTextFile } from "./workspace-fs";
@@ -22,8 +23,11 @@ import {
   readSessionEvents,
   renameSession,
   sessionExists,
+  workspaceOfSessionsRoot,
   type SessionInfo,
 } from "./sessions";
+import { createProductFork, withSessionMutation } from "./session-repository";
+import { assertNoDependents } from "./session-dependencies";
 import { ProjectRegistry, type AddProjectInput, type ProjectRecord } from "./project-registry";
 import { SessionMetadataRepository, type SessionMetadataRecord } from "./session-metadata";
 import { FeedbackStore, type FeedbackRating, type ResolvedFeedback } from "./feedback";
@@ -173,53 +177,60 @@ export async function applyCrashRecovery(logPath: string, emit?: (e: AgentEvent)
   return out;
 }
 
-export async function handleSessionRename(oldId: string, newName: string): Promise<{ id: string }> {
+export async function handleSessionRename(oldId: string, newName: string, sessionsRoot?: string): Promise<{ id: string }> {
   // 归属根来自解析器（多根面）：项目工作区里的会话不在单例根下，
   // 用单例根去改名 = 改不到（或改到同 id 的另一条）——桌面端「改名」对项目会话整条失效。
-  const dir = await resolveSessionRoot(oldId);
+  // `sessionsRoot` = 调用方已过登记根闸的显式根（两个工作区同名 id 必须精确寻址）。
+  const dir = sessionsRoot ?? await resolveSessionRoot(oldId);
   if (dir === null) throw new Error(`会话不存在: ${oldId}`);
-  const id = await renameSession(dir, oldId, newName, requireSessionMetadata());
-  const cur = await store().get();
-  if (cur.currentSession === oldId) await store().set({ currentSession: id });
-  return { id };
+  return await withSessionMutation(dir, async () => {
+    await assertNoDependents({ workspace: workspaceOfSessionsRoot(dir) ?? dir, sessionId: oldId }, dir);
+    const id = await renameSession(dir, oldId, newName, requireSessionMetadata());
+    const cur = await store().get();
+    if (cur.currentSession === oldId) await store().set({ currentSession: id });
+    return { id };
+  });
 }
 
 /** 删除会话：若删的是当前会话 → 回退到最近一个（列表 mtime 降序首个）；无会话 → null。 */
-export async function handleSessionDelete(id: string): Promise<{ currentSession: string | null }> {
-  const dir = await resolveSessionRoot(id);
+export async function handleSessionDelete(id: string, sessionsRoot?: string): Promise<{ currentSession: string | null }> {
+  const dir = sessionsRoot ?? await resolveSessionRoot(id);
   if (dir === null) throw new Error(`会话不存在: ${id}`);
   const logPath = pathOf(dir, id);
-  await deleteSession(dir, id, requireSessionMetadata());
-  // 删除会话要连私有观测数据 / 反馈 / 裁剪附件一起清：它们都以会话 id 为锚，留着会让同 id
-  // 新会话继承旧反馈（eventId 指向不存在的转录），且隐私面残留在盘上。
-  // 清理失败不把已完成的删除反签成失败（与 deleteSession 的队列清理同口径），但要出声。
-  await removePrivateSessionData(logPath).catch((err: unknown) => {
-    console.warn("[session-delete] 私有观测数据清理失败:", err instanceof Error ? err.message : String(err));
-  });
-  await requireFeedbackStore().removeSession(id).catch((err: unknown) => {
-    console.warn("[session-delete] 反馈清理失败:", err instanceof Error ? err.message : String(err));
-  });
-  // 置顶记录同样以会话 id 为锚：留着会让同 id 新会话继承旧 eventId 的高亮（指向不存在的转录）。
-  await requirePinStore().removeSession(id).catch((err: unknown) => {
-    console.warn("[session-delete] 置顶清理失败:", err instanceof Error ? err.message : String(err));
-  });
-  try {
-    const pruneDir = join(dir, "prune-attachments");
-    const prefix = attachmentPrefixFor(id);
-    for (const name of await readdir(pruneDir)) {
-      if (name.startsWith(prefix)) await rm(join(pruneDir, name), { force: true });
+  return await withSessionMutation(dir, async () => {
+    await assertNoDependents({ workspace: workspaceOfSessionsRoot(dir) ?? dir, sessionId: id }, dir);
+    await deleteSession(dir, id, requireSessionMetadata());
+    // 删除会话要连私有观测数据 / 反馈 / 裁剪附件一起清：它们都以会话 id 为锚，留着会让同 id
+    // 新会话继承旧反馈（eventId 指向不存在的转录），且隐私面残留在盘上。
+    // 清理失败不把已完成的删除反签成失败（与 deleteSession 的队列清理同口径），但要出声。
+    await removePrivateSessionData(logPath).catch((err: unknown) => {
+      console.warn("[session-delete] 私有观测数据清理失败:", err instanceof Error ? err.message : String(err));
+    });
+    await requireFeedbackStore().removeSession(id).catch((err: unknown) => {
+      console.warn("[session-delete] 反馈清理失败:", err instanceof Error ? err.message : String(err));
+    });
+    // 置顶记录同样以会话 id 为锚：留着会让同 id 新会话继承旧 eventId 的高亮（指向不存在的转录）。
+    await requirePinStore().removeSession(id).catch((err: unknown) => {
+      console.warn("[session-delete] 置顶清理失败:", err instanceof Error ? err.message : String(err));
+    });
+    try {
+      const pruneDir = join(dir, "prune-attachments");
+      const prefix = attachmentPrefixFor(id);
+      for (const name of await readdir(pruneDir)) {
+        if (name.startsWith(prefix)) await rm(join(pruneDir, name), { force: true });
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        console.warn("[session-delete] 裁剪附件清理失败:", err instanceof Error ? err.message : String(err));
+      }
     }
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-      console.warn("[session-delete] 裁剪附件清理失败:", err instanceof Error ? err.message : String(err));
-    }
-  }
-  const cur = await store().get();
-  if (cur.currentSession !== id) return { currentSession: cur.currentSession };
-  const rest = await listSessions(dir);
-  const next = rest[0]?.id ?? null;
-  await store().set({ currentSession: next });
-  return { currentSession: next };
+    const cur = await store().get();
+    if (cur.currentSession !== id) return { currentSession: cur.currentSession };
+    const rest = await listSessions(dir);
+    const next = rest[0]?.id ?? null;
+    await store().set({ currentSession: next });
+    return { currentSession: next };
+  });
 }
 
 /** M8 分叉 IPC 接线（v2.15）：保留前 N 轮（含）→ 新会话 `<id>-f<N>`；源会话只读、字节不变。
@@ -230,27 +241,24 @@ export async function handleSessionFork(
   sessionId: string,
   round: number,
   unique = false,
+  sessionsRoot?: string,
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
-  const dir = requireSessionsDir();
+  const dir = sessionsRoot ?? requireSessionsDir();
   if (!(await sessionExists(dir, sessionId))) return { ok: false, error: `源会话不存在：${sessionId}` };
-  const srcPath = pathOf(dir, sessionId);
-  let events: AgentEvent[];
+  const workspace = workspaceOfSessionsRoot(dir) ?? dir;
+  // 轮数按**可见历史**数（父前缀的轮也算），名字与 CLI `--from <轮数>` 同源。
+  let view;
   try {
-    events = await replay(srcPath);
+    view = await readSessionView({ workspace, sessionId }, dir);
   } catch (err) {
     return { ok: false, error: `读源会话失败：${err instanceof Error ? err.message : String(err)}` };
   }
-  // round = 0（第十四遍，desktop 侧扩展，对话菜单「分叉…」）：**全量分叉**——保留到最后一轮。
-  // 总轮数从同一份 forkPointOf 算术取（round=1 的返回带 totalRounds，不另抄一份计数）；
-  // 名字仍按实际轮数拼 <id>-f<总轮数>，与 CLI `--from <总轮数>` 同源。CLI 仍只收正整数（fork-cli 校验不动）。
-  let effective = round;
-  if (effective === 0) {
-    const probe = forkPointOf(events, 1);
-    if ("error" in probe) return { ok: false, error: probe.error };
-    effective = probe.totalRounds;
-  }
-  const point = forkPointOf(events, effective);
-  if ("error" in point) return { ok: false, error: point.error };
+  const totalRounds = view.entries.filter((entry) => entry.event.type === "user_message").length;
+  if (totalRounds === 0) return { ok: false, error: "这条会话还没有任何一轮（0 条 user_message），没有可分叉的点" };
+  // round = 0（desktop 扩展，对话菜单「分叉…」）：全量分叉——保留到最后一轮。
+  const effective = round === 0 ? totalRounds : round;
+  if (!Number.isInteger(effective) || effective < 1) return { ok: false, error: `分叉轮次非法：${String(round)}` };
+  if (effective > totalRounds) return { ok: false, error: `第 ${String(effective)} 轮超出会话轮数（该会话共 ${String(totalRounds)} 轮）` };
   const baseId = forkSessionName(sessionId, effective);
   let newId = baseId;
   let suffix = 1;
@@ -278,15 +286,18 @@ export async function handleSessionFork(
     srcRecord !== undefined && srcRecord.title !== sessionId ? `${srcRecord.title}-f${String(effective)}` : null;
   const forkTitle = baseTitle === null ? null : (suffix > 1 ? `${baseTitle}-${String(suffix)}` : baseTitle);
   if (forkTitle !== null) await meta.create(newId, forkTitle);
-  const scratch = join(dir, ".fork-" + newId);
   try {
-    const made = await forkSession(srcPath, String(point.lastIncluded), scratch);
-    await rename(made.eventsPath, target);
-    await rm(scratch, { recursive: true, force: true });
+    // 产品指针分叉的唯一创建入口（CLI 与桌面共用）：父日志只读、目标排他、依赖检查与创建同一临界区。
+    const created = await createProductFork({ workspace, sessionId }, effective, { workspace, sessionId: newId }, { sessionsRoot: dir });
+    if (!created.ok) {
+      if (forkTitle !== null) await meta.remove(newId).catch(() => undefined);
+      return { ok: false, error: created.error };
+    }
   } catch (error) {
     if (forkTitle !== null) await meta.remove(newId).catch(() => undefined);
     throw error;
   }
+  void target;
   return { ok: true, id: newId };
 }
 
@@ -299,9 +310,10 @@ export async function handleSessionRevert(
   sessionId: string,
   round: number,
   workspaceOverride: string | null = null,
+  sessionsRoot?: string,
 ): Promise<FileRevertResult & { ok: boolean; error?: string }> {
   const empty: FileRevertResult = { restored: [], deleted: [], manual: [], failed: [] };
-  const dir = requireSessionsDir();
+  const dir = sessionsRoot ?? requireSessionsDir();
   if (!(await sessionExists(dir, sessionId))) return { ok: false, error: `会话不存在：${sessionId}`, ...empty };
   const workspace = workspaceOverride ?? getLastWorkspace();
   if (workspace === null) return { ok: false, error: "没有已知的工作区（本进程还没跑过 run）⇒ 无法定位要回滚的文件", ...empty };
@@ -311,12 +323,37 @@ export async function handleSessionRevert(
   } catch (err) {
     return { ok: false, error: `读会话失败：${err instanceof Error ? err.message : String(err)}`, ...empty };
   }
-  const plan = planTurnRevert(events, round);
+  // 指针分叉：轮次与写回执都要在来源视图里解释（父前缀的轮也是可见轮）。
+  let plan;
+  const head = events[0];
+  if (head !== undefined && head.type === "session_meta" && head.fork !== undefined) {
+    const ws = workspaceOfSessionsRoot(dir) ?? workspace;
+    const view = await readSessionView({ workspace: ws, sessionId }, dir).catch(() => null);
+    plan = view === null ? planTurnRevert(events, round) : planTurnRevertView(view, round);
+  } else {
+    plan = planTurnRevert(events, round);
+  }
   if ("error" in plan) return { ok: false, error: plan.error, ...empty };
   if (plan.entries.length === 0) {
     return { ok: false, error: `第 ${String(round)} 轮没有可回滚的文件改动（这一轮没写过盘，或改动都取不到覆盖前原件）`, ...empty };
   }
   const r = await applyTurnRevert(workspace, plan);
+  // 留痕：每条真正还原/删除的文件落一条 file_restored（只写当前会话；祖先行带 source_ref）。
+  // 落流失败不把已完成的回滚反签成失败——盘上的事实优先，事件面只是读数；但要出声。
+  const refByPath = new Map(plan.entries.map((entry) => [entry.path, entry.sourceRef] as const));
+  try {
+    const log = createEventLog(pathOf(dir, sessionId));
+    for (const path of [...r.restored, ...r.deleted]) {
+      const sourceRef = refByPath.get(path);
+      await log.append({
+        type: "file_restored", path,
+        ...(sourceRef !== undefined ? { source_ref: sourceRef } : {}),
+      } as AgentEvent);
+    }
+    await log.close?.();
+  } catch (err) {
+    console.warn("[changes] 回滚成功但落 file_restored 事件失败:", err instanceof Error ? err.message : String(err));
+  }
   return { ok: true, ...r };
 }
 
@@ -328,14 +365,16 @@ export async function handleFeedbackSubmit(req: {
   eventId: number;
   rating: FeedbackRating;
   note?: string;
-}): Promise<{ ok: boolean; error?: string }> {
+  eventRef?: EventRef;
+}, sessionsRoot?: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    await requireExistingSession(req.sessionId);
+    await requireExistingSession(req.sessionId, sessionsRoot);
     await requireFeedbackStore().append({
       sessionId: req.sessionId,
       eventId: req.eventId,
       rating: req.rating,
       ...(req.note !== undefined ? { note: req.note } : {}),
+      ...(req.eventRef !== undefined ? { eventRef: req.eventRef } : {}),
     });
     return { ok: true };
   } catch (err) {
@@ -344,7 +383,7 @@ export async function handleFeedbackSubmit(req: {
 }
 
 /** 某会话当前生效的反馈（界面据此点亮赞/踩）。 */
-export async function handleFeedbackList(sessionId: string): Promise<ResolvedFeedback[]> {
+export async function handleFeedbackList(sessionId: string, _sessionsRoot?: string): Promise<ResolvedFeedback[]> {
   return await requireFeedbackStore().listForSession(sessionId);
 }
 
@@ -355,10 +394,14 @@ export async function handlePinSet(req: {
   sessionId: string;
   eventId: number;
   pinned: boolean;
-}): Promise<{ ok: boolean; error?: string }> {
+  eventRef?: EventRef;
+}, sessionsRoot?: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    await requireExistingSession(req.sessionId);
-    await requirePinStore().append({ sessionId: req.sessionId, eventId: req.eventId, pinned: req.pinned });
+    await requireExistingSession(req.sessionId, sessionsRoot);
+    await requirePinStore().append({
+      sessionId: req.sessionId, eventId: req.eventId, pinned: req.pinned,
+      ...(req.eventRef !== undefined ? { eventRef: req.eventRef } : {}),
+    });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -366,8 +409,8 @@ export async function handlePinSet(req: {
 }
 
 /** 某会话当前生效的置顶锚点（界面据此点亮 pin 钮、大纲里置顶项排前）。 */
-export async function handlePinList(sessionId: string): Promise<number[]> {
-  return await requirePinStore().listForSession(sessionId);
+export async function handlePinList(sessionId: string): Promise<{ eventId: number; eventRef?: EventRef }[]> {
+  return await requirePinStore().listForSessionWithRefs(sessionId);
 }
 
 // ---- CX-01：项目注册表 + Session-plane 组织记录 ----
@@ -386,10 +429,11 @@ export async function handleProjectRemove(id: string): Promise<ProjectRecord> {
   return await requireProjectRegistry().remove(id);
 }
 
-async function requireExistingSession(id: string): Promise<void> {
+async function requireExistingSession(id: string, sessionsRoot?: string): Promise<void> {
   // 归属根由解析器给（多根面）；**存在性仍然当场查**——解析器只说"去哪儿找"，
   // 不替它说"存在"（否则解析器的一次误判就变成一次静默放行）。
-  const root = await resolveSessionRoot(id);
+  // `sessionsRoot` = 调用方已过登记根闸的显式根（同名 id 精确寻址）。
+  const root = sessionsRoot ?? await resolveSessionRoot(id);
   if (root === null || !(await sessionExists(root, id))) throw new Error(`会话不存在: ${id}`);
 }
 
@@ -428,7 +472,7 @@ export async function handleChangeDiff(req: { path: string; snapshotId?: string 
  *  全部从事件流投影 ⇒ 还原之后那一行仍写着"修改"、仍提供"撤销"、徽标仍数着它，
  *  而那个改动在盘上已经不存在了。落流之后改动面才能如实反映"这一项被撤了"。 */
 export async function handleSnapshotRestore(
-  req: { path?: string; snapshotId?: string; sessionId?: string },
+  req: { path?: string; snapshotId?: string; sessionId?: string; eventRef?: EventRef },
   workspaceOverride: string | null = null,
 ) {
   const workspace = workspaceOverride ?? getLastWorkspace();
@@ -458,6 +502,7 @@ export async function handleSnapshotRestore(
           type: "file_restored",
           path: String(req.path ?? ""),
           ...(req.snapshotId !== undefined ? { snapshotId: String(req.snapshotId) } : {}),
+          ...(req.eventRef !== undefined && isEventRef(req.eventRef) ? { source_ref: req.eventRef } : {}),
         } as AgentEvent));
       }
     } catch (err) {

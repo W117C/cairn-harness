@@ -13,7 +13,7 @@
 // （「目录名含 `[` `?` `*` 拼进 `branch --list` 会匹配全部 agent 分支并循环删除」）——
 // 一道防**批量误删**的闸，零证人。
 import { describe, expect, it } from "vitest";
-import { branchForAgent, cleanOrphanWorktree, orphanWorktrees, taskSlug } from "../src/agent/worktree";
+import { branchForAgent, cleanOrphanWorktree, orphanWorktrees, parseWorktreeRef, taskSlug } from "../src/agent/worktree";
 
 /** 事件流的最小形状（`orphanWorktrees` 只读这几个字段）。 */
 type Ev = { type: string; agent_id?: string; status?: string; callId?: string; ok?: boolean };
@@ -66,6 +66,16 @@ describe("orphanWorktrees：谁进「可清理」面板（删除决策的第一�
   it("非终态（running 等）仍算孤儿 —— 进程被杀遗留正是这一格要捞的", () => {
     const out = orphanWorktrees(dirs, [{ type: "agent_status", agent_id: "w1", status: "running" }]);
     expect(out).toContain("w1");
+  });
+
+  it("进程内仍有归属（运行中/待合并）⇒ 不算孤儿；未归属的 running 仍算（崩溃遗留仍要捞）", () => {
+    // 跨会话：目录是 workspace 级，事件流是 session 级。另一会话的活 worker 在本会话日志里没有终态，
+    // 但它在 orchestrator 的 agentOwners/mergeOwners 里仍有归属 ⇒ 不许进「可清理」。
+    expect(orphanWorktrees(["wt-w1", "wt-w2"], [], new Set(["w1"]))).toEqual(["w2"]);
+    const running = [{ type: "agent_status", agent_id: "w1", status: "running" }];
+    expect(orphanWorktrees(["wt-w1"], running, new Set(["w1"]))).toEqual([]);
+    // 反向哨兵：没有归属的 running 仍算孤儿——进程被杀留下的树正是这一格要捞的。
+    expect(orphanWorktrees(["wt-w1"], running)).toEqual(["w1"]);
   });
 
   it("merge- / wt-cleanup- 收尾记录 ⇒ 不算孤儿（两条前缀都要认）", () => {
@@ -125,5 +135,18 @@ describe("cleanOrphanWorktree：真删之前的那道 glob 白名单（防批量
     // 这条防的是把闸写成永真（那样任何 id 都拒绝，清理功能形同虚设却全绿）。
     const r = await cleanOrphanWorktree("/tmp/dsh-does-not-exist", "w1");
     expect(r.error ?? "").not.toContain("非法字符");
+  });
+});
+describe("parseWorktreeRef：worker 改动预览的入口形状闸", () => {
+  it("只认 .agents/wt-<id>@<hex>；路径穿越/非 hex/空串一律 null", () => {
+    expect(parseWorktreeRef(".agents/wt-worker-1@0123456")).toEqual({ worktree: ".agents/wt-worker-1", baseCommit: "0123456" });
+    for (const bad of [
+      ".agents/wt-worker-1@xyz",
+      "../.agents/wt-worker-1@0123456",
+      ".agents/wt-worker-1/../../etc/passwd@0123456",
+      "wt-worker-1@0123456",
+      ".agents/wt-worker-1@",
+      "",
+    ]) expect(parseWorktreeRef(bad), bad).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 # Core code wiki
 
-This checkout is core-first: the agent kernel (`src/`) is electron-free. The former Electron shell, renderer, preload, desktop gates, and UI acceptance layers were removed on 2026-09-27 (`69fbb0d`); a new desktop shell has since been reintroduced under `apps/desktop/` (2026-10-02, M1 slices) and is **not** scanned by the root gates. Its status and disposition are decided in [`adr/0001-core-only-vs-desktop.md`](adr/0001-core-only-vs-desktop.md).
+This checkout is core-first: the agent kernel (`src/`) is electron-free. The former Electron shell, renderer, preload, desktop gates, and UI acceptance layers were removed on 2026-09-27 (`69fbb0d`); a new desktop shell has since been reintroduced under `apps/desktop/` (2026-10-02, M1 slices). Since 2026-10-12 that shell is **inside** the root gate manifest: `desktop-test` (desktop suite + `desktop-boundary-check`) is listed in both `GATES` and `CERT_GATES`. The [`adr/0001` scope ruling](adr/0001-core-only-vs-desktop.md) still governs **scope** — desktop is not a v1 delivery surface — but "not a delivery surface" no longer means "unscanned"; do not read the scope ruling backwards.
 
 > 定位按**符号名**而非行号（沿用 `docs/m5-proposal.md` v3 修订的纪律：行号会腐，符号名不会）。
 > 本文只写**已核实**的事实；未核实的推测一律不写进来。
@@ -30,6 +30,14 @@ This checkout is core-first: the agent kernel (`src/`) is electron-free. The for
 3. **新增能力优先走既有字段的 origin 通道，而不是新增事件类型**。两处先例：
    `user_message.origin` 承载 sidechat 提升与 goal 续跑（`PromoteOrigin` / `GoalTurnOrigin`）；
    `tool_result.gate` 承载全部权限判定留痕。新增一种事件会让每条旧日志的重放都多一个分支。
+4. **例外是「日志结构控制记录」**（`docs/adr/0005-log-structural-records.md`）：描述的是**日志本身被怎么了**
+   （回退指针、会话元数据更新），不是「agent 做了什么」，也没有 origin 通道可挂。
+   这类记录只允许 `session_meta` / `compaction` 那两种既有形状。
+   配套三条协议（真身在 `src/agent/session-cursor.ts`、`src/events/session.ts`、`src/agent/submission-ledger.ts`）：
+   - `replay()` 保持**笨且逐字**：控制记录原样读回，解释它是**投影**的活（`src/events/projection.ts`）。
+   - **分叉是指针不是拷贝**：子会话只写一行血缘（`{parent, boundary}`），不拷父事件，也不继承父的在飞状态。
+   - **游标不透明且 fail-closed**：kind 不认、载荷坏、位置越界、session 不对，一律拒——绝不用另一个游标顶上。
+   - **提交带 `requestId` 幂等键**：同一个 `requestId` 再交一次，返回既有那次，不把活跑第二遍。
 
 **枚举即事实源**：`TOOL_BLOCK_REASONS`、`HARNESS_HOLD_REASONS`、`GATE_VERDICTS`、`GATE_LAYERS`
 都是**运行时数组**（不是只存在于类型里）。理由一致：复跑面按它铺矩阵，
@@ -101,7 +109,14 @@ worker 卡在审批上时，父 turn 已经结束，审批应答与取消必须�
 
 ## Desktop renderer 的三个自研底座（2026-10-07 UI 产品化）
 
-桌面端（`apps/desktop/src/renderer/`）按 spec
+桌面端（`apps/desktop/src/renderer/`）的**分层**（2026-10-22 App 拆分批落地）：
+`state/`（state-cluster hooks）→ `derived/`（纯投影）→ `components/` ＋ `panes/`（props in, events out）→
+`App.tsx`（组合根）。机器面是 `pnpm renderer-layer-check`（它钉：组件层不回流 `App.tsx`、
+状态层不 import 组件层、派生层纯、每源文件 ≤1,200 行且 `App.tsx` ≤900 行）。
+**判卷读渲染层源码时读整个面**（`apps/desktop/tests/helpers/app-surface.ts`）——
+指着一个文件做 `not.toContain` 的断言，代码一搬就空转通过；空转不是通过，是断言被削弱了。
+
+按 spec
 [`docs/superpowers/specs/2026-10-07-desktop-ui-productization-design.md`](superpowers/specs/2026-10-07-desktop-ui-productization-design.md)
 重排后，有三个"只有一处"的底座，动 UI 前先认路：
 
@@ -122,6 +137,18 @@ worker 卡在审批上时，父 turn 已经结束，审批应答与取消必须�
 顺序唯一、`<Switch` 恰 3 处、CustomProviderForm 源码级 `allowLocalEndpoint: true`）。重排 UI
 先读它，别把钉子当冗余拔了。视觉自查走 `scripts/ui-gallery.cjs`（离屏 capturePage + 假
 AgentApi，不跑真模型、不触发系统录屏权限）。
+
+## ⑤ LSP 的 `languageId` 契约（2026-10-23，第 675 页）
+
+`src/tools/lsp.ts` 的 `didOpen` 必须送**服务器声明的那一个** `languageId`：
+`LspServerConfig.extensionToLanguage`（`.py → python`）优先，缺格回落 `defaultLanguageId()`
+（六个 JS/TS 后缀 ⇒ `typescript`，其余 ⇒ `plaintext`）。两个入口——宿主 `.agent/lsp.json`
+（`loadLspConfig` 解析）与插件 `.lsp.json`（`plugins/index.ts` 的 `activateLsp`）——**都必须把这一格的值带到运行时**；
+只传键（当扩展名清单用）而丢值，非 JS 语言的 server 会整条静默失效：六操作无一处出声。
+
+查表按**原样键**，不做大小写归一——静默归一会把"配错了扩展名"藏起来。
+判卷：`tests/lsp-language-id.test.ts`（探针 server 把 didOpen 的 languageId 原样交回，判的是真发出去的值）＋
+`tests/plugin-lsp-activation.test.ts` 的同名断言。**两个入口各有一条**：只钉一个入口的判据是半个判据。
 
 ## Verification
 

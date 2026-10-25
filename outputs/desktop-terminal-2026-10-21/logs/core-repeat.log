@@ -1,0 +1,75 @@
+$ vitest run --config tests/vitest.config.ts
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness
+
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+fatal: not a git repository (or any of the parent directories): .git
+拒跑：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-NuslVM/repo —— 工作树有 1 项在飞
+拒跑：/Users/ze/Downloads/Cairn/deepseek harness —— 工作树有 135 项在飞
+取料坏：2/2 棵树不合格 ⇒ 一条不跑（这不是「没有红」，是没尺）
+取料坏：--trees 里有重复路径 ⇒ 同树两个进程会互改源文件（.mutbak 会互相踩），一条不跑
+取料坏：认不出的参数 ⇒ 一条不跑：--shardz=2
+用法：node --import tsx scripts/mutate-shards.ts --trees 树1,树2[,…] [--changed-since=<rev> | id…] [--budget-ms N] [--serial-seconds N] [--lock-tag-base …] [--cost-logs 机器原文,…] [--dry-run]（带值的旗标两种写法都收）
+Preparing worktree (detached HEAD 93164365)
+Updating files:  59% (2903/4840)Updating files:  60% (2904/4840)Updating files:  61% (2953/4840)Updating files:  62% (3001/4840)Updating files:  63% (3050/4840)Updating files:  64% (3098/4840)Updating files:  65% (3146/4840)Updating files:  66% (3195/4840)Updating files:  67% (3243/4840)Updating files:  68% (3292/4840)Updating files:  69% (3340/4840)Updating files:  70% (3388/4840)Updating files:  71% (3437/4840)Updating files:  72% (3485/4840)Updating files:  73% (3534/4840)Updating files:  74% (3582/4840)Updating files:  75% (3630/4840)Updating files:  76% (3679/4840)Updating files:  77% (3727/4840)Updating files:  78% (3776/4840)Updating files:  79% (3824/4840)Updating files:  80% (3872/4840)Updating files:  81% (3921/4840)Updating files:  82% (3969/4840)Updating files:  83% (4018/4840)Updating files:  84% (4066/4840)Updating files:  85% (4114/4840)Updating files:  86% (4163/4840)Updating files:  87% (4211/4840)Updating files:  88% (4260/4840)Updating files:  89% (4308/4840)Updating files:  90% (4356/4840)Updating files:  91% (4405/4840)Updating files:  92% (4453/4840)Updating files:  93% (4502/4840)Updating files:  94% (4550/4840)Updating files:  95% (4598/4840)Updating files:  96% (4647/4840)Updating files:  97% (4695/4840)Updating files:  98% (4744/4840)Updating files:  99% (4792/4840)Updating files: 100% (4840/4840)Updating files: 100% (4840/4840), done.
+取料坏：给了 1 条不在这张表上的 id ⇒ 一条不跑：this-anchor-does-not-exist
+Preparing worktree (detached HEAD 93164365)
+Updating files:  51% (2490/4840)Updating files:  52% (2517/4840)Updating files:  53% (2566/4840)Updating files:  54% (2614/4840)Updating files:  55% (2662/4840)Updating files:  56% (2711/4840)Updating files:  57% (2759/4840)Updating files:  58% (2808/4840)Updating files:  59% (2856/4840)Updating files:  60% (2904/4840)Updating files:  61% (2953/4840)Updating files:  62% (3001/4840)Updating files:  63% (3050/4840)Updating files:  64% (3098/4840)Updating files:  65% (3146/4840)Updating files:  66% (3195/4840)Updating files:  67% (3243/4840)Updating files:  68% (3292/4840)Updating files:  69% (3340/4840)Updating files:  70% (3388/4840)Updating files:  71% (3437/4840)Updating files:  72% (3485/4840)Updating files:  73% (3534/4840)Updating files:  74% (3582/4840)Updating files:  75% (3630/4840)Updating files:  76% (3679/4840)Updating files:  77% (3727/4840)Updating files:  78% (3776/4840)Updating files:  79% (3824/4840)Updating files:  80% (3872/4840)Updating files:  81% (3921/4840)Updating files:  82% (3969/4840)Updating files:  83% (4018/4840)Updating files:  84% (4066/4840)Updating files:  85% (4114/4840)Updating files:  86% (4163/4840)Updating files:  86% (4187/4840)Updating files:  87% (4211/4840)Updating files:  88% (4260/4840)Updating files:  89% (4308/4840)Updating files:  90% (4356/4840)Updating files:  91% (4405/4840)Updating files:  92% (4453/4840)Updating files:  93% (4502/4840)Updating files:  94% (4550/4840)Updating files:  95% (4598/4840)Updating files:  96% (4647/4840)Updating files:  97% (4695/4840)Updating files:  98% (4744/4840)Updating files:  99% (4792/4840)Updating files: 100% (4840/4840)Updating files: 100% (4840/4840), done.
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+Preparing worktree (detached HEAD 93164365)
+Updating files:  90% (4396/4840)Updating files:  91% (4405/4840)Updating files:  92% (4453/4840)Updating files:  93% (4502/4840)Updating files:  94% (4550/4840)Updating files:  95% (4598/4840)Updating files:  96% (4647/4840)Updating files:  97% (4695/4840)Updating files:  98% (4744/4840)Updating files:  99% (4792/4840)Updating files: 100% (4840/4840)Updating files: 100% (4840/4840), done.
+Preparing worktree (detached HEAD 93164365)
+Updating files:  34% (1653/4840)Updating files:  35% (1694/4840)Updating files:  36% (1743/4840)Updating files:  37% (1791/4840)Updating files:  38% (1840/4840)Updating files:  39% (1888/4840)Updating files:  40% (1936/4840)Updating files:  41% (1985/4840)Updating files:  42% (2033/4840)Updating files:  43% (2082/4840)Updating files:  44% (2130/4840)Updating files:  45% (2178/4840)Updating files:  46% (2227/4840)Updating files:  47% (2275/4840)Updating files:  48% (2324/4840)Updating files:  49% (2372/4840)Updating files:  50% (2420/4840)Updating files:  51% (2469/4840)Updating files:  52% (2517/4840)Updating files:  53% (2566/4840)Updating files:  54% (2614/4840)Updating files:  55% (2662/4840)Updating files:  56% (2711/4840)Updating files:  57% (2759/4840)Updating files:  58% (2808/4840)Updating files:  59% (2856/4840)Updating files:  60% (2904/4840)Updating files:  61% (2953/4840)Updating files:  62% (3001/4840)Updating files:  63% (3050/4840)Updating files:  64% (3098/4840)Updating files:  65% (3146/4840)Updating files:  66% (3195/4840)Updating files:  67% (3243/4840)Updating files:  68% (3292/4840)Updating files:  69% (3340/4840)Updating files:  70% (3388/4840)Updating files:  71% (3437/4840)Updating files:  72% (3485/4840)Updating files:  73% (3534/4840)Updating files:  74% (3582/4840)Updating files:  75% (3630/4840)Updating files:  76% (3679/4840)Updating files:  77% (3727/4840)Updating files:  78% (3776/4840)Updating files:  79% (3824/4840)Updating files:  80% (3872/4840)Updating files:  81% (3921/4840)Updating files:  82% (3969/4840)Updating files:  83% (4018/4840)Updating files:  84% (4066/4840)Updating files:  85% (4114/4840)Updating files:  86% (4163/4840)Updating files:  87% (4211/4840)Updating files:  88% (4260/4840)Updating files:  89% (4308/4840)Updating files:  90% (4356/4840)Updating files:  91% (4405/4840)Updating files:  92% (4453/4840)Updating files:  93% (4502/4840)Updating files:  94% (4550/4840)Updating files:  95% (4598/4840)Updating files:  96% (4647/4840)Updating files:  97% (4695/4840)Updating files:  98% (4744/4840)Updating files:  99% (4792/4840)Updating files: 100% (4840/4840)Updating files: 100% (4840/4840), done.
+取料坏：1 个判卷宿主被摊到两片以上 ⇒ 会并发真跑同一份判卷，一条不跑：tests/mutate-shards.test.ts
+Preparing worktree (detached HEAD 93164365)
+Preparing worktree (detached HEAD 93164365)
+Updating files:  91% (4445/4840)Updating files:  92% (4453/4840)Updating files:  93% (4502/4840)Updating files:  94% (4550/4840)Updating files:  95% (4598/4840)Updating files:  96% (4647/4840)Updating files:  97% (4695/4840)Updating files:  98% (4744/4840)Updating files:  99% (4792/4840)Updating files: 100% (4840/4840)Updating files: 100% (4840/4840), done.
+ ❯ tests/promise-recall-inventory.test.ts (35 tests | 1 failed) 9776ms
+   ❯ 能力断言的证人面：一句都不曾被点过才算欠（第 311 页） (16)
+     × 真仓那一趟：分母非零、存量在帽内、四态相加＝分母（这条尺不许恒红也不许空载） 1547ms
+node: bad option: --token
+node: bad option: --port
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/promise-recall-inventory.test.ts > 能力断言的证人面：一句都不曾被点过才算欠（第 311 页） > 真仓那一趟：分母非零、存量在帽内、四态相加＝分母（这条尺不许恒红也不许空载）
+AssertionError: 「尺读不出」超出帽 ⇒ 又写了一句点不出名字的能力断言：
+src/agent/plugins/hooks.ts#run｜
+src/agent/sequencer.ts#resolvePluginRole｜
+src/main/agent-runner.ts#handleAgentRun｜
+src/main/evolution/candidate-record.ts#parseCandidateRecord｜
+src/main/scheduler.ts#scheduleTimeZoneNotes｜
+src/providers/provider-config.ts#deriveCustomProviders｜: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/promise-recall-inventory.test.ts:333:87
+    331|     expect(ceil.stale, `现读 ${String(ceil.read)} 低于帽 ${String(ceil.cap)…
+    332|     const needleCeil = claimCountCeiling(f.noNeedle.length, CLAIM_NO_N…
+    333|     expect(needleCeil.over, `「尺读不出」超出帽 ⇒ 又写了一句点不出名字的能力断言：\n${f.noNeedl…
+       |                                                                                       ^
+    334|     expect(needleCeil.stale, `现读 ${String(needleCeil.read)} 低于帽 ${Stri…
+    335|     expect(f.witnessed.length, "一条都没被判过＝这条尺没在工作").toBeGreaterThan(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 453 passed (454)
+      Tests  1 failed | 6235 passed (6236)
+   Start at  17:45:37
+   Duration  125.32s (tests 85%, import 11%, transform 4%)
+
+    Isolate  454 workers spawned · ~133ms startup each (spawn + environment, per file)
+             at least ~8.48s faster with isolate: false — reuses workers across files instead of one per file
+
+[ELIFECYCLE] Test failed. See above for more details.

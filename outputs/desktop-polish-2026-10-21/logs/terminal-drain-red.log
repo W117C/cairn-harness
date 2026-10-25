@@ -1,0 +1,37 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness/apps/desktop
+
+ ❯ tests/terminal-drain.test.ts (2 tests | 1 failed) 5ms
+   ❯ PTY 进程退出与管道排空 (2)
+     × exit 后 close 前仍可能有字节：先读完整中文，再发终端退出 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/terminal-drain.test.ts > PTY 进程退出与管道排空 > exit 后 close 前仍可能有字节：先读完整中文，再发终端退出
+AssertionError: expected [ { kind: 'exit', …(2) } ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/terminal-drain.test.ts:29:51
+     27|     proc.emit('exit', 0);
+     28|     expect(host.write(started.id, 'after-exit')).toBe(false);
+     29|     expect(events.filter(e => e.kind === 'exit')).toHaveLength(0);
+       |                                                   ^
+     30|     proc.stdout.emit('data', bytes.subarray(4));
+     31|     proc.emit('close', 0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  16:44:16
+   Duration  135ms (transform 63%, import 21%, tests 11%, worker 5%)
+
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts tests/terminal-drain.test.ts

@@ -8,19 +8,18 @@
 // 只影响自身（errors 聚合 + 面板报错），其余照常。
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { parseFrontmatter, fmString } from "./frontmatter";
 import { pluginFingerprintEx } from "./trust";
+import {
+  dirExists, loadSkillEntry, readAgentEntries, readCommandEntries, readSkillEntries,
+} from "./content";
+import { scanForeignSource, type ForeignSource } from "./foreign";
 import { parsePluginManifest, parseHooksFile, detectJsEntry, PluginLoadError } from "./manifest";
 import { parseHookIf } from "./hooks";
 import { LSP_SERVER_FIELDS } from "./types";
 import type {
-  DiscoveredPlugin, LooseSkill, PluginScanRoots, PluginScope, PluginsManifest, SkillEntry, PromptCommandEntry,
-  AgentRoleEntry, LoadedHookDef, HookEventName, HookMatcherDef, LspConfigFile, LspServerConfig,
+  DiscoveredPlugin, LooseSkill, PluginScanRoots, PluginScope, PluginsManifest,
+  LoadedHookDef, HookEventName, HookMatcherDef, LspConfigFile, LspServerConfig,
 } from "./types";
-
-async function dirExists(p: string): Promise<boolean> {
-  try { return (await stat(p)).isDirectory(); } catch { return false; }
-}
 
 /** 扫描一个作用域根：子目录要么是容器（有 .claude-plugin/plugin.json），要么是散装 skill（有 SKILL.md）。 */
 async function scanScopeRoot(
@@ -52,7 +51,9 @@ async function scanScopeRoot(
         // 内容有界/无界形态互换或指纹变化都自然不命中 = 重新出卡。
         const { fp, bounded } = await pluginFingerprintEx(abs);
         if (bounded) warnings.push({ plugin: name, message: "内容指纹不完整（含软链 / 超出上限 / 有文件读不出）⇒ 不可批准（fail-closed）；请改成普通文件布局" });
-        plugins.push(await loadContainer(abs, scope, trustOf(abs, fp, bounded)));
+        const plugin = await loadContainer(abs, scope, trustOf(abs, fp, bounded));
+        plugin.fingerprint = { fp, bounded };
+        plugins.push(plugin);
       } catch (err) {
         // 单插件失败隔离：坏 manifest 只影响自身
         errors.push({ plugin: name, message: err instanceof Error ? err.message : String(err) });
@@ -65,7 +66,7 @@ async function scanScopeRoot(
       const { fp, bounded } = await pluginFingerprintEx(abs);
       if (bounded) warnings.push({ plugin: name, message: "内容指纹不完整（含软链 / 超出上限 / 有文件读不出）⇒ 不可批准（fail-closed）" });
       const entry = await loadSkillEntry(null, name, abs);
-      if (entry) loose.push({ name, root: abs, entry, trust: trustOf(abs, fp, bounded), scope });
+      if (entry) loose.push({ name, root: abs, entry, trust: trustOf(abs, fp, bounded), scope, fingerprint: { fp, bounded } });
     }
   }
   return { plugins, loose, errors, warnings };
@@ -88,57 +89,9 @@ async function loadContainer(
   warnings.push(...m.warnings);
   const pluginName = m.name;
 
-  // skills/<name>/SKILL.md
-  const skills: SkillEntry[] = [];
-  const skillsRoot = join(root, m.skillsDir);
-  if (await dirExists(skillsRoot)) {
-    for (const dir of (await readdir(skillsRoot)).sort()) {
-      const abs = join(skillsRoot, dir);
-      if (!(await dirExists(abs))) continue;
-      const entry = await loadSkillEntry(pluginName, dir, abs);
-      if (entry) skills.push(entry);
-    }
-  }
-
-  // commands/*.md
-  const commands: PromptCommandEntry[] = [];
-  const commandsRoot = join(root, m.commandsDir);
-  if (await dirExists(commandsRoot)) {
-    for (const f of (await readdir(commandsRoot)).sort()) {
-      if (!f.endsWith(".md")) continue;
-      const abs = join(commandsRoot, f);
-      const text = await readFile(abs, "utf8").catch(() => "");
-      const { frontmatter, body } = parseFrontmatter(text);
-      commands.push({
-        plugin: pluginName,
-        name: f.slice(0, -3),
-        description: fmString(frontmatter, "description") ?? "",
-        path: abs,
-        frontmatter,
-        body,
-      });
-    }
-  }
-
-  // agents/*.md（解析并注册；采纳留 M3）
-  const agents: AgentRoleEntry[] = [];
-  const agentsRoot = join(root, m.agentsDir);
-  if (await dirExists(agentsRoot)) {
-    for (const f of (await readdir(agentsRoot)).sort()) {
-      if (!f.endsWith(".md")) continue;
-      const abs = join(agentsRoot, f);
-      const text = await readFile(abs, "utf8").catch(() => "");
-      const { frontmatter, body } = parseFrontmatter(text);
-      agents.push({
-        plugin: pluginName,
-        name: fmString(frontmatter, "name") ?? f.slice(0, -3),
-        description: fmString(frontmatter, "description") ?? "",
-        path: abs,
-        frontmatter,
-        body,
-      });
-    }
-  }
+  const skills = await readSkillEntries(root, m.skillsDir, pluginName);
+  const commands = await readCommandEntries(root, m.commandsDir, pluginName);
+  const agents = await readAgentEntries(root, m.agentsDir, pluginName);
 
   // hooks
   const hooks: LoadedHookDef[] = [];
@@ -239,26 +192,6 @@ function flattenHooks(plugin: string, pluginRoot: string, hooks: Partial<Record<
   return out;
 }
 
-/** 装载一个 skill 条目（容器内或散装）；frontmatter name/description 缺省回退目录名。 */
-async function loadSkillEntry(plugin: string | null, dirName: string, dir: string): Promise<SkillEntry | null> {
-  const path = join(dir, "SKILL.md");
-  let text: string;
-  try {
-    text = await readFile(path, "utf8");
-  } catch {
-    return null;
-  }
-  const { frontmatter, body } = parseFrontmatter(text);
-  return {
-    plugin,
-    name: fmString(frontmatter, "name") ?? dirName,
-    description: fmString(frontmatter, "description") ?? "",
-    path,
-    frontmatter,
-    body,
-  };
-}
-
 export interface DiscoverOptions {
   /** 用户级 <appData>/plugins/。 */
   userPluginsDir?: string;
@@ -271,6 +204,8 @@ export interface DiscoverOptions {
   projectSkillsDir?: string;
   /** 散装 skill 根（目录下每个含 SKILL.md 的子目录 = 独立 skill）。 */
   looseRoots?: string[];
+  /** 外部声明式来源（opencode / pi）。缺省 = 不扫（装配面在 `PluginRuntime.load` 里给默认来源）。 */
+  foreignSources?: ForeignSource[];
   /** 项目级插件信任决议源（缺省全部 pending）。H3-P5（E-10）：附带插件内容指纹（abs@fp 绑定）。
    *  审查 S1-7：第三参 bounded = 指纹是否被截断（超帽/超大/软链），由信任库编进条目键参与判定。 */
   trustStatus?: (absRoot: string, fingerprint: string, bounded: boolean) => "trusted" | "pending" | "declined";
@@ -290,6 +225,7 @@ export async function discoverPlugins(opts: DiscoverOptions): Promise<PluginsMan
     projectPluginsDir: opts.projectPluginsDir ? opts.projectPluginsDir : null,
     projectSkillsDir: opts.projectSkillsDir ? opts.projectSkillsDir : null,
     looseRoots: [...(opts.looseRoots ?? [])],
+    foreignSources: [...(opts.foreignSources ?? [])],
   };
 
   if (opts.userPluginsDir) {
@@ -315,6 +251,21 @@ export async function discoverPlugins(opts: DiscoverOptions): Promise<PluginsMan
     const r = await scanScopeRoot(root, "loose", () => "trusted");
     looseSkills.push(...r.loose);
     errors.push(...r.errors);
+  }
+  for (const source of opts.foreignSources ?? []) {
+    try {
+      const r = await scanForeignSource(source, trustOf);
+      if (r.plugin !== null) plugins.push(r.plugin);
+      errors.push(...r.errors);
+      warnings.push(...r.warnings);
+    } catch (err) {
+      // 单来源失败隔离（与容器插件的 scanScopeRoot 同一口径）：外部目录的 EACCES/ENOENT
+      // 只让这一支进 errors，不许把整份发现面（含容器插件/hook/MCP）一起打掉。
+      errors.push({
+        plugin: source.name,
+        message: "外部来源扫描失败（已隔离）：" + (err instanceof Error ? err.message : String(err)),
+      });
+    }
   }
 
   // 扁平化警告与 ${user_config.*} 违规提示

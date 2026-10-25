@@ -1,0 +1,19 @@
+diff --git a/apps/desktop/scripts/interaction-smoke.cjs b/apps/desktop/scripts/interaction-smoke.cjs
+index dd3ae19f..8c691ab8 100644
+--- a/apps/desktop/scripts/interaction-smoke.cjs
++++ b/apps/desktop/scripts/interaction-smoke.cjs
+@@ -98,12 +98,12 @@ async function main() {
+   check('关闭聚焦面板后回到剩余面板', await read(`return !document.querySelector('[data-pane="plan"]') && document.querySelector('[data-pane="file"]').getBoundingClientRect().height > 100;`));
+   // 2026-10-21 批 142：显式关闭必须压过恢复窗格。旧实现只看 paneTabs.length，
+   // 关闭检查器后带窗格重启会被强行掰开——这条在真实 renderer 里走一遍（含 localStorage 与 reload）。
+-  await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', metaKey: true, altKey: true, bubbles: true }))`); await pause();
++  await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'i', code: 'KeyI', metaKey: true, altKey: true, bubbles: true }))`); await pause();
+   check('显式关闭检查器：窗格仍开、偏好写成 0', await read(`return localStorage.getItem('cairn.inspector.open.v1') === '0' && !!document.querySelector('[data-pane="file"]');`));
+   await win.reload(); await pause();
+   state = await read(`const col = document.querySelector('.inspector-col'); return { pref: localStorage.getItem('cairn.inspector.open.v1'), pane: !!document.querySelector('[data-pane="file"]'), width: col?.getBoundingClientRect().width ?? -1, inert: col?.hasAttribute('inert') ?? false };`);
+   check('带恢复窗格重载后检查器保持关闭（显式偏好优先）', state.pref === '0' && state.pane && state.width < 1 && state.inert, state);
+-  await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', metaKey: true, altKey: true, bubbles: true }))`); await pause();
++  await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'i', code: 'KeyI', metaKey: true, altKey: true, bubbles: true }))`); await pause();
+   state = await read(`const col = document.querySelector('.inspector-col'); return { pref: localStorage.getItem('cairn.inspector.open.v1'), width: col?.getBoundingClientRect().width ?? -1, inert: col?.hasAttribute('inert') ?? false };`);
+   check('关闭后仍可重新打开检查器', state.pref === '1' && state.width > 300 && !state.inert, state);
+   // 上面的 reload 会回到「侧栏展开」的启动态；后续窄窗检查量的是收起快捷栏，先恢复收起。

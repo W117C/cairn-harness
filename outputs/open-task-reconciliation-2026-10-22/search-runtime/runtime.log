@@ -1,0 +1,29 @@
+PASS 空查询不发送正文检索 []
+PASS 生产 preload 暴露正文检索 IPC 
+PASS 非空查询通过生产 preload 发起正文检索 [{"workspace":"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-session-search-renderer-fKbpLo/workspace-a","query":"NEBULA","at":1792658768031}]
+PASS 正文检索带当前项目身份 {"workspace":"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-session-search-renderer-fKbpLo/workspace-a","query":"NEBULA","at":1792658768031}
+PASS 英文忽略大小写，标题无关键词的旧正文会话可见 [{"id":"shared-session","text":"旧工程笔记\n检索样本：Nebula 与紫罗兰只在正文中出现。\n1 条"}]
+PASS 连续输入在200ms窗口内不提前请求 []
+PASS 连续输入只请求最终查询 [{"workspace":"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-session-search-renderer-fKbpLo/workspace-a","query":"NEBULA","at":1792658768424,"kind":"ok"}]
+PASS 中文正文关键词和摘录可见 
+PASS 迟到旧查询成功不覆盖新查询结果 
+Error occurred in handler for 'agent:session-search': Error: 过时查询失败
+    at main (/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop/scripts/session-search-renderer-smoke.ts:187:35)
+PASS 迟到旧查询失败不污染当前结果和状态 
+PASS 全空白不请求且清空后迟到结果不残留 
+PASS 只有思考事件中的词不冒充正文命中，完整零命中可见 "命令面板\n当前项目正文\n正文中没有匹配\n↑ ↓ 选择\n⏎ 打开\nesc 关闭"
+PASS 真实扫描上限返回partial，保留命中并如实提示未完成 "命令面板\n当前项目正文\n搜索尚未完成，可能还有结果\n较新记录\nnewword partialmarker，这份是新查询结果。\n1 条\n↑ ↓ 选择\n⏎ 打开\nesc 关闭"
+PASS unavailable如实显示，不能写成没有匹配 "命令面板\n当前项目的对话正文暂时无法搜索：ENOENT: no such file or directory, stat '/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-session-search-renderer-fKbpLo/missing-sessions' 重试搜索\n↑ ↓ 选择\n⏎ 打开\nesc 关闭"
+PASS 失败状态提供原地重试入口 
+PASS 不可用后原地重试执行真实扫描并恢复 
+Error occurred in handler for 'agent:session-search': Error: 搜索受控失败，请重试
+    at <anonymous> (/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop/scripts/session-search-renderer-smoke.ts:115:51)
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:119988)
+    at Session.emit (node:events:514:28)
+PASS 失败状态提供原地重试入口 
+PASS IPC异常可原地重试恢复 
+PASS 键盘打开正文匹配携带准确workspace，同名会话不串项目 {"id":"shared-session","workspace":"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-session-search-renderer-fKbpLo/workspace-a"}
+PASS 搜索打开当前项目真实JSONL并关闭命令面板 
+PASS 正文结果不借用另一项目同名会话的标题 
+PASS 搜索打开未列出的旧会话不高亮另一项目的同名行 
+PASS 渲染过程无控制台错误 []

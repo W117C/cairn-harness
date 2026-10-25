@@ -1,0 +1,155 @@
+$ vitest run --config tests/vitest.config.ts --maxWorkers=2
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness
+
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+ ❯ tests/head-import-face.test.ts (37 tests | 1 failed) 7846ms
+   ❯ 真表自证：这把尺不许是空载的，也不许对事故那笔失明 (8)
+     × HEAD 现读：悬空集合必须**落在存量名单里**，且 finding 为 0（新增即红；名单里的补好了由 stale 那条逼人来删名） 891ms
+fatal: not a git repository (or any of the parent directories): .git
+拒跑：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-Qz5dwu/repo —— 工作树有 1 项在飞
+拒跑：/Users/ze/Downloads/Cairn/deepseek harness —— 工作树有 138 项在飞
+取料坏：2/2 棵树不合格 ⇒ 一条不跑（这不是「没有红」，是没尺）
+取料坏：--trees 里有重复路径 ⇒ 同树两个进程会互改源文件（.mutbak 会互相踩），一条不跑
+取料坏：认不出的参数 ⇒ 一条不跑：--shardz=2
+用法：node --import tsx scripts/mutate-shards.ts --trees 树1,树2[,…] [--changed-since=<rev> | id…] [--budget-ms N] [--serial-seconds N] [--lock-tag-base …] [--cost-logs 机器原文,…] [--dry-run]（带值的旗标两种写法都收）
+Preparing worktree (detached HEAD 6455bb20)
+取料坏：给了 1 条不在这张表上的 id ⇒ 一条不跑：this-anchor-does-not-exist
+Preparing worktree (detached HEAD 6455bb20)
+Preparing worktree (detached HEAD 6455bb20)
+Preparing worktree (detached HEAD 6455bb20)
+取料坏：1 个判卷宿主被摊到两片以上 ⇒ 会并发真跑同一份判卷，一条不跑：tests/mutate-shards.test.ts
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+Preparing worktree (detached HEAD 6455bb20)
+Preparing worktree (detached HEAD 6455bb20)
+ ❯ tests/scratch-tree-naming.test.ts (19 tests | 1 failed) 16ms
+   ❯ 真仓面：注册表里的暂存树名字都没说谎 (5)
+     × 真仓里的活工作树（挂在分支上）确实不带 detached ⇒ 不参与命名对账 2ms
+ ❯ tests/agents-command-face.test.ts (10 tests | 1 failed) 7ms
+   ❯ 真仓面：AGENTS.md 写出来的每条命令都指向这棵树里存在的东西 (2)
+     × 命令面自洽；不一致时报出的每一条都要指名道姓 4ms
+ ❯ tests/readme-invoke-channel-count.test.ts (2 tests | 1 failed) 4ms
+   ❯ README 的 invoke 通道数与通道表钉在一起 (2)
+     × README 写的数 == 运行时现读的表长（判卷同一来源） 4ms
+ ❯ tests/ipc-protocol-version.test.ts (2 tests | 1 failed) 4ms
+   ❯ IPC 协议版本（§3.5/§12） (2)
+     × bump 版本必须有意为之：现钉 17——改协议形状（AgentApi 增删/字段语义变）= bump 常量 + 同步本格，desktop-panel 提案走同一流水线 2ms
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+node: bad option: --token
+node: bad option: --port
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/agents-command-face.test.ts > 真仓面：AGENTS.md 写出来的每条命令都指向这棵树里存在的东西 > 命令面自洽；不一致时报出的每一条都要指名道姓
+AssertionError: AGENTS.md 点名的 components 在这棵树里不存在；AGENTS.md 点名的 derived 在这棵树里不存在；AGENTS.md 点名的 panes 在这棵树里不存在；AGENTS.md 点名的 state 在这棵树里不存在: expected [ Array(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "detail": "AGENTS.md 点名的 components 在这棵树里不存在",
++     "kind": "path-missing",
++   },
++   {
++     "detail": "AGENTS.md 点名的 derived 在这棵树里不存在",
++     "kind": "path-missing",
++   },
++   {
++     "detail": "AGENTS.md 点名的 panes 在这棵树里不存在",
++     "kind": "path-missing",
++   },
++   {
++     "detail": "AGENTS.md 点名的 state 在这棵树里不存在",
++     "kind": "path-missing",
++   },
++ ]
+
+ ❯ tests/agents-command-face.test.ts:101:63
+     99|       exists: (rel) => existsSync(join(ROOT, rel)),
+    100|     });
+    101|     expect(findings, findings.map((f) => f.detail).join("；")).toEqual(…
+       |                                                               ^
+    102|     // 反向证人：抽取到的东西非空 ⇒ 上面那条「相等于 []」不是因为在数空气
+    103|     expect(filterInvocations(agents ?? "").length).toBeGreaterThan(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/head-import-face.test.ts > 真表自证：这把尺不许是空载的，也不许对事故那笔失明 > HEAD 现读：悬空集合必须**落在存量名单里**，且 finding 为 0（新增即红；名单里的补好了由 stale 那条逼人来删名）
+AssertionError: expected [] to include 'apps/desktop/src/main/channels.ts'
+ ❯ tests/head-import-face.test.ts:228:70
+    226|     if (got === null) return; // 上一条已经红了
+    227|     const dang = findDanglingImports(got.edges, got.headFiles, () => t…
+    228|     for (const d of dang) expect(Object.keys(HEAD_DANGLING_WAIVERS)).t…
+       |                                                                      ^
+    229|     expect(checkHeadImportFace(dang)).toEqual([]);
+    230|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/ipc-protocol-version.test.ts > IPC 协议版本（§3.5/§12） > bump 版本必须有意为之：现钉 17——改协议形状（AgentApi 增删/字段语义变）= bump 常量 + 同步本格，desktop-panel 提案走同一流水线
+AssertionError: expected 18 to be 17 // Object.is equality
+
+- Expected
++ Received
+
+- 17
++ 18
+
+ ❯ tests/ipc-protocol-version.test.ts:24:34
+     22|     // v15 → v16（2026-10-21 会话定位批）：openSession 增可选 workspace（跨项目同名 id …
+     23|     // v16 → v17（终端尺寸同步）：＋terminalResize，真实 PTY 跟随 xterm 行列。
+     24|     expect(IPC_PROTOCOL_VERSION).toBe(17);
+       |                                  ^
+     25|   });
+     26| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/readme-invoke-channel-count.test.ts > README 的 invoke 通道数与通道表钉在一起 > README 写的数 == 运行时现读的表长（判卷同一来源）
+AssertionError: expected 97 to be 98 // Object.is equality
+
+- Expected
++ Received
+
+- 98
++ 97
+
+ ❯ tests/readme-invoke-channel-count.test.ts:30:23
+     28|     expect(stated).toHaveLength(1);
+     29|     // ① README 的数不许与表漂。
+     30|     expect(stated[0]).toBe(derived);
+       |                       ^
+     31|   });
+     32|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/scratch-tree-naming.test.ts > 真仓面：注册表里的暂存树名字都没说谎 > 真仓里的活工作树（挂在分支上）确实不带 detached ⇒ 不参与命名对账
+AssertionError: 真仓里没有任何挂在分支上的暂存树 ⇒ 这一条此刻无对象（不是绿）: expected 0 to be greater than 0
+ ❯ tests/scratch-tree-naming.test.ts:204:61
+    202|   it("真仓里的活工作树（挂在分支上）确实不带 detached ⇒ 不参与命名对账", () => {
+    203|     const live = rows.filter((r) => r.detached === false && resolve(r.…
+    204|     expect(live.length, "真仓里没有任何挂在分支上的暂存树 ⇒ 这一条此刻无对象（不是绿）").toBeGreate…
+       |                                                             ^
+    205|     for (const l of live) {
+    206|       expect(checkScratchTreeNaming(mainRoot, [l]), `活工作树 ${l.path} 不该…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  5 failed | 462 passed (467)
+      Tests  5 failed | 6434 passed (6439)
+   Start at  11:27:31
+   Duration  134.98s (tests 88%, import 10%, transform 1%)
+
+    Isolate  467 workers spawned · ~55ms startup each (spawn + environment, per file)
+             at least ~12.72s faster with isolate: false — reuses workers across files instead of one per file
+
+[ELIFECYCLE] Command failed with exit code 1.

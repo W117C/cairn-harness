@@ -2,28 +2,16 @@
 // baseURL / model / 额外 body 参数（extraBody）/ 环境变量名均可配，GLM 是它的一组预设（见 glm.ts）。
 // 解码规则与迁移前逐字一致：增量在 choices[0].delta.content；tool_calls 按 index 跨块累积
 //（id 首块、name 非空即记、arguments 拼接）；末 chunk 带 usage（后到覆盖）；data: [DONE] 结束。
+import { randomUUID } from "node:crypto";
 import { DEFAULT_STALL_MS } from "../net";
-import { backoffMs, establishStream, retryableStatus, waitRetryDelay } from "./retry";
+import { backoffMs, establishStream, retryableStreamErrorFrame, retryableStreamFailure, StreamFailure, waitRetryDelay } from "./retry";
 import { turnStopMissingEvent, turnTruncatedEvent } from "./stop-reason";
 import type { ModelOutput, ProviderContentImage, ProviderMessage, ProviderMessageWithImage, ProviderToolSpec } from "./index";
 import type { RequestMeter, RequestCategory, MeterUsage, RequestOutcome } from "../agent/metering";
 
-/** 流内失败的分类（2026-09-30）：重试与否由**抛出处**决定，不由 catch 处猜字符串。
- *  理由：判断「这个错能不能重放」需要的信息（是 5xx 还是协议错、是帧坏还是对端挂了）
- *  只在抛出的那一刻是确定的；拿到 catch 里再靠 message 正则反推，迟早在某个新错误形状上猜错。
- *  `retryable` 只表示「重放是安全的」——调用方仍要另外确认「本次尝试还没吐过输出」。 */
-export class StreamFailure extends Error {
-  readonly retryable: boolean;
-  constructor(message: string, retryable: boolean) {
-    super(message);
-    this.name = "StreamFailure";
-    this.retryable = retryable;
-  }
-}
-
-/** 流内 error 帧的类型名 → 是否可重放。数值状态码走 `retryableStatus`（唯一事实源）；
- *  这里的名字是 OpenRouter / 各家网关把 5xx 塞进 body 时用的形状（实测 `server_error` 即 502）。 */
-const RETRYABLE_ERROR_TYPES = new Set(["server_error", "overloaded_error", "rate_limit_exceeded", "timeout"]);
+/** `StreamFailure` 与流内 error 帧的判据已搬到 `retry.ts`（2026-10-23）：三家适配器共用同一套，
+ *  名字表与「数值优先」的读法只留一份。这里再导出，保持既有 import 路径不变。 */
+export { StreamFailure } from "./retry";
 
 export type OpenAiMessage = ProviderMessage;
 export type OpenAiToolSpec = ProviderToolSpec;
@@ -187,6 +175,8 @@ export async function* streamOpenAI(
   );
   const stream = opts.stream ?? true;
   const rawFetch = opts.fetchImpl ?? fetch;
+  // 缺失原生 id 时，序号只在这一逻辑请求内有效；重试沿用同一前缀，新请求不得碰撞。
+  const toolRequestScope = randomUUID();
 
   const body: Record<string, unknown> = { model, messages: toWireMessages(messages), stream };
   // C8（审查 P2）：流式计量——OpenAI 兼容端点默认不回 usage，须显式开启 stream_options.include_usage，
@@ -261,10 +251,10 @@ export async function* streamOpenAI(
       const callId = data.id ?? "a-0";
       const msg = data.choices?.[0]?.message;
       if (msg?.content) yield { type: "assistant_delta", callId, text: msg.content };
-      for (const c of msg?.tool_calls ?? []) {
+      for (const [index, c] of (msg?.tool_calls ?? []).entries()) {
         yield {
           type: "tool_call",
-          id: c.id ?? `call-${String(c.index)}`,
+          id: c.id ?? `call-${toolRequestScope}-${String(c.index ?? index)}`,
           name: c.function?.name ?? "",
           args: parseArgs(c.function?.arguments, label),
         };
@@ -343,16 +333,11 @@ export async function* streamOpenAI(
             if (chunk.error) {
               const e = chunk.error;
               const named = typeof e.type === "string" ? e.type : undefined;
-              // 数值可能落在 `type` 也可能落在 `code`，且可能是字符串形式：
-              // OpenRouter 实测用 `"type": "502"`（字符串），官方文档用 `"type":"server_error"`。
-              // 两处都取、都转数，否则「5xx 塞进 body」这个形状会被判成不可重放而继续打死任务。
-              const numeric = [e.type, e.code]
-                .map((v) => (typeof v === "number" ? v : Number(v)))
-                .find((n) => Number.isFinite(n));
-              const retryable = (numeric !== undefined && retryableStatus(numeric))
-                || (named !== undefined && RETRYABLE_ERROR_TYPES.has(named));
+              // 数值可能落在 `type` 也可能落在 `code`，且可能是字符串形式（OpenRouter 实测
+              // `"type": "502"`）。判据住 `retry.ts`：三家共用一份名字表与「数值优先」的读法。
               throw new StreamFailure(
-                `${label} 流错误 ${named ?? e.code ?? "unknown"}: ${e.message ?? ""}`, retryable,
+                `${label} 流错误 ${named ?? e.code ?? "unknown"}: ${e.message ?? ""}`,
+                retryableStreamErrorFrame({ names: [e.type, e.code] }),
               );
             }
             if (chunk.id) callId2 = chunk.id;
@@ -400,7 +385,7 @@ export async function* streamOpenAI(
         for (const [index, acc] of ordered) {
           yield {
             type: "tool_call",
-            id: acc.id ?? `call-${String(index)}`,
+            id: acc.id ?? `call-${toolRequestScope}-${String(index)}`,
             name: acc.name,
             args: parseArgs(acc.args, label),
           };
@@ -413,7 +398,7 @@ export async function* streamOpenAI(
         // 不可重放的失败（协议级：帧损坏 / 非 5xx 的 error 帧）立刻抛，不拿它去打转。
         // stall 守卫触发也不重放：重放会把静默窗当网络抖动再烧一遍全长超时。
         const stalledByGuard = est.guard.stalled();
-        const retryable = stalledByGuard ? false : err instanceof StreamFailure ? err.retryable : true; // 未知形状按可重放（网络抖动那一类）
+        const retryable = stalledByGuard ? false : retryableStreamFailure(err);
         if (emitted || attempt >= STREAM_ATTEMPTS || cancelled || !retryable) throw err;
         retryError = err;
       } finally {

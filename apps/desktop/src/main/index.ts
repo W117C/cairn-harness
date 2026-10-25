@@ -1,8 +1,10 @@
 // Electron main 装配根（M1-6）：kernel-host 单点装配 + IPC 薄映射。
 // 装载通道：entry.cjs 注册 repo 根 tsx 后 require 本 TS 源——core 链零打包零漂移
 // （esbuild 打包会把 agent-runner 的 ROOT 漂进 <repo>/apps，fixtures 运行时静默落空）。
-import { app, BrowserWindow, dialog, ipcMain, Notification, safeStorage, screen, shell, webContents, type IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, Notification, safeStorage, screen, shell, webContents, type IpcMainInvokeEvent } from "electron";
 import { clampToWorkArea, readWindowState, writeWindowState } from "./window-state";
+import { bootBackgroundFor, normalizeThemePreference, resolveBootTheme, type ThemePreference } from "./boot-theme";
+import { windowVibrancyOptions } from "./window-vibrancy";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
@@ -81,9 +83,12 @@ import { createKernelHost, canonicalWorkspacePath } from "./kernel-host";
 import {
   canonicalKnownProjectPath as canonicalKnownProjectPathIn,
   canonicalKnownRoots,
+  resolveCreateParent,
   resolveKnownProjectTarget as resolveKnownProjectTargetIn,
+  resolveProvidedWorkspace,
 } from "./project-path-gate";
 import { isAppShellUrl } from "./shell-url";
+import { WindowWorkspaceContext } from "./window-workspace-context";
 import { ProjectRegistry } from "../../../../src/main/project-registry";
 import { loadCustomProviders } from "../../../../src/main/custom-provider-store";
 import { installCustomProviders, installedCustomProviders } from "../../../../src/providers/registry";
@@ -110,6 +115,31 @@ const reinjectSavedProviderKey = injectStoredProviderKey;
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const distElectron = join(here, "..", "..", "dist-electron");
+let mainWindow: BrowserWindow | null = null;
+
+// 首帧底色（2026-10-21）：在 renderer 的 CSS/React 到达前，BrowserWindow 先铺一块与
+// Claude Desktop v3 的 surface-1 同值的底色——亮 #fcfcfb / 暗 #151515，避免白闪。
+// settings.json 的 theme 是唯一真相：启动时把它同步给 nativeTheme，让 backgroundColor 与
+// index.html 的 `prefers-color-scheme` 占位用同一判据（系统暗、应用亮时不再先闪暗底）。
+// 读不到/字段非法一律回 system，不阻断启动。
+const readThemePreference = (): ThemePreference => {
+  try {
+    const raw = JSON.parse(readFileSync(join(app.getPath("userData"), "settings.json"), "utf8")) as { theme?: unknown };
+    return normalizeThemePreference(raw.theme);
+  } catch {
+    return "system";
+  }
+};
+const bootBackground = (): string =>
+  bootBackgroundFor(resolveBootTheme(readThemePreference(), nativeTheme.shouldUseDarkColors));
+const readWindowVibrancyPreference = (): boolean => {
+  try {
+    const raw = JSON.parse(readFileSync(join(app.getPath("userData"), "settings.json"), "utf8")) as { windowVibrancy?: unknown };
+    return raw.windowVibrancy === true;
+  } catch {
+    return false;
+  }
+};
 
 // ---- v7 朗读宿主（§2.2 消息操作条 read aloud）----
 // macOS 系统 say：无 npm 依赖、无网络、进程随应用退出清理；重复调用先停上一条（一次只念一条）。
@@ -160,11 +190,11 @@ if (app.isPackaged && process.env.CAIRN_DESKTOP_WORKSPACE === undefined) {
   mkdirSync(join(userData, "workspace"), { recursive: true });
 }
 
-/** 活动工作区上下文（2026-10-17）：渲染层切项目/开会话时经 IPC 上报。工作区类操作
- *  （diff / 文件窗格 / 回滚 / 快照还原 / 路径动作）优先用它，缺省才回落「最近一次 run」。
- *  修的是冷启动实证：没跑过 run 时这些面板全部报「没有已知的工作区」。 */
-let workspaceContext: string | null = null;
-const resolveWorkspace = (): string | null => workspaceContext ?? getLastWorkspace();
+// 工作区由可信 IPC sender 所属窗口保存；弹窗继承打开时的选择，之后独立。
+// 缺少窗口上下文时，文件/回滚/终端操作拒绝执行，不能回落到别的窗口最近跑过的项目。
+const windowWorkspaces = new WindowWorkspaceContext(canonicalKnownProjectPath);
+const workspaceContext = (): string | null => windowWorkspaces.current();
+const resolveWorkspace = (): string => windowWorkspaces.require();
 
 // 自定义 provider（工作区的 `.agent/providers.json`）：与 CLI **同一条装载路径**，而且必须在
 // 任何一次 run 之前装上（provider 解析、档位表、适配器 baseURL 三处都读它）。
@@ -227,9 +257,9 @@ const terminalHost = new TerminalHost((e) => {
   }
 });
 
-// v5 browser 窗格：WebContentsView 宿主（独立干净 profile）；视图挂在当前主窗口上。
+// browser 窗格：WebContentsView 宿主；产品调用按可信 IPC sender 绑定窗口。
 const browserHost = new BrowserHost(
-  // 优先当前聚焦窗口：弹出窗格里的浏览器页必须挂到 popout，而不是恒挂主窗（getAllWindows()[0]）。
+  // 仅供直接宿主调用兜底；browserOpen IPC 始终传入调用窗口，不依赖焦点。
   () => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null,
   (state) => {
     for (const win of BrowserWindow.getAllWindows()) win.webContents.send(PUSH_CHANNELS.onBrowserState, state);
@@ -286,6 +316,14 @@ async function canonicalKnownProjectPath(p: string): Promise<string | null> {
   return canonicalKnownProjectPathIn(p, await knownProjectRoots());
 }
 
+/** 显式 workspace → 该工作区的会话目录（**已登记根闸**）；缺省/空 = 交给 host 自行解析（唯一才认）。 */
+async function explicitSessionsRoot(workspace: unknown): Promise<string | undefined> {
+  if (workspace === undefined || workspace === null || workspace === "") return undefined;
+  const canonical = await canonicalKnownProjectPath(String(workspace));
+  if (canonical === null) throw new Error(`未注册的工作区，已拒绝：${String(workspace)}`);
+  return join(canonical, ".agent", "sessions");
+}
+
 /** 包含版：等于某个根**或**落在某个根之内就放行。
  *  落在根之内这一支是给"工作区里 agent 交付的单文件交付物也要能预览"留的
  *  （产品明确支持的一路，不能顺手砍掉）。软链逐段解析后再判
@@ -304,7 +342,10 @@ let stopDesktopScheduler: (() => void) | null = null;
 // list() 默认不返回，不复活。fail-soft：ProjectRegistry 构造不抛（纯字段存储），损坏在
 // 异步 load() 显式抛 ProjectRegistryCorruptError——在此捕获 console.error 不阻启动
 // （projects.json 损坏时 listProjects/addProject 通道仍 fail-visible，rehydrate 缺席只影响旧分组）。
-void (async () => {
+// 保留 Promise 给 IPC 面：渲染层首屏的 listSessions 必须等回灌完成再扫。
+// 旧实现是裸 `void` IIFE ⇒ 首屏若抢在 list 完成前到达，另一个项目的会话不在清单里，
+// 启动恢复会把它判成「不存在」并永久清 key（跨区恢复在冷启动时随机失效）。
+const projectRehydrate = (async () => {
   try {
     for (const p of await projectRegistry.list()) host.addWorkspace(p.path);
   } catch (error) {
@@ -348,10 +389,21 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // host.cancel 形参必选 string ⇒ 直传必红；此洗参是 wired 表房式（同 decide/createSession），
   // 非 T5 遗留——传参语义已是真实可选参透传，cast 只发生在类型面。
   runCancel: (sessionId) => host.cancel(sessionId as string),
-  listSessions: () => host.listSessions(),
+  // 第 9 点·轮中插话：host.steer 只在会话真在跑时返回 ok（否则 fail-visible，渲染层转「入队」）。
+  // 洗参与 runCancel 同一条房式（wired 表形参上下文是 unknown；cast 只发生在类型面）。
+  runSteer: (sessionId, text) => host.steer(sessionId as string, text as string),
+  listSessions: async () => { await projectRehydrate; return host.listSessions(); },
+  // v14：跨会话用量账本（只读；面板点「全部会话」才调）。
+  usageLedger: () => host.usageLedger(),
+  // v20：编排预览/提交/控制；地址由渲染层显式给出，host 侧再验工作区归属。
+  orchestrationView: address => host.orchestrationView(address as never),
+  orchestrationSubmit: request => host.orchestrationSubmit(request as never),
+  orchestrationControl: request => host.orchestrationControl(request as never),
+  // v15：会话日志尾部（只读；会话归属由 host 解析，renderer 不传路径）。
+  sessionLog: (id, tailLines) => host.sessionLog(id as string, typeof tailLines === "number" ? tailLines : undefined),
   // createSession 首参 M3 起是工作区（原 name 槽位被 M3 接口接管）；渲染层现不传 ⇒ 缺省 activeWorkspace
   createSession: (workspace) => host.createSession(workspace as string | undefined),
-  openSession: (id) => host.openSession(id as string),
+  openSession: (id, workspace) => host.openSession(id as string, workspace as string | undefined),
   queueGet: (sessionId) => host.queueGet(sessionId as string),
   queueSet: (sessionId, items) => host.queueSet(sessionId as string, items as SessionQueueEntry[]),
   // M3 小修（M1 六通道清单遗留缺口）：channels.ts 有 getProviderInfo 通道、preload 程序化桥自动
@@ -368,9 +420,12 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // 而且登记失败时目录**已经建好了** —— 消息里必须给出那个路径，否则用户找不到它。
   createProject: async (req) => {
     const r = req as { name?: string; parentDir?: string };
+    // 批 133：parentDir 是写入落点，不是"看一眼"——只认用户选过的目录 ∪ 已知项目根。
+    const parent = resolveCreateParent(r.parentDir, pickedDirs, await knownProjectRoots());
+    if (!parent.ok) return { ok: false, reason: "unpicked-parent", message: parent.message };
     const made = createProjectFolder({
       name: String(r.name ?? ""),
-      ...(typeof r.parentDir === "string" && r.parentDir !== "" ? { parentDir: r.parentDir } : {}),
+      ...(parent.parentDir !== undefined ? { parentDir: parent.parentDir } : {}),
     });
     if (!made.ok) return { ok: false, reason: made.reason, message: made.message };
     try {
@@ -390,10 +445,13 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   projectTemplates: () => Promise.resolve(templateCatalog()),
   projectCreateFromTemplate: async (req) => {
     const r = req as { name?: string; templateId?: string; parentDir?: string };
+    // 批 133：与 createProject 同一条父目录闸（同形漏洞，不各写一套）。
+    const parent = resolveCreateParent(r.parentDir, pickedDirs, await knownProjectRoots());
+    if (!parent.ok) return { ok: false, reason: "unpicked-parent", message: parent.message };
     const made = createProjectFromTemplate({
       name: String(r.name ?? ""),
       templateId: String(r.templateId ?? ""),
-      ...(typeof r.parentDir === "string" && r.parentDir !== "" ? { parentDir: r.parentDir } : {}),
+      ...(parent.parentDir !== undefined ? { parentDir: parent.parentDir } : {}),
     });
     if (!made.ok) return { ok: false, reason: made.reason, message: made.message };
     try {
@@ -444,9 +502,18 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // v6 连接自检：GET 模型清单（不产生 token 费用）。
   providerCheck: (provider) => checkProviderConnection({ provider: String(provider) }),
   // 斜杠菜单技能清单（2026-10-18）：显式传工作区，切项目时不吃竞态。
-  listSkills: (workspace) => handleListSkills(String(workspace ?? "") || workspaceContext),
+  listSkills: async (workspace) => {
+    // 批 133：workspace 是"去哪棵树里读技能"的根；只认已登记根。空参数回落到上下文。
+    const gate = resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext());
+    if (!gate.ok) throw new Error(gate.error);
+    return await handleListSkills(gate.workspace);
+  },
   // 技能正文（§8 #15）：同上按显式工作区读取。
-  skillBody: (name, workspace) => handleSkillBody(String(name ?? ""), String(workspace ?? "") || workspaceContext),
+  skillBody: async (name, workspace) => {
+    const gate = resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext());
+    if (!gate.ok) return { ok: false, error: gate.error };
+    return await handleSkillBody(String(name ?? ""), gate.workspace);
+  },
   // 导出对话为 .md（2026-10-18）：原生保存面板；取消是合法结果（canceled），不是错误。
   exportTranscript: async (markdown, suggestedName) => {
     const raw = String(suggestedName ?? "").trim();
@@ -511,42 +578,45 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
       return { ok: false as const, reason: "error" as const, message: brief, hint: `想建议失败（${brief.slice(0, 60)}）——去设置检查模型，或再按一次 Tab。` };
     }
   },
-  getState: () => handleAgentState(workspaceContext),
+  getState: () => handleAgentState(workspaceContext()),
   getOnboarding: () => onboardingGroups(),
   getSettings: () => getSettings(),
-  setSettings: (patch) => setSettings(patch as never),
-  compact: (sessionId) => handleCompact({ sessionId: sessionId as string | undefined }),
+  setSettings: async (patch) => {
+    const next = await setSettings(patch as never);
+    // 主题切到 light/dark/system 时同步原生窗口 chrome；下次启动的 bootBackground 也读同一字段。
+    const theme = (patch as { theme?: unknown }).theme;
+    if (theme === "light" || theme === "dark" || theme === "system") nativeTheme.themeSource = theme;
+    // 窗口材质：运行期先 best-effort 应用；透明窗口的完整材质仍以重启为准。
+    const vibrancy = (patch as { windowVibrancy?: unknown }).windowVibrancy;
+    if (process.platform === "darwin" && typeof vibrancy === "boolean" && mainWindow !== null) {
+      mainWindow.setVibrancy(vibrancy ? "sidebar" : null);
+      mainWindow.setBackgroundColor(vibrancy ? "#00000000" : bootBackground());
+    }
+    return next;
+  },
+  compact: async (sessionId, workspace) => {
+    const root = await explicitSessionsRoot(workspace);
+    return handleCompact({ sessionId: sessionId as string | undefined, ...(root !== undefined ? { sessionsRoot: root } : {}) });
+  },
   setGoal: (req) => handleGoalSet(req as never),
   cardAction: (req) => handleCardAction(req as never),
-  renameSession: (oldId, newName) => handleSessionRename(oldId as string, newName as string),
-  deleteSession: (id) => handleSessionDelete(id as string),
+  renameSession: async (oldId, newName, workspace) => handleSessionRename(oldId as string, newName as string, await explicitSessionsRoot(workspace)),
+  deleteSession: async (id, workspace) => handleSessionDelete(id as string, await explicitSessionsRoot(workspace)),
   // M8 分叉（v2.15）：保留前 N 轮 → 新会话 `<id>-f<N>`；与 CLI --fork/--from 同口径（fork-cli 单源）。
-  forkSession: (id, round, unique) => handleSessionFork(id as string, round as number, unique === true),
+  forkSession: async (id, round, unique, workspace) => handleSessionFork(id as string, round as number, unique === true, await explicitSessionsRoot(workspace)),
   // #7 文件级回滚（v2.16）：把第 N 轮主会话改过的文件还原成该轮之前的原件（源自 D7 覆盖前快照）。
   // 活动工作区上下文（desktop 专用）：空串清除；写入口只收字符串，非法值留给后续操作 fail-visible。
-  setWorkspaceContext: async (path) => {
-    const p = String(path ?? "");
-    if (p === "") { workspaceContext = null; return { ok: true as const }; }
-    // 只接受**已注册**的工作区：`/` 也是合法路径，不校验就把整盘变成文件窗格/预览的边界
-    // （workspaceReadText("etc/hosts")、workspacePathAction("Applications/X.app","open")）。
-    const canonical = await canonicalKnownProjectPath(p);
-    if (canonical === null) {
-      return { ok: false as const, error: `未注册的工作区，已拒绝：${p}` };
-    }
-    workspaceContext = canonical;
-    return { ok: true as const };
-  },
-  revertTurn: (id, round) => handleSessionRevert(id as string, round as number, workspaceContext),
+  setWorkspaceContext: (path) => windowWorkspaces.select(String(path ?? "")),
+  revertTurn: async (id, round, workspace) => handleSessionRevert(id as string, round as number, resolveWorkspace(), await explicitSessionsRoot(workspace)),
   // v4 变更审阅（diff 窗格逐 hunk）。
-  changeDiff: (req) => handleChangeDiff(req as never, workspaceContext),
+  changeDiff: (req) => handleChangeDiff(req as never, resolveWorkspace()),
   // v5 file 窗格（只读浏览）。
-  workspaceListDir: (relPath) => handleWorkspaceListDir(relPath as string, workspaceContext),
-  workspaceReadText: (relPath) => handleWorkspaceReadText(relPath as string, workspaceContext),
+  workspaceListDir: (relPath) => handleWorkspaceListDir(relPath as string, resolveWorkspace()),
+  workspaceReadText: (relPath) => handleWorkspaceReadText(relPath as string, resolveWorkspace()),
   // v7 路径动作（§2.3 右键菜单）：解析段（存在性 + 越界拒绝）在 workspace-fs（纯 Node 判卷面），
   // shell 调用留在壳。openPath 空串 = 成功（Electron 口径）。
   workspacePathAction: async (relPath, action) => {
     const ws = resolveWorkspace();
-    if (ws === null) return { ok: false, error: "工作区未知（先跑一场会话或选工作区）" };
     const resolved = await resolveEntry(ws, String(relPath ?? ""));
     if (!resolved.ok) return { ok: false, error: resolved.error };
     const act = String(action);
@@ -581,9 +651,10 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     return Promise.resolve({ ok: true });
   },
   // v5 terminal 窗格（PTY 宿主见 terminal-host.ts）。
-  // 与 diff/文件窗格/回滚同一条工作区解析：活动上下文优先，最近 run 只做兜底。
-  terminalStart: () => terminalHost.start(resolveWorkspace()),
+  // 与 diff/文件窗格/回滚同一条工作区解析：只使用当前调用窗口的上下文。
+  terminalStart: (owner) => terminalHost.start(resolveWorkspace(), process.env, owner as BrowserWindow),
   terminalWrite: (id, data) => Promise.resolve(terminalHost.write(id as string, data as string)),
+  terminalResize: (id, cols, rows) => Promise.resolve(terminalHost.resize(id as string, cols as number, rows as number)),
   terminalKill: (id) => { terminalHost.kill(id as string); return Promise.resolve(); },
   // v5 窗格弹出：独立窗口（同壳参数；#pane=<kind>[&session=<id>] 路由）。
   panePopout: (kind, sessionId) => {
@@ -591,8 +662,10 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
       width: 760,
       height: 620,
       titleBarStyle: "hiddenInset",
+      backgroundColor: bootBackground(),
       webPreferences: { preload: join(distElectron, "preload.cjs"), contextIsolation: true, nodeIntegration: false },
     });
+    windowWorkspaces.inherit(win.webContents);
     hardenAppWindow(win);
     const hash = `pane=${encodeURIComponent(kind as string)}${typeof sessionId === "string" && sessionId !== "" ? `&session=${encodeURIComponent(sessionId)}` : ""}`;
     if (process.env.VITE_DEV_SERVER_URL) void win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#${hash}`);
@@ -600,7 +673,8 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     return Promise.resolve({ ok: true });
   },
   // v5 browser 窗格（WebContentsView 宿主见 browser-host.ts）。
-  browserOpen: (id, url) => Promise.resolve(browserHost.open(id as string, url as string)),
+  // owner 只由下方可信 IPC sender 解析，不能接受 renderer 自报的窗口。
+  browserOpen: (id, url, owner) => Promise.resolve(browserHost.open(id as string, url as string, owner as BrowserWindow | null)),
   browserBounds: (id, rect) => { browserHost.setBounds(id as string, rect as { x: number; y: number; width: number; height: number }); return Promise.resolve(); },
   browserNav: (id, action) => { browserHost.navigate(id as string, action as "back" | "forward" | "reload"); return Promise.resolve(); },
   browserClose: (id) => { browserHost.close(id as string); return Promise.resolve(); },
@@ -612,18 +686,24 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   },
   browserPickElement: (id) => browserHost.pickElement(String(id)),
   // v2.16 用户反馈沉淀（赞/踩）：sidecar feedback.jsonl，append-only、不进事件流。
-  submitFeedback: (req) => handleFeedbackSubmit(req as never),
-  listFeedback: (sessionId) => handleFeedbackList(sessionId as string),
+  submitFeedback: async (req) => handleFeedbackSubmit(req as never, await explicitSessionsRoot((req as { workspace?: unknown } | null)?.workspace)),
+  listFeedback: async (sessionId, workspace) => handleFeedbackList(sessionId as string, await explicitSessionsRoot(workspace)),
   // 2026-10-20 消息置顶（销 G6）：sidecar pins.jsonl，append-only、不进事件流。
-  setMessagePinned: (req) => handlePinSet(req as never),
+  setMessagePinned: async (req) => handlePinSet(req as never, await explicitSessionsRoot((req as { workspace?: unknown } | null)?.workspace)),
   listMessagePins: (sessionId) => handlePinList(sessionId as string),
   setSessionPinned: (sessionId, pinned) => handleSessionSetPinned(sessionId as string, pinned as boolean),
   setSessionArchived: (sessionId, archived) => handleSessionSetArchived(sessionId as string, archived as boolean),
   // §3.7 · G4 会话级 worktree 隔离：解析归属/在跑拒绝/创建合并清理全在 kernel-host 与 core 侧。
   sessionWorktree: (req) => host.sessionWorktree(req as never),
+  worktreeClean: (name, workspace) => host.worktreeClean(name as string, workspace as string | undefined),
+  worktreeDiff: (ref, workspace) => host.worktreeDiff(ref as string, workspace as string | undefined),
   assignSessionProject: (sessionId, projectId) => handleSessionAssignProject(sessionId as string, projectId as string | null),
-  deleteMemory: (scope, topic) => handleMemoryDelete(scope as never, topic as string, workspaceContext),
-  pluginDecide: (plugin, trusted, workspace) => handlePluginDecide(plugin as string, trusted as boolean, String(workspace ?? "") || workspaceContext),
+  deleteMemory: (scope, topic) => handleMemoryDelete(scope as never, topic as string, scope === "project" ? resolveWorkspace() : workspaceContext()),
+  pluginDecide: async (plugin, trusted, workspace) => {
+    const gate = resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext());
+    if (!gate.ok) return { ok: false };
+    return await handlePluginDecide(plugin as string, trusted as boolean, gate.workspace);
+  },
   pluginUserConfigSet: (plugin, values) => {
     const rt = currentPluginRuntime();
     if (rt === null) return Promise.resolve({ ok: false, error: "插件运行时未装载（先跑一场会话）" });
@@ -727,7 +807,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // SEMA §3.5/§12：协议版本握手（同步返回 number，ipcMain.handle 自动包成 resolve）。
   protocolVersion: () => IPC_PROTOCOL_VERSION,
   // 能力在场性：搜索端点配没配。口径与 CLI --doctor 的 search 那一格同源（同一个 loadSearchConfig）。
-  capabilities: async () => await readCapabilities(resolveWorkspace() ?? workspace, join(app.getPath("userData"), "settings.json")),
+  capabilities: async () => await readCapabilities(workspaceContext() ?? workspace, join(app.getPath("userData"), "settings.json")),
   // v11 主界面重做批（七行）——
   // git 两闸：读数无副作用；克隆 URL 白名单 + 目标已存在即拒（都在 core 模块内判）。
   gitStatus: (path) => gitStatus(String(path)),
@@ -746,14 +826,35 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     return gitClone(String(r.url ?? ""), canonical);
   },
   // 项目内模糊搜索（@ 引用数据面；只读文件名，不读文件内容）。
-  workspaceSearch: (ws, query) => searchWorkspace(String(ws), String(query)),
+  // 2026-10-21 评审修：它同样收渲染层给的目录，必须过已登记根闸（只读名字也是泄露面）。
+  workspaceSearch: async (ws, query) => {
+    const gate = resolveProvidedWorkspace(ws, await knownProjectRoots(), workspaceContext());
+    if (!gate.ok) throw new Error(gate.error);
+    if (gate.workspace === null) throw new Error("工作区未知——先打开一个项目");
+    return await searchWorkspace(gate.workspace, String(query));
+  },
+  // v18：会话正文全文检索（只读）。**主进程扫会话 JSONL，渲染层不碰盘**——
+  // 检索是 IO 密集面，放在渲染进程会卡 UI 也会把会话目录摸进前端。
+  // 工作区归属先过已登记根闸（同 workspaceSearch：渲染层给的目录必须 ∈ 已登记工作区）。
+  // 结果三态由 core 给（ok / partial / unavailable），这里**原样传回**——
+  // 「没量到」不许在主进程被折成空数组。
+  sessionSearch: async (ws, query, options) => {
+    const gate = resolveProvidedWorkspace(ws, await knownProjectRoots(), workspaceContext());
+    if (!gate.ok) throw new Error(gate.error);
+    if (gate.workspace === null) throw new Error("工作区未知——先打开一个项目");
+    const o = options as { budgetBytes?: unknown; maxSessions?: unknown } | undefined;
+    return await host.sessionSearch(gate.workspace, String(query), {
+      ...(typeof o?.budgetBytes === "number" ? { budgetBytes: o.budgetBytes } : {}),
+      ...(typeof o?.maxSessions === "number" ? { maxSessions: o.maxSessions } : {}),
+    });
+  },
   // ⌘V 粘贴落临时文件（字节帽 20MB 在核心模块内判；校验先于 electron 动态导入）。
   saveTempFile: (req) => {
     const r = req as { name?: string; bytes?: unknown };
     return saveTempFile(String(r.name ?? ""), r.bytes);
   },
   // 快照还原（检查器「撤销此文件改动」；工作区口径与 changeDiff 同——最近一次 run 的工作区）。
-  snapshotRestore: (req) => handleSnapshotRestore(req as { path?: string; snapshotId?: string }, workspaceContext),
+  snapshotRestore: (req) => handleSnapshotRestore(req as { path?: string; snapshotId?: string }, resolveWorkspace()),
   // Finder 显示（项目右键菜单 / 项目外附件 chip 的落点）。只显示不打开；绝对路径 + 存在性前置。
   attachmentThumb: (path) => handleAttachmentThumb(path as string),
   revealInFinder: async (path) => {
@@ -786,7 +887,16 @@ for (const [key, channel] of Object.entries(INVOKE_CHANNELS) as [InvokeChannel, 
     if (!isTrustedIpcSender(event)) {
       throw new Error(`IPC 来源不可信，已拒绝：${channel}`);
     }
-    return handler(...args);
+    return windowWorkspaces.run(event.sender, () => {
+      // 后台弹窗恢复页面时焦点可能还在主窗；视图归属取发起 IPC 的窗口。
+      if (key === "browserOpen") return handler(args[0], args[1], BrowserWindow.fromWebContents(event.sender));
+      if (key === "terminalStart") {
+        const owner = BrowserWindow.fromWebContents(event.sender);
+        if (owner === null || owner.isDestroyed()) return { ok: false, error: "调用窗口已关闭" };
+        return handler(owner); // 窗口归属只由可信 sender 提供，忽略 renderer 自报参数。
+      }
+      return handler(...args);
+    });
   });
 }
 void webContents; // 显式留痕：推送经 BrowserWindow.getAllWindows()
@@ -816,6 +926,7 @@ function openExternalSafe(raw: string): void {
 }
 function hardenAppWindow(win: BrowserWindow): void {
   const wc = win.webContents;
+  wc.once("destroyed", () => windowWorkspaces.forget(wc));
   wc.setWindowOpenHandler(({ url }) => {
     openExternalSafe(url);
     return { action: "deny" };
@@ -832,6 +943,7 @@ const createWindow = () => {
   const statePath = join(app.getPath("userData"), "window-state.json");
   const saved = readWindowState(statePath);
   const bounds = saved === null ? null : clampToWorkArea(saved, screen.getDisplayMatching(saved).workArea);
+  const vibrancy = windowVibrancyOptions(process.platform, process.env, readWindowVibrancyPreference());
   const win = new BrowserWindow({
     ...(bounds === null ? {} : { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }),
     ...(bounds === null ? { width: 1200, height: 800 } : {}),
@@ -847,7 +959,13 @@ const createWindow = () => {
     // 也就无所谓「覆盖」。真正防覆盖的是下面 createWindow 里 bounds 显式传入 + clampToWorkArea。
     // 因此：删掉这个不存在的键，typecheck 恢复绿；行为不变（本来就没开系统恢复）。
     titleBarStyle: "hiddenInset",
-    webPreferences: { preload: join(distElectron, "preload.cjs"), contextIsolation: true, nodeIntegration: false },
+    ...(vibrancy === null ? { backgroundColor: bootBackground() } : vibrancy),
+    webPreferences: {
+      preload: join(distElectron, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      ...(vibrancy === null ? {} : { additionalArguments: ["--cairn-vibrancy"] }),
+    },
   });
   if (saved?.maximized === true) win.maximize();
   // 拖动/缩放防抖 400ms 落盘；关闭前再写一次（正常退出一定留住最后位置）。
@@ -863,6 +981,8 @@ const createWindow = () => {
   win.on("resize", scheduleSave);
   win.on("move", scheduleSave);
   win.on("close", persistBounds);
+  mainWindow = win;
+  win.on("closed", () => { if (mainWindow === win) mainWindow = null; });
   hardenAppWindow(win);
   if (process.env.VITE_DEV_SERVER_URL) void win.loadURL(process.env.VITE_DEV_SERVER_URL);
   else void win.loadFile(join(distElectron, "..", "dist", "index.html"));
@@ -1131,6 +1251,8 @@ const createWindow = () => {
   }
 };
 app.whenReady().then(() => {
+  // 主题真相在 settings.json；ready 后先同步，再建窗（createWindow 里的 bootBackground 也读同一字段）。
+  nativeTheme.themeSource = readThemePreference();
   // 应用菜单（蓝本 §5.2 菜单树）：App → 文件 → 编辑 → 视图 → 前往 → 窗口 → 帮助。
   // 模板在 ./menu-template.ts（纯数据、可判卷），这里只装 + 给一条出口：渲染层拥有键位的项
   // 经 push 通道 `onMenu` 转交，accelerator 只显示不注册（否则菜单 push 与渲染层 keydown 双发）。
@@ -1217,6 +1339,23 @@ app.on("before-quit", (e) => {
     // 不让应用停在「无窗可操作、在跑会话看不见」的悬空态。
     createWindow();
   }
+});
+// Let the durable executor acknowledge cancellation and release its journal locks before exit.
+let orchestrationClosing = false;
+let orchestrationClosed = false;
+app.on("before-quit", (event) => {
+  if (event.defaultPrevented || orchestrationClosed) return;
+  event.preventDefault();
+  if (orchestrationClosing) return;
+  orchestrationClosing = true;
+  void host.orchestrationClose().then(() => {
+    orchestrationClosed = true;
+    app.quit();
+  }).catch(error => {
+    orchestrationClosing = false;
+    console.error("[orchestration] shutdown failed:", error);
+    dialog.showErrorBox("任务编排尚未安全停止", String(error instanceof Error ? error.message : error));
+  });
 });
 // 调度器随应用退出停表（清 timer；与 CLI SIGINT → stop 同语义）。
 app.on("will-quit", () => {

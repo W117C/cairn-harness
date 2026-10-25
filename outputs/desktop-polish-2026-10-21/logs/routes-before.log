@@ -1,0 +1,5 @@
+route-smoke 超时
+[Error: target closed while handling command]
+undefined
+/Users/ze/Downloads/Cairn/deepseek harness/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron scripts/route-smoke.cjs '/Users/ze/Downloads/Cairn/deepseek harness/outputs/desktop-polish-2026-10-21/routes-before.json'

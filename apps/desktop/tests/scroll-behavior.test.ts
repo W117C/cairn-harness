@@ -4,8 +4,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { scrollBehavior } from "../src/renderer/useStickyScroll";
+import { readAppShell } from "./helpers/app-surface";
 
-const app = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const app = readAppShell();
 const hook = readFileSync(fileURLToPath(new URL("../src/renderer/useStickyScroll.ts", import.meta.url)), "utf8");
 
 describe("scrollBehavior", () => {

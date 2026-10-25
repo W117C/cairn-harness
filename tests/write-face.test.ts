@@ -41,6 +41,21 @@ const writePair = (id: string): AgentEvent[] => [
   { type: "tool_call", id, name: "write_file", args: { path: "a.ts" } },
   okResult(id),
 ];
+/** 动作融合：写已落盘，随后 lint 红 ⇒ 工具 ok:false，但结构字段 fusedWrite 为真。 */
+const fusedPair = (id: string): AgentEvent[] => [
+  { type: "tool_call", id, name: "write_file", args: { path: "a.ts" } },
+  { type: "tool_result", callId: id, ok: false, output: "written then lint failed", fusedWrite: true },
+];
+
+describe("融合写盘的证据面（ok:false 不等于没写）", () => {
+  it("hasSessionWrites：fusedWrite 的写盘算产出，不许把 goal 判成「压根没产出」", () => {
+    expect(hasSessionWrites(fusedPair("w1"))).toBe(true);
+  });
+
+  it("workerVerificationEvidence：绿拍之后的融合写盘让证据变 stale，不是 verified", () => {
+    expect(workerVerificationEvidence([...writePair("w0"), beat(true), ...fusedPair("w1")])).toBe("stale");
+  });
+});
 
 describe("mayHaveWrittenDisk：写向判据的唯一事实源", () => {
   it("两个显式写工具 ⇒ 算改盘", () => {

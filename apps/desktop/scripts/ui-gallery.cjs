@@ -10,7 +10,10 @@ const { app, BrowserWindow } = require("electron");
 const { mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
 
-const OUT = "/tmp/cairn-gallery";
+// 首启那一趟单独落一个目录：两趟的 01-empty 长得不一样（一边有「设置检查」、一边没有），
+// 混在一个目录里会互相覆盖 ⇒ 目验时读到的是上一次那张。
+const FIRST_RUN = process.env.GALLERY_FIRST_RUN === "1";
+const OUT = FIRST_RUN ? "/tmp/cairn-gallery-first-run" : "/tmp/cairn-gallery";
 mkdirSync(OUT, { recursive: true });
 
 // 桩的兜底名单从**真接口**推导（src/main/ipc-protocol.ts 的 AgentApi 成员），
@@ -42,6 +45,19 @@ function agentApiSurface() {
   return { version, members };
 }
 
+/** 首启夹具：七组覆盖面取**真源**（`src/main/onboarding-groups.ts` 的那份数组字面量）。
+ *  不手抄：手抄一份就会随服务端那份漂——这正是本文件对 AgentApi 名单的处理理由。
+ *  这里是本地视觉工具、读的是本仓自己的源文件 ⇒ 在主进程里把那一个字面量求值出来。 */
+function onboardingGroupsSurface() {
+  const src = readFileSync(join(__dirname, "..", "..", "..", "src", "main", "onboarding-groups.ts"), "utf8");
+  const at = src.indexOf("ONBOARDING_GROUPS: readonly OnboardingGroup[] = ");
+  if (at < 0) throw new Error("ONBOARDING_GROUPS 未找到");
+  const from = src.indexOf("[", at);
+  const to = src.indexOf("] as const;", from);
+  if (from < 0 || to < 0) throw new Error("ONBOARDING_GROUPS 的数组字面量取不到");
+  return new Function("return " + src.slice(from, to + 1) + ";")();
+}
+
 async function main() {
   await app.whenReady();
   // 看门狗：视觉自查工具卡死时不能把会话一直挂在这儿（此前一次跑到第 5 张就无声挂住）。
@@ -56,7 +72,10 @@ async function main() {
   const apiArgs = [
     "--cairn-api-members=" + JSON.stringify(members),
     "--cairn-protocol-version=" + version,
+    // 七组覆盖面交给桩：首启那一趟要显示真清单（手抄一份会漂）。
+    "--cairn-onboarding-groups=" + JSON.stringify(onboardingGroupsSurface()),
   ];
+  if (FIRST_RUN) apiArgs.push("--cairn-first-run-fixture");
   console.log("[gallery] AgentApi 成员:", members.length, "协议版本:", version);
   const win = new BrowserWindow({
     width: 1440, height: 900, show: false,
@@ -119,19 +138,75 @@ async function main() {
   await js(`document.querySelector(".mp-trigger")?.click()`);
   await shot("02-model-menu.png", 400);
 
-  // 思考分段控件（deepseek-chat 声明支持 ⇒ 可点开）
-  await js(`document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))`);
-  await js(`[...document.querySelectorAll(".ctl")].find(b=>b.getAttribute("aria-label")==="思考档位")?.click()`);
+  // 思考强度（2026-10-22 契约：P2-2 起思考与模型合并成单芯片菜单，旧的 `.ctl[aria-label=思考档位]`
+  // 已不存在——旧选择器让 03/04 两张图静默退化成 01 的副本，而脚本只报 done）。
+  await js(`document.querySelector('.mp-pop .th-row button[data-e="medium"]')?.click()`);
   await shot("03-thinking.png", 400);
 
-  // 空态 pill 填入 composer
+  // 空态起手行（QuickStarts；2026-10-20 起由 `.pill` 改成 `.start`）填入 composer，不发送。
   await js(`document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))`);
-  await js(`document.querySelector(".pill")?.click()`);
+  await js(`document.querySelector(".start")?.click()`);
   await shot("04-composer-draft.png", 300);
 
   // 打开演示会话 → markdown 流 + 变更卡
   await js(`document.querySelector(".session")?.click()`);
   await shot("05-stream.png", 900);
+
+  // ⑬ 概览里的数字**刚变过**闪一下：推一个 usage 事件让「输入」变，随即在闪的窗口里截。
+  // 闪只有 300ms（--t-slow）⇒ 截晚了就只剩「已经变过」的常态，看不出那一下。
+  // 自查：推事件后**立刻**问「闪的那一格在不在、它是什么颜色」——
+  // 截图看颜色是主观的，读计算样式是客观的（���图只证明「那一刻长这样」）。
+  // ⚠️ 推事件后不能**立刻**问：React 的重绘是异步的 ⇒ 那一刻 DOM 还是旧的 ⇒ 会读成「没闪」。
+  // 要等一两帧（闪的窗口有 420ms，等 60ms 还在窗口里）。
+  const flashProbe = await js(`(async () => {
+    window.__cairnPushEvent && window.__cairnPushEvent({ type: "usage", inputTokens: 15800, outputTokens: 2140, ts: Date.now() });
+    await new Promise(r => setTimeout(r, 60));
+    const el = document.querySelector(".isp-ov-value-flash");
+    const num = document.querySelector(".num");
+    return JSON.stringify({
+      flashing: document.querySelectorAll(".isp-ov-value-flash").length,
+      // animationName 若为 "none" ⇒ 那条 animation 简写**整条不成立**（类加了、动画没跑）。
+      animName: el ? getComputedStyle(el).animationName : null,
+      animDuration: el ? getComputedStyle(el).animationDuration : null,
+      flashColor: el ? getComputedStyle(el).color : null,
+      numColor: num ? getComputedStyle(num).color : null,
+    });
+  })()`);
+  console.log("[gallery] 概览数字闪动自查:", flashProbe);
+  await shot("13-overview-value-flash.png", 60);
+
+  // 自查：失败正文**是不是**正文色（--text-200），失败标记（红三角/失败摘要）是不是仍危险色。
+  const errorProbe = await js(`(() => {
+    // 不预设类名：先找到**含那句散文的最内层元素**，再连着祖先的类名与颜色一起报出来。
+    const all = [...document.querySelectorAll("body *")].filter(n => (n.textContent || "").includes("Permission denied"));
+    const body = all.length ? all[all.length - 1] : null;
+    const chain = [];
+    for (let n = body; n && n !== document.body; n = n.parentElement) {
+      chain.push({ cls: n.className, color: getComputedStyle(n).color });
+      if (chain.length >= 4) break;
+    }
+    const mark = [...document.querySelectorAll("body *")].find(n => (n.textContent || "").trim() === "1 次失败");
+    return JSON.stringify({ chain, markColor: mark ? getComputedStyle(mark).color : null });
+  })()`);
+  console.log("[gallery] 失败正文配色自查:", errorProbe);
+
+  // ⑭ 弹出的**单窗格**窗口（#pane=file）：那行「面板导航」不该在这里——
+  // 弹窗里没有多面板可导航/可恢复，那一行是一排**死按钮**，还把唯一的标题重复了一遍。
+  const pop = new BrowserWindow({
+    width: 900, height: 640, show: false,
+    webPreferences: { preload: join(__dirname, "ui-gallery-preload.cjs"), additionalArguments: apiArgs },
+  });
+  await pop.loadFile(join(__dirname, "..", "dist", "index.html"), { hash: "pane=file" });
+  await new Promise((r) => setTimeout(r, 900));
+  const popImg = await pop.webContents.capturePage();
+  require("node:fs").writeFileSync(join(OUT, "14-popout-pane.png"), popImg.toPNG());
+  console.log("[gallery] 14-popout-pane.png");
+  // 自查：弹窗里**不该**有那行面板导航（`.pane-nav`）。
+  const navProbe = await pop.webContents.executeJavaScript(
+    `JSON.stringify({ nav: document.querySelectorAll(".pane-nav").length, titles: [...document.querySelectorAll(".pane-title,.tp-title,.tb-title")].map(e => e.textContent) })`,
+  );
+  console.log("[gallery] 弹窗面板导航自查:", navProbe);
+  pop.destroy();
 
   // 窄窗（产品 minWidth 880）：三窗格按钮收进 ⋮（CSS 收口 @media max-width:920px）。
   // 这一档此前只写在 CSS 里，没被看过。

@@ -75,6 +75,6 @@ describe("Sidebar 搜索接线", () => {
   it("⏎ 打开第一个命中（搜索的终点就是打开它）", () => {
     expect(sidebarSrc).toContain('if (e.key === "Enter")');
     expect(sidebarSrc).toContain("const first = visibleActive[0] ?? visibleArchived[0];");
-    expect(sidebarSrc).toContain("props.onOpen(first.id)");
+    expect(sidebarSrc).toContain("props.onOpen(first.id, first.workspace)");
   });
 });

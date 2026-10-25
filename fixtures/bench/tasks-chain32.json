@@ -13,6 +13,7 @@
   "expects": [
    "verifyOk",
    "judgeUntouched"
-  ]
+  ],
+  "judge": {"failToPass":["32 级流水线逐级跑通"],"passToPass":[]}
  }
 ]

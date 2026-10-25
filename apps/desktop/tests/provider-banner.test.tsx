@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ProviderBanner } from "../src/renderer/components/ProviderBanner";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
@@ -20,7 +21,7 @@ describe("ProviderBanner", () => {
   });
 
   it("App 只在 providerOk === false 的空屏挂载它", () => {
-    const app = read("../src/renderer/App.tsx");
+    const app = readAppSurface();
     expect(app).toContain("providerOk === false && (");
     expect(app).toContain("<ProviderBanner");
     expect(app).toContain("setSettingsOpen(true)");

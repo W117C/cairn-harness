@@ -1,0 +1,23 @@
+=== core 全套（--maxWorkers=2）· 2026-10-22 · 工作树 ===
++ ]
+
+ ❯ tests/docs-check.test.ts:1034:61
+    1032|     expect(face.witness!.refs, "分母为 0 的绿不算绿").toBeGreaterThanOrEqual(2…
+    1033|     expect(face.witness!.pages).toBeGreaterThan(0);
+    1034|     expect(hit(face.findings, "D-11").map((x) => x.detail)).toEqual([]…
+       |                                                             ^
+    1035|     // 第 290 页补⑴：取值域换成整本台账，登记位从 0 涨到**现读的 12 条**（整目录已不在盘上的老账，09-12～09-…
+    1036|     // 这条是**恰好 12 的等式**，不是下限：多一条要交代、少一条（原件被找回并入库）就必须删（规则 241/248）。
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 459 passed (460)
+      Tests  1 failed | 6330 passed (6331)
+   Start at  04:57:42
+   Duration  119.90s (tests 88%, import 10%, transform 1%)
+
+    Isolate  460 workers spawned · ~52ms startup each (spawn + environment, per file)
+             at least ~11.91s faster with isolate: false — reuses workers across files instead of one per file
+
+[ELIFECYCLE] Command failed with exit code 1.

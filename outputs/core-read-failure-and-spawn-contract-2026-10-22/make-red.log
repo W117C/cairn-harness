@@ -1,0 +1,47 @@
+=== 造红机 · 2026-10-22 · 两处修法同时还原成修前的样子，判卷留着新写的 ===
+--- 实现：src/tools/apply_patch.ts 读失败分支 / src/tools/run_shell.ts spawn 失败出口 ---
++ {
++   "change": "created",
++   "changedPaths": [
++     "secret.txt",
++   ],
++   "ok": true,
++   "output": "已应用补丁（1 文件 / 1 hunk，+1 −0 行）
++   secret.txt +1 −0",
+  }
+
+ ❯ tests/apply-patch-unreadable-target.test.ts:63:94
+     61|       await chmod(target, 0o000);
+     62|
+     63|       await expect(apply_patch.run({ patch: createPatch("secret.txt", …
+       |                                                                                              ^
+     64|
+     65|       // 这一条是本判卷的**承重**断言：旧写法（读失败＝不存在）会把原文件 rename 覆盖掉。
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/exec-outcome-face.test.ts > exec 结局的结构面：exitCode / timedOut 要活到落盘面 > 生产端·spawn 失败（命令根本没跑成）⇒ 结构面也在，不只剩一句文案
+AssertionError: 「没有跑成」与「没这一位」是两件事：前者是 null，后者是 undefined: expected undefined to be null
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ tests/exec-outcome-face.test.ts:81:68
+     79|     const r = await run_shell.run({ command: "echo hi" }, ctx("/nonexi…
+     80|     expect(r.ok).toBe(false);
+     81|     expect(r.exitCode, "「没有跑成」与「没这一位」是两件事：前者是 null，后者是 undefined").toB…
+       |                                                                    ^
+     82|     expect(r.timedOut, "这一支不是超时").toBe(false);
+     83|     expect(r.output, "归因走同一条谓词（not-run），文案也在").toContain("[exec:");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 7 passed (10)
+   Start at  01:40:26
+   Duration  367ms (transform 72%, import 19%, tests 8%, worker 1%)
+

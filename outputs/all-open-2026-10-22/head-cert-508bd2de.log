@@ -1,0 +1,32 @@
+$ node --import tsx scripts/gates.ts --only=head-cert-check
+== pnpm gates ==
+门清单（1 道，清单即事实源）：head-cert-check
+执行器：pnpm run
+  清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）
+
+  ▶ head-cert-check …  ❌ head-cert-check    exit=1  138131ms
+      ── 失败输出尾 12 行 ──
+        TREE=508bd2d DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-gate-head-cert.lock）
+        Test Files 1 failed | 466 passed (467)｜Tests 1 failed | 6458 passed (6459)｜exit=1（退出码直接取，不接管道）
+        并发判卷=起前 0 套／跑完 0 套（两端独占）
+        本趟墙钟 135.04s（同一进程 hrtime 实测·口径＝起跑→汇总那一行，不含提前退出的那些趟）
+        贴帽读数（缺省＝config 里的 testTimeout=30000ms）：6459 条里 0 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 5893 条｜标题非字面量（it.each／插值／拼接，按缺省算）384 条｜预算没落到 0 条｜无｜离帽余量最近：tests/m3c.test.ts·M3c pipeline 哑 sequencer（零 LLM） 未获 15280ms/25000ms=61%；tests/mutate-shards.test.ts·treeProblem 与编排器的前置闸：脏树不许当片用 同一宿主被 7243ms/15000ms=48%；tests/plugin-trust-revocation.test.ts·撤回插件信任后旧执行面立即失效 撤回时关闭在途 MCP 请求，服务端 84ms/200ms=42%
+        逐条日志：/tmp/dsh-head-cert-508bd2d
+        已回收认证树 .worktrees/gate-head-cert（exit=0）
+        常驻残留树=1（/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/gate-mutate-verify@6455bb2）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+        本次退出码=1（这是 head-cert 这道门自己的码，不是它跑进去的 test runner 的码）｜红的维：判卷 exit=1、认证门面红 1 道
+        汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-508bd2d/summary.txt
+        可引用读数已落盘（引用墙钟/门耗时前先读它）：outputs/head-cert-508bd2d-2026-10-22-0443/provenance.md
+      [ELIFECYCLE] Command failed with exit code 1.
+      完整输出已落盘： /Users/ze/Downloads/Cairn/deepseek harness/.tmp/gate-failures/head-cert-check.log（这里只贴尾部 12 行）
+
+== 断言体检（空断言 / 恒真式 / 暗卷段零断言 / 析取式弱断言）==
+  扫描面：155 个已跟踪且在盘的脚本（未跟踪草稿不判，口径同 tests/assertion-health-scan.test.ts）
+  ✅ 零命中
+
+== 汇总 ==
+  绿 0 / 1，红 1（head-cert-check）
+  逐道退出码：head-cert-check=1
+  认证面：判卷四面与 HEAD 逐字一致（在飞 4 项全在四面之外） ⇒ 本表即 HEAD 认证
+[ELIFECYCLE] Command failed with exit code 1.
+HEADCERT_EXIT=1

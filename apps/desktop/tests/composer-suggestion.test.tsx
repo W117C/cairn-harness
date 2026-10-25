@@ -25,7 +25,6 @@ const base = {
   phase: "idle" as const,
   elapsedSec: 0,
   steps: 0,
-  workspaceLabel: null,
   onSend: () => undefined,
   onCancel: () => undefined,
   onModeChange: () => undefined,

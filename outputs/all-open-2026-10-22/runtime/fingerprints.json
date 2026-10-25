@@ -1,0 +1,7 @@
+{
+  "apps/desktop/scripts/interaction-smoke.cjs": "724a1cb5e8daf79266b4d71f27de28c2e828b13a39b96e3428b08c1ac864c4a9",
+  "apps/desktop/scripts/state-smoke.cjs": "7237aa96db7314df407242dd09518c625bdaae44374d56be06fdfdc9685fa858",
+  "apps/desktop/scripts/route-smoke.cjs": "310172e5d1e9fc7e59a1fea1420381f3340f805e5d44c7b0b2172755f7aa7b2e",
+  "apps/desktop/scripts/ui-gallery-preload.cjs": "e95ffa5b093cc1317e1eb24caec0de2b30186103bf2c61df402cceeb73ab835c",
+  "apps/desktop/dist/index.html": "81846b9d9626a38f92f15554718b530f5c5a56f340fa605e81ed6d3cb186255d"
+}

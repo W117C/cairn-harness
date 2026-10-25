@@ -270,7 +270,7 @@ describe("项目 skill 那顶根真的被扫，且走的是项目信任门（真
 
 /** 真跑 CLI：抹掉全部 provider key，证「看面和决议这两件事不需要钥匙」（读路径不被无关闸门挡住）。 */
 function runCli(args: string[], env: Record<string, string> = {}): { status: number | null; out: string } {
-  const e: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1", ...env };
+  const e: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1", M2E_FOREIGN_SOURCES: "off", ...env };
   for (const k of ["CAIRN_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "M2E_LOOSE_SKILLS", "M2E_USER_PLUGINS"]) delete e[k];
   const r = spawnSync(process.execPath, [BIN, ...args], { cwd: ROOT, encoding: "utf8", env: e, input: "", timeout: 60_000 });
   return { status: r.status, out: (r.stdout ?? "") + (r.stderr ?? "") };

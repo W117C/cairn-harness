@@ -599,6 +599,20 @@ if (plan.mode === "run" && (process.argv.slice(2).includes("--in-worktree") || p
     console.log(`[mutate-verify] cp -al node_modules exit=${String(copied.status)}`);
     if (copied.status !== 0) { console.error((copied.stderr || "").trim()); process.exit(2); }
   }
+  // 工作区包的 node_modules 也要进树：桌面判卷是**独立 vitest 配置 + JSX**，`react/jsx-dev-runtime`
+  // 从 `apps/desktop/node_modules` 解析（pnpm 的 workspace 链接），只链根 node_modules 时那三个
+  // `.tsx` 判卷在树里连基线都起不来 ⇒ mutate-verify 把它们读成 "selected 未取到"（vacuous），
+  // 而这类假红会被误当成「锚点没写 config」。2026-10-23 实测：desktop-steering-* 六条全栽在这一格。
+  const desktopNm = join(mainRoot, "apps", "desktop", "node_modules");
+  const treeDesktopNm = join(treeAbs, "apps", "desktop", "node_modules");
+  // 判「装好了没」看 `.bin`（pnpm 真正的入口目录），不看目录空不空：树里跑过一次 vitest 后
+  // 会留下 `.vite/`、`.vite-temp/` 两个缓存目录 ⇒ `readdir.length === 0` 恒假，拷贝永远不发生。
+  if (existsSync(desktopNm) && !existsSync(join(treeDesktopNm, ".bin"))) {
+    rmSync(treeDesktopNm, { recursive: true, force: true });
+    const copied = spawnSync("cp", ["-al", desktopNm, treeDesktopNm], { encoding: "utf8" });
+    console.log(`[mutate-verify] cp -al apps/desktop/node_modules exit=${String(copied.status)}`);
+    if (copied.status !== 0) { console.error((copied.stderr || "").trim()); process.exit(2); }
+  }
   const childArgs = process.argv.slice(2).filter((a) => !a.startsWith("--in-worktree"));
   // 路径原样传：脚本自己那道「被 import 时拒绝运行」两边都归一化真路径（S2-3），
   // 仓库根落在软链后面（macOS 上 `/tmp`、`/var`、以及指向软链的 home 目录都可能）时它认得出来。

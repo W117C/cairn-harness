@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { read_file } from "../src/tools/read_file";
+import { read_file, readBatchConcurrent } from "../src/tools/read_file";
 import type { ToolContext } from "../src/tools";
 import { gateToolSpecs } from "../src/agent/session-provider";
 
@@ -171,4 +171,25 @@ describe("read_file 一次多份（第 477 页）", () => {
     expect(JSON.stringify(spec)).toContain('"paths"');
     expect(spec?.function.description, "说明里要讲什么时候用它——这支原语存在的理由就是省步数").toContain("paths");
   });
+
+  it("并发内核：保序、并发上限 8、一份失败不拖整批（数同时在飞的路数，不靠墙钟）", async () => {
+    const paths = Array.from({ length: 20 }, (_, i) => "f" + String(i));
+    let active = 0;
+    let max = 0;
+    const out = await readBatchConcurrent(paths, async (rel) => {
+      active += 1;
+      max = Math.max(max, active);
+      await new Promise((r) => setTimeout(r, 5));
+      active -= 1;
+      if (rel === "f7") throw new Error("boom");
+      return "T:" + rel;
+    });
+    expect(max, "串行仍是 1 ⇒ 这次只改了包装，没有真的并发").toBeGreaterThan(1);
+    expect(max, "并发必须有界").toBeLessThanOrEqual(8);
+    expect(out.map((x) => x.rel)).toEqual(paths);
+    expect(out[7]!.ok).toBe(false);
+    expect(out[7]!.text).toContain("读取失败");
+    expect(out[0]!.text).toBe("T:f0");
+  });
+
 });

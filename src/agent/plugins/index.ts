@@ -6,6 +6,7 @@ import type { PermissionMode } from "../../permissions/modes";
 import {
   discoverPlugins, activeHooks, pendingPlugins,
 } from "./discover";
+import { defaultForeignSources, type ForeignSource } from "./foreign";
 import { TrustStore, pluginFingerprint, pluginFingerprintEx } from "./trust";
 import { HookEngine } from "./hooks";
 import { McpManager, type McpToolInfo } from "./mcp";
@@ -23,13 +24,14 @@ import { loadUserAgentRoles, userAgentInvoke, type UserAgentRole } from "../role
 import {
   registerPluginLspServers, unregisterPluginLspServers, closePluginLspClients, type LspServerConfig as LspRuntimeConfig,
 } from "../../tools/lsp";
-import type { AgentEvent, ToolCallEvent, ToolResultEvent, UserMessageEvent } from "../../events";
+import { isNumericCompaction, type AgentEvent, type ToolCallEvent, type ToolResultEvent, type UserMessageEvent } from "../../events";
 import { userConfigValuesErrors } from "./manifest";
 import type {
   DiscoveredPlugin, LoadedHookDef, LooseSkill, PluginsManifest, SkillEntry, McpServerStatus,
 } from "./types";
 
 export * from "./types";
+export { defaultForeignSources, FOREIGN_LAYOUTS } from "./foreign";
 export {
   parseUserConfigFields,
   sensitiveUserConfigKeys,
@@ -77,6 +79,9 @@ export interface PluginRuntimeOptions {
    *  显式给空串＝关掉这一顶根（判卷与「只想看别的根」的脚本用）。 */
   projectSkillsDir?: string;
   looseRoots?: string[];
+  /** 外部声明式来源（opencode / pi / codex / qoder / claude）。缺省 =
+   *  `defaultForeignSources(workspace, home)`：项目级五顶根，带 home 时再加用户级。 */
+  foreignSources?: ForeignSource[];
   workspace: string;
   /** 插件数据根（PLUGIN_DATA / 超限落盘）。 */
   pluginDataRoot: string;
@@ -253,6 +258,7 @@ export class PluginRuntime {
       // 缺省取装配面那个唯一算法（不在调用方拼路径）；显式空串＝关掉这一顶（`??` 不把 "" 当没给）。
       projectSkillsDir: opts.projectSkillsDir ?? projectSkillsRootOf(opts.workspace),
       ...(opts.looseRoots ? { looseRoots: opts.looseRoots } : {}),
+      foreignSources: opts.foreignSources ?? defaultForeignSources(opts.workspace, opts.home),
       trustStatus: (abs, fp, bounded) => trust.statusSync(abs, fp, bounded),
     });
     const rt = new PluginRuntime(manifest, opts);
@@ -382,12 +388,14 @@ export class PluginRuntime {
     // 旧实现取扫描序第一个 ⇒ 用户批的是 A，落信任的可能是 B 的执行面。
     // 判不准就不落：歧义时拒绝本次决议（fail-closed），面板仍显示待信任。
     const matches = [
-      ...this.manifest.plugins.map((x) => ({ name: x.name, root: x.root })),
-      ...this.manifest.looseSkills.map((x) => ({ name: x.name, root: x.root })),
+      ...this.manifest.plugins.map((x) => ({ name: x.name, root: x.root, fingerprint: x.fingerprint })),
+      ...this.manifest.looseSkills.map((x) => ({ name: x.name, root: x.root, fingerprint: x.fingerprint })),
     ].filter((x) => x.name === pluginName);
     if (matches.length !== 1) return false;
     const target = matches[0]!;
-    const { fp, bounded } = await pluginFingerprintEx(target.root);
+    // 指纹必须与**发现侧**算的是同一份：外部来源按被导入目录算子集指纹，这里若另算全量根指纹，
+    // 写下的 `abs@fp` 永远不被重载查询命中（批准了还弹卡）。旧快照/手写夹具没有这一格才回退。
+    const { fp, bounded } = target.fingerprint ?? await pluginFingerprintEx(target.root);
     await this.trust.decide(target.root, trusted, fp, bounded);
     const reloaded = await PluginRuntime.load(this.opts);
     const inactive = this.manifest.plugins.filter((plugin) =>
@@ -404,7 +412,12 @@ export class PluginRuntime {
       cleanups.push(this.mcp.disconnectPlugin(plugin.name), closePluginLspClients(this.opts.workspace, ids));
     }
     await Promise.all(cleanups);
-    return true;
+    // 决议是否真的落地：重载后仍 pending 就说没生效，不拿「已批准」冒充。
+    const applied = [
+      ...reloaded.manifest.plugins.map((x) => ({ name: x.name, trust: x.trust })),
+      ...reloaded.manifest.looseSkills.map((x) => ({ name: x.name, trust: x.trust })),
+    ].find((x) => x.name === pluginName);
+    return trusted ? applied?.trust === "trusted" : applied?.trust === "declined";
   }
 
   /** 激活全部受信插件的 MCP server（未信任/declined 不连接）。 */
@@ -451,6 +464,9 @@ export class PluginRuntime {
           command: expand(cfg.command),
           args: (cfg.args ?? []).map(expand),
           extensions,
+          // extensionToLanguage 的**值**此前在这里被丢掉（只用 Object.keys 取扩展名）⇒
+          // didOpen 的 languageId 落回 TS 启发式，非 JS 语言的插件 server 静默失效。
+          ...(cfg.extensionToLanguage !== undefined ? { extensionToLanguage: cfg.extensionToLanguage } : {}),
           ...(cfg.initializationOptions !== undefined ? { initializationOptions: cfg.initializationOptions } : {}),
           ...(cfg.diagnostics?.enabled === false ? { diagnosticsEnabled: false } : {}),
         };
@@ -591,7 +607,7 @@ export class PluginRuntime {
     });
     const excluded = new Set<number>();
     for (const e of events) {
-      if (e.type === "compaction") for (const id of e.compressed_event_ids) excluded.add(id);
+      if (e.type === "compaction" && isNumericCompaction(e)) for (const id of e.compressed_event_ids) excluded.add(id);
     }
     return skillRemount(activated, (id) => excluded.has(id));
   }

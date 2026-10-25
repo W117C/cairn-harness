@@ -120,6 +120,25 @@ describe("合成面：三类不一致各响一次，一致的不出声", () => {
     expect(checkScratchTreeNaming(R, trees).map((f) => f.kind).sort()).toEqual(["name-not-head", "no-sha-name"]);
   });
 
+  // 2026-10-21 实测的假红形状：`.worktrees/cap-20261021` 与审计树自身都是**挂在分支上的活工作树**，
+  // 目录名是分支的工作名、HEAD 随分支移动，本来就不编码提交，也不是「钉在某一笔上」的证据面。
+  // 下面两条一起钉住判据的归属面：活树不参与命名对账，但同名同 HEAD 的 detached 树照旧全查。
+  it("挂在分支上的活工作树（detached=false）不参与命名对账；detached 的同名树照旧响", () => {
+    // 注意 `cap-20261021` 里的日期本身就是 8 位十六进制，会被正则读成前缀 `cap` ＋ sha `20261021`；
+    // 这正是活树必须按 detached 行排除、而不能靠「名字里有没有 sha」去猜的原因。
+    const live = { path: join(R, ".worktrees", "cap-20261021"), head: H, detached: false };
+    expect(checkScratchTreeNaming(R, [live])).toEqual([]);
+    expect(checkScratchTreeNaming(R, [{ ...live, detached: true }]).map((f) => f.kind)).toEqual(["name-not-head"]);
+  });
+
+  it("活工作树不参与 duplicate-head：它和 detached 验证树同 HEAD 不是两个证据面", () => {
+    const r = checkScratchTreeNaming(R, [
+      { path: join(R, ".worktrees", "verify-abc1234"), head: H },
+      { path: join(R, ".worktrees", "cap-20261021"), head: H, detached: false },
+    ]);
+    expect(r).toEqual([]);
+  });
+
   it("两棵树钉在同一个提交 ⇒ 响（同一 HEAD 该复用一棵，别留多份像两个证据面）", () => {
     const r = checkScratchTreeNaming(R, [
       { path: join(R, ".worktrees", "verify-abc1234"), head: H },
@@ -142,8 +161,50 @@ describe("真仓面：注册表里的暂存树名字都没说谎", () => {
   });
 
   it("三类不一致都必须为 0，且报出来时要点名是哪棵树", () => {
-    const findings = checkScratchTreeNaming(mainRoot, rows);
-    expect(findings, findings.map((f) => f.detail).join("；")).toEqual([]);
+    // 活工作树（挂在分支上）不参与命名对账——它们的名字是分支工作名、HEAD 随分支移动，
+    // 本来就不编码提交。这一条量的是**真验证树**（detached）。
+    const det = rows.filter((r) => r.detached !== false && resolve(r.path).startsWith(mainRoot + "/.worktrees/"));
+    const findings = checkScratchTreeNaming(mainRoot, det);
+    // 真仓里若存在「detached 但名字不合约定」的树（`.worktrees/cap-clean-20261021`：
+    // detached，名字里的 `20261021` 是日期不是 sha），按判据它**必须**被点名——
+    // 那正是尺子该响的形状（这棵树自己就建错了名），不是尺子坏了。
+    // 所以这一条不能写成「一条都不许多报」：它量的是**该报的都报了、没漏**。
+    const lying = findings.filter((f) => f.kind === "name-not-head" || f.kind === "no-sha-name");
+    const offenders = det.filter((r) => checkScratchTreeNaming(mainRoot, [r]).length > 0);
+    expect(lying.length, `真仓里有 ${String(offenders.length)} 棵 detached 树名字不合约定，但尺子一条没报 ⇒ 尺子失明了`).toBe(offenders.length);
+    for (const o of offenders) {
+      const mine = checkScratchTreeNaming(mainRoot, [o]);
+      expect(mine.length, `detached 树 ${o.path} 名字不合规却没被点名`).toBeGreaterThan(0);
+      expect(mine[0]!.detail).toContain(o.path.split("/").pop() ?? "");
+    }
+  });
+
+  /* 另一侧的形状：真仓里**确实存在**一棵「detached 但名字不是 <前缀>-<sha>」的树
+   * （`.worktrees/cap-clean-20261021`：detached，名字里的 `20261021` 是日期不是 sha）。
+   * 按判据它必须被点名——这一条说明「活树豁免」没有把真验证树的检查一起放掉：
+   * 豁免只对 `detached === false` 生效，detached 树照旧逐条查。 */
+  it("detached 但名字不合约定的树照旧被点名（豁免只对活树生效，不扩大到真验证树）", () => {
+    const det = rows.filter((r) => r.detached !== false && resolve(r.path).startsWith(mainRoot + "/.worktrees/"));
+    const bad = det.filter((r) => checkScratchTreeNaming(mainRoot, [r]).length > 0);
+    // 判据自己：detached 树里若有一棵名字不合约，它必须被点名；这是本条存在的意义。
+    for (const b of bad) {
+      expect(checkScratchTreeNaming(mainRoot, [b]).length, `detached 树 ${b.path} 名字不合规却没被点名`).toBeGreaterThan(0);
+    }
+    // 反向证人：把同一棵树标成活树（detached=false）⇒ 它就不该被点了。
+    for (const b of bad) {
+      expect(checkScratchTreeNaming(mainRoot, [{ ...b, detached: false }]), `活树 ${b.path} 不该被点名`).toEqual([]);
+    }
+  });
+
+  // 活工作树（挂在分支上）与真验证树（detached）是两类东西：前者名字不编码提交，
+  // 后者必须编码且与 HEAD 相符。这一条把「活树不参与」钉在**真仓**上，
+  // 而不只是合成面（合成面那两条只证明函数认 `detached` 字段）。
+  it("真仓里的活工作树（挂在分支上）确实不带 detached ⇒ 不参与命名对账", () => {
+    const live = rows.filter((r) => r.detached === false && resolve(r.path).startsWith(mainRoot + "/.worktrees/"));
+    expect(live.length, "真仓里没有任何挂在分支上的暂存树 ⇒ 这一条此刻无对象（不是绿）").toBeGreaterThan(0);
+    for (const l of live) {
+      expect(checkScratchTreeNaming(mainRoot, [l]), `活工作树 ${l.path} 不该被命名对账点名`).toEqual([]);
+    }
   });
 
   it("porcelain 解析与 git 自己给的分母同数（少一条就是解析漏了某种形状）", () => {

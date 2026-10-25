@@ -1,0 +1,100 @@
+$ node --import tsx scripts/gates.ts
+== pnpm gates ==
+门清单（40 道，清单即事实源）：typecheck test e2e sandbox:check fork-check gate-check docs-check autonomy-check compaction-check tools-check map-check prune-check provider:check memory-check plugins-check security-check gym-check routing-check supervisor-check model-surface-check prefix-churn-check prompt-surface-check replay-determinism-check no-progress-check cost-per-progress-check head-import-check web-fetch-check repo-hygiene-check head-cert-check mutate-verify mutate-needles-check evidence-typecheck-check bench-judge-spec-check renderer-layer-check event-semantics-check session-semantics-check session-search-check motion-policy-check desktop-boundary-check desktop-test
+执行器：pnpm run
+  清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）
+
+  ▶ typecheck …  ✅ typecheck          exit=0  4841ms
+      └ typecheck: tsc --noEmit 通过（0 条报错）✅
+  ▶ test …  ✅ test               exit=0  66890ms
+      └ Tests  6459 passed (6459)
+  ▶ e2e …  ✅ e2e                exit=0  1808ms
+      └ ✅ 交付时 sha256 与开工冻结逐字一致
+  ▶ sandbox:check …  ✅ sandbox:check      exit=0  582ms
+      └ ✅ ⑤ 尾部结论留住（只留头部时这条必红）
+  ▶ fork-check …  ✅ fork-check         exit=0  254ms
+      └ ✅ 越界 eventId 被拒绝（fail loud）
+  ▶ gate-check …  ✅ gate-check         exit=0  1817ms
+      └ ✅ H7 冻结表与判卷区目录双向一致（新增判卷文件不许逃出冻结面；新判卷目录须登记进 src/frozen.ts 的 areas）：{"onDiskNotInTable":[],"inTableNotOnDisk":[],"tableDirsNotSwept":[]}
+  ▶ docs-check …  ✅ docs-check         exit=0  1092ms
+      └ docs-check: 受检项全绿
+  ▶ autonomy-check …  ✅ autonomy-check     exit=0  481ms
+      └ ✅ 收口时判卷文件 sha256 仍与冻结基线逐字一致
+  ▶ compaction-check …  ✅ compaction-check   exit=0  387ms
+      └ [compaction-check] 断言全过，但有 1 项未证（不得宣称全绿）
+  ▶ tools-check …  ✅ tools-check        exit=0  448ms
+      └ ✅ tools-check 全部通过：grep/glob/read_file/lsp 四工具三项全绿；edit_file ①② 显式 n/a（输出有界），③ 相对路径绿。
+  ▶ map-check …  ✅ map-check          exit=0  36302ms
+      └ ✅ map-check 全部通过
+  ▶ prune-check …  ✅ prune-check        exit=0  314ms
+      └ ✅ prune-check 全部通过
+  ▶ provider:check …  ✅ provider:check     exit=0  253ms
+      └ [provider:check] 断言全过，但有 1 项未证（不得宣称全绿）
+  ▶ memory-check …  ✅ memory-check       exit=0  443ms
+      └ ✅ memory-check 全部通过（两层布局/remember/注入预算/索引上限/安全/双轨/压缩接缝）
+  ▶ plugins-check …  ✅ plugins-check      exit=0  19515ms
+      └ plugins-check: 42 ✅ / 0 ❌ / 1 未证
+  ▶ security-check …  ✅ security-check     exit=0  514ms
+      └ [security-check] 全部断言通过 ✅（54 ✅ / 0 ❌）
+  ▶ gym-check …  ✅ gym-check          exit=0  1020ms
+      └ [gym-check] 全部断言通过 ✅（33 ✅ / 0 ❌）
+  ▶ routing-check …  ✅ routing-check      exit=0  433ms
+      └ [routing-check] 全部断言通过 ✅（39 ✅ / 0 ❌）
+  ▶ supervisor-check …  ✅ supervisor-check   exit=0  12400ms
+      └ [supervisor-check] 全部断言通过 ✅（81 ✅ / 0 ❌）
+  ▶ model-surface-check …  ✅ model-surface-check exit=0  530ms
+      └ ✅ MS6-core 不得被自动砍 — unresolvable=true，core 全在=true（丢 30 把，仍超 54414 字符）
+  ▶ prefix-churn-check …  ✅ prefix-churn-check exit=0  567ms
+      └ ✅ PC9-免费车只在断过头的那一轮放行 — 门槛不可达（10^9）下 8 轮：落盘轮=[2,4,6] 压缩轮=[2,4,6] 有量却推迟的轮=4｜对照臂 门槛=1 时：没压缩却落盘的轮 7、有可剪量的轮 7
+  ▶ prompt-surface-check …  ✅ prompt-surface-check exit=0  384ms
+      └ [prompt-surface] 全部通过 ✅
+  ▶ replay-determinism-check …  ✅ replay-determinism-check exit=0  312ms
+      └ ✅ RD4-每条登记的债都必须真能吸收同形差异（分类器复查） — 登记 2 条债，逐条构造同形差异都能吸收
+  ▶ no-progress-check …  ✅ no-progress-check  exit=0  280ms
+      └ ✅ NP5-语料 sha256 与冻结表逐字一致 — 语料 7 份｜冻结表核对 7 份：不在表上或哈希对不上 0
+  ▶ cost-per-progress-check …  ✅ cost-per-progress-check exit=0  281ms
+      └ ✅ CP4-均值只从可测样本取且点名跳过 — 均值=22979（期望 22979）用了 4 条、跳过 2 条[real-red-verify-stagnation:no-progress-boundary,synth-no-usage:no-usage]｜成功跑 4 条：带 verified 边界 4 条、取不到边界…
+  ▶ head-import-check …  ✅ head-import-check  exit=0  1644ms
+      └ head-import-face: ✅ import 面自洽（或在内存量已逐条带理由）
+  ▶ web-fetch-check …  ✅ web-fetch-check    exit=0  323ms
+      └ ✅ WF7-没有能关掉红线的开关 — 放行开关扫描：命中 0
+  ▶ repo-hygiene-check …  ✅ repo-hygiene-check exit=0  432ms
+      └ [repo-hygiene-check] 四面全绿 ✅（帽：取料 ≤ 70%、src 单文件 ≤ 2600 行、scripts 单文件 ≤ 2600 行、一笔里从树消失的文件 ≤ 4 支；现状站住，后续逐波降帽）
+  ▶ head-cert-check …  ✅ head-cert-check    exit=0  152405ms
+      └ Test Files 467 passed (467)｜Tests 6459 passed (6459)｜exit=0（退出码直接取，不接管道）
+  ▶ mutate-verify …  ✅ mutate-verify      exit=0  2117088ms
+      └ 成本分母：判卷 spawn 3178 次／1589 条（每条次数分布 2×1589）· 单次中位 第1次 0.4s／第2次 0.5s· 最贵一条 orchestrator-project-rules-not-passed 32.1s
+  ▶ mutate-needles-check …  ✅ mutate-needles-check exit=0  11473ms
+      └ [mutate-needles-check] 全部锚点针脚可判定 ✅
+  ▶ evidence-typecheck-check …  ✅ evidence-typecheck-check exit=0  3834ms
+      └ ✅ evidence-typecheck：证据面危险码 12 条／帽 12 条（HEAD 口径｜在飞未入库 0 条／0 个文件（只点名，不计我的账）；登记 8 个文件；全量报错 146 条）（3231ms｜解析 146/146 条）
+  ▶ bench-judge-spec-check …  ✅ bench-judge-spec-check exit=0  1757ms
+      └ [judge-spec] 五份清单的逐名规格与盘上现读逐字一致 ✅
+  ▶ renderer-layer-check …  ✅ renderer-layer-check exit=0  274ms
+      └ renderer-layer-check: 绿（117 个渲染层源文件；I1 组件层不回流 App / I2 状态层不 import 组件 / I3 派生层纯 / I4 行数帽 1200·App 900）
+  ▶ event-semantics-check …  ✅ event-semantics-check exit=0  259ms
+      └ ✅ 投影是纯函数（同输入同输出、不改入参）
+  ▶ session-semantics-check …  ✅ session-semantics-check exit=0  258ms
+      └ ✅ 分叉点：位置越界 → 抛
+  ▶ session-search-check …  ✅ session-search-check exit=0  265ms
+      └ ✅ 空查询 ⇒ kind=unavailable（没有可匹配的词 ≠ 没有匹配）
+  ▶ motion-policy-check …  ✅ motion-policy-check exit=0  288ms
+      └ ✅ M7 降级块之外无 !important
+  ▶ desktop-boundary-check …  ✅ desktop-boundary-check exit=0  272ms
+      └ desktop-boundary-check: 绿（src 无反向依赖、无 UI import）
+  ▶ desktop-test …  ✅ desktop-test       exit=0  8917ms
+      └ Tests  1359 passed (1359)
+
+== 断言体检（空断言 / 恒真式 / 暗卷段零断言 / 析取式弱断言）==
+  扫描面：155 个已跟踪且在盘的脚本（未跟踪草稿不判，口径同 tests/assertion-health-scan.test.ts）
+  ✅ 零命中
+
+== 汇总 ==
+  绿 40 / 40，红 0
+  逐道退出码：typecheck=0 test=0 e2e=0 sandbox:check=0 fork-check=0 gate-check=0 docs-check=0 autonomy-check=0 compaction-check=0 tools-check=0 map-check=0 prune-check=0 provider:check=0 memory-check=0 plugins-check=0 security-check=0 gym-check=0 routing-check=0 supervisor-check=0 model-surface-check=0 prefix-churn-check=0 prompt-surface-check=0 replay-determinism-check=0 no-progress-check=0 cost-per-progress-check=0 head-import-check=0 web-fetch-check=0 repo-hygiene-check=0 head-cert-check=0 mutate-verify=0 mutate-needles-check=0 evidence-typecheck-check=0 bench-judge-spec-check=0 renderer-layer-check=0 event-semantics-check=0 session-semantics-check=0 session-search-check=0 motion-policy-check=0 desktop-boundary-check=0 desktop-test=0
+  认证面：判卷四面与 HEAD 逐字一致（在飞 6 项全在四面之外） ⇒ 本表即 HEAD 认证
+  ⚠️  未证 6 项（连网/凭据限制未跑到的断言，或绿而零输出的门——**不等于通过**）
+     逐道：gate-check 1｜autonomy-check 1｜compaction-check 1｜provider:check 1｜plugins-check 1｜gym-check 1
+     严格模式：DSH_STRICT_UNVERIFIED=1 或 --strict-unverified 可让未证直接判红
+  ⚠️  40 道门退出码全 0，但有 6 项未证——不得宣称「全部通过」
+GATES_EXIT=0

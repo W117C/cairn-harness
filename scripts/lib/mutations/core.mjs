@@ -152,6 +152,32 @@ export const MUTATIONS = [
     apply: (s) => s.replace("if (s.consecutiveAutoApprovals >= MAX_AUTO_APPROVALS) s.breakerTripped = true;", "if (false) s.breakerTripped = true;"),
     expectFail: "第 51 次降级：50 次 scope 自动放行后，下一次送审且直至会话重开",
   },
+  // ---- 「因」这一维（2026-10-22）：层 12 个、出口 17 处，同层几种因结构上分不开
+  // ⇒ 只钉层的判据看不见「因错而层对」。下面两条各守一个**今天才有**的因：
+  //   ① 取不出补丁目标时本该 fail-closed 拒绝（层不动、把 deny 降成 ask ⇒ 旧判据全绿）
+  //   ② 裸 allow 规则（「总是允许该工具」）不带走高风险路径（这一因此前零用例）
+  {
+    id: "gate-cause-failclosed-downgraded-to-ask",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/gate-audit.test.ts",
+    desc: "判卷面取不出目标时把 fail-closed 拒绝降成「要人批」⇒「读不到目标」被读成「大概是安全的」",
+    apply: (s) => s.replace(
+      'verdict: "deny",\n        layer: "L0-hard",\n        reason:\n          `判卷面冻结闸没法判',
+      'verdict: "ask",\n        layer: "L0-hard",\n        reason:\n          `判卷面冻结闸没法判',
+    ),
+    expectFail: "判卷面取不出目标：认不出补丁写哪儿 ⇒ fail-closed 拒绝",
+  },
+  {
+    id: "gate-cause-bare-allow-walks-highrisk-path",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/gate-audit.test.ts",
+    desc: "裸 allow 规则（「总是允许该工具」）带走高风险路径 ⇒ 一次普通 write_file 批准把 .env / .git/hooks 一起免批",
+    apply: (s) => s.replace(
+      'if (risk === "high" && chain.pattern === undefined && !isShellFamily(tool)',
+      'if (false && chain.pattern === undefined && !isShellFamily(tool)',
+    ),
+    expectFail: "裸 allow 规则不带走高风险路径（非 shell）",
+  },
   {
     id: "autonomy-network-once",
     src: "src/permissions/autonomy.ts",
@@ -225,7 +251,7 @@ export const MUTATIONS = [
     src: "src/providers/anthropic.ts",
     test: "tests/provider-cache-usage.test.ts",
     desc: "只认 message_delta 的缓存字段（对端在 message_start 起报、delta 不再回时，整次命中被判成零）",
-    apply: (s) => s.replace("        if (event.message?.usage?.cache_read_input_tokens !== undefined) cacheRead = event.message.usage.cache_read_input_tokens;\n        if (event.message?.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.message.usage.cache_creation_input_tokens;\n", ""),
+    apply: (s) => s.replace("          if (event.message?.usage?.cache_read_input_tokens !== undefined) cacheRead = event.message.usage.cache_read_input_tokens;\n          if (event.message?.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.message.usage.cache_creation_input_tokens;\n", ""),
     expectFail: "缓存量只出现在 message_start（delta 不回缓存字段）时同样要认",
   },
   {
@@ -233,7 +259,7 @@ export const MUTATIONS = [
     src: "src/providers/anthropic.ts",
     test: "tests/provider-cache-usage.test.ts",
     desc: "不认累计帧 message_delta 里的缓存字段（末帧才是权威累计值，漏读即分块恒缺）",
-    apply: (s) => s.replace("        if (event.usage?.cache_read_input_tokens !== undefined) cacheRead = event.usage.cache_read_input_tokens;\n        if (event.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.usage.cache_creation_input_tokens;\n", ""),
+    apply: (s) => s.replace("          if (event.usage?.cache_read_input_tokens !== undefined) cacheRead = event.usage.cache_read_input_tokens;\n          if (event.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.usage.cache_creation_input_tokens;\n", ""),
     expectFail: "缓存量只出现在 message_delta（累计帧）时也认，且不跨帧累加",
   },
   {
@@ -528,7 +554,7 @@ export const MUTATIONS = [
     src: "src/providers/anthropic.ts",
     test: "tests/turn-truncated.test.ts",
     desc: "Anthropic 这一路摘掉发射 ⇒ 它单独回到「缺失与正常不可分」",
-    apply: (s) => s.replace("    const stopMissing = turnStopMissingEvent(callId, stopReason, outputTokens);\n    if (stopMissing) yield stopMissing;\n", ""),
+    apply: (s) => s.replace("      const stopMissing = turnStopMissingEvent(callId, stopReason, outputTokens);\n      if (stopMissing) yield stopMissing;\n", ""),
     expectFail: "anthropic：流结束而 message_delta 没带 stop_reason ⇒ 落一条 turn_stop_missing",
   },
   {
@@ -536,7 +562,7 @@ export const MUTATIONS = [
     src: "src/providers/gemini.ts",
     test: "tests/turn-truncated.test.ts",
     desc: "Gemini 这一路摘掉发射 ⇒ 它单独回到「缺失与正常不可分」",
-    apply: (s) => s.replace("    const stopMissing = turnStopMissingEvent(callId, finishReason ?? blockReason, outputTokens);\n    if (stopMissing) yield stopMissing;\n", ""),
+    apply: (s) => s.replace("        const stopMissing = turnStopMissingEvent(callId, finishReason ?? blockReason, outputTokens);\n        if (stopMissing) yield stopMissing;\n", ""),
     expectFail: "gemini：流结束而 finishReason 缺席 ⇒ 落一条 turn_stop_missing",
   },
   {

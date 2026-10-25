@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import { restoredPathsOf, turnDelivery } from "../src/renderer/projections";
 import { changedFileCount, changedFilesOf } from "../src/renderer/components/panes";
 import type { AgentEvent } from "../../../src/events";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const ev = (o: Record<string, unknown>): AgentEvent => o as unknown as AgentEvent;
@@ -133,7 +134,7 @@ describe("restoredPathsOf（判定面）", () => {
 });
 
 describe("接线：还原要落事件，且带上会话 id", () => {
-  const app = read("../src/renderer/App.tsx");
+  const app = readAppSurface();
   const handlers = read("../../../src/main/session-handlers.ts");
 
   it("渲染层把 sessionId 一起递过去（不递 ⇒ 主进程不知道往哪条事件流落）", () => {

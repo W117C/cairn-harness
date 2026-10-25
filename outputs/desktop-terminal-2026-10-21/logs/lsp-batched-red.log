@@ -1,0 +1,43 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness
+
+ ❯ tests/lsp-request-lifecycle.test.ts (24 tests | 1 failed) 2767ms
+   ❯ 官方 JSON-RPC 链路的超时重试 (7)
+     × 请求与取消同批到达，handler 开始前已取消也只释放自己的任务 510ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/lsp-request-lifecycle.test.ts > 官方 JSON-RPC 链路的超时重试 > 请求与取消同批到达，handler 开始前已取消也只释放自己的任务
+AssertionError: expected { count: 2, pending: [ 1, 2 ], …(1) } to deeply equal { count: 2, pending: [ 2 ], …(1) }
+
+- Expected
++ Received
+
+  {
+-   "cancelled": [
+-     1,
+-   ],
++   "cancelled": [],
+    "count": 2,
+    "pending": [
++     1,
+      2,
+    ],
+  }
+
+ ❯ tests/lsp-request-lifecycle.test.ts:232:19
+    230|     expect(await other).toEqual({ request: 2 });
+    231|     expect(await client.request("fixture/cancelledAtEntry", {})).toEqu…
+    232|     expect(state).toEqual({ count: 2, pending: [2], cancelled: [1] });
+       |                   ^
+    233|   });
+    234|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 23 passed (24)
+   Start at  17:22:32
+   Duration  3.29s (tests 92%, transform 6%, import 2%)
+

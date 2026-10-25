@@ -1,0 +1,10 @@
+{"op":"register","ts":"2026-10-21T09:03:09.623Z","id":"content-pack.report-recipe","version":"1.0.0","kind":"content-pack","permissions":[],"gates":["pack-check"],"actor":"evolution-plane-pipeline-v1"}
+{"op":"gate","ts":"2026-10-21T09:03:09.650Z","id":"content-pack.report-recipe","version":"1.0.0","gate":"pack-check","passed":true,"actor":"gate-runner"}
+{"op":"activate","ts":"2026-10-21T09:03:09.654Z","id":"content-pack.report-recipe","version":"1.0.0","actor":"owner-human"}
+{"op":"register","ts":"2026-10-21T09:03:09.831Z","id":"content-pack.report-recipe","version":"1.1.0","kind":"content-pack","permissions":[],"gates":["pack-check"],"actor":"evolution-plane-pipeline-v1"}
+{"op":"gate","ts":"2026-10-21T09:03:09.858Z","id":"content-pack.report-recipe","version":"1.1.0","gate":"pack-check","passed":true,"actor":"gate-runner"}
+{"op":"activate","ts":"2026-10-21T09:03:09.861Z","id":"content-pack.report-recipe","version":"1.1.0","actor":"owner-human"}
+{"op":"register","ts":"2026-10-21T09:03:10.014Z","id":"content-pack.report-recipe","version":"1.2.0","kind":"content-pack","permissions":[],"gates":["pack-check"],"actor":"evolution-plane-pipeline-v1"}
+{"op":"gate","ts":"2026-10-21T09:03:10.042Z","id":"content-pack.report-recipe","version":"1.2.0","gate":"pack-check","passed":true,"actor":"gate-runner"}
+{"op":"activate","ts":"2026-10-21T09:03:10.044Z","id":"content-pack.report-recipe","version":"1.2.0","actor":"owner-human"}
+{"op":"rollback","ts":"2026-10-21T09:03:14.430Z","id":"content-pack.report-recipe","actor":"canary"}

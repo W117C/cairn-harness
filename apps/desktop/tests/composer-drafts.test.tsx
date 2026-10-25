@@ -4,25 +4,27 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const src = read("../src/renderer/components/Composer.tsx");
 
 describe("Composer 每会话草稿", () => {
-  it("按 activeId 分桶：切换时存旧取新，首页用常量键", () => {
-    expect(src).toContain("const draftKey = props.activeId ?? HOME_DRAFT_KEY;");
+  it("按会话键分桶（工作区+id）：切换时存旧取新，首页用常量键", () => {
+    expect(src).toContain("const draftKey = props.activeId === null ? HOME_DRAFT_KEY : draftKeyFor(props.workspacePath, props.activeId);");
     expect(src).toContain("draftsRef.current.set(draftKeyRef.current, text);");
-    expect(src).toContain("setText(draftsRef.current.get(draftKey) ?? \"\");");
+    expect(src).toContain("setText(takeDraft(draftKey) ?? \"\");");
+    expect(src).toContain("setAttachments(takeAttach(draftKey) ?? []);");
   });
 
   it("草稿落盘：启动回读 + 防抖写整张桶表（附件不落盘）", () => {
-    expect(src).toContain('import { DRAFTS_KEY, HOME_DRAFT_KEY } from "../drafts";');
+    expect(src).toContain('import { DRAFTS_KEY, HOME_DRAFT_KEY, draftKeyFor, sessionIdOfDraftKey } from "../drafts";');
     expect(read("../src/renderer/drafts.ts")).toContain('export const DRAFTS_KEY = "cairn.composer.drafts.v1";');
     expect(src).toContain("const draftsRef = useRef<Map<string, string>>(storedDrafts());");
     expect(src).toContain("const snap: Record<string, string> = Object.fromEntries(draftsRef.current);");
     expect(src).toContain('if (text !== "") snap[draftKey] = text;');
     expect(src).toContain("window.localStorage.setItem(DRAFTS_KEY, JSON.stringify(snap));");
-    expect(src).toContain("const saved = draftsRef.current.get(draftKey);");
+    expect(src).toContain("const saved = takeDraft(draftKey);");
     // 结构守卫（2026-10-18 事故）：这两个 effect 必须在切会话 effect 的闭合之后，
     // 不能落在它的回调里——嵌在回调里是 invalid hook call，真机构建直接白屏（React #321）。
     const closeSwitch = src.indexOf("mentionSeq.current += 1;");
@@ -32,11 +34,11 @@ describe("Composer 每会话草稿", () => {
   });
 
   it("侧栏草稿标记：Composer 上报、App 持集合、Sidebar 画铅笔", () => {
-    expect(src).toContain('props.onDraftPresence?.(props.activeId ?? null, text.trim() !== "");');
+    expect(src).toContain('props.onDraftPresence?.(props.activeId === null ? null : draftKey, text.trim() !== "");');
     const sidebar = read("../src/renderer/components/Sidebar.tsx");
     expect(sidebar).toContain('className="s-draft"');
-    expect(sidebar).toContain("hasDraft={props.draftIds?.has(s.id) === true}");
-    const app = read("../src/renderer/App.tsx");
+    expect(sidebar).toContain("hasDraft={props.draftIds?.has(draftKeyFor(s.workspace, s.id)) === true || props.draftIds?.has(s.id) === true}");
+    const app = readAppSurface();
     expect(app).toContain("useState<Set<string>>(() => readDraftIds())");
     expect(app).toContain("onDraftPresence={noteDraft}");
     expect(app).toContain("draftIds={draftIds}");
@@ -44,8 +46,14 @@ describe("Composer 每会话草稿", () => {
 
   it("附件 chip 与草稿同键分桶（切会话不带着别人选的附件去发）", () => {
     expect(src).toContain("attachByKey.current.set(draftKeyRef.current, attachments);");
-    expect(src).toContain("setAttachments(attachByKey.current.get(draftKey) ?? []);");
+    expect(src).toContain("setAttachments(takeAttach(draftKey) ?? []);");
     expect(src).toContain("attachByKey.current.delete(draftKeyRef.current);");
+  });
+
+  it("旧裸 id 桶懒迁移到引用键（升级不丢稿；搬完删旧键）", () => {
+    expect(src).toContain("const legacyId = sessionIdOfDraftKey(key);");
+    expect(src).toContain("draftsRef.current.set(key, legacy);");
+    expect(src).toContain("draftsRef.current.delete(legacyId);");
   });
 
   it("切会话收浮层：mention/附件/权限菜单关闭，防抖作废，模型菜单重挂", () => {

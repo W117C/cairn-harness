@@ -14,8 +14,10 @@ export interface PromoteOrigin {
   kind: "sidechat";
   /** 来源 sidechat 会话 id（独立 JSONL 文件组的目录名）。 */
   session_id: string;
-  /** 来源 sidechat 事件 id（1-based 行号，可跳回源消息）。 */
+  /** 来源 sidechat 事件 id（1-based 行号，可跳回源消息）。来源引用形式下为空数组。 */
   source_event_ids: number[];
+  /** 来源引用形式（指针分叉）：与 source_event_ids 互斥；每条的 eventId 是所属文件的物理行号。 */
+  source_event_refs?: import("./session-ref").EventRef[];
   note?: string;
 }
 /** §9.3 的用户侧 skill 触发：正文是某个 skill 渲染后的结果，`skill` 记下「是哪个、当时给了什么参数」，
@@ -29,9 +31,31 @@ export interface GoalTurnOrigin {
   turn: number;
   max_turns: number;
 }
-/** `user_message.origin` 的两种来源：sidechat 提升 / goal 自动续跑。消费端一律按 kind 分支，
- *  不许再无条件读 `.session_id`——那会把另一种来源在类型上假装成不存在。 */
-export type UserMessageOrigin = PromoteOrigin | GoalTurnOrigin;
+/** 第 9 点「用户干预注入」的第三条来源：**轮中插话（steering）**。
+ *
+ *  语义与另外两种来源**根本不同**，这也是它必须自带一个 kind 的原因：
+ *  另外两种都**开启新一轮 run**（sidechat 提升＝人此刻发起的新任务；goal＝harness 续跑的新一轮），
+ *  而 steering 发生在**同一轮 run 内部**——用户在人正在跑的时候补一句话，harness 把它插进
+ *  模型的下一轮请求里，**轮次边界不变**。
+ *
+ *  ⇒ `eventsForCurrentRun()` 必须把 `kind: "steering"` 的那条**跳过**不当成 run 起点。
+ *  这不是风格问题：那个函数是交付断言（能力 12）、幽灵交付、空转判定、进化信号、收尾复核
+ *  与 round 读数**共同的**轮界取料口；把插话当成新 run 起点，会让它之前那一段的承诺与证据
+ *  整整一段静默失效（2026-10-23 实测：plan 承诺 create a.ts 却未落盘时，插一条插话
+ *  ⇒ `findPhantomDelivery` 由 `{missing:["a.ts"]}` 变成 `null`，假绿）。
+ *
+ *  重放无损：仍走既有 `user_message` + origin 通道，零新增事件类型（M2f 先例）。
+ *  `step` 是**插话发生时的轮次序号**（0-based，与 loop 的 `currentStep` 同源），只作展示与审计——
+ *  判定不信它（判定读 kind 与事件流位置）。 */
+export interface SteeringOrigin {
+  kind: "steering";
+  /** 插话发生在第几轮循环之后（0-based）：展示用，判定不读。 */
+  step: number;
+}
+/** `user_message.origin` 的三种来源：sidechat 提升 / goal 自动续跑 / 轮中插话。
+ *  消费端一律按 kind 分支，不许再无条件读 `.session_id`——那会把另一种来源在类型上假装成不存在。
+ *  **轮界消费者（`eventsForCurrentRun`）必须显式处理 `steering`**：它不开新轮。 */
+export type UserMessageOrigin = PromoteOrigin | GoalTurnOrigin | SteeringOrigin;
 /** 用户消息附带的文件/目录引用（2026-10-18）：只记引用，不含内容；缺省 = 无附件，既有事件字节不变。
  *  kind 与主进程 RunAttachmentKind 同字面量；事件层不反向依赖 main，故就地声明。 */
 export interface UserMessageAttachment { path: string; kind: "file" | "directory" }
@@ -88,6 +112,10 @@ export interface ToolResultEvent { type: "tool_result"; callId: string; ok: bool
    *  桌面端也就无从显示。缺席 = 这次调用没有交付物（绝大多数调用）。 */
   artifact?: { kind: "image" | "html" | "svg" | "text"; path: string; note?: string };
   change?: "created" | "modified";
+  /** 动作融合的结构事实：写已落盘，随后的 lint 可能失败（因此 `ok` 可能是 false）。
+   *  写盘证据的读者（goal / worker-report / tool-choice）必须把它与 `ok` 一起看；
+   *  缺席 = 旧事件或非融合写（仍由 `ok` 判定）。 */
+  fusedWrite?: boolean;
   /** 多文件写工具成功落盘的 workspace 相对路径清单；缺席表示没有结构化清单。 */
   changedPaths?: string[]; /** 进程退出码（run_shell / worker shell / 沙箱出口才有）。
    *  **缺席 = 这一笔不是跑进程的工具**（或旧日志），绝不等于 0；`null` 才是"进程没起来/被强杀"。
@@ -120,6 +148,43 @@ export interface SessionMetaEvent {
   origin?: "scheduled";
   automation_id?: string;
   automation_name?: string;
+  /** 指针分叉的血缘（ADR 0005：分叉是**指针**不是拷贝）。
+   *
+   *  **缺席 = 这是个独立/根会话**（不是「边界 0」）——两者必须分得开：
+   *  「没有 fork 字段」说的是「压根没有父会话」，不是「父会话存在但边界在 0」。
+   *  一旦把缺席读成「边界 0」，独立会话就会被当成"分叉自某个空前缀"，血缘树整个歪掉。
+   *
+   *  `from_session_path` = 父会话 events.jsonl 的路径（与 `branch_of` 同一口径：绝对路径）。
+   *  `boundary_event_id` = 继承的父事件前缀长度（**含**该 id，1-based 行号口径）。
+   *  `from_session_id` = 父会话 id（可选）：路径改名/移动时仍有一个人读的身份。 */
+  fork?: { from_session_path: string; boundary_event_id: number; from_session_id?: string };
+}
+
+/** 日志结构控制记录（ADR 0005）：**关于日志本身**的记录，不是「agent 做了什么」。
+ *
+ *  §①.3「新增能力优先走既有字段的 origin 通道」管的是**描述 agent 行为**的能力；
+ *  它不管**日志结构控制记录**——回退指针、元数据补丁这类东西没有 origin 通道可挂：
+ *  它们不是某个 user_message 的来源标注，而是**对日志本身的改写**。
+ *  先例已在仓内：`compaction`（关于日志的记录）与 `session_meta`（关于会话身份的记录）都是既有事件型。
+ *
+ *  **`replay()` 不解释它们**（逐字原样返回，含控制记录）：解释控制记录是**投影**的活
+ *  （`src/events/projection.ts` 的 `effectiveEvents` / `sessionMetaPatch`）。
+ *  这正是「JSONL 逐字重放」与「事件 id = 1-based 行号」能同时为真的原因。 */
+export interface SessionRewindEvent {
+  type: "session_rewind";
+  /** 回退到哪条事件（1-based 行号口径，**含**该条）。语义见 ADR 0005。 */
+  to_event_id: number;
+  /** 回退理由（自由文本，可缺席）。**缺席 = 没记理由**，不等于「没有理由存在」。 */
+  reason?: string;
+}
+
+/** 会话元数据的增量补丁（ADR 0005）：改**会话的身份/属性**，不改消息历史。
+ *
+ *  `patch` = 键值对。**缺席的键 = 该键不变**（不是"清空"）；空 patch = 什么都没改
+ *  （记录存在，但这一笔不改变任何东西）。 */
+export interface SessionMetaUpdateEvent {
+  type: "session_meta_update";
+  patch: Record<string, string>;
 }
 
 // ---- M1b 三门事件（澄清门 / 方案门 / 验证门）----
@@ -139,13 +204,15 @@ export interface PlanFileChange { path: string; action: "create" | "edit" | "del
 export interface PlanProposal {
   goal: string;
   files: PlanFileChange[];
+  /** Versioned orchestration graph; absent on legacy proposals. */
+  orchestration?: import("../orchestration/types").OrchPlan;
   approach?: string;
   verify?: { lint?: string[]; test?: string[] };
 }
 /** 方案门：模型提交计划，等人批准；批准前写工具在权限层被拒。 */
 export interface PlanProposedEvent { type: "plan_proposed"; callId: string; plan: PlanProposal }
 /** 方案决议（批准 / 拒绝），落日志供 plan 卡显示状态。 */
-export interface PlanApprovedEvent { type: "plan_approved"; callId: string; approved: boolean }
+export interface PlanApprovedEvent { type: "plan_approved"; callId: string; approved: boolean; orchestration?: import("../orchestration/types").OrchestrationStamp }
 
 /**
  * verify 红的**归因**（judgment-layer §9.1 定案五值 + 2026-09-23 实测补的 `pkg-manager`）。
@@ -196,6 +263,7 @@ export interface VerifyCommandResult {
 /** 验证门：一次 lint/test 执行结果。attempt 从 1 起；失败时错误输出经 tool_result 注入同轮继续修。 */
 export interface VerifyResultEvent {
   type: "verify_result";
+  orchestration?: import("../orchestration/types").OrchestrationStamp;
   callId: string;
   /** 缺省（false/缺席）= 模型自调 verify；true = harness 在收束前补的自动验证拍
    *  （能力 5「写过盘必须有证据」）。审计与时间线靠它区分归属，不冒充模型行为。 */
@@ -217,21 +285,66 @@ export interface VerifyResultEvent {
 /** 压缩发生记录：trigger=auto（比例阈值）/ manual（/compact）/ overflow（硬兜底紧急截断）。
  *  usage 缺省 = 摘要器无 API 用量（mock/紧急截断不伪造）；model 缺省 = 会话同模型。 */
 export interface CompactionUsage { inputTokens: number; outputTokens: number }
-export interface CompactionEvent {
+/** 摘要注入锚点（来源形式）：在某个事件之前，或明确的末尾。 */
+export type SummaryAnchor = { before: import("./session-ref").EventRef } | { end: true };
+
+/** 压缩记录的公共字段（两种引用形式共享；新旧互斥）。 */
+export interface CompactionCommon {
   type: "compaction";
   trigger: "auto" | "manual" | "overflow";
   reason: "threshold" | "hard_buffer" | "user_request";
-  /** 被摘除事件的 id（1-based 行号）；永不含 compaction 事件本体（摘要不二次被压）。 */
-  compressed_event_ids: number[];
   summary: string;
-  /** 注入位置：投影在该 id 的事件之前插一条 user 角色摘要消息（fresh start）。 */
-  summary_offset: number;
   tokens_before: number;
   tokens_after: number;
   usage?: CompactionUsage;
   model?: string;
   /** M3c：worker 归因（§7.5 worker 压缩事件落子流；主会话压缩无此字段）。 */
   agent_id?: string;
+}
+
+/** 旧数字形式：`compressed_event_ids` 是**本文件**的 1-based 行号，`summary_offset` 是**本文件**的注入位置。
+ *  继续可读；跨文件写回一律使用来源形式。 */
+export interface NumericCompaction extends CompactionCommon {
+  compressed_event_ids: number[];
+  summary_offset: number;
+  reference_version?: undefined;
+  compressed_event_refs?: undefined;
+  summary_anchor?: undefined;
+  superseded_summary_refs?: undefined;
+}
+
+/** 来源形式（ADR 0005 产品接入）：跨文件压缩只认 EventRef，数字位置不在拼接数组上解释。
+ *  完整来源集合与锚点必须成套在场；旧摘要若进入新摘要输入，其来源须列入 `superseded_summary_refs`。 */
+export interface ReferencedCompaction extends CompactionCommon {
+  reference_version: 1;
+  compressed_event_refs: import("./session-ref").EventRef[];
+  summary_anchor: SummaryAnchor;
+  superseded_summary_refs: import("./session-ref").EventRef[];
+  compressed_event_ids?: undefined;
+  summary_offset?: undefined;
+}
+
+export type CompactionEvent = NumericCompaction | ReferencedCompaction;
+
+/** 形状判别：新旧互斥，不会同时为真（类型上就互斥）。 */
+export function isReferencedCompaction(e: CompactionEvent): e is ReferencedCompaction {
+  return "reference_version" in e && e.reference_version === 1;
+}
+
+export function isNumericCompaction(e: CompactionEvent): e is NumericCompaction {
+  return "compressed_event_ids" in e;
+}
+
+/** 旧数字形式的行号集合；来源形式没有「本文件行号集合」这回事 ⇒ 显式抛，不返回空数组。 */
+export function numericCompactionIds(e: CompactionEvent): number[] {
+  if (!isNumericCompaction(e)) throw new Error("压缩记录不是旧数字形式：来源形式没有本文件行号集合");
+  return e.compressed_event_ids;
+}
+
+/** 旧数字形式的注入位置（本文件 1-based 行号）；来源形式用 `summary_anchor`。 */
+export function numericCompactionOffset(e: CompactionEvent): number {
+  if (!isNumericCompaction(e)) throw new Error("压缩记录不是旧数字形式：来源形式没有本文件 summary_offset");
+  return e.summary_offset;
 }
 
 // ---- M2f 产出代码安全 report（§11.6 定稿，本轮只做 off/report）----
@@ -318,6 +431,7 @@ export type AgentPermissionMode = (typeof AGENT_PERMISSION_MODES)[number];
 
 export interface AgentSpawnedEvent {
   type: "agent_spawned";
+  orchestration?: import("../orchestration/types").OrchestrationStamp;
   agent_id: string;
   /** 血缘：主流里 spawn_agent tool_call 的事件 id（1-based 行号）。 */
   parent_event_id: number;
@@ -358,6 +472,7 @@ export interface AgentSpawnedEvent {
 
 export interface AgentStatusEvent {
   type: "agent_status";
+  orchestration?: import("../orchestration/types").OrchestrationStamp;
   agent_id: string;
   status: AgentStatus;
   /** failed 的分型原因（max_turns / interrupted / 异常摘要）；cancelled 可带发起方注记。 */
@@ -379,6 +494,7 @@ export type WorkerEvidence = "verified" | "failed" | "stale" | "absent";
 /** 终态回传（§4.4.4）：父上下文唯一接收物。错误永不冒充结果——failed 走 status/reason 分型。 */
 export interface AgentResultEvent {
   type: "agent_result";
+  orchestration?: import("../orchestration/types").OrchestrationStamp;
   agent_id: string;
   status: "done" | "failed";
   reason?: string;
@@ -415,6 +531,7 @@ export interface AgentResultEvent {
 // ---- 审批事件协议（§4.4.3 与 turn 解耦）：请求（落流）与等待（订阅 approval_resolved by id）两段 ----
 export interface ApprovalRequestedEvent {
   type: "approval_requested";
+  orchestration?: import("../orchestration/types").OrchestrationStamp;
   id: string;
   /** 发起 worker 的归因（主会话审批不落此事件，走 IPC AskGate 通道）。 */
   agent_id?: string;
@@ -429,6 +546,7 @@ export interface ApprovalRequestedEvent {
 
 export interface ApprovalResolvedEvent {
   type: "approval_resolved";
+  orchestration?: import("../orchestration/types").OrchestrationStamp;
   id: string;
   agent_id?: string;
   decision: "approved" | "rejected";
@@ -440,6 +558,7 @@ export interface ApprovalResolvedEvent {
 /** 卡片回写协议（§10.3）：卡片动作的唯一事件形态。target_agent_id = 多 agent 归因。 */
 export interface CardActionEvent {
   type: "card_action";
+  orchestration?: import("../orchestration/types").OrchestrationStamp;
   card_id: string;
   source_event_id: number;
   card_type: string;
@@ -447,6 +566,8 @@ export interface CardActionEvent {
   payload?: Record<string, unknown>;
   scope?: "once" | "session_kind" | "always";
   target_agent_id?: string;
+  /** 卡片来源的**真实**归属（指针分叉：祖先行）。旧数字形式没有它 = 来源是当前会话自己的行。 */
+  source_event_ref?: import("./session-ref").EventRef;
 }
 
 /** M3b 评审闭环（§3.4 / §4.5）：diff 卡行级评论 → 定向 user_message 注入该 worker 子流 → 修正 → diff 卡 v2。
@@ -454,6 +575,8 @@ export interface CardActionEvent {
 export interface DiffCommentEvent {
   type: "diff_comment";
   agent_id: string;
+  /** 评论所依据的卡片来源（可选；祖先行时记录真实来源）。 */
+  source_ref?: import("./session-ref").EventRef;
   /** 评论落点文件（workspace 相对）。 */
   path: string;
   /** 行号（1-based，diff 卡行级定位）。 */
@@ -537,6 +660,8 @@ export interface FileRestoredEvent {
   path: string;
   /** 还原所用的覆盖前快照 id（可选；同一份事件流里能对回是哪一次覆盖）。 */
   snapshotId?: string;
+  /** 被撤销对象在来源视图里的真实归属（祖先行时指向父文件；旧事件缺席）。 */
+  source_ref?: import("./session-ref").EventRef;
   ts?: number;
 }
 
@@ -744,6 +869,8 @@ export type AgentEvent = (
   | TurnStopMissingEvent
   | SurfaceAccountEvent
   | FileRestoredEvent
+  | SessionRewindEvent
+  | SessionMetaUpdateEvent
   | RunErrorEvent
 ) & { /** M2 §3.5：事件真值时间戳（毫秒）。core 自 8361657 起在落盘处统一盖戳——写调用方同一对象，live 与盘同式（tests/events.test.ts 三用例钉死），新事件恒在场；旧 JSONL 缺席，读侧按可选兼容（投影留空不造假）。 */ ts?: number };
 
@@ -794,5 +921,7 @@ export const KNOWN_TYPES: Record<AgentEvent["type"], true> = {
   turn_stop_missing: true,
   surface_account: true,
   file_restored: true,
+  session_rewind: true,
+  session_meta_update: true,
   error: true,
 };

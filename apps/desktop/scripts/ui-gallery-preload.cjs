@@ -3,6 +3,12 @@
 const { contextBridge } = require("electron");
 
 const reply = (v) => () => new Promise((res) => setTimeout(() => res(typeof v === "function" ? v() : v), 30));
+// 第 9 点冒烟的断言面：渲染层调过 runSteer 的**原始参数**。走 contextBridge 暴露
+// （preload 与 renderer 不共享 globalThis，直接挂 globalThis 在 renderer 侧读不到——第一版就错在这里）。
+const cairnSteers = [];
+/** 第 9 点冒烟：真 run 的调用记录（判「空闲回车起了一轮 / 运行中回车没起新一轮」）。 */
+const cairnRuns = [];
+let cairnHoldRun = null;
 
 const now = Date.now();
 const mkMarkdown = [
@@ -37,6 +43,10 @@ const EVENTS = [
   { type: "tool_result", callId: "t2", ok: true, change: "modified", snapshotId: "snap-4081", ts: now - 85_000 },
   { type: "usage", inputTokens: 12400, outputTokens: 1830, ts: now - 84_000 },
   { type: "assistant_message", content: mkMarkdown, ts: now - 83_000 },
+  // 一条**失败**的工具调用：失败正文那格要有东西可看（错误正文降到正文色、失败标记仍危险色）。
+  // 文案是四行散文——那一格原先整段用危险色，在阅读面里喊。
+  { type: "tool_call", id: "t3", name: "run_shell", args: { command: "pnpm test" }, ts: now - 82_000 },
+  { type: "tool_result", callId: "t3", ok: false, output: "Permission denied: 写操作被拒\n被拒的动作：pnpm test（写 .git 之外的路径）\n这一档权限不许写工作区\n要继续请换只读命令，或调高权限档位", ts: now - 81_000 },
 ];
 
 const MODEL = (id, provider, name, tier, ctx, image, thinking) => ({
@@ -73,6 +83,33 @@ const SETTINGS = {
   routingBandit: false, routingCascade: false, maxBudgetUsd: 0, scheduleConcurrencyCap: 4,
 };
 
+// 文件窗格夹具（2026-10-21）：只给离屏画廊用，让树的键盘/重试/预览有真实行可走。
+const FAKE_TREE = {
+  "": [{ name: "src", kind: "dir", size: null }, { name: "README.md", kind: "file", size: 2140 }, { name: "package.json", kind: "file", size: 880 }],
+  src: [{ name: "main.ts", kind: "file", size: 5120 }, { name: "renderer", kind: "dir", size: null }],
+  "src/renderer": [{ name: "App.tsx", kind: "file", size: 8800 }],
+};
+const FAKE_TEXT = {
+  "README.md": "# Demo workspace\n\n用于文件窗格的键盘与预览验收。\n",
+  "package.json": '{"name":"demo","private":true}\n',
+  "src/main.ts": "export const desktop = true;\n",
+  "src/renderer/App.tsx": "export function App() { return null; }\n",
+};
+// 插件窗格夹具（2026-10-21）：让右列插件页在画廊里也有真实列表/技能/命令可看。
+const PLUGIN_SNAPSHOT = {
+  plugins: [{
+    name: "demo-plugin", scope: "workspace", trust: "trusted", root: "/tmp/demo-ws/.agent/plugins/demo-plugin",
+    counts: { skills: 1, commands: 1, agents: 0, hooks: 0, mcp: 1, lsp: 0, lspActive: 0 },
+    skills: [{ name: "审查改动", invoke: "demo-plugin:review", description: "按仓库规矩审一遍改动" }],
+    commands: [{ name: "跑测试", invoke: "demo-plugin:test", description: "跑相关判卷并汇总失败" }],
+    userConfig: [],
+    errors: [], warnings: [],
+  }],
+  looseSkills: [],
+  mcpServers: [{ plugin: "demo-plugin", server: "demo-mcp", state: "connected", tools: ["search"] }],
+  toolScopes: [],
+  errors: [], warnings: [],
+};
 const stub = {
   protocolVersion: reply(1),
   getSettings: reply(SETTINGS),
@@ -85,10 +122,32 @@ const stub = {
   listProjects: reply([{ path: "/tmp/demo-ws" }]),
   addProject: reply({ path: "/tmp/demo-ws" }),
   createProject: reply({ ok: true, path: "/tmp/demo-ws/new" }),
+  workspaceListDir: (rel) => new Promise((res) => setTimeout(() => {
+    const entries = FAKE_TREE[rel];
+    res(entries === undefined
+      ? { ok: false, error: `目录不存在：${rel}` }
+      : { ok: true, path: rel, entries, truncated: rel === "src" });
+  }, 30)),
+  workspaceReadText: (rel) => new Promise((res) => setTimeout(() => {
+    const text = FAKE_TEXT[rel];
+    res(text === undefined
+      ? { ok: false, error: `文件不存在：${rel}` }
+      : { ok: true, path: rel, text, truncated: false, size: Buffer.byteLength(text) });
+  }, 30)),
   pickDirectory: reply(null),
   openSession: reply({ events: EVENTS }),
   createSession: reply({ id: "s2" }),
-  run: reply({ ok: true }),
+  // 第 9 点冒烟：`run` **可以挂住不返回**（`--cairn-steer-fixture` 时）。
+  // 为什么必须挂住：活动会话的 running 置位只在 `send()` 那条路里、run 返回后立刻摘掉
+  // （session-subscription.ts 的注释：「运行集口径」）。桩若 30ms 就返回，运行态根本立不住，
+  // 于是"运行中按回车"永远测不到——第一版冒烟就死在这里，而它看起来像产品缺陷。
+  run: process.argv.includes("--cairn-steer-fixture")
+    ? (req) => new Promise((res) => {
+        // 记录每次真 run（冒烟据此判「这一拍到底有没有起新一轮」）
+        cairnRuns.push({ message: req && req.message, sessionId: req && req.sessionId });
+        cairnHoldRun = res; // 冒烟可手动放行
+      })
+    : reply({ ok: true }),
   runCancel: reply({ ok: true }),
   decide: reply(true),
   decidePlan: reply(true),
@@ -98,7 +157,11 @@ const stub = {
   revertTurn: reply({ ok: true, restored: [], deleted: [], manual: [], failed: [] }),
   compact: reply({ ok: true }),
   checkUpdate: reply({ configured: false }),
-  getState: reply({}),
+  getState: reply({ plugins: PLUGIN_SNAPSHOT }),
+  listSkills: reply({
+    skills: [{ invoke: "demo-plugin:review", description: "按仓库规矩审一遍改动", trust: "trusted" }],
+    commands: [{ invoke: "demo-plugin:test", description: "跑相关判卷并汇总失败", trust: "trusted" }],
+  }),
   getOnboarding: reply([]),
   setGoal: reply({ ok: true }),
   pluginDecide: reply({ ok: true }),
@@ -109,6 +172,16 @@ const stub = {
   // 发送队列 sidecar：返回数组字段，否则渲染层 .map 会炸（此前落在兜底 {} ⇒ 首屏挂错误条）。
   queueGet: reply({ items: [] }),
   queueSet: reply({ ok: true }),
+  // 第 9 点·轮中插话：**必须有真实现**，否则落到下方兜底 `reply({})` ⇒ 渲染层读
+  // `steered.ok === true` 得 undefined ⇒ 运行中回车永远走「入队」，插话那条路在离屏界面里
+  // 一次都走不到（实测形态：gallery 里按回车只会看到队列条，看不到「已插话到本轮」）。
+  // 这里把每次调用记进 window.__cairnSteers，供 smoke 断言"渲染层真的调了它、且带了什么话"。
+  runSteer: (sessionId, text) => new Promise((res) => setTimeout(() => {
+    // 记录写在 **contextBridge 暴露的那个**对象上：preload 与 renderer 是两个上下文，
+    // `globalThis` 不共享（第一版就写错在这里：调用成功而 __cairnSteers 恒 null）。
+    cairnSteers.push({ sessionId, text });
+    res({ ok: true, queued: 1 });
+  }, 30)),
   // 能力读数（设置页「模型与 Provider」分区读它）：search/vision 是必填字段，
   // 兜底的 {} 会让渲染层读 cap.search.kind 时抛 "reading 'kind'"。
   capabilities: reply({
@@ -117,10 +190,20 @@ const stub = {
     vision: { state: "undeclared", modelId: null, declaredModalities: [] },
     workspace: "/tmp/demo-ws",
   }),
-  onEvent: () => () => undefined,
   onAsk: () => () => undefined,
   onAskDone: () => () => undefined,
 };
+
+// 事件订阅**真收集**：概览里的数字刚变过会闪一下（那是「刚刚变」的提示），
+// 要目验那格就得**能推事件进去**。主进程经 executeJavaScript 调 __cairnPushEvent。
+const eventListeners = new Set();
+stub.onEvent = (fn) => { eventListeners.add(fn); return () => eventListeners.delete(fn); };
+contextBridge.exposeInMainWorld("__cairnSteers", () => cairnSteers.slice());
+contextBridge.exposeInMainWorld("__cairnRuns", () => cairnRuns.slice());
+contextBridge.exposeInMainWorld("__cairnReleaseRun", (v) => { if (cairnHoldRun) { const r = cairnHoldRun; cairnHoldRun = null; r(v ?? { ok: true }); } });
+contextBridge.exposeInMainWorld("__cairnPushEvent", (event) => {
+  for (const fn of eventListeners) { try { fn(event); } catch { /* 一个订阅者抛了不该挡住别人 */ } }
+});
 
 // 桩的兜底名单由主进程从**真接口**（src/main/ipc-protocol.ts 的 AgentApi）推导后经
 // additionalArguments 交接（preload 是 sandboxed 独立进程：拿不到主进程对象，也 require
@@ -140,6 +223,13 @@ for (const { name, isArray } of members) {
 }
 // 协议版本必须与渲染层期望一致，否则渲染层亮「协议版本失配」fatal 面——画廊要的是产品面。
 stub.protocolVersion = reply(Number(argOf("--cairn-protocol-version=", "0")));
+
+// 首启夹具：空态的「设置检查」要看得见才叫目验（那一块只在 onboarded === false 时摆）。
+// 七组覆盖面由主进程从**真源**推导后交接（这里不复刻那份清单——手抄会随它漂）。
+if (process.argv.includes("--cairn-first-run-fixture")) {
+  stub.getOnboarding = reply(JSON.parse(argOf("--cairn-onboarding-groups=", "[]")));
+  stub.getSettings = reply({ ...SETTINGS, onboarded: false });
+}
 
 // 可选交互夹具：只在独立 smoke 窗口显式传参时启用，不进入产品桥。
 if (process.argv.includes("--cairn-interaction-fixture")) {
@@ -184,7 +274,9 @@ if (process.argv.includes("--cairn-hardening-fixture")) {
     { type: "assistant_message", content: "第二条回复：失败只回滚当前条目。", ts: now - 3000 },
   ] });
   stub.listFeedback = async (sid) => [...(ratings.get(sid) ?? new Map())].map(([eventId, rating]) => ({ sessionId: sid, eventId, rating, at: new Date().toISOString() }));
-  stub.listMessagePins = async (sid) => [...(pins.get(sid) ?? new Set())];
+  // v19（指针分叉）：协议形状已从 `number[]` 收成 `{eventId, eventRef?}[]`。夹具晚改一步，
+  // state-smoke 会在「置顶按钮的 aria-label」那一格静默读到 false——不是产品回归，是证人陈旧。
+  stub.listMessagePins = async (sid) => [...(pins.get(sid) ?? new Set())].map((eventId) => ({ eventId }));
   stub.submitFeedback = (req) => new Promise((resolve) => { requests.feedback.push({ req, resolve }); });
   stub.setMessagePinned = (req) => new Promise((resolve) => { requests.pin.push({ req, resolve }); });
   contextBridge.exposeInMainWorld("__cairnFixture", {
@@ -212,6 +304,8 @@ if (process.argv.includes("--cairn-performance-fixture")) {
   const turns = Number(argOf("--cairn-performance-turns=", "400"));
   const listeners = new Set();
   let finishRun;
+  let liveText = "";
+  const calls = { runs: [], forks: [] };
   const events = [];
   for (let i = 0; i < turns; i++) {
     events.push({ type: "user_message", content: `第 ${i+1} 轮：检查模块 ${i}`, ts: now - (turns-i)*60000 });
@@ -223,15 +317,65 @@ if (process.argv.includes("--cairn-performance-fixture")) {
   stub.openSession = reply({ events });
   stub.onEvent = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
   const emit = (e) => { for (const listener of listeners) listener({ ...e, session_id: "s1", ts: Date.now() }); };
-  stub.run = () => new Promise((resolve) => {
+  stub.forkSession = (sessionId, round, keepWorkspace) => {
+    calls.forks.push({ sessionId, round, keepWorkspace });
+    return Promise.resolve({ ok: false, error: "夹具已记录回放请求" });
+  };
+  stub.run = (request) => new Promise((resolve) => {
+    calls.runs.push(request);
+    liveText = "PERF-LIVE-0";
     finishRun = resolve;
     emit({ type: "user_message", content: "逐帧流式性能检查" });
     emit({ type: "assistant_delta", callId: "perf-live", text: "PERF-LIVE-0" });
   });
   contextBridge.exposeInMainWorld("__cairnPerf", {
-    step: (index) => emit({ type: "assistant_delta", callId: "perf-live", text: ` PERF-LIVE-${index}` }),
+    calls: () => calls,
+    step: (index) => {
+      const text = ` PERF-LIVE-${index}`;
+      liveText += text;
+      emit({ type: "assistant_delta", callId: "perf-live", text });
+    },
+    complete: () => emit({ type: "assistant_message", callId: "perf-live", content: liveText }),
     finish: () => { emit({ type: "agent_status", status: "done" }); finishRun?.({ ok: true }); },
   });
+}
+
+// 终端尺寸夹具（terminal-resize-smoke.cjs 专用；不进产品链路）：
+// 记录渲染层发给主进程的 terminalResize 行列，用来证明「面板尺寸变化 ⇒ 行列跟着变」这条
+// 渲染段链路真的在跑（主进程→PTY 那一段由 tests/terminal-size.test.ts 用 stty 量）。
+if (process.argv.includes("--cairn-terminal-fixture")) {
+  const calls = { resize: [], start: 0, write: [] };
+  stub.terminalStart = reply(() => { calls.start += 1; return { ok: true, id: "term-fixture-1" }; });
+  stub.terminalWrite = (id, data) => { calls.write.push({ id, data }); return Promise.resolve(true); };
+  stub.terminalKill = reply(true);
+  stub.terminalResize = (id, cols, rows) => { calls.resize.push({ id, cols, rows }); return Promise.resolve(true); };
+  stub.onTerminalData = () => () => undefined;
+  stub.onTerminalExit = () => () => undefined;
+  contextBridge.exposeInMainWorld("__cairnTerminal", { calls: () => ({ ...calls, resize: [...calls.resize] }) });
+}
+
+// 跨工作区恢复夹具（cross-workspace-restore.cjs 专用；不进产品链路）：
+// 侧栏清单含另一项目的会话，openSession/setWorkspaceContext 记录调用，证明启动恢复走的是它。
+if (process.argv.includes("--cairn-cross-workspace-fixture")) {
+  const calls = { open: [], workspace: [] };
+  stub.listSessions = reply([
+    { id: "s-current", title: "当前项目会话", mtimeMs: now - 60_000, lines: 2, workspace: "/tmp/demo-ws" },
+    { id: "s-other", title: "跨工作区 · 另一项目", mtimeMs: now, lines: 2, workspace: "/tmp/demo-ws-other" },
+  ]);
+  stub.listProjects = reply([{ path: "/tmp/demo-ws" }, { path: "/tmp/demo-ws-other" }]);
+  stub.openSession = async (id, workspace) => {
+    calls.open.push({ id, workspace });
+    return {
+      events: id === "s-other"
+        ? [
+            { type: "user_message", content: "看看另一个项目", ts: now - 2000 },
+            { type: "assistant_message", content: "跨工作区会话内容已恢复", ts: now - 1000 },
+          ]
+        : [{ type: "assistant_message", content: "当前项目内容", ts: now - 1000 }],
+    };
+  };
+  stub.setWorkspaceContext = async (workspace) => { calls.workspace.push(workspace); return {}; };
+  contextBridge.exposeInMainWorld("__cairnCrossWorkspace", { calls: () => ({ ...calls }) });
 }
 
 contextBridge.exposeInMainWorld("agent", stub);

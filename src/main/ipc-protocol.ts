@@ -1,7 +1,7 @@
 // IPC 协议：main / preload / renderer 共享的类型（除协议版本常量外全部 type-only，跨层引用
 // 不产生运行时依赖；版本常量是唯一运行时出口，SEMA §3.5/§12——src-execution-path 棘轮的
 // 纯类型面豁免随 Phase 3 版本化撤名，执行路径由 tests/ipc-protocol-version.test.ts 供给）。
-import type { AgentEvent } from "../events";
+import type { AgentEvent, EventRef, SessionRef, SessionView } from "../events";
 import type { PermissionMode } from "../permissions";
 import type { ToolName } from "../tools/base";
 import type { SandboxStatus } from "./sandbox";
@@ -19,6 +19,8 @@ import type { SessionQueueEntry } from "./sessions";
 import type { ThinkingEffort } from "../providers/capabilities";
 import type { ProviderInfo } from "./provider-runtime";
 import type { CapabilityReadout } from "./doctor";
+import type { OrchestrationAddress, OrchestrationSubmitRequest, OrchestrationControlRequest, OrchestrationResponse } from "./orchestration-service";
+export type { OrchestrationAddress, OrchestrationSubmitRequest, OrchestrationControlRequest, OrchestrationResponse, OrchestrationSnapshot } from "./orchestration-service";
 // v9：建议单发的结果形状事实源在 suggest-next（分类 + hint 的构造与失败面同源）；这里只转发类型。
 import type { SuggestNextResult } from "./suggest-next";
 
@@ -42,6 +44,9 @@ import type { DiscoveredRow } from "../providers/provider-draft";
 import type { PreviewSnapshot } from "./project-preview";
 // v12：导入诊断三态的形状事实源在 project-templates（判定与文案同源）；这里只转发类型。
 import type { ProjectDiagnosis } from "./project-templates";
+// v18：会话正文检索的结果类型（三态联合）。`import type` 编译期擦除 ⇒ 渲染层产物零运行时 import src。
+import type { SessionSearchResult } from "./session-search";
+export type { SessionSearchResult } from "./session-search";
 import type { ProviderConnectionResult } from "./provider-connection";
 
 // ---- SEMA §3.5/§12：IPC 协议版本化 ----
@@ -56,8 +61,17 @@ import type { ProviderConnectionResult } from "./provider-connection";
  *  v10 = 能力在场性批（capabilities——搜索端点配没配，让「模型为什么少一把工具」上屏）；
  *  v11 = 主界面重做批（git 两闸 / 项目内模糊搜索 / 最近打开 / 粘贴落盘 / 快照还原 / Finder 显示）；
  *  v12 = 导入诊断批（projectDiagnose——导入已有文件夹先给三态诊断，ADR 0004 §4）；
- *  v13 = 记忆正文批（MemoryTopicPayload 增 body——「主题正文」快照面接通，§8 #15 销账）。 */
-export const IPC_PROTOCOL_VERSION = 13;
+ *  v13 = 记忆正文批（MemoryTopicPayload 增 body——「主题正文」快照面接通，§8 #15 销账）；
+ *  v14 = 跨会话用量批（usageLedger——头像菜单「用量统计」的「全部会话」口径）；
+ *  v15 = 会话日志批（sessionLog——错误条/命令面板「查看日志」的只读尾部）。
+ *  v16 = 会话定位批（openSession 增可选 workspace——跨项目同名 id 必须开对转录）；
+ *  v17 = 终端尺寸批（terminalResize——xterm 行列同步到真实 PTY）；
+ *  v18 = 会话全文检索批（sessionSearch——搜**会话正文**而不是文件；结果是三态，
+ *  「没量到 ≠ 没有」由类型层面分开，见 src/main/session-search.ts）。
+ *  v19 = 指针分叉来源批（openSession 附 SessionRef + SessionView；会话 mutation/队列/注释
+ *  增加可选 workspace——两个工作区同名 id 必须精确寻址，歧义拒绝）。
+ *  v20 = 多智能体编排（显式 workspace/session 的预览、提交与控制）。 */
+export const IPC_PROTOCOL_VERSION = 20;
 
 // ---- v11：主界面重做批的载荷（git 读数 / 克隆 / 项目内搜索）----
 /** git 在场读数：branch 为 null = detached HEAD（如实，不拿 "HEAD" 冒充分支名）。 */
@@ -67,6 +81,38 @@ export type GitCloneResult = { ok: true; path: string } | { ok: false; error: st
 /** 项目内搜索：hits 为 workspace 相对路径（正斜杠）；truncated = 扫描或命中超帽（不假装完整）。 */
 export type WorkspaceSearchPayload =
   | { ok: true; hits: { path: string; kind: "file" | "directory" }[]; truncated: boolean }
+  | { ok: false; error: string };
+
+/** v14：跨会话用量账本（头像菜单「用量统计」→「全部会话」）。
+ *  口径与渲染层 `usageSummary` 同源（core 纯函数 `usage-ledger.ts` 折叠，面板不再另算一套）：
+ *  token 累加、缓存缺字段不计、工具步数与对话轮数只数主会话（worker 子流不计）。
+ *  `sessions` / `workspaces` 是**有会话的**数量（不是已注册项目数——空项目不冒充工作量）；
+ *  `skipped` = 读不了的会话文件数，`badLines` = 坏行数：统计不全时界面如实提示，不假装完整。 */
+export interface UsageLedgerTotalsPayload {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  usageCount: number;
+  toolSteps: number;
+  rounds: number;
+}
+
+export type UsageLedgerPayload =
+  | {
+      ok: true;
+      totals: UsageLedgerTotalsPayload;
+      sessions: number;
+      workspaces: number;
+      skipped: number;
+      badLines: number;
+    }
+  | { ok: false; error: string };
+
+/** v15：会话日志尾部（错误条/命令面板「查看日志」）。`path` 是**本会话日志的真实落点**
+ *  （只经主进程按会话归属解析，不接受渲染层传任意路径）；`truncated` = 不是整份文件
+ *  （字节窗口或行数截断），界面必须如实提示。 */
+export type SessionLogPayload =
+  | { ok: true; path: string; text: string; truncated: boolean; bytes: number; lines: number }
   | { ok: false; error: string };
 
 /** S7：探测结果（表单据此渲染那张可勾选的表）。 */
@@ -181,7 +227,7 @@ export interface StateResponse {
   /** M2f：辅助对话面板快照（sidechat 会话清单 + 已提升记录；缺省 = 无会话目录）。 */
   sidechat?: SidechatPanelSnapshot;
   /** M3b：孤儿 worktree 扫描（§4.4.9 只列不自动删；git 面板「可清理」列表数据源）。 */
-  worktree?: { orphans: string[] };
+  worktree?: { workspace: string; orphans: string[]; details?: { name: string; dirty: boolean }[] };
   /** M4a：定时任务面板快照（任务定义 + 运行历史投影 + 并发计数；journal/会话纯投影）。 */
   schedule?: ScheduleSnapshot;
   /** M4b：license 状态（valid/expired/inactive/invalid；inactive → 引导横幅，§2.2）。 */
@@ -232,6 +278,11 @@ export interface SessionInfoPayload {
   pinned?: boolean;
   archived?: boolean;
   projectId?: string;
+  /** 审计 sidecar 字段；缺席 = 未记录，不能补成 epoch/0。 */
+  viewedAt?: string;
+  archivedAt?: string;
+  idleSince?: string;
+  resumeAttempts?: number;
   createdAt?: string;
   updatedAt?: string;
   /** 这条会话有自己的 git worktree（§3.7 · G4）。读侧由目录存在与否给真值，不另存状态。 */
@@ -280,8 +331,17 @@ export interface AgentApi {
    *  M3-5：补可选 sessionId 走会话级取消（kernel-host cancel(sessionId)，T2 per-session controller）；
    *  缺省无参 = 兼容旧调用（host 侧 fail-visible：{ok:false,"会话不在运行"}）。 */
   runCancel(sessionId?: string): Promise<{ ok: boolean; error?: string }>;
+  /** 第 9 点·轮中插话（steering）：把用户这一句话递进**正在跑**的那一轮。
+   *
+   *  与 `runCancel` 同一族但语义相反：cancel 收束这一轮，steer 让这一轮**继续**但多知道一件事。
+   *  它落成一条带 `origin:{kind:"steering"}` 的 `user_message`，**不开新轮**（轮界取料口
+   *  `eventsForCurrentRun` 会跳过它，否则本轮之前的交付承诺会静默失效）。
+   *
+   *  会话不在跑 ⇒ `{ok:false, error}` fail-visible：渲染层据此把这句话转成「入队」
+   *  （下一轮首发），而不是假装已经送进去了。`queued` = 盒子里当前待取条数（观测用）。 */
+  runSteer(sessionId: string, text: string): Promise<{ ok: boolean; error?: string; queued?: number }>;
   /** M1d 手动压缩入口（M1e 起 preload 暴露：token 面板按钮）。 */
-  compact?(sessionId?: string): Promise<CompactResponse>;
+  compact?(sessionId?: string, workspace?: string): Promise<CompactResponse>;
   onEvent(cb: (e: AgentEvent) => void): () => void;
   onAsk(cb: (p: AskPayload) => void): () => void;
   /** 原生菜单命令（main → 渲染层）：id 见 apps/desktop/src/shared/menu-commands.ts。
@@ -300,19 +360,31 @@ export interface AgentApi {
   setSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
   // ---- M1e：会话列表（JSONL 即会话）----
   listSessions(): Promise<SessionInfoPayload[]>;
-  createSession(name?: string): Promise<{ id: string }>;
-  openSession(id: string): Promise<{ events: AgentEvent[] }>;
+  /** v14：跨全部已登记工作区的用量账本（只读；按会话日志投影，不触发 openSession）。 */
+  usageLedger(): Promise<UsageLedgerPayload>;
+  /** v20：编排预览、提交与控制；地址 = 显式工作区 + 会话，未知/越界地址 fail-closed。 */
+  orchestrationView(address: OrchestrationAddress): Promise<OrchestrationResponse>;
+  orchestrationSubmit(request: OrchestrationSubmitRequest): Promise<OrchestrationResponse>;
+  orchestrationControl(request: OrchestrationControlRequest): Promise<OrchestrationResponse>;
+  /** v15：读该会话日志的尾部（只读；`tailLines` 缺省 400，上限 2000）。 */
+  sessionLog(id: string, tailLines?: number): Promise<SessionLogPayload>;
+  /** 新建会话；`workspace` = 该会话实际落点的规范工作区（缺省 = host 的 activeWorkspace）。
+   *  回传归属：渲染层空屏直接发任务时 activeWorkspace 仍是 null，不回传就只能靠猜。 */
+  createSession(name?: string): Promise<{ id: string; workspace: string }>;
+  /** v19：`events` = 本地 raw；`session`/`view` = 来源视图（父前缀 + 物理行号）。
+   *  workspace 显式给出会话归属（同名 id 跨项目时按它定位）；缺省 = host 自行解析，歧义拒绝。 */
+  openSession(id: string, workspace?: string): Promise<{ events: AgentEvent[]; session: SessionRef; view: SessionView }>;
   /** 恢复闭环：读回 / 覆盖写该会话的发送队列 sidecar。队列不是 AgentEvent，不混入 JSONL；
    *  重启后由 renderer 读回并显式继续发送，仍走原有权限与沙箱链路。 */
-  queueGet(sessionId: string): Promise<{ items: SessionQueueEntry[] }>;
-  queueSet(sessionId: string, items: SessionQueueEntry[]): Promise<{ ok: boolean; error?: string }>;
-  renameSession(oldId: string, newName: string): Promise<{ id: string }>;
-  deleteSession(id: string): Promise<{ currentSession: string | null }>;
+  queueGet(sessionId: string, workspace?: string): Promise<{ items: SessionQueueEntry[] }>;
+  queueSet(sessionId: string, items: SessionQueueEntry[], workspace?: string): Promise<{ ok: boolean; error?: string }>;
+  renameSession(oldId: string, newName: string, workspace?: string): Promise<{ id: string }>;
+  deleteSession(id: string, workspace?: string): Promise<{ currentSession: string | null }>;
   /** M8 分叉（v2.15 IPC 接线）：保留前 N 轮（含）→ 新会话 `<id>-f<N>`；源会话只读、字节不变。 */
-  forkSession(sessionId: string, round: number, unique?: boolean): Promise<{ ok: boolean; id?: string; error?: string }>;
+  forkSession(sessionId: string, round: number, unique?: boolean, workspace?: string): Promise<{ ok: boolean; id?: string; error?: string }>;
   /** #7 文件级回滚（v2.16 IPC 接线）：把第 N 轮主会话改过的文件还原成该轮之前的原件（源自 D7 覆盖前快照）。
    *  只动主会话直写；worker 改动在各自 worktree（另有合并控制塔）。取不到原件 / 轮后又改过的逐条 manual 报出。 */
-  revertTurn(sessionId: string, round: number): Promise<{
+  revertTurn(sessionId: string, round: number, workspace?: string): Promise<{
     ok: boolean;
     error?: string;
     restored: string[];
@@ -343,6 +415,8 @@ export interface AgentApi {
   terminalStart(): Promise<{ ok: true; id: string } | { ok: false; error: string }>;
   /** 用户输入 → shell stdin（未知 id 返回 false，不静默丢）。 */
   terminalWrite(id: string, data: string): Promise<boolean>;
+  /** v17：同步真实 PTY 行列；非法尺寸、未知或已关闭终端返回 false。 */
+  terminalResize(id: string, cols: number, rows: number): Promise<boolean>;
   /** 杀终端（幂等）。 */
   terminalKill(id: string): Promise<void>;
   /** v5 terminal 窗格推送：pty 输出（按 id 归因）。 */
@@ -386,6 +460,16 @@ export interface AgentApi {
   /** v11：项目内文件模糊搜索（@ 引用补全）：命中 = workspace 相对路径 + 文件/目录；
    *  跳过 .git/node_modules 等，扫描与命中双帽截断如实标注。 */
   workspaceSearch(workspace: string, query: string): Promise<WorkspaceSearchPayload>;
+  /** v18：**会话正文**全文检索（不是文件检索）——只读，扫该工作区下的会话 JSONL。
+   *  结果是**三态**：`ok`（扫完了；空数组＝量过了没命中）／`partial`（预算用尽，命中为真但可能还有）／
+   *  `unavailable`（**没量**——会话根读不到；绝不能被渲染成「没有匹配」）。
+   *  可见语料 = 用户看得见的正文（用户消息 + 助手消息 + 按 callId 合并的流式片段）；模型自己的思考
+   *  与工具载荷**不进语料**。逐工作区检索（工作区由主进程解析归属，渲染层不传路径）。 */
+  sessionSearch(
+    workspace: string,
+    query: string,
+    options?: { budgetBytes?: number; maxSessions?: number },
+  ): Promise<SessionSearchResult>;
   /** v11：标记项目「最近打开」（打开会话 / 切换项目时调用）；未知 id 拒绝。 */
   touchProject(id: string): Promise<ProjectRecord>;
   /** v11：⌘V 粘贴素材落临时文件（截图等）；字节帽 20MB，返回路径此后走既有附件引用链。 */
@@ -401,17 +485,21 @@ export interface AgentApi {
   attachmentThumb(path: string): Promise<{ ok: boolean; dataUrl?: string; error?: string }>;
   /** v2.16 用户反馈沉淀（赞/踩）：落 sidecar `feedback.jsonl`（append-only，不进事件流）。
    *  `rating:"none"` = 撤销（读时取最后一条生效）。未接线前界面只选中、不假提交。 */
-  submitFeedback(req: { sessionId: string; eventId: number; rating: "up" | "down" | "none"; note?: string }): Promise<{ ok: boolean; error?: string }>;
+  submitFeedback(req: { sessionId: string; eventId: number; rating: "up" | "down" | "none"; note?: string; workspace?: string; eventRef?: EventRef }): Promise<{ ok: boolean; error?: string }>;
   /** 当前生效的反馈（按 eventId 去重、撤销的不返回）：界面据此点亮赞/踩。 */
-  listFeedback(sessionId: string): Promise<{ sessionId: string; eventId: number; rating: "up" | "down"; note?: string; at: string }[]>;
+  listFeedback(sessionId: string, workspace?: string): Promise<{ sessionId: string; eventId: number; rating: "up" | "down"; note?: string; at: string; eventRef?: EventRef }[]>;
   /** 2026-10-20 消息置顶（规范 §3.11 操作条 pin）：sidecar `pins.jsonl`，append-only、不进事件流。
    *  `pinned:false` = 取消置顶（追加一条撤销行，读时取最后一条生效）。 */
-  setMessagePinned(req: { sessionId: string; eventId: number; pinned: boolean }): Promise<{ ok: boolean; error?: string }>;
+  setMessagePinned(req: { sessionId: string; eventId: number; pinned: boolean; workspace?: string; eventRef?: EventRef }): Promise<{ ok: boolean; error?: string }>;
   /** 某会话当前生效的置顶锚点（eventId 升序）。 */
-  listMessagePins(sessionId: string): Promise<number[]>;
+  listMessagePins(sessionId: string): Promise<{ eventId: number; eventRef?: EventRef }[]>;
   /** 会话级 worktree 隔离（§3.7 · G4）：一条会话可以在自己的 git worktree 里跑，做完合并回来。
    *  三动作一个通道——它们共用同一条事实（磁盘上那棵树在不在），拆成三条只是把同一份状态抄三遍。 */
   sessionWorktree(req: SessionWorktreeRequest): Promise<SessionWorktreeResult>;
+  /** 孤儿 worktree 清理（显式动作）：主进程按当前工作区解析、仍有归属则拒绝（第 688 页）。 */
+  worktreeClean(name: string, workspace?: string): Promise<{ ok: boolean; error?: string }>;
+  /** 读 worker worktree 的 diff（`diff_ref` = `<worktree>@<baseCommit>`）：只认 .agents/wt-* 与 hex 基线。 */
+  worktreeDiff(ref: string, workspace?: string): Promise<{ ok: true; stat: string; patch: string; files: string[] } | { ok: false; error: string }>;
   setSessionPinned(sessionId: string, pinned: boolean): Promise<SessionMetadataRecord>;
   setSessionArchived(sessionId: string, archived: boolean): Promise<SessionMetadataRecord>;
   assignSessionProject(sessionId: string, projectId: string | null): Promise<SessionMetadataRecord>;
@@ -439,6 +527,8 @@ export interface AgentApi {
   cardAction(req: {
     cardId: string;
     sourceEventId: number;
+    /** 指针分叉的祖先行：数字 id 是该行在**来源**日志里的行号，落记录时用引用钉住来源。 */
+    eventRef?: EventRef;
     cardType: string;
     action: string;
     payload?: Record<string, unknown>;

@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createEventLog, replay, type AgentEvent } from "../src/events";
+import { createEventLog, numericCompactionIds, replay, type AgentEvent } from "../src/events";
 import { projectContext } from "../src/agent/context";
 import {
   Orchestrator,
@@ -709,7 +709,7 @@ describe("M3c worker 压缩", () => {
     expect(typeof comp!.agent_id).toBe("string");
     expect((comp!.agent_id as string).startsWith("worker-")).toBe(true);
     expect(comp!.trigger).toBe("auto"); // §7.5 worker 触发更晚：非 overflow 兜底，是阈值摘要路径
-    expect(comp!.compressed_event_ids.length).toBeGreaterThanOrEqual(1);
+    expect(numericCompactionIds(comp!).length).toBeGreaterThanOrEqual(1);
     // 摘要 usage 计入该 worker（usage(agent_id) 事件 + agent_result 汇总）
     const usageEvents = events.filter((e) => e.type === "usage" && (e as { agent_id?: string }).agent_id !== undefined) as Extract<AgentEvent, { type: "usage" }>[];
     expect(usageEvents.some((u) => u.inputTokens >= 33 && u.outputTokens >= 7)).toBe(true);

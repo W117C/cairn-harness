@@ -6,7 +6,7 @@
 // 能力 19 L0：凡**本文件自己拼进正文**的文本（工具输出、裁剪替换、摘要、自动验证拍、补位/截断提示）
 // 一律过 escapeControlTags；唯一例外是用户与助手自己说的话，逐字保留。中和只改投影，
 // 绝不写回事件流（与 closeDanglingToolCalls 同一条纪律）。判卷 = tests/instruction-provenance.test.ts。
-import type { AgentEvent, CompactionEvent, TurnTruncatedEvent, VerifyCommandResult } from "../events";
+import { isNumericCompaction, type AgentEvent, type CompactionEvent, type TurnTruncatedEvent, type VerifyCommandResult } from "../events";
 import { failureDigest } from "./verify";
 import { clampTailToTokenBudget } from "./text-budget";
 import { escapeControlTags } from "./control-tags";
@@ -51,7 +51,9 @@ export function isWorkerCompaction(e: AgentEvent): boolean {
 export function excludedIds(events: AgentEvent[]): Set<number> {
   const out = new Set<number>();
   for (const e of events) {
-    if (isCompaction(e) && !isWorkerCompaction(e)) for (const id of e.compressed_event_ids) out.add(id);
+    if (isCompaction(e) && !isWorkerCompaction(e) && isNumericCompaction(e)) {
+      for (const id of e.compressed_event_ids) out.add(id);
+    }
   }
   return out;
 }
@@ -243,9 +245,9 @@ export function projectContext(
   // 最新一份 compaction（滚动合并：其摘要已整合旧摘要，旧摘要不再单独注入）
   // M3c：worker 子流压缩事件（agent_id 在场）不作为主投影的摘要注入源。
   let latest: (typeof events)[number] | null = null;
-  for (const e of events) if (isCompaction(e) && !isWorkerCompaction(e)) latest = e;
-  const offset = latest ? latest.summary_offset : Number.POSITIVE_INFINITY;
-  const envelope = latest ? summaryEnvelope(latest.summary) : null;
+  for (const e of events) if (isCompaction(e) && !isWorkerCompaction(e) && isNumericCompaction(e)) latest = e;
+  const offset = latest !== null ? latest.summary_offset : Number.POSITIVE_INFINITY;
+  const envelope = latest !== null ? summaryEnvelope(latest.summary) : null;
 
   const msgs: ContextMessage[] = [];
   let injected = false;

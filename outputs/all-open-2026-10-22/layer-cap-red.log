@@ -1,0 +1,27 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/deepseek harness
+
+ ❯ tests/renderer-layer.test.ts (10 tests | 1 failed) 10ms
+   ❯ renderer-layer-check：四条不变量的机器面 (10)
+     × 行数帽遵守已批准的 1200 / 900 上限 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/renderer-layer.test.ts > renderer-layer-check：四条不变量的机器面 > 行数帽遵守已批准的 1200 / 900 上限
+AssertionError: expected 1250 to be less than or equal to 1200
+ ❯ tests/renderer-layer.test.ts:35:36
+     33| describe("renderer-layer-check：四条不变量的机器面", () => {
+     34|   it("行数帽遵守已批准的 1200 / 900 上限", () => {
+     35|     expect(RENDERER_FILE_LINE_CAP).toBeLessThanOrEqual(1200);
+       |                                    ^
+     36|     expect(APP_TSX_LINE_CAP).toBeLessThanOrEqual(900);
+     37|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+   Start at  11:18:06
+   Duration  101ms (transform 51%, tests 28%, import 16%, worker 5%)
+

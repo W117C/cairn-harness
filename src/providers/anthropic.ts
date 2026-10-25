@@ -5,8 +5,11 @@
 // message_delta 里的 usage 是【累计值】——直接取最后一条，不得跨事件累加。
 // 解析直接消费 Anthropic 原生字段（content_block_delta.delta.text_delta 等），
 // 不经过任何 OpenAI 中间格式。
-import { DEFAULT_STALL_MS, type StallGuard } from "../net";
-import { establishStream } from "./retry";
+import { randomUUID } from "node:crypto";
+import { DEFAULT_STALL_MS } from "../net";
+import {
+  backoffMs, establishStream, retryableStreamErrorFrame, retryableStreamFailure, StreamFailure, waitRetryDelay,
+} from "./retry";
 import { turnStopMissingEvent, turnTruncatedEvent } from "./stop-reason";
 import type { ModelOutput, ProviderContentImage, ProviderMessage, ProviderMessageWithImage, ProviderToolSpec } from "./index";
 
@@ -183,169 +186,218 @@ export async function* streamAnthropic(
   const maxTokens =
     thinkingBudget !== undefined && thinkingBudget > 0 ? Math.max(baseMaxTokens, thinkingBudget + 4096) : baseMaxTokens;
   const doFetch = opts.fetchImpl ?? fetch;
+  const toolRequestScope = randomUUID(); // 缺失原生 id 的序号只在本请求内复用。
 
   // 根因 4：停滞守卫改由 establishStream 逐次新建（静默窗口，不是总时长），成功建连后交回
   // 本函数继续管流体。建连期失败（429/5xx/网络抖动）按指数退避 + full jitter 重试；
-  // 不变量：res.ok 之后绝不重放（流已产出），调用方取消与停滞都不重试。
-  let guard: StallGuard | undefined;
-  const est = await establishStream({
-    label,
-    url: `${baseURL}/v1/messages`,
-    init: {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": opts.version ?? "2023-06-01",
-      },
-      body: JSON.stringify(
-        toAnthropicBody(
-          messages,
-          { model, maxTokens, stream: true, promptCache: opts.promptCache === true, ...(thinkingBudget !== undefined ? { thinkingBudget } : {}) },
-          tools,
-        ),
-      ),
-    },
-    fetchImpl: doFetch,
-    stallMs: opts.stallTimeoutMs ?? DEFAULT_STALL_MS,
-    ...(call?.signal !== undefined ? { callerSignal: call.signal } : {}),
-  });
-  const res = est.res;
-  guard = est.guard;
-  if (!res.body) {
-    guard?.dispose();
-    throw new Error(`${label} 流式响应缺少 body`);
-  }
+  // 不变量：res.ok 之后「尚未产出任何输出」时才允许重放（见下方 streamOnce 的 catch）。
+  /** 一次尝试的全部产出。**流内重试**（2026-10-23 补齐）：`establishStream` 只管到「响应体尚未
+   *  被消费」那一段；对端把 `overloaded_error` / `api_error` / 5xx **塞进 SSE 体**（HTTP 200）时它
+   *  管不着——而 Anthropic 的过载恰恰是这个形状。此前这条路一次就打死整轮任务，与 openai 适配器
+   *  同族的问题却只修了一边（同一判据两个入口的镜像：`StreamFailure` 的判据现在住 `retry.ts`）。
+   *
+   *  **安全边界**与 openai 侧逐字同源：① 本次尝试一个输出都没吐出去；② 还有次数；③ 不是调用方取消；
+   *  ④ 停滞守卫触发也不重放（重放会把静默窗当网络抖动再烧一遍全长超时）。 */
+  const STREAM_ATTEMPTS = 3;
+  const streamOnce = async function* (): AsyncGenerator<ModelOutput, void, undefined> {
+    let attempt = 0;
+    // `emitted` **跨尝试累积**（与 openai 侧同一条安全边界）：一旦任何一次尝试吐过输出，
+    // 后续尝试就再也不许重放——重放会把同一轮内容吐两遍，比失败更糟。
+    let emitted = false;
+    let retryError: unknown;
+    for (;;) {
+      attempt += 1;
+      const est = await establishStream({
+        label,
+        url: `${baseURL}/v1/messages`,
+        init: {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": opts.version ?? "2023-06-01",
+          },
+          body: JSON.stringify(
+            toAnthropicBody(
+              messages,
+              { model, maxTokens, stream: true, promptCache: opts.promptCache === true, ...(thinkingBudget !== undefined ? { thinkingBudget } : {}) },
+              tools,
+            ),
+          ),
+        },
+        fetchImpl: doFetch,
+        stallMs: opts.stallTimeoutMs ?? DEFAULT_STALL_MS,
+        ...(call?.signal !== undefined ? { callerSignal: call.signal } : {}),
+        ...(attempt > 1 ? { attempts: 1 } : {}), // 建连段那一层重试上一轮已付过
+      });
+      const res = est.res;
+      if (!res.body) {
+        est.guard.dispose();
+        throw new Error(`${label} 流式响应缺少 body`);
+      }
 
-  const decoder = new TextDecoder();
-  const reader = res.body.getReader();
-  let buf = "";
-  let callId = "anthropic-a";
-  let inputTokens: number | null = null;
-  let outputTokens: number | null = null;
-  // 缓存分块：Anthropic 的 input_tokens **不含**缓存读写量（与 OpenAI 系 prompt_tokens 含缓存相反），
-  // 事件口径统一成「inputTokens = 含缓存总输入」，分块另列（未上报时不落 0）。
-  let cacheRead: number | null = null;
-  let cacheWrite: number | null = null;
-  // 停止原因随 message_delta 到达（可能多条，取最后一条，与 usage 的累计值口径一致）。
-  let stopReason: string | null | undefined;
-  // 内容块聚合：index → { id, name, json }（input_json_delta 分片跨事件拼接）
-  const blocks = new Map<number, { id: string; name: string; json: string }>();
+      const decoder = new TextDecoder();
+      const reader = res.body.getReader();
+      let buf = "";
+      let callId = "anthropic-a";
+      let inputTokens: number | null = null;
+      let outputTokens: number | null = null;
+      // 缓存分块：Anthropic 的 input_tokens **不含**缓存读写量（与 OpenAI 系 prompt_tokens 含缓存相反），
+      // 事件口径统一成「inputTokens = 含缓存总输入」，分块另列（未上报时不落 0）。
+      let cacheRead: number | null = null;
+      let cacheWrite: number | null = null;
+      // 停止原因随 message_delta 到达（可能多条，取最后一条，与 usage 的累计值口径一致）。
+      let stopReason: string | null | undefined;
+      // 内容块聚合：index → { id, name, json }（input_json_delta 分片跨事件拼接）
+      const blocks = new Map<number, { id: string; name: string; json: string }>();
 
-  const handleEvent = function* (event: AnthropicSseEvent): Generator<ModelOutput> {
-    switch (event.type) {
-      case "message_start": {
-        if (event.message?.id) callId = event.message.id;
-        if (event.message?.usage?.input_tokens !== undefined) inputTokens = event.message.usage.input_tokens;
-        if (event.message?.usage?.cache_read_input_tokens !== undefined) cacheRead = event.message.usage.cache_read_input_tokens;
-        if (event.message?.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.message.usage.cache_creation_input_tokens;
-        return;
-      }
-      case "content_block_start": {
-        const cb = event.content_block;
-        if (cb?.type === "tool_use" && event.index !== undefined) {
-          const seed = cb.input !== undefined && cb.input !== null && Object.keys(cb.input as object).length > 0
-            ? JSON.stringify(cb.input)
-            : "";
-          blocks.set(event.index, { id: cb.id ?? `toolu-${String(event.index)}`, name: cb.name ?? "", json: seed });
+      const handleEvent = function* (event: AnthropicSseEvent): Generator<ModelOutput> {
+      switch (event.type) {
+        case "message_start": {
+          if (event.message?.id) callId = event.message.id;
+          if (event.message?.usage?.input_tokens !== undefined) inputTokens = event.message.usage.input_tokens;
+          if (event.message?.usage?.cache_read_input_tokens !== undefined) cacheRead = event.message.usage.cache_read_input_tokens;
+          if (event.message?.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.message.usage.cache_creation_input_tokens;
+          return;
         }
-        return;
-      }
-      case "content_block_delta": {
-        const d = event.delta;
-        if (d?.type === "text_delta" && d.text) {
-          yield { type: "assistant_delta", callId, text: d.text };
-        } else if (d?.type === "thinking_delta" && d.thinking) {
-          // Claude 的思考块（budget 开启时吐 thinking_delta）→ 独立事件，不并进正文。
-          yield { type: "thinking_delta", callId, text: d.thinking };
-        } else if (d?.type === "input_json_delta" && d.partial_json && event.index !== undefined) {
-          const acc = blocks.get(event.index);
-          if (acc) acc.json += d.partial_json; // 分片拼接成完整 JSON（流末 block_stop 时解析）
+        case "content_block_start": {
+          const cb = event.content_block;
+          if (cb?.type === "tool_use" && event.index !== undefined) {
+            const seed = cb.input !== undefined && cb.input !== null && Object.keys(cb.input as object).length > 0
+              ? JSON.stringify(cb.input)
+              : "";
+            blocks.set(event.index, { id: cb.id ?? `toolu-${toolRequestScope}-${String(event.index)}`, name: cb.name ?? "", json: seed });
+          }
+          return;
         }
-        // 其余 delta 子类型（signature_delta / citations_delta …）按未知优雅跳过
-        return;
-      }
-      case "content_block_stop": {
-        const acc = event.index !== undefined ? blocks.get(event.index) : undefined;
-        if (acc) {
-          yield { type: "tool_call", id: acc.id, name: acc.name, args: parseArgs(acc.json, label) };
-          blocks.delete(event.index as number);
+        case "content_block_delta": {
+          const d = event.delta;
+          if (d?.type === "text_delta" && d.text) {
+            emitted = true;
+            yield { type: "assistant_delta", callId, text: d.text };
+          } else if (d?.type === "thinking_delta" && d.thinking) {
+            // Claude 的思考块（budget 开启时吐 thinking_delta）→ 独立事件，不并进正文。
+            emitted = true;
+            yield { type: "thinking_delta", callId, text: d.thinking };
+          } else if (d?.type === "input_json_delta" && d.partial_json && event.index !== undefined) {
+            const acc = blocks.get(event.index);
+            if (acc) acc.json += d.partial_json; // 分片拼接成完整 JSON（流末 block_stop 时解析）
+          }
+          // 其余 delta 子类型（signature_delta / citations_delta …）按未知优雅跳过
+          return;
         }
-        return;
+        case "content_block_stop": {
+          const acc = event.index !== undefined ? blocks.get(event.index) : undefined;
+          if (acc) {
+            emitted = true;
+            yield { type: "tool_call", id: acc.id, name: acc.name, args: parseArgs(acc.json, label) };
+            blocks.delete(event.index as number);
+          }
+          return;
+        }
+        case "message_delta": {
+          // usage 为累计值：直接覆盖，绝不累加
+          if (event.usage?.output_tokens !== undefined) outputTokens = event.usage.output_tokens;
+          if (event.usage?.input_tokens !== undefined) inputTokens = event.usage.input_tokens;
+          if (event.usage?.cache_read_input_tokens !== undefined) cacheRead = event.usage.cache_read_input_tokens;
+          if (event.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.usage.cache_creation_input_tokens;
+          // stop_reason 与 usage 同帧到达。只认真字符串：后续帧可能带 stop_reason:null，
+          // 用 !== undefined 会让那个 null 把已经拿到的 max_tokens 抹掉（openai/gemini 侧同用真值判断）。
+          if (typeof event.delta?.stop_reason === "string") stopReason = event.delta.stop_reason;
+          return;
+        }
+        case "message_stop":
+        case "ping":
+          return; // ping 按协议要求优雅跳过
+        case "error": {
+          const e = event.error ?? {};
+          // 判据住 `retry.ts`：与 openai/gemini 侧共用同一份名字表与「数值优先」的读法。
+          throw new StreamFailure(
+            `${label} 流错误 ${e.type ?? "unknown"}: ${e.message ?? ""}`,
+            retryableStreamErrorFrame({ names: [e.type] }),
+          );
+        }
+        default:
+          return; // 未知事件类型：优雅跳过，不抛错
       }
-      case "message_delta": {
-        // usage 为累计值：直接覆盖，绝不累加
-        if (event.usage?.output_tokens !== undefined) outputTokens = event.usage.output_tokens;
-        if (event.usage?.input_tokens !== undefined) inputTokens = event.usage.input_tokens;
-        if (event.usage?.cache_read_input_tokens !== undefined) cacheRead = event.usage.cache_read_input_tokens;
-        if (event.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.usage.cache_creation_input_tokens;
-        // stop_reason 与 usage 同帧到达。只认真字符串：后续帧可能带 stop_reason:null，
-        // 用 !== undefined 会让那个 null 把已经拿到的 max_tokens 抹掉（openai/gemini 侧同用真值判断）。
-        if (typeof event.delta?.stop_reason === "string") stopReason = event.delta.stop_reason;
-        return;
+    };
+
+    try {
+      let done = false;
+      while (!done) {
+        const read = await reader.read();
+        if (read.done) break;
+        est.guard.bump(); // 有分片 → 续期（只有完全静默才会到点）
+        buf += decoder.decode(read.value, { stream: true });
+        let nl: number;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!line.startsWith("data:")) continue; // event:/注释/空行跳过（type 以 data JSON 为准）
+          const payload = line.slice(5).trim();
+          if (!payload) continue;
+          // C7（审查 P2）容错边界修正（审查 S1-6）：只对「不是帧的行」容错——注释心跳、
+          // 网关塞进来的非 JSON 文本。以 { 开头的真帧 parse 失败不得静默 continue：那意味着
+          // 上游把一帧截断了，跳过 = 少一截正文/少一个 tool_call 分片，而流随后正常收尾会让
+          // 本轮以「不完整输出」成功收束（loop 无从得知）。同文件 parseArgs 的口径就是协议级
+          // 异常 fail loud，这里与之对齐。**协议级异常不重放**（重放只会再错一次并白烧预算）。
+          let event: AnthropicSseEvent;
+          try {
+            event = JSON.parse(payload) as AnthropicSseEvent;
+          } catch {
+            if (!payload.startsWith("{")) continue; // 心跳/注释/网关杂帧：容忍
+            throw new StreamFailure(`${label} SSE 帧损坏（半帧截断？）：JSON 解析失败，拒绝静默丢字`, false);
+          }
+          yield* handleEvent(event);
+        }
       }
-      case "message_stop":
-      case "ping":
-        return; // ping 按协议要求优雅跳过
-      case "error": {
-        const e = event.error ?? {};
-        throw new Error(`${label} 流错误 ${e.type ?? "unknown"}: ${e.message ?? ""}`);
+      if (inputTokens !== null || outputTokens !== null || cacheRead !== null || cacheWrite !== null) {
+        yield {
+          type: "usage",
+          // Anthropic 的 input_tokens 是「未命中缓存的那一段」，加上读/写缓存才是本次真实输入
+          inputTokens: (inputTokens ?? 0) + (cacheRead ?? 0) + (cacheWrite ?? 0),
+          outputTokens: outputTokens ?? 0,
+          ...(cacheRead !== null ? { cacheReadInputTokens: cacheRead } : {}),
+          ...(cacheWrite !== null ? { cacheWriteInputTokens: cacheWrite } : {}),
+        };
       }
-      default:
-        return; // 未知事件类型：优雅跳过，不抛错
+      // 流正常收尾，但**原因**说这一轮没说完：正文被输出预算/内容策略收走。
+      // 上面 C7 那条守的是「半帧被截断」，这里守的是「整帧到齐、模型却没被给够篇幅」——
+      // 同一句注释里点名的危害（loop 无从得知），另一支一直没管。
+      const truncated = turnTruncatedEvent(callId, stopReason, outputTokens);
+      if (truncated) yield truncated;
+      // 同位置、互斥：整个流一条 message_delta.stop_reason 都没见到 ⇒ 「不知道它说没说」的证据。
+      const stopMissing = turnStopMissingEvent(callId, stopReason, outputTokens);
+      if (stopMissing) yield stopMissing;
+      return;
+    } catch (err) {
+      const cancelled = call?.signal?.aborted === true;
+      // stall 守卫触发不重放：重放会把静默窗当网络抖动再烧一遍全长超时。
+      const stalledByGuard = est.guard.stalled();
+      const retryable = stalledByGuard ? false : retryableStreamFailure(err);
+      // 安全边界与 openai 侧逐字同源：判断「本次尝试吐过输出没有」必须**在尝试内部**做，
+      // 不能在循环外拿累积量判——那样第一次吐出半句之后的每一次重试都会被误判成"没吐过"。
+      if (emitted || attempt >= STREAM_ATTEMPTS || cancelled || !retryable) throw err;
+      retryError = err;
+    } finally {
+      // 包括消费者在 yield 处提前 return；重试退避前也先回收本次响应。
+      est.guard.dispose();
+      void reader.cancel().catch(() => {});
+      reader.releaseLock();
+    }
+      // 退避与可见重试（fail-visible：静默重试等于把故障藏起来）。
+      const backoff = backoffMs(attempt, 300, 2_000, Math.random);
+      console.warn(
+        `[${label}] 流内失败（第 ${String(attempt)} 次，尚未产出任何输出）⇒ ${String(backoff)}ms 后重试：`
+        + (retryError instanceof Error ? retryError.message : String(retryError)),
+      );
+      try {
+        await waitRetryDelay(backoff, call?.signal);
+      } catch (error) {
+        call?.signal?.throwIfAborted();
+        throw error;
+      }
     }
   };
-
-  try {
-    let done = false;
-    while (!done) {
-      const read = await reader.read();
-      if (read.done) break;
-      guard?.bump(); // 有分片 → 续期（只有完全静默才会到点）
-      buf += decoder.decode(read.value, { stream: true });
-      let nl: number;
-      while ((nl = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, nl).trim();
-        buf = buf.slice(nl + 1);
-        if (!line.startsWith("data:")) continue; // event:/注释/空行跳过（type 以 data JSON 为准）
-        const payload = line.slice(5).trim();
-        if (!payload) continue;
-        // C7（审查 P2）容错边界修正（审查 S1-6）：只对「不是帧的行」容错——注释心跳、
-        // 网关塞进来的非 JSON 文本。以 { 开头的真帧 parse 失败不得静默 continue：那意味着
-        // 上游把一帧截断了，跳过 = 少一截正文/少一个 tool_call 分片，而流随后正常收尾会让
-        // 本轮以「不完整输出」成功收束（loop 无从得知）。同文件 parseArgs 的口径就是协议级
-        // 异常 fail loud，这里与之对齐。
-        let event: AnthropicSseEvent;
-        try {
-          event = JSON.parse(payload) as AnthropicSseEvent;
-        } catch {
-          if (!payload.startsWith("{")) continue; // 心跳/注释/网关杂帧：容忍
-          throw new Error(`${label} SSE 帧损坏（半帧截断？）：JSON 解析失败，拒绝静默丢字`);
-        }
-        yield* handleEvent(event);
-      }
-    }
-    if (inputTokens !== null || outputTokens !== null || cacheRead !== null || cacheWrite !== null) {
-      yield {
-        type: "usage",
-        // Anthropic 的 input_tokens 是「未命中缓存的那一段」，加上读/写缓存才是本次真实输入
-        inputTokens: (inputTokens ?? 0) + (cacheRead ?? 0) + (cacheWrite ?? 0),
-        outputTokens: outputTokens ?? 0,
-        ...(cacheRead !== null ? { cacheReadInputTokens: cacheRead } : {}),
-        ...(cacheWrite !== null ? { cacheWriteInputTokens: cacheWrite } : {}),
-      };
-    }
-    // 流正常收尾，但**原因**说这一轮没说完：正文被输出预算/内容策略收走。
-    // 上面 C7 那条守的是「半帧被截断」，这里守的是「整帧到齐、模型却没被给够篇幅」——
-    // 同一句注释里点名的危害（loop 无从得知），另一支一直没管。
-    const truncated = turnTruncatedEvent(callId, stopReason, outputTokens);
-    if (truncated) yield truncated;
-    // 同位置、互斥：整个流一条 message_delta.stop_reason 都没见到 ⇒ 「不知道它说没说」的证据。
-    const stopMissing = turnStopMissingEvent(callId, stopReason, outputTokens);
-    if (stopMissing) yield stopMissing;
-  } finally {
-    guard?.dispose();
-    // 消费者提前 break / 出错退出时主动取消 body，否则连接与对端资源一直挂着。
-    void reader.cancel().catch(() => {});
-  }
+  yield* streamOnce();
 }

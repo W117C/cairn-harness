@@ -22,6 +22,8 @@ export function isNearBottom(m: { scrollTop: number; scrollHeight: number; clien
 export interface StickyScroll {
   /** true = 视口贴底（此时不显示浮钮）。 */
   stuck: boolean;
+  /** true = 视口在顶部（滚离顶部后顶栏渐隐显形）。 */
+  atTop: boolean;
   /** 回到底部；behavior 缺省 instant（人手点击请传 "smooth"）。 */
   scrollToBottom: (behavior?: ScrollBehavior) => void;
   /** 回到顶部（⌘↑）；脱离贴底（浮钮随之出现）。 */
@@ -45,12 +47,14 @@ export function scrollBehavior(wanted: ScrollBehavior): ScrollBehavior {
 
 export function useStickyScroll(el: HTMLDivElement | null): StickyScroll {
   const [stuck, setStuck] = useState(true);
+  const [atTop, setAtTop] = useState(true);
   const pinned = useRef(true);
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "instant") => {
     if (el === null) return;
     pinned.current = true;
     el.scrollTo({ top: el.scrollHeight, behavior: scrollBehavior(behavior) });
     setStuck(true);
+    setAtTop(el.scrollTop <= 1);
   }, [el]);
   const scrollToTop = useCallback((behavior: ScrollBehavior = "instant") => {
     if (el === null) return;
@@ -58,6 +62,7 @@ export function useStickyScroll(el: HTMLDivElement | null): StickyScroll {
     el.scrollTo({ top: 0, behavior: scrollBehavior(behavior) });
     // 内容不足一屏时顶部即底部——按真实位置判，不盲目离开贴底。
     setStuck(isNearBottom(el));
+    setAtTop(true);
   }, [el]);
   const restoreTo = useCallback((top: number, behavior: ScrollBehavior = "instant") => {
     if (el === null) return;
@@ -65,6 +70,7 @@ export function useStickyScroll(el: HTMLDivElement | null): StickyScroll {
     // instant 落位后 scrollTop 已同步——按真实落点判贴底（clamp 到上限时即贴底，正确）。
     pinned.current = isNearBottom(el);
     setStuck(pinned.current);
+    setAtTop(el.scrollTop <= 1);
   }, [el]);
 
   useEffect(() => {
@@ -72,6 +78,7 @@ export function useStickyScroll(el: HTMLDivElement | null): StickyScroll {
     const onScroll = (): void => {
       pinned.current = isNearBottom(el);
       setStuck(pinned.current);
+      setAtTop(el.scrollTop <= 1);
     };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
@@ -91,5 +98,5 @@ export function useStickyScroll(el: HTMLDivElement | null): StickyScroll {
     return () => ro.disconnect();
   }, [el]);
 
-  return { stuck, scrollToBottom, scrollToTop, restoreTo };
+  return { stuck, atTop, scrollToBottom, scrollToTop, restoreTo };
 }

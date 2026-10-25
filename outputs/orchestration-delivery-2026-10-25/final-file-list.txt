@@ -1,0 +1,37 @@
+HEAD f4bffa3a3a399459c84d4c2dcf50ec2e62155560
+
+== orchestration files ==
+src/orchestration/artifacts.ts
+src/orchestration/engine.ts
+src/orchestration/flow.ts
+src/orchestration/local-backend.ts
+src/orchestration/project.ts
+src/orchestration/schedule.ts
+src/orchestration/store.ts
+src/orchestration/types.ts
+src/orchestration/validate.ts
+src/main/orchestration-backend.ts
+src/main/orchestration-service.ts
+tests/orchestration-backend.test.ts
+tests/orchestration-engine.test.ts
+tests/orchestration-plan.test.ts
+tests/orchestration-project.test.ts
+tests/orchestration-provider.test.ts
+tests/orchestration-schedule.test.ts
+tests/orchestration-service.test.ts
+tests/orchestration-store.test.ts
+tests/orchestration-fixture.ts
+apps/desktop/src/renderer/components/OrchestrationPane.tsx
+apps/desktop/src/renderer/components/orchestration-pane.css
+apps/desktop/tests/orchestration-host.test.ts
+apps/desktop/tests/orchestration-pane.test.tsx
+docs/superpowers/plans/2026-10-25-orchestration-delivery.md
+
+== shared hot files (mixed with other sessions) ==
+src/main/ipc-protocol.ts
+apps/desktop/src/main/channels.ts
+apps/desktop/src/main/kernel-host.ts
+apps/desktop/src/main/index.ts
+apps/desktop/src/renderer/components/PaneDock.tsx
+apps/desktop/src/preload/index.ts
+tests/ipc-protocol-version.test.ts

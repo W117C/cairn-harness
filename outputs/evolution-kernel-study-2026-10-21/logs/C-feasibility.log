@@ -1,0 +1,21 @@
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+ERROR: failed to copy trust settings of system certificate-25291
+[feasibility] B1-bugfix-crossfile        不可跑 ← 缺模型凭据（CAIRN_API_KEY / CAIRN_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] B2-feature-export          不可跑 ← 缺模型凭据（CAIRN_API_KEY / CAIRN_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] B3-refactor-callsite       不可跑 ← 缺模型凭据（CAIRN_API_KEY / CAIRN_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] B4-bugfix-pagination       不可跑 ← 缺模型凭据（CAIRN_API_KEY / CAIRN_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] B5-bugfix-async            不可跑 ← 缺模型凭据（CAIRN_API_KEY / CAIRN_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] B6-feature-flag            不可跑 ← 缺模型凭据（CAIRN_API_KEY / CAIRN_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] B7-feature-csv             不可跑 ← 缺模型凭据（CAIRN_API_KEY / CAIRN_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] B8-feature-memo            不可跑 ← 缺模型凭据（CAIRN_API_KEY / CAIRN_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] B9-refactor-rename         不可跑 ← 缺模型凭据（CAIRN_API_KEY / CAIRN_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] B10-refactor-dedupe        不可跑 ← 缺模型凭据（CAIRN_API_KEY / CAIRN_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] B11-refactor-signature     不可跑 ← 缺模型凭据（CAIRN_API_KEY / CAIRN_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] B12-long-horizon           不可跑 ← 缺模型凭据（CAIRN_API_KEY / CAIRN_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] 逐名格：0 / 12 条带 judge 规格（FAIL_TO_PASS 合计 0 条／PASS_TO_PASS 合计 0 条）⇒ 这一批**没有一条**有第二半尺 ⇒ 「该转绿的没绿」与「该保住的坏了」仍只在同一枚退出码上同形
+[feasibility] 工具链自检 ✅ node --version
+[feasibility] 可跑 0 / 分母 12（未发任何模型请求 ⇒ 零花费）
+[feasibility] 装配面（产品缺省开的键 ↔ 本跑器）：autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same
+⇒ 12 条任务全部不可跑 ⇒ 基准读数无从谈起，先看 blockers 里缺什么

@@ -4,12 +4,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
 const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/Composer.tsx", import.meta.url)), "utf8");
 
 describe("运行状态条", () => {
   it("正文开始后不再叫「思考中」：生成中 → 收尾中（run 未完但正文已停）", () => {
-    const app = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+    const app = readAppSurface();
     expect(app).toContain("hasAssistantTextThisRun(events)");
     expect(app).toContain("lastDeltaAt.current.set");
     expect(app).toContain("answerQuiet");

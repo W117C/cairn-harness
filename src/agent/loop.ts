@@ -4,6 +4,7 @@ import { redactEventForLog, redactSecrets } from "../events";
 import { autoOf, denyReason, gate, type PermissionMode, type ToolResultWithAudit } from "../permissions";
 import type { HookEngine } from "./plugins/hooks";
 import { projectContext } from "./context";
+import { SubmissionLedger, submissionRequestId } from "./submission-ledger";
 import type { LegacyNextProvider, ModelOutput, Provider } from "../providers";
 import { streamFromNextSource } from "../providers";
 import { failureDigest, repeatDigestNote, verifyOutcomeCause, type VerifyHook, type VerifyOutcome } from "./verify";
@@ -126,6 +127,52 @@ export interface LoopOptions {
    *  - sidechat：只读问答，重复便宜。
    *  所以只有人直用的主会话（agent-runner）显式开。 */
   stuckNudge?: boolean;
+  /** 第 9 点·用户干预注入（steering）：**轮中**取一条用户插话。
+   *
+   *  与 `pendingImages` 同一形状（收件盒由调用方持有），但时序不同：图片只能等到**下一轮**请求
+   *  （provider 在本轮调工具前就已经发出了消息），而插话**就是要在下一拍请求里出现**——
+   *  两者都落在「轮界」这一拍，所以都从盒子取。
+   *
+   *  **安全边界（为什么是轮界而不是随时）**：这一拍之前所有在途工具都已结算、事件已落盘
+   *  （`for await` 循环已退到轮末），所以插入一条新 user 消息不会把 tool_call/tool_result 对
+   *  拆开、也不会与正在执行的工具抢写；取消信号也在同一个位置被复查。
+   *
+   *  **它不开新轮**：插话落成带 `origin:{kind:"steering",step}` 的 `user_message`，
+   *  `eventsForCurrentRun()` 明确跳过它（否则整轮之前的承诺与证据会静默失效）。
+   *  它也不额外买步：一次 `run` 的步数帽仍是那一个帽，插话不增加 `maxSteps` 的计数语义。
+   *
+   *  缺省 undefined = 零行为（既有路径字节与调用次数都不变）。 */
+  steering?: {
+    /** 有插话就取走（take 即清空：同一条不会被两拍各付一遍 token）。空/undefined = 没有。 */
+    take: () => readonly string[] | undefined;
+  };
+  /** 第 1 点·截断续跑：输出被预算/内容策略砍断时（`turn_truncated`），再要**一轮**把话说完。
+   *
+   *  为什么必须有：`context.ts` 的 `truncationNote` 早就生成了「那不是完整结论，别当成已答完」
+   *  这条 user 消息，但旧 loop 在截断那一拍直接 `return` ⇒ **没有任何下一轮去读它**
+   *  （实测：请求数=1、提示在最终投影里、零消费者）。一条没人读的提示与没有它等价。
+   *
+   *  边界与另两条返修环同形：**每 run 至多一轮**（续不出来就收束，不无限要）；
+   *  `false` = 逐字回到旧行为（不给它时缺省**开**：这是「把话说完」，不是可选增强）。
+   *  与 `autoVerifyRepair` / `deliveryRepair` 是三条**不同**的路，各自只解决自己那一类红。 */
+  truncationRepair?: boolean;
+}
+
+/** tool_result 正文的**取料**（单一出口）：工具返回体是运行期对象，`output` 可能缺、为 null、
+ *  或根本不是字符串（插件 / MCP / 脚本化工具都不受本仓类型约束）。
+ *
+ *  为什么单开一个而不是就地 `String()`：`String(undefined)` 得到字面量 `"undefined"`——
+ *  模型会把它当成真实输出读，而它其实是"这条回执没有正文"。两者必须分得开：
+ *  前者是**有内容的**错误，后者是**没有内容**的事实。空字符串同理不许拿来顶替。 */
+function readToolOutput(output: unknown): string {
+  if (typeof output === "string") return output;
+  if (output === undefined) return "[这条工具回执没有正文]";
+  if (output === null) return "[工具回执的正文是 null]";
+  try {
+    return "[非字符串正文] " + JSON.stringify(output);
+  } catch {
+    return "[非字符串正文·无法序列化]";
+  }
 }
 
 // agent loop：事件流 → 模型 → 工具 → 事件流。
@@ -193,6 +240,8 @@ export const HARNESS_VERIFY_CALL_ID = "harness-auto-verify";
 export async function runLoop(opts: LoopOptions): Promise<void> {
   const { workspace, userMessage, userMessageSkill, userMessageOrigin, userMessageAttachments } = opts;
   const seen: AgentEvent[] = [];
+  // ADR 0005：每个 run 独立的账本（含 worker），终态失败粘滞；不承诺跨 run / 重启去重。
+  const submissions = new SubmissionLedger<"continue" | "environment-red" | "stop">();
   // Persist first: failed writes must not become model-visible history.
   // 落盘与投影用同一份脱敏副本（`seen`）；工具执行面照原件执行。
   const events: EventLog = {
@@ -230,6 +279,12 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   let repairPending = false;
   // 能力 12 交付断言的返修环：本 run 是否已为了补做而多要过一轮（至多一轮）。
   let deliveryRepairUsed = false;
+  /** 第 1 点·终止判定的另一半：本轮是否以「被输出预算/内容策略截断」结束。
+   *  与「模型自己说完」在事件流上**长得一模一样**（都是零 tool_call），但语义相反：
+   *  前者是**没说完**。见下面收束段那处 `truncationRepair`。 */
+  let truncatedThisRun = false;
+  /** 截断续跑是否已用过（至多一次，与另两条返修环同一上限形状）。 */
+  let truncationRepairUsed = false;
   let deliveryGuardRecorded = false;
   // 换路压力（能力 4/9）：同一调用连败/连抄同一结果时，在那条 tool_result 尾部追加一行提示。
   // 复用 worker 看门那颗纯函数（stuck.ts）与它的阈值，不另造检测器。差别在动作：编排器命中
@@ -244,15 +299,21 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
    *  免得"循环这条路的判据"与"门／语料那条路的判据"各看一份数据（第十三族：同一谓词两份）。 */
   const verifyBeats: VerifyBeat[] = [];
   let wroteSinceVerifyBeat = false;
+  /** 与 `wroteSinceVerifyBeat` 同一个语汇：上一次 verify 之后**用户有没有说过话**。
+   *  为什么与写动作分开记：写＝「模型在换路子试」，说话＝「**用户把目标改写了**」。
+   *  两件事都让「同一条结论再红一次」不再是同一件事，但理由相反，判据里也是两条独立抑制项。
+   *  第 9 点接上轮中插话之前这个位**恒为 false**（用户不可能中途说话，那时是对的）；
+   *  现在它有了真生产者，不接就等于让插话在无进展判据里**不可见**。 */
+  let userSpokeSinceVerifyBeat = false;
   const nudgedNoProgress = new Set<string>();
   /** 跑一拍 verify 系统门。两种形态：
-   *  - manual（模型自调）：有配对的 tool_call ⇒ 失败原文注入同轮继续修，返回 "continue"。
+   *  - manual（模型自调）：有配对的 tool_call ⇒ 失败原文注入同轮继续修，环境红另标以识别无进展重发。
    *  - auto（harness 收束前补拍）：**没有**配对的 tool_call，也就没有合法的**同轮**注入通道
    *    （裸 tool_result 会让 provider 侧 tool 消息失去前置 tool_calls 而 400；合成 tool_call
    *    又违反 action-fusion 明写的「no extra tool calls」不变量）⇒ 只落 verify_result 证据，
    *    红在时间线上可见，不冒充模型行为、也不偷偷多要一轮。返回恒为 "stop"。
    *    跨轮通道在投影侧：context.ts 的 autoVerifyNote 把这条红投成下一轮可见的 user 消息。 */
-  const verifyBeat = async (callId: string, auto: boolean): Promise<"stop" | "continue" | "auto-red"> => {
+  const verifyBeat = async (callId: string, auto: boolean): Promise<"stop" | "continue" | "environment-red" | "auto-red"> => {
     verifyAttempts++;
     // verify 是系统门：钩子自身抛错（.agent/config.json 损坏、沙箱 exec 异常）应当记为
     // 「一次验证失败」，而不是把整轮任务炸掉。工具执行早有同族 try/catch，这里补齐同一口径；
@@ -295,10 +356,11 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       verifyBeats.push({
         index: verifyAttempts, attempt, maxAttempts: maxVerify, ok: outcome.ok,
         signature: outcome.ok ? "ok" : signature, named,
-        wroteSinceLast: wroteSinceVerifyBeat, userSpokeSinceLast: false,
+        wroteSinceLast: wroteSinceVerifyBeat, userSpokeSinceLast: userSpokeSinceVerifyBeat,
       });
       if (verifyBeats.length > 8) verifyBeats.shift();
       wroteSinceVerifyBeat = false;
+      userSpokeSinceVerifyBeat = false; // 与写那一位置同源同时刻清：一拍只算一次
     }
     if (outcome.ok) {
       // 成功的 verify 也必须留配对的 tool_result：旧实现只落 verify_result 就 return，
@@ -392,7 +454,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       // 不会让门里掩码、门口放行。`lastVerifyDigest` 的比对仍用同一脱敏副本，口径一致。
       output: redactSecrets(envPreface + (repeat ? repeatDigestNote(outcome, attempt) : digest) + noProgressNote).text,
     });
-    return "continue";
+    return envBeat ? "environment-red" : "continue";
   };
 
   // 新旧形态统一收敛成流式事件源（legacy next() 源遇 tool_call 断轮，日志同序）
@@ -418,7 +480,16 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         if (opts.signal?.aborted) return;
       }
     } catch (err) {
-      if (!isAbortLike(err) && !opts.signal?.aborted) {
+      // 落不落这条 error，取决于「这一趟是**谁**叫停的」——两件相反的事不能共用一个条件：
+      //  · `opts.signal.aborted` = **用户/编排器取消**（终态由编排器分类为 cancelled）⇒ 不落，
+      //    那本来就是正常收束，落一条红会把"用户按了停止"读成"出错了"。
+      //  · provider 内部**停滞守卫**的 abort = **对端挂起**（`net.ts` 以 Error 作 abort reason：
+      //    「停滞超时：Nms 内无任何数据」）⇒ **必须落**。它不是取消，是这一趟被打断，
+      //    而这条 error 是"为什么停了"的唯一落盘证据（2026-10-23 实测：旧条件下这一趟
+      //    在事件流里只留一条 user_message 就戛然而止，用户与审计都看不到原因）。
+      // 判据：用户取消 ⇒ 不落；其余（含守卫停滞、协议错、断网）⇒ 落。
+      const userCancelled = opts.signal?.aborted === true;
+      if (!userCancelled) {
         await events.append({
           type: "error",
           message: err instanceof Error ? err.message : String(err),
@@ -447,70 +518,159 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     // 被取消 / 验证通过或达上限 / 模型自然收束——这三条出去时承诺都还没对过账。
     if (opts.signal?.aborted) return; // M3a：取消信号于轮界收束（终态由编排器分类：cancelled）
     currentStep = step;
+    // ---- 第 9 点：轮中插话的注入位（**只在轮界，绝不在 for-await 里**）----
+    // 位置要求①：必须在 `currentStep = step` **之后**——`streamFn(projectContext(seen))` 是在
+    // 下面那句被调用的，它当场快照历史；写在它之前注入才进得了**这一拍**请求。
+    // 位置要求②：必须在 for-await 之外——上一拍的每个 tool_call 都已配上 tool_result 落盘、
+    // 循环已退到轮末，因此插一条 user 消息不会把 tool 配对拆开、也不会与在途工具抢写。
+    // 取料排在本轮第一次请求**之前**也是对的：那时盒子里是空的（没人能在本轮开始前插话），
+    // 而 `take()` 一次取走 ⇒ 之后各拍都不会把同一条再付一遍 token。
+    // 取消与取料的先后：**取消优先**，用户刚按了停止就不该再为一句插话落事件、更不该多花一次请求。
+    // 这条保证由**多处 abort 复查共同给**（本轮顶那个、每步末那个、工具执行前后那几个），
+    // 不是单靠某一行——所以判据钉的是**行为**（`steering-injection` 的「取消后迟到的那条插话」：
+    // 盒子里的那条必须**没被取走**、也**没换来第 2 次请求**），而不是某个行号。
+    // 别把这条注释读成「挪走紧邻那行 abort 就破功」：单挪那行，循环仍会在步末那道 abort 收束。
+    if (opts.steering !== undefined) {
+      const injections = opts.steering.take();
+      if (injections !== undefined) {
+        for (const text of injections) {
+          if (text.trim() === "") continue; // 空插话不落事件：它不是指令，只是一次误触
+          await events.append({
+            type: "user_message",
+            content: text,
+            // 轮次序号是**展示/审计**用（判定不读它，见 `SteeringOrigin` 的注释）。
+            origin: { kind: "steering", step },
+          });
+          // 第 9 点与 R1 的交点：用户插了话 ⇒ 目标可能已被改写 ⇒「同一条结论再红一次」
+          // 不再是同一件事。判据（`detectVerifyStagnation`）早就有这一条抑制项，
+          // 但生产端此前恒发 false（用户不可能中途说话），这条抑制永远走不到。
+          userSpokeSinceVerifyBeat = true;
+        }
+      }
+    }
     let sawToolCall = false;
+    let onlyVerifyReplays = true;
     for await (const output of streamFn(projectContext(seen))) {
-      // 落盘的那一份与执行用的那一份必须分开：args 只在落盘面脱敏，执行面照原样拿
-      // （模型自己写的凭据原样执行，不要在这里把它改成一个掩码路径）。
-      await events.append(output); // append 内统一脱敏，落盘与投影同副本
-      if (output.type !== "tool_call") continue; // assistant_message / delta / usage：继续
-
-      if (opts.signal?.aborted) {
-        await cancelUnstartedTool(output.id);
-        return;
+      if (output.type !== "tool_call") {
+        await events.append(output);
+        // 截断是一个**收束语义**的事实，不是普通输出：记下来供收束段判「它其实没说完」。
+        if (output.type === "turn_truncated") truncatedThisRun = true;
+        continue;
       }
-
       sawToolCall = true;
+      // 重复 id 回用原提交，参数/工具名变化也不算新调用。历史只保留原调用与回执，
+      // 不能只再 append 一条 tool_call 而不配结果，下一轮模型照常读取第一次的完整回执。
+      const requestId = submissionRequestId(opts.agentId ?? "main", output.id);
+      let isNewSubmission = false;
+      const control = await submissions.submit(requestId, async () => {
+        isNewSubmission = true;
+        // 落盘的那一份与执行用的那一份必须分开：args 只在落盘面脱敏，执行面照原样拿
+        // （模型自己写的凭据原样执行，不要在这里把它改成一个掩码路径）。
+        await events.append(output); // append 内统一脱敏，落盘与投影同副本
 
-      // M2f 工具表摘除（sidechat 只读白名单 / worker 工具面）：不在表内的工具根本不进入执行面——
-      // 与提示词无关的硬闸，工具调用被拒且给出明确原因（fail-closed）。
-      // ⚠️ 排在 verify 反射循环**之前**：那句「系统门优先于权限门与 TOOLS」说的是绕过 ask/approval，
-      //    不含绕过白名单。今天没人同时给 allowedTools 与 verify 钩子（worker 侧 orchestrator.ts:1473
-      //    不传 verify）⇒ 洞未暴露；一旦按 spec §6 W4a 给 worker 接上收束闸，「表里没有 verify 却能
-      //    执行 verify」就是权限旁路。次序由 tests/loop.test.ts「allowedTools 硬闸与 verify 系统门的次序」钉住。
-      if (opts.allowedTools && !opts.allowedTools.includes(output.name as ToolName)) {
-        await events.append({
-          type: "tool_result",
-          callId: output.id,
-          ok: false,
-          output: `[tool table] ${output.name} 不在本会话工具表（只读白名单摘除）`,
-          blockedBy: "tool-table",
-        });
-        continue;
-      }
+        if (opts.signal?.aborted) {
+          await cancelUnstartedTool(output.id);
+          return "stop";
+        }
 
-      // §9.3 disallowed-tools：激活期摘工具（同一类硬闸，区别只在**时机**——run 中途才生效）。
-      // 同样排在 verify 反射循环之前：被摘掉的工具不能因为「它是系统门」就绕过白名单。
-      const sk = opts.skillDenial?.(output.name);
-      if (sk !== undefined && sk !== null) {
-        await events.append({
-          type: "tool_result",
-          callId: output.id,
-          ok: false,
-          output: `[skill] ${output.name} 已被 ${sk} 的 disallowed-tools 摘除（本 turn 内不可用）`,
-          blockedBy: "skill-denial",
-        });
-        continue;
-      }
-
-      // ---- verify 反射循环（系统门：优先于权限门与 TOOLS，但不越过上面的工具表硬闸）----
-      if (output.name === "verify") {
-        if (!opts.verify) {
+        // M2f 工具表摘除（sidechat 只读白名单 / worker 工具面）：不在表内的工具根本不进入执行面——
+        // 与提示词无关的硬闸，工具调用被拒且给出明确原因（fail-closed）。
+        // ⚠️ 排在 verify 反射循环**之前**：那句「系统门优先于权限门与 TOOLS」说的是绕过 ask/approval，
+        //    不含绕过白名单。今天没人同时给 allowedTools 与 verify 钩子（worker 侧 orchestrator.ts:1473
+        //    不传 verify）⇒ 洞未暴露；一旦按 spec §6 W4a 给 worker 接上收束闸，「表里没有 verify 却能
+        //    执行 verify」就是权限旁路。次序由 tests/loop.test.ts「allowedTools 硬闸与 verify 系统门的次序」钉住。
+        if (opts.allowedTools && !opts.allowedTools.includes(output.name as ToolName)) {
           await events.append({
             type: "tool_result",
             callId: output.id,
             ok: false,
-            output: "verify: 未接线验证门（fail-closed）",
-            blockedBy: "verify-unwired",
+            output: `[tool table] ${output.name} 不在本会话工具表（只读白名单摘除）`,
+            blockedBy: "tool-table",
           });
-          continue;
+          return "continue";
         }
-        // verify 会执行仓库自带命令：审计/阻断型 PreToolUse 钩子也必须看得到它
-        // （旧实现 verify 分支排在 hook 之前并 continue，`matcher:"*"` 的钩子整支失明）。
+
+        // §9.3 disallowed-tools：激活期摘工具（同一类硬闸，区别只在**时机**——run 中途才生效）。
+        // 同样排在 verify 反射循环之前：被摘掉的工具不能因为「它是系统门」就绕过白名单。
+        const sk = opts.skillDenial?.(output.name);
+        if (sk !== undefined && sk !== null) {
+          await events.append({
+            type: "tool_result",
+            callId: output.id,
+            ok: false,
+            output: `[skill] ${output.name} 已被 ${sk} 的 disallowed-tools 摘除（本 turn 内不可用）`,
+            blockedBy: "skill-denial",
+          });
+          return "continue";
+        }
+
+        // ---- verify 反射循环（系统门：优先于权限门与 TOOLS，但不越过上面的工具表硬闸）----
+        if (output.name === "verify") {
+          if (!opts.verify) {
+            await events.append({
+              type: "tool_result",
+              callId: output.id,
+              ok: false,
+              output: "verify: 未接线验证门（fail-closed）",
+              blockedBy: "verify-unwired",
+            });
+            return "continue";
+          }
+          // verify 会执行仓库自带命令：审计/阻断型 PreToolUse 钩子也必须看得到它
+          // （旧实现 verify 分支排在 hook 之前并 continue，`matcher:"*"` 的钩子整支失明）。
+          if (opts.hooks) {
+            try {
+              const pre = await opts.hooks.run("PreToolUse", {
+                event: "PreToolUse",
+                tool_name: "verify",
+                tool_args: output.args,
+                tool_use_id: output.id,
+                agent_id: opts.agentId,
+              });
+              if (pre.blocked) {
+                await events.append({
+                  type: "tool_result",
+                  callId: output.id,
+                  ok: false,
+                  output: "[hook blocked] " + (pre.blockReason ?? "PreToolUse hook 阻断"),
+                  blockedBy: "hook",
+                });
+                return "continue";
+              }
+            } catch (err) {
+              console.warn("[hooks] PreToolUse(verify) 引擎失败:", err instanceof Error ? err.message : String(err));
+            }
+          }
+          if (opts.signal?.aborted) {
+            await cancelUnstartedTool(output.id);
+            return "stop";
+          }
+          const beat = await verifyBeat(output.id, false);
+          if (opts.hooks && !opts.signal?.aborted) {
+            try {
+              await opts.hooks.run("PostToolUse", {
+                event: "PostToolUse",
+                tool_name: "verify",
+                tool_args: output.args,
+                tool_response: beat === "stop" ? "[verify] 已收束" : "[verify] 未通过，继续修",
+                tool_use_id: output.id,
+                agent_id: opts.agentId,
+              });
+            } catch (err) {
+              console.warn("[hooks] PostToolUse(verify) 引擎失败:", err instanceof Error ? err.message : String(err));
+            }
+          }
+          if (beat === "stop") return "stop"; // 通过或达上限 → 收束，不再调用模型
+          return beat === "environment-red" ? "environment-red" : "continue"; // 失败已回注，同轮继续修
+        }
+
+        // M2e：PreToolUse hook 先于权限门（CC 语义）；deny/exit2 阻断该次工具调用，
+        // allow/ask 继续走原有权限管线（hook 无特权，§9.8 让步序）。
         if (opts.hooks) {
           try {
             const pre = await opts.hooks.run("PreToolUse", {
               event: "PreToolUse",
-              tool_name: "verify",
+              tool_name: output.name,
               tool_args: output.args,
               tool_use_id: output.id,
               agent_id: opts.agentId,
@@ -523,201 +683,176 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
                 output: "[hook blocked] " + (pre.blockReason ?? "PreToolUse hook 阻断"),
                 blockedBy: "hook",
               });
-              continue;
+              return "continue";
             }
           } catch (err) {
-            console.warn("[hooks] PreToolUse(verify) 引擎失败:", err instanceof Error ? err.message : String(err));
+            // hook 引擎自身故障不得炸 loop（与 prune/地图同族的静默降级面）
+            console.warn("[hooks] PreToolUse 引擎失败:", err instanceof Error ? err.message : String(err));
           }
         }
-        const beat = await verifyBeat(output.id, false);
-        if (opts.hooks) {
+
+        // 权限门：先过门再动手（verify 已在上面分支处理，此处 name 不含 verify）
+        if (opts.signal?.aborted) {
+          await cancelUnstartedTool(output.id);
+          return "stop";
+        }
+        const name = output.name as Exclude<ToolName, "verify">;
+        const decision = gate(mode, name, interactive);
+        if (decision !== "allow") {
+          const reason = decision === "deny" ? denyReason(name) : null;
+          // 方案门**不是档位裁决**，所以这条拒绝不报档。`checkPermission` 在查
+          // `SIDE_EFFECT_DECISION` 之前就先判 `planBlocks()`（permissions/index.ts:107），
+          // 四档一律拒、且都与用户传了什么无关。而这一层的 mode 是冻结的 `auto`
+          // （agent-runner.ts:1523），照实写出来就变成「在 auto 档」——传了 `--mode read-only`
+          // 的用户撞到方案门也会看见它，于是以为自己的 flag 没生效，去 debug 错的方向。
+          // 真正的档位裁决在 `gatedTool` 那一层（它读 `s.autonomy.mode`），那一层逐档正确。
+          // 判据用 `reason` 而不是 `decision === "deny"`：非交互时 `ask` 被降级成 deny
+          // （`gate()`）也是 deny，但那一档确实参与过裁决，得照实报。
+          const where = reason === null ? `在 ${mode} 档（${interactive ? "交互" : "非交互"}）下` : "";
+          await events.append({
+            type: "tool_result",
+            callId: output.id,
+            ok: false,
+            output: `[permission denied] ${output.name} ${where}被门拒绝（${decision}${reason ? `：${reason}` : ""}）`,
+            blockedBy: "permission",
+          });
+          return "continue";
+        }
+
+        const tool = (opts.tools ?? TOOLS)[name] ?? opts.resolveTool?.(name);
+        let result;
+        if (!tool) {
+          result = { ok: false, output: `unknown tool: ${output.name}` };
+        } else {
+          const ctx = {
+            workspace,
+            emit: (e: Parameters<EventLog["append"]>[0]) => events.append(e),
+            callId: output.id,
+            clarify: opts.clarify,
+            plan: opts.plan,
+            ...(opts.signal ? { signal: opts.signal } : {}), // C12：取消信号透传进长驻工具
+            ...(opts.impact ? { impact: opts.impact } : {}), // M7：影响面钩子透传进写工具
+          };
           try {
-            await opts.hooks.run("PostToolUse", {
-              event: "PostToolUse",
-              tool_name: "verify",
+            result = await tool.run(output.args, ctx);
+            // 识图：图片内容块进待发盒（下一轮请求带上）。**只在这里存一次**——
+            // 落盘的 tool_result 不带 base64，所以这条图不会跟着事件流重放，也不必去重。
+            if (result.images !== undefined && result.images.length > 0) {
+              opts.pendingImages?.push(result.images);
+            }
+          } catch (err) {
+            result = { ok: false, output: err instanceof Error ? err.message : String(err) };
+          }
+        }
+        // M1c：gatedTool 附带判定留痕（结构扩展），透传进 tool_result 事件；
+        // auto 由 gate 派生（唯一 writer），历史语义不变：只有 rule / session_scope 两种自动放行才落 auto。
+        const gateMeta = (result as ToolResultWithAudit).gate;
+        const audit = autoOf(gateMeta);
+        // D7 覆盖前快照：正文里那句给模型看（它得知道去哪儿找回原件），这个字段给界面与审计看。
+        // 同一个事实只有一个 writer（写工具），这里只搬运不改写。
+        const snapshotId = (result as { snapshotId?: string }).snapshotId;
+        const change = (result as { change?: "created" | "modified" }).change;
+        // 交付给用户的产物引用：与 snapshotId / change 同一条搬运纪律（唯一 writer 是工具，
+        // 这里只透传不改写）。base64 不进事件流，所以这一格只有路径与用途。
+        const artifact = (result as { artifact?: { kind: "image" | "html" | "svg" | "text"; path: string; note?: string } }).artifact;
+        // 换路压力记账（只读，不改事件序）：动作换了 ⇒ 上一轮的重复段结束，解除提示帽
+        let repeatNote = "";
+        // **历史恒收，提示才受开关管**（2026-10-19 独立评审追出的 MEDIUM-LOW）：
+        // 旧实现把"记这一拍"也关在 `stuckNudge` 里面 ⇒ 编排器的 worker 那条 runLoop 不开这个开关
+        // （它自己在编排器里另有一套卡死看门狗）⇒ worker 的 `stuckTurns` **恒为空**
+        // ⇒ `detectStuck` 与 `detectAlternatingThrash`（R3 往返抖动）在 worker 路径上**永远判不出**：
+        // 同一串 A/B/A/B/A/B 的动作往返，主会话判 thrashing=true、worker 判 false（列表恒空）。
+        // 这两件事是**两件事**：「有没有得判」（历史）与「判出来了要不要说给模型听」（提示）。
+        // 历史是判据的输入，开关只该管后者。
+        {
+          const action = stuckActionOf(output.name, output.args);
+          const lastTurn = stuckTurns.length > 0 ? stuckTurns[stuckTurns.length - 1] : undefined;
+          if (lastTurn !== undefined && lastTurn.action !== action) nudgedActions.delete(lastTurn.action);
+          stuckTurns.push({ action, observation: stuckObservationOf(result.output), ok: result.ok });
+          if (stuckTurns.length > DEFAULT_STUCK_CONFIG.windowSize) stuckTurns.shift();
+        }
+        if (opts.stuckNudge === true) {
+          const action = stuckActionOf(output.name, output.args);
+          const verdict = detectStuck(stuckTurns);
+          if (verdict.stuck && !nudgedActions.has(action)) {
+            nudgedActions.add(action);
+            // 每句只声称检测器真比过的那件事（第 313 页）。旧文案两处越界：
+            //  ① 错误分支只看 action＋全失败就断言「原样重试不会改变结果」——三次连败而错误各不同时，
+            //     这句话把"该再看一次"的那次重试劝掉了（flaky 测试/超时/竞态正是这一类）；
+            //  ② 观察分支说「逐字相同」，而比的是 `stuckObservationOf` 截出来的前 200 字。
+            repeatNote = verdict.rule === "same_action_error_x3"
+              ? verdict.sameObservation
+                ? `\n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次失败且错误相同（比对取前 200 字）——原样重试不会改变结果：换一个探针（改命令 / 换路径 / 直接 read 那个文件）或说明卡点。`
+                : `\n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次失败，但每次错误不同——最新那条本身就是新信息：先读它，再决定换探针还是先修环境。`
+              : `\n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次拿到相同结果（比对取前 200 字）——再问一次不会有新信息：换一个探针或说明为何仍需重复。`;
+          }
+        }
+        // M2e：PostToolUse（成功）/ PostToolUseFailure（失败）——additionalContext 回注 tool_result 尾部
+        let postContext = "";
+        if (opts.hooks && !opts.signal?.aborted) {
+          try {
+            const post = await opts.hooks.run(result.ok ? "PostToolUse" : "PostToolUseFailure", {
+              event: result.ok ? "PostToolUse" : "PostToolUseFailure",
+              tool_name: output.name,
               tool_args: output.args,
-              tool_response: beat === "stop" ? "[verify] 已收束" : "[verify] 未通过，继续修",
+              tool_response: result.output,
               tool_use_id: output.id,
               agent_id: opts.agentId,
             });
+            if (post.additionalContext !== "") postContext = "\n[hook] " + post.additionalContext;
           } catch (err) {
-            console.warn("[hooks] PostToolUse(verify) 引擎失败:", err instanceof Error ? err.message : String(err));
+            console.warn("[hooks] PostToolUse 引擎失败:", err instanceof Error ? err.message : String(err));
           }
         }
-        if (beat === "stop") return; // 通过或达上限 → 收束，不再调用模型
-        continue; // 失败已回注，同轮继续修
-      }
-
-      // M2e：PreToolUse hook 先于权限门（CC 语义）；deny/exit2 阻断该次工具调用，
-      // allow/ask 继续走原有权限管线（hook 无特权，§9.8 让步序）。
-      if (opts.hooks) {
-        try {
-          const pre = await opts.hooks.run("PreToolUse", {
-            event: "PreToolUse",
-            tool_name: output.name,
-            tool_args: output.args,
-            tool_use_id: output.id,
-            agent_id: opts.agentId,
-          });
-          if (pre.blocked) {
-            await events.append({
-              type: "tool_result",
-              callId: output.id,
-              ok: false,
-              output: "[hook blocked] " + (pre.blockReason ?? "PreToolUse hook 阻断"),
-              blockedBy: "hook",
-            });
-            continue;
-          }
-        } catch (err) {
-          // hook 引擎自身故障不得炸 loop（与 prune/地图同族的静默降级面）
-          console.warn("[hooks] PreToolUse 引擎失败:", err instanceof Error ? err.message : String(err));
-        }
-      }
-
-      // 权限门：先过门再动手（verify 已在上面分支处理，此处 name 不含 verify）
-      if (opts.signal?.aborted) {
-        await cancelUnstartedTool(output.id);
-        return;
-      }
-      const name = output.name as Exclude<ToolName, "verify">;
-      const decision = gate(mode, name, interactive);
-      if (decision !== "allow") {
-        const reason = decision === "deny" ? denyReason(name) : null;
-        // 方案门**不是档位裁决**，所以这条拒绝不报档。`checkPermission` 在查
-        // `SIDE_EFFECT_DECISION` 之前就先判 `planBlocks()`（permissions/index.ts:107），
-        // 四档一律拒、且都与用户传了什么无关。而这一层的 mode 是冻结的 `auto`
-        // （agent-runner.ts:1523），照实写出来就变成「在 auto 档」——传了 `--mode read-only`
-        // 的用户撞到方案门也会看见它，于是以为自己的 flag 没生效，去 debug 错的方向。
-        // 真正的档位裁决在 `gatedTool` 那一层（它读 `s.autonomy.mode`），那一层逐档正确。
-        // 判据用 `reason` 而不是 `decision === "deny"`：非交互时 `ask` 被降级成 deny
-        // （`gate()`）也是 deny，但那一档确实参与过裁决，得照实报。
-        const where = reason === null ? `在 ${mode} 档（${interactive ? "交互" : "非交互"}）下` : "";
         await events.append({
           type: "tool_result",
           callId: output.id,
-          ok: false,
-          output: `[permission denied] ${output.name} ${where}被门拒绝（${decision}${reason ? `：${reason}` : ""}）`,
-          blockedBy: "permission",
+          ok: result.ok,
+          // 取料而不是硬拼：`result.output + …` 对非字符串会做**隐式**字符串化，
+          // 于是缺 output 的工具落盘成字面量 `"undefined"`、对象落成 `"[object Object]"`——
+          // 模型拿到一条"有回执但读不懂"的 tool_result，比明确说"这条回执没有正文"更坏。
+          // （2026-10-23 实测：插件/MCP 工具是运行期才拿到的，类型上的 `output: string` 管不到它们。）
+          output: redactSecrets(readToolOutput(result.output) + postContext + repeatNote).text,
+          // 执行面没有这把工具：上面 `if (!tool)` 只造了 `result`，落盘在这一格 ⇒ 原因也在这里补，
+          // 而不是在分支里改 `result`（那是工具的返回体，不是闸的留痕）。
+          ...(tool === undefined ? { blockedBy: "unknown-tool" } : {}),
+          ...(gateMeta ? { gate: gateMeta } : {}),
+          ...(audit ? { auto: audit } : {}),
+          ...(snapshotId !== undefined ? { snapshotId } : {}),
+          ...(change !== undefined ? { change } : {}),
+          ...(artifact !== undefined ? { artifact } : {}),
+          ...(result.changedPaths !== undefined ? { changedPaths: result.changedPaths } : {}),
+          // 融合写盘的结构事实：ok:false 时下游仍须知道「盘已经改了」。
+          ...(result.fusedWrite === true ? { fusedWrite: true } : {}),
+          // 跑进程类工具的结局必须**结构地**活到落盘面：从前 `ok:false` ＋一句文案就是全部，
+          // 于是"工具链没装（127）／被墙钟杀掉／模型代码真错了"三件事在事件流里长得一模一样，
+          // 下游（额度、按档升级、沉淀、失败轨迹评估）只能回去匹配文案。缺席＝这一笔不是跑进程的工具。
+          ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}),
+          ...(result.timedOut !== undefined ? { timedOut: result.timedOut } : {}),
+          // 编排侧「这一次压根没派发出 worker」的原因也得结构地活到落盘面：从前它只在 `output` 那一句里，
+          // 于是「因钱不起」与「worker 跑挂了」在事件流上长得一模一样（`spawn_agent` 的拒绝返回体自带 `hold`）。
+          ...(result.hold !== undefined ? { hold: result.hold } : {}),
         });
-        continue;
-      }
-
-      const tool = (opts.tools ?? TOOLS)[name] ?? opts.resolveTool?.(name);
-      let result;
-      if (!tool) {
-        result = { ok: false, output: `unknown tool: ${output.name}` };
-      } else {
-        const ctx = {
-          workspace,
-          emit: (e: Parameters<EventLog["append"]>[0]) => events.append(e),
-          callId: output.id,
-          clarify: opts.clarify,
-          plan: opts.plan,
-          ...(opts.signal ? { signal: opts.signal } : {}), // C12：取消信号透传进长驻工具
-          ...(opts.impact ? { impact: opts.impact } : {}), // M7：影响面钩子透传进写工具
-        };
-        try {
-          result = await tool.run(output.args, ctx);
-          // 识图：图片内容块进待发盒（下一轮请求带上）。**只在这里存一次**——
-          // 落盘的 tool_result 不带 base64，所以这条图不会跟着事件流重放，也不必去重。
-          if (result.images !== undefined && result.images.length > 0) {
-            opts.pendingImages?.push(result.images);
-          }
-        } catch (err) {
-          result = { ok: false, output: err instanceof Error ? err.message : String(err) };
+        // 动作融合把「写已落盘、随后的配置 lint 红了」编码成 ok:false + fusedWrite。
+        // 落盘事实与检查结局是两件事：只看 ok 会把前者读丢 ⇒ 收束闸跳过 auto-verify。
+        // 读**结构字段**而不是 output 字样——失败的 shell/diagnose 也能打印同一行字。
+        const persistedWrite = result.ok || result.fusedWrite === true;
+        if (persistedWrite && mayHaveWrittenDisk(name, output.args ?? {})) {
+          wroteThisRun = true;
+          wroteSinceAutoBeat = true; // 返修是否算「真去修了」只看这一位；没改盘就不配再验一遍
+          wroteSinceVerifyBeat = true; // M10②：判据的另一位——两拍同签名红之间**有过成功的写**就算在换路子试
         }
-      }
-      // M1c：gatedTool 附带判定留痕（结构扩展），透传进 tool_result 事件；
-      // auto 由 gate 派生（唯一 writer），历史语义不变：只有 rule / session_scope 两种自动放行才落 auto。
-      const gateMeta = (result as ToolResultWithAudit).gate;
-      const audit = autoOf(gateMeta);
-      // D7 覆盖前快照：正文里那句给模型看（它得知道去哪儿找回原件），这个字段给界面与审计看。
-      // 同一个事实只有一个 writer（写工具），这里只搬运不改写。
-      const snapshotId = (result as { snapshotId?: string }).snapshotId;
-      const change = (result as { change?: "created" | "modified" }).change;
-      // 交付给用户的产物引用：与 snapshotId / change 同一条搬运纪律（唯一 writer 是工具，
-      // 这里只透传不改写）。base64 不进事件流，所以这一格只有路径与用途。
-      const artifact = (result as { artifact?: { kind: "image" | "html" | "svg" | "text"; path: string; note?: string } }).artifact;
-      // 换路压力记账（只读，不改事件序）：动作换了 ⇒ 上一轮的重复段结束，解除提示帽
-      let repeatNote = "";
-      // **历史恒收，提示才受开关管**（2026-10-19 独立评审追出的 MEDIUM-LOW）：
-      // 旧实现把"记这一拍"也关在 `stuckNudge` 里面 ⇒ 编排器的 worker 那条 runLoop 不开这个开关
-      // （它自己在编排器里另有一套卡死看门狗）⇒ worker 的 `stuckTurns` **恒为空**
-      // ⇒ `detectStuck` 与 `detectAlternatingThrash`（R3 往返抖动）在 worker 路径上**永远判不出**：
-      // 同一串 A/B/A/B/A/B 的动作往返，主会话判 thrashing=true、worker 判 false（列表恒空）。
-      // 这两件事是**两件事**：「有没有得判」（历史）与「判出来了要不要说给模型听」（提示）。
-      // 历史是判据的输入，开关只该管后者。
-      {
-        const action = stuckActionOf(output.name, output.args);
-        const lastTurn = stuckTurns.length > 0 ? stuckTurns[stuckTurns.length - 1] : undefined;
-        if (lastTurn !== undefined && lastTurn.action !== action) nudgedActions.delete(lastTurn.action);
-        stuckTurns.push({ action, observation: stuckObservationOf(result.output), ok: result.ok });
-        if (stuckTurns.length > DEFAULT_STUCK_CONFIG.windowSize) stuckTurns.shift();
-      }
-      if (opts.stuckNudge === true) {
-        const action = stuckActionOf(output.name, output.args);
-        const verdict = detectStuck(stuckTurns);
-        if (verdict.stuck && !nudgedActions.has(action)) {
-          nudgedActions.add(action);
-          // 每句只声称检测器真比过的那件事（第 313 页）。旧文案两处越界：
-          //  ① 错误分支只看 action＋全失败就断言「原样重试不会改变结果」——三次连败而错误各不同时，
-          //     这句话把"该再看一次"的那次重试劝掉了（flaky 测试/超时/竞态正是这一类）；
-          //  ② 观察分支说「逐字相同」，而比的是 `stuckObservationOf` 截出来的前 200 字。
-          repeatNote = verdict.rule === "same_action_error_x3"
-            ? verdict.sameObservation
-              ? `\n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次失败且错误相同（比对取前 200 字）——原样重试不会改变结果：换一个探针（改命令 / 换路径 / 直接 read 那个文件）或说明卡点。`
-              : `\n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次失败，但每次错误不同——最新那条本身就是新信息：先读它，再决定换探针还是先修环境。`
-            : `\n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次拿到相同结果（比对取前 200 字）——再问一次不会有新信息：换一个探针或说明为何仍需重复。`;
-        }
-      }
-      // M2e：PostToolUse（成功）/ PostToolUseFailure（失败）——additionalContext 回注 tool_result 尾部
-      let postContext = "";
-      if (opts.hooks && !opts.signal?.aborted) {
-        try {
-          const post = await opts.hooks.run(result.ok ? "PostToolUse" : "PostToolUseFailure", {
-            event: result.ok ? "PostToolUse" : "PostToolUseFailure",
-            tool_name: output.name,
-            tool_args: output.args,
-            tool_response: result.output,
-            tool_use_id: output.id,
-            agent_id: opts.agentId,
-          });
-          if (post.additionalContext !== "") postContext = "\n[hook] " + post.additionalContext;
-        } catch (err) {
-          console.warn("[hooks] PostToolUse 引擎失败:", err instanceof Error ? err.message : String(err));
-        }
-      }
-      await events.append({
-        type: "tool_result",
-        callId: output.id,
-        ok: result.ok,
-        output: redactSecrets(result.output + postContext + repeatNote).text,
-        // 执行面没有这把工具：上面 `if (!tool)` 只造了 `result`，落盘在这一格 ⇒ 原因也在这里补，
-        // 而不是在分支里改 `result`（那是工具的返回体，不是闸的留痕）。
-        ...(tool === undefined ? { blockedBy: "unknown-tool" } : {}),
-        ...(gateMeta ? { gate: gateMeta } : {}),
-        ...(audit ? { auto: audit } : {}),
-        ...(snapshotId !== undefined ? { snapshotId } : {}),
-        ...(change !== undefined ? { change } : {}),
-        ...(artifact !== undefined ? { artifact } : {}),
-        ...(result.changedPaths !== undefined ? { changedPaths: result.changedPaths } : {}),
-        // 跑进程类工具的结局必须**结构地**活到落盘面：从前 `ok:false` ＋一句文案就是全部，
-        // 于是"工具链没装（127）／被墙钟杀掉／模型代码真错了"三件事在事件流里长得一模一样，
-        // 下游（额度、按档升级、沉淀、失败轨迹评估）只能回去匹配文案。缺席＝这一笔不是跑进程的工具。
-        ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}),
-        ...(result.timedOut !== undefined ? { timedOut: result.timedOut } : {}),
-        // 编排侧「这一次压根没派发出 worker」的原因也得结构地活到落盘面：从前它只在 `output` 那一句里，
-        // 于是「因钱不起」与「worker 跑挂了」在事件流上长得一模一样（`spawn_agent` 的拒绝返回体自带 `hold`）。
-        ...(result.hold !== undefined ? { hold: result.hold } : {}),
+        return "continue";
       });
-      if (result.ok && mayHaveWrittenDisk(name, output.args ?? {})) {
-        wroteThisRun = true;
-        wroteSinceAutoBeat = true; // 返修是否算「真去修了」只看这一位；没改盘就不配再验一遍
-        wroteSinceVerifyBeat = true; // M10②：判据的另一位——两拍同签名红之间**有过成功的写**就算在换路子试
-      }
+      // 新提交（含新的 verify）⇒ 本轮有进展；非 verify 的重放走原有步数预算（撞帽仍要落 error 事件）。
+      if (isNewSubmission || output.name !== "verify") onlyVerifyReplays = false;
+      if (control === "stop") return;
     }
     if (opts.signal?.aborted) return;
+    // 整轮只是重放已执行过的 verify = 无进展：重放的旧回执已经在本轮输入里，模型再问一次拿到的还是同一份。
+    // 真红与环境红同判——只认环境红会让真红的重放绕过 maxVerify（verify 不再执行、拍数不涨），
+    // 一路烧到 maxSteps 的付费请求。非 verify 的重放不走这条：它们仍有步数预算兜底，且撞帽要落 error。
+    if (sawToolCall && onlyVerifyReplays) return;
     // #69：最后一步模型**仍在调工具**时，也让收束闸有机会留下证据——
     // 从前这一段只在模型自己不再调工具时才走到，于是撞帽的 run 一条 verify 证据都没有
     // （真模型面实测 5/43≈12% 整趟被帽砍掉）。这里只把"该收束了"这件事说给它听，
@@ -794,6 +929,21 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           deliveryRepairUsed = true;
           continue;
         }
+      }
+      // ---- 第 1 点：截断 ≠ 说完 ----
+      // 旧行为：`turn_truncated` 只落一条事件，然后这一轮照常 `return`——而投影侧的
+      // `truncationNote` 明明生成了「那不是完整结论，别当成已答完；接着做完」这条 user 消息，
+      // **却没有任何下一轮去读它**（实测：请求数=1、提示在最终投影里、零消费者）。
+      // 一条没人读的提示与没有这条提示等价：用户拿到的仍是半句，而 harness 以为收完了。
+      //
+      // 上限与另外两条返修环同形（deliveryRepair 至多一轮 / autoVerifyRepair 至多一次两拍）：
+      // **每 run 至多一轮续跑**，续不出来就收束，不无限要。
+      // 缺省开（与 `autoVerify` 同族：这是「把话说完」，不是可选增强）；
+      // 关掉它 `truncationRepair: false` 就逐字回到旧行为。
+      if (truncatedThisRun && opts.truncationRepair !== false && !truncationRepairUsed) {
+        truncationRepairUsed = true;
+        truncatedThisRun = false;
+        continue;
       }
       if (!capReached) return; // 模型认为任务结束（纯文本轮 / 事件源耗尽）；撞帽则落回循环外那条 throw
       // 撞帽路：证据已在上面落流，这里**不吞掉失败**——继续往下走，由循环外那句抛。

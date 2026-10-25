@@ -1,0 +1,35 @@
+$ pnpm run build:preload && vite build && tsc -p tsconfig.json --noEmit
+$ esbuild src/preload/index.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs
+
+  dist-electron/preload.cjs  7.6kb
+
+⚡ Done in 62ms
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 2086 modules transformed.
+rendering chunks...
+computing gzip size...
+../../dist/index.html                                         0.64 kB │ gzip:   0.37 kB
+../../dist/assets/NotoSerifVariable-f932DlCQ.woff2           76.55 kB
+../../dist/assets/InterVariable-DJwk3cVO.woff2              137.26 kB
+../../dist/assets/JetBrainsMonoVariable-DgTxpPXt.ttf        303.14 kB
+../../dist/assets/JetBrainsMonoItalicVariable-BPH9J9VZ.ttf  308.89 kB
+../../dist/assets/PaneDock-DDGTF8rc.css                       3.62 kB │ gzip:   0.99 kB
+../../dist/assets/index-DPVGZPsa.css                        163.95 kB │ gzip:  26.96 kB
+../../dist/assets/PopoutApp-DdIAOQ-J.js                       0.87 kB │ gzip:   0.50 kB
+../../dist/assets/addon-fit-DX4qG4td.js                       1.21 kB │ gzip:   0.51 kB
+../../dist/assets/settings-nav-C7GE_aki.js                    4.31 kB │ gzip:   2.06 kB
+../../dist/assets/markdown-B1InbmBQ.js                        6.92 kB │ gzip:   2.67 kB
+../../dist/assets/Stream-D99T0BWW.js                         18.06 kB │ gzip:   6.41 kB
+../../dist/assets/index-CMreJr3i.js                          34.80 kB │ gzip:   9.88 kB
+../../dist/assets/CommandPalette-CbOJ_l3u.js                 34.87 kB │ gzip:  12.17 kB
+../../dist/assets/PaneDock-C2yED-R9.js                       35.18 kB │ gzip:  12.07 kB
+../../dist/assets/SettingsPanel-D3P4Ktff.js                  61.08 kB │ gzip:  18.49 kB
+../../dist/assets/xterm-B-qIQCd3.js                         329.31 kB │ gzip:  83.04 kB
+../../dist/assets/index-Cb9d-pXl.js                         531.73 kB │ gzip: 172.96 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.76s

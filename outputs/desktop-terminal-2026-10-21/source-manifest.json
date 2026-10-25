@@ -1,0 +1,24 @@
+{
+  "startHead": "6af24734ba957838e5584e01228499e5e77b61e9",
+  "currentHead": "b270a5d1d4367e3b0d73cdc181b9952430f16c54",
+  "scope": "working tree; task changes against saved start bytes, not a commit certificate",
+  "lspClientUnchanged": true,
+  "sha256": {
+    "apps/desktop/src/main/terminal-host.ts": "2d7d3c8e2eda1d66c9f49664d66fb5e02c0ffe0169d6aa471d6fbe5b320b6282",
+    "apps/desktop/src/main/index.ts": "89de3075206eab841c308efdddf6b6a3f1cc676fb73ceb0dc7b6d1b147bfbddf",
+    "apps/desktop/src/main/channels.ts": "4ce9f2db3a18aeb0d22868160ed1daa19b83163e6af3f02027c9c26e0d9c1ea8",
+    "apps/desktop/src/renderer/components/PaneDock.tsx": "5730943a9fd1e5e62d61a4fee9b15d9bc6966d075444533c257099fc95c5084e",
+    "src/main/ipc-protocol.ts": "3bffcadd1c866a6bfad924149ee44aca777d3f8bdaba6a9dfef6bc6345fb1af8",
+    "apps/desktop/tests/protocol-version.test.ts": "3403bb0215d12042a27ac6b7f4e78eb3b7893a99d7ee4b781cb85da1fe7ce267",
+    "tests/ipc-protocol-version.test.ts": "52cee60b6669809f191d11905d4c15d2d9eed9714cef967a5d656305a7cc17a3",
+    "apps/desktop/tests/channels.test.ts": "72b460aa057790ddef1710ab81d433d9c70fdbe61d699d90516cdcca6436f44b",
+    "tests/lsp-request-lifecycle.test.ts": "49e2f02bf2fdae90dba1e8640ad80f8eafb849c02b0f4f0e2a2be69b0f23cdc4",
+    "apps/desktop/tests/terminal-host.test.ts": "a86168a89cbb5a2344566051b07e1e87235fc5e4168c90d734bbdb3a097e24ce",
+    "apps/desktop/tests/terminal-drain.test.ts": "78ce7a94b053665730d701ffb2b0f1bb0492879a9c0882c6fada6bbc6ab65be6",
+    "apps/desktop/scripts/native-host-smoke.ts": "a0600cb90a46f936c750de0c65380e894dcfb694ce95969e25d8fa48a14007f1",
+    "apps/desktop/src/main/pty-bridge.ts": "38e30c33318136edccb01469d4fdbb61b2ad110c43e98a105d855b94b94164e5",
+    "apps/desktop/tests/terminal-size.test.ts": "ff72e14ae83232d882ef49b8fb344e6d5afe47747919523b3fc0d5cbf2cf363b",
+    "apps/desktop/scripts/terminal-renderer-smoke.cjs": "88bf048e5f405ae25a800afed41e9c9af9807b53f6861ed66e3c601b2b397f7e",
+    "apps/desktop/scripts/terminal-renderer-smoke.ts": "914a219bb2add16b2c6838eaeeecc96c522b0f45a8e768e937c57789470840d7"
+  }
+}
