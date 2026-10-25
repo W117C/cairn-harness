@@ -42,6 +42,12 @@ agent-canon/
 # · `.agent/evolution.json`：会话沉淀出来的进化补丁登记（本机运行产物）。
 .agent/providers.json
 .agent/evolution.json
+# 自进化闭环 v2（第 707 页）新增的三支同族运行产物：跨轮账本（evolution-ledger.jsonl，逐轮追加）、
+# 周期体检报告（assess-report.json）、canary 观察档（canary/，观察期读-改-写）——口径同上，
+# 机器本地状态不随仓库分发；账本/报告含本机会话的读数与措辞，不是源码。
+.agent/evolution-ledger.jsonl
+.agent/assess-report.json
+.agent/canary/
 # 桌面端（apps/desktop）首启工作区默认落仓库根（S2 ①：不得回落 $HOME）⇒ 会话 JSONL 写进
 # <repo>/.agent/sessions/。这是运行产物，与 .agent/memory/ 同理不进 git；.agent/permissions.json
 # 仍是有意跟踪的（见上），所以只忽略 sessions/ 这一支，不整体忽略 .agent/。

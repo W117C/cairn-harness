@@ -26,7 +26,7 @@ export interface TypecheckTriage {
 }
 
 /** tsc 行形态 `path(12,5): error TS2345: …`。
- *  路径**可以含空格**（本仓目录名就是 "deepseek harness"）⇒ 取路径只能用非贪婪 + 锚定尾部的
+ *  路径**可以含空格**（本仓历史目录名 "deepseek harness" 就带空格；2026-10-24 已更名 cairn，夹具保留空格路径防回归）⇒ 取路径只能用非贪婪 + 锚定尾部的
  *  `(行,列): error TS`，按空白切会截出半个路径、归因随之全错（这类"解析器恰好对英文目录成立"
  *  的坑与 chars/4 是同族）。 */
 const TSC_ERROR_LINE = /^(.+?)\(\d+,\d+\): error TS\d+/u;
