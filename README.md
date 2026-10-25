@@ -1,44 +1,83 @@
 # Cairn — 可重放的 agent harness
 
-一个事件溯源（event-sourced）的 agent 内核：每一步都落成 JSONL 事件，因此**同一份日志可以被重放、分叉、审计**。
-内核侧没有构建步骤——克隆下来 `npm install` 完就有一条 `cairn` 命令；
-桌面壳是另一条路，`apps/desktop/` 下走 Electron + Vite，需要单独构建（见「这个仓库是什么」）。
+> 一个事件溯源（event-sourced）的 agent 内核：每一步都落成 JSONL 事件，因此**同一份日志可以被重放、分叉、审计**。
+
+[![verify](https://github.com/W117C/cairn-harness/actions/workflows/verify.yml/badge.svg?branch=main)](https://github.com/W117C/cairn-harness/actions/workflows/verify.yml)
+[![CodeQL](https://github.com/W117C/cairn-harness/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/W117C/cairn-harness/actions/workflows/codeql.yml)
+[![release](https://img.shields.io/github/v/release/W117C/cairn-harness?label=release&color=blue)](https://github.com/W117C/cairn-harness/releases)
+[![license](https://img.shields.io/badge/license-%E4%B8%93%E6%9C%89-proprietary-blue)](./LICENSE)
+[![node](https://img.shields.io/badge/node-%3E%3D20.11%20%3C25-5FA04E?logo=node.js)](https://nodejs.org)
+[![pnpm](https://img.shields.io/badge/pnpm-11.21.0-F69220?logo=pnpm)](https://pnpm.io)
+
+**一句话**：给 AI 编码 agent 用的**可审计运行时**——每一步都留痕，事后能重放、能分叉、能审计；
+写操作默认 fail-closed，没人应答时当场拒绝，而不是静默放行。
+
+内核侧**没有构建步骤**：克隆下来装完依赖就有一条 `cairn` 命令。
+桌面壳是另一条路，`apps/desktop/` 下走 Electron + Vite，需要单独构建（见[仓库结构](#仓库结构)）。
+
+---
+
+## 目录
+
+- [30 秒上手](#30-秒上手)
+- [能力面](#能力面)
+  - [量一量：固定开销与任务达成](#量一量固定开销与任务达成)
+  - [零凭据试一下：--provider demo](#零凭据试一下--provider-demo读之前先看这段)
+  - [目标模式：一轮收束 ≠ 目标达成](#目标模式一轮收束--目标达成)
+  - [手动压缩一条会话](#手动压缩一条会话)
+  - [配 provider](#配-provider)
+- [权限与安全边界](#权限与安全边界)
+  - [网络与沙箱边界](#网络与沙箱边界)
+- [事件日志](#事件日志)
+- [设置](#设置)
+- [工具面](#工具面)
+- [退出码](#退出码)
+- [仓库结构](#仓库结构)
+- [文档分层](#文档分层)
+- [开发与验证](#开发与验证)
+- [参与本项目](#参与本项目)
+- [许可](#许可)
+
+---
+
+## 30 秒上手
+
+需要 Node `>=20.11 <25`（以 `package.json` 的 `engines` 为准）与 pnpm。
 
 ```sh
-git clone <this-repo> && cd cairn-harness
-npm install                       # CLI 走 tsx 通道（devDependency），必须装齐才能跑
+git clone https://github.com/W117C/cairn-harness.git
+cd cairn-harness
+pnpm install --frozen-lockfile
+
 export OPENAI_API_KEY=<你的 key>
 ./bin/cairn.mjs "把 tests 里失败的那个用例修好"
 ```
 
-> 本包是 `"private": true`，**不经 npm 分发**：没有 `npm install -g cairn` 这条路。上面是克隆仓库后的用法——
-> tsx 在 devDependencies 里，源码经 tsx 通道直接跑。
+> 本包是 `"private": true`，**不经 npm 分发**：没有 `npm install -g cairn` 这条路。
+> 上面是克隆仓库后的用法——tsx 在 devDependencies 里，源码经 tsx 通道直接跑。
+> 不想手动装依赖可以走 `./scripts/install.sh`（按 `engines` 判 Node 版本，有 pnpm 用 pnpm，否则用 npm）。
+
+**没有 API key 也能看一遍完整流程**（预录剧本，不拨号、不花钱）：
+
+```sh
+./bin/cairn.mjs --provider demo --mode auto --workspace /tmp/cairn-demo "随便写点什么"
+```
+
+环境自检（Node / 凭据在位 / 沙箱 / 工作区可写，**不回显密钥值**）：
+
+```sh
+./bin/cairn.mjs --doctor
+```
+
+版本与受众裁决见 [`docs/adr/0002-v1-audience-b1-internal-beta.md`](docs/adr/0002-v1-audience-b1-internal-beta.md)
+（B1 内测先行，交付面只做 CLI；B2 扩受众清单留门 [`docs/b2-checklist.md`](docs/b2-checklist.md)）。
+变更史见 [`CHANGELOG.md`](CHANGELOG.md)，发布记录见 [Releases](https://github.com/W117C/cairn-harness/releases)。
 
 ---
 
-## 安装
-
-本包不发布 npm（`private: true`），装法是克隆仓库后跑安装脚本：
+## 能力面
 
 ```sh
-git clone <this-repo> && cd cairn-harness
-./scripts/install.sh        # 按 package.json 的 engines 判 Node 版本；pnpm 在则 pnpm install，否则 npm install
-./bin/cairn.mjs --doctor    # 环境自检：Node / 凭据在位 / 沙箱 / 工作区可写（不回显密钥值）
-./bin/cairn.mjs --version   # 打印版本（cairn <version>）
-./bin/cairn.mjs --plugins   # 插件与 skill 的发现面：扫了哪几顶根、每支的信任状态、信任表落在哪
-./bin/cairn.mjs --trust-plugin <名称>    # 批准其中一条（项目作用域的样本默认待信任；决议绑「绝对路径@内容指纹」）
-./bin/cairn.mjs --decline-plugin <名称>  # 拒绝它。三条都不跑模型、不落会话、不需要 API key
-```
-
-版本与受众裁决见 `docs/adr/0002-v1-audience-b1-internal-beta.md`（B1 内测先行，交付面只做 CLI；
-B2 扩受众清单留门 `docs/b2-checklist.md`）。变更史见 `CHANGELOG.md`。
-
-## 快速开始
-
-需要 Node ≥20.11 且 <25（以 `package.json` 的 `engines` 为准）与 pnpm。仓库根目录：
-
-```sh
-pnpm install
 pnpm typecheck        # tsc --noEmit
 pnpm test             # 整跑（core-only 全部测试文件）
 ```
@@ -153,7 +192,7 @@ key 从环境变量读，**缺 key 会明确报错退出，不会静默换一家
 | `anthropic` | `ANTHROPIC_API_KEY` |
 | `gemini` | `GEMINI_API_KEY` |
 
-**DeepSeek**（这个仓库叫 deepseek harness，但 `src/providers/` 下**没有** deepseek 专用适配器——它走的是现成的 OpenAI 兼容通道，
+**DeepSeek**（`src/providers/` 下**没有** deepseek 专用适配器——它走的是现成的 OpenAI 兼容通道，
 `providers/openai.ts` 的 `baseURL` 本来就可配，`glm.ts` 就是它的预设）：
 
 ```sh
@@ -185,7 +224,9 @@ npx cairn --provider openai --model some/small-model --ctx-window 32768 "..."
 
 ---
 
-## 权限档（默认 fail-closed）
+## 权限与安全边界
+
+权限档默认 **fail-closed**：
 
 | 档 | 含义 |
 |---|---|
@@ -246,7 +287,7 @@ harness 的 verify 报红**（假红，且事件里报的是原始命令，模�
   { "search": { "endpoint": "https://searx.example/search?q={query}&format=json" } }
   ```
 
-  响应按 SearxNG `format=json` 形状消费（`results[].title[/content|snippet]`）；
+  响应按 SearxNG `format=json` 形状消费（`results[].title[/content/snippet]`）；
   端点返回非 JSON 时降级为**有界原文**并如实标注「可能不是检索结果」。重定向即拒（改配置为最终地址）。
 - **`diagnose`**：跑本工作区配置的 lint/test（`.agent/config.json` 的 `verify` 或 `package.json` scripts），
   把失败输出解析成结构化错误清单（文件:行:列 严重度 规则 原文）。它**执行进程** ⇒ 按写向类管：
@@ -298,7 +339,7 @@ CLI 走 `handleAgentRun` 这个装配入口，所以它第一次真正读盘上�
 
 ---
 
-## 工具
+## 工具面
 
 静态注册表 10 个（`src/tools/index.ts`，`tools-check` 钉着这个数）：
 
@@ -340,17 +381,8 @@ worker 要联网只能回主会话发。
 
 ---
 
-## 这个仓库是什么
+## 仓库结构
 
-内核质量很高、**产品面刚补上**的一棵树：strict 零报错，fail-closed 是设计意图而非事后补丁，
-变异测试的判红标准很硬。桌面层曾于 2026-09-27（`69fbb0d`）整体移除，2026-10-02 起以 M1 切片
-重新入库于 `apps/desktop/`（Electron + React + Vite），此后持续接线：50 个 invoke 通道（现读，
-判据在 `apps/desktop/tests/channels.test.ts` 的表长断言，改表不改数当场红）
-**全键接线**——`apps/desktop/src/main/channels.ts` 与 main 的 `wired` 表都是全键映射，少一行
-typecheck 当场红；桌面判卷与 `desktop-boundary-check` 已进 `GATES`/`CERT_GATES`，CI 也单跑
-`pnpm --filter cairn-desktop test`。产品形态仍早（终端/浏览器等面板为后端前置，见
-[apps/desktop/design/desktop-ui-spec.md](apps/desktop/design/desktop-ui-spec.md) §8）。
-存废与受众的裁决见 [docs/adr/0001-core-only-vs-desktop.md](docs/adr/0001-core-only-vs-desktop.md)。
 内核侧保持 electron-free，应用服务在 `src/main/`。
 
 - `src/agent/` — 事件循环、编排、worker、压缩、判卷层
@@ -362,5 +394,74 @@ typecheck 当场红；桌面判卷与 `desktop-boundary-check` 已进 `GATES`/`C
 - `apps/desktop/` — 桌面壳（Electron + React + Vite；独立构建，判卷与边界闸已进根门与 CI）
 - `scripts/` — headless 闸（`pnpm gates` 全跑，清单在 `scripts/gate-manifest.ts`，即事实源）
 
-开发规则见 [AGENTS.md](AGENTS.md)；架构说明见 [docs/CODE-WIKI.md](docs/CODE-WIKI.md)。
+**桌面层**曾于 2026-09-27（`69fbb0d`）整体移除，2026-10-02 起以 M1 切片重新入库于 `apps/desktop/`，
+此后持续接线：**94 个 invoke 通道**（现读 `apps/desktop/src/main/channels.ts` 的 `INVOKE_CHANNELS`；
+表长由 `apps/desktop/tests/channels.test.ts` 的断言钉住，改表不改数当场红），
+且是**全键接线**——`channels.ts` 与 main 的 `wired` 表都是全键映射，少一行 typecheck 当场红。
+桌面判卷与 `desktop-boundary-check` 已进 `GATES`/`CERT_GATES`，CI 也单跑
+`pnpm --filter cairn-desktop test`。产品形态仍早（终端/浏览器等面板为后端前置，见
+[apps/desktop/design/desktop-ui-spec.md](apps/desktop/design/desktop-ui-spec.md) §8）。
+存废与受众的裁决见 [docs/adr/0001-core-only-vs-desktop.md](docs/adr/0001-core-only-vs-desktop.md)。
 
+---
+
+## 文档分层
+
+本仓的文档分四层，**改错层会让 `docs-check` 判红**——这是新人最容易踩的一格：
+
+| 层 | 落点 | 放什么 | 写法 |
+|---|---|---|---|
+| 规矩层 | [`AGENTS.md`](AGENTS.md) | 不知道就会这一轮做错事的规则 | 只加新规则 |
+| 现态层 | [`STATE.md`](STATE.md)、[`docs/README.md`](docs/README.md)、[`docs/CODE-WIKI.md`](docs/CODE-WIKI.md) | 现在在哪、在飞什么、还有什么没裁 | 整体重写，永不追加 |
+| 台账层 | [`PROGRESS.md`](PROGRESS.md) | 历史与审计链：备案、裁决全文、各轮实录 | 只追加，页号是引用单位 |
+| 档案层 | [`archive/`](archive/) | 不再现行的结论 | 归档 |
+
+另有 ADR（决策记录）：[`docs/adr/`](docs/adr/)。
+
+---
+
+## 开发与验证
+
+| 改动面 | 必跑 |
+|---|---|
+| 任意 | `pnpm typecheck` |
+| 核心行为 | `pnpm test:capped`（或 `pnpm test`） |
+| 桌面行为 | `pnpm --filter cairn-desktop test` |
+| 跨层依赖 | `pnpm desktop-boundary-check` |
+| 规则 / 文档 | `pnpm docs-check` |
+| 提交前全量 | `pnpm gates` |
+
+> **核心套件读数必须带并发档位**：8GB 机器上默认 worker 数会超订，报出来的超时是**负载假象**，
+> 不是逻辑回归。要一个可复现的整跑读数，用 `pnpm test:capped`。
+> 引用读数时也要说清它覆盖的是**工作树**还是**某个提交**。
+
+门禁清单的事实源是 `scripts/gate-manifest.ts`。`pnpm gates` 不带参数跑的是全集，
+比认证面（`CERT_GATES`）慢、面也不同——引用读数时说明跑的是哪一面。
+
+完整贡献流程（四层文档怎么落、提交面纪律、PR 自检清单）见 [`CONTRIBUTING.md`](CONTRIBUTING.md)；
+开发规则见 [`AGENTS.md`](AGENTS.md)；架构与符号索引见 [`docs/CODE-WIKI.md`](docs/CODE-WIKI.md)。
+
+---
+
+## 参与本项目
+
+| 入口 | 用途 |
+|---|---|
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | 贡献流程、门禁、提交规范、PR 自检清单 |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | 行为准则 |
+| [`SECURITY.md`](SECURITY.md) | **安全漏洞私密报告**（不要开公开 Issue） |
+| [`SUPPORT.md`](SUPPORT.md) | 按问题类型选渠道 |
+
+CI 跑在 `macos-latest`（沙箱与平台分支的判卷按它写）；静态安全分析由 CodeQL 承担，
+告警不自动阻断合并——本仓的沙箱与 fail-closed 路径天生长成「看起来危险」的样子。
+CI 说明与取舍见 [`scripts/ci/README.md`](scripts/ci/README.md)。
+
+---
+
+## 许可
+
+**专有软件，保留所有权利。** 许可与内测授权范围见 [`LICENSE`](LICENSE)。
+
+本包 `"private": true`，**不经 npm 分发**。B1 内测阶段的受众与范围裁决见
+[`docs/adr/0002-v1-audience-b1-internal-beta.md`](docs/adr/0002-v1-audience-b1-internal-beta.md)，
+扩大受众的清单留门 [`docs/b2-checklist.md`](docs/b2-checklist.md)。

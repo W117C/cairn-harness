@@ -75,6 +75,62 @@ git config core.hooksPath .githooks     # 撤销：git config --unset core.hooks
 **反悔条件（写清才叫裁决）**：若出现"同一类型错连穿两笔 CI"或"CI 因类型错红了 ≥2 次且本可
 本地拦住"这类证据，把上面两条命令跑一遍翻回来。
 
+## L1 的增量（2026-10-25 仓库标准化）
+
+这一段记的是**在 L1 之上加的东西**，以及**为什么这么加**。
+L1 本身的取舍（快门面 25 道、更重的门不进每次 push、pre-commit 不做）一个字没动。
+
+### 并发组：同一 ref 上只留最新的一趟
+
+```yaml
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+```
+
+**为什么**：本仓每趟 verify 要跑完整判卷 + 快门面。连续推送时会叠出好几趟并行——
+**重复的是同一份树，浪费的是计费分钟**。取消的是**被取代**的那一趟，不是最新那一趟：
+最新那趟仍会跑完并给出读数。
+
+> ⚠️ 这条只省算力，**不改变任何判读口径**：被取消的那一趟本来就要被更新的那趟取代。
+> 想看历史某一趟的读数，被取消的 run 在 Actions 里仍留记录（状态是 cancelled）。
+
+### 最小权限
+
+```yaml
+permissions:
+  contents: read
+```
+
+这道门只需要读仓库（checkout + 跑判卷）。默认的写权限是**能用上但用不到**的权限面——
+在能给的最小面上给，是 CI 的基本卫生。
+
+### L1′（已落地，**手动触发**）：`.github/workflows/codeql.yml`
+
+静态安全分析，与 L1 是**并行的另一根轴**：L1 判「这次改动有没有做坏它该做的事」，
+CodeQL 判「这次改动有没有引进它不该有的东西」。两道互不替代。
+
+- **只挂 `workflow_dispatch`，不挂 `push` / `schedule`**：
+  **私有仓库的 code scanning 需要 GitHub Advanced Security**，本仓当前计划上没有这个特性
+  （`security_and_analysis.code_scanning` 在这个计划上不存在，secret scanning 同理）。
+  按常规挂上去，每一次推送都会得到一份**红**——红的不是代码，是「后端没有这个特性」。
+  **一道永远红的门等于没有门**（本仓 `repo-hygiene-check` 写明的同一条纪律）。
+- **开启办法**：Settings → Code security → Code scanning → Enable（需 Advanced Security），
+  然后手动跑一次本工作流；确认结果页出现告警后，再把 `push` / `schedule` 放开。
+- **告警不作为阻断条件**：本仓大量**刻意设计**的取舍（沙箱、审批门、fail-closed 路径、
+  路径拼接、跟随软链）天生长成「看起来危险」的样子。把告警直接当阻断条件，
+  等于逼人把断言改松。⇒ 告警走 Issue 评审，不自动阻断合并。
+
+### CI 起不来的那一段（不是代码问题）
+
+2026-10-15 之前每趟 verify 都是绿的。此后**每一趟都红**，但**红的不是代码**——
+GitHub 报的是「最近付款失败或消费上限需要提高，**任务根本没启动**」。
+
+- **这是账户侧的事**（Billing & plans），代码侧无解；恢复要先在账户设置里处理。
+- 因此**本地读数是这段时间唯一可用的证据来源**。引用读数时说清它是本地的还是 CI 的。
+- macOS runner 另有 arm64 容量告警（排队变长）。**换 runner 之前先在真实 CI 上验证一轮 Linux**——
+  本机无法验证 Linux 行为，所以这里不假装 ubuntu 也行。
+
 ## 反向验证（L1 的判据有没有分辨力）
 
 「故意提交一处类型错误 → CI 配置能抓到（本地用同样命令证）」：
