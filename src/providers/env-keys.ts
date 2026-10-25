@@ -8,6 +8,9 @@ export const PROVIDER_ENV_KEYS = {
   openai: "OPENAI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
   gemini: "GEMINI_API_KEY",
+  // 追加在尾：表序 = ENV_KEYED_PROVIDERS 序 = PROVIDER_KINDS 序 = 桌面面板序，
+  // 与 registry 的 PROVIDER_IDS 逐位对账（tests/main-provider-runtime.test.ts 钉着）。
+  deepseek: "DEEPSEEK_API_KEY",
 } as const;
 
 export type EnvKeyedProvider = keyof typeof PROVIDER_ENV_KEYS;

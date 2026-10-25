@@ -92,7 +92,9 @@ describe("discoverForProviderSetup：拉取不改文件", () => {
 
 describe("saveCustomProvider：upsert 且不覆盖读不懂的文件", () => {
   const entry = {
-    id: "deepseek",
+    // id 不用 "deepseek"：那是内置家名，校验会拒收（见下「占用内置名」用例）；
+    // 端点与变量名照旧用 DeepSeek 的——自定义家用别家端点本就是常态。
+    id: "mydeepseek",
     label: "DeepSeek",
     protocol: "openai" as const,
     baseURL: "https://api.deepseek.com/v1",
@@ -105,14 +107,14 @@ describe("saveCustomProvider：upsert 且不覆盖读不懂的文件", () => {
     const ws = workspace();
     const r = await saveCustomProvider(ws, entry);
     if (!r.ok) throw new Error(r.error);
-    expect(r.providers).toEqual(["deepseek"]);
+    expect(r.providers).toEqual(["mydeepseek"]);
     const written = JSON.parse(readFileSync(customProvidersPath(ws), "utf8")) as {
       providers: { id: string; models: { id: string; model?: string }[] }[];
     };
-    expect(written.providers[0].id).toBe("deepseek");
+    expect(written.providers[0].id).toBe("mydeepseek");
     // 写进文件时上游调用名是显式的（schema 严格，不靠"读的时候再补"）
     expect(written.providers[0].models[0].model).toBe("deepseek-chat");
-    expect(r.derived[0].specs[0].id).toBe("deepseek-chat");
+    expect(r.derived[0].specs[0].id).toBe("mydeepseek-deepseek-chat"); // 派生档位 id = <provider>-<model id>
   });
 
   it("upsert 保住别的家，并就地替换同名那家", async () => {
@@ -121,18 +123,18 @@ describe("saveCustomProvider：upsert 且不覆盖读不懂的文件", () => {
         version: 1,
         providers: [
           { id: "moonshot", protocol: "openai", baseURL: "https://api.moonshot.cn/v1", apiKeyEnv: "MOONSHOT_API_KEY", models: [{ id: "kimi", model: "kimi" }] },
-          { id: "deepseek", protocol: "openai", baseURL: "https://old.example.com/v1", apiKeyEnv: "OLD_KEY", models: [{ id: "old", model: "old" }] },
+          { id: "mydeepseek", protocol: "openai", baseURL: "https://old.example.com/v1", apiKeyEnv: "OLD_KEY", models: [{ id: "old", model: "old" }] },
         ],
       }),
     );
     const r = await saveCustomProvider(ws, entry);
     if (!r.ok) throw new Error(r.error);
-    expect([...r.providers].sort()).toEqual(["deepseek", "moonshot"]);
+    expect([...r.providers].sort()).toEqual(["moonshot", "mydeepseek"]);
     const written = JSON.parse(readFileSync(customProvidersPath(ws), "utf8")) as {
       providers: { id: string; baseURL: string }[];
     };
     expect(written.providers.find((p) => p.id === "moonshot")?.baseURL).toBe("https://api.moonshot.cn/v1");
-    expect(written.providers.find((p) => p.id === "deepseek")?.baseURL).toBe("https://api.deepseek.com/v1");
+    expect(written.providers.find((p) => p.id === "mydeepseek")?.baseURL).toBe("https://api.deepseek.com/v1");
   });
 
   it("现有文件是坏 JSON ⇒ 拒绝写（不拿我们的 upsert 盖掉用户手写的东西）", async () => {
@@ -167,10 +169,13 @@ describe("表单默认值推导：与命令行同一套", () => {
   it("地址 → id → 变量名", () => {
     // 第 447 页：这一格要钉的是「setup 把 draft 的 note 原样透传」，不是那句文案本身——
     // 所以断言两边相等（派生断言，不抄生产措辞，也不抄 `内置` 那种到处都有的词）。
-    expect(suggestSetupDefaults("https://api.deepseek.com/v1")).toEqual({
-      providerId: "deepseek",
-      apiKeyEnv: "DEEPSEEK_API_KEY",
+    // 2026-10-25 起 deepseek 是内置家名 ⇒ 建议让开成 deepseek-compat（draft 的保留名避让）。
+    // note 透传断言用 toMatchObject（不抄生产文案，只钉「避让发生了」这三个字段）。
+    expect(suggestSetupDefaults("https://api.deepseek.com/v1")).toMatchObject({
+      providerId: "deepseek-compat",
+      apiKeyEnv: "DEEPSEEK_COMPAT_API_KEY",
     });
+    expect(suggestSetupDefaults("https://api.deepseek.com/v1").note).toContain("已让开成");
     const drafted = suggestProviderId("https://api.openai.com/v1");
     const setup = suggestSetupDefaults("https://api.openai.com/v1");
     expect(setup.providerId).toBe(drafted.id);

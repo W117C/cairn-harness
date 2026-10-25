@@ -6,6 +6,7 @@ import { DEFAULT_MODEL_TABLE, lookupModel, PROVIDER_IDS as REGISTRY_PROVIDER_IDS
 import { PROVIDER_IDS as STORABLE_PROVIDER_IDS } from "../src/main/provider-keys";
 import {
   buildProviderInfo,
+  preferCheapSelection,
   providerKeyConfigured,
   providerKindFromEnv,
   resolveMainModel,
@@ -113,8 +114,14 @@ describe("CX-02/CX-03 main provider registry", () => {
     expect(info.models.map((model) => model.id)).toEqual(DEFAULT_MODEL_TABLE.map((model) => model.id));
     expect(info.models.every((model) => model.capability.provider === model.provider)).toBe(true);
     expect(info.models.every((model) => model.capability.availability === "unverified")).toBe(true);
-    expect(info.models.every((model) => !model.capability.thinking.supported)).toBe(true);
-    expect(info.models.every((model) => model.capability.attachments.text && !model.capability.attachments.image)).toBe(true);
+    // DeepSeek 两行带官方文档自述的档位/模态证据（2026-10-25），是 thinking/识图开门的唯一
+    // 内置例外；其余行照旧「无证据不开门」。
+    const ds = info.models.filter((m) => m.provider === "deepseek");
+    expect(ds.every((m) => m.capability.thinking.supported)).toBe(true);
+    expect(ds.find((m) => m.id === "deepseek-cheap")?.capability.attachments.image).toBe(true);
+    const rest = info.models.filter((m) => m.provider !== "deepseek");
+    expect(rest.every((model) => !model.capability.thinking.supported)).toBe(true);
+    expect(rest.every((model) => model.capability.attachments.text && !model.capability.attachments.image)).toBe(true);
 
     const demo = buildProviderInfo({ kind: "demo" });
     // 2026-10-06 契约修正：demo 只表示「没选模型时跑预录剧本」，**不再**表示「没有模型可选」。
@@ -129,5 +136,36 @@ describe("CX-02/CX-03 main provider registry", () => {
     expect(providerKeyConfigured("openai", {})).toBe(false);
     expect(providerKeyConfigured("openai", { [PROVIDER_ENV_KEYS.openai]: "secret-value" })).toBe(true);
     expect(providerKeyConfigured("demo", {})).toBe(false);
+  });
+});
+
+// 自进化「便宜档偏置」（闭环 v2 批次 A4）：偏置的三条边界（显式不动 / 只降一档 / 同家找档）
+// 与尽力而为语义（找不到目标档原样返回）在这里判卷——生产接线在 agent-runner 装配缝。
+describe("preferCheapSelection（自进化便宜档偏置）", () => {
+  // MainModelSelection 是含 demo 的联合：取 spec 统一走这个小口（demo ⇒ null，判卷里 expect 非 null）。
+  const specOf = (s: ReturnType<typeof preferCheapSelection>) => (s.kind === "demo" ? null : s.spec);
+  const glmStandard = { kind: "glm" as const, spec: DEFAULT_MODEL_TABLE.find((s) => s.id === "glm-standard")!, modelExplicit: false };
+  const glmStrong = { kind: "glm" as const, spec: DEFAULT_MODEL_TABLE.find((s) => s.id === "glm-strong")!, modelExplicit: false };
+  const glmPinned = { ...glmStandard, modelExplicit: true };
+
+  it("standard/strong 缺省档 ⇒ 同家降一档到 glm-flash；modelExplicit 落 false", () => {
+    const demoted = preferCheapSelection(glmStandard);
+    expect(specOf(demoted)?.id).toBe("glm-flash");
+    if (demoted.kind !== "demo") expect(demoted.modelExplicit).toBe(false);
+    expect(specOf(preferCheapSelection(glmStrong))?.tier).toBe("standard"); // 只降一档，不跳到 cheap
+  });
+
+  it("反向：显式点名（modelExplicit）与 demo 不动——偏置只降缺省档", () => {
+    expect(preferCheapSelection(glmPinned)).toEqual(glmPinned);
+    expect(preferCheapSelection({ kind: "demo" })).toEqual({ kind: "demo" });
+  });
+
+  it("反向：已是 cheap ⇒ 原样；同家没有目标档 ⇒ 原样（尽力而为，绝不因偏置失败）", () => {
+    const glmCheap = { ...glmStandard, spec: DEFAULT_MODEL_TABLE.find((s) => s.id === "glm-flash")! };
+    expect(specOf(preferCheapSelection(glmCheap))?.tier).toBe("cheap");
+    // 表里没有「某家没有 cheap」的内置情形，用 custom 分支构造：spec 挂在 custom 家名下，
+    // effectiveModelTable 里该家没有 cheap 行 ⇒ 原样返回。
+    const customOnly = { kind: "custom" as const, providerId: "no-such-provider", spec: glmStrong.spec, modelExplicit: false };
+    expect(preferCheapSelection(customOnly)).toEqual(customOnly);
   });
 });

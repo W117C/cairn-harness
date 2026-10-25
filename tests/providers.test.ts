@@ -227,15 +227,15 @@ describe("跨 provider 契约（任务6：同一逻辑对话三家等价）", ()
 });
 
 describe("M5b/M6 provider 档位表", () => {
-  it("M6 白名单：PROVIDER_IDS = glm/openai/anthropic/gemini 四家（§4.3 预留面开闸）", () => {
-    expect(PROVIDER_IDS).toEqual(["glm", "openai", "anthropic", "gemini"]);
+  it("白名单：PROVIDER_IDS = glm/openai/anthropic/gemini + deepseek（2026-10-25 升一等家，追加在尾）", () => {
+    expect(PROVIDER_IDS).toEqual(["glm", "openai", "anthropic", "gemini", "deepseek"]);
   });
 
-  it("档位表 spec 解析往返：四家 × 三档齐备、字段完整、id 唯一", () => {
+  it("档位表 spec 解析往返：五家、字段完整、id 唯一；DeepSeek 只登官方现行的两档", () => {
     const tiers = new Set(DEFAULT_MODEL_TABLE.map((s) => s.tier));
     expect(tiers).toEqual(new Set(["cheap", "standard", "strong"]));
     const providers = new Set(DEFAULT_MODEL_TABLE.map((s) => s.provider));
-    expect(providers).toEqual(new Set(["glm", "openai", "anthropic", "gemini"]));
+    expect(providers).toEqual(new Set(["glm", "openai", "anthropic", "gemini", "deepseek"]));
     const ids = new Set(DEFAULT_MODEL_TABLE.map((s) => s.id));
     expect(ids.size).toBe(DEFAULT_MODEL_TABLE.length); // id 唯一
     for (const s of DEFAULT_MODEL_TABLE) {
@@ -243,6 +243,13 @@ describe("M5b/M6 provider 档位表", () => {
       expect(s.ctxWindow).toBeGreaterThan(0);
       expect(lookupModel(DEFAULT_MODEL_TABLE, s.id)).toBe(s); // 往返一致
     }
+    // DeepSeek 现行只有 deepseek-flash / deepseek-v4-pro 两个调用名（官方 docs 2026-10-25）——
+    // 没有 standard 可登，不造占位行；缺档由 defaultModelFor / preferCheapSelection 的缺省兜底走。
+    const ds = DEFAULT_MODEL_TABLE.filter((s) => s.provider === "deepseek");
+    expect(ds.map((s) => [s.id, s.model, s.tier])).toEqual([
+      ["deepseek-cheap", "deepseek-flash", "cheap"],
+      ["deepseek-strong", "deepseek-v4-pro", "strong"],
+    ]);
   });
 
   it("未知 id fail-visible 报错，不静默回落", () => {
@@ -250,9 +257,9 @@ describe("M5b/M6 provider 档位表", () => {
     expect(lookupModel(DEFAULT_MODEL_TABLE, "glm-nonexistent")).toBeUndefined();
   });
 
-  it("specsByTier 按档位分组（每档 4 家）", () => {
+  it("specsByTier 按档位分组：前四家三档齐备；deepseek 两档（cheap/strong）", () => {
     for (const t of ["cheap", "standard", "strong"] as const) {
-      expect(specsByTier(DEFAULT_MODEL_TABLE, t).length).toBe(4);
+      expect(specsByTier(DEFAULT_MODEL_TABLE, t).length).toBe(t === "standard" ? 4 : 5);
     }
   });
 
@@ -287,6 +294,129 @@ describe("M5b/M6 provider 档位表", () => {
       if (oldG === undefined) delete process.env.GEMINI_API_KEY;
       else process.env.GEMINI_API_KEY = oldG;
     }
+  });
+});
+
+/* DeepSeek 预设（2026-10-25 升一等家）：钉的是「这家与别家不一样」的三件事——
+   ① 永远显式 thinking 开关（V4.1 服务端默认开，不表态＝开）；
+   ② effort 按官方形状放 thinking.reasoning_effort，顶层 reasoning_effort 不发；
+   ③ usage 缓存命中读数认 prompt_cache_hit_tokens 旧字段兜底（官方文档：与 cached_tokens 同值）。 */
+describe("DeepSeek 预设 wire 形状", () => {
+  const capture = async (opts: {
+    reasoningEffort?: string;
+    sseLines?: string[];
+    env?: Record<string, string | undefined>;
+  }): Promise<{ bodies: Record<string, unknown>[]; url: string; events: AgentEvent[] }> => {
+    const bodies: Record<string, unknown>[] = [];
+    let url = "";
+    const fetchImpl = (async (u: unknown, init: unknown) => {
+      url = String(u);
+      bodies.push(JSON.parse(String((init as RequestInit).body)));
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            const encoder = new TextEncoder();
+            for (const l of opts.sseLines ?? ['data: {"choices":[{"delta":{"content":"hi"}}]}', "data: [DONE]", ""])
+              controller.enqueue(encoder.encode(l + "\n"));
+            controller.close();
+          },
+        }),
+        { status: 200, headers: { "content-type": "text/event-stream" } },
+      );
+    }) as unknown as typeof fetch;
+    const oldKey = process.env.DEEPSEEK_API_KEY;
+    const oldModel = process.env.DEEPSEEK_MODEL;
+    process.env.DEEPSEEK_API_KEY = "test";
+    delete process.env.DEEPSEEK_MODEL;
+    for (const [k, v] of Object.entries(opts.env ?? {})) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    try {
+      const wm = toWorkerModel(resolveModel(DEFAULT_MODEL_TABLE, "deepseek-cheap"), {
+        fetchImpl,
+        ...(opts.reasoningEffort !== undefined ? { reasoningEffort: opts.reasoningEffort as "off" } : {}),
+      });
+      const events = await collect(wm(USER, []));
+      return { bodies, url, events };
+    } finally {
+      if (oldKey === undefined) delete process.env.DEEPSEEK_API_KEY;
+      else process.env.DEEPSEEK_API_KEY = oldKey;
+      if (oldModel === undefined) delete process.env.DEEPSEEK_MODEL;
+      else process.env.DEEPSEEK_MODEL = oldModel;
+      for (const k of Object.keys(opts.env ?? {})) delete process.env[k];
+    }
+  };
+
+  it("① 未表态 ⇒ 显式 thinking disabled（V4.1 默认开思考，「不发字段」在这家等于「表态开」）", async () => {
+    const r = await capture({});
+    expect(r.url).toBe("https://api.deepseek.com/chat/completions");
+    expect(r.bodies[0]!.thinking).toEqual({ type: "disabled" });
+    expect("reasoning_effort" in r.bodies[0]!).toBe(false); // 顶层是 OpenAI 家的形状，这家不发
+    expect(r.bodies[0]!.stream_options).toEqual({ include_usage: true }); // 流式计量不丢
+    expect(r.bodies[0]!.model).toBe("deepseek-flash");
+    // 官方文档点名的雷区字段一个都不发：tool_choice 的 required/具名在 thinking 模式 400；
+    // frequency_penalty / presence_penalty 官方已弃用（"no longer supported"）
+    expect("tool_choice" in r.bodies[0]!).toBe(false);
+    expect("frequency_penalty" in r.bodies[0]!).toBe(false);
+    expect("presence_penalty" in r.bodies[0]!).toBe(false);
+  });
+
+  it("② 档位在场 ⇒ thinking enabled 且 effort 在 thinking 对象里（官方形状），无顶层字段", async () => {
+    const r = await capture({ reasoningEffort: "low" });
+    expect(r.bodies[0]!.thinking).toEqual({ type: "enabled", reasoning_effort: "low" });
+    expect("reasoning_effort" in r.bodies[0]!).toBe(false);
+  });
+
+  it("③ usage 缓存命中：prompt_cache_hit_tokens（旧字段）与 cached_tokens 同样被读到", async () => {
+    // DeepSeek 实测形状：usage 里两个口径都给（官方文档写明同值）；这里各喂一个只含其一的帧，
+    // 证明任一口径单独在场都不丢缓存命中读数（缺报仍是缺报，不折 0）。
+    const oldStyle = await capture({
+      sseLines: [
+        'data: {"choices":[{"delta":{"content":"hi"}}]}',
+        'data: {"usage":{"prompt_tokens":100,"completion_tokens":5,"prompt_cache_hit_tokens":64,"prompt_cache_miss_tokens":36}}',
+        "data: [DONE]",
+        "",
+      ],
+    });
+    const oldUsage = usageOf(oldStyle.events);
+    expect(oldUsage?.cacheReadInputTokens).toBe(64);
+    const newStyle = await capture({
+      sseLines: [
+        'data: {"choices":[{"delta":{"content":"hi"}}]}',
+        'data: {"usage":{"prompt_tokens":100,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":64}}}',
+        "data: [DONE]",
+        "",
+      ],
+    });
+    expect(usageOf(newStyle.events)?.cacheReadInputTokens).toBe(64);
+    const none = await capture({
+      sseLines: [
+        'data: {"choices":[{"delta":{"content":"hi"}}]}',
+        'data: {"usage":{"prompt_tokens":100,"completion_tokens":5}}',
+        "data: [DONE]",
+        "",
+      ],
+    });
+    expect(none.events.find((e): e is UsageEvent => e.type === "usage")?.cacheReadInputTokens).toBeUndefined();
+  });
+
+  it("④ reasoning_content 增量走独立 thinking_delta（正文不被思考污染），端点可被 DEEPSEEK_ENDPOINT 覆盖", async () => {
+    const r = await capture({
+      env: { DEEPSEEK_ENDPOINT: "https://ds-relay.example.com/v1" },
+      sseLines: [
+        'data: {"choices":[{"delta":{"reasoning_content":"先想想"}}]}',
+        'data: {"choices":[{"delta":{"content":"答案是 42"}}]}',
+        "data: [DONE]",
+        "",
+      ],
+    });
+    expect(r.url).toBe("https://ds-relay.example.com/v1/chat/completions");
+    expect(mergeAssistantDeltas(deltasOf(r.events))).toBe("答案是 42");
+    const thinking = r.events.find((e): e is Extract<AgentEvent, { type: "thinking_delta" }> => e.type === "thinking_delta");
+    expect(thinking?.text).toBe("先想想");
+    // 覆盖端点后 wire 形状仍是 DeepSeek 官方形状（预设身份自述，不靠 hostname 猜）
+    expect(r.bodies[0]!.thinking).toEqual({ type: "disabled" });
   });
 });
 

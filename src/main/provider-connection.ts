@@ -8,6 +8,7 @@
 // 其余三家与各自适配器的缺省 baseURL 对齐（适配器未导出常量——这里是第二份，
 // 改了适配器缺省必须同步这里；不一致的后果是检查失败/落错地址，可见、不会静默成功）。
 import { GLM_ENDPOINT } from "../providers/glm";
+import { DEEPSEEK_ENDPOINT } from "../providers/deepseek";
 import { envKeyOf } from "../providers/env-keys";
 import { discoverModels, type DiscoverFailure } from "./model-discovery";
 import type { DiscoveryProtocol } from "../providers/discovery";
@@ -36,9 +37,16 @@ export function builtinConnectionTarget(provider: string, env: NodeJS.ProcessEnv
       return { protocol: "anthropic", baseURL: "https://api.anthropic.com" };
     case "gemini":
       return { protocol: "gemini", baseURL: "https://generativelanguage.googleapis.com" };
+    case "deepseek":
+      return { protocol: "openai", baseURL: stripEndpointSuffix(overrideOf(env.DEEPSEEK_ENDPOINT) ?? DEEPSEEK_ENDPOINT) };
     default:
       return null;
   }
+}
+
+function overrideOf(raw: string | undefined): string | null {
+  const v = (raw ?? "").trim();
+  return v === "" ? null : v;
 }
 
 export type ProviderCheckReason =
@@ -88,7 +96,7 @@ function hintFor(reason: ProviderCheckReason, provider: string): string {
     case "http":
       return `上游报错但 key 可能有效：稍后重试；持续失败可在终端用 curl 复现 ${provider} 的 /models。`;
     case "unknown-provider":
-      return "内置的四家（glm / openai / anthropic / gemini）支持一键检查；自定义接口请在自定义表单里「拉取」。";
+      return "内置的五家（glm / openai / anthropic / gemini / deepseek）支持一键检查；自定义接口请在自定义表单里「拉取」。";
   }
 }
 

@@ -5,8 +5,10 @@ import { buildProviderDraft, suggestApiKeyEnv, suggestProviderId, wrapProvidersF
 import { parseCustomProviders } from "../src/providers/provider-config";
 
 describe("从地址推名字（建议值，用户可改）", () => {
-  it("常见情况", () => {
-    expect(suggestProviderId("https://api.deepseek.com/v1").id).toBe("deepseek");
+  it("常见情况（deepseek 自 2026-10-25 起是内置名 ⇒ 归进「撞上内置名」那一类，让开成 -compat）", () => {
+    const ds = suggestProviderId("https://api.deepseek.com/v1");
+    expect(ds.id).toBe("deepseek-compat");
+    expect(ds.note).toContain("已让开成");
     expect(suggestProviderId("https://openrouter.ai/api/v1").id).toBe("openrouter");
     expect(suggestProviderId("https://llm.mycompany.com/v1").id).toBe("mycompany");
     expect(suggestProviderId("https://api.moonshot.cn/v1").id).toBe("moonshot");
@@ -39,7 +41,9 @@ describe("从地址推名字（建议值，用户可改）", () => {
 
 describe("草稿：只写拿到的字段，缺的必须点名", () => {
   const base = {
-    providerId: "deepseek",
+    // providerId 不用 "deepseek"（2026-10-25 起是内置家名，校验拒收）——本文件的核心断言
+    // 恰是「生成的片段必须过我们自己的校验」，fixture 必须跟保留名单相容。
+    providerId: "mydeepseek",
     label: "DeepSeek",
     protocol: "openai" as const,
     baseURL: "https://api.deepseek.com/v1",
@@ -105,6 +109,6 @@ describe("草稿：只写拿到的字段，缺的必须点名", () => {
     }).json;
     const parsed = parseCustomProviders(JSON.parse(wrapProvidersFile([a, b])) as unknown);
     expect(parsed.ok).toBe(true);
-    if (parsed.ok) expect(parsed.file.providers.map((p) => p.id)).toEqual(["deepseek", "moonshot"]);
+    if (parsed.ok) expect(parsed.file.providers.map((p) => p.id)).toEqual(["mydeepseek", "moonshot"]);
   });
 });

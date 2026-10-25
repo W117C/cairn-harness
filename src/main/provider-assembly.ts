@@ -8,6 +8,7 @@
 // 入参 `SessionProviderOptions` 自己声明（原先写作 `Pick<RunOptions, "logPath" | "workspace" |
 // "attachments"> & {…}`），见该接口头上的说明。
 import { createSessionProvider, gateToolSpecs, type SessionTransport } from "../agent/session-provider";
+import type { CompactionConfig } from "../agent/compaction";
 import type { SolpiRuntime } from "../agent/solpi-runtime";
 import type { AgentEvent } from "../events";
 import type { GlmToolSpec } from "../providers/glm";
@@ -50,6 +51,10 @@ export interface SessionProviderOptions {
   /** 思考档位（§S8）：一路带到适配器的请求体里。缺省 / "off" ⇒ 请求体里不出现这个字段。 */
   thinking?: ThinkingEffort;
   onPreCompact?: (trigger: "manual" | "auto") => Promise<void>;
+  /** compaction 触发旋钮的注入面（自进化「提前压缩」偏置用，闭环 v2 · 批次 A4）：
+   *  给了就透传给 SessionCompaction.config，覆盖缺省 ratio。缺省不传 = compaction
+   *  用自己的缺省（逐字旧行为）。 */
+  compactionConfig?: Partial<CompactionConfig>;
   /** 本 provider 每次请求末尾追加的临时 user 消息（不进日志）：会话末沉淀轮送指令用。 */
   ephemeralUserTurn?: string;
   /** 识图活盒子：loop 读到图后，provider 在下一轮请求里取走附上（见 image-channel.ts）。
@@ -98,6 +103,9 @@ export function createProvider(
       requestFace: sessionOptions.requestFace,
       compaction: {
         ...(sessionOptions.onPreCompact ? { onPreCompact: sessionOptions.onPreCompact } : {}),
+        // 自进化「提前压缩」偏置（闭环 v2 · 批次 A4）：上一轮读数说贵 ⇒ 触发 ratio 压到
+        // COMPRESS_EARLY_RATIO（值唯一事实源在 evolution/advice.ts，调用方取来递进来）。
+        ...(sessionOptions.compactionConfig ? { config: sessionOptions.compactionConfig } : {}),
       },
       emit: sessionOptions.emit,
       plugins: sessionOptions.plugins,

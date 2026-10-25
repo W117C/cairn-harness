@@ -2,7 +2,7 @@
 // baseURL / model / 额外 body 参数（extraBody）/ 环境变量名均可配，GLM 是它的一组预设（见 glm.ts）。
 // 解码规则与迁移前逐字一致：增量在 choices[0].delta.content；tool_calls 按 index 跨块累积
 //（id 首块、name 非空即记、arguments 拼接）；末 chunk 带 usage（后到覆盖）；data: [DONE] 结束。
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { DEFAULT_STALL_MS } from "../net";
 import { backoffMs, establishStream, retryableStreamErrorFrame, retryableStreamFailure, StreamFailure, waitRetryDelay } from "./retry";
 import { turnStopMissingEvent, turnTruncatedEvent } from "./stop-reason";
@@ -42,10 +42,16 @@ export interface OpenAiOptions {
   fetchImpl?: typeof fetch;
   /** 停滞守卫静默窗口 ms（根因 4）；缺省 60s，<=0 关闭守卫。 */
   stallTimeoutMs?: number;
-  /** 思考档位（"low"|"medium"|"high"）：非空则写 body.reasoning_effort。
+  /** 思考档位（"low"|"medium"|"high"|"off"）：非空则写 body.reasoning_effort。
    *  传的是**档位名**而不是数值——OpenAI 兼容族收的就是这个名字（DeepSeek 的 /models 自述里
-   *  `effort.supported_levels` 写明的也是这些名字）。undefined = 逐字旧行为（不出现这个字段）。 */
+   *  `effort.supported_levels` 写明的也是这些名字）。undefined = 逐字旧行为（不出现这个字段）。
+   *  **例外（native DeepSeek）**：见 `deepseekNative`——那一家「不发字段」被服务端读成默认开思考，
+   *  所以它的 undefined/"" 与 "off" 同样显式写 `thinking:{type:"disabled"}`，effort 放进
+   *  `thinking.reasoning_effort`（官方形状）而不是顶层。 */
   reasoningEffort?: string;
+  /** 预设身份自述（deepseek.ts 传 true）：按 DeepSeek 官方 wire 形状发（thinking 对象、
+   *  显式开关），不靠 hostname 猜——端点被镜像/中转覆盖时形状也不能变。 */
+  deepseekNative?: boolean;
   /** Opt-in wire-boundary accounting; never stores payload/key text. */
   metering?: { meter: RequestMeter; category: RequestCategory };
 }
@@ -66,10 +72,10 @@ interface ChatChunk {
       reasoning?: string;
       tool_calls?: DeltaToolCall[];
     };
-    message?: { content?: string; tool_calls?: DeltaToolCall[] };
+    message?: { content?: string; reasoning_content?: string; tool_calls?: DeltaToolCall[] };
     finish_reason?: string | null;
   }[];
-  usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number }; cache_creation_input_tokens?: number } | null;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number }; completion_tokens_details?: { reasoning_tokens?: number }; cache_creation_input_tokens?: number; prompt_cache_hit_tokens?: number } | null;
   // OpenAI 流中段错误事件（如内容审查），出现即按协议错误抛出
   error?: { message?: string; type?: string; code?: string } | null;
 }
@@ -89,21 +95,26 @@ function tokenCount(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
 }
 
+/** 缓存命中读数：OpenAI 形状（`prompt_tokens_details.cached_tokens`）优先，DeepSeek 旧字段
+ *  `prompt_cache_hit_tokens` 兜底——官方文档写明两者同值（2026-10-25 实读），谁在场读谁；
+ *  都缺报仍是 null（未上报 ≠ 0 命中）。只此一处，流式/非流式/计量三张脸共用。 */
+function cacheReadTokens(u: NonNullable<ChatChunk["usage"]>): number | null {
+  return tokenCount(u.prompt_tokens_details?.cached_tokens) ?? tokenCount(u.prompt_cache_hit_tokens);
+}
+
 function toUsage(u: NonNullable<ChatChunk["usage"]>): ModelOutput & { type: "usage" } {
   // prompt_tokens 本身含缓存命中量 → 事件口径已一致；这里只是把分块透出，让命中率可见（缺报不落 0）
-  const read = tokenCount(u.prompt_tokens_details?.cached_tokens);
+  const read = cacheReadTokens(u);
   const write = tokenCount(u.cache_creation_input_tokens);
+  const reasoning = tokenCount(u.completion_tokens_details?.reasoning_tokens);
   return {
     type: "usage",
     inputTokens: u.prompt_tokens ?? 0,
     outputTokens: u.completion_tokens ?? 0,
     ...(read !== null ? { cacheReadInputTokens: read } : {}),
     ...(write !== null ? { cacheWriteInputTokens: write } : {}),
+    ...(reasoning !== null ? { reasoningOutputTokens: reasoning } : {}),
   };
-}
-
-function toWireMessages(messages: OpenAiMessage[]): unknown[] {
-  return toOpenAiWireMessages(messages);
 }
 
 /** 带图消息的 wire 形状：content 从字符串换成 OpenAI 的 parts 数组。
@@ -126,20 +137,23 @@ function toWireImageMessage(m: OpenAiMessage, parts: readonly ProviderContentIma
 }
 
 /** 一条消息的 wire 形状（识图那一支在这里分叉）。 */
-function toWireMessage(m: OpenAiMessage): unknown {
+function toWireMessage(m: OpenAiMessage, reasoningSource?: string): unknown {
   const parts = (m as ProviderMessageWithImage).contentParts;
-  if (parts !== undefined && parts.length > 0) return toWireImageMessage(m, parts);
+  const native = m.role === "assistant" && reasoningSource !== undefined && m.reasoning?.source === reasoningSource
+    ? { reasoning_content: m.reasoning.content } : {};
+  if (parts !== undefined && parts.length > 0) return { ...(toWireImageMessage(m, parts) as object), ...native };
   return {
     role: m.role,
     content: m.content,
     ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
     ...(m.tool_call_id !== undefined ? { tool_call_id: m.tool_call_id } : {}),
+    ...native,
   };
 }
 
 /** 识图消息表（纯函数，供判卷直接钉 wire 形状）。 */
-export function toOpenAiWireMessages(messages: OpenAiMessage[]): unknown[] {
-  return messages.map(toWireMessage);
+export function toOpenAiWireMessages(messages: OpenAiMessage[], reasoningSource?: string): unknown[] {
+  return messages.map(message => toWireMessage(message, reasoningSource));
 }
 
 function toWireTools(tools: OpenAiToolSpec[]): unknown[] {
@@ -178,11 +192,35 @@ export async function* streamOpenAI(
   // 缺失原生 id 时，序号只在这一逻辑请求内有效；重试沿用同一前缀，新请求不得碰撞。
   const toolRequestScope = randomUUID();
 
-  const body: Record<string, unknown> = { model, messages: toWireMessages(messages), stream };
+  const effectiveModel = opts.extraBody?.model ?? model;
+  const reasoningSource = createHash("sha256").update(endpoint + "\0" + String(effectiveModel)).digest("hex");
+  const endpointUrl = new URL(endpoint);
+  const nativeDeepSeek = opts.deepseekNative === true || endpointUrl.hostname === "api.deepseek.com";
+  // reasoning_content 作为**输入**回放：官方文档（2026-10-25 实读）写明这是 beta 通道的
+  // Chat Prefix Completion 能力（base 必须是 …/beta）；reasoner 时代的标准端点对输入里的
+  // reasoning_content 是 400。所以回放的来源分域判据不变（同端点+同模型才回放），但发给
+  // **标准端点**的 wire 一律不带这个字段——回放只在 beta 路径上发生。事件层的思考记录
+  // （thinking_delta 的 source 域）不受影响：状态留档，只是不回传。
+  const deepSeekBetaInput = nativeDeepSeek && endpointUrl.pathname.startsWith("/beta");
+  const wireReasoningSource = nativeDeepSeek && !deepSeekBetaInput ? undefined : reasoningSource;
+  const body: Record<string, unknown> = { model, messages: toOpenAiWireMessages(messages, wireReasoningSource), stream };
   // C8（审查 P2）：流式计量——OpenAI 兼容端点默认不回 usage，须显式开启 stream_options.include_usage，
   // 否则流式会话 token 恒 0（成本闸/用量面板全失真）。extraBody 仍可覆盖（自建网关不兼容时）。
   if (stream) body.stream_options = { include_usage: true };
-  if (opts.reasoningEffort !== undefined && opts.reasoningEffort !== "") body.reasoning_effort = opts.reasoningEffort;
+  if (nativeDeepSeek) {
+    // DeepSeek V4.1 官方文档（2026-10-25 实读）：`thinking.type` 缺省 **enabled**（effort 缺省 high）
+    // ——「一个字不加」在别家是逐字旧行为，在这家被服务端读成「要思考」：更慢、更贵、输出上限
+    // 也按思考档（64K）给。所以 native DeepSeek **永远写显式开关**；effort 同按官方形状放进
+    // `thinking.reasoning_effort`，顶层 reasoning_effort 是 OpenAI 家的形状，这家不发
+    // （档位词汇的兼容映射 minimal→low、medium/xhigh→high 由服务端做，见官方文档）。
+    if (opts.reasoningEffort === undefined || opts.reasoningEffort === "" || opts.reasoningEffort === "off") {
+      body.thinking = { type: "disabled" };
+    } else {
+      body.thinking = { type: "enabled", reasoning_effort: opts.reasoningEffort };
+    }
+  } else if (opts.reasoningEffort !== undefined && opts.reasoningEffort !== "" && opts.reasoningEffort !== "off") {
+    body.reasoning_effort = opts.reasoningEffort;
+  }
   if (opts.extraBody) Object.assign(body, opts.extraBody);
   if (tools && tools.length > 0) body.tools = toWireTools(tools);
 
@@ -212,7 +250,7 @@ export async function* streamOpenAI(
     }
   };
   const observeUsage = (u: NonNullable<ChatChunk["usage"]>): void => {
-    const input = tokenCount(u.prompt_tokens), read = tokenCount(u.prompt_tokens_details?.cached_tokens);
+    const input = tokenCount(u.prompt_tokens), read = cacheReadTokens(u);
     // OpenAI/GLM do not report a disjoint cache-write bucket. Do not invent zero.
     const write = tokenCount(u.cache_creation_input_tokens);
     meterUsage = { inputTokens: input !== null ? Math.max(0, input - (read ?? 0) - (write ?? 0)) : null,
@@ -250,6 +288,8 @@ export async function* streamOpenAI(
       if (data.usage) observeUsage(data.usage);
       const callId = data.id ?? "a-0";
       const msg = data.choices?.[0]?.message;
+      const nativeReasoning = typeof msg?.reasoning_content === "string" && msg.reasoning_content !== "";
+      if (nativeReasoning) yield { type: "thinking_delta", callId, text: msg!.reasoning_content!, reasoning: { id: toolRequestScope, source: reasoningSource } };
       if (msg?.content) yield { type: "assistant_delta", callId, text: msg.content };
       for (const [index, c] of (msg?.tool_calls ?? []).entries()) {
         yield {
@@ -257,6 +297,7 @@ export async function* streamOpenAI(
           id: c.id ?? `call-${toolRequestScope}-${String(c.index ?? index)}`,
           name: c.function?.name ?? "",
           args: parseArgs(c.function?.arguments, label),
+          ...(nativeReasoning ? { reasoningId: toolRequestScope } : {}),
         };
       }
       if (data.usage) yield toUsage(data.usage);
@@ -305,6 +346,7 @@ export async function* streamOpenAI(
       let buf2 = "";
       let finished2 = false;
       let callId2 = "a-0";
+      let nativeReasoning2 = false;
       const pending2 = new Map<number, { id?: string; name: string; args: string }>();
       let usage2: (ModelOutput & { type: "usage" }) | null = null;
       let finishReason2: string | null | undefined;
@@ -352,7 +394,9 @@ export async function* streamOpenAI(
             const thinking = delta?.reasoning_content ?? delta?.reasoning;
             if (typeof thinking === "string" && thinking !== "") {
               emitted = true;
-              yield { type: "thinking_delta", callId: callId2, text: thinking };
+              if (typeof delta?.reasoning_content === "string") nativeReasoning2 = true;
+              yield { type: "thinking_delta", callId: callId2, text: thinking,
+                ...(typeof delta?.reasoning_content === "string" ? { reasoning: { id: toolRequestScope, source: reasoningSource } } : {}) };
             }
             if (delta?.content) {
               emitted = true;
@@ -388,6 +432,7 @@ export async function* streamOpenAI(
             id: acc.id ?? `call-${toolRequestScope}-${String(index)}`,
             name: acc.name,
             args: parseArgs(acc.args, label),
+            ...(nativeReasoning2 ? { reasoningId: toolRequestScope } : {}),
           };
         }
         if (usage2) yield usage2;

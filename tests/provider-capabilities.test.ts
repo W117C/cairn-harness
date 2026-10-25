@@ -14,9 +14,23 @@ describe("provider capability contract", () => {
     expect(capabilities).toHaveLength(DEFAULT_MODEL_TABLE.length);
     expect(capabilities.every((cap) => cap.availability === "unverified")).toBe(true);
     expect(listVerifiedProviderCapabilities(DEFAULT_MODEL_TABLE)).toEqual([]);
-    expect(capabilities.every((cap) => cap.thinking.supported === false)).toBe(true);
-    expect(capabilities.every((cap) => cap.thinking.values.join(",") === "off")).toBe(true);
-    expect(capabilities.every((cap) => cap.attachments.text && !cap.attachments.image)).toBe(true);
+    // 证据纪律不变：没声明档位的内置行照旧 supported=false。唯一的例外是 DeepSeek 两行——
+    // 它们的 reasoningEfforts 是官方文档自述（2026-10-25 api-docs 实读：effort low/high/max），
+    // 正是 capability() 注释里「上游自述」那条证据通道第一次在内置行上被官方文档填上。
+    const declared = capabilities.filter((cap) => cap.provider === "deepseek");
+    expect(declared).toHaveLength(2);
+    for (const cap of declared) {
+      expect(cap.thinking.supported).toBe(true);
+      expect(cap.thinking.values).toEqual(["off", "low", "high"]); // max 归到 high，medium 未声明不可选
+      expect(cap.thinking.default).toBe("off"); // 声明了支持 ≠ 替用户打开（思考要花钱）
+    }
+    const rest = capabilities.filter((cap) => cap.provider !== "deepseek");
+    expect(rest.every((cap) => cap.thinking.supported === false)).toBe(true);
+    expect(rest.every((cap) => cap.thinking.values.join(",") === "off")).toBe(true);
+    expect(rest.every((cap) => cap.attachments.text && !cap.attachments.image)).toBe(true);
+    // 识图证据同源：flash 官方自述收图像，pro 只收文本
+    expect(declared.find((c) => c.modelId === "deepseek-cheap")?.attachments.image).toBe(true);
+    expect(declared.find((c) => c.modelId === "deepseek-strong")?.attachments.image).toBe(false);
   });
 
   it("keeps the UI vocabulary centralized and stable", () => {
@@ -34,6 +48,14 @@ describe("provider capability contract", () => {
     expect(() => validateThinkingEffort(spec!, "high")).toThrow(/不支持 thinking/);
     // 第 447 页：这句要原句证人（欠证人帽 0）；点的是那句里 ≥6 字的连续中文，不是关键词。
     expect(() => validateThinkingEffort(spec!, "high")).toThrow(/当前仅支持下列取值/);
+  });
+
+  it("DeepSeek 声明档位可校验通过；未声明的 medium 仍被拒（宁可发小一档也不猜）", () => {
+    const spec = findSpecByNameOrId(DEFAULT_MODEL_TABLE, "deepseek-cheap");
+    expect(validateThinkingEffort(spec!, "low")).toBe("low");
+    expect(validateThinkingEffort(spec!, "high")).toBe("high");
+    expect(validateThinkingEffort(spec!, undefined)).toBe("off");
+    expect(() => validateThinkingEffort(spec!, "medium")).toThrow(/不支持 thinking/);
   });
 
   it("fails visibly for an unregistered model rather than inventing capability", () => {
@@ -78,7 +100,7 @@ describe("自由档 capability：表外但可拨，且能力取保守值", () =>
 
   it("前缀仍是精确匹配，不是包含（`freeform/` 后面跟着的东西不可伪造 provider）", () => {
     expect(() => capabilityForModel({ id: "freeform-x", provider: "openai" })).toThrow(/未登记/);
-    // provider 必须是登记过的那四家：自由档也不给绕过这道的口子
+    // provider 必须是登记过的那五家：自由档也不给绕过这道的口子
     expect(() => capabilityForModel({ ...spec, provider: "evil" })).toThrow(/Provider capability 未登记/);
   });
 });

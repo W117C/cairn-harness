@@ -3,6 +3,7 @@
 // 禁止各自维护模型目录或 provider 分支。
 // 档位模型名与价格为**占位**——需联网实测校准（m5-acceptance C5：provider 可用性抽样 + 价格核实）。
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "./glm";
+import { streamDeepSeek } from "./deepseek";
 import { streamOpenAI, type OpenAiOptions } from "./openai";
 import { streamAnthropic } from "./anthropic";
 import { streamGemini } from "./gemini";
@@ -26,8 +27,9 @@ export interface ModelSpec {
   reasoningEfforts?: readonly string[];
 }
 
-/** Worker/main shared provider whitelist. */
-export const PROVIDER_IDS = ["glm", "openai", "anthropic", "gemini"] as const;
+/** Worker/main shared provider whitelist. deepseek 追加在尾：新增家不许静默改
+ *  既有顺序语义（表序 = 档位缺省优先级、ENV_KEYED_PROVIDERS 序 = 面板序）。 */
+export const PROVIDER_IDS = ["glm", "openai", "anthropic", "gemini", "deepseek"] as const;
 
 /* ---- 运行期自定义 provider（`.agent/providers.json` 派生出来的那些）--------------------------------
    为什么状态落在这里而不是另开一个模块：档位表、白名单、传输层三样都住在本文件，而它们必须**同时**
@@ -118,6 +120,14 @@ export const DEFAULT_MODEL_TABLE: readonly ModelSpec[] = [
   { id: "gemini-cheap", provider: "gemini", model: "gemini-2.5-flash", tier: "cheap", ctxWindow: 1_000_000 },
   { id: "gemini-standard", provider: "gemini", model: "gemini-3.8-flash", tier: "standard", ctxWindow: 1_000_000 },
   { id: "gemini-strong", provider: "gemini", model: "gemini-2.5-pro", tier: "strong", ctxWindow: 1_000_000 },
+  // DeepSeek（2026-10-25 官方 api-docs 实读）：现行调用名只有 deepseek-flash（V4.1-Flash-1017）
+  // 与 deepseek-v4-pro（V4-Pro-0813）两个，**没有 standard 档可登**——不造第三行占位。
+  // reasoningEfforts / inputModalities 是官方 /models 与文档自述的证据（effort: low/high/max；
+  // flash 收图像，pro 只收文本），capability 据此开门（thinking 可选、flash 识图）。
+  { id: "deepseek-cheap", provider: "deepseek", model: "deepseek-flash", tier: "cheap", ctxWindow: 1_000_000,
+    inputModalities: ["text", "image"], reasoningEfforts: ["low", "high", "max"] },
+  { id: "deepseek-strong", provider: "deepseek", model: "deepseek-v4-pro", tier: "strong", ctxWindow: 1_000_000,
+    inputModalities: ["text"], reasoningEfforts: ["low", "high", "max"] },
 ];
 
 /** 档位表查询（纯函数）。 */
@@ -201,6 +211,7 @@ function pickWorkerModel(spec: ModelSpec, opts: ToWorkerModelOptions): RegistryW
   const fetchImpl = opts.fetchImpl;
   // 档位 → 中立描述（各家自己决定放到 body 的哪儿）；null = 不发这个字段
   const directive = opts.reasoningEffort !== undefined ? reasoningDirective(opts.reasoningEffort) : null;
+  const openAiEffort = opts.reasoningEffort === "off" ? "off" : directive?.effort;
   switch (spec.provider) {
     case "glm":
       return (messages, tools, callOptions) => streamGlm(
@@ -210,7 +221,7 @@ function pickWorkerModel(spec: ModelSpec, opts: ToWorkerModelOptions): RegistryW
           ...(fetchImpl ? { fetchImpl } : {}),
           ...(callOptions?.stream !== undefined ? { stream: callOptions.stream } : {}),
           ...(callOptions?.metering ? { metering: callOptions.metering } : {}),
-          ...(directive !== null ? { reasoningEffort: directive.effort } : {}),
+          ...(openAiEffort !== undefined ? { reasoningEffort: openAiEffort } : {}),
         },
         tools,
         callOptions?.call,
@@ -223,9 +234,24 @@ function pickWorkerModel(spec: ModelSpec, opts: ToWorkerModelOptions): RegistryW
           ...(fetchImpl ? { fetchImpl } : {}),
           ...(callOptions?.stream !== undefined ? { stream: callOptions.stream } : {}),
           ...(callOptions?.metering ? { metering: callOptions.metering } : {}),
-          ...(directive !== null ? { reasoningEffort: directive.effort } : {}),
+          ...(openAiEffort !== undefined ? { reasoningEffort: openAiEffort } : {}),
         },
         toProviderTools(tools),
+        callOptions?.call,
+      );
+    case "deepseek":
+      // 档位未给时也显式关思考（DeepSeek V4.1 服务端默认开——见 deepseek.ts 文件头），预设层归一。
+      return (messages, tools, callOptions) => streamDeepSeek(
+        messages,
+        {
+          model: spec.model,
+          ...(fetchImpl ? { fetchImpl } : {}),
+          ...(callOptions?.stream !== undefined ? { stream: callOptions.stream } : {}),
+          ...(callOptions?.metering ? { metering: callOptions.metering } : {}),
+          // openAiEffort 为 undefined（调用方没表态）时也传 "off"：这家「不表态」≠「不开」
+          reasoningEffort: openAiEffort ?? "off",
+        },
+        tools,
         callOptions?.call,
       );
     case "anthropic":
@@ -271,8 +297,8 @@ function pickWorkerModel(spec: ModelSpec, opts: ToWorkerModelOptions): RegistryW
         label: custom.label,
         ...(fetchImpl ? { fetchImpl } : {}),
         // 自定义家走的就是这三支适配器，思考档位按协议翻译（见 providers/reasoning.ts）
-        ...(directive !== null && custom.protocol !== "anthropic" && custom.protocol !== "gemini"
-          ? { reasoningEffort: directive.effort }
+        ...(openAiEffort !== undefined && custom.protocol === "openai"
+          ? { reasoningEffort: openAiEffort }
           : {}),
         ...(directive !== null && custom.protocol !== "openai" ? { thinkingBudget: directive.budgetTokens } : {}),
       };

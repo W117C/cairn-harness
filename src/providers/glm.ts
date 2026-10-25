@@ -41,6 +41,8 @@ export interface GlmOptions {
   /** 单测注入点（缺省全局 fetch）。 */
   fetchImpl?: typeof fetch;
   metering?: OpenAiOptions["metering"];
+  /** Compatibility controls are serialized before transport metering; omitted preserves the default wire shape. */
+  extraBody?: OpenAiOptions["extraBody"];
 }
 
 /** GLM 工具调用流式要额外打开 `tool_stream`（官方必需），但**第三方 OpenAI 兼容中转会拒收未知字段**
@@ -69,7 +71,7 @@ function toOpenAiOptions(opts: GlmOptions): OpenAiOptions {
     baseURLEnv: "CAIRN_ENDPOINT",
     defaultBaseURL: GLM_ENDPOINT,
     // GLM 特有：工具调用流式要额外打开 tool_stream（可由 CAIRN_GLM_TOOL_STREAM=0 关，见上）
-    extraBody: glmToolStreamFlag(opts.stream),
+    extraBody: { ...glmToolStreamFlag(opts.stream), ...opts.extraBody },
     ...(opts.reasoningEffort !== undefined ? { reasoningEffort: opts.reasoningEffort } : {}),
     stream: opts.stream,
     label: "GLM",

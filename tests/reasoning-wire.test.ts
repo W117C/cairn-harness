@@ -119,11 +119,15 @@ describe("推理增量不许泄漏进正文", () => {
 });
 
 describe("能力表的门：有证据才开门", () => {
-  it("内置档位照旧 supported=false（没有任何一条带凭据实测过）", () => {
+  it("内置档位照旧 supported=false——唯一的例外是 DeepSeek（官方文档自述了档位，2026-10-25）", () => {
     const cap = capabilityForModel({ id: "openai-standard", provider: "openai" });
     expect(cap.thinking.supported).toBe(false);
     expect(cap.thinking.values).toEqual(["off"]);
     expect(() => validateThinkingEffort({ id: "openai-standard", provider: "openai" }, "high")).toThrow(/不支持/);
+    // DeepSeek 内置两行走「上游自述」证据通道：官方 /models 与文档给 effort low/high/max
+    const ds = capabilityForModel({ id: "deepseek-cheap", provider: "deepseek" });
+    expect(ds.thinking.supported).toBe(true);
+    expect(ds.thinking.values).toEqual(["off", "low", "high"]);
   });
 
   it("用户给自己的模型声明了档位 ⇒ 只有声明过的那些可选（max 被映射掉，medium 没声明就不能选）", () => {
@@ -131,7 +135,8 @@ describe("能力表的门：有证据才开门", () => {
       version: 1,
       providers: [
         {
-          id: "deepseek",
+          // id 不再用 "deepseek"：它已成内置家名，配置校验会拒收（保留名单同 PROVIDER_IDS 同步）
+          id: "my-deepseek",
           protocol: "openai",
           baseURL: "https://api.deepseek.com/v1",
           apiKeyEnv: "DEEPSEEK_API_KEY",
@@ -141,7 +146,7 @@ describe("能力表的门：有证据才开门", () => {
     });
     if (!parsed.ok) throw new Error(JSON.stringify(parsed.problems));
     installCustomProviders(deriveCustomProviders(parsed.file));
-    const custom = effectiveModelTable().find((s) => s.id === "deepseek-chat");
+    const custom = effectiveModelTable().find((s) => s.id === "my-deepseek-chat");
     if (custom === undefined) throw new Error("自定义档位没进表");
     const cap = capabilityForModel(custom);
     expect(cap.thinking.supported).toBe(true);

@@ -16,6 +16,18 @@ describe("M6 价格表", () => {
     expect(c).toBeCloseTo(0.15, 6);
   });
 
+  it("DeepSeek 两行已标定（官方 pricing 页 2026-10-25 实读；峰时价，谷时恰为一半）", () => {
+    expect(priceOf("deepseek-cheap")).toEqual({
+      inputPerMTok: 0.3, outputPerMTok: 1.2, cacheReadPerMTok: 0.006, cacheWritePerMTok: 0.3, calibrated: true,
+    });
+    expect(priceOf("deepseek-strong")).toEqual({
+      inputPerMTok: 1.32, outputPerMTok: 3.96, cacheReadPerMTok: 0.044, cacheWritePerMTok: 1.32, calibrated: true,
+    });
+    // 缓存命中读价真的被用在折算上（1M 全命中 @deepseek-cheap = $0.006，不是 $0.30）
+    const hit = costUsd("deepseek-cheap", { inputTokens: 1_000_000, outputTokens: 0, cacheReadInputTokens: 1_000_000 });
+    expect(hit).toBeCloseTo(0.006, 6);
+  });
+
   it("costUsd 输入输出分列计价", () => {
     // 算术用**注入价表**测：缺省表的单价是厂商目录价（会随 catalog 漂，2026-09-19 已按官方页
     // 实测换过一轮），把它写死在这里 = 每次改价都要来动测。缺省表自身的数字对不对，由
