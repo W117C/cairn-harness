@@ -18,6 +18,7 @@ const SIDE_EFFECT_DECISION: Record<PermissionMode, Decision> = {
   // guided 在粗档不逐笔问：它拆的正是这一条，「问不问」改由风险线判（autonomy 细档）。
   guided: "allow",
   auto: "allow",
+  "full-access": "allow",
 };
 
 // ---- M1c 自治等级：规则库 / 风险三通道 / 评估管线 / scope / 断路器（§11.7）----
