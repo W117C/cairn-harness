@@ -128,7 +128,7 @@
 | 插话 smoke | 1/6（gallery 桩的 running 立不住；组件级判卷全绿） |
 | core 终跑 | **518 文件 6971 条全绿，exit 0**（`pnpm test:capped` = `--maxWorkers=2`）｜日志 `.tmp/goal-20261026/core-final-5.log` |
 | `pnpm gates` | 30 道门：27 道非 HEAD 门全绿；`test` 的 2 条既有债已在本轮修掉（core 转全绿）；`web-fetch-check` 的五档缺口已修并复跑 7/7；`head-cert-check` 见下；`mutate-verify` 未跑完 |
-| `head-cert-check` / `mutate-verify` | `head-cert-check` 在 `f2ccc6ce` 上复跑（日志 `.tmp/goal-20261026/head-cert-final.log`）；`mutate-verify` 锚点全表本轮未跑完，不把部分读数当认证 |
+| `head-cert-check` / `mutate-verify` | `head-cert-check` 在 `f2ccc6ce` 上跑到 25 道认证门：24 道绿（含 core 518/6971、desktop-test、e2e、docs-check、web-fetch），唯一红是 `mutate-needles-check` 的 6 条锚点搬家；已改指新实现并逐条实跑，6/6 变异被杀死（日志 `.tmp/goal-20261026/head-cert-final.log`、`mutate-six.log`）。`mutate-verify` 全表本轮未跑完，不把部分读数当全表认证 |
 
 ## 八、未做的边界
 
