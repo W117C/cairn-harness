@@ -81,6 +81,29 @@ describe("McpManager 接线（描述与结果都过界）", () => {
     expect(desc).toContain("…[truncated: 描述 ");
   });
 
+  it("includeTools / excludeTools 在进注册表之前裁剪（被排除的连名字都不出现）", async () => {
+    const transport = { onclose: undefined as (() => void) | undefined, close: async () => {} } as unknown as Transport;
+    const client = {
+      connect: async () => {},
+      listTools: async () => ({
+        tools: [
+          { name: "a", description: "A", inputSchema: {} },
+          { name: "b", description: "B", inputSchema: {} },
+          { name: "c", description: "C", inputSchema: {} },
+        ],
+      }),
+      callTool: async () => ({ content: [] }),
+      close: async () => {},
+    } as unknown as Client;
+    const mgr = new McpManager(async () => ({ client, transport }), 500, 500);
+    const listed = await mgr.connect("p", "s", {
+      command: "x",
+      includeTools: ["a", "c"],
+      excludeTools: ["c"],
+    });
+    expect(listed.tools.map((t) => t.name)).toEqual(["a"]);
+  });
+
   it("未超限的描述与结果逐字不变（零回归）", async () => {
     const { client } = stubClient("plain result", "short desc");
     const mgr = new McpManager(async () => ({ client, transport: {} as Transport }), 500, 500);

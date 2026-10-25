@@ -318,7 +318,7 @@ async function main(): Promise<void> {
     assert(direct.ok && direct.output === "echo: 直连", "E2 tools/call 结果回传（stub server 透传）");
     await rtE.shutdown();
     // e2e：模型经统一注册表调用 MCP 工具（auto 档 + 无规则 → 放行）
-    const evE1 = await run(wsE.ws, "mcp-flow.jsonl", trustE, "mcp-allow");
+    const evE1 = await run(wsE.ws, "mcp-lazy-flow.jsonl", trustE, "mcp-allow");
     const okCall = resultOf(evE1, "c-mcp");
     assert(okCall !== null && okCall.ok && okCall.output.includes("echo: 你好"), "E3 MCP 工具经统一注册表真实执行（事件流回传 echo: 你好）");
     // e2e：deny 规则命中 scoped 名 → 同一权限门拦截
@@ -326,14 +326,14 @@ async function main(): Promise<void> {
       join(wsE.ws, ".agent", "permissions.json"),
       JSON.stringify({ rules: [{ behavior: "deny", tool: scopedEcho, scope: "always" }] }),
     );
-    const evE2 = await run(wsE.ws, "mcp-flow.jsonl", trustE, "mcp-deny");
+    const evE2 = await run(wsE.ws, "mcp-lazy-flow.jsonl", trustE, "mcp-deny");
     const denyCall = resultOf(evE2, "c-mcp");
     assert(denyCall !== null && !denyCall.ok && denyCall.output.includes("[permission denied]") && denyCall.output.includes("deny 规则命中"), "E4 权限门对 MCP 工具同样生效（deny 规则命中 scoped 名）");
     // 撤掉 E4 的规则文件：E5–E6b 断的是**注解分级**，留着规则就分不清拒绝是谁给的（两种口径 = 假绿）。
     await rm(join(wsE.ws, ".agent", "permissions.json"), { force: true });
     // E5 §11.7.2 fail-closed：stub 的 fail 工具什么都不标 ⇒ 按写处理，自主档亦逐次；
     //     非交互（无 askGate）时按 deny 收束，且**必须没跑到 server**（否则「免批」只是被换成「执行后再报错」）。
-    const evE3 = await run(wsE.ws, "mcp-unannotated.jsonl", trustE, "mcp-noann");
+    const evE3 = await run(wsE.ws, "mcp-lazy-unannotated.jsonl", trustE, "mcp-noann");
     const noAnn = resultOf(evE3, "c-mcp-noann");
     assert(
       noAnn !== null && !noAnn.ok && noAnn.output.includes("[permission denied]") && noAnn.output.includes("MCP 无注解") && !noAnn.output.includes("stub failure"),
@@ -342,7 +342,7 @@ async function main(): Promise<void> {
     );
     // E6 只读档 = 只读注解白名单（正向）：server 标了 readOnlyHint 的工具体仍可跑——
     //     这条同时证明注解是从 tools/list 一路走到门的，不是 evaluate 里凭空猜的。
-    const evE4 = await run(wsE.ws, "mcp-flow.jsonl", trustE, "ro-echo", "read-only");
+    const evE4 = await run(wsE.ws, "mcp-lazy-flow.jsonl", trustE, "ro-echo", "read-only");
     const roEcho = resultOf(evE4, "c-mcp");
     assert(
       roEcho !== null && roEcho.ok && roEcho.output.includes("echo: 你好"),
@@ -350,7 +350,7 @@ async function main(): Promise<void> {
       roEcho === null ? "无 tool_result" : roEcho.output,
     );
     // E6b 反向：同一档位里无注解的工具体必须被拒（只放行有注解的，不是「读档一律放行 MCP」）
-    const evE5 = await run(wsE.ws, "mcp-unannotated.jsonl", trustE, "ro-noann", "read-only");
+    const evE5 = await run(wsE.ws, "mcp-lazy-unannotated.jsonl", trustE, "ro-noann", "read-only");
     const roNoAnn = resultOf(evE5, "c-mcp-noann");
     assert(
       roNoAnn !== null && !roNoAnn.ok && roNoAnn.output.includes("只读注解白名单") && !roNoAnn.output.includes("stub failure"),

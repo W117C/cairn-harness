@@ -64,6 +64,14 @@ export function capMcpDescription(text: string, limit = MCP_DESCRIPTION_CHAR_LIM
 export const MCP_SCHEMA_LEAF_CHAR_LIMIT = 600;
 export const MCP_SCHEMA_DEPTH_LIMIT = 6;
 
+/** 服务器级懒加载的默认上限：一次 run 最多激活几台 server / 几把工具。
+ *  超限由 `mcp_activate` 显式拒绝并说清当前占用——不静默丢工具，也不让一台 80 工具
+ *  server 把 24k 固定面一口气撑爆。 */
+export const MCP_ACTIVE_SERVER_LIMIT = 2;
+export const MCP_ACTIVE_TOOL_LIMIT = 20;
+/** 目录里单条工具描述的上限（目录本身不该再制造一份大上下文）。 */
+export const MCP_CATALOG_DESC_CHAR_LIMIT = 300;
+
 function capSchemaLeaf(text: string): string {
   if (text.length <= MCP_SCHEMA_LEAF_CHAR_LIMIT) return text;
   const lineEnd = text.lastIndexOf("\n", MCP_SCHEMA_LEAF_CHAR_LIMIT);
@@ -115,6 +123,35 @@ export interface McpToolInfo {
   scopedName: string;
   /** §11.7.2「MCP 工具」那一行的分级输入（server 自带注解）。不收没有消费者的字段。 */
   grade: McpGrade;
+}
+
+/** 服务器级懒加载的目录项（模型先看到 server，再决定是否激活）。 */
+export interface McpServerSummary {
+  /** `plugin/server`，跨插件唯一。 */
+  key: string;
+  plugin: string;
+  server: string;
+  toolCount: number;
+  /** 整台 server 或其中至少一把工具处于 active。 */
+  active: boolean;
+  /** server = 整台激活；tools = 只激活了子集；none = 未激活。 */
+  activeMode: "server" | "tools" | "none";
+  /** 实际进入模型面的工具数（整台激活时 = toolCount）。 */
+  activeToolCount: number;
+}
+
+/** `mcp_list` 返回的单条工具摘要（不包含 schema）。 */
+export interface McpToolSummary {
+  name: string;
+  scopedName: string;
+  description: string;
+  /** 该工具此刻是否已激活（整台或其 scoped 名在按工具集里）。 */
+  active: boolean;
+}
+
+/** 跨插件唯一的 server key：插件名与 server 名都可能重复，用 `/` 拼成稳定键。 */
+export function mcpServerKey(plugin: string, server: string): string {
+  return plugin + "/" + server;
 }
 
 /** 注解收窄：只留"有没有标"+"只读/破坏性"两个布尔，其余（title / openWorld / idempotent）
@@ -278,7 +315,12 @@ export class McpManager {
       const label = `MCP server ${plugin}/${server}`;
       await withTimeout(client.connect(transport), this.connectTimeoutMs, label + " 连接");
       const listed = await withTimeout(client.listTools(), this.connectTimeoutMs, label + " tools/list");
-      const tools: McpToolInfo[] = (listed.tools ?? []).map((t) => {
+      // 工具级裁剪在进注册表之前：被 include/exclude 排除的工具连名字都不该出现在模型面。
+      const include = new Set(resolved.includeTools ?? []);
+      const exclude = new Set(resolved.excludeTools ?? []);
+      const kept = (listed.tools ?? []).filter((t) =>
+        (include.size === 0 || include.has(t.name)) && !exclude.has(t.name));
+      const tools: McpToolInfo[] = kept.map((t) => {
         // schema 与描述成对收窄：只压了 schema 却不告诉模型，模型会以为看到的就是全部参数说明。
         const capped = capMcpSchema((t.inputSchema ?? {}) as Record<string, unknown>);
         const desc = typeof t.description === "string" ? capMcpDescription(t.description) : "";

@@ -53,6 +53,12 @@ export interface McpServerConfig {
   url?: string;
   headers?: Record<string, string>;
   type?: "stdio" | "http" | "sse";
+  /** 与 Qoder/CC 对齐的工具级裁剪：只注册列出的工具 / 排除列出的工具。
+   *  在 `tools/list` 之后、进注册表之前生效，因此被排除的工具连名字都不会进模型面。 */
+  includeTools?: string[];
+  excludeTools?: string[];
+  /** 保留配置但不连接；用于按任务临时关掉一台 server。 */
+  disabled?: boolean;
 }
 
 export interface McpConfigFile {
@@ -143,6 +149,14 @@ export interface LooseSkill {
   fingerprint?: PluginContentFingerprint;
 }
 
+/** Skill 目录里的一个随附资源（L2）：只登记路径与大小，不读内容。
+ *  模型要内容时再走 read_file / run_shell，避免把 assets/references 全量买进上下文。 */
+export interface SkillResource {
+  /** 相对 skill 根目录的路径（不是绝对路径）。 */
+  path: string;
+  bytes: number;
+}
+
 export interface SkillEntry {
   /** 插件名；散装 skill 为 null。 */
   plugin: string | null;
@@ -151,6 +165,8 @@ export interface SkillEntry {
   path: string;
   frontmatter: Record<string, unknown>;
   body: string;
+  /** L2 资源索引：加载 SKILL.md 时只 stat、不读内容；旧夹具/外部构造可缺省。 */
+  resources?: SkillResource[];
 }
 
 export interface PromptCommandEntry {

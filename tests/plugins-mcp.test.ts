@@ -5,7 +5,12 @@ import { describe, expect, it } from "vitest";
 import { cp, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PluginRuntime, scopedToolName, parseScopedToolName } from "../src/agent/plugins";
+import {
+  PluginRuntime, scopedToolName, parseScopedToolName,
+  MCP_ACTIVE_TOOL_LIMIT,
+} from "../src/agent/plugins";
+import { pluginToolSpecsFromRuntime, installPluginTools } from "../src/main/tool-gates";
+import { TOOLS } from "../src/tools";
 import { evaluate, newAutonomySession, type McpGrade } from "../src/permissions";
 import type { ToolName } from "../src/tools/base";
 import { McpManager } from "../src/agent/plugins/mcp";
@@ -50,8 +55,100 @@ describe("M2e MCP 适配器（任务 7，真 stub server）", () => {
     expect(st).toHaveLength(1);
     expect(st[0]!.state).toBe("connected");
     expect(st[0]!.tools).toContain(scopedEcho);
+
+    // 服务器级懒加载：目录可见、工具规格默认不可见，激活后下一请求可见。
+    const key = "echo-suite/stub";
+    expect(rt.mcpServerSummaries()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key, toolCount: 2, active: false }),
+    ]));
+    expect(rt.mcpServerTools(key)?.map((t) => t.name).sort()).toEqual(["echo", "fail"]);
+    expect(rt.isMcpServerActive(key)).toBe(false);
+    const before = pluginToolSpecsFromRuntime(rt).map((t) => t.name);
+    expect(before).toEqual(expect.arrayContaining(["skill", "mcp_list", "mcp_activate", "mcp_release"]));
+    expect(before).not.toContain(scopedEcho);
+    const injectedBefore = installPluginTools(rt);
+    try {
+      expect(injectedBefore).toEqual(expect.arrayContaining(["mcp_list", "mcp_activate", "mcp_release"]));
+      expect(injectedBefore).not.toContain(scopedEcho);
+      const listed = await TOOLS["mcp_list"]!.run({}, { workspace: process.cwd() });
+      expect(listed.ok).toBe(true);
+      expect(listed.output).toContain(key);
+      const activated = await TOOLS["mcp_activate"]!.run({ server: key }, { workspace: process.cwd() });
+      expect(activated.ok).toBe(true);
+      expect(activated.output).toContain(scopedEcho);
+      const after = pluginToolSpecsFromRuntime(rt).map((t) => t.name);
+      expect(after).toContain(scopedEcho);
+      const injectedAfter = installPluginTools(rt);
+      expect(injectedAfter).toContain(scopedEcho);
+      for (const n of new Set([...injectedBefore, ...injectedAfter])) delete TOOLS[n];
+      expect(rt.releaseMcpServer(key).ok).toBe(true);
+      expect(rt.isMcpServerActive(key)).toBe(false);
+    } finally {
+      for (const n of new Set([...injectedBefore, "mcp_list", "mcp_activate", "mcp_release"])) delete TOOLS[n];
+    }
     await rt.shutdown();
   }, 30000);
+
+  it("大 server：整台超限显式拒绝；按工具可激活子集，仍受总帽约束", async () => {
+    const ws = await mkdtemp(join(tmpdir(), "m2e-mcp-cap-"));
+    const rt = await PluginRuntime.load({
+      workspace: ws,
+      pluginDataRoot: join(ws, "data"),
+      trustFile: join(ws, "trust.json"),
+      projectPluginsDir: join(ws, "no-plugins"),
+    });
+    const names: string[] = [];
+    for (let i = 0; i < MCP_ACTIVE_TOOL_LIMIT + 1; i++) {
+      const scoped = "mcp__plugin_fake_big__t" + String(i);
+      names.push("t" + String(i));
+      rt.mcpTools.set(scoped, {
+        name: "t" + String(i),
+        description: "",
+        inputSchema: {},
+        scopedName: scoped,
+        grade: { annotated: false },
+        plugin: "fake",
+        server: "big",
+      });
+    }
+    const whole = rt.activateMcpServer("fake/big");
+    expect(whole.ok).toBe(false);
+    expect(whole.error).toContain("超过上限");
+    expect(whole.error).toContain("tools");
+    expect(rt.isMcpServerActive("fake/big")).toBe(false);
+
+    const subset = rt.activateMcpTools("fake/big", ["t0", "t1"]);
+    expect(subset.ok).toBe(true);
+    expect(rt.mcpServerSummaries().find((s) => s.key === "fake/big")).toMatchObject({
+      active: true,
+      activeMode: "tools",
+      activeToolCount: 2,
+    });
+    expect(rt.isMcpToolActive("mcp__plugin_fake_big__t0")).toBe(true);
+    expect(rt.isMcpToolActive("mcp__plugin_fake_big__t1")).toBe(true);
+    expect(rt.isMcpToolActive("mcp__plugin_fake_big__t2")).toBe(false);
+    expect(rt.activeMcpToolCount()).toBe(2);
+
+    const specs = pluginToolSpecsFromRuntime(rt);
+    const specNames = specs.map((s) => s.name);
+    expect(specNames).toEqual(expect.arrayContaining(["mcp_list", "mcp_activate", "mcp_release", "mcp__plugin_fake_big__t0", "mcp__plugin_fake_big__t1"]));
+    expect(specNames).not.toContain("mcp__plugin_fake_big__t2");
+    const activateParams = specs.find((s) => s.name === "mcp_activate")?.parameters as {
+      properties?: Record<string, unknown>;
+    };
+    expect(activateParams.properties?.tools).toBeDefined();
+    expect(activateParams.properties?.tool).toBeDefined();
+
+    expect(rt.releaseMcpTool("fake/big", "t0").ok).toBe(true);
+    expect(rt.isMcpToolActive("mcp__plugin_fake_big__t0")).toBe(false);
+    expect(rt.isMcpToolActive("mcp__plugin_fake_big__t1")).toBe(true);
+
+    const tooMany = rt.activateMcpTools("fake/big", names);
+    expect(tooMany.ok).toBe(false);
+    expect(tooMany.error).toContain("超过上限");
+    await rt.shutdown();
+    await rm(ws, { recursive: true, force: true });
+  });
 
   it("权限门对 MCP 工具同样生效（deny 规则命中 scoped 名即拦；普通调用同管线放行）", async () => {
     const scopedEcho = scopedToolName("echo-suite", "stub", "echo");
