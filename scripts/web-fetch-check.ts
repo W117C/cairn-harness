@@ -157,11 +157,13 @@ export function tiersAllAsk(rows: readonly TierReading[]): WfVerdict {
     const r = byMode.get(m);
     if (r === undefined) { missing.push(m + "(没读到)"); continue; }
     if (r.verdict !== "ask") missing.push(m + "(" + r.verdict + ")");
-    if (r.layer !== "L4-risk" || r.risk !== "high") wrongLayer.push(m + "(" + r.layer + "/" + r.risk + ")");
+    // full-access 的出网仍走一次性批准，但出口层是专门的 L4-network（§11.4 红线的落点）；
+    // 其余四档走 L4-risk。两层都必须是 ask + high，不许任何一档被降成 L4-pass。
+    if ((r.layer !== "L4-risk" && r.layer !== "L4-network") || r.risk !== "high") wrongLayer.push(m + "(" + r.layer + "/" + r.risk + ")");
   }
   return {
     ok: missing.length === 0 && wrongLayer.length === 0,
-    detail: `四档 read-only/default/guided/auto：没问的 ${String(missing.length)}` +
+    detail: `五档 read-only/default/guided/auto/full-access：没问的 ${String(missing.length)}` +
       (missing.length ? "[" + missing.join(",") + "]" : "") +
       `、出口/风险级不对的 ${String(wrongLayer.length)}${wrongLayer.length ? "[" + wrongLayer.join(",") + "]" : ""}`,
   };
@@ -294,7 +296,7 @@ async function runRules(): Promise<WfRule[]> {
       v: publicAllowed(publics),
     },
     {
-      id: "WF3-出网四档逐档点名都问，且出口是风险层",
+      id: "WF3-出网五档逐档点名都问，且出口是风险层",
       why: "出网永不免批是本仓既有立场（run_shell 跑 curl 在 auto 档也会被问）。" +
         "而 L4-network 那条出口长在 if (!policy.writeAsk) 里，read-only / default 两档 writeAsk: true，" +
         "**那两档永远走不到它** ⇒ 只钉 verdict 不够，得同时钉 layer 与 risk。",
