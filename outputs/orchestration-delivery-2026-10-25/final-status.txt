@@ -1,0 +1,276 @@
+ M .gitignore
+ M BLOCKED.md
+ M PROGRESS.md
+ M README.md
+ M STATE.md
+ M apps/desktop/design/desktop-design-spec.md
+ M apps/desktop/scripts/interaction-smoke.cjs
+ M apps/desktop/scripts/layout-smoke.cjs
+ M apps/desktop/scripts/package.mjs
+ M apps/desktop/scripts/ui-gallery-preload.cjs
+ M apps/desktop/scripts/ui-gallery.cjs
+ M apps/desktop/src/main/channels.ts
+ M apps/desktop/src/main/index.ts
+ M apps/desktop/src/main/kernel-host.ts
+ M apps/desktop/src/preload/index.ts
+ M apps/desktop/src/renderer/app-controls.ts
+ M apps/desktop/src/renderer/components/AppPage.tsx
+ M apps/desktop/src/renderer/components/CommandPalette.tsx
+ M apps/desktop/src/renderer/components/Composer.tsx
+ M apps/desktop/src/renderer/components/CustomProviderForm.tsx
+ M apps/desktop/src/renderer/components/FilePane.tsx
+ M apps/desktop/src/renderer/components/PaneDock.tsx
+ M apps/desktop/src/renderer/components/PermissionMenu.tsx
+ M apps/desktop/src/renderer/components/SettingsPanel.tsx
+ M apps/desktop/src/renderer/components/Sidebar.tsx
+ M apps/desktop/src/renderer/components/Stream.tsx
+ M apps/desktop/src/renderer/components/settings-nav.tsx
+ M apps/desktop/src/renderer/components/settings-sections.tsx
+ M apps/desktop/src/renderer/components/settings-ui.tsx
+ M apps/desktop/src/renderer/derived/session.ts
+ M apps/desktop/src/renderer/derived/stream.ts
+ M apps/desktop/src/renderer/derived/trail.ts
+ M apps/desktop/src/renderer/index.html
+ M apps/desktop/src/renderer/main.tsx
+ M apps/desktop/src/renderer/markdown.tsx
+ M apps/desktop/src/renderer/pane-registry.ts
+ M apps/desktop/src/renderer/panes/AppToolbar.tsx
+ M apps/desktop/src/renderer/panes/WorkbenchView.tsx
+ M apps/desktop/src/renderer/permission-labels.ts
+ M apps/desktop/src/renderer/projections.ts
+ M apps/desktop/src/renderer/quick-starts.ts
+ M apps/desktop/src/renderer/slash.ts
+ M apps/desktop/src/renderer/state/chrome.ts
+ M apps/desktop/src/renderer/state/message-actions.ts
+ M apps/desktop/src/renderer/state/run-queue.ts
+ M apps/desktop/src/renderer/state/workbench.ts
+ M apps/desktop/src/renderer/stream-actions.ts
+ M apps/desktop/src/renderer/strings.ts
+ M apps/desktop/src/renderer/styles.css
+ M apps/desktop/src/renderer/tokens.css
+ M apps/desktop/src/renderer/vendor/dsh-claude-style/typography.css
+ M apps/desktop/tests/a11y-activate.test.tsx
+ M apps/desktop/tests/app-empty-terms.test.tsx
+ M apps/desktop/tests/boot-placeholder.test.ts
+ M apps/desktop/tests/channels.test.ts
+ M apps/desktop/tests/composer-phase.test.ts
+ M apps/desktop/tests/composer-rework.test.tsx
+ M apps/desktop/tests/composer-slash-key.test.ts
+ M apps/desktop/tests/composer-usage-ring.test.tsx
+ M apps/desktop/tests/delivery-summary.test.tsx
+ M apps/desktop/tests/delivery-trail-latest.test.ts
+ M apps/desktop/tests/design-minimal.test.tsx
+ M apps/desktop/tests/edit-user.test.tsx
+ M apps/desktop/tests/inspector.test.tsx
+ M apps/desktop/tests/markdown.test.tsx
+ M apps/desktop/tests/menu-unify.test.tsx
+ M apps/desktop/tests/micro-interaction.test.ts
+ M apps/desktop/tests/pane-disclosure.test.tsx
+ M apps/desktop/tests/pane-open-reveals-inspector.test.ts
+ M apps/desktop/tests/pane-rows.test.tsx
+ M apps/desktop/tests/panes-structure.test.tsx
+ M apps/desktop/tests/plugins-pane.test.ts
+ M apps/desktop/tests/popover-dismiss-coverage.test.ts
+ M apps/desktop/tests/popover-radius.test.ts
+ M apps/desktop/tests/projections.test.ts
+ M apps/desktop/tests/protocol-version.test.ts
+ M apps/desktop/tests/quick-starts-ui.test.tsx
+ M apps/desktop/tests/quick-starts.test.ts
+ M apps/desktop/tests/render-structure.test.tsx
+ M apps/desktop/tests/session-stream-isolation.test.ts
+ M apps/desktop/tests/settings-section-search.test.ts
+ M apps/desktop/tests/settings-sections.test.tsx
+ M apps/desktop/tests/settings-ui.test.tsx
+ M apps/desktop/tests/sidebar-session-search.test.ts
+ M apps/desktop/tests/slash.test.ts
+ M apps/desktop/tests/stream-actions.test.tsx
+ M apps/desktop/tests/stream-rework.test.tsx
+ M apps/desktop/tests/tokens.test.ts
+ M scripts/lib/mutations/scripts-gates.mjs
+ M scripts/lib/typecheck-triage.ts
+ M scripts/loop-eval.ts
+ M scripts/memory-check.ts
+ M scripts/plugins-check.ts
+ M src/agent/compaction.ts
+ M src/agent/context.ts
+ M src/agent/evolution/advice.ts
+ M src/agent/evolution/index.ts
+ M src/agent/memory/distill.ts
+ M src/agent/memory/inject.ts
+ M src/agent/memory/store.ts
+ M src/agent/model-surface.ts
+ M src/agent/plugins/content.ts
+ M src/agent/plugins/index.ts
+ M src/agent/plugins/mcp.ts
+ M src/agent/plugins/skills.ts
+ M src/agent/plugins/types.ts
+ M src/agent/session-provider.ts
+ M src/agent/sidechat.ts
+ M src/agent/tool-surface.ts
+ M src/agent/worker-prompt.ts
+ M src/cli.ts
+ M src/events/types.ts
+ M src/main/agent-runner.ts
+ M src/main/ipc-protocol.ts
+ M src/main/post-run-readings.ts
+ M src/main/provider-assembly.ts
+ M src/main/provider-connection.ts
+ M src/main/provider-runtime.ts
+ M src/main/run-request.ts
+ M src/main/tool-gates.ts
+ M src/main/usage-ledger-scan.ts
+ M src/main/usage-ledger.ts
+ M src/permissions/autonomy.ts
+ M src/permissions/index.ts
+ M src/permissions/modes.ts
+ M src/providers/env-keys.ts
+ M src/providers/glm.ts
+ M src/providers/index.ts
+ M src/providers/openai.ts
+ M src/providers/provider-identifiers.ts
+ M src/providers/registry.ts
+ M src/routing/pricing.ts
+ M src/tools/web-search.ts
+ M src/tools/web_fetch.ts
+ M tests/cli-surface.test.ts
+ M tests/custom-provider-store.test.ts
+ M tests/custom-provider-wiring.test.ts
+ M tests/desktop-model-surface.test.ts
+ M tests/distill-cancellation.test.ts
+ M tests/gated-tools.test.ts
+ M tests/ipc-protocol-version.test.ts
+ M tests/main-provider-runtime.test.ts
+ M tests/main-run-routing.test.ts
+ M tests/mcp-bounds.test.ts
+ M tests/mcp-current-permissions.test.ts
+ M tests/mcp-grade-gate.test.ts
+ M tests/permissions-tool-registry.test.ts
+ M tests/plugins-mcp.test.ts
+ M tests/plugins-skills.test.ts
+ M tests/provider-capabilities.test.ts
+ M tests/provider-config.test.ts
+ M tests/provider-connection.test.ts
+ M tests/provider-draft.test.ts
+ M tests/provider-setup.test.ts
+ M tests/providers.test.ts
+ M tests/reasoning-wire.test.ts
+ M tests/routing-pricing.test.ts
+ M tests/session-tools.test.ts
+ M tests/skill-routing-query-wiring.test.ts
+ M tests/skill-routing-tiering.test.ts
+?? ab.py
+?? apps/desktop/scripts/error-boundary-smoke.cjs
+?? apps/desktop/scripts/notification-open-smoke.cjs
+?? apps/desktop/scripts/pane-tabs-smoke.cjs
+?? apps/desktop/scripts/plan-mode-smoke.cjs
+?? apps/desktop/scripts/session-continuity-smoke.cjs
+?? apps/desktop/scripts/session-preview-smoke.cjs
+?? apps/desktop/scripts/settings-process-smoke.cjs
+?? apps/desktop/src/main/run-notification.ts
+?? apps/desktop/src/renderer/__prov-probe.html
+?? apps/desktop/src/renderer/components/CairnLoader.tsx
+?? apps/desktop/src/renderer/components/CairnMark.tsx
+?? apps/desktop/src/renderer/components/McpServerRow.tsx
+?? apps/desktop/src/renderer/components/OrchestrationPane.tsx
+?? apps/desktop/src/renderer/components/RenderErrorBoundary.tsx
+?? apps/desktop/src/renderer/components/SessionPreviewPane.tsx
+?? apps/desktop/src/renderer/components/UsageMeter.tsx
+?? apps/desktop/src/renderer/components/composer-plan.css
+?? apps/desktop/src/renderer/components/orchestration-pane.css
+?? apps/desktop/src/renderer/components/pane-tabs.css
+?? apps/desktop/src/renderer/components/render-error.css
+?? apps/desktop/src/renderer/components/session-preview.css
+?? apps/desktop/src/renderer/components/settings/
+?? apps/desktop/src/renderer/components/sidebar-filter.css
+?? apps/desktop/src/renderer/components/stream-process.css
+?? apps/desktop/src/renderer/public/brand/
+?? apps/desktop/tests/mcp-server-row.test.tsx
+?? apps/desktop/tests/notification-open-wiring.test.ts
+?? apps/desktop/tests/orchestration-host.test.ts
+?? apps/desktop/tests/orchestration-pane.test.tsx
+?? apps/desktop/tests/palette-file-open.test.ts
+?? apps/desktop/tests/plan-mode-wiring.test.ts
+?? apps/desktop/tests/plugins-pane-mcp-active.test.tsx
+?? apps/desktop/tests/render-resilience.test.tsx
+?? apps/desktop/tests/run-notification.test.ts
+?? apps/desktop/tests/run-queue-session.test.tsx
+?? apps/desktop/tests/settings-ease.test.tsx
+?? apps/desktop/tests/stream-process.test.tsx
+?? apps/desktop/tests/usage-analytics-host.test.ts
+?? apps/desktop/tests/usage-dashboard.test.tsx
+?? docs/adr/0006-lazy-mcp-server-activation.md
+?? docs/research/
+?? docs/superpowers/plans/2026-10-25-metacognition-study.md
+?? docs/superpowers/plans/2026-10-25-orchestration-delivery.md
+?? docs/superpowers/specs/2026-10-25-metacognition-study-design.md
+?? docs/superpowers/specs/2026-10-25-multi-agent-orchestration-platform-design.md
+?? fixtures/plugins/check/mcp-lazy-flow.jsonl
+?? fixtures/plugins/check/mcp-lazy-unannotated.jsonl
+?? outputs/bench-audit-2026-10-22/
+?? outputs/bench-thinking/
+?? outputs/full-sweep-2026-10-24/
+?? outputs/head-cert-7cd7733-2026-10-22-1948/
+?? outputs/head-cert-396adbd-2026-10-22-1708/
+?? outputs/head-cert-b93f2c6-2026-10-23-0042/
+?? outputs/head-cert-df512af-2026-10-23-1436/
+?? outputs/head-cert-c368858-2026-10-23-0229/
+?? outputs/head-cert-deafde8-2026-10-23-1057/
+?? outputs/head-cert-8cf4f30-2026-10-22-1324/
+?? outputs/head-cert-adb6b2c-2026-10-23-0158/
+?? outputs/head-cert-b75c11d-2026-10-22-1335/
+?? outputs/head-cert-7bbd2b4-2026-10-23-0121/
+?? outputs/metacognition-study-2026-10-25/
+?? outputs/metacognition-v2-acceptance-2026-10-25/
+?? outputs/orchestration-delivery-2026-10-25/
+?? scripts/build-metacognition-corpus.py
+?? scripts/lib/metacognition-run-state.ts
+?? scripts/lib/metacognition-sandbox.ts
+?? scripts/metacognition-study.ts
+?? scripts/native-reasoning-probe.ts
+?? src/agent/eval/metacognition.ts
+?? src/agent/eval/study.ts
+?? src/agent/evolution/ledger.ts
+?? src/agent/evolution/patch-gates.ts
+?? src/agent/evolution/reflect.ts
+?? src/agent/memory/consolidate.ts
+?? src/agent/memory/retrieval.ts
+?? src/agent/memory/strength.ts
+?? src/agent/memory/workflow.ts
+?? src/main/evolution/assess.ts
+?? src/main/evolution/autonomy.ts
+?? src/main/evolution/workflow-graduate.ts
+?? src/main/orchestration-backend.ts
+?? src/main/orchestration-service.ts
+?? src/main/search-settings.ts
+?? src/main/usage-analytics.ts
+?? src/orchestration/
+?? src/providers/deepseek.ts
+?? tests/evolution-assess.test.ts
+?? tests/evolution-autonomy.test.ts
+?? tests/evolution-ledger.test.ts
+?? tests/evolution-loop-v2.test.ts
+?? tests/evolution-patch-gates.test.ts
+?? tests/evolution-reflect.test.ts
+?? tests/memory-consolidation.test.ts
+?? tests/memory-recall.test.ts
+?? tests/memory-strength.test.ts
+?? tests/memory-workflow.test.ts
+?? tests/metacognition-policy.test.ts
+?? tests/metacognition-run-state.test.ts
+?? tests/metacognition-sandbox.test.ts
+?? tests/metacognition-study.test.ts
+?? tests/metacognition-wiring.test.ts
+?? tests/orchestration-backend.test.ts
+?? tests/orchestration-engine.test.ts
+?? tests/orchestration-fixture.ts
+?? tests/orchestration-plan.test.ts
+?? tests/orchestration-project.test.ts
+?? tests/orchestration-provider.test.ts
+?? tests/orchestration-schedule.test.ts
+?? tests/orchestration-service.test.ts
+?? tests/orchestration-store.test.ts
+?? tests/reasoning-continuity.test.ts
+?? tests/search-settings.test.ts
+?? tests/thinking-plumbing.test.ts
+?? tests/usage-analytics.test.ts
+?? tests/web-search-providers.test.ts

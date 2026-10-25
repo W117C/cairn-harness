@@ -1,0 +1,198 @@
+[
+ {
+  "r": {
+   "study": {
+    "strategy": "baseline",
+    "seed": 607119744,
+    "interventions": [],
+    "physicalRequests": 13,
+    "outputCap": 4096,
+    "timeoutMs": 120000,
+    "envelopes": [
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 0
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 1
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 2
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 2
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 3
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 4
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 5
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 6
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 6
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 6
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 7
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 8
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 9
+     }
+    ],
+    "reasoningOutputTokens": 1778
+   },
+   "id": "C1-malformed-tool",
+   "name": "C1-malformed-tool",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "cn:deepseek-v4.1-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "study: no hidden episode retry",
+   "seconds": 48.585,
+   "requests": 12,
+   "tokensIn": 183832,
+   "tokensOut": 3107,
+   "cny": null,
+   "toolCalls": 14,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 8,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "namedSets": {
+    "state": "pass",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [],
+    "reasons": [],
+    "sources": [
+     {
+      "command": "pnpm_config_verify_deps_before_run=false pnpm run test",
+      "format": "node-test-tap",
+      "tests": 9,
+      "carried": true,
+      "complete": true
+     }
+    ]
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/agent/loop.ts",
+    "src/agent/stuck.ts"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 568,
+    "procPeak": 8,
+    "cpuMs": 5998,
+    "samples": 91
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": true,
+    "exitCode": 0,
+    "output": "TAP version 13\nok 1 - loop context feedback includes persisted tool results exactly once in the next provider request\nok 2 - loop context feedback returns failure to the model without duplicate history\nok 3 - loop context feedback returns permission denial to the model without duplicate history\nok 4 - loop context feedback returns tool table denial to the model without duplicate history\nok 5 - loop context feedback returns unknown tool to the model without duplicate history\nok 6 - loop context feedback returns missing verify hook to the model without duplicate history\nok 7 - loop context feedback returns verify exception to the model without duplicate history\nok 8 - loop context feedback includes tool-emitted events in persisted order\nok 9 - loop context feedback does not request another turn after cancellation\nok 10 - auto-verify on completion (harness 补拍，证据 only) 写盘后纯文本收束 → 补一拍并把红字落进事件流（零额外模型调用）\nok 11 - auto-verify on completion (harness 补拍，证据 only) 每 run 至多一拍：自动拍红字后模型仍纯文本收束 ⇒ 不叠加\nok 12 - auto-verify on completion (harness 补拍，证据 only) 自动拍验证通过 → 绿证据落流\nok 13 - auto-verify on completion (harness 补拍，证据 only) 模型自调过 verify ⇒ harness 让位，且手动拍事件形态零变化（连 auto 键都不出现）\nok 14 - auto-verify on completion (harness 补拍，证据 only) 可验面探测炸（config 存在但 JSON 坏）⇒ 不炸 run、不补拍，但必须出声\nok 15 - auto-verify on completion (harness 补拍，证据 only) 零行为回退：未写盘（只读动作） → 无 verify_result、请求数与旧行为同形\nok 16 - auto-verify on completion (harness 补拍，证据 only) 零行为回退：仓库无 verify 面（surface=false） → 无 verify_result、请求数与旧行为同形\nok 17 - auto-verify on \n…[有界性：中段省略 301 字]…\n未给工具表（主会话形状）⇒ 行为逐字不变\nok 22 - resolveTool 补表钩子（run 中途才出现的工具，2026-10-19） 静态表里没有、钩子给得出 ⇒ 照常执行（模型看到的 ≠ 能执行的，这条堵住后半句）\nok 23 - resolveTool 补表钩子（run 中途才出现的工具，2026-10-19） 钩子也拿不到 ⇒ 仍是 unknown tool（补表不放行未注册工具，fail-closed 不变）\nok 24 - resolveTool 补表钩子（run 中途才出现的工具，2026-10-19） 反向（突变体专破）：把 `?? opts.resolveTool?.(name)` 从 loop 里拆掉 ⇒ 第一条必须红在这儿\n1..24\n# tests 24\n# pass 24\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0"
+   },
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "146743c",
+   "ranAt": "2026-10-24T17:33:43.712Z",
+   "maxSteps": 24,
+   "reps": 1,
+   "arm": "baseline",
+   "thinking": "low"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  },
+  "taskId": "C1-malformed-tool"
+ }
+]

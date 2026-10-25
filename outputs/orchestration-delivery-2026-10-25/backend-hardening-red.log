@@ -1,0 +1,68 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/orchestration-backend.test.ts (13 tests | 2 failed) 102ms
+   ❯ local orchestration backend (13)
+     × retains paid reservations across failed runs, retries and backend recreation 7ms
+     × rejects changed contracts and overlay bytes after production 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-backend.test.ts > local orchestration backend > retains paid reservations across failed runs, retries and backend recreation
+AssertionError: expected [Function] to throw error matching /budget|预算/i but got 'connection interrupted'
+
+- Expected:
+/budget|预算/i
+
++ Received:
+"connection interrupted"
+
+ ❯ tests/orchestration-backend.test.ts:142:43
+    140|     retry.signal = new AbortController().signal; retry.run_id = "retry…
+    141|     const recreated = createLocalBackend(f.options);
+    142|     await expect(recreated.execute(retry)).rejects.toThrow(/budget|预算/…
+       |                                           ^
+    143|   });
+    144|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/orchestration-backend.test.ts > local orchestration backend > rejects changed contracts and overlay bytes after production
+AssertionError: promise resolved "{ verdict: 'pass', …(5) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "checks": [
++     {
++       "detail": "backend-generated evidence fields checked",
++       "id": "forged",
++       "verdict": "pass",
++     },
++   ],
++   "results": [],
++   "revision": "bb75373f59bbc8761c5abaec9166c24cab8e058bf39fa07529afe90234138b21",
++   "spent_usd": 0,
++   "verdict": "pass",
++   "verifier_id": "verifier-5e02d4b0-c661-4a32-8aa3-05190d8c5cb1",
+  }
+
+ ❯ tests/orchestration-backend.test.ts:153:50
+    151|     await writeFile(join(overlay, "src/answer.txt"), "42\n");
+    152|     f.req.task.contract.acceptance = [{ kind: "evidence", id: "forged"…
+    153|     await expect(f.backend.verify(f.req, result)).rejects.toThrow(/con…
+       |                                                  ^
+    154|   });
+    155|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 11 passed (13)
+   Start at  20:03:17
+   Duration  567ms (transform 64%, tests 20%, import 15%, worker 1%)
+

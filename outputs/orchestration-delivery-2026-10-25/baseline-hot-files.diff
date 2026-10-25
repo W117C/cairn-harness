@@ -1,0 +1,854 @@
+diff --git a/apps/desktop/src/main/channels.ts b/apps/desktop/src/main/channels.ts
+index 91f05c34..de98ab9f 100644
+--- a/apps/desktop/src/main/channels.ts
++++ b/apps/desktop/src/main/channels.ts
+@@ -2,7 +2,7 @@
+ // AgentApi 新增方法而这里不加行 ⇒ typecheck 红（ipc-protocol 删键同理）。
+ import type { AgentApi } from "../../../../src/main/ipc-protocol";
+ 
+-export type PushChannel = "onEvent" | "onAsk" | "onAskDone" | "onTerminalData" | "onTerminalExit" | "onBrowserState" | "onPreviewState" | "onMenu";
++export type PushChannel = "onEvent" | "onAsk" | "onAskDone" | "onTerminalData" | "onTerminalExit" | "onBrowserState" | "onPreviewState" | "onMenu" | "onNotificationOpen";
+ export type InvokeChannel = Exclude<keyof AgentApi, PushChannel>;
+ 
+ export const PUSH_CHANNELS: { [K in PushChannel]: string } = {
+@@ -14,6 +14,7 @@ export const PUSH_CHANNELS: { [K in PushChannel]: string } = {
+   onBrowserState: "agent:browser-state",
+   onPreviewState: "agent:preview-state",
+   onMenu: "agent:menu-command",
++  onNotificationOpen: "agent:notification-open",
+ };
+ 
+ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
+@@ -31,6 +32,9 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
+   getOnboarding: "agent:onboarding",
+   getSettings: "agent:settings-get",
+   setSettings: "agent:settings-set",
++  searchSettingsGet: "agent:search-settings-get",
++  searchSettingsSave: "agent:search-settings-save",
++  searchSettingsTest: "agent:search-settings-test",
+   listSessions: "agent:sessions-list",
+   // v14：跨会话用量账本（头像菜单「用量统计」→「全部会话」；main 只读扫描各工作区日志）。
+   usageLedger: "agent:usage-ledger",
+@@ -115,6 +119,7 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
+   createProject: "agent:project-create",
+   providerDiscover: "agent:provider-discover",
+   providerSave: "agent:provider-save",
++  providerCustomList: "agent:provider-custom-list",
+   checkUpdate: "agent:check-update",
+   openExternal: "agent:open-external",
+   // M4-5：dialog 选目录（M3 deferred 收口）——main 端 dialog.showOpenDialog({ openDirectory })，
+diff --git a/apps/desktop/src/main/index.ts b/apps/desktop/src/main/index.ts
+index 0caef7e7..b5345ca9 100644
+--- a/apps/desktop/src/main/index.ts
++++ b/apps/desktop/src/main/index.ts
+@@ -5,6 +5,7 @@ import { app, BrowserWindow, dialog, ipcMain, nativeTheme, Notification, safeSto
+ import { clampToWorkArea, readWindowState, writeWindowState } from "./window-state";
+ import { bootBackgroundFor, normalizeThemePreference, resolveBootTheme, type ThemePreference } from "./boot-theme";
+ import { windowVibrancyOptions } from "./window-vibrancy";
++import { runNotificationCopy, runNotificationTarget, shouldNotifyRunSettled } from "./run-notification";
+ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+ import { stat } from "node:fs/promises";
+ import { spawn } from "node:child_process";
+@@ -98,6 +99,7 @@ import { createProjectFromTemplate, diagnoseProjectDirectory, templateCatalog }
+ import { PreviewRuntime } from "../../../../src/main/project-preview";
+ import { exportProject } from "../../../../src/main/project-export";
+ import { checkProviderConnection } from "../../../../src/main/provider-connection";
++import { getSearchSettings, saveSearchSettings, testSearchSettings } from "../../../../src/main/search-settings";
+ import { resolveEntry } from "../../../../src/main/workspace-fs";
+ import { readCapabilities } from "../../../../src/main/doctor";
+ import { gitClone, gitStatus } from "../../../../src/main/git-ops";
+@@ -105,7 +107,7 @@ import { searchWorkspace } from "../../../../src/main/workspace-search";
+ import { saveTempFile, cleanupPasteTempFiles } from "./temp-file";
+ import { quitWarningMessage, shouldWarnBeforeQuit } from "./quit-guard";
+ import type { DiscoveryProtocol } from "../../../../src/providers/discovery";
+-import type { ProviderSaveRequest } from "../../../../src/main/ipc-protocol";
++import type { ProviderSaveRequest, SearchSettingsInput } from "../../../../src/main/ipc-protocol";
+ 
+ // M4-5 即时重注别名（providerKeySet 保存成功 → 免重启生效）：wired 表在装配段（whenReady）之前，
+ // 若 wired 行直写 injectStoredProviderKey 调用，会把 T1 装配守卫（provider-keys.test 次序红线：
+@@ -115,6 +117,7 @@ const reinjectSavedProviderKey = injectStoredProviderKey;
+ 
+ const here = fileURLToPath(new URL(".", import.meta.url));
+ const distElectron = join(here, "..", "..", "dist-electron");
++const appIcon = join(here, "..", "renderer", "public", "brand", "cairn.png");
+ let mainWindow: BrowserWindow | null = null;
+ 
+ // 首帧底色（2026-10-21）：在 renderer 的 CSS/React 到达前，BrowserWindow 先铺一块与
+@@ -154,13 +157,41 @@ function stopSpeakingNow(): void {
+ // ---- §2.1 完成通知：会话 run 收束且窗口整体失焦时发 OS 通知 ----
+ // 近似口径（如实记）：渲染层没有「你正在看哪个会话」的主进程镜像，这里用「窗口整体失焦 = 你不在看」
+ // 作判据——聚焦时不发（你就在跟前看）；失焦时哪怕看的是别家窗口也发（宁可多一条不丢一条）。
+-function maybeNotifyRunSettled(sessionId: string, ok: boolean, error?: string): void {
+-  if (Notification.isSupported() === false) return;
+-  if (BrowserWindow.getAllWindows().some((w) => w.isFocused())) return;
+-  const title = ok ? "Cairn · 会话完成" : "Cairn · 会话未完成";
+-  const body = ok ? `会话「${sessionId}」本轮已收束。` : `会话「${sessionId}」本轮未完成：${error ?? "未知原因"}`;
++// 2026-10-25：通知可点击——聚焦主窗并经 push 通道让 renderer 打开目标会话。
++// 决策/文案/目标在 ./run-notification 纯函数里单测；这里只留 Electron 壳。
++const liveNotifications = new Set<Notification>();
++function maybeNotifyRunSettled(input: {
++  sessionId: string;
++  workspace?: string;
++  message?: string;
++  ok: boolean;
++  error?: string;
++}): void {
++  const supported = Notification.isSupported();
++  if (!shouldNotifyRunSettled({
++    ...input,
++    supported,
++    anyWindowFocused: BrowserWindow.getAllWindows().some((w) => w.isFocused()),
++  })) return;
++  const copy = runNotificationCopy(input);
++  const target = runNotificationTarget(input);
+   try {
+-    new Notification({ title, body }).show();
++    const notification = new Notification({ title: copy.title, body: copy.body });
++    liveNotifications.add(notification);
++    notification.on("close", () => { liveNotifications.delete(notification); });
++    notification.on("click", () => {
++      liveNotifications.delete(notification);
++      const win = mainWindow !== null && !mainWindow.isDestroyed()
++        ? mainWindow
++        : BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null;
++      if (win === null) return;
++      if (process.platform === "darwin") app.focus({ steal: true });
++      if (win.isMinimized()) win.restore();
++      win.show();
++      win.focus();
++      if (!win.webContents.isDestroyed()) win.webContents.send(PUSH_CHANNELS.onNotificationOpen, target);
++    });
++    notification.show();
+   } catch (err) {
+     console.error("[notify] 系统通知失败（不阻运行）:", err instanceof Error ? err.message : String(err));
+   }
+@@ -363,12 +394,23 @@ const projectRehydrate = (async () => {
+ // addProject 一行仍记 M3-3 修复轮的语义：透传之外在成功后同步 host.addWorkspace(record.path)，
+ // 新工作区并入 host 扫描面（main 进程内直调，不经 IPC、renderer 无感知自动生效）。
+ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
++  // 当前调用窗口的可信工作区；不接受 renderer 自报的目录。
++  searchSettingsGet: () => getSearchSettings(resolveWorkspace()),
++  searchSettingsSave: (input) => saveSearchSettings(resolveWorkspace(), input as SearchSettingsInput),
++  searchSettingsTest: (input) => testSearchSettings(resolveWorkspace(), input as SearchSettingsInput | undefined),
+   // §2.1 完成通知的挂点：run 收束后（会话模式）窗口失焦则发系统通知；不改变 run 的任何语义。
+   run: async (req) => {
+-    const sessionId = (req as { sessionId?: string } | null)?.sessionId;
++    const request = req as { sessionId?: string; workspace?: unknown; message?: unknown } | null;
++    const sessionId = request?.sessionId;
+     const res = await host.run(req as never);
+     if (typeof sessionId === "string" && sessionId !== "") {
+-      maybeNotifyRunSettled(sessionId, res.ok === true, res.error);
++      maybeNotifyRunSettled({
++        sessionId,
++        ...(typeof request?.workspace === "string" ? { workspace: request.workspace } : {}),
++        ...(typeof request?.message === "string" ? { message: request.message } : {}),
++        ok: res.ok === true,
++        ...(res.error !== undefined ? { error: res.error } : {}),
++      });
+     }
+     return res;
+   },
+@@ -655,6 +697,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
+   // v5 窗格弹出：独立窗口（同壳参数；#pane=<kind>[&session=<id>] 路由）。
+   panePopout: (kind, sessionId) => {
+     const win = new BrowserWindow({
++      icon: appIcon,
+       width: 760,
+       height: 620,
+       titleBarStyle: "hiddenInset",
+@@ -789,6 +832,22 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
+       warnings: [...prepared.warnings],
+     };
+   },
++  // 自定义供应商编辑模式的预填数据面：DerivedCustomProvider 的界面投影（不含 key 明文）。
++  providerCustomList: async () => {
++    const loaded = loadCustomProviders(workspace);
++    if (loaded.kind !== "ok") return { ok: true, entries: [] };
++    return {
++      ok: true,
++      entries: loaded.derived.map((d) => ({
++        id: d.id,
++        label: d.label,
++        protocol: d.protocol,
++        baseURL: d.baseURL,
++        apiKeyEnv: d.apiKeyEnv,
++        modelIds: d.specs.map((sp) => sp.id),
++      })),
++    };
++  },
+   checkUpdate: () => handleUpdateCheck(),
+   openExternal: async (url) => {
+     try {
+@@ -941,6 +1000,7 @@ const createWindow = () => {
+   const bounds = saved === null ? null : clampToWorkArea(saved, screen.getDisplayMatching(saved).workArea);
+   const vibrancy = windowVibrancyOptions(process.platform, process.env, readWindowVibrancyPreference());
+   const win = new BrowserWindow({
++    icon: appIcon,
+     ...(bounds === null ? {} : { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }),
+     ...(bounds === null ? { width: 1200, height: 800 } : {}),
+     minWidth: 880,
+@@ -1247,6 +1307,7 @@ const createWindow = () => {
+   }
+ };
+ app.whenReady().then(() => {
++  if (process.platform === "darwin") app.dock?.setIcon(appIcon);
+   // 主题真相在 settings.json；ready 后先同步，再建窗（createWindow 里的 bootBackground 也读同一字段）。
+   nativeTheme.themeSource = readThemePreference();
+   // 应用菜单（蓝本 §5.2 菜单树）：App → 文件 → 编辑 → 视图 → 前往 → 窗口 → 帮助。
+diff --git a/apps/desktop/src/main/kernel-host.ts b/apps/desktop/src/main/kernel-host.ts
+index 6257116f..fbbd7e9a 100644
+--- a/apps/desktop/src/main/kernel-host.ts
++++ b/apps/desktop/src/main/kernel-host.ts
+@@ -70,6 +70,7 @@ import { searchSessions } from "../../../../src/main/session-search";
+ import type { SessionMetadataRepository } from "../../../../src/main/session-metadata";
+ import { addUsageTotals, emptyUsageTotals } from "../../../../src/main/usage-ledger";
+ import { scanUsageFile, type UsageFileCache } from "../../../../src/main/usage-ledger-scan";
++import { emptyUsageAnalytics, mergeUsageAnalytics, usageAnalyticsSnapshot } from "../../../../src/main/usage-analytics";
+ import { readSessionLogTail } from "../../../../src/main/session-log";
+ 
+ export interface KernelHostDeps {
+@@ -493,7 +494,10 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
+   return {
+     run: async (req) => {
+       const sessionId = req.sessionId;
+-      if (sessionId === undefined) return handleAgentRun(req); // 非会话模式：临时日志，无归属无漂移无可取消缝
++      if (sessionId === undefined) {
++        // 非会话模式：临时日志，无归属无漂移无可取消缝；plan 覆盖仍随请求透传。
++        return handleAgentRun(req, req.planRequired !== undefined ? { planRequired: req.planRequired } : {});
++      }
+       const ws = await resolveSessionWs(sessionId);
+       const logPath = pathOf(wsRoot(ws), sessionId);
+       // 会话级 worktree 隔离（§3.7 · G4）：隔离会话的 run 工作区 = 它自己那棵 worktree
+@@ -531,6 +535,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
+       try {
+         const res = await handleAgentRun(req, {
+           sessionId, logPath, workspace: runWs, signal: controller.signal, steering,
++          ...(req.planRequired !== undefined ? { planRequired: req.planRequired } : {}),
+           onEvent: (event) => {
+             // 只有本 run 真正接收了主面用户轮才记 active；请求校验/busy 拒绝没有这拍。
+             if (!accepted && event.type === "user_message" &&
+@@ -630,6 +635,9 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
+       try {
+         // 评审修：不再经 listSessions（它会整份读文件数行）也不读 metadata（这里根本用不上）。
+         const totals = emptyUsageTotals();
++        const analyticsAcc = emptyUsageAnalytics();
++        let sessionsWithUsage = 0;
++        let sessionsWithoutUsage = 0;
+         const seenWorkspaces = new Set<string>();
+         let sessions = 0;
+         let skipped = 0;
+@@ -643,6 +651,9 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
+             try {
+               const scan = await scanUsageFile(pathOf(root, id), usageCache);
+               addUsageTotals(totals, scan.totals);
++              mergeUsageAnalytics(analyticsAcc, scan.analytics);
++              if (scan.totals.usageCount > 0) sessionsWithUsage += 1;
++              else sessionsWithoutUsage += 1;
+               badLines += scan.badLines;
+             } catch {
+               // 单个会话读不了（权限/删除竞态/损坏）不拖垮整本账：计数后如实上报。
+@@ -650,7 +661,10 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
+             }
+           }
+         }
+-        return { ok: true, totals, sessions, workspaces: seenWorkspaces.size, skipped, badLines };
++        return {
++          ok: true, totals, sessions, workspaces: seenWorkspaces.size, skipped, badLines,
++          analytics: { ...usageAnalyticsSnapshot(analyticsAcc), sessionsWithUsage, sessionsWithoutUsage, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt: Date.now() },
++        };
+       } catch (error) {
+         return { ok: false, error: error instanceof Error ? error.message : String(error) };
+       }
+diff --git a/apps/desktop/src/renderer/components/PaneDock.tsx b/apps/desktop/src/renderer/components/PaneDock.tsx
+index fd354a3d..0b9b7180 100644
+--- a/apps/desktop/src/renderer/components/PaneDock.tsx
++++ b/apps/desktop/src/renderer/components/PaneDock.tsx
+@@ -1,26 +1,27 @@
+-// 窗格区（蓝本 §3.4 窗格系统，D1 全采纳）：
+-//   右列容器——**多窗格同屏、纵向堆叠**（react-resizable-panels v4 的 Grid/Cell/Gridline：
+-//   每格一个窗格、格间分割线可拖行高）。每格自带标题头（标签 + 关闭钮），重开/关闭单一入口。
+-//   「堆叠要翻」的批评由"格少 + 每格常显标题"回应：≤4 个窗格全可见，没有翻找成本。
++// 窗格区（蓝本 §3.4 窗格系统；2026-10-24 业主重定为**单窗格占满 + 标签页切换**）：
++//   右列容器——一次只显示一个窗格、占满整列；顶部 pane-nav 即标签条（点标签切换，
++//   「＋」开新窗格并激活，标签上的关闭钮关窗格；⌥↑/⌥↓ 调标签顺序）。原 Grid 纵向
++//   堆叠模型（react-resizable-panels Grid/Cell/Gridline）整体撤下。
+ //   本轮窗格：变更（diff 审阅，含逐 hunk 展开）/ 方案 / 任务（多 agent）。subagent 详情并入任务窗格。
+ //   空态诚实：无数据即说明（不摆空壳）；价格不可知显式写"价格不可知"（不当 0）。
+ // 数据面全部来自 panes.ts 纯投影 + turnDelivery（既有）+ changeDiff（v4 通道，懒加载）。
+-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
++import { useEffect, useMemo, useRef, useState } from "react";
+ import "@xterm/xterm/css/xterm.css";
+-import { AlertTriangle, Check, ChevronRight, Crosshair, ExternalLink, GripVertical, Loader2, MoreHorizontal, PanelsTopLeft, Plus, X } from "lucide-react";
++import "./pane-tabs.css";
++import { AlertTriangle, Check, ChevronRight, Crosshair, ExternalLink, Loader2, MoreHorizontal, Plus, X } from "lucide-react";
+ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+-import { Cell, Grid, Gridline, useGridRef } from "react-resizable-panels";
+ import type { AgentEvent } from "../../../../../src/events";
+ import { turnDelivery } from "../projections";
+ import { diffCount, useLazyChangeDiff } from "../change-diff-state";
+-import { MIN_PANE_PCT, loadPaneRows, mergePaneRows, paneRowLayout, savePaneRows } from "../pane-layout";
+ import { ConfirmDialog } from "./ConfirmDialog";
+ import { clipDiff, parseUnifiedPatch } from "../diff-patch";
+ import { ModalSurface } from "./ModalSurface";
++import { RenderErrorBoundary } from "./RenderErrorBoundary";
+ import { toast } from "../toast";
+ import { DiffView } from "./DiffView";
+ import { FilePane } from "./FilePane";
+ import { PluginSurface } from "./PluginSurface";
++import { SessionPreviewPane } from "./SessionPreviewPane";
+ import { SidechatPane } from "./SidechatPane";
+ import { PathMenu } from "./PathMenu";
+ import { changedFileCount, composeReviewMessage, PANE_META, PANE_OPENABLE, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, workerCardAction, type PaneKind, type WorkerPaneItem } from "./panes";
+@@ -52,6 +53,8 @@ type BpPickResult = { ok: boolean; selector?: string; snippet?: string; url?: st
+  *  外站 first-visit 询问。⌘⇧S / 工具钮 = 元素选择（页内按键由主进程捕获、经 browserState.pick 回程；
+  *  结果经 onPickResult 回 App 填入输入框）。清除数据只及本独立 profile（persist:cairn-browser）。 */
+ function BrowserPane(props: {
++  /** 窗格标签是否在前台。非前台时原生视图必须收成零矩形（隐藏父容器管不到 WebContentsView）。 */
++  active: boolean;
+   initialUrl?: string;
+   /** 元素选择信号（App ⌘⇧S 递增；seq 变化触发一次）。 */
+   pickSignal?: number;
+@@ -88,6 +91,7 @@ function BrowserPane(props: {
+   const activeViewId = tabs.find((t) => t.key === activeKey)?.viewId ?? null;
+   const activeViewRef = useRef<string | null>(null); activeViewRef.current = activeViewId;
+   const activeKeyRef = useRef(activeKey); activeKeyRef.current = activeKey;
++  const paneActiveRef = useRef(props.active); paneActiveRef.current = props.active;
+ 
+   // 站点授权弹出时把焦点送进对话框（2026-10-18）：否则键盘用户还停在地址栏，
+   // Tab 要穿过整条工具栏才能到「允许/拒绝」。默认聚焦允许本次（与浏览器首访语义一致）。
+@@ -103,7 +107,13 @@ function BrowserPane(props: {
+     void window.agent.browserSetAllowedHosts([...hosts]).catch(() => undefined);
+   }, []);
+ 
++  const hideAllViews = (): void => {
++    for (const tab of tabsRef.current) void window.agent.browserBounds(tab.viewId, { x: 0, y: 0, width: 0, height: 0 });
++  };
+   const boundsSync = (): void => {
++    // 原生 WebContentsView 不参与 CSS 层叠：窗格标签切走后父容器 visibility:hidden
++    // 挡不住它。必须显式把每张视图收成零矩形，回到前台再按容器矩形放回。
++    if (!paneActiveRef.current) { hideAllViews(); return; }
+     const vid = activeViewRef.current;
+     const el = containerRef.current;
+     if (vid === null || el === null) return;
+@@ -144,6 +154,14 @@ function BrowserPane(props: {
+     boundsSync();
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [activeViewId]);
++  // 窗格标签切走/切回：原生视图整组藏/显。隐藏父容器不够（见 boundsSync 注释）。
++  useEffect(() => {
++    if (!props.active) { hideAllViews(); return; }
++    const raf = requestAnimationFrame(() => { boundsSync(); });
++    return () => cancelAnimationFrame(raf);
++    // hideAllViews/boundsSync 都是 latest-ref 读取，不随渲染换身份。
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [props.active]);
+ 
+   // 选中结果处理（两条来路共用：browserPickElement 直返、页内 ⌘⇧S 经 browserState.pick 回程）。
+   const handlePickResult = (r: BpPickResult): void => {
+@@ -855,6 +873,12 @@ export function PaneDock(props: {
+    *  且和窗格自己的标题行叠成两行同样的字（真机截图：弹出窗里两行「终端」）。
+    *  ⇒ 独立窗格窗口不渲染那一行。 */
+   inPopout?: boolean;
++  /** 命令面板快速打开：文件路径 + 递增序号；PaneDock 激活文件标签，FilePane 展开并预览。 */
++  fileTarget?: { path: string; seq: number };
++  /** ⌘+点击侧栏会话：只读预览目标（seq 递增；新目标自动激活「会话」标签）。 */
++  sessionPreview?: { id: string; workspace?: string; title: string; seq: number } | null;
++  /** 预览头部「切到会话」：把主体会话换过去（预览窗格保留）。 */
++  onSwitchSession?: (id: string, workspace?: string) => void;
+   /** v6 预览地址：browser 窗格就绪后自动导航到这里（缺省 = 只显示手动地址栏）。 */
+   browserUrl?: string;
+   /** v7 当前会话 id（sidechat 窗格的父会话面；缺省 = 旁路空态提示先开会话）。 */
+@@ -866,12 +890,37 @@ export function PaneDock(props: {
+   /** v7 元素选择结果（选择器/片段/页面 URL）→ App 拼文进输入框。 */
+   onPickResult?: (r: { selector: string; snippet: string; url: string }) => void;
+ }): React.JSX.Element {
+-  // 拖拽换位状态（HTML5 DnD；拖动中的格子给视觉反馈）。
+-  const [dragIndex, setDragIndex] = useState<number | null>(null);
+   const [focusedPane, setFocusedPane] = useState<PaneKind | null>(null);
+-  const focused = focusedPane !== null && props.tabs.includes(focusedPane) ? focusedPane : null;
++  // 单窗格模式（2026-10-24 业主）：侧栏一次只显示一个窗格、占满整列；标签页即窗格切换。
++  // 激活窗格 = 手动点选的那个（仍开着时），否则最新打开的一个——新开窗格自动露出。
++  const active = focusedPane !== null && props.tabs.includes(focusedPane)
++    ? focusedPane
++    : props.tabs[props.tabs.length - 1] ?? null;
+   const previousTabs = useRef(props.tabs);
+   const navRef = useRef<HTMLElement | null>(null);
++  const navItemsRef = useRef<HTMLDivElement | null>(null);
++  const activeTabRef = useRef<HTMLSpanElement | null>(null);
++  const tabsSig = props.tabs.join("\u0001");
++  // 多标签时激活标签必须自己滚进可视区：新开第 6–8 个窗格时标签条会横向溢出，
++  // 内容切过去了但标签还藏在右边，用户会以为没开。滚动只发生在标签条内部（不带动整页）。
++  useEffect(() => {
++    if (active === null) return;
++    const scroller = navItemsRef.current;
++    const tab = activeTabRef.current;
++    if (scroller === null || tab === null) return;
++    const raf = window.requestAnimationFrame(() => {
++      const pad = 4;
++      const left = tab.offsetLeft;
++      const right = left + tab.offsetWidth;
++      const viewLeft = scroller.scrollLeft;
++      const viewRight = viewLeft + scroller.clientWidth;
++      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
++      const behavior: ScrollBehavior = reduced ? "auto" : "smooth";
++      if (left < viewLeft + pad) scroller.scrollTo({ left: Math.max(0, left - pad), behavior });
++      else if (right > viewRight - pad) scroller.scrollTo({ left: right - scroller.clientWidth + pad, behavior });
++    });
++    return () => window.cancelAnimationFrame(raf);
++  }, [active, tabsSig]);
+   const closePane = (kind: PaneKind): void => {
+     props.onClose(kind);
+     // 关闭按钮卸载后将焦点交给剩余窗格，避免键盘用户掉回文档起点。
+@@ -881,36 +930,23 @@ export function PaneDock(props: {
+   };
+   useEffect(() => {
+     const added = props.tabs.find((kind) => !previousTabs.current.includes(kind));
+-    if (focusedPane !== null) setFocusedPane(added ?? (props.tabs.includes(focusedPane) ? focusedPane : null));
++    if (added !== undefined) setFocusedPane(added);
++    else if (focusedPane !== null && !props.tabs.includes(focusedPane)) setFocusedPane(null);
+     previousTabs.current = props.tabs;
+   }, [props.tabs, focusedPane]);
++  // 命令面板快速打开：即使文件标签早已开着但不在前台，也要切过去（openPane 只保证标签存在）。
++  useEffect(() => {
++    if (props.fileTarget !== undefined) setFocusedPane("file");
++  }, [props.fileTarget]);
++  // ⌘+点击侧栏会话：新目标即激活「会话」标签（即使它早已开着但不在前台）。
++  useEffect(() => {
++    if (props.sessionPreview !== undefined && props.sessionPreview !== null) setFocusedPane("session");
++  }, [props.sessionPreview]);
+   // 右键路径菜单（§2.3）：窗格内坐标 + 目标；渲染层自绘（见 PathMenu）。
+   const [pathMenu, setPathMenu] = useState<{ x: number; y: number; rel: string; kind: "file" | "directory" } | null>(null);
+   const openPathMenu = (rel: string, kind: "file" | "directory", x: number, y: number): void => {
+     setPathMenu({ x, y, rel, kind });
+   };
+-  // 行高记忆：Grid 的行轨 id 用窗格 kind（不是行下标），重排/关开后尺寸跟着窗格走。
+-  const gridRef = useGridRef();
+-  const tabsSig = props.tabs.join("\u0001");
+-  const rowTracks = useMemo(
+-    () => props.tabs.map((kind) => ({ id: kind, minSize: `${MIN_PANE_PCT}%` })),
+-    // 数组每次渲染都是新引用；tabsSig 是内容签名，等价于「窗格集变了没有」。
+-    // eslint-disable-next-line react-hooks/exhaustive-deps
+-    [tabsSig],
+-  );
+-  const defaultRows = useMemo(
+-    () => paneRowLayout(props.tabs, loadPaneRows()),
+-    // eslint-disable-next-line react-hooks/exhaustive-deps
+-    [tabsSig],
+-  );
+-  // 窗格集变化（恢复上次布局 / 新开 / 关闭）时把记下的行高放回去。
+-  // setLayout 触发的 onLayoutChanged 带 isUserInteraction=false，不会回写存储。
+-  useEffect(() => {
+-    const grid = gridRef.current;
+-    if (grid === null || props.tabs.length === 0) return;
+-    grid.setLayout({ rows: paneRowLayout(props.tabs, loadPaneRows()) });
+-    // eslint-disable-next-line react-hooks/exhaustive-deps
+-  }, [tabsSig]);
+   if (props.tabs.length === 0) {
+     return (
+       <aside className="pane-dock" aria-label="窗格区">
+@@ -923,13 +959,35 @@ export function PaneDock(props: {
+     {/* 面板导航行只对「多窗格同屏」有意义：独立窗格窗口里它是死按钮（见 inPopout 注释）。 */}
+     {props.inPopout !== true && (
+     <nav className="pane-nav" aria-label="面板导航" ref={navRef}>
+-      <div className="pane-nav-items">
+-        {props.tabs.map((kind) => <button key={kind} className="pane-nav-item"
+-          aria-label={`聚焦${PANE_META[kind].label}窗格`} aria-pressed={focused === kind}
+-          onClick={() => setFocusedPane(kind)}>{PANE_META[kind].label}</button>)}
++      <div className="pane-nav-items" ref={navItemsRef}>
++        {props.tabs.map((kind) => (
++          <span key={kind} ref={kind === active ? activeTabRef : undefined} className={"pane-tab" + (kind === active ? " on" : "")}>
++            <button className="pane-nav-item" aria-label={`切换到${PANE_META[kind].label}窗格`}
++              aria-pressed={kind === active}
++              title={props.onReorder !== undefined ? "⌥↑ / ⌥↓ 调整标签顺序" : undefined}
++              onKeyDown={(e) => {
++                if (props.onReorder === undefined || e.target !== e.currentTarget) return;
++                if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
++                const i = props.tabs.indexOf(kind);
++                const to = reorderTarget(i, e.key, props.tabs.length);
++                if (to === null) return;
++                e.preventDefault();
++                props.onReorder?.(i, to);
++              }}
++              onClick={() => setFocusedPane(kind)}>{PANE_META[kind].label}</button>
++            {/* 临时预览窗格（session）没有独立窗口路由：弹出后 PopoutApp 拿不到预览目标，
++                只会开一个空壳。可选窗格集合才是「能脱离主窗存在」的那一组。 */}
++            {kind === active && props.onPopout !== undefined && PANE_OPENABLE.includes(kind) && (
++              <button className="pane-tab-act" aria-label={`弹出${PANE_META[kind].label}窗格`} title="弹出为独立窗口"
++                onClick={() => { props.onPopout?.(kind); }}><ExternalLink size={11} /></button>
++            )}
++            {kind === active && (
++              <button className="pane-tab-act" aria-label={`关闭${PANE_META[kind].label}窗格`}
++                onClick={() => { closePane(kind); }}><X size={11} /></button>
++            )}
++          </span>
++        ))}
+       </div>
+-      <button className="iconbtn sm" aria-label="恢复多面板布局" title="恢复多面板布局" aria-pressed={focused === null}
+-        onClick={() => setFocusedPane(null)}><PanelsTopLeft size={15} /></button>
+       {props.onOpen !== undefined && <DropdownMenu.Root>
+         <DropdownMenu.Trigger asChild><button className="iconbtn sm" aria-label="添加面板" title="添加面板"><Plus size={15} /></button></DropdownMenu.Trigger>
+         <DropdownMenu.Portal><DropdownMenu.Content className="pop-rd" sideOffset={5} align="end">
+@@ -941,99 +999,58 @@ export function PaneDock(props: {
+       </DropdownMenu.Root>}
+     </nav>
+     )}
+-    <Grid
+-      gridRef={gridRef}
+-      columns={1}
+-      rows={rowTracks}
+-      defaultLayout={{ rows: defaultRows }}
+-      onLayoutChanged={(layout, meta) => {
+-        if (focused !== null) return;
+-        if (!meta.isUserInteraction) return;
+-        savePaneRows(mergePaneRows(loadPaneRows(), layout.rows, props.tabs));
+-      }}
+-      className="pane-grid"
+-      id="cairn-panes"
+-      data-focused={focused ?? undefined}
+-    >
+-      {props.tabs.map((kind, i) => (
+-        <Fragment key={kind}>
+-          {i > 0 && <Gridline type="row" row={i} className="pane-gridline" />}
+-          <Cell column={0} row={i} className="pane-cell" data-pane={kind} data-focused={focused === kind}>
+-            <section className="pane-chunk" aria-label={`${PANE_META[kind].label}窗格`}>
+-              <div
+-                className="pane-chunk-head"
+-                draggable={props.onReorder !== undefined}
+-                data-dragging={dragIndex === i}
+-                onDragStart={(e) => {
+-                  if (props.onReorder === undefined) return;
+-                  setDragIndex(i);
+-                  e.dataTransfer.effectAllowed = "move";
+-                }}
+-                onDragOver={(e) => {
+-                  if (dragIndex !== null && dragIndex !== i) e.preventDefault();
+-                }}
+-                onDrop={(e) => {
+-                  e.preventDefault();
+-                  if (dragIndex !== null && dragIndex !== i) props.onReorder?.(dragIndex, i);
+-                  setDragIndex(null);
+-                }}
+-                onDragEnd={() => setDragIndex(null)}
+-                // 键盘换位（2026-10-18）：拖拽此前是唯一的换位路径，键盘用户够不着「⋮⋮」。
+-                // 焦点在窗格头本身时 ⌥↑/⌥↓ 与拖拽同语义（共用 movePane）；方向键留给内部控件。
+-                tabIndex={props.onReorder !== undefined ? 0 : undefined}
+-                onKeyDown={(e) => {
+-                  if (props.onReorder === undefined || e.target !== e.currentTarget) return;
+-                  if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+-                  const to = reorderTarget(i, e.key, props.tabs.length);
+-                  if (to === null) return;
+-                  e.preventDefault();
+-                  props.onReorder(i, to);
+-                }}
+-                title={props.onReorder !== undefined ? "拖动换位（键盘：⌥↑ / ⌥↓）" : undefined}
+-              >
+-                {props.onReorder !== undefined && <span className="pc-grip" aria-hidden="true"><GripVertical size={12} /></span>}
+-                <span className="pc-label">{PANE_META[kind].label}</span>
+-                {props.onPopout !== undefined && (
+-                  <button
+-                    className="pt-x"
+-                    aria-label={`弹出${PANE_META[kind].label}窗格`}
+-                    title="弹出为独立窗口"
+-                    onClick={() => { props.onPopout?.(kind); }}
+-                  ><ExternalLink size={12} /></button>
+-                )}
+-                <button
+-                  className="pt-x"
+-                  aria-label={`关闭${PANE_META[kind].label}窗格`}
+-                  onClick={() => { closePane(kind); }}
+-                ><X size={11} /></button>
+-              </div>
+-              <div className="pane-chunk-body">
+-                {kind === "changes" && (
+-                  <ChangesPane
+-                    events={props.events}
+-                    {...(props.onReview !== undefined ? { onReview: props.onReview } : {})}
+-                    onPathMenu={openPathMenu}
+-                  />
+-                )}
+-                {kind === "plan" && <PlanPane events={props.events} />}
+-                {kind === "tasks" && <TasksPane events={props.events} />}
+-                {kind === "file" && <FilePane onPathMenu={openPathMenu} />}
+-                {kind === "terminal" && <TerminalPane />}
+-                {kind === "browser" && (
+-                  <BrowserPane
+-                    {...(props.browserUrl !== undefined ? { initialUrl: props.browserUrl } : {})}
+-                    {...(props.pickSignal !== undefined ? { pickSignal: props.pickSignal } : {})}
+-                    {...(props.onPickResult !== undefined ? { onPickResult: props.onPickResult } : {})}
+-                  />
+-                )}
+-                {kind === "sidechat" && <SidechatPane sessionId={props.sessionId ?? null} />}
+-                {kind === "plugins" && <PluginSurface />}
+-              </div>
+-            </section>
+-          </Cell>
+-        </Fragment>
+-      ))}
+-    </Grid>
++    {active !== null && (
++      <div className="pane-stack">
++        {props.tabs.map((kind) => (
++          <section
++            key={kind}
++            className="pane-chunk"
++            aria-label={`${PANE_META[kind].label}窗格`}
++            data-pane={kind}
++            data-active={kind === active}
++          >
++            <div className="pane-chunk-body">
++              {/* 每个窗格各自成界：一个窗格炸掉不牵连标签条与其他窗格；
++                  无错时边界返回 Fragment，直接子元素关系不变。 */}
++              <RenderErrorBoundary variant="inline">
++              {kind === "changes" && (
++                <ChangesPane
++                  events={props.events}
++                  {...(props.onReview !== undefined ? { onReview: props.onReview } : {})}
++                  onPathMenu={openPathMenu}
++                />
++              )}
++              {kind === "plan" && <PlanPane events={props.events} />}
++              {kind === "tasks" && <TasksPane events={props.events} />}
++              {kind === "file" && (
++                <FilePane
++                  onPathMenu={openPathMenu}
++                  {...(props.fileTarget !== undefined ? { openTarget: props.fileTarget } : {})}
++                />
++              )}
++              {kind === "terminal" && <TerminalPane />}
++              {kind === "browser" && (
++                <BrowserPane
++                  active={kind === active}
++                  {...(props.browserUrl !== undefined ? { initialUrl: props.browserUrl } : {})}
++                  {...(props.pickSignal !== undefined ? { pickSignal: props.pickSignal } : {})}
++                  {...(props.onPickResult !== undefined ? { onPickResult: props.onPickResult } : {})}
++                />
++              )}
++              {kind === "sidechat" && <SidechatPane sessionId={props.sessionId ?? null} />}
++              {kind === "plugins" && <PluginSurface />}
++              {kind === "session" && (
++                <SessionPreviewPane
++                  target={props.sessionPreview ?? null}
++                  {...(props.onSwitchSession !== undefined ? { onSwitch: props.onSwitchSession } : {})}
++                />
++              )}
++              </RenderErrorBoundary>
++            </div>
++          </section>
++        ))}
++      </div>
++    )}
+     {pathMenu !== null && (
+       <PathMenu
+         x={pathMenu.x}
+diff --git a/src/events/types.ts b/src/events/types.ts
+index ecd74728..071958a2 100644
+--- a/src/events/types.ts
++++ b/src/events/types.ts
+@@ -64,17 +64,19 @@ export interface UserMessageEvent { type: "user_message"; content: string; origi
+ export interface AssistantMessageEvent { type: "assistant_message"; content: string }
+ /** 流式增量片段：callId 标识同一轮回复，text 为逐字追加的一小段。 */
+ export interface AssistantDeltaEvent { type: "assistant_delta"; callId: string; text: string }
++/** Native continuation state is scoped to one endpoint/model, never general answer text. */
++export interface ProviderReasoningState { source: string; content: string }
+ /** 模型的**思考正文**（reasoning / thinking）增量。
+  *
+  *  与 assistant_delta 的区别：那段是"答给用户的话"，这段是"它自己怎么想的"。
+  *  两者必须分开 —— 混进正文会让转录与重放变脏（思考块在多数家不可回传）。
+  *  callId 与 assistant_delta 同源（同一次请求里的同一段输出），渲染层据此把思考挂在对应回答行前。
+  *  2026-10-07 用户要求显示思考过程：以前适配器是**刻意忽略**推理增量的。 */
+-export interface ThinkingDeltaEvent { type: "thinking_delta"; callId: string; text: string }
++export interface ThinkingDeltaEvent { type: "thinking_delta"; callId: string; text: string; reasoning?: { id: string; source: string } }
+ 
+ /** M3a：worker 子流的工具调用（§4.4.9 落主流口径）——agent_id 在场 = 该事件属于该 worker 子流，
+  *  主上下文投影（projectContext）跳过带 agent_id 的事件（父上下文唯一接收物 = agent_result，§4.4.4）。 */
+-export interface ToolCallEvent { type: "tool_call"; id: string; name: string; args: Record<string, unknown>; agent_id?: string }
++export interface ToolCallEvent { type: "tool_call"; id: string; name: string; args: Record<string, unknown>; agent_id?: string; reasoningId?: string }
+ /** 执行前就被拦下的工具调用：哪道闸拦的（唯一事实源；下面六处出口共用，别各写一份字符串）。
+  *  为什么不塞进 `gate: GateMeta`——这六道闸都不在档位机里，没有 layer/risk/mode 可言，
+  *  编一个就会污染 `gate-outcomes` 的 layer×verdict 免批率（`GateMeta.mode` 那句「宁缺不编」是纪律不是注释）。
+@@ -132,7 +134,10 @@ export interface ToolResultEvent { type: "tool_result"; callId: string; ok: bool
+ export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number; /** 缓存分列（可选）：**缺字段 = 该 provider 没上报，不等于 0**。约定 `inputTokens` 是含缓存的总输入，
+    *  下面两个是其中的分块——不得再与 inputTokens 相加（metering 的 MeterUsage 要互斥桶，适配器换算后再交）。
+    *  写侧断点（Anthropic cache_control / 稳定前缀排布）尚未接线：先把「命中没有」测出来，再谈制造命中。 */
+-  cacheReadInputTokens?: number; cacheWriteInputTokens?: number; /** M3a §4.4.10：usage 按 agent 归因（主 loop usage 无此字段）。 */ agent_id?: string; /** 产生这笔用量的模型名（provider 名或档位 id 两态都收，价表键由 `priceForModel` 反查）。
++  cacheReadInputTokens?: number; cacheWriteInputTokens?: number;
++  /** Reported subset of outputTokens, never added to the total again; absent means unknown. */
++  reasoningOutputTokens?: number;
++  /** M3a §4.4.10：usage 按 agent 归因（主 loop usage 无此字段）。 */ agent_id?: string; /** 产生这笔用量的模型名（provider 名或档位 id 两态都收，价表键由 `priceForModel` 反查）。
+    *  **缺字段 = 这一笔定不了价**（旧日志、剧本/demo 通道、worker 没在流里留过档）⇒ 消费方按「价格不可知」记，
+    *  绝不折成 $0（评估面的 `$ / 成功任务` 一直报不可测，缺的就是这一列，见 2026-09-27 第 148 页）。
+    *  写侧只有一个盖章点：会话落盘的漏斗 `runAgent` 的 pipeline（主会话与 worker 子流都过它）。 */
+@@ -423,7 +428,7 @@ export type AgentStatus = "running" | "waiting_approval" | "waiting_input" | "do
+ /** 权限档（与 src/permissions 的 PermissionMode 同字面量；events 层零依赖不自引）。
+  *  导出**运行时元组**是为了让"两份抄本必须同集"这件事可判卷
+  *  （见 `tests/permission-mode-single-source.test.ts`；抄本不可见 = 加一档时只有一份会改）。 */
+-export const AGENT_PERMISSION_MODES = ["read-only", "default", "guided", "auto"] as const;
++export const AGENT_PERMISSION_MODES = ["read-only", "default", "guided", "auto", "full-access"] as const; // 与 permissions/modes.ts 同步（2026-10-24 完全允许档）
+ export type AgentPermissionMode = (typeof AGENT_PERMISSION_MODES)[number];
+ 
+ export interface AgentSpawnedEvent {
+diff --git a/src/main/ipc-protocol.ts b/src/main/ipc-protocol.ts
+index b221a295..60d22c4f 100644
+--- a/src/main/ipc-protocol.ts
++++ b/src/main/ipc-protocol.ts
+@@ -46,6 +46,8 @@ import type { ProjectDiagnosis } from "./project-templates";
+ import type { SessionSearchResult } from "./session-search";
+ export type { SessionSearchResult } from "./session-search";
+ import type { ProviderConnectionResult } from "./provider-connection";
++import type { SearchProvider } from "../tools/web-search";
++export type { SearchProvider } from "../tools/web-search";
+ 
+ // ---- SEMA §3.5/§12：IPC 协议版本化 ----
+ /** 协议兼容面唯一事实源：renderer 的期望版本经 vite define 构建期注入（App.tsx 挂载即比对
+@@ -67,8 +69,43 @@ import type { ProviderConnectionResult } from "./provider-connection";
+  *  v18 = 会话全文检索批（sessionSearch——搜**会话正文**而不是文件；结果是三态，
+  *  「没量到 ≠ 没有」由类型层面分开，见 src/main/session-search.ts）。
+  *  v19 = 指针分叉来源批（openSession 附 SessionRef + SessionView；会话 mutation/队列/注释
+- *  增加可选 workspace——两个工作区同名 id 必须精确寻址，歧义拒绝）。 */
+-export const IPC_PROTOCOL_VERSION = 19;
++ *  增加可选 workspace——两个工作区同名 id 必须精确寻址，歧义拒绝）。
++ *  v20 = 联网搜索设置（窗口工作区内保存服务地址、安全密钥与显式单次检索测试）。
++ *  v21 = 完成通知点击直达（新增 push onNotificationOpen；点击载荷带 sessionId + workspace）。
++ *  v22 = 插件面板 MCP 激活态（PluginPanelSnapshot 增 activeMcpServers / activeMcpTools /
++ *  mcpServerSummaries——设置页显示整台/按工具激活的 server）。
++ *  v23 = Plan 模式一等入口（RunRequest 增可选 planRequired——按轮覆盖 settings 默认）。 */
++export const IPC_PROTOCOL_VERSION = 23;
++
++/** 密钥只允许写入；读取面只报告状态，不回传明文。端点为空时 Brave/Tavily 使用官方地址。 */
++export interface SearchSettingsInput {
++  enabled: boolean;
++  provider: SearchProvider;
++  endpoint: string;
++  allowLocalEndpoint: boolean;
++  apiKey?: string;
++  clearApiKey?: boolean;
++}
++export interface SearchSettingsSnapshot {
++  workspace: string;
++  enabled: boolean;
++  provider: SearchProvider;
++  endpoint: string;
++  allowLocalEndpoint: boolean;
++  hasKey: boolean;
++  keySource: "stored" | "environment" | "none";
++  secureStorageAvailable: boolean;
++  error?: string;
++}
++export type SearchSettingsSaveResult =
++  | { ok: true; settings: SearchSettingsSnapshot }
++  | { ok: false; error: string };
++export interface SearchSettingsTestResult {
++  ok: boolean;
++  elapsedMs: number;
++  resultCount: number;
++  error?: string;
++}
+ 
+ // ---- v11：主界面重做批的载荷（git 读数 / 克隆 / 项目内搜索）----
+ /** git 在场读数：branch 为 null = detached HEAD（如实，不拿 "HEAD" 冒充分支名）。 */
+@@ -94,6 +131,38 @@ export interface UsageLedgerTotalsPayload {
+   rounds: number;
+ }
+ 
++/** 按事件真实时间与模型分桶；null 是旧日志没有记录，不能推算补齐。 */
++export interface UsageLedgerBucketPayload {
++  day: string | null;
++  model: string | null;
++  inputTokens: number;
++  outputTokens: number;
++  cacheReadTokens: number;
++  usageCount: number;
++  workerUsageCount: number;
++  /** 有有效字段的 usage 行数；显式 0 也算量到，缺字段不算。 */
++  inputMeasured: number;
++  outputMeasured: number;
++  cacheReadMeasured: number;
++}
++
++export interface UsageLedgerActivityPayload {
++  day: string | null;
++  sessions: number;
++  rounds: number;
++  toolSteps: number;
++}
++
++export interface UsageLedgerAnalyticsPayload {
++  buckets: UsageLedgerBucketPayload[];
++  activity: UsageLedgerActivityPayload[];
++  sessionsWithUsage: number;
++  sessionsWithoutUsage: number;
++  /** day 采用扫描主机时区，附带时区名使归日口径可见。 */
++  timeZone: string;
++  generatedAt: number;
++}
++
+ export type UsageLedgerPayload =
+   | {
+       ok: true;
+@@ -102,6 +171,8 @@ export type UsageLedgerPayload =
+       workspaces: number;
+       skipped: number;
+       badLines: number;
++      /** 可选以兼容旧客户端；当前 host 总会返回这份只读投影。 */
++      analytics?: UsageLedgerAnalyticsPayload;
+     }
+   | { ok: false; error: string };
+ 
+@@ -163,6 +234,9 @@ export interface RunRequest {
+   thinking?: ThinkingEffort;
+   /** Local references only. Main validates canonical location/type before the run starts. */
+   attachments?: RunAttachmentReference[];
++  /** v23：本轮是否强制“先方案、批准后才写文件”。缺省 = 用 settings.planRequiredByDefault；
++   *  Composer 的「方案」开关按轮显式覆盖。 */
++  planRequired?: boolean;
+ }
+ 
+ export interface RunResponse {
+@@ -171,6 +245,13 @@ export interface RunResponse {
+   /** Present only when validated references were consumed as path context. */
+   attachmentCount?: number;
+ }
++
++/** v21：完成通知点击后回传的目标会话。workspace 缺省 = 由 renderer 按唯一命中解析；
++ *  跨项目同名 id 必须带 workspace，否则 renderer 侧 fail-closed（不开错转录）。 */
++export interface RunNotificationPayload {
++  sessionId: string;
++  workspace?: string;
++}
+ /** 会话级 worktree 动作（§3.7 · G4）。`sessionId` 由调用方给——main 侧按会话归属解析工作区。 */
+ export type SessionWorktreeRequest =
+   | { kind: "create"; sessionId: string; title?: string }
+@@ -346,6 +427,8 @@ export interface AgentApi {
+    *  要读「本轮是否在跑」、要移动焦点），主进程没有那些状态。 */
+   onMenu(cb: (id: string) => void): () => void;
+   onAskDone(cb: (p: AskOutcomePayload) => void): () => void;
++  /** v21：用户点击完成通知 → 主进程已聚焦窗口，渲染层据此打开目标会话。 */
++  onNotificationOpen(cb: (p: RunNotificationPayload) => void): () => void;
+   getState(): Promise<StateResponse>;
+   /** Provider/model/capability catalog derived from the same registry used by workers. */
+   getProviderInfo(): Promise<ProviderInfo>;
+@@ -355,6 +438,11 @@ export interface AgentApi {
+   // ---- M1e：settings（布局 + 设置页持久化，主进程 app data）----
+   getSettings(): Promise<AppSettings>;
+   setSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
++  /** v20：当前调用窗口的工作区；打开设置不会发送网络请求。 */
++  searchSettingsGet(): Promise<SearchSettingsSnapshot>;
++  searchSettingsSave(input: SearchSettingsInput): Promise<SearchSettingsSaveResult>;
++  /** 显式单次真实检索；传草稿只测试不保存，缺省使用已保存配置。 */
++  searchSettingsTest(input?: SearchSettingsInput): Promise<SearchSettingsTestResult>;
+   // ---- M1e：会话列表（JSONL 即会话）----
+   listSessions(): Promise<SessionInfoPayload[]>;
+   /** v14：跨全部已登记工作区的用量账本（只读；按会话日志投影，不触发 openSession）。 */
+@@ -560,6 +648,12 @@ export interface AgentApi {
+   /** 把一家写进工作区 `.agent/providers.json`（按 id upsert，别的家原样保留）；
+    *  给了 `keyValue` 就顺手存进 safeStorage（存失败则整件事失败，不写半个配置）。 */
+   providerSave(req: ProviderSaveRequest): Promise<ProviderSaveResult>;
++  /** 已装自定义供应商的预填数据（编辑模式）：DerivedCustomProvider 的界面投影（不含 key 明文）。 */
++  providerCustomList(): Promise<{
++    ok: boolean;
++    error?: string;
++    entries: readonly { id: string; label: string; protocol: string; baseURL: string; apiKeyEnv: string; modelIds: readonly string[] }[];
++  }>;
+   /** M4b §2.3：轻量更新检查（未配置 / 网络失败 / 已最新 / 有新版 全显式态）。 */
+   checkUpdate(): Promise<UpdateCheckResult>;
+   /** M4b §2.3：打开下载页（shell.openExternal，仅 http(s) 白名单——防 manifest 注入协议）。 */

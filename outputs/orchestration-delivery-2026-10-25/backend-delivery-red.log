@@ -1,0 +1,28 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/orchestration-backend.test.ts (16 tests | 1 failed) 155ms
+   ❯ local orchestration backend (16)
+     × rolls delivered bytes back after recreation while preserving unrelated user files 13ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-backend.test.ts > local orchestration backend > rolls delivered bytes back after recreation while preserving unrelated user files
+Error: automatic rollback of delivered workspace changes requires human conflict resolution
+ ❯ Object.rollback src/orchestration/local-backend.ts:320:35
+    318|     async rollback(request) {
+    319|       const record = await recordFor(request);
+    320|       if (record.delivered) throw new Error("automatic rollback of del…
+       |                                   ^
+    321|       await rm(join(record.directory, "overlay"), { recursive: true, f…
+    322|     },
+ ❯ tests/orchestration-backend.test.ts:170:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 15 passed (16)
+   Start at  20:05:23
+   Duration  558ms (transform 55%, tests 31%, import 14%)
+

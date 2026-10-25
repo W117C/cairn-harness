@@ -1,0 +1,22 @@
+{
+  "arms": [
+    {
+      "strategy": "baseline",
+      "planned": 2,
+      "attempted": 2,
+      "pass": 1,
+      "fail": 1,
+      "unmeasurable": 0,
+      "pending": 0,
+      "decidablePassRate": 0.5,
+      "totalTokens": null,
+      "unknownUsageRuns": 1,
+      "seconds": 123.255
+    }
+  ],
+  "comparisons": [],
+  "independentTasks": 2,
+  "complete": true,
+  "inference": "pilot-only",
+  "limitation": "Descriptive pilot. Repeated attempts and test assertions are not independent tasks; saturation does not establish equivalence."
+}

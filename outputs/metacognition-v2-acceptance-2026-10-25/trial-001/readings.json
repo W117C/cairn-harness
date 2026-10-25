@@ -1,0 +1,777 @@
+[
+ {
+  "r": {
+   "study": {
+    "strategy": "baseline",
+    "seed": 607119744,
+    "interventions": [],
+    "physicalRequests": 20,
+    "meter": {
+     "version": 1,
+     "wallClockMs": 77671.630583,
+     "requests": [
+      {
+       "id": 1,
+       "category": "main",
+       "bytes": 28819,
+       "chars": 19265,
+       "bodySha256": "4117227f28a64d39e51628b87895993cf2c5830236639e5c97243d4213daf614",
+       "startedMs": 3139.1679169999998,
+       "elapsedMs": 3610.6738750000004,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 227,
+        "outputTokens": 73,
+        "cacheReadInputTokens": 5888,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 2,
+       "category": "main",
+       "bytes": 29509,
+       "chars": 19739,
+       "bodySha256": "de92c8d8cadce97dde2d4e0c1da546fed0b4e49a17d9eea38df1e5a6f40a6266",
+       "startedMs": 6767.781375,
+       "elapsedMs": 1721.2789169999987,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 1792,
+        "outputTokens": 91,
+        "cacheReadInputTokens": 6144,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 3,
+       "category": "main",
+       "bytes": 31511,
+       "chars": 21549,
+       "bodySha256": "3ad9804f8b5c758f10583169b45f65043e371ec6dcd1913b0a034e0b5d9aece8",
+       "startedMs": 8490.445375,
+       "elapsedMs": 1745.3724580000016,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 651,
+        "outputTokens": 57,
+        "cacheReadInputTokens": 7808,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 4,
+       "category": "main",
+       "bytes": 37432,
+       "chars": 26276,
+       "bodySha256": "c844e5edc46ffc6b5bff3af1cd33950fc78cf6b1d24fc454d0c05f1709065235",
+       "startedMs": 10238.944707999999,
+       "elapsedMs": 1707.36175,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 1557,
+        "outputTokens": 43,
+        "cacheReadInputTokens": 8448,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 5,
+       "category": "main",
+       "bytes": 43597,
+       "chars": 30649,
+       "bodySha256": "7b78c07d8a572e8e46d5c486d54dd9580ce215a354fb437b34e238725202e869",
+       "startedMs": 11950.061833,
+       "elapsedMs": 1671.9145419999986,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 1641,
+        "outputTokens": 103,
+        "cacheReadInputTokens": 9984,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 6,
+       "category": "main",
+       "bytes": 56369,
+       "chars": 39547,
+       "bodySha256": "f07aad166ef9510bdf16267f4c4e7adcedc295a740400574a12ee9661022b9df",
+       "startedMs": 13626.148708,
+       "elapsedMs": 2270.342499999999,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 3413,
+        "outputTokens": 126,
+        "cacheReadInputTokens": 11648,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 7,
+       "category": "main",
+       "bytes": 62824,
+       "chars": 44542,
+       "bodySha256": "a88ce51224cecae2da3a81358f506026e933aee12535241e9f7a2ece818a23c6",
+       "startedMs": 15898.878417,
+       "elapsedMs": 2599.5311660000007,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 1651,
+        "outputTokens": 96,
+        "cacheReadInputTokens": 15104,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 8,
+       "category": "main",
+       "bytes": 73079,
+       "chars": 52337,
+       "bodySha256": "2f3effa1e3056a002e37303d6e850cd8c65b37243998dd24fd53a73b471a2b8d",
+       "startedMs": 18506.742082999997,
+       "elapsedMs": 9365.295834,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 2478,
+        "outputTokens": 1395,
+        "cacheReadInputTokens": 16768,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 9,
+       "category": "main",
+       "bytes": 82118,
+       "chars": 60760,
+       "bodySha256": "af917910de5a2c9c05260b67debea649941c6e9788ffbd26dd06ac60fed73363",
+       "startedMs": 27881.206082999997,
+       "elapsedMs": 2724.534083999999,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 748,
+        "outputTokens": 103,
+        "cacheReadInputTokens": 20608,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 10,
+       "category": "main",
+       "bytes": 92036,
+       "chars": 69814,
+       "bodySha256": "4df0be1c21a3c536291c6fa15f04a19ca37ba7044de3ef379c45ab53d362b603",
+       "startedMs": 30612.769916999998,
+       "elapsedMs": 15311.432666,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 2722,
+        "outputTokens": 2737,
+        "cacheReadInputTokens": 21376,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 11,
+       "category": "main",
+       "bytes": 106736,
+       "chars": 83136,
+       "bodySha256": "8f5cfed707738fe9535939d26344440f104abd62973ad39f71b4913ccbd46b58",
+       "startedMs": 45943.574375,
+       "elapsedMs": 3825.851042000002,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 916,
+        "outputTokens": 624,
+        "cacheReadInputTokens": 26752,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 12,
+       "category": "main",
+       "bytes": 109632,
+       "chars": 85244,
+       "bodySha256": "0499c92d70516314a1a4db806c961908ad5084522a20b7eda68c66c2f0ae04d3",
+       "startedMs": 49777.604667,
+       "elapsedMs": 2861.5215000000026,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 231,
+        "outputTokens": 148,
+        "cacheReadInputTokens": 28160,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 13,
+       "category": "main",
+       "bytes": 110544,
+       "chars": 86028,
+       "bodySha256": "d4ecc595f69c9240ac0de8db3fce7d9ca90e7aaa892fd0fbc26696a3821e9a05",
+       "startedMs": 52652.700292,
+       "elapsedMs": 1919.0095409999994,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 222,
+        "outputTokens": 98,
+        "cacheReadInputTokens": 28416,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 14,
+       "category": "main",
+       "bytes": 112767,
+       "chars": 87831,
+       "bodySha256": "e55e49aae9ee0b0ef6d3b2378936e45e7a7d05a6f7cd657d85235d6c91c4ce4e",
+       "startedMs": 54590.327166999996,
+       "elapsedMs": 2975.0546250000043,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 510,
+        "outputTokens": 414,
+        "cacheReadInputTokens": 28672,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 15,
+       "category": "main",
+       "bytes": 114882,
+       "chars": 89442,
+       "bodySha256": "eec0947fd92012378da9de8db0dd850d5c7790a04ce034706934152f06824825",
+       "startedMs": 57573.493667,
+       "elapsedMs": 2681.9994159999987,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 640,
+        "outputTokens": 207,
+        "cacheReadInputTokens": 29056,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 16,
+       "category": "main",
+       "bytes": 116084,
+       "chars": 90514,
+       "bodySha256": "7319aaffadf1061801f5ad255e88ba42a349614d183383211b395160048d1e5a",
+       "startedMs": 60263.151458,
+       "elapsedMs": 1823.257583999999,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 178,
+        "outputTokens": 117,
+        "cacheReadInputTokens": 29824,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 17,
+       "category": "main",
+       "bytes": 116866,
+       "chars": 91168,
+       "bodySha256": "dc832d1260480d9dc8c8d9748ff5abdbd69f501a410d35d690963e0efcf85aa9",
+       "startedMs": 62098.203625,
+       "elapsedMs": 3916.968792000007,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 267,
+        "outputTokens": 164,
+        "cacheReadInputTokens": 29952,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 18,
+       "category": "main",
+       "bytes": 119455,
+       "chars": 93085,
+       "bodySha256": "cade2a61618dbb1a27356d0d8a9acba301d98d74e316f01f396bd3ff139dce67",
+       "startedMs": 66023.23766700001,
+       "elapsedMs": 4421.782332999996,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 643,
+        "outputTokens": 235,
+        "cacheReadInputTokens": 30336,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 19,
+       "category": "main",
+       "bytes": 120817,
+       "chars": 94123,
+       "bodySha256": "b5bcc417f005a5e7b30dd5475b38f5e5252e868219fcb2e6575a9334e8882b58",
+       "startedMs": 70460.61937500001,
+       "elapsedMs": 3304.124457999991,
+       "outcome": "ok",
+       "usage": {
+        "inputTokens": 209,
+        "outputTokens": 61,
+        "cacheReadInputTokens": 31104,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      },
+      {
+       "id": 20,
+       "category": "main",
+       "bytes": 122331,
+       "chars": 95069,
+       "bodySha256": "3b8f9a6c28a50b17b62d57ad3e80874dd42b1fdfa5a18b0775d743b01d8edc4c",
+       "startedMs": 73771.931958,
+       "elapsedMs": 2822.0285839999997,
+       "outcome": "failed",
+       "usage": {
+        "inputTokens": 487,
+        "outputTokens": 33,
+        "cacheReadInputTokens": 31232,
+        "cacheWriteInputTokens": 0
+       },
+       "prices": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "cacheReadInputTokens": null,
+        "cacheWriteInputTokens": null
+       },
+       "cost": null
+      }
+     ],
+     "totals": {
+      "requests": 20,
+      "bytes": 1687408,
+      "chars": 1280118,
+      "elapsedMs": 73279.335667,
+      "usage": {
+       "inputTokens": 21183,
+       "outputTokens": 6925,
+       "cacheReadInputTokens": 417280,
+       "cacheWriteInputTokens": 0
+      },
+      "cost": null
+     },
+     "categories": {
+      "main": {
+       "requests": 20,
+       "bytes": 1687408,
+       "chars": 1280118,
+       "elapsedMs": 73279.335667,
+       "usage": {
+        "inputTokens": 21183,
+        "outputTokens": 6925,
+        "cacheReadInputTokens": 417280,
+        "cacheWriteInputTokens": 0
+       },
+       "cost": null
+      },
+      "summary": {
+       "requests": 0,
+       "bytes": 0,
+       "chars": 0,
+       "elapsedMs": 0,
+       "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadInputTokens": 0,
+        "cacheWriteInputTokens": 0
+       },
+       "cost": 0
+      },
+      "recall": {
+       "requests": 0,
+       "bytes": 0,
+       "chars": 0,
+       "elapsedMs": 0,
+       "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadInputTokens": 0,
+        "cacheWriteInputTokens": 0
+       },
+       "cost": 0
+      }
+     },
+     "verifications": [],
+     "verifyOutcome": "unknown"
+    },
+    "dependencyIntact": true,
+    "outputCap": 4096,
+    "timeoutMs": 120000,
+    "envelopes": [
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 0
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 1
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 2
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 3
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 3
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 4
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 5
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 6
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 7
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 8
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 9
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 10
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 11
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 12
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 12
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 13
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 13
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 14
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 15
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 15
+     }
+    ],
+    "reasoningOutputTokens": 4519
+   },
+   "id": "C1-malformed-tool",
+   "name": "C1-malformed-tool",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "cn:deepseek-v4.1-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "study: no hidden episode retry",
+   "seconds": 76.594,
+   "requests": 19,
+   "tokensIn": 406744,
+   "tokensOut": 6892,
+   "cny": null,
+   "toolCalls": 20,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 10,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "namedSets": {
+    "state": "pass",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [],
+    "reasons": [],
+    "sources": [
+     {
+      "command": "pnpm_config_verify_deps_before_run=false pnpm run test",
+      "format": "node-test-tap",
+      "tests": 9,
+      "carried": true,
+      "complete": true
+     }
+    ]
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/agent/loop.ts",
+    "src/agent/stuck.ts"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 768,
+    "procPeak": 8,
+    "cpuMs": 6303,
+    "samples": 150
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": true,
+    "exitCode": 0,
+    "output": "TAP version 13\nok 1 - loop context feedback includes persisted tool results exactly once in the next provider request\nok 2 - loop context feedback returns failure to the model without duplicate history\nok 3 - loop context feedback returns permission denial to the model without duplicate history\nok 4 - loop context feedback returns tool table denial to the model without duplicate history\nok 5 - loop context feedback returns unknown tool to the model without duplicate history\nok 6 - loop context feedback returns missing verify hook to the model without duplicate history\nok 7 - loop context feedback returns verify exception to the model without duplicate history\nok 8 - loop context feedback includes tool-emitted events in persisted order\nok 9 - loop context feedback does not request another turn after cancellation\nok 10 - auto-verify on completion (harness 补拍，证据 only) 写盘后纯文本收束 → 补一拍并把红字落进事件流（零额外模型调用）\nok 11 - auto-verify on completion (harness 补拍，证据 only) 每 run 至多一拍：自动拍红字后模型仍纯文本收束 ⇒ 不叠加\nok 12 - auto-verify on completion (harness 补拍，证据 only) 自动拍验证通过 → 绿证据落流\nok 13 - auto-verify on completion (harness 补拍，证据 only) 模型自调过 verify ⇒ harness 让位，且手动拍事件形态零变化（连 auto 键都不出现）\nok 14 - auto-verify on completion (harness 补拍，证据 only) 可验面探测炸（config 存在但 JSON 坏）⇒ 不炸 run、不补拍，但必须出声\nok 15 - auto-verify on completion (harness 补拍，证据 only) 零行为回退：未写盘（只读动作） → 无 verify_result、请求数与旧行为同形\nok 16 - auto-verify on completion (harness 补拍，证据 only) 零行为回退：仓库无 verify 面（surface=false） → 无 verify_result、请求数与旧行为同形\nok 17 - auto-verify on \n…[有界性：中段省略 302 字]…\n给工具表（主会话形状）⇒ 行为逐字不变\nok 22 - resolveTool 补表钩子（run 中途才出现的工具，2026-10-19） 静态表里没有、钩子给得出 ⇒ 照常执行（模型看到的 ≠ 能执行的，这条堵住后半句）\nok 23 - resolveTool 补表钩子（run 中途才出现的工具，2026-10-19） 钩子也拿不到 ⇒ 仍是 unknown tool（补表不放行未注册工具，fail-closed 不变）\nok 24 - resolveTool 补表钩子（run 中途才出现的工具，2026-10-19） 反向（突变体专破）：把 `?? opts.resolveTool?.(name)` 从 loop 里拆掉 ⇒ 第一条必须红在这儿\n1..24\n# tests 24\n# pass 24\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n"
+   },
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "146743c",
+   "ranAt": "2026-10-25T03:00:27.732Z",
+   "maxSteps": 24,
+   "reps": 1,
+   "arm": "baseline",
+   "thinking": "low"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  },
+  "taskId": "C1-malformed-tool"
+ }
+]

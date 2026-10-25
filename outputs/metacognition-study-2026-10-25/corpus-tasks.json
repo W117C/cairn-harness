@@ -1,0 +1,261 @@
+[
+  {
+    "id": "C1-malformed-tool",
+    "source": "Cairn@19a6a4d",
+    "instruction": "插件工具返回缺少 output、null 或对象时，任务会崩溃或产生误导性的 undefined 文本。请恢复健壮的工具结果处理，同时保留原有循环行为。 先运行 node tests/run-visible.mjs 复现；只修改 src/，不要修改 tests/、package.json 或判卷逻辑。修复后调用 verify。",
+    "seed": {
+      "kind": "dir",
+      "path": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C1-malformed-tool/seed"
+    },
+    "verifier": {
+      "command": "node tests/run-visible.mjs"
+    },
+    "judge": {
+      "failToPass": [
+        "工具返回畸形结构：不炸、不糊、分得开 ★ 缺 output（`{ok:true}`）⇒ 不许炸整轮，且回执可读",
+        "工具返回畸形结构：不炸、不糊、分得开 ★ output = null ⇒ 回执可读，且与「缺失」分得开",
+        "工具返回畸形结构：不炸、不糊、分得开 ★ output = 对象 ⇒ **序列化出来**（不是 [object Object]）",
+        "stuckObservationOf 的取料面（崩溃点本体） ★ 非字符串一律不抛（旧实现 undefined.slice ⇒ TypeError）",
+        "stuckObservationOf 的取料面（崩溃点本体） 不同畸形给出**不同**的观察串（否则「缺失」会被当成「卡在同一动作」）",
+        "stuckObservationOf 的取料面（崩溃点本体） 环形对象不抛（JSON.stringify 会炸的那一类）"
+      ],
+      "passToPass": [
+        "工具返回畸形结构：不炸、不糊、分得开 ★ 反向哨兵：正常字符串输出**逐字不变**（不许为了安全全包一层）",
+        "工具返回畸形结构：不炸、不糊、分得开 真空串 ≠ 缺失（空串是『真的没输出』这一事实，不许被顶替成占位符）",
+        "stuckObservationOf 的取料面（崩溃点本体） 正常字符串照旧截 200 字（既有口径不变）"
+      ]
+    },
+    "heldOut": {
+      "files": [
+        {
+          "src": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C1-malformed-tool/heldout/tests/loop.test.ts",
+          "dest": "tests/loop.test.ts"
+        }
+      ],
+      "command": "node tests/run-visible.mjs tests/loop.test.ts"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched",
+      "onlySrcChanged",
+      "heldOutPass"
+    ]
+  },
+  {
+    "id": "C2-truncated-turn",
+    "source": "Cairn@eaf90a0",
+    "instruction": "模型输出被预算截断后，执行循环有时把半段回复当成完成，任务无法续跑。请修复终止判断，保留取消与正常完成语义。 先运行 node tests/run-visible.mjs 复现；只修改 src/，不要修改 tests/、package.json 或判卷逻辑。修复后调用 verify。",
+    "seed": {
+      "kind": "dir",
+      "path": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C2-truncated-turn/seed"
+    },
+    "verifier": {
+      "command": "node tests/run-visible.mjs"
+    },
+    "judge": {
+      "failToPass": [
+        "第 1 点：截断续跑（截断 ≠ 说完） ★ 截断后真的再要一轮，且那一轮**读到了**「别当成已答完」那条提示",
+        "第 1 点：截断续跑（截断 ≠ 说完） ★ 上限：次次截断也**至多续一轮**（不无限要，与 deliveryRepair/autoVerifyRepair 同形）",
+        "撞帽与截断续跑不许互相顶掉 撞帽那一拍同时被截断 ⇒ 撞帽照旧抛（续跑不许给撞帽多留一条命）"
+      ],
+      "passToPass": [
+        "第 1 点：截断续跑（截断 ≠ 说完） 关掉开关 ⇒ 逐字回到旧行为（一次都不多要）",
+        "第 1 点：截断续跑（截断 ≠ 说完） ★ 反向哨兵：没被截断的正常收束 ⇒ 零额外请求（这一支不许被顺手改宽）",
+        "第 1 点：截断续跑（截断 ≠ 说完） 工具轮不会被误判成截断（两条收束语义不许混）",
+        "第 1 点：截断续跑（截断 ≠ 说完） 截断提示在投影里仍只出现一次（续跑读的是同一条，不重复注入）",
+        "撞帽与截断续跑不许互相顶掉 纯撞帽（没有截断）同样是 throw + error，两路口径一致"
+      ]
+    },
+    "heldOut": {
+      "files": [
+        {
+          "src": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C2-truncated-turn/heldout/tests/turn-truncated.test.ts",
+          "dest": "tests/turn-truncated.test.ts"
+        }
+      ],
+      "command": "node tests/run-visible.mjs tests/turn-truncated.test.ts"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched",
+      "onlySrcChanged",
+      "heldOutPass"
+    ]
+  },
+  {
+    "id": "C3-steering-stagnation",
+    "source": "Cairn@0d19036",
+    "instruction": "用户轮中补充目标后，旧的验证失败仍被当成同一件事累计，导致停滞提示错误。请修复用户插话到停滞判据的接线，并保留正常停滞检测。 先运行 node tests/run-visible.mjs 复现；只修改 src/，不要修改 tests/、package.json 或判卷逻辑。修复后调用 verify。",
+    "seed": {
+      "kind": "dir",
+      "path": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C3-steering-stagnation/seed"
+    },
+    "verifier": {
+      "command": "node tests/run-visible.mjs"
+    },
+    "judge": {
+      "failToPass": [
+        "第 9 点与 R1（验证停滞）的交点 ★ 两次同签名红之间用户插了话 ⇒ **不喊停滞**（目标可能已被改写）"
+      ],
+      "passToPass": [
+        "轮中插话不改写轮界（交付断言的命门） ★ 带 origin:steering 的 user_message 之后，本轮承诺仍然算数",
+        "轮中插话不改写轮界（交付断言的命门） ★ 反面哨兵：用户真开新一轮（无 origin）时，上一轮的承诺不跨轮",
+        "轮中插话不改写轮界（交付断言的命门） sidechat / goal 来源照旧开新轮（只有 steering 是例外，别顺手放过别的 kind）",
+        "轮中插话不改写轮界（交付断言的命门） worker 的插话**根本不参与**父会话轮界（既有口径：先按 worker 归因摘掉）",
+        "轮中插话不改写轮界（交付断言的命门） 判定按 kind 分支，不按文本：正文里恰好写着「插话」也不算",
+        "loop 的注入位：落在 tool_result 之后、下一次请求之前 插话进第 2 次请求，且事件序在 tool_result 之后",
+        "loop 的注入位：落在 tool_result 之后、下一次请求之前 投影次序合法：user → assistant(tool_call) → tool → user（不拆 tool 配对）",
+        "loop 的注入位：落在 tool_result 之后、下一次请求之前 缺省不传盒子 = 零行为：只有一条 user_message、零插话",
+        "loop 的注入位：落在 tool_result 之后、下一次请求之前 空插话不落事件（误触不该变成一条空洞的指令）",
+        "loop 的注入位：落在 tool_result 之后、下一次请求之前 取消后迟到的那条插话既不落事件、也不再买一次请求",
+        "通道（界面 → loop 那只盒子） push/take 的取出即清空：同一条不会被两拍各付一遍 token",
+        "通道（界面 → loop 那只盒子） 同一拍连说几句 ⇒ 一次取走全部（顺序保留）",
+        "通道（界面 → loop 那只盒子） 纯空白 / 空串不进货（误触不该变成一条空洞的指令）",
+        "通道（界面 → loop 那只盒子） 超帽截断**并保留**，且正文里说清被截过（不静默截）",
+        "通道（界面 → loop 那只盒子） 首尾空白被去掉（人打字常带换行，不该原样进模型）",
+        "第 9 点与 R1（验证停滞）的交点 ★ 反面：中间没插话 ⇒ 照旧喊停滞（这条抑制不是把判据关掉）",
+        "插话与压缩：它必须活过每一次压缩 ★ keepFirstSet 受护集含插话（它靠 user_message 这条广义判据，不是靠运气）",
+        "插话与压缩：它必须活过每一次压缩 真实压缩之后，插话仍在模型面（不是只在受护名单里挂着）"
+      ]
+    },
+    "heldOut": {
+      "files": [
+        {
+          "src": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C3-steering-stagnation/heldout/tests/loop-no-progress.test.ts",
+          "dest": "tests/loop-no-progress.test.ts"
+        }
+      ],
+      "command": "node tests/run-visible.mjs tests/loop-no-progress.test.ts"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched",
+      "onlySrcChanged",
+      "heldOutPass"
+    ]
+  },
+  {
+    "id": "C4-provider-overload",
+    "source": "Cairn@fcd1437",
+    "instruction": "部分 provider 的流在尚未产出内容时收到过载错误，任务立即失败。请统一处理可重试流错误，且已输出内容后不能重放或重复执行。 先运行 node tests/run-visible.mjs 复现；只修改 src/，不要修改 tests/、package.json 或判卷逻辑。修复后调用 verify。",
+    "seed": {
+      "kind": "dir",
+      "path": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C4-provider-overload/seed"
+    },
+    "verifier": {
+      "command": "node tests/run-visible.mjs"
+    },
+    "judge": {
+      "failToPass": [
+        "Anthropic：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完",
+        "Anthropic：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转",
+        "Gemini：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完",
+        "Gemini：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转"
+      ],
+      "passToPass": [
+        "OpenAI 兼容：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完",
+        "OpenAI 兼容：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）",
+        "OpenAI 兼容：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）",
+        "OpenAI 兼容：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转",
+        "OpenAI 兼容：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次",
+        "Anthropic：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）",
+        "Anthropic：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）",
+        "Anthropic：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次",
+        "Gemini：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）",
+        "Gemini：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）",
+        "Gemini：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次",
+        "三家共用同一份判据（`retry.ts`），不许各抄一份名字表 数值优先：字符串形式的 502 也算可重试（OpenRouter 实测 `\"type\": \"502\"`）",
+        "三家共用同一份判据（`retry.ts`），不许各抄一份名字表 名字表覆盖三家的过载/限流/可用性形状（大小写不敏感）",
+        "三家共用同一份判据（`retry.ts`），不许各抄一份名字表 请求本身的问题一律不可重放（400/401/403 家族与协议错）",
+        "三家共用同一份判据（`retry.ts`），不许各抄一份名字表 `StreamFailure` 的 retryable 是唯一出口：非 StreamFailure 的未知形状按可重放处理"
+      ]
+    },
+    "heldOut": {
+      "files": [
+        {
+          "src": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C4-provider-overload/heldout/tests/provider-stream-lifecycle.test.ts",
+          "dest": "tests/provider-stream-lifecycle.test.ts"
+        }
+      ],
+      "command": "node tests/run-visible.mjs tests/provider-stream-lifecycle.test.ts"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched",
+      "onlySrcChanged",
+      "heldOutPass"
+    ]
+  },
+  {
+    "id": "C5-lsp-language",
+    "source": "Cairn@e1b9819",
+    "instruction": "非 JavaScript 语言服务器不能正确激活和处理文档，入口提供的语言身份丢失。请修复 LSP 接口契约与调用，保留插件边界。 先运行 node tests/run-visible.mjs 复现；只修改 src/，不要修改 tests/、package.json 或判卷逻辑。修复后调用 verify。",
+    "seed": {
+      "kind": "dir",
+      "path": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C5-lsp-language/seed"
+    },
+    "verifier": {
+      "command": "node tests/run-visible.mjs"
+    },
+    "judge": {
+      "failToPass": [
+        "defaultLanguageId（缺省启发式，存量行为不变） 六个 JS/TS 后缀 ⇒ typescript；其余 ⇒ plaintext",
+        "languageIdMap（配置 → 查表） 只收非空字符串值；坏形状按缺格处理（不抛、不污染查表）",
+        "didOpen 的 languageId 走服务器声明（真发出去的那个值） 配了 extensionToLanguage ⇒ 非 JS 文件拿到声明的 languageId（不再是 plaintext）",
+        "didOpen 的 languageId 走服务器声明（真发出去的那个值） 同族：.go ⇒ go、.rs ⇒ rust（两个 server 各管各的，表不串）"
+      ],
+      "passToPass": [
+        "didOpen 的 languageId 走服务器声明（真发出去的那个值） 没配 extensionToLanguage ⇒ 回落缺省启发式（存量配置一个字不变）",
+        "didOpen 的 languageId 走服务器声明（真发出去的那个值） 查表按原样键：配置写 .py 只命中 .py，别的扩展仍回落"
+      ]
+    },
+    "heldOut": {
+      "files": [
+        {
+          "src": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C5-lsp-language/heldout/tests/plugin-lsp-activation.test.ts",
+          "dest": "tests/plugin-lsp-activation.test.ts"
+        }
+      ],
+      "command": "node tests/run-visible.mjs tests/plugin-lsp-activation.test.ts"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched",
+      "onlySrcChanged",
+      "heldOutPass"
+    ]
+  },
+  {
+    "id": "C6-mutation-order",
+    "source": "Cairn@b75c11d",
+    "instruction": "同一会话的并发修改有时按路径解析完成顺序执行，违反提交顺序。请保证先提交的修改先进入临界区，同时保留错误释放和不同会话的隔离。 先运行 node tests/run-visible.mjs 复现；只修改 src/，不要修改 tests/、package.json 或判卷逻辑。修复后调用 verify。",
+    "seed": {
+      "kind": "dir",
+      "path": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C6-mutation-order/seed"
+    },
+    "verifier": {
+      "command": "node tests/run-visible.mjs"
+    },
+    "judge": {
+      "failToPass": [
+        "withSessionMutation：入链按调用顺序，与 realpath 回程快慢无关 第一次调用的 realpath 慢 30ms ⇒ 第二个 mutation 仍排在它后面（旧实现会抢跑）"
+      ],
+      "passToPass": []
+    },
+    "heldOut": {
+      "files": [
+        {
+          "src": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C6-mutation-order/heldout/tests/session-reference-repository.test.ts",
+          "dest": "tests/session-reference-repository.test.ts"
+        }
+      ],
+      "command": "node tests/run-visible.mjs tests/session-reference-repository.test.ts"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched",
+      "onlySrcChanged",
+      "heldOutPass"
+    ]
+  }
+]

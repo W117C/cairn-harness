@@ -1,0 +1,184 @@
+[
+ {
+  "r": {
+   "study": {
+    "strategy": "random",
+    "seed": 1167595772,
+    "interventions": [
+     {
+      "request": 2,
+      "reason": "random",
+      "evidenceEvent": 15
+     },
+     {
+      "request": 10,
+      "reason": "random",
+      "evidenceEvent": 6311
+     }
+    ],
+    "physicalRequests": 10,
+    "outputCap": 4096,
+    "timeoutMs": 120000,
+    "envelopes": [
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 0
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 1
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 2
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 2
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 3
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 3
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 4
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 5
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 5
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 6
+     }
+    ],
+    "reasoningOutputTokens": 6154
+   },
+   "id": "C6-mutation-order",
+   "name": "C6-mutation-order",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "cn:deepseek-v4.1-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "study: no hidden episode retry",
+   "seconds": 69.387,
+   "requests": 9,
+   "tokensIn": 101716,
+   "tokensOut": 7632,
+   "cny": null,
+   "toolCalls": 10,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 10,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "namedSets": {
+    "state": "pass",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [],
+    "reasons": [],
+    "sources": [
+     {
+      "command": "pnpm_config_verify_deps_before_run=false pnpm run test",
+      "format": "node-test-tap",
+      "tests": 1,
+      "carried": true,
+      "complete": true
+     }
+    ]
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/main/session-repository.ts"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 1149,
+    "procPeak": 7,
+    "cpuMs": 6633,
+    "samples": 136
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": true,
+    "exitCode": 0,
+    "output": "TAP version 13\nok 1 - resolveSessionRef：同名会话必须精确寻址 无 workspace 且两个根同名 ⇒ 拒绝；显式 workspace 各自命中\nok 2 - resolveSessionRef：同名会话必须精确寻址 未登记工作区 / 不存在的会话 / 空 id 都 fail closed\nok 3 - 父依赖：直接 + 传递，读不动不算无依赖 parent ← child ← grand：删除 parent 前能列出两代子会话；叶子可删\nok 4 - 父依赖：直接 + 传递，读不动不算无依赖 依赖文件读不动 ⇒ 抛错，不当成没有依赖\nok 5 - withSessionMutation：根级临界区 进程内串行：第二个 mutation 等第一个结束才开始\nok 6 - withSessionMutation：根级临界区 跨进程：锁被占用时另一个进程拿不到；结束后锁文件不残留\nok 7 - withSessionMutation：根级临界区 崩溃遗留的锁：显式报「需人工确认」，不自动删锁\n1..7\n# tests 7\n# pass 7\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n"
+   },
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "146743c",
+   "ranAt": "2026-10-25T02:56:16.204Z",
+   "maxSteps": 24,
+   "reps": 1,
+   "arm": "random",
+   "thinking": "low"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  },
+  "taskId": "C6-mutation-order"
+ }
+]

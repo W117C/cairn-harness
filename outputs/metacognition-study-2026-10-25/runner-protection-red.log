@@ -1,0 +1,46 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/metacognition-sandbox.test.ts (2 tests | 2 failed) 239ms
+   × allows workspace commands and refuses external writes and oracle reads 236ms
+   × detects host tool replacement and nested shadow dependencies while allowing cache writes 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/metacognition-sandbox.test.ts > allows workspace commands and refuses external writes and oracle reads
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/metacognition-sandbox.test.ts:20:66
+     18|   expect((await sandbox.exec(`printf changed > '${join(oracle,'answer'…
+     19|   expect(await readFile(join(oracle,'answer'),'utf8')).toBe('hidden');
+     20|   expect((await sandbox.exec('rm node_modules/vitest',work)).ok).toBe(…
+       |                                                                  ^
+     21|   expect((await sandbox.exec('mkdir -p node_modules/.vite-temp; printf…
+     22|  }finally{await rm(dir,{recursive:true,force:true});}
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/metacognition-sandbox.test.ts > detects host tool replacement and nested shadow dependencies while allowing cache writes
+TypeError: snapshotStudyDependencies is not a function
+ ❯ tests/metacognition-sandbox.test.ts:28:35
+     26|  try{
+     27|   await mkdir(work);await prepareStudyModules(work,resolve('node_modul…
+     28|   const before=await studySandbox.snapshotStudyDependencies(work);
+       |                                   ^
+     29|   await mkdir(join(work,'node_modules/.vite-temp'));await writeFile(jo…
+     30|   expect(await studySandbox.snapshotStudyDependencies(work)).toBe(befo…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  10:37:00
+   Duration  408ms (tests 71%, transform 23%, import 5%, worker 1%)
+

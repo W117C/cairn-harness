@@ -1,0 +1,84 @@
+[
+ {
+  "r": {
+   "id": "B1-bugfix-crossfile",
+   "name": "B1-bugfix-crossfile",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "z-ai/glm-5.2",
+   "attempts": 3,
+   "retryWaitMs": 40000,
+   "retryWhy": "已拨到第 3 趟（帽 3）⇒ 停，剩下的记为「跑不成」而不是「没做到」",
+   "seconds": 1.478,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "namedSets": {
+    "state": "unreadable",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [
+     "券后金额跌破包邮线，应当收运费",
+     "无券：商品金额 + 运费",
+     "已包邮：只付商品金额"
+    ],
+    "reasons": [
+     "最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读",
+     "格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：券后金额跌破包邮线，应当收运费、无券：商品金额 + 运费、已包邮：只付商品金额"
+    ],
+    "sources": []
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request requires more credits, or fewer max_tokens. You requested up to 131072 tokens, but can only afford 2100. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"limit_source\":\"openrouter_credits\",\"remedy_hint\"",
+   "resources": {
+    "rssPeakMb": 305,
+    "procPeak": 2,
+    "cpuMs": 1023,
+    "samples": 4
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": false,
+    "exitCode": 1,
+    "output": "✖ 折扣不是 20% 时同样要按券后金额收运费 (1.033458ms)\n✖ 多条商品行：看的是券后总额，不是原始总额 (0.103625ms)\n✖ 整单清零：券 100% 时仍要付运费 (0.073ms)\n✔ 原价恰好差一分不到包邮线 (0.07125ms)\n✔ 券后正好落在包邮线上：应当免运费 (0.0465ms)\n✔ 非整除折扣取整后仍是整数分 (0.063ms)\n✖ 跨过包邮线的另一档折扣 (0.055625ms)\n✔ 无券且刚好包邮线原价 (0.034875ms)\nℹ tests 8\nℹ suites 0\nℹ pass 4\nℹ fail 4\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 48.206541\n\n✖ failing tests:\n\ntest at tests/checkout.held.test.js:11:1\n✖ 折扣不是 20% 时同样要按券后金额收运费 (1.033458ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  4200 !== 4800\n  \n      at TestContext.<anonymous> (file:///private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/loop-eval-TsdVUl/work/tests/checkout.held.test.js:13:10)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1382:25)\n      at Test.start (node:internal/test_runner/test:1242:17)\n      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 4200,\n    expected: 4800,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n\ntest at tests/checkout.held.test.js:16:1\n✖ 多条商品行：看的是券后总额，不是原始总额 (0.103625ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  4000 !== 4600\n  \n      at TestContext.<anonymous> (file:///private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/loop-eval-TsdVUl/work/tests/checkout.held.test.js:18:10)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Te\n…[有界性：中段省略 1691 字]…\ninternal/test_runner/test:960:18)\n      at Test.postRun (node:internal/test_runner/test:1522:19)\n      at Test.run (node:internal/test_runner/test:1447:12)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 4500,\n    expected: 5100,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n\n[exit code: 1]"
+   },
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "146743c",
+   "ranAt": "2026-10-24T13:46:39.738Z",
+   "maxSteps": 25,
+   "reps": 1,
+   "arm": "low",
+   "thinking": "low"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "held-out 没过（可见测试绿了但隐藏验收不认 ⇒ 大概率是特殊分支，不是根因）〔exit=1〕",
+    "逐名判卷不可读 ⇒ 不许算过：最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读；格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：券后金额跌破包邮线，应当收运费、无券：商品金额 + 运费、已包邮：只付商品金额〔对不上号 3 条〕",
+    "runLoop 抛错:GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request require"
+   ]
+  },
+  "taskId": "B1-bugfix-crossfile"
+ }
+]

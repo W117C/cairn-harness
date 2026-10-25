@@ -1,0 +1,106 @@
+$ vitest run --config tests/vitest.config.ts tests/orchestration-provider.test.ts --maxWorkers=2
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/orchestration-provider.test.ts (10 tests | 9 failed) 18ms
+   ❯ workspace orchestration provider budget gateway (10)
+     × assembles without a network call, forwards only approved tools and forces the actual wire limits 4ms
+     × reserves the highest input/cache-write tariff rather than observed or missing usage 1ms
+     × rejects UTF8 request bytes over the cap before making any network call 1ms
+     × blocks a second paid fetch during adapter http retries 1ms
+     × blocks a second paid fetch during adapter sse retries 1ms
+     × blocks a second paid fetch during adapter network retries 1ms
+     × uses the initialized settings selection and mapped env key without exporting it 1ms
+     × enforces Anthropic max_tokens and explicitly disables thinking on the transmitted request 1ms
+     × refuses a provider endpoint override before sending credentials or a request 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-provider.test.ts > workspace orchestration provider budget gateway > assembles without a network call, forwards only approved tools and forces the actual wire limits
+AssertionError: expected null not to be null
+ ❯ tests/orchestration-provider.test.ts:41:27
+     39|   it("assembles without a network call, forwards only approved tools a…
+     40|     const f = await fixture();
+     41|     expect(f.backend).not.toBeNull(); expect(f.captures).toHaveLength(…
+       |                           ^
+     42|     const result = await f.backend!.execute(f.request);
+     43|     expect(result.summary).toBe("done"); expect(f.captures).toHaveLeng…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  tests/orchestration-provider.test.ts > workspace orchestration provider budget gateway > reserves the highest input/cache-write tariff rather than observed or missing usage
+TypeError: Cannot read properties of null (reading 'execute')
+ ❯ tests/orchestration-provider.test.ts:56:37
+     54|   it("reserves the highest input/cache-write tariff rather than observ…
+     55|     const f = await fixture({ price: { inputPerMTok: 1, outputPerMTok:…
+     56|     const result = await f.backend!.execute(f.request);
+       |                                     ^
+     57|     expect(result.spent_usd).toBeCloseTo(0.172032, 10);
+     58|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  tests/orchestration-provider.test.ts > workspace orchestration provider budget gateway > rejects UTF8 request bytes over the cap before making any network call
+TypeError: Cannot read properties of null (reading 'execute')
+ ❯ tests/orchestration-provider.test.ts:62:29
+     60|   it("rejects UTF8 request bytes over the cap before making any networ…
+     61|     const f = await fixture(); f.request.task.goal = "界".repeat(12000);
+     62|     await expect(f.backend!.execute(f.request)).rejects.toThrow(/reque…
+       |                             ^
+     63|     expect(f.captures).toHaveLength(0);
+     64|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  tests/orchestration-provider.test.ts > workspace orchestration provider budget gateway > blocks a second paid fetch during adapter http retries
+ FAIL  tests/orchestration-provider.test.ts > workspace orchestration provider budget gateway > blocks a second paid fetch during adapter sse retries
+ FAIL  tests/orchestration-provider.test.ts > workspace orchestration provider budget gateway > blocks a second paid fetch during adapter network retries
+TypeError: Cannot read properties of null (reading 'execute')
+ ❯ tests/orchestration-provider.test.ts:75:29
+     73|     };
+     74|     const f = await fixture({ fetchImpl });
+     75|     await expect(f.backend!.execute(f.request)).rejects.toThrow(/one.*…
+       |                             ^
+     76|     expect(calls).toBe(1);
+     77|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  tests/orchestration-provider.test.ts > workspace orchestration provider budget gateway > uses the initialized settings selection and mapped env key without exporting it
+AssertionError: expected null not to be null
+ ❯ tests/orchestration-provider.test.ts:94:25
+     92|     vi.stubEnv("M0A_PROVIDER", "");
+     93|     const backend = await createWorkspaceOrchestrationBackend(f.worksp…
+     94|     expect(backend).not.toBeNull();
+       |                         ^
+     95|     expect(JSON.stringify(backend)).not.toContain("fixture-key");
+     96|     vi.stubEnv("DEEPSEEK_API_KEY", "");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  tests/orchestration-provider.test.ts > workspace orchestration provider budget gateway > enforces Anthropic max_tokens and explicitly disables thinking on the transmitted request
+TypeError: Cannot read properties of null (reading 'execute')
+ ❯ tests/orchestration-provider.test.ts:106:37
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  tests/orchestration-provider.test.ts > workspace orchestration provider budget gateway > refuses a provider endpoint override before sending credentials or a request
+TypeError: Cannot read properties of null (reading 'execute')
+ ❯ tests/orchestration-provider.test.ts:114:29
+    112|   it("refuses a provider endpoint override before sending credentials …
+    113|     const f = await fixture(); vi.stubEnv("DEEPSEEK_ENDPOINT", "https:…
+    114|     await expect(f.backend!.execute(f.request)).rejects.toThrow(/endpo…
+       |                             ^
+    115|     expect(f.captures).toHaveLength(0);
+    116|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  9 failed | 1 passed (10)
+   Start at  20:11:34
+   Duration  165ms (transform 66%, tests 17%, import 16%, worker 2%)
+
+[ELIFECYCLE] Test failed. See above for more details.

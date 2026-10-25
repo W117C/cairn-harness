@@ -1,0 +1,111 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/orchestration-project.test.ts (20 tests | 4 failed) 10ms
+   ❯ orchestration event projection (20)
+     × accepts durable submission audit around the proposal without changing plan authority 4ms
+     × accepts kernel delivery intent but requires the later delivery receipt 0ms
+     × charges kernel terminal error costs once including real budget overruns 0ms
+     × does not accept a new spawn while dependencies or writer leases are unresolved 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > accepts durable submission audit around the proposal without changing plan authority
+AssertionError: expected { plans: { p: { …(6) } }, …(3) } to match object { anomalies: [], …(1) }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+@@ -1,7 +1,10 @@
+  {
+-   "anomalies": [],
++   "anomalies": [
++     "1: unknown plan or stale version",
++     "3: unmatched or duplicate control result",
++   ],
+    "plans": {
+      "p": {
+        "phase": "proposed",
+      },
+    },
+
+ ❯ tests/orchestration-project.test.ts:112:42
+    110|   it("accepts durable submission audit around the proposal without cha…
+    111|     const events = [control("submit_plan", "request", "submit", { sour…
+    112|     expect(projectOrchestration(events)).toMatchObject({ anomalies: []…
+       |                                          ^
+    113|   });
+    114|   it("accepts kernel delivery intent but requires the later delivery r…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > accepts kernel delivery intent but requires the later delivery receipt
+AssertionError: expected { Object (task, phase, ...) } to match object { phase: 'merging', delivered: false }
+(23 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "delivered": false,
+-   "phase": "merging",
++   "phase": "verifying",
+  }
+
+ ❯ tests/orchestration-project.test.ts:116:30
+    114|   it("accepts kernel delivery intent but requires the later delivery r…
+    115|     const events = [...base(), result(), verified(), status("merging")…
+    116|     expect(viewTask(events)).toMatchObject({ phase: "merging", deliver…
+       |                              ^
+    117|     expect(viewTask([...events, status("done")]).phase).toBe("merging"…
+    118|     const complete = projectOrchestration([...events, status("merging"…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > charges kernel terminal error costs once including real budget overruns
+AssertionError: expected { Object (task, phase, ...) } to match object { phase: 'failed', spent_usd: 5, …(1) }
+(20 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "phase": "failed",
+    "reserved_usd": 0,
+-   "spent_usd": 5,
++   "spent_usd": 1,
+  }
+
+ ❯ tests/orchestration-project.test.ts:125:34
+    123|     const events = [...base(), result(), status("failed", { spent_usd:…
+    124|     const view = projectOrchestration([...events, status("failed", { s…
+    125|     expect(view.plans.p.tasks.a).toMatchObject({ phase: "failed", spen…
+       |                                  ^
+    126|     expect(view.plans.p.spent_usd).toBe(5);
+    127|     expect(view.anomalies).toHaveLength(2);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > does not accept a new spawn while dependencies or writer leases are unresolved
+AssertionError: expected 'running' to be 'planned' // Object.is equality
+
+Expected: "planned"
+Received: "running"
+
+ ❯ tests/orchestration-project.test.ts:137:43
+    135|     const p = plan("p", [task("a"), task("b", { depends_on: ["a"] })]);
+    136|     const blocked = projectOrchestration([proposal(p), approval(), spa…
+    137|     expect(blocked.plans.p.tasks.b.phase).toBe("planned");
+       |                                           ^
+    138|     expect(blocked.anomalies).toHaveLength(1);
+    139|     const conflictPlan = plan("p", [task("a"), task("b", { write_scope…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  4 failed | 28 passed (32)
+   Start at  20:02:33
+   Duration  111ms (transform 63%, tests 18%, import 15%, worker 4%)
+

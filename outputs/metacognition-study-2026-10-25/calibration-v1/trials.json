@@ -1,0 +1,381 @@
+[
+  {
+    "taskId": "C1-malformed-tool",
+    "strategy": "baseline",
+    "rep": 1,
+    "seed": 607119744,
+    "outcome": "pass",
+    "tokens": null,
+    "seconds": 55.346,
+    "detail": {
+      "exitCode": 0,
+      "reading": {
+        "r": {
+          "study": {
+            "strategy": "baseline",
+            "seed": 607119744,
+            "interventions": [],
+            "physicalRequests": 13,
+            "outputCap": 4096,
+            "timeoutMs": 120000,
+            "envelopes": [
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 0
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 1
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 2
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 2
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 3
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 4
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 5
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 6
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 6
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 6
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 7
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 8
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 9
+              }
+            ],
+            "reasoningOutputTokens": 1778
+          },
+          "id": "C1-malformed-tool",
+          "name": "C1-malformed-tool",
+          "rep": 1,
+          "system": "base",
+          "seedVerifyOk": false,
+          "model": "cn:deepseek-v4.1-flash",
+          "attempts": 1,
+          "retryWaitMs": 0,
+          "retryWhy": "study: no hidden episode retry",
+          "seconds": 48.585,
+          "requests": 12,
+          "tokensIn": 183832,
+          "tokensOut": 3107,
+          "cny": null,
+          "toolCalls": 14,
+          "toolFailures": 0,
+          "repeatedSameAction": 0,
+          "firstWriterIndex": 8,
+          "readsBeforeFirstWrite": 0,
+          "clarified": 0,
+          "planned": 0,
+          "plannedBeforeWrite": false,
+          "verified": 1,
+          "verifyOkLast": true,
+          "autoVerifyBeat": false,
+          "autoVerifyBeats": 0,
+          "verifyRecovery": "greenFirst",
+          "namedSets": {
+            "state": "pass",
+            "notGreen": [],
+            "broken": [],
+            "unmatched": [],
+            "reasons": [],
+            "sources": [
+              {
+                "command": "pnpm_config_verify_deps_before_run=false pnpm run test",
+                "format": "node-test-tap",
+                "tests": 9,
+                "carried": true,
+                "complete": true
+              }
+            ]
+          },
+          "providerFace": "真会话",
+          "wroteTests": false,
+          "touchedJudge": false,
+          "onlySrcChanged": true,
+          "changedFiles": [
+            "src/agent/loop.ts",
+            "src/agent/stuck.ts"
+          ],
+          "exitError": null,
+          "resources": {
+            "rssPeakMb": 568,
+            "procPeak": 8,
+            "cpuMs": 5998,
+            "samples": 91
+          },
+          "heldOutInstallErrs": [],
+          "heldOutRun": {
+            "ran": true,
+            "ok": true,
+            "exitCode": 0,
+            "output": "TAP version 13\nok 1 - loop context feedback includes persisted tool results exactly once in the next provider request\nok 2 - loop context feedback returns failure to the model without duplicate history\nok 3 - loop context feedback returns permission denial to the model without duplicate history\nok 4 - loop context feedback returns tool table denial to the model without duplicate history\nok 5 - loop context feedback returns unknown tool to the model without duplicate history\nok 6 - loop context feedback returns missing verify hook to the model without duplicate history\nok 7 - loop context feedback returns verify exception to the model without duplicate history\nok 8 - loop context feedback includes tool-emitted events in persisted order\nok 9 - loop context feedback does not request another turn after cancellation\nok 10 - auto-verify on completion (harness 补拍，证据 only) 写盘后纯文本收束 → 补一拍并把红字落进事件流（零额外模型调用）\nok 11 - auto-verify on completion (harness 补拍，证据 only) 每 run 至多一拍：自动拍红字后模型仍纯文本收束 ⇒ 不叠加\nok 12 - auto-verify on completion (harness 补拍，证据 only) 自动拍验证通过 → 绿证据落流\nok 13 - auto-verify on completion (harness 补拍，证据 only) 模型自调过 verify ⇒ harness 让位，且手动拍事件形态零变化（连 auto 键都不出现）\nok 14 - auto-verify on completion (harness 补拍，证据 only) 可验面探测炸（config 存在但 JSON 坏）⇒ 不炸 run、不补拍，但必须出声\nok 15 - auto-verify on completion (harness 补拍，证据 only) 零行为回退：未写盘（只读动作） → 无 verify_result、请求数与旧行为同形\nok 16 - auto-verify on completion (harness 补拍，证据 only) 零行为回退：仓库无 verify 面（surface=false） → 无 verify_result、请求数与旧行为同形\nok 17 - auto-verify on \n…[有界性：中段省略 301 字]…\n未给工具表（主会话形状）⇒ 行为逐字不变\nok 22 - resolveTool 补表钩子（run 中途才出现的工具，2026-10-19） 静态表里没有、钩子给得出 ⇒ 照常执行（模型看到的 ≠ 能执行的，这条堵住后半句）\nok 23 - resolveTool 补表钩子（run 中途才出现的工具，2026-10-19） 钩子也拿不到 ⇒ 仍是 unknown tool（补表不放行未注册工具，fail-closed 不变）\nok 24 - resolveTool 补表钩子（run 中途才出现的工具，2026-10-19） 反向（突变体专破）：把 `?? opts.resolveTool?.(name)` 从 loop 里拆掉 ⇒ 第一条必须红在这儿\n1..24\n# tests 24\n# pass 24\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0"
+          },
+          "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+          "headSha": "146743c",
+          "ranAt": "2026-10-24T17:33:43.712Z",
+          "maxSteps": 24,
+          "reps": 1,
+          "arm": "baseline",
+          "thinking": "low"
+        },
+        "g": {
+          "ok": true,
+          "fails": []
+        },
+        "taskId": "C1-malformed-tool"
+      }
+    }
+  },
+  {
+    "taskId": "C4-provider-overload",
+    "strategy": "baseline",
+    "rep": 1,
+    "seed": 1454727384,
+    "outcome": "fail",
+    "tokens": 136763,
+    "seconds": 67.909,
+    "detail": {
+      "exitCode": 0,
+      "reading": {
+        "r": {
+          "study": {
+            "strategy": "baseline",
+            "seed": 1454727384,
+            "interventions": [],
+            "physicalRequests": 7,
+            "outputCap": 4096,
+            "timeoutMs": 120000,
+            "envelopes": [
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 0
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 1
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 2
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 3
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 4
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 5
+              },
+              {
+                "effort": "low",
+                "thinking": {
+                  "type": "enabled"
+                },
+                "model": "cn:deepseek-v4.1-flash",
+                "reasoningStates": 5
+              }
+            ],
+            "reasoningOutputTokens": 8293
+          },
+          "id": "C4-provider-overload",
+          "name": "C4-provider-overload",
+          "rep": 1,
+          "system": "base",
+          "seedVerifyOk": false,
+          "model": "cn:deepseek-v4.1-flash",
+          "attempts": 1,
+          "retryWaitMs": 0,
+          "retryWhy": "study: no hidden episode retry",
+          "seconds": 61.781,
+          "requests": 7,
+          "tokensIn": 128104,
+          "tokensOut": 8659,
+          "cny": null,
+          "toolCalls": 8,
+          "toolFailures": 0,
+          "repeatedSameAction": 0,
+          "firstWriterIndex": 16,
+          "readsBeforeFirstWrite": 0,
+          "clarified": 0,
+          "planned": 0,
+          "plannedBeforeWrite": false,
+          "verified": 0,
+          "verifyOkLast": false,
+          "autoVerifyBeat": true,
+          "autoVerifyBeats": 1,
+          "verifyRecovery": "notRecovered",
+          "namedSets": {
+            "state": "fail",
+            "notGreen": [
+              "Anthropic：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完",
+              "Anthropic：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转",
+              "Gemini：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完",
+              "Gemini：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转"
+            ],
+            "broken": [],
+            "unmatched": [],
+            "reasons": [
+              "FAIL_TO_PASS「Anthropic：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完」逐名读到的是 failed ⇒ 该转绿的没绿",
+              "FAIL_TO_PASS「Anthropic：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转」逐名读到的是 failed ⇒ 该转绿的没绿",
+              "FAIL_TO_PASS「Gemini：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完」逐名读到的是 failed ⇒ 该转绿的没绿",
+              "FAIL_TO_PASS「Gemini：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转」逐名读到的是 failed ⇒ 该转绿的没绿"
+            ],
+            "sources": [
+              {
+                "command": "pnpm_config_verify_deps_before_run=false pnpm run test",
+                "format": "node-test-tap",
+                "tests": 19,
+                "carried": true,
+                "complete": true
+              }
+            ]
+          },
+          "providerFace": "真会话",
+          "wroteTests": false,
+          "touchedJudge": false,
+          "onlySrcChanged": false,
+          "changedFiles": [],
+          "exitError": null,
+          "resources": {
+            "rssPeakMb": 433,
+            "procPeak": 7,
+            "cpuMs": 7368,
+            "samples": 117
+          },
+          "heldOutInstallErrs": [],
+          "heldOutRun": {
+            "ran": true,
+            "ok": true,
+            "exitCode": 0,
+            "output": "TAP version 13\nok 1 - OpenAI 兼容响应流生命周期 消费者在 text 输出后提前结束，也取消响应体并释放读取锁\nok 2 - OpenAI 兼容响应流生命周期 消费者在 thinking 输出后提前结束，也取消响应体并释放读取锁\nok 3 - OpenAI 兼容响应流生命周期 消费者在 tool 输出后提前结束，也取消响应体并释放读取锁\nok 4 - OpenAI 兼容响应流生命周期 完整流式响应在计量中记录为成功，并保留累计 usage\nok 5 - OpenAI 兼容响应流生命周期 损坏的帧仍然报错并记为失败，不重试协议错误\nok 6 - OpenAI 兼容响应流生命周期 调用方取消仍记为取消，退出时释放响应体\nok 7 - OpenAI 兼容响应流生命周期 reasoning_content 已展示后收到服务端错误，不重放已产出的思考\nok 8 - OpenAI 兼容响应流生命周期 reasoning 已展示后收到服务端错误，不重放已产出的思考\nok 9 - OpenAI 兼容响应流生命周期 尚未产出内容的服务端错误仍可重试，恢复后仅交付一次正文\nok 10 - 真实 HTTP 响应连接回收 消费者提前结束后，服务端能观察到响应连接关闭\nok 11 - 请求计量逐笔覆盖真实传输尝试 HTTP 失败后恢复，保留失败与成功两笔记录\nok 12 - 请求计量逐笔覆盖真实传输尝试 HTTP 重试耗尽时每次请求都留痕，不把三次失败并成一次\nok 13 - 请求计量逐笔覆盖真实传输尝试 网络错误后的重试也各自计量\nok 14 - 请求计量逐笔覆盖真实传输尝试 非流式请求同样逐次计量，并保留摘要类别\nok 15 - 请求计量逐笔覆盖真实传输尝试 SSE 失败尝试的 usage 不会混入下一次请求（后续上报=false）\nok 16 - 请求计量逐笔覆盖真实传输尝试 SSE 失败尝试的 usage 不会混入下一次请求（后续上报=true）\nok 17 - 请求计量逐笔覆盖真实传输尝试 调用前已取消时，不产生未发送请求的计量记录\nok 18 - 请求计量逐笔覆盖真实传输尝试 本地 HTTP 服务收到两次请求时，计量也准确记录两笔\nok 19 - 流内重试的解码与取消边界 失败响应残留 UTF-8 起始字节 228，不污染下一次成功响应\nok 20 - 流内重试的解码与取消边界 失败响应残留 UTF-8 起始字节 240，不污染下一次成功响应\nok 21 - 流内重试的解码与取消边界 同一次响应内的 UTF-8 字符跨块时仍能正确拼接\nok 22 - 流内重试的解码与取消边界 退避期间取消立即结束等待并保留原始原因：Error: cancelled during backoff\nok 23 - 流内重试的解码与取消边界 退避期间取消立即结束等待并保留原始原因：cancelled during backoff\n1..23\n# tests 23\n# pass 23\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0"
+          },
+          "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+          "headSha": "146743c",
+          "ranAt": "2026-10-24T17:34:39.017Z",
+          "maxSteps": 24,
+          "reps": 1,
+          "arm": "baseline",
+          "thinking": "low"
+        },
+        "g": {
+          "ok": false,
+          "fails": [
+            "verify 未通过/未跑",
+            "改动越出 src/",
+            "逐名判卷红〔同一枚退出码分不出这两件事〕：该转绿的没绿：Anthropic：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完、Anthropic：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转、Gemini：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完、Gemini：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转"
+          ]
+        },
+        "taskId": "C4-provider-overload"
+      }
+    }
+  }
+]

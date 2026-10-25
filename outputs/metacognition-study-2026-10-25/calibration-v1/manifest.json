@@ -1,0 +1,44 @@
+{
+  "model": "cn:deepseek-v4.1-flash",
+  "endpoint": "http://127.0.0.1:7863/v1/chat/completions",
+  "tasksDigest": "3a65765217e2cf47a6840924d7de0a57beead2fb84f3c2653c2b43179cc8a089",
+  "codeHashes": {
+    "src/providers/openai.ts": "623b433e70eeb0fde4096fb9681123bcee2de08332298b5fcba67b9540015a97",
+    "src/agent/context.ts": "46c6e927692e08e1494fe0a9b627e1e73fa803d97e7d69c146c291a0373171fd",
+    "src/agent/compaction.ts": "bfb1233b72239fe6f2ea9d2993e8eccf570fcce7dbd5ded5dfcf72295e9f2412",
+    "src/agent/session-provider.ts": "e0ce1d7c3f92c52a6ec3e00b26fc7d7f834ccc4cc9e1d795c7fb0949c4231385",
+    "src/agent/eval/metacognition.ts": "887a29c6b1cb6c8895cb22ddfdc45abea7ef7a0edf3c8e09154082ec874ff122",
+    "src/agent/eval/study.ts": "68a3752fffe49a139fc207a4ae4ffde8af3819afaabb5c41b9fbf261e038ba80",
+    "scripts/loop-eval.ts": "e5cb8bf7a7c73ab7cb28b183d29f7bd0c97367de8f917095d1d15e38c8703175",
+    "scripts/metacognition-study.ts": "b4f0240cec2aaba75d2e307de42d77e84ba74cea3fab5d1a50596f0d44cc1167"
+  },
+  "taskHashes": {
+    "C1-malformed-tool": "c72025ea8d670981bc7c33e64085647ce453f0a68953623037638bf9600d7acf",
+    "C4-provider-overload": "8bb78c9f07f0b9cc4e89e266ed7429413e16b8b7ec68f72f708c55d1d695c608"
+  },
+  "reps": 1,
+  "seed": 20261025,
+  "strategies": [
+    "baseline"
+  ],
+  "maxSteps": 24,
+  "timeoutMs": 120000,
+  "outputCap": 4096,
+  "schedule": [
+    {
+      "taskId": "C1-malformed-tool",
+      "strategy": "baseline",
+      "rep": 1,
+      "seed": 607119744
+    },
+    {
+      "taskId": "C4-provider-overload",
+      "strategy": "baseline",
+      "rep": 1,
+      "seed": 1454727384
+    }
+  ],
+  "concurrency": 1,
+  "memory": "empty and isolated per trial",
+  "contract": "Requested effort and explicit enabled thinking; exact effort enforcement is unverified. Tokens and reasoning details are provider-reported; monetary price is unknown."
+}

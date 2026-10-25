@@ -13,7 +13,7 @@ $ node --import tsx scripts/gates.ts --only=head-cert-check
         贴帽读数（缺省＝config 里的 testTimeout=30000ms）：6459 条里 0 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 5893 条｜标题非字面量（it.each／插值／拼接，按缺省算）384 条｜预算没落到 0 条｜无｜离帽余量最近：tests/m3c.test.ts·M3c pipeline 哑 sequencer（零 LLM） 未获 15352ms/25000ms=61%；tests/mutate-shards.test.ts·treeProblem 与编排器的前置闸：脏树不许当片用 同一宿主被 5738ms/15000ms=38%；tests/plugin-trust-revocation.test.ts·撤回插件信任后旧执行面立即失效 撤回时关闭在途 MCP 请求，服务端 64ms/200ms=32%
         逐条日志：/tmp/dsh-head-cert-48cc04a
         已回收认证树 .worktrees/gate-head-cert（exit=0）
-        常驻残留树=1（/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/gate-mutate-verify@6455bb2）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+        常驻残留树=1（/Users/ze/Downloads/Cairn/deepseek harness/.worktrees/gate-mutate-verify@d0708a0）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
         本次退出码=1（这是 head-cert 这道门自己的码，不是它跑进去的 test runner 的码）｜红的维：认证门面红 1 道
         汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-48cc04a/summary.txt
         可引用读数已落盘（引用墙钟/门耗时前先读它）：outputs/head-cert-48cc04a-2026-10-22-0454/provenance.md

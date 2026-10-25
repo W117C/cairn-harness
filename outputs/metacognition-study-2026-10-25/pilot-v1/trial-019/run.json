@@ -1,0 +1,14 @@
+{
+ "headSha": "146743c",
+ "dirty": 142,
+ "ranAt": "2026-10-25T02:44:43.140Z",
+ "maxSteps": 24,
+ "reps": 1,
+ "system": "base",
+ "arm": "high",
+ "thinking": "high",
+ "model": "cn:deepseek-v4.1-flash",
+ "tasks": [
+  "C4-provider-overload"
+ ]
+}

@@ -1,0 +1,4 @@
+[loop-eval] 判卷器自校：必绿仓→ok ✅ 必红仓→不 ok ✅
+[loop-eval] 靶子 fixtures/todo-app 当前起始态：红（该文件是生成物，任何一次 e2e/agent/gate 都会就地重置它 ⇒ 读数横比须看这一行）
+[loop-eval] 装配面（产品缺省开的键 ↔ 本跑器）：autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same
+[loop-eval] 任务=C1-malformed-tool reps=1 system=base maxSteps=24 thinking=high 模型=cn:deepseek-v4.1-flash 价=价不可知〔没给 EVAL_PRICE_IN / EVAL_PRICE_OUT ⇒ 钱按「不可知」处理（不再静默吃缺省价）〕

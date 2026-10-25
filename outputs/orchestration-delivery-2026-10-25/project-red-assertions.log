@@ -1,0 +1,413 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/orchestration-project.test.ts (15 tests | 15 failed) 8ms
+   ❯ orchestration event projection (15)
+     × ignores legacy events and derives time only from event timestamps 4ms
+     × keeps plans with equal task ids separate and never mutates input 0ms
+     × requires successful matching control results and rejects duplicate requests 0ms
+     × requires kernel approval and ignores late versions 0ms
+     × reserves remaining task budget, counts each result once and releases only at terminal 0ms
+     × producer done is only verifying and cannot certify itself 0ms
+     × requires independent fresh checks and a matching successful delivery before done 0ms
+     × does not promote missing or stale acceptance evidence: {"revision":"old"} 0ms
+     × does not promote missing or stale acceptance evidence: {"checks":[]} 0ms
+     × does not promote missing or stale acceptance evidence: {"checks":[{"id":"wrong","verdict":"pass","detail":"wrong"}]} 1ms
+     × does not accept command checks without actual successful command execution 0ms
+     × fences run ids, versions and attempts without changing spend 0ms
+     × refuses replacing a version while its previous writer has not stopped 0ms
+     × retains needs_you writer lease until kernel confirms it stopped 0ms
+     × only explicitly requested retries open another attempt and never double-spend 0ms
+ ❯ tests/orchestration-schedule.test.ts (12 tests | 10 failed) 9ms
+   ❯ orchestration scheduling (12)
+     × dispatches approved dependency-ready tasks by priority with stable ties 4ms
+     × respects total and per-plan concurrency 0ms
+     × round-robins multiple plans and gives a previously served plan lower turn priority 0ms
+     × reserves complete remaining task budgets across all actions in one decision 1ms
+     × blocks failed dependencies and does not automatically retry terminal tasks 0ms
+     × keeps leases held by needs_you tasks and cancels expired runs instead of respawning 1ms
+     × conservatively finds crossed glob scopes that neither glob matches as a literal 0ms
+     × treats unknown or empty write scopes as global, while read lanes share 1ms
+     × schedules independent verification then serial delivery without dispatching another writer 0ms
+     × escalates failed or unverifiable evidence instead of spinning verification 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 25 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > ignores legacy events and derives time only from event timestamps
+AssertionError: expected { plans: {}, anomalies: [], …(2) } to deeply equal { plans: {}, anomalies: [], …(2) }
+
+- Expected
++ Received
+
+  {
+    "anomalies": [],
+    "last_event_id": 1,
+-   "now": 30,
++   "now": 0,
+    "plans": {},
+  }
+
+ ❯ tests/orchestration-project.test.ts:27:91
+     25| describe("orchestration event projection", () => {
+     26|   it("ignores legacy events and derives time only from event timestamp…
+     27|     expect(projectOrchestration([{ type: "assistant_message", content:…
+       |                                                                                           ^
+     28|   });
+     29|   it("keeps plans with equal task ids separate and never mutates input…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/25]⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > keeps plans with equal task ids separate and never mutates input
+TypeError: Cannot read properties of undefined (reading 'tasks')
+ ❯ tests/orchestration-project.test.ts:33:25
+     31|     const saved = JSON.stringify(events);
+     32|     const view = projectOrchestration(events);
+     33|     expect(view.plans.p.tasks.a.phase).toBe("planned");
+       |                         ^
+     34|     expect(view.plans.q.phase).toBe("approved");
+     35|     expect(JSON.stringify(events)).toBe(saved);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/25]⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > requires successful matching control results and rejects duplicate requests
+TypeError: Cannot read properties of undefined (reading 'phase')
+ ❯ tests/orchestration-project.test.ts:40:47
+     38|   it("requires successful matching control results and rejects duplica…
+     39|     const events = [proposal(), approval(), control("pause_plan", "req…
+     40|     expect(projectOrchestration(events).plans.p.phase).toBe("approved"…
+       |                                               ^
+     41|     expect(projectOrchestration([...events, control("pause_plan", "res…
+     42|     const view = projectOrchestration([...events, control("pause_plan"…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/25]⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > requires kernel approval and ignores late versions
+TypeError: Cannot read properties of undefined (reading 'phase')
+ ❯ tests/orchestration-project.test.ts:49:25
+     47|   it("requires kernel approval and ignores late versions", () => {
+     48|     const view = projectOrchestration([proposal(plan("p", [task()], 2)…
+     49|     expect(view.plans.p.phase).toBe("proposed");
+       |                         ^
+     50|     expect(view.anomalies).toHaveLength(3);
+     51|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/25]⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > reserves remaining task budget, counts each result once and releases only at terminal
+TypeError: Cannot read properties of undefined (reading 'spent_usd')
+ ❯ tests/orchestration-project.test.ts:55:25
+     53|     const events = [...base(), result(), verified()];
+     54|     const view = projectOrchestration([...events, result(), verified()…
+     55|     expect(view.plans.p.spent_usd).toBe(1.5);
+       |                         ^
+     56|     expect(view.plans.p.reserved_usd).toBe(1.5);
+     57|     expect(view.anomalies).toHaveLength(2);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/25]⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > producer done is only verifying and cannot certify itself
+TypeError: Cannot read properties of undefined (reading 'tasks')
+ ❯ viewTask tests/orchestration-project.test.ts:23:79
+
+ ❯ tests/orchestration-project.test.ts:64:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/25]⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > requires independent fresh checks and a matching successful delivery before done
+TypeError: Cannot read properties of undefined (reading 'tasks')
+ ❯ viewTask tests/orchestration-project.test.ts:23:79
+
+ ❯ tests/orchestration-project.test.ts:72:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/25]⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > does not promote missing or stale acceptance evidence: {"revision":"old"}
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > does not promote missing or stale acceptance evidence: {"checks":[]}
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > does not promote missing or stale acceptance evidence: {"checks":[{"id":"wrong","verdict":"pass","detail":"wrong"}]}
+TypeError: Cannot read properties of undefined (reading 'tasks')
+ ❯ tests/orchestration-project.test.ts:80:25
+     78|   ])("does not promote missing or stale acceptance evidence: %j", (ext…
+     79|     const view = projectOrchestration([...base(), result(), verified(e…
+     80|     expect(view.plans.p.tasks.a.phase).not.toBe("done");
+       |                         ^
+     81|     expect(view.anomalies.length).toBeGreaterThan(0);
+     82|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/25]⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > does not accept command checks without actual successful command execution
+TypeError: Cannot read properties of undefined (reading 'tasks')
+ ❯ viewTask tests/orchestration-project.test.ts:23:79
+
+ ❯ tests/orchestration-project.test.ts:86:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/25]⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > fences run ids, versions and attempts without changing spend
+TypeError: Cannot read properties of undefined (reading 'tasks')
+ ❯ tests/orchestration-project.test.ts:90:25
+     88|   it("fences run ids, versions and attempts without changing spend", (…
+     89|     const view = projectOrchestration([...base(), result({ run_id: "ol…
+     90|     expect(view.plans.p.tasks.a).toMatchObject({ phase: "running", run…
+       |                         ^
+     91|     expect(view.anomalies).toHaveLength(4);
+     92|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/25]⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > refuses replacing a version while its previous writer has not stopped
+TypeError: Cannot read properties of undefined (reading 'plan')
+ ❯ tests/orchestration-project.test.ts:95:25
+     93|   it("refuses replacing a version while its previous writer has not st…
+     94|     const view = projectOrchestration([...base(), proposal(plan("p", […
+     95|     expect(view.plans.p.plan.version).toBe(1);
+       |                         ^
+     96|     expect(view.plans.p.reserved_usd).toBe(3);
+     97|     expect(view.anomalies).toHaveLength(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/25]⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > retains needs_you writer lease until kernel confirms it stopped
+TypeError: Cannot read properties of undefined (reading 'tasks')
+ ❯ viewTask tests/orchestration-project.test.ts:23:79
+
+ ❯ tests/orchestration-project.test.ts:100:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/25]⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > only explicitly requested retries open another attempt and never double-spend
+TypeError: Cannot read properties of undefined (reading 'tasks')
+ ❯ tests/orchestration-project.test.ts:107:25
+    105|     const events = [...base(), result(), status("failed"), control("re…
+    106|     const view = projectOrchestration([...events, spawn({ run_id: "r2"…
+    107|     expect(view.plans.p.tasks.a).toMatchObject({ phase: "running", run…
+       |                         ^
+    108|     expect(view.plans.p.spent_usd).toBe(1);
+    109|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/25]⎯
+
+ FAIL  tests/orchestration-schedule.test.ts > orchestration scheduling > dispatches approved dependency-ready tasks by priority with stable ties
+AssertionError: expected [] to deeply equal [ 'urgent', 'a', 'b' ]
+
+- Expected
++ Received
+
+- [
+-   "urgent",
+-   "a",
+-   "b",
+- ]
++ []
+
+ ❯ tests/orchestration-schedule.test.ts:20:54
+     18|   it("dispatches approved dependency-ready tasks by priority with stab…
+     19|     const p = plan("p", [task("b"), task("a"), task("urgent", { priori…
+     20|     expect(nextActions(view(p)).map(a => a.task_id)).toEqual(["urgent"…
+       |                                                      ^
+     21|     expect(nextActions(view(p))).toEqual(nextActions(view(p)));
+     22|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/25]⎯
+
+ FAIL  tests/orchestration-schedule.test.ts > orchestration scheduling > respects total and per-plan concurrency
+AssertionError: expected [] to deeply equal [ 'b' ]
+
+- Expected
++ Received
+
+- [
+-   "b",
+- ]
++ []
+
+ ❯ tests/orchestration-schedule.test.ts:27:78
+     25|     running(p);
+     26|     expect(nextActions(view(p), { max_concurrency: 1 })).toEqual([]);
+     27|     expect(nextActions(view(p), { max_concurrency: 3 }).map(a => a.tas…
+       |                                                                              ^
+     28|   });
+     29|   it("round-robins multiple plans and gives a previously served plan l…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/25]⎯
+
+ FAIL  tests/orchestration-schedule.test.ts > orchestration scheduling > round-robins multiple plans and gives a previously served plan lower turn priority
+AssertionError: expected [] to deeply equal [ 'p', 'q', 'p', 'q' ]
+
+- Expected
++ Received
+
+- [
+-   "p",
+-   "q",
+-   "p",
+-   "q",
+- ]
++ []
+
+ ❯ tests/orchestration-schedule.test.ts:32:81
+     30|     const p = plan("p", [task("a"), task("b"), task("c")]);
+     31|     const q = plan("q", [task("d"), task("e"), task("f")]);
+     32|     expect(nextActions(view(p, q), { max_concurrency: 4 }).map(a => a.…
+       |                                                                                 ^
+     33|     p.tasks.a.phase = "done"; p.tasks.a.attempt = 1;
+     34|     expect(nextActions(view(p, q), { max_concurrency: 1 })[0].plan_id)…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/25]⎯
+
+ FAIL  tests/orchestration-schedule.test.ts > orchestration scheduling > reserves complete remaining task budgets across all actions in one decision
+AssertionError: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/orchestration-schedule.test.ts:40:56
+     38|     p.plan.budget.usd = 3;
+     39|     const actions = nextActions(view(p));
+     40|     expect(actions.filter(a => a.kind === "dispatch")).toHaveLength(1);
+       |                                                        ^
+     41|     expect(actions.some(a => a.kind === "escalate" && a.reason?.includ…
+     42|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/25]⎯
+
+ FAIL  tests/orchestration-schedule.test.ts > orchestration scheduling > blocks failed dependencies and does not automatically retry terminal tasks
+AssertionError: the given combination of arguments (undefined and string) is invalid for this assertion. You can use an array, a map, an object, a set, a string, or a weakset instead of a string
+ ❯ tests/orchestration-schedule.test.ts:48:58
+     46|     const actions = nextActions(view(p));
+     47|     expect(actions.every(a => a.kind === "escalate")).toBe(true);
+     48|     expect(actions.find(a => a.task_id === "b")?.reason).toContain("de…
+       |                                                          ^
+     49|   });
+     50|   it("does not dispatch paused, needs_you or unapproved tasks", () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/25]⎯
+
+ FAIL  tests/orchestration-schedule.test.ts > orchestration scheduling > keeps leases held by needs_you tasks and cancels expired runs instead of respawning
+AssertionError: expected [] to deeply equal [ { kind: 'cancel', …(4) } ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "kind": "cancel",
+-     "plan_id": "p",
+-     "reason": "lease expired; confirm the previous executor stopped",
+-     "task_id": "a",
+-     "version": 1,
+-   },
+- ]
++ []
+
+ ❯ tests/orchestration-schedule.test.ts:65:34
+     63|     expect(nextActions(view(p))).toEqual([]);
+     64|     p.tasks.a.lease_expires_at = 20;
+     65|     expect(nextActions(view(p))).toEqual([{ kind: "cancel", plan_id: "…
+       |                                  ^
+     66|   });
+     67|   it("conservatively finds crossed glob scopes that neither glob match…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/25]⎯
+
+ FAIL  tests/orchestration-schedule.test.ts > orchestration scheduling > conservatively finds crossed glob scopes that neither glob matches as a literal
+AssertionError: expected [] to deeply equal [ 'a', 'c' ]
+
+- Expected
++ Received
+
+- [
+-   "a",
+-   "c",
+- ]
++ []
+
+ ❯ tests/orchestration-schedule.test.ts:69:89
+     67|   it("conservatively finds crossed glob scopes that neither glob match…
+     68|     const p = plan("p", [task("a", { write_scopes: ["src/*/a.ts"] }), …
+     69|     expect(nextActions(view(p)).filter(a => a.kind === "dispatch").map…
+       |                                                                                         ^
+     70|   });
+     71|   it("treats unknown or empty write scopes as global, while read lanes…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/25]⎯
+
+ FAIL  tests/orchestration-schedule.test.ts > orchestration scheduling > treats unknown or empty write scopes as global, while read lanes share
+AssertionError: expected [] to deeply equal [ 'a', 'c' ]
+
+- Expected
++ Received
+
+- [
+-   "a",
+-   "c",
+- ]
++ []
+
+ ❯ tests/orchestration-schedule.test.ts:73:54
+     71|   it("treats unknown or empty write scopes as global, while read lanes…
+     72|     const p = plan("p", [task("a", { write_scopes: [] }), task("b"), t…
+     73|     expect(nextActions(view(p)).map(a => a.task_id)).toEqual(["a", "c"…
+       |                                                      ^
+     74|   });
+     75|   it("schedules independent verification then serial delivery without …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/25]⎯
+
+ FAIL  tests/orchestration-schedule.test.ts > orchestration scheduling > schedules independent verification then serial delivery without dispatching another writer
+AssertionError: expected [] to deeply equal [ 'verify' ]
+
+- Expected
++ Received
+
+- [
+-   "verify",
+- ]
++ []
+
+ ❯ tests/orchestration-schedule.test.ts:78:51
+     76|     const p = plan("p", [task("a"), task("b", { write_scopes: ["src/a.…
+     77|     running(p, "a", "verifying");
+     78|     expect(nextActions(view(p)).map(a => a.kind)).toEqual(["verify"]);
+       |                                                   ^
+     79|     Object.assign(p.tasks.a, { evidence: "verified", verdict: "pass", …
+     80|     expect(nextActions(view(p)).map(a => a.kind)).toEqual(["merge"]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/25]⎯
+
+ FAIL  tests/orchestration-schedule.test.ts > orchestration scheduling > escalates failed or unverifiable evidence instead of spinning verification
+AssertionError: expected [] to deeply equal [ { kind: 'escalate', …(4) } ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "kind": "escalate",
+-     "plan_id": "p",
+-     "reason": "verification failed or is unverifiable",
+-     "task_id": "a",
+-     "version": 1,
+-   },
+- ]
++ []
+
+ ❯ tests/orchestration-schedule.test.ts:85:34
+     83|     const p = plan("p"); running(p, "a", "verifying");
+     84|     p.tasks.a.evidence = "failed"; p.tasks.a.verdict = "fail";
+     85|     expect(nextActions(view(p))).toEqual([{ kind: "escalate", plan_id:…
+       |                                  ^
+     86|   });
+     87|   it("does not mutate the projection and ignores expired TTL for a ter…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/25]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  25 failed | 2 passed (27)
+   Start at  20:00:05
+   Duration  139ms (transform 55%, tests 23%, import 16%, worker 5%)
+

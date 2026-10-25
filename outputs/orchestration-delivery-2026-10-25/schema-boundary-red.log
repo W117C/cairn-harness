@@ -1,0 +1,55 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/orchestration-plan.test.ts (61 tests | 2 failed) 27ms
+   ❯ orchestration plan parsing (41)
+     × rejects non JSON values instead of coercing them 2ms
+   ❯ bounded static Flow expansion (20)
+     × enforces the 256-task cap across nested expansion 15ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-plan.test.ts > orchestration plan parsing > rejects non JSON values instead of coercing them
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ tests/orchestration-plan.test.ts:81:37
+     79|     const hidden = plan();
+     80|     Object.defineProperty(hidden, "ignored", { value: true, enumerable…
+     81|     expect(() => parsePlan(hidden)).toThrow(/JSON|enumerable/);
+       |                                     ^
+     82|     const accessor = plan();
+     83|     Object.defineProperty(accessor.tasks, "0", { get: () => { throw ne…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/orchestration-plan.test.ts > bounded static Flow expansion > enforces the 256-task cap across nested expansion
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ tests/orchestration-plan.test.ts:258:37
+    256|     const empty: FlowNode = { kind: "map", items: { literal: Array.fro…
+    257|       body: { kind: "map", items: { literal: Array.from({ length: 256 …
+    258|     expect(() => expandFlow(empty)).toThrow(/expansion.*limit/);
+       |                                     ^
+    259|   });
+    260|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 59 passed (61)
+   Start at  20:03:30
+   Duration  131ms (transform 43%, tests 43%, import 11%, worker 3%)
+

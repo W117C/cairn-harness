@@ -1,0 +1,617 @@
+diff --git a/apps/desktop/scripts/session-reference-smoke.cjs b/apps/desktop/scripts/session-reference-smoke.cjs
+index 5b6647fe..ffe5965c 100644
+--- a/apps/desktop/scripts/session-reference-smoke.cjs
++++ b/apps/desktop/scripts/session-reference-smoke.cjs
+@@ -15,6 +15,9 @@ for (const dir of [profile, workspaceA, workspaceB]) mkdirSync(dir);
+ app.setPath('userData', profile);
+ app.setAppPath(resolve(__dirname, '..'));
+ process.env.CAIRN_DESKTOP_WORKSPACE = workspaceA;
++// Sidechat integration uses the existing offline fixture, even when the launching shell has a real key.
++delete process.env.CAIRN_API_KEY;
++process.env.M2F_SIDECHAT_DEMO = "1";
+ 
+ const output = resolve(process.argv[2] ?? 'session-reference-checks.json');
+ const checks = [];
+@@ -205,6 +208,45 @@ async function main() {
+     const forkRaw = readFileSync(join(workspaceA, '.agent', 'sessions', activeFork + '.jsonl'), 'utf8').trim().split('\n');
+     check('DOM 回放创建的日志仍只有血缘首行', forkRaw.length === 1 && forkRaw[0].includes('"fork"'));
+   }
++  // Real popout: both roots contain the same child id; its inherited plan must survive a main-window switch.
++  for (const [ws, suffix] of [[workspaceA, 'A'], [workspaceB, 'B']]) {
++    const pp = writeSession(ws, 'popparent', [
++      {type:'user_message',content:'PLAN_TASK_'+suffix},
++      {type:'plan_proposed',callId:'p',plan:{goal:'ANCESTOR_PLAN_'+suffix,files:[],approach:'read only',verify:{}}},
++      {type:'plan_approved',callId:'p',approved:true},
++    ]);
++    writeSession(ws, 'popchild', [{type:'session_meta',fork:{from_session_path:pp,from_session_id:'popparent',boundary_event_id:3}}]);
++  }
++  await call(`window.agent.setWorkspaceContext(${JSON.stringify(workspaceA)})`);
++  const sideA = await call(`window.agent.sidechatCreate('popchild','shared-sidechat',${JSON.stringify(workspaceA)})`);
++  const sideB = await call(`window.agent.sidechatCreate('popchild','shared-sidechat',${JSON.stringify(workspaceB)})`);
++  check('同名侧聊分别写入两个父会话根',sideA.id===sideB.id&&existsSync(join(workspaceA,'.agent','sessions','sidechats',sideA.id,'events.jsonl'))&&existsSync(join(workspaceB,'.agent','sessions','sidechats',sideB.id,'events.jsonl')));
++  const askedB = await call(`window.agent.sidechatAsk(${JSON.stringify(sideB.id)},'只读问题','popchild',${JSON.stringify(workspaceB)})`);
++  const stateA = await call(`window.agent.sidechatState('popchild',${JSON.stringify(workspaceA)})`);
++  const stateB = await call(`window.agent.sidechatState('popchild',${JSON.stringify(workspaceB)})`);
++  const answerB = stateB.sessions.find(s=>s.id===sideB.id)?.messages.find(m=>m.role==='assistant');
++  check('B 侧聊问答经生产入口持久化且 A 仍为空',askedB.ok===true&&!!answerB&&stateA.sessions.every(s=>s.messages.length===0),{asked:askedB.ok,A:stateA.sessions.map(s=>s.messages.length),B:stateB.sessions.map(s=>s.messages.length)});
++  const aChildBefore = sha(join(workspaceA,'.agent','sessions','popchild.jsonl'));
++  const promotedB = await call(`window.agent.sidechatPromote({parentSessionId:'popchild',sidechatId:${JSON.stringify(sideB.id)},sourceEventIds:[${answerB?.eventId??0}],workspace:${JSON.stringify(workspaceB)}})`);
++  const promotedState = await call(`window.agent.sidechatState('popchild',${JSON.stringify(workspaceB)})`);
++  check('B 侧聊提升只追加 B 子日志且重读可见',promotedB.ok===true&&promotedState.promoted.some(p=>p.sessionId===sideB.id)&&sha(join(workspaceA,'.agent','sessions','popchild.jsonl'))===aChildBefore,promotedB);
++  await pause(100);
++  check('后台 B 侧聊提升不会混入当前 A 会话转录',!!answerB && await call(`!document.querySelector('.reading')?.innerText.includes(${JSON.stringify(answerB?.text??'')})`));
++  const oldWindows = new Set(BrowserWindow.getAllWindows());
++  await call(`window.agent.panePopout('plan','popchild')`);
++  await waitFor(()=>BrowserWindow.getAllWindows().some(w=>!oldWindows.has(w)&&!w.webContents.isLoading()),'real plan popout');
++  const popup = BrowserWindow.getAllWindows().find(w=>!oldWindows.has(w));
++  const pj = expression=>popup.webContents.executeJavaScript(expression);
++  await waitFor(()=>pj('!!document.querySelector(".popout-app")'),'popout renderer');
++  await pause(350);
++  check('弹出窗按继承的工作区打开同名指针并显示祖先方案',await pj('document.body.innerText.includes("ANCESTOR_PLAN_A") && !document.body.innerText.includes("ANCESTOR_PLAN_B")'));
++  await call(`window.agent.setWorkspaceContext(${JSON.stringify(workspaceB)})`);
++  for (const [ws, goal] of [[workspaceB,'WRONG_ROOT_PLAN'],[workspaceA,'A_LIVE_PLAN']]) popup.webContents.send('agent:event',{type:'plan_proposed',session_id:'popchild',workspace:ws,callId:goal,plan:{goal,files:[],approach:'read only',verify:{}}});
++  await waitFor(()=>pj('document.body.innerText.includes("A_LIVE_PLAN")'),'owned popout push');
++  check('主窗切 B 后弹出窗仅接受 A 的同名会话推送',await pj('!document.body.innerText.includes("WRONG_ROOT_PLAN")'));
++  popup.show();await pause(200);
++  writeFileSync(output.replace(/\.json$/, '-popout.png'),(await popup.webContents.capturePage()).toPNG());
++  popup.destroy();
+   win.show(); win.focus();
+   await pause(600);
+   writeFileSync(output.replace(/\.json$/, '-ui.png'), (await win.webContents.capturePage()).toPNG());
+diff --git a/apps/desktop/src/main/index.ts b/apps/desktop/src/main/index.ts
+index 675dcebe..ebfcd15b 100644
+--- a/apps/desktop/src/main/index.ts
++++ b/apps/desktop/src/main/index.ts
+@@ -399,7 +399,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
+   sessionLog: (id, tailLines) => host.sessionLog(id as string, typeof tailLines === "number" ? tailLines : undefined),
+   // createSession 首参 M3 起是工作区（原 name 槽位被 M3 接口接管）；渲染层现不传 ⇒ 缺省 activeWorkspace
+   createSession: (workspace) => host.createSession(workspace as string | undefined),
+-  openSession: (id, workspace) => host.openSession(id as string, workspace as string | undefined),
++  openSession: (id, workspace) => host.openSession(id as string, (workspace as string | undefined) ?? workspaceContext() ?? undefined),
+   queueGet: (sessionId, workspace) => host.queueGet(sessionId as string, (workspace as string | undefined) ?? workspaceContext() ?? undefined),
+   queueSet: (sessionId, items, workspace) => host.queueSet(sessionId as string, items as SessionQueueEntry[], (workspace as string | undefined) ?? workspaceContext() ?? undefined),
+   // M3 小修（M1 六通道清单遗留缺口）：channels.ts 有 getProviderInfo 通道、preload 程序化桥自动
+@@ -707,11 +707,11 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
+     if (rt === null) return Promise.resolve({ ok: false, error: "插件运行时未装载（先跑一场会话）" });
+     return rt.setUserConfig(String(plugin), (values ?? {}) as Record<string, unknown>);
+   },
+-  sidechatCreate: (parentSessionId, name) => handleSidechatCreate(parentSessionId as string, name as string | undefined),
+-  sidechatAsk: (sidechatId, message, parentSessionId) =>
+-    handleSidechatAsk(sidechatId as string, message as string, { parentSessionId: parentSessionId as string | undefined }),
+-  sidechatPromote: (req) => handleSidechatPromote(req as never),
+-  sidechatState: (parentSessionId) => handleSidechatState(parentSessionId as string | undefined),
++  sidechatCreate: async (parentSessionId, name, workspace) => handleSidechatCreate(parentSessionId as string, name as string | undefined, await explicitSessionsRoot(workspace ?? workspaceContext())),
++  sidechatAsk: async (sidechatId, message, parentSessionId, workspace) =>
++    handleSidechatAsk(sidechatId as string, message as string, { parentSessionId: parentSessionId as string | undefined, sessionsRoot: await explicitSessionsRoot(workspace ?? workspaceContext()) }),
++  sidechatPromote: async (req) => handleSidechatPromote(req as never, await explicitSessionsRoot((req as { workspace?: unknown } | null)?.workspace ?? workspaceContext())),
++  sidechatState: async (parentSessionId, workspace) => handleSidechatState(parentSessionId as string | undefined, await explicitSessionsRoot(workspace ?? workspaceContext())),
+   scheduleSnapshot: () => handleScheduleSnapshot(),
+   scheduleUpsert: (def, form) => handleScheduleUpsert(def, form as boolean | undefined),
+   scheduleDelete: (id) => handleScheduleDelete(id as string),
+diff --git a/apps/desktop/src/renderer/components/PaneDock.tsx b/apps/desktop/src/renderer/components/PaneDock.tsx
+index 46542add..aec749e4 100644
+--- a/apps/desktop/src/renderer/components/PaneDock.tsx
++++ b/apps/desktop/src/renderer/components/PaneDock.tsx
+@@ -809,6 +809,7 @@ export function PaneDock(props: {
+   browserUrl?: string;
+   /** v7 当前会话 id（sidechat 窗格的父会话面；缺省 = 旁路空态提示先开会话）。 */
+   sessionId?: string | null;
++  workspace?: string;
+   /** v7 附为上下文（§2.3 右键菜单）：工作区相对路径 → App 解析绝对路径后进 composer 附件。 */
+   onAttach?: (rel: string, kind: "file" | "directory") => void;
+   /** v7 元素选择信号（§3.6 ⌘⇧S，App 递增 seq）：browser 窗格据此对活动标签发起一次选择。 */
+@@ -976,7 +977,7 @@ export function PaneDock(props: {
+                     {...(props.onPickResult !== undefined ? { onPickResult: props.onPickResult } : {})}
+                   />
+                 )}
+-                {kind === "sidechat" && <SidechatPane sessionId={props.sessionId ?? null} />}
++                {kind === "sidechat" && <SidechatPane key={JSON.stringify([props.workspace, props.sessionId])} sessionId={props.sessionId ?? null} workspace={props.workspace} />}
+                 {kind === "plugins" && <PluginSurface />}
+               </div>
+             </section>
+diff --git a/apps/desktop/src/renderer/components/PopoutApp.tsx b/apps/desktop/src/renderer/components/PopoutApp.tsx
+index e7cf71b6..ff602bb6 100644
+--- a/apps/desktop/src/renderer/components/PopoutApp.tsx
++++ b/apps/desktop/src/renderer/components/PopoutApp.tsx
+@@ -2,14 +2,18 @@
+ // 只渲染一个窗格 + 主题跟随；数据面自拉（openSession 历史 + onEvent 增量——推送已广播所有窗口）。
+ // 与主窗口共用同一 preload/AgentApi；不嵌套弹出（onPopout 不传）；关闭钮 = 关窗。
+ import { useEffect, useState } from "react";
+-import type { AgentEvent } from "../../../../../src/events";
++import type { AgentEvent, SessionRef, SessionView } from "../../../../../src/events";
+ import { applyTheme, browserThemeEnv, type ThemePref } from "../theme";
+ import { mergeSessionSnapshot, popoutEventBelongsTo } from "../projections";
++import { mergeViewEvents } from "../derived/event-reference";
+ import { PaneDock, type PaneKind } from "./PaneDock";
+ import { PANE_META } from "./panes";
+ 
+ export function PopoutApp(props: { kind: PaneKind; sessionId: string | null }): React.JSX.Element {
+   const [events, setEvents] = useState<AgentEvent[]>([]);
++  const [owner, setOwner] = useState<SessionRef | null>(null);
++  const [view, setView] = useState<SessionView | null>(null);
++  const [error, setError] = useState<string | null>(null);
+   const [themePref, setThemePref] = useState<ThemePref>("system");
+   useEffect(() => {
+     void window.agent.getSettings().then((s) => { setThemePref(s.theme); }).catch(() => undefined);
+@@ -28,22 +32,34 @@ export function PopoutApp(props: { kind: PaneKind; sessionId: string | null }):
+     // 不清、⧉ 传的是 undefined）。用户在这个只有「变更」两个字、空态还写着"本会话还没有文件改动"
+     // 的窗格里，看到的是**另一个会话**的轮次、文件与验证状态。没有归属就不显示，不是全都显示。
+     if (props.sessionId === null) return;
+-    void window.agent.openSession(props.sessionId).then((r) => {
+-      // 读盘期间到达的增量不能丢：openSession 回的是**读之前**的快照，直接 setEvents 会把
+-      // 这窗口注册 onEvent 之后收到的那些事件盖掉（主窗口同款缺陷，那边用 openPending +
+-      // mergeSessionSnapshot 修过，见 App.tsx 与 projections.ts；弹出窗漏了这一手）。
+-      setEvents((prev) => mergeSessionSnapshot(r.events, prev));
+-    }).catch(() => undefined);
++    let alive = true;
++    let scope: SessionRef | null = null;
++    const pending: AgentEvent[] = [];
++    setEvents([]); setOwner(null); setView(null); setError(null);
+     const off = window.agent.onEvent((e) => {
+-      if (popoutEventBelongsTo(e, props.sessionId)) setEvents((prev) => [...prev, e]);
++      if (scope === null) { pending.push(e); return; }
++      if (popoutEventBelongsTo(e, props.sessionId, scope.workspace)) setEvents((prev) => [...prev, e]);
+     });
+-    return off;
++    // main uses the trusted sender's inherited workspace; the response stamps the immutable owner.
++    void window.agent.openSession(props.sessionId).then((r) => {
++      if (!alive) return;
++      scope = r.session ?? r.view?.session ?? null;
++      if (scope === null) throw new Error("会话未返回可验证来源，拒绝显示无归属历史");
++      const workspace = scope.workspace;
++      setOwner(scope); setView(r.view ?? null);
++      setEvents(mergeSessionSnapshot(r.events, pending.filter(e => popoutEventBelongsTo(e, props.sessionId, workspace))));
++    }).catch((err: unknown) => { if (alive) setError(err instanceof Error ? err.message : String(err)); });
++    return () => { alive = false; off(); };
+   }, [props.sessionId]);
++  const history = view === null ? events : mergeViewEvents(view, events).map(entry => entry.event);
+   return (
+     <div className="popout-app">
++      {error !== null && <div className="ap-notice err" role="alert">{error}</div>}
+       <PaneDock
+         tabs={[props.kind]}
+-        events={events}
++        events={history}
++        localEvents={events}
++        workspace={owner?.workspace}
+         sessionId={props.sessionId}
+         onClose={() => { window.close(); }}
+         inPopout
+diff --git a/apps/desktop/src/renderer/components/SidechatPane.tsx b/apps/desktop/src/renderer/components/SidechatPane.tsx
+index 2696c476..6870383f 100644
+--- a/apps/desktop/src/renderer/components/SidechatPane.tsx
++++ b/apps/desktop/src/renderer/components/SidechatPane.tsx
+@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
+ import { MessageCirclePlus, Send } from "lucide-react";
+ import type { SidechatPanelSnapshot } from "../../../../../src/main/ipc-protocol";
+ 
+-export function SidechatPane(props: { sessionId: string | null }): React.JSX.Element {
++export function SidechatPane(props: { sessionId: string | null; workspace?: string }): React.JSX.Element {
+   const [snap, setSnap] = useState<SidechatPanelSnapshot | null>(null);
+   const [stateError, setStateError] = useState<string | null>(null);
+   const [active, setActive] = useState<string | null>(null);
+@@ -18,16 +18,20 @@ export function SidechatPane(props: { sessionId: string | null }): React.JSX.Ele
+   const [notice, setNotice] = useState<string | null>(null);
+   const [picked, setPicked] = useState<ReadonlySet<number>>(new Set());
+   const [note, setNote] = useState("");
++  const mounted = useRef(true);
++  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+   const bottomRef = useRef<HTMLDivElement | null>(null);
+ 
+   const refresh = useCallback(() => {
+-    void window.agent.sidechatState(props.sessionId ?? undefined).then((s) => {
++    void window.agent.sidechatState(props.sessionId ?? undefined, props.workspace).then((s) => {
++      if (!mounted.current) return;
+       setSnap(s);
+       setStateError(null);
+     }, (err: unknown) => {
++      if (!mounted.current) return;
+       setStateError(err instanceof Error ? err.message : String(err));
+     });
+-  }, [props.sessionId]);
++  }, [props.sessionId, props.workspace]);
+   useEffect(() => {
+     setActive(null);
+     setPicked(new Set());
+@@ -44,11 +48,13 @@ export function SidechatPane(props: { sessionId: string | null }): React.JSX.Ele
+   const create = (): void => {
+     if (props.sessionId === null) return;
+     setNotice(null);
+-    void window.agent.sidechatCreate(props.sessionId).then((r) => {
++    void window.agent.sidechatCreate(props.sessionId, undefined, props.workspace).then((r) => {
++      if (!mounted.current) return;
+       setActive(r.id);
+       refresh();
+       setNotice("旁路会话已建（读主线程上下文；不回写主会话）");
+     }, (err: unknown) => {
++      if (!mounted.current) return;
+       setNotice(`新建失败：${err instanceof Error ? err.message : String(err)}`);
+     });
+   };
+@@ -57,12 +63,14 @@ export function SidechatPane(props: { sessionId: string | null }): React.JSX.Ele
+     if (text === "" || busy || currentId === null) return;
+     setBusy(true);
+     setNotice(null);
+-    void window.agent.sidechatAsk(currentId, text, props.sessionId ?? undefined).then((r) => {
++    void window.agent.sidechatAsk(currentId, text, props.sessionId ?? undefined, props.workspace).then((r) => {
++      if (!mounted.current) return;
+       setBusy(false);
+       if (!r.ok) { setNotice(r.error ?? "旁路提问失败"); return; }
+       setDraft("");
+       refresh();
+     }, (err: unknown) => {
++      if (!mounted.current) return;
+       setBusy(false);
+       setNotice(`旁路提问失败：${err instanceof Error ? err.message : String(err)}`);
+     });
+@@ -73,15 +81,18 @@ export function SidechatPane(props: { sessionId: string | null }): React.JSX.Ele
+     void window.agent.sidechatPromote({
+       sidechatId: currentId,
+       parentSessionId: props.sessionId,
++      workspace: props.workspace,
+       sourceEventIds: [...picked],
+       ...(note.trim() !== "" ? { note: note.trim() } : {}),
+     }).then((r) => {
++      if (!mounted.current) return;
+       if (!r.ok) { setNotice(r.error ?? "提升失败"); return; }
+       setPicked(new Set());
+       setNote("");
+       setNotice("已提升进主会话（主会话新增一条带来源的 user 消息，可再派活）");
+       refresh();
+     }, (err: unknown) => {
++      if (!mounted.current) return;
+       setNotice(`提升失败：${err instanceof Error ? err.message : String(err)}`);
+     });
+   };
+diff --git a/apps/desktop/src/renderer/derived/session.ts b/apps/desktop/src/renderer/derived/session.ts
+index 7fd1c7e3..a41c7856 100644
+--- a/apps/desktop/src/renderer/derived/session.ts
++++ b/apps/desktop/src/renderer/derived/session.ts
+@@ -23,7 +23,7 @@ export function isWorkerSubflowEvent(e: AgentEvent): boolean {
+ 
+ /** 独立窗格窗口（PopoutApp）收不收这条事件——**归属**判据，纯函数。
+  *
+- *  旧实现在组件里内联写着 `props.sessionId === null || sid === undefined || sid === props.sessionId`：
++ *  旧实现在组件里把“窗口没有归属”作为接收所有事件的充分条件：
+  *  第一个析取项为真时，后面两项全是废话 ⇒ 一个**没有会话归属**的弹出窗会把**所有会话**的事件
+  *  都吸进来。而这种窗格是真实存在的路径：⌘N 回首页时 paneTabs 不清，⧉ 传的是 undefined。
+  *  用户于是在一个只有「变更」两个字的窗格里，读到**另一个会话**的轮次、文件与验证状态，
+@@ -35,12 +35,12 @@ export function isWorkerSubflowEvent(e: AgentEvent): boolean {
+  *    那条**不属于任何会话**，让它进来就等于让弹出窗回到"什么都收"的老毛病。
+  *  · `session_titled` 是 push-only 的命名推送（第十八遍的既定口径），与窗格内容无关。
+  */
+-export function popoutEventBelongsTo(e: AgentEvent, sessionId: string | null): boolean {
++export function popoutEventBelongsTo(e: AgentEvent, sessionId: string | null, workspace?: string): boolean {
+   if (sessionId === null) return false;
+   if ((e as { type?: string }).type === "session_titled") return false;
+   const sid = (e as { session_id?: string }).session_id;
+   if (sid === undefined) return false;
+-  return sid === sessionId;
++  return sid === sessionId && (workspace === undefined || (e as { workspace?: string }).workspace === workspace);
+ }
+ 
+ /** 运行秒表读数：起点按**会话**存，读的时候只读**当前会话**那一格。
+diff --git a/apps/desktop/src/renderer/panes/WorkbenchView.tsx b/apps/desktop/src/renderer/panes/WorkbenchView.tsx
+index 14368246..b26ba3cb 100644
+--- a/apps/desktop/src/renderer/panes/WorkbenchView.tsx
++++ b/apps/desktop/src/renderer/panes/WorkbenchView.tsx
+@@ -550,7 +550,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
+                       // 不能跨会话复用——真机 A 展开 read_file 后切 B，B 的第一条工具行也展开；
+                       // 只给行 key 加前缀会让 React 留下旧行（实测 31→57 并出现重复 event id），
+                       // 重挂 Stream 本体是可靠边界（.stream 滚动容器与 sticky 观察对象都不动）。
+-                      key={activeId ?? "home"}
++                      key={runKey(activeWorkspace, activeId ?? "home")}
+                       rows={streamRows}
+                       refs={rowRefs}
+                       inherited={inheritedSeqs}
+@@ -880,7 +880,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
+                 可聚焦是正确的；inert 在宽度归 0 的那一刻由 onResize 置上。 */}
+             <div className="inspector-col" ref={inspectorColRef}>
+               <Inspector
+-                key={activeId ?? "home"} // 切会话即重挂：内部 openKey/diff 状态不能跨会话复用
++                key={runKey(activeWorkspace, activeId ?? "home")} // 切会话即重挂：内部 openKey/diff 状态不能跨会话复用
+                 events={historyEvents}
+                 localEvents={events}
+                 refs={rowRefs ?? undefined}
+@@ -902,6 +902,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
+                       events={historyEvents}
+                       localEvents={events}
+                       sessionId={activeId}
++                      workspace={activeWorkspace ?? undefined}
+                       onAttach={attachFromPane}
+                       pickSignal={pickSignal}
+                       onPickResult={handlePickResult}
+diff --git a/apps/desktop/tests/pointer-run-owner.test.ts b/apps/desktop/tests/pointer-run-owner.test.ts
+index 7e8ebf28..00be5818 100644
+--- a/apps/desktop/tests/pointer-run-owner.test.ts
++++ b/apps/desktop/tests/pointer-run-owner.test.ts
+@@ -94,3 +94,22 @@ it("renaming an unopened unique legacy session retains its known organization me
+   expect(await handleSessionRename("legacy", "renamed", root)).toEqual({ id: "renamed" });
+   expect((await host.listSessions()).find(s => s.id === "renamed")).toMatchObject({ pinned: true });
+ });
++
++it("owned sidechat appends remain local writes for the next run drift check", async () => {
++  dir = await realpath(await mkdtemp(join(tmpdir(), "pointer-sidechat-drift-")));
++  const A = join(dir, "A"), B = join(dir, "B"), data = join(dir, "data");
++  for (const ws of [A, B]) { await mkdir(join(ws, ".agent", "sessions"), { recursive: true }); await writeFile(join(ws, ".agent", "sessions", "same.jsonl"), JSON.stringify({ type: "user_message", content: "old" }) + "\n"); }
++  await mkdir(data); await writeFile(join(data, "settings.json"), JSON.stringify({ provider: "demo", model: "" }));
++  const host = createKernelHost({ workspaces: [A, B], activeWorkspace: A, userDataDir: data, outbox: () => undefined });
++  const { setSidechatHandlerDeps, handleSidechatCreate, handleSidechatPromote } = await import("../../../src/main/sidechat-handlers");
++  setSidechatHandlerDeps({ onEvent: e => control.hooks.onEvent(e), currentWorkspace: async () => A, lastLogPath: () => null });
++  await host.openSession("same", B);
++  const root = join(B, ".agent", "sessions");
++  const side = await handleSidechatCreate("same", "topic", root);
++  expect((await handleSidechatPromote({ sidechatId: side.id, parentSessionId: "same", sourceEventIds: [1], content: "OWN_PROMOTION" }, root)).ok).toBe(true);
++  const started = new Promise<void>(resolve => { control.started = resolve; });
++  const run = host.run({ sessionId: "same", workspace: B, mode: "default", message: "continue" });
++  const reached = await Promise.race([started.then(() => true), run.then(() => false)]);
++  try { expect(reached, "a promoted local message is not external CLI drift").toBe(true); }
++  finally { control.release?.(); await run; }
++});
+diff --git a/apps/desktop/tests/popout-event-scope.test.ts b/apps/desktop/tests/popout-event-scope.test.ts
+index 60aeebe3..677b7839 100644
+--- a/apps/desktop/tests/popout-event-scope.test.ts
++++ b/apps/desktop/tests/popout-event-scope.test.ts
+@@ -8,13 +8,11 @@
+ //
+ // 判据落在**纯函数**上（popoutEventBelongsTo）：本仓无 jsdom，交互逻辑走「纯函数 + 接线见证」两面
+ // （见 render-structure.test.tsx 头注）。纯函数能真跑 ⇒ 这一条不是恒真的源码断言。
+-import { readFileSync } from "node:fs";
+-import { fileURLToPath } from "node:url";
++import { readAppSurface } from "./helpers/app-surface";
+ import { describe, expect, it } from "vitest";
+ import { popoutEventBelongsTo } from "../src/renderer/projections";
+ import type { AgentEvent } from "../../../src/events";
+ 
+-const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+ const ev = (o: Record<string, unknown>): AgentEvent => o as unknown as AgentEvent;
+ 
+ describe("弹出窗的事件归属（popoutEventBelongsTo）", () => {
+@@ -45,10 +43,10 @@ describe("弹出窗的事件归属（popoutEventBelongsTo）", () => {
+ });
+ 
+ describe("弹出窗接线：归属判据走纯函数 + 读盘期间的增量要合并", () => {
+-  const src = read("../src/renderer/components/PopoutApp.tsx");
++  const src = readAppSurface();
+ 
+   it("组件调用 popoutEventBelongsTo，不内联写归属判断", () => {
+-    expect(src).toContain("popoutEventBelongsTo(e, props.sessionId)");
++    expect(src).toContain("popoutEventBelongsTo(e, props.sessionId, scope.workspace)");
+     // 反面对照：旧的"null 就全都收"不许回来
+     expect(src).not.toContain("props.sessionId === null || sid === undefined");
+   });
+@@ -58,7 +56,7 @@ describe("弹出窗接线：归属判据走纯函数 + 读盘期间的增量要
+   });
+ 
+   it("openSession 的回包用 mergeSessionSnapshot 合并，不直接 setEvents 覆盖", () => {
+-    expect(src).toContain("mergeSessionSnapshot(r.events, prev)");
++    expect(src).toContain("mergeSessionSnapshot(r.events, pending.filter");
+     expect(src).not.toContain(".then((r) => { setEvents(r.events); })");
+   });
+ });
+diff --git a/src/agent/sidechat.ts b/src/agent/sidechat.ts
+index c2476c95..441d3714 100644
+--- a/src/agent/sidechat.ts
++++ b/src/agent/sidechat.ts
+@@ -1,3 +1,6 @@
++import { stat } from "node:fs/promises";
++import { isUserTurnStart } from "../events/projection";
++import { compactionMaterial } from "./session-view-context";
+ // M2f 辅助对话（sidechat）：独立会话（session_meta.kind="sidechat" + parent_session_id），
+ // 独立 JSONL 文件组、own loop、own 上下文；上下文 = 自身历史 + 主会话只读投影 + 用户 @ 引用 + 两层记忆。
+ // 工具白名单**只读强制**：write_file / run_shell / edit_file 从工具表摘除（不是提示词自觉），
+@@ -203,7 +206,7 @@ export function buildMainProjection(
+   // 轮 = 以 user_message 起的一段；窗口只在尾部内计（摘要已覆盖其前面包）
+   const starts: number[] = [];
+   events.forEach((e, i) => {
+-    if (i >= tailFrom && e.type === "user_message" && !excluded.has(eventIdAt(i))) starts.push(i);
++    if (i >= tailFrom && isUserTurnStart(e) && !excluded.has(eventIdAt(i))) starts.push(i);
+   });
+   const from = starts.length > rounds ? starts[starts.length - rounds] : tailFrom;
+ 
+@@ -307,6 +310,14 @@ export interface SidechatContext {
+  *  与工具执行面同一套只读规则；缺省 undefined = 只走 `readAtRef` 的敏感路径底线。 */
+ export type AtRefGate = (ref: string) => boolean;
+ 
++/** 主会话来源视图：不存在的旧入口仍是空投影，已存在但断链的日志必须失败关闭。 */
++async function readMainProjectionEvents(mainLogPath: string, workspace: string): Promise<AgentEvent[]> {
++  try { await stat(mainLogPath); }
++  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
++  const view = await readSessionView({ workspace, sessionId: basename(mainLogPath, ".jsonl") }, dirname(mainLogPath));
++  return compactionMaterial(view).events;
++}
++
+ /** 组装 sidechat 上下文（纯读）：system → 两层记忆 → 主会话只读投影 → @ 引用 → 自身历史。 */
+ export async function buildSidechatContext(opts: {
+   sidechatLogPath: string;
+@@ -317,13 +328,7 @@ export async function buildSidechatContext(opts: {
+ }): Promise<SidechatContext> {
+   const own = await replayIncremental(opts.sidechatLogPath).catch((): AgentEvent[] => []);
+   const history = projectContext(own);
+-  // 主会话只读投影（读不到 = 空投影，不阻塞）
+-  let mainEvents: AgentEvent[] = [];
+-  try {
+-    mainEvents = await replayIncremental(opts.mainLogPath);
+-  } catch {
+-    mainEvents = [];
+-  }
++  const mainEvents = await readMainProjectionEvents(opts.mainLogPath, opts.workspace);
+   const mainProjection = buildMainProjection(mainEvents, opts.rounds ?? SIDECHAT_PROJECTION_ROUNDS);
+   // 两层记忆（固定回注，每轮重注）。出口共用 `buildMemoryInjectionSafe`（第 315 页）：
+   // 从前这里是空 catch ⇒ 一次异常把整段记忆变成无痕丢失，旁路模型读到的"没有记忆"与"这仓库没写过记忆"同形。
+@@ -460,10 +465,8 @@ export async function runSidechatTurn(opts: SidechatTurnOptions): Promise<AgentE
+       const mem = await buildMemoryInjectionSafe({ workspace: opts.workspace });
+       reserveChars += (mem.injection.project ?? "").length + (mem.injection.global ?? "").length;
+     } catch { /* 记忆不可用 = 不注入，不占预算 */ }
+-    try {
+-      const mainEvents = await replayIncremental(opts.mainLogPath);
+-      reserveChars += buildMainProjection(mainEvents, opts.rounds ?? SIDECHAT_PROJECTION_ROUNDS).text.length;
+-    } catch { /* 投影读不到 = 空投影 */ }
++    const mainEvents = await readMainProjectionEvents(opts.mainLogPath, opts.workspace);
++    reserveChars += buildMainProjection(mainEvents, opts.rounds ?? SIDECHAT_PROJECTION_ROUNDS).text.length;
+     for (const ref of extractAtRefs(opts.message).slice(0, 8)) {
+       if (opts.atRefGate !== undefined && !opts.atRefGate(ref)) continue;
+       reserveChars += readAtRef(opts.workspace, ref)?.content.length ?? 0;
+diff --git a/src/main/ipc-protocol.ts b/src/main/ipc-protocol.ts
+index 79789257..57bb44d0 100644
+--- a/src/main/ipc-protocol.ts
++++ b/src/main/ipc-protocol.ts
+@@ -504,16 +504,18 @@ export interface AgentApi {
+   /** 写插件 userConfig（敏感字段走 safeStorage；值绝不回读给渲染层）。 */
+   pluginUserConfigSet(plugin: string, values: Record<string, string>): Promise<{ ok: boolean; error?: string }>;
+   /** M2f：辅助对话（sidechat）+ /promote。 */
+-  sidechatCreate(parentSessionId: string, name?: string): Promise<{ id: string }>;
+-  sidechatAsk(sidechatId: string, message: string, parentSessionId?: string): Promise<{ ok: boolean; error?: string; events?: AgentEvent[] }>;
++  sidechatCreate(parentSessionId: string, name?: string, workspace?: string): Promise<{ id: string }>;
++  sidechatAsk(sidechatId: string, message: string, parentSessionId?: string, workspace?: string): Promise<{ ok: boolean; error?: string; events?: AgentEvent[] }>;
+   /** /promote：把 sidechat 结论提升进主会话（渲染为主会话一条 user_message + origin）。 */
+   sidechatPromote(req: {
+     sidechatId: string;
+     parentSessionId: string;
++    workspace?: string;
+     sourceEventIds: number[];
++    sourceEventRefs?: EventRef[];
+     note?: string;
+   }): Promise<{ ok: boolean; error?: string }>;
+-  sidechatState(parentSessionId?: string): Promise<SidechatPanelSnapshot>;
++  sidechatState(parentSessionId?: string, workspace?: string): Promise<SidechatPanelSnapshot>;
+   /** M3a：card_action 回写协议（§10.3）——worker 审批应答 / agent 取消的唯一事件流入口。 */
+   cardAction(req: {
+     cardId: string;
+diff --git a/src/main/sidechat-handlers.ts b/src/main/sidechat-handlers.ts
+index f1aec5c0..5dc19307 100644
+--- a/src/main/sidechat-handlers.ts
++++ b/src/main/sidechat-handlers.ts
+@@ -21,7 +21,7 @@ import { gatedTool, readOnlyGateSession } from "./tool-gates";
+ import type { SidechatPanelSnapshot } from "./ipc-protocol";
+ import {
+   createSidechatSession, listSidechatSessions, pathOf, readSessionEvents, readSidechatEvents,
+-  sessionExists, sidechatDir, sidechatEventsPath, workspaceOfSessionsRoot,
++  sessionExists, sidechatDir, sidechatEventsPath, workspaceOfSessionsRoot, type SidechatInfo,
+ } from "./sessions";
+ import { getSessionsDir, requireSessionsDir, resolveSessionRoot } from "./session-handlers";
+ import { store } from "./settings-handlers";
+@@ -123,18 +123,34 @@ function sidechatToolTable(workspace: string): {
+   };
+ }
+ 
+-export async function handleSidechatCreate(parentSessionId: string, name?: string): Promise<{ id: string }> {
+-  return { id: await createSidechatSession(requireSessionsDir(), parentSessionId, name) };
++/** 旧侧聊曾存放在启动根；仅父会话唯一归属可证明时读取那份旧存储，不猜同名父会话。 */
++async function sidechatReadRoots(dir: string, parentId: string | null): Promise<string[]> {
++  const legacy = getSessionsDir();
++  if (legacy === null || resolve(legacy) === resolve(dir) || !parentId) return [dir];
++  let owner: string | null;
++  try { owner = await resolveSessionRoot(parentId); } catch { return [dir]; }
++  return owner !== null && resolve(owner) === resolve(dir) ? [dir, legacy] : [dir];
++}
++
++async function sidechatStoreFor(dir: string, parentId: string, sidechatId: string): Promise<string> {
++  for (const root of await sidechatReadRoots(dir, parentId)) {
++    if ((await listSidechatSessions(root, parentId || undefined)).some(info => info.id === sidechatId)) return root;
++  }
++  throw new Error(`侧聊不存在或不属于此父会话：${sidechatId}`);
++}
++
++export async function handleSidechatCreate(parentSessionId: string, name?: string, sessionsRoot?: string): Promise<{ id: string }> {
++  return { id: await createSidechatSession(sessionsRoot ?? requireSessionsDir(), parentSessionId, name) };
+ }
+ 
+ /** 跑一轮 sidechat（own loop）。事件只落 sidechat 自己的 JSONL；主会话文件字节不变。 */
+ export async function handleSidechatAsk(
+   sidechatId: string,
+   message: string,
+-  over: { parentSessionId?: string; model?: SidechatModel; summarizer?: Summarizer; onEvent?: (e: AgentEvent) => void } = {},
++  over: { parentSessionId?: string; sessionsRoot?: string; model?: SidechatModel; summarizer?: Summarizer; onEvent?: (e: AgentEvent) => void } = {},
+ ): Promise<{ ok: boolean; error?: string; events?: AgentEvent[] }> {
+   try {
+-    const dir = requireSessionsDir();
++    const dir = over.sessionsRoot ?? requireSessionsDir();
+     const parentId = over.parentSessionId ?? (await store().get()).currentSession ?? "";
+     const picked = resolveSidechatModel(over.model);
+     if (picked.error) return { ok: false, error: picked.error };
+@@ -144,7 +160,7 @@ export async function handleSidechatAsk(
+     let workspace = await D().currentWorkspace();
+     let mainLogPath = parentId !== "" ? pathOf(dir, parentId) : (D().lastLogPath() ?? "");
+     if (parentId !== "") {
+-      const root = await resolveSessionRoot(parentId);
++      const root = over.sessionsRoot ?? await resolveSessionRoot(parentId);
+       if (root === null || !(await sessionExists(root, parentId))) {
+         return { ok: false, error: `父会话不存在: ${parentId}` };
+       }
+@@ -158,7 +174,7 @@ export async function handleSidechatAsk(
+     // 规则库读不出/解析不了 ⇒ readOnlyGateSession 抛错，这一轮显式失败（fail-closed）。
+     const face = sidechatToolTable(workspace);
+     const events = await runSidechatTurn({
+-      sidechatDir: sidechatDir(dir, sidechatId),
++      sidechatDir: sidechatDir(await sidechatStoreFor(dir, parentId, sidechatId), sidechatId),
+       mainLogPath,
+       workspace,
+       tools: face.tools,
+@@ -182,7 +198,7 @@ export async function handleSidechatPromote(req: {
+   sourceEventRefs?: EventRef[];
+   note?: string;
+   content?: string;
+-}): Promise<{ ok: boolean; error?: string; event?: AgentEvent }> {
++}, sessionsRoot?: string): Promise<{ ok: boolean; error?: string; event?: AgentEvent }> {
+   try {
+     const hasIds = Array.isArray(req.sourceEventIds) && req.sourceEventIds.length > 0;
+     const hasRefs = req.sourceEventRefs !== undefined && req.sourceEventRefs.length > 0;
+@@ -190,17 +206,17 @@ export async function handleSidechatPromote(req: {
+     if (hasRefs && !req.sourceEventRefs!.every((ref) => isEventRef(ref))) {
+       return { ok: false, error: "promote: 来源引用形状非法" };
+     }
+-    const dir = requireSessionsDir();
++    const dir = sessionsRoot ?? requireSessionsDir();
+     // 提升是**写主会话**：必须落父会话自己的根。用单例根会在启动工作区造一条同 id 幽灵会话，
+     // 真父会话里看不到这次提升（2026-10-21 独立评审实测）。
+-    const root = await resolveSessionRoot(req.parentSessionId);
++    const root = sessionsRoot ?? await resolveSessionRoot(req.parentSessionId);
+     if (root === null || !(await sessionExists(root, req.parentSessionId))) {
+       return { ok: false, error: `父会话不存在: ${req.parentSessionId}` };
+     }
+     const mainLogPath = pathOf(root, req.parentSessionId);
+     const res = await promoteToMain({
+       mainLogPath,
+-      sidechatLogPath: sidechatEventsPath(dir, req.sidechatId),
++      sidechatLogPath: sidechatEventsPath(await sidechatStoreFor(dir, req.parentSessionId, req.sidechatId), req.sidechatId),
+       sidechatId: req.sidechatId,
+       sourceEventIds: req.sourceEventIds,
+       ...(req.sourceEventRefs !== undefined ? { sourceEventRefs: req.sourceEventRefs } : {}),
+@@ -217,16 +233,22 @@ export async function handleSidechatPromote(req: {
+ }
+ 
+ /** sidechat 面板快照（纯投影）：会话清单 + 各自最近消息 + 已提升记录（由主会话 origin 反向投影）。 */
+-export async function handleSidechatState(parentSessionId?: string): Promise<SidechatPanelSnapshot> {
+-  const dir = getSessionsDir();
++export async function handleSidechatState(parentSessionId?: string, sessionsRoot?: string): Promise<SidechatPanelSnapshot> {
++  const dir = sessionsRoot ?? getSessionsDir();
+   if (!dir) return { parentSessionId: null, sessions: [], promoted: [] };
+   const parent = parentSessionId ?? (await store().get()).currentSession ?? null;
+-  const infos = await listSidechatSessions(dir, parent ?? undefined);
++  const infos: { info: SidechatInfo; root: string }[] = [];
++  const seen = new Set<string>();
++  for (const root of await sidechatReadRoots(dir, parent)) {
++    for (const info of await listSidechatSessions(root, parent ?? undefined)) {
++      if (!seen.has(info.id)) { seen.add(info.id); infos.push({ info, root }); }
++    }
++  }
+   const sessions = [] as SidechatPanelSnapshot["sessions"];
+-  for (const info of infos) {
++  for (const { info, root } of infos) {
+     let events: AgentEvent[] = [];
+     try {
+-      events = await readSidechatEvents(dir, info.id);
++      events = await readSidechatEvents(root, info.id);
+     } catch {
+       events = [];
+     }
+@@ -248,7 +270,7 @@ export async function handleSidechatState(parentSessionId?: string): Promise<Sid
+   if (parent) {
+     try {
+       // 已提升记录的来源是父会话的根（可能是另一个项目）；找不到才退回单例根。
+-      const root = await resolveSessionRoot(parent).catch(() => null);
++      const root = sessionsRoot ?? await resolveSessionRoot(parent).catch(() => null);
+       const parentRoot = root !== null && (await sessionExists(root, parent).catch(() => false)) ? root : dir;
+       const mainEvents = await readSessionEvents(parentRoot, parent);
+       mainEvents.forEach((e, i) => {

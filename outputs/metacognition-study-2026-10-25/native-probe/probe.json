@@ -1,0 +1,210 @@
+{
+  "date": "2026-10-24T17:09:54.829Z",
+  "endpoint": "http://127.0.0.1:7863/v1/chat/completions",
+  "model": "cn:deepseek-v4.1-flash",
+  "requestCount": 7,
+  "requests": [
+    {
+      "requestedModel": "cn:deepseek-v4.1-flash",
+      "effort": null,
+      "thinking": null,
+      "assistantStates": 0,
+      "toolMessages": 0
+    },
+    {
+      "requestedModel": "cn:deepseek-v4.1-flash",
+      "effort": "low",
+      "thinking": {
+        "type": "enabled"
+      },
+      "assistantStates": 0,
+      "toolMessages": 0
+    },
+    {
+      "requestedModel": "cn:deepseek-v4.1-flash",
+      "effort": "high",
+      "thinking": {
+        "type": "enabled"
+      },
+      "assistantStates": 0,
+      "toolMessages": 0
+    },
+    {
+      "requestedModel": "cn:deepseek-v4.1-flash",
+      "effort": null,
+      "thinking": {
+        "type": "disabled"
+      },
+      "assistantStates": 0,
+      "toolMessages": 0
+    },
+    {
+      "requestedModel": "cn:deepseek-v4.1-flash",
+      "effort": "low",
+      "thinking": {
+        "type": "enabled"
+      },
+      "assistantStates": 0,
+      "toolMessages": 0
+    },
+    {
+      "requestedModel": "cn:deepseek-v4.1-flash",
+      "effort": "low",
+      "thinking": {
+        "type": "enabled"
+      },
+      "assistantStates": 0,
+      "toolMessages": 1
+    },
+    {
+      "requestedModel": "cn:deepseek-v4.1-flash",
+      "effort": "low",
+      "thinking": {
+        "type": "enabled"
+      },
+      "assistantStates": 0,
+      "toolMessages": 1
+    }
+  ],
+  "rows": [
+    {
+      "label": "upstream-default",
+      "seconds": 1.438,
+      "error": null,
+      "reasoningChars": 49,
+      "answer": "7",
+      "toolCalls": [],
+      "usage": [
+        {
+          "type": "usage",
+          "inputTokens": 64,
+          "outputTokens": 14,
+          "cacheReadInputTokens": 0,
+          "cacheWriteInputTokens": 0,
+          "reasoningOutputTokens": 12
+        }
+      ],
+      "truncated": false
+    },
+    {
+      "label": "low",
+      "seconds": 1.409,
+      "error": null,
+      "reasoningChars": 33,
+      "answer": "7",
+      "toolCalls": [],
+      "usage": [
+        {
+          "type": "usage",
+          "inputTokens": 64,
+          "outputTokens": 21,
+          "cacheReadInputTokens": 0,
+          "cacheWriteInputTokens": 0,
+          "reasoningOutputTokens": 19
+        }
+      ],
+      "truncated": false
+    },
+    {
+      "label": "high",
+      "seconds": 1.493,
+      "error": null,
+      "reasoningChars": 56,
+      "answer": "7",
+      "toolCalls": [],
+      "usage": [
+        {
+          "type": "usage",
+          "inputTokens": 64,
+          "outputTokens": 16,
+          "cacheReadInputTokens": 0,
+          "cacheWriteInputTokens": 0,
+          "reasoningOutputTokens": 14
+        }
+      ],
+      "truncated": false
+    },
+    {
+      "label": "off",
+      "seconds": 1.297,
+      "error": null,
+      "reasoningChars": 0,
+      "answer": "7",
+      "toolCalls": [],
+      "usage": [
+        {
+          "type": "usage",
+          "inputTokens": 39,
+          "outputTokens": 1,
+          "cacheReadInputTokens": 0,
+          "cacheWriteInputTokens": 0,
+          "reasoningOutputTokens": 0
+        }
+      ],
+      "truncated": false
+    },
+    {
+      "label": "tool-first",
+      "seconds": 1.305,
+      "error": null,
+      "reasoningChars": 0,
+      "answer": "",
+      "toolCalls": [
+        {
+          "name": "read_probe"
+        }
+      ],
+      "usage": [
+        {
+          "type": "usage",
+          "inputTokens": 326,
+          "outputTokens": 23,
+          "cacheReadInputTokens": 0,
+          "cacheWriteInputTokens": 0,
+          "reasoningOutputTokens": 0
+        }
+      ],
+      "truncated": false
+    },
+    {
+      "label": "tool-continuation-preserved",
+      "seconds": 1.116,
+      "error": null,
+      "reasoningChars": 0,
+      "answer": "7",
+      "toolCalls": [],
+      "usage": [
+        {
+          "type": "usage",
+          "inputTokens": 363,
+          "outputTokens": 2,
+          "cacheReadInputTokens": 128,
+          "cacheWriteInputTokens": 0,
+          "reasoningOutputTokens": 0
+        }
+      ],
+      "truncated": false
+    },
+    {
+      "label": "tool-continuation-without-native-state",
+      "seconds": 1.076,
+      "error": null,
+      "reasoningChars": 0,
+      "answer": "7",
+      "toolCalls": [],
+      "usage": [
+        {
+          "type": "usage",
+          "inputTokens": 363,
+          "outputTokens": 2,
+          "cacheReadInputTokens": 128,
+          "cacheWriteInputTokens": 0,
+          "reasoningOutputTokens": 0
+        }
+      ],
+      "truncated": false
+    }
+  ],
+  "effortEnforcement": "unverified: successful parameter acceptance and one prompt are not causal budget evidence",
+  "scope": "read-only bounded protocol requests, no production configuration changes"
+}

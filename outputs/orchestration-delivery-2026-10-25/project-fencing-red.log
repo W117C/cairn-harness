@@ -1,0 +1,51 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/orchestration-project.test.ts (24 tests | 2 failed) 11ms
+   ❯ orchestration event projection (24)
+     × does not let a delayed task control for an old run mutate its replacement 2ms
+     × requires explicit cost on producer and verifier receipts 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > does not let a delayed task control for an old run mutate its replacement
+AssertionError: expected 'paused by user' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"paused by user"
+
+ ❯ tests/orchestration-project.test.ts:163:46
+    161|       spawn({ run_id: "r2", attempt: 2 }), control("pause_task", "resu…
+    162|     const projected = projectOrchestration(events);
+    163|     expect(projected.plans.p.tasks.a.reason).toBeUndefined();
+       |                                              ^
+    164|     expect(projected.anomalies).toHaveLength(1);
+    165|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/orchestration-project.test.ts > orchestration event projection > requires explicit cost on producer and verifier receipts
+AssertionError: expected 'verifying' to be 'running' // Object.is equality
+
+Expected: "running"
+Received: "verifying"
+
+ ❯ tests/orchestration-project.test.ts:168:51
+    166|   it("requires explicit cost on producer and verifier receipts", () =>…
+    167|     const missingProducer = projectOrchestration([...base(), result({ …
+    168|     expect(missingProducer.plans.p.tasks.a.phase).toBe("running");
+       |                                                   ^
+    169|     expect(missingProducer.anomalies).toHaveLength(1);
+    170|     const missingVerifier = projectOrchestration([...base(), result(),…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  2 failed | 35 passed (37)
+   Start at  20:05:36
+   Duration  118ms (transform 67%, tests 15%, import 15%, worker 3%)
+

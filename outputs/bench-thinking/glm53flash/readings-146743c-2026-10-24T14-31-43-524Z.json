@@ -1,0 +1,83 @@
+[
+ {
+  "r": {
+   "id": "B1-bugfix-crossfile",
+   "name": "B1-bugfix-crossfile",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "cn:glm-5.3-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 70.451,
+   "requests": 9,
+   "tokensIn": 62655,
+   "tokensOut": 1153,
+   "cny": 0,
+   "toolCalls": 10,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 9,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": true,
+   "autoVerifyBeat": true,
+   "autoVerifyBeats": 1,
+   "verifyRecovery": "greenFirst",
+   "namedSets": {
+    "state": "pass",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [],
+    "reasons": [],
+    "sources": [
+     {
+      "command": "pnpm_config_verify_deps_before_run=false pnpm run test",
+      "format": "node-test-spec",
+      "tests": 3,
+      "carried": true,
+      "complete": true
+     }
+    ]
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/checkout.js",
+    "src/discount.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 485,
+    "procPeak": 5,
+    "cpuMs": 1561,
+    "samples": 142
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": true,
+    "exitCode": 0,
+    "output": "✔ 折扣不是 20% 时同样要按券后金额收运费 (0.710917ms)\n✔ 多条商品行：看的是券后总额，不是原始总额 (0.05575ms)\n✔ 整单清零：券 100% 时仍要付运费 (0.041625ms)\n✔ 原价恰好差一分不到包邮线 (0.038459ms)\n✔ 券后正好落在包邮线上：应当免运费 (0.041959ms)\n✔ 非整除折扣取整后仍是整数分 (0.060542ms)\n✔ 跨过包邮线的另一档折扣 (0.037125ms)\n✔ 无券且刚好包邮线原价 (0.034583ms)\nℹ tests 8\nℹ suites 0\nℹ pass 8\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 40.065833"
+   },
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "146743c",
+   "ranAt": "2026-10-24T14:28:09.865Z",
+   "maxSteps": 25,
+   "reps": 1,
+   "arm": "high",
+   "thinking": "high"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  },
+  "taskId": "B1-bugfix-crossfile"
+ }
+]

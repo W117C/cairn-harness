@@ -1,0 +1,26 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/orchestration-engine.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-engine.test.ts [ tests/orchestration-engine.test.ts ]
+Error: Cannot find module './project' imported from /Users/ze/Downloads/Cairn/cairn/src/orchestration/store.ts
+ ❯ src/orchestration/store.ts:5:1
+      3| import { dirname } from "node:path";
+      4| import { createEventLog, replay, type AgentEvent, type EventLog } from…
+      5| import { projectOrchestration } from "./project";
+       | ^
+      6| import type { OrchestrationView } from "./types";
+      7|
+ ❯ tests/orchestration-engine.test.ts:5:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  no tests
+   Start at  19:54:46
+   Duration  120ms (worker 97%, environment 3%)
+

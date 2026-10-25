@@ -1,0 +1,88 @@
+[
+ {
+  "r": {
+   "id": "B2-feature-export",
+   "name": "B2-feature-export",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "cn:glm-5.3-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分",
+   "seconds": 80.494,
+   "requests": 7,
+   "tokensIn": 46944,
+   "tokensOut": 1577,
+   "cny": 0,
+   "toolCalls": 6,
+   "toolFailures": 1,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 146,
+   "readsBeforeFirstWrite": 2,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": true,
+   "autoVerifyBeat": true,
+   "autoVerifyBeats": 1,
+   "verifyRecovery": "greenFirst",
+   "namedSets": {
+    "state": "unreadable",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [
+     "tests/fit.test.js"
+    ],
+    "reasons": [
+     "这些 id 在任何逐名结果里都对不上号（tests/fit.test.js）⇒ 不许算成绿；名字口径不同就得上报器做映射，不是在这儿蒙"
+    ],
+    "sources": [
+     {
+      "command": "pnpm_config_verify_deps_before_run=false pnpm run test",
+      "format": "node-test-spec",
+      "tests": 4,
+      "carried": true,
+      "complete": true
+     }
+    ]
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/fit.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 692,
+    "procPeak": 4,
+    "cpuMs": 1705,
+    "samples": 162
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": true,
+    "exitCode": 0,
+    "output": "✔ 宽度换成 3：每段真的按 wrap 的规则折 (0.344416ms)\n✔ 折行边界：正好装满一行不再塞下一个词 (0.053ms)\n✔ 零段：空字符串，不许留下分隔符 (0.044417ms)\n✔ 单空段：只有一个空行位，结果为空字符串 (0.040167ms)\n✔ 空段在开头：前面不留分隔空行，段间的空行照给 (0.050125ms)\n✔ 空段在结尾：保留一个空行 ⇒ 以换行收尾 (0.037ms)\n✔ 三段混合：长段折行 + 空段 + 短段 (0.039125ms)\nℹ tests 7\nℹ suites 0\nℹ pass 7\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 39.751167"
+   },
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "146743c",
+   "ranAt": "2026-10-24T14:53:04.479Z",
+   "maxSteps": 25,
+   "reps": 1,
+   "arm": "low",
+   "thinking": "low"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "逐名判卷不可读 ⇒ 不许算过：这些 id 在任何逐名结果里都对不上号（tests/fit.test.js）⇒ 不许算成绿；名字口径不同就得上报器做映射，不是在这儿蒙〔对不上号 1 条〕"
+   ]
+  },
+  "taskId": "B2-feature-export"
+ }
+]

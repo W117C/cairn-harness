@@ -26,10 +26,10 @@
 ~~- `apps/desktop/tests/session-identity-ui.test.tsx` [added] +44/-0 (excluded: default_path)~~
 ~~- `apps/desktop/tests/window-workspace-context.test.ts` [added] +87/-0 (excluded: default_path)~~
 ~~- `docs/superpowers/specs/2026-10-22-pointer-session-integration-design.md` [added] +119/-0 (excluded: unsupported_ext)~~
-~~- `outputs/head-cert-d059c02-2026-10-22-0824/provenance.md` [added] +63/-0 (excluded: user_exclude)~~
-~~- `outputs/head-cert-d059c02-2026-10-22-0831/provenance.md` [added] +65/-0 (excluded: user_exclude)~~
-~~- `outputs/head-read-capped-d059c02d/core-suite-capped.log` [added] +41/-0 (excluded: user_exclude)~~
-~~- `outputs/head-read-capped-d059c02d/mutate-needles-check.log` [added] +8/-0 (excluded: user_exclude)~~
+~~- `outputs/head-cert-f8b86e4-2026-10-22-0824/provenance.md` [added] +63/-0 (excluded: user_exclude)~~
+~~- `outputs/head-cert-f8b86e4-2026-10-22-0831/provenance.md` [added] +65/-0 (excluded: user_exclude)~~
+~~- `outputs/head-read-capped-f8b86e4/core-suite-capped.log` [added] +41/-0 (excluded: user_exclude)~~
+~~- `outputs/head-read-capped-f8b86e4/mutate-needles-check.log` [added] +8/-0 (excluded: user_exclude)~~
 ~~- `outputs/open-task-reconciliation-2026-10-22/README.md` [added] +30/-0 (excluded: user_exclude)~~
 ~~- `outputs/open-task-reconciliation-2026-10-22/contracts.log` [added] +46/-0 (excluded: user_exclude)~~
 ~~- `outputs/open-task-reconciliation-2026-10-22/core-capped.log` [added] +5/-0 (excluded: user_exclude)~~

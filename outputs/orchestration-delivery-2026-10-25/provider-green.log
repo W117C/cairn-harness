@@ -1,0 +1,54 @@
+$ vitest run --config tests/vitest.config.ts tests/orchestration-provider.test.ts --maxWorkers=2
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/orchestration-provider.test.ts (10 tests | 2 failed) 470ms
+   ❯ workspace orchestration provider budget gateway (10)
+     × assembles without a network call, forwards only approved tools and forces the actual wire limits 27ms
+     × enforces Anthropic max_tokens and explicitly disables thinking on the transmitted request 10ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-provider.test.ts > workspace orchestration provider budget gateway > assembles without a network call, forwards only approved tools and forces the actual wire limits
+AssertionError: expected '' to be 'done' // Object.is equality
+
+- Expected
++ Received
+
+- done
+
+ ❯ tests/orchestration-provider.test.ts:43:28
+     41|     expect(f.backend).not.toBeNull(); expect(f.captures).toHaveLength(…
+     42|     const result = await f.backend!.execute(f.request);
+     43|     expect(result.summary).toBe("done"); expect(f.captures).toHaveLeng…
+       |                            ^
+     44|     const body = JSON.parse(f.captures[0].body as string);
+     45|     expect(body.max_tokens).toBe(4096);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/orchestration-provider.test.ts > workspace orchestration provider budget gateway > enforces Anthropic max_tokens and explicitly disables thinking on the transmitted request
+AssertionError: expected '' to be 'done' // Object.is equality
+
+- Expected
++ Received
+
+- done
+
+ ❯ tests/orchestration-provider.test.ts:108:28
+    106|     const result = await f.backend!.execute(f.request);
+    107|     const body = JSON.parse(captures[0].body as string);
+    108|     expect(result.summary).toBe("done"); expect(body.max_tokens).toBe(…
+       |                            ^
+    109|     expect(result.spent_usd).toBeCloseTo(0.06144, 10);
+    110|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 8 passed (10)
+   Start at  20:12:16
+   Duration  915ms (tests 55%, transform 37%, import 9%)
+
+[ELIFECYCLE] Test failed. See above for more details.

@@ -1,0 +1,207 @@
+[
+ {
+  "r": {
+   "study": {
+    "strategy": "triggered",
+    "seed": 2303829213,
+    "interventions": [],
+    "physicalRequests": 14,
+    "outputCap": 4096,
+    "timeoutMs": 120000,
+    "envelopes": [
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 0
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 0
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 0
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 0
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 0
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 1
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 2
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 3
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 4
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 5
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 6
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 6
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 6
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 7
+     }
+    ],
+    "reasoningOutputTokens": 916
+   },
+   "id": "C5-lsp-language",
+   "name": "C5-lsp-language",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "cn:deepseek-v4.1-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "study: no hidden episode retry",
+   "seconds": 40.393,
+   "requests": 13,
+   "tokensIn": 252920,
+   "tokensOut": 2943,
+   "cny": null,
+   "toolCalls": 15,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 10,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "namedSets": {
+    "state": "pass",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [],
+    "reasons": [],
+    "sources": [
+     {
+      "command": "pnpm_config_verify_deps_before_run=false pnpm run test",
+      "format": "node-test-tap",
+      "tests": 6,
+      "carried": true,
+      "complete": true
+     }
+    ]
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/tools/lsp.ts"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 842,
+    "procPeak": 6,
+    "cpuMs": 4244,
+    "samples": 79
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": false,
+    "exitCode": 1,
+    "output": "TAP version 13\nnot ok 1 - 插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） 受信插件的服务器按 scoped id 注册；transport:socket 那条不占名额\n# AssertionError: expected undefined to deeply equal { '.ts': 'typescript', …(1) }\n#     at /private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/loop-eval-cBqPXW/work/tests/plugin-lsp-activation.test.ts:59:68\n#     at file:///Users/ze/Downloads/Cairn/cairn/node_modules/.pnpm/vitest@5.0.0_@types+node@26.5.0_vite@8.2.2_@types+node@26.5.0_esbuild@0.28.2_jiti@2.7.0_tsx@4.23.13_/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:2783:20\nok 2 - 插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） §9.8 里运行时还没兑现的字段，装载期当场说出来（不静默收下）\nok 3 - 插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） 未过信任门的插件不注册（server.command 是任意可执行文件，信任门与 hook/MCP 同口径）\nok 4 - 插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） 宿主没开 LSP 总开关 ⇒ 注册了也不生效（插件不能替用户把 LSP 打开）\nok 5 - 插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） 真跳：${PLUGIN_ROOT} 展开成真路径，lsp 工具 hover 回显出 initializationOptions\nok 6 - 插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） shutdown 摘干净：注册表不留跨会话残留（下一个会话不该继承上一个插件的服务器）\nok 7 - 插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） §9.8 的 diagnostics 开关真兑现：开 ⇒ 插件服务器推的 ERROR 回流；关 ⇒ 一个字都不回\nok 8 - runAgent 真的会激活插件 LSP（§9.8 那一跳不是只有测试在调） runAgent 里注册的 id 与面板口径同源；未激活（把那一行摘掉）就是红\n1..8\n# tests 8\n# pass 7\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n"
+   },
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "146743c",
+   "ranAt": "2026-10-25T02:51:05.987Z",
+   "maxSteps": 24,
+   "reps": 1,
+   "arm": "triggered",
+   "thinking": "low"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "held-out 没过（可见测试绿了但隐藏验收不认 ⇒ 大概率是特殊分支，不是根因）〔exit=1〕"
+   ]
+  },
+  "taskId": "C5-lsp-language"
+ }
+]

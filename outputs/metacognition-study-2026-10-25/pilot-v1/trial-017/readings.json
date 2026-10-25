@@ -1,0 +1,208 @@
+[
+ {
+  "r": {
+   "study": {
+    "strategy": "baseline",
+    "seed": 3710674098,
+    "interventions": [],
+    "physicalRequests": 12,
+    "outputCap": 4096,
+    "timeoutMs": 120000,
+    "envelopes": [
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 0
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 1
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 1
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 1
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 2
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 2
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 3
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 4
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 5
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 6
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 7
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 8
+     }
+    ],
+    "reasoningOutputTokens": 5232
+   },
+   "id": "C4-provider-overload",
+   "name": "C4-provider-overload",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "cn:deepseek-v4.1-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "study: no hidden episode retry",
+   "seconds": 62.816,
+   "requests": 11,
+   "tokensIn": 196835,
+   "tokensOut": 6224,
+   "cny": null,
+   "toolCalls": 12,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 14,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "namedSets": {
+    "state": "unreadable",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [
+     "Anthropic：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完",
+     "Anthropic：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转",
+     "Gemini：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完",
+     "Gemini：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转",
+     "OpenAI 兼容：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完",
+     "OpenAI 兼容：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）",
+     "OpenAI 兼容：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）",
+     "OpenAI 兼容：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转",
+     "OpenAI 兼容：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次",
+     "Anthropic：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）",
+     "Anthropic：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）",
+     "Anthropic：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次",
+     "Gemini：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）",
+     "Gemini：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）",
+     "Gemini：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次",
+     "三家共用同一份判据（`retry.ts`），不许各抄一份名字表 数值优先：字符串形式的 502 也算可重试（OpenRouter 实测 `\"type\": \"502\"`）",
+     "三家共用同一份判据（`retry.ts`），不许各抄一份名字表 名字表覆盖三家的过载/限流/可用性形状（大小写不敏感）",
+     "三家共用同一份判据（`retry.ts`），不许各抄一份名字表 请求本身的问题一律不可重放（400/401/403 家族与协议错）",
+     "三家共用同一份判据（`retry.ts`），不许各抄一份名字表 `StreamFailure` 的 retryable 是唯一出口：非 StreamFailure 的未知形状按可重放处理"
+    ],
+    "reasons": [
+     "最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读",
+     "格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：Anthropic：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完、Anthropic：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转、Gemini：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完、Gemini：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转、OpenAI 兼容：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完、OpenAI 兼容：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）、OpenAI 兼容：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）、OpenAI 兼容：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转、OpenAI 兼容：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次、Anthropic：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）、Anthropic：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）、Anthropic：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次、Gemini：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）、Gemini：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）、Gemini：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次、三家共用同一份判据（`retry.ts`），不许各抄一份名字表 数值优先：字符串形式的 502 也算可重试（OpenRouter 实测 `\"type\": \"502\"`）、三家共用同一份判据（`retry.ts`），不许各抄一份名字表 名字表覆盖三家的过载/限流/可用性形状（大小写不敏感）、三家共用同一份判据（`retry.ts`），不许各抄一份名字表 请求本身的问题一律不可重放（400/401/403 家族与协议错）、三家共用同一份判据（`retry.ts`），不许各抄一份名字表 `StreamFailure` 的 retryable 是唯一出口：非 StreamFailure 的未知形状按可重放处理"
+    ],
+    "sources": []
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/providers/anthropic.ts"
+   ],
+   "exitError": "Unterminated string in JSON at position 10469 (line 1 column 10470)",
+   "resources": {
+    "rssPeakMb": 916,
+    "procPeak": 7,
+    "cpuMs": 5918,
+    "samples": 123
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": true,
+    "exitCode": 0,
+    "output": "TAP version 13\nok 1 - OpenAI 兼容响应流生命周期 消费者在 text 输出后提前结束，也取消响应体并释放读取锁\nok 2 - OpenAI 兼容响应流生命周期 消费者在 thinking 输出后提前结束，也取消响应体并释放读取锁\nok 3 - OpenAI 兼容响应流生命周期 消费者在 tool 输出后提前结束，也取消响应体并释放读取锁\nok 4 - OpenAI 兼容响应流生命周期 完整流式响应在计量中记录为成功，并保留累计 usage\nok 5 - OpenAI 兼容响应流生命周期 损坏的帧仍然报错并记为失败，不重试协议错误\nok 6 - OpenAI 兼容响应流生命周期 调用方取消仍记为取消，退出时释放响应体\nok 7 - OpenAI 兼容响应流生命周期 reasoning_content 已展示后收到服务端错误，不重放已产出的思考\nok 8 - OpenAI 兼容响应流生命周期 reasoning 已展示后收到服务端错误，不重放已产出的思考\nok 9 - OpenAI 兼容响应流生命周期 尚未产出内容的服务端错误仍可重试，恢复后仅交付一次正文\nok 10 - 真实 HTTP 响应连接回收 消费者提前结束后，服务端能观察到响应连接关闭\nok 11 - 请求计量逐笔覆盖真实传输尝试 HTTP 失败后恢复，保留失败与成功两笔记录\nok 12 - 请求计量逐笔覆盖真实传输尝试 HTTP 重试耗尽时每次请求都留痕，不把三次失败并成一次\nok 13 - 请求计量逐笔覆盖真实传输尝试 网络错误后的重试也各自计量\nok 14 - 请求计量逐笔覆盖真实传输尝试 非流式请求同样逐次计量，并保留摘要类别\nok 15 - 请求计量逐笔覆盖真实传输尝试 SSE 失败尝试的 usage 不会混入下一次请求（后续上报=false）\nok 16 - 请求计量逐笔覆盖真实传输尝试 SSE 失败尝试的 usage 不会混入下一次请求（后续上报=true）\nok 17 - 请求计量逐笔覆盖真实传输尝试 调用前已取消时，不产生未发送请求的计量记录\nok 18 - 请求计量逐笔覆盖真实传输尝试 本地 HTTP 服务收到两次请求时，计量也准确记录两笔\nok 19 - 流内重试的解码与取消边界 失败响应残留 UTF-8 起始字节 228，不污染下一次成功响应\nok 20 - 流内重试的解码与取消边界 失败响应残留 UTF-8 起始字节 240，不污染下一次成功响应\nok 21 - 流内重试的解码与取消边界 同一次响应内的 UTF-8 字符跨块时仍能正确拼接\nok 22 - 流内重试的解码与取消边界 退避期间取消立即结束等待并保留原始原因：Error: cancelled during backoff\nok 23 - 流内重试的解码与取消边界 退避期间取消立即结束等待并保留原始原因：cancelled during backoff\n1..23\n# tests 23\n# pass 23\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n"
+   },
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "146743c",
+   "ranAt": "2026-10-25T02:41:58.877Z",
+   "maxSteps": 24,
+   "reps": 1,
+   "arm": "baseline",
+   "thinking": "low"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "逐名判卷不可读 ⇒ 不许算过：最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读；格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：Anthropic：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完、Anthropic：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转、Gemini：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完、Gemini：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转、OpenAI 兼容：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完、OpenAI 兼容：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）、OpenAI 兼容：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）、OpenAI 兼容：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转、OpenAI 兼容：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次、Anthropic：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）、Anthropic：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）、Anthropic：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次、Gemini：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）、Gemini：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）、Gemini：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次、三家共用同一份判据（`retry.ts`），不许各抄一份名字表 数值优先：字符串形式的 502 也算可重试（OpenRouter 实测 `\"type\": \"502\"`）、三家共用同一份判据（`retry.ts`），不许各抄一份名字表 名字表覆盖三家的过载/限流/可用性形状（大小写不敏感）、三家共用同一份判据（`retry.ts`），不许各抄一份名字表 请求本身的问题一律不可重放（400/401/403 家族与协议错）、三家共用同一份判据（`retry.ts`），不许各抄一份名字表 `StreamFailure` 的 retryable 是唯一出口：非 StreamFailure 的未知形状按可重放处理〔对不上号 19 条〕",
+    "runLoop 抛错:Unterminated string in JSON at position 10469 (line 1 column"
+   ]
+  },
+  "taskId": "C4-provider-overload"
+ }
+]

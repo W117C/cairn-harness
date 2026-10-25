@@ -1,0 +1,1207 @@
+[
+  {
+    "id": "C1-malformed-tool",
+    "sourceCommit": "19a6a4d",
+    "sourcePaths": [
+      "src/agent/loop.ts",
+      "src/agent/stuck.ts"
+    ],
+    "visible": "tests/tool-result-malformed.test.ts",
+    "hidden": [
+      "tests/loop.test.ts"
+    ],
+    "seed": {
+      "exitCode": 1,
+      "rows": [
+        {
+          "name": "工具返回畸形结构：不炸、不糊、分得开 ★ 缺 output（`{ok:true}`）⇒ 不许炸整轮，且回执可读",
+          "status": "failed"
+        },
+        {
+          "name": "工具返回畸形结构：不炸、不糊、分得开 ★ output = null ⇒ 回执可读，且与「缺失」分得开",
+          "status": "failed"
+        },
+        {
+          "name": "工具返回畸形结构：不炸、不糊、分得开 ★ output = 对象 ⇒ **序列化出来**（不是 [object Object]）",
+          "status": "failed"
+        },
+        {
+          "name": "工具返回畸形结构：不炸、不糊、分得开 ★ 反向哨兵：正常字符串输出**逐字不变**（不许为了安全全包一层）",
+          "status": "passed"
+        },
+        {
+          "name": "工具返回畸形结构：不炸、不糊、分得开 真空串 ≠ 缺失（空串是『真的没输出』这一事实，不许被顶替成占位符）",
+          "status": "passed"
+        },
+        {
+          "name": "stuckObservationOf 的取料面（崩溃点本体） ★ 非字符串一律不抛（旧实现 undefined.slice ⇒ TypeError）",
+          "status": "failed"
+        },
+        {
+          "name": "stuckObservationOf 的取料面（崩溃点本体） 不同畸形给出**不同**的观察串（否则「缺失」会被当成「卡在同一动作」）",
+          "status": "failed"
+        },
+        {
+          "name": "stuckObservationOf 的取料面（崩溃点本体） 正常字符串照旧截 200 字（既有口径不变）",
+          "status": "passed"
+        },
+        {
+          "name": "stuckObservationOf 的取料面（崩溃点本体） 环形对象不抛（JSON.stringify 会炸的那一类）",
+          "status": "failed"
+        }
+      ],
+      "passed": 3,
+      "failed": 6
+    },
+    "reference": {
+      "exitCode": 0,
+      "rows": [
+        {
+          "name": "loop context feedback includes persisted tool results exactly once in the next provider request",
+          "status": "passed"
+        },
+        {
+          "name": "loop context feedback returns failure to the model without duplicate history",
+          "status": "passed"
+        },
+        {
+          "name": "loop context feedback returns permission denial to the model without duplicate history",
+          "status": "passed"
+        },
+        {
+          "name": "loop context feedback returns tool table denial to the model without duplicate history",
+          "status": "passed"
+        },
+        {
+          "name": "loop context feedback returns unknown tool to the model without duplicate history",
+          "status": "passed"
+        },
+        {
+          "name": "loop context feedback returns missing verify hook to the model without duplicate history",
+          "status": "passed"
+        },
+        {
+          "name": "loop context feedback returns verify exception to the model without duplicate history",
+          "status": "passed"
+        },
+        {
+          "name": "loop context feedback includes tool-emitted events in persisted order",
+          "status": "passed"
+        },
+        {
+          "name": "loop context feedback does not request another turn after cancellation",
+          "status": "passed"
+        },
+        {
+          "name": "auto-verify on completion (harness 补拍，证据 only) 写盘后纯文本收束 → 补一拍并把红字落进事件流（零额外模型调用）",
+          "status": "passed"
+        },
+        {
+          "name": "auto-verify on completion (harness 补拍，证据 only) 每 run 至多一拍：自动拍红字后模型仍纯文本收束 ⇒ 不叠加",
+          "status": "passed"
+        },
+        {
+          "name": "auto-verify on completion (harness 补拍，证据 only) 自动拍验证通过 → 绿证据落流",
+          "status": "passed"
+        },
+        {
+          "name": "auto-verify on completion (harness 补拍，证据 only) 模型自调过 verify ⇒ harness 让位，且手动拍事件形态零变化（连 auto 键都不出现）",
+          "status": "passed"
+        },
+        {
+          "name": "auto-verify on completion (harness 补拍，证据 only) 可验面探测炸（config 存在但 JSON 坏）⇒ 不炸 run、不补拍，但必须出声",
+          "status": "passed"
+        },
+        {
+          "name": "auto-verify on completion (harness 补拍，证据 only) 零行为回退：未写盘（只读动作） → 无 verify_result、请求数与旧行为同形",
+          "status": "passed"
+        },
+        {
+          "name": "auto-verify on completion (harness 补拍，证据 only) 零行为回退：仓库无 verify 面（surface=false） → 无 verify_result、请求数与旧行为同形",
+          "status": "passed"
+        },
+        {
+          "name": "auto-verify on completion (harness 补拍，证据 only) 零行为回退：缺省不开闸（未给 autoVerify） → 无 verify_result、请求数与旧行为同形",
+          "status": "passed"
+        },
+        {
+          "name": "auto-verify on completion (harness 补拍，证据 only) 零行为回退：显式 autoVerify:false → 无 verify_result、请求数与旧行为同形",
+          "status": "passed"
+        },
+        {
+          "name": "allowedTools 硬闸与 verify 系统门的次序 表内没有 verify ⇒ 钩子一次都不执行，按工具表摘除拒绝",
+          "status": "passed"
+        },
+        {
+          "name": "allowedTools 硬闸与 verify 系统门的次序 表内有 verify ⇒ 系统门照旧执行（反向锁：修法不是一律禁掉 verify）",
+          "status": "passed"
+        },
+        {
+          "name": "allowedTools 硬闸与 verify 系统门的次序 未给工具表（主会话形状）⇒ 行为逐字不变",
+          "status": "passed"
+        },
+        {
+          "name": "resolveTool 补表钩子（run 中途才出现的工具，2026-10-19） 静态表里没有、钩子给得出 ⇒ 照常执行（模型看到的 ≠ 能执行的，这条堵住后半句）",
+          "status": "passed"
+        },
+        {
+          "name": "resolveTool 补表钩子（run 中途才出现的工具，2026-10-19） 钩子也拿不到 ⇒ 仍是 unknown tool（补表不放行未注册工具，fail-closed 不变）",
+          "status": "passed"
+        },
+        {
+          "name": "resolveTool 补表钩子（run 中途才出现的工具，2026-10-19） 反向（突变体专破）：把 `?? opts.resolveTool?.(name)` 从 loop 里拆掉 ⇒ 第一条必须红在这儿",
+          "status": "passed"
+        },
+        {
+          "name": "工具返回畸形结构：不炸、不糊、分得开 ★ 缺 output（`{ok:true}`）⇒ 不许炸整轮，且回执可读",
+          "status": "passed"
+        },
+        {
+          "name": "工具返回畸形结构：不炸、不糊、分得开 ★ output = null ⇒ 回执可读，且与「缺失」分得开",
+          "status": "passed"
+        },
+        {
+          "name": "工具返回畸形结构：不炸、不糊、分得开 ★ output = 对象 ⇒ **序列化出来**（不是 [object Object]）",
+          "status": "passed"
+        },
+        {
+          "name": "工具返回畸形结构：不炸、不糊、分得开 ★ 反向哨兵：正常字符串输出**逐字不变**（不许为了安全全包一层）",
+          "status": "passed"
+        },
+        {
+          "name": "工具返回畸形结构：不炸、不糊、分得开 真空串 ≠ 缺失（空串是『真的没输出』这一事实，不许被顶替成占位符）",
+          "status": "passed"
+        },
+        {
+          "name": "stuckObservationOf 的取料面（崩溃点本体） ★ 非字符串一律不抛（旧实现 undefined.slice ⇒ TypeError）",
+          "status": "passed"
+        },
+        {
+          "name": "stuckObservationOf 的取料面（崩溃点本体） 不同畸形给出**不同**的观察串（否则「缺失」会被当成「卡在同一动作」）",
+          "status": "passed"
+        },
+        {
+          "name": "stuckObservationOf 的取料面（崩溃点本体） 正常字符串照旧截 200 字（既有口径不变）",
+          "status": "passed"
+        },
+        {
+          "name": "stuckObservationOf 的取料面（崩溃点本体） 环形对象不抛（JSON.stringify 会炸的那一类）",
+          "status": "passed"
+        }
+      ],
+      "passed": 33,
+      "failed": 0
+    },
+    "status": "ready",
+    "historicalPatchSha256": "1a92b2836750b01eb8a03d685122847b02d3a049da0deb4d66591e844f1af6c8",
+    "referencePatchSha256": "d2f6b43d7978f3d4c9db8ef4f758475a2df0908e90b2812b2b96848874913e5b",
+    "protectedHashes": {
+      "tests/run-visible.mjs": "aeb06a77a0137bacb6606df3f1b3b795372b7a4000277b1f1de7595daf722fc8",
+      "tests/event-registry.ts": "48077e86b554442b8ae68ae2180ec5391288d80a041cbe60b71f2fb42449c986",
+      "tests/tool-result-malformed.test.ts": "8d59dd9bbf090da96896d96c2d54cfb33583c6e8ed589cfff72d71d014c9aec9",
+      "tests/app-fixture-lock.ts": "fc181a87fee1446f5c754884c38cf3e1e942271301cc18eb9b3a31eba7135588",
+      "tests/vitest.config.ts": "0bd3168e13faf09d93ad75fa02781961d15862cb92be478f3c1c79972aea3e20",
+      "tests/helpers/real-corpus.ts": "95cdb745e120760c2d7b9bde0cf2e7b2bcdb55fc4eccbb771951e17902c29820",
+      "tests/helpers/memory-inject-mock.ts": "97e81a7f6a0920ceb8fa67636c7a3255b6c84359d21f179e20eca1c2e8c8245a",
+      "tests/helpers/stream-equals.ts": "5addf8cb59ea0ea7bd45eb43bf4945ebc689256a803fa73a1167d2fad9565ad8",
+      "package.json": "6b5a0ce41b8c4ebe656b7e1f7917572bf1442a01065bae0d5d208876916d8555"
+    }
+  },
+  {
+    "id": "C2-truncated-turn",
+    "sourceCommit": "eaf90a0",
+    "sourcePaths": [
+      "src/agent/loop.ts"
+    ],
+    "visible": "tests/loop-truncation-repair.test.ts",
+    "hidden": [
+      "tests/turn-truncated.test.ts"
+    ],
+    "seed": {
+      "exitCode": 1,
+      "rows": [
+        {
+          "name": "第 1 点：截断续跑（截断 ≠ 说完） ★ 截断后真的再要一轮，且那一轮**读到了**「别当成已答完」那条提示",
+          "status": "failed"
+        },
+        {
+          "name": "第 1 点：截断续跑（截断 ≠ 说完） ★ 上限：次次截断也**至多续一轮**（不无限要，与 deliveryRepair/autoVerifyRepair 同形）",
+          "status": "failed"
+        },
+        {
+          "name": "第 1 点：截断续跑（截断 ≠ 说完） 关掉开关 ⇒ 逐字回到旧行为（一次都不多要）",
+          "status": "passed"
+        },
+        {
+          "name": "第 1 点：截断续跑（截断 ≠ 说完） ★ 反向哨兵：没被截断的正常收束 ⇒ 零额外请求（这一支不许被顺手改宽）",
+          "status": "passed"
+        },
+        {
+          "name": "第 1 点：截断续跑（截断 ≠ 说完） 工具轮不会被误判成截断（两条收束语义不许混）",
+          "status": "passed"
+        },
+        {
+          "name": "第 1 点：截断续跑（截断 ≠ 说完） 截断提示在投影里仍只出现一次（续跑读的是同一条，不重复注入）",
+          "status": "passed"
+        },
+        {
+          "name": "撞帽与截断续跑不许互相顶掉 撞帽那一拍同时被截断 ⇒ 撞帽照旧抛（续跑不许给撞帽多留一条命）",
+          "status": "failed"
+        },
+        {
+          "name": "撞帽与截断续跑不许互相顶掉 纯撞帽（没有截断）同样是 throw + error，两路口径一致",
+          "status": "passed"
+        }
+      ],
+      "passed": 5,
+      "failed": 3
+    },
+    "reference": {
+      "exitCode": 0,
+      "rows": [
+        {
+          "name": "第 1 点：截断续跑（截断 ≠ 说完） ★ 截断后真的再要一轮，且那一轮**读到了**「别当成已答完」那条提示",
+          "status": "passed"
+        },
+        {
+          "name": "第 1 点：截断续跑（截断 ≠ 说完） ★ 上限：次次截断也**至多续一轮**（不无限要，与 deliveryRepair/autoVerifyRepair 同形）",
+          "status": "passed"
+        },
+        {
+          "name": "第 1 点：截断续跑（截断 ≠ 说完） 关掉开关 ⇒ 逐字回到旧行为（一次都不多要）",
+          "status": "passed"
+        },
+        {
+          "name": "第 1 点：截断续跑（截断 ≠ 说完） ★ 反向哨兵：没被截断的正常收束 ⇒ 零额外请求（这一支不许被顺手改宽）",
+          "status": "passed"
+        },
+        {
+          "name": "第 1 点：截断续跑（截断 ≠ 说完） 工具轮不会被误判成截断（两条收束语义不许混）",
+          "status": "passed"
+        },
+        {
+          "name": "第 1 点：截断续跑（截断 ≠ 说完） 截断提示在投影里仍只出现一次（续跑读的是同一条，不重复注入）",
+          "status": "passed"
+        },
+        {
+          "name": "撞帽与截断续跑不许互相顶掉 撞帽那一拍同时被截断 ⇒ 撞帽照旧抛（续跑不许给撞帽多留一条命）",
+          "status": "passed"
+        },
+        {
+          "name": "撞帽与截断续跑不许互相顶掉 纯撞帽（没有截断）同样是 throw + error，两路口径一致",
+          "status": "passed"
+        },
+        {
+          "name": "停止原因解码（纯函数，三家词表） 三家各自的「篇幅用尽」都归一到 output_budget",
+          "status": "passed"
+        },
+        {
+          "name": "停止原因解码（纯函数，三家词表） 三家各自的「内容策略拦停」都归一到 content_blocked",
+          "status": "passed"
+        },
+        {
+          "name": "停止原因解码（纯函数，三家词表） 正常收尾与工具轮不算截断",
+          "status": "passed"
+        },
+        {
+          "name": "停止原因解码（纯函数，三家词表） 大小写与首尾空白不造成第二种拼写；未知值一律 unknown（不把不知道说成坏）",
+          "status": "passed"
+        },
+        {
+          "name": "停止原因解码（纯函数，三家词表） turnTruncatedEvent：正常收尾返回 null；截断时存归一 token 而非线上原文",
+          "status": "passed"
+        },
+        {
+          "name": "停止原因解码（纯函数，三家词表） output_tokens：0 要如实留（0 也是读数），null/undefined 才不落字段",
+          "status": "passed"
+        },
+        {
+          "name": "第三种收尾证据：流结束而一个停止原因都没上报（2026-10-13 第 471 页） 纯函数：缺席（undefined/null/空串）⇒ 落事件；有任何非空原文（含词表外的）⇒ 不落",
+          "status": "passed"
+        },
+        {
+          "name": "第三种收尾证据：流结束而一个停止原因都没上报（2026-10-13 第 471 页） openai（glm 即其预设）：流结束而全程没有 finish_reason ⇒ 落一条 turn_stop_missing，且不落 turn_truncated",
+          "status": "passed"
+        },
+        {
+          "name": "第三种收尾证据：流结束而一个停止原因都没上报（2026-10-13 第 471 页） openai 负控：正常 stop ⇒ 零新事件（这一族只在该出声时出声）",
+          "status": "passed"
+        },
+        {
+          "name": "第三种收尾证据：流结束而一个停止原因都没上报（2026-10-13 第 471 页） anthropic：流结束而 message_delta 没带 stop_reason ⇒ 落一条 turn_stop_missing",
+          "status": "passed"
+        },
+        {
+          "name": "第三种收尾证据：流结束而一个停止原因都没上报（2026-10-13 第 471 页） gemini：流结束而 finishReason 缺席 ⇒ 落一条 turn_stop_missing",
+          "status": "passed"
+        },
+        {
+          "name": "三家适配器：把停止原因读出流 anthropic：message_delta 带 max_tokens ⇒ 流尾多出一条 turn_truncated",
+          "status": "passed"
+        },
+        {
+          "name": "三家适配器：把停止原因读出流 anthropic 负控：end_turn ⇒ 一个字节都不多（既有转录不变）",
+          "status": "passed"
+        },
+        {
+          "name": "三家适配器：把停止原因读出流 openai（glm 即其预设）：finish_reason=length ⇒ turn_truncated",
+          "status": "passed"
+        },
+        {
+          "name": "三家适配器：把停止原因读出流 gemini：finishReason=MAX_TOKENS ⇒ turn_truncated（大小写不同，表要认）",
+          "status": "passed"
+        },
+        {
+          "name": "三家适配器：把停止原因读出流 gemini 负控：STOP ⇒ 不落（这一族的正常收尾是大写）",
+          "status": "passed"
+        },
+        {
+          "name": "三家适配器：把停止原因读出流 没带停止原因的流不落证据（缺读数 ≠ 被截断）",
+          "status": "passed"
+        },
+        {
+          "name": "落盘与投影 runLoop 原样落进 JSONL；截断那一拍**续跑一次**把话说完（2026-10-23 接线）",
+          "status": "passed"
+        },
+        {
+          "name": "落盘与投影 turn_truncated 能过写入口校验（未知类型会被 createEventLog 抛死）",
+          "status": "passed"
+        },
+        {
+          "name": "落盘与投影 projectContext：说明紧跟在被砍断的那段正文之后（位置本身就是信息）",
+          "status": "passed"
+        },
+        {
+          "name": "落盘与投影 正常收尾的转录：projectContext 逐字节不变（零回归）",
+          "status": "passed"
+        },
+        {
+          "name": "落盘与投影 worker 子流的截断不进父上下文（§4.4.4：子流不越界，父只收 agent_result）",
+          "status": "passed"
+        },
+        {
+          "name": "剧本入口（createMockProvider） 剧本可以带 turn_truncated，并按序原样产出（不折进正文、不丢）",
+          "status": "passed"
+        },
+        {
+          "name": "剧本入口（createMockProvider） 负控仍在：运行时产物（tool_result）依旧拒收——放行它等于让剧本伪造工具回执",
+          "status": "passed"
+        },
+        {
+          "name": "剧本入口（createMockProvider） 端到端：剧本驱动 runLoop，截断确实落到盘上那一行",
+          "status": "passed"
+        },
+        {
+          "name": "跨轮真请求体（会话型 provider 的 transport 抓包） 下一轮的真请求体里带着「上一条没说完」",
+          "status": "passed"
+        },
+        {
+          "name": "跨轮真请求体（会话型 provider 的 transport 抓包） 负控：答完的一轮，请求体里一个字的说明都没有",
+          "status": "passed"
+        },
+        {
+          "name": "摘要输入（serializeConversation） 截断有自己一行，紧跟被砍断的那段正文，且带上是哪个原因",
+          "status": "passed"
+        },
+        {
+          "name": "摘要输入（serializeConversation） 负控：答完的一轮不因此多一行",
+          "status": "passed"
+        },
+        {
+          "name": "摘要输入（serializeConversation） output_tokens 缺席时不落那半句（缺 = 没上报，不等于 0）",
+          "status": "passed"
+        },
+        {
+          "name": "摘要输入（serializeConversation） 内容策略中止与篇幅用尽各说各的（两种原因的下一步不同）",
+          "status": "passed"
+        },
+        {
+          "name": "摘要输入（serializeConversation） delta 形态的正文先落位再落截断行（不吞掉半句，也不把说明插到半句前面）",
+          "status": "passed"
+        },
+        {
+          "name": "goal 续跑判据 被收走的那一轮 ⇒ 继续，而不是宣布「没有可验证的产出」",
+          "status": "passed"
+        },
+        {
+          "name": "goal 续跑判据 负控（回归锁）：模型自己说完且没产出 ⇒ 仍然停，理由逐字不变",
+          "status": "passed"
+        },
+        {
+          "name": "goal 续跑判据 轮次上限已用尽 + 被截断 ⇒ 仍然停（截断不给额外的轮）",
+          "status": "passed"
+        },
+        {
+          "name": "goal 续跑判据 美元上限已花到 + 被截断 ⇒ 仍然停（截断不给额外的钱）",
+          "status": "passed"
+        },
+        {
+          "name": "goal 续跑判据 读过事件流就能拿到这个判断（projectGoal 算了不许丢——「两头断」防线）",
+          "status": "passed"
+        },
+        {
+          "name": "goal 续跑判据 新提示已经进来 ⇒ 打断不再是当前态（旧截断不该替这一轮说话）",
+          "status": "passed"
+        },
+        {
+          "name": "评审修的五处 worker 子流的截断会被装饰 agent_id（否则它以「主会话上一轮没说完」落进父转录）",
+          "status": "passed"
+        },
+        {
+          "name": "评审修的五处 openai：参数解析抛错之前，截断记录已经出去（最常见的截断就是砍在 write_file 参数上）",
+          "status": "passed"
+        },
+        {
+          "name": "评审修的五处 anthropic：后到的 stop_reason:null 帧不得抹掉已拿到的 max_tokens",
+          "status": "passed"
+        },
+        {
+          "name": "评审修的五处 output_tokens 只收有限非负数：字符串/NaN/Infinity 一律落缺席，不进散文行",
+          "status": "passed"
+        },
+        {
+          "name": "评审修的五处 摘要行两种原因各自成句（不出现「中止（，停止原因」这种半截括号）",
+          "status": "passed"
+        },
+        {
+          "name": "非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） openai 非流式（摘要器走的那一支）：finish_reason=length ⇒ 事件照落",
+          "status": "passed"
+        },
+        {
+          "name": "非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） 负控：非流式 stop ⇒ 不落（摘要是摘要，不是每份都被砍）",
+          "status": "passed"
+        },
+        {
+          "name": "非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） openai 非流式：finish_reason 缺席 ⇒ 落一条 turn_stop_missing（观测 only）",
+          "status": "passed"
+        },
+        {
+          "name": "非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） gemini：candidates 缺席、只有 promptFeedback.blockReason ⇒ SAFETY 看得见",
+          "status": "passed"
+        },
+        {
+          "name": "非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） gemini 负控：promptFeedback 里没 blockReason ⇒ 不落（缺读数 ≠ 被拦）",
+          "status": "passed"
+        },
+        {
+          "name": "非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） 两个字段都在时以 candidates 的为准（更具体：它说的是这一条候选，blockReason 说的是整段输入）",
+          "status": "passed"
+        },
+        {
+          "name": "非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） 穿链：非流式响应 → 摘要器 → out.truncated（收了不声张 = 没收，「两头断」第 10 次防线）",
+          "status": "passed"
+        },
+        {
+          "name": "非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） 负控：答完的摘要 ⇒ truncated 字段缺席（恒 truthy 会把压缩整条闸死）",
+          "status": "passed"
+        }
+      ],
+      "passed": 59,
+      "failed": 0
+    },
+    "status": "ready",
+    "historicalPatchSha256": "6b6c57754de23e2203722ab9045aeabec94a5fdd4d4de016aa6cd3378598de89",
+    "referencePatchSha256": "f2d43689d08976e42e30b56ab7db0f7d3ce298d4a949bb2e0d5bb57e4c6c61ac",
+    "protectedHashes": {
+      "tests/run-visible.mjs": "dd6dc169066291a96c61e13ff7c8b93c5a767ca8921563afe99c20b4b2dfcf3a",
+      "tests/event-registry.ts": "48077e86b554442b8ae68ae2180ec5391288d80a041cbe60b71f2fb42449c986",
+      "tests/loop-truncation-repair.test.ts": "c28fe379eb883a29577e8285be0d1fede68fb34f26657d007549c1f5835d3984",
+      "tests/app-fixture-lock.ts": "fc181a87fee1446f5c754884c38cf3e1e942271301cc18eb9b3a31eba7135588",
+      "tests/vitest.config.ts": "0bd3168e13faf09d93ad75fa02781961d15862cb92be478f3c1c79972aea3e20",
+      "tests/helpers/real-corpus.ts": "95cdb745e120760c2d7b9bde0cf2e7b2bcdb55fc4eccbb771951e17902c29820",
+      "tests/helpers/memory-inject-mock.ts": "97e81a7f6a0920ceb8fa67636c7a3255b6c84359d21f179e20eca1c2e8c8245a",
+      "tests/helpers/stream-equals.ts": "5addf8cb59ea0ea7bd45eb43bf4945ebc689256a803fa73a1167d2fad9565ad8",
+      "package.json": "eeba3244b31061bd2733b712668afaacd879b7e951cc5a8b1501a4c47a7f4023"
+    }
+  },
+  {
+    "id": "C3-steering-stagnation",
+    "sourceCommit": "0d19036",
+    "sourcePaths": [
+      "src/agent/loop.ts"
+    ],
+    "visible": "tests/steering-injection.test.ts",
+    "hidden": [
+      "tests/loop-no-progress.test.ts"
+    ],
+    "seed": {
+      "exitCode": 1,
+      "rows": [
+        {
+          "name": "轮中插话不改写轮界（交付断言的命门） ★ 带 origin:steering 的 user_message 之后，本轮承诺仍然算数",
+          "status": "passed"
+        },
+        {
+          "name": "轮中插话不改写轮界（交付断言的命门） ★ 反面哨兵：用户真开新一轮（无 origin）时，上一轮的承诺不跨轮",
+          "status": "passed"
+        },
+        {
+          "name": "轮中插话不改写轮界（交付断言的命门） sidechat / goal 来源照旧开新轮（只有 steering 是例外，别顺手放过别的 kind）",
+          "status": "passed"
+        },
+        {
+          "name": "轮中插话不改写轮界（交付断言的命门） worker 的插话**根本不参与**父会话轮界（既有口径：先按 worker 归因摘掉）",
+          "status": "passed"
+        },
+        {
+          "name": "轮中插话不改写轮界（交付断言的命门） 判定按 kind 分支，不按文本：正文里恰好写着「插话」也不算",
+          "status": "passed"
+        },
+        {
+          "name": "loop 的注入位：落在 tool_result 之后、下一次请求之前 插话进第 2 次请求，且事件序在 tool_result 之后",
+          "status": "passed"
+        },
+        {
+          "name": "loop 的注入位：落在 tool_result 之后、下一次请求之前 投影次序合法：user → assistant(tool_call) → tool → user（不拆 tool 配对）",
+          "status": "passed"
+        },
+        {
+          "name": "loop 的注入位：落在 tool_result 之后、下一次请求之前 缺省不传盒子 = 零行为：只有一条 user_message、零插话",
+          "status": "passed"
+        },
+        {
+          "name": "loop 的注入位：落在 tool_result 之后、下一次请求之前 空插话不落事件（误触不该变成一条空洞的指令）",
+          "status": "passed"
+        },
+        {
+          "name": "loop 的注入位：落在 tool_result 之后、下一次请求之前 取消后迟到的那条插话既不落事件、也不再买一次请求",
+          "status": "passed"
+        },
+        {
+          "name": "通道（界面 → loop 那只盒子） push/take 的取出即清空：同一条不会被两拍各付一遍 token",
+          "status": "passed"
+        },
+        {
+          "name": "通道（界面 → loop 那只盒子） 同一拍连说几句 ⇒ 一次取走全部（顺序保留）",
+          "status": "passed"
+        },
+        {
+          "name": "通道（界面 → loop 那只盒子） 纯空白 / 空串不进货（误触不该变成一条空洞的指令）",
+          "status": "passed"
+        },
+        {
+          "name": "通道（界面 → loop 那只盒子） 超帽截断**并保留**，且正文里说清被截过（不静默截）",
+          "status": "passed"
+        },
+        {
+          "name": "通道（界面 → loop 那只盒子） 首尾空白被去掉（人打字常带换行，不该原样进模型）",
+          "status": "passed"
+        },
+        {
+          "name": "第 9 点与 R1（验证停滞）的交点 ★ 两次同签名红之间用户插了话 ⇒ **不喊停滞**（目标可能已被改写）",
+          "status": "failed"
+        },
+        {
+          "name": "第 9 点与 R1（验证停滞）的交点 ★ 反面：中间没插话 ⇒ 照旧喊停滞（这条抑制不是把判据关掉）",
+          "status": "passed"
+        },
+        {
+          "name": "插话与压缩：它必须活过每一次压缩 ★ keepFirstSet 受护集含插话（它靠 user_message 这条广义判据，不是靠运气）",
+          "status": "passed"
+        },
+        {
+          "name": "插话与压缩：它必须活过每一次压缩 真实压缩之后，插话仍在模型面（不是只在受护名单里挂着）",
+          "status": "passed"
+        }
+      ],
+      "passed": 18,
+      "failed": 1
+    },
+    "reference": {
+      "exitCode": 0,
+      "rows": [
+        {
+          "name": "M10② 无进展阶梯接进主循环（no-progress.ts 的首个生产消费者） 同一验证结论连红 2 次且中间无写 ⇒ 第 2 拍就把 [no-progress] 回注给模型；第 1 拍一个字不加",
+          "status": "passed"
+        },
+        {
+          "name": "M10② 无进展阶梯接进主循环（no-progress.ts 的首个生产消费者） 同一 rules 组合只回注一次（第 3 拍不再叠同一句话）",
+          "status": "passed"
+        },
+        {
+          "name": "M10② 无进展阶梯接进主循环（no-progress.ts 的首个生产消费者） 两拍红之间**有过成功的写** ⇒ 不算停滞（那是在换路子试），一个字都不加",
+          "status": "passed"
+        },
+        {
+          "name": "M10② 无进展阶梯接进主循环（no-progress.ts 的首个生产消费者） 绿拍零行为：验证通过就直接收束，不加任何注记",
+          "status": "passed"
+        },
+        {
+          "name": "M10② 无进展阶梯接进主循环（no-progress.ts 的首个生产消费者） 只加一行文本：不新增事件类型、不多要一轮、不改 verify 语义",
+          "status": "passed"
+        },
+        {
+          "name": "轮中插话不改写轮界（交付断言的命门） ★ 带 origin:steering 的 user_message 之后，本轮承诺仍然算数",
+          "status": "passed"
+        },
+        {
+          "name": "轮中插话不改写轮界（交付断言的命门） ★ 反面哨兵：用户真开新一轮（无 origin）时，上一轮的承诺不跨轮",
+          "status": "passed"
+        },
+        {
+          "name": "轮中插话不改写轮界（交付断言的命门） sidechat / goal 来源照旧开新轮（只有 steering 是例外，别顺手放过别的 kind）",
+          "status": "passed"
+        },
+        {
+          "name": "轮中插话不改写轮界（交付断言的命门） worker 的插话**根本不参与**父会话轮界（既有口径：先按 worker 归因摘掉）",
+          "status": "passed"
+        },
+        {
+          "name": "轮中插话不改写轮界（交付断言的命门） 判定按 kind 分支，不按文本：正文里恰好写着「插话」也不算",
+          "status": "passed"
+        },
+        {
+          "name": "loop 的注入位：落在 tool_result 之后、下一次请求之前 插话进第 2 次请求，且事件序在 tool_result 之后",
+          "status": "passed"
+        },
+        {
+          "name": "loop 的注入位：落在 tool_result 之后、下一次请求之前 投影次序合法：user → assistant(tool_call) → tool → user（不拆 tool 配对）",
+          "status": "passed"
+        },
+        {
+          "name": "loop 的注入位：落在 tool_result 之后、下一次请求之前 缺省不传盒子 = 零行为：只有一条 user_message、零插话",
+          "status": "passed"
+        },
+        {
+          "name": "loop 的注入位：落在 tool_result 之后、下一次请求之前 空插话不落事件（误触不该变成一条空洞的指令）",
+          "status": "passed"
+        },
+        {
+          "name": "loop 的注入位：落在 tool_result 之后、下一次请求之前 取消后迟到的那条插话既不落事件、也不再买一次请求",
+          "status": "passed"
+        },
+        {
+          "name": "通道（界面 → loop 那只盒子） push/take 的取出即清空：同一条不会被两拍各付一遍 token",
+          "status": "passed"
+        },
+        {
+          "name": "通道（界面 → loop 那只盒子） 同一拍连说几句 ⇒ 一次取走全部（顺序保留）",
+          "status": "passed"
+        },
+        {
+          "name": "通道（界面 → loop 那只盒子） 纯空白 / 空串不进货（误触不该变成一条空洞的指令）",
+          "status": "passed"
+        },
+        {
+          "name": "通道（界面 → loop 那只盒子） 超帽截断**并保留**，且正文里说清被截过（不静默截）",
+          "status": "passed"
+        },
+        {
+          "name": "通道（界面 → loop 那只盒子） 首尾空白被去掉（人打字常带换行，不该原样进模型）",
+          "status": "passed"
+        },
+        {
+          "name": "第 9 点与 R1（验证停滞）的交点 ★ 两次同签名红之间用户插了话 ⇒ **不喊停滞**（目标可能已被改写）",
+          "status": "passed"
+        },
+        {
+          "name": "第 9 点与 R1（验证停滞）的交点 ★ 反面：中间没插话 ⇒ 照旧喊停滞（这条抑制不是把判据关掉）",
+          "status": "passed"
+        },
+        {
+          "name": "插话与压缩：它必须活过每一次压缩 ★ keepFirstSet 受护集含插话（它靠 user_message 这条广义判据，不是靠运气）",
+          "status": "passed"
+        },
+        {
+          "name": "插话与压缩：它必须活过每一次压缩 真实压缩之后，插话仍在模型面（不是只在受护名单里挂着）",
+          "status": "passed"
+        }
+      ],
+      "passed": 24,
+      "failed": 0
+    },
+    "status": "ready",
+    "historicalPatchSha256": "dd0338a0de7ded6b201e0b14ecdbc1f9332598f343292ea4f9f672a862abda6e",
+    "referencePatchSha256": "df60dad647c1fd0e07b82e116140c0d442c65ab45d68e8764f5f9bb1ee88bda4",
+    "protectedHashes": {
+      "tests/run-visible.mjs": "e3f081e6138406bcc9ba1dc51b21073494e21d5538a72064646b83cd694db3b8",
+      "tests/event-registry.ts": "48077e86b554442b8ae68ae2180ec5391288d80a041cbe60b71f2fb42449c986",
+      "tests/app-fixture-lock.ts": "fc181a87fee1446f5c754884c38cf3e1e942271301cc18eb9b3a31eba7135588",
+      "tests/steering-injection.test.ts": "3afa4888b1da99d434b23a816878e55c81e4e86282a97c0a06131f42d21a70b7",
+      "tests/vitest.config.ts": "0bd3168e13faf09d93ad75fa02781961d15862cb92be478f3c1c79972aea3e20",
+      "tests/helpers/real-corpus.ts": "95cdb745e120760c2d7b9bde0cf2e7b2bcdb55fc4eccbb771951e17902c29820",
+      "tests/helpers/memory-inject-mock.ts": "97e81a7f6a0920ceb8fa67636c7a3255b6c84359d21f179e20eca1c2e8c8245a",
+      "tests/helpers/stream-equals.ts": "5addf8cb59ea0ea7bd45eb43bf4945ebc689256a803fa73a1167d2fad9565ad8",
+      "package.json": "042d3a58fd8db4de303533bfb457354e7d86eca1c757f15bd8f812ec806da65d"
+    }
+  },
+  {
+    "id": "C4-provider-overload",
+    "sourceCommit": "fcd1437",
+    "sourcePaths": [
+      "src/providers/anthropic.ts",
+      "src/providers/gemini.ts"
+    ],
+    "visible": "tests/provider-instream-retry.test.ts",
+    "hidden": [
+      "tests/provider-stream-lifecycle.test.ts"
+    ],
+    "seed": {
+      "exitCode": 1,
+      "rows": [
+        {
+          "name": "OpenAI 兼容：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完",
+          "status": "passed"
+        },
+        {
+          "name": "OpenAI 兼容：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）",
+          "status": "passed"
+        },
+        {
+          "name": "OpenAI 兼容：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）",
+          "status": "passed"
+        },
+        {
+          "name": "OpenAI 兼容：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转",
+          "status": "passed"
+        },
+        {
+          "name": "OpenAI 兼容：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次",
+          "status": "passed"
+        },
+        {
+          "name": "Anthropic：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完",
+          "status": "failed"
+        },
+        {
+          "name": "Anthropic：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）",
+          "status": "passed"
+        },
+        {
+          "name": "Anthropic：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）",
+          "status": "passed"
+        },
+        {
+          "name": "Anthropic：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转",
+          "status": "failed"
+        },
+        {
+          "name": "Anthropic：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次",
+          "status": "passed"
+        },
+        {
+          "name": "Gemini：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完",
+          "status": "failed"
+        },
+        {
+          "name": "Gemini：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）",
+          "status": "passed"
+        },
+        {
+          "name": "Gemini：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）",
+          "status": "passed"
+        },
+        {
+          "name": "Gemini：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转",
+          "status": "failed"
+        },
+        {
+          "name": "Gemini：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次",
+          "status": "passed"
+        },
+        {
+          "name": "三家共用同一份判据（`retry.ts`），不许各抄一份名字表 数值优先：字符串形式的 502 也算可重试（OpenRouter 实测 `\"type\": \"502\"`）",
+          "status": "passed"
+        },
+        {
+          "name": "三家共用同一份判据（`retry.ts`），不许各抄一份名字表 名字表覆盖三家的过载/限流/可用性形状（大小写不敏感）",
+          "status": "passed"
+        },
+        {
+          "name": "三家共用同一份判据（`retry.ts`），不许各抄一份名字表 请求本身的问题一律不可重放（400/401/403 家族与协议错）",
+          "status": "passed"
+        },
+        {
+          "name": "三家共用同一份判据（`retry.ts`），不许各抄一份名字表 `StreamFailure` 的 retryable 是唯一出口：非 StreamFailure 的未知形状按可重放处理",
+          "status": "passed"
+        }
+      ],
+      "passed": 15,
+      "failed": 4
+    },
+    "reference": {
+      "exitCode": 0,
+      "rows": [
+        {
+          "name": "OpenAI 兼容：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完",
+          "status": "passed"
+        },
+        {
+          "name": "OpenAI 兼容：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）",
+          "status": "passed"
+        },
+        {
+          "name": "OpenAI 兼容：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）",
+          "status": "passed"
+        },
+        {
+          "name": "OpenAI 兼容：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转",
+          "status": "passed"
+        },
+        {
+          "name": "OpenAI 兼容：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次",
+          "status": "passed"
+        },
+        {
+          "name": "Anthropic：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完",
+          "status": "passed"
+        },
+        {
+          "name": "Anthropic：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）",
+          "status": "passed"
+        },
+        {
+          "name": "Anthropic：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）",
+          "status": "passed"
+        },
+        {
+          "name": "Anthropic：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转",
+          "status": "passed"
+        },
+        {
+          "name": "Anthropic：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次",
+          "status": "passed"
+        },
+        {
+          "name": "Gemini：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完",
+          "status": "passed"
+        },
+        {
+          "name": "Gemini：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）",
+          "status": "passed"
+        },
+        {
+          "name": "Gemini：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）",
+          "status": "passed"
+        },
+        {
+          "name": "Gemini：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转",
+          "status": "passed"
+        },
+        {
+          "name": "Gemini：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次",
+          "status": "passed"
+        },
+        {
+          "name": "三家共用同一份判据（`retry.ts`），不许各抄一份名字表 数值优先：字符串形式的 502 也算可重试（OpenRouter 实测 `\"type\": \"502\"`）",
+          "status": "passed"
+        },
+        {
+          "name": "三家共用同一份判据（`retry.ts`），不许各抄一份名字表 名字表覆盖三家的过载/限流/可用性形状（大小写不敏感）",
+          "status": "passed"
+        },
+        {
+          "name": "三家共用同一份判据（`retry.ts`），不许各抄一份名字表 请求本身的问题一律不可重放（400/401/403 家族与协议错）",
+          "status": "passed"
+        },
+        {
+          "name": "三家共用同一份判据（`retry.ts`），不许各抄一份名字表 `StreamFailure` 的 retryable 是唯一出口：非 StreamFailure 的未知形状按可重放处理",
+          "status": "passed"
+        },
+        {
+          "name": "OpenAI 兼容响应流生命周期 消费者在 text 输出后提前结束，也取消响应体并释放读取锁",
+          "status": "passed"
+        },
+        {
+          "name": "OpenAI 兼容响应流生命周期 消费者在 thinking 输出后提前结束，也取消响应体并释放读取锁",
+          "status": "passed"
+        },
+        {
+          "name": "OpenAI 兼容响应流生命周期 消费者在 tool 输出后提前结束，也取消响应体并释放读取锁",
+          "status": "passed"
+        },
+        {
+          "name": "OpenAI 兼容响应流生命周期 完整流式响应在计量中记录为成功，并保留累计 usage",
+          "status": "passed"
+        },
+        {
+          "name": "OpenAI 兼容响应流生命周期 损坏的帧仍然报错并记为失败，不重试协议错误",
+          "status": "passed"
+        },
+        {
+          "name": "OpenAI 兼容响应流生命周期 调用方取消仍记为取消，退出时释放响应体",
+          "status": "passed"
+        },
+        {
+          "name": "OpenAI 兼容响应流生命周期 reasoning_content 已展示后收到服务端错误，不重放已产出的思考",
+          "status": "passed"
+        },
+        {
+          "name": "OpenAI 兼容响应流生命周期 reasoning 已展示后收到服务端错误，不重放已产出的思考",
+          "status": "passed"
+        },
+        {
+          "name": "OpenAI 兼容响应流生命周期 尚未产出内容的服务端错误仍可重试，恢复后仅交付一次正文",
+          "status": "passed"
+        },
+        {
+          "name": "真实 HTTP 响应连接回收 消费者提前结束后，服务端能观察到响应连接关闭",
+          "status": "passed"
+        },
+        {
+          "name": "请求计量逐笔覆盖真实传输尝试 HTTP 失败后恢复，保留失败与成功两笔记录",
+          "status": "passed"
+        },
+        {
+          "name": "请求计量逐笔覆盖真实传输尝试 HTTP 重试耗尽时每次请求都留痕，不把三次失败并成一次",
+          "status": "passed"
+        },
+        {
+          "name": "请求计量逐笔覆盖真实传输尝试 网络错误后的重试也各自计量",
+          "status": "passed"
+        },
+        {
+          "name": "请求计量逐笔覆盖真实传输尝试 非流式请求同样逐次计量，并保留摘要类别",
+          "status": "passed"
+        },
+        {
+          "name": "请求计量逐笔覆盖真实传输尝试 SSE 失败尝试的 usage 不会混入下一次请求（后续上报=false）",
+          "status": "passed"
+        },
+        {
+          "name": "请求计量逐笔覆盖真实传输尝试 SSE 失败尝试的 usage 不会混入下一次请求（后续上报=true）",
+          "status": "passed"
+        },
+        {
+          "name": "请求计量逐笔覆盖真实传输尝试 调用前已取消时，不产生未发送请求的计量记录",
+          "status": "passed"
+        },
+        {
+          "name": "请求计量逐笔覆盖真实传输尝试 本地 HTTP 服务收到两次请求时，计量也准确记录两笔",
+          "status": "passed"
+        },
+        {
+          "name": "流内重试的解码与取消边界 失败响应残留 UTF-8 起始字节 228，不污染下一次成功响应",
+          "status": "passed"
+        },
+        {
+          "name": "流内重试的解码与取消边界 失败响应残留 UTF-8 起始字节 240，不污染下一次成功响应",
+          "status": "passed"
+        },
+        {
+          "name": "流内重试的解码与取消边界 同一次响应内的 UTF-8 字符跨块时仍能正确拼接",
+          "status": "passed"
+        },
+        {
+          "name": "流内重试的解码与取消边界 退避期间取消立即结束等待并保留原始原因：Error: cancelled during backoff",
+          "status": "passed"
+        },
+        {
+          "name": "流内重试的解码与取消边界 退避期间取消立即结束等待并保留原始原因：cancelled during backoff",
+          "status": "passed"
+        }
+      ],
+      "passed": 42,
+      "failed": 0
+    },
+    "status": "ready",
+    "historicalPatchSha256": "041d2305a49a7eef24124702fd3dbf66a9092741defa5ebee16b7a7795e69b1c",
+    "referencePatchSha256": "0032b3fd420998a5580f03be2b5ada32efa778c6fdba6f8cf3e9a8c43863f0d4",
+    "protectedHashes": {
+      "tests/run-visible.mjs": "49abaf98058340fe44af11897bcb4401ae5f72397bd0508e0ab2dd5360e698d6",
+      "tests/event-registry.ts": "48077e86b554442b8ae68ae2180ec5391288d80a041cbe60b71f2fb42449c986",
+      "tests/provider-instream-retry.test.ts": "1cb742f159703fb8beaa1f55bfac669aeb7fe2ec9e8495280ee8d6b6cc644036",
+      "tests/app-fixture-lock.ts": "fc181a87fee1446f5c754884c38cf3e1e942271301cc18eb9b3a31eba7135588",
+      "tests/vitest.config.ts": "0bd3168e13faf09d93ad75fa02781961d15862cb92be478f3c1c79972aea3e20",
+      "tests/helpers/real-corpus.ts": "95cdb745e120760c2d7b9bde0cf2e7b2bcdb55fc4eccbb771951e17902c29820",
+      "tests/helpers/memory-inject-mock.ts": "97e81a7f6a0920ceb8fa67636c7a3255b6c84359d21f179e20eca1c2e8c8245a",
+      "tests/helpers/stream-equals.ts": "5addf8cb59ea0ea7bd45eb43bf4945ebc689256a803fa73a1167d2fad9565ad8",
+      "package.json": "af3b37ee75aa59c4fd5cce0318f312964fa922d135a58918bc2533893250a1ed"
+    }
+  },
+  {
+    "id": "C5-lsp-language",
+    "sourceCommit": "e1b9819",
+    "sourcePaths": [
+      "src/agent/plugins/index.ts",
+      "src/tools/lsp.ts"
+    ],
+    "visible": "tests/lsp-language-id.test.ts",
+    "hidden": [
+      "tests/plugin-lsp-activation.test.ts"
+    ],
+    "seed": {
+      "exitCode": 1,
+      "rows": [
+        {
+          "name": "defaultLanguageId（缺省启发式，存量行为不变） 六个 JS/TS 后缀 ⇒ typescript；其余 ⇒ plaintext",
+          "status": "failed"
+        },
+        {
+          "name": "languageIdMap（配置 → 查表） 只收非空字符串值；坏形状按缺格处理（不抛、不污染查表）",
+          "status": "failed"
+        },
+        {
+          "name": "didOpen 的 languageId 走服务器声明（真发出去的那个值） 配了 extensionToLanguage ⇒ 非 JS 文件拿到声明的 languageId（不再是 plaintext）",
+          "status": "failed"
+        },
+        {
+          "name": "didOpen 的 languageId 走服务器声明（真发出去的那个值） 同族：.go ⇒ go、.rs ⇒ rust（两个 server 各管各的，表不串）",
+          "status": "failed"
+        },
+        {
+          "name": "didOpen 的 languageId 走服务器声明（真发出去的那个值） 没配 extensionToLanguage ⇒ 回落缺省启发式（存量配置一个字不变）",
+          "status": "passed"
+        },
+        {
+          "name": "didOpen 的 languageId 走服务器声明（真发出去的那个值） 查表按原样键：配置写 .py 只命中 .py，别的扩展仍回落",
+          "status": "passed"
+        }
+      ],
+      "passed": 2,
+      "failed": 4
+    },
+    "reference": {
+      "exitCode": 0,
+      "rows": [
+        {
+          "name": "defaultLanguageId（缺省启发式，存量行为不变） 六个 JS/TS 后缀 ⇒ typescript；其余 ⇒ plaintext",
+          "status": "passed"
+        },
+        {
+          "name": "languageIdMap（配置 → 查表） 只收非空字符串值；坏形状按缺格处理（不抛、不污染查表）",
+          "status": "passed"
+        },
+        {
+          "name": "didOpen 的 languageId 走服务器声明（真发出去的那个值） 配了 extensionToLanguage ⇒ 非 JS 文件拿到声明的 languageId（不再是 plaintext）",
+          "status": "passed"
+        },
+        {
+          "name": "didOpen 的 languageId 走服务器声明（真发出去的那个值） 同族：.go ⇒ go、.rs ⇒ rust（两个 server 各管各的，表不串）",
+          "status": "passed"
+        },
+        {
+          "name": "didOpen 的 languageId 走服务器声明（真发出去的那个值） 没配 extensionToLanguage ⇒ 回落缺省启发式（存量配置一个字不变）",
+          "status": "passed"
+        },
+        {
+          "name": "didOpen 的 languageId 走服务器声明（真发出去的那个值） 查表按原样键：配置写 .py 只命中 .py，别的扩展仍回落",
+          "status": "passed"
+        },
+        {
+          "name": "插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） 受信插件的服务器按 scoped id 注册；transport:socket 那条不占名额",
+          "status": "passed"
+        },
+        {
+          "name": "插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） §9.8 里运行时还没兑现的字段，装载期当场说出来（不静默收下）",
+          "status": "passed"
+        },
+        {
+          "name": "插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） 未过信任门的插件不注册（server.command 是任意可执行文件，信任门与 hook/MCP 同口径）",
+          "status": "passed"
+        },
+        {
+          "name": "插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） 宿主没开 LSP 总开关 ⇒ 注册了也不生效（插件不能替用户把 LSP 打开）",
+          "status": "passed"
+        },
+        {
+          "name": "插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） 真跳：${PLUGIN_ROOT} 展开成真路径，lsp 工具 hover 回显出 initializationOptions",
+          "status": "passed"
+        },
+        {
+          "name": "插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） shutdown 摘干净：注册表不留跨会话残留（下一个会话不该继承上一个插件的服务器）",
+          "status": "passed"
+        },
+        {
+          "name": "插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） §9.8 的 diagnostics 开关真兑现：开 ⇒ 插件服务器推的 ERROR 回流；关 ⇒ 一个字都不回",
+          "status": "passed"
+        },
+        {
+          "name": "runAgent 真的会激活插件 LSP（§9.8 那一跳不是只有测试在调） runAgent 里注册的 id 与面板口径同源；未激活（把那一行摘掉）就是红",
+          "status": "passed"
+        }
+      ],
+      "passed": 14,
+      "failed": 0
+    },
+    "status": "ready",
+    "historicalPatchSha256": "21f3037a45fe7694988d4868f8e52a95c97460381f8723321e45e0ac145a7fbe",
+    "referencePatchSha256": "5c3e58cbf71e3ce4ccb1e9b69a9a412225b7bf6cfe179c7a0babccc62949a357",
+    "protectedHashes": {
+      "tests/run-visible.mjs": "04cde375ad72ee4e21ad26cc64e42367e7ad2abeccdd222c058535a39d260793",
+      "tests/event-registry.ts": "48077e86b554442b8ae68ae2180ec5391288d80a041cbe60b71f2fb42449c986",
+      "tests/lsp-language-id.test.ts": "be41ebebda4d25519c606e9e28ee8763c19c66e8f246aa7243135a0721f7a45b",
+      "tests/app-fixture-lock.ts": "fc181a87fee1446f5c754884c38cf3e1e942271301cc18eb9b3a31eba7135588",
+      "tests/vitest.config.ts": "0bd3168e13faf09d93ad75fa02781961d15862cb92be478f3c1c79972aea3e20",
+      "tests/helpers/real-corpus.ts": "95cdb745e120760c2d7b9bde0cf2e7b2bcdb55fc4eccbb771951e17902c29820",
+      "tests/helpers/memory-inject-mock.ts": "97e81a7f6a0920ceb8fa67636c7a3255b6c84359d21f179e20eca1c2e8c8245a",
+      "tests/helpers/stream-equals.ts": "5addf8cb59ea0ea7bd45eb43bf4945ebc689256a803fa73a1167d2fad9565ad8",
+      "package.json": "0416bf2b949c45bb01d02186b1b9b6053c96c21d6d38a5f609fd4303f5fb3d50"
+    }
+  },
+  {
+    "id": "C6-mutation-order",
+    "sourceCommit": "b75c11d",
+    "sourcePaths": [
+      "src/main/session-repository.ts"
+    ],
+    "visible": "tests/session-mutation-order.test.ts",
+    "hidden": [
+      "tests/session-reference-repository.test.ts"
+    ],
+    "seed": {
+      "exitCode": 1,
+      "rows": [
+        {
+          "name": "withSessionMutation：入链按调用顺序，与 realpath 回程快慢无关 第一次调用的 realpath 慢 30ms ⇒ 第二个 mutation 仍排在它后面（旧实现会抢跑）",
+          "status": "failed"
+        }
+      ],
+      "passed": 0,
+      "failed": 1
+    },
+    "reference": {
+      "exitCode": 0,
+      "rows": [
+        {
+          "name": "withSessionMutation：入链按调用顺序，与 realpath 回程快慢无关 第一次调用的 realpath 慢 30ms ⇒ 第二个 mutation 仍排在它后面（旧实现会抢跑）",
+          "status": "passed"
+        },
+        {
+          "name": "resolveSessionRef：同名会话必须精确寻址 无 workspace 且两个根同名 ⇒ 拒绝；显式 workspace 各自命中",
+          "status": "passed"
+        },
+        {
+          "name": "resolveSessionRef：同名会话必须精确寻址 未登记工作区 / 不存在的会话 / 空 id 都 fail closed",
+          "status": "passed"
+        },
+        {
+          "name": "父依赖：直接 + 传递，读不动不算无依赖 parent ← child ← grand：删除 parent 前能列出两代子会话；叶子可删",
+          "status": "passed"
+        },
+        {
+          "name": "父依赖：直接 + 传递，读不动不算无依赖 依赖文件读不动 ⇒ 抛错，不当成没有依赖",
+          "status": "passed"
+        },
+        {
+          "name": "withSessionMutation：根级临界区 进程内串行：第二个 mutation 等第一个结束才开始",
+          "status": "passed"
+        },
+        {
+          "name": "withSessionMutation：根级临界区 跨进程：锁被占用时另一个进程拿不到；结束后锁文件不残留",
+          "status": "passed"
+        },
+        {
+          "name": "withSessionMutation：根级临界区 崩溃遗留的锁：显式报「需人工确认」，不自动删锁",
+          "status": "passed"
+        }
+      ],
+      "passed": 8,
+      "failed": 0
+    },
+    "status": "ready",
+    "historicalPatchSha256": "14d0f387634e45a77ed6c437377f7d87bd3f3f68181d7c3488b7205c4462e118",
+    "referencePatchSha256": "98c78e0d2b142e3ee4589381e093605e8d93df377c371e7aa7b30e08f1d79358",
+    "protectedHashes": {
+      "tests/run-visible.mjs": "c13451bd1c518922040b2995f357cfd3769ea78058a45eaa96e535001e5d67f3",
+      "tests/event-registry.ts": "48077e86b554442b8ae68ae2180ec5391288d80a041cbe60b71f2fb42449c986",
+      "tests/session-mutation-order.test.ts": "8dea4e1ced18d21347adcb9b5bbeac45f4e7f8b457eece0a8d020636e8a04130",
+      "tests/app-fixture-lock.ts": "fc181a87fee1446f5c754884c38cf3e1e942271301cc18eb9b3a31eba7135588",
+      "tests/vitest.config.ts": "0bd3168e13faf09d93ad75fa02781961d15862cb92be478f3c1c79972aea3e20",
+      "tests/helpers/real-corpus.ts": "95cdb745e120760c2d7b9bde0cf2e7b2bcdb55fc4eccbb771951e17902c29820",
+      "tests/helpers/memory-inject-mock.ts": "97e81a7f6a0920ceb8fa67636c7a3255b6c84359d21f179e20eca1c2e8c8245a",
+      "tests/helpers/stream-equals.ts": "5addf8cb59ea0ea7bd45eb43bf4945ebc689256a803fa73a1167d2fad9565ad8",
+      "package.json": "cabd19c2a6d63e550068046ee43e5e5c4719f628b9e8bf7cb05bb86d39502f1e"
+    }
+  }
+]

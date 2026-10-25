@@ -62,17 +62,17 @@ $ node --import tsx scripts/gates.ts
       └ [repo-hygiene-check] 四面全绿 ✅（帽：取料 ≤ 70%、src 单文件 ≤ 2600 行、scripts 单文件 ≤ 2600 行、一笔里从树消失的文件 ≤ 4 支；现状站住，后续逐波降帽）
   ▶ head-cert-check …  ❌ head-cert-check    exit=1  160390ms
       ── 失败输出尾 12 行 ──
-        TREE=6455bb2 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-gate-head-cert.lock）
+        TREE=d0708a0 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-gate-head-cert.lock）
         Test Files 1 failed | 459 passed (460)｜Tests 1 failed | 6335 passed (6336)｜exit=1（退出码直接取，不接管道）
         并发判卷=起前 0 套／跑完 0 套（两端独占）
         本趟墙钟 157.58s（同一进程 hrtime 实测·口径＝起跑→汇总那一行，不含提前退出的那些趟）
         贴帽读数（缺省＝config 里的 testTimeout=30000ms）：6336 条里 0 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 5772 条｜标题非字面量（it.each／插值／拼接，按缺省算）382 条｜预算没落到 0 条｜无｜离帽余量最近：tests/m3c.test.ts·M3c pipeline 哑 sequencer（零 LLM） 未获 15295ms/25000ms=61%；tests/main-run-routing.test.ts·glm main-session routing uses the  14042ms/30000ms=47%；tests/plugin-trust-revocation.test.ts·撤回插件信任后旧执行面立即失效 撤回时关闭在途 MCP 请求，服务端 93ms/200ms=47%
-        逐条日志：/tmp/dsh-head-cert-6455bb2
+        逐条日志：/tmp/dsh-head-cert-d0708a0
         已回收认证树 .worktrees/gate-head-cert（exit=0）
         常驻残留树=0（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
         本次退出码=1（这是 head-cert 这道门自己的码，不是它跑进去的 test runner 的码）｜红的维：判卷 exit=1、认证门面红 2 道
-        汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-6455bb2/summary.txt
-        可引用读数已落盘（引用墙钟/门耗时前先读它）：outputs/head-cert-6455bb2-2026-10-22-0354/provenance.md
+        汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-d0708a0/summary.txt
+        可引用读数已落盘（引用墙钟/门耗时前先读它）：outputs/head-cert-d0708a0-2026-10-22-0354/provenance.md
       [ELIFECYCLE] Command failed with exit code 1.
       完整输出已落盘： /Users/ze/Downloads/Cairn/deepseek harness/.tmp/gate-failures/head-cert-check.log（这里只贴尾部 12 行）
   ▶ mutate-verify …  ❌ mutate-verify      exit=1  1998764ms
@@ -92,7 +92,7 @@ $ node --import tsx scripts/gates.ts
       完整输出已落盘： /Users/ze/Downloads/Cairn/deepseek harness/.tmp/gate-failures/mutate-verify.log（这里只贴尾部 12 行）
   ▶ mutate-needles-check …  ❌ mutate-needles-check exit=1  10383ms
       ── 失败输出尾 12 行 ──
-      ❌ respawn-forward-back-to-field-list — src/agent/orchestrator.ts — 针脚已不在源文件里（变异必然不生效——多半是被锚定的实现搬走了，改指它）："    return await this.spawn(respawnSpawnArgs(args), ctx);" ｜谁搬走的：971fe18c feat: 桌面 v3 对齐、逐名判卷、路由体积面三批一起落库（第 639/640/641 页）
+      ❌ respawn-forward-back-to-field-list — src/agent/orchestrator.ts — 针脚已不在源文件里（变异必然不生效——多半是被锚定的实现搬走了，改指它）："    return await this.spawn(respawnSpawnArgs(args), ctx);" ｜谁搬走的：d0708a0 feat: 桌面 v3 对齐、逐名判卷、路由体积面三批一起落库（第 639/640/641 页）
       ❌ desktop-thinking-not-carried-onto-final — apps/desktop/src/renderer/projections.ts — 针脚已不在源文件里（变异必然不生效——多半是被锚定的实现搬走了，改指它）："        const carriedThinking = [...thinkingBuckets.values()" ｜谁搬走的：0bab06a8 第 446 页：Wave 1 收口——把判卷面的欠账一次入库（190+2 条路径，入库前树是绿的）
       ❌ desktop-protocol-mismatch-gate-inverted — apps/desktop/src/renderer/App.tsx — 针脚已不在源文件里（变异必然不生效——多半是被锚定的实现搬走了，改指它）："        if (live !== __IPC_PROTOCOL_VERSION__) {" ｜谁搬走的：0bab06a8 第 446 页：Wave 1 收口——把判卷面的欠账一次入库（190+2 条路径，入库前树是绿的）
       ℹ️ 静态检未覆盖 1 条（apply 非通行写法）：heldout-install-before-change-list

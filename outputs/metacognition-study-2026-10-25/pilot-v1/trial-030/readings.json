@@ -1,0 +1,169 @@
+[
+ {
+  "r": {
+   "study": {
+    "strategy": "triggered",
+    "seed": 3379046237,
+    "interventions": [
+     {
+      "request": 8,
+      "reason": "validation-failed",
+      "evidenceEvent": 4250
+     }
+    ],
+    "physicalRequests": 8,
+    "outputCap": 4096,
+    "timeoutMs": 120000,
+    "envelopes": [
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 0
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 1
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 1
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 2
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 2
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 3
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 4
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 4
+     }
+    ],
+    "reasoningOutputTokens": 8322
+   },
+   "id": "C6-mutation-order",
+   "name": "C6-mutation-order",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "cn:deepseek-v4.1-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "study: no hidden episode retry",
+   "seconds": 71.167,
+   "requests": 8,
+   "tokensIn": 72851,
+   "tokensOut": 8754,
+   "cny": null,
+   "toolCalls": 6,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 10,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": false,
+   "autoVerifyBeat": true,
+   "autoVerifyBeats": 1,
+   "verifyRecovery": "notRecovered",
+   "namedSets": {
+    "state": "fail",
+    "notGreen": [
+     "withSessionMutation：入链按调用顺序，与 realpath 回程快慢无关 第一次调用的 realpath 慢 30ms ⇒ 第二个 mutation 仍排在它后面（旧实现会抢跑）"
+    ],
+    "broken": [],
+    "unmatched": [],
+    "reasons": [
+     "FAIL_TO_PASS「withSessionMutation：入链按调用顺序，与 realpath 回程快慢无关 第一次调用的 realpath 慢 30ms ⇒ 第二个 mutation 仍排在它后面（旧实现会抢跑）」逐名读到的是 failed ⇒ 该转绿的没绿"
+    ],
+    "sources": [
+     {
+      "command": "pnpm_config_verify_deps_before_run=false pnpm run test",
+      "format": "node-test-tap",
+      "tests": 1,
+      "carried": true,
+      "complete": true
+     }
+    ]
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 858,
+    "procPeak": 6,
+    "cpuMs": 6367,
+    "samples": 141
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": true,
+    "exitCode": 0,
+    "output": "TAP version 13\nok 1 - resolveSessionRef：同名会话必须精确寻址 无 workspace 且两个根同名 ⇒ 拒绝；显式 workspace 各自命中\nok 2 - resolveSessionRef：同名会话必须精确寻址 未登记工作区 / 不存在的会话 / 空 id 都 fail closed\nok 3 - 父依赖：直接 + 传递，读不动不算无依赖 parent ← child ← grand：删除 parent 前能列出两代子会话；叶子可删\nok 4 - 父依赖：直接 + 传递，读不动不算无依赖 依赖文件读不动 ⇒ 抛错，不当成没有依赖\nok 5 - withSessionMutation：根级临界区 进程内串行：第二个 mutation 等第一个结束才开始\nok 6 - withSessionMutation：根级临界区 跨进程：锁被占用时另一个进程拿不到；结束后锁文件不残留\nok 7 - withSessionMutation：根级临界区 崩溃遗留的锁：显式报「需人工确认」，不自动删锁\n1..7\n# tests 7\n# pass 7\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n"
+   },
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "146743c",
+   "ranAt": "2026-10-25T02:57:28.109Z",
+   "maxSteps": 24,
+   "reps": 1,
+   "arm": "triggered",
+   "thinking": "low"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "改动越出 src/",
+    "逐名判卷红〔同一枚退出码分不出这两件事〕：该转绿的没绿：withSessionMutation：入链按调用顺序，与 realpath 回程快慢无关 第一次调用的 realpath 慢 30ms ⇒ 第二个 mutation 仍排在它后面（旧实现会抢跑）"
+   ]
+  },
+  "taskId": "C6-mutation-order"
+ }
+]

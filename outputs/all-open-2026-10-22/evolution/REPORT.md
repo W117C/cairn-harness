@@ -37,7 +37,7 @@
 | 最终类型检查 | 同上 | 0；tsc --noEmit，0 报错 | `typecheck-green.log` |
 | diff 空白检查 | `git diff --check -- src/main/evolution tests/evolution-open-closeout.test.ts` | 0 | 本批工具输出 |
 
-未跑全量 core、desktop、gates、mutate-verify 或 head-cert-check；由主代理统一验证。当前基点 HEAD 是 `6455bb205da19acc7ced2c9d9d811fb08b347c25`，它不包含本批未提交改动。
+未跑全量 core、desktop、gates、mutate-verify 或 head-cert-check；由主代理统一验证。当前基点 HEAD 是 `d0708a0`，它不包含本批未提交改动。
 
 ## 代码审查与真实边界
 

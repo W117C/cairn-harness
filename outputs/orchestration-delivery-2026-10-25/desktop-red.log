@@ -1,0 +1,50 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+ ❯ tests/orchestration-pane.test.tsx (0 test)
+ ❯ tests/orchestration-host.test.ts (1 test | 1 failed) 8ms
+   ❯ desktop orchestration host boundary (1)
+     × persists controls in the explicit workspace/session and rejects unknown addresses 8ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-pane.test.tsx [ tests/orchestration-pane.test.tsx ]
+Error: Cannot find module '../src/renderer/components/OrchestrationPane' imported from /Users/ze/Downloads/Cairn/cairn/apps/desktop/tests/orchestration-pane.test.tsx
+ ❯ tests/orchestration-pane.test.tsx:3:1
+      1| import { renderToStaticMarkup } from "react-dom/server";
+      2| import { describe, expect, it, vi } from "vitest";
+      3| import { buildReadPlan, OrchestrationSnapshotView } from "../src/rende…
+       | ^
+      4| import { validatePlan } from "../../../src/orchestration/validate";
+      5| import type { OrchestrationSnapshot } from "../../../src/main/orchestr…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-host.test.ts > desktop orchestration host boundary > persists controls in the explicit workspace/session and rejects unknown addresses
+AssertionError: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ tests/orchestration-host.test.ts:20:43
+     18|     await writeFile(join(userDataDir, "settings.json"), JSON.stringify…
+     19|     const host = createKernelHost({ workspaces: [workspace], activeWor…
+     20|     expect(typeof host.orchestrationView).toBe("function");
+       |                                           ^
+     21|     cleanup.push(() => host.orchestrationClose());
+     22|     const address = { workspace, sessionId: "first" };
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  1 failed (1)
+   Start at  20:08:38
+   Duration  1.00s (transform 73%, import 25%, tests 1%)
+
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts tests/orchestration-pane.test.tsx tests/orchestration-host.test.ts

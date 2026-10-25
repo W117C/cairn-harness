@@ -1,0 +1,27 @@
+[
+  {
+    "command": "printf changed > node_modules/vitest/vitest.mjs",
+    "status": 1,
+    "output": "/bin/bash: node_modules/vitest/vitest.mjs: Operation not permitted\n"
+  },
+  {
+    "command": "mkdir -p node_modules/.vite-temp; printf allowed > node_modules/.vite-temp/cache",
+    "status": 0,
+    "output": ""
+  },
+  {
+    "command": "rm -r node_modules/vitest",
+    "status": 1,
+    "output": "rm: node_modules/vitest/vitest.mjs: Operation not permitted\nrm: node_modules/vitest: Operation not permitted\n"
+  },
+  {
+    "command": "mv node_modules node_modules-old",
+    "status": 1,
+    "output": "mv: rename node_modules to node_modules-old: Operation not permitted\n"
+  },
+  {
+    "command": "printf source > source.ts",
+    "status": 0,
+    "output": ""
+  }
+]

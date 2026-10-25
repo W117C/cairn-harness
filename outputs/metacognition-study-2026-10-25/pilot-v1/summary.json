@@ -1,0 +1,112 @@
+{
+  "arms": [
+    {
+      "strategy": "triggered",
+      "planned": 6,
+      "attempted": 6,
+      "pass": 3,
+      "fail": 3,
+      "unmeasurable": 0,
+      "pending": 0,
+      "decidablePassRate": 0.5,
+      "totalTokens": null,
+      "unknownUsageRuns": 5,
+      "unknownTimeRuns": 0,
+      "seconds": 400.53000000000003
+    },
+    {
+      "strategy": "high",
+      "planned": 6,
+      "attempted": 6,
+      "pass": 2,
+      "fail": 3,
+      "unmeasurable": 1,
+      "pending": 0,
+      "decidablePassRate": 0.4,
+      "totalTokens": null,
+      "unknownUsageRuns": 3,
+      "unknownTimeRuns": 1,
+      "seconds": null
+    },
+    {
+      "strategy": "random",
+      "planned": 6,
+      "attempted": 6,
+      "pass": 3,
+      "fail": 2,
+      "unmeasurable": 1,
+      "pending": 0,
+      "decidablePassRate": 0.6,
+      "totalTokens": null,
+      "unknownUsageRuns": 5,
+      "unknownTimeRuns": 0,
+      "seconds": 299.26599999999996
+    },
+    {
+      "strategy": "periodic",
+      "planned": 6,
+      "attempted": 6,
+      "pass": 4,
+      "fail": 2,
+      "unmeasurable": 0,
+      "pending": 0,
+      "decidablePassRate": 0.6666666666666666,
+      "totalTokens": null,
+      "unknownUsageRuns": 5,
+      "unknownTimeRuns": 0,
+      "seconds": 406.151
+    },
+    {
+      "strategy": "baseline",
+      "planned": 6,
+      "attempted": 6,
+      "pass": 4,
+      "fail": 2,
+      "unmeasurable": 0,
+      "pending": 0,
+      "decidablePassRate": 0.6666666666666666,
+      "totalTokens": null,
+      "unknownUsageRuns": 5,
+      "unknownTimeRuns": 0,
+      "seconds": 422.533
+    }
+  ],
+  "comparisons": [
+    {
+      "strategy": "triggered",
+      "pairedTrajectories": 6,
+      "pairedTasks": 6,
+      "wins": 0,
+      "losses": 1,
+      "taskMeanCompletionDifference": -0.16666666666666666
+    },
+    {
+      "strategy": "high",
+      "pairedTrajectories": 5,
+      "pairedTasks": 5,
+      "wins": 0,
+      "losses": 1,
+      "taskMeanCompletionDifference": -0.2
+    },
+    {
+      "strategy": "random",
+      "pairedTrajectories": 5,
+      "pairedTasks": 5,
+      "wins": 1,
+      "losses": 1,
+      "taskMeanCompletionDifference": 0
+    },
+    {
+      "strategy": "periodic",
+      "pairedTrajectories": 6,
+      "pairedTasks": 6,
+      "wins": 1,
+      "losses": 1,
+      "taskMeanCompletionDifference": 0
+    }
+  ],
+  "independentTasks": 6,
+  "complete": true,
+  "inference": "pilot-only",
+  "limitation": "Descriptive pilot. Repeated attempts and test assertions are not independent tasks; saturation does not establish equivalence."
+}

@@ -1,0 +1,14 @@
+{
+ "headSha": "146743c",
+ "dirty": 125,
+ "ranAt": "2026-10-24T15:40:50.323Z",
+ "maxSteps": 60,
+ "reps": 1,
+ "system": "base",
+ "arm": "high",
+ "thinking": "high",
+ "model": "cn:glm-5.3-flash",
+ "tasks": [
+  "L32-long-chain"
+ ]
+}

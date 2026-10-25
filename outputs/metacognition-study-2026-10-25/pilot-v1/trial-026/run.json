@@ -1,0 +1,14 @@
+{
+ "headSha": "146743c",
+ "dirty": 142,
+ "ranAt": "2026-10-25T02:52:37.986Z",
+ "maxSteps": 24,
+ "reps": 1,
+ "system": "base",
+ "arm": "periodic",
+ "thinking": "low",
+ "model": "cn:deepseek-v4.1-flash",
+ "tasks": [
+  "C6-mutation-order"
+ ]
+}

@@ -1,0 +1,41 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/reasoning-continuity.test.ts (16 tests | 2 failed) 32ms
+   ❯ final verify request accounting (2)
+     × retains the last paid request usage when verification stops the stream loop 5ms
+     × retains the last paid request usage when verification stops the non-stream loop 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/reasoning-continuity.test.ts > final verify request accounting > retains the last paid request usage when verification stops the stream loop
+ FAIL  tests/reasoning-continuity.test.ts > final verify request accounting > retains the last paid request usage when verification stops the non-stream loop
+AssertionError: expected [] to deeply equal [ ObjectContaining{…} ]
+
+- Expected
++ Received
+
+- [
+-   ObjectContaining {
+-     "inputTokens": 10,
+-     "outputTokens": 8,
+-   },
+- ]
++ []
+
+ ❯ tests/reasoning-continuity.test.ts:152:56
+    150|     expect(fetches).toBe(1);
+    151|     expect(events.some(event=>event.type==='verify_result'&&event.ok))…
+    152|     expect(events.filter(event=>event.type==='usage')).toEqual([expect…
+       |                                                        ^
+    153|   });
+    154| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 14 passed (16)
+   Start at  10:42:58
+   Duration  593ms (transform 75%, import 18%, tests 6%, worker 1%)
+

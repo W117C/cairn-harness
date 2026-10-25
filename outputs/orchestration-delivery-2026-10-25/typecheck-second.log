@@ -1,0 +1,6 @@
+tests/orchestration-provider.test.ts(5,96): error TS2307: Cannot find module '../src/main/orchestration-backend' or its corresponding type declarations.
+tests/orchestration-provider.test.ts(102,90): error TS7006: Parameter '_url' implicitly has an 'any' type.
+tests/orchestration-provider.test.ts(102,96): error TS7006: Parameter 'init' implicitly has an 'any' type.
+[typecheck] 报错文件归因：HEAD 内 0／在飞改动中的 tracked 0／未跟踪草稿 1／工作树状态取不到 0（四档相加＝1，与分母 1 不等就是归因坏了）
+[typecheck] ⚠️ 未跟踪草稿（不属 HEAD 回归，属在飞改动）: tests/orchestration-provider.test.ts
+[typecheck] tracked 面没有报错 ⇒ HEAD 态类型干净（全部报错都在未跟踪草稿里；同 HEAD 开 worktree 跑 tsc 可复核）

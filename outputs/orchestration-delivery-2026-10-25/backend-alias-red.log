@@ -1,0 +1,54 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/orchestration-backend.test.ts (18 tests | 2 failed) 185ms
+   ❯ local orchestration backend (18)
+     × rejects symlink ancestors introduced after production, including aliases inside the workspace 16ms
+     × does not accept an empty backend evidence array as a meaningful check 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-backend.test.ts > local orchestration backend > rejects symlink ancestors introduced after production, including aliases inside the workspace
+AssertionError: promise resolved "{ revision: '2aa935ff43045f2c017c869…' }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "revision": "2aa935ff43045f2c017c8692191c776e6dfafc514f7f3279a80c681fe2c104bb",
+  }
+
+ ❯ tests/orchestration-backend.test.ts:194:52
+    192|     const result = await f.backend.execute(f.req); await f.backend.ver…
+    193|     await mkdir(join(f.workspace, "outside")); await symlink(join(f.wo…
+    194|     await expect(f.backend.deliver!(f.req, result)).rejects.toThrow(/s…
+       |                                                    ^
+    195|     await expect(readFile(join(f.workspace, "outside/answer.txt"))).re…
+    196|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/orchestration-backend.test.ts > local orchestration backend > does not accept an empty backend evidence array as a meaningful check
+AssertionError: expected 'pass' to be 'fail' // Object.is equality
+
+Expected: "fail"
+Received: "pass"
+
+ ❯ tests/orchestration-backend.test.ts:201:34
+    199|     const f = await fixture(); f.options.producer.create = () => scrip…
+    200|     const verification = await f.backend.verify(f.req, await f.backend…
+    201|     expect(verification.verdict).toBe("fail");
+       |                                  ^
+    202|   });
+    203| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 16 passed (18)
+   Start at  20:07:04
+   Duration  608ms (transform 52%, tests 34%, import 13%)
+

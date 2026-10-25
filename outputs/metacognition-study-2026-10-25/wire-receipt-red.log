@@ -1,0 +1,45 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/metacognition-wiring.test.ts (2 tests | 1 failed) 21ms
+   × meters the final capped study request body before the physical fetch 15ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/metacognition-wiring.test.ts > meters the final capped study request body before the physical fetch
+AssertionError: expected { model: 'fixture', …(2) } to match object { max_tokens: 128, thinking: { …(1) } }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "max_tokens": 128,
+-   "thinking": {
+-     "type": "enabled",
++   "messages": [
++     {
++       "content": "fixture",
++       "role": "user",
+      },
++   ],
++   "model": "fixture",
++   "stream": false,
+  }
+
+ ❯ tests/metacognition-wiring.test.ts:41:27
+     39|  for await(const _ of streamGlm([{role:'user',content:'fixture'}],{api…
+     40|   extraBody:{max_tokens:128,thinking:{type:'enabled'}},fetchImpl,meter…
+     41|  expect(JSON.parse(wire)).toMatchObject({max_tokens:128,thinking:{type…
+       |                           ^
+     42|  expect(meter.snapshot().requests[0]).toMatchObject({bodySha256:create…
+     43| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  10:53:05
+   Duration  571ms (transform 77%, import 18%, tests 4%, worker 1%)
+

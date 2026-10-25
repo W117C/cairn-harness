@@ -1,0 +1,27 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/orchestration-backend.test.ts (19 tests | 1 failed) 180ms
+   ❯ local orchestration backend (19)
+     × binds the final report to the revision and gives the independent verifier its exact bytes 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-backend.test.ts > local orchestration backend > binds the final report to the revision and gives the independent verifier its exact bytes
+AssertionError: expected undefined to be defined
+ ❯ tests/orchestration-backend.test.ts:213:20
+    211|     const result = await f.backend.execute(f.req);
+    212|     const report = result.artifacts.find((artifact) => artifact.kind =…
+    213|     expect(report).toBeDefined();
+       |                    ^
+    214|     const store = createArtifactStore(join(f.options.dataDir, "artifac…
+    215|     expect(await store.read(report!)).toBe(result.summary);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 18 passed (19)
+   Start at  20:11:10
+   Duration  607ms (transform 54%, tests 33%, import 13%)
+

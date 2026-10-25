@@ -1,0 +1,924 @@
+[
+ {
+  "r": {
+   "id": "B1-bugfix-crossfile",
+   "name": "B1-bugfix-crossfile",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "deepseek/deepseek-v4.1-flash-1017",
+   "attempts": 3,
+   "retryWaitMs": 40000,
+   "retryWhy": "已拨到第 3 趟（帽 3）⇒ 停，剩下的记为「跑不成」而不是「没做到」",
+   "seconds": 2.016,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "namedSets": {
+    "state": "unreadable",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [
+     "券后金额跌破包邮线，应当收运费",
+     "无券：商品金额 + 运费",
+     "已包邮：只付商品金额"
+    ],
+    "reasons": [
+     "最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读",
+     "格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：券后金额跌破包邮线，应当收运费、无券：商品金额 + 运费、已包邮：只付商品金额"
+    ],
+    "sources": []
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request requires more credits, or fewer max_tokens. You requested up to 131072 tokens, but can only afford 7468. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"limit_source\":\"openrouter_credits\",\"remedy_hint\"",
+   "resources": {
+    "rssPeakMb": 81,
+    "procPeak": 2,
+    "cpuMs": 1263,
+    "samples": 5
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": false,
+    "exitCode": 1,
+    "output": "✖ 折扣不是 20% 时同样要按券后金额收运费 (1.522167ms)\n✖ 多条商品行：看的是券后总额，不是原始总额 (0.120708ms)\n✖ 整单清零：券 100% 时仍要付运费 (0.081209ms)\n✔ 原价恰好差一分不到包邮线 (0.078958ms)\n✔ 券后正好落在包邮线上：应当免运费 (0.049292ms)\n✔ 非整除折扣取整后仍是整数分 (0.067042ms)\n✖ 跨过包邮线的另一档折扣 (0.058417ms)\n✔ 无券且刚好包邮线原价 (0.037167ms)\nℹ tests 8\nℹ suites 0\nℹ pass 4\nℹ fail 4\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 56.014416\n\n✖ failing tests:\n\ntest at tests/checkout.held.test.js:11:1\n✖ 折扣不是 20% 时同样要按券后金额收运费 (1.522167ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  4200 !== 4800\n  \n      at TestContext.<anonymous> (file:///private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/loop-eval-s6WagW/work/tests/checkout.held.test.js:13:10)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1382:25)\n      at Test.start (node:internal/test_runner/test:1242:17)\n      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 4200,\n    expected: 4800,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n\ntest at tests/checkout.held.test.js:16:1\n✖ 多条商品行：看的是券后总额，不是原始总额 (0.120708ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  4000 !== 4600\n  \n      at TestContext.<anonymous> (file:///private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/loop-eval-s6WagW/work/tests/checkout.held.test.js:18:10)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n  \n…[有界性：中段省略 1703 字]…\ninternal/test_runner/test:960:18)\n      at Test.postRun (node:internal/test_runner/test:1522:19)\n      at Test.run (node:internal/test_runner/test:1447:12)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 4500,\n    expected: 5100,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n\n[exit code: 1]"
+   },
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "396adbd",
+   "ranAt": "2026-10-22T14:23:24.517Z",
+   "maxSteps": 25,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "held-out 没过（可见测试绿了但隐藏验收不认 ⇒ 大概率是特殊分支，不是根因）〔exit=1〕",
+    "逐名判卷不可读 ⇒ 不许算过：最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读；格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：券后金额跌破包邮线，应当收运费、无券：商品金额 + 运费、已包邮：只付商品金额〔对不上号 3 条〕",
+    "runLoop 抛错:GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request require"
+   ]
+  },
+  "taskId": "B1-bugfix-crossfile"
+ },
+ {
+  "r": {
+   "id": "B2-feature-export",
+   "name": "B2-feature-export",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "deepseek/deepseek-v4.1-flash-1017",
+   "attempts": 3,
+   "retryWaitMs": 40000,
+   "retryWhy": "已拨到第 3 趟（帽 3）⇒ 停，剩下的记为「跑不成」而不是「没做到」",
+   "seconds": 2.333,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "namedSets": {
+    "state": "unreadable",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [
+     "tests/fit.test.js"
+    ],
+    "reasons": [
+     "最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读",
+     "格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：tests/fit.test.js"
+    ],
+    "sources": []
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request requires more credits, or fewer max_tokens. You requested up to 131072 tokens, but can only afford 7468. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"limit_source\":\"openrouter_credits\",\"remedy_hint\"",
+   "resources": {
+    "rssPeakMb": 83,
+    "procPeak": 2,
+    "cpuMs": 1401,
+    "samples": 5
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": false,
+    "exitCode": 1,
+    "output": "file:///private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/loop-eval-PQe3EL/work/tests/fit.held.test.js:9\nimport { joinFitted } from \"../src/fit.js\";\n         ^^^^^^^^^^\nSyntaxError: The requested module '../src/fit.js' does not provide an export named 'joinFitted'\n    at #asyncInstantiate (node:internal/modules/esm/module_job:327:21)\n    at async ModuleJob.run (node:internal/modules/esm/module_job:431:5)\n    at async node:internal/modules/esm/loader:643:26\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\n\nNode.js v24.19.0\n✖ tests/fit.held.test.js (38.347125ms)\nℹ tests 1\nℹ suites 0\nℹ pass 0\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 42.320583\n\n✖ failing tests:\n\ntest at tests/fit.held.test.js:1:1\n✖ tests/fit.held.test.js (38.347125ms)\n  'test failed'\n\n[exit code: 1]"
+   },
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "396adbd",
+   "ranAt": "2026-10-22T14:23:24.517Z",
+   "maxSteps": 25,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "held-out 没过（可见测试绿了但隐藏验收不认 ⇒ 大概率是特殊分支，不是根因）〔exit=1〕",
+    "逐名判卷不可读 ⇒ 不许算过：最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读；格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：tests/fit.test.js〔对不上号 1 条〕",
+    "runLoop 抛错:GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request require"
+   ]
+  },
+  "taskId": "B2-feature-export"
+ },
+ {
+  "r": {
+   "id": "B3-refactor-callsite",
+   "name": "B3-refactor-callsite",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "deepseek/deepseek-v4.1-flash-1017",
+   "attempts": 3,
+   "retryWaitMs": 40000,
+   "retryWhy": "已拨到第 3 趟（帽 3）⇒ 停，剩下的记为「跑不成」而不是「没做到」",
+   "seconds": 2.369,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "namedSets": {
+    "state": "unreadable",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [
+     "money 一律两位小数",
+     "receiptLine 用 format.money 渲染",
+     "legacyTotal 与 receiptLine 渲染一致",
+     "receipt 逐行渲染"
+    ],
+    "reasons": [
+     "最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读",
+     "格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：money 一律两位小数、receiptLine 用 format.money 渲染、legacyTotal 与 receiptLine 渲染一致、receipt 逐行渲染"
+    ],
+    "sources": []
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request requires more credits, or fewer max_tokens. You requested up to 131072 tokens, but can only afford 7468. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"limit_source\":\"openrouter_credits\",\"remedy_hint\"",
+   "resources": {
+    "rssPeakMb": 81,
+    "procPeak": 2,
+    "cpuMs": 1532,
+    "samples": 5
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "396adbd",
+   "ranAt": "2026-10-22T14:23:24.517Z",
+   "maxSteps": 25,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "逐名判卷不可读 ⇒ 不许算过：最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读；格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：money 一律两位小数、receiptLine 用 format.money 渲染、legacyTotal 与 receiptLine 渲染一致、receipt 逐行渲染〔对不上号 4 条〕",
+    "runLoop 抛错:GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request require"
+   ]
+  },
+  "taskId": "B3-refactor-callsite"
+ },
+ {
+  "r": {
+   "id": "B4-bugfix-pagination",
+   "name": "B4-bugfix-pagination",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "deepseek/deepseek-v4.1-flash-1017",
+   "attempts": 3,
+   "retryWaitMs": 40000,
+   "retryWhy": "已拨到第 3 趟（帽 3）⇒ 停，剩下的记为「跑不成」而不是「没做到」",
+   "seconds": 1.352,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "namedSets": {
+    "state": "unreadable",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [
+     "listPage 每页满员",
+     "第一页取满 size 条",
+     "listPage 末页余数正确",
+     "第二页取剩下的",
+     "越界页返回空"
+    ],
+    "reasons": [
+     "最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读",
+     "格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：listPage 每页满员、第一页取满 size 条、listPage 末页余数正确、第二页取剩下的、越界页返回空"
+    ],
+    "sources": []
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request requires more credits, or fewer max_tokens. You requested up to 131072 tokens, but can only afford 7468. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"limit_source\":\"openrouter_credits\",\"remedy_hint\"",
+   "resources": {
+    "rssPeakMb": 81,
+    "procPeak": 2,
+    "cpuMs": 1648,
+    "samples": 3
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "396adbd",
+   "ranAt": "2026-10-22T14:23:24.517Z",
+   "maxSteps": 25,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "逐名判卷不可读 ⇒ 不许算过：最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读；格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：listPage 每页满员、第一页取满 size 条、listPage 末页余数正确、第二页取剩下的、越界页返回空〔对不上号 5 条〕",
+    "runLoop 抛错:GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request require"
+   ]
+  },
+  "taskId": "B4-bugfix-pagination"
+ },
+ {
+  "r": {
+   "id": "B5-bugfix-async",
+   "name": "B5-bugfix-async",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "deepseek/deepseek-v4.1-flash-1017",
+   "attempts": 3,
+   "retryWaitMs": 40000,
+   "retryWhy": "已拨到第 3 趟（帽 3）⇒ 停，剩下的记为「跑不成」而不是「没做到」",
+   "seconds": 1.128,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "namedSets": {
+    "state": "unreadable",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [
+     "drain 等所有异步任务完成后才返回",
+     "drain 保持提交顺序",
+     "total 累加异步结果"
+    ],
+    "reasons": [
+     "最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读",
+     "格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：drain 等所有异步任务完成后才返回、drain 保持提交顺序、total 累加异步结果"
+    ],
+    "sources": []
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request requires more credits, or fewer max_tokens. You requested up to 131072 tokens, but can only afford 7468. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"limit_source\":\"openrouter_credits\",\"remedy_hint\"",
+   "resources": {
+    "rssPeakMb": 79,
+    "procPeak": 2,
+    "cpuMs": 1754,
+    "samples": 3
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "396adbd",
+   "ranAt": "2026-10-22T14:23:24.517Z",
+   "maxSteps": 25,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "逐名判卷不可读 ⇒ 不许算过：最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读；格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：drain 等所有异步任务完成后才返回、drain 保持提交顺序、total 累加异步结果〔对不上号 3 条〕",
+    "runLoop 抛错:GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request require"
+   ]
+  },
+  "taskId": "B5-bugfix-async"
+ },
+ {
+  "r": {
+   "id": "B6-feature-flag",
+   "name": "B6-feature-flag",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "deepseek/deepseek-v4.1-flash-1017",
+   "attempts": 3,
+   "retryWaitMs": 40000,
+   "retryWhy": "已拨到第 3 趟（帽 3）⇒ 停，剩下的记为「跑不成」而不是「没做到」",
+   "seconds": 1.359,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "namedSets": {
+    "state": "unreadable",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [
+     "parseArgs 的结果可以直接喂 setVerbose",
+     "--verbose 置位且不进 rest",
+     "--verbose 与位置参数共存",
+     "--name 取值"
+    ],
+    "reasons": [
+     "最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读",
+     "格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：parseArgs 的结果可以直接喂 setVerbose、--verbose 置位且不进 rest、--verbose 与位置参数共存、--name 取值"
+    ],
+    "sources": []
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request requires more credits, or fewer max_tokens. You requested up to 131072 tokens, but can only afford 7468. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"limit_source\":\"openrouter_credits\",\"remedy_hint\"",
+   "resources": {
+    "rssPeakMb": 78,
+    "procPeak": 2,
+    "cpuMs": 1860,
+    "samples": 3
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "396adbd",
+   "ranAt": "2026-10-22T14:23:24.517Z",
+   "maxSteps": 25,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "逐名判卷不可读 ⇒ 不许算过：最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读；格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：parseArgs 的结果可以直接喂 setVerbose、--verbose 置位且不进 rest、--verbose 与位置参数共存、--name 取值〔对不上号 4 条〕",
+    "runLoop 抛错:GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request require"
+   ]
+  },
+  "taskId": "B6-feature-flag"
+ },
+ {
+  "r": {
+   "id": "B7-feature-csv",
+   "name": "B7-feature-csv",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "deepseek/deepseek-v4.1-flash-1017",
+   "attempts": 3,
+   "retryWaitMs": 40000,
+   "retryWhy": "已拨到第 3 趟（帽 3）⇒ 停，剩下的记为「跑不成」而不是「没做到」",
+   "seconds": 1.154,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "namedSets": {
+    "state": "unreadable",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [
+     "含逗号的字段要用双引号包住",
+     "含双引号的字段：包起来并把内部引号写成两个",
+     "含换行的字段要包起来",
+     "导出带表头，且转义生效",
+     "普通字段直接用逗号连"
+    ],
+    "reasons": [
+     "最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读",
+     "格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：含逗号的字段要用双引号包住、含双引号的字段：包起来并把内部引号写成两个、含换行的字段要包起来、导出带表头，且转义生效、普通字段直接用逗号连"
+    ],
+    "sources": []
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request requires more credits, or fewer max_tokens. You requested up to 131072 tokens, but can only afford 7468. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"limit_source\":\"openrouter_credits\",\"remedy_hint\"",
+   "resources": {
+    "rssPeakMb": 79,
+    "procPeak": 2,
+    "cpuMs": 1979,
+    "samples": 3
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "396adbd",
+   "ranAt": "2026-10-22T14:23:24.517Z",
+   "maxSteps": 25,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "逐名判卷不可读 ⇒ 不许算过：最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读；格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：含逗号的字段要用双引号包住、含双引号的字段：包起来并把内部引号写成两个、含换行的字段要包起来、导出带表头，且转义生效、普通字段直接用逗号连〔对不上号 5 条〕",
+    "runLoop 抛错:GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request require"
+   ]
+  },
+  "taskId": "B7-feature-csv"
+ },
+ {
+  "r": {
+   "id": "B8-feature-memo",
+   "name": "B8-feature-memo",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "deepseek/deepseek-v4.1-flash-1017",
+   "attempts": 3,
+   "retryWaitMs": 40000,
+   "retryWhy": "已拨到第 3 趟（帽 3）⇒ 停，剩下的记为「跑不成」而不是「没做到」",
+   "seconds": 1.186,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "namedSets": {
+    "state": "unreadable",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [
+     "同一个 id 只真取一次",
+     "不同 id 各自真取",
+     "resetCache 之后会重新取"
+    ],
+    "reasons": [
+     "最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读",
+     "格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：同一个 id 只真取一次、不同 id 各自真取、resetCache 之后会重新取"
+    ],
+    "sources": []
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request requires more credits, or fewer max_tokens. You requested up to 131072 tokens, but can only afford 7468. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"limit_source\":\"openrouter_credits\",\"remedy_hint\"",
+   "resources": {
+    "rssPeakMb": 79,
+    "procPeak": 2,
+    "cpuMs": 2137,
+    "samples": 3
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "396adbd",
+   "ranAt": "2026-10-22T14:23:24.517Z",
+   "maxSteps": 25,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "逐名判卷不可读 ⇒ 不许算过：最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读；格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：同一个 id 只真取一次、不同 id 各自真取、resetCache 之后会重新取〔对不上号 3 条〕",
+    "runLoop 抛错:GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request require"
+   ]
+  },
+  "taskId": "B8-feature-memo"
+ },
+ {
+  "r": {
+   "id": "B9-refactor-rename",
+   "name": "B9-refactor-rename",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "deepseek/deepseek-v4.1-flash-1017",
+   "attempts": 3,
+   "retryWaitMs": 40000,
+   "retryWhy": "已拨到第 3 趟（帽 3）⇒ 停，剩下的记为「跑不成」而不是「没做到」",
+   "seconds": 1.84,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "namedSets": {
+    "state": "unreadable",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [
+     "新名字 fetchUser 可用",
+     "旧名字 getUser 不再保留",
+     "三个调用点都跟着改了"
+    ],
+    "reasons": [
+     "最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读",
+     "格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：新名字 fetchUser 可用、旧名字 getUser 不再保留、三个调用点都跟着改了"
+    ],
+    "sources": []
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request requires more credits, or fewer max_tokens. You requested up to 131072 tokens, but can only afford 7468. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"limit_source\":\"openrouter_credits\",\"remedy_hint\"",
+   "resources": {
+    "rssPeakMb": 80,
+    "procPeak": 2,
+    "cpuMs": 2243,
+    "samples": 4
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "396adbd",
+   "ranAt": "2026-10-22T14:23:24.517Z",
+   "maxSteps": 25,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "逐名判卷不可读 ⇒ 不许算过：最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读；格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：新名字 fetchUser 可用、旧名字 getUser 不再保留、三个调用点都跟着改了〔对不上号 3 条〕",
+    "runLoop 抛错:GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request require"
+   ]
+  },
+  "taskId": "B9-refactor-rename"
+ },
+ {
+  "r": {
+   "id": "B10-refactor-dedupe",
+   "name": "B10-refactor-dedupe",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "deepseek/deepseek-v4.1-flash-1017",
+   "attempts": 3,
+   "retryWaitMs": 40000,
+   "retryWhy": "已拨到第 3 趟（帽 3）⇒ 停，剩下的记为「跑不成」而不是「没做到」",
+   "seconds": 1.474,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "namedSets": {
+    "state": "unreadable",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [
+     "两处口径必须完全一致（逐例比）",
+     "都做 trim + 小写",
+     "非法一律 null"
+    ],
+    "reasons": [
+     "最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读",
+     "格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：两处口径必须完全一致（逐例比）、都做 trim + 小写、非法一律 null"
+    ],
+    "sources": []
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request requires more credits, or fewer max_tokens. You requested up to 131072 tokens, but can only afford 7468. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"limit_source\":\"openrouter_credits\",\"remedy_hint\"",
+   "resources": {
+    "rssPeakMb": 80,
+    "procPeak": 2,
+    "cpuMs": 2343,
+    "samples": 4
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "396adbd",
+   "ranAt": "2026-10-22T14:23:24.517Z",
+   "maxSteps": 25,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "逐名判卷不可读 ⇒ 不许算过：最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读；格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：两处口径必须完全一致（逐例比）、都做 trim + 小写、非法一律 null〔对不上号 3 条〕",
+    "runLoop 抛错:GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request require"
+   ]
+  },
+  "taskId": "B10-refactor-dedupe"
+ },
+ {
+  "r": {
+   "id": "B11-refactor-signature",
+   "name": "B11-refactor-signature",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "deepseek/deepseek-v4.1-flash-1017",
+   "attempts": 3,
+   "retryWaitMs": 40000,
+   "retryWhy": "已拨到第 3 趟（帽 3）⇒ 停，剩下的记为「跑不成」而不是「没做到」",
+   "seconds": 1.819,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "namedSets": {
+    "state": "unreadable",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [
+     "put 收选项对象",
+     "三个调用点都改用新签名"
+    ],
+    "reasons": [
+     "最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读",
+     "格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：put 收选项对象、三个调用点都改用新签名"
+    ],
+    "sources": []
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request requires more credits, or fewer max_tokens. You requested up to 131072 tokens, but can only afford 7468. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"limit_source\":\"openrouter_credits\",\"remedy_hint\"",
+   "resources": {
+    "rssPeakMb": 81,
+    "procPeak": 2,
+    "cpuMs": 2453,
+    "samples": 4
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "396adbd",
+   "ranAt": "2026-10-22T14:23:24.517Z",
+   "maxSteps": 25,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "逐名判卷不可读 ⇒ 不许算过：最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读；格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：put 收选项对象、三个调用点都改用新签名〔对不上号 2 条〕",
+    "runLoop 抛错:GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request require"
+   ]
+  },
+  "taskId": "B11-refactor-signature"
+ },
+ {
+  "r": {
+   "id": "B12-long-horizon",
+   "name": "B12-long-horizon",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "deepseek/deepseek-v4.1-flash-1017",
+   "attempts": 3,
+   "retryWaitMs": 40000,
+   "retryWhy": "已拨到第 3 趟（帽 3）⇒ 停，剩下的记为「跑不成」而不是「没做到」",
+   "seconds": 1.286,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "namedSets": {
+    "state": "unreadable",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [
+     "clamp：把 v 夹在 [lo, hi] 之间",
+     "sum：求和（含第一个元素）",
+     "unique：去重且**保持首次出现顺序**",
+     "chunk：按 size 切块，**末块不足也保留**",
+     "titleCase：每词首字母大写，**其余转小写**",
+     "parseIntSafe：解析失败返回 fallback，不是 NaN",
+     "mean：平均值（除以个数）",
+     "zip：**按较长者**配对，缺的用 null 填",
+     "flatten：**递归**展平到最深层",
+     "groupBy：分组：同键的**累积**成数组（不是覆盖）",
+     "sortBy：按**数值**升序（不是字符串序）",
+     "trimAll：**每一条**都去掉首尾空白",
+     "escapeHtml：转义 & < > 三个字符",
+     "splitLines：按",
+     "percent：返回**百分数**（0-100）",
+     "roundTo：四舍五入到 n 位小数，**返回数字**",
+     "pickKeys：挑出**指定**的键（当前挑反了）",
+     "deepMerge：**深**合并（嵌套对象不整个覆盖）",
+     "lastN：取**最后** n 个",
+     "repeatEach：每个元素重复 n 次"
+    ],
+    "reasons": [
+     "最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读",
+     "格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：clamp：把 v 夹在 [lo, hi] 之间、sum：求和（含第一个元素）、unique：去重且**保持首次出现顺序**、chunk：按 size 切块，**末块不足也保留**、titleCase：每词首字母大写，**其余转小写**、parseIntSafe：解析失败返回 fallback，不是 NaN、mean：平均值（除以个数）、zip：**按较长者**配对，缺的用 null 填、flatten：**递归**展平到最深层、groupBy：分组：同键的**累积**成数组（不是覆盖）、sortBy：按**数值**升序（不是字符串序）、trimAll：**每一条**都去掉首尾空白、escapeHtml：转义 & < > 三个字符、splitLines：按、percent：返回**百分数**（0-100）、roundTo：四舍五入到 n 位小数，**返回数字**、pickKeys：挑出**指定**的键（当前挑反了）、deepMerge：**深**合并（嵌套对象不整个覆盖）、lastN：取**最后** n 个、repeatEach：每个元素重复 n 次"
+    ],
+    "sources": []
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request requires more credits, or fewer max_tokens. You requested up to 131072 tokens, but can only afford 7468. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"limit_source\":\"openrouter_credits\",\"remedy_hint\"",
+   "resources": {
+    "rssPeakMb": 81,
+    "procPeak": 2,
+    "cpuMs": 2642,
+    "samples": 3
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "396adbd",
+   "ranAt": "2026-10-22T14:23:24.517Z",
+   "maxSteps": 25,
+   "reps": 1,
+   "arm": "base"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "逐名判卷不可读 ⇒ 不许算过：最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读；格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：clamp：把 v 夹在 [lo, hi] 之间、sum：求和（含第一个元素）、unique：去重且**保持首次出现顺序**、chunk：按 size 切块，**末块不足也保留**、titleCase：每词首字母大写，**其余转小写**、parseIntSafe：解析失败返回 fallback，不是 NaN、mean：平均值（除以个数）、zip：**按较长者**配对，缺的用 null 填、flatten：**递归**展平到最深层、groupBy：分组：同键的**累积**成数组（不是覆盖）、sortBy：按**数值**升序（不是字符串序）、trimAll：**每一条**都去掉首尾空白、escapeHtml：转义 & < > 三个字符、splitLines：按、percent：返回**百分数**（0-100）、roundTo：四舍五入到 n 位小数，**返回数字**、pickKeys：挑出**指定**的键（当前挑反了）、deepMerge：**深**合并（嵌套对象不整个覆盖）、lastN：取**最后** n 个、repeatEach：每个元素重复 n 次〔对不上号 20 条〕",
+    "runLoop 抛错:GLM 请求失败 HTTP 402: {\"error\":{\"message\":\"This request require"
+   ]
+  },
+  "taskId": "B12-long-horizon"
+ }
+]

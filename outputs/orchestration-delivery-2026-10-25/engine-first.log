@@ -1,0 +1,79 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/orchestration-engine.test.ts (5 tests | 4 failed) 30056ms
+   × queues 120 tasks, verifies independently and replays identical completion 24ms
+   × deduplicates submit and control keys but rejects key reuse with a different payload 7ms
+   × producer success cannot become done when verifier rejects 6ms
+   × cancel waits until the running backend acknowledges abort 30013ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-engine.test.ts > queues 120 tasks, verifies independently and replays identical completion
+AssertionError: expected [] to have a length of 120 but got +0
+
+- Expected
++ Received
+
+- 120
++ 0
+
+ ❯ tests/orchestration-engine.test.ts:31:81
+     29|   await engine.runUntilIdle();
+     30|   const view = await store.view();
+     31|   expect(Object.values(view.plans.plan!.tasks).filter(t => t.phase ===…
+       |                                                                                 ^
+     32|   expect(calls).toBe(120); expect(peak).toBeLessThanOrEqual(3); expect…
+     33|   expect(await engine.view()).toEqual(view);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/orchestration-engine.test.ts > deduplicates submit and control keys but rejects key reuse with a different payload
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/orchestration-engine.test.ts:40:109
+     38|   await expect(engine.submit({ ...plan, goal: "different" }, "submit")…
+     39|   const cmd = { request_id: "approve", plan_id: "plan", version: 1, ac…
+     40|   await Promise.all([engine.control(cmd), engine.control(cmd)]); await…
+       |                                                                                                             ^
+     41| });
+     42| it("shadow mode persists plans and performs no backend calls", async (…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/orchestration-engine.test.ts > producer success cannot become done when verifier rejects
+AssertionError: expected 'planned' to be 'failed' // Object.is equality
+
+Expected: "failed"
+Received: "planned"
+
+ ❯ tests/orchestration-engine.test.ts:51:61
+     49|   const { engine } = await setup(b); await engine.submit(orchestration…
+     50|   await engine.control({ request_id: "approve", plan_id: "plan", versi…
+     51|   expect((await engine.view()).plans.plan!.tasks.t0!.phase).toBe("fail…
+       |                                                             ^
+     52| });
+     53| it("cancel waits until the running backend acknowledges abort", async …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/orchestration-engine.test.ts > cancel waits until the running backend acknowledges abort
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/orchestration-engine.test.ts:53:1
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  4 failed | 5 passed (9)
+   Start at  20:02:15
+   Duration  30.30s (tests 100%)
+

@@ -1,0 +1,38 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/orchestration-schedule.test.ts (0 test)
+ ❯ tests/orchestration-project.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-project.test.ts [ tests/orchestration-project.test.ts ]
+Error: Cannot find module '../src/orchestration/project' imported from /Users/ze/Downloads/Cairn/cairn/tests/orchestration-project.test.ts
+ ❯ tests/orchestration-project.test.ts:4:1
+      2| import type { AgentEvent } from "../src/events/types";
+      3| import type { FlowTask, OrchPlan, OrchestrationStamp } from "../src/or…
+      4| import { projectOrchestration } from "../src/orchestration/project";
+       | ^
+      5|
+      6| const task = (id = "a", extra: Partial<FlowTask> = {}): FlowTask => ({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/orchestration-schedule.test.ts [ tests/orchestration-schedule.test.ts ]
+Error: Cannot find module '../src/orchestration/schedule' imported from /Users/ze/Downloads/Cairn/cairn/tests/orchestration-schedule.test.ts
+ ❯ tests/orchestration-schedule.test.ts:3:1
+      1| import { describe, expect, it } from "vitest";
+      2| import type { FlowTask, OrchestrationView, PlanView, TaskPhase } from …
+      3| import { nextActions } from "../src/orchestration/schedule";
+       | ^
+      4|
+      5| function task(id: string, extra: Partial<FlowTask> = {}): FlowTask {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  no tests
+   Start at  19:54:32
+   Duration  88ms (worker 97%, environment 3%)
+

@@ -1,0 +1,109 @@
+[
+ {
+  "r": {
+   "id": "B12-long-horizon",
+   "name": "B12-long-horizon",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "端点要等 604 分钟才放行，超出可等待上限 5 分钟 ⇒ 不重拨（那是日配额，不是抖动）",
+   "seconds": 339.751,
+   "requests": 39,
+   "tokensIn": 690285,
+   "tokensOut": 6458,
+   "cny": 3.0506584199999995,
+   "toolCalls": 39,
+   "toolFailures": 4,
+   "repeatedSameAction": 1,
+   "firstWriterIndex": 49,
+   "readsBeforeFirstWrite": 3,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "noVerify",
+   "namedSets": {
+    "state": "unreadable",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [
+     "clamp：把 v 夹在 [lo, hi] 之间",
+     "sum：求和（含第一个元素）",
+     "unique：去重且**保持首次出现顺序**",
+     "chunk：按 size 切块，**末块不足也保留**",
+     "titleCase：每词首字母大写，**其余转小写**",
+     "parseIntSafe：解析失败返回 fallback，不是 NaN",
+     "mean：平均值（除以个数）",
+     "zip：**按较长者**配对，缺的用 null 填",
+     "flatten：**递归**展平到最深层",
+     "groupBy：分组：同键的**累积**成数组（不是覆盖）",
+     "sortBy：按**数值**升序（不是字符串序）",
+     "trimAll：**每一条**都去掉首尾空白",
+     "escapeHtml：转义 & < > 三个字符",
+     "splitLines：按",
+     "percent：返回**百分数**（0-100）",
+     "roundTo：四舍五入到 n 位小数，**返回数字**",
+     "pickKeys：挑出**指定**的键（当前挑反了）",
+     "deepMerge：**深**合并（嵌套对象不整个覆盖）",
+     "lastN：取**最后** n 个",
+     "repeatEach：每个元素重复 n 次"
+    ],
+    "reasons": [
+     "最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读",
+     "格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：clamp：把 v 夹在 [lo, hi] 之间、sum：求和（含第一个元素）、unique：去重且**保持首次出现顺序**、chunk：按 size 切块，**末块不足也保留**、titleCase：每词首字母大写，**其余转小写**、parseIntSafe：解析失败返回 fallback，不是 NaN、mean：平均值（除以个数）、zip：**按较长者**配对，缺的用 null 填、flatten：**递归**展平到最深层、groupBy：分组：同键的**累积**成数组（不是覆盖）、sortBy：按**数值**升序（不是字符串序）、trimAll：**每一条**都去掉首尾空白、escapeHtml：转义 & < > 三个字符、splitLines：按、percent：返回**百分数**（0-100）、roundTo：四舍五入到 n 位小数，**返回数字**、pickKeys：挑出**指定**的键（当前挑反了）、deepMerge：**深**合并（嵌套对象不整个覆盖）、lastN：取**最后** n 个、repeatEach：每个元素重复 n 次"
+    ],
+    "sources": []
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/m01-clamp.js",
+    "src/m02-sum.js",
+    "src/m03-unique.js",
+    "src/m04-chunk.js",
+    "src/m05-titleCase.js",
+    "src/m06-parseIntSafe.js",
+    "src/m07-mean.js",
+    "src/m08-zip.js",
+    "src/m09-flatten.js",
+    "src/m10-groupBy.js",
+    "src/m11-sortBy.js",
+    "src/m12-trimAll.js",
+    "src/m13-escapeHtml.js",
+    "src/m14-splitLines.js"
+   ],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day\",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"50\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1792886400000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hi",
+   "resources": {
+    "rssPeakMb": 720,
+    "procPeak": 2,
+    "cpuMs": 3849,
+    "samples": 679
+   },
+   "heldOutInstallErrs": [],
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "146743c",
+   "ranAt": "2026-10-24T13:50:22.814Z",
+   "maxSteps": 60,
+   "reps": 1,
+   "arm": "low",
+   "thinking": "low"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "逐名判卷不可读 ⇒ 不许算过：最后一次 verify 拍里一条命令结果也没有 ⇒ 逐名面没有原文可读；格式认不出（unknown）⇒ 一条逐名也接不住，这些 id 全部算没读到：clamp：把 v 夹在 [lo, hi] 之间、sum：求和（含第一个元素）、unique：去重且**保持首次出现顺序**、chunk：按 size 切块，**末块不足也保留**、titleCase：每词首字母大写，**其余转小写**、parseIntSafe：解析失败返回 fallback，不是 NaN、mean：平均值（除以个数）、zip：**按较长者**配对，缺的用 null 填、flatten：**递归**展平到最深层、groupBy：分组：同键的**累积**成数组（不是覆盖）、sortBy：按**数值**升序（不是字符串序）、trimAll：**每一条**都去掉首尾空白、escapeHtml：转义 & < > 三个字符、splitLines：按、percent：返回**百分数**（0-100）、roundTo：四舍五入到 n 位小数，**返回数字**、pickKeys：挑出**指定**的键（当前挑反了）、deepMerge：**深**合并（嵌套对象不整个覆盖）、lastN：取**最后** n 个、repeatEach：每个元素重复 n 次〔对不上号 20 条〕",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  },
+  "taskId": "B12-long-horizon"
+ }
+]

@@ -1,0 +1,30 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/metacognition-run-state.test.ts (6 tests | 1 failed) 14ms
+   × recognizes a real one-request success even if final verification closes the usage event stream 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/metacognition-run-state.test.ts > recognizes a real one-request success even if final verification closes the usage event stream
+AssertionError: expected 'unmeasurable' to be 'pass' // Object.is equality
+
+Expected: "pass"
+Received: "unmeasurable"
+
+ ❯ tests/metacognition-run-state.test.ts:57:112
+     55|  const meter=new RequestMeter(),id=meter.beginRequest('main','{}');
+     56|  meter.finishRequest(id,'ok',{inputTokens:10,outputTokens:5});
+     57|  expect(studyOutcome({r:{requests:0,providerFace:'真会话',study:{meter:me…
+       |                                                                                                                ^
+     58|  const failed=new RequestMeter(),retry=failed.beginRequest('main','{}'…
+     59|  expect(studyOutcome({r:{requests:0,providerFace:'真会话',study:{meter:fa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  10:53:54
+   Duration  165ms (transform 66%, tests 17%, import 15%, worker 2%)
+

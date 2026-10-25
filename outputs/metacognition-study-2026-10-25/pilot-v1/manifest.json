@@ -1,0 +1,277 @@
+{
+  "harnessHashes": {
+    "src": "78b188e42603f7b5876fc556a32fc87714f9ca21cf65379467ab23dc6559140d",
+    "scripts": "bdf5f25cf60316046accde4945bdef125186a10bbb9dd1fa555840dd08d13ddc",
+    "package": "0bdec1449098774ad9bc7b7aaa4c43aaf0b6959a3ad2cf9dcdbfd47adcf2741f",
+    "lockfile": "299c5c94e02aa83054898521582d199e3a5a82f98045ab616c4d0cb20c571213"
+  },
+  "deniedRoots": [
+    "/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen",
+    "/tmp/cairn-metacognition-implementation-2026-10-25",
+    "/tmp/cairn-metacognition-2026-10-25"
+  ],
+  "heldOutHashes": {
+    "C1-malformed-tool": [
+      {
+        "src": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C1-malformed-tool/heldout/tests/loop.test.ts",
+        "dest": "tests/loop.test.ts",
+        "sha256": "5829a4a5d425ddd20cac003dbdb86637093735196659aa88fe349cf90ea34676"
+      }
+    ],
+    "C2-truncated-turn": [
+      {
+        "src": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C2-truncated-turn/heldout/tests/turn-truncated.test.ts",
+        "dest": "tests/turn-truncated.test.ts",
+        "sha256": "bff3ff6fbe77d2c7ad58f5b4f8a1bcdd77b5d1367454693fde06e45ad5b1011f"
+      }
+    ],
+    "C3-steering-stagnation": [
+      {
+        "src": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C3-steering-stagnation/heldout/tests/loop-no-progress.test.ts",
+        "dest": "tests/loop-no-progress.test.ts",
+        "sha256": "411a9d2fe304962336b0be8bd055b063250db5348b7aa34051772f3702964674"
+      }
+    ],
+    "C4-provider-overload": [
+      {
+        "src": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C4-provider-overload/heldout/tests/provider-stream-lifecycle.test.ts",
+        "dest": "tests/provider-stream-lifecycle.test.ts",
+        "sha256": "5ed1617fd16ebd05f6cb8504f07224a3632daebedc8f3b34e3301a0e642f607c"
+      }
+    ],
+    "C5-lsp-language": [
+      {
+        "src": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C5-lsp-language/heldout/tests/plugin-lsp-activation.test.ts",
+        "dest": "tests/plugin-lsp-activation.test.ts",
+        "sha256": "7165634f44399ecc82c91d81f4bbdf57688618c459a7dd4ea1411b7b78d46ee1"
+      }
+    ],
+    "C6-mutation-order": [
+      {
+        "src": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C6-mutation-order/heldout/tests/session-reference-repository.test.ts",
+        "dest": "tests/session-reference-repository.test.ts",
+        "sha256": "a08297d115112909ba8feaa81d03f09b592da6d3086d5dded21d80ef080e8b5a"
+      }
+    ]
+  },
+  "model": "cn:deepseek-v4.1-flash",
+  "endpoint": "http://127.0.0.1:7863/v1/chat/completions",
+  "tasksDigest": "3a65765217e2cf47a6840924d7de0a57beead2fb84f3c2653c2b43179cc8a089",
+  "codeHashes": {
+    "src/providers/openai.ts": "b7692e2818ee9c14fcaa8a1d0f01f3f3d009864552bf3c33139c0007825daca7",
+    "src/agent/context.ts": "f932a12989fb1b3b4d150fb484909599a2495a39bc2c6e7654679662107e219a",
+    "src/agent/compaction.ts": "bfb1233b72239fe6f2ea9d2993e8eccf570fcce7dbd5ded5dfcf72295e9f2412",
+    "src/agent/session-provider.ts": "e0ce1d7c3f92c52a6ec3e00b26fc7d7f834ccc4cc9e1d795c7fb0949c4231385",
+    "src/agent/eval/metacognition.ts": "a0f0d9234aa5e4ad9d2f315cb1e5973e330b514cf94b34ba0887e5cd30027b2d",
+    "src/agent/eval/study.ts": "fc882fecd3029783ab7dee8433ff194cc23cfd4cbd4102e2ace0586f3d7ecc3c",
+    "scripts/loop-eval.ts": "27b238b9081f92a99d06fa752a735f3d7fc3c783759e757707185bc81c5c2028",
+    "scripts/metacognition-study.ts": "49d35d2bb895e12d84b8b205ab063bee9b8802ab5334098c30f4e2bf13ea0c9e",
+    "scripts/lib/metacognition-run-state.ts": "3b54709293bffe5f56e60fced40c904e8d6a4546d886d1f8aa0cb4990868034f",
+    "scripts/lib/metacognition-sandbox.ts": "de1f74ce7995d5fc9c0c1890dbdbd83c97b726ce34e8f95ee2fe8f1be46eb662"
+  },
+  "taskHashes": {
+    "C1-malformed-tool": "c72025ea8d670981bc7c33e64085647ce453f0a68953623037638bf9600d7acf",
+    "C2-truncated-turn": "b02de14cc623e4152e260b25746cf5024b1ef8581fa2c6a8df35a7aa890b3853",
+    "C3-steering-stagnation": "22f8ed7a2271effb17c8b1abe32486bbdb4c1724e425e9236cb8c6ab3203b025",
+    "C4-provider-overload": "8bb78c9f07f0b9cc4e89e266ed7429413e16b8b7ec68f72f708c55d1d695c608",
+    "C5-lsp-language": "515b18ed88d2cf73fb1bd7a29b656155fd177836488fe73f441fe2a80e550c78",
+    "C6-mutation-order": "4fa751d0eb88ae0ba7855de9f2b0c77f28a344583a1fdb37563f52ab2cfdaf36"
+  },
+  "reps": 1,
+  "seed": 20261025,
+  "strategies": [
+    "baseline",
+    "high",
+    "triggered",
+    "periodic",
+    "random"
+  ],
+  "maxSteps": 24,
+  "timeoutMs": 120000,
+  "outputCap": 4096,
+  "schedule": [
+    {
+      "taskId": "C1-malformed-tool",
+      "strategy": "triggered",
+      "rep": 1,
+      "seed": 2948864263
+    },
+    {
+      "taskId": "C1-malformed-tool",
+      "strategy": "high",
+      "rep": 1,
+      "seed": 1454727384
+    },
+    {
+      "taskId": "C1-malformed-tool",
+      "strategy": "random",
+      "rep": 1,
+      "seed": 3029335574
+    },
+    {
+      "taskId": "C1-malformed-tool",
+      "strategy": "periodic",
+      "rep": 1,
+      "seed": 4268814354
+    },
+    {
+      "taskId": "C1-malformed-tool",
+      "strategy": "baseline",
+      "rep": 1,
+      "seed": 607119744
+    },
+    {
+      "taskId": "C2-truncated-turn",
+      "strategy": "baseline",
+      "rep": 1,
+      "seed": 3443267738
+    },
+    {
+      "taskId": "C2-truncated-turn",
+      "strategy": "triggered",
+      "rep": 1,
+      "seed": 2139918472
+    },
+    {
+      "taskId": "C2-truncated-turn",
+      "strategy": "periodic",
+      "rep": 1,
+      "seed": 418665533
+    },
+    {
+      "taskId": "C2-truncated-turn",
+      "strategy": "random",
+      "rep": 1,
+      "seed": 1708330970
+    },
+    {
+      "taskId": "C2-truncated-turn",
+      "strategy": "high",
+      "rep": 1,
+      "seed": 1303322966
+    },
+    {
+      "taskId": "C3-steering-stagnation",
+      "strategy": "baseline",
+      "rep": 1,
+      "seed": 1700606420
+    },
+    {
+      "taskId": "C3-steering-stagnation",
+      "strategy": "periodic",
+      "rep": 1,
+      "seed": 1649496408
+    },
+    {
+      "taskId": "C3-steering-stagnation",
+      "strategy": "random",
+      "rep": 1,
+      "seed": 4282301636
+    },
+    {
+      "taskId": "C3-steering-stagnation",
+      "strategy": "high",
+      "rep": 1,
+      "seed": 3446149525
+    },
+    {
+      "taskId": "C3-steering-stagnation",
+      "strategy": "triggered",
+      "rep": 1,
+      "seed": 888952958
+    },
+    {
+      "taskId": "C4-provider-overload",
+      "strategy": "periodic",
+      "rep": 1,
+      "seed": 3059699654
+    },
+    {
+      "taskId": "C4-provider-overload",
+      "strategy": "baseline",
+      "rep": 1,
+      "seed": 3710674098
+    },
+    {
+      "taskId": "C4-provider-overload",
+      "strategy": "triggered",
+      "rep": 1,
+      "seed": 3338618761
+    },
+    {
+      "taskId": "C4-provider-overload",
+      "strategy": "high",
+      "rep": 1,
+      "seed": 2028338590
+    },
+    {
+      "taskId": "C4-provider-overload",
+      "strategy": "random",
+      "rep": 1,
+      "seed": 346235880
+    },
+    {
+      "taskId": "C5-lsp-language",
+      "strategy": "high",
+      "rep": 1,
+      "seed": 2581904290
+    },
+    {
+      "taskId": "C5-lsp-language",
+      "strategy": "random",
+      "rep": 1,
+      "seed": 811984297
+    },
+    {
+      "taskId": "C5-lsp-language",
+      "strategy": "baseline",
+      "rep": 1,
+      "seed": 446121827
+    },
+    {
+      "taskId": "C5-lsp-language",
+      "strategy": "triggered",
+      "rep": 1,
+      "seed": 2303829213
+    },
+    {
+      "taskId": "C5-lsp-language",
+      "strategy": "periodic",
+      "rep": 1,
+      "seed": 1066890833
+    },
+    {
+      "taskId": "C6-mutation-order",
+      "strategy": "periodic",
+      "rep": 1,
+      "seed": 1014189687
+    },
+    {
+      "taskId": "C6-mutation-order",
+      "strategy": "baseline",
+      "rep": 1,
+      "seed": 2668987409
+    },
+    {
+      "taskId": "C6-mutation-order",
+      "strategy": "high",
+      "rep": 1,
+      "seed": 575337676
+    },
+    {
+      "taskId": "C6-mutation-order",
+      "strategy": "random",
+      "rep": 1,
+      "seed": 1167595772
+    },
+    {
+      "taskId": "C6-mutation-order",
+      "strategy": "triggered",
+      "rep": 1,
+      "seed": 3379046237
+    }
+  ],
+  "concurrency": 1,
+  "memory": "empty and isolated per trial",
+  "contract": "Requested effort and explicit enabled thinking; exact effort enforcement is unverified. Tokens and reasoning details are provider-reported; monetary price is unknown."
+}

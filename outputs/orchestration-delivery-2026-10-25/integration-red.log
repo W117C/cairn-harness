@@ -1,0 +1,54 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/orchestration-engine.test.ts (6 tests | 1 failed) 243ms
+   × an invalid reused control key cannot cancel an active run 7ms
+ ❯ tests/orchestration-service.test.ts (4 tests | 1 failed) 25ms
+   × accepts real product session names containing Chinese text and spaces 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-engine.test.ts > an invalid reused control key cannot cancel an active run
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/orchestration-engine.test.ts:69:59
+     67|   await engine.tick(); await began;
+     68|   await expect(engine.control({ request_id: "approve", plan_id: "plan"…
+     69|   release(); await engine.runUntilIdle(); expect(aborted).toBe(false);
+       |                                                           ^
+     70| });
+     71|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/orchestration-service.test.ts > accepts real product session names containing Chinese text and spaces
+AssertionError: {"ok":false,"error":"invalid orchestration workspace/session address"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/orchestration-service.test.ts:18:49
+     16|   const { a, service } = await setup();
+     17|   const response = await service.submit({ address: { workspace: a, ses…
+     18|   expect(response.ok, JSON.stringify(response)).toBe(true);
+       |                                                 ^
+     19| });
+     20| it("isolates identically named sessions and plans in separate workspac…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 8 passed (10)
+   Start at  20:07:29
+   Duration  472ms (tests 74%, transform 18%, import 7%, worker 1%)
+

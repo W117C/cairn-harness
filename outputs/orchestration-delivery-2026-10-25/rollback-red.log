@@ -1,0 +1,28 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/orchestration-engine.test.ts (8 tests | 1 failed) 260ms
+   × rolls back a verified delivery once and records the changed evidence state 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-engine.test.ts > rolls back a verified delivery once and records the changed evidence state
+Error: delivery is controlled by the verified execution queue; manual delivery is unavailable
+ ❯ src/orchestration/engine.ts:90:91
+     88|       if (["pause_task", "takeover_task"].includes(command.action) && …
+     89|       // Publication and rollback require a live retained result and e…
+     90|       if (["merge_task", "reject_merge", "rollback_task"].includes(com…
+       |                                                                                           ^
+     91|       if (!previous.requested) await this.commandEvent(command, digest…
+     92|       if (["cancel_plan", "cancel_task", "takeover_task"].includes(com…
+ ❯ OrchestrationEngine.control src/orchestration/engine.ts:70:5
+ ❯ tests/orchestration-engine.test.ts:79:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+   Start at  20:10:47
+   Duration  401ms (tests 77%, transform 19%, import 4%)
+

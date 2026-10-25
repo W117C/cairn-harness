@@ -1,0 +1,12 @@
+[loop-eval] 判卷器自校：必绿仓→ok ✅ 必红仓→不 ok ✅
+[loop-eval] 靶子 fixtures/todo-app 当前起始态：红（该文件是生成物，任何一次 e2e/agent/gate 都会就地重置它 ⇒ 读数横比须看这一行）
+[loop-eval] 装配面（产品缺省开的键 ↔ 本跑器）：autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same
+[loop-eval] 任务=C1-malformed-tool reps=1 system=base maxSteps=24 thinking=low 模型=cn:deepseek-v4.1-flash 价=价不可知〔没给 EVAL_PRICE_IN / EVAL_PRICE_OUT ⇒ 钱按「不可知」处理（不再静默吃缺省价）〕
+[loop-eval] C1-malformed-tool rep1 PASS 起点=红 读先于写=0 clarify=0 先批后写=N verify=1→true 闸拍=0 返修=一次绿 隐藏=绿 逐名=逐名全绿 提供者=真会话 工具=24/1败 重复=0 请求=21 拨数=1 tok=430491/8992 价不可知 87s 内存峰=940MB/7进程 cpu=6460ms
+[loop-eval] 合计 1/1 达标 · 实付=价不可知 · 每达标任务=价不可知 〔没给 EVAL_PRICE_IN / EVAL_PRICE_OUT ⇒ 钱按「不可知」处理（不再静默吃缺省价）；token/耗时/内存不受影响〕
+[loop-eval] 任务级（独立单位＝任务，rep 之间相关）：pass@1 = 1/1 · pass^1 = 1/1 · pass@1 95% 区间 [0.207, 1.000] · pass^1 95% 区间 [0.207, 1.000]
+[loop-eval] 闸补拍：合计 0／单趟最多 0／≥2 拍的趟次 0（共 1 趟）
+[loop-eval] 返修那一格：模型自己红→绿 0／闸补的绿 0／红没回 0／一次绿 1／归属不可知 0／没验 0（共 1 趟）
+[loop-eval] 逐名那一格：全绿 1／有红 0／读不出 0（有规格 1 趟／无规格 0 趟）
+[loop-eval] 读数写出 outputs/metacognition-pilot-2026-10-25/trial-004/readings.json
+[loop-eval] 失败轨迹留档：写出 0 条 0 KB → outputs/metacognition-pilot-2026-10-25/trial-004/failures/2026-10-25/（帽 12 条/日·256 KB/条·1536 KB/目录）｜丢弃合计 0：超条数帽 0·超单条帽 0·超目录总帽 0｜非失败不写 1｜同日已在场不覆盖 0·--keep 已留全量而未写 0·没留成而报错 0｜取法 node --import tsx scripts/gym-draft.ts outputs/metacognition-pilot-2026-10-25/trial-004/failures/2026-10-25/ --apply

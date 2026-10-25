@@ -1,0 +1,92 @@
+[
+  {
+    "id": "C1-malformed-tool",
+    "visible": {
+      "command": "node tests/run-visible.mjs",
+      "ok": true,
+      "output": "TAP version 13\nok 1 - 工具返回畸形结构：不炸、不糊、分得开 ★ 缺 output（`{ok:true}`）⇒ 不许炸整轮，且回执可读\nok 2 - 工具返回畸形结构：不炸、不糊、分得开 ★ output = null ⇒ 回执可读，且与「缺失」分得开\nok 3 - 工具返回畸形结构：不炸、不糊、分得开 ★ output = 对象 ⇒ **序列化出来**（不是 [object Object]）\nok 4 - 工具返回畸形结构：不炸、不糊、分得开 ★ 反向哨兵：正常字符串输出**逐字不变**（不许为了安全全包一层）\nok 5 - 工具返回畸形结构：不炸、不糊、分得开 真空串 ≠ 缺失（空串是『真的没输出』这一事实，不许被顶替成占位符）\nok 6 - stuckObservationOf 的取料面（崩溃点本体） ★ 非字符串一律不抛（旧实现 undefined.slice ⇒ TypeError）\nok 7 - stuckObservationOf 的取料面（崩溃点本体） 不同畸形给出**不同**的观察串（否则「缺失」会被当成「卡在同一动作」）\nok 8 - stuckObservationOf 的取料面（崩溃点本体） 正常字符串照旧截 200 字（既有口径不变）\nok 9 - stuckObservationOf 的取料面（崩溃点本体） 环形对象不抛（JSON.stringify 会炸的那一类）\n1..9\n# tests 9\n# pass 9\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n",
+      "exitCode": 0
+    },
+    "hidden": {
+      "command": "node tests/run-visible.mjs tests/loop.test.ts",
+      "ok": true,
+      "output": "TAP version 13\nok 1 - loop context feedback includes persisted tool results exactly once in the next provider request\nok 2 - loop context feedback returns failure to the model without duplicate history\nok 3 - loop context feedback returns permission denial to the model without duplicate history\nok 4 - loop context feedback returns tool table denial to the model without duplicate history\nok 5 - loop context feedback returns unknown tool to the model without duplicate history\nok 6 - loop context feedback returns missing verify hook to the model without duplicate history\nok 7 - loop context feedback returns verify exception to the model without duplicate history\nok 8 - loop context feedback includes tool-emitted events in persisted order\nok 9 - loop context feedback does not request another turn after cancellation\nok 10 - auto-verify on completion (harness 补拍，证据 only) 写盘后纯文本收束 → 补一拍并把红字落进事件流（零额外模型调用）\nok 11 - auto-verify on completion (harness 补拍，证据 only) 每 run 至多一拍：自动拍红字后模型仍纯文本收束 ⇒ 不叠加\nok 12 - auto-verify on completion (harness 补拍，证据 only) 自动拍验证通过 → 绿证据落流\nok 13 - auto-verify on completion (harness 补拍，证据 only) 模型自调过 verify ⇒ harness 让位，且手动拍事件形态零变化（连 auto 键都不出现）\nok 14 - auto-verify on completion (harness 补拍，证据 only) 可验面探测炸（config 存在但 JSON 坏）⇒ 不炸 run、不补拍，但必须出声\nok 15 - auto-verify on completion (harness 补拍，证据 only) 零行为回退：未写盘（只读动作） → 无 verify_result、请求数与旧行为同形\nok 16 - auto-verify on completion (harness 补拍，证据 only) 零行为回退：仓库无 verify 面（surface=false） → 无 verify_result、请求数与旧行为同形\nok 17 - auto-verify on completion (harness 补拍，证据 only) 零行为回退：缺省不开闸（未给 autoVerify） → 无 verify_result、请求数与旧行为同形\nok 18 - auto-verify on completion (harness 补拍，证据 only) 零行为回退：显式 autoVerify:false → 无 verify_result、请求数与旧行为同形\nok 19 - allowedTools 硬闸与 verify 系统门的次序 表内没有 verify ⇒ 钩子一次都不执行，按工具表摘除拒绝\nok 20 - allowedTools 硬闸与 verify 系统门的次序 表内有 verify ⇒ 系统门照旧执行（反向锁：修法不是一律禁掉 verify）\nok 21 - allowedTools 硬闸与 verify 系统门的次序 未给工具表（主会话形状）⇒ 行为逐字不变\nok 22 - resolveTool 补表钩子（run 中途才出现的工具，2026-10-19） 静态表里没有、钩子给得出 ⇒ 照常执行（模型看到的 ≠ 能执行的，这条堵住后半句）\nok 23 - resolveTool 补表钩子（run 中途才出现的工具，2026-10-19） 钩子也拿不到 ⇒ 仍是 unknown tool（补表不放行未注册工具，fail-closed 不变）\nok 24 - resolveTool 补表钩子（run 中途才出现的工具，2026-10-19） 反向（突变体专破）：把 `?? opts.resolveTool?.(name)` 从 loop 里拆掉 ⇒ 第一条必须红在这儿\n1..24\n# tests 24\n# pass 24\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n",
+      "exitCode": 0
+    }
+  },
+  {
+    "id": "C2-truncated-turn",
+    "visible": {
+      "command": "node tests/run-visible.mjs",
+      "ok": true,
+      "output": "TAP version 13\nok 1 - 第 1 点：截断续跑（截断 ≠ 说完） ★ 截断后真的再要一轮，且那一轮**读到了**「别当成已答完」那条提示\nok 2 - 第 1 点：截断续跑（截断 ≠ 说完） ★ 上限：次次截断也**至多续一轮**（不无限要，与 deliveryRepair/autoVerifyRepair 同形）\nok 3 - 第 1 点：截断续跑（截断 ≠ 说完） 关掉开关 ⇒ 逐字回到旧行为（一次都不多要）\nok 4 - 第 1 点：截断续跑（截断 ≠ 说完） ★ 反向哨兵：没被截断的正常收束 ⇒ 零额外请求（这一支不许被顺手改宽）\nok 5 - 第 1 点：截断续跑（截断 ≠ 说完） 工具轮不会被误判成截断（两条收束语义不许混）\nok 6 - 第 1 点：截断续跑（截断 ≠ 说完） 截断提示在投影里仍只出现一次（续跑读的是同一条，不重复注入）\nok 7 - 撞帽与截断续跑不许互相顶掉 撞帽那一拍同时被截断 ⇒ 撞帽照旧抛（续跑不许给撞帽多留一条命）\nok 8 - 撞帽与截断续跑不许互相顶掉 纯撞帽（没有截断）同样是 throw + error，两路口径一致\n1..8\n# tests 8\n# pass 8\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n",
+      "exitCode": 0
+    },
+    "hidden": {
+      "command": "node tests/run-visible.mjs tests/turn-truncated.test.ts",
+      "ok": true,
+      "output": "TAP version 13\nok 1 - 停止原因解码（纯函数，三家词表） 三家各自的「篇幅用尽」都归一到 output_budget\nok 2 - 停止原因解码（纯函数，三家词表） 三家各自的「内容策略拦停」都归一到 content_blocked\nok 3 - 停止原因解码（纯函数，三家词表） 正常收尾与工具轮不算截断\nok 4 - 停止原因解码（纯函数，三家词表） 大小写与首尾空白不造成第二种拼写；未知值一律 unknown（不把不知道说成坏）\nok 5 - 停止原因解码（纯函数，三家词表） turnTruncatedEvent：正常收尾返回 null；截断时存归一 token 而非线上原文\nok 6 - 停止原因解码（纯函数，三家词表） output_tokens：0 要如实留（0 也是读数），null/undefined 才不落字段\nok 7 - 第三种收尾证据：流结束而一个停止原因都没上报（2026-10-13 第 471 页） 纯函数：缺席（undefined/null/空串）⇒ 落事件；有任何非空原文（含词表外的）⇒ 不落\nok 8 - 第三种收尾证据：流结束而一个停止原因都没上报（2026-10-13 第 471 页） openai（glm 即其预设）：流结束而全程没有 finish_reason ⇒ 落一条 turn_stop_missing，且不落 turn_truncated\nok 9 - 第三种收尾证据：流结束而一个停止原因都没上报（2026-10-13 第 471 页） openai 负控：正常 stop ⇒ 零新事件（这一族只在该出声时出声）\nok 10 - 第三种收尾证据：流结束而一个停止原因都没上报（2026-10-13 第 471 页） anthropic：流结束而 message_delta 没带 stop_reason ⇒ 落一条 turn_stop_missing\nok 11 - 第三种收尾证据：流结束而一个停止原因都没上报（2026-10-13 第 471 页） gemini：流结束而 finishReason 缺席 ⇒ 落一条 turn_stop_missing\nok 12 - 三家适配器：把停止原因读出流 anthropic：message_delta 带 max_tokens ⇒ 流尾多出一条 turn_truncated\nok 13 - 三家适配器：把停止原因读出流 anthropic 负控：end_turn ⇒ 一个字节都不多（既有转录不变）\nok 14 - 三家适配器：把停止原因读出流 openai（glm 即其预设）：finish_reason=length ⇒ turn_truncated\nok 15 - 三家适配器：把停止原因读出流 gemini：finishReason=MAX_TOKENS ⇒ turn_truncated（大小写不同，表要认）\nok 16 - 三家适配器：把停止原因读出流 gemini 负控：STOP ⇒ 不落（这一族的正常收尾是大写）\nok 17 - 三家适配器：把停止原因读出流 没带停止原因的流不落证据（缺读数 ≠ 被截断）\nok 18 - 落盘与投影 runLoop 原样落进 JSONL；截断那一拍**续跑一次**把话说完（2026-10-23 接线）\nok 19 - 落盘与投影 turn_truncated 能过写入口校验（未知类型会被 createEventLog 抛死）\nok 20 - 落盘与投影 projectContext：说明紧跟在被砍断的那段正文之后（位置本身就是信息）\nok 21 - 落盘与投影 正常收尾的转录：projectContext 逐字节不变（零回归）\nok 22 - 落盘与投影 worker 子流的截断不进父上下文（§4.4.4：子流不越界，父只收 agent_result）\nok 23 - 剧本入口（createMockProvider） 剧本可以带 turn_truncated，并按序原样产出（不折进正文、不丢）\nok 24 - 剧本入口（createMockProvider） 负控仍在：运行时产物（tool_result）依旧拒收——放行它等于让剧本伪造工具回执\nok 25 - 剧本入口（createMockProvider） 端到端：剧本驱动 runLoop，截断确实落到盘上那一行\nok 26 - 跨轮真请求体（会话型 provider 的 transport 抓包） 下一轮的真请求体里带着「上一条没说完」\nok 27 - 跨轮真请求体（会话型 provider 的 transport 抓包） 负控：答完的一轮，请求体里一个字的说明都没有\nok 28 - 摘要输入（serializeConversation） 截断有自己一行，紧跟被砍断的那段正文，且带上是哪个原因\nok 29 - 摘要输入（serializeConversation） 负控：答完的一轮不因此多一行\nok 30 - 摘要输入（serializeConversation） output_tokens 缺席时不落那半句（缺 = 没上报，不等于 0）\nok 31 - 摘要输入（serializeConversation） 内容策略中止与篇幅用尽各说各的（两种原因的下一步不同）\nok 32 - 摘要输入（serializeConversation） delta 形态的正文先落位再落截断行（不吞掉半句，也不把说明插到半句前面）\nok 33 - goal 续跑判据 被收走的那一轮 ⇒ 继续，而不是宣布「没有可验证的产出」\nok 34 - goal 续跑判据 负控（回归锁）：模型自己说完且没产出 ⇒ 仍然停，理由逐字不变\nok 35 - goal 续跑判据 轮次上限已用尽 + 被截断 ⇒ 仍然停（截断不给额外的轮）\nok 36 - goal 续跑判据 美元上限已花到 + 被截断 ⇒ 仍然停（截断不给额外的钱）\nok 37 - goal 续跑判据 读过事件流就能拿到这个判断（projectGoal 算了不许丢——「两头断」防线）\nok 38 - goal 续跑判据 新提示已经进来 ⇒ 打断不再是当前态（旧截断不该替这一轮说话）\nok 39 - 评审修的五处 worker 子流的截断会被装饰 agent_id（否则它以「主会话上一轮没说完」落进父转录）\nok 40 - 评审修的五处 openai：参数解析抛错之前，截断记录已经出去（最常见的截断就是砍在 write_file 参数上）\nok 41 - 评审修的五处 anthropic：后到的 stop_reason:null 帧不得抹掉已拿到的 max_tokens\nok 42 - 评审修的五处 output_tokens 只收有限非负数：字符串/NaN/Infinity 一律落缺席，不进散文行\nok 43 - 评审修的五处 摘要行两种原因各自成句（不出现「中止（，停止原因」这种半截括号）\nok 44 - 非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） openai 非流式（摘要器走的那一支）：finish_reason=length ⇒ 事件照落\nok 45 - 非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） 负控：非流式 stop ⇒ 不落（摘要是摘要，不是每份都被砍）\nok 46 - 非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） openai 非流式：finish_reason 缺席 ⇒ 落一条 turn_stop_missing（观测 only）\nok 47 - 非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） gemini：candidates 缺席、只有 promptFeedback.blockReason ⇒ SAFETY 看得见\nok 48 - 非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） gemini 负控：promptFeedback 里没 blockReason ⇒ 不落（缺读数 ≠ 被拦）\nok 49 - 非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） 两个字段都在时以 candidates 的为准（更具体：它说的是这一条候选，blockReason 说的是整段输入）\nok 50 - 非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） 穿链：非流式响应 → 摘要器 → out.truncated（收了不声张 = 没收，「两头断」第 10 次防线）\nok 51 - 非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） 负控：答完的摘要 ⇒ truncated 字段缺席（恒 truthy 会把压缩整条闸死）\n1..51\n# tests 51\n# pass 51\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n",
+      "exitCode": 0
+    }
+  },
+  {
+    "id": "C3-steering-stagnation",
+    "visible": {
+      "command": "node tests/run-visible.mjs",
+      "ok": true,
+      "output": "TAP version 13\nok 1 - 轮中插话不改写轮界（交付断言的命门） ★ 带 origin:steering 的 user_message 之后，本轮承诺仍然算数\nok 2 - 轮中插话不改写轮界（交付断言的命门） ★ 反面哨兵：用户真开新一轮（无 origin）时，上一轮的承诺不跨轮\nok 3 - 轮中插话不改写轮界（交付断言的命门） sidechat / goal 来源照旧开新轮（只有 steering 是例外，别顺手放过别的 kind）\nok 4 - 轮中插话不改写轮界（交付断言的命门） worker 的插话**根本不参与**父会话轮界（既有口径：先按 worker 归因摘掉）\nok 5 - 轮中插话不改写轮界（交付断言的命门） 判定按 kind 分支，不按文本：正文里恰好写着「插话」也不算\nok 6 - loop 的注入位：落在 tool_result 之后、下一次请求之前 插话进第 2 次请求，且事件序在 tool_result 之后\nok 7 - loop 的注入位：落在 tool_result 之后、下一次请求之前 投影次序合法：user → assistant(tool_call) → tool → user（不拆 tool 配对）\nok 8 - loop 的注入位：落在 tool_result 之后、下一次请求之前 缺省不传盒子 = 零行为：只有一条 user_message、零插话\nok 9 - loop 的注入位：落在 tool_result 之后、下一次请求之前 空插话不落事件（误触不该变成一条空洞的指令）\nok 10 - loop 的注入位：落在 tool_result 之后、下一次请求之前 取消后迟到的那条插话既不落事件、也不再买一次请求\nok 11 - 通道（界面 → loop 那只盒子） push/take 的取出即清空：同一条不会被两拍各付一遍 token\nok 12 - 通道（界面 → loop 那只盒子） 同一拍连说几句 ⇒ 一次取走全部（顺序保留）\nok 13 - 通道（界面 → loop 那只盒子） 纯空白 / 空串不进货（误触不该变成一条空洞的指令）\nok 14 - 通道（界面 → loop 那只盒子） 超帽截断**并保留**，且正文里说清被截过（不静默截）\nok 15 - 通道（界面 → loop 那只盒子） 首尾空白被去掉（人打字常带换行，不该原样进模型）\nok 16 - 第 9 点与 R1（验证停滞）的交点 ★ 两次同签名红之间用户插了话 ⇒ **不喊停滞**（目标可能已被改写）\nok 17 - 第 9 点与 R1（验证停滞）的交点 ★ 反面：中间没插话 ⇒ 照旧喊停滞（这条抑制不是把判据关掉）\nok 18 - 插话与压缩：它必须活过每一次压缩 ★ keepFirstSet 受护集含插话（它靠 user_message 这条广义判据，不是靠运气）\nok 19 - 插话与压缩：它必须活过每一次压缩 真实压缩之后，插话仍在模型面（不是只在受护名单里挂着）\n1..19\n# tests 19\n# pass 19\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n",
+      "exitCode": 0
+    },
+    "hidden": {
+      "command": "node tests/run-visible.mjs tests/loop-no-progress.test.ts",
+      "ok": true,
+      "output": "TAP version 13\nok 1 - M10② 无进展阶梯接进主循环（no-progress.ts 的首个生产消费者） 同一验证结论连红 2 次且中间无写 ⇒ 第 2 拍就把 [no-progress] 回注给模型；第 1 拍一个字不加\nok 2 - M10② 无进展阶梯接进主循环（no-progress.ts 的首个生产消费者） 同一 rules 组合只回注一次（第 3 拍不再叠同一句话）\nok 3 - M10② 无进展阶梯接进主循环（no-progress.ts 的首个生产消费者） 两拍红之间**有过成功的写** ⇒ 不算停滞（那是在换路子试），一个字都不加\nok 4 - M10② 无进展阶梯接进主循环（no-progress.ts 的首个生产消费者） 绿拍零行为：验证通过就直接收束，不加任何注记\nok 5 - M10② 无进展阶梯接进主循环（no-progress.ts 的首个生产消费者） 只加一行文本：不新增事件类型、不多要一轮、不改 verify 语义\n1..5\n# tests 5\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n",
+      "exitCode": 0
+    }
+  },
+  {
+    "id": "C4-provider-overload",
+    "visible": {
+      "command": "node tests/run-visible.mjs",
+      "ok": true,
+      "output": "TAP version 13\nok 1 - OpenAI 兼容：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完\nok 2 - OpenAI 兼容：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）\nok 3 - OpenAI 兼容：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）\nok 4 - OpenAI 兼容：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转\nok 5 - OpenAI 兼容：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次\nok 6 - Anthropic：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完\nok 7 - Anthropic：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）\nok 8 - Anthropic：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）\nok 9 - Anthropic：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转\nok 10 - Anthropic：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次\nok 11 - Gemini：流内失败的统一重试边界 首帧就是可重试错误（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完\nok 12 - Gemini：流内失败的统一重试边界 ★ 反向哨兵：已经吐过正文之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）\nok 13 - Gemini：流内失败的统一重试边界 不可重放的错误不重试（请求本身的问题，重放只会再错一次并白烧预算）\nok 14 - Gemini：流内失败的统一重试边界 重试次数有上限：连续失败不会无限打转\nok 15 - Gemini：流内失败的统一重试边界 退避期间调用方取消 ⇒ 立刻收束，不再打第二次\nok 16 - 三家共用同一份判据（`retry.ts`），不许各抄一份名字表 数值优先：字符串形式的 502 也算可重试（OpenRouter 实测 `\"type\": \"502\"`）\nok 17 - 三家共用同一份判据（`retry.ts`），不许各抄一份名字表 名字表覆盖三家的过载/限流/可用性形状（大小写不敏感）\nok 18 - 三家共用同一份判据（`retry.ts`），不许各抄一份名字表 请求本身的问题一律不可重放（400/401/403 家族与协议错）\nok 19 - 三家共用同一份判据（`retry.ts`），不许各抄一份名字表 `StreamFailure` 的 retryable 是唯一出口：非 StreamFailure 的未知形状按可重放处理\n1..19\n# tests 19\n# pass 19\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n",
+      "exitCode": 0
+    },
+    "hidden": {
+      "command": "node tests/run-visible.mjs tests/provider-stream-lifecycle.test.ts",
+      "ok": true,
+      "output": "TAP version 13\nok 1 - OpenAI 兼容响应流生命周期 消费者在 text 输出后提前结束，也取消响应体并释放读取锁\nok 2 - OpenAI 兼容响应流生命周期 消费者在 thinking 输出后提前结束，也取消响应体并释放读取锁\nok 3 - OpenAI 兼容响应流生命周期 消费者在 tool 输出后提前结束，也取消响应体并释放读取锁\nok 4 - OpenAI 兼容响应流生命周期 完整流式响应在计量中记录为成功，并保留累计 usage\nok 5 - OpenAI 兼容响应流生命周期 损坏的帧仍然报错并记为失败，不重试协议错误\nok 6 - OpenAI 兼容响应流生命周期 调用方取消仍记为取消，退出时释放响应体\nok 7 - OpenAI 兼容响应流生命周期 reasoning_content 已展示后收到服务端错误，不重放已产出的思考\nok 8 - OpenAI 兼容响应流生命周期 reasoning 已展示后收到服务端错误，不重放已产出的思考\nok 9 - OpenAI 兼容响应流生命周期 尚未产出内容的服务端错误仍可重试，恢复后仅交付一次正文\nok 10 - 真实 HTTP 响应连接回收 消费者提前结束后，服务端能观察到响应连接关闭\nok 11 - 请求计量逐笔覆盖真实传输尝试 HTTP 失败后恢复，保留失败与成功两笔记录\nok 12 - 请求计量逐笔覆盖真实传输尝试 HTTP 重试耗尽时每次请求都留痕，不把三次失败并成一次\nok 13 - 请求计量逐笔覆盖真实传输尝试 网络错误后的重试也各自计量\nok 14 - 请求计量逐笔覆盖真实传输尝试 非流式请求同样逐次计量，并保留摘要类别\nok 15 - 请求计量逐笔覆盖真实传输尝试 SSE 失败尝试的 usage 不会混入下一次请求（后续上报=false）\nok 16 - 请求计量逐笔覆盖真实传输尝试 SSE 失败尝试的 usage 不会混入下一次请求（后续上报=true）\nok 17 - 请求计量逐笔覆盖真实传输尝试 调用前已取消时，不产生未发送请求的计量记录\nok 18 - 请求计量逐笔覆盖真实传输尝试 本地 HTTP 服务收到两次请求时，计量也准确记录两笔\nok 19 - 流内重试的解码与取消边界 失败响应残留 UTF-8 起始字节 228，不污染下一次成功响应\nok 20 - 流内重试的解码与取消边界 失败响应残留 UTF-8 起始字节 240，不污染下一次成功响应\nok 21 - 流内重试的解码与取消边界 同一次响应内的 UTF-8 字符跨块时仍能正确拼接\nok 22 - 流内重试的解码与取消边界 退避期间取消立即结束等待并保留原始原因：Error: cancelled during backoff\nok 23 - 流内重试的解码与取消边界 退避期间取消立即结束等待并保留原始原因：cancelled during backoff\n1..23\n# tests 23\n# pass 23\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n",
+      "exitCode": 0
+    }
+  },
+  {
+    "id": "C5-lsp-language",
+    "visible": {
+      "command": "node tests/run-visible.mjs",
+      "ok": true,
+      "output": "TAP version 13\nok 1 - defaultLanguageId（缺省启发式，存量行为不变） 六个 JS/TS 后缀 ⇒ typescript；其余 ⇒ plaintext\nok 2 - languageIdMap（配置 → 查表） 只收非空字符串值；坏形状按缺格处理（不抛、不污染查表）\nok 3 - didOpen 的 languageId 走服务器声明（真发出去的那个值） 配了 extensionToLanguage ⇒ 非 JS 文件拿到声明的 languageId（不再是 plaintext）\nok 4 - didOpen 的 languageId 走服务器声明（真发出去的那个值） 同族：.go ⇒ go、.rs ⇒ rust（两个 server 各管各的，表不串）\nok 5 - didOpen 的 languageId 走服务器声明（真发出去的那个值） 没配 extensionToLanguage ⇒ 回落缺省启发式（存量配置一个字不变）\nok 6 - didOpen 的 languageId 走服务器声明（真发出去的那个值） 查表按原样键：配置写 .py 只命中 .py，别的扩展仍回落\n1..6\n# tests 6\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n",
+      "exitCode": 0
+    },
+    "hidden": {
+      "command": "node tests/run-visible.mjs tests/plugin-lsp-activation.test.ts",
+      "ok": true,
+      "output": "TAP version 13\nok 1 - 插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） 受信插件的服务器按 scoped id 注册；transport:socket 那条不占名额\nok 2 - 插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） §9.8 里运行时还没兑现的字段，装载期当场说出来（不静默收下）\nok 3 - 插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） 未过信任门的插件不注册（server.command 是任意可执行文件，信任门与 hook/MCP 同口径）\nok 4 - 插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） 宿主没开 LSP 总开关 ⇒ 注册了也不生效（插件不能替用户把 LSP 打开）\nok 5 - 插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） 真跳：${PLUGIN_ROOT} 展开成真路径，lsp 工具 hover 回显出 initializationOptions\nok 6 - 插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） shutdown 摘干净：注册表不留跨会话残留（下一个会话不该继承上一个插件的服务器）\nok 7 - 插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面） §9.8 的 diagnostics 开关真兑现：开 ⇒ 插件服务器推的 ERROR 回流；关 ⇒ 一个字都不回\nok 8 - runAgent 真的会激活插件 LSP（§9.8 那一跳不是只有测试在调） runAgent 里注册的 id 与面板口径同源；未激活（把那一行摘掉）就是红\n1..8\n# tests 8\n# pass 8\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n",
+      "exitCode": 0
+    }
+  },
+  {
+    "id": "C6-mutation-order",
+    "visible": {
+      "command": "node tests/run-visible.mjs",
+      "ok": true,
+      "output": "TAP version 13\nok 1 - withSessionMutation：入链按调用顺序，与 realpath 回程快慢无关 第一次调用的 realpath 慢 30ms ⇒ 第二个 mutation 仍排在它后面（旧实现会抢跑）\n1..1\n# tests 1\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n",
+      "exitCode": 0
+    },
+    "hidden": {
+      "command": "node tests/run-visible.mjs tests/session-reference-repository.test.ts",
+      "ok": true,
+      "output": "TAP version 13\nok 1 - resolveSessionRef：同名会话必须精确寻址 无 workspace 且两个根同名 ⇒ 拒绝；显式 workspace 各自命中\nok 2 - resolveSessionRef：同名会话必须精确寻址 未登记工作区 / 不存在的会话 / 空 id 都 fail closed\nok 3 - 父依赖：直接 + 传递，读不动不算无依赖 parent ← child ← grand：删除 parent 前能列出两代子会话；叶子可删\nok 4 - 父依赖：直接 + 传递，读不动不算无依赖 依赖文件读不动 ⇒ 抛错，不当成没有依赖\nok 5 - withSessionMutation：根级临界区 进程内串行：第二个 mutation 等第一个结束才开始\nok 6 - withSessionMutation：根级临界区 跨进程：锁被占用时另一个进程拿不到；结束后锁文件不残留\nok 7 - withSessionMutation：根级临界区 崩溃遗留的锁：显式报「需人工确认」，不自动删锁\n1..7\n# tests 7\n# pass 7\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n",
+      "exitCode": 0
+    }
+  }
+]

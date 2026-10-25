@@ -1,0 +1,114 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/orchestration-backend.test.ts (10 tests | 10 failed) 14ms
+   ❯ local orchestration backend (10)
+     × isolates writes, independently verifies the revision, then delivers exact bytes 4ms
+     × rejects unsupported capabilities with a reason 1ms
+     × derives prompt, model tool specs and the execution allowlist from one surface 1ms
+     × blocks write scope escapes and source symlinks before tool execution 1ms
+     × cannot deliver unverified or mutated output 1ms
+     × keeps commands unverifiable without a sandbox and never accepts zero assertions 1ms
+     × fails an empty acceptance contract and a verifier judging a stale revision 1ms
+     × reserves every paid provider call before invocation, including verifier calls 1ms
+     × rejects unknown paid prices instead of interpreting them as zero 1ms
+     × reads content addressed artifacts only after checking their hash and redacts secrets 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/orchestration-backend.test.ts > local orchestration backend > isolates writes, independently verifies the revision, then delivers exact bytes
+Error: local backend not implemented
+ ❯ createLocalBackend src/orchestration/local-backend.ts:7:93
+
+ ❯ fixture tests/orchestration-backend.test.ts:29:47
+ ❯ tests/orchestration-backend.test.ts:35:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  tests/orchestration-backend.test.ts > local orchestration backend > rejects unsupported capabilities with a reason
+Error: local backend not implemented
+ ❯ createLocalBackend src/orchestration/local-backend.ts:7:93
+
+ ❯ fixture tests/orchestration-backend.test.ts:29:47
+ ❯ tests/orchestration-backend.test.ts:53:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  tests/orchestration-backend.test.ts > local orchestration backend > derives prompt, model tool specs and the execution allowlist from one surface
+Error: local backend not implemented
+ ❯ createLocalBackend src/orchestration/local-backend.ts:7:93
+
+ ❯ fixture tests/orchestration-backend.test.ts:29:47
+ ❯ tests/orchestration-backend.test.ts:62:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  tests/orchestration-backend.test.ts > local orchestration backend > blocks write scope escapes and source symlinks before tool execution
+Error: local backend not implemented
+ ❯ createLocalBackend src/orchestration/local-backend.ts:7:93
+
+ ❯ fixture tests/orchestration-backend.test.ts:29:47
+ ❯ tests/orchestration-backend.test.ts:78:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  tests/orchestration-backend.test.ts > local orchestration backend > cannot deliver unverified or mutated output
+Error: local backend not implemented
+ ❯ createLocalBackend src/orchestration/local-backend.ts:7:93
+
+ ❯ fixture tests/orchestration-backend.test.ts:29:47
+ ❯ tests/orchestration-backend.test.ts:86:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  tests/orchestration-backend.test.ts > local orchestration backend > keeps commands unverifiable without a sandbox and never accepts zero assertions
+Error: local backend not implemented
+ ❯ createLocalBackend src/orchestration/local-backend.ts:7:93
+
+ ❯ fixture tests/orchestration-backend.test.ts:29:47
+ ❯ tests/orchestration-backend.test.ts:97:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  tests/orchestration-backend.test.ts > local orchestration backend > fails an empty acceptance contract and a verifier judging a stale revision
+Error: local backend not implemented
+ ❯ createLocalBackend src/orchestration/local-backend.ts:7:93
+
+ ❯ fixture tests/orchestration-backend.test.ts:29:47
+ ❯ tests/orchestration-backend.test.ts:106:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  tests/orchestration-backend.test.ts > local orchestration backend > reserves every paid provider call before invocation, including verifier calls
+Error: local backend not implemented
+ ❯ createLocalBackend src/orchestration/local-backend.ts:7:93
+
+ ❯ fixture tests/orchestration-backend.test.ts:29:47
+ ❯ tests/orchestration-backend.test.ts:113:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  tests/orchestration-backend.test.ts > local orchestration backend > rejects unknown paid prices instead of interpreting them as zero
+Error: local backend not implemented
+ ❯ createLocalBackend src/orchestration/local-backend.ts:7:93
+
+ ❯ fixture tests/orchestration-backend.test.ts:29:47
+ ❯ tests/orchestration-backend.test.ts:121:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  tests/orchestration-backend.test.ts > local orchestration backend > reads content addressed artifacts only after checking their hash and redacts secrets
+Error: local backend not implemented
+ ❯ createLocalBackend src/orchestration/local-backend.ts:7:93
+
+ ❯ fixture tests/orchestration-backend.test.ts:29:47
+ ❯ tests/orchestration-backend.test.ts:128:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  10 failed (10)
+   Start at  20:00:36
+   Duration  109ms (transform 46%, tests 35%, import 15%, worker 4%)
+

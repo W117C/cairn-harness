@@ -1,0 +1,59 @@
+{
+  "harnessHashes": {
+    "src": "414e8d4ce88f3683b169d69921c294ae47819799ca347729690cf680a50f19a9",
+    "scripts": "d86ac57f892e345a3278599fc03597bcc2931b05ca7ba8dd0577e13c7af63efe",
+    "package": "0bdec1449098774ad9bc7b7aaa4c43aaf0b6959a3ad2cf9dcdbfd47adcf2741f",
+    "lockfile": "299c5c94e02aa83054898521582d199e3a5a82f98045ab616c4d0cb20c571213"
+  },
+  "deniedRoots": [
+    "/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen",
+    "/tmp/cairn-metacognition-implementation-2026-10-25",
+    "/tmp/cairn-metacognition-2026-10-25"
+  ],
+  "heldOutHashes": {
+    "C1-malformed-tool": [
+      {
+        "src": "/private/tmp/cairn-metacognition-implementation-2026-10-25/corpus-frozen/C1-malformed-tool/heldout/tests/loop.test.ts",
+        "dest": "tests/loop.test.ts",
+        "sha256": "5829a4a5d425ddd20cac003dbdb86637093735196659aa88fe349cf90ea34676"
+      }
+    ]
+  },
+  "model": "cn:deepseek-v4.1-flash",
+  "endpoint": "http://127.0.0.1:7863/v1/chat/completions",
+  "tasksDigest": "3a65765217e2cf47a6840924d7de0a57beead2fb84f3c2653c2b43179cc8a089",
+  "codeHashes": {
+    "src/providers/openai.ts": "b7692e2818ee9c14fcaa8a1d0f01f3f3d009864552bf3c33139c0007825daca7",
+    "src/agent/context.ts": "f932a12989fb1b3b4d150fb484909599a2495a39bc2c6e7654679662107e219a",
+    "src/agent/compaction.ts": "bfb1233b72239fe6f2ea9d2993e8eccf570fcce7dbd5ded5dfcf72295e9f2412",
+    "src/agent/session-provider.ts": "e0ce1d7c3f92c52a6ec3e00b26fc7d7f834ccc4cc9e1d795c7fb0949c4231385",
+    "src/agent/eval/metacognition.ts": "a0f0d9234aa5e4ad9d2f315cb1e5973e330b514cf94b34ba0887e5cd30027b2d",
+    "src/agent/eval/study.ts": "fc882fecd3029783ab7dee8433ff194cc23cfd4cbd4102e2ace0586f3d7ecc3c",
+    "scripts/loop-eval.ts": "008d7c959d0f04f11878539d0100deeb662eb0edbaca3e0103ae045fa4e4ac54",
+    "scripts/metacognition-study.ts": "2ae47128cec8c9039749fd1a48506723b7628226aacf89af5ca4f341342ce40d",
+    "scripts/lib/metacognition-run-state.ts": "ec55ea564ca83e7093ff4b45fb3eb1a4e26ccf48d20b7a8687e67feea9e51007",
+    "scripts/lib/metacognition-sandbox.ts": "17ce4181e054b1131c1722e87918fa9cfc7e111bd8b5871922a3bacce1bd7347"
+  },
+  "taskHashes": {
+    "C1-malformed-tool": "c72025ea8d670981bc7c33e64085647ce453f0a68953623037638bf9600d7acf"
+  },
+  "reps": 1,
+  "seed": 20261025,
+  "strategies": [
+    "baseline"
+  ],
+  "maxSteps": 24,
+  "timeoutMs": 120000,
+  "outputCap": 4096,
+  "schedule": [
+    {
+      "taskId": "C1-malformed-tool",
+      "strategy": "baseline",
+      "rep": 1,
+      "seed": 607119744
+    }
+  ],
+  "concurrency": 1,
+  "memory": "empty and isolated per trial",
+  "contract": "Requested effort and explicit enabled thinking; exact effort enforcement is unverified. Tokens and reasoning details are provider-reported; monetary price is unknown."
+}

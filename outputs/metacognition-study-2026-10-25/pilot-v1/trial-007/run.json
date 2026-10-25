@@ -1,0 +1,14 @@
+{
+ "headSha": "146743c",
+ "dirty": 142,
+ "ranAt": "2026-10-25T02:31:51.752Z",
+ "maxSteps": 24,
+ "reps": 1,
+ "system": "base",
+ "arm": "triggered",
+ "thinking": "low",
+ "model": "cn:deepseek-v4.1-flash",
+ "tasks": [
+  "C2-truncated-turn"
+ ]
+}

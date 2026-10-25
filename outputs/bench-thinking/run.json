@@ -1,0 +1,14 @@
+{
+ "headSha": "146743c",
+ "dirty": 125,
+ "ranAt": "2026-10-24T14:19:06.818Z",
+ "maxSteps": 35,
+ "reps": 1,
+ "system": "base",
+ "arm": "low",
+ "thinking": "low",
+ "model": "hy3",
+ "tasks": [
+  "L32-long-chain"
+ ]
+}

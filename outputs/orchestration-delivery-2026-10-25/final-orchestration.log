@@ -1,0 +1,20 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ✓ tests/orchestration-engine.test.ts (8 tests) 279ms
+stderr | tests/orchestration-provider.test.ts > workspace orchestration provider budget gateway > blocks a second paid fetch during adapter sse retries
+[DeepSeek] 流内失败（第 1 次，尚未产出任何输出）⇒ 158ms 后重试：DeepSeek 流错误 server_error: fixture overload
+
+ ✓ tests/orchestration-backend.test.ts (19 tests) 191ms
+ ✓ tests/orchestration-service.test.ts (4 tests) 31ms
+ ✓ tests/orchestration-store.test.ts (4 tests) 25ms
+ ✓ tests/orchestration-provider.test.ts (10 tests) 486ms
+ ✓ tests/orchestration-plan.test.ts (61 tests) 18ms
+ ✓ tests/orchestration-project.test.ts (24 tests) 9ms
+ ✓ tests/orchestration-schedule.test.ts (13 tests) 3ms
+
+ Test Files  8 passed (8)
+      Tests  143 passed (143)
+   Start at  20:50:13
+   Duration  1.10s (tests 61%, transform 27%, import 12%, worker 1%)
+

@@ -1,0 +1,205 @@
+[
+ {
+  "r": {
+   "study": {
+    "strategy": "triggered",
+    "seed": 2139918472,
+    "interventions": [],
+    "physicalRequests": 14,
+    "outputCap": 4096,
+    "timeoutMs": 120000,
+    "envelopes": [
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 0
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 1
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 1
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 2
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 2
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 3
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 4
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 5
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 6
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 7
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 7
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 8
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 8
+     },
+     {
+      "effort": "low",
+      "thinking": {
+       "type": "enabled"
+      },
+      "model": "cn:deepseek-v4.1-flash",
+      "reasoningStates": 9
+     }
+    ],
+    "reasoningOutputTokens": 2548
+   },
+   "id": "C2-truncated-turn",
+   "name": "C2-truncated-turn",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "model": "cn:deepseek-v4.1-flash",
+   "attempts": 1,
+   "retryWaitMs": 0,
+   "retryWhy": "study: no hidden episode retry",
+   "seconds": 51.507,
+   "requests": 13,
+   "tokensIn": 322826,
+   "tokensOut": 4400,
+   "cny": null,
+   "toolCalls": 14,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 10,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "autoVerifyBeats": 0,
+   "verifyRecovery": "greenFirst",
+   "namedSets": {
+    "state": "pass",
+    "notGreen": [],
+    "broken": [],
+    "unmatched": [],
+    "reasons": [],
+    "sources": [
+     {
+      "command": "pnpm_config_verify_deps_before_run=false pnpm run test",
+      "format": "node-test-tap",
+      "tests": 8,
+      "carried": true,
+      "complete": true
+     }
+    ]
+   },
+   "providerFace": "真会话",
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/agent/loop.ts"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 637,
+    "procPeak": 7,
+    "cpuMs": 5911,
+    "samples": 97
+   },
+   "heldOutInstallErrs": [],
+   "heldOutRun": {
+    "ran": true,
+    "ok": true,
+    "exitCode": 0,
+    "output": "TAP version 13\nok 1 - 停止原因解码（纯函数，三家词表） 三家各自的「篇幅用尽」都归一到 output_budget\nok 2 - 停止原因解码（纯函数，三家词表） 三家各自的「内容策略拦停」都归一到 content_blocked\nok 3 - 停止原因解码（纯函数，三家词表） 正常收尾与工具轮不算截断\nok 4 - 停止原因解码（纯函数，三家词表） 大小写与首尾空白不造成第二种拼写；未知值一律 unknown（不把不知道说成坏）\nok 5 - 停止原因解码（纯函数，三家词表） turnTruncatedEvent：正常收尾返回 null；截断时存归一 token 而非线上原文\nok 6 - 停止原因解码（纯函数，三家词表） output_tokens：0 要如实留（0 也是读数），null/undefined 才不落字段\nok 7 - 第三种收尾证据：流结束而一个停止原因都没上报（2026-10-13 第 471 页） 纯函数：缺席（undefined/null/空串）⇒ 落事件；有任何非空原文（含词表外的）⇒ 不落\nok 8 - 第三种收尾证据：流结束而一个停止原因都没上报（2026-10-13 第 471 页） openai（glm 即其预设）：流结束而全程没有 finish_reason ⇒ 落一条 turn_stop_missing，且不落 turn_truncated\nok 9 - 第三种收尾证据：流结束而一个停止原因都没上报（2026-10-13 第 471 页） openai 负控：正常 stop ⇒ 零新事件（这一族只在该出声时出声）\nok 10 - 第三种收尾证据：流结束而一个停止原因都没上报（2026-10-13 第 471 页） anthropic：流结束而 message_delta 没带 stop_reason ⇒ 落一条 turn_stop_missing\nok 11 - 第三种收尾证据：流结束而一个停止原因都没上报（2026-10-13 第 471 页） gemini：流结束而 finishReason 缺席 ⇒ 落一条 turn_stop_missing\nok 12 - 三家适配器：把停止原因读出流 anthropic：message_delta 带 max_tokens ⇒ 流尾多出一条 turn_truncated\nok 13 - 三家适配器：把停止原因读出流 anthropic 负控：end_turn ⇒ 一个字节都不多（既有转录不变）\nok 14 - 三家适配器：把停止原因读出流 openai（glm 即其预设）：finish_reason=length ⇒ turn_truncated\nok 15 - 三家适配器：把停止原因读出流 gemini：finishReason=MAX_TOKENS ⇒ turn_truncated（大小写不同，表要认）\nok 16 - 三家适配器：把停止原因读出流 gemini 负控：STOP ⇒ 不落（这一族的正常收尾是大写）\nok 17 - 三家适配器：把停止原因读出流 没带停止原因的流不落证据（缺读数 ≠ 被截断）\nok 18 - 落盘与投影 runLoop 原样落进 JSONL；截断那一拍**续跑一次**把话说完（2026-10-23 接线）\nok 19 - 落盘与投影 turn_truncated 能过写入口校验（未知类型会被 createEventLog 抛死）\nok 20 - 落盘与投影 projectContext：说明紧跟在被砍断的那段正文之后（位置本身就是信息\n…[有界性：中段省略 1724 字]…\n负控：promptFeedback 里没 blockReason ⇒ 不落（缺读数 ≠ 被拦）\nok 49 - 非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） 两个字段都在时以 candidates 的为准（更具体：它说的是这一条候选，blockReason 说的是整段输入）\nok 50 - 非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） 穿链：非流式响应 → 摘要器 → out.truncated（收了不声张 = 没收，「两头断」第 10 次防线）\nok 51 - 非流式分支与 prompt 级拦截（第二次实测补上的两处盲区） 负控：答完的摘要 ⇒ truncated 字段缺席（恒 truthy 会把压缩整条闸死）\n1..51\n# tests 51\n# pass 51\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n"
+   },
+   "assembly": "autoMemory:off-here autoVerify:same ctrlTabCycle:not-applicable impactAnalysis:off-here promptCache:off-here subagentTools:same",
+   "headSha": "146743c",
+   "ranAt": "2026-10-25T02:31:51.752Z",
+   "maxSteps": 24,
+   "reps": 1,
+   "arm": "triggered",
+   "thinking": "low"
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  },
+  "taskId": "C2-truncated-turn"
+ }
+]

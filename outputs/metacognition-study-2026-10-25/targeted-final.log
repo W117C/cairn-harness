@@ -1,0 +1,13 @@
+
+ RUN  v5.0.0 /private/tmp/cairn-metacognition-work-2026-10-25
+
+
+ Test Files  10 passed (10)
+      Tests  87 passed (87)
+   Start at  01:58:15
+   Duration  8.56s (transform 47%, tests 40%, import 12%, worker 1%)
+
+  Transform  transforming modules took 5.84s · 47% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

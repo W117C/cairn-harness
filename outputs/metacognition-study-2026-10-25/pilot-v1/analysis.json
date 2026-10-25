@@ -1,0 +1,250 @@
+{
+  "complete": true,
+  "distinctTasks": 6,
+  "plannedTrajectories": 30,
+  "attempted": 30,
+  "arms": [
+    {
+      "strategy": "baseline",
+      "planned": 6,
+      "attempted": 6,
+      "pass": 4,
+      "fail": 2,
+      "unmeasurable": 0,
+      "decidable": 6,
+      "medianDecidableWallSeconds": 68.059,
+      "knownTotalTokenRuns": 1,
+      "observedTokens": 2041688,
+      "fetchCallsObserved": 93,
+      "usageEvents": 88,
+      "interventions": 0,
+      "intervenedRuns": 0,
+      "verifiedModelRecoveries": 0,
+      "visibleGreenHiddenRed": 0,
+      "judgeTamperFlags": 0
+    },
+    {
+      "strategy": "high",
+      "planned": 6,
+      "attempted": 6,
+      "pass": 2,
+      "fail": 3,
+      "unmeasurable": 1,
+      "decidable": 5,
+      "medianDecidableWallSeconds": 95.069,
+      "knownTotalTokenRuns": 3,
+      "observedTokens": 2241606,
+      "fetchCallsObserved": 84,
+      "usageEvents": 82,
+      "interventions": 0,
+      "intervenedRuns": 0,
+      "verifiedModelRecoveries": 0,
+      "visibleGreenHiddenRed": 0,
+      "judgeTamperFlags": 0
+    },
+    {
+      "strategy": "triggered",
+      "planned": 6,
+      "attempted": 6,
+      "pass": 3,
+      "fail": 3,
+      "unmeasurable": 0,
+      "decidable": 6,
+      "medianDecidableWallSeconds": 64.9635,
+      "knownTotalTokenRuns": 1,
+      "observedTokens": 1521458,
+      "fetchCallsObserved": 82,
+      "usageEvents": 77,
+      "interventions": 2,
+      "intervenedRuns": 2,
+      "verifiedModelRecoveries": 0,
+      "visibleGreenHiddenRed": 1,
+      "judgeTamperFlags": 0
+    },
+    {
+      "strategy": "periodic",
+      "planned": 6,
+      "attempted": 6,
+      "pass": 4,
+      "fail": 2,
+      "unmeasurable": 0,
+      "decidable": 6,
+      "medianDecidableWallSeconds": 70.5625,
+      "knownTotalTokenRuns": 1,
+      "observedTokens": 1846656,
+      "fetchCallsObserved": 95,
+      "usageEvents": 90,
+      "interventions": 11,
+      "intervenedRuns": 6,
+      "verifiedModelRecoveries": 0,
+      "visibleGreenHiddenRed": 1,
+      "judgeTamperFlags": 0
+    },
+    {
+      "strategy": "random",
+      "planned": 6,
+      "attempted": 6,
+      "pass": 3,
+      "fail": 2,
+      "unmeasurable": 1,
+      "decidable": 5,
+      "medianDecidableWallSeconds": 67.064,
+      "knownTotalTokenRuns": 1,
+      "observedTokens": 1169861,
+      "fetchCallsObserved": 65,
+      "usageEvents": 58,
+      "interventions": 8,
+      "intervenedRuns": 4,
+      "verifiedModelRecoveries": 0,
+      "visibleGreenHiddenRed": 1,
+      "judgeTamperFlags": 0
+    }
+  ],
+  "matrix": [
+    {
+      "taskId": "C1-malformed-tool",
+      "baseline": [
+        "pass"
+      ],
+      "high": [
+        "unmeasurable"
+      ],
+      "triggered": [
+        "pass"
+      ],
+      "periodic": [
+        "pass"
+      ],
+      "random": [
+        "unmeasurable"
+      ]
+    },
+    {
+      "taskId": "C2-truncated-turn",
+      "baseline": [
+        "pass"
+      ],
+      "high": [
+        "pass"
+      ],
+      "triggered": [
+        "pass"
+      ],
+      "periodic": [
+        "pass"
+      ],
+      "random": [
+        "pass"
+      ]
+    },
+    {
+      "taskId": "C3-steering-stagnation",
+      "baseline": [
+        "pass"
+      ],
+      "high": [
+        "pass"
+      ],
+      "triggered": [
+        "pass"
+      ],
+      "periodic": [
+        "pass"
+      ],
+      "random": [
+        "pass"
+      ]
+    },
+    {
+      "taskId": "C4-provider-overload",
+      "baseline": [
+        "fail"
+      ],
+      "high": [
+        "fail"
+      ],
+      "triggered": [
+        "fail"
+      ],
+      "periodic": [
+        "fail"
+      ],
+      "random": [
+        "fail"
+      ]
+    },
+    {
+      "taskId": "C5-lsp-language",
+      "baseline": [
+        "pass"
+      ],
+      "high": [
+        "fail"
+      ],
+      "triggered": [
+        "fail"
+      ],
+      "periodic": [
+        "fail"
+      ],
+      "random": [
+        "fail"
+      ]
+    },
+    {
+      "taskId": "C6-mutation-order",
+      "baseline": [
+        "fail"
+      ],
+      "high": [
+        "fail"
+      ],
+      "triggered": [
+        "fail"
+      ],
+      "periodic": [
+        "pass"
+      ],
+      "random": [
+        "pass"
+      ]
+    }
+  ],
+  "paired": [
+    {
+      "strategy": "triggered",
+      "pairedTrajectories": 6,
+      "pairedTasks": 6,
+      "wins": 0,
+      "losses": 1,
+      "taskMeanCompletionDifference": -0.16666666666666666
+    },
+    {
+      "strategy": "high",
+      "pairedTrajectories": 5,
+      "pairedTasks": 5,
+      "wins": 0,
+      "losses": 1,
+      "taskMeanCompletionDifference": -0.2
+    },
+    {
+      "strategy": "random",
+      "pairedTrajectories": 5,
+      "pairedTasks": 5,
+      "wins": 1,
+      "losses": 1,
+      "taskMeanCompletionDifference": 0
+    },
+    {
+      "strategy": "periodic",
+      "pairedTrajectories": 6,
+      "pairedTasks": 6,
+      "wins": 1,
+      "losses": 1,
+      "taskMeanCompletionDifference": 0
+    }
+  ],
+  "dataVersion": "frozen-v1",
+  "fullTokenTotals": "unknown; final verify closes the v1 stream before usage",
+  "monetaryCost": "unknown; no price supplied"
+}

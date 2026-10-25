@@ -1,0 +1,1697 @@
+--- a/src/agent/compaction.ts
++++ b/src/agent/compaction.ts
+@@ -145,8 +145,22 @@
+  *  verify_result 同 callId 归一组；区间重叠再合并；不在任何区间的事件是单例。 */
+ export function atomicUnits(events: AgentEvent[]): AtomicUnit[] {
+   const groups = new Map<string, number[]>();
++  const nativeByCall = new Map<string, string>();
++  const group = (key: string, id: number): void => {
++    const prior = groups.get(key);
++    if (prior) prior.push(id); else groups.set(key, [id]);
++  };
+   events.forEach((e, i) => {
+     const id = eventIdAt(i);
++    if (e.type === "user_message" || e.type === "usage") nativeByCall.clear();
++    if (e.type === "thinking_delta" && e.reasoning) {
++      nativeByCall.set(e.callId, e.reasoning.id);
++      group("r:" + e.reasoning.id, id);
++    } else if (e.type === "assistant_delta" && nativeByCall.has(e.callId)) {
++      group("r:" + nativeByCall.get(e.callId)!, id);
++    } else if (e.type === "tool_call" && e.reasoningId) {
++      group("r:" + e.reasoningId, id);
++    }
+     let key: string | null = null;
+     if (e.type === "tool_call") key = "c:" + e.id;
+     else if (
+@@ -159,9 +173,7 @@
+       key = "c:" + e.callId;
+     }
+     if (!key) return;
+-    const g = groups.get(key);
+-    if (g) g.push(id);
+-    else groups.set(key, [id]);
++    group(key, id);
+   });
+   const spans = [...groups.values()].map((ids) => ({ lo: Math.min(...ids), hi: Math.max(...ids) }));
+   spans.sort((a, b) => a.lo - b.lo);
+--- a/src/agent/context.ts
++++ b/src/agent/context.ts
+@@ -18,6 +18,7 @@
+   content: string | null;
+   tool_calls?: { id: string; type: "function"; function: { name: string; arguments: string } }[];
+   tool_call_id?: string;
++  reasoning?: import("../events/types").ProviderReasoningState;
+ }
+ 
+ /** 最新一份摘要的注入包装：交接叙事 + 免疫声明（§7.3(g)，分析用户意图时排除本消息）。
+@@ -259,9 +260,16 @@
+ 
+   const deltaBuf = new Map<string, string>();
+   const deltaOrder: string[] = [];
++  const reasoning = new Map<string, import("../events/types").ProviderReasoningState>();
++  const reasoningByCall = new Map<string, string>();
++  const reasoningMessages = new Map<string, number>();
+   const flushDeltas = (): void => {
+     for (const callId of deltaOrder) {
+-      msgs.push({ role: "assistant", content: deltaBuf.get(callId) ?? "" });
++      const reasoningId = reasoningByCall.get(callId);
++      const state = reasoningId === undefined ? undefined : reasoning.get(reasoningId);
++      if (reasoningId !== undefined) reasoningMessages.set(reasoningId, msgs.length);
++      msgs.push({ role: "assistant", content: deltaBuf.get(callId) ?? "", ...(state ? { reasoning: { ...state } } : {}) });
++      reasoningByCall.delete(callId);
+     }
+     deltaBuf.clear();
+     deltaOrder.length = 0;
+@@ -281,28 +289,50 @@
+     ) {
+       return; // 编排/审批协议事件：语义在面板与卡片侧，模型上下文不需要（与 clarify/plan 同口径）
+     }
+-    if (id >= offset) {
++    if (!injected && id >= offset) {
+       flushDeltas(); // offset 之前的待并 delta 先落位，保证注入点次序
+       injectOnce(); // 到达注入位（首个 tail 事件或末尾）
+     }
+     if (e.type === "user_message") {
+       flushDeltas();
++      reasoningByCall.clear();
+       msgs.push({ role: "user", content: e.content });
+     } else if (e.type === "assistant_message") {
+       flushDeltas();
+       msgs.push({ role: "assistant", content: e.content });
++    } else if (e.type === "thinking_delta") {
++      if (e.reasoning && typeof e.reasoning.id === "string" && typeof e.reasoning.source === "string") {
++        const prior = reasoning.get(e.reasoning.id);
++        reasoning.set(e.reasoning.id, {
++          source: e.reasoning.source,
++          content: (prior?.source === e.reasoning.source ? prior.content : "") + e.text,
++        });
++        reasoningByCall.set(e.callId, e.reasoning.id);
++      }
+     } else if (e.type === "assistant_delta") {
+       if (!deltaBuf.has(e.callId)) deltaOrder.push(e.callId);
+       deltaBuf.set(e.callId, (deltaBuf.get(e.callId) ?? "") + e.text);
+     } else if (e.type === "tool_call") {
+       flushDeltas();
+-      msgs.push({
++      const state = e.reasoningId === undefined ? undefined : reasoning.get(e.reasoningId);
++      const previousAt = e.reasoningId === undefined ? undefined : reasoningMessages.get(e.reasoningId);
++      const previous = previousAt === undefined ? undefined : msgs[previousAt];
++      const tool = { id: e.id, type: "function" as const, function: { name: e.name, arguments: JSON.stringify(e.args) } };
++      // Reconstruct the native assistant batch; do not repeat its reasoning once per tool.
++      const answeredIds = new Set(previous?.tool_calls?.map(call => call.id) ?? []);
++      if (state && previous?.role === "assistant" && previousAt !== undefined &&
++          msgs.slice(previousAt + 1).every(msg => msg.role === "tool" && answeredIds.has(msg.tool_call_id ?? ""))) {
++        previous.tool_calls = [...(previous.tool_calls ?? []), tool];
++      } else {
++        if (state && e.reasoningId !== undefined) reasoningMessages.set(e.reasoningId, msgs.length);
++        msgs.push({
+         role: "assistant",
+         content: null,
+-        tool_calls: [
+-          { id: e.id, type: "function", function: { name: e.name, arguments: JSON.stringify(e.args) } },
+-        ],
+-      });
++        tool_calls: [tool],
++        ...(state ? { reasoning: { ...state } } : {}),
++        });
++      }
++      if (state) reasoningByCall.clear();
+     } else if (e.type === "tool_result") {
+       flushDeltas();
+       const pruned = replacements?.get(id);
+@@ -325,7 +355,11 @@
+       if (i === lastAutoIdx) msgs.push({ role: "user", content: autoVerifyNote(e.results, autoIdx.length - 1) });
+     } else if (e.type === "turn_truncated") {
+       flushDeltas(); // 先把那段被砍断的正文落位，「上一条」才指得清是哪条
++      reasoningByCall.clear();
+       msgs.push({ role: "user", content: truncationNote(e) });
++    } else if (e.type === "usage") {
++      flushDeltas();
++      reasoningByCall.clear();
+     }
+     // clarify_requested / plan_proposed / plan_approved / usage / session_meta：
+     // 语义已在 tool_result / 卡片侧，模型上下文不需要（与既有 buildSessionHistory 口径一致）
+--- /dev/null
++++ b/src/agent/eval/metacognition.ts
+@@ -0,0 +1,69 @@
++// Opt-in evaluation policy only. No permissions, tools, judge or production defaults change.
++import { createRng, nextRandom } from '../../routing/bandit';
++import { isEnvVerifyCause, type AgentEvent } from '../../events';
++import { judgeNoProgressEvents, normalizeFailureLine, verifySignature } from '../no-progress';
++import { classifyVerifyFailure } from '../verify';
++
++export const STUDY_STRATEGIES = ['baseline', 'high', 'triggered', 'periodic', 'random'] as const;
++export type StudyStrategy = typeof STUDY_STRATEGIES[number];
++export interface InterventionOptions { strategy: string; seed: number; maxInterventions: number; period?: number; probability?: number }
++export interface InterventionDecision { request: number; reason: string; evidenceEvent: number }
++
++export function createInterventionPolicy(options: InterventionOptions): {
++  next: (events: readonly AgentEvent[]) => string | undefined;
++  decisions: InterventionDecision[];
++} {
++  const period = options.period ?? 5, probability = options.probability ?? 0.2;
++  if (!(STUDY_STRATEGIES as readonly string[]).includes(options.strategy) || !Number.isSafeInteger(options.seed) ||
++      !Number.isSafeInteger(options.maxInterventions) || options.maxInterventions < 0 || !Number.isSafeInteger(period) || period < 1 ||
++      !Number.isFinite(probability) || probability < 0 || probability > 1) throw new Error('Invalid intervention strategy or budget');
++  const decisions: InterventionDecision[] = [], seen = new Set<string>();
++  const rng = createRng(options.seed);
++  let request = 0, userCount = 0;
++  return { decisions, next(events) {
++    request++;
++    if (options.strategy === 'baseline' || options.strategy === 'high' || decisions.length >= options.maxInterventions) return undefined;
++    const users = events.filter(event => event.type === 'user_message').length;
++    if (users !== userCount) { seen.clear(); userCount = users; }
++    let reason = '', key = '', evidenceEvent = events.length;
++    if (options.strategy === 'periodic') {
++      if (request % period !== 0) return undefined;
++      reason = 'periodic'; key = 'periodic:' + request;
++    } else if (options.strategy === 'random') {
++      if (request === 1 || nextRandom(rng) >= probability) return undefined;
++      reason = 'random'; key = 'random:' + request;
++    } else {
++      let latest = -1;
++      for (let at = events.length - 1; at >= 0; at--) {
++        if (events[at]!.type === 'user_message') break;
++        if (events[at]!.type === 'tool_result' || events[at]!.type === 'verify_result') { latest = at; break; }
++      }
++      const last = events[latest];
++      const verify = last?.type === 'verify_result' ? last : last?.type === 'tool_result'
++        ? [...events.slice(0, latest)].reverse().find(event => event.type === 'verify_result' && event.callId === last.callId) : undefined;
++      if (verify?.type === 'verify_result' && !verify.ok) {
++        if (isEnvVerifyCause(verify.cause)) return undefined;
++        reason = 'validation-failed'; key = reason + ':' + verifySignature(verify.results).signature;
++      } else if (last?.type === 'tool_result' && !last.ok && !last.blockedBy) {
++        if ((last.exitCode !== undefined || last.timedOut) && isEnvVerifyCause(classifyVerifyFailure({
++          exitCode:last.exitCode??null,timedOut:last.timedOut===true,output:last.output,
++        }))) return undefined;
++        const call = [...events.slice(0, latest)].reverse().find(event => event.type === 'tool_call' && event.id === last.callId);
++        reason = 'tool-failed'; key = reason + ':' + (call?.type === 'tool_call' ? call.name : '?') + ':' + normalizeFailureLine(last.output);
++      } else {
++        let start = events.length;
++        while (start > 0 && events[start - 1]!.type !== 'user_message') start--;
++        const progress = judgeNoProgressEvents(events.slice(start) as unknown as readonly Record<string, unknown>[]);
++        if (progress.action === 'silent') return undefined;
++        reason = 'no-progress'; key = reason + ':' + progress.rules.join(',');
++      }
++      evidenceEvent = latest >= 0 ? latest + 1 : events.length;
++      if (seen.has(key)) return undefined;
++    }
++    seen.add(key); decisions.push({ request, reason, evidenceEvent });
++    const evidence = reason === 'validation-failed' ? `验证未通过（事件序号 ${evidenceEvent}）。`
++      : reason === 'tool-failed' ? `工具未成功（事件序号 ${evidenceEvent}）。`
++      : reason === 'no-progress' ? `已有重复或停滞证据（截至事件序号 ${evidenceEvent}）。` : '';
++    return '[实验策略提示] ' + evidence + '继续前简短核对目标、关键假设和已有证据；选择一个能区分原因的最小探针，再决定下一项修改与验证。遵守原有权限与验收要求。';
++  } };
++}
+--- /dev/null
++++ b/src/agent/eval/study.ts
+@@ -0,0 +1,65 @@
++import { createRng, nextRandom } from '../../routing/bandit';
++
++export interface StudyTrial { taskId: string; strategy: string; rep: number; seed: number }
++export interface StudyRecord extends StudyTrial { outcome: 'pass' | 'fail' | 'unmeasurable'; tokens: number | null; seconds: number | null }
++const identity = (trial: StudyTrial): string => JSON.stringify([trial.taskId, trial.strategy, trial.rep]);
++
++export function createStudySchedule(options: { tasks: readonly string[]; strategies: readonly string[]; reps: number; seed: number }): StudyTrial[] {
++  for (const values of [options.tasks, options.strategies]) {
++    if (values.length === 0 || values.some(value => value.trim() === '') || new Set(values).size !== values.length) throw new Error('Study identities must be non-empty and unique');
++  }
++  if (!Number.isSafeInteger(options.reps) || options.reps < 1 || !Number.isSafeInteger(options.seed)) throw new Error('Invalid study repeats or seed');
++  const rng = createRng(options.seed);
++  const trials: StudyTrial[] = [];
++  for (const taskId of options.tasks) for (let rep = 1; rep <= options.reps; rep++) {
++    const block = options.strategies.map(strategy => ({ taskId, strategy, rep, seed: Math.floor(nextRandom(rng) * 0x100000000) }));
++    for (let at = block.length - 1; at > 0; at--) {
++      const other = Math.floor(nextRandom(rng) * (at + 1));
++      [block[at], block[other]] = [block[other]!, block[at]!];
++    }
++    trials.push(...block);
++  }
++  return trials;
++}
++
++export function summarizeStudy(schedule: readonly StudyTrial[], records: readonly StudyRecord[]) {
++  const planned = new Map(schedule.map(trial => [identity(trial), trial]));
++  if (planned.size !== schedule.length) throw new Error('Duplicate scheduled trial');
++  const actual = new Map<string, StudyRecord>();
++  for (const record of records) {
++    const key = identity(record), trial = planned.get(key);
++    if (!trial || trial.seed !== record.seed || actual.has(key)) throw new Error('Foreign or duplicate study record');
++    if (!['pass', 'fail', 'unmeasurable'].includes(record.outcome) || (record.seconds !== null && (!Number.isFinite(record.seconds) || record.seconds < 0)) ||
++        (record.tokens !== null && (!Number.isFinite(record.tokens) || record.tokens < 0))) throw new Error('Invalid study measurement');
++    actual.set(key, record);
++  }
++  const arms = [...new Set(schedule.map(trial => trial.strategy))].map(strategy => {
++    const requested = schedule.filter(trial => trial.strategy === strategy);
++    const rows = records.filter(record => record.strategy === strategy);
++    const pass = rows.filter(row => row.outcome === 'pass').length, fail = rows.filter(row => row.outcome === 'fail').length;
++    const unknownUsageRuns = rows.filter(row => row.tokens === null).length;
++    return { strategy, planned: requested.length, attempted: rows.length, pass, fail,
++      unmeasurable: rows.filter(row => row.outcome === 'unmeasurable').length, pending: requested.length - rows.length,
++      decidablePassRate: pass + fail > 0 ? pass / (pass + fail) : null,
++      totalTokens: unknownUsageRuns === 0 && rows.length > 0 ? rows.reduce((sum, row) => sum + row.tokens!, 0) : null,
++      unknownUsageRuns, unknownTimeRuns: rows.filter(row=>row.seconds===null).length,
++      seconds: rows.some(row=>row.seconds===null)?null:rows.reduce((sum, row) => sum + row.seconds!, 0) };
++  });
++  const comparisons = arms.filter(arm => arm.strategy !== 'baseline').map(arm => {
++    const pairs: { taskId: string; difference: number }[] = [];
++    let wins = 0, losses = 0;
++    for (const row of records.filter(record => record.strategy === arm.strategy)) {
++      const base = records.find(candidate => candidate.strategy === 'baseline' && candidate.taskId === row.taskId && candidate.rep === row.rep);
++      if (!base || base.outcome === 'unmeasurable' || row.outcome === 'unmeasurable') continue;
++      const difference = Number(row.outcome === 'pass') - Number(base.outcome === 'pass');
++      pairs.push({ taskId: row.taskId, difference }); wins += Number(difference > 0); losses += Number(difference < 0);
++    }
++    const tasks = [...new Set(pairs.map(pair => pair.taskId))];
++    const effects = tasks.map(task => { const rows = pairs.filter(pair => pair.taskId === task); return rows.reduce((sum, row) => sum + row.difference, 0) / rows.length; });
++    return { strategy: arm.strategy, pairedTrajectories: pairs.length, pairedTasks: tasks.length, wins, losses,
++      taskMeanCompletionDifference: effects.length > 0 ? effects.reduce((sum, value) => sum + value, 0) / effects.length : null };
++  });
++  return { arms, comparisons, independentTasks: new Set(schedule.map(trial => trial.taskId)).size,
++    complete: records.length === schedule.length, inference: 'pilot-only' as const,
++    limitation: 'Descriptive pilot. Repeated attempts and test assertions are not independent tasks; saturation does not establish equivalence.' };
++}
+--- a/src/agent/session-provider.ts
++++ b/src/agent/session-provider.ts
+@@ -794,7 +794,7 @@
+     };
+     /** 真实通道模型名（缺省 = provider 层读 CAIRN_MODEL env；settings.model 在场时优先）。 */
+     model?: string;
+-    /** 思考档位：只在这一层展开成 transport 的 `reasoningEffort`；缺省/off = 请求体逐字不变。 */
++    /** Explicit effort reaches transport; native off differs from an unspecified upstream default. */
+     thinking?: ThinkingEffort;
+     /** 调用方**已经解析好**的模型窗口（如 `--model` 自由档位合成 spec 上的那个）。
+      *  `opts.model` 那条查表的路只认得表内模型；自由档位的名字按定义不在表里，查表恒为 undefined ⇒
+@@ -808,6 +808,8 @@
+      *  会话末沉淀轮用它把指令送进请求——既不落日志（否则下一轮会被当用户发言重放），
+      *  又能真正到达模型。缺省 undefined = 零行为。 */
+     ephemeralUserTurn?: string;
++    /** Optional host-owned experimental instruction, assembled before the final context budget check. */
++    requestIntervention?: (events: readonly AgentEvent[]) => string | undefined;
+     /** 识图通道（`read_image` → 下一轮请求）：provider 每轮组装时从这里取待发的图片。
+      *  与 `ephemeralImages` 的区别是**时机**：那个是「这一轮就附上」的一次性块（调用方自己算好），
+      *  这个是「loop 什么时候读到图，下一轮就附上」的活盒子。两者都缺省 = 零行为。 */
+@@ -1213,6 +1215,8 @@
+       // 识图：盒子里有图就取出来附到本轮请求末尾（take 即清空 ⇒ 同一张图不会在两轮里各付一遍 token）。
+       // 空盒时这个参数缺席 ⇒ 消息序列逐字不变，不读图的会话一个字节都不多付。
+       const liveImages = opts.imageChannel?.take() ?? [];
++      const ephemeralUserTurn = [opts.ephemeralUserTurn, opts.requestIntervention?.(events)]
++        .filter((text): text is string => text !== undefined && text !== "").join("\n\n");
+       const msgs = composeTurnMessages({
+         system: opts.system,
+         mapText,
+@@ -1222,7 +1226,7 @@
+         ...(skillsBlock ? { skills: skillsBlock } : {}),
+         ...(surfaceNoteText ? { surfaceNote: surfaceNoteText } : {}),
+         ...(opts.attachmentContext ? { attachmentContext: opts.attachmentContext } : {}),
+-        ...(opts.ephemeralUserTurn !== undefined ? { ephemeralUserTurn: opts.ephemeralUserTurn } : {}),
++        ...(ephemeralUserTurn !== "" ? { ephemeralUserTurn } : {}),
+         ...(liveImages.length > 0 ? { ephemeralImages: liveImages } : {}),
+         ...(opts.ephemeralImages !== undefined ? { ephemeralImages: opts.ephemeralImages } : {}),
+       });
+@@ -1246,7 +1250,7 @@
+       }
+       call?.signal?.throwIfAborted();
+       yield* (opts.transport ?? streamGlm)(msgs, { ...(opts.model ? { model: opts.model } : {}),
+-        ...(opts.thinking !== undefined && opts.thinking !== "off" ? { reasoningEffort: opts.thinking } : {}),
++        ...(opts.thinking !== undefined ? { reasoningEffort: opts.thinking } : {}),
+         ...(opts.solpi?.meter ? { metering: { meter: opts.solpi.meter, category: "main" as const } } : {}) }, tools, call);
+       successfulRequests++;
+       opts.solpi?.sent(msgs, events);
+--- a/src/events/types.ts
++++ b/src/events/types.ts
+@@ -64,17 +64,19 @@
+ export interface AssistantMessageEvent { type: "assistant_message"; content: string }
+ /** 流式增量片段：callId 标识同一轮回复，text 为逐字追加的一小段。 */
+ export interface AssistantDeltaEvent { type: "assistant_delta"; callId: string; text: string }
++/** Native continuation state is scoped to one endpoint/model, never general answer text. */
++export interface ProviderReasoningState { source: string; content: string }
+ /** 模型的**思考正文**（reasoning / thinking）增量。
+  *
+  *  与 assistant_delta 的区别：那段是"答给用户的话"，这段是"它自己怎么想的"。
+  *  两者必须分开 —— 混进正文会让转录与重放变脏（思考块在多数家不可回传）。
+  *  callId 与 assistant_delta 同源（同一次请求里的同一段输出），渲染层据此把思考挂在对应回答行前。
+  *  2026-10-07 用户要求显示思考过程：以前适配器是**刻意忽略**推理增量的。 */
+-export interface ThinkingDeltaEvent { type: "thinking_delta"; callId: string; text: string }
++export interface ThinkingDeltaEvent { type: "thinking_delta"; callId: string; text: string; reasoning?: { id: string; source: string } }
+ 
+ /** M3a：worker 子流的工具调用（§4.4.9 落主流口径）——agent_id 在场 = 该事件属于该 worker 子流，
+  *  主上下文投影（projectContext）跳过带 agent_id 的事件（父上下文唯一接收物 = agent_result，§4.4.4）。 */
+-export interface ToolCallEvent { type: "tool_call"; id: string; name: string; args: Record<string, unknown>; agent_id?: string }
++export interface ToolCallEvent { type: "tool_call"; id: string; name: string; args: Record<string, unknown>; agent_id?: string; reasoningId?: string }
+ /** 执行前就被拦下的工具调用：哪道闸拦的（唯一事实源；下面六处出口共用，别各写一份字符串）。
+  *  为什么不塞进 `gate: GateMeta`——这六道闸都不在档位机里，没有 layer/risk/mode 可言，
+  *  编一个就会污染 `gate-outcomes` 的 layer×verdict 免批率（`GateMeta.mode` 那句「宁缺不编」是纪律不是注释）。
+@@ -132,7 +134,10 @@
+ export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number; /** 缓存分列（可选）：**缺字段 = 该 provider 没上报，不等于 0**。约定 `inputTokens` 是含缓存的总输入，
+    *  下面两个是其中的分块——不得再与 inputTokens 相加（metering 的 MeterUsage 要互斥桶，适配器换算后再交）。
+    *  写侧断点（Anthropic cache_control / 稳定前缀排布）尚未接线：先把「命中没有」测出来，再谈制造命中。 */
+-  cacheReadInputTokens?: number; cacheWriteInputTokens?: number; /** M3a §4.4.10：usage 按 agent 归因（主 loop usage 无此字段）。 */ agent_id?: string; /** 产生这笔用量的模型名（provider 名或档位 id 两态都收，价表键由 `priceForModel` 反查）。
++  cacheReadInputTokens?: number; cacheWriteInputTokens?: number;
++  /** Reported subset of outputTokens, never added to the total again; absent means unknown. */
++  reasoningOutputTokens?: number;
++  /** M3a §4.4.10：usage 按 agent 归因（主 loop usage 无此字段）。 */ agent_id?: string; /** 产生这笔用量的模型名（provider 名或档位 id 两态都收，价表键由 `priceForModel` 反查）。
+    *  **缺字段 = 这一笔定不了价**（旧日志、剧本/demo 通道、worker 没在流里留过档）⇒ 消费方按「价格不可知」记，
+    *  绝不折成 $0（评估面的 `$ / 成功任务` 一直报不可测，缺的就是这一列，见 2026-09-27 第 148 页）。
+    *  写侧只有一个盖章点：会话落盘的漏斗 `runAgent` 的 pipeline（主会话与 worker 子流都过它）。 */
+--- a/src/providers/index.ts
++++ b/src/providers/index.ts
+@@ -19,6 +19,7 @@
+   content: string | null;
+   tool_calls?: { id: string; type: "function"; function: { name: string; arguments: string } }[];
+   tool_call_id?: string;
++  reasoning?: import("../events/types").ProviderReasoningState;
+   /** 多模态图片块（识图）。**缺席 = 这条消息没有图片**（绝大多数消息）⇒ 缺省零行为：
+    *  纯文本消息在每一处 wire 映射里都逐字保持 `content: "..."` 原形状。
+    *
+--- a/src/providers/openai.ts
++++ b/src/providers/openai.ts
+@@ -2,7 +2,7 @@
+ // baseURL / model / 额外 body 参数（extraBody）/ 环境变量名均可配，GLM 是它的一组预设（见 glm.ts）。
+ // 解码规则与迁移前逐字一致：增量在 choices[0].delta.content；tool_calls 按 index 跨块累积
+ //（id 首块、name 非空即记、arguments 拼接）；末 chunk 带 usage（后到覆盖）；data: [DONE] 结束。
+-import { randomUUID } from "node:crypto";
++import { createHash, randomUUID } from "node:crypto";
+ import { DEFAULT_STALL_MS } from "../net";
+ import { backoffMs, establishStream, retryableStreamErrorFrame, retryableStreamFailure, StreamFailure, waitRetryDelay } from "./retry";
+ import { turnStopMissingEvent, turnTruncatedEvent } from "./stop-reason";
+@@ -66,10 +66,10 @@
+       reasoning?: string;
+       tool_calls?: DeltaToolCall[];
+     };
+-    message?: { content?: string; tool_calls?: DeltaToolCall[] };
++    message?: { content?: string; reasoning_content?: string; tool_calls?: DeltaToolCall[] };
+     finish_reason?: string | null;
+   }[];
+-  usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number }; cache_creation_input_tokens?: number } | null;
++  usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number }; completion_tokens_details?: { reasoning_tokens?: number }; cache_creation_input_tokens?: number } | null;
+   // OpenAI 流中段错误事件（如内容审查），出现即按协议错误抛出
+   error?: { message?: string; type?: string; code?: string } | null;
+ }
+@@ -93,17 +93,15 @@
+   // prompt_tokens 本身含缓存命中量 → 事件口径已一致；这里只是把分块透出，让命中率可见（缺报不落 0）
+   const read = tokenCount(u.prompt_tokens_details?.cached_tokens);
+   const write = tokenCount(u.cache_creation_input_tokens);
++  const reasoning = tokenCount(u.completion_tokens_details?.reasoning_tokens);
+   return {
+     type: "usage",
+     inputTokens: u.prompt_tokens ?? 0,
+     outputTokens: u.completion_tokens ?? 0,
+     ...(read !== null ? { cacheReadInputTokens: read } : {}),
+     ...(write !== null ? { cacheWriteInputTokens: write } : {}),
+-  };
+-}
+-
+-function toWireMessages(messages: OpenAiMessage[]): unknown[] {
+-  return toOpenAiWireMessages(messages);
++    ...(reasoning !== null ? { reasoningOutputTokens: reasoning } : {}),
++  };
+ }
+ 
+ /** 带图消息的 wire 形状：content 从字符串换成 OpenAI 的 parts 数组。
+@@ -126,20 +124,23 @@
+ }
+ 
+ /** 一条消息的 wire 形状（识图那一支在这里分叉）。 */
+-function toWireMessage(m: OpenAiMessage): unknown {
++function toWireMessage(m: OpenAiMessage, reasoningSource?: string): unknown {
+   const parts = (m as ProviderMessageWithImage).contentParts;
+-  if (parts !== undefined && parts.length > 0) return toWireImageMessage(m, parts);
++  const native = m.role === "assistant" && reasoningSource !== undefined && m.reasoning?.source === reasoningSource
++    ? { reasoning_content: m.reasoning.content } : {};
++  if (parts !== undefined && parts.length > 0) return { ...(toWireImageMessage(m, parts) as object), ...native };
+   return {
+     role: m.role,
+     content: m.content,
+     ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+     ...(m.tool_call_id !== undefined ? { tool_call_id: m.tool_call_id } : {}),
++    ...native,
+   };
+ }
+ 
+ /** 识图消息表（纯函数，供判卷直接钉 wire 形状）。 */
+-export function toOpenAiWireMessages(messages: OpenAiMessage[]): unknown[] {
+-  return messages.map(toWireMessage);
++export function toOpenAiWireMessages(messages: OpenAiMessage[], reasoningSource?: string): unknown[] {
++  return messages.map(message => toWireMessage(message, reasoningSource));
+ }
+ 
+ function toWireTools(tools: OpenAiToolSpec[]): unknown[] {
+@@ -178,11 +179,19 @@
+   // 缺失原生 id 时，序号只在这一逻辑请求内有效；重试沿用同一前缀，新请求不得碰撞。
+   const toolRequestScope = randomUUID();
+ 
+-  const body: Record<string, unknown> = { model, messages: toWireMessages(messages), stream };
++  const effectiveModel = opts.extraBody?.model ?? model;
++  const reasoningSource = createHash("sha256").update(endpoint + "\0" + String(effectiveModel)).digest("hex");
++  const nativeDeepSeek = new URL(endpoint).hostname === "api.deepseek.com";
++  const body: Record<string, unknown> = { model, messages: toOpenAiWireMessages(messages, reasoningSource), stream };
+   // C8（审查 P2）：流式计量——OpenAI 兼容端点默认不回 usage，须显式开启 stream_options.include_usage，
+   // 否则流式会话 token 恒 0（成本闸/用量面板全失真）。extraBody 仍可覆盖（自建网关不兼容时）。
+   if (stream) body.stream_options = { include_usage: true };
+-  if (opts.reasoningEffort !== undefined && opts.reasoningEffort !== "") body.reasoning_effort = opts.reasoningEffort;
++  if (opts.reasoningEffort === "off") {
++    if (nativeDeepSeek) body.thinking = { type: "disabled" };
++  } else if (opts.reasoningEffort !== undefined && opts.reasoningEffort !== "") {
++    body.reasoning_effort = opts.reasoningEffort;
++    if (nativeDeepSeek) body.thinking = { type: "enabled" };
++  }
+   if (opts.extraBody) Object.assign(body, opts.extraBody);
+   if (tools && tools.length > 0) body.tools = toWireTools(tools);
+ 
+@@ -250,6 +259,8 @@
+       if (data.usage) observeUsage(data.usage);
+       const callId = data.id ?? "a-0";
+       const msg = data.choices?.[0]?.message;
++      const nativeReasoning = typeof msg?.reasoning_content === "string" && msg.reasoning_content !== "";
++      if (nativeReasoning) yield { type: "thinking_delta", callId, text: msg!.reasoning_content!, reasoning: { id: toolRequestScope, source: reasoningSource } };
+       if (msg?.content) yield { type: "assistant_delta", callId, text: msg.content };
+       for (const [index, c] of (msg?.tool_calls ?? []).entries()) {
+         yield {
+@@ -257,6 +268,7 @@
+           id: c.id ?? `call-${toolRequestScope}-${String(c.index ?? index)}`,
+           name: c.function?.name ?? "",
+           args: parseArgs(c.function?.arguments, label),
++          ...(nativeReasoning ? { reasoningId: toolRequestScope } : {}),
+         };
+       }
+       if (data.usage) yield toUsage(data.usage);
+@@ -305,6 +317,7 @@
+       let buf2 = "";
+       let finished2 = false;
+       let callId2 = "a-0";
++      let nativeReasoning2 = false;
+       const pending2 = new Map<number, { id?: string; name: string; args: string }>();
+       let usage2: (ModelOutput & { type: "usage" }) | null = null;
+       let finishReason2: string | null | undefined;
+@@ -352,7 +365,9 @@
+             const thinking = delta?.reasoning_content ?? delta?.reasoning;
+             if (typeof thinking === "string" && thinking !== "") {
+               emitted = true;
+-              yield { type: "thinking_delta", callId: callId2, text: thinking };
++              if (typeof delta?.reasoning_content === "string") nativeReasoning2 = true;
++              yield { type: "thinking_delta", callId: callId2, text: thinking,
++                ...(typeof delta?.reasoning_content === "string" ? { reasoning: { id: toolRequestScope, source: reasoningSource } } : {}) };
+             }
+             if (delta?.content) {
+               emitted = true;
+@@ -388,6 +403,7 @@
+             id: acc.id ?? `call-${toolRequestScope}-${String(index)}`,
+             name: acc.name,
+             args: parseArgs(acc.args, label),
++            ...(nativeReasoning2 ? { reasoningId: toolRequestScope } : {}),
+           };
+         }
+         if (usage2) yield usage2;
+--- a/src/providers/registry.ts
++++ b/src/providers/registry.ts
+@@ -201,6 +201,7 @@
+   const fetchImpl = opts.fetchImpl;
+   // 档位 → 中立描述（各家自己决定放到 body 的哪儿）；null = 不发这个字段
+   const directive = opts.reasoningEffort !== undefined ? reasoningDirective(opts.reasoningEffort) : null;
++  const openAiEffort = opts.reasoningEffort === "off" ? "off" : directive?.effort;
+   switch (spec.provider) {
+     case "glm":
+       return (messages, tools, callOptions) => streamGlm(
+@@ -210,7 +211,7 @@
+           ...(fetchImpl ? { fetchImpl } : {}),
+           ...(callOptions?.stream !== undefined ? { stream: callOptions.stream } : {}),
+           ...(callOptions?.metering ? { metering: callOptions.metering } : {}),
+-          ...(directive !== null ? { reasoningEffort: directive.effort } : {}),
++          ...(openAiEffort !== undefined ? { reasoningEffort: openAiEffort } : {}),
+         },
+         tools,
+         callOptions?.call,
+@@ -223,7 +224,7 @@
+           ...(fetchImpl ? { fetchImpl } : {}),
+           ...(callOptions?.stream !== undefined ? { stream: callOptions.stream } : {}),
+           ...(callOptions?.metering ? { metering: callOptions.metering } : {}),
+-          ...(directive !== null ? { reasoningEffort: directive.effort } : {}),
++          ...(openAiEffort !== undefined ? { reasoningEffort: openAiEffort } : {}),
+         },
+         toProviderTools(tools),
+         callOptions?.call,
+@@ -271,8 +272,8 @@
+         label: custom.label,
+         ...(fetchImpl ? { fetchImpl } : {}),
+         // 自定义家走的就是这三支适配器，思考档位按协议翻译（见 providers/reasoning.ts）
+-        ...(directive !== null && custom.protocol !== "anthropic" && custom.protocol !== "gemini"
+-          ? { reasoningEffort: directive.effort }
++        ...(openAiEffort !== undefined && custom.protocol === "openai"
++          ? { reasoningEffort: openAiEffort }
+           : {}),
+         ...(directive !== null && custom.protocol !== "openai" ? { thinkingBudget: directive.budgetTokens } : {}),
+       };
+--- /dev/null
++++ b/scripts/build-metacognition-corpus.py
+@@ -0,0 +1,98 @@
++"""Curate actual Cairn regressions using existing immutable tests and reversible commits.
++No model is called. Runtime source snapshots live outside the repository.
++"""
++import argparse, difflib, hashlib, json, os, shutil, subprocess
++from pathlib import Path
++
++ROOT=Path(__file__).resolve().parents[1]
++CASES=[
++ ('C1-malformed-tool','19a6a4d',['src/agent/loop.ts','src/agent/stuck.ts'],'tests/tool-result-malformed.test.ts',['tests/loop.test.ts'],'插件工具返回缺少 output、null 或对象时，任务会崩溃或产生误导性的 undefined 文本。请恢复健壮的工具结果处理，同时保留原有循环行为。'),
++ ('C2-truncated-turn','eaf90a0',['src/agent/loop.ts'],'tests/loop-truncation-repair.test.ts',['tests/turn-truncated.test.ts'],'模型输出被预算截断后，执行循环有时把半段回复当成完成，任务无法续跑。请修复终止判断，保留取消与正常完成语义。'),
++ ('C3-steering-stagnation','0d19036',['src/agent/loop.ts'],'tests/steering-injection.test.ts',['tests/loop-no-progress.test.ts'],'用户轮中补充目标后，旧的验证失败仍被当成同一件事累计，导致停滞提示错误。请修复用户插话到停滞判据的接线，并保留正常停滞检测。'),
++ ('C4-provider-overload','fcd1437',['src/providers/anthropic.ts','src/providers/gemini.ts'],'tests/provider-instream-retry.test.ts',['tests/provider-stream-lifecycle.test.ts'],'部分 provider 的流在尚未产出内容时收到过载错误，任务立即失败。请统一处理可重试流错误，且已输出内容后不能重放或重复执行。'),
++ ('C5-lsp-language','e1b9819',['src/agent/plugins/index.ts','src/tools/lsp.ts'],'tests/lsp-language-id.test.ts',['tests/plugin-lsp-activation.test.ts'],'非 JavaScript 语言服务器不能正确激活和处理文档，入口提供的语言身份丢失。请修复 LSP 接口契约与调用，保留插件边界。'),
++ ('C6-mutation-order','b75c11d',['src/main/session-repository.ts'],'tests/session-mutation-order.test.ts',['tests/session-reference-repository.test.ts'],'同一会话的并发修改有时按路径解析完成顺序执行，违反提交顺序。请保证先提交的修改先进入临界区，同时保留错误释放和不同会话的隔离。'),
++]
++WRAPPER=r'''import { spawnSync } from 'node:child_process';
++import { mkdirSync, readFileSync, rmSync } from 'node:fs';
++import { randomUUID } from 'node:crypto';
++const selected=process.argv.slice(2); const targets=selected.length?selected:__VISIBLE__;
++mkdirSync('.tmp',{recursive:true}); const report='.tmp/judge-'+randomUUID()+'.json';
++const r=spawnSync(process.execPath,['node_modules/vitest/vitest.mjs','run',...targets,'--config','tests/vitest.config.ts','--maxWorkers=2','--reporter=json','--outputFile='+report],{encoding:'utf8',maxBuffer:16*1024*1024,timeout:90000,env:{...process.env,pnpm_config_verify_deps_before_run:'false'}});
++let data;try{data=JSON.parse(readFileSync(report,'utf8'));rmSync(report)}catch{console.error('Judge did not produce complete JSON');process.exit(2)}
++const rows=data.testResults.flatMap(s=>(s.assertionResults??[]).map(a=>({name:(a.fullName??[...(a.ancestorTitles??[]),a.title].join(' ')).replaceAll('\n',' '),status:a.status,failures:a.failureMessages??[]})));
++if(!rows.length||data.numTotalTests!==rows.length){console.error('Judge has missing assertions');process.exit(2)}
++console.log('TAP version 13');let passed=0,failed=0;
++rows.forEach((a,i)=>{const ok=a.status==='passed';passed+=Number(ok);failed+=Number(!ok);console.log(`${ok?'ok':'not ok'} ${i+1} - ${a.name}`);if(!ok)console.log(a.failures.join(' ').slice(0,450).split('\n').map(line=>'# '+line).join('\n'))});
++console.log(`1..${rows.length}\n# tests ${rows.length}\n# pass ${passed}\n# fail ${failed}\n# cancelled 0\n# skipped 0\n# todo 0`);
++if(r.status!==0||failed)process.exit(1);
++'''
++def git(*args):return subprocess.check_output(['git',*args],cwd=ROOT)
++def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
++def run(work,targets):
++ report=work/'.tmp/curation-report.json';report.parent.mkdir(exist_ok=True)
++ r=subprocess.run(['node','node_modules/vitest/vitest.mjs','run',*targets,'--config','tests/vitest.config.ts','--maxWorkers=2','--reporter=json','--outputFile='+str(report)],cwd=work,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=90,env={**os.environ,'pnpm_config_verify_deps_before_run':'false'})
++ try:o=json.loads(report.read_text());report.unlink()
++ except ValueError:raise RuntimeError('No complete Vitest JSON: '+r.stderr[-300:])
++ rows=[{'name':a.get('fullName') or ' '.join([*a.get('ancestorTitles',[]),a['title']]),'status':a['status']} for s in o['testResults'] for a in s.get('assertionResults',[])]
++ if not rows or len(rows)!=o['numTotalTests']:raise RuntimeError('Missing assertions')
++ return {'exitCode':r.returncode,'rows':rows,'passed':sum(a['status']=='passed' for a in rows),'failed':sum(a['status']!='passed' for a in rows)}
++def main():
++ parser=argparse.ArgumentParser();parser.add_argument('--out',required=True);args=parser.parse_args();out=Path(args.out).resolve()
++ if out.exists():raise SystemExit('Output already exists; preserve the frozen corpus and choose a new directory')
++ if out==ROOT or ROOT in out.parents:raise SystemExit('Runtime source snapshots must remain outside the repository')
++ out.mkdir(parents=True);tasks=[];ledger=[]
++ for task,rev,paths,visible,hidden,instruction in CASES:
++  case=out/task;seed=case/'seed';case.mkdir();record={'id':task,'sourceCommit':rev,'sourcePaths':paths,'visible':visible,'hidden':hidden}
++  try:
++   if not (ROOT/visible).is_file() or any(not (ROOT/f).is_file() for f in hidden):raise RuntimeError('Referenced test file is absent')
++   patch=git('diff','--unified=0',rev+'^',rev,'--',*paths)
++   if not patch:raise RuntimeError('Source patch is empty')
++   for tree in ['src','tests','scripts','fixtures','packages']:
++    if (ROOT/tree).exists():shutil.copytree(ROOT/tree,seed/tree,symlinks=True)
++   for path in seed.rglob('*metacognition*'):
++    if path.is_file():path.unlink()
++   for name in ['scripts/native-reasoning-probe.ts']:
++    candidate=seed/name
++    if candidate.exists():candidate.unlink()
++   for path in (seed/'tests').rglob('*.test.ts'):
++    if path.relative_to(seed).as_posix()!=visible:path.unlink()
++   (seed/'node_modules').symlink_to((ROOT/'node_modules').resolve(),target_is_directory=True)
++   (seed/'package.json').write_text(json.dumps({'name':'cairn-regression-'+task.lower(),'private':True,'type':'module','scripts':{'test':'node tests/run-visible.mjs'}})+'\n')
++   (seed/'tests/run-visible.mjs').write_text(WRAPPER.replace('__VISIBLE__',json.dumps([visible])))
++   (seed/'README.md').write_text('# 历史回归任务\n\n'+instruction+'\n\n仅修改 src/，保留 tests/、package.json 和验收逻辑。\n执行 node tests/run-visible.mjs 复现并检查。隐藏回归会在任务结束后独立运行。\n')
++   (case/'historical.patch').write_bytes(patch)
++   subprocess.run(['git','apply','--unidiff-zero','--reverse','--check',str(case/'historical.patch')],cwd=seed,check=True,capture_output=True)
++   subprocess.run(['git','apply','--unidiff-zero','--reverse',str(case/'historical.patch')],cwd=seed,check=True,capture_output=True)
++   red=run(seed,[visible]);record['seed']=red
++   if red['failed']==0:raise RuntimeError('Reverted source has no failing assertion')
++   repair=''.join(''.join(difflib.unified_diff((seed/name).read_text().splitlines(keepends=True),(ROOT/name).read_text().splitlines(keepends=True),fromfile='a/'+name,tofile='b/'+name)) for name in paths)
++   (case/'reference.patch').write_text(repair)
++   reference=case/'reference';shutil.copytree(seed,reference,symlinks=True)
++   subprocess.run(['git','apply',str(case/'reference.patch')],cwd=reference,check=True,capture_output=True)
++   for name in hidden:
++    destination=reference/name;destination.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/name,destination)
++   assert all((reference/name).read_bytes()==(ROOT/name).read_bytes() for name in paths),'Reference did not restore current baseline bytes'
++   green=run(reference,[visible,*hidden]);record['reference']=green
++   if green['failed'] or green['exitCode']!=0:raise RuntimeError('Reference repair is not green')
++   green_names={a['name'] for a in green['rows'] if a['status']=='passed'}
++   fail=[a['name'] for a in red['rows'] if a['status']!='passed' and a['name'] in green_names]
++   passed=[a['name'] for a in red['rows'] if a['status']=='passed' and a['name'] in green_names]
++   if not fail:raise RuntimeError('No independent fail-to-pass assertion')
++   held=[]
++   for name in hidden:
++    saved=case/'heldout'/name;saved.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/name,saved);held.append({'src':str(saved),'dest':name})
++   protected={str(p.relative_to(seed)):digest(p) for p in (seed/'tests').rglob('*') if p.is_file()}
++   protected['package.json']=digest(seed/'package.json')
++   record.update(status='ready',historicalPatchSha256=hashlib.sha256(patch).hexdigest(),referencePatchSha256=hashlib.sha256(repair.encode()).hexdigest(),protectedHashes=protected)
++   tasks.append({'id':task,'source':'Cairn@'+rev,'instruction':instruction+' 先运行 node tests/run-visible.mjs 复现；只修改 src/，不要修改 tests/、package.json 或判卷逻辑。修复后调用 verify。','seed':{'kind':'dir','path':str(seed)},'verifier':{'command':'node tests/run-visible.mjs'},'judge':{'failToPass':fail,'passToPass':passed},'heldOut':{'files':held,'command':'node tests/run-visible.mjs '+' '.join(hidden)},'expects':['verifyOk','judgeUntouched','onlySrcChanged','heldOutPass']})
++   # The reference implementation is an oracle, not a model-visible source snapshot.
++   shutil.rmtree(reference)
++  except Exception as error:
++   record.update(status='excluded-before-model-trials',reason=str(error)[:400])
++   if isinstance(error,subprocess.CalledProcessError):record['reason']=error.stderr.decode(errors='replace')[:400] if isinstance(error.stderr,bytes) else str(error.stderr)[:400]
++  ledger.append(record);(out/'corpus-ledger.json').write_text(json.dumps(ledger,ensure_ascii=False,indent=2)+'\n');(out/'tasks.json').write_text(json.dumps(tasks,ensure_ascii=False,indent=2)+'\n')
++  print(json.dumps({'id':task,'status':record['status'],'seedFailures':record.get('seed',{}).get('failed'),'referenceFailures':record.get('reference',{}).get('failed'),'reason':record.get('reason')},ensure_ascii=False),flush=True)
++ if len(tasks)<3:raise SystemExit('Insufficient independently validated tasks; no model experiment should run')
++ print(json.dumps({'ready':len(tasks),'manifest':str(out/'tasks.json'),'selection':'Commit applicability and independent red/green checks only; no model outcome used.'}),flush=True)
++if __name__=='__main__':main()
+--- /dev/null
++++ b/scripts/lib/metacognition-run-state.ts
+@@ -0,0 +1,39 @@
++import { mkdir, readFile } from 'node:fs/promises';
++import { createHash } from 'node:crypto';
++import { join, resolve } from 'node:path';
++import { writeFileAtomic } from '../../src/atomic-write';
++import type { StudyTrial } from '../../src/agent/eval/study';
++import { runValidity } from './eval-validity';
++import { namedSetFailReason, type NamedSetReading } from './eval-named-sets';
++
++// Only absence is recoverable. Corrupt or inaccessible ledgers must survive for inspection.
++export async function readStudyJson(path:string):Promise<unknown>{
++ let text:string;try{text=await readFile(path,'utf8');}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return undefined;throw error;}
++ const value:unknown=JSON.parse(text);if(value===null)throw new Error('Study accounting cannot be null');return value;
++}
++// Exclusive directory is the attempt boundary. An interrupted paid attempt is never re-run or assigned an old receipt.
++export async function startStudyTrial(path:string,trial:StudyTrial):Promise<boolean>{
++ try{await mkdir(path);}catch(error){
++  if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;
++  const start=await readStudyJson(join(path,'attempt-start.json')) as {trial?:StudyTrial}|null;
++  if(JSON.stringify(start?.trial)!==JSON.stringify(trial))throw new Error('Existing attempt has no matching start receipt; preserve it for inspection');
++  return false;
++ }
++ await writeFileAtomic(join(path,'attempt-start.json'),JSON.stringify({trial,startedAt:new Date().toISOString()})+'\n');
++ return true;
++}
++export function studyOutcome(detail:{r:{requests:number;providerFace?:'真会话'|'剧本';namedSets?:unknown;touchedJudge?:boolean};g:{ok:boolean;fails:string[]}}):'pass'|'fail'|'unmeasurable'{
++ if(detail.r.touchedJudge)return 'fail'; // Determined, irreversible judge violation survives a later provider interruption.
++ if(!runValidity(detail.r,detail.g.fails).valid)return 'unmeasurable';
++ if((detail.r.namedSets as {state?:string}|undefined)?.state==='unreadable'){
++  const unreadable=namedSetFailReason(detail.r.namedSets as NamedSetReading);
++  // An unreadable report alone is unknown. Any other existing judge failure remains a failure.
++  return detail.g.fails.some(failure=>failure!==unreadable)?'fail':'unmeasurable';
++ }
++ return detail.g.ok?'pass':'fail';
++}
++export async function hashHeldOutFiles(root:string,tasks:readonly {id:string;heldOut?:{files:readonly {src:string;dest:string}[]}}[]):Promise<Record<string,unknown>>{
++ return Object.fromEntries(await Promise.all(tasks.map(async task=>[task.id,await Promise.all((task.heldOut?.files??[]).map(async file=>({
++  ...file,sha256:createHash('sha256').update(await readFile(resolve(root,file.src))).digest('hex'),
++ })))])));
++}
+--- /dev/null
++++ b/scripts/lib/metacognition-sandbox.ts
+@@ -0,0 +1,61 @@
++// Experiment-only boundary; reuse the existing Seatbelt runner without changing production policy.
++import { mkdir, readdir, realpath, symlink, writeFile } from 'node:fs/promises';
++import { dirname, join, relative, isAbsolute } from 'node:path';
++import { tmpdir } from 'node:os';
++import { buildSandboxProfile, checkSandbox } from '../../src/main/sandbox';
++import { killGroup, sanitizedEnv, spawnTracked } from '../../src/tools/process';
++import { createOutputRing } from '../../src/tools/output-ring';
++import { annotateExecCause, classifyVerifyFailure, withVerifyCauseNote, type ExecFn } from '../../src/agent/verify';
++import { snapshotShellRedirects, shellRedirectReceipt } from '../../src/tools/snapshot';
++import type { Tool, ToolResult } from '../../src/tools/base';
++export async function prepareStudyModules(workspace:string,source:string):Promise<string>{
++ const modules=await realpath(source),local=join(workspace,'node_modules');await mkdir(local);
++ // Vite writes configuration bundles/cache under node_modules; give each trial its own cache directories.
++ for(const entry of await readdir(modules))if(!['.vite','.vite-temp','.cache'].includes(entry))await symlink(join(modules,entry),join(local,entry));
++ return modules;
++}
++export async function createStudySandbox(workspace:string,denyRead:readonly string[],dependencyRoot?:string){
++ const status=await checkSandbox();if(!status.available)throw new Error('Study requires the existing Seatbelt sandbox: '+status.reason);
++ const roots=new Set(await Promise.all(denyRead.map(path=>realpath(path))));
++ const active=await realpath(workspace),temp=await realpath(tmpdir());
++ // Prior kept trial workspaces can contain solved source. Exclude sibling temporary directories too.
++ for(const entry of await readdir(temp)){
++  if(!entry.startsWith('loop-eval-')&&!entry.startsWith('study-reference-'))continue;
++  const path=join(temp,entry),rel=relative(path,active);
++  if(rel.startsWith('..')||isAbsolute(rel))roots.add(path);
++ }
++ // Dependencies may be shared by symlink; deny reads of the host checkout except its dependency directory.
++ const modules=dependencyRoot??await realpath(join(workspace,'node_modules')),host=dirname(modules);
++ roots.delete(host); // When run from the dependency host itself, replace the parent denial with child denials.
++ for(const entry of await readdir(host))if(entry!=='node_modules')roots.add(join(host,entry));
++ // Existing provider lifecycle judges use an in-process loopback HTTP fixture. Internet access remains denied.
++ const loopback='\n(allow network-bind (local ip "localhost:*"))\n(allow network-inbound (local ip "localhost:*"))\n(allow network-outbound (remote ip "localhost:*"))';
++ const profile=buildSandboxProfile(workspace)+loopback+'\n'+[...roots].map(path=>'(deny file-read* (subpath '+JSON.stringify(path)+'))').join('\n');
++ const tmp=join(workspace,'.tmp');await mkdir(tmp,{recursive:true});
++ // The model cannot write the trial's parent. Keep the profile outside its writable workspace.
++ const profilePath=join(dirname(workspace),'study-sandbox.sb');await writeFile(profilePath,profile,{flag:'wx'});
++ // Seatbelt cannot be nested. Reuse the same profile, process lifecycle and bounded output primitives.
++ const run=(command:string,timeoutMs=60_000,signal?:AbortSignal):Promise<ToolResult>=>new Promise(resolve=>{
++  const ring=createOutputRing(32*1024);let settled=false,timedOut=false,cancelled=false;
++  const finish=(code:number|null)=>{
++   if(settled)return;settled=true;handle.dispose();signal?.removeEventListener('abort',abort);
++   resolve({ok:code===0&&!timedOut&&!cancelled,output:ring.read()+(timedOut?'\n[study shell timeout]':cancelled?'\n[study shell cancelled]':''),exitCode:code,timedOut});
++  };
++  const handle=spawnTracked('sandbox-exec',['-f',profilePath,'/bin/bash','-c',command],{cwd:workspace,env:sanitizedEnv(tmp),timeoutMs,onTimeout:()=>{timedOut=true;finish(null);}});
++  const abort=()=>{cancelled=true;killGroup(handle.child);finish(null);};
++  handle.child.stdout?.on('data',(chunk:Buffer)=>ring.push(chunk));handle.child.stderr?.on('data',(chunk:Buffer)=>ring.push(chunk));
++  handle.child.once('error',error=>{ring.push(Buffer.from(error.message));finish(null);});handle.child.once('close',finish);
++  if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true});
++ });
++ const exec:ExecFn=async(command,_cwd,timeoutMs,signal)=>{
++  const result=await run(command,timeoutMs,signal),cause=classifyVerifyFailure({timedOut:result.timedOut===true,exitCode:result.exitCode??null,output:result.output});
++  return {command,ok:result.ok,output:result.ok?result.output:withVerifyCauseNote(result.output,cause),exitCode:result.exitCode??null,...(!result.ok?{cause}:{})};
++ };
++ const shell:Tool={name:'run_shell',async run(args,ctx){
++  if(typeof args.command!=='string'||!args.command.trim())throw new Error('run_shell requires a command');
++  const snapshot=await snapshotShellRedirects(workspace,args.command,{callId:ctx.callId,enabled:ctx.snapshot!==false});
++  const result=await run(args.command,60_000,ctx.signal);
++  return annotateExecCause({...result,output:result.output+shellRedirectReceipt(snapshot)},{timedOut:result.timedOut===true,exitCode:result.exitCode??null});
++ }};
++ return {exec,shell};
++}
+--- a/scripts/loop-eval.ts
++++ b/scripts/loop-eval.ts
+@@ -61,11 +61,15 @@
+ // 模型名取 `glmDefaultModelName()`：本跑器启动时已把 CAIRN_MODEL 归一成真正要拨的那一档，
+ // 所以这是同一个事实源，不是第三份 glm-5.2 字面量副本（同族出口那一族，规则里点过名）。
+ import { createUsageAttributor } from "../src/agent/usage-attribution";
+-import { glmDefaultModelName } from "../src/providers/glm";
++import { glmDefaultModelName, streamGlm } from "../src/providers/glm";
++import { createInterventionPolicy, STUDY_STRATEGIES, type InterventionDecision } from "../src/agent/eval/metacognition";
+ import { createSessionProvider, sessionToolSpecs } from "../src/agent/session-provider";
+ import type { ThinkingEffort } from "../src/providers/capabilities";
+ import { createEventLog, replay, type AgentEvent } from "../src/events";
+ import { BASE_SYSTEM } from "../src/main/agent-runner";
++import { TOOLS } from "../src/tools";
++import { createStudySandbox, prepareStudyModules } from "./lib/metacognition-sandbox";
++import { dirname } from "node:path";
+ import { stuckActionOf, stuckObservationOf } from "../src/agent/stuck";
+ 
+ const argv = process.argv.slice(2);
+@@ -95,6 +99,17 @@
+   process.exit(2);
+ }
+ const THINKING: ThinkingEffort | undefined = THINKING_RAW === "" ? undefined : THINKING_RAW as ThinkingEffort;
++const STUDY_STRATEGY = pick("--metacognition", "");
++const STUDY_SEED = Number(pick("--study-seed", "1"));
++const STUDY_MAX_OUTPUT = Number(pick("--study-max-output", "4096"));
++const STUDY_TIMEOUT = Number(pick("--study-timeout-ms", "120000"));
++if (STUDY_STRATEGY !== "") {
++  if (!(STUDY_STRATEGIES as readonly string[]).includes(STUDY_STRATEGY) || !Number.isSafeInteger(STUDY_SEED) ||
++      !Number.isSafeInteger(STUDY_MAX_OUTPUT) || STUDY_MAX_OUTPUT < 1 || !Number.isSafeInteger(STUDY_TIMEOUT) || STUDY_TIMEOUT < 1 ||
++      (STUDY_STRATEGY === "high" && THINKING !== "high")) {
++    console.error("[loop-eval] Invalid metacognition strategy, budget or high-arm identity"); process.exit(2);
++  }
++}
+ const SYSTEM_MODE = pick("--system", "base");
+ /* `--keep` = 全量档（每一趟都留）。失败那一侧的留档**不靠它**（#109）：
+  * bench 那四支脚本从不传 `--keep`，于是红轨迹跟着 mkdtemp 目录一起没，能力 10 在基准这一侧永远拿不到输入。
+@@ -379,6 +394,9 @@
+ }
+ 
+ interface Reading {
++  study?: { strategy: string; seed: number; interventions: InterventionDecision[]; physicalRequests: number;
++    reasoningOutputTokens: number | null; outputCap: number; timeoutMs: number;
++    envelopes: { effort: unknown; thinking: unknown; model: string; reasoningStates: number }[] };
+   id: string; name: string; rep: number; system: string;
+   /** 这一趟真拨的模型名 = 归因键（`scripts/eval/report.ts` 的 `modelFace` 用它挡跨模型 A/B）。
+    *  与 usage 事件上的 `model` 同源：都取 `glmDefaultModelName()`，不在这里再算一份缺省。 */
+@@ -483,7 +501,8 @@
+   // 直接 command not found ⇒ verify 恒红，量出来全是装配噪声不是模型行为（实测踩过）。
+   // 改成软链回原靶子的 node_modules：依赖可用，且绝不写回原目录。
+   await rm(join(work, "node_modules"), { recursive: true, force: true });
+-  await symlink(join(appDir, "node_modules"), join(work, "node_modules"), "dir");
++  const studyModules = STUDY_STRATEGY ? await prepareStudyModules(work, join(appDir,"node_modules")) : undefined;
++  if (!STUDY_STRATEGY) await symlink(join(appDir, "node_modules"), join(work, "node_modules"), "dir");
+   const bug = t.bugFile !== undefined ? t.bugFile : (t.seed === "bug" ? BUG : null);
+   if (bug !== null) await cp(bug, join(work, "src", "todo.ts"));
+   const eventsPath = join(dir, "events.jsonl");
+@@ -526,10 +545,24 @@
+   const face = sessionToolSpecs({ mode: "auto" });
+   const system = SYSTEM_MODE === "short" ? SHORT_SYSTEM : BASE_SYSTEM;
+   const started = Date.now();
++  const studyPolicy = STUDY_STRATEGY === "" ? undefined : createInterventionPolicy({ strategy: STUDY_STRATEGY, seed: STUDY_SEED, maxInterventions: 2 });
++  let physicalRequests = 0;
++  const envelopes: NonNullable<Reading["study"]>["envelopes"] = [];
++  const studyFetch: typeof fetch = async (url, init) => {
++    const body = JSON.parse(String(init?.body));
++    body.max_tokens = STUDY_MAX_OUTPUT;
++    body.thinking = { type: THINKING === "off" ? "disabled" : "enabled" };
++    envelopes.push({ effort: body.reasoning_effort ?? null, thinking: body.thinking, model: body.model,
++      reasoningStates: body.messages.filter((message: { reasoning_content?: string }) => typeof message.reasoning_content === "string" && message.reasoning_content !== "").length });
++    physicalRequests++;
++    return fetch(url, { ...init, body: JSON.stringify(body) });
++  };
+   // 起点自述：这一格开跑前靶子本身是绿是红。`fixtures/todo-app/src/todo.ts` 是生成物、会被任何
+   // 一次 e2e/agent/gate 就地重置 ⇒ 不能拿它当全局 gate，但必须逐格记进读数：
+   // 「模型把红修到绿」与「模型从绿开始又弄红了」是两个完全不同的结论。
+-  const seedVerifyOk = (await runVerifyOutcome(work, EVAL_EXEC)).ok;
++  const sandbox = studyPolicy ? await createStudySandbox(work, [ROOT, dirname(appDir), ...JSON.parse(process.env.CAIRN_STUDY_DENY_READ ?? "[]")], studyModules) : undefined;
++  const trialExec: ExecFn = sandbox ? (command,cwd,timeoutMs,signal) => sandbox.exec(`pnpm_config_verify_deps_before_run=false ${command}`,cwd,timeoutMs,signal) : EVAL_EXEC;
++  const seedVerifyOk = (await runVerifyOutcome(work, trialExec)).ok;
+   const stopSampler = startResourceSampler();
+   let exitError: string | null = null;
+   try {
+@@ -545,17 +578,23 @@
+           // 请求打到不是你要测的那个模型上。压缩摘要器也吃这个值，两处同源。
+           ...(BENCH_MODEL !== undefined && BENCH_MODEL !== "" ? { model: BENCH_MODEL } : {}),
+           ...(THINKING !== undefined ? { thinking: THINKING } : {}),
++          ...(studyPolicy ? {
++            requestIntervention: studyPolicy.next,
++            transport: (messages, options, tools, call) => streamGlm(messages, { ...options, fetchImpl: studyFetch }, tools, call),
++          } : {}),
+         })
+         // 合成面：装配不变，只换「模型那一侧从哪来」——剧本按轮吐，零 key 零网络（见上面 SCRIPTED 那段）。
+         : createRoundScriptedProvider(resolve(ROOT, SCRIPTED)),
+       events: driven,
+       workspace: work,
++      ...(sandbox ? { tools: { ...TOOLS, run_shell: sandbox.shell } } : {}),
+       mode: "auto",
+       maxSteps: MAX_STEPS,
++      ...(studyPolicy ? { signal: AbortSignal.timeout(STUDY_TIMEOUT) } : {}),
+       stuckNudge: true,
+       clarify,
+       plan,
+-      verify: createVerifyHook(work, { exec: EVAL_EXEC, trustedRepo: true }),
++      verify: createVerifyHook(work, { exec: trialExec, trustedRepo: true }),
+       userMessage: t.task,
+     });
+   } catch (err) {
+@@ -658,7 +697,7 @@
+   let heldOutRun: HeldOutRun | undefined;
+   if (t.spec?.heldOut !== undefined) {
+     heldOutInstallErrs.push(...await installHeldOut(work, ROOT, t.spec.heldOut.files));
+-    if (heldOutInstallErrs.length === 0) heldOutRun = await runHeldOut(work, t.spec.heldOut, EVAL_EXEC);
++    if (heldOutInstallErrs.length === 0) heldOutRun = await runHeldOut(work, t.spec.heldOut, trialExec);
+   }
+ 
+   // 先显式摘掉软链再删临时目录：不给"递归删到原靶子 node_modules"留任何可能性
+@@ -674,6 +713,10 @@
+    * 之前烧掉证据。把位置交给主循环，由它按自己印出来的那个 verdict 决定留不留，留完立刻收。 */
+   STAGED.push({ key: t.id + "-rep" + String(rep) + "-" + SYSTEM_MODE, eventsPath, dir });
+   return {
++    ...(studyPolicy ? { study: { strategy: STUDY_STRATEGY, seed: STUDY_SEED, interventions: studyPolicy.decisions,
++      physicalRequests, outputCap: STUDY_MAX_OUTPUT, timeoutMs: STUDY_TIMEOUT, envelopes,
++      reasoningOutputTokens: usage.length > 0 && usage.every(event => event.reasoningOutputTokens !== undefined)
++        ? usage.reduce((sum, event) => sum + event.reasoningOutputTokens!, 0) : null } } : {}),
+     id: t.id, name: t.name, rep, system: SYSTEM_MODE, seedVerifyOk,
+     model: glmDefaultModelName(),
+     attempts: 1, retryWaitMs: 0, retryWhy: "首趟未重拨",
+@@ -871,7 +914,7 @@
+     // 被 provider 打断 ⇒ 再拨一次（判据与分母共用同一个白名单，见 lib/eval-retry）。
+     // 帽内的等待（分钟级抖动）才等；日配额那种要等到明天的 ⇒ 明确不重拨并印出原因——
+     // 那一趟仍会被 `runValidity` 判成「无效、不进分母」，不会污染分数。
+-    const retried = await withProviderRetry(
++    const retried = STUDY_STRATEGY !== "" ? { value: await runOnce(t, rep), attempts: 1, waitedMs: 0, stoppedWhy: "study: no hidden episode retry" } : await withProviderRetry(
+       () => runOnce(t, rep),
+       (res, n) => retryVerdict([...grade(res, t).fails, res.exitError ?? ""], n, { nowMs: Date.now() }),
+       (ms) => sleep(ms),
+--- /dev/null
++++ b/scripts/metacognition-study.ts
+@@ -0,0 +1,91 @@
++// Bounded randomized pilot over the existing production-compatible loop evaluator.
++import { createHash } from 'node:crypto';
++import { mkdir, readFile, readdir } from 'node:fs/promises';
++import { createWriteStream } from 'node:fs';
++import { spawn } from 'node:child_process';
++import { resolve, join, relative, isAbsolute, dirname } from 'node:path';
++import { parseTaskSetJson } from '../src/agent/eval/task-set';
++import { createStudySchedule, summarizeStudy, type StudyRecord } from '../src/agent/eval/study';
++import { STUDY_STRATEGIES } from '../src/agent/eval/metacognition';
++import { writeFileAtomic } from '../src/atomic-write';
++import { killGroup } from '../src/tools/process';
++import { readStudyJson, startStudyTrial, studyOutcome, hashHeldOutFiles } from './lib/metacognition-run-state';
++
++const root=resolve(import.meta.dirname,'..'),args=process.argv.slice(2);
++const pick=(name:string,fallback:string)=>{const at=args.indexOf(name);return at<0?fallback:args[at+1]??fallback;};
++const tasksPath=resolve(pick('--tasks','')),outName=pick('--out','outputs/metacognition-pilot-2026-10-25');
++if(!args.includes('--tasks')||isAbsolute(outName)||outName.split('/').includes('..'))throw new Error('Pass --tasks and a repository-relative --out');
++const out=resolve(root,outName),reps=Number(pick('--reps','1')),seed=Number(pick('--seed','20261025'));
++const strategies=pick('--strategies',STUDY_STRATEGIES.join(',')).split(',');
++if(strategies.some(strategy=>!(STUDY_STRATEGIES as readonly string[]).includes(strategy)))throw new Error('Unknown study strategy');
++const maxSteps=Number(pick('--max-steps','24')),timeoutMs=Number(pick('--timeout-ms','120000')),outputCap=Number(pick('--output-cap','4096'));
++if([maxSteps,timeoutMs,outputCap].some(value=>!Number.isSafeInteger(value)||value<1))throw new Error('Invalid resource bound');
++const text=await readFile(tasksPath,'utf8'),parsed=parseTaskSetJson(text);
++if(parsed.errors.length)throw new Error(parsed.errors.join('\n'));
++const only=pick('--only','').split(',').filter(Boolean),tasks=parsed.tasks.filter(task=>only.length===0||only.includes(task.id));
++if(only.some(id=>!tasks.some(task=>task.id===id)))throw new Error('Unknown selected task');
++const schedule=createStudySchedule({tasks:tasks.map(task=>task.id),strategies,reps,seed});
++const hash=(value:string|Buffer)=>createHash('sha256').update(value).digest('hex');
++async function treeHash(path:string):Promise<string>{
++ const entries:string[]=[];
++ async function walk(dir:string){for(const entry of (await readdir(dir,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))){
++  if(['node_modules','.tmp','.git','.vitest'].includes(entry.name))continue;
++  const full=join(dir,entry.name);if(entry.isDirectory())await walk(full);else if(entry.isFile())entries.push(relative(path,full)+'\0'+hash(await readFile(full)));
++ }}await walk(path);return hash(entries.join('\n'));
++}
++const sourceFiles=['src/providers/openai.ts','src/agent/context.ts','src/agent/compaction.ts','src/agent/session-provider.ts','src/agent/eval/metacognition.ts','src/agent/eval/study.ts','scripts/loop-eval.ts','scripts/metacognition-study.ts','scripts/lib/metacognition-run-state.ts','scripts/lib/metacognition-sandbox.ts'];
++const codeHashes=Object.fromEntries(await Promise.all(sourceFiles.map(async file=>[file,hash(await readFile(join(root,file)))])));
++const taskHashes=Object.fromEntries(await Promise.all(tasks.map(async task=>[task.id,await treeHash(resolve(root,task.seed.path))])));
++const heldOutHashes=await hashHeldOutFiles(root,tasks);
++const deniedRoots=[dirname(tasksPath),...pick("--private-roots","").split(",").filter(Boolean).map(path=>resolve(path))];
++const harnessHashes={src:await treeHash(join(root,'src')),scripts:await treeHash(join(root,'scripts')),
++ package:hash(await readFile(join(root,'package.json'))),lockfile:hash(await readFile(join(root,'pnpm-lock.yaml')))};
++const config={harnessHashes,deniedRoots,heldOutHashes,model:process.env.CAIRN_MODEL??null,endpoint:process.env.CAIRN_ENDPOINT??null,tasksDigest:hash(text),codeHashes,taskHashes,
++ reps,seed,strategies,maxSteps,timeoutMs,outputCap,schedule,concurrency:1,memory:'empty and isolated per trial',
++ contract:'Requested effort and explicit enabled thinking; exact effort enforcement is unverified. Tokens and reasoning details are provider-reported; monetary price is unknown.'};
++if(!process.env.CAIRN_API_KEY||!process.env.CAIRN_ENDPOINT||!process.env.CAIRN_MODEL)throw new Error('Provide model credentials through environment; no model request sent');
++await mkdir(out,{recursive:true});
++const manifestPath=join(out,'manifest.json');
++const previous=await readStudyJson(manifestPath);
++if(previous!==undefined&&(!args.includes('--resume')||JSON.stringify(previous)!==JSON.stringify(config)))throw new Error('Existing study differs or --resume was not requested; preserve it and choose a new output');
++await writeFileAtomic(manifestPath,JSON.stringify(config,null,2)+'\n');
++let records:(StudyRecord&{detail:unknown})[]=[];
++if(args.includes('--resume')){
++ const saved=await readStudyJson(join(out,'trials.json'));
++ if(saved!==undefined&&!Array.isArray(saved))throw new Error('Study ledger must be an array');
++ records=(saved??[]) as typeof records;
++}
++summarizeStudy(schedule,records); // reject duplicate/foreign resume state before any request
++const identity=(trial:{taskId:string;strategy:string;rep:number})=>JSON.stringify([trial.taskId,trial.strategy,trial.rep]);
++async function save(){await writeFileAtomic(join(out,'trials.json'),JSON.stringify(records,null,2)+'\n');await writeFileAtomic(join(out,'summary.json'),JSON.stringify(summarizeStudy(schedule,records),null,2)+'\n');}
++await save();
++for(const [index,trial]of schedule.entries()){
++ if(records.some(record=>identity(record)===identity(trial)))continue;
++ const trialName=`trial-${String(index+1).padStart(3,'0')}`,trialOut=join(outName,trialName),directory=join(root,trialOut);
++ if(!await startStudyTrial(directory,trial)){
++  records.push({...trial,outcome:'unmeasurable',tokens:null,seconds:null,detail:{reason:'interrupted attempt; wall time and usage unknown; not restarted'}});
++  await save();console.log(JSON.stringify({event:'trial-recovered-interrupted',...trial}));continue;
++ }
++ await mkdir(join(directory,'memory'),{recursive:true});
++ console.log(JSON.stringify({event:'trial-start',trial:index+1,total:schedule.length,...trial}));
++ const cli=['--import','tsx','scripts/loop-eval.ts','--tasks',tasksPath,'--only',trial.taskId,'--reps','1','--max-steps',String(maxSteps),'--thinking',trial.strategy==='high'?'high':'low',
++ '--metacognition',trial.strategy,'--study-seed',String(trial.seed),'--study-max-output',String(outputCap),'--study-timeout-ms',String(timeoutMs),'--arm',trial.strategy,'--out',trialOut,'--keep'];
++ const started=Date.now(),log=createWriteStream(join(directory,'process.log'),{flags:'a'});
++ const code=await new Promise<number|null>((done,reject)=>{
++  const child=spawn(process.execPath,cli,{cwd:root,env:{...process.env,M2D_MEMORY_HOME:join(directory,'memory'),CAIRN_STUDY_DENY_READ:JSON.stringify(deniedRoots),pnpm_config_verify_deps_before_run:'false'},detached:process.platform!=='win32',stdio:['ignore','pipe','pipe']});
++  child.stdout.pipe(log,{end:false});child.stderr.pipe(log,{end:false});
++  const timer=setTimeout(()=>killGroup(child),timeoutMs+90_000);
++  child.once('error',error=>{clearTimeout(timer);reject(error);});child.once('close',exit=>{clearTimeout(timer);log.end();done(exit);});
++ });
++ let detail:any=null;try{const rows=JSON.parse(await readFile(join(directory,'readings.json'),'utf8'));if(rows.length===1)detail=rows[0];}catch{}
++ let outcome:'pass'|'fail'|'unmeasurable'='unmeasurable';
++ if(code===0&&detail?.r&&detail?.g&&detail.r.id===trial.taskId&&detail.r.study?.strategy===trial.strategy&&detail.r.study?.seed===trial.seed){
++  outcome=studyOutcome(detail);
++ }
++ const usageKnown=detail?.r?.requests>0&&detail.r.study?.physicalRequests===detail.r.requests&&Number.isFinite(detail.r.tokensIn)&&Number.isFinite(detail.r.tokensOut);
++ const record={...trial,outcome,tokens:usageKnown?detail.r.tokensIn+detail.r.tokensOut:null,seconds:(Date.now()-started)/1000,detail:{exitCode:code,reading:detail}};
++ records.push(record);await save();
++ console.log(JSON.stringify({event:'trial-end',trial:index+1,...trial,outcome,tokens:record.tokens,seconds:record.seconds,interventions:detail?.r?.study?.interventions?.length??null,
++  modelSeconds:detail?.r?.seconds??null,failures:detail?.g?.fails??null}));
++}
++console.log(JSON.stringify({event:'study-complete',out,summary:summarizeStudy(schedule,records)}));
+--- /dev/null
++++ b/scripts/native-reasoning-probe.ts
+@@ -0,0 +1,62 @@
++// Bounded, read-only native protocol probe. Never persists prompt traces or credentials.
++import { mkdir, writeFile } from 'node:fs/promises';
++import { resolve } from 'node:path';
++import { streamOpenAI, chatCompletionsEndpoint } from '../src/providers/openai';
++import { projectContext } from '../src/agent/context';
++import type { AgentEvent } from '../src/events';
++import type { ProviderMessage } from '../src/providers';
++
++const output = resolve(process.argv[2] ?? 'outputs/native-reasoning-probe');
++const model = process.env.CAIRN_MODEL;
++const baseURL = process.env.CAIRN_ENDPOINT;
++const apiKey = process.env.CAIRN_API_KEY;
++if (!model || !baseURL || !apiKey) throw new Error('CAIRN_MODEL / CAIRN_ENDPOINT / CAIRN_API_KEY are required');
++const tools = [{ name: 'read_probe', description: 'Return the external probe value.', parameters: { type: 'object', properties: {}, additionalProperties: false } }];
++let requestCount = 0;
++const requests: { requestedModel: string; effort: unknown; thinking: unknown; assistantStates: number; toolMessages: number }[] = [];
++const fetchImpl: typeof fetch = async (url, init) => {
++  requestCount++;
++  const body = JSON.parse(String(init?.body));
++  requests.push({ requestedModel: body.model, effort: body.reasoning_effort ?? null, thinking: body.thinking ?? null,
++    assistantStates: body.messages.filter((m: any) => typeof m.reasoning_content === 'string' && m.reasoning_content.length > 0).length,
++    toolMessages: body.messages.filter((m: any) => m.role === 'tool').length });
++  return fetch(url, init);
++};
++const rows: Record<string, unknown>[] = [];
++async function run(label: string, messages: ProviderMessage[], effort?: string, withTools = false, explicitSwitch = false): Promise<AgentEvent[]> {
++  const started = Date.now(); const events: AgentEvent[] = [];
++  const extraBody: Record<string, unknown> = { max_tokens: 1024 };
++  if (explicitSwitch) extraBody.thinking = { type: effort === 'off' ? 'disabled' : 'enabled' };
++  let error: string | null = null;
++  try {
++    for await (const event of streamOpenAI(messages, { model, baseURL, apiKey, fetchImpl, extraBody,
++      ...(effort !== undefined ? { reasoningEffort: effort } : {}) }, withTools ? tools : undefined,
++      { signal: AbortSignal.timeout(60_000) })) events.push(event);
++  } catch (failure) { error = String(failure).split(apiKey!).join('[redacted]').slice(0, 300); }
++  const row = { label, seconds: (Date.now() - started) / 1000, error,
++    reasoningChars: events.filter(e => e.type === 'thinking_delta').reduce((n,e) => n + e.text.length, 0),
++    answer: events.filter(e => e.type === 'assistant_delta').map(e => e.text).join(''),
++    toolCalls: events.filter(e => e.type === 'tool_call').map(e => ({ name: e.name })),
++    usage: events.filter(e => e.type === 'usage'),
++    truncated: events.some(e => e.type === 'turn_truncated') };
++  rows.push(row); console.log(JSON.stringify(row));
++  await save(); return events;
++}
++async function save(): Promise<void> {
++  await mkdir(output, { recursive: true });
++  await writeFile(resolve(output,'probe.json'),JSON.stringify({ date: new Date().toISOString(), endpoint: chatCompletionsEndpoint(baseURL!), model,
++    requestCount, requests, rows, effortEnforcement: 'unverified: successful parameter acceptance and one prompt are not causal budget evidence',
++    scope: 'read-only bounded protocol requests, no production configuration changes' },null,2)+'\n');
++}
++for (const effort of [undefined,'low','high','off']) await run(effort ?? 'upstream-default',[{ role:'user',content:'只输出数字 7，不要解释。' }],effort,false,effort!==undefined);
++const user = { type:'user_message' as const,content:'先调用 read_probe 工具获取数值，再只输出工具返回的数值。不得猜测数值。' };
++const first = await run('tool-first',[{role:'user',content:user.content}],'low',true,true);
++const calls = first.filter(e => e.type === 'tool_call');
++if (calls.length > 0) {
++  const history: AgentEvent[] = [user,...first,...calls.map(call => ({type:'tool_result' as const,callId:call.id,ok:true,output:'7'}))];
++  const messages = projectContext(history);
++  await run('tool-continuation-preserved',messages,'low',true,true);
++  await run('tool-continuation-without-native-state',messages.map(({reasoning,...message})=>message),'low',true,true);
++}
++await save();
++if (rows.some(row => row.error !== null || row.truncated === true)) process.exitCode = 1;
+--- /dev/null
++++ b/tests/metacognition-policy.test.ts
+@@ -0,0 +1,62 @@
++import { describe, expect, it } from 'vitest';
++import { createInterventionPolicy } from '../src/agent/eval/metacognition';
++import type { AgentEvent } from '../src/events';
++const start: AgentEvent[] = [{type:'user_message',content:'Fix the application.'}];
++const failure: AgentEvent[] = [...start,{type:'tool_call',id:'v1',name:'verify',args:{}},{type:'verify_result',callId:'v1',ok:false,attempt:1,maxAttempts:3,results:[{command:'test',ok:false,output:'AssertionError: expected saved state',cause:'code'}],cause:'code'}];
++
++describe('bounded experimental interventions', () => {
++  it('leaves the baseline entirely unchanged', () => {
++    const policy=createInterventionPolicy({strategy:'baseline',seed:7,maxInterventions:2});
++    expect(policy.next(failure)).toBeUndefined(); expect(policy.decisions).toEqual([]);
++  });
++  it('does not interrupt healthy execution', () => {
++    const policy=createInterventionPolicy({strategy:'triggered',seed:7,maxInterventions:2});
++    expect(policy.next(start)).toBeUndefined();
++    expect(policy.next([...start,{type:'tool_result',callId:'read1',ok:true,output:'source code'}])).toBeUndefined();
++  });
++  it('uses the failed validation as evidence and does not repeat the same intervention', () => {
++    const policy=createInterventionPolicy({strategy:'triggered',seed:7,maxInterventions:2});
++    expect(policy.next(failure)).toContain('验证');
++    expect(policy.decisions[0]).toMatchObject({reason:'validation-failed',evidenceEvent:3});
++    expect(policy.next(failure)).toBeUndefined();
++  });
++  it('does not turn a toolchain failure into code replanning', () => {
++    const policy=createInterventionPolicy({strategy:'triggered',seed:7,maxInterventions:2});
++    const environment=failure.map(e=>e.type==='verify_result'?{...e,cause:'toolchain-missing' as const}:e);
++    expect(policy.next(environment)).toBeUndefined();
++  });
++  it('honors the intervention limit even when failures differ', () => {
++    const policy=createInterventionPolicy({strategy:'triggered',seed:7,maxInterventions:1});
++    expect(policy.next(failure)).toBeDefined();
++    expect(policy.next([...failure,{type:'tool_result',callId:'other',ok:false,output:'another error'}])).toBeUndefined();
++    expect(policy.decisions).toHaveLength(1);
++  });
++  it('does not spend a code replanning intervention on a missing shell toolchain', () => {
++    const policy=createInterventionPolicy({strategy:'triggered',seed:7,maxInterventions:2});
++    expect(policy.next([...start,{type:'tool_call',id:'s',name:'run_shell',args:{command:'missing'}},
++      {type:'tool_result',callId:'s',ok:false,output:'not found',exitCode:127,timedOut:false}])).toBeUndefined();
++  });
++  it('allows fresh evidence after user steering without resetting the total budget', () => {
++    const policy=createInterventionPolicy({strategy:'triggered',seed:7,maxInterventions:2});
++    policy.next(failure);
++    const steered:AgentEvent[]=[...failure,{type:'user_message',content:'The API contract changed.'},...failure.slice(1)];
++    expect(policy.next(steered)).toBeDefined(); expect(policy.decisions).toHaveLength(2);
++  });
++  it('periodic control uses the same bounded instruction rather than pretending failure', () => {
++    const policy=createInterventionPolicy({strategy:'periodic',seed:7,maxInterventions:2,period:2});
++    expect(policy.next(start)).toBeUndefined();
++    expect(policy.next(start)).toContain('假设'); expect(policy.decisions[0]?.reason).toBe('periodic');
++  });
++  it('random control is reproducible and cannot exceed its budget', () => {
++    const one=createInterventionPolicy({strategy:'random',seed:7,maxInterventions:2,probability:0.5});
++    const two=createInterventionPolicy({strategy:'random',seed:7,maxInterventions:2,probability:0.5});
++    const first=Array.from({length:20},()=>one.next(start));
++    const second=Array.from({length:20},()=>two.next(start));
++    expect(first).toEqual(second); expect(first.filter(Boolean).length).toBeLessThanOrEqual(2);
++    expect(first.filter(Boolean).length).toBeGreaterThan(0);
++  });
++  it('rejects invalid strategies and budgets rather than silently running another arm', () => {
++    expect(()=>createInterventionPolicy({strategy:'unknown' as never,seed:1,maxInterventions:2})).toThrow();
++    expect(()=>createInterventionPolicy({strategy:'triggered',seed:1,maxInterventions:-1})).toThrow();
++  });
++});
+--- /dev/null
++++ b/tests/metacognition-run-state.test.ts
+@@ -0,0 +1,44 @@
++import { it, expect } from 'vitest';
++import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
++import { join } from 'node:path';
++import { tmpdir } from 'node:os';
++import { readStudyJson, startStudyTrial, studyOutcome, hashHeldOutFiles } from '../scripts/lib/metacognition-run-state';
++const trial={taskId:'C1',strategy:'baseline',rep:1,seed:2};
++it('fails closed on corrupt or unreadable accounting and only accepts missing files as missing',async()=>{
++ const dir=await mkdtemp(join(tmpdir(),'study-state-'));
++ try {
++  expect(await readStudyJson(join(dir,'absent'))).toBeUndefined();
++  await writeFile(join(dir,'null.json'),'null');
++  await expect(readStudyJson(join(dir,'null.json'))).rejects.toThrow();
++  await writeFile(join(dir,'trials.json'),'[{');
++  await expect(readStudyJson(join(dir,'trials.json'))).rejects.toThrow();
++  await expect(readStudyJson(dir)).rejects.toThrow();
++  expect(await readFile(join(dir,'trials.json'),'utf8')).toBe('[{');
++ }finally{await rm(dir,{recursive:true,force:true});}
++});
++it('never restarts or accepts readings from an interrupted attempt',async()=>{
++ const dir=await mkdtemp(join(tmpdir(),'study-attempt-')),path=join(dir,'trial');
++ try {
++  expect(await startStudyTrial(path,trial)).toBe(true);
++  await writeFile(join(path,'readings.json'),JSON.stringify([{g:{ok:true}}]));
++  expect(await startStudyTrial(path,trial)).toBe(false);
++  await expect(startStudyTrial(path,{...trial,seed:3})).rejects.toThrow();
++ }finally{await rm(dir,{recursive:true,force:true});}
++});
++it('keeps determined model failures in the denominator even without a readable named judge',()=>{
++ const named={state:'unreadable' as const,reasons:['no test output'],unmatched:[]};
++ const r={requests:1,namedSets:named,providerFace:'真会话' as const};
++ expect(studyOutcome({r,g:{ok:false,fails:['改了判卷面','verify 未通过/未跑']}})).toBe('fail');
++ expect(studyOutcome({r:{...r,touchedJudge:true},g:{ok:false,fails:['改了判卷面','runLoop 抛错:HTTP 429']}})).toBe('fail');
++ expect(studyOutcome({r,g:{ok:true,fails:[]}})).toBe('unmeasurable');
++ expect(studyOutcome({r:{...r,namedSets:{state:'pass'}},g:{ok:true,fails:[]}})).toBe('pass');
++});
++it('freezes held-out bytes as well as their paths',async()=>{
++ const dir=await mkdtemp(join(tmpdir(),'study-oracle-'));
++ try {
++  const path=join(dir,'hidden.test.ts');await writeFile(path,'first');
++  const task={id:'C1',heldOut:{files:[{src:path,dest:'tests/hidden.test.ts'}]}};
++  const one=await hashHeldOutFiles(dir,[task]);await writeFile(path,'second');
++  expect(await hashHeldOutFiles(dir,[task])).not.toEqual(one);
++ }finally{await rm(dir,{recursive:true,force:true});}
++});
+--- /dev/null
++++ b/tests/metacognition-sandbox.test.ts
+@@ -0,0 +1,20 @@
++import { it, expect } from 'vitest';
++import { mkdtemp, mkdir, readFile, writeFile, symlink, rm, realpath } from 'node:fs/promises';
++import { dirname, join, resolve } from 'node:path';
++import { tmpdir } from 'node:os';
++import { createStudySandbox } from '../scripts/lib/metacognition-sandbox';
++it.skipIf(process.platform!=='darwin')('allows workspace commands and refuses external writes and oracle reads',async()=>{
++ const dir=await mkdtemp(join(tmpdir(),'study-sandbox-')),work=join(dir,'work'),oracle=join(dir,'oracle');
++ try{
++  await mkdir(work);await mkdir(oracle);await writeFile(join(oracle,'answer'),'hidden');
++  const modules=await realpath(resolve('node_modules'));
++  await symlink(modules,join(work,'node_modules'));
++  const sandbox=await createStudySandbox(work,[oracle,dirname(modules)]);
++  expect((await sandbox.exec('node node_modules/vitest/vitest.mjs --version',work)).ok).toBe(true);
++  expect((await sandbox.exec('printf local > result',work)).ok).toBe(true);
++  expect(await readFile(join(work,'result'),'utf8')).toBe('local');
++  expect((await sandbox.exec(`cat '${join(oracle,'answer')}'`,work)).ok).toBe(false);
++  expect((await sandbox.exec(`printf changed > '${join(oracle,'answer')}'`,work)).ok).toBe(false);
++  expect(await readFile(join(oracle,'answer'),'utf8')).toBe('hidden');
++ }finally{await rm(dir,{recursive:true,force:true});}
++});
+--- /dev/null
++++ b/tests/metacognition-study.test.ts
+@@ -0,0 +1,41 @@
++import { describe, expect, it } from 'vitest';
++import { createStudySchedule, summarizeStudy } from '../src/agent/eval/study';
++
++describe('study identity and denominators',()=>{
++  it('keeps every task, strategy and repeat exactly once with reproducible randomization',()=>{
++    const options={tasks:['one','two'],strategies:['baseline','triggered'],reps:2,seed:17};
++    const one=createStudySchedule(options),two=createStudySchedule(options);
++    expect(one).toEqual(two);expect(one).toHaveLength(8);
++    expect(new Set(one.map(t=>`${t.taskId}/${t.strategy}/${t.rep}`)).size).toBe(8);
++    expect(createStudySchedule({...options,seed:18})).not.toEqual(one);
++  });
++  it('rejects duplicate task identities rather than inflating the denominator',()=>{
++    expect(()=>createStudySchedule({tasks:['one','one'],strategies:['baseline'],reps:1,seed:1})).toThrow();
++  });
++  it('keeps missing and unmeasurable trials separate from passes and failures',()=>{
++    const schedule=createStudySchedule({tasks:['one','two'],strategies:['baseline','triggered'],reps:1,seed:1});
++    const records=[{...schedule.find(t=>t.taskId==='one'&&t.strategy==='baseline')!,outcome:'pass' as const,tokens:10,seconds:1},
++      {...schedule.find(t=>t.taskId==='one'&&t.strategy==='triggered')!,outcome:'unmeasurable' as const,tokens:null,seconds:1}];
++    const summary=summarizeStudy(schedule,records);
++    expect(summary.arms.find(a=>a.strategy==='baseline')).toMatchObject({planned:2,pass:1,fail:0,pending:1,unmeasurable:0});
++    expect(summary.arms.find(a=>a.strategy==='triggered')).toMatchObject({planned:2,pass:0,fail:0,pending:1,unmeasurable:1});
++    expect(summary.complete).toBe(false);
++  });
++  it('does not turn repeated attempts on one task into independent tasks',()=>{
++    const schedule=createStudySchedule({tasks:['one'],strategies:['baseline','triggered'],reps:3,seed:1});
++    const records=schedule.map(t=>({...t,outcome:'pass' as const,tokens:10,seconds:1}));
++    const summary=summarizeStudy(schedule,records);
++    expect(summary.independentTasks).toBe(1);expect(summary.complete).toBe(true);
++    expect(summary.inference).toBe('pilot-only');
++  });
++  it('rejects duplicate or foreign records instead of overwriting an earlier result',()=>{
++    const schedule=createStudySchedule({tasks:['one'],strategies:['baseline'],reps:1,seed:1});
++    const row={...schedule[0]!,outcome:'pass' as const,tokens:10,seconds:1};
++    expect(()=>summarizeStudy(schedule,[row,row])).toThrow();
++    expect(()=>summarizeStudy(schedule,[{...row,taskId:'foreign'}])).toThrow();
++  });
++  it('does not report an interrupted attempt as zero elapsed time',()=>{
++    const schedule=createStudySchedule({tasks:['one'],strategies:['baseline'],reps:1,seed:1});
++    expect(summarizeStudy(schedule,[{...schedule[0]!,outcome:'unmeasurable',tokens:null,seconds:null}]).arms[0]).toMatchObject({seconds:null,unknownTimeRuns:1});
++  });
++});
+--- /dev/null
++++ b/tests/metacognition-wiring.test.ts
+@@ -0,0 +1,29 @@
++import { afterEach, describe, expect, it, vi } from 'vitest';
++import { mkdtemp, rm } from 'node:fs/promises';
++import { join } from 'node:path';
++import { tmpdir } from 'node:os';
++import { createEventLog, replay } from '../src/events';
++import { createSessionProvider } from '../src/agent/session-provider';
++import { createInterventionPolicy } from '../src/agent/eval/metacognition';
++vi.mock('../src/agent/memory/inject',async()=>(await import('./helpers/memory-inject-mock')).memoryInjectMock({project:null,global:null}));
++const directories:string[]=[];
++afterEach(async()=>{await Promise.all(directories.splice(0).map(path=>rm(path,{recursive:true,force:true})));});
++
++describe('experimental intervention reaches the actual model request',()=>{
++  it('adds a bounded transient instruction once without fabricating user history',async()=>{
++    const workspace=await mkdtemp(join(tmpdir(),'meta-wiring-'));directories.push(workspace);
++    const path=join(workspace,'events.jsonl'),log=createEventLog(path);
++    await log.append({type:'user_message',content:'Fix the task.'});
++    await log.append({type:'verify_result',callId:'check',ok:false,attempt:1,maxAttempts:3,results:[{command:'test',ok:false,output:'AssertionError',cause:'code'}],cause:'code'});
++    await log.close?.();
++    const policy=createInterventionPolicy({strategy:'triggered',seed:1,maxInterventions:2});
++    const requests:{role:string;content:string|null}[][]=[];
++    const provider=createSessionProvider(path,{workspace,map:false,requestIntervention:policy.next,
++      transport:async function*(messages){requests.push(messages);yield {type:'assistant_message',content:'done'};}});
++    for await(const _ of provider.stream([])){/* actual assembly */}
++    for await(const _ of provider.stream([])){/* deduplicated */}
++    expect(requests[0]?.some(message=>message.content?.includes('[实验策略提示]'))).toBe(true);
++    expect(requests[1]?.some(message=>message.content?.includes('[实验策略提示]'))).toBe(false);
++    expect((await replay(path)).some(event=>event.type==='user_message'&&event.content.includes('[实验策略提示]'))).toBe(false);
++  });
++});
+--- /dev/null
++++ b/tests/reasoning-continuity.test.ts
+@@ -0,0 +1,133 @@
++import { describe, it, expect } from 'vitest';
++import { streamOpenAI } from '../src/providers/openai';
++import { projectContext } from '../src/agent/context';
++import type { AgentEvent } from '../src/events';
++
++const nativeURL = 'https://api.deepseek.com/v1';
++const tools = [{ name: 'read_probe', parameters: { type: 'object', properties: {} } }];
++const thought = 'Check the external observation before deciding.';
++function reply(stream: boolean, tool: boolean): Response {
++  const message = tool
++    ? { content: 'Checking.', reasoning_content: thought, tool_calls: [{ id: 'probe-1', index: 0, type: 'function', function: { name: 'read_probe', arguments: '{}' } }] }
++    : { content: '7' };
++  const usage = { prompt_tokens: 10, completion_tokens: 8, completion_tokens_details: { reasoning_tokens: 5 } };
++  if (!stream) return Response.json({ id: 'reply-1', choices: [{ message, finish_reason: tool ? 'tool_calls' : 'stop' }], usage });
++  const chunks = tool
++    ? [{ id: 'reply-1', choices: [{ delta: { reasoning_content: thought.slice(0, 12) } }] },
++      { id: 'reply-1', choices: [{ delta: { reasoning_content: thought.slice(12), content: message.content, tool_calls: message.tool_calls }, finish_reason: 'tool_calls' }], usage }]
++    : [{ id: 'reply-2', choices: [{ delta: { content: '7' }, finish_reason: 'stop' }], usage }];
++  return new Response(chunks.map(c => `data: ${JSON.stringify(c)}\n\n`).join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
++}
++async function roundTrip(stream: boolean, second: { model?: string; baseURL?: string } = {}) {
++  const requests: Record<string, any>[] = [];
++  const fetchImpl = (async (_url, init) => {
++    const body = JSON.parse(String(init?.body)); requests.push(body);
++    return reply(body.stream !== false, requests.length === 1);
++  }) as typeof fetch;
++  const opts = { apiKey: 'fixture', model: 'deepseek-v4-flash', baseURL: nativeURL, stream, fetchImpl };
++  const outputs: AgentEvent[] = [];
++  for await (const event of streamOpenAI([{ role: 'user', content: 'Read the probe and answer.' }], opts, tools)) outputs.push(event);
++  const history: AgentEvent[] = [{ type: 'user_message', content: 'Read the probe and answer.' }, ...outputs, { type: 'tool_result', callId: 'probe-1', ok: true, output: '7' }];
++  const projected = projectContext(history);
++  for await (const _ of streamOpenAI(projected, { ...opts, ...second }, tools)) { /* drain actual serializer */ }
++  return { requests, outputs, projected, history, opts };
++}
++
++describe('provider-native reasoning survives real tool continuation', () => {
++  for (const stream of [true, false]) it(`${stream ? 'stream' : 'non-stream'} preserves native reasoning through context and the next request`, async () => {
++    const { requests, projected } = await roundTrip(stream);
++    const assistants = requests[1]!.messages.filter((m: any) => m.role === 'assistant');
++    expect(assistants.some((m: any) => m.reasoning_content === thought)).toBe(true);
++    expect(projected.filter(m => m.role === 'assistant').map(m => m.content).join('')).not.toContain(thought);
++    expect(requests[1]!.messages.find((m: any) => m.tool_calls)?.reasoning_content).toBe(thought);
++  });
++  it('does not send another model its native reasoning state', async () => {
++    const { requests } = await roundTrip(true, { model: 'other-model' });
++    expect(JSON.stringify(requests[1]!.messages)).not.toContain(thought);
++  });
++  it('does not send another endpoint its native reasoning state', async () => {
++    const { requests } = await roundTrip(true, { baseURL: 'https://other.example/v1' });
++    expect(JSON.stringify(requests[1]!.messages)).not.toContain(thought);
++  });
++  it('does not attach worker state to parent messages', async () => {
++    const { history } = await roundTrip(true);
++    const worker = history.map(e => e.type === 'user_message' ? e : { ...e, agent_id: 'worker-1' }) as AgentEvent[];
++    expect(JSON.stringify(projectContext(worker))).not.toContain(thought);
++  });
++  it('keeps reported reasoning tokens separate from total output tokens', async () => {
++    const { outputs } = await roundTrip(true);
++    expect(outputs.find(e => e.type === 'usage')).toMatchObject({ outputTokens: 8, reasoningOutputTokens: 5 });
++  });
++  it('preserves reasoning for a completed assistant answer across a later user turn', async () => {
++    const { outputs, opts } = await roundTrip(true);
++    const native = outputs.filter(e => e.type === 'thinking_delta' || e.type === 'assistant_delta');
++    const requests: any[] = [];
++    const fetchImpl = (async (_url, init) => { requests.push(JSON.parse(String(init?.body))); return reply(false, false); }) as typeof fetch;
++    const projected = projectContext([{ type: 'user_message', content: 'first' }, ...native, { type: 'user_message', content: 'next' }]);
++    for await (const _ of streamOpenAI(projected, { ...opts, stream: false, fetchImpl }, tools)) { /* drain */ }
++    expect(requests[0].messages.find((m: any) => m.role === 'assistant').reasoning_content).toBe(thought);
++  });
++});
++
++describe('explicit native reasoning switch', () => {
++  it('disables native DeepSeek thinking instead of merely omitting effort', async () => {
++    let body: any;
++    const fetchImpl = (async (_url, init) => { body = JSON.parse(String(init?.body)); return reply(false, false); }) as typeof fetch;
++    for await (const _ of streamOpenAI([{ role: 'user', content: 'hi' }], { apiKey: 'fixture', model: 'deepseek-v4-flash', baseURL: nativeURL, reasoningEffort: 'off', stream: false, fetchImpl })) { /* drain */ }
++    expect(body.thinking).toEqual({ type: 'disabled' });
++    expect(body).not.toHaveProperty('reasoning_effort');
++  });
++  it('preserves default request shape when no switch was requested', async () => {
++    let body: any;
++    const fetchImpl = (async (_url, init) => { body = JSON.parse(String(init?.body)); return reply(false, false); }) as typeof fetch;
++    for await (const _ of streamOpenAI([{ role: 'user', content: 'hi' }], { apiKey: 'fixture', model: 'some-model', baseURL: 'https://example.com/v1', stream: false, fetchImpl })) { /* drain */ }
++    expect(body).not.toHaveProperty('thinking'); expect(body).not.toHaveProperty('reasoning_effort');
++  });
++});
++
++describe('native reasoning response boundaries', () => {
++  it('keeps a multi-delta response together after a summary insertion', () => {
++    const history: AgentEvent[] = [
++      {type:'user_message',content:'task'},
++      {type:'thinking_delta',callId:'a',text:thought,reasoning:{id:'r',source:'native'}},
++      {type:'assistant_delta',callId:'a',text:'Part one. '},
++      {type:'assistant_delta',callId:'a',text:'Part two.'},
++      {type:'tool_call',id:'t',name:'read_probe',args:{},reasoningId:'r'},
++      {type:'tool_result',callId:'t',ok:true,output:'7'},
++      {type:'compaction',trigger:'manual',reason:'user_request',tokens_before:100,tokens_after:10,compressed_event_ids:[],summary_offset:2,summary:'earlier context'},
++    ];
++    const assistants=projectContext(history).filter(m=>m.role==='assistant');
++    expect(assistants).toHaveLength(1);
++    expect(assistants[0]).toMatchObject({content:'Part one. Part two.',reasoning:{content:thought},tool_calls:[{id:'t'}]});
++  });
++  it('does not attach a truncated reasoning-only response to a reused text call id', () => {
++    const projected=projectContext([
++      {type:'thinking_delta',callId:'a-0',text:thought,reasoning:{id:'old',source:'native'}},
++      {type:'usage',inputTokens:1,outputTokens:1},
++      {type:'turn_truncated',callId:'a-0',outcome:'output_budget',stop_reason:'length'},
++      {type:'assistant_delta',callId:'a-0',text:'new plain answer'},
++    ] as AgentEvent[]);
++    expect(projected.at(-1)).not.toHaveProperty('reasoning');
++  });
++  it('uses the actual extraBody model as the reasoning provenance', async () => {
++    const requests:any[]=[];
++    const fetchImpl=(async (_url,init)=>{requests.push(JSON.parse(String(init?.body)));return reply(false,requests.length===1);}) as typeof fetch;
++    const opts={apiKey:'fixture',model:'model-A',extraBody:{model:'model-B'},baseURL:nativeURL,stream:false,fetchImpl};
++    const events:AgentEvent[]=[];
++    for await(const e of streamOpenAI([{role:'user',content:'task'}],opts,tools))events.push(e);
++    for await(const _ of streamOpenAI(projectContext([...events,{type:'tool_result',callId:'probe-1',ok:true,output:'7'}]),{...opts,extraBody:{model:'model-A'}},tools)){}
++    expect(JSON.stringify(requests[1].messages)).not.toContain(thought);
++  });
++  it('keeps a native response atomic with its tool calls during compaction', async () => {
++    const { atomicUnits } = await import('../src/agent/compaction');
++    const { history } = await roundTrip(true);
++    const nativeStart = history.findIndex(e => e.type === 'thinking_delta') + 1;
++    const callEnd = history.findIndex(e => e.type === 'tool_result') + 1;
++    expect(atomicUnits(history).some(unit => unit.lo <= nativeStart && unit.hi >= callEnd)).toBe(true);
++  });
++  it('does not reuse a previous response state when an upstream reply id is reused', async () => {
++    const { history } = await roundTrip(true);
++    const projected = projectContext([...history, {type:'user_message',content:'another question'}, {type:'assistant_delta',callId:'reply-1',text:'plain answer'}]);
++    expect(projected.at(-1)).not.toHaveProperty('reasoning');
++  });
++});
+--- /dev/null
++++ b/docs/superpowers/plans/2026-10-25-metacognition-study.md
+@@ -0,0 +1,64 @@
++# Cairn Metacognition Implementation Plan
++
++> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
++
++**Goal:** Correct native reasoning state handling, establish an independently judged task pilot, and evaluate minimal evidence-triggered interventions before enabling any production strategy.
++
++**Architecture:** Preserve provider-native state with endpoint/model provenance through existing event fields and context projection. Reuse the existing runLoop/createSessionProvider/loop-eval assembly. Experimental intervention policies and randomized comparisons remain opt-in and isolated from production defaults.
++
++**Tech Stack:** TypeScript, existing Node/Vitest, Python standard library for credential-in-memory process launch only; no new dependencies.
++
++**Spec:** `docs/superpowers/specs/2026-10-25-metacognition-study-design.md` (research route approved by the user with “按照你建议的顺序开始全部推进”).
++
++## Global Constraints
++
++- Real task completion and reliability take priority over cost and speed.
++- Do not modify permissions, acceptance/judge rules, agent rules, global settings, or existing frozen fixtures.
++- No new event kind; native reasoning metadata uses an existing event's optional field.
++- Production defaults do not acquire experimental reflection behavior.
++- Preserve unrelated edits. Isolated worktree contains a recorded foreign baseline; only this plan's delta may be integrated, never commit the foreign baseline.
++- Credentials stay in the evaluation process memory; never write them to code, config, events, or reports.
++- Endpoint/model: user supplied local endpoint and `cn:deepseek-v4.1-flash`. User authorized an unbounded monetary ceiling with a bounded pilot; record token/call/time use and never infer prices from missing data.
++
++## Review Focus
++
++- Native reasoning state must survive tool results, multiple calls, projection and replay, while remaining absent from normal assistant text and unrelated model/endpoint requests.
++- Explicit off versus upstream default must be distinguishable in native probes and experiment receipts; do not claim a gateway executed a requested field merely because HTTP succeeded.
++- Retry/truncation/cancellation must not splice partial reasoning from another attempt into a tool call.
++- Interventions must be bounded, deduplicated, evidence-based, and incapable of bypassing approval or changing judges.
++- Pilot outcomes must retain all task denominators, hidden/regression outcomes and failed attempts; small or saturated samples cannot establish equivalence or general improvement.
++
++## Task 1: Native reasoning contracts
++
++**Files:** `src/providers/openai.ts`, `src/providers/index.ts`, `src/providers/glm.ts`, `src/providers/registry.ts`, `src/events/types.ts`, `src/agent/context.ts`, `src/agent/session-provider.ts`; new `tests/reasoning-continuity.test.ts`; targeted existing tests unchanged unless adding assertions.
++
++**Interfaces:** Existing ToolCallEvent and ProviderMessage gain optional `reasoning` state `{ source: string; content: string }`, where source binds protocol endpoint and model. `streamOpenAI` records returned native reasoning for tool replies and only replays matching provenance. Explicit off reaches native transport; recognized native DeepSeek uses its documented switch, unknown endpoints retain legacy behavior and remain unverified in receipts.
++
++- [ ] Write failing stream/non-stream continuation, cross-model/endpoint, plain-text isolation, worker isolation and explicit-off tests; observe the intended failures.
++- [ ] Implement the minimal state and transport changes, including reported reasoning token counts as optional data where provided.
++- [ ] Verify red→green against production functions, then run provider/context/loop regression scope.
++- [ ] Authenticated native pilot probe: default/low/high/off behavior and actual tool continuation. Record unsupported/ignored controls explicitly.
++
++## Task 2: Representative, independently judged baseline
++
++**Files:** New `scripts/metacognition-study.ts`, supporting pure evaluation helpers under `src/agent/eval/` only as needed; add opt-in hooks/flags to `scripts/loop-eval.ts`; new task snapshots under a new non-frozen corpus directory; new behavioral tests.
++
++**Interfaces:** Existing TaskSpec shape and runLoop assembly remain authoritative. Experiment manifest records requested strategy, model, code/input hashes, order, resource limits, actual attempts and judge outcomes; credential and hidden judge material never enter the model context.
++
++- [ ] Test parser/manifest and independent positive/negative judge controls before implementation.
++- [ ] Reuse existing real-task capabilities first, add new independent pilot tasks for gaps rather than renaming identical chain assertions as tasks.
++- [ ] Verify each task's seeded failure, reference repair and negative controls; hash and freeze before model trials.
++- [ ] Run an initial bounded task pilot and inspect task difficulty, failures and costs before expanding coverage.
++
++## Task 3: Minimal intervention experiment and decision
++
++**Files:** Pure experimental policy under `src/agent/eval/`, opt-in evaluation wiring, randomized study driver and result analyzer; tests for observable decisions and end-to-end execution.
++
++**Interfaces:** Evidence→decision uses existing tool/verify/user events. Baseline does not get new instructions. Triggered/fixed/reminder/random controls share tool surface, permissions, starting snapshot and resource ceiling. Every extra call is counted.
++
++- [ ] Write failing tests for actual failure-triggered replanning, no trigger during healthy execution, environment-failure handling, steering reset, deduplication and budget exhaustion.
++- [ ] Implement a minimal opt-in policy and wire it into the real evaluation assembly with no production-default change.
++- [ ] Run controlled real-model pilot with randomized order; include high-budget and matched-frequency controls as feasible. Log any missing comparison as a limitation.
++- [ ] Analyze per-task completion, protected regressions, false completion, recovery, calls/tokens/time and paired differences; do not claim general gain from a saturated or tiny sample.
++- [ ] Whole-delta fresh review using OCR delegate routing; fix actionable issues, verify appropriate core tests/typecheck/boundaries/docs, and integrate only our reviewed delta under baseline hash guards.
++- [ ] Deliver code, experiment artifacts, exact verification boundaries and deployment decision. Retain resumable instructions for any external blocker.
+--- /dev/null
++++ b/docs/superpowers/specs/2026-10-25-metacognition-study-design.md
+@@ -0,0 +1,233 @@
++# Cairn 元认知研究：哪些思考值得增加，怎样证明值得
++
++日期：2026-10-25（Asia/Shanghai）。本报告是研究结论和候选实验方案，尚未成为批准的内核设计。
++
++## 结论
++
++**值得投入的是“让 agent 依据证据决定何时查资料、规划、验证、换路和停止”的受控实验。当前没有足够证据支持默认增加每步反思、常驻规划代理或开放式内核自改。**
++
++目前对 Cairn 最有依据的顺序是：核验原生推理协议 → 建立有区分度的任务基线 → 在现有执行循环上试验按事件触发的干预 → 有独立留出集收益再考虑部署。离线经验优化另行评价。
++
++“先思考再动手”可以实现，但人类类比不能决定具体机制。模型已经可能在原生推理中规划；再增加显式规划会产生额外调用，也可能干扰原有策略。合理目标是提高真实任务完成率和可靠性，并在此基础上比较时间与成本。
++
++不存在脱离任务分布、模型、验证器和资源限制的已证“全局最优方案”。本文推荐的是当前证据支持度最高、能够被后续实验推翻的路线。
++
++## 1. 研究边界与方法
++
++- 实际仓库：`/Users/ze/Downloads/Cairn/cairn`。会话最初提供的 `deepseek harness` 路径已失效。
++- 读取时 HEAD：`146743c`。工作树有其他会话的未提交修改；本文观察的是磁盘快照，不能当作纯 HEAD 的认证。
++- 使用父目录现有 `.codegraph` 索引导航，再定向读取主循环、provider、规划门、停滞检测、经验回注及评测入口。
++- 联网沿原生推理、规划、反思、元推理和开源实现五个方向检索，优先核对作者论文、官方文档和 GitHub 原码。搜索结果和 README 的效果宣称均不直接作为采用依据。
++- 复算了现存文件中的 20 条历史 low/high 运行记录，未重跑这些模型实验。原始记录中的“真会话”是历史记录的身份字段，本次未独立见证其生成过程。
++- 本轮未修改生产代码、规则、技能、全局配置或项目文档，未安装、运行第三方项目，未把本地私有代码上传到研究服务，未发起新的模型评测请求。
++- 历史记忆只用来定位和理解既有约束；当前目录、接线、judge 和已有读数均重新核对。旧记忆中“逐名 judge 缺席”的结论已经不适用于当前任务清单。
++
++## 2. 需要分清的四种能力
++
++| 能力 | 实际作用 | 应如何验收 |
++|---|---|---|
++| 模型原生推理 | 模型在生成和工具交互中分配内部推理计算 | 请求与响应契约正确，真实任务在指定预算下表现改善 |
++| 显式任务规划 | 明确目标、范围、下一步和验证办法 | 计划推动正确执行；单纯出现计划文本不计收益 |
++| 运行时元认知控制 | 根据失败、未知事实、目标变化和进展选择下一种策略 | 干预提高完成率或可靠性，并量出误触发与额外代价 |
++| 跨任务学习 | 从经过判定的历史结果中更新经验或提示词 | 独立留出任务受益，且权限和验收标准保持受保护 |
++
++Cairn 已覆盖其中不少机制。真正需要验证的是各机制在什么条件下提供增量收益。
++
++## 3. 仓库当前已经有什么
++
++| 实际入口 | 本次确认的行为 | 证据能证明的范围 |
++|---|---|---|
++| `src/tools/propose_plan.ts`、`src/permissions/plan-state.ts` | 提交计划并进入审批与写入约束 | 授权边界；不证明计划质量或执行收益 |
++| `src/agent/system-prompt.ts` | 现有纪律包含规划、复现、修复、验证 | 有执行指导；不证明所有任务都受益 |
++| `src/agent/loop.ts` | 接收验证反馈、约束修复轮次、注入重复动作提示 | 已有反馈与干预接线；不证明干预的因果收益 |
++| `src/agent/stuck.ts`、`src/agent/no-progress.ts` | 检查重复动作、同类验证失败和往返抖动，产生干预阶梯 | 适合复用为触发信号；阈值与误报成本仍需实测 |
++| `src/agent/evolution/index.ts`、`src/main/post-run-readings.ts`、`src/main/agent-runner.ts` | 从事件抽信号，生成策略补丁与建议，并在后续运行注入 | 经验确实回流；跨任务信号变化不能单独证明补丁造成改善 |
++| `src/providers/reasoning.ts`、`src/providers/capabilities.ts`、`src/agent/session-provider.ts` | 推理档位声明、校验、传输映射 | 参数接线；仍需证明具体端点实际执行了档位 |
++| `scripts/loop-eval.ts` | 提供逐名 judge、隐藏测试相关字段、装配身份和 feasibility | 可作为实验基础；本仓小题集不能直接代表真实仓库工作 |
++
++一个值得保留的实践是：`no-progress.ts` 已经明确区分“从未触发”和“触发后没有误报”。这类证据纪律应延续到元认知实验里。
++
++## 4. 扩建之前，先核验原生推理契约
++
++这里发现两个具体的协议条件，优先级高于增加一套新认知架构。
++
++### 4.1 `off` 的含义需要按端点核验
++
++当前 `reasoningDirective('off')` 返回 `null`；主 provider 在 `off` 时不发送 `reasoningEffort`。这能保证保持旧请求形状，但不自动等于上游关闭思考。
++
++本次读取的 [DeepSeek 官方文档](https://api-docs.deepseek.com/guides/thinking_mode) 对其当前 V4 模型写明：思考默认开启；Chat Completions 另有 `thinking.type` 开关，`reasoning_effort` 控制强度。因此对这类端点，省略字段可能是“采用上游默认”，并非“关闭”。具体还取决于模型版本、网关和 `extraBody`。
++
++这不能直接推出所有 GLM、MiniMax 或本地代理行为都错了。它说明：实验中的档位标签必须有端点级的操作定义，不能只相信 UI 名字和参数被接收。
++
++### 4.2 工具轮次中的推理状态需要协议级保存
++
++上述 DeepSeek 文档还要求：携带 tools 的后续请求回传先前轮次的 `reasoning_content`。Cairn 当前统一 `ProviderMessage` 没有该字段，OpenAI wire 映射只保留 role/content/tool_calls/tool_call_id 等字段。
++
++本次离线探针把带 `reasoning_content` 的合成 assistant 工具调用消息交给实际 `toOpenAiWireMessages`，输出：
++
++```json
++{"offDirective":null,"reasoningContentPreserved":false,"wireKeys":["role","content","tool_calls"]}
++```
++
++这是**确定的本地消息形状证据**，尚不是一次真实 DeepSeek 会话失败的复现。网关可能有自己的转换；必须按实际使用的模型和协议再做原生交互核验。提供方要求的推理状态应按其协议保存，不应擅自拼成通用正文、跨模型复用或写入经验库。
++
++## 5. 复算已有 thinking 实验：结果与限制
++
++复算脚本输出在同目录 `historical-summary.json`，包含六份输入文件的 SHA-256、20 条精简运行记录及分组汇总。
++
++| 模型 | 任务 | low 逐名通过运行数 | high 逐名通过运行数 | high 平均总 tokens 相对 low |
++|---|---|---:|---:|---:|
++| hy3 | B1 | 1/1 | 1/1 | −2.00% |
++| hy3 | B12 | 1/1 | 1/1 | −7.07% |
++| GLM-5.3-Flash | B1 | 1/1 | 1/1 | +55.30% |
++| GLM-5.3-Flash | B12 | 1/1 | 1/1 | −48.29% |
++| GLM-5.3-Flash | L32 | 3/3 | 3/3 | −45.40% |
++| MiniMax-M3.1-Flash | L32 | 3/3 | 3/3 | +340.13% |
++
++这里的总 tokens 是历史记录的 `tokensIn + tokensOut`。这批记录均为 `verifyOkLast=true`、`namedSets.state=pass`，且 `touchedJudge=false`。
++
++可靠结论：**这批已观察的运行没有显示 high 多完成任务；用量变化具有明显的模型和任务差异。**
++
++不能推出的结论：
++
++1. **3/3 对 3/3 不证明两种策略等效。** 样本太小且通过率封顶，无法检测实际小差异，更不能据此宣称“多想永远无用”。仓库 README 个别“3 对足够证明不买正确率”的表述应按这个边界理解。
++2. B12 的 20 条断言和 L32 的 32 个链环，不能作为 20/32 个独立任务来增加统计分母。同一题重复运行也不能替代不同任务覆盖。
++3. 档位被写进请求，不证明代理端点实际执行了不同推理预算。本次未重新认证历史代理的档位行为。
++4. `cny=0` 无法证明服务没有计算成本，亦不能推出美元成本改善。缓存、推理 token 及代理计价口径需另行核对。总 tokens 只是有限的用量描述。
++5. 不能只比较低用量：GLM L32 的 high 虽然 token 较少，历史平均用时却更长；成本、时间和可靠性需要分别报告。
++6. 历史记录包含 dirty 身份；未确认运行顺序随机化、缓存状态、精确工作树内容与独立重复性，因果结论要保留。
++
++本次 fresh feasibility 命令没有发模型请求，结果是：当前进程缺少跑器要求的模型凭据，**可跑 0/12**；但 **12/12 已带 judge**，合计 FAIL_TO_PASS 43、PASS_TO_PASS 13。装配声明中 autoMemory、impactAnalysis、promptCache 为 `off-here`，subagentTools 与 autoVerify 为 `same`。这意味着即使后续跑通，也必须写清所测装配，不能泛称所有产品能力都已覆盖。
++
++## 6. 外部研究怎样改变判断
++
++| 一手来源 | 主要发现 | 对 Cairn 的价值与限制 |
++|---|---|---|
++| [From Plan to Action，ASE 2026](https://arxiv.org/html/2604.12147v3) | 研究 21,120 条轨迹；合适的标准流程和定期提醒能帮助部分 agent，额外早期阶段也可能干扰执行 | 支持有针对性的计划维护；不支持无限加阶段。四种模型，部分 R1 结果受工具格式失败影响；Pro 分析只保留部分可解实例，不能当作全体真实任务的收益 |
++| [PaT，ACL 2026](https://aclanthology.org/2026.acl-long.1703/) | 先尝试并验证，失败后再调用规划器；异构模型配置在文中实验节省约 69% 推理成本 | 直接挑战“所有任务都先付完整规划成本”。覆盖 HumanEval、MBPP、EvalPlus、xCodeEval 等代码生成任务；自生成验证也会有盲区，不能直接迁移为 Cairn 真实仓库收益或生产副作用策略 |
++| [Anthropic think tool](https://www.anthropic.com/engineering/claude-think-tool) | 旧模型在部分复杂工具场景中受益；官方于 2025-12-15 补充，多数场景现应优先使用 improved extended thinking | 必须结合模型代际。旧文的 tool+优化 prompt 效果不能全归因于一个空工具，也不能外推到当前多供应商模型 |
++| [Intrinsic self-correction，ICLR 2024](https://arxiv.org/abs/2310.01798) | 所测模型在缺外部反馈时可能把对答案改错 | 反思需要可核验依据；这是指定模型与任务的结果，并非永恒能力上限 |
++| [Task-sensitive self-correction，2026](https://arxiv.org/html/2606.23196) | 较新的实验发现，在适当任务结构和模型下，纯自我修订也可能改善结果 | 保留正面证据；该研究未覆盖代码合成，且不等于同成本的 agent 基准，不能据此默认全量启用 |
++| [Reflexion，NeurIPS 2023](https://arxiv.org/abs/2303.11366) | 把任务反馈转成反思记忆，帮助后续尝试 | 借鉴具体失败经验；重复试验、反馈来源和当时模型条件都要计入比较，不能当成新架构已证明优于现有 Cairn |
++| [GEPA，原论文](https://arxiv.org/html/2507.19457) | 利用轨迹与评估反馈生成、测试和选择提示词候选，使用训练/验证/测试划分 | 适合离线候选优化，前提是有可信判据和评估预算；不等于每步加反思，也不证明开放式生产自改安全有效 |
++| [Rational Metareasoning](https://arxiv.org/html/2410.05563v2) | 通过训练让模型选择何时使用额外推理，在所测任务下降低输出用量 | 为“计算的价值”提供依据，但涉及模型训练，不能作为 API harness 可直接启用的功能 |
++
++另检索到 [uncertainty-aware coding-agent 自纠错稿件](https://openreview.net/attachment?id=KgQphSXJj4&name=pdf) 等更直接的选择性干预探索，报告的收益伴随额外延迟。这些只作为后续线索；本轮没有完成其代码、完整统计和独立复现核验，因此不把其中效果数字列入决策依据。
++
++从这些证据能作出的推断是：**适应任务、利用执行反馈、保留低开销基线，比固定增加认知步骤更值得优先验证。** 事件触发是否优于定期提醒，仍须做直接对照，不能用上述论文替代。
++
++## 7. GitHub 方案比较与采用判断
++
++以下仓库的公开元数据、相关 README 或源码已实时读取；所列仓库均未归档、仓库级许可证为 MIT。许可证判断不覆盖所有依赖、模型权重和托管服务条款；本轮没有安装审计依赖树。
++
++| 项目 | 具体可借鉴内容 | 适配与代价 | 判断 |
++|---|---|---|---|
++| [mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent) | 直接读取了 DefaultAgent 的 query→execute→observation 线性循环、预算与退出控制 | Python 参考实现；少控制层仍可完成有价值任务，不能把它的分数归因于“简单”一个变量 | 作为强简洁基线，不替换 Cairn |
++| [SWE-agent](https://github.com/SWE-agent/SWE-agent) | 可配置工具和历史处理，作为规划论文的被测系统 | Python 体系；有价值的是对照接口和轨迹，而非重新引入一整套运行时 | 研究参考 |
++| [OpenHands SDK](https://github.com/OpenHands/software-agent-sdk) | 已核对 TypeScript StuckDetector，包含重复动作/错误、独白、往返模式，以及用户新消息的边界 | 当前提供 Python、TypeScript、REST 能力；完整采用会涉及会话、事件与工作区契约迁移。Cairn 已有同类检测 | 借鉴判据与测试场景，复用本仓机制 |
++| [Deep Agents JS](https://github.com/langchain-ai/deepagentsjs) | 规划、上下文卸载、技能、记忆、审批等可组合能力；官方文档将任务规划列为可选能力 | TypeScript 相容，但依托 LangChain/LangGraph，直接迁移会重叠 Cairn 现有设施；本轮未测完整安装体积 | 参考组合方式，不为一个控制点迁移整个 harness |
++| [Reflexion](https://github.com/noahshinn/reflexion) | 有反馈来源、记忆开关与多轮试验的研究代码 | 本次元数据最后 push 为 2025-01-14；偏研究制品，需要适配现代模型、验证器与本地工具 | 借鉴实验设计与经验结构 |
++| [GEPA](https://github.com/gepa-ai/gepa) | 基于轨迹诊断的候选优化和独立评估 | Python 生态，可在离线适配器旁运行；主要成本还包括许多评估调用、反思模型与判据维护 | 当前最值得保留的离线优化候选；先补数据与判据 |
++
++近期 push 只说明仓库活动，不自动证明成熟、稳定或适合生产。没有发现一个可直接插入 Cairn、无需适配和评测就能提供“最优元认知”的成熟模块。
++
++## 8. 三条路线与建议
++
++### A. 核验原生推理，使用现有循环建立强基线
++
++先按真实端点核验开关、预算、工具轮次状态和计量；在同一任务分布上比较当前 low/high/default 等配置。若这样已满足成功率与可靠性目标，就没有必要增加新的控制器。
++
++这是当前优先级最高的工程前提。不能一边丢失模型要求的状态，一边把失败归因于“缺元认知”。
++
++### B. 在现有循环上试验轻量、按证据触发的控制
++
++推荐作为 A 之后的实验候选。复用现有停滞信号、验证结果、用户插话和预算，统一决定下一项干预，不另建常驻 planner/critic，也不叠加第二套重复提示器。
++
++| 可观察情况 | 候选动作 | 检验重点 |
++|---|---|---|
++| 缺少路径、API 或复现结果等外部事实 | 先使用低风险工具获取信息 | 额外思考是否只是重复未知信息 |
++| 复杂多文件变更，已有足够事实 | 形成短计划：范围、关键假设、下一步、验证办法 | 是否减少错误修改与返工 |
++| 验证结果推翻关键假设，或命中有证据的停滞 | 指明失败证据，调整假设或探针；必要时提升已验证的推理档位/模型 | 是否恢复任务，是否比同预算普通重试更有效 |
++| 工具链或端点未能执行 | 修复环境或报告阻塞 | 不把基础设施故障当作业务代码错误 |
++| 出现足够完成证据 | 进入既有收尾逻辑 | 不为完成反思流程继续消费资源 |
++| 涉及高影响操作 | 维持独立授权、验证和权限约束 | 元控制不得改变权限、判卷或自我监督边界 |
++
++建议只保存短决策摘要：证据引用、尚未确定的假设、下一步和检查结果。它用于续跑与审计，不是要求输出完整思维链。
++
++触发器先使用可解释信号。模型自报“90% 自信”可以是候选特征，但未经校准不能当作概率。为相同证据加去重与干预预算；阈值、冷却和升级次数在开发集上确定，并在留出集冻结。
++
++若后续获准实现，最可能涉及 `loop.ts`、`no-progress.ts`、`session-provider.ts` 的既有控制点。按仓库事件规则，行为证据优先使用现有事件的可选字段，避免为“元认知”另建事件族。审批规划与策略规划应在语义上分清。
++
++### C. 固定每步规划/批评、双代理或树搜索
++
++优点是能生成更多替代方案，可能帮助真正困难且有判据的任务；代价是额外调用、上下文、候选隔离、状态恢复和错误评估。
++
++例如 [SWE-Search](https://arxiv.org/abs/2410.20285) 给出 MCTS 与反馈搜索的正面研究线索，但这并不证明在 Cairn 相同预算、现代模型和真实工作负载上优于 A/B。只有 B 仍反复卡在“探索策略不足”，且评判器能够区分候选时，才值得把它加入针对性实验。
++
++GEPA 属于另一条离线轴：它可以在 A/B/C 的策略或提示词之间优化候选，不应直接和运行时控制器画等号。
++
++## 9. 如何判断 B 值不值得保留
++
++### 第零阶段：先证明比较的是实际不同策略
++
++对计划使用的每个模型/端点核验：解析后的模型身份、default/off 的真实含义、low/high 是否被执行、工具多轮状态、截断/重试行为、usage 中推理与缓存的计量方式。兼容网关接受字段不是充分证据；无法确认的档位记为未验证。
++
++保留固定代码快照、模型版本和安全配置。把运行时契约修正后的现有产品作为基线，而非故意使用有缺陷的基线抬高候选收益。
++
++### 第一阶段：用独立 pilot 找到可测问题
++
++一个起始建议是约 24 个不同任务，覆盖真实跨文件修复、异步问题、未知仓库约定、长上下文、工具失败和目标变化。该数量只是发现成本、失败类型和配对差异的 pilot 规模，不是统计认证样本量。
++
++应包含普通任务，避免只挑“正好会触发控制器”的失败样本。发现集与最终留出集按仓库或时间隔离；已用于调触发器的题不能再充当独立证明。B12/L32 可保留为机制回归，但不能担当全部能力分母。
++
++### 第二阶段：进行能够区分解释的对照
++
++至少保留这些策略：
++
++- 原生推理契约正确的现有 agent。
++- 固定较高推理预算，用来检验简单加算力是否足够。
++- 固定阶段反思或定期提醒，检验按事件触发是否必要。
++- 按证据触发的候选策略。
++- 随机触发、平均干预次数接近的控制组，用来检验“选对时机”是否优于单纯多试几次。
++
++可分阶段筛选控制组以限制开销，但缺了某个控制，就不能声称排除了它对应的解释。上述 24 题、5 策略、2 次重复会是 **240 个任务轨迹**，并非 240 个 API 调用；真实费用必须先由 pilot 估算。本轮不自动执行这一预算。
++
++同一题同一起点、权限、可见测试、工具、记忆快照和最大步数；按模型与任务分块随机交错运行。策略必须计入所有规划、反思、路由与重试开销。先报告相同资源上限的结果，再比较质量—用量—时间曲线；相同上限不等于实际花费相同。
++
++### 第三阶段：用任务结果裁决
++
++主指标是独立判据下的任务完成率及既有行为保持。辅助指标包括错误交付、干预后恢复、误触发、模型调用、可核实费用、token 分项和延迟。基础设施未执行、取消、超时与代码失败分别报告，保留全部尝试的分母。
++
++隐藏判据由独立评估端管理，候选不得读写或优化它。真实任务缺少完整自动判据时，结合固定验收标准的人工盲评；LLM judge 作为辅助信号，不单独签发正确性证明。
++
++统计以不同任务为单位，考虑同题重复和同仓库聚类。配对二元结果可以使用 McNemar 等方法，区间可按任务聚类 bootstrap；小样本时使用适当的精确方法。正式样本量要结合 pilot 的配对差异率、目标效果和置信要求确定，不能只因为“3 对都过”就宣称等效。
++
++决策规则应预先写明：先排除关键可靠性与授权回归，再看有实际价值的完成率改善；在这些条件满足后比较成本与速度。若只增调用而无可重复收益，保留 A；若仅特定任务/模型获益，则只考虑在相应范围启用。证据不足应继续标记未知。
++
++## 10. 跨任务经验怎样接入
++
++已有 evolution 回注可以作为候选种子；经验条目宜包含适用范围、原始证据、验证状态和失效条件。一次失败后的模型解释只能先作为假设，不能直接晋升为全局规则。
++
++若使用 GEPA，先固定训练/验证/最终测试划分和评价预算；验证可用于选择，最终测试保留到冻结后。最终隐藏判据不能反馈给候选学习；每次重新调参后应更新独立证据边界。权限、验收规则与进化内核的变更保持独立批准。
++
++## 11. 本次验证记录与未验证项
++
++已执行：
++
++```text
++node --import tsx scripts/loop-eval.ts --tasks fixtures/bench/tasks.json --feasibility
++→ 当前凭据条件下 0/12 可跑；12/12 带 judge；未发模型请求。
++
++pnpm exec vitest run tests/thinking-plumbing.test.ts tests/reasoning-wire.test.ts --config tests/vitest.config.ts --maxWorkers=2
++→ 2 个测试文件，16 条测试通过；maxWorkers=2。
++```
++
++另执行了真实消息映射函数的离线形状探针，以及六份历史数据的独立复算。这些检查证明接线行为和历史文件内的算术；**不证明端点实际执行了推理档位，不证明元认知策略提升了能力，也不构成全仓、桌面或 HEAD 认证。**
++
++未执行新的真实模型对照、上游原生交互验证、全量测试、构建、部署或第三方依赖审计。当前推荐仍需实验确认。
++
++下一步最值得做的具体工作是：选定实际使用的模型与端点，先完成原生推理契约核验，再用未封顶的代表任务比较现有基线与最小触发策略。通过之前维持研究状态。
++
++## 工具维护附记
++
++只读检查发现 Agent Reach 当前 v1.5.0，可更新至 v1.6.0；本轮未更新。若需要，可后续按 [官方更新说明](https://raw.githubusercontent.com/Panniantong/agent-reach/main/docs/update.md) 单独处理。

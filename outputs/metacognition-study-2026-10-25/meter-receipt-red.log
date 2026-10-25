@@ -1,0 +1,33 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/metacognition-run-state.test.ts (5 tests | 1 failed) 11ms
+   × uses complete transport receipts and preserves unknown requests without assuming free retries 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/metacognition-run-state.test.ts > uses complete transport receipts and preserves unknown requests without assuming free retries
+AssertionError: expected null to be 18 // Object.is equality
+
+- Expected:
+18
+
++ Received:
+null
+
+ ❯ tests/metacognition-run-state.test.ts:49:49
+     47|  const meter=new RequestMeter(),id=meter.beginRequest('main','{}');
+     48|  meter.finishRequest(id,'ok',{inputTokens:10,outputTokens:5,cacheReadI…
+     49|  expect(meteredStudyTokens(meter.snapshot(),1)).toBe(18);
+       |                                                 ^
+     50|  expect(meteredStudyTokens(meter.snapshot(),2)).toBeNull();
+     51|  const retry=meter.beginRequest('main','{}');meter.finishRequest(retry…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  10:51:26
+   Duration  154ms (transform 65%, import 18%, tests 14%, worker 3%)
+
