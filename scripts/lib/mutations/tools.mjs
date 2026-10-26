@@ -111,12 +111,16 @@ export const MUTATIONS = [
   // 判卷 tests/path-boundary.test.ts 从写下那天起零锚点（第 37 页的对账机读出来的）。
   // 三面各一条：词法 resolve/relative、realpath 归属、落点复查是**三道独立的闸**，
   // 少任何一道都有各自能穿透的形态（绝对路径 / 区内软链 / `link -> .agent`），不是冗余副本。
+  // realpath 归属本身有两份同判据落地：解析后的 assertRealContainment 与打开/捕获后的
+  // assertRealPathWithin。单拆前者时后者仍会拒绝，量到的是防御纵深而不是判据缺失；须两份一起拆。
   {
     id: "containment-realpath-dropped",
     src: "src/tools/base.ts",
     test: "tests/path-boundary.test.ts",
-    desc: "词法 resolve/relative 过关后再不做 realpath 归属复查 ⇒ 工作区内一条软链就把读写送出边界（旧实现正是这一形态）",
-    apply: (s) => s.replace("  if (relBack !== \"\" && (relBack.startsWith(\"..\") || isAbsolute(relBack))) {", "  if (false) {"),
+    desc: "realpath 归属的两份复查一起拆除 ⇒ 工作区内一条软链就把读写送出边界（旧实现正是这一形态；单拆一份只量到防御纵深）",
+    apply: (s) => s
+      .replace("  if (relBack !== \"\" && (relBack.startsWith(\"..\") || isAbsolute(relBack))) {", "  if (false) {")
+      .replace("  if (relBack !== \"\" && (relBack.startsWith(\"..\") || isAbsolute(relBack))) {", "  if (false) {"),
     expectFail: "工作区内软链指向外部：write_file 拒绝（旧实现会穿透写入外部文件）",
   },
   {
