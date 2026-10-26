@@ -1,15 +1,11 @@
 {
-  "_comment": "本工作区的 harness 配置。2026-10-15 桌面端会话读数：本仓 pnpm run test 是全量 382 文件 / 5429 条用例，实测 219s，而 verify 缺省墙钟是 60s（src/agent/verify.ts DEFAULT_VERIFY_TIMEOUT_MS）⇒ 每一轮自动补拍都被强杀，报「取消信号生效 / not-run」。那不是测试红，是这一轮从来没跑完。这里把超时抬到实测之上，并把测试面收窄到能在帽内跑完的范围。 2026-10-16：test 面第一格加 html-artifact-check——从前的三条只查 harness 自己的健康（typecheck + 工具面/权限/写向判卷），用户要的那份 HTML 一次都没被看过。产物被删时那格会红（读不到），届时把这条命令从本数组里去掉或改成当前产物路径。 2026-10-17：test 面第二格加 anim-geometry-check（运动学判卷）——第一格只验字节层（存在/零外链/无占位符/本地引用齐），而鹈鹕那次真实失败里那四样**全过了**，它坏在几何上：膝被 IK 选肢钉死、脚偏离曲柄圆、两腿同相。字节层一格都看不见。第二格补的正是那个盲区：循环闭合 / 根点固定 / 骨长恒定 / 末点在圆 / 双腿反相 / spline 配平 / 同轮同期，七条各对应一类真实缺陷。反向验证已做：7 个各破一条的突变体全部被抓到、好标本仍绿。它读的是**任意** HTML/SVG 产物（从文件里解析骨架），不像 pel_verify.py 把数据硬编码在脚本里——后者只能验这一份标本，agent 新写的任何一份它一个字都看不了。",
+  "_comment": "仓库自身的快速验证配置。这里只检查 Cairn 代码；具体任务产物的验证由该任务按需运行。完整回归使用 pnpm test:capped 与桌面测试。",
   "verify": {
     "_comment": "typecheck 是零误报的第一道（本仓 TS 严格）；test 只跑与改动最相关的三个判卷族（工具面 / 权限登记 / 写向判据）——全量套件留给 pnpm test 手动跑，不占 agent 每一轮的钱。",
     "typecheck": [
       "node --import tsx scripts/typecheck.ts"
     ],
     "test": [
-      "node --import tsx scripts/html-artifact-check.ts pelican-bicycle.html",
-      "node --import tsx scripts/anim-geometry-check.ts pelican-bicycle.html",
-      "node --import tsx scripts/anim-js-geometry-check.ts pelican-bicycle.html",
-      "node --import tsx scripts/svg-figure-check.ts pelican-bicycle.html",
       "node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/tool-surface-parity.test.ts tests/prompt-surface-check.test.ts tests/base-system-discipline.test.ts",
       "node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/write-face.test.ts tests/permissions-tool-registry.test.ts tests/remember.test.ts"
     ],
