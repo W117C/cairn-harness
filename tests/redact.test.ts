@@ -212,12 +212,19 @@ const ruleIdsOf = (line: string): string[] =>
 // 半掩比不掩更坏——`PASSWORD=post****` 那种只掩到第一个 `/` 的输出会给人"已脱敏"的假象，
 // 而 `//` 之后的真密码原样在场。
 describe("连接串内嵌凭据：整条掩，不许留下 // 之后那一段", () => {
+  // 合成 Atlas URI 在运行时拼接：连续写成一条会被仓库 secret scanning 反复识别。
+  const MONGO_ATLAS_URI = [
+    "mongodb+srv://",
+    "admin:",
+    "hunter2hunter2",
+    "@cluster0.abcd.mongodb.net/db",
+  ].join("");
   const URIS = [
     "postgres://appuser:s3cr3tp4ssw0rd@db.internal:5432/prod",
     "postgresql://appuser:s3cr3tp4ssw0rd@db.internal:5432/prod",
     "redis://:r3d1sp4ssw0rd@cache.internal:6379/0",
     "mongodb://admin:hunter2hunter2@mongo.internal:27017/db",
-    "mongodb+srv://admin:hunter2hunter2@cluster0.abcd.mongodb.net/db",
+    MONGO_ATLAS_URI,
     "amqp://guest:guestpass1234@mq.internal:5672/%2F",
     "mysql://root:rootpassw0rd@127.0.0.1:3306/app",
   ];
