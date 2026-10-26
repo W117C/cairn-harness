@@ -19330,3 +19330,28 @@ typecheck 0 报错｜八份判卷 **101 条全绿**（含两条反过拟合用�
 - GitHub main 的 verify 任务未启动，annotation 指明账户付款/支出限制；没有伪造 CI 绿。
   全量 core、desktop、build、gates 和 HEAD 认证本轮未跑；合并与交付仍需这些边界的实际证据。
 - 不删 rescue/历史分支、tag 或历史工件，不改许可/可见性/付费计划；依赖告警留独立兼容修复任务。
+
+
+## 2026-10-26 · 第 714 页：公开仓库的保护设置与 CodeQL 接线
+
+业主已将 GitHub 仓库改为公开，指示继续检查整理。本批沿用 PR #2 的隔离树，未动共享本地成果。
+
+- 远端设置实读后启用密钥扫描、推送保护、私密漏洞报告、Dependabot 安全更新；
+  main 仅增加防删除与防强推规则，不增必需评审人数、不改普通提交方式。未改许可或付费计划。
+- CodeQL 的 `language` 输入不在上游 Action schema 中：静态复现先红，改为 `languages` 后通过；
+  JS/TS 明确 build-mode none，公开后的 main push 与 PR 自动分析，保留手动入口。
+- CI 契约 2 文件 / 24 测试通过（maxWorkers=2）；根 typecheck 与 docs-check 通过。
+  公开后在原提交重新启动真实 verify，安装和类型检查已执行；本提交的远端结果以 PR Checks 为准，
+  不把旧的未启动失败或本地专项通过写成远端全绿。
+- 历史材料按文件名与事件日志类型盘点；测试/夹具、台账与原始工件不删除，不做历史重写。
+- GitHub 新出现的一个密钥模式告警完成只读静态核对；敏感原文未写入公开 PR/台账，
+  未做外部凭据验证、未自动关闭告警；私密核对记录由 Codex Security 工件存储保存。
+
+### 同批远端复验与并发口径
+
+`43f29ab3` 的真实 GitHub verify 第二次尝试已完成：核心 445 文件 / 6188 测试、
+桌面 156 文件 / 1150 测试通过；该趟使用原 workflow 默认并发，实际 worker 数未留痕。
+认证面 25 道退出码均为零，但 gate-check / autonomy-check / compaction-check / provider:check / gym-check
+各有一项未证，不能写成“全部通过”。原账单失败记录未删除。
+本批把后续核心 CI 改为既有 test:capped 入口（maxWorkers=2），测试集合与断言原样；
+完整后续读数仍应引用对应提交与并发档位。Actions 的 Node 20 运行时弃用提示另列优化，不隐藏。

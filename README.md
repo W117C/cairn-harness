@@ -454,7 +454,8 @@ worker 要联网只能回主会话发。
 | [`SUPPORT.md`](SUPPORT.md) | 按问题类型选渠道 |
 
 CI 跑在 `macos-latest`（沙箱与平台分支的判卷按它写）。
-[CodeQL 工作流](.github/workflows/codeql.yml) 仅手动触发，运行前提见该文件；不代表持续扫描已启用。
+[CodeQL 工作流](.github/workflows/codeql.yml) 对 main 推送与面向 main 的 PR 自动运行，并保留手动入口；
+具体分析结果与功能验证分别查看对应 Actions。
 CI 说明与取舍见 [`scripts/ci/README.md`](scripts/ci/README.md)。
 
 ---
