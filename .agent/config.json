@@ -1,11 +1,12 @@
 {
-  "_comment": "仓库自身的快速验证配置。这里只检查 Cairn 代码；具体任务产物的验证由该任务按需运行。完整回归使用 pnpm test:capped 与桌面测试。",
+  "_comment": "仓库自身的快速验证配置，检查 Cairn 代码与页面入口；具体任务产物的验证由该任务按需运行。完整回归使用 pnpm test:capped 与桌面测试。",
   "verify": {
     "_comment": "typecheck 是零误报的第一道（本仓 TS 严格）；test 只跑与改动最相关的三个判卷族（工具面 / 权限登记 / 写向判据）——全量套件留给 pnpm test 手动跑，不占 agent 每一轮的钱。",
     "typecheck": [
       "node --import tsx scripts/typecheck.ts"
     ],
     "test": [
+      "node --import tsx scripts/html-artifact-check.ts apps/desktop/src/renderer/index.html",
       "node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/tool-surface-parity.test.ts tests/prompt-surface-check.test.ts tests/base-system-discipline.test.ts",
       "node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/write-face.test.ts tests/permissions-tool-registry.test.ts tests/remember.test.ts"
     ],

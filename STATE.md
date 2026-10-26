@@ -31,6 +31,6 @@ rev: 8094efa977a1f54520ee2896f5d767f271930165
 ## 怎么验
 
 命令与边界见 AGENTS.md。core、desktop、build 与真实交互分别取证。
-仓库配置只跑代码自检；任务产物使用对应检查器按需验证。
+仓库配置检查自身代码与页面入口；任务产物使用对应检查器按需验证。
 完整门表见 `scripts/gate-manifest.ts`，实测用 `pnpm facts` 和对应证据。
 `mutate-verify`、`head-cert-check` 仅证明其测量提交，不把退出码全零等同于全部已证。
