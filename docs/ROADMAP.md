@@ -2,7 +2,7 @@
 
 更新日期：2026-10-26（Asia/Shanghai）。本页是带日期的远端盘点与待办入口；
 默认分支的当前实现见 [STATE.md](../STATE.md)，实时运行结果见 [Actions](https://github.com/W117C/cairn-harness/actions)。
-首批整理已通过 PR #2 合并；本批基于 `main@8094efa977a1f54520ee2896f5d767f271930165`，不代表本地开发线成果已上传。
+PR #2、#3、#8、#13 已合并；本批根目录修正基于 `main@2fa56173141291959013539c2b9a5a9ae9f3bf7d`，不代表本地开发线成果已上传。
 
 ## 分支各放什么
 
@@ -12,7 +12,7 @@
 | `fix/spec-summary-double-count` | 远端仍在 `014ac0e3`；与 main 各有独有提交，实时差量看下方比较入口 | 保留完整开发线；独立处理代码集成、冲突和同一提交的验证 |
 | `integration/dev-line-with-standardization` | 与上述开发分支同一个 tip，实际尚未包含 main 的治理提交 | 保留，集成后再决定是否收口这个别名 |
 | `chore/repo-standardization` | 首批整理已随 PR #2 合并，远端分支已收口 | 结果见 main 与 PR #2 |
-| `chore/remove-demo-coupling` | 本批去除旧动画任务绑定的评审分支 | 清理任务残留与过期状态，不混入依赖升级 |
+| `chore/remove-demo-coupling` | 已随 PR #13 合并，远端分支已收口 | 结果见 main 与 PR #13 |
 | `doc-layer-migration` | 相对 main 仍有 5 个独有提交，已有同 tip 的 rescue 标签 | 历史归档候选；先核对恢复凭证再决定是否删分支 |
 | `rescue/wip-20261025` | 相对 main 仍有 2 个独有提交 | 保留恢复用途，不按“旧分支”删除 |
 
@@ -29,13 +29,13 @@
 - 补上 README 已引用的 `test:capped`，使用既有 Vitest 配置并限制两个 worker；不改 lockfile 或判据。
 - README 与文档索引接入本页；CodeQL 对 main 推送/PR 自动运行，并保留手动入口。
 - 移除四份无执行消费者的根目录残留：`gen_legs.py`、`pel_verify.py`、
-  `pelican_gen.py`、`pelican-bike.html`。几何与渲染测试读取的 `pelican-bicycle.html` 保留。
+  `pelican_gen.py`、`pelican-bike.html`。几何与渲染测试标本归入 `fixtures/artifacts/cycling-animation.html`。
 - 已有测试、fixture、许可、发布 tag、恢复分支和历史台账原文保持原样；公开可见性由仓库所有者修改。
 - 单分支 checkout 最初报出缺失历史引用；完整获取远端 ref 与 tag 后 docs-check 通过，未改判据或添加豁免。
 - 公开后已启用密钥扫描、推送保护、私密漏洞报告和 Dependabot 安全更新；main 防强推/防删除规则已生效，不新增必需评审人数或改变普通提交方式。
 - CodeQL 改为 main 推送/PR 自动分析，修复与上游不符的 `language` 输入为 `languages`；具体成功状态以 Actions 为准。
 
-首批配置和文件整理已随 PR #2 进入默认分支；本批去除旧动画任务绑定仍待本批 PR 合并。
+首批配置和文件整理已随 PR #2 进入默认分支；后续 PR #3、#8、#13 也已合并；本批将回归标本归入 fixtures/artifacts。
 标签、安全功能和 main 防强推/防删除规则属于已经生效的远端设置。
 
 本批去除仓库自检中固定的动画任务命令，并将 render_image 的动画说明改为通用轨迹与循环检查；测试标本和检查器保留。
