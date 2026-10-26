@@ -23,15 +23,17 @@ rev: f79077e2056dabb481a1ec9a7fd797bdb7d0bc08
 ## 正在收口
 
 - 真实 DeepSeek 连接需要 `DEEPSEEK_API_KEY`；wire 判卷只证明请求形状。
-- 插话的端到端 smoke 受 gallery 桩限制（`running` 立不住），组件级判卷已绿。
+- 同一活跃会话的插话、取消后继续发送与跨窗口 smoke 已接通；空屏首发的 running key 由单测钉住。
+- FilePane 与设置页已有真实 renderer / 生产 preload 的键盘、失败恢复与窄窗补测。
 - `mutate-verify` / `head-cert-check` / `pnpm gates` 需在目标提交上另行认证。
 - 远程 worker、P5 真实评测、P6 SDK 与对外分发按任务清单的条件待开工。
 
 ## 待验与待决
 
-- 同一活跃会话的取消/恢复、跨窗口与编排控制面真机交互。
+- 编排控制面的真实用户交互；当前只有组件/服务面判卷。
 - 自进化新接线的真实收益（配对读数），不能用判卷绿替代。
-- Radix 首开延迟、长会话/长列表/大 diff 的渲染长尾、FilePane/设置的真机可发现性。
+- 长会话/大 diff 的跨机器长尾与 Radix 是否值得懒加载；当前本机读数不足以支持重构。
+- FilePane 已在 500 项目录下通过真机 smoke，设置页已在真实 main/preload 下通过；仍需真实用户可发现性样本。
 - 取料归档治理。
 
 ## 验证入口

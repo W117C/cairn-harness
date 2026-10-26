@@ -1,0 +1,49 @@
+{
+  "checks": [
+    {
+      "name": "运行中发送先入队，不新开 run",
+      "ok": true,
+      "detail": {
+        "runs": [
+          {
+            "message": "开始一个长任务",
+            "sessionId": "s2"
+          }
+        ],
+        "queue": 1
+      }
+    },
+    {
+      "name": "取消后队列头自动接上同一会话",
+      "ok": true,
+      "detail": {
+        "runs": [
+          {
+            "message": "开始一个长任务",
+            "sessionId": "s2"
+          },
+          {
+            "message": "取消后继续发送",
+            "sessionId": "s2"
+          }
+        ],
+        "stop": true,
+        "queue": 0
+      }
+    },
+    {
+      "name": "第二轮收束后停止钮消失、队列清空",
+      "ok": true,
+      "detail": {
+        "stop": false,
+        "queue": 0
+      }
+    },
+    {
+      "name": "真实渲染无控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "consoleErrors": []
+}

@@ -1,0 +1,41 @@
+{
+  "checks": [
+    {
+      "name": "① 空闲时回车 = 起一轮（不插话）：runSteer 未被调用，且出现停止钮",
+      "ok": true,
+      "detail": "{\"steersSoFar\":[],\"stopBtn\":true}"
+    },
+    {
+      "name": "★ 运行中回车真的调了 runSteer（不是默默排队）",
+      "ok": true,
+      "detail": "{\"steers\":[{\"sessionId\":\"s2\",\"text\":\"插话：先别改 a.ts\"}],\"noticeText\":true,\"queueRows\":0}"
+    },
+    {
+      "name": "★ 带的话就是输入框里那句",
+      "ok": true,
+      "detail": [
+        {
+          "sessionId": "s2",
+          "text": "插话：先别改 a.ts"
+        }
+      ]
+    },
+    {
+      "name": "★ 回执是「已插话到本轮」（用户分得清插话与排队）",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "反向：这条话**没有**进队列条（否则既插话又排队＝发两遍）",
+      "ok": true,
+      "detail": 0
+    },
+    {
+      "name": "镜像：不在运行 ⇒ 回落为队列（不吞消息）",
+      "ok": true,
+      "detail": "{\"queueRows\":1}"
+    }
+  ],
+  "consoleErrors": [],
+  "passed": true
+}

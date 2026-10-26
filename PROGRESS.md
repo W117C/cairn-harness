@@ -24711,3 +24711,49 @@ DeepSeek 真连一项，业主选择「本轮不验，登记为外部依赖」�
 移至 `/Users/ze/Downloads/Cairn/archive-external-2026-10-26/ab.py`，SHA-256
 `ba350b7b3ebcc9da6f588c0724dade552791b3c5edd9f16641eadb5931de9c30`，同目录 README 记录来源与恢复方式。
 工作树自此干净。
+
+## 2026-10-27 · 第 714 页：空屏首发运行键修复与仓库现态补测
+
+业主指定 `docs/REPOSITORY-STATUS.md` 为任务入口。本轮没有重开已定范围；只处理该页仍标为未测/不可跑的
+真实交互与“先测后改”项，并把读数落到 `outputs/repository-status-2026-10-27/`。
+
+### 一、插话 smoke 的真实根因
+
+旧 `steer-smoke` 把根因写成“gallery 桩立不住 running”，本轮在真实 renderer 里复现并定位到更底层的一格：
+空屏首发 `createSession` 返回真实 workspace 后，`setActiveWorkspace` 的 state 要到下一拍才可见；
+`run-queue` 仍用闭包里的旧 `activeWorkspace=null` 计算 running key，于是起跑记成裸会话 id，
+UI 用新 workspace 算键 ⇒ 停止钮不出现，插话入口永远走不到。gallery 桩不是唯一原因。
+
+修复：
+
+- `apps/desktop/src/renderer/state/run-queue.ts` 增加 workspace ref；`runOn` 接受新建会话回包的工作区，
+  起跑、收束、队列读写共用同一个键。
+- `steer-smoke` 改用冻结桥上的 control hook 模拟主进程“不在运行”，并把队列断言从 `.q-sub`（附件格）
+  改为 `.queue-item`，避免把“空队列”读成“已回落”。
+- 新增 `cancel-resume-smoke.cjs`：运行中入队 → 停止 → 队列头自动接上同一会话 → 收束清空。
+- 新增 `radix-open-latency.cjs`、`diff-render-latency.cjs`，分别量真实鼠标命中后的下拉挂载和 4000 行 diff 挂载。
+- `settings-process-smoke` 重载后先打开真实会话并等待窗口工作区上下文，修掉把“工作区未知”误报成配置未保存的冒烟竞态。
+
+### 二、真机读数
+
+| 检查 | 读数 | 取料 |
+|---|---|---|
+| 连续发送 smoke | 7/7 PASS | `outputs/repository-status-2026-10-27/session-continuity-checks.json` |
+| 插话 smoke | 6/6 PASS；运行中真的调用 `runSteer`，拒绝时回落队列 | `outputs/repository-status-2026-10-27/steer-smoke.json` |
+| 取消/恢复 smoke | 4/4 PASS | `outputs/repository-status-2026-10-27/cancel-resume-smoke.json` |
+| 跨工作区 / 双窗口 | 7/7、13/13 PASS | `outputs/repository-status-2026-10-27/cross-workspace-checks.json`、`workspace-owner-checks.json` |
+| FilePane 真机 | 25/25 PASS；键盘、失败恢复、窄窗、长路径、只读态、路径菜单 | `outputs/repository-status-2026-10-27/file-pane-checks.json` |
+| 设置页真机 | 15/15 PASS；独立用量页、窄窗、测试连接、密钥不落明文、重载恢复 | `outputs/repository-status-2026-10-27/settings-checks.json` |
+| 400 轮长会话 | 启动 153.3 ms；首开 475.3 ms；流式帧 p50 26.2 / p95 31.9 / max 33.1 ms；39,585 DOM 节点 | `outputs/repository-status-2026-10-27/performance.json` |
+| Radix 下拉 | 首开 17.3 ms；复开 p50 6.4 / p95 7.3 ms；依赖树 251,225 B / 49 模块 | `outputs/repository-status-2026-10-27/radix-open-latency.json`、`bundle-audit.json` |
+| 4000 行 diff | 191.1 ms；20 hunks / 24,570 节点 | `outputs/repository-status-2026-10-27/diff-render-latency.json` |
+
+桌面套件本笔为 **223 文件 / 1484 条全绿**，boundary 绿；根 typecheck 0；桌面 build 绿。
+这些是工作树读数，不等于 HEAD 认证；`mutate-verify` 全表仍未宣称通过。
+
+### 三、未做边界
+
+- 4000 行 diff 只是一个本机样本，不能外推所有机器；因此没有据此拆 `DiffView`。
+- Radix 依赖树仍随主路由进首屏；首开与复开读数都不支持先付六处懒加载的改造代价。
+- 编排控制面仍缺真实用户交互样本；没有把组件/服务面判卷冒充端到端。
+- 真实 DeepSeek、真实外部用户、真实账单与跨机器长尾仍未验。

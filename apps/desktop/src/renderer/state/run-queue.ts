@@ -50,12 +50,18 @@ interface RunQueueDeps {
 
 export function useRunQueue(deps: RunQueueDeps) {
   const { setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, planRequiredRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef } = deps;
-  const keyOf = (id: string): string => runKey(activeWorkspace, id);
+  // 空屏首发时 createSession 会带回真实工作区；setActiveWorkspace 的 state 要到下一拍才可见。
+  // 运行旗、队列键若继续读闭包里的旧 activeWorkspace（null），刚起的 run 会以裸会话 id 记账，
+  // 而 UI 用新工作区算键 ⇒ 停止钮永远不出现、运行中插话也永远走不到。这里用 ref 记当前归属，
+  // 新建会话时先落 ref 再起 run，保证起跑、收束、队列三处用同一个键。
+  const workspaceRef = useRef<string | null>(activeWorkspace);
+  workspaceRef.current = activeWorkspace;
+  const keyOf = (id: string): string => runKey(workspaceRef.current, id);
   const setQueueFor = useCallback((sid: string, list: QueuedSend[]) => {
     const key = keyOf(sid);
     setQueueLocal(key, list);
     const prev = queueWrites.current.get(key) ?? Promise.resolve();
-    const next = prev.catch(() => undefined).then(() => window.agent.queueSet(sid, toSessionQueueEntries(list), activeWorkspace ?? undefined));
+    const next = prev.catch(() => undefined).then(() => window.agent.queueSet(sid, toSessionQueueEntries(list), workspaceRef.current ?? undefined));
     queueWrites.current.set(key, next);
     void next.then(
       (r) => { if (!r.ok) setLastError(`发送队列保存失败：${r.error ?? "未知错误"}`, sid); },
@@ -74,7 +80,9 @@ export function useRunQueue(deps: RunQueueDeps) {
   /** 一条消息 → 一轮 run；收束后自动派队列下一条（顺序派发唯一实现在 send-queue.drainQueue）。
    *  不重入 send：send 要判 activeId，后台会话的续发必须显式钉住 sid。
    *  本轮失败（ok=false 或抛出）→ 停表：剩余队列留在表里，等用户处理；用户主动打断不算失败。 */
-  const runOn = useCallback(async (sid: string, first: { text: string; attachments: RunAttachmentReference[] }) => {
+  const runOn = useCallback(async (sid: string, first: { text: string; attachments: RunAttachmentReference[] }, workspace?: string | null) => {
+    if (workspace !== undefined) workspaceRef.current = workspace;
+    const key = keyOf(sid);
     await drainQueue(first, async (msg) => {
       setStoppedIds((prev) => {
         if (!prev.has(sid)) return prev;
@@ -82,7 +90,7 @@ export function useRunQueue(deps: RunQueueDeps) {
         fresh.delete(sid);
         return fresh;
       });
-      runningSet.current.add(keyOf(sid));
+      runningSet.current.add(key);
       lastDeltaAt.current.delete(sid);
       // 代际号（2026-10-18 真机：打断并发送后新 run 在跑、running 却为 false）：旧 run 的
       // finally 会把**新 run**刚置上的旗摘掉——经典“旧清理清掉新状态”。每次起跑领一个号，
@@ -118,7 +126,7 @@ export function useRunQueue(deps: RunQueueDeps) {
         return false;
       }
       finally {
-        if ((runGen.current.get(sid) ?? 0) === myGen) runningSet.current.delete(keyOf(sid));
+        if ((runGen.current.get(sid) ?? 0) === myGen) runningSet.current.delete(key);
         // 起点随这一轮一起收掉（收之前先判代际：新 run 已经起跑时不能把它的起点删了）。
         if ((runGen.current.get(sid) ?? 0) === myGen) runStartBySession.current.delete(sid);
         force((n) => n + 1);
@@ -170,11 +178,13 @@ export function useRunQueue(deps: RunQueueDeps) {
     let id = sid;
     try {
       let newId = sid;
+      let runWorkspace = activeWorkspace;
       // 续聊、重试和重跑都追加到当前会话；只有首页首发才创建会话。
       if (newId === null) {
         const created = await window.agent.createSession(activeWorkspace ?? undefined);
         newId = created.id;
         id = newId;
+        runWorkspace = created.workspace ?? activeWorkspace;
         // 空屏首发采纳主进程实际使用的默认工作区。
         if (activeWorkspace === null) setActiveWorkspace(created.workspace);
         // 空屏上选的思考档必须落在**这条**新会话上；否则芯片显示「思考 强」、请求里没有 thinking。
@@ -188,7 +198,7 @@ export function useRunQueue(deps: RunQueueDeps) {
         const g = await window.agent.setGoal({ sessionId: newId, objective: goalCmd.objective, ...(goalCmd.maxTurns !== undefined ? { maxTurns: goalCmd.maxTurns } : {}), ...(goalCmd.maxUsd !== undefined ? { maxUsd: goalCmd.maxUsd } : {}) });
         if (!g.ok) setLastError(STR.goal.setFail.replace("{reason}", g.error ?? "未知原因"), newId);
       }
-      await runOn(newId, { text, attachments });
+      await runOn(newId, { text, attachments }, runWorkspace);
     }
     catch (err) {
       setLastError(`本轮运行失败：${err instanceof Error ? err.message : String(err)}`, id ?? "");

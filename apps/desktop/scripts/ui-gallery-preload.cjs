@@ -9,6 +9,8 @@ const cairnSteers = [];
 /** 第 9 点冒烟：真 run 的调用记录（判「空闲回车起了一轮 / 运行中回车没起新一轮」）。 */
 const cairnRuns = [];
 let cairnHoldRun = null;
+let cairnSteerReject = false;
+const holdFixture = process.argv.includes("--cairn-steer-fixture") || process.argv.includes("--cairn-cancel-fixture");
 
 const now = Date.now();
 const mkMarkdown = [
@@ -208,13 +210,19 @@ const stub = {
   run: (req) => new Promise((res) => {
     // 记录每次真 run（插话冒烟判「这一拍到底有没有起新一轮」；Plan 冒烟读 planRequired）。
     cairnRuns.push({ message: req && req.message, sessionId: req && req.sessionId, planRequired: req && req.planRequired });
-    if (process.argv.includes("--cairn-steer-fixture")) {
+    if (holdFixture) {
       cairnHoldRun = res; // 冒烟可手动放行
       return;
     }
     setTimeout(() => res({ ok: true }), 30);
   }),
-  runCancel: reply({ ok: true }),
+  // 取消必须让挂住的 run promise 真正收束；否则 gallery 里的队列永远等不到下一轮。
+  runCancel: () => new Promise((res) => setTimeout(() => {
+    const held = cairnHoldRun;
+    cairnHoldRun = null;
+    if (held !== null) held({ ok: true, aborted: true });
+    res({ ok: true });
+  }, 30)),
   decide: reply(true),
   decidePlan: reply(true),
   submitClarify: reply(true),
@@ -246,6 +254,10 @@ const stub = {
     // 记录写在 **contextBridge 暴露的那个**对象上：preload 与 renderer 是两个上下文，
     // `globalThis` 不共享（第一版就写错在这里：调用成功而 __cairnSteers 恒 null）。
     cairnSteers.push({ sessionId, text });
+    if (cairnSteerReject) {
+      res({ ok: false, error: "会话不在运行（插话无人接收）" });
+      return;
+    }
     res({ ok: true, queued: 1 });
   }, 30)),
   // 能力读数（设置页「模型与 Provider」分区读它）：search/vision 是必填字段，
@@ -279,6 +291,9 @@ contextBridge.exposeInMainWorld("__cairnPushNotification", (payload) => {
 contextBridge.exposeInMainWorld("__cairnSteers", () => cairnSteers.slice());
 contextBridge.exposeInMainWorld("__cairnRuns", () => cairnRuns.slice());
 contextBridge.exposeInMainWorld("__cairnReleaseRun", (v) => { if (cairnHoldRun) { const r = cairnHoldRun; cairnHoldRun = null; r(v ?? { ok: true }); } });
+// 镜像场景需要主进程答「这一轮刚好收束」；contextBridge 暴露的对象是冻结的，
+// 在 renderer 里直接改 window.agent.runSteer 不会生效（第一版冒烟就卡在这里）。
+contextBridge.exposeInMainWorld("__cairnSetSteerReject", (v) => { cairnSteerReject = v === true; });
 contextBridge.exposeInMainWorld("__cairnPushEvent", (event) => {
   for (const fn of eventListeners) { try { fn(event); } catch { /* 一个订阅者抛了不该挡住别人 */ } }
 });
@@ -415,6 +430,33 @@ if (process.argv.includes("--cairn-performance-fixture")) {
     },
     complete: () => emit({ type: "assistant_message", callId: "perf-live", content: liveText }),
     finish: () => { emit({ type: "agent_status", status: "done" }); finishRun?.({ ok: true }); },
+  });
+}
+
+// 大 diff 渲染夹具：主进程面已经产出 20 个 hunk / 4000 行，renderer 只负责真实挂 DOM。
+// 这不是伪造复杂度——4000 行正是 core 侧 MAX_PATCH_LINES 的帽，用来量"帽内最坏形状"。
+if (process.argv.includes("--cairn-large-diff-fixture")) {
+  const hunks = [];
+  for (let h = 0; h < 20; h++) {
+    const lines = [];
+    for (let j = 0; j < 200; j++) {
+      const no = h * 200 + j + 1;
+      lines.push({
+        kind: j % 4 === 0 ? "add" : j % 7 === 0 ? "del" : "ctx",
+        text: `fixture line ${String(no).padStart(5, "0")} · 检查大差异渲染的稳定行宽`,
+        oldNo: j % 4 === 0 ? null : no,
+        newNo: j % 7 === 0 ? null : no,
+      });
+    }
+    hunks.push({ header: `@@ -${String(h * 200 + 1)},200 +${String(h * 200 + 1)},200 @@`, lines });
+  }
+  stub.changeDiff = reply({
+    ok: true,
+    path: "src/agent/agent-runner.ts",
+    created: false,
+    hunks,
+    truncated: true,
+    bytes: { before: 524288, after: 524288 },
   });
 }
 

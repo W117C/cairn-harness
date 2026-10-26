@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useRunQueue } from "../src/renderer/state/run-queue";
+import { runKey } from "../src/renderer/state/session-identity";
 
 type Deps = Parameters<typeof useRunQueue>[0];
 const ref = <T,>(current: T) => ({ current });
@@ -64,6 +65,23 @@ describe("send keeps the active conversation", () => {
       { message: "first", mode: "default", sessionId: "created", model: undefined, thinking: "medium" },
       { message: "second", mode: "default", sessionId: "created", model: undefined, thinking: "medium" },
     ]);
+  });
+
+  it("starts the first run under the workspace returned by createSession", async () => {
+    const { agent, deps, render } = harness(null);
+    deps.activeWorkspace = null;
+    let release: (value: { ok: boolean }) => void = () => undefined;
+    agent.run.mockImplementationOnce(() => new Promise<{ ok: boolean }>((resolve) => { release = resolve; }));
+
+    const pending = render().send("first");
+    await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(1));
+    expect(deps.setActiveWorkspace).toHaveBeenCalledWith("/workspace");
+    expect(deps.runningSet.current.has(runKey("/workspace", "created"))).toBe(true);
+    expect(deps.runningSet.current.has("created")).toBe(false);
+
+    release({ ok: true });
+    await pending;
+    expect(deps.runningSet.current.size).toBe(0);
   });
 
   it("handleRetryLast reruns inside the current conversation", async () => {

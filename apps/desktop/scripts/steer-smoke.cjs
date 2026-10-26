@@ -1,10 +1,10 @@
-// 第 9 点·轮中插话的**离屏全链冒烟**（2026-10-23）。
+// 第 9 点·轮中插话的**离屏全链冒烟**（2026-10-23；2026-10-26 修通运行态）。
 //
-// ⛔ **本脚本今天不通（未证，不是已证）**：运行态在这一套 gallery 桩里立不住——
-//    活动会话的 running 只由 `send()` 那条路置位（session-subscription.ts 的「运行集口径」注释），
-//    而桩侧 `run` 挂住之后 `stop` 钮仍从不出现（逐拍 200ms×6 观测：trail = "------"），
-//    ⇒ "运行中按回车"这一拍根本走不到。若有人接着做，先解决"让 gallery 里的 running 真的成立"，
-//    再谈这条冒烟；不要为了让判据变绿去改产品代码。
+// 运行态为什么现在立得住：空屏首发 `createSession` 会带回真实 workspace，但
+// `setActiveWorkspace` 的 state 要到下一拍才可见。旧 `run-queue` 用闭包里的 null 算运行键，
+// 起跑记成裸会话 id，UI 却用新 workspace 算键 ⇒ 停止钮永不出现。修复后起跑/收束/队列
+// 共用同一个 workspace 键；桩的 `run` 再挂住不返回，就能稳定走到「运行中按回车」。
+// （这不是为判据改产品代码：修的是空屏首发真实存在的运行态错位，另有单测钉住。）
 //
 // 本脚本仍然有价值的三件产出（都是今天真跑出来的）：
 //  ① 暴露出三个**构建门抓得到、test 门抓不到**的类型错（`KernelHost.steer` 未声明、
@@ -105,7 +105,7 @@ async function main() {
     return JSON.stringify({
       steers: (window.__cairnSteers && window.__cairnSteers()) ?? [],
       noticeText: document.body.innerText.includes("已插话到本轮"),
-      queueRows: document.querySelectorAll(".q-sub").length,
+      queueRows: document.querySelectorAll(".queue-item").length,
     });
   })()`);
   const s2 = JSON.parse(steered);
@@ -121,9 +121,9 @@ async function main() {
 
   // ---- 反面：主进程说「不在运行」时，必须回落入队（一个字都不丢）----
   const fallback = await js(`(async () => {
-    // 把窗口里的 runSteer 换成"不在运行"的应答，模拟这一轮刚好收束
-    const real = window.agent.runSteer;
-    window.agent.runSteer = async () => ({ ok: false, error: "会话不在运行（插话无人接收）" });
+    // 让桩答"不在运行"的应答，模拟这一轮刚好收束。
+    // contextBridge 对象是冻结的，不能直接改 window.agent.runSteer。
+    window.__cairnSetSteerReject(true);
     const ta = document.querySelector("textarea");
     const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
     setter.call(ta, "这句该进队列");
@@ -131,8 +131,8 @@ async function main() {
     await new Promise(r => setTimeout(r, 60));
     ta.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     await new Promise(r => setTimeout(r, 400));
-    window.agent.runSteer = real;
-    return JSON.stringify({ queueRows: document.querySelectorAll(".q-sub").length });
+    window.__cairnSetSteerReject(false);
+    return JSON.stringify({ queueRows: document.querySelectorAll(".queue-item").length });
   })()`);
   const f = JSON.parse(fallback);
   check("镜像：不在运行 ⇒ 回落为队列（不吞消息）", f.queueRows >= 1, fallback);

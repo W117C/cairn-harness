@@ -147,6 +147,17 @@ async function main() {
   await shot('04-network');
   win.reload();
   await waitFor(() => js('!!document.querySelector(".composer-card")'), 'reloaded app');
+  // 重载后回到首页路径：先打开真实会话，让 renderer 重新上报当前工作区；
+  // 直接调 searchSettingsGet 会撞主进程的「工作区未知」保护（不是配置没保存）。
+  await waitFor(() => js(`!![...document.querySelectorAll('.session')].find(el => el.textContent.includes('过程展示'))`), 'sessions after reload');
+  await js(`[...document.querySelectorAll('.session')].find(el => el.textContent.includes('过程展示')).click()`);
+  await waitFor(async () => {
+    try {
+      return await js(`window.agent.searchSettingsGet().then(r => r.workspace === ${JSON.stringify(workspace)})`);
+    } catch {
+      return false;
+    }
+  }, 'workspace context after reload');
   const restored = await js('window.agent.searchSettingsGet()');
   check('重载后配置与密钥状态保留，读取接口不泄露密钥', restored.enabled && restored.provider === 'custom' && (!capability.secureStorageAvailable || restored.hasKey) && !JSON.stringify(restored).includes(secret));
   check('真实渲染无控制台错误', errors.length === 0, errors);
