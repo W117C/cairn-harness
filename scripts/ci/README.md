@@ -6,7 +6,7 @@
 
 ## L1（已落地，零打扰）：`.github/workflows/verify.yml`
 
-- **覆盖**：`pnpm install --frozen-lockfile` → `pnpm typecheck` → `pnpm test`（全量判卷）→
+- **覆盖**：`pnpm install --frozen-lockfile` → `pnpm typecheck` → `pnpm test:capped`（全量核心判卷，maxWorkers=2）→
   **快门面** `pnpm gates --only=…`（= `CERT_GATES` 那 25 道，唯一定义在 `scripts/gate-manifest.ts`，
   逐道点名在 workflow 里；10-02 起不再减门，见下一节）。
 - **工具链版本钉在一处**（第 475 页）：`package.json` 的 `packageManager` 与 workflow 里的
@@ -20,7 +20,7 @@
   ```sh
   pnpm install --frozen-lockfile
   pnpm typecheck
-  pnpm test
+  pnpm test:capped
   # 2026-10-12：cert face 23 → 25（买进 e2e 与 desktop-test，理由见 scripts/gate-manifest.ts 的 CERT_GATES 买入注）
   pnpm gates --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check,gate-check,mutate-needles-check,repo-hygiene-check,e2e,desktop-test
   ```
@@ -105,31 +105,21 @@ permissions:
 这道门只需要读仓库（checkout + 跑判卷）。默认的写权限是**能用上但用不到**的权限面——
 在能给的最小面上给，是 CI 的基本卫生。
 
-### L1′（已落地，**手动触发**）：`.github/workflows/codeql.yml`
+### L1′：公开仓库的 CodeQL 分析
 
-静态安全分析，与 L1 是**并行的另一根轴**：L1 判「这次改动有没有做坏它该做的事」，
-CodeQL 判「这次改动有没有引进它不该有的东西」。两道互不替代。
+静态分析与 verify 分别取证。仓库已于 2026-10-26 转为公开，原来“私有仓库无此能力”的前提已不适用。
 
-- **只挂 `workflow_dispatch`，不挂 `push` / `schedule`**：
-  **私有仓库的 code scanning 需要 GitHub Advanced Security**，本仓当前计划上没有这个特性
-  （`security_and_analysis.code_scanning` 在这个计划上不存在，secret scanning 同理）。
-  按常规挂上去，每一次推送都会得到一份**红**——红的不是代码，是「后端没有这个特性」。
-  **一道永远红的门等于没有门**（本仓 `repo-hygiene-check` 写明的同一条纪律）。
-- **开启办法**：Settings → Code security → Code scanning → Enable（需 Advanced Security），
-  然后手动跑一次本工作流；确认结果页出现告警后，再把 `push` / `schedule` 放开。
-- **告警不作为阻断条件**：本仓大量**刻意设计**的取舍（沙箱、审批门、fail-closed 路径、
-  路径拼接、跟随软链）天生长成「看起来危险」的样子。把告警直接当阻断条件，
-  等于逼人把断言改松。⇒ 告警走 Issue 评审，不自动阻断合并。
+- 触发：main 的 push、面向 main 的 pull_request，以及 workflow_dispatch；不新增周期任务。
+- JavaScript/TypeScript 使用上游 Action 的 `languages` 输入和 `build-mode: none`，不构建产品。
+- 扫描 src、apps/desktop/src、bin、scripts；历史工件、夹具和 node_modules 不混入生产源码分析。
+- CodeQL 告警是待核对的静态证据；不把数量当成已验证可利用漏洞数，也不替代 core/desktop 回归。
+- 配置、权限与执行记录以 `.github/workflows/codeql.yml` 和对应 GitHub Actions 为准。
 
-### CI 起不来的那一段（不是代码问题）
+### 当前 CI 状态与旧账单阻塞
 
-2026-10-15 之前每趟 verify 都是绿的。此后**每一趟都红**，但**红的不是代码**——
-GitHub 报的是「最近付款失败或消费上限需要提高，**任务根本没启动**」。
-
-- **这是账户侧的事**（Billing & plans），代码侧无解；恢复要先在账户设置里处理。
-- 因此**本地读数是这段时间唯一可用的证据来源**。引用读数时说清它是本地的还是 CI 的。
-- macOS runner 另有 arm64 容量告警（排队变长）。**换 runner 之前先在真实 CI 上验证一轮 Linux**——
-  本机无法验证 Linux 行为，所以这里不假装 ubuntu 也行。
+公开前的 verify 有账户付款/支出限制，任务没有启动；这些失败记录仍保留。
+公开后已在原提交上重新启动真实 CI，不能再把旧账单限制当成当前必然阻塞。
+最新运行链接和剩余事项见 `docs/ROADMAP.md`；必须核对 run 的提交与结论再报告通过。
 
 ## 反向验证（L1 的判据有没有分辨力）
 

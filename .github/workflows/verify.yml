@@ -54,7 +54,8 @@ jobs:
       - name: typecheck
         run: pnpm typecheck
       - name: full test suite
-        run: pnpm test
+        # 同一套核心测试，固定两个 worker；命令与本地可复现入口同源。
+        run: pnpm test:capped
       - name: desktop tests
         run: pnpm --filter cairn-desktop test
       # 快门面 = CERT_GATES 那 25 道，逐字点名（`pnpm gates` 不加参数跑的是 GATES 全集，比认证面慢、面也不同）。

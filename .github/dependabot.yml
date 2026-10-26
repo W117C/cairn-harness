@@ -72,11 +72,3 @@ updates:
       actions:
         patterns:
           - "*"
-
-  # ── Dependabot 自身的配置 ──
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: monthly
-    labels:
-      - dependencies
