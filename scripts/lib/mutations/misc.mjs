@@ -1,6 +1,8 @@
 // misc 域的变异配置条目（2026-10-17 从 scripts/mutate-verify.mjs 按域拆出，见 PROGRESS 第 501 页）。
 // 每条 = 一处语义突变 + 期望被它杀死的具体用例标题。追加条目时放进对应域的文件；
 // **组间顺序不影响任何判据**（每条独立），同一文件内保持原顺序以便 diff。
+import { regexSource } from "./regex-source.mjs";
+
 export const MUTATIONS = [
   {
     id: "ask-card-owner-not-scoped",
@@ -71,7 +73,10 @@ export const MUTATIONS = [
     src: "tests/tool-surface-parity.test.ts",
     test: "tests/tool-surface-parity.test.ts",
     desc: "实例面解析器退回只认一形 ⇒ 走 table 下标注入的工具整个从分母消失，而这道门照常绿（本轮抓到的就是这个）",
-    apply: (s) => s.replace('/^\\s*table\\["([a-z_][a-z0-9_]*)\"\\]\\s*=/gm', '/^\\s*NEVER\\["([a-z_][a-z0-9_]*)\"\\]\\s*=/gm'),
+    apply: (s) => s.replace(
+      regexSource('^\\s*table\\["([a-z_][a-z0-9_]*)"\\]\\s*=', "gm"),
+      regexSource('^\\s*NEVER\\["([a-z_][a-z0-9_]*)"\\]\\s*=', "gm"),
+    ),
     expectFail: "扩形后的分母自证：table[\"name\"] = 那一形确实被算进来了（解析器静默 0 命中比不扩更坏）",
   },
 

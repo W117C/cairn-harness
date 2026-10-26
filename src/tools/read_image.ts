@@ -1,6 +1,5 @@
-import { readFile, stat } from "node:fs/promises";
 import { basename } from "node:path";
-import { assertRealContainment, resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
+import { openContainedFile, resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
 
 /** 识图工具：把工作区内的一张图片读成 data URL，作为多模态内容块进上下文。
  *
@@ -50,22 +49,39 @@ export const read_image: Tool = {
     }
     const abs = resolveInWorkspace(ctx.workspace, rel.trim(), "read_image");
     // 软链穿透：与 read_file/grep/glob 同一道闸（词法 resolve 挡不住「界内软链指向界外」）。
-    await assertRealContainment(ctx.workspace, abs, "read_image");
-    let st;
+    let opened;
     try {
-      st = await stat(abs);
-    } catch {
+      opened = await openContainedFile(ctx.workspace, abs, "read_image");
+    } catch (error) {
+      if (error instanceof Error && !("code" in error)) throw error;
       throw new Error("read_image: 文件不存在或不可读: " + rel);
     }
-    if (!st.isFile()) throw new Error("read_image: 不是文件: " + rel);
-    if (st.size > MAX_IMAGE_BYTES) {
-      throw new Error(
-        "read_image: 图片超过 " + String(Math.floor(MAX_IMAGE_BYTES / 1024 / 1024)) + "MB 帽（实际 " +
-          String(Math.ceil(st.size / 1024 / 1024)) + "MB）——先缩到帽内再读，或分块描述你要看的部分",
-      );
+    let buf: Buffer;
+    const { fh, stat: st } = opened;
+    try {
+      if (!st.isFile()) throw new Error("read_image: 不是文件: " + rel);
+      if (st.size > MAX_IMAGE_BYTES) {
+        throw new Error(
+          "read_image: 图片超过 " + String(Math.floor(MAX_IMAGE_BYTES / 1024 / 1024)) + "MB 帽（实际 " +
+            String(Math.ceil(st.size / 1024 / 1024)) + "MB）——先缩到帽内再读，或分块描述你要看的部分",
+        );
+      }
+      if (st.size === 0) throw new Error("read_image: 空文件不是图片: " + rel);
+      buf = Buffer.allocUnsafe(st.size);
+      let offset = 0;
+      while (offset < buf.length) {
+        const { bytesRead } = await fh.read(buf, offset, buf.length - offset, offset);
+        if (bytesRead === 0) break;
+        offset += bytesRead;
+      }
+      if (offset !== st.size) throw new Error("read_image: 文件在读取期间发生变化: " + rel);
+      const after = await fh.stat();
+      if (after.dev !== st.dev || after.ino !== st.ino || after.size !== st.size || after.mtimeMs !== st.mtimeMs) {
+        throw new Error("read_image: 文件在读取期间发生变化: " + rel);
+      }
+    } finally {
+      await fh.close().catch(() => undefined);
     }
-    if (st.size === 0) throw new Error("read_image: 空文件不是图片: " + rel);
-    const buf = await readFile(abs);
     const mime = sniffImageMime(buf);
     if (mime === null) {
       throw new Error(

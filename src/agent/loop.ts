@@ -349,7 +349,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     // 失败 → 错误输出注入同轮继续修（自动拍加 [harness] 前缀：这条不是模型自己调的）
     const digest = hookError !== null
       ? "[verify] 钩子异常（harness 侧原因，不占修复额度）：" + hookError
-      : (auto ? "[harness 自动验证] " : "") + failureDigest(outcome);
+      : failureDigest(outcome);
     // 环境拍先说清"这不占你的额度"：否则模型读到一条红就去改本来正确的代码（语料里 3/3 是这一类）。
     const envPreface = envBeat
       ? "[verify] 这一拍因 harness 侧原因没跑成（cause=" + String(cause) + "）——不是代码失败，"
@@ -739,7 +739,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       const firstBeat = verifyAttempts === 0;
       const repairBeat = repairPending && wroteSinceAutoBeat && autoBeats < 2;
       if (opts.verify && opts.autoVerify === true && wroteThisRun && (firstBeat || repairBeat)) {
-        let hasSurface = true;
+        let hasSurface: boolean;
         try {
           hasSurface = (await opts.verify.surface?.()) !== false;
         } catch (err) {

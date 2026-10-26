@@ -1,6 +1,15 @@
-import { open, readFile, readdir, stat } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
-import { assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
+import { readdir } from "node:fs/promises";
+import { basename, dirname, join, relative } from "node:path";
+import {
+  assertContainedPathIdentity,
+  captureContainedPath,
+  openContainedFile,
+  resolveInWorkspace,
+  ToolError,
+  type Tool,
+  type ToolContext,
+  type ToolResult,
+} from "./base.js";
 import { byteCapNotice, clipLine } from "./cap-notice.js";
 import { headWithinBytes, utf8PrefixEnd } from "./output-ring.js";
 import { prefetchLsp } from "./lsp.js";
@@ -16,16 +25,39 @@ const BATCH_LIMIT_BYTES = 50 * 1024;
 // 一个 GB 级文件（日志/打包产物/数据库转储）会把 Electron 主进程读爆。
 const LARGE_FILE_PREFIX_BYTES = 16 * 1024 * 1024;
 
-/** 只读文件前 bytes 字节（大文件路径用；返回可能被截断的 Buffer）。 */
-async function readPrefix(abs: string, bytes: number): Promise<Buffer> {
-  const fh = await open(abs, "r");
-  try {
-    const buf = Buffer.allocUnsafe(bytes);
-    const { bytesRead } = await fh.read(buf, 0, bytes, 0);
-    return buf.subarray(0, bytesRead);
-  } finally {
-    await fh.close();
+interface PrefixRead {
+  buf: Buffer;
+  oversized: boolean;
+  grewDuringRead: boolean;
+}
+
+interface PrefixReadHandle {
+  read(buffer: Buffer, offset: number, length: number, position: number): Promise<{ bytesRead: number }>;
+}
+
+/** Read at most one byte beyond the fstat size (capped at 16 MiB + 1).
+ * A small file that grows after fstat therefore still gets a bounded read,
+ * and the extra byte is used only as a growth witness. */
+export async function readRegularFilePrefix(
+  fh: PrefixReadHandle,
+  initialSize: number,
+): Promise<PrefixRead> {
+  const safeInitial = Math.max(0, Math.min(initialSize, LARGE_FILE_PREFIX_BYTES));
+  const buffer = Buffer.allocUnsafe(safeInitial + 1);
+  let bytesRead = 0;
+  while (bytesRead < buffer.length) {
+    const read = await fh.read(buffer, bytesRead, buffer.length - bytesRead, bytesRead);
+    if (read.bytesRead === 0) break;
+    bytesRead += read.bytesRead;
   }
+  const oversized = initialSize > LARGE_FILE_PREFIX_BYTES;
+  const grewDuringRead = !oversized && bytesRead > safeInitial;
+  const visibleBytes = oversized ? Math.min(bytesRead, LARGE_FILE_PREFIX_BYTES) : Math.min(bytesRead, safeInitial);
+  return {
+    buf: buffer.subarray(0, visibleBytes),
+    oversized,
+    grewDuringRead,
+  };
 }
 
 // 二进制嗅探：出现 NUL 即拒读；不可打印字节（除少数常见空白）占比 >30% 也拒读。
@@ -41,7 +73,10 @@ function looksBinary(buf: Buffer): boolean {
 
 // 未命中时给最多 3 个近名建议：同目录前缀匹配优先，其次同扩展名。
 async function nearNameSuggestions(workspace: string, rel: string): Promise<string[]> {
-  const dir = dirname(join(workspace, rel));
+  const lexicalDir = dirname(join(workspace, rel));
+  const inspected = await captureContainedPath(workspace, lexicalDir, "read_file").catch(() => null);
+  if (inspected === null || !inspected.stat.isDirectory()) return [];
+  const dir = inspected.path;
   const base = basename(rel);
   let entries: string[];
   try {
@@ -64,8 +99,8 @@ async function nearNameSuggestions(workspace: string, rel: string): Promise<stri
     .sort((a, b) => b.score - a.score || a.e.localeCompare(b.e))
     .slice(0, 3)
     .map((x) => x.e);
-  const dirRel = dir === workspace ? "" : dir.slice(workspace.length + 1) + "/";
-  return scored.map((e) => dirRel + e);
+  const dirRel = relative(workspace, dir).replaceAll("\\", "/");
+  return scored.map((e) => (dirRel === "" ? e : dirRel + "/" + e));
 }
 
 /** 读**一份**：单份路径的全部现存语义（目录、二进制、大文件前缀、行/字节帽、offset/limit 提示）
@@ -73,12 +108,56 @@ async function nearNameSuggestions(workspace: string, rel: string): Promise<stri
  *  读不到/拒读一律 `ToolError` 抛出——批量那一侧负责决定「一份失败算不算整批失败」。 */
 async function readOne(ctx: ToolContext, rel: string, offsetRaw: unknown, limitRaw: unknown): Promise<string> {
   const abs = resolveInWorkspace(ctx.workspace, rel, "read_file");
-  await assertRealContainment(ctx.workspace, abs, "read_file");
 
-  // 目录路径：列条目（目录读不了内容，但列条目是有用的输出）。
-  const st = await stat(abs).catch(() => null);
-  if (st?.isDirectory()) {
-    const entries = await readdir(abs);
+  // Windows cannot reliably open a directory through fs.open, so identify
+  // that shape before asking for a file handle. Other platforms still fstat
+  // the opened handle below, keeping the race-safe file path.
+  const inspected = await captureContainedPath(ctx.workspace, abs, "read_file").catch(() => null);
+  if (inspected?.stat.isDirectory()) {
+    const target = inspected.path;
+    const pathStat = inspected.stat;
+    let entries: string[];
+    try {
+      entries = await readdir(target);
+      await assertContainedPathIdentity(ctx.workspace, target, "read_file", { path: target, stat: pathStat });
+    } catch {
+      throw new ToolError("read_file: 目录不存在或不可读: " + rel);
+    }
+    const sorted = entries.sort().map((e) => e + "/");
+    const shown: string[] = [];
+    let used = 0;
+    for (const line of sorted) {
+      if (shown.length >= DEFAULT_MAX_LINES || used + Buffer.byteLength(line, "utf8") + 1 > READ_LIMIT_BYTES) break;
+      shown.push(line);
+      used += Buffer.byteLength(line, "utf8") + 1;
+    }
+    const truncated = shown.length < sorted.length;
+    return rel + "/（目录，" + entries.length + " 项）\n" + shown.join("\n")
+      + (truncated ? "\n[truncated] 仅列前 " + String(shown.length) + " 项（共 " + String(entries.length) + " 项）" : "");
+  }
+
+  let opened;
+  try {
+    opened = await openContainedFile(ctx.workspace, abs, "read_file");
+  } catch (error) {
+    if (error instanceof ToolError && (error as NodeJS.ErrnoException).code === undefined) throw error;
+    const suggestions = await nearNameSuggestions(ctx.workspace, rel);
+    const hint = suggestions.length ? "（近名建议: " + suggestions.join(", ") + "）" : "";
+    throw new ToolError("read_file: 文件不存在或不可读: " + rel + hint);
+  }
+
+  const { fh, stat: st, path: target } = opened;
+
+  // POSIX may still hand us a directory when a path changed after the
+  // pre-stat check above. Use the already-opened handle's fstat verdict.
+  if (st.isDirectory()) {
+    let entries: string[];
+    try {
+      entries = await readdir(target);
+      await assertContainedPathIdentity(ctx.workspace, target, "read_file", { path: target, stat: st });
+    } finally {
+      await fh.close().catch(() => undefined);
+    }
     const sorted = entries.sort().map((e) => e + "/");
     // 目录同样要受行/字节帽约束：旧实现把整目录条目 join 后直接返回，5 万项直接吃光上下文
     // 且不给 truncated 信号（批量读复用本函数时同样无帽）。
@@ -94,18 +173,25 @@ async function readOne(ctx: ToolContext, rel: string, offsetRaw: unknown, limitR
       + (truncated ? "\n[truncated] 仅列前 " + String(shown.length) + " 项（共 " + String(entries.length) + " 项）" : "");
   }
 
-  // 大文件只读前缀（stat 已在上面取过，零额外系统调用）。
+  if (!st.isFile()) {
+    await fh.close();
+    throw new ToolError("read_file: 不是常规文件: " + rel);
+  }
+
+  // 大文件只读前缀（fstat 与读取使用同一个句柄，避免检查后换文件）。
   // 前缀边界可能切断一个多字节 UTF-8 序列，末尾会解码成替换字符——输出已显式声明截断，
   // 不影响语义；这里不做额外修补，避免误改文件本身合法的 U+FFFD。
-  const oversized = (st?.size ?? 0) > LARGE_FILE_PREFIX_BYTES;
-  let buf: Buffer;
+  let read: PrefixRead;
   try {
-    buf = oversized ? await readPrefix(abs, LARGE_FILE_PREFIX_BYTES) : await readFile(abs);
+    read = await readRegularFilePrefix(fh, st.size);
   } catch {
     const suggestions = await nearNameSuggestions(ctx.workspace, rel);
     const hint = suggestions.length ? "（近名建议: " + suggestions.join(", ") + "）" : "";
     throw new ToolError("read_file: 文件不存在或不可读: " + rel + hint);
+  } finally {
+    await fh.close().catch(() => undefined);
   }
+  const { buf, oversized, grewDuringRead } = read;
   if (looksBinary(buf)) {
     throw new ToolError("read_file: 疑似二进制文件，拒绝按文本读取: " + rel);
   }
@@ -114,7 +200,7 @@ async function readOne(ctx: ToolContext, rel: string, offsetRaw: unknown, limitR
   // 整份文件，边界由文件自己给，不用退。
   const content = oversized ? buf.subarray(0, utf8PrefixEnd(buf)).toString("utf8") : buf.toString("utf8");
   // M2a：read 命中源码 → 后台预热 LSP（尽力而为，零阻塞、零异常冒泡）
-  prefetchLsp(ctx.workspace, abs);
+  prefetchLsp(ctx.workspace, target);
   const allLines = content.split("\n");
   // 若因行尾换行 split 出的最后一个空串不算一行
   const hasTrailingNewline = allLines.length > 0 && allLines[allLines.length - 1] === "";
@@ -144,6 +230,8 @@ async function readOne(ctx: ToolContext, rel: string, offsetRaw: unknown, limitR
   const notices: string[] = [];
   if (oversized) {
     notices.push("[truncated: 文件超过 " + String(LARGE_FILE_PREFIX_BYTES / (1024 * 1024)) + " MB，仅读取前 " + String(LARGE_FILE_PREFIX_BYTES / (1024 * 1024)) + " MB 参与解析；建议用 grep 定位后再按 offset 读]");
+  } else if (grewDuringRead) {
+    notices.push("[truncated: 文件在读取期间增长，仅保留开始读取时的大小参与解析；请重读以获取稳定版本]");
   }
   // 字节帽生效时行数的口径要跟着改：说"仅显示 400 行"而真交付 205 行，等于教模型跳读漏内容（#57）。
   if (byteTruncated) {

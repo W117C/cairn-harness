@@ -147,7 +147,7 @@ function main(): void {
   );
   console.log("layer×verdict（非零格）:", show(t.cells) || "（无非零格）");
   const byVerdict = new Map<string, number>();
-  for (const [k, v] of t.cells) bump(byVerdict, k.split(CELL_SEP)[1] ?? "?");
+  for (const [k] of t.cells) bump(byVerdict, k.split(CELL_SEP)[1] ?? "?");
   console.log("按 verdict 汇总:", show(byVerdict));
   if (t.unknownLayer.size > 0) console.log("⚠️ 表外 layer（GATE_LAYERS 没这一层）:", show(t.unknownLayer));
   if (t.unknownVerdict.size > 0) console.log("⚠️ 表外 verdict（GATE_VERDICTS 没这一种）:", show(t.unknownVerdict));

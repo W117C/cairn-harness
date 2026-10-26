@@ -18,7 +18,7 @@ import { MIN_PANE_PCT, loadPaneRows, mergePaneRows, paneRowLayout, savePaneRows 
 import { DiffView } from "./DiffView";
 import { SidechatPane } from "./SidechatPane";
 import { PathMenu } from "./PathMenu";
-import { changedFileCount, composeReviewMessage, PANE_META, PANE_OPENABLE, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, type PaneKind, type WorkerPaneItem } from "./panes";
+import { composeReviewMessage, PANE_META, PANE_OPENABLE, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, type PaneKind, type WorkerPaneItem } from "./panes";
 
 // PaneKind / PANE_META 的唯一事实源在 panes.ts（独立窗口路由同用）；此处 re-export 保接口。
 export { PANE_META, PANE_OPENABLE, type PaneKind } from "./panes";

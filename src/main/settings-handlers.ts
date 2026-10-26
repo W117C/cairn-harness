@@ -6,6 +6,9 @@ import {
 import { verifyLicenseFile, type LicenseState } from "./license";
 import { checkUpdate, type UpdateCheckResult } from "./updater";
 import { SettingsStore, isPersistableProvider, type AppSettings, type ProviderKind } from "./settings";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { effectiveModelTable, findSpecByNameOrId } from "../providers/registry";
 import { ENV_KEYED_PROVIDERS, customEnvKeyedProviders, envKeyOf } from "../providers/env-keys";
 import {
@@ -39,6 +42,7 @@ export function setSettingsHostDeps(deps: SettingsHostDeps): void {
 }
 
 let settingsStore: SettingsStore | null = null;
+let fallbackSettingsPath: string | null = null;
 
 /** shell 启动时初始化 settings 存储（文件路径）。 */
 export function initSettingsStore(filePath: string): void {
@@ -46,7 +50,10 @@ export function initSettingsStore(filePath: string): void {
 }
 
 export function store(): SettingsStore {
-  if (!settingsStore) settingsStore = new SettingsStore("/tmp/m1e-default-settings.json");
+  if (!settingsStore) {
+    fallbackSettingsPath ??= join(mkdtempSync(join(tmpdir(), "cairn-settings-")), "settings.json");
+    settingsStore = new SettingsStore(fallbackSettingsPath);
+  }
   return settingsStore;
 }
 

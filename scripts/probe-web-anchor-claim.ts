@@ -62,7 +62,11 @@ const other = await tool.run({ url: "http://example.com/other#anything" }, { wor
 if (!other.ok) { console.log("❌ 正控那一趟没跑到"); process.exit(1); }
 
 console.log("我交给 fetch 的写法            →  服务器在报文里看见的 req.url");
-forms.forEach((f, i) => console.log(`  ${f.padEnd(20)}  →  ${String(seen[i]).padEnd(12)} 含片段=${String((seen[i] ?? "").includes("#"))}`));
+forms.forEach((f, i) => console.log(JSON.stringify({
+  requested: f,
+  received: seen[i] ?? "",
+  containsFragment: (seen[i] ?? "").includes("#"),
+})));
 
 let red = 0;
 const withHash = seen.slice(0, forms.length).filter((s) => s.includes("#")).length;

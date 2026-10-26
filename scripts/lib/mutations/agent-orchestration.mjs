@@ -1,6 +1,8 @@
 // agent-orchestration 域的变异配置条目（2026-10-17 从 scripts/mutate-verify.mjs 按域拆出，见 PROGRESS 第 501 页）。
 // 每条 = 一处语义突变 + 期望被它杀死的具体用例标题。追加条目时放进对应域的文件；
 // **组间顺序不影响任何判据**（每条独立），同一文件内保持原顺序以便 diff。
+import { regexSource } from "./regex-source.mjs";
+
 export const MUTATIONS = [
   {
     id: "user-agent-duplicate-name-silent-override",
@@ -1114,7 +1116,7 @@ export const MUTATIONS = [
     src: "src/agent/worktree.ts",
     test: "tests/worktree-pure.test.ts",
     desc: "A6 的 glob 白名单失效 ⇒ 含 [ ? * 的 agentId 拼进 `branch --list` 会匹配全部 agent 分支并循环删除",
-    apply: (s) => s.replace("if (!/^[A-Za-z0-9_-]+$/.test(agentId)) {", "if (false) {"),
+    apply: (s) => s.replace(`if (!${regexSource("^[A-Za-z0-9_-]+$")}.test(agentId)) {`, "if (false) {"),
     expectFail: "含 glob 元字符 / 路径分隔 / 命令分隔符的 agentId 一律拒绝，且不动盘",
   },
   {

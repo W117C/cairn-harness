@@ -431,7 +431,9 @@ describe("编排器接线：合并层不是挂在墙上的仪表", () => {
 
   /** 「边跑边落盘」是这一层第 190 页要钉的那一半：缓冲到结束才写，意味着外层超时会把四片原文一起带走。 */
   it("原文是**开跑前就建好、逐块追加**的（不是跑完一次性写），且计划行先印路径", () => {
-    expect(src).toMatch(/for \(const p of logs\) writeFileSync\(p, ""\);/u);
+    expect(src).toMatch(
+      /for \(const p of logs\) \{[\s\S]{0,300}unlinkSync\(p\)[\s\S]{0,300}openSync\([\s\S]{0,160}constants\.O_EXCL[\s\S]{0,100}constants\.O_NOFOLLOW[\s\S]{0,80}closeSync\(fd\)/u,
+    );
     expect(src).toMatch(/appendFileSync\(logPath, text\)/u);
     expect(src).toMatch(/runShard\([^;]*f\.budgetMs, logs\[i\]!\)/u);
   });
@@ -630,6 +632,8 @@ describe("编排器的权重取料面", () => {
     expect(src).toMatch(/· \$\{packCell\} · 每片一棵树/u);
     // 顺序证人：默认权重就是「本标签上一轮的片原文」，而这几份文件开跑前会被清空——
     // 先截断后读＝每次都是「没有权重」，而那一格会诚实地说没来源，于是缺陷读起来像首跑。
-    expect(src).toMatch(/const cost = costWeights\([\s\S]*\n  for \(const p of logs\) writeFileSync\(p, ""\);/u);
+    expect(src).toMatch(
+      /const cost = costWeights\([\s\S]*\n  for \(const p of logs\) \{[\s\S]{0,300}unlinkSync\(p\)[\s\S]{0,300}openSync\(/u,
+    );
   }, 15_000); // 建一棵干净树再跑编排器（含两次 tsx 冷启）：安静态 2.77s（第 262 页）
 });

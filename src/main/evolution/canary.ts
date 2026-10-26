@@ -25,6 +25,7 @@
 //    触发者仍是"装上位的那个宿主"（begin），账本只做校验（档里的候选还是不是当前 active）：
 //    active/previous 的 activatedAt 会被 rollback 重新盖章，拿时间戳反过来推"谁是候选"会翻车。
 //  · 读不动观察档不许折成"没有档"（那等于把连败计数静默清零）：一个点名 refused，一个不动账。
+import { constants } from "node:fs";
 import { mkdir, open, readdir, readFile, rm, stat } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { writeFileAtomic } from "../../atomic-write";
@@ -45,6 +46,49 @@ export class CanaryRefusedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "CanaryRefusedError";
+  }
+}
+
+type StableFile =
+  | { kind: "ok"; size: number; mtimeMs: number; text: string }
+  | { kind: "too-large"; size: number }
+  | { kind: "missing" | "unreadable" | "not-file" | "changed" };
+
+/** Read metadata and bytes through one descriptor so the size/type decision and
+ * the bytes cannot refer to different path targets. */
+async function readStableTextFile(abs: string, maxBytes = Number.MAX_SAFE_INTEGER): Promise<StableFile> {
+  let fh;
+  try {
+    fh = await open(abs, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+  } catch (err) {
+    return { kind: (err as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "unreadable" };
+  }
+  try {
+    const before = await fh.stat();
+    if (!before.isFile()) return { kind: "not-file" };
+    if (before.size > maxBytes) return { kind: "too-large", size: before.size };
+    const data = Buffer.allocUnsafe(before.size);
+    let offset = 0;
+    while (offset < data.length) {
+      const { bytesRead } = await fh.read(data, offset, data.length - offset, offset);
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    const after = await fh.stat();
+    if (
+      offset !== before.size ||
+      after.dev !== before.dev ||
+      after.ino !== before.ino ||
+      after.size !== before.size ||
+      after.mtimeMs !== before.mtimeMs
+    ) {
+      return { kind: "changed" };
+    }
+    return { kind: "ok", size: before.size, mtimeMs: before.mtimeMs, text: data.toString("utf8") };
+  } catch {
+    return { kind: "unreadable" };
+  } finally {
+    await fh.close().catch(() => undefined);
   }
 }
 
@@ -192,21 +236,25 @@ export class RuntimeLoader {
     }
     const rel = manifest.entry;
     const abs = join(dir, rel);
-    let st;
-    try {
-      st = await stat(abs);
-    } catch {
+    const file = await readStableTextFile(abs, this.caps.maxFileBytes);
+    if (file.kind === "missing" || file.kind === "unreadable") {
       throw new LoadRefusedError(`${id}@${version} 的 entry ${rel} 不在安装目录里——盘上字节与账本不符，拒绝装载`);
     }
-    if (!st.isFile()) {
+    if (file.kind === "not-file") {
       throw new LoadRefusedError(`${id}@${version} 的 entry ${rel} 不是常规文件——entry 必须是一份普通文件`);
     }
-    if (st.size > this.caps.maxFileBytes) {
+    if (file.kind === "too-large") {
       throw new LoadRefusedError(
-        `${id}@${version} 的 entry ${rel} 有 ${String(st.size)} 字节，越过装载帽 ${String(this.caps.maxFileBytes)}`,
+        `${id}@${version} 的 entry ${rel} 有 ${String(file.size)} 字节，越过装载帽 ${String(this.caps.maxFileBytes)}`,
       );
     }
-    return { entry: rel, source: await readFile(abs, "utf8") };
+    if (file.kind === "changed") {
+      throw new LoadRefusedError(`${id}@${version} 的 entry ${rel} 在读取期间发生变化——拒绝装载`);
+    }
+    if (file.kind !== "ok") {
+      throw new LoadRefusedError(`${id}@${version} 的 entry ${rel} 不能形成稳定快照——拒绝装载`);
+    }
+    return { entry: rel, source: file.text };
   }
 
   /** 收集包内文本文件（不含 manifest.json 自身），按路径排序并按帽计数。 */
@@ -224,15 +272,18 @@ export class RuntimeLoader {
         if (!e.isFile()) continue;
         const rel = relative(dir, abs).split(sep).join("/");
         if (rel === "manifest.json") continue;
-        const st = await stat(abs);
         if (files.length + 1 > this.caps.maxFiles) {
           throw new LoadRefusedError(`${dir} 的文件数越过装载帽 ${String(this.caps.maxFiles)}`);
         }
-        total += st.size;
-        if (st.size > this.caps.maxFileBytes || total > this.caps.maxTotalBytes) {
+        const file = await readStableTextFile(abs, this.caps.maxFileBytes);
+        if (file.kind !== "ok") {
+          throw new LoadRefusedError(`${dir}/${rel} 不能形成稳定快照（${file.kind}）`);
+        }
+        total += file.size;
+        if (total > this.caps.maxTotalBytes) {
           throw new LoadRefusedError(`${dir} 的文本体量越过装载帽（单文件 ${String(this.caps.maxFileBytes)} / 总量 ${String(this.caps.maxTotalBytes)}）`);
         }
-        files.push({ rel, text: await readFile(abs, "utf8") });
+        files.push({ rel, text: file.text });
       }
     };
     await walk(dir);
@@ -427,10 +478,11 @@ export class CanaryController {
         return await open(lockPath, "wx");
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-        const st = await stat(lockPath).catch(() => null);
+        const lock = await readStableTextFile(lockPath, 1024);
         // 锁文件被外部删掉 ⇒ 没有持锁者可言，直接重取（这一支不靠 mtime，删了就是删了）。
-        if (st === null) return await open(lockPath, "wx");
-        const holder = await readFile(lockPath, "utf8").then((t) => Number.parseInt(t.trim(), 10), () => Number.NaN);
+        // lgtm[js/file-system-race] The retry is an exclusive create; a path replaced after the read makes this fail, never follow it.
+        if (lock.kind === "missing") return await open(lockPath, "wx");
+        const holder = lock.kind === "ok" ? Number.parseInt(lock.text.trim(), 10) : Number.NaN;
         // 探活：`kill(pid, 0)` 只问存在。EPERM＝存在但不是我的进程 ⇒ 算活着
         // （判错了只能是多等，不能是抢走别人的锁）。
         let alive = false;
@@ -444,11 +496,12 @@ export class CanaryController {
         // 超时 ⇒ canary 从这一秒起永远 refused，而盘上没有任何东西能解开它。
         // pid 读不出（NaN，典型是崩溃在 open 与 writeFile 之间）时不猜，退回 60s 时间兜底。
         if (!Number.isInteger(holder) || holder <= 0) {
-          if (Date.now() - st.mtimeMs <= 60_000) {
+          if (lock.kind !== "ok" || Date.now() - lock.mtimeMs <= 60_000) {
             throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
           }
         }
         await rm(lockPath, { force: true }).catch(() => undefined);
+        // lgtm[js/file-system-race] The retry is an exclusive create; a path replaced after reclaim makes this fail, never follow it.
         return await open(lockPath, "wx");
       }
     };

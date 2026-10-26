@@ -12,7 +12,7 @@ import { interruptedWorkers, respawnArgsFrom } from "../agent/recovery";
 import { orchestratorForAgent } from "../agent/orchestrator";
 import { isSessionLogBusy } from "./session-liveness";
 import { removePrivateSessionData } from "../agent/solpi-runtime";
-import { attachmentPrefixFor } from "../agent/prune";
+import { attachmentPrefixFor, legacyAttachmentPrefixFor } from "../agent/prune";
 import {
   createSession,
   deleteSession,
@@ -205,9 +205,9 @@ export async function handleSessionDelete(id: string): Promise<{ currentSession:
   });
   try {
     const pruneDir = join(dir, "prune-attachments");
-    const prefix = attachmentPrefixFor(id);
+    const prefixes = [attachmentPrefixFor(id), legacyAttachmentPrefixFor(id)];
     for (const name of await readdir(pruneDir)) {
-      if (name.startsWith(prefix)) await rm(join(pruneDir, name), { force: true });
+      if (prefixes.some((prefix) => name.startsWith(prefix))) await rm(join(pruneDir, name), { force: true });
     }
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") {

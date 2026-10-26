@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { read_file } from "../src/tools/read_file";
+import { read_file, readRegularFilePrefix } from "../src/tools/read_file";
 import type { ToolContext } from "../src/tools";
 import { gateToolSpecs } from "../src/agent/session-provider";
 
@@ -105,6 +105,23 @@ describe("read_file 整形（M2a 任务 3）", () => {
     await writeFile(join(ws, "a.txt"), "hello cairn", "utf8");
     const res = await read_file.run({ path: "a.txt" }, ctx);
     expect(res.output).toBe("hello cairn");
+  });
+
+  it("fstat 后小文件增长仍只做有界前缀读取，并明确报告文件已变化", async () => {
+    const data = Buffer.from("growth witness");
+    let requested = 0;
+    const fake = {
+      async read(target: Buffer, offset: number, length: number): Promise<{ bytesRead: number }> {
+        requested = Math.max(requested, target.length);
+        const n = Math.min(length, data.length);
+        data.copy(target, offset, 0, n);
+        return { bytesRead: n };
+      },
+    };
+    const read = await readRegularFilePrefix(fake, 4);
+    expect(requested, "分配上限必须由 fstat 大小得出，不能读成整文件").toBe(5);
+    expect(read.grewDuringRead).toBe(true);
+    expect(read.buf.toString("utf8")).toBe("grow");
   });
 });
 

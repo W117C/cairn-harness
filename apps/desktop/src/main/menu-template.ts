@@ -33,21 +33,6 @@ export interface AppMenuDeps {
   closeWindow: () => void;
 }
 
-/** 渲染层命令项：显示快捷键、不注册（见文件头纪律）。 */
-function cmd(
-  id: MenuCommandId,
-  label: string,
-  accelerator?: string,
-): MenuItemConstructorOptions {
-  return {
-    id: MENU_ITEM_ID_PREFIX + id,
-    label,
-    ...(accelerator !== undefined ? { accelerator } : {}),
-    registerAccelerator: false,
-    click: () => undefined, // 由 appMenuTemplate 回填（这里只为形状统一）
-  };
-}
-
 /** 模板构造：`send` 在 click 里调用（每条命令一个闭包，共用同一个出口）。 */
 export function appMenuTemplate(deps: AppMenuDeps): MenuItemConstructorOptions[] {
   /** 渲染层命令项：显示快捷键、不注册（见文件头纪律）。 */

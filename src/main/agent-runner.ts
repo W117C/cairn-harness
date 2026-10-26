@@ -3,7 +3,7 @@
 // 真实门在本模块的工具包装里 —— 复用 src/permissions 的 checkPermission，语义与 M0 一致：
 // read-only 拒副作用 / default 询问（UI 批准才执行）/ auto 放行；沙箱不可用时写工具强制逐条审批。
 import { readFileSync } from "node:fs";
-import { rm, mkdir, realpath, appendFile } from "node:fs/promises";
+import { rm, appendFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { basename, dirname, join, resolve } from "node:path";
@@ -12,12 +12,10 @@ import { runLoop } from "../agent/loop";
 // 断面补落（finally 那一格）要用同一枚哨兵 id 与同一份判据——不重抄字符串、不重写谓词。
 import { DELIVERY_GUARD_CALL_ID, describePhantomDelivery, eventsForCurrentRun, findPhantomDelivery } from "../agent/delivery-guard";
 import { createImageChannel } from "../agent/image-channel";
-import { runCompaction } from "../agent/compaction";
 import { buildMap } from "../agent/map/build";
 import { computePrune, writePruneAttachments } from "../agent/prune";
 import {
   createSessionSummarizer,
-  type SessionPluginTool,
 } from "../agent/session-provider";
 import { ClarifyGate, PlanGate } from "../agent/gates";
 // M10 拆分：系统提示词面搬去 `src/agent/system-prompt.ts`。**这里既是本地消费、也再导出**——
@@ -26,7 +24,7 @@ import { ClarifyGate, PlanGate } from "../agent/gates";
 import { BASE_SYSTEM, systemPromptFor } from "../agent/system-prompt";
 import { classifyVerifyFailure, createVerifyHook, defaultExec, withVerifyCauseNote, type ExecFn } from "../agent/verify";
 import { createActionFusion } from "../agent/action-fusion";
-import { SolpiRuntime, privateSessionDirectory, removePrivateSessionData, observationRecallSpec, solpiEnabled, type SolpiFlags } from "../agent/solpi-runtime";
+import { SolpiRuntime, privateSessionDirectory, observationRecallSpec, solpiEnabled, type SolpiFlags } from "../agent/solpi-runtime";
 import { createUsageAttributor } from "../agent/usage-attribution";
 import { isSessionLogBusy, markSessionRunLive, unmarkSessionRunLive } from "./session-liveness";
 // 既有消费者（compact 等）从这里取；唯一实现在 session-liveness（删除/重命名也共用）。
@@ -40,11 +38,11 @@ import { createRefineGoalTool } from "../tools/refine_goal";
 import { makeWebFetch, webFetch, type WebFetchDeps } from "../tools/web_fetch";
 import { loadSearchConfig, makeWebSearch, webSearchSpec, type SearchConfig } from "../tools/web-search";
 import { run_shell } from "../tools/run_shell";
-import type { AgentEvent, ClarifyAnswerMap, EventLog, GoalTurnOrigin } from "../events";
+import type { AgentEvent, EventLog, GoalTurnOrigin } from "../events";
 import { frozenJudgePathSet } from "../frozen";
 import { createEventLog, redactEventForLog, replay } from "../events";
 // goal 模式：判据与投影全在纯函数面（src/agent/goal.ts），这里只做「读事件流 → 问它 → 落流 → 起下一轮」。
-import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, goalWindowSpend, parseGoalSpec, projectGoal, type GoalView } from "../agent/goal";
+import { GOAL_TURN_CAP_MAX, projectGoal } from "../agent/goal";
 // 收束后的三支观测读数（目标漂移 / cost-per-progress / 自进化）2026-10-17 搬去
 // `./post-run-readings.ts`：判据仍住在各自的纯模块（goal-drift / cost-per-progress / evolution），
 // 那边只做「读事件流 → 问它 → 印一行」，不新增事件类型。
@@ -54,21 +52,17 @@ import { emitPostRunReadings } from "./post-run-readings";
 import { evolutionPromptNote } from "../agent/evolution";
 // 落流前的文本扫描表（`goal_stopped.reason` 已在表上）：异常原文是外部文本，而这条写入点不经
 // loop 那份 redactEventForLog，扫它就得取这张现成的表，不在这里再抄一遍「哪个字段该擦」。
-import { scanStreamEvent } from "../agent/worker-projection";
-import { checkPermission, enterPlanRunScope, getPlanState, planGateBlocks, rememberDecision, seedPendingPlanFromEvents, type PermissionMode } from "../permissions";
+import { enterPlanRunScope, getPlanState, planGateBlocks, rememberDecision, seedPendingPlanFromEvents, type PermissionMode } from "../permissions";
 import {
   evaluate,
-  isNetworkCommandCall,
   loadPermissionRules,
   newAutonomySession,
-  type AskScope,
 } from "../permissions";
 import { globalPermissionsPath } from "../permissions/rules";
 import { type ProviderKind } from "./settings";
 import { getLastWorkspace, setRunWorkspace } from "./runner-workspace";
-import { createSession, pathOf, sessionExists, type SessionInfo } from "./sessions";
+import { pathOf, sessionExists } from "./sessions";
 import { validateThinkingEffort } from "../providers/capabilities";
-import type { ModelOutput } from "../providers";
 import { validateRunRequestEnvelope } from "./run-request";
 import {
   MODEL_SHELL_TEST_ALIASES,
@@ -90,15 +84,14 @@ import {
   resolveMainModel,
   type MainModelSelection,
 } from "./provider-runtime";
-import { TOOLS, type Tool, type ToolResult } from "../tools";
+import { TOOLS, type Tool } from "../tools";
 import { remember } from "../tools/remember";
 import type { ToolName } from "../tools/base";
-import { initMemoryHome, type TopicEntry } from "../agent/memory/store";
-import { runSessionEndDistill } from "../agent/memory/distill";
 export { initMemoryHome } from "../agent/memory/store"; // shell 启动时注入 userData/memory
+import { runSessionEndDistill } from "../agent/memory/distill";
 import { AskGate } from "./ask-gate";
 import type { AskOutcomePayload, AskPayload, RunRequest } from "./ipc-protocol";
-import { checkSandbox, networkProfileFor, runInSandbox, type SandboxStatus } from "./sandbox";
+import { checkSandbox, runInSandbox, type SandboxStatus } from "./sandbox";
 import { resolveRoutingFlags, type RoutingFlagOverrides } from "./routing-flags";
 import { PluginRuntime, trustFilePathOf, setCurrentPluginRuntime, currentPluginRuntime, expandPromptCommand, expandSkillInvocation, commandInvokeName, skillInvokeName } from "../agent/plugins";
 // `TrustStore` 从**实现文件**取，不从 `../agent/plugins` 取：那边是 `export { … } from "./trust"`
@@ -106,51 +99,40 @@ import { PluginRuntime, trustFilePathOf, setCurrentPluginRuntime, currentPluginR
 import { TrustStore } from "../agent/plugins/trust";
 import { createVerifyTrustGate } from "./verify-trust-gate";
 import type { VerifyTrustResolver } from "../agent/verify-trust";
-import type { ScheduleSnapshot } from "./scheduler";
-import { validateAutomation, isUnattendedTier } from "./automations";
 import {
   Orchestrator,
-  orchestratorForAgent,
-  orchestratorForApproval,
-  orchestratorForMerge,
   type OrchestratorOptions,
   type SpawnArgs,
   type WorkerModel,
 } from "../agent/orchestrator";
-import type { RespawnArgs } from "../agent/recovery";
-import {
-  cleanOrphanWorktree,
-  type WorktreeCleanupResult,
-} from "../agent/worktree";
 // ---- 拆分面（同 provider-key-inject 先例：实现搬去轻模块，本装配根按原路径继续导出）----
 // settings/BYOK/license/更新面 → ./settings-handlers；会话列表与崩溃恢复 → ./session-handlers；
 // 记忆快照与删除 → ./memory-handlers；「最近一次 run 的工作区」单一事实源 → ./runner-workspace。
 import { setSettingsHostDeps, store } from "./settings-handlers";
-import { getSessionsDir, requireSessionsDir } from "./session-handlers";
+import { requireSessionsDir } from "./session-handlers";
 // 会话/编排器装配面（唯一构造口 + 崩溃恢复兜底 + 扩展接线 + worker shell 出口）2026-10-17 搬去
 // `./session-assembly.ts`（结构债审查报告 #2 的第三缝）。`workerShellRunnerFor` 是导出 API
 // （`tests/worker-sandbox-wiring.test.ts` 直接调它看「装不装」这个决定），故两条都写。
 import { buildSessionOrchestrator, ensureSessionOrchestrator, setSessionAssemblyDeps, workerShellRunnerFor } from "./session-assembly";
 export { workerShellRunnerFor };
 import {
-  automationsScheduled, handleScheduleSnapshot, initScheduler, installAutomationTools,
+  automationsScheduled, initScheduler, installAutomationTools,
   scheduleDataDir, schedulerEverStarted, setSchedulerRuntimeDeps, startScheduler, stopScheduler, updateScheduleCap,
 } from "./scheduler-runtime";
 import {
   emitGoalEvent, emitGoalStoppedOnThrow, goalNextTurn, setGoalHandlerDeps,
 } from "./goal-handlers";
 import {
-  handleSidechatAsk, handleSidechatCreate, handleSidechatPromote, handleSidechatState, runSidechatDemo,
+  runSidechatDemo,
   setSidechatHandlerDeps,
 } from "./sidechat-handlers";
-import { compactSessionLog, firePreCompactHook, resolveSafeMode, runSecurityReportHook } from "./compact-and-report";
+import { compactSessionLog, firePreCompactHook, runSecurityReportHook } from "./compact-and-report";
 import { currentWorkspace, pluginRuntimeOpts, setPluginSnapshot, setStateHandlerDeps } from "./state-handlers";
 import {
   denied, gatedTool, installPluginTools, pluginToolSpecsFromRuntime, resolveLivePluginTool, sessionToolFace, setToolGateDeps,
   type CardExtra,
 } from "./tool-gates";
 import {
-  handleAgentDecide, handleCardAction, handleClarifySubmit, handlePlanDecide, handleRunCancel,
   setCardActionDeps,
 } from "./card-action-handlers";
 // 演示/剧本通道的**数据面**（fixtures 路径 + 剧本枚举 + demo worker 装配）2026-10-17 搬去
@@ -158,7 +140,7 @@ import {
 // 是导出 API（`tests/usage-attribution.test.ts` 按原路径 import），所以下面**再导出**一次——
 // 那条 `export … from` 只对外可见、**不进本地作用域**，故 上面 import、这里 export 两条都要
 // （本文件 system-prompt 那次搬迁踩过同一个坑，见下面 M10 那段注释）。
-import { DEFAULT_WORKSPACE, MOCK_FIXTURE, loadDemoWorkerModels, scriptedMainModelPath } from "./demo-scripted";
+import { DEFAULT_WORKSPACE, loadDemoWorkerModels, scriptedMainModelPath } from "./demo-scripted";
 export { scriptedMainModelPath };
 // provider 装配面（`resolveProviderKind` + `createProvider`）2026-10-17 搬去 `./provider-assembly.ts`
 // （结构债审查报告 #2 的第二缝）。`resolveProviderKind` 是导出 API（`settings-handlers` 与桌面层

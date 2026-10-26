@@ -13,7 +13,7 @@
 // 全部逐字保留（本文件换形态与图标，不动锚）。
 // 图标 = lucide-react（ADR 0003）。
 import { Fragment, memo, useEffect, useId, useState } from "react";
-import { AlertTriangle, Check, ChevronRight, ChevronUp, CircleDashed, Copy, Download, Eye, FileCode2, FileText, Folder, GitBranch, History, Image as ImageIcon, Loader2, Pencil, Pin, RotateCcw, RotateCw, Sparkles, Square, ThumbsDown, ThumbsUp, Volume2 } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, ChevronUp, CircleDashed, Copy, Eye, FileCode2, FileText, Folder, GitBranch, History, Image as ImageIcon, Loader2, Pencil, Pin, RotateCcw, RotateCw, Sparkles, Square, ThumbsDown, ThumbsUp, Volume2 } from "lucide-react";
 import { relativeTime, type StreamRow } from "../projections";
 import { userMessageCopy } from "../transcript";
 import { useNow } from "../useNow";

@@ -96,6 +96,20 @@ describe("正向：写对了的式子必须退 0", () => {
     expect(r.code).toBe(0);
     expect(r.out).not.toMatch(/必须同期旋转/);
   });
+
+  it("结束标签带 parser-error 属性时仍只读 script 正文，不把后面的页面文本当 JS", () => {
+    writeFileSync(join(dir, "script-end-tag.html"), `<!doctype html><html><body>
+      <script>
+        const footX = 350 + R * Math.sin(angle);
+        const footY = 250 - R * Math.cos(angle);
+        requestAnimationFrame(() => {});
+      </script data-test="kept">
+      <p>const badX = 350 + R1 * Math.sin(angle);</p>
+      <p>const badY = 250 - R2 * Math.cos(angle);</p>
+      </script>
+    </body></html>`);
+    expect(run([join(rel, "script-end-tag.html")]).code).toBe(0);
+  });
 });
 
 describe("反向：每条判据各有一个会红的片段", () => {

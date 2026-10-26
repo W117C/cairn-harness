@@ -70,23 +70,138 @@ function decodeEntities(s: string): string {
   });
 }
 
-/** HTML → 纯文本。**剥标签在解实体之前**：`&lt;script&gt;` 是页面上真要显示的字面文本，
- * 先解实体就会把它变成真标签再被剥掉，页面显示的那段字凭空消失。
- * 顺序：注释/脚本/样式 → 块级标签转换行 → 剥余下标签 → 解实体 → 收空白。
- * 返回 0 行的输入原样返回（非 HTML 走这条路，什么都不该变）。 */
+const RAW_TEXT_TAGS: ReadonlySet<string> = new Set(["script", "style", "noscript", "template", "svg", "iframe"]);
+const BLOCK_TAGS: ReadonlySet<string> = new Set([
+  "p", "div", "section", "article", "header", "footer", "main", "aside", "nav",
+  "ul", "ol", "dl", "table", "tr", "blockquote", "pre",
+]);
+const LINE_TAGS: ReadonlySet<string> = new Set([
+  "h1", "h2", "h3", "h4", "h5", "h6", "dt", "dd", "caption", "th", "td", "form", "figure", "address",
+]);
+
+interface HtmlTag {
+  name: string;
+  closing: boolean;
+  selfClosing: boolean;
+}
+
+/** Find a tag's closing `>` without treating `>` inside a quoted attribute as the end. */
+function tagEnd(html: string, start: number): number {
+  let quote = "";
+  for (let i = start + 1; i < html.length; i += 1) {
+    const ch = html[i]!;
+    if (quote !== "") {
+      if (ch === quote) quote = "";
+      continue;
+    }
+    if (ch === "\"" || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === ">") return i;
+  }
+  return -1;
+}
+
+function parseTag(html: string, start: number, end: number): HtmlTag | null {
+  let i = start + 1;
+  while (i < end && /\s/u.test(html[i]!)) i += 1;
+  const closing = html[i] === "/";
+  if (closing) {
+    i += 1;
+    while (i < end && /\s/u.test(html[i]!)) i += 1;
+  }
+  const nameStart = i;
+  while (i < end && /[A-Za-z0-9:-]/u.test(html[i]!)) i += 1;
+  if (nameStart === i) return null;
+  let tail = end - 1;
+  while (tail > start && /\s/u.test(html[tail]!)) tail -= 1;
+  return {
+    name: html.slice(nameStart, i).toLowerCase(),
+    closing,
+    selfClosing: !closing && html[tail] === "/",
+  };
+}
+
+/** Skip an entire raw-text element. HTML raw text is not nested; if no valid close
+ * tag exists, every remaining byte is untrusted code/markup and must stay out of the text projection. */
+function rawElementEnd(html: string, from: number, name: string): number {
+  let cursor = from;
+  while (cursor < html.length) {
+    const lt = html.indexOf("<", cursor);
+    if (lt < 0) return html.length;
+    const end = tagEnd(html, lt);
+    if (end < 0) return html.length;
+    const tag = parseTag(html, lt, end);
+    if (tag?.closing === true && tag.name === name) return end + 1;
+    cursor = end + 1;
+  }
+  return html.length;
+}
+
+/** HTML → plain text. This is a projection, not an HTML sanitizer: it parses
+ * tags once, removes comments/raw executable regions, then decodes entities in
+ * the remaining text. Decoding last preserves literal `&lt;script&gt;` shown by
+ * the page instead of mistaking it for markup. */
 export function htmlToText(html: string): string {
-  let s = html;
-  s = s.replace(/<!--[\s\S]*?-->/g, "");                                  // 注释（含条件注释里的老 IE 指令）
-  s = s.replace(/<(script|style|noscript|template|svg|iframe)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "");
-  // 未闭合的 <script src=…> 这类：标签本身还在，剥标签那一步会处理，但里面的 JS 文本会漏成正文。
-  s = s.replace(/<(script|style|noscript|template|svg|iframe)\b[^>]*\/?>/gi, ""); // 自闭合/无闭标签的一支
-  s = s.replace(/<br\s*\/?>/gi, "\n").replace(/<hr\s*\/?>/gi, "\n");
-  s = s.replace(/<\/?(p|div|section|article|header|footer|main|aside|nav|ul|ol|dl|table|tr|blockquote|pre)\b[^>]*>/gi, "\n");
-  s = s.replace(/<li\b[^>]*>/gi, "\n- ").replace(/<\/?(h[1-6]|dt|dd|caption|th|td|form|figure|address|blockquote)\b[^>]*>/gi, "\n");
-  s = s.replace(/<[^>]*>/g, "");                                          // 余下标签（含属性里的 > 已被上面吃掉大部分）
-  s = decodeEntities(s);
-  s = s.split("\n").map((line) => line.replace(/[ \t ]+/g, " ").trim()).join("\n");
-  return s.replace(/\n{3,}/g, "\n\n").trim();
+  const out: string[] = [];
+  let cursor = 0;
+  while (cursor < html.length) {
+    if (html.startsWith("<!--", cursor)) {
+      const end = html.indexOf("-->", cursor + 4);
+      cursor = end < 0 ? html.length : end + 3;
+      continue;
+    }
+    if (html[cursor] !== "<") {
+      const next = html.indexOf("<", cursor);
+      const end = next < 0 ? html.length : next;
+      out.push(html.slice(cursor, end));
+      cursor = end;
+      continue;
+    }
+
+    if (html.startsWith("<!", cursor) || html.startsWith("<?", cursor)) {
+      const end = tagEnd(html, cursor);
+      if (end < 0) {
+        out.push(html.slice(cursor));
+        break;
+      }
+      cursor = end + 1;
+      continue;
+    }
+
+    const end = tagEnd(html, cursor);
+    if (end < 0) {
+      out.push(html.slice(cursor));
+      break;
+    }
+    const tag = parseTag(html, cursor, end);
+    if (tag === null) {
+      out.push("<");
+      cursor += 1;
+      continue;
+    }
+
+    // In HTML, script/style/... are raw-text elements, not void elements. A
+    // trailing slash on the start tag is ignored by HTML parsers, so
+    // `<script/>alert(1)</script>` still contains executable text. Requiring
+    // !selfClosing here would project that text into the model-visible body.
+    if (!tag.closing && RAW_TEXT_TAGS.has(tag.name)) {
+      cursor = rawElementEnd(html, end + 1, tag.name);
+      continue;
+    }
+    if (tag.name === "br" || tag.name === "hr") out.push("\n");
+    else if (!tag.closing && tag.name === "li") out.push("\n- ");
+    else if (BLOCK_TAGS.has(tag.name) || LINE_TAGS.has(tag.name)) out.push("\n");
+    cursor = end + 1;
+  }
+
+  return decodeEntities(out.join(""))
+    .split("\n")
+    .map((line) => line.replace(/[ \t ]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /** 是不是该走 HTML 还原。非 HTML（text/plain、application/json、text/markdown…）原样返回——

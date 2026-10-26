@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { statSync as stat } from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
-import { extname, join, relative, resolve, sep } from "node:path";
+import { extname, relative, resolve, sep } from "node:path";
 import { projectAgentPath } from "../app-data";
 import { pathToFileURL } from "node:url";
 import { killGroup, sanitizedEnv } from "./process.js";

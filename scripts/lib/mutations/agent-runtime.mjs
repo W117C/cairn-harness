@@ -1,6 +1,8 @@
 // agent-runtime 域的变异配置条目（2026-10-17 从 scripts/mutate-verify.mjs 按域拆出，见 PROGRESS 第 501 页）。
 // 每条 = 一处语义突变 + 期望被它杀死的具体用例标题。追加条目时放进对应域的文件；
 // **组间顺序不影响任何判据**（每条独立），同一文件内保持原顺序以便 diff。
+import { regexSource } from "./regex-source.mjs";
+
 export const MUTATIONS = [
   {
     id: "verify-fail-closed-empty",
@@ -378,7 +380,10 @@ export const MUTATIONS = [
     src: "src/agent/verify.ts",
     test: "tests/verify-probe.test.ts",
     desc: "test: 判定丢掉行首锚 ⇒ Makefile 里一句注释「run test: pytest」就凭空造出验证面（跑不存在的目标）",
-    apply: (s) => s.replace("/^test[ \\t]*:/m", "/test[ \\t]*:/m"),
+    apply: (s) => s.replace(
+      regexSource("^test[ \\t]*:", "m"),
+      regexSource("test[ \\t]*:", "m"),
+    ),
     expectFail: "注释里写着「test:」不算目标（判定锚在行首，否则一句说明就凭空造出验证面）",
   },
   {
@@ -656,7 +661,10 @@ export const MUTATIONS = [
     src: "src/agent/prune.ts",
     test: "tests/prune.test.ts",
     desc: "去掉「已存在即跳过」⇒ 每次模型调用都把全部附件重写一遍（白 IO，且 mtime 失去「何时被裁」的含义）",
-    apply: (s) => s.replace("      try {\n        await access(file);\n        continue;\n      } catch { /* 不存在（或被清理）→ 重写 */ }", "      try {\n        await Promise.resolve();\n      } catch { /* 不存在（或被清理）→ 重写 */ }"),
+    apply: (s) => s.replace(
+      '        if ((err as NodeJS.ErrnoException).code === "EEXIST") continue;',
+      '        if ((err as NodeJS.ErrnoException).code === "EEXIST") { fh = await open(file, constants.O_WRONLY | constants.O_TRUNC); } else throw err;',
+    ),
     expectFail: "④同一附件重复装配不重写（幂等；每轮组装都跑，重写 = 白 IO 且打断 mtime 语义）",
   },
   {

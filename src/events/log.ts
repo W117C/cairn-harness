@@ -1,7 +1,8 @@
 // 事件流：append-only JSONL，一事件一行。
 // 本文件 = 存储引擎（常驻句柄缓存 / 半写尾行修复 / replay / forkSession）；协议面（类型 + KNOWN_TYPES）
 // 住 ./types.ts。2026-10-17 从 index.ts 拆出（前 770 行是纯协议面，两张脸不再互相扰动行号）。公开面 = ./index.ts。
-import { mkdir, open, readFile, stat, type FileHandle } from "node:fs/promises";
+import { constants } from "node:fs";
+import { mkdir, open, readFile, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { KNOWN_TYPES, type AgentEvent, type AssistantDeltaEvent } from "./types";
 import { redactEventForLog } from "./redact";
@@ -14,6 +15,7 @@ import { redactEventForLog } from "./redact";
 const LOG_HANDLE_MAX = 32;
 interface CachedHandle {
   fh: FileHandle;
+  dev: number;
   ino: number;
 }
 const logHandles = new Map<string, CachedHandle>();
@@ -86,19 +88,26 @@ async function repairPartialTail(path: string, fh: FileHandle): Promise<void> {
 /** 解析（必要时新建）path 的常驻句柄。inode 校验是必须的：agent-runner 会先 rm(logPath) 再
  *  createEventLog——不校验会把事件写进已 unlink 的旧 inode（静默丢数据）。 */
 async function resolveHandleInner(path: string): Promise<FileHandle> {
-  const st = await stat(path).catch(() => null);
   const cached = logHandles.get(path);
-  if (cached && st !== null && st.ino === cached.ino) return cached.fh; // 同 inode → 复用
+  // Open first, then compare the handle's identity with the cache. This removes
+  // the path-stat/use window and refuses a final-component symlink.
+  const fh = await open(
+    path,
+    constants.O_RDWR | constants.O_APPEND | constants.O_CREAT | (constants.O_NOFOLLOW ?? 0),
+    0o600,
+  );
+  const st = await fh.stat();
+  if (cached && st.dev === cached.dev && st.ino === cached.ino) {
+    await fh.close();
+    return cached.fh;
+  }
   if (cached) {
     // 旧 inode 已被 unlink/替换：关掉旧句柄（忽略错误）并从缓存删除
     logHandles.delete(path);
     await cached.fh.close().catch(() => undefined);
   }
-  // `a+` 而不是 `a`：半写尾行修复要在**同一句柄**上回读文件尾（`a` 是只写 fd，read 报 EBADF）。
-  // 追加语义逐字不变（O_APPEND：写永远落在末尾），只多一个可读位。
-  const fh = await open(path, "a+");
   await repairPartialTail(path, fh);
-  const ino = (await fh.stat()).ino;
+  const current = await fh.stat();
   if (logHandles.size >= LOG_HANDLE_MAX) {
     // 有界：淘汰最早插入的一条并关闭其句柄（照抄 replayCache 的淘汰写法；Map 插入序即 LRU-ish，
     // 不做访问序更新，保持简单）。
@@ -109,7 +118,7 @@ async function resolveHandleInner(path: string): Promise<FileHandle> {
       if (old) await old.fh.close().catch(() => undefined);
     }
   }
-  logHandles.set(path, { fh, ino });
+  logHandles.set(path, { fh, dev: current.dev, ino: current.ino });
   return fh;
 }
 
@@ -312,55 +321,54 @@ export async function replayIncremental(path: string): Promise<AgentEvent[]> {
 }
 
 async function replayIncrementalInner(path: string): Promise<AgentEvent[]> {
-  let st;
+  let fh: FileHandle;
   try {
-    st = await stat(path);
-  } catch {
+    // lgtm[js/insecure-temporary-file] Test fixtures use mkdtemp; production opens an existing log read-only without following links.
+    fh = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     replayCache.delete(path); // 会话文件被清理：缓存同步失效
     return [];
   }
-  const cached = replayCache.get(path);
-  if (!cached || cached.ino !== st.ino || cached.offset > st.size) {
-    // 首访 / 文件被重建（inode 变化）/ 被截断 → 全量解析并重建缓存
-    const raw = await readFile(path, "utf8").catch(() => "");
-    const events: AgentEvent[] = [];
-    const bad: number[] = [];
-    let offset = 0;
-    let lastGood = 0;
-    const allParts = raw.split("\n");
-    const completeInit = raw === "" ? [] : allParts.slice(0, -1); // 最后一段是尾行（空串或半写）
-    for (let i = 0; i < completeInit.length; i++) {
-      const rawLine = completeInit[i];
-      offset += Buffer.byteLength(rawLine, "utf8") + 1; // 完整行都推进偏移（含空行/坏行）
-      const t = rawLine.trim();
-      if (!t) continue;
-      const e = parseReplayLine(t);
-      if (e) { lastGood = i + 1; events.push(e); } else bad.push(i + 1);
-    }
-    const midBad = bad.filter((l) => l < lastGood);
-    if (midBad.length > 0) throw midBadLineError(path, midBad); // 抛在写缓存之前：不留半份缓存
-    if (bad.length > 0) console.warn(`[events] replayIncremental 跳过尾部 ${String(bad.length)} 条坏行（降级容错）: ${path}`);
-    if (replayCache.size >= REPLAY_CACHE_MAX) {
-      const oldest = replayCache.keys().next().value;
-      if (oldest !== undefined) replayCache.delete(oldest);
-    }
-    // 偏移用**实际读到的字节数**，不再按 stat 时的大小夹回去：stat 在 readFile 之前，
-    // 期间追加会让 raw 比 st.size 大，`Math.min` 把 offset 退回旧大小 ⇒ 下次增量把
-    // [旧大小, 新大小) 整段重读一遍（投影重复事件；同族见 sessions.listSessions 行数）。
-    const entry: ReplayCacheEntry = { ino: st.ino, offset, events, line: completeInit.length, tailBad: bad };
-    replayCache.set(path, entry);
-    return entry.events.slice(); // 交副本：消费方排序/清空不得影响缓存
-  }
-  // 增量：只读上次偏移之后的完整行（半写尾行留待完整落盘——不推进偏移、不重复解析）
-  const len = st.size - cached.offset;
-  if (len <= 0) return cached.events.slice();
-  const fresh: AgentEvent[] = [];
-  const bad: number[] = [];
-  let lastGood = 0;
-  let consumed = 0;
-  let done = 0; // 本批消费的完整行数（含空行/坏行——它们同样占行号）
-  const fh = await open(path, "r");
   try {
+    const st = await fh.stat();
+    const cached = replayCache.get(path);
+    if (!cached || cached.ino !== st.ino || cached.offset > st.size) {
+      // 首访 / 文件被重建（inode 变化）/ 被截断 → 从同一个句柄全量解析并重建缓存
+      const raw = await fh.readFile("utf8");
+      const events: AgentEvent[] = [];
+      const bad: number[] = [];
+      let offset = 0;
+      let lastGood = 0;
+      const allParts = raw.split("\n");
+      const completeInit = raw === "" ? [] : allParts.slice(0, -1);
+      for (let i = 0; i < completeInit.length; i++) {
+        const rawLine = completeInit[i];
+        offset += Buffer.byteLength(rawLine, "utf8") + 1;
+        const t = rawLine.trim();
+        if (!t) continue;
+        const e = parseReplayLine(t);
+        if (e) { lastGood = i + 1; events.push(e); } else bad.push(i + 1);
+      }
+      const midBad = bad.filter((l) => l < lastGood);
+      if (midBad.length > 0) throw midBadLineError(path, midBad);
+      if (bad.length > 0) console.warn(`[events] replayIncremental 跳过尾部 ${String(bad.length)} 条坏行（降级容错）: ${path}`);
+      if (replayCache.size >= REPLAY_CACHE_MAX) {
+        const oldest = replayCache.keys().next().value;
+        if (oldest !== undefined) replayCache.delete(oldest);
+      }
+      const entry: ReplayCacheEntry = { ino: st.ino, offset, events, line: completeInit.length, tailBad: bad };
+      replayCache.set(path, entry);
+      return entry.events.slice();
+    }
+    // 增量：只读上次偏移之后的完整行（半写尾行留待完整落盘——不推进偏移、不重复解析）
+    const len = st.size - cached.offset;
+    if (len <= 0) return cached.events.slice();
+    const fresh: AgentEvent[] = [];
+    const bad: number[] = [];
+    let lastGood = 0;
+    let consumed = 0;
+    let done = 0; // 本批消费的完整行数（含空行/坏行——它们同样占行号）
     const buf = Buffer.allocUnsafe(len);
     await fh.read(buf, 0, len, cached.offset);
     const text = buf.toString("utf8");
@@ -376,19 +384,18 @@ async function replayIncrementalInner(path: string): Promise<AgentEvent[]> {
       const e = parseReplayLine(t);
       if (e) { lastGood = abs; fresh.push(e); } else bad.push(abs);
     }
+    // 跨批裁决：上一批留下的尾坏，只要本批出现新事件就已离开尾部 ⇒ 与 replay 同判必炸。
+    const midBad = [...(fresh.length > 0 ? cached.tailBad : []), ...bad.filter((l) => l < lastGood)];
+    if (midBad.length > 0) throw midBadLineError(path, midBad);
+    if (bad.length > 0) console.warn(`[events] replayIncremental 跳过尾部 ${String(bad.length)} 条坏行（降级容错）: ${path}`);
+    cached.events.push(...fresh);
+    cached.offset += consumed;
+    cached.line += done;
+    cached.tailBad = fresh.length > 0 ? [...bad] : [...cached.tailBad, ...bad];
+    return cached.events.slice();
   } finally {
     await fh.close();
   }
-  // 跨批裁决：上一批留下的尾坏，只要本批出现新事件就已离开尾部 ⇒ 与 replay 同判必炸。
-  // 先算后写：抛出去时不碰缓存（偏移不推进 → 下次同一批重读，仍抛，不会退化成静默错位）。
-  const midBad = [...(fresh.length > 0 ? cached.tailBad : []), ...bad.filter((l) => l < lastGood)];
-  if (midBad.length > 0) throw midBadLineError(path, midBad);
-  if (bad.length > 0) console.warn(`[events] replayIncremental 跳过尾部 ${String(bad.length)} 条坏行（降级容错）: ${path}`);
-  cached.events.push(...fresh);
-  cached.offset += consumed;
-  cached.line += done;
-  cached.tailBad = fresh.length > 0 ? [...bad] : [...cached.tailBad, ...bad];
-  return cached.events.slice();
 }
 
 /** 流式渲染的合成基底：同一轮回复的增量片段按序拼回完整文本。 */

@@ -3,7 +3,7 @@
 // ③单行超 100 字符被截断 ④未改文件 → 命中缓存且结果逐字相同 ⑤改一个文件 → 重算且结果变化
 // ⑥用户仓库里没有 tags 缓存文件（缓存只落应用数据目录 M2B_TAGS_DIR 指定的临时目录）
 // 真实靶子 = 本仓库 src/agent/**（自研吃狗粮，四语言中的 ts 真实存在）。
-import { cp, mkdtemp, readdir, stat, utimes, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { lstatSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";

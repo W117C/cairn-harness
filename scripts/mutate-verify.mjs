@@ -16,7 +16,7 @@
 // 可判性三分（entryDisposition）：源文件在飞/未跟踪 = 拒绝并抛死（无回滚兜底）；
 // **判卷测试文件**在飞 = 本条记「未证」跳过——否则别人的在飞编辑会伪装成「变异存活」或「基线红」。
 
-import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync, writeSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync, writeSync, rmSync } from "node:fs";
 import ts from "typescript";
 import { execFileSync, spawnSync } from "node:child_process";
 import { join, dirname, resolve, relative, basename } from "node:path";

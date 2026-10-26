@@ -22,7 +22,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 
 import { certGateCell, certGatePlan, certGateVerdict, certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, certTreeReclaim, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, defaultTimeoutFromConfig, depDirs, gitInflightArgs, headGateTableIntegrity, mainRootFromCommonDir, missingDeclaredDeps, parseCertGateRows, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, suiteRows, timingCell, timingNearCapCell, unknownCertArgs, wallClockCell } from "./lib/head-cert-deps";
 import { needsNodeModules } from "./lib/subrepo-dep-need";
@@ -321,7 +321,7 @@ if (!flag("skip-test")) {
   };
   let suiteText: string | null = null;
   try { suiteText = readFileSync(join(logDir, "suite.json"), "utf8"); } catch { suiteText = null; }
-  let treeRoot = treeAbs;
+  let treeRoot: string;
   try { treeRoot = realpathSync(treeAbs); } catch { treeRoot = treeAbs; }
   timingReading = timingCell(timingNearCapCell(suiteRows(suiteText, treeRoot + "/"), {
     defaultBudget: defaultTimeoutFromConfig(readFile("tests/vitest.config.ts")),

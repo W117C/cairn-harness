@@ -99,6 +99,7 @@ describe("tokensOf（词面切分：CJK 二元组＋拉丁词）", () => {
 
   it("CJK 扩展区/兼容表意文字算连续串（区间端点被复制磨掉时这条会红）", () => {
     expect(new Set(tokensOf("豈帝甲"))).toEqual(new Set(["豈帝", "帝甲"]));
+    expect(tokensOf("豈\uE000")).toEqual([]); // 私用区不能借旧区间的重叠混进汉字词
   });
 
   it("同一个串切两次给的集合相同（切词不许依赖输入次序）", () => {

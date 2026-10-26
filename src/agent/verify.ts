@@ -225,14 +225,11 @@ export async function probeLanguageTestCommands(repoDir: string): Promise<string
  *    扣模型的钱、改本来正确的代码。故用相对路径二进制（cwd=repoDir，相对路径照常解析）。 */
 const TSC_BIN = "./node_modules/.bin/tsc";
 export async function probeTypecheckCommands(repoDir: string): Promise<string[]> {
-  let hasTsconfig = false;
   try {
     await access(join(repoDir, "tsconfig.json"), constants.F_OK);
-    hasTsconfig = true;
   } catch {
     return [];
   }
-  if (!hasTsconfig) return [];
   try {
     await access(join(repoDir, "node_modules", ".bin", "tsc"), constants.X_OK);
   } catch {

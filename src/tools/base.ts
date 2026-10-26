@@ -1,4 +1,5 @@
-import { lstat, readlink, realpath } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, open, readlink, realpath, stat, type FileHandle } from "node:fs/promises";
 import type { Stats } from "node:fs";
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { frozenJudgePathSet } from "../frozen";
@@ -181,16 +182,105 @@ async function resolveDeepest(abs: string, label: string): Promise<string> {
   return cur;
 }
 
-export async function assertRealContainment(workspace: string, abs: string, label: string): Promise<void> {
+export async function assertRealContainment(workspace: string, abs: string, label: string): Promise<string> {
   let wsReal: string;
   try {
     wsReal = await realpath(workspace);
   } catch {
     throw new ToolError(`${label}: workspace 不可解析: ${workspace}`);
   }
-  const relBack = relative(wsReal, await resolveDeepest(abs, label));
+  const contained = await resolveDeepest(abs, label);
+  const relBack = relative(wsReal, contained);
   if (relBack !== "" && (relBack.startsWith("..") || isAbsolute(relBack))) {
     throw new ToolError(`${label}: 路径经软链解析后越出 workspace 边界: ${abs}`);
+  }
+  return contained;
+}
+
+export interface ContainedOpen {
+  fh: FileHandle;
+  path: string;
+  stat: Stats;
+}
+
+function sameFileIdentity(a: Stats, b: Stats): boolean {
+  return a.dev === b.dev && a.ino === b.ino;
+}
+
+function assertRealPathWithin(workspaceReal: string, candidateReal: string, abs: string, label: string): void {
+  const relBack = relative(workspaceReal, candidateReal);
+  if (relBack !== "" && (relBack.startsWith("..") || isAbsolute(relBack))) {
+    throw new ToolError(`${label}: 路径经软链解析后越出 workspace 边界: ${abs}`);
+  }
+}
+
+/**
+ * Open a workspace path and prove that the opened inode is still the inode
+ * currently named by the canonical path. O_NOFOLLOW protects the final
+ * component; the realpath + inode recheck narrows the ancestor-directory
+ * check-to-use window that Node cannot close without openat(2).
+ */
+export async function openContainedFile(
+  workspace: string,
+  abs: string,
+  label: string,
+  flags = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0),
+): Promise<ContainedOpen> {
+  const target = await assertRealContainment(workspace, abs, label);
+  let fh: FileHandle | undefined;
+  try {
+    fh = await open(target, flags | (constants.O_NOFOLLOW ?? 0));
+    const opened = await fh.stat();
+    const workspaceReal = await realpath(workspace);
+    const requestedReal = await realpath(abs);
+    const targetReal = await realpath(target);
+    assertRealPathWithin(workspaceReal, requestedReal, abs, label);
+    assertRealPathWithin(workspaceReal, targetReal, abs, label);
+    const requestedStat = await stat(requestedReal);
+    const targetStat = await stat(targetReal);
+    if (!sameFileIdentity(opened, requestedStat) || !sameFileIdentity(opened, targetStat)) {
+      throw new ToolError(`${label}: 路径在打开与复核之间发生变化，拒绝使用不可信句柄: ${abs}`);
+    }
+    return { fh, path: targetReal, stat: opened };
+  } catch (error) {
+    await fh?.close().catch(() => undefined);
+    if (error instanceof ToolError) throw error;
+    const wrapped = new ToolError(`${label}: 路径无法安全打开: ${abs}`);
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== undefined) Object.assign(wrapped, { code });
+    throw wrapped;
+  }
+}
+
+export interface ContainedPathIdentity {
+  path: string;
+  stat: Stats;
+}
+
+/** Capture an existing contained path's inode, then recheck it around a
+ * write. This catches an ancestor directory being swapped between checks
+ * and the atomic rename. */
+export async function captureContainedPath(
+  workspace: string,
+  abs: string,
+  label: string,
+): Promise<ContainedPathIdentity> {
+  const target = await assertRealContainment(workspace, abs, label);
+  const targetStat = await stat(target);
+  const workspaceReal = await realpath(workspace);
+  assertRealPathWithin(workspaceReal, target, abs, label);
+  return { path: target, stat: targetStat };
+}
+
+export async function assertContainedPathIdentity(
+  workspace: string,
+  abs: string,
+  label: string,
+  expected: ContainedPathIdentity,
+): Promise<void> {
+  const current = await captureContainedPath(workspace, abs, label);
+  if (!sameFileIdentity(expected.stat, current.stat)) {
+    throw new ToolError(`${label}: 路径在写入前发生变化，拒绝继续: ${abs}`);
   }
 }
 

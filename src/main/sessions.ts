@@ -3,14 +3,14 @@
 // 新建/切换/重命名/删除；删除当前会话回退到最近一个（mtime 降序）。
 // electron-free（root 由调用方传入：app 用 userData，验收脚本用临时目录），可 headless 单测。
 import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import type { AgentEvent } from "../events";
 import { createEventLog, replay } from "../events";
 import { tmpPathFor, writeFileAtomic } from "../atomic-write";
 import { parseRunAttachment, type RunAttachmentReference } from "./run-attachments";
 import type { SessionMetadataRecord, SessionMetadataRepository } from "./session-metadata";
 import { isSessionLogBusy, markSessionMutating, unmarkSessionMutating } from "./session-liveness";
-import { attachmentPrefixFor } from "../agent/prune";
+import { attachmentPrefixFor, legacyAttachmentPrefixFor } from "../agent/prune";
 
 /** 文件事实始终来自 JSONL；sidecar 字段只在确有 metadata 时合并，老会话不会被伪造成默认记录。 */
 export interface SessionInfo extends Partial<SessionMetadataRecord> {
@@ -523,10 +523,11 @@ async function renameSessionUnlocked(
   // 裁剪附件按会话 id 命名：不随重命名迁移的话，之后删除新 id 只清新前缀，旧文件永久残留。
   try {
     const pruneDir = join(root, "prune-attachments");
-    const fromPrefix = attachmentPrefixFor(oldId);
+    const fromPrefixes = [attachmentPrefixFor(oldId), legacyAttachmentPrefixFor(oldId)];
     const toPrefix = attachmentPrefixFor(newName);
     for (const name of await readdir(pruneDir)) {
-      if (name.startsWith(fromPrefix)) {
+      const fromPrefix = fromPrefixes.find((prefix) => name.startsWith(prefix));
+      if (fromPrefix !== undefined) {
         await rename(join(pruneDir, name), join(pruneDir, toPrefix + name.slice(fromPrefix.length)));
       }
     }
