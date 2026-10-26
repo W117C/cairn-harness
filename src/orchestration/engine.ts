@@ -347,10 +347,17 @@ export class OrchestrationEngine {
       // reservation into spend (that makes a cancelled task unretryable). A real backend error
       // keeps the reservation: it may have incurred unreported provider cost.
       const paused = request.signal.aborted && request.signal.reason === "pause";
+      const needsYou = error !== null && typeof error === "object" &&
+        (error as { needsYou?: unknown }).needsYou === true;
       const remaining = request.signal.aborted
         ? Math.max(0, charged - recorded)
         : Math.max(0, Math.max(request.context.budget.usd, charged) - recorded);
-      await this.status({ ...stamp, spent_usd: remaining }, paused ? "paused" : request.signal.aborted ? "cancelled" : "failed", paused ? "paused by user" : String(error instanceof Error ? error.message : error));
+      const phase = paused ? "paused" : request.signal.aborted ? "cancelled" : needsYou ? "needs_you" : "failed";
+      await this.status(
+        { ...stamp, spent_usd: remaining },
+        phase,
+        paused ? "paused by user" : String(error instanceof Error ? error.message : error),
+      );
     }
   }
   /** Run until nothing can proceed. Blocked/needs-you tasks remain visible, not falsely completed. */
