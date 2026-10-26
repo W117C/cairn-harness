@@ -24699,3 +24699,9 @@ search-settings 无安全存储五处各补一条逐字观测，35 条转绿。`
   后者的 6 条锚点已改指新实现并逐条实跑，6/6 变异被杀死（`mutate-six.log`）。
 - `mutate-verify` **全表**本轮未跑完（锚点 1621 条，逐条 spawn 判卷，超出本轮时间预算）；
   已跑的是静态针脚体检（阻断 0）与受改动影响的 6 条变异。不把这两项当全表认证。
+
+### 业主决定（2026-10-26 · 第 713 页收尾）
+
+DeepSeek 真连一项，业主选择「本轮不验，登记为外部依赖」：
+官方端点无 key 返回 401、本机无 `DEEPSEEK_API_KEY`；不把 stub wire 绿冒充厂商可用性。
+将来拿到 key 后按 `src/providers/deepseek.ts` 与 `scripts/native-reasoning-probe.ts` 的入口补真实读数。

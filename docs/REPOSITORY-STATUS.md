@@ -67,7 +67,7 @@
 | P1 | 指针会话集成状态 | **代码面已核**：CLI `src/cli.ts:1375` 调用 `createProductFork`；桌面 Stream 的 `EventRef` 在 `apps/desktop/src/renderer/components/Stream.tsx:269/393/405/488` 有渲染与 `data-event-ref` 落点。真实交互见下一行。 |
 | P1 | 活跃会话连续发送与插话 | **连续发送已实测**：`session-continuity-smoke.cjs` 7/7 PASS（三次发送只建一个日志、重启恢复、续发追加、新建任务分叉、无控制台错误）。**插话 e2e 仍不可跑**：`steer-smoke.cjs` 1/6，根因是 gallery 桩无法把活动会话的 `running` 置起来（脚本头注已写明）；组件级插话判卷 `composer-steer` / `stream-steering-round` 在桌面 1483 条里全绿。未宣称端到端已证。 |
 | P1 | 记忆、自进化新接线验收 | **已收口到判卷层**：27 个 memory/evolution 判卷文件 332 条全绿；`post-run-readings.ts` 的反思/蒸馏/毕业/Assess/canary 调用点在场。**收益**（真实配对读数）仍未取，不能由判卷绿替代。 |
-| P1 | DeepSeek 真连与契约核验 | **阻塞**：`https://api.deepseek.com/chat/completions` 无 key 返回 401；本机未找到 `DEEPSEEK_API_KEY`。wire/定价/续聊/缓存判卷 11 文件 170 条全绿，但这是 stub，不是真实厂商可用性。需要一把 key 才能完成本项。 |
+| P1 | DeepSeek 真连与契约核验 | **登记为外部依赖（业主 2026-10-26 决定本轮不验真连）**：官方端点无 key 返回 401、本机无 `DEEPSEEK_API_KEY`；wire/定价/续聊/缓存判卷 11 文件 170 条全绿，但这是 stub，不是真实厂商可用性。本项不再算本轮未完成；将来拿到 key 后按 `src/providers/deepseek.ts` 与 `scripts/native-reasoning-probe.ts` 已备的入口补真实读数。 |
 | P1 | 当前完整验证和交付 | **主体完成**：根 typecheck 0；core 518 文件 6971 条全绿（`--maxWorkers=2`，exit 0）；桌面 223 文件 1483 条 + boundary 绿；桌面 build 绿；docs-check 绿；编排 154、记忆/进化 332、provider 170、权限 112、搜索/用量 64、插件 58、元认知 26。`pnpm gates` 的 28 道非 HEAD 门全绿（web_fetch 修复后复跑 7/7）；`head-cert-check` 在 `f79077e2` 上 **25/25 道认证门全绿**（exit 0）；`mutate-verify` 锚点全表本轮未跑完，不宣称。 |
 
 ## 四、待开工（条件未变，不启动）
@@ -102,7 +102,7 @@
 - 文档：`changed-and-verified`（本页、STATE、PROGRESS 第 713 页、ADR 0007 后续）。
 - 规则：`verified-current`（读取未改）。
 - 运行/发布：`out-of-scope`（未打包、未部署）。
-- 真实模型/真实外部用户：`pending`（DeepSeek 缺 key；steer e2e 受 gallery 桩限制）。
+- 真实模型：`out-of-scope`（业主决定本轮不验真连，登记为外部依赖）；真实外部用户：`pending`（steer e2e 受 gallery 桩限制）。
 
 ## 七、证据与最终验证
 
