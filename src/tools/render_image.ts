@@ -60,7 +60,7 @@ export const RENDER_IMAGE_DESCRIPTION =
   "参数：path 必填；atMs 是虚拟时间预算（动画用它取不同时刻的帧，省略＝加载完那一刻）；" +
   "width 是视口宽、height 是视口高（px，缺省 1200/1200）——两者定的是**视口**，不是页面："
   + "页面比视口矮时底部留白，比视口高时超出的部分被裁掉，要全貌就把 height 调大。" +
-  "单帧只覆盖一个时刻：动画要看脚贴不贴踏板、循环交界跳不跳变，就用 atMs 取一个周期内的多个时刻分别看。"
+  "单帧只覆盖一个时刻：动画要用 atMs 采样一个周期内的多个时刻，检查运动轨迹、相对位置和循环衔接。"
   + "约束：单帧 ≤ " + String(Math.floor(MAX_RENDER_PNG_BYTES / 1024 / 1024)) + "MB。";
 
 /** Chrome/Chromium 可执行文件的候选名单（按序找第一个在的）。
@@ -203,11 +203,9 @@ export function makeRenderImage(deps: RenderImageDeps = {}): Tool {
             + "（视口 " + String(width) + "×" + String(height) + "，"
             + (atMs !== undefined ? "虚拟时间 " + String(atMs) + "ms" : "加载态那一帧")
             + "，" + String(buf.length) + " 字节 PNG）已作为图片内容块附上。"
-            + "这一帧只证明页面跑起来了、元素在画面里；动画还需要按周期多点采样（atMs）比对脚/踏板/膝盖，"
+            + "这一帧只证明页面跑起来了、元素在画面里；动画还需要按周期多点采样（atMs），检查运动轨迹、相对位置和循环衔接，"
             + "页面比视口高的部分会被裁掉。",
           images: [{ type: "image", dataUrl }],
-          // 产物引用指向**被渲染的那个源文件**，不是这张 PNG（PNG 落在 OS 临时目录、用完即删）。
-          // 用户面据此给「打开预览」入口——同一条链路的另一半在桌面端 projections/Stream。
           // 产物引用指向**被渲染的那个源文件**，不是这张 PNG（PNG 落在 OS 临时目录、用完即删）。
           // 用户面据此给「打开预览」入口——同一条链路的另一半在桌面端 projections/Stream。
           // kind 走 write_file 那个共用分类器（按后缀名）：写死 "html" 会把 .svg 也报成 html，

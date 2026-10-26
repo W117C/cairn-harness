@@ -1,38 +1,36 @@
 # Cairn / DSH —— 现态
 
-rev: 41f226e53f37c5809ae130ac568f90f5cb6c4336
+rev: 8094efa977a1f54520ee2896f5d767f271930165
 
-本页描述 GitHub 默认分支的实现基线。开发线、本地未提交成果与发布 tag 分别取证，
-不把一边的实现或绿灯写成另一边已经交付。分支快照、未完成/待开工/优化事项统一见
-[项目路线与仓库状态](docs/ROADMAP.md)；实时验证见 GitHub Actions。
+本页描述 GitHub 默认分支的实现基线。开发线、本地成果与发布 tag 分别取证。
+未完成、待开工和优化事项见 [项目路线与仓库状态](docs/ROADMAP.md)，
+验证结果须核对对应提交和 GitHub Actions。
 
 ## 现在在哪
 
-- **core**：`src/agent/`、`src/tools/`、`src/providers/`、`src/permissions/`、`src/events/`；
-  `src/main/` 是 electron-free 的应用服务，核心不得反向依赖 `apps/desktop/`。
-- **desktop**：`apps/desktop/` 的 main / preload / renderer，可 import core；
-  IPC 契约在 `src/main/ipc-protocol.ts`，边界由 `scripts/desktop-boundary-check.ts` 检查。
-- **交付与受众**：默认分支保留 B1 核心/CLI 定位与桌面开发壳；范围裁决在 `docs/adr/`。
-- **事实入口**：门表是 `scripts/gate-manifest.ts`，实测用 `pnpm facts` 和对应证据；
-  历史保留在 `PROGRESS.md` 与 `outputs/`，不搬走台账或删除历史来使门禁变绿。
+- core 位于 `src/`；`src/main/` 是 electron-free 的应用服务，核心不反向依赖桌面壳。
+- desktop 位于 `apps/desktop/`；IPC 契约在 `src/main/ipc-protocol.ts`，层级由 desktop-boundary-check 检查。
+- 默认分支保留 B1 核心/CLI 定位与桌面开发壳，交付范围裁决见 `docs/adr/`。
+- 仓库已公开；密钥扫描、推送保护、私密漏洞报告与 main 防强推/防删除保护已启用。
+- 仓库入口、Dependabot 配置、CodeQL 自动分析和受限并发测试入口已整理；
+  运行结果见 PR #2 及其合并提交的 Actions，认证面仍有未证条目。
 
 ## 正在收口
 
-- GitHub 治理文件已经具备；本轮补齐依赖标签、修复重复更新配置与缺失验证命令，整理任务入口和闲置样本。
-- 开发线与默认分支已经分叉，开发线的新功能尚未因此进入 main；集成要保留两边有效改动并单独验证。
-- 本地仍有未提交的功能批次，需逐批检查归属与依赖，不能用共享工作树的结果替代远端提交认证。
-- 仓库已公开；密钥扫描、推送保护、私密漏洞报告与 main 防强推/防删除保护已启用。
-  真实 CI 已重新启动，结果以拟交付提交对应的运行记录为准。
+- 本批移除仓库自检对旧动画产物的固定绑定，渲染工具改用通用动画说明；
+  既有渲染、几何检查能力与测试标本保留。
+- Electron 补丁更新与 Actions 运行时更新分别在 PR #3、PR #8 验收，合并前不写成 main 已修复。
+- 开发线和默认分支仍有各自独有提交；本地另有已提交成果，发布与集成按文件归属逐批核对。
 
 ## 待验与待决
 
-- main 基线保留的桌面根路径授权与自进化接线债见 `PROGRESS.md` 第 618、619 页；
-  开发线是否已修及最终集成证据另行核对，不能仅凭旧状态重复施工。
-- 文档引用检查须获取完整远端 ref 与 tag；台账页号重复与依赖告警仍保留，本轮不修改冻结判据或擅自升级依赖。
-- 连续发送、分叉、插话、多窗口与编排控制面须在拟交付构建真实复验；收益与真连测量另立受控任务。
-- 远程编排、开放面、B2 分发及性能优化按路线图的启动条件推进；恢复分支和历史工件保持可回取。
+- main 的桌面路径授权与自进化接线债见 PROGRESS 第 618、619 页，先核对开发线实现再补缺口。
+- 依赖升级、公开日志隐私审阅、真实会话/桌面验收及开发线集成仍按路线图推进。
+- 历史工件和恢复分支保留用途与凭证；未发现执行消费者不单独证明历史证据可以删除。
 
 ## 怎么验
 
-命令与边界见 `AGENTS.md`；core 与 desktop 分开验证。`test:capped` 是同一核心套件的并发受限入口。
-`mutate-verify` / `head-cert-check` 只证明测量提交。没有完整运行结果时，不声称完整 gates 通过。
+命令与边界见 AGENTS.md。core、desktop、build 与真实交互分别取证。
+仓库配置检查自身代码与页面入口；任务产物使用对应检查器按需验证。
+完整门表见 `scripts/gate-manifest.ts`，实测用 `pnpm facts` 和对应证据。
+`mutate-verify`、`head-cert-check` 仅证明其测量提交，不把退出码全零等同于全部已证。
