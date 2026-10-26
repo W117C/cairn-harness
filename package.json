@@ -63,6 +63,7 @@
     "event-semantics-check": "node --import tsx scripts/event-semantics-check.ts",
     "session-semantics-check": "node --import tsx scripts/session-semantics-check.ts",
     "session-search-check": "node --import tsx scripts/session-search-check.ts",
+    "context-quality-eval": "node --import tsx scripts/context-quality-eval.ts",
     "motion-policy-check": "node --import tsx scripts/motion-policy-check.ts"
   },
   "devDependencies": {
