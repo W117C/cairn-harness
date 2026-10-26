@@ -1,10 +1,10 @@
 # Cairn / DSH —— 现态
 
-rev: 3579f49b43ea05ebeb9489564f073e094122fa96
+rev: fc056d03915c9ad3a1568973fb7e87b92ef6517e
 
 本页描述 `cairn/` 当前工作树，不代表同级 staging、远端或已发布应用。
 任务、阻塞与待开工统一见 [仓库整理与任务清单](docs/REPOSITORY-STATUS.md)；
-逐批读数见 `PROGRESS.md` 第 713 页，历史证据保留在 `PROGRESS.md` 与 `outputs/`。
+逐批读数见 `PROGRESS.md` 第 715 页，历史证据保留在 `PROGRESS.md` 与 `outputs/`。
 本页整体重写，台账只追加。
 
 ## 当前实现
@@ -25,8 +25,8 @@ rev: 3579f49b43ea05ebeb9489564f073e094122fa96
 - 真实 DeepSeek 连接需要 `DEEPSEEK_API_KEY`；wire 判卷只证明请求形状。
 - 同一活跃会话的插话、取消后继续发送与跨窗口 smoke 已接通；空屏首发的 running key 由单测钉住。
 - FilePane 与设置页已有真实 renderer / 生产 preload 的键盘、失败恢复与窄窗补测。
-- `head-cert-check` 已在 `3579f49` 上跑满 25/25；`pnpm gates` 的 9 道相关门在该提交上全绿。
-- `mutate-verify` 全表和完整 `pnpm gates` 仍未跑，不能写成全量认证。
+- `head-cert-check` 已在 `fc056d03` 上最终跑满 25/25；首趟并发红样本与复跑绿样本都保留。
+- `mutate-verify` 全表已在同一提交上 1621/1621 全杀死；完整 `pnpm gates` 仍未作为一条命令全跑。
 - 远程 worker、P5 真实评测、P6 SDK 与对外分发按任务清单的条件待开工。
 
 ## 待验与待决

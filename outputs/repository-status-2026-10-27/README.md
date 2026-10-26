@@ -28,3 +28,21 @@ ELECTRON_RUN_AS_NODE= pnpm --filter cairn-desktop exec electron scripts/workspac
   时间，不含主进程生成 diff 的耗时。
 - 设置、文件窗格、工作区和跨窗口 smoke 使用临时 profile / workspace，不触碰产品用户数据。
 - `settings-process-smoke` 的本地搜索请求打 loopback；没有真实模型请求，也不证明真实计费。
+
+## 最终认证
+
+全表变异与最终 HEAD 认证分开取料：
+
+```sh
+pnpm mutate-verify
+pnpm head-cert-check
+```
+
+- `mutate-verify` 在 `fc056d0` 上跑满 1621/1621，exit 0；原文摘要见
+  [`mutate-verify.md`](mutate-verify.md)。
+- `head-cert-check` 在同一提交上先留下 24/25 的并发红样本，再在两端独占时得到 25/25：
+  `../head-cert-fc056d0-2026-10-26-1651/provenance.md` 与
+  `../head-cert-fc056d0-2026-10-26-1656/provenance.md`。
+- 首趟红样本的 3 条失败名随认证树回收而不可补回；文档只把它当不可归因的并发污染样本，
+  不据此推断产品回归，也不删除该样本。
+- 这些认证只覆盖 `fc056d0` 的提交树，不证明真实 DeepSeek、真实用户、打包发布或跨机器长尾。

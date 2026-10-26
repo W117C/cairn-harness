@@ -1,0 +1,65 @@
+# 认证读数 · rev fc056d0
+- 生成时刻=2026-10-26-1651（UTC。台账页按本地日期，跨零点时页号与这里差一天，不是写错了）
+- 温度＝有别人在跑 ⇒ **时间量不可引用**，只能引用「这一趟慢」；条数与红名仍可用
+- 收尾复核=同一笔
+- 判据：两端独占＝「起前 0 且跑完 0 且这一趟真跑了全量判卷」；本页引用时间量前先回看这一行
+
+## 认证打出来的读数（原样，未改写）
+
+```text
+目标提交：fc056d0（--at=HEAD）
+worktree add exit=0
+已核：TREE=fc056d03915c9ad3a1568973fb7e87b92ef6517e｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 apps/desktop/node_modules ← 主树 exit=0
+  硬链接子仓库依赖 apps/desktop/preview/node_modules ← 主树 exit=0
+  零依赖子仓库 17 个（不需要 node_modules，不计入补齐面）
+import 面：5914 条边｜悬空 0（其中存量已豁免 0）
+门表：40 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（25 道，名单取自 fc056d0）==
+  ✅ no-progress-check exit=0 399ms（预算 1100ms）
+  ✅ prune-check exit=0 313ms（预算 1100ms）
+  ✅ fork-check exit=0 327ms（预算 1100ms）
+  ✅ compaction-check exit=0 502ms（预算 1200ms）
+  ✅ docs-check exit=0 1182ms（预算 1300ms）
+  ✅ memory-check exit=0 474ms（预算 1300ms）
+  ✅ head-import-check exit=0 1865ms（预算 2400ms）
+  ✅ autonomy-check exit=0 1663ms（预算 1500ms）
+  ✅ sandbox:check exit=0 967ms（预算 1700ms）
+  ✅ security-check exit=0 595ms（预算 1500ms）
+  ✅ provider:check exit=0 268ms（预算 1300ms）
+  ✅ routing-check exit=0 445ms（预算 1400ms）
+  ✅ model-surface-check exit=0 523ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 587ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 373ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 314ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 276ms（预算 1000ms）
+  ✅ web-fetch-check exit=0 356ms（预算 1200ms）
+  ✅ gym-check exit=0 1057ms（预算 2400ms）
+  ✅ gate-check exit=0 2206ms（预算 5400ms）
+  ✅ evidence-typecheck-check exit=0 4450ms（预算 5300ms）
+  ✅ mutate-needles-check exit=0 11524ms（预算 20000ms）
+  ✅ repo-hygiene-check exit=0 468ms（预算 1200ms）
+  ✅ e2e exit=0 4562ms（预算 4000ms）
+  ❌ desktop-test exit=1 14559ms（预算 10000ms）
+  ⚠️ 超预算（只出声，不判红）：autonomy-check 1663ms > 名单里的 1500ms
+  ⚠️ 超预算（只出声，不判红）：e2e 4562ms > 名单里的 4000ms
+  ⚠️ 超预算（只出声，不判红）：desktop-test 14559ms > 名单里的 10000ms
+  认证门面=25 道（跑到 25）｜❌ 红 1 道｜⚠️ 超预算 3
+  ❌ desktop-test exit=1（14559ms）
+
+== 认证汇总 ==
+  TREE=fc056d0 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-gate-head-cert.lock）
+  Test Files 518 passed (518)｜Tests 6971 passed (6971)｜exit=0（退出码直接取，不接管道）
+  并发判卷=起前 1 套／跑完 0 套（撞窗：本仓判卷有读写共享 /tmp 的用例）
+  本趟墙钟 174.38s（同一进程 hrtime 实测·口径＝起跑→汇总那一行，不含提前退出的那些趟）
+  贴帽读数（缺省＝config 里的 testTimeout=30000ms）：6971 条里 0 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 6289 条｜标题非字面量（it.each／插值／拼接，按缺省算）475 条｜预算没落到 24 条（这一格没量到，不等于 0）｜成因点名：tests/metacognition-policy.test.ts（标题不在那份判卷里）；tests/metacognition-policy.test.ts（标题不在那份判卷里）；tests/metacognition-policy.test.ts（标题不在那份判卷里）｜无｜离帽余量最近：tests/mutate-shards.test.ts·treeProblem 与编排器的前置闸：脏树不许当片用 同一宿主被 9443ms/15000ms=63%；tests/m3c.test.ts·M3c pipeline 哑 sequencer（零 LLM） 未获 15654ms/25000ms=63%；tests/plugin-trust-revocation.test.ts·撤回插件信任后旧执行面立即失效 撤回时关闭在途 MCP 请求，服务端 100ms/200ms=50%
+  逐条日志：/tmp/dsh-head-cert-fc056d0
+  已回收认证树 .worktrees/gate-head-cert（exit=0）
+  常驻残留树=1（/Users/ze/Downloads/Cairn/cairn/.worktrees/gate-mutate-verify@fc056d0）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+  本次退出码=1（这是 head-cert 这道门自己的码，不是它跑进去的 test runner 的码）｜红的维：认证门面红 1 道
+  汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-fc056d0/summary.txt
+```

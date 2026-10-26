@@ -30,7 +30,11 @@
 - Radix 模型下拉真机命中：首开 17.3 ms，复开 p50 6.4 / p95 7.3 ms；依赖树 251,225 B（主路由闭包 45.3%）。
   暂不拆懒加载——读数不支持先付六处触发钮与首开 chunk 的改造代价。
 - 4000 行 diff 真机挂载：191.1 ms、20 hunks、24,570 节点；仅记录帽内最坏形状，不据此拍脑袋拆组件。
-- `head-cert-check` 在提交 `3579f49` 上 25/25 全绿；取料见第九节。`mutate-verify` 全表仍未跑。
+- `mutate-verify` 全表在提交 `fc056d03` 上 **1621/1621 条变异全部被杀死，exit 0**，耗时
+  2145.4 s；取料见 `outputs/repository-status-2026-10-27/mutate-verify.md`。
+- `head-cert-check` 在 `fc056d03` 上先出现 24/25（干净认证树的桌面门 2 文件 3 条失败，
+  同时检测到 1 套并发判卷），随后在两端独占时 **25/25 全绿，exit 0**。红绿两份原文都保留；
+  首趟详情见第九节。`3579f49` 的 25/25 历史认证仍保留。
 
 ### 批次主体 15 笔（`014ac0e3..HEAD`；另有 11 笔收尾）
 
@@ -82,7 +86,7 @@
 | P1 | 活跃会话连续发送与插话 | **端到端已实测**：连续发送 7/7；插话 6/6（运行中回车真的调用 `runSteer`、回执与队列互斥、主进程拒绝时回落入队）；取消后继续发送 4/4；组件级判卷仍在桌面套件内。 |
 | P1 | 记忆、自进化新接线验收 | **已收口到判卷层**：27 个 memory/evolution 判卷文件 332 条全绿；`post-run-readings.ts` 的反思/蒸馏/毕业/Assess/canary 调用点在场。**收益**（真实配对读数）仍未取，不能由判卷绿替代。 |
 | P1 | DeepSeek 真连与契约核验 | **登记为外部依赖（业主 2026-10-26 决定本轮不验真连）**：官方端点无 key 返回 401、本机无 `DEEPSEEK_API_KEY`；wire/定价/续聊/缓存判卷 11 文件 170 条全绿，但这是 stub，不是真实厂商可用性。本项不再算本轮未完成；将来拿到 key 后按 `src/providers/deepseek.ts` 与 `scripts/native-reasoning-probe.ts` 已备的入口补真实读数。 |
-| P1 | 当前完整验证和交付 | **主体完成**：根 typecheck 0；core 518 文件 6971 条全绿（`--maxWorkers=2`，exit 0）；桌面 223 文件 1484 条 + boundary 绿；桌面 build 绿；docs-check 绿；编排 154、记忆/进化 332、provider 170、权限 112、搜索/用量 64、插件 58、元认知 26。`pnpm gates` 的 9 道相关门在 `3579f49` 上全绿（子集，不是全量）；`head-cert-check` 在 `3579f49` 上 **25/25 道认证门全绿**（exit 0）；`mutate-verify` 锚点全表仍未跑完，不宣称。 |
+| P1 | 当前完整验证和交付 | **主体完成**：根 typecheck 0；core 518 文件 6971 条全绿（`--maxWorkers=2`，exit 0）；桌面 223 文件 1484 条 + boundary 绿；桌面 build 绿；docs-check 绿；编排 154、记忆/进化 332、provider 170、权限 112、搜索/用量 64、插件 58、元认知 26。`pnpm gates` 的 9 道相关门在 `3579f49` 上全绿（子集，40 道未作为一条命令全跑）；`head-cert-check` 在 `fc056d03` 上最终 **25/25 道认证门全绿**（exit 0，首趟并发红样本保留）；`mutate-verify` 全表在该提交上 **1621/1621 全杀死**，exit 0。 |
 
 ## 四、待开工（条件未变，不启动）
 
@@ -113,7 +117,7 @@
 ## 六、事实面
 
 - 代码/工作区：`verified-current`（本轮提交均可复跑）。
-- 文档：`changed-and-verified`（本页、STATE、PROGRESS 第 713 页、ADR 0007 后续）。
+- 文档：`changed-and-verified`（本页、STATE、PROGRESS 第 715 页、ADR 0007 后续）。
 - 规则：`verified-current`（读取未改）。
 - 运行/发布：`out-of-scope`（未打包、未部署）。
 - 真实模型：`out-of-scope`（业主决定本轮不验真连，登记为外部依赖）；真实外部用户：`pending`（没有外部用户样本，不以离屏 smoke 代替）。
@@ -147,9 +151,9 @@
 | Radix 下拉延迟 | 首开 17.3 ms；复开 p50 6.4 / p95 7.3 ms |
 | 4000 行 diff | 191.1 ms，20 hunks / 24,570 节点 |
 | core 终跑 | **518 文件 6971 条全绿，exit 0**（`pnpm test:capped` = `--maxWorkers=2`）｜日志 `.tmp/goal-20261026/core-final-5.log` |
-| `pnpm gates` | 本次 9 道相关门（子集）在 `3579f49` 上全绿；40 道全量 gate 未跑，`mutate-verify` 不在已证面 |
-| `head-cert-check` | **`3579f49` 上 25/25 道认证门全绿，exit 0**：core 518/6971、desktop 1484、e2e、docs-check、web-fetch、mutate-needles 等；取料 `outputs/head-cert-3579f49-2026-10-26-1611/provenance.md` |
-| `mutate-verify` | 全表仍未跑完；不把 `mutate-needles-check` 或局部杀锚当全表认证 |
+| `pnpm gates` | 9 道相关门（子集）在 `3579f49` 上全绿；40 道未作为一条 `pnpm gates` 全跑，不能写成全量 gate 认证 |
+| `head-cert-check` | **`fc056d03` 上 25/25 道认证门全绿，exit 0**：core 518/6971、desktop 1484、e2e、docs-check、web-fetch、mutate-needles 等；红、绿原文见 `outputs/head-cert-fc056d0-2026-10-26-1651/provenance.md` 与 `outputs/head-cert-fc056d0-2026-10-26-1656/provenance.md`。`3579f49` 的历史 25/25 原文也保留 |
+| `mutate-verify` | **`fc056d03` 全表 1621/1621 条被杀死，exit 0，2145.4 s**；专用 worktree、未设预算、3242 次判卷 spawn；取料 `outputs/repository-status-2026-10-27/mutate-verify.md` |
 
 ## 八、未做的边界
 
@@ -157,6 +161,8 @@
 - 没有真实模型请求（缺 DeepSeek key）；没有真实外部用户；没有打包分发。
 - 插话/取消/恢复与 FilePane/设置已完成真机 smoke；编排控制面仍是组件/服务面判卷，未宣称真实用户全流程。
 - Radix 依赖树仍随主路由进入首屏；当前延迟读数不支持先做六处懒加载改造。
+- `fc056d03` 首趟 `head-cert-check` 的桌面红发生在检测到并发判卷时；完整失败日志随认证树回收，
+  3 条失败名未补回，因此只把它当不可归因的并发污染样本，不用它推断产品回归，也不删这份红样本。
 - 本页的读数是本轮实测；`PROGRESS.md` 历史页里的旧读数不随之改写。
 
 ## 九、取料短索引（按页面 / 批次）
@@ -164,9 +170,11 @@
 | 批次 | 入口 | 用途 |
 |---|---|---|
 | 2026-10-27 复核 | `outputs/repository-status-2026-10-27/` | 本轮插话、取消/恢复、跨窗口、FilePane、设置、性能与 Radix 原始读数 |
+| 2026-10-27 变异 | `outputs/repository-status-2026-10-27/mutate-verify.md` | `fc056d03` 的 1621/1621 全表变异原文摘要与运行边界 |
 | 2026-10-26 收口 | `PROGRESS.md` 第 713 页；`outputs/orchestration-delivery-2026-10-25/` | Git 收口、编排纵切与交付读数 |
 | 2026-10-25 元认知 | `outputs/metacognition-v2-acceptance-2026-10-25/` | 有界 pilot 验收与未决边界 |
-| 2026-10-27 认证 | `outputs/head-cert-3579f49-2026-10-26-1611/` | `3579f49` 的 25/25 认证原文 |
+| 2026-10-27 认证 | `outputs/head-cert-fc056d0-2026-10-26-1651/`、`outputs/head-cert-fc056d0-2026-10-26-1656/` | `fc056d03` 首趟 24/25 并发红与复跑 25/25 绿的两份原文 |
+| 2026-10-27 历史认证 | `outputs/head-cert-3579f49-2026-10-26-1611/` | `3579f49` 的 25/25 认证原文 |
 | 2026-10-25 认证 | `outputs/head-cert-f79077e-2026-10-25-1839/` | 上一笔 `f79077e2` 的历史认证原文 |
 | 2026-10-20 桌面基线 | `outputs/desktop-performance-2026-10-20/` | 旧版首屏、流式与 bundle 预算基线 |
 | 2026-10-25 工作区清理 | `outputs/workspace-cleanup-2026-10-25/` | worktree、备份与残留处置凭证 |

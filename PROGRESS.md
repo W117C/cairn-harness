@@ -24767,3 +24767,38 @@ UI 用新 workspace 算键 ⇒ 停止钮不出现，插话入口永远走不到�
 - `pnpm gates --only=typecheck,docs-check,desktop-test,desktop-boundary-check,renderer-layer-check,head-import-check,mutate-needles-check,evidence-typecheck-check,repo-hygiene-check`
   在该提交上 **9/9 全绿**，但这是子集，不写成 40 道全量 gate 通过。
 - `mutate-verify` 全表仍未跑；静针脚 1621 条阻断 0，不等于全表变异通过。
+
+## 2026-10-27 · 第 715 页：fc056d0 的 HEAD 认证与全表变异收口
+
+业主指定的 `docs/REPOSITORY-STATUS.md` 已完成最后两项验证收口。本页只追加，不改第 714 页；
+第 714 页关于“全表变异未跑”的表述由本页更新。
+
+### 一、HEAD 认证
+
+- 首趟 `head-cert-check` 在 `fc056d03` 上得到 24/25：认证树内 core 518 文件 6971 条全绿，
+  `desktop-test` 为 2 文件 3 条失败。该趟起跑时检测到 1 套并发判卷，认证工具明确提示本仓判卷
+  会读写共享 `/tmp`。
+- 认证树回收后，完整桌面失败日志不再可读，因此 3 条失败名无法补回。没有把“重跑变绿”写成
+  “已定位偶发单测”；该红样本作为**并发污染下不可归因**的证据保留。
+- 第二趟在同一提交上复跑，两端独占（起前 0 套、跑完 0 套），得到 **25/25 全绿，exit 0**：
+  core 518 文件 6971 条、desktop 1484 条、e2e、docs-check、web-fetch、mutate-needles 等均通过；
+  本趟墙钟 190.63 s。
+- 红、绿原文：
+  `outputs/head-cert-fc056d0-2026-10-26-1651/provenance.md`、
+  `outputs/head-cert-fc056d0-2026-10-26-1656/provenance.md`。
+- `3579f49` 的历史 25/25 认证仍有效；`pnpm gates` 的 9 道相关门也是该提交上的历史子集读数，
+  不能替代本条 `fc056d03` 的完整认证。
+
+### 二、全表变异
+
+- `pnpm mutate-verify` 在专用 `.worktrees/gate-mutate-verify @ fc056d0` 上跑满：
+  **1621/1621 条变异全部被正确杀死，exit 0，实测 2145.4 s，未设内部预算**。
+- 成本分母为判卷 spawn 3242 次／1621 条（每条 2 次）；40 道 `pnpm gates` 仍未作为一条命令全跑，
+  但不把“gate 清单全跑”与“全表变异已跑”混成同一件事。
+- 原文摘要：`outputs/repository-status-2026-10-27/mutate-verify.md`。
+
+### 三、证据边界
+
+- 已验证：`fc056d03` 提交树的 25 道 HEAD 认证门、全表变异、core/desktop 判卷与证据面取料。
+- 未验证：真实 DeepSeek 请求、真实外部用户、真实账单、打包发布、跨机器性能长尾。
+- 本页与 STATUS/STATE 是文档与证据提交；没有借文档改动虚增或重算 `fc056d03` 的认证覆盖。
