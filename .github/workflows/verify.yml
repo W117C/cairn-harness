@@ -53,6 +53,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: typecheck
         run: pnpm typecheck
+      - name: Electron runtime matches installed package
+        timeout-minutes: 5
+        env:
+          ELECTRON_RUN_AS_NODE: "1"
+        run: >-
+          pnpm --filter cairn-desktop exec electron -e
+          'const assert = require("node:assert/strict"); const expected = require("electron/package.json").version; assert.equal(process.versions.electron, expected); console.log(JSON.stringify(process.versions));'
       - name: full test suite
         # 同一套核心测试，固定两个 worker；命令与本地可复现入口同源。
         run: pnpm test:capped
