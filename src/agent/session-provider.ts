@@ -13,7 +13,7 @@
 // （scripts/provider-check.ts / tests/glm.test.ts）也是从 providers/glm 导入，与本文件无关。
 // 职责：从事件日志重建中立对话历史（含 tool_calls / tool 角色），把工具结果反馈回模型，
 // 使真实 GLM 能多轮调用 clarify / propose_plan / write_file / verify。
-import { createEventLog, eventRefKey, readSessionView, replayIncremental, type AgentEvent, type CompactionUsage, type SessionView } from "../events";
+import { createEventLog, eventRefKey, readSessionView, replayIncremental, type AgentEvent, type CompactionEvent, type CompactionUsage, type SessionView } from "../events";
 import { realpath } from "node:fs/promises";
 import { projectViewContext } from "./session-view-context";
 import { isSideEffectTool, isWriteCall, type McpGrade, type PermissionMode } from "../permissions";
@@ -54,6 +54,13 @@ import { planSurfaceBudget, surfaceSpecChars } from "./model-surface";
 import { serializeLayer } from "./prefix-churn";
 import { amortizedCompactionConfig, measureHeadSurvival, type HeadSurvivalReading } from "./compaction-cost";
 import { freshSavings, shouldApplyPrune } from "./prune-batching";
+import {
+  DEFAULT_PREDICTION_MAX_AGE_MS,
+  compactionPrefixDigest,
+  shouldStartCompactionPrediction,
+  validatePrediction,
+  type PredictiveCompactionCandidate,
+} from "./compaction-prediction";
 
 type RawMessage = Record<string, unknown>;
 
@@ -684,6 +691,13 @@ export interface SessionCompaction {
    *  这一次就多压一点（「一次付账，拿满折扣」）。**缺省关**——关时逐字节零回归，
    *  因为它只动 tail 预算（`tailRatio`/`tailMaxTokens`），而这两个旋钮不在触发判定与硬闸里。 */
   amortizeRewriteCost?: boolean;
+  /** Opt-in speculative summary below the normal trigger. */
+  prediction?: {
+    enabled?: boolean;
+    /** Start when estimated tokens cross this fraction of the normal threshold. */
+    startRatio?: number;
+    maxAgeMs?: number;
+  };
 }
 
 /** 会话型 provider：每次 stream 从日志重建历史，直接转发网络增量；轮次结束由 loop 控制。
@@ -839,6 +853,9 @@ export function createSessionProvider(
   // （turnGenerator 每次 stream() 都是新的生成器，函数内局部变量留不住）。
   let prevRequestLayer = "";
   let headSurvival: HeadSurvivalReading | null = null;
+  let predictionCandidate: PredictiveCompactionCandidate | null = null;
+  let predictionTask: Promise<void> | null = null;
+  const predictionModelKey = opts.model ?? "default";
   /** 本请求的压缩/预算配置：inputLimit 认模型真实窗口（registry.ctxWindow，此前零消费者）。
    *  优先级 = 模型窗口定基线 < 调用方显式 config；但**显式值也绝不超出模型窗口**——
    *  超窗 provider 必 400，把 fail-closed 让给远端不如本地钳住。
@@ -1050,9 +1067,62 @@ export function createSessionProvider(
       console.warn("[surface_account] 装配账落流失败（本轮请求继续）:", error);
     }
   };
-  const appendSurfaceAccount = async (event: AgentEvent): Promise<void> => {
+  const appendInternalEvent = async (event: AgentEvent): Promise<void> => {
     if (opts.emit) return opts.emit(event);
     await createEventLog(logPath).append(event);
+  };
+  const appendSurfaceAccount = async (event: AgentEvent): Promise<void> => {
+    await appendInternalEvent(event);
+  };
+  const startPrediction = (
+    snapshot: AgentEvent[],
+    estimate: number,
+    overhead: AssemblyOverhead,
+    view: SessionView | undefined,
+    config: CompactionConfig,
+  ): void => {
+    const prediction = opts.compaction?.prediction;
+    if (!coordinator || !opts.compaction || prediction?.enabled !== true || coordinator.summarizerDisabled) return;
+    if (!shouldStartCompactionPrediction({
+      estimateTokens: estimate,
+      config,
+      ...(prediction.startRatio !== undefined ? { warmRatio: prediction.startRatio } : {}),
+    })) return;
+    const digest = compactionPrefixDigest(snapshot);
+    if (predictionTask !== null || predictionCandidate !== null) return;
+    const baseEventCount = snapshot.length;
+    const startedAt = Date.now();
+    predictionTask = (async () => {
+      const outcome = await coordinator.predict([...snapshot], {
+        overhead,
+        ...(view !== undefined ? { view } : {}),
+        config,
+      });
+      if (!outcome?.ok) return;
+      const event = outcome.event;
+      if (event.usage) {
+        await appendInternalEvent({
+          type: "usage",
+          inputTokens: event.usage.inputTokens,
+          outputTokens: event.usage.outputTokens,
+          source: "compaction_prediction",
+          model: event.model ?? predictionModelKey,
+        });
+      }
+      const adopted = { ...event } as CompactionEvent;
+      delete adopted.usage;
+      predictionCandidate = {
+        event: adopted,
+        baseEventCount,
+        prefixDigest: digest,
+        modelKey: predictionModelKey,
+        createdAt: startedAt,
+      };
+    })().catch((error) => {
+      console.warn("[compaction] predictive summary failed; synchronous fallback remains available:", error);
+    }).finally(() => {
+      predictionTask = null;
+    });
   };
   return {
     stream(_messages, _tools, call): AsyncIterable<ModelOutput> {
@@ -1180,8 +1250,30 @@ export function createSessionProvider(
           config: budgetConfig(),
           ...(decision ? { trigger: decision.trigger } : {}),
         });
+        const predictionConfig: CompactionConfig = { ...budgetConfig(), ...(amortize ?? {}) };
+        if (decision === null) {
+          startPrediction(events, estimate, overhead, view, predictionConfig);
+        }
+        if (decision?.trigger === "auto" && predictionTask !== null) {
+          await predictionTask;
+        }
+        let adoptedOutcome: Awaited<ReturnType<CompactionCoordinator["maybeCompact"]>> = null;
+        if (decision?.trigger === "auto" && predictionCandidate !== null) {
+          const verdict = validatePrediction(predictionCandidate, {
+            events,
+            modelKey: predictionModelKey,
+            now: Date.now(),
+            maxAgeMs: opts.compaction.prediction?.maxAgeMs ?? DEFAULT_PREDICTION_MAX_AGE_MS,
+          });
+          if (verdict.ok) {
+            adoptedOutcome = { ok: true, event: predictionCandidate.event };
+          } else {
+            console.debug("[compaction] discarded predictive candidate:", verdict.reason);
+          }
+          predictionCandidate = null;
+        }
         const boundaries = opts.solpi?.flags.economicCompaction ? deriveProgressBoundaries(events) : [];
-        const outcome = await coordinator.maybeCompact(events, decision, { overhead, signal: call?.signal,
+        const outcome = adoptedOutcome ?? await coordinator.maybeCompact(events, decision, { overhead, signal: call?.signal,
           ...(view !== undefined ? { view } : {}),
           ...(amortize ? { config: amortize } : {}),
           ...(opts.solpi?.flags.economicCompaction ? { economics: {

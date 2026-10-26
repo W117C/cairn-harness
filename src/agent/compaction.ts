@@ -82,6 +82,7 @@ export function calibrateFactor(events: AgentEvent[]): number {
   let pending = 0;
   for (const e of events) {
     if (e.type === "usage") {
+      if (e.source === "compaction_prediction" || e.source === "summary") continue;
       tokens += e.outputTokens;
       chars += pending;
       pending = 0;
@@ -668,6 +669,8 @@ export interface RunCompactionArgs {
    *  `auto` = harness 按阈值或超窗自己压（`overflow` 也归这一档——表里没有第三个词，
    *  而它同样是"非用户点"的）。回调抛错只告警，不阻断压缩（与既有手动路径同口径）。 */
   onPreCompact?: (trigger: "manual" | "auto") => Promise<void>;
+  /** Speculative execution: no context replacement happened, so PreCompact must not fire. */
+  prediction?: boolean;
 }
 
 /** 执行一次压缩：产出 compaction 事件（调用方 append）；不落流、不静默。 */
@@ -676,7 +679,7 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
   // §9.5 PreCompact 的生产端唯一在此——手动、阈值自动、超窗三条路都经过本函数。
   // 此前只有 agent-runner 的手动分支自己发过一次 ⇒ 按 `PreCompact(auto)` 写的钩子永不命中，
   // 而把这条挪到各调用方又会变成「同族出口各抄一份」（SessionEnd 双生产者就是前车之鉴）。
-  if (args.onPreCompact) {
+  if (args.onPreCompact && args.prediction !== true) {
     try {
       await args.onPreCompact(args.trigger === "manual" ? "manual" : "auto");
     } catch (err) {
@@ -923,6 +926,25 @@ export class CompactionCoordinator {
     if (outcome.ok) this.consecutiveFailures = 0;
     else if (outcome.kind === "failed") this.consecutiveFailures++;
     return outcome;
+  }
+
+  /** Build a candidate without changing failure counters or firing PreCompact. */
+  async predict(
+    events: AgentEvent[],
+    options: Pick<RunCompactionArgs, "overhead" | "signal" | "view"> & { config?: Partial<CompactionConfig> } = {},
+  ): Promise<CompactionOutcome | null> {
+    if (this.summarizerDisabled || !this.summarizer) return null;
+    return await runCompaction({
+      events,
+      ...(options.view !== undefined ? { view: options.view } : {}),
+      trigger: "auto",
+      reason: "threshold",
+      summarizer: this.summarizer,
+      config: options.config ? { ...this.config, ...options.config } : this.config,
+      overhead: options.overhead,
+      signal: options.signal,
+      prediction: true,
+    });
   }
 }
 

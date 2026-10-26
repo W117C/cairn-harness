@@ -141,7 +141,10 @@ export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: 
    *  **缺字段 = 这一笔定不了价**（旧日志、剧本/demo 通道、worker 没在流里留过档）⇒ 消费方按「价格不可知」记，
    *  绝不折成 $0（评估面的 `$ / 成功任务` 一直报不可测，缺的就是这一列，见 2026-09-27 第 148 页）。
    *  写侧只有一个盖章点：会话落盘的漏斗 `runAgent` 的 pipeline（主会话与 worker 子流都过它）。 */
-  model?: string }
+  model?: string; /** Optional source for usage that is not a normal main/worker turn.
+   * Absence preserves legacy semantics. Prediction usage is charged but excluded
+   * from context calibration. */
+  source?: "main" | "worker" | "summary" | "compaction_prediction" }
 /** 会话元信息：分支会话首行携带 branch_of 指向原会话；
  *  M2f：sidechat 会话首行携带 kind="sidechat" + parent_session_id 指向主会话；
  *  M4a：定时任务触发的新会话首行携带 origin="scheduled" + automation_id/automation_name（§12.2.2）。 */
