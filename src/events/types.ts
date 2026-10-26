@@ -501,6 +501,7 @@ export interface AgentMessageEvent {
   thread_id?: string;
   message_id?: string;
   fence?: string;
+  direction?: "to_agent" | "from_agent";
   kind: "progress" | "report";
   text: string;
 }

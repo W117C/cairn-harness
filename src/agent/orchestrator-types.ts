@@ -66,6 +66,11 @@ export interface WorkerContext {
 
 export interface WorkerHandle {
   agentId: string;
+  /** Stable logical conversation across follow-up runs; absent = legacy one-run worker. */
+  threadId?: string;
+  /** Fencing generation for this run. */
+  fence?: string;
+  followUpMessageIds: Set<string>;
   spawnCallId: string;
   mode: "read" | "write";
   task: string;
@@ -155,6 +160,15 @@ export interface WorkerHandle {
   /** 终态标记（finishInner 写入；依赖链终态裁决与 sequencer 同步点复用）。 */
   terminalStatus?: "done" | "failed" | "cancelled";
   lastResult?: Extract<AgentEvent, { type: "agent_result" }>;
+}
+
+export function workerThreadFields(
+  worker: Pick<WorkerHandle, "threadId" | "fence">,
+): { thread_id?: string; fence?: string } {
+  return {
+    ...(worker.threadId !== undefined ? { thread_id: worker.threadId } : {}),
+    ...(worker.fence !== undefined ? { fence: worker.fence } : {}),
+  };
 }
 
 // ---- M3c pipeline 链状态（sequencer 只读呈现；stages 批准后冻结） ----

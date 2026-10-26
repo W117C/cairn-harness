@@ -73,7 +73,7 @@ import { shell_rw, workerToolSpecs } from "./worker-shell-tools";
 import { clampTier, clipWorkerSummary, isPermissionMode, parseSpawnedAgentId, scanModelOutput, workerVerificationEvidence } from "./worker-report";
 import { priceForModel, priceTagText, spentUsdFor, type JoinPayloadBody, type WorkerPrice } from "./orchestrator-join";
 import { WorkerCancelled, defaultWorkerModel, isScriptedModel, usageNameOf, type WorkerModel } from "./worker-model";
-import { type OrchestratorOptions, type PipelineChain, type SpawnArgs, type StageRoleResolution, type WorkerContext, type WorkerHandle } from "./orchestrator-types";
+import { workerThreadFields, type OrchestratorOptions, type PipelineChain, type SpawnArgs, type StageRoleResolution, type WorkerContext, type WorkerHandle } from "./orchestrator-types";
 import { filterWorkerSpecs, filterWorkerTable, parseStringList, parseWorkerContext, scanStreamEvent, withAgentId } from "./worker-projection";
 import { globIntersects, semanticConflictsVia } from "./lease-conflicts";
 import { findToolCallEventId } from "./call-id-index";
@@ -185,16 +185,24 @@ export class Orchestrator {
     this.opts = {
       ...opts,
       emit: async (e: AgentEvent) => {
-        if (e.type === "usage") {
-          this.sessionUsage.inputTokens += e.inputTokens;
-          this.sessionUsage.outputTokens += e.outputTokens;
-          // 带 agent_id 的是 worker 子流（各自有档位，按 handle 上的真价单独成桶）
-          if (e.agent_id === undefined) {
-            this.mainUsage.inputTokens += e.inputTokens;
-            this.mainUsage.outputTokens += e.outputTokens;
+        let event = e;
+        if (event.type === "agent_spawned" || event.type === "agent_status" ||
+            event.type === "agent_message" || event.type === "agent_result") {
+          const worker = this.workers.get(event.agent_id);
+          if (worker !== undefined) {
+            event = { ...workerThreadFields(worker), ...event } as AgentEvent;
           }
         }
-        await rawEmit(e);
+        if (event.type === "usage") {
+          this.sessionUsage.inputTokens += event.inputTokens;
+          this.sessionUsage.outputTokens += event.outputTokens;
+          // 带 agent_id 的是 worker 子流（各自有档位，按 handle 上的真价单独成桶）
+          if (event.agent_id === undefined) {
+            this.mainUsage.inputTokens += event.inputTokens;
+            this.mainUsage.outputTokens += event.outputTokens;
+          }
+        }
+        await rawEmit(event);
       },
     };
     // A 簇状态基座：三份**活引用**（上面的 emit 包装照旧在原地累加 usage）+ 窄 opts 面 + 收尾回调。
@@ -308,7 +316,7 @@ export class Orchestrator {
 
   /** spawn_agent 工具体（loop 经 TOOLS 注入调用；验收脚本可携 ctx.callId 直调）。
    *  M3c：pipeline mode = 哑 sequencer（一个审批授权全链，零 LLM 展开）；depends_on 事件驱动依赖链。 */
-  async spawn(args: SpawnArgs, ctx: { callId?: string; recovery?: RecoveryBaseline }): Promise<ToolResult> {
+  async spawn(args: SpawnArgs, ctx: { callId?: string; recovery?: RecoveryBaseline; threadId?: string; fence?: string }): Promise<ToolResult> {
     const mode = typeof args.mode === "string" ? args.mode : "";
     if (!SPAWN_MODES.includes(mode)) {
       // 取值清单取自事实源：写死 "read|write|pipeline" 时 supervise 早已在册，
@@ -509,7 +517,7 @@ export class Orchestrator {
   private spawnReserve = 0;
 
   /** spawn 内核入口（模型面与 sequencer 逐环共用；stageRole 只由 sequencer 代码注入）。 */
-  private async spawnInternal(args: SpawnArgs, ctx: { callId?: string; cascadeFrom?: ModelTier; recovery?: RecoveryBaseline }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
+  private async spawnInternal(args: SpawnArgs, ctx: { callId?: string; cascadeFrom?: ModelTier; recovery?: RecoveryBaseline; threadId?: string; fence?: string }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
     const mode = typeof args.mode === "string" ? args.mode : "";
     // H2（审查 B-3）：入口 fail-closed——主会话已取消时不再派发任何 worker
     //（addEventListener 对已 abort 的 signal 不会触发，靠入口检查补上取消窗口）。
@@ -534,7 +542,7 @@ export class Orchestrator {
   /** spawn 预留段（占位后执行）。B2（审查）：read-only 父会话不允许派 write worker——
    *  worker 有效权限 ≤ 父（§11.7.6）：write worker 文件面/shell 面恒 auto，read-only 父放行
    *  等于把只读会话变成可写（permission_mode 记 read-only 实写 auto 的记录失真一并消除）。 */
-  private async spawnReserved(args: SpawnArgs, ctx: { callId?: string; cascadeFrom?: ModelTier; recovery?: RecoveryBaseline }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
+  private async spawnReserved(args: SpawnArgs, ctx: { callId?: string; cascadeFrom?: ModelTier; recovery?: RecoveryBaseline; threadId?: string; fence?: string }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
     const mode = typeof args.mode === "string" ? args.mode : "";
     if (mode === "write" && this.opts.parentMode === "read-only") {
       return { ok: false, output: "spawn_agent: 父会话为 read-only 档，不允许派 write worker（worker 权限 ≤ 父会话，§11.7.6）" };
@@ -663,7 +671,14 @@ export class Orchestrator {
         if (!approved) {
           return { ok: false, output: "spawn_agent: 未获批准（写租约相交未强行批准：" + detail + "）" };
         }
-        await this.opts.emit({ type: "agent_message", agent_id: agentId, kind: "progress", text: "[lease] 租约相交但已强行批准：" + detail } as AgentEvent);
+        await this.opts.emit({
+          type: "agent_message",
+          agent_id: agentId,
+          ...(ctx.threadId !== undefined ? { thread_id: ctx.threadId } : {}),
+          ...(ctx.fence !== undefined ? { fence: ctx.fence } : {}),
+          kind: "progress",
+          text: "[lease] 租约相交但已强行批准：" + detail,
+        } as AgentEvent);
       }
     }
 
@@ -710,6 +725,9 @@ export class Orchestrator {
     const parentEventId = ctx.callId ? await findToolCallEventId(this.opts.logPath, ctx.callId) : 0;
     const handle: WorkerHandle = {
       agentId,
+      ...(ctx.threadId !== undefined ? { threadId: ctx.threadId } : {}),
+      ...(ctx.fence !== undefined ? { fence: ctx.fence } : {}),
+      followUpMessageIds: new Set(),
       spawnCallId: ctx.callId ?? "",
       mode: mode as "read" | "write",
       task,
@@ -785,6 +803,7 @@ export class Orchestrator {
     const spawned: AgentEvent = {
       type: "agent_spawned",
       agent_id: agentId,
+      ...workerThreadFields(handle),
       parent_event_id: parentEventId,
       mode: mode as "read" | "write",
       task,
@@ -820,7 +839,12 @@ export class Orchestrator {
         } as AgentEvent);
       }
       await this.opts.emit(spawned);
-      await this.opts.emit({ type: "agent_status", agent_id: agentId, status: "running" } as AgentEvent);
+      await this.opts.emit({
+        type: "agent_status",
+        agent_id: agentId,
+        ...workerThreadFields(handle),
+        status: "running",
+      } as AgentEvent);
     } catch (err) {
       // 落流失败 = spawn 未成立：write worker 的 worktree 必须回收（不留孤儿）
       if (mode === "write") await removeWorktree(this.opts.workspace, agentId, { branch }).catch(() => {});
@@ -839,11 +863,23 @@ export class Orchestrator {
       return { ok: false, output: "spawn_agent: 事件落流失败，已回滚：" + (err instanceof Error ? err.message : String(err)) };
     }
     for (const w2 of symlinkWarnings) {
-      await this.opts.emit({ type: "agent_message", agent_id: agentId, kind: "progress", text: "[worktree] " + w2 } as AgentEvent);
+      await this.opts.emit({
+        type: "agent_message",
+        agent_id: agentId,
+        ...workerThreadFields(handle),
+        kind: "progress",
+        text: "[worktree] " + w2,
+      } as AgentEvent);
     }
     // M3c 插件角色 frontmatter 警告（hooks/mcpServers/permissionMode 忽略 + 警告，§9.6）落 worker 子流
     for (const w3 of stageRole?.warnings ?? []) {
-      await this.opts.emit({ type: "agent_message", agent_id: agentId, kind: "progress", text: "[role] " + w3 } as AgentEvent);
+      await this.opts.emit({
+        type: "agent_message",
+        agent_id: agentId,
+        ...workerThreadFields(handle),
+        kind: "progress",
+        text: "[role] " + w3,
+      } as AgentEvent);
     }
     void this.runWorker(handle).catch(() => {}); // 失败隔离：worker 边界永不炸主 loop（双保险，runWorker 内已 catch-all）
     return {
@@ -912,6 +948,39 @@ export class Orchestrator {
     }
     w.controller.abort();
     return true;
+  }
+
+  /** Append one idempotent parent follow-up at the next worker turn boundary. */
+  async followUp(
+    agentId: string,
+    messageId: string,
+    text: string,
+    threadId?: string,
+    fence?: string,
+  ): Promise<{ ok: boolean; duplicate?: boolean; reason?: string }> {
+    const w = this.workers.get(agentId);
+    if (!w) return { ok: false, reason: "unknown worker" };
+    if (w.finished) return { ok: false, reason: "worker already reached a terminal state" };
+    if (fence !== undefined && w.fence !== undefined && fence !== w.fence) {
+      return { ok: false, reason: "stale fence" };
+    }
+    if (threadId !== undefined && w.threadId !== undefined && threadId !== w.threadId) {
+      return { ok: false, reason: "thread identity mismatch" };
+    }
+    if (w.followUpMessageIds.has(messageId)) return { ok: true, duplicate: true };
+    if (text.trim() === "") return { ok: false, reason: "follow-up text is empty" };
+    await this.opts.emit({
+      type: "agent_message",
+      agent_id: agentId,
+      ...workerThreadFields(w),
+      message_id: messageId,
+      direction: "to_agent",
+      kind: "progress",
+      text,
+    } as AgentEvent);
+    w.events.push({ type: "user_message", content: text });
+    w.followUpMessageIds.add(messageId);
+    return { ok: true };
   }
 
   /** 仍在途（未终态）的 agent_id 清单。给模型面用：回执报"手上还有几个"，拒绝语报"哪些才是真的"。 */
@@ -1030,7 +1099,12 @@ export class Orchestrator {
     w.pauseWaiters.length = 0;
     for (const fn of waiters) fn();
     this.armStuckSilence(w); // 重新武装静默计时
-    void this.opts.emit({ type: "agent_status", agent_id: agentId, status: "running" } as AgentEvent).catch(() => {});
+    void this.opts.emit({
+      type: "agent_status",
+      agent_id: agentId,
+      ...workerThreadFields(w),
+      status: "running",
+    } as AgentEvent).catch(() => {});
     return true;
   }
 
@@ -1074,7 +1148,13 @@ export class Orchestrator {
     if (w.stuckActive || w.finished || w.controller.signal.aborted) return;
     w.stuckActive = true;
     w.paused = true;
-    await this.opts.emit({ type: "agent_status", agent_id: w.agentId, status: "waiting_input", reason: "stuck" } as AgentEvent);
+    await this.opts.emit({
+      type: "agent_status",
+      agent_id: w.agentId,
+      ...workerThreadFields(w),
+      status: "waiting_input",
+      reason: "stuck",
+    } as AgentEvent);
     await this.opts.emit({
       type: "agent_message",
       agent_id: w.agentId,
@@ -1354,7 +1434,14 @@ export class Orchestrator {
     const ts = Date.now();
     if (status === "cancelled") {
       if (w.mode === "write") await this.wmr.cleanupWrite(w, "cancelled");
-      await this.opts.emit({ type: "agent_status", agent_id: w.agentId, status: "cancelled", ...(reason ? { reason } : {}), ts } as AgentEvent);
+      await this.opts.emit({
+        type: "agent_status",
+        agent_id: w.agentId,
+        ...workerThreadFields(w),
+        status: "cancelled",
+        ...(reason ? { reason } : {}),
+        ts,
+      } as AgentEvent);
       await this.wmr.emitSyntheticResult(w, {
         ok: false,
         body: { agent_id: w.agentId, status: "cancelled", reason: reason ?? "用户取消" },
@@ -1381,8 +1468,20 @@ export class Orchestrator {
         }
         if (diff !== null) await this.wmr.emitWorkerDiffSnapshot(w, diff, llmNote);
       }
-      await this.opts.emit({ type: "agent_message", agent_id: w.agentId, kind: "report", text: clipped.text } as AgentEvent);
-      await this.opts.emit({ type: "agent_status", agent_id: w.agentId, status: "done", ts } as AgentEvent);
+      await this.opts.emit({
+        type: "agent_message",
+        agent_id: w.agentId,
+        ...workerThreadFields(w),
+        kind: "report",
+        text: clipped.text,
+      } as AgentEvent);
+      await this.opts.emit({
+        type: "agent_status",
+        agent_id: w.agentId,
+        ...workerThreadFields(w),
+        status: "done",
+        ts,
+      } as AgentEvent);
       const filesChanged = diff?.files ?? [];
       const diffRef = w.mode === "write" && w.worktree && w.baseCommit ? w.worktree + "@" + w.baseCommit : undefined;
       // W4b：只在本次真改过文件时标证据（没写代码就无所谓「跑过了」）。
@@ -1393,6 +1492,7 @@ export class Orchestrator {
       const doneResult: Extract<AgentEvent, { type: "agent_result" }> = {
         type: "agent_result",
         agent_id: w.agentId,
+        ...workerThreadFields(w),
         status: "done",
         summary: clipped.text,
         ...(clipped.truncated ? { summary_truncated: true } : {}),
@@ -1433,11 +1533,19 @@ export class Orchestrator {
     } else {
       if (w.mode === "write") await this.wmr.cleanupWrite(w, "failed");
       // failed：错误永不冒充结果——status/reason 分型；max_turns 附 partial 报告（§4.4.8 闸门）
-      await this.opts.emit({ type: "agent_status", agent_id: w.agentId, status: "failed", reason, ts } as AgentEvent);
+      await this.opts.emit({
+        type: "agent_status",
+        agent_id: w.agentId,
+        ...workerThreadFields(w),
+        status: "failed",
+        reason,
+        ts,
+      } as AgentEvent);
       const failedSpent = spentUsdFor(w.price, w.usage);
       const failedResult: Extract<AgentEvent, { type: "agent_result" }> = {
         type: "agent_result",
         agent_id: w.agentId,
+        ...workerThreadFields(w),
         status: "failed",
         ...(reason ? { reason } : {}),
         summary: clipped.text,
