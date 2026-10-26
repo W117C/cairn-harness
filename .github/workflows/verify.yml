@@ -29,7 +29,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # 全量历史（2026-10-12 第一次 CI 自评抓到的洞）：本仓判卷里有五处**吃 git 历史**——
           # docs-check 的 D-5（PROGRESS.md 引了 445 个提交 sha，逐个核可达）、
@@ -38,7 +38,7 @@ jobs:
           # 缺省 fetch-depth:1 让它们全部读成「不可达」⇒ 13 条假红。
           # 代价：多拉约 128MB 历史。对一条 1639 笔提交的私有仓，这是判据正确性的对价。
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         # 第 475 页：**这一格刻意不写 `with: version:`**——版本只住在 package.json 的 `packageManager`
         # 里（现读 `pnpm@11.21.0`），action 自己会去读它。两处同时写会被 action 直接判红
         # （`Multiple versions of pnpm specified`，10-13 那趟实测），那比"漂"更早暴露，但也更冤：
@@ -46,7 +46,7 @@ jobs:
         # （9 读 package.json 的 `pnpm` 字段、11 读 `pnpm-workspace.yaml`，11 对前者只印 warning 就忽略）
         # ⇒ 差一个大版本，同一份锁文件在两处会被解释成两种配置，CI 上直接
         # `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`。
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: pnpm
