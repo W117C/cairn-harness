@@ -1341,6 +1341,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       ...(rt ? { resolveTool: (name: string) => resolveLivePluginTool(name, rt) } : {}),
       provider: createProvider(promptText, systemPromptFor(opts.mode) + evolutionNote, modelSelection, {
         ...opts, emit: pipeline, solpi, promptCache: providerSettings.promptCache,
+        prediction: { enabled: true },
         // 自进化「提前压缩」（批次 A4）：上一轮读数说贵 ⇒ 自动压缩触发线从缺省 0.9 压到
         // COMPRESS_EARLY_RATIO（值唯一事实源在 evolution/advice.ts）。缺省不传 = 逐字旧行为。
         ...(evolutionBias.contextAction === "compress-early" ? { compactionConfig: { ratio: COMPRESS_EARLY_RATIO } } : {}),

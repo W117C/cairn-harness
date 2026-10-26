@@ -7,7 +7,7 @@
 // 本模块**不反向依赖装配根**（同 state-handlers / scheduler-runtime / demo-scripted 那一族）：
 // 入参 `SessionProviderOptions` 自己声明（原先写作 `Pick<RunOptions, "logPath" | "workspace" |
 // "attachments"> & {…}`），见该接口头上的说明。
-import { createSessionProvider, gateToolSpecs, type SessionTransport } from "../agent/session-provider";
+import { createSessionProvider, gateToolSpecs, type SessionCompaction, type SessionTransport } from "../agent/session-provider";
 import type { CompactionConfig } from "../agent/compaction";
 import type { SolpiRuntime } from "../agent/solpi-runtime";
 import type { AgentEvent } from "../events";
@@ -55,6 +55,7 @@ export interface SessionProviderOptions {
    *  给了就透传给 SessionCompaction.config，覆盖缺省 ratio。缺省不传 = compaction
    *  用自己的缺省（逐字旧行为）。 */
   compactionConfig?: Partial<CompactionConfig>;
+  prediction?: NonNullable<SessionCompaction["prediction"]>;
   /** 本 provider 每次请求末尾追加的临时 user 消息（不进日志）：会话末沉淀轮送指令用。 */
   ephemeralUserTurn?: string;
   /** 识图活盒子：loop 读到图后，provider 在下一轮请求里取走附上（见 image-channel.ts）。
@@ -106,6 +107,7 @@ export function createProvider(
         // 自进化「提前压缩」偏置（闭环 v2 · 批次 A4）：上一轮读数说贵 ⇒ 触发 ratio 压到
         // COMPRESS_EARLY_RATIO（值唯一事实源在 evolution/advice.ts，调用方取来递进来）。
         ...(sessionOptions.compactionConfig ? { config: sessionOptions.compactionConfig } : {}),
+        ...(sessionOptions.prediction ? { prediction: sessionOptions.prediction } : {}),
       },
       emit: sessionOptions.emit,
       plugins: sessionOptions.plugins,
