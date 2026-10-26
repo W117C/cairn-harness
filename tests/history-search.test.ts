@@ -96,7 +96,7 @@ describe("searchHistory", () => {
   it("excludes hidden reasoning and clips excerpts by Unicode code point", () => {
     const hidden = searchHistory({
       query: "SECRET",
-      entries: [entry({ type: "thinking_delta", text: "SECRET plan" }, 1)],
+      entries: [entry({ type: "thinking_delta", callId: "reasoning-1", text: "SECRET plan" }, 1)],
     });
     expect(hidden).toMatchObject({ kind: "ok", hits: [] });
 

@@ -41,9 +41,9 @@ import {
   RECALL_MAX_TOPICS,
   WAKE_MIN_SCORE,
   scoreRecallCandidates,
-  selectRecall,
   type RecallInput,
 } from "./retrieval.js";
+import { selectRecallHybrid, type EmbeddingProvider } from "./semantic.js";
 import { bumpStat } from "./strength.js";
 
 export const MEMORY_TOKEN_BUDGET_DEFAULT = 6_000;
@@ -197,25 +197,37 @@ async function recallSection(args: {
   stats: Record<string, import("./strength.js").MemoryStat>;
   limit: number;
   nowISO: string;
-}): Promise<{ section: Section | null; picked: string[] }> {
+  embedding?: { provider: EmbeddingProvider; signal?: AbortSignal };
+}): Promise<{
+  section: Section | null;
+  picked: string[];
+  mode: "lexical" | "hybrid" | "hybrid-fallback";
+  reason?: string;
+}> {
   const query = args.queryText?.trim();
-  if (query === undefined || query === "") return { section: null, picked: [] };
+  if (query === undefined || query === "") {
+    return { section: null, picked: [], mode: args.embedding ? "hybrid" : "lexical" };
+  }
   const raw = await readTextOrNull(args.dir + "/" + MEMORY_INDEX);
-  if (raw === null) return { section: null, picked: [] };
+  if (raw === null) return { section: null, picked: [], mode: args.embedding ? "hybrid" : "lexical" };
   const entries = parseIndex(raw);
-  if (entries.length === 0) return { section: null, picked: [] };
+  if (entries.length === 0) return { section: null, picked: [], mode: args.embedding ? "hybrid" : "lexical" };
   const scored = new Map(scoreRecallCandidates(query, entries).map((s) => [s.topic, s]));
-  if (scored.size === 0) return { section: null, picked: [] };
+  if (scored.size === 0 && !args.embedding) {
+    return { section: null, picked: [], mode: "lexical" };
+  }
   // 预筛 + 有界读盘：只给「词面分已过线」的候选读正文（休眠条目按更高的唤醒门槛筛），
   // 且最多读 RECALL_CANDIDATE_BODIES_MAX 份——selectRecall 的强度微调只能在这个有界集内重排，
   // 这个界是**词面分降序**切的，不是遍历顺序（确定性不交给 readdir）。
-  const qualified = entries
-    .filter((e) => {
-      const s = scored.get(e.topic);
-      if (s === undefined) return false;
-      return s.score >= (args.stats[e.topic]?.dormant === true ? WAKE_MIN_SCORE : RECALL_MIN_SCORE);
-    })
-    .sort((a, b) => (scored.get(b.topic)!.score - scored.get(a.topic)!.score) || (a.topic < b.topic ? -1 : 1))
+  const qualified = (args.embedding
+    ? entries
+    : entries
+      .filter((e) => {
+        const s = scored.get(e.topic);
+        if (s === undefined) return false;
+        return s.score >= (args.stats[e.topic]?.dormant === true ? WAKE_MIN_SCORE : RECALL_MIN_SCORE);
+      })
+      .sort((a, b) => (scored.get(b.topic)!.score - scored.get(a.topic)!.score) || (a.topic < b.topic ? -1 : 1)))
     .slice(0, RECALL_CANDIDATE_BODIES_MAX);
   const inputs: RecallInput[] = [];
   for (const e of qualified) {
@@ -230,18 +242,51 @@ async function recallSection(args: {
     }
     inputs.push({ ...e, stat: args.stats[e.topic], body });
   }
-  const picks = selectRecall(query, inputs, { k: args.limit, nowISO: args.nowISO });
-  if (picks.length === 0) return { section: null, picked: [] };
+  const outcome = await selectRecallHybrid(query, inputs, {
+    k: args.limit,
+    nowISO: args.nowISO,
+    ...(args.embedding ? { embedding: args.embedding } : {}),
+  });
+  const picks = outcome.picks;
+  if (picks.length === 0) {
+    if (outcome.mode === "hybrid-fallback") {
+      return {
+        section: {
+          header: "[RECALL 检索降级（hybrid-fallback）]",
+          lines: ["[hybrid-fallback] 语义增强不可用，词面回退也没有命中：" + (outcome.reason ?? "unknown error")],
+        },
+        picked: [],
+        mode: outcome.mode,
+        ...(outcome.reason ? { reason: outcome.reason } : {}),
+      };
+    }
+    return {
+      section: null,
+      picked: [],
+      mode: outcome.mode,
+    };
+  }
   const lines: string[] = [];
+  if (outcome.mode === "hybrid-fallback") {
+    lines.push("[hybrid-fallback] 语义增强不可用，已保留词面检索：" + (outcome.reason ?? "unknown error"));
+  }
   for (const p of picks) {
     lines.push(
-      "- " + p.topic + " ｜ " + p.type + " ｜" + (p.woke ? "〔休眠条目·本轮强命中唤醒〕" : "") + "〔命中: " + p.matched.join("、") + "〕 " + p.headline,
+      "- " + p.topic + " ｜ " + p.type + " ｜" + (p.woke ? "〔休眠条目·本轮强命中唤醒〕" : "") +
+        (p.matched.length > 0 ? "〔命中: " + p.matched.join("、") + "〕 " : "〔语义相似〕 ") + p.headline,
     );
     for (const l of wrapExcerptLines(p.excerpt)) lines.push("  " + l);
   }
   return {
-    section: { header: "[RECALL 按本轮问话词面命中的记忆正文（" + args.label + " top " + String(picks.length) + "；词面命中≠重要性排名，命中词随行）]", lines },
+    section: {
+      header: outcome.mode === "hybrid"
+        ? "[RECALL 词面+语义命中的记忆正文（" + args.label + " top " + String(picks.length) + "；命中≠重要性排名）]"
+        : "[RECALL 按本轮问话词面命中的记忆正文（" + args.label + " top " + String(picks.length) + "；词面命中≠重要性排名，命中词随行）]",
+      lines,
+    },
     picked: picks.map((p) => p.topic),
+    mode: outcome.mode,
+    ...(outcome.reason ? { reason: outcome.reason } : {}),
   };
 }
 
@@ -421,6 +466,11 @@ export interface MemoryInjectionOptions {
   onExternalRef?: (ref: string) => Promise<boolean> | boolean;
   /** 审批决议落账（缺省写全局记忆目录 external-refs.json）。 */
   persistRefDecision?: (ref: string, approved: boolean) => Promise<void> | void;
+  /** Optional semantic enhancement. Absence keeps the exact lexical path. */
+  embedding?: {
+    provider: EmbeddingProvider;
+    signal?: AbortSignal;
+  };
 }
 
 export interface MemoryInjection {
@@ -428,6 +478,10 @@ export interface MemoryInjection {
   global: string | null;
   /** M7：本轮 RECALL 选中的 topic（项目层+全局层；观测面/判卷用，注入文本里同样可见）。 */
   recall: string[];
+  retrieval: {
+    mode: "lexical" | "hybrid" | "hybrid-fallback";
+    reason?: string;
+  };
   charsCurrent: number;
   charsLimit: number;
   tokens: number;
@@ -481,8 +535,14 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
   const projIndex = indexSectionFiltered("[MEMORY.md 索引]", projIndexRaw, projStats);
   const globIndex = indexSectionFiltered("[MEMORY.md 索引（全局）]", globIndexRaw, globStats);
   const recallLimit = opts.recallLimit ?? RECALL_MAX_TOPICS;
-  const recallProj = await recallSection({ dir: projDir, label: "项目层", queryText: opts.queryText, stats: projStats, limit: recallLimit, nowISO });
-  const recallGlob = await recallSection({ dir: globDir, label: "全局层", queryText: opts.queryText, stats: globStats, limit: recallLimit, nowISO });
+  const recallProj = await recallSection({
+    dir: projDir, label: "项目层", queryText: opts.queryText, stats: projStats, limit: recallLimit, nowISO,
+    ...(opts.embedding ? { embedding: opts.embedding } : {}),
+  });
+  const recallGlob = await recallSection({
+    dir: globDir, label: "全局层", queryText: opts.queryText, stats: globStats, limit: recallLimit, nowISO,
+    ...(opts.embedding ? { embedding: opts.embedding } : {}),
+  });
 
   // 段内容统一过「脱敏 → 外部引用治理 → 控制标签转义」再进块；包装产生**新对象**，
   // 预算淘汰改的是这些新对象——后面给命中记账必须认它们（认淘汰前的旧对象就是账实不符）。
@@ -557,10 +617,24 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
   const survivedRecallGlob = recallGlobWrapped !== null ? recordRecallHitsForSurvivors(recallGlobWrapped, globDir, recallGlob.picked) : [];
   const charsCurrent = totalChars();
   const tokensCurrent = Math.ceil(totalWeight());
+  const fallbackReason = recallProj.mode === "hybrid-fallback"
+    ? recallProj.reason
+    : recallGlob.mode === "hybrid-fallback"
+      ? recallGlob.reason
+      : undefined;
+  const retrievalMode = fallbackReason !== undefined
+    ? "hybrid-fallback"
+    : recallProj.mode === "hybrid" || recallGlob.mode === "hybrid"
+      ? "hybrid"
+      : "lexical";
   return {
     project: keptProject.length > 0 ? renderBlock("project", keptProject, charsLimit, charsCurrent, tokensCurrent, tokenBudget, truncated, evictedOf("project")) : null,
     global: keptGlobal.length > 0 ? renderBlock("global", keptGlobal, charsLimit, charsCurrent, tokensCurrent, tokenBudget, truncated, evictedOf("global")) : null,
     recall: [...survivedRecallProj, ...survivedRecallGlob],
+    retrieval: {
+      mode: retrievalMode,
+      ...(fallbackReason !== undefined ? { reason: fallbackReason } : {}),
+    },
     charsCurrent,
     charsLimit,
     tokens: tokensCurrent,
@@ -569,7 +643,10 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
 }
 
 /** 一次注入都没有时的空壳（`buildMemoryInjectionSafe` 的降级支用它，别在三处调用点各造一份字面量）。 */
-export const EMPTY_MEMORY_INJECTION: MemoryInjection = { project: null, global: null, recall: [], charsCurrent: 0, charsLimit: 0, tokens: 0, truncated: false };
+export const EMPTY_MEMORY_INJECTION: MemoryInjection = {
+  project: null, global: null, recall: [], retrieval: { mode: "lexical" },
+  charsCurrent: 0, charsLimit: 0, tokens: 0, truncated: false,
+};
 
 /** 「这轮没有记忆」与「这个工作区没写过记忆」从前同形：三处调用点各自 `try/catch`，异常只走
  *  `console.debug`（两处甚至是空 catch）就返回空壳 ⇒ 模型据"没有 LESSONS"决定要不要自己翻历史，
