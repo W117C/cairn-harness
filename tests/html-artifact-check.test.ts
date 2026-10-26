@@ -102,7 +102,7 @@ describe("html-artifact-check：产物字节层的四条判据", () => {
   });
 
   it("本仓那份真实产物跑得过（这一格不是空转的尺）", () => {
-    const r = run(["pelican-bicycle.html"]);
+    const r = run(["fixtures/artifacts/cycling-animation.html"]);
     // 产物被清掉时如实跳过（不假绿也不假红）；在就必须退 0——否则判据与真实产物脱节。
     if (r.out.includes("读不到") || r.out.includes("不是文件")) { expect(r.code).toBe(1); return; }
     expect(r.code).toBe(0);

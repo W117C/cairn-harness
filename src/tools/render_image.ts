@@ -10,7 +10,7 @@ import { artifactKindOf } from "./write_file.js";
  *
  *  为什么需要它：`read_image` 只能读**已经在盘上**的图片文件。而 agent 写的可视化产物
  *  （HTML/SVG/动画）恰恰还没有图片形态——要"真的看过"，得先渲染。
- *  实测（2026-10-16，用本仓那份 pelican-bicycle.html）：Chrome headless 1.2s 出图，
+ *  实测（2026-10-16，用本仓那份 fixtures/artifacts/cycling-animation.html）：Chrome headless 1.2s 出图，
  *  `--virtual-time-budget` 取不同值确实得到不同帧（PNG sha 不同）⇒ 动画可分段看。
  *
  *  三道闸，缺一不可：
