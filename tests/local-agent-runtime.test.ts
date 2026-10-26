@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createLocalAgentRuntime,
+  type LocalAgentRuntime,
   type LocalAgentOrchestrator,
 } from "../src/agent/local-agent-runtime";
 import { projectAgentThreads } from "../src/agent/agent-thread-projector";
@@ -117,6 +118,32 @@ describe("createLocalAgentRuntime", () => {
     expect(snapshot[0]?.runIds).toHaveLength(2);
   });
 
+  it("starts a continuation when the executor finished before the runtime observed it", async () => {
+    const driver = new FakeOrchestrator();
+    const runtime = createLocalAgentRuntime(driver);
+    const spawned = await runtime.spawn({ task: "inspect", mode: "read", fence: "f1" });
+    const firstRunId = spawned.currentRunId!;
+    driver.finish(firstRunId, "first summary from executor");
+
+    const receipt = await runtime.send(spawned.id, { id: "m-fresh", text: "continue now" });
+
+    expect(receipt.ok).toBe(true);
+    expect(driver.spawns).toHaveLength(2);
+    expect(String(driver.spawns[1]?.args.task)).toContain("first summary from executor");
+    expect(String(driver.spawns[1]?.args.task)).toContain("continue now");
+  });
+
+  it("refreshes list_agents from executor state without a prior wait", async () => {
+    const driver = new FakeOrchestrator();
+    const runtime = createLocalAgentRuntime(driver);
+    const spawned = await runtime.spawn({ task: "inspect", mode: "read", fence: "f1" });
+    driver.finish(spawned.currentRunId!, "completed");
+
+    const snapshot = await runtime.list();
+
+    expect(snapshot[0]).toMatchObject({ status: "done", summary: "completed" });
+  });
+
   it("rejects a stale resume fence", async () => {
     const driver = new FakeOrchestrator();
     const runtime = createLocalAgentRuntime(driver);
@@ -140,6 +167,28 @@ describe("createLocalAgentRuntime", () => {
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(true);
     expect(second.duplicate).toBe(true);
+  });
+
+  it("exposes a stable thread id in the spawn receipt while preserving the raw spawn result and args", async () => {
+    const driver = new FakeOrchestrator();
+    const runtime: LocalAgentRuntime = createLocalAgentRuntime(driver);
+    const spawned = await runtime.spawnWithReceipt(
+      { threadId: "thread-a", task: "inspect", mode: "read", fence: "f1" },
+      { task: "inspect", mode: "read", role: "review", tier: "strong", depends_on: ["upstream"] },
+    );
+
+    expect(spawned.record?.id).toBe("thread-a");
+    expect(spawned.result.ok).toBe(true);
+    expect(JSON.parse(spawned.result.output)).toMatchObject({
+      agent_id: "run-1",
+      run_id: "run-1",
+      thread_id: "thread-a",
+    });
+    expect(driver.spawns[0]?.args).toMatchObject({
+      role: "review",
+      tier: "strong",
+      depends_on: ["upstream"],
+    });
   });
 });
 

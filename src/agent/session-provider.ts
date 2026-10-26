@@ -437,6 +437,66 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         ),
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "send_agent",
+        description:
+          "向已有的逻辑 agent thread 追加一条用户侧后续要求。运行中会排到下一轮边界；终态则用原任务、上一摘要和这条要求启动同 thread 的新 run。" +
+          "thread_id 取 spawn_agent 回执里的 thread_id 或 list_agents 返回的 id；message_id 相同即重复投递，不会执行两次。" +
+          "何时用：原方向基本正确，只需要补约束、换验证目标或继续未完成部分。何时不用：目标已根本改变——应取消并重新派生。",
+        parameters: obj(
+          {
+            thread_id: { type: "string", description: "逻辑 agent thread id（不是 run id）" },
+            message: { type: "string", description: "要追加给该 thread 的后续要求" },
+            message_id: { type: "string", description: "幂等键；缺省使用本次工具 call id，同一键重复调用不会二次投递" },
+            fence: { type: "string", description: "可选 fencing token；与 thread 当前值不符时拒绝，防止旧控制面写入新 run" },
+          },
+          ["thread_id", "message"],
+        ),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "list_agents",
+        description:
+          "列出本会话当前 AgentRuntime 中的逻辑 agent thread：稳定 id、当前 run_id、状态、fence、任务、摘要与用量。" +
+          "何时用：接续上一轮、需要 resume/close/follow-up 前先确认当前状态；只返回当前会话，不提供跨会话查询。",
+        parameters: obj({}, []),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "resume_agent",
+        description:
+          "用当前 fencing token 恢复等待中的 agent run。fence 不匹配时拒绝，不能用旧 token 恢复已经换代或重启的 run。" +
+          "何时用：list_agents 显示 waiting，且你确认应继续执行。",
+        parameters: obj(
+          {
+            thread_id: { type: "string", description: "逻辑 agent thread id" },
+            fence: { type: "string", description: "list_agents 返回的当前 fence" },
+          },
+          ["thread_id", "fence"],
+        ),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "close_agent",
+        description:
+          "关闭逻辑 agent thread 并等待执行器确认停止；重复关闭是幂等的。不会顺手关闭其他 thread。" +
+          "何时用：任务已完成、目标已取消，或确认不再需要该 agent。",
+        parameters: obj(
+          {
+            thread_id: { type: "string", description: "逻辑 agent thread id" },
+          },
+          ["thread_id"],
+        ),
+      },
+    },
     // 长任务的锚点此前只有人能写：模型每轮读回的还是三小时前那句人话，而它此刻已知道自己要交付什么。
     // 这一条只给「改措辞」，不给「改预算」——轮次帽与美元闸归人（工具拒 + 投影层兜底，两处都写死）。
     {
@@ -509,6 +569,10 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
       s.function.name !== "remember" &&
       s.function.name !== "wait_for_agents" &&
       s.function.name !== "cancel_agents" &&
+      s.function.name !== "send_agent" &&
+      s.function.name !== "list_agents" &&
+      s.function.name !== "resume_agent" &&
+      s.function.name !== "close_agent" &&
       !AUTOMATION_TOOL_NAMES.includes(s.function.name),
     ));
   }
@@ -539,11 +603,14 @@ function readOnlyDescriptions(specs: GlmToolSpec[]): GlmToolSpec[] {
 export const OPTIONAL_TOOL_NAMES = {
   goalTools: ["refine_goal"],
   memoryTools: ["remember"],
-  /** 子代理三件套：**固定开销里最大的一块（611 tok/轮）**，且它是每一轮重送的静态段。
+  /** 子代理工具族：**固定开销里最大的一块**，且它是每一轮重送的静态段。
    *  缺省挂（能力 4 的正面）；`settings.subagentTools: false` 时整族从模型面摘掉。
    *  关掉它不是为了省钱省到抠——是给「这一轮根本不派 worker」的任务一个诚实的开关：
    *  看不见的工具不会被尝试，模型也就不会把一轮花在派一个派不出来的 worker 上。 */
-  subagentTools: ["spawn_agent", "wait_for_agents", "cancel_agents"],
+  subagentTools: [
+    "spawn_agent", "wait_for_agents", "cancel_agents",
+    "send_agent", "list_agents", "resume_agent", "close_agent",
+  ],
   /** `.agent/lsp.json` 没配（或显式 `{"lsp": false}`）时 lsp 工具**必然抛**
    *  「未启用——工作区 .agent/lsp.json 缺少 lsp 配置」（lsp.ts:602）⇒ 挂着它只有成本没有能力。 */
   lspTools: ["lsp"],

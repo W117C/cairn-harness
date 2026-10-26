@@ -18,6 +18,7 @@ import { buildMap } from "../agent/map/build";
 import { computePrune, writePruneAttachments } from "../agent/prune";
 import {
   createSessionSummarizer,
+  OPTIONAL_TOOL_NAMES,
   type SessionPluginTool,
 } from "../agent/session-provider";
 import { ClarifyGate, PlanGate } from "../agent/gates";
@@ -37,6 +38,7 @@ import { createImpactQueryTool, impactQuerySpec } from "../tools/impact-query";
 import { createDiagnoseTool, diagnoseSpec, diagnoseSurface } from "../tools/diagnose";
 import { createWaitForAgentsTool } from "../tools/wait_for_agents";
 import { createCancelAgentsTool } from "../tools/cancel_agents";
+import { createAgentLifecycleTools } from "../tools/agent-lifecycle";
 import { createRefineGoalTool } from "../tools/refine_goal";
 import { createCurrentSessionSearchHistoryTool, searchHistorySpec } from "../tools/search-history";
 import { makeWebFetch, webFetch, type WebFetchDeps } from "../tools/web_fetch";
@@ -119,10 +121,16 @@ import {
   orchestratorForAgent,
   orchestratorForApproval,
   orchestratorForMerge,
+  parseSpawnedAgentId,
   type OrchestratorOptions,
   type SpawnArgs,
   type WorkerModel,
 } from "../agent/orchestrator";
+import {
+  createLocalAgentRuntime,
+  type LocalAgentOrchestrator,
+  type LocalAgentRuntime,
+} from "../agent/local-agent-runtime";
 import type { RespawnArgs } from "../agent/recovery";
 import {
   cleanOrphanWorktree,
@@ -289,6 +297,7 @@ let interactiveRunAbort: AbortController | null = null;
 interface RunScope {
   session: Session;
   orchestrator: Orchestrator | null;
+  agentRuntime: LocalAgentRuntime | null;
 }
 const runScopeALS = new AsyncLocalStorage<RunScope>();
 /** 工具闭包取「当前 run」的会话态：run 内 = scope（并发隔离）；run 外遗留路径 = 交互面全局（行为不变）。 */
@@ -298,6 +307,81 @@ function currentSession(): Session | null {
 /** 工具闭包取「当前 run」的编排器：语义同上。 */
 function currentOrchestrator(): Orchestrator | null {
   return runScopeALS.getStore()?.orchestrator ?? activeOrchestrator;
+}
+
+const agentRuntimesByLogPath = new Map<string, LocalAgentRuntime>();
+
+function currentAgentRuntime(): LocalAgentRuntime | null {
+  return runScopeALS.getStore()?.agentRuntime ?? null;
+}
+
+function createSessionAgentRuntimeDriver(): LocalAgentOrchestrator {
+  const runOwners = new Map<string, Orchestrator>();
+  const orchestratorForRun = (runId: string): Orchestrator | null =>
+    runOwners.get(runId) ?? orchestratorForAgent(runId);
+
+  return {
+    async spawn(args, ctx) {
+      const orchestrator = currentOrchestrator();
+      if (orchestrator === null) return { ok: false, output: "spawn_agent: 编排器未接线（fail-closed）" };
+      const result = await orchestrator.spawn(args, ctx);
+      if (result.ok) {
+        const runId = parseSpawnedAgentId(result.output);
+        if (runId !== undefined) runOwners.set(runId, orchestrator);
+      }
+      return result;
+    },
+    async followUp(agentId, messageId, text, threadId, fence) {
+      const orchestrator = orchestratorForRun(agentId);
+      if (orchestrator === null) return { ok: false, reason: "unknown worker" };
+      return orchestrator.followUp(agentId, messageId, text, threadId, fence);
+    },
+    async waitForAgents(ids, timeoutMs) {
+      const groups = new Map<Orchestrator, string[]>();
+      const rows: Array<{ agent_id: string; status: string; summary: string }> = [];
+      const timedOut: string[] = [];
+      for (const id of ids) {
+        const orchestrator = orchestratorForRun(id);
+        if (orchestrator === null) {
+          rows.push({ agent_id: id, status: "unknown", summary: "unknown agent run" });
+          continue;
+        }
+        const group = groups.get(orchestrator) ?? [];
+        group.push(id);
+        groups.set(orchestrator, group);
+      }
+      const settled = await Promise.all([...groups].map(async ([orchestrator, group]) => ({
+        body: await orchestrator.waitForAgents(group, timeoutMs),
+      })));
+      for (const { body } of settled) {
+        rows.push(...body.rows.map((row) => ({
+          agent_id: row.agent_id,
+          status: row.status,
+          summary: row.summary,
+        })));
+        timedOut.push(...body.timedOut);
+      }
+      return { rows, timedOut };
+    },
+    resumeAgent(agentId) {
+      return orchestratorForRun(agentId)?.resumeAgent(agentId) ?? false;
+    },
+    cancelAgent(agentId) {
+      return orchestratorForRun(agentId)?.cancelAgent(agentId) ?? false;
+    },
+    async appendProtocol(event) {
+      const orchestrator = currentOrchestrator();
+      if (orchestrator !== null) await orchestrator.appendProtocol(event);
+    },
+  };
+}
+
+function agentRuntimeForLogPath(logPath: string): LocalAgentRuntime {
+  const existing = agentRuntimesByLogPath.get(logPath);
+  if (existing !== undefined) return existing;
+  const created = createLocalAgentRuntime(createSessionAgentRuntimeDriver());
+  agentRuntimesByLogPath.set(logPath, created);
+  return created;
 }
 
 /** run 起一次模型选择：把「env 覆盖 + 设置盘 + 逐请求指定」三输入喂给唯一那把纯函数 `resolveMainModel`。
@@ -625,6 +709,22 @@ function injectOmitFaceTools(): void {
       async run(args, ctx) {
         const orch = currentOrchestrator();
         if (!orch) return { ok: false, output: "spawn_agent: 编排器未接线（fail-closed）" };
+        const runtime = currentAgentRuntime();
+        const mode = args.mode;
+        const task = args.task;
+        if (runtime !== null && (mode === "read" || mode === "write") && typeof task === "string") {
+          const spawned = await runtime.spawnWithReceipt({
+            task,
+            mode,
+            ...(typeof args.role === "string" ? { role: args.role } : {}),
+            ...(typeof args.model === "string" ? { model: args.model } : {}),
+            ...(typeof args.max_turns === "number" ? { maxTurns: args.max_turns } : {}),
+            ...(Array.isArray(args.resources) && args.resources.every((item) => typeof item === "string")
+              ? { resources: args.resources as string[] }
+              : {}),
+          }, args as SpawnArgs);
+          return spawned.result;
+        }
         return orch.spawn(args as SpawnArgs, { callId: ctx.callId });
       },
     };
@@ -635,6 +735,11 @@ function injectOmitFaceTools(): void {
     // 动态调整的另一半：模型自己撤自己派出的 worker（同一注入面、同一 fail-closed 口径）。
     // 缺它时 join 文案里那句"可再取消"就是一扇不存在的门，而"派错了只能干等它跑完"是能力 4 的反面。
     (TOOLS as unknown as Record<string, Tool>).cancel_agents = createCancelAgentsTool(() => currentOrchestrator());
+    const lifecycle = createAgentLifecycleTools(() => currentAgentRuntime());
+    (TOOLS as unknown as Record<string, Tool>).send_agent = lifecycle.send_agent;
+    (TOOLS as unknown as Record<string, Tool>).list_agents = lifecycle.list_agents;
+    (TOOLS as unknown as Record<string, Tool>).resume_agent = lifecycle.resume_agent;
+    (TOOLS as unknown as Record<string, Tool>).close_agent = lifecycle.close_agent;
   }
   // 长任务锚点的模型侧「改措辞」：落的是与人同一条 goal_set（一份事实源），但带 set_by:"model"，
   // 而投影层不因此挪动窗口锚点/轮次帽 ⇒ 模型能把自己的目标写进每轮提醒，拿不到续跑额度（那两条归人）。
@@ -927,9 +1032,9 @@ function installTimeOmitTools(want: { goal: boolean; memory: boolean; lsp: boole
   else omittedForever.add("remember");
   if (want.lsp) omittedForever.delete("lsp");
   else omittedForever.add("lsp");
-  // 子代理三件套同进同退：任一在场就从 omitted 里删掉全部三个（判据以 spawn_agent 为代表，
+  // 子代理工具族同进同退：任一在场就恢复整族（判据以 spawn_agent 为代表，
   // 因为执行面那边读的就是它；`wantSubagents` 也是同一个谓词）。
-  for (const n of ["spawn_agent", "wait_for_agents", "cancel_agents"]) {
+  for (const n of OPTIONAL_TOOL_NAMES.subagentTools) {
     if (want.subagents) omittedForever.delete(n);
     else omittedForever.add(n);
   }
@@ -1008,7 +1113,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   const signal = opts.signal ? AbortSignal.any([opts.signal, runAbort.signal]) : runAbort.signal;
   if (interactive) interactiveRunAbort = runAbort;
   setRunWorkspace(opts.workspace);
-  const runScope: RunScope = { session: sessionObj, orchestrator: null };
+  const runScope: RunScope = { session: sessionObj, orchestrator: null, agentRuntime: null };
   runScopeALS.enterWith(runScope); // 本 run 整条异步链（loop await / 门等待 / 工具执行）都在 scope 内
   // P1（审查）：plan 门状态随 run 隔离——并发 run 互不污染（permissions ALS）。
   // planRequired = 用户武装的 plan 模式：置位者只有 RunRequest/settings，模型侧无入口（否则又退回自愿）。
@@ -1108,6 +1213,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       ...(opts.routing ? { routing: opts.routing } : {}),
     });
     runScope.orchestrator = orchestrator;
+    runScope.agentRuntime = agentRuntimeForLogPath(opts.logPath);
     // 取消必须沿树传播：旧实现只 abort run 的主循环，派出去的 worker / pipeline 链 / supervise 环
     // 继续跑并继续往同一 JSONL 写（父 run 收束后仍 append）。cancelAll 在此之前**生产代码零调用**。
     const onRunAbort = (): void => { orchestrator.cancelAll(); };

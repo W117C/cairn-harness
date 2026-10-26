@@ -22,6 +22,11 @@ export const INJECTED_TOOLS: readonly InjectedToolSurface[] = [
   { name: "wait_for_agents", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
   // 撤自己派出的活（能力 4 动态调整）。worker 两面都不给：让 worker 撤兄弟 = 深度恒 1 的反面。
   { name: "cancel_agents", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  // Lifecycle controls operate on logical threads, never on another run's session runtime.
+  { name: "send_agent", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  { name: "list_agents", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  { name: "resume_agent", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  { name: "close_agent", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
   // 只改目标措辞、不写盘也不派活 ⇒ 不是写向；只读档也留着（长任务可以在只读档跑）
   { name: "refine_goal", specFace: "static", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
   { name: "remember", specFace: "static", workerReachable: "write", reachableWhenReadOnly: false, mainSessionSideEffect: false },

@@ -30,9 +30,23 @@ export interface LocalAgentOrchestrator {
   appendProtocol(event: AgentEvent): Promise<void>;
 }
 
+export interface SpawnWithReceiptResult {
+  record?: AgentRecord;
+  result: ToolResult;
+}
+
+export interface LocalAgentRuntime extends AgentRuntime {
+  /**
+   * Spawn through the lifecycle registry while preserving the exact tool result
+   * and raw spawn arguments needed by existing model-facing callers.
+   */
+  spawnWithReceipt(spec: AgentSpawnSpec, args?: SpawnArgs): Promise<SpawnWithReceiptResult>;
+}
+
 interface ThreadState {
   record: AgentRecord;
   spawnSpec: AgentSpawnSpec;
+  spawnArgs: SpawnArgs;
   originalTask: string;
   lastSummary: string;
   messageIds: Set<string>;
@@ -56,26 +70,73 @@ function runtimeStatus(value: string): AgentRuntimeStatus {
   return "starting";
 }
 
-export function createLocalAgentRuntime(driver: LocalAgentOrchestrator): AgentRuntime {
+function spawnArgsFor(spec: AgentSpawnSpec): SpawnArgs {
+  return {
+    task: spec.task,
+    mode: spec.mode,
+    ...(spec.role ? { role: spec.role } : {}),
+    ...(spec.model ? { model: spec.model } : {}),
+    ...(spec.maxTurns !== undefined ? { max_turns: spec.maxTurns } : {}),
+    ...(spec.resources ? { resources: spec.resources } : {}),
+  };
+}
+
+function spawnReceipt(result: ToolResult, threadId: string, runId: string): ToolResult {
+  if (!result.ok) return result;
+  try {
+    const payload = JSON.parse(result.output) as unknown;
+    if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return result;
+    return {
+      ...result,
+      output: JSON.stringify({
+        ...(payload as Record<string, unknown>),
+        thread_id: threadId,
+        run_id: (payload as Record<string, unknown>).agent_id ?? runId,
+      }),
+    };
+  } catch {
+    return result;
+  }
+}
+
+export function createLocalAgentRuntime(driver: LocalAgentOrchestrator): LocalAgentRuntime {
   const threads = new Map<string, ThreadState>();
+
+  const applyJoinedRows = (joined: Awaited<ReturnType<LocalAgentOrchestrator["waitForAgents"]>>): void => {
+    for (const row of joined.rows) {
+      const state = [...threads.values()].find((candidate) => candidate.record.currentRunId === row.agent_id);
+      if (state === undefined) continue;
+      state.record.status = runtimeStatus(row.status);
+      state.record.updatedAt = Date.now();
+      if (row.summary !== "") {
+        state.lastSummary = row.summary;
+        state.record.summary = row.summary;
+      }
+    }
+  };
+
+  const refreshStates = async (states: readonly ThreadState[]): Promise<void> => {
+    const runIds = [...new Set(states
+      .map((state) => state.record.currentRunId)
+      .filter((runId): runId is string => runId !== undefined))];
+    if (runIds.length === 0) return;
+    applyJoinedRows(await driver.waitForAgents(runIds, 0));
+  };
 
   const startRun = async (
     state: ThreadState,
     task: string,
     fence?: string,
-  ): Promise<string> => {
+  ): Promise<{ ok: true; runId: string; result: ToolResult } | { ok: false; result: ToolResult }> => {
     const result = await driver.spawn({
+      ...state.spawnArgs,
       mode: state.record.mode,
       task,
-      ...(state.spawnSpec.role ? { role: state.spawnSpec.role } : {}),
-      ...(state.spawnSpec.model ? { model: state.spawnSpec.model } : {}),
-      ...(state.spawnSpec.maxTurns !== undefined ? { max_turns: state.spawnSpec.maxTurns } : {}),
-      ...(state.spawnSpec.resources ? { resources: state.spawnSpec.resources } : {}),
     }, {
       threadId: state.record.id,
       ...(fence !== undefined ? { fence } : {}),
     });
-    if (!result.ok) throw new Error(result.output);
+    if (!result.ok) return { ok: false, result };
     const runId = parseSpawnedAgentId(result.output);
     if (runId === undefined) throw new Error("local agent spawn returned no agent_id: " + result.output);
     if (!state.record.runIds.includes(runId)) state.record.runIds.push(runId);
@@ -83,7 +144,7 @@ export function createLocalAgentRuntime(driver: LocalAgentOrchestrator): AgentRu
     state.record.status = "running";
     if (fence !== undefined) state.record.fence = fence;
     state.record.updatedAt = Date.now();
-    return runId;
+    return { ok: true, runId, result };
   };
 
   const continuationTask = (state: ThreadState, text: string): string => [
@@ -105,6 +166,7 @@ export function createLocalAgentRuntime(driver: LocalAgentOrchestrator): AgentRu
       return { ok: false, threadId: state.record.id, messageId: message.id, duplicate: false, reason: "stale fence" };
     }
 
+    await refreshStates([state]);
     const active = state.record.status === "running" || state.record.status === "waiting";
     if (active && state.record.currentRunId !== undefined) {
       const delivered = await driver.followUp(
@@ -139,7 +201,9 @@ export function createLocalAgentRuntime(driver: LocalAgentOrchestrator): AgentRu
       }
     }
 
-    const runId = await startRun(state, continuationTask(state, message.text), fence ?? randomUUID());
+    const started = await startRun(state, continuationTask(state, message.text), fence ?? randomUUID());
+    if (!started.ok) throw new Error(started.result.output);
+    const runId = started.runId;
     state.messageIds.add(message.id);
     const receipt: AgentReceipt = {
       ok: true,
@@ -153,7 +217,7 @@ export function createLocalAgentRuntime(driver: LocalAgentOrchestrator): AgentRu
   };
 
   return {
-    async spawn(spec: AgentSpawnSpec): Promise<AgentRecord> {
+    async spawnWithReceipt(spec: AgentSpawnSpec, args?: SpawnArgs): Promise<SpawnWithReceiptResult> {
       const id = spec.threadId ?? randomUUID();
       if (threads.has(id)) throw new Error("agent thread already exists: " + id);
       const now = Date.now();
@@ -173,6 +237,7 @@ export function createLocalAgentRuntime(driver: LocalAgentOrchestrator): AgentRu
           usage: { inputTokens: 0, outputTokens: 0 },
         },
         spawnSpec: spec,
+        spawnArgs: args ?? spawnArgsFor(spec),
         originalTask: spec.task,
         lastSummary: "",
         messageIds: new Set(),
@@ -181,12 +246,25 @@ export function createLocalAgentRuntime(driver: LocalAgentOrchestrator): AgentRu
       };
       threads.set(id, state);
       try {
-        await startRun(state, spec.task, spec.fence ?? randomUUID());
+        const started = await startRun(state, spec.task, spec.fence ?? randomUUID());
+        if (!started.ok) {
+          threads.delete(id);
+          return { result: started.result };
+        }
+        return {
+          record: cloneRecord(state.record),
+          result: spawnReceipt(started.result, state.record.id, started.runId),
+        };
       } catch (error) {
         threads.delete(id);
         throw error;
       }
-      return cloneRecord(state.record);
+    },
+
+    async spawn(spec: AgentSpawnSpec): Promise<AgentRecord> {
+      const spawned = await this.spawnWithReceipt(spec);
+      if (spawned.record === undefined) throw new Error(spawned.result.output);
+      return spawned.record;
     },
 
     async send(id, message, fence): Promise<AgentReceipt> {
@@ -211,17 +289,7 @@ export function createLocalAgentRuntime(driver: LocalAgentOrchestrator): AgentRu
         return { rows: known.map((id) => cloneRecord(threads.get(id)!.record)), timedOut: [], unknown };
       }
       const joined = await driver.waitForAgents(runIds, opts.timeoutMs ?? 120_000);
-      for (const row of joined.rows) {
-        const state = [...threads.values()].find((candidate) => candidate.record.currentRunId === row.agent_id);
-        if (state) {
-          state.record.status = runtimeStatus(row.status);
-          state.record.updatedAt = Date.now();
-          if (row.summary !== "") {
-            state.lastSummary = row.summary;
-            state.record.summary = row.summary;
-          }
-        }
-      }
+      applyJoinedRows(joined);
       return {
         rows: known.map((id) => cloneRecord(threads.get(id)!.record)),
         timedOut: joined.timedOut,
@@ -259,7 +327,9 @@ export function createLocalAgentRuntime(driver: LocalAgentOrchestrator): AgentRu
     },
 
     async list(): Promise<AgentRecord[]> {
-      return [...threads.values()]
+      const states = [...threads.values()];
+      await refreshStates(states);
+      return states
         .map((state) => cloneRecord(state.record))
         .sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id));
     },
