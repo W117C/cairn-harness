@@ -1,40 +1,12 @@
-# CodeQL：静态安全分析（JavaScript / TypeScript）
-#
-# ── 为什么这个工作流默认不自动跑 ─────────────────────────────────────────
-#
-# **私有仓库的 code scanning 需要 GitHub Advanced Security。**
-# 本仓当前是个人账户下的私有仓库，尚未启用该功能（`security_and_analysis.code_scanning`
-# 在这个计划上不存在，secret scanning 同理）。
-# 若按常规把 `push` / `schedule` 挂上去，每一次推送都会得到一份**红**——
-# 红的不是代码，是「后端没有这个特性」。
-#
-# **一道永远红的门等于没有门**（本仓 `repo-hygiene-check` 写明的同一条纪律）。
-# 所以这里只留 `workflow_dispatch`：**手动触发**，且前提是先在
-# **Settings → Code security → Code scanning** 里把 code scanning 打开
-# （私有仓需要 GitHub Advanced Security）。
-#
-# 打开之后的用法：
-#   1. Settings → Code security → Code scanning → Enable（需 Advanced Security）
-#   2. 手动跑一次本工作流：Actions → codeql → Run workflow
-#   3. 确认结果页出现告警后，再把 `push` / `schedule` 两个触发器放开
-#      （放开前请把上面的注释整段删掉，别留一份与事实不符的说明）
-#
-# ── 这一道与 `verify` 是并行的另一根轴 ──────────────────────────────────
-#
-#   · verify 判「这次改动有没有做坏它该做的事」（功能回归、门禁、判卷）
-#   · CodeQL 判「这次改动有没有引进它不该有的东西」（注入、路径穿越、危险 API）
-# 两道互不替代，所以独立成一道，而不是塞进 verify 里当一步。
-#
-# ── 为什么告警不作为阻断条件 ────────────────────────────────────────────
-#
-# 本仓有大量**刻意设计**的取舍——沙箱、审批门、fail-closed 路径、
-# 路径拼接、跟随软链——天生长成「看起来危险」的样子。
-# 把 CodeQL 告警直接当阻断条件，等于逼人把断言改松。
-# ⇒ 落地口径：**CodeQL 出告警就走 Issue 评审，不自动阻断合并。**
+# CodeQL 分析 core、desktop、CLI 与门禁源码。仓库公开后可用；与 verify 的功能回归分别取证。
+# main 推送与面向 main 的 PR 自动运行，保留手动入口；告警需逐项核对，不替代运行验证。
 name: codeql
 
 on:
-  # 只留手动触发：理由见上面的「为什么这个工作流默认不自动跑」。
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -59,7 +31,8 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          language: javascript-typescript
+          languages: javascript-typescript
+          build-mode: none
           # 本仓没有自建编译产物，JavaScript/TypeScript 走的是**无构建**分析面。
           # 这是 CodeQL 对 JS/TS 的官方推荐形态：不需要 npm run build。
           queries: security-and-quality
