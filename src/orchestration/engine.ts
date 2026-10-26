@@ -1,9 +1,21 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { AgentEvent } from "../events";
+import { decideRuntimeControl, expandRuntimeFlow, runtimeGroups } from "./control-node";
 import { OrchestrationStore } from "./store";
 import { parsePlan } from "./validate";
 import { nextActions } from "./schedule";
-import type { ControlCommand, ExecutionBackend, ExecutionRequest, ExecutionResult, OrchestrationStamp, OrchestrationView, VerificationResult } from "./types";
+import type {
+  ControlCommand,
+  ExecutionBackend,
+  ExecutionRequest,
+  ExecutionResult,
+  OrchestrationStamp,
+  OrchestrationView,
+  RuntimeControlEvent,
+  RuntimeControlGroup,
+  RuntimeControlStamp,
+  VerificationResult,
+} from "./types";
 
 const ACTIONS = new Set(["approve_plan", "reject_plan", "pause_plan", "resume_plan", "cancel_plan", "pause_task", "resume_task", "cancel_task", "takeover_task", "retry_task", "merge_task", "reject_merge", "rollback_task"]);
 function hash(value: unknown): string { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
@@ -11,6 +23,19 @@ const own = <T>(record: Record<string, T>, key: string): T | undefined => Object
 function nonempty(value: unknown, name: string): asserts value is string { if (typeof value !== "string" || !value.trim() || value.length > 256) throw new Error(name + " is invalid"); }
 function cost(value: number): void { if (!Number.isFinite(value) || value < 0) throw new Error("backend returned invalid spent_usd"); }
 interface ActiveRun { request: ExecutionRequest; controller: AbortController; promise: Promise<void>; pauseRequested?: boolean; }
+interface RuntimeControlAbort {
+  kind: "runtime_control";
+  group_id: string;
+  task_id: string;
+  reason: "winner" | "quorum";
+}
+
+function controlAbortReason(signal: AbortSignal): RuntimeControlAbort | null {
+  const reason = signal.reason;
+  return reason !== null && typeof reason === "object" && (reason as { kind?: unknown }).kind === "runtime_control"
+    ? reason as RuntimeControlAbort
+    : null;
+}
 
 /** Durable intent precedes effects. Worker reports never directly grant completion. */
 export class OrchestrationEngine {
@@ -24,6 +49,77 @@ export class OrchestrationEngine {
     await this.options.store.append(event);
     // The observer is not the journal: a UI failure cannot turn a durable write into a retry.
     try { this.options.onEvent?.(event); } catch { /* persisted event remains authoritative */ }
+  }
+  private async controlEvent(
+    planId: string,
+    version: number,
+    control: RuntimeControlStamp,
+  ): Promise<void> {
+    const failed = control.event === "group_failed";
+    await this.append({
+      type: "agent_status",
+      agent_id: "control:" + planId + ":" + control.group_id,
+      status: failed ? "failed" : "done",
+      reason: control.event,
+      orchestration: {
+        schema_version: 1,
+        plan_id: planId,
+        version,
+        actor: "kernel",
+        control,
+      },
+    });
+  }
+  private groupsFor(view: OrchestrationView, planId: string): RuntimeControlGroup[] {
+    const plan = own(view.plans, planId);
+    if (!plan?.plan.flow) return [];
+    return runtimeGroups(expandRuntimeFlow(plan.plan.flow));
+  }
+  private async settleRuntimeControls(view: OrchestrationView): Promise<boolean> {
+    let changed = false;
+    for (const plan of Object.values(view.plans)) {
+      if (plan.phase !== "approved" || !plan.controls) continue;
+      for (const group of this.groupsFor(view, plan.plan.plan_id)) {
+        const current = own(plan.controls, group.id);
+        if (!current || current.status !== "pending") continue;
+        const states = Object.fromEntries(group.candidates.flatMap((candidate) =>
+          candidate.task_ids.map((taskId) => [taskId, own(plan.tasks, taskId)?.phase ?? "cancelled"])));
+        const decision = decideRuntimeControl(group, states);
+        if (decision.status === "pending") continue;
+        const candidates = group.candidates.flatMap((candidate) => candidate.task_ids).sort();
+        const event: RuntimeControlEvent = decision.status === "failed"
+          ? "group_failed"
+          : group.strategy === "race" ? "race_won" : "quorum_reached";
+        const control: RuntimeControlStamp = {
+          event,
+          group_id: group.id,
+          strategy: group.strategy,
+          quorum: group.quorum,
+          candidates,
+          ...(decision.winners.length > 0 ? { winners: decision.winners } : {}),
+          ...(decision.cancelled.length > 0 ? { cancelled: decision.cancelled } : {}),
+          ...(decision.reason ? { reason: decision.reason } : {}),
+        };
+        await this.controlEvent(plan.plan.plan_id, plan.plan.version, control);
+        changed = true;
+        for (const taskId of decision.cancelled) {
+          for (const run of this.active.values()) {
+            if (run.request.plan.plan_id === plan.plan.plan_id &&
+                run.request.plan.version === plan.plan.version &&
+                run.request.task.task_id === taskId &&
+                !run.controller.signal.aborted) {
+              run.controller.abort({
+                kind: "runtime_control",
+                group_id: group.id,
+                task_id: taskId,
+                reason: group.strategy === "race" || group.strategy === "any" ? "winner" : "quorum",
+              } satisfies RuntimeControlAbort);
+            }
+          }
+        }
+      }
+    }
+    return changed;
   }
   view(): Promise<OrchestrationView> { return this.options.store.view(); }
   private async previous(requestId: string, digest: string): Promise<{ done: boolean; requested: boolean }> {
@@ -128,14 +224,16 @@ export class OrchestrationEngine {
     return this.serial(async () => {
       if (this.options.enabled !== true) return 0;
       const view = await this.view();
-      const actions = nextActions(view, { max_concurrency: this.options.backend.max_concurrency, now: Date.now() });
+      await this.settleRuntimeControls(view);
+      const current = await this.view();
+      const actions = nextActions(current, { max_concurrency: this.options.backend.max_concurrency, now: Date.now() });
       let started = 0;
       for (const action of actions) {
         if (action.kind === "cancel") {
           let aborted = false;
           for (const run of this.active.values()) if (run.request.plan.plan_id === action.plan_id && run.request.task.task_id === action.task_id) { run.controller.abort(); aborted = true; }
           if (!aborted) {
-            const p = own(view.plans, action.plan_id); const t = p ? own(p.tasks, action.task_id) : undefined;
+            const p = own(current.plans, action.plan_id); const t = p ? own(p.tasks, action.task_id) : undefined;
             if (t && !["done", "failed", "cancelled"].includes(t.phase)) {
               await this.append({ type: "agent_status", agent_id: t.agent_id ?? "unspawned:" + action.task_id, status: "cancelled", reason: action.reason ?? "lease expired; confirmed no live executor", orchestration: { schema_version: 1, plan_id: action.plan_id, version: action.version, task_id: action.task_id, actor: "kernel", phase: "cancelled" } });
             }
@@ -143,7 +241,7 @@ export class OrchestrationEngine {
           continue;
         }
         if (action.kind === "escalate") {
-          const task = (() => { const p = own(view.plans, action.plan_id); return p ? own(p.tasks, action.task_id) : undefined; })();
+          const task = (() => { const p = own(current.plans, action.plan_id); return p ? own(p.tasks, action.task_id) : undefined; })();
           if (task && ["planned", "queued"].includes(task.phase)) {
             const cmd = { request_id: randomUUID(), plan_id: action.plan_id, version: action.version, task_id: action.task_id, action: "takeover_task" };
             const digest = hash(cmd); await this.commandEvent(cmd, digest, "request"); await this.commandEvent(cmd, digest, "result");
@@ -151,7 +249,7 @@ export class OrchestrationEngine {
           continue;
         }
         if (action.kind !== "dispatch") continue;
-        const p = own(view.plans, action.plan_id); const t = p ? own(p.tasks, action.task_id) : undefined;
+        const p = own(current.plans, action.plan_id); const t = p ? own(p.tasks, action.task_id) : undefined;
         if (!p || !t) continue;
         const key = action.plan_id + ":" + action.version + ":" + action.task_id;
         if (this.active.has(key)) continue;
@@ -173,7 +271,8 @@ export class OrchestrationEngine {
         void active.promise.catch(() => undefined);
         started++;
       }
-      return started;
+      const controlChanged = await this.settleRuntimeControls(await this.view());
+      return started + (controlChanged ? 1 : 0);
     });
   }
   private async status(stamp: OrchestrationStamp, phase: NonNullable<OrchestrationStamp["phase"]>, reason?: string): Promise<void> {
@@ -184,15 +283,36 @@ export class OrchestrationEngine {
   private async execute(request: ExecutionRequest, stamp: OrchestrationStamp): Promise<void> {
     let charged = 0;
     let recorded = 0;
+    let backendReturned = false;
+    let lateRecorded = false;
+    const recordLateResult = async (): Promise<void> => {
+      const reason = controlAbortReason(request.signal);
+      if (!backendReturned || reason === null || lateRecorded) return;
+      lateRecorded = true;
+      const group = request.plan.flow
+        ? runtimeGroups(expandRuntimeFlow(request.plan.flow)).find((candidate) => candidate.id === reason.group_id)
+        : undefined;
+      await this.controlEvent(request.plan.plan_id, request.plan.version, {
+        event: "late_result_rejected",
+        group_id: reason.group_id,
+        strategy: group?.strategy ?? "race",
+        quorum: group?.quorum ?? 1,
+        candidates: group?.candidates.flatMap((candidate) => candidate.task_ids).sort() ?? [request.task.task_id],
+        candidate_id: request.task.task_id,
+        reason: "result arrived after the runtime group had already selected its outcome",
+      });
+    };
     try {
       const spec = request.plan.agents.find(s => s.agent_spec_id === request.task.agent_spec)!;
       const unsupported = this.options.backend.supports(request.task, spec);
       if (unsupported) { await this.status(stamp, "failed", unsupported); return; }
       request.signal.throwIfAborted();
       const result: ExecutionResult = await this.options.backend.execute(request);
+      backendReturned = true;
       cost(result.spent_usd); charged += result.spent_usd;
       nonempty(result.agent_id, "producer agent_id"); nonempty(result.revision, "revision");
       if (charged > request.context.budget.usd) throw new Error("backend exceeded reserved budget");
+      await recordLateResult();
       request.signal.throwIfAborted();
       // Persist the real producer identity so an independent verifier cannot impersonate it.
       await this.append({ type: "agent_result", agent_id: "orch:" + stamp.run_id, status: "done", summary: result.summary,
@@ -222,6 +342,7 @@ export class OrchestrationEngine {
       }
       await this.status({ ...stamp, revision: result.revision }, "done");
     } catch (error) {
+      await recordLateResult();
       // A user/kernel cancellation has no reported cost yet; do not turn the whole remaining
       // reservation into spend (that makes a cancelled task unretryable). A real backend error
       // keeps the reservation: it may have incurred unreported provider cost.

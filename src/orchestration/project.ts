@@ -1,7 +1,15 @@
 import type { AgentEvent, CardActionEvent, VerifyResultEvent } from "../events/types";
+import { expandRuntimeFlow, runtimeGroups } from "./control-node";
 import { writeScopesConflict } from "./schedule";
 import { parsePlan } from "./validate";
-import type { ControlAction, OrchestrationStamp, OrchestrationView, PlanView, TaskView } from "./types";
+import type {
+  ControlAction,
+  OrchestrationStamp,
+  OrchestrationView,
+  PlanView,
+  RuntimeControlView,
+  TaskView,
+} from "./types";
 
 const terminal = (task: TaskView) => ["done", "failed", "cancelled"].includes(task.phase);
 const live = (task: TaskView) => !!task.run_id && !terminal(task) && task.phase !== "paused";
@@ -9,6 +17,13 @@ const money = (value: unknown): value is number => typeof value === "number" && 
 const own = <T>(record: Record<string, T>, key: string): T | undefined => Object.hasOwn(record, key) ? record[key] : undefined;
 const taskControls = new Set<ControlAction>(["pause_task", "resume_task", "cancel_task", "takeover_task", "retry_task", "merge_task", "reject_merge", "rollback_task"]);
 interface PendingControl { event_id: number; event: CardActionEvent; stamp: OrchestrationStamp; }
+
+function dependencySatisfied(plan: PlanView, dependency: string): boolean {
+  if (dependency.startsWith("@group:")) {
+    return plan.controls?.[dependency.slice("@group:".length)]?.status === "satisfied";
+  }
+  return own(plan.tasks, dependency)?.phase === "done";
+}
 
 function freshPass(event: VerifyResultEvent, stamp: OrchestrationStamp, task: TaskView): boolean {
   if (stamp.verdict !== "pass" || !event.ok || !stamp.verifier_id || stamp.verifier_id === (task.producer_id ?? task.agent_id) ||
@@ -63,11 +78,23 @@ export function projectOrchestration(events: readonly AgentEvent[]): Orchestrati
         anomaly(id, "duplicate/stale plan version or previous run still live"); continue;
       }
       const plan = structuredClone(proposed);
+      const controls = Object.fromEntries(
+        (plan.flow ? runtimeGroups(expandRuntimeFlow(plan.flow)) : []).map((group) => [group.id, {
+          group_id: group.id,
+          status: "pending",
+          strategy: group.strategy,
+          quorum: group.quorum,
+          candidates: group.candidates.flatMap((candidate) => candidate.task_ids).sort(),
+          winners: [],
+          cancelled: [],
+          late_results: [],
+        } satisfies RuntimeControlView]),
+      ) as Record<string, RuntimeControlView>;
       // Define a data property so even a log-supplied '__proto__' stays a namespaced key.
       Object.defineProperty(view.plans, plan.plan_id, { enumerable: true, configurable: true, writable: true, value: {
         plan, phase: "proposed", tasks: Object.fromEntries(plan.tasks.map(task => [task.task_id, {
           task, phase: "planned", attempt: 0, evidence: "absent", spent_usd: 0, reserved_usd: 0,
-        }])), spent_usd: 0, reserved_usd: 0, source_event_id: id,
+        }])), controls, spent_usd: 0, reserved_usd: 0, source_event_id: id,
       } satisfies PlanView });
       continue;
     }
@@ -154,6 +181,49 @@ export function projectOrchestration(events: readonly AgentEvent[]): Orchestrati
       if (!valid) anomaly(id, `invalid control transition: ${action}`);
       continue;
     }
+    if (stamp.control) {
+      if (stamp.actor !== "kernel") { anomaly(id, "runtime control missing kernel authority"); continue; }
+      const control = own(plan.controls ?? {}, stamp.control.group_id);
+      if (!control || control.strategy !== stamp.control.strategy || control.quorum !== stamp.control.quorum ||
+          control.candidates.join("\n") !== [...stamp.control.candidates].sort().join("\n")) {
+        anomaly(id, "invalid runtime control group");
+        continue;
+      }
+      if (stamp.control.event === "late_result_rejected") {
+        if (!stamp.control.candidate_id || !control.candidates.includes(stamp.control.candidate_id)) {
+          anomaly(id, "late result names an unknown candidate");
+          continue;
+        }
+        control.late_results = [...new Set([...control.late_results, stamp.control.candidate_id])].sort();
+        continue;
+      }
+      if (control.status !== "pending") {
+        anomaly(id, "duplicate runtime control decision");
+        continue;
+      }
+      const cancelled = [...new Set(stamp.control.cancelled ?? [])].sort();
+      for (const taskId of cancelled) {
+        const candidate = own(plan.tasks, taskId);
+        if (candidate && !live(candidate) && !terminal(candidate)) {
+          candidate.reason = "runtime control: " + stamp.control.event;
+          stop(plan, candidate, "cancelled");
+        }
+      }
+      control.cancelled = cancelled;
+      if (stamp.control.event === "group_failed") {
+        control.status = "failed";
+        control.reason = stamp.control.reason ?? "runtime control group failed";
+      } else {
+        const winners = [...new Set(stamp.control.winners ?? [])].sort();
+        if (winners.length === 0 || winners.some((taskId) => !control.candidates.includes(taskId))) {
+          anomaly(id, "runtime control winner is not a candidate");
+          continue;
+        }
+        control.status = "satisfied";
+        control.winners = winners;
+      }
+      continue;
+    }
     const task = stamp.task_id ? own(plan.tasks, stamp.task_id) : undefined;
     if (!task) { anomaly(id, "unknown orchestration task"); continue; }
     if (stamp.spent_usd !== undefined && !money(stamp.spent_usd)) { anomaly(id, "invalid spent amount"); continue; }
@@ -161,7 +231,7 @@ export function projectOrchestration(events: readonly AgentEvent[]): Orchestrati
     if (event.type === "agent_spawned") {
       const remaining = task.task.budget.usd - task.spent_usd;
       const activeTasks = Object.values(view.plans).flatMap(p => Object.values(p.tasks)).filter(live);
-      const dependenciesReady = task.task.depends_on.every(dependency => own(plan.tasks, dependency)?.phase === "done");
+      const dependenciesReady = task.task.depends_on.every(dependency => dependencySatisfied(plan, dependency));
       if (!dependenciesReady || activeTasks.some(other => writeScopesConflict(task.task, other.task)) ||
           Object.values(plan.tasks).filter(live).length >= plan.plan.max_concurrency ||
           Object.values(plan.tasks).some(other => other.spent_usd > other.task.budget.usd + 1e-9) ||stamp.actor !== "kernel" || stamp.phase !== "running" || plan.phase !== "approved" ||

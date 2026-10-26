@@ -174,7 +174,7 @@ function rejectTemplates(value: unknown): void {
   if (value && typeof value === "object") for (const entry of Object.values(value)) rejectTemplates(entry);
 }
 
-export function assertTaskGraph(tasks: FlowTask[]): void {
+export function assertTaskGraph(tasks: FlowTask[], allowedGroups: ReadonlySet<string> = new Set()): void {
   const byId = new Map<string, FlowTask>();
   for (const task of tasks) {
     if (byId.has(task.task_id)) fail("tasks", `duplicate task ID ${task.task_id}`);
@@ -182,6 +182,10 @@ export function assertTaskGraph(tasks: FlowTask[]): void {
   }
   const complete = new Set<string>(); const visiting = new Set<string>();
   const visit = (id: string) => {
+    if (id.startsWith("@group:")) {
+      if (!allowedGroups.has(id.slice("@group:".length))) fail("tasks", `unknown runtime group ${id}`);
+      return;
+    }
     if (visiting.has(id)) fail("tasks", `dependency cycle at ${id}`);
     if (complete.has(id)) return;
     const task = byId.get(id);

@@ -7,6 +7,19 @@ const compare = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 export const DEPENDENCY_ESCALATION_REASON = "dependency failed, was cancelled or requires user action";
 const order = (a: TaskView, b: TaskView) => b.task.priority - a.task.priority || compare(a.task.task_id, b.task.task_id);
 
+function dependencyState(plan: PlanView, dependency: string): "done" | "failed" | "pending" {
+  if (dependency.startsWith("@group:")) {
+    const control = plan.controls?.[dependency.slice("@group:".length)];
+    if (control?.status === "satisfied") return "done";
+    if (control?.status === "failed") return "failed";
+    return "pending";
+  }
+  const task = plan.tasks[dependency];
+  if (task?.phase === "done") return "done";
+  if (["failed", "cancelled", "needs_you"].includes(task?.phase ?? "")) return "failed";
+  return "pending";
+}
+
 function prefix(scope: string): string {
   const normalized = scope.replaceAll("\\", "/").replace(/^\.\//, "");
   if (normalized === ".") return "";
@@ -68,11 +81,11 @@ export function nextActions(view: OrchestrationView, options: { max_concurrency?
       if (overBudget) { emit("escalate", plan, task, "plan budget exceeded"); continue; }
       if (task.phase === "failed") { emit("escalate", plan, task, "task failed; explicit retry or takeover required"); continue; }
       if (!["planned", "queued"].includes(task.phase)) continue;
-      const dependencies = task.task.depends_on.map(id => plan.tasks[id]);
-      if (dependencies.some(dep => !dep || ["failed", "cancelled", "needs_you"].includes(dep.phase))) {
+      const dependencies = task.task.depends_on.map((id) => dependencyState(plan, id));
+      if (dependencies.some((state) => state === "failed")) {
         emit("escalate", plan, task, DEPENDENCY_ESCALATION_REASON); continue;
       }
-      if (dependencies.some(dep => dep.phase !== "done")) continue;
+      if (dependencies.some((state) => state !== "done")) continue;
       if (task.task.deadline_ms !== undefined && task.task.deadline_ms <= now) { emit("escalate", plan, task, "task deadline exceeded"); continue; }
       if (task.attempt >= task.task.max_attempts) { emit("escalate", plan, task, "attempt limit reached"); continue; }
       ready.push(task);

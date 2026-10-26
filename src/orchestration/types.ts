@@ -51,6 +51,24 @@ export type FlowNode =
   | { kind: "gather"; steps: FlowNode[]; strategy: "all" | "any" | "quorum"; quorum?: number }
   | { kind: "checkpoint"; label: string }
   | { kind: "escalate"; reason: string };
+export interface RuntimeCandidate {
+  candidate_id: string;
+  task_ids: string[];
+}
+export interface RuntimeControlGroup {
+  id: string;
+  kind: "race" | "gather";
+  strategy: "race" | "any" | "quorum";
+  quorum: number;
+  candidates: RuntimeCandidate[];
+  steps?: RuntimeNode[];
+}
+export type RuntimeNode =
+  | { kind: "task"; task: FlowTask }
+  | { kind: "sequence" | "parallel"; steps: RuntimeNode[]; max_concurrency?: number }
+  | { kind: "control"; group: RuntimeControlGroup }
+  | { kind: "checkpoint"; label: string }
+  | { kind: "escalate"; reason: string };
 export interface AgentSpec {
   agent_spec_id: string;
   role: string;
@@ -92,6 +110,34 @@ export interface OrchestrationStamp {
   lease_expires_at?: number;
   checks?: VerificationResult["checks"];
   output?: { artifacts: ArtifactRef[]; evidence: Record<string, unknown> };
+  control?: RuntimeControlStamp;
+}
+export type RuntimeControlEvent =
+  | "race_won"
+  | "quorum_reached"
+  | "group_failed"
+  | "late_result_rejected";
+export interface RuntimeControlStamp {
+  event: RuntimeControlEvent;
+  group_id: string;
+  strategy: RuntimeControlGroup["strategy"];
+  quorum: number;
+  candidates: string[];
+  winners?: string[];
+  cancelled?: string[];
+  candidate_id?: string;
+  reason?: string;
+}
+export interface RuntimeControlView {
+  group_id: string;
+  status: "pending" | "satisfied" | "failed";
+  strategy: RuntimeControlGroup["strategy"];
+  quorum: number;
+  candidates: string[];
+  winners: string[];
+  cancelled: string[];
+  late_results: string[];
+  reason?: string;
 }
 export interface TaskView {
   task: FlowTask;
@@ -116,6 +162,7 @@ export interface PlanView {
   plan: OrchPlan;
   phase: PlanPhase;
   tasks: Record<string, TaskView>;
+  controls?: Record<string, RuntimeControlView>;
   spent_usd: number;
   reserved_usd: number;
   source_event_id: number;

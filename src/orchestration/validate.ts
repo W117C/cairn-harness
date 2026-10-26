@@ -1,4 +1,5 @@
 import { assertFlowShape, assertJson, assertTaskGraph, expandFlow } from "./flow.js";
+import { expandRuntimeFlow, hasRuntimeControl, runtimeGroups, runtimeTasks } from "./control-node.js";
 import type { AgentSpec, FlowNode, FlowTask, OrchPlan } from "./types.js";
 
 function fail(path: string, message: string): never { throw new Error(`${path}: ${message}`); }
@@ -157,13 +158,20 @@ export function parsePlan(value: unknown): OrchPlan {
     specs.set(entry.agent_spec_id, entry);
   }
   let expanded = tasks as FlowTask[];
+  let runtimeGroupIds = new Set<string>();
   if (Object.hasOwn(item, "flow")) {
     assertFlowShape(item.flow);
     flowTasks(item.flow).forEach((entry, index) => { task(entry, `plan.flow.tasks[${index}]`); executable(entry, specs); });
-    expanded = expandFlow(item.flow);
+    if (hasRuntimeControl(item.flow)) {
+      const runtime = expandRuntimeFlow(item.flow);
+      expanded = runtimeTasks(runtime);
+      runtimeGroupIds = new Set(runtimeGroups(runtime).map((group) => group.id));
+    } else {
+      expanded = expandFlow(item.flow);
+    }
     if (tasks.length && canonical([...tasks].sort((a, b) => (a as FlowTask).task_id.localeCompare((b as FlowTask).task_id))) !== canonical([...expanded].sort((a, b) => a.task_id.localeCompare(b.task_id)))) fail("plan", "flow and tasks conflict; use empty tasks or identical expanded definitions");
   }
   for (const entry of expanded) executable(entry, specs);
-  assertTaskGraph(expanded);
+  assertTaskGraph(expanded, runtimeGroupIds);
   return structuredClone({ ...item, tasks: expanded }) as unknown as OrchPlan;
 }
