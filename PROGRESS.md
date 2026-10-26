@@ -24757,3 +24757,13 @@ UI 用新 workspace 算键 ⇒ 停止钮不出现，插话入口永远走不到�
 - Radix 依赖树仍随主路由进首屏；首开与复开读数都不支持先付六处懒加载的改造代价。
 - 编排控制面仍缺真实用户交互样本；没有把组件/服务面判卷冒充端到端。
 - 真实 DeepSeek、真实外部用户、真实账单与跨机器长尾仍未验。
+
+### 凭证（2026-10-27 · 第 714 页）
+
+- `head-cert-check` 在提交 `3579f49b43ea05ebeb9489564f073e094122fa96` 上 **25/25 道认证门全绿，exit 0**：
+  core 518 文件 6971 条、desktop 1484 条、e2e、docs-check、web-fetch、mutate-needles 等均包含；
+  认证树已回收，常驻残留树 0，判决输入六维全过。原文：
+  `outputs/head-cert-3579f49-2026-10-26-1611/provenance.md`。
+- `pnpm gates --only=typecheck,docs-check,desktop-test,desktop-boundary-check,renderer-layer-check,head-import-check,mutate-needles-check,evidence-typecheck-check,repo-hygiene-check`
+  在该提交上 **9/9 全绿**，但这是子集，不写成 40 道全量 gate 通过。
+- `mutate-verify` 全表仍未跑；静针脚 1621 条阻断 0，不等于全表变异通过。
