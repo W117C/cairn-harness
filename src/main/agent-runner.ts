@@ -38,6 +38,7 @@ import { createDiagnoseTool, diagnoseSpec, diagnoseSurface } from "../tools/diag
 import { createWaitForAgentsTool } from "../tools/wait_for_agents";
 import { createCancelAgentsTool } from "../tools/cancel_agents";
 import { createRefineGoalTool } from "../tools/refine_goal";
+import { createCurrentSessionSearchHistoryTool, searchHistorySpec } from "../tools/search-history";
 import { makeWebFetch, webFetch, type WebFetchDeps } from "../tools/web_fetch";
 import { loadSearchConfig, makeWebSearch, webSearchSpec, type SearchConfig } from "../tools/web-search";
 import { run_shell } from "../tools/run_shell";
@@ -1290,6 +1291,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // 下一轮 requestFace 要重新读 rt.mcpTools 才能把新工具送进模型面。
     // 执行面仍由 installPluginTools + resolveLivePluginTool 负责；两面读同一份 rt。
     const pluginToolsForFace = (): SessionPluginTool[] => [
+      searchHistorySpec,
       ...(recall ? [observationRecallSpec] : []),
       ...(impactTool ? [impactQuerySpec] : []),
       ...(diagnoseTool ? [diagnoseSpec] : []),
@@ -1304,6 +1306,11 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       ...(omitTools.length > 0 ? { omitTools } : {}),
       pluginTools: pluginToolsForFace,
     };
+    const historySearchTool = createCurrentSessionSearchHistoryTool({
+      workspace: opts.workspace,
+      sessionId: basename(opts.logPath, ".jsonl"),
+      root: dirname(opts.logPath),
+    });
     // run 起点这份只管两件事：出声（同名冲突 / 摘了谁的哪把）+ 给 loop 一份稳定的活闸闭包。
     // 模型可见清单本身走 requestFace 逐请求重算 —— 模型在 run 中途点起的 skill，下一轮就不该再看见那把。
     const initialFace = sessionToolFace(rt, faceArgs);
@@ -1355,9 +1362,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       ...(opts.steering !== undefined ? { steering: opts.steering } : {}),
     // 下一行是 tests/tool-surface-parity.test.ts 的取料面：那个门按行文本认注入键，
     // 所以覆盖表的键必须都留在同一行，别为了排版拆成 helper（拆了它就一个都认不出）。
-    ...(webFetchOverride !== undefined || recall || impactTool || diagnoseTool || searchTool
-      ? { tools: { ...TOOLS, ...(webFetchOverride !== undefined ? { web_fetch: gatedTool("web_fetch", webFetchOverride) } : {}), ...(recall ? { obs_recall: recall } : {}), ...(impactTool ? { impact_query: impactTool } : {}), ...(diagnoseTool ? { diagnose: gatedTool("diagnose", diagnoseTool) } : {}), ...(searchTool ? { web_search: gatedTool("web_search", searchTool, undefined, searchCardExtra(opts.workspace)) } : {}) } }
-      : {}),
+    tools: { ...TOOLS, search_history: historySearchTool, ...(webFetchOverride !== undefined ? { web_fetch: gatedTool("web_fetch", webFetchOverride) } : {}), ...(recall ? { obs_recall: recall } : {}), ...(impactTool ? { impact_query: impactTool } : {}), ...(diagnoseTool ? { diagnose: gatedTool("diagnose", diagnoseTool) } : {}), ...(searchTool ? { web_search: gatedTool("web_search", searchTool, undefined, searchCardExtra(opts.workspace)) } : {}) },
       workspace: opts.workspace,
       mode: "auto", // 冻结 loop 对 ask 一律拒绝；真实门在 gatedTool（复用 checkPermission）
       signal,

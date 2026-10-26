@@ -29,6 +29,8 @@ export const INJECTED_TOOLS: readonly InjectedToolSurface[] = [
   { name: "impact_query", specFace: "runtime", workerReachable: "both", reachableWhenReadOnly: true, mainSessionSideEffect: false },
   // 与 impact_query 同族：运行期按开关（solpiEnabled）注入，worker 面不开放
   { name: "obs_recall", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  // Raw current-session recall is read-only and bound to the run's own session.
+  { name: "search_history", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
   // M3 诊断工具：按「本工作区真有可诊断面」（配了 lint/test 命令）运行期注入，口径同 lsp。
   // 写向类＝true（它执行进程；测试会写缓存/产物）：只读档从模型面与执行面一起拒（gatedTool 包装），
   // 方案门挡它，沙箱降级时沙箱通道强制审批。worker 面不给：worker 已有 shell，诊断是主会话的省上下文件。
