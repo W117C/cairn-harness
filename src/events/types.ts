@@ -441,6 +441,10 @@ export interface AgentSpawnedEvent {
   type: "agent_spawned";
   orchestration?: import("../orchestration/types").OrchestrationStamp;
   agent_id: string;
+  /** Stable logical thread across follow-up runs. Absent = legacy one-run agent. */
+  thread_id?: string;
+  /** Lease/fencing generation for this execution run. */
+  fence?: string;
   /** 血缘：主流里 spawn_agent tool_call 的事件 id（1-based 行号）。 */
   parent_event_id: number;
   mode: AgentMode;
@@ -482,6 +486,8 @@ export interface AgentStatusEvent {
   type: "agent_status";
   orchestration?: import("../orchestration/types").OrchestrationStamp;
   agent_id: string;
+  thread_id?: string;
+  fence?: string;
   status: AgentStatus;
   /** failed 的分型原因（max_turns / interrupted / 异常摘要）；cancelled 可带发起方注记。 */
   reason?: string;
@@ -492,6 +498,9 @@ export interface AgentStatusEvent {
 export interface AgentMessageEvent {
   type: "agent_message";
   agent_id: string;
+  thread_id?: string;
+  message_id?: string;
+  fence?: string;
   kind: "progress" | "report";
   text: string;
 }
@@ -504,6 +513,8 @@ export interface AgentResultEvent {
   type: "agent_result";
   orchestration?: import("../orchestration/types").OrchestrationStamp;
   agent_id: string;
+  thread_id?: string;
+  fence?: string;
   status: "done" | "failed";
   reason?: string;
   /** ≤2000 token，超限类型化裁剪（summary_truncated = true + 尾部截断提示）。 */
