@@ -50,7 +50,7 @@
 | `pelican-bicycle.html` | 几何测试直接读取的正确标本；render-image 和 HTML 检查也引用 | **保留**；未来可迁入 fixture |
 | `anim-geometry-check.ts`、`anim-js-geometry-check.ts`、`svg-figure-check.ts` | 支持传入文件，有独立测试 | 保留开发检查 |
 | `src/agent/system-prompt.ts` | 只有通用视觉自检与落盘交付要求 | 无需再删 |
-| `ab.py` | 未跟踪的外部 benchmark 脚本；旧记录明确保留 | 保留（仍未跟踪，来源与用途待裁） |
+| `ab.py` | Aider polyglot 基准跑分脚本副本（`import aider`、`polyglot-benchmark`、`.aider.results.json`）；从未提交、仓内无代码引用，本机缺依赖跑不起来 | **已移入仓外归档**：`/Users/ze/Downloads/Cairn/archive-external-2026-10-26/`（SHA-256 `ba350b7b…de9c30`，业主 2026-10-26 确认） |
 | `outputs/`、`PROGRESS.md`、`archive/` | 门禁与历史事实源 | 保留 |
 | staging、旧 worktree、补丁、压缩包与 wip/untracked 备份 | 恢复与差量核对已完成；worktree 已归档移除，其余保留 | 保留 |
 
@@ -61,7 +61,7 @@
 | 优先级 | 事项 | 结果 |
 |---|---|---|
 | P0 | Git 完整性与恢复副本核对 | **已收口（有边界）**：25 个坏 ref 全部归档后处置，所有命名 ref 与 `HEAD` 遍历通过；`git fsck` 仍有 37 条 broken link / missing，全部属于**不可达**的重建前对象（ADR 0007 已判永久不可恢复），不构成任何 ref 的缺口。未运行 `gc/prune`，避免把仓外归档之外的旧对象一并删掉。 |
-| P0 | 未提交功能批次集成 | **已收口**：工作树拆成多笔提交；`git status` 只剩 `ab.py`。每个批次在提交说明里列了页面来源、共享文件与复跑读数。 |
+| P0 | 未提交功能批次集成 | **已收口**：工作树拆成多笔提交；`ab.py` 已移入仓外归档，`git status` 干净。每个批次在提交说明里列了页面来源、共享文件与复跑读数。 |
 | P1 | 编排原设计缺口 | **已按允许的「正式缩范围」收口**：P0–P4 本地纵切已实现（154 条编排判卷全绿）；P3 的 `race`、`gather any/quorum`、动态控制与远程 worker 未实现，`flow.ts` 对它们显式 fail-closed；本地后端对 network/shell/git 能力拒收。设计稿新增「实施状态」表写明理由。 |
 | P1 | 编排文档与证据收口 | **已收口**：设计稿不再写「尚未实施」；FINAL 的两次全量读数按「提交树 `5dcb67b`」与「共享主树」分开标注；「未提交」改为实际提交链。 |
 | P1 | 指针会话集成状态 | **代码面已核**：CLI `src/cli.ts:1375` 调用 `createProductFork`；桌面 Stream 的 `EventRef` 在 `apps/desktop/src/renderer/components/Stream.tsx:269/393/405/488` 有渲染与 `data-event-ref` 落点。真实交互见下一行。 |

@@ -24705,3 +24705,9 @@ search-settings 无安全存储五处各补一条逐字观测，35 条转绿。`
 DeepSeek 真连一项，业主选择「本轮不验，登记为外部依赖」：
 官方端点无 key 返回 401、本机无 `DEEPSEEK_API_KEY`；不把 stub wire 绿冒充厂商可用性。
 将来拿到 key 后按 `src/providers/deepseek.ts` 与 `scripts/native-reasoning-probe.ts` 的入口补真实读数。
+
+补记（2026-10-26 · 第 713 页）：`ab.py` 已按业主确认的「移到仓外归档」处置。
+原路径 `cairn/ab.py`（Aider polyglot 基准脚本副本，34,621 字节，从未提交、仓内零代码引用），
+移至 `/Users/ze/Downloads/Cairn/archive-external-2026-10-26/ab.py`，SHA-256
+`ba350b7b3ebcc9da6f588c0724dade552791b3c5edd9f16641eadb5931de9c30`，同目录 README 记录来源与恢复方式。
+工作树自此干净。
