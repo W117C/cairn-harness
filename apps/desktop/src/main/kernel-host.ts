@@ -140,7 +140,7 @@ export type DriftVerdict =
   /** 拒绝：有外部改动的证据。 */
   | { kind: "reject" };
 
-/** 漂移判据（纯函数）：基线 + 当前读数 + 本端归因 ⇒ 放行/重建/拒绝。
+/** 漂移判据（纯函数）：基线 + 当前读数 + 本端归因 ⇒ 放行/拒绝。
  *
  *  四条判据与它们的理由：
  *  ① **无基线** ⇒ 放行（首场 run，基线在这一轮收束时建立）。
@@ -208,6 +208,31 @@ export async function stableSessionSnapshot(
   }
   // 持续尾随写时不把最后一组读数冒充可信基线；下一轮 fail-closed，刷新后重建。
   return latest === null ? null : { ...latest, unstable: true };
+}
+
+/** run 前检查漂移；只在确认全为本端追加后返回可替换的基线。 */
+export async function checkSessionDrift(
+  baseline: DriftSnapshot,
+  statSession: () => Promise<{ size: number; mtimeMs: number } | null>,
+  countLines: () => Promise<number | null>,
+  ownAppends: () => number,
+  pendingAppends: () => number = () => 0,
+): Promise<DriftVerdict & { snapshot?: DriftSnapshot }> {
+  const st = await statSession();
+  if (st === null) return { kind: "reject" };
+  // 文件未动时不读整份日志；不稳基线也不能吸收未经确认的变化。
+  if (st.size === baseline.size && st.mtimeMs === baseline.mtimeMs) return { kind: "allow" };
+  if (baseline.unstable === true) return { kind: "reject" };
+  // 尾随写可插进任一次 await：当前读数与追加计数也必须来自同一稳定时点。
+  const current = await stableSessionSnapshot(statSession, countLines, ownAppends, pendingAppends);
+  if (current === null || current.unstable === true) return { kind: "reject" };
+  const verdict = decideDrift({
+    baseline,
+    current,
+    ownSinceSnapshot: current.ownAtSnapshot - baseline.ownAtSnapshot,
+    currentLines: current.lines,
+  });
+  return verdict.kind === "allow" ? { ...verdict, snapshot: current } : verdict;
 }
 
 /** 第十八遍「首条消息自动命名」（业主 21.50.54：侧栏一水「会话 2026-10-15 21:51:38」戳名）：
@@ -393,23 +418,15 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       await refreshSnapshot(logPath); // 首场 run 前保存基线，收束读数不稳时仍有可信参照。
       return false;
     }
-    const st = await statSession(logPath);
-    const ownTotal = ownAppends.get(logPath) ?? 0;
-    const own = ownTotal - snap.ownAtSnapshot;
-    // 只有在可能走归因慢路径时才读行数（读整份文件很贵；快路径不该付这个钱）。
-    const needLines = snap.unstable !== true && own > 0;
-    const lines = needLines ? await countLines(logPath) : null;
-    const verdict = decideDrift({
-      baseline: snap,
-      current: st,
-      ownSinceSnapshot: own,
-      currentLines: lines,
-    });
+    const verdict = await checkSessionDrift(
+      snap,
+      () => statSession(logPath),
+      () => countLines(logPath),
+      () => ownAppends.get(logPath) ?? 0,
+      () => pendingAppends.get(logPath) ?? 0,
+    );
     if (verdict.kind === "allow") {
-      // 归因慢路径判定"增长全来自本端"时，基线要跟着刷新（否则下一轮又拿旧基线比）。
-      if (st !== null && own > 0 && lines !== null && lines === snap.lines + own) {
-        drift.set(logPath, { size: st.size, mtimeMs: st.mtimeMs, lines, ownAtSnapshot: ownTotal });
-      }
+      if (verdict.snapshot !== undefined) drift.set(logPath, verdict.snapshot);
       return false;
     }
     return true;

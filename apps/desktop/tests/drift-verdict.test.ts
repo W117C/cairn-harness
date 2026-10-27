@@ -1,9 +1,73 @@
 // 漂移判据：稳定基线保留自身增长；不稳基线不能吸收未经确认的文件修改。
 import { describe, expect, it } from "vitest";
-import { decideDrift, type DriftSnapshot } from "../src/main/kernel-host";
+import { checkSessionDrift, decideDrift, type DriftSnapshot } from "../src/main/kernel-host";
 
 const snap = (over: Partial<DriftSnapshot> = {}): DriftSnapshot => ({
   size: 100, mtimeMs: 5, lines: 10, ownAtSnapshot: 10, ...over,
+});
+
+describe("run 前漂移采样", () => {
+  it("stat 未变时保留原基线，不把较新的行数和计数拼进旧 stat", async () => {
+    let reads = 0;
+    const verdict = await checkSessionDrift(
+      snap(),
+      async () => ({ size: 100, mtimeMs: 5 }),
+      async () => { reads++; return 11; },
+      () => 11,
+    );
+    expect(verdict).toEqual({ kind: "allow" });
+    expect(reads).toBe(0);
+  });
+
+  it("本端写入尚未回调时等待归因，不能按旧计数误拒绝", async () => {
+    let pending = 1;
+    let own = 10;
+    setImmediate(() => { own = 11; pending = 0; });
+    const verdict = await checkSessionDrift(
+      snap(),
+      async () => ({ size: 110, mtimeMs: 6 }),
+      async () => 11,
+      () => own,
+      () => pending,
+    );
+    expect(verdict).toEqual({ kind: "allow", snapshot: { size: 110, mtimeMs: 6, lines: 11, ownAtSnapshot: 11 } });
+  });
+
+  it("当前读数持续变化时拒绝，且不返回能污染旧基线的快照", async () => {
+    let size = 100;
+    const verdict = await checkSessionDrift(
+      snap(),
+      async () => ({ size: ++size, mtimeMs: size }),
+      async () => 11,
+      () => 11,
+    );
+    expect(verdict).toEqual({ kind: "reject" });
+  });
+
+  it.each([0, 1])("采样中本端又追加一行，外部追加 %i 行时仍按一致快照裁决", async (external) => {
+    let own = 11;
+    let lines = 11;
+    let size = 110;
+    const verdict = await checkSessionDrift(
+      snap(),
+      async () => ({ size, mtimeMs: size }),
+      async () => {
+        if (own === 11) {
+          own++;
+          lines += 1 + external;
+          size = lines * 10;
+        }
+        return lines;
+      },
+      () => own,
+    );
+    expect(verdict.kind).toBe(external === 0 ? "allow" : "reject");
+    if (external === 0) {
+      expect(verdict.snapshot).toEqual({ size: 120, mtimeMs: 120, lines: 12, ownAtSnapshot: 12 });
+    } else {
+      expect(verdict.snapshot).toBeUndefined();
+    }
+  });
 });
 
 describe("漂移判据（decideDrift）", () => {
