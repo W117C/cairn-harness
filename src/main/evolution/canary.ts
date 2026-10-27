@@ -26,7 +26,7 @@
 //    active/previous 的 activatedAt 会被 rollback 重新盖章，拿时间戳反过来推"谁是候选"会翻车。
 //  · 读不动观察档不许折成"没有档"（那等于把连败计数静默清零）：一个点名 refused，一个不动账。
 import { constants } from "node:fs";
-import { mkdir, open, readdir, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, open, readdir, readFile, rm, stat, type FileHandle } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { writeFileAtomic } from "../../atomic-write";
 import { EVIDENCE_LINE_PREFIX, LESSON_MEMORY_TYPE, LESSON_TOPIC_PREFIX, SESSION_LINE_PREFIX } from "../../agent/memory/lessons";
@@ -473,61 +473,86 @@ export class CanaryController {
     // tickAll 在零档时只取锁不该顺手建出那个目录（判据钉着「没有档 = 目录不存在」）。
     const lockPath = join(dir, ".canary.lock");
     await mkdir(dir, { recursive: true });
-    const acquire = async (): Promise<Awaited<ReturnType<typeof open>>> => {
-      try {
-        return await open(lockPath, "wx");
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-        // Serialize stale-lock inspection AND replacement. Without this second
-        // exclusive name, two reclaimers can each read a dead PID and the later
-        // one can delete the other's newly acquired live lock. Recovery itself
-        // fails closed after a crash: its marker requires explicit cleanup,
-        // rather than introducing the same stale-reclamation race recursively.
-        const reclaimPath = lockPath + ".reclaim";
-        let reclaim;
+    const acquire = async (): Promise<FileHandle> => {
+      for (;;) {
         try {
-          reclaim = await open(reclaimPath, "wx", 0o600);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-          throw new CanaryRefusedError("另一实例正在恢复观察档锁；若恢复进程已退出，请确认后清理 .agent/.canary.lock.reclaim");
-        }
-        try {
-          await reclaim.writeFile(String(process.pid));
-          const lock = await readStableTextFile(lockPath, 1024);
-          // 锁文件被外部删掉 ⇒ 没有持锁者可言，直接重取（这一支不靠 mtime，删了就是删了）。
-          // An exclusive retry fails if another contender created the path.
-          if (lock.kind === "missing") return await open(lockPath, "wx");
-          const holder = lock.kind === "ok" ? Number.parseInt(lock.text.trim(), 10) : Number.NaN;
-          // 探活：`kill(pid, 0)` 只问存在。EPERM＝存在但不是我的进程 ⇒ 算活着
-          // （判错了只能是多等，不能是抢走别人的锁）。
-          let alive = false;
-          if (Number.isInteger(holder) && holder > 0) {
-            try { process.kill(holder, 0); alive = true; }
-            catch (e) { alive = (e as NodeJS.ErrnoException).code === "EPERM"; }
+          return await open(lockPath, "wx", 0o600);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+          // Serialize stale-lock inspection AND replacement. Without this second
+          // exclusive name, two reclaimers can each read a dead PID and the later
+          // one can delete the other's newly acquired live lock.
+          const reclaimPath = lockPath + ".reclaim";
+          let reclaim: FileHandle;
+          try {
+            reclaim = await open(reclaimPath, "wx", 0o600);
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+            throw new CanaryRefusedError("另一实例正在恢复观察档锁；若恢复进程已退出，请确认后清理 .agent/.canary.lock.reclaim");
           }
-          if (alive) throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
-          // 持锁者已不在 ⇒ 直接收回，**不看时钟**。这正是修的那一格：旧逻辑在这里仍要求
-          // "超过 60s"，时钟一回跳（NTP 校正 / 虚拟机恢复 / 手动改表），死进程留下的锁永远读不出
-          // 超时 ⇒ canary 从这一秒起永远 refused，而盘上没有任何东西能解开它。
-          // pid 读不出（NaN，典型是崩溃在 open 与 writeFile 之间）时不猜，退回 60s 时间兜底。
-          if (!Number.isInteger(holder) || holder <= 0) {
-            if (lock.kind !== "ok" || Date.now() - lock.mtimeMs <= 60_000) {
-              throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
+          let acquired: FileHandle | null = null;
+          let retry = false;
+          try {
+            await reclaim.writeFile(String(process.pid));
+            let lock: FileHandle | undefined;
+            try {
+              lock = await open(lockPath, constants.O_RDWR | (constants.O_NOFOLLOW ?? 0));
+            } catch (error) {
+              const code = (error as NodeJS.ErrnoException).code;
+              if (code === "ENOENT") retry = true; // Retry exclusively after disappearance.
+              else if (code === "ELOOP") throw new CanaryRefusedError("观察档锁是软链，拒绝跟随；请人工检查 .agent/.canary.lock");
+              else throw error;
             }
+            if (lock !== undefined) {
+              try {
+                const before = await lock.stat();
+                if (!before.isFile()) throw new CanaryRefusedError("观察档锁不是常规文件，请人工检查 .agent/.canary.lock");
+                const text = await lock.readFile("utf8");
+                const after = await lock.stat();
+                if (
+                  after.dev !== before.dev ||
+                  after.ino !== before.ino ||
+                  after.size !== before.size ||
+                  after.mtimeMs !== before.mtimeMs
+                ) {
+                  throw new CanaryRefusedError("观察档锁在读取期间发生变化，请稍后重试");
+                }
+                const holder = Number.parseInt(text.trim(), 10);
+                // 探活：`kill(pid, 0)` 只问存在。EPERM＝存在但不是我的进程 ⇒ 算活着。
+                let alive = false;
+                if (Number.isInteger(holder) && holder > 0) {
+                  try { process.kill(holder, 0); alive = true; }
+                  catch (e) { alive = (e as NodeJS.ErrnoException).code === "EPERM"; }
+                }
+                if (alive) throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
+                // pid 读不出时不猜，退回 60s 时间兜底。
+                if (!Number.isInteger(holder) || holder <= 0) {
+                  if (Date.now() - before.mtimeMs <= 60_000) {
+                    throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
+                  }
+                }
+                // Reuse the inspected descriptor to replace stale contents. This
+                // avoids a path-based delete/create window during reclamation.
+                await lock.truncate(0);
+                await lock.write(String(process.pid), 0);
+                acquired = lock;
+              } finally {
+                if (acquired !== lock) await lock.close().catch(() => undefined);
+              }
+            }
+          } finally {
+            await reclaim.close().catch(() => undefined);
+            await rm(reclaimPath, { force: true }).catch(() => undefined);
           }
-          await rm(lockPath, { force: true }).catch(() => undefined);
-          // Recovery is serialized above; acquisition itself is also exclusive.
-          return await open(lockPath, "wx");
-        } finally {
-          await reclaim.close().catch(() => undefined);
-          await rm(reclaimPath, { force: true }).catch(() => undefined);
+          if (acquired !== null) return acquired;
+          if (retry) continue;
         }
       }
     };
     const fh = await acquire();
     this.lockDepth += 1;
     try {
-      try { await fh.writeFile(String(process.pid)); } finally { await fh.close().catch(() => undefined); }
+      try { await fh.write(String(process.pid), 0); } finally { await fh.close().catch(() => undefined); }
       return await fn();
     } finally {
       this.lockDepth -= 1;

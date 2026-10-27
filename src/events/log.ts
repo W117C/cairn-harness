@@ -2,7 +2,7 @@
 // 本文件 = 存储引擎（常驻句柄缓存 / 半写尾行修复 / replay / forkSession）；协议面（类型 + KNOWN_TYPES）
 // 住 ./types.ts。2026-10-17 从 index.ts 拆出（前 770 行是纯协议面，两张脸不再互相扰动行号）。公开面 = ./index.ts。
 import { constants } from "node:fs";
-import { mkdir, open, readFile, type FileHandle } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { KNOWN_TYPES, type AgentEvent, type AssistantDeltaEvent } from "./types";
 import { redactEventForLog } from "./redact";
@@ -321,10 +321,23 @@ export async function replayIncremental(path: string): Promise<AgentEvent[]> {
 }
 
 async function replayIncrementalInner(path: string): Promise<AgentEvent[]> {
+  let pre;
+  try {
+    pre = await lstat(path);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      replayCache.delete(path); // 会话文件被清理：缓存同步失效
+      return [];
+    }
+    throw err;
+  }
+  if (!pre.isFile()) {
+    throw new Error(`会话日志不是常规文件: ${path}`);
+  }
   let fh: FileHandle;
   try {
-    // Read-only: this neither creates a missing log nor follows a final symlink.
-    fh = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    // Explicit read-only mode keeps this path out of file-creation flows.
+    fh = await open(path, "r");
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     replayCache.delete(path); // 会话文件被清理：缓存同步失效
@@ -332,6 +345,9 @@ async function replayIncrementalInner(path: string): Promise<AgentEvent[]> {
   }
   try {
     const st = await fh.stat();
+    if (st.dev !== pre.dev || st.ino !== pre.ino || !st.isFile()) {
+      throw new Error(`会话日志在打开期间被替换: ${path}`);
+    }
     const cached = replayCache.get(path);
     if (!cached || cached.ino !== st.ino || cached.offset > st.size) {
       // 首访 / 文件被重建（inode 变化）/ 被截断 → 从同一个句柄全量解析并重建缓存

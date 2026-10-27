@@ -573,6 +573,18 @@ describe("canary 跨进程锁：探活优先于时钟（2026-10-19）", () => {
     expect(r.refused).toContain("另一实例正在更新观察档");
   });
 
+  it("锁的最终组件是软链 ⇒ 拒绝跟随，也不改写软链目标", async () => {
+    await mkdir(dirname(lockPath()), { recursive: true });
+    const target = join(root, "outside-lock");
+    const original = "2147483646";
+    await writeFile(target, original, "utf8");
+    await import("node:fs/promises").then((fs) => fs.symlink(target, lockPath()));
+    const r = await tick();
+    expect(r.outcome).toBe("refused");
+    expect(r.refused).toContain("软链");
+    expect(await readFile(target, "utf8")).toBe(original);
+  });
+
   it("零档取锁 ⇒ 不顺手建出 `.agent/canary/`（既有判据：没有档 = 目录不存在）", async () => {
     const r = await tick();
     expect(r.outcome).toBe("empty");

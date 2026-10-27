@@ -37,7 +37,7 @@ it("two stale-lock contenders never enter the canary critical section together",
     await mkdir(join(root, ".agent"));
     await writeFile(lockPath, "2147483646");
     hooks.beforeRemove = async (path) => {
-      if (path !== lockPath || !firstRemove) return;
+      if (path !== lockPath + ".reclaim" || !firstRemove) return;
       firstRemove = false;
       removing.release();
       await resumeRemove.promise;
