@@ -168,7 +168,7 @@ export function decideDrift(input: {
   if (snap === undefined) return { kind: "allow" };
   if (input.current === null) return { kind: "reject" };
   if (input.current.size === snap.size && input.current.mtimeMs === snap.mtimeMs) return { kind: "allow" };
-  if (snap.unstable === true) return { kind: "rebuild" };
+  if (snap.unstable === true) return input.ownSinceSnapshot > 0 ? { kind: "rebuild" } : { kind: "reject" };
   if (input.ownSinceSnapshot > 0 && input.currentLines !== null && input.currentLines === snap.lines + input.ownSinceSnapshot) {
     return { kind: "allow" };
   }
@@ -184,9 +184,11 @@ export async function stableSessionSnapshot(
   statSession: () => Promise<{ size: number; mtimeMs: number } | null>,
   countLines: () => Promise<number | null>,
   ownAppends: () => number,
+  pendingAppends: () => number = () => 0,
 ): Promise<DriftSnapshot | null> {
   let latest: DriftSnapshot | null = null;
   for (let attempt = 0; attempt < SNAPSHOT_STABLE_ATTEMPTS; attempt++) {
+    const pendingBefore = pendingAppends();
     const ownBefore = ownAppends();
     const before = await statSession();
     if (before === null) return null;
@@ -195,8 +197,16 @@ export async function stableSessionSnapshot(
     const after = await statSession();
     if (after === null) return null;
     const ownAfter = ownAppends();
+    const pendingAfter = pendingAppends();
     latest = { size: after.size, mtimeMs: after.mtimeMs, lines, ownAtSnapshot: ownAfter };
-    if (ownBefore === ownAfter && before.size === after.size && before.mtimeMs === after.mtimeMs) {
+    if (
+      pendingBefore === 0 &&
+      pendingAfter === 0 &&
+      ownBefore === ownAfter &&
+      before.size === after.size &&
+      before.mtimeMs === after.mtimeMs &&
+      ownAfter <= lines
+    ) {
       return latest;
     }
     await new Promise<void>((resolve) => { setImmediate(resolve); });
@@ -317,8 +327,26 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
   // 已知局限（如实记）：计数只能按 session_id 归并——同 id 跨工作区（同秒撞名）且两流
   // 并发尾随时，计数互相抬高 ⇒ 归因保守偏「拒」（不静默覆盖是底线方向），openSession 刷新即恢复。
   const ownAppends = new Map<string, number>();
+  const pendingAppends = new Map<string, number>();
+  const changePending = (sessionId: string, delta: number): void => {
+    const next = (pendingAppends.get(sessionId) ?? 0) + delta;
+    if (next <= 0) pendingAppends.delete(sessionId);
+    else pendingAppends.set(sessionId, next);
+  };
 
   setAppHooks({
+    onAppend: (e) => {
+      const sid = (e as { session_id?: unknown }).session_id;
+      if (typeof sid === "string") {
+        changePending(sid, 1);
+        return () => { changePending(sid, -1); };
+      }
+      return undefined;
+    },
+    onAppendFailed: (e) => {
+      const sid = (e as { session_id?: unknown }).session_id;
+      if (typeof sid === "string") changePending(sid, -1);
+    },
     onEvent: (e) => {
       const sid = (e as { session_id?: unknown }).session_id;
       if (typeof sid === "string") ownAppends.set(sid, (ownAppends.get(sid) ?? 0) + 1);
@@ -353,6 +381,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       () => statSession(logPath),
       () => countLines(logPath),
       () => ownAppends.get(sessionId) ?? 0,
+      () => pendingAppends.get(sessionId) ?? 0,
     );
     if (snapshot === null) {
       drift.delete(logPath); // 文件不可见 = 无从守护；下次 run 重建基线

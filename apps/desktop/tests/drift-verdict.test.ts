@@ -26,14 +26,24 @@ const snap = (over: Partial<DriftSnapshot> = {}): DriftSnapshot => ({
 });
 
 describe("漂移判据（decideDrift）", () => {
-  it("★基线不稳 + 文件变了 ⇒ 重建后放行，**不是拒绝**（旧实现永久卡死 + 无证据指控）", () => {
+  it("基线不稳 + 本端零增长 + 文件变了 ⇒ fail-closed 拒绝", () => {
     const v = decideDrift({
       baseline: snap({ unstable: true }),
       current: { size: 200, mtimeMs: 9 },
       ownSinceSnapshot: 0,
       currentLines: 20,
     });
-    expect(v.kind, "基线不稳只说明我们测不准，不是别人改了；拒绝会把会话永久卡死").toBe("rebuild");
+    expect(v.kind).toBe("reject");
+  });
+
+  it("基线不稳 + 本端有增长 ⇒ 重建后放行，不把自身尾随写误判成外部修改", () => {
+    const v = decideDrift({
+      baseline: snap({ unstable: true }),
+      current: { size: 200, mtimeMs: 9 },
+      ownSinceSnapshot: 1,
+      currentLines: 20,
+    });
+    expect(v.kind).toBe("rebuild");
   });
 
   it("基线不稳 + 文件逐字未动 ⇒ 放行（快路径排在不稳之前）", () => {
@@ -79,7 +89,8 @@ describe("漂移判据（decideDrift）", () => {
   it("反向对照：判据不是恒真（同一组输入换个基线就换个结论）", () => {
     const input = { current: { size: 200, mtimeMs: 9 }, ownSinceSnapshot: 0, currentLines: 20 };
     expect(decideDrift({ ...input, baseline: snap() }).kind).toBe("reject");
-    expect(decideDrift({ ...input, baseline: snap({ unstable: true }) }).kind).toBe("rebuild");
+    expect(decideDrift({ ...input, baseline: snap({ unstable: true }) }).kind).toBe("reject");
+    expect(decideDrift({ ...input, ownSinceSnapshot: 1, baseline: snap({ unstable: true }) }).kind).toBe("rebuild");
   });
 });
 

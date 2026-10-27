@@ -292,6 +292,23 @@ describe("M3 多工作区运行面", () => {
 
     expect(snapshot).toMatchObject({ unstable: true });
   });
+
+  it("漂移基线：文件已追加但本端归因尚未回调时，不接受不相容快照", async () => {
+    let pending = true;
+    let own = 0;
+    setImmediate(() => {
+      pending = false;
+      own = 1;
+    });
+    const snapshot = await Reflect.apply(stableSessionSnapshot, undefined, [
+      async () => ({ size: 10, mtimeMs: 1 }),
+      async () => 1,
+      () => own,
+      () => pending,
+    ]) as { size: number; mtimeMs: number; lines: number; ownAtSnapshot: number } | null;
+
+    expect(snapshot).toMatchObject({ size: 10, mtimeMs: 1, lines: 1, ownAtSnapshot: 1 });
+  });
 });
 
 describe("发送队列持久化（重启恢复的 host 面）", () => {

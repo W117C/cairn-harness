@@ -378,6 +378,8 @@ async function orchestratorExtras(
 }
 
 interface Hooks {
+  onAppend?: (e: AgentEvent) => void | (() => void);
+  onAppendFailed?: (e: AgentEvent) => void;
   onEvent?: (e: AgentEvent) => void;
   onAsk?: (p: AskPayload) => void;
   onAskOutcome?: (p: AskOutcomePayload) => void;
@@ -416,9 +418,21 @@ export async function handleCompact(
   if (!logPath) return { ok: false, error: "无会话日志（先跑一轮会话再 /compact）" };
   if (isSessionLogBusy(logPath)) return { ok: false, error: "该会话正在运行，先停止再压缩" };
   const log = createEventLog(logPath);
+  const sessionId = over.sessionId ?? basename(logPath, ".jsonl");
   const res = await compactSessionLog(
     logPath,
-    async (e) => { await log.append(e); hooks.onEvent?.(e); },
+    async (e) => {
+      const hookEvent = { ...e, session_id: sessionId } as AgentEvent;
+      const commit = hooks.onAppend?.(hookEvent);
+      try {
+        await log.append(e);
+      } catch (error) {
+        hooks.onAppendFailed?.(hookEvent);
+        throw error;
+      }
+      commit?.();
+      hooks.onEvent?.(hookEvent);
+    },
     currentPluginRuntime()?.hooks,
   );
   return { ok: res.ok, error: res.error, cardPayload: res.cardPayload };
@@ -730,6 +744,8 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
   webFetchDeps?: WebFetchDeps;
   /** M1e：会话模式 —— 日志 append 到既有会话（不 rm）。缺省 false（旧行为：fresh 日志）。 */
   sessionId?: string;
+  onAppend?: (e: AgentEvent) => void | (() => void);
+  onAppendFailed?: (e: AgentEvent) => void;
   onEvent?: (e: AgentEvent) => void;
   /** 缺省 = 非交互（ask 按 deny，fail-closed，与 M0 一致）。 */
   askGate?: AskGate;
@@ -1030,7 +1046,15 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
         // 那道闸就静默空转了），所以**日志自己擦**（log.append 内部）⇒ 任何新写的出口
         // 都不可能"忘了擦"（旧形状把擦除藏在 loop 里，新出口漏了没人会报错）。
         usageAttribution.stamp(e); // 落盘前先盖：live 与盘必须是同一个对象（同 events 盖 ts 的口径）
-        await log!.append(e);
+        const hookEvent = opts.sessionId === undefined ? e : ({ ...e, session_id: opts.sessionId } as AgentEvent);
+        const commit = opts.onAppend?.(hookEvent);
+        try {
+          await log!.append(e);
+        } catch (error) {
+          opts.onAppendFailed?.(hookEvent);
+          throw error;
+        }
+        commit?.();
         if (!parentFinished && !(e as { agent_id?: string }).agent_id && e.type === "verify_result") solpi?.meter?.recordVerification({ id: `${e.callId}:${e.attempt}`, ok: e.ok, elapsedMs: null }); // worker 子流不进父验证计量（同投影同口径）
         // 出站面（推给渲染层的那一份）也擦：日志自己擦的是"写进盘的那一份"，
         // 推出去的那一份是另一条出口，同样不能带明文。
@@ -1516,6 +1540,8 @@ export interface RunOverrides
   logPath?: string;
   /** M1e：会话模式 —— run 追加到该会话（不 rm 日志），消息落该会话 JSONL。 */
   sessionId?: string;
+  onAppend?: (e: AgentEvent) => void | (() => void);
+  onAppendFailed?: (e: AgentEvent) => void;
   onEvent?: (e: AgentEvent) => void;
   /** S3 信任闸：本 run 的工作区 verify 命令可否被自动补拍执行。**缺省即拒绝**——
    *  verify 命令 100% 来自仓库自带文件，而那条执行路径上没有权限判定。 */
@@ -1680,6 +1706,19 @@ export async function handleAgentRun(
         evidenceReceipts: (await store().get()).evidenceReceipts,
         economicCompaction: (await store().get()).economicCompaction,
         autoVerifyRepair: (await store().get()).autoVerifyRepair,
+        onAppend: (e) => {
+          const hookEvent = sessionId === undefined ? e : ({ ...e, session_id: sessionId } as AgentEvent);
+          const commits = [over.onAppend?.(hookEvent), hooks.onAppend?.(hookEvent)]
+            .filter((commit): commit is () => void => typeof commit === "function");
+          return () => {
+            for (const commit of commits) commit();
+          };
+        },
+        onAppendFailed: (e) => {
+          const hookEvent = sessionId === undefined ? e : ({ ...e, session_id: sessionId } as AgentEvent);
+          over.onAppendFailed?.(hookEvent);
+          hooks.onAppendFailed?.(hookEvent);
+        },
         onEvent: (e) => {
           over.onEvent?.(e);
           // F1（审查 P1-14）：agent:event 是全局通道——事件载荷带 session_id，renderer 按当前
