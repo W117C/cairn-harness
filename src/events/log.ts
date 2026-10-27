@@ -1,7 +1,7 @@
 // 事件流：append-only JSONL，一事件一行。
 // 本文件 = 存储引擎（常驻句柄缓存 / 半写尾行修复 / replay / forkSession）；协议面（类型 + KNOWN_TYPES）
 // 住 ./types.ts。2026-10-17 从 index.ts 拆出（前 770 行是纯协议面，两张脸不再互相扰动行号）。公开面 = ./index.ts。
-import { constants } from "node:fs";
+import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
 import { mkdir, open, readFile, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { KNOWN_TYPES, type AgentEvent, type AssistantDeltaEvent } from "./types";
@@ -321,10 +321,9 @@ export async function replayIncremental(path: string): Promise<AgentEvent[]> {
 }
 
 async function replayIncrementalInner(path: string): Promise<AgentEvent[]> {
-  let fh: FileHandle;
+  let fd: number;
   try {
-    // codeql[js/insecure-temporary-file]
-    fh = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ELOOP") throw new Error(`会话日志是软链，拒绝跟随: ${path}`);
@@ -333,11 +332,18 @@ async function replayIncrementalInner(path: string): Promise<AgentEvent[]> {
     return [];
   }
   try {
-    const st = await fh.stat();
+    const st = fstatSync(fd);
     const cached = replayCache.get(path);
     if (!cached || cached.ino !== st.ino || cached.offset > st.size) {
       // 首访 / 文件被重建（inode 变化）/ 被截断 → 从同一个句柄全量解析并重建缓存
-      const raw = await fh.readFile("utf8");
+      const chunks: Buffer[] = [];
+      const buf = Buffer.allocUnsafe(64 * 1024);
+      for (;;) {
+        const bytesRead = readSync(fd, buf, 0, buf.length, null);
+        if (bytesRead === 0) break;
+        chunks.push(Buffer.from(buf.subarray(0, bytesRead)));
+      }
+      const raw = Buffer.concat(chunks).toString("utf8");
       const events: AgentEvent[] = [];
       const bad: number[] = [];
       let offset = 0;
@@ -372,7 +378,7 @@ async function replayIncrementalInner(path: string): Promise<AgentEvent[]> {
     let consumed = 0;
     let done = 0; // 本批消费的完整行数（含空行/坏行——它们同样占行号）
     const buf = Buffer.allocUnsafe(len);
-    await fh.read(buf, 0, len, cached.offset);
+    readSync(fd, buf, 0, len, cached.offset);
     const text = buf.toString("utf8");
     const parts = text.split("\n");
     const complete = parts.slice(0, -1); // 最后一段是尾行（空串=到 EOF；否则半写）
@@ -396,7 +402,7 @@ async function replayIncrementalInner(path: string): Promise<AgentEvent[]> {
     cached.tailBad = fresh.length > 0 ? [...bad] : [...cached.tailBad, ...bad];
     return cached.events.slice();
   } finally {
-    await fh.close();
+    closeSync(fd);
   }
 }
 

@@ -50,9 +50,9 @@ export class CanaryRefusedError extends Error {
 }
 
 type StableFile =
-  | { kind: "ok"; size: number; mtimeMs: number; text: string }
+  | { kind: "ok"; size: number; mtimeMs: number; nlink: number; text: string }
   | { kind: "too-large"; size: number }
-  | { kind: "missing" | "unreadable" | "not-file" | "changed" };
+  | { kind: "missing" | "unreadable" | "not-file" | "changed" | "symlink" };
 
 /** Read metadata and bytes through one descriptor so the size/type decision and
  * the bytes cannot refer to different path targets. */
@@ -61,7 +61,8 @@ async function readStableTextFile(abs: string, maxBytes = Number.MAX_SAFE_INTEGE
   try {
     fh = await open(abs, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
   } catch (err) {
-    return { kind: (err as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "unreadable" };
+    const code = (err as NodeJS.ErrnoException).code;
+    return { kind: code === "ENOENT" ? "missing" : code === "ELOOP" ? "symlink" : "unreadable" };
   }
   try {
     const before = await fh.stat();
@@ -84,7 +85,7 @@ async function readStableTextFile(abs: string, maxBytes = Number.MAX_SAFE_INTEGE
     ) {
       return { kind: "changed" };
     }
-    return { kind: "ok", size: before.size, mtimeMs: before.mtimeMs, text: data.toString("utf8") };
+    return { kind: "ok", size: before.size, mtimeMs: before.mtimeMs, nlink: before.nlink, text: data.toString("utf8") };
   } catch {
     return { kind: "unreadable" };
   } finally {
@@ -494,69 +495,49 @@ export class CanaryController {
           let retry = false;
           try {
             await reclaim.writeFile(String(process.pid));
-            let lock: FileHandle | undefined;
-            try {
-              // codeql[js/file-system-race]
-              lock = await open(lockPath, constants.O_RDWR | (constants.O_NOFOLLOW ?? 0));
-            } catch (error) {
-              const code = (error as NodeJS.ErrnoException).code;
-              if (code === "ENOENT") retry = true; // Retry exclusively after disappearance.
-              else if (code === "ELOOP") throw new CanaryRefusedError("观察档锁是软链，拒绝跟随；请人工检查 .agent/.canary.lock");
-              else throw error;
+            const lock = await readStableTextFile(lockPath, 1024);
+            if (lock.kind === "missing") retry = true;
+            else if (lock.kind === "symlink") {
+              throw new CanaryRefusedError("观察档锁是软链，拒绝跟随；请人工检查 .agent/.canary.lock");
             }
-            if (lock !== undefined) {
+            else if (lock.kind !== "ok") {
+              throw new CanaryRefusedError("观察档锁不能形成稳定快照，请人工检查 .agent/.canary.lock");
+            } else if (lock.nlink !== 1) {
+              throw new CanaryRefusedError("观察档锁不是独立常规文件，请人工检查 .agent/.canary.lock");
+            } else {
+              const holder = Number.parseInt(lock.text.trim(), 10);
+              const released = lock.text.trim() === "released";
+              // 探活：`kill(pid, 0)` 只问存在。EPERM＝存在但不是我的进程 ⇒ 算活着。
+              let alive = false;
+              if (Number.isInteger(holder) && holder > 0) {
+                try { process.kill(holder, 0); alive = true; }
+                catch (e) { alive = (e as NodeJS.ErrnoException).code === "EPERM"; }
+              }
+              if (alive) throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
+              // pid 读不出时不猜，退回 60s 时间兜底。
+              if (!released && (!Number.isInteger(holder) || holder <= 0)) {
+                if (Date.now() - lock.mtimeMs <= 60_000) {
+                  throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
+                }
+              }
+              // Never write through the inspected inode. A hardlink made after
+              // inspection cannot be redirected into a victim because takeover
+              // creates a fresh inode and atomically replaces only the lock name.
+              const replacement = tmpPathFor(lockPath);
+              let next: FileHandle | undefined;
               try {
-                const before = await lock.stat();
-                if (!before.isFile() || before.nlink !== 1) {
-                  throw new CanaryRefusedError("观察档锁不是独立常规文件，请人工检查 .agent/.canary.lock");
-                }
-                const text = await lock.readFile("utf8");
-                const after = await lock.stat();
-                if (
-                  after.dev !== before.dev ||
-                  after.ino !== before.ino ||
-                  after.nlink !== 1 ||
-                  after.size !== before.size ||
-                  after.mtimeMs !== before.mtimeMs
-                ) {
-                  throw new CanaryRefusedError("观察档锁在读取期间发生变化，请稍后重试");
-                }
-                const holder = Number.parseInt(text.trim(), 10);
-                const released = text.trim() === "released";
-                // 探活：`kill(pid, 0)` 只问存在。EPERM＝存在但不是我的进程 ⇒ 算活着。
-                let alive = false;
-                if (Number.isInteger(holder) && holder > 0) {
-                  try { process.kill(holder, 0); alive = true; }
-                  catch (e) { alive = (e as NodeJS.ErrnoException).code === "EPERM"; }
-                }
-                if (alive) throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
-                // pid 读不出时不猜，退回 60s 时间兜底。
-                if (!released && (!Number.isInteger(holder) || holder <= 0)) {
-                  if (Date.now() - before.mtimeMs <= 60_000) {
-                    throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
-                  }
-                }
-                // Never write through the inspected inode. A hardlink made after
-                // inspection cannot be redirected into a victim because takeover
-                // creates a fresh inode and atomically replaces only the lock name.
-                const replacement = tmpPathFor(lockPath);
-                let next: FileHandle | undefined;
-                try {
-                  next = await open(
-                    replacement,
-                    constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
-                    0o600,
-                  );
-                  await next.write(String(process.pid), 0);
-                  await rename(replacement, lockPath);
-                  acquired = next;
-                } catch (error) {
-                  if (next !== undefined) await next.close().catch(() => undefined);
-                  await rm(replacement, { force: true }).catch(() => undefined);
-                  throw error;
-                }
-              } finally {
-                if (acquired !== lock) await lock.close().catch(() => undefined);
+                next = await open(
+                  replacement,
+                  constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+                  0o600,
+                );
+                await next.write(String(process.pid), 0);
+                await rename(replacement, lockPath);
+                acquired = next;
+              } catch (error) {
+                if (next !== undefined) await next.close().catch(() => undefined);
+                await rm(replacement, { force: true }).catch(() => undefined);
+                throw error;
               }
             }
           } finally {
