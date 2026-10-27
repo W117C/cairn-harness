@@ -9,6 +9,16 @@ let dir: string;
 afterEach(async () => { if (dir) await rm(dir, { recursive: true, force: true }); });
 
 describe("事件流", () => {
+  it("增量重放只读：不创建缺失日志，也不修改现有日志", async () => {
+    dir = await mkdtemp(join(tmpdir(), "cairn-events-readonly-"));
+    const logPath = join(dir, "events.jsonl");
+    expect(await replayIncremental(logPath)).toEqual([]);
+    await expect(readFile(logPath)).rejects.toMatchObject({ code: "ENOENT" });
+    const bytes = JSON.stringify({ type: "user_message", content: "preserve", ts: 1 }) + "\n";
+    await writeFile(logPath, bytes);
+    expect(await replayIncremental(logPath)).toHaveLength(1);
+    expect(await readFile(logPath, "utf8")).toBe(bytes);
+  });
   it("写 3 条 → replay 回 3 条且顺序一致", async () => {
     dir = await mkdtemp(join(tmpdir(), "cairn-events-"));
     const logPath = join(dir, "events.jsonl");

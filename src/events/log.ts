@@ -323,7 +323,7 @@ export async function replayIncremental(path: string): Promise<AgentEvent[]> {
 async function replayIncrementalInner(path: string): Promise<AgentEvent[]> {
   let fh: FileHandle;
   try {
-    // lgtm[js/insecure-temporary-file] Test fixtures use mkdtemp; production opens an existing log read-only without following links.
+    // Read-only: this neither creates a missing log nor follows a final symlink.
     fh = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;

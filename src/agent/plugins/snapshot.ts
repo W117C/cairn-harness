@@ -135,19 +135,39 @@ export async function pluginSnapshot(root: string): Promise<PluginSnapshot> {
   /** `.git` metadata is not included wholesale, but config and hooks can
    * redirect executable behavior, so those files stay in the binding. */
   const walkGitMeta = async (gitDir: string): Promise<void> => {
-    const config = await readBoundedSnapshot(join(gitDir, "config"));
-    if (config !== null) {
-      const key = keyOf(root, join(gitDir, "config"));
-      if (key !== null) record(key, config);
+    const metadata = await readdir(gitDir, { withFileTypes: true }).catch(() => null);
+    if (metadata === null) {
+      bounded = true;
+      return;
+    }
+    const configEntry = metadata.find((entry) => entry.name === "config");
+    if (configEntry !== undefined) {
+      const config = configEntry.isFile() ? await readBoundedSnapshot(join(gitDir, "config")) : null;
+      if (config === null) bounded = true;
+      else {
+        const key = keyOf(root, join(gitDir, "config"));
+        if (key !== null) record(key, config);
+      }
+    }
+    const hooksEntry = metadata.find((entry) => entry.name === "hooks");
+    if (hooksEntry === undefined) return;
+    if (!hooksEntry.isDirectory()) {
+      bounded = true;
+      return;
     }
     const hooksDir = join(gitDir, "hooks");
     let hooks;
     try {
       hooks = await readdir(hooksDir, { withFileTypes: true });
     } catch {
-      return; // no hooks directory is normal
+      bounded = true;
+      return;
     }
     for (const ent of hooks.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (count >= FP_MAX_FILES) {
+        bounded = true;
+        return;
+      }
       if (ent.isSymbolicLink()) {
         bounded = true;
         continue;
@@ -169,9 +189,13 @@ export async function pluginSnapshot(root: string): Promise<PluginSnapshot> {
   };
 
   await walk(root);
+  parts.sort(([a], [b]) => {
+    if (a < b) return -1;
+    return a > b ? 1 : 0;
+  });
   return {
     // Tuple encoding preserves filename boundaries, including literal newlines.
-    fp: createHash("sha256").update(JSON.stringify(parts.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))).digest("hex").slice(0, 32),
+    fp: createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 32),
     bounded,
     files,
     paths,

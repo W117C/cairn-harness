@@ -70,7 +70,7 @@ export async function checkUpdate(opts: {
   const guard = stallGuard(opts.stallTimeoutMs ?? DEFAULT_STALL_MS, "更新源");
   let res: Response;
   try {
-    // lgtm[js/file-access-to-http] Only the user-configured update URL crosses this boundary; no file contents are sent.
+    // Only the user-configured update URL is sent, without file contents.
     res = await doFetch(url, { headers: { accept: "application/json" }, signal: guard.signal });
   } catch (err) {
     // 审查 S3（任务 4.5）两处收口：

@@ -495,7 +495,7 @@ export class CanaryController {
           await reclaim.writeFile(String(process.pid));
           const lock = await readStableTextFile(lockPath, 1024);
           // 锁文件被外部删掉 ⇒ 没有持锁者可言，直接重取（这一支不靠 mtime，删了就是删了）。
-          // lgtm[js/file-system-race] The retry is an exclusive create; a path replaced after the read makes this fail, never follow it.
+          // An exclusive retry fails if another contender created the path.
           if (lock.kind === "missing") return await open(lockPath, "wx");
           const holder = lock.kind === "ok" ? Number.parseInt(lock.text.trim(), 10) : Number.NaN;
           // 探活：`kill(pid, 0)` 只问存在。EPERM＝存在但不是我的进程 ⇒ 算活着
@@ -516,7 +516,7 @@ export class CanaryController {
             }
           }
           await rm(lockPath, { force: true }).catch(() => undefined);
-          // lgtm[js/file-system-race] The exclusive recovery marker serializes inspection/removal; final acquisition is also exclusive.
+          // Recovery is serialized above; acquisition itself is also exclusive.
           return await open(lockPath, "wx");
         } finally {
           await reclaim.close().catch(() => undefined);

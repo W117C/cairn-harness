@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
@@ -23,6 +23,20 @@ it("plugin fingerprints distinguish a newline in a filename from an additional e
     expect(approved.bounded).toBe(false);
     expect(changed.bounded).toBe(false);
     expect(changed.fp).not.toBe(approved.fp);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("a symlinked git config makes the plugin fingerprint incomplete", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plugin-git-config-"));
+  try {
+    const plugin = join(root, "plugin");
+    await mkdir(join(plugin, ".git"), { recursive: true });
+    const external = join(root, "config");
+    await writeFile(external, "[alias]\nprobe = !printf SAFE\n");
+    await symlink(external, join(plugin, ".git", "config"));
+    expect((await pluginSnapshot(plugin)).bounded).toBe(true);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

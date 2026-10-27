@@ -82,7 +82,6 @@ const LINE_TAGS: ReadonlySet<string> = new Set([
 interface HtmlTag {
   name: string;
   closing: boolean;
-  selfClosing: boolean;
 }
 
 /** Find a tag's closing `>` without treating `>` inside a quoted attribute as the end. */
@@ -114,12 +113,9 @@ function parseTag(html: string, start: number, end: number): HtmlTag | null {
   const nameStart = i;
   while (i < end && /[A-Za-z0-9:-]/u.test(html[i]!)) i += 1;
   if (nameStart === i) return null;
-  let tail = end - 1;
-  while (tail > start && /\s/u.test(html[tail]!)) tail -= 1;
   return {
     name: html.slice(nameStart, i).toLowerCase(),
     closing,
-    selfClosing: !closing && html[tail] === "/",
   };
 }
 
@@ -128,13 +124,14 @@ function parseTag(html: string, start: number, end: number): HtmlTag | null {
 function rawElementEnd(html: string, from: number, name: string): number {
   let cursor = from;
   while (cursor < html.length) {
-    const lt = html.indexOf("<", cursor);
+    const lt = html.indexOf("</", cursor);
     if (lt < 0) return html.length;
-    const end = tagEnd(html, lt);
-    if (end < 0) return html.length;
-    const tag = parseTag(html, lt, end);
-    if (tag?.closing === true && tag.name === name) return end + 1;
-    cursor = end + 1;
+    const tag = parseTag(html, lt, html.length);
+    if (tag?.closing === true && tag.name === name) {
+      const end = tagEnd(html, lt);
+      return end < 0 ? html.length : end + 1;
+    }
+    cursor = lt + 2;
   }
   return html.length;
 }
@@ -170,16 +167,18 @@ export function htmlToText(html: string): string {
       continue;
     }
 
-    const end = tagEnd(html, cursor);
-    if (end < 0) {
-      out.push(html.slice(cursor));
-      break;
-    }
-    const tag = parseTag(html, cursor, end);
+    // Reject an invalid prefix before scanning the remaining input for `>`.
+    // Otherwise each `<` in a malformed run rescans the same suffix.
+    const tag = parseTag(html, cursor, html.length);
     if (tag === null) {
       out.push("<");
       cursor += 1;
       continue;
+    }
+    const end = tagEnd(html, cursor);
+    if (end < 0) {
+      out.push(html.slice(cursor));
+      break;
     }
 
     // In HTML, script/style/... are raw-text elements, not void elements. A

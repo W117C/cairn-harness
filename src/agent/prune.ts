@@ -161,7 +161,7 @@ export function attachmentPrefixFor(sessionId: string): string {
 /** 旧版 8 位 SHA-1 前缀，只用于迁移/清理既有附件；新写入一律走
  *  `attachmentPrefixFor` 的 SHA-256 口径。 */
 export function legacyAttachmentPrefixFor(sessionId: string): string {
-  // lgtm[js/weak-cryptographic-algorithm] compatibility lookup for old filenames.
+  // Compatibility lookup for old filenames; new names use SHA-256.
   const digest = createHash("sha1").update(sessionId).digest("hex").slice(0, 8);
   return `${safeSegment(sessionId, 32)}-${digest}-`;
 }
