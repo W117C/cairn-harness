@@ -9,6 +9,7 @@ import {
   assertNotFrozenReal,
   assertNotSensitivePathReal,
   assertRealContainment,
+  assertWritablePath,
   captureContainedPath,
   openContainedFile,
   resolveInWorkspace,
@@ -115,7 +116,10 @@ export const edit_file: Tool = {
     await mkdir(dirname(targetAbs), { recursive: true });
     const parentAbs = dirname(targetAbs);
     const parentIdentity = await captureContainedPath(ctx.workspace, parentAbs, "edit_file");
-    const guard = () => assertContainedPathIdentity(ctx.workspace, parentAbs, "edit_file", parentIdentity);
+    const guard = async (): Promise<void> => {
+      await assertContainedPathIdentity(ctx.workspace, parentAbs, "edit_file", parentIdentity);
+      await assertWritablePath(ctx.workspace, targetAbs, "edit_file");
+    };
     // D7 覆盖前快照：排在「0 处/多处匹配」两道拒绝**之后**——被拒的编辑不该留下快照（那会是脏文件）。
     const snapshotId = ctx.snapshot === false ? null : await snapshotBeforeOverwrite(ctx.workspace, targetAbs, rel, ctx.callId);
     await writeFileAtomic(targetAbs, updated, {

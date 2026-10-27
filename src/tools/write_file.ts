@@ -9,6 +9,7 @@ import {
   assertNotFrozenReal,
   assertNotSensitivePathReal,
   assertRealContainment,
+  assertWritablePath,
   captureContainedPath,
   openContainedFile,
   resolveInWorkspace,
@@ -86,7 +87,10 @@ export const write_file: Tool = {
     await mkdir(dirname(targetAbs), { recursive: true });
     const parentAbs = dirname(targetAbs);
     const parentIdentity = await captureContainedPath(ctx.workspace, parentAbs, "write_file");
-    const guard = () => assertContainedPathIdentity(ctx.workspace, parentAbs, "write_file", parentIdentity);
+    const guard = async (): Promise<void> => {
+      await assertContainedPathIdentity(ctx.workspace, parentAbs, "write_file", parentIdentity);
+      await assertWritablePath(ctx.workspace, targetAbs, "write_file");
+    };
     // D7：覆盖已有文件前先把原件抄进 .agent/snapshots/（新建文件不占快照；失败不改写盘结果）。
     const snapshotId = ctx.snapshot === false ? null : await snapshotBeforeOverwrite(ctx.workspace, targetAbs, rel, ctx.callId);
     // 原子写：先写临时文件再 rename。直接 writeFile 是 O_TRUNC 后写，ENOSPC/EFBIG 或被硬杀

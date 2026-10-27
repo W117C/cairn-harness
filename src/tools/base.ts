@@ -284,6 +284,15 @@ export async function assertContainedPathIdentity(
   }
 }
 
+/** Recheck every write policy at the use boundary, after any directory creation
+ * or snapshot IO that could have allowed a path to change. */
+export async function assertWritablePath(workspace: string, abs: string, label: string): Promise<void> {
+  await assertRealContainment(workspace, abs, label);
+  await assertNotAgentAreaReal(workspace, abs, label);
+  await assertNotFrozenReal(workspace, abs, label);
+  await assertNotSensitivePathReal(workspace, abs, label);
+}
+
 // .agent/ 是系统区（审查 C-11：permissions.json 跨会话提权 / lsp.json 任意 command RCE 面 / plugins / memory）。
 // 记忆走 remember 专用通道、配置由用户维护——内容工具对整个 .agent/ 子树一律拒写。
 export function assertNotAgentArea(rel: string, label: string): void {

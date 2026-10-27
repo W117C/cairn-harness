@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open, readdir, type FileHandle } from "node:fs/promises";
-import { isAbsolute, join, relative } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 
 const FP_MAX_FILES = 5_000;
 const FP_MAX_FILE_BYTES = 8 * 1024 * 1024;
@@ -56,7 +56,7 @@ async function readBoundedSnapshot(abs: string): Promise<Buffer | null> {
 }
 
 function keyOf(root: string, abs: string): string | null {
-  const rel = relative(root, abs).replaceAll("\\", "/");
+  const rel = relative(root, abs).split(sep).join("/");
   if (isAbsolute(rel) || rel === ".." || rel.startsWith("../")) return null;
   return rel;
 }
@@ -67,7 +67,7 @@ function keyOf(root: string, abs: string): string | null {
  * Files that did not fit are deliberately absent: the loader treats their
  * absence as a load failure rather than reopening the live path. */
 export async function pluginSnapshot(root: string): Promise<PluginSnapshot> {
-  const parts: string[] = [];
+  const parts: [string, string][] = [];
   const files = new Map<string, Buffer>();
   const paths = new Set<string>();
   let count = 0;
@@ -76,7 +76,7 @@ export async function pluginSnapshot(root: string): Promise<PluginSnapshot> {
 
   const record = (key: string, content: Buffer): void => {
     count++;
-    parts.push(key + ":" + createHash("sha256").update(content).digest("hex"));
+    parts.push([key, createHash("sha256").update(content).digest("hex")]);
     if (snapshotBytes + content.length > FP_MAX_SNAPSHOT_BYTES) {
       bounded = true;
       return;
@@ -170,7 +170,8 @@ export async function pluginSnapshot(root: string): Promise<PluginSnapshot> {
 
   await walk(root);
   return {
-    fp: createHash("sha256").update(parts.sort().join("\n")).digest("hex").slice(0, 32),
+    // Tuple encoding preserves filename boundaries, including literal newlines.
+    fp: createHash("sha256").update(JSON.stringify(parts.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))).digest("hex").slice(0, 32),
     bounded,
     files,
     paths,

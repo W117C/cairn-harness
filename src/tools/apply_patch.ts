@@ -8,7 +8,7 @@
 //
 // 写盘纪律全部复用 `base.ts` 的四道闸 + `snapshot.ts` + `lsp.ts` + 影响面回注：本工具不另立第二套。
 import { constants } from "node:fs";
-import { mkdir, open, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, open, rename, unlink } from "node:fs/promises";
 import { dirname, posix } from "node:path";
 import {
   appendImpact,
@@ -18,6 +18,7 @@ import {
   assertNotFrozenReal,
   assertNotSensitivePathReal,
   assertRealContainment,
+  assertWritablePath,
   captureContainedPath,
   openContainedFile,
   resolveInWorkspace,
@@ -29,7 +30,7 @@ import {
 import { collectDiagnostics } from "./lsp.js";
 import { snapshotBeforeOverwrite, snapshotNote } from "./snapshot.js";
 import { contentLines } from "./line-delta.js";
-import { tmpPathFor } from "../atomic-write.js";
+import { tmpPathFor, writeFileAtomic } from "../atomic-write.js";
 import { parsePatch, PatchParseError, type PatchFile, type PatchHunk } from "./patch-parse.js";
 
 /** 补丁正文上限：比 write_file 的单文件 50KB 宽（补丁天然跨文件），但必须有界——
@@ -304,7 +305,11 @@ export const apply_patch: Tool = {
         }
         raw = decoded;
         originalMode = opened.stat.mode & 0o777;
-      } catch {
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          failures.push(`${f.path} 不可读：${error instanceof Error ? error.message : String(error)}`);
+          continue;
+        }
         raw = null;
       } finally {
         await sourceHandle?.close().catch(() => undefined);
@@ -369,12 +374,14 @@ export const apply_patch: Tool = {
         const parentAbs = dirname(p.abs);
         const parentIdentity = await captureContainedPath(ctx.workspace, parentAbs, "apply_patch");
         await assertContainedPathIdentity(ctx.workspace, parentAbs, "apply_patch", parentIdentity);
+        await assertWritablePath(ctx.workspace, p.abs, "apply_patch");
         const tmp = tmpPathFor(p.abs);
         const fh = await open(
           tmp,
           constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
           0o666,
         );
+        staged.push({ p, tmp, parentAbs, parentIdentity });
         try {
           await fh.writeFile(fromText(p.result.text), "utf8");
           // 临时文件按 0666&umask 创建：不补模式，rename 后原 0755/ACL 会被换成 0644。
@@ -382,7 +389,6 @@ export const apply_patch: Tool = {
         } finally {
           await fh.close().catch(() => undefined);
         }
-        staged.push({ p, tmp, parentAbs, parentIdentity });
         if (p.snap !== null && snapshotId === undefined) snapshotId = p.snap;
       }
       // 全部就绪：逐个 rename。同目录内 rename 原子，失败只剩"目录被撤权"这一种，概率极窄。
@@ -390,6 +396,7 @@ export const apply_patch: Tool = {
       for (const { p, tmp, parentAbs, parentIdentity } of staged) {
         try {
           await assertContainedPathIdentity(ctx.workspace, parentAbs, "apply_patch", parentIdentity);
+          await assertWritablePath(ctx.workspace, p.abs, "apply_patch");
           await rename(tmp, p.abs);
           renamed.push(p.rel);
         } catch (err) {
@@ -401,10 +408,17 @@ export const apply_patch: Tool = {
             if (other.p.rel === p.rel || !renamed.includes(other.p.rel)) continue;
             try {
               await assertContainedPathIdentity(ctx.workspace, other.parentAbs, "apply_patch", other.parentIdentity);
+              await assertWritablePath(ctx.workspace, other.p.abs, "apply_patch");
               if (other.p.original === null) {
                 await unlink(other.p.abs).catch(() => {});
               } else {
-                await writeFile(other.p.abs, other.p.original, "utf8");
+                await writeFileAtomic(other.p.abs, other.p.original, {
+                  ...(other.p.mode !== undefined ? { mode: other.p.mode } : {}),
+                  guard: async () => {
+                    await assertContainedPathIdentity(ctx.workspace, other.parentAbs, "apply_patch", other.parentIdentity);
+                    await assertWritablePath(ctx.workspace, other.p.abs, "apply_patch");
+                  },
+                });
               }
               rolled.push(other.p.rel);
             } catch {
@@ -439,8 +453,8 @@ export const apply_patch: Tool = {
     } catch (err) {
       // 阶段①（预写临时文件）失败：目标文件一个都没碰，清掉临时文件即可。
       // 阶段② 的失败已经在上面包成 ToolError（带回滚明细），直接透传。
-      if (err instanceof ToolError) throw err;
       for (const { tmp } of staged) await unlink(tmp).catch(() => {});
+      if (err instanceof ToolError) throw err;
       const why = err instanceof Error ? err.message : String(err);
       throw new ToolError(
         `apply_patch: 预写阶段失败（${why}）——目标文件一个都没有改动，整笔未写盘` +

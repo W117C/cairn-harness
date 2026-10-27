@@ -478,31 +478,50 @@ export class CanaryController {
         return await open(lockPath, "wx");
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-        const lock = await readStableTextFile(lockPath, 1024);
-        // 锁文件被外部删掉 ⇒ 没有持锁者可言，直接重取（这一支不靠 mtime，删了就是删了）。
-        // lgtm[js/file-system-race] The retry is an exclusive create; a path replaced after the read makes this fail, never follow it.
-        if (lock.kind === "missing") return await open(lockPath, "wx");
-        const holder = lock.kind === "ok" ? Number.parseInt(lock.text.trim(), 10) : Number.NaN;
-        // 探活：`kill(pid, 0)` 只问存在。EPERM＝存在但不是我的进程 ⇒ 算活着
-        // （判错了只能是多等，不能是抢走别人的锁）。
-        let alive = false;
-        if (Number.isInteger(holder) && holder > 0) {
-          try { process.kill(holder, 0); alive = true; }
-          catch (e) { alive = (e as NodeJS.ErrnoException).code === "EPERM"; }
+        // Serialize stale-lock inspection AND replacement. Without this second
+        // exclusive name, two reclaimers can each read a dead PID and the later
+        // one can delete the other's newly acquired live lock. Recovery itself
+        // fails closed after a crash: its marker requires explicit cleanup,
+        // rather than introducing the same stale-reclamation race recursively.
+        const reclaimPath = lockPath + ".reclaim";
+        let reclaim;
+        try {
+          reclaim = await open(reclaimPath, "wx", 0o600);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+          throw new CanaryRefusedError("另一实例正在恢复观察档锁；若恢复进程已退出，请确认后清理 .agent/.canary.lock.reclaim");
         }
-        if (alive) throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
-        // 持锁者已不在 ⇒ 直接收回，**不看时钟**。这正是修的那一格：旧逻辑在这里仍要求
-        // "超过 60s"，时钟一回跳（NTP 校正 / 虚拟机恢复 / 手动改表），死进程留下的锁永远读不出
-        // 超时 ⇒ canary 从这一秒起永远 refused，而盘上没有任何东西能解开它。
-        // pid 读不出（NaN，典型是崩溃在 open 与 writeFile 之间）时不猜，退回 60s 时间兜底。
-        if (!Number.isInteger(holder) || holder <= 0) {
-          if (lock.kind !== "ok" || Date.now() - lock.mtimeMs <= 60_000) {
-            throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
+        try {
+          await reclaim.writeFile(String(process.pid));
+          const lock = await readStableTextFile(lockPath, 1024);
+          // 锁文件被外部删掉 ⇒ 没有持锁者可言，直接重取（这一支不靠 mtime，删了就是删了）。
+          // lgtm[js/file-system-race] The retry is an exclusive create; a path replaced after the read makes this fail, never follow it.
+          if (lock.kind === "missing") return await open(lockPath, "wx");
+          const holder = lock.kind === "ok" ? Number.parseInt(lock.text.trim(), 10) : Number.NaN;
+          // 探活：`kill(pid, 0)` 只问存在。EPERM＝存在但不是我的进程 ⇒ 算活着
+          // （判错了只能是多等，不能是抢走别人的锁）。
+          let alive = false;
+          if (Number.isInteger(holder) && holder > 0) {
+            try { process.kill(holder, 0); alive = true; }
+            catch (e) { alive = (e as NodeJS.ErrnoException).code === "EPERM"; }
           }
+          if (alive) throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
+          // 持锁者已不在 ⇒ 直接收回，**不看时钟**。这正是修的那一格：旧逻辑在这里仍要求
+          // "超过 60s"，时钟一回跳（NTP 校正 / 虚拟机恢复 / 手动改表），死进程留下的锁永远读不出
+          // 超时 ⇒ canary 从这一秒起永远 refused，而盘上没有任何东西能解开它。
+          // pid 读不出（NaN，典型是崩溃在 open 与 writeFile 之间）时不猜，退回 60s 时间兜底。
+          if (!Number.isInteger(holder) || holder <= 0) {
+            if (lock.kind !== "ok" || Date.now() - lock.mtimeMs <= 60_000) {
+              throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
+            }
+          }
+          await rm(lockPath, { force: true }).catch(() => undefined);
+          // lgtm[js/file-system-race] The exclusive recovery marker serializes inspection/removal; final acquisition is also exclusive.
+          return await open(lockPath, "wx");
+        } finally {
+          await reclaim.close().catch(() => undefined);
+          await rm(reclaimPath, { force: true }).catch(() => undefined);
         }
-        await rm(lockPath, { force: true }).catch(() => undefined);
-        // lgtm[js/file-system-race] The retry is an exclusive create; a path replaced after reclaim makes this fail, never follow it.
-        return await open(lockPath, "wx");
       }
     };
     const fh = await acquire();
