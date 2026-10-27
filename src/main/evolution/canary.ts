@@ -26,9 +26,9 @@
 //    active/previous 的 activatedAt 会被 rollback 重新盖章，拿时间戳反过来推"谁是候选"会翻车。
 //  · 读不动观察档不许折成"没有档"（那等于把连败计数静默清零）：一个点名 refused，一个不动账。
 import { constants } from "node:fs";
-import { mkdir, open, readdir, readFile, rm, stat, type FileHandle } from "node:fs/promises";
+import { mkdir, open, readdir, readFile, rename, rm, stat, type FileHandle } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
-import { writeFileAtomic } from "../../atomic-write";
+import { tmpPathFor, writeFileAtomic } from "../../atomic-write";
 import { EVIDENCE_LINE_PREFIX, LESSON_MEMORY_TYPE, LESSON_TOPIC_PREFIX, SESSION_LINE_PREFIX } from "../../agent/memory/lessons";
 import { projectMemoryDir, writeTopic } from "../../agent/memory/store";
 import { Installer } from "./installer";
@@ -496,6 +496,7 @@ export class CanaryController {
             await reclaim.writeFile(String(process.pid));
             let lock: FileHandle | undefined;
             try {
+              // codeql[js/file-system-race]
               lock = await open(lockPath, constants.O_RDWR | (constants.O_NOFOLLOW ?? 0));
             } catch (error) {
               const code = (error as NodeJS.ErrnoException).code;
@@ -506,18 +507,22 @@ export class CanaryController {
             if (lock !== undefined) {
               try {
                 const before = await lock.stat();
-                if (!before.isFile()) throw new CanaryRefusedError("观察档锁不是常规文件，请人工检查 .agent/.canary.lock");
+                if (!before.isFile() || before.nlink !== 1) {
+                  throw new CanaryRefusedError("观察档锁不是独立常规文件，请人工检查 .agent/.canary.lock");
+                }
                 const text = await lock.readFile("utf8");
                 const after = await lock.stat();
                 if (
                   after.dev !== before.dev ||
                   after.ino !== before.ino ||
+                  after.nlink !== 1 ||
                   after.size !== before.size ||
                   after.mtimeMs !== before.mtimeMs
                 ) {
                   throw new CanaryRefusedError("观察档锁在读取期间发生变化，请稍后重试");
                 }
                 const holder = Number.parseInt(text.trim(), 10);
+                const released = text.trim() === "released";
                 // 探活：`kill(pid, 0)` 只问存在。EPERM＝存在但不是我的进程 ⇒ 算活着。
                 let alive = false;
                 if (Number.isInteger(holder) && holder > 0) {
@@ -526,16 +531,30 @@ export class CanaryController {
                 }
                 if (alive) throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
                 // pid 读不出时不猜，退回 60s 时间兜底。
-                if (!Number.isInteger(holder) || holder <= 0) {
+                if (!released && (!Number.isInteger(holder) || holder <= 0)) {
                   if (Date.now() - before.mtimeMs <= 60_000) {
                     throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
                   }
                 }
-                // Reuse the inspected descriptor to replace stale contents. This
-                // avoids a path-based delete/create window during reclamation.
-                await lock.truncate(0);
-                await lock.write(String(process.pid), 0);
-                acquired = lock;
+                // Never write through the inspected inode. A hardlink made after
+                // inspection cannot be redirected into a victim because takeover
+                // creates a fresh inode and atomically replaces only the lock name.
+                const replacement = tmpPathFor(lockPath);
+                let next: FileHandle | undefined;
+                try {
+                  next = await open(
+                    replacement,
+                    constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+                    0o600,
+                  );
+                  await next.write(String(process.pid), 0);
+                  await rename(replacement, lockPath);
+                  acquired = next;
+                } catch (error) {
+                  if (next !== undefined) await next.close().catch(() => undefined);
+                  await rm(replacement, { force: true }).catch(() => undefined);
+                  throw error;
+                }
               } finally {
                 if (acquired !== lock) await lock.close().catch(() => undefined);
               }
@@ -552,11 +571,12 @@ export class CanaryController {
     const fh = await acquire();
     this.lockDepth += 1;
     try {
-      try { await fh.write(String(process.pid), 0); } finally { await fh.close().catch(() => undefined); }
+      await fh.write(String(process.pid), 0);
       return await fn();
     } finally {
       this.lockDepth -= 1;
-      await rm(lockPath, { force: true }).catch(() => undefined);
+      await fh.write("released", 0).catch(() => undefined);
+      await fh.close().catch(() => undefined);
     }
   }
 

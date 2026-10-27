@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
@@ -69,6 +69,38 @@ it("two stale-lock contenders never enter the canary critical section together",
     holdCriticalSection.release();
     await Promise.allSettled([taskA, taskB]);
     hooks.beforeRemove = undefined;
+    vi.restoreAllMocks();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("release cannot delete a replacement lock path", async () => {
+  const root = await mkdtemp(join(tmpdir(), "canary-lock-release-aba-"));
+  const lockPath = join(root, ".agent", ".canary.lock");
+  const entered = latch();
+  const releaseCriticalSection = latch();
+  let task: Promise<unknown> | undefined;
+  try {
+    await mkdir(join(root, ".agent"), { recursive: true });
+    const registry = new ModuleRegistry(root, { knownGates: new Set(["typecheck"]) });
+    const readIndex = registry.readIndex.bind(registry);
+    vi.spyOn(registry, "readIndex").mockImplementation(async () => {
+      entered.release();
+      await releaseCriticalSection.promise;
+      return await readIndex();
+    });
+    const controller = new CanaryController({ registry, workspace: root });
+    const sample: CanarySample = { verifyOutcome: "green", costMeasurable: true, tokensPerBoundary: 1, spendAfterLastBoundary: 0 };
+    task = controller.tickAll(sample).catch((error: unknown) => error);
+    await entered.promise;
+    await rm(lockPath, { force: true });
+    await writeFile(lockPath, "2147483646", "utf8");
+    releaseCriticalSection.release();
+    await task;
+    expect(await readFile(lockPath, "utf8")).toBe("2147483646");
+  } finally {
+    releaseCriticalSection.release();
+    await Promise.allSettled([task]);
     vi.restoreAllMocks();
     await rm(root, { recursive: true, force: true });
   }

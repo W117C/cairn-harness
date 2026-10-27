@@ -25,7 +25,7 @@ describe("事件流", () => {
     const link = join(dir, "events.jsonl");
     await writeFile(target, JSON.stringify({ type: "user_message", content: "target" }) + "\n");
     await symlink(target, link);
-    await expect(replayIncremental(link)).rejects.toThrow(/不是常规文件/);
+    await expect(replayIncremental(link)).rejects.toThrow(/软链/);
   });
   it("写 3 条 → replay 回 3 条且顺序一致", async () => {
     dir = await mkdtemp(join(tmpdir(), "cairn-events-"));
