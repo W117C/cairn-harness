@@ -52,7 +52,7 @@ export interface SessionAssemblyDeps {
   /** 「最近一次 run 的日志路径」（装配根的可变状态，活读）。 */
   lastLogPath: () => string | null;
   /** 事件推送（装配根 `hooks.onEvent` 的活读；装配根那份解包成同一个口）。 */
-  onEvent: (e: AgentEvent) => void;
+  onEvent: (e: AgentEvent, logPath?: string) => void;
   /** 沙箱自检结果（装配根的可变状态，活读）。 */
   sandboxState: () => SandboxStatus;
   orchestratorExtras: OrchestratorExtras;
@@ -160,7 +160,7 @@ export async function ensureSessionOrchestrator(): Promise<Orchestrator | null> 
     parentMode: recoveryParentMode(await replay(logPath).catch(() => []), (await store().get()).mode),
     emit: async (e: AgentEvent) => {
       await log.append(e);
-      D().onEvent(e);
+      D().onEvent(e, logPath);
     },
     sandbox: D().sandboxState(),
     rules: loadPermissionRules(projectAgentPath(workspace, "permissions.json"), globalPermissionsPath()),

@@ -159,7 +159,7 @@ setSettingsHostDeps({
 // 随本笔搬成 import 之后值已固定，这里保留闭包写法只为不让两处形状分叉）。
 setSchedulerRuntimeDeps({
   defaultWorkspace: () => DEFAULT_WORKSPACE,
-  onEvent: (e) => hooks.onEvent?.(e),
+  onEvent: (e, logPath) => hooks.onEvent?.(e, logPath),
   runSession: (workspace, args) =>
     handleAgentRun({ message: args.message, mode: args.mode }, { sessionId: args.sessionId, workspace, unattended: true, signal: args.signal }),
   currentSession: () => currentSession(),
@@ -167,13 +167,13 @@ setSchedulerRuntimeDeps({
 
 // goal 面同理（实现住 ./goal-handlers）：事件推送与价键派生按回调注入，其余依赖它自己 import。
 setGoalHandlerDeps({
-  onEvent: (e) => hooks.onEvent?.(e),
+  onEvent: (e, logPath) => hooks.onEvent?.(e, logPath),
   budgetPriceKeyOf: (selection) => budgetPriceKeyOf(selection),
 });
 
 // sidechat 面同理（实现住 ./sidechat-handlers）：事件推送 / 最近 run 日志 / 当前工作区三处活状态注入。
 setSidechatHandlerDeps({
-  onEvent: (e) => hooks.onEvent?.(e),
+  onEvent: (e, logPath) => hooks.onEvent?.(e, logPath),
   lastLogPath: () => lastLogPath,
   currentWorkspace: () => currentWorkspace(),
 });
@@ -207,7 +207,7 @@ setSessionAssemblyDeps({
   activeOrchestrator: () => activeOrchestrator,
   setActiveOrchestrator: (o) => { activeOrchestrator = o; },
   lastLogPath: () => lastLogPath,
-  onEvent: (e) => hooks.onEvent?.(e),
+  onEvent: (e, logPath) => hooks.onEvent?.(e, logPath),
   sandboxState: () => sandboxState,
   orchestratorExtras: (sandbox, runModel, trust, over) => orchestratorExtras(sandbox, runModel, trust, over),
 });
@@ -378,9 +378,9 @@ async function orchestratorExtras(
 }
 
 interface Hooks {
-  onAppend?: (e: AgentEvent) => void | (() => void);
-  onAppendFailed?: (e: AgentEvent) => void;
-  onEvent?: (e: AgentEvent) => void;
+  onAppend?: (e: AgentEvent, logPath?: string) => void | (() => void);
+  onAppendFailed?: (e: AgentEvent, logPath?: string) => void;
+  onEvent?: (e: AgentEvent, logPath?: string) => void;
   onAsk?: (p: AskPayload) => void;
   onAskOutcome?: (p: AskOutcomePayload) => void;
 }
@@ -423,15 +423,15 @@ export async function handleCompact(
     logPath,
     async (e) => {
       const hookEvent = { ...e, session_id: sessionId } as AgentEvent;
-      const commit = hooks.onAppend?.(hookEvent);
+      const commit = hooks.onAppend?.(hookEvent, logPath);
       try {
         await log.append(e);
       } catch (error) {
-        hooks.onAppendFailed?.(hookEvent);
+        hooks.onAppendFailed?.(hookEvent, logPath);
         throw error;
       }
       commit?.();
-      hooks.onEvent?.(hookEvent);
+      hooks.onEvent?.(hookEvent, logPath);
     },
     currentPluginRuntime()?.hooks,
   );
@@ -1708,7 +1708,7 @@ export async function handleAgentRun(
         autoVerifyRepair: (await store().get()).autoVerifyRepair,
         onAppend: (e) => {
           const hookEvent = sessionId === undefined ? e : ({ ...e, session_id: sessionId } as AgentEvent);
-          const commits = [over.onAppend?.(hookEvent), hooks.onAppend?.(hookEvent)]
+          const commits = [over.onAppend?.(hookEvent), hooks.onAppend?.(hookEvent, logPath)]
             .filter((commit): commit is () => void => typeof commit === "function");
           return () => {
             for (const commit of commits) commit();
@@ -1717,14 +1717,14 @@ export async function handleAgentRun(
         onAppendFailed: (e) => {
           const hookEvent = sessionId === undefined ? e : ({ ...e, session_id: sessionId } as AgentEvent);
           over.onAppendFailed?.(hookEvent);
-          hooks.onAppendFailed?.(hookEvent);
+          hooks.onAppendFailed?.(hookEvent, logPath);
         },
         onEvent: (e) => {
           over.onEvent?.(e);
           // F1（审查 P1-14）：agent:event 是全局通道——事件载荷带 session_id，renderer 按当前
           // 会话过滤（定时/后台 run 的事件不再串进用户正看的会话）。仅标记 UI 推送面，
           // JSONL 落盘内容不变（pipeline 已 append 原事件）；无 sessionId 的旧脚本路径不带标记。
-          hooks.onEvent?.(sessionId !== undefined ? ({ ...e, session_id: sessionId } as AgentEvent) : e);
+          hooks.onEvent?.(sessionId !== undefined ? ({ ...e, session_id: sessionId } as AgentEvent) : e, logPath);
         },
         // #96：`noAnswerer`（cli.ts 在非 TTY 那一路翻的槽）以前只喂 goal 续跑闸，这一行不认它
         // ⇒ 管道形状照样拿交互面那只门去"等人答"，而没有任何人会答：每条写向停 60s。

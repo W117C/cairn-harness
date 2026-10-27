@@ -619,8 +619,8 @@ export const MUTATIONS = [
     test: "tests/compact-wiring.test.ts",
     desc: "手动压缩只推不落盘（历史原样）⇒ 压缩卡当场看得见、下一次 run 重放又是全文：花一次摘要的钱换个零效果。演示那条支用会话管线，所以它红着门也绿",
     apply: (s) => s.replace(
-      "      const commit = hooks.onAppend?.(hookEvent);\n      try {\n        await log.append(e);\n      } catch (error) {\n        hooks.onAppendFailed?.(hookEvent);\n        throw error;\n      }\n      commit?.();\n      hooks.onEvent?.(hookEvent);",
-      "      hooks.onEvent?.(hookEvent);",
+      "      const commit = hooks.onAppend?.(hookEvent, logPath);\n      try {\n        await log.append(e);\n      } catch (error) {\n        hooks.onAppendFailed?.(hookEvent, logPath);\n        throw error;\n      }\n      commit?.();\n      hooks.onEvent?.(hookEvent, logPath);",
+      "      hooks.onEvent?.(hookEvent, logPath);",
     ),
     expectFail: "压缩事件既上屏**也**落盘：只推不写就是花一次摘要钱换个零效果",
   },
