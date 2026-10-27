@@ -6,10 +6,10 @@
 //   loose   = 显式给出的散装 skill 根（foo/SKILL.md 无 manifest = 独立 skill，免包装加载）
 // 会话启动静态扫描产「加载清单」（不新增事件类型）；单插件失败隔离：坏 manifest/坏 hook JSON
 // 只影响自身（errors 聚合 + 面板报错），其余照常。
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { parseFrontmatter, fmString } from "./frontmatter";
-import { pluginFingerprintEx } from "./trust";
+import { pluginSnapshot } from "./snapshot";
 import { parsePluginManifest, parseHooksFile, detectJsEntry, PluginLoadError } from "./manifest";
 import { parseHookIf } from "./hooks";
 import { LSP_SERVER_FIELDS } from "./types";
@@ -17,6 +17,12 @@ import type {
   DiscoveredPlugin, LooseSkill, PluginScanRoots, PluginScope, PluginsManifest, SkillEntry, PromptCommandEntry,
   AgentRoleEntry, LoadedHookDef, HookEventName, HookMatcherDef, LspConfigFile, LspServerConfig,
 } from "./types";
+import {
+  snapshotIsDirectory,
+  snapshotListDirectory,
+  snapshotReadText,
+  type PluginSnapshot,
+} from "./snapshot";
 
 async function dirExists(p: string): Promise<boolean> {
   try { return (await stat(p)).isDirectory(); } catch { return false; }
@@ -50,9 +56,11 @@ async function scanScopeRoot(
         // 塌成 pending——那会让 decide 写下的无界条目永不命中，「批准了还弹卡」死循环。
         // bounded 位随查询一起传给信任库，编进条目键（abs@fp+b）：批准一次即对该形态生效，
         // 内容有界/无界形态互换或指纹变化都自然不命中 = 重新出卡。
-        const { fp, bounded } = await pluginFingerprintEx(abs);
+        const snapshot = await pluginSnapshot(abs);
+        const { fp, bounded } = snapshot;
         if (bounded) warnings.push({ plugin: name, message: "内容指纹不完整（含软链 / 超出上限 / 有文件读不出）⇒ 不可批准（fail-closed）；请改成普通文件布局" });
-        plugins.push(await loadContainer(abs, scope, trustOf(abs, fp, bounded)));
+        const loaded = await loadPluginFromSnapshot(abs, scope, trustOf(abs, fp, bounded), snapshot);
+        plugins.push(loaded);
       } catch (err) {
         // 单插件失败隔离：坏 manifest 只影响自身
         errors.push({ plugin: name, message: err instanceof Error ? err.message : String(err) });
@@ -62,9 +70,10 @@ async function scanScopeRoot(
       // E3（审查 P1-13）：项目作用域 loose skill 同走信任门——frontmatter description 随路由
       // 清单直进 system prompt = 注入面，克隆仓库放一个 SKILL.md 不许免审批；免信任只保留给
       // 显式 looseRoots 与用户级安装（两处的 trustOf 恒 trusted）。
-      const { fp, bounded } = await pluginFingerprintEx(abs);
+      const snapshot = await pluginSnapshot(abs);
+      const { fp, bounded } = snapshot;
       if (bounded) warnings.push({ plugin: name, message: "内容指纹不完整（含软链 / 超出上限 / 有文件读不出）⇒ 不可批准（fail-closed）" });
-      const entry = await loadSkillEntry(null, name, abs);
+      const entry = await loadSkillEntry(null, abs, name, abs, snapshot);
       if (entry) loose.push({ name, root: abs, entry, trust: trustOf(abs, fp, bounded), scope });
     }
   }
@@ -72,30 +81,33 @@ async function scanScopeRoot(
 }
 
 /** 装载一个容器插件；任何结构性错误抛 PluginLoadError（由调用方隔离）。 */
-async function loadContainer(
+/** Load a container using only bytes already bound by pluginSnapshot. Exported
+ * so the snapshot-to-loader boundary has a direct regression test. */
+export async function loadPluginFromSnapshot(
   root: string,
   scope: PluginScope,
   trust: "trusted" | "pending" | "declined",
+  snapshot: PluginSnapshot,
 ): Promise<DiscoveredPlugin> {
   const errors: string[] = [];
   const warnings: string[] = [];
-  const jsEntry = await detectJsEntry(root);
+  const jsEntry = await detectJsEntry(root, snapshot);
   if (jsEntry) {
     // 代码插件拒载 + 警告（能力边界：插件零进程内第三方代码）
     throw new PluginLoadError("代码插件拒载（能力边界：插件零进程内第三方代码）：检测到 JS 入口 " + jsEntry);
   }
-  const m = await parsePluginManifest(root);
+  const m = await parsePluginManifest(root, snapshot);
   warnings.push(...m.warnings);
   const pluginName = m.name;
 
   // skills/<name>/SKILL.md
   const skills: SkillEntry[] = [];
   const skillsRoot = join(root, m.skillsDir);
-  if (await dirExists(skillsRoot)) {
-    for (const dir of (await readdir(skillsRoot)).sort()) {
+  if (snapshotIsDirectory(root, skillsRoot, snapshot)) {
+    for (const dir of snapshotListDirectory(root, skillsRoot, snapshot)) {
       const abs = join(skillsRoot, dir);
-      if (!(await dirExists(abs))) continue;
-      const entry = await loadSkillEntry(pluginName, dir, abs);
+      if (!snapshotIsDirectory(root, abs, snapshot)) continue;
+      const entry = await loadSkillEntry(pluginName, root, dir, abs, snapshot);
       if (entry) skills.push(entry);
     }
   }
@@ -103,11 +115,11 @@ async function loadContainer(
   // commands/*.md
   const commands: PromptCommandEntry[] = [];
   const commandsRoot = join(root, m.commandsDir);
-  if (await dirExists(commandsRoot)) {
-    for (const f of (await readdir(commandsRoot)).sort()) {
+  if (snapshotIsDirectory(root, commandsRoot, snapshot)) {
+    for (const f of snapshotListDirectory(root, commandsRoot, snapshot)) {
       if (!f.endsWith(".md")) continue;
       const abs = join(commandsRoot, f);
-      const text = await readFile(abs, "utf8").catch(() => "");
+      const text = snapshotReadText(root, abs, snapshot) ?? "";
       const { frontmatter, body } = parseFrontmatter(text);
       commands.push({
         plugin: pluginName,
@@ -123,11 +135,11 @@ async function loadContainer(
   // agents/*.md（解析并注册；采纳留 M3）
   const agents: AgentRoleEntry[] = [];
   const agentsRoot = join(root, m.agentsDir);
-  if (await dirExists(agentsRoot)) {
-    for (const f of (await readdir(agentsRoot)).sort()) {
+  if (snapshotIsDirectory(root, agentsRoot, snapshot)) {
+    for (const f of snapshotListDirectory(root, agentsRoot, snapshot)) {
       if (!f.endsWith(".md")) continue;
       const abs = join(agentsRoot, f);
-      const text = await readFile(abs, "utf8").catch(() => "");
+      const text = snapshotReadText(root, abs, snapshot) ?? "";
       const { frontmatter, body } = parseFrontmatter(text);
       agents.push({
         plugin: pluginName,
@@ -154,7 +166,8 @@ async function loadContainer(
   };
   if (m.hooksRef.kind === "path") {
     try {
-      const raw = await readFile(m.hooksRef.path, "utf8");
+      const raw = snapshotReadText(root, m.hooksRef.path, snapshot);
+      if (raw === null) throw new PluginLoadError("hooks 文件不可完整读取: " + m.hooksRef.path);
       collectHooks(parseHooksFile(raw, m.hooksRef.path));
     } catch (err) {
       // 坏 hook JSON 只影响自身（隔离），不炸整插件
@@ -168,7 +181,8 @@ async function loadContainer(
   const lsp: Record<string, LspServerConfig> = {};
   const lspPath = join(root, ".lsp.json");
   try {
-    const raw = await readFile(lspPath, "utf8");
+    const raw = snapshotReadText(root, lspPath, snapshot);
+    if (raw === null) throw new Error("not present");
     const parsed = JSON.parse(raw) as LspConfigFile;
     for (const [id, cfg] of Object.entries(parsed.servers ?? {})) {
       if (cfg && typeof cfg === "object" && cfg.transport === "socket") {
@@ -240,14 +254,16 @@ function flattenHooks(plugin: string, pluginRoot: string, hooks: Partial<Record<
 }
 
 /** 装载一个 skill 条目（容器内或散装）；frontmatter name/description 缺省回退目录名。 */
-async function loadSkillEntry(plugin: string | null, dirName: string, dir: string): Promise<SkillEntry | null> {
+async function loadSkillEntry(
+  plugin: string | null,
+  root: string,
+  dirName: string,
+  dir: string,
+  snapshot: PluginSnapshot,
+): Promise<SkillEntry | null> {
   const path = join(dir, "SKILL.md");
-  let text: string;
-  try {
-    text = await readFile(path, "utf8");
-  } catch {
-    return null;
-  }
+  const text = snapshotReadText(root, path, snapshot);
+  if (text === null) return null;
   const { frontmatter, body } = parseFrontmatter(text);
   return {
     plugin,

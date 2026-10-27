@@ -11,7 +11,7 @@
 // 退出码三态：0＝每一片都判「已杀死」；1＝有片判红（存活／红了未点名／基线红／未生效）；
 // 2＝**取料坏**（树不干净／两片同一路径／名单为空／红行抽取对不上）——这一档不是「没有红」，是没尺。
 import { execFileSync, spawn } from "node:child_process";
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, constants, existsSync, openSync, readFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -257,7 +257,17 @@ async function main(): Promise<void> {
     return;
   }
 
-  for (const p of logs) writeFileSync(p, ""); // 先截断：边跑边 append，不截断就会把上一轮的原文续在同一份里
+  for (const p of logs) {
+    try { unlinkSync(p); } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    }
+    const fd = openSync(
+      p,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+      0o600,
+    );
+    closeSync(fd);
+  }
   const t0 = Date.now();
   const raw = await Promise.all(shards.map((sh, i) => runShard(distinct[i % distinct.length]!, sh, `${f.lockTagBase}-${String(i)}`, f.budgetMs, logs[i]!)));
   const wallSec = (Date.now() - t0) / 1000;

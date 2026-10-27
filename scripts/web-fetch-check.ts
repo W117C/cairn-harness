@@ -22,7 +22,7 @@ import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { assertPublicUrl, blockedReason, type HostResolver } from "../src/tools/web-fetch-policy.js";
+import { assertPublicUrl, type HostResolver } from "../src/tools/web-fetch-policy.js";
 import { MAX_REDIRECTS, makeWebFetch } from "../src/tools/web_fetch.js";
 import { evaluate, newAutonomySession } from "../src/permissions/autonomy.js";
 import { PERMISSION_MODES } from "../src/permissions/modes.js";

@@ -2,7 +2,7 @@
 // 运行面装载器（已激活包重验 + 三 kind 装载）与 canary 观察期（退化自动回退 + lesson 沉淀）。
 // 判据全在 tmp 根上跑（测试数据绝不落工作区）；门执行面与 lesson 写盘都用注桩/临时目录，不起真进程。
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -573,11 +573,35 @@ describe("canary 跨进程锁：探活优先于时钟（2026-10-19）", () => {
     expect(r.refused).toContain("另一实例正在更新观察档");
   });
 
+  it("锁的最终组件是软链 ⇒ 拒绝跟随，也不改写软链目标", async () => {
+    await mkdir(dirname(lockPath()), { recursive: true });
+    const target = join(root, "outside-lock");
+    const original = "2147483646";
+    await writeFile(target, original, "utf8");
+    await import("node:fs/promises").then((fs) => fs.symlink(target, lockPath()));
+    const r = await tick();
+    expect(r.outcome).toBe("refused");
+    expect(r.refused).toContain("软链");
+    expect(await readFile(target, "utf8")).toBe(original);
+  });
+
+  it("锁是受害文件的 hardlink ⇒ 拒绝接管，也不写穿受害文件", async () => {
+    await mkdir(dirname(lockPath()), { recursive: true });
+    const victim = join(root, "outside-lock");
+    const original = "84713";
+    await writeFile(victim, original, "utf8");
+    await link(victim, lockPath());
+    const r = await tick();
+    expect(r.outcome).toBe("refused");
+    expect(r.refused).toContain("独立常规文件");
+    expect(await readFile(victim, "utf8")).toBe(original);
+  });
+
   it("零档取锁 ⇒ 不顺手建出 `.agent/canary/`（既有判据：没有档 = 目录不存在）", async () => {
     const r = await tick();
     expect(r.outcome).toBe("empty");
     expect(existsSync(join(root, ".agent", "canary"))).toBe(false);
-    // 锁本身用完即销，不在盘上留残余
-    expect(existsSync(lockPath())).toBe(false);
+    // 释放只标记同一 inode，不按锁路径删除，避免释放阶段的路径 ABA。
+    expect(await readFile(lockPath(), "utf8")).toBe("released");
   });
 });

@@ -137,8 +137,6 @@ export interface DriftSnapshot {
 export type DriftVerdict =
   /** 放行：没有外部改动。 */
   | { kind: "allow" }
-  /** 放行，但基线不可信 ⇒ 先重建基线再跑（见下）。 */
-  | { kind: "rebuild" }
   /** 拒绝：有外部改动的证据。 */
   | { kind: "reject" };
 
@@ -149,11 +147,8 @@ export type DriftVerdict =
  *  ② **文件不在场** ⇒ 拒绝（快照在而文件没了 = 外部删除）。
  *  ③ **文件自基线起逐字未动** ⇒ 放行（零 I/O 快路径）。**这条排在不稳之前**：
  *     快照不稳只说明"我们测不准"，不是"别人改了"；文件确实没动时不该被拒。
- *  ④ **基线不稳** ⇒ **重建后放行**，不是拒绝。理由见 externalDrift 的注释：
- *     旧实现在这里直接 `return true`（拒绝），而拒绝发生在 refreshSnapshot 之前
- *     ⇒ 基线永远不重建 ⇒ 会话**永久卡死**，且那句文案（"会话已被外部修改（CLI？）"）
- *     是**没有证据的指控**。实测：20MB 会话日志、本端无人写、文件逐字未动，
- *     连续两轮 run 全被这句拒绝，连它自己给的出路（"请刷新后重试"）都走不通。
+ *  ④ **基线不稳且文件变了** ⇒ 拒绝，交由 openSession 显式刷新。自身尾随写不能证明
+ *     没有同时发生外部修改；自动重建会把外部行吸收进基线。文件未动仍由③正常放行。
  *  ⑤ **增长行数 == 本端事件数** ⇒ 增长全来自本端 ⇒ 刷新基线放行；否则拒绝。
  */
 export function decideDrift(input: {
@@ -168,7 +163,7 @@ export function decideDrift(input: {
   if (snap === undefined) return { kind: "allow" };
   if (input.current === null) return { kind: "reject" };
   if (input.current.size === snap.size && input.current.mtimeMs === snap.mtimeMs) return { kind: "allow" };
-  if (snap.unstable === true) return { kind: "rebuild" };
+  if (snap.unstable === true) return { kind: "reject" };
   if (input.ownSinceSnapshot > 0 && input.currentLines !== null && input.currentLines === snap.lines + input.ownSinceSnapshot) {
     return { kind: "allow" };
   }
@@ -184,9 +179,11 @@ export async function stableSessionSnapshot(
   statSession: () => Promise<{ size: number; mtimeMs: number } | null>,
   countLines: () => Promise<number | null>,
   ownAppends: () => number,
+  pendingAppends: () => number = () => 0,
 ): Promise<DriftSnapshot | null> {
   let latest: DriftSnapshot | null = null;
   for (let attempt = 0; attempt < SNAPSHOT_STABLE_ATTEMPTS; attempt++) {
+    const pendingBefore = pendingAppends();
     const ownBefore = ownAppends();
     const before = await statSession();
     if (before === null) return null;
@@ -195,8 +192,16 @@ export async function stableSessionSnapshot(
     const after = await statSession();
     if (after === null) return null;
     const ownAfter = ownAppends();
+    const pendingAfter = pendingAppends();
     latest = { size: after.size, mtimeMs: after.mtimeMs, lines, ownAtSnapshot: ownAfter };
-    if (ownBefore === ownAfter && before.size === after.size && before.mtimeMs === after.mtimeMs) {
+    if (
+      pendingBefore === 0 &&
+      pendingAfter === 0 &&
+      ownBefore === ownAfter &&
+      before.size === after.size &&
+      before.mtimeMs === after.mtimeMs &&
+      ownAfter <= lines
+    ) {
       return latest;
     }
     await new Promise<void>((resolve) => { setImmediate(resolve); });
@@ -311,17 +316,29 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
   // 快照按 logPath（=工作区×会话）记，不按裸 id：同一秒在两工作区外部建的会话 id 可同名
   // （core 撞名规避只在各自根内），按 id 记会让两个文件的基线互相覆盖。
   const drift = new Map<string, DriftSnapshot>();
-  // 本端事件计数：setAppHooks.onEvent 是每一条会话 JSONL 追加的下游（agent-runner pipeline
-  // 「先 log.append 后 onEvent」，agent-runner.ts:1618-1626），事件带 session_id ⇒ 每见一次
-  // = 本端向该会话落了一行。用「行数守恒」区分本端尾随写与外部追加，见 externalDrift。
-  // 已知局限（如实记）：计数只能按 session_id 归并——同 id 跨工作区（同秒撞名）且两流
-  // 并发尾随时，计数互相抬高 ⇒ 归因保守偏「拒」（不静默覆盖是底线方向），openSession 刷新即恢复。
+  // 追加归因按实际日志路径计数，与漂移基线共用键。不同工作区或旧 host 的同名会话
+  // 不能补偿当前日志里的外部追加；没有落盘路径的 UI 推送不参与归因。
   const ownAppends = new Map<string, number>();
+  const pendingAppends = new Map<string, number>();
+  const changePending = (logPath: string, delta: number): void => {
+    const next = (pendingAppends.get(logPath) ?? 0) + delta;
+    if (next <= 0) pendingAppends.delete(logPath);
+    else pendingAppends.set(logPath, next);
+  };
 
   setAppHooks({
-    onEvent: (e) => {
-      const sid = (e as { session_id?: unknown }).session_id;
-      if (typeof sid === "string") ownAppends.set(sid, (ownAppends.get(sid) ?? 0) + 1);
+    onAppend: (_e, logPath) => {
+      if (logPath !== undefined) {
+        changePending(logPath, 1);
+        return () => { changePending(logPath, -1); };
+      }
+      return undefined;
+    },
+    onAppendFailed: (_e, logPath) => {
+      if (logPath !== undefined) changePending(logPath, -1);
+    },
+    onEvent: (e, logPath) => {
+      if (logPath !== undefined) ownAppends.set(logPath, (ownAppends.get(logPath) ?? 0) + 1);
       deps.outbox("onEvent", e);
     },
     onAsk: (p) => deps.outbox("onAsk", p),
@@ -348,16 +365,21 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
   };
   /** 刷新基线为同一稳定时点的文件三面。worker 尾随写可能插在任意两次异步读取之间，
    *  由 stableSessionSnapshot 反复取到 stat / 行数 / 本端计数都不再变化才落盘。 */
-  const refreshSnapshot = async (sessionId: string, logPath: string): Promise<void> => {
+  const refreshSnapshot = async (logPath: string, preserveStable = false): Promise<void> => {
     const snapshot = await stableSessionSnapshot(
       () => statSession(logPath),
       () => countLines(logPath),
-      () => ownAppends.get(sessionId) ?? 0,
+      () => ownAppends.get(logPath) ?? 0,
+      () => pendingAppends.get(logPath) ?? 0,
     );
     if (snapshot === null) {
       drift.delete(logPath); // 文件不可见 = 无从守护；下次 run 重建基线
       return;
     }
+    const previous = drift.get(logPath);
+    // 收束时仍有尾随写：保留可信旧基线，下一轮按该文件的真实追加数归因。
+    // 显式 openSession 刷新则接受当前快照；不稳快照仍由 decideDrift 拒绝未经确认的变化。
+    if (preserveStable && snapshot.unstable === true && previous !== undefined && previous.unstable !== true) return;
     drift.set(logPath, snapshot);
   };
   /** run 启动前的漂移判：true = 外部改动 ⇒ 拒绝。快路径 stat 全等放行；慢路径做归因——
@@ -365,13 +387,17 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
    *  「a late worker append reopens through createEventLog」），单纯「收束即 stat」会把这部分
    *  自身增长误判成外部改动。归据：增长行数 == 快照后本端事件数 ⇒ 全部自身 ⇒ 刷新基线放行；
    *  行数对不上（含外部追加/删改/触碰）⇒ 拒绝，恢复走 openSession 重建基线（「请刷新后重试」）。 */
-  const externalDrift = async (sessionId: string, logPath: string): Promise<boolean> => {
+  const externalDrift = async (logPath: string): Promise<boolean> => {
     const snap = drift.get(logPath);
+    if (snap === undefined) {
+      await refreshSnapshot(logPath); // 首场 run 前保存基线，收束读数不稳时仍有可信参照。
+      return false;
+    }
     const st = await statSession(logPath);
-    const ownTotal = ownAppends.get(sessionId) ?? 0;
-    const own = snap === undefined ? 0 : ownTotal - snap.ownAtSnapshot;
+    const ownTotal = ownAppends.get(logPath) ?? 0;
+    const own = ownTotal - snap.ownAtSnapshot;
     // 只有在可能走归因慢路径时才读行数（读整份文件很贵；快路径不该付这个钱）。
-    const needLines = snap !== undefined && snap.unstable !== true && own > 0;
+    const needLines = snap.unstable !== true && own > 0;
     const lines = needLines ? await countLines(logPath) : null;
     const verdict = decideDrift({
       baseline: snap,
@@ -381,23 +407,9 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
     });
     if (verdict.kind === "allow") {
       // 归因慢路径判定"增长全来自本端"时，基线要跟着刷新（否则下一轮又拿旧基线比）。
-      if (snap !== undefined && st !== null && own > 0 && lines !== null && lines === snap.lines + own) {
+      if (st !== null && own > 0 && lines !== null && lines === snap.lines + own) {
         drift.set(logPath, { size: st.size, mtimeMs: st.mtimeMs, lines, ownAtSnapshot: ownTotal });
       }
-      return false;
-    }
-    if (verdict.kind === "rebuild") {
-      // 基线不稳 ⇒ 这一格我们**自己都测不出**「文件有没有被外部改过」——
-      // 把它读成外部改动是**指控**（文案说"会话已被外部修改（CLI？），请刷新后重试"），
-      // 而证据并不支持那个指控；更糟的是它把会话**永久卡死**：旧实现在这里直接 return true，
-      // 而拒绝发生在 refreshSnapshot 之前 ⇒ 基线永远不重建 ⇒ 每一轮都撞同一句拒绝，
-      // 连"刷新后重试"那条出路都走不通（实测：20MB 会话日志、本端无人写、文件逐字未动，
-      // 连续两轮 run 全被这句拒绝；只有切走再切回（openSession 重建基线）才恢复）。
-      // 正确处置：**重新取一次基线**（读当前状态），让这一轮从当前真相起跑；
-      // 下一轮再从新基线判。重建后仍不稳（worker 还在尾随写）也照样放行——
-      // 卡死比"这一轮测不出漂移"坏得多：卡死让会话彻底不可用，而尾随写是我们自己的。
-      await refreshSnapshot(sessionId, logPath);
-      console.warn("[drift] 基线不稳（多见于 worker 尾随写）⇒ 重建基线后放行本轮；这不是外部改动");
       return false;
     }
     return true;
@@ -432,7 +444,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       // logPath 已显式钉在主 checkout 侧，而 worktree 里的 `.agent` 是指回主 checkout 的 symlink
       // ⇒ 权限表/记忆/配置/会话根仍是同一份（这正是「配置跨面共享」那一环，缺了隔离会话就成活孤岛）。
       const runWs = (await isSessionIsolated(ws, sessionId)) ? sessionWorktreePath(ws, sessionId) : ws;
-      if (await externalDrift(sessionId, logPath)) return { ok: false, error: DRIFT_ERROR };
+      if (await externalDrift(logPath)) return { ok: false, error: DRIFT_ERROR };
       const controller = new AbortController();
       if (!runControllers.has(sessionId)) {
         runControllers.set(sessionId, controller);
@@ -477,7 +489,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
           status: controller.signal.aborted ? "cancelled" : settledOk ? "done" : "failed",
           ts: Date.now(),
         });
-        await refreshSnapshot(sessionId, logPath); // 收束即基线；自身尾随写由下一场 run 启动前的归因放行
+        await refreshSnapshot(logPath, true); // 收束读数不稳时保留旧基线，由下一轮按路径归因。
       }
     },
     decide: (askId, approved, scope) => handleAgentDecide(askId, approved, scope),
@@ -621,7 +633,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       // 不经 onEvent 通道，但在下面的基线刷新之后落盘 ⇒ 计入基线，不污染归因）。
       await applyCrashRecovery(logPath);
       const events = await readSessionEvents(root, id);
-      await refreshSnapshot(id, logPath); // open 即基线（含补发行）
+      await refreshSnapshot(logPath); // open 即基线（含补发行）
       // running 实况（desktop 扩展字段）：渲染层开会对账——换实例后的新渲染层靠这条把陈旧的
       // 「运行中」标记收敛到 main 真值（真在跑 ⇒ 补上；已收束 ⇒ 摘掉）。收束补发终态是正路，
       // 这条是开一条会话就自愈一次的兜底（两者互不依赖）。

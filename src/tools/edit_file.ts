@@ -1,6 +1,23 @@
-import { readFile, stat } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
 import { writeFileAtomic } from "../atomic-write.js";
-import { appendImpact, assertNotAgentArea, assertNotAgentAreaReal, assertNotFrozenReal, assertNotSensitivePathReal, assertRealContainment, resolveInWorkspace, resolveWriteTarget, ToolError, type Tool, type ToolResult } from "./base.js";
+import {
+  appendImpact,
+  assertContainedPathIdentity,
+  assertNotAgentArea,
+  assertNotAgentAreaReal,
+  assertNotFrozenReal,
+  assertNotSensitivePathReal,
+  assertRealContainment,
+  assertWritablePath,
+  captureContainedPath,
+  openContainedFile,
+  resolveInWorkspace,
+  resolveWriteTarget,
+  ToolError,
+  type Tool,
+  type ToolResult,
+} from "./base.js";
 import { collectDiagnostics } from "./lsp.js";
 import { snapshotBeforeOverwrite, snapshotNote } from "./snapshot.js";
 import { lineDelta } from "./line-delta.js";
@@ -59,8 +76,13 @@ export const edit_file: Tool = {
     await assertNotSensitivePathReal(ctx.workspace, abs, "edit_file"); // 软链落点命中敏感路径
     const targetAbs = await resolveWriteTarget(ctx.workspace, abs, "edit_file");
     let content: string;
+    let existingMode: number | undefined;
+    let sourceHandle;
     try {
-      const raw = await readFile(targetAbs);
+      const opened = await openContainedFile(ctx.workspace, targetAbs, "edit_file");
+      sourceHandle = opened.fh;
+      existingMode = opened.stat.mode & 0o777;
+      const raw = await opened.fh.readFile();
       // 非 UTF-8 / 二进制：按 utf8 解码 + 整文件写回会把非法字节替换成 U+FFFD，
       // 且未命中的行也会一起被改写。与 apply_patch 同口径 fail-visible。
       if (raw.includes(0)) throw new ToolError("edit_file: 疑似二进制文件（含 NUL 字节），拒绝按文本编辑: " + rel);
@@ -71,6 +93,8 @@ export const edit_file: Tool = {
     } catch (err) {
       if (err instanceof ToolError) throw err;
       throw new ToolError("edit_file: 文件不存在或不可读: " + rel);
+    } finally {
+      await sourceHandle?.close().catch(() => undefined);
     }
     // 唯一匹配纪律：非唯一且未显式 replace_all 一律拒绝并回报匹配数。
     let count = 0;
@@ -89,10 +113,19 @@ export const edit_file: Tool = {
     // 若直接写 content.replace(old, new)，new_string 里的 $& / $1 / $` / $' 会被当成
     // 替换模式解释（把匹配到的原文插回去），静默写出错误内容——两个分支必须同口径。
     const updated = replaceAll ? content.split(oldString).join(newString) : content.replace(oldString, () => newString);
+    await mkdir(dirname(targetAbs), { recursive: true });
+    const parentAbs = dirname(targetAbs);
+    const parentIdentity = await captureContainedPath(ctx.workspace, parentAbs, "edit_file");
+    const guard = async (): Promise<void> => {
+      await assertContainedPathIdentity(ctx.workspace, parentAbs, "edit_file", parentIdentity);
+      await assertWritablePath(ctx.workspace, targetAbs, "edit_file");
+    };
     // D7 覆盖前快照：排在「0 处/多处匹配」两道拒绝**之后**——被拒的编辑不该留下快照（那会是脏文件）。
     const snapshotId = ctx.snapshot === false ? null : await snapshotBeforeOverwrite(ctx.workspace, targetAbs, rel, ctx.callId);
-    const existingMode = (await stat(targetAbs).catch(() => null))?.mode;
-    await writeFileAtomic(targetAbs, updated, existingMode !== undefined ? { mode: existingMode & 0o777 } : {});
+    await writeFileAtomic(targetAbs, updated, {
+      ...(existingMode !== undefined ? { mode: existingMode } : {}),
+      guard,
+    });
     const replacements = replaceAll ? count : 1;
     // 行增减是「改动范围最小」的可核对面：处数只说改了几块，不说动了多少行内容。
     const d = lineDelta(content, updated);

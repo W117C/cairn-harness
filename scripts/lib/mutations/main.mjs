@@ -618,7 +618,10 @@ export const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/compact-wiring.test.ts",
     desc: "手动压缩只推不落盘（历史原样）⇒ 压缩卡当场看得见、下一次 run 重放又是全文：花一次摘要的钱换个零效果。演示那条支用会话管线，所以它红着门也绿",
-    apply: (s) => s.replace("async (e) => { await log.append(e); hooks.onEvent?.(e); },", "async (e) => { hooks.onEvent?.(e); },"),
+    apply: (s) => s.replace(
+      "      const commit = hooks.onAppend?.(hookEvent, logPath);\n      try {\n        await log.append(e);\n      } catch (error) {\n        hooks.onAppendFailed?.(hookEvent, logPath);\n        throw error;\n      }\n      commit?.();\n      hooks.onEvent?.(hookEvent, logPath);",
+      "      hooks.onEvent?.(hookEvent, logPath);",
+    ),
     expectFail: "压缩事件既上屏**也**落盘：只推不写就是花一次摘要钱换个零效果",
   },
   {
@@ -952,8 +955,8 @@ export const MUTATIONS = [
     test: "tests/usage-attribution.test.ts",
     desc: "盖章器建出来了却没接进落盘漏斗 ⇒ 消费端照旧读到恒零归因，钱轴继续报不可测，而这一层的代码全在（「装配存在」≠「这格有不变量」那一族）",
     apply: (s) => s.replace(
-      "        usageAttribution.stamp(e); // 落盘前先盖：live 与盘必须是同一个对象（同 events 盖 ts 的口径）\n        await log!.append(e);",
-      "        await log!.append(e);",
+      "        usageAttribution.stamp(e); // 落盘前先盖：live 与盘必须是同一个对象（同 events 盖 ts 的口径）\n",
+      "",
     ),
     expectFail: "pipeline 里 stamp 在 append **之前**（live 与盘必须同一个对象），且这一份文件里只有这一处盖章",
   },
@@ -962,10 +965,12 @@ export const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/usage-attribution.test.ts",
     desc: "先落盘后盖章 ⇒ 盘上那条没 model、内存里那条有：`onEvent` 看板算得出钱，重放与评估面算不出，两条对不上时没人知道自己看的是哪一份",
-    apply: (s) => s.replace(
-      "        usageAttribution.stamp(e); // 落盘前先盖：live 与盘必须是同一个对象（同 events 盖 ts 的口径）\n        await log!.append(e);",
-      "        await log!.append(e);\n        usageAttribution.stamp(e);",
-    ),
+    apply: (s) => s
+      .replace(
+        "        usageAttribution.stamp(e); // 落盘前先盖：live 与盘必须是同一个对象（同 events 盖 ts 的口径）\n",
+        "",
+      )
+      .replace("        commit?.();", "        commit?.();\n        usageAttribution.stamp(e);"),
     expectFail: "pipeline 里 stamp 在 append **之前**（live 与盘必须同一个对象），且这一份文件里只有这一处盖章",
   },
   {

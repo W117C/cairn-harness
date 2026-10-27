@@ -37,10 +37,7 @@ export const MUTATIONS = [
     src: "src/atomic-write.ts",
     test: "tests/secrets.test.ts",
     desc: "去掉 rename：tmp 写完不落定（崩溃即丢密文）",
-    apply: (s) => s.replace(
-      '    await writeFile(tmp, text, "utf8");\n    if (opts.mode !== undefined) await chmod(tmp, opts.mode).catch(() => undefined);\n    await rename(tmp, path);',
-      '    await writeFile(tmp, text, "utf8");\n    if (opts.mode !== undefined) await chmod(tmp, opts.mode).catch(() => undefined);',
-    ),
+    apply: (s) => s.replace("    await rename(tmp, path);\n", ""),
     expectFail: "原子写：经 tmp→rename 落盘，成功后无 .tmp 残留",
   },
   {
@@ -48,11 +45,24 @@ export const MUTATIONS = [
     src: "src/atomic-write.ts",
     test: "tests/secrets.test.ts",
     desc: "tmp+rename 退回裸 writeFile（写中途崩溃截断密文存储）",
-    apply: (s) => s.replace(
-      '    await writeFile(tmp, text, "utf8");\n    if (opts.mode !== undefined) await chmod(tmp, opts.mode).catch(() => undefined);\n    await rename(tmp, path);',
-      '    await writeFile(path, text, "utf8");',
-    ),
+    apply: (s) => s
+      .replace("const tmp = tmpPathFor(path);", "const tmp = path;")
+      .replace(
+        "constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0)",
+        "constants.O_WRONLY | constants.O_CREAT",
+      ),
     expectFail: "原子写：经 tmp→rename 落盘，成功后无 .tmp 残留",
+  },
+  {
+    id: "atomic-tmp-follows-preseeded-symlink",
+    src: "src/atomic-write.ts",
+    test: "tests/atomic-write.test.ts",
+    desc: "临时文件丢掉排他/不跟随标志 ⇒ 预先占位的软链把原子写变成任意目标覆写",
+    apply: (s) => s.replace(
+      "constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0)",
+      "constants.O_WRONLY | constants.O_CREAT",
+    ),
+    expectFail: "临时名被预占为软链时 fail closed，不写穿到链接目标",
   },
   // ---- 方案门（tests/plan-gate.test.ts 此前零锚点：判据最重的一支权限门，全靠断言自己守自己）----
   {
@@ -458,7 +468,7 @@ export const MUTATIONS = [
     src: "src/atomic-write.ts",
     test: "tests/secrets.test.ts",
     desc: "rename 失败不清理临时文件 ⇒ 崩溃残留堆在插件数据目录里，且下一次「写入中断自愈」清的是别人的名字",
-    apply: (s) => s.replace("    await unlink(tmp).catch(() => {});\n", ""),
+    apply: (s) => s.replace("    if (created) await unlink(tmp).catch(() => {});\n", ""),
     expectFail: "写失败时 tmp 被清理，且不截断既有密文存储",
   },
     /* ── 辅助对话面板（§10.8，10fece3）：形状由 vm 切片判，八条各钉一个「看得见但说谎」的落点 ── */

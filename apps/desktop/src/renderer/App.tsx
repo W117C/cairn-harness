@@ -15,7 +15,7 @@ import type { TextSizeSetting, UiSizeSetting } from "../../../../src/main/settin
 // 渲染层只消费推送快照；文案在渲染层按 status 组合）。
 import type { PreviewSnapshot } from "../../../../src/main/project-preview";
 import { deliveryTrail, deriveRunPhase, elapsedSecondsFor, runPhaseLabel, formatEmptyTrailNote, formatRevertNotice, hasAssistantTextThisRun, isMainSessionTerminalEvent, mergeSessionSnapshot, pendingClarifyOf, pendingPlanOf, projectStream, roundOfEvent, turnDelivery, usageAggregate, usageSummary, countToolSteps, countRunSteps, userTextOfRound } from "./projections";
-import { askBelongsToSession, composerLockReason, continueAfterRun, drainQueue, dropQueued, fromSessionQueueEntries, isSessionEndDistillAsk, promoteQueued, shouldHealStaleRun, takeQueued, toSessionQueueEntries, type QueuedSend } from "./send-queue";
+import { composerLockReason, continueAfterRun, drainQueue, dropQueued, fromSessionQueueEntries, isSessionEndDistillAsk, promoteQueued, shouldHealStaleRun, takeQueued, toSessionQueueEntries, type QueuedSend } from "./send-queue";
 import { stripMarkdownForSpeech } from "./speech";
 import { useMessageAnnotations } from "./useMessageAnnotations";
 import { Sidebar } from "./components/Sidebar";

@@ -1,10 +1,12 @@
 // M2e：信任门（§9.8）。项目级插件（.agent/plugins/）首次加载出信任卡；未信任只列出、
 // hook/MCP/LSP 一律不激活；信任决议持久化（tmp+rename 原子写，仿 SettingsStore）。
 // 用户级插件免信任（用户自己装的）；散装 skill 免信任（纯 markdown，无执行面）。
-import { createHash } from "node:crypto";
-import { readFile, rm, readdir, stat } from "node:fs/promises";
-import { basename, dirname, join, relative } from "node:path";
+import { readFile, rm, readdir } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { writeFileAtomic } from "../../atomic-write";
+import { pluginSnapshot } from "./snapshot";
+
+export { pluginSnapshot, type PluginSnapshot } from "./snapshot";
 
 export type TrustState = "trusted" | "declined" | "pending";
 
@@ -35,13 +37,11 @@ export function parseTrustFile(text: string): { trusted: string[]; declined: str
 // 旧实现只按绝对路径记录信任：同路径下的插件内容被替换（恶意改写 hooks/MCP 配置）仍自动 trusted。
 // v1 口径：**一概**写 `abs@指纹`（内容绑定，改动即重新出信任卡）。旧版裸路径记录不再命中
 // （fail-closed：重新出一次卡），见 hit 的注释。
+// 当前内容摘要为 SHA-256；旧 SHA-1 指纹条目同样不命中，必须重新批准。这里刻意不做
+// “按路径恢复旧的 SHA-1 信任”迁移——那会把弱摘要重新变回授权依据。
 // 只跳过 `.git`（版本库元数据不参与执行）。`dist`/`out`/`node_modules` 必须入指纹：
 // 插件 manifest 可以把 hooks/MCP/LSP 指向这些目录，旧实现跳过它们 ⇒ 批准后替换
 // `dist/hooks.json` 不改指纹，信任继续命中（等于批准了一个可随时换内容的执行面）。
-const FP_SKIP_DIRS = new Set<string>(); // 不再整目录跳过（`.git` 单独只哈希 config + hooks）
-const FP_MAX_FILES = 5_000;
-const FP_MAX_FILE_BYTES = 8 * 1024 * 1024;
-
 /** 指纹结果（E1/E2，审查 P1-11/P1-12）：bounded=true 表示本指纹**不能**完整绑定插件内容
  *  （文件数超帽 / 单文件超大 / 目录内存在软链）——信任判定必须 fail-closed（视为 pending），
  *  不允许复用旧信任记录：帽外新增或改写的恶意 hooks/MCP 配置在截断指纹下逐字不变。 */
@@ -50,85 +50,12 @@ export interface PluginFingerprint {
   bounded: boolean;
 }
 
-/** 插件内容指纹（完整口径）：全量文件按 (相对路径, sha1(内容)) 排序后取 sha256。目录结构变化即指纹变化。
- *  E2（审查）：walk 按 Dirent 判定软链——软链既不入指纹也不静默跳过，直接标记 bounded（加载侧
- *  跟随软链而指纹不 follow 的组合 = 「信任后新增软链 .mcp.json」绕过面）。 */
+/** 插件内容指纹（完整口径）：全量文件按 (相对路径, sha256(内容)) 排序后取 sha256。
+ *  `pluginSnapshot` 同时保留已绑定内容的不可变快照，装载器只消费这份快照；不能在
+ *  `pluginFingerprintEx` 之后重新按路径读文件，否则指纹与真正装载的配置会分叉。 */
 export async function pluginFingerprintEx(root: string): Promise<PluginFingerprint> {
-  const parts: string[] = [];
-  let count = 0;
-  let bounded = false;
-  const walk = async (dir: string): Promise<void> => {
-    if (count >= FP_MAX_FILES) {
-      bounded = true; // E1：超帽不再静默截断——剩余内容未入指纹 = 绑定不完整
-      return;
-    }
-    let entries;
-    try {
-      entries = await readdir(dir, { withFileTypes: true });
-    } catch {
-      bounded = true; // 读不出 = 这部分内容没绑定（旧实现静默 return）
-      return;
-    }
-    for (const ent of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      if (count >= FP_MAX_FILES) {
-        bounded = true;
-        return;
-      }
-      const abs = join(dir, ent.name);
-      if (ent.isSymbolicLink()) {
-        bounded = true; // E2：软链（文件或目录）一律 fail-closed——加载侧会 follow 而指纹不跟
-        continue;
-      }
-      if (ent.isDirectory()) {
-        if (FP_SKIP_DIRS.has(ent.name)) continue;
-        if (ent.name === ".git") {
-          // 版本库元数据不整体入指纹（churn 大），但**可执行面**必须绑定：
-          // manifest 可以把 hooks 指向 `.git/hooks.json`，整目录跳过会让批准后替换 hook 指纹不变。
-          await walkGitMeta(abs);
-          continue;
-        }
-        await walk(abs);
-        continue;
-      }
-      if (!ent.isFile()) continue;
-      const st = await stat(abs).catch(() => null);
-      if (st === null) { bounded = true; continue; }
-      if (st.size > FP_MAX_FILE_BYTES) {
-        bounded = true; // 超大文件不入指纹 = 绑定不完整（信任会被拒绝）
-        continue;
-      }
-      const content = await readFile(abs).catch(() => null);
-      if (content === null) { bounded = true; continue; }
-      count++;
-      parts.push(relative(root, abs).replaceAll("\\", "/") + ":" + createHash("sha1").update(content).digest("hex"));
-    }
-  };
-  /** `.git` 里只绑定会参与执行的两处：config（可重定向 hooksPath）与 hooks/ 下的全部文件。 */
-  const walkGitMeta = async (gitDir: string): Promise<void> => {
-    const config = await readFile(join(gitDir, "config")).catch(() => null);
-    if (config !== null) {
-      count++;
-      parts.push(relative(root, join(gitDir, "config")).replaceAll("\\", "/") + ":" + createHash("sha1").update(config).digest("hex"));
-    }
-    const hooksDir = join(gitDir, "hooks");
-    let hooks;
-    try { hooks = await readdir(hooksDir, { withFileTypes: true }); }
-    catch { return; } // 没有 hooks 目录是常态
-    for (const ent of hooks.sort((a, b) => a.name.localeCompare(b.name))) {
-      if (ent.isSymbolicLink()) { bounded = true; continue; }
-      if (!ent.isFile()) continue;
-      const abs = join(hooksDir, ent.name);
-      const content = await readFile(abs).catch(() => null);
-      if (content === null) { bounded = true; continue; }
-      count++;
-      parts.push(relative(root, abs).replaceAll("\\", "/") + ":" + createHash("sha1").update(content).digest("hex"));
-    }
-  };
-  await walk(root);
-  return {
-    fp: createHash("sha256").update(parts.sort().join("\n")).digest("hex").slice(0, 32),
-    bounded,
-  };
+  const snapshot = await pluginSnapshot(root);
+  return { fp: snapshot.fp, bounded: snapshot.bounded };
 }
 
 /** 兼容口径（既有调用点）：只取指纹串。信任判定面请用 pluginFingerprintEx（bounded 须 fail-closed）。 */

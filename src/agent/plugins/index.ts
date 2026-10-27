@@ -4,9 +4,9 @@
 import { dirname, join } from "node:path";
 import type { PermissionMode } from "../../permissions/modes";
 import {
-  discoverPlugins, activeHooks, pendingPlugins,
+  discoverPlugins, activeHooks,
 } from "./discover";
-import { TrustStore, pluginFingerprint, pluginFingerprintEx } from "./trust";
+import { TrustStore, pluginFingerprintEx } from "./trust";
 import { HookEngine } from "./hooks";
 import { McpManager, type McpToolInfo } from "./mcp";
 import {

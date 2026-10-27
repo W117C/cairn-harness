@@ -7,15 +7,20 @@
 // ④ 行数读数用 hunk 声明的 +/- 计数，与 `git diff --stat` 同口径（现 `lineDelta` 是多重集差，实测 2.7–3.6% 的文件差 1–2 行）。
 //
 // 写盘纪律全部复用 `base.ts` 的四道闸 + `snapshot.ts` + `lsp.ts` + 影响面回注：本工具不另立第二套。
-import { chmod, mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { mkdir, open, rename, unlink } from "node:fs/promises";
 import { dirname, posix } from "node:path";
 import {
   appendImpact,
+  assertContainedPathIdentity,
   assertNotAgentArea,
   assertNotAgentAreaReal,
   assertNotFrozenReal,
   assertNotSensitivePathReal,
   assertRealContainment,
+  assertWritablePath,
+  captureContainedPath,
+  openContainedFile,
   resolveInWorkspace,
   resolveWriteTarget,
   ToolError,
@@ -25,7 +30,7 @@ import {
 import { collectDiagnostics } from "./lsp.js";
 import { snapshotBeforeOverwrite, snapshotNote } from "./snapshot.js";
 import { contentLines } from "./line-delta.js";
-import { tmpPathFor } from "../atomic-write.js";
+import { tmpPathFor, writeFileAtomic } from "../atomic-write.js";
 import { parsePatch, PatchParseError, type PatchFile, type PatchHunk } from "./patch-parse.js";
 
 /** 补丁正文上限：比 write_file 的单文件 50KB 宽（补丁天然跨文件），但必须有界——
@@ -282,8 +287,11 @@ export const apply_patch: Tool = {
       }
       let raw: string | null = null;
       let originalMode: number | undefined;
+      let sourceHandle;
       try {
-        const buf = await readFile(abs);
+        const opened = await openContainedFile(ctx.workspace, abs, "apply_patch");
+        sourceHandle = opened.fh;
+        const buf = await opened.fh.readFile();
         // 非 UTF-8 / 二进制：按 utf8 解码会把非法字节变成 U+FFFD，整文件写回时未被 hunk
         // 触碰的行也一起被永久替换。这里 fail-visible 拒绝，不静默改坏文件。
         if (buf.includes(0)) {
@@ -296,9 +304,15 @@ export const apply_patch: Tool = {
           continue;
         }
         raw = decoded;
-        originalMode = (await stat(abs)).mode & 0o777;
-      } catch {
+        originalMode = opened.stat.mode & 0o777;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          failures.push(`${f.path} 不可读：${error instanceof Error ? error.message : String(error)}`);
+          continue;
+        }
         raw = null;
+      } finally {
+        await sourceHandle?.close().catch(() => undefined);
       }
       const existed = raw !== null;
       if (f.op === "update" && raw === null) {
@@ -346,23 +360,43 @@ export const apply_patch: Tool = {
     let totalAdd = 0;
     let totalRem = 0;
     let snapshotId: string | undefined;
-    const staged: { p: Prepared; tmp: string }[] = [];
+    const staged: {
+      p: Prepared;
+      tmp: string;
+      parentAbs: string;
+      parentIdentity: Awaited<ReturnType<typeof captureContainedPath>>;
+    }[] = [];
     try {
       for (const p of prepared) {
         p.snap = ctx.snapshot === false || !p.existed ? null : await snapshotBeforeOverwrite(ctx.workspace, p.abs, p.rel, ctx.callId);
         // 新建文件的父目录可能整条都不存在（write_file 同纪律）：真数据探针在 138/163 笔上撞到的就是这条。
         await mkdir(dirname(p.abs), { recursive: true });
+        const parentAbs = dirname(p.abs);
+        const parentIdentity = await captureContainedPath(ctx.workspace, parentAbs, "apply_patch");
+        await assertContainedPathIdentity(ctx.workspace, parentAbs, "apply_patch", parentIdentity);
+        await assertWritablePath(ctx.workspace, p.abs, "apply_patch");
         const tmp = tmpPathFor(p.abs);
-        await writeFile(tmp, fromText(p.result.text), "utf8");
-        // 临时文件按 0666&umask 创建：不补模式，rename 后原 0755/ACL 会被换成 0644。
-        if (p.mode !== undefined) await chmod(tmp, p.mode).catch(() => undefined);
-        staged.push({ p, tmp });
+        const fh = await open(
+          tmp,
+          constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+          0o666,
+        );
+        staged.push({ p, tmp, parentAbs, parentIdentity });
+        try {
+          await fh.writeFile(fromText(p.result.text), "utf8");
+          // 临时文件按 0666&umask 创建：不补模式，rename 后原 0755/ACL 会被换成 0644。
+          if (p.mode !== undefined) await fh.chmod(p.mode).catch(() => undefined);
+        } finally {
+          await fh.close().catch(() => undefined);
+        }
         if (p.snap !== null && snapshotId === undefined) snapshotId = p.snap;
       }
       // 全部就绪：逐个 rename。同目录内 rename 原子，失败只剩"目录被撤权"这一种，概率极窄。
       const renamed: string[] = [];
-      for (const { p, tmp } of staged) {
+      for (const { p, tmp, parentAbs, parentIdentity } of staged) {
         try {
+          await assertContainedPathIdentity(ctx.workspace, parentAbs, "apply_patch", parentIdentity);
+          await assertWritablePath(ctx.workspace, p.abs, "apply_patch");
           await rename(tmp, p.abs);
           renamed.push(p.rel);
         } catch (err) {
@@ -373,8 +407,19 @@ export const apply_patch: Tool = {
           for (const other of staged) {
             if (other.p.rel === p.rel || !renamed.includes(other.p.rel)) continue;
             try {
-              if (other.p.original === null) await unlink(other.p.abs).catch(() => {});
-              else await writeFile(other.p.abs, other.p.original, "utf8");
+              await assertContainedPathIdentity(ctx.workspace, other.parentAbs, "apply_patch", other.parentIdentity);
+              await assertWritablePath(ctx.workspace, other.p.abs, "apply_patch");
+              if (other.p.original === null) {
+                await unlink(other.p.abs).catch(() => {});
+              } else {
+                await writeFileAtomic(other.p.abs, other.p.original, {
+                  ...(other.p.mode !== undefined ? { mode: other.p.mode } : {}),
+                  guard: async () => {
+                    await assertContainedPathIdentity(ctx.workspace, other.parentAbs, "apply_patch", other.parentIdentity);
+                    await assertWritablePath(ctx.workspace, other.p.abs, "apply_patch");
+                  },
+                });
+              }
               rolled.push(other.p.rel);
             } catch {
               stuck.push(other.p.rel);
@@ -408,8 +453,8 @@ export const apply_patch: Tool = {
     } catch (err) {
       // 阶段①（预写临时文件）失败：目标文件一个都没碰，清掉临时文件即可。
       // 阶段② 的失败已经在上面包成 ToolError（带回滚明细），直接透传。
-      if (err instanceof ToolError) throw err;
       for (const { tmp } of staged) await unlink(tmp).catch(() => {});
+      if (err instanceof ToolError) throw err;
       const why = err instanceof Error ? err.message : String(err);
       throw new ToolError(
         `apply_patch: 预写阶段失败（${why}）——目标文件一个都没有改动，整笔未写盘` +

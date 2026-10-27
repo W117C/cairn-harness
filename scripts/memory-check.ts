@@ -15,13 +15,11 @@ import {
   deleteTopic,
   initMemoryHome,
   parseTopicDoc,
-  recentDecisionEntries,
   renderTopicDoc,
 } from "../src/agent/memory/store";
 import { buildMemoryInjection, extractExternalRefs } from "../src/agent/memory/inject";
 import { escapeControlTags } from "../src/agent/control-tags";
 import { runSessionEndDistill } from "../src/agent/memory/distill";
-import { createGatedRemember } from "../src/main/agent-runner";
 import { AskGate } from "../src/main/ask-gate";
 import { composeTurnMessages } from "../src/agent/session-provider";
 import { projectContext } from "../src/agent/context";

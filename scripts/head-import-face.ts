@@ -30,7 +30,6 @@ import { dirname, join, relative, resolve } from "node:path";
 import ts from "typescript";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const FACES = ["src", "scripts", "tests"] as const;
 const FACE_RE = /^(src|scripts|tests)\/.*\.(ts|tsx|mts)$/;
 
 const git = (args: readonly string[], input?: string): string | null => {

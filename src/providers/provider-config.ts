@@ -255,7 +255,7 @@ function parseModel(raw: unknown, where: string, problems: CustomProviderProblem
       inputModalities = list;
     }
   }
-  if (id === undefined || model === undefined) return undefined;
+  if (model === undefined) return undefined;
   return {
     id,
     ...(registryId !== undefined ? { registryId } : {}),

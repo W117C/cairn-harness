@@ -281,6 +281,24 @@ describe("web_fetch 传输层（注入 fetchImpl / resolveHost）", () => {
     expect(htmlToText("<p>a &notarealentity; b</p>")).toContain("&notarealentity;");
   });
 
+  it("脚本结束标签允许空格，属性里的 > 不会提前截断标签", () => {
+    const t = htmlToText('<p data-x="1 > 0">ok</p><script src="x">alert(1)</script ><p>tail</p>');
+    expect(t).toBe("ok\n\ntail");
+  });
+
+  it("未闭合的脚本区按不可信原文整段丢弃，不把 JS 漏成正文", () => {
+    const t = htmlToText("<p>before</p><script>alert('leak')");
+    expect(t).toBe("before");
+    expect(t).not.toContain("leak");
+  });
+
+  it("raw-text 起始标签带自闭合斜线时仍按 HTML 语义吞掉整个元素", () => {
+    const t = htmlToText("<script/>alert('leak')</script><style/>body{display:none}</style><p>ok</p>");
+    expect(t).toBe("ok");
+    expect(t).not.toContain("leak");
+    expect(t).not.toContain("display:none");
+  });
+
   it("正文非 HTML 时原样返回（JSON 不该被剥标签压平）", async () => {
     const tool = makeWebFetch({
       resolveHost: publicResolver,

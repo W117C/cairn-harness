@@ -26,7 +26,7 @@ export interface SchedulerRuntimeDeps {
   /** initScheduler 未显式给 workspace 时的回退（装配根的工作区常量）。 */
   defaultWorkspace: () => string;
   /** 事件推给壳（`hooks.onEvent` 的活转发：钩子可在首场 run 之后才注册/取消注册）。 */
-  onEvent: (e: AgentEvent) => void;
+  onEvent: (e: AgentEvent, logPath?: string) => void;
   /** 触发执行器：真实代码路径（装配根 `handleAgentRun` + unattended 覆盖 + signal 透传）。 */
   runSession: (workspace: string, args: TriggerExecutorArgs) => Promise<{ ok: boolean; error?: string }>;
   /** 会话审批面（每次审批活读；无会话 = null，fail-closed）。只需 `askGate` 一位。 */
@@ -88,8 +88,9 @@ export function initScheduler(opts: {
     emitTimeline: async (e: AgentEvent) => {
       const cur = (await store().get()).currentSession;
       const sdir = getSessionsDir();
-      if (sdir && cur) await createEventLog(pathOf(sdir, cur)).append(e);
-      D().onEvent(e);
+      const logPath = sdir && cur ? pathOf(sdir, cur) : undefined;
+      if (logPath) await createEventLog(logPath).append(e);
+      D().onEvent(e, logPath);
     },
   });
 }

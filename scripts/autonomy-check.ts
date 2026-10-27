@@ -8,6 +8,7 @@
 //   暗卷（任务 7，有 key 才跑）：真实 GLM requires_approval 约定；无 key → 退出码 0 跳过
 // 任一断言失败 → 退出码非 0。
 import { existsSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -27,7 +28,7 @@ import {
 } from "../src/permissions";
 import { sha256MatchesFrozen } from "../src/frozen";
 import { streamGlm } from "../src/providers/glm";
-import { mergeAssistantDeltas, replay, type AgentEvent } from "../src/events";
+import { mergeAssistantDeltas, type AgentEvent } from "../src/events";
 import type { PermissionMode } from "../src/permissions";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -234,7 +235,7 @@ async function runScript(
   gate: AskGate | undefined,
 ): Promise<AgentEvent[]> {
   await assertScriptReadTargets(script);
-  const logPath = join(tmpdir(), `m1c-autonomy-${mode}-${String(Date.now())}-${String(Math.random()).slice(2, 6)}.jsonl`);
+  const logPath = join(tmpdir(), `m1c-autonomy-${mode}-${String(Date.now())}-${randomUUID()}.jsonl`);
   process.env.M1C_AUTONOMY_SCRIPT = script;
   try {
     return await runAgent({

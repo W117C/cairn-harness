@@ -25,7 +25,7 @@
  *  用法：`node --import tsx scripts/svg-figure-check.ts <file.svg|file.html> […]`
  *  退出码 0 = 全过；1 = 有发现（每条带 文件:行）；2 = 用法错。
  */
-import { readFileSync, statSync } from "node:fs";
+import { readTextFileSnapshotSync } from "./lib/file-snapshot";
 import { isAbsolute, resolve } from "node:path";
 
 interface Finding {
@@ -72,16 +72,13 @@ function viewBoxOf(text: string): { w: number; h: number } | null {
 function checkFile(abs: string, rel: string): void {
   let text: string;
   try {
-    const st = statSync(abs);
-    if (!st.isFile()) {
-      findings.push({ file: rel, line: 1, what: "不是文件" });
-      return;
-    }
+    const snapshot = readTextFileSnapshotSync(abs);
+    const st = snapshot.stat;
     if (st.size === 0) {
       findings.push({ file: rel, line: 1, what: "空文件——没有可交付的内容" });
       return;
     }
-    text = readFileSync(abs, "utf8");
+    text = snapshot.text;
   } catch (err) {
     findings.push({ file: rel, line: 1, what: "读不到：" + (err instanceof Error ? err.message : String(err)) });
     return;

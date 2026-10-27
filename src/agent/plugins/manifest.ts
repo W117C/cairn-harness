@@ -5,6 +5,12 @@
 import { lstat, readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import type { HooksFile, HookMatcherDef, HookEventName, McpConfigFile, McpServerConfig } from "./types";
+import {
+  snapshotHasEntry,
+  snapshotHasFile,
+  snapshotReadText,
+  type PluginSnapshot,
+} from "./snapshot";
 
 /** 单插件解析失败（加载器隔离粒度：只影响自身，其余照常）。 */
 export class PluginLoadError extends Error {}
@@ -38,14 +44,18 @@ async function existsRegular(p: string): Promise<boolean> {
 }
 
 /** 代码插件拒载：根 JS 入口（进程内第三方代码边界，§9.8）。 */
-export async function detectJsEntry(root: string): Promise<string | null> {
+export async function detectJsEntry(root: string, snapshot?: PluginSnapshot): Promise<string | null> {
   for (const f of ["index.js", "index.cjs", "index.mjs", "main.js", "main.cjs"]) {
-    if (await exists(join(root, f))) return f;
+    const p = join(root, f);
+    if (snapshot ? snapshotHasFile(root, p, snapshot) : await exists(p)) return f;
   }
   const pkgPath = join(root, "package.json");
-  if (await exists(pkgPath)) {
+  const packagePresent = snapshot ? snapshotHasEntry(root, pkgPath, snapshot) : await exists(pkgPath);
+  if (packagePresent) {
     try {
-      const pkg = JSON.parse(await readFile(pkgPath, "utf8")) as Record<string, unknown>;
+      const raw = snapshot ? snapshotReadText(root, pkgPath, snapshot) : await readFile(pkgPath, "utf8");
+      if (raw === null) return "package.json（不可完整读取）";
+      const pkg = JSON.parse(raw) as Record<string, unknown>;
       if (typeof pkg.main === "string" && pkg.main !== "") return "package.json:main=" + pkg.main;
       if (pkg.bin !== undefined) return "package.json:bin";
     } catch {
@@ -172,11 +182,13 @@ export function userConfigValuesErrors(fields: readonly UserConfigField[], value
 }
 
 /** 解析 .claude-plugin/plugin.json；结构性错误抛 PluginLoadError（隔离），非结构缺陷只警告。 */
-export async function parsePluginManifest(root: string): Promise<ManifestParseResult> {
+export async function parsePluginManifest(root: string, snapshot?: PluginSnapshot): Promise<ManifestParseResult> {
   const manifestPath = join(root, ".claude-plugin", "plugin.json");
   let raw: string;
   try {
-    raw = await readFile(manifestPath, "utf8");
+    const loaded = snapshot ? snapshotReadText(root, manifestPath, snapshot) : await readFile(manifestPath, "utf8");
+    if (loaded === null) throw new Error("manifest unavailable in snapshot");
+    raw = loaded;
   } catch {
     throw new PluginLoadError("缺少 .claude-plugin/plugin.json（非容器布局）");
   }
@@ -225,15 +237,19 @@ export async function parsePluginManifest(root: string): Promise<ManifestParseRe
     // 直接交给 discover.readFile 读，跟随软链 => 插件根里放一个 x.json -> /tmp/evil.json
     // 就把「批准的是哪个内容」和「执行的是哪个内容」拆成两件事。显式路径同样只接受常规文件
     // （lstat 判定）；缺失留给既有 discover 侧 warning（行为不变，只补软链/目录这一类）。
-    const st = await lstat(hp).catch(() => null);
-    if (st !== null && !st.isFile()) {
+    const isRegular = snapshot ? snapshotHasFile(root, hp, snapshot) : (await lstat(hp).catch(() => null))?.isFile() === true;
+    const isPresent = snapshot ? snapshotHasEntry(root, hp, snapshot) : (await lstat(hp).catch(() => null)) !== null;
+    if (isPresent && !isRegular) {
       throw new PluginLoadError("plugin.json hooks 指向的不是常规文件（软链/目录一律拒载）: " + String(m.hooks));
     }
     hooksRef = { kind: "path", path: hp };
   } else if (m.hooks && typeof m.hooks === "object") {
     hooksRef = { kind: "inline", file: m.hooks as HooksFile };
-  } else if (await existsRegular(join(root, "hooks", "hooks.json"))) {
-    hooksRef = { kind: "path", path: join(root, "hooks", "hooks.json") };
+  } else {
+    const hp = join(root, "hooks", "hooks.json");
+    if (snapshot ? snapshotHasFile(root, hp, snapshot) : await existsRegular(hp)) {
+      hooksRef = { kind: "path", path: hp };
+    }
   }
   // mcpServers：manifest 内联优先；否则容器根 .mcp.json
   const mcp: { serverName: string; config: McpServerConfig }[] = [];
@@ -241,11 +257,19 @@ export async function parsePluginManifest(root: string): Promise<ManifestParseRe
     mcp.push(...normalizeMcp(m.mcpServers as Record<string, unknown>));
   } else {
     const mcpPath = join(root, ".mcp.json");
-    if (await existsRegular(mcpPath)) {
+    const regular = snapshot ? snapshotHasFile(root, mcpPath, snapshot) : await existsRegular(mcpPath);
+    const present = snapshot ? snapshotHasEntry(root, mcpPath, snapshot) : await exists(mcpPath);
+    if (present && !regular) {
+      throw new PluginLoadError(".mcp.json 不是常规文件（软链/目录一律拒载）");
+    }
+    if (regular) {
       try {
-        const parsed = JSON.parse(await readFile(mcpPath, "utf8")) as McpConfigFile;
+        const raw = snapshot ? snapshotReadText(root, mcpPath, snapshot) : await readFile(mcpPath, "utf8");
+        if (raw === null) throw new PluginLoadError(".mcp.json 不可完整读取");
+        const parsed = JSON.parse(raw) as McpConfigFile;
         mcp.push(...normalizeMcp((parsed.mcpServers ?? {}) as Record<string, unknown>));
       } catch (err) {
+        if (err instanceof PluginLoadError) throw err;
         throw new PluginLoadError(".mcp.json 解析失败：" + (err instanceof Error ? err.message : String(err)));
       }
     }

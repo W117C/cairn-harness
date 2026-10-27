@@ -26,7 +26,7 @@ const HR = /^ {0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/;
 const UL = /^ {0,3}[-*+]\s+(.+)$/;
 const OL = /^ {0,3}\d{1,9}[.)]\s+(.+)$/;
 const QUOTE = /^ {0,3}>\s?(.*)$/;
-const TABLE_SEP = /^\s*\|?\s*:?-{2,}[\s:|:-]*\|?\s*$/;
+const TABLE_SEP = /^\s*\|?\s*:?-{2,}[\s|:-]*\|?\s*$/;
 // 独行图片（2026-10-18）：`![alt](src)` 单独成块；只放行 **https** 与 data:image——CSP 的
 // img-src 只许 https 图源，http 图就算画个门闩、点了也加载不出来；http 让它回落成普通段落，
 // 由裸 URL 自动链接兜住（点击走系统浏览器）。javascript:/file: 等同理回落，不静默丢字。

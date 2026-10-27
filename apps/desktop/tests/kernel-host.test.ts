@@ -13,6 +13,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import { autoTitleFirstMessage, createKernelHost, normalizeWorkspaces, stableSessionSnapshot, type KernelHost } from "../src/main/kernel-host";
 import { createSession as createSessionInRoot, pathOf } from "../../../src/main/sessions";
 import { SessionMetadataRepository } from "../../../src/main/session-metadata";
+import { handleAgentRun } from "../../../src/main/agent-runner";
 
 const dir = mkdtempSync(join(tmpdir(), "cairn-host-"));
 const workspace = join(dir, "ws");
@@ -253,6 +254,54 @@ describe("M3 多工作区运行面", () => {
     60_000,
   );
 
+  it("漂移归因按日志路径隔离：另一工作区同名会话的追加不能掩盖外部修改", async () => {
+    const base = mkdtempSync(join(dir, "drift-path-"));
+    const a = join(base, "a");
+    const b = join(base, "b");
+    const sid = "shared-drift-id";
+    for (const ws of [a, b]) mkdirSync(join(ws, ".agent", "sessions"), { recursive: true });
+    const ap = pathOf(join(a, ".agent", "sessions"), sid);
+    const bp = pathOf(join(b, ".agent", "sessions"), sid);
+    writeFileSync(ap, Array.from({ length: 500 }, (_, i) =>
+      JSON.stringify({ type: "user_message", content: `old ${String(i)}` }) + "\n").join(""));
+    writeFileSync(bp, "");
+    const script = join(base, "simple.jsonl");
+    writeFileSync(script, JSON.stringify({ type: "assistant_message", content: "OK" }) + "\n");
+    const previousScript = process.env.M3A_MAIN_SCRIPT;
+    process.env.M3A_MAIN_SCRIPT = script;
+    try {
+      let observed = 0;
+      const driftHost = createKernelHost({
+        workspaces: [a, b], activeWorkspace: a, userDataDir: userData,
+        outbox: (channel, payload) => {
+          if (channel === "onEvent" && (payload as { session_id?: string }).session_id === sid) observed++;
+        },
+      });
+      await driftHost.openSession(sid, a);
+      const other = await handleAgentRun({ message: "other file", mode: "default", sessionId: sid },
+        { sessionId: sid, logPath: bp, workspace: b });
+      expect(other.ok, JSON.stringify(other)).toBe(true);
+      expect(observed).toBeGreaterThan(0);
+      const external = Array.from({ length: observed }, (_, i) =>
+        JSON.stringify({ type: "user_message", content: `EXTERNAL ${String(i)}` }) + "\n").join("");
+      appendFileSync(ap, external);
+      const denied = await driftHost.run({ message: "must reject", mode: "default", sessionId: sid });
+      expect(denied.ok).toBe(false);
+      expect(denied.error).toMatch(/外部修改/);
+      expect(readFileSync(ap, "utf8")).toContain(external);
+      const opened = await driftHost.openSession(sid, a);
+      expect(opened.events.filter((e) => e.type === "user_message" && e.content.startsWith("EXTERNAL ")))
+        .toHaveLength(observed);
+      const retry = await driftHost.run({ message: "after refresh", mode: "default", sessionId: sid });
+      expect(retry.ok, JSON.stringify(retry)).toBe(true);
+      const again = await driftHost.run({ message: "own appends are allowed", mode: "default", sessionId: sid });
+      expect(again.ok, JSON.stringify(again)).toBe(true);
+    } finally {
+      if (previousScript === undefined) delete process.env.M3A_MAIN_SCRIPT;
+      else process.env.M3A_MAIN_SCRIPT = previousScript;
+    }
+  });
+
   it("漂移基线：自写计数与文件快照错拍时重试，等三面稳定后再落基线", async () => {
     const stats = [
       { size: 5537, mtimeMs: 1 },
@@ -291,6 +340,23 @@ describe("M3 多工作区运行面", () => {
     );
 
     expect(snapshot).toMatchObject({ unstable: true });
+  });
+
+  it("漂移基线：文件已追加但本端归因尚未回调时，不接受不相容快照", async () => {
+    let pending = true;
+    let own = 0;
+    setImmediate(() => {
+      pending = false;
+      own = 1;
+    });
+    const snapshot = await Reflect.apply(stableSessionSnapshot, undefined, [
+      async () => ({ size: 10, mtimeMs: 1 }),
+      async () => 1,
+      () => own,
+      () => pending,
+    ]) as { size: number; mtimeMs: number; lines: number; ownAtSnapshot: number } | null;
+
+    expect(snapshot).toMatchObject({ size: 10, mtimeMs: 1, lines: 1, ownAtSnapshot: 1 });
   });
 });
 

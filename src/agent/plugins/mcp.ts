@@ -408,7 +408,9 @@ export class McpManager {
     try {
       await close;
     } finally {
-      if (this.closing === close) this.closing = null;
+      // The creator is the only writer until it clears this slot; concurrent
+      // callers return the same promise and never replace it.
+      this.closing = null;
     }
   }
 

@@ -111,12 +111,16 @@ export const MUTATIONS = [
   // 判卷 tests/path-boundary.test.ts 从写下那天起零锚点（第 37 页的对账机读出来的）。
   // 三面各一条：词法 resolve/relative、realpath 归属、落点复查是**三道独立的闸**，
   // 少任何一道都有各自能穿透的形态（绝对路径 / 区内软链 / `link -> .agent`），不是冗余副本。
+  // realpath 归属本身有两份同判据落地：解析后的 assertRealContainment 与打开/捕获后的
+  // assertRealPathWithin。单拆前者时后者仍会拒绝，量到的是防御纵深而不是判据缺失；须两份一起拆。
   {
     id: "containment-realpath-dropped",
     src: "src/tools/base.ts",
     test: "tests/path-boundary.test.ts",
-    desc: "词法 resolve/relative 过关后再不做 realpath 归属复查 ⇒ 工作区内一条软链就把读写送出边界（旧实现正是这一形态）",
-    apply: (s) => s.replace("  if (relBack !== \"\" && (relBack.startsWith(\"..\") || isAbsolute(relBack))) {", "  if (false) {"),
+    desc: "realpath 归属的两份复查一起拆除 ⇒ 工作区内一条软链就把读写送出边界（旧实现正是这一形态；单拆一份只量到防御纵深）",
+    apply: (s) => s
+      .replace("  if (relBack !== \"\" && (relBack.startsWith(\"..\") || isAbsolute(relBack))) {", "  if (false) {")
+      .replace("  if (relBack !== \"\" && (relBack.startsWith(\"..\") || isAbsolute(relBack))) {", "  if (false) {"),
     expectFail: "工作区内软链指向外部：write_file 拒绝（旧实现会穿透写入外部文件）",
   },
   {
@@ -167,7 +171,10 @@ export const MUTATIONS = [
     desc: "大文件仍只读前缀，但不声明 ⇒ 模型以为看到了整个文件（静默截断是本仓反复判红的形状）。" +
       "注：只钉声明这一半；readPrefix 那一支无观测者，见规则 57 的撤针署名。" +
       "第 477 页那次把 `read_file` 的单份读取抽进 `readOne`，这一段跟着减了两格缩进 ⇒ 针脚改指新写法",
-    apply: (s) => s.replace("  if (oversized) {", "  if (false) {"),
+    apply: (s) => s.replace(
+      '  if (oversized) {\n    notices.push("[truncated:',
+      '  if (false) {\n    notices.push("[truncated:',
+    ),
     expectFail: "超过 16MB 只读前 16MB 并显式声明截断（旧实现整读进内存）",
   },
   {
@@ -419,7 +426,10 @@ export const MUTATIONS = [
     src: "src/tools/write_file.ts",
     test: "tests/write-line-delta.test.ts",
     desc: "大到不值得读的既有文件也去读（或统计失败时按 0 行处理）⇒ 把「不知道」报成「新建」，覆盖掉整个旧文件却显示新建",
-    apply: (s) => s.replace("      oldText = st.size <= DELTA_READ_LIMIT_BYTES ? await readFile(targetAbs, \"utf8\") : null;\n", "      oldText = await readFile(targetAbs, \"utf8\");\n"),
+    apply: (s) => s.replace(
+      '      oldText = st.size <= DELTA_READ_LIMIT_BYTES ? await fh.readFile("utf8") : null;',
+      '      oldText = await fh.readFile("utf8");',
+    ),
     expectFail: "既有文件大到不统计时，退回旧口径而不是假装是新建（不拿「不知道」当「新建」）",
   },
   {
@@ -731,9 +741,9 @@ export const MUTATIONS = [
     id: "d7-snapshot-taken-for-new-file",
     src: "src/tools/snapshot.ts",
     test: "tests/snapshot-d7.test.ts",
-    desc: "去掉「不存在/非普通文件/空文件」三道不占快照的界 ⇒ 每次新建都往用户仓库塞一份原件（噪音变垃圾）",
-    apply: (s) => s.replace("if (st === null || !st.isFile() || st.size === 0) return null;", "if (false) return null;"),
-    expectFail: "新建文件不占快照",
+    desc: "去掉「非普通文件/空文件」不占快照的界 ⇒ 空文件也往用户仓库塞一份原件（噪音变垃圾）",
+    apply: (s) => s.replace("if (!opened.stat.isFile() || opened.stat.size === 0) return null;", "if (false) return null;"),
+    expectFail: "空文件不占快照",
   },
   {
     id: "d7-worker-optout-ignored",

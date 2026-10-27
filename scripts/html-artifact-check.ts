@@ -14,8 +14,9 @@
  *
  *  用法：`node --import tsx scripts/html-artifact-check.ts <file.html> [more.html …]`
  *  退出码 0 = 全过；1 = 有失败（每条带 文件:行）；2 = 用法错（没有参数不假装干净）。 */
-import { readFileSync, statSync } from "node:fs";
+import { statSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
+import { readTextFileSnapshotSync } from "./lib/file-snapshot";
 
 interface Finding {
   file: string;
@@ -41,16 +42,13 @@ function lineOf(text: string, index: number): number {
 function checkFile(abs: string, rel: string): void {
   let text: string;
   try {
-    const st = statSync(abs);
-    if (!st.isFile()) {
-      findings.push({ file: rel, line: 1, what: "不是文件" });
-      return;
-    }
+    const snapshot = readTextFileSnapshotSync(abs);
+    const st = snapshot.stat;
     if (st.size === 0) {
       findings.push({ file: rel, line: 1, what: "空文件——没有可交付的内容" });
       return;
     }
-    text = readFileSync(abs, "utf8");
+    text = snapshot.text;
   } catch (err) {
     findings.push({ file: rel, line: 1, what: "读不到：" + (err instanceof Error ? err.message : String(err)) });
     return;

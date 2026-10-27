@@ -12,7 +12,6 @@
 import { lookup } from "node:dns/promises";
 import { readFileSync } from "node:fs";
 import { isIP } from "node:net";
-import { join } from "node:path";
 import { projectAgentPath } from "../app-data";
 import { readBodyCapped, stallGuard, withAbort } from "../net.js";
 import { ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";

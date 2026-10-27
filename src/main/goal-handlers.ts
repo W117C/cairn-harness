@@ -12,7 +12,7 @@ import { store } from "./settings-handlers";
 
 export interface GoalHandlerDeps {
   /** 事件推给壳（`hooks.onEvent` 的活转发：钩子可在首场 run 之后才注册/取消注册）。 */
-  onEvent: (e: AgentEvent) => void;
+  onEvent: (e: AgentEvent, logPath?: string) => void;
   /** 价键派生（与拨号同一个数；定义住装配根，避免装配根 ↔ 轻模块成环）。 */
   budgetPriceKeyOf: (selection: MainModelSelection) => string;
 }
@@ -33,7 +33,7 @@ function D(): GoalHandlerDeps {
  *  而 replay 又看得见（两路不一致，正是本仓点名的形状）。三处 goal 写入点共用一份。 */
 export async function emitGoalEvent(logPath: string, sessionId: string | undefined, ev: AgentEvent): Promise<void> {
   await createEventLog(logPath).append(ev);
-  D().onEvent(sessionId !== undefined ? ({ ...ev, session_id: sessionId } as AgentEvent) : ev);
+  D().onEvent(sessionId !== undefined ? ({ ...ev, session_id: sessionId } as AgentEvent) : ev, logPath);
 }
 
 /** run 中途抛错时补的那一条 `goal_stopped`（异常收场也是「不跑了」，也得让用户看得见）。

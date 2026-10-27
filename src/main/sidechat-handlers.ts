@@ -21,7 +21,7 @@ import { store } from "./settings-handlers";
 
 export interface SidechatHandlerDeps {
   /** 事件推给壳（`hooks.onEvent` 的活转发：钩子可在首场 run 之后才注册/取消注册）。 */
-  onEvent: (e: AgentEvent) => void;
+  onEvent: (e: AgentEvent, logPath?: string) => void;
   /** 「最近一次 run 的日志路径」（装配根的可变状态，活读）。 */
   lastLogPath: () => string | null;
   /** 当前工作区（与 handleAgentRun 同一份解析）。 */
@@ -143,7 +143,7 @@ export async function handleSidechatPromote(req: {
     });
     if (!res.ok) return { ok: false, error: res.error };
     // 上屏：主会话活流（renderer 渲染为 promote 卡）
-    if (res.event) D().onEvent(res.event);
+    if (res.event) D().onEvent(res.event, mainLogPath);
     return { ok: true, event: res.event };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };

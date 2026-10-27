@@ -19,7 +19,8 @@
 //  - deprecate 不许落在当前 active 版本上——先回滚再废弃，不留「已废弃却还在位」的模糊态；
 //  - prune（清退）只许落在已废弃、且不在 active/previous 位、未清退过的版本上——
 //    回滚目标被清退 = 指针将指向盘上没有的文件，这条在账本层就闸死。
-import { appendFile, mkdir, open, readFile, stat, truncate } from "node:fs/promises";
+import { constants } from "node:fs";
+import { mkdir, open, readFile, stat, truncate } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { writeFileAtomic } from "../../atomic-write";
 import {
@@ -491,24 +492,27 @@ export class ModuleRegistry {
     // 尾段没成行；下一次 append 会直接拼在它后面 ⇒ **半行 + 完整行 = 一条坏行**，
     // 而这条坏行在**中段**（后面还有好行）⇒ 重建会当场抛 ⇒ 注册表永久打不开。
     // 这里补一个换行把它隔开（与 src/events/log.ts 的同一口径）。
-    const st = await stat(this.logPath).catch(() => null);
-    if (st !== null && st.size > 0) {
-      const fh = await open(this.logPath, "r");
+    const fh = await open(
+      this.logPath,
+      constants.O_RDWR | constants.O_APPEND | constants.O_CREAT | (constants.O_NOFOLLOW ?? 0),
+      0o600,
+    );
+    try {
       let needsNewline = false;
-      try {
+      const st = await fh.stat();
+      if (st.size > 0) {
         const last = Buffer.alloc(1);
         await fh.read(last, 0, 1, st.size - 1);
         needsNewline = last[0] !== 0x0a;
-      } finally {
-        await fh.close().catch(() => undefined);
       }
+      await fh.writeFile((needsNewline ? "\n" : "") + JSON.stringify(ev) + "\n", "utf8");
       if (needsNewline) {
-        await appendFile(this.logPath, "\n", "utf8");
         console.warn("[evolution] registry.jsonl 尾行没以换行收尾：已补换行隔离（否则下一次追加会把它拼成坏行）");
       }
+      index.logSize = (await fh.stat()).size;
+    } finally {
+      await fh.close().catch(() => undefined);
     }
-    await appendFile(this.logPath, JSON.stringify(ev) + "\n", "utf8");
-    index.logSize = (await stat(this.logPath)).size;
     await this.persistIndex(index);
   }
 

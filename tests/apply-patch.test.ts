@@ -669,7 +669,7 @@ describe("apply_patch：把计划落到盘上", () => {
 /** rename 失败注入点（必须活在模块顶层：`vi.mock` 的工厂被提升，引用不到 describe 内的绑定）。 */
 const failRenameOn = { target: "" };
 /** 回滚写回也失败的目标（制造「没能恢复」那一格，用来判恢复指引不说空话）。
- *  **只在 rename 已经开始失败之后生效**：预写阶段也走 writeFile，不设这道闸就会错失败在预写，
+ *  **只在 rename 已经开始失败之后生效**：恢复现在也走原子 rename，不设这道闸就会错失败在预写，
  *  那一格另一个用例已经判过，这里要的是第二阶段。 */
 const failRollbackOn = { target: "", armed: false };
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -677,18 +677,15 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   return {
     ...fs,
     rename: async (...args: Parameters<typeof fs.rename>) => {
+      if (failRollbackOn.armed && failRenameOn.target === "" && String(args[1]) === failRollbackOn.target) {
+        throw Object.assign(new Error("注入的回滚写回失败"), { code: "EACCES" });
+      }
       // 只对**目标路径**命中失败一次：第一个文件落盘成功，第二个失败 ⇒ 必须回滚第一个。
       if (String(args[1]) === failRenameOn.target) {
         failRenameOn.target = "";
         throw Object.assign(new Error("注入的 rename 失败"), { code: "EACCES" });
       }
       return fs.rename(...args);
-    },
-    writeFile: async (...args: Parameters<typeof fs.writeFile>) => {
-      if (failRollbackOn.armed && String(args[0]) === failRollbackOn.target) {
-        throw Object.assign(new Error("注入的回滚写回失败"), { code: "EACCES" });
-      }
-      return fs.writeFile(...args);
     },
   };
 });

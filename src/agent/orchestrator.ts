@@ -4,59 +4,41 @@
 // spawn_agent（非运行时报错）；worker 上下文 = task + context + 项目记忆注入，永不继承主对话。
 // 事件纪律（§4.4.9 / 任务书裁决 1）：worker 事件落主会话 JSONL（子流：agent_* + 带 agent_id 的
 // tool_call/tool_result/usage），agent_spawned 携 parent_event_id 建立血缘树；重放主流后投影一致。
-import { readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
 import type { AgentEvent, HarnessHoldReason } from "../events";
 import { replay } from "../events";
 import type { ModelOutput, Provider } from "../providers";
 import { glmDefaultModelName, type GlmMessage, type GlmToolSpec } from "../providers/glm";
 import { envKeyOf } from "../providers/env-keys";
-import { effectiveModelTable, findSpecByNameOrId, resolveModel, toWorkerModel, type ModelTier } from "../providers/registry";
+import { effectiveModelTable, resolveModel, toWorkerModel, type ModelTier } from "../providers/registry";
 import { routeFor, TIER_ORDER as MODEL_TIER_ORDER } from "../routing/policy";
 import type { ToolResult } from "../tools/base";
-import { glob } from "../tools/glob";
-import { run_shell } from "../tools/run_shell";
-import { write_file } from "../tools/write_file";
-import { remember } from "../tools/remember";
 import { runLoop } from "./loop";
 import { redactEventForLog } from "../events";
 import { DELIVERY_GUARD_CALL_ID, EMPTY_RUN_DELIVERY } from "./delivery-guard";
 import { projectContext, type ContextMessage } from "./context";
 import {
-  DEFAULT_COMPACTION_CONFIG,
   estimateContextTokens,
-  estimateTokens,
   calibrateFactor,
   runCompaction,
   shouldCompact,
-  withModelBudget,
   type CompactionConfig,
   type Summarizer,
 } from "./compaction";
 import {
   dependsOnCycle,
-  type FrozenStage,
-  type PluginAgentRoleDef,
-  type ResolvedPluginRole,
 } from "./sequencer";
-import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckConfig, type StuckTurn } from "./stuck";
+import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckConfig } from "./stuck";
 import { unconsumedSpawnArgs } from "./spawn-surface";
 import { respawnSpawnArgs, type RespawnArgs } from "./recovery";
 import {
-  branchForAgent,
   createWorktree,
   removeWorktree,
   worktreeDiff,
   worktreePathFor,
 } from "./worktree";
 import {
-  evaluate,
   newAutonomySession,
-  scopeKey,
   type AskScope,
-  type AutonomySession,
-  type EvaluateDecision,
-  type PermissionRule,
   type RiskLevel,
 } from "../permissions";
 import { frozenJudgePathSet } from "../frozen";
@@ -66,13 +48,13 @@ import { frozenJudgePathSet } from "../frozen";
 import { ApprovalsChainsSupervise } from "./orchestrator-approvals";
 import { BudgetCascadeBandit } from "./orchestrator-budget";
 import { WorkerMergeReview } from "./worker-merge";
-import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, WORKER_TOOL_TABLE, WRITE_WORKER_TOOL_TABLE, workerBudgetConfig, workerToolTable } from "./orchestrator-config";
-import { shell_rw, workerToolSpecs } from "./worker-shell-tools";
+import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, workerBudgetConfig, workerToolTable } from "./orchestrator-config";
+import { workerToolSpecs } from "./worker-shell-tools";
 import { clampTier, clipWorkerSummary, isPermissionMode, parseSpawnedAgentId, scanModelOutput, workerVerificationEvidence } from "./worker-report";
 import { priceForModel, priceTagText, spentUsdFor, type JoinPayloadBody, type WorkerPrice } from "./orchestrator-join";
 import { WorkerCancelled, defaultWorkerModel, isScriptedModel, usageNameOf, type WorkerModel } from "./worker-model";
-import { type OrchestratorOptions, type PipelineChain, type SpawnArgs, type StageRoleResolution, type WorkerContext, type WorkerHandle } from "./orchestrator-types";
-import { filterWorkerSpecs, filterWorkerTable, parseStringList, parseWorkerContext, scanStreamEvent, withAgentId } from "./worker-projection";
+import { type OrchestratorOptions, type PipelineChain, type SpawnArgs, type StageRoleResolution, type WorkerHandle } from "./orchestrator-types";
+import { filterWorkerSpecs, filterWorkerTable, parseStringList, parseWorkerContext, withAgentId } from "./worker-projection";
 import { globIntersects, semanticConflictsVia } from "./lease-conflicts";
 import { findToolCallEventId } from "./call-id-index";
 import { buildWorkerSystemMessages, lastAssistantText } from "./worker-prompt";
@@ -476,7 +458,6 @@ export class Orchestrator {
 
   /** spawn 内核入口（模型面与 sequencer 逐环共用；stageRole 只由 sequencer 代码注入）。 */
   private async spawnInternal(args: SpawnArgs, ctx: { callId?: string; cascadeFrom?: ModelTier }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
-    const mode = typeof args.mode === "string" ? args.mode : "";
     // H2（审查 B-3）：入口 fail-closed——主会话已取消时不再派发任何 worker
     //（addEventListener 对已 abort 的 signal 不会触发，靠入口检查补上取消窗口）。
     if (this.root.signal.aborted) {

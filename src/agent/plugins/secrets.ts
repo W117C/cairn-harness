@@ -3,7 +3,7 @@
 //   绝不静默退回明文（§11.8 信任边界底线）。
 // 存储形态：加密后的字节以 base64 落在 <storePath> 的 JSON 里（密文可落盘，明文永不落盘）。
 // src/agent/** 不 import electron：Electron 侧经 installSafeStorageBackend 注入 IO（可测可换）。
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { writeFileAtomic } from "../../atomic-write";
 import type { UserConfigField } from "./manifest";
@@ -204,7 +204,7 @@ export async function writePluginUserConfig(opts: {
   }
   const file = opts.dir.endsWith("/") ? opts.dir + "plugin-userconfig.json" : opts.dir + "/plugin-userconfig.json";
   await mkdir(opts.dir, { recursive: true });
-  await writeFile(file, JSON.stringify({ plugin: opts.plugin, config: plaintext, secretKeys }, null, 2) + "\n", "utf8");
+  await writeFileAtomic(file, JSON.stringify({ plugin: opts.plugin, config: plaintext, secretKeys }, null, 2) + "\n");
   // H4（审查 P1-18）：产品口径审计行（只记插件名/键名/落盘路径，**绝不记值**）——userConfig
   // 写入是用户可见事件，日志可查；这也让验收的日志扫描位有真实捕获对象（不再靠验收脚本手工喂行）。
   console.log("[plugin] userConfig 写入完成：" + JSON.stringify({ plugin: opts.plugin, secretKeys, plaintextKeys, file }));

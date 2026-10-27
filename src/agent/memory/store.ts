@@ -2,7 +2,8 @@
 // 全局层 <appData>/memory/（可配：M2D_MEMORY_HOME / initMemoryHome，测试用临时目录）。
 // 读写是纯 fs 语义：frontmatter 解析往返不丢字段、modified 写入落账、索引 upsert、索引硬上限写入端拒绝。
 // 本模块是唯一知道记忆文件布局的地方；remember 工具与注入器都经它读写（写入口收敛 §8.1.8 第 4 条）。
-import { appendFile, mkdir, open, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { mkdir, open, readFile, readdir, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { projectAgentPath } from "../../app-data";
@@ -235,23 +236,23 @@ export async function appendRootFile(workspace: string, kind: keyof typeof ROOT_
   // 一行，"## " 分块解析被破坏。整段按文件路径串行（与 writeTopic 按 dir 串行同口径）。
   await serializeOn(path, async () => {
     await ensureDir(projectAgentPath(workspace));
-    let prefix = "";
+    const fh = await open(
+      path,
+      constants.O_RDWR | constants.O_APPEND | constants.O_CREAT | (constants.O_NOFOLLOW ?? 0),
+      0o600,
+    );
     try {
-      const fh = await open(path, "r");
-      try {
-        const st = await fh.stat();
-        if (st.size > 0) {
-          const buf = Buffer.alloc(1);
-          await fh.read(buf, 0, 1, st.size - 1);
-          if (buf[0] !== 0x0a) prefix = "\n";
-        }
-      } finally {
-        await fh.close();
+      let prefix = "";
+      const st = await fh.stat();
+      if (st.size > 0) {
+        const buf = Buffer.alloc(1);
+        await fh.read(buf, 0, 1, st.size - 1);
+        if (buf[0] !== 0x0a) prefix = "\n";
       }
-    } catch {
-      /* 文件不存在：无需分隔 */
+      await fh.writeFile(prefix + content, "utf8");
+    } finally {
+      await fh.close();
     }
-    await appendFile(path, prefix + content, "utf8");
   });
 }
 
