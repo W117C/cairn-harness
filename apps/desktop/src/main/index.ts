@@ -88,7 +88,7 @@ import {
   resolveKnownProjectTarget as resolveKnownProjectTargetIn,
   resolveProvidedWorkspace,
 } from "./project-path-gate";
-import { isAppShellUrl } from "./shell-url";
+import { isAppShellUrl, shellAppPath } from "./shell-url";
 import { WindowWorkspaceContext } from "./window-workspace-context";
 import { ProjectRegistry } from "../../../../src/main/project-registry";
 import { loadCustomProviders } from "../../../../src/main/custom-provider-store";
@@ -963,7 +963,7 @@ void webContents; // 显式留痕：推送经 BrowserWindow.getAllWindows()
  *  窗口里加载外部页面——应用壳的 preload 暴露 window.agent（全量 IPC），把渲染层交给
  *  远程页面等于把本机能力一起交出去。只放行「应用壳自身」的导航（dist/index.html 或
  *  dev server 根）；http(s) 外链 shell.openExternal，其余协议直接丢。 */
-const shellUrlOptions = { devServerUrl: process.env.VITE_DEV_SERVER_URL ?? "", appPath: app.getAppPath() };
+const shellUrlOptions = { devServerUrl: process.env.VITE_DEV_SERVER_URL ?? "", appPath: shellAppPath(here) };
 const isShellUrl = (raw: string): boolean => isAppShellUrl(raw, shellUrlOptions);
 
 /** IPC 来源校验：只有应用壳页面（含 popout，同一 dist/index.html）能调 window.agent。
@@ -1310,6 +1310,7 @@ const createWindow = () => {
   }
 };
 app.whenReady().then(() => {
+  if (process.env.CAIRN_SMOKE === "1") console.error("[cairn-smoke] app ready");
   if (process.platform === "darwin") app.dock?.setIcon(appIcon);
   // 主题真相在 settings.json；ready 后先同步，再建窗（createWindow 里的 bootBackground 也读同一字段）。
   nativeTheme.themeSource = readThemePreference();
@@ -1338,6 +1339,7 @@ app.whenReady().then(() => {
     },
     closeWindow: () => { BrowserWindow.getFocusedWindow()?.close(); },
   });
+  if (process.env.CAIRN_SMOKE === "1") console.error("[cairn-smoke] initializing secure storage");
   installProviderKeyBackend(
     {
       isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
@@ -1346,6 +1348,7 @@ app.whenReady().then(() => {
     },
     join(userData, "provider-keys.json"),
   );
+  if (process.env.CAIRN_SMOKE === "1") console.error("[cairn-smoke] provider storage initialized");
   // 插件 userConfig 的敏感值同样要有后端：此前 installSafeStorageBackend 全仓零调用点 ⇒
   // getPluginSecret 恒 null、所有 sensitive 字段恒 missing（带字面占位符去连远端）。
   if (!installSafeStorageBackend(

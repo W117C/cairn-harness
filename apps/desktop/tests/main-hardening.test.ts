@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { isAppShellUrl } from "../src/main/shell-url";
+import { isAppShellUrl, shellAppPath } from "../src/main/shell-url";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const app = read("../src/main/index.ts");
@@ -48,6 +48,14 @@ describe("应用壳 URL 判定", () => {
     expect(isAppShellUrl("http://localhost:5173/", prod)).toBe(false);
     expect(isAppShellUrl("file:///repo/apps/desktop/dist/index.html", prod)).toBe(true);
   });
+
+  it("壳根取主进程入口上两级：打包后是 Resources/app/apps/desktop，不是 app.getAppPath 的 Resources/app", () => {
+    const packagedMain = "/tmp/Cairn.app/Contents/Resources/app/apps/desktop/src/main";
+    const appPath = shellAppPath(packagedMain);
+    expect(appPath).toBe("/tmp/Cairn.app/Contents/Resources/app/apps/desktop");
+    expect(isAppShellUrl("file:///tmp/Cairn.app/Contents/Resources/app/apps/desktop/dist/index.html", { appPath })).toBe(true);
+    expect(isAppShellUrl("file:///tmp/Cairn.app/Contents/Resources/app/dist/index.html", { appPath })).toBe(false);
+  });
 });
 
 describe("主进程接线见证", () => {
@@ -60,6 +68,9 @@ describe("主进程接线见证", () => {
     expect(app).toContain("isTrustedIpcSender(event)");
     expect(app).toContain('throw new Error(`IPC 来源不可信，已拒绝：${channel}`)');
     expect(app).toContain("isAppShellUrl(raw, shellUrlOptions)");
+    // 打包态：壳根必须从入口目录推（app.getAppPath 在 runtime package 里少一层）。
+    expect(app).toContain("appPath: shellAppPath(here)");
+    expect(app).not.toContain("appPath: app.getAppPath()");
   });
 
   it("工作区上下文只接受已注册路径（`/` 不再是合法边界）", () => {

@@ -5,8 +5,16 @@ import { resolve } from "node:path";
 export interface ShellUrlOptions {
   /** VITE_DEV_SERVER_URL（生产为空串）。 */
   devServerUrl?: string;
-  /** app.getAppPath()（dev = apps/desktop；打包 = asar 根）。 */
+  /** 桌面包根（dist/ 的父目录）：dev = apps/desktop；打包 = <app>/Contents/Resources/app/apps/desktop。 */
   appPath: string;
+}
+
+/** 从主进程入口目录（<desktop>/src/main）推桌面包根。
+ *  不能用 app.getAppPath()：runtime package 的 main 在 apps/desktop/src/main/entry.cjs，
+ *  打包后它返回 Resources/app，而 loadFile 的壳在 Resources/app/apps/desktop/dist —— 差一层，
+ *  IPC 来源校验会把壳页面整体判成不可信。 */
+export function shellAppPath(mainDir: string): string {
+  return resolve(mainDir, "..", "..");
 }
 
 export function isAppShellUrl(raw: string, opts: ShellUrlOptions): boolean {

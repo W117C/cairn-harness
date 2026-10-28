@@ -6,13 +6,13 @@
 
 ```sh
 git clone <this-repo> && cd cairn-harness
-npm install                       # CLI 走 tsx 通道（devDependency），必须装齐才能跑
+npm install                       # CLI 走 tsx 通道（运行依赖）
 export OPENAI_API_KEY=<你的 key>
 ./bin/cairn.mjs "把 tests 里失败的那个用例修好"
 ```
 
 > 本包是 `"private": true`，**不经 npm 分发**：没有 `npm install -g cairn` 这条路。上面是克隆仓库后的用法——
-> tsx 在 devDependencies 里，源码经 tsx 通道直接跑。
+> tsx 是运行依赖，源码经 tsx 通道直接跑；桌面包也使用同一条 loader 路径。
 
 ---
 

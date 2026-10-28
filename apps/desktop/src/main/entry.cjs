@@ -5,5 +5,17 @@
 const path = require("node:path");
 // __dirname = <repo>/apps/desktop/src/main，上溯 4 层才是 repo 根（apps/desktop/src/main 各一层）
 const repoRoot = path.resolve(__dirname, "..", "..", "..", "..");
+if (process.env.CAIRN_SMOKE === "1") {
+  require("node:fs").writeSync(2, "[cairn-smoke] bootstrap entry\n");
+  // A machine probe must fail visibly instead of waiting in Electron's startup-error dialog.
+  const fail = (error) => {
+    console.error("[cairn-smoke] startup failure:", error instanceof Error ? error.stack : String(error));
+    require("electron").app.exit(1);
+  };
+  process.prependListener("uncaughtException", fail);
+  process.prependListener("unhandledRejection", fail);
+}
 require(require.resolve("tsx/cjs", { paths: [repoRoot] }));
+if (process.env.CAIRN_SMOKE === "1") require("node:fs").writeSync(2, "[cairn-smoke] TypeScript loader registered\n");
 require(path.join(__dirname, "index.ts"));
+if (process.env.CAIRN_SMOKE === "1") require("node:fs").writeSync(2, "[cairn-smoke] main module loaded\n");
