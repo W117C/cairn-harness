@@ -196,8 +196,25 @@ export function ModelPicker(props: {
   initialFocus?: "model" | "effort";
   /** 用户自己点开触发器（2026-10-18）：让上层把落点复位成 model，避免上一次 ⌘⇧E 的焦点意图残留。 */
   onUserOpen?: () => void;
+  /** 开合**由上层持有**（2026-10-28 · 第 752 页）：模型菜单此前自己一份 open 态，
+   *  与 Composer 的浮层槽（用量环/附件/权限）**互不知情** ⇒ 模型菜单开着时点用量环，
+   *  两个浮层同屏叠放（真机复现：几何真的重叠，用量浮层盖住模型菜单右半）。
+   *  现在开合真相在 Composer 一处，本组件是受控件。 */
+  open?: boolean;
+  /** 请求开/关（受控件的唯一出口）：上层据此收口同带的其他浮层。 */
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  // 受控优先：给了 `open` 就以外部为准；没给（嵌用面）退回内部态（旧行为不变）。
+  const controlled = props.open !== undefined;
+  const open = controlled ? props.open === true : internalOpen;
+  const setOpen = useCallback((next: boolean): void => {
+    if (props.onOpenChange !== undefined) {
+      props.onOpenChange(next);
+      return;
+    }
+    setInternalOpen(next);
+  }, [props.onOpenChange]);
   const box = useRef<HTMLDivElement>(null);
   // 菜单向上开，高度必须让出标题栏：空屏输入卡在中部，393px 菜单会顶穿窗口上沿。
   const [menuMax, setMenuMax] = useState<number | undefined>(undefined);
@@ -256,7 +273,7 @@ export function ModelPicker(props: {
         aria-expanded={open}
         title={describeSelection(props.value, options)}
         disabled={props.disabled}
-        onClick={() => { props.onUserOpen?.(); setOpen((v) => !v); }}
+        onClick={() => { props.onUserOpen?.(); setOpen(!open); }}
       >
         <span className="mp-name">
           {shortModelName(props.value, options)}

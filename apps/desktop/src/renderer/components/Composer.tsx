@@ -28,6 +28,7 @@ import { MODE_LABEL, ModeDot, PermissionMenu } from "./PermissionMenu";
 import { Popover, usePopoverDismiss, useMenuKeyboard } from "./Popover";
 import { mentionBreadcrumb, parseMentionQuery, replaceMentionToken } from "../mention";
 import { isCompositionEnter } from "../ime";
+import { useComposerOverlaySlot } from "../composer-overlays";
 import { STR } from "../strings";
 import { slashItems, slashMatches, type SlashSkill } from "../slash";
 import { DRAFTS_KEY, HOME_DRAFT_KEY, draftKeyFor, sessionIdOfDraftKey } from "../drafts";
@@ -346,7 +347,12 @@ export function Composer(props: {
     if (r.attachments.length > 0) setAttachments((cur) => (cur.length === 0 ? [...r.attachments] : cur));
     taRef.current?.focus();
   }, [props.restoreDraft]);
-  const [menu, setMenu] = useState<"none" | "perm" | "meter" | "attach">("none");
+  // 浮层槽（2026-10-28 · 第 752 页）：**一个**开合真相，四个浮层族共用。
+  // 此前模型菜单（ModelPicker）自己一份 open 态，与这个槽互不知情 ⇒ 模型菜单开着时点用量环，
+  // 两个浮层同屏叠放（真机复现：几何真的重叠，用量浮层盖住模型菜单右半，命中测试落在
+  // 用量浮层上）。现在模型菜单也写这个槽（受控件），同带互斥。
+  // 逻辑在 composer-overlays.ts（Composer 已近行数帽，浮层槽有自己的家 + 自己的判卷面）。
+  const { layer: overlayLayer, menu, setMenu, setModelOpen, setAttachOpen, setPermOpen, setMeterOpen } = useComposerOverlaySlot();
   // v7 附件注入（路径右键「附为上下文」）：seq 变化 append 一次（同一路径已在列表则不加）。
   const lastInjectedAttachment = useRef(0);
   // 附件/权限两个菜单的外点与 Esc 关闭（2026-10-17 真机实证：菜单开着按 Esc 不关，点外面也不关——
@@ -363,8 +369,6 @@ export function Composer(props: {
   usePopoverDismiss(menu === "perm", closeMenu, permWrapRef);
   // 键盘导航（2026-10-18）：两个自绘菜单支持 ↓/↑ / Home / End，焦点在触发钮上时 ↓ 也能开菜单；
   // 此前只有 Tab 能进菜单，与模型菜单/命令面板的手感不一致。
-  const setAttachOpen = useCallback((open: boolean) => { setMenu(open ? "attach" : "none"); }, []);
-  const setPermOpen = useCallback((open: boolean) => { setMenu(open ? "perm" : "none"); }, []);
   const attachKeys = useMenuKeyboard(menu === "attach", setAttachOpen, attachWrapRef);
   const permKeys = useMenuKeyboard(menu === "perm", setPermOpen, permWrapRef);
   useEffect(() => {
@@ -1016,7 +1020,7 @@ export function Composer(props: {
               aria-haspopup="menu"
               aria-expanded={menu === "attach"}
               disabled={disabled}
-              onClick={() => setMenu(menu === "attach" ? "none" : "attach")}
+              onClick={() => setAttachOpen(menu !== "attach")}
             ><Plus size={13} /></button>
             <Popover open={menu === "attach"} up role="menu" style={{ minWidth: 270 }}>
               <div className="pop-label">{STR.composer.attachLabel}</div>
@@ -1091,7 +1095,7 @@ export function Composer(props: {
               className="ctl"
               aria-haspopup="menu"
               aria-expanded={menu === "perm"}
-              onClick={() => setMenu(menu === "perm" ? "none" : "perm")}
+              onClick={() => setPermOpen(menu !== "perm")}
               disabled={disabled || props.running}
             >
               <ModeDot mode={props.mode} />
@@ -1145,6 +1149,10 @@ export function Composer(props: {
             openSeq={pickerOpenSeq}
             initialFocus={pickerFocus}
             onUserOpen={() => setPickerFocus("model")}
+            // 开合由 Composer 的浮层槽持有（第 752 页）：模型菜单与用量环/附件/权限同带互斥，
+            // 不许同屏叠放。
+            open={overlayLayer === "model"}
+            onOpenChange={setModelOpen}
           />
           <span className="spacer" />
           {/* 用量环（v3-lite .ring：环心带上下文百分数；环钉在发送/中断钮左侧——原型 .bar 列序
@@ -1154,7 +1162,7 @@ export function Composer(props: {
             steps={props.steps}
             {...(props.ctxWindow !== undefined ? { ctxWindow: props.ctxWindow } : {})}
             open={menu === "meter"}
-            onOpenChange={(open) => { setMenu(open ? "meter" : "none"); }}
+            onOpenChange={setMeterOpen}
             onCompact={props.onCompact}
           />
           {/* 加入队列钮（运行中）：**有话说才出现**——空输入下只留打断钮，不摆禁用的灰钟（v7.1 业主裁）。 */}

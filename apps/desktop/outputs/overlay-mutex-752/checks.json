@@ -1,0 +1,62 @@
+[
+  {
+    "name": "模型菜单单独开着：屏上只有它一个",
+    "ok": true,
+    "detail": {
+      "count": 1,
+      "classes": [
+        "pop up show mp-pop"
+      ],
+      "modelOpen": true,
+      "usageOpen": false,
+      "overlap": false
+    }
+  },
+  {
+    "name": "模型菜单开着点用量环 ⇒ 只剩一个浮层（模型菜单让路），且不重叠",
+    "ok": true,
+    "detail": {
+      "ringClicked": {
+        "clicked": true
+      },
+      "afterRing": {
+        "count": 1,
+        "classes": [
+          "pop up show"
+        ],
+        "modelOpen": false,
+        "usageOpen": true,
+        "overlap": false
+      }
+    }
+  },
+  {
+    "name": "反向同样互斥（用量环开着点模型菜单 ⇒ 只剩模型菜单）",
+    "ok": true,
+    "detail": {
+      "count": 1,
+      "classes": [
+        "pop up show mp-pop"
+      ],
+      "modelOpen": true,
+      "usageOpen": false,
+      "overlap": false
+    }
+  },
+  {
+    "name": "模型菜单仍能自己开、自己关",
+    "ok": true,
+    "detail": {
+      "count": 0,
+      "classes": [],
+      "modelOpen": false,
+      "usageOpen": false,
+      "overlap": false
+    }
+  },
+  {
+    "name": "渲染过程无控制台错误",
+    "ok": true,
+    "detail": []
+  }
+]

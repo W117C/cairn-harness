@@ -25050,3 +25050,90 @@ IPC 通道 + **单发模型调用**）」。也就是说「按 Tab 才去生成�
 - 子代理的源码推理在本页三处**都错**，但它在**覆盖面**与**指出候选**上有价值——这正是
   「候选由代理给、结论由本机实测定」这条分工的价值。
 - 工作树未提交；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 752 页：浮层互斥（交互面第 3 轮 · 模型菜单与用量环同屏叠放）
+
+### 一、这轮修的是「点开一个浮层，另一个还开着，两个叠在一起」
+
+**缺陷本体**（真机复现，真实 renderer + 真实 dist）：模型菜单（`ModelPicker`）与用量环
+浮层（`UsageMeter`）是**两个独立的 open 态**——模型菜单的 `open` 在它自己身上，Composer 的
+`menu` 槽（attach/perm/meter）不知道它。于是模型菜单开着时点用量环 ⇒ 用量浮层开起来，
+**模型菜单仍在** ⇒ 两个浮层同屏。
+
+实测几何（1440×900，展开后的实际矩形）：
+
+| 浮层 | 矩形 | 与模型菜单重叠？ |
+|---|---|---|
+| 模型菜单 `.mp-pop` | `left 668, top 397, 300×408` | — |
+| 用量浮层 `.pop.up.show` | `left 919, top 496, 258×309` | **是** |
+| 附件菜单 `.pop.up.show` | `left 481, top 617, 270×188` | **是**（与用量浮层不重叠） |
+
+命中测试：用量浮层中央点命中的是**用量浮层**（`hitIsUsage: true`）⇒ 模型菜单的右半被
+盖住，用户要点两次才关得掉两个浮层。规格里没有「同一个角上两个浮层叠着」这种形状；
+Composer 自己的浮层注释早就记过同族事故（「斜杠菜单开着再点模型菜单，两个弹层同屏叠放」），
+那次只修了斜杠那一对。
+
+### 二、修法：一个开合槽（第 752 页新增 `apps/desktop/src/renderer/overlay-mutex.ts`）
+
+- 新增 `overlay-mutex.ts`：`OverlayLayer`（none/model/meter/attach/perm）、
+  `overlayLayersAt`（锚点带读面）、`layersExclusive`（两两互斥）、`nextOverlay`
+  （换层 ⇒ 目标接管；同层再点 ⇒ 关）。
+- 新增 `composer-overlays.ts`：`useComposerOverlaySlot()` 钩子，持有槽的状态与四个开合出口。
+  **为什么单独成文件**：`Composer.tsx` 已近 1200 行帽（`renderer-layer-check` 的 I4）——
+  第一版把槽的逻辑直接写进 Composer，独立树复跑时**行数 1216 超帽、当场红**；
+  拆出钩子后 Composer 回到 1175 行，且这段逻辑有了自己的判卷面。
+- `ModelPicker` 改**受控件**：`open` / `onOpenChange` 由 Composer 给；给了 `open` 就以外部
+  为准，没给（嵌用面）才退回内部态（旧行为不变）。触发钮的 toggle 走受控出口。
+
+### 三、判卷（三层）
+
+新增 `apps/desktop/tests/overlay-mutex.test.ts`（**7 条**）：
+
+- **纯函数层**（3 条）：锚点带的读面；两个不同的层互斥、同层不；`nextOverlay` 的换层/关闭。
+- **接线层**（2 条）：`ModelPicker` 是受控件（`controlled` / `props.onOpenChange` /
+  `setOpen(!open)`），反向锚「不再 `setOpen((v) => !v)`」；Composer 侧只有**一个**浮层真相
+  （走 `useComposerOverlaySlot()`，四个层的开合出口都在 `composer-overlays.ts`）。
+- **真机层**（2 条）：读 `outputs/overlay-mutex-752/checks.json`。
+
+新增 `apps/desktop/scripts/overlay-mutex-smoke.cjs`：真实 renderer + 真实 dist 的 5 条读数
+（模型菜单单独开着只有它 / 模型菜单开着点用量环 ⇒ 只剩一个且不重叠 / 反向同样互斥 /
+模型菜单仍能自己开自己关 / 无控制台错误）。判据**量几何与命中测试**，不只看类名。
+
+### 四、判卷能造红（已实测）
+
+把 `ModelPicker` 退回「自己一份 open 态」（去掉 Composer's `open`/`onOpenChange` 接线）→
+重建 → 重跑真机判卷：
+
+```
+FAIL 模型菜单开着点用量环 ⇒ 只剩一个浮层（模型菜单让路），且不重叠
+     {"afterRing":{"count":2,"classes":["pop up show mp-pop","pop up show"],
+                  "modelOpen":true,"usageOpen":true,"overlap":true}}
+FAIL 反向同样互斥 / FAIL 模型菜单仍能自己开、自己关
+读数：5 条，2 绿 / 3 红
+```
+
+红的读数**精确复现了原缺陷**（`count: 2`、`overlap: true`）。改回后 5/5 绿。
+
+### 五、本轮读数（本轮现跑）
+
+- 桌面全量：**230 文件 / 1583 条，1583 绿 / 0 红**（本轮前基线 229 文件 / 1576 条；
+  新增 1 个判卷文件 7 条）。
+- **I4 行数帽**：`Composer.tsx` **1175 行**（帽 1200）。第一版把浮层槽直接写进 Composer 时
+  独立干净树复跑**红**（1216 超帽）⇒ 按「帽只许收紧、涨过就先拆」的纪律拆出
+  `composer-overlays.ts` 后再复跑，帽与行为同时绿。
+- 浮层互斥判卷：**7/7 绿**；真机判卷：**5/5 绿**（`outputs/overlay-mutex-752/checks.json`）。
+- `typecheck` 0 报错；`renderer-layer-check` 绿（137 个渲染层源文件）；`docs-check` 受检项全绿。
+- `bundle-audit`：首屏 175,889 B（帽 800,000）；**main 561,101 B**（帽 600,000）/ popout
+  371,868 B（帽 400,000），`overBudget: false`。main 比上轮 560,652 B **+449 B**
+  （`overlay-mutex.ts` + Composer's 受控接线）。
+
+### 六、边界
+
+- 「用量浮层 ↔ 附件菜单」这一对几何上**不重叠**（实测），但它们仍共用一个槽 ⇒ 仍互斥。
+  这是**沿用既有槽行为的保守选择**，不是几何必需；注记写在 `overlay-mutex.ts` 的文件头，
+  免得下一位把它当成"量出来的必然"。要放开需把槽从一层升成一组，是另一笔改动。
+- 真机判卷跑的是**离屏 Electron + 合成 AgentApi 桩**，证的是「渲染层一次只开一个浮层」，
+  不证真实主进程下的浮层行为。
+- 未验：同一处浮层在**窄窗 / 暗色 / 竖屏**下的几何是否仍与 1440×900 一致（换算会变，
+  但"模型菜单压住别人"这层关系来自模型菜单的尺寸，与窗口宽无关）。
+- 工作树未提交；`STATE.md` 仍未动。
