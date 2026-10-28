@@ -100,7 +100,11 @@ export function useSessionSubscription(deps: SessionSubscriptionDeps) {
       // ⇒ 这轮收尾的自动沉淀不与对话抢审批，当场拒掉（快销）——distill 的合并审批一次到位，
       // run 收束后队列立即开派；沉淀只是本轮跳过（下次会话收尾再试），notice 明示不暗吞。
       // 手打的记忆写入审批（args 无 trigger）不在此列，照常弹卡。
-      if (isSessionEndDistillAsk(p) && (sendQueue.current.get(sid)?.length ?? 0) > 0) {
+      // ⚠️ 2026-10-28（第 750 页）：读队列表必须与写**同键**——写方按
+      // `runKey(workspace, sid)`（限定键）存，这里此前按**裸 sid** 读 ⇒ 永远读到 undefined
+      // ⇒ 这条「对话优先、跳沉」守卫**从不触发** ⇒ 本该被快销的沉淀审批卡照样弹出来，
+      // 挡住用户已经排队的下一条消息。
+      if (isSessionEndDistillAsk(p) && (sendQueue.current.get(runKey(activeWorkspaceRef.current, sid))?.length ?? 0) > 0) {
         void window.agent.decide(p.askId, false).catch(() => undefined);
         setLastNotice("已跳过本轮全局记忆写入（你在继续对话；下次收尾再试）", sid);
         return;

@@ -1,0 +1,84 @@
+[
+  {
+    "name": "进入会话",
+    "ok": true,
+    "detail": {
+      "session": true
+    }
+  },
+  {
+    "name": "第二条进入队列（队列条在场）",
+    "ok": true,
+    "detail": {
+      "queuedByBtn": {
+        "clicked": true
+      },
+      "queued": {
+        "present": true,
+        "items": [
+          "第二条：排队"
+        ]
+      }
+    }
+  },
+  {
+    "name": "移出队列只删这一条，队列条不因写回空表而整条消失",
+    "ok": true,
+    "detail": {
+      "removed": {
+        "clicked": true
+      },
+      "afterRemove": {
+        "present": false,
+        "items": []
+      }
+    }
+  },
+  {
+    "name": "两条排队在场",
+    "ok": true,
+    "detail": {
+      "q3": {
+        "clicked": true
+      },
+      "q4": {
+        "clicked": true
+      },
+      "two": {
+        "present": true,
+        "items": [
+          "第三条：排队 A",
+          "第四条：排队 B"
+        ]
+      }
+    }
+  },
+  {
+    "name": "打断并发送：被选中的那条被派出去，另一条仍留在队列（队列不被清空）",
+    "ok": true,
+    "detail": {
+      "promoted": {
+        "clicked": true
+      },
+      "before": {
+        "present": true,
+        "items": [
+          "第三条：排队 A",
+          "第四条：排队 B"
+        ]
+      },
+      "after": {
+        "present": true,
+        "items": [
+          "第四条：排队 B"
+        ]
+      },
+      "runs": "[\"第一条：起跑\",\"第三条：排队 A\"]"
+    }
+  },
+  {
+    "name": "渲染过程无控制台错误",
+    "ok": true,
+    "detail": []
+  }
+]

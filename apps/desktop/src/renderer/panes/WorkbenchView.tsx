@@ -763,15 +763,24 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                 onInterruptSend={(index) => {
                   // 「打断并发送」：先把它提到队首，再打断本轮——收束在轮界，runOn 随即先派它。
                   // 打断走 cancelRunHeal：陈旧旗（main 无在跑）时摘旗并把这条当场派出去，不再是死点。
+                  //
+                  // ⚠️ 2026-10-28（第 750 页）：读队列表必须与写**同键**——写方 `setQueueFor`
+                  // 用的是 `runKey(workspace, sid)`（限定键），此前这里按**裸 sid** 读 ⇒ 读到
+                  // undefined ⇒ `?? []` ⇒ `promoteQueued([], i)` 得 `[]` ⇒ 写回空表 ⇒
+                  // `setQueueLocal(key, [])` 直接 `delete(key)` ⇒ **整条队列被静默清空**：
+                  // 用户排队的消息既没发出去、也没被移出，只是不见了。
                   const sid = activeIdRef.current;
                   if (sid === null) return;
-                  setQueueFor(sid, promoteQueued(sendQueue.current.get(sid) ?? [], index));
+                  const key = runKey(activeWorkspace, sid);
+                  setQueueFor(sid, promoteQueued(sendQueue.current.get(key) ?? [], index));
                   cancelRunHeal(sid);
                 }}
                 onRemove={(index) => {
                   const sid = activeIdRef.current;
                   if (sid === null) return;
-                  setQueueFor(sid, dropQueued(sendQueue.current.get(sid) ?? [], index));
+                  // 同上：按限定键读，否则「移出队列」会把**整条**队列清空而不是只删这一条。
+                  const key = runKey(activeWorkspace, sid);
+                  setQueueFor(sid, dropQueued(sendQueue.current.get(key) ?? [], index));
                 }}
                 {...(!runningActive && !queueLoading && !pendingSend && pendingClarify === null && pendingPlan === null
                   ? { onResume: resumeQueue }

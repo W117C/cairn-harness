@@ -27,6 +27,7 @@ import { UsageMeter } from "./UsageMeter";
 import { MODE_LABEL, ModeDot, PermissionMenu } from "./PermissionMenu";
 import { Popover, usePopoverDismiss, useMenuKeyboard } from "./Popover";
 import { mentionBreadcrumb, parseMentionQuery, replaceMentionToken } from "../mention";
+import { isCompositionEnter } from "../ime";
 import { STR } from "../strings";
 import { slashItems, slashMatches, type SlashSkill } from "../slash";
 import { DRAFTS_KEY, HOME_DRAFT_KEY, draftKeyFor, sessionIdOfDraftKey } from "../drafts";
@@ -889,6 +890,11 @@ export function Composer(props: {
               attachFromFiles(files);
             }}
             onKeyDown={(e) => {
+              // IME 组字守卫（2026-10-28）：组字途中的一次回车**归 IME**，应用不消费。
+              // 此前只有"发送"那条路径有守卫；斜杠/@菜单的 Enter 分支没有 ⇒ 拼音组字
+              // 期间按 Enter 会把正在写的字改写成 `/compact `（真机复现，见 PROGRESS
+              // 第 749 页）。守卫口径统一走 `ime.ts` 一处，三条 Enter 路径共用。
+              if (e.key === "Enter" && isCompositionEnter(e, composing)) return;
               // Esc 先收浮层（2026-10-18）：斜杠/mention 开着时 Esc 只关菜单，不动草稿。
               // 不依赖“有命中”——加载中/零命中的 mention 也要能 Esc 掉。
               if (e.key === "Escape") {

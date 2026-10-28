@@ -1,0 +1,68 @@
+[
+  {
+    "name": "斜杠菜单在输入 / 后展开（有可被吃掉的 Enter 分支）",
+    "ok": true,
+    "detail": {
+      "open": true,
+      "rows": 4
+    }
+  },
+  {
+    "name": "组字期间回车不被斜杠菜单吃掉，用户正在写的字不被改写",
+    "ok": true,
+    "detail": {
+      "ime": {
+        "defaultPrevented": false
+      },
+      "after": {
+        "value": "/",
+        "slashOpen": true
+      }
+    }
+  },
+  {
+    "name": "无菜单时组字回车不发消息（草稿原文留在输入框）",
+    "ok": true,
+    "detail": {
+      "before": {
+        "value": "/zzz-no-such-command",
+        "slashOpen": false
+      },
+      "ime": {
+        "defaultPrevented": false
+      },
+      "after": {
+        "value": "/zzz-no-such-command",
+        "slashOpen": false
+      }
+    }
+  },
+  {
+    "name": "非组字的回车仍走菜单选中（守卫只挡组字那一次）",
+    "ok": true,
+    "detail": {
+      "enter": {
+        "defaultPrevented": true
+      },
+      "after": {
+        "value": "/compact ",
+        "slashOpen": false
+      }
+    }
+  },
+  {
+    "name": "候选确认顺序（compositionend 先于 keydown）也不发送半成品拼音",
+    "ok": true,
+    "detail": {
+      "order": {
+        "defaultPrevented": false
+      },
+      "runs": "[]"
+    }
+  },
+  {
+    "name": "渲染过程无控制台错误",
+    "ok": true,
+    "detail": []
+  }
+]

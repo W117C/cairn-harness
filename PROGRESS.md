@@ -24802,3 +24802,185 @@ UI 用新 workspace 算键 ⇒ 停止钮不出现，插话入口永远走不到�
 - 已验证：`fc056d03` 提交树的 25 道 HEAD 认证门、全表变异、core/desktop 判卷与证据面取料。
 - 未验证：真实 DeepSeek 请求、真实外部用户、真实账单、打包发布、跨机器性能长尾。
 - 本页与 STATUS/STATE 是文档与证据提交；没有借文档改动虚增或重算 `fc056d03` 的认证覆盖。
+
+## 2026-10-28 · 第 749 页：IME 组字守卫（交互面第 1 轮 · 中文输入回车改写用户正在写的字）
+
+### 一、这轮修的是「中文用户组字时按回车，正在写的字被系统改掉」
+
+**缺陷本体**（真机复现，非推演）：`Composer.tsx` 的 Enter 路径有**三条**——斜杠菜单选中、
+`@mention` 菜单选中、直接发送。此前只有**第三条**带 IME 组字守卫（`composing.current`，
+C-27 引入），前两条没有。
+
+后果：拼音组字途中按一次回车（中文输入里这是**确认候选词**的常规动作），斜杠菜单把
+「正在组字的半成品」当成「选中了第 0 项」，`chooseSlash` 直接把输入框内容改写成
+`/compact `。**用户正在写的字被系统改掉**——最坏的一类交互缺陷：用户没按发送，
+消息却已经变成了一条命令。
+
+真机读数（`apps/desktop/outputs/ime-guard-749/checks.json`，真实 renderer + 真实 dist）：
+
+- 修前：组字回车 `defaultPrevented: true`，输入框由 `"/"` 变成 `"/compact "`，菜单关闭；
+- 修后：组字回车 `defaultPrevented: false`，输入框仍是 `"/"`，菜单仍在。
+
+复现路径（探针 dispatch 的事件顺序与真实 IME 一致）：
+`compositionstart` → `keydown(Enter, isComposing=true)` → `compositionend`。
+
+### 二、修法：口径收成一处（`src/renderer/ime.ts`）
+
+新增 `ime.ts` 一个纯函数 `isCompositionEnter(event, composingRef)`，判定取**或**：
+
+1. `composingRef.current`（compositionstart/end 驱动）；
+2. `event.isComposing`（部分 Electron/Chromium 路径只挂在合成事件自身）；
+3. `event.nativeEvent.isComposing`（浏览器标准旗）；
+4. `event.keyCode === 229`（传统 IME 信号：组字期间的按键一律报 229）。
+
+`Composer.tsx` 的 onKeyDown **第一行**就加
+`if (e.key === "Enter" && isCompositionEnter(e, composing)) return;`——一处守卫罩住
+上面三条 Enter 路径（不是每条分支各抄一遍）。
+
+**顺带收口一处同源分叉**：`SessionPreviewPane.tsx` 的 Enter 分支此前自己抄了
+`!e.nativeEvent.isComposing`——与 Composer 不同源，合成事件缺旗时两处行为会分叉。
+现在两处走同一个 `isCompositionEnter`。
+
+### 三、判卷（三层，缺一层就留了让它复发的缝）
+
+新增 `apps/desktop/tests/ime-guard.test.ts`（**11 条**）：
+
+- **纯函数层**（4 条）：三条旗任一为真即归 IME；普通回车（`isComposing: false` / `keyCode: 13`）
+  **不**归 IME——守卫不能把正常 Enter 一起吃掉。
+- **接线层**（5 条）：Composer 导入并调用共用守卫；守卫位置**早于**斜杠 / @mention / 发送
+  三条 Enter 分支各自的 `preventDefault`（按处理器边界取窗口，不用固定字符数）；
+  守卫在处理器里**只出现一次**；**反向锚**：全渲染层（读「面」不读单文件）除 `ime.ts` 外
+  不许再出现裸的 `isComposing` 消费判断。
+- **真机层**（2 条）：读 `outputs/ime-guard-749/checks.json` 的实测读数；取料缺席时
+  `it.skipIf` 跳过并明说「跳过 ≠ 通过」（与 cds-parity 判卷同一口径）。
+
+新增 `apps/desktop/scripts/ime-guard-smoke.cjs`：真实 renderer + 真实 dist 的 5 条读数
+（斜杠菜单在位 / 组字回车不被吃掉且原文不变 / 无菜单时组字回车不发消息 /
+**非组字的普通回车仍走菜单选中** / 无控制台错误）。
+
+### 四、判卷能造红（已实测，不是"应该能红"）
+
+把守卫那一行从 `Composer.tsx` 删掉 → 重建 → 重跑真机判卷：
+
+```
+FAIL 组字期间回车不被斜杠菜单吃掉，用户正在写的字不被改写
+     {"ime":{"defaultPrevented":true},"after":{"value":"/compact ","slashOpen":false}}
+读数：5 条，4 绿 / 1 红
+```
+
+红的那一条**精确复现了原缺陷**（`"/"` → `"/compact "`）。改回后 5/5 绿。
+另一路：把 `SessionPreviewPane` 换回自己抄的 `nativeEvent.isComposing` ⇒ 接线层的
+反向锚当场红（`offenders = ['components/SessionPreviewPane.tsx']`），改回后绿。
+
+### 五、本轮读数（本轮现跑）
+
+- 桌面全量：**228 文件 / 1568 条，1568 绿 / 0 红**（修前基线 227 文件 / 1558 条；
+  新增 1 个判卷文件 10 条 + 补 1 条 ⇒ 228/1568）。含 `desktop-boundary-check` 绿。
+- IME 判卷：**11/11 绿**（`tests/ime-guard.test.ts`）。
+- IME 真机判卷：**5/5 绿**（`outputs/ime-guard-749/checks.json`）。
+- `typecheck` 0 报错；`renderer-layer-check` 绿（136 个渲染层源文件，I1–I4 全过）。
+- `motion-policy-check` 绿（7 条规则 0 处发现）。
+- `bundle-audit`：首屏 175,889 B（帽 800,000）；**main 560,590 B**（帽 600,000）/ popout
+  371,868 B（帽 400,000），`overBudget: false`。main 比上轮 560,411 B **+179 B**
+  （`ime.ts` 判定 + Composer 一行调用）。
+
+### 六、边界
+
+- 真机判卷跑的是**离屏 Electron + 合成 AgentApi 桩**（`ui-gallery-preload.cjs`），
+  **不是**真实主进程；它证的是「事件顺序到达时应用不消费回车」，不证真实 IME 的
+  候选窗行为（候选窗是 OS 层的，不在渲染面内）。
+- 组字旗取**或**（三条路径），是**保守**方向：宁可漏挡一次回车，也不误挡正常发送。
+  误挡的代价（正常回车发不出去）比漏挡（组字回车改字）小，但这个取舍是**推断**，
+  不是实测出来的分布。
+- `keyCode 229` 这条传统旗在本机 Chromium 上未被触发（探针里 `isComposing` 已先命中）；
+  它是**兜底**分支，覆盖部分 Windows 输入法的候选确认键。
+- `SessionPreviewPane` 的收口只换判定口径，没改它的发送/插话/队列语义。
+- 工作树未提交；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 750 页：发送队列的键错配（交互面第 2 轮 · 排队消息被静默清空）
+
+### 一、这轮修的是「排队中的消息点一下就没了，而且没发出去」
+
+**缺陷本体**（写与读**不同键**）：
+
+| 角色 | 位置 | 用的键 |
+|---|---|---|
+| 写 | `apps/desktop/src/renderer/state/run-queue.ts` 的 `setQueueFor` → `apps/desktop/src/renderer/state/workbench.ts` 的 `setQueueLocal` | `runKey(workspace, sid)`（**限定键**：`sessionRefKey` = JSON 元组） |
+| 读（**错**） | `apps/desktop/src/renderer/panes/WorkbenchView.tsx` 的「打断并发送」「移出队列」两处 | **裸 sid** |
+| 读（**错**） | `apps/desktop/src/renderer/state/session-subscription.ts` 的沉淀跳过守卫 | **裸 sid** |
+
+同一个 map，两套键 ⇒ 裸 id 读**永远**读不到东西（会话 id 在两个已登记工作区里可能同名，
+限定键存在的全部理由就是防这个）⇒ `get(sid)` 得 `undefined` ⇒ `?? []` ⇒
+`promoteQueued([], i)` / `dropQueued([], i)` 得 `[]` ⇒ `setQueueFor(sid, [])` ⇒
+`setQueueLocal(key, [])` 直接 `delete(key)` ⇒ **整条队列被清空**。
+
+**用户可见症状**：运行中排了队，队列条上摆着「排队中 · 本轮结束后自动发送」和那条消息；
+点「打断并发送」⇒ 消息**没有发出去**、队列条**直接消失**；点「移出队列」⇒ 整条队列消失
+（不是只删那一条）。用户已经排队的消息**既没发出去、也没被移出，只是不见了**——而草稿
+早在提交时就清空了，无从恢复。
+
+第二条同源分叉：`apps/desktop/src/renderer/state/session-subscription.ts` 那条守卫「对话优先、跳沉」按裸 id 读 ⇒ 永远读到
+空 ⇒ **从不触发** ⇒ 本该被快销的「本轮全局记忆写入」审批卡照样弹出来，挡住用户已经排队的
+下一条消息。
+
+### 二、修法：读与写同键（三处）
+
+- `apps/desktop/src/renderer/panes/WorkbenchView.tsx` 的「打断并发送」「移出队列」：先算
+  `const key = runKey(activeWorkspace, sid)`，再 `sendQueue.current.get(key)`。
+- `apps/desktop/src/renderer/state/session-subscription.ts` 的沉淀跳过守卫：改读
+  `sendQueue.current.get(runKey(activeWorkspaceRef.current, sid))`（`runKey` 此前已在该文件导入）。
+
+**顺带修了一处既有判卷**：`apps/desktop/tests/memory-distill.test.ts` 的接线哨兵原本钉的是
+`(sendQueue.current.get(sid)?.length ?? 0) > 0` ——它把**裸 id 读**当成正确写法钉住了
+（该文件不在 `scripts/frozen-sha256.json` 的冻结表里，66 条冻结项只覆盖 `fixtures/`）。
+哨兵因此升到「限定键读」，并**加了一条否定锚**（不许再出现裸 id 读）：钉住的是**意图**
+（守卫要读对那张表），不是某一行写法。
+
+### 三、判卷（三层）
+
+新增 `apps/desktop/tests/queue-key.test.ts`（**6 条**）：
+
+- **纯函数层**（2 条）：有工作区 ⇒ 限定键；无工作区 ⇒ 回落裸 id；不同工作区的同名会话键不同。
+- **接线层**（2 条）：**反向锚**——整渲染层（读「面」不读单文件）不许出现
+  `sendQueue.current.get(<裸 id>)`；三个消费者都按 `runKey` 读。
+- **真机层**（2 条）：读 `outputs/queue-key-750/checks.json` 的实测读数；取料缺席时 skip。
+
+新增 `apps/desktop/scripts/queue-key-smoke.cjs`：真实 renderer + 真实 dist 的 6 条读数
+（进会话 / 第二条进入队列 / 移出只删这一条 / 两条排队在场 / 打断并发送后被选中的那条
+**真的被派出去**且另一条**仍留在队列** / 无控制台错误）。
+
+⚠️ 走通这条路要两个前提，都写在脚本里：
+① `run` 桩必须**挂住不返回**（`--cairn-steer-fixture`），否则运行态瞬间消失、队列条根本
+不出现（第一版就死在这里，且看起来像产品缺陷）；
+② 运行中按回车是**插话到本轮**（规格 §3.2），想入队得点那颗「加入队列」钮——脚本走的是钮。
+
+### 四、判卷能造红（已实测）
+
+把两处读改回裸 id → 重建 → 重跑真机判卷：
+
+```
+FAIL 打断并发送：被选中的那条被派出去，另一条仍留在队列（队列不被清空）
+     {"after":{"present":false,"items":[]},"runs":"[\"第一条：起跑\"]"}
+读数：6 条，5 绿 / 1 红
+```
+
+红的那一条**精确复现了原缺陷**：队列条**整条消失**（`present: false`），且 `runs` 里**没有**
+被选中的那条（没发出去）。改回后 6/6 绿。
+
+### 五、本轮读数（本轮现跑）
+
+- 桌面全量：**229 文件 / 1576 条，1576 绿 / 0 红**（本轮前基线 228 文件 / 1569 条；
+  新增 2 个判卷文件 18 条 + 既有判卷 1 条改为更强口径）。
+- 队列键判卷：**6/6 绿**；队列真机判卷：**6/6 绿**（`outputs/queue-key-750/checks.json`）。
+- `typecheck` 0 报错；`renderer-layer-check` 绿；`motion-policy-check` 绿；`desktop-boundary-check` 绿。
+- `docs-check` 受检项全绿。
+
+### 六、边界
+
+- 真机判卷跑的是**离屏 Electron + 合成 AgentApi 桩**，证的是「渲染层按同一个键读写、
+  队列不丢」，**不证**真实主进程的 sidecar 落盘与重启恢复。
+- 「打断并发送」之后被选中的那条**从队列条上消失**是**既有语义**（提到队首 + 打断本轮 ⇒
+  收束时队首被派出去），不是缺陷；本轮判据因此断言的是「另一条**仍留在队列**」。
+- 未验：多工作区同名会话下队列隔离的真机表现（本轮只有单工作区夹具）。
+- 第 749 页的 IME 判卷在本轮未重跑（那一轮 6/6 绿）；本轮改动不触及组字路径。
+- 工作树未提交；`STATE.md` 仍未动。

@@ -42,7 +42,13 @@ describe("接线哨兵（源码级）", () => {
 
   it("onAsk：队列在场即拒沉淀审批（快销 + notice 明示），不占卡位不上屏", () => {
     expect(appSrc).toContain("isSessionEndDistillAsk(p)");
-    expect(appSrc).toContain("(sendQueue.current.get(sid)?.length ?? 0) > 0");
+    // 2026-10-28（第 750 页）：读队列表必须与写**同键**——写方按 `runKey(workspace, sid)`
+    // （限定键）存，此前这里按**裸 sid** 读 ⇒ 永远读到 undefined ⇒ 这条守卫**从不触发**
+    // ⇒ 本该被快销的沉淀审批卡照样弹出来，挡住用户已经排队的下一条消息。
+    // 哨兵因此从「裸 id 读」升到「限定键读」：钉住的是**意图**（守卫要读对那张表），
+    // 不是某一行写法。
+    expect(appSrc).toContain("(sendQueue.current.get(runKey(");
+    expect(appSrc).not.toContain("sendQueue.current.get(sid)");
     expect(appSrc).toContain("window.agent.decide(p.askId, false)");
     expect(appSrc).toContain("已跳过本轮全局记忆写入（你在继续对话；下次收尾再试）");
   });
