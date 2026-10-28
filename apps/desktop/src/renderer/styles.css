@@ -859,6 +859,13 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
   background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover));
 }
 .onboard-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 完成出口：附注里的次级动作，不抢七格的主位；只落 onboarded，不再出现。 */
+.onboard-foot { display: flex; justify-content: flex-end; }
+.onboard-done {
+  color: hsl(var(--text-300)); font-size: var(--fs-caption-sm);
+  transition: color var(--t-instant);
+}
+.onboard-done:hover { color: hsl(var(--text-000)); }
 
 /* ── 回到底部（阶段 2 · brief §二.6）：右下角小圆形图标钮，未滚到底才出现（淡入）。 ── */
 .jump-latest {

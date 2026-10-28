@@ -18,7 +18,6 @@ import type { ThinkingEffort } from "../../../../../src/providers/capabilities";
 // 本文件只换外壳与布局（蓝本 §3.1 应用外壳）；业务语义不动。
 import { useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState } from "react";
 import type { AgentEvent,AskPayload,PermissionMode,ProjectDiagnosis,ProjectRecord,ProviderInfo,SuggestNextResult } from "../../../../../src/main/ipc-protocol";
-import type { OnboardingGroup } from "../../../../../src/main/onboarding-groups";
 import type { StreamActions } from "../stream-actions";
 // 预览状态是**类型**导入（值面留在主进程：project-preview 拖 node:http/child_process，
 // 渲染层只消费推送快照；文案在渲染层按 status 组合）。
@@ -49,6 +48,7 @@ import { relInWorkspace } from "../workspace-rel";
 import { useChrome } from "./chrome";
 import { useComposerDrafts } from "./drafts";
 import { useMessageActions } from "./message-actions";
+import { useOnboardingGroups } from "./onboarding";
 import { useSessionOps } from "./sessions";
 
 
@@ -135,9 +135,6 @@ export function useWorkbenchModel() {
   const showEmpty = activeId === null && events.length === 0;
   // P2-1 空屏面：首启标记（settings.onboarded）/ 建议与分支数据（按项目路径缓存）/ 项目 chip 弹层。
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
-  // 首启「设置检查」的七组覆盖面：**主进程给的副本**（唯一事实源 src/main/onboarding-groups.ts）。
-  // 渲染层不抄那份清单——抄一份就多一份会各自漂的决策点。取不到 = 空数组 = 整块不渲染。
-  const [onboarding, setOnboarding] = useState<readonly OnboardingGroup[]>([]);
   const [emptyData, setEmptyData] = useState<EmptySurface | null>(null);
   const emptyCache = useRef(new Map<string, EmptySurface>());
   const [chipOpen, setChipOpen] = useState(false);
@@ -373,17 +370,8 @@ export function useWorkbenchModel() {
       () => { setTemplates([]); },
     );
   }, []);
-  // 首启设置检查：只在**还没 onboarded** 时取那七组（已 onboarded 的用户不必看这张清单）。
-  // 取不到 ⇒ 空数组 ⇒ 整块不渲染（不摆一个空壳，那比不摆更让人以为坏了）。
-  useEffect(() => {
-    if (onboarded !== false) return;
-    let alive = true;
-    void window.agent.getOnboarding().then(
-      (groups) => { if (alive) setOnboarding(groups); },
-      () => { if (alive) setOnboarding([]); },
-    );
-    return () => { alive = false; };
-  }, [onboarded]);
+  // 首启设置检查的数据面与完成出口（唯一完成路径 = 落 settings.onboarded=true）。
+  const { onboarding, dismissOnboarding } = useOnboardingGroups(onboarded, setOnboarded, setLastError);
   // 快捷键统一收口在下方 hotkeysRef 段（蓝本 §3.6 全表；此处不再各自挂监听）。
 
   // SEMA §3.5/§12：协议版本握手（失配/查询失败 fail-closed）。
@@ -1138,6 +1126,7 @@ export function useWorkbenchModel() {
     injectedAppend,
     onboarded,
     onboarding,
+    dismissOnboarding,
     injectText,
     inspectorRef,
     inspectorDefault,

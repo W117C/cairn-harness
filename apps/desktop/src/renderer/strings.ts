@@ -280,6 +280,7 @@ export const STR = {
   },
   onboarding: {
     title: "设置检查",
+    done: "完成，不再显示",
   },
   sessionProject: {
     /** 行上的项目标签（会话已归到某个项目时才有）。 */

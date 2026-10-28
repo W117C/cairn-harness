@@ -64,10 +64,12 @@ describe("接线面（防拆掉）", () => {
     const view = readRendererFile("panes/WorkbenchView.tsx");
     expect(view).toContain('import { OnboardingChecklist } from "../components/OnboardingChecklist";');
     expect(view).toContain("onboarding: readonly OnboardingGroup[];");
-    expect(view).toContain("onboarded, onboarding, injectText");
+    expect(view).toContain("dismissOnboarding: () => void;");
+    expect(view).toContain("onboarded, onboarding, dismissOnboarding, injectText");
     expect(view).toMatch(/\{onboarded === false && \(\s*<OnboardingChecklist/);
     expect(view).toContain("groups={onboarding}");
     expect(view).toContain("setSettingsSection(section); setSettingsOpen(true);");
+    expect(view).toContain("onDone={dismissOnboarding}");
   });
 
   it("窗格常驻挂载：按 tabs map 渲染 pane-chunk，而不是只渲染 active 一块", () => {

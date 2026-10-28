@@ -50,6 +50,8 @@ export function OnboardingChecklist(props: {
   groups: readonly OnboardingGroup[];
   /** 点一格：跳到对应设置分区（由调用方开设置页并定位）。 */
   onOpen: (section: SectionId) => void;
+  /** 完成：落 settings.onboarded=true 并由调用方立即隐藏（失败回滚）。 */
+  onDone: () => void;
 }): React.JSX.Element | null {
   // 只摆**有落点**的组（见 onboardingTarget 的理由）。
   const groups = props.groups.filter((g) => onboardingTarget(g.id) !== undefined);
@@ -79,6 +81,11 @@ export function OnboardingChecklist(props: {
           </div>
         </div>
       ))}
+      <div className="onboard-foot">
+        <button type="button" className="onboard-done" onClick={props.onDone}>
+          {STR.onboarding.done}
+        </button>
+      </div>
     </div>
   );
 }
