@@ -1,0 +1,56 @@
+{
+  "files": 5011,
+  "symlinks": 286,
+  "absoluteSymlinks": 0,
+  "escapes": [],
+  "samples": [
+    {
+      "path": "Contents/Frameworks/Electron Framework.framework/Electron Framework",
+      "target": "Versions/Current/Electron Framework",
+      "resolvedInside": true,
+      "absolute": false
+    },
+    {
+      "path": "Contents/Frameworks/Electron Framework.framework/Helpers",
+      "target": "Versions/Current/Helpers",
+      "resolvedInside": true,
+      "absolute": false
+    },
+    {
+      "path": "Contents/Frameworks/Electron Framework.framework/Libraries",
+      "target": "Versions/Current/Libraries",
+      "resolvedInside": true,
+      "absolute": false
+    },
+    {
+      "path": "Contents/Frameworks/Electron Framework.framework/Resources",
+      "target": "Versions/Current/Resources",
+      "resolvedInside": true,
+      "absolute": false
+    },
+    {
+      "path": "Contents/Frameworks/Electron Framework.framework/Versions/Current",
+      "target": "A",
+      "resolvedInside": true,
+      "absolute": false
+    },
+    {
+      "path": "Contents/Frameworks/Mantle.framework/Mantle",
+      "target": "Versions/Current/Mantle",
+      "resolvedInside": true,
+      "absolute": false
+    },
+    {
+      "path": "Contents/Frameworks/Mantle.framework/Resources",
+      "target": "Versions/Current/Resources",
+      "resolvedInside": true,
+      "absolute": false
+    },
+    {
+      "path": "Contents/Frameworks/Mantle.framework/Versions/Current",
+      "target": "A",
+      "resolvedInside": true,
+      "absolute": false
+    }
+  ]
+}

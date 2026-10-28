@@ -36,6 +36,14 @@
   同时检测到 1 套并发判卷），随后在两端独占时 **25/25 全绿，exit 0**。红绿两份原文都保留；
   首趟详情见第九节。`3579f49` 的 25/25 历史认证仍保留。
 
+### 2026-10-28 独立桌面包补记
+
+- macOS arm64 ad-hoc 包已产出；打包态冒烟、解压到源码树外启动、签名与链接审计均通过
+  （产物在 `apps/desktop/release/`，被 git 忽略）。打包态同时暴露并修复了 IPC 壳根取错：
+  `app.getAppPath()` 在 runtime package 里少一层，改为从主进程入口推 `shellAppPath`。
+- 仍阻塞：Developer ID / 公证、稳定签名下的真实钥匙串首启、Windows/Linux 打包、
+  真实 provider 与外部用户验收。读数与红样本见 PROGRESS 第 753/756 页（取料目录待提交后补链接）。
+
 ### 批次主体 15 笔（`014ac0e3..HEAD`；另有 11 笔收尾）
 
 | 提交 | 内容 |
@@ -96,7 +104,7 @@
 | 编排 P5 真实评测 | 独立验证者、完整失败回执、明确费用预算；scripted DAG 不证明真实收益 | 编排设计 P5、交付报告 |
 | 元认知扩大确认试验 | 有界 pilot 已完成，默认不开新策略；更多未见任务、固定预算、重复配对是采用条件 | `docs/research/metacognition-pilot-2026-10-25.md` |
 | SDK/API、A2A 与其他领域包 | P6 留门，接口占位不算已支持 | 编排设计 §16 |
-| 对外分发与 Windows | B2 首个真实外部用户触发；先更新过期范围，再立安装/打包/矩阵验收 | `b2-checklist.md`、ADR 0001/0002 |
+| 对外分发与 Windows | **macOS ad-hoc 包已产出并核验**（PROGRESS 753/756）；Developer ID/公证、稳定签名下的真实钥匙串首启、Windows/Linux 与外部用户验收仍待做 | `b2-checklist.md`、ADR 0001/0002 |
 | 官网、遥测、多租户、计费、市场 | 目前未纳入实现；有明确产品需求后单独立项 | B2、编排 Non-goals |
 | 取料归档治理 | 先查 PROGRESS/docs-check/冻结判据对工件的依赖，给出可恢复迁移，再裁决 | `scripts/repo-hygiene-check.ts`、取料盘点 |
 

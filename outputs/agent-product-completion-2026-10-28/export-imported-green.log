@@ -1,0 +1,9 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+
+ Test Files  3 passed (3)
+      Tests  28 passed (28)
+   Start at  17:44:26
+   Duration  317ms (transform 41%, tests 34%, import 18%, worker 7%)
+

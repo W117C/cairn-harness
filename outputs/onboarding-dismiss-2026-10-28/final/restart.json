@@ -1,0 +1,62 @@
+{
+  "mode": "check",
+  "state": {
+    "onboard": false,
+    "empty": true,
+    "settings": {
+      "layout": {
+        "open": {
+          "approvals": false,
+          "token": false,
+          "git": false,
+          "memory": false,
+          "plugins": false,
+          "sidechat": false,
+          "agents": false,
+          "schedule": false
+        },
+        "activePanel": null,
+        "width": 32
+      },
+      "mode": "default",
+      "safeMode": "report",
+      "theme": "system",
+      "locale": "zh-CN",
+      "currentSession": null,
+      "autoMemory": true,
+      "subagentTools": true,
+      "maxBudgetUsd": 0,
+      "budgetPricePerMTok": 0,
+      "scheduleConcurrencyCap": 2,
+      "onboarded": true,
+      "updateManifestUrl": "",
+      "telemetry": false,
+      "routingBandit": false,
+      "routingCascade": false,
+      "actionFusion": false,
+      "promptCache": true,
+      "requestMetering": false,
+      "observationPack": false,
+      "evidenceReceipts": false,
+      "economicCompaction": false,
+      "impactAnalysis": true,
+      "autoVerify": true,
+      "autoVerifyRepair": false,
+      "planRequiredByDefault": false,
+      "windowVibrancy": false,
+      "ctrlTabCycle": true,
+      "textSize": "md",
+      "uiSize": "2",
+      "provider": "demo",
+      "model": "",
+      "workspace": null
+    },
+    "text": "Cairn\n工具\nCairn\n新任务\n⌘N\n还没有任务，按 ⌘N 开始\n添加项目\n服务正常\n设置与偏好\n夜里辛苦了，今天想做点什么？\n选择项目\nTab\n默认\n方案\n演示\n—\n解释这个项目的结构\n帮我把当前项目跑起来看看\n列一个今天可以推进的小计划\n概览\n空闲\n还没有活动——对话开始后，用量、改动、计划与时间线会在这里长"
+  }
+}
+Warning: Detected unsettled top-level await at file:///private/tmp/onboard-dismiss-cdp.mjs:84
+await send("Browser.close").catch(() => undefined);
+^
+
+
+

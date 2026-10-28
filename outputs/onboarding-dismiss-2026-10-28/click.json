@@ -1,0 +1,67 @@
+{
+  "mode": "click",
+  "appeared": true,
+  "rect": {
+    "x": 1060,
+    "y": 675
+  },
+  "after": {
+    "onboard": false,
+    "done": false,
+    "empty": true,
+    "settings": {
+      "layout": {
+        "open": {
+          "approvals": false,
+          "token": false,
+          "git": false,
+          "memory": false,
+          "plugins": false,
+          "sidechat": false,
+          "agents": false,
+          "schedule": false
+        },
+        "activePanel": null,
+        "width": 32
+      },
+      "mode": "default",
+      "safeMode": "report",
+      "theme": "system",
+      "locale": "zh-CN",
+      "currentSession": null,
+      "autoMemory": true,
+      "subagentTools": true,
+      "maxBudgetUsd": 0,
+      "budgetPricePerMTok": 0,
+      "scheduleConcurrencyCap": 2,
+      "onboarded": true,
+      "updateManifestUrl": "",
+      "telemetry": false,
+      "routingBandit": false,
+      "routingCascade": false,
+      "actionFusion": false,
+      "promptCache": true,
+      "requestMetering": false,
+      "observationPack": false,
+      "evidenceReceipts": false,
+      "economicCompaction": false,
+      "impactAnalysis": true,
+      "autoVerify": true,
+      "autoVerifyRepair": false,
+      "planRequiredByDefault": false,
+      "windowVibrancy": false,
+      "ctrlTabCycle": true,
+      "textSize": "md",
+      "uiSize": "2",
+      "provider": "demo",
+      "model": "",
+      "workspace": null
+    }
+  }
+}
+Warning: Detected unsettled top-level await at file:///private/tmp/onboard-dismiss-cdp.mjs:84
+await send("Browser.close").catch(() => undefined);
+^
+
+
+

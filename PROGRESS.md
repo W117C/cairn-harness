@@ -25137,3 +25137,180 @@ FAIL 反向同样互斥 / FAIL 模型菜单仍能自己开、自己关
 - 未验：同一处浮层在**窄窗 / 暗色 / 竖屏**下的几何是否仍与 1440×900 一致（换算会变，
   但"模型菜单压住别人"这层关系来自模型菜单的尺寸，与窗口宽无关）。
 - 工作树未提交；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 753 页：独立桌面包与打包态 IPC 来源（Codex 计划 Task 5 收口）
+
+### 一、这轮修的是「打包后的应用每个 IPC 都被判来源不可信」
+
+Codex 的 `2026-10-28-agent-product-completion` 计划把 Task 1–4 勾完，Task 5（独立桌面包）
+停在半程；打包脚本里的严格冒烟判据是后来补的，**从未在真实打包态跑出过 PASS**。
+本轮第一次用严格判据打包，先超时；手工启动打包产物后拿到真读数：
+
+```
+[cairn-smoke] window.agent type: object
+Error occurred in handler for 'agent:sessions-create':
+  Error: IPC 来源不可信，已拒绝：agent:sessions-create
+[cairn-smoke] FAILED: Error invoking remote method 'agent:sessions-create'
+```
+
+**根因**（不是窗口没加载，而是来源校验的壳根取错）：
+
+| 量 | dev | 打包后 |
+|---|---|---|
+| 主进程入口 | `apps/desktop/src/main/index.ts` | `Resources/app/apps/desktop/src/main/index.ts` |
+| `app.getAppPath()` | `apps/desktop` | `Resources/app` |
+| `loadFile` 的壳 | `apps/desktop/dist/index.html` | `Resources/app/apps/desktop/dist/index.html` |
+| `isAppShellUrl` 的期望 | `apps/desktop/dist/index.html` | **`Resources/app/dist/index.html`** ⇒ 永不匹配 |
+
+`isAppShellUrl` 本身没错，错在 `shellUrlOptions.appPath` 用了 `app.getAppPath()`；
+runtime package 的 `main` 在 `apps/desktop/src/main/entry.cjs`，所以打包后它少了一层。
+
+**修法**：`apps/desktop/src/main/shell-url.ts` 新增 `shellAppPath(mainDir)`（入口上两级），
+`index.ts` 用它计算 `shellUrlOptions`。壳根与 `loadFile` 用同一个推导，不再依赖
+`app.getAppPath()` 的 asar/目录假设。
+
+**判卷**（`apps/desktop/tests/main-hardening.test.ts`，11/11 绿）：
+
+- 纯函数层：打包入口 `/tmp/Cairn.app/Contents/Resources/app/apps/desktop/src/main`
+  ⇒ 壳根 `…/Resources/app/apps/desktop`；该路径的 `dist/index.html` 放行，
+  `Resources/app/dist/index.html` 拒绝。
+- 接线层：`appPath: shellAppPath(here)` 在场，反向锚不许回到 `appPath: app.getAppPath()`。
+- **能造红**：把接线退回 `app.getAppPath()`，接线哨兵当场红；改回后 11/11 绿。
+
+### 二、第二个拦路的是钥匙串，不是应用代码
+
+修好 IPC 后打包态仍超时（45s、120s 都一样），且日志停在
+`[cairn-smoke] initializing secure storage`。对卡住的进程做 `sample`，主线程全程在
+`SecItemCopyMatching`（Security.framework）：
+
+- ad-hoc 签名每次构建都换 CDHash；macOS 对既有 “Cairn Safe Storage” 条目的 ACL
+  会重新要授权，非交互冒烟里没人点，lookup 一直等。
+- **修法**：打包冒烟传 Chromium 的 `--use-mock-keychain`（内存钥匙串）。它仍走
+  safeStorage 的加密路径，只把真实 ACL 从冒烟里隔离出去。
+- **边界**：mock 不证明真实钥匙串；稳定 Developer ID 签名下的首启授权仍未验。
+
+### 三、独立包产物与树外核验
+
+`pnpm --filter cairn-desktop package`（默认输出 `apps/desktop/release/`；该目录被 git 忽略）：
+
+| 项 | 读数 |
+|---|---|
+| 打包态冒烟 | 构建树内 **PASS 4296 ms** |
+| 解压到源码树外再跑 | `ditto -x -k Cairn-macOS.zip` 后 **PASS 2231 ms** |
+| 签名 | `codesign --verify --deep --strict` 通过；ad-hoc |
+| 链接审计 | 5011 文件 / 286 软链；0 条绝对路径、0 条逃出 bundle |
+| 体量 | app 402M / zip 160M |
+| zip sha256 | `486b9ec917af75aacc0561ee9bcf3886806785da933c2ef4bb80dd8d6813e6da` |
+| 可执行 sha256 | `9c0d05eab70643255d5d41cca5eb4d807d0a7064852d1e37c881151796862ec7` |
+| 运行期工具 | 解压产物内 `tsx/cjs` loader 可用；`@vscode/ripgrep` 输出 `ripgrep 15.0.0` |
+| 源路径 | 产物 `apps/`、`src/` 内无源码树绝对路径引用 |
+
+判卷 `tests/desktop-package.test.ts` 新增 mock-keychain 隔离哨兵，**14/14 绿**。
+
+### 四、本轮读数（本轮现跑）
+
+- core：`pnpm test:capped`（maxWorkers=2）**557 文件 / 7201 条全绿，exit 0**。
+- desktop：`vitest --maxWorkers=2` **231 文件 / 1590 条，1586 绿 / 4 红**；
+  `desktop-boundary-check` 绿。4 条红全部是他笔在飞的设计/CSS 判卷：
+  `cds-parity`（新 `conversation-rail.css` 未入 import 顺序）、`row-actions-reveal`、
+  `stream-nav`、`tool-rows`（`styles.css` / `stream-process.css` 的脏改尚未与旧哨兵对齐）。
+  本笔改动的 `shell-url.ts` / `index.ts` / `package.mjs` / 两个判卷文件不在红样本里。
+- dev 冒烟：`pnpm --filter cairn-desktop smoke` **PASS 1831 ms**。
+- `typecheck` 0 报错。
+- 红样本保留：`package-final-red.log`（首跑超时）、`package-final-red-2.log`（IPC 修复后
+  仍被钥匙串卡住）、`package-hang-red.log`（主线程 `SecItemCopyMatching` 栈）。
+
+### 五、边界
+
+- ad-hoc 签名，没有 Developer ID / 公证；换机器首次打开会被 Gatekeeper 拦，未做分发。
+- 只做 macOS arm64；Windows/Linux 打包入口未做。
+- 真实钥匙串首启（稳定签名）未验；打包冒烟用 mock keychain。
+- 真实 provider 未验；产品链仍走 demo provider。
+- `apps/desktop/release/` 不入库；可复现命令与读数在本轮取料目录（提交后补链接）。
+- 工作树未提交；`STATE.md` 仍未动（沿用第 749/750/752 页同例，留给收口批次）。
+
+## 2026-10-28 · 第 755 页：首启设置检查的完成出口（七组清单反复出现）
+
+### 一、用户看到的现象与根因
+
+业主截屏空屏上的七组设置芯片 + 首启副标题，问「怎么这个又出现了、是不是很多个版本」。
+**不是多版本**：现在只有一个开发壳实例；版本感来自同一套代码的 dist 被不同会话在不同时间重建
+（开发 dist、发布包、旧 worktree），以及开发壳/打包壳各用一套 userData。
+
+这张清单的开关是 `settings.onboarded`：
+
+- 缺省 **false**（`src/main/settings.ts`），而产品里**没有任何入口把它写成 true**
+  （只有 `CAIRN_SMOKE` 的 seed 会写）⇒ 每个新档、每次重开都会出现，用户消不掉。
+- `WorkbenchView` 按 `onboarded === false` 摆七组（2026-10-25 空屏重做后恢复挂载），
+  但 `settings.ts` 的字段注释还写着「不要再拿它做任何门控」——两处口径互相打架。
+- 开发壳的设置档 `~/Library/Application Support/cairn-desktop/settings.json` 实测
+  `onboarded:false`（10-24 起未变）；打包壳用另一套 `cairn` userData，首次打开同样会看到。
+
+### 二、改法：唯一完成出口
+
+- `OnboardingChecklist` 增 `onDone` 与「完成，不再显示」：附注位、右对齐、`--text-300`，
+  不抢七格主位。
+- 新增 `apps/desktop/src/renderer/state/onboarding.ts` 的 `useOnboardingGroups`：
+  标记为 false 时取七组；`dismissOnboarding` 先本地隐藏，`setSettings({ onboarded: true })`
+  失败则回滚并留错误。拆出钩子同时把 `workbench.ts` 从 1208 行压回 1186（1200 行帽）。
+- `WorkbenchView` 接 `onDone={dismissOnboarding}`；旧哨兵同步到新形。
+
+### 三、判卷（造红 / 回绿）
+
+- `onboarding-checklist` **9/9**：新增出口标记 + 接线/落盘/回滚哨兵。
+  **实测能造红**：摘掉按钮 ⇒ ④⑤ 红；把 `onboarded: true` 改成 false ⇒ ⑤ 红；还原后绿。
+- `render-resilience` **6/6**（旧哨兵同步 `dismissOnboarding` / `onDone`）。
+- 桌面全量（`--maxWorkers=2`）：**231 文件 / 1593 条全绿**；中途一次
+  `conversation-rail` 红是他笔在飞，已由他笔收口，复跑全绿。
+- `typecheck` 0；`renderer-layer-check` 绿（139 文件）；`desktop-boundary-check` 绿。
+
+### 四、真机（隔离 profile + 真 main/preload + CDP 真鼠标）
+
+- 点击前 `.onboard` 在场；真实鼠标点「完成，不再显示」后 **`.onboard` 消失、空屏仍在**，
+  `settings.json` 落 `"onboarded": true`。
+- 用同一 profile 重启：`.onboard` **不再出现**，`onboarded` 仍为 true。
+- 真机用 `--use-mock-keychain` 隔离钥匙串（只影响 keychain，不影响 settings 落盘）。
+- 截图与读数在本轮取料目录（提交后补链接）。
+
+### 五、边界
+
+- 只在空屏（`showEmpty`）出现；有活动会话时不摆，也不影响本修复。
+- `onboarded` 是全局标记，不按工作区分；老档首次看到新按钮，点一次后不再出现。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用。
+- `STATE.md` 仍未动（并发批次同例，留给收口批次）。
+
+## 2026-10-28 · 第 756 页：发布包随首启修复重建（含打包产物内的点击验证）
+
+### 一、为什么重建
+
+20:29 的发布包冻结在首启修复之前；打开它仍会看到无完成出口的七组清单。本轮在共享树当前源码上
+重建，包内包含「完成，不再显示」（第 755 页）与对话轨道等他笔最新实现。
+
+### 二、构建与产物
+
+- 命令 `pnpm --filter cairn-desktop package`；旧包先移到仓外，**成功后才发布**；
+  构建树内 packaged smoke **PASS 1847 ms**。
+- 产物：`apps/desktop/release/{Cairn.app,Cairn-macOS.zip,build-info.json}`。
+- 体量 402M app / 160M zip；**5012 文件 / 286 软链 / 0 绝对路径 / 0 逃逸**。
+- zip sha256 `3dbdd5d1444d7d894c1a0ce40dbedf956d1ae233064175aa40408d134e5b6bb2`；
+  可执行 sha256 `60bc1434cc3c3dde4124d649e288e4ec0db5dca8a3a51dc80dc7baa5f5d492fd`。
+- `codesign --verify --deep --strict` 通过；ad-hoc；源锁 sha256
+  `44a348d89db2a7e4923da636691d1d11372ad787cd5435f264a953d0f8d38ca5`；
+  `build-info.createdAt` `2026-10-28T13:04:26.797Z`。
+
+### 三、树外与包内核验
+
+- `ditto -x -k` 解压到源码树外：packaged smoke **PASS 1853 ms**；`tsx/cjs` loader 与
+  `@vscode/ripgrep` 均可执行；`apps/`、`src/` 内无源码树绝对路径引用。
+- **包内首启修复**：隔离 profile + 真 main/preload + CDP 真鼠标点「完成，不再显示」⇒
+  清单消失、空屏仍在、`settings.json` 落 `onboarded:true`；同 profile 重启后不重现。
+  包内 dist 资产含该文案（`index-05tLdySM.js`）。
+- 截图与读数在本轮取料目录（提交后补链接）。
+
+### 四、边界
+
+- ad-hoc，无 Developer ID / 公证；只做 macOS arm64；真实钥匙串首启未验
+  （打包冒烟与包内点击均用 `--use-mock-keychain`）。
+- 真实 provider 未验；包内点击是空屏 + demo 档。
+- 旧 20:29 包已移出并删除；历史读数保留在第 753 页与 REPORT。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。

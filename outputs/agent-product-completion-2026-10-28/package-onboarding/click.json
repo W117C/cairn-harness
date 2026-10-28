@@ -1,0 +1,13 @@
+{
+  "mode": "click",
+  "appeared": true,
+  "rect": {
+    "x": 1060,
+    "y": 675
+  },
+  "after": {
+    "onboard": false,
+    "empty": true,
+    "onboarded": true
+  }
+}

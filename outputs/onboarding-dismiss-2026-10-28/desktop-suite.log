@@ -1,0 +1,2490 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/Cairn/cairn/apps/desktop[39m
+
+ [31m❯[39m tests/render-resilience.test.tsx [2m([22m[2m6 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 18[2mms[22m[39m
+   [32m✓[39m RenderErrorBoundary 兜底面 [2m(3)[22m
+     [32m✓[39m 无错时原样输出 children（不产生额外 DOM 节点）[32m 3[2mms[22m[39m
+     [32m✓[39m 页面级：alert 语义 + 重试 + 重新载入 + 错误正文可展开[32m 5[2mms[22m[39m
+     [32m✓[39m 内联级：不摆「重新载入」，其他区域不受影响的文案在场[32m 1[2mms[22m[39m
+   [31m❯[39m 接线面（防拆掉） [2m(3)[22m
+     [32m✓[39m 根、设置分区、窗格三处都有错误边界[32m 1[2mms[22m[39m
+[31m     [31m×[31m 首启「设置检查」重新挂回空屏，且只在 onboarded === false 时摆[39m[32m 7[2mms[22m[39m
+     [32m✓[39m 窗格常驻挂载：按 tabs map 渲染 pane-chunk，而不是只渲染 active 一块[32m 0[2mms[22m[39m
+ [32m✓[39m tests/desktop-review-batch.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 1614[2mms[22m[39m
+   [32m✓[39m 测量脚本要有预算（量过了 ≠ 没变） [2m(3)[22m
+     [33m[2m✓[22m[39m 原生宿主实际运行：无系统配置前提，完整验证导航、窗口归属和 PTY[33m 1606[2mms[22m[39m
+[90mstdout[2m | tests/kernel-host.test.ts[2m > [22m[2mkernel-host 纵向装配[2m > [22m[2mrun：demo 全链路落事件、会话 JSONL 落 <ws>/.agent/sessions
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstderr[2m | tests/kernel-host.test.ts[2m > [22m[2mkernel-host 纵向装配[2m > [22m[2mrun：demo 全链路落事件、会话 JSONL 落 <ws>/.agent/sessions
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+[90mstderr[2m | tests/session-audit-lifecycle.test.ts[2m > [22m[2mSessionMetadata audit through the real KernelHost[2m > [22m[2mmarks an accepted run active, keeps it active after a rejected duplicate, then marks it idle
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+[90mstdout[2m | tests/kernel-host.test.ts[2m > [22m[2mkernel-host 纵向装配[2m > [22m[2m收束补发合成终态 + openSession.running：在跑为 true、收束转 false、恰一条 push-only 终态
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstderr[2m | tests/kernel-host.test.ts[2m > [22m[2mkernel-host 纵向装配[2m > [22m[2m收束补发合成终态 + openSession.running：在跑为 true、收束转 false、恰一条 push-only 终态
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+[90mstdout[2m | tests/kernel-host.test.ts[2m > [22m[2mM3 多工作区运行面[2m > [22m[2m多工作区：A/B 两工作区各建会话，run 各落各的根，listSessions 带 workspace 归组
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstderr[2m | tests/kernel-host.test.ts[2m > [22m[2mM3 多工作区运行面[2m > [22m[2m多工作区：A/B 两工作区各建会话，run 各落各的根，listSessions 带 workspace 归组
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+[90mstderr[2m | tests/session-audit-lifecycle.test.ts[2m > [22m[2mSessionMetadata audit through the real KernelHost[2m > [22m[2mconcurrent sessions settle their own audit state without marking the other session idle
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+[90mstderr[2m | tests/session-audit-lifecycle.test.ts[2m > [22m[2mSessionMetadata audit through the real KernelHost[2m > [22m[2mconcurrent sessions settle their own audit state without marking the other session idle
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+[90mstdout[2m | tests/kernel-host.test.ts[2m > [22m[2mM3 多工作区运行面[2m > [22m[2m多工作区：A/B 两工作区各建会话，run 各落各的根，listSessions 带 workspace 归组
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstderr[2m | tests/kernel-host.test.ts[2m > [22m[2mM3 多工作区运行面[2m > [22m[2m多工作区：A/B 两工作区各建会话，run 各落各的根，listSessions 带 workspace 归组
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+[90mstdout[2m | tests/kernel-host.test.ts[2m > [22m[2mM3 多工作区运行面[2m > [22m[2m漂移检测：会话文件被外部追加后，下一次 run 被拒且报外部修改
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstderr[2m | tests/kernel-host.test.ts[2m > [22m[2mM3 多工作区运行面[2m > [22m[2m漂移检测：会话文件被外部追加后，下一次 run 被拒且报外部修改
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+[90mstderr[2m | tests/session-audit-lifecycle.test.ts[2m > [22m[2mSessionMetadata audit through the real KernelHost[2m > [22m[2man old run holds ownership until its idle write finishes, so a new run cannot be marked idle by it
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+[90mstderr[2m | tests/session-audit-lifecycle.test.ts[2m > [22m[2mSessionMetadata audit through the real KernelHost[2m > [22m[2man old run holds ownership until its idle write finishes, so a new run cannot be marked idle by it
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+ [32m✓[39m tests/session-audit-lifecycle.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 573[2mms[22m[39m
+[90mstdout[2m | tests/approval-e2e.test.ts[2m > [22m[2m审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 档 appAskGate）[2m > [22m[2m审批→执行：ask 到达 → decide(approved) → run ok 且 marker 落工作区
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstderr[2m | tests/approval-e2e.test.ts[2m > [22m[2m审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 档 appAskGate）[2m > [22m[2m审批→执行：ask 到达 → decide(approved) → run ok 且 marker 落工作区
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+[90mstdout[2m | tests/approval-e2e.test.ts[2m > [22m[2m审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 档 appAskGate）[2m > [22m[2m打断：ask 等待期 runCancel → run 收束（无 marker；onAskDone reason ∈ user|timeout|unattended）
+[22m[39m[memory] 会话结束沉淀: {"kind":"failed","why":"This operation was aborted"}
+
+[90mstderr[2m | tests/approval-e2e.test.ts[2m > [22m[2m审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 档 appAskGate）[2m > [22m[2m打断：ask 等待期 runCancel → run 收束（无 marker；onAskDone reason ∈ user|timeout|unattended）
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+[90mstdout[2m | tests/approval-e2e.test.ts[2m > [22m[2m审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 档 appAskGate）[2m > [22m[2m每会话取消：取消 A 不影响 B；A 返回 aborted:true 且 onAskDone fail-closed
+[22m[39m[memory] 会话结束沉淀: {"kind":"failed","why":"This operation was aborted"}
+
+[90mstderr[2m | tests/approval-e2e.test.ts[2m > [22m[2m审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 档 appAskGate）[2m > [22m[2m每会话取消：取消 A 不影响 B；A 返回 aborted:true 且 onAskDone fail-closed
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+[90mstdout[2m | tests/approval-e2e.test.ts[2m > [22m[2m审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 档 appAskGate）[2m > [22m[2m每会话取消：取消 A 不影响 B；A 返回 aborted:true 且 onAskDone fail-closed
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstderr[2m | tests/approval-e2e.test.ts[2m > [22m[2m审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 档 appAskGate）[2m > [22m[2m每会话取消：取消 A 不影响 B；A 返回 aborted:true 且 onAskDone fail-closed
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+ [32m✓[39m tests/approval-e2e.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 546[2mms[22m[39m
+ [32m✓[39m tests/kernel-host-metadata-list.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 28[2mms[22m[39m
+ [32m✓[39m tests/orchestration-host.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 56[2mms[22m[39m
+[90mstdout[2m | tests/m3-e2e.test.ts[2m > [22m[2mM3 验收锚 e2e[2m > [22m[2m锚二 并行两会话互不串流：A/B 并发 run 分桶不相交，各自 JSONL 只含各自事件
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/m3-e2e.test.ts[2m > [22m[2mM3 验收锚 e2e[2m > [22m[2m锚二 并行两会话互不串流：A/B 并发 run 分桶不相交，各自 JSONL 只含各自事件
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstderr[2m | tests/m3-e2e.test.ts[2m > [22m[2mM3 验收锚 e2e[2m > [22m[2m锚二 并行两会话互不串流：A/B 并发 run 分桶不相交，各自 JSONL 只含各自事件
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+[90mstderr[2m | tests/m3-e2e.test.ts[2m > [22m[2mM3 验收锚 e2e[2m > [22m[2m锚二 并行两会话互不串流：A/B 并发 run 分桶不相交，各自 JSONL 只含各自事件
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+ [32m✓[39m tests/m3-e2e.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 175[2mms[22m[39m
+ [32m✓[39m tests/sandbox-init.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 71[2mms[22m[39m
+ [32m✓[39m tests/plugin-trust-wiring.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 38[2mms[22m[39m
+ [32m✓[39m tests/terminal-size.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 316[2mms[22m[39m
+ [32m✓[39m tests/stream-steering-round.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[32m 220[2mms[22m[39m
+ [32m✓[39m tests/terminal-login-shell.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 222[2mms[22m[39m
+ [32m✓[39m tests/plugin-sidebar.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 60[2mms[22m[39m
+ [32m✓[39m tests/session-reference-host.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 68[2mms[22m[39m
+ [32m✓[39m tests/stream-actions.test.tsx [2m([22m[2m11 tests[22m[2m)[22m[32m 54[2mms[22m[39m
+ [32m✓[39m tests/provider-browser-boundary.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 46[2mms[22m[39m
+[90mstdout[2m | tests/kernel-host.test.ts[2m > [22m[2mM3 多工作区运行面[2m > [22m[2m漂移检测：会话文件被外部追加后，下一次 run 被拒且报外部修改
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstderr[2m | tests/kernel-host.test.ts[2m > [22m[2mM3 多工作区运行面[2m > [22m[2m漂移检测：会话文件被外部追加后，下一次 run 被拒且报外部修改
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+[90mstdout[2m | tests/kernel-host.test.ts[2m > [22m[2mM4-5 removeWorkspace 缩面[2m > [22m[2m缩面后该组不再经 listSessions 出现、createSession 白名单收窄；归属表与漂移基线同步清理
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstderr[2m | tests/kernel-host.test.ts[2m > [22m[2mM4-5 removeWorkspace 缩面[2m > [22m[2m缩面后该组不再经 listSessions 出现、createSession 白名单收窄；归属表与漂移基线同步清理
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+ [32m✓[39m tests/stream-rework.test.tsx [2m([22m[2m16 tests[22m[2m)[22m[32m 46[2mms[22m[39m
+[90mstdout[2m | tests/kernel-host.test.ts[2m > [22m[2mM4-5 removeWorkspace 缩面[2m > [22m[2m该组有在跑会话 ⇒ fail-visible 拒绝缩面；run 收束后缩面放行（控制器零残留）
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstderr[2m | tests/kernel-host.test.ts[2m > [22m[2mM4-5 removeWorkspace 缩面[2m > [22m[2m该组有在跑会话 ⇒ fail-visible 拒绝缩面；run 收束后缩面放行（控制器零残留）
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+[90mstdout[2m | tests/kernel-host.test.ts[2m > [22m[2m第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点）[2m > [22m[2me2e：run 首条消息 ⇒ sidecar 标题落位 + push-only session_titled（带 ts）进 outbox
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstderr[2m | tests/kernel-host.test.ts[2m > [22m[2m第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点）[2m > [22m[2me2e：run 首条消息 ⇒ sidecar 标题落位 + push-only session_titled（带 ts）进 outbox
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+[90mstdout[2m | tests/kernel-host.test.ts[2m > [22m[2m第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点）[2m > [22m[2me2e：run 首条消息 ⇒ sidecar 标题落位 + push-only session_titled（带 ts）进 outbox
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstderr[2m | tests/kernel-host.test.ts[2m > [22m[2m第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点）[2m > [22m[2me2e：run 首条消息 ⇒ sidecar 标题落位 + push-only session_titled（带 ts）进 outbox
+[22m[39m[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+ [32m✓[39m tests/kernel-host.test.ts [2m([22m[2m19 tests[22m[2m)[22m[33m 6989[2mms[22m[39m
+   [32m✓[39m M3 多工作区运行面 [2m(5)[22m
+     [33m[2m✓[22m[39m 漂移检测：会话文件被外部追加后，下一次 run 被拒且报外部修改[33m 6132[2mms[22m[39m
+[90mstderr[2m | tests/usage-dashboard.test.tsx[2m > [22m[2musage dashboard[2m > [22m[2mrenders the actual figures, recovery and coverage disclosures with accessible controls
+[22m[39mWarning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+
+[90mstderr[2m | tests/usage-dashboard.test.tsx[2m > [22m[2musage dashboard[2m > [22m[2mdoes not turn sessions without usage or an older payload into measured zero
+[22m[39mWarning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+
+ [32m✓[39m tests/usage-dashboard.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[32m 62[2mms[22m[39m
+ [32m✓[39m tests/a11y-activate.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m tests/command-palette.test.tsx [2m([22m[2m27 tests[22m[2m)[22m[32m 33[2mms[22m[39m
+ [32m✓[39m tests/toast.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 228[2mms[22m[39m
+ [32m✓[39m tests/terminal-host.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 119[2mms[22m[39m
+ [32m✓[39m tests/settings-sections.test.tsx [2m([22m[2m27 tests[22m[2m)[22m[32m 75[2mms[22m[39m
+ [32m✓[39m tests/thinking-selection.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m tests/tokens.test.ts [2m([22m[2m29 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/text-size-setting.test.tsx [2m([22m[2m12 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m tests/run-queue-session.test.tsx [2m([22m[2m9 tests[22m[2m)[22m[32m 121[2mms[22m[39m
+ [32m✓[39m tests/session-log-host.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m tests/invoke-consumer-census.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 43[2mms[22m[39m
+ [32m✓[39m tests/usage-composition.test.tsx [2m([22m[2m7 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/cds-parity.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m tests/quick-starts-ui.test.tsx [2m([22m[2m17 tests[22m[2m)[22m[32m 44[2mms[22m[39m
+ [32m✓[39m tests/send-queue.test.ts [2m([22m[2m28 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/design-minimal.test.tsx [2m([22m[2m9 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m tests/stream-nav.test.tsx [2m([22m[2m22 tests[22m[2m)[22m[32m 62[2mms[22m[39m
+[90mstderr[2m | tests/render-structure.test.tsx[2m > [22m[2mModelPicker 触发条（真 HTML）[2m > [22m[2m是个带 aria 的可点按钮，title 就是选中项描述
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+
+[90mstderr[2m | tests/render-structure.test.tsx[2m > [22m[2mModelPicker 触发条（真 HTML）[2m > [22m[2m会话内显式选择 ⇒ 触发条上现出小圆点
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+
+[90mstderr[2m | tests/render-structure.test.tsx[2m > [22m[2mModelPicker 触发条（真 HTML）[2m > [22m[2m演示选中时触发条显示「演示」，title 写明不产生真实调用
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+
+[90mstderr[2m | tests/render-structure.test.tsx[2m > [22m[2m思考段合并单面（P2-2；触发条短档词族）[2m > [22m[2m触发条 = 「deepseek-chat · 思考 关」单芯片（短档词族；请求侧 off 字面量不变）
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+
+[90mstderr[2m | tests/render-structure.test.tsx[2m > [22m[2m思考段合并单面（P2-2；触发条短档词族）[2m > [22m[2m运行中：触发器不灰（可开菜单拧思考档）；标签照常显示当前档（短词）
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+
+ [32m✓[39m tests/render-structure.test.tsx [2m([22m[2m60 tests[22m[2m)[22m[32m 91[2mms[22m[39m
+ [32m✓[39m tests/usage-analytics-host.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 38[2mms[22m[39m
+ [32m✓[39m tests/pane-rows.test.tsx [2m([22m[2m15 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/byok-e2e.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 23[2mms[22m[39m
+ [32m✓[39m tests/settings-section-search.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/project-path-gate.test.ts [2m([22m[2m20 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+[90mstderr[2m | tests/composer-rework.test.tsx[2m > [22m[2mP2-2 ＋ 菜单四项（零路径输入）[2m > [22m[2m四项文案在场：上传文件… / 添加文件夹… / 粘贴截图（⌘V） / 引用最近文件
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+[90mstderr[2m | tests/composer-rework.test.tsx[2m > [22m[2mP2-2 ＋ 菜单四项（零路径输入）[2m > [22m[2m最近文件空态：该项 disabled 且 tooltip 说明（不摆空壳入口）
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+[90mstderr[2m | tests/composer-rework.test.tsx[2m > [22m[2mP2-2 权限 chip（档位名 + 色点 data-mode）[2m > [22m[2m触发 chip：模式名 + 色点 data-mode + token 色（组件零字面色值）
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+[90mstderr[2m | tests/composer-rework.test.tsx[2m > [22m[2mP2-2 模型+思考合并单面[2m > [22m[2mchip 文案 `名 · 思考 X`；未声明支持不带思考段
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+
+[90mstderr[2m | tests/composer-rework.test.tsx[2m > [22m[2mP2-2 发送/停止钮 title[2m > [22m[2m空闲：发送钮 title 含 ⏎；运行中：停止钮 title 含 ⌘.
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+ [32m✓[39m tests/composer-rework.test.tsx [2m([22m[2m20 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+ [32m✓[39m tests/app-page.test.tsx [2m([22m[2m12 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m tests/usage-ledger-host.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 36[2mms[22m[39m
+ [32m✓[39m tests/transcript.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 38[2mms[22m[39m
+ [32m✓[39m tests/edit-user.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 32[2mms[22m[39m
+[90mstderr[2m | tests/composer-usage-ring.test.tsx[2m > [22m[2m用量环（v3-lite .ring：环心数字 + 贴发送侧）[2m > [22m[2m上下文有数：环心是百分数（12400/20000 ⇒ 62），title / aria 报同一口径
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+[90mstderr[2m | tests/composer-usage-ring.test.tsx[2m > [22m[2m用量环（v3-lite .ring：环心数字 + 贴发送侧）[2m > [22m[2m窗口已声明但本会话还没跑过：环心「—」+ title 说「暂无数据」（不假报 0）
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+[90mstderr[2m | tests/composer-usage-ring.test.tsx[2m > [22m[2m用量环（v3-lite .ring：环心数字 + 贴发送侧）[2m > [22m[2m模型窗口未声明：环心「—」+ title 说「模型窗口未声明」（两种未知分开说清）
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+[90mstderr[2m | tests/composer-usage-ring.test.tsx[2m > [22m[2m用量环（v3-lite .ring：环心数字 + 贴发送侧）[2m > [22m[2m环钉在发送/中断钮左侧：DOM 序 = .spacer → 用量环 → 发送钮（原型 .bar 列序）
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+[90mstderr[2m | tests/composer-usage-ring.test.tsx[2m > [22m[2m批 4 输入区：状态条拆入环 / 强调发送 / 运行中红底转圈 / 聚焦强调描边[2m > [22m[2m状态条整行已拆：组件与样式层无 status-strip 残留；环 title 带 轮/步/tok/缓存
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+ [32m✓[39m tests/composer-usage-ring.test.tsx [2m([22m[2m8 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+ [32m✓[39m tests/composer-drafts.test.tsx [2m([22m[2m7 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m tests/session-project-assign.test.tsx [2m([22m[2m13 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [32m✓[39m tests/panes.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/menu-unify.test.tsx [2m([22m[2m15 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m tests/usage-panel.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/session-identity-ui.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 32[2mms[22m[39m
+ [32m✓[39m tests/route-bundle-closure.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 44[2mms[22m[39m
+ [32m✓[39m tests/inspector.test.tsx [2m([22m[2m21 tests[22m[2m)[22m[32m 45[2mms[22m[39m
+ [32m✓[39m tests/cds-components.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [32m✓[39m tests/press-scale.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/queue-key.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [32m✓[39m tests/tooltip-audit.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m tests/settings-ui.test.tsx [2m([22m[2m17 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m tests/popover.test.tsx [2m([22m[2m7 tests[22m[2m)[22m[32m 37[2mms[22m[39m
+ [32m✓[39m tests/channels.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m tests/session-target.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/goal-chip.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+ [32m✓[39m tests/tool-rows.test.tsx [2m([22m[2m16 tests[22m[2m)[22m[32m 32[2mms[22m[39m
+ [32m✓[39m tests/workspace-context.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 32[2mms[22m[39m
+ [32m✓[39m tests/modal-surface.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[32m 33[2mms[22m[39m
+ [32m✓[39m tests/markdown.test.tsx [2m([22m[2m31 tests[22m[2m)[22m[32m 46[2mms[22m[39m
+ [32m✓[39m tests/stream-fade.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 50[2mms[22m[39m
+ [32m✓[39m tests/orchestration-pane.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/find-bar.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m tests/pane-shortcuts.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/font-assets-used.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+[90mstderr[2m | tests/composer-attach.test.tsx[2m > [22m[2m＋附件菜单四入口（P2-2：零路径手输）[2m > [22m[2m两枚选择器都给了 ⇒ 四入口齐、顺序= 上传文件… → 添加文件夹… → 粘贴截图 → 引用最近文件
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+[90mstderr[2m | tests/composer-attach.test.tsx[2m > [22m[2m＋附件菜单四入口（P2-2：零路径手输）[2m > [22m[2m不给选择器 ⇒ 两枚选择器入口不在；粘贴截图与引用最近文件恒在（不依赖系统选择器）
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+ [32m✓[39m tests/composer-attach.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+ [32m✓[39m tests/session-open-workspace.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 39[2mms[22m[39m
+ [32m✓[39m tests/composer-phase.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m tests/command-gate.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m tests/inspector-missing-usage.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m tests/stream-process.test.tsx [2m([22m[2m7 tests[22m[2m)[22m[32m 23[2mms[22m[39m
+ [32m✓[39m tests/session-list-polish.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+ [32m✓[39m tests/popover-dismiss-coverage.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/projections.test.ts [2m([22m[2m53 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m tests/slash.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+[90mstderr[2m | tests/composer-suggestion.test.tsx[2m > [22m[2mComposer 建议（Tab 想下一条 · 常驻芯片下架）[2m > [22m[2m任何形态都不再有常驻灰字芯片（suggest-ghost 全仓清零）；空闲空框只有 Tab 键帽
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+[90mstderr[2m | tests/composer-suggestion.test.tsx[2m > [22m[2mComposer 建议（Tab 想下一条 · 常驻芯片下架）[2m > [22m[2m键帽门槛：没接线（旧消费者）不摆；门槛中（disabled）不摆
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+ [32m✓[39m tests/composer-suggestion.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m tests/protocol-version.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [31m❯[39m tests/conversation-rail.test.ts [2m([22m[2m7 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 17[2mms[22m[39m
+   [31m❯[39m 对话轨道（第 754 页） [2m(7)[22m
+     [32m✓[39m ① 过程带与助手正文挂在同一条左轨（左轨宽 = 标列 + 间隙）[32m 2[2mms[22m[39m
+     [32m✓[39m ② 每一档都是 24px：过程带的档 = brief §二.1 的 24px（与行上的字面量同值）[32m 1[2mms[22m[39m
+     [32m✓[39m ③ 署名条是浮层：不占流内高度（回到流里就白吃 30px，节奏重新散掉）[32m 0[2mms[22m[39m
+     [32m✓[39m ④ 隐藏态不吃指针：看不见的操作条不许吃掉下一段的点击[32m 0[2mms[22m[39m
+[31m     [31m×[31m ⑤ 轴线：按令牌落位、只在有对话时画、且不引入动效[39m[32m 5[2mms[22m[39m
+     [32m✓[39m ⑥ 标与首行齐平：正文首块的顶距归零（品牌标不再浮在半空）[32m 0[2mms[22m[39m
+     [32m✓[39m ⑦ 渲染层 CSS 里不再有对话缩进的裸像素（旧写的 22px 那类）[32m 9[2mms[22m[39m
+ [32m✓[39m tests/approval-card.test.tsx [2m([22m[2m12 tests[22m[2m)[22m[32m 23[2mms[22m[39m
+ [32m✓[39m tests/focus-mode.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/new-project-blank.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+[90mstderr[2m | tests/composer-steer.test.tsx[2m > [22m[2m运行中：插话与排队的两个入口不混[2m > [22m[2m运行中 SSR：打断钮在位、输入可用、不摆常驻「回车排队」
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+ [32m✓[39m tests/composer-steer.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m tests/new-project-dialog.test.tsx [2m([22m[2m10 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m tests/interaction-deadends.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m tests/mcp-server-row.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/provider-banner.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m tests/panes-structure.test.tsx [2m([22m[2m11 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m tests/pane-disclosure.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m tests/goal-dismiss.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m tests/session-search-ui.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/micro-interaction.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/delivery-summary.test.tsx [2m([22m[2m6 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m tests/field-fill-token.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/tool-disclosure.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m tests/app-empty-terms.test.tsx [2m([22m[2m8 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/ime-guard.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m tests/phase-label.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/confirm-dialog.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m tests/shortcuts-drift.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m tests/plugins-pane-mcp-active.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/composer-esc.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/provider-keys.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m tests/strings.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m tests/session-log-viewer.test.tsx [2m([22m[2m6 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/session-stream-isolation.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+[90mstderr[2m | tests/composer-running.test.tsx[2m > [22m[2mComposer 运行中可沟通（C-18 / C-22）[2m > [22m[2m运行中：输入可用，空输入只留打断钮（不摆禁用灰钟），占位不写排队提示
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+[90mstderr[2m | tests/composer-running.test.tsx[2m > [22m[2mComposer 运行中可沟通（C-18 / C-22）[2m > [22m[2m空闲：没有入队按钮，发送按钮在位
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+[90mstderr[2m | tests/composer-running.test.tsx[2m > [22m[2mComposer 运行中可沟通（C-18 / C-22）[2m > [22m[2m运行中：权限档维持禁用；模型选择器可开（v7.2 业主裁——思考档要能调，模型行由菜单内锁定）
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+[90mstderr[2m | tests/composer-running.test.tsx[2m > [22m[2mComposer 运行中可沟通（C-18 / C-22）[2m > [22m[2m门槛中（disabled+running=澄清/方案门）：输入禁用，占位「等待你的决定…」，入队钮不在场
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:129:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+ [32m✓[39m tests/composer-running.test.tsx [2m([22m[2m9 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+ [32m✓[39m tests/workbench-tools.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/suggest.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/sidebar-session-context-menu.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/tool-diff-payload.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m tests/timeline-pane.test.tsx [2m([22m[2m6 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/onboarding-checklist.test.tsx [2m([22m[2m9 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/session-reference-ui.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m tests/stream-memo.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/sidebar-groups.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/import-diagnosis.test.tsx [2m([22m[2m7 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/settings-ease.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/model-picker.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m tests/update-open-external.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 31[2mms[22m[39m
+ [32m✓[39m tests/window-workspace-context.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/composer-slash-key.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m tests/memory-view.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/inspector-width.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/shortcuts.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/settings-evolve.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/motion-gaps.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/model-menu-fit.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/sidebar-session-search.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/browser-frame-gate.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/quick-starts.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/settings-panel.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/mention.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/composer-commands.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/sessions-view.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/restore-drops-from-changes.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/live-time.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/pane-open-reveals-inspector.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/overlay-mutex.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/terminal-drain.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/search-card-endpoint.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/window-hardening.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/last-session-decision.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/keyboard-modal-focus.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/run-elapsed-per-session.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/file-pane-improvements.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/sidebar-highlight.test.tsx [2m([22m[2m6 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+[90mstderr[2m | tests/titlebar.test.tsx
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at TitleBar (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/TitleBar.tsx:10:51)
+
+[90mstderr[2m | tests/titlebar.test.tsx[2m > [22m[2m设置页返回（2026-10-21，评审后修正）[2m > [22m[2m设置打开时工具栏只留 chrome：不摆侧栏开关、也不摆工具栏返回
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at TitleBar (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/TitleBar.tsx:10:51)
+
+ [32m✓[39m tests/titlebar.test.tsx [2m([22m[2m10 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/send-queue-strip.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/composer-radius.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/memory-distill.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/control-accent.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/run-notification.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/pane-persistence.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/tool-lifecycle.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/plugins-pane.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/motion.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/browser-forget-hosts.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/boot-theme.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/goal-command.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/notification-open-wiring.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/drafts.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/overlay-focus.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/boot-placeholder.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/terminal-utf8-decoder.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/theme.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/edit-notice.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/attachment-thumb.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/settings-live.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/delivery-trail-latest.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/view-mode.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/csp-build.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/sidebar-arrow-nav.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/theme-browser-env.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/alpha-hover-tokens.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/run-generation.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/automation-edit.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/focus-ring.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/model-picker-open-seq.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/session-worktree.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/temp-file.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/drift-verdict.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/plan-mode-wiring.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/diff-patch.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/window-vibrancy.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/usage-summary.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/main-hardening.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/v3-shadow-tokens.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/browser-permit-escape.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/inspector-initial-state.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/palette-session-actions.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/browser-local-ipv6.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/rename-shortcut.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/last-session-restore.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/settings-advanced-section.test.tsx [2m([22m[2m12 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/stream-session-boundary.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/plugin-strip.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/terminal-clipboard.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 1[2mms[22m[39m
+ [32m✓[39m tests/changes-pane-accordion.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/browser-focus.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 1[2mms[22m[39m
+ [32m✓[39m tests/workspace-rel.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/scroll-behavior.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/app-menu.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/composer-history.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/skeleton-shimmer.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/preview-order.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/cards.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/pane-close-order.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/change-diff-state.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/browser-permit-focus.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/speech.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/palette-file-open.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/terminal-restart.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/popout-event-scope.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/popover-radius.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/styles-motion.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/row-actions-reveal.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/user-visible-text.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/popout-title.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/window-state.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/boot-rehydrate.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/quit-guard.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/browser-clear-confirm.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/conversation-rail.test.ts[2m > [22m对话轨道（第 754 页）[2m > [22m⑤ 轴线：按令牌落位、只在有对话时画、且不引入动效
+[31m[1mAssertionError[22m: expected '' not to be '' // Object.is equality[39m
+[36m [2m❯[22m tests/conversation-rail.test.ts:[2m135:22[22m[39m
+    [90m133|[39m   it("⑤ 轴线：按令牌落位、只在有对话时画、且不引入动效", () => {
+    [90m134|[39m     const axis = ruleOf(railCss, ".reading:has(.row.assistant)::before…
+    [90m135|[39m     expect(axis).not.toBe("");
+    [90m   |[39m                      [31m^[39m
+    [90m136|[39m     expect(axis).toContain("position: absolute");
+    [90m137|[39m     // 落位由令牌算出（气沟 + 标心），不许写死像素。
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/render-resilience.test.tsx[2m > [22m接线面（防拆掉）[2m > [22m首启「设置检查」重新挂回空屏，且只在 onboarded === false 时摆
+[31m[1mAssertionError[22m: expected 'import { runKey } from "../state/sess…' to contain 'onboarded, onboarding, injectText'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- onboarded, onboarding, injectText[39m
+[31m+ import { runKey } from "../state/session-identity";[39m
+[31m+ import type { SendOutcome } from "../state/run-queue";[39m
+[31m+ import { composerThinking, thinkingChangeTarget } from "../state/thinking-selection";[39m
+[31m+ import type { Dispatch,MutableRefObject,PointerEvent,SetStateAction } from "react";[39m
+[31m+ import type { GoalTrace } from "../../../../../src/agent/goal-trace";[39m
+[31m+ import type { ClarifyQuestion,PlanProposal } from "../../../../../src/events";[39m
+[31m+ import type { DeliveryTrailItem,RunPhase,StreamRow,UsageSummary } from "../projections";[39m
+[31m+ import type { ThinkingEffort } from "../../../../../src/providers/capabilities";[39m
+[31m+ import type { ComposerLockReason } from "../send-queue";[39m
+[31m+ import type { StickyScroll } from "../useStickyScroll";[39m
+[31m+ import { renderAppToolbar } from "./AppToolbar";[39m
+[31m+ // WorkbenchView: extracted without changing event or callback behavior.[39m
+[31m+ import { ArrowDown,Check,ChevronDown,Folder,FolderPlus,GitBranch,X } from "lucide-react";[39m
+[31m+ import { CairnMark } from "../components/CairnMark";[39m
+[31m+ import { menuNavIndex } from "../components/popover-keys";[39m
+[31m+ import { lazy,Suspense,useEffect,useState } from "react";[39m
+[31m+ import { Group,Panel,Separator,type PanelImperativeHandle } from "react-resizable-panels";[39m
+[31m+ import type { AgentEvent,AskPayload,PermissionMode,ProjectDiagnosis,ProjectRecord,ProviderInfo,RunAttachmentReference,SuggestNextResult } from "../../../../../src/main/ipc-protocol";[39m
+[31m+ import type { PreviewSnapshot } from "../../../../../src/main/project-preview";[39m
+[31m+ import type { TextSizeSetting,UiSizeSetting } from "../../../../../src/main/settings";[39m
+[31m+ import { AddProjectMenu } from "../components/AddProjectMenu";[39m
+[31m+ import { ApprovalCard } from "../components/ApprovalCard";[39m
+[31m+ import { ChangeSummaryCard } from "../components/ChangeSummaryCard";[39m
+[31m+ import { ClarifyCard } from "../components/ClarifyCard";[39m
+[31m+ import type { PaletteAction } from "../components/CommandPalette";[39m
+[31m+ import { Composer } from "../components/Composer";[39m
+[31m+ import { ErrorStrip } from "../components/ErrorStrip";[39m
+[31m+ import { FindBar,type FindBarHandle } from "../components/FindBar";[39m
+[31m+ import { ImportDiagnosisCard } from "../components/ImportDiagnosisCard";[39m
+[31m+ import { Inspector } from "../components/Inspector";[39m
+[31m+ import { ModalSurface } from "../components/ModalSurface";[39m
+[31m+ import { NewProjectDialog } from "../components/NewProjectDialog";[39m
+[31m+ import { OnboardingChecklist } from "../components/OnboardingChecklist";[39m
+[31m+ import { OutlinePanel } from "../components/Outline";[39m
+[31m+ import { MODE_LABEL } from "../components/PermissionMenu";[39m
+[31m+ import { PlanCard } from "../components/PlanCard";[39m
+[31m+ import { PluginSidebar } from "../components/PluginSidebar";[39m
+[31m+ import { Popover } from "../components/Popover";[39m
+[31m+ import { ProviderBanner } from "../components/ProviderBanner";[39m
+[31m+ import { QuickStarts } from "../components/QuickStarts";[39m
+[31m+ import { SendQueueStrip } from "../components/SendQueueStrip";[39m
+[31m+ import { SessionLogDialog } from "../components/SessionLogDialog";[39m
+[31m+ import { Sidebar } from "../components/Sidebar";[39m
+[31m+ import { SidebarRail } from "../components/SidebarRail";[39m
+[31m+ import type { StreamActions } from "../components/Stream";[39m
+[31m+ import { TitleBar } from "../components/TitleBar";[39m
+[31m+ import type { UsageAllState } from "../components/UsagePanel";[39m
+[31m+ import { movePane,type PaneKind } from "../components/panes";[39m
+[31m+ import type { SectionId } from "../components/settings-nav";[39m
+[31m+ import type { OnboardingGroup } from "../../../../../src/main/onboarding-groups";[39m
+[31m+ import { greetingFor,type QuickStartInput } from "../quick-starts";[39m
+[31m+ import { dropQueued,promoteQueued,type QueuedSend } from "../send-queue";[39m
+[31m+ import type { WorkspaceSession } from "../sessions-view";[39m
+[31m+ import { SHORTCUT_GROUPS } from "../shortcuts";[39m
+[31m+ import type { SlashSkill } from "../slash";[39m
+[31m+ import { SIDEBAR_DEFAULT,SIDEBAR_MAX,SIDEBAR_MIN } from "../state/chrome";[39m
+[31m+ import { STR } from "../strings";[39m
+[31m+ import { type ThemePref } from "../theme";[39m
+[31m+ import { toast } from "../toast";[39m
+[31m+ import { type ViewMode } from "../view-mode";[39m
+[31m+ import { ConfirmScrims } from "./ConfirmScrims";[39m
+[31m+ const PaneDock = lazy(() => import("../components/PaneDock").then((m) => ({ default: m.PaneDock })));[39m
+[31m+ const CommandPalette = lazy(() => import("../components/CommandPalette").then((m) => ({ default: m.CommandPalette })));[39m
+[31m+ const SettingsPanel = lazy(() => import("../components/SettingsPanel").then((m) => ({ default: m.SettingsPanel })));[39m
+[31m+ const Stream = lazy(() => import("../components/Stream").then((m) => ({ default: m.Stream })));[39m
+[31m+ interface EmptySurface {[39m
+[31m+   quickStarts: string[];[39m
+[31m+   branch: string | null;[39m
+[31m+ }[39m
+[31m+ const NULL_QUICK_INPUT: QuickStartInput = {[39m
+[31m+   git: null,[39m
+[31m+   hasPackageJson: false,[39m
+[31m+   scripts: [],[39m
+[31m+   readmeExists: false,[39m
+[31m+   lastSessionTitle: null,[39m
+[31m+ };[39m
+[31m+[39m
+[31m+ interface WorkbenchViewDeps {[39m
+[31m+   activeWorkspace: string | null;[39m
+[31m+   projects: ProjectRecord[];[39m
+[31m+   pickerValue: string | null;[39m
+[31m+   providerInfo: ProviderInfo | null;[39m
+[31m+   settingsOpen: boolean;[39m
+[31m+   activeId: string | null;[39m
+[31m+   barRenaming: { id: string; text: string; } | null;[39m
+[31m+   setBarRenaming: Dispatch<SetStateAction<{ id: string; text: string; } | null>>;[39m
+[31m+   sessions: WorkspaceSession[];[39m
+[31m+   renameSessionById: (id: string, name: string) => Promise<void>;[39m
+[31m+   sessionTitle: string;[39m
+[31m+   goalTrace: GoalTrace | null;[39m
+[31m+   dismissedGoals: Map<string, number>;[39m
+[31m+   goalAct: (req: { pause?: boolean | undefined; resume?: boolean | undefined; clear?: boolean | undefined; }) => void;[39m
+[31m+   activeIdRef: MutableRefObject<string | null>;[39m
+[31m+   setDismissedGoals: Dispatch<SetStateAction<Map<string, number>>>;[39m
+[31m+   outlineTurns: { round: number; text: string; }[];[39m
+[31m+   outlineOpen: boolean;[39m
+[31m+   setOutlineOpen: Dispatch<SetStateAction<boolean>>;[39m
+[31m+   paneTabs: PaneKind[];[39m
+[31m+   togglePane: (kind: PaneKind) => void;[39m
+[31m+   fileCount: number;[39m
+[31m+   pluginSidebarOpen: boolean;[39m
+[31m+   togglePluginSidebar: () => void;[39m
+[31m+   focusMode: boolean;[39m
+[31m+   toggleFocusMode: () => void;[39m
+[31m+   sidebarCollapsed: boolean;[39m
+[31m+   toggleSidebar: () => void;[39m
+[31m+   newSession: () => void;[39m
+[31m+   handleOpenPalette: () => void;[39m
+[31m+   openPane: (kind: PaneKind) => void;[39m
+[31m+   setSettingsSection: Dispatch<SetStateAction<SectionId | undefined>>;[39m
+[31m+   setSettingsOpen: Dispatch<SetStateAction<boolean>>;[39m
+[31m+   sidebarWidth: number;[39m
+[31m+   runningSet: MutableRefObject<Set<string>>;[39m
+[31m+   waitingIdSet: Set<string>;[39m
+[31m+   draftIds: Set<string>;[39m
+[31m+   outcomes: MutableRefObject<Map<string, "ok" | "failed">>;[39m
+[31m+   registryNotice: string | null;[39m
+[31m+   sessionsLoaded: boolean;[39m
+[31m+   sessionsLoadError: boolean;[39m
+[31m+   retrySessions: () => void;[39m
+[31m+   providerOk: boolean | null;[39m
+[31m+   openSession: (id: string, workspace?: string | undefined) => void;[39m
+[31m+   setActiveWorkspace: Dispatch<SetStateAction<string | null>>;[39m
+[31m+   activeWorkspaceRef: MutableRefObject<string | null>;[39m
+[31m+   touchWorkspace: (path: string | null) => void;[39m
+[31m+   handleAddProject: (path: string) => Promise<void>;[39m
+[31m+   handleCloneProject: (url: string, parentDir: string) => Promise<void>;[39m
+[31m+   setNewProjectOpen: Dispatch<SetStateAction<boolean>>;[39m
+[31m+   handleUpdateProject: (p: ProjectRecord, patch: { name?: string | undefined; defaultLocation?: string | undefined; }) => Promise<void>;[39m
+[31m+   handleRemoveProject: (p: ProjectRecord) => Promise<void>;[39m
+[31m+   handleRevealProject: (p: ProjectRecord) => void;[39m
+[31m+   pinSessionById: (id: string, pinned: boolean) => Promise<void>;[39m
+[31m+   forkSessionFromMenu: (s: WorkspaceSession) => Promise<void>;[39m
+[31m+   requestArchiveSession: (s: WorkspaceSession, archived: boolean) => void;[39m
+[31m+   openSessionInCli: (s: WorkspaceSession) => void;[39m
+[31m+   setWtDiscard: Dispatch<SetStateAction<WorkspaceSession | null>>;[39m
+[31m+   sessionWorktreeOp: (kind: "create" | "merge" | "discard", s: WorkspaceSession) => Promise<void>;[39m
+[31m+   requestDeleteSession: (s: WorkspaceSession) => void;[39m
+[31m+   themePref: ThemePref;[39m
+[31m+   changeTheme: (next: ThemePref) => void;[39m
+[31m+   usageStats: UsageSummary;[39m
+[31m+   usageAll: UsageAllState;[39m
+[31m+   loadUsageAll: () => void;[39m
+[31m+   startSidebarDrag: (e: PointerEvent<HTMLDivElement>) => void;[39m
+[31m+   persistSidebarWidth: (w: number) => void;[39m
+[31m+   sidebarWidthRef: MutableRefObject<number>;[39m
+[31m+   mainGroupRef: MutableRefObject<HTMLDivElement | null>;[39m
+[31m+   showEmpty: boolean;[39m
+[31m+   findRef: MutableRefObject<FindBarHandle | null>;[39m
+[31m+   findOpen: boolean;[39m
+[31m+   streamEl: HTMLDivElement | null;[39m
+[31m+   closeFind: () => void;[39m
+[31m+   lastError: string | null;[39m
+[31m+   clearLastError: () => void;[39m
+[31m+   setLogTarget: Dispatch<SetStateAction<string | null>>;[39m
+[31m+   lastNotice: string | null;[39m
+[31m+   clearLastNotice: () => void;[39m
+[31m+   importDiagnosis: { name: string; diagnosis: ProjectDiagnosis; } | null;[39m
+[31m+   setImportDiagnosis: Dispatch<SetStateAction<{ name: string; diagnosis: ProjectDiagnosis; } | null>>;[39m
+[31m+   chipRef: MutableRefObject<HTMLDivElement | null>;[39m
+[31m+   chipOpen: boolean;[39m
+[31m+   openChipPopover: () => void;[39m
+[31m+   emptyData: EmptySurface | null;[39m
+[31m+   chipQuery: string;[39m
+[31m+   setChipQuery: Dispatch<SetStateAction<string>>;[39m
+[31m+   chipRecent: ProjectRecord[] | null;[39m
+[31m+   chipList: ProjectRecord[];[39m
+[31m+   closeChip: () => void;[39m
+[31m+   setLastError: (message: string, sessionId?: string | undefined) => void;[39m
+[31m+   setStreamEl: Dispatch<SetStateAction<HTMLDivElement | null>>;[39m
+[31m+   stick: StickyScroll;[39m
+[31m+   streamRows: StreamRow[];[39m
+[31m+   rowRefs: ReadonlyMap<number, import("../../../../../src/events").EventRef> | null;[39m
+[31m+   inheritedSeqs: ReadonlySet<number> | null;[39m
+[31m+   viewMode: ViewMode;[39m
+[31m+   runningActive: boolean;[39m
+[31m+   foldedRounds: ReadonlySet<number>;[39m
+[31m+   flashRound: number | null;[39m
+[31m+   streamActions: StreamActions;[39m
+[31m+   deliveryTrailItems: DeliveryTrailItem[];[39m
+[31m+   deliveryExpandedFor: string | null;[39m
+[31m+   openPreview: (target: string) => Promise<void>;[39m
+[31m+   exportActiveProject: (projectPath: string) => Promise<void>;[39m
+[31m+   lastDeliveryRound: number | undefined;[39m
+[31m+   handleRevertTurn: (round: number) => void;[39m
+[31m+   setDeliveryExpandedFor: Dispatch<SetStateAction<string | null>>;[39m
+[31m+   outlineCurrent: number | null;[39m
+[31m+   jumpToRound: (round: number) => void;[39m
+[31m+   unfoldAllTurns: () => void;[39m
+[31m+   foldAllTurns: () => void;[39m
+[31m+   askForActive: AskPayload | null;[39m
+[31m+   setMode: Dispatch<SetStateAction<PermissionMode>>;[39m
+[31m+   setLastNotice: (message: string, sessionId?: string | undefined) => void;[39m
+[31m+   pendingClarify: { callId: string; questions: ClarifyQuestion[]; } | null;[39m
+[31m+   pendingPlan: { callId: string; plan: PlanProposal; } | null;[39m
+[31m+   composerZoneRef: MutableRefObject<HTMLDivElement | null>;[39m
+[31m+   editCtx: { originId: string; originTitle: string; forkId: string; round: number; } | null;[39m
+[31m+   events: AgentEvent[];[39m
+[31m+   sendQueue: MutableRefObject<Map<string, QueuedSend[]>>;[39m
+[31m+   setEditCtx: (v: { originId: string; originTitle: string; forkId: string; round: number; } | null) => void;[39m
+[31m+   setDraftRemap: (v: { from: string; to: string; seq: number; } | undefined) => void;[39m
+[31m+   draftRemapSeq: MutableRefObject<number>;[39m
+[31m+   refreshSessions: () => Promise<void>;[39m
+[31m+   setQueueFor: (sid: string, list: QueuedSend[], workspace?: string | null) => void;[39m
+[31m+   cancelRunHeal: (sid: string, workspace?: string | null) => void;[39m
+[31m+   resumeQueueFor: (sid: string, workspace?: string | null) => void;[39m
+[31m+   /** 预览/后台会话发送：与主发送共用插话与队列；`running` 由预览按目标会话事件态传入。 */[39m
+[31m+   sendTo: (sid: string, workspace: string | null, text: string, attachments?: RunAttachmentReference[], options?: { forceQueue?: boolean; running?: boolean }) => Promise<SendOutcome>;[39m
+[31m+   queueLoading: boolean;[39m
+[31m+   pendingSend: boolean;[39m
+[31m+   resumeQueue: () => void;[39m
+[31m+   skills: readonly SlashSkill[];[39m
+[31m+   composerLock: ComposerLockReason | null;[39m
+[31m+   mode: PermissionMode;[39m
+[31m+   /** 当前 Plan 模式（默认来自 settings，Composer「方案」开关按轮覆盖）。 */[39m
+[31m+   planRequired: boolean;[39m
+[31m+   onPlanRequiredChange: (next: boolean) => void;[39m
+[31m+   stopped: boolean;[39m
+[31m+   usage: { inputTokens: number; outputTokens: number; usageCount: number; cacheReadTokens: number; lastInputTokens: number; };[39m
+[31m+   phaseLabel: string;[39m
+[31m+   phase: RunPhase;[39m
+[31m+   elapsedSec: number;[39m
+[31m+   steps: number;[39m
+[31m+   runSteps: number;[39m
+[31m+   chosenCtx: number | undefined;[39m
+[31m+   recentRefsBySession: MutableRefObject<Map<string, string[]>>;[39m
+[31m+   noteRecentRef: (path: string) => void;[39m
+[31m+   promptHistory: string[];[39m
+[31m+   noteDraft: (draftKey: string | null, has: boolean) => void;[39m
+[31m+   injectedText: string | undefined;[39m
+[31m+   injectedTextSeq: number;[39m
+[31m+   draftRemap: { from: string; to: string; seq: number; } | undefined;[39m
+[31m+   draftRestore: { forSession: string | null; text: string; attachments: RunAttachmentReference[]; seq: number; } | undefined;[39m
+[31m+   /** 第三参 `forceQueue`（第 9 点）：只入队、不插话（「加入队列」钮专用）。 */[39m
+[31m+   sendWithGoal: (text: string, attachments: RunAttachmentReference[], forceQueue?: boolean) => void;[39m
+[31m+   configuredProviders: Set<string> | undefined;[39m
+[31m+   thinkingBySession: MutableRefObject<Map<string, string>>;[39m
+[31m+   /** 空屏上选的思考档（下一条新会话起点）；activeId 为 null 时 Composer 显示它。 */[39m
+[31m+   pendingThinking: ThinkingEffort;[39m
+[31m+   setPendingThinking: (level: ThinkingEffort) => void;[39m
+[31m+   force: Dispatch<SetStateAction<number>>;[39m
+[31m+   selections: MutableRefObject<Map<string, string | null>>;[39m
+[31m+   refreshProviderInfo: () => Promise<void>;[39m
+[31m+   compactNow: () => void;[39m
+[31m+   composerMenuSignal: { kind: "model" | "perm" | "effort"; seq: number; } | null;[39m
+[31m+   onSuggestNext: () => Promise<SuggestNextResult>;[39m
+[31m+   injectedAttachment: { path: string; kind: "file" | "directory"; seq: number; } | undefined;[39m
+[31m+   injectedAppend: { text: string; seq: number; } | undefined;[39m
+[31m+   onboarded: boolean | null;[39m
+[31m+   /** 首启「设置检查」的七组覆盖面（主进程给的副本；空 = 还没取到 ⇒ 整块不渲染）。 */[39m
+[31m+   onboarding: readonly OnboardingGroup[];[39m
+[31m+   /** 首启检查「完成，不再显示」：落 settings.onboarded=true 并立即隐藏。 */[39m
+[31m+   dismissOnboarding: () => void;[39m
+[31m+   injectText: (text: string) => void;[39m
+[31m+   inspectorRef: MutableRefObject<PanelImperativeHandle | null>;[39m
+[31m+   inspectorDefault: number;[39m
+[31m+   inspectorCollapsed: boolean;[39m
+[31m+   setInspectorCollapsed: Dispatch<SetStateAction<boolean>>;[39m
+[31m+   inspectorSaveTimer: MutableRefObject<number | null>;[39m
+[31m+   inspectorColRef: MutableRefObject<HTMLDivElement | null>;[39m
+[31m+   jumpToEvent: (eventId: number) => void;[39m
+[31m+   handleRestoreSnapshot: (path: string, snapshotId: string) => void;[39m
+[31m+   toggleInspector: () => void;[39m
+[31m+   attachFromPane: (rel: string, kind: "file" | "directory") => void;[39m
+[31m+   pickSignal: number;[39m
+[31m+   handlePickResult: (r: { selector: string; snippet: string; url: string; }) => void;[39m
+[31m+   preview: PreviewSnapshot | null;[39m
+[31m+   closePane: (kind: PaneKind) => void;[39m
+[31m+   send: (text: string, attachments?: RunAttachmentReference[]) => Promise<void>;[39m
+[31m+   setPaneTabs: Dispatch<SetStateAction<PaneKind[]>>;[39m
+[31m+   pluginSidebarWidth: number;[39m
+[31m+   setPluginSidebarWidthPersist: (width: number) => void;[39m
+[31m+   closePluginSidebar: () => void;[39m
+[31m+   fillPluginCommand: (invoke: string) => void;[39m
+[31m+   viewToast: string | null;[39m
+[31m+   cheatOpen: boolean;[39m
+[31m+   closeCheat: () => void;[39m
+[31m+   revertConfirm: number | null;[39m
+[31m+   setRevertConfirm: Dispatch<SetStateAction<number | null>>;[39m
+[31m+   doRevertTurn: (round: number) => void;[39m
+[31m+   projectRemoveConfirm: ProjectRecord | null;[39m
+[31m+   setProjectRemoveConfirm: Dispatch<SetStateAction<ProjectRecord | null>>;[39m
+[31m+   doRemoveProject: (p: ProjectRecord) => Promise<void>;[39m
+[31m+   archiveConfirm: WorkspaceSession | null;[39m
+[31m+   setArchiveConfirm: Dispatch<SetStateAction<WorkspaceSession | null>>;[39m
+[31m+   doArchiveSession: (id: string, archived: boolean) => Promise<void>;[39m
+[31m+   deleteConfirm: WorkspaceSession | null;[39m
+[31m+   setDeleteConfirm: Dispatch<SetStateAction<WorkspaceSession | null>>;[39m
+[31m+   doDeleteSession: (id: string) => Promise<void>;[39m
+[31m+   wtDiscard: WorkspaceSession | null;[39m
+[31m+   paletteOpen: boolean;[39m
+[31m+   setPaletteOpen: Dispatch<SetStateAction<boolean>>;[39m
+[31m+   focusComposer: () => void;[39m
+[31m+   handlePaletteAction: (action: PaletteAction) => void;[39m
+[31m+   startBarRename: () => boolean;[39m
+[31m+   logTarget: string | null;[39m
+[31m+   settingsSection: SectionId | undefined;[39m
+[31m+   refreshProviderKeys: () => Promise<void>;[39m
+[31m+   setThemePref: Dispatch<SetStateAction<ThemePref>>;[39m
+[31m+   setTextSize: Dispatch<SetStateAction<TextSizeSetting>>;[39m
+[31m+   setUiSize: Dispatch<SetStateAction<UiSizeSetting>>;[39m
+[31m+   setCtrlTabCycle: Dispatch<SetStateAction<boolean>>;[39m
+[31m+   dragOverApp: boolean;[39m
+[31m+   newProjectOpen: boolean;[39m
+[31m+   templates: { id: string; name: string; description: string; runKind: "static" | "vite"; }[];[39m
+[31m+   handleCreateFromDialog: (input: { name: string; templateId: string; parentDir?: string | undefined; }) => Promise<void>;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ export function WorkbenchView(deps: WorkbenchViewDeps) {[39m
+[31m+   // 空屏问候语（2026-10-24）：按时段分组、组内轮换，每次挂载取定一句——[39m
+[31m+   // 重渲染不再重抽（文字闪变），换会话/重开才有机会换词。[39m
+[31m+   const [greeting] = useState(() => greetingFor(new Date().getHours()));[39m
+[31m+   // 命令面板快速打开的文件目标（本地信号；递增 seq 允许连续打开同一文件）。[39m
+[31m+   const [fileTarget, setFileTarget] = useState<{ path: string; seq: number } | null>(null);[39m
+[31m+   // ⌘+点击侧栏会话：右侧预览目标（可继续发送；seq 允许连续预览同一会话）。[39m
+[31m+   const [sessionPreview, setSessionPreview] = useState<{ id: string; workspace?: string; title: string; seq: number } | null>(null);[39m
+[31m+   const [paneTarget, setPaneTarget] = useState<{ kind: PaneKind; seq: number } | null>(null);[39m
+[31m+   const { activeWorkspace, projects, pickerValue, providerInfo, settingsOpen, activeId, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, togglePane, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, sidebarCollapsed, toggleSidebar, newSession, handleOpenPalette, openPane, setSettingsSection, setSettingsOpen, sidebarWidth, runningSet, waitingIdSet, draftIds, outcomes, registryNotice, sessionsLoaded, sessionsLoadError, retrySessions, providerOk, openSession, setActiveWorkspace, activeWorkspaceRef, touchWorkspace, handleAddProject, handleCloneProject, setNewProjectOpen, handleUpdateProject, handleRemoveProject, handleRevealProject, pinSessionById, forkSessionFromMenu, requestArchiveSession, openSessionInCli, setWtDiscard, sessionWorktreeOp, requestDeleteSession, themePref, changeTheme, usageStats, usageAll, loadUsageAll, startSidebarDrag, persistSidebarWidth, sidebarWidthRef, mainGroupRef, showEmpty, findRef, findOpen, streamEl, closeFind, lastError, clearLastError, setLogTarget, lastNotice, clearLastNotice, importDiagnosis, setImportDiagnosis, chipRef, chipOpen, openChipPopover, emptyData, chipQuery, setChipQuery, chipRecent, chipList, closeChip, setLastError, setStreamEl, stick, streamRows, rowRefs, inheritedSeqs, viewMode, runningActive, foldedRounds, flashRound, streamActions, deliveryTrailItems, deliveryExpandedFor, openPreview, exportActiveProject, lastDeliveryRound, handleRevertTurn, setDeliveryExpandedFor, outlineCurrent, jumpToRound, unfoldAllTurns, foldAllTurns, askForActive, setMode, setLastNotice, pendingClarify, pendingPlan, composerZoneRef, editCtx, events, sendQueue, setEditCtx, setDraftRemap, draftRemapSeq, refreshSessions, setQueueFor, cancelRunHeal, resumeQueueFor, sendTo, queueLoading, pendingSend, resumeQueue, skills, composerLock, mode, planRequired, onPlanRequiredChange, stopped, usage, phaseLabel, phase, elapsedSec, steps, runSteps, chosenCtx, recentRefsBySession, noteRecentRef, promptHistory, noteDraft, injectedText, injectedTextSeq, draftRemap, draftRestore, sendWithGoal, configuredProviders, thinkingBySession, pendingThinking, setPendingThinking, force, selections, refreshProviderInfo, compactNow, composerMenuSignal, onSuggestNext, injectedAttachment, injectedAppend, onboarded, onboarding, dismissOnboarding, injectText, inspectorRef, inspectorDefault, setInspectorCollapsed, inspectorSaveTimer, inspectorColRef, jumpToEvent, handleRestoreSnapshot, toggleInspector, attachFromPane, pickSignal, handlePickResult, preview, closePane, send, setPaneTabs, pluginSidebarWidth, setPluginSidebarWidthPersist, closePluginSidebar, fillPluginCommand, viewToast, cheatOpen, closeCheat, revertConfirm, setRevertConfirm, doRevertTurn, projectRemoveConfirm, setProjectRemoveConfirm, doRemoveProject, archiveConfirm, setArchiveConfirm, doArchiveSession, deleteConfirm, setDeleteConfirm, doDeleteSession, wtDiscard, paletteOpen, setPaletteOpen, focusComposer, handlePaletteAction, startBarRename, logTarget, settingsSection, refreshProviderKeys, setThemePref, setTextSize, setUiSize, setCtrlTabCycle, dragOverApp, newProjectOpen, templates, handleCreateFromDialog } = deps;[39m
+[31m+   const { inspectorCollapsed } = deps;[39m
+[31m+   const openToolbarPane = (kind: PaneKind): void => {[39m
+[31m+     openPane(kind);[39m
+[31m+     setPaneTarget(prev => ({ kind, seq: (prev?.seq ?? 0) + 1 }));[39m
+[31m+   };[39m
+[31m+   // 主区正常打开预览中的同一场会话时，预览已没有意义：两块同内容副本既占宽又像故障。[39m
+[31m+   // 「切到会话」按钮已显式收起；从侧栏直接打开同一场也走这一条。[39m
+[31m+   useEffect(() => {[39m
+[31m+     if (sessionPreview === null || activeId !== sessionPreview.id) return;[39m
+[31m+     if (sessionPreview.workspace !== undefined && activeWorkspace !== null && sessionPreview.workspace !== activeWorkspace) return;[39m
+[31m+     setSessionPreview(null);[39m
+[31m+     closePane("session");[39m
+[31m+   }, [activeId, activeWorkspace, sessionPreview, closePane]);[39m
+[31m+   // 项目弹层（2026-10-24 第二版）：向上开时按 chip 行上方的**实测空间**封顶。[39m
+[31m+   // 只给列表 240px 上限不够——搜索框 + 列表 + 页脚一起仍可能高于可用空间，弹层顶到[39m
+[31m+   // 窗口上沿（截图复现：top=0，圆角/阴影被裁）。封顶后列表自己缩，搜索与页脚始终可见。[39m
+[31m+   useEffect(() => {[39m
+[31m+     if (!chipOpen) return;[39m
+[31m+     const row = chipRef.current;[39m
+[31m+     if (row === null) return;[39m
+[31m+     const place = (): void => {[39m
+[31m+       const pop = row.querySelector<HTMLElement>(".chip-pop");[39m
+[31m+       if (pop === null) return;[39m
+[31m+       const r = row.getBoundingClientRect();[39m
+[31m+       const above = r.top - 58; // 顶栏 48 + 10 留白：弹层压到标题栏同样算被裁[39m
+[31m+       const below = window.innerHeight - r.bottom - 10;[39m
+[31m+       const down = below > above;[39m
+[31m+       pop.classList.toggle("down", down);[39m
+[31m+       pop.style.maxHeight = `${String(Math.max(160, Math.min(480, down ? below : above)))}px`;[39m
+[31m+     };[39m
+[31m+     place();[39m
+[31m+     window.addEventListener("resize", place);[39m
+[31m+     const ro = new ResizeObserver(place);[39m
+[31m+     ro.observe(row);[39m
+[31m+     return () => { window.removeEventListener("resize", place); ro.disconnect(); };[39m
+[31m+   }, [chipOpen, chipRef]);[39m
+[31m+   // 统一工具栏 · 左翼工作区上下文（2026-10-21 设计重做）：会话内把工作区名从输入区[39m
+[31m+   // 搬到这里——同一语义只留一处，输入区回到纯粹的写作面。[39m
+[31m+   const activeProjectLabel = activeWorkspace === null ? null[39m
+[31m+     : (projects.find((p) => p.path === activeWorkspace)?.name ?? activeWorkspace.slice(activeWorkspace.lastIndexOf("/") + 1));[39m
+[31m+   // 概览模型 chip：没有 provider 也没有显式选择时**不摆**，不拿「演示」冒充未知通道。[39m
+[31m+   const inspectorModelLabel = pickerValue ?? (providerInfo === null ? undefined : providerInfo.kind === "demo" ? STR.modelPicker.demo : providerInfo.model);[39m
+[31m+   const { toolbarContext, toolbarCenter, toolbarAside, toolbarRight } = renderAppToolbar({ settingsOpen, activeId, activeWorkspace, activeProjectLabel, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, onOpenPane: openToolbarPane, inspectorOpen: !inspectorCollapsed, onToggleInspector: toggleInspector, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode });[39m
+[31m+[39m
+[31m+     return ([39m
+[31m+     <div className="app" data-sidebar={sidebarCollapsed ? "collapsed" : "expanded"}>[39m
+[31m+       <TitleBar[39m
+[31m+         center={settingsOpen ? <span className="tb-brand">设置</span> : toolbarCenter}[39m
+[31m+         aside={settingsOpen ? undefined : toolbarAside}[39m
+[31m+         context={toolbarContext ?? undefined}[39m
+[31m+         sidebarCollapsed={sidebarCollapsed}[39m
+[31m+         onToggleSidebar={toggleSidebar}[39m
+[31m+         showToggle={!settingsOpen}[39m
+[31m+         right={toolbarRight}[39m
+[31m+       />[39m
+[31m+       <div className="shell">[39m
+[31m+         {sidebarCollapsed && !focusMode && <SidebarRail[39m
+[31m+           onExpand={toggleSidebar}[39m
+[31m+           onNewTask={newSession}[39m
+[31m+           onSearch={handleOpenPalette}[39m
+[31m+           onFiles={() => openPane("file")}[39m
+[31m+           onTerminal={() => openPane("terminal")}[39m
+[31m+           onSettings={() => { setSettingsSection(undefined); setSettingsOpen(true); }}[39m
+[31m+         />}[39m
+[31m+         <div className="side-wrap" data-dsh-claude-part="sidebar-column" style={{ width: sidebarWidth }}>[39m
+[31m+         <Sidebar[39m
+[31m+           projects={projects}[39m
+[31m+           sessions={sessions}[39m
+[31m+           activeId={activeId}[39m
+[31m+           activeWorkspace={activeWorkspace}[39m
+[31m+           running={runningSet.current}[39m
+[31m+           waitingIds={waitingIdSet}[39m
+[31m+           draftIds={draftIds}[39m
+[31m+           outcomes={outcomes.current}[39m
+[31m+           notice={registryNotice}[39m
+[31m+           loading={!sessionsLoaded && !sessionsLoadError}[39m
+[31m+           loadError={sessionsLoadError}[39m
+[31m+           onRetryLoad={retrySessions}[39m
+[31m+           providerOk={providerOk}[39m
+[31m+           onOpen={openSession}[39m
+[31m+           onPreviewSession={(s) => {[39m
+[31m+             // 当前会话没有「预览」可看（主体就是它）。⌘+点击自己时保持无操作，[39m
+[31m+             // 不开一块与左边同内容的只读副本。[39m
+[31m+             if (s.id === activeId) return;[39m
+[31m+             openPane("session");[39m
+[31m+             setSessionPreview((prev) => ({[39m
+[31m+               id: s.id,[39m
+[31m+               ...(s.workspace !== undefined ? { workspace: s.workspace } : {}),[39m
+[31m+               title: s.title ?? s.id,[39m
+[31m+               seq: (prev?.seq ?? 0) + 1,[39m
+[31m+             }));[39m
+[31m+           }}[39m
+[31m+           onNewTask={newSession}[39m
+[31m+           onOpenPalette={handleOpenPalette}[39m
+[31m+           onSwitchWorkspace={(p) => { setActiveWorkspace(p); activeWorkspaceRef.current = p; touchWorkspace(p); }}[39m
+[31m+           onAddProject={handleAddProject}[39m
+[31m+           onCloneProject={handleCloneProject}[39m
+[31m+           onOpenNewProjectDialog={() => setNewProjectOpen(true)}[39m
+[31m+           onUpdateProject={handleUpdateProject}[39m
+[31m+           onRemoveProject={handleRemoveProject}[39m
+[31m+           onRevealProject={handleRevealProject}[39m
+[31m+           onRenameSession={renameSessionById}[39m
+[31m+           onPinSession={pinSessionById}[39m
+[31m+           onForkSession={forkSessionFromMenu}[39m
+[31m+           onArchiveSession={requestArchiveSession}[39m
+[31m+           onOpenInCliSession={openSessionInCli}[39m
+[31m+           /* 归到项目：写完侧边档（主进程校验项目 id 存在）⇒ 重读会话清单，[39m
+[31m+              让行上的归属标签立刻变——写完不刷新的归属，用户看不到自己刚做的事。 */[39m
+[31m+           onAssignSessionProject={(id, projectId) => {[39m
+[31m+             void window.agent.assignSessionProject(id, projectId).then([39m
+[31m+               () => { void refreshSessions(); },[39m
+[31m+               (err: unknown) => { toast.error("归项目失败：" + (err instanceof Error ? err.message : String(err))); },[39m
+[31m+             );[39m
+[31m+           }}[39m
+[31m+           onSessionWorktree={(kind, s) => {[39m
+[31m+             if (kind === "discard") setWtDiscard(s);[39m
+[31m+             else void sessionWorktreeOp(kind, s);[39m
+[31m+           }}[39m
+[31m+           onDeleteSession={requestDeleteSession}[39m
+[31m+           onPickDirectory={() => window.agent.pickDirectory()}[39m
+[31m+           onOpenSettings={() => { setSettingsSection(undefined); setSettingsOpen(true); }}[39m
+[31m+           onOpenAbout={() => { setSettingsSection("about"); setSettingsOpen(true); }}[39m
+[31m+           /* 状态点是「模型服务可用与否」的常驻事实位 ⇒ 直接进「模型与 Provider」分区，[39m
+[31m+              笼统开设置页等于让用户自己找那一格。 */[39m
+[31m+           onOpenProviderSettings={() => { setSettingsSection("provider"); setSettingsOpen(true); }}[39m
+[31m+           theme={themePref}[39m
+[31m+           onThemeChange={changeTheme}[39m
+[31m+           usage={activeId === null ? null : usageStats}[39m
+[31m+           usageAll={usageAll}[39m
+[31m+           onLoadUsageAll={loadUsageAll}[39m
+[31m+           onOpenUsage={() => { setSettingsSection("usage"); setSettingsOpen(true); }}[39m
+[31m+         />[39m
+[31m+           <div[39m
+[31m+             className="side-handle"[39m
+[31m+             role="separator"[39m
+[31m+             aria-orientation="vertical"[39m
+[31m+             aria-label={`调整侧栏宽度（${SIDEBAR_MIN}–${SIDEBAR_MAX}px）`}[39m
+[31m+             aria-valuemin={SIDEBAR_MIN}[39m
+[31m+             aria-valuemax={SIDEBAR_MAX}[39m
+[31m+             aria-valuenow={sidebarWidth}[39m
+[31m+             title={`拖动调整侧栏宽度；双击回到 ${SIDEBAR_DEFAULT}px`}[39m
+[31m+             tabIndex={0}[39m
+[31m+             onPointerDown={startSidebarDrag}[39m
+[31m+             onDoubleClick={() => { persistSidebarWidth(SIDEBAR_DEFAULT); }}[39m
+[31m+             onKeyDown={(e) => {[39m
+[31m+               if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;[39m
+[31m+               e.preventDefault();[39m
+[31m+               persistSidebarWidth(sidebarWidthRef.current + (e.key === "ArrowRight" ? 16 : -16));[39m
+[31m+             }}[39m
+[31m+           />[39m
+[31m+         </div>[39m
+[31m+         <Group orientation="horizontal" id="cairn-main" className="main-group" elementRef={mainGroupRef}>[39m
+[31m+           <Panel minSize={420}>[39m
+[31m+         <main className="main" data-dsh-claude-part="center-column" data-empty={showEmpty ? "true" : "false"}>[39m
+[31m+           <FindBar ref={findRef} open={findOpen && !showEmpty} container={streamEl} onClose={closeFind} />[39m
+[31m+           {showEmpty ? ([39m
+[31m+             /* 空屏（P2-1）：品牌字标 → 问候 → 项目 chip →（输入区居中枢位见 zone-composer）→ 建议行。[39m
+[31m+                错误/提示条在这里也渲染：新建项目与预览的失败发生在"还没有会话"时，[39m
+[31m+                以前这条路径不显示 strips ⇒ 用户点了创建却看不到失败原因。 */[39m
+[31m+             <div className="zone-stream">[39m
+[31m+               <div>[39m
+[31m+                 {lastError !== null && ([39m
+[31m+                 <ErrorStrip[39m
+[31m+                   message={lastError}[39m
+[31m+                   onDismiss={clearLastError}[39m
+[31m+                   {...(activeId !== null ? { onViewLog: () => { setLogTarget(activeId); } } : {})}[39m
+[31m+                 />[39m
+[31m+               )}[39m
+[31m+                 {lastNotice !== null && ([39m
+[31m+                   <div className="notice-strip" role="status">[39m
+[31m+                     <span className="msg">{lastNotice}</span>[39m
+[31m+                     <button className="btn-ghost" aria-label="关闭提示" onClick={clearLastNotice}>×</button>[39m
+[31m+                   </div>[39m
+[31m+                 )}[39m
+[31m+                 {/* 未配置模型服务的空屏横幅（2026-10-18）：发送前就说清楚，别等错误行。 */}[39m
+[31m+                 {providerOk === false && ([39m
+[31m+                   <ProviderBanner onOpenSettings={() => { setSettingsSection(undefined); setSettingsOpen(true); }} />[39m
+[31m+                 )}[39m
+[31m+                 {importDiagnosis !== null && ([39m
+[31m+                   <ImportDiagnosisCard[39m
+[31m+                     name={importDiagnosis.name}[39m
+[31m+                     diagnosis={importDiagnosis.diagnosis}[39m
+[31m+                     onDismiss={() => { setImportDiagnosis(null); }}[39m
+[31m+                   />[39m
+[31m+                 )}[39m
+[31m+               </div>[39m
+[31m+               {/* 弹层开着时给 hero 打 data-picking：问候语淡出让焦点（弹层向上开会压到问候线，2026-10-24）。 */}[39m
+[31m+               <div className="empty" {...(chipOpen ? { "data-picking": "true" } : {})}>[39m
+[31m+                 {/* 2026-10-18 对照 Claude 桌面端：hero 不是「字标 + 问候」两行，而是珊瑚星标与[39m
+[31m+                     问候同一行、衬线大字（Claude 的「✳ You're here!」）。品牌名仍在窗口顶栏，[39m
+[31m+                     这里不再叠一个 CAIRN 字标。 */}[39m
+[31m+                 <h1 className="empty-greet" data-dsh-claude-part="hero-headline" data-dsh-claude-holds="hero-mark">[39m
+[31m+                   <CairnMark className="empty-greet-mark" />[39m
+[31m+                   <span><span className="empty-greet-period">{greeting}，</span>{STR.empty.greetingAsk}</span>[39m
+[31m+                 </h1>[39m
+[31m+                 {/* 项目 chip：📁 名 · 分支；点开 = 搜索 + 最近项目 + 复用 AddProjectMenu 四入口。 */}[39m
+[31m+                 <div className="empty-chip-row" ref={chipRef}>[39m
+[31m+                   <button[39m
+[31m+                     className="empty-chip"[39m
+[31m+                     aria-haspopup="true"[39m
+[31m+                     aria-expanded={chipOpen}[39m
+[31m+                     title={STR.empty.pickProject}[39m
+[31m+                     onClick={openChipPopover}[39m
+[31m+                   >[39m
+[31m+                     <Folder size={13} aria-hidden="true" />[39m
+[31m+                     {/* 2026-10-17：已登记项目显示「显示名」（与侧栏一致）；未登记才回落文件夹名。 */}[39m
+[31m+                     <span>{activeWorkspace !== null[39m
+[31m+                       ? (projects.find((p) => p.path === activeWorkspace)?.name ?? activeWorkspace.slice(activeWorkspace.lastIndexOf("/") + 1))[39m
+[31m+                       : STR.empty.pickProject}</span>[39m
+[31m+                     {emptyData !== null && emptyData.branch !== null && emptyData.branch !== "" && ([39m
+[31m+                       <>[39m
+[31m+                         <span className="chip-sep" aria-hidden="true">·</span>[39m
+[31m+                         <GitBranch size={11} aria-hidden="true" />[39m
+[31m+                         <span>{emptyData.branch}</span>[39m
+[31m+                       </>[39m
+[31m+                     )}[39m
+[31m+                     <ChevronDown size={11} aria-hidden="true" className="chip-caret" />[39m
+[31m+                   </button>[39m
+[31m+                   {/* 项目选择弹层向上开（2026-10-17 真机目验：向下开会盖住 composer 本身，[39m
+[31m+                       你一边选项目一边看不见自己要发的输入）。 */}[39m
+[31m+                   <Popover[39m
+[31m+                     open={chipOpen}[39m
+[31m+                     up[39m
+[31m+                     className="chip-pop"[39m
+[31m+                     aria-label={STR.empty.projectsLabel}[39m
+[31m+                     onKeyDown={(e) => {[39m
+[31m+                       const items = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>(".chip-list .menu-item:not(:disabled)"));[39m
+[31m+                       if (items.length === 0) return;[39m
+[31m+                       const current = items.indexOf(document.activeElement as HTMLButtonElement);[39m
+[31m+                       // 焦点还在搜索框时，Home/End 归光标（别抢输入法/文本编辑的键）；只放行 ↑↓。[39m
+[31m+                       if (current < 0 && e.key !== "ArrowDown" && e.key !== "ArrowUp") return;[39m
+[31m+                       const next = menuNavIndex(e.key, current, items.length);[39m
+[31m+                       if (next === null) return;[39m
+[31m+                       e.preventDefault();[39m
+[31m+                       items[next]?.focus();[39m
+[31m+                     }}[39m
+[31m+                   >[39m
+[31m+                     <input[39m
+[31m+                       className="chip-search"[39m
+[31m+                       aria-label={STR.empty.searchProjects}[39m
+[31m+                       placeholder={STR.empty.searchProjects}[39m
+[31m+                       value={chipQuery}[39m
+[31m+                       onChange={(e) => { setChipQuery(e.target.value); }}[39m
+[31m+                     />[39m
+[31m+                     <div className="chip-list">[39m
+[31m+                       {chipRecent === null && <div className="menu-note">{STR.common.loading}</div>}[39m
+[31m+                       {chipRecent !== null && chipList.length === 0 && ([39m
+[31m+                         <div className="menu-note">{projects.length === 0 ? STR.empty.pickProject : STR.empty.noProjectMatch}</div>[39m
+[31m+                       )}[39m
+[31m+                       {chipList.map((p) => {[39m
+[31m+                         const registered = projects.some((x) => x.path === p.path);[39m
+[31m+                         return ([39m
+[31m+                           <button[39m
+[31m+                             key={p.id}[39m
+[31m+                             className={"menu-item" + (p.path === activeWorkspace ? " on" : "")}[39m
+[31m+                             title={p.path}[39m
+[31m+                             onClick={() => {[39m
+[31m+                               closeChip();[39m
+[31m+                               if (registered) {[39m
+[31m+                                 setActiveWorkspace(p.path);[39m
+[31m+                                 activeWorkspaceRef.current = p.path;[39m
+[31m+                                 touchWorkspace(p.path);[39m
+[31m+                               } else {[39m
+[31m+                                 // 最近但已移除：点 = 重新添加 + 切过去（空屏点项目就是要用它）。[39m
+[31m+                                 void handleAddProject(p.path).then(() => {[39m
+[31m+                                   setActiveWorkspace(p.path);[39m
+[31m+                                   activeWorkspaceRef.current = p.path;[39m
+[31m+                                   touchWorkspace(p.path);[39m
+[31m+                                 }).catch((err: unknown) => { setLastError(`添加项目失败：${err instanceof Error ? err.message : String(err)}`); });[39m
+[31m+                               }[39m
+[31m+                             }}[39m
+[31m+                           >[39m
+[31m+                             <span className="mi-ico" aria-hidden="true"><Folder size={12} /></span>[39m
+[31m+                             {/* 最近项目的 name 可能为空（只剩 path）；空名在弹层里会显示成一行空白，[39m
+[31m+                                 回落到路径 basename，与侧栏/项目 chip 的显示口径一致。 */}[39m
+[31m+                             <span>{p.name || p.path.slice(p.path.lastIndexOf("/") + 1)}</span>[39m
+[31m+                             <span className="sub">{p.path}</span>[39m
+[31m+                             {p.path === activeWorkspace && <Check size={12} className="mi-check" aria-hidden="true" />}[39m
+[31m+                           </button>[39m
+[31m+                         );[39m
+[31m+                       })}[39m
+[31m+                     </div>[39m
+[31m+                     <div className="chip-foot">[39m
+[31m+                       <AddProjectMenu[39m
+[31m+                         onPickDirectory={() => window.agent.pickDirectory()}[39m
+[31m+                         onAddProject={handleAddProject}[39m
+[31m+                         onOpenNewProjectDialog={() => { closeChip(); setNewProjectOpen(true); }}[39m
+[31m+                         onCloneProject={handleCloneProject}[39m
+[31m+                         activePaths={projects.map((p) => p.path)}[39m
+[31m+                       />[39m
+[31m+                       <div className="menu-note">{STR.empty.dropHint}</div>[39m
+[31m+                     </div>[39m
+[31m+                   </Popover>[39m
+[31m+                 </div>[39m
+[31m+               </div>[39m
+[31m+             </div>[39m
+[31m+           ) : ([39m
+[31m+             <div className="zone-stream">[39m
+[31m+               {lastError !== null && <ErrorStrip message={lastError} onDismiss={clearLastError} />}[39m
+[31m+               {lastNotice !== null && ([39m
+[31m+                 <div className="notice-strip" role="status">[39m
+[31m+                   <span className="msg">{lastNotice}</span>[39m
+[31m+                   <button className="btn-ghost" aria-label="关闭提示" onClick={clearLastNotice}>×</button>[39m
+[31m+                 </div>[39m
+[31m+               )}[39m
+[31m+               {importDiagnosis !== null && ([39m
+[31m+                 <ImportDiagnosisCard[39m
+[31m+                   name={importDiagnosis.name}[39m
+[31m+                   diagnosis={importDiagnosis.diagnosis}[39m
+[31m+                   onDismiss={() => { setImportDiagnosis(null); }}[39m
+[31m+                 />[39m
+[31m+               )}[39m
+[31m+               <div className="stream" id="stream" ref={setStreamEl}>[39m
+[31m+                 <div className="reading" id="reading">[39m
+[31m+                   <div className="stream-fade-top" data-on={!stick.atTop} aria-hidden="true" />[39m
+[31m+                   <Suspense fallback={null}>[39m
+[31m+                     <Stream[39m
+[31m+                       // 切会话重挂（2026-10-18）：行内局部状态（工具展开/思考折叠/审批卡展开）[39m
+[31m+                       // 不能跨会话复用——真机 A 展开 read_file 后切 B，B 的第一条工具行也展开；[39m
+[31m+                       // 只给行 key 加前缀会让 React 留下旧行（实测 31→57 并出现重复 event id），[39m
+[31m+                       // 重挂 Stream 本体是可靠边界（.stream 滚动容器与 sticky 观察对象都不动）。[39m
+[31m+                       key={activeId ?? "home"}[39m
+[31m+                       rows={streamRows}[39m
+[31m+                       refs={rowRefs}[39m
+[31m+                       inherited={inheritedSeqs}[39m
+[31m+                       view={viewMode}[39m
+[31m+                       streaming={runningActive}[39m
+[31m+                       foldedRounds={foldedRounds}[39m
+[31m+                       flashRound={flashRound}[39m
+[31m+                       actions={streamActions}[39m
+[31m+                     />[39m
+[31m+                   </Suspense>[39m
+[31m+                   {/* 交付摘要卡（批 3）：有交付的轮各一张，流尾展示；空轮不出内容（2026-10-24 弱行撤下）。[39m
+[31m+                       2026-10-18 业主截图批：默认只渲染最新一张卡；早期记录收进一行「查看早期交付」，[39m
+[31m+                       展开状态按会话记（deliveryExpandedFor），切走再回来不会又铺开。 */}[39m
+[31m+                   {(() => {[39m
+[31m+                     const lastIdx = deliveryTrailItems.length - 1;[39m
+[31m+                     const tailItems = lastIdx >= 0 ? deliveryTrailItems.slice(lastIdx) : [];[39m
+[31m+                     const olderItems = lastIdx >= 0 ? deliveryTrailItems.slice(0, lastIdx) : [];[39m
+[31m+                     const showEarlier = activeId !== null && deliveryExpandedFor === activeId;[39m
+[31m+                     const renderItem = (item: (typeof deliveryTrailItems)[number]): React.ReactNode => ([39m
+[31m+                       <ChangeSummaryCard[39m
+[31m+                         key={`d${String(item.delivery.round)}`}[39m
+[31m+                         delivery={item.delivery}[39m
+[31m+                         {...(activeWorkspace !== null[39m
+[31m+                           ? {[39m
+[31m+                               actions: {[39m
+[31m+                                 onOpenPreview: () => void openPreview(activeWorkspace),[39m
+[31m+                                 onExport: () => void exportActiveProject(activeWorkspace),[39m
+[31m+                                 ...(item.delivery.round === lastDeliveryRound ? { onRevert: () => handleRevertTurn(item.delivery.round) } : {}),[39m
+[31m+                               },[39m
+[31m+                             }[39m
+[31m+                           : {})}[39m
+[31m+                       />[39m
+[31m+                     );[39m
+[31m+                     return ([39m
+[31m+                       <>[39m
+[31m+                         {olderItems.length > 0 && ([39m
+[31m+                           <button[39m
+[31m+                             type="button"[39m
+[31m+                             className="delivery-earlier"[39m
+[31m+                             aria-expanded={showEarlier}[39m
+[31m+                             onClick={() => { setDeliveryExpandedFor(showEarlier ? null : activeId); }}[39m
+[31m+                           >[39m
+[31m+                             {showEarlier[39m
+[31m+                               ? "收起早期交付"[39m
+[31m+                               : `查看早期交付（${String(olderItems.length)} 张卡）`}[39m
+[31m+                           </button>[39m
+[31m+                         )}[39m
+[31m+                         {showEarlier && olderItems.map(renderItem)}[39m
+[31m+                         {tailItems.map(renderItem)}[39m
+[31m+                       </>[39m
+[31m+                     );[39m
+[31m+                   })()}[39m
+[31m+                 </div>[39m
+[31m+               </div>[39m
+[31m+               <div className="stream-fade-bottom" data-on={!stick.stuck} aria-hidden="true" />[39m
+[31m+               {outlineOpen && outlineTurns.length >= 2 && ([39m
+[31m+                 <OutlinePanel[39m
+[31m+                   turns={outlineTurns}[39m
+[31m+                   currentRound={outlineCurrent}[39m
+[31m+                   anyFolded={foldedRounds.size > 0}[39m
+[31m+                   onJump={jumpToRound}[39m
+[31m+                   onToggleAllFold={() => { if (foldedRounds.size > 0) unfoldAllTurns(); else foldAllTurns(); }}[39m
+[31m+                   onClose={() => setOutlineOpen(false)}[39m
+[31m+                 />[39m
+[31m+               )}[39m
+[31m+               {!stick.stuck && ([39m
+[31m+                 <button className="jump-latest" aria-label="回到底部" title="回到底部" onClick={() => stick.scrollToBottom("smooth")}>[39m
+[31m+                   <ArrowDown size={14} />[39m
+[31m+                 </button>[39m
+[31m+               )}[39m
+[31m+             </div>[39m
+[31m+           )}[39m
+[31m+           <div className="zone-gate">[39m
+[31m+             {askForActive !== null && ([39m
+[31m+               <ApprovalCard[39m
+[31m+                 ask={askForActive}[39m
+[31m+                 // 连拦降级（§2.2 双向断路器）：一键落到**比当前更保守**的那一档。[39m
+[31m+                 // 为什么落「默认」而不是再往下：auto/guided 都是「免逐笔问写」的档，[39m
+[31m+                 // 连拦说明被免掉的那层正在出事，退回逐笔审批就是这副断路器要说的话。[39m
+[31m+                 // 不自动改档：这里只有用户点了才写 settings。[39m
+[31m+                 onDowngrade={() => {[39m
+[31m+                   void window.agent.setSettings({ mode: "default" }).then(() => {[39m
+[31m+                     setMode("default");[39m
+[31m+                     setLastNotice(`权限档已降到「${MODE_LABEL.default.label}」——${MODE_LABEL.default.desc}`);[39m
+[31m+                   }).catch((err: unknown) => {[39m
+[31m+                     setLastError(`权限档保存失败：${err instanceof Error ? err.message : String(err)}`);[39m
+[31m+                   });[39m
+[31m+                 }}[39m
+[31m+                 onDecide={(approved, scope) => {[39m
+[31m+                   void window.agent.decide(askForActive.askId, approved, scope).then((ok) => {[39m
+[31m+                     if (!ok) setLastError("审批提交失败");[39m
+[31m+                   }).catch((err: unknown) => {[39m
+[31m+                     setLastError(`审批提交失败：${err instanceof Error ? err.message : String(err)}`);[39m
+[31m+                   });[39m
+[31m+                 }}[39m
+[31m+               />[39m
+[31m+             )}[39m
+[31m+             {askForActive === null && pendingClarify !== null && ([39m
+[31m+               <ClarifyCard[39m
+[31m+                 key={pendingClarify.callId}[39m
+[31m+                 callId={pendingClarify.callId}[39m
+[31m+                 questions={pendingClarify.questions}[39m
+[31m+                 onSubmit={(callId, answers) => {[39m
+[31m+                   void window.agent.submitClarify(callId, answers).then((ok) => {[39m
+[31m+                     if (!ok) setLastError("澄清提交失败");[39m
+[31m+                   }).catch((err: unknown) => {[39m
+[31m+                     setLastError(`澄清提交失败：${err instanceof Error ? err.message : String(err)}`);[39m
+[31m+                   });[39m
+[31m+                 }}[39m
+[31m+               />[39m
+[31m+             )}[39m
+[31m+             {askForActive === null && pendingClarify === null && pendingPlan !== null && ([39m
+[31m+               <PlanCard[39m
+[31m+                 key={pendingPlan.callId}[39m
+[31m+                 callId={pendingPlan.callId}[39m
+[31m+                 plan={pendingPlan.plan}[39m
+[31m+                 onDecide={(approved, callId) => {[39m
+[31m+                   void window.agent.decidePlan(approved, callId).then((ok) => {[39m
+[31m+                     if (!ok) setLastError("方案决议失败");[39m
+[31m+                   }).catch((err: unknown) => {[39m
+[31m+                     setLastError(`方案决议失败：${err instanceof Error ? err.message : String(err)}`);[39m
+[31m+                   });[39m
+[31m+                 }}[39m
+[31m+               />[39m
+[31m+             )}[39m
+[31m+           </div>[39m
+[31m+           <div className="zone-composer" ref={composerZoneRef}>[39m
+[31m+             {editCtx !== null && activeId === editCtx.forkId && ([39m
+[31m+               <div className="notice-strip" role="status">[39m
+[31m+                 <span className="msg">正在新分支里编辑第 {editCtx.round} 轮消息；原会话「{editCtx.originTitle}」不动。</span>[39m
+[31m+                 <button[39m
+[31m+                   className="btn-ghost"[39m
+[31m+                   onClick={() => {[39m
+[31m+                     const ctx = editCtx;[39m
+[31m+                     if (ctx === null) return;[39m
+[31m+                     // 2026-10-20 真机：旧实现只 activate(originId)，只换标题不载入原会话转录——[39m
+[31m+                     // 回到原会话后屏上是空流（rows=0）。必须走 openSession 重新载入。[39m
+[31m+                     const emptyBranch = activeIdRef.current === ctx.forkId[39m
+[31m+                       && events.length === 0[39m
+[31m+                       && (sendQueue.current.get(runKey(activeWorkspace, ctx.forkId))?.length ?? 0) === 0;[39m
+[31m+                     setEditCtx(null);[39m
+[31m+                     openSession(ctx.originId);[39m
+[31m+                     // 第 1 轮编辑建的空分支：回到原会话即无内容，顺手清掉，别留 0 字节会话。[39m
+[31m+                     // 删除与 openSession 谁先落都收敛到 origin（openSession 会写 currentSession）。[39m
+[31m+                     if (emptyBranch) {[39m
+[31m+                       // 删之前先把**用户还没发出去的编辑稿**搬到 origin（2026-10-20 独立评审追出，[39m
+[31m+                       // LOW-MEDIUM）：那份稿存在空分支的草稿键下 ⇒ 删会话不删草稿 ⇒ 稿子变孤儿[39m
+[31m+                       // （那条会话没了，谁也读不到它）⇒ 用户以为写的字还在，其实没了。[39m
+[31m+                       // 走**既有的草稿搬家通道**（draftRemap）：Composer 那侧是草稿桶的**唯一写手**，[39m
+[31m+                       // 另起一条直写 localStorage 的路会被它的内存桶盖回去（等于没搬）。[39m
+[31m+                       setDraftRemap({ from: ctx.forkId, to: ctx.originId, seq: ++draftRemapSeq.current });[39m
+[31m+                       void window.agent.deleteSession(ctx.forkId).then(() => { void refreshSessions(); }, (err: unknown) => {[39m
+[31m+                         setLastError(`空分支清理失败：${err instanceof Error ? err.message : String(err)}`, ctx.originId);[39m
+[31m+                       });[39m
+[31m+                     }[39m
+[31m+                   }}[39m
+[31m+                 >回到原会话</button>[39m
+[31m+               </div>[39m
+[31m+             )}[39m
+[31m+             {activeId !== null && ([39m
+[31m+               <SendQueueStrip[39m
+[31m+                 items={sendQueue.current.get(runKey(activeWorkspace, activeId)) ?? []}[39m
+[31m+                 running={runningActive}[39m
+[31m+                 onInterruptSend={(index) => {[39m
+[31m+                   // 「打断并发送」：先把它提到队首，再打断本轮——收束在轮界，runOn 随即先派它。[39m
+[31m+                   // 打断走 cancelRunHeal：陈旧旗（main 无在跑）时摘旗并把这条当场派出去，不再是死点。[39m
+[31m+                   //[39m
+[31m+                   // ⚠️ 2026-10-28（第 750 页）：读队列表必须与写**同键**——写方 `setQueueFor`[39m
+[31m+                   // 用的是 `runKey(workspace, sid)`（限定键），此前这里按**裸 sid** 读 ⇒ 读到[39m
+[31m+                   // undefined ⇒ `?? []` ⇒ `promoteQueued([], i)` 得 `[]` ⇒ 写回空表 ⇒[39m
+[31m+                   // `setQueueLocal(key, [])` 直接 `delete(key)` ⇒ **整条队列被静默清空**：[39m
+[31m+                   // 用户排队的消息既没发出去、也没被移出，只是不见了。[39m
+[31m+                   const sid = activeIdRef.current;[39m
+[31m+                   if (sid === null) return;[39m
+[31m+                   const key = runKey(activeWorkspace, sid);[39m
+[31m+                   setQueueFor(sid, promoteQueued(sendQueue.current.get(key) ?? [], index));[39m
+[31m+                   cancelRunHeal(sid);[39m
+[31m+                 }}[39m
+[31m+                 onRemove={(index) => {[39m
+[31m+                   const sid = activeIdRef.current;[39m
+[31m+                   if (sid === null) return;[39m
+[31m+                   // 同上：按限定键读，否则「移出队列」会把**整条**队列清空而不是只删这一条。[39m
+[31m+                   const key = runKey(activeWorkspace, sid);[39m
+[31m+                   setQueueFor(sid, dropQueued(sendQueue.current.get(key) ?? [], index));[39m
+[31m+                 }}[39m
+[31m+                 {...(!runningActive && !queueLoading && !pendingSend && pendingClarify === null && pendingPlan === null[39m
+[31m+                   ? { onResume: resumeQueue }[39m
+[31m+                   : {})}[39m
+[31m+               />[39m
+[31m+             )}[39m
+[31m+             <Composer[39m
+[31m+               skills={skills}[39m
+[31m+               disabled={composerLock !== null}[39m
+[31m+               {...(composerLock !== null ? { disabledReason: composerLock } : {})}[39m
+[31m+               mode={mode}[39m
+[31m+               planRequired={planRequired}[39m
+[31m+               onPlanRequiredChange={onPlanRequiredChange}[39m
+[31m+               running={runningActive}[39m
+[31m+               stopped={stopped}[39m
+[31m+               activeId={activeId}[39m
+[31m+               providerInfo={providerInfo}[39m
+[31m+               pickerValue={pickerValue}[39m
+[31m+               usage={usage}[39m
+[31m+               phaseLabel={phaseLabel}[39m
+[31m+               phase={phase}[39m
+[31m+               elapsedSec={elapsedSec}[39m
+[31m+               steps={steps}[39m
+[31m+               runSteps={runSteps}[39m
+[31m+               {...(chosenCtx !== undefined ? { ctxWindow: chosenCtx } : {})}[39m
+[31m+               workspacePath={activeWorkspace}[39m
+[31m+               recentRefs={activeId !== null ? recentRefsBySession.current.get(activeId) ?? [] : []}[39m
+[31m+               onReferenceAdded={noteRecentRef}[39m
+[31m+               promptHistory={promptHistory}[39m
+[31m+               onDraftPresence={noteDraft}[39m
+[31m+               injectedText={injectedText}[39m
+[31m+               injectedTextSeq={injectedTextSeq}[39m
+[31m+               draftRemap={draftRemap}[39m
+[31m+               {...(draftRestore !== undefined ? { restoreDraft: draftRestore } : {})}[39m
+[31m+               onSend={(t, attachments, forceQueue) => { sendWithGoal(t, attachments, forceQueue ?? false); }}[39m
+[31m+               onCancel={() => { if (activeId !== null) cancelRunHeal(activeId); }}[39m
+[31m+               onPickDirectory={() => window.agent.pickDirectory()}[39m
+[31m+               onPickFiles={() => window.agent.pickFiles()}[39m
+[31m+               configuredProviders={configuredProviders}[39m
+[31m+               onModeChange={(m) => {[39m
+[31m+                 // 换档必须留下**可见后果**：芯片标签换字 + 一条 notice 说清新档从哪一刻起算。[39m
+[31m+                 // 业主实测 2026-10-16「点了切换感觉没用」——芯片确实换了字，但没有任何一句告诉用户[39m
+[31m+                 // 这一刻发生了什么、下一轮会怎样。runAgent 装配时 mode 进 sessionObj（整场 run 的[39m
+[31m+                 // 常量，agent-runner.ts:1140）⇒ 运行中的那一轮改不了，这是真实语义不是缺陷，[39m
+[31m+                 // 缺的只是把它说出来。[39m
+[31m+                 void window.agent.setSettings({ mode: m }).then(() => {[39m
+[31m+                   setMode(m);[39m
+[31m+                   const info = MODE_LABEL[m];[39m
+[31m+                   setLastNotice([39m
+[31m+                     runningActive[39m
+[31m+                       ? `权限档已切到「${info.label}」（${info.desc}）——本轮仍在原档下跑，下一条消息起生效`[39m
+[31m+                       : `权限档已切到「${info.label}」——${info.desc}`,[39m
+[31m+                   );[39m
+[31m+                 }).catch((err: unknown) => {[39m
+[31m+                   setLastError(`权限档保存失败：${err instanceof Error ? err.message : String(err)}`);[39m
+[31m+                 });[39m
+[31m+               }}[39m
+[31m+               thinking={composerThinking(activeId, pendingThinking, thinkingBySession.current)}[39m
+[31m+               onThinkingChange={(level) => {[39m
+[31m+                 const change = thinkingChangeTarget(activeId, level);[39m
+[31m+                 if (change === null) return; // 非法档位不猜、不夹紧[39m
+[31m+                 if (change.kind === "pending") { setPendingThinking(change.level); return; }[39m
+[31m+                 thinkingBySession.current.set(change.sessionId, change.level);[39m
+[31m+                 force((n) => n + 1);[39m
+[31m+               }}[39m
+[31m+               onModelChange={(registryId) => {[39m
+[31m+                 // 有会话就记成"本会话选择"，没有就只落全局缺省；两种情况都必须有可见后果。[39m
+[31m+                 if (activeId !== null) {[39m
+[31m+                   selections.current.set(activeId, registryId);[39m
+[31m+                   force((n) => n + 1);[39m
+[31m+                 }[39m
+[31m+                 // provider 必须一起写：模型自带属于哪一家；演示项把 provider 拨回 demo。[39m
+[31m+                 const pickedSpec =[39m
+[31m+                   registryId === null ? undefined : providerInfo?.models.find((m) => m.id === registryId);[39m
+[31m+                 const nextProvider = registryId === null ? "demo" : pickedSpec?.provider;[39m
+[31m+                 void window.agent[39m
+[31m+                   .setSettings({[39m
+[31m+                     model: registryId ?? "",[39m
+[31m+                     ...(nextProvider !== undefined ? { provider: nextProvider } : {}),[39m
+[31m+                   })[39m
+[31m+                   .then(() => refreshProviderInfo())[39m
+[31m+                   .catch((err: unknown) => setLastError(`模型缺省保存失败：${err instanceof Error ? err.message : String(err)}`));[39m
+[31m+               }}[39m
+[31m+               onOpenSettings={() => setSettingsOpen(true)}[39m
+[31m+               modelSessionOverride={activeId !== null && selections.current.has(activeId)}[39m
+[31m+               onCompact={() => { compactNow(); }}[39m
+[31m+               menuSignal={composerMenuSignal}[39m
+[31m+               onSuggestNext={onSuggestNext}[39m
+[31m+               injectedAttachment={injectedAttachment}[39m
+[31m+               injectedAppend={injectedAppend}[39m
+[31m+             />[39m
+[31m+           </div>[39m
+[31m+           {showEmpty && ([39m
+[31m+             /* 空屏下半区（P2-1）：建议行（点击=填入输入框不发送）+ 首启副标题；[39m
+[31m+                .empty-tail 是 .main 的直接弹性子女——把整组构图托到视觉中心偏上。 */[39m
+[31m+             <>[39m
+[31m+               <QuickStarts[39m
+[31m+                 items={emptyData?.quickStarts ?? []}[39m
+[31m+                 firstRunSub={onboarded === false ? STR.empty.firstRunSub : null}[39m
+[31m+                 onPick={(t) => { injectText(t); }}[39m
+[31m+               />[39m
+[31m+               {/* 首启「设置检查」：七组覆盖面来自主进程（不抄清单）；点一格跳到对应设置分区。[39m
+[31m+                   只在 onboarded === false 时摆——已 onboarded 的用户不必看这张清单。[39m
+[31m+                   （2026-10-25：空屏重做时这段挂载被连带删掉，而取数仍在跑；已恢复并加判据。） */}[39m
+[31m+               {onboarded === false && ([39m
+[31m+                 <OnboardingChecklist[39m
+[31m+                   groups={onboarding}[39m
+[31m+                   onOpen={(section) => { setSettingsSection(section); setSettingsOpen(true); }}[39m
+[31m+                   onDone={dismissOnboarding}[39m
+[31m+                 />[39m
+[31m+               )}[39m
+[31m+               <div className="empty-tail" aria-hidden="true" />[39m
+[31m+             </>[39m
+[31m+           )}[39m
+[31m+         </main>[39m
+[31m+           </Panel>[39m
+[31m+           {/* P3-2 右侧检查器（brief 七）：常驻 Panel、默认收起（collapsible + collapsedSize 0；[39m
+[31m+               ⌘⌥I 开合 / 打开窗格自动露出 / 边沿拖出）。宽 320–420（defaultSize 360）。[39m
+[31m+               Inspector 三 Tab（改动/计划/时间线）在上；开了窗格时 PaneDock 在下方（组件与数据面不动）。 */}[39m
+[31m+           <Separator className="pane-handle" aria-label="调整检查器宽度" />[39m
+[31m+           <Panel[39m
+[31m+             panelRef={inspectorRef}[39m
+[31m+             collapsible[39m
+[31m+             collapsedSize={0}[39m
+[31m+             defaultSize={inspectorDefault}[39m
+[31m+             minSize={320}[39m
+[31m+             maxSize={420}[39m
+[31m+             className="pane-panel"[39m
+[31m+             onResize={(panelSize) => {[39m
+[31m+               setInspectorCollapsed(panelSize.inPixels <= 0);[39m
+[31m+               const px = Math.round(panelSize.inPixels);[39m
+[31m+               if (px < 320 || px > 420) return;[39m
+[31m+               if (inspectorSaveTimer.current !== null) window.clearTimeout(inspectorSaveTimer.current);[39m
+[31m+               inspectorSaveTimer.current = window.setTimeout(() => {[39m
+[31m+                 try { window.localStorage.setItem("cairn.inspector.width", String(px)); } catch { /* 存不下则忽略 */ }[39m
+[31m+               }, 300);[39m
+[31m+             }}[39m
+[31m+           >[39m
+[31m+             {/* 收起态用 inert 而不是 hidden（2026-10-18）：[39m
+[31m+                 · hidden={inspectorCollapsed} → display:none，会把 react-resizable-panels[39m
+[31m+                   正在做的宽度收起动画一刀砍掉，⌘⌥I 开合退化成硬切；[39m
+[31m+                 · inert 同样把内部控件移出 Tab 序与无障碍树（屏外不劫持键盘、不被读屏念到），[39m
+[31m+                   但保留布局，宽度过渡照常播完。[39m
+[31m+                 实现走 setAttribute（同 ModalSurface 的 imperative 口径）：@types/react 18.3[39m
+[31m+                 的 HTMLAttributes 还没有 inert 这个 prop，写成 JSX 属性会直接编译红。[39m
+[31m+                 收起瞬间若仍能 Tab 进检查器，是因为过渡还在跑（width > 0）——此刻控件在屏上，[39m
+[31m+                 可聚焦是正确的；inert 在宽度归 0 的那一刻由 onResize 置上。 */}[39m
+[31m+             {/* 单窗格占满侧栏（2026-10-24 业主）：开着窗格 → 栏内检查器内容让位（CSS 隐藏 .isp），[39m
+[31m+                   窗格独占整条侧栏；全关 → 检查器内容回位。⌘⌥I 的整栏开合不受影响。 */}[39m
+[31m+             <div className="inspector-col" ref={inspectorColRef} {...(paneTabs.length > 0 ? { "data-panes-open": "true" } : {})}>[39m
+[31m+               <Inspector[39m
+[31m+                 key={activeId ?? "home"} // 切会话即重挂：内部 openKey/diff 状态不能跨会话复用[39m
+[31m+                 events={events}[39m
+[31m+                 onJump={jumpToEvent}[39m
+[31m+                 onOpenPane={openPane}[39m
+[31m+                 onRestore={handleRestoreSnapshot}[39m
+[31m+                 onClose={toggleInspector}[39m
+[31m+                 {...(activeWorkspace !== null ? { workspacePath: activeWorkspace } : {})}[39m
+[31m+                 {...(activeId !== null && inspectorModelLabel !== undefined && inspectorModelLabel !== "" ? { modelLabel: inspectorModelLabel } : {})}[39m
+[31m+                 {...(activeId !== null ? { modeLabel: MODE_LABEL[mode].label } : {})}[39m
+[31m+                 running={runningActive}[39m
+[31m+               />[39m
+[31m+               {paneTabs.length > 0 && ([39m
+[31m+                 <div className="pane-dock-zone">[39m
+[31m+                   <Suspense fallback={null}>[39m
+[31m+                     <PaneDock[39m
+[31m+                       tabs={paneTabs}[39m
+[31m+                       {...(paneTarget !== null ? { paneTarget } : {})}[39m
+[31m+                       events={events}[39m
+[31m+                       sessionId={activeId}[39m
+[31m+                       workspace={activeWorkspace}[39m
+[31m+                       {...(fileTarget !== null ? { fileTarget } : {})}[39m
+[31m+                       {...(sessionPreview !== null ? { sessionPreview } : {})}[39m
+[31m+                       onSwitchSession={(id, workspace) => {[39m
+[31m+                         openSession(id, workspace);[39m
+[31m+                         // 切过去后主体与预览是同一场会话：留一块只读副本既占宽又像故障。[39m
+[31m+                         // 预览是「看一眼」的临时面，切走即收。[39m
+[31m+                         setSessionPreview(null);[39m
+[31m+                         closePane("session");[39m
+[31m+                       }}[39m
+[31m+                       {...(sessionPreview !== null[39m
+[31m+                         ? {[39m
+[31m+                             onSessionPreviewSend: (text: string, running: boolean) =>[39m
+[31m+                               sendTo(sessionPreview.id, sessionPreview.workspace ?? activeWorkspace, text, [], { running }),[39m
+[31m+                             onSessionPreviewStop: () =>[39m
+[31m+                               cancelRunHeal(sessionPreview.id, sessionPreview.workspace ?? activeWorkspace),[39m
+[31m+                             onSessionPreviewResume: () =>[39m
+[31m+                               resumeQueueFor(sessionPreview.id, sessionPreview.workspace ?? activeWorkspace),[39m
+[31m+                           }[39m
+[31m+                         : {})}[39m
+[31m+                       onAttach={attachFromPane}[39m
+[31m+                       pickSignal={pickSignal}[39m
+[31m+                       onPickResult={handlePickResult}[39m
+[31m+                       {...(preview !== null && preview.status === "ready" && preview.url !== undefined ? { browserUrl: preview.url } : {})}[39m
+[31m+                       onClose={closePane}[39m
+[31m+                       onOpen={openPane}[39m
+[31m+                       onReview={(text) => void send(text)}[39m
+[31m+                       onReorder={(from, to) => setPaneTabs((tabs) => movePane(tabs, from, to))}[39m
+[31m+                       onPopout={(kind) => { void window.agent.panePopout(kind, activeId ?? undefined); }}[39m
+[31m+                     />[39m
+[31m+                   </Suspense>[39m
+[31m+                 </div>[39m
+[31m+               )}[39m
+[31m+             </div>[39m
+[31m+           </Panel>[39m
+[31m+         </Group>[39m
+[31m+         {pluginSidebarOpen && <PluginSidebar width={pluginSidebarWidth} onWidth={setPluginSidebarWidthPersist} onClose={closePluginSidebar} onInvoke={fillPluginCommand} />}[39m
+[31m+       </div>[39m
+[31m+       {/* 视图三档 toast（§3.4）：Ctrl+O 切换时一闪即走 */}[39m
+[31m+       {viewToast !== null && ([39m
+[31m+         <div className="view-toast" role="status">{viewToast}</div>[39m
+[31m+       )}[39m
+[31m+       {/* ⌘/ 快捷键速查（§3.6「查看全部」）：数据单一源 shortcuts.ts（只列已实现的键）。 */}[39m
+[31m+       {cheatOpen && ([39m
+[31m+         <ModalSurface className="sheet-scrim" label="快捷键速查" onClose={closeCheat} onClick={closeCheat}>[39m
+[31m+           <div className="sheet" onClick={(e) => { e.stopPropagation(); }}>[39m
+[31m+             <div className="sheet-head">[39m
+[31m+               <span className="sheet-title">快捷键</span>[39m
+[31m+               <button className="iconbtn sm" aria-label="关闭速查表" onClick={closeCheat}><X size={13} /></button>[39m
+[31m+             </div>[39m
+[31m+             <div className="sheet-body">[39m
+[31m+               {SHORTCUT_GROUPS.map((g) => ([39m
+[31m+                 <div key={g.title} className="sheet-group">[39m
+[31m+                   <div className="sheet-group-title">{g.title}</div>[39m
+[31m+                   {g.rows.map((r) => ([39m
+[31m+                     <div key={r.keys} className="sheet-row">[39m
+[31m+                       <span className="sheet-keys">{r.keys}</span>[39m
+[31m+                       <span className="sheet-what">{r.what}</span>[39m
+[31m+                     </div>[39m
+[31m+                   ))}[39m
+[31m+                 </div>[39m
+[31m+               ))}[39m
+[31m+             </div>[39m
+[31m+           </div>[39m
+[31m+         </ModalSurface>[39m
+[31m+       )}[39m
+[31m+       {/* 五张确认闸（回滚轮次 / 移除项目 / 归档 / 删除会话 / 丢弃隔离工作区）[39m
+[31m+           搬进 panes/ConfirmScrims.tsx（Phase 2 · 批 2.4）：props 进、事件出，本体不碰状态。 */}[39m
+[31m+       <ConfirmScrims[39m
+[31m+         revertConfirm={revertConfirm}[39m
+[31m+         setRevertConfirm={setRevertConfirm}[39m
+[31m+         doRevertTurn={doRevertTurn}[39m
+[31m+         projectRemoveConfirm={projectRemoveConfirm}[39m
+[31m+         setProjectRemoveConfirm={setProjectRemoveConfirm}[39m
+[31m+         doRemoveProject={doRemoveProject}[39m
+[31m+         archiveConfirm={archiveConfirm}[39m
+[31m+         setArchiveConfirm={setArchiveConfirm}[39m
+[31m+         doArchiveSession={doArchiveSession}[39m
+[31m+         deleteConfirm={deleteConfirm}[39m
+[31m+         setDeleteConfirm={setDeleteConfirm}[39m
+[31m+         doDeleteSession={doDeleteSession}[39m
+[31m+         wtDiscard={wtDiscard}[39m
+[31m+         setWtDiscard={setWtDiscard}[39m
+[31m+         sessionWorktreeOp={sessionWorktreeOp}[39m
+[31m+       />[39m
+[31m+       {/* 命令面板（P3-3 · brief 八）：⌘K / 侧栏搜索钮；数据全从 App 拿（技能组已接同一条 skills 数据面）。 */}[39m
+[31m+       {paletteOpen && ([39m
+[31m+         <Suspense fallback={null}>[39m
+[31m+           <CommandPalette[39m
+[31m+             activeWorkspace={activeWorkspace}[39m
+[31m+             open[39m
+[31m+             onClose={() => { setPaletteOpen(false); focusComposer(); }}[39m
+[31m+             sessions={sessions}[39m
+[31m+             projects={projects.map((p) => ({ id: p.id, name: p.name, path: p.path }))}[39m
+[31m+             onOpenSession={(id, workspace) => { setPaletteOpen(false); openSession(id, workspace); }}[39m
+[31m+             onSwitchWorkspace={(path) => { setPaletteOpen(false); setActiveWorkspace(path); activeWorkspaceRef.current = path; touchWorkspace(path); }}[39m
+[31m+             onOpenSettings={(section) => { setPaletteOpen(false); setSettingsSection(section); setSettingsOpen(true); }}[39m
+[31m+             onOpenFile={(path) => {[39m
+[31m+               setPaletteOpen(false);[39m
+[31m+               openPane("file");[39m
+[31m+               setFileTarget((prev) => ({ path, seq: (prev?.seq ?? 0) + 1 }));[39m
+[31m+               focusComposer();[39m
+[31m+             }}[39m
+[31m+             onAction={(action) => { setPaletteOpen(false); handlePaletteAction(action); }}[39m
+[31m+             skills={skills}[39m
+[31m+             onUseSkill={(invoke) => {[39m
+[31m+               // 与斜杠菜单同一落点：只填入、不发送；injectText 会覆盖草稿并聚焦输入框。[39m
+[31m+               setPaletteOpen(false);[39m
+[31m+               const trimmed = invoke.trim();[39m
+[31m+               injectText(`${trimmed.endsWith(" ") ? trimmed : trimmed + " "}`);[39m
+[31m+             }}[39m
+[31m+             activeSessionId={activeId}[39m
+[31m+             onSessionAction={(action, id) => {[39m
+[31m+               setPaletteOpen(false);[39m
+[31m+               const target = sessions.find((s) => s.id === id);[39m
+[31m+               if (target === undefined) { toast.error("会话已不存在"); return; }[39m
+[31m+               if (action === "rename") startBarRename();[39m
+[31m+               else if (action === "archive") requestArchiveSession(target, target.archived !== true);[39m
+[31m+               else requestDeleteSession(target);[39m
+[31m+             }}[39m
+[31m+           />[39m
+[31m+         </Suspense>[39m
+[31m+       )}[39m
+[31m+       {logTarget !== null && ([39m
+[31m+         <SessionLogDialog[39m
+[31m+           id={logTarget}[39m
+[31m+           title={sessions.find((s) => s.id === logTarget)?.title ?? logTarget}[39m
+[31m+           onClose={() => { setLogTarget(null); }}[39m
+[31m+         />[39m
+[31m+       )}[39m
+[31m+       {settingsOpen && ([39m
+[31m+         <Suspense fallback={null}>[39m
+[31m+           <SettingsPanel[39m
+[31m+             onClose={() => setSettingsOpen(false)}[39m
+[31m+             {...(settingsSection !== undefined ? { initialSection: settingsSection } : {})}[39m
+[31m+             onSettingsSaved={() => {[39m
+[31m+               void refreshProviderInfo();[39m
+[31m+               void refreshProviderKeys();[39m
+[31m+               // 设置页那条路也要给出「换档之后发生了什么」：与 Composer 档位菜单同一句口径[39m
+[31m+               // （面板保存后不主动喊，用户点完单选卡只看到对勾移动，仍旧读不出下一轮何时生效）。[39m
+[31m+               void window.agent.getSettings().then((s) => {[39m
+[31m+                 if (s.mode !== mode) {[39m
+[31m+                   const info = MODE_LABEL[s.mode];[39m
+[31m+                   setLastNotice(`权限档已切到「${info.label}」——${info.desc}`);[39m
+[31m+                 }[39m
+[31m+                 setMode(s.mode);[39m
+[31m+                 setThemePref(s.theme);[39m
+[31m+                 setTextSize(s.textSize);[39m
+[31m+                 setUiSize(s.uiSize);[39m
+[31m+                 // 2026-10-18 真机：Ctrl+Tab 开关只落盘、未回灌 live 状态 ⇒ 关掉后快捷键照样切会话[39m
+[31m+                 // （重启才生效）。设置页保存的回灌必须覆盖快捷键读取的那份 state。[39m
+[31m+                 setCtrlTabCycle(s.ctrlTabCycle);[39m
+[31m+               }).catch(() => undefined);[39m
+[31m+             }}[39m
+[31m+           />[39m
+[31m+         </Suspense>[39m
+[31m+       )}[39m
+[31m+       {/* 拖放提示（brief 第四节）：拖文件夹进窗口即亮；松手落在全局 drop（目录 = 添加项目）。 */}[39m
+[31m+       {dragOverApp && ([39m
+[31m+         <div className="drop-overlay" aria-hidden="true">[39m
+[31m+           <div className="drop-card">[39m
+[31m+             <FolderPlus size={18} />[39m
+[31m+             <span>{STR.drop.hintAddProject}</span>[39m
+[31m+           </div>[39m
+[31m+         </div>[39m
+[31m+       )}[39m
+[31m+       {newProjectOpen && ([39m
+[31m+         <NewProjectDialog[39m
+[31m+           templates={[...templates, { id: "blank", name: STR.newProject.blankName, description: STR.newProject.blankDesc }]}[39m
+[31m+           existingNames={projects.map((p) => p.name)}[39m
+[31m+           onClose={() => { setNewProjectOpen(false); }}[39m
+[31m+           onPickDirectory={() => window.agent.pickDirectory()}[39m
+[31m+           onCreate={handleCreateFromDialog}[39m
+[31m+         />[39m
+[31m+       )}[39m
+[31m+     </div>[39m
+[31m+   );[39m
+[31m+ }[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/render-resilience.test.tsx:[2m67:18[22m[39m
+    [90m 65|[39m     expect(view).toContain('import { OnboardingChecklist } from "../co…
+    [90m 66|[39m     expect(view).toContain("onboarding: readonly OnboardingGroup[];");
+    [90m 67|[39m     expect(view).toContain("onboarded, onboarding, injectText");
+    [90m   |[39m                  [31m^[39m
+    [90m 68|[39m     expect(view).toMatch(/\{onboarded === false && \(\s*<OnboardingChe…
+    [90m 69|[39m     expect(view).toContain("groups={onboarding}");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m229 passed[39m[22m[90m (231)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m1591 passed[39m[22m[90m (1593)[39m
+[2m   Start at [22m 20:55:16
+[2m   Duration [22m 32.71s[2m (import 44%, tests 37%, transform 17%, worker 2%)[22m
+
+[2m    Isolate [22m [33m231 workers spawned[39m[2m · ~107ms startup each (spawn + environment, per file)[22m
+[2m            [22m [2mat least ~12.28s faster with [22m[33misolate: false[39m[2m — reuses workers across files instead of one per file[22m
+

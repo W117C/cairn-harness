@@ -1,0 +1,1071 @@
+diff --git a/src/main/project-export.ts b/src/main/project-export.ts
+index 099f7364..42d95a6c 100644
+--- a/src/main/project-export.ts
++++ b/src/main/project-export.ts
+@@ -6,8 +6,8 @@
+ //   · 排除可再生与仅本机相关的东西：node_modules / dist / .git / .agent / .DS_Store。
+ //     静态模板导出后双击 index.html 就能看；React 模板导出后需要 pnpm install（交付卡里写明）。
+ //   · .cairn/project.json 保留：它让导出目录还能被 Cairn 认出来，重新添加后可继续预览。
+-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+-import { basename, join } from "node:path";
++import { cpSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, unlinkSync } from "node:fs";
++import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
+ 
+ /** 导出时排除的条目名（任意层级）。这是导出契约的一部分：交付卡文案与这里必须一致。 */
+ export const EXPORT_EXCLUDED = ["node_modules", "dist", ".git", ".agent", ".DS_Store"] as const;
+@@ -27,31 +27,71 @@ function countFiles(dir: string): number {
+ }
+ 
+ export function exportProject(sourceDir: string, destParentDir: string, opts: { name?: string } = {}): ExportProjectResult {
+-  if (!existsSync(sourceDir) || !statSync(sourceDir).isDirectory()) {
+-    return { ok: false, reason: "bad-source", message: `要导出的项目目录不存在：${sourceDir}` };
++  const name = opts.name?.trim() || basename(sourceDir);
++  if (name === "" || name === "." || name === ".." || /[/\\\0]/.test(name)) {
++    return { ok: false, reason: "bad-source", message: "导出名称必须是单个文件夹名，不能包含路径分隔符或空字符" };
+   }
+-  if (!existsSync(destParentDir) || !statSync(destParentDir).isDirectory()) {
+-    return { ok: false, reason: "bad-source", message: `导出目标不是一个目录：${destParentDir}` };
++  let source: string;
++  let parent: string;
++  try {
++    source = realpathSync(sourceDir);
++    parent = realpathSync(destParentDir);
++    if (!statSync(source).isDirectory() || !statSync(parent).isDirectory()) throw new Error("not a directory");
++  } catch {
++    return { ok: false, reason: "bad-source", message: "项目与导出父目录必须是可访问的现有目录" };
+   }
+-  const rawName = opts.name ?? basename(sourceDir);
+-  const name = rawName.trim() === "" ? basename(sourceDir) : rawName.trim();
+-  const dest = join(destParentDir, name);
+-  if (existsSync(dest)) {
+-    return { ok: false, reason: "dest-exists", message: `目标已存在：${dest}——换一个导出位置，或把已有目录改名后重试` };
++  const dest = join(parent, name);
++  if (within(source, dest)) {
++    return { ok: false, reason: "bad-source", message: "请在项目目录之外选择导出位置，避免递归复制项目自身" };
+   }
+   const excluded = new Set<string>(EXPORT_EXCLUDED);
++  const links: { path: string; target: string; directory: boolean }[] = [];
+   let created = false;
+   try {
++    try {
++      lstatSync(dest); // A dangling symlink is still an existing destination.
++      return { ok: false, reason: "dest-exists", message: `目标已存在：${dest}——换一个导出位置，或把已有目录改名后重试` };
++    } catch (error) {
++      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
++    }
+     mkdirSync(dest);
+     created = true;
+-    cpSync(sourceDir, dest, {
++    cpSync(source, dest, {
+       recursive: true,
+       dereference: false,
+-      filter: (src) => !excluded.has(basename(src)),
++      verbatimSymlinks: true,
++      filter: src => {
++        if (src === source) return true;
++        if (excluded.has(basename(src))) return false;
++        if (lstatSync(src).isSymbolicLink()) {
++          const target = realpathSync(src);
++          const targetPath = relative(source, target);
++          if (!within(source, target) || targetPath.split(sep).some(part => excluded.has(part))) {
++            throw new Error(`链接 ${relative(source, src)} 指向项目外或未导出的内容；请改成项目内的实际文件后重试`);
++          }
++          links.push({ path: relative(source, src), target: targetPath, directory: statSync(target).isDirectory() });
++        }
++        return true;
++      },
+     });
++    // Map internal links onto the delivered tree, including absolute links and renamed roots.
++    for (const link of links) {
++      const path = join(dest, link.path);
++      unlinkSync(path);
++      symlinkSync(relative(dirname(path), join(dest, link.target)) || ".", path, link.directory ? "dir" : "file");
++    }
+     return { ok: true, dest, copiedFiles: countFiles(dest) };
+   } catch (err) {
+-    if (created) rmSync(dest, { recursive: true, force: true });
+-    return { ok: false, reason: "copy-failed", message: `导出失败：${err instanceof Error ? err.message : String(err)}（目标目录已清理）` };
++    let cleanup = "未创建目标目录";
++    if (created) {
++      try { rmSync(dest, { recursive: true, force: true }); cleanup = "目标目录已清理"; }
++      catch { cleanup = `未能清理半成品，请检查：${dest}`; }
++    }
++    return { ok: false, reason: "copy-failed", message: `导出失败：${err instanceof Error ? err.message : String(err)}（${cleanup}）` };
+   }
+ }
++
++function within(root: string, path: string): boolean {
++  const rel = relative(root, path);
++  return rel === "" || (rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel));
++}
+diff --git a/src/main/provider-key-inject.ts b/src/main/provider-key-inject.ts
+index 57a53ea7..144f3140 100644
+--- a/src/main/provider-key-inject.ts
++++ b/src/main/provider-key-inject.ts
+@@ -5,12 +5,30 @@
+ import { getProviderKey, PROVIDER_IDS } from "./provider-keys";
+ import { customEnvKeyedProviders, envKeyOf } from "../providers/env-keys";
+ 
+-/** 启动时把已存 provider key 解密注入各自 provider 的 env（env 优先：该家 env 已在 = 那一家零行为）。
++// Only values injected by Cairn may be refreshed or removed. External env remains authoritative.
++const injectedValues = new Map<string, { provider: string; value: string }>();
++
++/** Revoke only this provider's own values, including mappings no longer in the registry. */
++export function revokeInjectedProviderKey(provider: string, keepEnv?: string): boolean {
++  let revoked = false;
++  for (const [envName, owner] of injectedValues) {
++    if (owner.provider !== provider || envName === keepEnv) continue;
++    injectedValues.delete(envName);
++    if (process.env[envName] === owner.value) {
++      delete process.env[envName];
++      revoked = true;
++    }
++  }
++  return revoked;
++}
++
++/** 把已存 key 注入各自 provider 的 env；外部 env 优先，Cairn 自己的旧注入可刷新/撤销。
+  *  注入只发生在进程内 env——不落日志、不进事件流（明文零落盘三处纪律）。
+  *  **遍历存储白名单**，不再硬编码 `"glm"`：白名单加一家，注入面自动跟上门（原实现是「能力发货、
+  *  入口不通」的下半截——存得进、没人读）。缺 env 名映射即崩：那是登记漏了一半，静默跳过会让
+  *  用户以为「key 存了就生效」，而 provider 层读不到 key 才是真后果。
+- *  `providers` 形参给判卷留缝：判据要能问「白名单是四家时注入面跟不跟得上」，而不只问今天一家。 */
++ *  `providers` 形参给判卷留缝：判据要能问「白名单是四家时注入面跟不跟得上」，而不只问今天一家。
++ *  true 表示读回确认了 Cairn 管理的注入值，或已撤销旧注入；重复刷新仍可确认已生效。 */
+ export async function injectStoredProviderKey(
+   providers: readonly string[] = [...PROVIDER_IDS, ...customEnvKeyedProviders()],
+ ): Promise<boolean> {
+@@ -20,10 +38,26 @@ export async function injectStoredProviderKey(
+     if (envName === null) {
+       throw new Error(`provider-key 注入：provider=${JSON.stringify(provider)} 没有 env 名映射（须登记进 src/providers/env-keys.ts）`);
+     }
+-    if (process.env[envName]) continue; // env 路径优先，逐家独立判断
++    if (revokeInjectedProviderKey(provider, envName)) injected = true;
++    const current = process.env[envName];
++    const owner = injectedValues.get(envName);
++    const previous = owner?.provider === provider ? owner.value : undefined;
++    if (owner !== undefined && current !== owner.value) injectedValues.delete(envName);
++    if (current && current !== previous) continue;
+     const stored = await getProviderKey(provider);
+-    if (!stored) continue; // 未存 key / 解密失败（换机器）→ 不注入，UI 显式提示
++    // Another refresh or the caller may change env while storage is being read.
++    if (process.env[envName] !== current) continue;
++    if (!stored) {
++      if (previous !== undefined && current === previous) {
++        delete process.env[envName];
++        injectedValues.delete(envName);
++        injected = true;
++      }
++      continue;
++    }
++    if (stored === current) { injected = true; continue; }
+     process.env[envName] = stored;
++    injectedValues.set(envName, { provider, value: stored });
+     injected = true;
+   }
+   return injected;
+diff --git a/src/main/provider-keys.ts b/src/main/provider-keys.ts
+index fc92e421..d1591060 100644
+--- a/src/main/provider-keys.ts
++++ b/src/main/provider-keys.ts
+@@ -7,6 +7,7 @@ import { readFile } from "node:fs/promises";
+ import { writeFileAtomic } from "../atomic-write";
+ import type { SafeStorageIo } from "../agent/plugins/secrets";
+ import { ENV_KEYED_PROVIDERS, customEnvKeyedProviders, type EnvKeyedProvider } from "../providers/env-keys";
++import { PROVIDER_ID_RE, RESERVED_PROVIDER_IDS } from "../providers/provider-identifiers";
+ 
+ export type { SafeStorageIo };
+ 
+@@ -38,16 +39,24 @@ let backend: ProviderKeyBackend | null = null;
+ 
+ /** Electron main 侧装配：safeStorage 加密，密文落 storePath（不可用 → 返回 false，不注入后端）。 */
+ export function installProviderKeyBackend(io: SafeStorageIo, storePath: string): boolean {
++  backend = null;
+   if (!io.isEncryptionAvailable()) return false;
++  // Electron main owns this store; serialize read/modify/write across its windows.
++  let pending: Promise<unknown> = Promise.resolve();
++  const serialize = <T>(operation: () => Promise<T>): Promise<T> => {
++    const result = pending.then(operation);
++    pending = result.catch(() => undefined);
++    return result;
++  };
+   backend = {
+     name: "safeStorage",
+     isAvailable: () => io.isEncryptionAvailable(),
+-    async set(provider, plaintext) {
++    set: (provider, plaintext) => serialize(async () => {
+       const store = await readStore(storePath);
+       store.keys[provider] = { ciphertext: io.encryptString(plaintext).toString("base64"), updatedAt: new Date().toISOString() };
+       await writeStore(storePath, store);
+-    },
+-    async get(provider) {
++    }),
++    get: provider => serialize(async () => {
+       const store = await readStore(storePath);
+       const v = store.keys[provider];
+       if (!v || typeof v.ciphertext !== "string") return null;
+@@ -56,17 +65,15 @@ export function installProviderKeyBackend(io: SafeStorageIo, storePath: string):
+       } catch {
+         return null; // 解密失败（换机器/换钥匙）→ null，不抛明文
+       }
+-    },
+-    async delete(provider) {
++    }),
++    delete: provider => serialize(async () => {
+       const store = await readStore(storePath);
+       if (!(provider in store.keys)) return false;
+       delete store.keys[provider];
+       await writeStore(storePath, store);
+       return true;
+-    },
+-    async storedProviders() {
+-      return Object.keys((await readStore(storePath)).keys).sort();
+-    },
++    }),
++    storedProviders: () => serialize(async () => Object.keys((await readStore(storePath)).keys).sort()),
+   };
+   return true;
+ }
+@@ -81,37 +88,49 @@ export function providerKeyBackend(): ProviderKeyBackend | null {
+ }
+ 
+ async function readStore(p: string): Promise<ProviderKeyStore> {
++  let text: string;
+   try {
+-    const parsed = JSON.parse(await readFile(p, "utf8")) as unknown;
+-    const v = validateProviderKeyStore(parsed);
+-    if (v.ok) return v.value;
+-  } catch {
+-    /* 无文件 / 坏文件 = 空存储 */
++    text = await readFile(p, "utf8");
++  } catch (error) {
++    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { version: 1, keys: {} };
++    throw new Error("无法读取 provider key 存储；原文件未修改，请检查文件权限");
+   }
+-  return { version: 1, keys: {} };
++  let parsed: unknown;
++  try { parsed = JSON.parse(text) as unknown; }
++  catch { throw new Error("provider key 存储不是合法 JSON；原文件未修改，请先修复或恢复备份"); }
++  // The encrypted file is application-wide; a workspace need not load every stored provider.
++  const result = parseProviderKeyStore(parsed, false);
++  if (!result.ok) throw new Error("provider key 存储格式无效；原文件未修改，请先修复或恢复备份");
++  return result.value;
+ }
+ 
+ async function writeStore(p: string, store: ProviderKeyStore): Promise<void> {
+-  await writeFileAtomic(p, JSON.stringify(store, null, 2) + "\n");
++  await writeFileAtomic(p, JSON.stringify(store, null, 2) + "\n", { mode: 0o600 });
+ }
+ 
+ /** 严格 schema 校验（commercial-check「Provider 管理 schema」判卷面）：未知字段拒绝 / ciphertext 须 base64 /
+  *  updatedAt 须可解析 ISO / version 恒 1。返回 {ok:false, reason} 而非抛异常（fail-visible）。 */
+ export function validateProviderKeyStore(raw: unknown): { ok: true; value: ProviderKeyStore } | { ok: false; reason: string } {
+-  if (typeof raw !== "object" || raw === null) return { ok: false, reason: "不是对象" };
++  return parseProviderKeyStore(raw, true);
++}
++
++function parseProviderKeyStore(raw: unknown, registeredOnly: boolean): ReturnType<typeof validateProviderKeyStore> {
++  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return { ok: false, reason: "不是对象" };
+   const r = raw as Record<string, unknown>;
+   if (r.version !== 1) return { ok: false, reason: "version 必须 = 1" };
+-  if (typeof r.keys !== "object" || r.keys === null) return { ok: false, reason: "keys 缺失" };
++  if (typeof r.keys !== "object" || r.keys === null || Array.isArray(r.keys)) return { ok: false, reason: "keys 缺失或不是对象" };
+   const unknown = Object.keys(r).filter((k) => k !== "version" && k !== "keys");
+   if (unknown.length > 0) return { ok: false, reason: "未知字段：" + unknown.join("、") };
+   const keys: ProviderKeyStore["keys"] = {};
+   for (const [id, v] of Object.entries(r.keys as Record<string, unknown>)) {
+-    if (!isProviderId(id)) return { ok: false, reason: "未知 provider id：" + id };
+-    if (typeof v !== "object" || v === null) return { ok: false, reason: "keys[" + id + "] 不是对象" };
++    const persistedCustom = !registeredOnly && PROVIDER_ID_RE.test(id) && !(RESERVED_PROVIDER_IDS as readonly string[]).includes(id);
++    if (!isProviderId(id) && !persistedCustom) return { ok: false, reason: "未知 provider id：" + id };
++    if (typeof v !== "object" || v === null || Array.isArray(v)) return { ok: false, reason: "keys[" + id + "] 不是对象" };
+     const e = v as Record<string, unknown>;
+     const uk = Object.keys(e).filter((k) => k !== "ciphertext" && k !== "updatedAt");
+     if (uk.length > 0) return { ok: false, reason: "keys[" + id + "] 未知字段：" + uk.join("、") };
+-    if (typeof e.ciphertext !== "string" || e.ciphertext === "" || !/^[A-Za-z0-9+/]+={0,2}$/.test(e.ciphertext)) {
++    if (typeof e.ciphertext !== "string" || e.ciphertext === "" || !/^[A-Za-z0-9+/]+={0,2}$/.test(e.ciphertext)
++      || Buffer.from(e.ciphertext, "base64").toString("base64") !== e.ciphertext) {
+       return { ok: false, reason: "keys[" + id + "].ciphertext 不是 base64 密文" };
+     }
+     if (typeof e.updatedAt !== "string" || Number.isNaN(Date.parse(e.updatedAt))) {
+@@ -144,24 +163,32 @@ export async function putProviderKey(
+   provider: string,
+   plaintext: string,
+ ): Promise<{ ok: true } | { ok: false; error: string }> {
+-  if (!backend) return { ok: false, error: PROVIDER_KEY_NO_BACKEND_ERROR };
++  if (!backend || !backend.isAvailable()) return { ok: false, error: PROVIDER_KEY_NO_BACKEND_ERROR };
+   if (!isProviderId(provider)) return { ok: false, error: "未知 provider：" + provider + "（白名单：" + PROVIDER_IDS.join("/") + "）" };
+   if (plaintext.trim() === "") return { ok: false, error: "key 为空（拒存）" };
+-  await backend.set(provider, plaintext);
+-  return { ok: true };
++  try {
++    await backend.set(provider, plaintext);
++    return { ok: true };
++  } catch {
++    return { ok: false, error: "保存 provider key 失败：请检查安全存储、文件格式与权限；原有配置未被替换" };
++  }
+ }
+ 
+-/** 读一个 provider key；无后端/未存/解密失败 → null（不抛，不回显）。 */
++/** 无后端/未存/解密失败 → null；存储不可读或损坏显式抛错，错误不含密文或明文。 */
+ export async function getProviderKey(provider: string): Promise<string | null> {
+-  if (!backend) return null;
++  if (!backend || !backend.isAvailable() || !isProviderId(provider)) return null;
+   return await backend.get(provider);
+ }
+ 
+ /** 删除一个 provider key（用户经设置页显式删除）。 */
+ export async function deleteProviderKey(provider: string): Promise<{ ok: boolean; error?: string }> {
+-  if (!backend) return { ok: false, error: PROVIDER_KEY_NO_BACKEND_ERROR };
+-  const removed = await backend.delete(provider);
+-  return removed ? { ok: true } : { ok: false, error: "该 provider 没有已存 key" };
++  if (!backend || !backend.isAvailable()) return { ok: false, error: PROVIDER_KEY_NO_BACKEND_ERROR };
++  try {
++    const removed = await backend.delete(provider);
++    return removed ? { ok: true } : { ok: false, error: "该 provider 没有已存 key" };
++  } catch {
++    return { ok: false, error: "删除 provider key 失败：请检查安全存储、文件格式与权限；原有配置未被替换" };
++  }
+ }
+ 
+ /** 状态面（设置页徽标；不含任何 key 值）：stored = 已存 key 的 provider 清单。 */
+diff --git a/src/main/provider-setup.ts b/src/main/provider-setup.ts
+index 0bb79a0e..4dfe8037 100644
+--- a/src/main/provider-setup.ts
++++ b/src/main/provider-setup.ts
+@@ -11,6 +11,9 @@ import { readFileSync } from "node:fs";
+ import { writeFileAtomic } from "../atomic-write";
+ import { loadCatalog } from "./catalog-store";
+ import { customProvidersPath } from "./custom-provider-store";
++import { installCustomProviders, installedCustomProviders } from "../providers/registry";
++import { putProviderKey } from "./provider-keys";
++import { injectStoredProviderKey } from "./provider-key-inject";
+ import { discoverModels, type DiscoverFailure } from "./model-discovery";
+ import type { CatalogReadout } from "../providers/catalog";
+ import type { DiscoveryProtocol } from "../providers/discovery";
+@@ -226,6 +229,29 @@ export async function commitCustomProvider(prepared: {
+   }
+ }
+ 
++/** Desktop setup transaction: register for key validation, commit config, then activate credentials. */
++export async function commitProviderSetup(
++  prepared: Extract<PrepareCustomProviderResult, { ok: true }>,
++  providerId: string,
++  keyValue?: string,
++): Promise<SaveProviderResult> {
++  if (!prepared.derived.some(provider => provider.id === providerId)) return { ok: false, error: "provider 不在待提交配置中" };
++  const previous = installedCustomProviders();
++  installCustomProviders(prepared.derived);
++  if (keyValue !== undefined && keyValue !== "") {
++    const keyed = await putProviderKey(providerId, keyValue);
++    if (!keyed.ok) {
++      installCustomProviders(previous);
++      return { ok: false, error: keyed.error ?? "key 保存失败" };
++    }
++  }
++  const wrote = await commitCustomProvider(prepared);
++  if (!wrote.ok) { installCustomProviders(previous); return wrote; }
++  try { await injectStoredProviderKey(prepared.derived.map(provider => provider.id)); }
++  catch { return { ok: false, error: "配置已保存，但密钥激活失败；请检查安全存储后重试" }; }
++  return { ok: true, path: prepared.path, providers: prepared.file.providers.map(provider => provider.id), derived: prepared.derived, warnings: prepared.warnings };
++}
++
+ /**
+  * 把一家 provider 写进工作区配置（按 id upsert；**别的家原样保留**）= prepare + commit。
+  *
+diff --git a/src/main/settings-handlers.ts b/src/main/settings-handlers.ts
+index 298cf5b0..e208fad0 100644
+--- a/src/main/settings-handlers.ts
++++ b/src/main/settings-handlers.ts
+@@ -16,6 +16,7 @@ import {
+   type ProviderInfo,
+ } from "./provider-runtime";
+ import { ONBOARDING_GROUPS, type OnboardingGroup } from "./onboarding-groups";
++import { injectStoredProviderKey, revokeInjectedProviderKey } from "./provider-key-inject";
+ 
+ // ---- M1e：settings 存储 + 会话目录 + Provider 只读信息 ----
+ // settings 文件与会话目录由 shell（index.ts）按环境初始化：M1E_SETTINGS_PATH / M1E_SESSIONS_DIR
+@@ -112,11 +113,15 @@ export async function providerInfo(): Promise<ProviderInfo> {
+ export { injectStoredProviderKey } from "./provider-key-inject";
+ 
+ export async function handleProviderKeySet(provider: string, key: string): Promise<{ ok: boolean; error?: string }> {
+-  return await putProviderKey(provider, key);
++  const result = await putProviderKey(provider, key);
++  if (result.ok) await injectStoredProviderKey([provider]);
++  return result;
+ }
+ 
+ export async function handleProviderKeyDelete(provider: string): Promise<{ ok: boolean; error?: string }> {
+-  return await deleteProviderKey(provider);
++  const result = await deleteProviderKey(provider);
++  if (result.ok) revokeInjectedProviderKey(provider);
++  return result;
+ }
+ 
+ /** 状态面（设置页徽标 + env 并存提示；不含 key 值）。 */
+diff --git a/src/providers/provider-config.ts b/src/providers/provider-config.ts
+index beef4330..792a5fa3 100644
+--- a/src/providers/provider-config.ts
++++ b/src/providers/provider-config.ts
+@@ -13,7 +13,7 @@
+ // 本文件是纯逻辑：读文件、发请求、注入环境变量都不在这里（那是接线层的事）。判卷直接喂 JSON。
+ 
+ import { isIP } from "node:net";
+-import { MODEL_ID_RE, RESERVED_PROVIDER_IDS } from "./provider-identifiers";
++import { MODEL_ID_RE, PROVIDER_ID_RE, RESERVED_PROVIDER_IDS } from "./provider-identifiers";
+ export { isValidModelId, RESERVED_PROVIDER_IDS } from "./provider-identifiers";
+ import { DEFAULT_MODEL_TABLE, type ModelSpec, type ModelTier } from "./registry";
+ import type { CatalogPricing } from "./catalog";
+@@ -86,7 +86,6 @@ export type ParseResult =
+   | { ok: true; file: CustomProvidersFile; warnings: readonly string[] }
+   | { ok: false; problems: readonly CustomProviderProblem[] };
+ 
+-const PROVIDER_ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
+ const ENV_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
+ const TIERS: readonly ModelTier[] = ["cheap", "standard", "strong"];
+ const PRICE_KEYS = ["inputPerMTok", "outputPerMTok", "cacheReadPerMTok", "cacheWritePerMTok"] as const;
+diff --git a/src/providers/provider-identifiers.ts b/src/providers/provider-identifiers.ts
+index 7236d9fb..78cabf03 100644
+--- a/src/providers/provider-identifiers.ts
++++ b/src/providers/provider-identifiers.ts
+@@ -2,6 +2,7 @@
+ // 保留名单必须跟 registry 的 PROVIDER_IDS 同步：同名自定义家会让 registry 的 switch 先命中
+ // 内置分支、自定义配置被静默忽略——所以校验在这里拒收，而不是运行时静默让位。
+ export const RESERVED_PROVIDER_IDS = ["demo", "glm", "openai", "anthropic", "gemini", "deepseek"] as const;
++export const PROVIDER_ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
+ export const MODEL_ID_RE = /^[A-Za-z0-9._:/-]{1,128}$/;
+ 
+ export function isValidModelId(id: unknown): id is string {
+--- a/src/main/agent-runner.ts
++++ b/src/main/agent-runner.ts
+@@ -1879,8 +1879,8 @@
+         ...(req.thinking !== undefined ? { thinking: req.thinking } : {}),
+         message,
+         mode: req.mode,
+-        // plan 模式：settings 的默认档是唯一入口（composer 的即时开关随 goal 模式一起改，见 spec §3）。
+-        planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,
++        // Overrides serve trusted hosts; every caller's validated request can override the default.
++        planRequired: over.planRequired ?? req.planRequired ?? (await store().get()).planRequiredByDefault,
+         ...(goalTurn ? { goalTurn } : {}),
+         logPath,
+         modelSelection,
+--- a/apps/desktop/src/main/index.ts
++++ b/apps/desktop/src/main/index.ts
+@@ -92,8 +92,8 @@
+ import { WindowWorkspaceContext } from "./window-workspace-context";
+ import { ProjectRegistry } from "../../../../src/main/project-registry";
+ import { loadCustomProviders } from "../../../../src/main/custom-provider-store";
+-import { installCustomProviders, installedCustomProviders } from "../../../../src/providers/registry";
+-import { discoverForProviderSetup, prepareCustomProvider, commitCustomProvider } from "../../../../src/main/provider-setup";
++import { installCustomProviders } from "../../../../src/providers/registry";
++import { discoverForProviderSetup, prepareCustomProvider, commitProviderSetup } from "../../../../src/main/provider-setup";
+ import { createProjectFolder } from "../../../../src/main/project-create";
+ import { createProjectFromTemplate, diagnoseProjectDirectory, templateCatalog } from "../../../../src/main/project-templates";
+ import { PreviewRuntime } from "../../../../src/main/project-preview";
+@@ -811,25 +811,8 @@
+     if (!prepared.ok) {
+       return { ok: false, error: prepared.error, ...(prepared.problems !== undefined ? { problems: [...prepared.problems] } : {}) };
+     }
+-    const previous = installedCustomProviders();
+-    installCustomProviders(prepared.derived); // ① 先装上（内存态，可回滚）
+-    if (typeof r.keyValue === "string" && r.keyValue !== "") {
+-      const keyed = await handleProviderKeySet(providerId, r.keyValue);
+-      if (!keyed.ok) {
+-        installCustomProviders(previous); // ② 钥匙存不进 ⇒ 整体失败，注册表回滚，配置文件一个字都没写
+-        return { ok: false, error: keyed.error ?? "key 保存失败" };
+-      }
+-    }
+-    const wrote = await commitCustomProvider(prepared); // ③ 落盘
+-    if (!wrote.ok) {
+-      installCustomProviders(previous);
+-      return { ok: false, error: wrote.error };
+-    }
+-    // ④ 钥匙解密注入 env（与 providerKeySet 同一条注入面，免重启生效）
+-    void reinjectSavedProviderKey().then(
+-      () => undefined,
+-      (error) => console.error("[byok-inject] 自定义 provider 保存后重注失败（不影响保存结果）:", error),
+-    );
++    const saved = await commitProviderSetup(prepared, providerId, typeof r.keyValue === "string" ? r.keyValue : undefined);
++    if (!saved.ok) return { ok: false, error: saved.error };
+     return {
+       ok: true,
+       path: prepared.path,
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -88,9 +88,9 @@
+ 
+ ## Design-system parity
+ 
+-- `apps/desktop/src/renderer/vendor/cds-official/tokens.css` is Claude's own `@ant/cds` token
++- `apps/desktop/src/renderer/vendor/cds-official/tokens.css` is Claude's own @ant/cds token
+   sheet, vendored **byte-for-byte** (source + sha256 in `UPSTREAM.json` beside it). Never hand-edit
+-  it — re-extract instead; `tests/cds-parity.test.ts` fails on any digest or name-count drift.
++  it — re-extract instead; `apps/desktop/tests/cds-parity.test.ts` fails on any digest or name-count drift.
+ - `cds-adapter.css` **maps, never copies**: every right side is `var(--official)` or
+   `from var(--official) h s l`. A literal there silently decouples us from upstream.
+ - Never write `--x: var(--x)` — a CSS self-reference is a cycle: the declaration is dropped and the
+@@ -100,7 +100,7 @@
+ - CDS dark mode is scoped by `[data-mode="dark"]`, Cairn's theme writes `data-theme`. Write both
+   (`themeKeysOf`) or dark silently falls back to light.
+ - Acceptance is a **measured** `getComputedStyle` read from the real renderer
+-  (`scripts/cds-values-probe.cjs`), not CSS text that looks right. The judge skips those assertions
++  (`apps/desktop/scripts/cds-values-probe.cjs`), not CSS text that looks right. The judge skips those assertions
+   without the evidence file — skipped is not passed.
+ 
+ ## HEAD verification
+--- /dev/null
++++ b/tests/provider-key-durability.test.ts
+@@ -0,0 +1,101 @@
++import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
++import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { installCustomEnvKeys } from "../src/providers/env-keys";
++import {
++  deleteProviderKey, getProviderKey, installProviderKeyBackend, providerKeyStatus,
++  putProviderKey, setProviderKeyBackend, type SafeStorageIo,
++} from "../src/main/provider-keys";
++
++function encryptedBackend(): SafeStorageIo {
++  const key = randomBytes(32);
++  return {
++    isEncryptionAvailable: () => true,
++    encryptString(value) {
++      const iv = randomBytes(12);
++      const cipher = createCipheriv("aes-256-gcm", key, iv);
++      const ciphertext = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
++      return Buffer.concat([iv, cipher.getAuthTag(), ciphertext]);
++    },
++    decryptString(value) {
++      const cipher = createDecipheriv("aes-256-gcm", key, value.subarray(0, 12));
++      cipher.setAuthTag(value.subarray(12, 28));
++      return Buffer.concat([cipher.update(value.subarray(28)), cipher.final()]).toString("utf8");
++    },
++  };
++}
++
++let dir: string;
++let path: string;
++beforeEach(async () => {
++  dir = await mkdtemp(join(tmpdir(), "cairn-key-durability-"));
++  path = join(dir, "keys.json");
++  installProviderKeyBackend(encryptedBackend(), path);
++});
++afterEach(async () => {
++  setProviderKeyBackend(null);
++  installCustomEnvKeys({});
++  await rm(dir, { recursive: true, force: true });
++});
++
++describe("provider key persistence", () => {
++  it("parallel saves retain every encrypted key", async () => {
++    const providers = ["glm", "openai", "anthropic", "gemini", "deepseek"];
++    const results = await Promise.all(providers.map(provider => putProviderKey(provider, `fixture-${provider}`)));
++    expect(results).toEqual(providers.map(() => ({ ok: true })));
++    expect((await providerKeyStatus()).stored).toEqual(["anthropic", "deepseek", "gemini", "glm", "openai"]);
++    for (const provider of providers) expect(await getProviderKey(provider)).toBe(`fixture-${provider}`);
++    expect(await readFile(path, "utf8")).not.toContain("fixture-");
++    if (process.platform !== "win32") expect((await stat(path)).mode & 0o777).toBe(0o600);
++  });
++
++  it("a concurrent delete and save cannot resurrect the deleted key", async () => {
++    await putProviderKey("glm", "fixture-original");
++    expect(await Promise.all([deleteProviderKey("glm"), putProviderKey("openai", "fixture-new")]))
++      .toEqual([{ ok: true }, { ok: true }]);
++    expect((await providerKeyStatus()).stored).toEqual(["openai"]);
++  });
++
++  it.each(["{broken-private-value", '{"version":2,"keys":{}}', '{"version":1,"keys":[]}'])(
++    "a damaged store is reported without overwriting its bytes: %s", async raw => {
++      await writeFile(path, raw);
++      const result = await putProviderKey("glm", "fixture-new");
++      expect(result.ok).toBe(false);
++      expect(JSON.stringify(result)).not.toContain("broken-private-value");
++      expect(await readFile(path, "utf8")).toBe(raw);
++      await expect(providerKeyStatus()).rejects.toThrow(/存储/);
++      await expect(getProviderKey("glm")).rejects.toThrow(/存储/);
++    },
++  );
++
++  it("a failed operation does not poison subsequent operations after the file is repaired", async () => {
++    await writeFile(path, "{broken");
++    expect((await putProviderKey("glm", "fixture-rejected")).ok).toBe(false);
++    await writeFile(path, '{"version":1,"keys":{}}');
++    expect(await putProviderKey("glm", "fixture-repaired")).toEqual({ ok: true });
++    expect(await getProviderKey("glm")).toBe("fixture-repaired");
++  });
++
++  it("saving in another workspace preserves an unloaded custom provider's ciphertext", async () => {
++    installCustomEnvKeys({ "fixture-gateway": "FIXTURE_GATEWAY_KEY" });
++    await putProviderKey("fixture-gateway", "fixture-custom");
++    const before = JSON.parse(await readFile(path, "utf8")) as { keys: Record<string, unknown> };
++    installCustomEnvKeys({});
++    expect(await putProviderKey("openai", "fixture-builtin")).toEqual({ ok: true });
++    expect((await putProviderKey("unregistered", "fixture-rejected")).ok).toBe(false);
++    const after = JSON.parse(await readFile(path, "utf8")) as { keys: Record<string, unknown> };
++    expect(after.keys["fixture-gateway"]).toEqual(before.keys["fixture-gateway"]);
++    expect(await getProviderKey("openai")).toBe("fixture-builtin");
++    installCustomEnvKeys({ "fixture-gateway": "FIXTURE_GATEWAY_KEY" });
++    expect(await getProviderKey("fixture-gateway")).toBe("fixture-custom");
++  });
++
++  it("an unavailable replacement backend cannot leave the previous backend active", async () => {
++    const unavailable = { ...encryptedBackend(), isEncryptionAvailable: () => false };
++    expect(installProviderKeyBackend(unavailable, path)).toBe(false);
++    expect((await putProviderKey("glm", "fixture-rejected")).ok).toBe(false);
++    expect(await providerKeyStatus()).toEqual({ available: false, stored: [] });
++  });
++});
+--- /dev/null
++++ b/tests/provider-key-refresh.test.ts
+@@ -0,0 +1,103 @@
++import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { injectStoredProviderKey } from "../src/main/provider-key-inject";
++import { setProviderKeyBackend } from "../src/main/provider-keys";
++import { handleProviderKeyDelete, handleProviderKeySet } from "../src/main/settings-handlers";
++import { installCustomEnvKeys } from "../src/providers/env-keys";
++
++let original: string | undefined;
++let keys: Map<string, string>;
++beforeEach(() => {
++  original = process.env.CAIRN_API_KEY;
++  delete process.env.CAIRN_API_KEY;
++  keys = new Map();
++  setProviderKeyBackend({
++    name: "refresh-fixture", isAvailable: () => true,
++    async set(provider, value) { keys.set(provider, value); },
++    async get(provider) { return keys.get(provider) ?? null; },
++    async delete(provider) { return keys.delete(provider); },
++    async storedProviders() { return [...keys.keys()]; },
++  });
++});
++afterEach(() => {
++  setProviderKeyBackend(null);
++  installCustomEnvKeys({});
++  if (original === undefined) delete process.env.CAIRN_API_KEY;
++  else process.env.CAIRN_API_KEY = original;
++});
++
++describe("provider key lifecycle in the application", () => {
++  it("saving a key activates it before the handler resolves", async () => {
++    expect(await handleProviderKeySet("glm", "fixture-first")).toEqual({ ok: true });
++    expect(process.env.CAIRN_API_KEY).toBe("fixture-first");
++  });
++
++  it("replacing a Cairn-injected key updates the running provider", async () => {
++    keys.set("glm", "fixture-old");
++    await injectStoredProviderKey(["glm"]);
++    expect(await handleProviderKeySet("glm", "fixture-replacement")).toEqual({ ok: true });
++    expect(process.env.CAIRN_API_KEY).toBe("fixture-replacement");
++  });
++
++  it("deleting a Cairn-injected key removes it from the running environment", async () => {
++    keys.set("glm", "fixture-owned");
++    await injectStoredProviderKey(["glm"]);
++    expect(await handleProviderKeyDelete("glm")).toEqual({ ok: true });
++    expect(process.env.CAIRN_API_KEY).toBeUndefined();
++  });
++
++  it("external credentials remain authoritative across save and delete", async () => {
++    process.env.CAIRN_API_KEY = "fixture-external";
++    expect(await handleProviderKeySet("glm", "fixture-stored")).toEqual({ ok: true });
++    expect(process.env.CAIRN_API_KEY).toBe("fixture-external");
++    expect(await handleProviderKeyDelete("glm")).toEqual({ ok: true });
++    expect(process.env.CAIRN_API_KEY).toBe("fixture-external");
++  });
++
++  it("an externally replaced env value is no longer owned by Cairn", async () => {
++    keys.set("glm", "fixture-owned");
++    await injectStoredProviderKey(["glm"]);
++    process.env.CAIRN_API_KEY = "fixture-external-replacement";
++    await handleProviderKeySet("glm", "fixture-new-stored");
++    await handleProviderKeyDelete("glm");
++    expect(process.env.CAIRN_API_KEY).toBe("fixture-external-replacement");
++  });
++
++  it("providers sharing an env name cannot replace or delete each other's active key", async () => {
++    installCustomEnvKeys({ "fixture-alias": "CAIRN_API_KEY" });
++    keys.set("glm", "fixture-builtin");
++    keys.set("fixture-alias", "fixture-alias-value");
++    await injectStoredProviderKey(["glm", "fixture-alias"]);
++    expect(process.env.CAIRN_API_KEY).toBe("fixture-builtin");
++    await handleProviderKeySet("fixture-alias", "fixture-alias-replaced");
++    await handleProviderKeyDelete("fixture-alias");
++    expect(process.env.CAIRN_API_KEY).toBe("fixture-builtin");
++    await handleProviderKeySet("glm", "fixture-builtin-refreshed");
++    expect(process.env.CAIRN_API_KEY).toBe("fixture-builtin-refreshed");
++  });
++
++  it("deleting an unloaded provider revokes its prior injection without consulting its current mapping", async () => {
++    installCustomEnvKeys({ "fixture-unloaded": "CAIRN_API_KEY" });
++    await handleProviderKeySet("fixture-unloaded", "fixture-owned-before-unload");
++    installCustomEnvKeys({});
++    expect(await handleProviderKeyDelete("fixture-unloaded")).toEqual({ ok: true });
++    expect(process.env.CAIRN_API_KEY).toBeUndefined();
++  });
++
++  it("a remapped provider leaves no old injection behind after deletion", async () => {
++    const savedOther = process.env.CAIRN_FIXTURE_REMAPPED_KEY;
++    try {
++      delete process.env.CAIRN_FIXTURE_REMAPPED_KEY;
++      installCustomEnvKeys({ "fixture-remapped": "CAIRN_API_KEY" });
++      await handleProviderKeySet("fixture-remapped", "fixture-old-mapping");
++      installCustomEnvKeys({ "fixture-remapped": "CAIRN_FIXTURE_REMAPPED_KEY" });
++      await handleProviderKeySet("fixture-remapped", "fixture-new-mapping");
++      expect(process.env.CAIRN_API_KEY).toBeUndefined();
++      expect(process.env.CAIRN_FIXTURE_REMAPPED_KEY).toBe("fixture-new-mapping");
++      expect(await handleProviderKeyDelete("fixture-remapped")).toEqual({ ok: true });
++      expect(process.env.CAIRN_FIXTURE_REMAPPED_KEY).toBeUndefined();
++    } finally {
++      if (savedOther === undefined) delete process.env.CAIRN_FIXTURE_REMAPPED_KEY;
++      else process.env.CAIRN_FIXTURE_REMAPPED_KEY = savedOther;
++    }
++  });
++});
+--- /dev/null
++++ b/tests/provider-setup-activation.test.ts
+@@ -0,0 +1,72 @@
++import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { dirname, join } from "node:path";
++import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { commitProviderSetup, prepareCustomProvider } from "../src/main/provider-setup";
++import { installCustomProviders, installedCustomProviders } from "../src/providers/registry";
++import { setProviderKeyBackend } from "../src/main/provider-keys";
++import { revokeInjectedProviderKey } from "../src/main/provider-key-inject";
++
++let root: string;
++let oldEnv: string | undefined;
++const provider = "fixture-transaction";
++beforeEach(async () => {
++  root = await mkdtemp(join(tmpdir(), "cairn-provider-transaction-"));
++  oldEnv = process.env.CAIRN_FIXTURE_TRANSACTION_KEY;
++  delete process.env.CAIRN_FIXTURE_TRANSACTION_KEY;
++  const keys = new Map<string, string>();
++  setProviderKeyBackend({
++    name: "transaction-fixture", isAvailable: () => true,
++    async set(id, key) { keys.set(id, key); },
++    async get(id) { return keys.get(id) ?? null; },
++    async delete(id) { return keys.delete(id); },
++    async storedProviders() { return [...keys.keys()]; },
++  });
++});
++afterEach(async () => {
++  revokeInjectedProviderKey(provider);
++  installCustomProviders([]);
++  setProviderKeyBackend(null);
++  if (oldEnv === undefined) delete process.env.CAIRN_FIXTURE_TRANSACTION_KEY;
++  else process.env.CAIRN_FIXTURE_TRANSACTION_KEY = oldEnv;
++  await rm(root, { recursive: true, force: true });
++});
++
++function prepare() {
++  const prepared = prepareCustomProvider(root, {
++    id: provider, protocol: "openai", baseURL: "https://example.com/v1",
++    apiKeyEnv: "CAIRN_FIXTURE_TRANSACTION_KEY", models: [{ id: "standard", model: "fixture-model" }],
++  });
++  if (!prepared.ok) throw new Error(prepared.error);
++  return prepared;
++}
++
++describe("custom provider configuration activates only after commit", () => {
++  it("a failed first configuration commit does not activate the new credential", async () => {
++    const prepared = prepare();
++    await mkdir(prepared.path, { recursive: true }); // A real filesystem failure at rename.
++    const result = await commitProviderSetup(prepared, provider, "fixture-uncommitted");
++    expect(result.ok).toBe(false);
++    expect(installedCustomProviders()).toEqual([]);
++    expect(process.env.CAIRN_FIXTURE_TRANSACTION_KEY).toBeUndefined();
++  });
++
++  it("a failed configuration replacement leaves the running credential unchanged", async () => {
++    const initial = prepare();
++    expect((await commitProviderSetup(initial, provider, "fixture-original")).ok).toBe(true);
++    const prepared = prepare();
++    await rm(prepared.path);
++    await mkdir(prepared.path);
++    expect((await commitProviderSetup(prepared, provider, "fixture-uncommitted-replacement")).ok).toBe(false);
++    expect(process.env.CAIRN_FIXTURE_TRANSACTION_KEY).toBe("fixture-original");
++    expect(installedCustomProviders().map(item => item.id)).toEqual([provider]);
++  });
++
++  it("success returns only after configuration and credential are usable", async () => {
++    const prepared = prepare();
++    await mkdir(dirname(prepared.path), { recursive: true });
++    expect((await commitProviderSetup(prepared, provider, "fixture-committed")).ok).toBe(true);
++    expect(JSON.parse(await readFile(prepared.path, "utf8")).providers[0].id).toBe(provider);
++    expect(process.env.CAIRN_FIXTURE_TRANSACTION_KEY).toBe("fixture-committed");
++  });
++});
+--- /dev/null
++++ b/tests/run-request-plan-precedence.test.ts
+@@ -0,0 +1,65 @@
++import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { handleAgentRun, initSettingsStore } from "../src/main/agent-runner";
++import type { AgentEvent } from "../src/events";
++
++let root: string;
++let savedScript: string | undefined;
++beforeEach(async () => {
++  root = await mkdtemp(join(tmpdir(), "cairn-plan-precedence-"));
++  savedScript = process.env.M3A_MAIN_SCRIPT;
++});
++afterEach(async () => {
++  if (savedScript === undefined) delete process.env.M3A_MAIN_SCRIPT;
++  else process.env.M3A_MAIN_SCRIPT = savedScript;
++  await rm(root, { recursive: true, force: true });
++});
++
++describe("shared application entry respects the plan request", () => {
++  it.each([
++    { setting: false, request: true, override: undefined, canWrite: false },
++    { setting: true, request: false, override: undefined, canWrite: true },
++    { setting: false, request: true, override: false, canWrite: true },
++    { setting: true, request: false, override: true, canWrite: false },
++    { setting: true, request: undefined, override: undefined, canWrite: false },
++    { setting: false, request: undefined, override: undefined, canWrite: true },
++  ])("setting=$setting request=$request override=$override => write=$canWrite", async row => {
++    const workspace = join(root, "workspace");
++    await mkdir(join(workspace, ".agent"), { recursive: true });
++    await writeFile(join(workspace, ".agent", "permissions.json"), JSON.stringify({
++      rules: [{ behavior: "allow", tool: "write_file", scope: "always" }],
++    }));
++    const settings = join(root, "settings.json");
++    await writeFile(settings, JSON.stringify({
++      provider: "demo", planRequiredByDefault: row.setting, autoVerify: false, impactAnalysis: false,
++    }));
++    initSettingsStore(settings);
++    const script = join(root, "script.jsonl");
++    await writeFile(script, [
++      { type: "tool_call", id: "write-result", name: "write_file", args: { path: "result.txt", content: "actual result" } },
++      { type: "assistant_message", content: "本轮已收束。" },
++    ].map(event => JSON.stringify(event)).join("\n") + "\n");
++    process.env.M3A_MAIN_SCRIPT = script;
++    const events: AgentEvent[] = [];
++    const result = await handleAgentRun({
++      message: "写入结果", mode: "auto", workspace,
++      ...(row.request !== undefined ? { planRequired: row.request } : {}),
++    }, {
++      logPath: join(root, "events.jsonl"), modelSelection: { kind: "demo" }, unattended: true,
++      ...(row.override !== undefined ? { planRequired: row.override } : {}),
++      onEvent: event => { events.push(event); },
++    });
++    expect(result.ok, JSON.stringify(result)).toBe(true);
++    const receipt = events.find(event => event.type === "tool_result" && event.callId === "write-result");
++    expect(receipt?.type).toBe("tool_result");
++    if (receipt?.type !== "tool_result") throw new Error("missing write receipt");
++    expect(receipt.ok, receipt.output).toBe(row.canWrite);
++    if (row.canWrite) expect(await readFile(join(workspace, "result.txt"), "utf8")).toBe("actual result");
++    else {
++      expect(receipt.output).toContain("方案");
++      await expect(readFile(join(workspace, "result.txt"))).rejects.toMatchObject({ code: "ENOENT" });
++    }
++  });
++});
+--- /dev/null
++++ b/tests/project-export-boundaries.test.ts
+@@ -0,0 +1,88 @@
++import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { isAbsolute, join } from "node:path";
++import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { exportProject } from "../src/main/project-export";
++
++let root: string;
++let source: string;
++let parent: string;
++beforeEach(() => {
++  root = mkdtempSync(join(tmpdir(), "cairn-export-boundaries-"));
++  source = join(root, "source");
++  parent = join(root, "exports");
++  mkdirSync(source);
++  mkdirSync(parent);
++  writeFileSync(join(source, "actual.txt"), "portable result");
++});
++afterEach(() => rmSync(root, { recursive: true, force: true }));
++
++describe("project export boundaries", () => {
++  it.each([".imported-project", "imported-" + "x".repeat(70)])("exports an existing folder without imposing new-project naming limits: %s", name => {
++    const imported = join(root, name);
++    renameSync(source, imported);
++    const result = exportProject(imported, parent);
++    expect(result.ok, JSON.stringify(result)).toBe(true);
++    if (!result.ok) throw new Error(result.message);
++    expect(readFileSync(join(result.dest, "actual.txt"), "utf8")).toBe("portable result");
++  });
++
++  it.each(["../escaped", "nested/export", ".", "..", "bad\\name"])("rejects a non-folder name: %s", name => {
++    expect(exportProject(source, parent, { name })).toMatchObject({ ok: false, reason: "bad-source" });
++    expect(readdirSync(parent)).toEqual([]);
++    expect(existsSync(join(root, "escaped"))).toBe(false);
++    expect(readFileSync(join(source, "actual.txt"), "utf8")).toBe("portable result");
++  });
++
++  it("rejects a destination inside the source before copying", () => {
++    expect(exportProject(source, source, { name: "recursive-copy" }))
++      .toMatchObject({ ok: false, reason: "bad-source" });
++    expect(readdirSync(source)).toEqual(["actual.txt"]);
++  });
++
++  it.skipIf(process.platform === "win32")("resolves a parent symlink before checking source containment", () => {
++    const alias = join(root, "source-alias");
++    symlinkSync(source, alias, "dir");
++    expect(exportProject(source, alias, { name: "recursive-copy" }))
++      .toMatchObject({ ok: false, reason: "bad-source" });
++    expect(readdirSync(source)).toEqual(["actual.txt"]);
++  });
++
++  it.skipIf(process.platform === "win32").each(["relative", "absolute"])(
++    "keeps an internal %s symlink portable after the source is removed", kind => {
++      symlinkSync(kind === "relative" ? "actual.txt" : join(source, "actual.txt"), join(source, "linked.txt"));
++      const result = exportProject(source, parent, { name: "deliverable" });
++      expect(result.ok, JSON.stringify(result)).toBe(true);
++      if (!result.ok) throw new Error(result.message);
++      expect(isAbsolute(readlinkSync(join(result.dest, "linked.txt")))).toBe(false);
++      rmSync(source, { recursive: true });
++      expect(readFileSync(join(result.dest, "linked.txt"), "utf8")).toBe("portable result");
++    },
++  );
++
++  it.skipIf(process.platform === "win32")("rejects an external link and removes only the partial export", () => {
++    const outside = join(root, "private.txt");
++    writeFileSync(outside, "outside workspace");
++    symlinkSync(outside, join(source, "external.txt"));
++    expect(exportProject(source, parent, { name: "deliverable" })).toMatchObject({ ok: false });
++    expect(readdirSync(parent)).toEqual([]);
++    expect(readFileSync(outside, "utf8")).toBe("outside workspace");
++  });
++
++  it.skipIf(process.platform === "win32")("rejects a link whose target is excluded from delivery", () => {
++    mkdirSync(join(source, ".agent"));
++    writeFileSync(join(source, ".agent", "local.txt"), "local data");
++    symlinkSync(".agent/local.txt", join(source, "linked.txt"));
++    expect(exportProject(source, parent, { name: "deliverable" })).toMatchObject({ ok: false });
++    expect(readdirSync(parent)).toEqual([]);
++    expect(readFileSync(join(source, ".agent", "local.txt"), "utf8")).toBe("local data");
++  });
++
++  it.skipIf(process.platform === "win32")("a dangling destination link remains untouched", () => {
++    const target = join(root, "missing");
++    const dest = join(parent, "deliverable");
++    symlinkSync(target, dest);
++    expect(exportProject(source, parent, { name: "deliverable" })).toMatchObject({ ok: false, reason: "dest-exists" });
++    expect(readlinkSync(dest)).toBe(target);
++  });
++});
+--- /dev/null
++++ b/docs/superpowers/specs/2026-10-28-agent-product-completion-design.md
+@@ -0,0 +1,37 @@
++# Cairn agent 产品闭环
++
++日期：2026-10-28。用户授权：按执行者判断直接推进；默认交付本地桌面 coding agent。
++
++## 目标与选择
++
++让现有内核和桌面端组成可实际使用的代码任务闭环：配置模型 → 打开项目 → 执行与审批 →
++取消/续跑 → 验证 → 查看与导出交付物 → 重启恢复。以真实字节、事件与运行结果验收。
++
++选择增量完善现有 TypeScript/Electron 架构。重写框架会丢失已有权限与事件语义，继续增加
++独立功能则不能解决主路径断点；这两条均不采用。现有应用能力优先，首批零新增依赖。
++
++## 约束
++
++- 保留其他会话的已修改/未跟踪文件，不重置、不 stash、不整文件混合提交。
++- 不修改规则、冻结判卷、现有断言、权限默认值或日志结构来获得绿灯。
++- CLI、桌面、SDK 使用同一核心入口；入口自身须兑现校验后的请求。
++- 外部环境变量仍优先；Cairn 注入的旧 key 可以更新或撤销，用户提供的 env 不可被删除。
++- 加密存储读不到/损坏必须显式失败且保留原件；切换 workspace 不丢其他 provider 的密文。
++- 导出必须留在用户选定的父目录，失败不覆盖既有数据，也不产生依赖源机器路径的成品。
++- 本轮不启动云服务、计费、公开发布或无凭据的真实模型测试。
++
++## 首批验收
++
++1. 并发保存不同 provider 不丢更新；失败不污染后续存储操作；损坏文件不被覆盖。
++2. 自定义 provider 暂未装载时，已存密文仍保留；未知 provider 的新写入继续拒绝。
++3. 替换/删除 key 后，运行环境即时更新；外部 env 优先语义保持。
++4. 核心 `handleAgentRun` 尊重 `RunRequest.planRequired`，包括显式 false，优先级为
++   override → request → settings；验证门不会因缺少 shell 的重复转发而消失。
++5. 项目导出拒绝路径逃逸、源内递归、不可携带的链接，清晰返回错误且不留半成品。
++6. 定向测试、core capped、desktop、typecheck、构建与真实 Electron smoke 分别记录。
++
++## 后续产品验收
++
++沿同一主路径检查首次配置、故障恢复、任务终态、结果可发现性和独立安装包。先修复可复现的
++阻断，再决定是否需要新增模块。真实 provider 成功率、跨机器运行与签名分发未取得证据前，
++不声明完整产品就绪。本机 shell 未配置 provider API key；确定性传输测试不能代替真实模型能力。
+--- /dev/null
++++ b/docs/superpowers/plans/2026-10-28-agent-product-completion.md
+@@ -0,0 +1,69 @@
++# Cairn agent product completion implementation plan
++
++> **For agentic workers:** Use superpowers:executing-plans in this session. The user authorized direct execution using the implementer's judgment.
++
++**Goal:** Repair the configuration, request and delivery paths needed for a usable local coding agent.
++
++**Architecture:** Reuse the existing encrypted backend, environment injector, application runner and project exporter. Keep Electron outside core and avoid new dependencies.
++
++**Tech Stack:** TypeScript, Node.js, Electron, Vitest.
++
++**Spec:** `docs/superpowers/specs/2026-10-28-agent-product-completion-design.md`
++
++## Global Constraints
++
++- Preserve unrelated working-tree changes; no rule edits or weakened checks.
++- Unknown-provider writes remain rejected; external env takes priority.
++- Store failures preserve existing bytes; export cannot overwrite user files.
++- Evidence distinguishes deterministic tests, real Electron and real providers.
++
++## Review Focus
++
++- Provider ciphertext for an unloaded workspace must survive saves elsewhere.
++- Concurrent save/delete and failed reads must not lose or poison later updates.
++- A refreshed key must not overwrite an externally changed environment variable.
++- Explicit false in a run request must override a true default.
++- Export destination aliases, broken links and a directory inside the source must fail safely.
++
++### Task 1: Reliable provider configuration
++
++**Files:** `src/main/provider-keys.ts`, `src/main/provider-key-inject.ts`,
++`src/main/settings-handlers.ts`, `src/providers/provider-identifiers.ts`,
++`src/providers/provider-config.ts`, `src/main/provider-setup.ts`,
++`apps/desktop/src/main/index.ts`; new regression tests under `tests/`.
++
++**Interfaces:** Preserve put/get/delete/status and injection signatures. Reuse the provider id grammar for persisted entries without authorizing unregistered writes.
++
++- [x] Reproduce lost concurrent writes, corrupt-store overwrite, unloaded custom keys and stale injected keys.
++- [x] Serialize encrypted-store operations, distinguish ENOENT from failure, preserve valid unloaded entries.
++- [x] Track only Cairn-owned environment injections; await refresh after save/delete in shared handlers.
++- [x] Run provider regression and existing provider suites with `--maxWorkers=2`.
++- [x] Keep custom-provider setup's credential activation after the configuration commit; revoke old provider-owned env mappings on remap/delete.
++
++### Task 2: Core request semantics
++
++**Files:** `src/main/agent-runner.ts`; new production-entry regression test.
++
++**Interfaces:** `handleAgentRun(req, over)`; plan precedence is override → request → settings.
++
++- [x] Reproduce required-plan bypass at the shared core entry; include both true and false requests.
++- [x] Apply nullish precedence at the assembly point; keep pending-plan and permission semantics.
++- [x] Run new regression plus existing plan and runner tests.
++
++### Task 3: Portable project delivery
++
++**Files:** `src/main/project-export.ts`; new export regression tests.
++
++**Interfaces:** Preserve `exportProject` result shape and reason categories.
++
++- [x] Reproduce invalid names, export inside the source, source/parent aliases and nonportable symlinks.
++- [x] Validate before creating the destination, preserve no-overwrite behavior, clean only this operation's partial output.
++- [x] Run export and project tests; verify valid copies and exclusions still work.
++
++### Task 4: Integration and next product slice
++
++- [x] Review task-specific diff with OCR delegate rules; agent performs the review.
++- [x] Run typecheck, capped core, desktop tests/build and real Electron smoke sequentially.
++- [x] Record pre-existing failures separately and investigate any new failures.
++- [x] Leave exact files, commands, results and remaining product acceptance in a handoff record.
++- [ ] Continue the goal until remaining product boundaries are resolved; do not equate this repair batch with product readiness.

@@ -1,0 +1,79 @@
+$ node scripts/package.mjs --out /tmp/cairn-release-verify-20261028
+$ pnpm run build:preload && vite build && tsc -p tsconfig.json --noEmit
+$ esbuild src/preload/index.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs
+
+  dist-electron/preload.cjs  9.1kb
+
+⚡ Done in 17ms
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 2150 modules transformed.
+rendering chunks...
+computing gzip size...
+../../dist/index.html                                   4.29 kB │ gzip:  2.09 kB
+../../dist/assets/NotoSerifVariable-f932DlCQ.woff2     76.55 kB
+../../dist/assets/InterVariable-DJwk3cVO.woff2        137.26 kB
+../../dist/assets/JetBrainsMonoVariable-DgTxpPXt.ttf  303.14 kB
+../../dist/assets/App-DARzvstG.css                      0.89 kB │ gzip:  0.40 kB
+../../dist/assets/Stream-DOSUdf7i.css                   5.01 kB │ gzip:  1.40 kB
+../../dist/assets/PaneDock-B9VJlH_P.css                 8.41 kB │ gzip:  2.25 kB
+../../dist/assets/SettingsPanel-DAFv1DlO.css           10.64 kB │ gzip:  2.68 kB
+../../dist/assets/index-Ch6GkPpE.css                  275.73 kB │ gzip: 43.81 kB
+../../dist/assets/index-CUEDrzLV.js                     0.09 kB │ gzip:  0.10 kB
+../../dist/assets/PopoutApp-ODgiSUMb.js                 1.01 kB │ gzip:  0.57 kB
+../../dist/assets/addon-fit-DX4qG4td.js                 1.21 kB │ gzip:  0.51 kB
+../../dist/assets/wrench-TG00Z5Wf.js                    1.67 kB │ gzip:  0.76 kB
+../../dist/assets/settings-nav-CzUwPVmS.js              5.11 kB │ gzip:  2.38 kB
+../../dist/assets/markdown-BmXEmsA-.js                  7.96 kB │ gzip:  3.10 kB
+../../dist/assets/Stream-ChH1aaIQ.js                   22.09 kB │ gzip:  7.56 kB
+../../dist/assets/index-B69fOTy9.js                    34.83 kB │ gzip:  9.89 kB
+../../dist/assets/AppPage-Dhd4J6lR.js                  36.88 kB │ gzip: 10.61 kB
+../../dist/assets/CommandPalette-CsdJBIbq.js           38.85 kB │ gzip: 13.39 kB
+../../dist/assets/PaneDock-C52P6tCr.js                 54.92 kB │ gzip: 18.37 kB
+../../dist/assets/SettingsPanel-eyhz22yW.js            60.17 kB │ gzip: 20.06 kB
+../../dist/assets/stream-model-CHrzOxzP.js            110.12 kB │ gzip: 38.28 kB
+../../dist/assets/index-CZf0BLNH.js                   176.29 kB │ gzip: 60.79 kB
+../../dist/assets/App-qtwTmxvx.js                     274.29 kB │ gzip: 85.53 kB
+../../dist/assets/xterm-B-qIQCd3.js                   329.31 kB │ gzip: 83.04 kB
+✓ built in 2.73s
+Packages are cloned from the content-addressable store to the virtual store.
+  Content-addressable store is at: /Users/ze/Library/pnpm/store/v11
+  Virtual store is at:             ../../../../../tmp/.cairn-package-suhYLd/Cairn.app/Contents/Resources/app/node_modules/.pnpm
+✓ Lockfile at ../../../../../tmp/.cairn-package-suhYLd/Cairn.app/Contents/Resources/app/pnpm-lock.yaml passes supply-chain policies (verified 2h ago)
+.../Cairn.app/Contents/Resources/app     | Progress: resolved 1, reused 0, downloaded 0, added 0
+.../Cairn.app/Contents/Resources/app     | +106 +++++++++++
+.../Cairn.app/Contents/Resources/app     | Progress: resolved 106, reused 106, downloaded 0, added 106, done
+/tmp/.cairn-package-suhYLd/Cairn.app/Contents/Frameworks/Electron Framework.framework: replacing existing signature
+/tmp/.cairn-package-suhYLd/Cairn.app/Contents/Frameworks/Electron Helper (GPU).app: replacing existing signature
+/tmp/.cairn-package-suhYLd/Cairn.app/Contents/Frameworks/Electron Helper (Plugin).app: replacing existing signature
+/tmp/.cairn-package-suhYLd/Cairn.app/Contents/Frameworks/Electron Helper (Renderer).app: replacing existing signature
+/tmp/.cairn-package-suhYLd/Cairn.app/Contents/Frameworks/Electron Helper.app: replacing existing signature
+/tmp/.cairn-package-suhYLd/Cairn.app/Contents/Frameworks/Mantle.framework: replacing existing signature
+/tmp/.cairn-package-suhYLd/Cairn.app/Contents/Frameworks/ReactiveObjC.framework: replacing existing signature
+/tmp/.cairn-package-suhYLd/Cairn.app/Contents/Frameworks/Squirrel.framework: replacing existing signature
+/tmp/.cairn-package-suhYLd/Cairn.app: replacing existing signature
+[package] core loader ready
+ripgrep 15.0.0 (rev 3a612f88b8)
+
+features:+pcre2
+simd(compile):+NEON
+simd(runtime):+NEON
+
+PCRE2 10.45 is available (JIT is available)
+sandbox_extension_issue_file_to_process failed for /tmp/.cairn-package-suhYLd/Cairn.app: 1 (Operation not permitted)
+[cairn-smoke] bootstrap entry
+[cairn-smoke] TypeScript loader registered
+[cairn-smoke] main module loaded
+[cairn-smoke] app ready
+[cairn-smoke] initializing secure storage
+[cairn-smoke] provider storage initialized
+[13330:1028/202028.799542:ERROR:content/browser/network_service_instance_impl.cc:650] Network service crashed or was terminated, restarting service.
+[byok-inject] 启动注入：无可注入 key（未存或 env 优先）
+[m4a] 调度器已启动（桌面端常驻接线：快照/CRUD/触发同实例）
+[package] FAIL: /tmp/.cairn-package-suhYLd/Cairn.app/Contents/MacOS/Cairn 失败：spawnSync /tmp/.cairn-package-suhYLd/Cairn.app/Contents/MacOS/Cairn ETIMEDOUT
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] cairn-desktop@0.1.0 package: `node scripts/package.mjs --out /tmp/cairn-release-verify-20261028`
+Exit status 1
+real 66.15
+user 20.53
+sys 6.13

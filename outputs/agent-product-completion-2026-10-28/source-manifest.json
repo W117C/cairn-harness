@@ -1,0 +1,25 @@
+{
+  "createdAt": "2026-10-28T17:49:10.828464+08:00",
+  "baseHead": "8e94d99b07351f6334e2551e4b7f8ccd6f28c179",
+  "evidenceScope": "working tree; not HEAD certification",
+  "otherTrackedDiffDrift": [],
+  "sha256": {
+    "src/main/provider-keys.ts": "2ed8d53f59722416a54818336363c16f553671573db84b87b947c58d364c42c0",
+    "src/main/provider-key-inject.ts": "8a1b2cc2b3b36cf4399782ac159aaa01639cc68d94dbbc8fa3d43b7883692f27",
+    "src/main/settings-handlers.ts": "6014213e8ffe6dbbf7c31ddfe335c036e2e734d92bd85edc371122551517e158",
+    "src/main/provider-setup.ts": "86a3847add62e274415ffb3d67c19dbd9abc2ad230fd256a7ec20a35db731a41",
+    "src/main/project-export.ts": "e836b4712be4d3b16ac44df62acf903dcaeb7ac9e2933c77462a36b63883d904",
+    "src/providers/provider-identifiers.ts": "67f4dc743feabffbff4d15508bb2ba78f0bbe932af59d65731b1d4f2e2a69c84",
+    "src/providers/provider-config.ts": "c2061ca897bb739943219490772fef0342db831c6c52fbe585be5f4af270ef02",
+    "src/main/agent-runner.ts": "23fe566ee155e5c9a7072023186f4639adacc109f9eb847867720f40da45c274",
+    "apps/desktop/src/main/index.ts": "57b486ed671d308778b90aa8a77dd89ec02bf3bee2192cfcd05f8de05058135b",
+    "AGENTS.md": "46926ed1f007239d345e265926177aa3734728f42f838c0c975291d8a68775c5",
+    "tests/provider-key-durability.test.ts": "a7de2900824c64d8ba48cb61c0385a22a342a5e11a05cef24a6c96c659b35fc1",
+    "tests/provider-key-refresh.test.ts": "2adf65028d8057d270b25bb62e7e333d6c9c22d5e1fe2275d371e36cecc1947c",
+    "tests/provider-setup-activation.test.ts": "a997765b300c50be2182df66a3cca58720d48439050c84c2a78ea6910b2b9451",
+    "tests/run-request-plan-precedence.test.ts": "70f8f3dd16856c0a511167898d398b9aff98fe3f20cd4f91db5711909f3cda87",
+    "tests/project-export-boundaries.test.ts": "91d0fd2302d0d4d664932a9251aef8169961329f9928b1dcae3896b425b58387",
+    "docs/superpowers/specs/2026-10-28-agent-product-completion-design.md": "73389d94c37d9ed628933a3b68e570cf78d07b31bdd4105fb9afc7a2282d3c87",
+    "docs/superpowers/plans/2026-10-28-agent-product-completion.md": "bc911d6beb686fe35b352e4f2abb3ab3f882936db7b9704a86a2953438712aa6"
+  }
+}

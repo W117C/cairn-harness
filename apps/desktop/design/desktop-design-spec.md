@@ -3720,3 +3720,41 @@ Plan 模式此前只有设置页的 `planRequiredByDefault` 一个入口：用�
   仍按最新 settings 判，因此只影响芯片显示）。
 - 方案开关在运行中仍可按（下一条消息生效），当前轮不受影响；回执文案已说明“下一条消息起”。
 - 未提交；`mutate-verify` / `head-cert-check` 不适用、未跑。
+
+### 2026-10-28 · 首启「设置检查」的完成出口
+
+#### A. 缺口
+
+`settings.onboarded` 缺省 false，产品里没有任何入口把它写成 true（只有冒烟 seed 会写）；
+`WorkbenchView` 又按 `onboarded === false` 摆首启七组 ⇒ 每个新档、每次重开都会看到这张清单，
+用户无法消掉。`settings.ts` 的字段注释写着「不要再拿它做任何门控」，但 2026-10-25 空屏恢复
+挂载时没有补完成路径——两处口径互相打架。
+
+#### B. 改法
+
+- `OnboardingChecklist` 增 `onDone` 与「完成，不再显示」：附注位、右对齐、`--text-300`，
+  不抢七格主位。
+- 新增 `state/onboarding.ts` 的 `useOnboardingGroups`：标记为 false 时取七组；
+  `dismissOnboarding` 先本地隐藏，`setSettings({ onboarded: true })` 失败则回滚并留错误。
+  拆出钩子同时把 `workbench.ts` 从 1208 行压回 1186（1200 行帽）。
+- `WorkbenchView` 接线 `onDone={dismissOnboarding}`。
+
+#### C. 判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `onboarding-checklist` | **9/9**：新增出口标记 + 接线/落盘/回滚哨兵；摘按钮或把 true 改 false 均实测红 |
+| `render-resilience` | **6/6**（旧哨兵同步到 `dismissOnboarding` / `onDone`） |
+| 桌面套件（`--maxWorkers=2`） | **231 文件 / 1593 条全绿**（复跑；中途一次 `conversation-rail` 红是他笔在飞，已由他笔收口） |
+| 真机（隔离 profile + 真 main/preload + CDP 真鼠标） | 点击前 `.onboard` 在场；点击后消失、空屏仍在、`settings.json` `onboarded:true`；同 profile 重启后不重现 |
+| `typecheck` / `renderer-layer-check` / `desktop-boundary-check` | 0 / 绿（139 文件）/ 绿 |
+
+截图与读数：`outputs/onboarding-dismiss-2026-10-28/final/`（`before.png`、`after.png`、
+`restart.png`、`click.json`、`restart.json`）。
+
+#### D. 边界
+
+- 只在空屏（`showEmpty`）出现；有活动会话时不摆，也不影响本修复。
+- `onboarded` 是全局标记，不按工作区分；老档首次看到新按钮，点一次后不再出现。
+- 真机用 `--use-mock-keychain` 隔离钥匙串（只影响 keychain，不影响 settings 落盘）。
+- 未提交；未跑 `head-cert-check` / `mutate-verify`。
