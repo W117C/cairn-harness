@@ -1,6 +1,6 @@
 # Cairn / DSH —— 现态
 
-rev: 5403fb9976727b0b2ae2650a6c6a979c316eae5e
+rev: a92b67724886e6cac674273ff1901367e6f16139
 
 本页描述 `cairn/` 当前工作树，不代表同级 staging、远端或已发布应用。
 任务、阻塞与待开工统一见 [仓库整理与任务清单](docs/REPOSITORY-STATUS.md)；
