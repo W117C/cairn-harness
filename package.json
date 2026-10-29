@@ -60,9 +60,9 @@
     "bench:chain48": "node --import tsx scripts/loop-eval.ts --tasks fixtures/bench/tasks-chain48.json --reps 1 --max-steps 55 --out outputs/bench-chain48"
   },
   "devDependencies": {
-    "@types/node": "^26.5.0",
+    "@types/node": "^26.6.5",
     "tsx": "^4.23.13",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "vitest": "^5.0.5"
   },
   "dependencies": {
