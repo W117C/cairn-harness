@@ -1,0 +1,513 @@
+{
+  "source": {
+    "file": "MainWindowPage-BjVtjJFx.css",
+    "sha256": "948bac16bdceb510a49a832778b3c0bb7de6bc1fac86ebc10672a0c3cbd97960",
+    "bytes": 237153
+  },
+  "transform": {
+    "root": ".cds-root -> body[data-dsh-claude-style]",
+    "tokens": "var(--cds-x) -> var(--x) only when --x exists in vendor/cds-official/tokens.css"
+  },
+  "totals": {
+    "components": 45,
+    "rules": 115,
+    "declarations": 465
+  },
+  "components": [
+    {
+      "name": "Card",
+      "rules": 20,
+      "declarations": 27,
+      "conditions": [
+        "@layer cds-card",
+        "@layer base",
+        "@media (prefers-reduced-motion:reduce)"
+      ],
+      "sampleSelectors": [
+        ".cds-root [data-cds=Card]>.cds-card-fill",
+        ".cds-root [data-cds=Card]:has([data-cds=CardLink]):hover>.cds-card-fill",
+        ":where(.cds-root [data-cds=Card]:has([data-cds=CardLink])) :where(a,button,input,select,textarea,label,summary,iframe,[role=button],[contenteditable]:not([contenteditable=false]),[tabindex]:not([tabindex^=\\-])):where(:not([data-cds=CardLink"
+      ]
+    },
+    {
+      "name": "MessageActions",
+      "rules": 17,
+      "declarations": 50,
+      "conditions": [
+        "@starting-style",
+        "@media (hover:hover)",
+        "@media (pointer:coarse),(hover:none)",
+        "@media (prefers-reduced-motion:reduce)"
+      ],
+      "sampleSelectors": [
+        ".cds-root [data-cds=MessageActions][data-reveal]",
+        ".cds-root [data-cds=MessageActions][data-reveal][data-always-visible]",
+        ".cds-root [data-cds=MessageActions][data-reveal]:where([data-always-visible]:has(>[data-cds-reveal-on-hover]))"
+      ]
+    },
+    {
+      "name": "CardLink",
+      "rules": 15,
+      "declarations": 21,
+      "conditions": [
+        "@layer cds-card",
+        "@media (prefers-reduced-motion:reduce)"
+      ],
+      "sampleSelectors": [
+        ".cds-root [data-cds=Card]:has([data-cds=CardLink]):hover>.cds-card-fill",
+        ":where(.cds-root [data-cds=Card]:has([data-cds=CardLink])) :where(a,button,input,select,textarea,label,summary,iframe,[role=button],[contenteditable]:not([contenteditable=false]),[tabindex]:not([tabindex^=\\-])):where(:not([data-cds=CardLink",
+        ":where(.cds-root) :where([data-cds=CardLink]:focus-visible):after"
+      ]
+    },
+    {
+      "name": "Prose",
+      "rules": 13,
+      "declarations": 33,
+      "conditions": [
+        "@media (forced-colors:none)",
+        "@media print",
+        "@media screen and (forced-colors:none)"
+      ],
+      "sampleSelectors": [
+        ".cds-root [data-cds-reply-type] [data-cds=Prose]:not([data-cds-reply-type] :where([data-cds]:not([data-cds-reply-type])) *)",
+        ".cds-root [data-cds-reply-type] [data-cds=Prose]:not([data-cds-reply-type] :where([data-cds]:not([data-cds-reply-type])) *) .prose-scroll table:not([data-cds]):not(:where(.not-prose,[data-not-prose],.not-prose *,[data-not-prose] *,[data-cds",
+        ".cds-root [data-cds-reply-type] [data-cds=Prose]:not([data-cds-reply-type] :where([data-cds]:not([data-cds-reply-type])) *) .prose-scroll :is(th,td):not(:where(.not-prose,[data-not-prose],.not-prose *,[data-not-prose] *,[data-cds=Prose] [da"
+      ]
+    },
+    {
+      "name": "AssistantMessage",
+      "rules": 12,
+      "declarations": 52,
+      "conditions": [
+        "@media print"
+      ],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage][data-cds-reply-type] [data-cds=TurnStatus]:not([data-cds-reply-type] :where([data-cds]:not([data-cds-reply-type])) *)>div:first-child,.cds-root [data-cds=AssistantMessage][data-cds-reply-type] [data-cds",
+        ".cds-root [data-cds=AssistantMessage]",
+        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d"
+      ]
+    },
+    {
+      "name": "MessageAttachmentsImage",
+      "rules": 12,
+      "declarations": 21,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural]",
+        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural] [data-cds-tile-media]",
+        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural] [data-cds-tile-picture]"
+      ]
+    },
+    {
+      "name": "MessageAttachmentsVideo",
+      "rules": 12,
+      "declarations": 21,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural]",
+        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural] [data-cds-tile-media]",
+        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural] [data-cds-tile-picture]"
+      ]
+    },
+    {
+      "name": "SkeletonGroup",
+      "rules": 10,
+      "declarations": 15,
+      "conditions": [
+        "@media (prefers-reduced-motion:reduce)"
+      ],
+      "sampleSelectors": [
+        ".cds-root [data-cds=SkeletonGroup][data-hold]",
+        ".cds-root [data-cds=SkeletonGroup][data-hold=none]",
+        ".cds-root [data-cds=SkeletonGroup][data-hold=delayed]"
+      ]
+    },
+    {
+      "name": "Icon",
+      "rules": 9,
+      "declarations": 28,
+      "conditions": [
+        "@supports (color:color-mix(in lab, red, red))",
+        "@media (forced-colors:active)",
+        "@supports (forced-color-adjust:preserve-parent-color)"
+      ],
+      "sampleSelectors": [
+        "[data-cds=Icon]:not(svg)",
+        "[data-cds=Icon]:not(svg):not([data-cds-anim])",
+        ":root[dir=rtl] :is([data-cds=Icon],svg)[data-cds-mirror]:is(:lang(ae),:lang(ar),:lang(arc),:lang(bcc),:lang(bqi),:lang(ckb),:lang(dv),:lang(fa),:lang(glk),:lang(he),:lang(ku),:lang(mzn),:lang(nqo),:lang(pnb),:lang(ps),:lang(sd),:lang(ug),:l"
+      ]
+    },
+    {
+      "name": "MessageAttachments",
+      "rules": 9,
+      "declarations": 14,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=MessageAttachments][data-thumbnail-height] :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural]",
+        ".cds-root [data-cds=MessageAttachments][data-thumbnail-height] :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural]:not([data-cds-composer-attachments] *) [data-cds-tile-media]:has([data-cds-tile-pict",
+        ".cds-root [data-cds=MessageAttachments][data-thumbnail-height] :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural]:not([data-cds-composer-attachments] *) [data-cds-tile-picture][data-loaded]"
+      ]
+    },
+    {
+      "name": "Page",
+      "rules": 6,
+      "declarations": 14,
+      "conditions": [
+        "@supports (color:color-mix(in lab, red, red))",
+        "@media (prefers-reduced-transparency:reduce),(prefers-contrast:more),(forced-colors:active),print",
+        "@supports not ((-webkit-backdrop-filter:blur(1px)) or (backdrop-filter:blur(1px)))"
+      ],
+      "sampleSelectors": [
+        "[data-cds=Toolbar]>[data-cds-part=toolbar-ground],[data-cds=Page] [data-cds-part=page-header-ground]",
+        "[data-cds=Toolbar]>[data-cds-part=toolbar-ground],[data-cds=Page] [data-cds-part=page-header-ground]",
+        "[data-cds=Toolbar]>[data-cds-part=toolbar-ground],[data-cds=Page] [data-cds-part=page-header-ground]"
+      ]
+    },
+    {
+      "name": "Toolbar",
+      "rules": 6,
+      "declarations": 14,
+      "conditions": [
+        "@supports (color:color-mix(in lab, red, red))",
+        "@media (prefers-reduced-transparency:reduce),(prefers-contrast:more),(forced-colors:active),print",
+        "@supports not ((-webkit-backdrop-filter:blur(1px)) or (backdrop-filter:blur(1px)))"
+      ],
+      "sampleSelectors": [
+        "[data-cds=Toolbar]>[data-cds-part=toolbar-ground],[data-cds=Page] [data-cds-part=page-header-ground]",
+        "[data-cds=Toolbar]>[data-cds-part=toolbar-ground],[data-cds=Page] [data-cds-part=page-header-ground]",
+        "[data-cds=Toolbar]>[data-cds-part=toolbar-ground],[data-cds=Page] [data-cds-part=page-header-ground]"
+      ]
+    },
+    {
+      "name": "UserMessage",
+      "rules": 6,
+      "declarations": 34,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d",
+        ".cds-root [data-cds=UserMessage],.cds-root [data-cds=AssistantMessage][data-variant=bubble]",
+        ".cds-root :where([data-cds=AssistantMessage],[data-cds=UserMessage],[data-cds=ChatComposerQueuedMessages])[data-text-size=sm]"
+      ]
+    },
+    {
+      "name": "ChatComposerQueuedMessages",
+      "rules": 5,
+      "declarations": 29,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=ChatComposerDock]>:not([data-cds-dock-item],[data-cds=ChatComposerNotices],[data-cds=ChatComposerQueuedMessages],[data-cds-dock-group],[data-cds-dock-static],[hidden],:last-child)",
+        ".cds-root :where([data-cds=AssistantMessage],[data-cds=UserMessage],[data-cds=ChatComposerQueuedMessages])[data-text-size=sm]",
+        ".cds-root :where([data-cds=AssistantMessage],[data-cds=UserMessage],[data-cds=ChatComposerQueuedMessages])[data-text-size=md]"
+      ]
+    },
+    {
+      "name": "ChatComposerDock",
+      "rules": 4,
+      "declarations": 4,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=ChatComposerDock][data-cds-dock-masked] :is([data-cds-dock-item],[data-cds-dock-card]):not([hidden])~:is([data-cds-dock-item],[data-cds-dock-card]):before,.cds-root [data-cds=ChatComposerDock][data-cds-dock-masked] :is([",
+        ".cds-root [data-cds=ChatComposerDock][data-cds-dock-masked] [data-cds-dock-group]:not([hidden]):has(:is([data-cds-dock-item],[data-cds-dock-card]):not([hidden]))~:is([data-cds-dock-item],[data-cds-dock-card]):before",
+        ".cds-root [data-cds=ChatComposerDock][data-cds-dock-masked] [data-cds-dock-group]:not([hidden]):has(:is([data-cds-dock-item],[data-cds-dock-card]):not([hidden]))~[data-cds-dock-group] :is([data-cds-dock-item],[data-cds-dock-card]):before"
+      ]
+    },
+    {
+      "name": "DataTable",
+      "rules": 4,
+      "declarations": 16,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d",
+        ".cds-root [data-cds=DataTable]",
+        ".cds-root [data-cds=DataTable] tr[data-dimmed]"
+      ]
+    },
+    {
+      "name": "Skeleton",
+      "rules": 4,
+      "declarations": 6,
+      "conditions": [
+        "@media (prefers-reduced-motion:reduce)"
+      ],
+      "sampleSelectors": [
+        ".cds-root [data-cds=Skeleton][data-cds=Skeleton]:where(:root[dir=rtl] :is(:lang(ae),:lang(ar),:lang(arc),:lang(bcc),:lang(bqi),:lang(ckb),:lang(dv),:lang(fa),:lang(glk),:lang(he),:lang(ku),:lang(mzn),:lang(nqo),:lang(pnb),:lang(ps),:lang(sd",
+        ".cds-root [data-cds=SkeletonGroup][data-motion=wave] [data-cds=Skeleton]",
+        ".cds-root [data-cds=SkeletonGroup][data-hold][data-motion],.cds-root [data-cds=SkeletonGroup][data-hold][data-motion] [data-cds=Skeleton]"
+      ]
+    },
+    {
+      "name": "AccordionHeader",
+      "rules": 3,
+      "declarations": 4,
+      "conditions": [
+        "@layer theme",
+        "@media print"
+      ],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AccordionHeader]~[role=region][hidden]",
+        ".cds-root [data-cds=AccordionHeader]~[role=region][hidden]",
+        ".cds-root [data-cds=AccordionHeader]:has(~[role=region]) [data-cds-accordion-caret]"
+      ]
+    },
+    {
+      "name": "Button",
+      "rules": 2,
+      "declarations": 3,
+      "conditions": [
+        "@media (pointer:coarse),(hover:none)",
+        "@media screen"
+      ],
+      "sampleSelectors": [
+        ".cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=ButtonGroup],[data-cds=SplitDropdownButton]):not([data-size]),.cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=Button],[data-cds=ModelSelector],[data",
+        "[data-window-active=false] [data-cds=Button]"
+      ]
+    },
+    {
+      "name": "ChatComposerChin",
+      "rules": 2,
+      "declarations": 16,
+      "conditions": [
+        "@media (pointer:coarse),(hover:none)"
+      ],
+      "sampleSelectors": [
+        ".cds-root [data-cds=ChatComposerChin] [data-touch-size]",
+        ".cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=ButtonGroup],[data-cds=SplitDropdownButton]):not([data-size]),.cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=Button],[data-cds=ModelSelector],[data"
+      ]
+    },
+    {
+      "name": "ChatComposerEditor",
+      "rules": 2,
+      "declarations": 2,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-composer-placeholder]:has(+[data-cds=ChatComposerEditor] [data-doc-empty=false])",
+        ".cds-root [data-cds=ChatComposerEditor]:has([data-doc-empty=false]) [data-cds-part=draft-stand-in]"
+      ]
+    },
+    {
+      "name": "TurnStatusStep",
+      "rules": 2,
+      "declarations": 4,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage][data-cds-reply-type] [data-cds=TurnStatus]:not([data-cds-reply-type] :where([data-cds]:not([data-cds-reply-type])) *)>div:first-child,.cds-root [data-cds=AssistantMessage][data-cds-reply-type] [data-cds",
+        ".cds-root :where([data-cds=AssistantMessage],[data-cds=UserMessage],[data-cds=ChatComposerQueuedMessages])[data-text-size] :where(button):not(:where([data-size],[data-step],[data-text-size] [data-size] *,[data-text-size] [data-step] *,[data"
+      ]
+    },
+    {
+      "name": "Accordion",
+      "rules": 1,
+      "declarations": 2,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d"
+      ]
+    },
+    {
+      "name": "Aside",
+      "rules": 1,
+      "declarations": 2,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d"
+      ]
+    },
+    {
+      "name": "AskUserQuestion",
+      "rules": 1,
+      "declarations": 2,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d"
+      ]
+    },
+    {
+      "name": "Banner",
+      "rules": 1,
+      "declarations": 2,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d"
+      ]
+    },
+    {
+      "name": "ButtonGroup",
+      "rules": 1,
+      "declarations": 1,
+      "conditions": [
+        "@media (pointer:coarse),(hover:none)"
+      ],
+      "sampleSelectors": [
+        ".cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=ButtonGroup],[data-cds=SplitDropdownButton]):not([data-size]),.cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=Button],[data-cds=ModelSelector],[data"
+      ]
+    },
+    {
+      "name": "ChartContainer",
+      "rules": 1,
+      "declarations": 2,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d"
+      ]
+    },
+    {
+      "name": "ChatComposerNotices",
+      "rules": 1,
+      "declarations": 1,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=ChatComposerDock]>:not([data-cds-dock-item],[data-cds=ChatComposerNotices],[data-cds=ChatComposerQueuedMessages],[data-cds-dock-group],[data-cds-dock-static],[hidden],:last-child)"
+      ]
+    },
+    {
+      "name": "CommentCard",
+      "rules": 1,
+      "declarations": 2,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d"
+      ]
+    },
+    {
+      "name": "DiffIndicator",
+      "rules": 1,
+      "declarations": 2,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds-reply-type] [data-cds=DiffIndicator][data-variant=text]"
+      ]
+    },
+    {
+      "name": "FileDiff",
+      "rules": 1,
+      "declarations": 2,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d"
+      ]
+    },
+    {
+      "name": "Heatmap",
+      "rules": 1,
+      "declarations": 2,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d"
+      ]
+    },
+    {
+      "name": "MessageAttachmentsFile",
+      "rules": 1,
+      "declarations": 1,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=MessageAttachments][data-fit=natural][data-natural-tiles]:not([data-cds-composer-attachments] *)>*,.cds-root [data-cds=MessageAttachments][data-fit=natural][data-natural-tiles]:not([data-cds-composer-attachments] *)>*>:i"
+      ]
+    },
+    {
+      "name": "MessageAttachmentsQuote",
+      "rules": 1,
+      "declarations": 1,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=MessageAttachments][data-fit=natural][data-natural-tiles]:not([data-cds-composer-attachments] *)>*,.cds-root [data-cds=MessageAttachments][data-fit=natural][data-natural-tiles]:not([data-cds-composer-attachments] *)>*>:i"
+      ]
+    },
+    {
+      "name": "ModelSelector",
+      "rules": 1,
+      "declarations": 1,
+      "conditions": [
+        "@media (pointer:coarse),(hover:none)"
+      ],
+      "sampleSelectors": [
+        ".cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=ButtonGroup],[data-cds=SplitDropdownButton]):not([data-size]),.cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=Button],[data-cds=ModelSelector],[data"
+      ]
+    },
+    {
+      "name": "ModelSelectorEffort",
+      "rules": 1,
+      "declarations": 1,
+      "conditions": [
+        "@media (pointer:coarse),(hover:none)"
+      ],
+      "sampleSelectors": [
+        ".cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=ButtonGroup],[data-cds=SplitDropdownButton]):not([data-size]),.cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=Button],[data-cds=ModelSelector],[data"
+      ]
+    },
+    {
+      "name": "Panel",
+      "rules": 1,
+      "declarations": 2,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d"
+      ]
+    },
+    {
+      "name": "PointChartContainer",
+      "rules": 1,
+      "declarations": 2,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d"
+      ]
+    },
+    {
+      "name": "PreviewCard",
+      "rules": 1,
+      "declarations": 2,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d"
+      ]
+    },
+    {
+      "name": "SplitDropdownButton",
+      "rules": 1,
+      "declarations": 1,
+      "conditions": [
+        "@media (pointer:coarse),(hover:none)"
+      ],
+      "sampleSelectors": [
+        ".cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=ButtonGroup],[data-cds=SplitDropdownButton]):not([data-size]),.cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=Button],[data-cds=ModelSelector],[data"
+      ]
+    },
+    {
+      "name": "Surface",
+      "rules": 1,
+      "declarations": 2,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d"
+      ]
+    },
+    {
+      "name": "Table",
+      "rules": 1,
+      "declarations": 2,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d"
+      ]
+    },
+    {
+      "name": "TurnStatus",
+      "rules": 1,
+      "declarations": 2,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage][data-cds-reply-type] [data-cds=TurnStatus]:not([data-cds-reply-type] :where([data-cds]:not([data-cds-reply-type])) *)>div:first-child,.cds-root [data-cds=AssistantMessage][data-cds-reply-type] [data-cds"
+      ]
+    },
+    {
+      "name": "Pulse",
+      "rules": 0,
+      "declarations": 0,
+      "conditions": [
+        "(only referenced by Tailwind utility selectors; no component rule emitted)"
+      ],
+      "sampleSelectors": []
+    }
+  ]
+}

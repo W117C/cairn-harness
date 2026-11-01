@@ -141,7 +141,7 @@ export const MUTATIONS = [
     src: "src/agent/orchestrator.ts",
     test: "tests/session-spend-ruler.test.ts",
     desc: "拆桶时把主会话那一段漏掉（只统计带 agent_id 的）⇒ 闸只看得到 worker，主 loop 烧的钱不进账",
-    apply: (s) => s.replace("          if (e.agent_id === undefined) {", "          if (false) {"),
+    apply: (s) => s.replace("          if (event.agent_id === undefined) {", "          if (false) {"),
     expectFail: "主会话那一桶与 worker 那一桶各算一次：不漏 main，也不因为拆桶而双计",
   },
   // ---- #97：用户自定义子代理的 CC 连字符字段名必须被那一份投影读到（此前 `allowed-tools` 落进未知键被丢）----
@@ -446,7 +446,7 @@ export const MUTATIONS = [
     src: "src/agent/orchestrator.ts",
     test: "tests/worker-hooks.test.ts",
     desc: "发了 SubagentStart 却不把 additionalContext 传进 system ⇒ 钩子跑了、模型一个字也没看到——「收下即丢」的第三种写法（前两种：字段不读、回执不接）",
-    apply: (s) => s.replace('      const system = await buildWorkerSystemMessages(w, this.opts.workspace, startContext);', '      const system = await buildWorkerSystemMessages(w, this.opts.workspace);'),
+    apply: (s) => s.replace('buildWorkerSystemMessages(w, this.opts.workspace, startContext, experienceNote)', 'buildWorkerSystemMessages(w, this.opts.workspace, experienceNote)'),
     expectFail: "SubagentStart 的 additionalContext 真的进模型收到的 system 块（不是发完就丢）",
   },
   {

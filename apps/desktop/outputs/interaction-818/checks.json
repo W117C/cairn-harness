@@ -1,0 +1,231 @@
+[
+  {
+    "name": "停转会话的工具组明确未收到结果，失败原因仍可见",
+    "ok": true,
+    "detail": {
+      "text": "3 次工具调用1 次未收到结果1 次失败Assertion failed Expected 2, received 1",
+      "open": "false",
+      "hidden": true
+    }
+  },
+  {
+    "name": "展开调用可读真实返回内容",
+    "ok": true
+  },
+  {
+    "name": "流式追加、收口和最终答复保留组与单次展开状态",
+    "ok": true,
+    "detail": {
+      "identity": "retained",
+      "open": "true",
+      "body": "返回内容\n复制\nexport const desktop = true;",
+      "count": 4,
+      "summary": "4 次工具调用1 次失败"
+    }
+  },
+  {
+    "name": "项目组收起状态已保存",
+    "ok": true
+  },
+  {
+    "name": "重载恢复项目组收起状态",
+    "ok": true
+  },
+  {
+    "name": "侧栏搜索按需展开并自动聚焦",
+    "ok": true
+  },
+  {
+    "name": "搜索自动显示收起组里的匹配会话",
+    "ok": true
+  },
+  {
+    "name": "清除搜索恢复原折叠选择",
+    "ok": true
+  },
+  {
+    "name": "空搜索 Esc 收起并把焦点还给搜索入口",
+    "ok": true
+  },
+  {
+    "name": "筛选菜单列全五档并标出当前档",
+    "ok": true,
+    "detail": {
+      "n": 5,
+      "ids": [
+        "all",
+        "running",
+        "pinned",
+        "archived",
+        "scheduled"
+      ],
+      "checked": [
+        "all"
+      ],
+      "archived": "已归档0"
+    }
+  },
+  {
+    "name": "切到已归档：专属空态、不摆空组头、选择已存",
+    "ok": true,
+    "detail": {
+      "active": "true",
+      "stored": "archived",
+      "empty": "「已归档」下没有会话清除筛选",
+      "sessions": 0,
+      "emptyGroups": 0
+    }
+  },
+  {
+    "name": "清除筛选回到全部：会话恢复、折叠组展开",
+    "ok": true,
+    "detail": {
+      "active": "false",
+      "stored": "all",
+      "sessions": 1,
+      "collapsed": "false"
+    }
+  },
+  {
+    "name": "侧栏收起仍有可用快捷栏",
+    "ok": true,
+    "detail": {
+      "rail": 48,
+      "side": 0
+    }
+  },
+  {
+    "name": "快捷栏和主区同排且主区填满剩余宽高",
+    "ok": true,
+    "detail": {
+      "top": 38,
+      "railTop": 38,
+      "right": 1440,
+      "viewport": 1440,
+      "railHeight": 826
+    }
+  },
+  {
+    "name": "快捷栏文件入口打开可交互的面板",
+    "ok": true
+  },
+  {
+    "name": "添加面板直接聚焦新开的面板",
+    "ok": true
+  },
+  {
+    "name": "切标签只换可见性：两块都挂载、文件块状态保留",
+    "ok": true,
+    "detail": {
+      "fileActive": "true",
+      "planActive": "false",
+      "fileVisibility": "visible",
+      "planVisibility": "hidden",
+      "identity": "retained-file",
+      "tabs": 2
+    }
+  },
+  {
+    "name": "关闭面板后键盘焦点回到剩余面板导航",
+    "ok": true
+  },
+  {
+    "name": "关闭方案后只剩文件块且它是激活块",
+    "ok": true
+  },
+  {
+    "name": "显式关闭检查器：窗格仍开、偏好写成 0",
+    "ok": true
+  },
+  {
+    "name": "带恢复窗格重载后检查器保持关闭（显式偏好优先）",
+    "ok": true,
+    "detail": {
+      "pref": "0",
+      "pane": true,
+      "width": 0,
+      "inert": true
+    }
+  },
+  {
+    "name": "关闭后仍可重新打开检查器",
+    "ok": true,
+    "detail": {
+      "pref": "1",
+      "width": 420,
+      "inert": false
+    }
+  },
+  {
+    "name": "检查器场景结束后侧栏快捷栏可回到收起态",
+    "ok": true
+  },
+  {
+    "name": "设置返回在 surface 内且命中测试可点",
+    "ok": true,
+    "detail": {
+      "page": true,
+      "back": true,
+      "hit": true,
+      "toggle": false,
+      "tbBack": false
+    }
+  },
+  {
+    "name": "真实指针点击返回关闭设置",
+    "ok": true
+  },
+  {
+    "name": "命令面板可开且搜索框聚焦",
+    "ok": true
+  },
+  {
+    "name": "命令面板 Esc 关闭",
+    "ok": true
+  },
+  {
+    "name": "命令面板文件组列出 workspaceSearch 命中",
+    "ok": true,
+    "detail": {
+      "item": true,
+      "label": "main.ts",
+      "dir": "src",
+      "group": [
+        "操作",
+        "技能",
+        "文件",
+        "当前项目正文",
+        "会话",
+        "项目",
+        "页面",
+        "设置"
+      ]
+    }
+  },
+  {
+    "name": "选中文件：面板关闭、文件窗格激活、父目录展开并预览",
+    "ok": true,
+    "detail": {
+      "palette": false,
+      "active": "true",
+      "tab": "文件",
+      "preview": "src/main.ts",
+      "tree": true,
+      "expanded": "true"
+    }
+  },
+  {
+    "name": "窄窗快捷栏和面板无横向溢出",
+    "ok": true,
+    "detail": {
+      "overflow": false,
+      "rail": 48,
+      "side": false
+    }
+  },
+  {
+    "name": "渲染过程无控制台错误",
+    "ok": true,
+    "detail": []
+  }
+]

@@ -1,0 +1,14 @@
+## 大入口行数
+    2023 src/main/agent-runner.ts
+    1869 src/cli.ts
+    2104 apps/desktop/src/main/index.ts
+    5996 total
+
+## 证据占比（tracked）
+tracked_all=6291
+tracked_outputs=4278
+
+## 主 chunk 体积（raw / gzip 字节）
+assets/index-DLHT4etI.js raw=179316 gzip=61848
+assets/App-B0LdRo_T.js raw=313227 gzip=97811
+assets/xterm-B-qIQCd3.js raw=329310 gzip=82729

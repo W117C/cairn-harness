@@ -1,0 +1,211 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+ ❯ tests/run-queue-session.test.tsx (13 tests | 4 failed) 1125ms
+   ❯ sendTo for preview sessions (3)
+     × running target steers; a rejected steer falls back to the shared queue 5ms
+     × “already running” from a stale idle hint falls back to steer instead of losing the text 1ms
+   ❯ workspace scoped run controls (2)
+     × the main composer includes its workspace when steering 0ms
+     × a refused cancel does not dequeue or dispatch the target project's messages 1002ms
+ ❯ tests/run-control-workspace.test.ts (7 tests | 4 failed) 347ms
+   × another workspace cannot steer or cancel the same-id run, even after opening its own session 66ms
+   × legacy controls without workspace reject ambiguous session ids 55ms
+   × invalid or unregistered explicit targets cannot fall back to the live run 55ms
+   × an aborted run no longer acknowledges new steering text 55ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/run-control-workspace.test.ts > another workspace cannot steer or cancel the same-id run, even after opening its own session
+AssertionError: expected { ok: true, queued: 1 } to match object { ok: false, …(1) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "code": "workspace_mismatch",
+-   "ok": false,
++   "ok": true,
+  }
+
+ ❯ tests/run-control-workspace.test.ts:42:53
+     40| it("another workspace cannot steer or cancel the same-id run, even aft…
+     41|   await host.openSession("same", b);
+     42|   expect(await host.steer("same", "only for B", b)).toMatchObject({ ok…
+       |                                                     ^
+     43|   expect(await host.cancel("same", b)).toMatchObject({ ok: false, code…
+     44|   expect(over.signal?.aborted).toBe(false);
+ ❯ withRun tests/run-control-workspace.test.ts:36:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  tests/run-control-workspace.test.ts > legacy controls without workspace reject ambiguous session ids
+AssertionError: expected { ok: true, queued: 1 } to match object { ok: false, code: 'invalid_target' }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "code": "invalid_target",
+-   "ok": false,
++   "ok": true,
+  }
+
+ ❯ tests/run-control-workspace.test.ts:57:49
+     55|
+     56| it("legacy controls without workspace reject ambiguous session ids", a…
+     57|   expect(await host.steer("same", "ambiguous")).toMatchObject({ ok: fa…
+       |                                                 ^
+     58|   expect(await host.cancel("same")).toMatchObject({ ok: false, code: "…
+     59|   expect(over.signal?.aborted).toBe(false);
+ ❯ withRun tests/run-control-workspace.test.ts:36:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  tests/run-control-workspace.test.ts > invalid or unregistered explicit targets cannot fall back to the live run
+AssertionError: expected { ok: true } to match object { ok: false, code: 'invalid_target' }
+
+- Expected
++ Received
+
+  {
+-   "code": "invalid_target",
+-   "ok": false,
++   "ok": true,
+  }
+
+ ❯ tests/run-control-workspace.test.ts:75:50
+     73| it("invalid or unregistered explicit targets cannot fall back to the l…
+     74|   for (const workspace of [null, "", 42, join(root, "unregistered")]) {
+     75|     expect(await host.cancel("same", workspace)).toMatchObject({ ok: f…
+       |                                                  ^
+     76|     expect(await host.steer("same", "bad target", workspace)).toMatchO…
+     77|   }
+ ❯ withRun tests/run-control-workspace.test.ts:36:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  tests/run-control-workspace.test.ts > an aborted run no longer acknowledges new steering text
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/run-control-workspace.test.ts:84:56
+     82| it("an aborted run no longer acknowledges new steering text", async ()…
+     83|   await host.cancel("same", a);
+     84|   expect((await host.steer("same", "too late", a)).ok).toBe(false);
+       |                                                        ^
+     85|   expect(over.steering?.take()).toBeUndefined();
+     86| }));
+ ❯ withRun tests/run-control-workspace.test.ts:36:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  tests/run-queue-session.test.tsx > sendTo for preview sessions > running target steers; a rejected steer falls back to the shared queue
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'other', …(2) ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+    "other",
+    "queued while running",
+-   "/other-ws",
+  ]
+
+
+Number of calls: 1
+
+ ❯ tests/run-queue-session.test.tsx:158:28
+    156|     const queued = await actions.sendTo("other", "/other-ws", "queued …
+    157|     expect(queued.outcome).toBe("queued");
+    158|     expect(agent.runSteer).toHaveBeenCalledWith("other", "queued while…
+       |                            ^
+    159|     expect(deps.sendQueue.current.get(runKey("/other-ws", "other"))).t…
+    160|     expect(deps.sendQueue.current.get(runKey("/workspace", "current"))…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  tests/run-queue-session.test.tsx > sendTo for preview sessions > “already running” from a stale idle hint falls back to steer instead of losing the text
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'other', 'do not lose me', …(1) ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+    "other",
+    "do not lose me",
+-   "/other-ws",
+  ]
+
+
+Number of calls: 1
+
+ ❯ tests/run-queue-session.test.tsx:172:28
+    170|     const result = await actions.sendTo("other", "/other-ws", "do not …
+    171|     expect(result.outcome).toBe("steered");
+    172|     expect(agent.runSteer).toHaveBeenCalledWith("other", "do not lose …
+       |                            ^
+    173|   });
+    174| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  tests/run-queue-session.test.tsx > workspace scoped run controls > the main composer includes its workspace when steering
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'current', 'for this project', …(1) ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+    "current",
+    "for this project",
+-   "/workspace",
+  ]
+
+
+Number of calls: 1
+
+ ❯ tests/run-queue-session.test.tsx:181:28
+    179|     deps.runningSet.current.add(runKey("/workspace", "current"));
+    180|     await actions.send("for this project");
+    181|     expect(agent.runSteer).toHaveBeenCalledWith("current", "for this p…
+       |                            ^
+    182|   });
+    183|   it("a refused cancel does not dequeue or dispatch the target project…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  tests/run-queue-session.test.tsx > workspace scoped run controls > a refused cancel does not dequeue or dispatch the target project's messages
+AssertionError: expected "vi.fn()" to be called with arguments: [ '目标工作区不匹配', 'same' ]
+
+Number of calls: 0
+
+ ❯ tests/run-queue-session.test.tsx:190:54
+    188|     agent.runCancel.mockResolvedValueOnce({ ok: false, error: "目标工作区不匹…
+    189|     actions.cancelRunHeal("same", "/other-ws");
+    190|     await vi.waitFor(() => expect(deps.setLastError).toHaveBeenCalledW…
+       |                                                      ^
+    191|     expect(agent.runCancel).toHaveBeenCalledWith("same", "/other-ws");
+    192|     expect(agent.run).not.toHaveBeenCalled(); expect(agent.queueSet).n…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  8 failed | 12 passed (20)
+   Start at  13:09:06
+   Duration  2.35s (transform 47%, tests 41%, import 12%)
+
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts tests/run-control-workspace.test.ts tests/run-queue-session.test.tsx '--maxWorkers=2'

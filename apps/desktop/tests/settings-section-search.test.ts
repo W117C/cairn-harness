@@ -10,7 +10,7 @@
 //    （它的形状被壳导航与命令面板消费，加字段要连带改两处与它们的判据）。
 // ② 顺序保序：结果按 SECTIONS 原序返回，不让匹配度重排（用户对固定顺序有肌肉记忆）。
 import { describe, expect, it } from "vitest";
-import { filterSections, SECTION_KEYWORDS, SECTIONS } from "../src/renderer/components/settings-nav";
+import { filterSections, SECTION_KEYWORDS, SECTIONS, SETTINGS_PAGE_ORDER } from "../src/renderer/components/settings-nav";
 
 const ALL = SECTIONS.map((s) => s.id);
 
@@ -39,9 +39,20 @@ describe("filterSections（分区搜索）", () => {
     // 「模型」在 provider 的分区名里没有（它叫「模型与 Provider」——其实有，换一个真的没有的）
     expect(filterSections("密钥")).toContain("provider");
     expect(filterSections("预算")).toContain("advanced");
-    expect(filterSections("定时")).toContain("automation");
     expect(filterSections("技能")).toContain("skills");
     expect(filterSections("诊断")).toContain("about");
+    // 第 805/807/809/813 页的维护动作都在「关于与更新」里：搜索要能打到。
+    expect(filterSections("备份")).toContain("about");
+    expect(filterSections("迁移")).toContain("about");
+    expect(filterSections("许可证")).toContain("about");
+    expect(filterSections("偏好")).toContain("about");
+  });
+
+  it("does not advertise durable pages as settings sections", () => {
+    expect(filterSections("插件")).not.toContain("plugins");
+    expect(filterSections("记忆")).not.toContain("memory");
+    expect(filterSections("自动化")).not.toContain("automation");
+    expect(SETTINGS_PAGE_ORDER).toEqual(["skills", "worktrees"]);
   });
 
   it("大小写不敏感（provider 名里带英文）", () => {
@@ -53,7 +64,7 @@ describe("filterSections（分区搜索）", () => {
   it("短查询也命中（词含查询或查询含词，双向子串）", () => {
     expect(filterSections("遥")).toContain("advanced"); // 「遥测」
     expect(filterSections("暗")).toContain("general"); // 「暗」
-    expect(filterSections("记忆")).toEqual(expect.arrayContaining(["advanced", "memory"]));
+    expect(filterSections("记忆")).toEqual(["advanced"]);
   });
 
   it("无命中返回空数组（调用方据此显示「没有匹配」而不是空导航）", () => {

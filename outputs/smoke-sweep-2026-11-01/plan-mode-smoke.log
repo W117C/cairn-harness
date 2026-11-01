@@ -1,0 +1,8 @@
+PASS 默认关闭：方案开关可见且 aria-pressed=false {"exists":true,"pressed":"false","on":"false","label":"方案"}
+PASS 点开方案：aria-pressed=true、轻底态、回执在场 {"pressed":"true","on":"true","notice":"方案模式已开启——下一条消息起先出方案，批准后才写文件×"}
+PASS 第一轮 RunRequest 带 planRequired:true [{"message":"plan probe one","sessionId":"s2","planRequired":true}]
+PASS 首轮结束后方案开关仍在、无根错误 {"plan":true,"disabled":false,"composer":true,"empty":"false","err":null}
+PASS 关掉后下一轮 RunRequest 带 planRequired:false [{"message":"plan probe one","sessionId":"s2","planRequired":true},{"message":"plan probe two","sessionId":"s2","planRequired":false}]
+PASS 渲染过程无控制台错误 []
+截图与读数：/Users/ze/Downloads/Cairn/cairn/.tmp/sweep/plan-mode-smoke.out
+隔离测试配置：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-plan-profile-pTM0E2

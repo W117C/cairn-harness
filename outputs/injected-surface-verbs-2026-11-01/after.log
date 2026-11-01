@@ -1,0 +1,8 @@
+$ node --import tsx .tmp/probe-injected.mts
+obs_recall      ⇒ "回看 obs-7"
+impact_query    ⇒ "查波及面 buildConfig"
+impact_query    ⇒ "查波及面 src/a.ts"
+search_history  ⇒ "搜历史 登录重试"
+tool_search     ⇒ "找工具 sqlite 查询"
+diagnose        ⇒ "诊断 全部检查"
+diagnose        ⇒ "诊断 只跑 lint"

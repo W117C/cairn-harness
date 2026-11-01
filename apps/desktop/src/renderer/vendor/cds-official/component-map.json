@@ -1,0 +1,372 @@
+{
+  "source": "vendor/cds-official/components.css",
+  "sourceSha256": "948bac16bdceb510a49a832778b3c0bb7de6bc1fac86ebc10672a0c3cbd97960",
+  "note": "45 个 data-cds 组件逐条对账；ported 由 cds-components.css 消费，其余两档原因见 reason。",
+  "components": [
+    {
+      "name": "Card",
+      "status": "no-cairn-counterpart",
+      "rules": 20,
+      "declarations": 27,
+      "cairn": null,
+      "reason": "官方 Card 是带 CardLink 的可按卡片（.cds-card-fill/.cds-card-body 两层的 scale .99 / clip 2px）；Cairn 的 .card 是纯静态容器，没有可按后代，规则无处落"
+    },
+    {
+      "name": "MessageActions",
+      "status": "ported",
+      "rules": 17,
+      "declarations": 50,
+      "cairn": ".row .row-actions[data-cds=\"MessageActions\"]",
+      "reason": "操作条显现时序：入 120ms + 0.1s 延迟、出 60ms；官方无位移，去掉 Cairn 原有的 translateY(2px)"
+    },
+    {
+      "name": "CardLink",
+      "status": "no-cairn-counterpart",
+      "rules": 15,
+      "declarations": 21,
+      "cairn": null,
+      "reason": "Cairn 没有“整卡可点”的组件；点击目标都是卡片内部的具体按钮，不能冒充 CardLink"
+    },
+    {
+      "name": "Prose",
+      "status": "ported",
+      "rules": 13,
+      "declarations": 33,
+      "cairn": "[data-cds-reply-type] .md-body[data-cds=\"Prose\"]",
+      "reason": "回复正文标题阶：h1/h2 = 1em+2px，h3–h6 = 1em，字重 580；官方只把值留在 --_prose-* 变量里"
+    },
+    {
+      "name": "AssistantMessage",
+      "status": "ported",
+      "rules": 12,
+      "declarations": 52,
+      "cairn": ".row.assistant[data-cds=\"AssistantMessage\"]",
+      "reason": "右侧留白读 --cds-assistant-message-text-stop（第 862 页起吃在助手行自身，与思考带/工具簇/交付卡同一条列）；首列缩进读 --cds-assistant-message-text-inset（落在 .md-body）"
+    },
+    {
+      "name": "MessageAttachmentsImage",
+      "status": "ported",
+      "rules": 12,
+      "declarations": 21,
+      "cairn": ".md-figure[data-cds=\"MessageAttachments\"] img[data-cds=\"MessageAttachmentsImage\"][data-fit=\"natural\"]",
+      "reason": "单图 natural 档：max-width 480px、max-height 320px（原 100% / 480px）"
+    },
+    {
+      "name": "MessageAttachmentsVideo",
+      "status": "no-cairn-counterpart",
+      "rules": 12,
+      "declarations": 21,
+      "cairn": null,
+      "reason": "Cairn 正文没有 video 节点；官方 Video 与 Image 共用同一档尺寸规则，等有视频渲染面时再挂"
+    },
+    {
+      "name": "SkeletonGroup",
+      "status": "ported",
+      "rules": 10,
+      "declarations": 15,
+      "cairn": ".side-skeleton[data-cds=\"SkeletonGroup\"]",
+      "reason": "骨架组：data-motion=wave 触发官方 cds-skeleton-breathe 规则"
+    },
+    {
+      "name": "Icon",
+      "status": "no-cairn-counterpart",
+      "rules": 9,
+      "declarations": 28,
+      "cairn": null,
+      "reason": "官方 Icon 规则针对 Anthropicons 字体字形（:not(svg)）；Cairn 全部用 lucide 内联 SVG，尺寸由 size prop 控制，套字体规则会破坏图标"
+    },
+    {
+      "name": "MessageAttachments",
+      "status": "ported",
+      "rules": 9,
+      "declarations": 14,
+      "cairn": ".md-figure[data-cds=\"MessageAttachments\"]",
+      "reason": "正文图容器标记；官方 natural 档布局规则的作用域"
+    },
+    {
+      "name": "Page",
+      "status": "no-cairn-counterpart",
+      "rules": 6,
+      "declarations": 14,
+      "cairn": null,
+      "reason": "官方 Page 规则给页头的 page-header-ground 铺毛玻璃；Cairn 没有独立 Page 页头（标题在 .titlebar），规则无处落"
+    },
+    {
+      "name": "Toolbar",
+      "status": "ported",
+      "rules": 6,
+      "declarations": 14,
+      "cairn": ".titlebar[data-cds=\"Toolbar\"]::before",
+      "reason": "工具栏地面：页面底色 85% + blur(12px)，降透明度/高对比时回 100% 无模糊"
+    },
+    {
+      "name": "UserMessage",
+      "status": "ported",
+      "rules": 6,
+      "declarations": 34,
+      "cairn": ".row.user[data-cds=\"UserMessage\"] .t",
+      "reason": "气泡几何：radius/pad-x/pad-y/measure 四个契约变量由官方规则定义，Cairn 在 .t 上消费"
+    },
+    {
+      "name": "ChatComposerQueuedMessages",
+      "status": "ported",
+      "rules": 5,
+      "declarations": 29,
+      "cairn": ".queue-strip[data-cds=\"ChatComposerQueuedMessages\"]",
+      "reason": "排队条底距对齐官方 --gap-xs（8px，原 6px）"
+    },
+    {
+      "name": "ChatComposerDock",
+      "status": "no-cairn-counterpart",
+      "rules": 4,
+      "declarations": 4,
+      "cairn": null,
+      "reason": "官方 dock 规则处理 masked 分组、dock-item 之间的伪元素分隔；Cairn 的输入卡是单一容器，没有 dock 子层"
+    },
+    {
+      "name": "DataTable",
+      "status": "no-cairn-counterpart",
+      "rules": 4,
+      "declarations": 16,
+      "cairn": null,
+      "reason": "Cairn 没有 DataTable 组件；官方规则是 dimmed 行的变量重映射，落到普通 table 上语义不成立"
+    },
+    {
+      "name": "Skeleton",
+      "status": "ported",
+      "rules": 4,
+      "declarations": 6,
+      "cairn": ".side-skeleton-row[data-cds=\"Skeleton\"]",
+      "reason": "骨架条：官方 2s 呼吸 + 90ms 错峰；去掉 Cairn 私有的扫光 ::after"
+    },
+    {
+      "name": "AccordionHeader",
+      "status": "no-cairn-counterpart",
+      "rules": 3,
+      "declarations": 4,
+      "cairn": null,
+      "reason": "官方只有打印态规则（隐藏区域可见、隐藏 caret）；Cairn 的折叠头不参与打印展开"
+    },
+    {
+      "name": "Button",
+      "status": "no-component-css",
+      "rules": 2,
+      "declarations": 3,
+      "cairn": null,
+      "reason": "官方 CSS 只有触摸设备下 ChatComposerChin 内的 margin 补偿和窗口失焦时的 brand 色降档；按钮本体样式在 React utility 类里，产物未下发"
+    },
+    {
+      "name": "ChatComposerChin",
+      "status": "no-cairn-counterpart",
+      "rules": 2,
+      "declarations": 16,
+      "cairn": null,
+      "reason": "官方 chin 是输入卡底部工具行（触摸设备下的控件高度继承与负 margin）；Cairn 的底部行是 .composer-foot 自有布局，没有 data-touch-size 两档"
+    },
+    {
+      "name": "ChatComposerEditor",
+      "status": "no-cairn-counterpart",
+      "rules": 2,
+      "declarations": 2,
+      "cairn": null,
+      "reason": "官方规则只做草稿占位可见性（contenteditable 的 data-doc-empty）；Cairn 用 textarea + placeholder，没有对应状态机"
+    },
+    {
+      "name": "TurnStatusStep",
+      "status": "no-cairn-counterpart",
+      "rules": 2,
+      "declarations": 4,
+      "cairn": null,
+      "reason": "同上；官方另有一条 data-text-size 的 button 字号重置，Cairn 无此尺寸轴"
+    },
+    {
+      "name": "Accordion",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 2,
+      "cairn": null,
+      "reason": "官方 Accordion 仅出现在 AssistantMessage 容器重置名单；Cairn 的折叠行是 .tool/.think 自有实现"
+    },
+    {
+      "name": "Aside",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 2,
+      "cairn": null,
+      "reason": "官方 Aside 仅出现在 AssistantMessage 容器重置名单；Cairn 无此组件"
+    },
+    {
+      "name": "AskUserQuestion",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 2,
+      "cairn": null,
+      "reason": "官方 AskUserQuestion 仅出现在 AssistantMessage 容器重置名单；Cairn 的提问卡是 ClarifyCard，DOM 与语义都不同"
+    },
+    {
+      "name": "Banner",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 2,
+      "cairn": null,
+      "reason": "官方 Banner 仅出现在 AssistantMessage 容器重置名单；Cairn 的提示条是 .notice-strip/.error-strip"
+    },
+    {
+      "name": "ButtonGroup",
+      "status": "no-component-css",
+      "rules": 1,
+      "declarations": 1,
+      "cairn": null,
+      "reason": "同上：仅触摸设备下 ChatComposerChin 内的负 margin 一条，无独立组件样式"
+    },
+    {
+      "name": "ChartContainer",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 2,
+      "cairn": null,
+      "reason": "官方 ChartContainer 仅出现在 AssistantMessage 容器重置名单；Cairn 无图表组件"
+    },
+    {
+      "name": "ChatComposerNotices",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 1,
+      "cairn": null,
+      "reason": "官方只给 dock 内 notices 一条 margin-bottom；Cairn 的错误/notice 条不在输入卡 dock 内"
+    },
+    {
+      "name": "CommentCard",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 2,
+      "cairn": null,
+      "reason": "官方 CommentCard 仅出现在 AssistantMessage 容器重置名单；Cairn 没有行内评论卡"
+    },
+    {
+      "name": "DiffIndicator",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 2,
+      "cairn": null,
+      "reason": "官方规则只有 font-size:inherit / line-height:inherit；Cairn 的 diff 行本来就是继承，无新增可落"
+    },
+    {
+      "name": "FileDiff",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 2,
+      "cairn": null,
+      "reason": "官方 FileDiff 仅出现在 AssistantMessage 容器重置名单；Cairn 的 DiffView 是自有实现，行高/字体另有判卷"
+    },
+    {
+      "name": "Heatmap",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 2,
+      "cairn": null,
+      "reason": "官方 Heatmap 仅出现在 AssistantMessage 容器重置名单；Cairn 无热力图组件"
+    },
+    {
+      "name": "MessageAttachmentsFile",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 1,
+      "cairn": null,
+      "reason": "官方只给附件瓦片一条 margin-top；Cairn 的 file 附件是 .ur-attach-chip（行内 chip），不是瓦片布局"
+    },
+    {
+      "name": "MessageAttachmentsQuote",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 1,
+      "cairn": null,
+      "reason": "官方只给附件瓦片一条 margin-top；Cairn 没有引用瓦片组件"
+    },
+    {
+      "name": "ModelSelector",
+      "status": "no-component-css",
+      "rules": 1,
+      "declarations": 1,
+      "cairn": null,
+      "reason": "同上：仅触摸设备下 ChatComposerChin 内的负 margin 一条，无独立组件样式"
+    },
+    {
+      "name": "ModelSelectorEffort",
+      "status": "no-component-css",
+      "rules": 1,
+      "declarations": 1,
+      "cairn": null,
+      "reason": "同上：仅触摸设备下 ChatComposerChin 内的负 margin 一条，无独立组件样式"
+    },
+    {
+      "name": "Panel",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 2,
+      "cairn": null,
+      "reason": "官方 Panel 仅出现在 AssistantMessage 容器重置名单；Cairn 的窗格面板是自有 .pane-panel"
+    },
+    {
+      "name": "PointChartContainer",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 2,
+      "cairn": null,
+      "reason": "官方 PointChartContainer 仅出现在 AssistantMessage 容器重置名单；Cairn 无图表组件"
+    },
+    {
+      "name": "PreviewCard",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 2,
+      "cairn": null,
+      "reason": "官方 PreviewCard 仅出现在 AssistantMessage 容器重置名单；Cairn 无此组件"
+    },
+    {
+      "name": "SplitDropdownButton",
+      "status": "no-component-css",
+      "rules": 1,
+      "declarations": 1,
+      "cairn": null,
+      "reason": "同上：仅触摸设备下 ChatComposerChin 内的负 margin 一条，无独立组件样式"
+    },
+    {
+      "name": "Surface",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 2,
+      "cairn": null,
+      "reason": "官方 Surface 仅出现在 AssistantMessage 容器重置名单；Cairn 没有 CDS Surface 层"
+    },
+    {
+      "name": "Table",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 2,
+      "cairn": null,
+      "reason": "官方 Table 仅在 AssistantMessage 的容器重置名单里出现；Cairn 的 markdown 表格是 .md-table，不复用 CDS Table"
+    },
+    {
+      "name": "TurnStatus",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 2,
+      "cairn": null,
+      "reason": "官方只给 TurnStatus 首列 prose 字号；Cairn 的工具/状态行是 caption 档自有组件，字号不能按 prose 走"
+    },
+    {
+      "name": "Pulse",
+      "status": "no-component-css",
+      "rules": 0,
+      "declarations": 0,
+      "cairn": null,
+      "reason": "官方只在工具类选择器里引用 Pulse（.has-[>[data-cds=Pulse]]…），没有 data-cds=Pulse 的组件规则"
+    }
+  ],
+  "totals": {
+    "ported": 10,
+    "no-cairn-counterpart": 29,
+    "no-component-css": 6
+  }
+}

@@ -18,7 +18,7 @@ export function PluginSidebar(props: { width: number; onWidth: (width: number) =
       const target = e.target;
       if (!(target instanceof Node)) return;
       if (rootRef.current?.contains(target)) return;
-      if (target instanceof Element && target.closest('[aria-label="插件侧栏"]') !== null) return;
+      if (target instanceof Element && target.closest('[aria-label="工作台工具"], [data-workbench-menu]') !== null) return;
       props.onClose();
     };
     document.addEventListener("pointerdown", onDown, true);

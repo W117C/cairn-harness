@@ -86,6 +86,23 @@ Run commands from the repository root. Start with checks covering the changed be
 - A provider/tool submission carries a `requestId` idempotency key: resubmitting the same
   `requestId` returns the existing submission and does not execute the work a second time.
 
+## Design-system parity
+
+- `apps/desktop/src/renderer/vendor/cds-official/tokens.css` is Claude's own @ant/cds token
+  sheet, vendored **byte-for-byte** (source + sha256 in `UPSTREAM.json` beside it). Never hand-edit
+  it — re-extract instead; `apps/desktop/tests/cds-parity.test.ts` fails on any digest or name-count drift.
+- `cds-adapter.css` **maps, never copies**: every right side is `var(--official)` or
+  `from var(--official) h s l`. A literal there silently decouples us from upstream.
+- Never write `--x: var(--x)` — a CSS self-reference is a cycle: the declaration is dropped and the
+  consumer gets an empty value. When both sides define the same name, let the official one win.
+- Cairn colours are HSL triplets (`hsl(var(--bg-100))`); CDS emits whole colours. Bridge with
+  relative colour rather than rewriting the ~900 call sites.
+- CDS dark mode is scoped by `[data-mode="dark"]`, Cairn's theme writes `data-theme`. Write both
+  (`themeKeysOf`) or dark silently falls back to light.
+- Acceptance is a **measured** `getComputedStyle` read from the real renderer
+  (`apps/desktop/scripts/cds-values-probe.cjs`), not CSS text that looks right. The judge skips those assertions
+  without the evidence file — skipped is not passed.
+
 ## HEAD verification
 
 - `pnpm mutate-verify` measures **HEAD, not the working tree**, in a disposable worktree.
@@ -95,3 +112,9 @@ Run commands from the repository root. Start with checks covering the changed be
   contains the change before citing either command as evidence for this task.
 - Report the checks actually run, real assertion/test counts, failures, skipped or
   unverified items, and whether the evidence covers the working tree or a commit.
+
+## Conversation rail
+
+- One rail, one gap: the conversation's left rail and its 24px gaps are pinned by
+  `apps/desktop/tests/conversation-rail.test.ts`; the byline strip is an overlay that takes no
+  pointer when hidden. See `docs/adr/0008-conversation-rail.md`.

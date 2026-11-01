@@ -91,12 +91,14 @@ describe("暗色分层与文字（2026-10-20 真机还原更正 · 原 2026-10-1
     expect(dark).not.toMatch(/--btn-primary-bg:\s*hsl\(var\(--text-000\)\);/);
   });
 
-  it("语义三色挂角色层（亮暗分档由角色承担，语义层只写引用）", () => {
-    // 2026-10-20：success/risk/danger 改为引用 role-* 而非写死色值。
-    // 这样暗色块只需重定义 role-*，语义名自动换档——组件始终只写一个名。
-    expect(tokens).toMatch(/--success:\s*var\(--role-success-450\);/);
+  it("语义三色挂官方 purpose 令牌（本地 role 名与官方撞名，整色不能进 hsl()）", () => {
+    // 2026-10-31：官方 CDS 的 --role-danger-300 / --role-success-450 是整色，
+    // 覆盖本地同名三元组；hsl(var(--role-*)) 会整条失效。语义层改桥到官方 purpose：
+    // fill = 实心底、text = 文字色；from … h s l 仍是三元组，组件 hsl(var(--…)) 不变。
+    expect(tokens).toMatch(/--success:\s*from var\(--fill-success\) h s l;/);
     expect(tokens).toMatch(/--color-risk:\s*var\(--role-warning-450\);/);
-    expect(tokens).toMatch(/--color-danger:\s*var\(--role-danger-300\);/);
+    expect(tokens).toMatch(/--color-danger:\s*from var\(--fill-danger\) h s l;/);
+    expect(tokens).toMatch(/--color-danger-ink:\s*from var\(--text-danger\) h s l;/);
   });
 
   it("角色层四族齐全（accent / danger / success / warning），每族带 fill / fill-hover / on", () => {
@@ -237,10 +239,18 @@ describe("字重刻度（2026-10-22 按 Claude v3 暗色轴实测更正 · 亮�
 });
 
 describe("刻度重钉：4px 栅格 / 圆角三档 / 正文字号 / 阅读列 / 过渡区间", () => {
-  it("圆角收敛 6 / 10 / 14", () => {
-    expect(tokens).toMatch(/--radius-sm:\s*calc\(0\.375rem \* var\(--size-scale\)\);/);     // 6
+  it("圆角收敛 7 / 10 / 14（2026-10-28 按 CDS 桌面档对齐 --radius-sm：6→7）", () => {
+    // 依据：Claude Desktop 3.6556.2 渲染层 `--cds-radius--sm` 在
+    // `.cds-root[data-platform=desktop]` / `[data-density=comfortable]` 两个作用域下都是
+    // calc(.4375rem)=7px（基础档 .cds-root 才是 6px）。Cairn 走桌面档 ⇒ 取 7。
+    // 取料：MainWindowPage-*.css（sha256 记在 vendor/cds-official/UPSTREAM.json 的同批记录）。
+    expect(tokens).toMatch(/--radius-sm:\s*calc\(0\.4375rem \* var\(--size-scale\)\);/);    // 7
     expect(tokens).toMatch(/--radius-md:\s*calc\(0\.625rem \* var\(--size-scale\)\);/);     // 10
     expect(tokens).toMatch(/--radius-composer:\s*calc\(0\.875rem \* var\(--size-scale\)\);/); // 14
+  });
+
+  it("间距下限对齐 CDS pad-xs = 6px（2026-10-28；旧 4px 全仓 0 处引用）", () => {
+    expect(tokens).toMatch(/--pad-xs:\s*calc\(0\.375rem \* var\(--size-scale\)\);/);        // 6
   });
 
   it("正文 14 / caption 四档 10·11·12·13 / 间距下探到 4 档（业主 §4.4 刻度，2026-10-21 更正）", () => {

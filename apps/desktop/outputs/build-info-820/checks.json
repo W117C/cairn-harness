@@ -1,0 +1,75 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "真指针进「关于与更新」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "导出/导入偏好按钮在屏上",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "真指针点「导出偏好…」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "导出回执带保存路径",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "导入前字号不是 lg（夹具初值）",
+      "ok": true
+    },
+    {
+      "name": "真指针点「导入偏好…」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "导入先出确认卡（列出覆盖项）",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "真指针点「应用」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "导入回执上屏且设置真的变了（textSize=lg）",
+      "ok": true,
+      "detail": "lg"
+    },
+    {
+      "name": "真指针点「恢复默认…」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "恢复默认先出确认卡",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "真指针点「恢复默认」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "恢复回执上屏且设置回默认（textSize=md）",
+      "ok": true,
+      "detail": "md"
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,2 @@
+$ pnpm --filter cairn-desktop run typecheck
+$ tsc -p tsconfig.json --noEmit

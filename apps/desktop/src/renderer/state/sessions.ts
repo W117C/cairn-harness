@@ -9,10 +9,19 @@
 // 回主页后要重开 ⇒ openSession）。
 import { useCallback, useRef } from "react";
 import type { AgentEvent } from "../../../../../src/main/ipc-protocol";
-import type { WorkspaceSession } from "../sessions-view";
+import type { DeleteConfirmTarget, SessionConfirmTarget, WorkspaceSession } from "../sessions-view";
 import { STR } from "../strings";
 import { toast } from "../toast";
 import { runKey } from "./session-identity";
+import { deleteSessionWaitingForRun, type SessionDeleteResult } from "./session-delete";
+
+const endSessionDelete = (id: string): Promise<SessionDeleteResult> => window.agent.deleteSession(id);
+
+/** 删除前的停止：不续队列（会话都要没了）；读应答返回是否真停住——false = 本窗口运行旗陈旧。 */
+async function stopRunForDelete(id: string, workspace: string | null): Promise<boolean> {
+  const res = await window.agent.runCancel(id, workspace ?? undefined).catch(() => null);
+  return res !== null && res.ok === true;
+}
 
 export interface SessionOpsDeps {
   /** 当前会话（id 可能是 null）。 */
@@ -44,8 +53,8 @@ export interface SessionOpsDeps {
   /** 在跑会话集合（关会话回主页要说清「后台还在跑」）。 */
   runningSet: React.MutableRefObject<Set<string>>;
   /** 归档必问闸 / 删除闸（那两张卡住在浮层簇，本簇只负责发起与执行）。 */
-  setArchiveConfirm: (v: WorkspaceSession | null) => void;
-  setDeleteConfirm: (v: WorkspaceSession | null) => void;
+  setArchiveConfirm: (v: SessionConfirmTarget | null) => void;
+  setDeleteConfirm: (v: DeleteConfirmTarget | null) => void;
 }
 
 export interface SessionOpsState {
@@ -66,7 +75,7 @@ export interface SessionOpsState {
   doArchiveSession: (id: string, archived: boolean) => Promise<void>;
   requestArchiveSession: (s: WorkspaceSession, archived: boolean) => void;
   requestDeleteSession: (s: WorkspaceSession) => void;
-  doDeleteSession: (id: string) => Promise<void>;
+  doDeleteSession: (id: string, target?: WorkspaceSession) => Promise<void>;
 }
 
 export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
@@ -95,13 +104,13 @@ export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
   const cycleSession = useCallback((dir: 1 | -1): boolean => {
     const list = sessions;
     if (list.length === 0) return false;
-    const i = list.findIndex((s) => s.id === activeId);
+    const i = list.findIndex((s) => s.id === activeId && s.workspace === activeWorkspaceRef.current);
     const idx = i < 0 ? (dir === 1 ? 0 : list.length - 1) : (i + dir + list.length) % list.length;
     const target = list[idx];
     if (target === undefined) return false;
-    openSession(target.id);
+    openSession(target.id, target.workspace);
     return true;
-  }, [sessions, activeId, openSession]);
+  }, [sessions, activeId, activeWorkspaceRef, openSession]);
   /** 切换会话（键位双入口与菜单共用一处出口）：无会话时给回执——静默无响应会被读成「键坏了」。
    *  这条回执此前在三个键位里各抄一份；菜单再抄两份就是五份，改口径时必然漏。 */
   const cycleSessionOrToast = useCallback((dir: 1 | -1): void => {
@@ -209,16 +218,30 @@ export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
       setLastError(`归档失败：${err instanceof Error ? err.message : String(err)}`);
     }
   }, [refreshSessions, newSession]);
-  /** 归档必问（§3.3 硬闸：「归档任何会话前必问」，与权限档无关）；取消归档不问。 */
+  /** 归档必问（§3.3 硬闸：「归档任何会话前必问」，与权限档无关）；取消归档不问。
+   *  在跑的会话照样能归档（可逆），但确认卡要前置「本轮继续在后台跑」——不把运行藏起来。 */
   const requestArchiveSession = useCallback((s: WorkspaceSession, archived: boolean) => {
-    if (archived) setArchiveConfirm(s);
-    else void doArchiveSession(s.id, false);
-  }, [doArchiveSession]);
+    if (!archived) { void doArchiveSession(s.id, false); return; }
+    setArchiveConfirm(runningSet.current.has(runKey(s.workspace, s.id)) ? { ...s, running: true } : s);
+  }, [doArchiveSession, runningSet, setArchiveConfirm]);
   // §6.3 删除会话：必问（不可撤销）→ 真删；删的是当前会话 ⇒ 回 settings.currentSession 指定的最近一个（core 已回退），无则回主页。
-  const requestDeleteSession = useCallback((s: WorkspaceSession) => { setDeleteConfirm(s); }, []);
-  const doDeleteSession = useCallback(async (id: string) => {
+  // 运行中的会话：确认卡先说「停止并删除」，执行时先取消本轮——核心对在跑会话有硬闸（会话正在运行，
+  // 先停止再删除），取消到锁释放是异步的，锁错误只在预算内重试，不把一次「还在退场」报成删除失败。
+  const requestDeleteSession = useCallback((s: WorkspaceSession) => {
+    setDeleteConfirm(runningSet.current.has(runKey(s.workspace, s.id)) ? { ...s, running: true } : s);
+  }, [setDeleteConfirm, runningSet]);
+  const doDeleteSession = useCallback(async (id: string, target?: WorkspaceSession) => {
+    const workspace = target?.workspace ?? (activeIdRef.current === id ? activeWorkspaceRef.current : null);
+    const key = runKey(workspace, id);
+    let wasRunning = runningSet.current.has(key);
+    if (wasRunning && !(await stopRunForDelete(id, workspace))) {
+      runningSet.current.delete(key); // 主进程没有活动 run：陈旧旗先摘，不把「已停」当事实
+      wasRunning = false;
+    }
     try {
-      const res = await window.agent.deleteSession(id);
+      // 只有本窗口确实发起过停止才等锁释放；没停就忙 = 别的进程在跑，立即如实报错。
+      const res = wasRunning ? await deleteSessionWaitingForRun(endSessionDelete, id) : await endSessionDelete(id);
+      runningSet.current.delete(key);
       if (activeIdRef.current === id) {
         if (res.currentSession === null) newSession();
         else openSession(res.currentSession);
@@ -227,7 +250,7 @@ export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
     } catch (err) {
       setLastError(`删除失败：${err instanceof Error ? err.message : String(err)}`);
     }
-  }, [openSession, newSession, refreshSessions, setLastError]);
+  }, [activeIdRef, activeWorkspaceRef, openSession, newSession, refreshSessions, runningSet, setLastError]);
 
   return {
     newSession,

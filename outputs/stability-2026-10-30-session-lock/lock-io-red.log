@@ -1,0 +1,36 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/session-lock-recovery.test.ts (10 tests | 1 failed) 68ms
+   ❯ session run lock recovery (10)
+     × does not treat an unreadable lock path as an unlocked session 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/session-lock-recovery.test.ts > session run lock recovery > does not treat an unreadable lock path as an unlocked session
+AssertionError: promise resolved "false" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+false
+
+ ❯ tests/session-lock-recovery.test.ts:48:43
+     46|     const path = join(await tempRoot(), "s.jsonl");
+     47|     await mkdir(`${path}.lock`);
+     48|     await expect(sessionRunLockHeld(path)).rejects.toMatchObject({ cod…
+       |                                           ^
+     49|     await expect(acquireSessionRunLock(path)).rejects.toMatchObject({ …
+     50|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+   Start at  15:19:12
+   Duration  289ms (transform 55%, tests 31%, import 13%, worker 1%)
+

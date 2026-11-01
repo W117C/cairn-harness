@@ -22,6 +22,12 @@ export function PopoutApp(props: { kind: PaneKind; sessionId: string | null }): 
       : ` · ${props.sessionId.length > 24 ? `${props.sessionId.slice(0, 24)}…` : props.sessionId}`;
     document.title = `Cairn · ${PANE_META[props.kind].label}${sid}`;
   }, [props.kind, props.sessionId]);
+  // 通知归属：弹窗在看哪个会话也上报；卸载/无会话清掉，避免旧窗压制通知。
+  useEffect(() => {
+    if (props.sessionId === null) { void window.agent.reportViewing(null, ""); return; }
+    void window.agent.reportViewing(props.sessionId, "");
+    return () => { void window.agent.reportViewing(null, ""); };
+  }, [props.sessionId]);
   useEffect(() => {
     // 没有 sessionId 的弹出窗**不收任何事件**：旧实现 `props.sessionId === null || …` 让第一个
     // 析取项把后面两项都变成废话 ⇒ 弹出窗会把**所有会话**的事件都吸进来（⌘N 回首页时 paneTabs

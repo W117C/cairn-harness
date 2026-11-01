@@ -21,7 +21,7 @@ describe("provider capability contract", () => {
     expect(declared).toHaveLength(2);
     for (const cap of declared) {
       expect(cap.thinking.supported).toBe(true);
-      expect(cap.thinking.values).toEqual(["off", "low", "high"]); // max 归到 high，medium 未声明不可选
+      expect(cap.thinking.values).toEqual(["off", "low", "high", "max"]); // 官方 low/high/max 全可达；medium 未声明不可选
       expect(cap.thinking.default).toBe("off"); // 声明了支持 ≠ 替用户打开（思考要花钱）
     }
     const rest = capabilities.filter((cap) => cap.provider !== "deepseek");
@@ -34,7 +34,7 @@ describe("provider capability contract", () => {
   });
 
   it("keeps the UI vocabulary centralized and stable", () => {
-    expect(THINKING_EFFORTS).toEqual(["off", "low", "medium", "high"]);
+    expect(THINKING_EFFORTS).toEqual(["off", "low", "medium", "high", "max"]);
   });
 
   it("defaults an omitted thinking value to the model capability default", () => {

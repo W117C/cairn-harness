@@ -1,0 +1,18 @@
+$ pnpm run build:preload && vite build && tsc -p tsconfig.json --noEmit
+$ esbuild src/preload/index.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs
+
+  dist-electron/preload.cjs  11.1kb
+
+⚡ Done in 16ms
+
+./vendor/dsh-claude-style/fonts/InterVariable.woff2 referenced in ./vendor/dsh-claude-style/fonts/InterVariable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+./vendor/dsh-claude-style/fonts/JetBrainsMonoVariable.ttf referenced in ./vendor/dsh-claude-style/fonts/JetBrainsMonoVariable.ttf didn't resolve at build time, it will remain unchanged to be resolved at runtime
+跑数 2｜启动 188.9–363.8（中位 276.3，离散度 1.93×）
+首开 547.1–655.6（中位 601.4，离散度 1.20×）
+帧 p50 30.1–31.3（中位 30.7，离散度 1.04×）｜p95 40.2–40.9（中位 40.6，离散度 1.02×）｜max 43.2–43.3（中位 43.2，离散度 1.00×）
+DOM 节点 42807（各跑一致）
+控制台错误 0 条
+预算：全过
+原始报告：/tmp/cairn-perf-UTImfB
+EXIT=0

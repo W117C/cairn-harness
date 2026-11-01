@@ -7,6 +7,7 @@
 import { randomBytes } from "node:crypto";
 import { isValidSessionName } from "./sessions";
 import type { PermissionMode } from "../permissions/modes";
+import { isRecord } from "../is-record";
 
 // ---- 七 kind 数据模型（表单与验收只暴露 once/interval/daily/weekly，§12.2.1 V1 收敛）----
 
@@ -116,10 +117,6 @@ export interface ValidateOptions {
   now?: Date;
 }
 
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 /** 校验器认的全部顶层字段。导出是给判卷层对账用的：模型面上出现的字段名必须在这里，
  *  否则模型照规格写出来的定义会被 `${k} 是未知字段` 拒掉（规格与实现各写一份时的必然下场）。 */
@@ -128,7 +125,7 @@ export const KNOWN_TOP_FIELDS = new Set([
 ]);
 
 function validateSchedule(raw: unknown, errors: string[], form: boolean): AutomationSchedule | null {
-  if (!isPlainObject(raw)) {
+  if (!isRecord(raw)) {
     errors.push("schedule 必须是对象");
     return null;
   }
@@ -244,7 +241,7 @@ export type ValidationResult =
  */
 export function validateAutomation(raw: unknown, opts: ValidateOptions = {}): ValidationResult {
   const errors: string[] = [];
-  if (!isPlainObject(raw)) return { ok: false, errors: ["定时任务定义必须是对象"] };
+  if (!isRecord(raw)) return { ok: false, errors: ["定时任务定义必须是对象"] };
   for (const k of Object.keys(raw)) {
     if (!KNOWN_TOP_FIELDS.has(k)) errors.push(`${k} 是未知字段`);
   }

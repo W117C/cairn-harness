@@ -1,0 +1,14 @@
+=== 改前 A：不带进位（照日志窗旧写法 toFixed）===
+     × 1 MB 门口不写四位数：1024.0 KB 进位成 1.0 MB 3ms
+     18|     expect(formatBytes(1047552)).toBe("1023.0 KB"); // 1023 × 1024
+      Tests  1 failed | 3 passed (4)
+
+=== 改前 B：附件行回到自己那份（裸数 + 无进位）===
+     × 两个调用面读同一份：附件行 formatSize 与日志窗同口径 2ms
+      Tests  1 failed | 3 passed (4)
+
+=== 复原后 ===
+      Tests  4 passed (4)
+=== sha256 ===
+baa5648d4759d0067c5cb2084ffaf148f0e7b6e78d5b48361746c0b16b38417a
+da3e41b2b802c81b845536d774d25fae728a3dd6edda8276087061f1f8dcaaed

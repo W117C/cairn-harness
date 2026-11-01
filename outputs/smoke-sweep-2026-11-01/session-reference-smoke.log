@@ -1,0 +1,23 @@
+[scheduler] journal 保留收敛完成（当前 0 条）
+[m4a] 调度器已启动（桌面端常驻接线：快照/CRUD/触发同实例）
+[byok-inject] 启动注入：无可注入 key（未存或 env 优先）
+PASS openSession 回传 SessionView 与父前缀
+PASS 父前缀保留物理行号（父第 1 行与子第 2 行各归各）
+PASS 产品分叉成功
+PASS 子日志初始只有一行血缘（不复制父事件）
+PASS 分叉后父日志 sha 不变
+PASS 祖先正文可被搜索且带来源引用
+PASS 祖先行的反馈落子会话并可读回来源
+PASS 祖先行的置顶保留来源
+PASS 祖先轮的文件回滚可执行
+PASS 盘上文件回到覆盖前内容
+PASS file_restored 落在子会话日志
+Error occurred in handler for 'agent:sessions-delete': Error: 会话被指针分叉依赖，拒绝破坏性操作：parent ← child、child-f1（先处理叶子会话，不提供隐式级联）
+    at assertNoDependents (/Users/ze/Downloads/Cairn/cairn/src/main/session-dependencies.ts:61:11)
+    at async <anonymous> (/Users/ze/Downloads/Cairn/cairn/src/main/session-handlers.ts:244:5)
+    at async withSessionMutation (/Users/ze/Downloads/Cairn/cairn/src/main/session-mutation-lock.ts:85:14)
+    at async handleSessionDelete (/Users/ze/Downloads/Cairn/cairn/src/main/session-handlers.ts:243:10)
+    at async Session.<anonymous> (node:electron/js2c/browser_init:1:119972)
+PASS 被指针依赖的父会话拒绝删除
+PASS 同名会话按 workspace 精确打开
+PASS 父日志仍未变

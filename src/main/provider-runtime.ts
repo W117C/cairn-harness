@@ -33,7 +33,7 @@ export interface ProviderInfo {
   keyConfigured: boolean;
 }
 
-/** 主会话可用的 provider id：内置四家有字面量提示，自定义家是运行时才知道的字符串
+/** 主会话可用的 provider id：内置家有字面量提示，自定义家是运行时才知道的字符串
  *  （`(string & {})` 保留字面量提示的同时允许任意 id —— 静态上无法枚举别人写在配置里的家）。 */
 export type MainProviderId = EnvKeyedProvider | (string & {});
 
@@ -97,7 +97,7 @@ const PROVIDER_LABELS: Record<EnvKeyedProvider, string> = {
   deepseek: "DeepSeek",
 };
 
-/** provider 的展示名：内置四家有固定文案，自定义家用自己的 label，兜底回 id。
+/** provider 的展示名：内置家（含 DeepSeek）有固定文案，自定义家用自己的 label，兜底回 id。
  *  兜底不抛：label 只影响显示；真正的把关在 `isKnownProviderId`（未知 id 在那一步就拒了）。 */
 export function providerLabel(kind: string): string {
   const builtin = (PROVIDER_LABELS as Readonly<Record<string, string | undefined>>)[kind];
@@ -106,7 +106,7 @@ export function providerLabel(kind: string): string {
   return custom === undefined ? kind : custom.label;
 }
 
-/** 内置四家的 id（错误文案里点名用；从标签表派生，避免再抄一份字面量）。 */
+/** 内置家的 id（错误文案里点名用；从标签表派生，避免再抄一份字面量）。 */
 const PROVIDER_LABELS_KEYS = Object.keys(PROVIDER_LABELS);
 
 /** Empty env means "no override"; unknown non-empty values fail visibly instead of falling through. */
@@ -226,7 +226,7 @@ export function resolveMainModel(input: ResolveMainModelInput): MainModelSelecti
   }
 
   const provider = input.forcedKind ?? input.configuredKind;
-  if (!isKnownProviderId(provider)) throw new Error(`未知主会话 provider: ${provider}（内置四家，或在 .agent/providers.json 里声明并已装上的自定义家）`);
+  if (!isKnownProviderId(provider)) throw new Error(`未知主会话 provider: ${provider}（内置 ${String(PROVIDER_LABELS_KEYS.length)} 家，或在 .agent/providers.json 里声明并已装上的自定义家）`);
   const requested = input.settingsModel !== ""
     ? input.settingsModel
     : provider === "glm" ? input.legacyEnvModel : undefined;
@@ -308,7 +308,7 @@ export function buildProviderInfo(
   };
 }
 
-/** 已知的 provider 清单（内置四家 + 已装自定义家）。
+/** 已知的 provider 清单（内置家 + 已装自定义家）。
  *  为什么要有这一格：设置页的 provider 下拉原先是**渲染层写死的常量**
  *  （`PANEL_PROVIDER_KINDS`），所以用户新加的家里根本选不上它 —— 配了却切不过去，
  *  正是本仓点名过的「能力发货、入口不通」。清单必须跟注册表同源，所以由主进程铺出去。 */

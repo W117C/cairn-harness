@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-30",
+  "timezone": "Asia/Shanghai",
+  "scope": "working-tree",
+  "baselineHead": "be9c0be5",
+  "core": {
+    "files": 580,
+    "tests": 7415,
+    "maxWorkers": 2,
+    "exitCode": 0
+  },
+  "desktop": {
+    "files": 271,
+    "tests": 1821,
+    "maxWorkers": 2,
+    "exitCode": 0
+  },
+  "typecheck": {
+    "exitCode": 0
+  },
+  "desktopBuild": {
+    "exitCode": 0
+  },
+  "desktopBoundary": {
+    "exitCode": 0
+  },
+  "rendererLayer": {
+    "exitCode": 0
+  },
+  "docsCheck": {
+    "exitCode": 0
+  },
+  "scopedSourcesUnchangedDuringVerification": true,
+  "newRegressionTests": 15,
+  "independentReview": false,
+  "reviewMode": "current-agent OCR delegate",
+  "committed": false,
+  "deployed": false
+}

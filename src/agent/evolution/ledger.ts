@@ -22,6 +22,7 @@ import { join } from "node:path";
 import type { PatchEffectStatus } from "./patch-effect";
 import type { StrategyPatch } from "./strategy-patch";
 import { patchKeyOf } from "./patch-effect";
+import { isRecord } from "../../is-record";
 
 export const EVOLUTION_LEDGER_FILE = "evolution-ledger.jsonl";
 
@@ -36,10 +37,6 @@ export type LedgerEvent =
   | { v: 1; type: "run"; ts: number; session?: string; verifyOutcome: "green" | "red" | "none"; patches: number; tokensPerBoundary?: number | null; costMeasurable?: boolean }
   | { v: 1; type: "emit"; ts: number; key: string; kind: StrategyPatch["kind"]; note: string }
   | { v: 1; type: "observe"; ts: number; key: string; status: PatchEffectStatus; observed: string };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /** 单行 parse + 验形状。认不出 ⇒ null（调用方按「坏行只丢这一条」处置）。 */
 export function parseLedgerLine(line: string): LedgerEvent | null {

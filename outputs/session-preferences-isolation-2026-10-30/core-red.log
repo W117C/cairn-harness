@@ -1,0 +1,84 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/session-prefs-isolation.test.ts (3 tests | 3 failed) 16ms
+   × saves same-id preferences beside each exact session without overwriting the other root 10ms
+   × clears one scoped field while keeping its sibling and the other workspace 3ms
+   × inherits an unambiguous legacy choice on first save without rewriting the old metadata 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/session-prefs-isolation.test.ts > saves same-id preferences beside each exact session without overwriting the other root
+AssertionError: expected null to deeply equal { version: 1, model: 'model-a', …(1) }
+
+- Expected:
+{
+  "model": "model-a",
+  "thinking": "high",
+  "version": 1,
+}
+
++ Received:
+null
+
+ ❯ tests/session-prefs-isolation.test.ts:29:30
+     27|   const second = await handleSessionPrefsSet({ sessionId: "same", pref…
+     28|   expect([first, second]).toEqual([{ ok: true }, { ok: true }]);
+     29|   expect(await readPrefs(a)).toEqual({ version: 1, model: "model-a", t…
+       |                              ^
+     30|   expect(await readPrefs(b)).toEqual({ version: 1, model: "model-b", t…
+     31| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/session-prefs-isolation.test.ts > clears one scoped field while keeping its sibling and the other workspace
+AssertionError: expected null to deeply equal { version: 1, thinking: 'high' }
+
+- Expected:
+{
+  "thinking": "high",
+  "version": 1,
+}
+
++ Received:
+null
+
+ ❯ tests/session-prefs-isolation.test.ts:37:30
+     35|   await handleSessionPrefsSet({ sessionId: "same", prefs: { model: "mo…
+     36|   await handleSessionPrefsSet({ sessionId: "same", prefs: { model: nul…
+     37|   expect(await readPrefs(a)).toEqual({ version: 1, thinking: "high" });
+       |                              ^
+     38|   expect(await readPrefs(b)).toEqual({ version: 1, model: "model-b" });
+     39| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/session-prefs-isolation.test.ts > inherits an unambiguous legacy choice on first save without rewriting the old metadata
+AssertionError: expected null to deeply equal { Object (version, model, ...) }
+
+- Expected:
+{
+  "model": "new-model",
+  "thinking": "high",
+  "version": 1,
+}
+
++ Received:
+null
+
+ ❯ tests/session-prefs-isolation.test.ts:45:30
+     43|   await metadata.setPrefs("same", { model: "legacy-model", thinking: "…
+     44|   await handleSessionPrefsSet({ sessionId: "same", prefs: { model: "ne…
+     45|   expect(await readPrefs(a)).toEqual({ version: 1, model: "new-model",…
+       |                              ^
+     46|   expect(await metadata.find("same")).toMatchObject({ model: "legacy-m…
+     47| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  16:02:54
+   Duration  988ms (transform 80%, import 18%, tests 2%)
+

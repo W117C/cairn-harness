@@ -30,7 +30,7 @@ export const RENDERER_FILE_LINE_CAP = 1200;
 export const APP_TSX_LINE_CAP = 900;
 
 /** 派生层允许的**运行时**依赖（纯模块白名单；type-only 导入不进这张表）。 */
-const DERIVED_RUNTIME_ALLOWLIST = new Set(["src/main/usage-ledger.ts"]);
+const DERIVED_RUNTIME_ALLOWLIST = new Set(["src/main/usage-ledger.ts", "src/agent/subflow.ts"]);
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 /** 渲染层相对仓根的路径（判卷在临时目录里造样本时也用同一套相对路径）。 */
@@ -188,6 +188,8 @@ export function checkI2(files: string[], root: string = ROOT): Violation[] {
 /** I3：derived/** 必须是纯投影。 */
 export function checkI3(files: string[], root: string = ROOT): Violation[] {
   const out: Violation[] = [];
+  const pending = files.filter((file) => relOf(file, root).startsWith("apps/desktop/src/renderer/derived/"));
+  const visited = new Set<string>();
   const banned: { re: RegExp; why: string }[] = [
     { re: /\bDate\s*\.\s*now\b/, why: "不读时钟（Date.now）" },
     { re: /\bnew\s+Date\b/, why: "不构造日期（new Date）" },
@@ -196,9 +198,10 @@ export function checkI3(files: string[], root: string = ROOT): Violation[] {
     { re: /\bawait\b/, why: "不同步等待（await）" },
     { re: /\basync\b/, why: "不写异步函数（async）" },
   ];
-  for (const file of files) {
+  for (const file of pending) {
+    if (visited.has(file)) continue;
+    visited.add(file);
     const rel = relOf(file, root);
-    if (!rel.startsWith("apps/desktop/src/renderer/derived/")) continue;
     const raw = readFileSync(file, "utf8");
     const code = stripCommentsAndStrings(raw);
     const codeLines = code.split("\n");
@@ -224,8 +227,11 @@ export function checkI3(files: string[], root: string = ROOT): Violation[] {
       }
       const target = resolveSpecifier(file, imp.specifier, root);
       if (target === null) continue;
-      if (target.startsWith("apps/desktop/src/renderer/derived/")) continue;
-      if (DERIVED_RUNTIME_ALLOWLIST.has(target)) continue;
+      if (target.startsWith("apps/desktop/src/renderer/derived/") || DERIVED_RUNTIME_ALLOWLIST.has(target)) {
+        // 登记只允许复用，不豁免纯度：传递依赖也跑同一套检查。
+        pending.push(join(root, target));
+        continue;
+      }
       out.push({ rule: "I3", file: rel, line: imp.line, message: `派生层只许吃纯模块（未登记：${target}）` });
     }
   }

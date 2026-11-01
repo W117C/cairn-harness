@@ -1,0 +1,19 @@
+attach:
+/dev/disk4  	GUID_partition_scheme
+/dev/disk4s1	Apple_APFS
+/dev/disk5  	Apple_APFS_Container
+/dev/disk5s1	Apple_APFS_Volume    	/Volumes/Cairn
+
+mounted:
+total 0
+drwxr-xr-x@ 4 ze    staff  128 Oct 30 16:59 .
+drwxr-xr-x  5 root  wheel  160 Oct 30 17:00 ..
+lrwxr-xr-x@ 1 ze    staff   13 Oct 30 16:59 Applications -> /Applications
+drwxr-xr-x@ 3 ze    staff   96 Oct 30 16:59 Cairn.app
+
+applications link:
+/Applications
+
+app bundle:
+  "CFBundleIdentifier" => "com.cairn.desktop"
+  "CFBundleShortVersionString" => "0.1.0"

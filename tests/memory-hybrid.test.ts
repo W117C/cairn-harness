@@ -63,6 +63,7 @@ describe("selectRecallHybrid", () => {
   });
 
   it("falls back visibly when the configured embedder fails", async () => {
+    const failure = "embedding service unavailable";
     const candidates = [
       candidate("deploy-timeout", "deploy timeout gateway retry", "retry twice"),
       candidate("style-guide", "naming conventions", "use descriptive identifiers"),
@@ -73,14 +74,14 @@ describe("selectRecallHybrid", () => {
         provider: {
           id: "broken",
           async embed() {
-            throw new Error("embedding service unavailable");
+            throw new Error(failure);
           },
         },
       },
     });
 
     expect(outcome.mode).toBe("hybrid-fallback");
-    expect(outcome.reason).toContain("embedding service unavailable");
+    expect(outcome.reason).toBe(failure);
     expect(outcome.picks.map((pick) => pick.topic)).toEqual(["deploy-timeout"]);
   });
 
@@ -98,7 +99,7 @@ describe("selectRecallHybrid", () => {
       },
     });
     expect(outcome.mode).toBe("hybrid-fallback");
-    expect(outcome.reason).toContain("finite");
+    expect(outcome.reason).toContain("embedding values must be finite numbers");
     expect(outcome.picks.map((pick) => pick.topic)).toEqual(["deploy-timeout"]);
   });
 });
@@ -156,6 +157,7 @@ describe("hybrid memory injection", () => {
         NOW,
       );
 
+      const failure = "provider 401";
       const result = await buildMemoryInjection({
         workspace,
         globalRoot,
@@ -164,7 +166,7 @@ describe("hybrid memory injection", () => {
           provider: {
             id: "broken",
             async embed() {
-              throw new Error("provider 401");
+              throw new Error(failure);
             },
           },
         },
@@ -172,7 +174,7 @@ describe("hybrid memory injection", () => {
 
       expect(result.recall).toEqual(["deploy-timeout"]);
       expect(result.retrieval.mode).toBe("hybrid-fallback");
-      expect(result.retrieval.reason).toContain("provider 401");
+      expect(result.retrieval.reason).toBe(failure);
       expect(result.project).toContain("hybrid-fallback");
     } finally {
       await rm(root, { recursive: true, force: true });

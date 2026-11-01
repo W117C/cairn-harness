@@ -1,0 +1,324 @@
+{
+  "passed": 25,
+  "total": 25,
+  "checks": [
+    {
+      "name": "任务窗格里出现编排计划且阶段可读",
+      "ok": true,
+      "detail": {
+        "pane": true,
+        "goal": "计划 核对编排控制面",
+        "phase": "proposed",
+        "phaseText": "待批准",
+        "taskPhases": [
+          "running",
+          "failed",
+          "done",
+          "needs_you"
+        ]
+      }
+    },
+    {
+      "name": "四个任务按夹具阶段落在面板上",
+      "ok": true,
+      "detail": [
+        "running",
+        "failed",
+        "done",
+        "needs_you"
+      ]
+    },
+    {
+      "name": "待批准阶段只有批准/拒绝/取消计划",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "未批准时不摆「启用执行」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "面板不出现引擎必然拒绝的手动交付按钮",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "运行中任务只能暂停/取消，不给接管或重试",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "失败且有次数的任务只给重试",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "已交付任务在有后端回滚能力时给回滚",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "待接管任务的原因、权限与验收都是产品中文",
+      "ok": true,
+      "detail": {
+        "phase": "needs_you",
+        "phaseText": "需你处理",
+        "reason": "已由你接管",
+        "detail": "权限：只读 · 写入范围：无 · 外部效果：无answer · 证据 · answer修订：未知 · 验证者：未知",
+        "next": "调度建议 · 2t0 · 派发 · 依赖失败、被取消或需要你处理t1 · 升级 · upstream provider returned 529"
+      }
+    },
+    {
+      "name": "调度建议译成中文、未知原因原样透出",
+      "ok": true,
+      "detail": "调度建议 · 2t0 · 派发 · 依赖失败、被取消或需要你处理t1 · 升级 · upstream provider returned 529"
+    },
+    {
+      "name": "取消计划第一次点只摆确认、不发命令",
+      "ok": true,
+      "detail": {
+        "armed": "确认取消计划",
+        "commands": 0
+      }
+    },
+    {
+      "name": "确认态对读屏也改名（aria-label 跟着走）",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "返回撤回确认且仍未发命令",
+      "ok": true,
+      "detail": {
+        "commands": 0
+      }
+    },
+    {
+      "name": "批准后阶段前进，且执行仍是一步单独的操作",
+      "ok": true,
+      "detail": {
+        "phase": "approved",
+        "enable": true
+      }
+    },
+    {
+      "name": "批准命令落账",
+      "ok": true,
+      "detail": {
+        "address": {
+          "workspace": "/tmp/demo-ws",
+          "sessionId": "s1"
+        },
+        "command": {
+          "request_id": "7d55ad2a-94e9-49e1-a9db-ef5455fa7a49",
+          "plan_id": "plan-fixture",
+          "version": 1,
+          "action": "approve_plan"
+        }
+      }
+    },
+    {
+      "name": "取消任务第一次点只摆确认",
+      "ok": true,
+      "detail": {
+        "commands": 1
+      }
+    },
+    {
+      "name": "第二次点才真的取消任务并落账",
+      "ok": true,
+      "detail": {
+        "state": {
+          "phase": "cancelled",
+          "text": "已取消"
+        },
+        "last": {
+          "address": {
+            "workspace": "/tmp/demo-ws",
+            "sessionId": "s1"
+          },
+          "command": {
+            "request_id": "adfe8e31-017b-4120-b9aa-f6b650de6571",
+            "plan_id": "plan-fixture",
+            "version": 1,
+            "action": "cancel_task",
+            "task_id": "t0"
+          }
+        }
+      }
+    },
+    {
+      "name": "重试把任务放回队列并消耗一次尝试",
+      "ok": true,
+      "detail": {
+        "state": {
+          "phase": "queued",
+          "meta": "t1 · 尝试 2/2 · 证据 验证失败 · 裁决 未通过"
+        },
+        "last": {
+          "address": {
+            "workspace": "/tmp/demo-ws",
+            "sessionId": "s1"
+          },
+          "command": {
+            "request_id": "a05c2442-4434-43d9-b20c-098506a3b239",
+            "plan_id": "plan-fixture",
+            "version": 1,
+            "action": "retry_task",
+            "task_id": "t1"
+          }
+        }
+      }
+    },
+    {
+      "name": "回滚第一次点只摆确认",
+      "ok": true,
+      "detail": {
+        "commands": 3
+      }
+    },
+    {
+      "name": "第二次点才发回滚命令",
+      "ok": true,
+      "detail": {
+        "address": {
+          "workspace": "/tmp/demo-ws",
+          "sessionId": "s1"
+        },
+        "command": {
+          "request_id": "7c54d5a0-c82d-419e-aa61-09824b06f2a6",
+          "plan_id": "plan-fixture",
+          "version": 1,
+          "action": "rollback_task",
+          "task_id": "t2"
+        }
+      }
+    },
+    {
+      "name": "暂停计划把计划停在已暂停",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "恢复计划回到已批准",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "取消计划两次后计划结束且不再摆动作",
+      "ok": true,
+      "detail": {
+        "phase": "cancelled",
+        "actions": 0
+      }
+    },
+    {
+      "name": "每条命令都带 plan/version/request_id",
+      "ok": true,
+      "detail": [
+        "approve_plan",
+        "cancel_task",
+        "retry_task",
+        "rollback_task",
+        "pause_plan",
+        "resume_plan",
+        "cancel_plan"
+      ]
+    },
+    {
+      "name": "全程无控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "commands": [
+    {
+      "address": {
+        "workspace": "/tmp/demo-ws",
+        "sessionId": "s1"
+      },
+      "command": {
+        "request_id": "7d55ad2a-94e9-49e1-a9db-ef5455fa7a49",
+        "plan_id": "plan-fixture",
+        "version": 1,
+        "action": "approve_plan"
+      }
+    },
+    {
+      "address": {
+        "workspace": "/tmp/demo-ws",
+        "sessionId": "s1"
+      },
+      "command": {
+        "request_id": "adfe8e31-017b-4120-b9aa-f6b650de6571",
+        "plan_id": "plan-fixture",
+        "version": 1,
+        "action": "cancel_task",
+        "task_id": "t0"
+      }
+    },
+    {
+      "address": {
+        "workspace": "/tmp/demo-ws",
+        "sessionId": "s1"
+      },
+      "command": {
+        "request_id": "a05c2442-4434-43d9-b20c-098506a3b239",
+        "plan_id": "plan-fixture",
+        "version": 1,
+        "action": "retry_task",
+        "task_id": "t1"
+      }
+    },
+    {
+      "address": {
+        "workspace": "/tmp/demo-ws",
+        "sessionId": "s1"
+      },
+      "command": {
+        "request_id": "7c54d5a0-c82d-419e-aa61-09824b06f2a6",
+        "plan_id": "plan-fixture",
+        "version": 1,
+        "action": "rollback_task",
+        "task_id": "t2"
+      }
+    },
+    {
+      "address": {
+        "workspace": "/tmp/demo-ws",
+        "sessionId": "s1"
+      },
+      "command": {
+        "request_id": "1428532f-2ef1-4ab7-bc72-b02aa49eae79",
+        "plan_id": "plan-fixture",
+        "version": 1,
+        "action": "pause_plan"
+      }
+    },
+    {
+      "address": {
+        "workspace": "/tmp/demo-ws",
+        "sessionId": "s1"
+      },
+      "command": {
+        "request_id": "c6e67425-b28a-42ca-881f-711ef892798f",
+        "plan_id": "plan-fixture",
+        "version": 1,
+        "action": "resume_plan"
+      }
+    },
+    {
+      "address": {
+        "workspace": "/tmp/demo-ws",
+        "sessionId": "s1"
+      },
+      "command": {
+        "request_id": "c360d341-ba32-4607-88b6-092774f5e076",
+        "plan_id": "plan-fixture",
+        "version": 1,
+        "action": "cancel_plan"
+      }
+    }
+  ]
+}

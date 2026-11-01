@@ -7,12 +7,14 @@
 // ② 不双发：渲染层拥有键位的项必须 `registerAccelerator:false`——否则菜单 push 与渲染层 keydown
 //    各走一次，⌘N 建两个会话。
 // ③ 键位不撞：同一 accelerator 出现在两项上，菜单会静默只认第一项，第二项永远点不到（也就永远显示成快捷键）。
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { MenuItemConstructorOptions } from "electron";
 import { MENU_ITEM_ID_PREFIX, appMenuTemplate } from "../src/main/menu-template";
 import { MENU_COMMAND_IDS, type MenuCommandId } from "../src/shared/menu-commands";
 
-const deps = { send: () => undefined, closeWindow: () => undefined };
+const deps = { send: () => undefined, closeWindow: () => undefined, openLogs: () => undefined, openDataDir: () => undefined, restart: () => undefined };
 
 /** 深度收集（submenu 是数组，本项目没有动态子菜单）。 */
 function walk(items: readonly MenuItemConstructorOptions[]): MenuItemConstructorOptions[] {
@@ -76,6 +78,30 @@ describe("原生菜单栏（§5.2）", () => {
     }
   });
 
+  it("「打开日志文件夹」是真动作（不是摆一条点了没反应的帮助项）", () => {
+    let opened = 0;
+    const items = walk(appMenuTemplate({ ...deps, openLogs: () => { opened += 1; } }));
+    const item = items.find((i) => i.id === "cairn.open-logs");
+    expect(item?.label).toBe("打开日志文件夹");
+    expect(typeof item?.click).toBe("function");
+    (item?.click as () => void)();
+    expect(opened).toBe(1);
+  });
+
+  it("维护入口都是真动作：打开数据目录 / 重新启动 Cairn", () => {
+    let openedData = 0;
+    let restarted = 0;
+    const items = walk(appMenuTemplate({ ...deps, openDataDir: () => { openedData += 1; }, restart: () => { restarted += 1; } }));
+    const data = items.find((i) => i.id === "cairn.open-data");
+    const restart = items.find((i) => i.id === "cairn.restart");
+    expect(data?.label).toBe("打开数据目录");
+    expect(restart?.label).toBe("重新启动 Cairn");
+    (data?.click as () => void)();
+    (restart?.click as () => void)();
+    expect(openedData).toBe(1);
+    expect(restarted).toBe(1);
+  });
+
   it("⌘W 属于「关闭会话」；「关闭窗口」不给快捷键（窗口走红绿灯）", () => {
     const closeSession = flat.find((i) => i.id === MENU_ITEM_ID_PREFIX + "close-session");
     expect(closeSession?.accelerator).toBe("CmdOrCtrl+W");
@@ -88,5 +114,15 @@ describe("原生菜单栏（§5.2）", () => {
     const labels = appMenuTemplate(deps).map((i) => i.label ?? i.role);
     // macOS 首位是 App 菜单（role 装载），其余六组是我们自己的分组。
     expect(labels.slice(-6)).toEqual(["文件", "编辑", "视图", "前往", "窗口", "帮助"]);
+  });
+});
+
+describe("重新启动的主进程接线", () => {
+  it("走 app.relaunch；有在跑会话先确认，确认后绕过退出闸", () => {
+    const src = readFileSync(fileURLToPath(new URL("../src/main/index.ts", import.meta.url)), "utf8");
+    expect(src).toContain("restartWarningMessage(running)");
+    expect(src).toContain("quitConfirmed = true;");
+    expect(src).toContain("app.relaunch();");
+    expect(src).toContain("openDataDir: () => { void shell.openPath(userData); }");
   });
 });

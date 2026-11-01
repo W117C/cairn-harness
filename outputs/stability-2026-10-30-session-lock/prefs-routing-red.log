@@ -1,0 +1,57 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/session-prefs-routing.test.ts (2 tests | 2 failed) 22ms
+   ❯ session preferences root resolution (2)
+     × saves preferences for a session in a resolved non-default workspace 16ms
+     × refuses an unresolved session instead of writing to the default root 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/session-prefs-routing.test.ts > session preferences root resolution > saves preferences for a session in a resolved non-default workspace
+AssertionError: expected { ok: false, error: '会话不存在: foreign' } to deeply equal { ok: true }
+
+- Expected
++ Received
+
+  {
+-   "ok": true,
++   "error": "会话不存在: foreign",
++   "ok": false,
+  }
+
+ ❯ tests/session-prefs-routing.test.ts:28:20
+     26|     setSessionRootResolver(async (sessionId) => sessionId === id ? oth…
+     27|     const result = await handleSessionPrefsSet({ sessionId: id, prefs:…
+     28|     expect(result).toEqual({ ok: true });
+       |                    ^
+     29|     expect(await metadata.find(id)).toMatchObject({ model: "deepseek-c…
+     30|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/session-prefs-routing.test.ts > session preferences root resolution > refuses an unresolved session instead of writing to the default root
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/session-prefs-routing.test.ts:36:23
+     34|     setSessionRootResolver(async () => null);
+     35|     const result = await handleSessionPrefsSet({ sessionId: id, prefs:…
+     36|     expect(result.ok).toBe(false);
+       |                       ^
+     37|     expect((await requireSessionMetadata().find(id))?.model).toBeUndef…
+     38|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  15:21:43
+   Duration  1.70s (transform 77%, import 21%, tests 1%)
+

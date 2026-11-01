@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mixedAttributionFixture } from "../scripts/cost-per-progress-check";
 import { eventsForCurrentRun } from "../src/agent/delivery-guard";
 import { evolutionPathFor, loadEvolution } from "../src/agent/evolution";
+import { loadPlaybook } from "../src/main/evolve/playbook-store";
 import type { AgentEvent } from "../src/events";
 import { emitPostRunReadings } from "../src/main/post-run-readings";
 
@@ -57,6 +58,9 @@ describe("收尾观测的真实落盘结果", () => {
     const record = await loadEvolution(input.workspace);
     expect(record?.fromSession).toBe("session-proof");
     expect(record?.patches.map((patch) => patch.kind)).toEqual(hasPatch ? ["goal-reconfirm"] : []);
+    const playbook = await loadPlaybook(input.workspace);
+    expect(playbook.entries).toHaveLength(hasPatch ? 1 : 0);
+    if (hasPatch) expect(playbook.entries[0]!.status).toBe("candidate");
     const warnings = input.warnings.filter((message) => message.startsWith("[evolution]"));
     expect(warnings).toEqual(hasPatch
       ? ["[evolution] 本跑产出 1 条策略补丁，已落 " + evolutionPathFor(input.workspace)]

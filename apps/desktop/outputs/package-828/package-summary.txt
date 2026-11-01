@@ -1,0 +1,10 @@
+packaged smoke:
+[cairn-smoke] PASS in 1966 ms
+[package] 完成（已验证打包态）：/Users/ze/Downloads/Cairn/cairn/apps/desktop/release-828/Cairn.app
+
+artifacts:
+ 
+96B Cairn.app
+149M Cairn.dmg
+255B build-info.json
+128B dmg

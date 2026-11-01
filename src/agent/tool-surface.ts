@@ -50,6 +50,8 @@ export const INJECTED_TOOLS: readonly InjectedToolSurface[] = [
   { name: "mcp_list", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
   { name: "mcp_activate", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
   { name: "mcp_release", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
+  // 延迟工具目录：只读检索，不激活也不执行；执行仍过 gatedMcpTool 的同一条权限门。
+  { name: "tool_search", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
   // 定时任务五件（§12.2.5）：实现一直有，规格第 42 页才补上 ⇒ 登记进表，让 G-B 从此盯着这一族。
   // worker 面不给（它们已在 WORKER_FORBIDDEN_TOOLS 里）；只读档也不给（只读会话不该排下一次无人值守的写）。
   { name: "automation_create", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },

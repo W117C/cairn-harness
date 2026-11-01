@@ -1,0 +1,81 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+stderr | tests/session-open-recovery.test.tsx > 会话尚未完整读取时的写入保护 > 输入框说明读取失败需要重试，不冒充仍在加载
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+ ❯ tests/session-open-recovery.test.tsx (3 tests | 3 failed) 12ms
+   ❯ 会话尚未完整读取时的写入保护 (3)
+     × 读取失败继续锁住输入，不依赖请求是否仍在进行 3ms
+     × 输入框说明读取失败需要重试，不冒充仍在加载 7ms
+     × 读取期间缓存队列仍可见，但所有改写和派发按钮禁用 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/session-open-recovery.test.tsx > 会话尚未完整读取时的写入保护 > 读取失败继续锁住输入，不依赖请求是否仍在进行
+AssertionError: expected null to be 'session' // Object.is equality
+
+- Expected:
+"session"
+
++ Received:
+null
+
+ ❯ tests/session-open-recovery.test.tsx:10:97
+      8| describe("会话尚未完整读取时的写入保护", () => {
+      9|   it("读取失败继续锁住输入，不依赖请求是否仍在进行", () => {
+     10|     expect(composerLockReason({ creating: false, gateActive: false, se…
+       |                                                                                                 ^
+     11|     expect(composerLockReason({ creating: false, gateActive: false, se…
+     12|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/session-open-recovery.test.tsx > 会话尚未完整读取时的写入保护 > 输入框说明读取失败需要重试，不冒充仍在加载
+AssertionError: expected '<textarea data-composer-input="true" …' to contain '会话未读取完成，请先重试'
+
+Expected: "会话未读取完成，请先重试"
+Received: "<textarea data-composer-input="true" rows="1" disabled="" placeholder="正在创建会话…" aria-label="任务输入">"
+
+ ❯ tests/session-open-recovery.test.tsx:22:22
+     20|     const textarea = html.match(/<textarea[^>]*>/)?.[0] ?? "";
+     21|     expect(textarea).toContain("disabled");
+     22|     expect(textarea).toContain("会话未读取完成，请先重试");
+       |                      ^
+     23|   });
+     24|   it("读取期间缓存队列仍可见，但所有改写和派发按钮禁用", () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/session-open-recovery.test.tsx > 会话尚未完整读取时的写入保护 > 读取期间缓存队列仍可见，但所有改写和派发按钮禁用
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/session-open-recovery.test.tsx:34:68
+     32|     const buttons = html.match(/<button[^>]*>/g) ?? [];
+     33|     expect(buttons.length).toBeGreaterThan(0);
+     34|     expect(buttons.every((button) => button.includes("disabled"))).toB…
+       |                                                                    ^
+     35|     expect(html).toContain("会话未读取完成，队列暂不可修改");
+     36|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  12:34:21
+   Duration  309ms (transform 58%, import 36%, tests 5%, worker 1%)
+
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts tests/session-open-recovery.test.tsx '--maxWorkers=2'

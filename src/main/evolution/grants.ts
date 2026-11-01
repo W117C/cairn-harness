@@ -12,6 +12,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isPermissionWord, PERMISSION_NAMESPACE_RE } from "./manifest";
+import { isRecord } from "../../is-record";
 
 export class GrantsConfigError extends Error {
   constructor(message: string) {
@@ -22,10 +23,6 @@ export class GrantsConfigError extends Error {
 
 const GRANTS_VERSION = 1 as const;
 const MAX_GRANTS = 256;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /** 授权词 = exact 权限词（manifest 同口径）或 `<ns>.*` 单段通配；裸 * 与深通配都不是授权词。 */
 export function isGrantWord(value: unknown): value is string {

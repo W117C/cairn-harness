@@ -1,0 +1,29 @@
+--- a/apps/desktop/scripts/ui-gallery.cjs	2026-11-01 16:52:31
++++ b/apps/desktop/scripts/ui-gallery.cjs	2026-11-01 16:49:58
+@@ -368,6 +368,19 @@
+     `JSON.stringify({ nav: document.querySelectorAll(".pane-nav").length, titles: [...document.querySelectorAll(".pane-title,.tp-title,.tb-title")].map(e => e.textContent) })`,
+   );
+   console.log("[gallery] 弹窗面板导航自查:", navProbe);
++  // 自查：文件行的大小必须带单位（B/KB/MB）。第 928 页把「尺」收进 formatBytes，第 943 页才把
++  // 文件窗格从裸字节数（2140）改成 2.1 KB——这条钉住「别退回去」：裸数字读起来不是大小，是乱码。
++  const sizeProbe = await pop.webContents.executeJavaScript(
++    `JSON.stringify([...document.querySelectorAll(".fp-size")].map(n => (n.textContent || "").trim()))`,
++  );
++  {
++    const sizes = JSON.parse(sizeProbe);
++    const bad = sizes.filter((t) => !/^\d+(?:\.\d+)?\s?(?:B|KB|MB)$/u.test(t));
++    if (sizes.length === 0 || bad.length > 0) {
++      throw new Error(`文件行大小没带单位（要 B/KB/MB）：${sizeProbe}`);
++    }
++    console.log("[gallery] 文件行大小自查:", sizeProbe);
++  }
+   // 空态几何自查：预览列整列空着时，那句提示该**居中**（贴左上角读起来像控件坏了）。
+   // 只看图容易放过——它一直"在屏上"，只是位置不对；量中心点才判得准。
+   const emptyProbe = await pop.webContents.executeJavaScript(`(() => {
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:52:31
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:51:57
+@@ -4312,3 +4312,4 @@
+ 71. **临时目录清理不许把绿判据弄红（第 948 页）**：`terminal-login-shell.test.ts` 用隔离 HOME 起真登录 shell，`afterEach` 裸 `rmSync` 撞上 shell 还在写 `.zcompdump`/`.zsh_history` ⇒ `ENOTEMPTY` ⇒ 一条判据由绿变红（2026-11-01 桌面套件首跑实测；单跑 10/10 绿、重跑整套绿，典型的清理竞态）。新增 `tests/helpers/temp-dir.ts#removeTempDir`：带重试地删、删不掉也咽下（留下的是系统临时目录）；该测试改用它。探针实测：同一现场下裸 `rmSync` 15/15 抛 `ENOTEMPTY`，带重试+咽下 0/15。
+ 72. **设置页头不许自己抄一份分区名（第 949 页）**：`settings-nav.tsx#SECTIONS` 自称「唯一事实源——导航与命令面板只许从这里取」，而 `SettingsPanel` 的七个页头各写了一遍字面量（`title="通用"`、`title="关于与更新"`…）——导航改名、页头就留旧话。新增 `sectionLabel(id)`，六个页头改读它；判卷钉「页头不再出现字面量」「六个分区都走 sectionLabel」「分区名两两不同」。
+ 73. **设置页档位与词表逐个对上（第 950 页）**：权限档的词表 `MODE_LABEL`（芯片/菜单）与设置页的 `MODE_OPTIONS`（单选卡）是两份，互相不锁——2026-10-24 加第五档 `full-access` 时只补了词表，设置页仍列四档，用户从设置页选不到最松档、用芯片切过去后四个单选项全不选中（注释里记着这次事故）。新增 `tests/permission-modes-coverage.test.ts`：两份的 id 集合必须**恰好相等**、无重复、每项都有标题与说明，且条数 ≥5（删空了不许算通过）。
++74. **画廊自查：文件行大小必须带单位（第 951 页）**：第 943 页把文件窗格从裸字节数（`2140`）改成 `2.1 KB`，但那是靠人眼看截图发现的——同一类回退（有人把 `formatBytes` 换回 `{e.size}`）没有任何机器拦截。`ui-gallery.cjs` 在弹窗文件窗格截图后加一条自查：`.fp-size` 的文本必须匹配 `B/KB/MB`，裸数字当场抛错（造红实测：退回裸数字 ⇒ `文件行大小没带单位（要 B/KB/MB）：["2140","880"]`，exit 1）。

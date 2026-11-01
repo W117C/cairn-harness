@@ -10,7 +10,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, Search, X } from "lucide-react";
 import type { AgentApi, AppSettings, CapabilityReadout, ProviderInfo } from "../../../../../src/main/ipc-protocol";
-import type { TextSizeSetting, UiSizeSetting } from "../../../../../src/main/settings";
+import type { SettingsLoadIssue, TextSizeSetting, UiSizeSetting } from "../../../../../src/main/settings";
 import { SettingsPage, SettingsRow, SettingsSection } from "./settings-ui";
 import {
   AboutSection,
@@ -18,16 +18,21 @@ import {
   GeneralSection,
   PermissionsSection,
   ProviderSection,
+  SettingsIssueBanner,
   ShortcutsSection,
   defaultKeyProvider,
   panelPatch,
 } from "./settings-sections";
 import { AppPageBody, type PageId } from "./AppPage";
 import { ModalSurface } from "./ModalSurface";
+import { isCompositionEnter } from "../ime";
 import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import { UsageSection } from "./settings/UsageSection";
+import { EvolveSection } from "./settings/EvolveSection";
 import { NetworkSection } from "./settings/NetworkSection";
-import { PAGE_ORDER, SECTIONS, filterSections, type SectionId } from "./settings-nav";
+import { SETTINGS_PAGE_ORDER, SECTIONS, filterSections, sectionLabel, type SectionId } from "./settings-nav";
+import { destinationForSection } from "../navigation";
+import "./settings-refinement.css";
 
 export { SECTIONS, type SectionId };
 
@@ -43,7 +48,7 @@ export {
   SEARCH_CONFIG_HINT,
 } from "./settings-sections";
 
-const PAGE_SECTION_IDS = new Set<string>(PAGE_ORDER);
+const PAGE_SECTION_IDS = new Set<string>(SETTINGS_PAGE_ORDER);
 
 /* ── 更新区（P1 修复 · 2026-10-22）：「发现新版本」不能是一句死胡同 ────────────────
    实测缺陷：旧实现只把检查结果的 version 拼成「发现新版本 X」⇒ manifest 里的下载页
@@ -124,12 +129,22 @@ export function SettingsPanel(props: {
   onClose: () => void;
   initialSection?: SectionId;
   onSettingsSaved?: () => void;
+  /** 重新显示首启检查（只落 onboarded=false，不重置其它设置）。 */
+  onShowOnboarding?: () => void;
 }): React.JSX.Element {
-  const [section, setSection] = useState<SectionId>(props.initialSection ?? "general");
+  const [section, setSection] = useState<SectionId>(() =>
+    props.initialSection !== undefined && destinationForSection(props.initialSection) === null
+      ? props.initialSection
+      : "general",
+  );
   const [settings, setS] = useState<AppSettings | null>(null);
   const [status, setStatus] = useState<{ available: boolean; stored: string[]; envActive: boolean }>({ available: true, stored: [], envActive: false });
-  const [about, setAbout] = useState<{ version: string } | null>(null);
+  const [about, setAbout] = useState<{ version: string; build?: import("../../../../../src/main/build-info").BuildInfo } | null>(null);
   const [license, setLicense] = useState<import("../../../../../src/main/license").LicenseState | null>(null);
+  // v26：设置文件首读失败（坏 JSON / 读不了）。null = 没有文件或读得动，不摆横幅。
+  const [settingsIssue, setSettingsIssue] = useState<SettingsLoadIssue | null>(null);
+  /** 「重新读取」进行中：按钮禁用（重读是串行进写队列的，连点没有第二份收益）。 */
+  const [reloadingSettings, setReloadingSettings] = useState(false);
   // 能力在场性读数（搜索端点配没配）。null = 还没问到 / 问失败——那一格显示「读不到」，
   // 不显示「已配」：把读不到当成配好，正是这个面板要修的那类假象。
   const [cap, setCap] = useState<CapabilityReadout | null>(null);
@@ -173,12 +188,49 @@ export function SettingsPanel(props: {
     void window.agent.getProviderInfo().then(setPvInfo).catch(() => setPvInfo(null));
   };
 
+  /** getState 面（关于/许可证/设置首读问题）——横幅上的「重新检查」也走这一条。 */
+  const loadState = () => {
+    void window.agent.getState().then((s) => {
+      setAbout(s.about ?? null);
+      setLicense(s.license ?? null);
+      setSettingsIssue(s.settingsIssue ?? null);
+    }).catch(() => { setAbout(null); setSettingsIssue(null); });
+  };
+
   useEffect(() => {
     refresh();
-    void window.agent.getState().then((s) => { setAbout(s.about ?? null); setLicense(s.license ?? null); }).catch(() => setAbout(null));
+    loadState();
     void window.agent.capabilities().then(setCap).catch(() => setCap(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** 关闭设置前先提交正在编辑的输入（v33 真机实测：数字框未失焦时按 Esc，值会随卸载丢掉）。
+   *  blur() 同步触发 React onBlur（失焦即存），再调 props.onClose 卸载面板。
+   *  返回按钮/遮罩/键盘三条关闭路径都走这里。 */
+  const closeSettings = () => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.closest(".sp-page") !== null) active.blur();
+    props.onClose();
+  };
+
+  /** 「重新读取」：真重读盘（主进程 SettingsStore.reload）——修好文件后不重启即可恢复。
+   *  重读成功后把盘上值回灌面板与 App 的 live state（主题/档位/字号…），并清掉横幅。 */
+  const reloadFromDisk = async () => {
+    setError(null);
+    setReloadingSettings(true);
+    try {
+      const r = await window.agent.reloadSettings();
+      if (!r.ok) { setError(`重新读取失败：${r.error ?? "未知错误"}`); return; }
+      refresh();
+      loadState();
+      props.onSettingsSaved?.();
+      pulse("已重新读取 ✓");
+    } catch (err) {
+      setError(`重新读取失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setReloadingSettings(false);
+    }
+  };
 
   const save = async (patch: Record<string, unknown>) => {
     setError(null);
@@ -289,13 +341,16 @@ export function SettingsPanel(props: {
     : `发现新版本 ${update.version}`;
 
   return (
-    <ModalSurface className="sp-page" label="设置" onClose={props.onClose}>
+    <ModalSurface className="sp-page" label="设置" onClose={closeSettings}>
       <div className="sp-shell">
         <nav className="sp-nav" aria-label="设置分区">
+          <div className="sp-nav-head">
+            <div className="sp-nav-title">设置</div>
+          </div>
           {/* 返回必须在 ModalSurface 内部（2026-10-21 评审抓到的 Critical）：settings 打开时
               isolateOutside 会把 titlebar/shell 标成 inert，鼠标点不到工具栏上的返回。
               这里用面板内按钮；工具栏只负责 chrome（设置时不摆侧栏开关）。 */}
-          <button className="sp-back" onClick={props.onClose} aria-label="关闭设置（Esc）">
+          <button className="sp-back" onClick={closeSettings} aria-label="关闭设置（Esc）">
             <ChevronLeft size={13} aria-hidden="true" />
             <span>返回</span>
           </button>
@@ -320,7 +375,7 @@ export function SettingsPanel(props: {
                   (e.target as HTMLInputElement).blur();
                   return;
                 }
-                if (e.key === "Enter" || e.key === "ArrowDown") {
+                if ((e.key === "Enter" && !isCompositionEnter(e, null)) || e.key === "ArrowDown") {
                   const first = visibleSections[0];
                   if (first !== undefined) { e.preventDefault(); setSection(first); }
                 }
@@ -332,23 +387,31 @@ export function SettingsPanel(props: {
               </button>
             )}
           </div>
-          {visibleSections.map((id) => {
-            const s = SECTIONS.find((x) => x.id === id);
-            if (s === undefined) return null;
-            const i = SECTIONS.indexOf(s);
+          {(["settings", "workspace", "system"] as const).map((group) => {
+            const groupIds = visibleSections.filter((id) => {
+              const inWorkspace = (SETTINGS_PAGE_ORDER as readonly string[]).includes(id);
+              return group === "workspace" ? inWorkspace : group === "system" ? id === "about" : !inWorkspace && id !== "about";
+            });
             return (
-              <Fragment key={s.id}>
-                {/* 分组标签：工作台四分区与「设置」本分区在导航上分开（纯标记，不可点）。 */}
-                {s.id === "plugins" && i > 0 && <div className="sp-nav-label" aria-hidden="true">工作台</div>}
-                <button
-                  className={"sp-nav-item" + (section === s.id ? " on" : "")}
-                  aria-current={section === s.id ? "page" : undefined}
-                  onClick={() => setSection(s.id)}
-                >
-                  <span className="sp-ni-ico" aria-hidden="true">{s.icon}</span>
-                  {s.label}
-                </button>
-              </Fragment>
+              <div className="sp-nav-group" data-group={group} key={group}>
+                {/* 分组标签：工作台分区与「设置」本分区在导航上分开（纯标记，不可点）。 */}
+                {group === "workspace" && groupIds.length > 0 && <div className="sp-nav-label" aria-hidden="true">工作台</div>}
+                {groupIds.map((id) => {
+                  const s = SECTIONS.find((x) => x.id === id);
+                  if (s === undefined) return null;
+                  return (
+                    <button
+                      key={s.id}
+                      className={"sp-nav-item" + (section === s.id ? " on" : "")}
+                      aria-current={section === s.id ? "page" : undefined}
+                      onClick={() => setSection(s.id)}
+                    >
+                      <span className="sp-ni-ico" aria-hidden="true">{s.icon}</span>
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
             );
           })}
           {/* 搜索无命中：说清「没有匹配的分区」，别留一个空导航列让人以为设置坏了。 */}
@@ -360,16 +423,17 @@ export function SettingsPanel(props: {
         </nav>
         <div className="sp-body">
           {error !== null && <div className="sp-note err" role="alert">{error}</div>}
-          {settings === null && !["about", "usage", "network"].includes(section) && !PAGE_SECTION_IDS.has(section) && <div className="sp-note">正在载入设置…</div>}
+          <SettingsIssueBanner issue={settingsIssue} onReload={() => { void reloadFromDisk(); }} reloading={reloadingSettings} />
+          {settings === null && !["about", "usage", "network", "evolve"].includes(section) && !PAGE_SECTION_IDS.has(section) && <div className="sp-note">正在载入设置…</div>}
 
           {/* 分区各自成界：一个分区渲染炸了不许把整窗打回启动占位。
               key={section}：切分区即重挂，换到好分区自动恢复，不需要先点重试。 */}
           <RenderErrorBoundary key={section} variant="inline">
-          {/* 工作台四分区（并入页体）：自取 getState() 快照，错误走同一错误条。 */}
-          {PAGE_SECTION_IDS.has(section) && <AppPageBody page={section as PageId} onError={setError} />}
+          {/* Skills and Worktrees remain settings pages; durable destinations render outside this overlay. */}
+          {PAGE_SECTION_IDS.has(section) && <AppPageBody page={section as PageId} />}
 
           {section === "general" && settings !== null && (
-            <SettingsPage title="通用" desc="外观、文字与输入习惯。">
+            <SettingsPage title={sectionLabel("general")}>
               <GeneralSection
                 settings={settings}
                 textSize={textSize}
@@ -379,12 +443,14 @@ export function SettingsPanel(props: {
                 onTextSize={(next) => { setTextSize(next); void saveSettingKey("textSize", next); }}
                 onUiSize={(next) => { setUiSize(next); void saveSettingKey("uiSize", next); }}
                 onWindowVibrancy={(next) => { void saveSettingKey("windowVibrancy", next); }}
+                onNotify={(next) => { void saveSettingKey("notifyOnComplete", next); }}
+                onShowOnboarding={props.onShowOnboarding}
               />
             </SettingsPage>
           )}
 
           {section === "provider" && (
-            <SettingsPage title="模型与 Provider" desc="当前通道、密钥与自定义接口。">
+            <SettingsPage title={sectionLabel("provider")}>
               <ProviderSection
                 settings={settings}
                 status={status}
@@ -412,14 +478,16 @@ export function SettingsPanel(props: {
 
           {section === "usage" && <UsageSection />}
 
+          {section === "evolve" && <EvolveSection />}
+
           {section === "permissions" && settings !== null && (
-            <SettingsPage title="权限与安全" desc="审批档位、网络与写入边界。">
+            <SettingsPage title={sectionLabel("permissions")}>
               <PermissionsSection settings={settings} onSave={(patch) => { void save(patch); }} />
             </SettingsPage>
           )}
 
           {section === "shortcuts" && (
-            <SettingsPage title="快捷键" desc="键盘入口与速查。">
+            <SettingsPage title={sectionLabel("shortcuts")}>
               <ShortcutsSection />
             </SettingsPage>
           )}
@@ -428,19 +496,23 @@ export function SettingsPanel(props: {
               走 saveKey 单键直写（不走 panelPatch 白名单——那份白名单与其判卷口径保持原样，
               与 saveCtrlTab 同一条路）。 */}
           {section === "advanced" && settings !== null && (
-            <SettingsPage title="高级" desc="记忆、成本与隐私。">
+            <SettingsPage title={sectionLabel("advanced")}>
               <AdvancedSection settings={settings} onSaveKey={saveSettingKey} />
             </SettingsPage>
           )}
 
           {section === "about" && (
-            <SettingsPage title="关于与更新" desc="版本、更新与诊断。">
+            <SettingsPage title={sectionLabel("about")}>
               <AboutSection
                 version={about?.version ?? null}
+                build={about?.build ?? null}
                 updateMsg={updateMsg}
                 onCheckUpdate={checkUpdate}
                 updateManifestUrl={settings?.updateManifestUrl ?? ""}
                 license={license}
+                onLicenseChanged={setLicense}
+                onPreferencesImported={setS}
+                onOpenSection={setSection}
                 onSaveManifest={(url) => { void saveSettingKey("updateManifestUrl", url); }}
               />
               {/* 有新版时给出**去处**：版本 + 更新说明 + 打开下载页（只走主进程通道）。 */}

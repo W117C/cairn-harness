@@ -44,3 +44,16 @@ it("defaults to shadow and refuses execute without an enforceable backend", asyn
   const view = await service.view(address); expect(view.ok && view.snapshot.mode).toBe("shadow");
   expect((await service.submit({ address, request_id: "submit", plan: orchestrationPlan(), execute: true })).ok).toBe(false);
 });
+it("reports backend rollback capability only when a backend declares it", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cairn-orchestration-service-caps-")); cleanups.push(() => rm(dir, { recursive: true, force: true }));
+  const workspace = join(dir, "ws"); await mkdir(workspace);
+  const base = { id: "bound", max_concurrency: 1, supports: () => null, execute: async () => { throw new Error("unused"); }, verify: async () => { throw new Error("unused"); } };
+  const plain = new OrchestrationService({ dataDir: join(dir, "data-plain"), allowedWorkspaces: () => [workspace], backendFor: () => base });
+  const rollbackable = new OrchestrationService({ dataDir: join(dir, "data-rollback"), allowedWorkspaces: () => [workspace], backendFor: () => ({ ...base, rollback: async () => undefined }) });
+  const none = new OrchestrationService({ dataDir: join(dir, "data-none"), allowedWorkspaces: () => [workspace] });
+  cleanups.push(() => plain.close(), () => rollbackable.close(), () => none.close());
+  const address = { workspace, sessionId: "safe" };
+  const plainView = await plain.view(address); expect(plainView.ok && plainView.snapshot.backend_capabilities).toEqual({ rollback: false });
+  const rollbackView = await rollbackable.view(address); expect(rollbackView.ok && rollbackView.snapshot.backend_capabilities).toEqual({ rollback: true });
+  const noneView = await none.view(address); expect(noneView.ok && "backend_capabilities" in noneView.snapshot).toBe(false);
+});

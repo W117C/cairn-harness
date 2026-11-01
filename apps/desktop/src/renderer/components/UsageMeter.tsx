@@ -9,6 +9,39 @@ import { Popover, usePopoverDismiss } from "./Popover";
 const USAGE_RING_R = 11.5;
 const USAGE_RING_C = 2 * Math.PI * USAGE_RING_R;
 
+/** 上下文预算（纯函数，判卷面）：窗口 / 已用 / **余量** / 水位。
+ *
+ *  「已用」取**上一轮实际带进去的 token**（`lastInputTokens`）——那正是下一轮要带的上下文，
+ *  也是 Codex 说的 context window 口径（不是本轮输入输出的累计总和）。
+ *  窗口未知（模型没登记窗口）⇒ null（界面说「未知」，**不许拿 0 冒充**）。
+ *  低水位阈值：余量 ≤ 窗口的 10%（Codex 的自动压缩点落在 90% 用量 ⇒ 余量 10%）。
+ */
+export interface ContextBudget {
+  /** 模型窗口（token）。 */
+  window: number;
+  /** 当前上下文（token）。 */
+  used: number;
+  /** 余量（token）。 */
+  remaining: number;
+  /** 已用百分比（0–100）。 */
+  pct: number;
+  /** 余量是否已经偏低（≤ 窗口的 10%）。 */
+  low: boolean;
+}
+
+export function contextBudget(ctxWindow: number | undefined, lastInputTokens: number): ContextBudget | null {
+  if (ctxWindow === undefined || ctxWindow <= 0 || lastInputTokens <= 0) return null;
+  const used = Math.min(lastInputTokens, ctxWindow);
+  const remaining = Math.max(0, ctxWindow - used);
+  const pct = Math.min(100, Math.round((used / ctxWindow) * 100));
+  return { window: ctxWindow, used, remaining, pct, low: remaining <= ctxWindow * 0.1 };
+}
+
+/** 余量占窗口的百分比（给人话看：还剩多少）。 */
+export function remainingPctOf(budget: ContextBudget): number {
+  return Math.max(0, 100 - Math.round((budget.used / budget.window) * 100));
+}
+
 export function UsageMeter(props: {
   usage: { inputTokens: number; outputTokens: number; usageCount: number; cacheReadTokens: number; lastInputTokens: number };
   steps: number;
@@ -25,9 +58,9 @@ export function UsageMeter(props: {
   const cachePct = usage.cacheReadTokens > 0 && usage.inputTokens > 0
     ? Math.min(99, Math.round((usage.cacheReadTokens / (usage.cacheReadTokens + usage.inputTokens)) * 100))
     : null;
-  const ctxPct = props.ctxWindow !== undefined && props.ctxWindow > 0 && usage.lastInputTokens > 0
-    ? Math.min(100, Math.round((usage.lastInputTokens / props.ctxWindow) * 100))
-    : null;
+  // 上下文预算：窗口、已用、余量、水位（纯函数在上）。
+  const budget = contextBudget(props.ctxWindow, usage.lastInputTokens);
+  const ctxPct = budget === null ? null : budget.pct;
   const ctxWindowDeclared = props.ctxWindow !== undefined && props.ctxWindow > 0;
   const ringFacts: string[] = [];
   if (totalTok > 0) ringFacts.push(STR.composer.ringTokens.replace("{n}", formatTokens(totalTok)));
@@ -48,6 +81,7 @@ export function UsageMeter(props: {
     <div className="usage-slot" ref={wrapRef}>
       <button
         className="usage-ring"
+        data-level={budget !== null && budget.low ? "low" : "normal"}
         aria-label={ringAria}
         title={ringTitle}
         aria-expanded={props.open}
@@ -85,6 +119,24 @@ export function UsageMeter(props: {
                 : ctxWindowDeclared ? STR.composer.meterCtxNoData : STR.composer.meterCtxUnknown}
             </b>
           </div>
+          {budget !== null && (
+            <>
+              <div className="mt-row">
+                <span>{STR.composer.meterCtxRemaining}</span>
+                <b>
+                  {STR.composer.meterCtxRemainingValue
+                    .replace("{n}", formatTokens(budget.remaining))
+                    .replace("{max}", formatTokens(budget.window))
+                    .replace("{pct}", String(remainingPctOf(budget)))}
+                </b>
+              </div>
+              {budget.low && (
+                <div className="meter-warn" role="status">
+                  {STR.composer.meterCtxLow.replace("{n}", formatTokens(budget.remaining))}
+                </div>
+              )}
+            </>
+          )}
           <div className="menu-note">{STR.composer.meterNote}</div>
           <div className="menu-sep" />
           <button className="menu-item" onClick={() => { close(); props.onCompact(); }}>{STR.composer.meterCompact}</button>

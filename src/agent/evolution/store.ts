@@ -8,6 +8,7 @@ import { writeFileAtomic } from "../../atomic-write";
 import { hasAdvice, type EvolutionAdvice } from "./advice";
 import type { PatchEffect } from "./patch-effect";
 import type { StrategyPatch } from "./strategy-patch";
+import { isRecord } from "../../is-record";
 
 export const EVOLUTION_FILE = "evolution.json";
 
@@ -32,10 +33,6 @@ export interface EvolutionRecord {
 export interface EvolutionExtras {
   effects?: PatchEffect[];
   advice?: EvolutionAdvice;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isStrategyPatch(value: unknown): value is StrategyPatch {

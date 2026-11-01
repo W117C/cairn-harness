@@ -1,0 +1,1255 @@
+# Files (387 reviewable / 1249 total)
+
+- mode: workspace
+- total_insertions: 291406
+- total_deletions: 7901
+
+  - `.gitignore` [modified] +1/-0
+~~- `AGENTS.md` [modified] +23/-0 (excluded: unsupported_ext)~~
+~~- `CHANGELOG.md` [modified] +12/-1 (excluded: unsupported_ext)~~
+~~- `PROGRESS.md` [modified] +7994/-377 (excluded: unsupported_ext)~~
+~~- `README.md` [modified] +59/-4 (excluded: unsupported_ext)~~
+~~- `STATE.md` [modified] +32/-11 (excluded: unsupported_ext)~~
+~~- `apps/desktop/design/desktop-design-spec.md` [modified] +522/-1 (excluded: unsupported_ext)~~
+  - `apps/desktop/package.json` [modified] +1/-1
+  - `apps/desktop/scripts/interaction-smoke.cjs` [modified] +30/-8
+  - `apps/desktop/scripts/layout-smoke.cjs` [modified] +153/-3
+  - `apps/desktop/scripts/package.mjs` [modified] +32/-8
+  - `apps/desktop/scripts/session-continuity-smoke.cjs` [modified] +16/-0
+  - `apps/desktop/scripts/session-preview-smoke.cjs` [modified] +115/-5
+  - `apps/desktop/scripts/settings-process-smoke.cjs` [modified] +4/-0
+  - `apps/desktop/scripts/ui-gallery-preload.cjs` [modified] +854/-16
+  - `apps/desktop/scripts/ui-gallery.cjs` [modified] +271/-22
+  - `apps/desktop/src/main/channels.ts` [modified] +37/-0
+  - `apps/desktop/src/main/index.ts` [modified] +731/-66
+  - `apps/desktop/src/main/kernel-host.ts` [modified] +84/-23
+  - `apps/desktop/src/main/menu-template.ts` [modified] +13/-0
+  - `apps/desktop/src/main/quit-guard.ts` [modified] +5/-0
+  - `apps/desktop/src/main/run-notification.ts` [modified] +66/-1
+  - `apps/desktop/src/renderer/app-controls.ts` [modified] +5/-1
+  - `apps/desktop/src/renderer/command-gate.ts` [modified] +7/-2
+  - `apps/desktop/src/renderer/components/AppPage.tsx` [modified] +302/-164
+  - `apps/desktop/src/renderer/components/ApprovalCard.tsx` [modified] +6/-1
+  - `apps/desktop/src/renderer/components/ChangeSummaryCard.tsx` [modified] +117/-85
+  - `apps/desktop/src/renderer/components/CommandPalette.tsx` [modified] +27/-3
+  - `apps/desktop/src/renderer/components/Composer.tsx` [modified] +7/-24
+  - `apps/desktop/src/renderer/components/DiffView.tsx` [modified] +205/-52
+  - `apps/desktop/src/renderer/components/FilePane.tsx` [modified] +3/-1
+  - `apps/desktop/src/renderer/components/FindBar.tsx` [modified] +2/-1
+  - `apps/desktop/src/renderer/components/Inspector.tsx` [modified] +68/-27
+  - `apps/desktop/src/renderer/components/ModelPicker.tsx` [modified] +241/-41
+  - `apps/desktop/src/renderer/components/NewProjectDialog.tsx` [modified] +20/-15
+  - `apps/desktop/src/renderer/components/OnboardingChecklist.tsx` [modified] +3/-1
+  - `apps/desktop/src/renderer/components/OrchestrationPane.tsx` [modified] +67/-14
+  - `apps/desktop/src/renderer/components/PaneDock.tsx` [modified] +143/-94
+  - `apps/desktop/src/renderer/components/PermissionMenu.tsx` [modified] +8/-3
+  - `apps/desktop/src/renderer/components/PluginSidebar.tsx` [modified] +1/-1
+  - `apps/desktop/src/renderer/components/PopoutApp.tsx` [modified] +6/-0
+  - `apps/desktop/src/renderer/components/QuickStarts.tsx` [modified] +19/-14
+  - `apps/desktop/src/renderer/components/SendQueueStrip.tsx` [modified] +83/-7
+  - `apps/desktop/src/renderer/components/SessionPreviewPane.tsx` [modified] +119/-5
+  - `apps/desktop/src/renderer/components/SettingsPanel.tsx` [modified] +106/-34
+  - `apps/desktop/src/renderer/components/Sidebar.tsx` [modified] +246/-90
+  - `apps/desktop/src/renderer/components/SidebarRail.tsx` [modified] +10/-8
+  - `apps/desktop/src/renderer/components/SidechatPane.tsx` [modified] +2/-1
+  - `apps/desktop/src/renderer/components/Stream.tsx` [modified] +163/-57
+  - `apps/desktop/src/renderer/components/TitleBar.tsx` [modified] +1/-1
+  - `apps/desktop/src/renderer/components/UsageMeter.tsx` [modified] +55/-3
+~~- `apps/desktop/src/renderer/components/UsagePanel.tsx` [deleted] +0/-172 (excluded: deleted)~~
+  - `apps/desktop/src/renderer/components/WorktreesPane.tsx` [modified] +29/-26
+  - `apps/desktop/src/renderer/components/composer-plan.css` [modified] +2/-2
+  - `apps/desktop/src/renderer/components/orchestration-pane.css` [modified] +2/-0
+  - `apps/desktop/src/renderer/components/panes.ts` [modified] +1/-1
+  - `apps/desktop/src/renderer/components/session-preview.css` [modified] +30/-3
+  - `apps/desktop/src/renderer/components/settings-nav.tsx` [modified] +8/-4
+  - `apps/desktop/src/renderer/components/settings-sections.tsx` [modified] +517/-84
+  - `apps/desktop/src/renderer/components/settings-ui.tsx` [modified] +7/-17
+  - `apps/desktop/src/renderer/components/settings/NetworkSection.tsx` [modified] +5/-5
+  - `apps/desktop/src/renderer/components/settings/UsageSection.tsx` [modified] +7/-3
+  - `apps/desktop/src/renderer/components/settings/usage-dashboard-data.ts` [modified] +18/-0
+  - `apps/desktop/src/renderer/components/settings/usage-dashboard.css` [modified] +1/-0
+  - `apps/desktop/src/renderer/components/sidebar-filter.css` [modified] +8/-11
+  - `apps/desktop/src/renderer/components/stream-process.css` [modified] +105/-25
+  - `apps/desktop/src/renderer/derived/stream.ts` [modified] +22/-4
+  - `apps/desktop/src/renderer/main.tsx` [modified] +15/-0
+  - `apps/desktop/src/renderer/markdown.tsx` [modified] +57/-16
+  - `apps/desktop/src/renderer/memory-view.ts` [modified] +33/-0
+  - `apps/desktop/src/renderer/pane-registry.ts` [modified] +11/-0
+  - `apps/desktop/src/renderer/panes/AppToolbar.tsx` [modified] +35/-76
+  - `apps/desktop/src/renderer/panes/ConfirmScrims.tsx` [modified] +30/-10
+  - `apps/desktop/src/renderer/panes/WorkbenchView.tsx` [modified] +221/-170
+  - `apps/desktop/src/renderer/permission-labels.ts` [modified] +7/-0
+~~- `apps/desktop/src/renderer/public/brand/cairn.icns` [binary] +0/-0 (excluded: binary)~~
+~~- `apps/desktop/src/renderer/public/brand/cairn.png` [binary] +0/-0 (excluded: binary)~~
+  - `apps/desktop/src/renderer/send-queue.ts` [modified] +27/-3
+  - `apps/desktop/src/renderer/sessions-view.ts` [modified] +6/-0
+  - `apps/desktop/src/renderer/shortcuts.ts` [modified] +1/-0
+  - `apps/desktop/src/renderer/state/app-commands.ts` [modified] +3/-1
+  - `apps/desktop/src/renderer/state/chrome.ts` [modified] +7/-4
+  - `apps/desktop/src/renderer/state/projects.ts` [modified] +17/-1
+  - `apps/desktop/src/renderer/state/run-queue.ts` [modified] +100/-32
+  - `apps/desktop/src/renderer/state/run-readings.ts` [modified] +7/-3
+  - `apps/desktop/src/renderer/state/session-subscription.ts` [modified] +12/-7
+  - `apps/desktop/src/renderer/state/sessions.ts` [modified] +38/-15
+  - `apps/desktop/src/renderer/state/thinking-selection.ts` [modified] +6/-3
+  - `apps/desktop/src/renderer/state/workbench.ts` [modified] +60/-79
+  - `apps/desktop/src/renderer/strings.ts` [modified] +59/-29
+  - `apps/desktop/src/renderer/styles.css` [modified] +860/-264
+  - `apps/desktop/src/renderer/theme.ts` [modified] +22/-2
+  - `apps/desktop/src/renderer/tokens.css` [modified] +74/-14
+~~- `apps/desktop/src/renderer/usage-state.ts` [deleted] +0/-6 (excluded: deleted)~~
+  - `apps/desktop/src/renderer/usePopoverDismiss.ts` [modified] +4/-3
+  - `apps/desktop/src/renderer/useStickyScroll.ts` [modified] +34/-5
+~~- `apps/desktop/src/renderer/vendor/dsh-claude-style/fonts/InterVariable.woff2` [binary] +0/-0 (excluded: binary)~~
+~~- `apps/desktop/src/renderer/vendor/dsh-claude-style/fonts/JetBrainsMonoItalicVariable.ttf` [binary] +0/-0 (excluded: binary)~~
+~~- `apps/desktop/src/renderer/vendor/dsh-claude-style/fonts/JetBrainsMonoVariable.ttf` [binary] +0/-0 (excluded: binary)~~
+~~- `apps/desktop/tests/app-empty-terms.test.tsx` [modified] +2/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/app-menu.test.ts` [modified] +37/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/app-page.test.tsx` [modified] +65/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/channels.test.ts` [modified] +62/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/command-gate.test.ts` [modified] +15/-6 (excluded: default_path)~~
+~~- `apps/desktop/tests/command-palette.test.tsx` [modified] +31/-3 (excluded: default_path)~~
+~~- `apps/desktop/tests/composer-drafts.test.tsx` [modified] +3/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/composer-radius.test.ts` [modified] +6/-3 (excluded: default_path)~~
+~~- `apps/desktop/tests/composer-rework.test.tsx` [modified] +48/-7 (excluded: default_path)~~
+~~- `apps/desktop/tests/composer-running.test.tsx` [modified] +29/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/control-accent.test.ts` [modified] +31/-12 (excluded: default_path)~~
+~~- `apps/desktop/tests/delivery-summary.test.tsx` [modified] +81/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/design-minimal.test.tsx` [modified] +45/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/file-pane-improvements.test.ts` [modified] +27/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/focus-mode.test.ts` [modified] +5/-4 (excluded: default_path)~~
+~~- `apps/desktop/tests/focus-ring.test.ts` [modified] +9/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/inspector-width.test.ts` [modified] +1/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/inspector.test.tsx` [modified] +44/-6 (excluded: default_path)~~
+~~- `apps/desktop/tests/interaction-deadends.test.ts` [modified] +13/-11 (excluded: default_path)~~
+~~- `apps/desktop/tests/invoke-consumer-census.test.ts` [modified] +1/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/markdown.test.tsx` [modified] +7/-4 (excluded: default_path)~~
+~~- `apps/desktop/tests/memory-distill.test.ts` [modified] +2/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/menu-unify.test.tsx` [modified] +4/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/micro-interaction.test.ts` [modified] +1/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/model-menu-fit.test.ts` [modified] +9/-7 (excluded: default_path)~~
+~~- `apps/desktop/tests/new-project-dialog.test.tsx` [modified] +13/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/notification-open-wiring.test.ts` [modified] +25/-5 (excluded: default_path)~~
+~~- `apps/desktop/tests/onboarding-checklist.test.tsx` [modified] +34/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/orchestration-pane.test.tsx` [modified] +78/-5 (excluded: default_path)~~
+~~- `apps/desktop/tests/pane-disclosure.test.tsx` [modified] +13/-3 (excluded: default_path)~~
+~~- `apps/desktop/tests/pane-shortcuts.test.ts` [modified] +3/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/plan-mode-wiring.test.ts` [modified] +2/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/plugin-sidebar.test.ts` [modified] +5/-3 (excluded: default_path)~~
+~~- `apps/desktop/tests/plugin-strip.test.ts` [modified] +15/-17 (excluded: default_path)~~
+~~- `apps/desktop/tests/popover.test.tsx` [modified] +14/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/protocol-version.test.ts` [modified] +27/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/provider-banner.test.tsx` [modified] +2/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/queue-key.test.ts` [modified] +7/-3 (excluded: default_path)~~
+~~- `apps/desktop/tests/quick-starts-ui.test.tsx` [modified] +36/-6 (excluded: default_path)~~
+~~- `apps/desktop/tests/quit-guard.test.ts` [modified] +10/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/render-resilience.test.tsx` [modified] +1/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/render-structure.test.tsx` [modified] +99/-13 (excluded: default_path)~~
+~~- `apps/desktop/tests/row-actions-reveal.test.ts` [modified] +41/-10 (excluded: default_path)~~
+~~- `apps/desktop/tests/run-notification.test.ts` [modified] +74/-3 (excluded: default_path)~~
+~~- `apps/desktop/tests/run-queue-session.test.tsx` [modified] +92/-9 (excluded: default_path)~~
+~~- `apps/desktop/tests/send-queue.test.ts` [modified] +39/-6 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-identity-ui.test.tsx` [modified] +2/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-list-polish.test.tsx` [modified] +1/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-project-assign.test.tsx` [modified] +1/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/settings-advanced-section.test.tsx` [modified] +51/-3 (excluded: default_path)~~
+~~- `apps/desktop/tests/settings-panel.test.ts` [modified] +5/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/settings-section-search.test.ts` [modified] +14/-3 (excluded: default_path)~~
+~~- `apps/desktop/tests/settings-sections.test.tsx` [modified] +140/-36 (excluded: default_path)~~
+~~- `apps/desktop/tests/settings-ui.test.tsx` [modified] +90/-36 (excluded: default_path)~~
+~~- `apps/desktop/tests/shortcuts.test.ts` [modified] +2/-2 (excluded: default_path)~~
+~~- `apps/desktop/tests/sidebar-groups.test.ts` [modified] +1/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/sidebar-highlight.test.tsx` [modified] +16/-7 (excluded: default_path)~~
+~~- `apps/desktop/tests/sidebar-session-search.test.ts` [modified] +14/-7 (excluded: default_path)~~
+~~- `apps/desktop/tests/stream-fade.test.ts` [modified] +17/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/stream-memo.test.ts` [modified] +4/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/stream-nav.test.tsx` [modified] +14/-10 (excluded: default_path)~~
+~~- `apps/desktop/tests/stream-process.test.tsx` [modified] +56/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/stream-rework.test.tsx` [modified] +13/-3 (excluded: default_path)~~
+~~- `apps/desktop/tests/thinking-selection.test.ts` [modified] +5/-3 (excluded: default_path)~~
+~~- `apps/desktop/tests/tokens.test.ts` [modified] +17/-7 (excluded: default_path)~~
+~~- `apps/desktop/tests/tool-diff-payload.test.tsx` [modified] +23/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/tool-rows.test.tsx` [modified] +12/-5 (excluded: default_path)~~
+~~- `apps/desktop/tests/tooltip-audit.test.tsx` [modified] +1/-1 (excluded: default_path)~~
+~~- `apps/desktop/tests/usage-composition.test.tsx` [deleted] +0/-93 (excluded: default_path)~~
+~~- `apps/desktop/tests/usage-panel.test.tsx` [deleted] +0/-58 (excluded: default_path)~~
+~~- `docs/CODE-WIKI.md` [modified] +20/-0 (excluded: user_exclude)~~
+~~- `docs/REPOSITORY-STATUS.md` [modified] +55/-3 (excluded: user_exclude)~~
+~~- `docs/superpowers/specs/2026-10-25-multi-agent-orchestration-platform-design.md` [modified] +19/-7 (excluded: user_exclude)~~
+~~- `docs/superpowers/specs/2026-10-27-context-memory-quality-design.md` [modified] +18/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/specs/2026-10-27-interop-ecosystem-design.md` [modified] +42/-0 (excluded: user_exclude)~~
+~~- `fixtures/lsp/README.md` [modified] +10/-0 (excluded: user_exclude)~~
+~~- `fixtures/lsp/stub-server.mjs` [modified] +80/-13 (excluded: user_exclude)~~
+~~- `fixtures/plugins/project/echo-suite/.lsp.json` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `outputs/all-open-2026-10-22/runtime/interaction-corrected/01-tools-folded.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/all-open-2026-10-22/runtime/interaction-corrected/02-tools-expanded.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/all-open-2026-10-22/runtime/interaction-corrected/03-focused-panel.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/all-open-2026-10-22/runtime/interaction-corrected/04-split-panels.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/all-open-2026-10-22/runtime/interaction-corrected/05-narrow.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/all-open-2026-10-22/runtime/interaction-corrected/06-dark.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-hardening-2026-10-20/interaction-final/01-tools-folded.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-hardening-2026-10-20/interaction-final/02-tools-expanded.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-hardening-2026-10-20/interaction-final/03-focused-panel.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-hardening-2026-10-20/interaction-final/04-split-panels.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-hardening-2026-10-20/interaction-final/06-dark.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-hardening-2026-10-20/repro-pending/02-independent-session-marks.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-hardening-2026-10-20/repro-ui/01-independent-session-marks.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-hardening-2026-10-20/state-final/02-independent-session-marks.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-official-interactions-2026-10-20/final/02-tools-expanded.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/InterVariable-DJwk3cVO.woff2` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-polish-2026-10-21/control-renderer/assets/JetBrainsMonoVariable-DgTxpPXt.ttf` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-polish-2026-10-21/interactions/05-narrow.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-polish-2026-10-21/interactions/06-dark.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-repair-2026-10-20/after/02-session.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-repair-2026-10-20/after/03-narrow.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-repair-2026-10-20/after/04-dark.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-repair-2026-10-20/before/01-empty.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-repair-2026-10-20/before/03-thinking.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-repair-2026-10-20/before/05-stream.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/desktop-repair-2026-10-20/final/05-settings.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/metacognition-v2-acceptance-2026-10-25/trial-001/C1-malformed-tool-rep1-base.events.jsonl` [deleted] +0/-4604 (excluded: user_exclude)~~
+~~- `outputs/onboarding-dismiss-2026-10-28/final/after.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/open-task-reconciliation-2026-10-22/search-runtime/02-english-body-match.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/open-task-reconciliation-2026-10-22/search-runtime/03-partial.png` [binary] +0/-0 (excluded: binary)~~
+~~- `outputs/open-task-reconciliation-2026-10-22/search-runtime/05-ipc-error.png` [binary] +0/-0 (excluded: binary)~~
+  - `package.json` [modified] +5/-1
+  - `pnpm-lock.yaml` [modified] +49/-0
+  - `scripts/lib/eval-assembly.ts` [modified] +4/-0
+  - `scripts/lib/mutations/agent-orchestration.mjs` [modified] +2/-2
+  - `scripts/lib/mutations/agent-plugins.mjs` [modified] +4/-4
+  - `scripts/lib/mutations/agent-runtime.mjs` [modified] +6/-5
+  - `scripts/lib/mutations/core.mjs` [modified] +1/-1
+  - `scripts/lib/mutations/main.mjs` [modified] +9/-9
+  - `scripts/lib/mutations/misc.mjs` [modified] +2/-2
+  - `scripts/lib/mutations/tools.mjs` [modified] +67/-3
+~~- `src/agent/local-agent-runtime.ts` [modified] +9/-3 (excluded: user_exclude)~~
+~~- `src/agent/loop.ts` [modified] +97/-3 (excluded: user_exclude)~~
+~~- `src/agent/orchestrator-types.ts` [modified] +20/-0 (excluded: user_exclude)~~
+~~- `src/agent/orchestrator.ts` [modified] +35/-2 (excluded: user_exclude)~~
+~~- `src/agent/plugins/discover.ts` [modified] +5/-8 (excluded: user_exclude)~~
+~~- `src/agent/plugins/index.ts` [modified] +13/-0 (excluded: user_exclude)~~
+~~- `src/agent/plugins/manifest.ts` [modified] +3/-0 (excluded: user_exclude)~~
+~~- `src/agent/plugins/secrets.ts` [modified] +40/-0 (excluded: user_exclude)~~
+~~- `src/agent/plugins/trust.ts` [modified] +15/-0 (excluded: user_exclude)~~
+~~- `src/agent/session-provider.ts` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `src/agent/tool-surface.ts` [modified] +2/-0 (excluded: user_exclude)~~
+~~- `src/agent/worker-prompt.ts` [modified] +3/-0 (excluded: user_exclude)~~
+  - `src/app-data.ts` [modified] +43/-3
+  - `src/cli.ts` [modified] +245/-45
+  - `src/events/index.ts` [modified] +1/-1
+  - `src/events/types.ts` [modified] +20/-1
+  - `src/main/agent-runner.ts` [modified] +51/-8
+  - `src/main/compact-and-report.ts` [modified] +16/-0
+  - `src/main/doctor.ts` [modified] +94/-3
+  - `src/main/ipc-protocol.ts` [modified] +129/-7
+  - `src/main/license.ts` [modified] +55/-1
+  - `src/main/onboarding-groups.ts` [modified] +11/-7
+  - `src/main/orchestration-service.ts` [modified] +3/-0
+  - `src/main/post-run-readings.ts` [modified] +28/-2
+  - `src/main/project-export.ts` [modified] +55/-15
+  - `src/main/project-registry.ts` [modified] +44/-1
+  - `src/main/provider-key-inject.ts` [modified] +38/-4
+  - `src/main/provider-keys.ts` [modified] +56/-29
+  - `src/main/provider-runtime.ts` [modified] +5/-5
+  - `src/main/provider-setup.ts` [modified] +26/-0
+  - `src/main/scheduler-runtime.ts` [modified] +10/-2
+  - `src/main/scheduler.ts` [modified] +44/-5
+  - `src/main/session-assembly.ts` [modified] +34/-0
+  - `src/main/session-handlers.ts` [modified] +43/-0
+  - `src/main/session-metadata.ts` [modified] +36/-1
+  - `src/main/session-repository.ts` [modified] +3/-76
+  - `src/main/session-search.ts` [modified] +6/-0
+  - `src/main/sessions.ts` [modified] +132/-44
+  - `src/main/settings-handlers.ts` [modified] +43/-4
+  - `src/main/settings.ts` [modified] +63/-12
+  - `src/main/state-handlers.ts` [modified] +20/-6
+  - `src/main/tool-gates.ts` [modified] +67/-2
+  - `src/permissions/modes.ts` [modified] +8/-0
+  - `src/providers/capabilities.ts` [modified] +1/-1
+  - `src/providers/env-keys.ts` [modified] +1/-1
+  - `src/providers/openai.ts` [modified] +1/-1
+  - `src/providers/provider-config.ts` [modified] +1/-2
+  - `src/providers/provider-identifiers.ts` [modified] +1/-0
+  - `src/providers/reasoning.ts` [modified] +8/-6
+  - `src/providers/registry.ts` [modified] +1/-1
+~~- `src/tools/lsp.ts` [modified] +229/-29 (excluded: user_exclude)~~
+~~- `tests/cli-surface.test.ts` [modified] +374/-1 (excluded: default_path)~~
+~~- `tests/desktop-package.test.ts` [modified] +20/-0 (excluded: default_path)~~
+~~- `tests/doctor.test.ts` [modified] +110/-3 (excluded: default_path)~~
+~~- `tests/eval-assembly.test.ts` [modified] +1/-1 (excluded: default_path)~~
+~~- `tests/gated-tools.test.ts` [modified] +2/-0 (excluded: default_path)~~
+~~- `tests/ipc-protocol-version.test.ts` [modified] +29/-2 (excluded: default_path)~~
+~~- `tests/local-agent-runtime.test.ts` [modified] +2/-2 (excluded: default_path)~~
+~~- `tests/lsp.test.ts` [modified] +171/-1 (excluded: default_path)~~
+~~- `tests/memory-hybrid.test.ts` [modified] +7/-5 (excluded: default_path)~~
+~~- `tests/motion-policy.test.ts` [modified] +3/-2 (excluded: default_path)~~
+~~- `tests/mutate-shards.test.ts` [modified] +2/-1 (excluded: default_path)~~
+~~- `tests/onboarding-groups.test.ts` [modified] +58/-0 (excluded: default_path)~~
+~~- `tests/orchestration-dynamic-control.test.ts` [modified] +166/-0 (excluded: default_path)~~
+~~- `tests/orchestration-service.test.ts` [modified] +13/-0 (excluded: default_path)~~
+~~- `tests/permission-mode-single-source.test.ts` [modified] +19/-1 (excluded: default_path)~~
+~~- `tests/permissions-tool-registry.test.ts` [modified] +2/-0 (excluded: default_path)~~
+~~- `tests/plugin-data-root-durable.test.ts` [modified] +18/-3 (excluded: default_path)~~
+~~- `tests/plugin-lsp-activation.test.ts` [modified] +7/-6 (excluded: default_path)~~
+~~- `tests/plugins-discover.test.ts` [modified] +1/-1 (excluded: default_path)~~
+~~- `tests/post-run-readings.test.ts` [modified] +4/-0 (excluded: default_path)~~
+~~- `tests/project-registry.test.ts` [modified] +70/-1 (excluded: default_path)~~
+~~- `tests/prompt-surface-check.test.ts` [modified] +6/-4 (excluded: default_path)~~
+~~- `tests/provider-capabilities.test.ts` [modified] +2/-2 (excluded: default_path)~~
+~~- `tests/reasoning-wire.test.ts` [modified] +8/-6 (excluded: default_path)~~
+~~- `tests/remote-backend.test.ts` [modified] +1/-1 (excluded: default_path)~~
+~~- `tests/runner-gates.test.ts` [modified] +3/-0 (excluded: default_path)~~
+~~- `tests/schedule.test.ts` [modified] +81/-1 (excluded: default_path)~~
+~~- `tests/session-metadata.test.ts` [modified] +48/-0 (excluded: default_path)~~
+~~- `tests/sessions.test.ts` [modified] +62/-0 (excluded: default_path)~~
+~~- `tests/settings.test.ts` [modified] +41/-1 (excluded: default_path)~~
+~~- `tests/skill-tool-policy.test.ts` [modified] +5/-1 (excluded: default_path)~~
+  - `tests/vitest.config.ts` [modified] +6/-0
+~~- `tests/worker-remember-scope.test.ts` [modified] +18/-8 (excluded: default_path)~~
+~~- `.agent/evolve/episodes.jsonl` [added] +743/-0 (excluded: unsupported_ext)~~
+~~- `.agent/evolve/playbook.jsonl` [added] +5/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/.impeccable/mocks/2026-10-30/a-unified-sidebar.json` [added] +7/-0
+~~- `apps/desktop/.impeccable/mocks/2026-10-30/a-unified-sidebar.png` [added] +4177/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/.impeccable/mocks/2026-10-30/b-compact-rail.json` [added] +7/-0
+~~- `apps/desktop/.impeccable/mocks/2026-10-30/b-compact-rail.png` [added] +4310/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/.impeccable/mocks/2026-10-30/c-review-workbench.json` [added] +7/-0
+~~- `apps/desktop/.impeccable/mocks/2026-10-30/c-review-workbench.png` [added] +4173/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/PRODUCT.md` [added] +75/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/bundle-audit.json` [added] +1555/-0
+~~- `apps/desktop/outputs/advanced-controls-789/01-advanced-controls.png` [added] +515/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/advanced-controls-789/checks.json` [added] +91/-0
+  - `apps/desktop/outputs/app-lifecycle-798/checks.json` [added] +30/-0
+~~- `apps/desktop/outputs/app-lifecycle-798/double-launch.log` [added] +15/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-log-800/boot-log.txt` [added] +11/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/app-log-800/checks.json` [added] +13/-0
+~~- `apps/desktop/outputs/app-shell-785/01-desktop-light-plugins.png` [added] +116/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-785/04-keyboard-focus-memory.png` [added] +441/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-785/05-empty-memory.png` [added] +275/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-785/06-read-error-memory.png` [added] +40/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-785/08-operation-error-automation.png` [added] +457/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-785/09-settings-skills-inline.png` [added] +202/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/app-shell-785/checks.json` [added] +487/-0
+~~- `apps/desktop/outputs/app-shell-815/01-desktop-light-plugins.png` [added] +114/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815/02-narrow-880-memory.png` [added] +475/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815/05-empty-memory.png` [added] +272/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815/06-read-error-memory.png` [added] +39/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815/08-operation-error-automation.png` [added] +459/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815/09-settings-skills-inline.png` [added] +202/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/app-shell-815/checks.json` [added] +487/-0
+~~- `apps/desktop/outputs/app-shell-815b/01-desktop-light-plugins.png` [added] +114/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815b/02-narrow-880-memory.png` [added] +440/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815b/05-empty-memory.png` [added] +272/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815b/06-read-error-memory.png` [added] +39/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815b/08-operation-error-automation.png` [added] +439/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815b/09-settings-skills-inline.png` [added] +202/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/app-shell-815b/checks.json` [added] +487/-0
+~~- `apps/desktop/outputs/app-shell-815c/01-desktop-light-plugins.png` [added] +116/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815c/02-narrow-880-memory.png` [added] +458/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815c/05-empty-memory.png` [added] +272/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815c/06-read-error-memory.png` [added] +39/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815c/08-operation-error-automation.png` [added] +447/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815c/09-settings-skills-inline.png` [added] +202/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/app-shell-815c/checks.json` [added] +487/-0
+~~- `apps/desktop/outputs/app-shell-815d/01-desktop-light-plugins.png` [added] +116/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815d/02-narrow-880-memory.png` [added] +471/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815d/05-empty-memory.png` [added] +272/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815d/06-read-error-memory.png` [added] +39/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815d/08-operation-error-automation.png` [added] +470/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815d/09-settings-skills-inline.png` [added] +202/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/app-shell-815d/checks.json` [added] +487/-0
+~~- `apps/desktop/outputs/app-shell-815e/04-keyboard-focus-memory.png` [added] +396/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815e/05-empty-memory.png` [added] +272/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815e/06-read-error-memory.png` [added] +39/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815e/08-operation-error-automation.png` [added] +450/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815e/09-settings-skills-inline.png` [added] +202/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/app-shell-815e/checks.json` [added] +477/-0
+~~- `apps/desktop/outputs/app-shell-815f/04-keyboard-focus-memory.png` [added] +414/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815f/05-empty-memory.png` [added] +272/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815f/06-read-error-memory.png` [added] +39/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815f/08-operation-error-automation.png` [added] +506/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815f/09-settings-skills-inline.png` [added] +202/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/app-shell-815f/checks.json` [added] +477/-0
+~~- `apps/desktop/outputs/app-shell-815g/01-desktop-light-plugins.png` [added] +223/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815g/02-narrow-880-memory.png` [added] +507/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815g/03-desktop-dark-memory.png` [added] +521/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815g/04-keyboard-focus-memory.png` [added] +458/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815g/05-empty-memory.png` [added] +272/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815g/06-read-error-memory.png` [added] +39/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815g/07-1120-memory-overlap.png` [added] +370/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815g/08-operation-error-automation.png` [added] +404/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/app-shell-815g/09-settings-skills-inline.png` [added] +202/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/app-shell-815g/checks.json` [added] +477/-0
+~~- `apps/desktop/outputs/automation-corrupt-785/01-automation-corrupt.png` [added] +228/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/automation-corrupt-785/checks.json` [added] +44/-0
+~~- `apps/desktop/outputs/build-info-820/01-import-preview.png` [added] +638/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/build-info-820/02-after-import.png` [added] +610/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/build-info-820/03-after-reset.png` [added] +667/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/build-info-820/checks.json` [added] +75/-0
+  - `apps/desktop/outputs/bundle-754.json` [added] +1563/-0
+  - `apps/desktop/outputs/bundle-755.json` [added] +1567/-0
+  - `apps/desktop/outputs/bundle-758.json` [added] +1575/-0
+~~- `apps/desktop/outputs/cds-components-verify/01-home.png` [added] +336/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/cds-components-verify/01b-search-open.png` [added] +328/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/cds-components-verify/02-session.png` [added] +846/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/cds-components-verify/02b-inspector-overview.png` [added] +960/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/cds-components-verify/02c-inspector-changes.png` [added] +899/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/cds-components-verify/03-narrow.png` [added] +640/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/cds-components-verify/04-dark.png` [added] +699/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/cds-components-verify/checks.json` [added] +137/-0
+~~- `apps/desktop/outputs/cds-parity-verify/01-home.png` [added] +277/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/cds-parity-verify/01b-search-open.png` [added] +380/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/cds-parity-verify/02-session.png` [added] +782/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/cds-parity-verify/02b-inspector-overview.png` [added] +1012/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/cds-parity-verify/02c-inspector-changes.png` [added] +901/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/cds-parity-verify/03-narrow.png` [added] +628/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/cds-parity-verify/04-dark.png` [added] +658/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/cds-parity-verify/05-settings.png` [added] +500/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/cds-parity-verify/checks.json` [added] +137/-0
+  - `apps/desktop/outputs/cds-parity-verify/values.json` [added] +303/-0
+~~- `apps/desktop/outputs/claude-parity-baseline/01-home.png` [added] +307/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/claude-parity-baseline/01b-search-open.png` [added] +404/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/claude-parity-baseline/02-session.png` [added] +805/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/claude-parity-baseline/02b-inspector-overview.png` [added] +962/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/claude-parity-baseline/02c-inspector-changes.png` [added] +928/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/claude-parity-baseline/03-narrow.png` [added] +638/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/claude-parity-baseline/04-dark.png` [added] +619/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/claude-parity-baseline/05-settings.png` [added] +623/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/claude-parity-baseline/bundle-baseline.json` [added] +1531/-0
+  - `apps/desktop/outputs/claude-parity-baseline/checks.json` [added] +137/-0
+~~- `apps/desktop/outputs/demo-honesty-812/01-home.png` [added] +602/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/demo-honesty-812/02-three-rounds.png` [added] +326/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/demo-honesty-812/checks.json` [added] +106/-0
+~~- `apps/desktop/outputs/design-818/01-model-light.png` [added] +451/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/design-818/02-model-short.png` [added] +471/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/design-818/03-filter-light.png` [added] +908/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/design-818/04-process-light.png` [added] +720/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/design-818/05-process-expanded.png` [added] +722/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/design-818/06-model-dark.png` [added] +730/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/design-818/checks.json` [added] +166/-0
+~~- `apps/desktop/outputs/desktop-polish-735/02-session.png` [added] +794/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-735/02b-inspector-overview.png` [added] +994/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-735/02c-inspector-changes.png` [added] +894/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-735/03-narrow.png` [added] +605/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-735/04-dark.png` [added] +633/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/desktop-polish-735/checks.json` [added] +137/-0
+~~- `apps/desktop/outputs/desktop-polish-736/02-session.png` [added] +844/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-736/02b-inspector-overview.png` [added] +1018/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-736/02c-inspector-changes.png` [added] +895/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-736/03-narrow.png` [added] +594/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-736/04-dark.png` [added] +609/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/desktop-polish-736/checks.json` [added] +137/-0
+~~- `apps/desktop/outputs/desktop-polish-737/02-session.png` [added] +803/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-737/02b-inspector-overview.png` [added] +1004/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-737/02c-inspector-changes.png` [added] +812/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-737/03-narrow.png` [added] +665/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-737/04-dark.png` [added] +702/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/desktop-polish-737/checks.json` [added] +137/-0
+  - `apps/desktop/outputs/desktop-polish-738/checks.json` [added] +137/-0
+~~- `apps/desktop/outputs/desktop-polish-739/02b-session-top.png` [added] +661/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/desktop-polish-739/checks.json` [added] +137/-0
+~~- `apps/desktop/outputs/desktop-polish-740/04b-changes-expanded.png` [added] +650/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-740/05-home-dark.png` [added] +369/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/desktop-polish-740/checks.json` [added] +137/-0
+~~- `apps/desktop/outputs/desktop-polish-741/01-home-620-light.png` [added] +369/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-741/02-home-620-dark.png` [added] +537/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-741/03-palette.png` [added] +643/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/desktop-polish-741/checks.json` [added] +137/-0
+~~- `apps/desktop/outputs/desktop-polish-742/04-project-picker.png` [added] +358/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/desktop-polish-742/checks.json` [added] +137/-0
+~~- `apps/desktop/outputs/desktop-polish-743/05-settings-620.png` [added] +711/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/desktop-polish-743/checks.json` [added] +137/-0
+~~- `apps/desktop/outputs/desktop-polish-744/01-home.png` [added] +322/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-744/01b-search-open.png` [added] +294/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/desktop-polish-744/checks.json` [added] +137/-0
+~~- `apps/desktop/outputs/desktop-polish-745/01-home.png` [added] +330/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-745/01b-search-open.png` [added] +338/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-745/06-model-picker.png` [added] +1006/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/desktop-polish-745/checks.json` [added] +137/-0
+~~- `apps/desktop/outputs/desktop-polish-746/01-home.png` [added] +282/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-746/01b-search-open.png` [added] +372/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-746/02-session.png` [added] +801/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-746/02b-inspector-overview.png` [added] +949/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-746/02c-inspector-changes.png` [added] +882/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-746/05-settings-880.png` [added] +485/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-746/05-settings.png` [added] +641/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-746/06-model-picker-dark.png` [added] +1001/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/desktop-polish-746/checks.json` [added] +137/-0
+~~- `apps/desktop/outputs/desktop-polish-747/01-home.png` [added] +355/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-747/01b-search-open.png` [added] +334/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-747/05-settings-880.png` [added] +525/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-747/05-settings.png` [added] +621/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/desktop-polish-747/checks.json` [added] +137/-0
+~~- `apps/desktop/outputs/desktop-polish-748/01-home.png` [added] +323/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-748/01b-search-open.png` [added] +342/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-748/02-session.png` [added] +810/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-748/02b-inspector-overview.png` [added] +1004/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-748/02c-inspector-changes.png` [added] +948/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-748/03-narrow.png` [added] +602/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-748/04-dark.png` [added] +673/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-748/05-settings-provider-880.png` [added] +669/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-748/05-settings.png` [added] +577/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/desktop-polish-748/06-settings-permissions-880.png` [added] +563/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/desktop-polish-748/checks.json` [added] +137/-0
+~~- `apps/desktop/outputs/diagnostics-bundle-807/01-doctor-report.png` [added] +789/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/diagnostics-bundle-807/02-after-doctor-jump.png` [added] +463/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/diagnostics-bundle-807/checks.json` [added] +159/-0
+~~- `apps/desktop/outputs/diagnostics-bundle-807/real-bundle.md` [added] +19/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/dialogs-enter-794/01-after-enter.png` [added] +392/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/dialogs-enter-794/checks.json` [added] +85/-0
+~~- `apps/desktop/outputs/doctor-copy-803/01-doctor-report.png` [added] +775/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/doctor-copy-803/02-after-doctor-jump.png` [added] +463/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/doctor-copy-803/checks.json` [added] +149/-0
+~~- `apps/desktop/outputs/doctor-nav-799/01-doctor-report.png` [added] +663/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/doctor-nav-799/checks.json` [added] +134/-0
+~~- `apps/desktop/outputs/doctor-report-793/01-doctor-report.png` [added] +667/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/doctor-report-793/checks.json` [added] +114/-0
+~~- `apps/desktop/outputs/interaction-816/02-tools-expanded.png` [added] +442/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/interaction-818/01-tools-folded.png` [added] +368/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/interaction-818/02-tools-expanded.png` [added] +449/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/interaction-818/02b-sidebar-filter.png` [added] +327/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/interaction-818/02c-sidebar-filter-empty.png` [added] +280/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/interaction-818/02d-palette-files.png` [added] +426/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/interaction-818/02e-file-quick-open.png` [added] +423/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/interaction-818/03-pane-tabs.png` [added] +276/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/interaction-818/05-narrow.png` [added] +449/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/interaction-818/06-dark.png` [added] +393/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/interaction-818/checks.json` [added] +231/-0
+~~- `apps/desktop/outputs/layout-818/01-home.png` [added] +332/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/layout-818/01b-search-open.png` [added] +361/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/layout-818/02-session.png` [added] +834/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/layout-818/02b-inspector-overview.png` [added] +1047/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/layout-818/02c-inspector-changes.png` [added] +961/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/layout-818/03-narrow.png` [added] +635/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/layout-818/04-dark.png` [added] +691/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/layout-818/05-settings.png` [added] +523/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/layout-818/checks.json` [added] +137/-0
+~~- `apps/desktop/outputs/license-import-805/01-after-license-import.png` [added] +618/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/license-import-805/checks.json` [added] +36/-0
+  - `apps/desktop/outputs/maintenance-menu-804/checks.json` [added] +13/-0
+  - `apps/desktop/outputs/maintenance-menu-804/menu-items.json` [added] +122/-0
+~~- `apps/desktop/outputs/memory-export-824/01-memory-export.png` [added] +429/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/memory-export-824/checks.json` [added] +36/-0
+~~- `apps/desktop/outputs/memory-export-826/01-memory-export.png` [added] +533/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/memory-export-826/checks.json` [added] +46/-0
+~~- `apps/desktop/outputs/notify-toggle-787/01-notify-off.png` [added] +450/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/notify-toggle-787/checks.json` [added] +40/-0
+~~- `apps/desktop/outputs/onboarding-copy-806/00-before.png` [added] +537/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/onboarding-copy-806/01-after.png` [added] +552/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/onboarding-copy-806/01-home.png` [added] +673/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/onboarding-copy-806/02-three-rounds.png` [added] +342/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/onboarding-copy-806/checks.json` [added] +98/-0
+~~- `apps/desktop/outputs/orchestration-controls-758/01-proposed.png` [added] +1462/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/orchestration-controls-758/02-arm-cancel.png` [added] +1370/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/orchestration-controls-758/03-cancelled.png` [added] +1397/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/orchestration-controls-758/checks.json` [added] +306/-0
+  - `apps/desktop/outputs/orchestration-controls-758/red-checks.json` [added] +87/-0
+~~- `apps/desktop/outputs/orchestration-copy-761/01-proposed.png` [added] +1469/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/orchestration-copy-761/02-arm-cancel.png` [added] +1410/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/orchestration-copy-761/03-cancelled.png` [added] +1407/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/orchestration-copy-761/checks.json` [added] +324/-0
+  - `apps/desktop/outputs/package-808/build-info.json` [added] +9/-0
+~~- `apps/desktop/outputs/package-808/package-summary.txt` [added] +8/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/package-818/build-info.json` [added] +9/-0
+~~- `apps/desktop/outputs/package-818/package-summary.txt` [added] +8/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/package-819/build-info.json` [added] +9/-0
+~~- `apps/desktop/outputs/package-819/package-summary.txt` [added] +6/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/package-820/build-info.json` [added] +9/-0
+~~- `apps/desktop/outputs/package-820/package-summary.txt` [added] +17/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/package-826/build-info.json` [added] +9/-0
+~~- `apps/desktop/outputs/package-826/package-summary.txt` [added] +8/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/package-827/build-info.json` [added] +9/-0
+~~- `apps/desktop/outputs/package-827/package-summary.txt` [added] +10/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/package-828/build-info.json` [added] +9/-0
+~~- `apps/desktop/outputs/package-828/mount-check.txt` [added] +19/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/package-828/package-summary.txt` [added] +10/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/package-829/build-info.json` [added] +9/-0
+~~- `apps/desktop/outputs/package-829/package-summary.txt` [added] +27/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/package-831/build-info.json` [added] +9/-0
+~~- `apps/desktop/outputs/package-831/package-summary.txt` [added] +17/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/package-833/build-info.json` [added] +9/-0
+~~- `apps/desktop/outputs/package-833/package-summary.txt` [added] +17/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/palette-perm-784/01-full-access.png` [added] +454/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/palette-perm-784/02-settings-full-access.png` [added] +526/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/palette-perm-784/checks.json` [added] +329/-0
+~~- `apps/desktop/outputs/plugin-marketplace-2026-10-29/01-discover-1440-light.png` [added] +229/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-2026-10-29/02-discover-1440-dark.png` [added] +193/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-2026-10-29/03-installed-1120-light.png` [added] +261/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-2026-10-29/04-updates-1120-dark.png` [added] +203/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-2026-10-29/05-review-880-light.png` [added] +218/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-2026-10-29/06-offline-1440-light.png` [added] +281/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-2026-10-29/07-corrupt-1120-dark.png` [added] +215/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-2026-10-29/08-detail-880-dark.png` [added] +176/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/plugin-marketplace-2026-10-29/checks.json` [added] +253/-0
+~~- `apps/desktop/outputs/plugin-marketplace-catalog-2026-10-29/smoke-final/01-desktop-light-plugins.png` [added] +78/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-catalog-2026-10-29/smoke-final/02-narrow-880-memory.png` [added] +467/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-catalog-2026-10-29/smoke-final/05-empty-memory.png` [added] +275/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-catalog-2026-10-29/smoke-final/06-read-error-memory.png` [added] +40/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-catalog-2026-10-29/smoke-final/08-operation-error-automation.png` [added] +453/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-catalog-2026-10-29/smoke-final/09-settings-skills-inline.png` [added] +202/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/plugin-marketplace-catalog-2026-10-29/smoke-final/checks.json` [added] +477/-0
+~~- `apps/desktop/outputs/plugin-marketplace-catalog-2026-10-29/smoke/01-desktop-light-plugins.png` [added] +78/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-catalog-2026-10-29/smoke/04-keyboard-focus-memory.png` [added] +450/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-catalog-2026-10-29/smoke/05-empty-memory.png` [added] +272/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-catalog-2026-10-29/smoke/06-read-error-memory.png` [added] +39/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-catalog-2026-10-29/smoke/08-operation-error-automation.png` [added] +416/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-catalog-2026-10-29/smoke/09-settings-skills-inline.png` [added] +202/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/plugin-marketplace-catalog-2026-10-29/smoke/checks.json` [added] +477/-0
+~~- `apps/desktop/outputs/preferences-backup-809/01-after-preferences-import.png` [added] +547/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/preferences-backup-809/checks.json` [added] +45/-0
+~~- `apps/desktop/outputs/preferences-preview-813/01-import-preview.png` [added] +582/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/preferences-preview-813/02-after-import.png` [added] +535/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/preferences-preview-813/checks.json` [added] +55/-0
+~~- `apps/desktop/outputs/preferences-reset-817/01-import-preview.png` [added] +594/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/preferences-reset-817/02-after-import.png` [added] +547/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/preferences-reset-817/03-after-reset.png` [added] +587/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/preferences-reset-817/checks.json` [added] +75/-0
+~~- `apps/desktop/outputs/project-presence-802/00-before-relocate.png` [added] +322/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/project-presence-802/01-after-relocate.png` [added] +388/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/project-presence-802/checks.json` [added] +55/-0
+~~- `apps/desktop/outputs/project-relocate-801/01-after-relocate.png` [added] +381/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/project-relocate-801/checks.json` [added] +55/-0
+~~- `apps/desktop/outputs/projects-retry-792/01-after-retry.png` [added] +361/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/projects-retry-792/checks.json` [added] +36/-0
+  - `apps/desktop/outputs/same-id-753/checks.json` [added] +77/-0
+~~- `apps/desktop/outputs/session-prefs-795/01-session-prefs.png` [added] +991/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/session-prefs-795/checks.json` [added] +77/-0
+~~- `apps/desktop/outputs/settings-020-829/01-import-preview.png` [added] +635/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/settings-020-829/02-after-import.png` [added] +665/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/settings-020-829/03-after-reset.png` [added] +714/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/settings-020-829/checks.json` [added] +75/-0
+~~- `apps/desktop/outputs/settings-esc-commit-790/01-after-esc.png` [added] +346/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/settings-esc-commit-790/checks.json` [added] +46/-0
+~~- `apps/desktop/outputs/settings-issue-768/01-settings-issue.png` [added] +700/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/settings-issue-768/checks.json` [added] +31/-0
+~~- `apps/desktop/outputs/settings-process-816/01-process.png` [added] +752/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/settings-process-816/02-usage-desktop.png` [added] +482/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/settings-process-816/02b-usage-details.png` [added] +461/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/settings-process-816/02c-evolve.png` [added] +463/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/settings-process-816/03-usage-narrow.png` [added] +599/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/settings-process-816/04-network.png` [added] +721/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/settings-process-816/checks.json` [added] +85/-0
+~~- `apps/desktop/outputs/settings-reload-786/01-settings-issue.png` [added] +502/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/settings-reload-786/02-after-reload.png` [added] +547/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/settings-reload-786/checks.json` [added] +63/-0
+~~- `apps/desktop/outputs/settings-responsive-823/01-settings-search.png` [added] +453/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/settings-responsive-823/02-about-1120.png` [added] +593/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/settings-responsive-823/02-about-880.png` [added] +556/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/settings-responsive-823/checks.json` [added] +82/-0
+~~- `apps/desktop/outputs/settings-search-814/01-settings-search.png` [added] +427/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/settings-search-814/checks.json` [added] +52/-0
+~~- `apps/desktop/outputs/settings-sweep-791/01-evolve.png` [added] +621/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/settings-sweep-791/checks.json` [added] +130/-0
+~~- `apps/desktop/outputs/sidebar-load-error-770/01-sidebar-load-error.png` [added] +498/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/sidebar-load-error-770/checks.json` [added] +35/-0
+~~- `apps/desktop/outputs/sidebar-load-error-775/01-sidebar-load-error.png` [added] +572/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/sidebar-load-error-775/checks.json` [added] +40/-0
+~~- `apps/desktop/outputs/turn-column-859/05-stream.png` [added] +760/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/turn-column-859/06-settings-provider.png` [added] +501/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/update-manifest-830/rejection.txt` [added] +3/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/update-manifest-830/update.json` [added] +5/-0
+~~- `apps/desktop/outputs/update-notice-810/01-update-notice.png` [added] +340/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/update-notice-810/checks.json` [added] +31/-0
+~~- `apps/desktop/outputs/update-notice-811/02-update-menu.png` [added] +602/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/update-notice-811/checks.json` [added] +46/-0
+~~- `apps/desktop/outputs/usage-csv-825/01-usage-csv.png` [added] +512/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/usage-csv-825/checks.json` [added] +41/-0
+~~- `apps/desktop/outputs/usage-csv-826/01-usage-csv.png` [added] +424/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/usage-csv-826/checks.json` [added] +51/-0
+~~- `apps/desktop/outputs/version-819/01-import-preview.png` [added] +641/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/version-819/02-after-import.png` [added] +595/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/version-819/03-after-reset.png` [added] +579/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/version-819/checks.json` [added] +75/-0
+~~- `apps/desktop/outputs/viewing-report-788/01-viewing-home.png` [added] +149/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/outputs/viewing-report-788/checks.json` [added] +56/-0
+  - `apps/desktop/scripts/_diag13.cjs` [added] +69/-0
+  - `apps/desktop/scripts/_diag14.cjs` [added] +53/-0
+  - `apps/desktop/scripts/advanced-controls-smoke.cjs` [added] +104/-0
+  - `apps/desktop/scripts/app-shell-smoke.cjs` [added] +407/-0
+  - `apps/desktop/scripts/approval-live-smoke.cjs` [added] +98/-0
+  - `apps/desktop/scripts/automation-corrupt-smoke.cjs` [added] +117/-0
+  - `apps/desktop/scripts/cds-values-probe.cjs` [added] +110/-0
+  - `apps/desktop/scripts/delete-running-smoke.cjs` [added] +178/-0
+  - `apps/desktop/scripts/desktop-design-smoke.cjs` [added] +122/-0
+  - `apps/desktop/scripts/dialogs-enter-smoke.cjs` [added] +117/-0
+  - `apps/desktop/scripts/doctor-report-smoke.cjs` [added] +116/-0
+  - `apps/desktop/scripts/evolve-freeze-smoke.cjs` [added] +135/-0
+  - `apps/desktop/scripts/extract-cds-components.mjs` [added] +180/-0
+  - `apps/desktop/scripts/extract-cds-tokens.py` [added] +194/-0
+  - `apps/desktop/scripts/install-smoke.mjs` [added] +47/-0
+  - `apps/desktop/scripts/license-import-smoke.cjs` [added] +79/-0
+  - `apps/desktop/scripts/memory-export-smoke.cjs` [added] +65/-0
+  - `apps/desktop/scripts/motion-lifecycle-smoke.cjs` [added] +113/-0
+  - `apps/desktop/scripts/notify-toggle-smoke.cjs` [added] +83/-0
+  - `apps/desktop/scripts/orchestration-controls-smoke.cjs` [added] +168/-0
+  - `apps/desktop/scripts/palette-perm-cycle-smoke.cjs` [added] +226/-0
+  - `apps/desktop/scripts/plugin-marketplace-smoke.cjs` [added] +443/-0
+  - `apps/desktop/scripts/preferences-backup-smoke.cjs` [added] +93/-0
+  - `apps/desktop/scripts/project-relocate-smoke.cjs` [added] +85/-0
+  - `apps/desktop/scripts/projects-notice-retry-smoke.cjs` [added] +79/-0
+  - `apps/desktop/scripts/queue-edit-smoke.cjs` [added] +183/-0
+  - `apps/desktop/scripts/queue-target-binding-smoke.cjs` [added] +73/-0
+  - `apps/desktop/scripts/run-control-ipc-smoke.cjs` [added] +61/-0
+  - `apps/desktop/scripts/same-id-workspace-smoke.cjs` [added] +138/-0
+  - `apps/desktop/scripts/session-list-recovery-smoke.cjs` [added] +103/-0
+  - `apps/desktop/scripts/session-model-persist-smoke.cjs` [added] +99/-0
+  - `apps/desktop/scripts/session-open-recovery-smoke.cjs` [added] +104/-0
+  - `apps/desktop/scripts/settings-esc-commit-smoke.cjs` [added] +98/-0
+  - `apps/desktop/scripts/settings-issue-smoke.cjs` [added] +114/-0
+  - `apps/desktop/scripts/settings-search-smoke.cjs` [added] +92/-0
+  - `apps/desktop/scripts/settings-sweep-smoke.cjs` [added] +162/-0
+  - `apps/desktop/scripts/sidebar-load-error-smoke.cjs` [added] +68/-0
+  - `apps/desktop/scripts/update-notice-smoke.cjs` [added] +82/-0
+  - `apps/desktop/scripts/usage-export-smoke.cjs` [added] +69/-0
+  - `apps/desktop/scripts/viewing-report-smoke.cjs` [added] +84/-0
+  - `apps/desktop/scripts/workbench-tools-smoke.cjs` [added] +136/-0
+  - `apps/desktop/src/main/app-log.ts` [added] +110/-0
+  - `apps/desktop/src/main/crash-recovery.ts` [added] +43/-0
+  - `apps/desktop/src/main/diagnostics-bundle.ts` [added] +86/-0
+  - `apps/desktop/src/main/project-presence.ts` [added] +40/-0
+  - `apps/desktop/src/main/single-instance.ts` [added] +36/-0
+  - `apps/desktop/src/renderer/cds-adapter.css` [added] +152/-0
+  - `apps/desktop/src/renderer/cds-components.css` [added] +203/-0
+  - `apps/desktop/src/renderer/components/AppRail.tsx` [added] +76/-0
+  - `apps/desktop/src/renderer/components/ImageLightbox.tsx` [added] +280/-0
+  - `apps/desktop/src/renderer/components/PageContextSidebar.tsx` [added] +42/-0
+  - `apps/desktop/src/renderer/components/PageFrame.tsx` [added] +69/-0
+  - `apps/desktop/src/renderer/components/SessionLoadNotice.tsx` [added] +24/-0
+  - `apps/desktop/src/renderer/components/WorkbenchTools.tsx` [added] +61/-0
+  - `apps/desktop/src/renderer/components/conversation-rail.css` [added] +43/-0
+  - `apps/desktop/src/renderer/components/model-menu.css` [added] +112/-0
+  - `apps/desktop/src/renderer/components/plugins/PluginDetail.tsx` [added] +230/-0
+  - `apps/desktop/src/renderer/components/plugins/PluginDiscover.tsx` [added] +184/-0
+  - `apps/desktop/src/renderer/components/plugins/PluginImportMenu.tsx` [added] +168/-0
+  - `apps/desktop/src/renderer/components/plugins/PluginInstalled.tsx` [added] +177/-0
+  - `apps/desktop/src/renderer/components/plugins/PluginReview.tsx` [added] +139/-0
+  - `apps/desktop/src/renderer/components/plugins/PluginUpdates.tsx` [added] +71/-0
+  - `apps/desktop/src/renderer/components/plugins/PluginsWorkspace.tsx` [added] +248/-0
+  - `apps/desktop/src/renderer/components/plugins/plugins.css` [added] +790/-0
+  - `apps/desktop/src/renderer/components/settings-refinement.css` [added] +98/-0
+  - `apps/desktop/src/renderer/components/settings/EvolvePanel.tsx` [added] +441/-0
+  - `apps/desktop/src/renderer/components/settings/EvolveSection.tsx` [added] +141/-0
+  - `apps/desktop/src/renderer/components/settings/doctor-view.ts` [added] +128/-0
+  - `apps/desktop/src/renderer/derived/model-waiting.ts` [added] +45/-0
+  - `apps/desktop/src/renderer/derived/orchestration.ts` [added] +135/-0
+  - `apps/desktop/src/renderer/derived/plugins.ts` [added] +316/-0
+  - `apps/desktop/src/renderer/navigation.ts` [added] +65/-0
+  - `apps/desktop/src/renderer/panes/DestinationWorkspace.tsx` [added] +57/-0
+  - `apps/desktop/src/renderer/panes/QueueDock.tsx` [added] +52/-0
+  - `apps/desktop/src/renderer/panes/WorkbenchSidebar.tsx` [added] +85/-0
+  - `apps/desktop/src/renderer/state/app-destination.ts` [added] +45/-0
+  - `apps/desktop/src/renderer/state/app-page-snapshot.ts` [added] +50/-0
+  - `apps/desktop/src/renderer/state/destination-pages.ts` [added] +9/-0
+  - `apps/desktop/src/renderer/state/motion-pref.ts` [added] +91/-0
+  - `apps/desktop/src/renderer/state/pinned-order.ts` [added] +62/-0
+  - `apps/desktop/src/renderer/state/plugins-marketplace.ts` [added] +737/-0
+  - `apps/desktop/src/renderer/state/session-delete.ts` [added] +39/-0
+  - `apps/desktop/src/renderer/state/session-list.ts` [added] +40/-0
+  - `apps/desktop/src/renderer/state/session-prefs.ts` [added] +85/-0
+  - `apps/desktop/src/renderer/state/sidebar-density.ts` [added] +8/-0
+  - `apps/desktop/src/renderer/state/thinking-prefs.ts` [added] +91/-0
+  - `apps/desktop/src/renderer/state/update-notice.ts` [added] +95/-0
+  - `apps/desktop/src/renderer/state/use-permission-confirm.ts` [added] +46/-0
+  - `apps/desktop/src/renderer/state/use-pinned-order.ts` [added] +183/-0
+  - `apps/desktop/src/renderer/vendor/cds-official/UPSTREAM.json` [added] +80/-0
+  - `apps/desktop/src/renderer/vendor/cds-official/component-map.json` [added] +372/-0
+  - `apps/desktop/src/renderer/vendor/cds-official/components.css` [added] +209/-0
+  - `apps/desktop/src/renderer/vendor/cds-official/components.json` [added] +513/-0
+  - `apps/desktop/src/renderer/vendor/cds-official/tokens.css` [added] +1065/-0
+  - `apps/desktop/src/renderer/vendor/open-claude-ui/LICENSE` [added] +21/-0
+~~- `apps/desktop/src/renderer/vendor/open-claude-ui/MediaLightboxViewer.source.txt` [added] +605/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/src/renderer/vendor/open-claude-ui/ReasoningAmbientGlow.source.txt` [added] +234/-0 (excluded: unsupported_ext)~~
+  - `apps/desktop/src/renderer/vendor/open-claude-ui/UPSTREAM.json` [added] +29/-0
+~~- `apps/desktop/tests/app-destination.test.ts` [added] +24/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/app-lifecycle.test.ts` [added] +102/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/app-log.test.ts` [added] +111/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/app-page-snapshot.test.ts` [added] +39/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/app-rail.test.tsx` [added] +16/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/cds-components.test.ts` [added] +246/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/cds-parity.test.ts` [added] +235/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/contrast-gate.test.ts` [added] +234/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/conversation-rail.test.ts` [added] +194/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/dead-surface.test.ts` [added] +59/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/demo-banner.test.tsx` [added] +26/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/destination-pages.test.ts` [added] +16/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/destination-workspace.test.tsx` [added] +36/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/diagnostics-bundle.test.ts` [added] +65/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/diff-split.test.tsx` [added] +141/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/image-lightbox.test.tsx` [added] +122/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/ime-enter-coverage.test.ts` [added] +58/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/license-import-ui.test.ts` [added] +22/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/marketplace-import-wiring.test.ts` [added] +127/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/marketplace-install-wiring.test.ts` [added] +107/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/marketplace-wiring.test.ts` [added] +25/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/memory-export.test.ts` [added] +35/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/model-menu-interaction.test.tsx` [added] +53/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/model-picker-axis.test.tsx` [added] +155/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/model-waiting.test.tsx` [added] +60/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/motion-pref.test.ts` [added] +48/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/navigation.test.ts` [added] +38/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/orchestration-controls.test.ts` [added] +121/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/output-motion.test.tsx` [added] +99/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/page-context-sidebar.test.tsx` [added] +20/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/page-frame.test.tsx` [added] +53/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/permission-confirm.test.ts` [added] +61/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/permission-options-parity.test.ts` [added] +16/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/pinned-order.test.ts` [added] +41/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/plugin-marketplace-wiring.test.ts` [added] +59/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/plugin-review.test.tsx` [added] +55/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/plugins-derived.test.ts` [added] +227/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/plugins-marketplace-state.test.ts` [added] +200/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/plugins-workspace.test.tsx` [added] +202/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/preferences-ui.test.ts` [added] +30/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/project-missing-badge.test.tsx` [added] +46/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/project-presence.test.ts` [added] +51/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/project-relocate.test.ts` [added] +25/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/queue-target-binding.test.tsx` [added] +37/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/r1-stream-surfaces.test.tsx` [added] +112/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/r2-composer-geometry.test.tsx` [added] +51/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/r3-scroll-physics.test.ts` [added] +34/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/readme-assets.test.ts` [added] +20/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/review-split.test.ts` [added] +65/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/run-control-workspace.test.ts` [added] +104/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-archive-running.test.ts` [added] +11/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-cycle-target.test.tsx` [added] +33/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-delete-retry.test.ts` [added] +86/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-open-recovery.test.tsx` [added] +37/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-prefs-errors.test.ts` [added] +18/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-prefs-host.test.ts` [added] +66/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-prefs-isolation.test.ts` [added] +29/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-prefs-run-routing.test.ts` [added] +46/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/session-prefs.test.ts` [added] +104/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/settings-doctor.test.tsx` [added] +153/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/settings-evolve.test.tsx` [added] +297/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/settings-issue-banner.test.tsx` [added] +58/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/shortcut-key-source.test.ts` [added] +43/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/sidebar-density.test.ts` [added] +35/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/sidebar-list-recovery.test.tsx` [added] +39/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/sidebar-pinned-drag.test.ts` [added] +49/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/thinking-motion.test.tsx` [added] +68/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/thinking-prefs.test.ts` [added] +46/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/tool-row-summary.test.ts` [added] +51/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/update-notice.test.ts` [added] +55/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/usage-export.test.ts` [added] +31/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/user-bubble-collapse.test.tsx` [added] +36/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/workbench-sidebar.test.tsx` [added] +37/-0 (excluded: default_path)~~
+~~- `apps/desktop/tests/workbench-tools.test.tsx` [added] +36/-0 (excluded: default_path)~~
+~~- `assets/readme/cairn-home.png` [added] +714/-0 (excluded: user_exclude)~~
+~~- `assets/readme/cairn-settings-about.png` [added] +519/-0 (excluded: user_exclude)~~
+~~- `docs/adr/0008-conversation-rail.md` [added] +99/-0 (excluded: user_exclude)~~
+~~- `docs/adr/0009-codex-claude-benchmark.md` [added] +124/-0 (excluded: user_exclude)~~
+~~- `docs/evolve-proposal.md` [added] +848/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/plans/2026-10-27-desktop-workbench.md` [added] +77/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/plans/2026-10-28-agent-product-completion.md` [added] +101/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/plans/2026-10-29-agent-os-shell.md` [added] +575/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/plans/2026-10-29-plugin-installer-and-registry.md` [added] +343/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/plans/2026-10-29-plugin-marketplace-catalog.md` [added] +285/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/plans/2026-10-29-plugin-marketplace.md` [added] +729/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/plans/2026-10-30-session-lock-stability.md` [added] +29/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/plans/2026-10-30-session-preferences-isolation.md` [added] +17/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/plans/2026-11-01-queue-target-binding.md` [added] +15/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/plans/2026-11-01-run-control-workspace.md` [added] +14/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/plans/2026-11-01-session-list-recovery.md` [added] +14/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/plans/2026-11-01-session-open-recovery.md` [added] +14/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/specs/2026-10-27-desktop-workbench-design.md` [added] +73/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/specs/2026-10-28-agent-product-completion-design.md` [added] +37/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/specs/2026-10-29-agent-os-desktop-design.md` [added] +280/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/specs/2026-10-29-plugin-marketplace-design.md` [added] +496/-0 (excluded: user_exclude)~~
+~~- `docs/superpowers/specs/2026-10-30-desktop-redesign-design.md` [added] +114/-0 (excluded: user_exclude)~~
+~~- `fixtures/bench-external/evidence.json` [added] +20/-0 (excluded: user_exclude)~~
+~~- `fixtures/bench-external/harbor.tasks.json` [added] +18/-0 (excluded: user_exclude)~~
+~~- `fixtures/bench-external/terminal-bench.tasks.json` [added] +21/-0 (excluded: user_exclude)~~
+~~- `outputs/agent-os-ui-0-2026-10-29/01-desktop-light-plugins.png` [added] +78/-0 (excluded: user_exclude)~~
+~~- `outputs/agent-os-ui-0-2026-10-29/04-keyboard-focus-memory.png` [added] +449/-0 (excluded: user_exclude)~~
+~~- `outputs/agent-os-ui-0-2026-10-29/05-empty-memory.png` [added] +272/-0 (excluded: user_exclude)~~
+~~- `outputs/agent-os-ui-0-2026-10-29/06-read-error-memory.png` [added] +39/-0 (excluded: user_exclude)~~
+~~- `outputs/agent-os-ui-0-2026-10-29/08-operation-error-automation.png` [added] +466/-0 (excluded: user_exclude)~~
+~~- `outputs/agent-os-ui-0-2026-10-29/09-settings-skills-inline.png` [added] +202/-0 (excluded: user_exclude)~~
+~~- `outputs/agent-os-ui-0-2026-10-29/REPORT.md` [added] +101/-0 (excluded: user_exclude)~~
+~~- `outputs/agent-os-ui-0-2026-10-29/checks.json` [added] +477/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/boundaries.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/build.log` [added] +37/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/design-detector.json` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/design/01-model-light.png` [added] +381/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/design/02-model-short.png` [added] +474/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/design/03-filter-light.png` [added] +964/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/design/04-process-light.png` [added] +719/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/design/05-process-expanded.png` [added] +702/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/design/06-model-dark.png` [added] +807/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/design/checks.json` [added] +166/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/docs.log` [added] +7/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/focused.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/motion/final.png` [added] +844/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/motion/report.json` [added] +111/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/review-rules.log` [added] +97/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/review.md` [added] +62/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/settings/checks.json` [added] +335/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/settings/custom-760.png` [added] +680/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/settings/general-1320.png` [added] +318/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/settings/general-760.png` [added] +455/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/settings/general-880.png` [added] +358/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/settings/provider-1320.png` [added] +431/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/settings/provider-760.png` [added] +518/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/settings/provider-880.png` [added] +534/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/tests.log` [added] +15/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-10-29/typecheck.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-session-preview-2026-10-27/01-session-preview.png` [added] +1432/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-session-preview-2026-10-27/02-switched.png` [added] +937/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-session-preview-2026-10-27/REPORT.md` [added] +60/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-session-preview-2026-10-27/checks.json` [added] +185/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-workbench-2026-10-27/01-session.png` [added] +807/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-workbench-2026-10-27/02-tools-menu.png` [added] +1069/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-workbench-2026-10-27/03-narrow.png` [added] +596/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-workbench-2026-10-27/04-dark.png` [added] +651/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-workbench-2026-10-27/05-short-menu.png` [added] +497/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-workbench-2026-10-27/REPORT.md` [added] +69/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-workbench-2026-10-27/checks.json` [added] +147/-0 (excluded: user_exclude)~~
+~~- `outputs/interop-c-2026-10-27/external-bench.jsonl` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/interop-c-2026-10-27/verification.md` [added] +118/-0 (excluded: user_exclude)~~
+~~- `outputs/lsp-judge-debt-2026-11-01/README.md` [added] +39/-0 (excluded: user_exclude)~~
+~~- `outputs/lsp-judge-debt-2026-11-01/after-inventory.log` [added] +6/-0 (excluded: user_exclude)~~
+~~- `outputs/lsp-judge-debt-2026-11-01/after-lsp.log` [added] +6/-0 (excluded: user_exclude)~~
+~~- `outputs/lsp-judge-debt-2026-11-01/after-needles.log` [added] +3/-0 (excluded: user_exclude)~~
+~~- `outputs/lsp-judge-debt-2026-11-01/after-probe.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/lsp-judge-debt-2026-11-01/before-inventory.log` [added] +18/-0 (excluded: user_exclude)~~
+~~- `outputs/lsp-judge-debt-2026-11-01/before-needles.log` [added] +6/-0 (excluded: user_exclude)~~
+~~- `outputs/lsp-judge-debt-2026-11-01/before-probe.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/lsp-judge-debt-2026-11-01/core-full.log` [added] +4/-0 (excluded: user_exclude)~~
+~~- `outputs/lsp-judge-debt-2026-11-01/docs-check.log` [added] +7/-0 (excluded: user_exclude)~~
+~~- `outputs/lsp-judge-debt-2026-11-01/mutation-kills.log` [added] +14/-0 (excluded: user_exclude)~~
+~~- `outputs/lsp-judge-debt-2026-11-01/scoped.patch` [added] +61/-0 (excluded: user_exclude)~~
+~~- `outputs/lsp-judge-debt-2026-11-01/typecheck.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/PLAN.md` [added] +116/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/01-top-thinking-and-image.png` [added] +1581/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/02-thinking-open.png` [added] +1756/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/03-lightbox.png` [added] +2068/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/04-lightbox-zoom.png` [added] +3252/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/05-fade-middle.png` [added] +1015/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/06-tool-rows.png` [added] +417/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/07-tool-failed-expanded.png` [added] +494/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/08-user-collapsed.png` [added] +1130/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/09-user-expanded.png` [added] +1760/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/10-code-dark.png` [added] +536/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/11-code-copied.png` [added] +577/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/12-pinned-dragging.png` [added] +377/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/13-pinned-after-drag.png` [added] +395/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/14-diff-unified.png` [added] +488/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/15-diff-split.png` [added] +503/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/16-sidebar-compact.png` [added] +409/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/17-perm-confirm.png` [added] +473/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/18-approval-live.png` [added] +890/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/19-search-filtered.png` [added] +354/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/20-gallery-B.png` [added] +29/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/approval-live-checks.json` [added] +81/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/code-block-summary.json` [added] +21/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/density-summary.json` [added] +70/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/diff-summary.json` [added] +28/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/gallery-summary.json` [added] +22/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/perm-confirm-checks.json` [added] +408/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/pinned-order-summary.json` [added] +56/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/search-filter-summary.json` [added] +40/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/summary.json` [added] +105/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/tool-rows-summary.json` [added] +51/-0 (excluded: user_exclude)~~
+~~- `outputs/open-claude-ui-integration-2026-10-31/evidence/user-bubble-summary.json` [added] +18/-0 (excluded: user_exclude)~~
+~~- `outputs/orchestration-controls-2026-10-30/01-proposed.png` [added] +1436/-0 (excluded: user_exclude)~~
+~~- `outputs/orchestration-controls-2026-10-30/02-arm-cancel.png` [added] +1514/-0 (excluded: user_exclude)~~
+~~- `outputs/orchestration-controls-2026-10-30/03-cancelled.png` [added] +1396/-0 (excluded: user_exclude)~~
+~~- `outputs/orchestration-controls-2026-10-30/checks.json` [added] +324/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/after/01-current-project-b.png` [added] +309/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/after/02-origin-project-a.png` [added] +299/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/after/result.json` [added] +73/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/before/01-current-project-b.png` [added] +316/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/before/02-origin-project-a.png` [added] +292/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/before/result.json` [added] +73/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/boundary.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/build.log` [added] +34/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/desktop-final.log` [added] +37/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/desktop-types.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/docs.log` [added] +7/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/focused.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/layer.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/list-compat.log` [added] +17/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/list-recovery/01-first-error.png` [added] +207/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/list-recovery/02-cached-error-dark.png` [added] +377/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/list-recovery/02-cached-error-light.png` [added] +303/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/list-recovery/03-error-details-dark.png` [added] +621/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/list-recovery/03-error-details-light.png` [added] +597/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/list-recovery/result.json` [added] +73/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/ocr-preview.txt` [added] +1203/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/ocr-rules.txt` [added] +86/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/open-compat.log` [added] +21/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/open-recovery/01-queue-error-dark.png` [added] +314/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/open-recovery/01-queue-error-light.png` [added] +320/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/open-recovery/result.json` [added] +81/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/red.log` [added] +164/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/review.md` [added] +29/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/root-types.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/scoped.patch` [added] +364/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/smoke-after.log` [added] +8/-0 (excluded: user_exclude)~~
+~~- `outputs/queue-target-binding-2026-11-01/smoke-before.log` [added] +12/-0 (excluded: user_exclude)~~
+~~- `outputs/run-control-workspace-2026-11-01/ipc/result.json` [added] +67/-0 (excluded: user_exclude)~~
+~~- `outputs/run-control-workspace-2026-11-01/renderer/01-current-project-b.png` [added] +324/-0 (excluded: user_exclude)~~
+~~- `outputs/run-control-workspace-2026-11-01/renderer/02-origin-project-a.png` [added] +337/-0 (excluded: user_exclude)~~
+~~- `outputs/run-control-workspace-2026-11-01/renderer/03-cancel-rejected.png` [added] +377/-0 (excluded: user_exclude)~~
+~~- `outputs/run-control-workspace-2026-11-01/renderer/result.json` [added] +104/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/after/01-first-error.png` [added] +148/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/after/02-cached-error-dark.png` [added] +363/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/after/02-cached-error-light.png` [added] +306/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/after/03-error-details-dark.png` [added] +693/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/after/03-error-details-light.png` [added] +637/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/after/result.json` [added] +73/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/before/01-first-error.png` [added] +535/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/before/02-cached-error-dark.png` [added] +701/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/before/02-cached-error-light.png` [added] +645/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/before/03-error-details-dark.png` [added] +727/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/before/03-error-details-light.png` [added] +645/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/before/result.json` [added] +57/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/build.log` [added] +34/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/compat.log` [added] +6/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/compat/01-sidebar-load-error.png` [added] +517/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/compat/checks.json` [added] +35/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/core-final.log` [added] +72/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/design-detector.json` [added] +22/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/desktop-baseline.log` [added] +37/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/desktop-boundary.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/desktop-final.log` [added] +37/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/desktop-typecheck.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/docs-check.log` [added] +7/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/focused-core.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/focused-desktop.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/inventory-attribution.json` [added] +19/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/inventory-failure.log` [added] +40/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/ocr-rules.md` [added] +90/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/renderer-layer.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/review.md` [added] +52/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/root-typecheck.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/scoped.patch` [added] +493/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/session-repository.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/session-list-recovery-2026-11-01/smoke-final.log` [added] +18/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/after/01-queue-error-dark.png` [added] +310/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/after/01-queue-error-light.png` [added] +299/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/after/result.json` [added] +81/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/before/01-queue-error-dark.png` [added] +430/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/before/01-queue-error-light.png` [added] +405/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/before/result.json` [added] +65/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/build.log` [added] +34/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/core-governance-baseline.log` [added] +40/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/design-detector.json` [added] +22/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/desktop-boundary.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/desktop-final.log` [added] +37/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/desktop-types.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/docs-check.log` [added] +7/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/focused-tests.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/list-compat.log` [added] +17/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/list-compat/01-first-error.png` [added] +244/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/list-compat/02-cached-error-dark.png` [added] +329/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/list-compat/02-cached-error-light.png` [added] +346/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/list-compat/03-error-details-dark.png` [added] +657/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/list-compat/03-error-details-light.png` [added] +570/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/list-compat/result.json` [added] +73/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/new-tests-red.log` [added] +81/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/ocr-rules.md` [added] +89/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/renderer-layer.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/review.md` [added] +46/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/root-types.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/scoped.patch` [added] +526/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/smoke-after.log` [added] +22/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/smoke-before.log` [added] +19/-0 (excluded: user_exclude)~~
+~~- `outputs/session-open-recovery-2026-11-01/stream-baseline.log` [added] +34/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/REPORT.md` [added] +36/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/VALIDATION.json` [added] +114/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/boundary.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/build.log` [added] +38/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/core-focused.log` [added] +13/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/core-red.log` [added] +84/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/core.log` [added] +43/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/desktop-focused.log` [added] +13/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/desktop.log` [added] +12/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/docs.log` [added] +7/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/entrypoint-routing.json` [added] +6/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/host-red.log` [added] +63/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/intermediate-core-concurrent-version-failure.log` [added] +68/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/intermediate-core-parallel-failure.log` [added] +64/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/intermediate-desktop-sentinel-failure.log` [added] +941/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/lifecycle-red.log` [added] +58/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/ocr-rules.md` [added] +57/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/protocol-current.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/renderer-layer.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/request-red.log` [added] +50/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/routing-green.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/routing-red.log` [added] +95/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/scope-sha256.json` [added] +20/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/seed-red.log` [added] +66/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/sentinel-green.log` [added] +13/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/task.patch` [added] +973/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/typecheck.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/session-preferences-isolation-2026-10-30/ui-red.log` [added] +56/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/REPORT.md` [added] +42/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/VALIDATION.json` [added] +39/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/boundary.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/build.log` [added] +38/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/core.log` [added] +43/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/desktop.log` [added] +12/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/docs-before-report.log` [added] +7/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/docs.log` [added] +7/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/duplicate-wait-failure.log` [added] +28/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/independent-lock-red.log` [added] +34/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/intermediate-core-failure.log` [added] +70/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/lock-io-red.log` [added] +36/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/lock-red.log` [added] +97/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/prefs-errors-red.log` [added] +32/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/prefs-routing-red.log` [added] +57/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/prefs-ui-regressions.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/renderer-layer.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/scope-sha256.json` [added] +12/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/targeted-regressions.log` [added] +9/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/task.patch` [added] +579/-0 (excluded: user_exclude)~~
+~~- `outputs/stability-2026-10-30-session-lock/typecheck.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/tool-row-identity-2026-11-01/after-judge.log` [added] +4/-0 (excluded: user_exclude)~~
+~~- `outputs/tool-row-identity-2026-11-01/after-summary.log` [added] +6/-0 (excluded: user_exclude)~~
+~~- `outputs/tool-row-identity-2026-11-01/before-judge.log` [added] +5/-0 (excluded: user_exclude)~~
+~~- `outputs/tool-row-identity-2026-11-01/before-summary.log` [added] +6/-0 (excluded: user_exclude)~~
+  - `scripts/a2a-server.ts` [added] +110/-0
+  - `scripts/acp-server.ts` [added] +124/-0
+  - `scripts/evolve-activate.ts` [added] +117/-0
+  - `scripts/evolve-eval.ts` [added] +126/-0
+  - `scripts/evolve-experiment.ts` [added] +166/-0
+  - `scripts/evolve-facts.ts` [added] +52/-0
+  - `scripts/evolve-globalize.ts` [added] +256/-0
+  - `scripts/evolve-promote.ts` [added] +117/-0
+  - `scripts/evolve-reflect.ts` [added] +69/-0
+  - `scripts/evolve-report.ts` [added] +38/-0
+  - `scripts/evolve-retire.ts` [added] +59/-0
+  - `scripts/evolve-shadow.ts` [added] +83/-0
+  - `scripts/evolve-skill.ts` [added] +48/-0
+  - `scripts/external-bench.ts` [added] +179/-0
+  - `scripts/update-manifest.ts` [added] +56/-0
+~~- `src/agent/evolve/candidates.ts` [added] +216/-0 (excluded: user_exclude)~~
+~~- `src/agent/evolve/episode.ts` [added] +458/-0 (excluded: user_exclude)~~
+~~- `src/agent/evolve/experiment.ts` [added] +284/-0 (excluded: user_exclude)~~
+~~- `src/agent/evolve/index.ts` [added] +37/-0 (excluded: user_exclude)~~
+~~- `src/agent/evolve/offline-apply.ts` [added] +30/-0 (excluded: user_exclude)~~
+~~- `src/agent/evolve/offline-eval.ts` [added] +175/-0 (excluded: user_exclude)~~
+~~- `src/agent/evolve/operators.ts` [added] +101/-0 (excluded: user_exclude)~~
+~~- `src/agent/evolve/playbook.ts` [added] +773/-0 (excluded: user_exclude)~~
+~~- `src/agent/evolve/retirement.ts` [added] +105/-0 (excluded: user_exclude)~~
+~~- `src/agent/evolve/shadow.ts` [added] +182/-0 (excluded: user_exclude)~~
+~~- `src/agent/evolve/skills.ts` [added] +76/-0 (excluded: user_exclude)~~
+~~- `src/agent/evolve/task-context.ts` [added] +50/-0 (excluded: user_exclude)~~
+~~- `src/agent/plugins/marketplace.ts` [added] +357/-0 (excluded: user_exclude)~~
+~~- `src/agent/plugins/package-archive.ts` [added] +201/-0 (excluded: user_exclude)~~
+~~- `src/agent/tool-search.ts` [added] +174/-0 (excluded: user_exclude)~~
+  - `src/interop/a2a-http.ts` [added] +249/-0
+  - `src/interop/a2a.ts` [added] +398/-0
+  - `src/interop/acp-stdio.ts` [added] +210/-0
+  - `src/interop/acp.ts` [added] +237/-0
+  - `src/interop/benchmarks.ts` [added] +262/-0
+  - `src/interop/index.ts` [added] +6/-0
+  - `src/interop/sdk.ts` [added] +398/-0
+  - `src/main/build-info.ts` [added] +50/-0
+  - `src/main/evolve/activation.ts` [added] +159/-0
+  - `src/main/evolve/assignment-store.ts` [added] +97/-0
+  - `src/main/evolve/candidate-store.ts` [added] +73/-0
+  - `src/main/evolve/episode-store.ts` [added] +411/-0
+  - `src/main/evolve/experience-nudge.ts` [added] +135/-0
+  - `src/main/evolve/experiment-candidate.ts` [added] +89/-0
+  - `src/main/evolve/experiment-store.ts` [added] +130/-0
+  - `src/main/evolve/global-playbook-store.ts` [added] +62/-0
+  - `src/main/evolve/globalize.ts` [added] +238/-0
+  - `src/main/evolve/governance.ts` [added] +102/-0
+  - `src/main/evolve/offline-eval-store.ts` [added] +31/-0
+  - `src/main/evolve/paths.ts` [added] +9/-0
+  - `src/main/evolve/playbook-store.ts` [added] +326/-0
+  - `src/main/evolve/promotion.ts` [added] +148/-0
+  - `src/main/evolve/reflect-operator.ts` [added] +79/-0
+  - `src/main/evolve/report.ts` [added] +325/-0
+  - `src/main/evolve/runtime.ts` [added] +306/-0
+  - `src/main/evolve/session-assembly.ts` [added] +69/-0
+  - `src/main/evolve/skill-synthesis.ts` [added] +74/-0
+  - `src/main/interop-a2a-runtime.ts` [added] +226/-0
+  - `src/main/interop-acp-ask-gate.ts` [added] +75/-0
+  - `src/main/interop-host.ts` [added] +90/-0
+  - `src/main/plugin-git-stage.ts` [added] +172/-0
+  - `src/main/plugin-install-jobs.ts` [added] +734/-0
+  - `src/main/plugin-install-operations.ts` [added] +257/-0
+  - `src/main/plugin-install-registry.ts` [added] +249/-0
+  - `src/main/plugin-local-stage.ts` [added] +153/-0
+  - `src/main/plugin-marketplace-store.ts` [added] +303/-0
+  - `src/main/plugin-package-download.ts` [added] +307/-0
+  - `src/main/plugin-path-safety.ts` [added] +64/-0
+  - `src/main/plugin-source.ts` [added] +204/-0
+  - `src/main/plugin-update-check.ts` [added] +156/-0
+  - `src/main/preferences.ts` [added] +149/-0
+  - `src/main/session-lock.ts` [added] +142/-0
+  - `src/main/session-mutation-lock.ts` [added] +94/-0
+  - `src/main/session-preferences.ts` [added] +51/-0
+~~- `tests/a2a-server-cli.test.ts` [added] +84/-0 (excluded: default_path)~~
+~~- `tests/acp-server-cli.test.ts` [added] +102/-0 (excluded: default_path)~~
+~~- `tests/app-version.test.ts` [added] +22/-0 (excluded: default_path)~~
+~~- `tests/blank-workspace-fail-closed.test.ts` [added] +140/-0 (excluded: default_path)~~
+~~- `tests/build-info.test.ts` [added] +42/-0 (excluded: default_path)~~
+~~- `tests/changelog-desktop.test.ts` [added] +25/-0 (excluded: default_path)~~
+~~- `tests/cli-sessions.test.ts` [added] +76/-0 (excluded: default_path)~~
+~~- `tests/deepseek-native-wire.test.ts` [added] +131/-0 (excluded: default_path)~~
+~~- `tests/evolve-activation.test.ts` [added] +214/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-candidates.test.ts` [added] +61/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-episode.test.ts` [added] +285/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-experiment.test.ts` [added] +105/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-global.test.ts` [added] +381/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-governance.test.ts` [added] +166/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-injection-wiring.test.ts` [added] +256/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-nudge-runner.test.ts` [added] +91/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-nudge.test.ts` [added] +283/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-observation.test.ts` [added] +134/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-offline-eval.test.ts` [added] +146/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-p2.test.ts` [added] +225/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-playbook-store.test.ts` [added] +109/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-playbook.test.ts` [added] +212/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-promotion.test.ts` [added] +222/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-reflect-operator.test.ts` [added] +135/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-retirement.test.ts` [added] +125/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-skills.test.ts` [added] +132/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-task-context.test.ts` [added] +25/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-user-feedback.test.ts` [added] +125/-0 (excluded: user_exclude)~~
+~~- `tests/interop-a2a-auth.test.ts` [added] +94/-0 (excluded: default_path)~~
+~~- `tests/interop-a2a-http.test.ts` [added] +201/-0 (excluded: default_path)~~
+~~- `tests/interop-a2a-product.test.ts` [added] +81/-0 (excluded: default_path)~~
+~~- `tests/interop-a2a-stream.test.ts` [added] +195/-0 (excluded: default_path)~~
+~~- `tests/interop-a2a.test.ts` [added] +215/-0 (excluded: default_path)~~
+~~- `tests/interop-acp-permission-bridge.test.ts` [added] +151/-0 (excluded: default_path)~~
+~~- `tests/interop-acp-stdio.test.ts` [added] +156/-0 (excluded: default_path)~~
+~~- `tests/interop-benchmarks.test.ts` [added] +158/-0 (excluded: default_path)~~
+~~- `tests/interop-host.test.ts` [added] +52/-0 (excluded: default_path)~~
+~~- `tests/interop-sdk.test.ts` [added] +278/-0 (excluded: default_path)~~
+~~- `tests/license-import.test.ts` [added] +69/-0 (excluded: default_path)~~
+~~- `tests/plugin-git-stage.test.ts` [added] +150/-0 (excluded: default_path)~~
+~~- `tests/plugin-install-jobs.test.ts` [added] +548/-0 (excluded: default_path)~~
+~~- `tests/plugin-install-operations.test.ts` [added] +549/-0 (excluded: default_path)~~
+~~- `tests/plugin-install-registry.test.ts` [added] +169/-0 (excluded: default_path)~~
+~~- `tests/plugin-local-stage.test.ts` [added] +111/-0 (excluded: default_path)~~
+~~- `tests/plugin-marketplace-store.test.ts` [added] +412/-0 (excluded: default_path)~~
+~~- `tests/plugin-marketplace.test.ts` [added] +159/-0 (excluded: default_path)~~
+~~- `tests/plugin-package-archive.test.ts` [added] +153/-0 (excluded: default_path)~~
+~~- `tests/plugin-package-download.test.ts` [added] +169/-0 (excluded: default_path)~~
+~~- `tests/plugin-secrets.test.ts` [added] +53/-0 (excluded: default_path)~~
+~~- `tests/plugin-source.test.ts` [added] +87/-0 (excluded: default_path)~~
+~~- `tests/plugin-update-check.test.ts` [added] +113/-0 (excluded: default_path)~~
+~~- `tests/product-doc-alignment.test.ts` [added] +21/-0 (excluded: default_path)~~
+~~- `tests/project-export-boundaries.test.ts` [added] +88/-0 (excluded: default_path)~~
+~~- `tests/provider-key-durability.test.ts` [added] +101/-0 (excluded: default_path)~~
+~~- `tests/provider-key-refresh.test.ts` [added] +103/-0 (excluded: default_path)~~
+~~- `tests/provider-setup-activation.test.ts` [added] +72/-0 (excluded: default_path)~~
+~~- `tests/readme-desktop-package.test.ts` [added] +30/-0 (excluded: default_path)~~
+~~- `tests/run-request-plan-precedence.test.ts` [added] +65/-0 (excluded: default_path)~~
+~~- `tests/session-list-errors.test.ts` [added] +35/-0 (excluded: default_path)~~
+~~- `tests/session-lock-recovery.test.ts` [added] +129/-0 (excluded: default_path)~~
+~~- `tests/session-lock.test.ts` [added] +98/-0 (excluded: default_path)~~
+~~- `tests/session-prefs-handlers.test.ts` [added] +48/-0 (excluded: default_path)~~
+~~- `tests/session-prefs-isolation.test.ts` [added] +106/-0 (excluded: default_path)~~
+~~- `tests/session-prefs-routing.test.ts` [added] +39/-0 (excluded: default_path)~~
+~~- `tests/settings-issue-state.test.ts` [added] +85/-0 (excluded: default_path)~~
+~~- `tests/settings-preferences.test.ts` [added] +114/-0 (excluded: default_path)~~
+~~- `tests/tool-search-tool.test.ts` [added] +133/-0 (excluded: default_path)~~
+~~- `tests/tool-search.test.ts` [added] +98/-0 (excluded: default_path)~~
+~~- `tests/update-manifest.test.ts` [added] +27/-0 (excluded: default_path)~~
+~~- `tests/worker-experience-note.test.ts` [added] +93/-0 (excluded: default_path)~~
+~~- `tests/worker-repair-nudge.test.ts` [added] +99/-0 (excluded: default_path)~~

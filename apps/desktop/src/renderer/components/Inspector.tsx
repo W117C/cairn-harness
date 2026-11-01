@@ -3,7 +3,7 @@
 // 只换一个入口）。改动行点击懒加载逐 hunk diff（v4 changeDiff 通道，复用既有 DiffView）；
 // 有快照的行提供「撤销此文件改动」（snapshotRestore，v11 通道在渲染层的消费者）。
 // 宽度与开合收口在 App 的右 Panel（320–420，默认收起，⌘⌥I 开合）——本组件只管内容。
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronRight, Plus, X } from "lucide-react";
 import type { AgentEvent } from "../../../../../src/events";
@@ -12,14 +12,19 @@ import { diffCount, useLazyChangeDiff } from "../change-diff-state";
 import { changedFilesOf, PANE_META, PANE_OPENABLE, projectPlans, type PaneKind } from "./panes";
 import { usageSummary } from "../projections";
 import { formatTokens } from "./format-tokens";
+import { changeLabel } from "../derived/change-labels";
 import { DiffView } from "./DiffView";
 import { TimelinePane } from "./TimelinePane";
 
-const CHANGE_WORD: Record<"created" | "modified" | "unknown", string> = {
-  created: "新建",
-  modified: "修改",
-  unknown: "变更",
-};
+/** Inspector 是水平 tablist：方向键循环，Home/End 到首尾，其他键留给原生焦点移动。 */
+export function inspectorTabIndexForKey(key: string, index: number, count: number): number | null {
+  if (count <= 0 || index < 0 || index >= count) return null;
+  if (key === "ArrowRight") return (index + 1) % count;
+  if (key === "ArrowLeft") return (index - 1 + count) % count;
+  if (key === "Home") return 0;
+  if (key === "End") return count - 1;
+  return null;
+}
 
 /** 概览里的一个数字：值变了就闪一下（2026-10-22 动效面）。
  *
@@ -58,7 +63,7 @@ function ChangesTab(props: {
             <div className="isp-file">
               <button className={"isp-file-main" + (open ? " open" : "")} aria-expanded={open} title={f.path} onClick={() => toggle(f.path, f.path, f.snapshotId)}>
                 <span className="chev" aria-hidden="true"><ChevronRight size={10} /></span>
-                <span className={"act " + f.change}>{CHANGE_WORD[f.change]}</span>
+                <span className={"act " + f.change}>{changeLabel(f.change)}</span>
                 <span className="path">{f.path}</span>
               </button>
               {f.snapshotId !== undefined && props.onRestore !== undefined && (
@@ -107,8 +112,6 @@ export interface InspectorProps {
   onRestore?: (path: string, snapshotId: string) => void;
   /** 判卷/深链预留：强制初始 Tab（缺省 = 概览）。 */
   initialTab?: "overview" | "changes" | "plan" | "timeline";
-  /** 概览页的会话事实（可选；判卷/嵌用面没有就不摆）。 */
-  sessionTitle?: string;
   workspacePath?: string;
   modelLabel?: string;
   modeLabel?: string;
@@ -119,13 +122,13 @@ export interface InspectorProps {
 }
 
 /** 概览页（2026-10-21）：右栏的「现在在哪」——会话/工作区/状态 + 六格用量。
- *  全部从 AgentEvent 与 App 传入的事实投影，不另存一份；空会话不摆假数据。 */
+ *  全部从 AgentEvent 与 App 传入的事实投影，不另存一份；空会话不摆假数据。
+ *  会话名只由顶栏承担；这里不重复标题，只保留轻量上下文与可行动读数。 */
 function OverviewTab(props: {
   events: readonly AgentEvent[];
   usage: ReturnType<typeof usageSummary>;
   fileCount: number;
   planCount: number;
-  sessionTitle?: string;
   workspacePath?: string;
   modelLabel?: string;
   modeLabel?: string;
@@ -144,27 +147,43 @@ function OverviewTab(props: {
   ];
   return (
     <div className="isp-ov">
-      <div className="isp-ov-head">
-        <div className="isp-ov-title">
-          <span className="isp-ov-name" title={props.sessionTitle ?? undefined}>{props.sessionTitle ?? "当前会话"}</span>
-          {props.running !== undefined && (
-            <span className="isp-ov-status" data-running={props.running ? "true" : "false"}>
-              {props.running ? "运行中" : "空闲"}
-            </span>
-          )}
-        </div>
+      <div className="isp-ov-context">
         {wsName !== null && (
           <div className="isp-ov-path" title={props.workspacePath}>{wsName}</div>
         )}
+        {props.running !== undefined && (
+          <span className="isp-ov-status" data-running={props.running ? "true" : "false"}>
+            <span className="isp-ov-status-dot" aria-hidden="true" />
+            {props.running ? "运行中" : "空闲"}
+          </span>
+        )}
       </div>
-      <dl className="isp-ov-stats">
-        {rows.map(([label, value]) => (
-          <div className="isp-ov-stat" key={label}>
-            <dt>{label}</dt>
-            <StatValue value={value} />
-          </div>
-        ))}
-      </dl>
+      {props.events.length > 0 && (
+        <>
+          <section className="isp-ov-section isp-ov-tokens">
+            <h2 className="isp-ov-section-title">Token 用量</h2>
+            <dl className="isp-ov-stats">
+              {rows.slice(0, 2).map(([label, value]) => (
+                <div className="isp-ov-stat" key={label}>
+                  <dt>{label}</dt>
+                  <StatValue value={value} />
+                </div>
+              ))}
+            </dl>
+          </section>
+          <section className="isp-ov-section isp-ov-activity">
+            <h2 className="isp-ov-section-title">会话活动</h2>
+            <dl className="isp-ov-stats">
+              {rows.slice(2).map(([label, value]) => (
+                <div className="isp-ov-stat" key={label}>
+                  <dt>{label}</dt>
+                  <StatValue value={value} />
+                </div>
+              ))}
+            </dl>
+          </section>
+        </>
+      )}
       {(props.modelLabel !== undefined || props.modeLabel !== undefined || props.planCount > 0) && (
         <div className="isp-ov-meta">
           {props.modelLabel !== undefined && <span className="chip">{props.modelLabel}</span>}
@@ -180,6 +199,7 @@ function OverviewTab(props: {
 }
 
 export function Inspector(props: InspectorProps): React.JSX.Element {
+  const tabsId = useId();
   const changes = changedFilesOf(props.events);
   const plans = projectPlans(props.events);
   const items = timelineItems(props.events);
@@ -200,14 +220,25 @@ export function Inspector(props: InspectorProps): React.JSX.Element {
   return (
     <div className="isp">
       <div className="isp-head">
-        <div className="isp-tabs" role="tablist" aria-label="检查器">
-          {available.map((t) => (
+        <div className="isp-tabs" role="tablist" aria-label="检查器" aria-orientation="horizontal">
+          {available.map((t, index) => (
             <button
               key={t.id}
+              id={`${tabsId}-tab-${t.id}`}
               role="tab"
               aria-selected={selected === t.id}
+              aria-controls={`${tabsId}-panel`}
+              tabIndex={selected === t.id ? 0 : -1}
               className={"isp-tab" + (selected === t.id ? " active" : "")}
-              onClick={() => setTab(t.id)}
+              onClick={() => { setTab(t.id); }}
+              onKeyDown={(e) => {
+                const next = inspectorTabIndexForKey(e.key, index, available.length);
+                if (next === null) return;
+                e.preventDefault();
+                const target = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next];
+                setTab(available[next]?.id ?? null);
+                target?.focus();
+              }}
             >{t.label}</button>
           ))}
         </div>
@@ -231,14 +262,19 @@ export function Inspector(props: InspectorProps): React.JSX.Element {
           </button>
         )}
       </div>
-      <div className="isp-body">
+      <div
+        className="isp-body"
+        id={`${tabsId}-panel`}
+        role="tabpanel"
+        aria-labelledby={`${tabsId}-tab-${selected ?? available[0]?.id ?? "overview"}`}
+        tabIndex={0}
+      >
         {selected === "overview" && (
           <OverviewTab
             events={props.events}
             usage={usage}
             fileCount={changes.length}
             planCount={plans.length}
-            sessionTitle={props.sessionTitle}
             workspacePath={props.workspacePath}
             modelLabel={props.modelLabel}
             modeLabel={props.modeLabel}

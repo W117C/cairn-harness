@@ -1,0 +1,37 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+ ❯ tests/stream-rework.test.tsx (16 tests | 1 failed) 43ms
+   ❯ ③ 工具卡折叠行：图标 + 摘要 + 耗时（有 then 显示）+ 状态符 (2)
+     × tool_result 收口 ⇒ 折叠行渲染耗时；未收口（无 then）不渲染耗时 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/stream-rework.test.tsx > ③ 工具卡折叠行：图标 + 摘要 + 耗时（有 then 显示）+ 状态符 > tool_result 收口 ⇒ 折叠行渲染耗时；未收口（无 then）不渲染耗时
+AssertionError: expected '<div class="gen-bar" data-running="tr…' to contain 'run_shell'
+
+Expected: "run_shell"
+Received: "<div class="gen-bar" data-running="true" aria-hidden="true"></div><div class="row user" data-cds="UserMessage" data-state="done" data-author="self" data-event-id="1" style="scroll-margin-top:14px"><span class="t" data-round-anchor="1" data-collapsed="false">你好</span><span class="meta"><span class="row-time" title="1/1/1970, 8:00:01 AM">1970-01-01</span></span></div><div class="row assistant" data-cds="AssistantMessage" data-cds-reply-type="true" data-event-id="2"><span class="spark" aria-hidden="true"><span aria-hidden="true" class="cairn-mark "></span></span><span class="t"><div class="md-body" data-cds="Prose" data-dsh-claude-part="markdown"><p class="md-p">收到。</p></div></span><span class="assistant-footer"><span class="meta"><span class="row-time" title="1/1/1970, 8:00:01 AM">1970-01-01</span></span></span></div><div class="row user" data-cds="UserMessage" data-state="done" data-author="self" data-event-id="3" style="scroll-margin-top:14px"><span class="t" data-round-anchor="2" data-collapsed="false">跑个命令</span><span class="meta"><span class="row-time" title="1/1/1970, 8:00:02 AM">1970-01-01</span></span></div><div class="toolcluster" data-tool-group="3" data-open="true"><div id=":Ri:" class="tool-group-body"><div class="row tool" data-event-id="4" data-state="done" data-tool-status="done"><button class="tool-head" aria-expanded="false" aria-controls=":Rdi:" aria-busy="false"><span class="chev" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span><span class="glyph ok" aria-label="完成"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span><span class="tool-kind" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-square-terminal lucide-terminal-square" aria-hidden="true"><path d="m7 11 2-2-2-2"></path><path d="M11 13h4"></path><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect></svg></span><span class="tsum">运行 ls</span><span class="tdur">1.2s</span></button></div></div></div><div class="row assistant" data-cds="AssistantMessage" data-cds-reply-type="true" data-event-id="6"><span class="spark" aria-hidden="true"><span aria-hidden="true" class="cairn-mark "></span></span><span class="t"><div class="md-body" data-cds="Prose" data-dsh-claude-part="markdown"><p class="md-p">好了。</p></div></span><span class="assistant-footer"><span class="meta"><span class="row-time" title="1/1/1970, 8:00:03 AM">1970-01-01</span></span></span></div><div class="toolcluster" data-tool-group="6" data-open="true"><div id=":Rq:" class="tool-group-body"><div class="row tool" data-event-id="7" data-state="pending" data-tool-status="pending"><button class="tool-head" aria-expanded="false" aria-controls=":Rdq:" aria-busy="true"><span class="chev" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span><span class="glyph pending" aria-label="执行中"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-loader-circle lucide-loader-2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg></span><span class="tool-kind" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg></span><span class="tsum">读取 a.ts</span><span class="tool-status">执行中</span></button></div></div></div>"
+
+ ❯ tests/stream-rework.test.tsx:63:18
+     61|     expect(html).toContain(">1.2s<");
+     62|     // 状态符与摘要仍在（折叠行三件套不丢）
+     63|     expect(html).toContain("run_shell");
+       |                  ^
+     64|     expect(html).toContain("运行 ls");
+     65|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 292 passed (293)
+      Tests  1 failed | 1977 passed (1978)
+   Start at  12:23:18
+   Duration  22.91s (tests 44%, import 42%, transform 12%, worker 2%)
+
+    Isolate  293 workers spawned · ~57ms startup each (spawn + environment, per file)
+             at least ~8.30s faster with isolate: false — reuses workers across files instead of one per file
+
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts '--maxWorkers=2'

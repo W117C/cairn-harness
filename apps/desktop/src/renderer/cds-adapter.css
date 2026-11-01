@@ -1,0 +1,152 @@
+/* Cairn ⇄ Claude Design System (CDS) 适配层。
+ *
+ * 上游：`vendor/cds-official/tokens.css`（Claude Desktop 3.6556.2 逐字节取出，见 UPSTREAM.json）。
+ * 本文件**只做映射**，不抄值：右值一律 `var(--官方令牌)`，官方升级时这里自动跟着走。
+ * 判卷：`tests/cds-parity.test.ts` 钉住「官方文件没被改」+「每条映射都解析得到官方名」。
+ *
+ * 为什么要这层
+ * ────────────
+ * Cairn 的颜色接口是 **HSL 三元组**（`--bg-100: 48 33.3% 97.1%`，组件写 `hsl(var(--bg-100))`，
+ * 全仓 898 处引用）。CDS 给的是**整色值**（`--surface-1: var(--gray-10)`）。
+ * 两者不能互换，但 CSS 相对颜色 `from <整色> h s l` 能把整色拆成三元组分量——
+ * 于是 898 处调用点一个都不用改，只需要在这里把三元组接到官方值上。
+ *
+ * 语义对齐（不是换个名字那么简单，逐档说明）
+ * ──────────────────────────────────────────
+ * CDS 的层模型是 `base palette → theme ramps → elevation → purpose`，组件只准读 purpose。
+ * Cairn 原来的 `--bg-*` 是「直接写死的暖米白阶梯」，没有 elevation 概念。
+ * 这里把它改成 elevation：CDS 的 ordinal 在亮暗两色都是「0 最暗、3 最亮」，
+ * 所以 `--bg-000..--bg-500` 不再是一个色阶，而是「画布 / 卡片 / 面板 / 浮层」四个台阶。
+ */
+@import "./vendor/cds-official/tokens.css";
+@import "./vendor/cds-official/components.css";
+
+/* 官方薄里的 `[data-platform="desktop"]` 与 `[data-mode="system"]` 会命中 Cairn 的
+   同名属性。Cairn 不消费它们的 cursor/color-scheme 两处（默认值本就相同），
+   这里显式声明不接管，避免将来有人以为我们在用它。 */
+:root { --cairn-cds-scope: "adapter"; }
+
+body[data-dsh-claude-style] {
+  /* ── 页面画布（elevation 0）────────────────────────────────────────
+     Claude 的外壳颜色**不在** CDS 令牌里：官方文档写明「页画布由宿主决定」，
+     实测主窗 `pageBackground` 亮 #fcfcfb / 暗 #151515，正好等于 surface-1
+     （见 UPSTREAM.json 的 extractedFrom；boot-theme.test.ts 已单独钉住这两个值）。
+     所以这里的 `--bg-100` 取 surface-1，而不是 surface-0。 */
+  --bg-100: from var(--surface-1) h s l;
+  /* 卡片/输入底 = surface-2（亮 gray-0 纯白 / 暗 gray-830） */
+  --bg-000: from var(--surface-2) h s l;
+  /* 侧栏/次级面 = surface-0（亮 gray-20 / 暗 gray-900） */
+  --bg-200: from var(--surface-0) h s l;
+  /* 用户气泡 = CDS 的 `--bg-user-message`（官方 = bg-neutral = alpha-1 淡墨），
+     不再用「比画布深一档」的私有台阶。 */
+  --bg-300: from var(--surface-1) h s l;
+  /* well / 悬停底 = surface-3（浮层档；Cairn 用它做 pressed/well） */
+  --bg-400: from var(--surface-3) h s l;
+  --bg-500: from var(--surface-3) h s l;
+  --bg-elevated: from var(--surface-popover) h s l;
+
+  /* ── 文字（CDS purpose 层原样）───────────────────────────────────
+     text-primary = neutral-900 / text-secondary = neutral-600 / text-muted = neutral-400。
+     Cairn 的 000/200/400 三档正对这三条；100/300/500 是历史别名，指向同一批以免悬空。 */
+  --text-000: from var(--text-primary) h s l;
+  --text-100: from var(--text-primary) h s l;
+  --text-200: from var(--text-secondary) h s l;
+  --text-300: from var(--text-secondary) h s l;
+  --text-400: from var(--text-muted) h s l;
+  --text-500: from var(--text-muted) h s l;
+
+  /* ── 结构语义 ──────────────────────────────────────────────────── */
+  --hairline: var(--border);
+  --hairline-strong: var(--border-strong);
+  --surface: from var(--surface-2) h s l;
+  --surface-2: var(--surface-panel);
+  --surface-3: var(--surface-popover);
+
+  /* ── 品牌陶土橙：CDS 的 clay（`brand` 角色专属，只给 Claude 主动作）── */
+  --accent-brand: from var(--clay) h s l;
+
+  /* ── 控件强调色（blue 角色，不是品牌橙）────────────────────────────
+     `fill-accent` = blue-450 实心；`text-accent` = blue-600 文字。
+     焦点环外发光**不在这里映射**：官方 `--cds-focus-shadow` 的第三层亮色是 blue-100 不透明、
+     暗色是 `hsl(from #184f95 / 60%)`，并不等于 `--bg-accent`（暗色那是 blue-800 #032042）。
+     逐主题值放在 tokens.css 的 `--focus-ring-glow` / `--focus-ring-glow-alpha`，
+     由真机实测得来（见那里的注释）。 */
+  --accent-control: from var(--fill-accent) h s l;
+  --accent-control-text: from var(--text-accent) h s l;
+
+  /* alpha 阶梯不在这里重新映射：`--alpha-N` 已经是 Cairn 自己的名字，官方薄同名同义
+     （neutral-900 定透明度，亮黑暗白自动随主题翻）。若在这里写 `--alpha-2: var(--alpha-2)`
+     就是自引用循环 ⇒ 该声明作废 ⇒ 组件拿到空值。名字撞车时**让官方直接赢**，不转发。 */
+
+  /* `--fill-field` 同理（官方同名同义）：不转发，官方值直接生效。 */
+
+  /* 图表中性档：官方 `--chart-muted` / `--chart-axis` 是**整色值**（gray-200），
+     而 Cairn 唯一消费点写的是 `hsl(var(--chart-muted))`（要三元组）。
+     形状不同就不能同住一个名字：这里另开 `--chart-*-hsl` 三元组孪生，
+     由 styles.css 的调用点改指孪生（1 处），官方名保持不被遮挡。 */
+  --chart-muted-hsl: from var(--chart-muted) h s l;
+  --chart-axis-hsl: from var(--chart-axis) h s l;
+
+  /* ── 圆角：官方 `--radius` = 0.5rem，composer 专用 = 0.875rem ──────── */
+  --radius-md: var(--radius);
+  /* `--radius-composer` 官方同名且同值（0.875rem），不转发；Cairn 的 --size-scale 缩放
+     由 images/尺轴另行处理，不在这一层假装。 */
+}
+
+/* ── 皮肤调色板桥接（2026-10-28，依据实测）────────────────────────────
+ * 上面那组 `--bg-*` 只覆盖 Cairn 自己的组件。`dsh-claude-style` 皮肤还有一批
+ * 直接画在元素上的颜色（`.side`、`.row.user .t`、`.md-code`、`[data-composer-card]`…），
+ * 它们读自己的 `--dsw-*` 调色板，而那套值是 0.17.0 时期的**近似**：
+ * 暗色 canvas #141413、卡片 #1e1e1d、输入底 #0f0e0d、正文 #faf9f5 —— 都不是 CDS 灰阶里的值
+ * （灰阶里没有 #141413/#1e1e1d/#0f0e0d）。
+ * 逐条改它的选择器会打补丁打不完，所以在这里**只换变量**，让它的规则自动落到官方值。
+ *
+ * 判卷：本文件必须晚于 dsh-claude-style.css 载入（见 main.tsx 注释），
+ * 且 tests/cds-parity.test.ts 量的是真实像素（.side / body / 卡片），不是令牌文本。 */
+/* 皮肤调色板桥接（2026-10-28，依据实测）
+ * ────────────────────────────────────────────────────────────────
+ * `dsh-claude-style` 除令牌外还有一批**直接画在元素上**的颜色（`.side`、`.md-code`、
+ * `[data-composer-card]`，以及 typography.css 给 body 铺的底色），它们读自己的 `--dsw-*` /
+ * `--dsh-claude-*` 调色板，而那套是 0.17.0 时期的近似：暗色画布 #141413、卡片 #1e1e1d、
+ * 输入底 #0f0e0d、正文 #faf9f5 —— 都不在 CDS 灰阶里（灰阶没有 #141413/#1e1e1d/#0f0e0d）。
+ * 逐条改它的选择器补不完，所以这里**只换变量**，让它的规则自动落到官方值。
+ *
+ * ⚠ 特异性必须对齐：皮肤在 `body[..][data-ds-dark-theme]`（0,2,1）里定义暗色值，
+ * 早先我写在 `body[..]`（0,1,1）上，结果被盖住 —— 实测整屏仍是 #141413、判卷却绿。
+ * 所以下面按亮/暗两块、用同等特异性 + 更晚载入取胜。 */
+body[data-dsh-claude-style]:not([data-ds-dark-theme]) {
+  --dsh-claude-canvas: var(--surface-1);
+  --dsh-claude-sidebar-canvas: var(--surface-0);
+  --dsh-claude-card: var(--surface-2);
+  --dsw-alias-bg-base: var(--surface-1);
+  --dsw-alias-bg-layer-2: var(--surface-3);
+  --dsw-specific-input-major: var(--surface-2);
+  --dsw-specific-bubble: var(--fill-secondary);
+  --dsw-alias-label-primary: var(--text-primary);
+  --dsw-alias-label-secondary: var(--text-secondary);
+  --dsw-alias-border-l1: var(--border);
+  --dsw-alias-border-l2: var(--border-strong);
+  --dsw-alias-brand-primary: var(--clay);
+  --dsw-alias-markdown-code-block: var(--surface-2);
+  --dsw-alias-markdown-code-block-banner: var(--surface-3);
+}
+
+/* 暗色侧栏 = gray-870 (#111111)：**真机实测** Claude 主窗侧栏比页面（surface-1 #151515）
+ * 更暗一档；官方 --surface-0 是 gray-900 #0b0b0b，实测没那么黑，故暗色单取 gray-870。
+ * 亮色侧栏取 surface-0 属推断（未把真机切到亮色量过），不当已认证。 */
+body[data-dsh-claude-style][data-ds-dark-theme] {
+  --dsh-claude-canvas: var(--surface-1);
+  --dsh-claude-sidebar-canvas: var(--gray-870);
+  --dsh-claude-card: var(--surface-2);
+  --dsw-alias-bg-base: var(--surface-1);
+  --dsw-alias-bg-layer-2: var(--surface-3);
+  --dsw-specific-input-major: var(--surface-2);
+  --dsw-specific-bubble: var(--fill-secondary);
+  --dsw-alias-label-primary: var(--text-primary);
+  --dsw-alias-label-secondary: var(--text-secondary);
+  --dsw-alias-border-l1: var(--border);
+  --dsw-alias-border-l2: var(--border-strong);
+  --dsw-alias-brand-primary: var(--clay);
+  --dsw-alias-markdown-code-block: var(--surface-2);
+  --dsw-alias-markdown-code-block-banner: var(--surface-3);
+}

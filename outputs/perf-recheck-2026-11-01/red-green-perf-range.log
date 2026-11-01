@@ -1,0 +1,9 @@
+=== 造红（收紧正则后）：性能行写回单点 ===
+   ❯ REPOSITORY-STATUS 的「现读」必须带日期（第 953 页） (3)
+     × 性能读数写区间与中位，不写单点（第 956 页：两跑写成「启动约 2×」的教训） 3ms
+ FAIL  tests/status-readings-dated.test.ts > REPOSITORY-STATUS 的「现读」必须带日期（第 953 页） > 性能读数写区间与中位，不写单点（第 956 页：两跑写成「启动约 2×」的教训）
+AssertionError: 时间类读数必须是区间，例如 187.7–311.8: expected '| P2 | 长会话/长列表/大 diff | 真实 renderer（2…' to match /\d+\.\d+\s*[–—-]\s*\d+\.\d+/u
+
+=== 复原后 ===
+      Tests  3 passed (3)
+   2 3bf1d9171bb7ee8fbdc0d111b2aa0627e428f5f123256d101493ba16708d64b4

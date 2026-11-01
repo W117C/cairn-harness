@@ -10,11 +10,15 @@
 // 于是本处不再钉死具体像素，只钉「吃 caption 刻度」这一事实。
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { readAppSurface } from "./helpers/app-surface";
 import { Badge, Banner, EmptyState, Field, OptionCard, SettingsPage, SettingsRow, SettingsSection, StatusDot } from "../src/renderer/components/settings-ui";
 import { ShortcutsSection } from "../src/renderer/components/settings-sections";
 
 const styles = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
+const refinementPath = new URL("../src/renderer/components/settings-refinement.css", import.meta.url);
+const refinement = existsSync(refinementPath) ? readFileSync(refinementPath, "utf8") : "";
 function block(css: string, sel: string): string {
   const i = css.indexOf(`\n${sel} {`);
   if (i < 0) throw new Error(`CSS 块不存在：${sel}`);
@@ -47,12 +51,22 @@ describe("批 6：设置页公共组件（SSR 结构）", () => {
     expect(bare).not.toContain("ss-sec-hint");
   });
 
-  it("快捷键速查：双列键帽+说明，12 行；窄窗一列", () => {
+  it("页面标题与说明组成独立页头，分组名使用真正的二级标题", () => {
+    const h = renderToStaticMarkup(
+      <SettingsPage title="通用" desc="外观、文字与输入习惯。">
+        <SettingsSection title="外观"><div /></SettingsSection>
+      </SettingsPage>,
+    );
+    expect(h).toContain('<header class="ss-head"><h1 class="ss-title">通用</h1><p class="ss-desc">外观、文字与输入习惯。</p></header>');
+    expect(h).toContain('<h2 class="ss-sec-title">外观</h2>');
+  });
+
+  it("快捷键速查：双列键帽+说明，13 行；窄窗一列", () => {
     const h = renderToStaticMarkup(<ShortcutsSection />);
     expect(h).toContain('class="kx-list"');
     expect(h).toContain('<kbd class="kx-keys">⌘N</kbd>');
     expect(h).toContain('class="kx-what">新任务');
-    expect((h.match(/class="kx-row"/g) ?? []).length).toBe(12);
+    expect((h.match(/class="kx-row"/g) ?? []).length).toBe(13);
     expect(h).toContain("完整速查表");
     const list = block(styles, ".kx-list");
     expect(list).toContain("repeat(2, minmax(0, 1fr))");
@@ -134,40 +148,41 @@ describe("批 6：设置页公共组件（SSR 结构）", () => {
 });
 
 describe("批 6：设置页公共组件（CSS 口径哨兵）", () => {
-  it(".ss-title = 28px 大字标题（2026-10-24 参照 ChatGPT 设置）；内容列 860px 居中", () => {
-    const t = block(styles, ".ss-title");
-    expect(t).toContain("font-size: 28px");
-    expect(t).toContain("font-weight: var(--fw-bold)");
-    expect(t).toContain("letter-spacing: -0.01em");
-    // 宽度与居中的单一落点：sp-body 的内容列包装规则（设置页收窄到 860，工作台保持 960）
-    expect(styles).toContain(".sp-body > .ss-page { max-width: 860px; margin: 0 auto; width: 100%; }");
-    expect(styles).toContain(".sp-body > .ap-body { max-width: 960px; margin: 0 auto; width: 100%; }");
-    expect(block(styles, ".sp-body")).not.toContain("max-width"); // 滚动容器自身不再设宽（A 的根因）
-    expect(block(styles, ".ss-page")).not.toContain("max-width");
+  it("设置页加载局部样式：紧凑无衬线标题，760px 内容列与全宽滚动容器", () => {
+    expect(readAppSurface().includes('import "./settings-refinement.css"')).toBe(true);
+    const t = block(refinement, ".sp-page .ss-head > .ss-title");
+    expect(t).toContain("font-family: inherit");
+    expect(t).toContain("font-size: 22px");
+    expect(t).toContain("font-weight: var(--fw-semibold)");
+    expect(t).toContain("letter-spacing: -0.02em");
+    const page = block(refinement, ".sp-page .sp-body > .ss-page");
+    expect(page).toContain("max-width: 760px");
+    expect(page).toContain("margin: 0 auto");
+    expect(block(refinement, ".sp-page .sp-body")).not.toContain("max-width");
   });
 
-  it(".ss-sec-head 组标题 = caption 档 tertiary；.ss-card = surface + hairline 描边 + pop 14 圆角（2026-10-24）", () => {
-    expect(block(styles, ".ss-sec-head")).toContain("font-size: var(--fs-caption-xs)");
-    expect(block(styles, ".ss-sec-head")).toContain("color: hsl(var(--text-400))");
-    const card = block(styles, ".ss-card");
-    expect(card).toContain("border-radius: var(--radius-pop)"); // 14（设置卡/大面板）
-    expect(card).toContain("hsl(var(--bg-000))");
-    expect(card).toContain("1px solid var(--hairline)");
-    expect(card).toContain("padding: 0");
+  it("分组靠间距与细线分层，正文不再包嵌套外卡片", () => {
+    const title = block(refinement, ".sp-page .ss-sec-head > .ss-sec-title");
+    expect(title).toContain("font-family: inherit");
+    expect(title).toContain("font-size: var(--fs-body-md)");
+    expect(title).toContain("font-weight: var(--fw-semibold)");
+    const card = block(refinement, ".sp-page .ss-card");
+    expect(card).toContain("border: 0");
+    expect(card).toContain("border-radius: 0");
+    expect(card).toContain("background: transparent");
+    expect(block(refinement, ".sp-page .ss-content > .ss-sec + .ss-sec")).toContain("border-top: 1px solid var(--hairline)");
   });
 
-  it(".ss-row = 左列（标题+说明上下排）+ 控件靠右垂直居中（2026-10-24 参照 ChatGPT）；行间 1px 分隔线", () => {
-    const row = block(styles, ".ss-row");
-    expect(row).toContain("grid-template-columns: minmax(0, 1fr) auto");
+  it("表单标签稳定占一列，控件可收缩；窄内容列回落单列防止挤成碎字", () => {
+    const row = block(refinement, ".sp-page .ss-row");
+    expect(row).toContain("grid-template-columns: minmax(150px, 1fr) minmax(0, 1.5fr)");
     expect(row).toContain("align-items: center");
-    expect(row).toContain("min-height: 56px");
-    expect(row).toContain("border-top: 1px solid var(--hairline)");
-    expect(styles).toContain(".ss-card > .ss-row:first-child { border-top: 0; }");
-    // 说明拿到整条左列宽度（中文长句不碎行），不再跨两列
-    expect(block(styles, ".ss-row-desc")).not.toContain("grid-column");
-    // 控件列靠右（ChatGPT 参考页的行观感）；窄宽媒体查询回落单列左对齐
-    expect(block(styles, ".ss-row-ctl")).toContain("justify-content: flex-end");
-    expect(styles).toMatch(/@media \(max-width: 640px\)[\s\S]{0,300}\.ss-row \{ grid-template-columns: minmax\(0, 1fr\)/);
+    expect(row).toContain("min-height: 60px");
+    expect(block(refinement, ".sp-page .ss-row-ctl")).toContain("justify-content: flex-end");
+    expect(refinement).toMatch(/@container \(max-width: 560px\)[\s\S]*\.sp-page \.ss-row \{ grid-template-columns: minmax\(0, 1fr\)/);
+    expect(refinement).toMatch(/@container \(max-width: 560px\)[\s\S]*\.sp-page \.ss-row-ctl \{ justify-content: flex-start/);
+    expect(block(refinement, ".sp-page .pv-detail .ss-frow .ss-field")).toContain("min-width: 0");
+    expect(refinement).toContain('.sp-page .pv-split { grid-template-columns: minmax(0, 1fr);');
   });
 
   it(".ss-opt 选中 = 强调描边 + 淡底；danger 档 = 危险色描边（不铺大红底）", () => {
@@ -238,5 +253,44 @@ describe("SettingsPage 分区说明（2026-10-21）", () => {
     expect(withDesc).toContain("外观、文字与输入习惯。");
     const without = renderToStaticMarkup(<SettingsPage title="通用"><div /></SettingsPage>);
     expect(without).not.toContain("ss-desc");
+  });
+});
+
+describe("设置卡内主按钮的身份（2026-11-01 第 862 页）", () => {
+  it("卡内不再另涂一套品牌珊瑚：primary 与全应用同一条 --btn-primary-* 令牌", () => {
+    // 业主用色裁决：品牌珊瑚只出现在品牌标记本身；要强调用对比而不是色相。
+    // 此前只有 `.ss-card` 里的 `mini-btn primary` 被改涂 accent-brand ⇒ 同一个语义控件
+    // 两套长相，且设置页最响的一块是一枚珊瑚键（真机 06-settings-provider 截图）。
+    expect(styles).not.toMatch(/\.ss-card \.mini-btn\.primary[^{]*\{[^}]*accent-brand/);
+    expect(styles).not.toContain(".ss-card .mini-btn.primary");
+    // 反向自证：全局那条确实读令牌（不是把两处一起删掉造成假绿）。
+    expect(styles).toMatch(/\.mini-btn\.primary \{ background: var\(--btn-primary-bg\)/);
+    // 卡内按钮的尺寸档仍在（本次只撤色相，不动 36px 这一档）。
+    expect(block(styles, ".ss-card .mini-btn")).toContain("height: 36px");
+  });
+});
+
+describe("分区标题与行标签不重复（第 892 页 · 让布局说话）", () => {
+  /** 扫源码：同一 SettingsSection 里，行标签不许是分区标题的子串。
+ *  ≥3 字才判：「关于与更新」分区里有一行就叫「更新」，那是短词的巧合包含，不是同词重复
+ *  （变异自检：把行标签改成分区标题的 ≥3 字子串，本判卷会红）。 */
+  const FILES = [
+    "../src/renderer/components/settings-sections.tsx",
+    "../src/renderer/components/settings/NetworkSection.tsx",
+    "../src/renderer/components/settings/UsageSection.tsx",
+  ];
+  it("没有「分区标题 ⊃ 行标签」的同屏重复", () => {
+    const dups: string[] = [];
+    for (const rel of FILES) {
+      const src = readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+      for (const m of src.matchAll(/SettingsSection title="([^"]+)"([\s\S]*?)<\/SettingsSection>/g)) {
+        const [, title, body] = m;
+        for (const lm of body.matchAll(/SettingsRow label="([^"]+)"/g)) {
+          const lab = lm[1];
+          if (lab.length >= 3 && title.includes(lab)) dups.push(`${rel} :: ${title} ⊃ ${lab}`);
+        }
+      }
+    }
+    expect(dups, "同屏同词：\n" + dups.join("\n")).toEqual([]);
   });
 });

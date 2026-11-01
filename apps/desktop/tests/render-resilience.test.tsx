@@ -65,7 +65,7 @@ describe("接线面（防拆掉）", () => {
     expect(view).toContain('import { OnboardingChecklist } from "../components/OnboardingChecklist";');
     expect(view).toContain("onboarding: readonly OnboardingGroup[];");
     expect(view).toContain("dismissOnboarding: () => void;");
-    expect(view).toContain("onboarded, onboarding, dismissOnboarding, injectText");
+    expect(view).toContain("onboarded, setOnboarded, onboarding, dismissOnboarding, injectText");
     expect(view).toMatch(/\{onboarded === false && \(\s*<OnboardingChecklist/);
     expect(view).toContain("groups={onboarding}");
     expect(view).toContain("setSettingsSection(section); setSettingsOpen(true);");

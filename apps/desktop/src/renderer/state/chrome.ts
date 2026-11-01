@@ -33,8 +33,10 @@ export const SIDEBAR_DEFAULT = 256;
 
 /** 主区最小 420 + 检查器最小 320 + 分隔条 3 + 余量 1：不足时先收起侧栏再展开检查器。 */
 export const INSPECTOR_SIDEBAR_COLLAPSE_BELOW = 744;
-/** 宽屏首次进入会话时自动展开检查器（2026-10-21 三栏工作台）。只在用户**从未表过态**时生效。 */
-export const INSPECTOR_AUTO_OPEN_MIN = 1400;
+/** 超宽屏首次进入会话时自动展开检查器（2026-10-27 专注优先）。
+ *  1440 逻辑像素仍常见于笔记本内屏：此时默认保持侧栏 + 对话两栏，右栏只在用户
+ *  打开窗格或显式触发检查器时出现；外部宽屏才让概览自动进入视野。 */
+export const INSPECTOR_AUTO_OPEN_MIN = 1600;
 
 export interface ChromeDeps {
   /** 错误条（预览启动失败等）。 */
@@ -262,7 +264,8 @@ export function useChrome(deps: ChromeDeps): ChromeState {
   }, [sidebarCollapsed]);
   const revealInspectorRef = useRef<(() => void) | null>(null);
   revealInspectorRef.current = revealInspector; // 供上方 openPreview 绕开 TDZ 调用
-  // 宽屏首次进入会话：用户从未显式开合过检查器 ⇒ 自动展开概览（三栏工作台）；
+  // 超宽屏首次进入会话：用户从未显式开合过检查器 ⇒ 自动展开概览；
+  // 1440 级内屏保持专注两栏，避免概览在默认视野里抢走 360px。
   // 用户关过一次（storage="0"）就不再抢——默认值只在「没有偏好」时生效。
   useEffect(() => {
     if (activeId === null || inspectorAutoOpened.current) return;
@@ -292,7 +295,7 @@ export function useChrome(deps: ChromeDeps): ChromeState {
     setPluginSidebarOpen(false);
     try { window.localStorage.setItem("cairn.pluginSidebar", "0"); } catch { /* 存储不可用不阻关闭 */ }
     // 从侧栏内部关闭时把焦点还给标题栏入口；点外部关闭不抢焦点。
-    if (fromSidebar) requestAnimationFrame(() => { document.querySelector<HTMLElement>('[aria-label="插件侧栏"]')?.focus() });
+    if (fromSidebar) requestAnimationFrame(() => { document.querySelector<HTMLElement>('[aria-label="工作台工具"]')?.focus() });
   }, []);
   const toggleSidebar = useCallback((): void => {
     exitFocusRef.current();

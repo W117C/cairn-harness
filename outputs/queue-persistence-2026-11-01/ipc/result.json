@@ -1,0 +1,81 @@
+{
+  "checks": [
+    {
+      "name": "真实 preload 回读当前协议版本",
+      "ok": true
+    },
+    {
+      "name": "真实运行停在审批门等待，只有一场执行",
+      "ok": true
+    },
+    {
+      "name": "错误工作区插话与停止均被真实 host 拒绝",
+      "ok": true
+    },
+    {
+      "name": "真实 host 的接收前拒绝明确回传 accepted:false",
+      "ok": true
+    },
+    {
+      "name": "旧式裸 id 控制在同名场景拒绝猜目标",
+      "ok": true
+    },
+    {
+      "name": "正确工作区可经真实 IPC 插话",
+      "ok": true
+    },
+    {
+      "name": "正确工作区取消穿透审批门并收束原运行",
+      "ok": true
+    },
+    {
+      "name": "真实用户轮已接收后取消仍回传 accepted:true",
+      "ok": true
+    },
+    {
+      "name": "收束后的插话明确拒绝",
+      "ok": true
+    },
+    {
+      "name": "无 preload 错误",
+      "ok": true
+    }
+  ],
+  "errors": [],
+  "wrongSteer": {
+    "ok": false,
+    "code": "workspace_mismatch",
+    "error": "同名会话被其他工作区的执行占用，请等待它结束"
+  },
+  "wrongCancel": {
+    "ok": false,
+    "code": "workspace_mismatch",
+    "error": "同名会话被其他工作区的执行占用，请等待它结束"
+  },
+  "refused": {
+    "ok": false,
+    "accepted": false,
+    "error": "同名会话被其他工作区的执行占用，请等待它结束"
+  },
+  "ambiguous": {
+    "ok": false,
+    "code": "invalid_target",
+    "error": "会话 id 在多个工作区同时存在，必须显式指定 workspace"
+  },
+  "steer": {
+    "ok": true,
+    "queued": 1
+  },
+  "cancel": {
+    "ok": true
+  },
+  "result": {
+    "ok": true,
+    "accepted": true,
+    "aborted": true
+  },
+  "late": {
+    "ok": false,
+    "error": "会话不在运行"
+  }
+}

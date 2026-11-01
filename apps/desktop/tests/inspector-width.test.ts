@@ -27,7 +27,7 @@ describe("检查器宽度持久化", () => {
   it("首屏自动展开读**实时**偏好，不是启动快照（先关检查器再开第一个会话不会被掰开）", () => {
     expect(app).toContain("const inspectorPrefSetRef = useRef(inspectorPrefSet);");
     expect(app).toContain("inspectorPrefSetRef.current = true;");
-    const anchor = app.indexOf("// 宽屏首次进入会话");
+    const anchor = app.indexOf("// 超宽屏首次进入会话");
     expect(anchor).toBeGreaterThan(-1);
     const auto = app.slice(anchor, anchor + 900);
     expect(auto).toContain("if (inspectorPrefSetRef.current) return;");

@@ -1,0 +1,115 @@
+--- a/apps/desktop/src/renderer/components/AppPage.tsx	2026-11-01 15:01:42
++++ b/apps/desktop/src/renderer/components/AppPage.tsx	2026-11-01 15:00:42
+@@ -9,6 +9,7 @@
+ import { ConfirmDialog } from "./ConfirmDialog";
+ import { ErrorStrip } from "./ErrorStrip";
+ import { WorktreesPane } from "./WorktreesPane";
++import { categoryLabel } from "./plugins/labels";
+ import { BookOpen, Brain, Check, CircleDashed, Clock, Puzzle, TriangleAlert } from "lucide-react";
+ import type { MemorySnapshot } from "../../../../../src/main/ipc-protocol";
+ import type { AutomationDefinition, AutomationSchedule } from "../../../../../src/main/automations";
+@@ -233,7 +234,7 @@
+             <section className="ap-sec">
+               <h3>组成</h3>
+               <div className="ap-kv">
+-                <span>技能 {String(selected.counts.skills)} · 命令 {String(selected.counts.commands)} · agents {String(selected.counts.agents)} · hooks {String(selected.counts.hooks)} · MCP {String(selected.counts.mcp)}（激活 {hasMcpActiveData ? String(mcpSummaries.filter((s) => s.plugin === selected.name && s.active).length) : "—"}） · LSP {String(selected.counts.lspActive)}/{String(selected.counts.lsp)}</span>
++                <span>{categoryLabel("skills")} {String(selected.counts.skills)} · {categoryLabel("commands")} {String(selected.counts.commands)} · {categoryLabel("agents")} {String(selected.counts.agents)} · {categoryLabel("hooks")} {String(selected.counts.hooks)} · {categoryLabel("mcp")} {String(selected.counts.mcp)}（激活 {hasMcpActiveData ? String(mcpSummaries.filter((s) => s.plugin === selected.name && s.active).length) : "—"}） · {categoryLabel("lsp")} {String(selected.counts.lspActive)}/{String(selected.counts.lsp)}</span>
+               </div>
+             </section>
+             <section className="ap-sec">
+--- a/apps/desktop/src/renderer/components/plugins/labels.ts	2026-11-01 15:01:42
++++ b/apps/desktop/src/renderer/components/plugins/labels.ts	2026-11-01 15:00:42
+@@ -19,3 +19,20 @@
+   return scope === "user" ? "全局" : "当前项目";
+ }
+ 
++/** 插件「组成」的六类（第 935 页）：发现页的能力计数与详情抽屉的组成行共用这一张表。
++ *  此前详情抽屉直接摆英文键名（`agents N · hooks N`），而发现页早有中文（智能体 / 钩子）——
++ *  同一套词两处两种写法，抽屉里还夹在「技能 / 命令」中间。 */
++export type PluginCategory = "skills" | "commands" | "agents" | "hooks" | "mcp" | "lsp";
++
++export const PLUGIN_CATEGORY_LABEL: Readonly<Record<PluginCategory, string>> = {
++  skills: "技能",
++  commands: "命令",
++  agents: "智能体",
++  hooks: "钩子",
++  mcp: "MCP",
++  lsp: "LSP",
++};
++
++export function categoryLabel(kind: PluginCategory): string {
++  return PLUGIN_CATEGORY_LABEL[kind];
++}
+--- a/apps/desktop/src/renderer/components/plugins/PluginDiscover.tsx	2026-11-01 15:02:06
++++ b/apps/desktop/src/renderer/components/plugins/PluginDiscover.tsx	2026-11-01 15:00:07
+@@ -1,22 +1,13 @@
+ import { AlertTriangle, Download, Puzzle, Star, WifiOff } from "lucide-react";
+ import type { PluginRowView } from "../../derived/plugins";
+ import type { PluginsMarketplaceState } from "../../state/plugins-marketplace";
+-import { sourceKindLabel } from "./labels";
++import { PLUGIN_CATEGORY_LABEL, sourceKindLabel } from "./labels";
+ 
+-const CATEGORY_LABEL = {
+-  skills: "技能",
+-  commands: "命令",
+-  agents: "智能体",
+-  hooks: "钩子",
+-  mcp: "MCP",
+-  lsp: "LSP",
+-} as const;
+-
+ function capabilityText(row: PluginRowView): string {
+   if (row.capabilities === null) return "能力未扫描";
+   return Object.entries(row.capabilities)
+     .filter(([, count]) => count > 0)
+-    .map(([kind, count]) => `${CATEGORY_LABEL[kind as keyof typeof CATEGORY_LABEL]} ${String(count)}`)
++    .map(([kind, count]) => `${PLUGIN_CATEGORY_LABEL[kind as keyof typeof PLUGIN_CATEGORY_LABEL]} ${String(count)}`)
+     .join(" · ");
+ }
+ 
+--- a/apps/desktop/tests/plugin-labels.test.ts	2026-11-01 15:01:42
++++ b/apps/desktop/tests/plugin-labels.test.ts	2026-11-01 15:00:26
+@@ -3,7 +3,7 @@
+ import { readFileSync } from "node:fs";
+ import { fileURLToPath } from "node:url";
+ import { describe, expect, it } from "vitest";
+-import { scopeLabelOf, sourceKindLabel } from "../src/renderer/components/plugins/labels";
++import { categoryLabel, scopeLabelOf, sourceKindLabel } from "../src/renderer/components/plugins/labels";
+ 
+ const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+ 
+@@ -36,3 +36,27 @@
+   });
+ });
+ 
++// 第 935 页：插件「组成」的六类此前两套写法——发现页是中文（智能体/钩子），
++// 详情抽屉直接摆英文键名（`agents N · hooks N`），还夹在「技能 / 命令」中间。
++describe("插件类目词表", () => {
++  it("六类全中文（MCP / LSP 是专名，原样）", () => {
++    expect(categoryLabel("skills")).toBe("技能");
++    expect(categoryLabel("commands")).toBe("命令");
++    expect(categoryLabel("agents")).toBe("智能体");
++    expect(categoryLabel("hooks")).toBe("钩子");
++    expect(categoryLabel("mcp")).toBe("MCP");
++    expect(categoryLabel("lsp")).toBe("LSP");
++  });
++
++  it("发现页与详情抽屉读同一份；抽屉不再直接写英文键名", () => {
++    const discover = read("../src/renderer/components/plugins/PluginDiscover.tsx");
++    expect(discover).toContain("PLUGIN_CATEGORY_LABEL");
++    expect(discover).not.toContain("const CATEGORY_LABEL");
++    const page = read("../src/renderer/components/AppPage.tsx");
++    expect(page).toContain('import { categoryLabel } from "./plugins/labels"');
++    expect(page).toContain('categoryLabel("agents")');
++    expect(page).toContain('categoryLabel("hooks")');
++    expect(page).not.toContain("· agents {String(");
++    expect(page).not.toContain("· hooks {String(");
++  });
++});
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 15:01:42
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 15:00:50
+@@ -4296,3 +4296,4 @@
+ 55. **读族 / 渲染 / 诊断的批准卡也说人话（第 932 页）**：`describeAsk` 此前只覆盖写族、命令、网络、记忆与定时任务；`read_file` / `grep` / `glob` / `lsp` / `render_image` / `diagnose` 在沙箱降级或严格档下同样会弹批准卡，却一律落到「需要你批准 + 参数 JSON」——批的是「读哪个文件 / 查什么 / 渲染哪张图」看不出来。补六条：读取文件（path 或 paths 列表）、查找内容（pattern）、找文件（pattern）、查符号（symbol，path 作副行）、渲染图（path）、跑诊断（face 缺省说「全部检查」）。
+ 56. **apply_patch 的批准卡先给抬头（第 933 页）**：补丁正文在卡上是一个 `max-height:132px` 的滚动框——大补丁只看得到开头几行，批准等于盲批。`describeAsk` 给 `apply_patch` 加一条副行：用 core 的 `parsePatch` 解出文件数、增删行数与前三路径（`3 个文件 · +12 −4 · a.ts、b.ts、c.ts`）；解析不了就**不摆抬头**（宁缺不猜），补丁原文仍整段在卡上。判卷钉抬头格式、解析失败回落、以及卡上真出现抬头且原文不丢。
+ 57. **定时任务页的两处小账（第 934 页）**：运行历史把 `due_at` 的原始 ISO 摆上屏（同一页的「下次」却是 `toLocaleString`——同一个人在同一行看到的两种写法），且只铺 20 条却不说：25 条时标题写「25 条」、列表只到第 20 条，尾部被当成整份。改成两个时间都走 `fullTime`（本地 `YYYY-MM-DD HH:mm`，解析不了原样返回），并用一个常量 `HISTORY_SHOWN` 管铺多少条，超出时标题写明「· 只显示最近 20 条」。
++58. **插件类目只有一张词表（第 935 页）**：发现页的能力计数用中文（智能体 / 钩子），而插件详情抽屉的「组成」行直接摆英文键名（`技能 3 · 命令 2 · agents 1 · hooks 4 · MCP 0 …`）——同一套词两处两种写法，英文那两格还夹在中文中间。类目词表收到 `components/plugins/labels.ts`（`PLUGIN_CATEGORY_LABEL` / `categoryLabel`），发现页与抽屉都读它；判卷钉六类中文与「抽屉里不再出现英文键名」。

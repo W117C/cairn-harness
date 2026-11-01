@@ -1,0 +1,137 @@
+[
+  {
+    "name": "侧栏默认只保留会话搜索入口，不常驻搜索框",
+    "ok": true,
+    "detail": {
+      "row": 0,
+      "toggle": true,
+      "title": "搜索会话",
+      "ariaLabel": "搜索会话"
+    }
+  },
+  {
+    "name": "点击搜索入口后展开并自动聚焦输入框",
+    "ok": true,
+    "detail": {
+      "row": 1,
+      "focused": true
+    }
+  },
+  {
+    "name": "空搜索再按 Esc 收起，并把焦点还给搜索入口",
+    "ok": true,
+    "detail": {
+      "row": 0,
+      "focused": true
+    }
+  },
+  {
+    "name": "空态建议保持无编号行",
+    "ok": true,
+    "detail": {
+      "rows": 3,
+      "numbers": 0
+    }
+  },
+  {
+    "name": "首页标题、项目与输入区共用阅读起点",
+    "ok": true,
+    "detail": {
+      "headingLeft": 471.5,
+      "composerLeft": 471.5,
+      "footer": "设置与偏好",
+      "canvas": "rgb(252, 252, 251)",
+      "radius": "12px",
+      "upstream": true
+    }
+  },
+  {
+    "name": "设置入口有可见文字，未伪装成用户头像",
+    "ok": true,
+    "detail": "设置与偏好"
+  },
+  {
+    "name": "已加载上游 Claude 主题与输入卡样式",
+    "ok": true,
+    "detail": {
+      "headingLeft": 471.5,
+      "composerLeft": 471.5,
+      "footer": "设置与偏好",
+      "canvas": "rgb(252, 252, 251)",
+      "radius": "12px",
+      "upstream": true
+    }
+  },
+  {
+    "name": "1440 首次进会话保持专注两栏，插件命令不常驻",
+    "ok": true,
+    "detail": {
+      "inspectorWidth": 0,
+      "inspectorInert": true,
+      "pluginStrip": 0,
+      "composerWidth": 750
+    }
+  },
+  {
+    "name": "检查器概览不重复顶栏会话名，只保留上下文与运行事实",
+    "ok": true,
+    "detail": {
+      "open": true,
+      "toolbarTitles": 1,
+      "toolbarTitle": "接 routing 开关并跑全量验证",
+      "overviewNames": 0,
+      "overviewContext": true
+    }
+  },
+  {
+    "name": "检查器方向键切 Tab，焦点与面板语义同步，只保留一个 Tab 停点",
+    "ok": true,
+    "detail": {
+      "selected": "改动",
+      "focused": "改动",
+      "panel": ":rj:-tab-changes",
+      "rovingStops": 1
+    }
+  },
+  {
+    "name": "侧栏任务名获得至少六成行宽",
+    "ok": true,
+    "detail": {
+      "rowWidth": 242.5,
+      "titleWidth": 213.5
+    }
+  },
+  {
+    "name": "窄窗输入框完整可见，页面无横向溢出",
+    "ok": true,
+    "detail": {
+      "left": 272,
+      "right": 861,
+      "viewport": 880,
+      "overflow": false
+    }
+  },
+  {
+    "name": "暗色主题与 Markdown 链接使用上游配色",
+    "ok": true,
+    "detail": {
+      "canvas": "rgb(20, 20, 19)",
+      "link": "rgb(138, 180, 248)"
+    }
+  },
+  {
+    "name": "设置页顶栏显示当前页面并收起任务操作",
+    "ok": true,
+    "detail": {
+      "open": true,
+      "title": "设置",
+      "tools": "",
+      "taskButton": false
+    }
+  },
+  {
+    "name": "渲染过程无控制台错误",
+    "ok": true,
+    "detail": []
+  }
+]

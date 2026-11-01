@@ -68,10 +68,25 @@ async function main() {
   check('项目组收起状态已保存', await read(`return JSON.parse(localStorage.getItem('cairn.sidebar.groups.v1')).length === 1;`));
   await win.reload(); await pause();
   check('重载恢复项目组收起状态', await read(`return document.querySelector('.group').dataset.collapsed === 'true';`));
+  await pointerClick('[data-sidebar-search-toggle]'); await pause();
+  check(
+    '侧栏搜索按需展开并自动聚焦',
+    await read(`return !!document.querySelector('.side-search') && document.activeElement?.classList.contains('side-search-input');`),
+  );
   await setInput('.side-search-input', 'routing'); await pause();
   check('搜索自动显示收起组里的匹配会话', await read(`return document.querySelector('.group').dataset.collapsed === 'false' && document.querySelector('.session').getBoundingClientRect().height > 0;`));
   await setInput('.side-search-input', ''); await pause();
   check('清除搜索恢复原折叠选择', await read(`return document.querySelector('.group').dataset.collapsed === 'true';`));
+  await js(`(() => {
+    const input = document.querySelector('.side-search-input');
+    input.focus();
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  })()`);
+  await pause();
+  check(
+    '空搜索 Esc 收起并把焦点还给搜索入口',
+    await read(`return !document.querySelector('.side-search') && document.activeElement?.hasAttribute('data-sidebar-search-toggle');`),
+  );
   // 会话筛选：此前 filterSessions 只被喂 "all"；补真实菜单开合、空态与清除。
   await pointerClick('.side-filter-btn'); await pause();
   state = await read(`const items=[...document.querySelectorAll('.side-filter-menu [role="menuitemradio"]')]; return { n: items.length, ids: items.map(e=>e.dataset.filter), checked: items.filter(e=>e.getAttribute('aria-checked')==='true').map(e=>e.dataset.filter), archived: items.find(e=>e.dataset.filter==='archived')?.textContent.trim() ?? null };`);
@@ -84,10 +99,13 @@ async function main() {
   await pointerClick('.side-filter-empty .side-retry'); await pause();
   state = await read(`return { active: document.querySelector('.side-filter-btn')?.dataset.active, stored: localStorage.getItem('cairn.sidebar.filter.v1'), sessions: document.querySelectorAll('.session').length, collapsed: document.querySelector('.group')?.dataset.collapsed };`);
   check('清除筛选回到全部：会话恢复、折叠组展开', state.active === 'false' && state.stored === 'all' && state.sessions > 0 && state.collapsed === 'false', state);
-  await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', metaKey: true, bubbles: true }))`); await pause();
-  state = await read(`return { rail: document.querySelector('.sidebar-rail').getBoundingClientRect().width, side: document.querySelector('.side-wrap').getBoundingClientRect().width };`);
-  check('侧栏收起仍有可用快捷栏', state.rail === 48 && state.side === 0, state);
-  state = await read(`const g = document.querySelector('.main-group').getBoundingClientRect(); const rail = document.querySelector('.sidebar-rail').getBoundingClientRect(); return { top: g.top, railTop: rail.top, right: g.right, viewport: innerWidth, railHeight: rail.height };`);
+  // 前序步骤可能已把侧栏留在收起态；⌘B 是切换，先按实际状态只补一次。
+  if (!(await read(`return (document.querySelector('.sidebar-rail')?.getBoundingClientRect().width ?? 0) > 0;`))) {
+    await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', metaKey: true, bubbles: true }))`); await pause();
+  }
+  state = await read(`const app = document.querySelector('.app-rail'); const rail = document.querySelector('.sidebar-rail'); return { app: app?.getBoundingClientRect().width ?? null, rail: rail?.getBoundingClientRect().width ?? 0, side: document.querySelector('.side-wrap')?.getBoundingClientRect().width ?? 0 };`);
+  check('侧栏收起仍有可用快捷栏（单轨 48px，快捷入口并进能力轨）', state.app === 48 && state.rail > 0 && state.side === 0, state);
+  state = await read(`const g = document.querySelector('.main-group').getBoundingClientRect(); const rail = document.querySelector('.app-rail').getBoundingClientRect(); return { top: g.top, railTop: rail.top, right: g.right, viewport: innerWidth, railHeight: rail.height };`);
   check('快捷栏和主区同排且主区填满剩余宽高', Math.abs(state.top-state.railTop) < 1 && Math.abs(state.right-state.viewport) < 1 && state.railHeight > 600, state);
   await click('.sidebar-rail [aria-label="打开文件窗格"]'); await pause();
   check('快捷栏文件入口打开可交互的面板', await read(`return document.querySelector('[data-pane="file"]')?.dataset.active === 'true' && !document.querySelector('.inspector-col').hasAttribute('inert');`));
@@ -116,10 +134,10 @@ async function main() {
   state = await read(`const col = document.querySelector('.inspector-col'); return { pref: localStorage.getItem('cairn.inspector.open.v1'), width: col?.getBoundingClientRect().width ?? -1, inert: col?.hasAttribute('inert') ?? false };`);
   check('关闭后仍可重新打开检查器', state.pref === '1' && state.width > 300 && !state.inert, state);
   // 上面的 reload 会回到「侧栏展开」的启动态；后续窄窗检查量的是收起快捷栏，先恢复收起。
-  if (!(await read(`return !!document.querySelector('.sidebar-rail');`))) {
+  if (!(await read(`return (document.querySelector('.sidebar-rail')?.getBoundingClientRect().width ?? 0) > 0;`))) {
     await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', metaKey: true, bubbles: true }))`); await pause();
   }
-  check('检查器场景结束后侧栏快捷栏可回到收起态', await read(`return document.querySelector('.sidebar-rail')?.getBoundingClientRect().width === 48;`));
+  check('检查器场景结束后侧栏快捷栏可回到收起态', await read(`return (document.querySelector('.sidebar-rail')?.getBoundingClientRect().width ?? 0) > 0 && !document.querySelector('.side-wrap');`));
   // 2026-10-21 评审修：设置返回必须在 ModalSurface 内部、且真实指针可命中。
   // 脚本 `.click()` 会绕过 inert/hit-test，不能作为"可点"的证据。
   await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', code: 'Comma', metaKey: true, bubbles: true }))`); await pause();
@@ -144,9 +162,13 @@ async function main() {
   state = await read(`return { palette: !!document.querySelector('.cp-panel'), active: document.querySelector('[data-pane="file"]')?.dataset.active, tab: document.querySelector('.pane-tab.on')?.textContent?.trim() ?? null, preview: document.querySelector('.fp-preview-path')?.textContent ?? null, tree: !!document.querySelector('.fp-row[data-path="src/main.ts"]'), expanded: document.querySelector('.fp-row[data-path="src"]')?.getAttribute('aria-expanded') ?? null };`);
   check('选中文件：面板关闭、文件窗格激活、父目录展开并预览', !state.palette && state.active === 'true' && state.tab === '文件' && state.preview === 'src/main.ts' && state.tree && state.expanded === 'true', state);
   await shot('02e-file-quick-open');
+  // 前一段的设置/命令面板/文件窗格可能把侧栏留在展开态；窄窗断言量的是收起快捷栏，先确保收起。
+  if (!(await read(`return (document.querySelector('.sidebar-rail')?.getBoundingClientRect().width ?? 0) > 0;`))) {
+    await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', metaKey: true, bubbles: true }))`); await pause();
+  }
   await win.setContentSize(880, 700); await pause();
-  state = await read(`return { overflow: document.documentElement.scrollWidth > innerWidth, rail: document.querySelector('.sidebar-rail').getBoundingClientRect().width };`);
-  check('窄窗快捷栏和面板无横向溢出', !state.overflow && state.rail === 48, state);
+  state = await read(`const app = document.querySelector('.app-rail'); const rail = document.querySelector('.sidebar-rail'); return { overflow: document.documentElement.scrollWidth > innerWidth, app: app?.getBoundingClientRect().width ?? null, rail: rail?.getBoundingClientRect().width ?? 0, side: !!document.querySelector('.side-wrap') };`);
+  check('窄窗快捷栏和面板无横向溢出', !state.overflow && state.app === 48 && state.rail > 0, state);
   await shot('05-narrow');
   nativeTheme.themeSource = 'dark'; await shot('06-dark');
   check("渲染过程无控制台错误", errors.length === 0, errors);

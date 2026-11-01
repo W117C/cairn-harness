@@ -59,14 +59,24 @@ interface AutomationsFile {
   tasks: AutomationDefinition[];
 }
 
-/** 加载任务定义（迁移容忍：坏文件/坏条目跳过 + 警告，不静默丢整个清单）。 */
-export async function loadAutomationsFile(file: string): Promise<{ tasks: AutomationDefinition[]; warnings: string[] }> {
+/** 加载任务定义（迁移容忍：坏条目跳过 + 警告，不静默丢整个清单）。
+ *  **缺文件 ≠ 坏文件**：坏 JSON 单独标 `corrupt`，写路径据此拒绝覆盖（同会话元数据/队列口径）；
+ *  把两者混成「空清单」会让下一次 upsert 把用户的任务表整份盖掉（实测路径：桌面加一条任务即可）。 */
+export async function loadAutomationsFile(
+  file: string,
+): Promise<{ tasks: AutomationDefinition[]; warnings: string[]; corrupt: boolean }> {
   const warnings: string[] = [];
   let raw: unknown = null;
   try {
     raw = JSON.parse(await readFile(file, "utf8")) as unknown;
-  } catch {
-    return { tasks: [], warnings: warnings.length > 0 ? warnings : ["（无既有文件，按空清单起步）"] };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { tasks: [], warnings: [], corrupt: false };
+    const reason = error instanceof Error ? error.message : String(error);
+    return {
+      tasks: [],
+      warnings: [`调度任务文件损坏：${file}（${reason}）——修好或删除该文件后重试，本次不覆盖`],
+      corrupt: true,
+    };
   }
   const obj = raw as { version?: unknown; tasks?: unknown };
   const list = Array.isArray(obj?.tasks) ? obj.tasks : [];
@@ -76,7 +86,7 @@ export async function loadAutomationsFile(file: string): Promise<{ tasks: Automa
     if (v.ok) tasks.push(v.value);
     else warnings.push(`automations.json 第 ${String(i + 1)} 条无效已跳过：${v.errors.join("；")}`);
   });
-  return { tasks, warnings };
+  return { tasks, warnings, corrupt: false };
 }
 
 /** 保存任务定义（原子写：tmp + rename，中断自愈；与 settings/permissions 同款）。 */
@@ -431,6 +441,11 @@ export interface ScheduleSnapshot {
   /** task_id → 时区注记：只有该任务的时区与本机不同（或声明值非法）时才有键。
    *  单独一张表而不是塞进 task：定义对象要能原样回传给严格校验（未知字段会被整条拒）。 */
   tzNotes: Record<string, string>;
+  /** 装载期警告（automations.json 损坏 / 坏条目被跳过 / journal 坏行）。
+   *  桌面端没有控制台可看：装载失败若只 `console.warn`，用户只会看到「还没有定时任务」。 */
+  warnings: string[];
+  /** 任务定义文件损坏（读不了）：写路径会拒绝覆盖。与「坏条目被跳过」不同，后者仍可写。 */
+  definitionsCorrupt: boolean;
 }
 
 /** 时区注记（纯函数，唯一实现；措辞与偏移都取自 automations 的那份 helper，不另写一遍）。 */
@@ -492,6 +507,10 @@ export class Scheduler {
   private jitterTimer: ReturnType<typeof setTimeout> | null = null;
   private firstTickDone = false;
   private started = false;
+  /** 装载期的坏档 / 坏行（快照上屏；桌面控制台无人可见）。 */
+  private definitionsWarnings: string[] = [];
+  private definitionsCorrupt = false;
+  private journalWarnings: string[] = [];
   private chain: Promise<void> = Promise.resolve();
   private tickMutex: Promise<void> = Promise.resolve();
   // tick 与 run_now 共用准入锁；覆盖检查到 queued 入表，不能跨 IO 留空位。
@@ -533,10 +552,13 @@ export class Scheduler {
     this.started = true;
     const loaded = await loadAutomationsFile(this.definitionsPath);
     this.tasks = loaded.tasks;
+    this.definitionsWarnings = loaded.warnings;
+    this.definitionsCorrupt = loaded.corrupt;
     for (const w of loaded.warnings) this.warn("[scheduler] " + w);
     const j = await readJournalFile(this.journalPath);
     this.ingestJournal(j.entries);
     await this.loadSessionIndex();
+    this.journalWarnings = j.warnings;
     for (const w of j.warnings) this.warn("[scheduler] " + w);
     // D7（审查 P2）：启动时对 journal 做保留上限收敛（超帽截到 KEEP 条，原子替换）。
     const kept = await compactJournalIfLarge(this.journalPath, (keep) => this.rebuildJournalMemory(keep)).catch(() => -1);
@@ -1011,6 +1033,11 @@ export class Scheduler {
     // 写前重读磁盘任务表：两个实例（桌面 app + `cairn --serve`）各持启动时的旧表，
     // 直接整表回写会静默抹掉对方刚建/改的任务。
     const disk = await loadAutomationsFile(this.definitionsPath).catch(() => null);
+    if (disk !== null) {
+      this.definitionsWarnings = disk.warnings;
+      this.definitionsCorrupt = disk.corrupt;
+    }
+    if (disk?.corrupt === true) return { ok: false, errors: disk.warnings.length > 0 ? disk.warnings : ["调度任务文件损坏，已拒绝覆盖"] };
     if (disk !== null) this.tasks = disk.tasks;
     const dup = this.tasks.find((t) => t.name === v.value.name && t.id !== v.value.id);
     if (dup) return { ok: false, errors: [`任务名已存在: ${v.value.name}（name 唯一）`] };
@@ -1023,17 +1050,27 @@ export class Scheduler {
     value.nextRunAt = nextRun ? nextRun.toISOString() : undefined;
     this.tasks = existing ? this.tasks.map((t) => (t.id === value.id ? value : t)) : [...this.tasks, value];
     await saveAutomationsFile(this.definitionsPath, this.tasks);
+    // 写成功 = 盘上已是一份完整合法的任务表；装载期的坏档 / 坏条目警告随之失效。
+    this.definitionsWarnings = [];
+    this.definitionsCorrupt = false;
     return { ok: true, value };
   }
 
   async remove(id: string): Promise<{ ok: boolean; error?: string }> {
     // 同 upsert：先与磁盘合并，别用旧表整表回写抹掉对方的改动。
     const disk = await loadAutomationsFile(this.definitionsPath).catch(() => null);
+    if (disk !== null) {
+      this.definitionsWarnings = disk.warnings;
+      this.definitionsCorrupt = disk.corrupt;
+    }
+    if (disk?.corrupt === true) return { ok: false, error: disk.warnings[0] ?? "调度任务文件损坏，已拒绝覆盖" };
     if (disk !== null) this.tasks = disk.tasks;
     const before = this.tasks.length;
     this.tasks = this.tasks.filter((t) => t.id !== id);
     if (this.tasks.length === before) return { ok: false, error: "任务不存在: " + id };
     await saveAutomationsFile(this.definitionsPath, this.tasks);
+    this.definitionsWarnings = [];
+    this.definitionsCorrupt = false;
     return { ok: true };
   }
 
@@ -1107,6 +1144,8 @@ export class Scheduler {
       cap: this.cap,
       startupDone: this.firstTickDone,
       tzNotes: scheduleTimeZoneNotes(tasks, systemTimeZone(), now),
+      warnings: [...this.definitionsWarnings, ...this.journalWarnings],
+      definitionsCorrupt: this.definitionsCorrupt,
     };
   }
 

@@ -63,14 +63,15 @@ describe("插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面）", () => 
     expect(snap?.counts.lspActive).toBe(1);
   });
 
-  it("§9.8 里运行时还没兑现的字段，装载期当场说出来（不静默收下）", async () => {
+  it("§9.8 的 startupTimeout / restartOnCrash / diagnostics.maxPerFile 已兑现到运行时；未知字段仍出声", async () => {
     const e = await load();
+    const cfg = loadLspConfig(ws).servers["echo-suite:stub-ts"];
+    expect(cfg?.startupTimeout).toBe(5000);
+    expect(cfg?.restartOnCrash).toBe(false);
+    expect(cfg?.diagnosticsMaxPerFile).toBe(20);
     const warns = e.manifest.plugins.find((p) => p.name === "echo-suite")?.warnings ?? [];
-    const unhonored = warns.find((w) => w.includes("本轮不生效"));
-    expect(unhonored).toBeDefined();
-    expect(unhonored ?? "").toContain("startupTimeout");
-    expect(unhonored ?? "").toContain("restartOnCrash");
-    expect(unhonored ?? "").toContain("diagnostics.maxPerFile");
+    expect(warns.some((w) => w.includes("本轮不生效"))).toBe(false);
+    expect(warns.some((w) => w.includes("unknownLspField"))).toBe(true);
   });
 
   it("未过信任门的插件不注册（server.command 是任意可执行文件，信任门与 hook/MCP 同口径）", async () => {

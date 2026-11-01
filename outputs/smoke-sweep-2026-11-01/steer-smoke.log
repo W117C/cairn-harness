@@ -1,0 +1,8 @@
+PASS ① 空闲时回车 = 起一轮（不插话）：runSteer 未被调用，且出现停止钮 "{\"steersSoFar\":[],\"stopBtn\":true}"
+PASS ★ 运行中回车真的调了 runSteer（不是默默排队） "{\"steers\":[{\"sessionId\":\"s2\",\"text\":\"插话：先别改 a.ts\"}],\"noticeText\":true,\"queueRows\":0}"
+PASS ★ 带的话就是输入框里那句 [{"sessionId":"s2","text":"插话：先别改 a.ts"}]
+PASS ★ 回执是「已插话到本轮」（用户分得清插话与排队） true
+PASS 反向：这条话**没有**进队列条（否则既插话又排队＝发两遍） 0
+PASS 镜像：不在运行 ⇒ 回落为队列（不吞消息） "{\"queueRows\":1}"
+[steer-smoke] 输出目录: /Users/ze/Downloads/Cairn/cairn/.tmp/sweep/steer-smoke.out
+[steer-smoke] 6/6 PASS｜console error 0

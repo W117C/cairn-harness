@@ -20,6 +20,7 @@ import { mayHaveWrittenDisk } from "../../src/agent/write-face";
 import { bucketsSpendUsd, priceForModel, type SpendBucket } from "../../src/agent/orchestrator-join";
 import { readJsonl, scanCorpus, zeroCorpusProblem } from "./corpus";
 import { armOfPath, groupPairs, magnitudeOfAb, parseArm, taskKey, abRowLine, repRowLine, signTestToken, SIGN_ALPHA, type ArmOf } from "../lib/eval-arms";
+import { hasWorkerId } from "../../src/agent/subflow";
 
 export type RunOutcome =
   | "green-first-try"
@@ -205,8 +206,8 @@ export function splitStreams(events: readonly AgentEvent[]): { main: AgentEvent[
   const main: AgentEvent[] = [];
   const byId = new Map<string, AgentEvent[]>();
   for (const e of events) {
-    const id = (e as { agent_id?: string }).agent_id;
-    if (typeof id === "string" && id !== "") {
+    if (hasWorkerId(e)) {
+      const id = e.agent_id;
       const arr = byId.get(id);
       if (arr === undefined) byId.set(id, [e]);
       else arr.push(e);

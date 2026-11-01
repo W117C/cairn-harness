@@ -5,12 +5,12 @@ import { app, BrowserWindow, dialog, ipcMain, nativeTheme, Notification, safeSto
 import { clampToWorkArea, readWindowState, writeWindowState } from "./window-state";
 import { bootBackgroundFor, normalizeThemePreference, resolveBootTheme, type ThemePreference } from "./boot-theme";
 import { windowVibrancyOptions } from "./window-vibrancy";
-import { runNotificationCopy, runNotificationTarget, shouldNotifyRunSettled } from "./run-notification";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { stat } from "node:fs/promises";
+import { focusedWindowViewing, notificationClickWindow, runNotificationCopy, runNotificationTarget, shouldNotifyRunSettled } from "./run-notification";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { realpath, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { isAbsolute, join, resolve } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { INVOKE_CHANNELS, PUSH_CHANNELS } from "./channels";
 import { installAppMenu } from "./menu";
@@ -45,16 +45,22 @@ import {
 } from "../../../../src/main/agent-runner";
 import { suggestNextMessage } from "../../../../src/main/suggest-next";
 import { handleMemoryDelete } from "../../../../src/main/memory-handlers";
+import { runDoctorForWorkspace } from "../../../../src/main/doctor";
 import { closeAllLspClients, killAllLspClientsSync } from "../../../../src/tools/lsp";
 import { killAllTrackedChildren } from "../../../../src/tools/process";
 import {
+  getAppVersion,
   getSettings,
   handleProviderKeyDelete,
   handleProviderKeySet,
   handleProviderKeyStatus,
+  handleLicenseImport,
   handleUpdateCheck,
+  initBuildInfo,
+  initUpdateContext,
   onboardingGroups,
   providerInfo,
+  reloadSettings,
   setSettings,
 } from "../../../../src/main/settings-handlers";
 import {
@@ -78,7 +84,36 @@ import { BrowserHost } from "./browser-host";
 import type { ClarifyAnswerMap } from "../../../../src/events";
 import { installProviderKeyBackend } from "../../../../src/main/provider-keys";
 import { installSafeStorageBackend } from "../../../../src/agent/plugins/secrets";
-import { currentPluginRuntime } from "../../../../src/agent/plugins";
+import {
+  currentPluginRuntime,
+  pluginDataRootOf,
+  TrustStore,
+  trustFilePathOf,
+  userPluginsDirOf,
+} from "../../../../src/agent/plugins";
+import {
+  loadPluginMarketplaceCatalog,
+  marketplaceSourceConfigFromEnv,
+  type MarketplaceCatalogReadout,
+} from "../../../../src/main/plugin-marketplace-store";
+import { PluginInstallJobManager } from "../../../../src/main/plugin-install-jobs";
+import {
+  InstalledPluginRegistry,
+  type InstalledPluginRecord,
+  type PluginInstallScope,
+} from "../../../../src/main/plugin-install-registry";
+import {
+  configureInstalledPlugin,
+  setPluginEnabled,
+  uninstallPlugin,
+} from "../../../../src/main/plugin-install-operations";
+import { authorizeLocalPluginSource } from "../../../../src/main/plugin-local-stage";
+import {
+  parsePluginImportRequest,
+  type PluginImportRequest,
+  type PluginSource,
+} from "../../../../src/main/plugin-source";
+import { checkPluginUpdate } from "../../../../src/main/plugin-update-check";
 import { injectStoredProviderKey } from "../../../../src/main/provider-key-inject";
 import { createKernelHost, canonicalWorkspacePath } from "./kernel-host";
 import {
@@ -92,8 +127,8 @@ import { isAppShellUrl, shellAppPath } from "./shell-url";
 import { WindowWorkspaceContext } from "./window-workspace-context";
 import { ProjectRegistry } from "../../../../src/main/project-registry";
 import { loadCustomProviders } from "../../../../src/main/custom-provider-store";
-import { installCustomProviders, installedCustomProviders } from "../../../../src/providers/registry";
-import { discoverForProviderSetup, prepareCustomProvider, commitCustomProvider } from "../../../../src/main/provider-setup";
+import { installCustomProviders } from "../../../../src/providers/registry";
+import { discoverForProviderSetup, prepareCustomProvider, commitProviderSetup } from "../../../../src/main/provider-setup";
 import { createProjectFolder } from "../../../../src/main/project-create";
 import { createProjectFromTemplate, diagnoseProjectDirectory, templateCatalog } from "../../../../src/main/project-templates";
 import { PreviewRuntime } from "../../../../src/main/project-preview";
@@ -101,11 +136,23 @@ import { exportProject } from "../../../../src/main/project-export";
 import { checkProviderConnection } from "../../../../src/main/provider-connection";
 import { getSearchSettings, saveSearchSettings, testSearchSettings } from "../../../../src/main/search-settings";
 import { resolveEntry } from "../../../../src/main/workspace-fs";
+import { buildEvolveReport } from "../../../../src/main/evolve/report";
+import { activatePlaybookEntry, dormantPlaybookEntry } from "../../../../src/main/evolve/activation";
+import { reactivateGlobalExperience, revokeGlobalExperience } from "../../../../src/main/evolve/globalize";
+import { setGlobalEvolveFrozen } from "../../../../src/main/evolve/global-playbook-store";
+import { setEvolveFrozen } from "../../../../src/main/evolve/governance";
 import { readCapabilities } from "../../../../src/main/doctor";
 import { gitClone, gitStatus } from "../../../../src/main/git-ops";
 import { searchWorkspace } from "../../../../src/main/workspace-search";
 import { saveTempFile, cleanupPasteTempFiles } from "./temp-file";
-import { quitWarningMessage, shouldWarnBeforeQuit } from "./quit-guard";
+import { quitWarningMessage, restartWarningMessage, shouldWarnBeforeQuit } from "./quit-guard";
+import { acquireSingleInstance } from "./single-instance";
+import { rendererCrashNotice } from "./crash-recovery";
+import { createAppLog, teeConsole } from "./app-log";
+import { buildDiagnosticsBundle, readLogTail } from "./diagnostics-bundle";
+import { readBuildInfoSync } from "../../../../src/main/build-info";
+import { buildPreferencesExport, defaultPreferences, readPreferencesFile } from "../../../../src/main/preferences";
+import { annotateProjectPresence, missingProjectPathError } from "./project-presence";
 import type { DiscoveryProtocol } from "../../../../src/providers/discovery";
 import type { ProviderSaveRequest, SearchSettingsInput } from "../../../../src/main/ipc-protocol";
 
@@ -117,8 +164,12 @@ const reinjectSavedProviderKey = injectStoredProviderKey;
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const distElectron = join(here, "..", "..", "dist-electron");
-const appIcon = join(here, "..", "renderer", "public", "brand", "cairn.png");
+const brandAssets = join(here, "..", "renderer", "public", "brand");
+// 开发工作树可能只有 favicon；图标资源缺失不能阻断会话与工作台启动。
+const appIcon = ["cairn.png", "favicon.png"].map((name) => join(brandAssets, name)).find(existsSync);
 let mainWindow: BrowserWindow | null = null;
+/** 退出流程自己的崩溃（renderer 被 kill）不该弹「界面崩溃」窗；由 before-quit 置位。 */
+let appQuitting = false;
 
 // 首帧底色（2026-10-21）：在 renderer 的 CSS/React 到达前，BrowserWindow 先铺一块与
 // Claude Desktop v3 的 surface-1 同值的底色——亮 #fcfcfb / 暗 #151515，避免白闪。
@@ -157,15 +208,22 @@ function stopSpeakingNow(): void {
 // ---- §2.1 完成通知：会话 run 收束且窗口整体失焦时发 OS 通知 ----
 // 近似口径（如实记）：渲染层没有「你正在看哪个会话」的主进程镜像，这里用「窗口整体失焦 = 你不在看」
 // 作判据——聚焦时不发（你就在跟前看）；失焦时哪怕看的是别家窗口也发（宁可多一条不丢一条）。
-// 2026-10-25：通知可点击——聚焦主窗并经 push 通道让 renderer 打开目标会话。
-// 决策/文案/目标在 ./run-notification 纯函数里单测；这里只留 Electron 壳。
+// 2026-10-25：通知可点击——聚焦目标窗口并经 push 通道让 renderer 打开目标会话。
+// 2026-10-31：点通知先落到「已经在看目标会话」的窗口（弹窗也算），没有再回主窗。
+// 决策/文案/目标/选窗在 ./run-notification 纯函数里单测；这里只留 Electron 壳。
 const liveNotifications = new Set<Notification>();
+/** 按窗口记录可见会话（v33 起上报；主窗/弹窗各自一格，null = 主页 / 没报过）。
+ *  通知判据取「有焦点窗口正在看目标会话」——主窗看 A、弹窗看 B 时，B 收束不提醒。 */
+const viewingByWindow = new Map<number, { sessionId: string | null; workspace: string | null }>();
 function maybeNotifyRunSettled(input: {
   sessionId: string;
   workspace?: string;
   message?: string;
   ok: boolean;
   error?: string;
+  enabled: boolean;
+  /** 这一轮的会话就是当前窗口正在看的那个（同 workspace + 同 session）。 */
+  viewingTarget: boolean;
 }): void {
   const supported = Notification.isSupported();
   if (!shouldNotifyRunSettled({
@@ -181,15 +239,32 @@ function maybeNotifyRunSettled(input: {
     notification.on("close", () => { liveNotifications.delete(notification); });
     notification.on("click", () => {
       liveNotifications.delete(notification);
-      const win = mainWindow !== null && !mainWindow.isDestroyed()
-        ? mainWindow
-        : BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null;
+      const windows = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
+      const mainId = mainWindow !== null && !mainWindow.isDestroyed() ? mainWindow.id : null;
+      const chosenId = notificationClickWindow(
+        windows.map((w) => {
+          const v = viewingByWindow.get(w.id);
+          return {
+            windowId: w.id,
+            alive: true,
+            focused: w.isFocused(),
+            sessionId: v?.sessionId ?? null,
+            workspace: v?.workspace ?? null,
+          };
+        }),
+        target,
+        mainId,
+      );
+      const win = windows.find((w) => w.id === chosenId) ?? null;
       if (win === null) return;
       if (process.platform === "darwin") app.focus({ steal: true });
       if (win.isMinimized()) win.restore();
       win.show();
       win.focus();
-      if (!win.webContents.isDestroyed()) win.webContents.send(PUSH_CHANNELS.onNotificationOpen, target);
+      // 弹窗已在显示目标会话：带到前台即可；只有主窗上的 renderer 认识 notification-open。
+      if (win.id === mainId && !win.webContents.isDestroyed()) {
+        win.webContents.send(PUSH_CHANNELS.onNotificationOpen, target);
+      }
     });
     notification.show();
   } catch (err) {
@@ -210,6 +285,21 @@ if (process.env.CAIRN_SMOKE === "1") {
 }
 
 const userData = app.getPath("userData");
+// 单实例闸：锁按 userData 归属，所以必须排在上面的 setPath 之后、任何启动副作用之前。
+// 副进程只退出，不进入 whenReady 的装配段——同一个工作区不会被两个 serveScheduler 各跑一遍。
+const primaryInstance = acquireSingleInstance({
+  requestLock: () => app.requestSingleInstanceLock(),
+  exit: () => app.exit(0),
+  onSecond: (listener) => { app.on("second-instance", listener); },
+  focusExisting: () => { focusMainWindow(); },
+});
+// 主进程日志：打包态从 Finder 启动时 console 没有落点，设置页却让人「对照日志」。
+// 副进程已在上面退出，不会碰这里；日志失败在模块内吞掉，不阻启动。
+const appLog = createAppLog({ dir: join(userData, "logs") });
+teeConsole(appLog);
+process.on("uncaughtExceptionMonitor", (error, origin) => {
+  appLog.write("error", `未捕获异常（${origin}）：${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
+});
 const repoRoot = join(here, "..", "..", "..", "..");
 // 首启工作区不得回落 $HOME：仓库内运行时默认落仓库根；打包分发前必须改成显式选择/要求 env。
 // 打包态：.app 里的 repoRoot 在只读安装位上——缺省工作区落 userData/workspace（可写）。
@@ -226,6 +316,40 @@ if (app.isPackaged && process.env.CAIRN_DESKTOP_WORKSPACE === undefined) {
 const windowWorkspaces = new WindowWorkspaceContext(canonicalKnownProjectPath);
 const workspaceContext = (): string | null => windowWorkspaces.current();
 const resolveWorkspace = (): string => windowWorkspaces.require();
+
+// 插件安装、registry 与运行时发现必须共享同一个数据根；renderer 永远不提供落点路径。
+const pluginDataRoot = pluginDataRootOf(process.env, homedir());
+const effectiveUserPluginsDir = process.env.M2E_USER_PLUGINS || userPluginsDirOf(pluginDataRoot);
+const effectivePluginTrustFile = process.env.M2E_TRUST_FILE || trustFilePathOf({ pluginDataRoot });
+const pluginInstallRegistry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
+const pluginTrust = new TrustStore(effectivePluginTrustFile);
+const pluginInstallJobs = new PluginInstallJobManager({
+  pluginDataRoot,
+  userPluginsDir: effectiveUserPluginsDir,
+  registry: pluginInstallRegistry,
+  currentAppVersion: app.getVersion(),
+  beforeCommit: assertPluginMutationIdle,
+});
+
+async function assertPluginMutationIdle(): Promise<void> {
+  if (host.runningCount() > 0) {
+    throw new Error("有会话正在运行；请结束当前会话后再更改插件");
+  }
+}
+
+type MarketplaceRefresh = "never" | "auto" | "force";
+
+async function loadDesktopMarketplaceCatalog(refresh: MarketplaceRefresh): Promise<MarketplaceCatalogReadout> {
+  return await loadPluginMarketplaceCatalog(
+    { refresh },
+    marketplaceSourceConfigFromEnv(process.env),
+    { dir: join(userData, "plugin-marketplace") },
+  );
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 // 自定义 provider（工作区的 `.agent/providers.json`）：与 CLI **同一条装载路径**，而且必须在
 // 任何一次 run 之前装上（provider 解析、档位表、适配器 baseURL 三处都读它）。
@@ -269,6 +393,8 @@ if (process.env.CAIRN_SMOKE === "1") {
 
 // M3 T1 多工作区装配面：当前产品仍是单工作区运行（T3 才接工作区注册/切换 UI），
 // 装配为 { workspaces: [workspace], activeWorkspace: workspace } 的单元素形态。
+initUpdateContext({ currentVersion: app.getVersion() });
+initBuildInfo(readBuildInfoSync(join(app.getAppPath(), "build-info.json")));
 const host = createKernelHost({
   workspaces: [workspace],
   activeWorkspace: workspace,
@@ -340,6 +466,98 @@ async function knownProjectRoots(): Promise<string[]> {
   return canonicalKnownRoots(roots);
 }
 
+function pluginInstallScope(value: unknown): PluginInstallScope {
+  if (value === "user" || value === "project") return value;
+  throw new Error(`插件安装作用域不合法：${String(value)}`);
+}
+
+async function resolvePluginOperationWorkspace(
+  scope: PluginInstallScope,
+  workspace: unknown,
+): Promise<string | null> {
+  if (scope === "user") return null;
+  const gate = resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext());
+  if (!gate.ok) throw new Error(gate.error);
+  if (gate.workspace === null) throw new Error("项目级插件操作需要现有工作区");
+  const info = await stat(gate.workspace).catch(() => null);
+  if (info === null || !info.isDirectory()) throw new Error("项目级插件操作需要现有工作区目录");
+  return canonicalWorkspacePath(gate.workspace);
+}
+
+interface InstalledPluginOperation {
+  readonly record: InstalledPluginRecord;
+  readonly scope: PluginInstallScope;
+  readonly workspace: string | null;
+}
+
+async function requireInstalledPluginOperation(
+  entryIdValue: unknown,
+  scopeValue: unknown,
+  workspace: unknown,
+): Promise<InstalledPluginOperation> {
+  const entryId = typeof entryIdValue === "string" ? entryIdValue.trim() : "";
+  if (entryId === "") throw new Error("插件 entryId 不能为空");
+  const scope = pluginInstallScope(scopeValue);
+  const workspaceTarget = await resolvePluginOperationWorkspace(scope, workspace);
+  const record = await pluginInstallRegistry.get(entryId, scope, workspaceTarget);
+  if (record === null) throw new Error(`plugin is not installed: ${entryId}`);
+  return { record, scope, workspace: workspaceTarget };
+}
+
+function updateRequestFromInstalledSource(source: PluginSource): PluginImportRequest {
+  if (source.kind === "catalog") {
+    return { kind: "catalog", entryId: source.entryId };
+  }
+  if (source.kind === "git") {
+    return {
+      kind: "git",
+      repositoryUrl: source.repositoryUrl,
+      ...(source.ref === "HEAD" ? {} : { ref: source.ref }),
+    };
+  }
+  return { kind: "local", sourcePath: source.sourcePath };
+}
+
+async function requireVerifiedMarketplaceEntry(entryId: string) {
+  const catalogReadout = await loadDesktopMarketplaceCatalog("auto");
+  if (catalogReadout.status !== "ready" || catalogReadout.catalog === null) {
+    throw new Error(`插件市场目录不可用：${catalogReadout.note ?? "没有已验证的目录"}`);
+  }
+  if (catalogReadout.stale) {
+    throw new Error(`插件市场目录已过期：${catalogReadout.note ?? catalogReadout.expiresAt ?? "请刷新目录"}`);
+  }
+  const entry = catalogReadout.catalog.entries.find((candidate) => candidate.id === entryId);
+  if (entry === undefined) throw new Error(`插件市场目录中没有该插件：${entryId}`);
+  return entry;
+}
+
+function pluginConfigureRequest(value: unknown): {
+  readonly entryId: unknown;
+  readonly scope: unknown;
+  readonly workspace: unknown;
+  readonly values: Record<string, string>;
+} {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("插件配置请求不合法");
+  }
+  const raw = value as Record<string, unknown>;
+  const unknown = Object.keys(raw).filter((key) => !["entryId", "scope", "workspace", "values"].includes(key));
+  if (unknown.length > 0) throw new Error(`插件配置请求包含未知字段：${unknown.join(", ")}`);
+  if (typeof raw.values !== "object" || raw.values === null || Array.isArray(raw.values)) {
+    throw new Error("插件配置 values 必须是对象");
+  }
+  const values = Object.entries(raw.values as Record<string, unknown>);
+  if (values.some(([, item]) => typeof item !== "string")) {
+    throw new Error("插件配置值必须是字符串");
+  }
+  return {
+    entryId: raw.entryId,
+    scope: raw.scope,
+    workspace: raw.workspace,
+    values: Object.fromEntries(values) as Record<string, string>,
+  };
+}
+
 /** 严格相等版：路径**恰好等于**某个已知根才放行。
  *  `setWorkspaceContext` 要的就是这个：它定的是"文件窗格/预览的**根**"，
  *  落进某个子目录会让边界含糊。 */
@@ -404,12 +622,25 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     const sessionId = request?.sessionId;
     const res = await host.run(req as never);
     if (typeof sessionId === "string" && sessionId !== "") {
+      // 通知偏好由设置页控制；读失败按「开」处理（缺省开，与既有行为一致），不让读设置拖垮 run 应答。
+      const notifyEnabled = await getSettings().then((s) => s.notifyOnComplete !== false, () => true);
+      const runWorkspace = typeof request?.workspace === "string" ? request.workspace : undefined;
+      const focusedIds = new Set(
+        BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && w.isFocused()).map((w) => w.id),
+      );
+      const viewingTarget = focusedWindowViewing(
+        [...viewingByWindow.entries()].map(([windowId, v]) => ({ windowId, focused: focusedIds.has(windowId), ...v })),
+        sessionId,
+        runWorkspace,
+      );
       maybeNotifyRunSettled({
         sessionId,
-        ...(typeof request?.workspace === "string" ? { workspace: request.workspace } : {}),
+        ...(runWorkspace !== undefined ? { workspace: runWorkspace } : {}),
         ...(typeof request?.message === "string" ? { message: request.message } : {}),
         ok: res.ok === true,
         ...(res.error !== undefined ? { error: res.error } : {}),
+        enabled: notifyEnabled,
+        viewingTarget,
       });
     }
     return res;
@@ -424,19 +655,100 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   submitClarify: (callId, answers) => handleClarifySubmit(callId as string, answers as ClarifyAnswerMap),
   decidePlan: (approved, callId) => handlePlanDecide(approved as boolean, callId as string | undefined),
   // channels 表（T2）钉的键是 runCancel；KernelHost 方法名是 cancel（brief 快照里写 cancel 与表不符——映射类型红线拦下）。
-  // M3-5 接线：renderer 打断按钮真实传 sessionId（ipc-protocol runCancel(sessionId?) 可选参，preload
-  // 程序化桥自动透传）⇒ 会话级取消（T2 per-session controller）。渲染层不传 ⇒ undefined 直进
-  // host.cancel ⇒ {ok:false,"会话不在运行"} 的 fail-visible 语义保留（兼容无参调用）。
-  // cast 定案（typecheck 实测 TS2345）：wired 表形参是 (...args: unknown[]) 的上下文 unknown，
-  // host.cancel 形参必选 string ⇒ 直传必红；此洗参是 wired 表房式（同 decide/createSession），
-  // 非 T5 遗留——传参语义已是真实可选参透传，cast 只发生在类型面。
-  runCancel: (sessionId) => host.cancel(sessionId as string),
-  // 第 9 点·轮中插话：host.steer 只在会话真在跑时返回 ok（否则 fail-visible，渲染层转「入队」）。
-  // 洗参与 runCancel 同一条房式（wired 表形参上下文是 unknown；cast 只发生在类型面）。
-  runSteer: (sessionId, text) => host.steer(sessionId as string, text as string),
+  // v50：透传未知入参，host 统一校验 sessionId/workspace；目标不匹配绝不控制其他项目的 run。
+  runCancel: (sessionId, workspace) => host.cancel(sessionId, workspace),
+  // 插话走同一工作区校验；不在运行时 renderer 将消息保留在目标队列。
+  runSteer: (sessionId, text, workspace) => host.steer(sessionId, text, workspace),
   listSessions: async () => { await projectRehydrate; return host.listSessions(); },
   // v14：跨会话用量账本（只读；面板点「全部会话」才调）。
   usageLedger: () => host.usageLedger(),
+  // v25：Evolve 只读报告（当前窗口工作区；不注入、不晋升）。
+  evolveReport: () => buildEvolveReport(resolveWorkspace()),
+  evolveSetFrozen: async (frozen) => {
+    const workspace = resolveWorkspace();
+    await setEvolveFrozen(workspace, frozen === true);
+    return buildEvolveReport(workspace);
+  },
+  evolveActivate: async (id) => {
+    const workspace = resolveWorkspace();
+    if (typeof id !== "string" || id.trim().length === 0) {
+      return { ok: false, reason: "经验 id 必填", report: await buildEvolveReport(workspace) };
+    }
+    const result = await activatePlaybookEntry(workspace, id, { apply: true });
+    const report = await buildEvolveReport(workspace);
+    if (result.outcome === "activated" || result.outcome === "already-active") {
+      return { ok: true, report };
+    }
+    if (result.outcome === "refused") {
+      return {
+        ok: false,
+        reason: result.blockers.map((blocker) => blocker.code + "：" + blocker.detail).join("；"),
+        report,
+      };
+    }
+    return {
+      ok: false,
+      reason: result.outcome === "frozen" ? "STOP 冻结中：不激活" : "未应用",
+      report,
+    };
+  },
+  evolveDormant: async (id) => {
+    const workspace = resolveWorkspace();
+    if (typeof id !== "string" || id.trim().length === 0) {
+      return { ok: false, reason: "经验 id 必填", report: await buildEvolveReport(workspace) };
+    }
+    const result = await dormantPlaybookEntry(workspace, id, { apply: true });
+    const report = await buildEvolveReport(workspace);
+    if (result.outcome === "dormant") return { ok: true, report };
+    if (result.outcome === "refused") return { ok: false, reason: result.reason, report };
+    return {
+      ok: false,
+      reason: result.outcome === "frozen" ? "STOP 冻结中：不转休眠" : "未应用",
+      report,
+    };
+  },
+  evolveGlobalRevoke: async (id) => {
+    const workspace = resolveWorkspace();
+    if (typeof id !== "string" || id.trim().length === 0) {
+      return { ok: false, reason: "全局经验 id 必填", report: await buildEvolveReport(workspace) };
+    }
+    // 边界输入（renderer 传 id）：条目可能已被外部账本改掉；拒绝要回到报告，不把整页打成错误。
+    const result = await revokeGlobalExperience(id, { apply: true }).catch((err: unknown) => ({
+      outcome: "refused" as const,
+      reason: err instanceof Error ? err.message : String(err),
+    }));
+    const report = await buildEvolveReport(workspace);
+    if (result.outcome === "revoked") return { ok: true, report };
+    if (result.outcome === "refused") return { ok: false, reason: result.reason, report };
+    return {
+      ok: false,
+      reason: result.outcome === "frozen" ? "全局 STOP 冻结中：不撤销" : "未应用",
+      report,
+    };
+  },
+  evolveGlobalSetFrozen: async (frozen) => {
+    await setGlobalEvolveFrozen(frozen === true);
+    return buildEvolveReport(resolveWorkspace());
+  },
+  evolveGlobalActivate: async (id) => {
+    const workspace = resolveWorkspace();
+    if (typeof id !== "string" || id.trim().length === 0) {
+      return { ok: false, reason: "全局经验 id 必填", report: await buildEvolveReport(workspace) };
+    }
+    // 边界输入：恢复前会复核已存证据；条目被外部改掉也要把报告带回屏。
+    const result = await reactivateGlobalExperience(id, { apply: true }).catch((err: unknown) => ({
+      outcome: "refused" as const,
+      reason: err instanceof Error ? err.message : String(err),
+    }));
+    const report = await buildEvolveReport(workspace);
+    if (result.outcome === "reactivated") return { ok: true, report };
+    if (result.outcome === "refused") return { ok: false, reason: result.reason, report };
+    return {
+      ok: false,
+      reason: result.outcome === "frozen" ? "全局 STOP 冻结中：不恢复" : "未应用",
+      report,
+    };
+  },
   orchestrationView: address => host.orchestrationView(address as never),
   orchestrationSubmit: request => host.orchestrationSubmit(request as never),
   orchestrationControl: request => host.orchestrationControl(request as never),
@@ -453,7 +765,13 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // model（无参异步，kernel-host 已注入 resolveProviderKind 依赖面），选择器恢复真值目录。
   getProviderInfo: () => providerInfo(),
   // v11：listProjects 收 options（recentFirst = 「最近打开」菜单序；includeRemoved = 含软删除记录）。
-  listProjects: (options) => projectRegistry.list(options as { includeRemoved?: boolean; recentFirst?: boolean } | undefined),
+  listProjects: async (options) => {
+    const records = await projectRegistry.list(options as { includeRemoved?: boolean; recentFirst?: boolean } | undefined);
+    return await annotateProjectPresence(records, async (path) => {
+      try { return (await stat(path)).isDirectory(); } catch { return false; }
+    });
+  },
+  relocateProject: (id, path) => projectRegistry.relocate(String(id), String(path)),
   // v11：最近打开标（打开会话/切项目时 renderer 调用；未知 id 拒绝上抛）。
   touchProject: (id) => projectRegistry.touch(String(id)),
   // ③「新建项目」：建同名文件夹 → 登记 → 同步进 host 工作区面。
@@ -556,11 +874,48 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     return await handleSkillBody(String(name ?? ""), gate.workspace);
   },
   // 导出对话为 .md（2026-10-18）：原生保存面板；取消是合法结果（canceled），不是错误。
-  exportTranscript: async (markdown, suggestedName) => {
-    const raw = String(suggestedName ?? "").trim();
-    const name = raw === "" ? "cairn-transcript.md" : raw;
+  exportPreferences: async () => {
+    const settings = await getSettings();
+    const payload = buildPreferencesExport(settings, getAppVersion(), new Date().toISOString());
+    const name = `Cairn-preferences-${new Date().toISOString().slice(0, 10)}.json`;
     const opts = {
-      title: "导出对话",
+      title: "导出偏好备份",
+      defaultPath: join(app.getPath("downloads"), name),
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    };
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
+    const r = win !== null ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+    if (r.canceled || r.filePath === undefined || r.filePath === "") return { ok: false as const, canceled: true as const };
+    try {
+      writeFileSync(r.filePath, JSON.stringify(payload, null, 2) + "\n", "utf8");
+      return { ok: true as const, path: r.filePath };
+    } catch (err) {
+      return { ok: false as const, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+  importPreferences: async () => {
+    const opts = {
+      title: "导入偏好备份",
+      properties: ["openFile" as const],
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    };
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
+    const picked = win !== null ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+    const source = picked.filePaths[0];
+    if (picked.canceled || source === undefined || source === "") return { ok: false as const, canceled: true as const };
+    return await readPreferencesFile(source);
+  },
+  exportDiagnostics: async (reportMarkdown, suggestedName) => {
+    const rawName = String(suggestedName ?? "").trim();
+    const name = rawName === "" ? "cairn-diagnostics.md" : rawName;
+    const logTail = await readLogTail(join(userData, "logs", "main.log"));
+    const bundle = buildDiagnosticsBundle({
+      reportText: String(reportMarkdown ?? "").slice(0, 200_000),
+      generatedAt: new Date().toISOString(),
+      logTail,
+    });
+    const opts = {
+      title: "导出诊断包",
       defaultPath: join(app.getPath("downloads"), name),
       filters: [{ name: "Markdown", extensions: ["md"] }],
     };
@@ -568,12 +923,14 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     const r = win !== null ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
     if (r.canceled || r.filePath === undefined || r.filePath === "") return { ok: false as const, canceled: true as const };
     try {
-      writeFileSync(r.filePath, String(markdown ?? ""), "utf8");
+      writeFileSync(r.filePath, bundle, "utf8");
       return { ok: true as const, path: r.filePath };
     } catch (err) {
       return { ok: false as const, error: err instanceof Error ? err.message : String(err) };
     }
   },
+  exportTranscript: (markdown, suggestedName) => saveMarkdownDialog("导出对话", "cairn-transcript.md", String(markdown ?? ""), String(suggestedName ?? "")),
+  exportMemory: (markdown, suggestedName) => saveMarkdownDialog("导出记忆", "cairn-memory.md", String(markdown ?? ""), String(suggestedName ?? "")),
   addProject: (input) =>
     projectRegistry.add(input as AddProjectInput).then((record) => {
       host.addWorkspace(record.path);
@@ -624,16 +981,27 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   getSettings: () => getSettings(),
   setSettings: async (patch) => {
     const next = await setSettings(patch as never);
-    // 主题切到 light/dark/system 时同步原生窗口 chrome；下次启动的 bootBackground 也读同一字段。
-    const theme = (patch as { theme?: unknown }).theme;
-    if (theme === "light" || theme === "dark" || theme === "system") nativeTheme.themeSource = theme;
-    // 窗口材质：运行期先 best-effort 应用；透明窗口的完整材质仍以重启为准。
-    const vibrancy = (patch as { windowVibrancy?: unknown }).windowVibrancy;
-    if (process.platform === "darwin" && typeof vibrancy === "boolean" && mainWindow !== null) {
-      mainWindow.setVibrancy(vibrancy ? "sidebar" : null);
-      mainWindow.setBackgroundColor(vibrancy ? "#00000000" : bootBackground());
-    }
+    applyNativeSettings(patch as Record<string, unknown>);
     return next;
+  },
+  resetPreferences: async () => {
+    const patch = defaultPreferences() as Record<string, unknown>;
+    const next = await setSettings(patch as never);
+    applyNativeSettings(patch);
+    return next;
+  },
+  reloadSettings: async () => {
+    const r = await reloadSettings();
+    if (r.ok) {
+      // 与 setSettings 同式：主题/窗口材质换了，原生窗口 chrome 也得跟（不等下次启动）。
+      const s = await getSettings();
+      nativeTheme.themeSource = s.theme;
+      if (process.platform === "darwin" && mainWindow !== null) {
+        mainWindow.setVibrancy(s.windowVibrancy ? "sidebar" : null);
+        mainWindow.setBackgroundColor(s.windowVibrancy ? "#00000000" : bootBackground());
+      }
+    }
+    return r;
   },
   compact: async (sessionId, workspace) => {
     const root = await explicitSessionsRoot(workspace);
@@ -642,12 +1010,37 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   setGoal: (req) => handleGoalSet(req as never),
   cardAction: (req) => handleCardAction(req as never),
   renameSession: async (oldId, newName, workspace) => handleSessionRename(oldId as string, newName as string, await explicitSessionsRoot(workspace)),
+  // v35：会话级模型/思考档持久化（sidecar；null = 清除回跟随全局）。
+  sessionPrefsSet: (id, prefs, workspace) => host.sessionPrefsSet(id, prefs, workspace),
   deleteSession: async (id, workspace) => handleSessionDelete(id as string, await explicitSessionsRoot(workspace)),
   // M8 分叉（v2.15）：保留前 N 轮 → 新会话 `<id>-f<N>`；与 CLI --fork/--from 同口径（fork-cli 单源）。
   forkSession: async (id, round, unique, workspace) => handleSessionFork(id as string, round as number, unique === true, await explicitSessionsRoot(workspace)),
   // #7 文件级回滚（v2.16）：把第 N 轮主会话改过的文件还原成该轮之前的原件（源自 D7 覆盖前快照）。
   // 活动工作区上下文（desktop 专用）：空串清除；写入口只收字符串，非法值留给后续操作 fail-visible。
-  setWorkspaceContext: (path) => windowWorkspaces.select(String(path ?? "")),
+  setWorkspaceContext: async (path) => {
+    const requested = String(path ?? "");
+    // 已登记但目录不在场：报「可能被移动」并给出重新定位入口，不再说成「未注册」。
+    const missing = await missingProjectPathError(requested, await projectRegistry.list().catch(() => []), async (p) => {
+      try { return (await stat(p)).isDirectory(); } catch { return false; }
+    });
+    if (missing !== null) return { ok: false, error: missing };
+    return windowWorkspaces.select(requested);
+  },
+  // v33：窗口可见会话上报（通知判据）。workspace 规范化后存，与 run 请求的工作区同口径比对；
+  // 校验失败（未注册）存 null ⇒ 只按 session 比对（宁可多一条，不丢一条——与旧注释同一取舍）。
+  doctor: () => runDoctorForWorkspace(workspaceContext()),
+  reportViewing: async (sessionId, workspace, owner) => {
+    const win = owner as BrowserWindow | null;
+    if (win === null || win.isDestroyed()) return { ok: false };
+    const sid = typeof sessionId === "string" && sessionId !== "" ? sessionId : null;
+    const raw = typeof workspace === "string" ? workspace : "";
+    // 主窗有显式工作区就规范化；弹窗自报空串 ⇒ 用继承来的窗口上下文（不信任 renderer 自报目录）。
+    const ws = sid === null ? null
+      : raw === "" ? windowWorkspaces.current()
+      : await canonicalKnownProjectPath(raw).catch(() => null);
+    viewingByWindow.set(win.id, { sessionId: sid, workspace: ws });
+    return { ok: true };
+  },
   revertTurn: async (id, round, workspace) => handleSessionRevert(id as string, round as number, resolveWorkspace(), await explicitSessionsRoot(workspace)),
   // v4 变更审阅（diff 窗格逐 hunk）。
   changeDiff: (req) => handleChangeDiff(req as never, resolveWorkspace()),
@@ -707,6 +1100,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
       backgroundColor: bootBackground(),
       webPreferences: { preload: join(distElectron, "preload.cjs"), contextIsolation: true, nodeIntegration: false },
     });
+    win.on("closed", () => { viewingByWindow.delete(win.id); });
     windowWorkspaces.inherit(win.webContents);
     hardenAppWindow(win);
     const hash = `pane=${encodeURIComponent(kind as string)}${typeof sessionId === "string" && sessionId !== "" ? `&session=${encodeURIComponent(sessionId)}` : ""}`;
@@ -751,6 +1145,167 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     if (rt === null) return Promise.resolve({ ok: false, error: "插件运行时未装载（先跑一场会话）" });
     return rt.setUserConfig(String(plugin), (values ?? {}) as Record<string, unknown>);
   },
+  marketplaceCatalog: async (refresh) => {
+    if (refresh !== undefined && refresh !== "never" && refresh !== "auto" && refresh !== "force") {
+      return {
+        status: "unavailable",
+        origin: "none",
+        catalog: null,
+        fetchedAt: null,
+        expiresAt: null,
+        stale: false,
+        note: "插件市场刷新参数不合法",
+      };
+    }
+    return await loadDesktopMarketplaceCatalog(refresh ?? "auto");
+  },
+  pluginPickLocalSource: async () => {
+    const picked = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+    const dir = picked.filePaths[0];
+    if (dir === undefined) return null;
+    const canonical = await realpath(dir);
+    authorizeLocalPluginSource(canonical);
+    return canonical;
+  },
+  marketplacePluginImport: async (request, scope, workspace) => {
+    const parsedRequest = parsePluginImportRequest(request);
+    const normalizedScope = pluginInstallScope(scope);
+    const workspaceTarget = await resolvePluginOperationWorkspace(normalizedScope, workspace);
+    if (parsedRequest.kind === "catalog") {
+      const entry = await requireVerifiedMarketplaceEntry(parsedRequest.entryId);
+      return await pluginInstallJobs.start(entry, normalizedScope, workspaceTarget);
+    }
+    return await pluginInstallJobs.startImport(parsedRequest, normalizedScope, workspaceTarget);
+  },
+  marketplacePluginUpdate: async (entryId, scope, workspace) => {
+    const operation = await requireInstalledPluginOperation(entryId, scope, workspace);
+    const updateRequest = updateRequestFromInstalledSource(operation.record.source);
+    if (operation.record.source.kind === "local") {
+      authorizeLocalPluginSource(operation.record.source.sourcePath);
+    }
+    if (updateRequest.kind === "catalog") {
+      const entry = await requireVerifiedMarketplaceEntry(updateRequest.entryId);
+      return await pluginInstallJobs.start(entry, operation.scope, operation.workspace);
+    }
+    return await pluginInstallJobs.startImport(updateRequest, operation.scope, operation.workspace);
+  },
+  marketplacePluginCheckUpdate: async (entryId, scope, workspace) => {
+    const operation = await requireInstalledPluginOperation(entryId, scope, workspace);
+    const record = operation.record;
+    if (record.source.kind === "catalog") {
+      const source = record.source;
+      const catalogReadout = await loadDesktopMarketplaceCatalog("auto");
+      const catalogEntry = catalogReadout.status === "ready"
+        && !catalogReadout.stale
+        && catalogReadout.catalog !== null
+        ? catalogReadout.catalog.entries.find((candidate) => candidate.id === source.entryId)
+        : undefined;
+      return await checkPluginUpdate(record, {
+        requestKind: source.kind,
+        ...(catalogEntry === undefined ? {} : { catalogEntry }),
+      });
+    }
+    return await checkPluginUpdate(record, { requestKind: record.source.kind });
+  },
+  pluginConfigureInstalled: async (requestValue) => {
+    try {
+      const request = pluginConfigureRequest(requestValue);
+      const operation = await requireInstalledPluginOperation(
+        request.entryId,
+        request.scope,
+        request.workspace,
+      );
+      await configureInstalledPlugin({
+        pluginDataRoot,
+        userPluginsDir: effectiveUserPluginsDir,
+        registry: pluginInstallRegistry,
+        entryId: operation.record.entryId,
+        scope: operation.scope,
+        workspace: operation.workspace,
+        values: request.values,
+        assertIdle: assertPluginMutationIdle,
+      });
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: errorText(error) };
+    }
+  },
+  marketplacePluginInstall: async (entryId, scope, workspace) => {
+    const catalogReadout = await loadDesktopMarketplaceCatalog("auto");
+    if (catalogReadout.status !== "ready" || catalogReadout.catalog === null) {
+      throw new Error(`插件市场目录不可用：${catalogReadout.note ?? "没有已验证的目录"}`);
+    }
+    if (catalogReadout.stale) {
+      throw new Error(`插件市场目录已过期：${catalogReadout.note ?? catalogReadout.expiresAt ?? "请刷新目录"}`);
+    }
+    const entry = catalogReadout.catalog.entries.find((candidate) => candidate.id === String(entryId ?? ""));
+    if (entry === undefined) throw new Error(`插件市场目录中没有该插件：${String(entryId ?? "")}`);
+    const normalizedScope = pluginInstallScope(scope);
+    const workspaceTarget = await resolvePluginOperationWorkspace(normalizedScope, workspace);
+    return await pluginInstallJobs.start(entry, normalizedScope, workspaceTarget);
+  },
+  marketplacePluginInstallStatus: (jobId) =>
+    Promise.resolve(pluginInstallJobs.status(String(jobId ?? ""))),
+  marketplacePluginInstallCommit: async (jobId) => {
+    try {
+      const job = await pluginInstallJobs.commit(String(jobId ?? ""));
+      if (job.state !== "succeeded") {
+        return { ok: false, error: job.error ?? `插件安装未完成：${job.state}` };
+      }
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: errorText(error) };
+    }
+  },
+  marketplacePluginInstallCancel: async (jobId) => {
+    try {
+      const job = await pluginInstallJobs.cancel(String(jobId ?? ""));
+      if (job.state !== "cancelled") return { ok: false, error: `插件安装当前状态：${job.state}` };
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: errorText(error) };
+    }
+  },
+  pluginSetEnabled: async (entryId, scope, enabled, workspace) => {
+    try {
+      if (typeof enabled !== "boolean") return { ok: false, error: "插件 enabled 必须是布尔值" };
+      const normalizedScope = pluginInstallScope(scope);
+      const workspaceTarget = await resolvePluginOperationWorkspace(normalizedScope, workspace);
+      await setPluginEnabled({
+        pluginDataRoot,
+        userPluginsDir: effectiveUserPluginsDir,
+        registry: pluginInstallRegistry,
+        entryId: String(entryId ?? ""),
+        scope: normalizedScope,
+        enabled,
+        workspace: workspaceTarget,
+        assertIdle: assertPluginMutationIdle,
+      });
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: errorText(error) };
+    }
+  },
+  pluginUninstall: async (entryId, scope, workspace) => {
+    try {
+      const normalizedScope = pluginInstallScope(scope);
+      const workspaceTarget = await resolvePluginOperationWorkspace(normalizedScope, workspace);
+      await uninstallPlugin({
+        pluginDataRoot,
+        userPluginsDir: effectiveUserPluginsDir,
+        registry: pluginInstallRegistry,
+        trust: pluginTrust,
+        entryId: String(entryId ?? ""),
+        scope: normalizedScope,
+        workspace: workspaceTarget,
+        assertIdle: assertPluginMutationIdle,
+      });
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: errorText(error) };
+    }
+  },
+  pluginsInstalled: () => pluginInstallRegistry.list(),
   sidechatCreate: (parentSessionId, name) => handleSidechatCreate(parentSessionId as string, name as string | undefined),
   sidechatAsk: (sidechatId, message, parentSessionId) =>
     handleSidechatAsk(sidechatId as string, message as string, { parentSessionId: parentSessionId as string | undefined }),
@@ -776,6 +1331,18 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     }),
   providerKeyDelete: (provider) => handleProviderKeyDelete(provider as string),
   providerKeyStatus: () => handleProviderKeyStatus(),
+  importLicense: async () => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
+    const opts = {
+      title: "导入许可证",
+      properties: ["openFile" as const],
+      filters: [{ name: "许可证", extensions: ["json"] }],
+    };
+    const picked = win !== null ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+    const source = picked.filePaths[0];
+    if (picked.canceled || source === undefined || source === "") return { canceled: true as const };
+    return await handleLicenseImport(source);
+  },
   // S7 自定义接口（BYO 端点）：拉取与保存都走 src/main 里那份**可离线判卷**的核心，
   // 这里只负责两件 Electron 侧的事——把钥匙存进 safeStorage（成功才写配置）、把新家装进运行期注册表。
   providerDiscover: (req) => {
@@ -808,25 +1375,8 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     if (!prepared.ok) {
       return { ok: false, error: prepared.error, ...(prepared.problems !== undefined ? { problems: [...prepared.problems] } : {}) };
     }
-    const previous = installedCustomProviders();
-    installCustomProviders(prepared.derived); // ① 先装上（内存态，可回滚）
-    if (typeof r.keyValue === "string" && r.keyValue !== "") {
-      const keyed = await handleProviderKeySet(providerId, r.keyValue);
-      if (!keyed.ok) {
-        installCustomProviders(previous); // ② 钥匙存不进 ⇒ 整体失败，注册表回滚，配置文件一个字都没写
-        return { ok: false, error: keyed.error ?? "key 保存失败" };
-      }
-    }
-    const wrote = await commitCustomProvider(prepared); // ③ 落盘
-    if (!wrote.ok) {
-      installCustomProviders(previous);
-      return { ok: false, error: wrote.error };
-    }
-    // ④ 钥匙解密注入 env（与 providerKeySet 同一条注入面，免重启生效）
-    void reinjectSavedProviderKey().then(
-      () => undefined,
-      (error) => console.error("[byok-inject] 自定义 provider 保存后重注失败（不影响保存结果）:", error),
-    );
+    const saved = await commitProviderSetup(prepared, providerId, typeof r.keyValue === "string" ? r.keyValue : undefined);
+    if (!saved.ok) return { ok: false, error: saved.error };
     return {
       ok: true,
       path: prepared.path,
@@ -947,6 +1497,7 @@ for (const [key, channel] of Object.entries(INVOKE_CHANNELS) as [InvokeChannel, 
     }
     return windowWorkspaces.run(event.sender, () => {
       // 后台弹窗恢复页面时焦点可能还在主窗；视图归属取发起 IPC 的窗口。
+      if (key === "reportViewing") return handler(args[0], args[1], BrowserWindow.fromWebContents(event.sender));
       if (key === "browserOpen") return handler(args[0], args[1], BrowserWindow.fromWebContents(event.sender));
       if (key === "terminalStart") {
         const owner = BrowserWindow.fromWebContents(event.sender);
@@ -1026,6 +1577,7 @@ const createWindow = () => {
       ...(vibrancy === null ? {} : { additionalArguments: ["--cairn-vibrancy"] }),
     },
   });
+  win.on("closed", () => { viewingByWindow.delete(win.id); });
   if (saved?.maximized === true) win.maximize();
   // 拖动/缩放防抖 400ms 落盘；关闭前再写一次（正常退出一定留住最后位置）。
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1042,6 +1594,12 @@ const createWindow = () => {
   win.on("close", persistBounds);
   mainWindow = win;
   win.on("closed", () => { if (mainWindow === win) mainWindow = null; });
+  // 渲染层的 console 错误也进主日志：打包态没有 devtools 时，这是用户能带走的唯一现场。
+  win.webContents.on("console-message", (event) => {
+    if (event.level === "error") {
+      appLog.write("error", `[renderer] ${event.message} (${event.sourceId}:${String(event.lineNumber)})`);
+    }
+  });
   hardenAppWindow(win);
   if (process.env.VITE_DEV_SERVER_URL) void win.loadURL(process.env.VITE_DEV_SERVER_URL);
   else void win.loadFile(join(distElectron, "..", "dist", "index.html"));
@@ -1309,9 +1867,81 @@ const createWindow = () => {
     });
   }
 };
+
+/** 第二次启动（或 macOS 重新打开）时把主窗带回前台；窗口已被关掉则按需重建。
+ *  启动竞态：首实例还没 ready 时第二次启动会先到这里，此时 whenReady 自己会建窗——
+ *  这里再建一个就是两个主窗（旧实现正是无条件 createWindow）。 */
+function focusMainWindow(): void {
+  if (appQuitting) return;
+  if (mainWindow === null || mainWindow.isDestroyed()) {
+    if (app.isReady()) createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.focus();
+}
+
+/** setSettings / resetPreferences 共用：主题与窗口材质改完要同步原生 chrome。 */
+function applyNativeSettings(patch: Record<string, unknown>): void {
+  const theme = patch.theme;
+  if (theme === "light" || theme === "dark" || theme === "system") nativeTheme.themeSource = theme;
+  // 窗口材质：运行期先 best-effort 应用；透明窗口的完整材质仍以重启为准。
+  const vibrancy = patch.windowVibrancy;
+  if (process.platform === "darwin" && typeof vibrancy === "boolean" && mainWindow !== null) {
+    mainWindow.setVibrancy(vibrancy ? "sidebar" : null);
+    mainWindow.setBackgroundColor(vibrancy ? "#00000000" : bootBackground());
+  }
+}
+
+/** 导出类动作共用：原生保存面板 + Markdown 落盘；取消/失败都是显式态。 */
+async function saveMarkdownDialog(
+  title: string,
+  fallbackName: string,
+  markdown: string,
+  suggestedName: string,
+): Promise<{ ok: boolean; path?: string; canceled?: boolean; error?: string }> {
+  const raw = String(suggestedName ?? "").trim();
+  const name = raw === "" ? fallbackName : raw;
+  const opts = {
+    title,
+    defaultPath: join(app.getPath("downloads"), name),
+    filters: [{ name: "Markdown", extensions: ["md"] }],
+  };
+  const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
+  const r = win !== null ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+  if (r.canceled || r.filePath === undefined || r.filePath === "") return { ok: false, canceled: true };
+  try {
+    writeFileSync(r.filePath, String(markdown ?? ""), "utf8");
+    return { ok: true, path: r.filePath };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** 「重新启动 Cairn」：有在跑会话先确认；确认后 relaunch 并绕过退出闸（不然会问两遍）。 */
+function requestRestart(): void {
+  const running = host.runningCount();
+  if (running > 0) {
+    const choice = dialog.showMessageBoxSync({
+      type: "warning",
+      message: restartWarningMessage(running),
+      buttons: ["仍然重启", "取消"],
+      defaultId: 1,
+      cancelId: 1,
+    });
+    if (choice !== 0) return;
+  }
+  quitConfirmed = true;
+  app.relaunch();
+  app.quit();
+}
+
 app.whenReady().then(() => {
+  // 副进程：锁已被别的实例持有，退出即可。return 挡在一切装配之前（菜单/调度器/BYOK/建窗）。
+  if (!primaryInstance) return;
   if (process.env.CAIRN_SMOKE === "1") console.error("[cairn-smoke] app ready");
-  if (process.platform === "darwin") app.dock?.setIcon(appIcon);
+  if (process.platform === "darwin" && appIcon !== undefined) app.dock?.setIcon(appIcon);
   // 主题真相在 settings.json；ready 后先同步，再建窗（createWindow 里的 bootBackground 也读同一字段）。
   nativeTheme.themeSource = readThemePreference();
   // 应用菜单（蓝本 §5.2 菜单树）：App → 文件 → 编辑 → 视图 → 前往 → 窗口 → 帮助。
@@ -1338,6 +1968,9 @@ app.whenReady().then(() => {
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send(PUSH_CHANNELS.onMenu, id);
     },
     closeWindow: () => { BrowserWindow.getFocusedWindow()?.close(); },
+    openLogs: () => { void shell.openPath(join(userData, "logs")); },
+    openDataDir: () => { void shell.openPath(userData); },
+    restart: () => { requestRestart(); },
   });
   if (process.env.CAIRN_SMOKE === "1") console.error("[cairn-smoke] initializing secure storage");
   installProviderKeyBackend(
@@ -1379,9 +2012,39 @@ app.whenReady().then(() => {
   createWindow();
 });
 app.on("window-all-closed", () => app.quit());
+// 界面进程崩溃：白窗不是产品形态。给「重新载入 / 退出」两条出路；退出流程自己的 renderer
+// 死亡（before-quit 已置位）不打扰用户。
+app.on("render-process-gone", (_event, contents, details) => {
+  // 只收窗口自己的渲染进程；内嵌 WebContentsView（浏览器窗格）不是「整窗白掉」，
+  // 不归这条出口，免得为一个小窗格弹整应用级弹窗。
+  const owner = BrowserWindow.fromWebContents(contents);
+  if (owner === null) return;
+  const notice = rendererCrashNotice(details, appQuitting);
+  if (notice === null) return;
+  console.error(`[renderer-crash] ${details.reason} exitCode=${details.exitCode}`);
+  const options = {
+    type: "error" as const,
+    title: notice.title,
+    message: notice.title,
+    detail: notice.body,
+    buttons: ["重新载入", "退出 Cairn"],
+    defaultId: 0,
+    cancelId: 1,
+  };
+  // 崩的可能是弹窗（PopoutApp），弹窗要挂在它自己的窗口上，不是恒挂主窗。
+  const parent = !owner.isDestroyed()
+    ? owner
+    : (mainWindow !== null && !mainWindow.isDestroyed() ? mainWindow : null);
+  const choice = parent !== null
+    ? dialog.showMessageBoxSync(parent, options)
+    : dialog.showMessageBoxSync(options);
+  if (choice !== 0) { app.quit(); return; }
+  if (!contents.isDestroyed()) contents.reload();
+});
 // §3.3 退出后果告知：有在跑会话 → 先问（默认按钮 = 取消，防误触直接中断）；确认后才走真退出。
 // 未在跑（含冒烟路径）⇒ 不问，行为逐字同此前。
 let quitConfirmed = false;
+app.on("before-quit", () => { appQuitting = true; });
 app.on("before-quit", (e) => {
   if (quitConfirmed) return;
   const running = host.runningCount();
@@ -1397,10 +2060,14 @@ app.on("before-quit", (e) => {
   if (choice === 0) {
     quitConfirmed = true;
     app.quit();
-  } else if (BrowserWindow.getAllWindows().length === 0) {
-    // 取消退出且窗口已关（window-all-closed → quit → 本闸拦下）：重开主窗，
-    // 不让应用停在「无窗可操作、在跑会话看不见」的悬空态。
-    createWindow();
+  } else {
+    // 取消退出：before-quit 已把 appQuitting 置位，要撤回——之后真崩了仍该给重载出路。
+    appQuitting = false;
+    if (BrowserWindow.getAllWindows().length === 0) {
+      // 取消退出且窗口已关（window-all-closed → quit → 本闸拦下）：重开主窗，
+      // 不让应用停在「无窗可操作、在跑会话看不见」的悬空态。
+      createWindow();
+    }
   }
 });
 // Let the durable executor acknowledge cancellation and release its journal locks before exit.
@@ -1411,13 +2078,13 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   if (orchestrationClosing) return;
   orchestrationClosing = true;
-  void host.orchestrationClose().then(() => {
+  void Promise.all([host.orchestrationClose(), pluginInstallJobs.shutdown()]).then(() => {
     orchestrationClosed = true;
     app.quit();
   }).catch(error => {
     orchestrationClosing = false;
-    console.error("[orchestration] shutdown failed:", error);
-    dialog.showErrorBox("任务编排尚未安全停止", String(error instanceof Error ? error.message : error));
+    console.error("[shutdown] background work failed to stop:", error);
+    dialog.showErrorBox("后台任务尚未安全停止", String(error instanceof Error ? error.message : error));
   });
 });
 // 调度器随应用退出停表（清 timer；与 CLI SIGINT → stop 同语义）。

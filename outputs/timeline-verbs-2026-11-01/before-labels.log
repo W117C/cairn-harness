@@ -1,0 +1,5 @@
+$ node --import tsx .tmp/probe-timeline.mts   # 改前：label 直接写实现名
+ 1 tool      "read_file a.ts"
+ 2 tool      "run_shell pnpm test"
+ 3 tool      "grep TODO"
+ 4 tool      "mystery_tool {\"q\":\"x\"}"

@@ -1,0 +1,4 @@
+$ pnpm --filter cairn-desktop run typecheck
+$ tsc -p tsconfig.json --noEmit
+$ node --import tsx scripts/typecheck.ts
+typecheck: tsc --noEmit 通过（0 条报错）✅

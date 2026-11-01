@@ -129,6 +129,16 @@ export function defaultPluginDataRoot(home: string): string {
   return join(home, ".config", "cairn", PLUGIN_DATA_DIR_NAME);
 }
 
+/** 用户级安装目录与信任/配置数据同顶，但只扫描 `plugins/`；disabled/staging 永远在它之外。 */
+export function defaultUserPluginsDir(home: string): string {
+  return userPluginsDirOf(defaultPluginDataRoot(home));
+}
+
+/** 已解析数据根对应的用户级插件扫描目录。 */
+export function userPluginsDirOf(pluginDataRoot: string): string {
+  return join(pluginDataRoot, "plugins");
+}
+
 /** 数据根的唯一决议：显式 `M2E_PLUGIN_DATA` 优先，空串按「没给」处理（与旧的 truthy 判定同义）。
  *  纯函数（env 与 home 都从参数进）是为了这一格能被秒级判卷直接问，而不是只在装配面间接可见。 */
 export function pluginDataRootOf(env: NodeJS.ProcessEnv, home: string): string {
@@ -696,6 +706,9 @@ export class PluginRuntime {
           ...(cfg.extensionToLanguage !== undefined ? { extensionToLanguage: cfg.extensionToLanguage } : {}),
           ...(cfg.initializationOptions !== undefined ? { initializationOptions: cfg.initializationOptions } : {}),
           ...(cfg.diagnostics?.enabled === false ? { diagnosticsEnabled: false } : {}),
+          ...(cfg.startupTimeout !== undefined ? { startupTimeout: cfg.startupTimeout } : {}),
+          ...(cfg.restartOnCrash !== undefined ? { restartOnCrash: cfg.restartOnCrash } : {}),
+          ...(cfg.diagnostics?.maxPerFile !== undefined ? { diagnosticsMaxPerFile: cfg.diagnostics.maxPerFile } : {}),
         };
       }
       const { accepted } = registerPluginLspServers(this.opts.workspace, servers);

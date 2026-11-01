@@ -24,11 +24,12 @@ describe("专注模式", () => {
     expect(app).toContain("window.setTimeout(() => { ref?.resize(width); }, restoreDelay);");
   });
 
-  it("⌘⌥F 走 toggleFocusMode；顶栏按钮带 aria-pressed 与可读标签", () => {
+  it("⌘⌥F 与工具菜单共用专注开关，菜单有勾选状态和可读标签", () => {
     expect(app).toMatch(/case "KeyF":[\s\S]{0,160}if \(e\.altKey && !shift\) \{ e\.preventDefault\(\); h\.toggleFocusMode\(\); \}/);
-    expect(app).toContain('aria-label={focusMode ? "退出专注模式" : "进入专注模式"}');
-    expect(app).toContain("aria-pressed={focusMode}");
-    expect(app).toContain("onClick={toggleFocusMode}");
+    expect(app).toContain('aria-label={props.focusMode ? "退出专注模式" : "进入专注模式"}');
+    expect(app).toContain("checked={props.focusMode}");
+    expect(app).toContain("onCheckedChange={props.onToggleFocusMode}");
+    expect(app).toContain("onToggleFocusMode={toggleFocusMode}");
   });
 
   it("专注中开侧栏/检查器/窗格 = 放弃专注（exitFocusRef 三处接线）", () => {

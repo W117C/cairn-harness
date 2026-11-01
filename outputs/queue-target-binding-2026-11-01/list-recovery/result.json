@@ -1,0 +1,73 @@
+{
+  "checks": [
+    {
+      "name": "首次加载不显示空列表",
+      "ok": true
+    },
+    {
+      "name": "重试按钮禁用且错误原因保留",
+      "ok": true
+    },
+    {
+      "name": "旧成功回包不覆盖新列表",
+      "ok": true
+    },
+    {
+      "name": "旧失败不覆盖新成功",
+      "ok": true
+    },
+    {
+      "name": "更新失败保留缓存并说明状态",
+      "ok": true
+    },
+    {
+      "name": "light 错误原因可键盘聚焦",
+      "ok": true
+    },
+    {
+      "name": "light Enter 实际展开错误原因",
+      "ok": true
+    },
+    {
+      "name": "light 长路径不撑宽侧栏",
+      "ok": true
+    },
+    {
+      "name": "dark 错误原因可键盘聚焦",
+      "ok": true
+    },
+    {
+      "name": "dark Enter 实际展开错误原因",
+      "ok": true
+    },
+    {
+      "name": "dark 长路径不撑宽侧栏",
+      "ok": true
+    },
+    {
+      "name": "更新失败期间仍能打开缓存会话",
+      "ok": true
+    },
+    {
+      "name": "后台重试保留列表且不叠骨架",
+      "ok": true
+    },
+    {
+      "name": "重试成功清除错误与忙碌标记",
+      "ok": true
+    },
+    {
+      "name": "旧请求结束不解除新请求的忙碌态",
+      "ok": true
+    },
+    {
+      "name": "真实空结果正常显示空态",
+      "ok": true
+    },
+    {
+      "name": "无 renderer 或 preload 错误",
+      "ok": true
+    }
+  ],
+  "errors": []
+}

@@ -10,11 +10,8 @@ import type { AgentEvent } from "../../../../../src/main/ipc-protocol";
 // 必带 agent_id 的子流事件族，恒滤。
 // 导出：对话转录也要走这同一条过滤（worker 子流的 delta 不是主会话的对话正文）。
 // 判据自己抄一遍就会漂——所以这里导出，让 transcript.ts 用同一份。
-export function isWorkerSubflowEvent(e: AgentEvent): boolean {
-  if (e.type === "agent_spawned") return false;
-  const id = (e as { agent_id?: unknown }).agent_id;
-  return typeof id === "string";
-}
+export { isWorkerSubflowEvent } from "../../../../../src/agent/subflow";
+import { isWorkerSubflowEvent } from "../../../../../src/agent/subflow";
 
 /** 独立窗格窗口（PopoutApp）收不收这条事件——**归属**判据，纯函数。
  *

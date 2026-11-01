@@ -15,6 +15,8 @@ import type {
   ExecutionRequest,
   FlowNode,
   FlowTask,
+  OrchPlan,
+  OrchestrationStamp,
   RuntimeControlGroup,
 } from "../src/orchestration/types";
 import { orchestrationPlan } from "./orchestration-fixture";
@@ -91,6 +93,103 @@ async function waitFor(predicate: () => Promise<boolean>, timeoutMs = 3_000): Pr
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error("condition was not reached before timeout");
+}
+
+async function seedCrash(store: OrchestrationStore, plan: OrchPlan, phases: Array<"running" | "verifying" | "merging">): Promise<void> {
+  await store.append({
+    type: "plan_proposed",
+    callId: "crash-plan",
+    plan: { goal: plan.goal, files: [], orchestration: plan },
+    ts: 1,
+  });
+  await store.append({
+    type: "plan_approved",
+    callId: "crash-plan",
+    approved: true,
+    orchestration: { schema_version: 1, plan_id: plan.plan_id, version: plan.version, actor: "kernel" },
+    ts: 2,
+  });
+  let ts = 3;
+  for (const phase of phases) {
+    const taskId = phase;
+    const runId = "run-" + phase;
+    const agentId = "orch:" + runId;
+    const stamp: OrchestrationStamp = {
+      schema_version: 1,
+      plan_id: plan.plan_id,
+      version: plan.version,
+      task_id: taskId,
+      run_id: runId,
+      attempt: 1,
+      actor: "kernel",
+    };
+    await store.append({
+      type: "agent_spawned",
+      agent_id: agentId,
+      parent_event_id: 1,
+      mode: "read",
+      task: taskId,
+      max_turns: 4,
+      permission_mode: "read-only",
+      resources: [],
+      orchestration: { ...stamp, phase: "running", reserved_usd: 1, lease_expires_at: 100_000 },
+      ts: ts++,
+    });
+    if (phase === "running") continue;
+    await store.append({
+      type: "agent_result",
+      agent_id: agentId,
+      status: "done",
+      summary: taskId + " complete",
+      artifacts: { verified: "absent", spent_usd: 0.1 },
+      usage: { inputTokens: 0, outputTokens: 0 },
+      tool_stats: {},
+      orchestration: {
+        ...stamp,
+        actor: "producer",
+        phase: "verifying",
+        revision: "rev-" + phase,
+        spent_usd: 0.1,
+        producer_id: "producer-" + phase,
+      },
+      ts: ts++,
+    });
+    if (phase === "verifying") continue;
+    await store.append({
+      type: "verify_result",
+      callId: "verify-" + phase,
+      agent_id: agentId,
+      ok: true,
+      attempt: 1,
+      maxAttempts: 2,
+      results: [],
+      orchestration: {
+        ...stamp,
+        actor: "verifier",
+        phase: "verifying",
+        revision: "rev-" + phase,
+        verifier_id: "verifier-" + phase,
+        verdict: "pass",
+        checks: [{ id: "answer", verdict: "pass", detail: "checked" }],
+        spent_usd: 0.1,
+      },
+      ts: ts++,
+    });
+    await store.append({
+      type: "agent_status",
+      agent_id: agentId,
+      status: "running",
+      orchestration: { ...stamp, phase: "merging", revision: "rev-" + phase },
+      ts: ts++,
+    });
+    await store.append({
+      type: "agent_status",
+      agent_id: agentId,
+      status: "running",
+      orchestration: { ...stamp, actor: "delivery", phase: "merging", revision: "rev-" + phase },
+      ts: ts++,
+    });
+  }
 }
 
 function group(over: Partial<RuntimeControlGroup> = {}): RuntimeControlGroup {
@@ -176,6 +275,73 @@ describe("runtime control decisions", () => {
 });
 
 describe("race engine integration", () => {
+  it("marks every interrupted run as needs_you and records recovery only once", async () => {
+    const { store } = await setup(backend());
+    const plan = orchestrationPlan(0);
+    plan.tasks = ["running", "verifying", "merging"].map((id) => task(id));
+    plan.max_concurrency = 3;
+    await seedCrash(store, plan, ["running", "verifying", "merging"]);
+
+    const restarted = new OrchestrationEngine({ store, backend: backend(), enabled: true });
+    const recovered = await restarted.recover();
+    expect(Object.fromEntries(Object.entries(recovered.plans.plan!.tasks).map(([id, item]) => [id, item.phase])))
+      .toEqual({ running: "needs_you", verifying: "needs_you", merging: "needs_you" });
+    expect(recovered.anomalies).toEqual([]);
+
+    const eventsAfterFirstRecovery = await store.events();
+    await restarted.recover();
+    expect(await store.events()).toHaveLength(eventsAfterFirstRecovery.length);
+  });
+
+  it("does not let a late result or duplicate control rewrite a recovered task", async () => {
+    const { store } = await setup(backend());
+    const plan = orchestrationPlan(0);
+    plan.tasks = [task("running")];
+    await seedCrash(store, plan, ["running"]);
+    const restarted = new OrchestrationEngine({ store, backend: backend(), enabled: true });
+    await restarted.recover();
+    const recovered = (await restarted.view()).plans.plan!.tasks.running!;
+
+    await store.append({
+      type: "agent_result",
+      agent_id: "orch:run-running",
+      status: "done",
+      summary: "late completion",
+      artifacts: { verified: "absent", spent_usd: 0.1 },
+      usage: { inputTokens: 0, outputTokens: 0 },
+      tool_stats: {},
+      orchestration: {
+        schema_version: 1,
+        plan_id: plan.plan_id,
+        version: plan.version,
+        task_id: "running",
+        run_id: "run-running",
+        attempt: 1,
+        actor: "producer",
+        phase: "verifying",
+        revision: "late-revision",
+        spent_usd: 0.1,
+        producer_id: "late-producer",
+      },
+      ts: 50,
+    });
+    expect((await restarted.view()).plans.plan!.tasks.running).toMatchObject({
+      phase: recovered.phase,
+      run_id: recovered.run_id,
+      reserved_usd: recovered.reserved_usd,
+      spent_usd: recovered.spent_usd,
+      reason: recovered.reason,
+    });
+
+    const cancel = { request_id: "cancel-recovered", plan_id: plan.plan_id, version: plan.version, action: "cancel_task" as const, task_id: "running" };
+    await restarted.control(cancel);
+    const cancelled = await restarted.view();
+    const eventsAfterCancel = (await store.events()).length;
+    await restarted.control(cancel);
+    expect(await restarted.view()).toEqual(cancelled);
+    expect(await store.events()).toHaveLength(eventsAfterCancel);
+  });
+
   it("records one winner, cancels losers in task order, and fences a late result", async () => {
     let releaseA = (): void => {};
     const aGate = new Promise<void>((resolve) => { releaseA = resolve; });

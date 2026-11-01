@@ -1,0 +1,8 @@
+=== 改后：全仓「第 914 页」引用 ===
+命中 0
+=== 改后：指向第 920 页的四处 ===
+src/tools/lsp.ts:317:/* ---- 能力协商（第 920 页）----
+tests/lsp.test.ts:198:/* ---- 第 920 页：能力协商 ----
+tests/lsp.test.ts:204:describe("能力协商（第 920 页）", () => {
+docs/CODE-WIKI.md:153:## ⑥ LSP 的能力协商两头都要用（2026-11-01，第 920 页）
+scripts/lib/mutations/tools.mjs:75:  /* 第 920 页：能力协商。这六条把「两头都没用 initialize」的旧形状钉住——旧行为不是"少装点料"，

@@ -1,0 +1,8 @@
+$ node --import tsx .tmp/probe-remember.mts   # 改前：ownSubject 不认这两族 ⇒ JSON 兜底
+remember           ⇒ "{\"scope\":\"project\",\"kind\":\"decision\",\"op\":\"append\",\"content\":\"发布前必须跑全量 gates；上一轮"
+remember           ⇒ "{\"kind\":\"memory\",\"topic\":\"release-gate\"}"
+automation_create  ⇒ "{\"name\":\"每日备份\",\"prompt\":\"备份仓库\",\"schedule\":[{\"kind\":\"daily\",\"at\":\"03:00\"}]}"
+automation_update  ⇒ "{\"id\":\"a1\",\"name\":\"每周巡检\"}"
+automation_delete  ⇒ "{\"id\":\"a1\"}"
+automation_run_now ⇒ "{\"id\":\"a1\"}"
+automation_list    ⇒ "{}"

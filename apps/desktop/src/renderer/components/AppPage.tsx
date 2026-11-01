@@ -4,23 +4,32 @@
 // 每页组织：统计行（仅真实字段）+ 工具行（搜索/筛选/排序）+ 列表 + 详情抽屉。
 // 数据面：getState() 真快照；操作走既有 IPC（scheduleUpsert/Delete/RunNow、pluginDecide、deleteMemory）。
 // 未接通的能力显式标「待接」——不摆空壳。（技能指令正文 2026-10-18 接通；插件技能/命令清单同批列出。）
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useNow } from "../useNow";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { ErrorStrip } from "./ErrorStrip";
 import { WorktreesPane } from "./WorktreesPane";
-import { BookOpen, Brain, Check, CircleDashed, Clock, Puzzle, RotateCw, Search } from "lucide-react";
+import { categoryLabel } from "./plugins/labels";
+import { BookOpen, Brain, Check, CircleDashed, Clock, Puzzle, TriangleAlert } from "lucide-react";
 import type { MemorySnapshot } from "../../../../../src/main/ipc-protocol";
 import type { AutomationDefinition, AutomationSchedule } from "../../../../../src/main/automations";
 import type { ScheduleSnapshot, HistoryEntry } from "../../../../../src/main/scheduler";
 import type { PluginPanelSnapshot } from "../../../../../src/agent/plugins";
 import { STR } from "../strings";
 import { Switch } from "./Switch";
-import { EmptyState } from "./settings-ui";
+import { EmptyState, Banner } from "./settings-ui";
 import { McpServerRow } from "./McpServerRow";
 import { activates } from "./a11y-activate";
-import { bodyLines, fullTime, indexLines, relativeTime } from "../memory-view";
+import { bodyLines, fullTime, indexLines, memoryExportMarkdown, relativeTime } from "../memory-view";
 import { renderInline } from "../markdown";
 import { PAGE_META, PAGE_ORDER, type PageId } from "./settings-nav";
+import { PageFrame } from "./PageFrame";
+import { PluginsDestination } from "./plugins/PluginsWorkspace";
+import { defaultPageFilter, PAGE_CONTEXT_ITEMS } from "../navigation";
+import {
+  appPageSnapshotReducer,
+  createAppPageSnapshotState,
+} from "../state/app-page-snapshot";
 
 export { PAGE_META, PAGE_ORDER, type PageId };
 
@@ -59,43 +68,6 @@ export function buildSchedule(kind: string, time: string, everyMinutes: string, 
   }
 }
 
-/** 页头（2026-10-24 参照 Codex 自定义页）：大标题 + 一句话描述 + 右侧操作簇（搜索/刷新）。
- *  取代原 Stats 统计条 + Toolbar 的组合——数字统计挪去详情抽屉，页头只留「这是什么、怎么找」。 */
-function PageHead(props: {
-  title: string; desc: string; searchLabel: string;
-  query: string; onQuery: (q: string) => void; onRefresh: () => void;
-}): React.JSX.Element {
-  return (
-    <div className="ap-head">
-      <div className="ap-head-main">
-        <h2 className="ap-head-title">{props.title}</h2>
-        <p className="ap-head-desc">{props.desc}</p>
-      </div>
-      <div className="ap-head-acts">
-        <div className="ap-head-search">
-          <Search size={13} aria-hidden="true" />
-          <input value={props.query} placeholder={props.searchLabel} aria-label={props.searchLabel}
-            onChange={(e) => props.onQuery(e.target.value)} />
-        </div>
-        <button className="iconbtn sm" aria-label="刷新" title="刷新" onClick={props.onRefresh}><RotateCw size={14} /></button>
-      </div>
-    </div>
-  );
-}
-
-/** 筛选药丸行（公开/个人、全部/已信任 这类二级筛选，摆在大标题描述之下）。 */
-function PanePills(props: { filters: readonly { id: string; label: string }[]; filter: string; onFilter: (f: string) => void }): React.JSX.Element {
-  return (
-    <div className="ap-pills" role="tablist" aria-label="筛选">
-      {props.filters.map((f) => (
-        <button key={f.id} className={"ap-pill" + (props.filter === f.id ? " on" : "")}
-          aria-pressed={props.filter === f.id}
-          onClick={() => props.onFilter(f.id)}>{f.label}</button>
-      ))}
-    </div>
-  );
-}
-
 /** 双列卡片网格（图标 + 名称 + 一句话描述 + 右侧动作）——Codex 自定义页的卡片形制。 */
 function PaneCard(props: {
   ico: string; name: string; sub: string; nameTitle?: string;
@@ -129,34 +101,6 @@ function Stats(props: { items: Array<{ k: string; v: string | number; warn?: boo
   );
 }
 
-function Toolbar(props: {
-  query: string; onQuery: (q: string) => void;
-  filters: readonly { id: string; label: string }[]; filter: string; onFilter: (f: string) => void;
-  sortLabel?: string; onSort?: () => void;
-}): React.JSX.Element {
-  return (
-    <div className="ap-toolbar">
-      <input
-        className="ap-search"
-        value={props.query}
-        placeholder="搜索…"
-        aria-label="搜索"
-        onChange={(e) => props.onQuery(e.target.value)}
-      />
-      <div className="ap-fchips">
-        {props.filters.map((f) => (
-          <button key={f.id} className={"chip" + (props.filter === f.id ? " on" : "")} onClick={() => props.onFilter(f.id)}>
-            {f.label}
-          </button>
-        ))}
-        {props.onSort !== undefined && (
-          <button className="chip" onClick={props.onSort}>{props.sortLabel ?? "排序"}</button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function Drawer(props: { title: string; sub?: string; subTitle?: string; onClose: () => void; children: React.ReactNode }): React.JSX.Element {
   return (
     <aside className="ap-drawer" aria-label="详情">
@@ -177,10 +121,24 @@ function Notice(props: { text: string | null }): React.JSX.Element | null {
 
 // ── 插件页 ────────────────────────────────────────────────────────
 
-export function PluginsPane(props: { snap: PluginPanelSnapshot; onError: (m: string) => void; refresh: () => void; onInvoke?: (invoke: string) => void }): React.JSX.Element {
+const LEGACY_PLUGIN_FILTERS = [
+  { id: "all", label: "全部" },
+  { id: "trusted", label: "已信任" },
+  { id: "untrusted", label: "未信任" },
+] as const;
+
+export function PluginsPane(props: {
+  snap: PluginPanelSnapshot;
+  onError: (m: string) => void;
+  refresh: () => void;
+  filter?: string;
+  onFilter?: (filter: string) => void;
+  onInvoke?: (invoke: string) => void;
+}): React.JSX.Element {
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [localFilter, setLocalFilter] = useState("all");
   const [sel, setSel] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const [trustBusy, setTrustBusy] = useState<string | null>(null);
   // 插件技能的正文预览（2026-10-18）：按 /plugin:skill 拉一次，展开/收起不重复请求。
   const [bodyFor, setBodyFor] = useState<string | null>(null);
@@ -206,6 +164,8 @@ export function PluginsPane(props: { snap: PluginPanelSnapshot; onError: (m: str
   // 旧快照/手写夹具没有这三格时显示「未记录」，不把缺席读成「没有激活」。
   const hasMcpActiveData = plugins.mcpServerSummaries !== undefined
     || plugins.activeMcpServers !== undefined || plugins.activeMcpTools !== undefined;
+  const filter = props.filter ?? localFilter;
+  const setFilter = props.onFilter ?? setLocalFilter;
   const q = query.trim().toLowerCase();
   const rows = plugins.plugins
     .filter((p) => (filter === "all" ? true : filter === "trusted" ? p.trust === "trusted" : p.trust !== "trusted"))
@@ -215,27 +175,34 @@ export function PluginsPane(props: { snap: PluginPanelSnapshot; onError: (m: str
   // 批 6（总纲阶段 3-3）：数据为 0 时只显示 EmptyState，不摆统计卡与筛选。
   if (plugins.plugins.length === 0) {
     return (
-      <EmptyState
-        icon={<Puzzle size={22} />}
-        title="还没有插件"
-        desc="把插件文件夹放进工作区的 .agent/plugins/ 目录即可被 Cairn 加载。"
-      />
+      <PageFrame
+        title="插件"
+        search={{ label: "搜索插件", value: query, onChange: setQuery }}
+        onRefresh={props.refresh}
+        filters={LEGACY_PLUGIN_FILTERS}
+        activeFilter={filter}
+        onFilter={setFilter}
+      >
+        <EmptyState
+          icon={<Puzzle size={22} />}
+          title="还没有插件"
+          desc="把插件文件夹放进工作区的 .agent/plugins/ 目录即可被 Cairn 加载。"
+        />
+      </PageFrame>
     );
   }
   // 双列卡片默认铺 6 张，其余收进「查看…另有 N 项」（与技能中心同款，2026-10-24）。
-  const [showAll, setShowAll] = useState(false);
   const shown = showAll ? rows : rows.slice(0, 6);
   const hidden = rows.length - shown.length;
   return (
-    <>
-      <PageHead
-        title="插件" desc="连接插件，让 agent 在你的各类工具中协同工作。"
-        searchLabel="搜索插件" query={query} onQuery={setQuery} onRefresh={props.refresh}
-      />
-      <PanePills
-        filter={filter} onFilter={setFilter}
-        filters={[{ id: "all", label: "全部" }, { id: "trusted", label: "已信任" }, { id: "untrusted", label: "未信任" }]}
-      />
+    <PageFrame
+      title="插件"
+      search={{ label: "搜索插件", value: query, onChange: setQuery }}
+      onRefresh={props.refresh}
+      filters={LEGACY_PLUGIN_FILTERS}
+      activeFilter={filter}
+      onFilter={setFilter}
+    >
       <div className={"ap-split" + (selected !== null ? " has-drawer" : "")}>
         <div className="ap-gridcol">
           {rows.length === 0 && <div className="ap-empty">没有匹配的插件</div>}
@@ -267,7 +234,7 @@ export function PluginsPane(props: { snap: PluginPanelSnapshot; onError: (m: str
             <section className="ap-sec">
               <h3>组成</h3>
               <div className="ap-kv">
-                <span>技能 {String(selected.counts.skills)} · 命令 {String(selected.counts.commands)} · agents {String(selected.counts.agents)} · hooks {String(selected.counts.hooks)} · MCP {String(selected.counts.mcp)}（激活 {hasMcpActiveData ? String(mcpSummaries.filter((s) => s.plugin === selected.name && s.active).length) : "—"}） · LSP {String(selected.counts.lspActive)}/{String(selected.counts.lsp)}</span>
+                <span>{categoryLabel("skills")} {String(selected.counts.skills)} · {categoryLabel("commands")} {String(selected.counts.commands)} · {categoryLabel("agents")} {String(selected.counts.agents)} · {categoryLabel("hooks")} {String(selected.counts.hooks)} · {categoryLabel("mcp")} {String(selected.counts.mcp)}（激活 {hasMcpActiveData ? String(mcpSummaries.filter((s) => s.plugin === selected.name && s.active).length) : "—"}） · {categoryLabel("lsp")} {String(selected.counts.lspActive)}/{String(selected.counts.lsp)}</span>
               </div>
             </section>
             <section className="ap-sec">
@@ -404,16 +371,43 @@ export function PluginsPane(props: { snap: PluginPanelSnapshot; onError: (m: str
           </Drawer>
         )}
       </div>
-    </>
+    </PageFrame>
   );
 }
 
 // ── 自动化任务页 ──────────────────────────────────────────────────
 
-export function AutomationPane(props: { snap: ScheduleSnapshot; onError: (m: string) => void; refresh: () => void }): React.JSX.Element {
+/** 运行历史在页上只铺最近这么多条（第 934 页）：超出必须在标题里说清，不把尾部冒充整份。 */
+const HISTORY_SHOWN = 20;
+
+export function AutomationPane(props: {
+  snap: ScheduleSnapshot;
+  onError: (m: string) => void;
+  refresh: () => void;
+  filter?: string;
+  onFilter?: (filter: string) => void;
+}): React.JSX.Element {
   const schedule = props.snap;
+  // 装载期坏档 / 坏行上屏（2026-10-30）：桌面没有控制台，只 warn 的后果是
+  // 「automations.json 坏了 ⇒ 页面写着还没有定时任务，新建又被拒」，用户无从知道原因。
+  // 坏档时任务表恰好是空的 ⇒ 空态分支也必须摆这条横幅。
+  const warningBanner = schedule.warnings.length === 0 ? null : (
+    <Banner
+      tone="warn"
+      icon={<TriangleAlert size={13} />}
+      {...(schedule.warnings.length > 1
+        ? { details: <div>{schedule.warnings.map((w) => <div key={w}>{w}</div>)}</div> }
+        : {})}
+    >
+      {schedule.definitionsCorrupt
+        ? `${schedule.warnings[0] ?? ""}。修好之前，新建、修改、删除任务都会被拒绝。`
+        : schedule.warnings.length === 1
+          ? `装载警告：${schedule.warnings[0] ?? ""}`
+          : `有 ${String(schedule.warnings.length)} 条装载警告；其余任务照常运行。`}
+    </Banner>
+  );
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [localFilter, setLocalFilter] = useState("all");
   const [sortByName, setSortByName] = useState(false);
   const [sel, setSel] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -434,6 +428,8 @@ export function AutomationPane(props: { snap: ScheduleSnapshot; onError: (m: str
   // 删除任务确认（2026-10-17：原生 confirm → 产品自绘卡）
   const [deleteAsk, setDeleteAsk] = useState<{ id: string; name: string } | null>(null);
 
+  const filter = props.filter ?? localFilter;
+  const setFilter = props.onFilter ?? setLocalFilter;
   const q = query.trim().toLowerCase();
   const rows = schedule.tasks
     .filter((t) => (filter === "all" ? true : filter === "on" ? t.enabled : !t.enabled))
@@ -527,7 +523,15 @@ export function AutomationPane(props: { snap: ScheduleSnapshot; onError: (m: str
   // 旧分支会让「删光任务」后的运行历史/统计整块不可见（空态隐藏真实数据）。
   if (schedule.tasks.length === 0 && schedule.history.length === 0) {
     return (
-      <>
+      <PageFrame
+        title="自动化任务"
+        search={{ label: "搜索任务", value: query, onChange: setQuery }}
+        onRefresh={props.refresh}
+        filters={PAGE_CONTEXT_ITEMS.automation}
+        activeFilter={filter}
+        onFilter={setFilter}
+      >
+        {warningBanner}
         <EmptyState
           icon={<Clock size={22} />}
           title="还没有定时任务"
@@ -536,23 +540,31 @@ export function AutomationPane(props: { snap: ScheduleSnapshot; onError: (m: str
         />
         {createForm}
         <Notice text={notice} />
-      </>
+      </PageFrame>
     );
   }
 
   return (
-    <>
+    <PageFrame
+      title="自动化任务"
+      search={{ label: "搜索任务", value: query, onChange: setQuery }}
+      onRefresh={props.refresh}
+      filters={PAGE_CONTEXT_ITEMS.automation}
+      activeFilter={filter}
+      onFilter={setFilter}
+    >
+      {warningBanner}
       <Stats items={[
         { k: "任务", v: schedule.tasks.length },
         { k: "启用中", v: schedule.tasks.filter((t) => t.enabled).length },
         { k: "运行中", v: schedule.running },
         { k: "队列", v: schedule.queued },
       ]} />
-      <Toolbar
-        query={query} onQuery={setQuery} filter={filter} onFilter={setFilter}
-        filters={[{ id: "all", label: "全部" }, { id: "on", label: "启用" }, { id: "off", label: "停用" }]}
-        sortLabel={sortByName ? "按名称" : "默认序"} onSort={() => setSortByName((v) => !v)}
-      />
+      <div className="ap-toolbar">
+        <button className="chip" onClick={() => setSortByName((value) => !value)}>
+          {sortByName ? "按名称" : "默认序"}
+        </button>
+      </div>
       <div className="ap-actions-row">
         <button className="mini-btn primary" onClick={() => setCreating((v) => { if (v) setEditing(null); return !v; })} aria-expanded={creating}>
           {creating ? "收起表单" : "＋ 新建任务"}
@@ -570,17 +582,19 @@ export function AutomationPane(props: { snap: ScheduleSnapshot; onError: (m: str
                 <span className="nm">{t.name}</span>
                 <span className={"sp-tag" + (t.enabled ? " ok" : "")}>{t.enabled ? "启用" : "停用"}</span>
                 <span className="sub mono-k">{scheduleLabel(t.schedule)}</span>
-                {t.nextRunAt !== undefined && <span className="r sub">下次 {new Date(t.nextRunAt).toLocaleString()}</span>}
+                {t.nextRunAt !== undefined && <span className="r sub">下次 {fullTime(t.nextRunAt)}</span>}
               </div>
             ))}
           </div>
-          <div className="ap-gtitle">运行历史（{String(schedule.history.length)} 条）</div>
+          <div className="ap-gtitle">
+            运行历史（{String(schedule.history.length)} 条{schedule.history.length > HISTORY_SHOWN ? ` · 只显示最近 ${String(HISTORY_SHOWN)} 条` : ""}）
+          </div>
           <div className="ap-list">
             {schedule.history.length === 0 && <div className="ap-empty">暂无运行记录</div>}
-            {schedule.history.slice(0, 20).map((h: HistoryEntry, i: number) => (
+            {schedule.history.slice(0, HISTORY_SHOWN).map((h: HistoryEntry, i: number) => (
               <div key={i} className="ap-li">
                 <span className="kind">{h.state}</span>
-                <span className="p">{h.due_at} · {h.task_name}{h.session_id !== undefined ? ` · ${h.session_id}` : ""}</span>
+                <span className="p">{fullTime(h.due_at)} · {h.task_name}{h.session_id !== undefined ? ` · ${h.session_id}` : ""}</span>
               </div>
             ))}
           </div>
@@ -659,17 +673,32 @@ export function AutomationPane(props: { snap: ScheduleSnapshot; onError: (m: str
           }}
         />
       )}
-    </>
+    </PageFrame>
   );
 }
 
 // ── 技能中心页 ────────────────────────────────────────────────────
 
-export function SkillsPane(props: { snap: PluginPanelSnapshot; onError: (m: string) => void; refresh: () => void }): React.JSX.Element {
+const SKILL_FILTER_ITEMS = [
+  { id: "all", label: "全部" },
+  { id: "trusted", label: "已信任" },
+  { id: "untrusted", label: "未信任" },
+] as const;
+
+export function SkillsPane(props: {
+  snap: PluginPanelSnapshot;
+  onError: (m: string) => void;
+  refresh: () => void;
+  filter?: string;
+  onFilter?: (filter: string) => void;
+}): React.JSX.Element {
   const plugins = props.snap;
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [localFilter, setLocalFilter] = useState("all");
   const [sel, setSel] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const filter = props.filter === undefined || props.filter === "" ? localFilter : props.filter;
+  const setFilter = props.onFilter ?? setLocalFilter;
   const q = query.trim().toLowerCase();
   const rows = plugins.looseSkills
     .filter((s) => (filter === "all" ? true : filter === "trusted" ? s.trust === "trusted" : s.trust !== "trusted"))
@@ -697,27 +726,36 @@ export function SkillsPane(props: { snap: PluginPanelSnapshot; onError: (m: stri
   // 批 6（总纲阶段 3-3）：数据为 0 时只显示 EmptyState，不摆统计卡与筛选。
   if (plugins.looseSkills.length === 0) {
     return (
-      <EmptyState
-        icon={<BookOpen size={22} />}
-        title="还没有技能"
-        desc="在输入框输入技能名即可调用。"
-      />
+      <PageFrame
+        title="技能中心"
+        search={{ label: "搜索技能", value: query, onChange: setQuery }}
+        onRefresh={props.refresh}
+        filters={SKILL_FILTER_ITEMS}
+        activeFilter={filter}
+        onFilter={setFilter}
+        inlineFilter
+      >
+        <EmptyState
+          icon={<BookOpen size={22} />}
+          title="还没有技能"
+          desc="在输入框输入技能名即可调用。"
+        />
+      </PageFrame>
     );
   }
   // 双列卡片默认铺 6 张（3 行 × 2 列），其余收进「查看…另有 N 项」——参照 Codex 自定义页。
-  const [showAll, setShowAll] = useState(false);
   const shown = showAll ? rows : rows.slice(0, 6);
   const hidden = rows.length - shown.length;
   return (
-    <>
-      <PageHead
-        title="技能中心" desc="通过任务专用技能扩展 agent。点卡片看指令正文与信任态。"
-        searchLabel="搜索技能" query={query} onQuery={setQuery} onRefresh={props.refresh}
-      />
-      <PanePills
-        filter={filter} onFilter={setFilter}
-        filters={[{ id: "all", label: "全部" }, { id: "trusted", label: "已信任" }, { id: "untrusted", label: "未信任" }]}
-      />
+    <PageFrame
+      title="技能中心"
+      search={{ label: "搜索技能", value: query, onChange: setQuery }}
+      onRefresh={props.refresh}
+      filters={SKILL_FILTER_ITEMS}
+      activeFilter={filter}
+      onFilter={setFilter}
+      inlineFilter
+    >
       <div className={"ap-split" + (selected !== null ? " has-drawer" : "")}>
         <div className="ap-gridcol">
           {rows.length === 0 && <div className="ap-empty">没有匹配的技能</div>}
@@ -783,22 +821,31 @@ export function SkillsPane(props: { snap: PluginPanelSnapshot; onError: (m: stri
         )}
       </div>
       <div className="ap-note">在输入框输入技能名即可调用。</div>
-    </>
+    </PageFrame>
   );
 }
 
 // ── 记忆系统页 ────────────────────────────────────────────────────
 
-export function MemoryPane(props: { snap: MemorySnapshot; onError: (m: string) => void; refresh: () => void }): React.JSX.Element {
+export function MemoryPane(props: {
+  snap: MemorySnapshot;
+  onError: (m: string) => void;
+  refresh: () => void;
+  filter?: string;
+  onFilter?: (filter: string) => void;
+}): React.JSX.Element {
   const memory = props.snap;
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [localFilter, setLocalFilter] = useState("all");
   const [sortByName, setSortByName] = useState(false);
   const [sel, setSel] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [exportBusy, setExportBusy] = useState(false);
   const now = useNow();
   // 删除主题确认（2026-10-17：原生 confirm → 产品自绘卡）
   const [topicAsk, setTopicAsk] = useState<{ layer: "project" | "global"; topic: string } | null>(null);
+  const filter = props.filter ?? localFilter;
+  const setFilter = props.onFilter ?? setLocalFilter;
   const q = query.trim().toLowerCase();
   type Row = { layer: "project" | "global"; topic: MemorySnapshot["project"]["topics"][number] };
   const rows: Row[] = [
@@ -810,18 +857,47 @@ export function MemoryPane(props: { snap: MemorySnapshot; onError: (m: string) =
   const [selLayer, selTopic] = sel === null ? [null, null] : (sel.split(":") as [string, string]);
   const selected = selLayer === null ? null : (selLayer === "project" ? memory.project : memory.global).topics.find((t) => t.topic === selTopic) ?? null;
   const selectedLayer = selLayer === "project" ? memory.project : memory.global;
+  const exportMemory = async (): Promise<void> => {
+    setExportBusy(true);
+    setNotice(null);
+    try {
+      const r = await window.agent.exportMemory(memoryExportMarkdown(memory), "cairn-memory.md");
+      if (r.ok) setNotice(`已导出：${r.path ?? "记忆文件"}`);
+      else if (r.canceled !== true) props.onError(`导出记忆失败：${r.error ?? "未知原因"}`);
+    } catch (err) {
+      props.onError(`导出记忆失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setExportBusy(false);
+    }
+  };
   // 批 6（总纲阶段 3-3）：数据为 0 时只显示 EmptyState，不摆统计卡与筛选。
   if (memory.project.topics.length + memory.global.topics.length === 0) {
     return (
-      <EmptyState
-        icon={<Brain size={22} />}
-        title="还没有记忆"
-        desc="Cairn 会在对话中记下项目约定和你的偏好。"
-      />
+      <PageFrame
+        title="记忆"
+        search={{ label: "搜索记忆", value: query, onChange: setQuery }}
+        onRefresh={props.refresh}
+        filters={PAGE_CONTEXT_ITEMS.memory}
+        activeFilter={filter}
+        onFilter={setFilter}
+      >
+        <EmptyState
+          icon={<Brain size={22} />}
+          title="还没有记忆"
+          desc="Cairn 会在对话中记下项目约定和你的偏好。"
+        />
+      </PageFrame>
     );
   }
   return (
-    <>
+    <PageFrame
+      title="记忆"
+      search={{ label: "搜索记忆", value: query, onChange: setQuery }}
+      onRefresh={props.refresh}
+      filters={PAGE_CONTEXT_ITEMS.memory}
+      activeFilter={filter}
+      onFilter={setFilter}
+    >
       <Stats items={[
         { k: "项目层", v: memory.project.topics.length },
         { k: "全局层", v: memory.global.topics.length },
@@ -831,11 +907,14 @@ export function MemoryPane(props: { snap: MemorySnapshot; onError: (m: string) =
           warn: memory.project.pendingExternalRefs.length + memory.global.pendingExternalRefs.length > 0,
         },
       ]} />
-      <Toolbar
-        query={query} onQuery={setQuery} filter={filter} onFilter={setFilter}
-        filters={[{ id: "all", label: "全部" }, { id: "project", label: "项目层" }, { id: "global", label: "全局层" }]}
-        sortLabel={sortByName ? "按名称" : "最近更新"} onSort={() => setSortByName((v) => !v)}
-      />
+      <div className="ap-toolbar">
+        <button className="chip" onClick={() => setSortByName((value) => !value)}>
+          {sortByName ? "按名称" : "最近更新"}
+        </button>
+        <button className="chip" disabled={exportBusy} onClick={() => { void exportMemory(); }}>
+          {exportBusy ? "导出中…" : "导出记忆…"}
+        </button>
+      </div>
       <div className="ap-actions-row"><Notice text={notice} /></div>
       <div className={"ap-split" + (selected !== null ? " has-drawer" : "")}>
         <div className="ap-list">
@@ -928,7 +1007,7 @@ export function MemoryPane(props: { snap: MemorySnapshot; onError: (m: string) =
           }}
         />
       )}
-    </>
+    </PageFrame>
   );
 }
 
@@ -936,57 +1015,122 @@ export function MemoryPane(props: { snap: MemorySnapshot; onError: (m: string) =
 // v7.1 业主裁：四个入口不再自带整页宿主与页内导航——只导出「页体」，由设置页按分区渲染；
 // 数据面不变（getState() 真快照），标题与图标事实源仍是 PAGE_META。
 
-type Snapshot = { plugins?: PluginPanelSnapshot; schedule?: ScheduleSnapshot; memory?: MemorySnapshot; worktree?: { workspace: string; orphans: string[] } };
+const PAGE_FRAME_TITLE: Record<PageId, string> = {
+  plugins: "插件",
+  automation: "自动化任务",
+  skills: "技能中心",
+  memory: "记忆",
+  worktrees: "工作树",
+};
 
 /** 页体：按 page 自取一份 getState() 快照并渲染对应面板（宿主只管分区切换，不管数据）。 */
 export function AppPageBody(props: {
   page: PageId;
-  onError: (message: string) => void;
+  filter?: string;
+  onFilter?: (filter: string) => void;
+  workspace?: string | null;
+  mutationBlocked?: boolean;
+  onPluginUpdateCount?: (count: number) => void;
 }): React.JSX.Element {
-  const [snap, setSnap] = useState<Snapshot | null>(null);
+  const [snapshotState, dispatch] = useReducer(
+    appPageSnapshotReducer,
+    props.page,
+    createAppPageSnapshotState,
+  );
+  const [operationError, setOperationError] = useState<string | null>(null);
+  const requestGeneration = useRef(0);
+  const [fallbackFilters, setFallbackFilters] = useState<Partial<Record<PageId, string>>>({});
+  const activeFilter = props.filter ?? fallbackFilters[props.page] ?? defaultPageFilter(props.page);
+  const setFallbackFilter = useCallback((filter: string): void => {
+    setFallbackFilters((current) => ({ ...current, [props.page]: filter }));
+  }, [props.page]);
+  const setActiveFilter = props.onFilter ?? setFallbackFilter;
+  // 目的地内的操作失败只落在本页的 error strip：不能同时写工作台的 lastError，
+  // 否则切回对话会看到一条属于自动化/记忆页的错误（第 815 页 app-shell 冒烟发现）。
+  const reportError = useCallback((message: string): void => {
+    setOperationError(message);
+  }, []);
 
   const refresh = useCallback(() => {
+    const page = props.page;
+    const generation = ++requestGeneration.current;
+    dispatch({ type: "start", page, generation });
+    const resolve = (snapshot: Parameters<typeof appPageSnapshotReducer>[0]["snapshot"]): void => {
+      if (snapshot !== null) dispatch({ type: "resolve", page, generation, snapshot });
+    };
+    const reject = (message: string): void => {
+      dispatch({ type: "reject", page, generation, message });
+    };
     // 自动化页只需要 schedule：走专用的 scheduleSnapshot 通道，不再用整份 getState
     // （那条整份快照还要算插件/记忆/工作树；也为 invoke 消费面留下一处真实调用点）。
-    if (props.page === "automation") {
-      void window.agent.scheduleSnapshot().then((schedule) => setSnap({ schedule })).catch((err: unknown) => {
-        props.onError(`调度快照读取失败：${err instanceof Error ? err.message : String(err)}`);
+    if (page === "automation") {
+      void window.agent.scheduleSnapshot().then((schedule) => resolve({ schedule })).catch((err: unknown) => {
+        reject(`调度快照读取失败：${err instanceof Error ? err.message : String(err)}`);
       });
       return;
     }
-    void window.agent.getState().then(setSnap).catch((err: unknown) => {
-      props.onError(`快照读取失败：${err instanceof Error ? err.message : String(err)}`);
+    void window.agent.getState().then((snapshot) => resolve(snapshot)).catch((err: unknown) => {
+      reject(`快照读取失败：${err instanceof Error ? err.message : String(err)}`);
     });
-  }, [props.onError, props.page]);
-  useEffect(() => { refresh(); }, [refresh]);
+  }, [props.page]);
+  useEffect(() => {
+    if (props.page === "plugins") return;
+    refresh();
+    return () => { requestGeneration.current += 1; };
+  }, [props.page, refresh]);
+  useEffect(() => { setOperationError(null); }, [props.page]);
+
+  const snapshot = snapshotState.page === props.page ? snapshotState.snapshot : null;
+  const loadError = snapshotState.page === props.page ? snapshotState.loadError : null;
+
+  const stateFrame = (message: string, error = false): React.JSX.Element => (
+    <PageFrame title={PAGE_FRAME_TITLE[props.page]} onRefresh={refresh}>
+      <div className="ap-empty" role={error ? "alert" : "status"}>{message}</div>
+    </PageFrame>
+  );
 
   return (
     <div className="ap-body" aria-label={PAGE_META[props.page].label}>
-      {snap === null && <div className="ap-empty">正在读取快照…</div>}
-      {snap !== null && props.page === "plugins" && (
-        snap.plugins === undefined
-          ? <div className="ap-empty">插件运行时未加载（无插件环境）</div>
-          : <PluginsPane snap={snap.plugins} onError={props.onError} refresh={refresh} />
+      {operationError !== null && (
+        <div className="ap-error-host">
+          <ErrorStrip message={operationError} onDismiss={() => { setOperationError(null); }} />
+        </div>
       )}
-      {snap !== null && props.page === "automation" && (
-        snap.schedule === undefined
-          ? <div className="ap-empty">调度器未初始化</div>
-          : <AutomationPane snap={snap.schedule} onError={props.onError} refresh={refresh} />
-      )}
-      {snap !== null && props.page === "skills" && (
-        snap.plugins === undefined
-          ? <div className="ap-empty">插件运行时未加载</div>
-          : <SkillsPane snap={snap.plugins} onError={props.onError} refresh={refresh} />
-      )}
-      {snap !== null && props.page === "memory" && (
-        snap.memory === undefined
-          ? <div className="ap-empty">记忆层未初始化</div>
-          : <MemoryPane snap={snap.memory} onError={props.onError} refresh={refresh} />
-      )}
-      {snap !== null && props.page === "worktrees" && (
-        snap.worktree === undefined
-          ? <div className="ap-empty">工作区未解析（无可用工作区）</div>
-          : <WorktreesPane snap={snap.worktree} onError={props.onError} refresh={refresh} />
+      {props.page === "plugins" ? (
+        <PluginsDestination
+          workspace={props.workspace ?? null}
+          onError={reportError}
+          filter={activeFilter}
+          onFilter={setActiveFilter}
+          mutationBlocked={props.mutationBlocked === true}
+          {...(props.onPluginUpdateCount !== undefined ? { onUpdateCount: props.onPluginUpdateCount } : {})}
+        />
+      ) : (
+        <>
+          {loadError !== null
+            ? stateFrame(loadError, true)
+            : snapshot === null && stateFrame("正在读取快照…")}
+          {loadError === null && snapshot !== null && props.page === "automation" && (
+            snapshot.schedule === undefined
+              ? stateFrame("调度器未初始化")
+              : <AutomationPane snap={snapshot.schedule} onError={reportError} refresh={refresh} filter={activeFilter} onFilter={setActiveFilter} />
+          )}
+          {loadError === null && snapshot !== null && props.page === "skills" && (
+            snapshot.plugins === undefined
+              ? stateFrame("插件运行时未加载")
+              : <SkillsPane snap={snapshot.plugins} onError={reportError} refresh={refresh} filter={activeFilter} onFilter={setActiveFilter} />
+          )}
+          {loadError === null && snapshot !== null && props.page === "memory" && (
+            snapshot.memory === undefined
+              ? stateFrame("记忆层未初始化")
+              : <MemoryPane snap={snapshot.memory} onError={reportError} refresh={refresh} filter={activeFilter} onFilter={setActiveFilter} />
+          )}
+          {loadError === null && snapshot !== null && props.page === "worktrees" && (
+            snapshot.worktree === undefined
+              ? stateFrame("工作区未解析（无可用工作区）")
+              : <WorktreesPane snap={snapshot.worktree} onError={reportError} refresh={refresh} />
+          )}
+        </>
       )}
     </div>
   );

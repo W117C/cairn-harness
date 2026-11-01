@@ -9,7 +9,7 @@ import {
 import { mapUpstreamEfforts } from "./reasoning";
 
 /** UI 与 RunRequest 共用的思考档位。Provider 不支持时只能使用 off。 */
-export const THINKING_EFFORTS = ["off", "low", "medium", "high"] as const;
+export const THINKING_EFFORTS = ["off", "low", "medium", "high", "max"] as const;
 export type ThinkingEffort = (typeof THINKING_EFFORTS)[number];
 
 export type ModelAvailability = "verified" | "unverified";

@@ -1,0 +1,159 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "真指针进「关于与更新」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "诊断结果点击前不出现（不在打开面板时偷偷跑）",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "真指针点「运行诊断」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "九项检查全部上屏",
+      "ok": true,
+      "detail": [
+        "Node",
+        "凭据",
+        "模型档位",
+        "沙箱",
+        "工作区",
+        "设置文件",
+        "会话数据",
+        "联网搜索",
+        "插件信任面"
+      ]
+    },
+    {
+      "name": "凭据行按桌面口径合成（环境变量 + 设置页已存）",
+      "ok": true,
+      "detail": {
+        "label": "凭据",
+        "ok": true,
+        "detail": "环境变量在位：glm；设置页已存 2 家：deepseek、glm"
+      }
+    },
+    {
+      "name": "联网搜索失败项在屏上（✗ + 原因）",
+      "ok": true,
+      "detail": {
+        "label": "联网搜索",
+        "ok": false,
+        "detail": "search.endpoint 未配（web_search 不可用；这是可选项）"
+      }
+    },
+    {
+      "name": "总档按上屏行计数（1 项要处理，不是 CLI 原行的 2 项）",
+      "ok": true,
+      "detail": "总档：部分就绪（1 项要处理）"
+    },
+    {
+      "name": "真指针点「复制报告」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "剪贴板里是完整诊断报告（版本/总档/失败项）",
+      "ok": true,
+      "detail": "Cairn 诊断报告\n版本：未知\n生成时间：2026-10-30T05:50:41.675Z\n总档：部分就绪（1 项要处理）\n\n[✓] Node：Node v2"
+    },
+    {
+      "name": "复制回执上屏",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "真指针点「导出诊断包…」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "导出回执带保存路径",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "诊断结果出现在「关于与更新」分区",
+      "ok": true,
+      "detail": "关于与更新"
+    },
+    {
+      "name": "真指针点失败的「联网搜索」行",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "点后切到「联网搜索」分区",
+      "ok": true,
+      "detail": "联网搜索"
+    },
+    {
+      "name": "分区正文是搜索设置（不是空白）",
+      "ok": true,
+      "detail": "联网搜索\n\n选择服务、填写密钥，测试通过后保存。无需编辑配置文件。\n\n应用于 demo-ws\n已启用\n搜索服务\n启用联网搜索\n开启后，助手可在对话中请求检索网页"
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": [],
+  "report": {
+    "verdict": "总档：部分就绪（1 项要处理）",
+    "rows": [
+      {
+        "label": "Node",
+        "ok": true,
+        "detail": "Node v24.19.0（engines >=20.11.0 <25）"
+      },
+      {
+        "label": "凭据",
+        "ok": true,
+        "detail": "环境变量在位：glm；设置页已存 2 家：deepseek、glm"
+      },
+      {
+        "label": "模型档位",
+        "ok": true,
+        "detail": "模型档位表 12 条（cheap 4 / standard 5 / strong 3）"
+      },
+      {
+        "label": "沙箱",
+        "ok": true,
+        "detail": "沙箱可用"
+      },
+      {
+        "label": "工作区",
+        "ok": true,
+        "detail": "工作区可写"
+      },
+      {
+        "label": "设置文件",
+        "ok": true,
+        "detail": "设置文件可读"
+      },
+      {
+        "label": "会话数据",
+        "ok": true,
+        "detail": "会话元数据可读"
+      },
+      {
+        "label": "联网搜索",
+        "ok": false,
+        "detail": "search.endpoint 未配（web_search 不可用；这是可选项）"
+      },
+      {
+        "label": "插件信任面",
+        "ok": true,
+        "detail": "插件信任面 2 条决议（trusted 2 / declined 0）"
+      }
+    ]
+  }
+}

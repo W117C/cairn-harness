@@ -126,7 +126,7 @@ describe("M2e hook 装载纪律（任务 2/5）", () => {
     const cfg = echo.lsp["stub-ts"]!;
     expect(cfg.extensionToLanguage).toEqual({ ".ts": "typescript", ".tsx": "typescript" });
     expect(cfg.initializationOptions).toEqual({ stub: true });
-    expect(cfg.startupTimeout).toBe(5);
+    expect(cfg.startupTimeout).toBe(5000);
     expect(cfg.restartOnCrash).toBe(false);
     expect(cfg.diagnostics).toEqual({ enabled: true, maxPerFile: 20 });
     const socketW = m.warnings.find((x) => x.plugin === "echo-suite" && x.message.includes("transport: socket"));

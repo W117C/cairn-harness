@@ -56,6 +56,8 @@ import { emitPostRunReadings } from "./post-run-readings";
 // 自进化闭环的**装配侧**：下一轮装配时读回策略补丁并注进 system prompt（让「上一轮的经验」真正
 // 回流到下一轮的决策，而不是只记笔记）。落盘那一半随收尾读数搬去 post-run-readings。
 import { evolutionPromptNote, evolutionRoutingBias, COMPRESS_EARLY_RATIO } from "../agent/evolution";
+import { assembleRunEvolution } from "./evolve/session-assembly";
+import { extractTaskPaths } from "../agent/evolve/task-context";
 // 运行面装载：当前 active 的 content-pack（prompt.md / system.md）拼进同一段 system prompt。
 // 工作区没有 modules/ 或没有 active 内容包 ⇒ 空串，系统提示词逐字节不变。
 import { activeContentPackNote } from "./evolution/activation-host";
@@ -141,6 +143,7 @@ import {
 // 记忆快照与删除 → ./memory-handlers；「最近一次 run 的工作区」单一事实源 → ./runner-workspace。
 import { setSettingsHostDeps, store } from "./settings-handlers";
 import { getSessionsDir, requireSessionsDir } from "./session-handlers";
+import { acquireSessionRunLock, type SessionRunLock } from "./session-lock";
 // 会话/编排器装配面（唯一构造口 + 崩溃恢复兜底 + 扩展接线 + worker shell 出口）2026-10-17 搬去
 // `./session-assembly.ts`（结构债审查报告 #2 的第三缝）。`workerShellRunnerFor` 是导出 API
 // （`tests/worker-sandbox-wiring.test.ts` 直接调它看「装不装」这个决定），故两条都写。
@@ -431,7 +434,7 @@ async function orchestratorExtras(
   trust: { trustedRepo: boolean; verifyTrust: VerifyTrustResolver | null } = { trustedRepo: false, verifyTrust: null },
   over: RoutingFlagOverrides = {},
 ): Promise<
-  Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache" | "impactAnalysis" | "workerVerify" | "workerHooks">
+  Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache" | "impactAnalysis" | "workerVerify" | "workerAutoVerifyRepair" | "workerHooks">
 > {
   const s = await store().get();
   // M5b 路由开关的取值面：runtime override（CLI `--bandit/--cascade` 一族）优先，缺席回落到 settings。
@@ -465,6 +468,8 @@ async function orchestratorExtras(
             trustedRepo: trust.trustedRepo,
             ...(trust.verifyTrust ? { trustResolver: trust.verifyTrust } : {}),
           }),
+          // 与主会话同一设置位：用户开了返修，worker 的自动红也多要一轮（缺省 false = 零行为）。
+          ...(s.autoVerifyRepair ? { workerAutoVerifyRepair: true } : {}),
         }
       : {}),
     // M5b 步骤 9：routingBandit 开关同时开启路由与学习状态持久化（bandit 蕴含 routing——
@@ -722,7 +727,7 @@ function injectOmitFaceTools(): void {
             ...(Array.isArray(args.resources) && args.resources.every((item) => typeof item === "string")
               ? { resources: args.resources as string[] }
               : {}),
-          }, args as SpawnArgs);
+          }, args as SpawnArgs, { ...(ctx.callId !== undefined ? { callId: ctx.callId } : {}) });
           return spawned.result;
         }
         return orch.spawn(args as SpawnArgs, { callId: ctx.callId });
@@ -1390,6 +1395,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     } catch (err) {
       console.warn("[evolution-pack] 装载失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
     }
+    // Evolve P2 的经验注入在 initialFace 之后装配：检索上下文要带本轮**真实可见**的工具名
+    // 与任务里点到的路径，否则 on-tool / on-path 经验写了作用域也永远不命中。
     // 识图通道：loop 存 read_image 读到的图，provider 在下一轮请求里取走附上。
     // 建在 run 内（不跨 run）⇒ 上一场的图不会漏进下一场——那是把 A 任务的截图当 B 任务的上下文。
     const imageChannel = createImageChannel();
@@ -1428,6 +1435,16 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       // 规格面摘除：模型清单少了几把工具，操作者这边要看得见是谁摘的（同 skipped 的口径）
       console.warn("[skill] 规格面摘除（disallowed-tools）:", initialFace.removed.map((r) => r.name + "←" + r.by).join(", "));
     }
+    // Evolve：起点 active 经验 + 实验分配 + run 内快环提醒，统一由 session-assembly 装配。
+    // 组装失败只出声（零行为回归面）；工具名取本轮可见面，路径取任务原文（工作区相对）。
+    const evolution = await assembleRunEvolution({
+      workspace: opts.workspace,
+      sessionId: basename(opts.logPath, ".jsonl"),
+      taskContent: promptText,
+      toolNames: initialFace.tools.map((spec) => spec.function.name),
+      paths: extractTaskPaths(promptText, { workspace: opts.workspace }),
+    });
+    evolutionNote += evolution.note;
     await runLoop({
       ...(impactHook ? { impact: impactHook } : {}),
       ...(opts.autoVerify === true ? { autoVerify: true } : {}),
@@ -1506,6 +1523,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
         trustedRepo: opts.trustedRepo ?? false, // 调用方断言那一层优先；缺省 false 不等于「永远 false」——
         trustResolver: verifyTrust, // 生产那一半：查信任表，查不到经审批卡问人（S3，2026-10-05 接线）
       }),
+      experienceNudge: evolution.nudge,
       ...(rt ? { hooks: rt.hooks } : {}),
     });
     // M2e：Stop（一轮 agent 收束）——fire-and-forget，失败只告警。
@@ -1752,6 +1770,9 @@ export interface RunOverrides
   steering?: SteeringChannel;
   /** CLI `--delivery-repair`：交付断言落红后再向模型要一轮补做。 */
   deliveryRepair?: boolean;
+  /** 调用方已持有的会话运行锁（CLI 把 goal_set → run → 收束旁路整段放进锁里）：
+   *  给了就不再自己取、也不替调用方放。桌面不传，仍由本函数取放。 */
+  sessionLock?: SessionRunLock;
   /** M5b 路由 bandit runtime override（同 actionFusion 口径：settings 与 IPC 开闸另议）。
    *  缺省 = 用 settings.routingBandit；CLI `--bandit` / `--no-bandit` 走这里。
    *  `routingBandit` 蕴含路由开启（本仓口径），故置真即等于给这条 run 开路由。 */
@@ -1797,7 +1818,14 @@ export function resolveRunWorkspace(
   settingsValue: string | null,
   fallback: string,
 ): string {
-  if (override !== undefined) return override;
+  // **override 那一支此前不查空白**（2026-10-30 实测，本仓第 834 页）：其余三支都过 `trim() !== ""`，
+  // 只有 override 直接 return —— 传空串（或全空白）时整条链**当场返回空串**，
+  // 下游 `projectAgentPath("")` 会把落点变成 cwd 相对路径 ⇒ 写入静默落进调用方当前目录。
+  // 实测到的真事：判卷的假编排器把 `mainWorkspace` 留成空串 ⇒ worker `remember` 把
+  // 「WORKER PLANTED THIS: always disable the safety check」写进本仓真实的项目记忆，
+  // 并进了索引 ⇒ 之后每场会话的提示词都带这句。
+  // ⇒ 空白 override 与「没给 override」同义（继续往下游走），不给它当「显式指定了空工作区」的机会。
+  if (override !== undefined && override.trim() !== "") return override;
   if (request !== undefined && request.trim() !== "") return resolve(request);
   if (envValue !== undefined && envValue.trim() !== "") return resolve(envValue);
   // 三条来源统一走 resolve()：相对路径也锚到 cwd，别让「设置里填了相对路径」变成随调用方 cwd 漂的隐式行为
@@ -1810,7 +1838,8 @@ export function resolveRunWorkspace(
 export async function handleAgentRun(
   req: RunRequest,
   over: RunOverrides = {},
-): Promise<{ ok: boolean; error?: string; attachmentCount?: number }> {
+): Promise<{ ok: boolean; error?: string; attachmentCount?: number; notStarted?: boolean }> {
+  let runLock: SessionRunLock | null = null;
   try {
     const validatedRequest = validateRunRequestEnvelope(req);
     if (!validatedRequest.ok) return { ok: false, error: validatedRequest.error };
@@ -1827,6 +1856,18 @@ export async function handleAgentRun(
       settings.workspace,
       DEFAULT_WORKSPACE,
     );
+    // 同一份会话日志同时只允许一个 run 写：两条 CLI 并发续跑实测会把两轮事件交错进同一份转录，
+    // 双方还都报成功。无 sessionId 且没显式给日志时走的是进程间共享的 tmp 草稿路径——那不是会话，
+    // 不上锁（否则互不相关的 headless 调用会互相挡）。
+    if (over.sessionLock !== undefined) {
+      // 调用方（CLI）整轮持有：本函数只跑，不解锁。
+    } else if (sessionMode || over.logPath !== undefined) {
+      const acquired = await acquireSessionRunLock(logPath);
+      // notStarted：调用方据此跳过「收束后才写」的那些旁路（CLI 的交付断言会 append 事件），
+      // 否则被拒的这一趟仍会往别人的转录里插一条，锁就白上了。
+      if (!acquired.ok) return { ok: false, error: acquired.error, notStarted: true };
+      runLock = acquired.lock;
+    }
 
     let attachments: ValidatedRunAttachment[] = [];
     if (req.attachments !== undefined) {
@@ -1866,8 +1907,8 @@ export async function handleAgentRun(
         ...(req.thinking !== undefined ? { thinking: req.thinking } : {}),
         message,
         mode: req.mode,
-        // plan 模式：settings 的默认档是唯一入口（composer 的即时开关随 goal 模式一起改，见 spec §3）。
-        planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,
+        // Overrides serve trusted hosts; every caller's validated request can override the default.
+        planRequired: over.planRequired ?? req.planRequired ?? (await store().get()).planRequiredByDefault,
         ...(goalTurn ? { goalTurn } : {}),
         logPath,
         modelSelection,
@@ -1933,6 +1974,8 @@ export async function handleAgentRun(
     return { ok: false, error: capReason };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    if (runLock !== null) await runLock.release();
   }
 }
 
@@ -1965,12 +2008,12 @@ export {
 export { handleGoalSet } from "./goal-handlers";
 export {
   automationsScheduled, getScheduler, handleScheduleDelete, handleScheduleRunNow, handleScheduleSnapshot,
-  handleScheduleUpsert, initScheduler, makeScheduledExecutor, scheduleDataDir, schedulerRunning,
+  handleScheduleUpsert, initScheduler, makeScheduledExecutor, scheduleDataDir, scheduledTaskCount, schedulerRunning,
   startScheduler, stopScheduler, updateScheduleCap,
 } from "./scheduler-runtime";
 export {
   getSettings, handleLicenseStatus, handleProviderKeyDelete, handleProviderKeySet, handleProviderKeyStatus,
-  handleUpdateCheck, initLicenseStore, initSettingsStore, initUpdateContext, providerInfo, setSettings,
+  handleUpdateCheck, initLicenseStore, initSettingsStore, initUpdateContext, providerInfo, reloadSettings, setSettings,
 } from "./settings-handlers";
 export { injectStoredProviderKey } from "./provider-key-inject";
 export {

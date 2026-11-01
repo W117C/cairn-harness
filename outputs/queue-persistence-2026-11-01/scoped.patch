@@ -1,0 +1,1091 @@
+--- a/tests/ipc-protocol-version.test.ts
++++ b/tests/ipc-protocol-version.test.ts
+@@ -10,7 +10,7 @@
+     expect(IPC_PROTOCOL_VERSION).toBeGreaterThanOrEqual(1);
+   });
+ 
+-  it("bump 版本必须有意为之：现钉 50——改协议形状（AgentApi 增删/字段语义变）= bump 常量 + 同步本格，desktop-panel 提案走同一流水线", () => {
++  it("bump 版本必须有意为之：现钉 51——改协议形状（AgentApi 增删/字段语义变）= bump 常量 + 同步本格，desktop-panel 提案走同一流水线", () => {
+     // v8 → v9（2026-10-16 建议批）：＋suggestNext（「Tab 想下一条」按上下文单发模型调用）。
+     // v9 → v10（2026-10-16 能力在场性批）：＋capabilities（搜索端点配没配——让「模型为什么少一把工具」上屏）。
+     // v10 → v11（2026-10-16 主界面重做批）：＋gitStatus / gitClone / workspaceSearch / touchProject /
+@@ -53,6 +53,7 @@
+     // v47 → v48：＋evolveGlobalSetFrozen（全局经验冻结开关）。
+     // v48 → v49：＋evolveGlobalActivate（恢复 dormant 全局经验）。
+     // v49 → v50：runCancel/runSteer 按 workspace 校验目标，拒绝不自动续发。
+-    expect(IPC_PROTOCOL_VERSION).toBe(50);
++    // v50 → v51：RunResponse.accepted 区分接收前拒绝与执行失败。
++    expect(IPC_PROTOCOL_VERSION).toBe(51);
+   });
+ });
+--- a/apps/desktop/tests/protocol-version.test.ts
++++ b/apps/desktop/tests/protocol-version.test.ts
+@@ -77,6 +77,7 @@
+     // v47 → v48：＋evolveGlobalSetFrozen（全局经验冻结开关；写/删全局 STOP）。
+     // v48 → v49：＋evolveGlobalActivate（恢复 dormant 全局经验；复核 ≥3 库证据）。
+     // v49 → v50：runCancel/runSteer 携带 workspace，目标校验拒绝不触发自动续发。
+-    expect(IPC_PROTOCOL_VERSION).toBe(50);
++    // v50 → v51：RunResponse.accepted 区分接收前拒绝与执行失败。
++    expect(IPC_PROTOCOL_VERSION).toBe(51);
+   });
+ });
+--- a/apps/desktop/tests/marketplace-install-wiring.test.ts
++++ b/apps/desktop/tests/marketplace-install-wiring.test.ts
+@@ -26,8 +26,8 @@
+ } as const;
+ 
+ describe("plugin install IPC wiring", () => {
+-  it("exposes the backend install surface at protocol v50", () => {
+-    expect(IPC_PROTOCOL_VERSION).toBe(50);
++  it("exposes the backend install surface at protocol v51", () => {
++    expect(IPC_PROTOCOL_VERSION).toBe(51);
+     const channels = INVOKE_CHANNELS as Record<string, string>;
+     for (const [key, channel] of Object.entries(INSTALL_CHANNELS)) {
+       expect(channels[key]).toBe(channel);
+--- a/apps/desktop/tests/run-queue-session.test.tsx
++++ b/apps/desktop/tests/run-queue-session.test.tsx
+@@ -13,17 +13,17 @@
+ function harness(sessionId: string | null = "current") {
+   const agent = {
+     createSession: vi.fn(async () => ({ id: "created", workspace: "/workspace" })),
+-    run: vi.fn(async (_request: unknown): Promise<{ ok: boolean; error?: string; aborted?: boolean }> => ({ ok: true })),
++    run: vi.fn(async (_request: unknown): Promise<{ ok: boolean; error?: string; aborted?: boolean; accepted?: boolean }> => ({ ok: true })),
+     runSteer: vi.fn(async (_sessionId: string, _text: string) => ({ ok: true })),
+     runCancel: vi.fn(async (_sessionId: string): Promise<{ ok: boolean; error?: string; code?: "workspace_mismatch" }> => ({ ok: true })),
+     setGoal: vi.fn(async (_request: unknown) => ({ ok: true })),
+-    queueSet: vi.fn(async (_sessionId: string, _items: unknown, _workspace?: string) => ({ ok: true })),
++    queueSet: vi.fn(async (_sessionId: string, _items: unknown, _workspace?: string): Promise<{ ok: boolean; error?: string }> => ({ ok: true })),
+     sessionPrefsSet: vi.fn(async (_sessionId: string, _prefs: unknown, _workspace?: string) => ({ ok: true })),
+   };
+   vi.stubGlobal("window", { agent });
+   const sendQueue = ref(new Map<string, QueuedSend[]>());
+   const deps: Deps = {
+-    setQueueLocal: (key: string, list: QueuedSend[]) => { sendQueue.current.set(key, list); }, queueWrites: ref(new Map()), setLastError: vi.fn(),
++    setQueueLocal: (key: string, list: QueuedSend[]) => { sendQueue.current.set(key, list); }, queueWrites: ref(new Map()), queueDirty: ref(new Set()), setLastError: vi.fn(),
+     sendQueue, setStoppedIds: vi.fn(), runningSet: ref(new Set()),
+     lastDeltaAt: ref(new Map()), runGen: ref(new Map()), runStartBySession: ref(new Map()),
+     force: vi.fn(), thinkingBySession: ref(new Map([[runKey("/workspace", "current"), "high"]])), pendingThinking: "medium",
+@@ -193,3 +193,117 @@
+     expect(deps.sendQueue.current.get(key)).toEqual(items);
+   });
+ });
++
++function deferred<T>() {
++  let resolve!: (value: T) => void;
++  const promise = new Promise<T>((done) => { resolve = done; });
++  return { promise, resolve };
++}
++async function writesDone(deps: Deps) {
++  while (deps.queueWrites.current.size > 0) await Promise.all([...deps.queueWrites.current.values()]);
++}
++const queued = (id: number): QueuedSend => ({ id, text: `queued ${id}`, attachments: [] });
++
++describe("queue persistence before dispatch", () => {
++  it("does not execute before the dequeue save is acknowledged; failure keeps the head", async () => {
++    const { actions, agent, deps } = harness();
++    const key = runKey("/workspace", "current"), head = queued(1);
++    deps.sendQueue.current.set(key, [head]);
++    const save = deferred<{ ok: boolean; error?: string }>();
++    agent.queueSet.mockImplementationOnce(() => save.promise);
++    try {
++      actions.resumeQueue();
++      await vi.waitFor(() => expect(agent.queueSet).toHaveBeenCalledTimes(1));
++      expect(agent.run).not.toHaveBeenCalled();
++    } finally { save.resolve({ ok: false, error: "disk full" }); await writesDone(deps); }
++    expect(deps.sendQueue.current.get(key)).toEqual([head]);
++    expect(agent.run).not.toHaveBeenCalled();
++  });
++
++  it("preserves a failed head together with messages appended during its save", async () => {
++    const { actions, agent, deps } = harness();
++    const key = runKey("/workspace", "current"), head = queued(1), tail = queued(2), added = queued(3);
++    deps.sendQueue.current.set(key, [head, tail]);
++    const save = deferred<{ ok: boolean; error?: string }>();
++    agent.queueSet.mockImplementationOnce(() => save.promise);
++    actions.resumeQueue();
++    await vi.waitFor(() => expect(agent.queueSet).toHaveBeenCalledTimes(1));
++    actions.setQueueFor("current", [...(deps.sendQueue.current.get(key) ?? []), added], "/workspace");
++    save.resolve({ ok: false, error: "disk full" }); await writesDone(deps);
++    expect(deps.sendQueue.current.get(key)).toEqual([head, tail, added]);
++    expect(agent.queueSet).toHaveBeenLastCalledWith("current", [head, tail, added].map(({ text, attachments }) => ({ text, attachments })), "/workspace");
++    expect(agent.run).not.toHaveBeenCalled();
++  });
++
++  it("stops automatic draining after a save failure and retries only on explicit resume", async () => {
++    const { actions, agent, deps } = harness();
++    const key = runKey("/workspace", "current"), head = queued(1);
++    const firstRun = deferred<{ ok: boolean }>();
++    agent.run.mockImplementationOnce(() => firstRun.promise);
++    const sending = actions.send("first message");
++    agent.queueSet.mockResolvedValueOnce({ ok: false, error: "disk full" });
++    actions.setQueueFor("current", [head], "/workspace"); await writesDone(deps);
++    firstRun.resolve({ ok: true }); await sending;
++    expect(agent.run).toHaveBeenCalledTimes(1);
++    expect(deps.sendQueue.current.get(key)).toEqual([head]);
++    actions.resumeQueue();
++    await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(2));
++    await writesDone(deps);
++    expect(agent.run).toHaveBeenLastCalledWith(expect.objectContaining({ message: head.text }));
++  });
++
++  it("repeated resume during a pending save reserves only one drain", async () => {
++    const { actions, agent, deps } = harness();
++    const key = runKey("/workspace", "current"); deps.sendQueue.current.set(key, [queued(1), queued(2)]);
++    const save = deferred<{ ok: boolean }>(), firstRun = deferred<{ ok: boolean }>();
++    agent.queueSet.mockImplementationOnce(() => save.promise); agent.run.mockImplementationOnce(() => firstRun.promise);
++    actions.resumeQueue(); actions.resumeQueue();
++    await vi.waitFor(() => expect(agent.queueSet).toHaveBeenCalledTimes(1));
++    try { expect(agent.run).not.toHaveBeenCalled(); }
++    finally { save.resolve({ ok: true }); }
++    await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(1));
++    actions.resumeQueue(); expect(agent.run).toHaveBeenCalledTimes(1);
++    firstRun.resolve({ ok: true });
++    await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(2)); await writesDone(deps);
++    expect(agent.run.mock.calls.map(([r]) => (r as { message: string }).message)).toEqual(["queued 1", "queued 2"]);
++  });
++
++  it("restores a queue message only when the host explicitly did not accept it", async () => {
++    const { actions, agent, deps } = harness();
++    const key = runKey("/workspace", "current"), head = queued(1); deps.sendQueue.current.set(key, [head]);
++    agent.run.mockResolvedValueOnce({ ok: false, accepted: false, error: "target occupied" });
++    actions.resumeQueue();
++    await vi.waitFor(() => expect(deps.setLastError).toHaveBeenCalledWith("target occupied", "current")); await writesDone(deps);
++    expect(deps.sendQueue.current.get(key)).toEqual([head]);
++    expect(agent.queueSet).toHaveBeenLastCalledWith("current", [{ text: head.text, attachments: [] }], "/workspace");
++  });
++
++  it("does not requeue an accepted message when execution fails", async () => {
++    const { actions, agent, deps } = harness();
++    const key = runKey("/workspace", "current"), tail = queued(2); deps.sendQueue.current.set(key, [queued(1), tail]);
++    agent.run.mockResolvedValueOnce({ ok: false, accepted: true, error: "tool failed" });
++    actions.resumeQueue();
++    await vi.waitFor(() => expect(deps.setLastError).toHaveBeenCalledWith("tool failed", "current")); await writesDone(deps);
++    expect(deps.sendQueue.current.get(key)).toEqual([tail]);
++    expect(agent.run).toHaveBeenCalledTimes(1);
++  });
++
++  it("a rejected queue write is handled without losing the head or dispatching", async () => {
++    const { actions, agent, deps } = harness();
++    const key = runKey("/workspace", "current"), head = queued(1); deps.sendQueue.current.set(key, [head]);
++    agent.queueSet.mockRejectedValueOnce(new Error("IPC write unavailable"));
++    actions.resumeQueue(); await writesDone(deps);
++    expect(deps.sendQueue.current.get(key)).toEqual([head]);
++    expect(deps.queueDirty.current.has(key)).toBe(true);
++    expect(agent.run).not.toHaveBeenCalled();
++  });
++
++  it("cancellation before admission restores the message and stops instead of retrying in a loop", async () => {
++    const { actions, agent, deps } = harness();
++    const key = runKey("/workspace", "current"), head = queued(1); deps.sendQueue.current.set(key, [head]);
++    agent.run.mockResolvedValueOnce({ ok: false, accepted: false, aborted: true, error: "cancelled before admission" });
++    actions.resumeQueue();
++    await vi.waitFor(() => expect(deps.setLastError).toHaveBeenCalled()); await writesDone(deps);
++    expect(deps.sendQueue.current.get(key)).toEqual([head]); expect(agent.run).toHaveBeenCalledTimes(1);
++  });
++});
+--- a/apps/desktop/tests/marketplace-wiring.test.ts
++++ b/apps/desktop/tests/marketplace-wiring.test.ts
+@@ -7,8 +7,8 @@
+ const repo = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+ 
+ describe("plugin marketplace catalog wiring", () => {
+-  it("keeps the read-only catalog channel at protocol v50", () => {
+-    expect(IPC_PROTOCOL_VERSION).toBe(50);
++  it("keeps the read-only catalog channel at protocol v51", () => {
++    expect(IPC_PROTOCOL_VERSION).toBe(51);
+     expect(INVOKE_CHANNELS.marketplaceCatalog).toBe("agent:marketplace-catalog");
+     expect(repo("../../../src/main/ipc-protocol.ts")).toContain(
+       'marketplaceCatalog(refresh?: "never" | "auto" | "force"): Promise<MarketplaceCatalogReadout>',
+--- a/apps/desktop/tests/marketplace-import-wiring.test.ts
++++ b/apps/desktop/tests/marketplace-import-wiring.test.ts
+@@ -24,8 +24,8 @@
+ } as const;
+ 
+ describe("plugin marketplace import and update IPC wiring", () => {
+-  it("exposes the unified import, update, check, picker, and config surface at protocol v50", () => {
+-    expect(IPC_PROTOCOL_VERSION).toBe(50);
++  it("exposes the unified import, update, check, picker, and config surface at protocol v51", () => {
++    expect(IPC_PROTOCOL_VERSION).toBe(51);
+     const channels = INVOKE_CHANNELS as Record<string, string>;
+     for (const [key, channel] of Object.entries(IMPORT_CHANNELS)) {
+       expect(channels[key]).toBe(channel);
+--- a/apps/desktop/tests/plan-mode-wiring.test.ts
++++ b/apps/desktop/tests/plan-mode-wiring.test.ts
+@@ -9,8 +9,8 @@
+ 
+ const repo = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+ 
+-it("协议 v23（现 v50）：RunRequest 有 planRequired，validator 只收布尔并原样保留", () => {
+-  expect(IPC_PROTOCOL_VERSION).toBe(50);
++it("协议 v23（现 v51）：RunRequest 有 planRequired，validator 只收布尔并原样保留", () => {
++  expect(IPC_PROTOCOL_VERSION).toBe(51);
+   const protocol = repo("../../../src/main/ipc-protocol.ts");
+   expect(protocol).toContain("planRequired?: boolean;");
+   const validator = repo("../../../src/main/run-request.ts");
+--- a/apps/desktop/tests/plugin-marketplace-wiring.test.ts
++++ b/apps/desktop/tests/plugin-marketplace-wiring.test.ts
+@@ -9,8 +9,8 @@
+ }
+ 
+ describe("plugin marketplace end-to-end wiring", () => {
+-  it("keeps protocol v50 and exposes the full marketplace API", () => {
+-    expect(IPC_PROTOCOL_VERSION).toBe(50);
++  it("keeps protocol v51 and exposes the full marketplace API", () => {
++    expect(IPC_PROTOCOL_VERSION).toBe(51);
+     for (const key of [
+       "marketplaceCatalog",
+       "marketplacePluginImport",
+--- a/apps/desktop/tests/notification-open-wiring.test.ts
++++ b/apps/desktop/tests/notification-open-wiring.test.ts
+@@ -10,9 +10,9 @@
+ 
+ const repo = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+ 
+-it("推送通道与协议版本：v21 增 onNotificationOpen，当前 v50（… / v47 撤销全局经验 / v48 全局冻结开关 / v49 恢复全局经验）", () => {
++it("推送通道与协议版本：v21 增 onNotificationOpen，当前 v51（… / v47 撤销全局经验 / v48 全局冻结开关 / v49 恢复全局经验）", () => {
+   expect(PUSH_CHANNELS.onNotificationOpen).toBe("agent:notification-open");
+-  expect(IPC_PROTOCOL_VERSION).toBe(50);
++  expect(IPC_PROTOCOL_VERSION).toBe(51);
+   const protocol = repo("../../../src/main/ipc-protocol.ts");
+   expect(protocol).toContain("export interface RunNotificationPayload");
+   expect(protocol).toContain("onNotificationOpen(cb: (p: RunNotificationPayload) => void)");
+--- a/apps/desktop/tests/session-prefs-run-routing.test.ts
++++ b/apps/desktop/tests/session-prefs-run-routing.test.ts
+@@ -44,3 +44,14 @@
+     expect(handleAgentRun).toHaveBeenCalledTimes(1);
+   } finally { finish?.(); await active; }
+ });
++
++it("distinguishes admission rejection from failure after a user message was accepted", async () => {
++  const request = { sessionId: "same", workspace: a, message: "queue message", mode: "default" as const };
++  vi.mocked(handleAgentRun).mockResolvedValueOnce({ ok: false, error: "admission refused" });
++  expect(await host.run(request)).toMatchObject({ ok: false, accepted: false });
++  vi.mocked(handleAgentRun).mockImplementationOnce(async (_req, overrides) => {
++    overrides?.onEvent?.({ type: "user_message", content: "queue message" });
++    return { ok: false, error: "execution failed" };
++  });
++  expect(await host.run(request)).toMatchObject({ ok: false, accepted: true });
++});
+--- a/apps/desktop/scripts/ui-gallery-preload.cjs
++++ b/apps/desktop/scripts/ui-gallery-preload.cjs
+@@ -1177,6 +1177,33 @@
+     });
+   }
+   contextBridge.exposeInMainWorld("__cairnSameId", { calls: () => ({ ...calls }) });
++  if (process.argv.includes("--cairn-queue-persistence-fixture")) {
++    const writes = [], runs = [], reads = [];
++    let holdReads = false;
++    const originalGet = stub.queueGet, originalOpen = stub.openSession;
++    stub.queueGet = (sessionId, workspace) => {
++      if (!holdReads) return originalGet(sessionId, workspace);
++      const items = queues.get(`${workspace ?? ""}|${sessionId}`) ?? [];
++      return new Promise((resolve) => { reads.push({ items, resolve }); });
++    };
++    stub.openSession = async (id, workspace) => ({ ...(await originalOpen(id, workspace)), running: runs.some((r) => r.request.sessionId === id && r.request.workspace === workspace && !r.finished) });
++    stub.queueSet = (sessionId, items, workspace) => new Promise((resolve) => {
++      writes.push({ sessionId, items, workspace, resolve });
++    });
++    stub.run = (request) => new Promise((resolve) => { runs.push({ request, resolve, finished: false }); });
++    stub.runSteer = async () => ({ ok: false, error: "本轮不接收插话" });
++    contextBridge.exposeInMainWorld("__cairnQueuePersistence", {
++      calls: () => ({ writes: writes.map(({ sessionId, items, workspace }) => ({ sessionId, items, workspace })), runs: runs.map(({ request }) => request), reads: reads.length }),
++      write: (index, ok) => {
++        const pending = writes[index];
++        if (ok) queues.set(`${pending.workspace ?? ""}|${pending.sessionId}`, pending.items);
++        pending.resolve(ok ? { ok: true } : { ok: false, error: "磁盘暂时不可写" });
++      },
++      run: (index, result) => { runs[index].finished = true; runs[index].resolve(result); },
++      holdReads: (value) => { holdReads = value; },
++      read: (index) => reads[index].resolve({ items: reads[index].items }),
++    });
++  }
+ }
+ 
+ // 工作台工具验收专用：让超长标题走正常 rename 回程，不用缺省 {} 冒充合法结果。
+--- a/apps/desktop/scripts/run-control-ipc-smoke.cjs
++++ b/apps/desktop/scripts/run-control-ipc-smoke.cjs
+@@ -44,6 +44,8 @@
+   const wrongSteer = await js(`window.agent.runSteer('same', 'B must not reach A', ${JSON.stringify(b)})`);
+   const wrongCancel = await js(`window.agent.runCancel('same', ${JSON.stringify(b)})`);
+   check("错误工作区插话与停止均被真实 host 拒绝", !wrongSteer.ok && wrongSteer.code === "workspace_mismatch" && !wrongCancel.ok && wrongCancel.code === "workspace_mismatch" && host.runningCount() === 1);
++  const refused = await js(`window.agent.run(${JSON.stringify({ sessionId: "same", workspace: b, message: "must stay queued in B", mode: "default" })})`);
++  check("真实 host 的接收前拒绝明确回传 accepted:false", !refused.ok && refused.accepted === false);
+   const ambiguous = await js("window.agent.runCancel('same')");
+   check("旧式裸 id 控制在同名场景拒绝猜目标", !ambiguous.ok && ambiguous.code === "invalid_target");
+   const steer = await js(`window.agent.runSteer('same', 'for A', ${JSON.stringify(a)})`);
+@@ -51,10 +53,11 @@
+   const cancel = await js(`window.agent.runCancel('same', ${JSON.stringify(a)})`);
+   const result = await js("window.activeRun");
+   check("正确工作区取消穿透审批门并收束原运行", cancel.ok && result.aborted === true && host.runningCount() === 0);
++  check("真实用户轮已接收后取消仍回传 accepted:true", result.accepted === true);
+   const late = await js(`window.agent.runSteer('same', 'too late', ${JSON.stringify(a)})`);
+   check("收束后的插话明确拒绝", late.ok === false);
+   check("无 preload 错误", errors.length === 0);
+-  writeFileSync(join(out, "result.json"), JSON.stringify({ checks, errors, wrongSteer, wrongCancel, ambiguous, steer, cancel, result, late }, null, 2));
++  writeFileSync(join(out, "result.json"), JSON.stringify({ checks, errors, wrongSteer, wrongCancel, refused, ambiguous, steer, cancel, result, late }, null, 2));
+   await host.orchestrationClose(); win.destroy(); app.exit(checks.every((c) => c.ok) ? 0 : 1);
+ }
+ setTimeout(() => { console.error("IPC smoke 超时"); app.exit(1); }, 30000).unref();
+--- a/apps/desktop/src/renderer/send-queue.ts
++++ b/apps/desktop/src/renderer/send-queue.ts
+@@ -10,7 +10,7 @@
+ import type { RunAttachmentReference, SessionQueueEntry } from "../../../../src/main/ipc-protocol";
+ 
+ export interface QueuedSend {
+-  /** 渲染键（进程内自增；队列不落盘——沿用渲染层内存态纪律）。 */
++  /** 渲染键（进程内自增；只有消息内容落盘，渲染键不落盘）。 */
+   id: number;
+   text: string;
+   attachments: RunAttachmentReference[];
+@@ -74,13 +74,13 @@
+ export async function drainQueue(
+   first: { text: string; attachments: RunAttachmentReference[] },
+   run: (msg: { text: string; attachments: RunAttachmentReference[] }) => Promise<boolean>,
+-  takeNext: () => QueuedSend | null,
++  takeNext: () => QueuedSend | null | Promise<QueuedSend | null>,
+ ): Promise<void> {
+   let next: { text: string; attachments: RunAttachmentReference[] } | null = first;
+   while (next !== null) {
+     const keepGoing = await run(next);
+     if (!keepGoing) return;
+-    next = takeNext();
++    next = await takeNext();
+   }
+ }
+ 
+--- a/apps/desktop/src/renderer/styles.css
++++ b/apps/desktop/src/renderer/styles.css
+@@ -1612,6 +1612,7 @@
+ .queue-strip { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; }
+ .queue-head { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-caption-xs); color: hsl(var(--text-400)); padding: 0 2px; }
+ .queue-head .queue-resume { margin-left: auto; font-size: var(--fs-caption-xs); color: hsl(var(--text-200)); }
++.queue-head .queue-retry, .queue-head [role="status"] { color: hsl(var(--text-100)); }
+ .queue-item {
+   animation: sp-flash-in var(--t-fast);
+   display: flex; align-items: center; gap: 8px;
+--- a/apps/desktop/src/main/kernel-host.ts
++++ b/apps/desktop/src/main/kernel-host.ts
+@@ -550,7 +550,7 @@
+       }
+       const live = runControllers.get(sessionId);
+       if (live !== undefined && req.workspace !== undefined && canonicalWorkspacePath(req.workspace) !== live.workspace) {
+-        return { ok: false, error: OTHER_WORKSPACE_RUN };
++        return { ok: false, accepted: false, error: OTHER_WORKSPACE_RUN };
+       }
+       const ws = await resolveSessionWs(sessionId, req.workspace);
+       const logPath = pathOf(wsRoot(ws), sessionId);
+@@ -559,11 +559,11 @@
+       // logPath 已显式钉在主 checkout 侧，而 worktree 里的 `.agent` 是指回主 checkout 的 symlink
+       // ⇒ 权限表/记忆/配置/会话根仍是同一份（这正是「配置跨面共享」那一环，缺了隔离会话就成活孤岛）。
+       const runWs = (await isSessionIsolated(ws, sessionId)) ? sessionWorktreePath(ws, sessionId) : ws;
+-      if (await externalDrift(sessionId, logPath)) return { ok: false, error: DRIFT_ERROR };
++      if (await externalDrift(sessionId, logPath)) return { ok: false, accepted: false, error: DRIFT_ERROR };
+       // canonical controller 覆盖 run 与审计收束：旧 run 的 idle 尚未写完时不接受下一代。
+       // 否则 core 已释放日志、旧 finally 仍在写 sidecar，可能把新 run 标成空闲。
+       const existing = runControllers.get(sessionId);
+-      if (existing !== undefined) return { ok: false, error: existing.workspace === ws ? "session already running or being deleted" : OTHER_WORKSPACE_RUN };
++      if (existing !== undefined) return { ok: false, accepted: false, error: existing.workspace === ws ? "session already running or being deleted" : OTHER_WORKSPACE_RUN };
+       const controller = new AbortController();
+       runControllers.set(sessionId, { controller, workspace: ws });
+       runStartedAt.set(sessionId, Date.now());
+@@ -602,7 +602,7 @@
+         });
+         settledOk = res.ok === true;
+         // aborted 真值（desktop 扩展字段，不动 ipc-protocol 类型）：当且仅当本会话 controller 被 abort
+-        return controller.signal.aborted ? { ...res, aborted: true } : res;
++        return { ...res, accepted, ...(controller.signal.aborted ? { aborted: true } : {}) };
+       } finally {
+         if (runControllers.get(sessionId)?.controller === controller) {
+           await activeAudit;
+--- a/apps/desktop/src/renderer/state/workbench.ts
++++ b/apps/desktop/src/renderer/state/workbench.ts
+@@ -93,6 +93,8 @@
+   const sendQueue = useRef(new Map<string, QueuedSend[]>());
+   // sidecar 写入按会话串行：快速连点时后一笔必须等前一笔落盘，不能靠 IPC 到达顺序赌最后写入。
+   const queueWrites = useRef(new Map<string, Promise<unknown>>());
++  const queueDirty = useRef(new Set<string>());
++  const queueRevision = useRef(new Map<string, number>());
+   const queueSeq = useRef(0);
+   // 思考档位（每会话一份；缺省 off = 不向发请求体里加思考参数）
+   const thinkingBySession = useRef(new Map<string, string>());
+@@ -103,6 +105,7 @@
+   const activeIdRef = useRef<string | null>(null);
+   const [, force] = useState(0);
+   const setQueueLocal = useCallback((sid: string, list: QueuedSend[]) => {
++    queueRevision.current.set(sid, (queueRevision.current.get(sid) ?? 0) + 1);
+     if (list.length === 0) sendQueue.current.delete(sid); else sendQueue.current.set(sid, list);
+     force((n) => n + 1);
+   }, []);
+@@ -520,9 +523,15 @@
+       if (openPending.current === pending) openPending.current = null;
+       failures.push(`会话打开失败：${err instanceof Error ? err.message : String(err)}`);
+     });
++    const queueKey = runKey(sessionWs ?? activeWorkspace, id);
++    const queueReadRevision = queueRevision.current.get(queueKey);
++    const queueWasDirty = queueDirty.current.has(queueKey);
+     const queued = window.agent.queueGet(id, sessionWs ?? undefined).then(({ items }) => {
+       if (seq !== openSeq.current) return;
+-      setQueueLocal(runKey(sessionWs ?? activeWorkspace, id), fromSessionQueueEntries(items, () => ++queueSeq.current));
++      // 保存失败或仍有写入时，磁盘快照比本窗口的 desired 队列旧；切走再回来不能覆盖未保存消息。
++      if (!queueWasDirty && !queueDirty.current.has(queueKey) && queueRevision.current.get(queueKey) === queueReadRevision) {
++        setQueueLocal(queueKey, fromSessionQueueEntries(items, () => ++queueSeq.current));
++      }
+     }).catch((err: unknown) => {
+       failures.push(`发送队列读取失败：${err instanceof Error ? err.message : String(err)}`);
+     });
+@@ -752,7 +761,7 @@
+   // ---- v2.17 运行中可沟通：按会话发送队列 ----
+   // 队列语义全在 send-queue.ts（本文件只存表与接线）；表是 Map<sessionId, 队列>，
+   // 这样后台会话的排队不因切换会话而丢失，自动派发也只认原会话。
+-  const { setQueueFor, send, sendTo, sendWithGoal, handleRetryLast, resumeQueue, resumeQueueFor, cancelRunHeal } = useRunQueue({ setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, planRequiredRef: planOverrideRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef });
++  const { queueSaving, queueSaveFailed, setQueueFor, send, sendTo, sendWithGoal, handleRetryLast, resumeQueue, resumeQueueFor, cancelRunHeal } = useRunQueue({ setQueueLocal, queueWrites, queueDirty, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, planRequiredRef: planOverrideRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef });
+   cancelRunHealRef.current = cancelRunHeal; // 撤回（编辑）晚绑
+     const { lastError, lastNotice, runningActive, modelWaiting, pendingClarify, pendingPlan, askForActive, phase, stopped, phaseLabel, chosen, pickerValue } = useRunReadings({ sessionErrors, activeId, sessionNotices, runningSet, setElapsedSec, runStartBySession, events, askBySid, stoppedIds, lastDeltaAt, selections, providerInfo, activeWorkspace });
+   useSessionPrefsHydration({ sessions, selections, thinking: thinkingBySession, force });
+@@ -1061,6 +1070,8 @@
+     draftRemapSeq,
+     refreshSessions,
+     setQueueFor,
++    queueSaving,
++    queueSaveFailed,
+     cancelRunHeal,
+     queueLoading,
+     sessionLoadError,
+--- a/apps/desktop/src/renderer/state/run-queue.ts
++++ b/apps/desktop/src/renderer/state/run-queue.ts
+@@ -1,17 +1,18 @@
+ import type { PermissionMode } from "../../../../../src/main/ipc-protocol";
+ import type { Dispatch,MutableRefObject,SetStateAction } from 'react';
+ // useRunQueue: extracted without changing event or callback behavior.
+-import { useCallback,useRef } from "react";
++import { useCallback,useMemo,useRef } from "react";
+ import type { AgentEvent,AskPayload,RunAttachmentReference,RunResponse } from "../../../../../src/main/ipc-protocol";
+ import { parseGoalCommand,type GoalCommand } from "../goal-command";
+ import { userTextOfRound } from "../projections";
+-import { continueAfterRun,drainQueue,isSessionEndDistillAsk,shouldHealStaleRun,steerAccepted,steerRouteOf,takeQueued,toSessionQueueEntries,type QueuedSend } from "../send-queue";
++import { continueAfterRun,drainQueue,isSessionEndDistillAsk,shouldHealStaleRun,steerAccepted,steerRouteOf,type QueuedSend } from "../send-queue";
+ import { STR } from "../strings";
+ import { toast } from "../toast";
+ import { runKey } from "./session-identity";
+ import { seedNewSessionThinking } from "./thinking-selection";
+ import { saveSessionPrefs } from "./session-prefs";
+ import type { ThinkingEffort } from "../../../../../src/providers/capabilities";
++import { createQueuePersistence } from "./queue-persistence";
+ 
+ /** 预览/后台会话的发送结果：调用方据此给回执，不靠猜运行态。 */
+ export interface SendOutcome {
+@@ -22,6 +23,7 @@
+ interface RunQueueDeps {
+   setQueueLocal: (sid: string, list: QueuedSend[]) => void;
+   queueWrites: MutableRefObject<Map<string, Promise<unknown>>>;
++  queueDirty: MutableRefObject<Set<string>>;
+   setLastError: (message: string, sessionId?: string | undefined) => void;
+   sendQueue: MutableRefObject<Map<string, QueuedSend[]>>;
+   setStoppedIds: Dispatch<SetStateAction<ReadonlySet<string>>>;
+@@ -56,97 +58,95 @@
+ }
+ 
+ export function useRunQueue(deps: RunQueueDeps) {
+-  const { setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, planRequiredRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef } = deps;
++  const { setQueueLocal, queueWrites, queueDirty, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, planRequiredRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef } = deps;
+   // 默认目标只跟随当前渲染；异步发送与后台恢复显式携带工作区，不反写后来切换的窗口上下文。
+   const workspaceRef = useRef<string | null>(activeWorkspace);
+   workspaceRef.current = activeWorkspace;
+   const keyOf = (id: string): string => runKey(workspaceRef.current, id);
+-  const setQueueFor = useCallback((sid: string, list: QueuedSend[], workspace?: string | null) => {
+-    // 预览窗格可看另一工作区的会话：队列键与 sidecar 必须按**目标会话的工作区**算，
+-    // 不能借用主会话的 workspaceRef（借用会把主会话的队列写进别的工作区）。
+-    const runWs = workspace === undefined ? workspaceRef.current : workspace;
+-    const key = runKey(runWs, sid);
+-    setQueueLocal(key, list);
+-    const prev = queueWrites.current.get(key) ?? Promise.resolve();
+-    const next = prev.catch(() => undefined).then(() => window.agent.queueSet(sid, toSessionQueueEntries(list), runWs ?? undefined));
+-    queueWrites.current.set(key, next);
+-    void next.then(
+-      (r) => { if (!r.ok) setLastError(`发送队列保存失败：${r.error ?? "未知错误"}`, sid); },
+-      (err: unknown) => setLastError(`发送队列保存失败：${err instanceof Error ? err.message : String(err)}`, sid),
+-    ).finally(() => {
+-      if (queueWrites.current.get(key) === next) queueWrites.current.delete(key);
+-    });
+-  }, [setLastError, setQueueLocal]);
+-  /** 本轮收束后出队：队首出表并返回；空队列 null（调用方停表）。 */
+-  const takeQueuedHead = useCallback((sid: string, workspace?: string | null): QueuedSend | null => {
+-    const key = runKey(workspace === undefined ? workspaceRef.current : workspace, sid);
+-    const { head, rest } = takeQueued(sendQueue.current.get(key) ?? []);
+-    if (head !== null) setQueueFor(sid, rest, workspace);
+-    return head;
+-  }, [setQueueFor]);
++  const persistence = useMemo(() => createQueuePersistence({
++    sendQueue, queueWrites, queueDirty, setQueueLocal, setLastError, changed: () => force((n) => n + 1),
++  }), [sendQueue, queueWrites, queueDirty, setQueueLocal, setLastError, force]);
++  const setQueueFor = useCallback((sid: string, list: QueuedSend[], workspace?: string | null) =>
++    persistence.setQueueFor(sid, list, workspace === undefined ? workspaceRef.current : workspace), [persistence]);
++  const takeQueuedHead = persistence.takeQueuedHead;
++  const draining = useRef(new Set<string>());
+ 
+   /** 一条消息 → 一轮 run；收束后自动派队列下一条（顺序派发唯一实现在 send-queue.drainQueue）。
+    *  不重入 send：send 要判 activeId，后台会话的续发必须显式钉住 sid。
+    *  本轮失败（ok=false 或抛出）→ 停表：剩余队列留在表里，等用户处理；用户主动打断不算失败。 */
+-  const runOn = useCallback(async (sid: string, first: { text: string; attachments: RunAttachmentReference[] }, workspace?: string | null): Promise<(RunResponse & { aborted?: boolean }) | null> => {
++  const runOn = useCallback(async (sid: string, first: { text: string; attachments: RunAttachmentReference[] } | null, workspace?: string | null): Promise<(RunResponse & { aborted?: boolean }) | null> => {
+     // 预览/后台会话可属于另一工作区：这一轮的键按目标工作区算，**不改**主会话的 workspaceRef。
+     // 新建会话用 createSession 返回的工作区；主路径也显式携带自己的目标。
+     const runWs = workspace === undefined ? workspaceRef.current : workspace;
+     const key = runKey(runWs, sid);
+-    let firstResponse: (RunResponse & { aborted?: boolean }) | null = null;
+-    await drainQueue(first, async (msg) => {
+-      setStoppedIds((prev) => {
+-        if (!prev.has(sid)) return prev;
+-        const fresh = new Set(prev);
+-        fresh.delete(sid);
+-        return fresh;
+-      });
+-      runningSet.current.add(key);
+-      lastDeltaAt.current.delete(sid);
+-      // 代际号（2026-10-18 真机：打断并发送后新 run 在跑、running 却为 false）：旧 run 的
+-      // finally 会把**新 run**刚置上的旗摘掉——经典“旧清理清掉新状态”。每次起跑领一个号，
+-      // 清理/停止态写入只在“号还是自己的”时生效。
+-      const myGen = (runGen.current.get(sid) ?? 0) + 1;
+-      runGen.current.set(sid, myGen);
+-      runStartBySession.current.set(sid, Date.now());
+-      force((n) => n + 1);
+-      try {
+-        const thinking = thinkingBySession.current.get(key);
+-        const planRequired = planRequiredRef?.current ?? null;
+-        const res = (await window.agent.run({
+-          message: msg.text, mode: modeRef.current, sessionId: sid, model: selections.current.get(key) ?? undefined,
+-          ...(runWs !== null ? { workspace: runWs } : {}),
+-          ...(thinking !== undefined ? { thinking: thinking as "off" | "low" | "medium" | "high" } : {}),
+-          ...(msg.attachments.length > 0 ? { attachments: msg.attachments } : {}),
+-          ...(planRequired !== null ? { planRequired } : {}),
+-        })) as RunResponse & { aborted?: boolean };
+-        if (firstResponse === null) firstResponse = res;
+-        if ((runGen.current.get(sid) ?? 0) === myGen) {
+-          setStoppedIds((prev) => {
+-            const want = res.aborted === true;
+-            if (prev.has(sid) === want) return prev;
+-            const fresh = new Set(prev);
+-            if (want) fresh.add(sid); else fresh.delete(sid);
+-            return fresh;
+-          });
+-        }
+-        const keepGoing = continueAfterRun(res);
+-        if (!keepGoing) setLastError(res.error ?? "本轮运行失败", sid);
+-        return keepGoing;
+-      }
+-      catch (err) {
+-        setLastError(`本轮运行失败：${err instanceof Error ? err.message : String(err)}`, sid);
+-        return false;
+-      }
+-      finally {
+-        if ((runGen.current.get(sid) ?? 0) === myGen) runningSet.current.delete(key);
+-        // 起点随这一轮一起收掉（收之前先判代际：新 run 已经起跑时不能把它的起点删了）。
+-        if ((runGen.current.get(sid) ?? 0) === myGen) runStartBySession.current.delete(sid);
++    if (draining.current.has(key)) return { ok: false, accepted: false, error: "session already running or being deleted" };
++    draining.current.add(key);
++    force((n) => n + 1);
++    try {
++      // null 是显式恢复入口；预留整条 drain 后再等待持久化，连续点击不能重复取队首。
++      const initial = first ?? await takeQueuedHead(sid, runWs, true);
++      if (initial === null) return null;
++      let firstResponse: (RunResponse & { aborted?: boolean }) | null = null;
++      await drainQueue(initial, async (msg) => {
++        setStoppedIds((prev) => {
++          if (!prev.has(sid)) return prev;
++          const fresh = new Set(prev);
++          fresh.delete(sid);
++          return fresh;
++        });
++        runningSet.current.add(key);
++        lastDeltaAt.current.delete(sid);
++        // 代际号（2026-10-18 真机：打断并发送后新 run 在跑、running 却为 false）：旧 run 的
++        // finally 会把**新 run**刚置上的旗摘掉——经典“旧清理清掉新状态”。每次起跑领一个号，
++        // 清理/停止态写入只在“号还是自己的”时生效。
++        const myGen = (runGen.current.get(sid) ?? 0) + 1;
++        runGen.current.set(sid, myGen);
++        runStartBySession.current.set(sid, Date.now());
+         force((n) => n + 1);
+-      }
+-    }, () => takeQueuedHead(sid, runWs));
+-    return firstResponse;
+-  }, [setLastError, takeQueuedHead]);
++        try {
++          const thinking = thinkingBySession.current.get(key);
++          const planRequired = planRequiredRef?.current ?? null;
++          const res = (await window.agent.run({
++            message: msg.text, mode: modeRef.current, sessionId: sid, model: selections.current.get(key) ?? undefined,
++            ...(runWs !== null ? { workspace: runWs } : {}),
++            ...(thinking !== undefined ? { thinking: thinking as "off" | "low" | "medium" | "high" } : {}),
++            ...(msg.attachments.length > 0 ? { attachments: msg.attachments } : {}),
++            ...(planRequired !== null ? { planRequired } : {}),
++          })) as RunResponse & { aborted?: boolean };
++          if (res.ok === false && res.accepted === false && "id" in msg && typeof msg.id === "number") {
++            // 主进程明确没有接收用户轮才恢复；执行失败已经落了用户消息，重入队会重复派活。
++            setQueueFor(sid, [{ id: msg.id, text: msg.text, attachments: msg.attachments }, ...(sendQueue.current.get(key) ?? [])], runWs);
++          }
++          if (firstResponse === null) firstResponse = res;
++          if ((runGen.current.get(sid) ?? 0) === myGen) {
++            setStoppedIds((prev) => {
++              const want = res.aborted === true;
++              if (prev.has(sid) === want) return prev;
++              const fresh = new Set(prev);
++              if (want) fresh.add(sid); else fresh.delete(sid);
++              return fresh;
++            });
++          }
++          const keepGoing = res.ok === false && res.accepted === false ? false : continueAfterRun(res);
++          if (!keepGoing) setLastError(res.error ?? "本轮运行失败", sid);
++          return keepGoing;
++        }
++        catch (err) {
++          setLastError(`本轮运行失败：${err instanceof Error ? err.message : String(err)}`, sid);
++          return false;
++        }
++        finally {
++          if ((runGen.current.get(sid) ?? 0) === myGen) runningSet.current.delete(key);
++          // 起点随这一轮一起收掉（收之前先判代际：新 run 已经起跑时不能把它的起点删了）。
++          if ((runGen.current.get(sid) ?? 0) === myGen) runStartBySession.current.delete(sid);
++          force((n) => n + 1);
++        }
++      }, () => takeQueuedHead(sid, runWs));
++      return firstResponse;
++    } finally {
++      draining.current.delete(key); force((n) => n + 1);
++    }
++  }, [setLastError, setQueueFor, takeQueuedHead]);
+ 
+   /** 任意会话的发送入口（预览窗格/后台会话）：与主发送共用插话、队列与 runOn 管線。
+    *  `running` 由调用方按目标会话的真实事件态传入；缺省才读本实例 runningSet。
+@@ -160,7 +160,7 @@
+   ): Promise<SendOutcome> => {
+     const runWs = workspace ?? workspaceRef.current;
+     const key = runKey(runWs, sid);
+-    const running = options.running ?? runningSet.current.has(key);
++    const running = (options.running ?? runningSet.current.has(key)) || draining.current.has(key);
+     if (running) {
+       if (steerRouteOf({ sessionId: sid, running: true, forceQueue: options.forceQueue === true, attachmentCount: attachments.length }) === "steer") {
+         const steered = await window.agent.runSteer(sid, text, runWs ?? undefined).catch(() => ({ ok: false as const }));
+@@ -196,7 +196,7 @@
+     if (sid !== null && editCtxRef.current?.forkId === sid) setEditCtx(null);
+     // 运行中发送 = 入队（收束后 runOn 的循环自动派下一条）。判据用 ref 不用渲染态：
+     // 收束与点击在同一拍竞争时，runningSet 是唯一真值。
+-    if (sid !== null && runningSet.current.has(sendKey!)) {
++    if (sid !== null && (runningSet.current.has(sendKey!) || draining.current.has(sendKey!))) {
+       // 对话优先跳沉（owner 实证 2026-10-15「记忆沉淀挡住正常对话了」）：本轮收尾的自动沉淀
+       // 正卡在合并审批时，用户按下发送 = 「接着聊」的最高信号——立即拒掉该审批让 run 收束、
+       // 队列开派；否则这条消息会排在记忆审批后面（distill 在 runAgent 尾部，run 不 settle
+@@ -320,12 +320,10 @@
+   const resumeQueueFor = useCallback((sid: string, workspace?: string | null) => {
+     const runWs = workspace === undefined ? workspaceRef.current : workspace;
+     if (runningSet.current.has(runKey(runWs, sid))) return;
+-    const first = takeQueuedHead(sid, runWs);
+-    if (first === null) return;
+-    void runOn(sid, first, runWs).catch((err: unknown) => {
++    void runOn(sid, null, runWs).catch((err: unknown) => {
+       setLastError(`恢复发送失败：${err instanceof Error ? err.message : String(err)}`, sid);
+     });
+-  }, [runOn, setLastError, takeQueuedHead]);
++  }, [runOn, setLastError]);
+   const resumeQueue = useCallback(() => {
+     const sid = activeIdRef.current;
+     if (sid !== null) resumeQueueFor(sid);
+@@ -358,5 +356,8 @@
+   }, [resumeQueueFor, setLastError]);
+ 
+ 
+-  return { setQueueFor, send, sendTo, sendWithGoal, handleRetryLast, resumeQueue, resumeQueueFor, cancelRunHeal };
++  const activeKey = activeId === null ? null : runKey(activeWorkspace, activeId);
++  const queueSaving = activeKey !== null && queueWrites.current.has(activeKey);
++  const queueSaveFailed = activeKey !== null && queueDirty.current.has(activeKey) && !queueSaving;
++  return { queueSaving, queueSaveFailed, setQueueFor, send, sendTo, sendWithGoal, handleRetryLast, resumeQueue, resumeQueueFor, cancelRunHeal };
+ }
+--- a/apps/desktop/src/renderer/components/SendQueueStrip.tsx
++++ b/apps/desktop/src/renderer/components/SendQueueStrip.tsx
+@@ -10,6 +10,9 @@
+   running: boolean;
+   /** 缓存可查看，但读取未完成前不能改写或派发。 */
+   disabled?: boolean;
++  saving?: boolean;
++  saveFailed?: boolean;
++  onRetrySave?: () => void;
+   onInterruptSend: (index: number) => void;
+   onRemove: (index: number) => void;
+   /** 改一条排队消息的正文；缺席 = 不提供编辑入口（旧用法字节不变）。 */
+@@ -24,7 +27,7 @@
+   const [draft, setDraft] = useState("");
+   // 键盘收尾后主动 blur 会在真实窗口里再补一个 blur 事件；跳过它，避免同一次编辑提交两遍。
+   const skipBlurRef = useRef(false);
+-  if (props.items.length === 0) return null;
++  if (props.items.length === 0 && !props.saving && !props.saveFailed) return null;
+   const commit = (id: number): void => {
+     if (props.disabled) return;
+     const index = props.items.findIndex((item) => item.id === id);
+@@ -42,8 +45,13 @@
+     <div className="queue-strip" data-cds="ChatComposerQueuedMessages" role="list" aria-label="待发送队列">
+       <span className="queue-head">
+         <Clock size={11} />
+-        {props.disabled && "会话未读取完成，队列暂不可修改"}
+-        {!props.disabled && (props.running ? "排队中 · 本轮结束后自动发送" : "排队中 · 等待恢复发送")}
++        {props.saving && <span role="status">正在保存队列…</span>}
++        {!props.saving && props.saveFailed && <span role="status">更改尚未保存</span>}
++        {!props.saving && !props.saveFailed && props.disabled && "会话未读取完成，队列暂不可修改"}
++        {!props.saving && !props.saveFailed && !props.disabled && (props.running ? "排队中 · 本轮结束后自动发送" : "排队中 · 等待恢复发送")}
++        {props.saveFailed && props.onRetrySave !== undefined && (
++          <button className="btn-ghost queue-retry" disabled={props.disabled} onClick={props.onRetrySave}>重试保存</button>
++        )}
+         {!props.running && props.onResume !== undefined && (
+           <button className="btn-ghost queue-resume" aria-label="继续发送队列" disabled={props.disabled} onClick={props.onResume}>
+             继续发送
+--- a/apps/desktop/src/renderer/panes/WorkbenchView.tsx
++++ b/apps/desktop/src/renderer/panes/WorkbenchView.tsx
+@@ -219,6 +219,8 @@
+   /** 预览/后台会话发送：与主发送共用插话与队列；`running` 由预览按目标会话事件态传入。 */
+   sendTo: (sid: string, workspace: string | null, text: string, attachments?: RunAttachmentReference[], options?: { forceQueue?: boolean; running?: boolean }) => Promise<SendOutcome>;
+   queueLoading: boolean;
++  queueSaving: boolean;
++  queueSaveFailed: boolean;
+   sessionLoadError: string | null;
+   retrySessionOpen: () => void;
+   pendingSend: boolean;
+@@ -829,6 +831,7 @@
+               <QueueDock
+                 activeId={activeId} activeWorkspace={activeWorkspace} queue={sendQueue} running={runningActive}
+                 queueLoading={queueLoading || deps.sessionLoadError !== null} pendingSend={pendingSend} pendingClarify={pendingClarify} pendingPlan={pendingPlan}
++                queueSaving={deps.queueSaving} queueSaveFailed={deps.queueSaveFailed}
+                 setQueueFor={setQueueFor} cancelRunHeal={cancelRunHeal} resumeQueueFor={resumeQueueFor}
+               />
+             )}
+--- a/apps/desktop/src/renderer/panes/QueueDock.tsx
++++ b/apps/desktop/src/renderer/panes/QueueDock.tsx
+@@ -15,6 +15,8 @@
+   queue: MutableRefObject<Map<string, QueuedSend[]>>;
+   running: boolean;
+   queueLoading: boolean;
++  queueSaving?: boolean;
++  queueSaveFailed?: boolean;
+   pendingSend: boolean;
+   pendingClarify: unknown;
+   pendingPlan: unknown;
+@@ -23,28 +25,39 @@
+   resumeQueueFor: (sid: string, workspace?: string | null) => void;
+ }) {
+   // 打断并发送 / 移出 / 编辑：都按目标会话的限定键读当前表，再交给纯函数改一条。
+-  const editAt = (index: number, change: (list: QueuedSend[]) => QueuedSend[]): void => {
++  const items = props.queue.current.get(runKey(props.activeWorkspace, props.activeId)) ?? [];
++  const blocked = props.queueLoading || props.queueSaving === true;
++  const editAt = (index: number, change: (list: QueuedSend[], at: number) => QueuedSend[]): boolean => {
+     const sid = props.activeId;
+-    if (props.queueLoading) return;
++    if (blocked) return false;
+     const key = runKey(props.activeWorkspace, sid);
+-    props.setQueueFor(sid, change(props.queue.current.get(key) ?? []), props.activeWorkspace);
++    const id = items[index]?.id;
++    const current = props.queue.current.get(key) ?? [];
++    const at = current.findIndex((item) => item.id === id);
++    if (id === undefined || at < 0) return false;
++    props.setQueueFor(sid, change(current, at), props.activeWorkspace);
++    return true;
+   };
+   return (
+     <SendQueueStrip
+-      items={props.queue.current.get(runKey(props.activeWorkspace, props.activeId)) ?? []}
++      items={items}
+       running={props.running}
+-      disabled={props.queueLoading}
++      disabled={blocked}
++      saving={props.queueSaving}
++      saveFailed={props.queueSaveFailed}
++      onRetrySave={() => {
++        if (!blocked) props.setQueueFor(props.activeId, props.queue.current.get(runKey(props.activeWorkspace, props.activeId)) ?? [], props.activeWorkspace);
++      }}
+       onInterruptSend={(index) => {
+-        if (props.queueLoading) return;
++        if (blocked) return;
+         /** 「打断并发送」：先把它提到队首，再打断本轮——收束在轮界，runOn 随即先派它。
+          *  打断走 cancelRunHeal：陈旧旗（main 无在跑）时摘旗并把这条当场派出去，不再是死点。 */
+-        editAt(index, (list) => promoteQueued(list, index));
+-        props.cancelRunHeal(props.activeId, props.activeWorkspace);
++        if (editAt(index, (list, at) => promoteQueued(list, at))) props.cancelRunHeal(props.activeId, props.activeWorkspace);
+       }}
+-      onRemove={(index) => { editAt(index, (list) => dropQueued(list, index)); }}
+-      onEdit={(index, text) => { editAt(index, (list) => editQueued(list, index, text)); }}
+-      onMove={(index, delta) => { editAt(index, (list) => moveQueued(list, index, delta)); }}
+-      {...(!props.running && !props.queueLoading && !props.pendingSend && props.pendingClarify === null && props.pendingPlan === null
++      onRemove={(index) => { editAt(index, (list, at) => dropQueued(list, at)); }}
++      onEdit={(index, text) => { editAt(index, (list, at) => editQueued(list, at, text)); }}
++      onMove={(index, delta) => { editAt(index, (list, at) => moveQueued(list, at, delta)); }}
++      {...(!props.running && !blocked && !props.pendingSend && props.pendingClarify === null && props.pendingPlan === null
+         ? { onResume: () => { props.resumeQueueFor(props.activeId, props.activeWorkspace); } }
+         : {})}
+     />
+--- a/src/main/ipc-protocol.ts
++++ b/src/main/ipc-protocol.ts
+@@ -121,8 +121,9 @@
+  *  v47 = 撤销全局经验（evolveGlobalRevoke；全局账 patch 转 dormant，跨 workspace 注入停用）。
+  *  v48 = 全局经验冻结开关（evolveGlobalSetFrozen；写/删全局 STOP，与 workspace STOP 分开）。
+  *  v49 = 恢复全局经验（evolveGlobalActivate；dormant → active，复核 ≥3 库证据）。
+- *  v50 = 会话运行控制携带 workspace；目标校验拒绝带 code，不触发陈旧旗自动续发。 */
+-export const IPC_PROTOCOL_VERSION = 50;
++ *  v50 = 会话运行控制携带 workspace；目标校验拒绝带 code，不触发陈旧旗自动续发。
++ *  v51 = RunResponse.accepted 区分未接收的请求和已接收后的执行失败，供队列安全恢复。 */
++export const IPC_PROTOCOL_VERSION = 51;
+ 
+ /** 密钥只允许写入；读取面只报告状态，不回传明文。端点为空时 Brave/Tavily 使用官方地址。 */
+ export interface SearchSettingsInput {
+@@ -289,6 +290,8 @@
+ export interface RunResponse {
+   ok: boolean;
+   error?: string;
++  /** 桌面会话宿主的接收回执；false 表示用户轮未进入日志，可恢复待发送消息。缺席 = 未知。 */
++  accepted?: boolean;
+   /** Present only when validated references were consumed as path context. */
+   attachmentCount?: number;
+ }
+--- /dev/null
++++ b/apps/desktop/src/renderer/state/queue-persistence.ts
+@@ -0,0 +1,64 @@
++import type { MutableRefObject } from "react";
++import { takeQueued, toSessionQueueEntries, type QueuedSend } from "../send-queue";
++import { runKey } from "./session-identity";
++
++/** desired 队列保留在窗口内；写入/出队共享串行链，失败不能把消息当成已落盘。 */
++export function createQueuePersistence(deps: {
++  sendQueue: MutableRefObject<Map<string, QueuedSend[]>>;
++  queueWrites: MutableRefObject<Map<string, Promise<unknown>>>;
++  queueDirty: MutableRefObject<Set<string>>;
++  setQueueLocal: (key: string, list: QueuedSend[]) => void;
++  setLastError: (message: string, sid?: string) => void;
++  changed: () => void;
++}) {
++  const failed = new Set<string>();
++  const update = (key: string, list: QueuedSend[]) => {
++    deps.queueDirty.current.add(key);
++    deps.setQueueLocal(key, list);
++  };
++  const serialize = <T,>(key: string, work: () => Promise<T>): Promise<T> => {
++    const previous = deps.queueWrites.current.get(key) ?? Promise.resolve();
++    const next = previous.catch(() => undefined).then(work);
++    deps.queueWrites.current.set(key, next); deps.changed();
++    const cleanup = () => {
++      if (deps.queueWrites.current.get(key) === next) {
++        deps.queueWrites.current.delete(key); deps.changed();
++      }
++    };
++    void next.then(cleanup, cleanup);
++    return next;
++  };
++  const persist = async (sid: string, workspace: string | null, key: string): Promise<boolean> => {
++    const snapshot = deps.sendQueue.current.get(key);
++    try {
++      const result = await window.agent.queueSet(sid, toSessionQueueEntries(snapshot ?? []), workspace ?? undefined);
++      if (!result.ok) throw new Error(result.error ?? "未知错误");
++      failed.delete(key);
++      if (deps.sendQueue.current.get(key) === snapshot) deps.queueDirty.current.delete(key);
++      return true;
++    } catch (error) {
++      failed.add(key);
++      deps.setLastError(`发送队列保存失败，未保存的更改已保留在本窗口：${error instanceof Error ? error.message : String(error)}`, sid);
++      return false;
++    }
++  };
++  const setQueueFor = (sid: string, list: QueuedSend[], workspace: string | null): Promise<boolean> => {
++    const key = runKey(workspace, sid);
++    update(key, list);
++    return serialize(key, () => persist(sid, workspace, key));
++  };
++  const takeQueuedHead = (sid: string, workspace: string | null, retry = false): Promise<QueuedSend | null> => {
++    const key = runKey(workspace, sid);
++    return serialize(key, async () => {
++      if (failed.has(key) && (!retry || !(await persist(sid, workspace, key)))) return null;
++      const { head, rest } = takeQueued(deps.sendQueue.current.get(key) ?? []);
++      if (head === null) return null;
++      update(key, rest);
++      if (await persist(sid, workspace, key)) return head;
++      // 同一笔保存等待期间还可入队；恢复队首时合并最新 desired 列表，不用旧快照覆盖新消息。
++      update(key, [head, ...(deps.sendQueue.current.get(key) ?? []).filter((item) => item.id !== head.id)]);
++      return null;
++    });
++  };
++  return { setQueueFor, takeQueuedHead };
++}
+--- /dev/null
++++ b/apps/desktop/tests/queue-persistence-ui.test.tsx
+@@ -0,0 +1,42 @@
++import type { ComponentProps } from "react";
++import { renderToStaticMarkup } from "react-dom/server";
++import { describe, expect, it, vi } from "vitest";
++import { QueueDock } from "../src/renderer/panes/QueueDock";
++import type { SendQueueStrip } from "../src/renderer/components/SendQueueStrip";
++
++function harness() {
++  const items = [{ id: 1, text: "first", attachments: [] }, { id: 2, text: "second", attachments: [] }];
++  const props = {
++    activeId: "s", activeWorkspace: "/a", queue: { current: new Map([['["/a","s"]', items]]) },
++    running: false, queueLoading: false, queueSaving: false, queueSaveFailed: false,
++    pendingSend: false, pendingClarify: null, pendingPlan: null,
++    setQueueFor: vi.fn(), cancelRunHeal: vi.fn(), resumeQueueFor: vi.fn(),
++  };
++  return { props, items };
++}
++
++describe("queue save feedback", () => {
++  it("saving uses the save status and disables mutations, including while the last head is reserved", () => {
++    const { props } = harness(); props.queueSaving = true; props.queue.current.clear();
++    const html = renderToStaticMarkup(<QueueDock {...props} />);
++    expect(html).toContain("正在保存队列"); expect(html).not.toContain("会话未读取完成");
++    expect(html).not.toContain("继续发送");
++  });
++  it("retry save targets the latest desired queue without dispatching a task", () => {
++    const { props, items } = harness(); props.queueSaveFailed = true;
++    const strip = QueueDock(props).props as ComponentProps<typeof SendQueueStrip>;
++    strip.onRetrySave?.();
++    expect(props.setQueueFor).toHaveBeenCalledWith("s", items, "/a");
++    expect(props.resumeQueueFor).not.toHaveBeenCalled();
++    expect(renderToStaticMarkup(<QueueDock {...props} />)).toContain("重试保存");
++  });
++  it("an old remove callback cannot remove a different head after async dequeue", () => {
++    const { props, items } = harness();
++    const oldStrip = QueueDock(props).props as ComponentProps<typeof SendQueueStrip>;
++    props.queue.current.set('["/a","s"]', [items[1]!]);
++    oldStrip.onRemove(0);
++    expect(props.setQueueFor).not.toHaveBeenCalled();
++    oldStrip.onEdit?.(1, "edit the same item");
++    expect(props.setQueueFor).toHaveBeenCalledWith("s", [{ ...items[1], text: "edit the same item" }], "/a");
++  });
++});
+--- /dev/null
++++ b/apps/desktop/scripts/queue-persistence-smoke.cjs
+@@ -0,0 +1,115 @@
++// 真实 renderer + 可控 IPC：落盘失败/项目切换/显式重试/续发/接收拒绝，不调用真实 Provider。
++const { app, BrowserWindow } = require("electron");
++const { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } = require("node:fs");
++const { tmpdir } = require("node:os");
++const { join, resolve } = require("node:path");
++const profile = mkdtempSync(join(tmpdir(), "cairn-queue-save-"));
++const out = resolve(process.argv[2]); mkdirSync(out, { recursive: true });
++app.setPath("userData", profile); app.on("quit", () => rmSync(profile, { recursive: true, force: true }));
++const checks = [];
++const check = (name, ok) => { checks.push({ name, ok: Boolean(ok) }); console.log(`${ok ? "PASS" : "FAIL"} ${name}`); };
++const pause = (ms = 90) => new Promise((r) => setTimeout(r, ms));
++async function main() {
++  await app.whenReady();
++  const protocol = readFileSync(join(__dirname, "../../../src/main/ipc-protocol.ts"), "utf8");
++  const tail = protocol.slice(protocol.indexOf("export interface AgentApi")), body = tail.slice(0, tail.indexOf("\n}"));
++  const starts = [...body.matchAll(/^\s{2}(\w+)\??\s*[(<]/gm)];
++  const members = starts.map((s, i) => ({ name: s[1], isArray: /Promise<[^>]*\[\]/.test(body.slice(s.index, starts[i + 1]?.index)) }));
++  const win = new BrowserWindow({ width: 1280, height: 820, show: false, webPreferences: {
++    preload: join(__dirname, "ui-gallery-preload.cjs"), additionalArguments: ["--cairn-api-members=" + JSON.stringify(members), "--cairn-protocol-version=" + (process.env.CAIRN_EXPECT_PROTOCOL || protocol.match(/IPC_PROTOCOL_VERSION\s*=\s*(\d+)/)[1]), "--cairn-same-id-workspace-fixture", "--cairn-queue-persistence-fixture"],
++  } });
++  const errors = [];
++  win.webContents.on("console-message", (details) => { if (details.level === "error") errors.push(details.message); });
++  win.webContents.on("preload-error", (_event, _path, error) => errors.push(error.message));
++  const js = (source) => win.webContents.executeJavaScript(source);
++  async function wait(source) { for (let i = 0; i < 100; i++) { if (await js(source)) return; await pause(); } throw new Error("等待超时: " + source); }
++  const state = () => js("window.__cairnQueuePersistence.calls()");
++  const write = async (index, ok) => { await js(`window.__cairnQueuePersistence.write(${index}, ${ok})`); await pause(); };
++  const shot = async (name) => { await pause(350); writeFileSync(join(out, name + ".png"), (await win.webContents.capturePage()).toPNG()); };
++  const finish = async () => {
++    writeFileSync(join(out, "result.json"), JSON.stringify({ checks, errors, calls: await state() }, null, 2));
++    win.destroy(); app.exit(checks.every(c => c.ok) && errors.length === 0 ? 0 : 1);
++  };
++  const open = async (label) => {
++    await js(`([...document.querySelectorAll('.s-title')].find(e => e.textContent.includes('${label}'))).closest('.session').click();true;`);
++    await wait(`document.querySelector('.row.user')?.textContent.includes('${label === "项目甲" ? "甲" : "乙"}项目的消息') && !document.querySelector('.composer-card textarea').disabled`);
++  };
++  const pressEnter = () => {
++    win.focus();
++    win.webContents.sendInputEvent({ type: "keyDown", keyCode: "Return" });
++    win.webContents.sendInputEvent({ type: "char", keyCode: "\r" });
++    win.webContents.sendInputEvent({ type: "keyUp", keyCode: "Return" });
++  };
++  await win.loadFile(join(process.env.CAIRN_RENDERER_DIST, "index.html")); win.show(); win.focus();
++  await wait("document.querySelectorAll('.session').length === 2"); await open("项目甲");
++  await js("document.querySelector('.queue-resume').click();true;");
++  await wait("window.__cairnQueuePersistence.calls().writes.length === 1");
++  check("保存确认前没有启动任务", (await state()).runs.length === 0);
++  check("待保存期间显示状态且不能重复恢复", await js("document.querySelector('.queue-strip')?.textContent.includes('正在保存') && !document.querySelector('.queue-resume:not(:disabled)')"));
++  await shot("01-saving"); await write(0, false);
++  check("出队保存失败恢复原消息且没有运行", await js("document.querySelector('.queue-strip')?.textContent.includes('甲项目排队的那条')") && (await state()).runs.length === 0);
++  if (checks.some(c => !c.ok)) { await finish(); return; } // 改前在这里明确失败，不按错误状态继续驱动后续步骤。
++  await js("document.querySelector('.queue-item button[aria-label^=\"编辑排队项\"]').click();true;");
++  await js("(() => {const t=document.querySelector('.q-edit');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(t,'修改后保留的消息');t.dispatchEvent(new Event('input',{bubbles:true}));t.focus();})()"); pressEnter();
++  await wait("window.__cairnQueuePersistence.calls().writes.length === 2"); await write(1, false);
++  await open("项目乙"); await open("项目甲");
++  check("保存失败后切换项目不会被旧磁盘消息覆盖", await js("document.querySelector('.queue-strip').textContent.includes('修改后保留的消息')"));
++  await shot("02-unsaved-after-switch");
++  for (const theme of ["light", "dark"]) {
++    win.setSize(theme === "dark" ? 880 : 1280, 820);
++    await js(`document.documentElement.dataset.theme='${theme}';document.documentElement.dataset.mode='${theme}';document.body.toggleAttribute('data-ds-dark-theme','${theme}'==='dark');true;`); await pause();
++    const colors = await js("(() => { const button=document.querySelector('.queue-retry'), backgrounds=[],canvas=document.createElement('canvas');canvas.width=canvas.height=1;const context=canvas.getContext('2d',{willReadFrequently:true}); const rgba=value=>{context.clearRect(0,0,1,1);context.fillStyle=value;context.fillRect(0,0,1,1);const pixel=context.getImageData(0,0,1,1).data;return [pixel[0],pixel[1],pixel[2],pixel[3]/255];}; for(let parent=button;parent;parent=parent.parentElement) backgrounds.push(rgba(getComputedStyle(parent).backgroundColor)); return {fg:rgba(getComputedStyle(button).color),backgrounds};})()");
++    const over = (color, background) => color.slice(0,3).map((v,i) => v*color[3] + background[i]*(1-color[3]));
++    const background = colors.backgrounds.slice().reverse().reduce((base, color) => over(color, base), [255,255,255]);
++    const luminance = (value) => value.map(v => v / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
++    const a = luminance(over(colors.fg, background)), b = luminance(background), contrast = (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
++    check(`${theme} 重试保存按钮对比度至少 4.5`, contrast >= 4.5); console.log(`contrast ${theme}: ${contrast.toFixed(2)}`);
++    if (theme === "dark") {
++      check("窄窗口队列与重试入口没有横向溢出", await js("document.querySelector('.queue-strip').scrollWidth <= document.querySelector('.queue-strip').clientWidth + 1 && document.documentElement.scrollWidth <= innerWidth"));
++      await shot("02-unsaved-dark");
++    }
++  }
++  win.setSize(1280, 820);
++  await js("document.documentElement.dataset.theme='light';document.documentElement.dataset.mode='light';document.body.removeAttribute('data-ds-dark-theme');true;");
++  await js("document.querySelector('.queue-retry').click();true;");
++  await wait("window.__cairnQueuePersistence.calls().writes.length === 3");
++  check("重试保存期间仍没有派发任务", (await state()).runs.length === 0);
++  await write(2, true); await wait("!document.querySelector('.queue-retry')");
++  check("重试保存提交的是本窗口修改后的消息", (await state()).writes[2].items[0].text === "修改后保留的消息");
++  await js("document.querySelector('.queue-resume').click();true;");
++  await wait("window.__cairnQueuePersistence.calls().writes.length === 4"); await write(3, true);
++  await wait("window.__cairnQueuePersistence.calls().runs.length === 1");
++  check("落盘确认后只执行一次正确的队首", (await state()).runs[0].message === "修改后保留的消息");
++  await js("(() => {const t=document.querySelector('.composer-card textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'后续排队消息');t.dispatchEvent(new Event('input',{bubbles:true}));t.focus();})()"); pressEnter();
++  await wait("window.__cairnQueuePersistence.calls().writes.length === 5"); await write(4, true);
++  await js("window.__cairnQueuePersistence.run(0,{ok:true,accepted:true})");
++  await wait("window.__cairnQueuePersistence.calls().writes.length === 6");
++  check("自动续发也等待出队保存确认", (await state()).runs.length === 1);
++  await write(5, true); await wait("window.__cairnQueuePersistence.calls().runs.length === 2");
++  await js("window.__cairnQueuePersistence.run(1,{ok:false,accepted:false,error:'请求未接收'})");
++  await wait("window.__cairnQueuePersistence.calls().writes.length === 7"); await write(6, true);
++  check("主进程明确未接收时恢复队列，等待用户继续", await js("document.querySelector('.queue-strip').textContent.includes('后续排队消息') && !!document.querySelector('.queue-resume')") && (await state()).runs.length === 2);
++  await shot("03-admission-rejected");
++  await js("document.querySelector('.queue-resume').click();true;");
++  await wait("window.__cairnQueuePersistence.calls().writes.length === 8"); await write(7, true);
++  await wait("window.__cairnQueuePersistence.calls().runs.length === 3");
++  await js("window.__cairnQueuePersistence.run(2,{ok:false,accepted:true,error:'执行失败'})"); await pause();
++  check("已接收后的执行失败不会重新入队或重复派发", await js("!document.querySelector('.queue-strip')") && (await state()).runs.length === 3);
++  await js("(() => {const t=document.querySelector('.composer-card textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'运行中读取快照');t.dispatchEvent(new Event('input',{bubbles:true}));t.focus();})()"); pressEnter();
++  await wait("window.__cairnQueuePersistence.calls().runs.length === 4");
++  await js("(() => {const t=document.querySelector('.composer-card textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'快照竞态消息');t.dispatchEvent(new Event('input',{bubbles:true}));t.focus();})()"); pressEnter();
++  await wait("window.__cairnQueuePersistence.calls().writes.length === 9"); await write(8, true);
++  await js("window.__cairnQueuePersistence.holdReads(true);([...document.querySelectorAll('.s-title')].find(e=>e.textContent.includes('项目甲'))).closest('.session').click();true;");
++  await wait("window.__cairnQueuePersistence.calls().reads === 1");
++  await js("window.__cairnQueuePersistence.run(3,{ok:true,accepted:true})");
++  await wait("window.__cairnQueuePersistence.calls().writes.length === 10"); await write(9, true);
++  await wait("window.__cairnQueuePersistence.calls().runs.length === 5");
++  await js("window.__cairnQueuePersistence.read(0)"); await wait("!document.querySelector('.composer-card textarea').disabled");
++  check("迟到的旧磁盘快照不能把已派发的消息放回队列", await js("!document.querySelector('.queue-strip')"));
++  await js("window.__cairnQueuePersistence.run(4,{ok:true,accepted:true})"); await pause(250);
++  check("旧快照未造成重复执行", (await state()).runs.length === 5);
++  check("所有队列写入与任务均绑定原项目", (await state()).writes.every(c => c.workspace === "/tmp/demo-ws") && (await state()).runs.every(c => c.workspace === "/tmp/demo-ws"));
++  check("无 renderer/preload 错误", errors.length === 0); await finish();
++}
++setTimeout(() => { console.error("queue smoke 超时"); app.exit(1); }, 45000).unref();
++main().catch(error => { console.error(error); app.exit(1); });
+--- /dev/null
++++ b/docs/superpowers/plans/2026-11-01-queue-persistence.md
+@@ -0,0 +1,15 @@
++# 队列保存与派发顺序
++
++持续优化目标下的本批修复，目标保持 active。现有队首在 queueSet 应答前即出队并执行；写入失败只显示错误，无法阻止执行或恢复队首。
++
++方案：提取 renderer 队列持久化职责，按工作区/会话串行写入和出队；出队成功落盘后才派发，失败在本窗口恢复队首及后续编辑。自动续发遇到未解决的保存失败停表，显式恢复才重试。整条 drain 防重入，异步取队列期间的新消息仍进入同一目标队列。队列行按渲染 id 寻址，保存中禁止修改并显示状态。
++
++host 回传用户轮是否已接收；只有明确未接收的队列请求恢复入队，已接收但执行失败的请求不自动重发。协议升版，复用既有版本闸。
++
++- [x] 改前行为测试：保存失败、延迟保存、编辑交错、恢复重入、自动续发停表、明确未接收与执行失败区分。
++- [x] 实现串行持久化、派发锁、host 接收回执与队列 UI 状态。
++- [x] 定向、桌面全套、core 协议与 host、类型/构建/架构边界、真实 Electron、OCR delegate 当前代理审查。
++
++保留共享树其他改动；不修改规则、冻结判卷或 JSONL。不新增依赖。这里验证已知应答下的保存与接收顺序，不宣称进程崩溃/IPC 断连下的 exactly-once；后者需要持久化请求身份与接收确认事务，不能靠 renderer 回滚冒充。
++
++本批证据：`outputs/queue-persistence-2026-11-01/review.md`。补充防护：未保存队列不被重新开会话的旧磁盘快照覆盖，读期间的本地变更由版本号保护。

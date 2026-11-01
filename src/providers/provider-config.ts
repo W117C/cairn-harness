@@ -13,11 +13,12 @@
 // 本文件是纯逻辑：读文件、发请求、注入环境变量都不在这里（那是接线层的事）。判卷直接喂 JSON。
 
 import { isIP } from "node:net";
-import { MODEL_ID_RE, RESERVED_PROVIDER_IDS } from "./provider-identifiers";
+import { MODEL_ID_RE, PROVIDER_ID_RE, RESERVED_PROVIDER_IDS } from "./provider-identifiers";
 export { isValidModelId, RESERVED_PROVIDER_IDS } from "./provider-identifiers";
 import { DEFAULT_MODEL_TABLE, type ModelSpec, type ModelTier } from "./registry";
 import type { CatalogPricing } from "./catalog";
 import { DISCOVERY_PROTOCOLS, type DiscoveryProtocol } from "./discovery";
+import { isRecord } from "../is-record";
 
 /** 用户侧配置文件名（工作区级，与 `.agent/config.json` / `.agent/lsp.json` 同族先例）。 */
 export const CUSTOM_PROVIDERS_RELATIVE_PATH = [".agent", "providers.json"] as const;
@@ -86,17 +87,12 @@ export type ParseResult =
   | { ok: true; file: CustomProvidersFile; warnings: readonly string[] }
   | { ok: false; problems: readonly CustomProviderProblem[] };
 
-const PROVIDER_ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const ENV_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
 const TIERS: readonly ModelTier[] = ["cheap", "standard", "strong"];
 const PRICE_KEYS = ["inputPerMTok", "outputPerMTok", "cacheReadPerMTok", "cacheWritePerMTok"] as const;
 /** 出现这些字段名 = 用户想把 key 值写进文件。不是「忽略」，是**判错**：
  *  静默忽略会让人以为钥匙已经配好了，而实际上一轮真跑会以「没配 key」失败。 */
 const FORBIDDEN_KEY_FIELDS = ["apikey", "key", "token", "secret", "apikeyvalue", "bearertoken", "password"];
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
 
 function posInt(v: unknown): number | undefined {
   return typeof v === "number" && Number.isInteger(v) && v > 0 ? v : undefined;

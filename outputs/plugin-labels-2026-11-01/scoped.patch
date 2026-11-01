@@ -1,0 +1,165 @@
+--- a/apps/desktop/src/renderer/components/plugins/PluginInstalled.tsx	2026-11-01 14:20:49
++++ b/apps/desktop/src/renderer/components/plugins/PluginInstalled.tsx	2026-11-01 14:19:12
+@@ -9,18 +9,8 @@
+ import type { PluginRowView } from "../../derived/plugins";
+ import type { PluginsMarketplaceState } from "../../state/plugins-marketplace";
+ import { ConfirmDialog } from "../ConfirmDialog";
++import { scopeLabelOf, sourceKindLabel } from "./labels";
+ 
+-function sourceLabel(row: PluginRowView): string {
+-  if (row.sourceKind === "catalog") return "官方目录";
+-  if (row.sourceKind === "git") return "Git";
+-  if (row.sourceKind === "local") return "本地";
+-  return "手动";
+-}
+-
+-function scopeLabel(row: PluginRowView): string {
+-  return row.installed?.scope === "project" ? "当前项目" : "全局";
+-}
+-
+ function stateLabel(row: PluginRowView): string {
+   if (row.state === "enabled") return "已启用";
+   if (row.state === "disabled") return "已停用";
+@@ -53,9 +43,9 @@
+           <span>{props.row.summary}</span>
+         </span>
+         <span className="plugin-row-meta">
+-          <span>{sourceLabel(props.row)}</span>
++          <span>{sourceKindLabel(props.row.sourceKind)}</span>
+           <span>{props.row.version ?? "未声明版本"}</span>
+-          {!unmanaged && <span>{scopeLabel(props.row)}</span>}
++          {!unmanaged && <span>{scopeLabelOf(props.row.installed?.scope === "project" ? "project" : "user")}</span>}
+           <span>{stateLabel(props.row)}</span>
+         </span>
+       </button>
+--- a/apps/desktop/src/renderer/components/plugins/PluginDiscover.tsx	2026-11-01 14:20:49
++++ b/apps/desktop/src/renderer/components/plugins/PluginDiscover.tsx	2026-11-01 14:19:52
+@@ -1,14 +1,8 @@
+ import { AlertTriangle, Download, Puzzle, Star, WifiOff } from "lucide-react";
+ import type { PluginRowView } from "../../derived/plugins";
+ import type { PluginsMarketplaceState } from "../../state/plugins-marketplace";
+-function sourceLabel(row: PluginRowView): string {
+-  if (row.sourceKind === "catalog") return "官方目录";
+-  if (row.sourceKind === "git") return "Git";
+-  if (row.sourceKind === "local") return "本地";
+-  return "手动";
+-}
++import { sourceKindLabel } from "./labels";
+ 
+-
+ const CATEGORY_LABEL = {
+   skills: "技能",
+   commands: "命令",
+@@ -46,7 +40,7 @@
+           <span>{props.row.summary}</span>
+         </span>
+         <span className="plugin-row-meta">
+-          <span>{sourceLabel(props.row)}</span>
++          <span>{sourceKindLabel(props.row.sourceKind)}</span>
+           <span>{props.row.version ?? "未声明版本"}</span>
+           <span>{capabilityText(props.row)}</span>
+         </span>
+--- a/apps/desktop/src/renderer/components/plugins/PluginReview.tsx	2026-11-01 14:20:49
++++ b/apps/desktop/src/renderer/components/plugins/PluginReview.tsx	2026-11-01 14:19:12
+@@ -2,17 +2,8 @@
+ import { AlertTriangle, Check, ShieldAlert, X } from "lucide-react";
+ import { ModalSurface } from "../ModalSurface";
+ import type { ScopedPluginReview } from "../../state/plugins-marketplace";
+-function sourceLabel(source: ScopedPluginReview["review"]["source"]): string {
+-  if (source.kind === "catalog") return "官方目录";
+-  if (source.kind === "git") return "Git";
+-  return "本地目录";
+-}
++import { scopeLabelOf, sourceKindLabel } from "./labels";
+ 
+-function scopeLabel(scope: ScopedPluginReview["review"]["scope"]): string {
+-  return scope === "user" ? "全局" : "当前项目";
+-}
+-
+-
+ export interface PluginReviewProps {
+   readonly state: ScopedPluginReview;
+   readonly busy?: boolean;
+@@ -48,8 +39,8 @@
+         <section className="plugin-review-section">
+           <h3>来源</h3>
+           <dl className="plugin-facts">
+-            <dt>类型</dt><dd>{sourceLabel(review.source)}</dd>
+-            <dt>作用域</dt><dd>{scopeLabel(review.scope)}</dd>
++            <dt>类型</dt><dd>{sourceKindLabel(review.source.kind)}</dd>
++            <dt>作用域</dt><dd>{scopeLabelOf(review.scope)}</dd>
+             {review.source.kind === "git" ? (
+               <>
+                 <dt>仓库</dt><dd className="plugin-break">{review.source.repositoryUrl}</dd>
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 14:20:49
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 14:20:16
+@@ -4289,3 +4289,4 @@
+ 48. **技能 / 目标 / MCP 元工具的行摘要（第 925 页）**：`skill` / `refine_goal` / `mcp_list` / `mcp_activate` / `mcp_release` 的参数同样没有 command/path，摘要此前落到 JSON 兜底（`{"name":"/plugin:review","args":…}`、`{}`）。`ownSubject` 补这五族：skill→调用名、refine_goal→目标原文（截 80）、mcp_list→server 或「全部 MCP 服务器」、mcp_activate→`server（N 把）`或`（整台）`、mcp_release→`server` 或 `server / 工具名`；`TOOL_VERBS` 补五个动词（用技能 / 改目标 / 列 · 启用 · 停用 MCP）。
+ 49. **⌘F 在折叠轮次里也能搜到（第 926 页）**：折叠轮次的分支只渲染「第 N 轮 + 摘要」，正文不在 DOM ⇒ 查找条原来只查 DOM，自己折起来的那些轮一律搜不到（计数 0，也没有提示）。现在 FindBar 同时读模型行：可见部分仍按 DOM 命中，折叠轮次里的 user/assistant 正文按模型补进来（按行序去重）；步进到折叠轮次里的命中时先展开那一轮，下一拍再滚到行锚并闪一下。工具行与元信息仍不参与（与 DOM 选择器同口径）。
+ 50. **注入面也全覆盖（第 927 页）**：静态工具面的动词判据只盯 `TOOL_NAMES`，运行期注入的五把（`tool_search` / `search_history` / `impact_query` / `obs_recall` / `diagnose`）漏在判据外——行首仍是实现名；`obs_recall` / `impact_query`（symbol 模式）/ `diagnose` 的摘要还会甩 JSON（`{}`、`{"face":"lint"}`）。补五个动词（找工具 / 搜历史 / 查波及面 / 回看 / 诊断）与三条主语（id / symbol / face），并把覆盖判据扩到 `INJECTED_TOOLS`：少一把就红，报错里当场点名。
++51. **插件标签一把尺（第 928 页）**：来源/作用域的词表原来有三份手抄本：安装确认卡把 local 写「本地目录」、列表页与发现页写「本地」；runtime（没有安装记录、手放进目录的那类）只有列表认「手动」；作用域一边按 `user` 判、一边按 `project` 判。词表收到 `components/plugins/labels.ts`（`sourceKindLabel` / `scopeLabelOf`），三张卡都读它；判卷钉住四种来源两种作用域，并钉「除 labels.ts 外没有第二份手抄本」。
+--- /dev/null → apps/desktop/src/renderer/components/plugins/labels.ts
+--- /dev/null	2026-11-01 14:20:49
++++ b/apps/desktop/src/renderer/components/plugins/labels.ts	2026-11-01 14:19:51
+@@ -0,0 +1,20 @@
++// 插件来源/作用域的词表（第 928 页）：此前三份手抄本漂成了两套说法——
++//   · 安装确认卡把 local 读作「本地目录」，而列表页与发现页读作「本地」；
++//   · runtime（没有安装记录、手放进插件目录的那一类）只有列表认得，写「手动」；
++//   · 作用域两边一个按 "user" 判、一个按 "project" 判，读起来像两条规则。
++// 一份词表放组件层（三张卡都在这一层，派生层的 PluginRowView 只提供取值）。
++import type { PluginRowView } from "../../derived/plugins";
++import type { PluginInstallScope } from "../../../../../../src/main/plugin-source";
++
++/** 来源：官方目录 / Git / 本地目录 / 手动（runtime = 没有安装记录、手放进目录的）。 */
++export function sourceKindLabel(kind: PluginRowView["sourceKind"]): string {
++  if (kind === "catalog") return "官方目录";
++  if (kind === "git") return "Git";
++  if (kind === "local") return "本地目录";
++  return "手动";
++}
++
++/** 作用域：user = 全局（对所有项目生效），project = 当前项目。 */
++export function scopeLabelOf(scope: PluginInstallScope): string {
++  return scope === "user" ? "全局" : "当前项目";
++}
+--- /dev/null → apps/desktop/tests/plugin-labels.test.ts
+--- /dev/null	2026-11-01 14:20:49
++++ b/apps/desktop/tests/plugin-labels.test.ts	2026-11-01 14:19:44
+@@ -0,0 +1,37 @@
++// 插件来源/作用域的单一词表（第 928 页）：三份手抄本此前漂成两套说法——
++// 同一个 local，安装卡写「本地目录」、列表与发现页写「本地」；runtime 只有列表认「手动」。
++import { readFileSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++import { describe, expect, it } from "vitest";
++import { scopeLabelOf, sourceKindLabel } from "../src/renderer/components/plugins/labels";
++
++const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
++
++describe("插件标签一把尺", () => {
++  it("来源四种：官方目录 / Git / 本地目录 / 手动（runtime）", () => {
++    expect(sourceKindLabel("catalog")).toBe("官方目录");
++    expect(sourceKindLabel("git")).toBe("Git");
++    expect(sourceKindLabel("local")).toBe("本地目录"); // 改前列表页与发现页写的是「本地」
++    expect(sourceKindLabel("runtime")).toBe("手动");
++  });
++
++  it("作用域两种：user = 全局，project = 当前项目", () => {
++    expect(scopeLabelOf("user")).toBe("全局");
++    expect(scopeLabelOf("project")).toBe("当前项目");
++  });
++
++  it("三张卡都读同一份：没有第二份手抄本", () => {
++    const files = ["PluginInstalled.tsx", "PluginDiscover.tsx", "PluginReview.tsx"];
++    for (const f of files) {
++      const src = read(`../src/renderer/components/plugins/${f}`);
++      expect(src, `${f} 没读 labels.ts`).toContain('from "./labels"');
++      expect(src, `${f} 还留着自己的 sourceLabel`).not.toContain("function sourceLabel");
++      expect(src, `${f} 还留着自己的 scopeLabel`).not.toContain("function scopeLabel");
++    }
++    const labels = read("../src/renderer/components/plugins/labels.ts");
++    // 词只在这里出现一次：别的文件里再写「本地目录」就是又抄了一份
++    const copies = files.filter((f) => read(`../src/renderer/components/plugins/${f}`).includes('"本地目录"'));
++    expect(copies, "除 labels.ts 之外还有文件直接写「本地目录」：" + copies.join(" | ")).toEqual([]);
++    expect(labels).toContain('return "本地目录";');
++  });
++});

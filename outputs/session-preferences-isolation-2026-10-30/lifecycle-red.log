@@ -1,0 +1,58 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/session-prefs-isolation.test.ts (9 tests | 2 failed) 50ms
+   × renames and deletes only the addressed session's preference file 8ms
+   × refuses a preference target collision and rolls the log name back 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/session-prefs-isolation.test.ts > renames and deletes only the addressed session's preference file
+AssertionError: expected { version: 1, model: 'model-a' } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "model": "model-a",
+  "version": 1,
+}
+
+ ❯ tests/session-prefs-isolation.test.ts:54:30
+     52|   await renameSession(a, "same", "renamed");
+     53|   const renamed = `${pathOf(a, "renamed")}.prefs.json`;
+     54|   expect(await readPrefs(a)).toBeNull();
+       |                              ^
+     55|   expect(JSON.parse(await readFile(renamed, "utf8"))).toEqual({ versio…
+     56|   await deleteSession(a, "renamed");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/session-prefs-isolation.test.ts > refuses a preference target collision and rolls the log name back
+AssertionError: promise resolved "'renamed'" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+"renamed"
+
+ ❯ tests/session-prefs-isolation.test.ts:65:52
+     63|   const target = `${pathOf(a, "renamed")}.prefs.json`;
+     64|   await writeFile(target, '{"version":1,"model":"orphan"}');
+     65|   await expect(renameSession(a, "same", "renamed")).rejects.toThrow(/偏…
+       |                                                    ^
+     66|   expect(await readFile(pathOf(a, "same"), "utf8")).toBe("");
+     67|   expect(JSON.parse(await readFile(target, "utf8"))).toEqual({ version…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 7 passed (9)
+   Start at  16:05:57
+   Duration  1.08s (transform 78%, import 16%, tests 5%)
+

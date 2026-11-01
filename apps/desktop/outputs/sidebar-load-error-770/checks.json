@@ -1,0 +1,35 @@
+{
+  "passed": 5,
+  "total": 5,
+  "checks": [
+    {
+      "name": "会话清单失败行在",
+      "ok": true,
+      "detail": {
+        "text": "会话列表没有加载成功\n会话元数据损坏，已拒绝覆盖: /tmp/demo-ws/.agent/sessions/session-metadata.json (JSON.parse 失败)——修好或删除该文件后重试\n重试",
+        "title": "会话元数据损坏，已拒绝覆盖: /tmp/demo-ws/.agent/sessions/session-metadata.json (JSON.parse 失败)——修好或删除该文件后重试",
+        "retry": true
+      }
+    },
+    {
+      "name": "失败原因上屏：损坏文件路径 + 出路",
+      "ok": true,
+      "detail": "会话列表没有加载成功\n会话元数据损坏，已拒绝覆盖: /tmp/demo-ws/.agent/sessions/session-metadata.json (JSON.parse 失败)——修好或删除该文件后重试\n重试"
+    },
+    {
+      "name": "原句完整保留在 title（长路径不被截断成信息损失）",
+      "ok": true,
+      "detail": "会话元数据损坏，已拒绝覆盖: /tmp/demo-ws/.agent/sessions/session-metadata.json (JSON.parse 失败)——修好或删除该文件后重试"
+    },
+    {
+      "name": "重试按钮仍在",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ]
+}

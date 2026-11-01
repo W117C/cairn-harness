@@ -1,0 +1,8 @@
+$ node --import tsx .tmp/probe-skill-mcp.mts
+skill          ⇒ "/plugin:review"
+refine_goal    ⇒ "把登录页的重试做成指数退避，并在 3 次失败后给出可操作提示"
+mcp_list       ⇒ "全部 MCP 服务器"
+mcp_list       ⇒ "plugin/sqlite"
+mcp_activate   ⇒ "plugin/sqlite（2 把）"
+mcp_activate   ⇒ "plugin/sqlite（整台）"
+mcp_release    ⇒ "plugin/sqlite / query"

@@ -1,0 +1,65 @@
+{
+  "checks": [
+    {
+      "name": "读取期间缓存队列所有动作禁用",
+      "ok": false
+    },
+    {
+      "name": "队列读取失败后仍锁住输入",
+      "ok": false
+    },
+    {
+      "name": "队列读取失败后仍阻止缓存队列改写",
+      "ok": false
+    },
+    {
+      "name": "失败原因在独立恢复提示中",
+      "ok": false
+    },
+    {
+      "name": "light 长错误不横向溢出",
+      "ok": true
+    },
+    {
+      "name": "dark 长错误不横向溢出",
+      "ok": true
+    },
+    {
+      "name": "提供就地重新读取入口",
+      "ok": false
+    },
+    {
+      "name": "队列先读完时等待正文，不提前解锁",
+      "ok": true
+    },
+    {
+      "name": "重读成功解除锁并移除提示",
+      "ok": true
+    },
+    {
+      "name": "重读保留未发送草稿与持久队列",
+      "ok": true
+    },
+    {
+      "name": "正文读取失败后仍锁住输入",
+      "ok": false
+    },
+    {
+      "name": "提供就地重新读取入口",
+      "ok": false
+    },
+    {
+      "name": "切会话后旧失败不污染新会话",
+      "ok": true
+    },
+    {
+      "name": "读取与恢复未改写队列、未派发任务",
+      "ok": true
+    },
+    {
+      "name": "无 renderer/preload 错误",
+      "ok": true
+    }
+  ],
+  "errors": []
+}

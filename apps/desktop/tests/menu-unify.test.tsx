@@ -97,8 +97,10 @@ describe("批 5：权限菜单（图标 + 两行 + 危险标签 + 自动二次�
     expect(permSrc).toContain("props.onModeChange(target)");
     // 确认按钮才带 onModeChange + onClose 串联
     expect(permSrc).toMatch(/onConfirm[\s\S]{0,160}props\.onModeChange\(target\)[\s\S]{0,60}props\.onClose\(\)/);
-    // 完全允许档有自己的确认文案
-    expect(permSrc).toContain('props.mode === "full-access"');
+    // 完全允许档有自己的确认文案（2026-10-31 抽成 permissionConfirmCopy 单一来源，
+    // composer 内联确认与 Workbench 模态确认共用；判据跟着契约走，原意不变）
+    expect(permSrc).toContain('mode === "full-access"');
+    expect(permSrc).toContain("permissionConfirmCopy(props.mode)");
   });
 
   it("确认卡文案：标题 + 危险说明 +〔取消 / 确认切换（danger）〕", () => {

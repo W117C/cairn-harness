@@ -1,0 +1,21 @@
+[
+  {
+    "task_id": "tb-demo-1",
+    "instruction": "Make the build green without weakening the tests.",
+    "difficulty": "medium",
+    "category": "build",
+    "tags": ["ci", "typescript"],
+    "max_agent_timeout_sec": 600,
+    "max_test_timeout_sec": 60,
+    "seed": 42
+  },
+  {
+    "task_id": "tb-demo-2",
+    "instruction": "Fix the data race reported by the stress test.",
+    "difficulty": "hard",
+    "category": "concurrency",
+    "tags": ["go"],
+    "max_agent_timeout_sec": 1200,
+    "max_test_timeout_sec": 120
+  }
+]

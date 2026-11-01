@@ -90,6 +90,22 @@ export function useProjectActions(deps: ProjectActionsDeps) {
     setProjectRemoveConfirm(p);
   }, []);
 
+  /** v36：目录被移动/改名后重新定位。成功后刷新项目与会话；若正停在这个项目，工作区跟着换到新路径。 */
+  const handleRelocateProject = useCallback(async (p: ProjectRecord, nextPath: string): Promise<void> => {
+    try {
+      const updated = await window.agent.relocateProject(p.id, nextPath);
+      await refreshProjects();
+      if (activeWorkspaceRef.current === p.path) {
+        setActiveWorkspace(updated.path);
+        activeWorkspaceRef.current = updated.path;
+      }
+      refreshSessions();
+      toast.success(STR.toast.projectRelocated.replace("{name}", updated.name));
+    } catch (err) {
+      toast.error(`项目重新定位失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [refreshProjects, refreshSessions, setActiveWorkspace, activeWorkspaceRef]);
+
   const handleRevealProject = useCallback((p: ProjectRecord): void => {
     void window.agent.revealInFinder(p.path).then((r) => {
       if (!r.ok) toast.error(r.error ?? "无法在 Finder 中显示");
@@ -117,5 +133,5 @@ export function useProjectActions(deps: ProjectActionsDeps) {
   }, [refreshProjects, refreshSessions]);
 
 
-  return { handleAddProject, handleCloneProject, handleUpdateProject, doRemoveProject, handleRemoveProject, handleRevealProject, handleCreateFromDialog };
+  return { handleAddProject, handleCloneProject, handleUpdateProject, doRemoveProject, handleRemoveProject, handleRevealProject, handleRelocateProject, handleCreateFromDialog };
 }

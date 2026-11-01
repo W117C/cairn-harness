@@ -1,0 +1,202 @@
+--- a/apps/desktop/src/renderer/components/FindBar.tsx	2026-11-01 14:09:44
++++ b/apps/desktop/src/renderer/components/FindBar.tsx	2026-11-01 14:11:43
+@@ -1,6 +1,8 @@
+-// 对话内查找（⌘F，2026-10-18 对照 Claude 桌面端 Edit > Find…）：在已渲染的用户/助手正文里找文本。
+-// 交互：⏎ / ↓ 下一个、⇧⏎ / ↑ 上一个、Esc 关闭。只搜「看得见的正文」（.row .t）——工具行、元信息、
+-// 折叠摘要不参与；高亮用瞬态 class（900ms 自清），不往 Stream 塞匹配态（查找是读面，不改数据）。
++// 对话内查找（⌘F，2026-10-18 对照 Claude 桌面端 Edit > Find…）：在用户/助手正文里找文本。
++// 交互：⏎ / ↓ 下一个、⇧⏎ / ↑ 上一个、Esc 关闭。可见部分搜 DOM 的 `.row .t`；折叠轮次的正文不在 DOM 里
++// （折叠分支只渲染标题行），按模型行补齐，命中时先展开再定位（第 926 页）。工具行与元信息不参与；
++// 高亮用瞬态 class（900ms 自清），不往 Stream 塞匹配态（查找是读面，不改数据）。
++import type { StreamRow } from "../derived/stream";
+ import { isCompositionEnter } from "../ime";
+ import { scrollBehavior } from "../useStickyScroll";
+ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+@@ -14,17 +16,42 @@
+   open: boolean;
+   /** 搜索范围：流的滚动容器（streamEl）。null = 还没有会话，只渲染不搜。 */
+   container: HTMLElement | null;
++  /** 折叠轮次的内容不在 DOM 里（`Stream` 的折叠分支只渲染标题行）⇒ 只搜 DOM 会漏。
++   *  传了模型行与折叠集，就能把「已折叠轮次里的命中」也算进来，步进时先展开再定位。 */
++  rows?: readonly StreamRow[];
++  foldedRounds?: ReadonlySet<number>;
++  onExpandRound?: (round: number) => void;
+   onClose: () => void;
+ }
+ 
+ /** 每次查询/步进都重新取一遍 DOM：流式追加或重渲染会换掉旧节点，缓存 Element 会指向已卸载的树。 */
+-function collect(container: HTMLElement | null, query: string): HTMLElement[] {
++function domHits(container: HTMLElement | null, query: string): HTMLElement[] {
+   const q = query.trim().toLowerCase();
+   if (q === "" || container === null) return [];
+   return [...container.querySelectorAll<HTMLElement>(".row.user .t, .row.assistant .t")]
+     .filter((el) => (el.textContent ?? "").toLowerCase().includes(q));
+ }
+ 
++const NO_FOLDS: ReadonlySet<number> = new Set<number>();
++
++/** 一次命中：可见行给元素（按文档序），折叠轮次给行号（DOM 里还没有这个节点）。 */
++type FindHit = { el: HTMLElement } | { seq: number; round: number };
++
++/** 折叠轮次里的命中（模型行，第 926 页）。折叠分支只渲染「第 N 轮 + 摘要」——正文既不在 DOM、
++ *  也不在 .t 里 ⇒ 折叠后 ⌘F 搜不到自己刚折起来的那些轮。只算 user/assistant 正文，与 DOM 同口径。 */
++export function foldedHitSeqs(rows: readonly StreamRow[], folded: ReadonlySet<number>, query: string): number[] {
++  const q = query.trim().toLowerCase();
++  if (q === "") return [];
++  const out: number[] = [];
++  for (const r of rows) {
++    if (r.kind !== "user" && r.kind !== "assistant") continue;
++    if (!folded.has(r.round)) continue;
++    if (!r.text.toLowerCase().includes(q)) continue;
++    out.push(r.seq);
++  }
++  return out;
++}
++
+ function flash(el: HTMLElement): void {
+   el.scrollIntoView({ block: "center", behavior: scrollBehavior("smooth") });
+   const row = el.closest(".row");
+@@ -51,9 +78,35 @@
+     return () => window.clearTimeout(t);
+   }, [props.open]);
+ 
++  /** 命中序列：可见行按文档序在前，折叠轮次里的按行序在后（折叠的节点还不存在，展开后才算可见）。 */
++  const collectHits = (value: string): FindHit[] => {
++    const visible = domHits(props.container, value).map((el): FindHit => ({ el }));
++    const seqs = foldedHitSeqs(props.rows ?? [], props.foldedRounds ?? NO_FOLDS, value);
++    const folded = seqs.map((seq): FindHit => {
++      const row = (props.rows ?? []).find((r) => r.seq === seq);
++      const round = row === undefined || row.kind === "tool" || row.kind === "error" ? 0 : row.round;
++      return { seq, round };
++    });
++    return [...visible, ...folded];
++  };
++
++  /** 折叠轮次里的命中：先展开那一轮，等这一帧渲染完再按行锚找节点（拿不到就只展开，不硬闪）。 */
++  const revealFolded = (seq: number, round: number): void => {
++    props.onExpandRound?.(round);
++    window.setTimeout(() => {
++      const el = props.container?.querySelector<HTMLElement>(`[data-event-id="${String(seq + 1)}"] .t`);
++      if (el !== null && el !== undefined) flash(el);
++    }, 0);
++  };
++
++  const reveal = (hit: FindHit): void => {
++    if ("el" in hit) { flash(hit.el); return; }
++    revealFolded(hit.seq, hit.round);
++  };
++
+   const search = (value: string): void => {
+     setQuery(value);
+-    const hits = collectSeqs(value);
++    const hits = collectHits(value);
+     setCount(hits.length);
+     setIndex(0);
+     if (hits[0] !== undefined) reveal(hits[0]);
+@@ -61,7 +114,7 @@
+ 
+   /** 用最新 DOM 重算再走位：计数与位置始终对得上当前流（流式期间也能用）。 */
+   const step = (dir: 1 | -1): void => {
+-    const hits = collect(props.container, query);
++    const hits = collectHits(query);
+     if (hits.length === 0) {
+       setCount(0);
+       setIndex(0);
+@@ -70,7 +123,7 @@
+     const next = (index + dir + hits.length) % hits.length;
+     setCount(hits.length);
+     setIndex(next);
+-    flash(hits[next]!);
++    reveal(hits[next]!);
+   };
+ 
+   // 钩子必须在早退之前调用（关闭态也要保持 hook 顺序）。
+--- a/apps/desktop/src/renderer/panes/WorkbenchView.tsx	2026-11-01 14:09:44
++++ b/apps/desktop/src/renderer/panes/WorkbenchView.tsx	2026-11-01 14:07:30
+@@ -499,7 +499,15 @@
+         <Group orientation="horizontal" id="cairn-main" className="main-group" elementRef={mainGroupRef}>
+           <Panel minSize={420}>
+         <main className="main" data-dsh-claude-part="center-column" data-empty={showEmpty ? "true" : "false"}>
+-          <FindBar ref={findRef} open={findOpen && !showEmpty} container={streamEl} onClose={closeFind} />
++          <FindBar
++            ref={findRef}
++            open={findOpen && !showEmpty}
++            container={streamEl}
++            rows={streamRows}
++            foldedRounds={foldedRounds}
++            onExpandRound={(round) => { streamActions.onToggleFold?.(round); }}
++            onClose={closeFind}
++          />
+           {showEmpty ? (
+             /* 空屏（P2-1）：品牌字标 → 问候 → 项目 chip →（输入区居中枢位见 zone-composer）→ 建议行。
+                错误/提示条在这里也渲染：新建项目与预览的失败发生在"还没有会话"时，
+--- a/apps/desktop/tests/find-bar.test.tsx	2026-11-01 14:09:44
++++ b/apps/desktop/tests/find-bar.test.tsx	2026-11-01 14:11:27
+@@ -6,7 +6,8 @@
+ import { fileURLToPath } from "node:url";
+ import { describe, expect, it } from "vitest";
+ import { renderToStaticMarkup } from "react-dom/server";
+-import { FindBar } from "../src/renderer/components/FindBar";
++import { FindBar, foldedHitSeqs } from "../src/renderer/components/FindBar";
++import type { StreamRow } from "../src/renderer/derived/stream";
+ import { readAppSurface } from "./helpers/app-surface";
+ 
+ const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+@@ -43,7 +44,10 @@
+     expect(app).toContain("if (activeIdRef.current === null) return false;");
+     expect(app).not.toContain("if (dir === -1 || activeIdRef.current === null) return false;");
+     expect(app).toContain("if (h.findOpen) { e.preventDefault(); h.closeFind(); return; }");
+-    expect(app).toContain("<FindBar ref={findRef} open={findOpen && !showEmpty}");
++    // 第 926 页：FindBar 多了模型行/折叠集/展开动作三个 props，JSX 从单行变成多行——
++    // 这条钉的是「面板挂在这儿、开合绑 findOpen && !showEmpty」，不是行长。
++    expect(app).toContain("<FindBar");
++    expect(app).toContain("open={findOpen && !showEmpty}");
+     expect(app).toContain('case "KeyG"');
+     expect(app).toContain("findRef.current?.step(dir)");
+     expect(read("../src/renderer/components/FindBar.tsx")).toContain("useImperativeHandle(ref");
+@@ -61,3 +65,38 @@
+   });
+ });
+ 
++describe("折叠轮次里的命中（第 926 页）", () => {
++  const rows = [
++    { kind: "user", text: "旧问题：登录重试", seq: 0, round: 1 },
++    { kind: "assistant", text: "旧回答：用指数退避", seq: 1, round: 1, eventId: 2 },
++    { kind: "tool", tool: "read_file", summary: "a.ts", seq: 2 },
++    { kind: "user", text: "新问题：设置页", seq: 3, round: 2 },
++  ] as unknown as StreamRow[];
++
++  it("只把已折叠轮次里的 user/assistant 正文算进来（工具行不参与）", () => {
++    const folded = new Set([1]);
++    expect(foldedHitSeqs(rows, folded, "登录")).toEqual([0]);
++    expect(foldedHitSeqs(rows, folded, "指数退避")).toEqual([1]);
++    expect(foldedHitSeqs(rows, folded, "新问题")).toEqual([]); // 第 2 轮没折叠 ⇒ DOM 负责
++    expect(foldedHitSeqs(rows, new Set([2]), "新问题")).toEqual([3]);
++    expect(foldedHitSeqs(rows, folded, "a.ts")).toEqual([]); // 工具行不参与（与 DOM 选择器同口径）
++  });
++
++  it("大小写与空白不影响；空查询不返回任何命中", () => {
++    const rows2 = [{ kind: "assistant", text: "Fixed Retry", seq: 5, round: 3, eventId: 6 }] as unknown as StreamRow[];
++    expect(foldedHitSeqs(rows2, new Set([3]), "fixed retry")).toEqual([5]);
++    expect(foldedHitSeqs(rows2, new Set([3]), "   ")).toEqual([]);
++  });
++
++  it("接线：FindBar 收模型行/折叠集/展开动作；命中在折叠轮里先展开再闪", () => {
++    const src = read("../src/renderer/components/FindBar.tsx");
++    expect(src).toContain("foldedHitSeqs(props.rows ?? [], props.foldedRounds ?? NO_FOLDS, value)");
++    expect(src).toContain("props.onExpandRound?.(round);");
++    expect(src).toContain("revealFolded(hit.seq, hit.round);");
++    expect(src).toContain('querySelector<HTMLElement>(`[data-event-id="${String(seq + 1)}"] .t`)');
++    const view = read("../src/renderer/panes/WorkbenchView.tsx");
++    expect(view).toContain("rows={streamRows}");
++    expect(view).toContain("foldedRounds={foldedRounds}");
++    expect(view).toContain("onExpandRound={(round) => { streamActions.onToggleFold?.(round); }}");
++  });
++});
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 14:09:44
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 14:08:47
+@@ -4287,3 +4287,4 @@
+ 46. **记忆与定时任务行的摘要（第 923 页）**：`remember` / `automation_*` 的参数里没有 command/path，摘要此前落到 JSON 兜底（`{"scope":"project","kind":"decision",…}`、`{}`）。`ownSubject` 补这两族：remember→正文首行（无正文用 topic）、automation_create/update→name（update 缺 name 用 id）、delete/run_now→id、list→「全部定时任务」；`TOOL_VERBS` 补六个动词（记住 / 建 / 改 / 删 / 跑 / 列定时任务）。
+ 47. **字节刻度只有一把尺（第 924 页）**：附件行 `formatSize` 与日志窗的局部 `formatBytes` 各写一份——2048 字节一处写「2 KB」、一处写「2.0 KB」；512 字节在附件行是没单位的裸数「512」；两边在 1 MB 门口都写出四位数（「1024 KB」/「1024.0 KB」）。实现收到 `derived/format-bytes.ts`（B/KB/MB 一位小数、`1024.0 KB` 进位成 `1.0 MB`、非法与负数返回 null），两个组件都读它；附件行「拿不到就破折号」的口径留在调用点。
+ 48. **技能 / 目标 / MCP 元工具的行摘要（第 925 页）**：`skill` / `refine_goal` / `mcp_list` / `mcp_activate` / `mcp_release` 的参数同样没有 command/path，摘要此前落到 JSON 兜底（`{"name":"/plugin:review","args":…}`、`{}`）。`ownSubject` 补这五族：skill→调用名、refine_goal→目标原文（截 80）、mcp_list→server 或「全部 MCP 服务器」、mcp_activate→`server（N 把）`或`（整台）`、mcp_release→`server` 或 `server / 工具名`；`TOOL_VERBS` 补五个动词（用技能 / 改目标 / 列 · 启用 · 停用 MCP）。
++49. **⌘F 在折叠轮次里也能搜到（第 926 页）**：折叠轮次的分支只渲染「第 N 轮 + 摘要」，正文不在 DOM ⇒ 查找条原来只查 DOM，自己折起来的那些轮一律搜不到（计数 0，也没有提示）。现在 FindBar 同时读模型行：可见部分仍按 DOM 命中，折叠轮次里的 user/assistant 正文按模型补进来（按行序去重）；步进到折叠轮次里的命中时先展开那一轮，下一拍再滚到行锚并闪一下。工具行与元信息仍不参与（与 DOM 选择器同口径）。

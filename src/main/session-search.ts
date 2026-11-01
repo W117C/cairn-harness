@@ -30,6 +30,7 @@ import { open, readdir, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { readSessionView, resolveSessionChain, type AgentEvent, type EventRef, type SessionRef } from "../events";
 import type { SessionMetadataRecord } from "./session-metadata";
+import { isSessionLogAt } from "./sessions";
 
 // ---- 语料口径：可见事件种类（唯一事实源）----
 /** 进语料的事件种类。**除这三种以外的一切事件都不进语料**（含 thinking_delta）。 */
@@ -329,6 +330,11 @@ export async function searchSessions(opts: SessionSearchOptions): Promise<Sessio
     if (!name.endsWith(".jsonl")) continue;
     const id = name.slice(0, -".jsonl".length);
     const path = join(opts.root, name);
+    try {
+      if (!(await isSessionLogAt(path))) continue;
+    } catch {
+      continue; // 首行都读不到：这条既扫不了，也不该被记成会话
+    }
     let mtimeMs = 0;
     try {
       mtimeMs = (await stat(path)).mtimeMs;

@@ -1,0 +1,71 @@
+--- a/docs/CODE-WIKI.md	2026-11-01 15:23:49
++++ b/docs/CODE-WIKI.md	2026-11-01 15:18:22
+@@ -123,7 +123,7 @@
+ - **图标唯一事实源：`components/icons.tsx` 的 `Ic` 表**。16px 网格、stroke 1.5、currentColor；
+   组件一律 `import { Ic }`，不许再内联 `<svg>` 路径或用 emoji 当图标（render-structure 判卷
+   豁免的 `⚠`/`✓` 字面量除外）。`providerHue(id)` 给 provider 品牌色相（确定性哈希）。
+-- **markdown 渲染：`markdown.tsx` 的 `parseBlocks`（纯函数，tests/markdown.test.tsx 判卷）+
++- **markdown 渲染：`markdown.tsx` 的 `parseBlocks`（纯函数，apps/desktop/tests/markdown.test.tsx 判卷）+
+   `<Markdown>`**。零依赖、零 `dangerouslySetInnerHTML`（全部 React 文本节点转义，链接只放行
+   http(s)）；未闭合围栏按"开放代码块"渲染（流式不闪烁）。样式全部前缀 `.md-*`——不许裸选
+   `pre`，会漏进 `.kv pre`（工具行展开体）。
+@@ -133,9 +133,9 @@
+   `.toolcluster`、`data-round-anchor` 这些锚——TurnRail 的跳轮/flash 靠 DOM 查询它们。
+ 
+ 判卷雷区：`apps/desktop/tests/render-structure.test.tsx` 用 react-dom/server 钉了大量用户可见
+-字符串与计数（分组头、`标准 · 窗口 128k`、`class="check">✓<`、disabled 计数、设置导航六分区
++字符串与计数（分组头、`标准 · 窗口 128.0k`、`class="check">✓<`、disabled 计数、设置导航六分区
+ 顺序唯一、`<Switch` 恰 3 处、CustomProviderForm 源码级 `allowLocalEndpoint: true`）。重排 UI
+-先读它，别把钉子当冗余拔了。视觉自查走 `scripts/ui-gallery.cjs`（离屏 capturePage + 假
++先读它，别把钉子当冗余拔了。视觉自查走 `apps/desktop/scripts/ui-gallery.cjs`（离屏 capturePage + 假
+ AgentApi，不跑真模型、不触发系统录屏权限）。
+ 
+ ## ⑤ LSP 的 `languageId` 契约（2026-10-23，第 675 页）
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 15:23:49
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 15:18:50
+@@ -4299,3 +4299,4 @@
+ 58. **插件类目只有一张词表（第 935 页）**：发现页的能力计数用中文（智能体 / 钩子），而插件详情抽屉的「组成」行直接摆英文键名（`技能 3 · 命令 2 · agents 1 · hooks 4 · MCP 0 …`）——同一套词两处两种写法，英文那两格还夹在中文中间。类目词表收到 `components/plugins/labels.ts`（`PLUGIN_CATEGORY_LABEL` / `categoryLabel`），发现页与抽屉都读它；判卷钉六类中文与「抽屉里不再出现英文键名」。
+ 59. **用量页的 token 数字回到同一把尺（第 936 页）**：用量页的 `usageTokenLabel` 走 `Intl.NumberFormat` 的中文紧凑记法（14 000 →「1.4万」），而用量环 / 检查器 / 时间线走 `formatTokens`（→「14.0k」）⇒ 同一个 token 数两种写法（1 250 000 →「125万」vs「1.3m」，1 830 →「1830」vs「1.8k」）。`usageTokenLabel` 改读 `formatTokens`；缺测仍是「—」，不折成 0。
+ 60. **上下文窗口也归同一把尺（第 937 页）**：`formatCtxWindow` 自己一套（12 000 → `12k`、1 000 000 → `1M`），而用量环 / 检查器 / 时间线 / 用量页走 `formatTokens`（`128.0k` / `1.0m`）⇒ 同一个窗口在模型菜单写「128k」、在用量浮层写「128.0k」。`formatCtxWindow` 改成 `formatTokens` 的薄包装（未知/非正仍给「—」），并加一条「必须等于 `formatTokens`」的钉子（七个值逐个比）——再有人在这里写一套 k/M，判据当场红。
++61. **CODE-WIKI 是一张能走通的地图（第 938 页）**：地图里的路径有两处少了 `apps/desktop/` 前缀（`tests/markdown.test.tsx`、`scripts/ui-gallery.cjs`），照抄的人按仓库根找不到；它引用的判卷字符串 `标准 · 窗口 128k` 在第 937 页改成 `128.0k` 之后也成了旧话。改指真路径与真引文，并加一把尺：地图里每条路径必须按仓库根解析得到，引用的「标准 · 窗口 …」必须逐字出现在 `render-structure.test.tsx` 里。
+--- /dev/null → tests/code-wiki-paths.test.ts
+--- /dev/null	2026-11-01 15:23:49
++++ b/tests/code-wiki-paths.test.ts	2026-11-01 15:18:01
+@@ -0,0 +1,37 @@
++/** 第 938 页：`docs/CODE-WIKI.md` 是「先读它再动手」的那张地图。
++ *  地图里的路径必须能走通（此前 `tests/markdown.test.tsx`、`scripts/ui-gallery.cjs` 都少了
++ *  `apps/desktop/` 前缀，照抄的人找不到文件）；它引用的判卷字符串也必须还是判卷里的那一条
++ *  （`标准 · 窗口 128k` 在第 937 页改成 `128.0k` 之后，地图上的引文就成了旧话）。
++ */
++import { existsSync, readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, expect, it } from "vitest";
++
++const ROOT = join(import.meta.dirname, "..");
++const read = (rel: string): string => readFileSync(join(ROOT, rel), "utf8");
++const wiki = read("docs/CODE-WIKI.md");
++
++/** 地图里的路径引用：只认仓库根相对的写法（`src/…`、`apps/desktop/…`、`scripts/…`、`tests/…`、`docs/…`）。 */
++function wikiPaths(text: string): string[] {
++  const out: string[] = [];
++  for (const m of text.matchAll(/(?<![\w/.-])((?:src|apps\/desktop|scripts|tests|docs)\/[\w./-]+\.(?:tsx|ts|mjs|cjs|md))/gu)) {
++    if (!out.includes(m[1])) out.push(m[1]);
++  }
++  return out;
++}
++
++describe("CODE-WIKI 是一张能走通的地图（第 938 页）", () => {
++  it("每条路径都按仓库根解析得到", () => {
++    const paths = wikiPaths(wiki);
++    expect(paths.length).toBeGreaterThan(10); // 地图至少得指到十来个文件，太少说明扫描面坏了
++    const missing = paths.filter((p) => !existsSync(join(ROOT, p)));
++    expect(missing, "地图里这些路径按仓库根找不到：" + missing.join(" | ")).toEqual([]);
++  });
++
++  it("引用的判卷字符串与 render-structure 的钉子逐字一致", () => {
++    const quoted = /`标准 · 窗口 [^`]+`/u.exec(wiki)?.[0];
++    expect(quoted, "地图里那句「标准 · 窗口 …」的引文不见了").toBeDefined();
++    const inner = quoted!.slice(1, -1);
++    expect(read("apps/desktop/tests/render-structure.test.tsx")).toContain(inner);
++  });
++});

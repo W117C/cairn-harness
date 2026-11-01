@@ -1,0 +1,138 @@
+--- a/apps/desktop/src/renderer/components/Stream.tsx	2026-11-01 13:16:50
++++ b/apps/desktop/src/renderer/components/Stream.tsx	2026-11-01 13:15:21
+@@ -63,13 +63,23 @@
+ 
+ /** 工具行一句话摘要的动词层（阶段 2 · brief §二.4 例：「抓取 api-docs.deepseek.com/news」）。
+  *  已知工具给中文动词；未知工具 null——宁缺不编（渲染层回落「· 摘要」形态）。 */
+-const TOOL_VERBS: Readonly<Record<string, string>> = {
++export const TOOL_VERBS: Readonly<Record<string, string>> = {
+   read_file: "读取",
+   write_file: "写入",
+   edit_file: "编辑",
+   apply_patch: "打补丁",
+   run_shell: "运行",
+-  list_dir: "列目录",
++  // 静态工具面（`TOOL_NAMES`）里剩下的六把（第 916 页）：它们此前没有动词，渲染层按「未知工具」
++  // 处理 ⇒ 折叠行把 `grep` / `glob` / `lsp` / `clarify` / `propose_plan` / `render_image` 这些
++  // 实现名原样摆上屏，与「不暴露实现名」相反。`list_dir` 是从前的工具，现已不存在（glob 取代），
++  // 留着这条 = 词表比工具面多一格，判据看不出来。
++  grep: "查找",
++  glob: "找文件",
++  lsp: "查符号",
++  clarify: "提问",
++  propose_plan: "提方案",
++  render_image: "出图",
++  verify: "验证",
+   web_fetch: "抓取",
+   web_search: "搜索",
+   spawn_agent: "派发子任务",
+@@ -95,7 +105,6 @@
+ /** 工具类型字形（2026-10-31，R1）：先认得出「在跑什么」，再看状态。
+  *  认不出的工具给通用文件图标，不猜语义。 */
+ function ToolKindGlyph({ tool }: { tool: string }): React.JSX.Element {
+-  if (tool === "list_dir") return <Folder size={12} />;
+   if (tool === "run_shell") return <SquareTerminal size={12} />;
+   if (tool === "web_fetch" || tool === "web_search") return <Globe size={12} />;
+   if (tool === "read_image") return <ImageIcon size={12} />;
+--- a/apps/desktop/src/renderer/derived/stream.ts	2026-11-01 13:16:50
++++ b/apps/desktop/src/renderer/derived/stream.ts	2026-11-01 13:15:21
+@@ -33,7 +33,11 @@
+ export const summarize = (args: Record<string, unknown>): string => {
+   // url / query 进取值链（阶段 2 · brief §二.4 例：「抓取 api-docs.deepseek.com/news」——
+   // web_fetch/web_search 的一句话摘要就是目标本身）。
+-  const first = args.command ?? args.path ?? args.file ?? args.url ?? args.query ?? "";
++  // **pattern 排在 path 前**（第 916 页）：grep 的 args = {pattern, path}，pattern 才是「搜什么」，
++  // path 只是范围；按 path 优先会把整行读成一个目录（现读：`{pattern:"TODO",path:"src/agent"}` ⇒
++  // 「src/agent」），而 glob 只有 pattern ⇒ 掉到 JSON 兜底、整行变成 `{"pattern":"src/**/*.ts"}`。
++  // 工具行折叠态只有这一句话，主语丢了就没地方补。
++  const first = args.command ?? args.pattern ?? args.path ?? args.file ?? args.url ?? args.query ?? "";
+   return typeof first === "string" && first ? first : JSON.stringify(args).slice(0, 80);
+ };
+ 
+--- a/apps/desktop/tests/stream-rework.test.tsx	2026-11-01 13:16:50
++++ b/apps/desktop/tests/stream-rework.test.tsx	2026-11-01 13:10:43
+@@ -59,9 +59,19 @@
+     // 仅 t1 有 then（3300-2100=1.2s）；t2 pending 无耗时
+     expect(html.match(/class="tdur"/g)?.length).toBe(1);
+     expect(html).toContain(">1.2s<");
+-    // 状态符与摘要仍在（折叠行三件套不丢）
+-    expect(html).toContain("run_shell");
++    // 状态符与摘要仍在（折叠行三件套不丢）。但**实现名不再上屏**（2026-10-31 R1：
++    // 有中文动词的行只说人话——`run_shell` 紧跟「运行 ls」是把一件事说两遍）。
++    expect(html).not.toContain("run_shell");
+     expect(html).toContain("运行 ls");
++    // 反面必须同时钉住：未知工具没有动词可给，原始名就是它唯一的身份，那时必须保留
++    // （`Stream.tsx` 的 `verb === null && <span className="tname">`，宁缺不编）。
++    const unknownTool = renderToStaticMarkup(
++      <Stream rows={projectStream([
++        { type: "tool_call", id: "u1", name: "mystery_tool", args: { q: "x" }, ts: 5000 },
++        { type: "tool_result", callId: "u1", ok: true, ts: 5100 },
++      ] as unknown as AgentEvent[])} />,
++    );
++    expect(unknownTool).toContain("mystery_tool");
+   });
+ });
+ 
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 13:16:50
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 13:16:41
+@@ -4278,3 +4278,5 @@
+ 37. **模型弹层选边取空间大的一边（第 908 页）**：`up = above >= min(320, below)` 让"上方凑够 320"就能赢——空屏 1440×864 实测上 327 / 下 453，仍向上开，模型列表被挤到 `client 139 / scroll 209`，末组组头露着而它那一行模型（和「演示」行）整行被裁 ⇒ 读起来是"空分组"，违反「空态按可见条目数」。改成 `above >= below`（矮窗口 <260 那档不动），既有 4 个判卷用例结果一字未变，另加真机形态钉 + 镜像反向自证 + 106 位扫边单调性。画廊加常驻不变量「组头可见 ⇒ 至少一行整行可见」，口径必须是**整行**（按"露出 3px"判会让闸门当场假绿）。改后真机 `client 209 / scroll 209`、`dangling: []`。
+ 38. **命令面板进视觉自查 + 键位单一事实源（第 910 页）**：画廊此前没有命令面板，设置页也没拍过「通用」（主题/字号/密度/动效）——补三档后，第 899 页的重复截图闸门立刻逮住两处**工具**错（⌘K 要派到 `window`；输入框是 `input.cp-input`）。查清不成立的候选逐条记录：「新任务」命中「会」来自 `keywords` 同义词、`⌘⌥I` 是字形看错、通用页两排分段控件不亮是**夹具缺 `textSize/uiSize`**（真主进程在 `settings.ts:282·284` 兜非法值）。成立的两处：① 面板「重命名当前会话」手抄 `F2`（违反该文件第 3 行自述的"单一事实源"），补 `SHORTCUTS` 的 `rename` 档并改读 `keysOf`，速查表行数 12→13；② 分段控件缺机器判据，新增画廊常驻自查——选中档与未选档的五元组计算样式相同、或没有任何一档选中，即抛错。新增 `shortcut-key-source.test.ts`（被引用的 id 必须全在表里 + 面板不许出现字面键位；变异自证：塞回 `F2` 即红 2 条）。
+ 39. **交付卡卡头：数字只说一遍，未判定不再冒充「已编辑」（第 913 页）**：卡头此前是「已编辑 1 个文件 / 修改 1 · 第 1 轮」——单一档时副行就是标题那个数的复读；而统计只算 `created`/`modified`，`unknown`（投影明说"不猜"的那一档）不进分解 ⇒ 全未判定时副行为空、标题却断言「已编辑」，**界面替投影猜了**。改法：补 `unknown` 计数（沿用既有词表「变更」），单一档把档名直接写进标题（`修改 1 个文件` / `变更 2 个文件`），只有混合档才用「已编辑 N 个文件」+ 分解副行，分解块因此不再空挂；「变更」用中性 `--text-300`（不是好消息也不是坏消息）。判卷 +3（既有两条混合档「已编辑 2 个文件」钉一字未改仍绿）+ 画廊常驻自查（单一档却挂分解块即抛错，真机 `{"title":"修改 1 个文件","stats":[]}`）。同批否证两条：权限弹层五档结构是第 872 页明令保留的对比表语法、五句 desc 逐条皆为政策事实。
++40. **工具行不再暴露实现名（第 916 页）**：有中文动词的行只说人话——`run_shell` 紧跟「运行 ls」是把一件事说两遍，`Stream.tsx` 因此只在 `verb === null`（未知工具）时渲染 `.tname`；未知工具没有动词可给，原始名是它唯一的身份，必须保留（宁缺不编）。旧判卷 `stream-rework.test.tsx` 还钉着 `toContain("run_shell")`，与这条口径相反；现改钉两面：已知工具的实现名不出现、未知工具的原名保留。第 7 条「工具名之前加类型字形」的行文按本条读：字形还在，名字只在未知工具时出现。
++41. **工具行摘要取主语，词表跟住工具面（第 916 页）**：`summarize` 的取值链是 command → path → file → url → query，没有 pattern ⇒ `grep {pattern:"TODO", path:"src/agent"}` 折成「src/agent」、`glob {pattern:"src/**/*.ts"}` 甩成 `{"pattern":…}`；折叠行只有这一句话，主语丢了没处补。pattern 插到 path 之前（command → pattern → path → file → url → query），既有五档顺序不动。另一半是词表：静态工具面 `TOOL_NAMES` 里有六把没有动词（grep / glob / lsp / clarify / propose_plan / render_image，verify 同批补上），渲染层按「未知工具」把实现名摆上屏；陈旧键 `list_dir`（工具已由 glob 取代）一并撤掉。新判卷 `tool-row-summary.test.ts` 钉两面：grep 的 pattern 优先于 path、`TOOL_NAMES` 全覆盖且词表不许有工具面之外的键。
+--- /dev/null → apps/desktop/tests/tool-row-summary.test.ts
+--- /dev/null	2026-11-01 13:16:50
++++ b/apps/desktop/tests/tool-row-summary.test.ts	2026-11-01 13:14:12
+@@ -0,0 +1,51 @@
++// 工具行折叠态的两件事（第 916 页）：
++//   ① 摘要取的是**主语**不是范围：grep 的 pattern、glob 的 pattern（此前 pattern 不在取值链里，
++//      grep 只剩目录、glob 直接甩 `{"pattern":…}`）；
++//   ② 静态工具面（`TOOL_NAMES`）每一把都有中文动词——没有动词的已知工具会被渲染层当成「未知工具」，
++//      把实现名原样摆上屏，与「不暴露实现名」相反。
++import { describe, expect, it } from "vitest";
++import { summarize } from "../src/renderer/derived/stream";
++import { TOOL_VERBS, toolVerb } from "../src/renderer/components/Stream";
++import { INJECTED_TOOLS } from "../../../src/agent/tool-surface";
++import { TOOL_NAMES } from "../../../src/tools/base";
++
++describe("工具行摘要：主语优先于范围", () => {
++  it("grep：pattern 是主语，path 只是范围——不许只剩目录", () => {
++    expect(summarize({ pattern: "TODO", path: "src/agent" })).toBe("TODO");
++  });
++
++  it("glob：只有 pattern 时不许把 JSON 甩上屏", () => {
++    expect(summarize({ pattern: "src/**/*.ts" })).toBe("src/**/*.ts");
++  });
++
++  it("既有取值链不动：command / path / file / url / query 各有其主", () => {
++    expect(summarize({ command: "pnpm test" })).toBe("pnpm test");
++    expect(summarize({ path: "src/a.ts" })).toBe("src/a.ts");
++    expect(summarize({ file: "a.ts" })).toBe("a.ts");
++    expect(summarize({ url: "https://example.com/a" })).toBe("https://example.com/a");
++    expect(summarize({ query: "cairn" })).toBe("cairn");
++  });
++
++  it("非字符串首值仍走 JSON 兜底（不编、不抛）", () => {
++    expect(summarize({})).toBe("{}");
++    expect(summarize({ pattern: 42 })).toBe('{"pattern":42}');
++  });
++});
++
++describe("静态工具面每一把都有中文动词（实现名不上屏）", () => {
++  it("TOOL_NAMES 全覆盖", () => {
++    const missing = TOOL_NAMES.filter((n) => toolVerb(n) === null);
++    expect(missing, "没有动词、会被当成未知工具把实现名摆上屏：" + missing.join(" | ")).toEqual([]);
++  });
++
++  it("词表里不许有工具面之外的陈旧键（如已不存在的 list_dir）", () => {
++    // web_fetch 的规格在 session-provider（网络工具按配置注册），既不进 TOOLS 也不进 INJECTED_TOOLS。
++    const known = new Set<string>([...TOOL_NAMES, ...INJECTED_TOOLS.map((t) => t.name), "web_fetch"]);
++    const stale = Object.keys(TOOL_VERBS).filter((k) => !known.has(k));
++    expect(stale, "词表比工具面多的键：" + stale.join(" | ")).toEqual([]);
++  });
++
++  it("未知工具仍然是 null（宁缺不编，渲染层回落原名）", () => {
++    expect(toolVerb("mystery_tool")).toBeNull();
++  });
++});

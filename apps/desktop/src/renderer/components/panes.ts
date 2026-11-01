@@ -9,7 +9,7 @@ import { turnChanges } from "../projections";
 import { PANE_META, PANE_OPENABLE, type PaneKind } from "../pane-registry";
 // 窗格登记表（类型/标签表/重排/⌘\ 选窗格）已搬到顶层 pane-registry.ts（Phase 2 · 批 2.3）：
 // state/ 不许 import components/，而那份是数据与纯函数、不是组件。导出面照旧从本文件转出。
-export { PANE_META, PANE_OPENABLE, lastOpenedPane, movePane, type PaneKind } from "../pane-registry";
+export { PANE_META, PANE_OPENABLE, lastOpenedPane, movePane, paneTabTargetForKey, type PaneKind } from "../pane-registry";
 
 /** 独立窗口路由：`#pane=<kind>[&session=<id>]` → 目标窗格；非该形状（含未知 kind）返回 null
  *  （主窗口模式——不猜、不部分匹配）。 */
@@ -185,16 +185,22 @@ export function changedFilesOf(events: readonly AgentEvent[]): Array<{
   return order.map((p) => byPath.get(p)!);
 }
 
-/** 行级评注集合（行键 `<path>|<line>`）→ 一次性提交的消息（蓝本 §3.6：多处评论 ⌘Enter 一次性提交）。
- *  格式稳定（判卷钉）：按文件分组、行号升序；键形状不合解析的**原样保留**为兜底条目——不吞任何评论。 */
+/** 行级评注集合（行键 `<path>|<side>:<line>`，第 922 页；旧键 `<path>|<line>` 仍认）→ 一次性提交的
+ *  消息（蓝本 §3.6：多处评论 ⌘Enter 一次性提交）。格式稳定（判卷钉）：按文件分组、行号升序；
+ *  删除侧（`old`）必须写明「删除前」——否则 agent 会按新文件的行号去找一行已经不在的内容。
+ *  键形状不合解析的**原样保留**为兜底条目——不吞任何评论。 */
+type ReviewItem = { line: number; text: string; side?: "old" | "new"; raw?: string };
 export function composeReviewMessage(comments: ReadonlyMap<string, string>): string {
-  const byPath = new Map<string, { line: number; text: string; raw?: string }[]>();
+  const byPath = new Map<string, ReviewItem[]>();
   for (const [key, text] of comments) {
     const at = key.lastIndexOf("|");
-    const line = at < 0 ? NaN : Number(key.slice(at + 1));
+    const tail = at < 0 ? "" : key.slice(at + 1);
     const path = at < 0 ? key : key.slice(0, at);
+    const sided = /^(old|new):(\d+)$/u.exec(tail);
+    const bare = /^\d+$/u.test(tail) ? Number(tail) : NaN;
     const arr = byPath.get(path) ?? [];
-    if (Number.isFinite(line) && path !== "") arr.push({ line, text });
+    if (sided !== null && path !== "") arr.push({ line: Number(sided[2]), text, side: sided[1] as "old" | "new" });
+    else if (Number.isFinite(bare) && path !== "") arr.push({ line: bare, text });
     else arr.push({ line: 0, text, raw: key });
     byPath.set(path, arr);
   }
@@ -204,7 +210,8 @@ export function composeReviewMessage(comments: ReadonlyMap<string, string>): str
     parts.push("");
     parts.push(`**${path}**`);
     for (const it of items) {
-      parts.push(it.raw !== undefined ? `- ${it.text}（原键：${it.raw}）` : `- 第 ${String(it.line)} 行：${it.text}`);
+      const where = `第 ${String(it.line)} 行${it.side === "old" ? "（删除前）" : ""}`;
+      parts.push(it.raw !== undefined ? `- ${it.text}（原键：${it.raw}）` : `- ${where}：${it.text}`);
     }
   }
   return parts.join("\n");

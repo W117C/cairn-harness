@@ -1,0 +1,63 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+ ❯ tests/session-prefs-host.test.ts (2 tests | 2 failed) 39ms
+   × lists independent saved choices after a fresh host boot 28ms
+   × does not assign ambiguous legacy preferences to both same-id sessions 10ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/session-prefs-host.test.ts > lists independent saved choices after a fresh host boot
+AssertionError: expected { id: 'same', …(3) } to match object { model: 'model-a', thinking: 'high' }
+(4 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "model": "model-a",
+-   "thinking": "high",
++   "id": "same",
++   "lines": 0,
++   "mtimeMs": 1793347490969.3777,
++   "workspace": "/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-prefs-host-FcMYHw/a",
+  }
+
+ ❯ tests/session-prefs-host.test.ts:28:71
+     26|   await host.orchestrationClose(); host = boot();
+     27|   const rows = await host.listSessions();
+     28|   expect(rows.find((s) => s.workspace === canonicalWorkspacePath(a))).…
+       |                                                                       ^
+     29|   expect(rows.find((s) => s.workspace === canonicalWorkspacePath(b))).…
+     30| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/session-prefs-host.test.ts > does not assign ambiguous legacy preferences to both same-id sessions
+AssertionError: expected 'unknown-owner' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"unknown-owner"
+
+ ❯ tests/session-prefs-host.test.ts:36:47
+     34|   const rows = await host.listSessions();
+     35|   expect(rows).toHaveLength(2);
+     36|   for (const row of rows) { expect(row.model).toBeUndefined(); expect(…
+       |                                               ^
+     37| });
+     38|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  16:04:49
+   Duration  1.78s (transform 76%, import 22%, tests 2%)
+
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run tests/session-prefs-host.test.ts '--maxWorkers=1'

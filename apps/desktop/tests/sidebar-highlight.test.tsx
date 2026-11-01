@@ -1,5 +1,6 @@
 // 批 6 附带 #71（总纲阶段 3.5 侧边栏与导航）：侧栏「多项同时高亮」修复——
-//   ① 选中态唯一：仅 .session.active 配左侧 2px 强调色条（文件夹行不再参与选中态着色）；
+//   ① 选中态唯一：仅 .session.active 配淡底 + 字重（2026-10-28 第 735 页撤掉 2px 橙条，
+//      暗色下它像红色警示轨；文件夹行仍不参与选中态着色）；
 //   ② hover = 更淡底色，且过渡只写在 :hover 规则里 ⇒ 鼠标离开瞬时清除（无离开动画）；
 //   ③ 设置页顶栏：.sp-page 不再覆盖 38px 标题栏（顶部让位，去 padding-top 空白带）。
 // 真机复现（2026-10-16 隔离实例）：active 行 rgba(29,29,31,.1) 与 hover 行 rgba(29,29,31,.05) 同时在场。
@@ -14,18 +15,26 @@ function block(sel: string): string {
 }
 
 describe("#71 侧栏选中态（唯一 + 强调条 + hover 瞬时清除）", () => {
-  it("选中行 = 淡底 + 左侧 2px 强调色条（::before，accent-brand）", () => {
-    const bar = styles.match(/\.session\.active::before \{[^}]*\}/) ?? [""];
-    expect(bar[0]).toContain("position: absolute");
-    expect(bar[0]).toContain("width: 2px");
-    expect(bar[0]).toContain("hsl(var(--accent-brand))");
+  it("选中行只靠淡底 + 字重分层，不再挂品牌色左条（暗色下会被读成警示轨）", () => {
+    expect(styles).not.toMatch(/\.session\.active::before\s*\{/);
+    expect(block(".session.active")).toContain("var(--alpha-selected)");
   });
 
-  it("hover 底色更淡（--alpha-hover vs --alpha-selected），且过渡只在 :hover 里（离开即瞬时清除）", () => {
+  it("新任务是实心 pill：走 --btn-primary-* 令牌（暗色自动 elevated），不是白底描边", () => {
+    const rule = block(".side-new");
+    expect(rule).toContain("var(--btn-primary-bg)");
+    expect(rule).toContain("var(--btn-primary-fg)");
+    expect(rule).toContain("var(--radius-pill)");
+    expect(rule).not.toContain("var(--hairline-strong)");
+  });
+
+  it("选中行保持既有淡底刻度，标题字重与项目间距承担层级", () => {
     const hover = block(".session:hover");
     expect(hover).toContain("var(--alpha-hover)");
     expect(hover).toContain("transition:");
     expect(block(".session.active")).toContain("var(--alpha-selected)");
+    expect(styles).toMatch(/\.session\.active \.s-title\s*{[^}]*font-weight:\s*var\(--fw-medium\)/s);
+    expect(block(".group-head")).toContain("margin-top: 16px");
     // 基态无 background 过渡 ⇒ 离开 hover 立即回到底色（不拖尾）
     expect(block(".session")).not.toContain("transition: background");
   });

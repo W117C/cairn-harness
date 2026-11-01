@@ -15524,7 +15524,7 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
 2. **修**：`gh repo edit W117C/cairn-harness --visibility private --accept-visibility-change-consequences`，
    复读 `{"private":true,"visibility":"private"}`。默认分支是 `zcode`（Dependabot 扫的就是它）。
 3. **密钥面取证**（既然公开过，就得按"可能被人 clone 过"处理）：
-   - 业主给的那枚本地端点 key（`29f357a99491356da201aef6285b9717`）在**当前树与全历史**里 0 命中
+   - 业主给的那枚本地端点 key（`[REDACTED_LOCAL_API_KEY]`）在**当前树与全历史**里 0 命中
      （`git grep` 与 `git log --all -S` 各跑一次）。
    - 通用凭据形状扫描（`sk-[A-Za-z0-9]{20,}`／`ghp_`／`github_pat_`／`AKIA`）命中的，全是仓库里
      早就备案的**演练假密钥**（`sk-abcdefghijklmnopqrstuvwxyz012345` 那一族）与扫描规则自身的字面。
@@ -24803,6 +24803,1406 @@ UI 用新 workspace 算键 ⇒ 停止钮不出现，插话入口永远走不到�
 - 未验证：真实 DeepSeek 请求、真实外部用户、真实账单、打包发布、跨机器性能长尾。
 - 本页与 STATUS/STATE 是文档与证据提交；没有借文档改动虚增或重算 `fc056d03` 的认证覆盖。
 
+## 2026-10-27 · 第 716 页：Cairn Evolve P0 证据基座落地
+
+依据 `docs/evolve-proposal.md` 的 P0；本笔只新增观测面，不改提示词、注入与判据。
+
+### 一、交付
+
+- `src/agent/evolve/episode.ts`：EpisodeRecord 纯投影。轮界复用 `eventsForCurrentRun`；
+  隐藏判据 > verify > 用户裁决 > unknown；主面/worker 成本分列；usd 缺席记 null；
+  任务分类与签名确定性（token + 路径扩展 + 工具骨架）。
+- `src/agent/evolve/index.ts`：纯核心公开面，electron-free。
+- `src/main/evolve/episode-store.ts`：追加式 `.agent/evolve/episodes.jsonl`、读侧按 id 去重、
+  坏行只丢一条、索引原子重建、汇总与 facts 格式化、`recordEpisode` 收束入口。
+- `src/main/post-run-readings.ts`：收束时写 Episode；失败只打 `[evolve]`，不阻塞旧 evolution。
+- `src/events/types.ts` 与 `src/events/index.ts`：只加 `session_meta.evolve` 与
+  `surface_account.evolveChars` 可选字段；不新增事件型，replay 不动。写入端留 P1。
+- `scripts/evolve-facts.ts`：`node --import tsx scripts/evolve-facts.ts [workspace] [--json] [--index]`。
+- `tests/evolve-episode.test.ts`：12 条定向判卷。
+
+### 二、口径
+
+- Episode 是事件流投影，不是新事件型（ADR 0005）。
+- 缺席语义写死：无 judge = unknown；无 verify = none；无 user = unknown；
+  无 usage = 0 token 但 usd = null；无 `session_meta.evolve` = 不在实验中（不是对照组）。
+- 成本主面与 worker 分列；worker 不替父会话表态。
+- 追加式 + 读侧去重；坏行只丢一条；`durationMs` 只认 `session_meta.ts`（多数为 null，不编）。
+
+### 三、读数
+
+- `tests/evolve-episode.test.ts`：12/12 通过（maxWorkers=2）。
+- 收束 + evolution 回归：4 文件 59/59 通过（maxWorkers=2）。
+- 事件/重放回归：3 文件 38/38 通过（maxWorkers=2）。
+- `node --import tsx scripts/typecheck.ts`：0 条报错。
+- `evolve-facts` 空工作区 smoke：summary 全 0，`--index` 写出 `episodes.index.json`。
+- `docs-check`：受检项全绿。
+
+### 四、偏差与未做
+
+- `session_meta.evolve` 只落类型与读取；写入端未接，当前 `assignment.source` 恒 `absent`
+  （除非手工/测试写入）。
+- `usd` 恒 null（P0 不接价表）；`diffDigest` 恒 null（P0 不读 git/文件内容）；
+  `harnessRev` / `provider` / `tier` 由调用方或 usage 推断，缺省 null。
+- 未跑全量 core/desktop/HEAD gates；以上是工作树读数，不是 HEAD 认证。
+
+## 2026-10-27 · 第 717 页：Cairn Evolve P1 类型化 playbook 与离线 shadow
+
+依据 `docs/evolve-proposal.md` 的 P1；本笔不注入提示词、不改运行面；运行时实验分配留 P2。
+
+### 一、交付
+
+- `src/agent/evolve/playbook.ts`：fact/strategy/warning/policy 四类条目；add/patch/deprecate/
+  retire/merge/split 六种 delta；active 必须有 Episode 证据；只有 active 且未过期可注入；
+  body 增量帽 30%；同触发 active 冲突时两条都不注入；检索按 scope→trigger→分数排序并受
+  条数/字符预算约束；render 带 id/kind/置信度/证据。
+- `src/agent/evolve/shadow.ts`：对历史 Episode 回放候选检索，报告命中、成功/失败分布与
+  “只在失败跑命中 / 无法区分”等判读；命中不是因果，不用于晋升。
+- `src/main/evolve/playbook-store.ts`：追加式 `.agent/evolve/playbook.jsonl`、读侧 fold、
+  坏行只丢一条、语义拒单出声、索引原子重建；`seedPlaybookFromLegacy` 把旧
+  `evolution.json` 补丁、memory 的 lesson/workflow 迁成 candidate，同 id 幂等。
+- `scripts/evolve-shadow.ts`：`node --import tsx scripts/evolve-shadow.ts [workspace] [--seed] [--json] [--index]`。
+- `src/agent/evolve/episode.ts`：Episode 证据增加 `toolNames`（on-tool 触发与任务签名共用）；
+  新 Episode 全部带这一列。
+- `tests/evolve-playbook.test.ts` 9 条、`tests/evolve-playbook-store.test.ts` 3 条。
+
+### 二、口径
+
+- 迁移产物一律 candidate：旧补丁/旧记忆没有 Episode id 作为可核验证据，不能直接 active；
+  它们先过离线 shadow，等 P2 对照。
+- candidate/shadow 只在 shadow/实验中可检索；默认运行时检索只认 active。
+- 检索预算缺省 6 条 / 2,000 字符；不是把整个 playbook 塞进上下文。
+- 冲突判据：同 workspace/taskClass/trigger 的两个 active/shadow 条目，关键词相交或一方无关键词。
+
+### 三、读数
+
+- playbook + store 定向：12/12 通过（maxWorkers=2）。
+- 并入 Episode/收束/evolution 的定向批：6 文件 73/73 通过（maxWorkers=2）。
+- `node --import tsx scripts/typecheck.ts`：0 条报错。
+- `evolve-shadow --seed --index` smoke：旧 evolution 补丁 1 条 → proposed 1 / added 1；
+  Episode 0 条时报告全 0；索引写出。
+- 本机工作区 `.agent/evolve/episodes.jsonl` 现有 6 条真实 Episode，全部 `unknown`、
+  verify 全 `none`——缺席语义生效；不作为能力收益证据。
+- 提示词面零改动；`docs-check` 在本次收口后复跑。
+
+### 四、偏差与未做
+
+- P1 的 shadow 是离线回放，不是装配缝实时 shadow；运行时注入、实验分配、
+  `session_meta.evolve` 写入端留 P2。
+- 旧 Episode（P0 早期）若没有 `toolNames` 会被读成坏行；当前工作区 6 条均为新形状，
+  未做旧账迁移（P0 才落地，没有需要保留的生产旧账）。
+- 检索排序只是确定性启发式（kind 权重 + 具体度 + 观测置信 + 近因），没有 embedding；
+  P2 用实验数据再校准。
+- 未跑全量 core/desktop/HEAD gates；以上是工作树读数，不是 HEAD 认证。
+
+## 2026-10-27 · 第 718 页：Cairn Evolve P2 在线随机对照与运行时分配
+
+依据 `docs/evolve-proposal.md` 的 P2；本笔开始改变运行面（active 经验/实验臂注入），
+但仍不自动晋升、不自动安装。
+
+### 一、交付
+
+- `src/agent/evolve/experiment.ts`：预注册实验形状；`assignArm` 用
+  `sha256(experimentId + "\0" + sessionId)` 确定性分配；两比例风险差 + Newcombe 95% CI；
+  样本不足 `running`、到上限仍跨 0 `unmeasurable`、显著更好 `passed`（只给
+  `suggest-promote`）、显著更差 `failed`（`stop`）；unknown 多于可判定样本时不下结论。
+- `src/main/evolve/experiment-store.ts`：`.agent/evolve/experiments/<id>.json` 预注册
+  （不可覆盖）+ `<id>.results.json` 分析快照；按 Episode 的 assignment 聚合样本。
+- `src/main/evolve/assignment-store.ts`：按 sessionId 哈希落分配 sidecar；每次装配先清旧档，
+  避免“实验已结束、同会话重跑还把旧臂带进新 Episode”；收束时 Episode 读回。
+- `src/main/evolve/runtime.ts`：active 经验 + 一个 running 实验的装配缝；treatment 注入候选，
+  control 只注入 baseline；`control: "no-injection"` 时两臂都不注入 baseline；没有 active/实验
+  ⇒ 空串、不写 sidecar（零行为）。
+- `src/main/agent-runner.ts`：把运行时注记拼进 `systemPromptFor(opts.mode) + evolutionNote`；
+  失败只出声，不阻塞主流程。
+- `scripts/evolve-experiment.ts`：create/list/analyze；create 前检查候选存在且未 active/退役。
+- `tests/evolve-experiment.test.ts` 6 条、`tests/evolve-p2.test.ts` 6 条。
+
+### 二、口径
+
+- 在线对照是**非配对**的：用 Newcombe 风险差 CI，不用 McNemar；cluster bootstrap 留 P3。
+- `propensity` = 治疗臂分配概率；`arm` 是实际臂；二者分列，IPW 不靠猜。
+- 一次只跑一个 running 实验（最早创建优先）；analysis 结果状态不是 running 的实验
+  不再继续分配。
+- 只有 active 经验默认注入；candidate 只在 treatment 臂出现，且 note 标题明确标注。
+- 实验裁决只产出 `suggest-promote`；没有自动安装、没有改 registry。
+
+### 三、读数
+
+- 实验核心：6/6 通过（maxWorkers=2）。
+- P2 存储/运行时：6/6 通过（maxWorkers=2）。
+- 并入 P0/P1/收束/evolution 的定向批：8 文件 85/85 通过（maxWorkers=2）。
+- 提示词面/前缀/模型面/工具面回归：5 文件 81/81 通过（maxWorkers=2）。
+- `node --import tsx scripts/typecheck.ts`：0 条报错。
+- CLI smoke：`evolve-shadow --seed` 产出候选 → `evolve-experiment create` → `list` →
+  `analyze`（无 Episode 时 running / keep-running）；create 的预注册文件落盘。
+- 本机工作区仍无 playbook/实验；`.agent/evolve/episodes.jsonl` 的 6 条真实 Episode 未变。
+
+### 四、偏差与未做
+
+- 分配落 sidecar，不是 `session_meta.evolve`；协议写入端仍未接，P3 统一。
+- 装配缝只传 `taskContent`，没有 `toolNames`/`paths` ⇒ on-tool/on-path 的 active 经验
+  不会在开场注入；mid-run 注入留 P3。
+- 报告是 CLI；桌面 Evolution 面板留 P3/P4。
+- 没有把实验结论回写 `ExperimentRecord.status`（预注册不可变）；终止标记是 results 文件。
+- 未跑全量 core/desktop/HEAD gates；以上是工作树读数，不是 HEAD 认证。
+
+## 2026-10-27 · 第 719 页：Cairn Evolve P3 候选档案与 SEMA staging 晋升
+
+依据 `docs/evolve-proposal.md` 的 P3；本笔把“实验通过”接到候选档案，再把候选接到 SEMA
+staging。只提交，不安装；没有向仓库 `modules/` 写任何生产候选。
+
+### 一、交付
+
+- `src/agent/evolve/candidates.ts`：CandidateRecord（评分/族谱/元生产力）、形状校验、
+  Pareto 前沿（只收有 holdout 评分的候选）、父代选择（元生产力优先）。
+- `src/main/evolve/candidate-store.ts`：`.agent/evolve/candidates/<id>.json`；create/load/list/
+  save；同 id 不可重复新建，状态更新走 save。
+- `src/main/evolve/experiment-candidate.ts`：只有 analysis `passed` 的实验才能生成候选；
+  评分进 validation，holdout 保持 null（不拿在线实验冒充离线 holdout）；证据只取 treatment 臂。
+- `src/main/evolve/promotion.ts`：passed 候选 + 与 playbook 目标正文一致 + `modules/` 存在
+  ⇒ 组 content-pack manifest（`prompt-surface-check` / `prefix-churn-check`）→
+  `EvolutionPlane.submitProposal` → 候选状态 promoted + staging 回执；不安装、不激活。
+- `scripts/evolve-promote.ts`：list / from-experiment / promote。
+- `tests/evolve-candidates.test.ts` 3 条、`tests/evolve-promotion.test.ts` 5 条。
+
+### 二、口径
+
+- 候选只认 passed；正文与 playbook 目标不一致（目标被改过）拒绝晋升。
+- 没有 `modules/` ⇒ 拒绝且不改候选状态；registry 坏档 ⇒ 拒绝。
+- 晋升只写 staging；安装仍需 SEMA 人工审批与 canary。
+- 候选的 `promotion` 回执落档；重复 promote 返回 already-promoted。
+- 实验→候选的 holdout 为 null ⇒ 该候选不进 Pareto；这是故意的诚实缺口，等 P4 离线 holdout。
+
+### 三、读数
+
+- 候选纯层：3/3 通过（maxWorkers=2）。
+- 晋升/候选存储：5/5 通过（maxWorkers=2）；含临时 workspace 的真实 registry submit +
+  staging `prompt.md` 读取 + `active` 仍为空。
+- 并入 P0–P2/收束/evolution 的定向批：10 文件 93/93 通过（maxWorkers=2）。
+- `node --import tsx scripts/typecheck.ts`：0 条报错。
+- `evolve-promote list` 空工作区：`[]`；缺候选 promote：出声 exit 1。
+
+### 四、偏差与未做
+
+- 候选生成目前来自 passed 实验/手工；`reflect-delta` / `policy-tune` 的模型反思搜索与
+  离线 paired + holdout 评分未接；Pareto/元生产力只落了选择函数，未接自动搜索循环。
+- 真实模型实验晋升未跑；没有业主批准，不往仓库 `modules/` 写生产候选。
+- 技能合成、退役/冲突自动处置留 P4。
+- 未跑全量 core/desktop/HEAD gates；以上是工作树读数，不是 HEAD 认证。
+
+## 2026-10-27 · 第 720 页：Cairn Evolve P4 技能合成与退役/冲突
+
+依据 `docs/evolve-proposal.md` 的 P4；本笔只产 candidate 与 dry-run delta，不注入、不晋升、
+不自动 apply。
+
+### 一、交付
+
+- `src/agent/evolve/episode.ts`：Episode 证据增加 `toolSequence`（工具名 + 参数键集骨架），
+  作为技能合成原料；新 Episode 全带。
+- `src/agent/evolve/skills.ts`：成功且精确同签名（workspace + taskClass + 工具序列）的
+  Episode ≥3 → `strategy` candidate；失败不参与；body 带步骤与 verify 收尾；证据带 Episode id。
+- `src/main/evolve/skill-synthesis.ts`：读 Episode → 合成 → 幂等追加 playbook add；
+  同 id 跳过，坏形状拒绝。
+- `src/agent/evolve/retirement.ts`：过期 ⇒ retire；同触发冲突 ⇒ 两条 deprecate（可 patch 复活）；
+  只产出 findings/ops。
+- `scripts/evolve-skill.ts`、`scripts/evolve-retire.ts`（默认 dry-run，`--apply` 才写）。
+- `tests/evolve-skills.test.ts` 4 条。
+
+### 二、口径
+
+- 技能分组是精确序列，不是模糊聚类或 Voyager 式环境探索；先验证形态，不宣称可执行技能。
+- 只有 `outcome.final === "success"` 且序列 2..12 步的 Episode 参与。
+- 产出 status=candidate；要过 shadow → 实验 → SEMA，才谈常驻。
+- 冲突退役用 deprecate 不用 retire：保留可恢复路径，交人裁决。
+- `--apply` 是人的动作；Agent 不自动调用。
+
+### 三、读数
+
+- 技能/退役定向：4/4 通过（maxWorkers=2）。
+- 并入 P0–P3/收束/evolution 的全量定向批：11 文件 97/97 通过（maxWorkers=2）。
+- `node --import tsx scripts/typecheck.ts`：0 条报错。
+- `evolve-skill` 空工作区：proposed 0 / added 0；`evolve-retire` 空工作区：无 findings（dry-run）。
+
+### 四、偏差与未做
+
+- 当前工作区 6 条真实 Episode 全部 unknown、无成功序列 ⇒ 没有真实技能可提炼；
+  机制只用临时 Episode 夹具证明。
+- 没有 gym 探针与 holdout 验证；没有可执行技能/工具包；这些是 P4 退出条件里未达成的部分。
+- 退役/冲突默认 dry-run，未自动 apply。
+- P5（有界自治、Evolution 面板、soak）未开始。
+- 未跑全量 core/desktop/HEAD gates；以上是工作树读数，不是 HEAD 认证。
+
+## 2026-10-27 · 第 722 页：Cairn Evolve P5 治理后端（STOP / 预算 / 报告）
+
+依据 `docs/evolve-proposal.md` 的 P5；本笔只落治理后端与只读报告，不做桌面面板、不做
+自动安装、不跑 soak。
+
+### 一、交付
+
+- `src/main/evolve/governance.ts`：`.agent/evolve/STOP` kill switch；`budget.json` 三态
+  （default/file/invalid，坏档回缺省并显式标 invalid）；五道上限（playbook/注入条数/
+  注入字符/实验/候选）。
+- `src/main/evolve/report.ts`：`EvolveReport` 聚合 Episode 汇总、playbook 状态/kind/冲突/过期、
+  实验列表与最近分析、候选状态、预算、冻结态；`formatEvolveReport` 人读面。
+- `scripts/evolve-report.ts`：`node --import tsx scripts/evolve-report.ts [workspace] [--json]`。
+- 冻结已接线：`prepareEvolutionInjection` 直接返回空注记（不写 sidecar）；
+  `promoteCandidateToSema` 拒绝；`seedSkillCandidates` 不写；注入预算从 `budget.json` 生效，
+  技能落库在 playbook 达到 `maxPlaybookEntries` 时停止。
+- `tests/evolve-governance.test.ts` 4 条。
+
+### 二、口径
+
+- STOP 存在 = 冻结：不注入、不晋升、不写技能候选；报告仍可读，且显式标 FROZEN。
+- 预算缺失 = 缺省；坏档 = 缺省 + invalid，不静默放宽也不静默收紧。
+- 报告只读：不改变 Episode/playbook/实验/候选任何状态。
+- 实验/候选数量上限目前只报告、未强制；注入条数/字符与 playbook 条数已强制。
+
+### 三、读数
+
+- 治理/报告定向：4/4 通过（maxWorkers=2）。
+- 并入 P0–P4/收束/evolution 的全量定向批：12 文件 101/101 通过（maxWorkers=2）。
+- `node --import tsx scripts/typecheck.ts`：0 条报错。
+- `evolve-report` 真实工作区 smoke：预算 default；playbook/实验/候选全 0；Episode 本次读取 0
+  （P4 页写的 6 条在并发清理后已不在，报告只报读取时刻现态）。
+- `evolve-report`/`evolve-skill`/`evolve-retire` 空工作区均可执行；无生产写入。
+
+### 四、偏差与未做
+
+- 桌面 Evolution 面板未做；报告已作为数据源（Episode/playbook/实验/候选/预算/冻结）。
+- 两周 soak、自动回滚演练、`autonomy.json` 与“实验 passed → 零权限 content-pack 自动装”的
+  联动均未做；现有 gated-auto 仍是旧的按 gate 全绿自动装，不读实验结论。
+- 实验/候选数量上限未强制；元进化（算子元生产力闭环）未接。
+- 台账撞号修正：并发会话后写的 A/B/C 页原为第 719 页，与本笔 P3 页撞号；按时间序把它改为
+  第 721 页，仅改标题、内容未动。本页用 722。
+- 台账撞号修正（第二处）：后写的 ACP/A2A 页也用了 722，已按时间序改为 723，仅改标题。
+- 未跑全量 core/desktop/HEAD gates；以上是工作树读数，不是 HEAD 认证。
+
+## 2026-10-27 · 第 724 页：Cairn Evolve 全量 core 读数
+
+补第 722 页“未跑全量 core”的边界：全量 core 已跑。
+
+- 命令：`node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts --maxWorkers=2`
+  （与 `pnpm test:capped` 同配置）。
+- 读数：**545 文件 / 7129 条全绿，188.5s，worker 2**。包含 Evolve P0–P5 的 9 个测试文件
+  与既有 evolution/post-run/prompt 面。
+- 本读数是**工作树**读数（含其他会话未提交改动），不是 HEAD 认证；`head-cert-check` /
+  `mutate-verify` 未跑。
+- 桌面套件未跑；P5 面板/soak、真实模型实验晋升、真实技能 holdout 仍未开工。
+- 证据边界：全量 core 绿只证明本树现有判卷通过，不证明真实任务收益，也不证明 P3/P4 的
+  真实实验/技能验收条件已达成。
+
+## 2026-10-27 · 第 725 页：Cairn Evolve P3 补齐：离线配对与 holdout 晋升门
+
+依据 `docs/evolve-proposal.md` 的 P3 缺口；本笔把“无 holdout 不晋升”从方案条款变成机器门。
+
+### 一、交付
+
+- `src/agent/evolve/offline-eval.ts`：search/validation/holdout 三分片配对评估；
+  McNemar 精确检验；基线过而候选挂 = 回归并点名；候选 holdout 未全过 = failed；
+  没有 holdout 分片 / 任一 run 不可测 = unmeasurable；正确性不劣且成本显著更低才可 promote。
+- `src/agent/evolve/offline-apply.ts`：评估结果 → 候选 status/eval；passed/promote ⇒ passed，
+  failed ⇒ failed，unmeasurable ⇒ evaluating；已 promoted 不复评降级。
+- `src/main/evolve/offline-eval-store.ts`：`recordOfflineEvaluation` 跑纯评估并写候选档案；
+  已晋升候选拒绝复评。
+- `src/main/evolve/promotion.ts`：晋升门新增 holdout 检查——`success>0` 且 `safety=pass`
+  才继续；缺 holdout/回归安全直接拒绝。
+- `scripts/evolve-eval.ts`：`record <cand> --file <runs.json>` / `show <cand>`。
+- `tests/evolve-offline-eval.test.ts` 8 条；`tests/evolve-promotion.test.ts` 增到 6 条。
+
+### 二、口径
+
+- holdout 是晋升必要条件；search 上的改善不能替代泛化。
+- 不可测（缺 run / ok=null / 无 holdout）记 unmeasurable，不折成失败或通过。
+- McNemar 双侧精确检验；成本只在正确性不劣后比较；安全回归一票否决。
+- 从在线实验生成的候选 holdout 为 null ⇒ 必须先用 `evolve-eval` 补离线评分，才能晋升。
+- 晋升仍是单向的；已 promoted 候选不接受离线复评。
+
+### 三、读数
+
+- 离线评估 + 晋升门：14/14 通过（maxWorkers=2）。
+- 并入 P0–P5/收束/evolution 的定向批：13 文件 110/110 通过（maxWorkers=2）。
+- `evolve-eval record` 真 CLI 冒烟：10 题 holdout，基线 2/10、候选 10/10 →
+  passed/promote，holdout success 1、safety pass、McNemar p=0.0078；`show` 读回同一评分。
+- `typecheck`：tracked 面 0 条报错；未跟踪草稿 `tests/acp-server-cli.test.ts` 有 1 条
+  TS7053（并发会话的 ACP/A2A 工作，不归本笔）。
+- 本页未重跑全量 core；第 724 页的 545 文件 / 7129 条读数在本笔之前，不能冒充本笔之后。
+
+### 四、偏差与未做
+
+- `reflect-delta` / `policy-tune` 模型反思算子仍未接；离线评估 CLI 吃外部 run JSON，
+  未直接接 `loop-eval`/gym 适配器。
+- 没有真实模型 holdout、没有真实技能 gym 探针；P3 真实实验晋升仍未发生。
+- 全量 core 未在本页后复跑；本页只报定向读数。
+- 未跑 desktop/HEAD gates；以上是工作树读数，不是 HEAD 认证。
+- 台账撞号修正（第三处）：后写的 SDK 工具面页也用了 725，已按时间序改为 726，仅改标题。
+
+## 2026-10-27 · 第 721 页：A/B/C 三批收口：互操作落地与运行时配对修复
+
+业主目标：A（上下文与记忆内核）、B（统一多智能体运行时）、C（互操作与生态层）全部完成。
+A/B 的主体已在前两批入库；本页记录 C 的新增实现、对 A/B 的两处收口修复与最终复跑读数。
+当前工作树同时含其他会话未提交的 Evolve P0–P2 与桌面改动，本页只对 A/B/C 负责。
+
+### 一、C 交付
+
+- 通用工具检索：`src/agent/tool-search.ts` 的确定性 BM25 排序（精确名/标识符加成、CJK 二元组、
+  分数后按名稳定排序、查询与结果有界）；`src/main/tool-gates.ts` 以只读元工具 `tool_search`
+  接入模型面与执行面。目录含静态工具与**未激活**的 MCP 工具，返回与执行面逐字相同的 schema；
+  检索不激活、不执行，执行仍走 `gatedMcpTool` 的同一条权限门。
+- SDK v1：`src/interop/sdk.ts` 的 `AgentClientV1`（createSession/send/stream/cancel/close）、
+  显式能力协商、公开事件判别联合与 `schemaVersion`；事件白名单投影，thinking/原始压缩摘要/
+  worker 内部投影不出；工具参数、输出、错误统一过既有脱敏面。
+- ACP：`src/interop/acp.ts` 把 SDK 映射为 `initialize` / `session/new` / `session/prompt` /
+  `session/cancel` 与 `session/update` 通知；同一脚本 run 的 ACP 通知与 SDK 公开事件按同一
+  纯映射逐条对齐。
+- A2A：`src/interop/a2a.ts` 的 task id → 逻辑 agent id、message id → 幂等键、内容寻址 artifact、
+  内部状态 → 公开生命周期；cancel/resume 必须携带协议版本与 fence，陈旧 fence 拒收；
+  只收文本，file/data 块拒收，远端无法选本地文件；消息正文始终是数据。
+- 外部基准：`src/interop/benchmarks.ts` 适配 Harbor/Terminal-Bench 形态任务，记录 benchmark/
+  dataset version、task/seed、model/provider、tool policy、timeout/token/dollar 预算、
+  outcome/failure/interruption 与 usage availability；`scripts/external-bench.ts` 把外部证据落成
+  JSONL。缺用量为 null + unknown，失败/中断不重试覆盖；证据点名任务集外的 task 直接拒绝。
+- 公开面：`src/interop/index.ts` 单一 barrel；`fixtures/bench-external/` 保存 Harbor/Terminal-Bench
+  夹具。本批未提交，复跑证据保存在本批工作树的证据目录（未入库，故不在此点名）。
+
+### 二、对 A/B 的收口修复
+
+- B 的 spawn 配对：`LocalAgentRuntime.spawnWithReceipt` 新增 `ctx.callId` 并传给执行器。
+  旧路径丢掉模型工具调用 id，worker 终态回执无法与 `spawn_agent` 配对，
+  `worker-evidence-parent-context` 3 条红。修复后该文件 3/3 绿；这是 B 的真实接线缺陷，
+  不是测试放宽。
+- B 的工具面水位：生命周期四把进入静态规格面后，`prompt-surface-check` 的精确水位从
+  22 把/67 份参数更新为 25 把/74 份（send_agent 四参 + resume_agent 两参 + close_agent 一参；
+  list_agents 无参数），只读档仍为 21；`permissions-tool-registry` 补 `tool_search` 金标准，
+  `skill-tool-policy` 同步运行时注入名单。
+- A 的断言：`memory-hybrid` 的 embedder 失败改用变量派生 + `toBe`（不再抄一段生产文案），
+  非法向量断言改点生产唯一句；`remote-backend` 的断线断言改点完整协议句；
+  prose-needle 的 drift/顶包候选回落到帽内。
+- 夹具卫生：`runner-gates` / `gated-tools` 的收尾新增清理 `.agent/evolve/`。
+  同时进行的 Evolve P0/P1 在真实 run 收束时会往 `fixtures/todo-app` 写 episodes.jsonl，
+  projection-invariant 会把它读成“git 看不见的语料”；清理后该不变量在第三趟全量中通过。
+
+### 三、读数
+
+- 定向：16 文件 / 273 条全绿（`--maxWorkers=2`；含 tool-search、SDK/ACP、A2A、benchmark、
+  生命周期、worker 证据、prompt/permission/skill/memory/remote/prose/projection）。
+- 全量 core：`pnpm test:capped` **539 文件 / 7105 条；538 文件 / 7103 条通过**，
+  2 条失败均在并发 Evolve P2 的 `tests/evolve-p2.test.ts`，该文件单跑 **6/6 通过**；
+  本批 `projection-invariant` 在该趟通过。日志 `.tmp/c-full-20261027c.log`。
+- `typecheck`：0 条报错；`docs-check`：全绿；`tools-check`：36 条；`model-surface-check`：6/6；
+  `prompt-surface-check`：dead 0 / odd 0；`plugins-check`：42 ✅ / 0 ❌ / 1 未证（联网源截断）。
+- 桌面：223/224 文件、1486/1487 条；唯一失败 `motion-gaps` 的 `.pop-rd` 动效属并发桌面批次；
+  先前 4 条 `approval-e2e`/`kernel-host` 失败在单跑时 22/22 通过。
+- 外部基准 CLI：`failed=1 unknown=1；用量未知 2/2`；失败原文保留，无证据任务保持 unknown，
+  缺 `dollars` 与全部用量分别写 null/unknown。产物在本批工作树内（未提交）。
+
+### 四、边界与未做
+
+- 当前工作树未提交；未跑 `head-cert-check` / `mutate-verify`，本页不是 HEAD 认证。
+- 同树并发的 Evolve P0–P2 与桌面改动未纳入本批；它们的 Evolve P2 两条失败单跑通过，
+  桌面一条动效失败归该批次。保留其未提交文件，不重置、不混入 A/B/C 结论。
+- ACP/A2A 只交付传输中立适配 + JSON-RPC 分派，不交付 ACP stdio 服务或 A2A HTTP/SSE 服务；
+  真实 ACP 客户端握手、A2A 网络传输、Harbor/Terminal-Bench 真实执行、真实远程 worker 部署
+  与真实 provider 收益仍未验证。本地 adapter/fixture 不等于外部认证。
+
+## 2026-10-27 · 第 723 页：ACP stdio 与 A2A loopback HTTP 传输
+
+第 721 页“ACP/A2A 只交付传输中立适配、不交付 stdio/HTTP”的边界由本页更新：
+本笔补上了两种真实传输；SSE/认证/TLS/权限桥仍未交付。
+
+### 一、交付
+
+- `src/interop/acp-stdio.ts`：newline-delimited JSON-RPC over Node streams。请求**并发分派**
+  （否则 `session/prompt` 等待模型时读不到 `session/cancel`），写侧串行化；单行上限，
+  超长行回 -32600，解析失败回 -32700，空行忽略；EOF 后等待在途请求收束。
+- `src/interop/a2a-http.ts`：loopback JSON-RPC HTTP + `/.well-known/agent-card.json`；
+  请求体上限、content-type 检查、404/405/415/413 显式拒绝；JSON-RPC 通知回 204；
+  `closeAllConnections` 保证测试/退出不悬挂。默认 `127.0.0.1:0`，不提供鉴权/TLS。
+- `src/interop/index.ts` 导出两种传输；C 的公开面仍只有这一处。
+
+### 二、判卷
+
+- `tests/interop-acp-stdio.test.ts` **3/3**：initialize/session-new/prompt/通知、超长帧后连接继续、
+  prompt 运行中 `session/cancel` 得到 `stopReason:"cancelled"`。
+- `tests/interop-a2a-http.test.ts` **3/3**：agent card、message/send 幂等、tasks/get artifact、
+  stale fence、未知方法，以及 wrong content-type / malformed / oversized / 404 / 405。
+- C 七文件合计 **7 文件 34 条全绿**；`typecheck` 0。
+- 合并 A/B/C 定向面 17/18 文件、278/279 条通过；唯一失败是并发 Evolve 未跟踪模块
+  `src/main/evolve/report.ts` 没有测试路径（`src-execution-path`），不计入 C。
+
+### 三、边界
+
+- ACP 没有 `session/request_permission` 权限桥；审批仍由注入的 client/host 决定，
+  默认只能 fail-closed。未打包独立 daemon，未与真实编辑器客户端联调。
+- A2A 只有 loopback HTTP；没有认证、TLS、SSE / `message/stream`、push notifications。
+  agent card 继续声明 `streaming:false`；绑非 loopback 由调用方显式选择。
+- 外部基准仍只做适配与记录，不执行 Harbor/Terminal-Bench 基础设施。
+- 工作树未提交；未跑 `head-cert-check` / `mutate-verify`；本页不是 HEAD 认证。
+
+## 2026-10-27 · 第 726 页：SDK 工具面安全收口与全量 core 复跑
+
+第 723 页交付传输后，审查发现 SDK 的一条执行边界缺口：`createAgentClientV1` 未给
+`runLoop` 传 `tools`，于是回落到静态 `TOOLS`；在 `mode:"auto"` 下 `write_file` 会绕过
+`gatedTool` 的权限门。本页记录修复与复跑。
+
+### 一、修复
+
+- `AgentClientHost.tools` 由宿主显式注入；`createAgentClientV1` 只把 `host.tools?.() ?? {}`
+  交给 `runLoop`。缺省空表 ⇒ 任何工具调用落 `unknown tool`，不存在“没注入就用静态表”的暗路。
+- ACP stdio 因此默认无工具；生产宿主必须注入同源 `gatedTool`/`gatedMcpTool` 表，
+  或改走 `handleAgentRun` 的产品装配。没有注入就没有绕过权限门的路径。
+- 判卷：`tests/interop-sdk.test.ts` 增两条——默认（auto 档）write_file 得到
+  `unknown tool: write_file`；宿主注入的 `echo_tool` 才能执行。
+
+### 二、读数
+
+- 定向：SDK 10/10；C 七文件 **36/36**；A/B/C 合并定向面 **18 文件 / 281 条全绿**。
+- 全量 core：`pnpm test:capped` **545 文件 / 7129 条全绿，exit 0**，181.28 s。
+  日志 `.tmp/c-full-transport-20261027.log`。
+- `typecheck` 0；`docs-check` 绿。
+
+### 三、边界
+
+- 工作树未提交；未跑 `head-cert-check` / `mutate-verify`，本页不是 HEAD 认证。
+- ACP 仍无 `session/request_permission` 权限桥；产品 ACP server 尚未装配真实
+  `handleAgentRun` 宿主，当前传输只能由调用方注入 client。
+- A2A 仍无认证/TLS/SSE；外部 benchmark 仍只做适配与记录。
+- 真实 provider 收益、真实远程 worker 部署、真实 ACP 客户端联调仍未认证。
+
+## 2026-10-27 · 第 727 页：Cairn Evolve P3 候选生成：reflect-delta 算子
+
+依据 `docs/evolve-proposal.md` 的 P3 候选生成缺口；本笔让模型反思只能提出**有证据的增量**，
+并落成 candidate entry + 候选档案，不改原条目、不直接 active。
+
+### 一、交付
+
+- `src/agent/evolve/operators.ts`：`parseReflectDelta` 纯门禁——target 必须一致；
+  反思证据必须是允许 Episode 集合的子集；reason 必填；body ≤30% 增量且 ≤800 字符；
+  正文含 TCB 路径标记（permissions/evolution/registry/grants/ipc-protocol/evolve 内核）直接拒；
+  产出**新 id** 的 candidate entry 与 draft 候选档案。
+- `src/main/evolve/reflect-operator.ts`：`recordReflectDelta` 读 Episode/playbook，
+  STOP 冻结时不写；合法则追加 playbook add + create 候选；同内容重复反思幂等返回 existing。
+- `scripts/evolve-reflect.ts`：吃已解析的 reflection JSON，输出 created/existing/refused。
+- `tests/evolve-reflect-operator.test.ts` 4 条。
+
+### 二、口径
+
+- 反思产出永远是 candidate/draft；原 active 条目继续按原样注入，不被原地改写。
+- 伪造证据、target 不一致、无 reason、整段重写、TCB 路径五类都拒绝并出声。
+- 晋升链不变：候选仍需离线 holdout + SEMA staging + 人工批准。
+- 反思 JSON 由外部生成（人或上层 agent），本笔不接 provider 自动调用。
+
+### 三、读数
+
+- reflect-delta 定向：4/4 通过（maxWorkers=2）。
+- 并入 P0–P5/收束/evolution 的定向批：14 文件 114/114 通过（maxWorkers=2）。
+- `typecheck`：0 条报错。
+- 并发 SDK 页记录的全量 core 545/7129（181.28s）发生在 reflect-delta 之前，
+  不冒充本笔之后的全量读数；本页只报定向。
+- 未跑真实模型反思（需要 provider/反思 JSON）；门禁与落库用临时 Episode 夹具证明。
+
+### 四、偏差与未做
+
+- `policy-tune` 算子未做；reflect JSON 未接 provider/agent-runner 自动生成。
+- 没有真实模型反思、没有真实 holdout/晋升；P3 真实实验晋升仍未发生。
+- 全量 core 未在本页后复跑；未跑 desktop/HEAD gates。
+- 以上是工作树读数，不是 HEAD 认证。
+
+## 2026-10-27 · 第 728 页：Cairn Evolve 运行时补丁回流与全量 core
+
+依据 P1/P5 的回流缺口；本笔把“最新补丁/记忆 → 类型化 candidate”接到收束缝，候选不注入，
+零行为，并受 STOP/预算约束。
+
+### 一、交付
+
+- `src/main/post-run-readings.ts`：`runEvolution` 落盘后调用 `seedPlaybookFromLegacy`；
+  迁入 candidate 时出声 `[evolve]`，失败只出声，不影响 canary/assess 等后续支。
+- `src/main/evolve/playbook-store.ts`：`seedPlaybookFromLegacy` 新增 STOP 冻结与
+  `maxPlaybookEntries` 预算检查；返回 `frozen` / `budgetBlocked`；路径用同一 `playbookPathFor`。
+- `tests/post-run-readings.test.ts`：`hasPatch=true` ⇒ 收束后 playbook 有 1 条 candidate；
+  `hasPatch=false` ⇒ 0 条；旧 evolution 断言不变。
+
+### 二、口径
+
+- 回流产物一律 candidate，不注入；原 active 条目/提示词面不变。
+- 旧补丁/记忆没有 Episode id 作为可核验证据 ⇒ 只能 candidate，不能直接 active；
+  要经 shadow → 实验 → 离线 holdout → SEMA。
+- STOP 冻结或 playbook 达预算上限 ⇒ 回流零写入。
+- 迁移失败不阻塞收束；失败出声。
+
+### 三、读数
+
+- 收束 + Episode 定向：20/20 通过（maxWorkers=2）。
+- 并入 P0–P5/evolution 的全量定向批：14 文件 114/114 通过（maxWorkers=2）。
+- 全量 core：**551 文件 / 7148 条全绿，202.91s，worker 2**（含本笔新增 4 条
+  reflect-delta 与 2 条离线 holdout 测试）。
+- `typecheck`：0 条报错。
+- 本页全量 core 是工作树读数，含其他会话未提交改动；不是 HEAD 认证。
+
+### 四、偏差与未做
+
+- 回流候选没有 Episode 证据，真实收益仍要靠后续实验/离线 holdout 验证。
+- `policy-tune` 算子未做；真实模型实验/技能 holdout、桌面面板/soak 未做。
+- 未跑 desktop suite / `head-cert-check` / `mutate-verify`。
+- 以上是工作树读数，不是 HEAD 认证。
+- 台账撞号修正（第四处）：后写的 ACP/A2A 产品宿主页也用了 728，已按时间序改为 729，仅改标题。
+
+## 2026-10-27 · 第 729 页：ACP/A2A 产品宿主与服务入口
+
+第 723 页的传输层此前只能由调用方注入 client；本页把两端接到真实
+`handleAgentRun` 装配，并补上可执行的服务入口。
+
+### 一、交付
+
+- `src/main/interop-host.ts`：`createProductAgentClientV1`，用 `AgentClientHost.run` 直通
+  `handleAgentRun`；固定工作区、初始化 settings/sessions/memory/sandbox，默认
+  `unattended:true`（没有审批 UI 时写工具 fail-closed）；不复制 provider/工具/权限/会话仓储。
+- `scripts/acp-server.ts`（`pnpm acp-server`）：真实 stdio 服务；stdout 只走 JSON-RPC，
+  `console.log` 强制到 stderr；`--mode` 缺省 default，`auto/full-access` 明确警告；
+  固定工作区；`--trusted-repo` 显式放行 verify。
+- `src/main/interop-a2a-runtime.ts`：产品 `AgentRuntime`，把 A2A task 映射到同一产品会话。
+  只接受 read 模式；task id 必须是路径安全名；follow-up 在 run 中排队；
+  message id 幂等；cancel/close 走 SDK abort；fence 按 thread 保存。
+- `scripts/a2a-server.ts`（`pnpm a2a-server`）：loopback HTTP 服务，缺省 `127.0.0.1:0`；
+  只读产品运行时；无鉴权/TLS/SSE，实际 URL 打到 stderr。
+- A2A task id 增加路径安全校验（`../escape` 直接拒收），避免远端用 task id 穿越会话路径。
+
+### 二、判卷
+
+- `tests/interop-host.test.ts` 1/1：真实 `handleAgentRun` + demo provider 端到端；
+  固定工作区校验。
+- `tests/acp-server-cli.test.ts` 1/1：子进程 initialize → session/new → prompt →
+  assistant chunk → stdin EOF 退出 0。
+- `tests/interop-a2a-product.test.ts` 1/1：真实只读任务完成、artifact 内容寻址、重复消息幂等。
+- `tests/a2a-server-cli.test.ts` 1/1：子进程 message/send → tasks/get completed →
+  SIGINT 退出 0。
+- C 十一文件 **42/42**；根 `typecheck` 0。
+- 全量 core（2 workers）：**551 文件 / 7148 条，549 文件 / 7146 条通过**；2 条失败分别在
+  `post-run-readings` 与 `scratch-tree-naming`，单跑 **27/27 通过**（并发工作树/收尾观测噪声）。
+  串行全量读数另记。
+
+### 三、边界
+
+- ACP 没有 `session/request_permission` 权限桥；默认 unattended，写工具 fail-closed。
+  `--mode auto/full-access` 是显式受信任选择，不是默认能力。
+- A2A 产品运行时只接受只读任务；无认证、TLS、SSE、push notifications，任务只活在产品会话
+  日志与进程内表里；`tasks/resume` 对已完成的 run 不可恢复。
+- 两端只用 demo provider 端到端跑通；真实 provider、真实编辑器/网络客户端未认证。
+- 工作树未提交；未跑 `head-cert-check` / `mutate-verify`，本页不是 HEAD 认证。
+
+## 2026-10-27 · 第 730 页：产品服务批次的全量收口与 README 通道数
+
+### 一、全量读数
+
+- 串行 `pnpm test:capped --maxWorkers=1`：**551 文件 / 7148 条全绿，exit 0**，291.18 s。
+  日志 `.tmp/c-full-product-1w2.log`。这是产品宿主/服务（第 729 页）与 SDK fail-closed 之后的
+  工作树读数；不是 HEAD 认证。
+- 2-worker 同批首趟 7146/7148，两条失败（`post-run-readings`、`scratch-tree-naming`）单跑
+  27/27 通过，属并发工作树/收尾观测噪声。
+- 串行首趟唯一失败是 `readme-invoke-channel-count`：并发桌面批次新增一个 invoke 通道后
+  README 仍写 108（运行时 109）。改 README 为现读 109，判卷 2/2 通过；复跑串行全绿。
+  这是文档与运行期事实的漂移，不是测试放宽。
+
+### 二、边界
+
+- C 的 11 个测试文件在两次全量中全部通过；产品服务仍只用 demo provider 跑通，
+  真实 provider / 真实编辑器客户端未认证。
+- ACP 仍无 `session/request_permission` 权限桥；默认 unattended，写工具 fail-closed。
+- A2A 产品运行时只读；无认证/TLS/SSE；任务只活在会话日志与进程内表。
+- 工作树未提交；未跑 `head-cert-check` / `mutate-verify`。
+
+## 2026-10-27 · 第 731 页：CDS 令牌层一比一接入（Claude Desktop 3.6556.2）
+
+### 一、取料（不是读压缩 CSS 反推）
+
+- 事实源：`/Applications/Claude.app`（`com.anthropic.claudefordesktop` 3.6556.2，
+  app.asar sha256 `b2dfbbb4…`）。`inspect_electron_fuses` 读出该包**关掉了**
+  `EnableNodeCliInspectArguments` / `RunAsNode`，开着 asar 完整性校验 ⇒ 不能靠 CDP 读运行时样式。
+- 改走静态取料：asar 内 `.vite/build/index.chunk-CbnfBP-3.js` **以 JS 字符串内嵌了
+  `@ant/cds/tokens.vanilla.css` 全文**，以及 `cds-docs` 生成的设计系统文档（层模型 / 规则 / 文案）。
+  逐字节取出为 `apps/desktop/src/renderer/vendor/cds-official/tokens.css`
+  （41,505 B，sha256 `8386ae2d…`，1021 条声明 / 704 个唯一名），来源与可复现步骤在
+  同目录 `UPSTREAM.json`。
+- 为什么不搬 Tailwind 产物：`MainWindowPage-*.css` 237 KB 是编译压缩后的组件规则，
+  读不出「哪个值是语义层」，而 vanilla 薄正是官方声明的语义层本体。
+
+### 二、落位
+
+- 新增 `src/renderer/cds-adapter.css`：**只映射不抄值**，右值一律 `var(--官方令牌)`。
+  Cairn 的颜色接口是 HSL 三元组（`hsl(var(--bg-100))`，全仓 898 处），CDS 给整色值；
+  用 CSS 相对颜色 `from var(--surface-1) h s l` 把整色拆成三元组，
+  于是 898 处调用点一个不用改。
+- `theme.ts` 新增纯函数 `themeKeysOf`：`data-theme`（Cairn）与 `data-mode`（CDS 暗色作用域）
+  同时写。只写前者时官方暗色块永远选不中，暗色会静默退回亮色值。
+- `styles.css` 唯一一处 `hsl(var(--chart-muted))` 改指三元组孪生 `--chart-muted-hsl`
+  （官方 `--chart-muted` 是整色值，同名不能同住）。
+
+### 三、判卷与读数
+
+- 新增 `tests/cds-parity.test.ts`：18 条全绿。四组面：
+  ① 官方薄未被改写（sha256 + 声明/唯一名计数）；
+  ② adapter 每条映射解析得到官方名、无字面量、**无自引用**（`--x: var(--x)` 是 CSS 循环，
+  该组当场逮住 3 条真 bug）；
+  ③ adapter 真接线（`main.tsx` import 顺序在 `styles.css` 之前）；主题键两处都写；
+  ④ **实测值**：证据取自真实 renderer 的 `getComputedStyle`（`scripts/cds-values-probe.cjs`
+  → `apps/desktop/outputs/cds-parity-verify/values.json`），逐档对官方 hex。
+- 实测（1440×900 真实 renderer）：surface 亮 `#f9f9f7/#fcfcfb/#ffffff/#ffffff`、
+  暗 `#0b0b0b/#151515/#1a1a19/#20201f`；clay 亮暗同 `#d97757`；
+  `--bg-accent` 亮 `#cde2fb` / 暗 `#032042`；`--radius` 8px、`--h-control` 32px。
+- 布局冒烟 `layout-smoke.cjs`：**15/15 PASS**（`outputs/cds-parity-verify`）。
+  其中一条曾报「搜索框未聚焦」，单独复跑 3 次全绿、且关掉 adapter 也复现不了 ⇒
+  判定为并发抖动，不是本批回归；如实记在此处。
+- 桌面全量：**226 文件 / 1511 条全绿**（`pnpm --filter cairn-desktop test`，含 boundary 门）。
+- `typecheck` 0 报错；`docs-check` 全绿；`bundle-audit` main 556,579 B（＋134 B）× cap 600,000。
+
+### 四、边界（本批不冒充的）
+
+- **字体没有一比一**：AnthropicSans/Serif 是包内专有 woff2（无授权声明），未纳入；
+  Cairn 继续用自有 OFL 字体族。字号/行高/字重轴按官方值对齐，字形不同。
+- **正文无法一比一**：Claude 主窗只有壳（`index.html` 11 KB），消息体由远程 claude.ai 渲染；
+  本批对齐的是壳与设计系统，不包含云端渲出的正文样式。
+- **组件规则未全量移植**：官方 45 个 `data-cds=*` 组件的规则在 Tailwind 产物里（237 KB 压缩）。
+  本批落的是**令牌层全量**＋adapter；组件级几何（内边距/行高组合）仍是 Cairn 自有实现。
+- 工作树**未提交**；未跑 `head-cert-check` / `mutate-verify`（它们量的是提交）。
+
+## 2026-10-28 · 第 732 页：CDS 刻度对齐复核（推翻本批前一页的一个假定）
+
+### 一、先更正我自己的一条判断
+
+第 731 页落令牌层后，我按「Cairn caption 11px、官方 `--font-size-caption` 12px」判定
+Cairn 偏离官方、准备把 11 改成 12。**量完发现这是错的，不能改。**
+
+- 官方渲染层（`MainWindowPage-*.css`，sha256 `93ee8d85…`）里同一枚令牌有**多作用域取值**：
+  `.cds-root` 基础档 `--cds-font-size-caption` = 11px、`--cds-radius` = 6px；
+  `.cds-root[data-platform=desktop]` 与 `.cds-root[data-density=comfortable]` 才是 12px / 8px。
+- 再按 `[data-size]` / `[data-step]` 分档：桌面档 `--cds-font-size-caption--xs` = **11px**、
+  `--cds-radius--xs` = **6px**、`--cds-radius--lg` = 10px。
+- Cairn 现有 11/13/14 与 6/10/14 **正是桌面档那组值**，不是偏离。若按我先前的判断改成 12，
+  反而会破坏一致性。这条留在此处，防以后有人重复同一个误判。
+
+### 二、真正要改的只有两处（已改，附依据）
+
+| 令牌 | 旧值 | 新值 | 依据（桌面档官方值） |
+| --- | --- | --- | --- |
+| `--radius-sm` | 6px | **7px** | `--cds-radius--sm` = calc(.4375rem) |
+| `--pad-xs` | 4px | **6px** | `--pad-xs` = calc(.375rem)（旧值全仓 0 处引用） |
+
+`tests/tokens.test.ts` 的两条钉值同步改到官方值并写明取料位置（该文件头允许「先改钉值再改实现」，
+本次是业主授权对齐官方后的正常重钉，不是放宽断言）。
+
+### 三、证据登记
+
+`vendor/cds-official/UPSTREAM.json` 增记第二个取料件：渲染层 CSS 的 sha256（`93ee8d85…`）、字节数，
+以及被引用的 6 条分档事实（radius--xs/sm/lg、caption--xs、body--textsm/textmd）。
+**该 CSS 未入库**（237 KB Anthropic 编译产物，不适合 vendoring）⇒ 引用的值可回查到摘要但**不能仓内重放**，
+这是明写的边界，不当成已认证。
+
+### 四、读数（本轮现跑）
+
+- 桌面全量 `pnpm --filter cairn-desktop test`：**226 文件 / 1519 条全绿**，含 boundary 门。
+- `node --import tsx scripts/typecheck.ts`：0 报错。
+- `pnpm docs-check`：受检项全绿。
+- `bundle-audit`：main **559,129 B** / cap 600,000；popout 371,393 / 400,000；`overBudget:false`。
+- 真实 renderer 布局冒烟：**15/15 PASS**（`apps/desktop/outputs/cds-parity-verify`）。
+- CDS 一致性判卷 `tests/cds-parity.test.ts`：**18 条全绿**（含真机 `getComputedStyle` 取值的 5 条）。
+
+### 五、边界
+
+- 字体仍未一比一（AnthropicSans/Serif 专有，包内 woff2 无授权）；字号/行高/字重轴按官方值。
+- 组件规则未全量移植：45 个 `data-cds=*` 组件的规则在 Tailwind 产物里，本轮落的是令牌层 + 刻度。
+- `STATE.md` 未动：它被其它会话在飞修改（C 批次），按「不覆盖他人脏改动」处理。
+- 工作树未提交；未跑 `head-cert-check` / `mutate-verify`（二者量提交）。
+
+## 2026-10-28 · 第 733 页：CDS 适配层的假通过（令牌绿而界面错）与真机像素复核
+
+### 一、假通过是怎么出现的
+
+第 731/732 页的判卷只量 `--surface-*` 令牌，**全绿**；但把真实渲染截图的像素取出来，
+暗色整屏是 `#141413`——皮肤的近似色，不是官方 `#151515`。
+
+根因两条，都不是「值写错」：
+1. `dsh-claude-style.css` 在 `cds-adapter.css` **之后**载入，同名令牌被它盖住；
+   第一次修法只是把 adapter 挪到最后，仍未生效——
+2. 皮肤在 `body[data-dsh-claude-style][data-ds-dark-theme]`（特异性 0,2,1）定义暗色调色板，
+   我的桥接写在 `body[data-dsh-claude-style]`（0,1,1），**输了特异性**。
+   而 `typography.css:25` 用 `body[..][data-dsh-claude-palette=claude]:not([data-we-wallpaper])`
+   直接给 body 铺 `--dsh-claude-canvas`，于是整屏是它的近似色。
+
+修法：adapter 移到最后一个 import；桥接改成**亮/暗两块、与皮肤同等特异性**，
+只换变量不逐条改它的选择器（`.side` / `.md-code` / `[data-composer-card]` 自动跟着走）。
+
+### 二、判卷补上「画出来的颜色」
+
+`scripts/cds-values-probe.cjs` 原先只读令牌；现在同时读 `.side`、body、`[data-composer-card]`
+的实际 `backgroundColor`，并先断言 `appRendered`。
+**探针自身也有过两个缺陷，一并修了**：① 用 `color` 读长度/未定义令牌，全读成继承色；
+② 合成 AgentApi 成员表写成空数组 ⇒ 页面落进 render-error 边界，在崩溃页上量令牌——
+「量了」等于没量。现在成员表与 `layout-smoke.cjs` 同源（读 `ipc-protocol.ts`）。
+
+### 三、实测（真实 renderer，1440×900，errors=0，appRendered=true）
+
+| 面 | 亮色实测 | 暗色实测 | 依据 |
+| --- | --- | --- | --- |
+| 页面 body | `#fcfcfb` | `#151515` | 暗色 = 真机 Claude 实测；亮色 = Claude 启动画布常量 |
+| 侧栏 `.side` | `#f9f9f7` | `#111111` | 暗色 = 真机实测（比页面暗一档）；亮色按 elevation 推断 |
+| 卡片 `[data-composer-card]` | `#ffffff` | `#1a1a19` | 官方 surface-2 |
+
+判卷 `tests/cds-parity.test.ts`：**21 条全绿**，含上述 6 条像素断言。
+
+### 四、连带改钉（有据，非放宽）
+
+- `layout-smoke.cjs` 的「暗色画布 = rgb(20,20,19)」改为 `rgb(21,21,21)`：
+  旧值是皮肤近似色 `#141413`，官方 surface-1 与真机实测都是 `#151515`。
+  该条先红（14/15），改钉后 **15/15 PASS**。
+
+### 五、读数（本轮现跑）
+
+- 桌面全量：**226 文件 / 1525 条全绿**（`pnpm --filter cairn-desktop test`）。
+- `typecheck` 0 报错；`docs-check` 全绿；布局冒烟 15/15。
+- `bundle-audit`：main **559,782 B** / cap 600,000；popout 371,492 / 400,000；`overBudget:false`。
+
+### 六、边界（仍未认证）
+
+- 亮色侧栏 `#f9f9f7` 是**按 elevation 推断**，没有把真机 Claude 切到亮色量过。
+- 字体仍非一比一（专有 woff2 未纳入）；组件级规则未全量移植。
+- `STATE.md` 未动（其它会话在飞）；工作树未提交，未跑 `head-cert-check` / `mutate-verify`。
+
+## 2026-10-28 · 第 734 页：CDS 组件层逐组件移植（45 个 data-cds 一条不落）
+
+### 一、先修上一批的一条假账
+
+第 731 页的 `vendor/cds-official/UPSTREAM.json` 写着
+`"reproduce": "python3 scripts/extract-cds-tokens.py"`，但该脚本**从未入库**（`git log --all` 无记录，
+工作树也没有）。本批把这条改成如实描述：令牌薄是 2026-10-27 的一次性 asar 取料（脚本未保留），
+组件抽取则有入库脚本。新脚本 `apps/desktop/scripts/extract-cds-components.mjs`，
+UPSTREAM 增记 `componentExtraction`（源 sha256 / 字节数 / 45 组件 / 115 规则 / 465 声明）。
+
+### 二、取料与抽取（按 data-cds 组件逐个）
+
+- 源：`MainWindowPage-BjVtjJFx.css`，237,153 B，sha256 `93ee8d85…`（UPSTREAM 的 evidence 已记）。
+- `components.css`（38,581 B）：选择器点名 `[data-cds=…]` 的规则**逐条照抄**，115 条 / 465 条声明 /
+  45 个组件。只有两个变换：`.cds-root → body[data-dsh-claude-style]`；
+  `var(--cds-x) → var(--x)`（仅当官方 vanilla 薄有同名公共令牌，组件私有变量原样保留）。
+- `components.json`：每组件规则数/声明数/条件栈；`component-map.json`：Cairn 侧逐组件裁决。
+- 关键事实（不是推断）：官方这 237 KB 里，`Button`/`ButtonGroup`/`ModelSelector`/`ModelSelectorEffort`/
+  `SplitDropdownButton` 只有触摸设备下 `ChatComposerChin` 内的 margin 补偿，`Pulse` 只在工具类选择器里
+  被引用——**它们没有可搬的组件级 CSS**。另有 15 个组件（Surface/Panel/Banner/Aside/Accordion/…）
+  只在 `AssistantMessage` 的容器重置名单里出现，本身没有独立规则。
+
+### 三、落位（10 个 ported，29 个无对应，6 个无组件 CSS）
+
+`cds-components.css` 消费官方契约变量，组件根挂同名 `data-cds` 标记：
+
+| 组件 | Cairn 锚 | 官方契约 / 落点 |
+| --- | --- | --- |
+| UserMessage | `.row.user` | 气泡 radius `--radius + .25rem` = 12px、pad 12×16、measure 85%（原 82%/14/10×14） |
+| AssistantMessage | `.row.assistant` | 右侧留白读 `--cds-assistant-message-text-stop`；正文首列 4px inset |
+| Prose | `.md-body`（祖先 `data-cds-reply-type`） | h1/h2 = 1em+2px、h3–h6 = 1em、字重 580 |
+| MessageActions | `.row-actions` | 入 120ms + .1s 延迟、出 60ms；去掉私有 translateY |
+| SkeletonGroup / Skeleton | `.side-skeleton` / `.side-skeleton-row` | 官方 `cds-skeleton-breathe` 2s + 90ms 错峰；去掉私有扫光 |
+| ChatComposerQueuedMessages | `.queue-strip` | 底距 `--gap-xs` = 8px（原 6px） |
+| MessageAttachments / Image | `.md-figure` / `img` | 单图 natural 档 480×320（原 100%×480） |
+| Toolbar | `.titlebar::before` | 页面底色 85% + `blur(12px)`；降透明度/高对比回退 100% 无模糊 |
+
+未移植的 29 个逐个写了原因（`component-map.json` 的 `reason`），例如 Card/CardLink 在 Cairn 里
+是纯静态卡片、没有整卡可点后代；DataTable/Table/ChartContainer 等没有对应组件；TurnStatus 的
+prose 字号不能套到 Cairn 的 caption 工具行。
+
+### 四、判卷与读数（本轮现跑）
+
+- 新增 `tests/cds-components.test.ts`：**24 条全绿**。四面：抽取完整性（45/115/465 + 源 sha）、
+  状态表 45/45 覆盖、接线（adapter import / main import 顺序 / 7 个关键 DOM 标记读应用面）、
+  真机几何（`values.json` 的 getComputedStyle：气泡 12px/12×16/85%、正文 inset 4px、
+  骨架 2s、排队条 8px、工具栏 `blur(12px)`）。
+- 连带重钉三条旧判卷（都有据，不是放宽）：`cds-parity` 的「adapter 是最后一个样式 import」改为
+  「adapter 后只允许 cds-components」；`stream-nav` 增一条 CDS 有效值断言（82%/14 仍作基础回退）；
+  `composer-radius` 同步注明有效圆角 12。
+- 相关四组判卷：`cds-components` 24 + `cds-parity` 21 + `stream-nav` 22 + `composer-radius` 3 = **70/70 绿**。
+- 布局冒烟 `scripts/layout-smoke.cjs`：**15/15 PASS**（`apps/desktop/outputs/cds-components-verify`，
+  1440×900，console errors=0）。
+- 桌面全量：**227 文件 / 1552 条**，1548 绿 / 4 红。4 条全落在 `settings-sections` / `settings-ui` /
+  `render-structure` 的设置页断言上；这些文件在本批开始前就已被其它会话改脏（本批无 hunk），
+  红的是「期望的 ss-head/ss-row-desc 结构与当前脏实现不一致」，不是 CDS 组件层回归。
+- `typecheck` 0 报错；`docs-check` 全绿；`desktop-boundary-check` 绿；`renderer-layer-check` 绿
+  （135 个源文件，四道层规则全过）。
+- `bundle-audit`：main **559,913 B** / cap 600,000；popout 371,741 / 400,000；`overBudget:false`
+  （main 比第 733 页 559,782 增 131 B）。
+
+### 五、边界（不冒充已认证）
+
+- **只搬了官方 CSS 里存在的组件规则**。官方按钮/选择器/菜单的视觉在 React 的 Tailwind utility 里，
+  壳产物（11 KB index.html + 编译 CSS）没有下发组件源码；`Button` 等 6 个组件「无组件 CSS」是抽样事实，
+  不是「官方没有这些视觉」。
+- 29 个「无对应」是当前 Cairn 的组件面判断，不等于永远不移植；新增对应组件时改 `component-map.json`
+  并把 `cairn` 选择器指到 `cds-components.css`，测试会要求三处同时成立。
+- 字体仍未一比一（AnthropicSans/Serif 专有 woff2 未纳入）；字号轴跟 Cairn 自己的 rem/size 缩放走。
+- `STATE.md` 未动：它被其它会话在飞修改（设置页批次），按「不覆盖他人脏改动」处理。
+- 工作树**未提交**；未跑 `head-cert-check` / `mutate-verify`（两者量的是提交）。
+
+## 2026-10-28 · 第 735 页：首页空态与侧栏主操作的去卡片化（设计打磨第 1 轮）
+
+### 一、这轮改的是「看起来像没做完」的三处
+
+第 734 页后的 1440×900 目验发现三处不是功能问题、是设计问题：
+
+1. **空态建议是 2×2 卡片，但只有 3 条** ⇒ 右下永远空一格，像没填满的仪表盘；而且「图标 + 标题 +
+   边框卡片」正是模板化卡片堆。三条建议不是三个等权卡片，它们是一条**阅读序列**。
+2. **「＋ 新任务」是白底描边按钮**，在侧栏里和会话行抢不到主次；品牌橙只出现在发送键，侧栏没有
+   一个真正的 primary 动作。
+3. **当前会话的 2px 品牌橙左条**在暗色下像一条红色警示轨——用户会把「选中」读成「异常」；
+   底色 + 字重已经足够表达选中，第三种信号是多余的。
+
+### 二、落位
+
+- `styles.css` `.starts`：`grid 2×2` → `flex column` + 顶部/行间发丝线；`.start` 从 28px 灰底
+  图标方块 + 卡片边框，改成 22px 裸图标 + 整行热区 + hover 才露箭头；字体从 `--fs-body-sm`
+  （13px）回到 `--fs-body-md`（14px），三条建议读起来是正文，不是标签。
+- `styles.css` `.side-new`：改用 `--btn-primary-bg/-fg/-border`（亮色近黑、暗色 elevated），
+  `--radius-pill`、32px 高、12px 内距；`⌘N` 键帽继承前景色 + 55% 透明度。品牌橙没有扩散到侧栏。
+- `styles.css` `.session.active`：删掉 `::before` 2px `accent-brand` 条，只保留 `--alpha-selected`
+  淡底 + `--fw-medium` 标题。侧栏不再出现彩色左轨。
+
+### 三、判卷与读数（本轮现跑）
+
+- 受影响 7 组判卷 **100/100 绿**：`cds-components` 24、`cds-parity` 21、`stream-nav` 22、
+  `composer-radius` 3、`quick-starts-ui` 17、`sidebar-highlight` 6、`control-accent` 7。
+- 重钉三处旧断言（都是删掉被替代的旧形制，不是放宽）：
+  - `quick-starts-ui` 从「2 列网格 / 28px 图标列 / 卡片圆角」改为「flex column / 发丝线 /
+    22px 图标列 / 明确不存在卡片圆角」；
+  - `sidebar-highlight` 从「必须有 2px 橙条」改为「必须没有 `::before`，淡底 + 字重仍在」；
+  - `control-accent` 从「橙条属于品牌位」改为「橙条已撤，品牌橙只留发送键与品牌图标」。
+- 布局冒烟：**15/15 PASS**（`apps/desktop/outputs/desktop-polish-735`，1440×900 + 880 窄窗 +
+  暗色 + 设置页，console errors=0）。
+- Impeccable 机械扫描：`detect.mjs --json --scope layout` 返回 `[]`（0 条）。
+- 桌面全量：**227 文件 / 1553 条，1549 绿 / 4 红**——仍是设置页那 4 条（其它会话在飞，
+  本批无 hunk），与第 734 页同面同数。
+- `typecheck` 0 报错；`bundle-audit` main **559,913 B** / cap 600,000（与本轮前一致）；
+  `renderer-layer-check` 绿（135 源文件）。
+
+### 四、边界
+
+- 只改了视觉层与三处判卷；没有改建议文案、点击语义（仍是填入不发送）、快捷键或侧栏行为。
+- 620px 以下的建议行只由 CSS 媒体查询保证（行高 46px），没有单独截图；本轮真机截图覆盖
+  1440×900 与 880 宽窗。
+- 暗色只验证了会话页（`04-dark.png`）与首页主操作令牌；空态建议行的暗色发丝线未单独截图。
+- 工作树未提交；`STATE.md` 仍未动（其它会话在飞）。
+
+## 2026-10-28 · 第 736 页：过程轨与交付卡回到正文阅读列（设计打磨第 2 轮）
+
+### 一、这轮修的是「卡片浮在正文外面」
+
+第 735 页后的 1440×900 目验发现会话页两处对齐/行长问题：
+
+1. **交付摘要卡与助手正文不是同一条阅读列**：正文左缘从 ✦ 列后的 28px 起，卡片却从 0 起；
+   正文右边有 fluid stop（`clamp(0, (100% - 384px) * .175, 56px)`），卡片却铺到容器右缘。
+   结果卡片左侧比正文多出 28px 空白、右侧比正文多出 56px，像贴在阅读面外面的浮层。
+2. **工具失败摘要行长失控**：失败原因一行铺到约 990px（小字号下约 80+ 字），远超声称的
+   65–75ch 阅读尺度；两行折行点也很随意。
+
+### 二、落位
+
+- `styles.css` `.changes-card`：`margin: var(--space-sm) 0` → 左 28px（20px ✦ 列 + 8px gap）、
+  右 `clamp(0px, (100% - 384px) * .175, 56px)`，与 `.row.assistant .t` 的 stop 同源。
+  卡片宽度因此与正文同列，不再压到正文右侧的留白区。
+- `styles.css` `.tool-group-failure`：加 `max-width: 72ch`。摘要仍是两行 clamp、仍保持危险色
+  （失败标记），只是折行点回到可读尺度。
+- 没有改任何 DOM、文案、交互或折叠行为；只动两条 CSS 规则。
+
+### 三、判卷与读数（本轮现跑）
+
+- 受影响 9 组判卷 **116/116 绿**：`cds-components` 24、`cds-parity` 21、`stream-nav` 22、
+  `composer-radius` 3、`quick-starts-ui` 17、`sidebar-highlight` 6、`control-accent` 7、
+  `design-minimal` 9、`stream-process` 7。
+  新增 `design-minimal` 第 ⑥ 条：失败摘要必须 `max-width: 72ch`；交付卡 margin 必须
+  `var(--space-sm) clamp(...) var(--space-sm) 28px`。
+- 布局冒烟：**15/15 PASS**（`apps/desktop/outputs/desktop-polish-736`，1440×900 + 880 窄窗 +
+  暗色 + 设置页，console errors=0）。
+- Impeccable `detect.mjs --json --scope layout`：**0 条**。
+- 桌面全量：**227 文件 / 1554 条，1550 绿 / 4 红**——仍是设置页那 4 条其它会话在飞的脏改动，
+  本批无 hunk。
+- `typecheck` 0 报错；`bundle-audit` main **559,913 B** / cap 600,000（未变）。
+
+### 四、边界
+
+- 只改了会话页的两处对齐/行长；没有验证 620px 以下的交付卡右缘（窄窗 880 已覆盖）。
+- 72ch 是按 `--fs-caption-sm` 的近似字符宽设的上限，不是动态字号计算；字号若改需同步复核。
+- 工作树未提交；`STATE.md` 仍未动（其它会话在飞）。
+
+## 2026-10-28 · 第 737 页：对话正文回到官方 prose 档（设计打磨第 3 轮）
+
+### 一、这轮修的是「正文比官方小一档」
+
+皮肤层把 `.md-body` 钉在 `--fs-body-lg`（15px）+ 1.7 行高；官方 CDS comfortable 的 prose 档是
+**16px / 24px**。差一档的后果不只是字号小：官方 Prose 的 h1/h2 = `1em + 2px`、h3–h6 = `1em`，
+在 15px 基座上标题只有 17/15px，正文与标题几乎同级；16px 基座才落回 18/16px 的官方层级。
+用户气泡与助手正文也应同档，否则同一段对话左右两种字号。
+
+### 二、落位
+
+`cds-components.css` 新增一条共同规则（只作用于对话正文，不动输入框 / 代码 / 表格）：
+
+```css
+body[data-dsh-claude-style] .row.user[data-cds="UserMessage"] .t,
+body[data-dsh-claude-style] .row.assistant[data-cds="AssistantMessage"] .md-body[data-cds="Prose"] {
+  font-size: var(--font-size-prose);   /* 官方 1rem = 16px */
+  line-height: var(--leading-prose);   /* 官方 1.5rem = 24px */
+}
+```
+
+- 用户气泡的 `max-width: 85%` / radius 12 / padding 12×16 不变；只是字号与行高跟官方 prose 对齐。
+- 助手标题阶随基座自动变为 h1/h2 18px、h3–h6 16px；代码块与表格仍走各自的 caption 档。
+- 没有改任何 DOM、文案或交互。
+
+### 三、判卷与读数（本轮现跑）
+
+- `cds-components` **25/25 绿**（新增第 25 条：正文必须 `var(--font-size-prose)` / `var(--leading-prose)`，
+  官方薄里 `--font-size-prose: 1rem` / `--leading-prose: 1.5rem`）。
+- 真机 getComputedStyle：用户气泡 **16px / 24px**，助手正文 **16px / 24px**；气泡 radius 12、
+  padding 12×16、正文 inset 4px 均未回退。
+- 布局冒烟：**15/15 PASS**（`apps/desktop/outputs/desktop-polish-737`，1440×900 + 880 窄窗 +
+  暗色 + 设置页，console errors=0）。
+- Impeccable `detect.mjs --json --scope layout`：**0 条**。
+- 桌面全量：**227 文件 / 1555 条，1551 绿 / 4 红**——仍是设置页那 4 条其它会话在飞的脏改动。
+- `typecheck` 0 报错；`bundle-audit` main **559,913 B** / cap 600,000（未变）。
+
+### 四、边界
+
+- 只改对话正文档；字体本身仍是 Cairn 的 OFL 字体（不是 AnthropicSans/Serif），所以行高与字形
+  只做到官方**字号/行高/层级**一致，不是字体文件一致。
+- 用户气泡在本轮 fixture 里没有出现在截图首屏（消息流停在助手段），16px 由 `values.json` 的
+  getComputedStyle 量到，不是目验。
+- 工作树未提交；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 738 页：过程轨的次级阅读面（设计打磨第 4 轮）
+
+### 一、这轮修的是「失败摘要既小又散」
+
+正文升到 16/24 后，工具过程轨仍是 12px caption，且失败摘要只是一段橙字悬在行下：
+它在 16px 正文与 13px 过程行之间找不到自己的层，读起来像正文的脚注，又比脚注更吵。
+失败是一条**需要被看见的过程记录**，应该有一个安静的承载面，而不是靠字号和颜色硬喊。
+
+### 二、落位（`components/stream-process.css`，两条）
+
+- `.toolcluster .tool-group-toggle`：`font-size: var(--fs-caption-md)`（12 → 13px）。过程轨的
+  主行（工具数、状态、失败数）升到和 caption-md 同级，仍比正文小一档。
+- `.toolcluster .tool-group-failure`：加 `margin: 4px 0 2px`、`padding: 6px 9px`、
+  `border-radius: var(--radius-sm)`、`background: hsl(var(--color-risk) / 6%)`、`text-wrap: pretty`。
+  失败摘要因此成为一块极淡的危险色底「过程记录」，不再是一段悬空橙字；没有用彩色左条
+  （craft floor），也没有改任何文案 / 折叠行为。
+- 失败正文仍是 `--text-200`，失败标记仍是危险色；`max-width: 72ch` 继续生效。
+
+### 三、判卷与读数（本轮现跑）
+
+- `stream-process` 7/7 绿（新增：过程轨 13px、失败块 6% danger 底、72ch 上限）；
+  `design-minimal` 9/9 绿（失败正文降色的旧判据未动）。
+- 布局冒烟：**15/15 PASS**（`apps/desktop/outputs/desktop-polish-738`，1440×900 + 880 窄窗 +
+  暗色 + 设置页，console errors=0）。暗色下 6% 危险色底为深棕红，未盖过正文。
+- Impeccable `detect.mjs --json --scope layout`：**0 条**。
+- 桌面全量：**227 文件 / 1555 条，1551 绿 / 4 红**——仍是设置页那 4 条其它会话在飞的脏改动。
+- `typecheck` 0 报错；`bundle-audit` main **559,913 B** / cap 600,000（未变）。
+
+### 四、边界
+
+- 只改过程轨的排版与失败块的承载面；没有改失败判定、截断长度（仍 240 字 / 2 行 clamp）或展开行为。
+- 6% 是按亮色目验定的；暗色也是 6%，若后续做对比度门需按实际底色重算。
+- 工作树未提交；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 739 页：用户气泡重新可见 + 交付四问可读性（设计打磨第 5 轮）
+
+### 一、这轮抓到一个真 bug：用户气泡在亮色下是隐形的
+
+皮肤把 `--bg-300` 桥成官方 `surface-3`（亮色 = `gray-0` 白），而 `--user-bubble-bg` 仍写
+`hsl(var(--bg-300))`，于是用户气泡背景变成 **rgba(255,255,255,0.1)**——落在 `#fcfcfb` 画布上
+等于没有气泡。真机 `getComputedStyle` 量到亮色 `backgroundColor: rgba(255,255,255,0.1)`、
+暗色 `color(srgb 1 1 1 / 0.1)`；截图首屏只看到一行右对齐文字，没有气泡边界。
+
+### 二、落位
+
+- `cds-components.css`：用户气泡直接吃官方灰阶——
+  - 亮色 `body:not([data-ds-dark-theme])` → `background: var(--gray-50)`（#f0efec）
+  - 暗色 `body[data-ds-dark-theme]` → `background: var(--gray-750)`（#2c2c2a）
+  不再经 `--bg-300` 的桥接。半径 12 / padding 12×16 / max-width 85% / 字号 16/24 均不变。
+- 交付四问（只改 `styles.css` 的 `.delivery-list` / `.dg-v`，组件结构一字未动）：**保持批 3 的纵向清单**（业主明确
+  「去四宫格」，本轮没有改回去），只把值从 12px 提到 `--fs-caption-md` 13px、行距 6→7px、
+  内距 10/12→12/14，并给标签加 0.01em 字距。四问读起来是正文事实，不是脚注。
+  `ChangeSummaryCard.tsx` 里其它未提交 hunk 是隔壁会话的，不属于本批。
+- 过程轨上一轮的 13px / 6% 危险色底保留。
+
+### 三、判卷与读数（本轮现跑）
+
+- `cds-components` **25/25 绿**（新增：亮色气泡背景必须是 `rgb(240, 239, 236)`；层里必须出现
+  `var(--gray-50)` 与 `var(--gray-750)`）。
+- `delivery-summary` **6/6 绿**（新增：`.delivery-list` 必须仍是 `max-content minmax(0, 1fr)` 纵向
+  两列；`.dg-v` 必须是 13px；`.delivery-grid/.delivery-cell` 仍零残留）。
+- 真机 `getComputedStyle`：亮色气泡 **rgb(240,239,236)**、暗色 **rgb(44,44,42)**；
+  气泡 16/24、radius 12、padding 12×16 未回退。
+- 布局冒烟：**15/15 PASS**（`apps/desktop/outputs/desktop-polish-739`；`02b-session-top.png`
+  是首屏气泡证据，`02-session.png` 是交付卡证据；console errors=0）。
+- Impeccable `detect.mjs --json --scope layout`：**0 条**。
+- 桌面全量：**227 文件 / 1555 条，1551 绿 / 4 红**——仍是设置页那 4 条其它会话在飞的脏改动。
+- `typecheck` 0 报错；`bundle-audit` main **559,913 B** / cap 600,000（未变）。
+
+### 四、边界
+
+- 曾短暂试过把交付四问改成 2×2 事实块，截图更好看，但它直接违反批 3「业主明确去四宫格」的
+  既有判卷——已回退，只保留 13px 与间距的可读性改动；不拿「更好看」覆盖已定的产品决策。
+- 气泡亮色有截图证据；暗色只有 `values.json` 的计算值，没有单独截首屏暗色气泡。
+- 工作树未提交；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 740 页：交付动作的主次 + 暗色空态证据（设计打磨第 6 轮）
+
+### 一、这轮把交付卡的三个动作分出主次
+
+之前「打开预览 / 恢复上一版 / 导出项目」三枚按钮同权重，全是描边小按钮；「恢复上一版」
+是破坏性动作，却和查看预览长得一样。用户要在三个同级按钮里自己判断哪个是安全的主路径。
+
+- `打开预览` → `mini-btn primary delivery-action`（黑色实心主按钮；暗色走 `--btn-primary-bg`）
+- `恢复上一版` → `mini-btn delivery-action delivery-action-danger`（危险色文字 + 22% 危险色描边，
+  hover 6% 危险色底；不填红——低频破坏动作不该比主操作更抢眼）
+- `导出项目` → 保持中性描边（次级）
+
+只加 class 与两条 CSS（`.delivery-action-danger` 及其 hover），没有改任何点击行为、文案或动作顺序。
+
+### 二、暗色空态补齐证据
+
+第 735 页的空态改造只在亮色截图；这轮补了暗色首屏 `05-home-dark.png`：
+新任务 pill 为 `--bg-elevated` 深灰、建议行发丝线可见、正文与分隔线对比正常，没有出现
+「白底按钮在暗色里发光」或「分隔线消失」。
+
+### 三、判卷与读数（本轮现跑）
+
+- `delivery-summary` **6/6 绿**：新增「预览必须是 primary」「恢复必须是 delivery-action-danger」
+  与危险色 CSS 断言。
+- `cds-components` 25/25、`design-minimal` 9/9、`stream-process` 7/7 均绿（上轮判据未回退）。
+- 布局冒烟：**15/15 PASS**（`apps/desktop/outputs/desktop-polish-740`；
+  `04b-changes-expanded.png` 是展开态动作行证据，`05-home-dark.png` 是暗色空态证据）。
+- Impeccable `detect.mjs --json --scope layout`：**0 条**。
+- 桌面全量：**227 文件 / 1555 条，1551 绿 / 4 红**——仍是设置页那 4 条其它会话在飞的脏改动。
+- `typecheck` 0 报错；`bundle-audit` main **559,944 B** / cap 600,000（比上轮 +31 B，来自动作 class 分支）。
+
+### 四、边界
+
+- `ChangeSummaryCard.tsx` 里其它未提交 hunk（按钮化头部、文件区、下载图标）是隔壁会话的；
+  本批只加了三个 class，没有重写组件。
+- 「恢复上一版」仍是危险色文字而非填充红钮；如果后续要更强的破坏性确认，应另做确认流程，
+  不在这一轮偷偷加。
+- 工作树未提交；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 741 页：焦点不改变轮廓 + 620px/命令面板复核（设计打磨第 7 轮）
+
+### 一、这轮修的是键盘焦点下的「方一下」
+
+全局 `:focus-visible` 为了统一焦点环，写了 `border-radius: var(--radius-xs)`（4px）。这会把
+侧栏「＋ 新任务」pill、模型选择 pill、空态项目 chip 和圆形发送键在键盘焦点时临时压成 4px 圆角，
+焦点环出现的同时控件轮廓变方——视觉上像换了一个控件。
+
+`styles.css` 补了四条定向规则（特异性高于全局）：`.side-new` / `.empty-chip` / `.mp-trigger`
+保持 `--radius-pill`，`.send-btn` 保持 `50%`。焦点环三层结构、颜色、过渡都没动。
+
+### 二、620px 与命令面板复核（无代码改动）
+
+- 620×900 亮/暗两套首屏截图：主区 `617px`（3px 滚动条）、`.empty` 左右各 16px、composer 585px、
+  建议行 585px，左右对称；没有横向溢出。之前 1440 截图里看到的「右边多一截」是缩放读数误判，
+  这轮用 DOM rect 量过才落结论。
+- ⌘K 命令面板截图：分组「操作 / 技能」、选中行灰底、右侧键位、底部 `↑↓ 选择 @ 打开 esc 关闭`
+  都在；没有发现需要改的层级问题，本轮不动它。
+
+### 三、判卷与读数（本轮现跑）
+
+- `focus-ring` **5/5 绿**：新增「焦点不改变控件轮廓」——四类 pill/圆钮的 `:focus-visible`
+  必须保持各自半径。
+- 布局冒烟：**15/15 PASS**（`apps/desktop/outputs/desktop-polish-741`；另存
+  `01-home-620-light.png`、`02-home-620-dark.png`、`03-palette.png`）。
+- Impeccable `detect.mjs --json --scope layout`：**0 条**。
+- 桌面全量：**227 文件 / 1556 条，1552 绿 / 4 红**——仍是设置页那 4 条其它会话在飞的脏改动。
+- `typecheck` 0 报错；`bundle-audit` main **559,944 B** / cap 600,000（未变）。
+
+### 四、边界
+
+- 焦点轮廓只有 CSS 判据，没有键盘焦点截图（Electron `show:false` 下伪类难以稳定复现）；
+  这是「规则正确」不是「肉眼认证」。
+- 620px 截图是 CSS 620 宽（设备像素 1240），不是 620 物理像素窗口。
+- 命令面板只做目验，没有改任何代码；如果后续要改，另起一批并补判卷。
+- 工作树未提交；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 742 页：项目选择弹层的空白行（设计打磨第 8 轮）
+
+### 一、这轮抓到一个真实显示 bug：最近项目行只有路径、没有名字
+
+在首页点「项目 chip」打开选择弹层后，最近项目行渲染成：
+
+```html
+<span></span><span class="sub">/tmp/demo-ws</span>
+```
+
+即主标题是空字符串/undefined，用户只看到右侧路径。原因是 `p.name` 在最近项目投影里可能为空
+（或缺失），JSX 直接 `{p.name}`，React 渲染成空节点。现在回落路径 basename：
+
+```tsx
+<span>{p.name || p.path.slice(p.path.lastIndexOf("/") + 1)}</span>
+```
+
+真机复测：同一行文本从 `/tmp/demo-ws` 变成 **`demo-ws` + `/tmp/demo-ws`**（截图
+`04-project-picker.png`）。
+
+### 二、顺手把「当前项目」标出来
+
+同一个弹层里，选中行原本只靠 `menu-item on` 的淡灰底，和 hover 太像。现在在路径右侧加一枚
+`Check`（`.mi-check`，`--accent-control`），与侧栏/设置页的选中语义一致；只在
+`p.path === activeWorkspace` 时渲染。
+
+### 三、判卷与读数（本轮现跑）
+
+- `quick-starts-ui` **17/17 绿**：新增「最近项 name 为空必须回落 basename」与
+  `className="mi-check"` 源文判据。
+- 真机 DOM：修复前 `.chip-list .menu-item` 的 `innerHTML` 里是 `<span></span>`；修复后是
+  `<span>demo-ws</span>`，且路径右侧出现 check。
+- 布局冒烟：**15/15 PASS**（`apps/desktop/outputs/desktop-polish-742`；`04-project-picker.png`
+  是弹层证据）。
+- Impeccable `detect.mjs --json --scope layout`：**0 条**。
+- 桌面全量：**227 文件 / 1556 条，1552 绿 / 4 红**——仍是设置页那 4 条其它会话在飞的脏改动。
+- `typecheck` 0 报错；`bundle-audit` main **560,059 B** / cap 600,000（比上轮 +115 B，来自
+  Check 图标与回退表达式）。
+
+### 四、边界
+
+- 只改项目选择弹层；没有改最近项目的数据投影，也没有把 `p.name` 的缺失“修”到上游。
+- 选中 check 是视觉标记，键盘/读屏仍靠 `menu-item on` 与按钮语义；`aria-hidden` 不抢读屏。
+- 弹层暗色没有单独截图；check 用 `--accent-control`，亮暗自动跟随。
+- `WorkbenchView.tsx` 里其它未提交 hunk 是隔壁会话的；本批只加了两处小改。
+- 工作树未提交；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 743 页：620px 设置页的「界面密度」不再被裁（设计打磨第 9 轮）
+
+### 一、这轮修的是窄窗设置页的横向裁切
+
+620×900 真机（CSS 620）打开设置页，左栏 220px、右内容卡约 336px。`界面密度` 的五档
+（紧凑 / 标准 / 宽松 / 舒适 / 超大）在 `.theme-opts` 里单行 `display:flex`、不换行，
+第五档直接越出卡片右缘被裁掉——用户看不到也点不到「超大」。
+
+`styles.css` 一条规则：
+
+```css
+.theme-opts { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+```
+
+1440px 下五档仍在一行（宽度足够），620px 下自动折成两列；没有改字号档、没有改任何按钮，
+也没有把 nav 做折叠——这是「不裁切」的最小修复。
+
+### 二、读数
+
+620px 真机 DOM（修复后）：
+
+- `.ss-card`：left 252 / right 588（内容宽 336）
+- `.theme-opts`：left 273 / right 567（宽 294）
+- 五个 `.theme-opt`：最大 right **477**，全部落在卡片右缘 588 以内；排布为 2 / 2 / 1
+- 截图 `05-settings-620.png` 可同时看到「紧凑 / 标准 / 宽松 / 舒适 / 超大」五档。
+
+### 三、判卷与读数（本轮现跑）
+
+- `settings-sections` 新增断言「`.theme-opts` 必须 `flex-wrap: wrap`」：单独跑
+  `-t "theme-opts 允许换行"` **1/1 通过**。
+- 该文件整体 **25/27**：2 条既有设置页失败（与全量那 4 条同源，属隔壁会话在飞的脏改动，
+  本批无 hunk）；不冒充全绿。
+- 布局冒烟：**15/15 PASS**（`apps/desktop/outputs/desktop-polish-743`）。
+- Impeccable `detect.mjs --json --scope layout`：**0 条**。
+- 桌面全量：**227 文件 / 1557 条，1553 绿 / 4 红**——4 条仍是设置页既有红。
+- `typecheck` 0 报错；`bundle-audit` main **560,059 B** / cap 600,000（未变）。
+
+### 四、边界
+
+- 只解决横向裁切；620px 下左侧 nav 仍固定 220px、内容列仍偏窄，五档折成 2/2/1 是预期行为，
+  不是把设置页重构成移动端抽屉。
+- 没有 620px 暗色设置页截图；本次是布局修复，颜色未动。
+- 新增断言所在文件本身带 2 条既有红；单条通过已用 `-t` 验证，不拿“全量 4 红”当本批失败。
+- 工作树未提交；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 744 页：项目弹层的键盘导航（设计打磨第 10 轮）
+
+### 一、这轮补的是项目弹层的键盘手感
+
+项目 chip 弹层此前只有 Tab/鼠标：搜索框里按 ↑↓ 不会进入项目行，Home/End 也没有意义。
+现在把同一套 `menuNavIndex` 接到 `.chip-pop` 容器上：
+
+- 搜索框里按 **↓** → 焦点落到第一个项目，**↑** → 落到最后一个；
+- 项目行之间 ↑↓ 环形移动，Home/End 直达首尾；
+- 焦点还在搜索框时 **Home/End 不抢**——它们归文本光标，只有 ↑↓ 进入列表；
+- Enter 仍走按钮原生 click，Esc 仍由共享 `usePopoverDismiss` 关闭。
+
+没有改 DOM 结构、项目数据或选择行为，只加一个 `onKeyDown` 和 guard。
+
+### 二、读数
+
+真机（单项目 fixture）：搜索框 focus → ArrowDown 后 `document.activeElement` 从
+`.chip-search` 变成项目行 `demo-ws/tmp/demo-ws`；再按 ArrowDown 仍在唯一行（环形退化为自身），
+ArrowUp 同样。多项目下的环形由纯函数判卷覆盖（首↔末、Home/End、非导航键 null）。
+
+### 三、判卷与读数（本轮现跑）
+
+- `popover` **7/7 绿**：新增纯函数 `menuNavIndex` 的环形/边界断言。
+- `quick-starts-ui` **17/17 绿**：新增项目弹层键盘源码哨兵与「输入框 Home/End 不抢」guard。
+- 布局冒烟：**15/15 PASS**（`apps/desktop/outputs/desktop-polish-744`）。
+- Impeccable `detect.mjs --json --scope layout`：**0 条**。
+- 桌面全量：**227 文件 / 1558 条，1554 绿 / 4 红**——仍是设置页那 4 条其它会话在飞的脏改动。
+- `typecheck` 0 报错；`bundle-audit` main **560,364 B** / cap 600,000（比上轮 +305 B，来自键盘
+  导航函数与事件处理）。
+
+### 四、边界
+
+- fixture 只有一个最近项目，↑↓ 的**多行环形**只在纯函数判卷里验过，没有真机多项目样本。
+- 搜索框 Home/End 的 guard 是源码判据；没有用真实键盘事件验 Home/End 光标行为。
+- 只有键盘行为，没有视觉变化；不新增截图。
+- 工作树未提交；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 745 页：模型选择器的 provider 分组线（设计打磨第 11 轮）
+
+### 一、这轮修的是「glm 看起来像 deepseek 的第三行」
+
+模型选择器里 provider 标签只是灰色小字，`glm` 紧贴在 `deepseek-reasoner` 行下，间距和组内
+行距差不多——读起来像 deepseek 组里又多了个叫 glm 的模型。现在给每个非首组加一条发丝线：
+
+```tsx
+{groups.map((g, gi) => (
+  <div key={g.provider} className={"mp-group" + (gi > 0 ? " separated" : "")}>
+```
+
+```css
+.mp-group.separated { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--hairline); }
+```
+
+首组不加线（搜索框下方直接起组），后续每组一条；「演示」组也因此和真实 provider 分开。
+没有改模型数据、选中态、搜索或思考强度。
+
+### 二、判卷与读数（本轮现跑）
+
+- `composer-rework` **20/20 绿**：新增渲染断言「多 provider 必须有 `mp-group separated`」与
+  CSS 发丝线断言。
+- 布局冒烟：**15/15 PASS**（`apps/desktop/outputs/desktop-polish-745`；`06-model-picker.png`
+  是弹层证据）。
+- Impeccable `detect.mjs --json --scope layout`：**0 条**。
+- 桌面全量：**227 文件 / 1558 条，1554 绿 / 4 红**——仍是设置页那 4 条其它会话在飞的脏改动。
+- `typecheck` 0 报错；`bundle-audit` main **560,411 B** / cap 600,000（比上轮 +47 B，来自分组
+  class 与 index）。
+
+### 三、边界
+
+- 只做视觉分隔；组内行距、组标题字号与 provider 圆点都没动。
+- 没有暗色模型弹层截图；分隔线用 `--hairline`，亮暗自动跟随。
+- 单 provider 的弹层没有分隔线（首组不划线），这是预期。
+- 工作树未提交；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 746 页：暗色分组线 + 620 合成窗口纠偏（设计打磨第 12 轮）
+
+### 一、暗色下 provider 分组线太淡
+
+第 745 页把 `.mp-group.separated` 的 `border-top` 设为 `--hairline`；亮色可见，暗色几乎融进
+背景。现在改成 `--hairline-strong`，上边距 6→8px：暗色 `06-model-picker-dark.png` 里
+`glm` 组与 `deepseek-reasoner` 行有明确分隔，不再像同一组第三行。
+
+### 二、纠偏：620px 是合成窗口，不是产品可达宽度
+
+`apps/desktop/src/main/index.ts:1012` 的 `minWidth` 是 **880**。第 743 页的 620px 截图是
+`BrowserWindow` 程序化设宽，低于产品最小窗口；「设置页五档被裁」在真实用户可达的 880px
+下并不存在——880×900 目验 `05-settings-880.png` 五档一行完整、无横向裁切。
+
+- 第 743 页的 `flex-wrap` 保留是**防御性兜底**（devtools/未来更窄窗口不崩），不再把它说成
+  「用户最小窗口的真实 bug」。
+- 620px 下的 `settings-620.png` 只能当合成边界样本，不能当产品验收口径。
+- 这轮新增 `settings-880.png` 作为真实最小宽的设置页证据。
+
+### 三、判卷与读数（本轮现跑）
+
+- `composer-rework` **20/20 绿**：分组线断言升级为 `1px solid var(--hairline-strong)`。
+- 布局冒烟：**15/15 PASS**（`apps/desktop/outputs/desktop-polish-746`）。
+- 桌面全量：**227 文件 / 1558 条，1554 绿 / 4 红**——仍是设置页那 4 条其它会话在飞的脏改动。
+- `typecheck` 0 报错；`bundle-audit` main **560,411 B** / cap 600,000（CSS 改动，JS 不变）。
+
+### 四、边界
+
+- 暗色模型弹层有截图；亮色在第 745 页，分组线从 hairline 升到 hairline-strong 后没有重拍亮色。
+- 880px 设置页截图是亮色；暗色 880 未拍。
+- 工作树未提交；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 747 页：设置页导航的信息架构与语义标题（设计打磨第 13 轮）
+
+### 一、这轮把设置页左栏从「一串按钮」变成三段
+
+之前设置页导航只有顶部「返回 / 搜索」，下面从「通用」一路平铺到「关于与更新」；「工作台」
+只是插件前的一行灰字，没有真正的分组边界。现在：
+
+- 导航顶部新增 `sp-nav-head` + `sp-nav-title`「设置」；
+- 导航主体拆成三个 `sp-nav-group`：
+  - `data-group="settings"`：通用 / 模型与 Provider / 联网搜索 / 用量统计 / 进化 / 权限与安全 / 高级 / 快捷键
+  - `data-group="workspace"`：工作台（`sp-nav-label`）+ 插件 / 自动化任务 / 技能中心 / 记忆系统 / 工作树
+  - `data-group="system"`：关于与更新
+- 搜索仍在导航顶部；搜索结果按组过滤，空组不摆空标签；
+- 组与组之间 6px 间距，组内仍是 2px 紧凑列。
+
+同时把页面标题/说明包成 `<header class="ss-head">`，分组标题从 `<span>` 改为真正的
+`<h2 class="ss-sec-title">`；因为 h2 有 UA 字号，补了 `font-size: inherit; line-height: inherit`
+保持原来的 12px caption 尺度（否则截图里「外观」会突然变成 18px）。
+
+### 二、视觉结果
+
+`05-settings-880.png`（真实最小窗口 880×900）：左栏顶部是「设置」，返回与搜索在标题下，
+「工作台」成为第二段的组标题；右侧「通用」页头、`外观 · 主题偏好` 等小节标题保持原字号，
+没有因 h2 语义化而放大。密度五档仍一行完整。
+
+### 三、判卷与读数（本轮现跑）
+
+- 设置页相关：`render-structure` 的设置导航分组断言通过，`settings-ui` 的「页头 + h2」断言通过。
+- 全量从 4 红降到 **2 红**：**227 文件 / 1558 条，1556 绿 / 2 红**；剩余 2 条是
+  `settings-sections` 的「当前通道行」「权限方案门文案」，与本轮导航/页头无关。
+- 布局冒烟：**15/15 PASS**（`apps/desktop/outputs/desktop-polish-747`）。
+- Impeccable `detect.mjs --json --scope layout`：**0 条**。
+- `typecheck` 0 报错；`bundle-audit` main **560,411 B** / cap 600,000（未变）。
+
+### 四、边界
+
+- 分组只改导航的视觉与语义，没有改分区 id、顺序、搜索同义词或任何设置项行为。
+- 880px 是产品 `minWidth`（`apps/desktop/src/main/index.ts:1012`）；620px 仍只当合成边界样本。
+- 剩余 2 条红是别的设置段文案/结构，不在本批 hunk 内，没有顺手改。
+- 工作树未提交；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 748 页：设置页最后两条红收口（设计打磨第 14 轮）
+
+### 一、当前通道摘要提到供应商列表之前
+
+`模型与 Provider` 段此前顺序是「供应商左右分栏 → 当前通道摘要」；读起来像先让你管理供应商，
+最后才告诉你现在用的是谁。现在把 `当前通道` 的 `SettingsRow` 提到 `pv-split` 之前：
+先给结论（当前 provider + 「模型与思考档位在输入框处切换」），再进列表/密钥表单。
+`05-settings-provider-880.png` 里当前通道行在上，DeepSeek「当前」标记与 GLM 详情在下的关系
+一眼能看懂。
+
+### 二、网络行改成「说明 + 状态标签」，不再是一段灰字
+
+之前网络行把「默认断网；出网 = 逐次审批（一次性，不记忆）。沙箱在 macOS 走 Seatbelt。」
+塞进一个 `sp-dim` 文本块，和「网络」标签挤在同一行左侧。现在按 `SettingsRow` 的标准语义拆：
+
+- 标签：`网络`
+- 说明（`ss-row-desc`）：`出网需要逐次审批（一次性，不记忆）；沙箱在 macOS 走 Seatbelt。`
+- 控件位：`默认断网` 状态标签（无按钮/开关）
+
+`06-settings-permissions-880.png` 里这一行现在是标准的「标题 + 说明 + 右侧状态」，与上方
+「写文件前先提交方案」的开关行同一节奏。
+
+### 三、判卷：全绿
+
+- **`227` 文件 / `1558` 条，`1558` 绿 / `0` 红**。这是本轮最重要的读数：设置页此前 4 条
+  既有红全部收口（第 747 页解决 2 条导航/页头，本页解决 2 条 provider/网络行）。
+- `settings-sections` **27/27 绿**。
+- 布局冒烟：**15/15 PASS**（`apps/desktop/outputs/desktop-polish-748`；
+  `05-settings-provider-880.png`、`06-settings-permissions-880.png` 是本页证据）。
+- Impeccable `detect.mjs --json --scope layout`：**0 条**。
+- `typecheck` 0 报错；`bundle-audit` main **560,411 B** / cap 600,000（未变）。
+
+### 四、边界
+
+- 只调整了当前通道摘要的位置与网络行的语义结构；没有改供应商选择、密钥保存、权限档或
+  任何设置值。
+- 880px 是产品 `minWidth`；截图都是 880×900 亮色。暗色 provider/permissions 未拍。
+- 工作树未提交；`STATE.md` 仍未动。
+
 ## 2026-10-28 · 第 749 页：IME 组字守卫（交互面第 1 轮 · 中文输入回车改写用户正在写的字）
 
 ### 一、这轮修的是「中文用户组字时按回车，正在写的字被系统改掉」
@@ -25229,6 +26629,283 @@ runtime package 的 `main` 在 `apps/desktop/src/main/entry.cjs`，所以打包�
 - `apps/desktop/release/` 不入库；可复现命令与读数在本轮取料目录（提交后补链接）。
 - 工作树未提交；`STATE.md` 仍未动（沿用第 749/750/752 页同例，留给收口批次）。
 
+## 2026-10-28 · 第 754 页：对话轨道（设计打磨第 15 轮 · 一条左轨、恒为 24px 的档；轴线试过即撤）
+
+### 一、这轮修的是「对话像一堵文字墙」
+
+业主定案「桌面端要做到 Codex / Claude 顶尖水平」。配色那一层本仓早已是 Claude 那一档
+（官方 CDS 令牌逐字节 vendored + 陶土色皮肤），**差距不在配色，在读法**。
+现读代码找到三处真因（不是猜测，是现读的 CSS 事实）：
+
+| # | 真因 | 证据 |
+|---|---|---|
+| ① | **隐形占位**：每轮留着一排「hover 才现身」的署名条（时间戳 + 复制/分叉/置顶…），它在**流里**占着 30px | `styles.css` 的 `.row.user > .meta` / `stream-process.css` 的 `.assistant-footer` 都是流内元素 |
+| ② | **左轨不齐**：过程带缩进 22px，助手正文缩进 28px ⇒ 同一轮里两段差 6px | `.toolcluster[data-tool-group] { margin: … 22px }` vs `.row.assistant` 的 `20px + gap 8px` |
+| ③ | **标浮在半空**：品牌标在标列里，正文首行自带 10px 顶距 ⇒ 标比首行高一大截 | `.md-h2 { margin: 10px 0 5px }` |
+
+三处合起来的效果：块与块之间的档是 14 / 24 / 36 / 54 四种，**一轮读下来像散落的几块**。
+
+### 二、修法：对话轨道（ADR 0008）
+
+新增 `apps/desktop/src/renderer/components/conversation-rail.css` + 轨道令牌（`tokens.css`）：
+
+- **一条左轨**：`--rail-gutter` = 标列 20px + 网格间隙 8px = 28px。轮内的过程带（思考记录 /
+  工具调用）、助手正文、交付卡全部挂在这一条轨上；品牌标在标列里，是**轨的标记**。
+  过程带的图标落在轨上（按钮左内距归零），文字跟在图标后——与正文里的项目符号同一读法。
+- **恒为 24px 的档**：行顶距仍是 brief §二.1 的字面量 `24px`（判卷逐字钉着），
+  过程带顶距走令牌 `--turn-gap`（= 24）、底距 0 ⇒ 段与段之间恒为 24px（此前是四种）。
+- **署名条浮层化**：绝对定位到行的下边缘之外（`top: 100%`），不占流内高度 ⇒ 每轮不再白吃 30px。
+  顺带修一条**幽灵点击**：隐藏态（`opacity: 0`）的操作条此前仍可点 ⇒ 用户点「过程带」
+  其实点在一条隐形按钮上；现在隐藏态 `pointer-events: none`，现身时恢复。
+- **标与首行齐平**：正文首块顶距归零、末块下边距归零（档由行负责，markdown 不许自己再加一段）。
+- **轴线（试过，撤了）**：本批第一版还画了一条发丝线（品牌标当「节点」）。
+  **业主在真机截图上一句话否掉：「这个线是什么鬼，有用吗？」** 判下来确实不成立：
+  线上只有品牌标一个点，其余全是空跑 ⇒ 多余的竖线；Codex / Claude 都没有它。
+  ⇒ 整条撤掉，两个令牌（`--rail-line` / `--rail-node`）一起删，不留死令牌；
+  并把「对话面不许有装饰性竖线」钉成判卷第 ⑤ 条（把线放回去 ⇒ 实测立刻红）。
+  **这批的收益本来就不在线上**——撤掉之后左轨、恒定 24px 的档、首行齐平三条全部成立。
+
+### 三、判卷（新增 `apps/desktop/tests/conversation-rail.test.ts`，7 条）
+
+钉的是**数值自洽**与**不许回退**，不是样式快照：
+左轨宽 = 标列 + 间隙（①）；`--turn-gap` == 24 == 行上的字面量（②）；署名条是浮层、不占流内高度（③）；
+隐藏态不吃指针、现身时恢复（④）；**不许有装饰性竖线**（轴线已撤，⑤）；轨道不引入动效（⑥）；
+标与首行齐平（⑦）；渲染层 CSS 面里不再有对话缩进的裸像素（⑧）。
+
+**能造红（已实测两处）**：把底座 `.toolcluster` 的缩进放回旧的 `22px` ⇒ ①⑧ 两条红；改回 ⇒ 7/7 绿。
+把撤掉的轴线放回 `conversation-rail.css` ⇒ ⑤ 红（`Tests 1 failed | 6 passed`）；撤掉 ⇒ 7/7 绿。
+
+### 四、判卷能造红之前，先撞了四条既有判卷（本轮改实现，不改判卷）
+
+新结构第一次落盘时，四条既有判卷同时红——它们**逐字钉着**既有契约：
+
+| 判卷 | 钉住的东西 | 本轮怎么让 |
+|---|---|---|
+| `cds-parity` | 「adapter 之后只允许组件层」——任何第三个样式 import 算接线漂移 | 轨道样式 import 挪到 **adapter 之前**（轨道只动自己的落位，与官方变量无冲突） |
+| `row-actions-reveal` | `.row:hover .row-actions, .row:focus-within .row-actions { opacity: 1; transform: none; }` 整条文本 | 指针那条**另起一条规则**写，不在原规则上加字 |
+| `tool-rows` | `.row.user/.row.assistant/.row.error-row { margin: 24px 0 0 }` 字面量（brief §二.1） | 行顶距**一个字没动**；本轮反过来把过程带的档收成同一个 24 |
+| `stream-nav` | `.row.assistant { grid-template-columns: 20px … }` 字面量 | 标列保留字面量 20px，左轨走令牌；等式由新判卷钉 |
+
+⇒ 结论记在这里：**brief §二.1 的 24px 与 owner 定的 20px 标列都是契约，不是风格**；
+新结构必须退让到契约，不能让契约迁就新结构。
+
+### 五、本轮读数（本轮现跑）
+
+- 桌面全量：**231 文件 / 1591 条，1590 绿 / 1 红**（本轮前基线 230 文件 / 1583 条，
+  1582 绿 / 1 红；新增判卷文件 1 个 7 条）。**那 1 条红是环境债不是回归**：
+  `desktop-review-batch` 的原生宿主真机冒烟（Electron Mach port 被外层沙箱拒 ⇒ 本机起不来 Electron），
+  与本轮开工前的基线同一条、同因。
+- `typecheck`：**0 条报错**；`desktop-boundary-check`：**绿**（src 无反向依赖、无 UI import）。
+- `docs-check`：**受检项全绿**（AGENTS.md 7,996 B / 预算 8,000 B；页号唯一面给出的下一个未占用页号 = 754）。
+- `bundle-audit`：首屏 **175,889 B**（帽 800,000）；**main 561,273 B**（帽 600,000）/
+  popout **371,868 B**（帽 400,000），`overBudget: false`。
+  **本批对路由字节的增量为 0**（实测：把轨道样式的 import 去掉重建，main 561,273 / popout 371,868
+  **逐位相同**——口径只量 JS 路由字节；本批只改 CSS，CSS 另计，`conversation-rail.css` 4.0 KB 源码）。
+- 视觉自查：**亮色 + 暗色两档**都看了真渲染产物（真 dist + 假 AgentApi，见第六节）。
+
+### 六、边界（明确不冒充的）
+
+- **真机观感未验收**：本机 Electron 起不来（环境债，见上文），**帧时间 / 启动耗时 / 原生冒烟本轮量不了**。
+  本轮的视觉证据来自「浏览器 + 真构建产物 + 真渲染代码 + 假 AgentApi」——是真渲染，
+  但**不是 Electron 宿主**（真机窗口装饰、原生窗格、缩放与高 DPI 差异未覆盖）。
+- 那套浏览器夹具本轮**未入库**（落在仓外临时目录，仓外材料不入库）；要长期用得另立批次。
+- 交互面（IME 组字守卫、发送队列键一致性、浮层互斥）本轮**没碰**。
+- **未提交**：所有改动留在工作树，证据覆盖的是**工作树**，不是任何提交；
+  `mutate-verify` / `head-cert-check` 量的是提交，本轮**不适用**，不引用。
+- `STATE.md` 本轮**没重写**：工作树里另有一批未提交的互操作改动在飞，其现态层已被上一轮更新过；
+  本轮整体重写会把那批的记述冲掉 ⇒ 留给收口批次一起写。
+
+## 2026-10-28 · 第 757 页：对标 Codex / Claude（研究批 + 模型选择器 + 输出动效）
+
+### 一、业主点名「去研究学习」——REA 不可用，如实诊断后走同一条一手路线
+
+`rea:reverse-engineer-anything` 插件已加载并按它的接入约定诊断：
+
+- 插件声明的 `rea` stdio MCP **未挂载**（`mcp list` 为空）；
+- 插件的获取通道也断在本机沙箱：`npx -y rea-agents@6.4.0 mcp doctor --json` 两次都报
+  `EPERM unlink`（npm 写不了缓存；默认缓存与全新临时缓存 alike）。
+  按插件约定**不擅自改宿主配置、不换 latest**。
+
+⇒ 改走 REA 的 JS/Electron 路线本身（解包产物读渲染层），本机正好装着两个目标：
+
+| 目标 | 产物 | 版本 |
+|---|---|---|
+| Claude Desktop | `/Applications/Claude.app/…/app.asar`（52.6 MB） | 3.6556.2 |
+| Codex 桌面端 | `/Applications/ChatGPT.app/…/app.asar`（660 MB） | 26.1023.51421 |
+| Codex 模型目录 | `~/.codex/cc-switch-model-catalog.json` | — |
+
+解包脚本按 asar 格式手写（16 字节头 + JSON 目录 + 数据段），**没引入任何新依赖**。
+
+### 二、读到的（一手事实，不是印象）
+
+- **Claude 3.6556.2**：渲染层是 Tailwind v4.3.3 + CDS 令牌 ⇒ 本仓 vendored 的 CDS 薄**不落后**
+  （`vendor/cds-official/UPSTREAM.json` 记的正是同一版本、同一 asar sha256）；
+  动效刻度 `.12s/.2s/.3s/.45s/60ms` + 四个缓动**与本仓已同值** ⇒ 差距不在令牌层。
+  两处新事实：① 输出动效是 **shimmer 扫光**（正文克隆层 + `mask-clip:text` + 120° 光带，3s linear infinite，
+  减弱动效走根属性 `data-reduce-motion`）；② 芯片值变化有 **pop**（上冲 1.32，40%/60% 两段，overshoot 收尾）。
+- **Codex 26.1023.51421**：① 输出动效是 **逐词到达**
+  （`_reveal-response-word`：0% 透明+强调色 → 20% .6 → 65% 不透明 → 落回正文色；另有打字点波、遮罩扫光）；
+  ② 模型选择是**多轴**结构：每模型带 `supportedReasoningEfforts`（各带人话说明）+ `defaultReasoningEffort`，
+  换模型时**归位**（当前档不支持 ⇒ 落到缺省档 ⇒ 再退第一档）；模型目录里还有 verbosity / 速度档 / 上下文百分比。
+
+### 三、批次 A：模型选择器（多轴 + 归位 + 芯片动效）
+
+- **档位跟模型走**：`ModelOption` 带该模型自己声明的 `thinkingLevels` / `thinkingDefault`
+  （唯一事实源仍是 `getProviderInfo()`）；菜单的思考段只出该模型声明的档；没声明 ⇒ 四档但整段禁用。
+- **归位是状态更新、不是显示层偷换**：新增纯函数 `reconcileThinkingLevel()`，
+  由两条路径写回状态（菜单点模型 `pick` + 父级换 value 的 `useEffect`）。
+  **芯片仍显示「当前档」**（既有契约：显示的 = 发出去的）⇒ 显示与请求永不分叉。
+- **芯片的值变了弹一下**：照抄 Claude 的数值（上冲 scale 1.32 占 40% 时长、下落 60% 用 overshoot）；
+  触发用「名字那格以模型名为 key ⇒ 换模型即重挂 ⇒ 动画自动重播」。
+
+### 四、批次 B：输出动效（逐词到达）
+
+- 关键帧照抄 Codex 那组值；**只在正在写的那一块开**（`caret` 为真的块）⇒ 历史正文不多包节点。
+- 词的 key 用**词序**（`w0/w1/…`）而不是词本身：词本身随流式增长而变 ⇒ 用它做 key 会每来一个字符就重挂、动画反复重播。
+- 光标（业主第 19 遍裁定的元素）**保留**：逐词到达是叠加，不是替换。
+
+### 五、读数（本轮现跑）
+
+- 桌面全量：**233 文件 / 1607 条，1606 绿 / 1 红**（那 1 条仍是 `desktop-review-batch` 的原生宿主真机冒烟：
+  本机 Electron 起不来，环境债，与前两轮同一条同因）。本轮新增判卷文件 2 个（14 条）。
+- `typecheck`：**0 条报错**；`desktop-boundary-check`：**绿**。
+- 对既有判卷的**唯一一处改动**：`tests/markdown.test.tsx` 的「光标落在最后一个文本块行内」那条——
+  逐词到达把正文包进一层**可选的** `<span class="md-word">`，原正则要求正文与光标紧邻、字面失配；
+  判据放宽成「正文可被包一层，但光标仍紧跟其后、且仍在 `<p>` 里」——**意图一点没松，期望文本一个字没改**。
+  （形状适配不是削弱断言；记在 ADR 0009 第四节，便于回查。）
+- 裁决与证据全文见 `docs/adr/0009-codex-claude-benchmark.md`。
+
+### 六、边界与下一批入口（明确不冒充的）
+
+- **真机观感未验收**：本机 Electron 起不来；动效的**观感**（节奏、幅度、是否太闹）必须由业主在真机上看。
+  本轮的视觉核对走「浏览器 + 真构建产物 + 真渲染代码 + 假 AgentApi」，看的是**静态帧**，不是动效本身。
+- 词级 DOM 包装只发生在**正在写的那一块**；长会话的节点数影响**未量**（下一批用基准脚本量）。
+- 业主说的「其他全部都需要优化」**尚未开始**。下一批入口（按对标证据排优先级）：
+  ① **审查与交付闭环**（设计规范 §3.6「重点补课」）——Codex 的核心是 diff 审阅那一圈，不是配色；
+  ② **上下文预算的可见性**（Codex 有 `effective_context_window_percent` + 进度环动画；本仓只有用量环）；
+  ③ **速度档 / 冗长度两根轴**（Codex 有；本仓协议还没有 ⇒ 要先在 `src/main/ipc-protocol.ts` 落契约）；
+  ④ Claude 的 **shimmer 扫光**（另一条输出动效路线，不与逐词到达叠加）。
+
+## 2026-10-28 · 第 758 页：应用内「减弱动效」开关（对标 Claude 的 `data-reduce-motion` 根属性）
+
+### 一、这轮补的是「动效只有一个总闸」这个缺口
+
+读 Claude 3.6556.2 的产物 CSS 时读到一条**此前不知道**的事实：减弱动效有**两个**入口——
+媒体查询（系统级）**和根属性** `[data-reduce-motion=true]`（应用自己也能强制降级）。
+后者不是媒体查询的重复：它让**用户可以在应用里**要求减弱。
+
+本仓原状：只有全局媒体查询那条（`styles.css` 的 `* { animation-duration: .01ms !important }`）
+⇒ 系统开了就降级，但**应用内没有开关**。本轮补上那个入口。
+
+### 二、修法
+
+- 新增 `apps/desktop/src/renderer/state/motion-pref.ts`：偏好（`system` / `reduced`）、纯函数决策
+  `motionPrefOf()`、根属性落位（`html[data-reduce-motion="true"]`，与主题同款：写属性不加 class）、
+  localStorage 持久化（`cairn.reduceMotion.v1`，窗口级偏好族）、启动落位 `bootMotionPref()`
+  （偏好 + 系统媒体查询两路事实 ⇒ 一个属性；系统那一侧变化也跟着走）。
+- 侧栏头像菜单「外观」子菜单里加一项「减弱动效」（当前档打勾；文案走 `STR.footer.reduceMotion`）。
+- CSS：`[data-reduce-motion="true"]` 关掉本仓自己加的动效——逐词到达（`.md-word`）、
+  芯片弹一下（`.mp-name`）、流式光标（`.cursor`）、逐格加载标（`.cairn-loader path`）。
+
+### 三、判卷
+
+新增 `apps/desktop/tests/motion-pref.test.ts`（4 条）：决策纯函数的三支 / 根属性名固定 /
+CSS 认这一个属性且覆盖到那四类动效 / 接线（启动落位 + 菜单项 + 文案走 STR，读整个渲染层）。
+
+### 四、读数（本轮现跑）
+
+- 桌面全量：**235 文件 / 1624 条，1623 绿 / 1 红**（仍是 `desktop-review-batch` 的原生宿主真机冒烟：
+  本机 Electron 起不来，环境债，与前三轮同一条同因）。本轮新增判卷文件 1 个（4 条）。
+- `typecheck`：**0 条报错**；`desktop-boundary-check`：**绿**；`docs-check` 受检项全绿。
+
+### 五、边界
+
+- **真机动效观感仍未验收**：本机 Electron 起不来；本轮新增的开关在真机上是否「开关一次、
+  动效立刻全停」，需要业主在真机上看一眼（本轮的浏览器核对只到静态帧与菜单可达性）。
+- 侧栏收起时头像菜单不可见（`.avatar` 在收窄态不可点）⇒ 本轮**没有**在浏览器里点到那一项，
+  「菜单项点下去会落位」由判卷第 ④ 条（接线面）与类型面兜住。
+
+## 2026-10-28 · 第 761 页：批次 D 的方案落账（审查与交付闭环 · 先核现状再动代码）
+
+按第 757 页排的优先级开下一批，先做**现状核对**（现读代码，不靠印象）——
+设计规范 §3.6「审阅与交付闭环（重点补课）」的四项，逐条核：
+
+| §3.6 条款 | 本仓现状 | 结论 |
+|---|---|---|
+| 改动出现 `+N −M` 统计指示器 | `PaneDock.ChangesPane` 展开文件后出 `.change-diff-stat`（`+12 −1`） | **已在** |
+| 点任意行写评论 | `DiffView` 每行 `.dl-actions` → `.dl-editor` → 「保存评论」 | **已在** |
+| 多处评论 `⌘Enter` 一次性提交 | 变更窗格有 `.review-bar`（「N 条评注待提交」+「提交评论（⌘Enter）」）与 `onKeyDown` 的 ⌘/Ctrl+Enter | **已在** |
+| 快照脚注在场才出 | 文件行上的「快照」徽标（覆盖前快照已保留） | **已在** |
+| 动作徽标 + 色盲冗余 | 文件行的「新建/修改/变更」徽标；diff 行带 `+`/`−` 字形（非只靠颜色） | **已在** |
+| **审阅器布局：左文件列表 + 右内容** | **单列手风琴**：轮卡片 → 文件行 → diff 内联展开 | **缺** |
+
+⇒ 真正缺的是**布局**，不是功能：Codex / Claude 的改审阅都是「文件列表在左、diff 在右」——
+一屏能看见「改了哪些文件」与「这个文件改了什么」，本仓要一路展开。
+
+### 两条不照抄 Codex 的理由（一手数据面的事实）
+
+- **不做「每文件 +/- 统计」**：统计要从 diff payload 算，而本仓的 diff 是**懒加载**的
+  （`useLazyChangeDiff`：「点开才要数据，不预取整会话的全部差异」）。
+  要每文件统计只有两条路：① 预取全部 diff（与既有设计相反，且会让长会话一次拉很多），
+  ② 在交付事件里补统计字段（要动核心契约 `src/` 与事件类型）⇒ 本批不做，记为待决。
+- **不分栏到窄容器**：右侧检查器（360px 宽）里放不下「文件列表 + diff」两栏；
+  分栏只做在**变更窗格**（可拖宽），检查器那一面维持现状。
+
+### 落点（下一批开工时按此切）
+
+- 组件：`components/PaneDock.tsx` 的 `ChangesPane`（现为竖排手风琴）⇒ 改成
+  「左：本次会话的改动文件列表（按轮分组、带路径与动作徽标）；右：选中文件的 diff」。
+- 状态：`openKey`/`toggle`（懒加载守卫）沿用，不预取；选中态与展开态分开（选中＝正在看哪个文件）。
+- 判卷（新增 `apps/desktop/tests/review-split.test.ts`）：
+  ① 分栏结构存在（左列表 + 右 diff）；② 列表项 = 文件路径 + 动作徽标（**徽标要有文字**，a11y 条）；
+  ③ 选中文件才请求 diff（不许预取）；④ ⌘Enter 提交多条评注这条**不许退化**；
+  ⑤ 窄容器（检查器那一面）仍走单列，不许硬塞两栏。
+- 真机观感仍需业主验收（本机 Electron 起不来）；本批**先出方案再动代码**，不并行改两处。
+
+### 本页读数
+
+本页只做现状核对与方案落账，**未改产品代码**：桌面全量仍为 235 文件 / 1624 条（1623 绿 / 1 红，
+红的是原生宿主真机冒烟那条环境债），`typecheck` 0 报错，`docs-check` 受检项全绿。
+
+## 2026-10-28 · 第 764 页：分栏审阅器（变更窗格 · 左文件列表 + 右差异）
+
+### 一、按第 761 页的方案开工
+
+`PaneDock.ChangesPane` 从「单列手风琴（轮 → 文件 → diff 内联）」改成**分栏**：
+
+- **左栏** `.review-files`：按轮折叠的文件列表（**手风琴机制一个字没动**——它仍管「不把 23 轮全摊开」，
+  既有判卷 `changes-pane-accordion` 原样通过）；每行是路径 + 动作徽标（文字）+ 快照徽标。
+- **右栏** `.review-diff`：选中文件的差异——动作徽标 + 路径 + `+N −M` 统计 + 逐 hunk diff + 逐行评注编辑器。
+- 选中态沿用 `useLazyChangeDiff` 的 `openKey`（**选中才取差异**，不预取整会话的全部 diff）；
+  评审条（`N 条评注待提交` + 「提交评论（⌘Enter）」）留在顶部通栏，**多条评注一次性提交这条不许退化**。
+- 窄容器（窗格被拖窄）退成上下两段：`.review-split` 用 `container-type: inline-size` +
+  `@container (max-width: 620px)`（**按容器宽，不是窗口宽**——同仓既有范式）。
+
+### 二、判卷
+
+新增 `apps/desktop/tests/review-split.test.ts`（6 条）：左右两栏且左列仍是按轮折叠 / 文件行带动作徽标（文字）/
+选中才取差异（且不许出现「一轮全取」的入口）/ ⌘Enter 多评注提交不退化 / 窄容器退单列 / 右栏拿的是选中文件的差异。
+**既有的 `changes-pane-accordion` 判卷未修改一字，仍绿** ⇒ 手风琴那条契约没被动。
+
+### 三、读数（本轮现跑）
+
+- 桌面全量：**236 文件 / 1633 条，1632 绿 / 1 红**（仍是原生宿主真机冒烟那条环境债，与前四轮同一条同因）。
+- `typecheck`：**0 条报错**；构建通过；`desktop-boundary-check` 绿；`docs-check` 受检项全绿。
+- 结构层目验（浏览器 + 真产物 + 假 AgentApi）：DOM 实测确认分栏已渲染——左栏「第 1 轮 / 1 个文件 / 未验证 /
+  修改 · src/agent/agent-runner.ts · 快照 / 未验证与下一步两行后果」，右栏是「左边选一个文件，这里看它改了什么」。
+
+### 四、边界（明确不冒充的）
+
+- **「点文件出差异」这条交互没在夹具里点成**：变更窗格是**底部 dock**，在浏览器面板的可视区之下，
+  夹具点不到那个位置 ⇒ 结构与渲染已验（DOM 实测），**交互与观感仍需业主在真机上看**。
+- **每文件 +/- 统计仍不做**（第 761 页的理由不变：统计要 diff payload，而 diff 是懒加载的 ⇒
+  要么预取、要么动核心契约）。
+- 右侧检查器（320–420 宽）里的「改动」页**维持单列**：那儿放不下两栏，不硬塞。
+
+
+
+
+
 ## 2026-10-28 · 第 755 页：首启设置检查的完成出口（七组清单反复出现）
 
 ### 一、用户看到的现象与根因
@@ -25261,7 +26938,7 @@ runtime package 的 `main` 在 `apps/desktop/src/main/entry.cjs`，所以打包�
   **实测能造红**：摘掉按钮 ⇒ ④⑤ 红；把 `onboarded: true` 改成 false ⇒ ⑤ 红；还原后绿。
 - `render-resilience` **6/6**（旧哨兵同步 `dismissOnboarding` / `onDone`）。
 - 桌面全量（`--maxWorkers=2`）：**231 文件 / 1593 条全绿**；中途一次
-  `conversation-rail` 红是他笔在飞，已由他笔收口，复跑全绿。
+  `conversation-rail` 红是他笔在飞，已由第 754 页收口，复跑全绿。
 - `typecheck` 0；`renderer-layer-check` 绿（139 文件）；`desktop-boundary-check` 绿。
 
 ### 四、真机（隔离 profile + 真 main/preload + CDP 真鼠标）
@@ -25284,7 +26961,7 @@ runtime package 的 `main` 在 `apps/desktop/src/main/entry.cjs`，所以打包�
 ### 一、为什么重建
 
 20:29 的发布包冻结在首启修复之前；打开它仍会看到无完成出口的七组清单。本轮在共享树当前源码上
-重建，包内包含「完成，不再显示」（第 755 页）与对话轨道等他笔最新实现。
+重建，包内包含「完成，不再显示」（第 755 页）与对话轨道（第 754 页）等最新实现。
 
 ### 二、构建与产物
 
@@ -25314,3 +26991,7597 @@ runtime package 的 `main` 在 `apps/desktop/src/main/entry.cjs`，所以打包�
 - 真实 provider 未验；包内点击是空屏 + demo 档。
 - 旧 20:29 包已移出并删除；历史读数保留在第 753 页与 REPORT。
 - 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 760 页：编排控制面按阶段出动作（终态任务不再摆必然被拒的按钮）
+
+### 一、缺口：面板摆的按钮，引擎有一半会拒
+
+现读代码（不是猜）：
+
+- `OrchestrationSnapshotView` 对每个计划恒摆 5 个动作、每个任务恒摆 7 个动作；
+- 引擎 `src/orchestration/engine.ts` 的转移表只允许：approve/reject 仅 proposed；pause 仅 approved；
+  resume 仅 paused；cancel 仅 proposed/approved/paused；任务 retry 仅 failed/cancelled/needs_you 且
+  `attempt < max_attempts`；pause/cancel/takeover 对终态（done/failed/cancelled）一律
+  `task already terminated`；
+- `merge_task` / `reject_merge` 在引擎里**恒被拒**（「交付由验证队列控制，手动交付不可用」）——
+  面板却一直摆着「合并交付」「拒绝交付」；
+- 旧判卷 `orchestration-pane.test.tsx` 还把一个 done 任务的「重试/接管」按钮钉成期望 ⇒ 判卷本身
+  在保护这个缺陷；
+- 引擎与本地后端早已实现 `rollback_task`（done + run_id + `backend.rollback`），面板没有任何入口
+  ⇒ 已交付的改动无法从界面回滚。
+
+### 二、改法
+
+- 新增纯投影 `apps/desktop/src/renderer/derived/orchestration.ts`：`planControls` / `taskControls`
+  照引擎守卫表给出**当前合法**动作；`canEnableExecution` 收口「批准 + shadow + 有后端」；
+  阶段/证据/裁决给中文标签（机器码留在 `data-phase` 与 `title`，不丢）。
+- `OrchestrationSnapshot`（`src/main/orchestration-service.ts`）增可选 `backend_capabilities`：
+  只在连上后端时给 `{ rollback: boolean }`（按 `typeof backend.rollback === "function"`）；
+  没有后端 ⇒ 字段缺席，不把缺席读成「false 能力」。
+- 面板只渲染合法动作；取消计划 / 取消任务 / 回滚要**二次确认**（第一次点只把按钮改成「确认…」并
+  变危险色，第二次才发命令，另有「返回」）；确认态连 aria-label 一起改（读屏与视觉同一句话）。
+- 「启用执行」仍是单独一步（不满足就不摆）；手动合并 / 拒绝交付从面板消失。
+
+### 三、判卷
+
+- 新增 `apps/desktop/tests/orchestration-controls.test.ts` **12 条**：五个计划阶段、十个任务阶段、
+  次数帽、回滚三条件、接管只在无活执行器时出现、任何阶段都不出现 merge/reject。
+- `apps/desktop/tests/orchestration-pane.test.tsx` **3 条**（原 2 条）：done 任务不再出现重试/接管/取消，
+  改钉「已完成 / data-phase=done / 未验证」与回滚入口；新增 proposed 计划 + running/failed/done
+  三任务的组合判卷。
+- `tests/orchestration-service.test.ts` **6 条**（原 5 条）：有 / 无 rollback 方法两态 + 无后端时字段缺席。
+- 能造红（实测）：摘掉二次确认门 ⇒ 冒烟「取消计划第一次点只摆确认」红（`commands:1`、`armed:null`），
+  其余判卷照常记录（8/10）；还原后 23/23 绿。
+
+### 四、真实渲染器冒烟（新增 `apps/desktop/scripts/orchestration-controls-smoke.cjs`）
+
+真 dist + 真鼠标事件（`sendInputEvent`，不是脚本 `.click()`）+ 合成 AgentApi（阶段机按引擎守卫走）：
+
+- **23/23 PASS**：初始只出批准/拒绝/取消计划，不摆启用执行与手动交付；运行中任务只暂停/取消；
+  失败任务只重试；done 且后端声明回滚才出回滚；取消计划第一次点零命令、「返回」后复原；
+  批准后阶段前进并出现启用执行；取消任务 / 回滚都要点两次；重试把任务放回队列并消耗一次尝试；
+  暂停 / 恢复计划；取消计划后不再摆动作；每条命令都带 plan/version/request_id；全程 0 控制台错误。
+- 证据：`apps/desktop/outputs/orchestration-controls-758/`（`checks.json`、三张截图、`red-checks.json`）。
+  目录名沿用批次开工时的序号；台账页号是 760（758 被他笔「减弱动效」、759 被他笔「审查与交付闭环」占用）。
+- 夹具（`scripts/ui-gallery-preload.cjs` 的 `--cairn-orchestration-fixture`）不进产品链路；
+  命令账本走 contextBridge（沙箱 preload 不能 `require("node:fs")`，第一版就红在这里）。
+
+### 五、本轮读数（本轮现跑）
+
+- 桌面全量（`--maxWorkers=2`）：**235 文件 / 1624 条全绿**，exit 0（33.56 s）。
+- `typecheck`（仓根）：**0 条报错**。
+- `renderer-layer-check`：**绿**（141 个渲染层源文件）；`desktop-boundary-check`：**绿**。
+- `docs-check`：页号冲突处置后受检项全绿（本页 760；下一个未占用号见下轮读数）。
+- 桌面 `tsc -p apps/desktop/tsconfig.json`：**1 条红**，在同树他笔未跟踪的
+  `tests/model-picker-axis.test.tsx:45`（`readonly string[]` 对四档联合类型），不属本批；
+  本批文件 0 报错。
+- 真 Electron dev 冒烟：`pnpm --filter cairn-desktop smoke` **PASS 1787 ms**（本轮开工时的基线）。
+
+### 六、边界
+
+- 冒烟的执行后端是夹具（`fixture-local`），证的是控制面接线与命令形状，**不证**真实执行、
+  真实 provider、真实回滚写入。
+- 回滚按钮只在快照声明 `backend_capabilities.rollback` 且任务 done + run_id 时出现；桌面本地后端
+  确有 `rollback` 实现，但连上它需要真实 provider——本机 demo provider 下走不到，未做真机回滚。
+- 手动合并 / 拒绝交付从面板移除；引擎本就拒绝，若要开放需先做「受控交付 + 回滚」后端能力，不属本批。
+- 面板仍每 2s 轮询；未改 IPC 协议版本（快照字段是共享类型，不加通道）。
+- 任务动作不按计划阶段收口（引擎也不收口）：计划取消后仍可对任务发命令——这是引擎现语义，
+  本批只对齐，不改引擎。
+- 工作树未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 762 页：编排面板的机器词中文化（原因 / 权限通道 / 验收类型 / 调度建议 / 产物类型）
+
+### 一、缺口：同一块面板里中文句子夹着英文机器码
+
+第 759 页把阶段与动作收成产品中文后，面板正文仍是半英文：
+
+- 任务原因直接显示引擎原句（`paused by user` / `taken over by user` / `merge rejected` /
+  `rolled back` / `budget exceeded`）；
+- 「能力与验收」里权限通道显示 `read` / `write` / `external`，外部效果显示
+  `none` / `workspace` / `external`，验收类型显示 `evidence` / `human` / `command` / `artifact`；
+- 产物引用显示 `file` / `blob` / `json` / `url`；
+- 「调度建议」显示 `dispatch` / `verify` / `merge` / `cancel` / `escalate`，其后还跟着调度器的英文原句。
+
+### 二、改法
+
+- `apps/desktop/src/renderer/derived/orchestration.ts` 增五组标签映射（通道 / 外部效果 / 验收类型 /
+  产物类型 / 调度类型）与 `reasonLabel`。
+- `reasonLabel` 是**白名单**：只译引擎与调度器已知的稳定原句；未知原句**原样透出**——宁可显示英文，
+  也不编一句没发生的话。任务原因的机器原句保留在 `title` 里，便于回查。
+- 只改显示层：事件、引擎状态机、IPC 协议均未动。
+
+### 三、判卷
+
+- `apps/desktop/tests/orchestration-controls.test.ts` **14 条**（原 12 条）：五组映射逐一钉住；
+  已知原因逐句对照，未知原句（`upstream provider returned 529`）必须原样透出，空原因返回空串。
+- `apps/desktop/tests/orchestration-pane.test.tsx` **4 条**（原 3 条）：新增「中文文案 + 机器码留 title」
+  一条——隐藏任务显示「需你处理 / 已由你接管 / 只读 / 外部效果：无 / 证据 / 文件」，
+  调度建议显示「派发 / 升级」，并实测不再出现 `· dispatch` / `· escalate` / `· evidence` / `· file`。
+- 能造红（实测）：把通道映射的 `read: "只读"` 改成 `read: "read"` ⇒ 两条判卷同时红
+  （纯规则一条、面板渲染一条，`2 failed | 16 passed`）；还原后 **18/18 绿**。
+
+### 四、真实渲染器冒烟（同一脚本扩到 25 条）
+
+`apps/desktop/scripts/orchestration-controls-smoke.cjs` 的夹具增第四个任务（`needs_you` +
+`taken over by user`）与两条调度建议（含一条未知英文原因）：
+
+- **25/25 PASS**（原 23 条 + 2 条新判据）：待接管任务显示「需你处理 / 已由你接管」，
+  「能力与验收」显示「权限：只读 · 外部效果：无 · 证据」；调度建议显示「派发 / 升级」，
+  已知调度原句译成中文、未知原句 `upstream provider returned 529` 原样出现。
+- 证据：`apps/desktop/outputs/orchestration-copy-761/`（`checks.json`、三张截图）。
+  目录名沿用开工时的序号；台账页号是 762（761 被他笔「批次 D」占用，759 同笔先占）。
+
+### 五、本轮读数（本轮现跑）
+
+- 桌面全量（`--maxWorkers=2`）：**235 文件 / 1627 条全绿**，exit 0。
+- `typecheck`（仓根）：**0 条报错**；`renderer-layer-check`：**绿**（141 个渲染层源文件）。
+- `docs-check`：本页写入前受检项全绿（页号唯一面下一个未占用号 762）。
+- 真 Electron 冒烟：同脚本 25/25 PASS（真 dist + 真鼠标事件 + 合成阶段机）。
+- 桌面 `tsc -p apps/desktop` 的同树他笔红（`model-picker-axis.test.tsx`）本批未触碰，不代改。
+
+### 六、边界
+
+- 未知原因不翻译：agent 摘要、provider 报错、后端自定义原因仍可能是英文原文——这是有意的
+  「不编造」选择，不是遗漏。
+- 翻译表是**显示层白名单**：引擎改文案后，旧映射自动失效并回落原句，不会把旧意思贴到新句子上。
+- 夹具新增了第四个任务与静态调度建议，仍不连接真实执行后端；真实编排执行与真实原因文本未验。
+- 未改 IPC 协议版本（标签只在渲染层）；工作树未提交；`head-cert-check` / `mutate-verify` 不适用；
+  `STATE.md` 仍未动。
+
+## 2026-10-28 · 第 763 页：CLI 打错的旗标不再静默变位置参数 + 工作区路径错误归因
+
+### 一、缺口（真跑实测，四条）
+
+| 命令 | 旧行为 | 真问题 |
+|---|---|---|
+| `cairn --sessoin abc hi`（带 `--workspace`） | 报「--workspace 与位置参数重复给工作区」 | `--sessoin` 被忽略，`abc` 被读成位置参数；**不带 `--workspace` 时它就是新工作区** ⇒ 打错一个字母会在错的地方新开一条会话 |
+| `cairn --session` | 「需要一个任务描述」 | 缺值的旗标没人点名，把人引向任务描述 |
+| `cairn --workspace <路径上有普通文件>/sub hi` | 「`.agent/providers.json` 配置有问题（读取失败：ENOTDIR…）」 | 用户没写过 providers.json；错误被归因到配置文件 |
+| `cairn --provider demo --workspace /definitely/not/here hi` | `Error: ENOENT … at async main (src/cli.ts:1366)` + exit 1 | 原始堆栈冒到用户面前，且退出码不是用法错 |
+
+另外：只在探测面生效的旗标（`--label` / `--key-env` / `--protocol` / `--provider-name` /
+`--allow-local` / `--json`）脱离 `--discover` 时被静默忽略——旗标假装生效。
+
+### 二、改法
+
+- `src/cli.ts` 增 `KNOWN_FLAGS` 白名单：任何未知 `--` 选项 ⇒ exit 2
+  「未知选项：--sessoin（-h 看全部选项）」，不再落进位置参数。
+- 取值型旗标缺值在「需要任务描述」之前点名（`--session 需要一个值`）。
+- 探测面旗标脱离 `--discover` ⇒ exit 2，点名那枚旗标。
+- 新增 `workspacePathProblem()`：工作区存在但不是目录 / 路径上有普通文件 / 无权限 / 符号链接成环
+  ⇒「工作区路径不可用：…（原因）」+ exit 2；仅仅不存在（ENOENT）仍放行给 mkdir（保持「新目录可用」）。
+- mkdir 失败不再抛堆栈，改成一句产品话 + exit 2。
+- `--help` / `--version` / `--doctor` 仍先于未知旗标校验（帮助优先），未改。
+
+### 三、判卷
+
+- `tests/cli-surface.test.ts` 新增 **5 条**（共 **79 条**）：未知旗标点名且不落成工作区/任务；
+  缺值点名；探测面旗标脱离 discover 被拒；路径挡文件时归因「工作区路径不可用」而不是 providers.json；
+  工作区指向普通文件时不抛堆栈。
+- 能造红（实测）：同时摘掉未知旗标守卫与工作区形状守卫 ⇒ **3 条红**
+  （未知选项 + 两条归因），其余照常；还原后 **79/79 绿**。
+- CLI 相关六文件（surface / exit-code / fork-replay / plan-auto / plugin-face /
+  default-workspace）：**151/151 绿**（`--maxWorkers=2`）。
+- `typecheck`（仓根）：**0 条报错**。
+- 首次全量 core：**557 文件 / 7207 条，7206 绿 / 1 红**——红在能力断言证人面
+  （`promise-recall-inventory`）：我那句「没有 --discover 时它不会生效」被判成一条没有证人的
+  能力断言。改法不是放宽帽子：文案收成「单独给会被拒绝」，判卷里**真断言**这句且真验退 2
+  ⇒ 证人面对齐；该文件与 CLI 面复跑 **114/114 绿**。
+- 全量 core 复跑（`pnpm test:capped` = `--maxWorkers=2`）：**557 文件 / 7207 条全绿**，exit 0。
+
+### 四、边界
+
+- 只拒 `--` 开头的未知旗标；单短横 `-x` 仍按位置参数（任务文本可能以 `-` 开头）。
+- 工作区不存在时仍会由 mkdir 建出来（现状未改）；本批只把「建不出来 / 形状不对」的归因修对。
+- 文件存在但不可读的 providers.json 仍归「配置有问题」——那确实是配置面；本批挡住的是工作区形状
+  导致的 ENOTDIR 被误归因。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 765 页：坏会话日志不再「先写盘、再报错」（CLI 续跑前的日志闸）
+
+### 一、缺口（真跑实测）
+
+工作区里放一条中间坏行的会话日志（`mid.jsonl` 第 2 行是 `BAD`），再续跑它：
+
+```
+cairn --workspace <ws> --provider demo --mode auto --session mid 继续
+```
+
+旧行为：demo 剧本照常执行，**`src/todo.ts` 已写入 725 字节**；到收束阶段才炸，
+stderr 连打 8 行（security 快筛 / delivery / goal-drift / cost / evolution / 运行失败…）。
+结果是副作用落了盘、转录却接不上——用户只看到一墙错误，也不知道哪一步真的发生了。
+
+根因：续跑前没人验日志，各收束读数各自 `replay` 才第一次发现坏行。而 `replay` 的语义是
+**尾部坏行降级容错、非尾部坏行 fail-closed**（跳过非尾部坏行会让事件 id 与 1-based 行号错位，
+血缘/分支/压缩 id 全部失准）——这条判据一直在，只是来得太晚。
+
+### 二、改法
+
+- CLI 在 `handleAgentRun`（以及 `--goal` 写同一份日志）**之前**验一次已存在的会话日志：
+  `opts.wireSession && existsSync(logPath)` ⇒ `replay(logPath)`；抛错就
+  「`[cairn] 无法续跑这条会话：<原句>`」+ exit 1，这一轮不开始。
+- 新会话（日志还不存在）零行为；`--log` 那条不是会话（`wireSession=false`），不拦。
+- `replay` 语义未动：尾部坏行仍放行，非尾部仍 fail-closed。
+
+### 三、判卷
+
+- `tests/cli-surface.test.ts` 新增 **2 条**（共 **81 条**）：
+  ① 非尾部坏行 ⇒ exit 1、点名「无法续跑这条会话」、且 **`src/todo.ts` 不存在**（副作用没发生）；
+  ② 尾部坏行 ⇒ 放行到真跑并写盘（不许把容忍的那半一起拒掉）。
+- 能造红（实测）：摘掉这道闸 ⇒ ①红，红样本输出里能直接看到
+  `✓ [auto-approved] 已写入 src/todo.ts（725 字节）`；还原后 **81/81 绿**。
+- CLI 六文件：**153/153 绿**（`--maxWorkers=2`）；`typecheck`（仓根）：**0 条报错**。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**557 文件 / 7209 条全绿**，exit 0。
+
+### 五、边界
+
+- 只验 CLI 续跑入口；桌面打开坏会话走它自己的错误态（已有判卷），本批未改。
+- 长会话会把日志解析两遍（闸一遍、run 内部再读）；10MB 级日志的额外耗时未量。
+- 尾部坏行放行是「崩溃时最后一次写没写完」的容错，不是数据完整性放水；非尾部仍拒。
+- 本次顺手实测到但**未修**：`settings.json` 写坏后 CLI **静默回落缺省**（真跑 `{oops` 无任何提示）
+  ——记入下一批候选，不在本批扩面。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 766 页：设置文件坏了不再静默用缺省（首读问题可被看见）
+
+### 一、缺口（真跑实测）
+
+工作区 `.agent/settings.json` 写成 `{oops`，再跑
+`cairn --workspace <ws> --provider demo --mode auto "做点事"`：**照常开跑、一句提示都没有**。
+根因：`SettingsStore.get()` 把「文件不存在」与「解析失败 / 读不了」一起 catch 成 `raw = null`
+⇒ 文件级损坏与「新档案」不可区分，用户的 permissions / planRequired / provider / theme
+全部静默失效，run 仍按缺省档走。
+
+### 二、改法
+
+- `src/main/settings.ts`：新增 `SettingsLoadIssue { kind: "invalid-json" | "unreadable"; message }`
+  与 `loadIssue()`。首读区分三种情形：ENOENT（新档案，不是问题）、坏 JSON、读不了；
+  message 带产品前缀（`JSON 解析失败：…` / `读取失败：…`）。
+  只记第一次；迟到的首读不覆盖已修好的缓存（沿用 `cache === null` 守卫）；成功写盘后清空。
+- `src/main/settings-handlers.ts`：暴露 `settingsLoadIssue()`（必须在 `getSettings()` 之后读）。
+- `src/cli.ts`：init 之后先 `getSettings()` 一次；有问题打一行黄色警告
+  `设置文件未生效：<path>（<原因>）——本轮按缺省设置继续；修好或删掉它再跑`。
+- 回退语义未改：坏文件仍按缺省继续（缺省是 fail-closed 的安全侧），本批只把「你的设置没生效」说出来。
+
+### 三、判卷
+
+- `tests/settings.test.ts` 新增 **2 条**：坏 JSON / 路径是目录 / 缺文件三态；成功写盘后问题清空。
+- `tests/cli-surface.test.ts` 新增 **2 条**：坏 settings ⇒ 警告 + 仍按缺省跑（不是拒跑）；
+  设置正常/不存在 ⇒ 没有这句警告。
+- 能造红（实测）：同时摘掉 issue 记录与 CLI 警告 ⇒ **3 条红**（含端到端那条，
+  红样本里 demo 剧本照跑、警告缺失）；还原后 settings + CLI + read-race **106/106 绿**。
+- `typecheck`（仓根）：**0 条报错**。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**557 文件 / 7213 条全绿**，exit 0。
+
+### 五、边界
+
+- 只报**文件级**问题（坏 JSON / 读不了）；字段级非法值（宽度越界、未知主题）仍按既有验收
+  静默回落默认，本批不改。
+- 桌面设置页还没有横幅：需要新增一个只读 IPC 通道（协议 v25 → v26 + preload + channels +
+  渲染层），本批不动协议，记为下一批候选。
+- 警告每次 CLI 启动都会出现（未做「已在别处修好」的记忆），直到文件被修好或删除。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 767 页：同一会话的并发 run 被会话锁挡住（交错转录 + 被拒仍补写事件）
+
+### 一、缺口（真跑实测，两层）
+
+- **第一层**：两条 CLI 同时 `--session same` 跑 demo（同一工作区）——
+  两轮的 user/assistant/tool 事件交错写进同一份 JSONL：24 行里两个 `user_message`、两组重复台词、
+  tool_call 与 tool_result 相互穿插；**两个进程都报成功、都打印「在桌面打开」**。
+  事件 id 按 1-based 行号定义 ⇒ 交错后血缘、分支、压缩 id 全部失准。
+- **第二层**（上了进程内锁之后才露出来）：被拒的那一趟退出前仍往同一份日志补写一条
+  `tool_result`（CLI 收束后的交付断言 `harness-delivery-guard` 无条件 append）——
+  锁住了却还插一条，活跃 run 的转录仍被污染。
+
+### 二、改法
+
+- 新增 `src/main/session-lock.ts`：`<logPath>.lock` 用 `wx`（O_EXCL）独占创建，内容
+  `{pid, nonce, startedAt}`。持锁进程活着 ⇒ 拒并点名 pid/开始时间；已死 ⇒ 只在文件内容仍是
+  刚读到的那份时删除、再重试（并发清理安全）；释放只删自己写的那份（nonce 对得上）；
+  SIGKILL 遗留由下一次获取按 pid 死活清理。
+- `handleAgentRun`：解出 `logPath` 后上锁，`finally` 释放。只对「会话」或显式日志上锁；
+  无 sessionId 的 tmp 草稿路径是多进程共享的临时面，不上锁（否则互不相关的 headless 调用互相挡）。
+  锁拒时返回 `notStarted: true`。
+- `compactSessionLog`：同一把锁（压缩也写同一份日志）。
+- CLI：`notStarted` 的趟跳过收束后的交付断言与 worker diff 审阅——不在别人的转录里补写事件。
+
+### 三、判卷
+
+- 新增 `tests/session-lock.test.ts` **4 条**（纯盘上事实 + 注入 pid 死活）：持有成功 / 第二个被拒并
+  点名 pid / 释放后可再取；死锁清理；活锁不抢写；释放不误删已被替换的锁。
+- `tests/cli-surface.test.ts` 新增 **3 条**：活锁 ⇒ exit 1、点名 pid、日志一字节不增、别人的锁不被删；
+  `--compact` 撞锁 ⇒ 拒且不写 compaction；死 pid 锁 ⇒ 清理后照常跑完并释放锁。
+- 真跑并发复测：两条同会话 CLI ⇒ 一条跑完（转录只有 **1 条** `user_message`「任务乙」），
+  另一条 exit 1 点名 pid（`这份会话正被另一个进程运行（pid …）`）；跑完锁不残留。
+- 能造红（实测）：同时摘掉 run 锁与 compact 锁 ⇒ **3 条红**（红样本里能看到 `已写入 src/todo.ts`）；
+  还原后 CLI + 锁六文件 **162/162 绿**。
+- `typecheck`（仓根）：**0 条报错**。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**558 文件 / 7220 条全绿**，exit 0。
+
+### 五、边界
+
+- 锁粒度是**日志路径**：`--log` 自定义路径也上锁；无 sessionId 且无 `--log` 的 tmp 草稿路径不上锁
+  （保持历史行为）。
+- `--goal` 的 `goal_set` 在 `handleAgentRun` 之前写：并发下仍可能有一条 goal_set 先落
+  （单行追加，不是整轮交错），未纳入本批锁。
+- 同进程内重复获取同一路径也按 busy 拒：当前没有合法的「同会话并行 run」调用方。
+- 陈旧判定按 pid 死活；pid 被系统复用给无关进程时可能误判为仍在跑，需人工删锁。
+- 桌面侧未单独加锁：它经同一 `handleAgentRun` 自动受益；桌面自身的同会话并行入口未验。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 768 页：设置文件未生效的桌面横幅（协议 v26 · 同一条首读结论上主界面）
+
+### 一、缺口
+
+第 766 页只让 **CLI** 说了「设置文件未生效」；桌面主界面仍静默按缺省跑——
+用户把 `settings.json` 改坏后，权限档、plan 门、provider、主题全部失效，界面上没有任何提示。
+
+### 二、改法
+
+- `SettingsLoadIssue` 增 `path`（横幅要指向盘上那个文件）。
+- `handleAgentState` 增 `settingsIssue`：先 `getSettings()` 确保首读已发生，再取 `settingsLoadIssue()`。
+- 协议 **v25 → v26**（StateResponse 形状变更，与 v22 增字段同例）：常量 + 版本注释 + 版本判卷同步。
+- 渲染层：`SettingsIssueBanner`（复用既有 `Banner` warn + 原生 details）摆在设置页正文顶部；
+  文案「设置文件未生效：当前按缺省设置运行。修好或删除它，再重新打开 Cairn。」
+- **不摆「重新检查」按钮**：主进程的设置缓存与首读结论都驻留在进程里，改盘后要重启才生效——
+  摆一个点了没反应的按钮，比不摆更坏。（第一版写了这个按钮；判卷里删掉并把「不许出现」钉住。）
+
+### 三、判卷
+
+- `tests/settings-issue-state.test.ts` **3 条**：坏 JSON ⇒ 应答带 path 与原因；缺文件 / 正常文件 ⇒
+  字段缺席（缺席 ≠ 失败）；修好并成功写盘后**同一应答面**自动消失。
+- `apps/desktop/tests/settings-issue-banner.test.tsx` **3 条**：缺席不渲染；有问题时给文案、路径、
+  原因与出路；不许出现「重新检查」。
+- `tests/ipc-protocol-version.test.ts` 钉 **v26**（注释补一行来源）。
+- 真实主进程 + 真 renderer 冒烟（新增 `apps/desktop/scripts/settings-issue-smoke.cjs`）：
+  **5/5 PASS**——坏 settings.json 启动 ⇒ 设置页出横幅、详情点名 `settings.json` 与「JSON 解析失败」、
+  设置面板本身照常加载、无「重新检查」、0 条控制台错误。
+  证据：`apps/desktop/outputs/settings-issue-768/`（`checks.json` + 截图）。
+- 能造红（实测）：把 `settingsIssue` 从 state 应答摘掉 ⇒ 冒烟 20s 等不到横幅（Timeout）；
+  还原后 5/5 绿。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**559 文件 / 7223 条全绿**，exit 0。
+- 桌面套件（`--maxWorkers=2`）：**237 文件 / 1635 条全绿**，exit 0。
+  首跑 3 红全部是**版本钉陈旧**（`notification-open-wiring` / `plan-mode-wiring` / `protocol-version`
+  各钉 25）；按升版惯例同步到 26 后复跑全绿——那不是产品回归，是协议判卷该跟着 bump 走。
+- `renderer-layer-check` 绿（141 文件）；`desktop-boundary-check` 绿；`docs-check` 全绿。
+
+### 五、边界
+
+- 只报**文件级**问题；字段级非法值（宽度越界、未知主题）仍按既有验收静默回落默认。
+- 修好文件后必须**重启 Cairn** 才生效（横幅文案已如实说明）；未做设置热重载。
+- 横幅只在设置页出现，不在主界面全局提示——设置页是「该去哪修」的落点。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-28 · 第 769 页：CLI 一整轮进同一把会话锁（goal_set 不再在锁外先落）
+
+### 一、缺口（真跑实测）
+
+第 767 页只锁了 run 本身，并把「`--goal` 的 goal_set 在锁前写」记为边界。本批把它收掉：
+
+会话被另一进程占用（活动 `.lock`）时跑
+`cairn --session busy --goal "把测试修绿" 继续`：
+
+- 输出先是「◎ 目标已设：把测试修绿（上限 8 轮）」，**然后**才
+  「运行失败：这份会话正被另一个进程运行」；
+- 日志里多了一条 `goal_set`——被拒的这轮仍往别人的转录里写了一条；
+- 收束旁路（交付断言）同理：它在 handleAgentRun 返回之后、锁已释放的窗口里写。
+
+### 二、改法
+
+- `RunOverrides` 增 `sessionLock`（调用方已持有的锁）：给了就**不再自己取、也不替调用方放**；
+  桌面不传，行为不变。
+- CLI 在预跑日志校验之后、写 goal_set 之前取锁；取不到 ⇒「运行失败：<原因>」+ exit 1，
+  这一轮一个字节都不写。
+- 锁覆盖整段 CLI 轮次：`goal_set` → `handleAgentRun`（含 run 内部写）→ 交付断言 → worker diff
+  审阅；在 `finally` 释放。
+
+### 三、判卷
+
+- `tests/cli-surface.test.ts` 新增 **1 条**：活动锁 + `--goal` ⇒ exit 1、不出现「目标已设」、
+  会话日志一字节不增。
+- 能造红（实测）：摘掉 CLI 的预取锁 ⇒ 该条红（红样本里 `◎ 目标已设` 照旧先打）；
+  还原后全绿。
+- CLI + 锁七文件：**163/163 绿**（`--maxWorkers=2`）；`typecheck`（仓根）：**0 条报错**。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**566 文件 / 7289 条全绿**，exit 0（同树他笔新增用例也在内）。
+- 桌面套件（`--maxWorkers=2`）：**237 文件 / 1635 条全绿**，exit 0。
+
+### 五、边界
+
+- 同进程内调用方（桌面）仍由 `handleAgentRun` 自己取锁；桌面自身的同会话并行入口未验。
+- `--compact` 是独立的一次锁（压缩不在 CLI 的 run 锁内，但 `compactSessionLog` 自己取锁）。
+- goal_set 仍是单行事件：现在不会在别人持锁时写，但两条 goal_set 之间没有跨事件原子性。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-29 · 第 770 页：会话清单读取失败不再只有一句空话（损坏元数据的路径与出路原样上屏）
+
+### 一、缺口（真跑 + 现读代码）
+
+`sessions/session-metadata.json` 坏掉时，`SessionMetadataRepository.list()` 按既有契约
+**fail-closed 抛错**（「损坏文件显式失败，绝不重置成假的新状态」；判卷钉着 `.rejects`）。
+但产品面把原因丢了：
+
+- `workbench.ts` 的 `refreshSessions` 只在失败回调里 `setSessionsLoadError(true)`——
+  **错误对象被丢弃**；
+- 侧栏失败行因此只有「会话列表没有加载成功 + 重试」；
+- 而损坏元数据这类失败，**重试永远不会好**：用户被留在一个没有信息、也没有出路的死循环里
+  （连盘上哪个文件坏了都看不到）。
+
+### 二、改法
+
+- `SessionMetadataCorruptError` 的句子补出路：`…——修好或删除该文件后重试`
+  （读写两条路径共用同一句；这句话会原样上屏）。
+- `workbench.ts` 增 `sessionsLoadErrorDetail`：失败时存 `err.message`，成功与重试时清空。
+- `WorkbenchView → Sidebar` 透传 `loadErrorDetail`；失败行在原句下多一行原因
+  （`title` 保留全文，长路径不被截断成信息损失），重试按钮不变。
+- 不新增 CSS：复用 `.side-load-error` 的 flex column（一行标题 + 一行原因 + 重试）。
+- 重试是真能恢复的：元数据仓库**每次读盘**、没有进程内缓存 ⇒ 用户修好/删掉文件后点「重试」即可，
+  不需要重启（与 settings 的缓存语义不同，文案因此写「重试」而不是「重开」。
+
+### 三、判卷
+
+- `tests/session-metadata.test.ts`：损坏用例新增一句 `.rejects.toThrow(/修好或删除该文件后重试/)`。
+- 真实 renderer 冒烟（新增 `apps/desktop/scripts/sidebar-load-error-smoke.cjs`，夹具
+  `--cairn-list-error-fixture` 用生产的原句让 `listSessions` 拒绝）：**5/5 PASS**——
+  失败行在、原因含损坏文件路径与「修好或删除该文件后重试」、`title` 保留全文、重试按钮在、
+  0 条控制台错误。证据：`apps/desktop/outputs/sidebar-load-error-770/`。
+- 能造红（实测）：摘掉侧栏那行原因 ⇒ **3/5**（原因与 title 两格红，红样本只有
+  `会话列表没有加载成功 / 重试`）；还原后 5/5 绿。
+- 桌面套件（`--maxWorkers=2`）：**250 文件 / 1687 条全绿**，exit 0。
+- `typecheck`（仓根）：**0 条报错**。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**566 文件 / 7289 条全绿**，exit 0（同树他笔新增用例也在内）。
+
+### 五、边界
+
+- 仍维持 fail-closed：元数据损坏时**整个清单不返回**（既有契约，本批不改）；只把原因与出路说清楚。
+- 失败原因只上侧栏会话清单这一处；其他面板失败各有自己的错误态。
+- 原因行是纯文本（不解析错误类型）：任何 `listSessions` 失败都以原句上屏。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-29 · 第 771 页：sidecar 首行坏掉不再冒充会话；保留名不许新建/改名
+
+### 一、缺口（真跑实测 + 现读代码，两条）
+
+- **坏首行的 sidecar 被列成会话**：sessions 目录里放 `pins.jsonl` / `feedback.jsonl`（内容 `{oops`），
+  `handleSessionList()` 返回 `["feedback","pins","s1"]`。原因：sidecar 形态判定只认
+  「首行可解析且长得像 sidecar」；首行坏掉时判定返回 false ⇒ 当成会话。
+- **保留名可被当成会话名**：`pins` / `feedback` 通过 `isValidSessionName`。新档案里先建一个叫 `pins`
+  的会话，`pins.jsonl` 之后还会被置顶 sidecar 追加——两类数据写进同一个文件。
+- 既有判卷明确保护另一半：「用户真把会话命名成 pins（首行是事件）仍要列出」。
+  所以不能按文件名一刀切，只能补「保留名 + 首行证明不了是事件」这一条。
+
+### 二、改法
+
+- 会话判定收成唯一一份 `sessionFileIsSession(name, head)`：
+  sidecar 形状 ⇒ 否；**保留名且首行证明不了是事件**（坏行/空行/非对象）⇒ 否；其余 ⇒ 是。
+  `listSessions` / `listSessionIds` / `isSessionFile` / 会话全文检索共用这一份。
+  （检索此前**完全没有 sidecar 过滤**，本轮顺带补上。）
+- 新建/改名层拒绝保留名：新增 `sessionNameProblem`（路径安全 + 保留名），`createSession` 与
+  `renameSession` 用它；`isValidSessionName` 仍只查路径安全 ⇒ 老档案里叫 `pins` 的会话**仍可读/续跑**。
+- CLI 三处会话名校验的拒因改为点名具体问题（空 / 超长 / 首尾空白 / 非法字符），不再只给字符规则。
+
+### 三、判卷
+
+- `tests/sessions.test.ts` 新增 **2 条**：
+  ① 保留名 `pins` / `feedback` 新建与改名被拒（点名「保留名」），而老 id 仍通过路径安全；
+  不撞 `.jsonl` 的 `projects` / `session-metadata` 不占名字。
+  ② 首行坏掉的 `pins.jsonl` / `feedback.jsonl` 不再被 `listSessions` / `listSessionIds` 列出。
+  原有「真叫 pins 的会话（首行是事件）仍列出」判卷保持全绿——语义没有回退。
+- 能造红（实测）：摘掉「保留名 + 首行无法证明是事件」规则 ⇒ ②红；把新建闸退回只看路径安全 ⇒ ①红；
+  还原后 **32/32 绿**。
+- 真跑复测：同一份坏 sidecar 工作区现在只列 `["s1"]`；会话相关套件 **63/63 绿**；
+  `typecheck`（仓根）：**0 条报错**。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**250 文件 / 1687 条全绿**，exit 0。
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**566 文件 / 7291 条全绿**，exit 0。
+
+### 五、边界
+
+- 首行坏掉且**不是保留名**的 `.jsonl` 仍按会话列——无法证明它不是会话，不能为它丢掉真会话。
+- 老档案里真叫 `pins` 的会话保持可读/续跑；若它同时被置顶过，两类行已混在一个文件里——
+  本批不回写数据，只防止新发生。
+- 检索面新增一次首行读取/候选文件（量级 = 会话文件数，与列表相同）。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-29 · 第 772 页：坏队列 sidecar 的「已拒绝覆盖」现在是真的（写路径同口径 fail-closed）
+
+### 一、缺口
+
+`SessionQueueCorruptError` 的文案说「已拒绝覆盖」，但这句话此前只发生在**读**路径：
+`writeSessionQueue` 不读旧档、直接原子覆盖。真实后果：
+
+- 会话打开时读到坏队列 ⇒ 渲染层出「发送队列读取失败：发送队列损坏…（路径 + 原因）」；
+- 用户此时再入队一条消息 ⇒ `queueSet` 用本地（空）队列覆盖 sidecar ⇒
+  **用户还能手工抢救的内容被静默抹掉**；
+- 而且错误条里「已拒绝覆盖」这半句是假话；文案也没给出路。
+
+### 二、改法
+
+- `writeSessionQueue` 覆盖前先读旧档：ENOENT（正常）放行；解析/校验失败 ⇒ 抛同一个
+  `SessionQueueCorruptError`，**一个字节不写**。
+- `SessionQueueCorruptError` 补出路：「——修好或删除该文件后重试」
+  （渲染层两条错误条都原样显示 `err.message`，UI 无需改动）。
+- 写失败经既有通道上屏：`queueSet → {ok:false} → setLastError("发送队列保存失败：…")`，不静默。
+
+### 三、判卷
+
+- `tests/sessions.test.ts` 新增 **1 条**：坏队列读拒（含出路）、写也拒（点名「已拒绝覆盖」）且
+  文件字节逐字不变；删掉坏档后读/写真能恢复。
+- 能造红（实测）：摘掉写侧守卫 ⇒ 该条红（`promise resolved ... instead of rejecting`）；
+  还原后 **33/33 绿**。
+- `typecheck`（仓根）：**0 条报错**；桌面套件（`--maxWorkers=2`）：**250 文件 / 1687 条全绿**。
+- 首趟全量 core 之外的连带：三把跨面棘轮被这一笔顶到了——
+  ① `mutate-anchor-titles` / `mutate-verify-gates`：改固定清单用例标题后，变异表里
+  `doctor-trust-check-computed-not-pushed` 的 `expectFail` 指向旧标题 ⇒ 漂移。
+  修法＝同步锚点（变异仍是「摘掉 trust push 必红」，没有放宽）；
+  ② `prose-needle-scan`：doctor 测试里三处 `toContain("settings.json")` 把生产文件名当字面量抄了一遍
+  ⇒ 顶包候选 13 > 帽 10。修法＝断言改用路径变量（派生）⇒ 在飞候选 4 → 1（剩下那条属他笔
+  `skill-tool-policy`），总数 10 = 帽。四把尺复跑 **329/329 绿**。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**566 文件 / 7292 条全绿**，exit 0。
+
+### 五、边界
+
+- 读路径仍 fail-closed；写路径新增一次旧档读（队列是小 JSON，代价可忽略）。
+- 同一进程内的队列写未串行化（多窗口并发最后写赢）——既有形状，本批不改。
+- 坏档被删后队列从空开始（内容本就读不出）；本批不做自动备份/迁移。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-29 · 第 773 页：桌面删除/改名会话也认跨进程会话锁（本进程运行表只看得见自己）
+
+### 一、缺口
+
+`deleteSession` / `renameSession` 的「正在运行」守卫只查**本进程**运行表
+（`isSessionLogBusy`）——CLI（或另一个主进程）持锁跑同一会话时，桌面照样能删/改名：
+
+- 删除正是该守卫注释要防的形状：unlink 后 CLI 的常驻写句柄继续写进已删除的 inode，
+  事件静默消失；
+- 改名让 CLI 的后续事件落进新名字（写句柄跟 inode 走），转录归属错位；旧路径的残留锁也会留成孤儿。
+
+### 二、改法
+
+- `session-lock.ts` 增只读 `sessionRunLockHeld(logPath)`：锁文件存在且 pid 活着 ⇒ true；
+  缺文件 / 死 pid / 坏内容 ⇒ false（与 acquire 的陈旧锁口径一致——坏锁 acquire 也会清掉）。
+- 删除/改名同时查本进程运行表与跨进程锁；任一占用 ⇒ 同一条产品话拒绝
+  （`会话正在运行，先停止再删除/重命名`）。
+- 两个操作只在「没有活持有者」时才走到内部：残留锁一律是崩溃遗留——删除时清掉，
+  改名时清掉旧路径锁（新名从干净状态开始）。
+
+### 三、判卷
+
+- `tests/session-lock.test.ts` 新增 **1 条**：只读检查四态（缺文件 / 活 pid / 死 pid / 坏内容）。
+- `tests/sessions.test.ts` 新增 **1 条**：活锁 ⇒ 删除与改名都被拒且会话原样；死 pid 锁不挡，
+  删除后锁被清；改名同理清旧路径锁。
+- 能造红（实测）：摘掉两处跨进程判定与两处残留锁清理 ⇒ 该条红
+  （`promise resolved "undefined" instead of rejecting`）；还原后 **39/39 绿**。
+- `typecheck`（仓根）：**0 条报错**；桌面套件（`--maxWorkers=2`）：**250 文件 / 1687 条全绿**。
+- 首趟全量 core 之外的连带：三把跨面棘轮被这一笔顶到了——
+  ① `mutate-anchor-titles` / `mutate-verify-gates`：改固定清单用例标题后，变异表里
+  `doctor-trust-check-computed-not-pushed` 的 `expectFail` 指向旧标题 ⇒ 漂移。
+  修法＝同步锚点（变异仍是「摘掉 trust push 必红」，没有放宽）；
+  ② `prose-needle-scan`：doctor 测试里三处 `toContain("settings.json")` 把生产文件名当字面量抄了一遍
+  ⇒ 顶包候选 13 > 帽 10。修法＝断言改用路径变量（派生）⇒ 在飞候选 4 → 1（剩下那条属他笔
+  `skill-tool-policy`），总数 10 = 帽。四把尺复跑 **329/329 绿**。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**566 文件 / 7294 条全绿**，exit 0。
+
+### 五、边界
+
+- 锁判定按 pid 死活；pid 被系统复用给无关进程时可能误判为仍在跑（保守拒绝）。
+- `isSessionLogBusy` 仍是同进程的第一道（更快，且覆盖「已决定运行、锁还没落」的窗口）；
+  锁文件是跨进程的唯一面。
+- 删除/改名不会向持有者发信号（拒绝而不是抢占）。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-29 · 第 774 页：`--doctor` 报设置与会话元数据两项（坏档在诊断面有名字与去处）
+
+### 一、缺口
+
+前几页让 CLI 单点警告（设置）、桌面横幅 / 侧栏（设置、元数据）各自说话；但
+`cairn --doctor` 这个「环境自检」面看不到它们。真跑：工作区里 `settings.json` 与
+`sessions/session-metadata.json` 都是坏 JSON，`--doctor` 仍只输出既有七项——
+用户拿着一个「设置不生效 / 会话列表打不开」的工作区做自检，问题不在清单里。
+
+### 二、改法
+
+- `DoctorFacts` 增 `settingsFace` / `sessionsFace` 三态（absent / ok / broken）；`runDoctor`
+  用**同一份生产判定**取：
+  - settings：`new SettingsStore(path).get()` + `loadIssue()`（与 CLI / 桌面同源，不另写解析）；
+  - sessions：`SessionMetadataRepository.list()`（与桌面列表同源；抛 = 坏档；缺文件 = 还没建会话）。
+- 两项插在 workspace 之后（settings / sessions）；坏档 = ✗ **非致命**（只报不阻断，fatal 仍只有 node）；
+  detail 点名文件与原因；sessions 的原句已带路径与出路（第 770 页）⇒ 不再前缀第二遍。
+- 固定清单 7 项 → **9 项**；顺序判卷同步。
+
+### 三、判卷
+
+- `tests/doctor.test.ts` 新增 **2 条**：纯核（缺席 ok / 坏档 ✗ 非致命、点名文件、总档部分就绪）；
+  IO 壳（真工作区坏档 ⇒ 两项 ✗ 且不抛；空工作区两项 ok）。
+- 固定清单断言更新为九项（`node/keys/tiers/sandbox/workspace/settings/sessions/search/trust`）。
+- 能造红（实测）：把两个 read 面的坏档吞成 ok ⇒ IO 那条红；还原后 **43/43 绿**。
+- 真跑（坏 settings + 坏 metadata）：输出
+  `✗ settings：设置文件读不了：<path>（JSON 解析失败…）（修好或删除该文件后重跑…）`、
+  `✗ sessions：会话元数据损坏，已拒绝覆盖: <path> …——修好或删除该文件后重试`、`总档：部分就绪`。
+- `typecheck`（仓根）：**0 条报错**；桌面套件（`--maxWorkers=2`）：**250 文件 / 1687 条全绿**。
+- 首趟全量 core 之外的连带：三把跨面棘轮被这一笔顶到了——
+  ① `mutate-anchor-titles` / `mutate-verify-gates`：改固定清单用例标题后，变异表里
+  `doctor-trust-check-computed-not-pushed` 的 `expectFail` 指向旧标题 ⇒ 漂移。
+  修法＝同步锚点（变异仍是「摘掉 trust push 必红」，没有放宽）；
+  ② `prose-needle-scan`：doctor 测试里三处 `toContain("settings.json")` 把生产文件名当字面量抄了一遍
+  ⇒ 顶包候选 13 > 帽 10。修法＝断言改用路径变量（派生）⇒ 在飞候选 4 → 1（剩下那条属他笔
+  `skill-tool-policy`），总数 10 = 帽。四把尺复跑 **329/329 绿**。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**569 文件 / 7314 条，7298 绿 / 16 红**。
+  16 红全部落在两份**未跟踪、同轮仍在写**的插件安装文件上
+  （`tests/plugin-install-{registry,jobs}.test.ts`，mtime 23:10–23:19），属同树他笔在飞批次；
+  本笔触及的四把尺与 doctor 面 **329/329 绿**，其余 **567 文件全绿**。按归属报绿，不代改他笔在飞文件。
+
+### 五、边界
+
+- 只查**文件级解析**（与各面同一判定）；`pins` / `feedback` 坏档不在 doctor——它们已被列表
+  按文件名挡掉，不影响会话可用性。
+- 会话日志的非尾部坏行不在 doctor（要逐份读全部日志；`--replay` 单条已给出精确报错）。
+- doctor 仍只报不阻断：坏档不会让 exit 1（唯一 fatal 仍是 node）。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-29 · 第 775 页：项目注册表坏档的拒因补出路（同一族文案收口）
+
+### 一、缺口（真跑实测）
+
+`sessions/projects.json` 写成坏 JSON，`handleProjectList()` 抛
+「项目注册表损坏，已拒绝覆盖: `<path>` (JSON.parse 失败)」——桌面启动时 `registryNotice`
+原样显示它（「项目注册表不可用：…」），但**句子没有出路**；与 settings（第 766 页）、
+会话元数据（第 770 页）、发送队列（第 772 页）三条已收口的文案不一致。
+
+同批实测：`pins.jsonl` / `feedback.jsonl` 首行坏掉时，`handlePinList` / `handlePinSet` /
+`handleFeedbackList` 均正常返回（append-only 读路径本就容错）⇒ 这两条不需要改。
+
+### 二、改法
+
+- `ProjectRegistryCorruptError` 句尾补「——修好或删除该文件后重试」；桌面提示与任何消费者
+  都原样显示 message，UI 无需改。
+- **不做 doctor 第三项**：项目注册表坏档在桌面启动就有可见提示（registryNotice），
+  而 settings / 会话元数据此前是静默或被整片拒绝才需要诊断面；且再加一项会把固定清单标题
+  再改一次、再触发一次变异锚点漂移（本轮刚为此付过同步成本）。记为边界。
+
+### 三、判卷
+
+- `tests/project-registry.test.ts` 损坏用例新增 `.rejects.toThrow(/修好或删除该文件后重试/)`；
+  用正则而不是字面量断言 ⇒ 不会顶成新的顶包候选（prose-scan 复跑：顶包候选 10 = 帽，exit 0）。
+- project-registry + doctor 复跑 **49/49 绿**；`typecheck`（仓根）**0 条报错**；
+  桌面套件（`--maxWorkers=2`）**250 文件 / 1687 条全绿**。
+- 真跑：坏 `projects.json` 下 `handleProjectList` 的 message 现含出路。
+- 真实 renderer 冒烟扩了第二臂（`sidebar-load-error-smoke.cjs --with-project-error`，
+  新夹具 `--cairn-project-error-fixture`）：**6/6 PASS**——会话清单失败行 5 条照旧，
+  新增「项目注册表坏档：侧栏提示原样上屏（`项目注册表不可用` + `projects.json` + 出路）」。
+  证据：`apps/desktop/outputs/sidebar-load-error-775/`。
+- 能造红（实测）：摘掉侧栏 `.side-notice` 渲染 ⇒ 该臂 **5/6**；还原后 6/6 绿。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**571 文件 / 7328 条，7327 绿 / 1 红**。
+  唯一红是 `readme-invoke-channel-count`（README 数 122 ≠ 运行时表 117）——由同树他笔在飞的
+  插件市场 IPC 方法造成（`src/main/ipc-protocol.ts` 新增一串 `marketplace*/plugin*` 通道，
+  其 README 与通道表尚未对齐），本笔未增删任何通道。按归属报绿，不代改他笔在飞批次。
+
+### 五、边界
+
+- 桌面 `registryNotice` 没有「重试」按钮（启动时取一次）；修好文件后需重开窗口或触发一次
+  项目刷新（加项目会走 `refreshProjects`）。
+- `pins` / `feedback` 坏行读路径本就容错（实测），不在本批。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-29 · 第 776 页：`--` 分隔符（任务以破折号开头时唯一的传法）
+
+### 一、缺口（实测）
+
+第 763 页的未知旗标闸把标准 `--` 分隔符也拦了：
+
+- `cairn --provider demo -- "--以两个破折号开头的任务"` ⇒ 「未知选项：--」exit 2；
+- `--message "--foo"` 也传不进（`pick` 拒绝以 `--` 开头的值）——
+  **以破折号开头的任务事实上没有任何传法**。
+
+### 二、改法
+
+- `argv` 按首个 `--` 切两段：`flagArgv`（旗标面）与 `trailingArgv`（位置参数面，原样保留）。
+- 旗标解析（`pick` / `includes` / 未知旗标闸 / `VALUE_FLAGS` 缺值 / 路由开关 / doctor 的
+  `--workspace` / `--delivery-repair`）只看 `flagArgv`；位置参数 = `trailingArgv` + 旗标面前的位置参数。
+- `--help` / `--version` / `--doctor` 也只看分隔符前：`cairn -- --help` 是任务，不是帮助。
+- help 增一行写清规则与例子。
+
+### 三、判卷
+
+- `tests/cli-surface.test.ts` 新增 **4 条**（共 **91 条**）：`--` 后的破折号任务**原样落进会话首条
+  `user_message`**；`cairn -- --help` 是任务文本；分隔符**之前**的未知旗标照样拒（`--` 不是绕过闸的后门）；
+  help 写明规则。
+- 能造红（实测）：`positional` 退回只用 `flagArgv` ⇒ 首条红（exit 2）；还原后 4/4、全套 **91/91 绿**。
+- `typecheck`（仓根）：**0 条报错**；CLI 六文件复跑绿。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**571 文件 / 7332 条，7331 绿 / 1 红**。
+  唯一红仍是 `readme-invoke-channel-count`（同树他笔在飞的插件市场通道：README 计数 ≠ 运行时表），
+  本笔只改 CLI 参数解析、未增删任何 IPC 通道。按归属报绿。
+
+### 五、边界
+
+- `--message` 本身仍拒绝以 `--` 开头的值（`--` 是推荐写法）；这不是新限制，本批不动它。
+- 分隔符只认第一个；任务正文里含独立 `--` 词时按 shell 引号整体传一个参数即可。
+- 分隔符之后不再解析任何旗标（标准语义）。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-29 · 第 777 页：`--flag=value` 等号形式（值可带前导破折号）
+
+### 一、缺口（实测）
+
+- `cairn --mode=auto 做点事`、`--provider=demo`、`--workspace=…` 全部报
+  「未知选项：--mode=auto」exit 2——等号形式完全不可用。
+- 第 776 页给了 `--` 分隔符，但 `--message --foo` 仍因「值以 `--` 开头」被拒；
+  要让**旗标形式**也收破折号值，需要等号写法。
+
+### 二、改法
+
+- 旗标面内把 `--flag=value`（`flag ∈ VALUE_FLAGS`）展开成**显式值表** `explicitFlags`；
+  原 token 不再进入 token 流 ⇒ 既不会被未知旗标闸拦，也不会污染位置参数。
+- `pick` 先查显式值表（值允许以 `--` 开头：`--message=--差量`）；普通形式仍读
+  `flagArgv[i + 1]`（顺带修正此前误读全 `argv` 的下标错位）。
+- 缺值前置检查跳过显式值；未知旗标的报错去掉 `=value`（`--bogus=x` ⇒「未知选项：--bogus」）。
+- help 写明等号形式。
+
+### 三、判卷
+
+- `tests/cli-surface.test.ts` 新增 **4 条**（共 **95 条**）：等号三连（provider/mode/workspace）
+  真起一条会话；`--message=--以破折号开头` 原样落进首条 `user_message`；`--bogus=x` 点名
+  `--bogus`；help 写明等号形式。
+- 能造红（实测）：关掉展开 ⇒ 前两条红（「未知选项：--provider」/ exit 2）；还原后 **95/95 绿**。
+- 其余 CLI 五文件 **72/72 绿**；`typecheck`（仓根）：**0 条报错**。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**571 文件 / 7336 条，7333 绿 / 3 红**。
+  3 红全部来自同树他笔在飞的插件市场通道批次：① `readme-invoke-channel-count`（README 122 ≠
+  运行时表）；②③ 两把变异锚点尺（`invoke-census-schedule-consumer-dropped` 的 `expectFail`
+  仍写着「100 条通道…」，而他笔 23:36 把该用例标题改成了「122 条通道…」，锚点尚未同步）。
+  本笔只改 CLI 参数解析；CLI 六文件 **95+72 条全绿**。按归属报绿。
+
+### 五、边界
+
+- 只有 `VALUE_FLAGS` 里的旗标支持等号；开关型（`--bandit` / `--json`）写 `=` 仍按未知选项拒。
+- 同一旗标同时给等号与空格形式时**等号优先**（显式胜出）；不报冲突。
+- `--` 之后的值不做等号展开（任务文本原样保留）。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-29 · 第 778 页：会话目录不可写时给产品话（不再裸 EACCES … .lock）
+
+### 一、缺口（实测）
+
+`sessions` 目录 chmod 0500 后跑 `cairn --provider demo --mode auto "hi"`：
+
+```
+[cairn] 运行失败：EACCES: permission denied, open '…/cli-….jsonl.lock'
+```
+
+exit 1。用户看到的是一条系统错误 + 一个内部锁文件名，没有出路；归因也错（说「运行失败」，
+实际是环境问题）；`--compact` 同样会撞在锁文件上。
+
+### 二、改法
+
+- 新增 `sessionDirWriteProblem(dir)`：`access(dir, W_OK)`；ENOENT 放行给后面的 mkdir。
+  在 shell init 之后、`--compact` / 普通 run 之前检查；不可写 ⇒
+  `会话目录不可写：<dir>（原因）` + 一行权限排查提示，**exit 2**。
+- `--replay` 在 shell init 之前就返回（只读面），不受影响——实测只读目录下仍能回放。
+
+### 三、判卷
+
+- `tests/cli-surface.test.ts` 新增 **3 条**（共 **98 条**）：运行 ⇒ exit 2 + 产品话（且输出不含
+  `.jsonl.lock`）；`--compact` 同样在写锁之前被拦；`--replay` 只读面照常回放（不许一刀切拒读）。
+- 能造红（实测）：摘掉检查 ⇒ 首条红（退出 1 + 裸 EACCES）；还原后 **98/98 绿**。
+- 其余 CLI 五文件 **72/72 绿**；`typecheck`（仓根）：**0 条报错**。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**571 文件 / 7339 条，7336 绿 / 3 红**。
+  3 红仍是同树他笔在飞插件市场通道批次的连带（README 计数 + 两把变异锚点尺指向旧标题
+  「100 条通道…」而他笔已改成「122 条通道…」）；本笔只加 CLI 前置检查，按归属报绿。
+
+### 五、边界
+
+- 只查目录本身的可写位（ACL / 只读挂载在 access 上已体现），不防检查与写入之间的 TOCTOU。
+- 目录不存在时放行（后续 mkdir 会建）。
+- 桌面主进程没有等价前置检查（写失败仍由错误条上屏）；本批只收 CLI。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-29 · 第 779 页：doctor 的「sessions」项也查目录可写位（只读挂载在诊断面有名字）
+
+### 一、缺口
+
+第 778 页让 CLI 运行 / 压缩在只读会话目录上给出产品话，但 `--doctor` 的 sessions 项只查
+`session-metadata.json`：目录只读时元数据文件仍可读，doctor 报 **✓**——用户拿着一个
+跑不了的工作区做自检，问题不在诊断清单里（真跑确认）。
+
+### 二、改法
+
+- `readSessionsFace(root)` 先 `access(root, W_OK)`：ENOENT 仍按「还没建会话」；其它错误 ⇒ broken，
+  detail `会话目录不可写：<原因>`（该句已含目录路径，`fileFaceCheck` 不再前缀第二遍）。
+- **不做成第 10 项**：并入现有 sessions 项 ⇒ 固定清单 / 顺序 / 变异锚点都不动
+  （上一轮刚为此付过一次同步成本）。
+- sessions 项 hint 改成「按原句里的去处处理后重跑本命令（桌面会同步显示同一问题）」——
+  metadata 损坏与目录只读两种情形都成立。
+
+### 三、判卷
+
+- `tests/doctor.test.ts` 新增 **1 条**（IO 真目录，chmod 0500）：sessions 项 ✗、
+  detail 含「会话目录不可写」、exit 0（非致命）。
+- 能造红（实测）：摘掉 `access` 分支 ⇒ 该条红；还原后 **44/44 绿**。
+- 真跑：`--doctor --workspace <只读 sessions>` ⇒
+  `✗ sessions：会话目录不可写：EACCES…` + `总档：部分就绪`。
+- project-registry + doctor **50/50 绿**；`typecheck`（仓根）：**0 条报错**。
+- 连带：两处 `toContain("会话目录不可写")`（doctor 与 CLI 判卷）把新生产句抄成字面量 ⇒
+  prose-needle 顶包候选 11 > 帽 10。修法不是抬帽：断言改成 `.toMatch(/会话目录不可写/)`
+  （仍逐字钉住原文，但不进「收料那段」）⇒ in-flight 候选回落到 1，总数 10 = 帽、exit 0；
+  doctor + cli-surface + prose-scan 复跑 **238/238 绿**。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**571 文件 / 7340 条，7337 绿 / 3 红**。
+  3 红仍是同树他笔在飞插件市场通道的连带（README 计数 + 两把变异锚点尺指向旧标题
+  「100 条通道…」而现标题是「122 条通道…」）；prose-needle 已回绿（10 = 帽）。按归属报绿。
+
+### 五、边界
+
+- 只查 `W_OK`，不防检查与写入之间的 TOCTOU（与 CLI 前置检查同口径）。
+- 会话日志逐条合法性仍不在 doctor（要扫全部日志；`--replay` 单条已给精确报错）。
+- 九项固定清单不变。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 780 页：`--serve` 死路 + 调度任务定义损坏的「静默覆盖」
+
+### 一、缺口（实测 + 现读）
+
+1. **`--serve` 根本进不去**：
+   - `cairn --provider demo --serve` ⇒「需要一个任务描述」exit 2——任务闸没有豁免 serve；
+   - `cairn --serve 做点事` ⇒「--serve 与 --message 互斥」exit 2——互斥表把位置参数任务当成 message。
+   两条都不是错误用法，但任何写法都到不了常驻调度。
+2. **坏 `automations.json` 会被静默覆盖**：
+   - `loadAutomationsFile` 把「缺文件」与「坏 JSON」合成「空清单」，警告还写「无既有文件」；
+   - `Scheduler.upsert/remove` 每次先重读磁盘再整表回写 ⇒ 坏档会被 `[] + 新任务` **整份盖掉**
+     （桌面加一条任务即可触发）；
+   - `initScheduler` 没有注入 `onWarn` ⇒ `--serve` 在「坏档 + 空清单」上静默跑。
+
+### 二、改法
+
+- CLI 任务闸豁免 `--serve`（错误文案补上它）；`--serve` 与任务描述的互斥表保持不变。
+- `loadAutomationsFile` 返回 `corrupt`：ENOENT = 缺席（无警告）；读 / 解析失败 = corrupt +
+  警告（路径、原因、出路「修好或删除该文件后重试，本次不覆盖」）。
+- `Scheduler.upsert/remove`：重读磁盘发现 corrupt ⇒ **拒绝写**，文件字节不动。
+- `initScheduler` 注入 `onWarn`（`console.warn` → CLI stderr / 桌面主进程日志）：坏档在启动时就上屏。
+
+### 三、判卷
+
+- `tests/schedule.test.ts`：新增 1 条（坏档 upsert / remove 拒绝且字节不变、无 tmp 残留）+
+  扩展 1 条（缺文件 ≠ 坏文件；坏条目跳过不算 corrupt）。
+- `tests/cli-surface.test.ts` 新增 **2 条**（共 **100 条**）：`--serve` 无任务即可启动且坏 automations
+  警告上屏（含出路）；`--serve` 带任务仍按互斥拒绝。
+- 能造红（实测）：摘 upsert/remove 的 corrupt 守卫 ⇒ 新条红（文件被覆盖）；
+  摘 serve 豁免 ⇒ serve 条红（「需要一个任务描述」）。还原后 **43/43**、**100/100** 绿。
+- schedule + wiring + orchestration-schedule **60/60 绿**；`typecheck`（仓根）**0 条报错**；
+  桌面套件（`--maxWorkers=2`）**256 文件 / 1713 条全绿**。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**571 文件 / 7343 条，7340 绿 / 3 红**。
+  3 红仍是同树他笔在飞插件市场通道的连带（README 计数 + 两把变异锚点尺指向旧标题）；
+  本笔的调度面判卷全绿。按归属报绿。
+
+### 五、边界
+
+- 坏条目（单条校验失败）仍按既有「跳过 + 警告」处理，不算整档损坏，写路径继续可用。
+- `--serve` 仍需要能解析 provider（调度触发要跑会话）；没 key 时照旧 fail-closed 报配置错。
+- 桌面 Schedule 面板没有单独的「坏档横幅」：用户在增删任务时会看到拒绝原因（错误条），启动警告进主进程日志。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 781 页：`--serve` 启动行报任务数 + 文档补 `--message` / `--serve` / 九项 doctor
+
+### 一、缺口
+
+- 第 780 页刚把 `--serve` 打通，但启动行只报「tick 60s / 补跑 / 并发闸」，**不报本工作区装载了
+  几个任务**——用户看不出「有活干」还是「空跑」。
+- `--message` 一直可用，但 help 里没有（本仓口径：没进 help 的选项等于不存在）；
+- README 的 `--doctor` 说明仍写着四项（现在是九项），且没有 `--serve` 入口。
+
+### 二、改法
+
+- `scheduledTaskCount()`（scheduler-runtime 导出、agent-runner 重导出）；`--serve` 启动行加
+  `已装载 N 个任务`；N=0 时补「本工作区还没有定时任务（在桌面端「定时任务」页添加）」。
+- help 增 `--message <任务>` 行（注明等号形式与前导 `--` 值）。
+- README：doctor 说明补「设置与会话数据面（坏档点名文件）」；安装块补 `--serve` 一行。
+
+### 三、判卷
+
+- `tests/cli-surface.test.ts` 新增 **1 条**（共 **101 条**）：有效 `automations.json` 一条任务 ⇒
+  启动行「已装载 1 个任务」且不出现「还没有」；坏档那条扩为断言「已装载 0 个任务」。
+- 能造红（实测）：`scheduledTaskCount` 恒返 0 ⇒ 新条红；还原后 **101/101 绿**。
+- `typecheck`（仓根）**0 条报错**；桌面套件 **256 文件 / 1713 条全绿**；`docs-check` 全绿。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**571 文件 / 7346 条，7341 绿 / 5 红**。
+  5 红全部来自同树他笔在飞的插件市场批次：`plugin-install-operations` 2 条（信任回滚）、
+  `readme-invoke-channel-count`（README 计数）、两把变异锚点尺（其 census 标题已改 122，
+  锚点仍写 100 条）。本笔的 CLI/调度面判卷全绿。按归属报绿。
+
+### 五、边界
+
+- 启动行是**启动快照**；运行中增删任务不会实时改那一行（桌面面板与日志另有读数）。
+- 坏档时计 0 且前一行先出「调度任务文件损坏」警告——不把「读不出」伪装成「没有任务」。
+- 文档改动不代替真实 provider / 分发验收。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 782 页：命令面板「切换权限档」漏了第五档（renderer 里第六份档位抄本）
+
+### 一、缺口（现读 + 判卷）
+
+- 核心档位表 `PERMISSION_MODES` 已是五档（read-only / default / guided / auto / **full-access**），
+  `PermissionMenu` 也用五档；
+- 但命令面板的 `cycle-perm` 在 `state/workbench.ts` 里**硬编码四档**
+  `["read-only","default","guided","auto"]` ⇒ `full-access` 永远轮不到、auto 之后直接回 read-only；
+  这正是仓里点名过的「同一字面集合抄了多份」家族在 renderer 的第六份，而且**已经漂了**。
+- 现有 `permission-mode-single-source` 判卷只对账 core 的几份，renderer 的抄本不在网里。
+
+### 二、改法
+
+- `src/permissions/modes.ts` 增 `nextPermissionMode(current)`：按权威顺序循环**全部**档位，
+  未知值从第一档开始（唯一实现）。
+- renderer `permission-labels.ts` 只**转出**它（不另抄顺序）；`workbench.ts` 的 `cycle-perm` 改调
+  `nextPermissionMode(mode)`，删掉硬编码四档；顺带修掉 `}      case` 的格式粘连
+  （净行数 1200 → **1199**，仍在帽内）。
+- 判卷加网：扫 `apps/desktop/src/renderer` 全部源文件，出现旧四档字面量即红；
+  同时钉 workbench 必须调 `nextPermissionMode`。
+
+### 三、判卷
+
+- `tests/permission-mode-single-source.test.ts` 新增 **2 条**（共 11 条）：五档循环逐位；
+  renderer 无四档抄本 + workbench 接线。
+- 能造红（实测）：把核心循环改成 `slice(0,4)` 且把旧字面量放回 workbench ⇒ **两条同时红**；
+  还原后 **11/11 绿**。
+- `typecheck`（仓根）**0 条报错**；`renderer-layer-check` 绿（**160** 个渲染层源文件，workbench **1199** 行）；
+  桌面套件 **256 文件 / 1715 条全绿**。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**571 文件 / 7348 条全绿**，exit 0
+  （同树他笔的插件市场通道批次也已在同一份树里收口，本轮首次全量零红）。
+- 桌面套件（`--maxWorkers=2`）：**256 文件 / 1715 条全绿**。
+
+### 五、边界
+
+- 命令面板里「点选切换权限档」这一具体动作本轮**未单独真机冒烟**：证据是核心纯函数判卷 +
+  源码网 + 类型检查，且同一套 `onAction` 接线已有既有覆盖；记为未验项。
+- `full-access` 仍是危险档：循环会经过它（与菜单可点一致），通知文案用 `MODE_LABEL` 的 warn 版说明。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 783 页：设置页的权限档补上第五档（full-access 选不到、已存值无选中项）
+
+### 一、缺口（现读 + 判卷）
+
+第 782 页修好了命令面板的第五档循环，但同一族抄本还有一处：**设置页 `PermissionsSection` 的
+`MODE_OPTIONS` 只有四档**。
+
+- 用户在设置页**永远选不到** `full-access`；
+- 已通过输入框旁的芯片切到 `full-access` 后，设置页四个单选项**全不选中**（checked 全 false）——
+  界面在说谎；
+- 既有判卷 `settings-sections.test` 还把「role=radio 恰四枚」钉成期望 ⇒ **判卷在保护缺陷**。
+
+### 二、改法
+
+- `MODE_OPTIONS` 补第五项 `full-access`（danger + 警示）：文案与 `strings.fullAccess` 同口径
+  （出网仍一次性批准、方案门与禁止规则仍生效），警示「最松档——风险线与 critical 也不再询问」。
+- 导出 `MODE_OPTIONS` 供判卷对账；模块头注释「四档」改为「五档」。
+- 判卷更新为**五枚 radio**、含 full-access 文案、`mode=full-access` 时恰一枚选中；
+  auto 那条「不是全部放行」的旧口径原样保留。
+
+### 三、判卷
+
+- 新增 `apps/desktop/tests/permission-options-parity.test.ts` **2 条**：
+  `MODE_OPTIONS` 的 id 与核心 `PERMISSION_MODES` **逐位相等**；full-access 必须带「最松档」警示。
+- `settings-sections.test.tsx`：四档 → 五档断言（radio 数、文案、选中态），其余断言不动。
+- 能造红（实测）：删掉 full-access 项 ⇒ parity **两条红**；还原后 settings-sections + parity +
+  terminal-size 复跑 **35/35 绿**，桌面全套 **257 文件 / 1717 条全绿**。
+- 归因一笔：并发整跑里 `terminal-size`（真实 PTY）红过一次，单跑 **6/6** 通过——负载假红，
+  与本次改动无关。
+- `typecheck`（仓根）**0 条报错**；桌面 257/1717 绿；`docs-check` 全绿。
+
+### 四、读数
+
+- 本批未改 core；同一份树上上一趟全量 core 为 **571 文件 / 7348 条全绿**。
+
+### 五、边界
+
+- 设置页真机点选第五档未单独冒烟：证据是组件级静态渲染判卷（真实 React 渲染五枚 radio +
+  选中态）与核心表逐位对账。
+- `full-access` 是危险档：卡片带 danger 样式与「最松档」警示，与菜单/命令面板口径一致。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+
+## 2026-10-30 · 第 784 页：权限第五档的两条真机路径补验（命令面板循环、设置页点选）
+
+### 一、缺口（现读）
+
+第 782、783 页都把边界写在同一处：**「面板点选切换」与「设置页点选第五档」只有纯函数 /
+组件级证据，未单独真机冒烟**。两页修的是同一个缺陷家族（档位表被抄成四档），
+而真机路径恰好是「用户最后一步」：面板的 `cycle-perm` 与设置页 `OptionCard` 点选。
+
+补冒烟时又撞出一个**证人陈旧**：画廊夹具的 `setSettings` 回静态 `SETTINGS`，
+而设置页保存后 `setS(await setSettings(...))` 信任应答 ⇒ 真机冒烟里点「完全允许」会
+**弹回旧档**。这不是产品回归，是夹具没照真主进程的「合并后回写」语义；
+不修它，这条冒烟只会造出假红（或者更糟：把假红记成产品缺陷）。
+
+### 二、改法
+
+- 新脚本 `apps/desktop/scripts/palette-perm-cycle-smoke.cjs`（真实 renderer + 合成 AgentApi）：
+  - 真 ⌘K → `insertText("权限")` → 真 ⏎，连做**五次**：guided → auto → full-access →
+    read-only → default → guided；
+  - 真 ⌘, 开设置 → 真指针点「权限与安全」→ 真指针点「完全允许」单选卡 → 点回「引导」；
+  - 三面断言：`setSettings` 补丁序列、composer chip 可见文案、提示条回执；
+    设置段另判 `aria-checked` 唯一选中、danger 样式、「最松档」警示、保存后 chip 同步。
+- `scripts/ui-gallery-preload.cjs`：
+  - 新增 `__cairnSettingsCalls()` 记录器（setSettings 的原始补丁）；
+  - `setSettings` 改为合并进活体 `settingsState` 并回**合并后**的设置，`getSettings` 读同一状态。
+
+### 三、判卷
+
+- 冒烟本尊：**37/37 PASS**（连续两次；证据 `outputs/palette-perm-784/checks.json`）。
+- 造红 A（旧四档行为：`auto ⇒ read-only`，其余仍走 `nextPermissionMode`）：**12/26**，
+  第 2 次动作起 chip / 补丁 / 提示条三面连锁红；还原重建后 **26/26**（扩设置段之前）。
+- 造红 B（删 `MODE_OPTIONS` 的 full-access 项）：设置段 **5 条红**
+  （五档缺席、指针找不到项、写入未发生、选中未变、danger/警示缺失）；还原重建后 **37/37**。
+- `typecheck`（仓根）**0 条报错**；`renderer-layer-check` 绿（160 个渲染层源文件）；
+  桌面套件 **257 文件 / 1717 条全绿**（exit 0）；`docs-check` 全绿。
+
+### 四、读数
+
+- 证据目录：`apps/desktop/outputs/palette-perm-784/`（`checks.json` + 两张截图：
+  `01-full-access.png` 提示条与 chip、`02-settings-full-access.png` 设置页第五档选中）。
+- 冒烟命令：`env -u ELECTRON_RUN_AS_NODE pnpm --filter cairn-desktop exec electron
+  scripts/palette-perm-cycle-smoke.cjs outputs/palette-perm-784`（先 `pnpm --filter
+  cairn-desktop build`——脚本读 `dist/index.html`）。
+
+### 五、边界
+
+- 冒烟跑在离屏真实 renderer + 合成 AgentApi 上：**主进程磁盘落盘不在这一层**
+  （设置持久化由 `settings-process-smoke` 覆盖）；夹具的活体设置只保证「渲染层看到的读写一致」。
+- 「设置页保存 → chip 同步」本轮已断言；「保存后下一轮 run 请求带新档」不在本冒烟
+  （那一路由 run 夹具的 `modeRef` 判卷覆盖）。
+- 冒烟未接进统一 runner，是独立脚本（与既有 smoke 同惯例）；未提交；
+  `head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 785 页：自动化文件坏了不再只剩「还没有定时任务」
+
+### 一、缺口（现读）
+
+`loadAutomationsFile` 早已把坏档标 `corrupt` 并给出「点名文件 + 原因 + 不覆盖」的警告，
+但 `Scheduler.start` 只把这些警告交给 `onWarn`——桌面注入的是 `console.warn`，而**桌面没有控制台**。
+于是坏档时：
+
+- 自动化页任务是空的 ⇒ 页面写着「还没有定时任务」，把**读失败**伪装成**本来就没有**；
+- 新建任务点了才报错（写路径拒绝覆盖，这条本身是对的），失败原因与出路只出现在那一下；
+- `ScheduleSnapshot` 没有任何装载结论字段，渲染层无从知道文件坏了。
+
+同族前例：settings.json 坏档已有横幅（v26）、会话元数据 / 队列 / projects / automations 的
+写路径都已 fail-closed——缺的是**读侧结论上屏**这一半。
+
+### 二、改法
+
+- core `ScheduleSnapshot` 增 `warnings: string[]` 与 `definitionsCorrupt: boolean`；
+  `Scheduler.start` 记录装载结论，`upsert` / `remove` 在磁盘合并处同步（坏档拒绝时也带上），
+  **写成功后清空**（盘上已是完整合法表）；`scheduler-runtime` 无调度器兜底给空值。
+- IPC 协议 **v29 → v30**（`ScheduleSnapshot` 形状变化），同步核心/桌面全部版本钉（7 个文件）。
+- 桌面 `AutomationPane`：正常分支与**空态分支都摆** `Banner`（tone=warn）；
+  文案直接用装载警告原文（文件路径 / 原因 / 「本次不覆盖」），并补一句「修好之前写路径会被拒」；
+  多于一条走「查看详情」。空态、新建入口、警告三者同屏——不是三选一。
+- 画廊夹具：`scheduleSnapshot` 补齐新字段，新增 `--cairn-schedule-corrupt-fixture` 复现坏档。
+
+### 三、判卷
+
+- core 新增 **4 条**（`tests/schedule.test.ts`）：坏档 ⇒ 快照 warnings 点名文件 + corrupt=true + 任务表空；
+  缺文件 ⇒ 无警告；坏条目 ⇒ 有警告但 corrupt=false（仍可写）；外部修好 + upsert 成功 ⇒ 警告清空。
+- 桌面新增 **3 条**（`apps/desktop/tests/app-page.test.tsx`）：坏档横幅 + 空态**共存**且点名文件；
+  正常/缺文件无横幅；坏条目措辞是「已跳过」而不是「写路径会被拒」。
+- 新冒烟 `apps/desktop/scripts/automation-corrupt-smoke.cjs`（真实 renderer + 合成 AgentApi）：
+  **6/6 PASS**——真实指针进自动化页、横幅点名文件/原因/写路径、空态仍在、
+  「新建任务」仍可点（修好后靠一次成功写入清横幅，不是死路）、控制台 0 错误。
+- 能造红（实测）：① 快照把 warnings 置空 ⇒ core **2 条红**；② 摘掉两处 `{warningBanner}` 渲染
+  ⇒ 桌面 **2 条红**；两处还原后各复跑全绿。
+- 版本钉回归（本批自造）：协议 bump 后桌面 **7 文件 / 7 条**版本钉先红，全部同步到 v30 后复跑
+  **7 文件 / 30 条绿**——这正是「bump 常量 + 同格」的流水线。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**571 文件 / 7352 条全绿**，exit 0。
+- 桌面套件（`--maxWorkers=2`）：**257 文件 / 1720 条全绿**，exit 0。
+- `typecheck`（仓根）**0 条报错**；`renderer-layer-check` 绿（160 个渲染层源文件）；
+  `prose-needle-scan` 收料断言 215 条、顶包 10 = 帽，exit 0；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/automation-corrupt-785/`（`checks.json` + `01-automation-corrupt.png`：
+  横幅 + 空态 + 新建入口同屏）。
+
+### 五、边界
+
+- **外部修好文件后的刷新时点**：调度器在启动时装载任务表；外部修好 `automations.json` 后，
+  横幅与任务表在下一次成功写入（新建/修改/删除会先重读磁盘，成功即清空警告）或重启应用时刷新。
+  页面不逐次重读文件（每次快照都读盘会把 getState 变成 I/O 热点），本轮不引入页内「重新检查」。
+- `definitionsCorrupt` 只指任务定义文件；journal 坏行也进同一 `warnings` 列表（横幅文案用「装载警告」，
+  不把 journal 坏行说成任务定义问题）。
+- 冒烟跑在离屏真实 renderer + 合成 AgentApi：主进程真落盘与跨实例合并由 core 判卷覆盖。
+- 归因一笔：同树 `app-shell-smoke` 44 项里 6 红，全部落在**插件目的地**（`apps/desktop/src/renderer/
+  components/plugins/` 与 `navigation.ts` 均为同树其他会话的未跟踪在飞文件）；本批自动化页那条检查通过，
+  这 6 红不归本批。
+- 顺带实测（未修，记下一批候选）：画廊夹具没有 `evolveReport` 桩，点「进化」分区会走兜底 `{}`
+  在渲染期抛 `reading 'byOutcome'`（被分区边界兜住显示「这一块加载失败」）；真实主进程给的是完整形状，
+  这是**视觉自查面**的缺口，不是用户路径回归。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 786 页：设置文件修好后不用重启（设置页「重新读取」）
+
+### 一、缺口（现读）
+
+v26 的设置坏档横幅把「没生效」说出来了，但出路只有一句「重新打开 Cairn」：`SettingsStore` 首读把
+失败结论与缺省值一起缓存，外部把 `settings.json` 修好后 App 不会自己重读——横幅一直挂着、行为仍是缺省。
+旧判卷（`settings-issue-banner`）当初还专门钉了「不许摆『重新检查』」——理由是当时主进程缓存不会重读，
+按钮点了不恢复。缺的不是按钮本身，而是**真重读**这条通路。
+
+### 二、改法
+
+- `SettingsStore` 抽出 `readDisk()`；新增 `reload()`：排在写队列里重读盘，缓存与失败结论一起刷新
+  （修好 ⇒ 清空；仍坏 ⇒ 换成这一次的结论），不与在写的 patch 交错。
+- 新 IPC `agent:settings-reload`（协议 **v30 → v31**）＋ `reloadSettings()`；主进程在成功重读后按新值
+  同步原生窗口 chrome（主题 / vibrancy），不等下次启动。
+- `SettingsIssueBanner` 增 `onReload` / `reloading`：有入口时文案改「……然后点『重新读取』」并出真按钮
+  （读取中禁用、换字）；没有入口时仍说「重新打开 Cairn」，且**不摆按钮**。
+- 设置页 `reloadFromDisk`：重读成功后 `refresh()` + `loadState()` + `onSettingsSaved?.()`——面板值、
+  横幅数据面与 App 的 live state（主题 / 权限档 / 字号 / Ctrl+Tab）一并回灌。
+- 夹具补 `reloadSettings`；README invoke 通道数 122 → 123；核心/桌面共 8 个协议钉文件同步 v31。
+
+### 三、判卷
+
+- core 新增 **2 条**（`tests/settings-issue-state.test.ts`）：修好 + reload ⇒ 横幅消失且新值生效
+  （重读前保持旧缓存 + 旧横幅，对照组成立）；修好又写坏 ⇒ 换新结论（不是只记第一次）。
+- 横幅 **4 条**（`apps/desktop/tests/settings-issue-banner.test.tsx`）：无问题不渲染；无入口说重开且无按钮；
+  有入口出真按钮、读取中禁用换字；接线哨兵（reloadSettings → refresh / loadState / onSettingsSaved）。
+- `settings-issue-smoke`（真实主进程 + 真鼠标）：**11/11 PASS**——坏档横幅 → 外部写入
+  `{mode:"read-only",theme:"dark"}` → 点「重新读取」→ 横幅消失、权限页「只读」选中、关闭设置后
+  composer chip 也是「只读」、主题转暗；控制台 0 错误。
+- 能造红（实测）：`reloadSettings` 改 no-op ⇒ core **2 条红**，同一构建冒烟停在「横幅消失」超时；
+  还原重建后全绿。版本钉先红后绿（7 文件）照旧。
+- `typecheck`（仓根）**0 条报错**；`renderer-layer-check` 绿（160 文件）；`prose-needle-scan` 顶包 10 = 帽，
+  exit 0；`docs-check` 全绿。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped` = `--maxWorkers=2`）：**571 文件 / 7354 条全绿**，exit 0。
+- 桌面套件（`--maxWorkers=2`）：**257 文件 / 1722 条全绿**，exit 0。
+- 证据：`apps/desktop/outputs/settings-reload-786/`（`checks.json`、`01-settings-issue.png`、
+  `02-after-reload.png`——暗色主题 + 「只读」chip + 权限档回执同屏）。
+- design-spec §9 已追记本节（`apps/desktop/design/desktop-design-spec.md` 末节）。
+
+### 五、边界
+
+- 重读是**显式动作**：不轮询、不 watch 文件；外部改动仍要用户点一次（或重启）。
+- CLI 每进程读一次设置、无常驻面板，不加对应入口。
+- 重读失败（IPC 异常）走设置页错误条；文件仍坏则横幅换成新结论，不假装成功。
+- 冒烟用临时 profile 的 `settings.json`，不碰业主数据；真实 OS 主题切换观感沿用既有真机读数。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 787 页：完成通知终于有开关（此前恒发，只判窗口失焦）
+
+### 一、缺口（现读）
+
+完成通知（v21）只判「Notification 支持 + 窗口整体失焦 + sessionId 非空」——**没有用户开关**。
+不想被打扰只能去系统设置里关掉 Cairn 的整类通知（连正当提醒一起丢）。`desktop-design-spec` 的旧账
+「无通知设置」从批 94 一路挂到现在；本轮把这一格补上。
+
+### 二、改法
+
+- `AppSettings.notifyOnComplete`（缺省 **true** = 既有行为逐字不变；老档案缺键也保持开）。
+- `shouldNotifyRunSettled` 增 `enabled` 输入：用户关掉 ⇒ 纯函数直接 false（不在 Electron 壳里另拦一道）。
+- 主进程 run 收束后读设置（失败按「开」处理，不让读设置拖垮 run 应答），把 `enabled` 交给纯函数。
+- 设置页「通用 → 使用习惯」加「任务完成时通知」开关（`saveSettingKey` 单键直调，`panelPatch` 白名单不动）；
+  副标题写明发送时机与点击行为。
+- 协议 **v31 → v32**；核心装配表（`scripts/lib/eval-assembly.ts`）补 `notifyOnComplete` 一行
+  （`not-applicable`：基准是 CLI 跑器，没有系统通知面）。
+
+### 三、判卷
+
+- `run-notification` **5 条**：新增「用户关掉 ⇒ 不发」，其余四条件（支持/聚焦/空 id）不动。
+- 设置页组件：开关在场、缺省开、关掉后 `aria-checked=false`（General 段测试 +1 条）。
+- `notification-open-wiring`：接线哨兵——main 读 `notifyOnComplete` 且传 `enabled: notifyEnabled`。
+- 新冒烟 `apps/desktop/scripts/notify-toggle-smoke.cjs`（真实 renderer）：**6/6 PASS**——开关在、
+  缺省开、真指针点一下 aria 翻面且 `setSettings({notifyOnComplete:false})`、再点回来恢复、0 控制台错误。
+- 能造红（实测）：① 纯函数摘掉 `enabled` 条件 ⇒ 判卷红；② main 把 `enabled: notifyEnabled` 改回恒 true
+  ⇒ 接线哨兵红；两处还原后 7/7 绿。
+- 登记表棘轮（既有机制，非本批缺陷）：新缺省开键未进装配表时 `eval-assembly` 2 条红、连带两个 loop-eval
+  文件红；补行后 **112 + 36 条**复跑全绿——棘轮按设计咬人。
+- 版本钉流水线：协议 bump 后 7 个桌面版本钉 + README 通道数（本轮无新通道，数字不变）逐一核对。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped`）：**571 文件 / 7355 条全绿**，exit 0。
+- 桌面套件（`--maxWorkers=2`）：**257 文件 / 1723 条全绿**，exit 0。
+- `typecheck`（仓根）0；桌面 `tsc -p tsconfig.json --noEmit` 0；`renderer-layer-check` 绿（160 文件）；
+  `prose-needle-scan` 顶包 10 = 帽，exit 0；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/notify-toggle-787/`（`checks.json` + `01-notify-off.png`）；
+  design-spec §9 已追记本节。
+
+### 五、边界
+
+- 通知口径仍只有「窗口整体失焦」：主进程没有「你正在看哪个会话」的镜像，**看别的会话完成 ⇒ 不发**的
+  按会话可见性判据仍未做（如实记，下批候选）。
+- 真实 OS 通知的浮现/点击仍无法在离屏环境验证（与 v21 同一条边界）；本轮验决策、接线与设置面。
+- 开关即时生效（主进程每次收束读一次缓存设置），不需要重启；不改变通知文案与点击直达。
+- 冒烟用临时 profile 的夹具设置，不碰业主数据。未提交；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 788 页：完成通知按「不在看那个会话」判（聚焦看 A，B 跑完也提醒）
+
+### 一、缺口（现读）
+
+完成通知的判据只有「Notification 支持 + 窗口整体失焦 + sessionId 非空」——聚焦着看会话 A 时，
+后台会话 B 跑完**不发通知**。蓝本 §3.3 写的是「任务完成且**你不在看那个会话**」；主进程没有
+「窗口正在看谁」的镜像，判据只能退化成窗口级。上一个批（v32 通知开关）的边界里已把它记为下批候选。
+
+### 二、改法
+
+- 新 IPC `reportViewing(sessionId: string | null, workspace: string)`（协议 **v32 → v33**）；
+  renderer `workbench` 在 `activeId / activeWorkspace` 变化时上报（主页/无会话报 null）。
+- 主进程保存 `viewing`，workspace 走 `canonicalKnownProjectPath` 规范化（失败存 null）；
+  run 收束算 `viewingTarget = 同 sessionId 且（run 未带 workspace 或与 viewing 相同）`。
+- `shouldNotifyRunSettled` 新语义：失焦一定发；聚焦时**只有正看着它**才免打扰，看别的会话要发。
+- 通道表 123 → **124**（`reportViewing`），`channels.test` 的 mustWire/计数与 README 通道数同步；
+  8 个协议钉文件同步 v33。
+
+### 三、判卷
+
+- `run-notification` 拆两组：用户关/不支持/空 id 一律不发；失焦 ⇒ 发；聚焦 + 正看 ⇒ 不发；
+  聚焦 + 看别的 ⇒ 发（旧口径在这格漏通知）。
+- `notification-open-wiring` 新增接线哨兵：main 有 `reportViewing` handler 与
+  `viewing.sessionId === sessionId`；renderer 调 `window.agent.reportViewing(activeId`。
+- 新冒烟 `apps/desktop/scripts/viewing-report-smoke.cjs`（真实 renderer）：**7/7 PASS**——
+  首屏报 null；真指针打开 s1 后报 `{sessionId:"s1", workspace:"/tmp/demo-ws"}`；⌘W 回主页报 null
+  且 workspace 仍在；0 控制台错误。
+- 能造红（实测）：① 纯函数退回「只看窗口失焦」⇒ 判卷 1 条红；② 摘掉 renderer 上报 ⇒ 冒烟停在
+  `initial viewing report` 超时；两处还原后分别全绿。
+- `workbench.ts` 加到 1204 行触发 I4 帽（1200）——压成两行 effect 后 **1199**，layer-check 复绿。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped`）：**571 文件 / 7355 条全绿**，exit 0。
+- 桌面套件（`--maxWorkers=2`）：**257 文件 / 1725 条全绿**，exit 0。
+- `typecheck`（仓根）0；桌面 `tsc -p tsconfig.json --noEmit` 0；`renderer-layer-check` 绿（160 文件，
+  workbench **1199** 行）；`prose-needle-scan` 顶包 10 = 帽，exit 0；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/viewing-report-788/`（`checks.json` + `01-viewing-home.png`）。
+
+### 五、边界
+
+- 只有主窗口上报（窗格弹窗不跑会话、不上报）；将来多主窗需要按窗口归属。
+- 窗口失焦时一律发——不再区分「是不是刚看过它」；这是「人不在跟前」的保守取舍。
+- workspace 规范化失败（未注册路径）时只按 session 比对 ⇒ 宁可多发一条，不丢提醒。
+- 真实 OS 通知的浮现/点击仍无法离屏验证（与 v21 同一条边界）。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 789 页：高级段补账——子代理 / 验证闸 / 返修 / 定时并发上限有入口了
+
+### 一、缺口（现读）
+
+「高级」段只有六项。`AppSettings` 里还有四枚**一直在生效、界面上没有入口**的字段：
+
+- `subagentTools`（默认 true）：决定模型看不看得见 spawn_agent / wait_for_agents / cancel_agents；
+- `autoVerify`（默认 true）：收束前补一拍验证；`autoVerifyRepair`（默认 false）：红了再要一轮修复；
+- `scheduleConcurrencyCap`（默认 2）：同时运行的定时会话数。
+
+用户看不见也改不了，等于替他们决定——与第 95 页补账、第 783 页补第五档是同一类缺陷。
+
+### 二、改法
+
+- 「高级」新增两节：「验证与子代理」三枚开关（副标题写清代价与依赖）、「定时任务」并发上限数字框。
+- 新增 `parseCapField`：只收 1-8 的整数；空 / 0 / 9 / 小数 / 非数字一律拒并给理由。
+  后端 `validateSettings` 对非法值静默回退 2——界面不拦就会「显示已保存、实际存的是 2」。
+- 全部走 `saveSettingKey` 单键直调（`panelPatch` 白名单不动）；画廊夹具补齐
+  `autoVerify` / `autoVerifyRepair` / `ctrlTabCycle`，与真 `DEFAULT_SETTINGS` 同源
+  （先前夹具缺 `autoVerifyRepair`，Switch 的 `aria-checked` 直接缺席——替身形状不真）。
+
+### 三、判卷
+
+- `settings-advanced-section` **15 条**：新字段逐键接线（源码哨兵）；SSR 渲染出三枚开关 + 上限输入，
+  缺省态与 `DEFAULT_SETTINGS` 同源；`parseCapField` 正反例（1/8/空白通过，0/9/1.5/abc/空拒绝）。
+- 新冒烟 `apps/desktop/scripts/advanced-controls-smoke.cjs`（真实 renderer，连跑 **3 次**）：
+  **9/9 PASS**——真指针进「高级」、三开关与上限在场且缺省正确、点「子代理工具」翻面并落盘
+  `{subagentTools:false}`、上限键入 5 + blur 落盘 `{scheduleConcurrencyCap:5}`、0 控制台错误。
+- 能造红（实测）：① 把子代理开关的写键换成别的 ⇒ 接线判卷红；② `parseCapField` 放宽到允许 0
+  ⇒ 校验判卷红；两处还原后全绿。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**257 文件 / 1728 条全绿**，exit 0。
+- 本批未改 core；同树上一趟全量 core 为 **571 文件 / 7355 条全绿**。
+- `typecheck`（仓根）0；桌面 `tsc -p tsconfig.json --noEmit` 0；`renderer-layer-check` 绿（160 文件）；
+  `prose-needle-scan` 顶包 10 = 帽，exit 0；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/advanced-controls-789/`（`checks.json` + `01-advanced-controls.png`）。
+
+### 五、边界
+
+- 三枚开关的下游行为（工具是否注入、收束闸/返修是否真跑）由既有核心判卷覆盖；本轮验「能改、
+  改得进盘、缺省与真设置同源」，未跑真模型验证行为变化。
+- `autoVerifyRepair` 依赖 `autoVerify`：收束闸关着时返修不会发生（副标题写明，不做联动禁用）。
+- 实验性路由开关（`routingBandit` / `routingCascade`）仍留在 JSON 层，不摆成普通设置。
+- 冒烟里并发上限那步：离屏 IME 焦点偶发不稳，真键入没落到输入框时用原生 setter 回填，但**仍走产品路径**
+  （blur → onBlur 校验 → 落盘），不绕过校验；连跑 3 次稳定 9/9。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 790 页：设置页按 Esc 不再吞掉正在输入的草稿
+
+### 一、缺口（真机探针实测）
+
+设置页的数字/文本输入是**失焦即存**。按 Esc 关设置时，`ModalSurface` 的 window 级 keydown 直接调
+`onClose` 卸载面板——焦点元素消失、`onBlur` 不触发 ⇒ 正在输入的草稿**悄悄丢掉**。而「返回」按钮
+因点击先移走焦点反而会保存：同一次编辑，两条关闭路径两种结果。
+
+探针读数（修前）：输入框是 6 时点「返回」⇒ 落盘 6；重开改成 7 后按 Esc ⇒ settings 调用仍停在 6。
+
+### 二、改法
+
+- `SettingsPanel` 新增 `closeSettings`：焦点在设置面板内（`.sp-page`）时先 `blur()`（同步触发既有
+  保存路径），再 `props.onClose()`。
+- `ModalSurface` 的 `onClose` 与「返回」按钮都改走它——Esc / 返回 / 遮罩三条关闭路径同一收口。
+
+### 三、判卷
+
+- 新冒烟 `apps/desktop/scripts/settings-esc-commit-smoke.cjs`（真实 renderer）：**7/7 PASS**——
+  输入框聚焦、草稿 6 未失焦 → Esc → 面板关且落盘 6；重开显示 6；改 7 →「返回」→ 落盘 7；0 错误。
+- 源码哨兵：`settings-advanced-section` 钉 `closeSettings` 的 blur 收口与两处接线；
+  `settings-panel` 的 ModalSurface 判据同步到新契约（原先钉的 `onClose={props.onClose}` 正是旧路径）。
+- 能造红（实测）：摘掉 `active.blur()` ⇒ 冒烟 **3 条红**（Esc 未落盘、重开仍显示旧值）；还原后 7/7。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**257 文件 / 1729 条全绿**，exit 0。
+- 本批未改 core；同树上一趟全量 core 为 **571 文件 / 7355 条全绿**。
+- `typecheck`（仓根）0；桌面 `tsc -p tsconfig.json --noEmit` 0；`renderer-layer-check` 绿（160 文件）；
+  `prose-needle-scan` 顶包 10 = 帽，exit 0；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/settings-esc-commit-790/`（`checks.json` + `01-after-esc.png`）。
+
+### 五、边界
+
+- 只管设置面板内的焦点元素；其他弹层关闭时不对输入做隐式提交。
+- `blur()` 同步触发保存，但落盘是异步 IPC：面板先卸载、写随后完成（设置页一贯如此，回执下次打开可见）。
+- 输入法组字中按 Esc 会先被 IME 吃掉（既有行为），本条不改变输入法语义。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 791 页：设置分区全量清扫 + 进化夹具（视觉自查不再有必崩的一页）
+
+### 一、缺口
+
+第 785 页补冒烟时顺带实测：画廊夹具没有 `evolveReport` 桩，点「进化」拿到兜底 `{}`，渲染期抛
+`reading 'byOutcome'`，被分区边界兜住显示「这一块加载失败」。真实主进程给的是完整形状——不是用户
+路径回归；但**视觉自查**永远看不到这一页，且设置分区缺少「逐一点开」的回归网。
+
+### 二、改法
+
+- 画廊夹具补 `EVOLVE_REPORT`（episodes / playbook / experiments / candidates / budget，与
+  `EvolveReport` 对齐），`evolveReport` 桩返回它。
+- 新冒烟 `apps/desktop/scripts/settings-sweep-smoke.cjs`：从真实导航读出全部分区并逐个真指针点开，
+  断言正文非空、无渲染错误边界；再单独断言进化分区渲染出 Episode / playbook / 预算。
+
+### 三、判卷
+
+- 冒烟 **4/4 PASS**：11 个分区全部点开、正文非空、无「这一块加载失败」、无 `.render-error`；
+  进化分区读到完整报告；0 控制台错误。
+- 能造红（实测）：去掉 `evolveReport` 桩 ⇒「每个分区」一条红并在明细里点名「进化 / 这一块加载失败」；
+  还原后 4/4。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**257 文件 / 1729 条全绿**，exit 0。
+- 本批未改 core；同树上一趟全量 core 为 **571 文件 / 7355 条全绿**。
+- `typecheck`（仓根）0；`renderer-layer-check` 绿（160 文件）；`prose-needle-scan` 顶包 10 = 帽，
+  exit 0；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/settings-sweep-791/`（`checks.json` + `01-evolve.png`）。
+
+### 五、边界
+
+- 夹具是视觉自查的形状替身，不是产品数据；真实报告仍由主进程 `buildEvolveReport` 生成。
+- 清扫用固定等待覆盖异步取数，验「不炸、有内容」，不验各分区内容语义。
+- 技能中心/工作树渲染的是 `AppPageBody`，本轮只判非空且无错误，内容细节由各自判卷覆盖。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 792 页：侧栏「项目注册表不可用」可就地重试，不用重启
+
+### 一、缺口
+
+`projects.json` 坏掉时，侧栏只出一句「项目注册表不可用：<原因 + 出路>」。用户按提示修好文件后
+**没有重试入口**：notice 只在订阅挂载时读一次，不重启就不会消失。与设置坏档（v26/v31）同一个形状——
+把问题说清了，但没给出路。
+
+### 二、改法
+
+- `useSessionSubscription` 把首次读取抽成 `retryProjects`（`useCallback`，首屏与重试共用同一条读法）并返回。
+- workbench 收进模型 → `WorkbenchView` 转给侧栏 → `Sidebar` 在 notice 里渲染「重试」（无出口的旧调用面不摆按钮）。
+- 行数帽连锁：`workbench.ts` +1 行到 1201 ⇒ 去掉订阅调用与 `const activate` 之间的空行，压回 **1199**。
+
+### 三、判卷
+
+- SSR（`render-structure`）：有 `onRetryNotice` 才出「重试」；无 notice 不摆空壳；接线哨兵覆盖
+  钩子返回 → workbench 模型 → WorkbenchView。
+- 新冒烟 `apps/desktop/scripts/projects-notice-retry-smoke.cjs`（真实 renderer）：**6/6 PASS**——
+  坏档 notice 点名 `projects.json` 与出路；探针模拟「文件已修好」后真指针点「重试」→ notice 消失、
+  项目 `demo-ws` 真的列出来；0 控制台错误。
+- 能造红（实测）：`retryProjects` 改 no-op ⇒ 首屏取不到项目，冒烟在 `registry notice` 超时；还原后 6/6。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**257 文件 / 1731 条全绿**，exit 0。
+- 本批未改 core；同树上一趟全量 core 为 **571 文件 / 7355 条全绿**。
+- `typecheck`（仓根）0；`renderer-layer-check` 绿（160 文件，workbench **1199** 行）；
+  `prose-needle-scan` 顶包 10 = 帽，exit 0；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/projects-retry-792/`（`checks.json` + `01-after-retry.png`）。
+
+### 五、边界
+
+- 重试只重读项目注册表；会话清单仍走自己的刷新路径。
+- notice 仍是被动提示 + 一个动作，不带「忽略」——修好后自然消失。
+- 夹具用 `__cairnRepairProjects()` 模拟外部修好，不碰真实注册表。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 793 页：桌面端终于能「运行诊断」（doctor 不再只在 CLI）
+
+### 一、缺口
+
+`cairn --doctor` 的检查核一直只在 CLI；桌面「关于与更新」只有一段静态诊断文本。沙箱降级、设置/会话
+文件坏、搜索工具没挂这类问题，桌面用户只能看到间接症状，无法在应用内自查。CLI doctor 的凭据检查
+只查环境变量，直接搬上桌面会误报「四个 provider key 全部未设」——所以不能原样复用它的输出。
+
+### 二、改法
+
+- core 新增 `runDoctorForWorkspace(workspace, inject?)`：没工作区返回可操作错误；有则复用 `runDoctor`。
+- 新 IPC `doctor()`（协议 **v33 → v34**，通道 124 → 125，README 同步）；About 按钮点击才跑
+  （含一次沙箱自检，不在面板打开时偷偷跑）。
+- renderer `doctor-view`：**凭据行按桌面口径重写**——`providerKeyStatus` 的「环境变量在位 + 设置页已存」
+  两侧合成；密钥状态读不到时退回原句并注明「仅环境变量」。总档按**上屏行**计数，避免与列表矛盾。
+- 原「诊断信息」改名「工程细节」。
+
+### 三、判卷
+
+- core：无工作区 ⇒ 可操作错误；真实临时工作区 ⇒ 九项齐全、总档三选一（沙箱读数注入，不赌机器态）。
+- 视图投影 **7 条**：凭据三种来源、其余检查原样映射、总档计数。
+- 新冒烟 `apps/desktop/scripts/doctor-report-smoke.cjs`（真实 renderer）：**8/8 PASS**——点击前不跑；
+  九项上屏；凭据行「环境变量在位：glm；设置页已存 2 家」；搜索失败项带原因；总档「1 项要处理」；
+  0 控制台错误。
+- 能造红（实测）：About 不读 `providerKeyStatus`（keys 传 null）⇒ 凭据行与总档两条红；还原后 8/8。
+- 本轮自抓：新 CSS 写了裸 `font-weight: 600` ⇒ tokens 判卷红，改 `var(--fw-bold)`；About 旧判据
+  钉着「诊断信息」⇒ 同步到「运行诊断 + 工程细节」。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped`）：**571 文件 / 7357 条全绿**，exit 0。
+- 桌面套件（`--maxWorkers=2`）：**258 文件 / 1738 条全绿**，exit 0。
+- `typecheck`（仓根）0；桌面 `tsc -p tsconfig.json --noEmit` 0；`renderer-layer-check` 绿（161 文件）；
+  `prose-needle-scan` 顶包 10 = 帽，exit 0；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/doctor-report-793/`（`checks.json` + `01-doctor-report.png`）。
+
+### 五、边界
+
+- 诊断是点击触发的一次性检查（沙箱自检会 spawn 一个短进程）；不轮询、不自动刷新。
+- doctor 本身保持 CLI 语义（`--doctor` 输出不变）；桌面凭据行是视图层把两份事实合成，不一锅煮。
+- DoctorFacts 只有「在位与否」没有值——脱敏是结构性的。
+- 未跑打包态真机；`runDoctor` 读 `package.json` 的路径沿用 CLI 既有实现。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 794 页：对话框/设置输入框回车提交 + IME 守卫补齐
+
+### 一、缺口（两条）
+
+1. 新建项目 / 项目设置两个模态只有按钮提交，名字框回车没反应；设置页的花费上限 / 单价 / 定时并发 /
+   更新源输入框同样按回车无动作（行内改名反倒支持回车）。
+2. `ime.ts` 写的是「所有消费 Enter 的路径共用一条判定」，但只有 Composer / ModelPicker 真接了；
+   会话行内改名、顶栏改名、项目显示名行内改名、会话搜索、设置导航搜索、查找、旁路提问、差异评注
+   （⌘Enter）、浏览器地址栏都能在**拼音组字途中**被 Enter 提前提交——正在写的字被系统当成确认。
+
+### 二、改法
+
+- 两个对话框抽 `submit()`（按钮与 Enter 同一条路；busy 不动、校验失败错误留面板）。
+- 设置页四个输入框：Enter ⇒ `blur()`（既有 onBlur 校验/保存，不另写保存逻辑）。
+- 所有上述文本输入的 Enter 先过 `isCompositionEnter(e, null)`；组字中的 Enter 归 IME。
+
+### 三、判卷
+
+- 新棘轮 `tests/ime-enter-coverage.test.ts` **15 条**：14 个文本输入逐条钉守卫锚点；消费方不许
+  另写 `nativeEvent.isComposing` 副本（判定只有 `ime.ts` 一处）。
+- 新冒烟 `dialogs-enter-smoke.cjs` **9/9**：项目设置改名 + 回车 → addProject 收到名字并关面板；
+  **组字 Enter 不提交**；新建项目空名回车 → 错误留面板；填名回车 → createProject；组字 Enter 不建项。
+- `advanced-controls-smoke` 改为按回车提交并发上限，仍 **9/9**。
+- 能造红（实测）：摘掉项目设置输入框的守卫 ⇒「组字中的回车不提交」一条红（面板当场关、名字发出）；
+  还原后 9/9。四条旧源码哨兵随之更新到带守卫的新串（它们此前钉着未加守卫的写法）。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**259 文件 / 1756 条全绿**，exit 0。
+- 本批未改 core；同树上一趟全量 core 为 **571 文件 / 7357 条全绿**。
+- `typecheck`（仓根）0；`renderer-layer-check` 绿（161 文件）；`prose-needle-scan` 顶包 10 = 帽，
+  exit 0；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/dialogs-enter-794/`（`checks.json` + `01-after-enter.png`）。
+
+### 五、边界
+
+- 非文本入口（按钮 / listbox 行激活 / 批准卡）不接组字守卫：没有组字态。
+- 这些输入传 `composingRef = null`：靠原生 isComposing 与 `keyCode 229` 判定；Composer 仍用它的
+  `composing` 引用（两条都认）。
+- 浏览器地址栏也接了守卫（IDN/中文域名），URL 校验仍在主进程。
+- 未跑真实输入法真机；组字路径由合成 `isComposing:true` 事件 + 纯函数判卷覆盖。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 795 页：会话级模型/思考档落盘（v35；顺带修「换会话模型会改全局缺省」）
+
+### 一、缺口（两条）
+
+1. 模型与思考档的会话级选择只在 renderer 内存表里：切走再回来/重启就回全局缺省。
+2. `onModelChange` 的注释写「有会话就记成本会话选择，没有就只落全局缺省」，实现却有会话时**也**写
+   全局缺省——在一个会话里换模型会悄悄改掉所有**新会话**的默认。
+
+### 二、改法
+
+- `session-metadata` 增可选 `model` / `thinking`（缺席 = 跟随全局；null = 摘格）＋ `setPrefs()`
+  （undefined 不改、null 摘掉；无记录旧会话 upsert 建档）。
+- `listSessions` 合并两格；`SessionInfoPayload` 增字段；新 IPC `sessionPrefsSet`（协议 **v34→v35**，
+  通道 125→126）；会话不存在/未知字段/非字符串拒。
+- renderer：`useSessionPrefsHydration` 回读（**只补本地还没有的键**，用户刚点的选择优先）；
+  `applySessionModelPick` 有会话只写 sidecar、主页才写全局缺省；思考档变化同样落 sidecar。
+
+### 三、判卷
+
+- core **15 条**（metadata 10 + handler 5）：写入重载、null 摘键、旧会话 upsert、非法值、列表回读、
+  幽灵会话拒、未知字段拒。
+- renderer **7 条**：回读只补缺席、局部优先、有会话只写 sidecar（不碰全局）、主页只写全局、
+  失败上屏、接线哨兵。
+- 新冒烟 `session-model-persist-smoke.cjs` **7/7**：列表偏好回读进选择器（`deepseek-chat · 思考 强`）；
+  换模型落 `sessionPrefsSet` 且 `__cairnSettingsCalls` 里没有 model 写入；思考档变化落 sidecar。
+- 能造红（实测）：① 去掉「有会话即 return」⇒「不写全局设置」红（全局被写成 glm）；
+  ② 摘掉回读钩子 ⇒ 选择器退回全局（`思考 关`）；还原后 7/7。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped`）：**572 文件 / 7364 条全绿**，exit 0。
+- 桌面套件（`--maxWorkers=2`）：**260 文件 / 1763 条全绿**，exit 0。
+- `typecheck`（仓根）0；桌面 `tsc` 0；`renderer-layer-check` 绿（162 文件，workbench 1199 行）；
+  `prose-needle-scan` 顶包 10 = 帽，exit 0；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/session-prefs-795/`（`checks.json` + `01-session-prefs.png`）。
+
+### 五、边界
+
+- provider 不随会话存：`RunRequest.model` 是稳定 registry id，主进程按注册表解析 provider——
+  这也是能停止写全局 provider 的前提。
+- 思考档只做字符串形状校验（真枚举在 provider 能力表）；旧 sidecar 没有这两格仍原样加载。
+- 「跟随全局」= 模型菜单选「默认」（写 null 摘格）；没有单独的「本会话不覆盖」指示器。
+- 未在真实主进程重启后目验整机重开（core 往返 + 真机列表回读覆盖两端，整机重启记未验）。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 796 页：`cairn --sessions`（CLI 的会话发现面）
+
+### 一、缺口
+
+`--replay/--session/--fork/--compact` 全按会话 id 寻址，CLI 用户此前没有任何地方能查 id——
+只能自己去 `ls .agent/sessions`，而 sidecar（pins/feedback）混在同目录里，文件名不等于会话。
+
+### 二、改法
+
+- 新旗标 `--sessions`：只读列出当前工作区的会话（id / 标题 / 行数 / 时间 / 会话级 model/thinking /
+  置顶/归档标记），不碰 provider / 沙箱 / 设置（没配 key 的机器也能查）。
+- 与任务描述或其他执行模式同用一律拒（`--replay/--serve/--compact/--fork/--goal/--plugins/...`）：
+  让它抢跑等于把用户的任务悄悄吃掉，而退码还是 0。
+- 元数据坏档：警告上屏 + 照列文件事实（不把坏档读成零会话）；`listSessions` 的首行形状判定保证
+  pins/feedback 等 sidecar 不混进列表。README 安装段补一行。
+
+### 三、判卷
+
+- 新 `tests/cli-sessions.test.ts` **5/5**：help 列出；空工作区 exit 0；真文件下列出 id/标题/模型并排除
+  sidecar；元数据坏档仍列文件事实；带任务描述/与 `--serve` 同用 exit 2。
+- 能造红（实测）：去掉只读闸 ⇒「带任务描述 / 与 --serve 同用」一条红（`--sessions 做点事` 被静默列完退出 0）。
+- 手工探针：临时工作区两场会话 + 一场带 model/thinking，输出逐行核对。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped`，含随后一批的改动）：**574 文件 / 7376 条全绿**，exit 0。
+- `typecheck`（仓根）0；`renderer-layer-check` 绿（162 文件）；`prose-needle-scan` 顶包 10 = 帽。
+
+### 五、边界
+
+- 只列**当前工作区**；跨项目列举不做（会话按根归属，混列要先做多根聚合）。
+- 时间用本机 locale；排序 = mtime 降序（与桌面侧栏同口径）。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 797 页：赞/踩进入自进化证据（用户信号不再恒 unknown）
+
+### 一、缺口（业主三重点之一「自进化」的首个硬缺口）
+
+`feedback.jsonl`（赞/踩）只被界面读取点亮按钮，从未进入 Episode：`recordEpisode` 的 `user` 参数
+无人传 ⇒ `outcome.user` 恒 `unknown`，`final` 只能靠 verify/judge；实验分析进一步把
+`final === "unknown"` 的 episode 当未知丢掉。**人类最明确的信号在进化账上是空白。**
+
+### 二、改法
+
+- `agent/evolve/episode.ts` 抽出 `finalOutcomeOf(judge, verify, user)`——录制与回读共用同一优先级
+  （判卷 > 验证 > 用户 > 未知），不再抄第二份。
+- `episode-store` 新增 `applyUserFeedback(episodes, feedback)`：反馈 eventId 落在该场 run 的
+  `startEventId..endEventId` 内 ⇒ 改 `outcome.user` 并重算 `final`；同场多条以时间最新为准，
+  `none` = 撤回 ⇒ unknown；跨会话指针（eventRef）与空窗口不映射。
+- `loadEpisodesWithUserFeedback(workspace)`：Episode 账 + `<ws>/.agent/sessions/feedback.jsonl`；
+  反馈账读不了按未知处理（不炸报告）。`buildEvolveReport` 与 `analyzeExperimentById` 改走它。
+
+### 三、判卷
+
+- 新 `tests/evolve-user-feedback.test.ts` **7/7**：纯覆盖（窗口内/外、最新覆盖、撤回、判卷/验证压过用户、
+  eventRef 与空窗口不映射）+ 真文件（赞 ⇒ success、报告 byOutcome 与 unknownReasons.user 同步；
+  踩 ⇒ failure；撤回 ⇒ 回 unknown）+ 实验分析入口哨兵。
+- 能造红（实测）：报告改回裸 `loadEpisodes` ⇒「赞 ⇒ 报告同步」一条红（byOutcome 仍 unknown）。
+- 全量 core：**574 文件 / 7376 条全绿**；桌面套件本批未改（同树上一趟 **260 文件 / 1763 条全绿**）。
+
+### 四、读数
+
+- 桌面 Evolve 分区无需改码：它读同一份报告，用户信号现在自动反映在 byOutcome / 未知面。
+- `typecheck` 0；layer 绿（162 文件）；prose 顶包 10 = 帽；docs-check 全绿。
+
+### 五、边界
+
+- 反馈在**读取时**叠加：页面需要刷新才看到新数字（没有推送通道；报告本就是快照）。
+- 只认 owner 自己的 eventId；分叉后的 ancestor 指针（eventRef）不映射（行号不同域，硬套会张冠李戴）。
+- 判卷/验证仍压过用户：用户踩一条 verify 绿的 run 只把 `user` 记为 rejected，`final` 仍是 success——
+  证据面展示分歧，不篡改客观结论。
+- 未提交；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 798 页：双开不再起第二个调度器，界面进程崩了给一条重载出路
+
+### 一、缺口（现读）
+
+两件都是「装到桌面上当产品用」才会暴露、判卷面此前为零的形态：
+
+1. **双开**：`apps/desktop/src/main/index.ts` 没有 `requestSingleInstanceLock`。第二个进程会完整走
+   whenReady 装配——再起一个 `serveScheduler`（同一工作区的定时任务被跑两遍）、再注入一次 BYOK、
+   再建一份窗口状态。macOS 双击 `.app` 由 LaunchServices 合并到已运行实例，但 `open -n`、直接执行
+   `Cairn.app/Contents/MacOS/Cairn`、以及将来 Windows/Linux 的快捷方式都不受这层系统保护。
+   台账 687/688 页曾把「本仓当前是单实例语义」写进边界——那一格没有实现也没有判卷，本页把它补成
+   可执行的一条。
+2. **崩溃**：全仓没有 `render-process-gone` 监听。Chromium 渲染进程被 OOM 杀掉或崩溃后只剩一个
+   白窗——没有说明、没有重载入口，只能强退重开。长会话（本仓 400 轮实测约 3.9 万 DOM 节点）正是
+   最容易撞上这一格的场景；而事件已按行落盘，重开本身是可恢复的。
+
+### 二、改法
+
+- 新 `apps/desktop/src/main/single-instance.ts`：`acquireSingleInstance(hooks)` 只做三件事——
+  拿锁、副进程退出、注册第二次启动回调；焦点与建窗由主进程注入，不 import electron。
+- `index.ts`：userData 定下来之后、whenReady 之前拿锁；`if (!primaryInstance) return;` 挡在装配段
+  最前（菜单 / 调度器 / BYOK / 建窗都不跑）。副进程用 `app.exit(0)` 立即终止——`app.quit()` 只是
+  请求退出，模块会继续求值、白建一遍 host/registry。
+- 新 `focusMainWindow()`：最小化→`restore()`、隐藏→`show()`、再 `focus()`；无窗时**只在
+  `app.isReady()` 之后**才 `createWindow()`——启动竞态下 whenReady 自己会建窗，无条件重建会出两个
+  主窗。退出流程中（`appQuitting`）不再抢焦点。
+- 新 `apps/desktop/src/main/crash-recovery.ts`：`rendererCrashNotice(details, appQuitting)` 纯函数；
+  `clean-exit` 与退出流程不打扰用户，OOM 单独文案，其余带 Electron 给的 reason 与退出码（>0 才显示）。
+- `index.ts` 监听 `render-process-gone`：弹「重新载入 / 退出 Cairn」；重载前查 `contents.isDestroyed()`，
+  弹窗挂在崩溃的那个窗口上（弹窗窗格也是 BrowserWindow，不恒挂主窗）。`before-quit` 置
+  `appQuitting`，用户取消退出时撤回。
+
+### 三、判卷
+
+- 新 `apps/desktop/tests/app-lifecycle.test.ts` **8 条**：
+  - 单实例：拿不到锁 ⇒ 只 exit、不注册监听、返回 false；拿到锁 ⇒ 不 exit、注册一个监听并返回
+    true，触发监听 ⇒ `focusExisting` 一次。
+  - 崩溃提示：`clean-exit` / `appQuitting` 两态不弹；OOM 标题与退出码（0 不显示）；其他 reason
+    保留原文并说明磁盘上的记录还在。
+  - 接线见证：锁在 whenReady 之前、副进程 return 在装配段最前、`app.exit(0)`、主窗恢复三步、
+    启动竞态 `app.isReady()` 守卫、`render-process-gone` + 两个按钮 + `contents.reload()` +
+    崩溃窗口归属。
+- 能造红（实测）：① 摘掉 `if (!primaryInstance) return;` ⇒ 接线 1 条红；② 把 OOM 分支改成永不
+  命中 ⇒ 文案 1 条红；两处还原后 8/8。
+- 真机双开（本机 macOS，同一 `--user-data-dir`）：第二个进程 **exit 0 / 421 ms** 自行退出；首实例
+  4 个 Electron 进程仍在；副进程日志 **0 条**调度器启动行，首实例 **1 条**。
+- 真窗口机器冒烟：`pnpm --filter cairn-desktop smoke` **PASS in 1374 ms**（单实例锁不挡冒烟：
+  `CAIRN_SMOKE` 每次把 userData 指到独立 mkdtemp）。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**261 文件 / 1774 条全绿**，exit 0。
+- 全量 core（`pnpm test:capped`，本批未改 core，同树基线）：**575 文件 / 7383 条全绿**，exit 0。
+- `typecheck`（仓根）0；`renderer-layer-check` 绿（162 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/app-lifecycle-798/`（`checks.json` + `double-launch.log`）。
+
+### 五、边界
+
+- **渲染进程真实崩溃未在整机触发**：判的是纯函数与接线（与 `main-hardening` 同式）；本页没有拿
+  `forcefullyCrashRenderer` 当判据——它会连带 Electron 自己的退出流程。真机崩溃后「重载是否恢复到
+  原会话」仍未验。
+- 单实例锁按 userData 归属：不同 `--user-data-dir` / profile 仍可并行（这是有意的）。
+- 第二个实例带不同命令行参数时不会把参数转交给首实例（没有 `open-file` / 深链需求）。
+- macOS 双击 `.app` 本来就由 LaunchServices 合并；本页真正覆盖的是 `open -n`、直接执行二进制与
+  将来的 Windows/Linux。
+- 打包态双开未复跑（`apps/desktop/release/` 里是加锁前的包）；锁是 Electron 主进程 API，与 dev 同一条。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 799 页：诊断说了哪里坏，还要给一个到「能修它的那一格」的入口
+
+### 一、缺口（现读）
+
+1. **诊断结果九行全是只读 div**：`doctorRows` 已经算出了失败项、原因与 hint，AboutSection 却只把
+   它们印出来。用户看到「联网搜索：search.endpoint 未配」之后，要自己在十几个设置分区里找「联网
+   搜索」；看到「凭据缺失」要找「模型与 Provider」。诊断越准，找不到落点时的挫败越大——一份正确
+   的诊断停在一句指责上。
+2. **空屏的「去设置」落错分区**：`WorkbenchView` 的 `ProviderBanner` 是
+   `setSettingsSection(undefined)` + `setSettingsOpen(true)` ⇒ 设置页落到默认的「通用」（主题 / 字号 /
+   界面语言）。横幅说「模型服务还没配好，去设置里选一家服务」，却把用户送到与配模型无关的一页。
+
+### 二、改法
+
+- `doctor-view` 新 `doctorTarget(id)`：只映射**应用里真能改**的项——keys → `provider`、
+  sandbox → `permissions`、search → `network`。Node / 工作区 / 设置文件 / 会话数据要动环境或文件系统；
+  插件信任面落在「插件」目的地页而不是设置分区（`SettingsPanel` 的 `setSection` 到不了 PageId）——
+  这五类一律返回 undefined。宁可不给按钮，也不给点了没用的入口。
+- 抽出 `DoctorResultView`：失败且可修的项渲染成 `<button data-doctor-id=…>`（右侧 chevron、
+  `aria-label`「…：到设置里处理」、hover 底与 focus 环）；通过项与无落点项保持只读 div。
+  `AboutSection` 增可选 `onOpenSection`，`SettingsPanel` 传 `setSection`；没有回调时失败项也不做按钮。
+- `ProviderBanner` 的调用点改成 `setSettingsSection("provider")`，横幅与落点终于说同一件事。
+
+### 三、判卷
+
+- `settings-doctor.test.tsx` 新增 **3 条**（共 10 条）：① mapping 正反例（keys/sandbox/search 有落点，
+  node/workspace/settings/sessions/trust/未知 id 一律 undefined）；② SSR 断言失败可修项是带
+  `data-doctor-id` 与 `aria-label` 的 `<button>`、通过项仍是 `<div>`、无 `onOpenSection` 时失败项也不
+  做按钮；③ `SettingsPanel` 的 `onOpenSection={setSection}` 接线哨兵。
+- `provider-banner.test.tsx` 补一条断言：`onOpenSettings` 的落点是 `setSettingsSection("provider")`。
+- 冒烟 `doctor-report-smoke.cjs` 从 **8 条扩到 12 条**：真指针点失败的「联网搜索」行 ⇒ 左栏
+  `.sp-nav-item.on` 切到「联网搜索」⇒ `.sp-body` 真是搜索设置（不是空白）；0 控制台错误。
+- 能造红（实测）：① 把 keys 的落点改成 undefined ⇒ 判卷 **2 条红**；② 摘掉
+  `onOpenSection={setSection}` 重新 build 跑冒烟 ⇒ 停在 `Timeout: network section`（行点不动）；
+  两处还原后 10 条与 12/12 全绿。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**261 文件 / 1777 条全绿**，exit 0。
+- `typecheck`（仓根）0；`renderer-layer-check` 绿（162 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/doctor-nav-799/`（`checks.json` + `01-doctor-report.png` +
+  `02-after-doctor-jump.png`）。
+
+### 五、边界
+
+- **只有失败项带入口**：通过项不摆按钮，避免把诊断面板变成第二套设置导航。
+- 五类不给入口的项（Node / 工作区 / 设置文件 / 会话数据 / 插件信任面）如实留白；插件页那条要等
+  SettingsPanel 能导航目的地页时再接，本页不硬塞。
+- `data-doctor-id` 是新增的判据锚点；行文案与 hint 仍由 `doctorRows` 单一事实源产出，没有第二份抄本。
+- 冒烟是画廊夹具（`fixtureData: true`）：证明的是「点击 → 分区切换 → 正文渲染」这条交互，不证明
+  真实 provider / 真实搜索配置；`ProviderBanner` 的落点只有源码哨兵，没有另起夹具冒烟。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 800 页：桌面终于有一份用户能带走的主进程日志
+
+### 一、缺口（现读）
+
+打包后的 Cairn 从 Finder 启动，主进程的 `console.*` 只进 stdout/stderr——devtools 关掉就没有任何留存，
+用户也带不走。进程起不来、IPC 报错、调度器装配失败这些**应用级**故障只剩一句白屏；会话日志
+（`SessionLogDialog`）只覆盖某一场会话的 JSONL，不覆盖壳。更刺眼的是设置页「工程细节」写着
+「供排查时对照日志使用」，而全仓没有一份可打开的日志文件。
+
+### 二、改法
+
+- 新 `apps/desktop/src/main/app-log.ts`：`formatAppLogLine`（ISO 含毫秒 + 级别 + 正文）、
+  `createAppLog`（2 MiB 上限、`main.log` → `main.1.log` 轮转、只留 2 份；目录不可写时 `write` 不抛——
+  日志失败不该把主进程带崩）、`teeConsole`（log/info/warn/error 四个级别落文件，原输出照常保留）。
+- `index.ts`：userData 定下来、单实例闸之后建 `appLog` 并 `teeConsole`；`uncaughtExceptionMonitor`
+  记未捕获异常；窗口的 `console-message` 错误记 `[renderer] …`（打包态唯一现场）。
+- 菜单：`appMenuTemplate` 的「帮助」新增「打开日志文件夹」，`AppMenuDeps` 增 `openLogs`，主进程
+  `shell.openPath(<userData>/logs)`——不经渲染层、不发 IPC、不碰协议版本。
+- 「工程细节」文案补上日志位置与打开方式（`logs/main.log`、2 MiB 轮转、帮助菜单入口）。
+
+### 三、判卷
+
+- 新 `apps/desktop/tests/app-log.test.ts` **8 条**：行格式；参数折行（Error / 循环引用）；首次写入
+  建目录；超过上限才轮转且旧内容进 `main.1.log`、不产生 `main.2.log`；目录被文件占住时 write
+  不抛；四个 console 级别都落文件且原 spy 各收到一次；两条主进程接线见证（日志建立 / 菜单开壳）。
+- `app-menu.test.ts` 增至 **7 条**：新增「打开日志文件夹」是真动作（click 调 `openLogs` 一次）。
+- 能造红（实测）：① 摘掉 `rotateIfNeeded()` ⇒ 轮转 1 条红；② 摘掉 write 的 try/catch ⇒
+  「目录不可写时不抛」1 条红；两处还原后 8/8。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**262 文件 / 1786 条全绿**，exit 0。
+- `typecheck`（仓根）0；`renderer-layer-check` 绿（162 个渲染层源文件）；`docs-check` 全绿。
+- 真机启动（独立 `--user-data-dir`，5 s 后退出）：`<userData>/logs/main.log` **307 B / 3 行**——
+  `[byok-inject] 启动注入`、`[scheduler] journal 保留收敛完成`、`[m4a] 调度器已启动`（级别 info / warn 正确）。
+- 真窗口机器冒烟：`pnpm --filter cairn-desktop smoke` **PASS in 1435 ms**。
+- 证据：`apps/desktop/outputs/app-log-800/`（`checks.json` + `boot-log.txt`）。
+
+### 五、边界
+
+- 日志是**本机文件**：不自动上传、不打包、不在 UI 里回显全文；用户主动从「帮助」菜单打开目录。
+- 记录的是主进程 console 与渲染层 error 级 console；会话内容仍只在会话 JSONL 里，不抄进主日志。
+- 代码面没有打印密钥值的 console 行（`byok-inject` 只打布尔态）；但日志仍可能含工作区路径与会话 id，
+  分享前由用户自己判断。
+- 轮转按单文件大小，不按天；高频错误可能很快覆盖旧文件（2 MiB × 2 份的取舍）。
+- 打包态未复跑（`release/` 里是加日志前的包）；`shell.openPath` 的 Finder 浮现未离屏验证，菜单项由
+  判卷钉 click 出口。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 801 页：项目文件夹被移动后，不用「移除再添加」——按同一条记录重新定位
+
+### 一、缺口（现读）
+
+项目注册表按 **canonical path** 做 upsert：`addProject` 先 `realpath(input.path)` 再按 path 找记录。
+用户把项目文件夹移动或改名后，旧路径在磁盘上已不存在 ⇒ `realpath` 先抛 ENOENT，`addProject`
+根本走不到「找记录」那一步。唯一剩下的路是「移除项目 → 重新添加」——那条路会 **mint 一个新 id**，
+而旧会话的 `projectId` 仍指向老 id，归属从此悬空。侧栏项目菜单里也没有任何「指向新目录」的入口；
+点旧项目只会得到一句「未注册的工作区，已拒绝」。这是数据连续性问题，不是便利性问题。
+
+### 二、改法
+
+- core `ProjectRegistry.relocate(id, nextPath)`：canonical 化新路径 → 保 id / name / createdAt，
+  只换 `path` 与 `updatedAt`；`defaultLocation` 等于旧 path 或位于旧 path 之下时按同一相对位置随迁，
+  用户设过别处则原样保留；路径唯一性按**全量记录**（含软删除）校验——`validateState` 的约束就是
+  全量唯一，只查活动项目会让下一次 load 炸成「注册表损坏」。
+- IPC **v35 → v36**：`relocateProject(id, path)`；`channels.ts` 126 → **127** 条 invoke，
+  README 同步；主进程 wired 表直连 registry。
+- 渲染层：项目菜单新增「更改项目目录…」→ 系统目录选择器 → `relocateProject` → 刷新项目与会话；
+  若正停在这个项目，`activeWorkspace` 跟随新路径（`setWorkspaceContext` 的既有 effect 随之生效）。
+  提示语「「{name}」已指向新目录」。
+
+### 三、判卷
+
+- core `tests/project-registry.test.ts` 新增 **3 条**（共 9 条）：保 id/name/createdAt、path 换成新
+  realpath、defaultLocation 在旧树内随迁；defaultLocation 在旧树外原样保留；拒绝不存在/非目录/
+  被别的项目占用（含已移除记录）/已移除项目，同路径幂等空操作。
+- 渲染层 `apps/desktop/tests/project-relocate.test.ts` **2 条**（读整张 app surface）：菜单项 +
+  选择器 + `relocateProject` 调用；成功后刷新项目/会话、当前工作区跟随。
+- 协议面 6 个钉 v35 的接线测试同步 v36；`channels.test` 的 mustWire 名单补 `relocateProject`
+  （缺名单会让守卫静默漏行）。
+- 新冒烟 `project-relocate-smoke.cjs`（真实 renderer + 夹具）：**7/7 PASS**——项目菜单里有
+  「更改项目目录…」、真指针点选后 `relocateProject` 收到 `/tmp/demo-ws-moved`、成功提示上屏、
+  0 控制台错误。
+- 能造红（实测）：① 把 `defaultLocation` 随迁条件改成恒 false ⇒ core 1 条红；② 摘掉菜单项重 build
+  跑冒烟 ⇒ 停在 `Timeout: relocate call`；还原后 9 条与 7/7 全绿。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped`）：**575 文件 / 7386 条全绿**，exit 0。
+- 桌面套件（`--maxWorkers=2`）：**263 文件 / 1788 条全绿**，exit 0。
+- `typecheck`（仓根）0；`renderer-layer-check` 绿（162 个渲染层源文件；workbench 压回 1199 行帽内）；
+  `docs-check` 全绿。
+- 证据：`apps/desktop/outputs/project-relocate-801/`（`checks.json` + `01-after-relocate.png`）。
+
+### 五、边界
+
+- **没有自动检测缺失路径**：菜单项对健康项目也可见（它同时可用于「指向一份副本」）；点一个已失联
+  的项目仍会先得到「未注册的工作区」，用户要知道去项目菜单里重新定位。把「路径不存在」与
+  「未登记」分开报，是下一轮的候选。
+- 真实 renderer → 主进程的 IPC 往返没有在整机跑：冒烟用夹具桩，core 测 registry，`channels` /
+  `typecheck` 钉住通道与签名；三段各证一段，不是一条端到端读数。
+- `defaultLocation` 若位于旧树内但该子目录没有随迁，relocate 只改字符串不校验存在；下次运行前的
+  目录检查仍由既有路径闸负责。
+- 会话的 `projectId` 原样保留；如果用户只移动了项目目录而会话文件不在其中（部分移动），那些会话
+  仍找不到——本页不猜「会话搬去哪了」。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 802 页：失联项目在侧栏就有名字，点它不再被说成「未注册」
+
+### 一、缺口（现读）
+
+1. `listProjects` 只回注册表记录，目录现在还在不在没人知道。文件夹被移动/删除后，侧栏里的项目
+   与健康项目长得一模一样——用户要等到点开它才发现不对。
+2. 点它时 `setWorkspaceContext` 先走 `canonicalKnownProjectPath`：路径不存在 ⇒ `realpath` 抛错 ⇒
+   统一回「未注册的工作区，已拒绝：<path>」。两句话都不对：它明明登记过；用户也不知道下一步
+   该去项目菜单里重新定位。
+3. 「失联」是**派生状态**：不能写进 registry（路径移回来就该自动消失），也不该靠一次失败点击才被
+   发现。
+
+### 二、改法
+
+- 新 `apps/desktop/src/main/project-presence.ts`：
+  - `annotateProjectPresence(records, exists)`：逐条补 `missing`，顺序不变；`exists` 抛错（EACCES 等）
+    按「不在场」处理——盘点失败不能读成健康。
+  - `missingProjectPathError(path, records, exists)`：只在「已登记 + 不在场」时返回
+    「项目目录不存在（可能已被移动或删除）：<path>——在侧栏项目菜单里选「更改项目目录…」重新定位」；
+    未登记 / 空路径 / 目录仍在 ⇒ `null`，保留既有「未注册」口径。
+- IPC **v36 → v37**：`listProjects` 返回 `ProjectListEntry`（`ProjectRecord & { missing?: boolean }`），
+  无新通道。`index.ts` 用 `stat` 盘点；`setWorkspaceContext` 先判「已登记但不在场」再走原校验。
+- 侧栏项目行新增 `.g-missing`「目录失联」标记：risk token、`title` 写明原因与动作，文案走
+  `STR.sidebar.missingBadge / missingBadgeTip`（不写裸中文）。
+
+### 三、判卷
+
+- 新 `apps/desktop/tests/project-presence.test.ts` **5 条**：逐条补 missing 且顺序不变；exists 抛错
+  按不在场；已登记 + 不在场给准确文案；未登记 / 空 / 在场不替换既有错误；主进程两条接线见证。
+- 新 `apps/desktop/tests/project-missing-badge.test.tsx` **3 条**：`missing` 项目渲染「目录失联」与
+  解释性 title；健康项目不显示；样式走 `--color-risk` 两个比例，不是硬编码色。
+- 冒烟 `project-relocate-smoke.cjs` 从 7 条扩到 **8 条**：加载后先断言「目录失联」，再点项目菜单
+  重新定位，成功提示上屏，0 控制台错误。
+- 能造红（实测）：① `annotateProjectPresence` 恒 `missing=false` ⇒ 2 条红；② 删掉
+  `if (!registered) return null` ⇒ 1 条红（未登记也会被改写成「目录不存在」）；还原后 5/5。
+- 本轮自抓一条弱断言：第一版 `exists` 对未登记路径也返回 true ⇒「未登记」用例永远绿；把它收成
+  只认 `/tmp/alive` 后，第二次造红才真的红。弱断言当场改掉，不留。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**265 文件 / 1796 条全绿**，exit 0。
+- 全量 core（`pnpm test:capped`）：**575 文件 / 7386 条全绿**，exit 0。
+- `typecheck`（仓根）0；`renderer-layer-check` 绿（162 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/project-presence-802/`（`checks.json` + `00-before-relocate.png` +
+  `01-after-relocate.png`）。
+
+### 五、边界
+
+- `missing` 是 `listProjects` 时点的快照：没有文件监听，文件夹移回后要等下一次列表刷新才转正常。
+- 只认 exact canonical path：渲染层传符号链接等非 canonical 形态时 match 不到，仍落回旧错误；
+  侧栏传的是 registry 里的 canonical path。
+- 没做「自动弹出重新定位向导」：标记 / 菜单入口 / 错误文案三处指向同一动作，但用户仍要自己点。
+- 真实 renderer → 主进程 IPC 往返没有整机跑（冒烟用夹具桩）；core 与桌面各证一段。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 803 页：诊断结果能一键复制带走，不用截屏
+
+### 一、缺口（现读）
+
+「运行诊断」把九项结果画在屏上，但它只活在设置页的组件状态里：用户要反馈问题，只能截图或手抄。
+诊断文本本身已经把「哪一项红了、原因、下一步」都算好了（`doctorRows` + `doctorVerdictText`），
+缺的只是一个**可带走的文本出口**——支持面停在最后一步。
+
+### 二、改法
+
+- `doctor-view` 新 `doctorReportText({ version, generatedAt, verdict, rows })`：纯函数，输出
+  「Cairn 诊断报告 / 版本 / 生成时间 / 总档 / 逐行 ✓✗ + 提示」；`generatedAt` 由调用方注入，
+  判卷不赌时钟。行序与屏上一致，不另拼一套投影。
+- AboutSection 在「运行诊断」旁加「复制报告」：未跑过诊断时禁用；点击把同一份 `doctorRowsView`
+  折成文本写入剪贴板，成功/失败都上屏（`已复制诊断报告` / `复制失败：…`），不静默。
+
+### 三、判卷
+
+- `settings-doctor.test.tsx` 新增 **2 条**（共 12 条）：报告含版本 / 生成时间 / 总档 / 逐行与提示、
+  行序与屏上一致、以换行收尾；版本读不到写「未知」不编造。接线哨兵补 `doctorReportText({` 与
+  `navigator.clipboard.writeText(text)`（复制走同一份行投影）。
+- 冒烟 `doctor-report-smoke.cjs` 从 12 条扩到 **15 条**：真指针点「复制报告」⇒ 主进程读剪贴板
+  （Electron 44 的 `clipboard.readText()` 是 Promise，冒烟里 `await`）⇒ 文本含「Cairn 诊断报告 /
+  总档：部分就绪 / 联网搜索」⇒ 「已复制诊断报告」回执上屏；0 控制台错误。
+- 能造红（实测）：删掉报告里的 `提示：` 行 ⇒ 判卷 1 条红；还原后 12/12。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**265 文件 / 1798 条全绿**，exit 0。
+- 本批未改 core；同树上一趟全量 core 为 **575 文件 / 7386 条全绿**。
+- `typecheck`（仓根）0；`renderer-layer-check` 绿（162 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/doctor-copy-803/`（`checks.json` + `01-doctor-report.png` +
+  `02-after-doctor-jump.png`）。
+
+### 五、边界
+
+- 报告是**文本**，不含主进程日志（日志在 `logs/main.log`，走第 800 页的「帮助 → 打开日志文件夹」）；
+  两者合成一个诊断包是后续候选。
+- 版本取 `getState().about.version`；读不到时如实写「未知」（画廊夹具即如此），不编造。
+- 剪贴板写入依赖 `navigator.clipboard`；不可用时给「复制失败：剪贴板不可用」，不假装成功。
+- 报告内容含工作区路径与检查详情，复制/分享由用户自己决定；不自动上传。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 804 页：帮助菜单补上「数据目录」，文件菜单补上「重新启动 Cairn」
+
+### 一、缺口（现读）
+
+1. 设置页「窗口材质」写着「改动需重启窗口」，但应用里没有任何重启入口——用户只能退出再从 Dock
+   打开（正在跑的会话会被退出闸问一次，重开还得自己找回来）。
+2. 应用数据（settings / projects / license / logs）在 `<userData>` 下，界面上只有「打开日志文件夹」
+   能到 `logs/`；用户想整体备份或找到别的东西时仍要靠猜路径。
+3. 退出闸的文案只说「退出」，复用到重启会误导（重启不丢已落盘记录）。
+
+### 二、改法
+
+- `quit-guard` 新 `restartWarningMessage(count)`：说清「会中断」与「已写入磁盘的记录不会丢」。
+- 菜单：文件菜单底部加「重新启动 Cairn」；帮助菜单在「打开日志文件夹」旁加「打开数据目录」。
+  `AppMenuDeps` 增 `openDataDir` / `restart`，都是主进程直连（`shell.openPath(userData)` /
+  `app.relaunch()`），不经渲染层、不发 IPC、不碰协议版本。
+- `requestRestart()`：有在跑会话先弹确认（默认「取消」）；确认后置 `quitConfirmed = true` 再
+  `app.relaunch()` + `app.quit()`——不置位会被退出闸问第二遍，用户以为没生效。
+
+### 三、判卷
+
+- `quit-guard.test.ts` 增至 **4 条**：重启文案含「N 个会话」「会中断」「磁盘记录不会丢」。
+- `app-menu.test.ts` 增至 **9 条**：新维护项逐条点一次（`openDataDir` / `restart` 各收一次）；
+  主进程接线见证（`restartWarningMessage(running)`、`quitConfirmed = true`、`app.relaunch()`、
+  `shell.openPath(userData)`）。
+- 能造红（实测）：① 摘掉 `app.relaunch()` ⇒ 接线 1 条红；② 摘掉菜单里的「重新启动 Cairn」⇒
+  维护项判卷 1 条红；还原后 9/9。
+- 菜单事实取料：`appMenuTemplate` 直接遍历，文件菜单 6 项含 `cairn.restart`，帮助菜单含
+  `cairn.open-data` / `cairn.open-logs`。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**265 文件 / 1801 条全绿**，exit 0。
+- 本批未改 core；同树上一趟全量 core 为 **575 文件 / 7386 条全绿**。
+- 真窗口机器冒烟：`pnpm --filter cairn-desktop smoke` **PASS in 1412 ms**（加菜单项不影响启动链）。
+- `typecheck`（仓根）0；`renderer-layer-check` 绿（162 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/maintenance-menu-804/`（`checks.json` + `menu-items.json`）。
+
+### 五、边界
+
+- **没有真跑重启**：`app.relaunch()` 会终止当前进程，整机验证会切断会话；本页只钉「菜单项存在 +
+  click 出口 + relaunch 调用面」。真实重启后的窗口/会话恢复仍属未验。
+- `shell.openPath` 的 Finder 浮现未离屏验证；路径本身是主进程的 `userData`，不由渲染层提供。
+- dev 模式（`electron .`）的 relaunch 参数用 Electron 默认值；打包态的 `Cairn.app` 走同一条
+  `app.relaunch()`，未在包上复跑。
+- 数据目录包含 settings / projects / license / logs；不含 provider key 明文（钥匙在 safeStorage
+  后端），分享目录前仍由用户自己判断。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 805 页：许可证能导入了——先验签，再覆盖
+
+### 一、缺口（现读）
+
+「关于与更新」只显示许可证状态（有效 / 过期 / 无 / 坏），没有任何导入入口：用户收到发行方签发的
+`license.json` 后，只能自己猜 `<appData>/license.json` 这个路径并手工放进去。台账第 694 页
+早已把这一格记为「只显示，不提供导入/激活入口」——对拿到许可证的用户，「未激活」就是一条死胡同。
+
+### 二、改法
+
+- core 新 `importLicenseFile(source, target, opts)`：64 KiB 上限；读文件 → JSON.parse →
+  `verifyLicense` **先验签**；只有 `valid` / `expired` 才 `writeFileAtomic` 覆盖目标。
+  坏 JSON / 签名不匹配 / 超限 / 不是文件一律拒绝，**现有 license 原样保留**（不拿坏文件覆盖好文件）。
+- `settings-handlers` 新 `handleLicenseImport(sourcePath)`：用已初始化的 license 路径与注入公钥调上面
+  那条；未初始化时显式报错。
+- IPC **v37 → v38**：`importLicense()`（主进程弹原生文件选择器，取消是合法结果；filters 只收 json）；
+  invoke 通道 127 → **128**，README 与 8 个协议钉同步。
+- 「关于与更新」许可证行加「导入许可证…」：导入中禁用；成功后回灌 `license` 状态（标签即时变
+  「有效 · 客户名」）并给回执；取消/失败都上屏，不静默。
+
+### 三、判卷
+
+- 新 `tests/license-import.test.ts` **4 条**（core）：有效签名写盘且重验 valid；过期签名可导入（状态
+  expired）；签名被篡改拒绝且**不覆盖**现有 license；坏 JSON / 超限 / 读不到都不动现有文件。
+- 新 `apps/desktop/tests/license-import-ui.test.ts` **2 条**：按钮走 `window.agent.importLicense()`、
+  成功后 `onLicenseChanged` 回灌；`SettingsPanel` 传 `onLicenseChanged={setLicense}`。
+- 新冒烟 `license-import-smoke.cjs`（真实 renderer）：**6/6 PASS**——真指针点「导入许可证…」⇒
+  标签从「未读取」变「有效 · 测试客户」⇒ 回执「许可证已导入：测试客户」上屏 ⇒ 0 控制台错误。
+- 协议面：`channels.test` 的 mustWire 补 `importLicense`；6 个接线测试 + 2 个版本钉同步 v38。
+- 能造红（实测）：① 删掉 `if (state.state === "invalid") return …` ⇒ 篡改用例 1 条红（坏文件会写进去）；
+  ② 删掉 `props.onLicenseChanged?.(r.state)` 重 build 跑冒烟 ⇒ `Timeout: license tag updated`。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped`）：**576 文件 / 7390 条全绿**，exit 0。
+- 桌面套件（`--maxWorkers=2`）：**266 文件 / 1803 条全绿**，exit 0。
+- `typecheck`（仓根）0；`renderer-layer-check` 绿（162 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/license-import-805/`（`checks.json` + `01-after-license-import.png`）。
+
+### 五、边界
+
+- **真实系统文件选择器没有自动化**：冒烟用夹具直接返回一份 valid license；「选文件 → 主进程读 →
+  验签 → 落盘」三段分别由 IPC 接线、core 判卷与冒烟覆盖，不是一条端到端真机读数。
+- 许可证仍**不阻断功能**（V1 契约不变）：导入只改变显示状态，不 gate 任何能力。
+- 过期签名允许导入（如实显示 expired），不冒充无效；无效签名不覆盖现有文件。
+- 测试用临时 Ed25519 密钥对；发行私钥不在仓库，内置公钥未变。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 806 页：首启检查说人话——七格从设置审计变成七句能看懂的话
+
+### 一、缺口（现读）
+
+首启空屏的「设置检查」七格是工程术语：`Provider 管理（BYOK key · 单价表）`、`权限档位（沙箱状态 ·
+产出代码安全模式）`、`UI（主题 · 面板布局）`、`关于 / 更新（版本 · license · 检查更新）`；说明只
+藏在 `title` tooltip 里，触屏与新用户看不到；出口写「完成，不再显示」，读起来像在关掉一个骚扰提示。
+第一次打开产品的用户读到的是一份设置审计，而不是「从哪开始」。
+
+### 二、改法
+
+- `ONBOARDING_GROUPS` 七组改写为用户语言：**连接模型 / 确认权限与安全 / 主题与布局 / 定时任务 /
+  记忆 / 隐私与遥测 / 版本与更新**；`entry` 改成一句「这格是干什么的」。
+- `OnboardingChecklist` 把 `entry` 从 title 兜底改为**可见的第二行**（`onboard-entry`，
+  `--fs-caption-xs` + dim），七格从单行标签 pill 变成「标题 + 一句说明」的小卡；出口改「开始使用」。
+- 只改文案与行内层级：七组 id / 步号 / 落点表 / 完成动作（`settings.onboarded=true`）全部不动。
+
+### 三、判卷
+
+- core `tests/onboarding-groups.test.ts` 新增 **2 条**（共 7 条）：labels/entries 不含
+  `BYOK / 单价表 / license / 沙箱状态 / 产出代码安全模式 / 面板布局 / Provider 管理 / 遥测开关`
+  等工程词；每组 entry > 8 字且含动作/去处词（不是只有名词）。
+- desktop `onboarding-checklist.test.tsx` 补可见说明断言（`onboard-entry`），**10 条全绿**；原有
+  「七组落点对齐 / 空清单不渲染 / 无落点不摆按钮 / 四步」判据保持不变。
+- 冒烟 `session-continuity-smoke.cjs` **9/9 PASS**（真实主进程 + `onboarded:false`）：首启块含
+  「连接模型」、不含 BYOK / 单价表 / license；每个 `onboard-entry` 可见且非空；其余连续发送 /
+  重载恢复 / 新建任务判据同轮全绿。
+- 能造红（实测）：摘掉 `onboard-entry` 可见行 ⇒ `onboarding-checklist` 1 条红；还原后 10/10。
+- 取料：`apps/desktop/outputs/onboarding-copy-806/00-before.png`（改前 7 个术语 pill）与
+  `01-after.png`（改后 7 张带说明的小卡）。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped`）：**576 文件 / 7392 条全绿**，exit 0。
+- 桌面套件（`--maxWorkers=2`）：**266 文件 / 1803 条全绿**，exit 0。
+- `typecheck`（仓根）0；`renderer-layer-check` 绿（162 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/onboarding-copy-806/`（`checks.json` + 改前/改后截图）。
+
+### 五、边界
+
+- 只改文案与行内层级，**不加/减步骤、不做向导**：仍是「七格检查 + 开始使用」，落点与完成语义不变。
+- 首启块只在 `onboarded === false` 时出现；已 onboarded 的用户不受影响。
+- 改后截图是 1440 宽；880 窄窗没有重新截图（`flex-wrap` 会换行，但未目验）。
+- 本轮未改协议 / 未改主进程判据 / 未动桌面重设计 spec。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 807 页：日志和诊断报告合成一个诊断包——反馈问题只带一个文件
+
+### 一、缺口（现读）
+
+第 800 页给了 `logs/main.log`，第 803 页给了可复制的诊断报告，但支持场景仍要用户分别拿两样东西：
+去菜单开日志目录找到文件，再回设置页复制报告。两样东西分开发，最常见的结局是只收到一半。
+
+### 二、改法
+
+- 新 `apps/desktop/src/main/diagnostics-bundle.ts`：
+  - `readLogTail(file)`：只读末尾 **200 行 / 256 KiB**；文件不存在返回 null（不是错误）；字节或行数
+    截断都置 `truncated`，拼接时明确标注「更早内容已截断」，不冒充完整。
+  - `buildDiagnosticsBundle({ reportText, generatedAt, logTail })`：报告在前、日志围栏在后；
+    没有日志文件时明确写「应用尚未写过 logs/main.log」。
+- IPC **v38 → v39**：`exportDiagnostics(reportMarkdown, suggestedName)`，主进程拼包 + 原生保存面板
+  （Markdown），取消是合法结果；invoke 通道 128 → **129**，README 与 8 个协议钉同步。
+- 「关于与更新」在「复制报告」旁加「导出诊断包…」：跑过诊断才可用；回执带保存路径 / 取消 / 失败。
+
+### 三、判卷
+
+- 新 `apps/desktop/tests/diagnostics-bundle.test.ts` **5 条**（core 侧模块）：报告/时间/围栏都在；
+  没有日志文件明确写出；截断标注；`readLogTail` 只留末尾 N 行且报 truncated；小文件不标、缺文件 null。
+- 冒烟 `doctor-report-smoke.cjs` 从 15 条扩到 **17 条**：真指针点「导出诊断包…」⇒ 回执带
+  `/tmp/cairn-diagnostics.md`（画廊夹具）⇒ 0 控制台错误。
+- 真机取料：用真实启动后 `<userData>/logs/main.log` 的 3 行（byok 注入 / scheduler 收敛 / m4a 启动）
+  拼出 `real-bundle.md`，日志围栏里是这三行真文本。
+- 能造红（实测）：去掉「更早内容已截断」标注 ⇒ 判卷 1 条红；还原后 5/5。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped`）：**576 文件 / 7392 条全绿**，exit 0。
+- 桌面套件（`--maxWorkers=2`）：**267 文件 / 1808 条全绿**，exit 0。
+- `typecheck`（仓根）0；`renderer-layer-check` 绿（162 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/diagnostics-bundle-807/`（`checks.json` + `real-bundle.md` +
+  `01-doctor-report.png`）。
+
+### 五、边界
+
+- 日志只取**末尾 200 行 / 256 KiB**；更早内容被截断并标注，定位需要完整日志时仍走「打开日志文件夹」。
+- 诊断报告文本由渲染层传入（与复制报告同一份 `doctorReportText`），主进程只拼日志与落盘；不自动上传。
+- 保存面板没有自动化：冒烟用夹具返回路径，真实写盘由 `buildDiagnosticsBundle` 单测与真机
+  `real-bundle.md` 覆盖；「选路径 → 写文件」这一段未在整机跑。
+- 打包态未复跑。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 808 页：打包链重新验证——`Cairn.app` 不是 10 月 28 日的旧产物
+
+### 一、缺口（现读）
+
+`apps/desktop/release/` 里的 `Cairn.app` / `Cairn-macOS.zip` 构建于 **10 月 28 日 21:04**，早于
+第 798–807 页这一整段（生命周期 / 诊断导航 / 日志 / 项目重定位 / 失联标注 / 诊断复制 / 维护菜单 /
+许可证导入 / 首启文案 / 诊断包）。README 也没有桌面构建与打包说明：外部读者拿不到可复制的
+「build → smoke → package」路径；`apps/desktop/release-*` 又不在 `.gitignore`，一次试打包就会把
+500MB+ 产物暴露成未跟踪文件。
+
+### 二、改法 / 验证
+
+- 用仓内打包脚本重打一份**新目录**（不覆盖旧 `release/`）：
+
+  ```sh
+  node apps/desktop/scripts/package.mjs --out apps/desktop/release-808
+  ```
+
+  脚本先 `build`，再用打包后的 `Cairn.app` 跑真窗口冒烟；只有冒烟通过才产出目录。
+- 打包态凭据：`build-info.json` = `version 0.1.0`、`platform darwin/arm64`、
+  `sourceLockSha256 eb4c8093…`、`packagedSmoke: passed`、`signature: ad-hoc`、
+  `createdAt 2026-10-30T05:58:44.178Z`；打包态冒烟 `[cairn-smoke] PASS in 1390 ms`。
+- 新功能确实进包（不是旧 dist）：`Cairn.app/…/dist/assets/SettingsPanel-4yAynzTb.js` 里能搜到
+  「导出诊断包」，`apps/desktop/src/main/diagnostics-bundle.ts` 在包内，`src/main/ipc-protocol.ts`
+  含 `exportDiagnostics`。
+- README 新增「桌面应用（macOS）」：build / smoke / package 三条命令、产物清单（`Cairn.app`、
+  `Cairn-macOS.zip`、`build-info.json`）、ad-hoc 签名与 Gatekeeper 说明。
+- `.gitignore` 增 `apps/desktop/release-*/`：试打包目录不再混进工作树。
+- 证据保留：`build-info.json` 与 `package-summary.txt` 落 `apps/desktop/outputs/package-808/`；
+  568MB 的 `release-808/` 验完即删（产物可由脚本重建，不入树）。
+
+### 三、判卷
+
+- 新 `tests/readme-desktop-package.test.ts` **2 条**：README 给出可复制的打包命令与产物清单
+  （`build-info.json` / `packagedSmoke: passed` / `ad-hoc`）；打包脚本仍坚持「冒烟不过不产出」
+  （`packagedSmokePassed` / `不生成已验证产物`）；`.gitignore` 含 `release-*`。
+- `docs-check` 全绿（含第 808 页读取面）。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped`）：**577 文件 / 7394 条全绿**，exit 0。
+- 桌面套件：本页未改桌面源码；同树上一趟 **267 文件 / 1808 条全绿**。
+- `typecheck`（仓根）0；`renderer-layer-check` 绿（162 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/package-808/`（`build-info.json` + `package-summary.txt`）。
+
+### 五、边界
+
+- 打包是 **ad-hoc 签名、未做 Apple 公证**：本机可跑，换机器首次打开可能被 Gatekeeper 拦；
+  内测按「右键 → 打开」放行，不等于可分发给外部用户。
+- 包从**未提交工作树**构建：`build-info.json` 只记 lock 哈希与构建时间，不记 git commit；
+  产物与「提交后的 HEAD」不是一一对应。
+- `pnpm deploy` 期间 npm registry 出现多次超时重试（最长 45s），最终成功；这是网络环境读数，
+  不是打包链失败。打包总耗时约 2 分钟（含 build）。
+- 没有做双开 / 二次启动验证；打包态只跑了仓内 `CAIRN_SMOKE=1` 冒烟。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 809 页：偏好能备份和迁移了——只搬界面与行为，不搬身份与项目
+
+### 一、缺口（现读）
+
+设置页已经有 30 个左右的偏好（主题、字号、权限档、预算、各类开关），但换机或支持排障时没有
+任何导出/导入入口：用户只能手改 `settings.json`，或者把整份设置文件拷到另一台机器。整份文件里
+混着 `provider` / `model` / `workspace` / `currentSession` / `onboarded` / `layout`——整份导入会把
+人带到别人的工作区、让新机器误以为已经完成首启，或把窗口布局带成另一台机器的形状。
+
+### 二、改法
+
+- 新 `src/main/preferences.ts`：
+  - 白名单 **28 个键**（主题 / 语言 / 字号 / 尺寸 / 权限档 / 预算 / 并发上限 / 更新源 / 各类开关），
+    `pickPreferences` 只挑这些；provider、model、workspace、currentSession、onboarded、layout 一律不进。
+  - 导出格式 `{ format: "cairn-preferences-v1", appVersion, exportedAt, preferences }`。
+  - 导入严格校验：已知键类型/枚举/范围不对 → **整份拒绝并点名键**；未知键忽略并回报（新版本备份
+    在旧版本上不会整份失败）；空偏好拒绝；文件上限 64 KiB。
+- IPC **v39 → v40**：`exportPreferences()` / `importPreferences()`；invoke 通道 129 → **131**，
+  README 与 8 个协议钉同步。
+- 「关于与更新」加「偏好备份」行：导出偏好… / 导入偏好…；导入先读 patch，再走既有
+  `setSettings(patch)`（主题/窗口材质热更新沿用原路径），成功后回灌整份设置并给
+  「已导入 N 项偏好；忽略 M 项不认识的设置」回执。
+
+### 三、判卷
+
+- 新 `tests/settings-preferences.test.ts` **6 条**（core）：pick 不含身份/项目/会话/布局；build→parse
+  往返值不变；主题/布尔/并发上限/预算/更新源坏值整份拒绝且点名；format/空偏好/非对象拒绝；
+  未知键忽略并回报；`readPreferencesFile` 好文件/坏 JSON/超限/缺文件。
+- 新 `apps/desktop/tests/preferences-ui.test.ts` **2 条**：导出/导入按钮接线；导入先
+  `importPreferences()` 再 `setSettings(patch)`，成功后 `onPreferencesImported` 回灌；SettingsPanel
+  传 `setS`。
+- 新冒烟 `preferences-backup-smoke.cjs` **8/8 PASS**（真实 renderer）：真指针点导出 → 回执带
+  `/tmp/cairn-preferences.json`；点导入 → 回执「已导入 1 项偏好」，且 `getSettings().textSize`
+  真的变成 `lg`；0 控制台错误。
+- 能造红（实测）：删掉枚举白名单判断 ⇒ 坏主题用例 1 条红；还原后 6/6。
+- 协议面：`channels.test` mustWire 补两个键；6 个接线测试 + 2 个版本钉同步 v40。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped`）：**578 文件 / 7400 条全绿**，exit 0。
+- 桌面套件（`--maxWorkers=2`）：**268 文件 / 1810 条全绿**，exit 0。
+- `typecheck`（仓根）0；`pnpm --filter cairn-desktop typecheck` 0；`renderer-layer-check` 绿
+  （162 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/preferences-backup-809/`（`checks.json` +
+  `01-after-preferences-import.png`）。
+
+### 五、边界
+
+- 只搬偏好：**不含** provider key / model / 项目路径 / 当前会话 / 首启标记 / 窗口布局；换机后模型与
+  项目仍要各自配置。
+- 导入是 patch 语义：备份里有的键覆盖，没写的键保持本机现值；不是「整份替换」。
+- 导出包含 `updateManifestUrl`（只接受空或 https）与 `windowVibrancy`（材质仍可能要重启窗口）。
+- 真实系统文件选择器未自动化：冒烟用夹具返回 patch；「选文件 → 读 → 严格校验」由 core 判卷覆盖。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 810 页：配了更新源的人，启动时就知道有新版本
+
+### 一、缺口（现读）
+
+「检查更新」一直只在设置页手动点；`updateManifestUrl` 配好的人也要先想起去点，否则永远看不到
+新版本。更新源是产品分发的一部分，缺的是启动时的一次轻量提醒——不下载、不安装，只把
+「有可用版本」说出来。
+
+### 二、改法
+
+- 新 `apps/desktop/src/renderer/state/update-notice.ts`：
+  - `shouldCheckForUpdate(last, now)`：首次 / 非数 / 时钟倒退都查；**24h 节流**（`cairn.update-check.v1`
+    存 localStorage），23h 内不重复打扰。
+  - `updateNoticeText(result)`：只有 `available` 才出「发现新版本 X——到「设置 → 关于与更新」查看」；
+    `unconfigured` / `up-to-date` / `error` 全部静默（详细错误面仍在设置页手动检查）。
+  - `useUpdateNotice(notify)`：读 `getSettings()`，有 `updateManifestUrl` 才 `checkUpdate()`；不下载、
+    不安装；失败不弹窗。
+- `WorkbenchView` 启动时调 `useUpdateNotice(setLastNotice)`：复用现有全局 notice strip，不新造浮层。
+
+### 三、判卷
+
+- 新 `apps/desktop/tests/update-notice.test.ts` **3 条**：24h 节流（null/NaN/时钟倒退/23h/24h）；
+  只有 available 出文案（版本号进句子），其余三态 null；WorkbenchView 真调用 hook（防死文件）。
+- 新冒烟 `update-notice-smoke.cjs` **5/5 PASS**：画廊夹具配好更新源 + `available` 回包 ⇒ 启动后
+  notice 上屏「发现新版本 0.2.0——到「设置 → 关于与更新」查看」⇒ 只有一条、0 控制台错误。
+- 能造红（实测）：把 24h 判断改成恒真 ⇒ 23h 用例 1 条红；还原后 3/3。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**269 文件 / 1813 条全绿**，exit 0。
+- 本页未改 core；同树上一趟全量 core 为 **578 文件 / 7400 条全绿**。
+- `typecheck`（仓根 + `--filter cairn-desktop typecheck`）0；`renderer-layer-check` 绿
+  （162 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/update-notice-810/`（`checks.json` + `01-update-notice.png`）。
+
+### 五、边界
+
+- notice 是**当前会话的 notice strip**：切换会话会跟着会话走，不是常驻角标；本轮没有做持久徽标。
+- 只有配置了 `updateManifestUrl` 才检查；未配置 = 完全静默，不冒充「已是最新」。
+- 24h 节流存 localStorage：清缓存/换 profile 会重新查一次；检查失败也记时间，避免每启动重试风暴。
+- 不自动下载/安装，也不打开下载页；用户仍需到设置页手动检查与取包。
+- 打包态没有重跑这条冒烟。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 811 页：更新提醒不再跟着会话走——头像上有常驻红点
+
+### 一、缺口（现读）
+
+第 810 页的「发现新版本」走的是 `lastNotice`，而 `lastNotice` 是**按会话**存的：用户切到另一个
+会话，提醒就消失；关掉再开也要等下一次 24h 检查。更新提醒应该是全局事实，不是某条会话的附注。
+
+### 二、改法
+
+- `state/update-notice.ts` 增全局 store：`getAvailableUpdate` / `setAvailableUpdate` +
+  `useAvailableUpdate`（`useSyncExternalStore`，SSR 固定 null）；检查到 `available` 时同时写 store
+  和当前会话 notice。
+- `Sidebar` 读同一个 store：头像按钮加 `data-update="true"`（右上角 6px 红点），头像菜单顶部加
+  「发现新版本 X」项；点它走 `onOpenUpdateSettings`（缺省回落 `onOpenSettings`），打开设置
+  「关于与更新」。文案进 `STR.sidebar.updateAvailableTitle` / `updateMenuItem`（重做面不许裸中文）。
+- `WorkbenchView` 把 `onOpenUpdateSettings` 接进 `chatSidebar`（1 行，1195/1200）。
+
+### 三、判卷
+
+- `apps/desktop/tests/update-notice.test.ts` 增至 **5 条**：24h 节流 / 只有 available 出文案 /
+  WorkbenchView 真调 hook；新增 store set/get 与 Sidebar 接线见证（`useAvailableUpdate()`、
+  `STR.sidebar.updateMenuItem`、`data-update`）。
+- 冒烟 `update-notice-smoke.cjs` 从 5 条扩到 **8 条**：头像红点 `data-update=true` ⇒ 真指针开头像菜单
+  ⇒ 菜单含「发现新版本 0.2.0」⇒ 点菜单项打开设置「关于与更新」；0 控制台错误。
+- 能造红（实测）：摘掉 `data-update` 属性 ⇒ Sidebar 接线 1 条红；还原后 5/5。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**269 文件 / 1815 条全绿**，exit 0。
+- 本页未改 core；同树上一趟全量 core 为 **578 文件 / 7400 条全绿**。
+- `typecheck`（仓根 + `--filter cairn-desktop typecheck`）0；`renderer-layer-check` 绿
+  （163 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/update-notice-811/`（`checks.json` + `01-update-notice.png` +
+  `02-update-menu.png`）。
+
+### 五、边界
+
+- 红点只在**本次进程**里常驻；重启后要等启动检查重新拿到 `available`（24h 节流命中时可能不查）。
+  没有做跨启动的「此版本已提醒」持久化。
+- 没有「忽略此版本」动作；红点会一直挂到版本号变化或用户更新。
+- 头像菜单项是唯一文字出口；notice strip 仍然只在当前会话出现。
+- 打包态没有重跑这条冒烟。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 812 页：演示模式不再冒充「服务正常」
+
+### 一、缺口（现读）
+
+默认 provider 是 `demo`——回复来自预录剧本、不产生真实调用、也不读项目。模型选择器里虽然写着
+「演示」，但页脚状态点是绿色 +「服务正常」，新用户很容易把剧本回复当成真模型。这不是视觉问题，
+是产品诚实问题：状态点说了一个它没有的事实。
+
+### 二、改法
+
+- 标题栏常驻「演示模式」胶囊（`tb-demo`，点开「模型与 Provider」设置）；说明放在 `title`：
+  「回复来自预录剧本，不产生真实调用，也不读取你的项目。点这里连接模型。」
+- 页脚状态点接 `providerDemo`：`data-ok="demo"` + 文案「演示模式」，点仍是模型设置；不再用绿色
+  「服务正常」。
+- `STR.demoBanner.chip/tip` + `STR.footer.providerDemo`；AppToolbar 与 Sidebar 各读各的，不抄文案。
+- 曾试过顶部横幅：在 900 高窗口把 `.empty` 压到 126px，chip 与 composer 叠在一起；已撤，改为
+  标题栏胶囊（不占空屏弹性高度）。
+
+### 三、判卷
+
+- 新 `apps/desktop/tests/demo-banner.test.tsx` **2 条**：AppToolbar 有 `tb-demo` / `STR.demoBanner.chip`
+  / `tip` / `demo === true`；WorkbenchView 只在 `providerInfo?.kind === "demo"` 时传 `demo`；Sidebar
+  用 `STR.footer.providerDemo` 且 `data-ok="demo"`。
+- 冒烟 `session-continuity-smoke.cjs` 从 9 条扩到 **11 条**（真实 demo profile）：标题栏胶囊文本
+  含「演示模式」且 title 含「预录剧本」；页脚状态点文本「演示模式」且 `data-ok="demo"`；其余会话
+  连续/重载/新建判据同轮全绿。
+- 能造红（实测）：把 `demo === true` 改成 `false &&` ⇒ 标题栏用例 1 条红；还原后 2/2。
+- 首屏截图里标题栏右上与页脚左下都能读到「演示模式」，空屏布局与之前一致（无横幅挤压）。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**270 文件 / 1817 条全绿**，exit 0。
+- 本页未改 core；同树上一趟全量 core 为 **578 文件 / 7400 条全绿**。
+- `typecheck`（仓根 + `--filter cairn-desktop typecheck`）0；`renderer-layer-check` 绿
+  （163 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/demo-honesty-812/`（`checks.json` + `01-home.png`）。
+
+### 五、边界
+
+- 胶囊只在 `providerInfo.kind === "demo"` 时出现；真实 provider 的绿点逻辑不变。
+- 胶囊点击进入「模型与 Provider」；没有在冒烟里点它（避免打断会话连续性流程），
+  `onClick` 接线由 AppToolbar 源码判据覆盖。
+- 只改状态文案与入口，不改 demo provider 的行为与默认值。
+- 打包态没有重跑这条冒烟。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 813 页：导入偏好先给预览，别一选文件就覆盖
+
+### 一、缺口（现读）
+
+第 809 页的「导入偏好…」在选完文件后**立即** `setSettings(patch)`：用户看不到这份备份要改哪几项，
+选错文件就直接覆盖主题、字号、预算与开关。导入是覆盖写，产品不能把「选文件」当成「确认应用」。
+
+### 二、改法
+
+- `AboutSection` 增 `pendingImport` 状态：`importPreferences()` 只读取并暂存 `{ patch, ignored }`，
+  不落盘；弹 `ConfirmDialog`「导入偏好？」列出将覆盖的键（前 8 个，超出写「等」），并说明
+  「模型、项目路径、会话与首启标记不会改变」。
+- 只有点「应用」才 `setSettings(pendingImport.patch)` → 回灌整份设置 → 回执；点「取消」关卡片，
+  当前设置原样保留。`ignored` 的未知键数量在回执里带出。
+
+### 三、判卷
+
+- `apps/desktop/tests/preferences-ui.test.ts` 更新为 **2 条**：导入只暂存 `setPendingImport`；应用时才
+  `setSettings(pendingImport.patch)` 并回灌；确认卡标题与 `<ConfirmDialog` 在场。
+- 冒烟 `preferences-backup-smoke.cjs` 从 8 条扩到 **10 条**（真实 renderer）：点导入 ⇒ 确认卡出现且
+  正文含 `textSize` ⇒ 点「应用」⇒ 回执「已导入 1 项偏好」且 `getSettings().textSize` 真的变 `lg`；
+  0 控制台错误；新增 `01-import-preview.png` 目验卡面。
+- 能造红（实测）：摘掉 `<ConfirmDialog` 渲染 ⇒ `preferences-ui` 1 条红；还原后 2/2。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**270 文件 / 1817 条全绿**，exit 0。
+- 本页未改 core；同树上一趟全量 core 为 **578 文件 / 7400 条全绿**。
+- `typecheck`（仓根 + `--filter cairn-desktop typecheck`）0；`renderer-layer-check` 绿
+  （163 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/preferences-preview-813/`（`checks.json` +
+  `01-import-preview.png` + `02-after-import.png`）。
+
+### 五、边界
+
+- 预览只列**键名**，不显示值的前后对比；备份里的值仍由 core 严格校验（坏值整份拒绝）。
+- 取消只关确认卡，不重新读文件；再次导入要重新选文件。
+- 真实系统文件选择器仍未自动化：冒烟用夹具返回 patch；文件读取/校验由 core 判卷覆盖。
+- 打包态没有重跑这条冒烟。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 814 页：设置搜索能打到维护动作，许可证到期不再是一串 ISO 时刻
+
+### 一、缺口（现读）
+
+第 805–813 页把许可证导入、诊断包、偏好备份都放进了「关于与更新」，但设置导航搜索只认分区名
+与同义词：输入「备份」「迁移」「许可证」得到空导航，用户只能猜这些动作藏在哪。许可证行则把
+`2027-01-01T00:00:00Z` 原样印出来，且到期前没有任何提醒。
+
+### 二、改法
+
+- `SECTION_KEYWORDS.about` 补：`偏好 备份 迁移 导入 导出 许可证 license 数据目录`——
+  「关于与更新」成为这些维护动作的搜索落点（搜索仍是**分区级**，不冒充行级全文搜索）。
+- `licenseLabel` 把 ISO 时刻截到日（`2027-01-01`）；新 `licenseExpiryHint(state, now)`：
+  过期 →「已于 YYYY-MM-DD 过期」；当天 →「今天到期」；30 天内 →「还有 N 天到期」；远日/null 不出。
+  About 许可证行把 hint 作为 `sp-dim` 回执显示。
+
+### 三、判卷
+
+- `settings-section-search.test.ts` 增至 **11 条**：`备份 / 迁移 / 许可证 / 偏好` 都命中 `about`。
+- `settings-sections.test.tsx` 增至 **30 条**：新增到期摘要（远日 null / 10 天 / 当天 / 过期 / 无到期）
+  与「标签截到日」两条。
+- 新冒烟 `settings-search-smoke.cjs` **8/8 PASS**（真实 renderer）：依次输入「备份」「迁移」「许可证」
+  ⇒ 导航只剩「关于与更新」⇒ 点进去正文同时看到偏好备份 / 导入许可证 / 导出诊断包；无关词不伪造命中；
+  0 控制台错误。
+- 回归：`license-import-smoke` 仍 **6/6 PASS**（无到期日的 valid 不显示 hint）。
+- 能造红（实测）：删掉 about 词表里的「备份」等词 ⇒ 搜索判卷 1 条红；还原后 11/11。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**270 文件 / 1819 条全绿**，exit 0。
+- 本页未改 core；同树上一趟全量 core 为 **578 文件 / 7400 条全绿**。
+- `typecheck`（仓根 + `--filter cairn-desktop typecheck`）0；`renderer-layer-check` 绿
+  （163 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/settings-search-814/`（`checks.json` + `01-settings-search.png`）。
+
+### 五、边界
+
+- 搜索仍是**分区级**：输入行内开关名（如「字号」以外的新词）不一定命中；没有做成设置全文搜索。
+- 到期提醒只在 30 天内出现，且只在打开「关于与更新」时可见；没有系统通知/邮件提醒。
+- 许可证状态来自 `getState().license`；画廊夹具没有 license，截图里仍是「未读取」，hint 由 headless
+  判卷覆盖。
+- 打包态没有重跑这两条冒烟。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 815 页：目的地页的操作错误不再漏进对话（app-shell 冒烟当场抓到的真红）
+
+### 一、缺口（现读）
+
+`app-shell-smoke.cjs` 的「page operation failure does not leak into chat」红了：在自动化页点「立即运行」
+失败后切回对话，对话区仍会出现一条 `触发失败` 的 error strip。根因在 `AppPage` 的 `reportError`：
+它同时写本页 `operationError` 和 `props.onError`（工作台 `setLastError`），而 `WorkbenchView` 把
+`AppPageBody.onError` 接到了 `setLastError`——目的地错误被复制成全局错误。
+
+### 二、改法
+
+- `AppPage.reportError` 只写本页 `operationError`；删掉 `props.onError?.(message)`。
+- `AppPageBody` 删掉 `onError` prop；`WorkbenchView` 不再给 `AppPageBody` 传 `setLastError`。
+- 顺带修 app-shell 冒烟自身的三处陈旧：
+  - `railState.currents` 只数 `.app-rail-item[aria-current="page"]`（页内「发现」导航也有
+    `aria-current="page"`，不能把它算成第二个全局目的地）。
+  - 插件页 fixture 加 `--cairn-plugin-marketplace-fixture`；卡片选择器从旧的 `.ap-card` /
+    `.ap-drawer` 更新到 `.plugin-discover-main` / `.plugin-detail`，搜索词改用 fixture 里的
+    `Featured`（旧 `demo-plugin` 在新目录里不存在）。
+
+### 三、判卷
+
+- `apps/desktop/tests/app-page.test.tsx` 增至 **18 条**：新增「reportError 只写本页、不再回调
+  lastError；WorkbenchView 的 AppPageBody 不传 onError」源码判据。
+- `app-shell-smoke.cjs` 全量 **44/44 PASS**（含 1440 / 1120 / 880 宽度、插件详情跨页保留、目的地错误
+  不外漏、0 控制台错误）；修复前同一条为 FAIL，修复后同一条 PASS。
+- 真红证据：`apps/desktop/outputs/app-shell-815f/checks.json`（44/44）与失败首跑
+  `apps/desktop/outputs/app-shell-815/` 的 `checks.json`。
+
+### 四、读数
+
+- 桌面套件（`--maxWorkers=2`）：**270 文件 / 1820 条全绿**，exit 0。
+- 本页未改 core；同树上一趟全量 core 为 **578 文件 / 7400 条全绿**。
+- `typecheck`（仓根 + `--filter cairn-desktop typecheck`）0；`renderer-layer-check` 绿
+  （163 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/app-shell-815g/`（`checks.json` + 9 张宽度/错误态截图）。
+
+### 五、边界
+
+- app-shell 是**夹具冒烟**：插件目录、快照、操作失败都是合成数据；它证明的是渲染层接线与跨页状态，
+  不是真插件市场可用性。
+- 只修「目的地错误泄漏」；对话自身的 `lastError` 语义不变（仍是全局错误位）。
+- app-shell 的测试选择器更新不改变产品页面；旧 `.ap-card` 判据已随插件页重做作废。
+- 打包态没有重跑这条冒烟。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 816 页：同一工作区的并发会话不再被「根锁」一口拒绝
+
+### 一、缺口（现读）
+
+全量 core 跑出 1 条真红：`tests/session-lock-recovery.test.ts` 的
+`cross-process recovery: shared=false admits 4 writers` 期望 4 条不同会话各拿到 run lock，实测只有
+1 条 `ok:true`。根因在 `session-mutation-lock.acquireRootLock`：`open(...,"wx")` 撞 `EEXIST` 时直接
+抛「会话根正被另一个进程占用」。可根锁只覆盖**建/删/改的短临界区**——四条不同会话并发启动时，
+后 3 个把几毫秒的临界区误读成「根被长期占用」，直接失败。
+
+### 二、改法
+
+- `acquireRootLock`：`EEXIST` 且持有 pid **活着** ⇒ 10ms 轮询重试，最多 2s；空锁/刚释放也重试；
+  死 pid 的遗留锁仍立即报「需人工确认后删除」；2s 后仍占用才报 busy。
+- 不改变 run lock 语义（旁路 `.lock`、nonce 释放、pid 死活判据）。
+
+### 三、判卷
+
+- `tests/session-lock-recovery.test.ts`：**12/12 全绿**（含 `shared=false` 四写者、`shared=true` 单写者、
+  坏锁回收、根锁占用拒写）。
+- 全量 core（`pnpm test:capped`）：**580 文件 / 7415 条全绿**，exit 0。
+- 能造红（实测）：修复前同一用例单独跑 1 failed（期望 4 得 1），全量 core 同条红；修复后 12/12。
+
+### 四、边界
+
+- 只解「短临界区被误判长期占用」；真正长期占用（>2s）仍 fail-closed，不无限等待。
+- 2s 是产品取舍：并发启动 4 条会话足够，但恶意/卡死持有者仍会被拒。
+- 没有做公平队列；多个进程同时重试时仍是先到先得。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 817 页：偏好能恢复默认了——只回偏好，不动模型与项目
+
+### 一、缺口（现读）
+
+第 809/813 页有了偏好导出、导入预览，但用户把 30 个开关试乱后没有回默认的出口：只能逐项手调，
+或从旧备份里猜哪些是默认。恢复默认必须是产品动作，不是「再来一遍设置」。
+
+### 二、改法
+
+- core 新 `defaultPreferences()`：复用 `pickPreferences(DEFAULT_SETTINGS)`，仍不碰 provider / model /
+  workspace / currentSession / onboarded / layout。
+- IPC **v40 → v41**：`resetPreferences()`，主进程把默认 patch 走 `setSettings`，并复用
+  `applyNativeSettings` 同步主题与窗口材质；invoke 通道 131 → **132**，README 与 8 个协议钉同步。
+- 「关于与更新」偏好行加「恢复默认…」：先弹 `ConfirmDialog`「恢复默认偏好？」说明只动偏好键；
+  确认后回灌整份设置并给「已恢复默认偏好」回执。
+
+### 三、判卷
+
+- `tests/settings-preferences.test.ts` 增至 **7 条**：`defaultPreferences()` 等于默认设置的偏好投影，
+  且仍不含身份/项目/会话/布局。
+- `apps/desktop/tests/preferences-ui.test.ts` **2 条**：恢复按钮、`resetPreferences()`、确认卡标题在场。
+- 冒烟 `preferences-backup-smoke.cjs` 扩到 **14/14 PASS**：导入把 `textSize` 改成 `lg`，点「恢复默认…」
+  ⇒ 确认卡 ⇒ 点「恢复默认」⇒ 回执且 `getSettings().textSize` 回到 `md`；0 控制台错误。
+- 能造红（实测）：摘掉「恢复默认…」按钮 ⇒ preferences-ui 1 条红；还原后 2/2。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped`）：**580 文件 / 7415 条全绿**，exit 0。
+- 桌面套件（`--maxWorkers=2`）：**271 文件 / 1821 条全绿**，exit 0。
+- `typecheck`（仓根 + `--filter cairn-desktop typecheck`）0；`renderer-layer-check` 绿
+  （163 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/preferences-reset-817/`（`checks.json` + `01-import-preview.png` +
+  `02-after-import.png` + `03-after-reset.png`）。
+
+### 五、边界
+
+- 恢复默认**不可撤销**（没有内置快照）；想留后路先导出偏好备份。
+- 只动偏好键；模型、项目路径、会话、首启标记、窗口布局都不变。
+- 主题/材质走既有热更新；仍有「需重启窗口」的材质边界（与设置页同口径）。
+- 真实系统确认卡/文件选择器未自动化；冒烟用夹具覆盖渲染路径。
+- 打包态没有重跑这条冒烟。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 818 页：当前产品面重新进包 + 四套真机冒烟巡检
+
+### 一、缺口（现读）
+
+上一份 `Cairn.app`（第 808 页）构建于偏好备份、恢复默认、演示标识、设置搜索之前；这段产品面
+只活在源码与 dist 里。另 `interaction-smoke` 在窄窗段有两条「侧栏应该是收起态」的陈旧假设：
+前序步骤已把侧栏留在展开态，脚本仍直接量 `.sidebar-rail`，结果不是产品红，是脚本自己炸。
+
+### 二、改法 / 验证
+
+- 修 `interaction-smoke` 两处：折叠断言前先按实际状态补一次 ⌘B；窄窗量 rail 时允许先收起。
+  修后 **31/31 PASS**。
+- 巡检：`layout-smoke` **15/15**；`desktop-design-smoke` PASS；`hardening-smoke` PASS；
+  `app-shell-smoke` **44/44**（第 815 页修完后的全量）。
+- 重打当前包：
+
+  ```sh
+  node apps/desktop/scripts/package.mjs --out apps/desktop/release-818
+  ```
+
+  `build-info.json`：`version 0.1.0`、`packagedSmoke: passed`、`ad-hoc`、
+  `createdAt 2026-10-30T07:37:41.146Z`；打包态冒烟 **PASS in 2073 ms**。
+- 新功能确实进包：`SettingsPanel-18sBRd1M.js` 含「恢复默认偏好」，`index-DWxJ5BAA.js` 含「演示模式」，
+  `src/main/ipc-protocol.ts` 含 `resetPreferences`。
+- 568MB 的 `release-818/` 验完即删；证据留 `outputs/package-818/`（`build-info.json` +
+  `package-summary.txt`）。
+
+### 三、读数
+
+- 桌面套件（`--maxWorkers=2`）：**271 文件 / 1821 条全绿**，exit 0。
+- 全量 core（`pnpm test:capped`）：**580 文件 / 7415 条全绿**，exit 0。
+- `typecheck`（仓根 + `--filter cairn-desktop typecheck`）0；`renderer-layer-check` 绿
+  （163 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/interaction-818/checks.json`（31/31）、`layout-818/checks.json`
+  （15/15）、`package-818/`（打包凭据）。
+
+### 四、边界
+
+- 打包仍是 **ad-hoc 签名、未公证**；本机可跑，换机可能被 Gatekeeper 拦。
+- 包从**未提交工作树**构建，`build-info.json` 不记 git commit。
+- 四套冒烟都是**夹具**：布局/交互/设计/加固的合成数据不等于真 Provider 或真插件市场。
+- 打包态只跑仓内 `CAIRN_SMOKE=1`，没有在包上逐页复跑四套冒烟。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 819 页：关于页的版本号不再恒为 0.0.1
+
+### 一、缺口（现读）
+
+`settings-handlers.initUpdateContext` 是一个**零调用点**的死锚点：`appVersion` 一直是缺省的
+`"0.0.1"`。关于页的「版本」与「检查更新」的 currentVersion 都读它——打包出来的 `Cairn.app`
+版本是 `0.1.0`，界面却可能自称 `0.0.1`；更新比较也会把当前版本读错。
+
+### 二、改法
+
+- 桌面装配根在 `createKernelHost` 之前调用
+  `initUpdateContext({ currentVersion: app.getVersion() })`——版本从 Electron 读取真实包版本，
+  不再靠缺省常量。
+- 画廊 `getState` 夹具补 `about: { version: "0.1.0" }`，目验截图能显示真版本而不是「—」。
+- 无协议变更、无新通道；只是把既有的初始化出口接上真实值。
+
+### 三、判卷
+
+- 新 `tests/app-version.test.ts` **2 条**：`initUpdateContext` 后 `getAppVersion()` 返回注入值；
+  桌面装配根含 `initUpdateContext({ currentVersion: app.getVersion() })`（防死 import 回退）。
+- `preferences-backup-smoke` **14/14 PASS**；截图里「版本」显示 `0.1.0`（`version-819/03-after-reset.png`）。
+- 能造红（实测）：删掉启动里的 `initUpdateContext(...)` ⇒ app-version 源码判据 1 条红；还原后 2/2。
+- 重新打包 `release-819`：`build-info.json` = `version 0.1.0`、`packagedSmoke: passed`、`ad-hoc`、
+  `createdAt 2026-10-30T07:47:07.229Z`；打包态冒烟 **PASS in 5140 ms**；包内
+  `apps/desktop/src/main/index.ts` 含版本注入行。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped`）：**581 文件 / 7417 条全绿**，exit 0。
+- 桌面套件（`--maxWorkers=2`）：**271 文件 / 1821 条全绿**，exit 0。
+- `typecheck`（仓根 + `--filter cairn-desktop typecheck`）0；`renderer-layer-check` 绿
+  （163 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/version-819/`（含 About 版本 0.1.0 截图）+
+  `apps/desktop/outputs/package-819/`（`build-info.json` + `package-summary.txt`）。
+
+### 五、边界
+
+- `app.getVersion()` 读的是 Electron 应用版本（开发态来自 package.json）；包内 `build-info.json`
+  的构建时间/签名仍未显示在 About，只是版本号正确了。
+- 画廊夹具的 `about.version=0.1.0` 是**视觉夹具**，不是真实应用读数；真实读数由 `app.getVersion()`
+  注入与源码判据覆盖。
+- 打包仍 ad-hoc、未公证；包从**未提交工作树**构建，`build-info.json` 不记 commit。
+- 568MB 的 `release-819/` 验完即删。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 820 页：关于页显示构建来源——包内 build-info 不再只躺在 zip 旁边
+
+### 一、缺口（现读）
+
+打包脚本产出的 `build-info.json` 只放在 release 目录旁边，应用自己读不到；关于页的版本行只有
+一个 `0.1.0`，支持场景无法回答「这个包是什么时候、什么签名、打包冒烟过没过」。用户拿到一个
+ad-hoc 包，也没法在应用内确认构建凭据。
+
+### 二、改法
+
+- 打包脚本把 `build-info.json` 同时写进 `Cairn.app/Contents/Resources/app/build-info.json`
+  （与 staging 的构建凭据是**同一个对象**，createdAt 一致）。
+- core 新 `build-info.ts`：严格解析七个字符串字段，缺一/坏 JSON/缺文件 = null（开发态不编造）。
+- 状态面 `about` 增可选 `build`（协议 **v41 → v42**；通道仍 132，无新 IPC）；启动时
+  `initBuildInfo(readBuildInfoSync(app.getAppPath()/build-info.json))`。
+- 关于页版本行显示：`0.1.0  构建于 2026-10-30 · ad-hoc · 冒烟 已过`；开发态/旧包不显示。
+
+### 三、判卷
+
+- 新 `tests/build-info.test.ts` **2 条**：七字段严格形状；好文件/坏 JSON/缺文件。
+- `apps/desktop/tests/settings-sections.test.tsx` 增至 **31 条**：版本行包含构建日期 / 签名 / 冒烟凭据。
+- 冒烟 `preferences-backup-smoke` **14/14 PASS**；截图 `build-info-820/03-after-reset.png` 里版本行显示
+  `0.1.0 构建于 2026-10-30 · ad-hoc · 冒烟 已过`。
+- 重新打包 `release-820`：包内 `build-info.json` 与 staging 同对象；打包态冒烟 **PASS in 1918 ms**；
+  包内 `apps/desktop/src/main/index.ts` 含 `initBuildInfo(readBuildInfoSync(...))`。
+- 能造红（实测）：删掉版本行的 build 显示 ⇒ settings-sections 1 条红；还原后 31/31。
+
+### 四、读数
+
+- 全量 core（`pnpm test:capped`）：**582 文件 / 7419 条全绿**，exit 0。
+- 桌面套件（`--maxWorkers=2`）：**271 文件 / 1822 条全绿**，exit 0。
+- `typecheck`（仓根 + `--filter cairn-desktop typecheck`）0；`renderer-layer-check` 绿
+  （163 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/build-info-820/`（含版本行截图）+
+  `apps/desktop/outputs/package-820/`（包内 build-info + summary）。
+
+### 五、边界
+
+- build-info 由打包脚本自己写，**不是签名凭据**；ad-hoc 包仍不可分发给外部用户。
+- 只显示构建日期（`createdAt` 截到日）、签名方式、打包冒烟状态；不显示 sourceLock 哈希/commit。
+- 开发态 / 旧包没有 build-info ⇒ 版本行只显示版本号，不编造「构建于」。
+- `release-820/` 568MB 验完即删；包从**未提交工作树**构建。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 821 页：README 终于像桌面产品——两张真实 renderer 截图 + 能力面一段话
+
+### 一、缺口（现读）
+
+README 的「桌面应用」只有 build/smoke/package 命令，没有一张界面截图；外部读者看到的是一棵
+CLI 仓库，看不见桌面端已经补上的项目/会话、偏好备份、许可证、诊断包、更新提醒。产品化不仅是
+代码，入口页也得让人看见产品。
+
+### 二、改法
+
+- 新增 `assets/readme/`（**不放 docs/**：D-7 不许 docs 下留二进制）：
+  - `cairn-home.png`：第 812 页的真 renderer 首启空屏（演示模式胶囊、首启检查、项目选择）；
+  - `cairn-settings-about.png`：第 820 页的关于页（版本 0.1.0 + 构建来源 + 许可证 + 偏好备份）。
+- README 桌面段落插入两张图 + 一段能力面说明（项目/会话、模型/权限、插件/记忆/自动化、诊断包、
+  偏好备份/恢复默认、许可证导入、更新提醒）；明确未配置更新源/插件目录/许可证显示显式状态。
+- 新 `apps/desktop/tests/readme-assets.test.ts`：README 里每张本地截图都必须存在且 >10KB，
+  不允许指向不存在路径的「产品截图」。
+
+### 三、判卷
+
+- `readme-assets.test.ts` **1 条 PASS**（2 张图均存在、非空）。
+- `docs-check` 全绿（D-7 不命中：图片在 `assets/readme/`，不在 `docs/`）。
+- 桌面套件（`--maxWorkers=2`）：**274 文件 / 1827 条全绿**，exit 0。为让套件回到全绿，同时修了
+  3 处 v35 会话级偏好签名漂移造成的陈旧断言（run-queue / session-prefs / thinking-selection 的
+  源码哨兵改成带 `workspace`/`runWorkspace` 的现行签名），产品代码未动。
+- 全量 core（同树上一趟）：**582 文件 / 7419 条全绿**。
+- 证据：README 第 42/46 行图片引用 + `assets/readme/` 两张 PNG（195KB / 154KB，已缩到 1440 宽）。
+
+### 四、边界
+
+- 两张图来自**画廊夹具**（demo provider / 首启状态），不是真 Provider 或真实用户数据；图注不写
+  「生产环境」或性能/市场声明。
+- 截图是静态文档资产，界面改版后需要同步换图；没有做像素级文档门（只判存在与非空）。
+- `assets/readme/` 不在 docs 下，是为了遵守 D-7「docs 不留二进制」；不是偷偷绕开文档门。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 822 页：首启检查关掉后还能重新打开
+
+### 一、缺口（现读）
+
+第 806 页把首启七格改成用户语言，但用户点「开始使用」后 `onboarded` 落为 true，界面上再没有
+任何入口把它调回 false——想再看一眼七项检查只能手改 settings.json。首启检查不能是一次性消耗品。
+
+### 二、改法
+
+- `GeneralSection`「使用习惯」加「首启检查」行：入口存在时给「重新显示」按钮；不占用其它设置。
+- `SettingsPanel` 透传 `onShowOnboarding`；`WorkbenchView` 回调做三件事：
+  `setOnboarded(false)` → `window.agent.setSettings({ onboarded: false })` → 关闭设置页；
+  写盘失败走 `setLastError`，不静默。
+- 只改首启标记，不重置主题/字号/权限档/预算等任何其它设置；`workbench` 的 state setter 只多一行
+  （1199/1200 行帽内）。
+
+### 三、判卷
+
+- `settings-sections.test.tsx` 增至 **32 条**：通用段入口 / `onShowOnboarding` 透传 / 只写
+  `onboarded:false` 且 `setOnboarded(false)`。
+- `render-resilience.test.tsx` 的首次挂载哨兵同步到新的解构行（`onboarded, setOnboarded, …`），**6 条全绿**。
+- 桌面套件（`--maxWorkers=2`）：**274 文件 / 1832 条全绿**，exit 0。
+- 全量 core（同树上一趟）：**582 文件 / 7419 条全绿**。
+- `typecheck`（仓根 + `--filter cairn-desktop typecheck`）0；`renderer-layer-check` 绿
+  （163 个渲染层源文件）；`docs-check` 全绿。
+
+### 四、边界
+
+- 只重新显示七格检查，不是重新跑向导；不会清空任何设置或会话。
+- 写盘失败只上屏错误，`onboarded` 的内存态已先置 false（下一次启动仍以磁盘为准）。
+- 没有为这条单独跑真机冒烟；入口/写盘/关闭设置由源码判据覆盖，桌面套件仍在。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 823 页：构建来源行在 880/1120 也站得住
+
+### 一、缺口（现读）
+
+第 820 页给关于页版本行加了「构建于 … · ad-hoc · 冒烟 已过」，但只在 1440 截图里看过。
+`PRODUCT.md` 明确支持 1440 / 1120 / 880 三个真实窗宽；新行在窄窗里会不会把版本行挤成横向滚动，
+此前没有读数。
+
+### 二、改法 / 验证
+
+- 扩 `settings-search-smoke`：打开关于页后，先量 1440 版本行含 `ad-hoc` 且宽度 >0；再把窗口切到
+  1120 / 880，量 `documentElement` 与 `.sp-body` 的横向溢出、版本行可见性，并各留一张截图。
+- 没有产品代码改动；新行本身是 `flex-wrap` 的 `ss-inline`，实测三档都不溢出。
+
+### 三、判卷
+
+- `settings-search-smoke` **11/11 PASS**（原 8 条 + 新 3 条：1440 构建来源、1120 无溢出、880 无溢出）。
+- 读数：1440 行宽 760；1120 `overflow=false / bodyOverflow=false / visible=true`；
+  880 `overflow=false / bodyOverflow=false / visible=true`；0 控制台错误。
+- 桌面套件（`--maxWorkers=2`）：**274 文件 / 1832 条全绿**，exit 0（本轮只改冒烟脚本）。
+- 全量 core（同树上一趟）：**582 文件 / 7419 条全绿**。
+- `typecheck`（仓根 + `--filter cairn-desktop typecheck`）0；`renderer-layer-check` 绿
+  （163 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/settings-responsive-823/`（`checks.json` + 1440/1120/880 截图）。
+
+### 四、边界
+
+- 只量「关于页版本行」这一格，不代替整个设置页的 880 响应式巡检（layout-smoke 另有 15 条）。
+- 冒烟是画廊夹具，不等同真实包；高度固定 760，不覆盖极短窗口。
+- 没有改产品代码，本轮是补支持宽度的证据缺口。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 824 页：记忆能导出了——项目层/全局层、索引与正文都带走
+
+### 一、缺口（现读）
+
+对话、偏好、诊断包都有导出，唯独「记忆」只能一主题一主题地看。记忆是 Cairn 最耐久的一层知识，
+用户换机/归档/交给同事时没有一条可携带的出口；这不是「少个按钮」，是数据可携带性缺口。
+
+### 二、改法
+
+- 新纯函数 `memoryExportMarkdown(snap, generatedAt)`：项目层/全局层分节；每层先导 `MEMORY.md`
+  索引（有才导），再逐主题导出类型/修改时间/大小/正文；空层给「本层暂无主题」，空正文给
+  「此主题暂无正文」。
+- IPC **v42 → v43**：`exportMemory(markdown, suggestedName)`；invoke 通道 132 → **133**。
+  主进程把 `exportTranscript` 的保存面板抽成共用 `saveMarkdownDialog`，`exportMemory` 只是
+  换标题（导出记忆）与缺省文件名（`cairn-memory.md`）。
+- 记忆页工具栏加「导出记忆…」：成功回执带路径；取消不报错；失败走 `onError`。
+
+### 三、判卷
+
+- 新 `apps/desktop/tests/memory-export.test.ts` **2 条**：两层分节 / 索引 / 主题元信息与正文 / 空层；
+  页面真的调 `window.agent.exportMemory(memoryExportMarkdown(memory), "cairn-memory.md")`。
+- 协议钉子：`channels.test` 133 + `exportMemory` 在 mustWire；protocol-version 43；8 个 wiring
+  测试同步。选中套件 **37/37 PASS**。
+- 新 `memory-export-smoke.cjs` **6/6 PASS**：记忆页 → 导出按钮 → 回执
+  `已导出：/tmp/cairn-memory.md`；0 控制台错误。
+- 桌面套件（`--maxWorkers=2`）：**276 文件 / 1837 条全绿**，exit 0。
+- 全量 core（`pnpm test:capped`）：**583 文件 / 7428 条全绿**，exit 0。
+- `typecheck`（仓根 + `--filter cairn-desktop typecheck`）0；`renderer-layer-check` 绿
+  （163 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/memory-export-824/`（`checks.json` + 截图）。
+
+### 四、边界
+
+- 导出的是**当前快照**（索引 + 主题正文 + 类型/时间/大小）；不含待批外部引用、删除历史或模型上下文。
+- 明文 Markdown，不加密；导出路径由用户选，默认 Downloads。
+- 冒烟用画廊夹具，不动真实文件；真实保存面板未自动化。
+- 未重新打包；当前 `release-820` 之后新增的导出通道尚未进包（下一轮如需要再打）。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 825 页：用量统计能复制 CSV 了——按当前时间范围带走逐日明细
+
+### 一、缺口（现读）
+
+用量页有累计、每日趋势、活动热力图与模型表，但数字只能看不能带走：用户想拿成本/用量去表格里
+对账，只能截图或手抄。数据可携带性缺口，同第 824 页记忆导出。
+
+### 二、改法
+
+- 纯函数 `usageCsv(period)`：表头 7 列（日期 / 输入 / 输出 / 缓存读取 / 用量记录 / 输入缺测 /
+  输出缺测），逐日一行，末尾「合计」行；原始整数，不做 `—` 美化（缺测列保留已上报值）。
+- 用量页头部加「复制 CSV」：复制当前 7/30/90 天口径的 `period`；成功提示「CSV 已复制」，
+  剪贴板不可用/拒绝时显示「复制失败：剪贴板不可用」，不静默。
+- 两枚按钮收进 `.ud-header-actions`，窄窗可换行，不挤压标题。
+
+### 三、判卷
+
+- 新 `apps/desktop/tests/usage-export.test.ts` **2 条**：表头/逐日/合计与整数格式；页面真的调用
+  `usageCsv(period)` 且有「复制 CSV」。
+- 新 `usage-export-smoke.cjs` **7/7 PASS**：设置 → 用量统计 → 点复制 → 主进程剪贴板读回
+  `日期,输入Token,输出Token…` 与 `合计,`；0 控制台错误。
+- 桌面套件（`--maxWorkers=2`）：**277 文件 / 1839 条全绿**，exit 0。
+- 全量 core（同树上一趟）：**583 文件 / 7428 条全绿**。
+- `typecheck`：`--filter cairn-desktop typecheck` 0；仓根 tracked 面 0，但有一份**未跟踪草稿**
+  `tests/interop-a2a-auth.test.ts` 报 1 条（不属本轮改动，未触碰）；`renderer-layer-check` 绿
+  （163 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/usage-csv-825/`（`checks.json` + 截图）。
+
+### 四、边界
+
+- 只复制当前选择的时间范围（7/30/90 天），不是全量账本；切换范围后需再点一次。
+- CSV 只含逐日明细，不含模型分组与未记日期桶；模型表仍在界面里。
+- 依赖系统剪贴板；失败会显示错误，但不会自动改成下载文件。
+- 没有改协议/通道；复制的纯文本未加密。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 826 页：记忆/用量导出进当前包，并在 880 窄窗验过
+
+### 一、缺口（现读）
+
+第 824/825 页新增了记忆导出与用量 CSV，但 `release-820` 是它们之前的包；同时两条新工具栏都
+只在 1440 点击过，`PRODUCT.md` 支持的 880 窄窗还没有读数。
+
+### 二、改法 / 验证
+
+- `usage-export-smoke` 增 1 条 880 检查：`overflow=false / headerOverflow=false / buttons=2`，
+  再点复制；**8/8 PASS**。
+- `memory-export-smoke` 增 1 条 880 检查：`overflow=false / barOverflow=false / visible=2`，
+  再点导出；**7/7 PASS**。
+- 重打 `release-826`：`build-info.json` `version 0.1.0`、`packagedSmoke: passed`、`ad-hoc`、
+  `createdAt 2026-10-30T08:44:05.437Z`；打包态冒烟 **PASS in 2104 ms**。
+- 三个标记进包：`AppPage-DMZ4x8QA.js` 含「导出记忆」、`SettingsPanel-Dgccu8Kz.js` 含「复制 CSV」、
+  `ipc-protocol.ts` 含 `exportMemory`。
+- 568MB 的 `release-826/` 验完即删；证据留 `outputs/package-826/`、`usage-csv-826/`、
+  `memory-export-826/`。
+
+### 三、读数
+
+- 桌面套件（`--maxWorkers=2`）：**277 文件 / 1839 条全绿**，exit 0。
+- 全量 core（同树上一趟）：**583 文件 / 7428 条全绿**。
+- `typecheck`：仓根 0 + `--filter cairn-desktop typecheck` 0（上一轮提到的未跟踪草稿已不在树）。
+- `renderer-layer-check` 绿（163 个渲染层源文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/usage-csv-826/checks.json`（8/8）、`memory-export-826/checks.json`
+  （7/7）、`package-826/`（build-info + summary）。
+
+### 四、边界
+
+- 包仍 ad-hoc、未公证；从未提交工作树构建，build-info 不记 commit。
+- 打包态只跑 `CAIRN_SMOKE=1`，没有在包上逐页复跑这两条导出冒烟。
+- 880 检查只覆盖两条工具栏的横向溢出，不代表整页所有内容在 880 的完整体检。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 827 页：发布产物真的产出 Cairn.dmg——hdiutil 失效不再静默退 zip
+
+### 一、缺口（现读）
+
+README 写「产物含 `Cairn.app`、`Cairn-macOS.zip`」，但 macOS 26 上 `hdiutil create` 实测直接
+`create failed - 功能未实现`；旧脚本吞掉 stderr、静默回退 zip。用户拿不到 DMG，文档也没说
+为什么。发布产物与文档在这一点上不一致。
+
+### 二、改法
+
+- 打包脚本 DMG 主路径改 `diskutil image create from --format UDZO --volumeName Cairn`；
+  `hdiutil` 只作旧系统回退；两者都失败才 `ditto` 出 `Cairn-macOS.zip`，并打印失败原因（不再静默）。
+- README 产物清单改成 `Cairn.app`、`Cairn.dmg`（`hdiutil` 不可用时回退 `Cairn-macOS.zip`）、
+  `build-info.json`。
+- `tests/desktop-package.test.ts` 增至 **15 条**：源码必须同时有 `diskutil image create from`、
+  `hdiutil` 回退与 `Cairn-macOS.zip` 兜底；`readme-desktop-package.test` **2 条**同步产物清单。
+
+### 三、判卷
+
+- 真打包 `release-827`：产物 **`Cairn.dmg` 149MB** + `build-info.json` 255B；**没有 zip**；
+  打包态冒烟 **PASS in 2043 ms**；`file` 认得 `Cairn.dmg: zlib compressed data`。
+- `build-info.json`：`version 0.1.0`、`packagedSmoke: passed`、`ad-hoc`、
+  `createdAt 2026-10-30T08:51:59.602Z`。
+- 桌面套件（`--maxWorkers=2`）：**277 文件 / 1839 条全绿**。
+- 全量 core（`pnpm test:capped`）：**584 文件 / 7432 条全绿**，exit 0。
+- `typecheck`（仓根 + desktop）0；`renderer-layer-check` 绿（163 文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/package-827/`（build-info + summary，含产物大小与 `file` 读数）。
+
+### 四、边界
+
+- DMG 仍 **ad-hoc 签名、未公证**；换机可能被 Gatekeeper 拦，内测仍按右键打开。
+- 只验证「DMG 文件产出与打包冒烟」；没有做挂载/拖进 Applications/首次启动的安装冒烟。
+- `diskutil image create from` 需要 macOS；旧系统回退 `hdiutil`，再失败才 zip。
+- 包从**未提交工作树**构建；`build-info` 不记 commit。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 828 页：DMG 里放上 Applications 快捷方式——打开就能拖
+
+### 一、缺口（现读）
+
+第 827 页产出的 `Cairn.dmg` 里只有 `Cairn.app`：用户打开镜像后还得再开一个 Finder 窗口找
+「应用程序」，才能把 app 拖进去。标准 macOS 安装盘应自带 `Applications` 快捷方式；这是安装
+路径上的真实摩擦，不是装饰。
+
+### 二、改法
+
+- 打包脚本先建 `staging/dmg/`：`cpSync` 克隆 `Cairn.app` + `symlinkSync("/Applications",
+  "dmg/Applications")`；`diskutil image create from` 对这个目录出 DMG；`hdiutil` 回退也指向
+  同一目录；两者都失败才 zip。
+- README 写明「DMG 内是 Cairn.app + Applications 快捷方式，打开后直接拖进去」。
+- `tests/desktop-package.test.ts` 15 条 + `readme-desktop-package.test` 2 条：源码必须有
+  `symlinkSync("/Applications"`、`join(dmgRoot, "Applications")`，README 必须提 `Applications`。
+
+### 三、判卷
+
+- 真打包 `release-828`：`Cairn.dmg` 149MB、`build-info.json` 255B；打包态冒烟 **PASS in 1966 ms**。
+- `diskutil image attach Cairn.dmg` 挂到 `/Volumes/Cairn` 后实测：
+  `Applications -> /Applications`、`Cairn.app` 目录在、`CFBundleShortVersionString = 0.1.0`；
+  `hdiutil detach` 正常卸载。
+- 桌面套件（`--maxWorkers=2`）：**277 文件 / 1839 条全绿**。
+- 全量 core（`pnpm test:capped`）：**584 文件 / 7432 条全绿**，exit 0。
+- `typecheck`（仓根 + desktop）0；`renderer-layer-check` 绿（163 文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/package-828/`（build-info + summary + `mount-check.txt`）。
+
+### 四、边界
+
+- DMG 仍 **ad-hoc 签名、未公证**；没有做 Gatekeeper 首次打开/拖拽安装的自动化。
+- 只验证挂载内容与版本字段；没有在真实用户目录执行「拖进 Applications → 启动」。
+- 安装盘只放 app + Applications 链接，没有背景图/图标布局等装饰。
+- 包从未提交工作树构建；`build-info` 不记 commit。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 829 页：0.2.0——桌面端进入版本史，DMG 也不再拖泥带水
+
+### 一、缺口（现读）
+
+`CHANGELOG.md` 还停在 0.1.0（2026-10-06），并明写「不在本版交付面：桌面端」；而桌面端已经
+有项目/会话、插件/记忆/自动化、偏好备份、诊断包、许可证、更新提醒、记忆导出、用量 CSV 与
+DMG。版本号也仍是 0.1.0，发布史与产品现状对不上。另第一轮 0.2.0 打包发现：DMG 的 568MB
+`dmg/` 克隆目录会随 staging rename 混进 release，产物不干净。
+
+### 二、改法
+
+- `package.json` / `apps/desktop/package.json` 升到 **0.2.0**；CHANGELOG 新增 0.2.0 条目：
+  桌面壳、数据可携带（偏好/诊断/许可证/记忆/用量）、发布支持（build-info、DMG、冒烟、doctor）、
+  安全诚实（演示标识/显式状态）、不在本版（公证/自动更新/英文）。
+- 0.1.0 的历史句改成「0.1.0 时不在交付面：桌面端（见 0.2.0）」，不再冒充现状。
+- 打包脚本在 DMG 建完后 `rmSync(dmgRoot)`：安装盘临时克隆不随 release 走。
+- README 关于页截图换成 0.2.0 版本（`assets/readme/cairn-settings-about.png`，154KB）。
+
+### 三、判卷
+
+- 新 `tests/changelog-desktop.test.ts` **2 条**：0.2.0 条目含桌面壳与全部数据出口；0.1.0 历史句
+  指向 0.2.0。
+- `tests/desktop-package.test.ts` **15 条**：DMG 主路径、hdiutil 回退、Applications 链接、
+  `rmSync(dmgRoot)` 清理。
+- 真打包 `release-829`：release 内容严格为 `Cairn.app` / `Cairn.dmg` / `build-info.json`；
+  `Cairn.dmg` 149MB；`build-info` 为 **`version 0.2.0`**、`packagedSmoke: passed`、`ad-hoc`、
+  `createdAt 2026-10-30T09:05:17.585Z`；打包态冒烟 **PASS in 1959 ms**。
+- 挂载实测：`Applications -> /Applications`、`Cairn.app` 在、`CFBundleShortVersionString = 0.2.0`。
+- 桌面套件（`--maxWorkers=2`）：**277 文件 / 1839 条全绿**。
+- 全量 core（`pnpm test:capped`）：**585 文件 / 7434 条全绿**，exit 0。
+- `typecheck`（仓根 + desktop）0；`renderer-layer-check` 绿（163 文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/package-829/`（build-info + summary + 挂载读数）。
+
+### 四、边界
+
+- 0.2.0 是**内测里程碑**，不是公开发布；仍 ad-hoc、未公证、npm 未发布。
+- CHANGELOG 只列能力面，不逐条列 30 轮内部修复；用户可见变更仍需单独写发布说明。
+- 版本号升了，但更新清单 URL/签名密钥仍由环境配置，没有随包发布。
+- 包从未提交工作树构建；`build-info` 不记 commit。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 830 页：发布更新清单有了生成器——坏的 manifest 在发布侧就拦
+
+### 一、缺口（现读）
+
+`checkUpdate` 只认 `{ version, url, notes? }`，且 version 必须三段 semver、url 必须 https；发布侧
+却只能手抄 JSON。抄错一个字段会被判「manifest 未知字段」整条拒收，等用户点「检查更新」才发现。
+发布基础设施缺一条把契约校验前移的出口。
+
+### 二、改法
+
+- 新 `scripts/update-manifest.ts`：纯 `buildUpdateManifest({version,url,notes?})` 校验三段 semver、
+  非空 https URL、notes 去空白；CLI `--version/--url/--notes/--out`，坏输入 exit 2 并点名。
+- README 桌面发布段落补一条可复制命令（0.2.0 示例）；生成物严格是 `checkUpdate` 消费的契约。
+- 新 `tests/update-manifest.test.ts`：把生成器的输出直接喂给真 `checkUpdate`（fetch 注入），
+  确认能判 `available`；坏 version/http/file/空 url 全拒。
+
+### 三、判卷
+
+- 生成样例：`outputs/update-manifest-830/update.json`
+  `{version:"0.2.0", url:"https://example.com/Cairn.dmg", notes:"桌面端 0.2.0：…"}`。
+- 坏输入实测：`--version 0.2` ⇒ exit 2 + `version 必须是三段 semver：0.2`（`rejection.txt`）。
+- `tests/update-manifest.test.ts` + `readme-desktop-package` **4/4 PASS**。
+- 桌面套件（`--maxWorkers=2`）：**277 文件 / 1839 条全绿**。
+- 全量 core（`pnpm test:capped`）：**586 文件 / 7436 条全绿**，exit 0。
+- `typecheck`（仓根 + desktop）0；`renderer-layer-check` 绿（163 文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/update-manifest-830/`（`update.json` + `rejection.txt`）。
+
+### 四、边界
+
+- 样例 URL 是 `example.com` 占位，不是真实下载页；生成器不负责上传/签名 manifest。
+- manifest 没有签名层；`checkUpdate` 只做形状/https/semver 校验，信任来源仍靠 HTTPS。
+- 生成器不读 build-info/DMG 自动算 URL，发布者仍需显式给下载页地址。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 831 页：从 DMG 拖出来的 Cairn.app 真能启动
+
+### 一、缺口（现读）
+
+第 828 页只验证了 DMG 挂载内容；「拖进 Applications 再启动」这条真实安装路径没有证据。
+app bundle 可能在 release 目录里能跑、离开后因路径/资源/签名问题起不来，这正是发布验收要量的事。
+
+### 二、改法
+
+- 新 `apps/desktop/scripts/install-smoke.mjs`：`diskutil image attach` → 检查 `Applications` 快捷方式
+  → 把 `Cairn.app` 复制到临时目录（模拟拖出）→ 以 `CAIRN_SMOKE=1` 启动复制后的 app → 检查
+  `[cairn-smoke] PASS` → `hdiutil detach`，全程 finally 清理临时目录。
+- README 打包段落加 `install-smoke.mjs .../Cairn.dmg` 命令；`desktop-package.test` 增至 **16 条**
+  （挂载/复制/CAIRN_SMOKE/PASS 凭据）。
+
+### 三、判卷
+
+- 真打包 `release-831`：release 内容严格为 `Cairn.app` / `Cairn.dmg` / `build-info.json`；
+  打包态冒烟 **PASS in 1321 ms**。
+- `node apps/desktop/scripts/install-smoke.mjs .../Cairn.dmg`：**PASS：从 DMG 拖出的 Cairn.app
+  启动并通过打包态冒烟**。
+- `codesign --verify --deep --strict`：**valid on disk / satisfies its Designated Requirement**
+  （ad-hoc 自签，不是公证）。
+- `desktop-package` + `readme-desktop-package`：**18/18 PASS**。
+- 桌面套件（`--maxWorkers=2`）：**277 文件 / 1839 条全绿**。
+- 全量 core（上一趟）：**586 文件 / 7436 条全绿**；本页新增 1 条包测试已在 18/18 选中套件里。
+- `typecheck`（仓根 + desktop）0；`renderer-layer-check` 绿（163 文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/package-831/`（build-info + summary：打包/安装冒烟、codesign、release 内容）。
+
+### 四、边界
+
+- 仍是 **ad-hoc 自签、未公证**；`codesign --verify` 通过不等于 Gatekeeper 放行。
+- 安装冒烟只启动到 `CAIRN_SMOKE=1` 的演示场景，不覆盖真实用户数据迁移/首次引导。
+- 复制到临时目录不是实际 `/Applications`；没有测试系统级权限/钥匙串迁移。
+- 包从未提交工作树构建；`build-info` 不记 commit。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 832 页：安装验收内置进打包——ditto 复制，失败不出包
+
+### 一、缺口（现读）
+
+第 831 页的安装验收是手动命令；打包脚本仍可能产出「能生成 DMG、但拖出来起不来」的包。
+把 install-smoke 接进 package 后又暴露一个真问题：`cpSync` 复制 `Cairn.app` 会丢签名相关
+xattr/ACL，复制出来的 app 在 smoke 里起不来（`sandbox_extension_issue_file_to_process`）。
+
+### 二、改法
+
+- `install-smoke.mjs` 改用 `ditto` 复制 app bundle（保留签名相关元数据）；复制失败即 fail。
+- `package.mjs` 在 DMG 建好后、release rename 前自动跑 `install-smoke.mjs`；失败就抛错，
+  staging 在 finally 清掉，**不产出包**。没有跳过开关。
+- `desktop-package.test` 增至 **16 条**：断言 install-smoke 走 ditto、CAIRN_SMOKE、PASS 凭据，
+  且 package 引用 install-smoke。
+
+### 三、判卷
+
+- 真打包 `release-833`（自动安装验收开启）日志同时出现：
+  `[cairn-smoke] PASS in 1420 ms` 与
+  `[install-smoke] PASS：从 DMG 拖出的 Cairn.app 启动并通过打包态冒烟`。
+- release 内容严格为 `Cairn.app`（407MB）/ `Cairn.dmg`（149MB）/ `build-info.json`。
+- `desktop-package` + `readme-desktop-package` **18/18 PASS**。
+- 桌面套件（`--maxWorkers=2`）：**277 文件 / 1839 条全绿**。
+- 全量 core（上一趟）：**586 文件 / 7436 条全绿**（本页只改打包/安装脚本与断言，不新增 core 用例）。
+- `typecheck`（仓根 + desktop）0；`renderer-layer-check` 绿（163 文件）；`docs-check` 全绿。
+- 证据：`apps/desktop/outputs/package-833/`（build-info + summary：两段 PASS、release 内容、体积）。
+
+### 四、边界
+
+- 仍是 **ad-hoc 自签、未公证**；安装冒烟通过不等于 Gatekeeper 放行。
+- 安装冒烟只覆盖 `CAIRN_SMOKE=1` 的演示启动；不覆盖真实数据迁移/首次引导。
+- 临时目录复制模拟拖拽，不是实际 `/Applications` 安装。
+- 打包时间增加一次安装冒烟（约 2–3 秒）；换来「失败不出包」。
+- 包从未提交工作树构建；`build-info` 不记 commit。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-30 · 第 833 页：产品文档对齐——README 不再说「只做 CLI」，PRODUCT 不再写 web
+
+### 一、缺口（现读）
+
+`README.md` 的版本与受众段仍写「v1 交付面只做 CLI」，而桌面端已经作为 0.2.0 内测壳落地；
+`apps/desktop/PRODUCT.md` 的 `Platform` 仍写 `web`，与实际 Electron + React 桌面壳不符。
+两处都是入口文档的陈旧事实，会让新读者先建立错误印象。
+
+### 二、改法
+
+- README 改成：v1 范围裁决当时只列 CLI，桌面端后作为 0.2.0 内测壳单独落地（ADR 0001 /
+  CHANGELOG），并保留 B2 门。
+- PRODUCT.md `Platform` 改成 `macOS desktop（Electron + React；开发态 Vite + Chromium）`。
+- 新 `tests/product-doc-alignment.test.ts` **2 条**：README 不得再出现「交付面只做 CLI」；
+  PRODUCT 的 Platform 不得是 `web`。
+
+### 三、判卷
+
+- `product-doc-alignment` **2/2 PASS**。
+- `docs-check` 全绿（页号唯一面：新页 833 被登记）。
+- 桌面套件与 core 均为文档改动之外的上一趟读数（277/1839、586/7436）；本页新增 2 条已选中全绿。
+- `typecheck`（仓根 + desktop）0；`renderer-layer-check` 绿（163 文件）。
+- 证据：README 版本段、`apps/desktop/PRODUCT.md` 第 5 行 Platform、测试输出。
+
+### 四、边界
+
+- ADR 0002 本身是历史裁决，不改历史文档；只在 README 补「后来发生了什么」。
+- PRODUCT.md 是产品简报，不是发布合同；Platform 改的是事实描述，不改变支持宽度清单。
+- 本轮无产品代码/协议变化；不重打包。
+- 未提交；`head-cert-check` / `mutate-verify` 量提交，本轮不适用；`STATE.md` 仍未动。
+
+## 2026-10-31 · 第 834 页：open-claude-ui 接入第一批——思考物理、图片灯箱、输入几何与滚动物理
+
+### 一、缺口（现读）
+
+业主 2026-10-31 指令：把 https://github.com/Caho1/open-claude-ui （MIT，提交 `c1f923ae0051a871941b98a0e2e3183a545e6a85`）用到桌面端，并且输入区/消息流/外壳/代码与 Diff 这些面**也要重新做**，不是只补缺口。
+
+上游实际是 30 个 React 组件/Hook + 逆向手册（约 7,700 行，Tailwind 工具类 + 部分 Framer Motion），不是可直接运行的应用；Cairn 已 vendored 官方 CDS 3.6556.2 的 704 个令牌与 45 组 `data-cds` 规则。故本批**不换官方令牌、不引 Tailwind/Framer**，只按上游契约移植行为与几何，并在 vendor 留 MIT 出处（`UPSTREAM.json` / `LICENSE` / 两份 `.source.txt`）。
+
+本批落地四组可见增量：
+
+1. 思考体从 `display:none` 硬切换成 Grid `0fr→1fr`；运行中陶土呼吸光；生成中且有正文锁折叠（上游 `ThinkingAccordion` 互斥锁）。**保留** Cairn 逐格加载标与 Normal 档默认折叠。
+2. 图片灯箱：缩略图点击开全屏，光标锚定缩放 1–4x、放大后拖拽平移、双击 1x/2x、`+/-/0`、Esc、焦点陷阱与返回焦点；外部图片仍走既有门闩。
+3. 输入区几何：12px 卡、textarea 14/1.5、min 44px（随 size-scale）、max `min(40svh,24rem)`、下颌 28px + 1px 上分线、附件 128×96 磁贴、思考档分段轨道、@/斜杠菜单行 36px。
+4. 滚动物理：贴底容差 48→40px、顶部判定 1→2px、用户输入后 150ms 冷却；流顶/流底渐隐从 2 档升为 7 档非线性 alpha。
+5. Diff 分屏：`splitDiffRows` 纯函数把 unified 行配成左右两栏，`DiffView` 增加统一/并排切换（默认仍是统一）；并排右栏保留行评注入口，左栏删除基线不重复给入口。
+
+同时：工具状态归一为 `toolStatusOf` 单源（中断>执行中>失败>完成>未知），行带 `data-tool-status` / `aria-busy`；审批卡 pending 带 `data-status` / `role="region"` + 陶土半透明边与暖光；代码块复制态 1.2s→2.5s 并带 `data-copied`。
+
+### 二、改法
+
+- 新增 `components/ImageLightbox.tsx`（`ModalSurface` + `createPortal`；纯函数 `clampLightboxScale` / `anchoredOffset` / `clampLightboxOffset`）。
+- `Stream.tsx`：`toolStatusOf` + 用户行 `data-state="done"` / `data-author="self"` + 思考锁。
+- `ApprovalCard.tsx` / `styles.css`：pending 态。
+- `markdown.tsx`：缩略图按钮 + 灯箱接线；复制 2.5s / `data-copied`。
+- `styles.css` / `tokens.css`：7 档遮罩、`--t-think-expand` / `--t-think-glow` / `--lightbox-scrim`、磁贴、思考档轨道、菜单行高、下颌分线。
+- `useStickyScroll.ts`：40px / 2px / 150ms + 用户输入监听（滚轮/触摸/滚动条按下；正文内点击不触发）。
+- `DiffView.tsx`：`splitDiffRows` + `initialView` / 视图切换；并排行评注（右栏）。
+- `vendor/open-claude-ui/`：`UPSTREAM.json` + `LICENSE` + `ReasoningAmbientGlow.source.txt` + `MediaLightboxViewer.source.txt`。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 新增判卷 | `image-lightbox` 9 + `thinking-motion` 6 + `r1-stream-surfaces` 7 + `r2-composer-geometry` 6 + `r3-scroll-physics` 4 + `diff-split` 7 = **39 条** |
+| 桌面套件（`--maxWorkers=2`） | **283 文件 / 1879 条全绿** |
+| 根 typecheck / desktop tsc | **0 / 0** |
+| boundary / renderer-layer | 绿 / 绿（164 文件） |
+| 真机（隔离实例 9444，1200×800，CDP） | 思考收起 `grid rows=0px`、`bodyH=0`；展开 60.75px/61；图片 natural 900×520、缩略 480×278；灯箱 `role=dialog` / 100%，连点两次放大 **156%**（`stateRef` 修复前只到 125%）；Esc 关闭后焦点回 `.md-img-open`；滚动中双向遮罩 opacity=1、7 档 gradient 在 computed `backgroundImage`；0 window error |
+| 契约升级 | markdown 复制 1200→2500（判卷同步）；tool-rows 贴底 48→40 + 41px 反例；stream-fade atTop 1→2 + 7 档断点 |
+
+### 四、边界
+
+- 未做（R1/R2/R3 余项）：消息气泡长文折叠、用户 pending/failed 态、工具行视觉重排、审批卡按钮次序、用量环视觉、@/菜单选中滑片、侧栏 28px 密度与会话拖拽、标题栏 zoom 补偿、窗格分屏、代码块暗色壳。
+- 未跑：core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交，这些量 HEAD）；未在真实主进程重启后目验（隔离实例是独立 userData/workspace）。
+- 4px 贴底容差与 150ms 冷却由纯函数/源码钉覆盖；真机只验证了滚动后的遮罩显隐，没有测「用户上滚 150ms 内追加不抢视口」的时序。
+- 灯箱拖拽/滚轮缩放的指针路径未在真机逐一驱动（只验了按钮缩放与 Esc/焦点）；数学由纯函数判卷。
+- Diff 分屏本批只走纯函数 + SSR + 样式判卷，**未在真机变更窗格里点开并排**（需要真实 write_file 快照与 changeDiff 通道；本会话没有造该面）。
+- vendor 只是出处与参考，不参与编译；上游是逆向复刻，不能替代官方 CDS 令牌。
+
+## 2026-10-31 · 第 835 页：R1 工具行视觉与审批动作次序
+
+### 一、缺口（现读）
+
+- 工具行只有状态字形 + 工具名：同为灰字，用户扫不出「在跑什么」；非完成态（执行中/失败/中断/未知）只有裸文本，没有可扫读的状态签。
+- 审批卡动作次序把「允许 · 本次」主钮放在最左、拒绝在第二：危险动作占了主位，与 open-claude-ui `McpToolDecisionCard` 的三阶次序（拒绝 / 总是允许 / 允许一次）相反。
+
+### 二、改法
+
+- `Stream.tsx` 新增 `ToolKindGlyph`：run_shell→终端、web_fetch/web_search→地球、list_dir→文件夹、read_image→图片、spawn_agent→分支、其余→文件；插在状态字形与工具名之间。
+- `styles.css`：`.tool-kind` 类型字形；`.tool-status` 改成 pill；pending 陶土、failed 风险色、interrupted/unknown 中性；`.tool-head` 最小高 28px（真机实际 34px 内容行高）。
+- `ApprovalCard.tsx`：动作行改为 **拒绝 → 总是允许 → 弹性空隙 → 「Esc 不做决议」→ 允许 · 本次（主钮最右）**；键盘 Enter=允许一次、Esc 不做决议的既有语义不动。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `r1-stream-surfaces` | **9 条**（新增工具类型/状态签 + 审批次序 2 条） |
+| `approval-card` / `tool-rows` | 12 / 16 条，既有判卷全绿 |
+| 桌面套件（`--maxWorkers=2`） | **283 文件 / 1881 条全绿** |
+| typecheck | 0 |
+| 真机（隔离实例 9445，CDP） | 3 行工具（done/failed/done）；类型字形 lucide square-terminal / file-text / globe；失败 pill `rgb(180, 83, 9)` / 边框 40%；head 高 34px；失败行展开出参数 JSON 与返回原文；0 window error |
+
+### 四、边界
+
+- 审批次序只走 SSR + 既有判卷，**未在真机触发一次真实审批**（需要 live run 跑到权限卡；本会话没有造 live approve）。
+- 34px 是内容行高，不是固定高；超长摘要仍按既有省略规则。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交，这些量 HEAD）；未提交。
+
+## 2026-10-31 · 第 836 页：R1 长用户消息折叠
+
+### 一、缺口（现读）
+
+长用户消息整段铺在对话里：一条 1,760 字的输入占满一屏，后续回复被挤到看不见；参考库 `ChatMessageBubbles` 有 collapseThreshold / mask 的成熟做法，Cairn 此前没有。
+
+### 二、改法
+
+- `Stream.tsx` 新增 `UserText`：字数超过 1,200 先保守折叠（SSR 可判），挂载后用 `ResizeObserver` 按真实 `scrollHeight > 320px` 再量一次；只对确实超高的消息摆「展开全文 / 收起」。
+- `.row.user .t` 折叠态 `max-height: 320px` + 底部 48px 渐隐遮罩；`data-round-anchor` 仍在 `.t` 上，复制/分叉/撤回锚不动。
+- 折叠按钮是行内独立 button（`aria-expanded`），不是气泡本体；展开后全文原样，不重排历史。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `user-bubble-collapse` | **3 条**：短消息不折/不摆按钮、长消息 SSR 折叠 + aria、阈值与 CSS 同源 |
+| 桌面套件（`--maxWorkers=2`） | **284 文件 / 1884 条全绿** |
+| typecheck | 0 |
+| 真机（隔离实例 9446，CDP） | 折叠高 320px / 全文 1176px；mask `linear-gradient(black calc(100% - 48px), transparent)`；按钮「展开全文」→ 点击后高 1176px、按钮变「收起」；0 window error |
+
+### 四、边界
+
+- 1,200 字是 SSR 的保守阈值，真实折叠以 320px 高度为准；挂载后才量的短句在窄窗里也可能被折叠。
+- 折叠后 `max-height` 固定 320px，不随 size-scale 缩放（与高度测量常量同源）。
+- 只对用户气泡；助手正文不折（其阅读面已有滚动与目录导航）。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交，这些量 HEAD）；未提交。
+
+## 2026-10-31 · 第 837 页：R4 暗色代码块壳
+
+### 一、缺口（现读）
+
+`open-claude-ui` 的 `CodeBlock` 与 Claude 官方码面是 12px 壳、36px 头、深色底；Cairn 的 `.md-code` 仍是浅色壳，而且皮肤层 `dsh-claude-style.css` / `typography.css` 用 0.17.0 的近似值（白底 + 15/24 码面）覆盖了基础规则——真机 computed 背景仍 `rgb(255,255,255)`、字号 15px。
+
+### 二、改法
+
+- `.md-code`：`--gray-900` 深底、`--gray-750` 描边、`--radius-composer-card`（12px）圆角；`.md-code-head` 36px 高、0 12px 内距、`--gray-800` 下边线；`.md-code pre` 走 `--fs-code` / 1.6 / `--gray-50`；复制态仍 2.5s + `data-copied`，颜色品牌陶土。
+- 皮肤层覆盖：新增 `body[data-dsh-claude-style] .md-body .md-code` / `.md-code-head` / `.md-code pre` 三条更高特异性的规则，把近似值钉回官方灰阶。真机先读到白底/15px，加这三条后复测通过——这是本页的主要取证。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `r1-stream-surfaces` | **10 条**（新增暗色码面 + 皮肤层覆盖哨兵） |
+| 桌面套件（`--maxWorkers=2`） | **284 文件 / 1885 条全绿** |
+| typecheck | 0 |
+| 真机（隔离实例 9447，CDP） | 背景 `rgb(11, 11, 11)`、边框 `rgb(44, 44, 42)`、圆角 12px、头高 36px、语言 `ts`；复制前 `aria-label="复制代码"` / `data-copied="false"`，点击后 `已复制代码` / `true`；0 window error |
+
+### 四、边界
+
+- 不做语法高亮（参考库 `CodeBlock` 本身也只给容器与复制状态）；长行仍横向滚动。
+- 码面字号 computed 15px：这是 `--fs-code` 随 `--rem-scale` 的结果，不是皮肤层的 15/24；line-height 1.6 已钉。
+- 真机只测亮色主题；码面跨主题恒深，暗色主题未单独截图。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交，这些量 HEAD）；未提交。
+
+## 2026-10-31 · 第 838 页：R3 置顶会话拖拽排序
+
+### 一、缺口（现读）
+
+侧栏置顶段只有「置顶/取消置顶」，没有手工顺序；置顶项互相之间仍按时间排。参考库 `DraggableSessionList` 有 `pinnedOrder` / 4px 死区 / 落点线的成熟做法，Cairn 此前没有。
+
+### 二、改法
+
+- 新增纯函数 `state/pinned-order.ts`：`orderKeyOf`（`workspace\0id`，跨项目 id 可撞名）、`parsePinnedOrder`（坏档回空）、`applyPinnedOrder`（只排置顶段，未入表项保持原序排后）、`moveInOrder`（before/after）。
+- 新增 `state/use-pinned-order.ts`：pointer capture 拖拽、4px 死区、同工作区落点、落点线、拖后吞 click；顺序写 `localStorage["cairn.sidebar.pinnedOrder"]`，不改会话 metadata / IPC。`Alt+↑/↓` 走同一张顺序表。
+- `Sidebar.tsx`：`sectionsFor()` 先 `pinnedOrder.ordered()` 再分段；`SessionRow` 接 `dragAttrs` / `dragProps` / `onReorder`，行根带 `data-session-key` / `data-pinned` / `data-dragging` / `data-drop`。
+- 真机抓到并修掉一个真 bug：提交时若只把「拖拽键 + 目标键」写进顺序表，未入表的置顶项会被当成未知排到前面（丙拖到甲后曾变成 **甲丙乙**）。改为以 DOM 当前全部置顶键为基表后，复测 **乙甲丙**，localStorage 三项齐全。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `pinned-order` + `sidebar-pinned-drag` | **8 条**：坏档/去重、只排置顶段、跨工作区 key、before/after、接线、4px、落点线、DOM 基表 |
+| 桌面套件（`--maxWorkers=2`） | **286 文件 / 1893 条全绿** |
+| typecheck / renderer-layer | 0 / 绿（166 文件；Sidebar 未破 1200 行帽） |
+| 真机（隔离实例 9448，CDP） | 拖前 丙乙甲；丙拖到甲后 → **乙甲丙**；localStorage 三项齐全；Alt+↑ 再变 **乙丙甲**；拖起行 opacity .45、落点线 2px 品牌色；0 window error |
+
+### 四、边界
+
+- 只排置顶段、同工作区；时间桶仍按时间，跨项目拖不搬会话。
+- 顺序是渲染层偏好（localStorage），不跨窗口/设备同步；重启持久化未在真机重开验证。
+- 归档行不参与拖排；触摸拖拽未单独真机验证（pointer 事件路径同一套）。
+- 无协议/metadata 变化；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-10-31 · 第 839 页：R4 Diff 快照贯通与并排真机
+
+### 一、缺口（现读）
+
+工具卡的行内 diff 只调 `changeDiff({ path })`，**没有带 `tool_result.snapshotId`**：主进程取不到覆盖前原件，修改文件会被当成「全新增」显示（before 为空）。另外，并排模式此前只有纯函数 + SSR 判卷，没在真机变更窗格里点开过。
+
+### 二、改法
+
+- `derived/stream.ts` 的 tool 行增可选 `snapshotId`；`tool_result` 带字符串快照时写入行。
+- `Stream.tsx` 的 `changeDiff` 调用带上 `snapshotId`：`{ path: diffPath, ...(r.snapshotId !== undefined ? { snapshotId: r.snapshotId } : {}) }`。
+- `stream-rework` 的接线哨兵同步到新形状（保留「调既有通道」原意）；`tool-diff-payload` 增 2 条：有快照进入行、无快照不伪造。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `tool-diff-payload` | **4 条**（新增快照贯通 2） |
+| 桌面套件（`--maxWorkers=2`） | **286 文件 / 1895 条全绿** |
+| typecheck | 0 |
+| 真机（隔离实例 9450，CDP） | 造 `edit_file` 覆盖前快照：unified 出现真实删除行 `const version = 1;` + 5 条新增；切并排 → 9 行、del/add cell、4 个空白侧、`aria-pressed` 正确；0 window error |
+
+### 四、边界
+
+- 快照只随成功写工具进 diff；没有快照的修改仍按「无原件」显示全新增——这是既有诚实口径，不伪造删除行。
+- 并排右栏保留行评注入口，左栏删除基线不重复给；窄容器（≤640px）横向滚动。
+- 本页只改渲染层投影/调用，无协议变化；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-10-31 · 第 840 页：R3 侧栏 28px 紧凑档
+
+### 一、缺口（现读）
+
+侧栏会话行只有 48px 双行（标题 + 时间/项目/草稿），参考库 `DraggableSessionList` 的 28px 高密行没有入口；用户无法按工作节奏在「舒适/紧凑」间切换。
+
+### 二、改法
+
+- 新增 `state/sidebar-density.ts`：`comfortable` / `compact`，坏档回舒适；偏好写 `localStorage["cairn.sidebar.density.v1"]`。
+- 筛选菜单（Radix DropdownMenu）末尾加「紧凑视图（28px）」CheckboxItem；`<aside className="side" data-density=…>`。
+- CSS：紧凑档行高 28px、`line-height` 1.35；`.s-meta` 绝对定位到右侧只留钉形，时间/项目/草稿隐藏（完整信息仍在 title/行菜单/悬浮里）。默认仍是舒适 48/52px。
+- 判卷教训：`.s-title` 的紧凑覆盖块若排在基础块之前，`session-list-polish` 取第一块会丢 `text-overflow: ellipsis`；把行高移到 `.session` 继承，基础 `.s-title` 保持单一来源。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `sidebar-density` | **3 条**：compact 字面量、坏档回舒适、Sidebar 接线 + 28px CSS |
+| 桌面套件（`--maxWorkers=2`） | **287 文件 / 1898 条全绿** |
+| typecheck | 0 |
+| 真机（隔离实例 9451，CDP） | 舒适行高 52px、`.s-meta` static、时间可见；真实指针开筛选菜单 → 勾「紧凑视图（28px）」→ **28px**、meta absolute、`.s-time` display:none；刷新后仍 compact（localStorage=compact）；0 window error |
+
+### 四、边界
+
+- 默认舒适；紧凑是可选视图偏好，不跨窗口/设备同步。
+- 紧凑隐藏时间/项目/草稿的**行上读数**，不删数据；完整标题与操作菜单仍在。
+- 归档行同样按 density 收；置顶钉形保留。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-10-31 · 第 841 页：open-claude-ui 接入完成审计（业主点名的 18 面）
+
+### 一、范围
+
+本目标的上游是 `Caho1/open-claude-ui`（MIT，commit 见 `vendor/open-claude-ui/UPSTREAM.json`）：30 个 React 组件/Hook + 逆向手册，不是应用。Cairn 保留官方 CDS 3.6556.2 令牌与 IPC，只移植行为/几何/物理；上游出处与许可在 `vendor/open-claude-ui/`。下面是业主 2026-10-31 点名「也要重新做」的逐面证据。
+
+### 二、逐面证据矩阵
+
+| # | 面 | 落地 | 判卷 | 真机/证据 |
+|---|---|---|---|---|
+| 1 | 输入框/下颌 | 12px 卡、14/1.5、min 44、max min(40svh,24rem)、下颌 28+上分线、128×96 磁贴、36px @/斜杠行 | `r2-composer-geometry` 6、`composer-rework` 20 | 隔离实例 composer 截图 |
+| 2 | 模型与思考档 | 6% 分段轨道、30px 段、能力声明才出的档位、High 缺省 | `model-picker-axis`、`model-menu-interaction`、`render-structure` 64 | composer 截图 |
+| 3 | 用量环 | 28px 环、r11.5/2.6、余量≤10% risk、环心百分比 | `composer-usage-ring`、`composer-rework` | composer 截图（审计为已达标，无改动） |
+| 4 | @ 与 / 菜单 | 36px 行、面包屑 11px、↑↓ 取模、Esc 只关菜单、外点关闭 | `composer-slash-key`、`composer-rework` | SSR + 真实键路径 |
+| 5 | IME 组字守卫 | `ime.ts` 单一判定（isComposing/keyCode 229/composing ref），全部 Enter 路径接入 | `ime-enter-coverage` **15** | 既有真机 + 合成组字判卷 |
+| 6 | 消息气泡 | 82/85% 量度、长消息 320px 折叠 + 遮罩 + 展开/收起 | `user-bubble-collapse` 3、`stream-rework` 16 | 真机 320→1176px 截图 |
+| 7 | 行操作 | 官方 reveal：只 opacity、120+100ms 入/60ms 出、无位移 | `row-actions-reveal` 5 | 既有真机 |
+| 8 | 思考折叠 | Grid 0fr→1fr、陶土呼吸光、生成中锁折叠、逐格加载标保留 | `thinking-motion` 6、`stream-process` 7 | 真机收起 0px/展开 61px |
+| 9 | 工具行 | 类型字形、状态签（pending/failed/interrupted/unknown）、单源 toolStatusOf、34px 内容行高 | `r1-stream-surfaces` 10、`tool-rows` 16 | 真机 3 行工具 + 失败展开截图 |
+| 10 | 审批卡 | pending 陶土边/暖光、role=region、拒绝→总是→允许一次（主钮最右）、Esc 不决议 | `approval-card` 12、`r1` | SSR；live 审批未触发 |
+| 11 | 会话锁和队列 | core 会话锁；`SendQueueStrip` 排队/恢复/打断/移除；失败停表不吞 | `send-queue` 28、`send-queue-strip` 1 | 既有真机；未改成 optimistic 行（见边界） |
+| 12 | 粘底滚动与回底钮 | 40px 容差、150ms 冷却、2px 顶判、7 档遮罩、居中回底钮 | `r3-scroll-physics` 4、`stream-fade` 5、`scroll-behavior` 3 | 真机双向遮罩截图 |
+| 13 | 会话滚动记忆 | 既有 `conversation-navigation` 记忆位 + 回场重判 | `stream-nav` 22、`stream-rework` | 既有判卷（本批未改） |
+| 14 | 容器查询 | composer/设置/审阅多档 `@container`；576/880 宽无溢出 | `layout-smoke`（脚本） | 真机 576/880/1200 探针：主区与空态可见 |
+| 15 | 窗格拖拽 | PaneDock 单窗格 + 标签页（业主 2026-10-24 裁决）；标签拖拽/⌥↑↓ 既有 | `panes-structure` 11、`pane-tabs-smoke` | 既有真机；不恢复旧 Grid 堆叠 |
+| 16 | 标题栏拖拽区 | 38px 一条栏、drag 带、button/input 全 no-drag、中栏 pointer-events:none | `titlebar` 10 | 既有真机；native hiddenInset |
+| 17 | 代码块复制 | 暗色 12px 壳、36px 头、官方灰阶、2.5s + data-copied | `r1`、`markdown` 31 | 真机 `rgb(11,11,11)` / 36px 头 |
+| 18 | Diff unified + 行评注 | unified + 并排双模式、行评注、snapshotId 贯通、真实删除行 | `diff-split` 7、`tool-diff-payload` 4 | 真机 unified/并排截图 |
+
+### 三、总量
+
+- 覆盖面判卷：22 文件 / **245 条全绿**；桌面全量（`--maxWorkers=2`）：**287 文件 / 1898 条全绿**。
+- typecheck 0；renderer-layer 绿（167 文件）；boundary、docs-check 全绿。
+- 真机证据：本页逐面读数（截图未提交）。
+
+### 四、明确不做（带理由）
+
+- **Pane 分屏/旧 Grid 堆叠**：与业主 2026-10-24「单窗格占满 + 标签页切换」裁决冲突；不恢复。
+- **optimistic user pending/failed 行**：当前发送失败由 `SendQueueStrip` 的「等待恢复发送」承担，再加一套行内状态会制造双源；要改需先裁决。
+- **audio/mic、Epitaxy iframe、Tailwind/Framer 运行时、三点波**：音频链路/架构/样式体系不适用，三点波已被 Cairn 逐格加载标取代。
+- **标题栏 zoom 补偿**：native `hiddenInset` + 76px 避让；没有可复现的缩放遮挡证据，不凭上游常量改布局。
+- **live 审批真机**：审批卡走 SSR + 既有真机路径，本批未触发一次真实 live 审批。
+
+### 五、边界
+
+- 工作树未提交；`gates` / `head-cert` / `mutate-verify` 量 HEAD，本轮不适用；core 全量未在本轮重跑。
+- 业主实例已重开并载最终 dist；隔离实例与 /tmp 已清。
+
+## 2026-10-31 · 第 842 页：命令面板危险档确认 + 危险色令牌桥
+
+### 一、缺口（现读）
+
+1. **安全不一致**：composer 的权限菜单对「自动/完全允许」有二次确认；命令面板「切换权限档」却直接 `setSettings({mode:next})`，键盘 ⌘K 循环可无确认进入最松档。
+2. **真机抓到的可见缺陷**：补上确认卡后，确认按钮在真实 renderer 里是**白字透明底**（截图只剩「取消」）。根因：官方 CDS 的 `--role-danger-300` 是整色，覆盖了本地同名三元组，`hsl(var(--color-danger))` 整条失效；同类 `--color-danger-ink`、`--success` 也断链（`getComputedStyle` 读 `--color-danger` = `#ec7e7e`，按钮 `backgroundColor` 透明）。
+
+### 二、改法
+
+- `permission-labels.ts` 新增纯函数 `permissionNeedsConfirm(current,next)`：只有真的换到 auto/full-access 才问。
+- `state/workbench.ts` + 新 `state/use-permission-confirm.ts`：`cycle-perm` 命中危险档时只置 `permissionConfirm`，不落盘；`apply()` 作为唯一落盘+回执；workbench 只接线并把 `permissionGuard` 透传（守住 1200 行帽：1212→1198）。
+- `ConfirmScrims` 增第六张闸：用 `ConfirmDialog` + `permissionConfirmCopy`（与 composer 内联确认同一文案来源）；确认后才 `doPermissionMode`。
+- **令牌桥**：`--color-danger: from var(--fill-danger) h s l`、`--color-danger-ink: from var(--text-danger) h s l`、`--success: from var(--fill-success) h s l`。官方 role 名是整色，本地 role 三元组被覆盖；桥到官方 purpose 令牌后 `hsl(var(--…))` 恢复有效（亮暗自动跟官方）。
+- 判据升级：`menu-unify` 原钉内联 `props.mode === "full-access"`，文案抽成 `permissionConfirmCopy` 后改钉新契约，保留「完全允许有自己的文案」原意；`tokens.test` 同步到 purpose 桥。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `permission-confirm` | **5 条**：危险档判定、文案单一来源、workbench 先置待确认、ConfirmScrims 接线 |
+| `palette-perm-cycle-smoke`（真实 renderer） | **44/44 PASS**：危险档确认闸出现 2 次、非危险档不出现；确认按钮实底 `rgb(208, 59, 59)`；确认前 `setSettings` 不增；五档一圈补丁序列无多余写；0 控制台错误 |
+| `tokens` / `menu-unify` | 29 / 15 条绿（契约升级后） |
+| 桌面套件（`--maxWorkers=2`） | **288 文件 / 1903 条全绿** |
+| typecheck | 0 |
+
+### 四、边界
+
+- 设置页「完全允许」单选项仍是直接保存（页面本身有 danger 样式与「最松档」警示，不是快捷键路径）；要统一成模态确认需产品裁决。
+- composer 内联确认卡保持原样，只共享文案来源。
+- 安全闸只覆盖命令面板的循环路径；其他调用 `applyPermissionMode` 的入口都为显式选择。
+- 本地 `--role-*` 三元组仍被官方整色覆盖（现无 `hsl(var(--role-*))` 消费点）；后续若要清理，应一次性移除或改名，不逐个打补丁。
+- 无协议变化；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-10-31 · 第 843 页：完成通知的窗口归属
+
+### 一、缺口（现读）
+
+主进程只有一个全局 `viewing { sessionId, workspace }`：主窗口的 `reportViewing` 会覆盖弹窗的可见会话，而 `PopoutApp` 从不上报。于是弹窗正在看 X、主窗在主页/看 Y 时，X 收束仍会发通知——「你不在看那个会话」的判据在弹窗场景下失效。
+
+### 二、改法
+
+- `run-notification.ts` 新增纯函数 `focusedWindowViewing(snapshots, sessionId, workspace?)`：只有**焦点窗口**正在看目标会话才抑制；后台弹窗不算。
+- `main/index.ts`：全局槽改 `viewingByWindow: Map<number, …>`；`reportViewing` handler 从可信 `event.sender` 取 BrowserWindow，弹窗自报空 workspace 时用 `windowWorkspaces.current()` 的继承上下文；run 收束按焦点窗口快照判定；主窗/弹窗 `closed` 时清表。
+- IPC 桥为 `reportViewing` 加 sender 特判（方法签名不变，协议不 bump）。
+- `PopoutApp` 挂载/切会话上报 `reportViewing(sessionId, "")`，卸载清零；不改变事件归属与窗格逻辑。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `run-notification` | **8 条**（新增焦点窗口归属 4：焦点/后台/同 session 异 workspace/未知 workspace 兜底） |
+| `notification-open-wiring` | 4 条：main 用 `focusedWindowViewing`/`viewingByWindow`、sender 特判、Popout 上报 |
+| 桌面套件（`--maxWorkers=2`） | **288 文件 / 1906 条全绿** |
+| typecheck | 0 |
+
+### 四、边界
+
+- OS 通知的真实弹出/点击仍无法在离屏验证；本批钉的是**决策与窗口归属**，不是系统通知壳。
+- 语义以焦点窗口为准：后台弹窗开着目标会话不算「正在看」；workspace 未知的旧上报只按 session 兜底。
+- 主窗仍上报 `activeId/activeWorkspace`；弹窗用继承上下文；关窗清表防陈旧压制。
+- 无协议形状变化；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-10-31 · 第 844 页：设置页危险档确认补口
+
+### 一、缺口（现读）
+
+第 842 页只堵了命令面板与 composer 的 quick path；设置页「自动 / 完全允许」单选项仍是 `onSelect → onSave` 直接落盘。它与同页的 danger 警示同级，但缺少最后一道确认，三处入口口径不一致。
+
+### 二、改法
+
+- `PermissionsSection` 增 `confirmMode` 待确认态：选 auto/full-access 且非当前档 ⇒ 先弹 `ConfirmDialog`；确认后才 `onSave({ mode })`。
+- 文案继续走 `permissionConfirmCopy`（与 composer 内联确认、Workbench 确认同一来源），不另写一份。
+- `palette-perm-cycle-smoke` 增加设置页确认闸检查，并点击确认后继续验证 chip/回执。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `permission-confirm` | **6 条**（新增设置页确认接线） |
+| `palette-perm-cycle-smoke`（真实 renderer） | **45/45 PASS**：设置页选「完全允许」先出确认闸，确认后才写 mode；命令面板危险档亦同；0 控制台错误 |
+| 桌面套件（`--maxWorkers=2`） | **288 文件 / 1907 条全绿** |
+| typecheck | 0 |
+
+### 四、边界
+
+- 设置页确认只对「进入 auto/full-access」弹；降档/同级不弹；取消保留原档。
+- 设置页原有的 danger 样式与警示行保留（确认卡不是替代，而是最后一道闸）。
+- 无协议变化；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-10-31 · 第 845 页：live 审批卡真机补验
+
+### 一、缺口
+
+第 841 页审计把「live 审批真机」列为未验：审批卡只有 SSR + 既有真机路径，没有一条从 ask 事件到卡片、按钮命中、决议、收卡的完整真实 renderer 证据。
+
+### 二、改法（验证基建，产品代码零改）
+
+- `ui-gallery-preload.cjs`：`onAsk`/`onAskDone` 从 no-op 改为真收集；暴露 `__cairnPushAsk` / `__cairnPushAskDone` / `__cairnDecisions`；`decide` 记录决议。
+- 新增 `scripts/approval-live-smoke.cjs`：真实 renderer 里推 ask → 等卡 → `elementFromPoint` 核按钮命中 → 真实指针点「允许 · 本次」→ AskDone 收卡 → 第二张卡本体 Enter=允许一次。
+- 截图前等 `gate-in` 140ms 淡入落定（首版在首帧拍了透明卡——不是产品缺陷，是取证时序）。
+
+### 三、读数
+
+- `approval-live-smoke`：**7/7 PASS** —— 卡片标题/主体/三钮齐全；允许按钮真实命中（`same=true`）；指针 `decide(true)`；AskDone 后卡片移除；卡本体 Enter `decide(true)` 且不双发；0 控制台错误。
+- 桌面套件仍为 **288 文件 / 1907 条全绿**（本页只改 gallery 桩与脚本）；typecheck 0。
+- 证据：产品 renderer 截图（卡片在场）；checks.json 7 条。
+
+### 四、边界
+
+- gallery 的 `decide` 是桩，不覆盖真实主进程权限决策链（core/desktop 判卷覆盖）；本页验的是 UI 面与命中/键盘。
+- 真实 OS 通知与跨窗口权限链仍不在本页。
+- 产品 dist 未变；业主实例无需重开。
+
+## 2026-10-31 · 第 846 页：置顶拖排的搜索/筛选边界
+
+### 一、缺口（现读）
+
+置顶拖排在搜索/筛选态仍启用：列表只渲染命中子集，拖拽提交时若以「当前可见键」为基表，会把未显示的置顶项从顺序表挤掉；清空搜索后这些项被当成未知排到后面。归档/隐藏键同样可能被挤掉。
+
+### 二、改法
+
+- `use-pinned-order` 提交基表改为「旧顺序 ∪ 当前可见键」（拖拽 pointer 与 Alt+↑↓ 两条路径），隐藏/归档键保留原 rank。
+- `Sidebar` 在 `searchOpen || filter !== "all"` 时不下发 `dragAttrs`/`dragProps`/`onReorder`：筛选视图只用于看/选，不重排。
+- 判卷更新 `sidebar-pinned-drag` 到新契约（union 基表 + 筛选态守卫）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `sidebar-pinned-drag` | 4 条（接线/4px/落点/样式 + union 基表 + 筛选守卫） |
+| 真机（隔离实例 9453，CDP） | 4 条置顶 初始 D/C/B/A；搜索「置顶A」→ 只剩 1 条且无 `data-pinned`/`data-session-key`（拖拽属性未下发）；真实鼠标拖拽后 `localStorage` 仍 null；清空搜索 → 4 条恢复且顺序 D/C/B/A 不变；0 window error |
+| 桌面套件（`--maxWorkers=2`） | **288 文件 / 1907 条全绿** |
+| typecheck / renderer-layer | 0 / 绿（168 文件） |
+
+### 四、边界
+
+- 筛选/搜索态**刻意禁用拖排**（不提供隐藏项的重排入口）；这是产品选择，不是缺失。
+- 隐藏/归档键只保留 rank，不改其 pinned/archived 事实。
+- 无协议/metadata 变化；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-10-31 · 第 847 页：图片灯箱多图画廊
+
+### 一、缺口（现读）
+
+灯箱只显示打开的那一张；同一条消息里多张图无法前后翻。参考库 `MediaLightboxViewer` 有画廊跑道/切换。另：真机初版遮罩 94% 时底层会话图透出来，像第二张图（截图取证）。
+
+### 二、改法
+
+- `ImageLightbox` 打开时从同会话 `.md-img-open img` 收集画廊（按 src 去重；当前图不在集合时补首位），渲染 `1 / N` 与上/下一张按钮；`ArrowLeft/Right` 首尾环绕；切图复位缩放/平移。
+- 纯函数 `galleryStep(index,length,delta)` 判卷；按钮文案走 STR。
+- 灯箱遮罩从半透明（94%/98% 仍可见底层亮图）改为**不透明深底** `rgb(10 10 9)`，消除残影。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `image-lightbox` | **12 条**（新增画廊索引 2 + 遮罩不透明 1） |
+| 真机（隔离实例 9454，CDP） | 3 张图 A/B/C：打开 A → `1 / 3`；放大到 125% 后下一张 → B `2 / 3` 且缩放复位 100%；ArrowRight → C `3 / 3`；再 ArrowRight 环绕 A `1 / 3`；Esc 关闭焦点回 `.md-img-open`；0 window error |
+| 桌面套件（`--maxWorkers=2`） | **288 文件 / 1910 条全绿** |
+| typecheck | 0 |
+
+### 四、边界
+
+- 画廊是**当前会话内**的 `.md-img-open` 图片（不同消息合并、按 src 去重）；不是跨会话媒体库。
+- 切图复位缩放与平移；不预加载下一张（本地/已显示图无需）。
+- 外部图仍先过门闩，未点击的远程图不在画廊。
+- 无协议变化；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-10-31 · 第 848 页：画廊归属收窄 + 计数可听
+
+### 一、缺口（现读）
+
+第 847 页的画廊按 `document` 收 `.md-img-open img`——侧栏会话预览、侧聊里如果也有 `.md-img-open` 的图（同一 DOM 树），会被并进当前对话的画廊，`1 / N` 的分母失真。计数变化（1/3 → 2/3）对读屏也是静默的。
+
+### 二、改法
+
+- 收集范围从 `document` 收窄到**打开图所在消息**的 `.md-body`：`const root = opener?.closest(".md-body") ?? document;` 只收这条消息里的图；找不到归属容器（理论兜底）才退回全文档。
+- `il-count` 加 `role="status" aria-live="polite"`，切图时分母不变、分子变化可被读屏播报。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `image-lightbox` | **12 条**全绿（来源哨兵同步收窄到 `root.querySelectorAll` + `.md-body` 归属 + `aria-live`） |
+| 真机（隔离实例 9455，CDP） | 同会话 3 张图：`thumbs:3`；A → `1 / 3`、`role=status`、`aria-live=polite`、`title=图A`；下一张 → B `2 / 3` 且 `srcLen=294` 换图；Esc 关闭 `open:false`、焦点回「预览图片」；0 window error |
+| 桌面套件（`--maxWorkers=2`） | **288 文件 / 1910 条全绿** |
+| typecheck / renderer-layer | 0 / 绿（168 文件） |
+
+### 四、边界
+
+- 画廊是**当前消息内**的图片；同会话其他消息的图不进这一场的画廊（与第 847 页的「同会话」口径相比进一步收窄，属纠偏）。
+- 不预加载；切图仍复位缩放/平移；遮罩仍不透明深底。
+- 无协议/metadata 变化；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-10-31 · 第 849 页：通知点击落到正在看目标的窗口
+
+### 一、缺口（现读）
+
+第 843 页按窗口归属解决了「发不发」，但**点击落点**仍固定选主窗：主窗开着 A、弹窗正显示目标 B，B 跑完点通知 → 主窗被拉到前台（可能把 A 顶掉打开 B），已在显示 B 的弹窗没被带到前台。`viewingByWindow` 表里其实已有每个窗口正看的会话，点击时没用上。
+
+### 二、改法
+
+- `run-notification.ts` 抽 `viewingMatches`（session 必等；目标 workspace 缺省或视图 workspace 未知时只按 session），`focusedWindowViewing` 与新增 `notificationClickWindow` 共用同一口径。
+- `notificationClickWindow(candidates, target, mainWindowId)`：存活窗口里先选「正在看目标」的（多个命中时焦点者优先，弹窗与主窗同等）→ 没有再回主窗 → 最后任一存活窗口；候选带 `alive/focused/sessionId/workspace`，全部由主进程点击时实时取。
+- 主进程 click：按选择结果 restore/show/focus；**只有主窗**转发 `onNotificationOpen`（弹窗已显示目标，不需要也可能不认识该通道）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `run-notification` | **13 条**（新增选窗 5 条：弹窗优先/焦点优先/会话与工作区不符回主窗/旧上报兜底/主窗缺失与死窗） |
+| `notification-open-wiring` | 4 条（新增钉 `notificationClickWindow` 与 `win.id === mainId` 才转发） |
+| 离屏真机 `notification-open-smoke` | 5/5 PASS（回主页→畸形载荷忽略→合法载荷打开目标会话→0 控制台错误）——renderer 接收面未受选窗改动影响 |
+| 桌面套件（`--maxWorkers=2`） | **288 文件 / 1915 条全绿** |
+| typecheck / boundary / renderer-layer | 0 / 绿 / 绿（168 文件） |
+
+### 四、边界
+
+- **真实 OS 通知的弹出与点击**仍无法在离屏环境造出：选窗决策由 13 条纯函数判卷 + 源判据覆盖；点击经 Electron Notification 事件这一段如实记未验（与第 843 页同一边界）。
+- 选择只看「是否正在看目标」与焦点，不看窗口创建顺序以外的偏好；主窗与弹窗同看一个会话时按候选顺序（主窗通常在前）落主窗，行为与旧版一致。
+- 无协议/metadata 变化；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-10-31 · 第 850 页：删除运行中会话——先停再删
+
+### 一、缺口（现读）
+
+核心对在跑会话有硬闸（`sessions.ts`「会话正在运行，先停止再删除」，`tests/sessions.test.ts` 钉住），但渲染层不知道这件事：确认卡只写通用后果，点「删除」后拿回运行锁错误，用户看到的是一次**确认完才失败**的删除。运行旗还可能在删除成功后残留（终态事件赶不上删除）。
+
+### 二、改法
+
+- 确认卡按运行态分叉：`requestDeleteSession` 在弹卡时查 `runningSet`（`runKey(workspace,id)`），命中则 `deleteConfirm.running=true`；卡片多一句「该会话正在运行：确认后会先停止本轮，再删除。」，按钮变「停止并删除」；非运行仍是「删除」。
+- 执行：`doDeleteSession(id, target)` 先读运行态；在跑则走 `stopRunForDelete`（直呼 `runCancel`，**刻意不续队列**——会话都要没了）并读应答；`res.ok` 假 = 本窗口运行旗陈旧，当场摘旗，不把「已停」当事实。
+- 运行锁释放是异步的：`deleteSessionWaitingForRun` 只在「还在运行」类错误上按 120ms 重试、上限 5s（纯函数，now/sleep 可注入）；其他错误立即抛。成功删除后清 `runningSet` 键。没发起停止就撞锁（别的进程在跑）不重试，立即如实报错。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `session-delete-retry` | **6 条**（锁错误识别 / 预算内重试到成功 / 非锁错误一次不重试 / 超预算抛出 / 两处接线源判据） |
+| `send-queue` 打断哨兵 | 28 条全绿（`runCancel` 直呼从 1 处改为 2 处：cancelRunHeal + 删除前停止；后者读 `res.ok`、禁止 void） |
+| 离屏真机 `delete-running-smoke` | **6/6 PASS**：运行中确认卡 `buttons=["取消","停止并删除"]` 且含前置句；确认后 `cancels=[{sessionId:"s2"}]`、`deletes=[busy,busy,ok]`；删除后 `empty=true`、无错误条、停止钮消失；非运行会话按钮仍为「删除」且无停止说明；0 控制台错误 |
+| 桌面套件（`--maxWorkers=2`） | **289 文件 / 1921 条全绿** |
+| typecheck | 0 |
+
+### 四、边界
+
+- 真实 core 的运行锁硬闸不在本页重验（`tests/sessions.test.ts` 既有判卷）；本页验的是渲染层先停再删的接线、文案分叉与重试越过锁。
+- 运行旗读的是本窗口 `runningSet`；旗陈旧时以 `runCancel` 应答为准并摘旗。别的进程占锁时不等待、直接报错。
+- 归档运行中会话未改（可逆操作，本轮会继续在后台跑）。
+- 无协议/metadata 变化；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-10-31 · 第 851 页：排队消息就地编辑（含 Esc 归属）
+
+### 一、缺口（现读）
+
+运行中排队的消息只能「打断并发送」或移出：发现错字就得删掉重打，附件也要重新挂。队列原来只有三语义（取首/提前/移除），没有「改正文」。
+
+### 二、改法
+
+- `send-queue.ts` 增 `editQueued(list,index,text)`：只换目标项正文（去首尾空白），id/附件/次序不动；空文本或越界原样返回（不制造空消息、不吞条目）。
+- `SendQueueStrip` 增可选 `onEdit`：传入才出现铅笔入口；点开按 **id**（不是 index，队列可能重排）进入原地编辑；Enter 提交、Esc 取消、失焦提交。编辑框 `data-esc-owns="true"`。
+- **Esc 归属**：全局 Esc 是「智慧停止本轮」，且挂在 window **捕获**阶段（先于 React）——实测在编辑框按 Esc 会把本轮停掉、队列被自动派发清空。修法：`GateInput` 增 `escOwnsTarget`（`readGateInput` 读 `activeElement.closest("[data-esc-owns='true']")`），全局 Esc 先让路；composer 的 Esc 停跑不变。
+- WorkbenchView 已到行帽：队列条整块抽成 `panes/QueueDock.tsx`（读/写同用限定键，第 750 页的键一致性判卷同步指向新文件）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `send-queue` | 2 条新判卷（只换正文且保 id/引用/次序；空文本/越界原样）→ 30 条 |
+| `command-gate` | 新增 `escOwnsTarget` 读法判卷与接线钉（10 条全绿） |
+| `composer-running` | 10 条（新增「给了 onEdit 才有铅笔入口」） |
+| `queue-key` | 全绿（改写点搬到 QueueDock 后仍无裸 id 读） |
+| 离屏真机 `queue-edit-smoke` | **6/6 PASS**：入队出铅笔；点开带原正文并获焦；真实输入 + Enter → 条面与 `queueSet` 载荷都是新正文；Esc → 草稿不落盘、正文保持上次提交值、**本轮仍在跑、队列条目还在**；0 控制台错误 |
+| 桌面套件（`--maxWorkers=2`） | **289 文件 / 1925 条全绿** |
+| typecheck / boundary / renderer-layer | 0 / 绿 / 绿（170 文件；WorkbenchView 1175 行） |
+
+### 四、边界
+
+- 编辑只改正文；附件、顺序、会话归属不动。空/纯空白提交等于取消。
+- `data-esc-owns` 只授予「Esc 只该关自己」的原地编辑；composer 仍按既有语义用 Esc 停跑。其他全局快捷键在编辑框内的让位未逐键处理。
+- 队列项重排仍未提供（当前只能移除/提前发送）。
+- 无协议/metadata 变化；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-10-31 · 第 852 页：队列条目上下移
+
+### 一、缺口（现读）
+
+队列已有「就地编辑 / 提前发送 / 移出」，但没有**排序**：排了两条发现顺序反了，只能删掉重排，附件也要重挂。拖拽在一条 28px 高的横向队列条上不好用，键盘也不可达。
+
+### 二、改法
+
+- `send-queue.ts` 增 `moveQueued(list,index,delta)`：delta=-1 上移、+1 下移；两端/越界原样返回，不交换成空。
+- `SendQueueStrip` 增可选 `onMove`：传入才出现 ↑/↓；首项 ↑、末项 ↓ 置灰（`btn-ghost:disabled` 统一 38% 透明度）；按钮带 `aria-label`，可键盘操作。
+- `QueueDock` 复用同一个「限定键读 → 纯函数改 → setQueueFor 落盘」路径（与编辑/移除/提前发送同源）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `send-queue` | 1 条新判卷（上/下移、两端与越界原样）→ 31 条 |
+| `composer-running` | 新增「给了 onMove 才出现；首项不能上移、末项不能下移」→ 11 条 |
+| 离屏真机 `queue-edit-smoke` | **8/8 PASS**：第二条入队后下移首条 ⇒ 条面 `第二条|已改好` 且 `queueSet` 载荷同序；上移回到原序；编辑/Esc/停止钮检查仍绿；0 控制台错误 |
+| 桌面套件（`--maxWorkers=2`） | **289 文件 / 1927 条全绿** |
+| typecheck / boundary / renderer-layer | 0 / 绿 / 绿（170 文件） |
+
+### 四、边界
+
+- 排序是单步上/下移（键盘可达），没有拖拽；跨会话队列各自独立。
+- 移动只换位置：正文/附件/id 不动；落盘仍是整队 `queueSet`。
+- 无协议/metadata 变化；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-10-31 · 第 853 页：归档运行中会话的后果前置
+
+### 一、缺口（现读）
+
+归档是可逆动作（不该像删除那样拦），但归档一条**正在跑**的会话时，卡片只说「移出常规列表、随时能取消」：用户看不到「本轮会在后台继续跑、队列还会继续派」——归档当前会话还会直接回主页，运行从视野里消失。
+
+### 二、改法
+
+- `SessionConfirmTarget = WorkspaceSession & { running?: boolean }`（归档/删除同形；`DeleteConfirmTarget` 保留为别名）。
+- `requestArchiveSession` 在弹卡时查运行旗（`runKey(workspace,id)`），命中则带 `running:true`。
+- 归档确认卡在运行态前置一句：「该会话正在运行：归档后本轮（含已排队消息）会在后台继续跑，完成后照常通知。」按钮与执行路径不变（不拦、不取消本轮）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `session-archive-running` | 1 条接线判卷（请求时带运行态 / 卡片读 `archiveConfirm.running` / 前置句原文） |
+| 离屏真机 `delete-running-smoke`（扩） | **7/7 PASS**：运行中归档卡 `note` 含前置句、按钮 `["取消","归档"]`；取消后删除流程 6 条仍绿；0 控制台错误 |
+| 桌面套件（`--maxWorkers=2`） | **290 文件 / 1928 条全绿** |
+| typecheck / boundary / renderer-layer | 0 / 绿 / 绿（170 文件） |
+
+### 四、边界
+
+- 归档**不停止**本轮、不清队列（可逆语义）；要停止仍由停止钮 / 删除的「停止并删除」承担。
+- 归档后完成通知照旧（按窗口可见会话判定）；归档会话在后台跑完的实测未做（本轮用 held run 只验确认文案与不拦）。
+- 无协议/metadata 变化；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-10-31 · 第 854 页：进化冻结开关（桌面治理闭环）
+
+### 一、缺口（现读）
+
+业主三重点之一是「Evolve 的经验/实验/候选/预算/冻结这一套要真正闭环，而不是只读展示」。桌面「进化」分区原注释就写着「只读快照，不注入、不晋升、不改任何状态」：冻结态只能看，STOP 只能手写文件。操作者没有桌面侧 kill switch。
+
+### 二、改法
+
+- 核心 `governance.ts` 增 `setEvolveFrozen(workspace, frozen)`：冻结写 `.agent/evolve/STOP`、解冻删（幂等；目录缺失自动建）。注释钉死：STOP 只由人工治理入口写，候选/runner 无写入口。
+- IPC **v43 → v44**：`evolveSetFrozen(frozen): Promise<EvolveReport>`（动作后返回最新报告）；通道表 **133 → 134**（`agent:evolve-set-frozen`），README 通道数与 `mustWire`/wired 表同步；根与桌面全部版本钉同步 44。
+- 桌面「进化」分区增「治理」行：未冻结显示「冻结」、已冻结显示「解冻」，确认卡写明后果（不注入/不晋升/不写技能候选；解冻恢复）；冻结态横幅改指「治理」可解冻。
+- 假 API 桩增 `evolveSetFrozen`/`__cairnEvolveFreezes`，供离屏冒烟验状态往返。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| core `evolve-governance` | **5 条**（新增冻结写/解冻删/幂等/目录自建） |
+| core `ipc-protocol-version` / `readme-invoke-channel-count` | 2 + 2 条全绿（v44；README 134 与表长同源） |
+| 桌面 `settings-evolve` | **4 条**（治理行/按钮随态变/忙碌态；Section 调 `evolveSetFrozen`；确认文案） |
+| 桌面 `channels` / 各版本钉 | 134 键、v44 全绿（5 个 marketplace/plan/plugin 钉同步） |
+| 离屏真机 `evolve-freeze-smoke` | **6/6 PASS**：设置→进化→冻结确认→STOP 横幅+按钮变「解冻」→解冻→横幅消失；调用记录 `[true,false]`；0 控制台错误 |
+| 根 typecheck / 桌面套件 | 0 / **290 文件 / 1929 条全绿** |
+| boundary / renderer-layer | 绿 / 绿（170 文件） |
+
+### 四、边界
+
+- 本页只打通**冻结**这一环；晋升仍由 holdout/SEMA 链路自动判定，预算仍只读（桌面不提供改预算入口）。
+- 真机冒烟用假 API 桩验 UI 状态往返；STOP 文件真写/真删由 core 单判卷覆盖，未在真机工作区落 STOP。
+- 协议 bump 已同步版本钉、通道计数与 README；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-10-31 · 第 855 页：DeepSeek 官方 max 思考档可达
+
+### 一、缺口（现读）
+
+业主三重点之二是「极度适配 DeepSeek 最新大模型」；官方 `thinking.reasoning_effort` 取值为 **low/high/max**。现行五档词表只有 off/low/medium/high：能力表把上游 `max` 折成 `high`（判卷原文「max 归到 high」），但**真正发出去的是字面量 high**——官方最高档 max 从桌面无法选择、也无法发送。
+
+### 二、改法
+
+- `THINKING_EFFORTS` 增第五档 **max**；`ACTIVE_REASONING_EFFORTS` 与 `REASONING_BUDGET_TOKENS` 同步（max = 65,536 token 预算）；`reasoningDirective` 照旧。
+- 别名表：`max → max`（上游自述的最高档字面量原样保留）；`xhigh` 仍保守落 `high`（没有 max 名字的上游不冒发 max）。DeepSeek 两行能力值由 `off/low/high` 变 **`off/low/high/max`**（medium 仍未声明、不可选）。
+- DeepSeek native wire：`thinking.reasoning_effort` 现在可发 `max`（判卷覆盖 low/high/max 三值）。
+- 桌面词表 `THINKING_LEVELS` 增「**最高**」档（hint：只在模型自述 max 时可选），`thinking-selection` 的合法档位与 `run-request` 校验同步；换模型归位沿用能力值。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| core `provider-capabilities` / `reasoning-wire` / `deepseek-native-wire` | 101 条全绿（DeepSeek 值 `off/low/high/max`；映射 `[low,high,max]→[low,high,max]`、xhigh→high；wire low/high/max 三值） |
+| core `run-request` / `providers` | 校验接受 max；其余 provider 能力未变（没声明 max 的仍不可选） |
+| 能力现读（node） | `deepseek-cheap/deepseek-strong thinking.values = ["off","low","high","max"]` |
+| 桌面 `composer-rework` / `render-structure` / `thinking-selection` / `model-picker-axis` | 五键词表、模型声明 max 时菜单出「最高」、非法档仍拒绝（xhigh） |
+| 根 typecheck / 桌面套件 | 0 / **290 文件 / 1931 条全绿** |
+| boundary / renderer-layer | 绿 / 绿（170 文件） |
+
+### 四、边界
+
+- 未真实调用 DeepSeek API（无可用凭据/不产生外部费用）：wire 形状由请求体捕获判卷，官方取值来自 2026-10-25 api-docs 实读（仓库注记）。
+- `max` 只在模型**自述** max 时可选；DeepSeek 仍不提供 medium（官方没有）。xhigh 型上游不冒发 max。
+- 无协议/metadata 变化；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-10-31 · 第 856 页：左轨去重、过程带视觉与可自定义思考档
+
+### 一、缺口（现读）
+
+业主截图（576×1626，工作区 `ocu-ws-20261031`）给出三处同屏病：
+
+- **左轨重复**：收起侧栏时是**两条 48px 图标栏**——第二条顶部的 PanelLeft 与标题栏那枚同形，底部两枚滑杆「设置」并排；窄窗（≤760px）`.side-wrap` 被 CSS 隐藏时，快捷入口整组消失，新建/搜索在窄窗没有入口。
+- **过程带太薄**：思考行只剩三字灰字「思考记录」；工具行只剩「N 次工具调用」，失败摘要是通栏淡橙块；窄窗下 `flex-basis:100%` 把摘要挤到第二行，图标与 500ms 孤悬成断表格。
+- **思考档写死**：分段只出固定词表，`reasoningEfforts` 只读；档位从哪儿来（上游 `/models` 还是服务配置）界面上没有一句话。
+
+### 二、改法
+
+- **单轨**：`AppRail` 增 `actions` 槽；`WorkbenchSidebar` 收起态把 `SidebarRail` 并进同一条 48px 轨（`.rail-context`）。`SidebarRail` 的「展开侧栏」「打开设置」两枚重复入口下架（展开归 TitleBar、设置归能力轨底部）；选中标记由窗口边缘 `left:-7px` 收进栏内；≤760px 侧栏被隐藏时轨内快捷入口由 CSS 放回。
+- **过程带**：思考/工具统一 22px 图标芯片；思考收起态出单行摘要；复制钮从正文顶部独占行挪到行头（悬停/聚焦现身）；工具组收起态出总耗时；失败摘要收成 `fit-content` 卡片（左缘对齐工具名）；窄窗摘要保持单行省略，不再换行。
+- **思考档**：新增 `state/thinking-prefs.ts`（localStorage，坏档回空、off 不可藏、只做减法）；模型菜单「思考强度」标题行加「自定义」，勾选面板写明「档位来自模型声明（上游 /models 或服务配置）：low / medium / high」；收起当前档按模型缺省 → 第一可见档 → off 归位。
+- 词表：`STR.modelPicker` 增 `effortCustom / effortDone / effortEditAria / effortEditNote / effortReset / effortUndeclared`。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 新增/更新判卷 | `thinking-prefs` 4 条、`stream-process` +1 条（组总耗时 + 复制钮位置）、`model-picker-axis` +1 条（自定义入口只对多档模型出现）、`pane-disclosure` / `workbench-sidebar` 契约同步 |
+| 桌面套件（`pnpm --filter cairn-desktop test`） | **291 文件 / 1937 条全绿** + boundary 绿 |
+| 根 typecheck / renderer-layer | 0 报错 / 绿（171 文件） |
+| `interaction-smoke` | **31/31 PASS**（含「单轨 48px，快捷入口并进能力轨」「窄窗快捷栏和面板无横向溢出」） |
+| `app-shell-smoke` / `layout-smoke` | **44/44** / **15/15 PASS** |
+| 真机（隔离实例，1200×900，合成 API） | 展开：`.app-rail` 48、`.rail-context` `display:none`、可见「设置」1、展开钮 0（标题栏 1）；收起：`.app-rail` 48、`side-wrap` null、可见「设置」1、展开 1 |
+| 真机过程带读数 | `.row.think` 40px、`.think-toggle` 36px、`.think-preview` `display:block`、`.tool-group-toggle` 36px、组总耗时 `1.5s` |
+| 真机窄窗 576 | `overflow:false`、`.sidebar-rail` 34px、快捷入口 4 枚 |
+| 模型菜单探针 | deepseek-chat 三档默认全勾；取消「中」后 `localStorage["cairn.thinking.hidden.v1"] = {"deepseek-chat":["medium"]}`，分段变 **关 / 低 / 强** |
+
+### 四、边界
+
+- 自定义**只做减法**：上游/内置未声明的档位不能凭空加出来（core 的 `ProviderCapability.thinking.values` 仍是唯一门）；要加档需在服务配置里声明 `reasoningEfforts`，UI 还没有写入口。
+- 这份偏好是渲染层 localStorage，不跨窗口/设备同步，CLI 不读。
+- 真机读数是隔离实例 + 合成 API，不是真实模型调用；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 857 页：真机二轮——页脚账户位去重与思考行压字
+
+### 一、缺口（2026-11-01 00:22 真机截图）
+
+第 856 页只治了「两条图标栏」和「底部两枚滑杆」，真机上还剩两处：
+
+1. **设置仍是两处**：能力轨底部一枚滑杆「设置」，侧栏页脚又是一整行 `滑杆 + 设置与偏好 + ›`——同一枚图标同屏两次。
+2. **思考行压字**：摘要是 `flex:1 1 auto` 且 `min-width:0`，`think-main` 可被压缩；长摘要把标签挤到内容盒外，文字直接压在「思考记录」上（截图里读成「思考记录发了一个问号」）。
+
+### 二、改法
+
+- **页脚账户位**：`Settings2 + 设置与偏好 + ChevronRight` 的整行按钮改为 30px 圆形 `CircleUser` 图标（无文字），`foot-avatar-wrap` 右对齐；外观/用量/设置/关于仍在账户菜单里。**常驻设置入口只剩能力轨底部一枚**。
+- **思考行**：`.think-main { flex: none }`、`.think-label { white-space: nowrap }`；摘要保持 `flex: 1 1 auto; min-width: 0` 负责省略。标签永不被压，摘要从标签右沿之后开始。
+- **连续过程行**：`think + think / think + toolcluster / toolcluster + think / toolcluster + toolcluster` 顶距收 4px（第一行与接正文仍是 24px）——真机会话里五段过程原先散成五条清单。
+- 判卷升级：`layout-smoke` 原「设置入口有可见文字，未伪装成用户头像」改为「设置入口只在能力轨，页脚账户位不再复制一枚」；`stream-process` 增 1 条钉 `flex:none / nowrap`。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 桌面套件 | **291 文件 / 1938 条全绿** |
+| `layout-smoke` | **15/15 PASS**（新判据：`railSettings="设置"`、页脚可见文字为空） |
+| `update-notice-smoke` | **8/8 PASS**（账户圆钮仍带更新红点、菜单仍能开「关于与更新」） |
+| 真机复核（1200×800，真实用户档案） | 页脚只剩「服务正常」+ 圆形账户钮；左轨底部设置仅一枚；思考标签与摘要无重叠（标签全字可见，摘要右侧省略） |
+
+### 四、边界
+
+- 账户菜单内容未动（外观/用量/设置与偏好/关于）；只是不再用一枚与能力轨同形的滑杆图标 + 文字去重复常驻入口。
+- 过程行 4px 只作用于**相邻过程行**；首行顶距与过程接正文的 24px 设计档未改（`conversation-rail` 判卷仍绿）。
+- 真机读数是本机真实档案 + 真实会话历史，但未发起真实模型调用；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 858 页：暗色黑框与思考体的两根竖线
+
+### 一、缺口（2026-11-01 00:30 真机暗色截图）
+
+1. **大黑框**：工具/思考行的 22px 状态芯片用 `background: hsl(var(--bg-200))`。暗色主题里 `bg-200` 是 `#0a0a0a`，比页面底 `#151515` 更黑 ⇒ 完成态的灰勾被套进一枚「嵌在行里的黑键」。
+2. **两根竖线**：展开的思考体同时有 `.row.think .think-body { border-left }`（外层）和 `.think-body-inner { border-left }`（内层基础样式），中间隔 20px padding，真机上是两条平行线。
+
+### 二、改法
+
+- **字形去底**：`.toolcluster .tool-group-main > .glyph` / `.tool-head > .glyph` 宽度 22→20、`background: transparent`；只有 `failed`（危险色 10%）与 `pending`（品牌色 10%）保留一层状态底。思考图标同样去底（18px，裸陶土色）。
+- **只留一根线**：删掉 `.row.think .think-body` 的 `border-left` 与 20px 左内距（改 10px），竖线只由 `.think-body-inner` 提供。
+- 判卷：`stream-process` 增 1 条（完成态透明底 + 思考体外层无 border-left + think-icon 透明），文件内共 10 条。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 桌面套件 | **291 文件 / 1939 条全绿** |
+| 真机 CDP 读数（真实档案、暗色主题） | `.think-body` `border-left: 0px`、`.think-body-inner` `1px`；`.glyph` `background: rgba(0,0,0,0)`、宽 20；`.think-icon` 透明；页脚 `.avatar` 30px、可见文字为空 |
+| 真机截图复核 | 完成态只剩一枚灰勾；思考图标裸色；展开的思考体只有内侧一根竖线 |
+
+### 四、边界
+
+- 失败/执行中仍保留极淡状态底（不是所有芯片都取消——状态签要有可扫读的色）。
+- 竖线由内层提供，内容左内距 10px；这是单一来源，后续不要再给外层加 border。
+- 真机读数来自真实本机档案与会话历史，未发起真实模型调用；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 859 页：自进化注入带上工具面与任务路径
+
+### 一、缺口（现读）
+
+`prepareEvolutionInjection` 的检索上下文早就接受 `toolNames` / `paths`，但生产装配点只递了 `taskContent`：
+
+- `context.paths` 恒空 ⇒ `trigger.when = "on-path"`（keywords 按 glob 对 `context.paths` 匹配）**永远不命中**；`scope.pathGlobs` 这条作用域也失去运行时依据。
+- `context.toolNames` 恒空 ⇒ `trigger.when = "on-tool"` 只剩 `keywordHit` 兜底（任务原文恰好提到工具名才算），`scope.toolchain` 的匹配面只剩任务词。经验写了作用域，却从未按作用域生效。
+- 注入点原本在 `initialFace` 之前，即使想递工具名也拿不到本场**真实可见面**。
+
+### 二、改法
+
+- 新增 `src/agent/evolve/task-context.ts` 的 `extractTaskPaths`（纯函数、零 IO）：复用 `context-signals` 的 PATHISH 同一把尺；先抹 URL 整段；workspace 下的绝对路径归一成相对，工作区外绝对路径丢弃；`./` 归一、去重保序、封顶 8 条（与 session-provider 的上下文文件面同帽）。
+- `src/main/agent-runner.ts`：经验注入后移到 `initialFace` 之后，递 `toolNames: initialFace.tools.map(spec => spec.function.name)` 与 `paths: extractTaskPaths(promptText, { workspace })`。只改检索上下文，不动执行面、权限门与实验分配规则。
+- 判卷：`tests/evolve-task-context.test.ts` 4 条（URL/去重保序、绝对路径归一、封顶、裸目录与版本串）；`tests/evolve-injection-wiring.test.ts` 2 条走真 `runAgent` + 真 session provider（stub 只换 fetch 字节）：
+  - 同一场里 on-path（`src/**` 且任务点到 `src/parser.test.ts`）与 on-tool（`edit_file` 在可见面）都进 system prompt；工具面没有的 `web_search` 条目不进。
+  - 任务没点路径 ⇒ on-path 条目不注入。
+- 变异自检：分别只撤 `paths:` 行、只撤 `toolNames:` 行，对应断言各变红 1 次；恢复后 2/2 绿。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| evolve 定向（14 个 evolve 文件 + `context-signals`） | **15 文件 / 86 条全绿**（`--maxWorkers=2`） |
+| `prompt-surface-check` / `wiring-coverage` | 32 + 19 条全绿 |
+| 根 typecheck | 0 报错 |
+| 桌面套件 / boundary | **291 文件 / 1939 条全绿** / 绿 |
+| `docs-check` | 全绿（下一个未占用页号 860） |
+
+### 四、边界
+
+- 路径线索只来自任务原文，不扫文件系统、不推断符号；PATHISH 是启发式尺（与 session-provider 同一把），`console.log` 这类点号标识符可能被当成路径候选，但还要过 `pathGlobs` / glob 关键词才会真正注入。
+- 检索仍在 run 起点做一次：run 中途才激活的 MCP/插件工具不会回写这条 note（工具面变化走 `requestFace`，两件事不混）。
+- 判卷条目要显式 `expiresAt: null`：固定 1970 时间戳建条目在真实钟下当场过期（本页第一版踩到，已修）。
+- 未发起真实模型调用；未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 860 页：观测账闭环——基线注入归因与 confidence/lastUsedAt 回填
+
+### 一、缺口（现读）
+
+- `ExperienceEntry.confidence.observational` 与 `lastUsedAt` 只有初始化和读取，全仓**没有任何写入点**：排序始终按 `confidenceScore = (0+1)/(0+2)` 等同看待，「观测 x/y」标签永远读不到；recency 也永远拿 `updatedAt` 冒充「上次使用」。
+- 基线注入（没有 running 实验时）不写 assignment sidecar ⇒ 收束时的 Episode 的 `injectedExperienceIds` 恒空，即使想回填也**没有归因来源**。
+- 实验分支写 sidecar 的注释是「实验分配」；要扩成观测归因，契约说明也缺一半。
+
+### 二、改法
+
+- `src/agent/evolve/episode.ts` 新增纯函数 `observationalStatsOf(episodes)`：按 Episode 的 `assignment.injectedExperienceIds` 折出每条经验的 `trials/successes/failures/lastUsedAt`；同场同条只记一次；结局 unknown 只更新 `lastUsedAt`、不进 trials（「不可测 ≠ 0」）；输入的是 `loadEpisodesWithUserFeedback` 的读侧投影，赞/踩会按既有 `finalOutcomeOf` 优先级进 success/failure。
+- `src/agent/evolve/playbook.ts` 新增 `applyObservationalStats(entries, stats)`：纯函数，只覆盖 `confidence.observational` 与 `lastUsedAt`；trials=0 的账只更新使用时刻，不清既有置信度；causal 置信度不从这里来。
+- `src/main/evolve/runtime.ts`：
+  - 注入前读 Episode 观测账并叠加到 playbook 条目（读不动 ⇒ 原置信度 + 出声）；
+  - 基线注入（无实验 / 候选已 active / 候选不适用）也写 sidecar：`experimentId=null, arm=none`，只记 `injectedExperienceIds/injectedChars`。写不进仍注入——基线没有实验完整性要保，观测账缺这一条只出声；实验臂的 fail-closed 语义不变。
+- `assignment-store` 头注改成两条写入路径共用一份契约（实验分配 / 基线归因）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| evolve 全量（15 文件） | **84 条全绿**（`--maxWorkers=2`） |
+| 新增 `evolve-observation` | 4 条：同场去重/unknown 只更 lastUsedAt、赞踩与判卷优先级、纯叠加不改原条目、观测成功率进排序 |
+| `evolve-injection-wiring` | 3 条全绿（含基线 sidecar 的 injected ids；第二次注入出「观测 2/2」） |
+| 相邻判卷 `context-signals` / `prompt-surface` / `wiring-coverage` | 7 + 32 + 19 条全绿 |
+| 根 typecheck | 0 报错 |
+| 变异自检 | 撤基线 stamp ⇒ sidecar 两格变红；撤观测叠加 ⇒ 「观测 2/2」变红；恢复后全绿 |
+
+### 四、边界与并发工作树
+
+- 观测账是**读侧**：每次 run 起点重算，不写回 playbook 条目；同一场的赞/踩在下一场注入时生效（不在本场中途刷新）。`lastUsedAt` 取 Episode 投影时刻，不是装配时刻。
+- 基线 sidecar 写失败仍注入（对比实验臂写失败 ⇒ 不注入）；无 sessionId 的装配无法归因，仍按旧行为注入。
+- core 全量（`--maxWorkers=2`，工作树）**590/592 文件、7460/7468 条**；2 个红均非本批：`motion-policy` 由并发在飞的 `apps/desktop/src/renderer/styles.css:810` 裸 `linear` 触发；`render-image` 是负载超时，单跑 20/20。桌面套件本批改动前 291 文件/1939 条绿；写本页时另一批正在改 `cds-components.css` / `styles.css` / 两份桌面判卷（mtime 00:50–00:51），当场读数 289/291、1938/1940，两红落在被并发改动的 selector/间距判卷上——不属本批，未触碰那些文件。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 861 页：on-signal 经验接同会话上一跑读数
+
+### 一、缺口（现读）
+
+- 第 859/860 页把 `toolNames` / `paths` / 观测账接进了注入上下文，但 `context.signals` 仍是字面量 `[]`：`trigger.when = "on-signal"` 的经验在生产注入里**永不命中**。
+- 迁移映射把 `lesson-verify-red-*` 映成 `verify:red`、`lesson-repeat-action-*` 映成 `repeat-action`、遗留策略补丁映成 `verify-cause:*` / `goal-drift` / `cost-high`；这些条目写了触发，实际一条也进不来。
+- 同一会话的上一跑读数（verify 红、重复动作、目标漂移）恰好是下一轮最相关的信号，但装配时没人去读。
+
+### 二、改法
+
+- `src/agent/evolve/shadow.ts` 新增纯函数 `previousRunSignals(episodes, sessionId)`：只取**同一 sessionId 的最新一跑** Episode，复用 `contextFromEpisode` 的信号口径（`verify:*` / `verify-cause:*` / `repeat-action` / `goal-drift` / `judge:*`）；新会话或该会话无历史 ⇒ `[]`。当前跑的 Episode 收束才落账，所以装配时看到的同会话最新一条就是上一跑。
+- `src/main/evolve/runtime.ts`：
+  - Episode 账只读一次，同时喂观测账（第 860 页）与上跑信号；`playbook` 为空时跳过这次读盘（检索本来就是空）。
+  - `RetrievalContext.signals = 上跑信号 ∪ input.signals`（去重排序），`PrepareEvolutionInput` 增可选 `signals`。
+- 判卷：`evolve-observation` 增「同会话只取最新一跑、不同会话不串」；`evolve-injection-wiring` 增两条：
+  - `prepareEvolutionInjection`：同会话上一跑 verify 红 ⇒ `verify:red` 条目进 note；换 sessionId ⇒ 不进。
+  - 真 `runAgent`：预置同会话红 Episode ⇒ 该条目出现在 system prompt。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| evolve 全量 + 相邻判卷 | **18 文件 / 145 条全绿**（`--maxWorkers=2`） |
+| `evolve-injection-wiring` | 5 条全绿（路径/工具面/基线归因/观测标签/上跑信号） |
+| `evolve-observation` | 5 条全绿（同场去重、赞踩优先级、上跑信号、纯叠加、排序） |
+| 根 typecheck | 0 报错 |
+| 变异自检 | 撤 `previousRunSignals` 接线 ⇒ 两条信号判卷同时变红；恢复后 5/5 绿 |
+
+### 四、边界
+
+- 信号只来自**同一会话的上一跑**：不跨会话、不按任务类猜、不取更早的跑；run 中途新产生的 verify 红/重复动作不会刷新本轮 system prompt（下一次装配才生效）。
+- `cost-high` 与 `memory-lesson` 仍没有生产者：前者在 evolution advice 里以策略补丁形式单独渲染，后者是迁移占位；本页不冒充接上。`verify:green` / `judge:*` 现在可达，但当前迁移映射没有消费它们的条目。
+- 上跑信号与观测账共用同一次 Episode 读盘；读不动 ⇒ 无信号、原置信度，出声不阻塞。
+- 未发起真实模型调用；桌面套件受并发在飞 CSS 改动影响，读数同第 860 页；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 863 页：经验激活门——实验因果回填与人工 --apply
+
+### 一、缺口（现读）
+
+- 全仓**没有任何生产写入点**把 playbook 条目置为 `active`：迁移只产出 candidate，实验晋升只写候选档案与 SEMA staging；`retrieveExperiences` 只注 active ⇒ 真实工作区的基线注入长期无料，第 859–861 页接的触发面只有测试/手改账本才跑得到。
+- `confidence.causal` 同样只有初始化和读取：实验分析算出的 `riskDiff/ci95` 停在候选档案，没有回填到 playbook 条目；设计里「candidate → active 只认对照组证据」因此无数据可认。
+- `ExperiencePatchFields` 不含 `confidence`，账本层连回填的工具都没有。
+
+### 二、改法
+
+- `playbook.ts`：`ExperiencePatchFields` 允许 `confidence`，patch fold 同步该字段（仍走同一条 `validateExperience`）。
+- `experiment-candidate.ts`：passed 实验 → 把 `causal { trials: nControl+nTreatment, riskDiff, ci95 }` 与 treatment Episode 证据 patch 回 playbook 条目；按当前值幂等（重复 `from-experiment` 不重复追加）；追加前用同一 fold 验语义，坏 patch 当场抛。
+- 新增 `src/main/evolve/activation.ts`：纯 `activationBlockers`（status 仅 candidate/shadow/dormant、未过期、有 Episode 证据、causal.trials>0 且 riskDiff>0、激活后不得与现有 active/shadow 冲突、`workspace:"*"` 一律 fail-closed——跨库证据核验未实现）+ `activatePlaybookEntry`（STOP 冻结拒绝；默认 dry-run，`apply:true` 才写 `status:"active"`）。
+- 新增 `scripts/evolve-activate.ts <exp_id> [--workspace] [--apply] [--json]`：人工门 CLI，默认只出阻断理由。
+- 判卷 `tests/evolve-activation.test.ts` 6 条：四类阻断（无因果/无改进/过期/冲突）、门通过、全局作用域 fail-closed、实验→因果→激活→运行时基线注入一条龙、无因果时 `--apply` 仍拒、CLI dry-run/apply 分明。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| evolve 全量 + `context-signals` | 本页写入时 **17 文件 / 99 条**；补全局门与第 865 页相似度后现读 **101 条**（`--maxWorkers=2`） |
+| `evolve-activation` | 6 条（含 `riskDiff` 0.7、`trials` 20 的真实聚合与激活后 note 命中） |
+| 根 typecheck | 0 报错 |
+| 变异自检 | 撤实验因果回填 ⇒ `trials` 0≠20 变红；撤激活 status patch ⇒ 状态仍 candidate、两格变红；均恢复后全绿 |
+
+### 四、边界
+
+- 仍是**人工门**：激活不自动发生，SEMA staging/安装不在本页；CLI 默认 dry-run。设计里的 canary 期未实现——本页只补「实验通过 + 业主批准 → playbook active」这一跳。
+- 因果置信度只由 `createCandidateFromExperiment`（passed 分析）回填；重新分析成 failed 不会自动撤销已回填值，激活时需要人看最新分析。任意 patch CLI 未暴露，模型面也无法直接写 playbook。
+- 激活后与 active/shadow 冲突即拒绝（否则冲突对两条都不注入，等于制造死条目）。
+- 未跑真实模型实验；桌面套件受并发在飞改动影响；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 862 页：一轮 = 一条列（右缘）与设置卡内主按钮去珊瑚
+
+### 一、缺口（真机读数取证）
+
+第 754 页把对话从「文字墙」改成「可扫读的轨迹」时，只统一了**左轨**（`--rail-gutter` = 28），右缘留了三种口径。1440 隔离渲染实测（`.reading` 内容列 = 491..1241）：
+
+| 段 | 右缘 | 与正文差 |
+|---|---|---|
+| 助手正文 `.md-body` / 交付卡 `.changes-card` | 1185 | — |
+| 思考带 `.row.think` / 工具簇 `.toolcluster` | **1241** | +56 |
+| 署名条 `.assistant-footer` | 1241（左缘 513） | +56 |
+
+⇒ 同一轮里正文比它上下的过程带窄 56px，右沿呈锯齿；代码块与表格的边框线也随正文收，读起来像「正文被裁了一块」。根因：官方 fluid stop（`--cds-assistant-message-text-stop: clamp(0px, (100% - 384px) * .175, 56px)`）当时**只吃在 `.row.assistant .t` 的 padding-right**，思考带/工具簇各走各的满宽；交付卡另抄了一份 clamp 字面量（公式一改就漂）。
+
+同屏另一处「功能重复」：同一个 `mini-btn primary` 在全应用 20 余处读 `--btn-primary-*` 令牌（亮色深色实底 / 暗色抬升暖面），只有设置卡里被 `.ss-card .mini-btn.primary` 另涂成品牌珊瑚 ⇒ 「保存到钥匙串」是整屏最响的一块，与既有裁决「品牌珊瑚只出现在品牌标记本身，要强调用对比而不是色相」相反。
+
+### 二、改法
+
+- **单源**：stop 公式只在 `.reading` 声明一次；皮肤开启时官方 `[data-cds=AssistantMessage]` 上的同名声明覆盖助手行，公式一致（`100%` 基准同为 `.reading` 内容宽）。
+- **消费点搬到行自身**：`.row.assistant .t` 的 `padding-right` 去掉，改 `.row.assistant` 的 `margin-right`——助手行、思考带（含 `[data-running]` 那一路）、工具簇（含 `[data-tool-group]`）、错误行、交付卡都是 `.reading` 直接子元素，于是共用同一条基准。`cds-components.css` 的皮肤消费点同步搬到行上。
+- 交付卡的 `margin` 不再抄字面量，左档改读 `--rail-gutter`（原来手写 28px）、右档改读那条变量。
+- **用户行不动**：仍贴阅读列右缘（上游 Claude 同样只给助手正文右侧留白）。
+- 删掉 `.ss-card .mini-btn.primary` 的两行珊瑚覆盖（含 hover），卡内 36px 尺寸档保留。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `conversation-rail` 新增 ⑧ | 四段 + 交付卡 + 错误行都读同一条变量；**面上 clamp 公式只许出现 1 处**（先去注释再查声明）；反向钉 `.row.assistant .t` 不再带 padding-right |
+| 判据升级（不放宽，按裁决点名） | `cds-components` 的 stop 消费点从 `.t` 改钉到行上并加两条反向哨兵；`design-minimal` ⑥ 改钉 `var(--cds-assistant-message-text-stop)` + `var(--rail-gutter)`；`tool-rows` 的 24px 顶距正则改为「顶/底/左三档逐字钉住，右档允许 0 或该变量」——变异自检：顶距改 20px 红、底档改 8px 红 |
+| `settings-ui` 新增 1 条 | 卡内不再出现 `.ss-card .mini-btn.primary`；全局 `.mini-btn.primary` 确实读 `--btn-primary-bg`（防两处一起删造成假绿）；36px 档仍在 |
+| 真机几何（离屏 renderer，1440） | `.row.assistant` / `.t` / `.md-body` / `.row.think` / `.toolcluster` / `.changes-card` / `.assistant-footer` 右缘**全部 1185**；`.row.user` 1241；`.reading` 1282 |
+| `layout-smoke`（新增 1 条判据） | **16/16 PASS**：六段右缘同值（该窗宽下 982），用户行 1036、阅读列 1077 ⇒ fluid 档随窗宽收窄仍成立 |
+| `interaction-smoke` | **31/31 PASS**（0 控制台错误） |
+| 桌面套件（`--maxWorkers=2`） | **291 文件 / 1941 条全绿**（原 1939 + 本次 2 条） |
+| boundary / renderer-layer / 桌面 tsc | 绿 / 绿（171 文件）/ 本批 tracked 文件 0 报错 |
+
+### 四、边界
+
+- **他笔红不属本批**：`src/agent/evolve/shadow.ts`、`src/main/evolve/runtime.ts` 两个**未跟踪**文件在 `tsc` 里报 4 条（另一会话的 evolve 面在改），本批未碰、未替它修。
+- `component-map.json` 里 AssistantMessage 的 `cairn` 选择器随消费点更新（该文件是逐组件裁决台账），`UPSTREAM.json` 的 sha256/bytes 同步刷新（13234 / `b9aad179…`），`cds-components` 摘要判卷绿。
+- 暗色下 primary（`--bg-elevated` + 亮字）与 secondary（`--bg-000` + `--text-200`）只差一档底与一档字色，可辨识度弱于原珊瑚——是否再抬一档由业主裁，本批只按既有令牌与用色裁决收口。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（它们量 HEAD，本批未提交）；未提交。真实模型调用未发起（读数为离屏 renderer + 合成 API）。
+
+## 2026-11-01 · 第 864 页：动效门收口——`linear` 走令牌与 E1 计数随 grid 展开
+
+### 一、缺口（现读）
+
+第 862 页（桌面右缘批）给思考体/宽度两处 Grid 展开新增了 `visibility 0s linear ...`，root `motion-policy-check` 因此变红：
+
+- M3 只认 `--ease-*` 令牌，`linear` 是裸关键字 ⇒ `styles.css:818` 一处发现；
+- E1（`visibility 0s` 豁免）从 4 处增到 6 处，`tests/motion-policy.test.ts` 仍按 4 条断言 ⇒ 该页的「豁免条数一致」判据红，连带 M3 坏标本用例多出 1 条既有发现。
+
+### 二、改法
+
+- `styles.css`：`visibility 0s linear var(--t-think-expand)` → `visibility 0s var(--ease-linear) var(--t-think-expand)`（`--ease-linear: linear`，行为逐字不变，只是让缓存/纪律面走令牌）。
+- `tests/motion-policy.test.ts`：E1 期望 4 → 6，注释点名两处新增都是 Grid 展开的瞬时翻转（宽度、思考体各一条），沿用同一规范理由。
+- 未改任何动画时长、曲线或可见行为；未改第 862 页的布局断言。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `motion-policy-check` | 绿：7 条规则全过，0 处发现 |
+| `tests/motion-policy.test.ts` | **33/33**（含坏标本反向自证） |
+| 桌面套件 / boundary | **291 文件 / 1941 条全绿** / 绿 |
+| core 全量（`--maxWorkers=2`） | **594 文件 / 7481 条全绿** |
+| 根 typecheck | 0 报错 |
+
+### 四、边界
+
+- 这是并发桌面批（第 862 页）留下的纪律面收口，不是新动效设计；`linear` 与本页令牌同值，真机观感不变。
+- 桌面套件读数由第 862 页的 CSS/判卷树给出；本页只改 `linear` 一处声明与 root 判卷计数。
+- 未发起真实模型调用；core 全量读数见上表；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 865 页：经验检索补上任务相似度项（Jaccard）
+
+### 一、缺口（现读）
+
+`docs/evolve-proposal.md` §5.5 写明检索排序是「scope → trigger → **相似度（token Jaccard/MinHash + 工具链）** → 预算」；`retrieveExperiences` 的实际打分只有 kind/特异性/置信度/新旧，**没有相似度项**。同 scope、同 trigger、同置信度的两条经验在预算只剩一格时由 id 字典序决定去留，与任务词面无关——注入的可能是无关经验。
+
+### 二、改法
+
+- `playbook.ts` 新增 `taskSimilarity(entry, tokens)`：CJK 二元组 + 拉丁词用**与地图/记忆同一把** `tokensOf`；语料 = body + 至多 20 个 trigger keywords；Jaccard = 交集/并集（0..1）。
+- 打分加 `similarity * 4`：低于 kind（10）与特异性（5），高于新旧（2），不推翻「warning 优先」等主干，只在同档内把任务更近的条目排前。
+- 判卷：`evolve-playbook` 增 1 条「同分同证据时词面更近者优先」——两条 on-signal、同 kind/证据/时间，无关条目 id 更小（无相似度时字典序会先选它），断言选中相关条目。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| evolve 全量 + `context-signals` | **17 文件 / 101 条全绿**（`--maxWorkers=2`） |
+| 根 typecheck | 0 报错 |
+| 变异自检 | 撤 `taskSimilarity * 4` ⇒ 该格选中无关条目（`exp_000…`）变红；恢复后 10/10 绿 |
+| core 全量 | 本页改动前（第 864 页）594 文件 / 7481 条全绿；本页未重跑全量 |
+
+### 四、边界
+
+- 词面 Jaccard，不买同义改写；那一档仍留给 embedding（与记忆 recall 同一边界）。中文按二元组切，英文词 ≥3 字符，与 `tokensOf` 同尺。
+- 只作用于**已通过 scope/trigger 的候选之间的排序**，不改变谁能命中；预算/冲突/过期语义未动。
+- 权重 4 是排序项的刻度，不是晋升依据；causal/observational 的职责不变。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 866 页：让布局说话——设置面次级说明减法（11 处）
+
+### 一、缺口（业主本轮口径）
+
+业主在目标里加了一句：**「Avoid unnecessary secondary labels and descriptions. Let the layout do the explaining.」** 拿这条去扫设置面，抓到的是同一族病：**次级说明在复述它正下方那个控件已经说的话**，或者复述另一屏已经列过的东西。逐条（现读）：
+
+| 行 | 原次级说明 | 为什么是废话 |
+|---|---|---|
+| 界面语言 | 目前只有中文界面；英文界面尚未接入。 | 右侧就摆着一个静态值「中文（简体）」，没有可选控件 ⇒ 布局已经说了「只有一种」 |
+| Ctrl+Tab 切会话 | 也可用 ⌘⇧[ / ⌘⇧] 切换。 | `shortcuts.ts` 快捷键表里已有「⌘⇧] / ⌘⇧[ 下一个 / 上一个会话」一行 ⇒ 同一信息两处 |
+| 工程细节 | 排查问题时对照日志使用的工程细节。 | 逐字复述行标签（label=「工程细节」），旁边还有「展开」二字 |
+| 联网搜索（页级） | 连接搜索服务，让助手查找网页与最新资料。 | 复述页面标题「联网搜索」 |
+| 启用联网搜索 | 开启后，助手可在对话中请求检索网页。 | 开关自己就在右侧显示「开启/关闭」 |
+| 允许本机或局域网服务 | 连接你信任的本地搜索服务时开启。 | 「要用就开」——没有新信息 |
+
+另有 5 处是**半句复述 + 半句不可推导事实**混在一行，删掉的是前半句：窗口材质（「macOS 侧栏半透明；默认关」→ 留「改动需重启窗口。」）、首启检查（→ 留「不会重置任何其它设置。」）、任务完成时通知（→ 留「点击通知回到该会话。」）、当前通道（→ 留「下次发送生效。」，生效时机按既有裁决必须就地说明）、方案门（→ 留「输入框旁的「方案」开关可按轮覆盖。」）。
+
+### 二、改法
+
+- 6 条 desc 整条撤（行只剩标签 + 控件），5 条剪到只剩不可推导的那半句：`settings-sections.tsx` / `settings/NetworkSection.tsx`。
+- 设置面 `desc=` 条数 **42 → 36**（本批实测；EmptyState 的说明**不动**——那里布局是空的，文字就是布局）。
+- 新增棘轮与哨兵（`design-minimal`，3 条）：① 设置面 `desc=` 条数帽 **36、零余量**（再加一条就红，逼先说理由）；② 同一行 `desc` 不许包含 `label` 前 4 字（复述检测，且先确证至少扫到 8 对成对 label+desc，防空转）；③ 被撤的 10 句逐句点名不许回来。
+- 判据升级（不放宽，按裁决点名）：`settings-sections` 三条（通知行改钉「点击通知回到该会话」并反向钉旧句、Ctrl+Tab 行改钉「只剩标签与开关」并正查 `shortcuts.ts` 仍在位、通用段两条旧提示词反向钉）、`settings-doctor` 一条（工程细节行不再复述）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `design-minimal` | 9 → **12 条全绿**（新增 3 条减法判卷） |
+| 变异自检 | 条数帽：现值 36 = 帽 36 ⇒ 加任意一条即红（脚本实测 `n+1>36` 为真）；复述检测扫到 10 对成对 label+desc（非空转） |
+| 桌面套件（`--maxWorkers=2`） | **291 文件 / 1944 条全绿**（第 862 页 1941 + 本批 3） |
+| `settings-sweep-smoke` | **4/4 PASS**：11 个分区全部点开、正文非空、0 渲染层控制台错误 |
+| boundary / renderer-layer / docs-check | 绿 / 绿（171 文件）/ 受检项全绿（页号 863 已被并发会话占用，本批改到 866） |
+| dist | 重建 `assets/index-B1TB2n2Y.js` / `index-CiSRxVXa.css`（本批改的是 tsx 文本，js 随构建刷新；页内先前记的是本批中途那一次构建的 hash，已按最终产物更正） |
+
+### 四、边界
+
+- 只动**设置面**的次级说明。空态（EmptyState）的说明、行内 tooltip、`sp-note`/`Notice` 这类**状态反馈**不在本批口径内——它们不是「替布局复述」。
+- 保留的 5 条剪短句仍带不可推导事实（重启要求、生效时机、可逆性、覆盖入口）。业主若认为这 5 条也该走，下一批按同一判卷删（帽会跟着调低）。
+- 并发归属：`settings-sections.tsx` 另有会话在改（HEAD 与工作树的 Ctrl+Tab 说明文本已不同），本批按盘上现读改。**他笔 tsc 红不属本批**：未跟踪的 `src/agent/evolve/*`、`src/agent/evolve/shadow.ts`、`apps/desktop/tests/settings-evolve.test.tsx`（缺 `negative` 字段）与已改的 `src/main/ipc-protocol.ts` 都是另一会话的 evolve 面；本批 tracked 文件 0 报错。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。截图在 /tmp（未提交故台账不点名）。
+
+## 2026-11-01 · 第 867 页：负证据降级——active 经验持续失败转 dormant
+
+### 一、缺口（现读）
+
+- `retirementFindings` 只看「过期/冲突」；active 经验即使注入了 5 场、5 场全失败，仍会继续被基线注入——观测账（第 860 页）只参与**排序**，没有任何降级出口。
+- `evolve-report` 与 `evolve-retire` 都没读观测账：人看不到「哪条 active 正在持续变坏」，CLI 也退不掉它。设计 §4.5 的「负证据 → dormant」没有落地。
+
+### 二、改法
+
+- `retirement.ts`：`retirementFindings(entries, now, observations, options)` 新增 `negative`：
+  - 只判 **active**；可测场次 ≥ 5（`RETIREMENT_MIN_NEGATIVE_TRIALS`）且成功率 ≤ 20%（`RETIREMENT_MAX_NEGATIVE_SUCCESS_RATE`）才产出；
+  - 优先级 expired > negative > conflict（同一条只产一个 finding，避免同批两个 op）；
+  - `retirementOps`：negative → `patch status:"dormant"`（可恢复；activation 门允许 dormant → active，且仍要因果证据）。
+- `report.ts`：复用已加载的 Episode 账算 `observationalStatsOf`，报告新增 `playbook.negative` 与人读行「负证据 N」。
+- `scripts/evolve-retire.ts`：读 `loadEpisodesWithUserFeedback` + 观测账后传进 findings；仍默认 dry-run，`--apply` 才写。
+- 判卷 `tests/evolve-retirement.test.ts` 3 条：纯函数阈值/最小样本/非 active 边界、ops 映射（dormant/retire/deprecate）、真文件 5 场失败 → 报告负证据 → dry-run 不动 → `--apply` 置 dormant → 运行时不再注入。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| evolve 全量 + `context-signals` | **18 文件 / 104 条全绿**（`--maxWorkers=2`） |
+| 根 typecheck | 0 报错 |
+| 变异自检 | 跳过 negative 循环 ⇒ 3 格变红；`dormant` 改成 `deprecated` ⇒ 2 格变红；均恢复后全绿 |
+
+### 四、边界
+
+- 观测账是**相关**不是因果：没有对照组，表现差也可能因为任务更难。因此门槛留在 5 场/20%，且 `--apply` 由人拍；不是自动降级。
+- 只降 active；candidate/shadow 不判。降级后条目仍可在账上，activation 门要求重新拿到因果证据才能回到 active。
+- 与冲突/过期同条目时按 expired > negative > conflict 只出一个 op；冲突的另一条仍各自按 conflict 处理。
+- 未发起真实模型调用；core 全量在本页改动前（第 864 页）594 文件 / 7481 条全绿，本页未重跑；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 868 页：verify 当轮红灯的快环经验提醒
+
+### 一、缺口（现读）
+
+第 861 页把 `on-signal` 经验接到了「同一会话上一跑」——但那只在 run 起点生效。模型本轮自己调 `verify` 拍出代码红时，最相关的 `verify:red` / `verify-cause:*` 经验**不会出现**：要么下一场才想起，要么根本没有下一场。loop 的失败回执已经会回注红字、重复动作提示与 no-progress 阶梯，唯独没有经验面。
+
+### 二、改法
+
+- 新增 `src/main/evolve/experience-nudge.ts`：`experienceSignalNudge(workspace, signals, input)` 只读 active 经验，复用起点注入的 `tokensOf`/观测账/检索排序；硬帽 2 条 / 700 字符；`excludeIds` 去掉起点已注入或上次已提醒的 id；读失败出声并返回空。
+- `playbook.ts` 抽出 `renderEntryLines`，新增 `renderSignalNote(selected, signals)`：与起点注记共用行渲染，只换抬头。
+- `loop.ts` 增 `verifyExperienceNudge?: (signals) => string | Promise<string>`：只在**非环境红、且这条红会让模型继续修**（手动拍，或自动拍开了返修）时调用；信号为 `verify:red` + `verify-cause:<cause>`；返回文本接在同一失败回执尾部，走既有 `redactSecrets` choke-point；回调抛错只出声，不影响验证回流。
+- `runtime.ts` 的 `EvolutionInjection` 增 `injectedExperienceIds`（含基线），agent-runner 用它初始化去重集；闭包复用本轮 `initialFace` 工具面与 `extractTaskPaths` 路径。
+- 判卷 `tests/evolve-nudge.test.ts` 4 条：命中/excludeIds/未知信号/非 active；真 `runLoop` 失败回执含提醒且信号带 cause；agent-runner 装配点行锚定。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| evolve + verify/loop 相邻判卷 | **22 文件 / 143 条全绿**（`--maxWorkers=2`） |
+| 根 typecheck | 0 报错 |
+| 变异自检 | 撤 loop 的 nudge 调用 ⇒ 回执不含提醒、信号格红；撤 agent-runner 的 `verifyExperienceNudge` 接线 ⇒ 行锚定格红；均恢复 |
+| core 全量（`--maxWorkers=2`） | **596 文件 / 7490 条全绿** |
+| 桌面套件 | **291 文件 / 1944 条全绿** |
+
+### 四、边界
+
+- 只在 verify **代码红**出现；环境红不提醒（不是代码问题），自动拍未开返修也不读（没有下一轮，读了白花 IO）。
+- 提醒是**建议**：不改系统提示、不新增事件类型、不改变验证/返修/收束语义；接在失败回执里，由模型自行判断是否适用。
+- 仍只取 active；观测账只进排序；不跑对照、不晋升。同一条经验本场只说一次（起点注入与多次红共用去重集）。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 869 页：同轮提醒扩到重复动作/卡死
+
+### 一、缺口（现读）
+
+第 868 页只在 verify 代码红时给经验提醒；**重复动作**（同一工具+参数连续失败/同结果）仍只有 loop 的 `[repeat]` 文案，没有经验面。迁移映射里 `lesson-repeat-action-*` 正是 `trigger.when="on-signal", signal="repeat-action"`，模型在卡死当轮看不到它，只能靠下一场或根本没下一场。
+
+### 二、改法
+
+- `loop.ts`：选项 `verifyExperienceNudge` 改名 `experienceNudge`（同一闭包服务两类信号）；在通用工具块里，`repeatNote` 真正生成（`stuckNudge` 主会话）时调 `experienceNudge(["repeat-action"])`，文本接在同一 `tool_result` 尾部，走既有 `redactSecrets`。
+- `agent-runner.ts`：闭包改名，仍复用本轮 `initialFace` 工具面、`extractTaskPaths` 路径和起点注入去重集。
+- 判卷 `evolve-nudge` 增 1 条：三次同动作同错误 → 回调只收到一次 `["repeat-action"]`，第三次回执同时含 `[repeat]` 与经验提醒；verify 那格改钉新选项名。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `evolve-nudge` / `auto-verify-repair` / `loop` | **36 条全绿** |
+| 根 typecheck | 0 报错 |
+| 变异自检 | 撤 stuck 分支的 `experienceNudge` 调用 ⇒ repeat-action 格变红；恢复后 5/5 绿 |
+| core 全量 / 桌面套件 | core **596 文件 / 7491 条**：本批相关全绿；唯一红是并发第 870 页编辑中的失效 sha，随后该页自修，单跑 `docs-check.test` **115/115** 绿；桌面 **291 文件 / 1944 条全绿** |
+
+### 四、边界
+
+- 只在 `repeatNote` 真正生成的那一拍调用：`stuckNudge` 关闭的 worker/靶场不产生这条提示，因此也不读经验；worker 自己的看门狗不变。
+- 信号固定 `repeat-action`；同一条经验通过调用方去重集本场只说一次（与 verify 提醒、起点注入共用）。
+- 提醒是建议，不改系统提示、不新增事件类型、不改变卡死判据与收束语义；上限仍是 2 条 / 700 字符。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 870 页：首页问候不再以装饰大字压过输入区
+
+### 一、缺口（真机读数）
+
+业主本轮口径：「Avoid unnecessary secondary labels and descriptions. Let the layout do the explaining.」拿它扫首页空态，量到的是**字级倒挂**（1440 隔离 renderer 实测）：
+
+| 元素 | 字号 | 能操作吗 |
+|---|---|---|
+| 问候 `.empty-greet`（「还没休息呀，今天想做点什么？」） | **44.2px** / 行高 54.4 | 不能点、不能输入 |
+| 输入卡正文 textarea | 14px | 这才是主角 |
+| 输入区控件（引导 / 方案 / 模型） | 13px | — |
+| 起手行 `.start` | 14px | 能点 |
+
+屏幕上最大的一档字属于一句纯装饰语，与输入正文差 **3.2:1**。来源不是本地写死：`vendor/dsh-claude-style/hero.css`（钉在 `scripts/sync-dsh-claude-style.mjs` 的 `revision` 常量上，同步脚本管，不手改）把上游 hero 的编辑字号 44.2px 转录过来。那是 Claude **整屏只有这一行 + 输入框**时的尺寸；Cairn 首页是三栏工作台里的一列，同一枚字号在这里变成喊话。
+
+### 二、改法
+
+- **皮肤层覆盖**（既有机制，同第 9 项代码块做法）：`cds-components.css` 末尾加一条更高特异性规则 `body[data-dsh-claude-style] .empty h1.empty-greet[data-dsh-claude-part~="hero-headline"]`，字号压回标题档上界 `--fs-title-lg`（22px）、行高 1.3、字重 `--fw-medium`。上游其余 hero 形制（衬线字族、星标先行、升起动效、预览徽标隐藏）**原样保留**。
+- 基准层 `styles.css` 的 `.empty h1.empty-greet` 同步由 `clamp(2rem, 4vw, 2.5rem)` 改走 `var(--fs-title-lg)`（皮肤关掉时不再两套字号）。
+- 窄窗（≤620px）那条 `clamp(1.75rem, 7vw, 2rem)` 删掉字号档：窄窗只改对齐与换行，**不许反向上调**（原值比基准还大一档）。
+- 星标 `.empty-greet-mark` 按 `0.68em` 走，随字号自动从 30px 收到 15px，不再另写数。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `layout-smoke` 新增 1 条（真机字级读数） | **17/17 PASS**：`greetPx 22`（原 44.2）、`taPx 14`、比值 1.57 ≤ 1.8；同时报「首页最大一档字归谁」（现仍为问候 22px，作为标题合理） |
+| `quick-starts-ui` 判据升级（不放宽，点名） | 原两条正向钉 `clamp(2rem, 4vw, 2.5rem)` / 窄窗 `clamp(1.75rem, 7vw, 2rem)` ⇒ 改钉 `var(--fs-title-lg)` 并**反向**钉「基准与窄窗都不许再出现 clamp 字号」；衬线字族、珊瑚星标两条原样保留 |
+| 桌面套件（`--maxWorkers=2`） | **291 文件 / 1944 条全绿** |
+| boundary / renderer-layer / docs-check | 绿 / 绿（171 文件）/ 受检项全绿 |
+| dist | 重建后由 `layout-smoke` 直接量新包（读数即新 dist） |
+| 视觉自查 | 画廊 16 张重跑，01-empty 复核：问候成一行安静的衬线标题，输入卡回到画面主角 |
+
+### 四、边界
+
+- **不手改 vendor**：上游转录件保持字节不动，偏离只写在皮肤层并留注释（谁看到 44.2 少了，能在 `cds-components.css` 找到理由）。
+- 问候**文案**本身（按时段变化的「还没休息呀」等）未动——本批只治字号这一档可测倒挂；要不要留这套寒暄文案属产品口味，待业主一句话。
+- 同屏还剩两处「说不清的次级控件」已登记未做：输入区右下角无上下文时仍占位的用量环（真机 aria-label「用量明细：上下文暂无数据」，视觉是一枚「—」），以及「引导」芯片的点+盾+字三重标记。前者要动 `composer-usage-ring` 一组判卷，单独开页做。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+
+## 2026-11-01 · 第 871 页：快环提醒的归因——事件字段与 Episode 观测账
+
+### 一、缺口（现读）
+
+第 868/869 页的 run 中途经验提醒只把文本接进失败回执；注入的 id 没有落盘。后果：
+
+- Episode 只认起点 assignment 的 `injectedExperienceIds` ⇒ 中途提醒过的经验对观测账完全不可见；
+- 「提醒有没有用」无法从账上回答，负证据降级/排序也看不到这些场次。
+
+### 二、改法
+
+- `events/types.ts` 的 `tool_result` 增可选 `nudgeExperienceIds`（缺席 = 这一笔没有提醒；旧日志逐字兼容）。
+- `loop.ts`：`experienceNudge` 返回 `{ note, ids }`；verify 红与卡死两处把 ids 随同一 `tool_result` 落盘（只在非空时写）。
+- `episode.ts`：`EpisodeEvidence` 增可选 `nudgedExperienceIds`，`projectEpisode` 从主会话 tool_result 收集去重排序；`episode-store` 读侧校验可选数组。
+- `observationalStatsOf`：每条 Episode 的 trial 集合 = 起点 `assignment.injectedExperienceIds` ∪ 中途 `evidence.nudgedExperienceIds`（同场 Set 去重）；观测账从此覆盖快环提醒。
+- `agent-runner` 的闭包返回 `{ note, ids }`，同时把 ids 加进去重集。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| evolve + event/session semantics/replay determinism | **21 文件 / 155 条全绿**（`--maxWorkers=2`） |
+| 根 typecheck | 0 报错 |
+| 变异自检 | 撤 tool_result 的 `nudgeExperienceIds` ⇒ 事件/投影格红；撤观测账并集 ⇒ 中途提醒 trial 格红；均恢复 |
+| core 全量 / 桌面套件 | core **596 文件 / 7492 条全绿**；桌面 **291 文件 / 1945 条全绿** |
+
+### 四、边界
+
+- 字段可选：旧日志/旧 Episode 没有这一格，读侧按「没有中途提醒」处理；无新事件类型。
+- 中途提醒计入**观测**（相关，不是因果）；它不会改 assignment、不影响实验臂归因，也不触发晋升。
+- 只在提醒真的注入（ids 非空）时落字段；提醒被去重/无 active 时不写空数组。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 872 页：权限触发器去掉第三枚标记，起手行悬停不走色相（附三条否证）
+
+### 一、缺口（现读）
+
+1. **权限 chip 一个状态三种说法**：触发器 = `色点 + 盾形图标 + 档名 + 箭头`。色点按五档给五色（`MODE_DOT`），档名给准确词（只读/默认/引导/自动/完全允许），而中间那枚盾**只有两个形**——`modeInfo.warn ? ShieldAlert : Shield`，即「危险/不危险」一位信息，既不比档名更准，也不比色点更醒目。真机 1440 读数：这枚 chip 宽 87px，是下颌最宽的非模型控件。
+2. **起手行悬停的珊瑚**：`.start:hover` 已经把整行文字提到 `--text-000` 并铺 3.5% 中性底，图标却又单独变 `--accent-brand` ⇒ 同一件事两种说法，且是空屏那一排里唯一的饱和色（与 2026-10-15 用色裁决「强调用深色对比而非色相」相抵）。
+
+### 二、改法
+
+- 触发器下架盾形图标，留 `色点 + 档名 + 箭头`（`Composer.tsx`；`ShieldAlert` 随之退出 import，`Shield` 仍服务附件「工作区外」标记）。**弹层五档列表不动**——那里色点/图标/两行说明是同一张对比表的列，扫描时各管一件事。
+- `.start:hover .start-icon / :focus-visible` 由 `accent-brand` 改 `--text-000`，与整行同一档中性强调。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `composer-rework` 触发器条 | 加钉「整枚 chip 只剩箭头一枚 svg」（改前 2 枚）+ 箭头仍在位；色点/data-mode/token 色三条原样保留 |
+| `control-accent` 新增 1 条 | 起手行悬停规则含 `--text-000`、不含 `accent-brand`，并带反向自证（换回色相即红）；「品牌橙仍留在品牌位」一条不动 |
+| 桌面套件（`--maxWorkers=2`） | **291 文件 / 1945 条全绿** |
+| 真机冒烟 | `layout-smoke` **17/17**、`interaction-smoke` **31/31**、`app-shell-smoke` **44/44**，各 0 FAIL |
+| 视觉自查 | 画廊 16 张重跑；裁图复核触发器现为「● 引导 ⌄」，与邻位「≔ 方案」同一语法 |
+| boundary / renderer-layer / docs-check | 绿 / 绿 / 受检项全绿 |
+
+### 四、否证（三条候选经查不成立，按第 751 页的做法登记）
+
+- **「标题栏改动 chip 与工具菜单重复」**：不成立——`WorkbenchTools.tsx` 早已 `PANE_OPENABLE.filter(k => k !== "changes")`，改动只有标题栏一个入口；流内交付卡说的是「这一轮」，与「本会话」不同口径。
+- **「侧栏『今天 1』计数是多余标签」**：不成立——分组收起时计数是唯一信息，删掉等于让用户盲开。
+- **「用量环无数据时的『—』该藏掉」**：不成立——2026-10-15 业主明确裁过「拿不到读数时环心『—』且 title 把两种『未知』说清，不假报 0」，判卷四条钉着。本条此前写进第 870 页候选，现予撤销并在页里点名理由。
+- 另：第 870 页曾疑「输入区里的 Tab 芯片是常驻废话」，现读为已按 `suggestArmed` 门控（空输入 + 空闲 + 有接线才现身，运行中不摆），不是缺陷。
+
+### 五、边界
+
+- 起手行悬停只改图标色这一档；行的文字/底色强调、`.start-go` 的显现时序未动。
+- 弹层内五档的「色点 + 图标 + 两行说明」保留（对比表语法），本批只治**触发器**这一处冗余。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交；真实模型调用未发起。
+
+## 2026-11-01 · 第 873 页：可激活条目可见——报告字段与 CLI list
+
+### 一、缺口（现读）
+
+第 863 页的激活门只能按 id 试：`evolve-activate <exp_id>`，人不知道**哪些条目已经过门**、哪些还差什么；`evolve-report` 只印状态/冲突/过期/负证据计数，候选是否「就差拍板」不可见。生命周期最后一跳存在，但入口不透明。
+
+### 二、改法
+
+- `report.ts`：复用同一 `activationBlockers`，新增 `playbook.activatable: string[]`（非 active 且零阻断的 id，排序），人读行追加「可激活 N（前 3 个 id…）」；只读快照，不写状态。
+- `scripts/evolve-activate.ts`：新增 `list` 命令——列出所有非 active 条目、各自状态与阻断码（或 `✅ 可激活`）；`--json` 同形。默认仍不写盘。
+- 判卷 `evolve-activation`：实验因果回填后，报告 `activatable` 含该 id、list 标 `activatable:true`；无因果时两者都不含/false；激活后报告不再列它。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `evolve-activation` / `evolve-governance` / `evolve-user-feedback` | **18 条全绿** |
+| 根 typecheck | 0 报错 |
+| 变异自检 | 报告去掉零阻断过滤 ⇒ 可激活格红；CLI list 把 blockers 置空 ⇒ 无因果格判 `true` 红；均恢复 |
+| core / 桌面 | core **596 文件 / 7492 条全绿**；桌面复跑时另一会话正在改 `DiffView.tsx`（语法中间态 `Expected "}" but found "&&"`），3 个文件 transform 失败——非本批；最近一次完整绿为 **291 / 1945** |
+
+### 四、边界
+
+- `activatable` 是**提示**，不是自动激活：仍要执行 `--apply` 并受 STOP 冻结、冲突、因果证据与证据集约束。
+- 同一份条目在不同时间可能因新增冲突/过期而进出该列表；报告时间戳即判定时刻。
+- CLI `list` 只读；不写 playbook、不创建 assignment、不调模型。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 874 页：auto-verify 返修轮也带经验提醒
+
+### 一、缺口（现读）
+
+快环提醒已覆盖模型自调的 verify 红与重复动作，但 **harness 收束前的自动验证拍**（`autoVerify`）不同：拍红只写一条「[verify] 自动验证未通过」证据；即使开了 `autoVerifyRepair` 再要一轮模型，那一轮也拿不到任何相关经验。模型明知还要再修，却看不到账上已有的同类教训。
+
+### 二、改法
+
+- `loop.ts` 的 auto 分支：仅当**代码红、非环境红、且开了 `autoVerifyRepair`** 时调同一个 `experienceNudge(["verify:red", "verify-cause:<cause>"])`；文本接在自动红 `tool_result` 尾部（走 `redactSecrets`），ids 随 `nudgeExperienceIds` 落盘。
+- 没开返修 ⇒ 模型不会再有下一轮，不读；环境红 ⇒ 不是代码问题，不读；成功拍不读。
+- 判卷 `evolve-nudge` 增 1 条：write → 收口自动验证红 → 返修；自动红回执含提醒、`nudgeExperienceIds` 正确，信号为 `verify:red` + cause。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `evolve-nudge` / `auto-verify-repair` / `loop` | **37 条全绿** |
+| 送达面（新增断言） | manual verify / auto-red 返修 / repeat-action 三路的提醒文本都出现在**下一轮 provider messages** 里（不只落事件） |
+| evolve 全量 + `context-signals` + `event-semantics` | **20 文件 / 131 条全绿** |
+| 根 typecheck | 0 报错 |
+| 变异自检 | 撤 auto 分支的 `experienceNudge` 调用 ⇒ 自动红提醒格变红；恢复后 6/6 绿 |
+| core 全量 / 桌面 | core **596 文件 / 7493 条全绿**；桌面未重跑（并发 `DiffView.tsx` 仍为语法中间态；最近完整绿 291 / 1945） |
+
+### 四、边界
+
+- 只在「返修轮真的会来」时读经验；自动拍至多两拍，每次都是同一去重集，不会复读同一条。
+- 提醒仍是建议：不改自动验证判据、不改返修次数、不新增事件类型；只是自动红回执多一段经验与归因 ids。
+- 环境红/绿拍不提醒；未开 `autoVerifyRepair` 不提醒。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 875 页：差异行评注——常驻标记回到视野、键盘聚焦现形、去 emoji
+
+### 一、缺口（机械审计 + 代码与自身契约打架）
+
+把「unnecessary secondary labels / 让布局说话」反过来用还有一类病：**该说的话被藏起来了**。用脚本扫渲染层 CSS，把「默认 `opacity:0` 的容器 + 里面有可聚焦控件 + 只有 `:hover` 一条揭示路」全列出来（7 条候选，逐条核）：
+
+| 候选 | 判定 |
+|---|---|
+| `.dl-actions`（差异行「评论第 N 行」钮） | **真缺陷**：只有 `.diff-line:hover` 一条揭示路 |
+| `.attach-chip .x` / `.diagnosis-head .x` / `.error-strip .x` / `.send-btn.queue` | 否证：基态 `opacity` 是 .72/0.7/1，本来就看得见 |
+| `.group-head .g-new` / `.g-more` | 否证：各自带 `:focus-visible { opacity: 1 }` |
+
+同一段代码里还有两处：
+1. `DiffView.tsx` 文件头契约写着「**已评注的行常显 💬**」，实现却把标记塞在 `opacity:0` 的 `.dl-actions` 内 ⇒ 读差异时不逐行悬停就永远看不到「哪几行被评过」，代码违背自己写下的契约。
+2. 标记用 emoji `💬`：全应用图标族是 lucide，emoji 随系统字形漂移（且与既有「全局 emoji 清理」纪律不一致）。
+3. `.dl-comment:hover` 用品牌珊瑚（与第 872 页起手行同一族病）。
+
+### 二、改法
+
+- **常驻标记搬出动作组**：`.dl-has-comment` 成为行的直接子元素（`position:absolute; right:26px`），不再随 hover 起落；字形换 `lucide/MessageSquare size=11`，颜色走中性 `--text-300`。统一视图与并排视图两条渲染路径同改（并排走 `commentButton`）。
+- **揭示纪律对齐 `.row-actions`**（第 754 页 ④ 的同一套）：`.dl-actions` 基态 `opacity:0` + `pointer-events:none`；`.diff-line:hover, .diff-line:focus-within` 一起给 `opacity:1` + `pointer-events:auto` ⇒ 键盘 Tab 进来焦点不再落在看不见的按钮上，隐藏态也不再吃指针（幽灵点击）。
+- `.dl-comment:hover` 由 `accent-brand` 改 `--text-000` + `--text-400` 描边。
+- 文件头契约注释同步改写，把「原写常显、实现却藏在 hover」这件事留在代码里。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `diff-split` 新增 3 条 | ① 基态必须同时有 `opacity:0` 与 `pointer-events:none`，揭示规则必须含 `:focus-within` 且给回 `pointer-events:auto`（带反向自证：摘掉 `:focus-within` 即红）；② 常驻标记不许再带 `opacity:0`、不许用色相；③ **渲染面图形 emoji（U+1F000–1FAFF + U+FE0F）计数为 0**——去注释后扫全渲染层，本批前一枚 `💬` 正是它抓到的 |
+| 桌面套件（`--maxWorkers=2`） | **291 文件 / 1948 条全绿**（1945 + 3） |
+| 真机冒烟 | `layout-smoke` **17/17**、`interaction-smoke` **31/31**、`app-shell-smoke` **44/44**，各 0 FAIL |
+| 本批 tracked 文件 tsc | 0 报错（`DiffView.tsx` / `styles.css` / 判卷均净） |
+| boundary / renderer-layer / docs-check | 绿 / 绿（171 文件）/ 受检项全绿 |
+| dist | 重建（`vite build` ✓ built），判卷读的是同一份工作树 |
+
+### 四、边界
+
+- **键盘聚焦现形这条未在真实 renderer 里量到**：曾往 `layout-smoke` 加过一条真机检查（点开改动文件 → 聚焦 `.dl-comment` → 读 `.dl-actions` 计算样式），但该夹具里 `.review-files button` 走不到带评注的 diff（读数 `present:false`）。**不把这条改成恒真来凑绿**，已撤掉检查并在此登记未验；契约目前由 CSS 源码判卷 + 反向自证守。
+- 渲染面仍留有 `⚠`（`ModelPicker.tsx` 的 keyNotice 行）——那是既有「⚠ 字面量豁免于全局 emoji 清理」的裁决，本批不动，判卷也只禁图形区（`✓ ✗ ·` 等排版符号不在禁列）。
+- 隐藏态不吃指针这一改会让「未悬停时点到行号右侧 4px 区域」不再触发评论钮；该行本身不可点，无既有行为被吞。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+
+## 2026-11-01 · 第 876 页：快环提醒 run 内单次读盘
+
+### 一、缺口（现读）
+
+快环提醒每失败一次就重读 playbook + Episode 观测账：同一场里 verify 连红三次、或卡死多个动作时，同一份账被重复解析/聚合；Episode 账越大，失败路径越慢。提醒内容来自本场开始后的稳定账，重复读没有新信息。
+
+### 二、改法
+
+- `experience-nudge.ts` 新增 `createExperienceNudgeRunner(workspace, base)`：playbook + Episode 观测账**懒加载一次**（首个失败才读），之后每次只做检索；`loads()` 暴露实际读盘次数。
+- `agent-runner` 在 run 内创建一次 runner，闭包每次只传 signals 与去重集；独立函数 `experienceSignalNudge` 改为 runner 的一次性包装（语义不变）。
+- 判卷 `evolve-nudge` 增 1 条：runner 首次命中后，本场**后加**的 active 条目不再出现（证明缓存），`loads() === 1`。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `evolve-nudge` / `evolve-observation` | **13 条全绿** |
+| 根 typecheck | 0 报错 |
+| 变异自检 | 去掉 runner 的 cached/loading 短路 ⇒ 后加条目被第二次读盘看见、`loads()` >1，判卷变红；恢复后 7/7 绿 |
+| evolve 全量 / core / 桌面 | evolve+event **20 文件 / 132 条全绿**；core **596 文件 / 7494 条全绿**；桌面 **291 文件 / 1948 条全绿** |
+
+### 四、边界
+
+- 缓存是**一场 run 内**的：中途从外部改账（CLI 激活/退役）不会反映到本场提醒；下一场重新读。这是刻意取舍——提醒只在失败时出现，用的是本场最早失败时看到的稳定账。
+- 独立 `experienceSignalNudge` 每次新建 runner（一次性调用者仍读一次，语义不变）。
+- 读失败仍出声并返回空提醒；验证回流优先。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 877 页：快环提醒的生产入口端到端
+
+### 一、缺口（现读）
+
+快环提醒此前只有两层证据：loop 级用例（自己传 `experienceNudge`）与 agent-runner 源码行锚定。**生产闭包整段断线**——runner 没建、workspace/工具面/路径传错、去重集没接——行锚定仍可满足（字符串在、行为死），loop 用例也不会红。这正是本仓反复点名的「机器建好、线接上、生产段没观测者」。
+
+### 二、改法
+
+- 新增 `tests/evolve-nudge-runner.test.ts`：走 `handleAgentRun` 生产入口（`M3A_MAIN_SCRIPT` 剧本 + 真 `.agent/config.json` 验证命令 + `trustedRepo` + 写权限批条），预置一条 active 的 `on-signal verify:red` 经验。
+- 剧本先写盘再收口 ⇒ harness 自动验证拍真红；断言自动红回执同时带：
+  - 经验正文（`VERIFY_RED_LESSON`）；
+  - `nudgeExperienceIds` 恰好等于该经验 id。
+- 这条覆盖的是生产闭包：起点注入不命中（新会话无信号）→ 失败时 runner 读账 → 闭包回注 → 事件归因，全链一次跑通。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `evolve-nudge-runner` | **1/1 绿**（真 `handleAgentRun`，130ms） |
+| evolve + `context-signals` + `event-semantics` | **21 文件 / 133 条全绿** |
+| 根 typecheck | 0 报错 |
+| 变异自检 | 拔掉 agent-runner 的 `experienceNudge` 接线 ⇒ 自动红回执不含经验正文，端到端格变红；恢复后绿 |
+| core / 桌面 | core **597 文件 / 7495 条全绿**；桌面 **292 文件 / 1953 条全绿** |
+
+### 四、边界
+
+- 剧本是 mock provider，不花模型钱；验证命令恒红（`echo FAIL && exit 1`），本页只证明「生产闭包把经验送进自动红回执并有归因」，不证明模型收益。
+- 端到端只覆盖自动验证红这一路；manual verify / repeat-action 的生产闭包仍由 loop 用例 + 同一条共享闭包覆盖。
+- 起始注入不命中是刻意的（新会话无上一跑信号），这样命中的只能是快环 runner。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 879 页：自进化装配收口——`assembleRunEvolution`
+
+### 一、缺口（现读）
+
+`agent-runner.ts` 已 2000+ 行；自进化装配（取料 → 起点注入 → 去重集 → 快环 runner → 回注闭包）整段内联在组合根里。任何第二条装配路径（worker/CLI/未来的 serve）都要复制这四件事；两处一漂就是「同一场会话两份注入语义」。
+
+### 二、改法
+
+- 新增 `src/main/evolve/session-assembly.ts` 的 `assembleRunEvolution(input)`：接收 workspace/sessionId/taskContent/工具名/路径，返回 `{ note, nudge }`。
+  - 起点注入失败、快环提醒失败都只出声；去重集与懒加载 runner 在模块内共享；
+  - 调用方不需要知道 `prepareEvolutionInjection` 的返回形状、runner 生命周期或去重规则。
+- `agent-runner.ts` 只保留取料与一行 `experienceNudge: evolution.nudge`；删除约 40 行内联装配与两个直接 import。
+- 源码行锚定判卷改钉新装配点（import / `assembleRunEvolution({` / `experienceNudge: evolution.nudge`）；行为仍由生产端到端格守。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `evolve-nudge` / `evolve-nudge-runner` / `evolve-p2` / `evolve-governance` | **19 条全绿**（含生产入口端到端） |
+| evolve + `context-signals` + `event-semantics` + `session-wiring` | **22 文件 / 141 条全绿** |
+| 根 typecheck | 0 报错 |
+| core / 桌面 | core **597 文件 / 7495 条全绿**；桌面 **292 文件 / 1957 条全绿** |
+
+### 四、边界
+
+- 纯收口：起点注记、快环提醒、去重、失败语义与之前逐字同义；生产端到端（自动验证红带经验与归因 ids）仍绿，证明接的是同一条链。
+- 只有主会话装配走了这层；worker/CLI 若将来接自进化，可直接复用而不复制四件事。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 878 页：品牌橙的前景档——把「好不好看」里能算的那一半算出来
+
+### 一、缺口（对比度实测，非观感）
+
+`tokens.css` 里品牌橙的注释自己写着「**只用于品牌/主按钮**」，但扫下来它有 **27 处被当成图标/状态文字色**在用。按 WCAG 2.1 相对亮度比真算（不是目测）：
+
+| 亮色表面 | 原橙 #d97757 作前景 | 要求 |
+|---|---|---|
+| `bg-100` 画布 #FAF9F5 | **2.96:1** | 文本 4.5 / 非文本组件 3.0 |
+| `bg-000` 卡面 #FFFFFF | 3.11:1 | 同上 |
+| `bg-200` 侧栏 #F5F4ED | **2.82:1** | 同上 |
+| `bg-300` 用户气泡/凹陷 #EBEAE4 | **2.68:1** | 同上 |
+
+⇒ 连**非文本组件的 3:1** 都差一点，被当文字用的那几处（方案 chip 点亮、筛选生效、复制成功反馈、状态签「执行中」、选中对勾、成功动作）离 4.5:1 更远。暗色方向相反：同一枚橙在 `bg-300` 卡面上只有 **3.77:1**（背景越亮、橙越吃不平）。
+
+### 二、改法
+
+- 新增前景档 `--accent-brand-ink`：**同色相 15°、同饱和 63.1%，只动明度**——亮色 L 59.6%→**42%**（四表面最差 4.75:1）、暗色 59.6%→**66%**（最差 4.57:1）。品牌橙本身一字不改，标还是那个标。
+- 12 处**承载状态/文字**的前景改读前景档：`方案` chip（含 hover）、侧栏筛选选中、复制成功、工具状态签（pending）、思考 live / 思考图标、工具簇 pending 芯片、选项对勾、动作成功、目标芯片图标、能力轨当前项、弹窗实时标、插件收藏态。
+- **保留原橙**：品牌标族（标题栏 `cairn-mark`、助手行 ✦、空态标、问候星标）、装饰字形（模型菜单立方、项目卡字母、插件标）、逐字入场动效。`hover 才变色`的箭头（`.start-go`）按第 872 页同一裁决改中性。
+- 状态底纹（`accent-brand / 9~16%` 的淡底）**不动**——底纹不是前景，不承担可读性。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 新增 `contrast-gate.test.ts` | **5 条全绿**：① 亮色前景档在 bg-100/000/200/300 上全部 ≥4.5:1；② 暗色同四条 ≥4.5:1；③ **反证**——原橙在亮色四表面上全部 <4.5、且在 bg-300 上 <3.0（证明这条判卷不是恒真，也证明本批不是吹毛求疵）；④ 名单外不许再用原橙作 `color:`（品牌/装饰标 7 条 + `@keyframes md-word-arrive` 逐条点名，keyframes 步进单独摘出来核对）；⑤ 前景档被真实使用 ≥10 处（防「加了个死令牌」） |
+| 判卷自纠 | 第一版前景档取 L=46%，被自己的闸门打回（bg-200 只有 4.31:1、暗色 bg-300 3.77:1）⇒ 解到 42% / 66% 才过。**这条闸门在写出来的那一轮就抓到了一次不够格的修复** |
+| 桌面套件（`--maxWorkers=2`） | **292 文件 / 1953 条全绿**（291/1948 + 新判卷 1 文件 5 条） |
+| 真机冒烟 | `layout-smoke` **17/17**、`interaction-smoke` **31/31**、`app-shell-smoke` **44/44**，各 0 FAIL |
+| boundary / renderer-layer / docs-check | 绿 / 绿（171 文件）/ 受检项全绿 |
+| dist | 重建（`vite build` ✓ built），暗色画廊 16 张重跑复核：品牌标、引导点、能力轨选中均正常，无一处发灰或掉色 |
+
+### 四、边界
+
+- 本批只治 **`--accent-brand`** 这一族。同一族病还有 `--color-run`（运行黄 #F5B544 档）：`wk-dot.running`、`isp-ov-status[data-running]`、`home-banner-demo` 图标——亮色画布上 3.03:1、`bg-300` 上 2.75:1，同样不到 3:1。已在闸门里留位（下一步加 `--color-run-ink`），本批未动，避免一次改两族色。
+- 前景档是**同一色相调明度**，不是换色：亮色下橙会更「砖红」、暗色下更「奶橙」。若业主觉得亮色品牌感被压暗，回退方式是把 `--accent-brand-ink` 调回 59.6% 并同时把判卷阈值降到 3:1（那等于承认状态文字不可读，不建议）。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。亮色主题的真机截图未取（画廊 `GALLERY_LIGHT` 那趟未生效，可读性结论由令牌算术给出，暗色形态已目验）。
+
+## 2026-11-01 · 第 880 页：快环提醒命中面进报告
+
+### 一、缺口（现读）
+
+第 871 页把中途提醒的 id 写进了 Episode 证据，但 `evolve-report` 只印负证据/可激活，**看不到快环到底叫过哪些经验、叫了多少场**。运营者无法判断某条 lesson 是否在失败时被反复取出，也无法把「提醒频率」与「负证据/成功率」放在一起读。
+
+### 二、改法
+
+- `EvolveReport` 增 `nudges: { episodes, ids, byId }`：从 Episode 的 `nudgedExperienceIds` 聚合——命中场次、去重经验数、按次数降序的前 10 个 id。
+- 人读行在 Episode 后加「快环提醒：场次 N｜经验 M｜前 3 个 id×次数」；无提醒时只印 0。
+- 生产端到端判卷追加：真 `handleAgentRun` 自动验证红后，报告须 `nudges.episodes ≥ 1` 且包含该经验 id，人读面出现「快环提醒」。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `evolve-nudge-runner` / `evolve-governance` / `evolve-user-feedback` | **13 条全绿** |
+| evolve + `context-signals` + `event-semantics` | **21 文件 / 133 条全绿** |
+| 根 typecheck | 0 报错 |
+| 变异自检 | 跳过带 ids 的 Episode ⇒ 报告场次 0，端到端报告格变红；恢复后绿 |
+| core / 桌面 | core **597 文件 / 7495 条全绿**；桌面 **292 文件 / 1957 条全绿** |
+
+### 四、边界
+
+- 只读投影：不改 playbook、不改 Episode、不参与晋升；计数来自 Episode 证据，旧 Episode 无该字段按 0 处理。
+- `byId` 只保留前 10 个，报告体积有界；完整集合仍在 Episode 账上。
+- 命中次数不是收益：提醒可能被忽略或任务本身很难；与 observational/negative 一起读，不单独下结论。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 881 页：墨色对表——判卷的注释与它钉的字面对不上（暗色 blue-300 拿成了亮档值）
+
+### 一、缺口（把闸门从「一族色」推到「全部墨色」）
+
+第 878 页的 `contrast-gate` 立起来之后，把扫描面从 `--accent-brand` 扩到**所有以不透明 `hsl(var(--x))` 作前景的 token**（22 个），逐个按它**真正落在的底色**量（不是拿四个表面吓自己）：
+
+| 墨色对 | 亮 | 暗 | 判定 |
+|---|---|---|---|
+| `accent-control-text` on `bg-000`（卡面/弹层） | 8.11 | **4.25** | 暗色不过 AA（链接 / 菜单勾 / 选中芯片标签） |
+| `accent-control-text` on `bg-200`（侧栏） | 7.35 | **3.65** | 同上，更差 |
+| `color-diff-add-ink` on `color-diff-add-bg`（增行淡绿码面） | **4.50 差一点** | 8.88 | 亮色贴边不过线 |
+| `color-diff-del-ink` on `color-diff-del-bg` | 5.57 | 5.92 | 通过 |
+| `color-run`（运行黄，状态点=非文本 3:1）on `bg-000`/`bg-100` | 3.19 / 3.03 | 9.09 / 10.08 | 按非文本档通过，不动 |
+| `accent-control`（勾形/动效，非文本）on 亮色 | 3.80–4.19 | — | 非文本 3:1 通过 |
+
+### 二、根因不是「色值选错了」，是**判卷的字面和它自己的注释相反**
+
+`control-accent.test.ts` 那条的名字与注释写着「暗色 blue-300（v3 暗色 scope 用 role-accent-300）」，字面却钉 `--accent-control-text: 210 70.9% 51.6%`。查官方件：`vendor/cds-official/tokens.css` 里 `--blue-300: #6da7ec` ≈ **210 65.5% 67.1%**，也正是本仓暗档 `--role-accent-300` 的值；`210 70.9% 51.6%` 是**亮档** role-accent-300。⇒ 暗色兜底档拿成了亮档值，越用越暗，卡面上掉到 4.25/3.65。（皮肤开着时由 `cds-adapter.css` 映射官方 `--text-accent`，本来就是 blue-300；这条只是**兜底档**错。）
+
+### 三、改法
+
+- 暗档 `--accent-control-text: 210 70.9% 51.6%` → **`210 65.5% 67.1%`**（= 官方 blue-300 = 暗档 role-accent-300）。不是自创颜色：把兜底档对齐到官方那一档。结果 bg-100 7.55 / bg-000 6.81 / bg-200 5.85 / bg-300 4.84，四表面全过 4.5。
+- 亮档 `--color-diff-add-ink` L 29.2% → **27%**：淡绿码面 4.50→5.10、bg-100 5.40、bg-200 5.16。
+- `contrast-gate` 加 **具名墨色对表**（8 对 × 亮暗两趟）：每对按真实底色判 ≥4.5；另加「反证」条钉住改动前的三个值确实不过线（51.6% 在 bg-000/bg-200、29.2% 在淡绿码面），以及状态点按非文本 3:1 单列一档。
+- **判卷更正（不放宽，按原意修字面）**：`control-accent` 那条改钉 `210 65.5% 67.1%`，并加两条哨兵——同块内 `--role-accent-300` 必须同值、且不许再出现 `210 70.9% 51.6%` 的 `accent-control-text`。原意（暗色用 blue-300）一字未改。
+
+### 四、读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `contrast-gate` | 5 → **9 条全绿**（新增具名对表亮/暗两趟 + 反证 + 状态点档） |
+| `control-accent` | 12 条全绿（含更正后的暗档字面与两条哨兵） |
+| 桌面套件（`--maxWorkers=2`） | **292 文件 / 1957 条全绿** |
+| 真机冒烟 | `layout-smoke` 17/17、`interaction-smoke` 31/31、`app-shell-smoke` 44/44，各 0 FAIL |
+| boundary / renderer-layer / docs-check | 绿 / 绿 / 全绿 |
+| dist | 重建 `index-y23Jv1RE.js` / `index-YF1ssgA9.css`（本批判卷与读数即此树） |
+
+### 五、边界
+
+- 官方令牌**没有换**：改的是本仓兜底档，把它对齐到官方 blue-300；`cds-adapter.css` 的映射一字未动（AGENTS.md「maps, never copies」不破）。
+- `--color-run` 亮色在 `bg-200/300` 上 2.89/2.75（非文本 3:1 之下的那两面）——它实际只出现在卡面/画布（3.19/3.03 过线），判卷按真实底锁住；若将来把运行黄搬到侧栏，闸门会红。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。暗色真机截图未逐面复核（比值由令牌算术给出）。
+
+## 2026-11-01 · 第 882 页：进化面板补上负证据/可激活/快环提醒（并修夹具类型漂移）
+
+### 一、缺口（现读）
+
+`EvolveReport` 已新增 `playbook.negative / playbook.activatable / nudges`，但桌面「进化」面板仍按旧字段渲染——负证据、可激活条目、快环命中在 UI 上不可见。同时 `settings-evolve.test.tsx` 的 `EvolveReport` 字面量缺新必填字段：桌面 `test` 只跑 vitest（esbuild 不做类型检查），**桌面 `tsc` 是红的**，只是没有门在看它。
+
+### 二、改法
+
+- `EvolvePanel`：playbook 行加入「负证据 N；可激活 M（前 2 个 id）」；新增「快环提醒」区：命中场次与去重经验数（单行 label；完整 id×次数在报告 JSON/CLI）。首版加了一条 `desc` 触发设置面「次级说明帽 36」；按规则改成 label 单行，未放宽帽。
+- 测试夹具补 `negative / activatable / nudges`；断言面板出现「负证据」「可激活」「快环提醒」「2 场 · 1 条经验」。
+- 桌面 `tsc -p tsconfig.json --noEmit` 复跑 0 报错（之前会因夹具缺字段失败）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `settings-evolve` / `design-minimal` | **4 + 12 条全绿**（次级说明条数帽未放宽） |
+| 桌面 tsc / 套件 | 0 报错 / **292 文件 / 1957 条全绿** |
+| core | 本页只改桌面只读面板；core 保持 **597 文件 / 7495 条**（第 880 页） |
+| 变异自检 | 把「快环提醒」区标题改掉 ⇒ 面板判卷变红；恢复后 4/4 绿 |
+
+### 四、边界
+
+- 面板仍**只读**：可激活只显示 id，不提供激活按钮（激活仍走 `evolve-activate --apply`）；快环提醒不提供开关。
+- UI 只显示快环场次/经验数；完整 `id×次数` 在报告 JSON 与 CLI，避免在设置页堆一列次级说明。
+- 旧报告形状来自同一 IPC 类型，字段必填；夹具已同步。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 883 页：子代理也拿到 active 经验——worker 起点注记
+
+### 一、缺口（现读）
+
+主会话已有 active 经验注入 + 快环提醒；worker（read/write 子代理）只有两层记忆与角色定义，**没有 active 经验**。子代理是编排的主执行面，却要重新踩主会话账上已经写明白的坑；经验闭环只覆盖主会话。
+
+### 二、改法
+
+- `runtime.ts` 新增只读 `baselineEvolutionNote({workspace, taskContent, toolNames, paths})`：与主会话起点共用 `loadBaselineState`（预算/playbook/观测账），只取 active、按任务类/触发/工具面/路径检索并渲染；冻结时零注入；不写 assignment、不碰实验。
+- `worker-prompt.ts` 的 `buildWorkerSystemMessages` 增可选 `experienceNote`：排在两层记忆之后、任务书之前（system 块整体先于 user）。
+- `OrchestratorOptions.workerExperienceNote`：worker 启动时拿 `agentId/task/mode/工具名` 取注记；抛错/读不动只出声，不阻塞 worker。
+- `session-assembly.ts` 的**唯一编排器构造口**默认接上：`baselineEvolutionNote` 读主 workspace（不是 worktree），路径从任务原文抽；runAgent 与崩溃恢复两条构造路径同口径。
+- 判卷 `worker-experience-note` 3 条：active/candidate/冻结边界；真 `Orchestrator` 捕获 worker 首轮 messages（含 system 注记）与工具面；生产装配口行锚定。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `worker-experience-note` / `orchestrator-wait` | **8 条全绿** |
+| 编排/恢复/worker/evolve 定向 | **62 文件 / 471 条全绿**（`--maxWorkers=2`） |
+| 根 typecheck | 0 报错 |
+| 变异自检 | worker prompt 不推注记 ⇒ 真 Orchestrator 格红；session-assembly 改名不接 ⇒ 行锚定格红；均恢复 |
+| core / 桌面 | core **598 文件 / 7498 条全绿**；桌面 **292 文件 / 1957 条全绿** |
+
+### 四、边界
+
+- 只注入 **active**；candidate/shadow 不进子代理。冻结（STOP）时零注入；读账失败只出声。
+- 不给 worker 写 assignment/实验分配，不进 Episode 观测账——这是「读主 workspace 经验」的只读面；worker 的失败快环提醒仍不在本页（没有返修轮，注了也无下一轮）。
+- 注记走现有 evolve 预算（条数/字符），任务类/工具/路径触发照旧；无 active 的工作区 worker 提示词逐字不变。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 884 页：亮色自查从来没生效过——视觉自查面只会拍暗色
+
+### 一、缺口（工具面，但它一直在骗人）
+
+设计规范与既有裁决都要求「先 1440/880 **亮暗**自查」。查 `ui-gallery.cjs` 的 `GALLERY_LIGHT`：它把 `document.documentElement.dataset.theme = "light"` 注入在 **loadFile 之后、React 挂载之前**（那一刻 `root chars = 0`），挂载时 `state/chrome.ts` 的主题效应按 `settings.theme`（缺省 system）把属性**重写回系统主题** ⇒ 这个开关**一次都没有生效过**，所有历史亮色自查实际拍的都是暗色。第 878/881 页的颜色改动也只在暗色下目验过。
+
+### 二、改法（`scripts/ui-gallery.cjs`）
+
+- 等挂载完（轮询 `#root` 有内容，最多 6s）再落主题。
+- **三把键一起落**：产品侧 `theme.ts` 的 `themeKeysOf` 同时写 `data-theme` / `data-mode` / `body[data-ds-dark-theme]`（皮肤 `palette.css` 的暗档挂在最后一把上）。只写前两把会留下「亮画布 + 黑侧栏 + 黑表头」的分裂——第一版就栽在这里，实拍过。
+- 注入后**量像素自证**：`capturePage` → `nativeImage.toBitmap()`，取主区画布与侧栏两个采样点，与请求主题不符就 `throw`（不再让静默被覆盖重演）。位图尺寸取 `getSize()` 而不是窗口 CSS 尺寸——Retina 下差 2 倍，按 1440 去索引 2880 宽的位图会采到别处像素（第二版把亮色侧栏误报成黑的，就是这个）。
+
+### 三、读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 亮色自查 | `主题自查落位: light {"theme":"light","mode":"light","bodyDark":false,"canvasPx":"251,252,252","sidePx":"247,249,249"}` |
+| 暗色自查 | `主题自查落位: dark {...,"canvasPx":"21,21,21","sidePx":"17,17,17"}` |
+| 亮色目验（首次真正拍到亮色） | 16 张重跑 + 裁图复核：表头浅灰、码面仍为官方深色（有意）、失败摘要暖底、链接蓝、「1 次失败」橙与「未验证」蓝都读得清 ⇒ **第 878/881 页的颜色改动在亮色下同样成立** |
+| 桌面套件 | **292 文件 / 1957 条全绿**（本批只改工具脚本，无产品代码变更） |
+| docs-check | 受检项全绿（页号 882/883 已被并发会话占用，本批用 884） |
+
+### 四、否证与归属（重要）
+
+- **亮色下「黑侧栏 / 黑表头」不是产品缺陷**：DOM 探针实测 `.side` = `rgb(249,249,247)`、`--side-bg` = `hsl(52.5 28.6% 94.5%)`，产品侧三把键由 `themeKeysOf` 一次落全，用户把 macOS 留暗色、App 设亮色时不会分裂。那张黑侧栏截图是**本批工具自己的两处缺陷**（漏第三把键 + 位图索引按 CSS 尺寸算）造成的假阳性，已各自修掉并留注释。登记在此以免后人再把它当产品 bug 追。
+- 未跑真机三冒烟（本批不动产品代码）；未提交。
+
+## 2026-11-01 · 第 885 页：可激活经验终于有入口——面板确认 + IPC v45
+
+### 一、缺口（现读）
+
+第 873/882 页只能把「可激活 N（id…）」显示出来，真正的激活只有 CLI（`evolve-activate --apply`）。桌面用户看到一条过门经验却没有任何入口——「生效必须有入口」在这一跳断了。IPC 还停在 v44（冻结开关）。
+
+### 二、改法
+
+- `report.ts` 增 `activationCandidates`：过门条目的 `id/kind/body/riskDiff/trials/evidence`（面板确认卡与列表用，不再只给 id）。
+- `EvolvePanel`：新增「可激活经验」区（正文 + `kind · ΔriskDiff · 场次 · 证据`），未冻结且宿主给了 `onActivate` 才出「激活」按钮；点击弹 `ConfirmDialog`（写明风险差/样本/证据与正文）；拒绝原因以 `role=alert` 留在面板，不把整页打成错误。
+- `EvolveSection`：调 `window.agent.evolveActivate(id)`，成功后用返回的新报告刷新；失败保留当前报告并显示原因。
+- IPC **v45**：`evolveActivate(id)` → main 调 `activatePlaybookEntry(..., {apply:true})`，返回 `{ok, reason?, report}`；冻结/阻断由同一激活门拒绝。channels/preload/main/wired 全键同步；README invoke 通道数 134→135。
+- 判卷：settings-evolve 增 1 条（未冻结 + onActivate 才有按钮）、fixture 补 `activationCandidates`；evolve-activation 增报告候选详情断言；protocol/README 判卷同步 v45/135。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `settings-evolve` / `design-minimal` | **5 + 12 条全绿**（次级说明帽未放宽） |
+| 桌面 tsc / 套件 | 0 报错 / **292 文件 / 1958 条全绿** |
+| 协议 v45 / README 135 / 激活报告详情 | 2 + 2 + 6 条全绿 |
+| 变异自检 | 撤面板激活按钮条件 ⇒ 面板判卷变红；恢复后 5/5 绿 |
+| core 全量 | **598 文件 / 7498 条全绿** |
+
+### 四、边界
+
+- 仍是**人工门**：必须点开确认卡再写 active；冻结时面板不出按钮、main 也拒绝。没有自动晋升。
+- 拒绝不遮报告：阻断原因（无因果/冲突/过期/全局作用域等）逐条显示，报告保持最新快照。
+- 激活只写 playbook `status:"active"`；不安装 SEMA、不改实验、不写 assignment。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 887 页：STOP 冻结补上中途快环——治理承诺的后半句
+
+### 一、缺口（现读）
+
+STOP 冻结的承诺是「不会注入经验」：起点注记（`prepareEvolutionInjection` / `baselineEvolutionNote`）都在读账前判了 `isEvolveFrozen`。但第 868 页起的**中途快环 runner 直接读 playbook**——冻结后模型 verify 变红，仍会把 active 经验注进失败回执。冻结只挡了前半场。
+
+### 二、改法
+
+- `createExperienceNudgeRunner` 的 `nudge()` **每次调用**先判 `isEvolveFrozen(workspace)`，冻结即返回空；不放在首次加载里，因为冻结可能发生在 run 中途，只判首读会让已缓存的 runner 继续漏经验。
+- 冻结检查只做一次 stat，不重读 playbook/Episode（`loads()` 仍为 1）；解冻后同一 runner 可继续用缓存。
+- 判卷 `evolve-nudge` 增 2 条：冻结库从第一次提醒就空；已缓存的 runner 在**一场中途**冻结后下一次提醒也空、且不重读账。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `evolve-nudge` | **9 条全绿**（含中途冻结） |
+| 根 typecheck | 0 报错 |
+| 变异自检 | 撤 `nudge()` 的冻结判断 ⇒ 两条冻结格同时变红；恢复后 9/9 绿 |
+| core / 桌面 | core **598 文件 / 7500 条全绿**；桌面 **292 文件 / 1958 条全绿** |
+
+### 四、边界
+
+- 冻结只挡注入，不删缓存/不改账：解冻后同一 run 的后续提醒恢复，下一次 run 照常重读。
+- 检查位于快环入口；worker 起点注记走 `baselineEvolutionNote` 自己的冻结门，不在本页改动范围。
+- 起点注记与快环现在共用同一条治理语义：冻结 = 零注入。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 886 页：能力分区两行统一语法——设置行里不再塞页面级 Banner
+
+### 一、缺口（亮色首次实拍才看得见）
+
+第 884 页修好亮色自查后，第一次拍到真亮色设置页。「能力」分区两行的右列**各说各的话**：
+
+| 行 | 右列语法 |
+|---|---|
+| 联网搜索 | 状态点 + 一句状态 + 去配置按钮 |
+| 识图能力（未声明） | **一整条页面级 Banner**（橙描边 + 浅橙底，横跨整个控件列） |
+| 识图能力（已声明） | desc 一句 + 一枚「已声明」药丸——药丸重复句首词 |
+| 识图能力（读不到） | desc 一句 + 一个裸「—」 |
+
+⇒ 同一分区里一个警告是「框」，另一个状态是「点 + 句」；而「已声明/未验证」药丸把句子第一个词再念一遍（业主本轮口径：Avoid unnecessary secondary labels）。
+
+### 二、改法
+
+- 识图能力三态收敛成**一条**右列：`StatusDot + 状态句`，与上一行同语法。点色按态给（declared=ok 绿 / undeclared=warn 琥珀 / unverified=off 灰 / 读不到=off）。
+- 警告仍**可扫读**：未声明与未验证时状态句走风险墨（新增 `.ss-search-line[data-warn="true"]`），不靠把页面级 Banner 塞进设置行。
+- 那句 2026-10-16 立下的原文（「当前模型 未声明支持图片输入，图片理解能力尚未确认。」等三句）**一字未动**，仍不出现 `render_image` 这类实现名；被删的只有药丸与「暂时无法读取模型能力。」这类复述。
+- 顺带清掉因此空掉的 `ImageIcon` import。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `settings-sections` 识图条（判据升级，不放宽） | 原钉 `ss-banner warn` ⇒ 改钉 `data-tone="warn"` + `data-warn="true"` + 三句原文 + `not.toContain("render_image")`，并加反向钉「设置行里不许再出现 `ss-banner`」；declared 态反向钉（绿点、不带风险墨、仍说「尚未验证实际效果」）。**32 条全绿** |
+| 桌面套件（`--maxWorkers=2`） | **292 文件 / 1958 条全绿** |
+| 本批 tracked 文件 tsc | 0 报错 |
+| 亮色真机目验 | 画廊亮色趟 `主题自查落位: light`；裁图复核：两行现在都是「点 + 右对齐状态句」，橙框消失，琥珀点 + 风险墨仍一眼看出这是缺口 |
+| boundary / renderer-layer / docs-check | 绿 / 绿 / 受检项全绿（页号 885 被并发会话占用，本批改 886） |
+
+### 四、他笔红（不属本批，但业主该知道）
+
+`settings-sweep-smoke` 现在**过不了**：设置「进化」分区点开即撞渲染边界——`TypeError: Cannot read properties of undefined (reading 'length')`，界面显示「这一块加载失败」，脚本随后在 `waitFor("evolve report rendered")` 超时。归属：`src/main/evolve/` 与 `apps/desktop/scripts/ui-gallery-preload.cjs` 是另一会话在改的面（本批未碰）。同一次扫描里**其余分区（含本批改的「模型与 Provider」）全部点开正常、正文非空**，故本批判据成立、sweep 整体不报绿。
+
+### 五、边界
+
+- 「当前通道与密钥」分区标题与首行标签「当前通道」重复（同一屏两处「当前通道」）——本批未动，因为它要么改分区名、要么把值搬进分区头，两种都动到既有判卷锚点，留待业主一句话再收。
+- 联网搜索行在「未配置」时给灰点（off），识图「未声明」给琥珀点（warn）：前者是待办、后者是「别误读成支持」的告警，2026-10-16 口径要求后者必须显眼，故不拉平。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+
+## 2026-11-01 · 第 888 页：worker 自动验证返修与失败经验提醒
+
+### 一、缺口（现读）
+
+设置文案写的是「验证拍出代码红时再要一轮模型修复、修完重验（上限一次）」，但这条只对主会话生效：write worker 的收束闸（`workerVerify`）永远 `autoVerify:true`、**不带 `autoVerifyRepair`**——worker 拍红即止，哪怕用户已经开了返修。worker 也没有失败时的经验提醒（起点注记只管第一轮）。
+
+### 二、改法
+
+- `OrchestratorOptions` 增 `workerAutoVerifyRepair`（与主会话同设置位；只在 `workerVerify` 接线时有意义）与 `workerExperienceNudge`（读主 workspace 的 active 经验，返回 `{note, ids}`）。
+- worker 的 runLoop：返修开着才传 `autoVerifyRepair:true`；nudge 回调带 `agentId/task/mode/工具名/signals`，只在该红会让 worker 继续修时由 loop 调用。
+- `agent-runner.orchestratorExtras`：`s.autoVerify && s.autoVerifyRepair` 时递 `workerAutoVerifyRepair:true`（缺省零行为）。
+- `session-assembly` 唯一构造口默认接 `workerExperienceNudge`：走 `experienceSignalNudge`（主 workspace、冻结每调用现判、无 assignment）。
+- 判卷 `worker-repair-nudge` 2 条，真 git worktree + 真 Orchestrator：开返修 ⇒ worker 请求数 3、自动红回执带经验与 ids；不开 ⇒ 请求数 2、无提醒。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `worker-repair-nudge` | **2/2 绿**（真 write worker；3 请求 vs 2 请求） |
+| 编排/恢复/worker/evolve 定向 | **63 文件 / 475 条全绿**（`--maxWorkers=2`） |
+| 根 typecheck | 0 报错 |
+| 变异自检 | 撤 workerAutoVerifyRepair 传递 ⇒ 请求数 2≠3 红；撤 workerExperienceNudge 传递 ⇒ 回执无提醒红；均恢复 |
+| core / 桌面 | core **599 文件 / 7502 条全绿**；桌面 **292 文件 / 1960 条全绿** |
+
+### 四、边界
+
+- 返修只在 `workerVerify` 接线且设置开启时发生；每次代码红最多多一轮模型请求（成本明示）。环境红不返修。
+- 提醒只在「会继续修」的自动红上调用；active/冻结/预算与主会话同一套；不写 assignment、不进实验臂。
+- worker 事件不并入主会话 Episode 的观测账（父子分流不变）；worker 起点注记另见第 883 页。
+- 并发归属：桌面复跑时另一批的 `settings-ui.test.tsx` 缺 `fileURLToPath` import（ReferenceError），本批只补一行 import 恢复验证，未改其任何断言。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 889 页：非 HEAD 门禁扫面——25/25 exit 0、6 项未证
+
+### 一、现态
+
+前面各页主要跑 core/desktop/typecheck/docs-check；`pnpm gates` 里的其余门很久没在同一棵树上复跑。HEAD 那两道（`head-cert-check` / `mutate-verify`）量提交，当前工作树未提交，跑不了也不算证据；其余能跑的全扫一遍。
+
+### 二、命令与结果
+
+`pnpm gates --only=e2e,sandbox:check,fork-check,gate-check,docs-check,autonomy-check,compaction-check,tools-check,map-check,prune-check,provider:check,memory-check,plugins-check,security-check,gym-check,routing-check,supervisor-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,no-progress-check,cost-per-progress-check,head-import-check,web-fetch-check`
+
+- **25 道门 exit=0**；`docs-check`、`memory-check`、`security-check`（54 断言）、`gym-check`（33）、`routing-check`（39）、`supervisor-check`（81）、`tools-check`、`map-check`、`prompt-surface-check`、`web-fetch-check` 等各自打印通过。
+- **6 项未证**（不得宣称「全部通过」）：`compaction-check` / `provider:check` / `plugins-check` 各 1 项加零输出门，属连网/凭据限制或绿而零输出；摘要明确写「25 道门退出码全 0，但有 6 项未证」。
+- 不跑：`typecheck` / `test` / `desktop-test`（本页之前已各自现读：tsc 0、core 599/7502、桌面 292/1960）；`head-cert-check` / `mutate-verify`（量 HEAD，工作树未提交）。
+
+### 三、边界
+
+- 这是**工作树**读数，不是 HEAD 认证；`head-cert`/`mutate` 未跑，不能替代提交后的认证。
+- 「6 项未证」原样保留，不折成通过；严格模式（`DSH_STRICT_UNVERIFIED=1`）才会把它们判红。
+- 本页零代码改动；只为后续批次留下可复跑的现态分母。
+- 未发起真实模型调用；未提交。
+
+## 2026-11-01 · 第 891 页：goal-drift 也进快环——改口后继续调工具时提醒
+
+### 一、缺口（现读）
+
+`goal-drift` 判据（收窄/扩大/替换目标）此前只在**收束后**读数：写进 Episode 信号、进下一场 `on-signal` 触发。模型在一场 run 中途改口、然后继续调工具时，没有任何即时反馈——它就在新的（可能更窄的）目标上继续干。
+
+### 二、改法
+
+- `loop.ts` 按工具调用断段累计本轮正文；遇到 `tool_call` 时跑 `goalDriftFindings([turnText])`，每个 `rule+quote` 本场只触发一次。
+- 命中后**下一条工具回执**调用 `experienceNudge(["goal-drift"])`，把 active 的 goal-drift 经验接在回执尾部（与 verify/repeat 同一回调、同一脱敏与 `nudgeExperienceIds` 归因）；verify 系统门不夹带（清 pending）。
+- 去重/冻结/预算全部沿用现有快环 runner；callback 缺席时只清 pending、零行为。
+- 判卷 `evolve-nudge` 增 1 条：同轮正文「范围收窄：只修解析器就够了」+ 随后 `read_file` ⇒ 回调收到 `["goal-drift"]`，回执与**下一轮 provider messages** 都含提醒与 ids。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `evolve-nudge` | **10 条全绿** |
+| loop / verify / no-progress / auto-verify 定向 | **6 文件 / 76 条全绿** |
+| 根 typecheck | 0 报错 |
+| 变异自检 | 撤 drift 命中置位 ⇒ goal-drift 格变红；恢复后 10/10 绿 |
+| core / 桌面 | core **599 文件 / 7503 条全绿**；桌面 **292 文件 / 1960 条全绿** |
+
+### 四、边界
+
+- 只在**检测到漂移措辞且随后真有工具调用**时送达：纯文本收口的漂移仍由收束后读数/下一场注入负责；verify 门不夹带。
+- 判据是既有的确定性三族规则（A/B/C），不是新模型判断；同一命中本场只说一次；提醒只是建议，不改目标/权限/验证。
+- 与第 861 页「同会话上一跑信号」互补：那条在起点，这条在当轮。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 893 页：负证据经验终于能转 dormant——面板确认 + IPC v46
+
+### 一、缺口（现读）
+
+第 867 页把负证据判定做成一等 finding、第 880 页把计数放上报告，但产品里只能看到「负证据 N」：哪条、多少场、怎么处置都没有入口，仍只能跑 CLI `evolve-retire --apply`。坏经验会继续被基线注入。
+
+### 二、改法
+
+- `report.ts` 增 `negativeCandidates`：负证据 active 条目的 `id/kind/body/trials/successes`（观测账直接取，不再让面板猜）。
+- `activation.ts` 增 `dormantPlaybookEntry(workspace,id,{apply})`：只允许 active；冻结拒绝；追加 `patch status:"dormant"`，追加前同 fold 验语义；可经激活门回到 active（仍需因果证据）。
+- `EvolvePanel` 新增「负证据经验」区：正文 + `观测 successes/trials` 徽章 + 「转休眠」按钮；未冻结才出按钮，点击弹确认卡（写明处置后果与正文）；拒绝原因留在面板。
+- `EvolveSection` 调 `window.agent.evolveDormant(id)`，成功后刷报告、失败保报告。
+- IPC **v46**：`evolveDormant(id)` → main 调 `dormantPlaybookEntry(apply:true)`，返回 `{ok, reason, report}`；channels/preload/main/wired 全键同步；README invoke 通道 135→136。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `evolve-activation` / `evolve-retirement` / 协议 / README | **14 条全绿**（含 dormant dry-run/apply/重复拒绝与报告候选详情） |
+| `settings-evolve` / `channels` / `protocol-version` | **5 + 4 + 5 条全绿**（桌面） |
+| 桌面 tsc / 套件 | 0 报错 / **292 文件 / 1960 条全绿** |
+| 变异自检 | 撤面板「转休眠」按钮条件 ⇒ 面板判卷变红；恢复后 5/5 绿 |
+| core 全量 | **599 文件 / 7504 条全绿** |
+
+### 四、边界
+
+- 仍人工门：必须确认卡；冻结时面板不出按钮、main 也拒绝；不自动休眠。
+- 只动 active → dormant；dormant 可经激活门（需因果证据）回到 active；负证据阈值（5 场/20%）未改。
+- 拒绝不遮报告；阻断/原因逐条显示。
+- 并发归属：另一批也在补 `settings-ui.test.tsx` 的 `fileURLToPath` import，撞成重复标识符；本批去重保一行，未改断言。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 895 页：全局经验纵切——owner 显式晋升与 ≥3 workspace 证据
+
+### 一、缺口（现读）
+
+设计 §4.5 写明 `scope.workspace="*"` 只能由 owner 显式晋升、且需 ≥3 个 workspace 的证据；实现里全局条目既没有存储，也没有写入路径（激活门对 `*` fail-closed），「跨项目经验」只停在 schema。
+
+### 二、改法
+
+- `global-playbook-store.ts`：全局账 `~/.config/cairn/evolve/playbook.jsonl`（`CAIRN_EVOLVE_HOME` 可覆盖，测试隔离用），复用同一 `PlaybookOp`/fold；全局 `STOP` 与 workspace STOP 分开。
+- `ExperienceEntry.globalEvidence?`：记录 `{workspace, episodeId}` 引用；`validateExperience` 校验形状。
+- `globalize.ts` + `scripts/evolve-globalize.ts`：owner CLI；核验 **≥3 个不同 workspace**，每条证据必须能在该 workspace 的 Episode 账里找到且 `final ≠ unknown`；源条目必须 active；源 workspace 冻结/全局 STOP/同 id 已存在都拒绝；默认 dry-run，`--apply` 才写全局 active 条目（`scope:"*"`）。
+- `list` / `revoke`：owner 只读列表与撤销；撤销 append patch → dormant（全局 STOP 时拒绝），跨库注入立即消失、账本保留 tombstone。
+- `runtime.loadBaselineState`：全局 active 条目并入主会话与 worker 起点检索（同 id 时 workspace 条目优先），共享注入预算；局部 Episode 观测账照常叠加；全局 STOP 时零注入。
+- 判卷 `evolve-global` 3 条：3 库证据 dry-run/apply/跨库注入/撤销后零注入；证据不足/缺失/同 id/全局冻结（含撤销冻结）；CLI dry-run/apply/list/revoke。
+- 变异自检：撤全局合并 ⇒ 跨库注入格红；撤 ≥3 库门 ⇒ 证据不足格红；均恢复。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `evolve-global` | **3/3 绿** |
+| evolve + `context-signals` + `event-semantics` | **22 文件 / 140 条全绿** |
+| 根 typecheck | 0 报错 |
+| core / 桌面 | core **600 文件 / 7510 条全绿**（含 list/revoke 扩判卷后的复跑）；桌面 **292 文件 / 1963 条全绿**（本批未动桌面，取上一轮同树读数） |
+| docs-check / repo-hygiene | 受检项全绿 / 四面全绿 |
+
+### 四、边界
+
+- **不做自动全局晋升、不做 UI**：只有 owner 手动 CLI；`--apply` 才写。全局条目激活后直接可注入（无 canary），因为门要求 ≥3 库证据 + 显式 `--apply`。
+- 证据核验只证明「该 Episode 存在且结局可测」，不证明它语义上支持这条经验；那仍由 owner 判断。
+- 全局条目与局部条目同 id 时局部优先；全局注入占同一份预算；全局条目未进 workspace 报告/面板，管理仍走 CLI/账本。
+- 全局账在用户目录，不入仓；未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 892 页：分区标题已经说了的事，行标签不再念第二遍（同屏同词清零）
+
+### 一、缺口（源码可判，不靠目测）
+
+第 886 页登记的那条「分区标题与行标签同词」在本页收口。扫设置面源码（`SettingsSection title="X"` 与其体内 `SettingsRow label="Y"`，Y≥3 字且 `X.includes(Y)`）：
+
+| 分区 | 行标签 | 判定 |
+|---|---|---|
+| 当前通道与密钥 | 当前通道 | **重复**——那一行只有一枚值药丸 + 「下次发送生效。」 |
+| 搜索服务（联网搜索页） | 搜索服务 | **重复**——那一行是选服务商的下拉 |
+| 关于与更新 | 更新 | 短词巧合包含，不算（见阈值理由） |
+
+### 二、改法
+
+- **撤行、值进分区头**：`SettingsSection` 的 `hint` 从 `string` 放宽到 `ReactNode`，「当前通道与密钥」分区头变成 `当前通道与密钥  [deepseek]  下次发送生效`（值仍是 mono 药丸，不降级成小灰字）。读序不变（先结论、再列表/表单，第 748 页与 Codex 同序的裁决保住）。
+- **改行名说清它在选什么**：联网搜索页里那行下拉从「搜索服务」改叫「服务商」（可见标签与 `aria-label` 同步改，不劈裂）。
+- 新增机械判卷（`settings-ui`）：扫三个设置文件，**「分区标题 ⊃ 行标签」必须为 0**。阈值 ≥3 字的理由写进注释（避开「更新」这类短词巧合）。
+- 新增反向哨兵（`settings-sections`）：Provider 段整段渲染里「当前通道」**只许出现一次**（就是分区标题），且不许再出现 `>当前通道<` 的独立标签。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 变异自检（先坏后修） | 第一次变异用 2 字标签「能力」→ 判卷不响，查出是**阈值**而非判卷空转；换 ≥3 字变异（分区头改「联网搜索与配额」+ 行改「联网搜索」）⇒ **抓到** `联网搜索与配额 ⊃ 联网搜索`。现况扫描 0 违规 |
+| 判卷自身的坑（如实记） | 新判卷第一次跑是 `ReferenceError: fileURLToPath is not defined`（该文件没这个 import）。**报错而不是静默通过**才算数——若当时写成 try/catch 或空数组，这条 lint 就是恒真的假绿 |
+| `settings-sections` / `settings-ui` / `network-settings` | **52 → 54 条全绿**（含新 lint 与新哨兵） |
+| 桌面套件（`--maxWorkers=2`） | **292 文件 / 1960 条全绿** |
+| 亮色真机目验 | 分区头读到 `当前通道与密钥 [deepseek] 下次发送生效`，下面直接进供应商列表，少一整行 |
+| `settings-sweep-smoke` | 「设置导航列出全部分区」PASS；**「每个分区都能点开」仍 FAIL，唯一失败项是「进化」分区撞渲染边界**（`Cannot read properties of undefined (reading 'length')`）——属另一会话在改的 `src/main/evolve/` 与画廊 preload，本批未碰；含本批改动的「模型与 Provider」等其余分区全部正常。sweep 整体**不报绿** |
+| boundary / renderer-layer / docs-check | 绿 / 绿 / 受检项全绿（页号 887–889 被并发会话占用，本批用 892） |
+| dist | 重建 `index-BsC3tipG.js` / `index-DkLBrj_y.css` |
+
+### 四、边界
+
+- 「进化」分区的崩溃不是本批引入，也不是本批能安全修的（他笔在改同一面）；业主当前树里那一格会显示「这一块加载失败」。
+- 阈值 ≥3 字是有意的宽松：将来若出现「配额」⊂「配额与预算」这类 2 字真重复，需要单独点名而不是全局降阈值（降阈值会把「更新」误报出来）。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+
+## 2026-11-01 · 第 894 页：首启「设置检查」从参差药丸堆改成一张清单
+
+### 一、缺口（首启实拍，此前从未看过这一屏）
+
+`GALLERY_FIRST_RUN=1` 拍到新用户看到的第一屏：七格覆盖面排成 **1 / 2 / 3 / 1 的参差堆**——每格宽度等于它自己文案的长度（`.onboard-items` 是 `flex-wrap`，`.onboard-item` 带 `max-width: 260px`），行与行的右沿互相缺角，看上去像一堆标签药丸，不像「一张待办清单」。同屏右下角的「开始使用」是**一行无框灰字**，与上面的说明文字同貌——首启用户找不到出口。
+
+步与步的格数天然不同（首启实测 1/2/3/1），所以固定列数（第一版改成 `repeat(auto-fit, minmax(184px,1fr))`）仍然每行留尾部空洞——真机复拍才发现没解决。
+
+### 二、改法
+
+- `.onboard-items` 改 `grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr)`：**每一步自成一行并按本步格数铺满**（1 格占满、2 格各半、3 格三等分），行与行右沿齐平；`.onboard-item` 撤掉 `max-width: 260px`（那是把宽度交给文案长度的根因），留 `min-width: 0` 让长句在格内换行。
+- 「开始使用」加描边胶囊（`--hairline-strong` 边 + 透明底 + hover 才上底纹）：**看得出可以点，但仍不抢七格的主位**（既有裁决原样保留，不走色相）。
+
+### 三、读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `onboarding-checklist` 新增 3 条 | ① 必须 `grid-auto-flow: column` + 等分列，且反向钉不许退回 `flex-wrap` / `repeat(auto-fit`（第一版正是被这条反向钉逼着改对的）；② `.onboard-item` 不许再有 `max-width: 260px`；③ 完成钮有描边、无 `accent-brand`、底透明 |
+| 桌面套件（`--maxWorkers=2`） | **292 文件 / 1963 条全绿**（1960 + 3） |
+| 首启真机 | 复拍：四行右沿齐平（1/2/3/1 各自铺满），块高 238→259（格内换行），出口成胶囊 |
+| boundary / renderer-layer / docs-check | 绿 / 绿 / 受检项全绿 |
+| dist | 重建（本批含一次协议追平，见下） |
+
+### 四、过程记录（两条，都影响可信度）
+
+1. **中途整屏变「IPC 协议版本失配：渲染层期望 45，主进程实况 46」**——并发会话把协议 bump 到 v46，而我的 `dist` 是按 v45 构建的（主进程走 tsx 直载、渲染层吃 dist）。重跑 `vite build` 追平后才继续。**教训：在并发树上，截图/读数的时效以 dist 构建时刻为界**，否则拍到的是失配页还以为是产品画面。
+2. 第一版布局（固定 `auto-fit` 三列）拍出来仍是缺角——**是靠「改完立刻复拍」而不是靠推理发现的**；随后补的反向钉把这一版也挡在门外。
+
+### 五、边界
+
+- 七格的 `entry` 说明文案来自 `src/main/onboarding-groups.ts`（唯一事实源）。其中「版本与更新 → 查看版本、许可证与更新」「定时任务 → 需要定时跑的任务在这里安排」是**复述标题**，按业主口径该剪；但 `onboarding-checklist` 有一条判卷要求**每格必须有可见 entry**，剪文案要同时改那条判据（属判据升级，需点名），本批未动，留作下一批。
+- 「记忆」格在 3 等分时说明折到 2 行（同行卡片等高，不缺角）；若业主嫌挤，可把该步并到 2 列。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+
+## 2026-11-01 · 第 896 页：首启七格的说明改成事实，不再改着说法念标题
+
+### 一、缺口（第 894 页登记，本批收口）
+
+首启七格里有四格的 `entry` 只是把格子标题换个说法再念一遍，读完不知道点进去会看到什么新东西：
+
+| 格 | 原 entry | 病 |
+|---|---|---|
+| 定时任务 | 需要定时跑的任务在这里安排 | 「定时任务」的换语 |
+| 版本与更新 | 查看版本、许可证与更新 | 标题词序重排 |
+| 主题与布局 | 选主题；布局随时可在右栏调整 | 前半句是「主题」的换语 |
+| 记忆 | 会话结束后自动沉淀项目约定，可在记忆页查看 | 后半句复述标题 + 卡片本身就是入口 |
+
+**没有直接删**：`tests/onboarding-groups.test.ts` 有一条既有裁决「每组都有 label 与『去哪儿找』的 entry（引导页不能出现空壳条目）」，删句会造出被禁止的空壳。所以处理方式是**改写成不可推导的事实**，裁决原样成立。
+
+### 二、改法（`src/main/onboarding-groups.ts`，单一事实源）
+
+- 定时任务 → 「到点会自动发起新的对话。」（事实取自定时页空态自己的原话，不新造承诺）
+- 版本与更新 → 「许可证状态与运行诊断都在这里。」（标题里没有的两样东西）
+- 主题与布局 → 「深浅色与字号可随时换，布局在右栏调」
+- 记忆 → 「会话结束后自动沉淀项目约定。」（撤掉复述后半句）
+- 另撤 `OnboardingChecklist` 每格上的 `title={g.entry}`：entry 本来就整行可见，再挂一枚同文 tooltip 是同一句话的第二份，且键盘用户读不到。
+- 文件头加一段文案纪律：entry 只写看不出来的部分，不许复述 label；同时保留「每组必须有 entry」。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `onboarding-groups`（根仓）新增 3 条 | ① 四句复述逐句点名不许回来；② **反向自证**：四格仍在屏上 + 现 entry 与旧句逐一不等（名单不会悄悄失效）；③ 每格 entry 仍 >8 字且带事实标记（自动/默认/随时/可/这里…）。**10 条全绿**（`--config tests/vitest.config.ts`，根仓裸跑会假红） |
+| `onboarding-checklist`（桌面） | 13 条全绿（含第 894 页三条布局判卷；`title` 撤掉后仍从可见 span 断言 entry 上屏） |
+| 桌面套件（`--maxWorkers=2`） | **292 文件 / 1963 条全绿** |
+| 首启真机 | 复拍：四格文案读起来各自给出一个新事实，行仍铺满、右沿齐平 |
+| boundary / renderer-layer / docs-check | 绿 / 绿 / 受检项全绿 |
+| dist | 重建（画廊首启趟读的就是新包） |
+
+### 四、过程记录
+
+- 新判卷第一次跑**自己写坏了**：反向自证里把元组写成 `[label, i]` 却按 `[i, l]` 解构，`toContain(0)` 直接红。修好后它才真正开始守（这条红恰好证明该判卷不是恒真）。
+- 新判卷第一次用桌面 vitest 配置跑 → 根仓测试不在收集范围，输出「no tests」。**根仓判卷必须带 `--config tests/vitest.config.ts`**。
+
+### 五、边界
+
+- 「确认权限与安全」「隐私与遥测」「连接模型」三格原本就是新信息，一字未动。
+- 文案改动落在核心数据源，CLI/其他消费者若展示同一句会同步变（同一份事实，符合单一源纪律）。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+
+## 2026-11-01 · 第 897 页：全局经验上桌面——报告可见、确认撤销、全局 STOP 有入口
+
+### 一、缺口（现读）
+
+第 895 页把全局经验写通了，但只到账本：`buildEvolveReport` 只读 workspace playbook，桌面「进化」分区看不到任何全局条目；撤销只有 CLI；全局 STOP 只有 `isGlobalEvolveFrozen` 读取端，没有任何写入入口（owner 得手动在 `~/.config/cairn/evolve/` 里 `touch STOP`）。结果是「跨项目经验」能注入，但注入面不可见、撤销面不可点、冻结面不可达。另：第 892 页记录的「进化」分区渲染边界崩溃，根因正是画廊 `EVOLVE_REPORT` 夹具缺 `nudges` / `activationCandidates` / `negativeCandidates`（本批一并修）。
+
+### 二、改法
+
+- `EvolveReport.global`：`{ frozen, total, byStatus, entries[], badLines, refusals }`；每条含 `id/status/kind/body/evidence/workspaces`，`workspaces` 由 `globalEvidence` 去重得出（不是把本地 seed 证据算进跨库数）。`buildEvolveReport` 与局部六项并行读全局账与全局 STOP；全局坏行/拒单原样上报告，不静默丢。
+- `formatEvolveReport`：全局行（总数/状态/坏行/拒单/全局冻结）+ 每条明细，CLI `evolve-report` 同步可见。
+- IPC v47 ＋`evolveGlobalRevoke`（136→137）：main 调 `revokeGlobalExperience(..., {apply:true})`，返回动作后的完整报告；拒绝/条目已消失（外部改账）都回到报告，不把整页折成错误；workspace STOP 不挡全局撤销，只有全局 STOP 挡。
+- 桌面「进化」新增「全局经验」分区：active 条目出「撤销」按钮（确认卡：所有 workspace 停用、账本保留 dormant）；dormant 列出但无按钮；全局 STOP 时显式说明并撤按钮；坏行出声。`EvolveSection` 接 `evolveGlobalRevoke`，忙态/拒绝原因与既有激活/转休眠同一条路径。
+- 全局 STOP 有入口：`scripts/evolve-globalize.ts freeze|unfreeze`（幂等），`list` 带 `frozen`；store 新增 `setGlobalEvolveFrozen`（写/删 STOP，与 workspace STOP 分开）。
+- 判卷夹具：`tests/vitest.config.ts` 把 `CAIRN_EVOLVE_HOME` 缺省隔离到临时目录（报告现在会读家目录，测试结果不许取决于跑测试那台机器）；画廊 `EVOLVE_REPORT` 补齐 7 个遗漏字段并加三个动作桩；`settings-sweep-smoke` 新增「全局经验分区渲染 + 撤销确认卡」两项断言与两张截图。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `evolve-global` | **4/4 绿**（新增报告字段/全局 STOP 两把锁/坏行；首跑红是夹具把 seed 证据算成 3，实际并集 4——判卷抓的是我的口径错，不是实现错） |
+| evolve + `context-signals` + `event-semantics` | **22 文件 / 141 条全绿**（140 + 坏行 1） |
+| 桌面定向（settings-evolve / channels / protocol / marketplace 六支） | **8 文件 / 37 条全绿** |
+| 变异自检（三处，均先红后绿） | ① `workspaces` 固定 0 ⇒ 报告格红；② 撤 `!report.global.frozen` ⇒ 冻结按钮格红；③ `freeze` 取反写 STOP ⇒ 全局 STOP 格红 |
+| 根 typecheck / 桌面 tsc | 0 报错 / 0 报错 |
+| `settings-sweep-smoke` | **6/6 PASS**（含新增「全局经验分区渲染出条目与撤销入口」「撤销先出确认卡」；全程 0 控制台错误；截图 `02-evolve-global.png` / `03-evolve-global-confirm.png`，条目读作 `lesson · active · 3 库 / 4 证据`） |
+| core / 桌面全量 | core **600 文件 / 7511 条全绿**（7510 + 坏行 1）；桌面 **292 文件 / 1964 条全绿**（1963 + 全局经验 1） |
+| docs-check / repo-hygiene | 受检项全绿（页号唯一，897 未撞） / 四面全绿 |
+| dist | 重建（画廊读的就是新包） |
+
+### 四、边界
+
+- **晋升仍只在 CLI**：桌面只做「可见 + 撤销」，不做晋升；晋升仍需 ≥3 workspace 可测证据 + `--apply`。全局条目无 canary，与第 895 页同一裁决。
+- **两把锁分开**：workspace STOP 挡局部注入/晋升/候选；global STOP 只挡全局注入/晋升/撤销。桌面顶栏只说 workspace 冻结，全局分区自己说全局冻结。
+- 全局账在用户目录、不入仓；报告每次读它，账本条目数目前没有独立上限（与 workspace playbook 的 200 条帽不是同一道门），留作下一批。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 898 页：全局经验体检——过期/本库负证据/跨账冲突用同一把判据上屏
+
+### 一、缺口（现读）
+
+第 897 页让全局经验「看得见、撤得掉」，但它们的健康只在晋升那一刻被检查过：active 之后过期、在本库累计失败、或与本库 active 条目同触发，报告都不出声。局部 `retirementFindings` 只扫 workspace playbook；全局账没有过期/负证据/冲突的出口。owner 只能盲撤，或者根本不知道一条全局经验已经在某个库里连续失败。
+
+### 二、改法
+
+- **复用同一把判据**：`retirementFindings` 不新增第二套阈值。报告先把全局条目的 `scope.workspace="*"` 投影到当前 workspace（与运行时 `matchesScope` 的 `*` 语义一致），按 id 去重且**本地优先**（与运行时合并一致），再与局部条目一起过 `retirementFindings`；结果只保留全局 id 的 findings（过期/负证据/同触发冲突，含全局×局部与全局×全局）。
+- `global.entries` 增 `trials/successes`：Episode 的注入账本来就记全局 id（`assignment.injectedExperienceIds` / `nudges`），观测直接复用，不另建账。
+- `global.findings` 上报告；`formatEvolveReport` 的全局行增「体检 N」，条目行增「本库观测 x/y」，并逐条打印 findings。
+- 桌面全局经验行：无 finding 时 desc=`本库观测 x/y`；负证据时 desc=`本库负证据：<detail>`（detail 已含 0/5，不再把同一组数念两遍）；过期/冲突时 desc=`本库观测 x/y；<原因>：<detail>`。有 finding 的条目徽章转中性；撤销仍是人工确认的 active-only 动作，不自动降级。
+- 通道/协议零变化（只扩报告字段）；画廊夹具补一条负证据，`settings-sweep-smoke` 增「本库观测与体检」断言。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `evolve-global` | **6/6 绿**（+2：过期体检且不再注入；全局×本地同触发冲突点名全局条目并断言 `playbook.conflicts=0`） |
+| evolve + `context-signals` + `event-semantics` | **22 文件 / 143 条全绿**（141 + 2） |
+| 桌面定向（`settings-evolve`） | **6/6 绿**（本库观测 0/5 + 本库负证据上屏；负证据 desc 不重复同一组数） |
+| 变异自检（三处，均先红后绿） | ① 撤掉 `*` → 当前 workspace 投影 ⇒ 跨账冲突格红；② `trials` 固定 0 ⇒ 观测格红；③ 撤掉 finding 的 desc ⇒ UI 格红 |
+| 根 typecheck / 桌面 tsc | 0 报错 / 0 报错（中途桌面 tsc 曾红 3 条 `SidebarProps.usage`，属并发会话删 UsagePanel 的过渡态；其收敛后复跑通过） |
+| `settings-sweep-smoke` | **7/7 PASS**（新增「全局经验分区显示本库观测与体检」；截图里读作 `本库负证据：观测 0/5（成功率 0% ≤ 20%）——建议 dormant`，撤销确认卡仍在） |
+| core / 桌面全量 | core **600 文件 / 7513 条全绿**（7511 + 2）；桌面 **290 文件 / 1953 条全绿**（并发会话本批删掉 UsagePanel 与两支旧判卷，文件/条数由 292/1964 降到 290/1953；本批未动它们，收敛后复跑全绿） |
+| docs-check / repo-hygiene | 受检项全绿（898 未撞） / 四面全绿 |
+| dist | 重建（画廊读的是含体检 desc 的新包） |
+
+### 四、过程记录
+
+- 全量桌面第一次跑在并发删 `UsagePanel.tsx` 的中途：3 文件 / 9 条红（`usage-panel` / `usage-composition` / `micro-interaction`），而同刻 `tsc` 报的正是 `SidebarProps.usage`——两处同源，属并发会话的过渡态。等它把旧面板与旧判卷删净后复跑：**290 / 1953 全绿**。这也再次提醒：**`cmd | tail` 的退出码是 tail 的**，那次后台任务报 exit 0 却带着 9 条红，必须读汇总行而不是只看退出码。
+- 新判据首跑即绿；随后用三处真变异（撤 workspace 投影 / `trials` 固定 0 / 撤 finding desc）逐一打断，确认不是恒真，再恢复复跑。
+
+### 五、边界
+
+- **本库观测 ≠ 全局观测**：负证据只来自当前 workspace 的 Episode；一条全局经验可能在别的库成功、在本库失败。desc 明写「本库」。跨库汇总与全局级降级留作后续，不在本批伪造。
+- findings 只是提示，不自动 retire/revoke；撤销仍走第 897 页的确认卡。过期/冲突同理：过期条目运行时已不注入，报告仍点名，让 owner 知道该清账。
+- 同 id 全局被本地遮蔽时，本库不做全局体检（运行时本地优先，它在本库不生效）；全局×本地的冲突只在全局分区点名，`playbook.conflicts` 仍是局部口径。
+- 冲突判据沿用既有的 workspace/taskClass/trigger 同键，不扩大；关键词互斥规则不变。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 899 页：用量浮层是死面——组件、样式、文案、状态链一并摘除
+
+### 一、缺口（亮色审计趟顺手挖出来的，不是猜的）
+
+第 884 页修好亮色自查后，第一次真跑亮色画廊。跑完对着产物发现：**`11-usage-panel.png` 与 `06c-settings-usage.png` 字节数一模一样（189619）**——画廊那一档根本没拍到「用量面板」，它拍的是设置页的副本，而脚本只打印一行 `panel:null` 就继续走。
+
+顺着这条线查下去，是一整条**产品里不存在的面**：
+
+| 证据 | 读数 |
+|---|---|
+| 真包 JS（`dist/assets/*.js`）里 `usage-pop / usage-anchor / usage-grid / usage-scope / usage-comp` | **0 引用**（CSS 里全在） |
+| `UsagePanel` 这个导出组件在 renderer 里被渲染（`<UsagePanel`） | **0 处**；只有 `tests/usage-panel.test.tsx`、`tests/usage-composition.test.tsx` 在跑它 |
+| 头像菜单「用量统计」实际行为 | `onOpenUsage` → 直达设置·用量统计（`Sidebar.tsx` 注释原话：「用量入口直达设置中的完整统计页。」） |
+| `git show 4c38b08c`（2026-10-26，PROGRESS 703–708） | 那次**刻意**把浮层改成直达：删了 `usageOpen/usageScope/usageAnchorRef/usePopoverDismiss` 与 `<UsagePanel>` 渲染点 |
+
+⇒ 结论：不是"要不要撤浮层"的新判断（10-26 已裁），而是**那次撤漏了尾巴**。留下来的是 172 行组件 + 5 行类型 + 57 行样式 + 23 条文案 + 一条懒加载状态链，外加两个天天判绿的测试——判卷证明的是一个用户永远打不开的面板。
+
+### 二、改法（只删死的，不动活的）
+
+- **组件与测试**：删 `components/UsagePanel.tsx`、`usage-state.ts`、`tests/usage-panel.test.tsx`、`tests/usage-composition.test.tsx`（四个都是 git 跟踪件，`D` 状态可回查）。
+- **样式**：删 `styles.css` 3037–3093 那 57 行（`.usage-anchor / .pop.usage-pop / .usage-grid / .usage-row / .usage-empty / .usage-scope* / .usage-note / .usage-fail / .usage-comp* / .uc-*`）；**保留** `.usage-slot / .usage-ring / .ur-*`（那是 composer 用量环，活的，`Composer.tsx:1141` 渲染）。
+- **文案**：删 `STR.footer` 里 23 条只服务该面板的键（`usageTip / usageTitle / usageScope* / usageAll* / usageComposition / usageCache* / usageInput / usageOutput / usageSteps / usageRounds / usageCalls / usageSessions / usageWorkspaces / usageSkipped / usageBadLines / usageEmpty`）；`usage: "用量统计"` 是菜单标签，留。
+- **状态链**：`workbench.ts` 删 `usageAll` state + `usageAllSeq` + `loadUsageAll`（22 行）及其两个返回键；`WorkbenchView.tsx` 删 deps 声明、解构项与三行传参；`Sidebar.tsx` 删 `usage / usageAll / onLoadUsageAll` 三条 prop（**侧栏一条都不读**，纯死重）；`AppToolbar.tsx` 删只 import 不用的类型。
+- 设置页「用量统计」自己走 `window.agent.usageLedger()`（`settings/UsageSection.tsx:151`），与浮层无关 ⇒ 账本、IPC、投影全留，用量仍是两处真面：**composer 用量环 + 设置·用量统计**。
+
+### 三、工具面：让下一次"静默退化"必须出声
+
+- `ui-gallery.cjs`：`shot()` 加**逐像素相同即失败**闸门（sha256 短哈希比对本次跑已存的所有张）。这一条是通用的：任何一档点了没生效，都会当场红，而不是留下一张冒名截图。
+- 「用量统计」那一档从「截图 + 只打印 `panel:null`」改成**落点断言**：`.sp-nav-item.on` 与 `.ss-title` 都必须是「用量统计」，且 `.usage-pop` 计数必须为 0（死面回来也红），随后点 `.sp-back` 回工作台再拍后面的档。
+- 弹窗窗口（`14-popout-pane.png`）主题**桩给 preload**（`--cairn-theme=`）：它是新文档，按 `settings.theme` 上主题，不吃主窗口的 DOM 注入。顺带把首启夹具的 `getSettings` 快照从 `{...SETTINGS}` 改成 `{...settingsState}`，让桩侧的改动流得进去。
+
+### 四、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `tests/dead-surface.test.ts`（新） | ① renderer `components/panes` 每个 `export function [A-Z]*` 必须真被渲染（同文件自渲染算活）；② 死面名单 13 个符号不回潮；③ 反向自证。**3 条全绿** |
+| 变异自证 | 临时造 `ScratchDeadPanel.tsx` → 判卷立刻红（`ScratchDeadPanel.tsx → ScratchDeadPanel`）；删掉 → 复跑绿。**闸门不是恒真** |
+| 桌面套件（`--maxWorkers=2`） | **291 文件 / 1957 条全绿**（删 2 个测试文件、加 1 个） |
+| 亮色画廊 | `用量入口落点自查: {"nav":"用量统计","title":"用量统计","pop":0}`｜`弹窗主题自查落位: light`｜15 张互不相同（重复闸门 0 响） |
+| 新包 | `dist/assets/index-D8Oafou5.css` / `index-I5YNSQVY.js`：`usage-pop/usage-scope/uc-seg/UsagePanel/usageAll` **全部 0 命中** |
+| typecheck / boundary / renderer-layer / docs-check | 绿 / 绿（169 源文件） / 绿 / 受检项全绿 |
+
+### 五、否证（写下来免得别人再去追）
+
+- **亮色趟里 `14-popout-pane.png` 曾是暗色**：不是产品缺陷。`PopoutApp.tsx:14-17` 自己读 `settings.theme` 并 `applyTheme`，是画廊没把主题桩交给新窗口。改完后同一张图是亮色（本批真机已复拍）。这与第 884 页「亮色黑侧栏」是同一类工具假阳性。
+- **`md-h1 / uc-input / ap-* / sp-*` 等 60 个"孤儿类名"不判死**：机械清点把 `styles.css` 的类名拿去和 renderer 源码对，有 60 个对不上——但 `md-h1`、`uc-input` 这类是 `className={`uc-${p.key}`}` **模板拼出来的**，字面量天然不在源码里。所以本批**不写通用死样式判卷**（会一片假阳性），只写孤儿**组件**判卷（组件名不会靠拼接渲染）。
+- 5 个测试夹具（`project-missing-badge / session-identity-ui / session-list-polish / session-project-assign / tooltip-audit`）传过 `usage=` 给 `<Sidebar>`：prop 删了它们就红，摘掉这 5 处传参。**没有放宽任何断言**——被删的是没人读的入参。
+
+### 六、边界
+
+- `micro-interaction.test.ts` 的 `MICRO` 名单去掉 `.usage-scope button` 一项：该控件已不存在，留着判卷会报「找不到规则块」。名单里其余项一字未动。
+- 设计规范 §3066（批 131 那条「`UsagePanel` 抽成独立组件」）是**当时**的记录，不回改历史；现状写进 §9 第 34 条。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+- 本批期间协议号又被并发会话从 47 抬到 48（画廊读的是 147 成员 / v48 的那次装配）；所有读数受打包时刻限制。
+
+## 2026-11-01 · 第 900 页：全局冻结上桌面——两把锁各有可见入口
+
+### 一、缺口（现读）
+
+第 897 页给全局 STOP 补了 CLI `freeze|unfreeze`，第 898 页把体检结论送上桌面，但桌面只能看到「全局 STOP 冻结中」这个状态，没有任何地方能把它打开或解除——owner 在应用里要停掉全局经验，仍得回终端。局部 STOP 有桌面开关，全局 STOP 没有，两把锁的产品面不对称。
+
+### 二、改法
+
+- IPC v48 ＋`evolveGlobalSetFrozen(frozen)`（137→138 通道）：main 调 `setGlobalEvolveFrozen` 写/删全局 STOP，返回动作后的完整报告；与局部 `evolveSetFrozen` 同形，互不代写。
+- 桌面「全局经验」分区新增治理行：未冻结 → 「冻结」；已冻结（STOP）→ 「解冻」；两者都先出确认卡（冻结卡明说**所有 workspace** 停止注入/撤销、局部经验与 workspace STOP 不受影响）。冻结态下 active 全局条目的「撤销」按钮隐藏（与内核拒绝一致），解冻后恢复。
+- `EvolveSection` 接 `evolveGlobalSetFrozen`：忙碌态「写入中…」、失败落错误页、成功用回传报告刷新（不本地猜状态）。
+- 画廊桩把 workspace 冻结与全局冻结分开模拟；`settings-sweep-smoke` 增三项断言：冻结确认卡、冻结后按钮变「解冻」且撤销隐藏、可解冻复位；新增 `04-evolve-global-frozen.png`。
+- 协议钉/通道计数/README 同步：7 支版本钉 → 48，`INVOKE_CHANNELS` 137→138，README 138。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 桌面定向（settings-evolve / channels / protocol / notification / marketplace 四支 / plan-mode） | **9 文件 / 42 条全绿**（settings-evolve 6→7） |
+| 变异自检 | 把冻结按钮的 aria-label 从「冻结/解冻」二态改成恒「冻结全局经验」⇒ 冻结态格红；恢复后绿 |
+| 根 typecheck / 桌面 tsc | 0 报错 / 0 报错 |
+| `settings-sweep-smoke` | **9/9 PASS**（新增「全局冻结先出确认卡」「全局冻结后按钮变解冻、撤销隐藏」；截图 `04-evolve-global-frozen.png` 读到 `全局已冻结（STOP）` + `解冻`，条目仍在但无撤销；全程 0 控制台错误） |
+| core / 桌面全量 | core **600 文件 / 7513 条全绿**；桌面 **291 文件 / 1957 条全绿**（并发第 899 页删掉 UsagePanel 与两支旧判卷后，由 292/1964 变为 290/1953；本批 +1 判卷、并发又补 3 条，收敛后 291/1957） |
+| docs-check / repo-hygiene | 受检项全绿（页号 899 被并发占用，本批用 900） / 四面全绿 |
+| dist | 重建（画廊读的是含全局冻结行/确认卡的新包） |
+
+### 四、边界
+
+- **冻结是「停止下一次装配/提醒」**：已在跑的模型调用不中断；基线注入、worker 起点与快检提醒都读 STOP，动作后新装配即生效。解冻同理。
+- 全局冻结是用户级、跨 workspace；局部 STOP 不受影响，反之亦然。桌面两个开关各自写各自的文件，确认卡都写明作用域。
+- 晋升仍只在 CLI（≥3 workspace 证据 + `--apply`）；本批只补「停」与「解」，没有放宽任何门。
+- 体检 findings 不会自动触发冻结；仍由 owner 看报告后拍板。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 901 页：全局经验可恢复——撤销不是单向门
+
+### 一、缺口（现读）
+
+第 897 页的撤销把全局条目转 dormant，确认卡写着「需要时可重新评估」，但实现里没有恢复入口：`globalizeExperience` 遇到同 id 直接拒绝（「全局账已有同 id 条目」），`revoke` 只单向 active→dormant。条目一旦撤销，除非手改账本，永远回不到 active——confirm 文案承诺了一条不存在的路。
+
+### 二、改法
+
+- `reactivateGlobalExperience(id, { apply?, now? })`：只接受 **dormant**（active 拒绝、其余状态拒绝）；全局 STOP → frozen；取出条目自带的 `globalEvidence`，用**同一支** `verifyGlobalEvidence` 复核（≥3 个不同 workspace、每条 Episode 仍在且 `final ≠ unknown`）；默认 dry-run，`--apply` append `patch {status:"active"}`，账本留痕（不新增条目）。
+- 复核不是「再信一次晋升时的快照」：证据 workspace 的 Episode 账被删/不可测时恢复会拒绝，条目保持 dormant。
+- CLI `evolve-globalize activate <exp_id> [--apply] [--json]`：与 revoke/freeze 同排；dry-run 打印复核到的 workspace/Episode 数；拒绝/冻结逐条出声。
+- 桌面不加按钮（与晋升同一条 owner-CLI 边界）：恢复是重新打开一条跨库注入，和晋升同级，不在面板上给一键入口。
+- 恢复后负证据体检会立刻回来（旧的 5 场失败仍在 Episode 账里）；不因恢复而清账、也不自动再休眠。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `evolve-global` | **7/7 绿**（+1：证据 workspace 删除后恢复拒绝且条目不回 active；首测还覆盖冻结拒绝→解冻→dry-run→apply→注入回来→体检 negative 回来→重复恢复拒绝） |
+| evolve + `context-signals` + `event-semantics` | **22 文件 / 144 条全绿**（143 + 1） |
+| 变异自检 | 撤掉恢复前的证据复核（改成恒真条件）⇒ 证据失效格红；恢复后绿 |
+| 根 typecheck / 桌面 tsc | 0 报错 / 0 报错 |
+| core / 桌面全量 | core **600 文件 / 7514 条全绿**（7513 + 1）；桌面 **291 文件 / 1957 条全绿** |
+| docs-check / repo-hygiene | 受检项全绿（901 未撞） / 四面全绿 |
+| dist | 未重建：本批无渲染层改动（桌面 main 只沿用既有 globalize 导入，无新增调用） |
+
+### 四、过程记录
+
+- 全量 core 第一次后台跑用 `| tail -6`，退出码 0 但把 `Test Files / Tests` 汇总行切掉了——**管道退出码是 tail 的，汇总行也未必在窗口里**。改为落盘 `/tmp` 再 grep 汇总，重跑才作为读数。这条与第 898 页记的「exit 0 却带 9 条红」同族。
+
+### 五、边界
+
+- 恢复只复核**晋升时的 `globalEvidence`**，不重新要求 owner 提供新证据，也不重跑 ≥3 库以外的任何门；证据失效就拒绝，宁可不恢复。
+- 恢复不改变条目的 scope/trigger/body/confidence；只改状态与 updatedAt。撤销前的局部观测账仍在，恢复后按原样参与排序与负证据判定。
+- 只有 dormant 可恢复；deprecated/retired 不在本门内（当前全局账只有 active/dormant 两种来源）。
+- 桌面仍无恢复按钮；owner 走 CLI，与晋升一致。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 902 页：预览列空态改走窗格共用语法，并居中
+
+### 一、缺口（第 899 页那张弹窗照片里看见的）
+
+`14-popout-pane.png`：预览列整列 505px 高，内容只有一行 12px 灰字贴在左上角，下面全白。那句话本身也是三合一：
+
+```
+点文件预览（只读；写入由 agent 走审批）
+```
+
+- 「点文件预览」= 命令式复述布局（左边就是文件树，点了就出内容）；
+- 「只读」= 与打开后常驻的 `.fp-readonly` 标重复；
+- 「写入由 agent 走审批」= 一条 agent 政策，塞在文件预览的括号里。
+
+对照全应用：**9 个窗格空态都走 `.pane-empty`**（居中、`--space-lg` 起、`--fs-body-sm`），只有文件预览用自造的 `.fp-note` 灰字。同一个语义两种形制，差的那个还读起来像控件坏了。
+
+### 二、改法
+
+- `FilePane.tsx`：空态换成 `.pane-empty` 语法，两行——「左边选一个文件，这里看内容。」/「预览只读；改文件走 agent 的审批卡。」第二行只留**看不出来的那条事实**（与兄弟窗格 `PaneDock:693`「选中之前不预取差异…」同一形状）；命令式与括号复述撤掉。
+- `styles.css`：`.file-preview:has(> .pane-empty) { display: grid; align-content: safe center; justify-items: center; }`。只在空态命中（有内容时仍是块级流）；`safe` 保证文字比窗口高时居中不把首行顶出可滚范围，不支持该关键字时整条作废退回默认，不会截不出内容。
+- 树内的「空目录 / 工作区为空」仍是 `.fp-note`：那是**行内**小注，不是整窗格空态，不改。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `file-pane-improvements`（+3 条，共 8 条） | ① 走 `.pane-empty` 且旧句点名不回潮；② 「预览只读」全源只许 1 处 + 常驻标仍在；③ 居中规则钉在 `:has(> .pane-empty)` 上且必须带 `safe`。**8 条全绿** |
+| 画廊新增「弹窗空态几何自查」 | `{"note":true,"cls":"pane-empty","boxH":505,"offRatio":0,"clipped":false}`——**offRatio 0 = 中心点与预览列中心重合**，无裁切。不符即抛错 |
+| 亮色真机 | 复拍 `14-popout-pane.png`：两行居中，读起来是有意的空态而不是一句漏在那儿的说明 |
+| typecheck / 桌面套件 | 绿 / **291 文件 · 1960 条全绿**（`--maxWorkers=2`） |
+
+### 四、过程记录（两条都是判卷自己响）
+
+- 新判卷第一次跑就红：我的正则 `([^<]*)` 只取到 `<br />` 之前，断言「只读」取不到。**红的是判卷，不是产品**——修判卷口径后绿。
+- 画廊闸门第一次跑恒红：成功分支的 JSON 没带 `note` 键，`!e.note` 永远真。补键后同一次跑读到 `offRatio:0` 并通过。这条恰好证明闸门不是摆设。
+
+### 五、边界
+
+- 没动 `.fp-note` 的其他三种用法（读取中 / 失败重试 / 截断警告）：那些是**状态注记**，位置贴着内容顶部是对的。
+- 「改文件走 agent 的审批卡」这句是既有事实的换形（原括号里的同一件事），未新增承诺；审批卡本体与权限档不在本批。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。并发会话仍在抬协议号，读数受打包时刻限制。
+
+## 2026-11-01 · 第 903 页：全局经验进真实 system prompt 的端到端判卷（含 STOP 与本地优先）
+
+### 一、缺口（现读）
+
+全局经验此前有单元级证据（`prepareEvolutionInjection` / `baselineEvolutionNote` / 报告字段），但没有一条走**生产 `runAgent`** 的断言证明它真的进了模型 system prompt。第 859 页在同一族测试上踩过「helper 支持、runner 没接」的坑（toolNames/paths）；全局合并也属于同一类「可能只绿在 helper」的接线，必须有真 run 的判据。
+
+### 二、改法（只加判卷，不动产品代码）
+
+`tests/evolve-injection-wiring.test.ts` 新增一条真 `runAgent`（stub fetch 只换字节来源）：
+
+1. 隔离 `CAIRN_EVOLVE_HOME`，往全局账 append 一条 `scope:"*"` active 经验；真 run 的 system prompt 必须含正文，assignment 必须记下该 id（归因）。
+2. 写全局 STOP ⇒ 下一次真 run 的 system prompt 不含正文（workspace 未冻结，证明是全局那把锁）。
+3. 移除 STOP，再在本地账 append 同 id active 条目 ⇒ 下一次真 run 只含本地正文、不含全局正文（本地优先在**生产合并路径**成立，不只是 `loadBaselineState` 的单测）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `evolve-injection-wiring` | **6/6 绿**（5 + 全局 E2E 1） |
+| 变异自检 | 把 `loadBaselineState` 的全局合并从 `rawEntries` 拿掉 ⇒ 全局 E2E 首格红；恢复后绿 |
+| 根 typecheck / 桌面 tsc | 0 报错 / 0 报错 |
+| core / 桌面全量 | core **600 文件 / 7515 条全绿**（7514 + 全局 E2E 1）；桌面 **291 文件 / 1957 条全绿**（本批无桌面文件改动，取同树上一轮读数） |
+| docs-check / repo-hygiene | 受检项全绿（903 未撞） / 四面全绿 |
+| dist | 未重建：本批无渲染层/主进程改动 |
+
+### 四、边界
+
+- stub fetch 证明的是**装配**（system prompt 字节）与归因，不是模型行为/收益；真实模型调用仍无凭据。
+- 全局经验的 ≥3 workspace 证据门、晋升/撤销/冻结/恢复都在各自的判卷里；本格只验「已 active 的全局条目在生产装配点可见」，不重复判那些门。
+- 本地优先的断言用同 id 两正文：若合并顺序反了，system prompt 会出现全局正文 ⇒ 红。它不证明排序细节（confidence/recency），那属检索单测。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，工作树未提交）；未提交。
+
+## 2026-11-01 · 第 904 页：桌面全局恢复——dormant 条目可从面板回到 active
+
+### 一、缺口（现读）
+
+第 901 页给 dormant 全局经验补了 CLI `activate`，但桌面面板对 dormant 只有一行静态徽章：撤销确认卡写着「需要时可重新评估」，应用里却没有恢复入口。全局生命周期在桌面缺最后一条对称边：active 可撤销、dormant 不可恢复、冻结只能 CLI/本页第 900 页补的开关。
+
+### 二、改法
+
+- IPC v49 ＋`evolveGlobalActivate(id)`（138→139 通道）：main 调 `reactivateGlobalExperience(..., {apply:true})`（复核保存的 `globalEvidence`：≥3 workspace、Episode 仍在且结局可测），返回动作后的完整报告；拒绝原因随报告回屏，不折整页错误。
+- 桌面全局经验行：dormant 且全局未冻结 ⇒ 「恢复」；确认卡明说**恢复前会复核 ≥3 个 workspace 的存储证据，失效则拒绝并保持 dormant**；active 行不出现恢复按钮，冻结态两者都不出。
+- `EvolveSection` 接 `evolveGlobalActivate`：忙碌态「恢复中…」、拒绝原因走 `actionError`、成功用回传报告刷新。
+- 画廊桩增一条 dormant 全局条目与 activate 桩；`settings-sweep-smoke` 增「恢复入口」与「恢复先出确认卡」两项，冻结检查仍覆盖撤销/恢复双隐藏。
+- 协议钉/通道计数/README 同步：7 支版本钉 → 49，`INVOKE_CHANNELS` 138→139，README 139。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 桌面定向（settings-evolve / channels / protocol / notification / marketplace 四支 / plan-mode） | **9 文件 / 43 条全绿**（settings-evolve 7→8） |
+| 变异自检 | 撤掉恢复按钮的 `status === "dormant"` 条件 ⇒ active 行冒出恢复按钮，判据红；恢复后绿 |
+| 根 typecheck / 桌面 tsc | 0 报错 / 0 报错 |
+| `settings-sweep-smoke` | **11/11 PASS**（新增「全局经验分区显示恢复入口」「全局恢复先出确认卡」；dormant 行读作 `pitfall · dormant · 2 库 / 3 证据` + 恢复；冻结后恢复/撤销都隐藏；0 控制台错误） |
+| core / 桌面全量 | core **600 文件 / 7515 条全绿**；桌面 **291 文件 / 1967 条全绿**（并发会话本轮又补 10 条，settings-evolve +1） |
+| docs-check / repo-hygiene | 受检项全绿（904 未撞） / 四面全绿 |
+| dist | 重建（画廊读的是含恢复行/确认卡的新包） |
+
+### 四、边界
+
+- 恢复只复核**已存的晋升证据**，不要求新证据、不重跑 owner 风险判断；证据失效即拒绝，条目保持 dormant。
+- active 行没有恢复按钮；冻结全局时恢复与撤销都隐藏（内核同样拒绝）。
+- 晋升仍只在 CLI（≥3 库证据 + `--apply`）；桌面补的是「恢复已晋升过的条目」，不是新晋升入口。
+- 恢复后局部观测账照旧参与排序与负证据体检；不因恢复清账，也不自动再休眠。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交）；未提交。
+
+## 2026-11-01 · 第 905 页：运行黄补前景档——10px 的「运行中」原来只有 2.92:1
+
+### 一、缺口（第 878 页点名留下的下一族）
+
+第 878 页治完品牌橙，原话留在这里：「同一族病还有 `--color-run`（运行黄）：`wk-dot.running`、`isp-ov-status[data-running]`、`home-banner-demo` 图标——亮色画布上 3.03:1、`bg-300` 上 2.75:1，同样不到 3:1。已在闸门里留位（下一步加 `--color-run-ink`）」。本批就是那一笔。
+
+先把"这一族到底谁在拿它当字用"分清（同一条令牌，两种职责）：
+
+| 用法 | 形制 | 该按哪条线判 |
+|---|---|---|
+| `.isp-ov-status[data-running="true"]` 的 `color` | **文字**（`--fs-caption-2xs` = 10px） | 文本 4.5:1 |
+| `.wk-dot.running` 的 `color` | 图标（lucide svg） | 非文本 3:1 |
+| `.dot.running` / `.tb-demo-dot` / `.provider-dot[data-ok=demo]::before` / `.isp-ov-status-dot` | 5px 实心点 | 非文本 3:1 |
+| `.home-banner-demo .home-banner-ico` | —— | 类名从未被发出（横幅真名是 `.home-banner`，走 risk 色）＝**死样式** |
+
+算术（WCAG 2.1 相对亮度，`--color-run` 亮档 `32.1 94.6% 43.7%` = #D97706）：
+
+```
+bg-000 3.19:1 ｜ bg-100 3.03:1 ｜ bg-200 2.89:1 ｜ bg-300 2.75:1
+```
+
+⇒ 那枚 10px 的「运行中」不只是不够 4.5:1，它在深一档卡面上**连非文本的 3:1 都不到**。暗色同档 6.46–10.08:1，本来就够（问题只在亮色）。
+
+### 二、改法（一族一次，圆点不动）
+
+- `tokens.css` 新增 **`--color-run-ink`**：亮色同色相同饱和压到 `L 32.7%`（#A25905）⇒ 四表面 `5.29 / 5.03 / 4.80 / 4.56`；暗色**显式**写同值（不写就会继承 `:root` 那档深棕，深底上直接看不见——这条单独有判卷）。
+- 文字/图标改读前景档：`.isp-ov-status[data-running="true"]` 的 `color`、`.wk-dot.running` 的 `color`。
+- **圆点仍用原档**（小色块要的是鲜度，且第 878 页的闸门已把它们钉在 `bg-000/bg-100` 上过 3:1）；chip 自己的 6% 淡染底与 30% 描边也留原档（只把 chip 与卡面分开，不单独传意）。
+- 删 `.home-banner-demo` 两条死样式（连同它那句「演示模式不穿告警黄」的注释——类名不存在，注释也就是假的）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `contrast-gate.test.ts` +6 条（共 15） | ① 亮色前景档四表面 ≥4.5；② **暗色必须显式定义**（漏了就继承深棕）；③ 反证：原档四表面全 <4.5 且 `bg-200/bg-300` <3；④ 机械：CSS 里 `color:` 用 `--color-run` 处数必须为 0、前景档实际用法 ≥2；⑤ 圆点填充族**逐条点名**（5 处，多一个少一个都红）；⑥ `.home-banner-demo` 不许回潮 + 真在用的 `.home-banner`/`.tb-demo-dot` 仍在。**15 条全绿** |
+| `layout-smoke` 新增真机自查 | 页内取计算色 + chip 自己那层淡染底（先与宿主底色混色）现算 WCAG 比：`{"ratio":4.84,"fg":"rgb(162, 89, 5)","bg":"250,244,236","size":"10px"}`；并钉死 `fg === rgb(162,89,5)`，防止"量到了空闲态的灰却报过线"。**18/18 PASS** |
+| 改前对照（同一块底） | 原档 `rgb(217,119,6)` on `250,244,236` = **2.92:1** → 现 **4.84:1** |
+| 桌面套件 / typecheck | **291 文件 · 1967 条全绿** / 静默 |
+| 真机三趟 | layout 18 / interaction 31 / app-shell 44，**FAIL 0** |
+| boundary / renderer-layer | 绿 / 绿（169 源文件） |
+
+### 四、过程记录（这一批的红全是我自己的量法）
+
+- **`getComputedStyle` 是活对象**：第一版探针先还原 `data-running`、再在 `return` 里读 `cs.color` ⇒ 报出来的是空闲态的灰，而 `ratio` 却是按运行态算的——数字对、标签错，看着"过线"其实量错了对象。改成"所有取值在还原前落成字符串/数字"，并把 `fg` 也钉进断言。
+- **临时置属性做样式测量**要说明白：`data-running` 真实由状态机写，这里只按同一形制临时置上量 CSS，量完还原；行为面另有判卷守着，不靠这一条。
+- 判卷第一次红在**圆点名单少写一处**：chip 自己的 6% 淡染底也算填充（`.isp-ov-status[data-running="true"]`），补进名单——这条恰好说明"逐条点名"比"数个数"有效。
+
+### 五、边界
+
+- 没动 `--color-risk/--color-wait/权限档色点`：一次只治一族（第 878 页立的规矩）。
+- `tokens.css` 里 `--run/--wait/--risk/--accent-ink/--ok-ink/--text-2/--text-3` 七个存量别名在 renderer 内 0 消费者，但 `apps/desktop/preview/src/theme.css` **自带同名定义**（独立预览面），删与不删要连预览一起判 ⇒ 本批不动，登记为下一笔。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。dist 已重建（`index-BCQOLaGj.css`），并发会话仍在抬协议号，读数受打包时刻限制。
+
+## 2026-11-01 · 第 906 页：变异针脚归位——13 条断针改指现值；余 10 条是「在飞文本」，须提交后复核
+
+### 一、缺口（现读）
+
+补跑非 HEAD 门禁子集（22 道）：**21 绿 / 1 红**，红的是 `mutate-needles-check`——13 条变异锚点的针脚已不在当前源文件里。其中 2 条是本会话前面给 `loop.ts` 追加快环经验提醒（`stuckExperienceNote` / `driftExperienceNote`）时把落盘行改长了；其余 11 条是更早在飞页面把实现搬走（planRequired 多了 `req` 覆盖、provider-key 多了 `isAvailable()`、pluginDataRoot 收成 const、许可证日期改走 `licenseDate()` 等）。另发现一条**静默空转**：`sessions-name-charset` 的逐行式 apply 还在找早已拆开的 `name.trim() === name`，命中 0 行 ⇒ 变异体根本不改任何东西，而门禁不核逐行式针脚。
+
+### 二、改法（只动变异表，不动产品代码）
+
+逐条把 13 个 `apply` 的针脚改指**当前工作树**的同一语义位置，不撤锚点、不改成 HEAD 旧写法：
+
+- `budget-main-bucket-never-accumulated`：变量 `e.agent_id` → `event.agent_id`。
+- `subagent-start-context-not-threaded`：调用已多带 `experienceNote`；变异只去掉 `startContext`（钩子上下文仍旧必须进 system）。
+- `tool-result-implicit-string-coercion`：落盘行多了两条经验提醒；变异只把 `readToolOutput` 换成 `String`，其余照旧。
+- `loop-repeat-nudge-note-dropped`：变异只去 `repeatNote`，保留 `stuckExperienceNote + driftExperienceNote`。
+- `precompact-producer-abolished`：守卫多了 `args.prediction !== true` 豁免；变异改 `if (false)`。
+- `provider-key-no-backend-fails-open`：守卫多了 `!backend.isAvailable()`；变异仍摘掉整支 fail-closed。
+- `sessions-name-trim`：条件已从 `===` 变 `!==`；变异改 `if (false)`。
+- `sessions-name-charset`（静默空转）：逐行式指针从 trim 行改指「会话名不得含」那一行，拆掉字符集闸。
+- `plan-required-run-override-ignored` / `settings-fallback-dropped` / `override-ignored`：当前行是 `over ?? req ?? settings`；三支分别去 `over`、去 settings 回退、全去。
+- `plugin-data-root-assembly-falls-back-to-tmp`：装配已收成 `const pluginDataRoot = pluginDataRootOf(...)`；变异把该 const 换成 `/tmp/m2e-plugin-data` 回退。
+- `plugin-cli-decide-name-counted-as-positional`：旗标表缩进变了；针脚改两空格版。
+- `license-label-always-inactive`：日期格式化改走 `licenseDate(...)`；针脚逐字对齐现值。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `mutate-needles-check`（工作树面） | **13 断针 → 10 条**；剩余 10 条全部是**「在飞文本」**（盘上针脚命中、HEAD 那份 0 处）——HEAD=753 页、本树=906 页未提交，门禁自述修法是「等实现入库或撤锚点」，本批不撤。killer 指针失效 0；改法语法 1621/1621 合法 |
+| 变异表静态判卷（4 文件） | **269 条全绿**（含逐行式、锚点标题、分片与还原守卫） |
+| 非 HEAD 门禁子集 | **21/22 绿**；红仅 `mutate-needles-check`（原因同上）。e2e / gate-check / docs / autonomy / tools / provider / memory / security / routing / model-surface / prefix-churn / prompt-surface / cost-per-progress / repo-hygiene / evidence-typecheck / bench-judge-spec / renderer-layer / event-semantics / session-semantics / motion-policy / desktop-boundary 全绿；未证 3 项（gate-check / autonomy-check / provider:check 各 1） |
+| 根 typecheck | 0 报错 |
+| core / 桌面全量 | 本批只改变异表（scripts/*.mjs），产品代码未动：沿用同树上一轮 core **600 / 7515**、桌面 **291 / 1967**；变异表 269 条为新增证据 |
+| dist | 未重建（无渲染层/SDK 改动） |
+
+### 四、边界
+
+- **不能在未提交树上跑到全绿**：`mutate-verify` 对在飞源文件直接拒绝（安全回滚面），`mutate-needles-check` 的 HEAD 半边也必然把未入库实现判成「在飞文本」。这不是缺陷，是这套门禁的提交前边界；提交后须在 HEAD 复跑整表。
+- 本批只证明了**针脚对齐 + 改法语法**；「变异仍被 killer 杀死」要等源文件入库后用 `pnpm mutate-verify <id>` 逐条复核，不能在脏树上伪证。
+- 没有删除任何锚点，也没有把针脚改回 HEAD 旧写法（那会把守护对象废掉）。
+- 未发起真实模型调用；未跑 `head-cert`（量 HEAD）、`mutate-verify`（在飞源文件拒绝）；未提交。
+
+## 2026-11-01 · 第 907 页：全局账 CLI `list` 带上体检——过期/同触发冲突不用开工作区报告也能看见
+
+### 一、缺口（现读）
+
+桌面报告已有 `global.findings`（第 898 页），但 owner 的全局账管理 CLI `evolve-globalize list` 仍只打 status/scope/证据/正文：两个全局条目同触发、或一条已过期，在 CLI 上完全看不出来。owner 要发现它们得打开某个工作区的「进化」页，而全局账本身是跨工作区的。
+
+### 二、改法
+
+- `runEvolveGlobalizeList` 增 `findings`：对全局账直接跑同一支 `retirementFindings`（无 Episode 观测账 ⇒ 只出**过期/全局×全局同触发冲突**）；JSON 与文本都带，文本无异常时显式打「体检：无」。
+- 负证据仍不在 CLI list：它需要工作区 Episode 观测（`本库` 口径）；工作区报告已有，不在此伪造全局负证据。
+- 判卷：CLI 用例在 apply 后 append 一条同触发全局条目 ⇒ `findings` 两条 conflict；撤销其中一条后 ⇒ 只剩一条 active，`findings` 空。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `evolve-global` | **7/7 绿**（CLI 格扩了冲突出现/撤销后消失） |
+| 变异自检 | `findings` 固定空数组 ⇒ 冲突格红；恢复后绿 |
+| 根 typecheck | 0 报错 |
+| core / 桌面全量 | core **599/600 文件、7514/7515 条**：唯一失败是 `mutate-shards` 的 15s worktree 超时（标准 capped 与串行各复跑一次，均在同一格；该文件单跑 **55/55 绿** 32.9s，属并发负载下的 git worktree 计时，与本批改动无关，未放宽判据）；其余全绿。桌面 **291 文件 / 1967 条全绿**（本批无桌面改动，取同树上一轮读数） |
+| docs-check / repo-hygiene | 受检项全绿（907 未撞） / 四面全绿 |
+| dist | 未重建（无渲染层/协议改动） |
+
+### 四、边界
+
+- CLI list 的体检是**全局账自身**的过期与全局×全局冲突；全局×本地冲突与负证据仍以工作区报告为准（需要 workspace 上下文）。
+- 只提示，不自动 retire/revoke；`list` 仍只读。
+- 无新协议/通道；桌面与报告字段未变。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，工作树未提交）；未提交。
+
+## 2026-11-01 · 第 908 页：模型弹层选边改成"哪边空间大选哪边"——不再把模型裁在组头下面
+
+### 一、缺口（亮色审计第二趟，看图看出来的）
+
+`02-model-menu.png`（亮色）里 `glm` 是一行**悬空的组名**：头露着，下面什么都没有，紧接着就是分隔线和「思考强度」。第一眼读到的就是"glm 这个组是空的"——正好撞在本仓既有裁决「空态按可见条目数说话」上。
+
+先把三种可能分开（不猜）：
+
+| 假设 | 量法 | 结果 |
+|---|---|---|
+| 真有空分组 | 逐组数 `button[role=option]` | 否：`deepseek:2 / glm:1`，没有空组 |
+| 分组头样式坏了 | 量 rect | 否：头在 22px 正常位 |
+| **末行被列表裁掉** | 量 `.mp-models` 的 client/scroll 与每行 rect | **是**：`client 139 / scroll 209`，`glm-5.3-flash` 的 `top 230` 已在列表底 233 之下（只露 3px）；「演示」行同样被裁 |
+
+再往上追一层（为什么只有 139px）：`.mp-pop` 的内联 `max-height: 327px` 来自 `modelMenuLayout()`——
+它的选边判据是 `up = above >= Math.min(320, below)`。这一屏实测 **above 327 / below 453**：
+上方只要凑够 320 就赢，于是明明下面多出 **126px** 仍向上开，列表被搜索框 + 思考强度 + 管理模型挤到只剩 139px。
+
+⇒ 病根不是列表高度写死，是**选边判据偏向"上"且门槛过低**。
+
+### 二、改法
+
+- `ModelPicker.tsx`：`const up = above >= below;`（两边都有空间时取空间大的一边；矮窗口 <260 那档仍走窗口内浮层，未动）。注释写明旧判据与真机读数，防止有人再"顺手"改回去。
+- 判卷 `model-menu-interaction` 加一条：钉真机形态 `modelMenuLayout(371, 403, 864) → { up: false, maxHeight: 453 }`；镜像位（上多下少）必须仍向上开（**反向自证**：规则不是"一律向下"）；再按 `top` 从 60 扫到 800 逐位断言"选到的高度 = 两边里更大的那个"（单调性，不靠单点）。
+  既有 4 个用例（100/620/120/238）**结果一字未变** ⇒ 这是把判据补全，不是放宽。
+- 画廊加常驻不变量 **`模型分组裁剪自查`**：逐组比较「组头整行在列表视口内」与「至少一行整行在视口内」，前者真而后者假即抛错。
+  口径按**整行可见**算——第一版按"露出一点"判，`top 230 < 底 233` 那 3px 被算成看见，闸门当场假绿。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 闸门先红后绿（反向自证） | 改前：`{"dangling":["glm"],"list":{"client":139,"scroll":209}}` → **FAIL**；改后：`{"dangling":[],"list":{"client":209,"scroll":209}}` → 通过 |
+| 真机形态 | 复拍 `02-model-menu.png`：菜单向下开，`glm-5.3-flash`（1M + 识图徽标）与「演示」两行**都出来了**，思考强度/管理模型在下方便，零裁切 |
+| `model-menu-interaction` | 3 条全绿（含 106 个位置的扫边） |
+| 桌面套件 / typecheck | **291 文件 · 1968 条全绿** / 静默 |
+| 真机三趟 | layout 18 / interaction 31 / app-shell 44，**FAIL 0** |
+| docs-check / boundary / renderer-layer | 全绿 / 绿 / 绿 |
+
+### 四、边界
+
+- 只改选边，不改弹层内部结构：搜索框、思考强度、管理模型三块的尺寸与顺序一字未动。
+- 向下开会盖住空屏的三条起手行——这是菜单的正常职责（浮层本就覆盖内容），且起手行在选择后仍在原位。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。dist 已重建，并发会话仍在推进页号与协议，读数受打包时刻限制。
+
+## 2026-11-01 · 第 909 页：worktree 判卷的 15s 假红灯——单跑 8.5s、负载下越线；预算对齐 30s，断言不动
+
+### 一、缺口（现读）
+
+第 907 页收尾跑 core 全量时，唯一失败是 `mutate-shards` 的「同一宿主被摊到两片」：`Test timed out in 15000ms`。标准 capped 与 `--maxWorkers=1` 串行各复跑一次都在同一格超时；把该格单跑（`-t` 选中）实测 **8.5s 通过**，整文件单跑 **55/55 绿 32.9s**。该格要起两个真 worktree、跑两次 tsx 冷启；15s 是当年按「三套判卷并行」定的预算，当前机器有并发会话负载，全量/串行都越过 15s——是**假红灯**（断言在跑完时全过），不是产品逻辑。
+
+### 二、改法（只调预算）
+
+- `tests/mutate-shards.test.ts` 该格超时 `15_000` → `30_000`，与全局 `testTimeout: 30_000` 对齐；注释记录 2026-11-01 单跑 8.5s 与越线原因。
+- **一条 expect、一条断言、一次 skip、一次 retry 都没加**；两次真 worktree add 与两次 tsx 冷启照旧。若真的挂死，30s 仍会红。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 该格单跑（修复前） | **8.5s 绿**（`-t 同一宿主被摊到两片`） |
+| 整文件单跑（修复前） | **55/55 绿**，32.9s |
+| core 全量（修复前，capped / 串行） | 各 **599/600 文件、7514/7515 条**；唯一红就是该格 15s 超时，其余全绿 |
+| core 全量（修复后） | **600/600 文件、7515/7515 条全绿**；该格在全量里 **13.0s**（单跑 8.5s，修复前 >15s 超时），30s 预算站住；总耗时 559s（并发负载） |
+| 根 typecheck | 0 报错（测试文件改动后复跑） |
+| 桌面 | 291 文件 / 1967 条全绿（本批无桌面改动） |
+| docs-check / repo-hygiene | 受检项全绿（909 未撞） / 四面全绿 |
+| dist | 未重建（无产品/渲染层改动） |
+
+### 四、边界
+
+- 这是**超时预算**，不是判据：断言、输入、真 worktree 与真 tsx 都没动；假红灯的修法是给足预算，不是让它跳过。
+- 30s 也不是无限；机器更慢时仍可能红——那是真需要查挂死/锁竞争，不由本页兜底。
+- 本批与第 907 页的产品改动无关；第 907 页的 core 红由本页复跑取代（若绿）。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，工作树未提交）；未提交。
+
+## 2026-11-01 · 第 910 页：命令面板第一次进视觉自查；键位提示收进单一事实源
+
+### 一、这趟拍的是从没被拍过的三面
+
+亮色审计第三趟。此前画廊 15 张里没有命令面板，设置页只拍过 provider / 联网 / 用量三页——**通用页（主题·字号·密度·动效）从没进过目验**。补 `15-palette.png`（空态）、`16-palette-query.png`（有查询）、`17-settings-general.png`。
+
+第 899 页加的**逐像素相同即失败**闸门当场逮住我新加的档是空操作：
+`15-palette.png` 与 `06c` 相同 ⇒ ⌘K 那一步根本没开（快捷键监听在 **window** 上，我派到了 document）；
+修好触发后 `16` 又与 `15` 相同 ⇒ 输入框选择器写错（真 DOM 是 `input.cp-input`，不是 `.cp-input input`）。
+两处都是工具错，不是产品缺陷——**没有这道闸门，这两张会一直冒充"面板被验过"**。
+
+### 二、查清后不成立的候选（写下来免得有人再去追）
+
+| 看着像缺陷 | 实测 |
+|---|---|
+| 查询「会」的结果里出现不含该字的「新任务」并排第一 | **成立的行为**：该条 `keywords: "新建 会话 任务"`，命中来自同义词。不是过滤错 |
+| 「开合检查器」的提示像 `⌘\I` | 是 `⌘⌥I`，字形在截图尺度下看错。表里就是 `⌘⌥I` |
+| 通用页「文字大小 / 界面密度」两排一档都不亮（`on: null`） | **夹具缺键**，不是产品缺陷：真主进程装载时把非法值兜回默认（`src/main/settings.ts:282·284` 的 `TEXT_SIZES.includes(...) ? ... : d.textSize`）。缺的是画廊 `SETTINGS` 里的 `textSize/uiSize` 两键——那块注释本来就要求"与真 DEFAULT_SETTINGS 对齐"，它漂了两格 |
+
+### 三、真成立的两处
+
+1. **面板手抄键位（违反自家契约）**：`CommandPalette.tsx` 第 3 行写着「键位提示从 SHORTCUTS 表取（keysOf——单一事实源，防漂移）」，而「重命名当前会话」那行是 `<span className="cp-keys">F2</span>`——因为表里没有 `rename` 这一档，就直接抄了一份。改：`SHORTCUTS` 补 `{ id: "rename", keys: "F2", label: "重命名当前会话" }`，面板改读 `keysOf("rename")`（值为 null 才不摆，不是把提示删掉）。
+2. **分段控件选中态没有机器判据**：这类控件的失败方式是"点了没反应"——DOM 上 `aria-checked`/`.on` 都对，样式或状态一断，屏幕上就是一排一模一样的词。新增常驻自查：逐组比较选中档与未选档的 `color / background / fontWeight / boxShadow / borderColor` 五元组，**完全相同或没有任何一档选中即抛错**。
+
+### 四、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `shortcut-key-source.test.ts`（新） | ① 全仓 `keysOf("x")` / `shortcutId: "x"` 引用到的 id 必须都在表里（清点面自证 `referenced.size > 5`，防空跑恒真）；② 面板 `cp-keys` 里不许出现字面键位。**2 条全绿** |
+| `shortcuts.test.ts` | 计数 12→**13**（新增合法一档，仍拦得住误删/漏档——是收紧不是放宽，理由写进判卷注释） |
+| `settings-ui.test.tsx` | 速查表行数 12→**13**（同一档带来的行数变化） |
+| `command-palette.test.tsx` | 29 条全绿；**变异自证**：把 `<span className="cp-keys">F2</span>` 塞回去 → 2 条当场红（字面量扫描 + 渲染分支哨兵），还原后复绿 |
+| 画廊 | 18 张互不相同；`分段控件选中态自查` 三组全亮：主题=亮 / 文字大小=标准 / 界面密度=标准，`identical:false` |
+| 桌面套件 / typecheck | **292 文件 · 1972 条全绿** / 静默 |
+| 真机四趟 | layout 18 / interaction 31 / app-shell 44 / settings-sweep 11，**FAIL 0** |
+| boundary / renderer-layer / docs-check | 绿 / 绿 / 受检项全绿 |
+
+### 五、顺带的一条归属更正
+
+`settings-sweep-smoke` 在第 899 页记的是「进化分区点开即撞渲染边界（属他笔）」，本批复跑 **11/11 全 PASS、0 FAIL**——那一格已由并发会话的第 897/898 页改进修掉，不再挂账。
+
+### 六、边界与待裁
+
+- **没动** `.theme-opt.on` 的选中用色（`--accent-control` 蓝框 + 8% 淡染）。粗算全应用"选中态"里 6 处用强调色、13 处用中性，但两把 grep 都不严谨，且既有裁决一边写「中性用色」、一边写「焦点环=强调色域」——**边界不清时不擅自改色**，登记待业主一句话。
+- 夹具只补了两键，没把 `SETTINGS` 改成从 core 反射（画廊主进程已有"从真源推导"的先例，但那是数组字面量可 `new Function` 求值；默认表带类型与函数，成本另计）。缺键这一类现在由分段控件自查兜住。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。dist 已重建，读数受打包时刻限制。
+
+## 2026-11-01 · 第 911 页：全局经验跨库观测——本库之外，晋升证据库的失败不再沉默
+
+### 一、缺口（现读）
+
+第 898 页的体检是**本库口径**：全局条目在别的 workspace 连续失败，本库报告看不到。全局经验恰恰是跨 workspace 的——只盯当前库会把「别处已经不灵」读成「全局正常」。晋升证据里已有 ≥3 个 workspace 的路径（`globalEvidence`），这些库就是现成的、有界的观测面。
+
+### 二、改法
+
+- `buildEvolveReport` 增跨库观测：对全局账里所有 `globalEvidence` 的去重 workspace（**排除当前库**，它在本地 observations 已计过）并行读 Episode，按 episode id 去重后跑同一支 `observationalStatsOf`；只取这些库里注入了全局 id 的场次。
+- `global.entries` 增 `evidenceTrials/evidenceSuccesses`（其他证据库的观测，不含当前库，避免双计）。
+- 负证据体检改用**本库＋证据库合并读数**：`combinedObservations = local + evidence`（同一 id），仍复用 `retirementFindings` 的 5 场/20% 门；过期/冲突判据不变。
+- 桌面 desc 变成「本库观测 x/y；证据库观测 u/v」，负证据标签改为「负证据（本库+证据库）」；CLI `evolve-report` 的全局条目行同步加「证据库观测 u/v」。
+- 无协议/通道变化（报告字段增量）；画廊夹具补 `evidenceTrials/evidenceSuccesses`，settings-sweep 仍 11 项。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `evolve-global` | **8/8 绿**（+1：证据库失败 5 场 ⇒ 新库报告 `evidenceTrials:5` 且负证据成立；本库=证据库时 `evidenceTrials:0`、详情 0/5 不是 0/10） |
+| evolve + signals | **22 文件 / 146 条全绿** |
+| 桌面 `settings-evolve` | **8/8 绿**（desc 两段观测 + 新标签） |
+| 变异自检 | 把证据观测置空 ⇒ 跨库格红；恢复后绿 |
+| 根 typecheck | 0 报错 |
+| core / 桌面全量 | core **600 文件 / 7516 条全绿**（7515 + 跨库 1）；桌面 **292 文件 / 1972 条全绿** |
+| `settings-sweep-smoke` | **11/11 PASS**（全局条目读作「本库观测 0/5；证据库观测 0/0；负证据（本库+证据库）…」）；0 控制台错误 |
+| docs-check / repo-hygiene | 受检项全绿（911 未撞） / 四面全绿 |
+| dist | 重建（画廊读的是含跨库 desc 的新包） |
+
+### 四、边界
+
+- 跨库面 = **晋升证据里的 workspace**（有界，≥3 库），不是「所有开过的项目」。全项目扫描没有可靠注册表时不伪造；这是有界证据，不是全局 census。
+- 当前库从证据面排除，避免同场 Episode 双计；若当前库恰好是证据库，跨库数为 0、合并数仍含本库。
+- 观测按 episode id 跨库去重；同一 id 在别的库被本地同 id 条目遮蔽的极端情况不再细分（运行时本地优先，ID 分配本应唯一）。
+- 仍是观测/提示，不是因果，也不自动 revoke；跨库失败只让负证据更早到达 5 场门。
+- 报告成本随**去重后的证据库数**增长（按全局条目并集），与条目数不是线性叠加；无全局条目时零额外 I/O。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，工作树未提交）；未提交。
+
+## 2026-11-01 · 第 912 页：LSP 配置兑现——启动预算/崩溃重启/诊断帽不再收下即丢
+
+### 一、缺口（现读）
+
+插件 `.lsp.json` 的 `startupTimeout` / `restartOnCrash` / `diagnostics.maxPerFile` 一直被装载器收下、却在运行时忽略（`discover.ts` 甚至专门发「本轮不生效」警告）。宿主 `.agent/lsp.json` 的嵌套 `diagnostics.enabled: false` 同样没读；实际行为是 initialize 恒 8s、每文件恒 20 条 ERROR、任何崩溃一律 broken 不再重试。作者配了重启/预算/诊断帽，得到的却是另一套固定值。
+
+### 二、改法
+
+- 运行时装入口补 `startupTimeout` / `restartOnCrash` / `diagnosticsMaxPerFile`，并读宿主嵌套 `diagnostics.enabled`；插件装载映射把三个字段一并摊平传入（不再只传 `enabled:false`）。
+- `lspStartupTimeoutMs`：按毫秒读，≥100 且封顶 120s；<100 视为旧占位（fixture 的 5）按缺省 8000。`lspDiagnosticsMaxPerFile`：正整数 1..200，缺省 20。
+- `restartOnCrash`：崩溃仍先标 broken；**下一次调用**时若该 server 允许重启且本会话重启次数 <3，清 broken 后惰性重起；超过上限仍按 broken 拒绝。诊断回流对 broken 的短路也放行可重启 server，让下一次写盘能触发重启。计数器在显式 close / 测试清理时清零，不成功后清零（防崩溃循环）。
+- `discover.ts` 删掉「本轮不生效」警告（未知字段警告保留）；fixture 的 `startupTimeout: 5` 改为 5000（5ms 会把真服务器一律判死）。
+- 判卷：lsp 新增 startupTimeout 预算、宿主 `diagnostics.enabled:false`、`maxPerFile:2`、崩溃一次后惰性重启四格；插件激活格从「警告未兑现」改成「三个字段已到运行时 + 未知字段仍出声」。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `lsp.test.ts` | **19/19 绿**（+4） |
+| 全部 LSP 相关（`lsp*` + 插件激活/发现） | **9 文件 / 96 条全绿** |
+| 变异自检（三处，均先红后绿） | ① `maxPerFile` 恒 20 ⇒ 配置 2 格红；② `restartOnCrash` 条件反置 ⇒ 重启格红；③ `startupTimeout` 恒 8000 ⇒ 200ms 预算格红 |
+| 变异表静态判卷 | **190 条全绿**（`mutate-anchor-titles` 23 + `mutate-verify-gates` 167）；旧锚点 `plugin-lsp-unhonored-fields-silent` 从「压掉未兑现警告」重指「插件映射丢三个字段」，killer 标题换成新的兑现格 |
+| 根 typecheck / 桌面 tsc | 0 报错 / 0 报错 |
+| core / 桌面全量 | core **600 文件 / 7520 条全绿**（`pnpm test:capped`，`--maxWorkers=2`；7516 + 本批 `lsp.test.ts` 新增 4 条）；桌面 **292 文件 / 1975 条全绿**（同树实跑，非沿用；1972 → 1975 的 3 条不属本批——本批零桌面改动，是同树在飞的其他改动带进来的，按归属记下不认领） |
+| docs-check / repo-hygiene | 受检项全绿（912 未撞） / 四面全绿 |
+| dist | 未重建（无渲染层/协议改动） |
+
+过程记录：首轮 core 全量红 2 格，都是同一件旧锚点——`plugin-lsp-unhonored-fields-silent` 的 killer 标题随本批改测而消失（`mutate-anchor-titles` 报 drift、`mutate-verify-gates` 报 not-found）。这正是判据该做的事；锚点重指后静态 190 条绿，core 复跑 **600 / 7520 全绿**（7516 + 本批新增 4 条，计数与实改对得上）。
+
+### 四、边界
+
+- `startupTimeout` 单位是毫秒；<100 按缺省（旧 fixture 的 5 是占位，不是 5ms 真预算）。重启是**惰性**的（下一次调用触发），不做后台常驻重拉；每会话最多 3 次，防崩溃循环。
+- `diagnostics.maxPerFile` 只影响 ERROR 回流条数，不改变六操作；上限 200 是输出安全帽，不是语义门。
+- 宿主与插件都走同一套摊平字段；未知字段仍警告（`unknownLspField` 判据保留）。
+- 本批不改 LSP 信任门、不改命令执行白名单、不改权限档；没有新协议通道/UI。
+- 未发起真实模型调用；未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，工作树未提交）；未提交。
+
+## 2026-11-01 · 第 913 页：交付卡不再把同一个数字念两遍；「未判定」那一档不再失踪
+
+### 一、这一批的两条前置否证（先记，防 churn）
+
+亮色审计第四趟先扫了两个候选，都不成立：
+
+- **权限弹层五档标记太多**（色点 + 盾图标 + 档名 + 危险 tag + 一句 desc）：不成立。
+  第 872 页白纸黑字裁过「弹层内五档的『色点 + 图标 + 两行说明』**保留**（对比表语法），本批只治触发器这一处冗余」（`PROGRESS.md:31462`）。结构不动。
+  顺手把五句 desc 按第 866 页那把尺读了一遍——`只读/写工具一律拒`、`默认/写跑逐次审批出卡`、`引导/低风险自动高风险出卡`、`自动/低风险免批高风险仍出卡`、`完全允许/不再出任何审批卡…`：**无一句复述档名**，且每条都是政策事实（`auto` 那句还是 2026-10-16「名不副实」事故后改的）。文案也不动。
+- **交付卡与标题栏「改动 1」重复**：不成立，第 872 页已否过（卡说「这一轮」，标题栏说「本会话」，不同口径）。
+
+### 二、真成立的那一处（在卡内部）
+
+`ChangeSummaryCard` 卡头此前是：
+
+```
+已编辑 1 个文件        ← 标题：总数
+修改 1 · 第 1 轮       ← 副行：分解
+```
+
+两个毛病同一处根源（`ChangeSummaryCard.tsx:75-77` 只算 `created`/`modified`）：
+
+1. **同一句话说两遍**：只有一档时 `修改 1` 就是标题里那个 `1`，业主口径「别改着说法念同一件事」直接命中。
+2. **未判定那一档被静默丢掉**：投影明确「change 缺席标 unknown，**不猜** created/modified」（该文件第 3-4 行），但卡头分解里没有 `unknown` ⇒ 全是未判定时副行是**空的**，而标题照样断言「已编辑 N 个文件」——**投影不肯猜的东西，界面替它猜了**。这比措辞问题重：它把"没判定"显示成了"编辑过"。
+
+### 三、改法
+
+- 统计补第三档：`unknown = files.length - created - modified`，词表用既有的 `CHANGE_LABEL.unknown = "变更"`（不另造词）。
+- 标题按档数分叉：**单一档**直接把档名放进标题——`修改 1 个文件` / `新建 2 个文件` / `变更 1 个文件`；**混合档**才用 `已编辑 N 个文件` + 副行分解（`新建 2 · 修改 1 · 变更 1`）。数字因此只出现在一处。
+- 副行分解块只在混合时渲染（单一档不挂空块）。`第 R 轮` 位置不变。
+- 新增 `.cf-chg { color: hsl(var(--text-300)) }`：「变更」是"没判定"，不是好消息也不是坏消息 ⇒ 中性色，不与 `cf-add`（绿）/`cf-del`（蓝）同调。
+
+### 四、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `delivery-summary.test.tsx` +3 条（共 9） | ① 全修改 ⇒ `修改 1 个文件`、无「已编辑」、**不挂 `cf-stats` 块**；② 全未判定 ⇒ `变更 2 个文件`，不冒充「已编辑」；③ 混合 ⇒ `已编辑 3 个文件` + 三档齐 + 分隔点恰好两枚。**9 条全绿**；既有两条 `已编辑 2 个文件` 钉（混合档）**一字未改仍绿** |
+| 画廊新增常驻自查 | `交付卡卡头自查: {"title":"修改 1 个文件","stats":[],"mixed":false,"dupNumber":false}`——单一档却挂着分解块即抛错。改前同一处是 `已编辑 1 个文件` + `修改 1` |
+| 桌面套件 / typecheck | **292 文件 · 1975 条全绿** / 静默 |
+| 真机四趟 | layout 18 / interaction 31 / app-shell 44 / settings-sweep 11，**FAIL 0** |
+| docs-check / boundary / renderer-layer | 全绿 / 绿 / 绿 |
+
+### 五、过程记录
+
+- 新判卷第一次跑就红：我把"数字不重复"写成正则 `>\s*修改 1\s*<`，而标题实际文本是 `修改 1 个文件` ⇒ 匹配 0 次。**红的是判卷的口径**，改成断言"单一档时不渲染 `cf-stats` 块"后才真正在守那件事。
+- 页号被并发推进两次（911→912→913），代码注释里的引用随之改正。
+
+### 六、边界
+
+- 展开态的四问清单（改了什么 / 验证了什么 / 哪些未验证 / 下一步）与文件明细、还原入口一字未动——本批只治**卡头一行**。
+- `unknown` 的判定本身在核心投影里（`turnDelivery`），本批不碰：界面只负责如实说"没判定"，不负责改判定。
+- 未跑 core 全量、`gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。dist 已重建，读数受打包时刻限制。
+## 2026-11-01 · 第 915 页：LSP 那批留下的两条判据债——一句读不出、三条钉空了
+
+### 一、缺口（现读）
+
+两条都不是产品行为，是**判据**在实现搬走之后失去分辨力：
+
+1. **能力断言挑不出针脚**。`tests/promise-recall-inventory.test.ts` 现红：「尺读不出」6 条 > 帽 5（`scripts/probe-promise-recall.ts:263` 的 `CLAIM_NO_NEEDLE_CAP = 5`，只准调低）。第 6 条是 `src/tools/lsp.ts#requireProvider`——能力协商那句被 `+` 拼成多段字面量，判据只收得到 `，不支持 ` 三个字（`claimWitnessRuns` 要 ≥6 个连续中文），整句落进「不可知」档。可这句话正是模型**换路而不是重跑**的依据（「这是该服务器的能力边界，不是这次调用失败」）——最该有人守的一句，尺读不出。
+2. **三条变异锚点钉在旧写法上**。`pnpm mutate-needles-check` 阻断 21 条里，3 条不是「在飞文本」而是**针脚已不在源文件里**：`lsp-diag-severity` 的 `diags.filter((d) => d.severity === DiagnosticSeverity.Error)`、`lsp-diag-cap` 的 `.slice(0, MAX_DIAGNOSTICS)`、`plugin-lsp-diagnostics-switch-ignored` 的 `if (cfg.servers[picked]?.diagnosticsEnabled === false) r`。第 912 页把回流改成链式取帽 `.slice(0, lspDiagnosticsMaxPerFile(server))`、并把开关判断收进 `const server = cfg.servers[picked]` 局部量 ⇒ 三条改法在现值上一条都替换不到，变异必然不生效：这三格等于没有判据。
+
+### 二、改法
+
+- `requireProvider` 的话术收成**一支**模板字面量（`src/tools/lsp.ts:1022`）：运行时字符串逐字不变，只是不再让判据被 `+` 切碎。`tests/lsp.test.ts:244` 补原句证人（抄原句 + `grep / read_file` 那条出路）——抄原句是刻意的：改措辞时会红，逼人重新确认那句话还对。
+- 三条锚点改指现值（`scripts/lib/mutations/tools.mjs:39/48/694`）：`.filter((d) => d.severity === DiagnosticSeverity.Error)` ⇒ `.filter(() => true)`；`.slice(0, lspDiagnosticsMaxPerFile(server))` ⇒ 删掉；`if (server?.diagnosticsEnabled === false) return "";` ⇒ `if (false) return "";`。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `promise-recall-inventory` | 改前 1 红 / 34 绿；改后 **35/35 全绿** |
+| 同一句的探针面 | 改前 有证人 64／绑定 12／欠证人 0／**尺读不出 6（帽 5 ⇒ 超帽）**；改后 65／12／0／**5（正贴线）**，四态相加 82 不变 |
+| `tests/lsp.test.ts` | **25/25 绿**（同一用例内 +2 条断言，用例数不变） |
+| LSP 相关（`tests/lsp*` + 插件激活/发现） | **8 文件 / 92 条全绿** |
+| 三条锚点逐条先红 | 用表里的 `apply` 直接改源文件：severity ⇒「无错误（仅 WARN 或干净文件）」红；cap ⇒「只取 ERROR 级，≤20 条」红；switch ⇒「§9.8 的 diagnostics 开关真兑现」红；三次复原后 sha256 `c43e6b47…` 一致 |
+| `pnpm mutate-needles-check` | 阻断 **21 → 20**；「针脚已不在源文件」**3 → 0**（判不了桶 14 → 11）；「钉在飞文本」18 → 20——两条锚点改指到未提交的实现上，属提交后才判得了的那一档 |
+| 根 typecheck / 工具三面 | 0 报错 / `tools-check` 36 条、`prompt-surface`、`model-surface` 6/6 全绿 |
+| core 全量 | **601 文件 / 7532 条全绿**（`pnpm test:capped`，`--maxWorkers=2`，exit 0） |
+
+### 四、边界
+
+- 剩余 20 条阻断**全是「钉在飞文本」**：锚点行已入库、被锚定的实现还没提交。按第 906 页的判法，不在工作树里改回 HEAD 的旧写法（那等于把锚点要守的东西废掉）；须提交后复核。本批不撤锚点、不调帽。
+- 没改能力协商的行为、没改 `docs/CODE-WIKI.md` 的口径、没有新协议/通道/依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 916 页：工具行那条折叠行——名字漏了半张表、摘要丢了主语
+
+### 一、缺口（现读）
+
+`Stream` 的工具行折叠态只有一句话（动词 + 摘要），这一轮三个毛病都在这句话上：
+
+1. **判据还停在旧口径**。`apps/desktop/tests/stream-rework.test.tsx` 里那条断言一直红：它要求折叠行里出现 `run_shell`——而 2026-10-31 R1 起，有中文动词的行只渲染人话（`Stream.tsx:176` 的 `{verb === null && <span className="tname">}`），实现名只在**未知工具**时出现。旧断言与这条产品口径正好相反。
+2. **词表只覆盖半个工具面**。`TOOL_VERBS` 十格里有七把静态工具（grep / glob / lsp / clarify / propose_plan / render_image / verify）没有动词 ⇒ 渲染层当「未知工具」处理，把实现名原样摆上屏；另有一格 `list_dir` 是早已不存在的工具（目录清单由 glob 出），词表比工具面还多一格。
+3. **摘要丢了主语**。`derived/stream.ts#summarize` 那条取值链此前是 command → path → file → url → query，**没有 pattern**：现读 `summarize({pattern:"TODO", path:"src/agent"})` ⇒ `"src/agent"`（grep 只报目录，搜什么没了）、`summarize({pattern:"src/**/*.ts"})` ⇒ `{"pattern":"src/**/*.ts"}`（glob 整行 JSON）。折叠行只有这一句，主语丢了没处补。
+
+### 二、改法
+
+- `stream-rework.test.tsx` 的旧断言改钉两面：已知工具不出现实现名、未知工具（`mystery_tool`）保留原名。
+- `TOOL_VERBS` 补七把（grep 查找 / glob 找文件 / lsp 查符号 / clarify 提问 / propose_plan 提方案 / render_image 出图 / verify 验证）；撤掉陈旧键 `list_dir` 与它的字形分支。
+- `summarize` 取值链把 pattern 插到 path 之前（command → pattern → path → file → url → query），五档旧序不动。
+- 新增 `apps/desktop/tests/tool-row-summary.test.ts`（7 条）：pattern 优先 / glob 不甩 JSON / 既有五档逐档 / JSON 兜底 / `TOOL_NAMES` 全覆盖 / 词表无陈旧键 / 未知工具仍 null。词表与工具面读同一份事实源（`src/tools/base.ts` 的 `TOOL_NAMES`、`src/agent/tool-surface.ts` 的 `INJECTED_TOOLS`），测试里不另抄一张。
+- 设计稿补第 40/41 条（名字口径、摘要求值链），第 7 条的行文按 40 读。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `stream-rework.test.tsx` | 改前 **1 红**（`toContain("run_shell")`）；改后 **16/16 绿** |
+| 新判 `tool-row-summary.test.ts` | 改前 **4 红 / 3 绿**（两条摘要 + 覆盖 + 陈旧键）；改后 **7/7 绿** |
+| 同一格先红自证 | 把 pattern 从取值链撤掉 ⇒ 摘要两条红；把 `grep` 动词删掉 ⇒ 覆盖那条红；两次复原后 sha256 一致 |
+| 摘要现读 | `grep {pattern:"TODO",path:"src/agent"}` ⇒ **"src/agent" → "TODO"**；`glob {pattern:"src/**/*.ts"}` ⇒ **JSON → "src/**/*.ts"** |
+| 桌面套件（同树实跑） | **298 文件 / 2003 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc | 0 报错 / 0 报错 |
+| docs-check | 受检项全绿（962 张页标题｜新撞 0｜下一个未占用页号 917） |
+
+### 四、边界
+
+- `summarize` 仍不认识 lsp 的 `operation`、clarify 的 `questions`、子代理/自动化的 `ids` 一类字段：那几行仍落到 JSON 兜底（现读 clarify 一行仍是长 JSON）。这一批只治「grep/glob 的主语被范围顶掉」，不假装把全部工具摘要都做好了。
+- 运行期注入的 20 个工具名（`wait_for_agents` / `automation_*` / `mcp_*` 等）还没有动词，仍会以原名上屏——下一批的料；本批判据只覆盖静态工具面 `TOOL_NAMES`，不把没做的面判成绿。
+- 没改工具行布局、没改权限面、没有新通道/依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 917 页：编排工具行的摘要是参数原文——`{"task":…}` 与 `{}`
+
+### 一、缺口（现读）
+
+`summarize` 只认六个字段（command / pattern / path / file / url / query）。编排族与 clarify 的参数里一个都不在里面，于是折叠行整句落到 JSON 兜底（`JSON.stringify(args).slice(0,80)`）：
+
+| 工具 | 这一行现在显示 |
+|---|---|
+| `spawn_agent` `{task, mode}` | `{"task":"把 a.ts 的 XX 改掉并跑测试","mode":"write"}`（截 80 字） |
+| `send_agent` `{thread_id, message}` | `{"thread_id":"th-1","message":"再看一下 b.ts"}` |
+| `wait_for_agents` `{agent_ids:["a1","a2"]}` | `{"agent_ids":["a1","a2"]}` |
+| `wait_for_agents` / `cancel_agents` / `list_agents` 空参数 | `{}` |
+| `resume_agent` `{thread_id}` | `{"thread_id":"th-1"}` |
+| `clarify` `{questions:[…]}` | `{"questions":[{"question":"要 A 还是 B？","options":["A","B"]}]}` |
+
+工具行折叠态只有这一句话；在多子任务编排里，用户看到的是参数原文而不是「派了什么活」。
+
+### 二、改法
+
+- `summarize(args)` → `summarize(tool, args)`，两个调用点同源改：`derived/stream.ts#summarize` 的 tool_call 投影、`derived/timeline.ts` 的时间线标签。
+- 先按工具挑主语：spawn→`task`（截 80 字，与 `agent_spawned` 行同口径）、send→`message`、wait/cancel→「N 个子任务」或「本会话全部子任务」、list→「本会话全部子任务」、resume/close→`thread_id`、clarify→第一个问题（多问补「共 N 问」）；挑不到才回通用链/JSON 兜底（不假装认识所有形状）。
+- `TOOL_VERBS` 补六个动词（发消息 / 等待 / 撤销 / 列出 / 恢复 / 关闭）——否则行首仍是 `wait_for_agents` 这类实现名，与第 916 页那条规则同一面。
+- 判卷 +7：编排族与 clarify 六格、挑不到主语仍兜底一格、行面 SSR 一格。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `tool-row-summary.test.ts` | 把 `ownSubject` 关掉复现改前：**6 红 / 8 绿**；改后 **14/14 绿** |
+| 行面 SSR | `spawn_agent` 行 =「派发子任务 把 a.ts 的 XX 改掉」、`wait_for_agents` 行 =「等待 2 个子任务」；HTML 里不再出现 `&quot;task&quot;` |
+| 摘要现读 | 见上表：JSON / `{}` → 任务原文 / 「2 个子任务」/「本会话全部子任务」/ `th-1` / 第一个问题 |
+| 桌面套件（同树实跑） | **298 文件 / 2010 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc | 0 报错 / 0 报错 |
+| docs-check | 受检项全绿（963 张页标题｜新撞 0｜下一个未占用页号 918） |
+
+### 四、边界
+
+- 只挑了七个工具的主语；`remember`（content/op/kind）、`skill`、`automation_*`、`mcp_*` 仍是 JSON 兜底或原名——下一批的料。
+- 「N 个子任务」是数量口径，不列 id；id 仍在展开区的原始参数里。
+- `list_agents` 的空参数行写「本会话全部子任务」——工具规格里缺省即全部，不是猜。
+- 没改工具行布局、没改权限面、没有新通道/依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 918 页：时间线里每一步还写着 `read_file`——词表长在组件层，派生层够不着
+
+### 一、缺口（现读）
+
+检查器「时间线」Tab 的每一步由 `derived/timeline.ts#timelineItems` 生成，tool 步的 label 是 `${e.name} ${summarize(...)}`：
+
+| 事件 | 时间线现在显示 |
+|---|---|
+| `read_file {path:"a.ts"}` | `read_file a.ts` |
+| `run_shell {command:"pnpm test"}` | `run_shell pnpm test` |
+| `grep {pattern:"TODO", path:"src"}` | `grep TODO` |
+
+`kind` 列只给「工具」这个类别，label 再把实现名摆一次；第 916 页已把「流里不出现实现名」定为工具行的口径，同一个流两个面因此两套说法。根因是词表 `TOOL_VERBS` 长在 `components/Stream.tsx` 里——派生层按分层规则不能 import 组件层，于是时间线只能写实现名（或另抄一份词表，那是第二事实源）。
+
+### 二、改法
+
+- 词表与 `toolVerb` 搬到 `apps/desktop/src/renderer/derived/tool-verbs.ts`（派生层：对话流与时间线都能读，组件层不再拥有词表）；`Stream.tsx` 改为 import + re-export，既有 `tool-rows.test.tsx` 从 Stream 取 `toolVerb` 的路径不动。
+- `timelineItems` 的 tool 步 label 改成「中文动词 ?? 原名」+ 摘要。
+- 判卷：`timeline-pane.test.tsx` 那条 `read_file a.ts` 钉改指现值 `读取 a.ts`（并反向钉 `not.toContain("read_file a.ts")`），另加一格「未知工具回落原名」；`tool-row-summary.test.ts` 的词表 import 改指新模块。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `timeline-pane.test.tsx` | 把 label 改回 `${e.name}` 复现：**3 红 / 4 绿**；改后 **7/7 绿** |
+| 时间线现读 | `read_file a.ts` → **`读取 a.ts`**；`run_shell pnpm test` → **`运行 pnpm test`**；`grep TODO` → **`查找 TODO`**；`mystery_tool …` 保持不变 |
+| 桌面套件（同树实跑） | **298 文件 / 2011 条全绿**，exit 0（含 boundary 绿；13:28 那一趟） |
+| 根 typecheck / 桌面 tsc / renderer-layer | 0 报错 / 0 报错 / 绿（172 个渲染层源文件，+1 新模块） |
+| docs-check | 受检项全绿（964 张页标题｜新撞 0｜下一个未占用页号 919） |
+
+### 四、边界
+
+- 只搬词表、没改词表内容；未知工具仍显示实现名（宁缺不编）。
+- 时间线的 `kind` 词（你/回复/工具/用量）与几何没动；`roundTimeline`（rail 悬停面板）不走这条标签。
+- 没改协议/通道/权限面，没有新依赖。
+- 桌面全量的 298/2011 是 13:28 那一趟（本批代码就位；随后 13:29 的 `TOOL_VERBS` 搬家只动模块位置，
+  目标三文件 37/37 复跑仍绿）。13:32 同树另一笔在飞改动（`state/workbench.ts` / `run-queue.ts`）把
+  `run-generation` 的一条源码哨兵改红——不属本批、未认领（13:33 单跑复现 1 红 1 绿）。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 919 页：代际守卫的哨兵按缩进钉死了——搬一层就红，第三处守卫还没人钉
+
+### 一、缺口（现读）
+
+`apps/desktop/tests/run-generation.test.ts`（run 代际守卫，2026-10-18 真机事故的守门人）在 13:32 之后一直红：
+
+- 它钉的是**带缩进的原文**：`if ((runGen.current.get(sid) ?? 0) === myGen) {` + 换行 + **十个空格** + `setStoppedIds`。
+- 同树另一笔在飞改动把这段守卫搬进了 `drainQueue(initial, async (msg) => {…})` 的回调（`apps/desktop/src/renderer/state/run-queue.ts:121`），缩进多一层变成十二空格，**语义一字未变**，哨兵照样红：「停止态写入同样按代际守卫」从守门变成常驻假红。
+- 顺带量到另一半：三处代际守卫只有两处有哨兵——`runStartBySession.current.delete(sid)`（`apps/desktop/src/renderer/state/run-queue.ts:141`，起点的删除）没人钉，摘掉它不会有任何判据出声。
+
+### 二、改法
+
+- 那条哨兵改成按**词序**判：`/if \(\(runGen\.current\.get\(sid\) \?\? 0\) === myGen\) \{\s*setStoppedIds\(\(prev\) => \{/`——空白随缩进走，守卫条件、函数式更新仍必须同块出现；另加一条 `const want = res.aborted === true;` 的字面钉，把「写的是停止态」这件事也钉住。
+- 新增第三条：「起点删除同样按代际守卫」。
+- 产品代码一行未改（守卫本来就在），没删断言、没放宽。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `run-generation.test.ts` | 改前（HEAD 版判卷 × 现工作树源码）**1 红 / 1 绿**；改后 **3/3 绿** |
+| 变异自证 A | 把守卫条件改成 `true` ⇒「停止态写入」红（1 红 / 2 绿） |
+| 变异自证 B | 摘掉起点的代际守卫 ⇒ 新增那条红（1 红 / 2 绿）；两次都从备份复原，`run-queue.ts` sha256 `2a5d664e…` 一致 |
+| 桌面套件（同树实跑） | **299 文件 / 2022 条全绿**，exit 0（含 boundary 绿） |
+| docs-check | 受检项全绿（965 张页标题｜新撞 0｜下一个未占用页号 920） |
+
+### 四、边界
+
+- 这是判据债不是产品债：守卫语义没动，改的只是「怎么读源码」。按词序判抓不住**同块重排**（例如把 `setStoppedIds` 提到守卫外）——那要靠行为判卷。
+- 同族还有四处「换行 + 固定缩进」的源码哨兵（`apps/desktop/tests/session-stream-isolation.test.ts:64`、`render-structure.test.tsx:741`、`apps/desktop/tests/plan-mode-wiring.test.ts:35`、`apps/desktop/tests/desktop-review-batch.test.ts:30`）；此刻都绿，本批不动（红一条修一条，不做无由重构），登记在这里备查。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 920 页（补记）：LSP 能力协商那批没落页——四处引用悬空，本页按现读补记
+
+### 一、为什么有这一页
+
+`src/tools/lsp.ts:317`、`tests/lsp.test.ts:198`、`tests/lsp.test.ts:204`、`docs/CODE-WIKI.md:153`、`scripts/lib/mutations/tools.mjs:75` 五处都写着「第 914 页」，而台账里没有 914 这一页：那批（LSP 能力协商）的代码与判卷早在工作树里，页一直没落。引用悬空比缺页更坏——读者按号找不到东西，也无从判断那批验过什么。本页是**补记**：实现与判卷不是本轮写的，下面的读数由本轮复跑取得。
+
+### 二、那批做了什么（现读）
+
+`initialize` 是 LSP 里唯一一次双方对齐「能说什么话」的机会，此前两头都没用（`src/tools/lsp.ts` 的能力协商段注释）：
+
+- **客户端声明**：`CLIENT_CAPABILITIES` 只声明真消费了的面——`definition/implementation.linkSupport`、`hover.contentFormat: [markdown, plaintext]`、`documentSymbol.hierarchicalDocumentSymbolSupport`、两处 `symbolKind.valueSet`（工作区符号的键是 `workspace.symbol`，不是 `workspaceSymbol`）。声明了不实现的面（如 `didChangeWatchedFiles`）会把服务器引到我们不走的路，所以不声明。
+- **服务器应答落地**：`adoptServerCapabilities` 收下 `textDocumentSync` 与各 provider；`syncKindOf` 把三种报法摊成 full / incremental / none（缺省 full = 改前行为）。
+- **按声明发 didChange**：`change:2` 只认带 range 的编辑 ⇒ 整篇替换要包 `wholeDocumentRange`；`change:0` 不接受 didChange ⇒ 改盘后 didClose+didOpen 重送。
+- **能力门**：`providerDeclared(operation)` 没声明就当场说「未声明」（`requireProvider`），不发请求等超时；服务器 `capabilities` 整个为空 ⇒ 不门控（老服务器）。
+- **符号 kind 派生**：`SYMBOL_KIND_NAMES` / `symbolKindValues()` 从协议枚举派生（此前手抄 20 格、少 6 格且把 25 抄成 TypeParameter）。
+- **回传形状**：LocationLink / Location / SymbolInformation / DocumentSymbol / WorkspaceSymbol（可只有名字）都收。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `tests/lsp.test.ts` 的「能力协商」一节 | 6 条：声明真面 / 未声明当场拒 / change:2 带 range / change:0 重开 / kind 派生 / workspaceSymbol 只有名字 |
+| `tests/lsp.test.ts` | **25/25 绿**（本轮复跑） |
+| LSP 相关（`tests/lsp*` + 插件激活/发现） | **8 文件 / 92 条全绿**（本轮复跑） |
+| `tests/mutate-anchor-titles.test.ts` | **23/23 绿**（改 describe 标题没让锚点漂） |
+| 全仓「第 914 页」引用 | **0**（五处改指第 920 页） |
+| docs-check | 受检项全绿（966 张页标题｜新撞 0｜下一个未占用页号 921） |
+
+### 四、边界
+
+- 本页**只补记录与引用**：实现、判卷、口径都来自那批（2026-11-01，工作树未提交），本轮没有改它们一行。
+- 补记不能替代当时的读数：那批自己跑过什么已无从回查，本页给的是**今天**的复跑读数。
+- 没跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 921 页：同一个 token 数，用量环写 1250.0k、时间线写 1.3m
+
+### 一、缺口（现读）
+
+用量数字有两份实现：
+
+- `components/format-tokens.ts#formatTokens`：只有 k 档（≥1000 写 `x.xk`）——用量环（Composer 底部）与检查器用量页读它。
+- `derived/timeline.ts` 的局部 `fmtTokens`：k + m 两档——时间线 usage 步读它。
+
+于是同一个数两个写法：`1_250_000` 在用量环是 **`1250.0k`**、在时间线是 **`1.3m`**；`1_000_000` 是 `1000.0k` vs `1.0m`。k-only 那版在 `999_950…999_999` 还会写出四位数 `1000.0k`。时间线在派生层，按分层规则够不着组件层，所以它抄了一份——第二事实源。
+
+### 二、改法
+
+- 实现搬到 `apps/desktop/src/renderer/derived/format-tokens.ts`（派生层，三个消费面都读得到）：过百万进位 m，`999_950` 那档也进位（不再出现 `1000.0k`）。
+- `components/format-tokens.ts` 改成转发出口（`export { formatTokens } from "../derived/format-tokens";`），UsageMeter / Inspector / 既有判卷的 import 路径不动。
+- `derived/timeline.ts` 删掉局部 `fmtTokens`，改用共享实现。
+- 判卷 +2：formatTokens 的 m 档与进位边界逐值钉；时间线 usage 步用同一把尺（并反向钉「时间线不再有自己的 fmtTokens」）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `model-picker.test.ts` + `timeline-pane.test.tsx` | 改前（k-only 那版）**2 红 / 20 绿**；改后 **22/22 绿** |
+| formatTokens 现读 | `1_000_000` **`1000.0k` → `1.0m`**；`1_250_000` **`1250.0k` → `1.3m`**；`999_960` **`1000.0k` → `1.0m`**；`999_949` / `400_000` / `1234` / `0` 不变 |
+| 桌面套件（同树实跑） | **299 文件 / 2026 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc / renderer-layer | 0 报错 / 0 报错 / 绿（174 个渲染层源文件，+1 新模块） |
+| docs-check | 受检项全绿（967 张页标题｜新撞 0｜下一个未占用页号 922） |
+
+### 四、边界
+
+- 只统一「token 数怎么念」，没动采集与口径（unknown 仍不折 0）。
+- 字节格式化（`SessionLogDialog` 的 KB/MB）是另一把尺，本批不动。
+- 没改协议/通道/权限面，没有新依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 922 页：同一个行号，删除行与新增行共用一把评注键
+
+### 一、缺口（现读）
+
+「改动」窗格允许对差异逐行评注（蓝本 §3.6，⌘Enter 一次性提交）。评注键此前是 `<path>|<newNo ?? oldNo>`——只有行号，没有「哪一侧」。一次「改这一行」的 diff 里，删除行（oldNo=2）与新增行（newNo=2）落在同一把键上：
+
+- 实测（DiffView 真 HTML）：一条键为 `src/a.ts|2` 的评注渲染出 **2 个标记**——删除行与新增行都挂着它；再在这两行任一上写一条，就把前一条覆盖掉（`Map.set` 同一个键）。
+- 提交消息 `composeReviewMessage` 只写「第 N 行」——对删除行来说 N 是旧文件行号，agent 按新文件去找会找不到那一行（或找错）。
+
+### 二、改法
+
+- 行键改成 `<path>|<side>:<line>`：`del` 取旧文件行号（`old:`），其余取新文件行号（`new:`）；统一走 `lineKeyOf`（unified 此前另有一处内联拼键，一并收口）。
+- `composeReviewMessage` 认带侧别的键：删除侧写成「第 N 行（删除前）」；**旧键形状 `<path>|<line>` 仍认**——当轮内存里的评注不丢，既有钉也不用改口径。
+- 判卷：`diff-split` +2（old 只挂删除行 / 两侧各一条共存）、`panes` +1（消息里删除侧写明「删除前」）、`panes-structure` 的夹具键改指新形（那条钉的正是删除行上的评注）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 撞键实测 | 改前一条评注渲染 **2 个标记**（探针 `markers = 2`），改后 old/new 各挂各的 |
+| 红→绿 | 行键改回只到行号 ⇒ diff-split **2 红**；解析改回老形状 ⇒ panes **1 红**；复原后 **42/42 绿** |
+| 桌面套件（同树实跑） | **299 文件 / 2029 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc / renderer-layer | 0 报错 / 0 报错 / 绿（174 个渲染层源文件） |
+| docs-check | 受检项全绿（968 张页标题｜新撞 0｜下一个未占用页号 923） |
+
+### 四、边界
+
+- 评注只活在本次渲染的 `useState` 里（不落盘、不跨会话），所以不需要迁移历史键；旧键仍被 `composeReviewMessage` 认，是给「同一轮里先写下的那条」留的兜底。
+- 并排视图只允许评右栏（现在还在的那一行），本批没改这个口径。
+- 没改协议/通道/权限面，没有新依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 923 页：记忆与定时任务的行还是参数原文——`remember` 甩的是半截 JSON
+
+### 一、缺口（现读）
+
+第 917 页给编排族与 clarify 挑了主语，但这两族的参数仍然一个字段都不在取值链上：
+
+| 工具 | 折叠行现在显示 |
+|---|---|
+| `remember {scope,kind,op,content}` | `{"scope":"project","kind":"decision","op":"append","content":"发布前必须跑全量 gates；上一轮`（80 字处截断，正文被切成半句） |
+| `remember {kind:"memory", topic}` | `{"kind":"memory","topic":"release-gate"}` |
+| `automation_create {name,prompt,schedule}` | `{"name":"每日备份","prompt":"备份仓库","schedule":[{"kind":"daily","at":"03:00"}]}` |
+| `automation_update {id,name}` | `{"id":"a1","name":"每周巡检"}` |
+| `automation_delete` / `automation_run_now` | `{"id":"a1"}` |
+| `automation_list {}` | `{}` |
+
+### 二、改法
+
+- `ownSubject` 补两族：remember→正文首行（无正文用 `topic`）、automation_create/update→`name`（update 缺 name 用 id）、delete/run_now→`id`、list→「全部定时任务」。
+- 共享词表 `derived/tool-verbs.ts` 补六个动词：记住 / 建 · 改 · 删 · 跑 · 列定时任务。
+- 判卷 +3：remember 三态（正文首行 / topic / 多行只取首行）、automation 五格、行面 SSR（「记住 发布前跑 gates」且不含 `&quot;content&quot;`）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `tool-row-summary.test.ts` | 关掉 ownSubject 复现 **9 红 / 8 绿**（含本批三条）；抽掉 remember 动词复现 **1 红**；复原 **17/17 绿** |
+| 摘要现读 | 见上表：JSON / `{}` → 正文首行 / `topic` / 名字 / id / 「全部定时任务」 |
+| 桌面套件（同树实跑） | **299 文件 / 2032 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc / renderer-layer | 0 报错 / 0 报错 / 绿（174 个渲染层源文件） |
+| docs-check | 受检项全绿（969 张页标题｜新撞 0｜下一个未占用页号 924） |
+
+### 四、边界
+
+- 运行期注入里还剩 `skill` / `mcp_*` / `obs_recall` / `search_history` / `diagnose` / `impact_query` 没有主语规则（下一批的料）；本批判据只钉自己加的两族，不把没做的面判成绿。
+- remember 只取正文首行；正文其余行仍在展开区的原始参数里，没丢。
+- 没改协议/通道/权限面，没有新依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 924 页：同一个字节数，附件行写 `512`、日志窗写 `512 B`
+
+### 一、缺口（现读）
+
+字节刻度有两份实现：
+
+- `components/Composer.tsx#formatSize`（附件小字）：B 档**不带单位**、KB/MB 用 `Math.round(n / 102.4) / 10`；
+- `components/SessionLogDialog.tsx` 的局部 `formatBytes`（日志窗）：B 档带单位、KB/MB 用 `toFixed(1)`。
+
+同一个数两种写法（现读，按旧公式直接算）：
+
+| 字节 | 附件行 | 日志窗 |
+|---|---|---|
+| 512 | `512`（没单位） | `512 B` |
+| 2048 | `2 KB` | `2.0 KB` |
+| 1_048_575（1 MB 差 1） | `1024 KB` | `1024.0 KB` |
+
+最后一行是两边共有的老毛病：差一个字节到 1 MB 时写出四位数——与第 921 页 token 的 `1000.0k` 同族。
+
+### 二、改法
+
+- 实现收到 `apps/desktop/src/renderer/derived/format-bytes.ts#formatBytes`：B/KB/MB 一位小数，`1024.0 KB` 进位成 `1.0 MB`；非法与负数返回 `null`（调用方决定显示什么，不冒充 0）。
+- `Composer.formatSize` 变成薄包装（`formatBytes(n) ?? STR.composer.dash`——「拿不到就破折号」的口径留在调用点）；`SessionLogDialog` 删掉局部分份。
+- 判卷 +4：三档与小数值、1 MB 门口进位、非法/负数 null、两个调用面同口径（附件行 512 现在写 `512 B`）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `format-bytes.test.ts` | 改前 A（不带进位）**1 红 / 3 绿**；改前 B（附件行回到自份）**1 红 / 3 绿**；改后 **4/4 绿** |
+| 现读 | `512` → **`512 B`**；`2 KB` / `2.0 KB` → 统一 **`2.0 KB`**；`1024 KB` / `1024.0 KB` → **`1.0 MB`**；`1_048_576` 仍是 `1.0 MB`、`1_047_552` 是 `1023.0 KB` |
+| 桌面套件（同树实跑） | **300 文件 / 2036 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc / renderer-layer | 0 报错 / 0 报错 / 绿（175 个渲染层源文件，+1 新模块） |
+| docs-check | 受检项全绿（970 张页标题｜新撞 0｜下一个未占用页号 925） |
+
+### 四、边界
+
+- 只统一刻度与进位；「拿不到大小」的展示（附件行破折号 / 日志窗 `—`）留在各自调用点，没有把 unknown 折成 0。
+- `OrchestrationPane` 里「计划文件不能超过 1 MB」是阈值文案，不是刻度，本批不动。
+- 没改协议/通道/权限面，没有新依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 925 页：技能/目标/MCP 元工具的行还是 JSON——`mcp_list` 甩一个 `{}`
+
+### 一、缺口（现读）
+
+第 917 / 923 页给编排族、记忆与定时任务挑了主语，但运行期注入里这五把仍然一个字段都不在取值链上：
+
+| 工具 | 折叠行现在显示 |
+|---|---|
+| `skill {name,args}` | `{"name":"/plugin:review","args":"src/a.ts"}` |
+| `refine_goal {objective}` | `{"objective":"把登录页的重试做成指数退避，并在 3 次失败后给出可操作提示"}` |
+| `mcp_list {}` | `{}` |
+| `mcp_list {server}` | `{"server":"plugin/sqlite"}` |
+| `mcp_activate {server,tools}` | `{"server":"plugin/sqlite","tools":["query","schema"]}` |
+| `mcp_release {server,tool}` | `{"server":"plugin/sqlite","tool":"query"}` |
+
+### 二、改法
+
+- `ownSubject` 补五族：skill→调用名、refine_goal→目标原文（截 80）、mcp_list→server 或「全部 MCP 服务器」、mcp_activate→`server（N 把）` 或 `（整台）`、mcp_release→`server` 或 `server / 工具名`。
+- 共享词表 `derived/tool-verbs.ts` 补五个动词：用技能 / 改目标 / 列 · 启用 · 停用 MCP。
+- 判卷 +4：skill 与 refine_goal、mcp_list 两态、mcp_activate/release 五格、行面 SSR（「启用 MCP plugin/sqlite（2 把）」且不含 `&quot;server&quot;`）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `tool-row-summary.test.ts` | 关掉 ownSubject 复现 **13 红 / 8 绿**（含本批四条）；抽掉 mcp_activate 动词复现 **1 红**；复原 **21/21 绿** |
+| 摘要现读 | 见上表：JSON / `{}` → 调用名 / 目标原文 / `plugin/sqlite` / `（2 把）` / `（整台）` / `plugin/sqlite / query` |
+| 桌面套件（同树实跑） | **300 文件 / 2040 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc / renderer-layer | 0 报错 / 0 报错 / 绿（175 个渲染层源文件） |
+| docs-check | 受检项全绿（971 张页标题｜新撞 0｜下一个未占用页号 926） |
+
+### 四、边界
+
+- 运行期注入里还剩 `obs_recall` / `search_history` / `diagnose` / `impact_query` 没有主语规则（参数面在各自模块里，下一批的料）；本批判据只钉自己加的五族。
+- `mcp_activate` 的「N 把」是数量口径，工具名清单在展开区的原始参数里，没丢。
+- 没改协议/通道/权限面，没有新依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 926 页：⌘F 搜不到自己刚折起来的那几轮
+
+### 一、缺口（现读）
+
+查找条（⌘F）只查 DOM：`.row.user .t, .row.assistant .t`。而折叠轮次的分支**只渲染标题行**（`Stream.tsx` 的 folded 分支：`.fold-head` + `.fold-sum` + 时间），正文根本不在 DOM 里 ⇒ 折起来的轮次整段搜不到：计数是 `0/0`，也没有任何「有一处在折叠里」的提示。长会话里折叠恰恰是为了翻旧账——越折越搜不到。
+
+### 二、改法
+
+- `FindBar` 新增三个可选 props：`rows`（模型行）、`foldedRounds`、`onExpandRound`。可见部分仍按 DOM 命中（语义不变、文档序在前），折叠轮次里的 user/assistant 正文按模型补在后面（`foldedHitSeqs`，只算正文、工具行不参与）。
+- 步进到折叠轮次里的命中：先 `onExpandRound(round)` 展开那一轮，下一拍（`setTimeout 0`）再按行锚 `[data-event-id="seq+1"] .t` 滚到中间并闪一下——展开是 React 的一次渲染，立刻找 DOM 拿到的是还没长出来的节点。
+- `WorkbenchView` 接线：`rows={streamRows}`、`foldedRounds={foldedRounds}`、`onExpandRound` 走 `streamActions.onToggleFold`。
+- 判卷 +3：折叠命中的模型口径（含工具行不参与）/ 大小写与空查询 / 接线与「先展开再闪」的源码哨兵。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `find-bar.test.tsx` | 改前 A（折叠命中恒 0）**2 红 / 5 绿**；改前 B（命中折叠轮不展开）**1 红 / 6 绿**；改后 **7/7 绿** |
+| 桌面套件（同树实跑） | **300 文件 / 2043 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc / renderer-layer | 0 报错 / 0 报错 / 绿（175 个渲染层源文件） |
+| docs-check | 受检项全绿（972 张页标题｜新撞 0｜下一个未占用页号 927） |
+
+### 四、边界
+
+- 只补「折叠轮次里的正文」；工具行、元信息、折叠摘要仍不参与（与 DOM 选择器同口径）。
+- 可见行仍以 DOM 文本为真（markdown 语法字符如 `**` 在原文里有、在可见文本里没有）；模型补的是折叠轮次的原文。
+- 展开动作复用 `onToggleFold`（只对已折叠的轮生效），不改折叠状态的其他口径。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 927 页：动词判据只盯静态面，注入面五把还在摆实现名
+
+### 一、缺口（现读）
+
+第 916 页的覆盖判据只查 `TOOL_NAMES`（静态面）。运行期注入的五把从来没进过判据，行面因此还是两截：
+
+| 工具 | 折叠行现在显示 |
+|---|---|
+| `obs_recall {id,by}` | `obs_recall {"id":"obs-7","by":"lines"}` |
+| `impact_query {symbol}` | `impact_query {"symbol":"buildConfig"}` |
+| `search_history {query}` | `search_history 登录重试` |
+| `tool_search {query}` | `tool_search sqlite 查询` |
+| `diagnose {}` | `diagnose {}` |
+| `diagnose {face:"lint"}` | `diagnose {"face":"lint"}` |
+
+后三条尤其难看：一把诊断工具在缺省调用时甩一个空对象。
+
+### 二、改法
+
+- 补五个动词：找工具 / 搜历史 / 查波及面 / 回看 / 诊断。
+- 补三条主语：`obs_recall`→`id`、`impact_query`→`symbol`（file 模式本来走通用链）、`diagnose`→`face`（缺省「全部检查」）。
+- 覆盖判据扩到 `INJECTED_TOOLS`：`missing` 为空才算绿，报错里把漏掉的工具名逐个点名（这次点出五个）。
+- 判卷 +4：注入面覆盖判据、obs/impact 主语、diagnose 三态、行面 SSR（「诊断 只跑 lint」且不含 `&quot;face&quot;`）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `tool-row-summary.test.ts` | 抽掉五个动词 ⇒ 覆盖判据红并点名 **impact_query \| obs_recall \| search_history \| diagnose \| tool_search**；抽掉三条主语 ⇒ **3 红**；改后 **25/25 绿** |
+| 行面现读 | 见上表：实现名 + JSON / `{}` → 五个中文动词 + id / 符号 / `全部检查` / `只跑 lint` |
+| 桌面套件（同树实跑） | **300 文件 / 2047 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc / renderer-layer | 0 报错 / 0 报错 / 绿（175 个渲染层源文件） |
+| docs-check | 受检项全绿（973 张页标题｜新撞 0｜下一个未占用页号 928） |
+
+### 四、边界
+
+- 判据管「有没有动词」，不管「摘得对不对」；主语取值各由自己的行为判据盯着。
+- `web_fetch` 不在 `INJECTED_TOOLS`（规格在 session-provider，按配置注册），词表里的「抓取」仍由陈旧键那条的豁免名单认——不把它算进本页的覆盖面。
+- 没改协议/通道/权限面，没有新依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 928 页：同一个 local，安装卡写「本地目录」、列表写「本地」
+
+### 一、缺口（现读）
+
+插件来源/作用域的词表有三份手抄本：
+
+- `PluginInstalled.tsx` 与 `PluginDiscover.tsx`：catalog→官方目录、git→Git、local→**本地**、其余→手动；
+- `PluginReview.tsx`：catalog→官方目录、git→Git、其余→**本地目录**。
+
+同一个 local 插件，装之前的确认卡写「本地目录」，装完之后的列表写「本地」——两套说法只隔一次点击。作用域同理：列表按 `scope === "project"` 判、确认卡按 `scope === "user"` 判，同一条规则两种写法。
+
+### 二、改法
+
+- 词表收到 `components/plugins/labels.ts`（`sourceKindLabel` / `scopeLabelOf`）：四种来源（官方目录 / Git / 本地目录 / 手动-runtime）、两种作用域（全局 / 当前项目）。
+- 三张卡都改成读它；「本地」这个旧说法在组件里已清零。
+- 判卷 +3：四种来源两种作用域、三张卡无第二份手抄本（重新定义 `function sourceLabel` 即红）、除 `labels.ts` 外没有文件直接写「本地目录」。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `plugin-labels.test.ts` | 改前 A（local 写「本地」）**2 红 / 1 绿**；改前 B（发现页抄回自份）**1 红 / 2 绿**；改后 **3/3 绿** |
+| 现读 | local → **本地目录**（三张卡一致）；runtime → 手动；user / project → 全局 / 当前项目 |
+| 桌面套件（同树实跑） | **301 文件 / 2050 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc / renderer-layer | 0 报错 / 0 报错 / 绿（176 个渲染层源文件，+1 新模块） |
+| docs-check | 受检项全绿（974 张页标题｜新撞 0｜下一个未占用页号 929） |
+
+### 四、边界
+
+- runtime（手放进插件目录、没有安装记录的那类）仍显示「手动」，与 local 保留区分；本批只统一说法，不改判定口径。
+- 来源枚举来自 core 的 `PluginSource`（catalog / git / local），前端多一个 runtime；词表按这一份枚举写全。
+- 没改协议/通道/权限面，没有新依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 929 页：注释引的页码，台账里根本没有那一页
+
+### 一、缺口（现读）
+
+`apps/desktop/src/renderer/markdown.tsx:5` 写着「正则一律 String.match/matchAll（第 408 页口径，消 RegExp.exec 撞名误报族）」——可台账里 407 之后直接是 409，**没有第 408 页**。按号去翻，翻到的是空白。
+
+顺着这条线扫了一遍台账正文：同类的断链号还有 405 / 454 / 673 / 759 / 914 号（另有 90 / 248 / 254 号是正文在讲「这个号让给了别人」「台账里没有这一页」，属自指，本来就该没有页）。台账只准追加，旧页追不回来。
+
+### 二、改法
+
+- `markdown.tsx` 那条注释改成只留规则、不留假页码。
+- 加一把尺 `tests/page-citation.test.ts`（进 `pnpm test`）：
+  - **源码面**：`src` / `apps/desktop/src` / `scripts` 里落在台账区间内的页号引用，必须能在台账里找到对应页；
+  - **台账面**：正文里出现、台账没有那一页的号，只允许登记过的旧账；修掉一处就必须从登记里删掉（登记不删就是假存量）；
+  - 区间外的号不管（`outputs/` 取证文档有自己的页号）；带 `outputs/` 或 `.md` 前缀的引用跳过。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 扫描面 | 台账页号 851 个（含「第 N–M 页」区间写法）；源码三处目录、`.ts / .tsx / .mjs` |
+| 改前 | 源码断链 **1 处**（`markdown.tsx:5 → 第 408 页`）；台账断链号 **9 个** |
+| 改后 | 源码断链 **0**；台账新增断链 **0**（登记 9 个不动） |
+| `page-citation.test.ts` | 改前 A（注释重新引 408）**1 红**；改前 B（正文新写一条指向 582 的引用）**1 红**；复原后 **2/2 绿** |
+| 核心套件（同树实跑） | **602 文件 / 7534 条全绿**，exit 0 |
+| 桌面套件（同树实跑） | **2050 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck | 0 报错 |
+| docs-check | 受检项全绿（975 张页标题｜新撞 0｜下一个未占用页号 930） |
+
+### 四、边界
+
+- 只认台账区间内的号：`第 51 页`、`第 55 页` 是 `outputs/` 取证文档的页号，不在管辖内。
+- 台账面不追旧账：那九个数已经写在正文里，这把尺只保证「不再新增」。
+- 判据读文件全文，注释里的示例字符串也会被看见——以后写文档示例要避开这个形状。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 930 页：名单外的工具弹批准卡，只看得见一段 JSON
+
+### 一、缺口（现读）
+
+`describeAsk` 只给几张熟面孔写人话（run_shell / write_file / edit_file / apply_patch / web_fetch / web_search / remember / automation_*），其余一律走兜底：标题「需要你批准」+ `JSON.stringify(args)`。工具名**只**出现在卡片的 `aria-label` 里（`ApprovalCard.tsx:58`）——屏幕上有的是 `{"table":"users"}` 这种参数，批的是哪把工具无从判断。
+
+对照：CLI 那一面早就把工具名印在提示里（`src/cli.ts:832`：`批准？ ${req.tool} ${argsDigest(req.args)}`），只有桌面这套兜底卡丢了它。
+
+### 二、改法
+
+- 兜底补 `subject: 工具名`——卡片本来就有 `.ask-subject` 这一位（带 title 悬停看全），参数 JSON 原样保留，可诊断性不丢。
+- 判卷 +1（纯函数兜底断言补一条）+1（SSR：`mcp__db__drop_table` 卡上看得见工具名，参数仍在）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `approval-card.test.tsx` | 改回兜底 ⇒ **2 红 / 11 绿**；改后 **13/13 绿** |
+| 现读 | `describeAsk({tool:"mystery_tool",args:{a:1}})` ⇒ `{ title: "需要你批准", subject: "mystery_tool", body: "{\"a\":1}" }` |
+| 桌面套件（同树实跑） | **2051 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc | 0 报错 / 0 报错 |
+| docs-check | 受检项全绿（976 张页标题｜新撞 0｜下一个未占用页号 931） |
+
+### 四、边界
+
+- 只补「哪把工具」这一格；参数仍原样 JSON——把危险参数渲染成人话是另一件事。
+- `aria-label` 不变（屏幕阅读器本来就能听到工具名）。
+- 没改权限/通道面，没有新依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 931 页：跑画廊先撞一段 node 栈——真因是环境里那个 ELECTRON_RUN_AS_NODE
+
+### 一、缺口（现读）
+
+本机环境里带着 `ELECTRON_RUN_AS_NODE=1`。这时 `npx electron scripts/ui-gallery.cjs` 实际是 **node** 在跑：
+`require("electron")` 退化成字符串（二进制路径），`app` 是 undefined ⇒ 脚本在 `app.whenReady()` 处报
+`TypeError: Cannot read properties of undefined (reading 'whenReady')`，而 catch 里的 `app.exit(1)` 再抛一次
+`reading 'exit'`。读到的是两段 node 栈 + `exit 1`，真正的原因（那个环境变量）一个字都没有——排查得先猜
+「是 dist 陈旧、还是渲染层抛错」，这一猜就白走一趟。
+
+### 二、改法
+
+- 脚本开头体检：拿到的 `electron` 不是对象、或没有 `app` ⇒ 印出「很可能是 `ELECTRON_RUN_AS_NODE=1`」与复跑命令
+  `env -u ELECTRON_RUN_AS_NODE npx electron scripts/ui-gallery.cjs`，以 **2** 退出（环境问题 ≠ 断言失败）。
+- catch 处理器从 `app.exit(1)` 改成 `process.exit(1)`——它在 `app` 不存在时正是第二个假错误的来源。
+- 判卷：spawn 一个带该环境变量的 node 进程跑脚本，钉「退 2 + 输出含 `ELECTRON_RUN_AS_NODE` + 不再出现 `whenReady`」。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 改前（`ELECTRON_RUN_AS_NODE=1`） | `[gallery] FAIL TypeError: … reading 'whenReady'` + node 栈，**exit 1** |
+| 改后（同环境） | `[gallery] 当前进程里没有 Electron 的 app：很可能是环境里有 ELECTRON_RUN_AS_NODE=1…` + 复跑命令，**exit 2** |
+| 真 Electron（`env -u ELECTRON_RUN_AS_NODE`） | **exit 0**：20 张截图、高对比/用量落点/分段控件/侧栏筛选四组自查全打印、`[gallery] done` |
+| `gallery-guard.test.ts` | 去掉体检 ⇒ **1 红**（`expected 1 to be 2`）；改后 **1/1 绿** |
+| 桌面套件（同树实跑） | **2052 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc | 0 报错 / 0 报错 |
+| docs-check | 受检项全绿（977 张页标题｜新撞 0｜下一个未占用页号 932） |
+
+### 四、边界
+
+- 只给画廊这一个入口做了体检。`apps/desktop/scripts/` 下另有几十个 smoke 脚本同样 `require("electron")`（其中大半还是未提交的新文件），同一个环境变量会让它们报同样的栈——本批不批量改别人的在飞文件（试过：45 个文件里 43 个是未跟踪的在写文件，已全部回退）。
+- 退出码 2 = 环境问题，与「断言失败」的 1 分开，方便脚本调用方分辨。
+- 没改产品代码，没有新依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 932 页：批一张读文件的卡，卡上只有一段 JSON
+
+### 一、缺口（现读）
+
+上一轮给「名单外工具」补了工具名。可名单内还有一半工具没有自己的那一句：`describeAsk` 只写了写族、命令、网络、记忆与定时任务，而 `read_file` / `grep` / `glob` / `lsp` / `render_image` / `diagnose` 在沙箱降级或严格档下同样会弹批准卡——它们一律落到兜底「需要你批准 + 参数 JSON」：
+
+| 工具 | 卡上现在显示 |
+|---|---|
+| `read_file {path}` | 需要你批准 · `{"path":"src/a.ts"}` |
+| `read_file {paths}` | 需要你批准 · `["a.ts","b.ts"]` |
+| `grep {pattern}` | 需要你批准 · `{"pattern":"TODO"}` |
+| `glob {pattern}` | 需要你批准 · `{"pattern":"**/*.ts"}` |
+| `lsp {symbol}` | 需要你批准 · `{"symbol":"resolveFlag"}` |
+| `render_image {path}` | 需要你批准 · `{"path":"out/chart.html"}` |
+| `diagnose {}` | 需要你批准 · `{}` |
+
+批的是「读哪个文件 / 查什么 / 渲染哪张图」，卡上一个字都没说。
+
+### 二、改法
+
+- `describeAsk` 补六条：读取文件（`path` 或 `paths` 列表）、查找内容（`pattern`）、找文件（`pattern`）、查符号（`symbol` 作副行、`path` 在同时给时作主体）、渲染图（`path`）、跑诊断（`face` 缺省说「全部检查」，否则「只跑 lint / 只跑 test」）。
+- 参数 JSON 只在无字段可念时保留（可诊断性不丢）。
+- 判卷 +2：六格映射表 + SSR（读文件的卡上是「读取文件 + 路径」且不含 `&quot;path&quot;`）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| `approval-card.test.tsx` | 去掉这六条 ⇒ **2 红 / 13 绿**；改后 **15/15 绿** |
+| 现读 | 见上表：`需要你批准 + JSON` → `读取文件 src/a.ts` / `查找内容 TODO` / `找文件 **/*.ts` / `查符号 resolveFlag` / `渲染图 out/chart.html` / `跑诊断 全部检查` |
+| 桌面套件（同树实跑） | **2054 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc | 0 报错 / 0 报错 |
+| docs-check | 受检项全绿（978 张页标题｜新撞 0｜下一个未占用页号 933） |
+
+### 四、边界
+
+- 只动「批准卡怎么念」这一层；无字段可念时仍摆参数 JSON。
+- 名单外工具（MCP scoped 等）仍走兜底「需要你批准 + 工具名 + JSON」。
+- 没改权限/通道面，没有新依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 933 页：批一个 300 行的补丁，卡上只有 132px 的滚动框
+
+### 一、缺口（现读）
+
+`describeAsk` 对 `apply_patch` 只给「应用补丁」+ `args.patch` 原文。正文落在 `.cmdline` 上，而它是 `max-height: 132px; overflow-y: auto`——一个 300 行的补丁，批准前只看得到开头六行。批的是什么、动几个文件、增删多少行，卡上一个字都没有。
+
+### 二、改法
+
+- 加一个纯函数 `patchHeadline(patch)`：用 core 的 `parsePatch`（零 IO）解出文件数、`+/-` 行数与前三路径，形如 `2 个文件 · +3 −2 · src/a.ts、src/b.ts`；超过三个用「等 N 个」收口。
+- `describeAsk` 的 `apply_patch` 分支把它放进 `subject`；**解析不了就不摆抬头**（宁缺不猜），补丁原文仍整段在卡上、仍可滚动。
+- 判卷 +3：抬头格式、解析失败回落（`{title, body}` 原样）、SSR（卡上真出现抬头且原文不丢）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | 两文件补丁 ⇒ `2 个文件 · +3 −2 · src/a.ts、src/b.ts`；解析不了的文本 ⇒ 只有「应用补丁 + 原文」 |
+| 红→绿 | 去掉抬头接线 ⇒ **1 红**；抬头函数恒 undefined ⇒ **2 红**；改后 **18/18 绿** |
+| 桌面套件（同树实跑） | **2057 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc / renderer-layer | 0 报错 / 0 报错 / 绿（176 个渲染层源文件） |
+| `pnpm run build` | **exit 0**：渲染层 import core 的 `patch-parse` 打得进包 |
+| docs-check | 受检项全绿（979 张页标题｜新撞 0｜下一个未占用页号 934） |
+
+### 四、边界
+
+- 抬头只说「几个文件、增删多少、动了谁」；逐 hunk 的细看仍在「改动」窗格（那里有 DiffView）。
+- `parsePatch` 只吃 `git diff` 那一族；`*** Update File:` 那族会解析失败 ⇒ 不摆抬头，原文照旧。
+- 跨边界 import 只读纯函数，不引 node 内置；Vite 构建已验。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 934 页：同一页两种时间写法，还把「只铺 20 条」瞒着
+
+### 一、缺口（现读）
+
+定时任务页的历史区有两处小账：
+
+1. **时间两种写法**：运行历史把 `due_at` 的原始 ISO 直接摆上屏（`2026-11-01T03:00:00.000Z · 每日备份`），而同一页任务的「下次」用的是 `new Date(...).toLocaleString()`。同一个人在同一屏看到两种时间写法，其中一种是机器格式。
+2. **静默截断**：`schedule.history.slice(0, 20)` 只铺 20 条，标题却只写「运行历史（N 条）」——25 条时列表到第 20 条就停，没有任何「只显示最近 20 条」的说明。仓里对截断的口径是「不把尾部冒充整份」。
+
+### 二、改法
+
+- 两个时间都走 `fullTime`（本地 `YYYY-MM-DD HH:mm`，解析不了原样返回，不装懂）。
+- 加常量 `HISTORY_SHOWN = 20` 管铺多少条；标题在超出时写「运行历史（N 条 · 只显示最近 20 条）」，没超出就不加这句（说多了也是噪音）。
+- 判卷 +3：时间两条都不含原始 ISO 且含本地日期；25 条时标题带截断声明；3 条时没有那句。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | 历史行 `2026-11-01 11:00 · 每日备份`；「下次」`2026-11-02 11:00`；25 条 ⇒ 标题带「· 只显示最近 20 条」 |
+| 红→绿 | 回到原始 ISO ⇒ **1 红**；去掉截断声明 ⇒ **1 红**；改后 **21/21 绿** |
+| 桌面套件（同树实跑） | **2060 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc / renderer-layer | 0 报错 / 0 报错 / 绿（176 个渲染层源文件） |
+| docs-check | 受检项全绿（980 张页标题｜新撞 0｜下一个未占用页号 935） |
+
+### 四、边界
+
+- 只改「页面上怎么显示」，调度器落盘的 `due_at` 仍是 ISO（事实源），界面负责读。
+- 20 条是页面铺多少，不是历史保留多少；更早的记录仍在 `journal.jsonl` 里。
+- 显示用本机时区；任务自己的 `timeZone` 已在抽屉副标题里写明。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 935 页：抽屉里「技能 3 · 命令 2 · agents 1 · hooks 4」
+
+### 一、缺口（现读）
+
+插件详情抽屉的「组成」行：`技能 3 · 命令 2 · agents 1 · hooks 4 · MCP 0（激活 —）· LSP 2/3`。前两格中文，中间两格是英文键名。而发现页的能力计数早有中文（`智能体 1 · 钩子 4`）——同一套词两处两种写法；抽屉里那两格还夹在中文中间，读起来像漏翻。
+
+### 二、改法
+
+- 类目词表收到 `components/plugins/labels.ts`：`PluginCategory`（skills / commands / agents / hooks / mcp / lsp）、`PLUGIN_CATEGORY_LABEL`、`categoryLabel`。
+- 发现页原来那份私有的 `CATEGORY_LABEL` 删掉，改读同一张表；抽屉的组成行六格全部走 `categoryLabel(...)`。
+- 判卷 +2：六类取值（MCP / LSP 是专名，原样）；源码哨兵钉「发现页没有第二份 `const CATEGORY_LABEL`、抽屉不再出现 `agents {String(` / `hooks {String(`」。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | 抽屉：`技能 3 · 命令 2 · 智能体 1 · 钩子 4 · MCP 0 · LSP 2/3` |
+| 红→绿 | 抽屉写回英文键名 ⇒ **1 红**；词表把 agents 读回英文 ⇒ **1 红**；改后 **5/5 绿** |
+| 桌面套件（同树实跑） | **2062 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc / renderer-layer | 0 报错 / 0 报错 / 绿（176 个渲染层源文件） |
+| docs-check | 受检项全绿（981 张页标题｜新撞 0｜下一个未占用页号 936） |
+
+### 四、边界
+
+- 只统一叫法；计数口径（`counts.*`）没动。
+- `MCP` / `LSP` 是专名，原样保留、不硬翻。
+- 没改协议/通道/权限面，没有新依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 936 页：同一个 14 000，用量环写「14.0k」、用量页写「1.4万」
+
+### 一、缺口（现读）
+
+用量页的 `usageTokenLabel` 走 `Intl.NumberFormat("zh-CN")` 的紧凑记法，而用量环 / 检查器 / 时间线走 `formatTokens`（k/m 档）。同一个 token 数两套写法：
+
+| token 数 | 环 / 检查器 / 时间线 | 用量页 |
+|---|---|---|
+| 14 000 | `14.0k` | `1.4万` |
+| 1 250 000 | `1.3m` | `125万` |
+| 1 830 | `1.8k` | `1830` |
+
+真机截图（画廊 06c）上，页头的「累计 Token 1.4万」与输入框旁的环正是同一个量、两种单位。
+
+### 二、改法
+
+- `usageTokenLabel` 改读 `formatTokens`（第 921 页立的单一实现）；缺测（`measured === 0`）仍是「—」，不折成 0。
+- 判卷 +2：`14 000 → 14.0k`、`1 250 000 → 1.3m`，外加一条「源文件里不再出现 compact 记法」的哨兵。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | 三组数字的两把尺对照见上表；改后用量页与环逐字相同 |
+| 红→绿 | 改回中文紧凑记法 ⇒ **1 红 / 4 绿**；改后 **5/5 绿** |
+| 桌面套件（同树实跑） | **2062 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc / renderer-layer | 0 报错 / 0 报错 / 绿（176 个渲染层源文件） |
+| docs-check | 受检项全绿（982 张页标题｜新撞 0｜下一个未占用页号 937） |
+
+### 四、边界
+
+- 只统一「token 数字怎么显示」；CSV 导出仍是原始整数（导出面不适用展示口径）。
+- 会话数 / 轮次 / 工具步数是计数，不走 `formatTokens`。
+- 没改协议/通道/权限面，没有新依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 937 页：同一个窗口，模型菜单写「128k」、用量浮层写「128.0k」
+
+### 一、缺口（现读）
+
+`ModelPicker.formatCtxWindow` 自己写了一套：`12 000 → 12k`、`1 000 000 → 1M`（整数不带小数、大写 M）。而用量环 / 检查器 / 时间线 / 用量页早就统一到 `formatTokens`（`128.0k` / `1.0m`）⇒ 同一个上下文窗口在两处两种写法：
+
+| 窗口 | 模型菜单 | 环 / 用量浮层 |
+|---|---|---|
+| 128 000 | `128k` | `128.0k` |
+| 1 000 000 | `1M` | `1.0m` |
+| 1 500 000 | `1.5M` | `1.5m` |
+
+### 二、改法
+
+- `formatCtxWindow` 改成 `formatTokens` 的薄包装；未知 / 非正仍给「—」（不冒充 0）。
+- 判卷：把 `formatCtxWindow` 的期望改成 k/m 口径，并加一条**逐值对 `formatTokens`** 的钉子（500 / 1 000 / 12 000 / 128 000 / 999 999 / 1 000 000 / 1 500 000）——再有人在这里写一套 k/M，当场红。
+- 连带改指三处钉：`model-menu-interaction`（`title="标准 · 窗口 128.0k"`）与 `render-structure` 的两处窗口文案。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | 三组数字两处逐字相同（见上表右列） |
+| 红→绿 | 改回自带那套 ⇒ **2 红 / 12 绿**（`expected '1M' to be '1.0m'`）；改后 **14/14 绿** |
+| 三个判卷文件合跑 | **81/81 绿**（`model-picker` / `model-menu-interaction` / `render-structure`） |
+| 桌面套件（同树实跑） | **2062 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck / 桌面 tsc / renderer-layer | 0 报错 / 0 报错 / 绿（176 个渲染层源文件） |
+| docs-check | 受检项全绿（983 张页标题｜新撞 0｜下一个未占用页号 938） |
+
+### 四、边界
+
+- 只统一「token 量怎么显示」；「—」（未知窗口）的语义没动。
+- 至此五个面（环 / 检查器 / 时间线 / 用量页 / 模型菜单）读同一把尺。
+- 没改协议/通道/权限面，没有新依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 938 页：那张「先读它」的地图，两条路走不通
+
+### 一、缺口（现读）
+
+`docs/CODE-WIKI.md` 是仓里指定的入口地图（「重排 UI 先读它」）。它有三处对不上：
+
+1. `tests/markdown.test.tsx`——按仓库根找不到；真文件在 `apps/desktop/tests/markdown.test.tsx`。
+2. `scripts/ui-gallery.cjs`——同病；真文件在 `apps/desktop/scripts/ui-gallery.cjs`。
+3. 引用的判卷字符串 `标准 · 窗口 128k`——第 937 页把那处口径改成 `128.0k` 之后，地图上引的还是旧话。
+
+前两条是「照抄找不到」，第三条是「引文比判卷旧一版」——都是读文档的人会当场卡住的地方。
+
+### 二、改法
+
+- 三处改指真路径与真引文。
+- 加一把尺 `tests/code-wiki-paths.test.ts`：
+  - 地图里每条路径（`src/…`、`apps/desktop/…`、`scripts/…`、`tests/…`、`docs/…`）必须按仓库根解析得到；
+  - 地图引用的「标准 · 窗口 …」必须逐字出现在 `render-structure.test.tsx` 里（判卷改了、地图就得跟）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | 31 条路径引用全部解析得到；引文与判卷逐字一致 |
+| 红→绿 | 回退两条路径 ⇒ **1 红**（报错点名 `tests/markdown.test.tsx \| scripts/ui-gallery.cjs`）；回退引文 ⇒ **1 红**；改后 **2/2 绿** |
+| 核心套件（同树实跑） | **603 文件 / 7536 条全绿**，exit 0 |
+| 桌面套件（同树实跑） | **2062 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck | 0 报错 |
+| docs-check | 受检项全绿（984 张页标题｜新撞 0｜下一个未占用页号 939） |
+
+### 四、边界
+
+- 只对 `CODE-WIKI.md` 上尺；`docs/superpowers/plans/*` 是历史计划稿，描述的是当时的文件形状，不追溯改。
+- 引文那条只钉「标准 · 窗口 …」这一处（地图里唯一被引用且判卷也在钉的字符串），其他描述性文字不做机械比对。
+- 没改产品代码，没有新依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 939 页：同一个内容指纹，四个文件各抄了一份
+
+### 一、缺口（现读）
+
+`digestOf`（`sha256` 前 16 位十六进制）在四处分身：`agent/evolve/candidates.ts`、`agent/evolve/episode.ts`、`agent/evolve/playbook.ts`、`main/evolve/playbook-store.ts`。它派生的是**身份**：
+
+- `candidates.ts`：`cand_` + digest；
+- `episode.ts`：`ep_` + digest、以及去重键里的 digest；
+- `playbook.ts`：条目的 `digest` 字段；
+- `playbook-store.ts`：`legacyId` 的 `exp_` + digest。
+
+四份今天逐字相同，但长度或算法只要有一处改了，跨模块的 id 就**静默失配**——按 id 查不到，也不报错，只是「查无此条」。
+
+### 二、改法
+
+- 新增 `src/agent/evolve/digest.ts`，只放这一个函数；四处删掉自己的副本、改成 import。
+- 判卷 `tests/evolve-digest.test.ts`：真值（空串 → `e3b0c44298fc1c14`）、16 位小写十六进制、四处在 import 且不许再出现 `function digestOf`、共享实现里保留 `slice(0, 16)`。
+- 行为零变更（同一实现搬出去），既有 id 一个都不变。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | `function digestOf` 从 **4 处 → 1 处**；四个消费面都 import 同一份 |
+| 红→绿 | playbook 抄回自份 ⇒ **1 红**；指纹长度改 12 位 ⇒ **2 红**（真值 + `slice(0, 16)`）；改后 **2/2 绿** |
+| 核心套件（同树实跑） | **604 文件 / 7538 条全绿**，exit 0 |
+| 桌面套件（同树实跑） | **2062 条全绿**，exit 0（含 boundary 绿） |
+| 两端 typecheck | 0 报错 / 0 报错 |
+| docs-check | 受检项全绿（985 张页标题｜新撞 0｜下一个未占用页号 940） |
+
+### 四、边界
+
+- 只搬实现、不改算法与长度；这是结构性收敛，不是行为变更。
+- `uniqueSorted` 这类同名小工具没并入：语义一致但不是 id 身份面，不属本批。
+- 没改协议/通道/权限面，没有新依赖。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 940 页：同一个「尺」修了四处，没人拦第五处
+
+### 一、缺口（现读）
+
+token 与字节这两把尺在本仓被反复手抄，前四轮各修一处、各补一条局部判据：
+
+| 页 | 修的是什么 | 当时的两套写法 |
+|---|---|---|
+| 921 | 时间线抄了 token 尺 | `1250.0k` vs `1.3m` |
+| 924 | 附件行与日志窗各一套字节尺 | `512` vs `512 B`、`1024 KB` vs `1024.0 KB` |
+| 936 | 用量页走 `Intl` 紧凑记法 | `1.4万` vs `14.0k` |
+| 937 | 模型菜单自己一套 k/M | `128k` vs `128.0k` |
+
+四次都是「发现一处、修一处」，**没有一把尺管住第五处**——只要下一个人在组件里写一句 `` `${(n / 1000).toFixed(1)}k` ``，同一个病就再长出来一次。
+
+### 二、改法
+
+- 新增 `tests/format-rulers.test.ts`：扫渲染层全部 `.ts/.tsx`，除 `derived/format-tokens.ts` 与 `derived/format-bytes.ts` 之外，命中以下任一条即红并点名 `文件:行`：
+  - k/m/M 模板拼装（`${…toFixed(1)}k` / `}m` / `}M`）；
+  - 模板里拼出来的字节单位（`` `…${…} KB|MB` ``）；
+  - `Intl` 紧凑记法；
+  - `Math.round(x / 1000)`。
+- 另加一条「两把尺本身还在」（两个实现文件里必须还有 `export function formatTokens` / `formatBytes`），防止允许名单变成空保护。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现状扫描 | 渲染层 176 个源文件里，除两个实现文件外**零命中** |
+| 造红 | 在 `UsageMeter` 里加一行 `` `${(n / 1000).toFixed(1)}k` `` ⇒ **1 红**，点名 `components/UsageMeter.tsx:57 [token-k]`；复原 **2/2 绿** |
+| 核心套件（同树实跑） | **605 文件 / 7540 条全绿**，exit 0 |
+| 桌面套件（同树实跑） | **2062 条全绿**，exit 0（含 boundary 绿） |
+| 根 typecheck | 0 报错 |
+| docs-check | 受检项全绿（986 张页标题｜新撞 0｜下一个未占用页号 941） |
+
+### 四、边界
+
+- 只拦「自己拼刻度」这一种形状；`formatDuration`（`1.2s` / `2m3s`）是时间刻度，不在这把尺的管辖内。
+- 错误文案里的「计划文件不能超过 1 MB」不算（没有插值的模板字面量不匹配）。
+- 允许名单只有两个实现文件；它们自身的存在由第二条判据钉住。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 941 页：闸门加了工具，批准卡不一定跟着长嘴
+
+### 一、缺口（现读）
+
+批准卡的人话是逐轮补的：名单外工具（工具名）、读族六把、补丁抬头。但**没有一把尺把「闸门清单」与「人话清单」锁在一起**——`src/main/tool-gates.ts` 的 `GatedName` 里加一把工具、`describeAsk` 没跟上时，卡片会静默落到兜底「需要你批准 + 参数 JSON」，而所有既有判据都是绿的（它们只逐个钉已写过的分支）。
+
+### 二、改法
+
+新增 `tests/approval-coverage.test.ts`：
+
+1. 从 `tool-gates.ts` 源码取出 `type GatedName = …` 的成员，**先断言取到了 ≥10 条**（正则坏了这条先红，不会空跑成绿）；
+2. 逐个要求 `describeAsk({tool})` 的标题不是「需要你批准」；
+3. 任意两把工具的标题不得相同（卡上要读得出是哪件事）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 闸门工具 | 12 把（write_file / edit_file / apply_patch / run_shell / web_fetch / web_search / diagnose / lsp / render_image / read_file / grep / glob） |
+| 现读 | 12 把**全有人话标题**，且 12 个标题互不相同 |
+| 红→绿 | 拿掉 `grep` 分支 ⇒ **1 红**（点名 `grep`）；把 `render_image` 标题改成「读取文件」⇒ **1 红**（标题重复）；复原 **3/3 绿** |
+| 桌面套件（同树实跑） | **2065 条全绿**，exit 0（含 boundary 绿） |
+| 两端 typecheck | 0 报错 / 0 报错 |
+| docs-check | 受检项全绿（987 张页标题｜新撞 0｜下一个未占用页号 942） |
+
+### 四、边界
+
+- 判据管「有没有自己的那一句、互不相同」，不管措辞好不好——措辞由各轮的行为判据钉。
+- `GatedName` 是类型声明，运行时没有实体，所以这一条读源码；union 改形状时第一条断言先红。
+- 名单外工具（MCP scoped 等）仍走兜底「需要你批准 + 工具名 + JSON」，不在本批范围。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 942 页：文件改动的三个词抄了三份，方案动作的三个词抄了两份
+
+### 一、缺口（现读）
+
+| 词表 | 值 | 原分布 |
+|---|---|---|
+| 文件改动 | 新建 / 修改 / 变更 | `ChangeSummaryCard.CHANGE_LABEL`、`Inspector.CHANGE_WORD`、`PaneDock` 两处内联三元 |
+| 方案动作 | 新建 / 修改 / 删除 | `PlanCard.ACTION_LABEL`、`PaneDock` 内联三元 |
+
+同一套词散在五个消费面。改一处措辞（比如把「新建」统一成「新增」），就有一面开始说旧话；两处内联三元还把「认不出的 kind」默认成「变更」这条规则写了两遍——写法一致纯属巧合。
+
+### 二、改法
+
+- 两套词收进 `derived/change-labels.ts`：`changeLabel`（created / modified / unknown，认不出一律「变更」，不猜）与 `planActionLabel`（create / edit / delete，认不出**原样返回**，不替模型编词）。
+- 五个消费面改读同一份；`review-split.test.ts` 原来钉着 PaneDock 的内联三元，改指 `changeLabel(f.change)`（意图「徽标仍是文字，不只靠颜色」不变）。
+- 判卷 +3：文件改动的四个取值（含认不出）、方案动作的四个取值、五个消费面都不再有自己的表/三元。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | 文件改动词表 **3 份 → 1 份**；方案动作词表 **2 份 → 1 份** |
+| 红→绿 | 认不出的 kind 猜成「新建」⇒ **1 红**；PaneDock 又内联三元 ⇒ **1 红**；改后 **3/3 绿** |
+| 桌面套件（同树实跑） | **2068 条全绿**，exit 0（含 boundary 绿） |
+| 两端 typecheck | 0 报错 / 0 报错 |
+| docs-check | 受检项全绿（988 张页标题｜新撞 0｜下一个未占用页号 943） |
+
+### 四、边界
+
+- 「变更」仍是 `change` 字段缺席时的缺省——不许猜成新建或修改。
+- 方案动作认不出的原样显示（那是模型给的字符串，不替它编）。
+- 两套词同模块是因为只差一档（「变更」vs「删除」），不是同一个枚举。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 943 页：文件窗格里的大小还是裸字节数
+
+### 一、缺口（现读）
+
+真机截图 `14-popout-pane.png`（弹出式文件窗格）里，文件行尾是 `2140` 与 `880`——裸字节数。而同一版里附件行已经写 `2.1 KB`（第 924 页统一过的 `formatBytes`）。同一个文件，在文件树里是 `2140`、在附件里是 `2.1 KB`。
+
+代码就一行：`FilePane.tsx:207` 的 `{e.size}`。
+
+### 二、改法
+
+- 改成 `formatBytes(e.size) ?? "—"`（未知仍不摆；`0` 仍是 `0 B`）。
+- 给第 925 页那把覆盖尺（`tests/format-rulers.test.ts`）加一条 `raw-bytes` 形状：直接渲染小写标识符的 `.size`。第 924 页只统一了「怎么格式化」，没管「有人压根不格式化」。
+- 判据 +1：文件窗格那条测试补一条「走共享字节尺、不摆裸数」。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | `2140` → `2.1 KB`；`880` → `880 B` |
+| 红→绿 | 摆回 `{e.size}` ⇒ 文件窗格判据 **1 红**、覆盖尺 **1 红**（点名 `FilePane.tsx:208 [raw-bytes]`）；复原后 **9/9 + 2/2 绿** |
+| 桌面套件（同树实跑） | **2069 条全绿**，exit 0（含 boundary 绿） |
+| 核心套件（同树实跑） | **605 文件 / 7540 条全绿**，exit 0 |
+| 两端 typecheck | 0 报错 / 0 报错 |
+| docs-check | 受检项全绿（989 张页标题｜新撞 0｜下一个未占用页号 944） |
+
+### 四、边界
+
+- 只改「大小怎么显示」；目录大小仍是未知（不摆），不折成 0。
+- `raw-bytes` 只认「直接渲染小写标识符的 `.size`」：`{STR.logViewer.size}`（文案标签）不匹配，避免误伤。
+- 字节格式化口径没动（仍是 `formatBytes`）。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 944 页：同样四个验证状态，两处两套说法
+
+### 一、缺口（现读）
+
+| 状态 | 编排面 `EVIDENCE_LABEL` | 交付卡 `STATUS_LABEL` |
+|---|---|---|
+| verified | 已验证 | 已验证 |
+| failed | **验证失败** | **验证未过** |
+| stale | **验证过期** | **证据已过期** |
+| absent | 未验证 | 未验证 |
+
+四个状态里两个词的写法不一致：一个是编排页的任务证据药丸，一个是每轮交付卡的徽标。用户在两处看到同一件事的两种说法；改一处措辞，另一处就成旧话。
+
+### 二、改法
+
+- 收进 `derived/verification-labels.ts`，取两处各自最准的词：`failed` 用「验证失败」（标准说法），`stale` 用「证据已过期」（说的是证据旧了，不是验证动作过期）。
+- 交付卡多出的一档「无需验证」（本轮没有文件改动）单独常量——它不是「验证的结果」，不塞进四值表。
+- 认不出的状态原样返回，不替事件流编词。
+- 两处测试的旧口径改指新词（`delivery-summary` 的「验证未过」、`orchestration-controls` 的四值）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | 四个状态**一套词**；两个消费面都 import 同一份 |
+| 红→绿 | 交付卡写回自表 ⇒ **1 红**（消费面判据 + 交付卡判据）；`stale` 写回「验证过期」⇒ **1 红**；复原后三文件合跑 **25/25 绿** |
+| 桌面套件（同树实跑） | **2071 条全绿**，exit 0（含 boundary 绿） |
+| 两端 typecheck | 0 报错 / 0 报错 |
+| docs-check | 受检项全绿（990 张页标题｜新撞 0｜下一个未占用页号 945） |
+
+### 四、边界
+
+- 只统一「同一状态怎么说」；状态判定（`turnDelivery` 的 stale / absent 规则）没动。
+- 「无需验证」是交付卡专有的第五档，不在四值表里。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 945 页：长会话的投影是线性还是平方，没人量过
+
+### 一、缺口（现读）
+
+流投影 `projectStream` 是每条事件都要过的纯函数；长会话一旦在里面出现超线性路径（例如每事件一次 `indexOf`、或按行号回扫找对应写回执），界面会先卡在投影这一步，而不是卡在渲染。此前没有任何一条判据量过它的规模行为——所有流相关判据都只钉「内容对不对」。
+
+### 二、先量后判
+
+本机现读（工作树）：
+
+| 规模 | 事件数 | 行数 | 耗时（最佳） | 每事件 |
+|---|---|---|---|---|
+| 300 轮 | 3 000 | 1 800 | 1.4 ms | 0.47 µs |
+| 900 轮 | 9 000 | 5 400 | 4.8 ms | 0.53 µs |
+| 2 700 轮 | 27 000 | 16 200 | 11.4 ms | 0.42 µs |
+
+线性。于是判据写成**斜率**而不是毫秒：事件 ×9 时耗时不得超过 ×25（平方会是 ×81），外加一条「行数与该看的轮数一致」，防止靠少产出换速度。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 红 | 在 `projectStream` 里插一段 `events.indexOf(e)` 平方扫描 ⇒ **1 红**：规模比 **40.6**（小 1.43ms / 大 58.00ms） |
+| 绿 | 复原后连跑两次 **2/2 绿**，sha256 相同 |
+| 桌面套件（同树实跑） | **2073 条全绿**，exit 0（含 boundary 绿） |
+| 两端 typecheck | 0 报错 / 0 报错 |
+| docs-check | 受检项全绿（991 张页标题｜新撞 0｜下一个未占用页号 946） |
+
+### 四、边界
+
+- 这是「规模斜率」判据，不是帧率判据：只保投影本身不退化，不管 DOM 布局与绘制（那部分靠折叠 + 行级 memo）。
+- 小规模一侧有 0.2ms 下限，防止太快的机器上噪声做分母。
+- 现读数字是本机一次读数，判据只用比例，不把毫秒写死成承诺。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 946 页：「空串 agent_id」这条事件，两把尺判成两种归属
+
+### 一、缺口（现读）
+
+「带非空 `agent_id` 的事件属于 worker 子流」这条判据在六处各写一遍，其中**两处漏了空串判断**：
+
+| 处 | 原判据 | 后果 |
+|---|---|---|
+| `main/usage-ledger.ts` | `typeof id === "string"` | `agent_id: ""` 被当 worker ⇒ 用量少算一条 |
+| `renderer/derived/session.ts` | `typeof id === "string"` | `agent_id: ""` 的事件从主流里消失 |
+| `agent/context.ts`（`hasWorkerAttribution` / `isWorkerCompaction`） | 非空才算 | — |
+| `agent/acceptance-sampler.ts` | 非空才算 | — |
+| `scripts/replay/run-scorecard.ts#splitStreams` | 非空才算 | — |
+
+`acceptance-sampler` 的注释里早就写着：两处不一致时「同一个『agent_id 为空』的事件会被一把尺当 worker、另一把当主会话，两个读数就再也对不上」——话写在那儿，漏的还是漏着。
+
+### 二、改法
+
+- 收进 `src/agent/subflow.ts`：`hasWorkerId(e)`（类型守卫：非空字符串）与 `isWorkerSubflowEvent(e)`（`agent_spawned` 仍是父流事实，不判 worker）。
+- 六处改读同一份：`context.ts` 两处、`acceptance-sampler.ts` 两处、`usage-ledger.ts`、`session.ts`（渲染面转发）、`run-scorecard.ts`。
+- 判卷四条：四类取值矩阵、用量账本计数、主流行出现、五个消费面都不再自己写一条。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | 判据实现 **6 处 → 1 处**；`agent_id: ""` 在账本里算主会话（`toolSteps` **1 → 2**）、在主流行里出现 |
+| 红→绿 | 账本写回漏空串版 ⇒ **1 红**（`expected 1 to be 2`）；渲染面写回自份 ⇒ **2 红**（主流行为 + 哨兵）；改后 **4/4 绿** |
+| 核心套件（同树实跑） | **606 文件 / 7544 条全绿**，exit 0 |
+| 桌面套件（同树实跑） | **2073 条全绿**，exit 0（含 boundary 绿） |
+| 两端 typecheck | 0 报错 / 0 报错 |
+| docs-check | 受检项全绿（992 张页标题｜新撞 0｜下一个未占用页号 947） |
+
+### 四、边界
+
+- 这是**行为修正**不是纯搬家：空串事件从此按主会话计（与另外三处、与仓库既定口径一致）。
+- `agent_spawned` 仍是父流事实：即使带 `agent_id` 也归主会话。
+- 判据只看「有没有非空 id」，不看 worker 的 mode/task 等其它字段。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 947 页：「将克隆到」的名字与落库的名字，各算各的
+
+### 一、缺口（现读）
+
+用「跨文件同体函数」扫描（归一化函数体后比哈希，不比名字）找到两组：
+
+| 函数 | 两份在哪 | 为什么会漂 |
+|---|---|---|
+| `repoNameFromUrl` | `src/main/git-ops.ts`（决定**落库的项目名**）与 `renderer/components/AddProjectMenu.tsx` 的 `repoNamePreview`（「将克隆到：」**预览**） | 改一处就漂：预览说 `bar`、落库说 `bar-2`，或预览空、落库有名。渲染层那份的注释自称「薄镜像」 |
+| `triggerLabel` | `agent/evolve/playbook.ts`（经验条目正文）与 `main/evolve/promotion.ts`（晋升包正文） | 同一条件在两处说两个词 |
+
+### 二、改法
+
+- `repoNameFromUrl` 收到 `src/git-url.ts`（纯字符串解析，不碰网络与文件系统）；`git-ops.ts` 保留同名转出口，既有 import 路径不动；渲染层改读同一份、删掉「薄镜像」。
+- `triggerLabel` 由 `playbook.ts` 导出、`promotion.ts` 改读，删掉自己那份。
+- 判卷：两个函数的取值矩阵（含非法/缺字段）+ 「两处都不再自己写一份」。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | 两组函数各 **2 份 → 1 份**；原 `git-ops.test.ts` 六条断言仍绿 |
+| 红→绿 | 渲染层写回自己的解析 ⇒ **1 红**；`promotion` 写回自己那份（`on-signal` 改说「触发了」）⇒ **1 红**；改后两文件合跑 **9/9 绿** |
+| 核心套件（同树实跑） | **607 文件 / 7548 条全绿**，exit 0 |
+| 桌面套件（同树实跑） | **2073 条全绿**，exit 0（含 boundary 绿） |
+| 两端 typecheck | 0 报错 / 0 报错 |
+| docs-check | 受检项全绿（993 张页标题｜新撞 0｜下一个未占用页号 948） |
+
+### 四、一次抖动（如实记）
+
+桌面套件第一次跑时 `terminal-login-shell.test.ts` 有 1 条红（登录 shell 子进程）；单跑该文件 **3/3 绿**、整套重跑 **2073 全绿**。判为并行负载下的抖动，与本批无关（本批没碰终端）；首跑日志留在证据里，未吞。
+
+### 五、边界
+
+- `repoNameFromUrl` 口径没变（非法一律 `null`，不猜）；`triggerLabel` 只搬位置、五种触发的词一个没动。
+- 终端那条抖动只记录未修：要修得先能稳定复现，否则就是拍脑袋改超时。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 948 页：那条「偶发红」不是抖动，是清理在跟登录 shell 抢目录
+
+### 一、上一轮留的线索
+
+第 947 页记到：桌面套件首跑 `terminal-login-shell.test.ts` 红了一条，单跑与重跑都绿。当时只记了「疑似抖动」，说好先量复现率再动手。
+
+### 二、查因（现读）
+
+先在不加载任何 CPU 负载下把它单跑 **10 次**：10/10 绿；再加 6 个 CPU 占满进程跑 **8 次**：8/8 绿。抖动不是负载问题。回头读首跑日志，红的原因不是断言：
+
+```
+Error: ENOTEMPTY, Directory not empty: /var/folders/…/cairn-term-home-z2A0wO
+ ❯ tests/terminal-login-shell.test.ts#afterEach   ← 清理这一行（行号会随重排漂，按符号写）
+```
+
+那条判据用隔离 HOME 起真登录 shell（`$SHELL -l`）；shell 退出前还在往那个 HOME 写 `.zcompdump` / `.zsh_history`。`afterEach` 里裸 `rmSync(dir, { recursive: true, force: true })` 与写入撞上 ⇒ `ENOTEMPTY`（`force: true` 只忽略 ENOENT，**不忽略 ENOTEMPTY**）⇒ 一条本该绿的判据变红。
+
+**结论：判据本身没坏，坏的是清理。**
+
+### 三、改法
+
+- 新增 `tests/helpers/temp-dir.ts#removeTempDir`：带重试地删（`maxRetries: 10, retryDelay: 50`），真删不掉也咽下——留下的是系统临时目录，OS 迟早会收，比误判一条绿判据要好。
+- `terminal-login-shell.test.ts` 的 `afterEach` 改用它。
+- 判据 +3：子进程还在写时不抛、目录不存在不抛、正常目录**真的会被删掉**（防止退化成「一律不删」）。
+
+### 四、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 探针（写入量 200 / 400 文件） | 裸 `rmSync` **15/15 + 15/15** 抛 ENOTEMPTY；重试+咽下 **0/15 + 0/15** |
+| 该测试单跑 | **15/15** 绿 |
+| 桌面套件整套（同树实跑） | **307 文件 / 2076 条全绿**，exit 0（含 boundary 绿） |
+| 两端 typecheck | 0 报错 / 0 报错 |
+| docs-check | 受检项全绿（994 张页标题｜新撞 0｜下一个未占用页号 949） |
+
+### 五、边界
+
+- 修的是清理，不是判据：登录 shell 那一路到底执行没执行，一个字没松。
+- `removeTempDir` 的保证是「不抛」，不是「一定删干净」——另有一条钉「正常目录真的会被删掉」。
+- 没有批量改另外 74 个 `rmSync` 调用点：那些没有活子进程并发写，改了是无差别噪声。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 949 页：那张自称「唯一事实源」的分区表，页头其实没读它
+
+### 一、缺口（现读）
+
+`settings-nav.tsx#SECTIONS` 的注释写着「顺序固定，**唯一事实源**——导航与命令面板只许从这里取」。但 `SettingsPanel` 的七个页头各写了一遍字面量：
+
+```tsx
+<SettingsPage title="通用">   <SettingsPage title="模型与 Provider">   <SettingsPage title="关于与更新">  …
+```
+
+导航改名（比如把「关于与更新」收敛成「关于」），页头还留旧话——同一屏的左边一栏和右边标题就开始说两种名字。这张表自称唯一源，实际只被导航与命令面板读了。
+
+### 二、改法
+
+- `settings-nav.tsx` 增 `sectionLabel(id)`：从 `SECTIONS` 取那一行，认不出的原样返回（不编名字）。
+- `SettingsPanel` 六个页头改读 `sectionLabel("…")`，页头字面量清零。
+- 判卷 +3：`sectionLabel` 对每个分区都回表里那行、页头不再出现 `SettingsPage title="`（六个分区逐个钉）、分区名两两不同。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | 页头字面量 **7 处 → 0 处**；分区名出处 **2 份 → 1 份** |
+| 红→绿 | 页头写回字面量且改叫「关于」⇒ **1 红**；改后 **3/3 绿** |
+| 桌面套件（同树实跑） | **308 文件 / 2079 条全绿**，exit 0（含 boundary 绿） |
+| 两端 typecheck | 0 报错 / 0 报错 |
+| docs-check | 受检项全绿（995 张页标题｜新撞 0｜下一个未占用页号 950） |
+
+### 四、边界
+
+- 只统一「分区名从哪来」；页头样式、排序、图标一个没动。
+- 子分区标题（「外观」「使用习惯」「当前通道与密钥」…）仍写在各自组件里——它们不是导航分区，不在这把尺的管辖内。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 950 页：那次「设置页少一档」的事故，只写在注释里
+
+### 一、缺口（现读）
+
+权限档有两份词表，互相不锁：
+
+| 词表 | 位置 | 消费面 |
+|---|---|---|
+| `MODE_LABEL` | `renderer/permission-labels.ts` | 芯片、菜单、确认框、命令面板 |
+| `MODE_OPTIONS` | `renderer/components/settings-sections.tsx` | 设置页的五张单选卡 |
+
+`MODE_OPTIONS` 的注释里记着一次真事故：2026-10-24 加第五档 `full-access` 时只补了词表，设置页仍只列四档 ⇒ 用户从设置页永远选不到最松档，而且用芯片切过去之后**四个单选项全不选中**（看起来像"没生效"）。事故修了，但促成它的结构（两份表、没有互锁）还在——下一次加档照样能重演。
+
+### 二、改法
+
+把那条事故变成判据（`tests/permission-modes-coverage.test.ts`）：
+
+1. `MODE_OPTIONS` 的 id 集合必须**恰好等于** `MODE_LABEL` 的键集合（不多不少）；
+2. 每个档位只出现一次；
+3. 每项都有非空标题与说明；
+4. 条数 ≥5（表被删空了不许算通过）。
+
+措辞不锁：芯片要短（「默认」），单选卡要交代后果（「默认 · 逐次审批」）——这是有意的两种语域。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | 两份表各 5 档，id 集合**恰好相等**、无重复 |
+| 红→绿 | 删掉 `full-access`（重演那次事故）⇒ **2 红**（集合不等 + 条数 <5）；同一档位列两遍 ⇒ **2 红**；改后 **3/3 绿** |
+| 桌面套件（同树实跑） | **309 文件 / 2082 条全绿**，exit 0（含 boundary 绿） |
+| 两端 typecheck | 0 报错 / 0 报错 |
+| docs-check | 受检项全绿（996 张页标题｜新撞 0｜下一个未占用页号 951） |
+
+### 四、边界
+
+- 判据只锁「有哪些档、有没有重复、有没有空串」，不锁措辞——两份表语域不同是有意的。
+- 全集从 `MODE_LABEL` 取：加档时必须先动词表，设置页不跟就当场红（这正是 10-24 那次走反的方向）。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 951 页：那次「2140」，只有人眼看见过
+
+### 一、缺口（现读）
+
+第 943 页把文件窗格从裸字节数（`2140`、`880`）改成了 `2.1 KB` / `880 B`。但发现它靠的是**看截图**：机器侧只有一条 `raw-bytes` 的源码形状判据（认 `{x.size}` 这种写法），换个变量名、或者用别的方式拼出裸数字，就绕过去了。
+
+画廊本来就是「渲染出来再看一眼」的地方——把这条判据放到那里，才是真的「渲染后的文本必须带单位」。
+
+### 二、改法
+
+`ui-gallery.cjs` 在弹窗文件窗格截图之后加一条自查：读 `.fp-size` 的实际文本，每一条都必须匹配 `B / KB / MB`；空集或任何裸数字当场抛错。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读（画廊实测） | `["2.1 KB","880 B"]` |
+| 红 | 退回 `{e.size}` → 重建 dist → 跑画廊：`FAIL Error: 文件行大小没带单位（要 B/KB/MB）：["2140","880"]`，**exit 1** |
+| 绿 | 复原（sha256 逐字一致）→ 重建 → 再跑：`["2.1 KB","880 B"]`，**exit 0** |
+| `gallery-guard` / `file-pane-improvements` | **10/10 绿** |
+| 桌面套件（同树实跑） | **309 文件 / 2082 条全绿**，exit 0（含 boundary 绿） |
+| 桌面 typecheck | 0 报错 |
+| docs-check | 受检项全绿（997 张页标题｜新撞 0｜下一个未占用页号 952） |
+
+### 四、一次自己的操作失误（如实记）
+
+造红那步我在 `{}` 里 `cd apps/desktop` 之后仍用仓库根相对路径去复原，`cp` 失败、文件停在造红版；发现后按 sha256 复核并复原（两处哈希相同），再重建、再跑画廊确认绿。教训：脚本里改工作目录后，路径回绝对或先 `cd` 回根。
+
+### 五、边界
+
+- 只查渲染后的文本（弹窗文件窗格那一路）；目前没有第二处摆大小。
+- 正则只认 `B / KB / MB`：将来支持 `GB` 要同时改这里与 `formatBytes`。
+- 画廊吃 `dist`：改了渲染层不重建就拍不到变化（造红/复原都走「先 build 再跑」）。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 952 页：同一个「在 Finder 中显示」，一处报错、一处不吭声
+
+### 一、缺口（现读）
+
+`revealInFinder` 有两处调用点，失败时的态度不一样：
+
+| 调用点 | 失败时 |
+|---|---|
+| 项目列表 `state/projects.ts#handleRevealProject` | `toast.error(r.error ?? "无法在 Finder 中显示")`，抛错也 toast |
+| 产物行 `state/workbench.ts#handleOpenArtifact` | `void …revealInFinder(abs)`——**结果直接丢掉** |
+
+上一轮的产物常常已经被删、或者不在当前工作区：用户点「在 Finder 中显示」没有任何反应，只能猜是不是按钮坏了。这类「点了没反应」比一句红字更费解。
+
+### 二、改法
+
+产物行改成与项目列表同口径：`revealInFinder(abs).then(ok ⇒ 失败 toast, err ⇒ toast)`；HTML/SVG 预览那支照旧（它有自己的错误面）。判据钉两件事：产物行接了结果且两种失败都 toast；不许退回 `else void window.agent.revealInFinder(abs);` 的写法。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 红 | 退回丢结果的写法 ⇒ **1 红** |
+| 绿 | 改后 **2/2 绿**（另一条钉项目列表那处本来就这样，防止两边又走散） |
+| 桌面套件（同树实跑） | **310 文件 / 2084 条全绿**，exit 0（含 boundary 绿） |
+| 桌面 typecheck | 0 报错 |
+| docs-check | 受检项全绿（998 张页标题｜新撞 0｜下一个未占用页号 953） |
+
+### 四、边界
+
+- 只补「失败要说出来」；HTML/SVG 预览那支没动。
+- 判据是接线级的（源码形状）：要真跑起来验，得在 Electron 里点一次产物行——那属于画廊/交互冒烟的范围，不在本批。
+- 没有全仓批量改另外 80 多处 `void window.agent.*`：多数是 `.then(...)` 已接结果，或本来就是一发即忘的遥测（`reportViewing`）。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 953 页：那张写着「现读」的表，读数停在 10-27
+
+### 一、缺口（现读）
+
+`docs/REPOSITORY-STATUS.md` 开头写着「本页只写现态」，第四节那张「需要优化（先测后改）」表里全是「现读」口吻的数字。按当前工作树重量：
+
+| 读数 | 10-27 写的 | 2026-11-01 实测 | 差 |
+|---|---|---|---|
+| `agent-runner.ts` 行数 | 1868 | **2023** | +155 |
+| `cli.ts` 行数 | 1669 | **1869** | +200 |
+| `main/index.ts` 行数 | 1434 | **2104** | **+670（+47%）** |
+| `App` chunk | 268.40 kB（gzip 83.82） | **305.89 kB（gzip 95.52）** | +37.5 kB / gzip +11.7 kB |
+
+「无明确冲突/热路径证据前不拆」这条结论建立在 1434 行这个读数上；它现在是 2104 行。结论可以不变，但**依据必须换新数**，否则下一个人拿着过期读数做决定。
+
+### 二、改法
+
+- 三行按实测改数，逐行标 `2026-11-01 复核`；表头上方加一句：本轮只重量了能一条命令量准的数字，**延迟类（首开/复开 ms、流式帧）没有重量**，依赖它们的结论一条没动。
+- 判卷 `tests/status-readings-dated.test.ts`：每个标「现读」的表格行必须带 `YYYY-MM-DD`；且本页至少留一处 `2026-11-01 复核` 标记（别的会话接手时知道读数的新旧）。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 红 | 去掉「证据占比」那行的日期 ⇒ **1 红**（点名该行）；复原 **2/2 绿** |
+| 核心套件（同树实跑） | **608 文件 / 7550 条全绿**，exit 0 |
+| 根 typecheck | 0 报错 |
+| docs-check | 受检项全绿（999 张页标题｜新撞 0｜下一个未占用页号 954） |
+
+### 四、边界
+
+- 只重量「能一条命令量准」的数字（行数 / tracked 占比 / chunk raw+gzip）；延迟与帧率没重量，文中已标注。
+- 行数涨幅来自工作树里未提交的批次，不是已发布基线——写进表里，免得被当成回归。
+- 判据只管「标了『现读』就得带日期」，不校验数字本身（数字随代码动，钉死会天天红）。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 954 页：「关于与更新」下面再顶一行「关于与更新」
+
+### 一、缺口（现读）
+
+两页里，页头与第一个段标题写着同一个词：
+
+```tsx
+<SettingsPage title={sectionLabel("about")}>            // 页头：关于与更新
+  <AboutSection> → <SettingsSection title="关于与更新">  // 段标题：又一遍
+```
+
+渲染出来是「关于与更新」大字下面再顶一行同名小标题，读起来像重复渲染。其余七页没这毛病（「通用」下面是「外观」「使用习惯」）。「快捷键」页同样中招。
+
+### 二、改法
+
+- 「关于与更新」→ **版本与更新**；「快捷键」→ **按键一览**（两段的实际内容就是版本/更新/许可证 与 按键表，名字也对得更准）。
+- 判卷加一条通用的：`settings-sections.tsx` 里任何 `<SettingsSection title="…">` 都不得等于 `SECTIONS` 里的分区名；取不到 ≥8 个标题就先红（防正则坏掉后空跑成绿）。
+- `settings-sections.test.tsx` 里关于段的标题断言改指新名字。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | 与分区同名的段标题 **2 → 0** |
+| 红→绿 | 两个同名一起改回 ⇒ **1 红**（点名 `关于与更新 \| 快捷键`）；改后 **4/4 绿**；与 `settings-sections.test.tsx` 合跑 **37/37 绿** |
+| 桌面套件（同树实跑） | **310 文件 / 2085 条全绿**，exit 0（含 boundary 绿） |
+| 桌面 typecheck | 0 报错 |
+| docs-check | 受检项全绿（1000 张页标题｜新撞 0｜下一个未占用页号 955） |
+
+### 四、边界
+
+- 只改这两个与分区同名的段标题；其余段标题一个没动。
+- 判据盯「段标题 == 任何分区名」，不是「段标题必须独特」——跨分区重名（两个页都有「安全」）不算问题。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 955 页：启动 153 ms 那个读数，是五天前的
+
+### 一、缺口（现读）
+
+上一轮把「能一条命令量准」的数字都换了新，唯独延迟类读数（启动 / 首开 / 帧时间）明说「本轮没有重量」。那些数字停在 10-27：400 轮会话启动 153.3 ms、首开 475.3 ms、帧 p50 26.2 / p95 31.9 / max 33.1、DOM 39,585 节点。
+
+本轮用**同一支** `performance-smoke.cjs`（400 轮 / 40 帧样本）复跑两遍：
+
+| 跑 | 启动 ms | 首开 ms | 帧 p50 | 帧 p95 | 帧 max | DOM 节点 |
+|---|---|---|---|---|---|---|
+| run1 | 310.6 | 503.0 | 30.8 | 36.1 | 36.2 | 42,807 |
+| run2 | 270.1 | 656.9 | 34.8 | 44.8 | 47.8 | 42,807 |
+| 10-27 | 153.3 | 475.3 | 26.2 | 31.9 | 33.1 | 39,585 |
+
+DOM 两跑一致 ⇒ 确定性读数 **+8.1%**；时间类 +20~40%，启动约 **2×**。三档预算（p95 200 / max 500 / 启动 1500）两跑全过，所以这**不是**红的，但「启动翻倍」是个该盯的趋势，不能继续拿五天前的数字当现态。
+
+### 二、改法
+
+- `docs/REPOSITORY-STATUS.md` 那条改成本轮两跑区间 + 与 10-27 的对照 + 「预算全过但启动要盯」。
+- 复跑脚本落成一条命令（跑 N 次并打印对照行），两跑原始 JSON 都留在取证目录里。
+- 结论只写区间不写单点：两跑之间本身有 ±15% 抖动，单点会被误读成"涨了"或"降了"。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | 启动 270.1 / 310.6 ms、首开 503.0 / 656.9 ms、p50 30.8 / 34.8、p95 36.1 / 44.8、DOM 42,807 |
+| 预算 | p95 ≤ 200 / max ≤ 500 / 启动 ≤ 1500 —— 两跑全过（脚本自带，超出即非零退出） |
+| docs-check | 受检项全绿（1001 张页标题｜新撞 0｜下一个未占用页号 956） |
+
+### 四、边界
+
+- 合成 AgentApi + 合成增量：量的是 renderer 生命周期与 DOM，不是模型吞吐或计费。
+- 两跑同机、期间还有别的会话在跑；用于趋势对照，不当作认证。
+- 4000 行 diff 挂载（191.1 ms）与 FilePane 500 项 smoke 本轮没重量，doc 里保留原读数并标明。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 956 页：上一页那个「启动约 2×」，是拿两跑对单点
+
+### 一、为什么回头查
+
+第 955 页据**两跑**（启动 310.6 / 270.1 ms）写了「启动约 2×」，基线是 10-27 的**单点** 153.3 ms。这个结论在页里就带着问号：两跑之间自己就差了 40 ms。于是补跑到五跑。
+
+### 二、五跑读数（同一支脚本、同一台机）
+
+| 跑 | 启动 ms | 首开 ms | 帧 p50 | 帧 p95 | 帧 max | DOM 节点 |
+|---|---|---|---|---|---|---|
+| run1 | 310.6 | 503.0 | 30.8 | 36.1 | 36.2 | 42,807 |
+| run2 | 270.1 | 656.9 | 34.8 | 44.8 | 47.8 | 42,807 |
+| run3 | 311.8 | 551.9 | 28.9 | 38.2 | 38.7 | 42,807 |
+| run4 | 190.1 | 513.2 | 30.3 | 39.2 | 43.1 | 42,807 |
+| run5 | 187.7 | 598.5 | 29.6 | 39.2 | 43.9 | 42,807 |
+
+启动 **187.7–311.8 ms、中位 270.1、离散度 1.66×**；首开 503.0–656.9（中位 551.9）；帧 p95 36.1–44.8（中位 39.2）。DOM 五跑全是 **42,807**。
+
+### 三、修正
+
+- **「启动约 2×」不成立**：五跑的离散度已经接近 2×，拿两跑对 10-27 的单点，量的是抖动不是趋势。能说的只有「比 10-27 单点高」。
+- **确定性读数不变**：DOM 39,585 → 42,807 = **+8.1%**，五跑一致，这条可以断言。
+- `docs/REPOSITORY-STATUS.md` 那一行已按五跑改写；判据加了一条：性能行必须写**小数区间 + 中位**（正则两侧都要小数——`2026-11-01` 这种日期不算区间，这是收紧前踩到的坑）。
+
+### 四、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 红 | 性能行写回单点 ⇒ **1 红**（`时间类读数必须是区间`）；复原 **3/3 绿**，sha256 相同 |
+| 五跑预算 | p95 ≤ 200 / max ≤ 500 / 启动 ≤ 1500 —— **五跑全过** |
+| docs-check | 受检项全绿（1002 张页标题｜新撞 0｜下一个未占用页号 957） |
+
+### 五、边界
+
+- 合成 AgentApi + 合成增量：量的是 renderer 生命周期与 DOM，不是模型吞吐或计费。
+- 五跑同机、期间还有别的会话在跑；用于趋势对照，不当作认证。
+- 「离散度 1.66×」本身就是这轮最硬的结论：这台机上单点性能读数不可用于判定 ±50% 以内的变化。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 957 页：把「单点不是读数」变成一支能跑的工具
+
+### 一、缺口（现读）
+
+第 956 页的结论是：这台机上单跑启动 188–312 ms，**离散度 1.66×**——单点对单点的性能结论不算结论。但这条教训只写进了台账和状态文档：下次要量，人还是得手跑五遍、自己算中位、自己盯 DOM 是否一致。**规矩没有工具，就只是提醒。**
+
+### 二、改法
+
+新增 `scripts/perf-summarize.ts`（`pnpm perf-summary <run1.json> …`）：
+
+- 每项指标输出**区间 / 中位 / 离散度**（中位：奇数取中间，偶数取中间两数平均）；
+- **DOM 一致性**：确定性读数，N 跑必须完全相同，否则把所有取值列出来；
+- **预算逐跑判定**：p95 ≤ 200 / max ≤ 500 / 启动 ≤ 1500，超帽点名「哪一趟、哪一项、超到多少」；
+- 控制台错误按跑累加；**空报告数组直接抛**（不许把「没跑」写成「全绿」）。
+
+配套：`recheck.sh` 改成默认 **5 跑**并调用汇总器（少于 2 跑直接拒跑），原始报告留在临时目录里。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 工具实跑（五跑，第 956 页那批 JSON） | 启动 187.7–311.8（中位 270.1，离散度 1.66×）｜首开 503.0–656.9｜p95 36.1–44.8｜DOM 42,807（各跑一致）｜预算全过 |
+| 工具实跑（新跑两趟，验证 `recheck.sh` 端到端） | **启动 188.9–363.8（中位 276.3，离散度 1.93×）**｜DOM 42,807｜预算全过｜exit 0 |
+| `perf-summarize.test.ts` | **5/5 绿**（中位奇偶、DOM 不一致点名、预算逐跑、错误累加、空数组抛） |
+| docs-check | 受检项全绿（1003 张页标题｜新撞 0｜下一个未占用页号 958） |
+| `pnpm perf-summary` | 已接进根 `package.json` |
+
+### 四、边界
+
+- 只做汇总，不改 `performance-smoke` 的取数口径（合成 AgentApi、400 轮、40 帧样本）。
+- 「离散度」用 max/min：对这批读数够用；它不衡量分布形状，别当方差读。
+- DOM 一致性只在同一份脚本、同一轮次下有意义；跨版本对比仍要看区间。
+- 新跑两趟又见 1.93× 离散度——**再次印证单跑不可用**，不是工具不稳。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 958 页：打开了 612 毫秒，然后没人管
+
+### 一、缺口（现读）
+
+`performance-smoke.cjs` 每次都把「打开会话」的耗时算出来写进报告：400 轮会话首开 503–657 ms（第 956/957 页五跑）。但 `budgets` 里只有三档——帧 p95 200、帧 max 500、启动 1500——**没有 `openMs`**，`overBudget` 也不看它，退出码自然也不看。
+
+也就是说：谁把打开会话弄慢三倍，这支冒烟照样 exit 0、照样说「预算全过」。量过 ≠ 判过。
+
+### 二、改法
+
+- `budgets` 加 `openMs`（默认 1500 ms，`CAIRN_PERF_OPEN_BUDGET_MS` 可覆盖，CI 慢机抬帽而不是删闸）；
+- 超帽进 `overBudget` ⇒ 非零退出，报「打开会话 X ms > 帽 Y ms」；
+- `perf-summarize.ts` 的逐跑预算判定同步加这一档；**旧报告没有 `openMs` 字段时按默认 1500 判**——字段缺席不许变成不判。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 造红（真跑，帽压到 1 ms） | `[performance-smoke] 超预算：打开会话 637.8ms > 帽 1ms`，**exit 1** |
+| 复原（默认帽，真跑） | **exit 0**；`budgets.openMs = 1500`；`openMs = 612.2` |
+| `perf-summarize.test.ts` | **6/6 绿**（新增：开帽超限点名 run2；旧报告缺字段仍按默认判） |
+| docs-check | 受检项全绿（1004 张页标题｜新撞 0｜下一个未占用页号 959） |
+
+### 四、边界
+
+- 帽取 1500 ms（约实测上限 657 ms 的 2.3 倍）：拦的是**数量级**回归，不是「慢 10%」——本机单跑离散度 1.66×，再紧就天天红。
+- 只加判定，不改 `openMs` 的取数口径（合成 AgentApi、400 轮、40 帧样本）。
+- 造红/复原都是**真跑**（`CAIRN_PERF_OPEN_BUDGET_MS=1` vs 默认），不是只改一行断言。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 959 页：一支冒烟找了三周的「edit_file」，早就改叫「编辑」了
+
+### 一、坏掉的那支
+
+`diff-render-latency.cjs` 用 `textContent.includes('edit_file')` 找要点的工具行。产品自「不暴露实现名」之后，行上只写中文动词（`edit_file` → 「编辑」，词表在 `derived/tool-verbs.ts`），于是它**永远等不到那一行**：
+
+```
+[diff-render-latency] 崩了: Error: 等待超时：edit tool row   → EXIT=1
+```
+
+也就是说状态文档里「4000 行 diff 挂载 191.1 ms」这个读数，在改词之后**已经复现不出来**——而没人回头量过。
+
+修法：按动词选行（「编辑」），不按实现名。**先试过给工具行加 `data-tool={r.tool}` 当钩子——被 `stream-rework.test.tsx` 当场拦下**（`expect(html).not.toContain("run_shell")`：渲染出的 HTML 里不许出现实现名），钩子已撤回。产品不变量比我的方便重要。
+
+### 二、两支都「量过 ≠ 判过」
+
+| 脚本 | 改前 | 改后 |
+|---|---|---|
+| `diff-render-latency.cjs` | `ok` 只看结构（20 hunks / 4000 行 / 已截断 / 无控制台错误），`elapsedMs` 只打印 | `CAIRN_DIFF_BUDGET_MS`（默认 2000 ms），超帽 FAIL + exit 1 |
+| `radix-open-latency.cjs` | 无条件 `app.exit(0)`——首开 3 秒也绿 | 首开 500 ms / 复开 p95 200 ms，超帽 exit 1 |
+
+帽取实测的 10 倍上下：拦数量级回归，不拦 ±10%（本机单跑离散度 1.66×，第 956 页）。
+
+### 三、判卷与读数（都是真跑）
+
+| 跑 | 读数 |
+|---|---|
+| diff 造红（帽 1 ms） | `超预算：挂载 192.6ms > 帽 1ms`，**exit 1** |
+| radix 造红（首开帽 1 ms） | `超预算：首开 26.2ms > 帽 1ms`，**exit 1** |
+| diff 复原（默认帽，三跑） | **PASS 185.4 / 193.6 / 203.3 ms**，20 hunks / 4000 行 / 24,621–24,625 节点，exit 0 |
+| radix 复原（默认帽，两跑） | 首开 11.9 / 26.8 ms，复开 p95 13.9 / 14.3 ms，exit 0 |
+| 桌面套件（同树实跑） | **2085 条全绿**，exit 0（含 boundary 绿） |
+| docs-check | 受检项全绿（1005 张页标题｜新撞 0｜下一个未占用页号 960） |
+
+### 四、边界
+
+- 只加「时间超帽即失败」，不改两支冒烟的取数口径与夹具。
+- diff 的 4000 行来自 `--cairn-large-diff-fixture`（20 hunks × 200 行），量的是 renderer 挂载，不是真实仓库 diff。
+- 三跑的 185–203 ms 与 10-27 的 191.1 ms 同量级——**不是**回归，是从来没被判定过。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 960 页：一支冒烟能坏，其它十九支呢
+
+### 一、为什么普查
+
+第 959 页发现 `diff-render-latency.cjs` 早就坏了（它按实现名找行，产品改说中文动词）。一支能坏，其它支同不同病？于是把 **20 支已跟踪**的 Electron 冒烟逐个真跑（每支 `timeout 300`）。
+
+### 二、普查结果（现读）
+
+| 结果 | 支数 | 名字 |
+|---|---|---|
+| exit 0 | **17** | cancel-resume / cross-workspace-restore / diff-render-latency / error-boundary / interaction / layout / pane-tabs / performance / plan-mode / radix-open-latency / route / session-continuity / session-preview / session-reference / steer / ui-gallery / workspace-owner |
+| exit 1 | **2** | `state-smoke`（7 项里 1 项 FAIL）、`terminal-resize-smoke`（入口就死） |
+| exit 2 | **1** | `settings-process-smoke`（渲染层脚本执行抛错） |
+
+### 三、本轮修的那支
+
+`terminal-resize-smoke` 先找 `[aria-label="添加面板"]` 再点「终端」。那枚按钮只在**已经有窗格的 dock 里**存在；首页一个窗格都没开时它不存在——冒烟在「还没开窗格就找添加按钮」的死结上 exit 1。
+
+改走键盘（`Ctrl+\``，pane-shortcuts 表里 terminal 那一格）：
+
+| 阶段 | 读数 |
+|---|---|
+| 修前 | `FAIL 渲染面就绪（存在「添加面板」入口） {"addBtn":false}`，exit 1 |
+| 第一次修（引号写坏） | `SyntaxError: missing ) after argument list`——反引号把模板字符串截断了，exit 124 |
+| 修后 | **5/7 PASS**：窗格与 xterm 挂上（344×765）、启动即发行列（44×54）、变窄列数跟着降（44→36）、正整数行列、无控制台错误 |
+
+仍红的两项（记录、未修）：`容器变矮 ⇒ 行数变少`（变矮后 rows 仍 56）、`容器放大 ⇒ 行列跟着回去`（放大后 cols 仍 36）。两项的前置读数都是 `hostNarrow.width = 2`——冒烟把容器宽度压到了 2px，终端在那宽度下已经退化。是「布局加了最小宽度、几何假设过期」还是「终端没跟着高度重算」，本轮没定论。
+
+### 四、另外两支红的线索（记录、未修）
+
+- `state-smoke`：「请求未完成时操作条保持可见」FAIL。CSS 里确实有 `.row-actions[data-saving="true"] { opacity: 1; }`，`Stream.tsx` 也把 `data-saving` 接到 `annotationPending(anchor)`——是 pending 没置上，还是取样式时正处在过渡中，要单独量。
+- `settings-process-smoke`：`Script failed to execute…` + 渲染层 console 报错，要读 `.out` 详情。
+
+### 五、边界
+
+| 面 | 读数 |
+|---|---|
+| docs-check | 受检项全绿（1006 张页标题｜新撞 0｜下一个未占用页号 961） |
+
+- 只跑**已跟踪**的 20 支（另有 39 支未跟踪的 `.cjs` 是别的工作树草稿，不碰）。
+- 修的是**入口**，不是断言：仍红的两项一条没放宽。
+- 普查每支都真开 Electron、真加载当轮 `dist`。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+## 2026-11-01 · 第 961 页：那条「保存中常显」，specificity 低了一级
+
+### 一、线索
+
+第 960 页的冒烟普查里 `state-smoke` 红了一条：「请求未完成时操作条保持可见，移开鼠标也能看到保存状态」。本轮先用探针把现场量出来（不改产品、只看）：
+
+```
+PROBE {"btn":true,"saving":"true","opacity":"0","transition":"0.06s"}
+```
+
+`data-saving="true"` **已经在元素上了**，`opacity` 却是 0——说明「保存中常显」那条 CSS 没命中。**这不是组件没接线，是 CSS 打不过。**
+
+### 二、根因
+
+| 规则 | 文件 | specificity |
+|---|---|---|
+| `.row-actions[data-saving="true"] { opacity: 1 }` | `styles.css` | (0,2,0) |
+| `body[data-dsh-claude-style] .row .row-actions[data-cds="MessageActions"] { opacity: 0 }` | `cds-components.css` | **(0,4,1)** |
+
+claude 风格那组选择器更具体、又在后加载——所以「保存中常显」**从来没生效过**：点完赞/踩、请求还在飞时把鼠标移开，操作条照样淡出，用户看不到「保存中」。这条只在 claude 风格下坏（默认风格里 `styles.css` 那条能生效），所以之前的截图与巡查看不出来。
+
+### 三、改法
+
+在 `cds-components.css` 补一条继承同族前缀、但多带 `[data-saving="true"]` 的规则（(0,5,1)），时序不动：
+
+```css
+body[data-dsh-claude-style] .row .row-actions[data-cds="MessageActions"][data-saving="true"] {
+  opacity: 1;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+```
+
+### 四、判卷与读数（都是真跑）
+
+| 面 | 改前 | 改后 |
+|---|---|---|
+| 探针 `opacity`（saving=true） | **0** | **1** |
+| `state-smoke` | 1 FAIL | **11 PASS / 0 FAIL，exit 0** |
+| 桌面套件 | — | **310 文件 / 2085 条全绿**，exit 0（含 boundary 绿） |
+| docs-check | 全绿 | 受检项全绿（1007 张页标题｜新撞 0｜下一个未占用页号 962） |
+
+### 五、边界
+
+- 只补「保存中」这一档的可见性；淡入淡出时序（`--dur-fast` / `--dur-snap`）一个没动。
+- 条件选择器写在 `cds-components.css` 而不是 `styles.css`：必须继承同一组 (0,4,1) 前缀才压得过那条 `opacity: 0`。
+- 只影响 claude 风格；默认风格下 `styles.css` 那条本来就生效——这也是它一直没被看见的原因。
+- 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
+
+## 2026-11-01 · 第 962 页：受邀 macOS 内测包与两轮真实 hy3 验收
+
+用户决定暂不做 Apple Developer ID / 公证；本批在共享工作树修复，不混合提交其他批次。HEAD 仍为 `be9c0be5b6545d41ebdb891fc676b1e9a912f309`，以下全部为工作树或本机构建证据。
+
+- 共享子流判据精确纳入派生层允许依赖，并递归检查纯度；六项临时仓用例先红后绿，没有豁免传递依赖。
+- 恢复原有品牌/字体资源；设置冒烟修复改名后的选择器；终端冒烟保持网格断言，补测窄窗自动收起与重新展开。
+- 安装冒烟复用 mock-keychain 与严格成功凭据、强制超时，并在本机用 `diskutil eject` 正常清理挂载；不将其当作真实钥匙串认证。
+- 构建来源写入基线 commit 与 dirty 状态，兼容旧包。独立审查指出 staging 污染 dirty 读数；已以真实临时仓 RED→GREEN 修正捕获时序。
+- 最终 core：`pnpm exec vitest run --config tests/vitest.config.ts --maxWorkers=1`，**612 文件 / 7573 条全绿，exit 0，333.98 秒**。
+- Desktop：`pnpm --filter cairn-desktop exec vitest run --config vitest.config.ts --maxWorkers=1`，**310 文件 / 2085 条全绿，exit 0**。根 typecheck 0；docs / desktop-boundary / renderer-layer 全绿。
+- 真实 Electron：设置 **16/16**、终端 **9/9**。打包态和 DMG 复制到源码树外启动通过；单应用 quarantine 属性演练通过，未改系统安全设置。
+- 真实本地 hy3：首次修复 30.35 秒、独立复验 **3/3**；同一会话续跑添加功能 17.36 秒、独立复验 **7/7**；两轮 agent 均 exit 0，测试文件字节不变。不当作真实任务成功率基准，美元成本未知。
+- 产物 `apps/desktop/release-trial-20261101/`：macOS arm64、0.2.0、`sourceDirty:true`；随包附安装说明与校验和。DMG SHA-256 `e01af0120ef1fc27a52fb61c74e6a60c1e666f4cb815e8a14c9df34138065cde`。
+
+取料：`outputs/macos-trial-stability-2026-11-01/REPORT.md`、`core-final.log`、`desktop.log`、`provenance-final.log`、`quarantine-check.json`、`real-agent.json`、`real-resume.json`、`scoped.patch`。首轮 core 两项失败及打包超时也保留，未用定向绿冒充全量绿。
+
+未验：另一台 Mac、真实钥匙串首启/升级、桌面真实模型交互、Intel/Windows/Linux、当前提交 HEAD 认证与全表变异认证；未发布，产品修复未提交，验证证据单独入库。内测允许单应用解除隔离，详见 `docs/macos-trial.md`。
+
+## 2026-11-01 · 第 963 页：当前项目全部改动上传
+
+业主明确授权上传当前项目的全部改动。保留现有分支和远端历史，不强推、不直接合并 main；安装包与本机运行状态沿用 ignore 规则，不放进源码提交。
+
+上传前发现旧台账含一处真实本地端点凭据，当前文件已将该值替换为脱敏占位符，除此不改历史叙述。该值在既有远端旧提交中已经存在，本批不重写历史；当前脱敏不等于历史已清除，凭据需由所有者更换。
+
+代码验证依据为第 962 页的最终工作树读数；本批在提交前另核类型、文档、边界、依赖分层及暂存内容，提交后检查远端分支落点。远端 CI 与本机验证分开报告。

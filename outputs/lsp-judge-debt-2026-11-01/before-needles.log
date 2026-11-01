@@ -1,0 +1,6 @@
+❌ lsp-diag-severity — src/tools/lsp.ts — 针脚已不在源文件里（变异必然不生效——多半是被锚定的实现搬走了，改指它）："diags.filter((d) => d.severity === DiagnosticSeverity.Error)" ｜谁搬走的：e24bcd81 M2a: 工具集补全——grep/glob/read 整形/edit_file/LSP 六操作/诊断回流 + tools-check（test 121→149）
+❌ lsp-diag-cap — src/tools/lsp.ts — 针脚已不在源文件里（变异必然不生效——多半是被锚定的实现搬走了，改指它）：".slice(0, MAX_DIAGNOSTICS)" ｜谁搬走的：e24bcd81 M2a: 工具集补全——grep/glob/read 整形/edit_file/LSP 六操作/诊断回流 + tools-check（test 121→149）
+❌ plugin-lsp-diagnostics-switch-ignored — src/tools/lsp.ts — 针脚已不在源文件里（变异必然不生效——多半是被锚定的实现搬走了，改指它）："    if (cfg.servers[picked]?.diagnosticsEnabled === false) r" ｜谁搬走的：1a86cd2c 写后静态诊断「没验成」不再伪装成干净：语言服务器坏了要说一句话
+ℹ️  指针接线（**线索，不进门禁**：静态代理按全表量会误喊，多数判卷从上游入口打进来；它只在「变异存活」那条红后面给方向）：接上 345／疑空 982／判不了 301（疑空＝needle 所在函数名在那条用例体里一次都没出现；判不了的四类：无包围函数 277、抽不出针脚或针脚不在源文件 14、标题不在这份判卷 10、两面任一读不到 0）｜样本 user-agent-duplicate-name-silent-override、unknown-role-error-hides-user-form、spawn-receipt-hides-in-flight-and-cap、supervise-unknown-key-silently-ignored、supervise-budget-ownership-note-lost、supervise-forbidden-type-error-swallowed、semantic-admission-never-reports、session-budget-table-fallback-dropped｜出口数可数 1337 条，其中针脚长在「≥2 条 return」的函数里 738 条（存活时先问判卷喂到了第几支，别撤锚点：规则 329）
+针脚体检：1628 条 —— 阻断 21，待复认 1，未覆盖 1，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 18，killer 指针失效 0（其中 HEAD 侧 0）
+[mutate-needles-check] 21 条锚点针脚/改法失效 ❌

@@ -15,6 +15,12 @@ export type StreamRow =
       steering?: true }
   | { kind: "assistant"; text: string; live?: boolean; thinking?: string; ts?: number; seq: number; eventId: number; round: number } // live=true = delta 流式中尚未被终稿取代的未结桶行；thinking = 同一 callId 下累计的思考正文
   | { kind: "tool"; tool: string; summary: string; path?: string; args?: string; output?: string; outputTruncated?: boolean; pending?: boolean; interrupted?: boolean; ok?: boolean; ts?: number; seq: number
+      /** 命令行原文（args.command 是字符串时才有）：展开区据此单独排一行 `$ 命令`，
+       *  不必让人去 JSON 里捞。摘要会被别的字段占位（path/file…），所以显式取，不靠摘要猜。 */
+      command?: string
+      /** D7 覆盖前快照（ToolResultEvent.snapshotId）：行内 diff 必须带它才能显示真实「修改」，
+       *  否则 changeDiff 把修改文件当成全新增。 */
+      snapshotId?: string
       /** tool_result 收口的到达时间（P3-1 折叠行耗时 = then − ts；拿不到不显）。 */
       then?: number
       /** 产物引用（本次调用交付给用户的东西）。从前聊天里只有文字回执 ⇒ 用户看不到 agent
@@ -24,10 +30,74 @@ export type StreamRow =
 
 type ToolRow = Extract<StreamRow, { kind: "tool" }>;
 
-export const summarize = (args: Record<string, unknown>): string => {
+const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() !== "" ? v : undefined);
+const idsOf = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x !== "") : [];
+
+/** 按工具挑**主语**（第 917 页）：编排族与 clarify 的参数里没有一个字段在通用取值链上
+ *  （`spawn_agent` 是 task、`send_agent` 是 message、`wait/cancel_agents` 是 agent_ids、`list_agents` 空参数），
+ *  于是整行落到 JSON 兜底：用户看到的是 `{"task":"…","mode":"write"}` 或 `{}`，而不是「派了什么活」。
+ *  这里只做「挑一格/数个数」，不编内容；挑不到返回 undefined，回通用链。 */
+function ownSubject(tool: string, args: Record<string, unknown>): string | undefined {
+  if (tool === "spawn_agent") return str(args.task)?.slice(0, 80);
+  if (tool === "send_agent") return str(args.message);
+  if (tool === "resume_agent" || tool === "close_agent") return str(args.thread_id);
+  if (tool === "wait_for_agents" || tool === "cancel_agents") {
+    const n = idsOf(args.agent_ids).length;
+    return n > 0 ? `${String(n)} 个子任务` : "本会话全部子任务";
+  }
+  if (tool === "list_agents") return "本会话全部子任务";
+  if (tool === "obs_recall") return str(args.id);
+  if (tool === "impact_query") return str(args.symbol);
+  if (tool === "diagnose") {
+    const face = str(args.face);
+    if (face === undefined) return "全部检查";
+    return face === "lint" ? "只跑 lint" : "只跑 test";
+  }
+  if (tool === "skill") return str(args.name);
+  if (tool === "refine_goal") return str(args.objective)?.slice(0, 80);
+  if (tool === "mcp_list") return str(args.server) ?? "全部 MCP 服务器";
+  if (tool === "mcp_activate") {
+    const server = str(args.server);
+    if (server === undefined) return undefined;
+    const one = str(args.tool);
+    const many = idsOf(args.tools);
+    const n = one !== undefined ? 1 : many.length;
+    return n > 0 ? `${server}（${String(n)} 把）` : `${server}（整台）`;
+  }
+  if (tool === "mcp_release") {
+    const server = str(args.server);
+    if (server === undefined) return undefined;
+    const one = str(args.tool);
+    return one !== undefined ? `${server} / ${one}` : server;
+  }
+  if (tool === "remember") {
+    const content = str(args.content);
+    if (content !== undefined) return content.split("\n")[0]!.trim().slice(0, 80);
+    return str(args.topic);
+  }
+  if (tool === "automation_create") return str(args.name);
+  if (tool === "automation_update") return str(args.name) ?? str(args.id);
+  if (tool === "automation_delete" || tool === "automation_run_now") return str(args.id);
+  if (tool === "automation_list") return "全部定时任务";
+  if (tool === "clarify") {
+    const qs = Array.isArray(args.questions) ? args.questions : [];
+    const q = str((qs[0] as { question?: unknown } | undefined)?.question);
+    if (q === undefined) return undefined;
+    return qs.length > 1 ? `${q}（共 ${String(qs.length)} 问）` : q;
+  }
+  return undefined;
+}
+
+export const summarize = (tool: string, args: Record<string, unknown>): string => {
   // url / query 进取值链（阶段 2 · brief §二.4 例：「抓取 api-docs.deepseek.com/news」——
   // web_fetch/web_search 的一句话摘要就是目标本身）。
-  const first = args.command ?? args.path ?? args.file ?? args.url ?? args.query ?? "";
+  // **pattern 排在 path 前**（第 916 页）：grep 的 args = {pattern, path}，pattern 才是「搜什么」，
+  // path 只是范围；按 path 优先会把整行读成一个目录（现读：`{pattern:"TODO",path:"src/agent"}` ⇒
+  // 「src/agent」），而 glob 只有 pattern ⇒ 掉到 JSON 兜底、整行变成 `{"pattern":"src/**/*.ts"}`。
+  // 工具行折叠态只有这一句话，主语丢了就没地方补。
+  const own = ownSubject(tool, args);
+  const first = own ?? args.command ?? args.pattern ?? args.path ?? args.file ?? args.url ?? args.query ?? "";
   return typeof first === "string" && first ? first : JSON.stringify(args).slice(0, 80);
 };
 
@@ -147,7 +217,11 @@ export function projectStream(events: readonly AgentEvent[], running: boolean = 
       }
       // 勘误落地：ToolCallEvent 的工具名字段是 name（不是计划作者预期的 tool）；行面仍叫 tool。
       case "tool_call": {
-        const row: ToolRow = { kind: "tool", tool: e.name, summary: summarize(e.args), args: rawArgs(e.args), pending: true, ts: e.ts, seq };
+        const row: ToolRow = {
+          kind: "tool", tool: e.name, summary: summarize(e.name, e.args), args: rawArgs(e.args),
+          ...(typeof e.args.command === "string" && e.args.command !== "" ? { command: e.args.command } : {}),
+          pending: true, ts: e.ts, seq,
+        };
         // 行为数据不从展示用截断 JSON 反解；长编辑参数仍保留差异入口。
         if (typeof e.args.path === "string" && e.args.path !== "") row.path = e.args.path;
         toolRows.set(e.id, row);
@@ -165,6 +239,7 @@ export function projectStream(events: readonly AgentEvent[], running: boolean = 
             if (e.output.length > 10000) row.outputTruncated = true;
           }
           if (e.ts !== undefined) row.then = e.ts; // P3-1：耗时的落地端（ts→then 一段）
+          if (typeof e.snapshotId === "string" && e.snapshotId !== "") row.snapshotId = e.snapshotId;
           // 只认**成功**的产物：失败的那一笔没有可看的东西（写盘被拒 / 渲染超时）。
           if (e.ok && e.artifact !== undefined) row.artifact = e.artifact;
         }
@@ -177,9 +252,12 @@ export function projectStream(events: readonly AgentEvent[], running: boolean = 
         rows.push({ kind: "tool", tool: "spawn_agent", summary: e.task.slice(0, 80), ts: e.ts, seq });
         break;
       // RunErrorEvent 勘定（src/events/index.ts）：失败原因原文在 message（渲染侧负责转义）。
-      case "error": rows.push({ kind: "error", text: e.message, ts: e.ts, seq }); break;
+      case "error":
+        flushBuckets(true);
+        rows.push({ kind: "error", text: e.message, ts: e.ts, seq });
+        break;
       case "agent_status":
-        if (isMainSessionTerminalEvent(e)) interruptTools();
+        if (isMainSessionTerminalEvent(e)) { flushBuckets(true); interruptTools(); }
         break;
       default: break; // 其余事件类型不成行：clarify/plan 走卡片选择器（pendingClarifyOf/pendingPlanOf）
     }

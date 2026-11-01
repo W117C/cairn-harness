@@ -1,0 +1,14 @@
+=== lsp-diag-severity
+applied lsp-diag-severity -> src/tools/lsp.ts (tests/lsp.test.ts)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 24 skipped (25)
+=== lsp-diag-cap
+applied lsp-diag-cap -> src/tools/lsp.ts (tests/lsp.test.ts)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 24 skipped (25)
+=== plugin-lsp-diagnostics-switch-ignored
+applied plugin-lsp-diagnostics-switch-ignored -> src/tools/lsp.ts (tests/plugin-lsp-activation.test.ts)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 7 skipped (8)
+=== restore check
+c43e6b4787348bf316e57410da0cb819013d86c597d303f5ded495f4951eeb9f  src/tools/lsp.ts

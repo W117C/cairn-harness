@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentEvent } from "../../../src/events";
 import { changedFilesOf } from "../src/renderer/components/panes";
-import { Inspector } from "../src/renderer/components/Inspector";
+import { Inspector, inspectorTabIndexForKey } from "../src/renderer/components/Inspector";
 import { readAppSurface } from "./helpers/app-surface";
 
 const appSrc = readAppSurface();
@@ -48,7 +48,6 @@ describe("④ Inspector SSR", () => {
     const html = renderToStaticMarkup(<Inspector
       events={events}
       onRestore={() => undefined}
-      sessionTitle="改 a.ts"
       workspacePath="/w/proj"
       modelLabel="演示"
       modeLabel="默认"
@@ -57,8 +56,10 @@ describe("④ Inspector SSR", () => {
     for (const label of ["概览", "改动", "计划", "时间线"]) expect(html).toContain(label);
     expect(html).toMatch(/class="isp-tab active"[^>]*>概览</);
     expect(html).toContain('aria-label="打开窗格"');
-    // 概览 = 会话事实 + 六格；不抢改动页的文件列表
-    expect(html).toContain("改 a.ts");
+    // 顶栏已经是会话标题的唯一锚点；右栏概览只给工作区/状态与用量，不重复标题。
+    expect(html).not.toContain("改 a.ts");
+    expect(html).not.toContain('class="isp-ov-name"');
+    expect(html).toContain('class="isp-ov-context"');
     expect(html).toContain("proj");
     expect(html).toContain("运行中");
     expect(html).toContain("文件改动");
@@ -94,6 +95,8 @@ describe("④ Inspector SSR", () => {
     expect(html).toContain("概览");
     expect((html.match(/class="isp-tab[ "]/g) ?? []).length).toBe(1);
     expect(html).toContain("还没有活动");
+    expect(html).not.toContain("用量次数");
+    expect(html).not.toContain("未返回");
     expect(html).toContain('aria-label="打开窗格"');
   });
 
@@ -102,6 +105,41 @@ describe("④ Inspector SSR", () => {
     expect(plan).toContain("把 a 改顺");
     const tl = renderToStaticMarkup(<Inspector events={events} initialTab="timeline" />);
     expect(tl).toContain('tl-kind user">你');
+  });
+
+  it("检查器 Tab 使用 roving tabindex，方向键/Home/End 有确定落点", () => {
+    const html = renderToStaticMarkup(<Inspector events={events} />);
+    expect(html).toContain('role="tablist"');
+    expect(html).toContain('role="tabpanel"');
+    expect(html).toContain('tabindex="0"');
+    expect(html).toContain('tabindex="-1"');
+    expect(inspectorTabIndexForKey("ArrowRight", 0, 3)).toBe(1);
+    expect(inspectorTabIndexForKey("ArrowRight", 2, 3)).toBe(0);
+    expect(inspectorTabIndexForKey("ArrowLeft", 0, 3)).toBe(2);
+    expect(inspectorTabIndexForKey("Home", 2, 3)).toBe(0);
+    expect(inspectorTabIndexForKey("End", 0, 3)).toBe(2);
+    expect(inspectorTabIndexForKey("Tab", 0, 3)).toBeNull();
+  });
+});
+
+describe("概览视觉层级", () => {
+  it("Token 与会话活动分组呈现，状态有独立视觉锚点", () => {
+    const html = renderToStaticMarkup(<Inspector
+      events={events}
+      workspacePath="/w/proj"
+      modelLabel="演示"
+      modeLabel="默认"
+      running={false}
+    />);
+    expect(html).toContain('class="isp-ov-section isp-ov-tokens"');
+    expect(html).toContain('class="isp-ov-section isp-ov-activity"');
+    expect(html).toContain('class="isp-ov-section-title">Token 用量</');
+    expect(html).toContain('class="isp-ov-section-title">会话活动</');
+    expect(html).toContain('class="isp-ov-status-dot"');
+    const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
+    expect(css).toMatch(/\.isp-ov-tokens \.isp-ov-stats\s*{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s);
+    expect(css).toMatch(/\.isp-ov-section-title\s*{[^}]*font-weight:\s*var\(--fw-medium\)/s);
+    expect(css).toMatch(/\.isp-ov-status-dot\s*{[^}]*border-radius:\s*50%/s);
   });
 });
 
@@ -119,8 +157,8 @@ describe("⑤b 关闭钮（2026-10-20 真机：「右边侧栏打开就没有关
     expect(appSrc).toContain("onClose={toggleInspector}");
   });
 
-  it("宽屏首次进会话自动展开概览；用户表过态就不抢", () => {
-    expect(appSrc).toContain("const INSPECTOR_AUTO_OPEN_MIN = 1400;");
+  it("超宽屏首次进会话才自动展开概览；1440 级窗口保持专注两栏", () => {
+    expect(appSrc).toContain("const INSPECTOR_AUTO_OPEN_MIN = 1600;");
     expect(appSrc).toContain("inspectorPrefSet");
     expect(appSrc).toContain("if (inspectorPrefSetRef.current) return;");
     expect(appSrc).toContain("window.innerWidth < INSPECTOR_AUTO_OPEN_MIN");

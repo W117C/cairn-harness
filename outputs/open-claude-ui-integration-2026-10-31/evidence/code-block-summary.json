@@ -1,0 +1,21 @@
+{
+  "code": {
+    "found": true,
+    "bg": "rgb(11, 11, 11)",
+    "radius": "12px",
+    "border": "rgb(44, 44, 42)",
+    "headH": 36,
+    "preFont": "15px",
+    "preLine": "24px",
+    "preColor": "rgb(240, 239, 236)",
+    "lang": "ts",
+    "copyLabel": "复制代码",
+    "copied": "false"
+  },
+  "copied": {
+    "label": "已复制代码",
+    "copied": "true",
+    "text": "已复制"
+  },
+  "errors": []
+}

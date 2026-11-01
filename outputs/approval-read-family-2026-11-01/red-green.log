@@ -1,0 +1,9 @@
+=== 改前：读族/渲染/诊断仍走兜底（需要你批准 + JSON）===
+     × 六个工具：标题是动作、主体是那件事本身 4ms
+     × SSR：读文件的卡上是「读取文件 + 路径」，不是一段 JSON 4ms
+      Tests  2 failed | 13 passed (15)
+
+=== 复原后 ===
+      Tests  15 passed (15)
+=== sha256 ===
+   2 e0ca17264ad199c3db5de9ff47d429ed7eb5e1ccacdb10e7b6045de23dfec0b3

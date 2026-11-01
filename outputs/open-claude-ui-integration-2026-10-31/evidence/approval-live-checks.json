@@ -1,0 +1,81 @@
+{
+  "checks": [
+    {
+      "name": "有活动会话可挂审批卡",
+      "ok": true,
+      "detail": "s1"
+    },
+    {
+      "name": "审批卡标题/主体/按钮齐全",
+      "ok": true,
+      "detail": {
+        "title": "运行命令",
+        "subject": "pnpm test",
+        "buttons": [
+          {
+            "t": "拒绝",
+            "cls": "btn secondary"
+          },
+          {
+            "t": "总是允许",
+            "cls": "btn ghost"
+          },
+          {
+            "t": "允许 · 本次",
+            "cls": "btn primary"
+          }
+        ],
+        "rect": {
+          "x": 496,
+          "y": 622,
+          "w": 750,
+          "h": 120
+        }
+      }
+    },
+    {
+      "name": "允许按钮真实命中（不被遮挡）",
+      "ok": true,
+      "detail": {
+        "tag": "BUTTON",
+        "text": "允许 · 本次",
+        "same": true
+      }
+    },
+    {
+      "name": "真实指针点「允许 · 本次」→ decide(true)",
+      "ok": true,
+      "detail": [
+        {
+          "askId": "ask-live",
+          "approved": true
+        }
+      ]
+    },
+    {
+      "name": "AskDone 后卡片移除",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "卡本体 Enter → decide(true)（不双发按钮）",
+      "ok": true,
+      "detail": [
+        {
+          "askId": "ask-live",
+          "approved": true
+        },
+        {
+          "askId": "ask-kb",
+          "approved": true
+        }
+      ]
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

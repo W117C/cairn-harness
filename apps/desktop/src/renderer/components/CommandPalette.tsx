@@ -4,7 +4,7 @@
 // 技能分组（2026-10-21 批 136）：与斜杠菜单共用 App 的 skills 数据面；空则整组缺席，不摆空组。
 import { Command } from "cmdk";
 import { useNow } from "../useNow";
-import { Archive, Copy, Download, FileText, Folder, FolderOpen, FolderPlus, MessageSquare, PanelLeft, PanelRight, Pencil, Plus, Search, Shield, Sun, Trash2, Wand2 } from "lucide-react";
+import { Archive, Brain, Clock3, Copy, Download, FileText, Folder, FolderOpen, FolderPlus, MessageSquare, PanelLeft, PanelRight, Pencil, Plus, Puzzle, Search, Shield, Sun, Trash2, Wand2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import { SessionSearchResults, type SessionSearchState } from "./SessionSearchResults";
@@ -12,9 +12,17 @@ import { relativeTime } from "../projections";
 import { sessionTime, type WorkspaceSession } from "../sessions-view";
 import { keysOf } from "../shortcuts";
 import { SECTIONS, SECTION_KEYWORDS, type SectionId } from "./settings-nav";
+import { APP_DESTINATIONS, APP_DESTINATION_LABEL } from "../navigation";
 
-import type { PaletteAction } from "../app-controls";
+import type { AppDestination, PaletteAction } from "../app-controls";
 export type { PaletteAction } from "../app-controls";
+
+const DESTINATION_ICON: Record<AppDestination, React.JSX.Element> = {
+  chat: <MessageSquare size={14} />,
+  plugins: <Puzzle size={14} />,
+  memory: <Brain size={14} />,
+  automation: <Clock3 size={14} />,
+};
 
 /** 操作组条目表（shortcutId 从 SHORTCUTS 取键位——表里改键，这里自动跟）。
  *  2026-10-21 命令面板 2.0：每条带图标与搜索同义词；`sessionOnly` 的条目只在有活动会话时出现
@@ -109,6 +117,7 @@ export interface PaletteContentProps {
   onOpenSession: (id: string, workspace?: string) => void;
   onSwitchWorkspace: (path: string) => void;
   onOpenSettings: (section: SectionId) => void;
+  onOpenDestination: (destination: AppDestination) => void;
   /** 文件快速打开：只对当前工作区搜文件名；选中后由 App 打开文件窗格并预览该文件。 */
   onOpenFile?: (path: string) => void;
   onAction: (action: PaletteAction) => void;
@@ -180,6 +189,8 @@ export function PaletteContent(props: PaletteContentProps): React.JSX.Element {
 
   const actions = OPS.filter((op) => op.sessionOnly !== true || sessionOpen);
   const recents = query.trim() === "" ? visibleRecentActions(recent, sessionOpen) : [];
+  // 单会话动作的键位也走表（文件头第 3 行写的就是「单一事实源，防漂移」）。
+  const renameKeys = keysOf("rename");
   const runAction = (id: PaletteAction): void => {
     setRecent(rememberRecentAction(recent, id));
     props.onAction(id);
@@ -318,7 +329,7 @@ export function PaletteContent(props: PaletteContentProps): React.JSX.Element {
                 >
                   <span className="cp-ico" aria-hidden="true"><Pencil size={14} /></span>
                   <span className="cp-label">重命名当前会话</span>
-                  <span className="cp-keys">F2</span>
+                  {renameKeys !== null && <span className="cp-keys">{renameKeys}</span>}
                 </Command.Item>
                 <Command.Item
                   className="cp-item"
@@ -351,6 +362,19 @@ export function PaletteContent(props: PaletteContentProps): React.JSX.Element {
             ))}
           </Command.Group>
         )}
+        <Command.Group heading="页面" className="cp-group">
+          {APP_DESTINATIONS.map((destination) => (
+            <Command.Item
+              key={destination}
+              value={`页面 ${APP_DESTINATION_LABEL[destination]}`}
+              className="cp-item"
+              onSelect={() => { props.onOpenDestination(destination); }}
+            >
+              <span className="cp-ico" aria-hidden="true">{DESTINATION_ICON[destination]}</span>
+              <span className="cp-label">{APP_DESTINATION_LABEL[destination]}</span>
+            </Command.Item>
+          ))}
+        </Command.Group>
         <Command.Group heading="设置" className="cp-group">
           {SECTIONS.map((s) => (
             // value 带「设置」前缀（2026-10-17 真机实证）：占位符承诺可搜「设置」，但条目文本全是

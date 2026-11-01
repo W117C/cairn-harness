@@ -1,0 +1,212 @@
+/* Cairn ⇄ CDS 组件层（2026-10-28 · 第 734 页）。
+ *
+ * 上游：`vendor/cds-official/components.css`——由 `scripts/extract-cds-components.mjs` 从
+ * Claude Desktop 3.6556.2 的渲染层 CSS（237,153 B，sha256 93ee8d85…）里逐条抽出的
+ * 45 个 `[data-cds=*]` 组件规则（115 条 / 465 条声明）。抽取只做两个变换：
+ *   `.cds-root` → `body[data-dsh-claude-style]`；`var(--cds-x)` → `var(--x)`（仅当官方
+ *   vanilla 薄里有同名公共令牌）。见同目录 `components.json` 与 `UPSTREAM.json`。
+ *
+ * 本文件不复制官方规则，只补两件事：
+ *   ① **消费契约**：官方把一部分几何留在 React 的 utility 类里，CSS 只留变量
+ *      （`--cds-message-bubble-*`、`--cds-assistant-message-*`、`--_prose-*`）。
+ *      这些变量在官方 CSS 里有定义、没有消费点；Cairn 在自己的 DOM 锚上消费它们。
+ *   ② **DOM 锚**：Cairn 组件根写同名 `data-cds=…` 后才命中官方规则；标记点见各节注释。
+ *
+ * 逐组件状态表在 `vendor/cds-official/component-map.json`：
+ *   ported / no-cairn-counterpart / no-component-css 三档，45 条一条不落。
+ * 判卷：`tests/cds-components.test.ts`（45/45 覆盖 + 契约变量解析 + 真机几何）。
+ */
+
+/* ── UserMessage：气泡几何 ─────────────────────────────────────────────
+ * 官方规则（components.css）在 `[data-cds=UserMessage]` 上定义：
+ *   --cds-message-bubble-radius: calc(--radius + .25rem) = 12px（desktop/comfortable）
+ *   --cds-message-bubble-pad-x: --pad-lg = 16px
+ *   --cds-message-bubble-pad-y: --pad-md = 12px
+ *   --cds-message-bubble-measure: 85%
+ * 官方消费点在 React 的 `cds-user-message-body` 上（CSS 未下发）；这里在 Cairn 的 `.t` 上消费。
+ * 标记：Stream.tsx 的 `.row.user` 写 data-cds="UserMessage"。
+ */
+body[data-dsh-claude-style] .row.user[data-cds="UserMessage"] .t {
+  max-width: var(--cds-message-bubble-measure);
+  border-radius: var(--cds-message-bubble-radius);
+  padding: var(--cds-message-bubble-pad-y) var(--cds-message-bubble-pad-x);
+}
+
+/* 用户气泡的底色（2026-10-28 第 739 页）：皮肤的 `--bg-300` 被桥到官方 `surface-3`
+ * （亮色 = gray-0 白），`--user-bubble-bg` 因此变成「白 10%」——落在 #fcfcfb 画布上等于隐形。
+ * 直接用官方灰阶把气泡放回可见的暖灰（亮色 gray-50 / 暗色 gray-750），不走 `--bg-300`。 */
+body[data-dsh-claude-style]:not([data-ds-dark-theme]) .row.user[data-cds="UserMessage"] .t {
+  background: var(--gray-50);
+}
+body[data-dsh-claude-style][data-ds-dark-theme] .row.user[data-cds="UserMessage"] .t {
+  background: var(--gray-750);
+}
+
+/* 对话正文用官方 prose 档（2026-10-28 第 737 页）：官方 comfortable = 16px / 24px；
+ * Cairn 皮肤此前把 .md-body 钉在 --fs-body-lg（15px）+ 1.7 行高，和官方差一档。
+ * 只作用于对话正文与用户气泡，不动输入框、表格、代码（它们各有自己的字号轴）。
+ * h1/h2 的 `1em + 2px` 因此落到 18px，h3–h6 落到 16px，正好是官方层级。 */
+body[data-dsh-claude-style] .row.user[data-cds="UserMessage"] .t,
+body[data-dsh-claude-style] .row.assistant[data-cds="AssistantMessage"] .md-body[data-cds="Prose"] {
+  font-size: var(--font-size-prose);
+  line-height: var(--leading-prose);
+}
+
+/* ── AssistantMessage：正文缩进与右侧流体留白 ─────────────────────────
+ * 官方在 `[data-cds=AssistantMessage]` 上定义：
+ *   --cds-assistant-message-text-inset: 4px
+ *   --cds-assistant-message-text-stop: clamp(0px, (100% - 384px) * .175, 56px)
+ * 官方消费点：`.prose-scroll` 的 border-inline-start 宽度 + 右侧留白（CSS 未下发）。
+ * Cairn 之前把 stop 公式写死在 `.row.assistant .t`；现在改为读官方变量（单源）。
+ * 2026-11-01 第 862 页：消费点从 `.t` 的 padding-right 搬到**助手行自身**的 margin-right——
+ * 与思考带 / 工具簇 / 交付卡（同为 `.reading` 直接子元素）同一条基准，一轮一条列。
+ * 标记：Stream.tsx 的 `.row.assistant` 写 data-cds="AssistantMessage"。
+ */
+body[data-dsh-claude-style] .row.assistant[data-cds="AssistantMessage"] {
+  margin-right: var(--cds-assistant-message-text-stop);
+}
+body[data-dsh-claude-style] .row.assistant[data-cds="AssistantMessage"] .md-body {
+  border-inline-start: var(--cds-assistant-message-text-inset, 0px) solid transparent;
+}
+
+/* ── Prose：回复正文的标题阶 ────────────────────────────────────────
+ * 官方 `[data-cds-reply-type] [data-cds=Prose]` 定义（components.css 已抽入）：
+ *   h1/h2 = calc(1em + .125rem)，行高 = prose-leading + .1875rem
+ *   h3–h6 = 1em，行高 = prose-leading
+ *   标题字重 = --cds-font-weight-semibold（580）
+ * 官方把字号应用在 `prose` 的 utility 类里；这里把这些值落到 Cairn 的 `.md-h*`。
+ * 字号用 em，随 `.md-body` 的实际字号缩放（Cairn 正文 14px 时 h1/h2=16、h3–h6=14）。
+ * 标记：markdown.tsx 的 `.md-body` 写 data-cds="Prose"，其祖先 `.row.assistant` 写
+ *       data-cds-reply-type（官方规则的作用域条件）。
+ */
+body[data-dsh-claude-style] [data-cds-reply-type] .md-body[data-cds="Prose"] :is(.md-h1, .md-h2) {
+  font-size: calc(1em + 0.125rem);
+  line-height: calc(1.5em + 0.1875rem);
+  font-weight: 580; /* 官方 --cds-font-weight-semibold 的缺省值（变量字体轴） */
+}
+body[data-dsh-claude-style] [data-cds-reply-type] .md-body[data-cds="Prose"] :is(.md-h3, .md-h4, .md-h5, .md-h6) {
+  font-size: 1em;
+  line-height: 1.5em;
+  font-weight: 580;
+}
+
+/* 官方 `strong,b` 规则写的是 `calc(--cds-font-weight-medium + 1)` = 501——它给可变字体的
+ * 字重轴留 +1 的微调，但 Cairn 的正文用系统/Inter 静态字重，501 会掉回近常规体，粗体失去语义。
+ * 这里把粗体钉回 Cairn 自己的 --fw-bold（700）；官方规则仍然抽在 components.css 里，
+ * 只在本仓的正文面覆盖。 */
+body[data-dsh-claude-style] [data-cds-reply-type] .md-body[data-cds="Prose"] :is(strong, b) {
+  font-weight: var(--fw-bold);
+}
+
+/* ── MessageActions：操作条的显现时序 ─────────────────────────────────
+ * 官方 `[data-cds=MessageActions][data-reveal]`：
+ *   默认 opacity 0；hover / focus-within 时 opacity 1
+ *   `--cds-message-actions-reveal-in-duration` = --dur-snap (120ms)
+ *   `--cds-message-actions-reveal-out-duration` = --dur-fast (60ms)
+ *   in-delay = .1s
+ * Cairn 的行操作条此前用 `--t-fast` 统一淡入 + translateY(2px)；官方没有位移，只有透明度。
+ * 标记：Stream.tsx 的 `.row-actions` 写 data-cds="MessageActions"（不加 data-reveal——
+ * 官方 reveal 的 hover 归属是操作条自身，Cairn 的显现归属是整行，语义不同，这里保留行悬停，
+ * 只对齐时序与位移）。
+ */
+body[data-dsh-claude-style] .row .row-actions[data-cds="MessageActions"] {
+  opacity: 0;
+  transform: none;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+body[data-dsh-claude-style] .row:hover .row-actions[data-cds="MessageActions"],
+body[data-dsh-claude-style] .row:focus-within .row-actions[data-cds="MessageActions"] {
+  opacity: 1;
+  transition: opacity var(--dur-snap) var(--ease-snap) 0.1s;
+}
+
+/* 保存中常显（第 961 页）：styles.css 里那条 `.row-actions[data-saving="true"] { opacity: 1 }`
+   的 specificity 是 (0,2,0)，而本文件这组选择器是 (0,4,1)——它**从来没生效过**：
+   点完赞/踩、请求还在飞时把鼠标移开，操作条照样淡出，用户看不到「保存中」。
+   状态冒烟（state-smoke 第 51 行那条）一直是红的，红在这儿。 */
+body[data-dsh-claude-style] .row .row-actions[data-cds="MessageActions"][data-saving="true"] {
+  opacity: 1;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+/* ── SkeletonGroup / Skeleton：呼吸节奏与 90ms 错峰 ───────────────────
+ * 官方：`[data-cds=SkeletonGroup][data-motion=wave] [data-cds=Skeleton]` 用
+ *   `cds-skeleton-breathe 2s ease-in-out calc(reveal-end + i * 90ms) infinite`；
+ *   reduced-motion 下 0.01ms / 1 次。
+ * Cairn 原实现是 1.6s 呼吸 + 一条扫光。官方没有扫光，这里去掉扫光、把节奏对齐到 2s/90ms。
+ * 标记：Sidebar 的 `.side-skeleton` 写 data-cds="SkeletonGroup" data-motion="wave"；
+ *       `.side-skeleton-row` 写 data-cds="Skeleton"，序号用 --cds-skel-i 注入。
+ */
+body[data-dsh-claude-style] .side-skeleton[data-cds="SkeletonGroup"] .side-skeleton-row[data-cds="Skeleton"]::after {
+  content: none;
+}
+body[data-dsh-claude-style] .side-skeleton[data-cds="SkeletonGroup"] .side-skeleton-row[data-cds="Skeleton"]:nth-child(1) { --cds-skel-i: 0; }
+body[data-dsh-claude-style] .side-skeleton[data-cds="SkeletonGroup"] .side-skeleton-row[data-cds="Skeleton"]:nth-child(2) { --cds-skel-i: 1; }
+body[data-dsh-claude-style] .side-skeleton[data-cds="SkeletonGroup"] .side-skeleton-row[data-cds="Skeleton"]:nth-child(3) { --cds-skel-i: 2; }
+
+/* ── ChatComposerQueuedMessages：排队条与输入卡的间距 ─────────────────
+ * 官方 `[data-cds=ChatComposerDock] > :not([data-cds=ChatComposerQueuedMessages], … :last-child)`
+ * 给非末位子项 `margin-bottom: --gap-xs`（8px）。Cairn 的排队条 `.queue-strip` 是输入卡上沿
+ * 的独立块，原值 6px；对齐到官方 8px。标记：SendQueueStrip 根写
+ * data-cds="ChatComposerQueuedMessages"。
+ */
+body[data-dsh-claude-style] .queue-strip[data-cds="ChatComposerQueuedMessages"] {
+  margin-bottom: var(--gap-xs);
+}
+
+/* ── MessageAttachmentsImage / Video：正文图片的尺寸档 ────────────────
+ * 官方 natural 档：单图 max-width 480px、加载后 max-height 320px；带缩略图档（两图并排）
+ * max-width 288px / max-height 120px。Cairn 只有正文单图（`.md-figure img`），按单图档对齐：
+ * 原 max-width 100% / max-height 480px → 480 / 320。
+ * 标记：markdown.tsx 的 `.md-figure` 写 data-cds="MessageAttachments"，
+ *       img 写 data-cds="MessageAttachmentsImage" data-fit="natural"。
+ */
+body[data-dsh-claude-style] .md-figure[data-cds="MessageAttachments"] img[data-cds="MessageAttachmentsImage"][data-fit="natural"] {
+  max-width: min(100%, 480px);
+  max-height: 320px;
+}
+
+/* ── Toolbar / Page：工具栏地面的 85% 底 + 12px 毛玻璃 ─────────────────
+ * 官方 `[data-cds=Toolbar] > [data-cds-part=toolbar-ground]`：
+ *   绝对定位铺满、background = color-mix(page-bg 85%, transparent)、backdrop-filter blur(12px)；
+ *   降低透明度/高对比/强制色/打印时回到 100% 且去掉模糊。
+ * Cairn 的 `.titlebar` 没有 ground 子元素；用同语义的 ::before 伪元素承载，避免改 DOM。
+ * 标记：TitleBar 的 `header.titlebar` 写 data-cds="Toolbar"。
+ */
+body[data-dsh-claude-style] .titlebar[data-cds="Toolbar"] {
+  position: relative;
+  isolation: isolate;
+}
+body[data-dsh-claude-style] .titlebar[data-cds="Toolbar"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  user-select: none;
+  background-color: color-mix(in srgb, hsl(var(--bg-100)) 85%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active), print {
+  body[data-dsh-claude-style] .titlebar[data-cds="Toolbar"]::before {
+    background-color: hsl(var(--bg-100));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* ── 首页问候的字号：本地有意偏离上游转录（2026-11-01 第 870 页）────────
+ * 上游皮肤把 hero 标题钉在 44.2px（vendor/dsh-claude-style/hero.css，固定 revision
+ * 484ece0，不手改）。那是 Claude 首页**整屏只有这一行 + 输入框**时的编辑字号。
+ * Cairn 首页不是那块屏：真机 1440 实测问候 44.2px、输入框正文 14px ⇒ 屏幕上最大的
+ * 一档字属于一句既不能点也不能输入的装饰语（3.2:1 倒挂），而真正的主角（输入卡）
+ * 只有 14px。业主本轮口径「让布局说话」直接命中这一条。
+ * ⇒ 在皮肤层用更高特异性压回标题档上界 --fs-title-lg（22px），星标按 em 跟着缩。
+ * 上游其余 hero 形制（衬线、星标先行、升起动效、预览徽标隐藏）原样保留。
+ */
+body[data-dsh-claude-style] .empty h1.empty-greet[data-dsh-claude-part~="hero-headline"] {
+  font-size: var(--fs-title-lg);
+  line-height: 1.3;
+  font-weight: var(--fw-medium);
+}

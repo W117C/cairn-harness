@@ -17,6 +17,7 @@
  */
 
 import { namedSetProblems } from "./test-results";
+import { isRecord } from "../../is-record";
 
 export interface TaskSeed {
   /** dir = 一个工作目录快照；file = 单文件靶子（本仓 loop-eval 的既有形态）。 */
@@ -60,9 +61,6 @@ export interface ParseResult {
 
 /** 认识哪些字段：拼错的字段名必须报错——静默忽略它，等于允许数据集作者"写了但没生效"。 */
 const TASK_FIELDS = new Set(["id", "instruction", "seed", "verifier", "heldOut", "judge", "expects", "source"]);
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
 
 const nonEmptyString = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
 

@@ -37,7 +37,7 @@ export function installCustomEnvKeys(map: Readonly<Record<string, string>>): voi
   customEnvKeys = map;
 }
 
-/** 已登记的自定义 provider id（判卷与 UI 用；不含内置四家）。 */
+/** 已登记的自定义 provider id（判卷与 UI 用；不含内置家）。 */
 export function customEnvKeyedProviders(): readonly string[] {
   return Object.keys(customEnvKeys).sort();
 }

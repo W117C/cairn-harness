@@ -2,6 +2,7 @@
 // 保留名单必须跟 registry 的 PROVIDER_IDS 同步：同名自定义家会让 registry 的 switch 先命中
 // 内置分支、自定义配置被静默忽略——所以校验在这里拒收，而不是运行时静默让位。
 export const RESERVED_PROVIDER_IDS = ["demo", "glm", "openai", "anthropic", "gemini", "deepseek"] as const;
+export const PROVIDER_ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
 export const MODEL_ID_RE = /^[A-Za-z0-9._:/-]{1,128}$/;
 
 export function isValidModelId(id: unknown): id is string {

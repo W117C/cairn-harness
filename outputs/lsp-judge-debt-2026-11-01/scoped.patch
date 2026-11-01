@@ -1,0 +1,61 @@
+--- a/src/tools/lsp.ts	2026-11-01 13:04:59
++++ b/src/tools/lsp.ts	2026-11-01 13:03:43
+@@ -1015,9 +1015,11 @@
+  *  grep/read_file），后者会被读成"这次没跑成，再跑一遍"。 */
+ function requireProvider(client: LspClient, serverId: string, operation: LspOperation): void {
+   if (client.providerDeclared(operation)) return;
++  // 整句必须是**一支**模板：这句话的用途是让模型换路（不是重跑），
++  // 而拼成多段字面量时判据只能读到「不支持」三字——挑不出可判的中文段，
++  // 这一面就落进「尺读不出」（第 331 页那一档），等于没人守。改动措辞时保持整句。
+   throw new ToolError(
+-    'lsp: 服务器 "' + serverId + '" 未声明 ' + OPERATION_PROVIDER[operation] + "，不支持 " + operation +
+-    "（这是该服务器的能力边界，不是这次调用失败；同一文件改用 grep / read_file）",
++    `lsp: 服务器 "${serverId}" 未声明 ${OPERATION_PROVIDER[operation]}，不支持 ${operation}（这是该服务器的能力边界，不是这次调用失败；同一文件改用 grep / read_file）`,
+   );
+ }
+ 
+--- a/tests/lsp.test.ts	2026-11-01 13:04:59
++++ b/tests/lsp.test.ts	2026-11-01 13:00:43
+@@ -239,6 +239,10 @@
+     const message = (err as Error).message;
+     expect(message).toContain("hover");
+     expect(message).toContain("未声明");
++    // 原句证人（第 915 页）：这句的用途是让模型**换路**而不是重跑，所以「能力的边界、不是一次
++    // 失败」必须真在话里。抄原句是刻意的——改措辞时这条会红，逼人重新确认那句话还对。
++    expect(message).toContain("这是该服务器的能力边界，不是这次调用失败");
++    expect(message).toContain("grep / read_file");
+     // stub 在 --no-hover 下**不注册** hover handler ⇒ 不设门控拿到的是 jsonrpc 的
+     // MethodNotFound 黑话（"Unhandled method"一类）：模型读不懂，也只能原样重跑。
+     expect(message).not.toMatch(/Unhandled method|Method not found|jsonrpc/i);
+--- a/scripts/lib/mutations/tools.mjs	2026-11-01 13:04:59
++++ b/scripts/lib/mutations/tools.mjs	2026-11-01 13:04:07
+@@ -40,7 +40,8 @@
+     src: "src/tools/lsp.ts",
+     test: "tests/lsp.test.ts",
+     desc: "去掉 ERROR 级过滤（警告也回流，污染 edit/write 输出）",
+-    apply: (s) => s.replace("diags.filter((d) => d.severity === DiagnosticSeverity.Error)", "diags"),
++    // 第 915 页：实现搬成链式两行后改指现值（原针脚 `diags.filter(...)` 已不在源文件里）。
++    apply: (s) => s.replace(".filter((d) => d.severity === DiagnosticSeverity.Error)", ".filter(() => true)"),
+     expectFail: "无错误（仅 WARN 或干净文件）→ 空串（输出不变）",
+   },
+   {
+@@ -48,7 +49,8 @@
+     src: "src/tools/lsp.ts",
+     test: "tests/lsp.test.ts",
+     desc: "去掉 ≤20 条上限（诊断洪水灌满工具输出，挤掉真正信息）",
+-    apply: (s) => s.replace(".slice(0, MAX_DIAGNOSTICS)", ""),
++    // 第 915 页：每文件帽改成按 server 配置取（lspDiagnosticsMaxPerFile），针脚跟着搬。
++    apply: (s) => s.replace(".slice(0, lspDiagnosticsMaxPerFile(server))", ""),
+     expectFail: "只取 ERROR 级，≤20 条，附 <diagnostics> 块在输出尾部",
+   },
+   {
+@@ -693,7 +695,8 @@
+     src: "src/tools/lsp.ts",
+     test: "tests/plugin-lsp-activation.test.ts",
+     desc: "diagnostics.enabled=false 照样回流 ⇒ 作者关掉的噪声（或某个乱报诊断的 server）关不掉，配置只是装饰",
+-    apply: (s) => s.replace("    if (cfg.servers[picked]?.diagnosticsEnabled === false) return \"\";", "    if (false) return \"\";"),
++    // 第 915 页：开关判断搬进 `server` 局部量（不再回表查 cfg.servers[picked]），针脚跟着搬。
++    apply: (s) => s.replace('    if (server?.diagnosticsEnabled === false) return "";', '    if (false) return "";'),
+     expectFail: "§9.8 的 diagnostics 开关真兑现：开 ⇒ 插件服务器推的 ERROR 回流；关 ⇒ 一个字都不回",
+   },
+   {

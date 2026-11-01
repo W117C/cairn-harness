@@ -37,9 +37,9 @@ describe("SHORTCUTS 核心表（P3-3 单一事实源 · brief 九节）", () => 
     // 2026-10-18：⌘F 对话内查找进核心表（对照 Claude Edit > Find…；第 513 页）。
     // 2026-10-20：⌘B 开合侧栏进核心表——命令面板的「开合侧栏」曾错指 palette id，
     // 把 ⌘K 当成它的键显示；键位提示必须从本表取，表里没有的 id 不得被引用。
-    expect(SHORTCUTS.length).toBe(12);
+    expect(SHORTCUTS.length).toBe(13);
     const keys = SHORTCUTS.map((s) => s.keys);
-    for (const k of ["⌘N", "⌘O", "⌘K", "⌘B", "⌘F", "⌘⌥I", "⌘.", "⌘⇧[ / ⌘⇧]", "⌘,", "⏎", "⇧⏎", "⌘/"]) {
+    for (const k of ["F2", "⌘N", "⌘O", "⌘K", "⌘B", "⌘F", "⌘⌥I", "⌘.", "⌘⇧[ / ⌘⇧]", "⌘,", "⏎", "⇧⏎", "⌘/"]) {
       expect(keys).toContain(k);
     }
   });

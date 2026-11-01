@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { GitBranch } from "lucide-react";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { PageFrame } from "./PageFrame";
 
 export function WorktreesPane(props: {
   snap: { workspace: string; orphans: string[]; details?: { name: string; dirty: boolean }[] };
@@ -28,32 +29,34 @@ export function WorktreesPane(props: {
   };
 
   return (
-    <div className="ap-worktrees" data-workspace={props.snap.workspace}>
-      <div className="ap-toolbar">
-        <div className="ap-note">孤儿 worktree 只在没有归属时列出；运行中或待合并的树不会出现在这里。</div>
-      </div>
-      {props.snap.orphans.length === 0 ? (
-        <div className="ap-empty">没有遗留的工作树。</div>
-      ) : (
-        <div className="ap-list" aria-label="孤儿工作树">
-          {props.snap.orphans.map((name) => {
-            const dirty = props.snap.details?.find((d) => d.name === name)?.dirty === true;
-            return (
-            <div className="ap-item" key={name} data-orphan={name} data-dirty={dirty ? "true" : "false"}>
-              <GitBranch size={14} aria-hidden="true" />
-              <span className="nm">wt-{name}</span>
-              <span className="sub">孤儿 worktree</span>
-              {dirty && <span className="sp-tag" style={{ color: "hsl(var(--color-risk-ink))" }}>有未提交改动</span>}
-              <button
-                className="mini-btn danger"
-                disabled={busy === name}
-                onClick={() => setAsk(name)}
-              >{busy === name ? "清理中…" : "清理"}</button>
-            </div>
-            );
-          })}
+    <PageFrame title="工作树" onRefresh={props.refresh}>
+      <div className="ap-worktrees" data-workspace={props.snap.workspace}>
+        <div className="ap-toolbar">
+          <div className="ap-note">孤儿 worktree 只在没有归属时列出；运行中或待合并的树不会出现在这里。</div>
         </div>
-      )}
+        {props.snap.orphans.length === 0 ? (
+          <div className="ap-empty">没有遗留的工作树。</div>
+        ) : (
+          <div className="ap-list" aria-label="孤儿工作树">
+            {props.snap.orphans.map((name) => {
+              const dirty = props.snap.details?.find((d) => d.name === name)?.dirty === true;
+              return (
+              <div className="ap-item" key={name} data-orphan={name} data-dirty={dirty ? "true" : "false"}>
+                <GitBranch size={14} aria-hidden="true" />
+                <span className="nm">wt-{name}</span>
+                <span className="sub">孤儿 worktree</span>
+                {dirty && <span className="sp-tag" style={{ color: "hsl(var(--color-risk-ink))" }}>有未提交改动</span>}
+                <button
+                  className="mini-btn danger"
+                  disabled={busy === name}
+                  onClick={() => setAsk(name)}
+                >{busy === name ? "清理中…" : "清理"}</button>
+              </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
       {ask !== null && (
         <ConfirmDialog
           title={`清理 wt-${ask}？`}
@@ -66,6 +69,6 @@ export function WorktreesPane(props: {
           onConfirm={() => clean(ask)}
         />
       )}
-    </div>
+    </PageFrame>
   );
 }

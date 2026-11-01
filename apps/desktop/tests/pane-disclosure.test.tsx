@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PaneDock } from "../src/renderer/components/PaneDock";
+import { AppRail } from "../src/renderer/components/AppRail";
 import { SidebarRail } from "../src/renderer/components/SidebarRail";
 const noop = () => undefined;
 it("单窗格占满：两块常驻、只显示激活窗格，标签切换、＋开新窗格、关闭入口在标签对应的块头上", () => {
@@ -23,9 +24,18 @@ it("单窗格占满：两块常驻、只显示激活窗格，标签切换、＋�
   expect(html).not.toContain("恢复多面板布局");
   expect(html).toContain('aria-label="添加面板"');
 });
-it("收起侧栏仍可新建、搜索、打开文件和设置", () => {
-  const html = renderToStaticMarkup(<SidebarRail onExpand={noop} onNewTask={noop} onSearch={noop} onFiles={noop} onTerminal={noop} onSettings={noop} />);
-  for (const label of ["展开侧栏", "新建任务", "搜索会话与命令", "打开文件窗格", "打开终端窗格", "打开设置"]) {
+it("收起侧栏仍可新建、搜索、打开文件和设置，且同一入口只出现一次", () => {
+  // 2026-10-31 业主截图：收起态两栏各有一枚滑杆「设置」、标题栏与侧栏各有一枚「展开」。
+  // 去重后动作在侧栏快捷栏、设置在全局能力轨、展开在标题栏——这里把三处合成一面来判。
+  const html = renderToStaticMarkup(
+    <>
+      <AppRail destination="chat" onOpen={noop} onSettings={noop} />
+      <SidebarRail onNewTask={noop} onSearch={noop} onFiles={noop} onTerminal={noop} />
+    </>,
+  );
+  for (const label of ["新建任务", "搜索会话与命令", "打开文件窗格", "打开终端窗格", "设置"]) {
     expect(html).toContain(`aria-label="${label}"`);
   }
+  expect((html.match(/aria-label="设置"/g) ?? []).length).toBe(1);
+  expect(html).not.toContain('aria-label="展开侧栏"');
 });

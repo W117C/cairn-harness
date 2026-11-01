@@ -1,0 +1,4 @@
+=== 改后：同一环境下跑画廊 ===
+[gallery] 当前进程里没有 Electron 的 app：很可能是环境里有 ELECTRON_RUN_AS_NODE=1（electron 退化成了 node）。
+[gallery] 复跑：env -u ELECTRON_RUN_AS_NODE npx electron scripts/ui-gallery.cjs
+EXIT=2

@@ -1,0 +1,5 @@
+$ node --import tsx .tmp/probe-timeline.mts
+ 1 tool      "读取 a.ts"
+ 2 tool      "运行 pnpm test"
+ 3 tool      "查找 TODO"
+ 4 tool      "mystery_tool {\"q\":\"x\"}"

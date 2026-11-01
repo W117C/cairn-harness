@@ -12,7 +12,10 @@
 //   后按真实位置重判 pinned/stuck（不在底部即解除粘底），跟底观察器（RO）不再把回场视口拽回底部。
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const NEAR_BOTTOM_PX = 48;
+const NEAR_BOTTOM_PX = 40;
+/** 用户刚滚过/按过键的 150ms 内不跟底（open-claude-ui `useClaudeScrollPinning` 的冷却窗）。 */
+export const USER_SCROLL_COOLDOWN_MS = 150;
+const AT_TOP_PX = 2;
 
 /** 视口是否贴底（纯函数，判卷锚）。 */
 export function isNearBottom(m: { scrollTop: number; scrollHeight: number; clientHeight: number }): boolean {
@@ -49,12 +52,13 @@ export function useStickyScroll(el: HTMLDivElement | null): StickyScroll {
   const [stuck, setStuck] = useState(true);
   const [atTop, setAtTop] = useState(true);
   const pinned = useRef(true);
+  const lastUserInputAt = useRef(0);
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "instant") => {
     if (el === null) return;
     pinned.current = true;
     el.scrollTo({ top: el.scrollHeight, behavior: scrollBehavior(behavior) });
     setStuck(true);
-    setAtTop(el.scrollTop <= 1);
+    setAtTop(el.scrollTop <= AT_TOP_PX);
   }, [el]);
   const scrollToTop = useCallback((behavior: ScrollBehavior = "instant") => {
     if (el === null) return;
@@ -70,7 +74,7 @@ export function useStickyScroll(el: HTMLDivElement | null): StickyScroll {
     // instant 落位后 scrollTop 已同步——按真实落点判贴底（clamp 到上限时即贴底，正确）。
     pinned.current = isNearBottom(el);
     setStuck(pinned.current);
-    setAtTop(el.scrollTop <= 1);
+    setAtTop(el.scrollTop <= AT_TOP_PX);
   }, [el]);
 
   useEffect(() => {
@@ -78,10 +82,33 @@ export function useStickyScroll(el: HTMLDivElement | null): StickyScroll {
     const onScroll = (): void => {
       pinned.current = isNearBottom(el);
       setStuck(pinned.current);
-      setAtTop(el.scrollTop <= 1);
+      setAtTop(el.scrollTop <= AT_TOP_PX);
+    };
+    // 用户刚主动滚/按键 ⇒ 立即释放图钉并记时；跟底观察器在冷却窗内不抢视口。
+    const onUserInput = (): void => {
+      lastUserInputAt.current = performance.now();
+      pinned.current = false;
+      setStuck(false);
+    };
+    // 只在滚动容器本体上的按下算「用户要滚」（点正文里的按钮/选字不该弹回底钮）。
+    const onPress = (e: MouseEvent): void => {
+      if (e.target === el) onUserInput();
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown", " "].includes(e.key)) onUserInput();
     };
     el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
+    el.addEventListener("wheel", onUserInput, { passive: true });
+    el.addEventListener("touchstart", onUserInput, { passive: true });
+    el.addEventListener("mousedown", onPress);
+    el.addEventListener("keydown", onKey);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      el.removeEventListener("wheel", onUserInput);
+      el.removeEventListener("touchstart", onUserInput);
+      el.removeEventListener("mousedown", onPress);
+      el.removeEventListener("keydown", onKey);
+    };
   }, [el]);
 
   // 内容长高（流式新行、代码块展开）且仍粘底 ⇒ 跟到底。观察内容包裹层（.reading）。
@@ -91,6 +118,8 @@ export function useStickyScroll(el: HTMLDivElement | null): StickyScroll {
     if (!content) return;
     const follow = () => {
       if (!pinned.current) return;
+      // 用户刚动过视口：150ms 内不跟（防止流式追加把刚滚上去的视口抢回来）。
+      if (performance.now() - lastUserInputAt.current <= USER_SCROLL_COOLDOWN_MS) return;
       el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
     };
     const ro = new ResizeObserver(follow);

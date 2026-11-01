@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { repoNameFromUrl } from "../git-url";
 
 const pexec = promisify(execFile);
 
@@ -15,12 +16,8 @@ export function isCloneableUrl(url: string): boolean {
 }
 
 /** URL → 仓库目录名：剥尾斜杠与 .git。认不出合法名 = null（调用方 fail-visible）。 */
-export function repoNameFromUrl(url: string): string | null {
-  const tail = url.replace(/\/+$/, "").split(/[/:]/).pop() ?? "";
-  if (tail === "" || /\s/.test(tail)) return null;
-  const name = tail.endsWith(".git") ? tail.slice(0, -4) : tail;
-  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) ? name : null;
-}
+/** 仓库名解析的唯一实现在 `src/git-url.ts`（渲染层的「将克隆到」预览读同一份）。 */
+export { repoNameFromUrl } from "../git-url";
 
 export type GitStatusResult = { ok: true; branch: string | null; dirtyFiles: number } | { ok: false; error: string };
 

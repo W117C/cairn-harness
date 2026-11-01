@@ -1,0 +1,95 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+ ❯ tests/run-queue-session.test.tsx (11 tests | 1 failed) 116ms
+   ❯ send keeps the active conversation (8)
+     × reports a refused background run instead of claiming it started 7ms
+(node:53324) PromiseRejectionHandledWarning: Promise rejection was handled asynchronously (rejection id: 2)
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ tests/session-prefs-run-routing.test.ts (2 tests | 2 failed) 1027ms
+   × routes an explicit same-id run to its workspace and exact log 19ms
+   × keeps another workspace's same-id run isolated while the first execution is active 1005ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/run-queue-session.test.tsx > send keeps the active conversation > reports a refused background run instead of claiming it started
+AssertionError: expected { outcome: 'started' } to deeply equal { outcome: 'failed', …(1) }
+
+- Expected
++ Received
+
+  {
+-   "error": "同名会话被其他工作区的执行占用",
+-   "outcome": "failed",
++   "outcome": "started",
+  }
+
+ ❯ tests/run-queue-session.test.tsx:50:62
+     48|     const { agent, actions } = harness();
+     49|     agent.run.mockResolvedValueOnce({ ok: false, error: "同名会话被其他工作区的执行…
+     50|     expect(await actions.sendTo("same", "/b", "continue B")).toEqual({…
+       |                                                              ^
+     51|     expect(agent.runSteer).not.toHaveBeenCalled();
+     52|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/session-prefs-run-routing.test.ts > routes an explicit same-id run to its workspace and exact log
+Error: 会话 id 在多个工作区同时存在（/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-prefs-run-XKiVSC/a、/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-prefs-run-XKiVSC/b），必须显式指定 workspace：same
+ ❯ resolveSessionWs src/main/kernel-host.ts:498:13
+    496|     for (const ws of workspaces) if (await sessionExists(wsRoot(ws), s…
+    497|     if (hits.length > 1) {
+    498|       throw new Error(`会话 id 在多个工作区同时存在（${hits.join("、")}），必须显式指定 work…
+       |             ^
+    499|     }
+    500|     if (hits.length === 1) {
+ ❯ Object.run src/main/kernel-host.ts:519:18
+ ❯ tests/session-prefs-run-routing.test.ts:26:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/session-prefs-run-routing.test.ts > keeps another workspace's same-id run isolated while the first execution is active
+Error: 会话 id 在多个工作区同时存在（/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-prefs-run-sNeTe2/a、/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-prefs-run-sNeTe2/b），必须显式指定 workspace：same
+ ❯ resolveSessionWs src/main/kernel-host.ts:498:13
+    496|     for (const ws of workspaces) if (await sessionExists(wsRoot(ws), s…
+    497|     if (hits.length > 1) {
+    498|       throw new Error(`会话 id 在多个工作区同时存在（${hits.join("、")}），必须显式指定 work…
+       |             ^
+    499|     }
+    500|     if (hits.length === 1) {
+ ❯ Object.run src/main/kernel-host.ts:519:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: 会话 id 在多个工作区同时存在（/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-prefs-run-sNeTe2/a、/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-prefs-run-sNeTe2/b），必须显式指定 workspace：same
+ ❯ resolveSessionWs src/main/kernel-host.ts:498:13
+    496|     for (const ws of workspaces) if (await sessionExists(wsRoot(ws), s…
+    497|     if (hits.length > 1) {
+    498|       throw new Error(`会话 id 在多个工作区同时存在（${hits.join("、")}），必须显式指定 work…
+       |             ^
+    499|     }
+    500|     if (hits.length === 1) {
+ ❯ Object.run src/main/kernel-host.ts:519:18
+
+This error originated in "tests/session-prefs-run-routing.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "keeps another workspace's same-id run isolated while the first execution is active". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 10 passed (13)
+     Errors  1 error
+   Start at  16:24:10
+   Duration  3.11s (transform 46%, tests 39%, import 15%)
+
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run tests/session-prefs-run-routing.test.ts tests/run-queue-session.test.tsx '--maxWorkers=1'

@@ -7,8 +7,10 @@
 // 五张闸同形（标题 + 后果说明 + 取消/确认），故合成一个组件：确认态由 props 给出，
 // 事件由 props 给出（onConfirm/onClose），组件自己不含任何状态。
 import type { ProjectRecord } from "../../../../../src/main/ipc-protocol";
-import type { WorkspaceSession } from "../sessions-view";
+import type { DeleteConfirmTarget, SessionConfirmTarget, WorkspaceSession } from "../sessions-view";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { permissionConfirmCopy } from "../components/PermissionMenu";
+import type { PermissionConfirmApi } from "../state/use-permission-confirm";
 import { ModalSurface } from "../components/ModalSurface";
 import { STR } from "../strings";
 
@@ -22,17 +24,19 @@ export interface ConfirmScrimsProps {
   setProjectRemoveConfirm: (v: ProjectRecord | null) => void;
   doRemoveProject: (p: ProjectRecord) => void;
   /** 归档必问闸。 */
-  archiveConfirm: WorkspaceSession | null;
-  setArchiveConfirm: (v: WorkspaceSession | null) => void;
+  archiveConfirm: SessionConfirmTarget | null;
+  setArchiveConfirm: (v: SessionConfirmTarget | null) => void;
   doArchiveSession: (id: string, archived: boolean) => void;
-  /** 删除会话闸。 */
-  deleteConfirm: WorkspaceSession | null;
-  setDeleteConfirm: (v: WorkspaceSession | null) => void;
-  doDeleteSession: (id: string) => void;
+  /** 删除会话闸（running = 请求确认时这条会话在跑，文案与按钮据此变化）。 */
+  deleteConfirm: DeleteConfirmTarget | null;
+  setDeleteConfirm: (v: DeleteConfirmTarget | null) => void;
+  doDeleteSession: (id: string, target?: WorkspaceSession) => void;
   /** 丢弃隔离工作区闸。 */
   wtDiscard: WorkspaceSession | null;
   setWtDiscard: (v: WorkspaceSession | null) => void;
   sessionWorktreeOp: (kind: "create" | "merge" | "discard", s: WorkspaceSession) => void;
+  /** 命令面板循环到危险权限档时的确认（服务层只给待确认态，不直接落盘）。 */
+  permissionGuard: PermissionConfirmApi;
 }
 
 export function ConfirmScrims(props: ConfirmScrimsProps) {
@@ -42,9 +46,21 @@ export function ConfirmScrims(props: ConfirmScrimsProps) {
     archiveConfirm, setArchiveConfirm, doArchiveSession,
     deleteConfirm, setDeleteConfirm, doDeleteSession,
     wtDiscard, setWtDiscard, sessionWorktreeOp,
+    permissionGuard,
   } = props;
+  const permissionCopy = permissionGuard.permissionConfirm === null ? null : permissionConfirmCopy(permissionGuard.permissionConfirm);
   return (
     <>
+      {permissionGuard.permissionConfirm !== null && permissionCopy !== null && (
+        <ConfirmDialog
+          title={permissionCopy.title}
+          note={permissionCopy.desc}
+          confirmLabel={STR.permissionMenu.confirmOk}
+          danger
+          onClose={() => permissionGuard.setPermissionConfirm(null)}
+          onConfirm={() => { const m = permissionGuard.permissionConfirm; permissionGuard.setPermissionConfirm(null); if (m !== null) permissionGuard.apply(m); }}
+        />
+      )}
       {/* 回滚轮次 / 移除项目的确认卡（2026-10-17：原生 confirm → 产品自绘）。 */}
       {revertConfirm !== null && (
         <ConfirmDialog
@@ -71,7 +87,10 @@ export function ConfirmScrims(props: ConfirmScrimsProps) {
         <ModalSurface className="confirm-scrim" label="归档确认" onClose={() => setArchiveConfirm(null)}>
           <div className="confirm-card">
             <div className="cc-title">归档「{archiveConfirm.title ?? archiveConfirm.id}」？</div>
-            <div className="cc-note">归档后会话移出常规列表，收进侧栏底部的「已归档」分组；随时能取消归档。归档不删任何内容。</div>
+            <div className="cc-note">
+              归档后会话移出常规列表，收进侧栏底部的「已归档」分组；随时能取消归档。归档不删任何内容。
+              {archiveConfirm.running === true && <><br />该会话正在运行：归档后本轮（含已排队消息）会在后台继续跑，完成后照常通知。</>}
+            </div>
             <div className="cc-actions">
               <button className="mini-btn" onClick={() => setArchiveConfirm(null)}>取消</button>
               <button
@@ -94,6 +113,7 @@ export function ConfirmScrims(props: ConfirmScrimsProps) {
             <div className="cc-note">
               此操作无法撤销：该会话的全部记录将从磁盘删除（含旁路提升历史与队列残留）。<br />
               工作区里的文件不受影响——agent 改过的文件不会随会话回滚。
+              {deleteConfirm.running === true && <><br />该会话正在运行：确认后会先停止本轮，再删除。</>}
             </div>
             <div className="cc-actions">
               <button className="mini-btn" onClick={() => setDeleteConfirm(null)}>取消</button>
@@ -102,9 +122,9 @@ export function ConfirmScrims(props: ConfirmScrimsProps) {
                 onClick={() => {
                   const target = deleteConfirm;
                   setDeleteConfirm(null);
-                  void doDeleteSession(target.id);
+                  void doDeleteSession(target.id, target);
                 }}
-              >删除</button>
+              >{deleteConfirm.running === true ? "停止并删除" : "删除"}</button>
             </div>
           </div>
         </ModalSurface>

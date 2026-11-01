@@ -1,0 +1,5 @@
+       × grep：pattern 是主语，path 只是范围——不许只剩目录 18ms
+       × glob：只有 pattern 时不许把 JSON 甩上屏 4ms
+       × TOOL_NAMES 全覆盖 129ms
+       × 词表里不许有工具面之外的陈旧键（如已不存在的 list_dir） 0ms
+        Tests  4 failed | 3 passed (7)

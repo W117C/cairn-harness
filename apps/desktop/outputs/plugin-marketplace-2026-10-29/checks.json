@@ -1,0 +1,253 @@
+{
+  "protocolVersion": 29,
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "protocol v29 is live",
+      "ok": true,
+      "detail": 29
+    },
+    {
+      "name": "discover is the default plugin view",
+      "ok": true
+    },
+    {
+      "name": "marketplace contains no fabricated social proof",
+      "ok": true
+    },
+    {
+      "name": "live catalog renders real shelves and rows",
+      "ok": true
+    },
+    {
+      "name": "featured plugin is discoverable",
+      "ok": true
+    },
+    {
+      "name": "three source-bound installed rows are visible",
+      "ok": true
+    },
+    {
+      "name": "1120px installed rows keep actions inside their row",
+      "ok": true,
+      "detail": {
+        "overlaps": 0,
+        "scrollWidth": 1120,
+        "width": 1120
+      }
+    },
+    {
+      "name": "enabled plugin exposes an explicit disable action",
+      "ok": true
+    },
+    {
+      "name": "disable round-trips through window.agent and refreshes the row",
+      "ok": true
+    },
+    {
+      "name": "real update count reaches the global rail",
+      "ok": true,
+      "detail": {
+        "updateCount": 2,
+        "railBadge": "2"
+      }
+    },
+    {
+      "name": "update action enters review as an update",
+      "ok": true
+    },
+    {
+      "name": "Git review shows provenance, digest, permissions, config, and risk",
+      "ok": true,
+      "detail": "git-import\n安装审查\n来源\n类型\nGit\n作用域\n全局\n仓库\nhttps://github.com/example/git-import\nRef\nmain\nCommit\n4444444444444444444444444444444444444444\nSHA-256\n6666666666666666666666666666666666666666666666666666666666666666\n能力\nskills\n1\ncommands\n0\nagents\n0\nhooks\n2\nmcp\n1\nlsp\n0\n权限\n未提供签名权限清单\n配置\nWorkspace token\n可选\n风险\nhooks 会在下一轮运行\n确认后先停用，启用后才在下一轮生效\n取消\n确认安装"
+    },
+    {
+      "name": "review primary action has an opaque background",
+      "ok": true,
+      "detail": "rgb(20, 20, 19)"
+    },
+    {
+      "name": "880px review uses the full-height sheet without horizontal overflow",
+      "ok": true,
+      "detail": {
+        "left": 0,
+        "right": 880,
+        "width": 880,
+        "top": 48,
+        "scrollWidth": 880
+      }
+    },
+    {
+      "name": "Escape closes review without cancelling the staged job",
+      "ok": true
+    },
+    {
+      "name": "a closed review can be reopened without resolving the source again",
+      "ok": true
+    },
+    {
+      "name": "explicit review cancellation still cancels the staged job",
+      "ok": true
+    },
+    {
+      "name": "local import enters the same review sheet",
+      "ok": true
+    },
+    {
+      "name": "catalog install enters the same review sheet",
+      "ok": true
+    },
+    {
+      "name": "stale cache is labeled as offline cache",
+      "ok": true
+    },
+    {
+      "name": "corrupt cache remains distinct from an empty catalog",
+      "ok": true
+    },
+    {
+      "name": "valid empty catalog is distinct from unavailable",
+      "ok": true
+    },
+    {
+      "name": "detail opens from a discover row",
+      "ok": true
+    },
+    {
+      "name": "Esc returns focus to the originating plugin row",
+      "ok": true
+    },
+    {
+      "name": "favorite survives a renderer reload",
+      "ok": true
+    },
+    {
+      "name": "uninstall removes only the confirmed registry row",
+      "ok": true
+    },
+    {
+      "name": "all plugin actions have accessible names",
+      "ok": true,
+      "detail": 0
+    },
+    {
+      "name": "renderer console has no errors",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "name": "smoke exercised import, status, cancel, enable, update review, and uninstall through window.agent",
+      "ok": true,
+      "detail": [
+        "pluginSetEnabled",
+        "marketplacePluginCheckUpdate",
+        "marketplacePluginCheckUpdate",
+        "marketplacePluginCheckUpdate",
+        "marketplacePluginUpdate",
+        "marketplacePluginInstallStatus",
+        "marketplacePluginInstallCancel",
+        "marketplacePluginImport",
+        "marketplacePluginInstallStatus",
+        "marketplacePluginInstallCancel",
+        "marketplacePluginImport",
+        "marketplacePluginInstallStatus",
+        "marketplacePluginInstall",
+        "marketplacePluginInstallStatus",
+        "pluginUninstall"
+      ]
+    }
+  ],
+  "errors": [],
+  "calls": [
+    {
+      "method": "pluginSetEnabled",
+      "entryId": "catalog-installed",
+      "scope": "user",
+      "enabled": false
+    },
+    {
+      "method": "marketplacePluginCheckUpdate",
+      "entryId": "catalog-installed",
+      "scope": "user"
+    },
+    {
+      "method": "marketplacePluginCheckUpdate",
+      "entryId": "git-installed",
+      "scope": "project",
+      "workspace": "/tmp/demo-ws"
+    },
+    {
+      "method": "marketplacePluginCheckUpdate",
+      "entryId": "local-installed",
+      "scope": "project",
+      "workspace": "/tmp/demo-ws"
+    },
+    {
+      "method": "marketplacePluginUpdate",
+      "entryId": "catalog-installed",
+      "scope": "user"
+    },
+    {
+      "method": "marketplacePluginInstallStatus",
+      "jobId": "fixture-job-1"
+    },
+    {
+      "method": "marketplacePluginInstallCancel",
+      "jobId": "fixture-job-1"
+    },
+    {
+      "method": "marketplacePluginImport",
+      "request": {
+        "kind": "git",
+        "repositoryUrl": "https://github.com/example/git-import",
+        "ref": "main"
+      },
+      "scope": "user"
+    },
+    {
+      "method": "marketplacePluginInstallStatus",
+      "jobId": "fixture-job-2"
+    },
+    {
+      "method": "marketplacePluginInstallCancel",
+      "jobId": "fixture-job-2"
+    },
+    {
+      "method": "marketplacePluginImport",
+      "request": {
+        "kind": "local",
+        "sourcePath": "/tmp/cairn-plugin-fixtures/local-import"
+      },
+      "scope": "user"
+    },
+    {
+      "method": "marketplacePluginInstallStatus",
+      "jobId": "fixture-job-3"
+    },
+    {
+      "method": "marketplacePluginInstall",
+      "entryId": "featured-plugin",
+      "scope": "user"
+    },
+    {
+      "method": "marketplacePluginInstallStatus",
+      "jobId": "fixture-job-4"
+    },
+    {
+      "method": "pluginUninstall",
+      "entryId": "local-installed",
+      "scope": "project",
+      "workspace": "/tmp/demo-ws"
+    }
+  ],
+  "screenshots": [
+    "01-discover-1440-light.png",
+    "02-discover-1440-dark.png",
+    "03-installed-1120-light.png",
+    "04-updates-1120-dark.png",
+    "05-review-880-light.png",
+    "06-offline-1440-light.png",
+    "07-corrupt-1120-dark.png",
+    "08-detail-880-dark.png"
+  ]
+}

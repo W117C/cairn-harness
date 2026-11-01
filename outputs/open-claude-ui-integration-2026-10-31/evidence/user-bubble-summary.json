@@ -1,0 +1,18 @@
+{
+  "before": {
+    "collapsed": "true",
+    "h": 320,
+    "scrollH": 1176,
+    "mask": "linear-gradient(rgb(0, 0, 0) calc(100% - 48px), rgba(0, 0, 0, 0))",
+    "more": "展开全文",
+    "expanded": "false",
+    "row": "done"
+  },
+  "after": {
+    "collapsed": "false",
+    "h": 1176,
+    "more": "收起",
+    "expanded": "true"
+  },
+  "errors": []
+}

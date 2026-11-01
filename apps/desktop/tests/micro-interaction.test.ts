@@ -47,7 +47,7 @@ const MICRO = [
   ".menu-item", ".cp-item", ".ss-row", ".session:hover", ".ss-opt", ".theme-opt", ".opt",
   ".tpl-card", ".start", ".err-retry", ".tool-head", ".avatar", ".side-new", ".sp-back",
   ".side-search", ".side-search-x", ".sp-nav-search", ".sp-nav-search-x",
-  ".sw", ".composer-card", ".usage-scope button", ".provider-dot",
+  ".sw", ".composer-card", ".provider-dot",
   ".pane-handle", ".mod-sidebar-resize::after",
 ];
 

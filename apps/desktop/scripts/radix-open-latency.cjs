@@ -35,6 +35,12 @@ const pct = (sorted, ratio) => sorted[Math.min(sorted.length - 1, Math.floor(sor
 
 async function main() {
   if (!Number.isInteger(requestedSamples) || requestedSamples < 2) throw new Error("samples 必须是 >= 2 的整数");
+
+// 开合耗时帽（第 959 页）：此前这支只打印不判定，`app.exit(0)` 无条件——开了 3 秒也照样绿。
+// 首开 500 ms / 复开 p95 200 ms（实测首开 26.8、复开 p95 14.3，约 10–20 倍余量）：拦数量级回归。
+const firstBudgetMs = Number(process.env.CAIRN_RADIX_FIRST_BUDGET_MS ?? 500);
+const warmBudgetMs = Number(process.env.CAIRN_RADIX_WARM_BUDGET_MS ?? 200);
+if (![firstBudgetMs, warmBudgetMs].every((v) => Number.isFinite(v) && v > 0)) throw new Error("radix 预算必须是有限正数");
   await app.whenReady();
   const { version, members } = apiSurface();
   const win = new BrowserWindow({
@@ -107,7 +113,12 @@ async function main() {
   writeFileSync(output, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report));
   console.log(`[radix-open-latency] first ${opens[0].toFixed(1)}ms | warm p50 ${report.warmOpenMs.p50.toFixed(1)}ms / p95 ${report.warmOpenMs.p95.toFixed(1)}ms / max ${report.warmOpenMs.max.toFixed(1)}ms`);
-  app.exit(0);
+  const overBudget = [
+    ...(opens[0] > firstBudgetMs ? [`首开 ${opens[0].toFixed(1)}ms > 帽 ${String(firstBudgetMs)}ms`] : []),
+    ...(report.warmOpenMs.p95 > warmBudgetMs ? [`复开 p95 ${report.warmOpenMs.p95.toFixed(1)}ms > 帽 ${String(warmBudgetMs)}ms`] : []),
+  ];
+  if (overBudget.length > 0) console.error("[radix-open-latency] 超预算：" + overBudget.join("；"));
+  app.exit(overBudget.length === 0 ? 0 : 1);
 }
 
 setTimeout(() => { console.error("[radix-open-latency] 超时"); app.exit(1); }, 30000).unref();

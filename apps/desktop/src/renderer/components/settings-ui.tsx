@@ -1,33 +1,23 @@
-// 设置页公共组件（批 6 · 总纲阶段 2「公共组件先行」+ 细则 §六；
-// 2026-10-16 模型/通道页重做：内容列 ≤960px + SettingsRow 定 220px 标题列 + Field/Badge/StatusDot 三件）：
-//   SettingsPage    页面壳：20px 标题 + ≤960px 内容列（宽度与居中由 .sp-body > .ss-page 落）
-//   SettingsSection 分组：12.5px tertiary 组标题在卡上方 + surface 卡（描边 + 14 圆角）
-//   SettingsRow     行：220px 固定标题列（标题 + 灰色说明）/ 控件列弹性左对齐、行间 1px 分隔线
-//   Field           控件外壳：36px 高 / 8px 圆角 / 焦点描边 / 禁用区分；select 走自绘箭头
-//   Badge           小徽章：已存 key 等；带 × 删除
-//   StatusDot       状态点：ok 绿 / warn 橙 / off 灰（联网搜索等状态行）
-//   EmptyState      空态：图标 + 标题 + 说明 + 主按钮（可选）；垂直居中，不摆统计卡
-//   OptionCard      单选卡：单选圆点 + 标题/说明上下排；选中 = 强调描边 + 淡底；危险档整体危险色
-//   Banner          提示条：信息/警告 + 可折叠「查看详情」；ToneBannerIcon 由调用方给内容与图标
-// 组标题字号口径：细则三处（设置页/模型页/权限页）一致「12.5px tertiary 卡上方小标签」，
-// 页面标题承担 20px/600（总纲阶段 2 的「15px/600 分组标题」按对账口径并入细则版——克制小标签）。
+// 设置页公共组件：页头、分组、标签/控件行，以及共享表单状态。
+// 设置页的紧凑布局在 settings-refinement.css 中，并限定于 .sp-page。
 import type { ReactNode } from "react";
 
 export function SettingsPage(props: { title: string; desc?: string; children: ReactNode }): React.JSX.Element {
   return (
     <div className="ss-page">
-      <h1 className="ss-title">{props.title}</h1>
-      {props.desc !== undefined && <p className="ss-desc">{props.desc}</p>}
+      <header className="ss-head"><h1 className="ss-title">{props.title}</h1>
+        {props.desc !== undefined && <p className="ss-desc">{props.desc}</p>}
+      </header>
       <div className="ss-content">{props.children}</div>
     </div>
   );
 }
 
-export function SettingsSection(props: { title: string; hint?: string; children: ReactNode }): React.JSX.Element {
+export function SettingsSection(props: { title: string; hint?: ReactNode; children: ReactNode }): React.JSX.Element {
   return (
     <section className="ss-sec">
       <div className="ss-sec-head">
-        <span className="ss-sec-title">{props.title}</span>
+        <h2 className="ss-sec-title">{props.title}</h2>
         {props.hint !== undefined && <span className="ss-sec-hint">{props.hint}</span>}
       </div>
       <div className="ss-card">{props.children}</div>

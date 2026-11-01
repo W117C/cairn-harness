@@ -1,0 +1,10 @@
+=== 造红 A：把「证据占比」那行的日期去掉 ===
+     × 每个标「现读」的表格行都带 YYYY-MM-DD 8ms
+AssertionError: 这些「现读」没有日期：| P1 | 证据占比与检索噪声 | 现读跟踪面约 **4278 / 6291 : expected [ Array(1) ] to deeply equal []
+     19|     expect(undated, "这些「现读」没有日期：" + undated.map((l) => l.slice(0, 40))…
+      Tests  1 failed | 1 passed (2)
+
+=== 复原后 ===
+      Tests  2 passed (2)
+=== sha256 ===
+   2 4f528f0bfeeaf8ca28cecdf8d313949316245d084fa162c644eb737e1fcc706c

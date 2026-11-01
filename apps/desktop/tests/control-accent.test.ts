@@ -8,7 +8,7 @@
 // 因此本仓拆成两枚：
 //   --accent-control      = blue-450  → 环 / 填充 / 边框
 //   --accent-control-text = blue-600  → 文字（450 当文字在亮底只有约 5.4:1，600 有 14:1+）
-//   --accent-brand        = 陶土橙     → 品牌（主按钮、品牌图标、当前会话强调条）
+//   --accent-brand        = 陶土橙     → 品牌（发送键、品牌图标；2026-10-28 起不再用于侧栏选中条）
 //
 // 判据钉的是**分工**（哪一枚用在哪），不是"存在即绿"：把控件蓝换回品牌橙必须红。
 import { readFileSync } from "node:fs";
@@ -35,8 +35,9 @@ describe("控件强调色与品牌色分工（Claude v3）", () => {
 
   it("焦点环三层用控件蓝（v3 --cds-focus-shadow 用 --cds-fill-accent）", () => {
     const rule = block(":focus-visible {");
-    expect(rule).toContain("hsl(var(--accent-control) / 60%)");
-    expect(rule).toContain("hsl(var(--accent-control-glow) / 60%)");
+    // 真机亮色 ①② 两层满不透明；原实现误乘 60%（2026-10-30 更正）
+    expect(rule).toContain("hsl(var(--accent-control))");
+    expect(rule).toContain("hsl(var(--focus-ring-glow) / var(--focus-ring-glow-alpha))");
     expect(rule).not.toContain("accent-brand");
   });
 
@@ -48,13 +49,15 @@ describe("控件强调色与品牌色分工（Claude v3）", () => {
     }
   });
 
-  it("焦点环外发光分主题：亮色 blue-100、暗色 blue-800（v3 --cds-bg-accent 两主题相反）", () => {
-    // v3 实测：亮色 `--cds-bg-accent` = role-accent-100（blue-100 #cde2fb），
-    // 暗色 scope = role-accent-800（blue-800 #032042）——同一枚 token 明暗相反。
-    expect(TOKENS).toContain("--accent-control-glow: 210 70.9% 90%;");
+  it("焦点环外发光分主题：亮 blue-100 不透明 / 暗 blue-600 60%（v3 --cds-focus-shadow 实测）", () => {
+    // 真机亮色第③层 = #cde2fb 满不透明；暗色 = hsl(from #184f95 h s l / 60%)。
+    // 暗色那层**不是** --bg-accent（blue-800 #032042）——按它推导会比蓝本暗一档。
+    expect(TOKENS).toContain("--focus-ring-glow: 212.6 85.2% 89.4%;");
+    expect(TOKENS).toContain("--focus-ring-glow-alpha: 100%;");
     const darkAt = TOKENS.indexOf('[data-theme="dark"] {');
-    expect(TOKENS.slice(darkAt)).toContain("--accent-control-glow: 210 82% 13%;");
-    expect(block(":focus-visible {")).toContain("hsl(var(--accent-control-glow) / 60%)");
+    const darkBlock = TOKENS.slice(darkAt);
+    expect(darkBlock).toContain("--focus-ring-glow: 213.6 72.3% 33.9%;");
+    expect(darkBlock).toContain("--focus-ring-glow-alpha: 60%;");
   });
 
   it("强调文字分主题：亮色 blue-600、暗色 blue-300（v3 暗色 scope 用 role-accent-300）", () => {
@@ -62,7 +65,13 @@ describe("控件强调色与品牌色分工（Claude v3）", () => {
     expect(TOKENS).toContain("--accent-control-text: 213.6 72.3% 33.9%;");
     const darkAt = TOKENS.indexOf('[data-theme="dark"] {');
     const darkBlock = TOKENS.slice(darkAt);
-    expect(darkBlock).toContain("--accent-control-text: 210 70.9% 51.6%;");
+    // 判卷更正（第 881 页）：本条注释一直写着「暗色 blue-300」，字面却钉着 210 70.9% 51.6%
+    // ——那是**亮档** role-accent-300 的值。官方 blue-300 = #6da7ec ≈ 210 65.5% 67.1%，
+    // 也正是暗档 --role-accent-300 的值。原意不变（暗色用 blue-300），把字面修成它描述的档。
+    expect(darkBlock).toContain("--accent-control-text: 210 65.5% 67.1%;");
+    expect(darkBlock).toContain("--role-accent-300: 210 65.5% 67.1%;");
+    // 反向自证：退回亮档值（51.6%）必须红
+    expect(darkBlock).not.toContain("--accent-control-text: 210 70.9% 51.6%;");
   });
 
   it("强调文字（链接 / 选中项文字 / 菜单勾）用 blue-600 那一枚", () => {
@@ -73,9 +82,19 @@ describe("控件强调色与品牌色分工（Claude v3）", () => {
     }
   });
 
-  it("品牌橙仍留在品牌位（主按钮发送键、品牌图标、当前会话强调条）", () => {
+  it("起手行悬停不走色相（第 872 页）：整行已用中性对比表态，图标不再变珊瑚", () => {
+    const rule = block(".start:hover .start-icon, .start:focus-visible .start-icon {");
+    expect(rule).not.toBe("");
+    expect(rule).toContain("hsl(var(--text-000))");
+    expect(rule).not.toContain("accent-brand");
+    // 反向自证：同一条若改回色相，本判卷必须红（不是恒真断言）。
+    expect(rule.replace("hsl(var(--text-000))", "hsl(var(--accent-brand))")).toContain("accent-brand");
+  });
+
+  it("品牌橙仍留在品牌位（主按钮发送键、品牌图标）", () => {
+    // 2026-10-28 第 735 页：当前会话的 2px 橙条已撤（暗色下像警示轨）；品牌橙不再用于侧栏选中态。
     expect(block(".send-btn {")).toContain("hsl(var(--accent-brand))");
-    expect(block(".session.active::before {")).toContain("hsl(var(--accent-brand))");
     expect(block(".empty-greet-mark {")).toContain("hsl(var(--accent-brand))");
+    expect(CSS).not.toMatch(/\.session\.active::before\s*\{/);
   });
 });

@@ -13,6 +13,9 @@ import { assistantTurnsFromEvents, goalDriftCell, goalDriftFindings } from "../a
 import { costPerProgress } from "../agent/cost-per-progress";
 import { eventsForCurrentRun } from "../agent/delivery-guard";
 import { runEvolution, type ReflectFn } from "../agent/evolution";
+import { basename } from "node:path";
+import { recordEpisode } from "./evolve/episode-store";
+import { seedPlaybookFromLegacy } from "./evolve/playbook-store";
 import { tickCanaryFromSignals } from "./evolution/activation-host";
 import { distillWorkflows, writeWorkflows } from "../agent/memory/workflow";
 import { maybeGraduateWorkflows } from "./evolution/workflow-graduate";
@@ -32,9 +35,11 @@ export interface PostRunReadingInput {
 
 /** 收束时调一次。**任何一支失败都不抛**——它不参与这一场的结果。 */
 export async function emitPostRunReadings(input: PostRunReadingInput): Promise<void> {
-  let events: AgentEvent[];
+  let allEvents: AgentEvent[] = [];
+  let events: AgentEvent[] = [];
   try {
-    events = eventsForCurrentRun(await replay(input.logPath), { includeWorkers: true });
+    allEvents = await replay(input.logPath);
+    events = eventsForCurrentRun(allEvents, { includeWorkers: true });
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     console.warn("[goal-drift] 读数失败（这一格未检，不等于没有漂移）: " + reason);
@@ -76,6 +81,17 @@ export async function emitPostRunReadings(input: PostRunReadingInput): Promise<v
   } catch (err) {
     console.warn("[cost-per-progress] 读数失败（这一格未检）: " + (err instanceof Error ? err.message : String(err)));
   }
+  // Episode 证据基座（Evolve P0）：只观测、不驱动决策；失败只出声，不阻塞主流程。
+  try {
+    await recordEpisode({
+      events: allEvents,
+      workspace: input.workspace,
+      sessionId: input.sessionId ?? basename(input.logPath, ".jsonl"),
+      logPath: input.logPath,
+    });
+  } catch (err) {
+    console.warn("[evolve] Episode 落盘失败（这一场没有证据，不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
+  }
   // 自进化闭环：抽信号 → 评旧账 → 生补丁（反思位可选改写）→ 过门 → 落盘。失败不阻塞主流程。
   try {
     const reflect: ReflectFn | undefined = input.reflectProviderFor === undefined
@@ -84,6 +100,16 @@ export async function emitPostRunReadings(input: PostRunReadingInput): Promise<v
     const evo = await runEvolution(events, input.workspace, input.sessionId ?? input.logPath, reflect === undefined ? undefined : { reflect });
     if (evo.persistedTo !== null && evo.patches.length > 0) {
       console.warn("[evolution] 本跑产出 " + evo.patches.length + " 条策略补丁，已落 " + String(evo.persistedTo));
+    }
+    // P1/P5：把最新补丁/记忆迁成 playbook candidate（只写 candidate，不注入）。
+    // 受 STOP 与 playbook 预算约束；迁移失败只出声，不影响收束。
+    try {
+      const seeded = await seedPlaybookFromLegacy(input.workspace);
+      if (seeded.added > 0) {
+        console.warn("[evolve] 本跑把 " + String(seeded.added) + " 条旧料迁入 playbook candidate");
+      }
+    } catch (err) {
+      console.warn("[evolve] playbook 迁移失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
     }
     // 观察期收束：工作区没有还开着的 canary 档 ⇒ 零行为；有档 ⇒ 用本轮同一份读数续档，
     // 命中退化规则会在 CanaryController 内自动回退。失败只出声，不影响这一场的结果。

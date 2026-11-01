@@ -22,6 +22,7 @@ import type { AgentEvent } from "../../../../src/events";
 import type {
   RunRequest,
   RunResponse,
+  RunControlResponse,
   SessionInfoPayload,
   SessionWorktreeRequest,
   SessionWorktreeResult,
@@ -51,7 +52,8 @@ import {
   setAppHooks,
   updateScheduleCap,
 } from "../../../../src/main/agent-runner";
-import { applyCrashRecovery, initSessionsDir, requireSessionMetadata, setSessionRootResolver } from "../../../../src/main/session-handlers";
+import { applyCrashRecovery, handleSessionPrefsSet, initSessionsDir, requireSessionMetadata, setSessionRootResolver } from "../../../../src/main/session-handlers";
+import { readSessionPreferences, type SessionPreferences } from "../../../../src/main/session-preferences";
 import { initSettingsStore, setSettingsHostDeps } from "../../../../src/main/settings-handlers";
 import {
   createSession as createSessionInRoot,
@@ -92,14 +94,14 @@ export interface KernelHost {
    *  当且仅当该会话的 per-session controller 被 abort 时为 true——判定在包装返回处做。 */
   run(req: RunRequest & { workspace?: string }): Promise<RunResponse & { aborted?: boolean }>;
   decide(askId: string, approved: boolean, scope?: "once" | "session_kind" | "always"): boolean;
-  /** 会话级取消（M3 T2 接管 T1 的缝）：只 abort 该会话在跑 run 的 AbortController；
+  /** 会话级取消（M3 T2 接管 T1 的缝）：只 abort 匹配工作区的会话在跑 run 的 AbortController；
    *  该会话不在运行 ⇒ { ok:false, error:"会话不在运行" }。不再走 M2 全局缝 handleRunCancel
    *  （那只认最后注册的 interactiveRunAbort——并发会话下取消的是最后启动的那场，杀错对象）。 */
-  cancel(sessionId: string): Promise<{ ok: boolean; error?: string }>;
+  cancel(sessionId: unknown, workspace?: unknown): Promise<RunControlResponse>;
   /** 第 9 点·轮中插话：把用户这句话递进**正在跑**的那一轮（不发新 run、不改轮次）。
    *  会话不在跑 ⇒ `{ ok:false, error }` fail-visible：渲染层据此回落为「入队」，
    *  而不是假装送进去了（两种结局在界面上必须分得开）。 */
-  steer(sessionId: string, text: string): Promise<{ ok: boolean; error?: string; queued?: number }>;
+  steer(sessionId: unknown, text: unknown, workspace?: unknown): Promise<RunControlResponse>;
   /** 会话级 worktree 隔离（§3.7 · G4）：create / merge / discard。
    *  三条都先按会话归属解析工作区（与 run 同一张归属表），并在该会话**正在跑**时拒绝——
    *  run 正在那棵树里写东西，此刻合并/删除等于把脚下的地板抽走。 */
@@ -111,6 +113,7 @@ export interface KernelHost {
   /** 全工作区合并的会话清单，每条带 workspace 归组标记（T3 分组侧栏的数据源）；
    *  并合并单例 sidecar 的 pinned/archived/projectId（与写路径同源，见实现处注释）。 */
   listSessions(): Promise<(SessionInfoPayload & { workspace: string })[]>;
+  sessionPrefsSet(sessionId: unknown, prefs: unknown, workspace?: unknown): Promise<{ ok: boolean; error?: string }>;
   /** v14：跨全部已登记工作区的用量账本（只读；不触发 openSession 的恢复/漂移副作用）。
    *  按「路径 + size + mtime」缓存单文件读数——重复打开面板只重读变过的会话。 */
   usageLedger(): Promise<UsageLedgerPayload>;
@@ -161,6 +164,7 @@ export interface KernelHost {
 
 /** 漂移拒绝文案（计划 Global Constraints 原文，逐字）。 */
 const DRIFT_ERROR = "会话已被外部修改（CLI？），请刷新后重试";
+const OTHER_WORKSPACE_RUN = "同名会话被其他工作区的执行占用，请等待它结束";
 
 /** 漂移快照：stat 之外还记基线行数与本端事件计数锚——见 externalDrift 的归因慢路径。 */
 export interface DriftSnapshot {
@@ -368,7 +372,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
   // 但它**不能跨 run 泄漏**成「下一轮的首条任务」——盒子里没被取走的插话随 run 收束一起丢弃，
   // 不会静默变成另一个任务的指令（`steering-channel` 头注释同一条纪律）。
   const runSteering = new Map<string, SteeringChannel>();
-  const runControllers = new Map<string, AbortController>();
+  const runControllers = new Map<string, { controller: AbortController; workspace: string }>();
   /** v14 用量账本的单文件缓存：跨面板开合复用，文件变了（size/mtime）才重读。 */
   const usageCache: UsageFileCache = new Map();
   // 每会话这一轮 run 的**起点**（毫秒）：渲染层换实例（HMR/重载）后秒表要接着真值算，
@@ -391,7 +395,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
   // owner 表是同步 Map（open/create/run 登记过），推送点拿不到归属就原样发、不编。
   const withWorkspace = <T extends object>(payload: T, sessionId: string | undefined): T => {
     if (sessionId === undefined || sessionId === "") return payload;
-    const ws = owner.get(sessionId);
+    const ws = runControllers.get(sessionId)?.workspace ?? owner.get(sessionId);
     return ws === undefined ? payload : { ...payload, workspace: ws };
   };
   setAppHooks({
@@ -503,6 +507,36 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
     return activeWorkspace;
   };
 
+  // 控制面不修改 owner：另一个项目的同名会话不能借打开/停止来改写运行归属。
+  // 校验中的 IO 完成后才取当前 controller，并同步执行动作，避免 await 跨过 run 的代际。
+  const controlRun = async (
+    sessionId: unknown, workspace: unknown,
+    action: (controller: AbortController, box: SteeringChannel | undefined) => RunControlResponse,
+  ): Promise<RunControlResponse> => {
+    try {
+      if (typeof sessionId !== "string" || sessionId.trim() === "") throw new Error("会话 id 必须是非空字符串");
+      let ws: string | undefined;
+      if (workspace !== undefined) {
+        if (typeof workspace !== "string" || workspace.trim() === "") throw new Error("workspace 必须是非空字符串");
+        ws = canonicalWorkspacePath(workspace);
+        if (!workspaces.includes(ws)) throw new Error(`workspace 不在 workspaces 里: ${workspace}`);
+      } else {
+        // 兼容旧调用，但同名 id 的目标不能靠「恰好谁在跑」来猜。
+        const hits = await Promise.all(workspaces.map(async (candidate) =>
+          await sessionExists(wsRoot(candidate), sessionId) ? candidate : null));
+        const matches = hits.filter((candidate): candidate is string => candidate !== null);
+        if (matches.length > 1) throw new Error("会话 id 在多个工作区同时存在，必须显式指定 workspace");
+        ws = matches[0];
+      }
+      const live = runControllers.get(sessionId);
+      if (live === undefined) return { ok: false, error: "会话不在运行" };
+      if (ws !== undefined && live.workspace !== ws) return { ok: false, code: "workspace_mismatch", error: OTHER_WORKSPACE_RUN };
+      return action(live.controller, runSteering.get(sessionId));
+    } catch (error) {
+      return { ok: false, code: "invalid_target", error: error instanceof Error ? error.message : String(error) };
+    }
+  };
+
   return {
     orchestrationView: address => orchestration.view(address),
     orchestrationSubmit: request => orchestration.submit(request),
@@ -514,19 +548,24 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
         // 非会话模式：临时日志，无归属无漂移无可取消缝；plan 覆盖仍随请求透传。
         return handleAgentRun(req, req.planRequired !== undefined ? { planRequired: req.planRequired } : {});
       }
-      const ws = await resolveSessionWs(sessionId);
+      const live = runControllers.get(sessionId);
+      if (live !== undefined && req.workspace !== undefined && canonicalWorkspacePath(req.workspace) !== live.workspace) {
+        return { ok: false, accepted: false, error: OTHER_WORKSPACE_RUN };
+      }
+      const ws = await resolveSessionWs(sessionId, req.workspace);
       const logPath = pathOf(wsRoot(ws), sessionId);
       // 会话级 worktree 隔离（§3.7 · G4）：隔离会话的 run 工作区 = 它自己那棵 worktree
       // （工具 cwd / 写面 / 验证全在里面，主 checkout 不被并行会话踩）。会话存储**不受影响**：
       // logPath 已显式钉在主 checkout 侧，而 worktree 里的 `.agent` 是指回主 checkout 的 symlink
       // ⇒ 权限表/记忆/配置/会话根仍是同一份（这正是「配置跨面共享」那一环，缺了隔离会话就成活孤岛）。
       const runWs = (await isSessionIsolated(ws, sessionId)) ? sessionWorktreePath(ws, sessionId) : ws;
-      if (await externalDrift(sessionId, logPath)) return { ok: false, error: DRIFT_ERROR };
+      if (await externalDrift(sessionId, logPath)) return { ok: false, accepted: false, error: DRIFT_ERROR };
       // canonical controller 覆盖 run 与审计收束：旧 run 的 idle 尚未写完时不接受下一代。
       // 否则 core 已释放日志、旧 finally 仍在写 sidecar，可能把新 run 标成空闲。
-      if (runControllers.has(sessionId)) return { ok: false, error: "session already running or being deleted" };
+      const existing = runControllers.get(sessionId);
+      if (existing !== undefined) return { ok: false, accepted: false, error: existing.workspace === ws ? "session already running or being deleted" : OTHER_WORKSPACE_RUN };
       const controller = new AbortController();
-      runControllers.set(sessionId, controller);
+      runControllers.set(sessionId, { controller, workspace: ws });
       runStartedAt.set(sessionId, Date.now());
       // 插话盒随 run 建：收件箱是 per-run 的（见上方 runSteering 处注释）。
       const steering = createSteeringChannel();
@@ -555,7 +594,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
           onEvent: (event) => {
             // 只有本 run 真正接收了主面用户轮才记 active；请求校验/busy 拒绝没有这拍。
             if (!accepted && event.type === "user_message" &&
-              (!("agent_id" in event) || event.agent_id === undefined) && runControllers.get(sessionId) === controller) {
+              (!("agent_id" in event) || event.agent_id === undefined) && runControllers.get(sessionId)?.controller === controller) {
               accepted = true;
               activeAudit = writeSessionAudit(sessionId, "markActive");
             }
@@ -563,9 +602,9 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
         });
         settledOk = res.ok === true;
         // aborted 真值（desktop 扩展字段，不动 ipc-protocol 类型）：当且仅当本会话 controller 被 abort
-        return controller.signal.aborted ? { ...res, aborted: true } : res;
+        return { ...res, accepted, ...(controller.signal.aborted ? { aborted: true } : {}) };
       } finally {
-        if (runControllers.get(sessionId) === controller) {
+        if (runControllers.get(sessionId)?.controller === controller) {
           await activeAudit;
           if (accepted) await writeSessionAudit(sessionId, "markIdle");
           runControllers.delete(sessionId);
@@ -593,20 +632,31 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
     decide: (askId, approved, scope) => handleAgentDecide(askId, approved, scope),
     // 会话级取消（M3 T2）：abort 该会话在跑 run 的 controller（经 RunOverrides.signal 全语义收束）；
     // 不在跑 ⇒ fail-visible。M2 全局缝 handleRunCancel 不再经此出口（并发会话下它杀的是最后启动的 run）。
-    cancel: async (sessionId) => {
-      const controller = runControllers.get(sessionId);
-      if (controller === undefined) return { ok: false, error: "会话不在运行" };
+    cancel: (sessionId, workspace) => controlRun(sessionId, workspace, (controller) => {
       controller.abort();
       return { ok: true };
-    },
+    }),
     // 第 9 点·轮中插话：把用户这句话递进**正在跑**的那一轮的收件盒。
     // 不在跑 ⇒ fail-visible（渲染层据此把消息转成「入队」而不是假装送进去了）：
     // 「送进去了但其实没人收」比明说「这一轮已经结束」坏得多。
-    steer: async (sessionId: string, text: string) => {
-      const box = runSteering.get(sessionId);
-      if (box === undefined) return { ok: false, error: "会话不在运行（插话无人接收）" };
-      box.push(text);
-      return { ok: true, queued: box.size() };
+    steer: async (sessionId, text, workspace) => {
+      if (typeof text !== "string" || text.trim() === "") return { ok: false, code: "invalid_target", error: "插话内容必须是非空字符串" };
+      return controlRun(sessionId, workspace, (controller, box) => {
+        if (box === undefined || controller.signal.aborted) return { ok: false, error: "会话不在运行（插话无人接收）" };
+        box.push(text);
+        return { ok: true, queued: box.size() };
+      });
+    },
+    sessionPrefsSet: async (sessionId, prefs, workspace) => {
+      try {
+        if (typeof sessionId !== "string") return { ok: false, error: "会话 id 必须是字符串" };
+        if (workspace !== undefined && workspace !== null && typeof workspace !== "string") return { ok: false, error: "workspace 必须是字符串" };
+        const ws = await resolveSessionWs(sessionId, typeof workspace === "string" && workspace !== "" ? workspace : undefined);
+        const owners = await Promise.all(workspaces.map((candidate) => sessionExists(wsRoot(candidate), sessionId)));
+        return await handleSessionPrefsSet({ sessionId, prefs }, wsRoot(ws), { inheritLegacy: owners.filter(Boolean).length === 1 });
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
     },
     listSessions: async () => {
       // pinned/archived/projectId 合并（第三遍真机复检勘定）：core listSessions 只在传 metadataById
@@ -619,11 +669,16 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       const records = await requireSessionMetadata().list();
       const metadataById = new Map(records.map((record) => [record.id, record]));
       const out: (SessionInfoPayload & { workspace: string })[] = [];
+      const scopedPrefs = new Map<SessionInfoPayload, SessionPreferences>();
       for (const ws of workspaces) {
         // 隔离标记读侧现算（目录存在即真）：不落 sidecar、不进事件流 ⇒ 也不会有第二份会漂的状态。
         const isolated = new Set(await listIsolatedSessions(ws));
-        for (const info of await listSessionsInRoot(wsRoot(ws), metadataById)) {
-          out.push({ ...info, workspace: ws, ...(isolated.has(info.id) ? { isolated: true } : {}) });
+        const infos = await listSessionsInRoot(wsRoot(ws), metadataById);
+        const prefs = await Promise.all(infos.map((info) => readSessionPreferences(pathOf(wsRoot(ws), info.id))));
+        for (const [index, info] of infos.entries()) {
+          const row = { ...info, workspace: ws, ...(isolated.has(info.id) ? { isolated: true } : {}) };
+          out.push(row);
+          if (prefs[index] !== null && prefs[index] !== undefined) scopedPrefs.set(row, prefs[index]);
         }
       }
       // 同 id 跨工作区（秒级时间戳撞名）：无法判断这份 sidecar 属于哪一边 ⇒ 两边都不套组织字段，
@@ -631,6 +686,11 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       const counts = new Map<string, number>();
       for (const s of out) counts.set(s.id, (counts.get(s.id) ?? 0) + 1);
       for (const s of out) {
+        if ((counts.get(s.id) ?? 0) > 1 || scopedPrefs.has(s)) {
+          delete s.model;
+          delete s.thinking;
+          Object.assign(s, scopedPrefs.get(s));
+        }
         if ((counts.get(s.id) ?? 0) > 1) {
           const mutable = s as unknown as Record<string, unknown>;
           delete mutable.title;
@@ -776,7 +836,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       // 在跑拒绝（M4-5 fail-visible）：该组任一会话仍在 run（runControllers 有键）⇒ 拒绝缩面。
       // 判据走归属表（owner: sid→ws，run 启动时已登记）——按 sid 逐个对组，命中即 throw。
       for (const sid of runControllers.keys()) {
-        if (owner.get(sid) === ws) {
+        if (runControllers.get(sid)?.workspace === ws) {
           throw new Error(`工作区有正在运行的会话，无法移除: ${ws}`);
         }
       }
@@ -848,7 +908,8 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       // startedAt：这一轮 run 的起点（渲染层换实例后秒表接着真值算；不在场 = 起点未知）
       const session = { workspace: ws, sessionId: id };
       const view = await readSessionView(session, root);
-      return { events, session, view, running: runControllers.has(id), startedAt: runStartedAt.get(id) };
+      const running = runControllers.get(id)?.workspace === ws;
+      return { events, session, view, running, ...(running ? { startedAt: runStartedAt.get(id) } : {}) };
     },
     queueGet: async (sessionId, workspace) => {
       const ws = await resolveSessionWs(sessionId, workspace);

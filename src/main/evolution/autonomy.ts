@@ -16,6 +16,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { BundleManifest } from "./manifest";
+import { isRecord } from "../../is-record";
 
 export type AutonomyTier = "manual" | "gated-auto";
 
@@ -31,7 +32,7 @@ export interface AutonomyConfig {
 }
 
 function isAutonomyConfig(value: unknown): value is AutonomyConfig {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
+  return isRecord(value)
     && ((value as { tier?: unknown }).tier === "manual" || (value as { tier?: unknown }).tier === "gated-auto");
 }
 

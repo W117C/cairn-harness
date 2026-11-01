@@ -1,0 +1,61 @@
+--- a/docs/REPOSITORY-STATUS.md	2026-11-01 17:00:56
++++ b/docs/REPOSITORY-STATUS.md	2026-11-01 16:57:10
+@@ -162,17 +162,19 @@
+ 
+ ## 五、需要优化（先测后改；本轮新增读数）
+ 
++> 2026-11-01 复核：本节里标「现读」的数字已按**当前工作树**重量（脚本与读数见 `outputs/status-doc-refresh-2026-11-01/`）。延迟类读数（首开/复开 ms、流式帧）本轮**没有**重量，所以依赖它们的结论一条没动。
++
+ | 优先级 | 事项 | 事实与下一步 |
+ |---|---|---|
+ | P1 | 状态文档漂移 | 本页重写为唯一入口；历史计划页不再逐勾重开。多份旧报告仍保留，引用时必须带日期与快照身份。 |
+-| P1 | 证据占比与检索噪声 | 现读跟踪面约 **4226 / 6193 = 68.2%** 在 `outputs/`。体量门绿不代表材料无用；已建本页第九节的页面/批次短索引，不删证据。 |
++| P1 | 证据占比与检索噪声 | 现读跟踪面约 **4278 / 6291 = 68.0%** 在 `outputs/`（2026-11-01 复核）。体量门绿不代表材料无用；已建本页第九节的页面/批次短索引，不删证据。 |
+ | P1 | 真实交互覆盖 | 连续发送 7/7；插话 6/6；取消/恢复 4/4；跨工作区 7/7；双窗口工作区 13/13。剩余空白是编排控制面的真实交互。 |
+-| P2 | Radix 下拉依赖 | 构建产物：`index` 176.11 kB（gzip 60.72）、`App` 268.40 kB（gzip 83.82）、`xterm` 329.31 kB（gzip 83.04）；依赖树 251,225 B / 49 模块，主路由闭包 -45.3% 的理论收益。真机首开 **17.3 ms**、复开 p50 **6.4 ms** / p95 **7.3 ms**；暂不懒加载。 |
++| P2 | Radix 下拉依赖 | 构建产物（2026-11-01 复核）：`index` 175.11 kB（gzip 60.40）、`App` **305.89 kB（gzip 95.52）**、`xterm` 321.59 kB（gzip 80.79）——`App` 自 10-27 的 268.40 kB / 83.82 涨了 **+37.5 kB / gzip +11.7 kB**；依赖树 251,225 B / 49 模块（10-27 读数，未重量），主路由闭包 -45.3% 的理论收益。真机首开 **17.3 ms**、复开 p50 **6.4 ms** / p95 **7.3 ms**；暂不懒加载。 |
+ | P2 | 长会话/长列表/大 diff | 真实 renderer：400 轮会话启动 153.3 ms、首开 475.3 ms；流式帧 p50 26.2 / p95 31.9 / max 33.1 ms；FilePane 500 项目录 smoke 通过；4000 行 diff 挂载 191.1 ms。长尾仍只覆盖一个本机样本。 |
+ | P2 | FilePane 与设置可发现性 | FilePane 真机 25/25（键盘、失败恢复、窄窗、长路径、只读态、路径菜单）；设置页 15/15（独立用量页、窄窗、测试连接、密钥不落明文、重载恢复）。 |
+ | P2 | 用量与成本 | usage analytics 5 文件 64 条绿；缺 usage、部分返回、取消/恢复与跨模型价格仍保留 unknown（不折 0）。真实账单口径未验。 |
+ | P2 | LSP 并发/取消 | 7 个 lsp 判卷文件在 core 终跑中通过；历史「首次失败、单跑通过」本轮未复现，不据此改代码。 |
+-| P2 | 大入口冲突成本 | 行数现读：`src/main/agent-runner.ts` 1868、`src/cli.ts` 1669、`apps/desktop/src/main/index.ts` 1434。无明确冲突/热路径证据前不拆。 |
++| P2 | 大入口冲突成本 | 行数现读（2026-11-01 复核）：`src/main/agent-runner.ts` **2023**、`src/cli.ts` **1869**、`apps/desktop/src/main/index.ts` **2104**——较 10-27 分别 +155 / +200 / **+670**（涨幅来自工作树里未提交的批次，不是已发布基线）。仍无明确冲突/热路径证据，不拆。 |
+ 
+ ## 六、事实面
+ 
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 17:00:56
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:57:17
+@@ -4314,3 +4314,4 @@
+ 73. **设置页档位与词表逐个对上（第 950 页）**：权限档的词表 `MODE_LABEL`（芯片/菜单）与设置页的 `MODE_OPTIONS`（单选卡）是两份，互相不锁——2026-10-24 加第五档 `full-access` 时只补了词表，设置页仍列四档，用户从设置页选不到最松档、用芯片切过去后四个单选项全不选中（注释里记着这次事故）。新增 `tests/permission-modes-coverage.test.ts`：两份的 id 集合必须**恰好相等**、无重复、每项都有标题与说明，且条数 ≥5（删空了不许算通过）。
+ 74. **画廊自查：文件行大小必须带单位（第 951 页）**：第 943 页把文件窗格从裸字节数（`2140`）改成 `2.1 KB`，但那是靠人眼看截图发现的——同一类回退（有人把 `formatBytes` 换回 `{e.size}`）没有任何机器拦截。`ui-gallery.cjs` 在弹窗文件窗格截图后加一条自查：`.fp-size` 的文本必须匹配 `B/KB/MB`，裸数字当场抛错（造红实测：退回裸数字 ⇒ `文件行大小没带单位（要 B/KB/MB）：["2140","880"]`，exit 1）。
+ 75. **「在 Finder 中显示」失败不许静默（第 952 页）**：同一个动作两处调用点口径不一——项目列表（`state/projects.ts#handleRevealProject`）失败会 toast，产物行（`state/workbench.ts#handleOpenArtifact`）却 `void …revealInFinder(abs)` 丢掉结果。上一轮的产物常已被删或不在本工作区，用户点了没反应只能猜按钮坏了。产物行改成与项目列表同口径（失败 toast、抛错也 toast）；判卷钉住这条接线并禁止退回丢结果的写法。
++76. **「现读」必须带日期（第 953 页）**：`docs/REPOSITORY-STATUS.md` 自称「只写现态」，但 10-27 那批读数一直以「现读」的口吻留在表里：大入口行数写 `index.ts` 1434（工作树实为 2104，+670）、App chunk 写 268.40 kB（实为 305.89 kB / gzip 95.52）。已按当前工作树重重一遍并逐行标 `2026-11-01 复核`（脚本 `outputs/status-doc-refresh-2026-11-01/measure.sh`），延迟类读数（首开/复开 ms、流式帧）本轮没重量、依赖它们的结论一条没动。判卷 `tests/status-readings-dated.test.ts`：每个标「现读」的表格行必须带 `YYYY-MM-DD`。
+--- /dev/null → tests/status-readings-dated.test.ts
+--- /dev/null	2026-11-01 17:00:56
++++ b/tests/status-readings-dated.test.ts	2026-11-01 16:56:56
+@@ -0,0 +1,25 @@
++/** 第 953 页：`docs/REPOSITORY-STATUS.md` 里标「现读」的读数必须带日期。
++ *
++ *  本页自称「只写现态」，但 10-27 那批读数一直以「现读」的口吻留在表里：大入口行数写着
++ *  `index.ts` 1434，而工作树里已是 2104（+670）；App chunk 写着 268.40 kB，实际 305.89 kB。
++ *  没有日期的「现读」会一直看起来像刚量的——所以把「带日期」变成判据。
++ */
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, expect, it } from "vitest";
++
++const ROOT = join(import.meta.dirname, "..");
++const doc = readFileSync(join(ROOT, "docs/REPOSITORY-STATUS.md"), "utf8");
++
++describe("REPOSITORY-STATUS 的「现读」必须带日期（第 953 页）", () => {
++  it("每个标「现读」的表格行都带 YYYY-MM-DD", () => {
++    const rows = doc.split("\n").filter((l) => l.startsWith("|") && l.includes("现读"));
++    expect(rows.length).toBeGreaterThan(0); // 全删了不算通过
++    const undated = rows.filter((l) => !/20\d\d-\d\d-\d\d/u.test(l));
++    expect(undated, "这些「现读」没有日期：" + undated.map((l) => l.slice(0, 40)).join(" | ")).toEqual([]);
++  });
++
++  it("本页至少有一处 2026-11-01 的复核标记（别的会话接手时知道读数的新旧）", () => {
++    expect(doc).toContain("2026-11-01 复核");
++  });
++});

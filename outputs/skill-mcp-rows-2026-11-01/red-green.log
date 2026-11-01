@@ -1,0 +1,25 @@
+=== 改前 A：ownSubject 不认这两族 ===
+     × spawn_agent 摘要 = 派了什么活（不是 {"task":…,"mode":…}） 3ms
+     × send_agent 摘要 = 追加的要求（thread id 留给展开区） 0ms
+     × wait/cancel：有点名就数个数，没点名就说全部——不摆 {} 也不摆数组原文 0ms
+     × resume/close：thread id 就是这一行唯一的事实 0ms
+     × clarify 摘要 = 第一个问题；多问补一句计数（不是 questions 的 JSON） 0ms
+     × remember 摘要 = 正文首行；没有正文时用 topic 0ms
+     × automation_*：建/改给名字，删/跑给 id，列给一句话 0ms
+     × 行面：remember 的折叠行是「记住 + 正文首行」 4ms
+     × skill 摘要 = 调用名；refine_goal = 目标原文 0ms
+     × mcp_list：不给 server 就是全部；给 server 就是那一台 0ms
+     × mcp_activate / release：server + 数量或工具名 0ms
+     × 行面：mcp_activate 的折叠行是「启用 MCP plugin/sqlite（2 把）」 1ms
+     × spawn_agent ⇒「派发子任务 把 a.ts 的 XX 改掉」；wait_for_agents ⇒「等待 2 个子任务」 1ms
+      Tests  13 failed | 8 passed (21)
+
+=== 改前 B：mcp_activate 没有动词 ===
+     × 行面：mcp_activate 的折叠行是「启用 MCP plugin/sqlite（2 把）」 4ms
+      Tests  1 failed | 20 passed (21)
+
+=== 复原后 ===
+      Tests  21 passed (21)
+=== sha256 ===
+4ff2b8971c98b1a2c27066af6b15e8fab097dbca87e6eb46ec0c70efc07c2ea0
+976bdb83dc264997b89af5c1a09d25d45e76307a382f951d1bdb8109c61c46ec

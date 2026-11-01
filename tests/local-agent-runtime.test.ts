@@ -82,7 +82,7 @@ class FakeOrchestrator implements LocalAgentOrchestrator {
 }
 
 describe("createLocalAgentRuntime", () => {
-  it("delivers two follow-ups to one active thread and is idempotent by message id", async () => {
+  it("send_agent：相同即重复投递，同一键重复调用不会二次投递（follow-up 按 message id 幂等）", async () => {
     const driver = new FakeOrchestrator();
     const runtime = createLocalAgentRuntime(driver);
     const spawned = await runtime.spawn({ task: "inspect", mode: "read", fence: "f1" });
@@ -157,7 +157,7 @@ describe("createLocalAgentRuntime", () => {
     });
   });
 
-  it("close confirms executor stop and is idempotent", async () => {
+  it("close_agent：并等待执行器确认停止（重复 close 幂等）", async () => {
     const driver = new FakeOrchestrator();
     const runtime = createLocalAgentRuntime(driver);
     const spawned = await runtime.spawn({ task: "inspect", mode: "read", fence: "f1" });

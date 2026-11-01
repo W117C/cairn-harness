@@ -1,0 +1,9 @@
+$ npx vitest run tests/lsp.test.ts
+ Test Files  1 passed (1)
+      Tests  25 passed (25)
+$ npx vitest run tests/lsp tests/plugin-lsp-activation.test.ts tests/plugin-lsp-discovery.test.ts
+ Test Files  8 passed (8)
+      Tests  92 passed (92)
+$ npx vitest run tests/mutate-anchor-titles.test.ts
+ Test Files  1 passed (1)
+      Tests  23 passed (23)

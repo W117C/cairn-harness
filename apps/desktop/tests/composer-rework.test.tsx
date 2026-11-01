@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { Composer, fileIconKind } from "../src/renderer/components/Composer";
-import { ModelMenu, ModelPicker, type ModelOption } from "../src/renderer/components/ModelPicker";
+import { ModelMenu, ModelPicker, THINKING_LEVELS, type ModelOption } from "../src/renderer/components/ModelPicker";
 import { MODE_DOT, PermissionMenu } from "../src/renderer/components/PermissionMenu";
 import { STR } from "../src/renderer/strings";
 import { readAppSurface } from "./helpers/app-surface";
@@ -15,6 +15,7 @@ import { readAppSurface } from "./helpers/app-surface";
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const composerSrc = read("../src/renderer/components/Composer.tsx");
 const appSrc = readAppSurface();
+const css = read("../src/renderer/styles.css");
 
 const base = {
   mode: "default" as const,
@@ -77,6 +78,11 @@ describe("P2-2 权限 chip（档位名 + 色点 data-mode）", () => {
     expect(chip).toContain('class="mode-dot"');
     expect(chip).toContain('data-mode="default"');
     expect(chip).toContain(MODE_DOT.default);
+    // 第 872 页（业主「让布局说话」）：触发器不再叠第三枚标记。
+    // 原先 = 色点 + 盾形图标（只有 warn/非 warn 两个形）+ 档名 + 箭头；
+    // 现在 = 色点 + 档名 + 箭头 ⇒ 整枚 chip 里只剩箭头一个 svg。
+    expect((chip.match(/<svg/g) ?? []).length, "触发 chip 只许剩箭头一枚 svg").toBe(1);
+    expect(chip).toContain('class="ctl-caret"');
   });
 
   it("弹层五档：每档 data-mode + 色点 + 一句说明；当前档恰一枚对勾", () => {
@@ -114,7 +120,7 @@ describe("P2-2 模型+思考合并单面", () => {
     expect(unsupported).not.toContain("· 思考");
   });
 
-  it("弹层（ModelMenu 本体）：搜索框 + 列表 + 下半区思考 segmented（四键 + 逐档 title 说明 + 当前档提示）", () => {
+  it("弹层（ModelMenu 本体）：搜索框 + 列表 + 下半区思考 segmented（五键 + 逐档 title 说明 + 当前档提示）", () => {
     const html = renderToStaticMarkup(
       <ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} onThinkingChange={() => undefined} thinking="low" thinkingSupported />,
     );
@@ -122,7 +128,10 @@ describe("P2-2 模型+思考合并单面", () => {
     expect(html).toContain(STR.modelPicker.searchPlaceholder);
     expect(html).toContain(">openai<");
     expect(html).toContain("th-row");
-    for (const s of [STR.modelPicker.thinkOff, STR.modelPicker.thinkLow, STR.modelPicker.thinkMedium, STR.modelPicker.thinkHigh]) {
+    // 多 provider 分组之间有发丝线，glm 标签不再紧贴 deepseek 最后一行。
+    expect(html).toContain('class="mp-group separated"');
+    expect(css).toMatch(/\.mp-group\.separated\s*{[^}]*border-top:\s*1px solid var\(--hairline-strong\)/s);
+    for (const s of [STR.modelPicker.thinkOff, STR.modelPicker.thinkLow, STR.modelPicker.thinkMedium, STR.modelPicker.thinkHigh, STR.modelPicker.thinkMax]) {
       expect(html).toContain(`>${s}<`);
     }
     expect((html.match(/aria-pressed="true"/g) ?? []).length).toBe(1);
@@ -130,13 +139,34 @@ describe("P2-2 模型+思考合并单面", () => {
     expect(html).toContain(`title="${STR.modelPicker.thinkHighHint}"`); // 每档一句说明（逐键 tooltip）
   });
 
-  it("未声明能力：整区禁用（四键 disabled）+ 注「当前模型不支持思考强度」+ 配置折叠在场", () => {
+  it("档位词表含 max（最高）：与能力值同字面量，文案来自 STR", () => {
+    expect(THINKING_LEVELS.map((level) => level.id)).toEqual(["off", "low", "medium", "high", "max"]);
+    expect(THINKING_LEVELS.find((level) => level.id === "max")?.short).toBe(STR.modelPicker.thinkMax);
+    expect(STR.modelPicker.thinkMax).toBe("最高");
+  });
+
+  it("模型声明 max ⇒ 菜单按当前模型出现「最高」档", () => {
+    const html = renderToStaticMarkup(
+      <ModelMenu
+        options={[{ registryId: "deepseek-cheap", label: "deepseek-flash", provider: "deepseek", thinkingLevels: ["off", "low", "high", "max"], thinkingDefault: "off" }]}
+        value="deepseek-cheap"
+        onPick={() => undefined}
+        onThinkingChange={() => undefined}
+        thinking="high"
+        thinkingSupported
+      />,
+    );
+    expect(html).toContain(STR.modelPicker.thinkMax);
+    expect(html).toContain(STR.modelPicker.thinkMaxHint);
+    expect(html).toContain('data-e="max"');
+  });
+
+  it("未声明能力：整区禁用（五键 disabled）+ 注「当前模型不支持思考强度」+ 配置折叠在场", () => {
     const html = renderToStaticMarkup(
       <ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} onThinkingChange={() => undefined} thinking="off" />,
     );
     expect(html).toContain("th-row");
-    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(4); // 四键 + 无列表禁用（本面无 running）
-    // 实际四键 disabled + 0 列表 = 4
+    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(5); // 五键 + 无列表禁用（本面无 running）
     expect(html).toContain(STR.modelPicker.unsupportedNote);
     expect(html).toContain("th-why");
     expect(html).toContain("reasoningEfforts");
@@ -147,12 +177,23 @@ describe("P2-2 模型+思考合并单面", () => {
       <ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} onThinkingChange={() => undefined} thinking="off" thinkingSupported running />,
     );
     expect(html).toContain(STR.modelPicker.runningNote);
-    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(3); // 模型两行 + 演示；四键不禁
+    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(3); // 模型两行 + 演示；五键不禁
   });
 
   it("无 onThinkingChange（旧消费者）：思考段不出现（零行为变化）", () => {
     const html = renderToStaticMarkup(<ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} />);
     expect(html).not.toContain("th-row");
+  });
+});
+
+describe("Composer 控件视觉层级", () => {
+  it("附件与权限退为低强调，模型保留轻底与细边，发送仍是唯一主行动", () => {
+    expect(css).toMatch(/\.attach-btn\s*{[^}]*border:\s*1px solid transparent/s);
+    expect(css).toMatch(/\.ctl\s*{[^}]*color:\s*hsl\(var\(--text-300\)\)/s);
+    expect(css).toMatch(/\.mp-trigger\s*{[^}]*border:\s*1px solid var\(--hairline\)/s);
+    expect(css).toMatch(/\.mp-trigger\s*{[^}]*background:\s*hsl\(var\(--bg-100\)\)/s);
+    expect(css).toMatch(/\.mp-trigger \.mp-name\s*{[^}]*max-width:\s*180px/s);
+    expect(css).toMatch(/\.send-btn\s*{[^}]*background:\s*hsl\(var\(--accent-brand\)\)/s);
   });
 });
 

@@ -1,0 +1,56 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+ ❯ tests/session-prefs-isolation.test.ts (2 tests | 2 failed) 5ms
+   × hydrates two same-id rows into independent workspace/session keys 3ms
+   × changing a model writes its scoped key and forwards workspace through IPC 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/session-prefs-isolation.test.ts > hydrates two same-id rows into independent workspace/session keys
+AssertionError: expected undefined to be 'model-a' // Object.is equality
+
+- Expected:
+"model-a"
+
++ Received:
+undefined
+
+ ❯ tests/session-prefs-isolation.test.ts:14:39
+     12|     { id: "same", workspace: "/b", model: "model-b", thinking: "low" },
+     13|   ], models, thinking);
+     14|   expect(models.get('["/a","same"]')).toBe("model-a");
+       |                                       ^
+     15|   expect(models.get('["/b","same"]')).toBe("model-b");
+     16|   expect(composerThinking("same", "off", thinking, "/a")).toBe("high");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/session-prefs-isolation.test.ts > changing a model writes its scoped key and forwards workspace through IPC
+AssertionError: expected undefined to be 'model-a' // Object.is equality
+
+- Expected:
+"model-a"
+
++ Received:
+undefined
+
+ ❯ tests/session-prefs-isolation.test.ts:26:51
+     24|   applySessionModelPick({ activeId: "same", activeWorkspace: "/a", reg…
+     25|     force: () => undefined, providerInfo: null, refreshProviderInfo: a…
+     26|   expect(selections.current.get('["/a","same"]')).toBe("model-a");
+       |                                                   ^
+     27|   expect(selections.current.get('["/b","same"]')).toBe("model-b");
+     28|   expect(sessionPrefsSet).toHaveBeenCalledWith("same", { model: "model…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  16:02:55
+   Duration  121ms (transform 62%, import 20%, tests 10%, worker 8%)
+
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run tests/session-prefs-isolation.test.ts '--maxWorkers=1'

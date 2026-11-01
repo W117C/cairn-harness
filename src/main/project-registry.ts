@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { basename, isAbsolute } from "node:path";
 import { writeFileAtomic } from "../atomic-write";
+import { isRecord } from "../is-record";
 
 const SCHEMA_VERSION = 1 as const;
 const MAX_ID_LENGTH = 128;
@@ -41,7 +42,8 @@ interface ProjectRegistryState {
 
 export class ProjectRegistryCorruptError extends Error {
   constructor(filePath: string, reason: string) {
-    super(`项目注册表损坏，已拒绝覆盖: ${filePath} (${reason})`);
+    // 拒因与出路同屏（这句会进桌面「项目注册表不可用：…」提示与 doctor）。
+    super(`项目注册表损坏，已拒绝覆盖: ${filePath} (${reason})——修好或删除该文件后重试`);
     this.name = "ProjectRegistryCorruptError";
   }
 }
@@ -54,10 +56,6 @@ function isTimestamp(value: unknown): value is string {
   if (typeof value !== "string" || value.length > 64) return false;
   const parsed = new Date(value);
   return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function assertName(value: unknown): asserts value is string {
@@ -221,6 +219,48 @@ export class ProjectRegistry {
       state.projects[id] = removed;
       await this.persist(state);
       return cloneProject(removed);
+    });
+  }
+
+  /**
+   * 重新定位（2026-10-30 · v36）：项目目录被移动/改名后，用新路径更新**同一条记录**。
+   *
+   * 为什么不能走 add 的 upsert：add 以 canonical path 找记录，旧路径在磁盘上已经不存在，
+   * canonicalDirectory 会先抛 ENOENT——用户只剩「移除再添加」一条路，而那条路会换掉 id，
+   * 旧会话的 projectId 变成悬空引用。这里保住 id / name / createdAt，只换 path。
+   *
+   * defaultLocation 跟随规则：它等于旧 path 或位于旧 path 之下时，按同一相对位置迁到新根；
+   * 用户显式设过别处（不在旧树里）则原样保留——不替用户改他没动过的设置。
+   * 路径唯一性按**全量记录**校验（含已软删除）：validateState 的约束就是全量唯一，
+   * 只查活动项目会让 persist 在下次 load 时炸成「注册表损坏」。
+   */
+  async relocate(id: string, nextPath: string): Promise<ProjectRecord> {
+    if (!isSafeId(id)) throw new Error(`项目 id 非法: ${JSON.stringify(id)}`);
+    const canonical = await canonicalDirectory(nextPath, "path");
+    return await this.enqueue(async () => {
+      const state = await this.load();
+      const project = Object.prototype.hasOwnProperty.call(state.projects, id) ? state.projects[id] : undefined;
+      if (!project) throw new Error(`项目不存在: ${id}`);
+      if (project.removedAt !== undefined) throw new Error(`项目已移除，不能重新定位: ${id}`);
+      if (project.path === canonical) return cloneProject(project);
+      const collision = Object.values(state.projects).find((candidate) => candidate.id !== id && candidate.path === canonical);
+      if (collision !== undefined) {
+        throw new Error(`该目录已被另一个项目登记: ${collision.name}${collision.removedAt !== undefined ? "（已移除）" : ""}`);
+      }
+
+      const oldPath = project.path;
+      const nextDefault = project.defaultLocation === oldPath || project.defaultLocation.startsWith(oldPath + "/")
+        ? canonical + project.defaultLocation.slice(oldPath.length)
+        : project.defaultLocation;
+      const relocated: ProjectRecord = {
+        ...project,
+        path: canonical,
+        defaultLocation: nextDefault,
+        updatedAt: new Date().toISOString(),
+      };
+      state.projects[id] = relocated;
+      await this.persist(state);
+      return cloneProject(relocated);
     });
   }
 

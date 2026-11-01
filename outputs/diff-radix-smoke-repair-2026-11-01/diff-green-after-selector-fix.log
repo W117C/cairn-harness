@@ -1,0 +1,3 @@
+{"elapsedMs":185.39999999850988,"dom":{"hunks":20,"lines":4000,"nodes":24621,"truncated":true},"consoleErrors":[]}
+[diff-render-latency] PASS 185.4ms | 20 hunks / 4000 lines / 24621 nodes
+EXIT=0

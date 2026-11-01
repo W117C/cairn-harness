@@ -1,0 +1,17 @@
+packaged smoke:
+[cairn-smoke] PASS in 1321 ms
+[package] 完成（已验证打包态）：/Users/ze/Downloads/Cairn/cairn/apps/desktop/release-831/Cairn.app
+
+install smoke:
+[install-smoke] PASS：从 DMG 拖出的 Cairn.app 启动并通过打包态冒烟
+
+release contents:
+Cairn.app
+Cairn.dmg
+build-info.json
+
+codesign:
+--prepared:/Users/ze/Downloads/Cairn/cairn/apps/desktop/release-831/Cairn.app/Contents/Frameworks/Mantle.framework/Versions/Current/.
+--prepared:/Users/ze/Downloads/Cairn/cairn/apps/desktop/release-831/Cairn.app/Contents/Frameworks/Electron Helper (GPU).app
+--prepared:/Users/ze/Downloads/Cairn/cairn/apps/desktop/release-831/Cairn.app/Contents/Frameworks/Electron Helper (Plugin).app
+--prepared:/Users/ze/Downloads/Cairn/cairn/apps/desktop/release-831/Cairn.app/Contents/Frameworks/Electron Helper (Renderer).app

@@ -4,14 +4,32 @@
 // `tierToMode` 返回类型），而最坏的一处是 `checkPermission` 以 `return "allow"` 收尾——
 // **加一档（或持久化里冒出个陌生值）不会报错，只会静默拿到"全放行"**。
 // 本文件把"少一份抄本没跟上"与"表外值拿宽权限"两件事变成红。
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { trackedExistingFiles } from "../scripts/lib/scan-scope";
 import { AGENT_PERMISSION_MODES } from "../src/events";
-import { PERMISSION_MODES, isPermissionMode, permissionModeRank, type PermissionMode } from "../src/permissions/modes";
+import { PERMISSION_MODES, isPermissionMode, nextPermissionMode, permissionModeRank, type PermissionMode } from "../src/permissions/modes";
 import { checkPermission, gate, sideEffectDecisionTable } from "../src/permissions";
 import { PERMISSION_MODES as SETTINGS_PERMISSION_MODES } from "../src/main/settings";
 import { isPermissionMode as workerIsPermissionMode, clampTier } from "../src/agent/worker-report";
 
+const ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
+
 describe("档位集合只有一个事实源", () => {
+  it("下一档循环走满五档（第五档 full-access 不许被 UI 的四档抄本漏掉）", () => {
+    expect(PERMISSION_MODES.map(nextPermissionMode)).toEqual(["default", "guided", "auto", "full-access", "read-only"]);
+    expect(nextPermissionMode("weird" as PermissionMode), "未知值从第一档开始").toBe("read-only");
+  });
+
+  it("renderer 不另抄档位顺序：命令面板经 nextPermissionMode，旧四档字面量已撤", () => {
+    const scope = trackedExistingFiles(ROOT, "apps/desktop/src/renderer");
+    const offenders = scope.files.filter((path) => readFileSync(join(ROOT, path), "utf8").includes('["read-only", "default", "guided", "auto"]'));
+    expect(offenders, "renderer 里又抄了一份缺 full-access 的四档顺序：" + offenders.join("、")).toEqual([]);
+    expect(readFileSync(join(ROOT, "apps/desktop/src/renderer/state/workbench.ts"), "utf8")).toContain("nextPermissionMode(mode)");
+  });
+
   it("events 的抄本与 permissions 的事实源逐位相同（顺序=松紧序，clampTier 依赖它）", () => {
     expect([...AGENT_PERMISSION_MODES]).toEqual([...PERMISSION_MODES]);
   });

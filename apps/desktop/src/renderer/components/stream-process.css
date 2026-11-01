@@ -10,12 +10,18 @@
   border-radius: var(--radius-sm);
 }
 .row.assistant > .assistant-footer {
+  /* 署名条落在**下一段之前的那一档**里（第 754 页）：此前它在流里占着 30px，
+     每轮白吃一格高度；现在绝对定位到行的下边缘（bottom:0），不占流内高度。
+     行的顶距是 brief §二.1 的 24px ⇒ 这一档恒为 24px，操作条 30px 会探进 6px，
+     但它默认不可见（opacity:0），只有悬停这一行时才现身。 */
+  position: absolute;
+  top: 100%; left: var(--rail-gutter); right: 0;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  grid-column: 2;
   gap: 4px 16px;
-  margin: 3px 0 0 -6px;
+  margin: 0 0 0 -6px;
+  z-index: 1;
 }
 .row.assistant .assistant-footer > .meta { margin-left: auto; opacity: 0; }
 .row.assistant:hover .assistant-footer > .meta,
@@ -28,25 +34,63 @@
 }
 .row .row-action:disabled { cursor: default; opacity: .5; }
 
+/* 过程带与正文挂在**同一条左轨**（--rail-gutter = 28）上：此前过程带缩进 22px、正文缩进 28px，
+   两者的左边缘差 6px，一轮读下来像两段各自为政的东西。现在同轨 ⇒ 一轮是一块。
+   顶距 0：用户行自己的 --round-gap 那一档就是轮与轮的距离；底距 --turn-gap 是过程带与正文的档。 */
+/* 过程带（2026-10-31 第二批）：思考与工具共用一套「图标芯片 + 一行摘要」的语法。
+   上一版两行都只有灰字，和正文抢同一条视觉线；现在给图标一枚 22px 的柔色芯片，
+   标题/摘要/耗时按三层排开——一眼能分出「这是一段过程」而不是散落的元数据。 */
 .toolcluster[data-tool-group] {
-  gap: 4px;
-  margin: 14px 0 12px 22px;
+  gap: 2px;
+  margin: var(--turn-gap) var(--cds-assistant-message-text-stop) 0 var(--rail-gutter);
   min-width: 0;
 }
 .toolcluster .tool-group-toggle {
   column-gap: 8px;
   row-gap: 5px;
-  min-height: 34px;
-  padding: 6px 8px;
+  min-height: 36px;
+  /* 左内距归零：过程带与正文挂在同一条左轨上，带里的图标要落在**轨**上，
+     不许因为按钮自己的 8px 内距而缩进去一格（此前差 8px ⇒ 带与正文看着不是一条线）。
+     文字跟在图标后面（像列表的 marker 那样挂在左缘），与正文里的项目符号同一读法。 */
+  padding: 5px 8px 5px 0;
   border-radius: var(--radius-sm);
+  /* 过程轨是 16px 正文旁边的次级阅读面：12 → 13px，避免和 caption 标签混成一团。 */
+  font-size: var(--fs-caption-md);
 }
 .toolcluster .tool-group-label { font-weight: var(--fw-medium); }
 .toolcluster .tool-group-detail { color: hsl(var(--text-300)); }
-.toolcluster .tool-group-failure {
-  padding: 0 0 2px 42px;
-  line-height: 1.6;
+.toolcluster .tool-group-main { gap: 8px; }
+/* 状态字形（2026-11-01 真机订正）：完成态**不套底**——此前 22px 的 `bg-200` 芯片在暗色主题里
+   几乎是纯黑方块，看起来像一行里嵌了个黑键。仅在失败/执行中时给一层极淡的状态底，
+   完成态只留一枚灰勾（2026-10-31「完成态只留灰勾」的原意）。 */
+.toolcluster .tool-group-main > .glyph,
+.toolcluster .tool-head > .glyph {
+  width: 20px; height: 20px; border-radius: 5px; justify-content: center;
+  background: transparent; color: hsl(var(--text-300));
 }
-.toolcluster .tool-group-failure-count { font-weight: var(--fw-medium); }
+.toolcluster .tool-group-main > .glyph.failed,
+.toolcluster .tool-head > .glyph.failed { background: hsl(var(--color-risk) / 10%); color: hsl(var(--color-risk)); }
+.toolcluster .tool-group-main > .glyph.pending,
+.toolcluster .tool-head > .glyph.pending { background: hsl(var(--accent-brand) / 10%); color: hsl(var(--accent-brand-ink)); }
+.toolcluster .tool:not(.open) .tname { display: none; }
+.toolcluster .tool-head .tsum { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toolcluster .tool-head .tdur { margin-left: 2px; font-variant-numeric: tabular-nums; color: hsl(var(--text-400)); }
+.toolcluster .tool-group-failure {
+  /* 失败摘要是「一条需要被看见的过程记录」，不是状态栏：给一块极淡的危险色底，
+     让它在 16px 正文与 13px 过程行之间自成一层；仍不用彩色左条（craft floor）。
+     2026-10-31：从通栏色块收成与正文同宽的卡片，左缘对齐工具名——不再横贯整个阅读面。 */
+  flex: 0 1 auto;
+  align-self: flex-start;
+  width: fit-content;
+  margin: 2px 0 2px 30px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: hsl(var(--color-risk) / 6%);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+.toolcluster .tool-group-failure-count { margin-left: 6px; font-weight: var(--fw-medium); }
+.toolcluster .tool-group-duration { margin-left: auto; font-size: var(--fs-caption-xs); color: hsl(var(--text-400)); font-variant-numeric: tabular-nums; }
 .toolcluster .tool-group-body {
   gap: 2px;
   min-width: 0;
@@ -59,8 +103,8 @@
   overflow: visible;
 }
 .toolcluster .tool-head {
-  min-height: 34px;
-  padding: 6px 8px;
+  min-height: 32px;
+  padding: 5px 8px;
   gap: 8px;
   vertical-align: top;
 }
@@ -86,7 +130,7 @@
   white-space: pre-wrap;
 }
 .toolcluster .tool-body {
-  margin: 3px 8px 14px 42px;
+  margin: 3px 8px 12px 34px;
   animation: none;
 }
 .toolcluster .tool-payload-head {
@@ -136,52 +180,78 @@
 }
 
 .row.think[data-running] {
-  margin: 14px 0 8px 22px;
+  margin: var(--turn-gap) var(--cds-assistant-message-text-stop) 0 var(--rail-gutter);
   padding: 0;
   cursor: auto;
 }
 .row.think[data-running]:hover { background: none; }
 .row.think .think-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
   width: 100%;
-  min-height: 34px;
-  padding: 6px 8px;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 5px 34px 5px 0; /* 右侧给复制钮留位；同上：思考带也挂在轨上，图标不缩进 */
   gap: 8px;
   border-radius: var(--radius-sm);
   text-align: left;
 }
 .row.think .think-toggle:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); }
 .row.think.open .think-toggle > .chev { transform: rotate(90deg); }
-.row.think .think-icon { flex: none; color: hsl(var(--text-300)); }
-.row.think .think-label { flex: none; color: hsl(var(--text-300)); }
+.row.think .think-icon {
+  display: inline-flex; flex: none;
+  width: 18px; height: 18px; padding: 2px;
+  background: transparent; color: hsl(var(--accent-brand-ink));
+}
+.row.think .think-main { flex: none; }
+.row.think .think-label { flex: none; color: hsl(var(--text-300)); white-space: nowrap; }
 .row.think[data-running="true"] .think-label { color: hsl(var(--text-200)); }
+/* 收起态：标题之后接一段单行摘要（此前整段隐藏，只剩「思考记录」三个字，像没加载完）。 */
 .row.think .think-preview {
+  display: block;
+  flex: 1 1 auto;
   min-width: 0;
+  margin-left: 8px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: hsl(var(--text-400));
 }
-.row.think .think-elapsed { flex: none; margin-left: auto; padding-left: 8px; }
+.row.think.open .think-preview { display: none; }
+.row.think .think-elapsed { flex: none; margin-left: 0; padding-left: 0; font-variant-numeric: tabular-nums; }
+.row.think .think-elapsed::before { content: "·"; margin-right: 5px; color: hsl(var(--text-400)); }
 .row.think .think-body {
-  margin: 3px 8px 6px 13px;
-  padding: 0 0 0 20px;
-  border-left: 1px solid var(--hairline);
+  margin: 2px 8px 2px 13px;
+  padding: 0 0 0 10px;
+  /* 2026-11-01 真机：外层的这条 border-left 与 .think-body-inner 的竖线并排成两根线。
+     只保留内层那一根（内容与线的关系由 inner 的 padding 决定）。 */
   color: hsl(var(--text-300));
   cursor: text;
 }
 .row.think .think-body[hidden] { display: none; }
-.row.think .thinking-actions { display: flex; justify-content: flex-end; margin-bottom: 2px; }
+/* 复制钮挂在行头右侧（悬停/聚焦才现身）：此前它在思考体里独占一行，正文被推到它下面 30px，
+   展开后的思考块看起来先空了一屏。 */
+.row.think .thinking-actions {
+  position: absolute; top: 5px; right: 2px; z-index: 2;
+  display: flex; opacity: 0; transition: opacity var(--t-fast);
+}
+.row.think:hover .thinking-actions,
+.row.think:focus-within .thinking-actions { opacity: 1; }
 .row.think .think-text { white-space: normal; }
 .row.think .think-text .md-body { color: hsl(var(--text-300)); font-size: var(--fs-caption-md); line-height: 1.75; }
 .row.think .think-text .md-body > :first-child { margin-top: 0; }
 .row.think .think-text .md-body > :last-child { margin-bottom: 0; }
 
 @media (max-width: 700px) {
-  .toolcluster .tool-head { flex-wrap: wrap; row-gap: 3px; }
-  .toolcluster .tsum { order: 1; flex: 1 1 100%; padding-left: 40px; }
+  /* 窄窗不再把摘要踢到第二行：那会让「图标 + 500ms」孤零零留在上一行，读起来像断掉的表格。
+     一行内省略号收尾；失败详情本来就会换行，不受影响。 */
+  .toolcluster .tool-head { flex-wrap: nowrap; row-gap: 0; }
+  .toolcluster .tsum { order: 0; flex: 1 1 auto; padding-left: 0; }
   .toolcluster .tool-body { margin-left: 10px; }
-  .toolcluster .tool-group-detail { flex-basis: 100%; padding-left: 42px; }
-  .row.think .think-preview { display: none; }
+  .toolcluster .tool-group-detail { flex-basis: auto; padding-left: 0; }
+  .toolcluster .tool-row-notice { margin-left: 30px; }
+  .row.think .think-preview { display: block; }
 }
 @media (hover: none) {
   .row .row-actions { opacity: 1; transform: none; }
@@ -191,3 +261,13 @@
   .row.think .chev,
   .toolcluster .chev { transition: none; }
 }
+
+
+
+/* 连续过程行（2026-11-01 真机会话）：思考/工具交替出现时，若每行都吃满 24px 顶距，
+   六七行过程会把一轮对话拉成散落的清单。只在**相邻过程行之间**收紧到 4px，
+   第一行仍走 --turn-gap，过程结束接正文仍走 24px。 */
+.row.think[data-running] + .row.think[data-running],
+.row.think[data-running] + .toolcluster,
+.toolcluster + .row.think[data-running],
+.toolcluster + .toolcluster { margin-top: 4px; }

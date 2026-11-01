@@ -1,0 +1,91 @@
+--- a/apps/desktop/src/renderer/components/AppPage.tsx	2026-11-01 14:58:16
++++ b/apps/desktop/src/renderer/components/AppPage.tsx	2026-11-01 14:57:09
+@@ -376,6 +376,9 @@
+ 
+ // ── 自动化任务页 ──────────────────────────────────────────────────
+ 
++/** 运行历史在页上只铺最近这么多条（第 934 页）：超出必须在标题里说清，不把尾部冒充整份。 */
++const HISTORY_SHOWN = 20;
++
+ export function AutomationPane(props: {
+   snap: ScheduleSnapshot;
+   onError: (m: string) => void;
+@@ -578,19 +581,19 @@
+                 <span className="nm">{t.name}</span>
+                 <span className={"sp-tag" + (t.enabled ? " ok" : "")}>{t.enabled ? "启用" : "停用"}</span>
+                 <span className="sub mono-k">{scheduleLabel(t.schedule)}</span>
+-                {t.nextRunAt !== undefined && <span className="r sub">下次 {new Date(t.nextRunAt).toLocaleString()}</span>}
++                {t.nextRunAt !== undefined && <span className="r sub">下次 {fullTime(t.nextRunAt)}</span>}
+               </div>
+             ))}
+           </div>
+           <div className="ap-gtitle">
+-            运行历史（{String(schedule.history.length)} 条）
++            运行历史（{String(schedule.history.length)} 条{schedule.history.length > HISTORY_SHOWN ? ` · 只显示最近 ${String(HISTORY_SHOWN)} 条` : ""}）
+           </div>
+           <div className="ap-list">
+             {schedule.history.length === 0 && <div className="ap-empty">暂无运行记录</div>}
+-            {schedule.history.slice(0, 20).map((h: HistoryEntry, i: number) => (
++            {schedule.history.slice(0, HISTORY_SHOWN).map((h: HistoryEntry, i: number) => (
+               <div key={i} className="ap-li">
+                 <span className="kind">{h.state}</span>
+-                <span className="p">{h.due_at} · {h.task_name}{h.session_id !== undefined ? ` · ${h.session_id}` : ""}</span>
++                <span className="p">{fullTime(h.due_at)} · {h.task_name}{h.session_id !== undefined ? ` · ${h.session_id}` : ""}</span>
+               </div>
+             ))}
+           </div>
+--- a/apps/desktop/tests/app-page.test.tsx	2026-11-01 14:58:16
++++ b/apps/desktop/tests/app-page.test.tsx	2026-11-01 14:56:52
+@@ -184,6 +184,45 @@
+   });
+ });
+ 
++// 第 934 页：运行历史把 due_at 的原始 ISO 直接摆上屏（旁边「下次」却是 toLocaleString），
++// 且只铺 20 条却不说——25 条时标题写着 25，列表只到 20，尾部被当成整份读。
++describe("自动化页：时间口径与历史截断要说清", () => {
++  const task = {
++    id: "t1", name: "每日备份", prompt: "备份仓库", schedule: { kind: "daily", time: "03:00" },
++    timeZone: "Asia/Shanghai", permissionTier: "read-only", catchUp: "skip", enabled: true,
++    createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z",
++    nextRunAt: "2026-11-02T03:00:00.000Z",
++  };
++  const entry = (i: number) => ({
++    task_id: "t1", task_name: "每日备份", occurrence_key: `t1:${String(i)}`,
++    due_at: "2026-11-01T03:00:00.000Z", decision: "triggered", state: "triggered",
++    at: "2026-11-01T03:00:01.000Z",
++  });
++  const snap = (n: number) => ({
++    tasks: [task], history: Array.from({ length: n }, (_, i) => entry(i)),
++    running: 0, queued: 0, cap: 2, startupDone: true, tzNotes: {}, warnings: [], definitionsCorrupt: false,
++  }) as never;
++
++  it("due_at 与「下次」都按本地时间显示，不摆原始 ISO", () => {
++    const html = renderToStaticMarkup(<AutomationPane snap={snap(1)} onError={() => undefined} refresh={() => undefined} />);
++    expect(html).not.toContain("2026-11-01T03:00:00.000Z");
++    expect(html).not.toContain("2026-11-02T03:00:00.000Z");
++    expect(html).toContain("2026-11-01");
++    expect(html).toContain("2026-11-02");
++  });
++
++  it("超过 20 条：标题说清只显示最近 20 条（不把尾部冒充整份）", () => {
++    const html = renderToStaticMarkup(<AutomationPane snap={snap(25)} onError={() => undefined} refresh={() => undefined} />);
++    expect(html).toContain("运行历史（25 条 · 只显示最近 20 条）");
++  });
++
++  it("不超过 20 条：不加那句（说多了也是噪音）", () => {
++    const html = renderToStaticMarkup(<AutomationPane snap={snap(3)} onError={() => undefined} refresh={() => undefined} />);
++    expect(html).toContain("运行历史（3 条）");
++    expect(html).not.toContain("只显示最近");
++  });
++});
++
+ describe("目的地错误不泄漏到对话", () => {
+   it("AppPage 的 reportError 只写本页 operationError，不再回调工作台 lastError", () => {
+     const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/AppPage.tsx", import.meta.url)), "utf8");
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 14:58:16
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 14:57:23
+@@ -4295,3 +4295,4 @@
+ 54. **画廊脚本先做环境体检（第 931 页）**：环境里带 `ELECTRON_RUN_AS_NODE=1` 时，`npx electron scripts/ui-gallery.cjs` 实际是 node 在跑——`require("electron")` 退化成一个字符串，`app` 是 undefined，脚本在 `app.whenReady()` 报「reading 'whenReady'」，catch 里的 `app.exit(1)` 再抛一次「reading 'exit'」，真正的原因（环境变量）谁都看不见。脚本开头加体检：没有 `app` 就印出原因与复跑命令（`env -u ELECTRON_RUN_AS_NODE npx electron …`）并以 2 退出；catch 改成 `process.exit`。判卷 spawn 一个带该环境变量的 node 进程，钉「退 2 + 输出里有 ELECTRON_RUN_AS_NODE + 不再出现 whenReady」。
+ 55. **读族 / 渲染 / 诊断的批准卡也说人话（第 932 页）**：`describeAsk` 此前只覆盖写族、命令、网络、记忆与定时任务；`read_file` / `grep` / `glob` / `lsp` / `render_image` / `diagnose` 在沙箱降级或严格档下同样会弹批准卡，却一律落到「需要你批准 + 参数 JSON」——批的是「读哪个文件 / 查什么 / 渲染哪张图」看不出来。补六条：读取文件（path 或 paths 列表）、查找内容（pattern）、找文件（pattern）、查符号（symbol，path 作副行）、渲染图（path）、跑诊断（face 缺省说「全部检查」）。
+ 56. **apply_patch 的批准卡先给抬头（第 933 页）**：补丁正文在卡上是一个 `max-height:132px` 的滚动框——大补丁只看得到开头几行，批准等于盲批。`describeAsk` 给 `apply_patch` 加一条副行：用 core 的 `parsePatch` 解出文件数、增删行数与前三路径（`3 个文件 · +12 −4 · a.ts、b.ts、c.ts`）；解析不了就**不摆抬头**（宁缺不猜），补丁原文仍整段在卡上。判卷钉抬头格式、解析失败回落、以及卡上真出现抬头且原文不丢。
++57. **定时任务页的两处小账（第 934 页）**：运行历史把 `due_at` 的原始 ISO 摆上屏（同一页的「下次」却是 `toLocaleString`——同一个人在同一行看到的两种写法），且只铺 20 条却不说：25 条时标题写「25 条」、列表只到第 20 条，尾部被当成整份。改成两个时间都走 `fullTime`（本地 `YYYY-MM-DD HH:mm`，解析不了原样返回），并用一个常量 `HISTORY_SHOWN` 管铺多少条，超出时标题写明「· 只显示最近 20 条」。

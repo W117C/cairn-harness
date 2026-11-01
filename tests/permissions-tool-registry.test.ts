@@ -94,6 +94,8 @@ const GOLDEN: Readonly<Record<string, Golden>> = {
   mcp_list: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   mcp_activate: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   mcp_release: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  // 延迟工具目录：只读检索，不激活也不执行；执行仍过 gatedMcpTool 的同一条权限门。
+  tool_search: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   automation_create: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   automation_update: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   automation_delete: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],

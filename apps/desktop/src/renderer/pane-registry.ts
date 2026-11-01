@@ -31,6 +31,17 @@ export function movePane<T>(items: readonly T[], from: number, to: number): T[] 
   return next;
 }
 
+/** 窗格标签的键盘落点（⌥↑/↓ 排序另算）：←/→ 循环、Home/End 到首尾；其余键 null。
+ *  与检查器 Tab 同一套口径，但窗格标签是 button + aria-pressed（不是 tablist）。 */
+export function paneTabTargetForKey(key: string, index: number, count: number): number | null {
+  if (count <= 0 || index < 0 || index >= count) return null;
+  if (key === "ArrowRight") return (index + 1) % count;
+  if (key === "ArrowLeft") return (index - 1 + count) % count;
+  if (key === "Home") return 0;
+  if (key === "End") return count - 1;
+  return null;
+}
+
 /** ⌘\ 「关闭最近打开的窗格」该关哪一个（2026-10-18 修）：
  *  旧实现直接 `tabs.slice(0, -1)`——数组尾项。追加开的顺序确实如此，但数组顺序是可变的
  *  （拖标题栏换位 / ⌥↑⌥↓ 都走 movePane 重排），重排之后尾项就不再是「最近打开」的那个，

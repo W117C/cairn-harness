@@ -1,0 +1,9 @@
+=== 改前：兜底卡只给「需要你批准」+ JSON，工具名只在 aria-label 里 ===
+     × web_fetch 出网地址入 subject；名单外工具保留 JSON 兜底（可诊断性） 2ms
+     × 工具名可见：mcp__db__drop_table 不再是「需要你批准 + 一段 JSON」 4ms
+      Tests  2 failed | 11 passed (13)
+
+=== 复原后 ===
+      Tests  13 passed (13)
+=== sha256 ===
+a2f1f56cb079bff69502d42fd76e2db6b3bd78134f88be8f3278c5aab95a1316

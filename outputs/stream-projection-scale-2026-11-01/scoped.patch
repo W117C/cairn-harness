@@ -1,0 +1,62 @@
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:19:58
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:19:22
+@@ -4306,3 +4306,4 @@
+ 65. **文件改动与方案动作的词各只有一张表（第 942 页）**：文件改动的三个词（新建 / 修改 / 变更）原先三处手抄——`ChangeSummaryCard` 的 `CHANGE_LABEL`、`Inspector` 的 `CHANGE_WORD`、`PaneDock` 两处内联三元；方案动作的三个词（新建 / 修改 / 删除）两处——`PlanCard` 的 `ACTION_LABEL` 与 `PaneDock` 的内联三元。两套词都收进 `derived/change-labels.ts`（`changeLabel` / `planActionLabel`），四个消费面改读；判卷钉「认不出的 kind 一律『变更』、不猜成新建」与「四处都不再有自己的表/三元」。
+ 66. **文件窗格的大小也走字节尺（第 943 页）**：文件树里 `{e.size}` 直接摆裸字节数（`2140`、`880`），而附件行在同一版里已经写 `2.1 KB`（第 924 页统一的那把尺）——同一个文件两种写法。改成 `formatBytes(e.size) ?? "—"`；`format-rulers` 那把覆盖尺也加一条 `raw-bytes` 形状（直接渲染 `{x.size}`），再有人摆裸数就当场红。
+ 67. **验证状态只有一套词（第 944 页）**：同样四个状态（verified / failed / stale / absent）两处两种说法——编排面 `EVIDENCE_LABEL` 写「已验证 / 验证失败 / 验证过期 / 未验证」，交付卡 `STATUS_LABEL` 写「已验证 / 验证未过 / 证据已过期 / 未验证」。收进 `derived/verification-labels.ts`（取两处各自最准的词：failed 用「验证失败」、stale 用「证据已过期」），交付卡多出的一档「无需验证」单独常量；判卷钉四值、认不出原样返回、两个消费面都不再写表。
++68. **长会话的投影规模有判据（第 945 页）**：流投影（`derived/stream.ts#projectStream`）是每条事件都要过的纯函数，长会话一旦退化成平方，界面会先卡在投影这一步。现读（本机 2026-11-01）：3 000 事件 ≈ 1.4ms、9 000 ≈ 4.8ms、27 000 ≈ 11.4ms（0.42–0.53µs/事件，线性）。判据不看绝对毫秒（机器快慢不同），只看规模斜率：事件 ×9 时耗时不得超过 ×25（平方会是 ×81）；另有一条「行数与该看的轮数一致」，防止靠少产出换速度。
+--- /dev/null → apps/desktop/tests/stream-projection-scale.test.ts
+--- /dev/null	2026-11-01 16:19:58
++++ b/apps/desktop/tests/stream-projection-scale.test.ts	2026-11-01 16:19:04
+@@ -0,0 +1,51 @@
++// 流投影的规模判据（第 945 页）：长会话不许在投影这一步炸成平方。
++// 现读（本机，2026-11-01）：300 轮/3 000 事件 ≈ 1.4ms；900 轮/9 000 ≈ 4.8ms；2 700 轮/27 000 ≈ 11.4ms
++// （每事件 0.42–0.53µs，线性）。判据不看绝对毫秒（机器快慢不同），只看**规模比的斜率**：
++// 事件 ×9 时耗时若超 ×25，说明出现了超线性路径（平方会是 ×81）。
++import { describe, expect, it } from "vitest";
++import { projectStream } from "../src/renderer/derived/stream";
++import type { AgentEvent } from "../../../src/main/ipc-protocol";
++
++function fixture(rounds: number): AgentEvent[] {
++  const events: AgentEvent[] = [];
++  let seq = 0;
++  for (let r = 1; r <= rounds; r++) {
++    events.push({ type: "user_message", seq: ++seq, ts: seq, content: `第 ${String(r)} 轮` } as AgentEvent);
++    for (let t = 0; t < 4; t++) {
++      const id = `c${String(++seq)}`;
++      events.push({ type: "tool_call", seq, ts: seq, id, tool: "read_file", args: "{}" } as unknown as AgentEvent);
++      events.push({ type: "tool_result", seq: ++seq, ts: seq, callId: id, ok: true, output: "y".repeat(120) } as unknown as AgentEvent);
++    }
++    events.push({ type: "assistant_message", seq: ++seq, ts: seq, content: `回答 ${String(r)}` } as unknown as AgentEvent);
++  }
++  return events;
++}
++
++/** 最佳一次耗时（ms）——避开 GC/调度抖动。 */
++function best(events: AgentEvent[], runs: number): number {
++  let fastest = Number.POSITIVE_INFINITY;
++  for (let i = 0; i < runs; i++) {
++    const t0 = performance.now();
++    void projectStream(events, false);
++    fastest = Math.min(fastest, performance.now() - t0);
++  }
++  return fastest;
++}
++
++describe("流投影随事件数线性增长（第 945 页）", () => {
++  it("事件 ×9 ⇒ 耗时不超过 ×25（平方会是 ×81）", () => {
++    const small = fixture(300);   // 3 000 事件
++    const large = fixture(2700);  // 27 000 事件
++    expect(small.length).toBe(3000);
++    expect(large.length).toBe(27000);
++    best(small, 2); // 预热
++    const tSmall = Math.max(best(small, 5), 0.2); // 下限 0.2ms：太快的机器上不让噪声做分母
++    const tLarge = best(large, 5);
++    const ratio = tLarge / tSmall;
++    expect(ratio, `规模化后耗时比 ${ratio.toFixed(1)}（小 ${tSmall.toFixed(2)}ms / 大 ${tLarge.toFixed(2)}ms）`).toBeLessThan(25);
++  });
++
++  it("行数与该看的轮数一致（规模判据不能靠少产出换速度）", () => {
++    expect(projectStream(fixture(300), false).length).toBe(300 * 6);
++  });
++});

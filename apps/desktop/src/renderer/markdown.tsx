@@ -2,11 +2,12 @@
 //  ① 渲染层零新增依赖（打包纪律同源）；② assistant 正文此前是裸文本，是"不像产品"的最大单点；
 //  ③ 流式安全：按已累计文本重解析，未闭合围栏按"开放代码块"渲染，不闪烁不跳变。
 // 安全纪律：**没有 dangerouslySetInnerHTML**——全部走 React 文本节点转义；链接只放行 http(s)。
-// 尺子纪律：正则一律 String.match/matchAll（第 408 页口径，消 RegExp.exec 撞名误报族）。
+// 尺子纪律：正则一律 String.match/matchAll（消 RegExp.exec 撞名误报族的口径）。
 // 判卷面：parseBlocks 是纯函数（tests/markdown.test.ts）；渲染面由 render-structure.test.tsx 承接。
 import { Fragment, memo, useEffect, useRef, useState } from "react";
 import { Check, Copy, Image as ImageIcon } from "lucide-react";
 import { STR } from "./strings";
+import { ImageLightbox } from "./components/ImageLightbox";
 
 export type Block =
   | { type: "heading"; level: number; text: string }
@@ -182,13 +183,27 @@ const INLINE = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(~~[^~\n]+~~)|(\*[^*\n]+\*)|(\[[^\
 /** 裸 URL 尾部的标点不属于地址（中英文都剥）：`https://a.com/x。` / `…,` 之类。 */
 const URL_TAIL = /[.,;:!?。，、；：！？)】》」』]+$/;
 
-export function renderInline(text: string): React.ReactNode[] {
+/** 行内渲染。
+ *  `arrival` = **逐词到达**（对标 Codex 的 `_reveal-response-word`：每个刚到的词
+ *  自己淡入一次、并从强调色落到正文色）。只在**正在写的那一块**上开（caret 为真），
+ *  历史正文一个字都不多包 ⇒ DOM 与改动前同形。
+ *  key 用该次调用内的词序：词**长出来**时（"wor" → "world"）节点不重挂 ⇒ 动画不重播；
+ *  新词出现 = 新节点 ⇒ 动画只播一次。 */
+export function renderInline(text: string, arrival?: boolean): React.ReactNode[] {
   const out: React.ReactNode[] = [];
   let last = 0;
   let key = 0;
+  const pushText = (chunk: string): void => {
+    if (arrival !== true) { out.push(chunk); return; }
+    for (const part of chunk.split(/(\s+)/)) {
+      if (part === "") continue;
+      if (/^\s+$/.test(part)) { out.push(part); continue; }
+      out.push(<span className="md-word" key={`w${String(key++)}`}>{part}</span>);
+    }
+  };
   for (const m of text.matchAll(INLINE)) {
     const idx = m.index ?? 0;
-    if (idx > last) out.push(text.slice(last, idx));
+    if (idx > last) pushText(text.slice(last, idx));
     const tok = m[0];
     if (tok.startsWith("`")) out.push(<code key={key++} className="md-icode">{tok.slice(1, -1)}</code>);
     else if (tok.startsWith("**")) out.push(<strong key={key++}>{tok.slice(2, -2)}</strong>);
@@ -209,7 +224,7 @@ export function renderInline(text: string): React.ReactNode[] {
     }
     last = idx + tok.length;
   }
-  if (last < text.length) out.push(text.slice(last));
+  if (last < text.length) pushText(text.slice(last));
   return out;
 }
 
@@ -220,12 +235,34 @@ export function renderInline(text: string): React.ReactNode[] {
  *  点击门闩后才创建 img（此时才发起请求）；失败面是浏览器的破图，不额外造错误。 */
 function MarkdownImage(props: { alt: string; src: string }): React.JSX.Element {
   const [show, setShow] = useState(() => props.src.startsWith("data:image/"));
+  const [open, setOpen] = useState(false);
+  const openerRef = useRef<HTMLButtonElement | null>(null);
   let host = "";
   try { host = new URL(props.src).host; } catch { /* 非标准 URL：不显示主机 */ }
   return (
-    <figure className="md-figure">
+    <figure className="md-figure" data-cds="MessageAttachments">
       {show ? (
-        <img src={props.src} alt={props.alt} loading="lazy" referrerPolicy="no-referrer" />
+        <>
+          <button
+            type="button"
+            className="md-img-open"
+            ref={openerRef}
+            aria-haspopup="dialog"
+            aria-label={STR.markdown.imagePreview}
+            title={STR.markdown.imagePreview}
+            onClick={() => { setOpen(true); }}
+          >
+            <img src={props.src} alt={props.alt} loading="lazy" referrerPolicy="no-referrer" data-cds="MessageAttachmentsImage" data-fit="natural" />
+          </button>
+          {open && (
+            <ImageLightbox
+              src={props.src}
+              alt={props.alt}
+              onClose={() => { setOpen(false); }}
+              returnFocusRef={openerRef}
+            />
+          )}
+        </>
       ) : (
         <button
           type="button"
@@ -245,14 +282,15 @@ function MarkdownImage(props: { alt: string; src: string }): React.JSX.Element {
 
 const CodeBlock = memo(function CodeBlock(props: { lang: string | null; content: string; onCopy?: (code: string) => Promise<boolean> | boolean | void; caret?: boolean }) {
   // 就地反馈（2026-10-18）：复制后只有远处 toast，按钮本身毫无变化——用户不确定点没点中。
-  // 成功态 1.2s 后自还原；onCopy 缺席时不假装成功。
+  // 成功态 2.5s 后自还原（2026-10-31 对齐 open-claude-ui `CodeBlock` 的 2.5s 状态机）；
+  // onCopy 缺席时不假装成功。
   const [copied, setCopied] = useState(false);
   const timer = useRef<number | null>(null);
   useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
   const flash = (): void => {
     setCopied(true);
     if (timer.current !== null) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setCopied(false), 1200);
+    timer.current = window.setTimeout(() => setCopied(false), 2500);
   };
   const copy = (): void => {
     if (props.onCopy === undefined) return;
@@ -272,6 +310,7 @@ const CodeBlock = memo(function CodeBlock(props: { lang: string | null; content:
         <button
           type="button"
           className="md-copy"
+          data-copied={copied ? "true" : "false"}
           aria-label={copied ? "已复制代码" : "复制代码"}
           onClick={copy}
         >
@@ -295,10 +334,12 @@ function Caret() {
 function BlockView(props: { block: Block; onCopy?: (code: string) => void; caret?: boolean }) {
   const b = props.block;
   const caret = props.caret === true ? <Caret /> : null;
+  // caret 为真 = 这一块正在被写 ⇒ 逐词到达只在这一块开（历史正文不多包节点）。
+  const arrival = props.caret === true;
   switch (b.type) {
     case "heading": {
       const Tag = (b.level === 1 ? "h1" : b.level === 2 ? "h2" : b.level === 3 ? "h3" : "h4") as "h1";
-      return <Tag className={`md-h md-h${String(b.level)}`}>{renderInline(b.text)}{caret}</Tag>;
+      return <Tag className={`md-h md-h${String(b.level)}`}>{renderInline(b.text, arrival)}{caret}</Tag>;
     }
     case "code":
       return <CodeBlock lang={b.lang} content={b.content} {...(props.onCopy !== undefined ? { onCopy: props.onCopy } : {})} {...(caret !== null ? { caret: true } : {})} />;
@@ -308,7 +349,7 @@ function BlockView(props: { block: Block; onCopy?: (code: string) => void; caret
           {b.items.map((it, i) => (
             <li key={i} className={it.done ? "done" : undefined}>
               <span className="md-task-box" data-done={it.done} aria-hidden="true">{it.done ? <Check size={9} /> : null}</span>
-              <span>{renderInline(it.text)}</span>
+              <span>{renderInline(it.text, arrival)}</span>
             </li>
           ))}
         </ul>
@@ -317,7 +358,7 @@ function BlockView(props: { block: Block; onCopy?: (code: string) => void; caret
       return (
         <ul className="md-ul">
           {b.items.map((it, i) => (
-            <li key={i}>{renderInline(it)}{caret !== null && i === b.items.length - 1 ? caret : null}</li>
+            <li key={i}>{renderInline(it, arrival)}{caret !== null && i === b.items.length - 1 ? caret : null}</li>
           ))}
         </ul>
       );
@@ -325,12 +366,12 @@ function BlockView(props: { block: Block; onCopy?: (code: string) => void; caret
       return (
         <ol className="md-ol">
           {b.items.map((it, i) => (
-            <li key={i}>{renderInline(it)}{caret !== null && i === b.items.length - 1 ? caret : null}</li>
+            <li key={i}>{renderInline(it, arrival)}{caret !== null && i === b.items.length - 1 ? caret : null}</li>
           ))}
         </ol>
       );
     case "quote":
-      return <blockquote className="md-quote">{renderInline(b.text)}{caret}</blockquote>;
+      return <blockquote className="md-quote">{renderInline(b.text, arrival)}{caret}</blockquote>;
     case "hr":
       return <hr className="md-hr" />;
     case "image":
@@ -339,8 +380,8 @@ function BlockView(props: { block: Block; onCopy?: (code: string) => void; caret
       return (
         <div className="md-table-wrap" data-dsh-claude-part="table-scroll">
           <table className="md-table">
-            <thead><tr>{b.header.map((h, i) => <th key={i}>{renderInline(h)}</th>)}</tr></thead>
-            <tbody>{b.rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{renderInline(c)}{caret !== null && i === b.rows.length - 1 && j === r.length - 1 ? caret : null}</td>)}</tr>)}</tbody>
+            <thead><tr>{b.header.map((h, i) => <th key={i}>{renderInline(h, arrival)}</th>)}</tr></thead>
+            <tbody>{b.rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{renderInline(c, arrival)}{caret !== null && i === b.rows.length - 1 && j === r.length - 1 ? caret : null}</td>)}</tr>)}</tbody>
           </table>
         </div>
       );
@@ -354,7 +395,7 @@ function BlockView(props: { block: Block; onCopy?: (code: string) => void; caret
           {lines.map((ln, i) => (
             <Fragment key={i}>
               {i > 0 && <br />}
-              {renderInline(ln)}
+              {renderInline(ln, arrival)}
             </Fragment>
           ))}
           {caret}
@@ -368,7 +409,7 @@ export const Markdown = memo(function Markdown(props: { text: string; onCopy?: (
   const blocks = parseBlocks(props.text);
   const last = blocks.length - 1;
   return (
-    <div className="md-body" data-dsh-claude-part="markdown">
+    <div className="md-body" data-cds="Prose" data-dsh-claude-part="markdown">
       {blocks.map((b, i) => (
         <BlockView key={i} block={b}
           {...(props.onCopy !== undefined ? { onCopy: props.onCopy } : {})}

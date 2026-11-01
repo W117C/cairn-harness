@@ -1,0 +1,9 @@
+{
+  "version": "0.2.0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "sourceLockSha256": "eb4c80935d19de1f4c09f969cf2e129c5bde14d4dc91fddf7aac89ac30d1a83e",
+  "packagedSmoke": "passed",
+  "signature": "ad-hoc",
+  "createdAt": "2026-10-30T09:16:41.813Z"
+}

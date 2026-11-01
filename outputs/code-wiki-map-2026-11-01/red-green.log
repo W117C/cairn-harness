@@ -1,0 +1,14 @@
+=== 改前 A：地图里两条路径少了 apps/desktop/ 前缀 ===
+     × 每条路径都按仓库根解析得到 3ms
+AssertionError: 地图里这些路径按仓库根找不到：tests/markdown.test.tsx | scripts/ui-gallery.cjs: expected [ 'tests/markdown.test.tsx', …(1) ] to deeply equal []
+     28|     expect(missing, "地图里这些路径按仓库根找不到：" + missing.join(" | ")).toEqual([…
+      Tests  1 failed | 1 passed (2)
+
+=== 改前 B：地图引的判卷字符串还是旧口径 128k ===
+     × 引用的判卷字符串与 render-structure 的钉子逐字一致 3ms
+      Tests  1 failed | 1 passed (2)
+
+=== 复原后 ===
+      Tests  2 passed (2)
+=== sha256 ===
+   2 bdf8ec58cda2a91835469d288a2a72d7a98c176ad594b048ad0fee32a3117489

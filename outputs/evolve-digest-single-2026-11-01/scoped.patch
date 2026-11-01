@@ -1,0 +1,148 @@
+--- a/src/agent/evolve/candidates.ts	2026-11-01 15:32:38
++++ b/src/agent/evolve/candidates.ts	2026-11-01 15:27:11
+@@ -3,7 +3,7 @@
+ // 纯函数：候选 shape、校验、Pareto 前沿、父代选择。Pareto 只看有 holdout 评分的候选；
+ // 当前分数不是唯一父代选择器（HGM 的元生产力—性能错配），所以选择同时看谱系产出。
+ 
+-import { createHash } from "node:crypto";
++import { digestOf } from "./digest";
+ 
+ export type CandidateOperator =
+   | "reflect-delta" | "policy-tune" | "skill-synthesize" | "bundle-patch" | "experiment" | "manual";
+@@ -70,10 +70,6 @@
+ const ID_RE = /^cand_[0-9a-f]{16}$/u;
+ const EXP_ID_RE = /^exp_[0-9a-f]{16}$/u;
+ 
+-function digestOf(text: string): string {
+-  return createHash("sha256").update(text).digest("hex").slice(0, 16);
+-}
+-
+ function uniqueSorted(values: readonly string[]): string[] {
+   return [...new Set(values)].sort();
+ }
+--- a/src/agent/evolve/episode.ts	2026-11-01 15:32:38
++++ b/src/agent/evolve/episode.ts	2026-11-01 15:27:11
+@@ -10,7 +10,7 @@
+ // 为什么不是事件型：Episode 是事件流的聚合投影，不是 agent 做的一件事。ADR 0005 的判别口诀
+ // 「这件事发生在日志里还是发生在 agent 身上」——Episode 是读侧算出来的，所以住投影层。
+ 
+-import { createHash } from "node:crypto";
++import { digestOf } from "./digest";
+ import type { AgentEvent } from "../../events";
+ import { deliveredPaths, eventsForCurrentRun } from "../delivery-guard";
+ import { assistantTurnsFromEvents, goalDriftFindings } from "../goal-drift";
+@@ -185,10 +185,6 @@
+   const base = path.split("/").pop() ?? "";
+   const dot = base.lastIndexOf(".");
+   return dot < 0 ? "" : base.slice(dot + 1).toLowerCase();
+-}
+-
+-function digestOf(text: string): string {
+-  return createHash("sha256").update(text).digest("hex").slice(0, 16);
+ }
+ 
+ function isRecord(value: unknown): value is Record<string, unknown> {
+--- a/src/agent/evolve/playbook.ts	2026-11-01 15:32:38
++++ b/src/agent/evolve/playbook.ts	2026-11-01 15:27:50
+@@ -9,7 +9,7 @@
+ //  · 同 scope+trigger 的 active 条目冲突时两条都不注入；
+ //  · 检索有硬预算（条数/字符），不把整个 playbook 塞进上下文。
+ 
+-import { createHash } from "node:crypto";
++import { digestOf } from "./digest";
+ import { tokensOf } from "../map/retrieve";
+ import type { EpisodeTaskClass } from "./episode";
+ 
+@@ -142,10 +142,6 @@
+   const day = 24 * 60 * 60 * 1000;
+   const days = kind === "policy" ? 30 : kind === "strategy" ? 90 : kind === "fact" ? 180 : 365;
+   return now + days * day;
+-}
+-
+-function digestOf(text: string): string {
+-  return createHash("sha256").update(text).digest("hex").slice(0, 16);
+ }
+ 
+ function uniqueSorted(values: readonly string[]): string[] {
+--- a/src/main/evolve/playbook-store.ts	2026-11-01 15:32:38
++++ b/src/main/evolve/playbook-store.ts	2026-11-01 15:27:11
+@@ -4,7 +4,7 @@
+ // 迁移（legacy）只产出 candidate：旧 evolution.json 的补丁、memory 的 lesson/workflow
+ // 都没有 Episode id 作为可核验证据，因此不能直接 active；它们进 shadow 先看命中与噪声。
+ 
+-import { createHash } from "node:crypto";
++import { digestOf } from "../../agent/evolve/digest";
+ import { appendFile, mkdir, readFile } from "node:fs/promises";
+ import { dirname, join } from "node:path";
+ import { loadEvolution, patchKeyOf, type StrategyPatch } from "../../agent/evolution";
+@@ -37,10 +37,6 @@
+ 
+ function isRecord(value: unknown): value is Record<string, unknown> {
+   return typeof value === "object" && value !== null && !Array.isArray(value);
+-}
+-
+-function digestOf(text: string): string {
+-  return createHash("sha256").update(text).digest("hex").slice(0, 16);
+ }
+ 
+ function legacyId(seed: string): string {
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 15:32:38
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 15:28:17
+@@ -4300,3 +4300,4 @@
+ 59. **用量页的 token 数字回到同一把尺（第 936 页）**：用量页的 `usageTokenLabel` 走 `Intl.NumberFormat` 的中文紧凑记法（14 000 →「1.4万」），而用量环 / 检查器 / 时间线走 `formatTokens`（→「14.0k」）⇒ 同一个 token 数两种写法（1 250 000 →「125万」vs「1.3m」，1 830 →「1830」vs「1.8k」）。`usageTokenLabel` 改读 `formatTokens`；缺测仍是「—」，不折成 0。
+ 60. **上下文窗口也归同一把尺（第 937 页）**：`formatCtxWindow` 自己一套（12 000 → `12k`、1 000 000 → `1M`），而用量环 / 检查器 / 时间线 / 用量页走 `formatTokens`（`128.0k` / `1.0m`）⇒ 同一个窗口在模型菜单写「128k」、在用量浮层写「128.0k」。`formatCtxWindow` 改成 `formatTokens` 的薄包装（未知/非正仍给「—」），并加一条「必须等于 `formatTokens`」的钉子（七个值逐个比）——再有人在这里写一套 k/M，判据当场红。
+ 61. **CODE-WIKI 是一张能走通的地图（第 938 页）**：地图里的路径有两处少了 `apps/desktop/` 前缀（`tests/markdown.test.tsx`、`scripts/ui-gallery.cjs`），照抄的人按仓库根找不到；它引用的判卷字符串 `标准 · 窗口 128k` 在第 937 页改成 `128.0k` 之后也成了旧话。改指真路径与真引文，并加一把尺：地图里每条路径必须按仓库根解析得到，引用的「标准 · 窗口 …」必须逐字出现在 `render-structure.test.tsx` 里。
++62. **evolve 的内容指纹只有一份（第 939 页）**：`digestOf`（sha256 前 16 位）在 candidate / episode / playbook / playbook-store 四处各抄了一份，而这四处的 id（`cand_…` / `ep_…` / playbook 条目 digest / `legacyId`）都靠它派生——长度或算法只要有一处改了，跨模块 id 就静默失配（按 id 查不到，但不报错）。实现收到 `src/agent/evolve/digest.ts`，四处改成 import；判卷钉「16 位 + 空串真值 `e3b0c44298fc1c14`」与「四处 import、src 里只剩一处定义」。
+--- /dev/null → src/agent/evolve/digest.ts
+--- /dev/null	2026-11-01 15:32:38
++++ b/src/agent/evolve/digest.ts	2026-11-01 15:27:51
+@@ -0,0 +1,9 @@
++import { createHash } from "node:crypto";
++
++/** 内容指纹（16 位十六进制）——candidate / episode / playbook / playbook-store 四处的 id 都由它派生。
++ *  第 939 页：这份实现原先是四份各自手抄的（`digestOf` 一模一样，但各在各的文件里）。
++ *  长度或算法只要有一处改了，跨模块的 id 就对不上：episode 的 id、playbook 条目的 digest、
++ *  store 的 legacyId 会静默失配（按 id 查不到，但不报错）。所以只留这一份。 */
++export function digestOf(text: string): string {
++  return createHash("sha256").update(text).digest("hex").slice(0, 16);
++}
+--- /dev/null → tests/evolve-digest.test.ts
+--- /dev/null	2026-11-01 15:32:38
++++ b/tests/evolve-digest.test.ts	2026-11-01 15:27:39
+@@ -0,0 +1,36 @@
++/** 第 939 页：evolve 四处的 `digestOf` 原本各抄一份（candidate / episode / playbook / playbook-store）。
++ *  这四处的 id 都靠它派生——长度或算法只要有一处改了，跨模块 id 就静默失配（按 id 查不到，但不报错）。
++ *  判据：一份实现 + 一个真值 + 一处定义。
++ */
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, expect, it } from "vitest";
++import { digestOf } from "../src/agent/evolve/digest";
++
++const ROOT = join(import.meta.dirname, "..");
++
++describe("evolve 的内容指纹只有一份（第 939 页）", () => {
++  it("16 位小写十六进制，且空串是真值 e3b0c44298fc1c14（sha256 前 16）", () => {
++    expect(digestOf("")).toBe("e3b0c44298fc1c14");
++    expect(digestOf("cand_x")).toMatch(/^[0-9a-f]{16}$/u);
++    expect(digestOf("a")).not.toBe(digestOf("b"));
++    expect(digestOf("a")).toBe(digestOf("a"));
++  });
++
++  it("四个消费面都 import 同一份，且 src/ 里只剩一处定义", () => {
++    const files = [
++      "src/agent/evolve/candidates.ts",
++      "src/agent/evolve/episode.ts",
++      "src/agent/evolve/playbook.ts",
++      "src/main/evolve/playbook-store.ts",
++    ];
++    for (const f of files) {
++      const src = readFileSync(join(ROOT, f), "utf8");
++      expect(src, `${f} 没读共享实现`).toMatch(/import \{ digestOf \} from "[^"]*digest"/u);
++      expect(src, `${f} 还留着自己的 digestOf`).not.toContain("function digestOf");
++    }
++    const digest = readFileSync(join(ROOT, "src/agent/evolve/digest.ts"), "utf8");
++    expect(digest).toContain("export function digestOf");
++    expect(digest).toContain("slice(0, 16)");
++  });
++});

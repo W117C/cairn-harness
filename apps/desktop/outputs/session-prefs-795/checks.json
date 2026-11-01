@@ -1,0 +1,77 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "真指针打开 s1",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "列表里的会话级模型/思考回读进选择器（不是全局 deepseek 缺省）",
+      "ok": true,
+      "detail": "deepseek-chat · 思考 强"
+    },
+    {
+      "name": "换模型 ⇒ sessionPrefsSet({sessionId:'s1', model:'glm-5.3-flash'})",
+      "ok": true,
+      "detail": {
+        "sessionId": "s1",
+        "prefs": {
+          "model": "glm-5.3-flash"
+        }
+      }
+    },
+    {
+      "name": "有会话时换模型**不**写全局设置（旧实现会悄悄改掉所有新会话的缺省）",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "name": "选择器显示新会话模型",
+      "ok": true,
+      "detail": "glm-5.3-flash"
+    },
+    {
+      "name": "思考档变化 ⇒ sessionPrefsSet({thinking:'medium'})",
+      "ok": true,
+      "detail": {
+        "sessionId": "s1",
+        "prefs": {
+          "thinking": "medium"
+        }
+      }
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": [],
+  "calls": [
+    {
+      "sessionId": "s1",
+      "prefs": {
+        "thinking": "off"
+      }
+    },
+    {
+      "sessionId": "s1",
+      "prefs": {
+        "model": "glm-5.3-flash"
+      }
+    },
+    {
+      "sessionId": "s1",
+      "prefs": {
+        "model": "deepseek-chat"
+      }
+    },
+    {
+      "sessionId": "s1",
+      "prefs": {
+        "thinking": "medium"
+      }
+    }
+  ]
+}

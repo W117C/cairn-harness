@@ -1,0 +1,18 @@
+App threw an error during load
+/Users/ze/Downloads/Cairn/cairn/apps/desktop/scripts/terminal-resize-smoke.cjs:64
+  await js(`window.dispatchEvent(new KeyboardEvent("keydown", { code: "Backquote", key: "`", bubbles: true, ctrlKey: true, metaKey: false, shiftKey: false, altKey: false }))`);
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+SyntaxError: missing ) after argument list
+    at wrapSafe (node:internal/modules/cjs/loader:1868:18)
+    at Module._compile (node:internal/modules/cjs/loader:1910:20)
+    at Object..js (node:internal/modules/cjs/loader:2070:10)
+    at Module.load (node:internal/modules/cjs/loader:1658:32)
+    at Module._load (node:internal/modules/cjs/loader:1450:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:268:19)
+    at loadCJSModuleWithModuleLoad (node:internal/modules/esm/translators:378:15)
+    at ModuleWrap.<anonymous> (node:internal/modules/esm/translators:246:9)
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+/Users/ze/Downloads/Cairn/cairn/node_modules/.pnpm/electron@44.7.0_supports-color@7.2.0/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron exited with signal SIGTERM
+EXIT=124

@@ -1,0 +1,241 @@
+--- a/src/agent/context.ts	2026-11-01 16:29:39
++++ b/src/agent/context.ts	2026-11-01 16:23:51
+@@ -11,6 +11,7 @@
+ import { clampTailToTokenBudget } from "./text-budget";
+ import { escapeControlTags } from "./control-tags";
+ import { DELIVERY_GUARD_CALL_ID } from "./delivery-guard";
++import { hasWorkerId } from "./subflow";
+ 
+ /** OpenAI 兼容消息（投影产物；system 由调用方按需前置）。 */
+ export interface ContextMessage {
+@@ -44,7 +45,7 @@
+  *  其 compressed_event_ids 是 worker 内存态事件序，对主流照搬会错误摘除主事件/注入 worker 摘要。
+  *  worker 自身投影不受影响：worker 内存态里的压缩事件不带 agent_id（落主流时才加 agent_id 归因）。 */
+ export function isWorkerCompaction(e: AgentEvent): boolean {
+-  return isCompaction(e) && typeof e.agent_id === "string" && e.agent_id !== "";
++  return isCompaction(e) && hasWorkerId(e);
+ }
+ 
+ /** 全部 compaction 事件声明的摘除 id 并集（滚动合并：多次压缩的排除集累加）。
+@@ -63,7 +64,7 @@
+  *  抽成一份判定是因为自动验证拍的投影也要走同一条闸——两份「谁算子流」的写法迟早漂移。
+  *  导出给读数投影（tool-choice）等外部消费者，别再各写一份 `typeof e.agent_id === "string"`。 */
+ export function hasWorkerAttribution(e: AgentEvent): boolean {
+-  return "agent_id" in e && typeof e.agent_id === "string" && e.agent_id !== "";
++  return hasWorkerId(e);
+ }
+ 
+ /** 自动验证拍（能力 5 收束闸）验出的红：harness 补拍没有配对的 tool_call，裸 tool_result 会让
+--- a/src/agent/acceptance-sampler.ts	2026-11-01 16:29:39
++++ b/src/agent/acceptance-sampler.ts	2026-11-01 16:23:51
+@@ -5,8 +5,8 @@
+ // 绝不折成 0 或 100%（与 cost-per-progress 同源纪律）。
+ // 纯函数 + 只读事件流 ⇒ 可离线判卷、可喂合成语料，不需要凭据也不需要真模型。
+ import type { AgentEvent } from "../events";
++import { hasWorkerId, isWorkerSubflowEvent } from "./subflow";
+ 
+-
+ /** 一格的读数：分母为 0 ⇒ 不可测（与「0%」是两种事实，不许合并）。 */
+ export interface RateSample {
+   /** 分子（命中的样本数）。 */
+@@ -37,13 +37,7 @@
+  * 把它们塞进分母会让读数随「任务有多难」漂移，而不是反映「修得有多好」。
+  */
+ export function reviewFailHealRate(events: readonly AgentEvent[]): RateSample {
+-  function isWorkerSubflow(e: AgentEvent): boolean {
+-  if (e.type === "agent_spawned") return false; // 父流事实（「派出了哪个 worker」）
+-  const id = (e as { agent_id?: unknown }).agent_id;
+-  return typeof id === "string" && id !== "";
+-}
+-
+-const main = events.filter((e) => !isWorkerSubflow(e));
++  const main = events.filter((e) => !isWorkerSubflowEvent(e));
+   let roundHadRed = false;
+   let healed = false;
+   let hits = 0;
+@@ -87,8 +81,7 @@
+   const decided = new Set<string>();
+   for (const e of events) {
+     if (e.type !== "routing_decision") continue;
+-    const id = (e as { agent_id?: unknown }).agent_id;
+-    if (typeof id === "string" && id !== "") decided.add(id);
++    if (hasWorkerId(e)) decided.add(e.agent_id);
+   }
+   const withDecision = spawns.filter((e) => decided.has(e.agent_id));
+   return rate(withDecision.length, spawns.length);
+--- a/src/main/usage-ledger.ts	2026-11-01 16:29:39
++++ b/src/main/usage-ledger.ts	2026-11-01 16:24:33
+@@ -2,6 +2,7 @@
+ // 面板（当前会话）与主进程跨会话汇总必须用**同一套**口径，否则两个数字会慢慢分叉。
+ // 这里只做事件折叠，不碰文件与 Electron——渲染层可直接 import（纯函数，无 Node 依赖）。
+ import type { AgentEvent } from "../events";
++import { isWorkerSubflowEvent } from "../agent/subflow";
+ 
+ /** 六个维度 = 面板展示的六行；token 缺字段当 0（旧日志防御），缓存「没量到」不冒充 0。 */
+ export interface UsageTotals {
+@@ -20,12 +21,6 @@
+ /** 子 agent 子流事件带 agent_id；主会话的事件不带。旧日志没有该字段 ⇒ 按主会话计入（旧口径）。 */
+ 
+ 
+-function isWorkerSubflow(e: AgentEvent): boolean {
+-  if (e.type === "agent_spawned") return false;
+-  const id = (e as { agent_id?: unknown }).agent_id;
+-  return typeof id === "string";
+-}
+-
+ /** 损坏/旧日志里的无效值不冒充负消耗，也不把 NaN 传播到整份账本。 */
+ export function isMeasuredTokenCount(value: unknown): value is number {
+   return typeof value === "number" && Number.isFinite(value) && value >= 0;
+@@ -44,7 +39,7 @@
+     if (isMeasuredTokenCount(cacheRead)) acc.cacheReadTokens += cacheRead;
+     return;
+   }
+-  if (isWorkerSubflow(e)) return;
++  if (isWorkerSubflowEvent(e)) return;
+   if (e.type === "tool_call") acc.toolSteps += 1;
+   else if (e.type === "user_message") acc.rounds += 1;
+ }
+--- a/apps/desktop/src/renderer/derived/session.ts	2026-11-01 16:29:39
++++ b/apps/desktop/src/renderer/derived/session.ts	2026-11-01 16:24:34
+@@ -10,11 +10,8 @@
+ // 必带 agent_id 的子流事件族，恒滤。
+ // 导出：对话转录也要走这同一条过滤（worker 子流的 delta 不是主会话的对话正文）。
+ // 判据自己抄一遍就会漂——所以这里导出，让 transcript.ts 用同一份。
+-export function isWorkerSubflowEvent(e: AgentEvent): boolean {
+-  if (e.type === "agent_spawned") return false;
+-  const id = (e as { agent_id?: unknown }).agent_id;
+-  return typeof id === "string";
+-}
++export { isWorkerSubflowEvent } from "../../../../../src/agent/subflow";
++import { isWorkerSubflowEvent } from "../../../../../src/agent/subflow";
+ 
+ /** 独立窗格窗口（PopoutApp）收不收这条事件——**归属**判据，纯函数。
+  *
+--- a/scripts/replay/run-scorecard.ts	2026-11-01 16:29:39
++++ b/scripts/replay/run-scorecard.ts	2026-11-01 16:22:40
+@@ -20,6 +20,7 @@
+ import { bucketsSpendUsd, priceForModel, type SpendBucket } from "../../src/agent/orchestrator-join";
+ import { readJsonl, scanCorpus, zeroCorpusProblem } from "./corpus";
+ import { armOfPath, groupPairs, magnitudeOfAb, parseArm, taskKey, abRowLine, repRowLine, signTestToken, SIGN_ALPHA, type ArmOf } from "../lib/eval-arms";
++import { hasWorkerId } from "../../src/agent/subflow";
+ 
+ export type RunOutcome =
+   | "green-first-try"
+@@ -205,8 +206,8 @@
+   const main: AgentEvent[] = [];
+   const byId = new Map<string, AgentEvent[]>();
+   for (const e of events) {
+-    const id = (e as { agent_id?: string }).agent_id;
+-    if (typeof id === "string" && id !== "") {
++    if (hasWorkerId(e)) {
++      const id = e.agent_id;
+       const arr = byId.get(id);
+       if (arr === undefined) byId.set(id, [e]);
+       else arr.push(e);
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:29:39
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:24:45
+@@ -4307,3 +4307,4 @@
+ 66. **文件窗格的大小也走字节尺（第 943 页）**：文件树里 `{e.size}` 直接摆裸字节数（`2140`、`880`），而附件行在同一版里已经写 `2.1 KB`（第 924 页统一的那把尺）——同一个文件两种写法。改成 `formatBytes(e.size) ?? "—"`；`format-rulers` 那把覆盖尺也加一条 `raw-bytes` 形状（直接渲染 `{x.size}`），再有人摆裸数就当场红。
+ 67. **验证状态只有一套词（第 944 页）**：同样四个状态（verified / failed / stale / absent）两处两种说法——编排面 `EVIDENCE_LABEL` 写「已验证 / 验证失败 / 验证过期 / 未验证」，交付卡 `STATUS_LABEL` 写「已验证 / 验证未过 / 证据已过期 / 未验证」。收进 `derived/verification-labels.ts`（取两处各自最准的词：failed 用「验证失败」、stale 用「证据已过期」），交付卡多出的一档「无需验证」单独常量；判卷钉四值、认不出原样返回、两个消费面都不再写表。
+ 68. **长会话的投影规模有判据（第 945 页）**：流投影（`derived/stream.ts#projectStream`）是每条事件都要过的纯函数，长会话一旦退化成平方，界面会先卡在投影这一步。现读（本机 2026-11-01）：3 000 事件 ≈ 1.4ms、9 000 ≈ 4.8ms、27 000 ≈ 11.4ms（0.42–0.53µs/事件，线性）。判据不看绝对毫秒（机器快慢不同），只看规模斜率：事件 ×9 时耗时不得超过 ×25（平方会是 ×81）；另有一条「行数与该看的轮数一致」，防止靠少产出换速度。
++69. **worker 归属判据只有一份（第 946 页）**：「带 `agent_id` 的事件属于 worker 子流」这条判据在六处各写一遍，其中两处漏了空串判断（`main/usage-ledger.ts` 把 `agent_id: ""` 当 worker ⇒ 用量少算；`renderer/derived/session.ts` 把它当 worker ⇒ 该事件从主流里消失），另三处（`agent/context.ts`、`agent/acceptance-sampler.ts`、`scripts/replay/run-scorecard.ts`）判的是「非空才算」。收进 `src/agent/subflow.ts`（`hasWorkerId` / `isWorkerSubflowEvent`，`agent_spawned` 仍是父流事实），六处改读；判卷钉四类取值、两条消费面的行为（用量账本计数、主流行出现），以及「五个消费面都不再自己写一条」。
+--- /dev/null → src/agent/subflow.ts
+--- /dev/null	2026-11-01 16:29:39
++++ b/src/agent/subflow.ts	2026-11-01 16:22:40
+@@ -0,0 +1,24 @@
++import type { AgentEvent } from "../events";
++
++/** worker 归属判据（第 946 页）：事件带**非空** `agent_id` 才算 worker 子流。
++ *  空串算「没有 id」＝主会话——`agent_id: ""` 不是标识符，把空串当 worker 会让这条事件
++ *  三个面三种算法（见下）。
++ *
++ *  这条判据此前在六处各写一遍，其中两处漏了 `!== ""`：
++ *   · `agent/context.ts#hasWorkerAttribution`（=== ""）
++ *   · `agent/acceptance-sampler.ts#isWorkerSubflow`（=== ""，注释里明确警告过不一致的后果）
++ *   · `main/usage-ledger.ts#isWorkerSubflow`（**漏**——空串被当 worker，用量少算一条）
++ *   · `renderer/derived/session.ts#isWorkerSubflowEvent`（**漏**——空串事件从主流里消失）
++ *   · `scripts/replay/run-scorecard.ts#splitStreams`（=== ""）
++ *  同一个「agent_id 为空」的事件被一把尺当 worker、另一把当主会话，两个读数就再也对不上。
++ */
++export function hasWorkerId(e: AgentEvent): e is AgentEvent & { agent_id: string } {
++  const id = (e as { agent_id?: unknown }).agent_id;
++  return typeof id === "string" && id !== "";
++}
++
++/** 子流判据（带 `agent_spawned` 例外）：`agent_spawned` 是**父流事实**（「派出了哪个 worker」），
++ *  即使它带 agent_id 也属于主会话的流水账。 */
++export function isWorkerSubflowEvent(e: AgentEvent): boolean {
++  return e.type !== "agent_spawned" && hasWorkerId(e);
++}
+--- /dev/null → tests/subflow-attribution.test.ts
+--- /dev/null	2026-11-01 16:29:39
++++ b/tests/subflow-attribution.test.ts	2026-11-01 16:24:25
+@@ -0,0 +1,68 @@
++/** 第 946 页：worker 归属判据只有一份，且「空串 agent_id = 主会话」。
++ *
++ *  这条判据此前在六处各写一遍，其中两处漏了 `!== ""`：
++ *   · `main/usage-ledger.ts#isWorkerSubflow`（空串被当 worker ⇒ 用量少算）
++ *   · `renderer/derived/session.ts#isWorkerSubflowEvent`（空串事件从主流里消失）
++ *  另外三处（`agent/context.ts`、`agent/acceptance-sampler.ts`、`scripts/replay/run-scorecard.ts`）
++ *  写的是 `!== ""`。同一个事件被两把尺判成两种归属，两边的读数就再也对不上。
++ */
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, expect, it } from "vitest";
++import { hasWorkerId, isWorkerSubflowEvent } from "../src/agent/subflow";
++import { usageTotals } from "../src/main/usage-ledger";
++import type { AgentEvent } from "../src/events";
++
++const ROOT = join(import.meta.dirname, "..");
++const ev = (o: Record<string, unknown>): AgentEvent => o as unknown as AgentEvent;
++
++describe("worker 归属判据（第 946 页）", () => {
++  it("非空 agent_id 才算 worker；空串/缺省/非字符串都算主会话", () => {
++    expect(isWorkerSubflowEvent(ev({ type: "tool_call", agent_id: "w1" }))).toBe(true);
++    expect(isWorkerSubflowEvent(ev({ type: "tool_call", agent_id: "" }))).toBe(false);
++    expect(isWorkerSubflowEvent(ev({ type: "tool_call" }))).toBe(false);
++    expect(isWorkerSubflowEvent(ev({ type: "tool_call", agent_id: 42 }))).toBe(false);
++    // agent_spawned 是父流事实：即使带 agent_id 也归主会话
++    expect(isWorkerSubflowEvent(ev({ type: "agent_spawned", agent_id: "w1" }))).toBe(false);
++    expect(hasWorkerId(ev({ agent_id: "w1" }))).toBe(true);
++    expect(hasWorkerId(ev({ agent_id: "" }))).toBe(false);
++  });
++
++  it("用量账本把空串 agent_id 的事件算作主会话（第 946 页的行为修正）", () => {
++    const totals = usageTotals([
++      ev({ type: "tool_call", id: "t1", tool: "read_file", args: {} }),
++      ev({ type: "tool_call", id: "t2", tool: "read_file", args: {}, agent_id: "" }), // 以前被当 worker 跳过
++      ev({ type: "tool_call", id: "t3", tool: "read_file", args: {}, agent_id: "w1" }), // worker：不计
++    ]);
++    expect(totals.toolSteps).toBe(2);
++  });
++
++  it("空串 agent_id 的事件照样进主流行（渲染面同一条判据）", async () => {
++    const { projectStream } = await import("../apps/desktop/src/renderer/derived/stream");
++    const rows = projectStream([
++      ev({ type: "user_message", seq: 1, ts: 1, content: "问" }),
++      ev({ type: "tool_call", seq: 2, ts: 2, id: "t1", tool: "read_file", args: "{}", agent_id: "" }), // 以前被当 worker 藏掉
++      ev({ type: "tool_result", seq: 3, ts: 3, callId: "t1", ok: true, output: "x", agent_id: "" }),
++    ], false);
++    expect(rows.some((r) => r.kind === "tool")).toBe(true);
++  });
++
++  it("五个消费面都读同一份，且都不再自己写一条", () => {
++    const files = [
++      "src/agent/context.ts",
++      "src/agent/acceptance-sampler.ts",
++      "src/main/usage-ledger.ts",
++      "apps/desktop/src/renderer/derived/session.ts",
++      "scripts/replay/run-scorecard.ts",
++    ];
++    for (const f of files) {
++      const src = readFileSync(join(ROOT, f), "utf8");
++      expect(src, `${f} 没读共享判据`).toMatch(/from ".*subflow"/u);
++      expect(src, `${f} 还留着自己那条`).not.toMatch(/typeof (?:e\.)?id === "string"\s*&&\s*(?:e\.)?id !== ""/u);
++      expect(src, `${f} 还留着自己那条（agent_id 版）`).not.toMatch(/typeof e\.agent_id === "string"\s*&&\s*e\.agent_id !== ""/u);
++    }
++    const canonical = readFileSync(join(ROOT, "src/agent/subflow.ts"), "utf8");
++    expect(canonical).toContain('id !== ""');
++    expect(canonical).toContain('e.type !== "agent_spawned"');
++  });
++});

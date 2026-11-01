@@ -1,0 +1,14 @@
+=== 改前 A：只搜 DOM（foldedHitSeqs 恒空）===
+     × 只把已折叠轮次里的 user/assistant 正文算进来（工具行不参与） 4ms
+     × 大小写与空白不影响；空查询不返回任何命中 1ms
+      Tests  2 failed | 5 passed (7)
+
+=== 改前 B：命中折叠轮时不展开 ===
+     × 接线：FindBar 收模型行/折叠集/展开动作；命中在折叠轮里先展开再闪 6ms
+      Tests  1 failed | 6 passed (7)
+
+=== 复原后 ===
+      Tests  7 passed (7)
+=== sha256 ===
+ae047301301cf3b4a3880913f0076d1ea3acc7dc2eec11ab0ad1c37034ba65ae
+983133632c3def0fd35637a9c4e1f0757355c92eb00732f822039135fb038e1b

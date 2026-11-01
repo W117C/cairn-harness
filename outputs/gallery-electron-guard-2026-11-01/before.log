@@ -1,0 +1,10 @@
+=== 改前：ELECTRON_RUN_AS_NODE=1 下跑画廊（node 跑，electron 退化成字符串）===
+[gallery] FAIL TypeError: Cannot read properties of undefined (reading 'whenReady')
+    at main (/Users/ze/Downloads/Cairn/cairn/apps/desktop/scripts/ui-gallery.cjs:63:13)
+    at Object.<anonymous> (/Users/ze/Downloads/Cairn/cairn/apps/desktop/scripts/ui-gallery.cjs:599:1)
+    at Module._compile (node:internal/modules/cjs/loader:1872:14)
+    at Object..js (node:internal/modules/cjs/loader:2003:10)
+    at Module.load (node:internal/modules/cjs/loader:1594:32)
+    at Module._load (node:internal/modules/cjs/loader:1396:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+EXIT=1

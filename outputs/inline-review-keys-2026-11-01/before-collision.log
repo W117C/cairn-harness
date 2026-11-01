@@ -1,0 +1,6 @@
+=== 改前：一条评注（键 src/a.ts|2）在 del/add 两侧的表现 ===
+markers = 2
+     × 一条评注 path|2 会同时挂在删除行与新增行上 6ms
+     20|     const markers = html.match(/dl-has-comment/g) ?? [];
+     21|     console.log("markers =", markers.length);
+      Tests  1 failed (1)

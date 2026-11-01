@@ -13,6 +13,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ONBOARDING_GROUPS, type OnboardingGroup } from "../../../src/main/onboarding-groups";
 import { OnboardingChecklist, ONBOARDING_TARGET, groupByStep, onboardingTarget } from "../src/renderer/components/OnboardingChecklist";
+import { destinationForSection } from "../src/renderer/navigation";
 import { STR } from "../src/renderer/strings";
 
 const groups = ONBOARDING_GROUPS as readonly OnboardingGroup[];
@@ -67,6 +68,7 @@ describe("首启设置检查：七组覆盖面", () => {
     for (const g of groups) {
       expect(html, `组 ${g.id} 的标题没上屏`).toContain(g.label);
       expect(html, `组 ${g.id} 的说明没上屏（title 承载）`).toContain(g.entry);
+      expect(html, `组 ${g.id} 的说明没有可见文本`).toContain("onboard-entry");
     }
     // 四步 ⇒ 四行（分组由行距说，不给步号）
     expect(html.match(/onboard-step/g)?.length).toBe(4);
@@ -92,6 +94,12 @@ describe("首启设置检查：七组覆盖面", () => {
     )).toBe("");
   });
 
+  it("routes onboarding groups to durable destinations when appropriate", () => {
+    expect(onboardingTarget("memory")).toBe("memory");
+    expect(destinationForSection("memory")).toBe("memory");
+    expect(destinationForSection("telemetry" as never)).toBeNull();
+  });
+
   it("⑤ 关闭动作落 settings.onboarded=true；失败回滚；WorkbenchView 真接线", () => {
     const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
     const onboarding = read("../src/renderer/state/onboarding.ts");
@@ -104,5 +112,31 @@ describe("首启设置检查：七组覆盖面", () => {
     expect(state).toContain("dismissOnboarding,");
     expect(view).toContain("onDone={dismissOnboarding}");
     expect(read("../src/renderer/components/OnboardingChecklist.tsx")).toContain("onClick={props.onDone}");
+  });
+});
+
+describe("首启七格排成清单，不是参差药丸堆（2026-11-01 第 894 页）", () => {
+  const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
+  it("每一步的格子等宽并铺满整行（列数随本步格数，不留尾部空洞）", () => {
+    const items = css.match(/\.onboard-items\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(items).not.toBe("");
+    expect(items, "要按本步格数铺满：auto-flow column + 等分列").toContain("grid-auto-flow: column");
+    expect(items).toMatch(/grid-auto-columns:\s*minmax\(0,\s*1fr\)/);
+    // 反向：不许退回「固定列 + 内容自伸缩」——那正是 1/2/3/1 步数下每行缺右角的原因。
+    expect(items).not.toContain("flex-wrap");
+    expect(items).not.toMatch(/repeat\(auto-fit/);
+  });
+
+  it("格子自身不再按文字收宽（旧 max-width:260px 让每格宽度=文案长度）", () => {
+    const item = css.match(/\.onboard-item\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(item).not.toContain("max-width: 260px");
+    expect(item).toContain("min-width: 0");
+  });
+
+  it("完成出口看得出可以点（描边胶囊），但仍是次级动作", () => {
+    const done = css.match(/\.onboard-done\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(done).toContain("border: 1px solid var(--hairline-strong)");
+    expect(done, "不抢主位：不走品牌色相").not.toContain("accent-brand");
+    expect(done).toContain("background: transparent");
   });
 });

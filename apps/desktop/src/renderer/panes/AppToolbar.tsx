@@ -1,7 +1,7 @@
+import { isCompositionEnter } from "../ime";
 import type { Dispatch,MutableRefObject,SetStateAction } from 'react';
 // renderAppToolbar: extracted without changing event or callback behavior.
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Blocks,FileDiff,Focus,Folder,Globe,List,MoreHorizontal,Terminal } from "lucide-react";
+import { Folder,List } from "lucide-react";
 import type { PointerEvent } from "react";
 import { type PanelImperativeHandle } from "react-resizable-panels";
 import type { GoalTrace } from "../../../../../src/agent/goal-trace";
@@ -13,8 +13,8 @@ import type { PaletteAction } from "../components/CommandPalette";
 import { type FindBarHandle } from "../components/FindBar";
 import { GoalChip } from "../components/GoalChip";
 import { CairnMark } from "../components/CairnMark";
+import { WorkbenchTools } from "../components/WorkbenchTools";
 import type { StreamActions } from "../components/Stream";
-import type { UsageAllState } from "../components/UsagePanel";
 import { PANE_META,PANE_OPENABLE,type PaneKind } from "../components/panes";
 import type { SectionId } from "../components/settings-nav";
 import { writeDismissedGoals } from "../goal-dismiss";
@@ -60,16 +60,21 @@ interface AppToolbarProps {
   outlineOpen: boolean;
   setOutlineOpen: Dispatch<SetStateAction<boolean>>;
   paneTabs: PaneKind[];
-  togglePane: (kind: PaneKind) => void;
+  onOpenPane: (kind: PaneKind) => void;
+  inspectorOpen: boolean;
+  onToggleInspector: () => void;
   fileCount: number;
   pluginSidebarOpen: boolean;
   togglePluginSidebar: () => void;
   focusMode: boolean;
   toggleFocusMode: () => void;
+  /** demo provider：标题栏常驻「演示模式」小胶囊，点开模型设置。 */
+  demo?: boolean;
+  onOpenProviderSettings?: () => void;
 }
 
 export function renderAppToolbar(deps: AppToolbarProps) {
-  const { settingsOpen, activeId, activeWorkspace, activeProjectLabel, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, togglePane, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode } = deps;
+  const { settingsOpen, activeId, activeWorkspace, activeProjectLabel, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, onOpenPane, inspectorOpen, onToggleInspector, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, demo, onOpenProviderSettings } = deps;
   const toolbarContext = !settingsOpen && activeId !== null && activeWorkspace !== null && activeProjectLabel !== null ? (
     <span className="tb-workspace" title={activeWorkspace} aria-label={`${STR.composer.workspaceAria}：${activeProjectLabel}`}>
       <Folder size={12} aria-hidden="true" />
@@ -102,7 +107,7 @@ export function renderAppToolbar(deps: AppToolbarProps) {
           onChange={(e) => setBarRenaming({ ...barRenaming, text: e.target.value })}
           onKeyDown={(e) => {
             e.stopPropagation();
-            if (e.key === "Enter") {
+            if (e.key === "Enter" && !isCompositionEnter(e, null)) {
               e.preventDefault();
               // 提交给**绑定的那条会话**（不是 activeId）：会话切换过也不能改名改到别人头上。
               const v = barRenaming.text.trim();
@@ -149,10 +154,20 @@ export function renderAppToolbar(deps: AppToolbarProps) {
     />
   ) : null;
 
-  // 统一工具栏 · 右组（批 129）：对话目录 + 窗格入口（Terminal / Changes / Browser）+ ⋯ + 专注模式。
-  // 窄窗（≤920px）三钮收进 ⋮（CSS 收口）；⋯ 恒列全部窗格。
+  // 右组：对话目录按内容出现，改动直达，其余工具按需打开；窄窗保留文字入口。
   const toolbarRight = !settingsOpen && (
     <>
+      {demo === true && (
+        <button
+          className="tb-demo"
+          title={STR.demoBanner.tip}
+          aria-label={STR.demoBanner.tip}
+          onClick={onOpenProviderSettings}
+        >
+          <span className="tb-demo-dot" aria-hidden="true" />
+          {STR.demoBanner.chip}
+        </button>
+      )}
       {activeId !== null && (
         <div className="tb-cluster">
           {/* 对话目录（v7.2 长对话导航）：2026-10-17 从流内浮片迁入会话条
@@ -169,76 +184,20 @@ export function renderAppToolbar(deps: AppToolbarProps) {
               <List size={13} />
             </button>
           )}
-          <span className="tb-quick">
-            <button
-              className="tb-btn"
-              aria-label="终端窗格"
-              title={`终端窗格（${paneShortcutKeys("terminal")}）`}
-              data-on={paneTabs.includes("terminal")}
-              onClick={() => togglePane("terminal")}
-            >
-              <Terminal size={13} />
-            </button>
-            <button
-              className="tb-btn"
-              aria-label="变更窗格"
-              title={`变更窗格（${paneShortcutKeys("changes")}）`}
-              data-on={paneTabs.includes("changes")}
-              onClick={() => togglePane("changes")}
-            >
-              <FileDiff size={13} />
-              {fileCount > 0 && <span className="tb-badge num">{String(fileCount)}</span>}
-            </button>
-            <button
-              className="tb-btn"
-              aria-label="浏览器窗格"
-              title={`浏览器窗格（${paneShortcutKeys("browser")}）`}
-              data-on={paneTabs.includes("browser")}
-              onClick={() => togglePane("browser")}
-            >
-              <Globe size={13} />
-            </button>
-          </span>
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger asChild>
-              <button className="tb-btn" aria-label="更多窗格" title="更多窗格">
-                <MoreHorizontal size={13} />
-              </button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content className="pop-rd" side="bottom" align="end" sideOffset={4}>
-              {PANE_OPENABLE.map((k) => (
-                <DropdownMenu.Item key={k} className="menu-item" onSelect={() => togglePane(k)}>
-                  <span>{paneTabs.includes(k) ? `关闭${PANE_META[k].label}窗格` : `打开${PANE_META[k].label}窗格`}</span>
-                  <span className="sub">{paneShortcutKeys(k)}</span>
-                </DropdownMenu.Item>
-              ))}
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
         </div>
       )}
-      {/* 专注模式是窗口级动作，与内容级动作分组（macOS 工具栏的分组惯例）。 */}
-      {activeId !== null && <span className="tb-sep" aria-hidden="true"></span>}
-      <button
-        className="iconbtn sm"
-        aria-label="插件侧栏"
-        aria-controls="mod-sidebar"
-        aria-expanded={pluginSidebarOpen}
-        data-on={pluginSidebarOpen}
-        title="插件侧栏（⌘⌥B）"
-        onClick={togglePluginSidebar}
-      >
-        <Blocks size={14} />
-      </button>
-      <button
-        className="iconbtn sm"
-        aria-label={focusMode ? "退出专注模式" : "进入专注模式"}
-        aria-pressed={focusMode}
-        data-on={focusMode}
-        title={focusMode ? "退出专注模式（⌘⌥F）" : "专注模式（⌘⌥F）：收起侧栏与检查器"}
-        onClick={toggleFocusMode}
-      >
-        <Focus size={14} />
-      </button>
+      <WorkbenchTools
+        hasSession={activeId !== null}
+        paneTabs={paneTabs}
+        fileCount={fileCount}
+        inspectorOpen={inspectorOpen}
+        pluginSidebarOpen={pluginSidebarOpen}
+        focusMode={focusMode}
+        onOpenPane={onOpenPane}
+        onToggleInspector={onToggleInspector}
+        onTogglePluginSidebar={togglePluginSidebar}
+        onToggleFocusMode={toggleFocusMode}
+      />
     </>
   );
 

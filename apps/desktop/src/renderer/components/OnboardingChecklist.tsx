@@ -65,17 +65,19 @@ export function OnboardingChecklist(props: {
       {steps.map((s) => (
         <div className="onboard-step" key={s.step}>
           <div className="onboard-items">
+            {/* 每格不再挂 title：entry 本来就整行可见（white-space: normal），
+                再挂一枚同文 tooltip 是同一句话的第二份，且键盘用户读不到。 */}
             {s.groups.map((g) => (
               <button
                 key={g.id}
                 className="onboard-item"
-                title={g.entry}
                 onClick={() => {
                   const target = onboardingTarget(g.id);
                   if (target !== undefined) props.onOpen(target);
                 }}
               >
                 <span className="onboard-label">{g.label}</span>
+                <span className="onboard-entry">{g.entry}</span>
               </button>
             ))}
           </div>

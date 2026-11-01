@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { OrchestrationAddress, OrchestrationResponse, OrchestrationSnapshot } from "../../../../../src/main/orchestration-service";
 import type { ControlAction, ControlCommand, OrchPlan, PlanView } from "../../../../../src/orchestration/types";
+import {
+  acceptanceLabel, artifactKindLabel, canEnableExecution, effectLabel, evidenceLabel, laneLabel, planControls,
+  planPhaseLabel, reasonLabel, scheduleKindLabel, taskControls, taskPhaseLabel, verdictLabel,
+  type OrchestrationControl,
+} from "../derived/orchestration";
 import "./orchestration-pane.css";
 
 /** The simple editor deliberately grants read-only capability; imported plans retain their own contract. */
@@ -23,7 +28,41 @@ export function buildReadPlan(input: { id: string; goal: string; tasks: string; 
 }
 
 const money = (value: number): string => Number.isFinite(value) ? `$${value.toFixed(4)}` : "未知";
-const actions: readonly [ControlAction, string][] = [["approve_plan", "批准"], ["reject_plan", "拒绝"], ["pause_plan", "暂停"], ["resume_plan", "恢复"], ["cancel_plan", "取消计划"]];
+
+/** 只摆当前阶段合法的动作；会终止进行中工作或改写文件的那几个要二次确认。 */
+function ControlButtons(props: {
+  controls: readonly OrchestrationControl[];
+  pending: boolean;
+  scope: string;
+  onRun: (action: ControlAction) => void;
+}): React.JSX.Element | null {
+  const [confirming, setConfirming] = useState<ControlAction | null>(null);
+  if (props.controls.length === 0) return null;
+  const run = (control: OrchestrationControl): void => {
+    // 第一次点只摆出确认；第二次点才真的发命令（避免误触把运行中的计划停掉）。
+    if (control.confirm === true && confirming !== control.action) { setConfirming(control.action); return; }
+    setConfirming(null);
+    props.onRun(control.action);
+  };
+  return (
+    <div className="orch-actions">
+      {props.controls.map(control => (
+        <button
+          type="button"
+          className={"mini-btn" + (confirming === control.action ? " orch-danger" : "")}
+          key={control.action}
+          disabled={props.pending}
+          aria-label={confirming === control.action ? `确认${control.label}` : `${control.label} ${props.scope}`}
+          data-control-action={control.action}
+          data-control-scope={props.scope}
+          data-confirm={control.confirm === true ? "true" : undefined}
+          onClick={() => { run(control); }}
+        >{confirming === control.action ? `确认${control.label}` : control.label}</button>
+      ))}
+      {confirming !== null && <button type="button" className="mini-btn ghost" onClick={() => { setConfirming(null); }}>返回</button>}
+    </div>
+  );
+}
 
 export function OrchestrationSnapshotView(props: {
   snapshot: OrchestrationSnapshot;
@@ -31,6 +70,8 @@ export function OrchestrationSnapshotView(props: {
   onControl: (plan: PlanView, action: ControlAction, taskId?: string, execute?: boolean) => void;
 }): React.JSX.Element {
   const { snapshot } = props;
+  const rollback = snapshot.backend_capabilities?.rollback === true;
+  const executionContext = { mode: snapshot.mode, backend: snapshot.backend, executionUnavailable: snapshot.execution_unavailable !== undefined };
   return <>
     <div className="orch-mode"><strong>{snapshot.mode === "execute" ? "执行模式" : "预览模式（shadow）"}</strong><span>后端：{snapshot.backend ?? "未连接"}</span></div>
     {snapshot.execution_unavailable && <p className="orch-notice">{snapshot.execution_unavailable}</p>}
@@ -38,28 +79,40 @@ export function OrchestrationSnapshotView(props: {
     {snapshot.view.anomalies.length > 0 && <div className="orch-error" role="alert"><strong>事件异常</strong><ul>{snapshot.view.anomalies.map((item, i) => <li key={i}>{item}</li>)}</ul></div>}
     {Object.values(snapshot.view.plans).length === 0 && <p className="orch-notice">本会话没有编排计划。填写目标与任务，或导入已有计划。</p>}
     {Object.values(snapshot.view.plans).map(plan => <section className="orch-plan" key={`${plan.plan.plan_id}:${String(plan.plan.version)}`} aria-label={`计划 ${plan.plan.goal}`}>
-      <div className="orch-plan-title"><strong>{plan.plan.goal}</strong><span>{plan.phase}</span></div>
+      <div className="orch-plan-title"><strong>{plan.plan.goal}</strong><span className="orch-phase" data-phase={plan.phase} title={plan.phase}>{planPhaseLabel(plan.phase)}</span></div>
       <p className="orch-meta">{plan.plan.plan_id} · v{String(plan.plan.version)} · 预算 {money(plan.plan.budget.usd)} · 已用 {money(plan.spent_usd)} · 预留 {money(plan.reserved_usd)}</p>
-      <div className="orch-actions">
-        {actions.map(([action, label]) => <button type="button" className="mini-btn" key={action} disabled={props.pending} onClick={() => props.onControl(plan, action)}>{label}</button>)}
-        {snapshot.mode === "shadow" && <button type="button" className="mini-btn" disabled={props.pending || snapshot.backend === null || plan.phase !== "approved" || Boolean(snapshot.execution_unavailable)} onClick={() => props.onControl(plan, "resume_plan", undefined, true)}>启用执行</button>}
-      </div>
+      <ControlButtons
+        controls={planControls(plan)}
+        pending={props.pending}
+        scope={plan.plan.plan_id}
+        onRun={action => { props.onControl(plan, action); }}
+      />
+      {canEnableExecution(plan, executionContext) && (
+        <div className="orch-actions">
+          <button type="button" className="mini-btn" disabled={props.pending} onClick={() => { props.onControl(plan, "resume_plan", undefined, true); }}>启用执行</button>
+        </div>
+      )}
       <ul className="orch-tasks">{Object.values(plan.tasks).map(item => <li key={item.task.task_id}>
-        <div className="orch-plan-title"><span>{item.task.goal}</span><code>{item.phase}</code></div>
-        <p className="orch-meta">{item.task.task_id} · 尝试 {String(item.attempt)}/{String(item.task.max_attempts)} · 证据 {item.evidence} · 裁决 {item.verdict ?? "未知"}</p>
+        <div className="orch-plan-title"><span>{item.task.goal}</span><code data-phase={item.phase} title={item.phase}>{taskPhaseLabel(item.phase)}</code></div>
+        <p className="orch-meta">{item.task.task_id} · 尝试 {String(item.attempt)}/{String(item.task.max_attempts)} · 证据 {evidenceLabel(item.evidence)} · 裁决 {verdictLabel(item.verdict)}</p>
         <p className="orch-meta">依赖：{item.task.depends_on.join("、") || "无"} · 预算 {money(item.task.budget.usd)} · 已用 {money(item.spent_usd)} · 预留 {money(item.reserved_usd)}</p>
-        {item.reason && <p className="orch-error">{item.reason}</p>}
+        {item.reason && <p className="orch-error" title={item.reason}>{reasonLabel(item.reason)}</p>}
         {item.summary && <details><summary>产出摘要</summary><p className="orch-summary">{item.summary}</p></details>}
-        {item.artifacts && item.artifacts.length > 0 && <details><summary>产物引用 · {String(item.artifacts.length)}</summary><ul>{item.artifacts.map((artifact, i) => <li key={i}><code>{artifact.id}</code> · {artifact.kind}{artifact.hash ? ` · ${artifact.hash}` : ""}</li>)}</ul></details>}
+        {item.artifacts && item.artifacts.length > 0 && <details><summary>产物引用 · {String(item.artifacts.length)}</summary><ul>{item.artifacts.map((artifact, i) => <li key={i}><code>{artifact.id}</code> · {artifactKindLabel(artifact.kind)}{artifact.hash ? ` · ${artifact.hash}` : ""}</li>)}</ul></details>}
         <details><summary>能力与验收</summary><div className="orch-detail">
-          <p>权限：{item.task.lane} · 写入范围：{item.task.write_scopes.join("、") || "无"} · 外部效果：{item.task.contract.effect}</p>
-          <ul>{item.task.contract.acceptance.map(check => <li key={check.id}>{check.id} · {check.kind}{check.kind === "human" ? ` · ${check.instruction}` : check.kind === "command" ? ` · ${check.run}` : check.kind === "evidence" ? ` · ${check.fields.join("、")}` : ` · ${check.artifact_id}`}</li>)}</ul>
+          <p>权限：{laneLabel(item.task.lane)} · 写入范围：{item.task.write_scopes.join("、") || "无"} · 外部效果：{effectLabel(item.task.contract.effect)}</p>
+          <ul>{item.task.contract.acceptance.map(check => <li key={check.id}>{check.id} · {acceptanceLabel(check.kind)}{check.kind === "human" ? ` · ${check.instruction}` : check.kind === "command" ? ` · ${check.run}` : check.kind === "evidence" ? ` · ${check.fields.join("、")}` : ` · ${check.artifact_id}`}</li>)}</ul>
           <p>修订：{item.revision ?? "未知"} · 验证者：{item.verifier_id ?? "未知"}</p>
         </div></details>
-        <div className="orch-actions">{([["retry_task", "重试"], ["takeover_task", "接管"], ["pause_task", "暂停任务"], ["resume_task", "恢复任务"], ["cancel_task", "取消任务"], ["merge_task", "合并交付"], ["reject_merge", "拒绝交付"]] as const).map(([action, label]) => <button type="button" className="mini-btn" key={action} disabled={props.pending} aria-label={`${label}任务 ${item.task.task_id}`} onClick={() => props.onControl(plan, action, item.task.task_id)}>{label}</button>)}</div>
+        <ControlButtons
+          controls={taskControls(item, { rollback })}
+          pending={props.pending}
+          scope={item.task.task_id}
+          onRun={action => { props.onControl(plan, action, item.task.task_id); }}
+        />
       </li>)}</ul>
     </section>)}
-    {snapshot.next_actions.length > 0 && <details className="orch-next"><summary>调度建议 · {String(snapshot.next_actions.length)}</summary><ul>{snapshot.next_actions.map((action, i) => <li key={i}>{action.task_id} · {action.kind}{action.reason ? ` · ${action.reason}` : ""}</li>)}</ul></details>}
+    {snapshot.next_actions.length > 0 && <details className="orch-next"><summary>调度建议 · {String(snapshot.next_actions.length)}</summary><ul>{snapshot.next_actions.map((action, i) => <li key={i}>{action.task_id} · {scheduleKindLabel(action.kind)}{action.reason ? ` · ${reasonLabel(action.reason)}` : ""}</li>)}</ul></details>}
   </>;
 }
 

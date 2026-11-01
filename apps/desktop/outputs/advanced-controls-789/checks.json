@@ -1,0 +1,91 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "真指针进「高级」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "三个开关与并发上限都在页面上",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "缺省态与 settings 同源（子代理开 / 收束闸开 / 返修关）",
+      "ok": true,
+      "detail": {
+        "subagent": "true",
+        "verify": "true",
+        "repair": "false",
+        "allSwitches": [
+          {
+            "label": "会话结束自动沉淀记忆",
+            "checked": "true"
+          },
+          {
+            "label": "写入后提示跨文件波及",
+            "checked": "false"
+          },
+          {
+            "label": "Prompt 缓存断点",
+            "checked": "true"
+          },
+          {
+            "label": "允许匿名使用统计",
+            "checked": "false"
+          },
+          {
+            "label": "子代理工具",
+            "checked": "true"
+          },
+          {
+            "label": "收束前补一拍验证",
+            "checked": "true"
+          },
+          {
+            "label": "验证红了自动返修一轮",
+            "checked": "false"
+          }
+        ]
+      }
+    },
+    {
+      "name": "真指针点「子代理工具」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "开关翻面 + 落盘 {subagentTools:false}",
+      "ok": true,
+      "detail": {
+        "subagentTools": false
+      }
+    },
+    {
+      "name": "点进并发上限输入框",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "输入框值变成 5",
+      "ok": true,
+      "detail": "5"
+    },
+    {
+      "name": "上限改成 5 并回车 ⇒ 落盘 {scheduleConcurrencyCap:5}",
+      "ok": true,
+      "detail": [
+        {
+          "scheduleConcurrencyCap": 5
+        }
+      ]
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

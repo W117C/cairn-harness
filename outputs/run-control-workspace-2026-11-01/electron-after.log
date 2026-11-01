@@ -1,0 +1,66 @@
+$ node scripts/smoke.mjs
+[cairn-smoke] bootstrap entry
+[cairn-smoke] TypeScript loader registered
+[cairn-smoke] main module loaded
+[cairn-smoke] app ready
+[cairn-smoke] initializing secure storage
+[cairn-smoke] provider storage initialized
+[byok-inject] 启动注入：无可注入 key（未存或 env 优先）
+[scheduler] journal 保留收敛完成（当前 0 条）
+[m4a] 调度器已启动（桌面端常驻接线：快照/CRUD/触发同实例）
+Error occurred in handler for 'agent:settings-get': Error: IPC 来源不可信，已拒绝：agent:settings-get
+    at <anonymous> (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/main/index.ts:1496:13)
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:119988)
+    at Session.emit (node:events:514:28)
+Error occurred in handler for 'agent:settings-get': Error: IPC 来源不可信，已拒绝：agent:settings-get
+    at <anonymous> (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/main/index.ts:1496:13)
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:119988)
+    at Session.emit (node:events:514:28)
+Error occurred in handler for 'agent:project-templates': Error: IPC 来源不可信，已拒绝：agent:project-templates
+    at <anonymous> (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/main/index.ts:1496:13)
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:119988)
+    at Session.emit (node:events:514:28)
+Error occurred in handler for 'agent:protocol-version': Error: IPC 来源不可信，已拒绝：agent:protocol-version
+    at <anonymous> (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/main/index.ts:1496:13)
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:119988)
+    at Session.emit (node:events:514:28)
+Error occurred in handler for 'agent:list-skills': Error: IPC 来源不可信，已拒绝：agent:list-skills
+    at <anonymous> (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/main/index.ts:1496:13)
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:119988)
+    at Session.emit (node:events:514:28)
+Error occurred in handler for 'agent:set-workspace-context': Error: IPC 来源不可信，已拒绝：agent:set-workspace-context
+    at <anonymous> (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/main/index.ts:1496:13)
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:119988)
+    at Session.emit (node:events:514:28)
+Error occurred in handler for 'agent:report-viewing': Error: IPC 来源不可信，已拒绝：agent:report-viewing
+    at <anonymous> (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/main/index.ts:1496:13)
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:119988)
+    at Session.emit (node:events:514:28)
+Error occurred in handler for 'agent:sessions-list': Error: IPC 来源不可信，已拒绝：agent:sessions-list
+    at <anonymous> (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/main/index.ts:1496:13)
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:119988)
+    at Session.emit (node:events:514:28)
+Error occurred in handler for 'agent:provider-info': Error: IPC 来源不可信，已拒绝：agent:provider-info
+    at <anonymous> (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/main/index.ts:1496:13)
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:119988)
+    at Session.emit (node:events:514:28)
+Error occurred in handler for 'agent:provider-key-status': Error: IPC 来源不可信，已拒绝：agent:provider-key-status
+    at <anonymous> (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/main/index.ts:1496:13)
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:119988)
+    at Session.emit (node:events:514:28)
+Error occurred in handler for 'agent:projects-list': Error: IPC 来源不可信，已拒绝：agent:projects-list
+    at <anonymous> (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/main/index.ts:1496:13)
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:119988)
+    at Session.emit (node:events:514:28)
+[cairn-smoke] window.agent type: object
+Error occurred in handler for 'agent:sessions-create': Error: IPC 来源不可信，已拒绝：agent:sessions-create
+    at <anonymous> (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/main/index.ts:1496:13)
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:119988)
+    at Session.emit (node:events:514:28)
+[cairn-smoke] FAILED: Error invoking remote method 'agent:sessions-create': Error: IPC 来源不可信，已拒绝：agent:sessions-create
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron .
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] cairn-desktop@0.2.0 smoke: `node scripts/smoke.mjs`
+Exit status 1

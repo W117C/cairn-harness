@@ -1,0 +1,6 @@
+$ node --import tsx .tmp/probe-summary.mts
+grep     ⇒ "TODO"
+grep     ⇒ "TODO"
+glob     ⇒ "src/**/*.ts"
+lsp      ⇒ "src/a.ts"
+clarify  ⇒ "{\"questions\":[{\"question\":\"选哪个？\",\"options\":[\"A\",\"B\"]}]}"

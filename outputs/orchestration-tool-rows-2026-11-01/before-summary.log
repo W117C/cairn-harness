@@ -1,0 +1,9 @@
+$ node --import tsx .tmp/probe-orchestration.mts   # ownSubject 关闭 = 第 916 页那版的行为
+spawn_agent      ⇒ "{\"task\":\"把 a.ts 的 XX 改掉并跑测试\",\"mode\":\"write\"}"
+send_agent       ⇒ "{\"thread_id\":\"th-1\",\"message\":\"再看一下 b.ts\"}"
+wait_for_agents  ⇒ "{\"agent_ids\":[\"a1\",\"a2\"]}"
+wait_for_agents  ⇒ "{}"
+cancel_agents    ⇒ "{}"
+list_agents      ⇒ "{}"
+resume_agent     ⇒ "{\"thread_id\":\"th-1\"}"
+clarify          ⇒ "{\"questions\":[{\"question\":\"要 A 还是 B？\",\"options\":[\"A\",\"B\"]}]}"

@@ -1,0 +1,579 @@
+--- a/src/main/session-lock.ts
++++ b/src/main/session-lock.ts
+@@ -4,23 +4,45 @@
+ //
+ // 锁 = `<logPath>.lock` 旁路文件，`wx`（O_EXCL）创建，内容 {pid, nonce, startedAt}：
+ //   · 持锁进程活着 → 拒绝，点名 pid 与开始时间；
+-//   · 持锁进程已死（崩溃留下的）→ 只在文件内容仍是刚才读到的那份时删除，再重试；
++//   · 获取/回收在会话根的短临界区内完成，避免两个清理者先后删掉新持有者的锁；
++//   · 持锁进程已死（崩溃留下的）→ 删除旧锁，再重试；
+ //   · 释放只删自己写的那一份（nonce 对得上），不误删别人的锁。
+ // 进程被 SIGKILL 时锁会留下，由下一次获取按 pid 死活清理。
+ import { randomUUID } from "node:crypto";
+ import { open, readFile, unlink } from "node:fs/promises";
++import { dirname } from "node:path";
++import { withSessionMutation } from "./session-mutation-lock";
++
++async function readLock(path: string): Promise<string | null> {
++  try {
++    return await readFile(path, "utf8");
++  } catch (error) {
++    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
++    throw error;
++  }
++}
++
++function readOwner(raw: string): Partial<LockFile> {
++  try {
++    const holder: unknown = JSON.parse(raw);
++    if (typeof holder === "object" && holder !== null && !Array.isArray(holder)) {
++      return holder as Partial<LockFile>;
++    }
++  } catch { /* 不完整或损坏的记录没有有效持有者。 */ }
++  return {};
++}
++
++function ownerPid(holder: Partial<LockFile>): number | null {
++  return typeof holder.pid === "number" && Number.isSafeInteger(holder.pid) && holder.pid > 0 ? holder.pid : null;
++}
+ 
+ /** 只读检查另一进程是否正持有这份日志的运行锁（供删除/改名这类写结构操作在动手前拦一下）。
+  *  只剩规则与 acquire 一致：坏锁内容按「没有有效持有者」处理（acquire 会把它当陈旧锁清掉）。 */
+ export async function sessionRunLockHeld(logPath: string): Promise<boolean> {
+-  const raw = await readFile(`${logPath}.lock`, "utf8").catch(() => null);
++  const raw = await readLock(`${logPath}.lock`);
+   if (raw === null) return false;
+-  try {
+-    const holder = JSON.parse(raw) as { pid?: unknown };
+-    return typeof holder.pid === "number" && Number.isInteger(holder.pid) && alive(holder.pid);
+-  } catch {
+-    return false;
+-  }
++  const pid = ownerPid(readOwner(raw));
++  return pid !== null && alive(pid);
+ }
+ 
+ export interface SessionRunLock {
+@@ -56,6 +78,13 @@
+   logPath: string,
+   opts: { pid?: number; isAlive?: (pid: number) => boolean } = {},
+ ): Promise<SessionRunLockResult> {
++  return withSessionMutation(dirname(logPath), () => acquireRunLock(logPath, opts));
++}
++
++async function acquireRunLock(
++  logPath: string,
++  opts: { pid?: number; isAlive?: (pid: number) => boolean },
++): Promise<SessionRunLockResult> {
+   const path = `${logPath}.lock`;
+   const pid = opts.pid ?? process.pid;
+   const isAlive = opts.isAlive ?? alive;
+@@ -73,20 +102,15 @@
+       return { kind: "ok" };
+     } catch (error) {
+       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+-      const raw = await readFile(path, "utf8").catch(() => null);
++      const raw = await readLock(path);
+       if (raw === null) return { kind: "retry" }; // 对方刚好释放
+-      let holder: Partial<LockFile> = {};
+-      try {
+-        holder = JSON.parse(raw) as Partial<LockFile>;
+-      } catch {
+-        holder = {};
+-      }
+-      const holderPid = typeof holder.pid === "number" && Number.isInteger(holder.pid) ? holder.pid : -1;
+-      if (holderPid > 0 && isAlive(holderPid)) {
++      const holder = readOwner(raw);
++      const holderPid = ownerPid(holder);
++      if (holderPid !== null && isAlive(holderPid)) {
+         return { kind: "busy", pid: holderPid, startedAt: typeof holder.startedAt === "string" ? holder.startedAt : null };
+       }
+-      // 持锁进程已死：只删刚才读到的那一份（两个清理者并发时，后到的会看到新内容而放手）。
+-      const again = await readFile(path, "utf8").catch(() => null);
++      // 根级临界区覆盖检查、删除和下一次创建；内容比较本身不能代替互斥。
++      const again = await readLock(path);
+       if (again === raw) await unlink(path).catch(() => undefined);
+       return { kind: "retry" };
+     }
+@@ -95,13 +119,14 @@
+   for (let i = 0; i < 3; i++) {
+     const result = await attempt();
+     if (result.kind === "ok") {
++      let releasePromise: Promise<void> | undefined;
+       return {
+         ok: true,
+         lock: {
+-          release: async () => {
+-            const current = await readFile(path, "utf8").catch(() => null);
++          release: () => releasePromise ??= (async () => {
++            const current = await readLock(path);
+             if (current === body) await unlink(path).catch(() => undefined);
+-          },
++          })(),
+         },
+       };
+     }
+--- /dev/null
++++ b/src/main/session-mutation-lock.ts
+@@ -0,0 +1,94 @@
++// 会话根的短临界区：创建/删除/改名与运行锁恢复共用，避免各自检查后抢写。
++import { open, readFile, realpath, unlink, type FileHandle } from "node:fs/promises";
++import { join } from "node:path";
++
++export const SESSION_MUTATION_LOCK = ".session-mutation.lock";
++
++/** 进程内：同一规范会话根上的 mutation 串行（跨进程那一半是文件锁）。 */
++const chains = new Map<string, Promise<void>>();
++const lockHandles = new Map<string, FileHandle>();
++
++function processAlive(pid: number): boolean {
++  try {
++    process.kill(pid, 0);
++    return true;
++  } catch {
++    return false;
++  }
++}
++
++async function acquireRootLock(root: string): Promise<void> {
++  const lockPath = join(root, SESSION_MUTATION_LOCK);
++  // 这是**短临界区**：另一个进程通常只持有几毫秒（建 run 锁 / 删改会话）。
++  // 并发开 4 条不同会话时若一撞 EEXIST 就抛，只有第一个能跑起来——实测见
++  // tests/session-lock-recovery.test.ts 的 shared=false 用例。活着就等，死了才报人工。
++  const deadline = Date.now() + 2000;
++  for (;;) {
++    let handle: FileHandle;
++    try {
++      handle = await open(lockPath, "wx");
++    } catch (error) {
++      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
++      const raw = await readFile(lockPath, "utf8").catch(() => "");
++      const pid = Number.parseInt(raw.trim(), 10);
++      const alive = Number.isSafeInteger(pid) && pid > 0 && processAlive(pid);
++      if (!alive && raw.trim() !== "") {
++        throw new Error(`会话根的锁是崩溃遗留的，需人工确认后删除：${lockPath}`);
++      }
++      if (Date.now() >= deadline) {
++        throw new Error(
++          alive
++            ? `会话根正被另一个进程占用（pid ${String(pid)}）：${lockPath}`
++            : `会话根正被另一个进程占用：${lockPath}`,
++        );
++      }
++      await new Promise((resolve) => setTimeout(resolve, 10));
++      continue;
++    }
++    lockHandles.set(root, handle);
++    await handle.writeFile(`${String(process.pid)}\n`);
++    return;
++  }
++}
++
++async function releaseRootLock(root: string): Promise<void> {
++  const handle = lockHandles.get(root);
++  lockHandles.delete(root);
++  if (handle !== undefined) await handle.close().catch(() => undefined);
++  await unlink(join(root, SESSION_MUTATION_LOCK)).catch(() => undefined);
++}
++
++/** 「算键 + 入链」这一步的队列：链键要等 `realpath`，而两次 `realpath` 的**回程顺序不受调用顺序保证**
++ *  （2026-10-22 实测：`tests/session-reference-repository.test.ts` 的「进程内串行」3 次里红 1 次——
++ *  旧实现先 `await realpath` 再读 `chains`，回程颠倒时后来的调用先入链，串行就此失守）。
++ *  队列是在调用那一刻**同步**挂上去的，所以入链顺序 = 调用顺序，与文件系统回程快慢无关。 */
++let reserveQueue: Promise<void> = Promise.resolve();
++
++/** 在会话根的临界区里执行 `operation`：进程内串行 + 跨进程文件锁。 */
++export async function withSessionMutation<T>(sessionsRoot: string, operation: () => Promise<T>): Promise<T> {
++  const reserved = reserveQueue.then(async () => {
++    const root = await realpath(sessionsRoot);
++    const previous = chains.get(root) ?? Promise.resolve();
++    let release!: () => void;
++    const gate = new Promise<void>((resolveGate) => { release = resolveGate; });
++    const tail = previous.then(() => gate);
++    chains.set(root, tail);
++    return { root, previous, release, tail };
++  });
++  // 队列本身不许因为某一次 realpath 失败而卡死（调用方照旧收得到那一条 rejection）。
++  reserveQueue = reserved.then(() => undefined, () => undefined);
++  const { root, previous, release, tail } = await reserved;
++  await previous.catch(() => undefined);
++  try {
++    await acquireRootLock(root);
++    try {
++      return await operation();
++    } finally {
++      await releaseRootLock(root);
++    }
++  } finally {
++    release();
++    if (chains.get(root) === tail) chains.delete(root);
++  }
++}
++
+--- a/src/main/session-repository.ts
++++ b/src/main/session-repository.ts
+@@ -8,12 +8,13 @@
+ //      跨进程（CLI + desktop）用会话根里的 `.session-mutation.lock`（O_EXCL）。锁被活人占着或
+ //      崩溃遗留时**显式报错并给出锁路径**，不凭超时自动删锁。
+ import { existsSync } from "node:fs";
+-import { open, readFile, realpath, rename, rm, unlink, type FileHandle } from "node:fs/promises";
++import { realpath, rename, rm } from "node:fs/promises";
+ import { join } from "node:path";
+ import { forkSessionPointer, readSessionView, forkPointInView, type SessionRef } from "../events";
+ import { isSessionInRoot, workspaceOfSessionsRoot } from "./sessions";
++import { withSessionMutation } from "./session-mutation-lock";
+ 
+-export const SESSION_MUTATION_LOCK = ".session-mutation.lock";
++export { SESSION_MUTATION_LOCK, withSessionMutation } from "./session-mutation-lock";
+ 
+ export interface ResolveSessionInput {
+   sessionId: string;
+@@ -51,80 +52,6 @@
+     throw new Error(`会话 id 在多个工作区同时存在（${hits.join("、")}），必须显式指定 workspace：${input.sessionId}`);
+   }
+   return { workspace: hits[0]!, sessionId: input.sessionId };
+-}
+-
+-/** 进程内：同一规范会话根上的 mutation 串行（跨进程那一半是文件锁）。 */
+-const chains = new Map<string, Promise<void>>();
+-const lockHandles = new Map<string, FileHandle>();
+-
+-function processAlive(pid: number): boolean {
+-  try {
+-    process.kill(pid, 0);
+-    return true;
+-  } catch {
+-    return false;
+-  }
+-}
+-
+-async function acquireRootLock(root: string): Promise<void> {
+-  const lockPath = join(root, SESSION_MUTATION_LOCK);
+-  let handle: FileHandle;
+-  try {
+-    handle = await open(lockPath, "wx");
+-  } catch (error) {
+-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+-    const raw = await readFile(lockPath, "utf8").catch(() => "");
+-    const pid = Number.parseInt(raw.trim(), 10);
+-    const alive = Number.isSafeInteger(pid) && pid > 0 && processAlive(pid);
+-    throw new Error(
+-      alive
+-        ? `会话根正被另一个进程占用（pid ${String(pid)}）：${lockPath}`
+-        : `会话根的锁是崩溃遗留的，需人工确认后删除：${lockPath}`,
+-    );
+-  }
+-  lockHandles.set(root, handle);
+-  await handle.writeFile(`${String(process.pid)}\n`);
+-}
+-
+-async function releaseRootLock(root: string): Promise<void> {
+-  const handle = lockHandles.get(root);
+-  lockHandles.delete(root);
+-  if (handle !== undefined) await handle.close().catch(() => undefined);
+-  await unlink(join(root, SESSION_MUTATION_LOCK)).catch(() => undefined);
+-}
+-
+-/** 「算键 + 入链」这一步的队列：链键要等 `realpath`，而两次 `realpath` 的**回程顺序不受调用顺序保证**
+- *  （2026-10-22 实测：`tests/session-reference-repository.test.ts` 的「进程内串行」3 次里红 1 次——
+- *  旧实现先 `await realpath` 再读 `chains`，回程颠倒时后来的调用先入链，串行就此失守）。
+- *  队列是在调用那一刻**同步**挂上去的，所以入链顺序 = 调用顺序，与文件系统回程快慢无关。 */
+-let reserveQueue: Promise<void> = Promise.resolve();
+-
+-/** 在会话根的临界区里执行 `operation`：进程内串行 + 跨进程文件锁。 */
+-export async function withSessionMutation<T>(sessionsRoot: string, operation: () => Promise<T>): Promise<T> {
+-  const reserved = reserveQueue.then(async () => {
+-    const root = await realpath(sessionsRoot);
+-    const previous = chains.get(root) ?? Promise.resolve();
+-    let release!: () => void;
+-    const gate = new Promise<void>((resolveGate) => { release = resolveGate; });
+-    const tail = previous.then(() => gate);
+-    chains.set(root, tail);
+-    return { root, previous, release, tail };
+-  });
+-  // 队列本身不许因为某一次 realpath 失败而卡死（调用方照旧收得到那一条 rejection）。
+-  reserveQueue = reserved.then(() => undefined, () => undefined);
+-  const { root, previous, release, tail } = await reserved;
+-  await previous.catch(() => undefined);
+-  try {
+-    await acquireRootLock(root);
+-    try {
+-      return await operation();
+-    } finally {
+-      await releaseRootLock(root);
+-    }
+-  } finally {
+-    release();
+-    if (chains.get(root) === tail) chains.delete(root);
+-  }
+ }
+ 
+ export interface ProductForkCreated {
+--- a/src/main/session-handlers.ts
++++ b/src/main/session-handlers.ts
+@@ -135,12 +135,12 @@
+   sessionsRoot?: string,
+ ): Promise<{ ok: boolean; error?: string }> {
+   try {
+-    const dir = sessionsRoot ?? requireSessionsDir();
+     const id = typeof req.sessionId === "string" ? req.sessionId : "";
+     if (id === "" || id.startsWith(".") || id.includes("/") || id.includes("\\")) {
+       return { ok: false, error: `会话名非法: ${JSON.stringify(req.sessionId)}` };
+     }
+-    if (!(await sessionExists(dir, id))) return { ok: false, error: `会话不存在: ${id}` };
++    const dir = sessionsRoot ?? await resolveSessionRoot(id);
++    if (dir === null || !(await sessionExists(dir, id))) return { ok: false, error: `会话不存在: ${id}` };
+     const raw = req.prefs;
+     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return { ok: false, error: "prefs 必须是对象" };
+     const record = raw as Record<string, unknown>;
+--- a/apps/desktop/src/renderer/state/session-prefs.ts
++++ b/apps/desktop/src/renderer/state/session-prefs.ts
+@@ -41,6 +41,15 @@
+   }, [sessions, selections, thinking, force]);
+ }
+ 
++/** IPC 正常返回也可能拒绝保存；统一转成异常，模型/思考档的现有错误条才能收到拒因。 */
++export async function saveSessionPrefs(
++  sessionId: string,
++  prefs: { model?: string | null; thinking?: string | null },
++): Promise<void> {
++  const result = await window.agent.sessionPrefsSet(sessionId, prefs);
++  if (!result.ok) throw new Error(result.error ?? "会话偏好保存被拒绝");
++}
++
+ /** 模型选择：有会话 ⇒ 只改本会话并落 sidecar（v35）；主页 ⇒ 只改全局缺省。
+  *  此前有会话时**同时**写全局缺省：在一个会话里换模型会悄悄改掉所有新会话的默认。
+  *  provider 不随会话存：RunRequest.model 是稳定 registry id，主进程按注册表解析 provider。 */
+@@ -56,7 +65,7 @@
+   if (input.activeId !== null) {
+     input.selections.current.set(input.activeId, input.registryId);
+     input.force((n) => n + 1);
+-    void window.agent.sessionPrefsSet(input.activeId, { model: input.registryId }).catch((err: unknown) => {
++    void saveSessionPrefs(input.activeId, { model: input.registryId }).catch((err: unknown) => {
+       input.setLastError(`会话模型保存失败：${err instanceof Error ? err.message : String(err)}`);
+     });
+     return;
+--- a/apps/desktop/src/renderer/panes/WorkbenchView.tsx
++++ b/apps/desktop/src/renderer/panes/WorkbenchView.tsx
+@@ -1,7 +1,7 @@
+ import { runKey } from "../state/session-identity";
+ import type { SendOutcome } from "../state/run-queue";
+ import { composerThinking, thinkingChangeTarget } from "../state/thinking-selection";
+-import { applySessionModelPick } from "../state/session-prefs";
++import { applySessionModelPick, saveSessionPrefs } from "../state/session-prefs";
+ import type { Dispatch,MutableRefObject,PointerEvent,SetStateAction } from "react";
+ import type { GoalTrace } from "../../../../../src/agent/goal-trace";
+ import type { ClarifyQuestion,PlanProposal } from "../../../../../src/events";
+@@ -914,7 +914,7 @@
+                 thinkingBySession.current.set(change.sessionId, change.level);
+                 force((n) => n + 1);
+                 // v35：会话级思考档落 sidecar（重启/切回仍生效）。
+-                void window.agent.sessionPrefsSet(change.sessionId, { thinking: change.level }).catch((err: unknown) => {
++                void saveSessionPrefs(change.sessionId, { thinking: change.level }).catch((err: unknown) => {
+                   setLastError(`会话思考档保存失败：${err instanceof Error ? err.message : String(err)}`);
+                 });
+               }}
+--- a/apps/desktop/tests/session-prefs.test.ts
++++ b/apps/desktop/tests/session-prefs.test.ts
+@@ -100,5 +100,5 @@
+     .toContain("useSessionPrefsHydration({ sessions, selections, thinking: thinkingBySession, force });");
+   const view = read("../src/renderer/panes/WorkbenchView.tsx");
+   expect(view).toContain("onModelChange={(registryId) => applySessionModelPick({");
+-  expect(view).toContain("window.agent.sessionPrefsSet(change.sessionId, { thinking: change.level })");
++  expect(view).toContain("saveSessionPrefs(change.sessionId, { thinking: change.level })");
+ });
+--- /dev/null
++++ b/apps/desktop/tests/session-prefs-errors.test.ts
+@@ -0,0 +1,18 @@
++import { afterEach, expect, it, vi } from "vitest";
++import { applySessionModelPick } from "../src/renderer/state/session-prefs";
++
++afterEach(() => { vi.unstubAllGlobals(); });
++
++it("shows a rejected save response even when IPC itself resolves successfully", async () => {
++  vi.stubGlobal("window", { agent: {
++    sessionPrefsSet: async () => ({ ok: false, error: "会话不存在: foreign" }),
++  } });
++  const setLastError = vi.fn();
++  applySessionModelPick({
++    activeId: "foreign", registryId: "deepseek-chat", selections: { current: new Map() },
++    force: () => undefined, providerInfo: null, refreshProviderInfo: async () => undefined, setLastError,
++  });
++  await vi.waitFor(() => {
++    expect(setLastError).toHaveBeenCalledWith(expect.stringContaining("会话不存在: foreign"));
++  });
++});
+--- /dev/null
++++ b/tests/session-lock-recovery.test.ts
+@@ -0,0 +1,129 @@
++import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
++import { fork } from "node:child_process";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { afterEach, describe, expect, it } from "vitest";
++import { acquireSessionRunLock, sessionRunLockHeld } from "../src/main/session-lock";
++import { SESSION_MUTATION_LOCK } from "../src/main/session-repository";
++
++const roots: string[] = [];
++afterEach(async () => {
++  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
++});
++
++async function tempRoot(): Promise<string> {
++  const root = await mkdtemp(join(tmpdir(), "cairn-lock-recovery-"));
++  roots.push(root);
++  return root;
++}
++
++describe("session run lock recovery", () => {
++  it.each(["null", "true", "42", '"lock"', "[]", '{"pid":0}', '{"pid":-1}'])(
++    "recovers malformed owner %s without throwing or probing a process group",
++    async (raw) => {
++      const path = join(await tempRoot(), "s.jsonl");
++      await writeFile(`${path}.lock`, raw);
++      expect(await sessionRunLockHeld(path)).toBe(false);
++      const acquired = await acquireSessionRunLock(path);
++      expect(acquired.ok).toBe(true);
++      if (!acquired.ok) return;
++      expect(await sessionRunLockHeld(path)).toBe(true);
++      expect(JSON.parse(await readFile(`${path}.lock`, "utf8"))).toMatchObject({ pid: process.pid });
++      await acquired.lock.release();
++    },
++  );
++
++  it("does not reclaim a run lock while another process owns the root mutation lock", async () => {
++    const root = await tempRoot();
++    const path = join(root, "s.jsonl");
++    const stale = JSON.stringify({ pid: 2_147_483_647, nonce: "dead" });
++    await writeFile(`${path}.lock`, stale);
++    await writeFile(join(root, SESSION_MUTATION_LOCK), `${String(process.pid)}\n`);
++    await expect(acquireSessionRunLock(path)).rejects.toThrow(/会话根.*占用/);
++    expect(await readFile(`${path}.lock`, "utf8")).toBe(stale);
++  });
++
++  it("does not treat an unreadable lock path as an unlocked session", async () => {
++    const path = join(await tempRoot(), "s.jsonl");
++    await mkdir(`${path}.lock`);
++    await expect(sessionRunLockHeld(path)).rejects.toMatchObject({ code: "EISDIR" });
++    await expect(acquireSessionRunLock(path)).rejects.toMatchObject({ code: "EISDIR" });
++  });
++
++  it("admits exactly one writer when concurrent calls recover a stale lock", async () => {
++    const root = await tempRoot();
++    for (let round = 0; round < 12; round++) {
++      const path = join(root, `${String(round)}.jsonl`);
++      await writeFile(`${path}.lock`, JSON.stringify({ pid: 2_147_483_647, nonce: "dead" }));
++      const results = await Promise.all(Array.from({ length: 12 }, () => acquireSessionRunLock(path)));
++      const holders = results.filter((result) => result.ok);
++      try {
++        expect(holders, `round ${String(round)}`).toHaveLength(1);
++        expect(await sessionRunLockHeld(path)).toBe(true);
++      } finally {
++        await Promise.all(holders.map((holder) => holder.lock.release()));
++      }
++      expect(await sessionRunLockHeld(path)).toBe(false);
++    }
++  });
++
++  it.each([
++    { shared: true, expectedWriters: 1 },
++    { shared: false, expectedWriters: 4 },
++  ])("cross-process recovery: shared=$shared admits $expectedWriters writers", async ({ shared, expectedWriters }) => {
++    const root = await tempRoot();
++    const paths = Array.from({ length: 4 }, (_, index) => join(root, shared ? "shared.jsonl" : `${String(index)}.jsonl`));
++    const script = join(root, "worker.mjs");
++    const moduleUrl = new URL("../src/main/session-lock.ts", import.meta.url).href;
++    for (const path of new Set(paths)) {
++      await writeFile(`${path}.lock`, JSON.stringify({ pid: 2_147_483_647, nonce: "dead" }));
++    }
++    await writeFile(script, `
++      import { acquireSessionRunLock } from ${JSON.stringify(moduleUrl)};
++      let held;
++      setTimeout(() => process.exit(2), 10000).unref();
++      process.on("message", async (message) => {
++        if (message === "go") {
++          try {
++            held = await acquireSessionRunLock(process.argv[2]);
++            process.send({ kind: "result", ok: held.ok, pid: process.pid });
++          } catch (error) {
++            process.send({ kind: "result", ok: false, error: error.message });
++          }
++        } else if (message === "release") {
++          if (held?.ok) await held.lock.release();
++          process.disconnect();
++        }
++      });
++      process.send({ kind: "ready" });
++    `);
++    const workers = paths.map((path) => {
++      const child = fork(script, [path], { execArgv: ["--import", "tsx"], stdio: ["ignore", "ignore", "pipe", "ipc"] });
++      let ready!: (value: boolean) => void;
++      let report!: (value: { ok: boolean; pid?: number }) => void;
++      const started = new Promise<boolean>((resolve) => { ready = resolve; });
++      const result = new Promise<{ ok: boolean; pid?: number }>((resolve) => { report = resolve; });
++      child.on("message", (message: { kind?: string; ok?: boolean; pid?: number }) => {
++        if (message.kind === "ready") ready(true);
++        if (message.kind === "result") report({ ok: message.ok === true, ...(message.pid !== undefined ? { pid: message.pid } : {}) });
++      });
++      child.on("error", () => { ready(false); report({ ok: false }); });
++      const closed = new Promise<void>((resolve) => child.on("close", () => {
++        ready(false); report({ ok: false }); resolve();
++      }));
++      return { child, started, result, closed };
++    });
++    try {
++      expect(await Promise.all(workers.map((worker) => worker.started))).toEqual([true, true, true, true]);
++      for (const { child } of workers) child.send("go");
++      const winners = (await Promise.all(workers.map((worker) => worker.result))).filter((result) => result.ok);
++      expect(winners).toHaveLength(expectedWriters);
++      if (shared) expect(JSON.parse(await readFile(`${paths[0]!}.lock`, "utf8"))).toMatchObject({ pid: winners[0]?.pid });
++      for (const path of new Set(paths)) expect(await sessionRunLockHeld(path)).toBe(true);
++    } finally {
++      for (const { child } of workers) if (child.connected) child.send("release");
++      await Promise.all(workers.map((worker) => worker.closed));
++    }
++    for (const path of new Set(paths)) expect(await sessionRunLockHeld(path)).toBe(false);
++  }, 15_000);
++});
+--- /dev/null
++++ b/tests/session-prefs-routing.test.ts
+@@ -0,0 +1,39 @@
++import { mkdtemp, rm } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import {
++  handleSessionCreate, handleSessionPrefsSet, initSessionsDir,
++  requireSessionMetadata, setSessionRootResolver,
++} from "../src/main/session-handlers";
++import { createSession } from "../src/main/sessions";
++
++let root = "";
++beforeEach(async () => {
++  root = await mkdtemp(join(tmpdir(), "cairn-prefs-routing-"));
++  initSessionsDir(join(root, "active"));
++});
++afterEach(async () => {
++  setSessionRootResolver(null);
++  await rm(root, { recursive: true, force: true });
++});
++
++describe("session preferences root resolution", () => {
++  it("saves preferences for a session in a resolved non-default workspace", async () => {
++    const otherRoot = join(root, "other");
++    const metadata = requireSessionMetadata();
++    const id = await createSession(otherRoot, "foreign", metadata);
++    setSessionRootResolver(async (sessionId) => sessionId === id ? otherRoot : null);
++    const result = await handleSessionPrefsSet({ sessionId: id, prefs: { model: "deepseek-chat", thinking: "high" } });
++    expect(result).toEqual({ ok: true });
++    expect(await metadata.find(id)).toMatchObject({ model: "deepseek-chat", thinking: "high" });
++  });
++
++  it("refuses an unresolved session instead of writing to the default root", async () => {
++    const { id } = await handleSessionCreate("local");
++    setSessionRootResolver(async () => null);
++    const result = await handleSessionPrefsSet({ sessionId: id, prefs: { model: "deepseek-chat" } });
++    expect(result.ok).toBe(false);
++    expect((await requireSessionMetadata().find(id))?.model).toBeUndefined();
++  });
++});

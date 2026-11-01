@@ -1,0 +1,17 @@
+packaged smoke:
+[cairn-smoke] PASS in 1918 ms
+[package] 完成（已验证打包态）：/Users/ze/Downloads/Cairn/cairn/apps/desktop/release-820/Cairn.app
+
+build-info inside app:
+{
+  "version": "0.1.0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "sourceLockSha256": "eb4c80935d19de1f4c09f969cf2e129c5bde14d4dc91fddf7aac89ac30d1a83e",
+  "packagedSmoke": "passed",
+  "signature": "ad-hoc",
+  "createdAt": "2026-10-30T07:52:25.922Z"
+}
+
+initBuildInfo in package:
+374:initBuildInfo(readBuildInfoSync(join(app.getAppPath(), "build-info.json")));

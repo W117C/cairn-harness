@@ -1,0 +1,20 @@
+{
+  "apps/desktop/src/main/index.ts": "2cbbce030a7ba874c12baef6094c524919ff9c38d91e2032911e3db57b29c93a",
+  "apps/desktop/src/main/kernel-host.ts": "ce8ea90ded3396bb894040dccfd0993fb61fd963df6414e928f51c6eca4565c5",
+  "apps/desktop/src/renderer/panes/WorkbenchView.tsx": "abbcd8648743113851fd468b9f4be2117de0058cffd75cffbcc4d6dede40b21e",
+  "apps/desktop/src/renderer/state/run-queue.ts": "1042c975516bea2f759d6fbd1bab9cc3e72a8eb9cf5aa4eb9fb4d59a17a7c45a",
+  "apps/desktop/src/renderer/state/run-readings.ts": "c0dd5d211303134cc6953422f41e8a4d01038247ec21d8dbfcd54b2aa9b25665",
+  "apps/desktop/src/renderer/state/session-prefs.ts": "075dad3a70ac98424b59ad53ea0de1eab48f20523cdab9aa3ca195000f46d0b6",
+  "apps/desktop/src/renderer/state/thinking-selection.ts": "8b7458fc77102b3dfcfb99642850db9ffad8a44bc7152d31ebde5e26cbe8cc60",
+  "apps/desktop/tests/run-queue-session.test.tsx": "8c33c56f20e60bbc3919084f382f63a543c37d520603230661d896af6aeb5dd1",
+  "apps/desktop/tests/session-prefs-host.test.ts": "18b8b092a883a65e63030d65bc10f596a94302a5993a76b19d92591c1f21631e",
+  "apps/desktop/tests/session-prefs-isolation.test.ts": "f64217a6650d6218e41b5c88cead408bd6238e3c1a53c6cc4b1696bd5d597f5a",
+  "apps/desktop/tests/session-prefs.test.ts": "b9cfa071cd6f9c7056ff187df17484fdc0e9f035ea764ac6a70e25feb31fc072",
+  "src/main/session-handlers.ts": "494396c1b69bb4c5e6c5380a0c3cca29004f6108598ebf6418aa6bf5c7df0b40",
+  "src/main/session-metadata.ts": "e16bc3ea3f4d362772bea7f31a8625d2db394347c0e82c666e2a4a54bb7a6152",
+  "src/main/session-preferences.ts": "67c8071c86a8e018fcec68a04c8cd297b537a38caa77185a8193dc32baad0a46",
+  "src/main/sessions.ts": "9047b205adf1c4f6b824a5a32391b540798a0e30c779856072bce7fe9170e5ca",
+  "tests/session-prefs-isolation.test.ts": "221c4ffa452fb7f4c5c2df98e98479772162e18a2ccceee58241dcc3b723a617",
+  "apps/desktop/tests/session-prefs-run-routing.test.ts": "a8b2db6929665e5787bac27ac98b182a41578bdc44c1f9a4558ba83a543ec5e6",
+  "apps/desktop/tests/memory-distill.test.ts": "7ac5a19004fdc7d6e6f8ef68b1bcc80dc6c6a2564e982c7eef132eea04086fcc"
+}

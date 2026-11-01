@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { readAppSurface } from "./helpers/app-surface";
+import { readAppSurface, readRendererFile } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const src = read("../src/renderer/components/Composer.tsx");
@@ -39,9 +39,10 @@ describe("Composer 每会话草稿", () => {
     expect(sidebar).toContain('className="s-draft"');
     expect(sidebar).toContain("hasDraft={props.draftIds?.has(draftKeyFor(s.workspace, s.id)) === true || props.draftIds?.has(s.id) === true}");
     const app = readAppSurface();
+    const workbench = readRendererFile("panes/WorkbenchView.tsx");
     expect(app).toContain("useState<Set<string>>(() => readDraftIds())");
     expect(app).toContain("onDraftPresence={noteDraft}");
-    expect(app).toContain("draftIds={draftIds}");
+    expect(workbench).toContain("draftIds,");
   });
 
   it("附件 chip 与草稿同键分桶（切会话不带着别人选的附件去发）", () => {

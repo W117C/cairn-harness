@@ -1,0 +1,97 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/session-lock-recovery.test.ts (9 tests | 5 failed) 97ms
+   ❯ session run lock recovery (9)
+     × recovers malformed owner null without throwing or probing a process group 29ms
+     × recovers malformed owner {"pid":0} without throwing or probing a process group 6ms
+     × recovers malformed owner {"pid":-1} without throwing or probing a process group 8ms
+     × does not reclaim a run lock while another process owns the root mutation lock 14ms
+     × admits exactly one writer when concurrent calls recover a stale lock 10ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/session-lock-recovery.test.ts > session run lock recovery > recovers malformed owner null without throwing or probing a process group
+TypeError: Cannot read properties of null (reading 'pid')
+ ❯ attempt src/main/session-lock.ts:84:39
+     82|         holder = {};
+     83|       }
+     84|       const holderPid = typeof holder.pid === "number" && Number.isInt…
+       |                                       ^
+     85|       if (holderPid > 0 && isAlive(holderPid)) {
+     86|         return { kind: "busy", pid: holderPid, startedAt: typeof holde…
+ ❯ acquireSessionRunLock src/main/session-lock.ts:96:20
+ ❯ tests/session-lock-recovery.test.ts:26:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/session-lock-recovery.test.ts > session run lock recovery > recovers malformed owner {"pid":0} without throwing or probing a process group
+ FAIL  tests/session-lock-recovery.test.ts > session run lock recovery > recovers malformed owner {"pid":-1} without throwing or probing a process group
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/session-lock-recovery.test.ts:25:46
+     23|       const path = join(await tempRoot(), "s.jsonl");
+     24|       await writeFile(`${path}.lock`, raw);
+     25|       expect(await sessionRunLockHeld(path)).toBe(false);
+       |                                              ^
+     26|       const acquired = await acquireSessionRunLock(path);
+     27|       expect(acquired.ok).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/session-lock-recovery.test.ts > session run lock recovery > does not reclaim a run lock while another process owns the root mutation lock
+AssertionError: promise resolved "{ ok: true, lock: { …(1) } }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "lock": {
++     "release": [Function release],
++   },
++   "ok": true,
+  }
+
+ ❯ tests/session-lock-recovery.test.ts:41:46
+     39|     await writeFile(`${path}.lock`, stale);
+     40|     await writeFile(join(root, SESSION_MUTATION_LOCK), `${String(proce…
+     41|     await expect(acquireSessionRunLock(path)).rejects.toThrow(/会话根.*占用…
+       |                                              ^
+     42|     expect(await readFile(`${path}.lock`, "utf8")).toBe(stale);
+     43|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/session-lock-recovery.test.ts > session run lock recovery > admits exactly one writer when concurrent calls recover a stale lock
+AssertionError: round 0: expected [ { ok: true, lock: { …(1) } }, …(1) ] to have a length of 1 but got 2
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ tests/session-lock-recovery.test.ts:53:51
+     51|       const holders = results.filter((result) => result.ok);
+     52|       try {
+     53|         expect(holders, `round ${String(round)}`).toHaveLength(1);
+       |                                                   ^
+     54|         expect(await sessionRunLockHeld(path)).toBe(true);
+     55|       } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 4 passed (9)
+   Start at  15:17:50
+   Duration  514ms (transform 61%, tests 26%, import 12%, worker 1%)
+

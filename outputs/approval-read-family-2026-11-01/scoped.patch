@@ -1,0 +1,65 @@
+--- a/apps/desktop/src/renderer/components/cards.ts	2026-11-01 14:48:16
++++ b/apps/desktop/src/renderer/components/cards.ts	2026-11-01 14:47:14
+@@ -81,6 +81,24 @@
+     return { title: `写入${layer}`, subject: topic !== undefined ? `${kind}「${topic}」` : kind };
+   }
+   if (tool.startsWith("automation_")) return { title: "变更定时任务", subject: s(args.name) };
++  // 读族与渲染/诊断（第 932 页）：它们在沙箱降级或严格档下也会弹批准卡，此前一律落到
++  // 「需要你批准 + 参数 JSON」——批的是「读哪个文件 / 查什么 / 渲染哪张图」看不出来。
++  if (tool === "read_file") {
++    const one = s(args.path);
++    const many = Array.isArray(args.paths) ? args.paths.filter((x): x is string => typeof x === "string") : [];
++    return { title: "读取文件", body: one ?? (many.length > 0 ? many.join("、") : JSON.stringify(args)) };
++  }
++  if (tool === "grep") return { title: "查找内容", body: s(args.pattern) ?? JSON.stringify(args) };
++  if (tool === "glob") return { title: "找文件", body: s(args.pattern) ?? JSON.stringify(args) };
++  if (tool === "lsp") {
++    const what = s(args.symbol) ?? s(args.operation) ?? s(args.path);
++    return { title: "查符号", ...(what !== undefined ? { subject: what } : {}), ...(s(args.path) !== undefined && s(args.symbol) !== undefined ? { body: s(args.path) } : {}) };
++  }
++  if (tool === "render_image") return { title: "渲染图", body: s(args.path) ?? JSON.stringify(args) };
++  if (tool === "diagnose") {
++    const face = s(args.face);
++    return { title: "跑诊断", body: face === undefined ? "全部检查" : face === "lint" ? "只跑 lint" : "只跑 test" };
++  }
+   // 名单外（MCP scoped 工具、运行期注入的诊断/检索等）也得看见**批的是哪把工具**：
+   // 卡片原来只给「需要你批准」+ 参数 JSON，工具名只藏在 aria-label 里 ⇒ 视觉上无从判断。
+   return { title: "需要你批准", subject: s(tool), body: JSON.stringify(args) };
+--- a/apps/desktop/tests/approval-card.test.tsx	2026-11-01 14:48:16
++++ b/apps/desktop/tests/approval-card.test.tsx	2026-11-01 14:47:03
+@@ -49,6 +49,28 @@
+   });
+ });
+ 
++describe("读族/渲染/诊断的批准卡说人话（第 932 页）", () => {
++  it("六个工具：标题是动作、主体是那件事本身", () => {
++    expect(describeAsk({ tool: "read_file", args: { path: "src/a.ts" } })).toEqual({ title: "读取文件", body: "src/a.ts" });
++    expect(describeAsk({ tool: "read_file", args: { paths: ["a.ts", "b.ts"] } })).toEqual({ title: "读取文件", body: "a.ts、b.ts" });
++    expect(describeAsk({ tool: "grep", args: { pattern: "TODO" } })).toEqual({ title: "查找内容", body: "TODO" });
++    expect(describeAsk({ tool: "glob", args: { pattern: "**/*.ts" } })).toEqual({ title: "找文件", body: "**/*.ts" });
++    expect(describeAsk({ tool: "lsp", args: { symbol: "resolveFlag" } })).toEqual({ title: "查符号", subject: "resolveFlag" });
++    expect(describeAsk({ tool: "render_image", args: { path: "out/chart.html" } })).toEqual({ title: "渲染图", body: "out/chart.html" });
++    expect(describeAsk({ tool: "diagnose", args: {} })).toEqual({ title: "跑诊断", body: "全部检查" });
++    expect(describeAsk({ tool: "diagnose", args: { face: "test" } })).toEqual({ title: "跑诊断", body: "只跑 test" });
++  });
++
++  it("SSR：读文件的卡上是「读取文件 + 路径」，不是一段 JSON", () => {
++    const html = renderToStaticMarkup(
++      <ApprovalCard ask={ask({ tool: "read_file", args: { path: "src/a.ts" }, risk: "low" })} onDecide={() => undefined} />,
++    );
++    expect(html).toContain("<h3>读取文件</h3>");
++    expect(html).toContain("src/a.ts");
++    expect(html).not.toContain("&quot;path&quot;");
++  });
++});
++
+ describe("名单外工具的批准卡（第 930 页）", () => {
+   it("工具名可见：mcp__db__drop_table 不再是「需要你批准 + 一段 JSON」", () => {
+     const html = renderToStaticMarkup(
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 14:48:16
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 14:47:24
+@@ -4293,3 +4293,4 @@
+ 52. **页号引用不许指向不存在的页（第 929 页）**：`markdown.tsx` 的注释引「第 408 页」，而台账里 407 之后直接是 409——按号去翻只有空白；台账正文里同类断链还有几处（405 / 454 / 673 / 759 / 914 等）。台账只准追加，旧页追不回来；但**新写的引用**不该再制造断链：加一把尺，源码注释（`src` / `apps/desktop/src` / `scripts`）里落在台账区间内的 `第 N 页` 必须能在台账里找到对应页，台账正文那一面只盯「有没有新增断链」（旧账登记、只准调低，修掉一处就必须从登记里删掉）。范围只认台账区间内的号——更小的号是 `outputs/` 取证文档自己的页号，不算台账。
+ 53. **名单外工具的批准卡要看见工具名（第 930 页）**：`describeAsk` 的兜底只给「需要你批准」+ `JSON.stringify(args)`，工具名仅出现在卡片的 `aria-label` 里——MCP scoped 工具或运行期注入的工具弹出来时，视觉上只看到一段参数 JSON，批的是哪把工具无从判断（与「看得见自己批的是什么」相反）。兜底补 `subject: 工具名`，参数 JSON 仍保留（可诊断）。
+ 54. **画廊脚本先做环境体检（第 931 页）**：环境里带 `ELECTRON_RUN_AS_NODE=1` 时，`npx electron scripts/ui-gallery.cjs` 实际是 node 在跑——`require("electron")` 退化成一个字符串，`app` 是 undefined，脚本在 `app.whenReady()` 报「reading 'whenReady'」，catch 里的 `app.exit(1)` 再抛一次「reading 'exit'」，真正的原因（环境变量）谁都看不见。脚本开头加体检：没有 `app` 就印出原因与复跑命令（`env -u ELECTRON_RUN_AS_NODE npx electron …`）并以 2 退出；catch 改成 `process.exit`。判卷 spawn 一个带该环境变量的 node 进程，钉「退 2 + 输出里有 ELECTRON_RUN_AS_NODE + 不再出现 whenReady」。
++55. **读族 / 渲染 / 诊断的批准卡也说人话（第 932 页）**：`describeAsk` 此前只覆盖写族、命令、网络、记忆与定时任务；`read_file` / `grep` / `glob` / `lsp` / `render_image` / `diagnose` 在沙箱降级或严格档下同样会弹批准卡，却一律落到「需要你批准 + 参数 JSON」——批的是「读哪个文件 / 查什么 / 渲染哪张图」看不出来。补六条：读取文件（path 或 paths 列表）、查找内容（pattern）、找文件（pattern）、查符号（symbol，path 作副行）、渲染图（path）、跑诊断（face 缺省说「全部检查」）。

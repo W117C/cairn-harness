@@ -7,17 +7,19 @@
 // 这一条镜像产品的调用形状：真登录 shell ＋ **隔离 HOME**（不读用户自己的 rc ⇒ 可复跑、
 // 不受个人 shell 配置影响）。它量的是「命令真的执行了」，不是「回显长得像输出」——
 // 标记用八进制生成，回显冒充不了（与既有那条同一个手法）。
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { TerminalHost, type TerminalPush } from '../src/main/terminal-host';
+import { removeTempDir } from './helpers/temp-dir';
 
 const hosts: TerminalHost[] = [];
 const dirs: string[] = [];
 afterEach(() => {
   for (const host of hosts.splice(0)) host.killAll();
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  // 登录 shell 退出前还会写隔离 HOME（.zcompdump 等）：清理只做尽力而为，不许把绿判据弄红（第 948 页）。
+  for (const dir of dirs.splice(0)) removeTempDir(dir);
 });
 
 const waitFor = async (test: () => boolean) => {

@@ -88,13 +88,20 @@ describe("Stream 轮折叠（真 HTML）", () => {
 
 describe("对话左右分（业主 18.41.11 裁，照搬原型 v3-lite .u/.u-wrap；样式层哨兵）", () => {
   const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
-  it("user = 右对齐气泡：行 grid 收右 + 82% 封顶 / bg-300 暖灰底 / 无描边 / 圆角 14", () => {
+  it("user = 右对齐气泡：行 grid 收右 / bg-300 暖灰底 / 无描边（基础档 82%·14 仍是回退值）", () => {
     expect(css).toMatch(/\.row\.user\s*{[^}]*justify-items:\s*end/s);
     expect(css).toMatch(/\.row\.user \.t\s*{[^}]*max-width:\s*82%/s);
     // 2026-10-17「像 Claude」：白底 → bg-300 暖灰（#F0EEE6），白底在暖米白画布上无边界
     expect(css).toMatch(/\.row\.user \.t\s*{[^}]*background:\s*var\(--user-bubble-bg\)/s);
     expect(css).toMatch(/\.row\.user \.t\s*{[^}]*border-radius:\s*var\(--radius-composer\)/s);
     expect(css).not.toMatch(/\.row\.user \.t\s*{[^}]*border:\s*1px solid/s);
+  });
+
+  it("CDS 组件层把有效值收到官方档：85% 封顶 / 圆角 12 / 内边距 12×16（2026-10-28）", () => {
+    const layer = readFileSync(new URL("../src/renderer/cds-components.css", import.meta.url), "utf8");
+    expect(layer).toMatch(/\.row\.user\[data-cds="UserMessage"\] \.t\s*{[^}]*max-width:\s*var\(--cds-message-bubble-measure\)/s);
+    expect(layer).toMatch(/border-radius:\s*var\(--cds-message-bubble-radius\)/);
+    expect(layer).toMatch(/padding:\s*var\(--cds-message-bubble-pad-y\) var\(--cds-message-bubble-pad-x\)/);
   });
 
   it("模型侧仍左对齐独立面（✦ 行不带 justify-items:end——左右才构成对照）", () => {
@@ -188,21 +195,18 @@ describe("第十九遍：输出完光标不陪跑尾部（usage 落定 × Stream
 describe("对话目录入口落点（工具栏动作组，不再浮在流上）", () => {
   const app = readAppSurface();
   const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
-  it("入口按钮在工具栏动作组段内（与 Terminal/Changes/Browser/⋮ 同族）", () => {
-    const barStart = app.indexOf('<div className="tb-cluster">');
-    // 组内没有嵌套 div ⇒ 首个 </div> 即组尾。
-    const barEnd = app.indexOf("</div>", barStart);
+  it("目录与改动、工具入口同属顶部操作槽", () => {
+    const barStart = app.indexOf('const toolbarRight = !settingsOpen');
+    const barEnd = app.indexOf("return { toolbarContext", barStart);
     expect(barStart).toBeGreaterThan(-1);
     expect(barEnd).toBeGreaterThan(barStart);
     const bar = app.slice(barStart, barEnd);
     expect(bar).toContain('aria-label="对话目录"');
     expect(bar).toContain("outlineTurns.length >= 2");
     expect(bar).toContain("data-on={outlineOpen}");
-    // 「同族」此前只靠「同一容器」隐含表达；容器改名后把它写成显式断言（不变量更强，不是更弱）。
-    expect(bar).toContain('aria-label="终端窗格"');
-    expect(bar).toContain('aria-label="变更窗格"');
-    expect(bar).toContain('aria-label="浏览器窗格"');
-    expect(bar).toContain('aria-label="更多窗格"');
+    expect(bar).toContain("<WorkbenchTools");
+    expect(bar).toContain("hasSession={activeId !== null}");
+    expect(bar).toContain("onOpenPane={onOpenPane}");
   });
   it("动作组挂在窗口顶栏（工具栏是第一行，不在主栏里）", () => {
     expect(app.indexOf("<TitleBar")).toBeGreaterThan(-1);

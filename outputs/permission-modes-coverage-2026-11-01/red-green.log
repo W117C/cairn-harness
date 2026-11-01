@@ -1,0 +1,15 @@
+=== 造红 A：把第五档 full-access 从设置页删掉（2026-10-24 那次真事故的形状）===
+     × 不多不少：id 集合相等 5ms
+     × 不重复：每个档位在设置页只出现一次 0ms
+AssertionError: expected [ 'auto', 'default', 'guided', …(1) ] to deeply equal [ 'auto', 'default', …(3) ]
+AssertionError: expected 4 to be greater than or equal to 5
+
+=== 造红 B：同一档位列两遍 ===
+     × 不多不少：id 集合相等 4ms
+     × 不重复：每个档位在设置页只出现一次 1ms
+      Tests  2 failed | 1 passed (3)
+
+=== 复原后 ===
+      Tests  3 passed (3)
+=== sha256 ===
+   2 564a1f0ac6f48b7b764756cb90ea885887b1bb48f66bf5f288c558c65e325c0e

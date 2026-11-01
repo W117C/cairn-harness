@@ -1,0 +1,9 @@
+=== 改前（只有 k 档的那版）===
+     × usage 步与用量环读同一把尺：过百万写 1.3m，不写 1250.0k（第 921 页） 3ms
+     × 过百万进位到 m；999_950 那档不再写成四位数 1000.0k（第 921 页） 2ms
+      Tests  2 failed | 20 passed (22)
+=== 改后 ===
+      Tests  22 passed (22)
+=== 复原 sha256 ===
+e9d03d55c9888d93366710b6416144804a570fecf42e6c8425ebe5024a4c660e  apps/desktop/src/renderer/derived/format-tokens.ts
+e9d03d55c9888d93366710b6416144804a570fecf42e6c8425ebe5024a4c660e  .tmp/format-tokens.final-921.ts

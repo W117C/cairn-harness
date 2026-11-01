@@ -77,6 +77,8 @@ afterAll(async () => {
   // 的语料尺只认「git 看得见」的语料，留着它 = 干净树与脏树两把不同的尺。跑完清掉这一份
   // （evolution.json/memory 等 .json/.md 运行态沿既有约定保留，那把尺看不见它们）。
   await rm(join(APP, ".agent", "evolution-ledger.jsonl"), { force: true });
+  // Evolve P0/P1 同样在收束时写 .agent/evolve/；它是运行态，不属于 tracked 语料。
+  await rm(join(APP, ".agent", "evolve"), { recursive: true, force: true });
   await releaseAppFixture?.();
 });
 

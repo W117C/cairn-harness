@@ -1,9 +1,10 @@
 import { runKey } from "./session-identity";
 import type { Dispatch,MutableRefObject,SetStateAction } from 'react';
 // useRunReadings: extracted without changing event or callback behavior.
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import type { AgentEvent,AskPayload,ProviderInfo } from "../../../../../src/main/ipc-protocol";
 import { deriveRunPhase,elapsedSecondsFor,hasAssistantTextThisRun,pendingClarifyOf,pendingPlanOf,runPhaseLabel } from "../projections";
+import { waitingForModel } from "../derived/model-waiting";
 
 interface RunReadingsDeps {
   sessionErrors: ReadonlyMap<string, string>;
@@ -54,8 +55,11 @@ export function useRunReadings(deps: RunReadingsDeps) {
   // 2026-10-20 独立评审追出 MEDIUM-HIGH——旧实现先判 `finishing`，而 `answerQuiet`
   // （正文停了 >1.5s）**恰好是"工具在跑"的形状** ⇒ 任何超过 1.5s 的构建都被报成"收尾中"。
   const phaseLabel = runPhaseLabel({ phase, stopped, running: runningActive, hasAnswerText, answerQuiet });
-  const chosen = activeId !== null ? selections.current.get(activeId) : undefined;
+  const chosen = activeId !== null ? selections.current.get(runKey(activeWorkspace, activeId)) : undefined;
   const pickerValue = chosen !== undefined ? chosen : (providerInfo?.modelId ?? null);
 
-  return { lastError, lastNotice, runningActive, pendingClarify, pendingPlan, askForActive, phase, stopped, phaseLabel, chosen, pickerValue };
+  const startedAt = runStartBySession.current.get(activeId ?? "");
+  const blocked = askForActive !== null || pendingClarify !== null || pendingPlan !== null;
+  const modelWaiting = useMemo(() => waitingForModel({ events, running: runningActive, startedAt, blocked }), [events, runningActive, startedAt, blocked]);
+  return { lastError, lastNotice, runningActive, modelWaiting, pendingClarify, pendingPlan, askForActive, phase, stopped, phaseLabel, chosen, pickerValue };
 }

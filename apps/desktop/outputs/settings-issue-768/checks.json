@@ -1,0 +1,31 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "设置文件坏了 ⇒ 设置页出警告横幅",
+      "ok": true,
+      "detail": "设置文件未生效：当前按缺省设置运行。修好或删除它，再重新打开 Cairn。\n查看详情"
+    },
+    {
+      "name": "详情点名盘上文件与原因",
+      "ok": true,
+      "detail": "/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-settings-issue-97xSga/profile/settings.json\n\nJSON 解析失败：Expected property name or '}' in JSON at position 2 (line 1 column 3)"
+    },
+    {
+      "name": "横幅不是空壳：设置面板本身照常加载",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "没有「重新检查」这种点了不会恢复的按钮",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

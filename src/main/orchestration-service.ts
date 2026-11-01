@@ -13,6 +13,8 @@ export interface OrchestrationSnapshot {
   address: OrchestrationAddress;
   mode: "shadow" | "execute";
   backend: string | null;
+  /** Backend-declared controls. Absent when no backend is connected: a missing capability is not a false one. */
+  backend_capabilities?: { rollback: boolean };
   execution_unavailable?: string;
   error?: string;
   view: OrchestrationView;
@@ -64,6 +66,7 @@ export class OrchestrationService {
   private async snapshotOf(address: OrchestrationAddress, entry: Entry): Promise<OrchestrationSnapshot> {
     const view = await entry.engine.view();
     return { address, mode: entry.options.enabled ? "execute" : "shadow", backend: entry.backend?.id ?? null,
+      ...(entry.backend ? { backend_capabilities: { rollback: typeof entry.backend.rollback === "function" } } : {}),
       ...(!entry.backend ? { execution_unavailable: "未连接可强制能力与成本上限的执行后端；计划可预览，不能执行。" } : {}),
       ...(entry.error ? { error: entry.error } : {}), view, next_actions: nextActions(view, { max_concurrency: entry.backend?.max_concurrency ?? 1 }) };
   }

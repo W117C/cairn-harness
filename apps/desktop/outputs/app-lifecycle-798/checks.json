@@ -1,0 +1,30 @@
+{
+  "fixtureData": false,
+  "checks": [
+    {
+      "name": "同一 userData 的第二个实例启动后自行退出（exit 0）",
+      "ok": true,
+      "detail": "421 ms（app.exit(0) 立即终止）"
+    },
+    {
+      "name": "首实例仍在运行（4 个 Electron 进程）",
+      "ok": true,
+      "detail": "启动前 4 / 第二实例退出后 4"
+    },
+    {
+      "name": "副进程没有启动调度器（日志 0 行）",
+      "ok": true,
+      "detail": "second_instance_scheduler_lines=0"
+    },
+    {
+      "name": "首实例的调度器只启动一次（日志 1 行）",
+      "ok": true,
+      "detail": "first_instance_scheduler_lines=1"
+    }
+  ],
+  "readings": {
+    "unit": "apps/desktop/tests/app-lifecycle.test.ts 8/8 绿",
+    "smoke": "apps/desktop/scripts/smoke.mjs PASS in 1374 ms",
+    "doubleLaunch": "apps/desktop/outputs/app-lifecycle-798/double-launch.log"
+  }
+}

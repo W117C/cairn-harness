@@ -16,6 +16,15 @@ describe("run 代际守卫", () => {
   });
 
   it("停止态写入同样按代际守卫（旧 run 的 aborted 不能改新 run 的 stopped）", () => {
-    expect(app).toContain("if ((runGen.current.get(sid) ?? 0) === myGen) {\n          setStoppedIds");
+    // 第 919 页：这条哨兵原来钉的是带缩进的原文（`{` + 换行 + 十个空格 + `setStoppedIds`）。
+    // 第 4 轮把这段守卫搬进 `drainQueue(initial, async (msg) => {…})` 的回调里，缩进多一层就红了，
+    // 而「号还是自己的才写 stopped」一字没变。改成按**词序**判：空白随缩进走，守卫条件、
+    // 函数式更新与 `res.aborted` 的语义仍在同一块里。
+    expect(app).toMatch(/if \(\(runGen\.current\.get\(sid\) \?\? 0\) === myGen\) \{\s*setStoppedIds\(\(prev\) => \{/);
+    expect(app).toContain("const want = res.aborted === true;");
+  });
+
+  it("起点删除同样按代际守卫（旧 run 收尾不能删掉新 run 的起点）", () => {
+    expect(app).toContain("if ((runGen.current.get(sid) ?? 0) === myGen) runStartBySession.current.delete(sid);");
   });
 });

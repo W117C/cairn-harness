@@ -1,0 +1,52 @@
+--- a/apps/desktop/src/renderer/components/FilePane.tsx	2026-11-01 16:10:48
++++ b/apps/desktop/src/renderer/components/FilePane.tsx	2026-11-01 16:05:51
+@@ -1,6 +1,7 @@
+ import { Fragment, useEffect, useRef, useState } from "react";
+ import { ChevronRight, FileText, Folder } from "lucide-react";
+ import type { DirEntryView } from "../../../../../src/main/workspace-fs";
++import { formatBytes } from "../derived/format-bytes";
+ 
+ /** 快速打开的目标路径 → 需要预展开的祖先目录（不含文件本身）。
+  *  纯函数，判卷可直接钉；命令面板的文件快速打开与 FilePane 的树展开共用这一把尺。 */
+@@ -204,7 +205,7 @@
+               >
+                 <FileText size={12} aria-hidden="true" />
+                 <span className="fp-name">{e.name}</span>
+-                {e.size !== null && <span className="fp-size num">{e.size}</span>}
++                {e.size !== null && <span className="fp-size num">{formatBytes(e.size) ?? "—"}</span>}
+               </button>
+             );
+           })}
+--- a/apps/desktop/tests/file-pane-improvements.test.ts	2026-11-01 16:10:48
++++ b/apps/desktop/tests/file-pane-improvements.test.ts	2026-11-01 16:05:38
+@@ -16,6 +16,12 @@
+     expect(src.match(/if \(previewSeq\.current !== seq\) return;/g)?.length).toBe(2);
+   });
+ 
++  it("文件大小走共享字节尺（2.1 KB / 880 B），不摆裸字节数", () => {
++    // 第 943 页：`{e.size}` 直接摆 2140，与附件行的 2.1 KB（第 924 页统一的那把尺）两种写法。
++    expect(src).toContain('{formatBytes(e.size) ?? "—"}');
++    expect(src).not.toContain("{e.size}");
++  });
++
+   it("目录截断如实提示，不静默丢项", () => {
+     expect(src).toContain("node.truncated &&");
+     expect(src).toContain("目录过大，已截断：只显示前");
+--- a/tests/format-rulers.test.ts	2026-11-01 16:10:48
++++ b/tests/format-rulers.test.ts	2026-11-01 16:05:38
+@@ -23,6 +23,8 @@
+   { name: "byte-unit", re: /`[^`]*\$\{[^}]*\}[^`]*\b(?:KB|MB)\b/gu },
+   { name: "intl-compact", re: /notation:\s*"compact"/gu },
+   { name: "round-k", re: /Math\.round\([^)]*\/\s*1000\)/gu },
++  // 直接渲染字节数（`{e.size}`）：与附件行 2.1 KB 是两种写法，必须走 formatBytes。
++  { name: "raw-bytes", re: /\{[a-z][A-Za-z0-9_]*\.size\}/gu },
+ ];
+ 
+ function sourceFiles(dir: string): string[] {
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:10:48
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:06:11
+@@ -4304,3 +4304,4 @@
+ 63. **token / 字节刻度只剩两处实现（第 940 页）**：这两把尺在本仓被反复手抄（用量环 vs 时间线、用量页 vs 环、模型菜单 vs 浮层、附件行 vs 日志窗），每修一处只补了一条局部判据，「下一个人再抄一份」没有机械拦截。新增 `tests/format-rulers.test.ts`：扫渲染层全部 `.ts/.tsx`，除 `derived/format-tokens.ts` 与 `derived/format-bytes.ts` 之外，出现 k/m/M 模板拼装、模板里 `${…} KB|MB`、`Intl` 紧凑记法或 `Math.round(x / 1000)` 都当场红并点名 `文件:行`；另有一条「两把尺本身还在」防止允许名单变成空保护。
+ 64. **闸门面的人话覆盖有判据（第 941 页）**：批准卡的人话是逐轮补的（名单外工具 → 读族 → 补丁抬头），但没有一把尺把「闸门清单」与「人话清单」锁在一起：`src/main/tool-gates.ts` 的 `GatedName` 新增一把工具而 `describeAsk` 没跟上时，卡片会静默落到兜底「需要你批准 + 参数 JSON」。新增 `tests/approval-coverage.test.ts`：从源码取出 `GatedName` 的成员（并先断言清单取到了 ≥10 条），逐个要求标题不是兜底，且任意两把工具的标题不得相同。
+ 65. **文件改动与方案动作的词各只有一张表（第 942 页）**：文件改动的三个词（新建 / 修改 / 变更）原先三处手抄——`ChangeSummaryCard` 的 `CHANGE_LABEL`、`Inspector` 的 `CHANGE_WORD`、`PaneDock` 两处内联三元；方案动作的三个词（新建 / 修改 / 删除）两处——`PlanCard` 的 `ACTION_LABEL` 与 `PaneDock` 的内联三元。两套词都收进 `derived/change-labels.ts`（`changeLabel` / `planActionLabel`），四个消费面改读；判卷钉「认不出的 kind 一律『变更』、不猜成新建」与「四处都不再有自己的表/三元」。
++66. **文件窗格的大小也走字节尺（第 943 页）**：文件树里 `{e.size}` 直接摆裸字节数（`2140`、`880`），而附件行在同一版里已经写 `2.1 KB`（第 924 页统一的那把尺）——同一个文件两种写法。改成 `formatBytes(e.size) ?? "—"`；`format-rulers` 那把覆盖尺也加一条 `raw-bytes` 形状（直接渲染 `{x.size}`），再有人摆裸数就当场红。

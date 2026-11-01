@@ -3,6 +3,7 @@
 // （默认 ~/Cairn Projects，「更改…」走系统选择器；显示「将创建在：」预览）。
 // 全程零路径手输（原则 1）；文案走 STR。
 import { useRef, useState } from "react";
+import { isCompositionEnter } from "../ime";
 import { Atom, BarChart3, ClipboardList, FolderPlus, LayoutTemplate, X } from "lucide-react";
 import { STR } from "../strings";
 import { ModalSurface } from "./ModalSurface";
@@ -60,6 +61,23 @@ export function NewProjectDialog(props: {
   const nameError = validateProjectName(name, props.existingNames);
   const showNameError = name.trim() !== "" && nameError !== null;
   const previewParent = parentDir ?? STR.newProject.defaultParent;
+  /** 回车 = 提交（按钮同一条路；busy / 校验失败时不动，错误照样上屏）。 */
+  const submit = () => {
+    if (busy) return;
+    const trimmed = name.trim();
+    const invalid = validateProjectName(trimmed, props.existingNames);
+    if (invalid !== null) { setError(invalid); return; }
+    setBusy(true);
+    setError(null);
+    void props.onCreate({
+      name: trimmed,
+      templateId,
+      ...(parentDir !== null ? { parentDir } : {}),
+    }).then(
+      () => { props.onClose(); },
+      (err: unknown) => { setError(STR.newProject.failed.replace("{reason}", err instanceof Error ? err.message : String(err))); setBusy(false); },
+    );
+  };
   return (
     <div className="modal-backdrop" role="presentation" onClick={props.onClose}>
       <ModalSurface
@@ -119,6 +137,7 @@ export function NewProjectDialog(props: {
             placeholder={STR.newProject.namePlaceholder}
             value={name}
             onChange={(e) => { setName(e.target.value); setError(null); }}
+            onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); submit(); } }}
           />
           {showNameError && <span className="form-error" role="alert">{nameError}</span>}
         </label>
@@ -149,21 +168,7 @@ export function NewProjectDialog(props: {
             className="mini-btn primary"
             title={STR.newProject.title}
             disabled={busy || nameError !== null || templateId === ""}
-            onClick={() => {
-              const trimmed = name.trim();
-              const invalid = validateProjectName(trimmed, props.existingNames);
-              if (invalid !== null) { setError(invalid); return; }
-              setBusy(true);
-              setError(null);
-              void props.onCreate({
-                name: trimmed,
-                templateId,
-                ...(parentDir !== null ? { parentDir } : {}),
-              }).then(
-                () => { props.onClose(); },
-                (err: unknown) => { setError(STR.newProject.failed.replace("{reason}", err instanceof Error ? err.message : String(err))); setBusy(false); },
-              );
-            }}
+            onClick={submit}
           >
             {busy ? STR.common.creating : STR.common.create}
           </button>

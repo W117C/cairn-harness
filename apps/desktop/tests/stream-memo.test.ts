@@ -28,7 +28,10 @@ describe("流本体的 memo 边界", () => {
     expect(appSrc).toContain("rows={streamRows}");
     expect(appSrc).toContain("actions={streamActions}");
     expect(appSrc).toContain("view={viewMode}");
-    expect(appSrc).toContain("streaming={runningActive}");
+    expect(appSrc).toContain("streaming={runningActive || pendingSession}");
+    expect(appSrc).toContain("waiting={deps.modelWaiting === true || pendingSession}");
+    // 建会话中的等待只归首页，切到另一条会话不能借用全局 pendingSend 点亮动效。
+    expect(appSrc).toContain("const pendingSession = pendingSend && activeId === null;");
     expect(appSrc).toContain("foldedRounds={foldedRounds}");
     expect(appSrc).toContain("flashRound={flashRound}");
     // 每次渲染新建的对象/数组会让 memo 恒不命中 ⇒ 这两处不许写成字面量。

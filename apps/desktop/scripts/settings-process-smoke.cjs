@@ -77,7 +77,7 @@ async function main() {
   win.webContents.on('console-message', (details) => { if (details.level === 'error') errors.push(details.message); });
   const js = (source) => win.webContents.executeJavaScript(source, true);
   const click = (selector) => js(`document.querySelector(${JSON.stringify(selector)}).click()`);
-  const fill = (selector, value) => js(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(el.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); })()`);
+  const fill = (selector, value) => js(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) throw new Error('找不到控件：' + ${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(el.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); })()`);
   const shot = async (name) => { await pause(300); writeFileSync(join(out, name + '.png'), (await win.webContents.capturePage()).toPNG()); };
   const nav = async (name) => { await js(`[...document.querySelectorAll('.sp-nav-item')].find(el => el.textContent.trim() === ${JSON.stringify(name)}).click()`); };
   const key = async (keyCode) => {
@@ -119,6 +119,10 @@ async function main() {
   await js(`document.querySelector('.sp-body').scrollTop = document.querySelector('.sp-body').scrollHeight`);
   await shot('02b-usage-details');
   await js(`document.querySelector('.sp-body').scrollTop = 0`);
+  await nav('进化');
+  await waitFor(() => js(`!!document.querySelector('.sp-nav-item[aria-current="page"]') && document.querySelector('.sp-nav-item[aria-current="page"]').innerText.includes('进化') && document.body.innerText.includes('Episode')`), 'evolve report');
+  check('进化分区只读报告可打开（真实 IPC）', await js(`document.querySelector('.sp-nav-item[aria-current="page"]').innerText.includes('进化') && document.body.innerText.includes('Episode') && document.body.innerText.includes('无 holdout 不晋升')`));
+  await shot('02c-evolve');
   win.setSize(900, 820); await pause(300);
   check('窄窗口下设置整页无横向溢出', await js('document.documentElement.scrollWidth <= innerWidth + 1'));
   await shot('03-usage-narrow');
@@ -127,7 +131,7 @@ async function main() {
   await nav('联网搜索');
   await waitFor(() => js('!!document.querySelector(".network-settings")'), 'search form');
   const countBefore = requests.length;
-  await fill('select[aria-label="搜索服务"]', 'custom');
+  await fill('select[aria-label="服务商"]', 'custom');
   await waitFor(() => js('!!document.querySelector(".network-settings input[type=url]")'), 'custom endpoint field');
   await fill('input[aria-label="搜索服务地址"]', `http://127.0.0.1:${server.address().port}/search`);
   await click('input[aria-label="启用联网搜索"]');

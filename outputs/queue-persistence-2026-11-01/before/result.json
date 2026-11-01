@@ -1,0 +1,35 @@
+{
+  "checks": [
+    {
+      "name": "保存确认前没有启动任务",
+      "ok": false
+    },
+    {
+      "name": "待保存期间显示状态且不能重复恢复",
+      "ok": false
+    },
+    {
+      "name": "出队保存失败恢复原消息且没有运行",
+      "ok": false
+    }
+  ],
+  "errors": [],
+  "calls": {
+    "writes": [
+      {
+        "sessionId": "dup",
+        "items": [],
+        "workspace": "/tmp/demo-ws"
+      }
+    ],
+    "runs": [
+      {
+        "message": "甲项目排队的那条",
+        "mode": "guided",
+        "sessionId": "dup",
+        "workspace": "/tmp/demo-ws"
+      }
+    ],
+    "reads": 0
+  }
+}

@@ -148,6 +148,16 @@ describe("composeReviewMessage", () => {
     expect(msg).toContain("- 第 8 行：删掉这行");
   });
 
+  it("键带侧别：删除侧写明「删除前」，新增侧不写（第 922 页）", async () => {
+    const { composeReviewMessage } = await import("../src/renderer/components/panes");
+    const msg = composeReviewMessage(new Map([
+      ["src/a.ts|old:2", "这段删掉"],
+      ["src/a.ts|new:2", "这行改名"],
+    ]));
+    expect(msg).toContain("- 第 2 行（删除前）：这段删掉");
+    expect(msg).toContain("- 第 2 行：这行改名");
+  });
+
   it("形状不合解析的键原样保留为兜底条目（不吞任何评论）", async () => {
     const { composeReviewMessage } = await import("../src/renderer/components/panes");
     const msg = composeReviewMessage(new Map([["weird-key", "自由评论"]]));

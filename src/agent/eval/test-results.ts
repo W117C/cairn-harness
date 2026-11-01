@@ -20,6 +20,7 @@
  *      靠「去掉前缀再看看像不像」去蒙，就是把没测到读成测到了。
  */
 
+import { isRecord } from "../../is-record";
 export type ResultsFormat = "vitest-json" | "node-test-tap" | "node-test-spec" | "pytest" | "unknown";
 /**
  * `node --test` 的**另一种**原生 reporter（spec）。与 TAP 是同一个跑器的两种输出面：
@@ -80,9 +81,6 @@ export interface NamedSetVerdict {
   unmatched: string[];
   reasons: string[];
 }
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
 
 const nonEmptyString = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
 

@@ -1,0 +1,22 @@
+PASS 两场会话在侧栏（预览夹具） {"s1":true,"s2":true}
+PASS 先正常打开 s1 undefined
+sandbox_extension_issue_file failed for /Users/ze/Downloads/Cairn/cairn/node_modules/.pnpm/electron@44.7.0_supports-color@7.2.0/node_modules/electron/dist/Electron.app/Contents/Frameworks/Electron Helper.app/Contents/Resources: 1 (Operation not permitted)
+PASS ⌘+点击只开预览：主体仍 s1、预览标签激活、标题/预览徽标/正文在位 {"main":"s1","tab":"会话预览","preview":true,"title":"整理竞品对照册","rows":6,"badge":"不切主会话"}
+PASS 880 窄窗打开预览不横向溢出 {"viewport":880,"overflow":false,"main":573,"pane":0,"preview":0}
+PASS 变宽或 ⌘⌥I 后预览可恢复 {"pane":360,"preview":344,"input":296}
+PASS 预览窗格有输入框与发送钮 {"input":true,"send":true,"sendDisabled":true}
+PASS 空闲时 Enter 真的向预览会话发一轮 {"runs":[{"message":"预览里继续","sessionId":"s2"}],"draft":"","notice":"已发送"}
+PASS 预览发送后主体仍停在原会话 {"main":"s1"}
+PASS 运行中显示运行标记与停止钮 {"live":true,"stop":true}
+PASS 运行中 Enter 走 runSteer 并回报已插话 {"steers":[{"sessionId":"s2","text":"插一句话"}],"notice":"已插话到本轮","draft":""}
+PASS 插话被拒绝时入队并给出回执 {"notice":"已加入队列，本轮结束后发送","disabled":false}
+PASS 本轮结束后待发送队列可见 {"running":false,"resume":true}
+PASS 继续发送把队首交给同一会话 {"runs":[{"message":"预览里继续","sessionId":"s2"},{"message":"排队这句","sessionId":"s2"}],"resume":false,"notice":"已加入队列，本轮结束后发送"}
+PASS 停止钮打到预览会话 {"cancels":[{"sessionId":"s2"}],"notice":"已请求停止"}
+PASS 「切到会话」把主体切到 s2，并收起预览（不留同一场的副本） {"main":"s2","title":"整理竞品对照册","preview":false,"sessionTab":false}
+PASS 行菜单里有「在侧栏预览」 {"x":383,"y":374}
+PASS 菜单预览同样不切走主体 {"main":"s1","preview":true,"title":"整理竞品对照册"}
+PASS 侧栏直接打开预览目标时预览自动收起 {"main":"s2","preview":false,"sessionTab":false}
+PASS 渲染过程无控制台错误 []
+截图与读数：/Users/ze/Downloads/Cairn/cairn/.tmp/sweep/session-preview-smoke.out
+隔离测试配置：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-preview-profile-jqhCEv

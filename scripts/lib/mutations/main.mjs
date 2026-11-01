@@ -50,7 +50,7 @@ export const MUTATIONS = [
     // 在源里出现两次（put 与 delete）。第一版只写那一行 ⇒ 针脚体检报「命中 2 处，需人工复认」。
     // 连下一行一起写才唯一（`isProviderId` 那一支只有 put 有）。
     // 标题必须逐字等于桌面判卷里那条用例名（近似标题 ⇒ 选择子零命中＝vacuous，第 483/490 页栽过两次）。
-    apply: (s) => s.replace("  if (!backend) return { ok: false, error: PROVIDER_KEY_NO_BACKEND_ERROR };\n  if (!isProviderId(provider)) return { ok: false, error: \"未知 provider：\" + provider + \"（白名单：\" + PROVIDER_IDS.join(\"/\") + \"）\" };", "  // 变异：fail-closed 那支摘掉"),
+    apply: (s) => s.replace("  if (!backend || !backend.isAvailable()) return { ok: false, error: PROVIDER_KEY_NO_BACKEND_ERROR };\n  if (!isProviderId(provider)) return { ok: false, error: \"未知 provider：\" + provider + \"（白名单：\" + PROVIDER_IDS.join(\"/\") + \"）\" };", "  // 变异：fail-closed 那支摘掉"),
     expectFail: "fail-closed：safeStorage 不可用 ⇒ 装配拒绝 + set 拒绝不落明文（目录零文件）；未装配后端同判",
   },
   {
@@ -189,7 +189,7 @@ export const MUTATIONS = [
     src: "src/main/sessions.ts",
     test: "tests/sessions.test.ts",
     desc: "会话名 trim 检查被拆（前后空白的名字合法，列表显示与文件名不一致）",
-    apply: (s) => s.replace("name.trim() === name", "true"),
+    apply: (s) => s.replace("if (name.trim() !== name) return \"会话名首尾不能有空白\";", "if (false) return \"会话名首尾不能有空白\";"),
     expectFail: "前后空白的名字非法（trim 规则）",
   },
   {
@@ -197,7 +197,7 @@ export const MUTATIONS = [
     src: "src/main/sessions.ts",
     test: "tests/sessions.test.ts",
     desc: "会话名字符集闸整条拆除（路径分隔/控制字符/点号全放行 → 目录穿越与伪装名）",
-    apply: (s) => s.split("\n").map((l) => (l.includes("name.trim() === name") ? "  return true;" : l)).join("\n"),
+    apply: (s) => s.split("\n").map((l) => (l.includes("会话名不得含") ? "  return null;" : l)).join("\n"),
     expectFail: "控制字符 / 点号开头的名字非法",
   },
   {
@@ -602,7 +602,7 @@ export const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/goal-continue.test.ts",
     desc: "run 入口只看 settings、丢掉 runtime override ⇒ 调用方（IPC 覆盖 / 测试 / 将来的按会话武装）说了不算",
-    apply: (s) => s.replace("planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,", "planRequired: (await store().get()).planRequiredByDefault,"),
+    apply: (s) => s.replace("planRequired: over.planRequired ?? req.planRequired ?? (await store().get()).planRequiredByDefault,", "planRequired: req.planRequired ?? (await store().get()).planRequiredByDefault,"),
     expectFail: "unattended + 武装方案门 ⇒ 拒因来自方案门而不是无人值守闸，盘上不留痕（J3：不是被忽略）",
   },
   {
@@ -810,7 +810,7 @@ export const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/goal-continue.test.ts",
     desc: "盘上的 planRequiredByDefault 到不了主会话 ⇒ 设置里那句「每轮先出计划」是装饰（J3 那格给的是 override，照绿）",
-    apply: (s) => s.replace("planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,", "planRequired: over.planRequired ?? false,"),
+    apply: (s) => s.replace("planRequired: over.planRequired ?? req.planRequired ?? (await store().get()).planRequiredByDefault,", "planRequired: over.planRequired ?? req.planRequired ?? false,"),
     expectFail: "settings.planRequiredByDefault=true ⇒ 生产入口自己就该拒写，且拒因来自方案门",
   },
   {
@@ -818,7 +818,7 @@ export const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/goal-continue.test.ts",
     desc: "那一行改成「只读 settings」⇒ 调用方显式传的 planRequired 被吞（J3 那格的武装态从此失效，闸不再说话）",
-    apply: (s) => s.replace("planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,", "planRequired: (await store().get()).planRequiredByDefault,"),
+    apply: (s) => s.replace("planRequired: over.planRequired ?? req.planRequired ?? (await store().get()).planRequiredByDefault,", "planRequired: (await store().get()).planRequiredByDefault,"),
     expectFail: "unattended + 武装方案门 ⇒ 拒因来自方案门而不是无人值守闸，盘上不留痕（J3：不是被忽略）",
   },
   {
@@ -1103,7 +1103,7 @@ export const MUTATIONS = [
     desc: "装配面退回「缺省落 os.tmpdir()」⇒ 信任表与插件 userConfig 一起回到会被回收、"
       + "且在共享 runner 上目录名固定可猜的那一顶（别的本机用户预建 plugin-trust.json 即免审批激活）。"
       + "纯函数那条判卷分辨不出这个：它只问取值式，不问谁在用它",
-    apply: (s) => s.replace(`    pluginDataRoot: pluginDataRootOf(process.env, homedir()),`, `    pluginDataRoot: process.env.M2E_PLUGIN_DATA ?? join(tmpdir(), "m2e-plugin-data"),`),
+    apply: (s) => s.replace(`  const pluginDataRoot = pluginDataRootOf(process.env, homedir());`, `  const pluginDataRoot = process.env.M2E_PLUGIN_DATA ?? "/tmp/m2e-plugin-data";`),
     expectFail: "⑦ 那一条接的是 pluginDataRootOf 连入参，且同一行不再出现临时区",
   },
   // ---- 第 432 页：`--doctor` 第七项（信任与插件数据落点）----
@@ -1158,10 +1158,10 @@ export const MUTATIONS = [
     id: "doctor-trust-check-computed-not-pushed",
     src: "src/main/doctor.ts",
     test: "tests/doctor.test.ts",
-    desc: "纯核算出来了却没接进清单 ⇒ 第七项在报告里彻底消失，而判卷里那 12 条用例照绿（恒真的接线），"
+    desc: "纯核算出来了却没接进清单 ⇒ trust 在报告里彻底消失，而判卷里那 12 条用例照绿（恒真的接线），"
       + "这一格只有把 push 摘掉才看得见它本来在不在",
     apply: (s) => s.replace(`  checks.push(trustFaceCheck(f.trust));\n`, ``),
-    expectFail: "固定清单＝七项，顺序即渲染顺序，第七项是 trust（第 432 页带进来的那一格）",
+    expectFail: "固定清单＝九项，顺序即渲染顺序（settings/sessions 插在 workspace 之后，trust 仍是最后一项）",
   },
   // ---- 第 438 页：CLI 上的插件/skill 发现面与信任决议（#7 的 ②＋①）----
   {

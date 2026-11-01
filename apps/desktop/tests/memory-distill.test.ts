@@ -72,7 +72,8 @@ describe("接线哨兵（源码级）", () => {
     // push-only 的机械面：直调 deps.outbox（不经 setAppHooks.onEvent 的 ownAppends 计数链）——
     // 「不落 JSONL」由 kernel-host.test.ts 的盘面语义断言钉住。
     expect(hostSrc).toContain('deps.outbox("onEvent", {');
-    expect(hostSrc).toContain("running: runControllers.has(id)");
+    expect(hostSrc).toContain("const running = runControllers.get(id)?.workspace === ws;");
+    expect(hostSrc).toContain("return { events, session, view, running,");
   });
 });
 

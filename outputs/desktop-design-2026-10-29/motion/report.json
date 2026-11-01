@@ -1,0 +1,111 @@
+{
+  "synthetic": true,
+  "checks": [
+    {
+      "name": "首页 createSession 尚未完成时立即有等待 Logo",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "建会话期间切到已有空闲会话不会借用 pendingSend 动效",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "user_message 与首个 delta 都未到达时等待 Logo 仍在",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "顶部流光超过一个周期仍在运行",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "iterations": "infinite",
+        "state": "running",
+        "time": 1350.6609999787993
+      }
+    },
+    {
+      "name": "应用内减弱动效停掉流光并保留可见的静态运行提示",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "animation": "none",
+        "background": "color(srgb 0.85098 0.466667 0.341177 / 0.4)",
+        "opacity": "1"
+      }
+    },
+    {
+      "name": "恢复动效后当前运行的流光继续循环",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "用户事件抵达时没有等待 Logo 闪退",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "首个增量接替等待 Logo 并保留追字光标",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "模型输出已完成时不在收尾阶段补出等待 Logo",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "工具执行阶段不重复显示模型等待",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "工具收口后立即等待下一段模型输出",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "worker 终态不会结束主模型等待",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "下一段输出接替等待且 Logo 不重复",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "请求错误立即清掉模型等待",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "失败收束后无残留 Logo 或顶部运行态",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "已有会话再次发送，首个 user 事件前也显示等待",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "切到空闲会话不携带其他会话等待态",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "停止后清掉等待 Logo 与顶部运行态",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "主会话完成事件立即清掉运行态",
+      "ok": true,
+      "detail": true
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,4 @@
+{"elapsedMs":192.59999999776483,"dom":{"hunks":20,"lines":4000,"nodes":24621,"truncated":true},"consoleErrors":[]}
+[diff-render-latency] 超预算：挂载 192.6ms > 帽 1ms
+[diff-render-latency] FAIL 192.6ms | 20 hunks / 4000 lines / 24621 nodes
+EXIT=1

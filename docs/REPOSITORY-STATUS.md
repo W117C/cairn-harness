@@ -36,6 +36,23 @@
   同时检测到 1 套并发判卷），随后在两端独占时 **25/25 全绿，exit 0**。红绿两份原文都保留；
   首趟详情见第九节。`3579f49` 的 25/25 历史认证仍保留。
 
+### 2026-10-27 统一运行时补记
+
+- 本地 agent 生命周期已落地：逻辑 thread 与 run 分离，`send_agent`、`list_agents`、
+  `resume_agent`、`close_agent` 使用同一 fenced `AgentRuntime`；重复 send/close 与 stale fence
+  有定向判卷。
+- 动态编排已落地：`race` 与 `gather any/quorum` 使用候选组，赢家/法定人数确定后按 task id
+  取消输家；迟到结果只追加隔离收据，不改写当前任务状态。
+- 远程执行已有 outbound JSON-RPC 适配器：能力、fence、契约摘要、deadline、heartbeat 和
+  幂等键均在 fake worker 中判卷；连接或心跳丢失转为 `needs_you`，token 只走 Authorization
+  header。该适配器当前只接收只读/无副作用任务，尚无可控远程交付与回滚。
+- 恢复判卷覆盖 `running`、`verifying`、`merging` 三种崩溃现场：无活动执行器时全部转
+  `needs_you`，重复恢复不追加状态；恢复后的迟到结果与重复 control 不改写终态。
+- 定向套件 `remote-backend`、`orchestration-dynamic-control`、`local-agent-runtime`
+  当前 **3 文件 / 29 条全绿**。完整 core/typecheck/docs 读数在本轮任务收口时追加。
+- 未验证边界：真实外部 worker 部署、跨机器网络分区、远程写回/回滚、真实 provider 收益，
+  以及编排控制面的真实用户交互。
+
 ### 2026-10-28 独立桌面包补记
 
 - macOS arm64 ad-hoc 包已产出；打包态冒烟、解压到源码树外启动、签名与链接审计均通过
@@ -43,6 +60,41 @@
   `app.getAppPath()` 在 runtime package 里少一层，改为从主进程入口推 `shellAppPath`。
 - 仍阻塞：Developer ID / 公证、稳定签名下的真实钥匙串首启、Windows/Linux 打包、
   真实 provider 与外部用户验收。读数与红样本见 PROGRESS 第 753/756 页（取料目录待提交后补链接）。
+
+### 2026-10-27 互操作补记
+
+- 通用工具检索已落地：`src/agent/tool-search.ts` 的确定性 BM25 排序 + `tool_search` 只读元工具；
+  目录含静态 schema 与**未激活**的 MCP 工具，检索不激活、不执行；执行仍走 `gatedMcpTool`。
+- SDK v1 已落地：`src/interop/sdk.ts` 的 `AgentClientV1`、显式能力协商、公开事件联合与脱敏投影；
+  工具执行表由宿主注入，缺省空表 fail-closed，不会静默回落到静态 `TOOLS`；
+  ACP 适配器 `src/interop/acp.ts` 把这些事件映射为 `session/update` 通知；
+  `src/interop/acp-stdio.ts` 提供有界 newline-delimited stdio 传输，请求并发分派，
+  prompt 运行中可收到 `session/cancel`。
+- A2A 任务桥已落地：`src/interop/a2a.ts`，task id → 逻辑 agent id、message id → 幂等键、
+  内容寻址 artifact、公开生命周期映射、cancel/resume 携带协议版本与 fence；
+  `src/interop/a2a-http.ts` 提供 loopback JSON-RPC HTTP、agent card、请求体上限与
+  404/405/415/413 显式拒绝。
+- 产品宿主/服务已落地：`src/main/interop-host.ts` 把 SDK run 接到 `handleAgentRun`，
+  `src/main/interop-a2a-runtime.ts` 把 A2A 任务接到同一产品会话（只读）；
+  `pnpm acp-server --workspace <dir>` 提供 ACP stdio，`pnpm a2a-server --workspace <dir>`
+  提供 loopback HTTP。两者默认 unattended / 只读，未加权限桥与认证/TLS。
+- 外部基准适配已落地：`src/interop/benchmarks.ts` 支持 Harbor/Terminal-Bench 形态任务与
+  ExternalRunRecord；`scripts/external-bench.ts` 把外部证据落成 JSONL，缺用量/无结果保持
+  `null`/`unknown`，首跑失败不被重试覆盖。夹具读数：`outputs/interop-c-2026-10-27/external-bench.jsonl`。
+- 定向判卷：`tool-search`、`tool-search-tool`、`interop-sdk`、`interop-acp-stdio`、
+  `interop-a2a`、`interop-a2a-http`、`interop-benchmarks`、`interop-host`、
+  `interop-a2a-product`、`acp-server-cli`、`a2a-server-cli` 共 11 文件 **42 条全绿**
+  （工作树，`--maxWorkers=2`）。
+- 全量读数（工作树）：串行 `pnpm test:capped --maxWorkers=1` **551 文件 / 7148 条全绿，
+  exit 0**（291.18 s，`.tmp/c-full-product-1w2.log`）。2-worker 首趟 7146/7148，两条失败
+  （`post-run-readings` / `scratch-tree-naming`）单跑 27/27；串行首趟唯一失败是 README
+  invoke 通道数 108 vs 运行时 109（并发桌面批次新增通道），已按现读改为 109，复跑全绿。
+  `typecheck` 0、`docs-check` 全绿、`tools-check` 36 条、`model-surface-check` 6/6、
+  `prompt-surface-check` 绿。取料：`outputs/interop-c-2026-10-27/verification.md`。
+- 未验证边界：真实 ACP 客户端握手与权限桥、A2A 认证/TLS/SSE、Harbor/Terminal-Bench 真实执行、
+  真实远程 worker 部署与真实 provider 收益；ACP/A2A 产品服务已用 demo provider 端到端判卷，
+  但外部客户端/网络面仍未认证。当前工作树未提交，未跑 `head-cert-check` / `mutate-verify`，
+  以上不是 HEAD 认证。
 
 ### 批次主体 15 笔（`014ac0e3..HEAD`；另有 11 笔收尾）
 
@@ -88,7 +140,7 @@
 |---|---|---|
 | P0 | Git 完整性与恢复副本核对 | **已收口（有边界）**：25 个坏 ref 全部归档后处置，所有命名 ref 与 `HEAD` 遍历通过；`git fsck` 仍有 37 条 broken link / missing，全部属于**不可达**的重建前对象（ADR 0007 已判永久不可恢复），不构成任何 ref 的缺口。未运行 `gc/prune`，避免把仓外归档之外的旧对象一并删掉。 |
 | P0 | 未提交功能批次集成 | **已收口**：工作树拆成多笔提交；`ab.py` 已移入仓外归档，`git status` 干净。每个批次在提交说明里列了页面来源、共享文件与复跑读数。 |
-| P1 | 编排原设计缺口 | **已按允许的「正式缩范围」收口**：P0–P4 本地纵切已实现（154 条编排判卷全绿）；P3 的 `race`、`gather any/quorum`、动态控制与远程 worker 未实现，`flow.ts` 对它们显式 fail-closed；本地后端对 network/shell/git 能力拒收。设计稿新增「实施状态」表写明理由。 |
+| P1 | 编排原设计缺口 | **本地运行时已补齐，远程只到适配器边界**：P0–P4 本地纵切已实现；动态 `race` / `gather any/quorum`、确定性取消与迟到结果隔离已判卷；远程 JSON-RPC 适配器覆盖能力、fence、摘要、deadline、heartbeat、幂等与断线 `needs_you`。当前只支持只读/无副作用远程任务，真实外部部署与受控写回仍未验证。 |
 | P1 | 编排文档与证据收口 | **已收口**：设计稿不再写「尚未实施」；FINAL 的两次全量读数按「提交树 `5dcb67b`」与「共享主树」分开标注；「未提交」改为实际提交链。 |
 | P1 | 指针会话集成状态 | **代码面已核**：CLI `src/cli.ts:1375` 调用 `createProductFork`；桌面 Stream 的 `EventRef` 在 `apps/desktop/src/renderer/components/Stream.tsx:269/393/405/488` 有渲染与 `data-event-ref` 落点。真实交互见下一行。 |
 | P1 | 活跃会话连续发送与插话 | **端到端已实测**：连续发送 7/7；插话 6/6（运行中回车真的调用 `runSteer`、回执与队列互斥、主进程拒绝时回落入队）；取消后继续发送 4/4；组件级判卷仍在桌面套件内。 |
@@ -100,27 +152,29 @@
 
 | 事项 | 状态 / 启动条件 | 来源 |
 |---|---|---|
-| 远程 worker、动态 Flow、更高并发 | 原设计有要求，当前未实现；先定可强制权限、取消和断线恢复 | 编排设计 §14、`flow.ts`、`local-backend.ts` |
+| 真实远程 worker 部署与更高并发 | 本地动态 Flow 与只读远程适配器已实现；真实外部 worker、网络分区、远程写回/回滚和 100+ 实机并发仍待验证 | 编排设计 §7.8/§14、`remote-backend.ts`、`remote-protocol.ts` |
 | 编排 P5 真实评测 | 独立验证者、完整失败回执、明确费用预算；scripted DAG 不证明真实收益 | 编排设计 P5、交付报告 |
 | 元认知扩大确认试验 | 有界 pilot 已完成，默认不开新策略；更多未见任务、固定预算、重复配对是采用条件 | `docs/research/metacognition-pilot-2026-10-25.md` |
-| SDK/API、A2A 与其他领域包 | P6 留门，接口占位不算已支持 | 编排设计 §16 |
+| SDK/API、A2A 与其他领域包 | 传输中立 SDK/ACP/A2A 桥、ACP stdio/A2A loopback HTTP 产品服务与外部基准适配已实现（2026-10-27）；A2A 产品运行时只读；**真实 ACP 客户端握手/权限桥、A2A 认证/TLS/SSE、真实 Harbor/Terminal-Bench 执行仍未认证** | 编排设计 §16、互操作设计 §Implementation Status |
 | 对外分发与 Windows | **macOS ad-hoc 包已产出并核验**（PROGRESS 753/756）；Developer ID/公证、稳定签名下的真实钥匙串首启、Windows/Linux 与外部用户验收仍待做 | `b2-checklist.md`、ADR 0001/0002 |
 | 官网、遥测、多租户、计费、市场 | 目前未纳入实现；有明确产品需求后单独立项 | B2、编排 Non-goals |
 | 取料归档治理 | 先查 PROGRESS/docs-check/冻结判据对工件的依赖，给出可恢复迁移，再裁决 | `scripts/repo-hygiene-check.ts`、取料盘点 |
 
 ## 五、需要优化（先测后改；本轮新增读数）
 
+> 2026-11-01 复核：本节里标「现读」的数字已按**当前工作树**重量（脚本与读数见 `outputs/status-doc-refresh-2026-11-01/`）。延迟类读数（首开/复开 ms、流式帧）本轮**没有**重量，所以依赖它们的结论一条没动。
+
 | 优先级 | 事项 | 事实与下一步 |
 |---|---|---|
 | P1 | 状态文档漂移 | 本页重写为唯一入口；历史计划页不再逐勾重开。多份旧报告仍保留，引用时必须带日期与快照身份。 |
-| P1 | 证据占比与检索噪声 | 现读跟踪面约 **4226 / 6193 = 68.2%** 在 `outputs/`。体量门绿不代表材料无用；已建本页第九节的页面/批次短索引，不删证据。 |
+| P1 | 证据占比与检索噪声 | 现读跟踪面约 **4278 / 6291 = 68.0%** 在 `outputs/`（2026-11-01 复核）。体量门绿不代表材料无用；已建本页第九节的页面/批次短索引，不删证据。 |
 | P1 | 真实交互覆盖 | 连续发送 7/7；插话 6/6；取消/恢复 4/4；跨工作区 7/7；双窗口工作区 13/13。剩余空白是编排控制面的真实交互。 |
-| P2 | Radix 下拉依赖 | 构建产物：`index` 176.11 kB（gzip 60.72）、`App` 268.40 kB（gzip 83.82）、`xterm` 329.31 kB（gzip 83.04）；依赖树 251,225 B / 49 模块，主路由闭包 -45.3% 的理论收益。真机首开 **17.3 ms**、复开 p50 **6.4 ms** / p95 **7.3 ms**；暂不懒加载。 |
-| P2 | 长会话/长列表/大 diff | 真实 renderer：400 轮会话启动 153.3 ms、首开 475.3 ms；流式帧 p50 26.2 / p95 31.9 / max 33.1 ms；FilePane 500 项目录 smoke 通过；4000 行 diff 挂载 191.1 ms。长尾仍只覆盖一个本机样本。 |
+| P2 | Radix 下拉依赖 | 构建产物（2026-11-01 复核）：`index` 175.11 kB（gzip 60.40）、`App` **305.89 kB（gzip 95.52）**、`xterm` 321.59 kB（gzip 80.79）——`App` 自 10-27 的 268.40 kB / 83.82 涨了 **+37.5 kB / gzip +11.7 kB**；依赖树 251,225 B / 49 模块（10-27 读数，未重量），主路由闭包 -45.3% 的理论收益。真机首开 **17.3 ms**、复开 p50 **6.4 ms** / p95 **7.3 ms**；暂不懒加载。 |
+| P2 | 长会话/长列表/大 diff | 真实 renderer（**2026-11-01 复核，五跑**，取料 `outputs/perf-recheck-2026-11-01/`）：400 轮会话启动 **187.7–311.8 ms（中位 270.1，离散度 1.66×）**、首开 503.0–656.9（中位 551.9）；流式帧 p50 28.9–34.8、p95 36.1–44.8、max 36.2–47.8 ms；DOM **42,807** 节点（五跑一致）。对照 10-27 的单点读数（启动 153.3、首开 475.3、p95 31.9、39,585 节点）：**DOM +8.1% 是确定性的**；时间类只高不低，但五跑离散度已接近 2×，单点对比不足以判定「翻倍」之类的趋势结论（第 955 页曾据两跑写成「启动约 2×」，第 956 页用五跑修正）。三档预算（p95 200 / max 500 / 启动 1500）五跑全过。FilePane 500 项目录 smoke 通过；4000 行 diff 挂载 191.1 ms（10-27 读数，未重量）。长尾仍只覆盖一个本机样本。 |
 | P2 | FilePane 与设置可发现性 | FilePane 真机 25/25（键盘、失败恢复、窄窗、长路径、只读态、路径菜单）；设置页 15/15（独立用量页、窄窗、测试连接、密钥不落明文、重载恢复）。 |
 | P2 | 用量与成本 | usage analytics 5 文件 64 条绿；缺 usage、部分返回、取消/恢复与跨模型价格仍保留 unknown（不折 0）。真实账单口径未验。 |
 | P2 | LSP 并发/取消 | 7 个 lsp 判卷文件在 core 终跑中通过；历史「首次失败、单跑通过」本轮未复现，不据此改代码。 |
-| P2 | 大入口冲突成本 | 行数现读：`src/main/agent-runner.ts` 1868、`src/cli.ts` 1669、`apps/desktop/src/main/index.ts` 1434。无明确冲突/热路径证据前不拆。 |
+| P2 | 大入口冲突成本 | 行数现读（2026-11-01 复核）：`src/main/agent-runner.ts` **2023**、`src/cli.ts` **1869**、`apps/desktop/src/main/index.ts` **2104**——较 10-27 分别 +155 / +200 / **+670**（涨幅来自工作树里未提交的批次，不是已发布基线）。仍无明确冲突/热路径证据，不拆。 |
 
 ## 六、事实面
 

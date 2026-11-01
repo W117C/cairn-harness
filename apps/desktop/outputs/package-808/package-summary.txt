@@ -1,0 +1,8 @@
+package log tail:
+[cairn-smoke] PASS in 1390 ms
+[package] 完成（已验证打包态）：/Users/ze/Downloads/Cairn/cairn/apps/desktop/release-808/Cairn.app
+
+packaged feature markers:
+apps/desktop/dist/assets/SettingsPanel-4yAynzTb.js
+apps/desktop/src/main/diagnostics-bundle.ts
+src/main/ipc-protocol.ts

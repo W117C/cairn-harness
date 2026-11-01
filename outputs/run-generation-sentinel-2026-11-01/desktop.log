@@ -1,0 +1,1362 @@
+$ vitest run --config vitest.config.ts && node --import tsx ../../scripts/desktop-boundary-check.ts
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+ ✓ tests/run-generation.test.ts (3 tests) 5ms
+ ✓ tests/terminal-size.test.ts (6 tests) 276ms
+ ✓ tests/run-queue-session.test.tsx (19 tests) 581ms
+ ✓ tests/stream-steering-round.test.tsx (5 tests) 292ms
+ ✓ tests/terminal-login-shell.test.ts (3 tests) 281ms
+ ✓ tests/toast.test.ts (3 tests) 223ms
+ ✓ tests/terminal-host.test.ts (3 tests) 128ms
+ ✓ tests/plugin-sidebar.test.ts (7 tests) 127ms
+ ✓ tests/desktop-review-batch.test.ts (8 tests) 2339ms
+   ✓ 测量脚本要有预算（量过了 ≠ 没变） (3)
+     ✓ 原生宿主实际运行：无系统配置前提，完整验证导航、窗口归属和 PTY 2334ms
+stdout | tests/kernel-host.test.ts > kernel-host 纵向装配 > run：demo 全链路落事件、会话 JSONL 落 <ws>/.agent/sessions
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stderr | tests/kernel-host.test.ts > kernel-host 纵向装配 > run：demo 全链路落事件、会话 JSONL 落 <ws>/.agent/sessions
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+stdout | tests/approval-e2e.test.ts > 审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 档 appAskGate） > 审批→执行：ask 到达 → decide(approved) → run ok 且 marker 落工作区
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stderr | tests/approval-e2e.test.ts > 审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 档 appAskGate） > 审批→执行：ask 到达 → decide(approved) → run ok 且 marker 落工作区
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+stderr | tests/session-audit-lifecycle.test.ts > SessionMetadata audit through the real KernelHost > marks an accepted run active, keeps it active after a rejected duplicate, then marks it idle
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+stdout | tests/m3-e2e.test.ts > M3 验收锚 e2e > 锚二 并行两会话互不串流：A/B 并发 run 分桶不相交，各自 JSONL 只含各自事件
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/m3-e2e.test.ts > M3 验收锚 e2e > 锚二 并行两会话互不串流：A/B 并发 run 分桶不相交，各自 JSONL 只含各自事件
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stderr | tests/m3-e2e.test.ts > M3 验收锚 e2e > 锚二 并行两会话互不串流：A/B 并发 run 分桶不相交，各自 JSONL 只含各自事件
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+stderr | tests/m3-e2e.test.ts > M3 验收锚 e2e > 锚二 并行两会话互不串流：A/B 并发 run 分桶不相交，各自 JSONL 只含各自事件
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+ ✓ tests/m3-e2e.test.ts (3 tests) 410ms
+   ✓ M3 验收锚 e2e (3)
+     ✓ 锚二 并行两会话互不串流：A/B 并发 run 分桶不相交，各自 JSONL 只含各自事件 334ms
+stdout | tests/kernel-host.test.ts > kernel-host 纵向装配 > 收束补发合成终态 + openSession.running：在跑为 true、收束转 false、恰一条 push-only 终态
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stderr | tests/kernel-host.test.ts > kernel-host 纵向装配 > 收束补发合成终态 + openSession.running：在跑为 true、收束转 false、恰一条 push-only 终态
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+ ✓ tests/run-control-workspace.test.ts (8 tests) 521ms
+stdout | tests/approval-e2e.test.ts > 审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 档 appAskGate） > 打断：ask 等待期 runCancel → run 收束（无 marker；onAskDone reason ∈ user|timeout|unattended）
+[memory] 会话结束沉淀: {"kind":"failed","why":"This operation was aborted"}
+
+stderr | tests/approval-e2e.test.ts > 审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 档 appAskGate） > 打断：ask 等待期 runCancel → run 收束（无 marker；onAskDone reason ∈ user|timeout|unattended）
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+stderr | tests/render-structure.test.tsx > ModelPicker 触发条（真 HTML） > 是个带 aria 的可点按钮，title 就是选中项描述
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+
+stderr | tests/render-structure.test.tsx > ModelPicker 触发条（真 HTML） > 会话内显式选择 ⇒ 触发条上现出小圆点
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+
+stderr | tests/render-structure.test.tsx > ModelPicker 触发条（真 HTML） > 演示选中时触发条显示「演示」，title 写明不产生真实调用
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+
+stdout | tests/kernel-host.test.ts > M3 多工作区运行面 > 多工作区：A/B 两工作区各建会话，run 各落各的根，listSessions 带 workspace 归组
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stderr | tests/kernel-host.test.ts > M3 多工作区运行面 > 多工作区：A/B 两工作区各建会话，run 各落各的根，listSessions 带 workspace 归组
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+stderr | tests/session-audit-lifecycle.test.ts > SessionMetadata audit through the real KernelHost > concurrent sessions settle their own audit state without marking the other session idle
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+stderr | tests/session-audit-lifecycle.test.ts > SessionMetadata audit through the real KernelHost > concurrent sessions settle their own audit state without marking the other session idle
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+stderr | tests/render-structure.test.tsx > 思考段合并单面（P2-2；触发条短档词族） > 触发条 = 「deepseek-chat · 思考 关」单芯片（短档词族；请求侧 off 字面量不变）
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+
+stderr | tests/render-structure.test.tsx > 思考段合并单面（P2-2；触发条短档词族） > 运行中：触发器不灰（可开菜单拧思考档）；标签照常显示当前档（短词）
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+
+ ✓ tests/render-structure.test.tsx (64 tests) 122ms
+ ✓ tests/session-prefs-run-routing.test.ts (3 tests) 176ms
+stdout | tests/kernel-host.test.ts > M3 多工作区运行面 > 多工作区：A/B 两工作区各建会话，run 各落各的根，listSessions 带 workspace 归组
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stderr | tests/kernel-host.test.ts > M3 多工作区运行面 > 多工作区：A/B 两工作区各建会话，run 各落各的根，listSessions 带 workspace 归组
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+stdout | tests/approval-e2e.test.ts > 审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 档 appAskGate） > 每会话取消：取消 A 不影响 B；A 返回 aborted:true 且 onAskDone fail-closed
+[memory] 会话结束沉淀: {"kind":"failed","why":"This operation was aborted"}
+
+stderr | tests/approval-e2e.test.ts > 审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 档 appAskGate） > 每会话取消：取消 A 不影响 B；A 返回 aborted:true 且 onAskDone fail-closed
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+stdout | tests/approval-e2e.test.ts > 审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 档 appAskGate） > 每会话取消：取消 A 不影响 B；A 返回 aborted:true 且 onAskDone fail-closed
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stderr | tests/approval-e2e.test.ts > 审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 档 appAskGate） > 每会话取消：取消 A 不影响 B；A 返回 aborted:true 且 onAskDone fail-closed
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+ ✓ tests/approval-e2e.test.ts (3 tests) 909ms
+   ✓ 审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 档 appAskGate） (3)
+     ✓ 审批→执行：ask 到达 → decide(approved) → run ok 且 marker 落工作区 348ms
+     ✓ 每会话取消：取消 A 不影响 B；A 返回 aborted:true 且 onAskDone fail-closed 348ms
+stdout | tests/kernel-host.test.ts > M3 多工作区运行面 > 漂移检测：会话文件被外部追加后，下一次 run 被拒且报外部修改
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stderr | tests/kernel-host.test.ts > M3 多工作区运行面 > 漂移检测：会话文件被外部追加后，下一次 run 被拒且报外部修改
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+stderr | tests/session-audit-lifecycle.test.ts > SessionMetadata audit through the real KernelHost > an old run holds ownership until its idle write finishes, so a new run cannot be marked idle by it
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+stderr | tests/session-audit-lifecycle.test.ts > SessionMetadata audit through the real KernelHost > an old run holds ownership until its idle write finishes, so a new run cannot be marked idle by it
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+ ✓ tests/settings-sections.test.tsx (33 tests) 140ms
+ ✓ tests/session-prefs-host.test.ts (5 tests) 205ms
+ ✓ tests/session-audit-lifecycle.test.ts (10 tests) 1243ms
+stderr | tests/usage-dashboard.test.tsx > usage dashboard > renders the actual figures, recovery and coverage disclosures with accessible controls
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+
+stderr | tests/usage-dashboard.test.tsx > usage dashboard > does not turn sessions without usage or an older payload into measured zero
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+Warning: A title element received an array with more than 1 element as children. In browsers title Elements can only have Text Nodes as children. If the children being rendered output more than a single text node in aggregate the browser will display markup and comments as text in the title and hydration will likely fail and fall back to client rendering
+    at title
+    at g
+    at svg
+    at DailyTrend (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:28:23)
+    at section
+    at div
+    at UsageDashboard (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/settings/UsageSection.tsx:332:27)
+
+ ✓ tests/usage-dashboard.test.tsx (5 tests) 61ms
+ ✓ tests/session-reference-host.test.ts (5 tests) 86ms
+ ✓ tests/session-prefs-errors.test.ts (1 test) 57ms
+ ✓ tests/sandbox-init.test.ts (3 tests) 184ms
+ ✓ tests/invoke-consumer-census.test.ts (1 test) 72ms
+ ✓ tests/dead-surface.test.ts (3 tests) 62ms
+ ✓ tests/provider-browser-boundary.test.ts (1 test) 53ms
+ ✓ tests/stream-actions.test.tsx (11 tests) 88ms
+ ✓ tests/stream-rework.test.tsx (16 tests) 53ms
+ ✓ tests/plugin-trust-wiring.test.ts (7 tests) 45ms
+ ✓ tests/app-page.test.tsx (18 tests) 80ms
+ ✓ tests/stream-nav.test.tsx (22 tests) 48ms
+ ✓ tests/orchestration-host.test.ts (1 test) 110ms
+ ✓ tests/transcript.test.ts (12 tests) 49ms
+ ✓ tests/edit-user.test.tsx (2 tests) 45ms
+ ✓ tests/plugins-workspace.test.tsx (4 tests) 40ms
+ ✓ tests/inspector.test.tsx (21 tests) 84ms
+ ✓ tests/diff-split.test.tsx (10 tests) 47ms
+ ✓ tests/stream-fade.test.ts (5 tests) 52ms
+ ✓ tests/kernel-host-metadata-list.test.ts (4 tests) 80ms
+ ✓ tests/route-bundle-closure.test.ts (5 tests) 51ms
+ ✓ tests/modal-surface.test.tsx (5 tests) 44ms
+ ✓ tests/project-path-gate.test.ts (20 tests) 50ms
+ ✓ tests/usage-analytics-host.test.ts (2 tests) 38ms
+ ✓ tests/popover.test.tsx (7 tests) 56ms
+ ✓ tests/goal-chip.test.tsx (2 tests) 42ms
+ ✓ tests/output-motion.test.tsx (11 tests) 45ms
+ ✓ tests/text-size-setting.test.tsx (12 tests) 22ms
+ ✓ tests/command-palette.test.tsx (29 tests) 134ms
+stderr | tests/model-picker-axis.test.tsx > 芯片显示的是**当前档**（既有契约：显示的 = 发出去的） > 模型不支持当前档 ⇒ 芯片仍显示当前档（归位不许靠偷换显示）
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+
+ ✓ tests/model-picker-axis.test.tsx (11 tests) 41ms
+ ✓ tests/find-bar.test.tsx (4 tests) 32ms
+ ✓ tests/cds-components.test.ts (25 tests) 36ms
+ ✓ tests/quick-starts-ui.test.tsx (17 tests) 37ms
+stderr | tests/composer-attach.test.tsx > ＋附件菜单四入口（P2-2：零路径手输） > 两枚选择器都给了 ⇒ 四入口齐、顺序= 上传文件… → 添加文件夹… → 粘贴截图 → 引用最近文件
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+stderr | tests/composer-attach.test.tsx > ＋附件菜单四入口（P2-2：零路径手输） > 不给选择器 ⇒ 两枚选择器入口不在；粘贴截图与引用最近文件恒在（不依赖系统选择器）
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+ ✓ tests/provider-banner.test.tsx (2 tests) 39ms
+stderr | tests/composer-rework.test.tsx > P2-2 ＋ 菜单四项（零路径输入） > 四项文案在场：上传文件… / 添加文件夹… / 粘贴截图（⌘V） / 引用最近文件
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+stderr | tests/composer-rework.test.tsx > P2-2 ＋ 菜单四项（零路径输入） > 最近文件空态：该项 disabled 且 tooltip 说明（不摆空壳入口）
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+stderr | tests/composer-rework.test.tsx > P2-2 权限 chip（档位名 + 色点 data-mode） > 触发 chip：模式名 + 色点 data-mode + token 色（组件零字面色值）
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+stderr | tests/composer-rework.test.tsx > P2-2 模型+思考合并单面 > chip 文案 `名 · 思考 X`；未声明支持不带思考段
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+
+ ✓ tests/composer-attach.test.tsx (4 tests) 61ms
+stderr | tests/composer-rework.test.tsx > P2-2 发送/停止钮 title > 空闲：发送钮 title 含 ⏎；运行中：停止钮 title 含 ⌘.
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+ ✓ tests/composer-rework.test.tsx (22 tests) 48ms
+ ✓ tests/conversation-rail.test.ts (8 tests) 40ms
+ ✓ tests/tokens.test.ts (29 tests) 21ms
+ ✓ tests/usage-ledger-host.test.ts (3 tests) 52ms
+ ✓ tests/session-identity-ui.test.tsx (2 tests) 25ms
+ ✓ tests/settings-ui.test.tsx (19 tests) 81ms
+ ✓ tests/ime-guard.test.ts (12 tests) 31ms
+ ✓ tests/session-list-polish.test.tsx (5 tests) 18ms
+ ✓ tests/tool-rows.test.tsx (16 tests) 28ms
+ ✓ tests/settings-evolve.test.tsx (8 tests) 47ms
+ ✓ tests/motion-pref.test.ts (4 tests) 24ms
+ ✓ tests/review-split.test.ts (6 tests) 19ms
+ ✓ tests/sidebar-list-recovery.test.tsx (3 tests) 25ms
+ ✓ tests/stream-process.test.tsx (10 tests) 67ms
+ ✓ tests/session-project-assign.test.tsx (13 tests) 51ms
+stderr | tests/composer-running.test.tsx > Composer 运行中可沟通（C-18 / C-22） > 运行中：输入可用，空输入只留打断钮（不摆禁用灰钟），占位不写排队提示
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+stderr | tests/composer-running.test.tsx > Composer 运行中可沟通（C-18 / C-22） > 空闲：没有入队按钮，发送按钮在位
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+stderr | tests/composer-running.test.tsx > Composer 运行中可沟通（C-18 / C-22） > 运行中：权限档维持禁用；模型选择器可开（v7.2 业主裁——思考档要能调，模型行由菜单内锁定）
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+stderr | tests/composer-running.test.tsx > Composer 运行中可沟通（C-18 / C-22） > 门槛中（disabled+running=澄清/方案门）：输入禁用，占位「等待你的决定…」，入队钮不在场
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+ ✓ tests/composer-running.test.tsx (11 tests) 27ms
+ ✓ tests/session-open-workspace.test.ts (3 tests) 27ms
+ ✓ tests/thinking-selection.test.ts (5 tests) 26ms
+ ✓ tests/workspace-context.test.ts (3 tests) 40ms
+ ✓ tests/project-missing-badge.test.tsx (3 tests) 74ms
+ ✓ tests/queue-key.test.ts (6 tests) 30ms
+ ✓ tests/r1-stream-surfaces.test.tsx (10 tests) 20ms
+ ✓ tests/shortcuts-drift.test.ts (3 tests) 59ms
+ ✓ tests/provider-keys.test.ts (5 tests) 37ms
+ ✓ tests/phase-label.test.ts (6 tests) 21ms
+ ✓ tests/slash.test.ts (5 tests) 34ms
+ ✓ tests/composer-drafts.test.tsx (7 tests) 28ms
+ ✓ tests/update-notice.test.ts (5 tests) 4ms
+ ✓ tests/delivery-summary.test.tsx (9 tests) 20ms
+ ✓ tests/channels.test.ts (4 tests) 29ms
+ ✓ tests/goal-dismiss.test.ts (2 tests) 42ms
+stderr | tests/composer-suggestion.test.tsx > Composer 建议（Tab 想下一条 · 常驻芯片下架） > 任何形态都不再有常驻灰字芯片（suggest-ghost 全仓清零）；空闲空框只有 Tab 键帽
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+stderr | tests/composer-suggestion.test.tsx > Composer 建议（Tab 想下一条 · 常驻芯片下架） > 键帽门槛：没接线（旧消费者）不摆；门槛中（disabled）不摆
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+ ✓ tests/composer-suggestion.test.tsx (4 tests) 45ms
+ ✓ tests/composer-phase.test.ts (2 tests) 48ms
+ ✓ tests/tooltip-audit.test.tsx (4 tests) 25ms
+ ✓ tests/command-gate.test.ts (7 tests) 46ms
+ ✓ tests/protocol-version.test.ts (5 tests) 30ms
+stderr | tests/composer-usage-ring.test.tsx > 用量环（v3-lite .ring：环心数字 + 贴发送侧） > 上下文有数：环心是百分数（12400/20000 ⇒ 62），title / aria 报同一口径
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+stderr | tests/composer-usage-ring.test.tsx > 用量环（v3-lite .ring：环心数字 + 贴发送侧） > 窗口已声明但本会话还没跑过：环心「—」+ title 说「暂无数据」（不假报 0）
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+stderr | tests/composer-usage-ring.test.tsx > 用量环（v3-lite .ring：环心数字 + 贴发送侧） > 模型窗口未声明：环心「—」+ title 说「模型窗口未声明」（两种未知分开说清）
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+stderr | tests/composer-usage-ring.test.tsx > 用量环（v3-lite .ring：环心数字 + 贴发送侧） > 环钉在发送/中断钮左侧：DOM 序 = .spacer → 用量环 → 发送钮（原型 .bar 列序）
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+stderr | tests/composer-usage-ring.test.tsx > 批 4 输入区：状态条拆入环 / 强调发送 / 运行中红底转圈 / 聚焦强调描边 > 状态条整行已拆：组件与样式层无 status-strip 残留；环 title 带 轮/步/tok/缓存
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+ ✓ tests/composer-usage-ring.test.tsx (8 tests) 26ms
+ ✓ tests/inspector-missing-usage.test.tsx (2 tests) 16ms
+ ✓ tests/confirm-dialog.test.tsx (3 tests) 20ms
+ ✓ tests/image-lightbox.test.tsx (12 tests) 12ms
+ ✓ tests/markdown.test.tsx (31 tests) 19ms
+ ✓ tests/panes-structure.test.tsx (11 tests) 18ms
+ ✓ tests/micro-interaction.test.ts (7 tests) 20ms
+ ✓ tests/projections.test.ts (53 tests) 19ms
+ ✓ tests/interaction-deadends.test.ts (15 tests) 21ms
+ ✓ tests/plugins-derived.test.ts (4 tests) 15ms
+ ✓ tests/byok-e2e.test.ts (3 tests) 32ms
+ ✓ tests/contrast-gate.test.ts (15 tests) 14ms
+ ✓ tests/strings.test.ts (3 tests) 17ms
+stderr | tests/composer-steer.test.tsx > 运行中：插话与排队的两个入口不混 > 运行中 SSR：打断钮在位、输入可用、不摆常驻「回车排队」
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+ ✓ tests/composer-steer.test.tsx (4 tests) 11ms
+ ✓ tests/thinking-motion.test.tsx (6 tests) 27ms
+ ✓ tests/approval-card.test.tsx (12 tests) 16ms
+ ✓ tests/new-project-dialog.test.tsx (11 tests) 19ms
+ ✓ tests/session-reference-ui.test.tsx (5 tests) 14ms
+ ✓ tests/orchestration-pane.test.tsx (4 tests) 15ms
+ ✓ tests/send-queue.test.ts (31 tests) 17ms
+ ✓ tests/cds-parity.test.ts (21 tests) 18ms
+ ✓ tests/app-empty-terms.test.tsx (8 tests) 12ms
+ ✓ tests/menu-unify.test.tsx (15 tests) 17ms
+stderr | tests/session-open-recovery.test.tsx > 会话尚未完整读取时的写入保护 > 输入框说明读取失败需要重试，不冒充仍在加载
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at ModelPicker (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/ModelPicker.tsx:155:77)
+    at div
+    at div
+    at Composer (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/Composer.tsx:120:61)
+
+ ✓ tests/a11y-activate.test.tsx (5 tests) 9ms
+ ✓ tests/session-open-recovery.test.tsx (3 tests) 16ms
+ ✓ tests/app-log.test.ts (8 tests) 24ms
+ ✓ tests/tool-row-summary.test.ts (14 tests) 12ms
+ ✓ tests/pane-rows.test.tsx (15 tests) 16ms
+ ✓ tests/stream-memo.test.ts (4 tests) 8ms
+ ✓ tests/settings-advanced-section.test.tsx (17 tests) 11ms
+ ✓ tests/session-search-ui.test.tsx (4 tests) 10ms
+ ✓ tests/import-diagnosis.test.tsx (7 tests) 15ms
+ ✓ tests/render-resilience.test.tsx (6 tests) 13ms
+ ✓ tests/pane-disclosure.test.tsx (2 tests) 13ms
+ ✓ tests/pane-shortcuts.test.ts (8 tests) 15ms
+ ✓ tests/session-stream-isolation.test.ts (13 tests) 10ms
+stdout | tests/kernel-host.test.ts > M3 多工作区运行面 > 漂移检测：会话文件被外部追加后，下一次 run 被拒且报外部修改
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stderr | tests/kernel-host.test.ts > M3 多工作区运行面 > 漂移检测：会话文件被外部追加后，下一次 run 被拒且报外部修改
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+ ✓ tests/design-minimal.test.tsx (12 tests) 16ms
+ ✓ tests/tool-disclosure.test.tsx (3 tests) 84ms
+ ✓ tests/onboarding-checklist.test.tsx (13 tests) 34ms
+ ✓ tests/focus-mode.test.ts (4 tests) 8ms
+ ✓ tests/workbench-tools.test.tsx (3 tests) 11ms
+ ✓ tests/tool-lifecycle.test.tsx (3 tests) 10ms
+ ✓ tests/timeline-pane.test.tsx (7 tests) 9ms
+stdout | tests/kernel-host.test.ts > M4-5 removeWorkspace 缩面 > 缩面后该组不再经 listSessions 出现、createSession 白名单收窄；归属表与漂移基线同步清理
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stderr | tests/kernel-host.test.ts > M4-5 removeWorkspace 缩面 > 缩面后该组不再经 listSessions 出现、createSession 白名单收窄；归属表与漂移基线同步清理
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+ ✓ tests/terminal-drain.test.ts (2 tests) 3ms
+ ✓ tests/plugin-review.test.tsx (2 tests) 10ms
+ ✓ tests/plugins-pane-mcp-active.test.tsx (2 tests) 10ms
+ ✓ tests/font-assets-used.test.ts (3 tests) 11ms
+ ✓ tests/settings-issue-banner.test.tsx (4 tests) 33ms
+stdout | tests/kernel-host.test.ts > M4-5 removeWorkspace 缩面 > 该组有在跑会话 ⇒ fail-visible 拒绝缩面；run 收束后缩面放行（控制器零残留）
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stderr | tests/kernel-host.test.ts > M4-5 removeWorkspace 缩面 > 该组有在跑会话 ⇒ fail-visible 拒绝缩面；run 收束后缩面放行（控制器零残留）
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+ ✓ tests/ime-enter-coverage.test.ts (15 tests) 10ms
+ ✓ tests/tool-diff-payload.test.tsx (4 tests) 10ms
+ ✓ tests/file-pane-improvements.test.ts (8 tests) 7ms
+ ✓ tests/model-menu-interaction.test.tsx (3 tests) 10ms
+ ✓ tests/session-log-host.test.ts (3 tests) 38ms
+stdout | tests/kernel-host.test.ts > 第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点） > e2e：run 首条消息 ⇒ sidecar 标题落位 + push-only session_titled（带 ts）进 outbox
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stderr | tests/kernel-host.test.ts > 第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点） > e2e：run 首条消息 ⇒ sidecar 标题落位 + push-only session_titled（带 ts）进 outbox
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+ ✓ tests/settings-panel.test.ts (25 tests) 7ms
+ ✓ tests/session-log-viewer.test.tsx (6 tests) 17ms
+ ✓ tests/session-prefs.test.ts (7 tests) 4ms
+ ✓ tests/diagnostics-bundle.test.ts (5 tests) 14ms
+ ✓ tests/orchestration-controls.test.ts (14 tests) 6ms
+stdout | tests/kernel-host.test.ts > 第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点） > e2e：run 首条消息 ⇒ sidecar 标题落位 + push-only session_titled（带 ts）进 outbox
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ ✓ tests/queue-persistence-ui.test.tsx (3 tests) 14ms
+ ✓ tests/update-open-external.test.ts (7 tests) 10ms
+stderr | tests/kernel-host.test.ts > 第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点） > e2e：run 首条消息 ⇒ sidecar 标题落位 + push-only session_titled（带 ts）进 outbox
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+
+ ✓ tests/app-rail.test.tsx (1 test) 12ms
+ ✓ tests/kernel-host.test.ts (19 tests) 8267ms
+   ✓ kernel-host 纵向装配 (5)
+     ✓ run：demo 全链路落事件、会话 JSONL 落 <ws>/.agent/sessions 305ms
+   ✓ M3 多工作区运行面 (5)
+     ✓ 漂移检测：会话文件被外部追加后，下一次 run 被拒且报外部修改 6268ms
+   ✓ M4-5 removeWorkspace 缩面 (2)
+     ✓ 缩面后该组不再经 listSessions 出现、createSession 白名单收窄；归属表与漂移基线同步清理 315ms
+     ✓ 该组有在跑会话 ⇒ fail-visible 拒绝缩面；run 收束后缩面放行（控制器零残留） 345ms
+   ✓ 第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点） (3)
+     ✓ e2e：run 首条消息 ⇒ sidecar 标题落位 + push-only session_titled（带 ts）进 outbox 390ms
+ ✓ tests/pane-open-reveals-inspector.test.ts (6 tests) 8ms
+ ✓ tests/keyboard-modal-focus.test.ts (5 tests) 9ms
+stderr | tests/titlebar.test.tsx
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at TitleBar (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/TitleBar.tsx:10:51)
+
+stderr | tests/titlebar.test.tsx > 设置页返回（2026-10-21，评审后修正） > 设置打开时工具栏只留 chrome：不摆侧栏开关、也不摆工具栏返回
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at TitleBar (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/components/TitleBar.tsx:10:51)
+
+ ✓ tests/titlebar.test.tsx (10 tests) 12ms
+ ✓ tests/send-queue-strip.test.tsx (1 test) 5ms
+ ✓ tests/overlay-mutex.test.ts (7 tests) 7ms
+ ✓ tests/page-frame.test.tsx (3 tests) 7ms
+ ✓ tests/sidebar-groups.test.ts (17 tests) 6ms
+ ✓ tests/settings-doctor.test.tsx (12 tests) 23ms
+ ✓ tests/new-project-blank.test.tsx (2 tests) 15ms
+ ✓ tests/mcp-server-row.test.tsx (4 tests) 17ms
+ ✓ tests/marketplace-install-wiring.test.ts (6 tests) 11ms
+ ✓ tests/inspector-width.test.ts (4 tests) 6ms
+ ✓ tests/main-hardening.test.ts (11 tests) 5ms
+ ✓ tests/pane-persistence.test.ts (3 tests) 7ms
+ ✓ tests/motion-gaps.test.ts (13 tests) 22ms
+ ✓ tests/model-picker.test.ts (13 tests) 6ms
+ ✓ tests/composer-commands.test.ts (3 tests) 8ms
+ ✓ tests/panes.test.ts (18 tests) 8ms
+ ✓ tests/user-bubble-collapse.test.tsx (3 tests) 9ms
+ ✓ tests/marketplace-import-wiring.test.ts (7 tests) 6ms
+ ✓ tests/settings-section-search.test.ts (11 tests) 7ms
+ ✓ tests/sessions-view.test.ts (7 tests) 6ms
+ ✓ tests/workbench-sidebar.test.tsx (1 test) 6ms
+ ✓ tests/settings-ease.test.tsx (1 test) 8ms
+ ✓ tests/restore-drops-from-changes.test.ts (14 tests) 42ms
+ ✓ tests/edit-notice.test.ts (3 tests) 6ms
+ ✓ tests/terminal-utf8-decoder.test.ts (8 tests) 7ms
+ ✓ tests/session-cycle-target.test.tsx (2 tests) 5ms
+ ✓ tests/speech.test.ts (4 tests) 5ms
+ ✓ tests/palette-session-actions.test.ts (6 tests) 6ms
+ ✓ tests/run-notification.test.ts (13 tests) 5ms
+ ✓ tests/shortcuts.test.ts (6 tests) 18ms
+ ✓ tests/destination-workspace.test.tsx (2 tests) 20ms
+ ✓ tests/quick-starts.test.ts (13 tests) 9ms
+ ✓ tests/page-context-sidebar.test.tsx (1 test) 34ms
+ ✓ tests/notification-open-wiring.test.ts (4 tests) 5ms
+ ✓ tests/run-elapsed-per-session.test.ts (7 tests) 8ms
+ ✓ tests/memory-view.test.ts (8 tests) 43ms
+ ✓ tests/session-delete-retry.test.ts (6 tests) 6ms
+ ✓ tests/sidebar-session-search.test.ts (12 tests) 9ms
+ ✓ tests/model-waiting.test.tsx (17 tests) 8ms
+ ✓ tests/theme.test.ts (6 tests) 5ms
+ ✓ tests/memory-distill.test.ts (10 tests) 19ms
+ ✓ tests/delivery-trail-latest.test.ts (1 test) 3ms
+ ✓ tests/queue-target-binding.test.tsx (3 tests) 6ms
+ ✓ tests/permission-confirm.test.ts (6 tests) 4ms
+ ✓ tests/app-menu.test.ts (9 tests) 8ms
+ ✓ tests/drafts.test.ts (5 tests) 3ms
+ ✓ tests/app-lifecycle.test.ts (8 tests) 7ms
+ ✓ tests/plan-mode-wiring.test.ts (4 tests) 4ms
+ ✓ tests/sidebar-highlight.test.tsx (6 tests) 6ms
+ ✓ tests/model-picker-open-seq.test.ts (8 tests) 52ms
+ ✓ tests/motion.test.ts (6 tests) 3ms
+ ✓ tests/press-scale.test.ts (2 tests) 3ms
+ ✓ tests/live-time.test.ts (2 tests) 5ms
+ ✓ tests/last-session-restore.test.ts (2 tests) 5ms
+ ✓ tests/mention.test.ts (12 tests) 3ms
+ ✓ tests/diff-patch.test.ts (4 tests) 4ms
+ ✓ tests/popover-dismiss-coverage.test.ts (7 tests) 7ms
+ ✓ tests/browser-frame-gate.test.ts (11 tests) 3ms
+ ✓ tests/composer-radius.test.ts (3 tests) 7ms
+ ✓ tests/pane-close-order.test.ts (8 tests) 3ms
+ ✓ tests/change-diff-state.test.ts (5 tests) 4ms
+ ✓ tests/attachment-thumb.test.tsx (2 tests) 5ms
+ ✓ tests/plugin-strip.test.ts (2 tests) 3ms
+ ✓ tests/r2-composer-geometry.test.tsx (6 tests) 4ms
+ ✓ tests/control-accent.test.ts (8 tests) 6ms
+ ✓ tests/plugins-marketplace-state.test.ts (6 tests) 4ms
+ ✓ tests/boot-placeholder.test.ts (4 tests) 4ms
+ ✓ tests/goal-command.test.ts (3 tests) 2ms
+ ✓ tests/temp-file.test.ts (3 tests) 2ms
+ ✓ tests/automation-edit.test.tsx (3 tests) 19ms
+ ✓ tests/window-workspace-context.test.ts (7 tests) 5ms
+ ✓ tests/view-mode.test.ts (4 tests) 9ms
+ ✓ tests/session-prefs-isolation.test.ts (2 tests) 3ms
+ ✓ tests/popover-radius.test.ts (2 tests) 13ms
+ ✓ tests/plugins-pane.test.ts (3 tests) 6ms
+ ✓ tests/project-relocate.test.ts (2 tests) 6ms
+ ✓ tests/focus-ring.test.ts (5 tests) 6ms
+ ✓ tests/plugin-marketplace-wiring.test.ts (3 tests) 6ms
+ ✓ tests/overlay-focus.test.ts (1 test) 5ms
+ ✓ tests/sidebar-pinned-drag.test.ts (4 tests) 4ms
+ ✓ tests/settings-live.test.ts (2 tests) 3ms
+ ✓ tests/skeleton-shimmer.test.ts (3 tests) 5ms
+ ✓ tests/composer-slash-key.test.ts (4 tests) 5ms
+ ✓ tests/stream-session-boundary.test.ts (2 tests) 2ms
+ ✓ tests/rename-shortcut.test.ts (2 tests) 5ms
+ ✓ tests/last-session-decision.test.ts (9 tests) 7ms
+ ✓ tests/browser-permit-escape.test.ts (2 tests) 3ms
+ ✓ tests/sidebar-arrow-nav.test.ts (11 tests) 12ms
+ ✓ tests/project-presence.test.ts (5 tests) 4ms
+ ✓ tests/browser-local-ipv6.test.ts (3 tests) 4ms
+ ✓ tests/suggest.test.ts (4 tests) 5ms
+ ✓ tests/inspector-initial-state.test.ts (4 tests) 3ms
+ ✓ tests/license-import-ui.test.ts (2 tests) 3ms
+ ✓ tests/usage-export.test.ts (2 tests) 2ms
+ ✓ tests/composer-history.test.tsx (3 tests) 4ms
+ ✓ tests/window-vibrancy.test.ts (3 tests) 11ms
+ ✓ tests/changes-pane-accordion.test.ts (2 tests) 3ms
+ ✓ tests/palette-file-open.test.ts (3 tests) 3ms
+ ✓ tests/pinned-order.test.ts (4 tests) 7ms
+ ✓ tests/preferences-ui.test.ts (2 tests) 4ms
+ ✓ tests/boot-theme.test.ts (4 tests) 3ms
+ ✓ tests/app-destination.test.ts (2 tests) 4ms
+ ✓ tests/drift-verdict.test.ts (10 tests) 5ms
+ ✓ tests/thinking-prefs.test.ts (4 tests) 5ms
+ ✓ tests/v3-shadow-tokens.test.ts (4 tests) 4ms
+ ✓ tests/sidebar-density.test.ts (3 tests) 4ms
+ ✓ tests/alpha-hover-tokens.test.ts (3 tests) 4ms
+ ✓ tests/window-hardening.test.ts (3 tests) 7ms
+ ✓ tests/demo-banner.test.tsx (2 tests) 6ms
+ ✓ tests/marketplace-wiring.test.ts (2 tests) 5ms
+ ✓ tests/usage-summary.test.ts (4 tests) 17ms
+ ✓ tests/workspace-rel.test.ts (4 tests) 4ms
+ ✓ tests/navigation.test.ts (3 tests) 4ms
+ ✓ tests/quit-guard.test.ts (4 tests) 3ms
+ ✓ tests/user-visible-text.test.tsx (2 tests) 3ms
+ ✓ tests/popout-event-scope.test.ts (8 tests) 125ms
+ ✓ tests/model-menu-fit.test.ts (3 tests) 3ms
+ ✓ tests/cards.test.ts (2 tests) 3ms
+ ✓ tests/row-actions-reveal.test.ts (5 tests) 9ms
+ ✓ tests/memory-export.test.ts (2 tests) 4ms
+ ✓ tests/shortcut-key-source.test.ts (2 tests) 2ms
+ ✓ tests/scroll-behavior.test.ts (3 tests) 2ms
+ ✓ tests/app-page-snapshot.test.ts (1 test) 5ms
+ ✓ tests/sidebar-session-context-menu.test.ts (5 tests) 3ms
+ ✓ tests/readme-assets.test.ts (1 test) 2ms
+ ✓ tests/browser-permit-focus.test.ts (2 tests) 4ms
+ ✓ tests/styles-motion.test.ts (2 tests) 4ms
+ ✓ tests/browser-clear-confirm.test.ts (2 tests) 3ms
+ ✓ tests/composer-esc.test.ts (3 tests) 8ms
+ ✓ tests/session-target.test.ts (3 tests) 4ms
+ ✓ tests/destination-pages.test.ts (1 test) 3ms
+ ✓ tests/session-worktree.test.ts (1 test) 4ms
+ ✓ tests/window-state.test.ts (2 tests) 5ms
+ ✓ tests/r3-scroll-physics.test.ts (4 tests) 5ms
+ ✓ tests/session-archive-running.test.ts (1 test) 3ms
+ ✓ tests/boot-rehydrate.test.ts (2 tests) 2ms
+ ✓ tests/search-card-endpoint.test.ts (3 tests) 4ms
+ ✓ tests/terminal-clipboard.test.ts (2 tests) 3ms
+ ✓ tests/field-fill-token.test.ts (2 tests) 7ms
+ ✓ tests/terminal-restart.test.ts (1 test) 1ms
+ ✓ tests/preview-order.test.ts (1 test) 3ms
+ ✓ tests/browser-forget-hosts.test.ts (2 tests) 3ms
+ ✓ tests/theme-browser-env.test.ts (1 test) 3ms
+ ✓ tests/popout-title.test.ts (1 test) 3ms
+ ✓ tests/browser-focus.test.ts (1 test) 2ms
+ ✓ tests/csp-build.test.ts (2 tests) 2ms
+ ✓ tests/permission-options-parity.test.ts (2 tests) 3ms
+
+ Test Files  299 passed (299)
+      Tests  2022 passed (2022)
+   Start at  13:37:04
+   Duration  15.43s (import 45%, tests 32%, transform 21%, worker 2%)
+
+    Isolate  299 workers spawned · ~122ms startup each (spawn + environment, per file)
+             at least ~5.10s faster with isolate: false — reuses workers across files instead of one per file
+
+desktop-boundary-check: 绿（src 无反向依赖、无 UI import）
+EXIT=0

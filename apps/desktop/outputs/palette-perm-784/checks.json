@@ -1,0 +1,329 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "首屏是空态（提示条与权限 chip 都在这一屏）",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "初始档来自设置（guided ⇒「引导」）",
+      "ok": true,
+      "detail": "引导"
+    },
+    {
+      "name": "第 1 次：⌘K 能打开命令面板并选中「切换权限档」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "第 1 次：chip 显示「自动」",
+      "ok": true,
+      "detail": "自动"
+    },
+    {
+      "name": "第 1 次：setSettings 收到 mode=auto",
+      "ok": true,
+      "detail": [
+        {
+          "mode": "auto"
+        }
+      ]
+    },
+    {
+      "name": "第 1 次：提示条确认「自动」",
+      "ok": true,
+      "detail": "权限档已切到「自动」（低风险免批；高风险仍出卡）"
+    },
+    {
+      "name": "第 2 次：⌘K 能打开命令面板并选中「切换权限档」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "第 2 次：chip 显示「完全允许」",
+      "ok": true,
+      "detail": "完全允许"
+    },
+    {
+      "name": "第 2 次：setSettings 收到 mode=full-access",
+      "ok": true,
+      "detail": [
+        {
+          "mode": "auto"
+        },
+        {
+          "mode": "full-access"
+        }
+      ]
+    },
+    {
+      "name": "第 2 次：提示条确认「完全允许」",
+      "ok": true,
+      "detail": "权限档已切到「完全允许」（不再出任何审批卡；出网仍一次性批准，方案门与禁止规则仍生效）"
+    },
+    {
+      "name": "最松档的提示条带同一句风险说明（不是只报档名）",
+      "ok": true,
+      "detail": "权限档已切到「完全允许」（不再出任何审批卡；出网仍一次性批准，方案门与禁止规则仍生效）"
+    },
+    {
+      "name": "第 3 次：⌘K 能打开命令面板并选中「切换权限档」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "第 3 次：chip 显示「只读」",
+      "ok": true,
+      "detail": "只读"
+    },
+    {
+      "name": "第 3 次：setSettings 收到 mode=read-only",
+      "ok": true,
+      "detail": [
+        {
+          "mode": "auto"
+        },
+        {
+          "mode": "full-access"
+        },
+        {
+          "mode": "read-only"
+        }
+      ]
+    },
+    {
+      "name": "第 3 次：提示条确认「只读」",
+      "ok": true,
+      "detail": "权限档已切到「只读」（写工具一律拒）"
+    },
+    {
+      "name": "第 4 次：⌘K 能打开命令面板并选中「切换权限档」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "第 4 次：chip 显示「默认」",
+      "ok": true,
+      "detail": "默认"
+    },
+    {
+      "name": "第 4 次：setSettings 收到 mode=default",
+      "ok": true,
+      "detail": [
+        {
+          "mode": "auto"
+        },
+        {
+          "mode": "full-access"
+        },
+        {
+          "mode": "read-only"
+        },
+        {
+          "mode": "default"
+        }
+      ]
+    },
+    {
+      "name": "第 4 次：提示条确认「默认」",
+      "ok": true,
+      "detail": "权限档已切到「默认」（写/跑逐次审批出卡）"
+    },
+    {
+      "name": "第 5 次：⌘K 能打开命令面板并选中「切换权限档」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "第 5 次：chip 显示「引导」",
+      "ok": true,
+      "detail": "引导"
+    },
+    {
+      "name": "第 5 次：setSettings 收到 mode=guided",
+      "ok": true,
+      "detail": [
+        {
+          "mode": "auto"
+        },
+        {
+          "mode": "full-access"
+        },
+        {
+          "mode": "read-only"
+        },
+        {
+          "mode": "default"
+        },
+        {
+          "mode": "guided"
+        }
+      ]
+    },
+    {
+      "name": "第 5 次：提示条确认「引导」",
+      "ok": true,
+      "detail": "权限档已切到「引导」（低风险自动、高风险出卡）"
+    },
+    {
+      "name": "五次动作后补丁序列恰为五档一轮（没有多余写）",
+      "ok": true,
+      "detail": [
+        {
+          "mode": "auto"
+        },
+        {
+          "mode": "full-access"
+        },
+        {
+          "mode": "read-only"
+        },
+        {
+          "mode": "default"
+        },
+        {
+          "mode": "guided"
+        }
+      ]
+    },
+    {
+      "name": "回到起点：完整一轮后档位与初始一致",
+      "ok": true,
+      "detail": "引导"
+    },
+    {
+      "name": "⌘, 打开设置面板",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "点到「权限与安全」分区",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "设置页列满五档（第五档不再缺席）",
+      "ok": true,
+      "detail": [
+        {
+          "title": "只读",
+          "checked": "false",
+          "danger": false
+        },
+        {
+          "title": "默认 · 逐次审批",
+          "checked": "false",
+          "danger": false
+        },
+        {
+          "title": "引导 · 按风险放行",
+          "checked": "true",
+          "danger": false
+        },
+        {
+          "title": "自动 · 低风险免批",
+          "checked": "false",
+          "danger": true
+        },
+        {
+          "title": "完全允许 · 不再出卡",
+          "checked": "false",
+          "danger": true
+        }
+      ]
+    },
+    {
+      "name": "盘上档位 guided ⇒ 恰一枚选中在「引导」",
+      "ok": true,
+      "detail": [
+        {
+          "title": "只读",
+          "checked": "false",
+          "danger": false
+        },
+        {
+          "title": "默认 · 逐次审批",
+          "checked": "false",
+          "danger": false
+        },
+        {
+          "title": "引导 · 按风险放行",
+          "checked": "true",
+          "danger": false
+        },
+        {
+          "title": "自动 · 低风险免批",
+          "checked": "false",
+          "danger": true
+        },
+        {
+          "title": "完全允许 · 不再出卡",
+          "checked": "false",
+          "danger": true
+        }
+      ]
+    },
+    {
+      "name": "真指针点到「完全允许」单选项",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "点选后写入 mode=full-access",
+      "ok": true,
+      "detail": [
+        {
+          "mode": "full-access"
+        }
+      ]
+    },
+    {
+      "name": "点选后恰该档选中（不再出现「全不选中」）",
+      "ok": true,
+      "detail": [
+        "完全允许 · 不再出卡"
+      ]
+    },
+    {
+      "name": "最松档在设置页带 danger 样式与「最松档」警示",
+      "ok": true,
+      "detail": {
+        "calls": [
+          {
+            "mode": "full-access"
+          }
+        ],
+        "checked": [
+          "完全允许 · 不再出卡"
+        ],
+        "danger": true,
+        "warn": "最松档——风险线与 critical 也不再询问。确认你在受信任的仓库里。"
+      }
+    },
+    {
+      "name": "设置页保存后 composer chip 同步到「完全允许」",
+      "ok": true,
+      "detail": {
+        "chip": "完全允许",
+        "notice": "权限档已切到「完全允许」——不再出任何审批卡；出网仍一次性批准，方案门与禁止规则仍生效"
+      }
+    },
+    {
+      "name": "设置页保存也给出权限档回执（—— 句式，与面板路径同口径）",
+      "ok": true,
+      "detail": "权限档已切到「完全允许」——不再出任何审批卡；出网仍一次性批准，方案门与禁止规则仍生效"
+    },
+    {
+      "name": "点回「引导」恢复测试前档位",
+      "ok": true,
+      "detail": "guided"
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

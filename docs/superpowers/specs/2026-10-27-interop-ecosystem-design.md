@@ -86,3 +86,43 @@ that erases the first result.
 - external benchmark runs preserve failures and unknowns;
 - no interface exposes raw secrets or unredacted internal events.
 
+## Implementation Status (2026-10-27)
+
+| Surface | Implementation | Evidence |
+|---|---|---|
+| Tool search | `src/agent/tool-search.ts` (BM25-style, deterministic, bounded), wired through `src/main/tool-gates.ts` as a read-only runtime tool; hidden MCP tools remain inactive until `mcp_activate` | `tests/tool-search.test.ts` (7), `tests/tool-search-tool.test.ts` (2) |
+| SDK v1 | `src/interop/sdk.ts`: versioned `AgentClientV1`, explicit capability negotiation, public event union, redacted projection, real `runLoop` host. Tool execution is **host-injected**; the default is an empty table, so the SDK cannot silently fall back to the raw static `TOOLS` and bypass permission gates | `tests/interop-sdk.test.ts` (12) |
+| ACP | `src/interop/acp.ts`: `initialize` / `session/new` / `session/prompt` / `session/cancel`, JSON-RPC dispatch, `session/update` notifications from the same SDK events; `src/interop/acp-stdio.ts`: bounded newline-delimited stdio transport that dispatches requests concurrently so cancel can arrive during a prompt | `tests/interop-sdk.test.ts`, `tests/interop-acp-stdio.test.ts` (3) |
+| A2A | `src/interop/a2a.ts`: task id = logical agent id, message id = idempotency key, content-addressed artifacts, public lifecycle mapping, fenced cancel/resume with protocol version; `src/interop/a2a-http.ts`: loopback JSON-RPC HTTP + agent-card endpoint with body caps and explicit 404/405/415/413 | `tests/interop-a2a.test.ts` (6), `tests/interop-a2a-http.test.ts` (3) |
+| External benchmarks | `src/interop/benchmarks.ts` adapters + run records; `scripts/external-bench.ts` CLI; fixtures under `fixtures/bench-external/` | `tests/interop-benchmarks.test.ts` (5), `outputs/interop-c-2026-10-27/external-bench.jsonl` |
+| Product host / servers | `src/main/interop-host.ts` maps SDK runs onto `handleAgentRun`; `src/main/interop-a2a-runtime.ts` maps A2A tasks onto the same product sessions (read-only). `scripts/acp-server.ts` serves stdio; `scripts/a2a-server.ts` serves loopback HTTP | `tests/interop-host.test.ts` (1), `tests/acp-server-cli.test.ts` (1), `tests/interop-a2a-product.test.ts` (1), `tests/a2a-server-cli.test.ts` (1) |
+
+Acceptance mapping:
+
+- hidden-tool discovery without activation and the subsequent permission denial:
+  `tests/tool-search-tool.test.ts`;
+- SDK/ACP event equivalence: the ACP test derives the expected updates from the SDK stream with the
+  same pure mapping used by the adapter;
+- A2A duplicate-message idempotency and stale-fence rejection: `tests/interop-a2a.test.ts`;
+- external failure/interruption/unknown preservation: adapter tests plus the CLI fixture run, where a
+  failed task keeps its failure, a task without evidence stays `unknown`, and missing usage is `null`
+  with named `unknown` fields;
+- secret redaction: `toClientEvents` passes tool arguments, outputs, and errors through the existing
+  redaction path; the SDK test asserts a planted key never appears in the public projection.
+
+Explicit boundaries:
+
+- ACP ships a stdio server (`pnpm acp-server`) backed by `handleAgentRun`; the workspace is fixed and
+  the default is `unattended:true`, so write tools fail closed. `--mode auto`/`full-access` is an
+  explicit trusted-client choice. There is still no `session/request_permission` bridge and no packaged
+  editor-client certification.
+- A2A ships a loopback HTTP server (`pnpm a2a-server`) backed by the same product sessions, but the
+  product runtime accepts **read-only** tasks only. There is no authentication, TLS, SSE streaming,
+  push notifications, or durable task store beyond the session log. `tasks/resume` is not resumable
+  for completed product runs.
+- External benchmark adapters normalize tasks and record runs; they do not execute Harbor or
+  Terminal-Bench infrastructure, clone repositories, or call a model. A real external run requires an
+  executor outside this repository.
+- None of these adapters replaces the existing approval, write-lease, or audit paths. The SDK host
+  receives its tool table from the caller; the default is empty, so it cannot fall back to the raw
+  static tools. The product ACP/A2A servers go through `handleAgentRun`, not a second execution path.

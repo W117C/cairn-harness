@@ -1,0 +1,27 @@
+packaged smoke:
+[cairn-smoke] PASS in 1959 ms
+[package] 完成（已验证打包态）：/Users/ze/Downloads/Cairn/cairn/apps/desktop/release-829/Cairn.app
+
+release contents:
+Cairn.app
+Cairn.dmg
+build-info.json
+
+sizes:
+ 
+96B Cairn.app
+149M Cairn.dmg
+255B build-info.json
+
+mounted:
+total 0
+drwxr-xr-x@ 4 ze    staff  128 Oct 30 17:05 .
+drwxr-xr-x  5 root  wheel  160 Oct 30 17:05 ..
+lrwxr-xr-x@ 1 ze    staff   13 Oct 30 17:05 Applications -> /Applications
+drwxr-xr-x@ 3 ze    staff   96 Oct 30 17:05 Cairn.app
+
+applications link:
+/Applications
+
+version:
+  "CFBundleShortVersionString" => "0.2.0"

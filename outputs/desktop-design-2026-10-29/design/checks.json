@@ -1,0 +1,166 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "打开模型菜单即聚焦搜索",
+      "ok": true
+    },
+    {
+      "name": "当前模型定位与高亮一致",
+      "ok": true
+    },
+    {
+      "name": "方向键切换可见焦点并同步读屏引用",
+      "ok": true
+    },
+    {
+      "name": "搜索只留下命中模型并重置焦点",
+      "ok": true
+    },
+    {
+      "name": "中文输入法确认不误选模型",
+      "ok": true
+    },
+    {
+      "name": "在思考档位按Enter不会误选模型",
+      "ok": true
+    },
+    {
+      "name": "思考档位修改生效且保留控件焦点",
+      "ok": true
+    },
+    {
+      "name": "1440×900模型列表与底部操作不越界",
+      "ok": true,
+      "detail": {
+        "top": 38.5625,
+        "bottom": 389.5625,
+        "left": 667.5,
+        "right": 1011.5,
+        "width": 1440,
+        "height": 900,
+        "effortBottom": 333.5625,
+        "manageBottom": 382.5625,
+        "display": "flex",
+        "listOverflow": "auto"
+      }
+    },
+    {
+      "name": "880×640模型列表与底部操作不越界",
+      "ok": true,
+      "detail": {
+        "top": 355.28125,
+        "bottom": 637.28125,
+        "left": 468,
+        "right": 812,
+        "width": 880,
+        "height": 640,
+        "effortBottom": 581.28125,
+        "manageBottom": 630.28125,
+        "display": "flex",
+        "listOverflow": "auto"
+      }
+    },
+    {
+      "name": "880×420模型列表与底部操作不越界",
+      "ok": true,
+      "detail": {
+        "top": 44,
+        "bottom": 408,
+        "left": 468,
+        "right": 812,
+        "width": 880,
+        "height": 420,
+        "effortBottom": 352,
+        "manageBottom": 401,
+        "display": "flex",
+        "listOverflow": "auto"
+      }
+    },
+    {
+      "name": "搜索后Enter选择GLM并关闭菜单",
+      "ok": true,
+      "detail": {
+        "active": "<input type=\"text\" role=\"combobox\" aria-expanded=\"true\" aria-autocomplete=\"list\" aria-controls=\":rv:\" aria-activedescendant=\":rv:-option-0\" aria-label=\"搜索模型\" placeholder=\"搜索模型或 provider…\" value=\"glm\">",
+        "highlight": "glm-5.3-flash1M",
+        "trigger": "deepseek-chat · 思考 关"
+      }
+    },
+    {
+      "name": "不支持思考的模型保留原因且底部操作可见",
+      "ok": true,
+      "detail": {
+        "top": 38,
+        "bottom": 361,
+        "left": 468,
+        "right": 812,
+        "width": 880,
+        "height": 420,
+        "effortBottom": 245.609375,
+        "manageBottom": 354,
+        "display": "flex",
+        "listOverflow": "auto"
+      }
+    },
+    {
+      "name": "展开能力说明后底部操作仍在菜单内",
+      "ok": true,
+      "detail": {
+        "top": 38,
+        "bottom": 361,
+        "left": 468,
+        "right": 812,
+        "width": 880,
+        "height": 420,
+        "effortBottom": 206.421875,
+        "manageBottom": 354,
+        "display": "flex",
+        "listOverflow": "auto"
+      }
+    },
+    {
+      "name": "Esc关闭并归还模型入口焦点",
+      "ok": true
+    },
+    {
+      "name": "筛选菜单只有五个选项，无重复标题和脚注",
+      "ok": true,
+      "detail": {
+        "text": "全部\n1\n运行中\n0\n已置顶\n0\n已归档\n0\n定时任务\n0",
+        "top": 116,
+        "bottom": 308.46875,
+        "items": 5
+      }
+    },
+    {
+      "name": "筛选生效后入口明确标记，列表有恢复入口",
+      "ok": true
+    },
+    {
+      "name": "清除筛选恢复对话",
+      "ok": true
+    },
+    {
+      "name": "思考与工具默认收起，思考没有重复摘要",
+      "ok": true
+    },
+    {
+      "name": "展开思考后正文可读",
+      "ok": true
+    },
+    {
+      "name": "工具组支持展开明细",
+      "ok": true
+    },
+    {
+      "name": "深色模型菜单使用深色面",
+      "ok": true
+    },
+    {
+      "name": "renderer无控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

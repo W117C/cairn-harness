@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { UsageLedgerPayload } from "../../../src/main/ipc-protocol";
@@ -33,6 +35,11 @@ describe("usage dashboard", () => {
     expect(usageTokenLabel(0, 0)).toBe("—");
     expect(usageTokenLabel(0, 1)).toBe("0");
     expect(usageTokenLabel(150, 1)).toBe("150");
+    // 第 936 页：与用量环同一把尺（k/m），不再是中文紧凑写法「1.4万」
+    expect(usageTokenLabel(14_000, 1)).toBe("14.0k");
+    expect(usageTokenLabel(1_250_000, 1)).toBe("1.3m");
+    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings/usage-dashboard-data.ts", import.meta.url)), "utf8");
+    expect(src).not.toContain('notation: "compact"');
   });
 
   it("uses the scanner timezone for the calendar boundary, even if the renderer timezone differs", () => {

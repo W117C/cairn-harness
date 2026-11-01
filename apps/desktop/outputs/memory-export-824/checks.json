@@ -1,0 +1,36 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "真指针点记忆目的地",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "记忆页已打开",
+      "ok": true,
+      "detail": "Cairn\n全部\n项目层\n全局层\n记忆\n项目层\n24\n全局层\n0\n待批外部引用\n0\n最近更新\n导出记忆…\nmemory-01\nproject · 184B · 1 小时前\n项目层\nmemory-02\nproject · 185B · 2 小"
+    },
+    {
+      "name": "记忆页有「导出记忆…」按钮",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "真指针点导出",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "导出回执上屏（含路径）",
+      "ok": true,
+      "detail": "已导出：/tmp/cairn-memory.md"
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

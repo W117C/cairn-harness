@@ -1,0 +1,44 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "真实指针点到「自动化」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "横幅点名坏档文件与原因",
+      "ok": true,
+      "detail": "调度任务文件损坏：/tmp/cairn-profile/automations.json（JSON 解析失败）——修好或删除该文件后重试，本次不覆盖。修好之前，新建、修改、删除任务都会被拒绝。"
+    },
+    {
+      "name": "横幅说清写路径会被拒（不是只报错）",
+      "ok": true,
+      "detail": "调度任务文件损坏：/tmp/cairn-profile/automations.json（JSON 解析失败）——修好或删除该文件后重试，本次不覆盖。修好之前，新建、修改、删除任务都会被拒绝。"
+    },
+    {
+      "name": "空态仍在：警告是叠加说明，不是替代空态",
+      "ok": true,
+      "detail": {
+        "banner": "调度任务文件损坏：/tmp/cairn-profile/automations.json（JSON 解析失败）——修好或删除该文件后重试，本次不覆盖。修好之前，新建、修改、删除任务都会被拒绝。",
+        "empty": true,
+        "createEnabled": true
+      }
+    },
+    {
+      "name": "「新建任务」仍可点：修好文件后靠一次成功写入清掉横幅（不是死路）",
+      "ok": true,
+      "detail": {
+        "banner": "调度任务文件损坏：/tmp/cairn-profile/automations.json（JSON 解析失败）——修好或删除该文件后重试，本次不覆盖。修好之前，新建、修改、删除任务都会被拒绝。",
+        "empty": true,
+        "createEnabled": true
+      }
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

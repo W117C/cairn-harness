@@ -133,14 +133,6 @@ async function loadContainer(
         // 过去这里手抄 8 个字符串，加字段的人只会改 interface，于是合法配置被报成「未知字段忽略」。
         const unknown = Object.keys(cfg).filter((k) => !LSP_SERVER_FIELDS.has(k));
         if (unknown.length > 0) warnings.push("lsp server " + id + ": 未知字段忽略（不阻断）: " + unknown.join(", "));
-        // §9.8 的字段里只有这几个是运行时真正兑现的；剩下的收下不兑现 = 本仓点名的"收下即丢"，
-        // 所以**当场说出来**：作者以为配了重启策略，实际崩了就崩了。
-        const unhonored = [
-          ...(cfg.startupTimeout !== undefined ? ["startupTimeout"] : []),
-          ...(cfg.restartOnCrash !== undefined ? ["restartOnCrash"] : []),
-          ...(cfg.diagnostics?.maxPerFile !== undefined ? ["diagnostics.maxPerFile"] : []),
-        ];
-        if (unhonored.length > 0) warnings.push("lsp server " + id + ": 这些字段本轮不生效（运行时未实现）: " + unhonored.join(", "));
         lsp[id] = cfg;
       } else {
         warnings.push("lsp server " + id + ": 缺少 command，忽略");
@@ -167,6 +159,11 @@ async function loadContainer(
     warnings,
     trust,
   };
+}
+
+/** Inspect one extracted plugin directory without activating it. */
+export async function inspectPluginDirectory(root: string): Promise<DiscoveredPlugin> {
+  return await loadContainer(root, "user", "pending");
 }
 
 /** 事件表 → 扁平 hook 定义列表；${user_config.*} 禁入 shell-form hook（loaded=false，调用方产警告）。 */

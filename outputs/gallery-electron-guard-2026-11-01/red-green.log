@@ -1,0 +1,9 @@
+=== 改前：去掉体检（回到 app.whenReady 那条路）===
+     × ELECTRON_RUN_AS_NODE=1 ⇒ 指认环境、退 2（不是一段 node 栈） 35ms
+AssertionError: expected 1 to be 2 // Object.is equality
+      Tests  1 failed (1)
+
+=== 复原后 ===
+      Tests  1 passed (1)
+=== sha256 ===
+   2 647addfb41ebfc70d4c78cd3ba36991a257473a008ef5f42295ca46e1b3fd3c9

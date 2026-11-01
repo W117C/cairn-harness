@@ -3,6 +3,7 @@ import { useConversationNavigation } from "./conversation-navigation";
 import { useEmptySurfaceEffects } from "./empty-surface";
 import { useProjectActions } from "./projects";
 import { useRunQueue } from "./run-queue";
+import { useSessionPrefsHydration } from "./session-prefs";
 import { useRunReadings } from "./run-readings";
 import { inheritedDisplayIndexes, mergeViewEvents, refsByDisplayIndex } from "../derived/event-reference";
 import { runKey } from "./session-identity";
@@ -22,16 +23,17 @@ import type { StreamActions } from "../stream-actions";
 // 预览状态是**类型**导入（值面留在主进程：project-preview 拖 node:http/child_process，
 // 渲染层只消费推送快照；文案在渲染层按 status 组合）。
 import { traceGoal } from "../../../../../src/agent/goal-trace";
-import type { PaletteAction,SectionId } from "../app-controls";
+import type { AppDestination,AppPageDestination,PaletteAction,SectionId } from "../app-controls";
 import { type FindBarHandle } from "../app-controls";
 import { readDismissedGoals } from "../goal-dismiss";
 import { decideLastSessionRestore,parseLastSession,serializeLastSession,type LastSessionRef } from "../last-session";
 import { changedFileCount } from "../changed-files";
-import { MODE_LABEL } from "../permission-labels";
+import { nextPermissionMode } from "../permission-labels";
+import { usePermissionConfirm } from "./use-permission-confirm";
 import { countRunSteps,countToolSteps,deliveryTrail,formatRevertNotice,mergeSessionSnapshot,projectStream,turnDelivery,usageAggregate,usageSummary } from "../projections";
 import { type QuickStartInput } from "../quick-starts";
 import { composerLockReason,fromSessionQueueEntries,type QueuedSend } from "../send-queue";
-import type { WorkspaceSession } from "../sessions-view";
+import type { DeleteConfirmTarget, SessionConfirmTarget, WorkspaceSession } from "../sessions-view";
 import { findSessionByRef } from "../sessions-view";
 import type { SlashSkill } from "../slash";
 import { turnSummaries } from "../stream-model";
@@ -40,16 +42,17 @@ import { buildSuggestContext } from "../suggest";
 import { type ThemePref } from "../theme";
 import { toast } from "../toast";
 import { transcriptFileName,transcriptMarkdown } from "../transcript";
-import type { UsageAllState } from "../usage-state";
 import { useMessageAnnotations } from "../useMessageAnnotations";
 import { usePopoverDismiss } from "../usePopoverDismiss";
 import { useStickyScroll } from "../useStickyScroll";
 import { relInWorkspace } from "../workspace-rel";
 import { useChrome } from "./chrome";
+import { useWorkbenchDestination } from "./app-destination";
 import { useComposerDrafts } from "./drafts";
 import { useMessageActions } from "./message-actions";
 import { useOnboardingGroups } from "./onboarding";
 import { useSessionOps } from "./sessions";
+import { useSessionList } from "./session-list";
 
 
 declare global { interface Window { agent: import("../../../../../src/main/ipc-protocol").AgentApi } }
@@ -69,13 +72,7 @@ interface EmptySurface {
 }
 
 export function useWorkbenchModel() {
-  // 会话清单带归属工作区（host.listSessions 的 desktop 扩展字段，交叉类型收窄——同 aborted 先例）。
-  const [sessions, setSessions] = useState<WorkspaceSession[]>([]);
-  // 会话清单是否已从盘上读过一轮（空屏建议要等它——「继续上次」的原料是最近标题，抢跑会漏）。
-  const [sessionsLoaded, setSessionsLoaded] = useState(false);
-  // 清单读取失败（2026-10-18）：此前失败只会让 sessionsLoaded 永远停在 false，
-  // 侧栏分不出「还没有任务」与「没读到」；现在失败可见并可重试（空 ≠ 失败）。
-  const [sessionsLoadError, setSessionsLoadError] = useState(false);
+  const { sessions, sessionsLoaded, sessionsLoadError, sessionsLoadErrorDetail, sessionsRefreshing, refreshSessions, retrySessions } = useSessionList();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   // 来源视图（指针分叉）：openSession 回包里的 SessionView；没分叉的会话为 null（渲染走原路径）。
@@ -96,6 +93,8 @@ export function useWorkbenchModel() {
   const sendQueue = useRef(new Map<string, QueuedSend[]>());
   // sidecar 写入按会话串行：快速连点时后一笔必须等前一笔落盘，不能靠 IPC 到达顺序赌最后写入。
   const queueWrites = useRef(new Map<string, Promise<unknown>>());
+  const queueDirty = useRef(new Set<string>());
+  const queueRevision = useRef(new Map<string, number>());
   const queueSeq = useRef(0);
   // 思考档位（每会话一份；缺省 off = 不向发请求体里加思考参数）
   const thinkingBySession = useRef(new Map<string, string>());
@@ -106,11 +105,13 @@ export function useWorkbenchModel() {
   const activeIdRef = useRef<string | null>(null);
   const [, force] = useState(0);
   const setQueueLocal = useCallback((sid: string, list: QueuedSend[]) => {
+    queueRevision.current.set(sid, (queueRevision.current.get(sid) ?? 0) + 1);
     if (list.length === 0) sendQueue.current.delete(sid); else sendQueue.current.set(sid, list);
     force((n) => n + 1);
   }, []);
   // 打开会话时 sidecar 读回未完成前先锁输入，避免“先发新消息、后读回旧队列”互相覆盖。
   const [queueLoading, setQueueLoading] = useState(false);
+  const [sessionLoadIssue, setSessionLoadIssue] = useState<{ seq: number; message: string } | null>(null);
   // M2-4 模型选择：per-session 内存态（Map<sessionId, registryId|null>），M4 才落 settings。
   const selections = useRef(new Map<string, string | null>());
   const [providerInfo, setProviderInfo] = useState<ProviderInfo | null>(null);
@@ -132,7 +133,6 @@ export function useWorkbenchModel() {
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [dragOverApp, setDragOverApp] = useState(false);
   // 空屏（对话未开：无会话且零事件）——建议装配 / 首启副标题 / 居中枢位布局都以此为准。
-  const showEmpty = activeId === null && events.length === 0;
   // P2-1 空屏面：首启标记（settings.onboarded）/ 建议与分支数据（按项目路径缓存）/ 项目 chip 弹层。
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
   const [emptyData, setEmptyData] = useState<EmptySurface | null>(null);
@@ -284,29 +284,12 @@ export function useWorkbenchModel() {
   // §3.6/§7.3.3：Ctrl+Tab 会话循环开关（设置页可关；缺省开）。
   const [ctrlTabCycle, setCtrlTabCycle] = useState(true);
   const [pendingSend, setPendingSend] = useState(false);
+  const showEmpty = activeId === null && events.length === 0 && !pendingSend;
   // M3-5 已停态真值驱动。
   const [stoppedIds, setStoppedIds] = useState<ReadonlySet<string>>(new Set());
   // 设置页（initialSection：直达分区）。
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // 用量统计「全部会话」账本（批 131）：懒加载——只有用户切到全部口径才向主进程要；
-  // 主进程按路径+size+mtime 缓存，重复打开只重读变过的会话。seq 守卫防旧响应盖新响应。
-  const [usageAll, setUsageAll] = useState<UsageAllState>({ status: "idle" });
-  const usageAllSeq = useRef(0);
-  const loadUsageAll = useCallback(() => {
-    const seq = ++usageAllSeq.current;
-    // 已有数字时保留旧读数（刷新不闪空）；首次/失败后才显示统计中。
-    setUsageAll((prev) => (prev.status === "ready" ? prev : { status: "loading" }));
-    void Promise.resolve().then(() => window.agent.usageLedger()).then(
-      (r) => {
-        if (seq !== usageAllSeq.current) return;
-        setUsageAll(r.ok ? { status: "ready", data: r } : { status: "error", error: r.error });
-      },
-      (e: unknown) => {
-        if (seq !== usageAllSeq.current) return;
-        setUsageAll({ status: "error", error: e instanceof Error ? e.message : String(e) });
-      },
-    );
-  }, []);
+  const { destination, pageFilter, openDestination, setPageFilter } = useWorkbenchDestination(setSettingsOpen);
   const [settingsSection, setSettingsSection] = useState<SectionId | undefined>(undefined);
   // 长对话导航（v7.2）：对话目录 + 轮折叠 + ⌘↑/⌘↓。折叠按会话记忆（渲染态，不落 settings）。
   const [outlineOpen, setOutlineOpen] = useState(false);
@@ -324,9 +307,9 @@ export function useWorkbenchModel() {
   const foldedBySession = useRef(new Map<string, ReadonlySet<number>>());
   // ⌘/ 速查表（§3.6「查看全部」）与归档必问闸（§3.3）、会话条重命名草稿（§2.1）。
   const [cheatOpen, setCheatOpen] = useState(false);
-  const [archiveConfirm, setArchiveConfirm] = useState<WorkspaceSession | null>(null);
+  const [archiveConfirm, setArchiveConfirm] = useState<SessionConfirmTarget | null>(null);
   // §6.3 删除会话的不可撤销闸（后果前置 + 明示不可撤销；确认卡在流尾）。
-  const [deleteConfirm, setDeleteConfirm] = useState<WorkspaceSession | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmTarget | null>(null);
   // §3.7 · G4 丢弃隔离工作区闸：未提交改动会一并消失，必问。
   const [wtDiscard, setWtDiscard] = useState<WorkspaceSession | null>(null);
   // 2026-10-17：回滚轮次 / 移除项目改走产品自绘确认卡（原生 confirm 与界面语言不一致）。
@@ -394,23 +377,6 @@ export function useWorkbenchModel() {
   // 侧栏清单同步（事件驱动补刷 + refetching 闸）。
   const knownSessionIds = useRef<ReadonlySet<string>>(new Set());
   const refetching = useRef(false);
-  const refreshSessions = useCallback(() => {
-    return (window.agent.listSessions() as Promise<WorkspaceSession[]>).then((list) => {
-      setSessions(list);
-      setSessionsLoadError(false);
-      setSessionsLoaded(true);
-    }, () => {
-      // fail-visible：不把一次 IPC 失败读成「没有会话」。注意**不能**把 sessionsLoaded 置真——
-      // 它同时是「启动恢复上次会话」的闸；失败时当空清单放行会顺手清掉 cairn.lastSession.v1。
-      // 侧栏的骨架由 loading={!sessionsLoaded && !sessionsLoadError} 收口。
-      setSessionsLoadError(true);
-    });
-  }, []);
-  const retrySessions = useCallback(() => {
-    setSessionsLoaded(false);
-    setSessionsLoadError(false);
-    void refreshSessions();
-  }, [refreshSessions]);
 
   // 斜杠菜单技能清单（2026-10-18）：工作区一变、或设置页关闭时刷新（信任决议就发生在设置里，
   // 不刷新的话菜单会一直标「待批准」）。设置打开期间不重复扫（省一次目录发现）。
@@ -440,9 +406,9 @@ export function useWorkbenchModel() {
       toast.error(r.error ?? "工作区不可用，已清空窗口上下文");
     });
   }, []);
-  useEffect(() => {
-    applyWorkspaceContext(activeWorkspace);
-  }, [activeWorkspace, applyWorkspaceContext]);
+  useEffect(() => { applyWorkspaceContext(activeWorkspace); }, [activeWorkspace, applyWorkspaceContext]);
+  // v33：上报窗口可见会话（通知判「你不在看那个会话」；主页/无会话报 null）。
+  useEffect(() => { void window.agent.reportViewing(activeId, activeWorkspace ?? ""); }, [activeId, activeWorkspace]);
   useEffect(() => {
     knownSessionIds.current = new Set(sessions.map((s) => s.id));
   }, [sessions]);
@@ -463,8 +429,7 @@ export function useWorkbenchModel() {
     [providerKeys],
   );
 
-  useSessionSubscription({ refreshSessions, refreshProviderInfo, refreshProviderKeys, setProjects, setRegistryNotice, knownSessionIds, refetching, openPending, activeIdRef, activeWorkspaceRef, lastDeltaAt, runningSet, outcomes, force, setEvents, sendQueue, setLastNotice, askById, setAskBySid, waitingByAsk, waitingCounts });
-
+  const { retryProjects } = useSessionSubscription({ refreshSessions, refreshProviderInfo, refreshProviderKeys, setProjects, setRegistryNotice, knownSessionIds, refetching, openPending, activeIdRef, activeWorkspaceRef, lastDeltaAt, runningSet, outcomes, force, setEvents, sendQueue, setLastNotice, askById, setAskBySid, waitingByAsk, waitingCounts });
     const activate = useCallback((id: string | null) => {
     activeIdRef.current = id;
     setActiveId(id);
@@ -522,6 +487,8 @@ export function useWorkbenchModel() {
     if (sessionWs !== null) setActiveWorkspace(sessionWs);
     void applyWorkspaceContext(sessionWs);
     const seq = ++openSeq.current;
+    const failures: string[] = [];
+    setSessionLoadIssue(null);
     // 立刻清掉上一会话的转录/门卡数据面：此前要等 openSession 回包才整体替换，窗口内
     // B 的标题下仍挂着 A 的转录、A 的澄清/方案门与行内「重试/还原」——用户可操作且会发错会话。
     // 读盘期间到达的 B 增量进 openPending，回包时合并（不丢流式文本）。
@@ -554,18 +521,33 @@ export function useWorkbenchModel() {
       }
     }).catch((err: unknown) => {
       if (openPending.current === pending) openPending.current = null;
-      if (seq === openSeq.current) setLastError(`会话打开失败：${err instanceof Error ? err.message : String(err)}`, id);
+      failures.push(`会话打开失败：${err instanceof Error ? err.message : String(err)}`);
     });
+    const queueKey = runKey(sessionWs ?? activeWorkspace, id);
+    const queueReadRevision = queueRevision.current.get(queueKey);
+    const queueWasDirty = queueDirty.current.has(queueKey);
     const queued = window.agent.queueGet(id, sessionWs ?? undefined).then(({ items }) => {
       if (seq !== openSeq.current) return;
-      setQueueLocal(runKey(sessionWs ?? activeWorkspace, id), fromSessionQueueEntries(items, () => ++queueSeq.current));
+      // 保存失败或仍有写入时，磁盘快照比本窗口的 desired 队列旧；切走再回来不能覆盖未保存消息。
+      if (!queueWasDirty && !queueDirty.current.has(queueKey) && queueRevision.current.get(queueKey) === queueReadRevision) {
+        setQueueLocal(queueKey, fromSessionQueueEntries(items, () => ++queueSeq.current));
+      }
     }).catch((err: unknown) => {
-      if (seq === openSeq.current) setLastError(`发送队列读取失败：${err instanceof Error ? err.message : String(err)}`, id);
+      failures.push(`发送队列读取失败：${err instanceof Error ? err.message : String(err)}`);
     });
     void Promise.allSettled([opened, queued]).finally(() => {
-      if (seq === openSeq.current) setQueueLoading(false);
+      if (seq !== openSeq.current) return;
+      setSessionLoadIssue(failures.length === 0 ? null : { seq, message: failures.join("\n") });
+      setQueueLoading(false);
     });
   }, [activate, setLastError, setQueueLocal, touchWorkspace]);
+
+  const sessionLoadError = activeId !== null && sessionLoadIssue?.seq === openSeq.current
+    ? sessionLoadIssue.message : null;
+  const retrySessionOpen = useCallback(() => {
+    const id = activeIdRef.current;
+    if (id !== null && !queueLoading) openSession(id, activeWorkspaceRef.current ?? undefined);
+  }, [openSession, queueLoading]);
 
   // 完成通知点击（v21）：主进程已把窗口拉到前台，这里只负责打开目标会话。
   // 同会话不重载（避免把正在看的流重置）；workspace 只接受字符串，跨项目同名 id 由 main 带上。
@@ -645,7 +627,7 @@ export function useWorkbenchModel() {
 
 
   // ---- P1 项目管理接线（brief 第二节；失败面 throw 给调用组件 fail-visible，成功面带 Toast）----
-  const { handleAddProject, handleCloneProject, handleUpdateProject, doRemoveProject, handleRemoveProject, handleRevealProject, handleCreateFromDialog } = useProjectActions({ setProjects, setRegistryNotice, setImportDiagnosis, setLastError, refreshSessions, setActiveWorkspace, activeWorkspaceRef, setProjectRemoveConfirm, newSessionRef });
+  const { handleAddProject, handleCloneProject, handleUpdateProject, doRemoveProject, handleRemoveProject, handleRevealProject, handleRelocateProject, handleCreateFromDialog } = useProjectActions({ setProjects, setRegistryNotice, setImportDiagnosis, setLastError, refreshSessions, setActiveWorkspace, activeWorkspaceRef, setProjectRemoveConfirm, newSessionRef });
 
     /** ⌘K 命令面板（P3-3）：真开（旧位只给 comingSoon 提示——面板已落地，替换掉）。 */
   const handleOpenPalette = useCallback((): void => {
@@ -718,6 +700,8 @@ export function useWorkbenchModel() {
       toast.error(`导出失败：${err instanceof Error ? err.message : String(err)}`);
     });
   }, [activeId, activeWorkspace, events, sessions]);
+  /** 权限档落盘 + 回执（菜单确认、命令面板确认共用；危险档确认前绝不调用）。 */
+  const permissionGuard = usePermissionConfirm({ mode, setMode, activeId, activeWorkspace, runningSet, setLastNotice, setLastError });
 
   /** 命令面板操作分发（P3-3）：动作全部复用既有能力（不另起炉灶）；新会话经 ref（TDZ 口径同 dialog）。 */
   const handlePaletteAction = useCallback((action: PaletteAction): void => {
@@ -740,19 +724,11 @@ export function useWorkbenchModel() {
           toast.error(`主题切换失败：${err instanceof Error ? err.message : String(err)}`);
         });
         break;
-      }      case "cycle-perm": {
-        const order: PermissionMode[] = ["read-only", "default", "guided", "auto"];
-        const next = order[(order.indexOf(mode) + 1) % order.length] ?? "default";
-        const runningHere = activeId !== null && runningSet.current.has(runKey(activeWorkspace, activeId)); // runningActive 的同一读法（TDZ 口径在其定义之前不可引用）
-        void window.agent.setSettings({ mode: next }).then(() => {
-          setMode(next);
-          const info = MODE_LABEL[next];
-          setLastNotice(`权限档已切到「${info.label}」（${info.desc}）${runningHere ? "——本轮仍在原档下跑，下一条消息起生效" : ""}`);
-        }).catch((err: unknown) => {
-          setLastError(`权限档保存失败：${err instanceof Error ? err.message : String(err)}`);
-        });
-        break;
       }
+      case "cycle-perm":
+        // 危险档（自动/完全允许）与 composer 菜单同口径：先确认，确认前不落盘。
+        permissionGuard.cycle(nextPermissionMode(mode));
+        break;
       case "toggle-inspector":
         toggleInspector();
         break;
@@ -785,11 +761,10 @@ export function useWorkbenchModel() {
   // ---- v2.17 运行中可沟通：按会话发送队列 ----
   // 队列语义全在 send-queue.ts（本文件只存表与接线）；表是 Map<sessionId, 队列>，
   // 这样后台会话的排队不因切换会话而丢失，自动派发也只认原会话。
-  const { setQueueFor, send, sendWithGoal, handleRetryLast, resumeQueue, cancelRunHeal } = useRunQueue({ setQueueLocal, queueWrites, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, planRequiredRef: planOverrideRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef });
+  const { queueSaving, queueSaveFailed, setQueueFor, send, sendTo, sendWithGoal, handleRetryLast, resumeQueue, resumeQueueFor, cancelRunHeal } = useRunQueue({ setQueueLocal, queueWrites, queueDirty, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, planRequiredRef: planOverrideRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef });
   cancelRunHealRef.current = cancelRunHeal; // 撤回（编辑）晚绑
-
-    const { lastError, lastNotice, runningActive, pendingClarify, pendingPlan, askForActive, phase, stopped, phaseLabel, chosen, pickerValue } = useRunReadings({ sessionErrors, activeId, sessionNotices, runningSet, setElapsedSec, runStartBySession, events, askBySid, stoppedIds, lastDeltaAt, selections, providerInfo, activeWorkspace });
-
+    const { lastError, lastNotice, runningActive, modelWaiting, pendingClarify, pendingPlan, askForActive, phase, stopped, phaseLabel, chosen, pickerValue } = useRunReadings({ sessionErrors, activeId, sessionNotices, runningSet, setElapsedSec, runStartBySession, events, askBySid, stoppedIds, lastDeltaAt, selections, providerInfo, activeWorkspace });
+  useSessionPrefsHydration({ sessions, selections, thinking: thinkingBySession, force });
     const usage = usageAggregate(events);
   // 头像菜单「用量统计」面板的数据（批 130）：当前会话口径，纯投影 ⇒ 判卷可测。
   const usageStats = useMemo(() => usageSummary(events), [events]);
@@ -874,12 +849,15 @@ export function useWorkbenchModel() {
   // 不再各推各的（真机实证：门未决时占位写成「正在创建会话…」）。理由只在这里排优先级。
   const composerLock = composerLockReason({
     queueLoading,
+    sessionLoadFailed: sessionLoadError !== null,
     creating: pendingSend && activeId === null,
     gateActive: pendingClarify !== null || pendingPlan !== null,
   });
   // 锁定时 ⌘⇧I/M/E 的可见回执；未锁 = null（正常开菜单）。
   const composerMenuBlock = composerLock === "queue"
     ? STR.shortcut.menuLockedQueue
+    : composerLock === "session"
+      ? STR.shortcut.menuLockedSession
     : composerLock === "creating"
       ? STR.shortcut.menuLockedCreating
       : composerLock === "gate"
@@ -920,8 +898,13 @@ export function useWorkbenchModel() {
   const handleOpenArtifact = useCallback<NonNullable<StreamActions["onOpenArtifact"]>>((a) => {
   if (activeWorkspace === null) return;
   const abs = a.path.startsWith("/") ? a.path : `${activeWorkspace}/${a.path}`;
-  if (a.kind === "html" || a.kind === "svg") void openPreview(abs);
-  else void window.agent.revealInFinder(abs);
+  if (a.kind === "html" || a.kind === "svg") { void openPreview(abs); return; }
+  // 与「项目 → 在 Finder 中显示」（state/projects.ts 的 handleRevealProject）同口径：
+  // 揭不开要说出来——上一轮的产物常常已经被删/不在这个工作区，点了没反应最费解（第 952 页）。
+  void window.agent.revealInFinder(abs).then(
+    (r) => { if (!r.ok) toast.error(r.error ?? "无法在 Finder 中显示"); },
+    (err: unknown) => { toast.error(err instanceof Error ? err.message : String(err)); },
+  );
   }, [activeWorkspace, openPreview]);
   const streamActions = useMemo<StreamActions>(() => ({
   feedback,
@@ -965,6 +948,10 @@ export function useWorkbenchModel() {
     pickerValue,
     providerInfo,
     settingsOpen,
+    destination,
+    pageFilter,
+    openDestination,
+    setPageFilter,
     activeId,
     barRenaming,
     setBarRenaming,
@@ -999,8 +986,11 @@ export function useWorkbenchModel() {
     draftIds,
     outcomes,
     registryNotice,
+    retryProjects,
     sessionsLoaded,
+    sessionsRefreshing,
     sessionsLoadError,
+    sessionsLoadErrorDetail,
     retrySessions,
     providerOk,
     openSession,
@@ -1010,7 +1000,7 @@ export function useWorkbenchModel() {
     handleAddProject,
     handleCloneProject,
     setNewProjectOpen,
-    handleUpdateProject,
+    handleUpdateProject, handleRelocateProject,
     handleRemoveProject,
     handleRevealProject,
     pinSessionById,
@@ -1023,8 +1013,6 @@ export function useWorkbenchModel() {
     themePref,
     changeTheme,
     usageStats,
-    usageAll,
-    loadUsageAll,
     startSidebarDrag,
     persistSidebarWidth,
     sidebarWidthRef,
@@ -1058,6 +1046,7 @@ export function useWorkbenchModel() {
     inheritedSeqs,
     viewMode,
     runningActive,
+    modelWaiting,
     foldedRounds,
     flashRound,
     streamActions,
@@ -1086,13 +1075,20 @@ export function useWorkbenchModel() {
     draftRemapSeq,
     refreshSessions,
     setQueueFor,
+    queueSaving,
+    queueSaveFailed,
     cancelRunHeal,
     queueLoading,
+    sessionLoadError,
+    retrySessionOpen,
     pendingSend,
     resumeQueue,
+    resumeQueueFor,
+    sendTo,
     skills,
     composerLock,
     mode,
+    permissionGuard,
     planRequired,
     onPlanRequiredChange: changePlanRequired,
     stopped,
@@ -1124,10 +1120,11 @@ export function useWorkbenchModel() {
     onSuggestNext,
     injectedAttachment,
     injectedAppend,
-    onboarded,
+    onboarded, setOnboarded,
     onboarding,
     dismissOnboarding,
     injectText,
+    inspectorCollapsed,
     inspectorRef,
     inspectorDefault,
     setInspectorCollapsed,

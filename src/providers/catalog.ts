@@ -15,6 +15,7 @@
 //      OpenRouter 是每 token 字符串），换算只许在这里做一次。
 
 /** 一套价格（美元 / 每百万 token）。四个字段各自可能缺席 —— 缺席就是这家没给这个口径。 */
+import { isRecord } from "../is-record";
 export interface CatalogPricing {
   inputPerMTok?: number;
   outputPerMTok?: number;
@@ -65,10 +66,6 @@ export interface CatalogSnapshot {
   /** 生成时间（ISO）；内置快照会带，运行时刷新也会带 —— 用户要能看出这份读数有多旧。 */
   generatedAt?: string;
   providers: readonly CatalogProvider[];
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 /** 非负有限数；字符串数字也收（上游把价格写成字符串是常态），空串/坏串 ⇒ undefined。 */

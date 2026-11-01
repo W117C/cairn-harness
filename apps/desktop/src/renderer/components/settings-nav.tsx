@@ -1,11 +1,12 @@
 // 设置导航的轻量单源：命令面板只需要分区 id/标签，不应因此把设置页正文与工作台一起拉进首屏。
-import { BarChart3, BookOpen, Brain, Clock, GitBranch, Globe, KeyRound, Keyboard, Puzzle, Shield, SlidersHorizontal, Wrench } from "lucide-react";
+import { BarChart3, BookOpen, Brain, Clock, GitBranch, Globe, KeyRound, Keyboard, Puzzle, Shield, SlidersHorizontal, Sparkles, Wrench } from "lucide-react";
 
 import type { PageId } from "../app-controls";
 export type { PageId } from "../app-controls";
 
-/** 页面顺序（导航与图标/标题事实源）：设置页的四个分区按此渲染，不再各抄一份。 */
+/** Page metadata remains the shared source for durable pages and the two page-style settings sections. */
 export const PAGE_ORDER: readonly PageId[] = ["plugins", "automation", "skills", "memory", "worktrees"];
+export const SETTINGS_PAGE_ORDER: readonly PageId[] = ["skills", "worktrees"];
 
 export const PAGE_META: Record<PageId, { label: string; icon: React.JSX.Element }> = {
   plugins: { label: "插件", icon: <Puzzle size={14} /> },
@@ -18,7 +19,7 @@ export const PAGE_META: Record<PageId, { label: string; icon: React.JSX.Element 
 import type { SectionId } from "../app-controls";
 export type { SectionId } from "../app-controls";
 
-const PAGE_SECTIONS = PAGE_ORDER.map((id) => ({ id, label: PAGE_META[id].label, icon: PAGE_META[id].icon }));
+const PAGE_SECTIONS = SETTINGS_PAGE_ORDER.map((id) => ({ id, label: PAGE_META[id].label, icon: PAGE_META[id].icon }));
 
 /** 设置分区（顺序固定，唯一事实源——导航与命令面板只许从这里取）。 */
 export const SECTIONS: readonly { id: SectionId; label: string; icon: React.JSX.Element }[] = [
@@ -26,6 +27,8 @@ export const SECTIONS: readonly { id: SectionId; label: string; icon: React.JSX.
   { id: "provider", label: "模型与 Provider", icon: <KeyRound size={14} /> },
   { id: "network", label: "联网搜索", icon: <Globe size={14} /> },
   { id: "usage", label: "用量统计", icon: <BarChart3 size={14} /> },
+  // 2026-10-27：Evolve 只读报告（经验/实验/候选/预算/冻结态）。不注入、不晋升。
+  { id: "evolve", label: "进化", icon: <Sparkles size={14} /> },
   { id: "permissions", label: "权限与安全", icon: <Shield size={14} /> },
   // 2026-10-18 补：AppSettings 里一直在生效、却没有开关的字段（记忆沉淀 / 跨文件波及 /
   // prompt 缓存 / 花费上限 / 隐私）——用户看不见也改不了，等于悄悄替他决定。
@@ -34,6 +37,12 @@ export const SECTIONS: readonly { id: SectionId; label: string; icon: React.JSX.
   ...PAGE_SECTIONS,
   { id: "about", label: "关于与更新", icon: <Globe size={14} /> },
 ];
+
+/** 分区标题的唯一出口（第 949 页）：导航、命令面板与设置页头都从这里取。
+ *  此前设置页头把七个标题又抄了一遍字面量——导航改了名、页头还留旧话。 */
+export function sectionLabel(id: SectionId): string {
+  return SECTIONS.find((s) => s.id === id)?.label ?? id;
+}
 
 /** 分区搜索词（2026-10-18 补设置页搜索）：只补**同义/口语**词，不进 SECTIONS 本体——
  *  SECTIONS 的形状被壳导航与命令面板消费，加字段要连带改两处与它们的判据；
@@ -44,6 +53,7 @@ export const SECTION_KEYWORDS: Readonly<Record<SectionId, string>> = {
   provider: "模型 通道 api key 密钥 接口 glm openai anthropic gemini deepseek 自定义 识图 视觉",
   network: "联网 搜索 网络 检索 brave tavily searxng 服务地址 api key",
   usage: "用量 统计 token 活动 趋势 模型消耗 缓存 调用 账单",
+  evolve: "进化 自进化 经验 实验 候选 预算 冻结 stop 证据 holdout",
   permissions: "权限 档位 模式 只读 自动 引导 审批 安全 沙箱 网络 方案 计划 写文件",
   advanced: "记忆 沉淀 波及 缓存 prompt 花费 预算 上限 成本 价格 隐私 遥测 统计",
   shortcuts: "快捷键 按键 键盘 键位 热键",
@@ -52,7 +62,7 @@ export const SECTION_KEYWORDS: Readonly<Record<SectionId, string>> = {
   skills: "技能 skill 命令 斜杠",
   memory: "记忆 memory 上下文",
   worktrees: "工作树 worktree 孤儿 清理 分支",
-  about: "关于 更新 版本 诊断 日志 更新源 manifest",
+  about: "关于 更新 版本 诊断 日志 更新源 manifest 偏好 备份 迁移 导入 导出 许可证 license 数据目录",
 };
 
 /** 设置分区搜索（纯函数，可单测）：空查询 = 全量；按 label + 关键词做大小写不敏感的子串匹配。

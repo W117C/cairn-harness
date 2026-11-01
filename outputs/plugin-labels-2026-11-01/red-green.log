@@ -1,0 +1,14 @@
+=== 改前 A：local 仍写「本地」（列表/发现页旧说法）===
+     × 来源四种：官方目录 / Git / 本地目录 / 手动（runtime） 3ms
+     × 三张卡都读同一份：没有第二份手抄本 2ms
+      Tests  2 failed | 1 passed (3)
+
+=== 改前 B：发现页又抄回自己那份 sourceLabel ===
+     × 三张卡都读同一份：没有第二份手抄本 4ms
+      Tests  1 failed | 2 passed (3)
+
+=== 复原后 ===
+      Tests  3 passed (3)
+=== sha256 ===
+dd0e736d31ce5b783bf99fe0c698067af726d96e8692af3f494e3f705859d983
+a49e28450726556d1653170bc9e101b09f84be9cf49aa5d249b0a4885e40e5b5

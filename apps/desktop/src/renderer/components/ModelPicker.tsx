@@ -1,20 +1,42 @@
 // C-21 `ModelPicker`（§5.4 Row3）——P2-2 合并单面（brief 三节：模型 chip「模型名 · 思考强度」，
 // 点击一个弹窗：搜索 + 模型列表（上下文长度 / 思考 / 图片能力）+ 下半区思考强度 Segmented）。
 // 旧两视图（思考面 × 换模型面）作废：一屏说全——上列表、下思考段，少一次翻面。
-// 触发条 = 单芯片形态：`deepseek-chat · 思考 关 ⌄`（档词 = 关/低/中/强；未声明支持不带思考段）。
+// 触发条 = 单芯片形态：`deepseek-chat · 思考 关 ⌄`（档词 = 关/低/中/强/最高；未声明支持不带思考段）。
 // 数据面不变（唯一事实源仍是 `getProviderInfo()`，本层不造第二份）；文案全出处 STR。
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ChevronDown, Eye, Info, Settings } from "lucide-react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { ChevronDown, Eye, Info, Search, Settings, SlidersHorizontal } from "lucide-react";
 import type { ProviderInfo } from "../../../../../src/main/ipc-protocol";
+import { formatTokens } from "../derived/format-tokens";
 import { STR } from "../strings";
+import { isCompositionEnter } from "../ime";
 import { Popover, usePopoverDismiss } from "./Popover";
+import { menuNavIndex } from "./popover-keys";
+import {
+  readThinkingHidden,
+  visibleThinkingLevels,
+  toggleThinkingHidden,
+  reconcileVisibleLevel,
+  writeThinkingHidden,
+} from "../state/thinking-prefs";
+import "./model-menu.css";
 
-/** 向上弹的菜单最多能有多高：触发条上沿到窗口顶（扣 38px 标题栏 + 6px 间隙）。
- *  空屏的输入卡在屏幕中部，菜单 393px 高会顶穿标题栏——真机实测第一行「deepseek-chat」
- *  被窗口上沿切掉。这条把可用高度算出来交给 style.maxHeight，超出的部分在菜单内滚动。
- *  240 是下限（再矮就连搜索框+两行都放不下，宁可让菜单贴边也不能压成一条缝）。 */
+/** 向上打开的真实可用高度：38px 标题栏 + 6px 间隙。空间不足交给布局选择向下开。 */
 export function modelMenuMaxHeight(triggerTop: number): number {
-  return Math.max(240, Math.min(560, Math.floor(triggerTop - 44)));
+  return Math.max(0, Math.min(560, Math.floor(triggerTop - 44)));
+}
+
+/** 空间不足时向下打开；高度只取真实可用空间，不能靠最小高度越出窗口。 */
+export function modelMenuLayout(top: number, bottom: number, viewportHeight: number): { up: boolean; maxHeight: number; viewportTop?: number } {
+  const above = modelMenuMaxHeight(top);
+  const below = Math.max(0, Math.min(560, Math.floor(viewportHeight - bottom - 8)));
+  // 矮窗口两边都放不下一份可操作的列表时，改用窗口内浮层。
+  if (Math.max(above, below) < 260) return { up: false, maxHeight: Math.max(0, viewportHeight - 56), viewportTop: 44 };
+  // 哪边空间大就往哪边开。旧判据是 `above >= min(320, below)`：上方只要凑够 320 就赢，
+  // 于是 1440×900 的空屏上（上 327 / 下 456）明明下面多出 129px 却仍向上开——
+  // 列表被挤到 139px（内容 209px），最后一个 provider 的组头露着、它那一行模型整行看不见，
+  // 读起来就是一个空分组（真机自查 `模型分组裁剪自查` 抓到过：dangling: ["glm"]）。
+  const up = above >= below;
+  return { up, maxHeight: up ? above : below };
 }
 
 /** 菜单项：registryId = null 即「演示」（run 时不透传 model，走 settings 缺省）。 */
@@ -26,6 +48,12 @@ export interface ModelOption {
   ctxWindow?: number;
   /** 识图能力（能力在菜单里可见，用户不用去猜模型名）。 */
   vision?: boolean;
+  /** 该模型**自己声明**的思考档位（capability.thinking.values）；未声明支持 = 缺席。
+   *  对标 Codex：每个模型带自己的 supportedReasoningEfforts，菜单按**当前模型**出档，
+   *  而不是把全局四档硬塞给所有模型（此前能给不支持的档 ⇒ 请求被 provider 拒）。 */
+  thinkingLevels?: readonly string[];
+  /** 该模型的缺省思考档（capability.thinking.default）。 */
+  thinkingDefault?: string;
 }
 
 /** 档位徽标文字。**必须有文字**：只靠颜色的徽标对色觉障碍用户等于没有（规范 a11y 条）。 */
@@ -42,15 +70,12 @@ export function tierBadge(tier: string | undefined): string {
   }
 }
 
-/** 上下文窗口的人话写法（12000 → 12k，1_000_000 → 1M）。缺省给「—」而不是 0。 */
+/** 上下文窗口的人话写法（第 937 页）：与用量环 / 检查器 / 时间线 / 用量页同一把尺（`formatTokens`）。
+ *  这里原来自己写了一套（12000 → `12k`、1_000_000 → `1M`）⇒ 同一个窗口在模型菜单写「128k」、
+ *  在用量浮层写「128.0k」。缺省仍给「—」而不是 0。 */
 export function formatCtxWindow(n: number | undefined): string {
   if (n === undefined || !Number.isFinite(n) || n <= 0) return STR.composer.dash;
-  if (n >= 1_000_000) {
-    const m = n / 1_000_000;
-    return `${Number.isInteger(m) ? String(m) : m.toFixed(1)}M`;
-  }
-  if (n >= 1000) return `${Math.round(n / 1000)}k`;
-  return String(n);
+  return formatTokens(n);
 }
 
 /** demo 常驻首项「演示」，其余按 spec 铺平（provider 分组交给菜单的分节）。
@@ -62,6 +87,7 @@ export function flattenModels(infos: readonly ProviderInfo[]): ModelOption[] {
     for (const spec of info.models) {
       if (seen.has(spec.id)) continue;
       seen.add(spec.id);
+      const th = spec.capability.thinking;
       options.push({
         registryId: spec.id,
         label: spec.model,
@@ -69,6 +95,7 @@ export function flattenModels(infos: readonly ProviderInfo[]): ModelOption[] {
         tier: spec.tier,
         ctxWindow: spec.ctxWindow,
         ...(spec.capability.attachments.image === true ? { vision: true } : {}),
+        ...(th.supported === true ? { thinkingLevels: th.values, thinkingDefault: th.default } : {}),
       });
     }
   }
@@ -95,6 +122,25 @@ export function groupModels(options: readonly ModelOption[]): ModelGroup[] {
     }
   }
   return groups;
+}
+
+/** 换模型后思考档的**归位**（对标 Codex 的 `supportedReasoningEfforts` + `defaultReasoningEffort`：
+ *  当前档不被新模型支持 ⇒ 落到该模型的缺省档 ⇒ 再退 ⇒ 该模型声明的第一档）。
+ *
+ *  模型**没声明**思考（levels 缺席）⇒ 归位到 "off"：给不支持思考的模型发思考参数
+ *  = 白烧 token（provider 侧会拒）。
+ *
+ *  纯函数、可判卷；调用方在**换模型**与**渲染芯片**两处都用它 ⇒ 界面显示的档
+ *  与真正发出去的档永远是同一个（此前两者会分叉：芯片显示旧档、请求发新档）。 */
+export function reconcileThinkingLevel(
+  current: string,
+  levels: readonly string[] | undefined,
+  fallback: string | undefined,
+): string {
+  if (levels === undefined || levels.length === 0) return "off";
+  if (levels.includes(current)) return current;
+  if (fallback !== undefined && levels.includes(fallback)) return fallback;
+  return levels[0] ?? "off";
 }
 
 /** 菜单搜索（纯函数判卷）。子序列模糊匹配（"ds" 命中 deepseek——fuzzy finder 惯例），
@@ -141,12 +187,13 @@ export function describeSelection(value: string | null, options: readonly ModelO
   return STR.modelPicker.descName.replace("{name}", hit.label) + provider + tier + ctx;
 }
 
-/** 思考档位词表（分段短词族：关/低/中/强；id 即请求侧字面量，不动；文案出处 STR）。 */
+/** 思考档位词表（分段短词族：关/低/中/强/最高；id 即请求侧字面量，不动；文案出处 STR）。 */
 export const THINKING_LEVELS = [
   { id: "off", short: STR.modelPicker.thinkOff, hint: STR.modelPicker.thinkOffHint },
   { id: "low", short: STR.modelPicker.thinkLow, hint: STR.modelPicker.thinkLowHint },
   { id: "medium", short: STR.modelPicker.thinkMedium, hint: STR.modelPicker.thinkMediumHint },
   { id: "high", short: STR.modelPicker.thinkHigh, hint: STR.modelPicker.thinkHighHint },
+  { id: "max", short: STR.modelPicker.thinkMax, hint: STR.modelPicker.thinkMaxHint },
 ] as const;
 
 /** 「信号开菜单」这一步的判据（纯函数）：seq 前进一次 = 开一次。
@@ -216,13 +263,23 @@ export function ModelPicker(props: {
     setInternalOpen(next);
   }, [props.onOpenChange]);
   const box = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   // 菜单向上开，高度必须让出标题栏：空屏输入卡在中部，393px 菜单会顶穿窗口上沿。
   const [menuMax, setMenuMax] = useState<number | undefined>(undefined);
+  const [menuUp, setMenuUp] = useState(true);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number }>();
   useLayoutEffect(() => {
     if (!open) { setMenuMax(undefined); return; }
     const update = (): void => {
-      const top = box.current?.getBoundingClientRect().top;
-      if (top !== undefined) setMenuMax(modelMenuMaxHeight(top));
+      const rect = box.current?.getBoundingClientRect();
+      if (rect === undefined) return;
+      const layout = modelMenuLayout(rect.top, rect.bottom, window.innerHeight);
+      setMenuMax(layout.maxHeight);
+      setMenuUp(layout.up);
+      setMenuPosition(layout.viewportTop === undefined ? undefined : {
+        top: layout.viewportTop - rect.top,
+        left: Math.max(12, Math.min(rect.left, window.innerWidth - 356)) - rect.left,
+      });
     };
     update();
     window.addEventListener("resize", update);
@@ -251,14 +308,38 @@ export function ModelPicker(props: {
     : allOptions.filter((o) => o.provider === null || props.configuredProviders!.has(o.provider));
   const info = props.infos[0] ?? null;
   const notice = pickerKeyNotice(info);
+  // 当前选中模型**自己声明**的思考档（缺席 = 该模型不支持思考）。
+  const selected = options.find((o) => o.registryId === props.value);
+  // 芯片显示的是**当前档**（用户设的那一档 = 真正发出去的那一档；既有契约）。
   const level = props.thinking ?? "off";
+  // 归位档：当前档不被该模型支持时的落点（对标 Codex 的 defaultReasoningEffort）。
+  // 归位**不在显示层偷换**（芯片不许显示一档、请求发另一档），
+  // 而是由下面的 effect 把它写回状态 ⇒ 显示与请求永远同一个。
+  const reconciled = reconcileThinkingLevel(level, selected?.thinkingLevels, selected?.thinkingDefault);
   const levelLabel = THINKING_LEVELS.find((l) => l.id === level)?.short ?? STR.modelPicker.thinkOff;
+  // 首次挂载不弹（那是「进场」）；换过模型之后才弹（那是「值变了」）。
+  const everPicked = useRef(false);
+  // 换模型 ⇒ 思考档归位（对标 Codex）：两条路径都走这里——用户在菜单里点模型，
+  // 以及父级直接换 value（切会话 / 恢复会话 / provider 列表变了）。
+  // 只在「归位档 ≠ 当前档」时写回，避免来回写回造成死循环。
+  useEffect(() => {
+    if (props.onThinkingChange === undefined) return;
+    if (reconciled !== level) props.onThinkingChange(reconciled);
+    // 依赖只认 value：档本身变化不该再触发一次归位（那是 effect 自己写的）。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.value]);
 
-  const close = useCallback(() => setOpen(false), []);
+  const close = useCallback(() => setOpen(false), [setOpen]);
   // 外点 / Esc 关闭：单源在 Popover（阶段 1 共享化；行为与旧内联监听逐条同构）。
-  usePopoverDismiss(open, close, box);
+  usePopoverDismiss(open, close, box, triggerRef);
 
   const pick = (registryId: string | null): void => {
+    // 换模型 ⇒ 思考档**归位**（对标 Codex）：新模型不支持当前档时，当场落到它的缺省档
+    // 并通知上层。否则给不支持思考的模型发思考参数（provider 侧会拒）。
+    const next = options.find((o) => o.registryId === registryId);
+    const nextLevel = reconcileThinkingLevel(level, next?.thinkingLevels, next?.thinkingDefault);
+    if (nextLevel !== level) props.onThinkingChange?.(nextLevel);
+    everPicked.current = true;
     props.onChange(registryId);
     close();
   };
@@ -268,14 +349,18 @@ export function ModelPicker(props: {
       <button
         type="button"
         className="mp-trigger"
+        ref={triggerRef}
         aria-label={STR.modelPicker.triggerAria}
-        aria-haspopup="listbox"
+        aria-haspopup="dialog"
         aria-expanded={open}
         title={describeSelection(props.value, options)}
         disabled={props.disabled}
         onClick={() => { props.onUserOpen?.(); setOpen(!open); }}
       >
-        <span className="mp-name">
+        {/* 芯片的值变了 ⇒ 名字这一格**重挂** ⇒ 播放「弹一下」的动效（对标 Claude 的
+            cds-pill-pop：上冲 40% 时长到 1.32，再落回，overshoot 收尾）。
+            key 变了 ⇒ React 重挂 ⇒ CSS 动画重播（不必手动重置动画状态）。 */}
+        <span className="mp-name" key={`mp-name-${String(props.value)}`} data-pop={everPicked.current ? "true" : "false"}>
           {shortModelName(props.value, options)}
           {/* 「· 思考 X」段只在模型真声明支持时出现——没能力的模型不带这个按键面（业主 22.01 裁）。 */}
           {props.onThinkingChange !== undefined && props.thinkingSupported === true
@@ -287,17 +372,20 @@ export function ModelPicker(props: {
       </button>
       {open && (
         <ModelMenu
+          up={menuUp}
           options={options}
           value={props.value}
           maxHeight={menuMax}
+          viewportPosition={menuPosition}
           {...(props.disabled === true || props.running === true ? { running: true } : {})}
           initialFocus={props.initialFocus ?? "model"}
           keyNotice={notice}
           {...(props.onOpenSettings !== undefined ? { onOpenSettings: props.onOpenSettings } : {})}
           {...(props.onThinkingChange !== undefined
             ? {
-                thinking: level,
+                thinking: reconciled,
                 thinkingSupported: props.thinkingSupported === true,
+                ...(selected?.thinkingLevels !== undefined ? { thinkingLevels: selected.thinkingLevels } : {}),
                 onThinkingChange: props.onThinkingChange,
               }
             : {})}
@@ -327,8 +415,13 @@ export function ModelMenu(props: {
   onOpenSettings?: () => void;
   /** 向上开时允许的最大高度（px）；undefined = 不限制（测试/旧调用）。 */
   maxHeight?: number;
+  viewportPosition?: { top: number; left: number };
+  up?: boolean;
   /** 当前思考档位（缺省 off）。 */
   thinking?: string;
+  /** 当前模型**自己声明**的思考档位；给了就只出这些档（对标 Codex 的 supportedReasoningEfforts）。
+   *  不给 = 沿用全局四档（旧行为；未声明支持的模型整段禁用，见下）。 */
+  thinkingLevels?: readonly string[];
   /** 当前模型是否**声明**支持思考档位；未声明 ⇒ 整区禁用 + 注记 + 配置折叠（fail-visible）。 */
   thinkingSupported?: boolean;
   onThinkingChange?: (level: string) => void;
@@ -338,7 +431,12 @@ export function ModelMenu(props: {
 }): React.JSX.Element {
   const wantEffort = props.onThinkingChange !== undefined;
   const [query, setQuery] = useState("");
-  const [hl, setHl] = useState(0);
+  const [hl, setHl] = useState(() => {
+    const ordered = [...groupModels(props.options).flatMap((g) => g.models), { registryId: null }];
+    return Math.max(0, ordered.findIndex((m) => m.registryId === props.value));
+  });
+  const listId = useId();
+  const listRef = useRef<HTMLDivElement>(null);
   const filtered = filterModelOptions(props.options, query);
   const groups = groupModels(filtered);
   const demoVisible = query.trim() === "";
@@ -350,7 +448,46 @@ export function ModelMenu(props: {
   const modelsDisabled = props.running === true;
   const supported = props.thinkingSupported === true;
   const level = props.thinking ?? "off";
-  const currentLevel = THINKING_LEVELS.find((l) => l.id === level) ?? THINKING_LEVELS[0];
+  // 档位列表 = **当前模型声明的档**（对标 Codex：每个模型带自己的 supportedReasoningEfforts）。
+  // 此前无论哪个模型都摆全局四档 ⇒ 能选到该模型不支持的档（请求会被 provider 拒）。
+  // 模型没声明 ⇒ 沿用四档但整段禁用（fail-visible，见下方 unsupportedNote）。
+  const declared = props.thinkingLevels;
+  // 2026-10-31 · 业主「有多少档、用户可以自己定义，但默认从上游得知」：
+  // 声明表仍由上游决定（capability），用户只能收起不想看到的档（存 localStorage，见 state/thinking-prefs）。
+  const [hidden, setHidden] = useState<readonly string[]>(() => {
+    if (props.value === null) return [];
+    return readThinkingHidden()[props.value] ?? [];
+  });
+  const [editingEfforts, setEditingEfforts] = useState(false);
+  useEffect(() => {
+    setHidden(props.value === null ? [] : readThinkingHidden()[props.value] ?? []);
+    setEditingEfforts(false);
+  }, [props.value]);
+  const declaredIds = declared ?? THINKING_LEVELS.map((l) => l.id);
+  const visibleIds = visibleThinkingLevels(declaredIds, hidden);
+  const levels: readonly { id: string; short: string; hint: string }[] = (declared === undefined || declared.length === 0
+    ? THINKING_LEVELS.map((l) => l.id)
+    : declaredIds
+  ).filter((id) => visibleIds.includes(id)).map((id) => THINKING_LEVELS.find((l) => l.id === id) ?? { id, short: id, hint: "" });
+  const levelLabelOf = (id: string): string => THINKING_LEVELS.find((l) => l.id === id)?.short ?? id;
+  const modelDefaultLevel = props.options.find((o) => o.registryId === props.value)?.thinkingDefault;
+  // 用户收起当前档 ⇒ 当场归位（显示与请求永远同一个；与换模型归位同一条契约）。
+  useEffect(() => {
+    if (!supported) return;
+    const next = reconcileVisibleLevel(level, levels.map((l) => l.id), modelDefaultLevel);
+    if (next !== level) props.onThinkingChange?.(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hidden, props.value]);
+  const commitHidden = (next: readonly string[]): void => {
+    if (props.value === null) return;
+    const map = { ...readThinkingHidden(), [props.value]: next };
+    writeThinkingHidden(map);
+    setHidden(next);
+  };
+  const optionId = (index: number): string => `${listId}-option-${index}`;
+  useEffect(() => {
+    listRef.current?.querySelector<HTMLElement>('[data-highlighted="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [hl, query]);
   // ⌘⇧E 的落点（2026-10-18）：首帧滚到思考分段并聚焦当前档按钮；模型不声明思考时
   // 分段整区禁用——聚焦分组本身（读屏仍报「思考强度，不可用」+ 下方说明），不静默。
   const effortRef = useRef<HTMLDivElement | null>(null);
@@ -359,20 +496,24 @@ export function ModelMenu(props: {
     if (props.initialFocus !== "effort") { searchRef.current?.focus(); return; }
     const box = effortRef.current;
     if (box === null) return;
-    const target = box.querySelector<HTMLButtonElement>("button:not(:disabled)") ?? box;
+    const target = box.querySelector<HTMLButtonElement>('button[aria-pressed="true"]:not(:disabled)') ?? box.querySelector<HTMLButtonElement>("button:not(:disabled)") ?? box;
     target.focus({ preventScroll: true });
     target.scrollIntoView({ block: "nearest" });
   }, [props.initialFocus]);
 
   const onKeyNav = (e: React.KeyboardEvent): void => {
+    if (isCompositionEnter(e, null) || modelsDisabled) return;
+    const targetElement = e.target as HTMLElement;
+    const inSearch = targetElement === searchRef.current;
+    if (!inSearch && targetElement.closest('[role="option"]') === null) return;
     // 蓝本 §3.6：在打开的列表里 1–9 选第 N 项。搜索框里的数字是**输入**不是选择——先让路。
     if (/^[1-9]$/.test(e.key) && !(e.target instanceof HTMLInputElement)) {
       const target = flat[Number(e.key) - 1];
       if (target !== undefined) { e.preventDefault(); props.onPick(target.registryId); }
       return;
     }
-    if (e.key === "ArrowDown") { e.preventDefault(); setHl((h) => Math.min(h + 1, flat.length - 1)); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); setHl((h) => Math.max(h - 1, 0)); }
+    const next = inSearch && (e.key === "Home" || e.key === "End") ? null : menuNavIndex(e.key, hl, flat.length);
+    if (next !== null) { e.preventDefault(); setHl(next); }
     else if (e.key === "Enter") {
       const target = flat[hl];
       if (target !== undefined) { e.preventDefault(); props.onPick(target.registryId); }
@@ -382,17 +523,23 @@ export function ModelMenu(props: {
   return (
     <Popover
       open
-      up
+      up={props.up !== false}
       className="mp-pop"
-      role="listbox"
+      role="dialog"
       aria-label={STR.modelPicker.menuAria}
       onKeyDown={onKeyNav}
-      {...(props.maxHeight !== undefined ? { style: { maxHeight: props.maxHeight } } : {})}
+      style={{ maxHeight: props.maxHeight, ...(props.viewportPosition === undefined ? {} : { bottom: "auto", ...props.viewportPosition }) }}
     >
       <div className="mp-search">
+        <Search size={14} aria-hidden="true" />
         <input
           ref={searchRef}
           type="text"
+          role="combobox"
+          aria-expanded="true"
+          aria-autocomplete="list"
+          aria-controls={listId}
+          aria-activedescendant={flat[hl] === undefined || modelsDisabled ? undefined : optionId(hl)}
           aria-label={STR.modelPicker.searchAria}
           placeholder={STR.modelPicker.searchPlaceholder}
           value={query}
@@ -403,11 +550,11 @@ export function ModelMenu(props: {
       {warn && (
         <button type="button" className="menu-item mp-warn" onClick={() => props.onOpenSettings?.()}>
           <span>⚠ {props.keyNotice}</span>
-          <span className="sub">{STR.modelPicker.goSettings}</span>
         </button>
       )}
-      {groups.map((g) => (
-        <div key={g.provider}>
+      <div id={listId} className="mp-models" role="listbox" aria-label={STR.modelPicker.menuAria} ref={listRef}>
+      {groups.map((g, gi) => (
+        <div key={g.provider} className={"mp-group" + (gi > 0 ? " separated" : "")}>
           <div className="mp-group-label">
             {/* 分组圆点：中性灰（v7.1 业主裁——按 provider 名取色相是装饰性用色，会被误读成状态点）。 */}
             <span className="g-dot" aria-hidden="true" />
@@ -418,14 +565,20 @@ export function ModelMenu(props: {
               key={m.registryId ?? "demo"}
               type="button"
               role="option"
+              id={optionId(flat.indexOf(m))}
               aria-selected={m.registryId === props.value}
               className="menu-item"
               disabled={modelsDisabled}
+              tabIndex={-1}
+              data-highlighted={flat.indexOf(m) === hl}
+              title={STR.modelPicker.tierMeta.replace("{tier}", tierBadge(m.tier)).replace("{ctx}", formatCtxWindow(m.ctxWindow))}
+              onPointerMove={() => setHl(flat.indexOf(m))}
+              onFocus={() => setHl(flat.indexOf(m))}
               onClick={() => props.onPick(m.registryId)}
             >
               <span className="mi-name">{m.label}</span>
               <span className="sub">
-                {STR.modelPicker.tierMeta.replace("{tier}", tierBadge(m.tier)).replace("{ctx}", formatCtxWindow(m.ctxWindow))}
+                {m.ctxWindow !== undefined ? formatCtxWindow(m.ctxWindow) : ""}
               </span>
               {m.vision === true && <span className="v-badge" title={STR.modelPicker.visionTip}><Eye size={11} /></span>}
               {m.registryId === props.value && <span className="check">✓</span>}
@@ -443,8 +596,12 @@ export function ModelMenu(props: {
         <button
           type="button"
           role="option"
+          id={optionId(flat.length - 1)}
           aria-selected={props.value === null}
           className="menu-item"
+          tabIndex={-1}
+          data-highlighted={hl === flat.length - 1}
+          onPointerMove={() => setHl(flat.length - 1)}
           disabled={props.running === true}
           // 行副文案放短词（长句在 300px 菜单里折成两行、行高翻倍）；完整免责句进 title 与触发条。
           title={STR.modelPicker.demoTitle}
@@ -455,28 +612,68 @@ export function ModelMenu(props: {
           {props.value === null && <span className="check">✓</span>}
         </button>
       )}
+      </div>
+      <div className="mp-controls">
       {wantEffort && (
         <>
           <div className="menu-sep" />
           {/* 运行中注记只在真有可调的东西时出现（未声明支持的模型不谎称「思考程度可调」）。 */}
           {modelsDisabled && supported && <div className="menu-note">{STR.modelPicker.runningNote}</div>}
-          <div className="pop-label">{STR.modelPicker.effortLabel}</div>
-          <div className="th-row" role="group" aria-label={STR.modelPicker.effortGroupAria} ref={effortRef} tabIndex={-1} data-effort-anchor="true">
-            {THINKING_LEVELS.map((lv) => (
+          <div className="th-head">
+            <span className="pop-label">{STR.modelPicker.effortLabel}</span>
+            {supported && declared !== undefined && declared.length > 1 && (
               <button
-                key={lv.id}
                 type="button"
-                data-e={lv.id}
-                title={lv.hint}
-                aria-pressed={level === lv.id}
-                disabled={!supported}
-                onClick={() => { props.onThinkingChange?.(lv.id); }}
-              >{lv.short}</button>
-            ))}
+                className="th-custom"
+                aria-expanded={editingEfforts}
+                onClick={() => { setEditingEfforts(!editingEfforts); }}
+              >
+                <SlidersHorizontal size={11} aria-hidden="true" />
+                {editingEfforts ? STR.modelPicker.effortDone : STR.modelPicker.effortCustom}
+              </button>
+            )}
           </div>
-          {supported ? (
-            <div className="th-hint">{currentLevel.hint}</div>
+          {!editingEfforts ? (
+            <div className="th-row" role="group" aria-label={STR.modelPicker.effortGroupAria} ref={effortRef} tabIndex={-1} data-effort-anchor="true">
+              {levels.map((lv) => (
+                <button
+                  key={lv.id}
+                  type="button"
+                  data-e={lv.id}
+                  title={lv.hint}
+                  aria-pressed={level === lv.id}
+                  disabled={!supported}
+                  onClick={() => { props.onThinkingChange?.(lv.id); }}
+                >{lv.short}</button>
+              ))}
+            </div>
           ) : (
+            <div className="th-edit" role="group" aria-label={STR.modelPicker.effortEditAria}>
+              <p className="th-edit-note">{STR.modelPicker.effortEditNote.replace("{levels}", declaredIds.filter((id) => id !== "off").join(" / ") || STR.modelPicker.effortUndeclared)}</p>
+              <div className="th-edit-list">
+                {declaredIds.filter((id) => id !== "off").map((id) => {
+                  const on = !hidden.includes(id);
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={on}
+                      className="th-edit-chip"
+                      onClick={() => { commitHidden(toggleThinkingHidden(hidden, id, declaredIds)); }}
+                    >
+                      <span className="th-edit-box" aria-hidden="true">{on ? "✓" : ""}</span>
+                      <span>{levelLabelOf(id)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button type="button" className="th-reset" onClick={() => { commitHidden([]); }}>
+                {STR.modelPicker.effortReset}
+              </button>
+            </div>
+          )}
+          {!supported && (
             <>
               <div className="th-off" role="status">{STR.modelPicker.unsupportedNote}</div>
               <details className="th-why">
@@ -499,6 +696,7 @@ export function ModelMenu(props: {
           </button>
         </div>
       )}
+      </div>
     </Popover>
   );
 }

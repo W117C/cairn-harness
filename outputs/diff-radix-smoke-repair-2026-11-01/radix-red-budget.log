@@ -1,0 +1,5 @@
+{"measuredAt":"2026-11-01T09:20:30.183Z","buildFingerprint":"502585fea586d52cdbfbfe787253f685522f2d8e1bc4f91ef6be31125ec6726b","startupMs":157.177542,"hitTest":{"x":704,"y":391.4921875,"hit":true,"tag":"SPAN"},"firstOpenMs":26.199999999254942,"warmOpenMs":{"samples":7,"p50":4.800000000745058,"p95":13.5,"max":13.5,"all":[13.5,5,4.099999997764826,4.899999998509884,4.800000000745058,4.699999999254942,4.200000002980232]}}
+[radix-open-latency] first 26.2ms | warm p50 4.8ms / p95 13.5ms / max 13.5ms
+[radix-open-latency] 超预算：首开 26.2ms > 帽 1ms
+[99955:1101/172030.197255:ERROR:base/process/process_mac.cc:98] task_policy_set TASK_SUPPRESSION_POLICY: (os/kern) invalid argument (4)
+EXIT=1

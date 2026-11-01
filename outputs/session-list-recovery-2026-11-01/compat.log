@@ -1,0 +1,6 @@
+PASS 会话清单失败行在 
+PASS 失败原因上屏：损坏文件路径 + 出路 
+PASS 原句完整保留在 title（长路径不被截断成信息损失） 
+PASS 重试按钮仍在 
+PASS 全程无渲染层控制台错误 
+[sidebar-load-error-smoke] 5/5 PASS · 证据 /Users/ze/Downloads/Cairn/cairn/outputs/session-list-recovery-2026-11-01/compat

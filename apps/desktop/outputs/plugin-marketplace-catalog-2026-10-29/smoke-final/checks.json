@@ -1,0 +1,477 @@
+{
+  "generatedAt": "2026-10-29T13:35:41.481Z",
+  "viewport": {
+    "desktop": "1440x900",
+    "medium": "1120x720",
+    "narrow": "880x640"
+  },
+  "fixture": "synthetic AgentApi",
+  "themeStates": [
+    "light",
+    "dark"
+  ],
+  "screenshots": [
+    "01-desktop-light-plugins.png",
+    "02-narrow-880-memory.png",
+    "03-desktop-dark-memory.png",
+    "04-keyboard-focus-memory.png",
+    "05-empty-memory.png",
+    "06-read-error-memory.png",
+    "07-1120-memory-overlap.png",
+    "08-operation-error-automation.png",
+    "09-settings-skills-inline.png"
+  ],
+  "checks": [
+    {
+      "name": "global rail is visible",
+      "ok": true
+    },
+    {
+      "name": "exactly one destination is current",
+      "ok": true,
+      "detail": 1
+    },
+    {
+      "name": "chat is the startup destination",
+      "ok": true,
+      "detail": {
+        "items": [
+          {
+            "label": "对话",
+            "destination": "chat",
+            "current": "page"
+          },
+          {
+            "label": "插件",
+            "destination": "plugins",
+            "current": null
+          },
+          {
+            "label": "记忆",
+            "destination": "memory",
+            "current": null
+          },
+          {
+            "label": "自动化",
+            "destination": "automation",
+            "current": null
+          },
+          {
+            "label": "设置",
+            "destination": null,
+            "current": null
+          }
+        ],
+        "currents": [
+          {
+            "label": "对话",
+            "destination": "chat",
+            "className": "app-rail-item"
+          }
+        ]
+      }
+    },
+    {
+      "name": "plugins destination is reachable",
+      "ok": true
+    },
+    {
+      "name": "plugins page is visible",
+      "ok": true
+    },
+    {
+      "name": "chat workspace stays mounted and hidden",
+      "ok": true
+    },
+    {
+      "name": "plugins becomes the only current destination",
+      "ok": true,
+      "detail": {
+        "items": [
+          {
+            "label": "对话",
+            "destination": "chat",
+            "current": null
+          },
+          {
+            "label": "插件",
+            "destination": "plugins",
+            "current": "page"
+          },
+          {
+            "label": "记忆",
+            "destination": "memory",
+            "current": null
+          },
+          {
+            "label": "自动化",
+            "destination": "automation",
+            "current": null
+          },
+          {
+            "label": "设置",
+            "destination": null,
+            "current": null
+          }
+        ],
+        "currents": [
+          {
+            "label": "插件",
+            "destination": "plugins",
+            "className": "app-rail-item"
+          }
+        ]
+      }
+    },
+    {
+      "name": "1440px rail, context, header, and actions do not overlap",
+      "ok": true,
+      "detail": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "rects": {
+          "rail": {
+            "left": 0,
+            "top": 38,
+            "right": 48,
+            "bottom": 864,
+            "width": 48,
+            "height": 826
+          },
+          "context": {
+            "left": 48,
+            "top": 38,
+            "right": 248,
+            "bottom": 864,
+            "width": 200,
+            "height": 826
+          },
+          "page": {
+            "left": 248,
+            "top": 38,
+            "right": 1440,
+            "bottom": 864,
+            "width": 1192,
+            "height": 826
+          },
+          "title": {
+            "left": 396,
+            "top": 70,
+            "right": 451.1640625,
+            "bottom": 105,
+            "width": 55.1640625,
+            "height": 35
+          },
+          "actions": {
+            "left": 996,
+            "top": 70,
+            "right": 1292,
+            "bottom": 102,
+            "width": 296,
+            "height": 32
+          }
+        },
+        "overlapping": []
+      }
+    },
+    {
+      "name": "plugin search accepts keyboard input",
+      "ok": true
+    },
+    {
+      "name": "plugin detail opens before destination switching",
+      "ok": true
+    },
+    {
+      "name": "visited plugin page stays mounted and inert behind memory",
+      "ok": true
+    },
+    {
+      "name": "memory owns its own scroll container",
+      "ok": true,
+      "detail": 240
+    },
+    {
+      "name": "plugin search and detail survive a trip to memory",
+      "ok": true
+    },
+    {
+      "name": "memory scroll survives a trip to plugins",
+      "ok": true
+    },
+    {
+      "name": "all visited utility pages remain mounted while chat is active",
+      "ok": true
+    },
+    {
+      "name": "plugin search and detail survive a trip through chat",
+      "ok": true
+    },
+    {
+      "name": "memory scroll survives a trip through chat",
+      "ok": true
+    },
+    {
+      "name": "880px memory destination is reachable",
+      "ok": true
+    },
+    {
+      "name": "880px memory page is visible",
+      "ok": true
+    },
+    {
+      "name": "narrow layout swaps rail context for inline filter",
+      "ok": true,
+      "detail": {
+        "sidebar": "none",
+        "inline": "block",
+        "sidebarExists": true,
+        "inlineExists": true
+      }
+    },
+    {
+      "name": "880px rail, header, and actions do not overlap",
+      "ok": true,
+      "detail": {
+        "width": 880,
+        "scrollWidth": 880,
+        "rects": {
+          "rail": {
+            "left": 0,
+            "top": 38,
+            "right": 48,
+            "bottom": 640,
+            "width": 48,
+            "height": 602
+          },
+          "context": null,
+          "page": {
+            "left": 48,
+            "top": 38,
+            "right": 880,
+            "bottom": 640,
+            "width": 832,
+            "height": 602
+          },
+          "title": {
+            "left": 72,
+            "top": 62,
+            "right": 127.1640625,
+            "bottom": 97,
+            "width": 55.1640625,
+            "height": 35
+          },
+          "actions": {
+            "left": 455,
+            "top": 62,
+            "right": 856,
+            "bottom": 94,
+            "width": 401,
+            "height": 32
+          }
+        },
+        "overlapping": []
+      }
+    },
+    {
+      "name": "1120px restores the destination context sidebar",
+      "ok": true
+    },
+    {
+      "name": "1120px rail, context, header, and actions do not overlap",
+      "ok": true,
+      "detail": {
+        "width": 1120,
+        "scrollWidth": 1120,
+        "rects": {
+          "rail": {
+            "left": 0,
+            "top": 38,
+            "right": 48,
+            "bottom": 720,
+            "width": 48,
+            "height": 682
+          },
+          "context": {
+            "left": 48,
+            "top": 38,
+            "right": 248,
+            "bottom": 720,
+            "width": 200,
+            "height": 682
+          },
+          "page": {
+            "left": 248,
+            "top": 38,
+            "right": 1120,
+            "bottom": 720,
+            "width": 872,
+            "height": 682
+          },
+          "title": {
+            "left": 280,
+            "top": 70,
+            "right": 335.1640625,
+            "bottom": 105,
+            "width": 55.1640625,
+            "height": 35
+          },
+          "actions": {
+            "left": 792,
+            "top": 70,
+            "right": 1088,
+            "bottom": 102,
+            "width": 296,
+            "height": 32
+          }
+        },
+        "overlapping": []
+      }
+    },
+    {
+      "name": "automation destination is reachable",
+      "ok": true
+    },
+    {
+      "name": "automation page is visible",
+      "ok": true
+    },
+    {
+      "name": "dark theme reaches the renderer",
+      "ok": true,
+      "detail": {
+        "theme": "dark",
+        "bodyDark": true
+      }
+    },
+    {
+      "name": "command palette opens from the real Meta+K input path",
+      "ok": true
+    },
+    {
+      "name": "command palette focuses its search field",
+      "ok": true,
+      "detail": {
+        "tag": "INPUT",
+        "className": "cp-input"
+      }
+    },
+    {
+      "name": "command palette lists the page group",
+      "ok": true
+    },
+    {
+      "name": "command palette lists all four destinations",
+      "ok": true
+    },
+    {
+      "name": "real keyboard text filters the palette to memory",
+      "ok": true,
+      "detail": "记忆"
+    },
+    {
+      "name": "keyboard destination selection opens memory",
+      "ok": true,
+      "detail": {
+        "items": [
+          {
+            "label": "对话",
+            "destination": "chat",
+            "current": null
+          },
+          {
+            "label": "插件",
+            "destination": "plugins",
+            "current": null
+          },
+          {
+            "label": "记忆",
+            "destination": "memory",
+            "current": "page"
+          },
+          {
+            "label": "自动化",
+            "destination": "automation",
+            "current": null
+          },
+          {
+            "label": "设置",
+            "destination": null,
+            "current": null
+          }
+        ],
+        "currents": [
+          {
+            "label": "记忆",
+            "destination": "memory",
+            "className": "app-rail-item"
+          }
+        ]
+      }
+    },
+    {
+      "name": "palette selection transfers visible keyboard focus to the active rail item",
+      "ok": true,
+      "detail": {
+        "destination": "memory",
+        "label": "记忆",
+        "outlineStyle": "solid",
+        "outlineWidth": "2px",
+        "boxShadow": "color(srgb 0.988235 0.988235 0.984314) 0px 0px 0px 1px inset, color(srgb 0.164706 0.470588 0.839216 / 0.6) 0px 0px 0px 1px, color(srgb 0.803922 0.886275 0.984314 / 0.6) 0px 0px 6px 1px"
+      }
+    },
+    {
+      "name": "empty memory snapshot remains distinct from loading",
+      "ok": true,
+      "detail": "记忆\n还没有记忆\nCairn 会在对话中记下项目约定和你的偏好。"
+    },
+    {
+      "name": "snapshot read failure is visible inside the memory page",
+      "ok": true,
+      "detail": "记忆\n快照读取失败：夹具：快照读取失败"
+    },
+    {
+      "name": "automation operation target opens",
+      "ok": true
+    },
+    {
+      "name": "page operation failure is visible inside its destination",
+      "ok": true,
+      "detail": "触发失败：夹具：触发失败"
+    },
+    {
+      "name": "page operation failure does not leak into chat",
+      "ok": true
+    },
+    {
+      "name": "destination retains its own operation failure",
+      "ok": true
+    },
+    {
+      "name": "destination error can be dismissed",
+      "ok": true
+    },
+    {
+      "name": "settings no longer contains durable destinations",
+      "ok": true
+    },
+    {
+      "name": "settings skills section is reachable",
+      "ok": true
+    },
+    {
+      "name": "settings skills keeps its filter visible without page context",
+      "ok": true,
+      "detail": {
+        "display": "block",
+        "inline": true
+      }
+    },
+    {
+      "name": "renderer produced no console errors",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "failed": 0
+}

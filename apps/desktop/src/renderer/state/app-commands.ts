@@ -32,7 +32,7 @@ interface AppCommandsDeps {
   toggleCheat: () => void;
   closeCheat: () => void;
   ctrlTabCycle: boolean;
-  composerMenuBlock: "暂不可切换：正在载入排队消息…" | "暂不可切换：正在创建会话…" | "暂不可切换：先处理上方的决定卡…" | null;
+  composerMenuBlock: "暂不可切换：正在载入排队消息…" | "暂不可切换：正在创建会话…" | "暂不可切换：先处理上方的决定卡…" | "暂不可切换：会话读取失败，请先重试" | null;
   askForActive: AskPayload | null;
   pendingClarify: { callId: string; questions: ClarifyQuestion[]; } | null;
   pendingPlan: { callId: string; plan: PlanProposal; } | null;
@@ -119,6 +119,8 @@ export function useAppCommands(deps: AppCommandsDeps) {
       if (e.key === "Escape") {
         // 站点授权弹层自己吃 Esc（2026-10-18）：全局这里让路，否则按 Esc 想关弹层会顺带停掉本轮。
         if (document.querySelector('.bp-permit[role="alertdialog"]') !== null) return;
+        // 自持 Esc 的就地编辑（排队项）：Esc 只取消这次编辑，不许被智慧停止吃掉（捕获阶段先到这里）。
+        if (readGateInput(h.paletteOpen).escOwnsTarget) return;
         if (h.pluginSidebarOpen) { e.preventDefault(); h.closePluginSidebar(); return; }
         // Esc 智慧停止（§7.3 禁令的正面写法）：浮层优先——开着菜单/弹层/速查表/目录时 Esc 只关它，不动运行。
         // capture 阶段检查：此刻菜单还开着，能可靠判定；等冒泡时 Radix 已把它关了。

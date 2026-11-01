@@ -108,11 +108,16 @@ export function PermissionMenu(props: {
   );
 }
 
-/** 危险档二次确认卡（自动 / 完全允许；危险动作显式确认；确认按钮才是真切换）。 */
-export function PermissionConfirm(props: { mode: PermissionMode; onCancel: () => void; onConfirm: () => void }) {
-  const copy = props.mode === "full-access"
+/** 危险档确认文案（菜单内联确认卡与 Workbench 模态确认共用这一处，防两处措辞漂移）。 */
+export function permissionConfirmCopy(mode: PermissionMode): { aria: string; title: string; desc: string } {
+  return mode === "full-access"
     ? { aria: STR.permissionMenu.confirmFullAria, title: STR.permissionMenu.confirmFullTitle, desc: STR.permissionMenu.confirmFullDesc }
     : { aria: STR.permissionMenu.confirmAria, title: STR.permissionMenu.confirmTitle, desc: STR.permissionMenu.confirmDesc };
+}
+
+/** 危险档二次确认卡（自动 / 完全允许；危险动作显式确认；确认按钮才是真切换）。 */
+export function PermissionConfirm(props: { mode: PermissionMode; onCancel: () => void; onConfirm: () => void }) {
+  const copy = permissionConfirmCopy(props.mode);
   return (
     <div className="perm-confirm" role="alertdialog" aria-label={copy.aria}>
       <div className="perm-confirm-title">{copy.title}</div>

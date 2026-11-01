@@ -1,0 +1,13 @@
+=== 改前 A：apply_patch 卡不摆抬头（只有补丁原文）===
+     × 卡上真出现抬头，且补丁原文仍在 8ms
+      Tests  1 failed | 17 passed (18)
+
+=== 改前 B：抬头函数本身不成立（恒 undefined）===
+     × 抬头：文件数、增删行数、前三路径 3ms
+     × 卡上真出现抬头，且补丁原文仍在 6ms
+      Tests  2 failed | 16 passed (18)
+
+=== 复原后 ===
+      Tests  18 passed (18)
+=== sha256 ===
+   2 c095592d4961b0902773c7735ab79b5dd1a94c3e74275a99ce8542f004bc0460

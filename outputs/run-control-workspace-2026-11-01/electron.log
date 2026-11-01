@@ -1,0 +1,13 @@
+$ node scripts/smoke.mjs
+[cairn-smoke] bootstrap entry
+[cairn-smoke] TypeScript loader registered
+[cairn-smoke] main module loaded
+[cairn-smoke] app ready
+[cairn-smoke] startup failure: Error: Failed to load image from path '/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/public/brand/cairn.png'
+    at <anonymous> (/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/main/index.ts:1942:48)
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron .
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] cairn-desktop@0.2.0 smoke: `node scripts/smoke.mjs`
+Exit status 1

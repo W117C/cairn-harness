@@ -1,0 +1,130 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "设置导航列出全部分区",
+      "ok": true,
+      "detail": [
+        "通用",
+        "模型与 Provider",
+        "联网搜索",
+        "用量统计",
+        "进化",
+        "权限与安全",
+        "高级",
+        "快捷键",
+        "技能中心",
+        "工作树",
+        "关于与更新"
+      ]
+    },
+    {
+      "name": "每个分区都能点开、正文非空、无渲染错误边界",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "name": "进化分区渲染出报告（Episode / playbook / 预算）",
+      "ok": true,
+      "detail": {
+        "text": "进化\n证据\n只读快照\nEpisode\nsuccess 8 / failure 1 / unknown 3；verify green 6 / red 2 / none 4\n12 条\n未知面\njudge 未测 3；verify 未跑 4；user 未测 9\n不折成成功\n成本\n主面 12400 token；worker 2200；可定价 6 / 不可定价 3\n记录值\n经验 playbook\ncandid"
+      }
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": [],
+  "results": [
+    {
+      "label": "通用",
+      "clicked": true,
+      "textLen": 190,
+      "boundary": false,
+      "renderError": false,
+      "title": "通用"
+    },
+    {
+      "label": "模型与 Provider",
+      "clicked": true,
+      "textLen": 189,
+      "boundary": false,
+      "renderError": false,
+      "title": "模型与 Provider"
+    },
+    {
+      "label": "联网搜索",
+      "clicked": true,
+      "textLen": 215,
+      "boundary": false,
+      "renderError": false,
+      "title": "联网搜索"
+    },
+    {
+      "label": "用量统计",
+      "clicked": true,
+      "textLen": 509,
+      "boundary": false,
+      "renderError": false,
+      "title": "用量统计"
+    },
+    {
+      "label": "进化",
+      "clicked": true,
+      "textLen": 466,
+      "boundary": false,
+      "renderError": false,
+      "title": "进化"
+    },
+    {
+      "label": "权限与安全",
+      "clicked": true,
+      "textLen": 271,
+      "boundary": false,
+      "renderError": false,
+      "title": "权限与安全"
+    },
+    {
+      "label": "高级",
+      "clicked": true,
+      "textLen": 617,
+      "boundary": false,
+      "renderError": false,
+      "title": "高级"
+    },
+    {
+      "label": "快捷键",
+      "clicked": true,
+      "textLen": 120,
+      "boundary": false,
+      "renderError": false,
+      "title": "快捷键"
+    },
+    {
+      "label": "技能中心",
+      "clicked": true,
+      "textLen": 36,
+      "boundary": false,
+      "renderError": false,
+      "title": "技能中心"
+    },
+    {
+      "label": "工作树",
+      "clicked": true,
+      "textLen": 18,
+      "boundary": false,
+      "renderError": false,
+      "title": "工作树"
+    },
+    {
+      "label": "关于与更新",
+      "clicked": true,
+      "textLen": 109,
+      "boundary": false,
+      "renderError": false,
+      "title": "关于与更新"
+    }
+  ]
+}

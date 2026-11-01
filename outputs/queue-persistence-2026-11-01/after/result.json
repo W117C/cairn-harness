@@ -1,0 +1,185 @@
+{
+  "checks": [
+    {
+      "name": "保存确认前没有启动任务",
+      "ok": true
+    },
+    {
+      "name": "待保存期间显示状态且不能重复恢复",
+      "ok": true
+    },
+    {
+      "name": "出队保存失败恢复原消息且没有运行",
+      "ok": true
+    },
+    {
+      "name": "保存失败后切换项目不会被旧磁盘消息覆盖",
+      "ok": true
+    },
+    {
+      "name": "light 重试保存按钮对比度至少 4.5",
+      "ok": true
+    },
+    {
+      "name": "dark 重试保存按钮对比度至少 4.5",
+      "ok": true
+    },
+    {
+      "name": "窄窗口队列与重试入口没有横向溢出",
+      "ok": true
+    },
+    {
+      "name": "重试保存期间仍没有派发任务",
+      "ok": true
+    },
+    {
+      "name": "重试保存提交的是本窗口修改后的消息",
+      "ok": true
+    },
+    {
+      "name": "落盘确认后只执行一次正确的队首",
+      "ok": true
+    },
+    {
+      "name": "自动续发也等待出队保存确认",
+      "ok": true
+    },
+    {
+      "name": "主进程明确未接收时恢复队列，等待用户继续",
+      "ok": true
+    },
+    {
+      "name": "已接收后的执行失败不会重新入队或重复派发",
+      "ok": true
+    },
+    {
+      "name": "迟到的旧磁盘快照不能把已派发的消息放回队列",
+      "ok": true
+    },
+    {
+      "name": "旧快照未造成重复执行",
+      "ok": true
+    },
+    {
+      "name": "所有队列写入与任务均绑定原项目",
+      "ok": true
+    },
+    {
+      "name": "无 renderer/preload 错误",
+      "ok": true
+    }
+  ],
+  "errors": [],
+  "calls": {
+    "writes": [
+      {
+        "sessionId": "dup",
+        "items": [],
+        "workspace": "/tmp/demo-ws"
+      },
+      {
+        "sessionId": "dup",
+        "items": [
+          {
+            "text": "修改后保留的消息",
+            "attachments": []
+          }
+        ],
+        "workspace": "/tmp/demo-ws"
+      },
+      {
+        "sessionId": "dup",
+        "items": [
+          {
+            "text": "修改后保留的消息",
+            "attachments": []
+          }
+        ],
+        "workspace": "/tmp/demo-ws"
+      },
+      {
+        "sessionId": "dup",
+        "items": [],
+        "workspace": "/tmp/demo-ws"
+      },
+      {
+        "sessionId": "dup",
+        "items": [
+          {
+            "text": "后续排队消息",
+            "attachments": []
+          }
+        ],
+        "workspace": "/tmp/demo-ws"
+      },
+      {
+        "sessionId": "dup",
+        "items": [],
+        "workspace": "/tmp/demo-ws"
+      },
+      {
+        "sessionId": "dup",
+        "items": [
+          {
+            "text": "后续排队消息",
+            "attachments": []
+          }
+        ],
+        "workspace": "/tmp/demo-ws"
+      },
+      {
+        "sessionId": "dup",
+        "items": [],
+        "workspace": "/tmp/demo-ws"
+      },
+      {
+        "sessionId": "dup",
+        "items": [
+          {
+            "text": "快照竞态消息",
+            "attachments": []
+          }
+        ],
+        "workspace": "/tmp/demo-ws"
+      },
+      {
+        "sessionId": "dup",
+        "items": [],
+        "workspace": "/tmp/demo-ws"
+      }
+    ],
+    "runs": [
+      {
+        "message": "修改后保留的消息",
+        "mode": "guided",
+        "sessionId": "dup",
+        "workspace": "/tmp/demo-ws"
+      },
+      {
+        "message": "后续排队消息",
+        "mode": "guided",
+        "sessionId": "dup",
+        "workspace": "/tmp/demo-ws"
+      },
+      {
+        "message": "后续排队消息",
+        "mode": "guided",
+        "sessionId": "dup",
+        "workspace": "/tmp/demo-ws"
+      },
+      {
+        "message": "运行中读取快照",
+        "mode": "guided",
+        "sessionId": "dup",
+        "workspace": "/tmp/demo-ws"
+      },
+      {
+        "message": "快照竞态消息",
+        "mode": "guided",
+        "sessionId": "dup",
+        "workspace": "/tmp/demo-ws"
+      }
+    ],
+    "reads": 1
+  }
+}

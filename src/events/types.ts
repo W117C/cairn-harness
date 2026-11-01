@@ -130,7 +130,9 @@ export interface ToolResultEvent { type: "tool_result"; callId: string; ok: bool
   blockedBy?: ToolBlockReason; /** 编排按住了这一次扩张（见 `HARNESS_HOLD_REASONS`）。**缺席 = 没人按住**
    *  （已派发出 worker，或结局来自 worker 自己）；与 `ok:false` 刻意不同款：worker 跑挂的回执也是 ok:false，
    *  那一格没有 hold——「失败」与「压根没起」在两列里必须长得不一样。 */
-  hold?: HarnessHoldReason }
+  hold?: HarnessHoldReason; /** 本回执附带注入的经验 id（Cairn Evolve 快环：verify 红 / 卡死提醒）。
+   *  缺席 = 这一笔没有经验提醒（旧日志亦然）；收束投影据此把「中途提示过哪些经验」记进 Episode。 */
+  nudgeExperienceIds?: string[] }
 export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number; /** 缓存分列（可选）：**缺字段 = 该 provider 没上报，不等于 0**。约定 `inputTokens` 是含缓存的总输入，
    *  下面两个是其中的分块——不得再与 inputTokens 相加（metering 的 MeterUsage 要互斥桶，适配器换算后再交）。
    *  写侧断点（Anthropic cache_control / 稳定前缀排布）尚未接线：先把「命中没有」测出来，再谈制造命中。 */
@@ -145,6 +147,18 @@ export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: 
    * Absence preserves legacy semantics. Prediction usage is charged but excluded
    * from context calibration. */
   source?: "main" | "worker" | "summary" | "compaction_prediction" }
+/** 会话装配面的进化分配（Evolve P0，ADR 0005 的既有字段通道）：
+ *  本场属于哪个实验、注入了哪些经验。**缺席 = 本场不在进化实验中**（不是对照组）；
+ *  `arm: "none"` 才是「在实验中但未分配」的显式值。旧日志没有这一格，重放逐字不变。 */
+export interface SessionEvolutionStamp {
+  experimentId: string | null;
+  arm: "none" | "control" | "treatment" | "shadow";
+  propensity: number | null;
+  policyVersion: string;
+  injectedExperienceIds: string[];
+  injectedChars: number;
+}
+
 /** 会话元信息：分支会话首行携带 branch_of 指向原会话；
  *  M2f：sidechat 会话首行携带 kind="sidechat" + parent_session_id 指向主会话；
  *  M4a：定时任务触发的新会话首行携带 origin="scheduled" + automation_id/automation_name（§12.2.2）。 */
@@ -166,6 +180,8 @@ export interface SessionMetaEvent {
    *  `boundary_event_id` = 继承的父事件前缀长度（**含**该 id，1-based 行号口径）。
    *  `from_session_id` = 父会话 id（可选）：路径改名/移动时仍有一个人读的身份。 */
   fork?: { from_session_path: string; boundary_event_id: number; from_session_id?: string };
+  /** 进化分配（Evolve）：缺席 = 不在实验中；只增字段，不改事件型与重放。 */
+  evolve?: SessionEvolutionStamp;
 }
 
 /** 日志结构控制记录（ADR 0005）：**关于日志本身**的记录，不是「agent 做了什么」。
@@ -849,6 +865,9 @@ export interface SurfaceAccountEvent {
    *  会走 `requestFace` 逐请求现算）。采样条件之一，落进事件里是为了让「为什么这一轮被记录」
    *  可回放、可审计。 */
   faceChanged: boolean;
+  /** 本请求进化注入的字符数（Evolve）：**缺席 = 未记录，不等于 0**；
+   *  与 memoryChars / skillsBlockChars 同层，不并入任何既有桶。 */
+  evolveChars?: number;
 }
 
 export type AgentEvent = (

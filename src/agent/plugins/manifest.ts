@@ -57,6 +57,8 @@ export async function detectJsEntry(root: string): Promise<string | null> {
 
 export interface ManifestParseResult {
   name: string;
+  /** 安装器用于把目录内容绑定到签名目录版本；运行时插件允许不声明版本。 */
+  version: string | null;
   unknownFields: string[];
   warnings: string[];
   /** commands/agents/skills 目录覆盖（相对插件根）。 */
@@ -253,6 +255,7 @@ export async function parsePluginManifest(root: string): Promise<ManifestParseRe
   const userConfig = m.userConfig && typeof m.userConfig === "object" ? (m.userConfig as Record<string, unknown>) : null;
   return {
     name,
+    version: typeof m.version === "string" && m.version.trim() !== "" ? m.version.trim() : null,
     unknownFields,
     warnings,
     commandsDir,

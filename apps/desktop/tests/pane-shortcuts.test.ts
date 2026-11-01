@@ -20,8 +20,9 @@ it("窗格 tooltip 的键位只从 PANE_SHORTCUTS 取（不再手抄）", () => 
   expect(app).not.toContain('title="终端窗格（Ctrl+`）"');
   expect(app).not.toContain('title="变更窗格（⌘⇧D）"');
   expect(app).not.toContain('title="浏览器窗格（⌘⇧B）"');
-  expect(app).toContain('paneShortcutKeys("terminal")');
-  expect(app).toContain('<span className="sub">{paneShortcutKeys(k)}</span>');
+  expect(app).toContain('paneShortcutKeys("changes")');
+  expect(app).toContain('PANE_OPENABLE.filter(k => k !== "changes").map(kind => (');
+  expect(app).toContain('<span className="sub">{paneShortcutKeys(kind)}</span>');
 });
 
 describe("PANE_SHORTCUTS：八窗格一表全覆盖", () => {

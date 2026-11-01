@@ -69,6 +69,10 @@ export const BENCH_KNOBS: Readonly<Record<string, BenchDeclaration>> = {
     face: "not-applicable",
     why: "纯渲染层快捷键闸（App.tsx 的 hotkeysRef：Ctrl+Tab 切会话），不进 runLoop 也不进 agent-runner——基准是 CLI 跑器，根本没有键盘面可拦",
   },
+  notifyOnComplete: {
+    face: "not-applicable",
+    why: "桌面壳的完成通知开关（Notification 只在 Electron 主进程发）；基准是 CLI 跑器，没有系统通知面——开关只影响桌面壳",
+  },
 };
 
 /** 跑器可以按命令行**改口**的键（只有真接了的才许改口，见 `assemblyOverrides` 与 loop-eval 的三枚旗标）。 */

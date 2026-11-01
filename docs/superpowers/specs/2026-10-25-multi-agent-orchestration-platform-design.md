@@ -1,6 +1,10 @@
 # 多智能体编排平台设计（Orchestration Kernel）
 
-状态：P0–P4 本地纵切已实施（2026-10-25，提交 `100fc3b`…`014ac0e3`）；P3 的 race/gather any/quorum 与远程 worker 未实现，静态展开 fail-closed。现役实现与边界见 `outputs/orchestration-delivery-2026-10-25/FINAL.md` 与 `PROGRESS.md` 第 711 页。
+状态：P0–P4 本地纵切已实施（2026-10-25，提交 `100fc3b`…`014ac0e3`）；统一运行时在
+2026-10-27 补齐本地生命周期、动态 race/gather any/quorum、崩溃恢复与只读远程执行适配器。
+真实远程部署、受控远程写回与 P5 仍未验证；P6 的传输中立 SDK/ACP/A2A 桥已实现，
+真实外部传输未认证。现役实现与边界见
+`docs/superpowers/specs/2026-10-27-unified-agent-runtime-design.md`、`STATE.md` 与 `PROGRESS.md`。
 代码核对起点：`f4bffa3a`（HEAD）。仓库中其它会话的未提交改动不在本设计范围内。
 交付目标：P0–P4 全量（内核 + 控制面），P5 持续评测，P6 开放面留门。
 
@@ -355,6 +359,7 @@ type FlowNode =
 planned → queued → running → verifying → merging → done
                     ↘ failed → retry/queued
                     ↘ cancelled
+                    ↘ needs_you → 人工接管/重试/取消
 ```
 
 - `planned`：在已批准计划里、依赖未满足或未入队。
@@ -364,6 +369,7 @@ planned → queued → running → verifying → merging → done
 - `merging`：合并/发布队列中。
 - `done`：契约通过 + 证据新鲜 + 策略满足。
 - `failed`：可重试或升级；旧 run 事件不改写。
+- `needs_you`：断线、未知副作用或缺少受控交付能力；保留租约，禁止自动重试，等待人工确认。
 
 ### 7.2 就绪判定（纯函数）
 
@@ -411,10 +417,12 @@ planned → queued → running → verifying → merging → done
 
 ### 7.7 崩溃恢复与幂等
 
-- 启动时重放事件；`running` 但无终态的任务标记 `interrupted`，按策略重试或升级。
+- 启动时重放事件；`running`、`verifying`、`merging` 但没有活动执行器的任务转为
+  `needs_you`，不自动重试。重复恢复是幂等的，不重复追加状态。
 - 恢复不重放副作用：provider/tool 提交带 `requestId`；合并带幂等键。
 - 本地 worktree 由事件里的 `worktree/base_commit` 重建；孤儿 worktree 走既有扫描。
-- 远程 worker 断线：心跳超时 → 任务重新入队或升级；worker 侧结果以幂等键去重。
+- 远程 worker 断线：心跳超时或连接中断 → `needs_you`，保留预留预算与 run fence；
+  worker 侧结果以幂等键去重，迟到结果只记隔离收据，不改写当前状态。
 
 ### 7.8 100+ 的边界
 
@@ -674,15 +682,19 @@ P0 的“完成”不是“能跑多 agent”，而是**上层可以安全地长
 5. **编码包先行**：Task/Contract/Capability/Artifact 不绑 git；远程后端 P3，100+ 指计划规模而非同时拨号。
 
 
-## 实施状态（2026-10-26 复核）
+## 实施状态（2026-10-27 复核）
 
 | 层 | 状态 | 证据 |
 |---|---|---|
 | P0 领域/Flow 校验 | 已实现 | `src/orchestration/flow.ts` / `validate.ts` / `types.ts`；`tests/orchestration-plan.test.ts` |
 | P1 调度与持久化 | 已实现（本地串行后端） | `src/orchestration/{engine,schedule,store}.ts`；`tests/orchestration-*.test.ts` |
 | P2 独立 verifier 与工件 | 已实现 | `src/orchestration/local-backend.ts` / `artifacts.ts`；producer ≠ verifier 判据 |
-| P3 动态 Flow / 远程 worker | **未实现，fail-closed** | `flow.ts` 对 `race` 与 `gather any/quorum` 显式抛错；`local-backend.ts` 对 network/shell/git 能力拒收 |
+| P3 动态 Flow | 已实现（本地判卷） | `control-node.ts`、`engine.ts`；`tests/orchestration-dynamic-control.test.ts`；取消按 task id 排序，迟到结果 fenced |
+| P3 远程 worker | 适配器已实现，真实互操作未认证 | `remote-backend.ts` / `remote-protocol.ts`；fake worker 验证 capability、fence、契约摘要、heartbeat、deadline 与断线 `needs_you`；当前只接收只读/无副作用任务 |
+| 本地 agent 生命周期 | 已实现（本地判卷） | `local-agent-runtime.ts`、`agent-lifecycle.ts`；稳定 thread、send/resume/close、幂等与 stale fence |
 | P4 桌面控制面 | 已实现 | `OrchestrationPane`、IPC v24；`apps/desktop/tests/orchestration-*.test.*` |
-| P5 真实评测 / P6 SDK、A2A | 未开工（见任务清单「待开工」） | — |
+| P5 真实评测 / P6 开放面 | P5 未开工；P6 的传输中立 SDK/ACP/A2A 桥与外部基准适配已实现（2026-10-27，见 `2026-10-27-interop-ecosystem-design.md`）；真实 ACP stdio、A2A HTTP/SSE 与外部基准执行未认证 | 本地 adapter 或 fixture 不等于外部认证 |
 
-**范围裁决**：P3 不在本轮交付内。理由不是「做不动」，而是下列前提未成立：远程 worker 需要短期能力令牌、断线重连与幂等回执的完整协议，当前没有真实外部 worker 与网络面；在没有这些的前提下实现 race/gather 的动态取消，只能得到不可验证的假语义。因此本仓选择显式 fail-closed，并把「补齐或正式缩范围」记录在 `docs/REPOSITORY-STATUS.md`。
+**范围裁决**：动态 Flow 与只读远程适配器已补齐并按本地判卷收口；远程写回仍不通，
+因为受控交付、回滚和真实外部网络分区尚无验证面。当前不把 fake worker、本地 HTTP
+或单进程取消测试表述为真实远程部署能力。

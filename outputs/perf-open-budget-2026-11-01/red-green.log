@@ -1,0 +1,7 @@
+=== 造红：把打开会话的帽压到 1ms（CAIRN_PERF_OPEN_BUDGET_MS=1）===
+[performance-smoke] 超预算：打开会话 637.8ms > 帽 1ms
+EXIT=1
+
+=== 复原（默认帽 1500ms）===
+EXIT=0
+budgets: {"p95Ms":200,"maxMs":500,"startupMs":1500,"openMs":1500} openMs: 612.2

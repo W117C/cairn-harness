@@ -8,9 +8,14 @@ import { join } from "node:path";
 import { mkdir, realpath } from "node:fs/promises";
 import { createActionFusion } from "../agent/action-fusion";
 import { AUTOMATION_TOOL_NAMES } from "../agent/automation-surface";
-import { sessionToolSpecs, type SessionPluginTool } from "../agent/session-provider";
+import { gateToolSpecs, sessionToolSpecs, type SessionPluginTool } from "../agent/session-provider";
 import { currentPluginRuntime, type PluginRuntime } from "../agent/plugins";
 import { MCP_ACTIVE_TOOL_LIMIT, mcpServerKey, type McpToolInfo } from "../agent/plugins/mcp";
+import {
+  searchToolCatalog,
+  TOOL_SEARCH_DEFAULT_RESULTS,
+  type ToolCatalogEntry,
+} from "../agent/tool-search";
 import { annotateExecCause } from "../agent/verify";
 import {
   downgradeSuggestion,
@@ -499,6 +504,51 @@ function mcpReleaseTool(rt: PluginRuntime): Tool {
   };
 }
 
+/** 检索目录 = 静态工具的精确 schema + 全部 MCP 工具（含未激活）。
+ *  `active` 只说明此刻是否已在模型面，不参与权限判定——搜索不授予任何执行权。 */
+function toolSearchCatalog(rt: PluginRuntime): ToolCatalogEntry[] {
+  const catalog: ToolCatalogEntry[] = [];
+  for (const spec of gateToolSpecs()) {
+    catalog.push({
+      name: spec.function.name,
+      description: spec.function.description ?? "",
+      inputSchema: spec.function.parameters,
+      source: "static",
+      active: true,
+    });
+  }
+  for (const [scoped, info] of rt.mcpTools) {
+    const server = mcpServerKey(info.plugin, info.server);
+    const active = scopedToolActive(rt, scoped, info);
+    catalog.push({
+      name: scoped,
+      description: info.description,
+      inputSchema: info.inputSchema,
+      source: "mcp",
+      server,
+      active,
+      ...(active ? {} : { activation: { tool: "mcp_activate" as const, server, tool_name: scoped } }),
+    });
+  }
+  return catalog;
+}
+
+/** 只读检索元工具：返回候选与精确 schema，**不激活、不执行**。
+ *  真正的执行仍走 `gatedMcpTool`；read-only 档能搜到写工具，但调用时照样被门拒绝。 */
+function toolSearchTool(rt: PluginRuntime): Tool {
+  return {
+    name: "tool_search",
+    async run(args) {
+      const query = typeof args.query === "string" ? args.query : "";
+      const requested = typeof args.max_results === "number" && Number.isFinite(args.max_results)
+        ? Math.trunc(args.max_results)
+        : TOOL_SEARCH_DEFAULT_RESULTS;
+      const outcome = searchToolCatalog(toolSearchCatalog(rt), query, { maxResults: requested });
+      return { ok: outcome.ok, output: JSON.stringify(outcome) };
+    },
+  };
+}
+
 /** M2e：把插件面装进统一注册表——skill + MCP 目录/激活元工具 + **已激活**的 scoped MCP 工具。
  *  返回注入名清单（会话结束摘除）。未激活 server 的工具不装表：模型看不见，也不该调得动。 */
 export function installPluginTools(rt: PluginRuntime): string[] {
@@ -519,10 +569,11 @@ export function installPluginTools(rt: PluginRuntime): string[] {
     injected.push("skill");
   }
   if (rt.mcpTools.size > 0) {
+    table["tool_search"] = toolSearchTool(rt);
     table["mcp_list"] = mcpListTool(rt);
     table["mcp_activate"] = mcpActivateTool(rt);
     table["mcp_release"] = mcpReleaseTool(rt);
-    injected.push("mcp_list", "mcp_activate", "mcp_release");
+    injected.push("tool_search", "mcp_list", "mcp_activate", "mcp_release");
   }
   for (const [scoped, info] of rt.mcpTools) {
     // 最小测试桩没有 active 语义 ⇒ 保持旧行为（全部可执行）；生产 PluginRuntime 必有。
@@ -549,6 +600,7 @@ export function resolveLivePluginTool(name: string, rt: PluginRuntime): Tool | u
   // 模型面由 requestFace 现算会列出它们，执行表却是起点快照 ⇒ 不补这一手，
   // 模型会看到 mcp_list/mcp_activate 却吃 unknown tool。与 scoped 工具同一条补表入口。
   if (rt.mcpTools.size > 0) {
+    if (name === "tool_search") return toolSearchTool(rt);
     if (name === "mcp_list") return mcpListTool(rt);
     if (name === "mcp_activate") return mcpActivateTool(rt);
     if (name === "mcp_release") return mcpReleaseTool(rt);
@@ -637,6 +689,19 @@ export function pluginToolSpecsFromRuntime(rt: PluginToolSource | null): Session
   const lazy = typeof rt.isMcpServerActive === "function" || typeof rt.isMcpToolActive === "function";
   if (lazy && rt.mcpTools.size > 0) {
     out.push(
+      {
+        name: "tool_search",
+        description: "检索工具目录（含尚未激活的 MCP 工具）：返回精确调用名、schema 与激活方式。只查找，不执行、不激活。",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "要查的能力，一句话或工具名（≤200 字符）" },
+            max_results: { type: "number", description: "可选：返回条数（缺省 5，上限 8）" },
+          },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
       {
         name: "mcp_list",
         description: "列出已连接的 MCP server；给 server 时列出工具名（不加载 schema）。先取 key，再 mcp_activate。",

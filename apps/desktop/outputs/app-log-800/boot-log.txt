@@ -1,0 +1,11 @@
+userData=/tmp/cairn-log-ud.AkyA3R
+workspace=/tmp/cairn-log-ws.ZERilt
+--- files ---
+total 8
+drwxr-xr-x@  3 ze  wheel   96 Oct 30 12:45 .
+drwx------@ 23 ze  wheel  736 Oct 30 12:45 ..
+-rw-r--r--@  1 ze  wheel  307 Oct 30 12:45 main.log
+--- main.log ---
+2026-10-30T04:45:31.890Z [info] [byok-inject] 启动注入：无可注入 key（未存或 env 优先）
+2026-10-30T04:45:31.891Z [warn] [scheduler] journal 保留收敛完成（当前 0 条）
+2026-10-30T04:45:31.891Z [info] [m4a] 调度器已启动（桌面端常驻接线：快照/CRUD/触发同实例）

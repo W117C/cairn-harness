@@ -1,4 +1,4 @@
-// 会话型 provider：保持既有日志重组/compaction 逻辑，transport 可由统一 registry 路由到 GLM/OpenAI/Anthropic/Gemini。
+// 会话型 provider：保持既有日志重组/compaction 逻辑，transport 可由统一 registry 路由到 GLM/OpenAI/Anthropic/Gemini/DeepSeek。
 // 2026-10-16 改名 glm-session.ts → session-provider.ts：这个文件早就不是 GLM 专属（transport 可路由到
 // 四家、83 个文件引用它、主会话与 worker/sidechat/沉淀轮共用同一装配入口），名字却在谎报职责。
 // 代价如实记：40 条变异锚点的 `src:` + PROGRESS.md 台账 5 条裸行号引用（docs-check D-10 的 legacy 名单）

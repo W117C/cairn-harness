@@ -1,0 +1,55 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "项目行有「更多」菜单入口",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "侧栏标出「目录失联」",
+      "ok": true,
+      "detail": "目录失联"
+    },
+    {
+      "name": "真指针点开项目菜单",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "菜单里有「更改项目目录…」",
+      "ok": true,
+      "detail": "在 Finder 中显示\n重命名显示名…\n项目设置…\n更改项目目录…\n移除…"
+    },
+    {
+      "name": "真指针点「更改项目目录…」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "走 relocateProject，新目录取系统选择器返回值",
+      "ok": true,
+      "detail": {
+        "kind": "relocateProject",
+        "id": "p1",
+        "path": "/tmp/demo-ws-moved"
+      }
+    },
+    {
+      "name": "成功提示上屏（项目与会话不变，只换目录）",
+      "ok": true,
+      "detail": "Cairn\n工具\nCairn\n新任务\n⌘N\ndemo-ws\n临时对话\n今天\n1\n接 routing 开关并跑全量验证\n1 分钟前\n添加项目\n服务正常\n设置与偏好\n下午好呀，今天想做点什么？\n选择项目\nTab\n引导\n方案\ndeepseek-c"
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": [],
+  "call": {
+    "kind": "relocateProject",
+    "id": "p1",
+    "path": "/tmp/demo-ws-moved"
+  }
+}

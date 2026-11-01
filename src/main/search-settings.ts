@@ -10,9 +10,9 @@ import {
   type SearchConfig, type SearchProvider, type WebSearchDeps,
 } from "../tools/web-search";
 import type { SearchSettingsInput, SearchSettingsSaveResult, SearchSettingsSnapshot, SearchSettingsTestResult } from "./ipc-protocol";
+import { isRecord } from "../is-record";
 
 const SECRET_OWNER = "web-search";
-const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const isProvider = (v: unknown): v is SearchProvider => ["searxng", "brave", "tavily", "custom"].includes(String(v));
 const message = (error: unknown): string => error instanceof SettingsError ? error.message : "搜索设置操作失败，请检查文件权限或系统安全存储后重试";
 class SettingsError extends Error {}
@@ -27,13 +27,13 @@ async function readDocument(workspace: string): Promise<Record<string, unknown>>
   }
   let value: unknown;
   try { value = JSON.parse(text); } catch { throw new SettingsError("搜索配置 JSON 损坏，请先修复 .agent/config.json；原文件未覆盖"); }
-  if (!isObject(value)) throw new SettingsError(".agent/config.json 须是 JSON 对象；原文件未覆盖");
+  if (!isRecord(value)) throw new SettingsError(".agent/config.json 须是 JSON 对象；原文件未覆盖");
   return value;
 }
 
 /** 只校验结构和 URL，不解析 DNS、不请求端点。网络边界由实际检索的既有闸执行。 */
 function normalize(input: SearchSettingsInput): SearchConfig {
-  if (!isObject(input) || typeof input.enabled !== "boolean" || !isProvider(input.provider) ||
+  if (!isRecord(input) || typeof input.enabled !== "boolean" || !isProvider(input.provider) ||
     typeof input.endpoint !== "string" || typeof input.allowLocalEndpoint !== "boolean" ||
     (input.clearApiKey !== undefined && typeof input.clearApiKey !== "boolean") ||
     (input.apiKey !== undefined && (typeof input.apiKey !== "string" || input.apiKey.length > 4096 || /[\r\n]/u.test(input.apiKey)))) {
@@ -66,7 +66,7 @@ export async function getSearchSettings(workspace: string): Promise<SearchSettin
   try {
     const doc = await readDocument(workspace);
     if (doc.search === undefined) return base;
-    if (!isObject(doc.search)) throw new SettingsError("现有 search 配置格式无效，请重新填写搜索设置");
+    if (!isRecord(doc.search)) throw new SettingsError("现有 search 配置格式无效，请重新填写搜索设置");
     const raw = doc.search;
     const provider = raw.provider === undefined ? "custom" : raw.provider;
     if (!isProvider(provider)) throw new SettingsError("现有搜索服务类型无法识别，请重新选择服务");
@@ -104,7 +104,7 @@ export async function saveSearchSettings(workspace: string, input: SearchSetting
     try {
       // 密钥存取可能异步等待系统：重新读，保留这期间更新的其他配置字段。
       const doc = await readDocument(workspace);
-      const existing = isObject(doc.search) ? doc.search : {};
+      const existing = isRecord(doc.search) ? doc.search : {};
       doc.search = { ...existing, ...cfg, enabled: input.enabled, allowLocalEndpoint: input.allowLocalEndpoint };
       const path = await resolveWriteTarget(workspace, projectAgentPath(workspace, "config.json"), "search settings");
       await writeFileAtomic(path, JSON.stringify(doc, null, 2) + "\n");

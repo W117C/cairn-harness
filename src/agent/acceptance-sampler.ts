@@ -5,6 +5,7 @@
 // 绝不折成 0 或 100%（与 cost-per-progress 同源纪律）。
 // 纯函数 + 只读事件流 ⇒ 可离线判卷、可喂合成语料，不需要凭据也不需要真模型。
 import type { AgentEvent } from "../events";
+import { hasWorkerId, isWorkerSubflowEvent } from "./subflow";
 
 /** 一格的读数：分母为 0 ⇒ 不可测（与「0%」是两种事实，不许合并）。 */
 export interface RateSample {
@@ -22,15 +23,11 @@ function rate(hits: number, total: number): RateSample {
 
 /**
  * 主会话面（worker 子流不计，与 projectStream/cost-per-progress 同口径）。
- * 空串 `agent_id` 算**没有 id**（＝主会话），与 `scripts/replay/run-scorecard.ts#splitStreams`
- * 逐字同口径：那一处判 `typeof id === "string" && id !== ""`。两处不一致时，同一个
- * 「agent_id 为空」的事件会被一把尺当 worker、另一把当主会话，两个读数就再也对不上。
+ * 判据只有一份：`agent/subflow.ts#isWorkerSubflowEvent`（第 946 页收口）——非空 `agent_id`
+ * 才算 worker，空串算**没有 id**（＝主会话）。此前这一条在六处各写一遍、两处漏了空串判断，
+ * 同一个「agent_id 为空」的事件会被一把尺当 worker、另一把当主会话，两个读数就再也对不上。
  */
-function isWorkerSubflow(e: AgentEvent): boolean {
-  if (e.type === "agent_spawned") return false; // 父流事实（「派出了哪个 worker」）
-  const id = (e as { agent_id?: unknown }).agent_id;
-  return typeof id === "string" && id !== "";
-}
+
 
 /**
  * review-fail 自愈率：一轮里「验证红 → 之后又验过且转绿」的比例。
@@ -40,7 +37,7 @@ function isWorkerSubflow(e: AgentEvent): boolean {
  * 把它们塞进分母会让读数随「任务有多难」漂移，而不是反映「修得有多好」。
  */
 export function reviewFailHealRate(events: readonly AgentEvent[]): RateSample {
-  const main = events.filter((e) => !isWorkerSubflow(e));
+  const main = events.filter((e) => !isWorkerSubflowEvent(e));
   let roundHadRed = false;
   let healed = false;
   let hits = 0;
@@ -84,8 +81,7 @@ export function routingDecisionCoverage(events: readonly AgentEvent[]): RateSamp
   const decided = new Set<string>();
   for (const e of events) {
     if (e.type !== "routing_decision") continue;
-    const id = (e as { agent_id?: unknown }).agent_id;
-    if (typeof id === "string" && id !== "") decided.add(id);
+    if (hasWorkerId(e)) decided.add(e.agent_id);
   }
   const withDecision = spawns.filter((e) => decided.has(e.agent_id));
   return rate(withDecision.length, spawns.length);

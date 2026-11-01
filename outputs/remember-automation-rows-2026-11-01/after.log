@@ -1,0 +1,8 @@
+$ node --import tsx .tmp/probe-remember.mts
+remember           ⇒ "发布前必须跑全量 gates；上一轮因为跳过它把红带进了 main。"
+remember           ⇒ "release-gate"
+automation_create  ⇒ "每日备份"
+automation_update  ⇒ "每周巡检"
+automation_delete  ⇒ "a1"
+automation_run_now ⇒ "a1"
+automation_list    ⇒ "全部定时任务"

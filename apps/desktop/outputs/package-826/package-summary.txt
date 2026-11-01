@@ -1,0 +1,8 @@
+packaged smoke:
+[cairn-smoke] PASS in 2104 ms
+[package] 完成（已验证打包态）：/Users/ze/Downloads/Cairn/cairn/apps/desktop/release-826/Cairn.app
+
+markers:
+apps/desktop/dist/assets/AppPage-DMZ4x8QA.js
+apps/desktop/dist/assets/SettingsPanel-Dgccu8Kz.js
+781:  exportMemory(markdown: string, suggestedName: string): Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }>;

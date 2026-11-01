@@ -44,7 +44,11 @@ async function main() {
   const errors = [];
   win.webContents.on("console-message", (d) => { if (d.level === "error") errors.push(d.message); });
   const js = (code) => win.webContents.executeJavaScript(code, true);
-  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+  // 挂载耗时帽（第 959 页）：此前 `elapsedMs` 只打印不判定——4000 行 diff 挂成 5 秒也照样 PASS。
+// 帽取 2000 ms（实测 203 ms 的约 10 倍）：拦的是数量级回归，不是「慢 10%」。
+const budgetMs = Number(process.env.CAIRN_DIFF_BUDGET_MS ?? 2000);
+if (!Number.isFinite(budgetMs) || budgetMs <= 0) throw new Error("CAIRN_DIFF_BUDGET_MS 必须是有限正数");
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
   const waitFor = async (expression, label, timeout = 8000) => {
     const start = Date.now();
     while (Date.now() - start < timeout) {
@@ -59,10 +63,13 @@ async function main() {
   await js("document.querySelector('.session').click()");
   await waitFor("!!document.querySelector('.toolcluster')", "tool cluster");
   await js("document.querySelector('.tool-group-toggle').click()");
-  await waitFor("!![...document.querySelectorAll('.tool-head')].find(el => el.textContent.includes('edit_file'))", "edit tool row");
+  // 按**中文动词**选行（第 959 页）：产品自「不暴露实现名」之后，行上只写动词（edit_file → 「编辑」，
+  // 词表在 derived/tool-verbs.ts），再按 textContent 找 `edit_file` 永远找不到——这支冒烟因此静默坏掉过。
+  // 不许加 data-tool 之类的钩子：`stream-rework.test.tsx` 钉着「渲染出的 HTML 里不出现实现名」。
+  await waitFor("!![...document.querySelectorAll('.row.tool .tool-head')].find(el => (el.textContent || '').includes('编辑'))", "edit tool row");
   await js(`(() => {
     window.__diffRenderStart = performance.now();
-    [...document.querySelectorAll('.tool-head')].find(el => el.textContent.includes('edit_file')).click();
+    [...document.querySelectorAll('.row.tool .tool-head')].find(el => (el.textContent || '').includes('编辑')).click();
     return true;
   })()`);
   await waitFor("document.querySelectorAll('.diff-line').length === 4000", "4000 diff lines");
@@ -79,7 +86,9 @@ async function main() {
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(output, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report));
-  const ok = dom.hunks === 20 && dom.lines === 4000 && dom.truncated && errors.length === 0;
+  const overTime = elapsedMs > budgetMs;
+  const ok = dom.hunks === 20 && dom.lines === 4000 && dom.truncated && errors.length === 0 && !overTime;
+  if (overTime) console.error(`[diff-render-latency] 超预算：挂载 ${elapsedMs.toFixed(1)}ms > 帽 ${String(budgetMs)}ms`);
   console.log(`[diff-render-latency] ${ok ? "PASS" : "FAIL"} ${elapsedMs.toFixed(1)}ms | ${dom.hunks} hunks / ${dom.lines} lines / ${dom.nodes} nodes`);
   app.exit(ok ? 0 : 1);
 }

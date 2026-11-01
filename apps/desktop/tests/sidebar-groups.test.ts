@@ -135,7 +135,7 @@ describe("对话菜单对齐原型 v3-lite（第十四遍；词面单源 STR—�
 
   it("分叉接线：App 走 round=0 全量分叉哨兵 + 菜单回调上抛 + 落点是 openSession（载转录，不是裸切 activeId），失败 fail-visible", () => {
     expect(appSrc).toContain("window.agent.forkSession(s.id, 0, true)");
-    expect(appSrc).toContain("onForkSession={forkSessionFromMenu}");
+    expect(appSrc).toContain("onForkSession: forkSessionFromMenu,");
     // 菜单能分非当前会话：只 activate 会把上个会话的流留在屏上 ⇒ 落点必须是 openSession(r.id)
     expect(appSrc).toContain("openSession(r.id);");
     expect(appSrc).toContain("分叉失败：");

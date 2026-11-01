@@ -1,0 +1,8 @@
+packaged smoke:
+[cairn-smoke] PASS in 2073 ms
+[package] 完成（已验证打包态）：/Users/ze/Downloads/Cairn/cairn/apps/desktop/release-818/Cairn.app
+
+feature markers:
+apps/desktop/dist/assets/SettingsPanel-18sBRd1M.js
+apps/desktop/dist/assets/index-DWxJ5BAA.js
+src/main/ipc-protocol.ts

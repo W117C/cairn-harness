@@ -1,0 +1,164 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+ ❯ tests/session-cycle-target.test.tsx (2 tests | 2 failed) 10ms
+   ❯ 同名会话的循环切换 (2)
+     × 下一项从活动工作区那一条算起 7ms
+     × 上一项携带明确工作区，不能按同名 id 找第一个 1ms
+ ❯ tests/queue-target-binding.test.tsx (3 tests | 3 failed) 7ms
+   ❯ 队列动作绑定渲染时的会话与工作区 (3)
+     × 切换会话后的旧移除回调仍只改原队列，显式携带原工作区 6ms
+     × 打断并发送把目标工作区同时交给队列写入和取消 1ms
+     × 继续发送显式恢复这条队列，不重新读取全局活动会话 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/queue-target-binding.test.tsx > 队列动作绑定渲染时的会话与工作区 > 切换会话后的旧移除回调仍只改原队列，显式携带原工作区
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'same', …(2) ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+-   "same",
+-   [
+-     {
+-       "attachments": [],
+-       "id": 2,
+-       "text": "甲二",
+-     },
+-   ],
+-   "/a",
++   "new-active",
++   [],
+  ]
+
+
+Number of calls: 1
+
+ ❯ tests/queue-target-binding.test.tsx:23:31
+     21|     const { props, strip, a, b } = harness();
+     22|     strip().onRemove(0);
+     23|     expect(props.setQueueFor).toHaveBeenCalledWith("same", [a[1]], "/a…
+       |                               ^
+     24|     expect(props.queue.current.get('["/b","same"]')).toEqual(b);
+     25|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/queue-target-binding.test.tsx > 队列动作绑定渲染时的会话与工作区 > 打断并发送把目标工作区同时交给队列写入和取消
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'same', [ …(2) ], '/a' ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+-   "same",
+-   [
+-     {
+-       "attachments": [],
+-       "id": 2,
+-       "text": "甲二",
+-     },
+-     {
+-       "attachments": [],
+-       "id": 1,
+-       "text": "甲一",
+-     },
+-   ],
+-   "/a",
++   "new-active",
++   [],
+  ]
+
+
+Number of calls: 1
+
+ ❯ tests/queue-target-binding.test.tsx:29:31
+     27|     const { props, strip, a } = harness(); props.running = true;
+     28|     strip().onInterruptSend(1);
+     29|     expect(props.setQueueFor).toHaveBeenCalledWith("same", [a[1], a[0]…
+       |                               ^
+     30|     expect(props.cancelRunHeal).toHaveBeenCalledWith("same", "/a");
+     31|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/queue-target-binding.test.tsx > 队列动作绑定渲染时的会话与工作区 > 继续发送显式恢复这条队列，不重新读取全局活动会话
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'same', '/a' ]
+
+Number of calls: 0
+
+ ❯ tests/queue-target-binding.test.tsx:35:34
+     33|     const { props, strip } = harness();
+     34|     strip().onResume?.();
+     35|     expect(props.resumeQueueFor).toHaveBeenCalledWith("same", "/a");
+       |                                  ^
+     36|   });
+     37| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/session-cycle-target.test.tsx > 同名会话的循环切换 > 下一项从活动工作区那一条算起
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'third', '/c' ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+-   "third",
+-   "/c",
++   "same",
+  ]
+
+
+Number of calls: 1
+
+ ❯ tests/session-cycle-target.test.tsx:26:25
+     24|     const { ops, openSession } = harness();
+     25|     expect(ops.cycleSession(1)).toBe(true);
+     26|     expect(openSession).toHaveBeenCalledWith("third", "/c");
+       |                         ^
+     27|   });
+     28|   it("上一项携带明确工作区，不能按同名 id 找第一个", () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/session-cycle-target.test.tsx > 同名会话的循环切换 > 上一项携带明确工作区，不能按同名 id 找第一个
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'same', '/a' ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+-   "same",
+-   "/a",
++   "third",
+  ]
+
+
+Number of calls: 1
+
+ ❯ tests/session-cycle-target.test.tsx:31:25
+     29|     const { ops, openSession } = harness();
+     30|     expect(ops.cycleSession(-1)).toBe(true);
+     31|     expect(openSession).toHaveBeenCalledWith("same", "/a");
+       |                         ^
+     32|   });
+     33| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  5 failed (5)
+   Start at  12:55:28
+   Duration  277ms (transform 50%, import 41%, tests 7%, worker 2%)
+
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts tests/queue-target-binding.test.tsx tests/session-cycle-target.test.tsx '--maxWorkers=2'

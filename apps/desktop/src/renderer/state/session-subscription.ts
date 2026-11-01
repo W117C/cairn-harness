@@ -1,6 +1,6 @@
 import type { Dispatch,MutableRefObject,SetStateAction } from 'react';
 // useSessionSubscription: extracted without changing event or callback behavior.
-import { useEffect } from "react";
+import { useCallback,useEffect } from "react";
 import type { AgentEvent,AskPayload,ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import { isMainSessionTerminalEvent } from "../projections";
 import { isSessionEndDistillAsk,type QueuedSend } from "../send-queue";
@@ -32,16 +32,21 @@ interface SessionSubscriptionDeps {
 
 export function useSessionSubscription(deps: SessionSubscriptionDeps) {
   const { refreshSessions, refreshProviderInfo, refreshProviderKeys, setProjects, setRegistryNotice, knownSessionIds, refetching, openPending, activeIdRef, activeWorkspaceRef, lastDeltaAt, runningSet, outcomes, force, setEvents, sendQueue, setLastNotice, askById, setAskBySid, waitingByAsk, waitingCounts } = deps;
-  useEffect(() => {
-    refreshSessions();
-    void refreshProviderInfo();
-    void refreshProviderKeys();
+  // 项目注册表读取（2026-10-30）：失败时侧栏出 notice；外部修好 projects.json 后要能**就地重试**，
+  // 不必重启应用。抽成回调供首屏与「重试」共用同一条读法。
+  const retryProjects = useCallback(() => {
     void window.agent.listProjects().then((registered) => {
       setProjects(registered);
       setRegistryNotice(null);
     }).catch((err: unknown) => {
       setRegistryNotice(`项目注册表不可用：${err instanceof Error ? err.message : String(err)}`);
     });
+  }, [setProjects, setRegistryNotice]);
+  useEffect(() => {
+    refreshSessions();
+    void refreshProviderInfo();
+    void refreshProviderKeys();
+    retryProjects();
     const offEvent = window.agent.onEvent((e) => {
       // 第十八遍：首条消息自动命名（push-only 合成事件，同收束终态先例）——只刷侧栏让新标题
       // 落位；不进事件流（会渲染成怪行）、不点运行灯。
@@ -134,8 +139,8 @@ export function useSessionSubscription(deps: SessionSubscriptionDeps) {
       }
     });
     return () => { offEvent(); offAsk(); offDone(); };
-  }, [refreshSessions, refreshProviderInfo, refreshProviderKeys]);
+  }, [refreshSessions, refreshProviderInfo, refreshProviderKeys, retryProjects]);
 
 
-  return {  };
+  return { retryProjects };
 }

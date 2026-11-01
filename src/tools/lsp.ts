@@ -21,6 +21,7 @@ import {
   DiagnosticSeverity,
   DefinitionRequest,
   DidChangeTextDocumentNotification,
+  DidCloseTextDocumentNotification,
   DidOpenTextDocumentNotification,
   InitializedNotification,
   InitializeRequest,
@@ -28,13 +29,16 @@ import {
   ReferencesRequest,
   ShutdownRequest,
   ExitNotification,
+  SymbolKind,
   WorkspaceSymbolRequest,
   DocumentSymbolRequest,
   HoverRequest,
   ImplementationRequest,
   type Diagnostic,
+  type ClientCapabilities,
   type DocumentSymbol,
   type Location,
+  type ServerCapabilities,
   type SymbolInformation,
 } from "vscode-languageserver-protocol/node";
 import { assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
@@ -57,6 +61,15 @@ export interface LspServerConfig {
   /** §9.8 `diagnostics.enabled`：显式 false ⇒ 该 server 不参与写后诊断回流（六操作照旧可用）。
    *  缺省 undefined = 开（与 §9.8「diagnostics 默认 true」一致）。 */
   diagnosticsEnabled?: boolean;
+  /** 原始 `.agent/lsp.json` / 插件里的嵌套 `diagnostics`（装载时会摊平到 `diagnosticsEnabled` /
+   *  `diagnosticsMaxPerFile`；这里保留只为读取，运行时只用摊平字段）。 */
+  diagnostics?: { enabled?: boolean; maxPerFile?: number };
+  /** initialize 超时（毫秒）。缺省 8000；小于 100 的值按缺省（防 5ms 这类把服务器一律判死）。 */
+  startupTimeout?: number;
+  /** 崩溃后是否允许惰性重启（下一次调用时重起，最多 LSP_MAX_RESTARTS 次）；缺省 false。 */
+  restartOnCrash?: boolean;
+  /** 每文件最多回流的 ERROR 条数（1..200）；缺省 20。 */
+  diagnosticsMaxPerFile?: number;
 }
 
 export interface LspConfig {
@@ -219,11 +232,16 @@ export function loadLspConfig(workspace: string): LspConfig {
     if (typeof cfg !== "object" || cfg === null || typeof cfg.command !== "string" || !Array.isArray(cfg.extensions)) {
       throw new ToolError('lsp: 服务器 "' + id + '" 配置不合法（需要 command 与 extensions）');
     }
+    const diagnostics = cfg.diagnostics;
+    const diagnosticsEnabled = cfg.diagnosticsEnabled ?? diagnostics?.enabled;
     servers[id] = {
       command: cfg.command, args: cfg.args ?? [], extensions: cfg.extensions,
       ...(cfg.extensionToLanguage !== undefined ? { extensionToLanguage: cfg.extensionToLanguage } : {}),
       ...(cfg.initializationOptions !== undefined ? { initializationOptions: cfg.initializationOptions } : {}),
-      ...(cfg.diagnosticsEnabled !== undefined ? { diagnosticsEnabled: cfg.diagnosticsEnabled } : {}),
+      ...(diagnosticsEnabled !== undefined ? { diagnosticsEnabled } : {}),
+      ...(typeof cfg.startupTimeout === "number" ? { startupTimeout: cfg.startupTimeout } : {}),
+      ...(typeof cfg.restartOnCrash === "boolean" ? { restartOnCrash: cfg.restartOnCrash } : {}),
+      ...(typeof diagnostics?.maxPerFile === "number" ? { diagnosticsMaxPerFile: diagnostics.maxPerFile } : {}),
     };
   }
   // 插件服务器：只在面上已开时并入（见 pluginServers 声明处口径 ①），同 id / 同扩展让位。
@@ -256,6 +274,8 @@ export function isLspBroken(root: string, serverId: string): boolean {
 
 const clients = new Map<string, Promise<LspClient>>();
 const broken = new Set<string>();
+/** restartOnCrash 的惰性重启次数（每 clientKey 一档；成功也不清零，防崩溃循环）。 */
+const restartCounts = new Map<string, number>();
 const pluginClientKeys = new Set<string>();
 
 /** 仅回收实际由插件启动的客户端；同名的宿主服务器不属于插件。 */
@@ -266,6 +286,7 @@ export async function closePluginLspClients(root: string, ids: readonly string[]
     const pending = clients.get(key);
     clients.delete(key);
     broken.delete(key);
+    restartCounts.delete(key);
     try {
       await (await pending)?.shutdown();
     } catch {
@@ -293,6 +314,93 @@ export function languageIdMap(server: LspServerConfig): ReadonlyMap<string, stri
   return out;
 }
 
+/* ---- 能力协商（第 920 页）----
+ * `initialize` 是 LSP 里唯一一次双方对齐"能说什么话"的机会，此前两头都没用：
+ * ① 我们发 `capabilities: {}` ⇒ 服务器按最保守形状回包。这不是"少装点料"，而是**换形状**：
+ *   没要 `linkSupport` 就拿不到 LocationLink（目标区间与选中区间合一，跳到整块而不是标识符）、
+ *   没要 `markdown` 就有权只回 plaintext（签名与文档的换行全塌）、
+ *   没要 `hierarchicalDocumentSymbolSupport` 就回平铺表（嵌套结构没了，输出行序也不同）。
+ * ② 服务器的应答整个丢掉 ⇒ 它声明的同步方式与不支持的操作我们都看不见：
+ *   增量服务器只认带 `range` 的 `didChange`，我们那条没带 ⇒ **它沉默地丢掉这次更新**，
+ *   六操作继续回旧文本——看着像"代码没变"，比报错更坏；
+ *   没实现 hover 的服务器收到 hover 请求，回的是 jsonrpc 黑话（或干脆不应答），模型读不懂。
+ * 只声明**真的消费了**的能力：声明了 `didChangeWatchedFiles` 却不发通知，等于把服务器引到
+ * 一条我们不走的路（它据此认为自己的索引是新的）。
+ */
+export const CLIENT_CAPABILITIES: ClientCapabilities = {
+  textDocument: {
+    definition: { linkSupport: true },
+    implementation: { linkSupport: true },
+    hover: { contentFormat: ["markdown", "plaintext"] },
+    documentSymbol: {
+      hierarchicalDocumentSymbolSupport: true,
+      // 值集来自协议自己的枚举（下面 SYMBOL_KIND_NAMES 同一份）：手写数字就是第二事实源，
+      // 而第二事实源迟早与枚举分家——本仓点名的那条。
+      // `as SymbolKind[]`：协议的这一格是**字面量并集**，看不见"由枚举派生"这件事；
+      // 派生的正确性由判卷钉（`tests/lsp.test.ts` 的「符号 kind 名派生自协议枚举」）。
+      symbolKind: { valueSet: symbolKindValues() as SymbolKind[] },
+    },
+  },
+  workspace: {
+    // 键名以协议为准：工作区符号的客户端能力在 `workspace.symbol`（不是 `workspaceSymbol`），
+    // 值集再套一层 `symbolKind`（与 `documentSymbol` 同形）。写错的键不是"少声明一项"，
+    // 是**没人听的一段 JSON**——判卷按真键名钉住。
+    symbol: { symbolKind: { valueSet: symbolKindValues() as SymbolKind[] } },
+  },
+};
+
+/** LSP `SymbolKind` 的全部取值（1…26），从协议枚举派生。
+ *  `Number.isFinite` 那一格是防上游哪天加**反向映射**（`"1" → "File"`）：那种键过不了
+ *  `n >= 1`，混进去就是把 `NaN` 写进我们向服务器声明的 valueSet。 */
+export function symbolKindValues(): number[] {
+  return Object.values(SymbolKind)
+    .map((v) => Number(v))
+    .filter((n) => Number.isFinite(n) && n >= 1)
+    .sort((a, b) => a - b);
+}
+
+/** kind → 名字。**此前是手抄的 20 格表**：少 6 格（Object/Key/Null/EnumMember/Event/TypeParameter
+ *  落到 "Symbol"），还把 25 抄成 "TypeParameter"（协议里 25 是 Operator、26 才是 TypeParameter）
+ *  ——于是模型看到的符号类型有一句是**错的**，不是缺的。派生之后这类偏差没有生存空间。 */
+export const SYMBOL_KIND_NAMES: Record<number, string> = Object.fromEntries(
+  Object.entries(SymbolKind)
+    .map(([name, value]) => [Number(value), name] as [number, string])
+    .filter(([n]) => Number.isFinite(n) && n >= 1),
+);
+
+/** 六操作 ↔ 服务器能力声明的键。门控用它，出错的话术也用它（说清是"没声明"还是"没配上"）。 */
+export const OPERATION_PROVIDER: Record<LspOperation, string> = {
+  definition: "definitionProvider",
+  references: "referencesProvider",
+  hover: "hoverProvider",
+  documentSymbol: "documentSymbolProvider",
+  workspaceSymbol: "workspaceSymbolProvider",
+  implementation: "implementationProvider",
+};
+
+/** `textDocumentSync` 的三种报法摊成一个判定。
+ *  缺省（没报）按 **full**：那是本框架改前的唯一行为，存量配置一个字不变；
+ *  `change` 缺格按协议默认（也是 full）。 */
+export type LspSyncKind = "full" | "incremental" | "none";
+
+export function syncKindOf(caps: ServerCapabilities): LspSyncKind {
+  const raw = caps.textDocumentSync;
+  if (raw === undefined || raw === null) return "full";
+  const change = typeof raw === "object" ? raw.change : raw;
+  if (change === 2) return "incremental";
+  if (change === 0) return "none";
+  return "full";
+}
+
+/** 整篇文档的区间（增量同步下"把旧内容整段换成新内容"的写法）。 */
+function wholeDocumentRange(prevText: string): Location["range"] {
+  const ls = prevText.split("\n");
+  return {
+    start: { line: 0, character: 0 },
+    end: { line: ls.length - 1, character: (ls[ls.length - 1] ?? "").length },
+  };
+}
+
 export class LspClient {
   readonly pid: number;
   readonly key: string;
@@ -310,6 +418,10 @@ export class LspClient {
   private diagWaiters: { uri: string; minRev: number; resolve: (d: Diagnostic[]) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }[] = [];
   private inflight = new Map<string, { promise: Promise<unknown>; reject: (e: Error) => void }>();
   private stopping = false;
+  /** `initialize` 应答里的服务器能力声明。构造时还没有（initialize 在听诊断之后才回），
+   *  由 `adoptServerCapabilities` 填 —— 顺序不能反：诊断处理器必须先挂上，否则服务器在
+   *  initialize 与第一次 didOpen 之间推的诊断会丢。 */
+  private serverCaps: ServerCapabilities = {};
 
   constructor(
     child: ChildProcess,
@@ -383,12 +495,44 @@ export class LspClient {
       });
     } else if (known.text !== content) {
       const version = known.version + 1;
-      this.openDocs.set(uri, { version, text: content });
-      await this.conn.sendNotification(DidChangeTextDocumentNotification.type, {
-        textDocument: { uri, version },
-        contentChanges: [{ text: content }],
-      });
+      const kind = syncKindOf(this.serverCaps);
+      if (kind === "none") {
+        // 服务器声明"不接受内容变更通知"：对它发 didChange 是**违反协商**的请求，它会照旧不理。
+        // 唯一能把盘上的新文本送进去的路是关掉再开（重开带的是刚读的盘内容，版本继续递增）。
+        this.openDocs.delete(uri);
+        await this.conn.sendNotification(DidCloseTextDocumentNotification.type, { textDocument: { uri } });
+        this.openDocs.set(uri, { version, text: content });
+        await this.conn.sendNotification(DidOpenTextDocumentNotification.type, {
+          textDocument: { uri, languageId: this.languageIdFor(absPath), version, text: content },
+        });
+      } else {
+        this.openDocs.set(uri, { version, text: content });
+        await this.conn.sendNotification(DidChangeTextDocumentNotification.type, {
+          textDocument: { uri, version },
+          // 增量同步的服务器只认带 `range` 的编辑：不带 range 的整篇替换在它眼里是**坏消息**，
+          // 而它多半是丢掉而不是报错——于是文档模型停在旧文本，六操作回旧结果，看着像"代码没变"。
+          contentChanges:
+            kind === "incremental"
+              ? [{ text: content, range: wholeDocumentRange(known.text) }]
+              : [{ text: content }],
+        });
+      }
     }
+  }
+
+  /** `initialize` 回来后交给客户端的能力声明（见 `serverCaps` 注：为什么不能塞进构造参数）。 */
+  adoptServerCapabilities(caps: ServerCapabilities): void {
+    this.serverCaps = caps ?? {};
+  }
+
+  /** 这台服务器有没有声明这支能力。
+   *  **`capabilities` 整个为空 = 它没报**（老服务器/半截实现）：这时不门控，照发请求——
+   *  把能用的一支判死，比多拿一个错误更糟。报了别的键却没报这一支，才是明确的不支持。 */
+  providerDeclared(operation: LspOperation): boolean {
+    const keys = Object.keys(this.serverCaps);
+    if (keys.length === 0) return true;
+    const declared = (this.serverCaps as Record<string, unknown>)[OPERATION_PROVIDER[operation]];
+    return declared === true || (typeof declared === "object" && declared !== null);
   }
 
   /** 本文件的 languageId：服务器显式表优先，缺省走 TS 启发式。
@@ -489,7 +633,13 @@ export async function getLspClient(root: string, cfg: LspConfig, serverId: strin
     throw new ToolError('lsp: 插件服务器 "' + serverId + '" 已停用，请重新读取配置');
   }
   if (broken.has(key)) {
-    throw new ToolError('lsp: 服务器 "' + serverId + '" 启动失败已标记不可用（broken），不再重试');
+    const restarts = restartCounts.get(key) ?? 0;
+    if (server.restartOnCrash === true && restarts < LSP_MAX_RESTARTS) {
+      restartCounts.set(key, restarts + 1);
+      broken.delete(key);
+    } else {
+      throw new ToolError('lsp: 服务器 "' + serverId + '" 启动失败已标记不可用（broken），不再重试');
+    }
   }
   // #58 第二半：起进程**之前**先过内容指纹信任门。放在 `getLspClient` 而不是 `startClient` 内部，
   // 是因为它是唯一的起进程入口，而这里能拿到 `serverId` 出点名的话术。
@@ -566,22 +716,28 @@ async function startClient(root: string, server: LspServerConfig, key: string): 
   const conn = createProtocolConnection(reader, writer as unknown as StreamMessageWriter);
   const client = new LspClient(child, conn, root, key, languageIdMap(server));
   conn.listen();
-  // initialize 带超时（服务器起不来 = 失败进 broken，不悬挂）
+  // initialize 带超时（服务器起不来 = 失败进 broken，不悬挂）；预算取配置 startupTimeout。
+  const startupMs = lspStartupTimeoutMs(server);
   let timer: ReturnType<typeof setTimeout> | undefined;
   await Promise.race([
     (async () => {
-      await conn.sendRequest(InitializeRequest.type, {
+      const initiated = (await conn.sendRequest(InitializeRequest.type, {
         processId: process.pid,
         rootUri: pathToFileURL(root).href,
-        capabilities: {},
+        capabilities: CLIENT_CAPABILITIES,
         // §9.8：CC 的 initializationOptions 一路带到 initialize——服务器靠它拿私有配置，
         // 收下不传等于配置白写一次（stub server 用它回显，判据就看这条）。
         initializationOptions: server.initializationOptions ?? {},
-      });
+      })) as { capabilities?: ServerCapabilities } | null;
+      // 服务器的声明必须**收下**：同步方式与不支持的操作都只在这里说一次，错过就没得问。
+      client.adoptServerCapabilities(initiated?.capabilities ?? {});
       await conn.sendNotification(InitializedNotification.type, {});
     })(),
     new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error('lsp: 服务器 "' + server.command + '" initialize 超时（启动失败）')), 8000);
+      timer = setTimeout(
+        () => reject(new Error('lsp: 服务器 "' + server.command + '" initialize 超时（' + String(startupMs) + 'ms，启动失败）')),
+        startupMs,
+      );
     }),
   ]).catch((err) => {
     try {
@@ -605,6 +761,7 @@ export function killAllLspClientsSync(): void {
   liveChildren.clear();
   clients.clear();
   broken.clear();
+  restartCounts.clear();
   pluginServers.clear();
   pluginClientKeys.clear();
 }
@@ -615,6 +772,7 @@ export async function closeAllLspClients(): Promise<void> {
   const all = [...clients.values()];
   clients.clear();
   broken.clear();
+  restartCounts.clear();
   pluginServers.clear();
   pluginClientKeys.clear();
   for (const p of all) {
@@ -631,6 +789,26 @@ export async function closeAllLspClients(): Promise<void> {
 
 const DIAG_TIMEOUT_MS = 2000;
 const MAX_DIAGNOSTICS = 20;
+const DEFAULT_LSP_STARTUP_MS = 8000;
+const MAX_LSP_STARTUP_MS = 120_000;
+const MAX_DIAGNOSTICS_PER_FILE_LIMIT = 200;
+export const LSP_MAX_RESTARTS = 3;
+
+/** initialize 预算：配置值按毫秒读；<100ms 视为无效（fixture 里的 5 是旧占位），封顶 120s。 */
+export function lspStartupTimeoutMs(server: LspServerConfig): number {
+  const value = server.startupTimeout;
+  return typeof value === "number" && Number.isFinite(value) && value >= 100
+    ? Math.min(Math.floor(value), MAX_LSP_STARTUP_MS)
+    : DEFAULT_LSP_STARTUP_MS;
+}
+
+/** 每文件回流 ERROR 上限：正整数 1..200，其余按缺省 20。 */
+export function lspDiagnosticsMaxPerFile(server: LspServerConfig | undefined): number {
+  const value = server?.diagnosticsMaxPerFile;
+  return typeof value === "number" && Number.isInteger(value) && value >= 1
+    ? Math.min(value, MAX_DIAGNOSTICS_PER_FILE_LIMIT)
+    : MAX_DIAGNOSTICS;
+}
 
 function toRel(root: string, absPath: string): string {
   return relative(resolve(root), resolve(absPath)).split(sep).join("/");
@@ -675,9 +853,11 @@ export async function collectDiagnostics(root: string, absPath: string, timeoutM
     const picked = pickServerForFile(cfg, absPath);
     if (!picked) return "";
     serverId = picked;
-    if (cfg.servers[picked]?.diagnosticsEnabled === false) return ""; // §9.8 显式关诊断 ⇒ 不回流（六操作照旧）
-    // broken 是运行时事实（本会话内起不来/崩过）：先问它，省掉一次注定失败的 spawn 等待
-    if (isLspBroken(root, picked)) {
+    const server = cfg.servers[picked];
+    if (server?.diagnosticsEnabled === false) return ""; // §9.8 显式关诊断 ⇒ 不回流（六操作照旧）
+    // broken 是运行时事实（本会话内起不来/崩过）：配了 restartOnCrash 的 server 仍给它一次惰性重启机会，
+    // 其余直接说缺席（省掉一次注定失败的 spawn 等待）。
+    if (isLspBroken(root, picked) && server?.restartOnCrash !== true) {
       return lspAbsentNote(root, absPath, picked, "已标记不可用（broken），本会话不再重试");
     }
     const client = await getLspClient(root, cfg, picked);
@@ -686,7 +866,9 @@ export async function collectDiagnostics(root: string, absPath: string, timeoutM
     const minRev = client.currentRev();
     await client.openFile(absPath, text);
     const diags = await client.waitForDiagnostics(uri, minRev, timeoutMs);
-    const errors = diags.filter((d) => d.severity === DiagnosticSeverity.Error).slice(0, MAX_DIAGNOSTICS);
+    const errors = diags
+      .filter((d) => d.severity === DiagnosticSeverity.Error)
+      .slice(0, lspDiagnosticsMaxPerFile(server));
     if (errors.length === 0) return "";
     const lines = errors.map((d) => "ERROR [" + String(d.range.start.line + 1) + ":" + String(d.range.start.character + 1) + "] " + d.message);
     return "\n<diagnostics file=\"" + toRel(root, absPath) + "\">\n" + lines.join("\n") + "\n</diagnostics>";
@@ -729,12 +911,6 @@ export function prefetchLsp(root: string, absPath: string, enabled = lspPrefetch
 
 const OPERATIONS = ["definition", "references", "hover", "documentSymbol", "workspaceSymbol", "implementation"] as const;
 type LspOperation = (typeof OPERATIONS)[number];
-
-const SYMBOL_KIND_NAMES: Record<number, string> = {
-  1: "File", 2: "Module", 3: "Namespace", 4: "Package", 5: "Class", 6: "Method", 7: "Property",
-  8: "Field", 9: "Constructor", 10: "Enum", 11: "Interface", 12: "Function", 13: "Variable",
-  14: "Constant", 15: "String", 16: "Number", 17: "Boolean", 18: "Array", 23: "Struct", 25: "TypeParameter",
-};
 
 function filePathFromUri(uri: string): string {
   return uri.startsWith("file://") ? decodeURIComponent(uri.slice("file://".length)) : uri;
@@ -784,16 +960,22 @@ function symbolLines(root: string, symbols: (DocumentSymbol | SymbolInformation)
   const out: string[] = [];
   for (const s of symbols) {
     const kindName = SYMBOL_KIND_NAMES[s.kind] ?? "Symbol";
+    const indent = "  ".repeat(depth);
     if ("location" in s && s.location) {
       const si = s as SymbolInformation;
-      out.push("  ".repeat(depth) + si.name + " " + kindName + " " + formatLocation(root, si.location));
-    } else {
+      out.push(indent + si.name + " " + kindName + " " + formatLocation(root, si.location));
+    } else if ("selectionRange" in s && (s as DocumentSymbol).selectionRange) {
       const ds = s as DocumentSymbol;
       out.push(
-        "  ".repeat(depth) + ds.name + " " + kindName +
+        indent + ds.name + " " + kindName +
         " :" + String(ds.selectionRange.start.line + 1) + ":" + String(ds.selectionRange.start.character + 1),
       );
       if (ds.children?.length) out.push(...symbolLines(root, ds.children, depth + 1));
+    } else {
+      // LSP 3.17 的 `WorkspaceSymbol` 允许**只带名字不带位置**（未索引的依赖符号就是这么回的）。
+      // 这类条目过去会走进上面的 `selectionRange.start` 直接抛 TypeError——一条合法形状把整支工具
+      // 打成崩溃。现在如实说"无位置"：模型看得见边界，才会改用 grep，而不是以为查询失败了。
+      out.push(indent + s.name + " " + kindName + "（无位置）");
     }
   }
   return out;
@@ -828,6 +1010,19 @@ export function capLspOutput(text: string): string {
   return cut + "\n" + byteCapNotice(32, bytes - Buffer.byteLength(cut, "utf8"), "用 grep 定位符号名，或 read_file 分批读那份文件");
 }
 
+/** 服务器没声明这支能力 ⇒ 当场说清楚，别把请求发出去等一个错误。
+ *  话术点名「未声明」而不是「失败」：前者告诉模型这是**这台服务器的边界**（换一支操作或退回
+ *  grep/read_file），后者会被读成"这次没跑成，再跑一遍"。 */
+function requireProvider(client: LspClient, serverId: string, operation: LspOperation): void {
+  if (client.providerDeclared(operation)) return;
+  // 整句必须是**一支**模板：这句话的用途是让模型换路（不是重跑），
+  // 而拼成多段字面量时判据只能读到「不支持」三字——挑不出可判的中文段，
+  // 这一面就落进「尺读不出」（第 331 页那一档），等于没人守。改动措辞时保持整句。
+  throw new ToolError(
+    `lsp: 服务器 "${serverId}" 未声明 ${OPERATION_PROVIDER[operation]}，不支持 ${operation}（这是该服务器的能力边界，不是这次调用失败；同一文件改用 grep / read_file）`,
+  );
+}
+
 export const lsp: Tool = {
   name: "lsp",
   async run(rawArgs, ctx: ToolContext): Promise<ToolResult> {
@@ -836,6 +1031,9 @@ export const lsp: Tool = {
     if (typeof operation !== "string" || !OPERATIONS.includes(operation as LspOperation)) {
       throw new ToolError("lsp: operation 必须是 " + OPERATIONS.join(" / ") + " 之一");
     }
+    // 上面那句只保证"在名单里"，不帮 TS 收窄类型（`includes` 的断言形写法要 `op in` 才生效）：
+    // 门控查表要的是 `LspOperation`，这里一次性收口，不在每个调用点各抄一遍断言。
+    const op = operation as LspOperation;
     const cfg = loadLspConfig(ctx.workspace);
     if (!cfg.enabled) {
       throw new ToolError('lsp: 未启用——工作区 .agent/lsp.json 缺少 "lsp" 配置（或显式 false = 全局关闭）');
@@ -846,11 +1044,12 @@ export const lsp: Tool = {
       const serverId = Object.keys(cfg.servers)[0];
       if (!serverId) throw new ToolError("lsp: 未配置任何服务器");
       const client = await getLspClient(ctx.workspace, cfg, serverId);
+      requireProvider(client, serverId, op);
       const symbols = await client.request<(DocumentSymbol | SymbolInformation)[] | null>(WorkspaceSymbolRequest.method, { query });
-      const lines = (symbols ?? []).map((s) => {
-        const kindName = SYMBOL_KIND_NAMES[s.kind] ?? "Symbol";
-        return (s as SymbolInformation).name + " " + kindName + " " + formatLocation(ctx.workspace, (s as SymbolInformation).location);
-      });
+      // 与 documentSymbol 共用一份形状处理：workspaceSymbol 的条目可能是平铺（带 location）、
+      // 层级（带 selectionRange）或**只有名字**，三种都合法。此处曾另抄一个只认 location 的 mapper
+      // = 同一件事的第二个事实源，也是那条 TypeError 的产地。
+      const lines = symbolLines(ctx.workspace, symbols ?? []);
       return { ok: true, output: capLspOutput(lines.length ? lines.join("\n") : "无结果") };
     }
 
@@ -866,6 +1065,7 @@ export const lsp: Tool = {
       throw new ToolError("lsp: 没有服务器处理扩展名 " + extname(abs) + "（检查 .agent/lsp.json 的 extensions）");
     }
     const client = await getLspClient(ctx.workspace, cfg, serverId);
+    requireProvider(client, serverId, op);
     await client.openFile(abs);
     const line = requirePos(args.line, "line", 1);
     const column = requirePos(args.column, "column", 1);

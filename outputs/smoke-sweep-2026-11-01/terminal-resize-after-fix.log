@@ -1,0 +1,10 @@
+PASS 终端窗格与 xterm 都真的挂上了 {"pane":true,"host":true,"w":344,"h":765.203125,"xterm":true}
+PASS 渲染层启动后就把行列发给了主进程（不是等用户拖窗格才发） {"calls":[{"id":"term-fixture-1","cols":44,"rows":54}]}
+PASS 容器变窄 ⇒ 发给主进程的列数变少（方向一致，不是反的） {"before":{"id":"term-fixture-1","cols":44,"rows":54},"afterNarrow":{"id":"term-fixture-1","cols":36,"rows":56},"hostBefore":{"w":344,"h":765.203125},"hostNarrow":{"w":2,"h":801.203125}}
+FAIL 容器变矮 ⇒ 发给主进程的行数变少 {"afterNarrow":{"id":"term-fixture-1","cols":36,"rows":56},"afterShort":{"id":"term-fixture-1","cols":36,"rows":56},"hostNarrow":{"w":2,"h":801.203125},"hostShort":{"w":2,"h":461.203125}}
+FAIL 容器放大 ⇒ 行列跟着回去（不是单向递减） {"afterShort":{"id":"term-fixture-1","cols":36,"rows":56},"afterWide":{"id":"term-fixture-1","cols":36,"rows":56}}
+PASS 每一次同步都是正整数行列（0 尺寸不外发） {"count":2,"last":{"id":"term-fixture-1","cols":36,"rows":56}}
+PASS 渲染过程无控制台错误 []
+截图与读数：/tmp/term-resize.out
+隔离测试配置：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-terminal-resize-profile-1e1MDJ
+EXIT=1

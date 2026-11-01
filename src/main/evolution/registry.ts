@@ -28,6 +28,7 @@ import {
   parseBundleManifest,
   type BundleKind,
 } from "./manifest";
+import { isRecord } from "../../is-record";
 
 const INDEX_VERSION = 1 as const;
 const MAX_ACTOR_LENGTH = 128;
@@ -92,10 +93,6 @@ export class RegistryLogCorruptError extends Error {
     super(message);
     this.name = "RegistryLogCorruptError";
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isTimestamp(value: unknown): value is string {

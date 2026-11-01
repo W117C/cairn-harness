@@ -267,4 +267,19 @@ export class TrustStore {
     this.writes = pending.catch(() => undefined);
     await pending;
   }
+
+  /** 卸载时移除该路径的全部历史指纹决议；只匹配精确根或其 `@指纹` 条目。 */
+  async forget(absRoot: string): Promise<void> {
+    const run = async (): Promise<void> => {
+      const s = await this.load();
+      const matches = (entry: string): boolean => entry === absRoot || entry.startsWith(absRoot + "@");
+      const trusted = s.trusted.filter((entry) => !matches(entry));
+      const declined = s.declined.filter((entry) => !matches(entry));
+      if (trusted.length === s.trusted.length && declined.length === s.declined.length) return;
+      await this.persist({ trusted, declined });
+    };
+    const pending = this.writes.then(run, run);
+    this.writes = pending.catch(() => undefined);
+    await pending;
+  }
 }

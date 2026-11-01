@@ -15524,7 +15524,7 @@ D-9 只认页里点名的 `outputs/<日期目录>/`——此前本页一个目�
 2. **修**：`gh repo edit W117C/cairn-harness --visibility private --accept-visibility-change-consequences`，
    复读 `{"private":true,"visibility":"private"}`。默认分支是 `zcode`（Dependabot 扫的就是它）。
 3. **密钥面取证**（既然公开过，就得按"可能被人 clone 过"处理）：
-   - 业主给的那枚本地端点 key（`29f357a99491356da201aef6285b9717`）在**当前树与全历史**里 0 命中
+   - 业主给的那枚本地端点 key（`[REDACTED_LOCAL_API_KEY]`）在**当前树与全历史**里 0 命中
      （`git grep` 与 `git log --all -S` 各跑一次）。
    - 通用凭据形状扫描（`sk-[A-Za-z0-9]{20,}`／`ghp_`／`github_pat_`／`AKIA`）命中的，全是仓库里
      早就备案的**演练假密钥**（`sk-abcdefghijklmnopqrstuvwxyz012345` 那一族）与扫描规则自身的字面。

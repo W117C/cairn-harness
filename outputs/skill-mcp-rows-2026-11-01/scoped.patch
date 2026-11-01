@@ -1,0 +1,88 @@
+--- a/apps/desktop/src/renderer/derived/stream.ts	2026-11-01 14:05:23
++++ b/apps/desktop/src/renderer/derived/stream.ts	2026-11-01 14:04:34
+@@ -47,6 +47,23 @@
+     return n > 0 ? `${String(n)} 个子任务` : "本会话全部子任务";
+   }
+   if (tool === "list_agents") return "本会话全部子任务";
++  if (tool === "skill") return str(args.name);
++  if (tool === "refine_goal") return str(args.objective)?.slice(0, 80);
++  if (tool === "mcp_list") return str(args.server) ?? "全部 MCP 服务器";
++  if (tool === "mcp_activate") {
++    const server = str(args.server);
++    if (server === undefined) return undefined;
++    const one = str(args.tool);
++    const many = idsOf(args.tools);
++    const n = one !== undefined ? 1 : many.length;
++    return n > 0 ? `${server}（${String(n)} 把）` : `${server}（整台）`;
++  }
++  if (tool === "mcp_release") {
++    const server = str(args.server);
++    if (server === undefined) return undefined;
++    const one = str(args.tool);
++    return one !== undefined ? `${server} / ${one}` : server;
++  }
+   if (tool === "remember") {
+     const content = str(args.content);
+     if (content !== undefined) return content.split("\n")[0]!.trim().slice(0, 80);
+--- a/apps/desktop/src/renderer/derived/tool-verbs.ts	2026-11-01 14:05:23
++++ b/apps/desktop/src/renderer/derived/tool-verbs.ts	2026-11-01 14:04:27
+@@ -40,6 +40,12 @@
+   automation_delete: "删定时任务",
+   automation_run_now: "跑定时任务",
+   automation_list: "列定时任务",
++  // 技能 / 目标 / MCP 元工具（第 925 页）：同样没有 command/path，摘要走 ownSubject。
++  skill: "用技能",
++  refine_goal: "改目标",
++  mcp_list: "列 MCP",
++  mcp_activate: "启用 MCP",
++  mcp_release: "停用 MCP",
+   read_image: "读图",
+ };
+ export function toolVerb(tool: string): string | null {
+--- a/apps/desktop/tests/tool-row-summary.test.ts	2026-11-01 14:05:23
++++ b/apps/desktop/tests/tool-row-summary.test.ts	2026-11-01 14:04:19
+@@ -99,6 +99,37 @@
+   });
+ });
+ 
++describe("技能 / 目标 / MCP 元工具（第 925 页）", () => {
++  it("skill 摘要 = 调用名；refine_goal = 目标原文", () => {
++    expect(summarize("skill", { name: "/plugin:review", args: "src/a.ts" })).toBe("/plugin:review");
++    expect(summarize("refine_goal", { objective: "把重试做成指数退避，三次失败后给可操作提示" }))
++      .toBe("把重试做成指数退避，三次失败后给可操作提示");
++  });
++
++  it("mcp_list：不给 server 就是全部；给 server 就是那一台", () => {
++    expect(summarize("mcp_list", {})).toBe("全部 MCP 服务器");
++    expect(summarize("mcp_list", { server: "plugin/sqlite" })).toBe("plugin/sqlite");
++  });
++
++  it("mcp_activate / release：server + 数量或工具名", () => {
++    expect(summarize("mcp_activate", { server: "plugin/sqlite", tools: ["query", "schema"] })).toBe("plugin/sqlite（2 把）");
++    expect(summarize("mcp_activate", { server: "plugin/sqlite", tool: "query" })).toBe("plugin/sqlite（1 把）");
++    expect(summarize("mcp_activate", { server: "plugin/sqlite" })).toBe("plugin/sqlite（整台）");
++    expect(summarize("mcp_release", { server: "plugin/sqlite", tool: "query" })).toBe("plugin/sqlite / query");
++    expect(summarize("mcp_release", { server: "plugin/sqlite" })).toBe("plugin/sqlite");
++  });
++
++  it("行面：mcp_activate 的折叠行是「启用 MCP plugin/sqlite（2 把）」", () => {
++    const events = [
++      { type: "tool_call", id: "m1", name: "mcp_activate", args: { server: "plugin/sqlite", tools: ["query", "schema"] }, ts: 1 },
++      { type: "tool_result", callId: "m1", ok: true, ts: 2 },
++    ] as unknown as AgentEvent[];
++    const html = renderToStaticMarkup(createElement(Stream, { rows: projectStream(events) }));
++    expect(html).toContain("启用 MCP plugin/sqlite（2 把）");
++    expect(html).not.toContain("&quot;server&quot;");
++  });
++});
++
+ describe("静态工具面每一把都有中文动词（实现名不上屏）", () => {
+   it("TOOL_NAMES 全覆盖", () => {
+     const missing = TOOL_NAMES.filter((n) => toolVerb(n) === null);
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 14:05:23
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 14:04:40
+@@ -4286,3 +4286,4 @@
+ 45. **行级评注的行键带侧别（第 922 页）**：DiffView 的评注键此前是 `<path>|<newNo ?? oldNo>`——一次「改这一行」的 del 与 add 同号，两侧共用一把键：一条评注同时挂两行（实测一条评注渲染出两个标记），再写一条就把前一条覆盖掉；提交消息里的「第 N 行」也说不清是改前还是改后。现在键是 `<path>|<side>:<line>`（del 用旧文件行号、其余用新文件行号），删除侧的提交条目写明「（删除前）」；旧键形状仍认（不吞历史评注）。
+ 46. **记忆与定时任务行的摘要（第 923 页）**：`remember` / `automation_*` 的参数里没有 command/path，摘要此前落到 JSON 兜底（`{"scope":"project","kind":"decision",…}`、`{}`）。`ownSubject` 补这两族：remember→正文首行（无正文用 topic）、automation_create/update→name（update 缺 name 用 id）、delete/run_now→id、list→「全部定时任务」；`TOOL_VERBS` 补六个动词（记住 / 建 / 改 / 删 / 跑 / 列定时任务）。
+ 47. **字节刻度只有一把尺（第 924 页）**：附件行 `formatSize` 与日志窗的局部 `formatBytes` 各写一份——2048 字节一处写「2 KB」、一处写「2.0 KB」；512 字节在附件行是没单位的裸数「512」；两边在 1 MB 门口都写出四位数（「1024 KB」/「1024.0 KB」）。实现收到 `derived/format-bytes.ts`（B/KB/MB 一位小数、`1024.0 KB` 进位成 `1.0 MB`、非法与负数返回 null），两个组件都读它；附件行「拿不到就破折号」的口径留在调用点。
++48. **技能 / 目标 / MCP 元工具的行摘要（第 925 页）**：`skill` / `refine_goal` / `mcp_list` / `mcp_activate` / `mcp_release` 的参数同样没有 command/path，摘要此前落到 JSON 兜底（`{"name":"/plugin:review","args":…}`、`{}`）。`ownSubject` 补这五族：skill→调用名、refine_goal→目标原文（截 80）、mcp_list→server 或「全部 MCP 服务器」、mcp_activate→`server（N 把）`或`（整台）`、mcp_release→`server` 或 `server / 工具名`；`TOOL_VERBS` 补五个动词（用技能 / 改目标 / 列 · 启用 · 停用 MCP）。

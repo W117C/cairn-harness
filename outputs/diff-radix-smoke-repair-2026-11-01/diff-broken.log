@@ -1,0 +1,4 @@
+[diff-render-latency] 崩了: Error: 等待超时：edit tool row
+    at waitFor (/Users/ze/Downloads/Cairn/cairn/apps/desktop/scripts/diff-render-latency.cjs:54:11)
+    at async main (/Users/ze/Downloads/Cairn/cairn/apps/desktop/scripts/diff-render-latency.cjs:62:3)
+EXIT=1

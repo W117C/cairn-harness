@@ -77,7 +77,7 @@ export function NetworkSection(props: { onSaved?: () => void }): React.JSX.Eleme
   };
 
   if (draft === null || saved === null) return (
-    <SettingsPage title="联网搜索" desc="连接搜索服务，让助手查找网页与最新资料。">
+    <SettingsPage title="联网搜索">
       {busy === "load" ? <p className="sp-note" role="status">正在读取搜索设置…</p> : (
         <div className="ns-result error" role="alert"><p>{error}</p><button type="button" className="mini-btn" onClick={() => void load()}><RefreshCw size={13} />重新加载</button></div>
       )}
@@ -103,11 +103,11 @@ export function NetworkSection(props: { onSaved?: () => void }): React.JSX.Eleme
         <div className="ns-context"><Globe size={15} aria-hidden="true" /><span>应用于 {saved.workspace.split(/[\\/]/).filter(Boolean).at(-1) ?? "当前项目"}</span><span className={"ns-status" + (saved.enabled ? " on" : "")}>{saved.enabled ? "已启用" : "未启用"}</span></div>
         <fieldset disabled={busy !== null}>
           <SettingsSection title="搜索服务">
-            <SettingsRow label="启用联网搜索" desc="开启后，助手可在对话中请求检索网页。">
+            <SettingsRow label="启用联网搜索">
               <label className="ns-switch"><input type="checkbox" aria-label="启用联网搜索" checked={draft.enabled} onChange={(e) => change({ enabled: e.target.checked })} /><span>{draft.enabled ? "开启" : "关闭"}</span></label>
             </SettingsRow>
-            <SettingsRow label="搜索服务" desc={preset.hint}>
-              <Field width="full" select><select aria-label="搜索服务" value={draft.provider} onChange={(e) => {
+            <SettingsRow label="服务商" desc={preset.hint}>
+              <Field width="full" select><select aria-label="服务商" value={draft.provider} onChange={(e) => {
                 const provider = e.target.value as SearchProvider;
                 change({ provider, endpoint: provider === saved.provider ? saved.endpoint : PROVIDERS[provider].endpoint, allowLocalEndpoint: provider === saved.provider && saved.allowLocalEndpoint });
                 setClearKey(false); if (keyInput.current) keyInput.current.value = "";
@@ -127,7 +127,7 @@ export function NetworkSection(props: { onSaved?: () => void }): React.JSX.Eleme
           <details className="ns-advanced">
             <summary>高级连接选项</summary>
             {!customEndpoint && endpointField}
-            <SettingsRow label="允许本机或局域网服务" desc="连接你信任的本地搜索服务时开启。">
+            <SettingsRow label="允许本机或局域网服务">
               <label className="ns-switch"><input type="checkbox" aria-label="允许本机或局域网搜索服务" checked={draft.allowLocalEndpoint} onChange={(e) => change({ allowLocalEndpoint: e.target.checked })} /><span>{draft.allowLocalEndpoint ? "允许" : "关闭"}</span></label>
             </SettingsRow>
           </details>

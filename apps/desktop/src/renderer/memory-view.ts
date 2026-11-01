@@ -45,3 +45,36 @@ export function bodyLines(body: string): string[] {
     .map((line) => line.trimEnd())
     .filter((line) => line.trim() !== "");
 }
+
+/** 记忆导出 Markdown（第 824 页）：项目层/全局层分节，主题带类型、修改时间、大小与正文；
+ *  空层给一句「本层暂无主题」，不导出空壳。纯函数，方便判卷与未来 CLI 复用。 */
+import type { MemorySnapshot } from "../../../../src/main/ipc-protocol";
+
+export function memoryExportMarkdown(snap: MemorySnapshot, generatedAt = new Date().toISOString()): string {
+  const lines: string[] = [
+    "# Cairn 记忆导出",
+    "",
+    `生成时间：${generatedAt}`,
+    "",
+    `项目层：${snap.project.path}`,
+    `全局层：${snap.global.path}`,
+    "",
+  ];
+  const layer = (title: string, layerSnap: MemorySnapshot["project"]): void => {
+    lines.push(`## ${title}`, "");
+    if (layerSnap.index !== null && layerSnap.index.trim() !== "") {
+      lines.push("### 索引", "", layerSnap.index.trimEnd(), "");
+    }
+    if (layerSnap.topics.length === 0) {
+      lines.push("_本层暂无主题_", "");
+      return;
+    }
+    for (const topic of layerSnap.topics) {
+      lines.push(`### ${topic.topic}`, "", `- 类型：${topic.type}`, `- 修改：${topic.modified}`, `- 大小：${String(topic.bytes)} B`, "");
+      lines.push(topic.body.trim() === "" ? "_此主题暂无正文_" : topic.body.trimEnd(), "");
+    }
+  };
+  layer("项目层", snap.project);
+  layer("全局层", snap.global);
+  return lines.join("\n").trimEnd() + "\n";
+}

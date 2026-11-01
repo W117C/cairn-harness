@@ -1,0 +1,15 @@
+=== 造红 A：grep 没有自己的人话（落兜底）===
+     × 每一把都给出人话标题（不落「需要你批准」兜底） 3ms
+AssertionError: 这些闸门工具还没有自己的人话标题，会落到兜底 JSON：grep: expected [ 'grep' ] to deeply equal []
+     33|     expect(missing, "这些闸门工具还没有自己的人话标题，会落到兜底 JSON：" + missing.join(" | …
+      Tests  1 failed | 2 passed (3)
+
+=== 造红 B：两把工具共用一个标题 ===
+     × 标题不重复到读不出区别（每把工具一个动作名） 3ms
+ FAIL  tests/approval-coverage.test.ts > 闸门面每一把工具在批准卡上都有自己的人话（第 941 页） > 标题不重复到读不出区别（每把工具一个动作名）
+      Tests  1 failed | 2 passed (3)
+
+=== 复原后 ===
+      Tests  3 passed (3)
+=== sha256 ===
+   2 c095592d4961b0902773c7735ab79b5dd1a94c3e74275a99ce8542f004bc0460

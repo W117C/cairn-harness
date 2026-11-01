@@ -192,7 +192,7 @@ describe("remote execution backend", () => {
 
     const view = await engine.view();
     expect(view.plans.plan?.tasks.t0?.phase).toBe("needs_you");
-    expect(view.plans.plan?.tasks.t0?.reason).toContain("connection was lost");
+    expect(view.plans.plan?.tasks.t0?.reason).toContain("confirm the executor stopped before retrying");
     expect(view.anomalies).toEqual([]);
   });
 

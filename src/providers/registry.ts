@@ -59,7 +59,7 @@ export function customProviderById(id: string): DerivedCustomProvider | undefine
   return customProviders.find((p) => p.id === id);
 }
 
-/** 这个 provider id 是不是**已知**的（内置四家，或已装的自定义家）。
+/** 这个 provider id 是不是**已知**的（内置家，或已装的自定义家）。
  *  它是「未知 provider 一律 fail-visible」这条纪律的唯一判据 —— 别处不要再抄一份白名单。 */
 export function isKnownProviderId(id: string): boolean {
   return (PROVIDER_IDS as readonly string[]).includes(id) || customProviderById(id) !== undefined;

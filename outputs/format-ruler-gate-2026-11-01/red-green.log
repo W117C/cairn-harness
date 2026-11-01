@@ -1,0 +1,10 @@
+=== 造红：在 UsageMeter 里再抄一份 k 档 ===
+     × 组件与派生模块里没有第三把尺 44ms
+components/UsageMeter.tsx:57 [token-k] ${(n / 1000).toFixed(1)}k: expected [ Array(1) ] to deeply equal []
++   "components/UsageMeter.tsx:57 [token-k] ${(n / 1000).toFixed(1)}k",
+      Tests  1 failed | 1 passed (2)
+
+=== 复原后 ===
+      Tests  2 passed (2)
+=== sha256 ===
+   2 e64e8d4e6aa974b9261b0be8b689542a7dbfbebea25bdd1c2d936cb467876126

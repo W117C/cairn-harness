@@ -224,3 +224,19 @@ run offline. Real-provider evaluation remains a separate, clearly labeled mode.
 - focused tests pass, then `pnpm test:capped`;
 - `node --import tsx scripts/typecheck.ts` and `pnpm docs-check` pass.
 
+## Implementation Status (2026-10-27)
+
+| Gap | Implementation | Evidence |
+|---|---|---|
+| Current-session history recall | `src/agent/history-search.ts` + `src/tools/search-history.ts`, bound to one session; tri-state envelope | `tests/history-search.test.ts` (7), `tests/search-history-tool.test.ts` (5) |
+| Predictive compaction | `src/agent/compaction-prediction.ts` + provider integration; prefix digest, model key, age, discarded usage | `tests/compaction-prediction.test.ts` (8) |
+| Hybrid memory | `src/agent/memory/semantic.ts` + injectable adapter in `inject.ts`; lexical fallback with visible reason | `tests/memory-hybrid.test.ts` (6), `tests/memory-recall.test.ts` (13) |
+| Fixed paired evaluation | `src/agent/context-quality-eval.ts`; separate arms, failure/unknown fields, no zero substitution | `tests/context-quality-eval.test.ts` (3) |
+
+Boundaries:
+
+- The paired evaluation runs on deterministic injected embedders/summarizers. Real-provider quality,
+  cost, and latency gains remain unmeasured; fixture readings must not be reported as provider gains.
+- History recall is current-session only; workers and write-only lanes cannot reach the tool.
+- Hybrid recall never turns an embedder failure into "no memory": lexical results remain and the
+  fallback reason is visible.

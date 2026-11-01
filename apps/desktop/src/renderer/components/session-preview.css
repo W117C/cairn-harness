@@ -1,4 +1,4 @@
-/* 会话预览窗格（只读）：头部标题/只读徽标/运行中/切换按钮 + 复用 .stream 的滚动正文。 */
+/* 会话预览窗格（2026-10-27 可继续）：头部标题/不切主会话徽标/运行中/切换按钮 + 复用 .stream 的滚动正文。 */
 .session-preview { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .svp-head {
   display: flex;
@@ -18,7 +18,7 @@
   font-weight: var(--fw-semibold);
   color: hsl(var(--text-000));
 }
-.svp-readonly {
+.svp-badge {
   flex: none;
   padding: 1px 6px;
   border: 1px solid var(--hairline);
@@ -29,10 +29,37 @@
 .svp-live {
   flex: none;
   font-size: var(--fs-caption-2xs);
-  color: hsl(var(--accent-brand));
+  color: hsl(var(--accent-brand-ink));
 }
 .svp-switch { flex: none; height: var(--h-btn-sm); font-size: var(--fs-caption-xs); }
 .svp-stream { padding: 6px var(--space-sm) var(--space-md); }
+/* 预览输入（2026-10-27）：纯文本发送 / 运行中插话 / 停止；附件与技能菜单仍归主输入框。 */
+.svp-composer {
+  flex: none; display: flex; flex-direction: column; gap: 4px;
+  padding: 6px var(--space-sm) 8px; border-top: 1px solid var(--hairline);
+  background: hsl(var(--bg-000));
+}
+.svp-composer-note { font-size: var(--fs-caption-xs); color: hsl(var(--text-300)); }
+.svp-composer-row { display: flex; align-items: flex-end; gap: 6px; }
+.svp-input {
+  flex: 1 1 auto; min-width: 0; resize: none; min-height: 34px; max-height: 96px;
+  padding: 5px 7px; border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+  background: hsl(var(--bg-000)); color: hsl(var(--text-000));
+  font: inherit; font-size: var(--fs-caption-md); line-height: 1.5;
+}
+.svp-input:focus-visible { outline: 2px solid hsl(var(--accent-control) / 40%); outline-offset: 1px; }
+.svp-input:disabled { opacity: .55; }
+.svp-composer-actions { flex: none; display: inline-flex; align-items: center; gap: 4px; padding-bottom: 1px; }
+.svp-send, .svp-stop {
+  width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--hairline); border-radius: var(--radius-sm); color: hsl(var(--text-200));
+}
+.svp-send:hover:not(:disabled), .svp-stop:hover {
+  background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); color: hsl(var(--text-000));
+}
+.svp-send:disabled { opacity: .4; }
+.svp-stop { color: hsl(var(--color-danger-ink)); border-color: hsl(var(--color-danger) / 35%); }
+.svp-resume { align-self: flex-start; height: 22px; font-size: var(--fs-caption-xs); color: hsl(var(--text-200)); }
 .svp-note {
   padding: var(--space-sm) var(--space-md);
   font-size: var(--fs-caption-md);

@@ -1,0 +1,82 @@
+--- a/apps/desktop/src/renderer/derived/stream.ts	2026-11-01 13:58:21
++++ b/apps/desktop/src/renderer/derived/stream.ts	2026-11-01 13:58:02
+@@ -47,6 +47,15 @@
+     return n > 0 ? `${String(n)} 个子任务` : "本会话全部子任务";
+   }
+   if (tool === "list_agents") return "本会话全部子任务";
++  if (tool === "remember") {
++    const content = str(args.content);
++    if (content !== undefined) return content.split("\n")[0]!.trim().slice(0, 80);
++    return str(args.topic);
++  }
++  if (tool === "automation_create") return str(args.name);
++  if (tool === "automation_update") return str(args.name) ?? str(args.id);
++  if (tool === "automation_delete" || tool === "automation_run_now") return str(args.id);
++  if (tool === "automation_list") return "全部定时任务";
+   if (tool === "clarify") {
+     const qs = Array.isArray(args.questions) ? args.questions : [];
+     const q = str((qs[0] as { question?: unknown } | undefined)?.question);
+--- a/apps/desktop/src/renderer/derived/tool-verbs.ts	2026-11-01 13:58:21
++++ b/apps/desktop/src/renderer/derived/tool-verbs.ts	2026-11-01 13:57:25
+@@ -32,6 +32,14 @@
+   list_agents: "列出",
+   resume_agent: "恢复",
+   close_agent: "关闭",
++  // 记忆与定时任务（第 923 页）：参数里没有 command/path，摘要走 ownSubject（content/topic、name/id）；
++  // 没有动词的话行首还是 `remember` / `automation_create` 这类实现名。
++  remember: "记住",
++  automation_create: "建定时任务",
++  automation_update: "改定时任务",
++  automation_delete: "删定时任务",
++  automation_run_now: "跑定时任务",
++  automation_list: "列定时任务",
+   read_image: "读图",
+ };
+ export function toolVerb(tool: string): string | null {
+--- a/apps/desktop/tests/tool-row-summary.test.ts	2026-11-01 13:58:21
++++ b/apps/desktop/tests/tool-row-summary.test.ts	2026-11-01 13:57:17
+@@ -68,6 +68,37 @@
+   });
+ });
+ 
++describe("记忆与定时任务：摘要取正文/名字，不甩参数 JSON（第 923 页）", () => {
++  it("remember 摘要 = 正文首行；没有正文时用 topic", () => {
++    expect(summarize("remember", {
++      scope: "project", kind: "decision", op: "append",
++      content: "发布前必须跑全量 gates；上一轮因为跳过它把红带进了 main。",
++    })).toBe("发布前必须跑全量 gates；上一轮因为跳过它把红带进了 main。");
++    expect(summarize("remember", { kind: "memory", topic: "release-gate" })).toBe("release-gate");
++    // 多行正文只取首行（行内换行会把折叠行撑成一条 JSON 状的乱麻）
++    expect(summarize("remember", { content: "第一行\n第二行" })).toBe("第一行");
++  });
++
++  it("automation_*：建/改给名字，删/跑给 id，列给一句话", () => {
++    expect(summarize("automation_create", { name: "每日备份", prompt: "备份仓库" })).toBe("每日备份");
++    expect(summarize("automation_update", { id: "a1", name: "每周巡检" })).toBe("每周巡检");
++    expect(summarize("automation_update", { id: "a1" })).toBe("a1");
++    expect(summarize("automation_delete", { id: "a1" })).toBe("a1");
++    expect(summarize("automation_run_now", { id: "a1" })).toBe("a1");
++    expect(summarize("automation_list", {})).toBe("全部定时任务");
++  });
++
++  it("行面：remember 的折叠行是「记住 + 正文首行」", () => {
++    const events = [
++      { type: "tool_call", id: "r1", name: "remember", args: { kind: "decision", content: "发布前跑 gates" }, ts: 1 },
++      { type: "tool_result", callId: "r1", ok: true, ts: 2 },
++    ] as unknown as AgentEvent[];
++    const html = renderToStaticMarkup(createElement(Stream, { rows: projectStream(events) }));
++    expect(html).toContain("记住 发布前跑 gates");
++    expect(html).not.toContain("&quot;content&quot;");
++  });
++});
++
+ describe("静态工具面每一把都有中文动词（实现名不上屏）", () => {
+   it("TOOL_NAMES 全覆盖", () => {
+     const missing = TOOL_NAMES.filter((n) => toolVerb(n) === null);
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 13:58:21
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 13:57:31
+@@ -4284,3 +4284,4 @@
+ 43. **时间线的工具步也用中文动词（第 918 页）**：时间线此前把 `read_file a.ts` 直接写进步骤标签——`kind` 列只给「工具」这个类别，label 里再摆一次实现名，与第 916 页确立的「流里不出现实现名」相反，同一件事两个面两套口径。词表 `TOOL_VERBS` 从 `components/Stream.tsx` 搬到 `derived/tool-verbs.ts`（派生层：组件与派生都能读，组件层不再拥有词表），`timelineItems` 的 tool 步改成「中文动词 + 摘要」；未知工具仍回落原名（宁缺不编）。
+ 44. **用量数字只有一把尺（第 921 页）**：`formatTokens` 原来只有 k 档（`components/format-tokens.ts`），而时间线的 usage 步自己抄了一份 `fmtTokens`（多一档 m）⇒ 同一个 token 数在用量环写 `1250.0k`、在时间线写 `1.3m`。实现搬到 `derived/format-tokens.ts`（派生层，用量环 / 检查器 / 时间线三个消费面都读得到），组件层那个文件改成转发出口；顺手把 `999_950…999_999` 这一档从四位数 `1000.0k` 进位成 `1.0m`。
+ 45. **行级评注的行键带侧别（第 922 页）**：DiffView 的评注键此前是 `<path>|<newNo ?? oldNo>`——一次「改这一行」的 del 与 add 同号，两侧共用一把键：一条评注同时挂两行（实测一条评注渲染出两个标记），再写一条就把前一条覆盖掉；提交消息里的「第 N 行」也说不清是改前还是改后。现在键是 `<path>|<side>:<line>`（del 用旧文件行号、其余用新文件行号），删除侧的提交条目写明「（删除前）」；旧键形状仍认（不吞历史评注）。
++46. **记忆与定时任务行的摘要（第 923 页）**：`remember` / `automation_*` 的参数里没有 command/path，摘要此前落到 JSON 兜底（`{"scope":"project","kind":"decision",…}`、`{}`）。`ownSubject` 补这两族：remember→正文首行（无正文用 topic）、automation_create/update→name（update 缺 name 用 id）、delete/run_now→id、list→「全部定时任务」；`TOOL_VERBS` 补六个动词（记住 / 建 / 改 / 删 / 跑 / 列定时任务）。

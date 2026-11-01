@@ -1,0 +1,14 @@
+=== 造红 A：认不出的 kind 被猜成「新建」===
+     × 三个词：新建 / 修改 / 变更；认不出的一律「变更」（不猜） 4ms
+AssertionError: expected '新建' to be '变更' // Object.is equality
+      Tests  1 failed | 2 passed (3)
+
+=== 造红 B：PaneDock 又内联方案动作三元 ===
+     × 三处消费面都读同一份，且不再各自内联三元 4ms
+      Tests  1 failed | 2 passed (3)
+
+=== 复原后 ===
+      Tests  3 passed (3)
+=== sha256 ===
+5726ec91ecf0a467efaa73da703a14b98d9976f68ac23b2b6d252c38330dade7
+3db97b1c690669b6a08cd20e3af0e2080876fb603ffb1bcac56d56622accf460

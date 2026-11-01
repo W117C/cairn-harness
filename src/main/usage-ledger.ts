@@ -2,6 +2,7 @@
 // 面板（当前会话）与主进程跨会话汇总必须用**同一套**口径，否则两个数字会慢慢分叉。
 // 这里只做事件折叠，不碰文件与 Electron——渲染层可直接 import（纯函数，无 Node 依赖）。
 import type { AgentEvent } from "../events";
+import { isWorkerSubflowEvent } from "../agent/subflow";
 
 /** 六个维度 = 面板展示的六行；token 缺字段当 0（旧日志防御），缓存「没量到」不冒充 0。 */
 export interface UsageTotals {
@@ -18,11 +19,7 @@ export function emptyUsageTotals(): UsageTotals {
 }
 
 /** 子 agent 子流事件带 agent_id；主会话的事件不带。旧日志没有该字段 ⇒ 按主会话计入（旧口径）。 */
-function isWorkerSubflow(e: AgentEvent): boolean {
-  if (e.type === "agent_spawned") return false;
-  const id = (e as { agent_id?: unknown }).agent_id;
-  return typeof id === "string";
-}
+
 
 /** 损坏/旧日志里的无效值不冒充负消耗，也不把 NaN 传播到整份账本。 */
 export function isMeasuredTokenCount(value: unknown): value is number {
@@ -42,7 +39,7 @@ export function foldUsageEvent(acc: UsageTotals, e: AgentEvent): void {
     if (isMeasuredTokenCount(cacheRead)) acc.cacheReadTokens += cacheRead;
     return;
   }
-  if (isWorkerSubflow(e)) return;
+  if (isWorkerSubflowEvent(e)) return;
   if (e.type === "tool_call") acc.toolSteps += 1;
   else if (e.type === "user_message") acc.rounds += 1;
 }

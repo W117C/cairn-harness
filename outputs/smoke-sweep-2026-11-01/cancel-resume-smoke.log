@@ -1,0 +1,5 @@
+PASS 运行中发送先入队，不新开 run
+PASS 取消后队列头自动接上同一会话
+PASS 第二轮收束后停止钮消失、队列清空
+PASS 真实渲染无控制台错误
+[cancel-resume-smoke] 4/4 PASS｜console error 0

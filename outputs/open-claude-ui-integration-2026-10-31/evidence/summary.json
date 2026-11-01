@@ -1,0 +1,105 @@
+{
+  "top": {
+    "top": 0,
+    "max": 3457
+  },
+  "dom": {
+    "think": {
+      "running": "false",
+      "expanded": "false",
+      "bodyOpen": "false",
+      "bodyRows": "0px",
+      "bodyH": 0,
+      "box": {
+        "w": 722,
+        "h": 43,
+        "x": 376,
+        "y": 158
+      }
+    },
+    "img": {
+      "label": "预览图片",
+      "box": {
+        "w": 552,
+        "h": 278,
+        "x": 380,
+        "y": 261
+      },
+      "complete": true,
+      "naturalW": 900,
+      "naturalH": 520,
+      "shown": {
+        "w": 480,
+        "h": 278,
+        "x": 380,
+        "y": 261
+      }
+    },
+    "composer": {
+      "radius": "12px",
+      "box": {
+        "w": 750,
+        "h": 107,
+        "x": 348,
+        "y": 682
+      },
+      "taMin": "36px",
+      "taMax": "320px",
+      "taLine": "21px",
+      "taFont": "14px",
+      "row3Border": "1px",
+      "row3Min": "28px"
+    },
+    "fades": {
+      "topOn": "false",
+      "bottomOn": "true"
+    },
+    "scroll": {
+      "top": 0,
+      "max": 3457
+    }
+  },
+  "thinkOpen": {
+    "expanded": "true",
+    "bodyOpen": "true",
+    "rows": "60.75px",
+    "h": 61,
+    "disabled": null
+  },
+  "open": true,
+  "lb": {
+    "open": true,
+    "role": "dialog",
+    "label": "预览图片",
+    "zoom": "100%",
+    "naturalW": 900,
+    "naturalH": 520,
+    "buttons": [
+      "缩小",
+      "重置缩放",
+      "放大",
+      "关闭预览"
+    ]
+  },
+  "zoomed": {
+    "zoom": "156%",
+    "transform": "matrix(1.5625, 0, 0, 1.5625, 0, 0)"
+  },
+  "closed": {
+    "open": false,
+    "focus": "md-img-open",
+    "focusLabel": "预览图片"
+  },
+  "scrolled": {
+    "top": 1583,
+    "max": 3518
+  },
+  "fades": {
+    "topOn": "true",
+    "bottomOn": "true",
+    "topOpacity": "1",
+    "bottomOpacity": "1",
+    "topBg": "linear-gradient(color(srgb 0.988235 0.988235 0.984314), color(srgb 0.988235 0.988235 0.984314 / 0.85) 13%, color(srgb 0.988235 0.988235 0.984314 / 0.7) 25%, color(srgb 0.988235 0.988235 0.984314 / 0.5), color(srgb 0.9882"
+  },
+  "errors": []
+}

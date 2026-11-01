@@ -1,0 +1,10 @@
+PASS 真实 preload 回读当前协议版本
+PASS 真实运行停在审批门等待，只有一场执行
+PASS 错误工作区插话与停止均被真实 host 拒绝
+PASS 旧式裸 id 控制在同名场景拒绝猜目标
+PASS 正确工作区可经真实 IPC 插话
+[memory] 会话结束沉淀: {"kind":"failed","why":"This operation was aborted"}
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+PASS 正确工作区取消穿透审批门并收束原运行
+PASS 收束后的插话明确拒绝
+PASS 无 preload 错误

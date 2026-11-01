@@ -1,0 +1,117 @@
+--- a/apps/desktop/src/renderer/components/format-tokens.ts	2026-11-01 13:49:21
++++ b/apps/desktop/src/renderer/components/format-tokens.ts	2026-11-01 13:48:13
+@@ -1,9 +1,4 @@
+-// 用量数字格式化（原 TokenPanel.tsx 的同名函数）。TokenPanel 组件自 M2 起就没被渲染过，
+-// 批 98 把它删掉：Composer 底部用量环（↑in ↓out / 缓存 / 轮数）才是唯一消费面。
+-// 保留独立模块而不是塞回 Composer——纯函数有判卷（model-picker.test）且以后状态条可复用。
+-
+-/** 元位数字：过 1000 显 k 一位小数（12400 → "12.4k"），未过原样。 */
+-export function formatTokens(n: number): string {
+-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+-  return String(n);
+-}
++// 用量数字格式化的**实现**已搬到 `derived/format-tokens.ts`（第 921 页）：
++// 时间线（派生层）与用量环 / 检查器（组件层）必须读同一份，否则同一个 token 数两处两个写法。
++// 这里保留同名出口，既有 import（UsageMeter / Inspector / 判卷）不用改路径。
++export { formatTokens } from "../derived/format-tokens";
+--- a/apps/desktop/src/renderer/derived/timeline.ts	2026-11-01 13:49:21
++++ b/apps/desktop/src/renderer/derived/timeline.ts	2026-11-01 13:48:13
+@@ -1,6 +1,7 @@
+ // 派生层·时间线面（纯投影）：事件流 → 步骤序列 / 轮次时间线。
+ // I3 契约：只吃 AgentEvent[]，只吐值；不读时钟、不取随机、不做 IO、不留模块级可变态。
+ import type { AgentEvent } from "../../../../../src/main/ipc-protocol";
++import { formatTokens } from "./format-tokens";
+ import { summarize } from "./stream";
+ import { toolVerb } from "./tool-verbs";
+ import { isWorkerSubflowEvent } from "./session";
+@@ -24,11 +25,6 @@
+ }
+ 
+ const TIMELINE_LABEL_MAX = 60;
+-const fmtTokens = (n: number): string => {
+-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`;
+-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+-  return String(n);
+-};
+ const timelineLabel = (text: string): string => {
+   const flat = text.replace(/\s+/g, " ").trim();
+   return flat.length <= TIMELINE_LABEL_MAX ? flat : flat.slice(0, TIMELINE_LABEL_MAX) + "…";
+@@ -57,7 +53,7 @@
+         out.push({ eventId, kind: "tool", label: timelineLabel(`${toolVerb(e.name) ?? e.name} ${summarize(e.name, e.args)}`), ...(e.ts !== undefined ? { at: e.ts } : {}) });
+         break;
+       case "usage":
+-        out.push({ eventId, kind: "usage", label: `输入 ${fmtTokens(e.inputTokens)} · 输出 ${fmtTokens(e.outputTokens)}`, ...(e.ts !== undefined ? { at: e.ts } : {}) });
++        out.push({ eventId, kind: "usage", label: `输入 ${formatTokens(e.inputTokens)} · 输出 ${formatTokens(e.outputTokens)}`, ...(e.ts !== undefined ? { at: e.ts } : {}) });
+         break;
+       default:
+         break; // clarify/plan/error 等：对话面有专卡/专行，时间线不为它们立步
+--- a/apps/desktop/tests/model-picker.test.ts	2026-11-01 13:49:38
++++ b/apps/desktop/tests/model-picker.test.ts	2026-11-01 13:48:23
+@@ -140,4 +140,12 @@
+     expect(formatTokens(0)).toBe("0");
+     expect(formatTokens(1234)).toBe("1.2k");
+   });
++
++  it("过百万进位到 m；999_950 那档不再写成四位数 1000.0k（第 921 页）", () => {
++    expect(formatTokens(1_000_000)).toBe("1.0m");
++    expect(formatTokens(1_250_000)).toBe("1.3m");
++    expect(formatTokens(999_960)).toBe("1.0m");
++    expect(formatTokens(999_949)).toBe("999.9k");
++    expect(formatTokens(400_000)).toBe("400.0k");
++  });
+ });
+--- a/apps/desktop/tests/timeline-pane.test.tsx	2026-11-01 13:49:21
++++ b/apps/desktop/tests/timeline-pane.test.tsx	2026-11-01 13:48:23
+@@ -7,6 +7,7 @@
+ import type { AgentEvent } from "../../../src/events";
+ import { timelineItems } from "../src/renderer/projections";
+ import { TimelinePane } from "../src/renderer/components/TimelinePane";
++import { readRendererFile } from "./helpers/app-surface";
+ 
+ const events = [
+   { type: "user_message", content: "帮我改一下", ts: 1000 },
+@@ -47,6 +48,16 @@
+     expect(labels.join("|")).not.toContain("run_shell");
+   });
+ 
++  it("usage 步与用量环读同一把尺：过百万写 1.3m，不写 1250.0k（第 921 页）", () => {
++    const big = [
++      { type: "usage", inputTokens: 1_250_000, outputTokens: 340, ts: 1 },
++    ] as unknown as AgentEvent[];
++    expect(timelineItems(big)[0]?.label).toBe("输入 1.3m · 输出 340");
++    // 同一份实现：组件层那个出口也从派生层转发（不是第二份）
++    expect(readRendererFile("components/format-tokens.ts")).toContain('export { formatTokens } from "../derived/format-tokens";');
++    expect(readRendererFile("derived/timeline.ts")).not.toContain("const fmtTokens");
++  });
++
+   it("at 只取在场 ts（编不出来的不给）", () => {
+     const items = timelineItems(events);
+     expect(items[0]?.at).toBe(1000);
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 13:49:21
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 13:48:37
+@@ -4282,3 +4282,4 @@
+ 41. **工具行摘要取主语，词表跟住工具面（第 916 页）**：`summarize` 的取值链是 command → path → file → url → query，没有 pattern ⇒ `grep {pattern:"TODO", path:"src/agent"}` 折成「src/agent」、`glob {pattern:"src/**/*.ts"}` 甩成 `{"pattern":…}`；折叠行只有这一句话，主语丢了没处补。pattern 插到 path 之前（command → pattern → path → file → url → query），既有五档顺序不动。另一半是词表：静态工具面 `TOOL_NAMES` 里有七把没有动词（grep / glob / lsp / clarify / propose_plan / render_image / verify），渲染层按「未知工具」把实现名摆上屏；陈旧键 `list_dir`（工具已由 glob 取代）一并撤掉。新判卷 `tool-row-summary.test.ts` 钉两面：grep 的 pattern 优先于 path、`TOOL_NAMES` 全覆盖且词表不许有工具面之外的键。
+ 42. **编排工具行挑主语（第 917 页）**：`summarize` 只认 command / pattern / path / file / url / query，编排族与 clarify 的参数一个都不在里面 ⇒ `spawn_agent` 行是 `{"task":…,"mode":…}`、`list_agents` 是 `{}`、clarify 是一串 questions JSON——用户看到的是参数原文，不是「派了什么活」。改为 `summarize(tool, args)`：先按工具挑主语（spawn→task、send→message、wait/cancel→「N 个子任务」或「本会话全部子任务」、list→「本会话全部子任务」、resume/close→thread_id、clarify→第一个问题＋共 N 问），挑不到才回通用链/JSON 兜底；对应六个动词（发消息 / 等待 / 撤销 / 列出 / 恢复 / 关闭）一并补进 `TOOL_VERBS`。
+ 43. **时间线的工具步也用中文动词（第 918 页）**：时间线此前把 `read_file a.ts` 直接写进步骤标签——`kind` 列只给「工具」这个类别，label 里再摆一次实现名，与第 916 页确立的「流里不出现实现名」相反，同一件事两个面两套口径。词表 `TOOL_VERBS` 从 `components/Stream.tsx` 搬到 `derived/tool-verbs.ts`（派生层：组件与派生都能读，组件层不再拥有词表），`timelineItems` 的 tool 步改成「中文动词 + 摘要」；未知工具仍回落原名（宁缺不编）。
++44. **用量数字只有一把尺（第 921 页）**：`formatTokens` 原来只有 k 档（`components/format-tokens.ts`），而时间线的 usage 步自己抄了一份 `fmtTokens`（多一档 m）⇒ 同一个 token 数在用量环写 `1250.0k`、在时间线写 `1.3m`。实现搬到 `derived/format-tokens.ts`（派生层，用量环 / 检查器 / 时间线三个消费面都读得到），组件层那个文件改成转发出口；顺手把 `999_950…999_999` 这一档从四位数 `1000.0k` 进位成 `1.0m`。
+--- /dev/null → apps/desktop/src/renderer/derived/format-tokens.ts
+--- /dev/null	2026-11-01 13:49:44
++++ b/apps/desktop/src/renderer/derived/format-tokens.ts	2026-11-01 13:49:13
+@@ -0,0 +1,17 @@
++// 用量数字格式化（第 921 页从 `components/format-tokens.ts` 搬到派生层）：
++// 它有三个消费面——用量环 / 检查器 / 时间线的 usage 步；时间线在派生层，按分层规则够不着组件层，
++// 于是它自己抄了一份 `fmtTokens`（还多一档 m）⇒ 同一个 token 数在两个面写法不同
++// （1_250_000 在时间线是 `1.3m`、在用量环是 `1250.0k`）。词表只能有一份，落在派生层。
++
++/** 元位数字：过 1000 显 k、过 100 万显 m，都是一位小数；未过 1000 原样。
++ *  `999_950…999_999` 这一档按 k 写会得到四位小数 `1000.0k`——那是没过万就撑爆的写法，
++ *  一并进位到 m（`1.0m`）。 */
++export function formatTokens(n: number): string {
++  if (!Number.isFinite(n)) return String(n);
++  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`;
++  if (n >= 1000) {
++    const k = (n / 1000).toFixed(1);
++    return k === "1000.0" ? `${(n / 1_000_000).toFixed(1)}m` : `${k}k`;
++  }
++  return String(n);
++}

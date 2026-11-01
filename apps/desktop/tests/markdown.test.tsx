@@ -93,8 +93,11 @@ describe("Markdown 渲染面：XSS 纪律（全部文本节点，不注入 HTML�
 
   it("流式光标（caret）落在最后一个文本块的行内，不是独立一行（业主实测抓到的形态）", () => {
     const html = renderToStaticMarkup(<Markdown text={"第一段\r\n\r\n正在写第二"} caret={true} />);
-    // caret 在 <p> 内部、跟在正文后面
-    expect(html).toMatch(/<p class="md-p">正在写第二<span class="cursor"/);
+    // caret 在 <p> 内部、跟在正文后面。
+    // 2026-10-28 第 757 页：正文可能被「逐词到达」的 span 包着（对标 Codex 的 word arrival），
+    // 那层包装是**可选**的（历史正文没有）⇒ 判据放宽成「正文可被包一层，但光标仍紧跟其后、
+    // 且仍在 <p> 里」——意图（光标行内、不独立一行）一点没松。
+    expect(html).toMatch(/<p class="md-p">(?:<span class="md-word">)?正在写第二(?:<\/span>)?<span class="cursor"/);
     const html2 = renderToStaticMarkup(<Markdown text={"```ts\nconst a=1;"} caret={true} />);
     // 2026-10-24 业主：光标要跟字走——末块是代码块时收到末行行尾（不消失、不独立一行）
     expect(html2).toMatch(/<pre><code>const a=1;<span class="cursor"/);
@@ -141,10 +144,10 @@ describe("parseBlocks：整行加粗段落归小节标题（brief §二.3「我�
 });
 
 describe("代码块复制反馈（2026-10-18）", () => {
-  it("点击后就地变「已复制」，1.2s 后还原；onCopy 缺席不假装成功", () => {
+  it("点击后就地变「已复制」，2.5s 后还原（2026-10-31 对齐 CodeBlock 状态机）；onCopy 缺席不假装成功", () => {
     const src = readFileSync(fileURLToPath(new URL("../src/renderer/markdown.tsx", import.meta.url)), "utf8");
     expect(src).toContain("if (props.onCopy === undefined) return;");
-    expect(src).toContain("window.setTimeout(() => setCopied(false), 1200);");
+    expect(src).toContain("window.setTimeout(() => setCopied(false), 2500);");
     expect(src).toContain('{copied ? "已复制" : "复制"}');
     // 2026-10-18：onCopy 可回报 Promise<boolean>，失败不亮「已复制」
     expect(src).toContain("if (r instanceof Promise) {");

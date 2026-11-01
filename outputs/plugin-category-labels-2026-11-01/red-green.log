@@ -1,0 +1,14 @@
+=== 改前 A：详情抽屉仍摆英文键名（agents / hooks）===
+     × 发现页与详情抽屉读同一份；抽屉不再直接写英文键名 4ms
++   // 双列卡片默认铺 6 张（3 行 × 2 列），其余收进「查看…另有 N 项」——参照 Codex 自定义页。
+      Tests  1 failed | 4 passed (5)
+
+=== 改前 B：词表把 agents 读回英文 ===
+     × 六类全中文（MCP / LSP 是专名，原样） 2ms
+      Tests  1 failed | 4 passed (5)
+
+=== 复原后 ===
+      Tests  5 passed (5)
+=== sha256 ===
+43b38516db1c1b0e207e7e2b6b9ffa572cbad2558bb5c9fba8db5c4ffd67707e
+225592d0096d693700b6c4b21977eefcfa7a81f13542f74940ef2b005b6024b7

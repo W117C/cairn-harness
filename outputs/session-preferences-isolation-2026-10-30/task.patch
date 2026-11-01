@@ -1,0 +1,973 @@
+--- a/apps/desktop/src/main/index.ts
++++ b/apps/desktop/src/main/index.ts
+@@ -70,7 +70,6 @@
+   handleSessionDelete,
+   handleSessionFork,
+   handleSessionRename,
+-  handleSessionPrefsSet,
+   handleSessionRevert,
+   handleChangeDiff,
+   handleSnapshotRestore,
+@@ -919,7 +918,7 @@
+   cardAction: (req) => handleCardAction(req as never),
+   renameSession: async (oldId, newName, workspace) => handleSessionRename(oldId as string, newName as string, await explicitSessionsRoot(workspace)),
+   // v35：会话级模型/思考档持久化（sidecar；null = 清除回跟随全局）。
+-  sessionPrefsSet: async (id, prefs, workspace) => handleSessionPrefsSet({ sessionId: id, prefs }, await explicitSessionsRoot(workspace)),
++  sessionPrefsSet: (id, prefs, workspace) => host.sessionPrefsSet(id, prefs, workspace),
+   deleteSession: async (id, workspace) => handleSessionDelete(id as string, await explicitSessionsRoot(workspace)),
+   // M8 分叉（v2.15）：保留前 N 轮 → 新会话 `<id>-f<N>`；与 CLI --fork/--from 同口径（fork-cli 单源）。
+   forkSession: async (id, round, unique, workspace) => handleSessionFork(id as string, round as number, unique === true, await explicitSessionsRoot(workspace)),
+--- a/apps/desktop/src/main/kernel-host.ts
++++ b/apps/desktop/src/main/kernel-host.ts
+@@ -51,7 +51,8 @@
+   setAppHooks,
+   updateScheduleCap,
+ } from "../../../../src/main/agent-runner";
+-import { applyCrashRecovery, initSessionsDir, requireSessionMetadata, setSessionRootResolver } from "../../../../src/main/session-handlers";
++import { applyCrashRecovery, handleSessionPrefsSet, initSessionsDir, requireSessionMetadata, setSessionRootResolver } from "../../../../src/main/session-handlers";
++import { readSessionPreferences, type SessionPreferences } from "../../../../src/main/session-preferences";
+ import { initSettingsStore, setSettingsHostDeps } from "../../../../src/main/settings-handlers";
+ import {
+   createSession as createSessionInRoot,
+@@ -111,6 +112,7 @@
+   /** 全工作区合并的会话清单，每条带 workspace 归组标记（T3 分组侧栏的数据源）；
+    *  并合并单例 sidecar 的 pinned/archived/projectId（与写路径同源，见实现处注释）。 */
+   listSessions(): Promise<(SessionInfoPayload & { workspace: string })[]>;
++  sessionPrefsSet(sessionId: unknown, prefs: unknown, workspace?: unknown): Promise<{ ok: boolean; error?: string }>;
+   /** v14：跨全部已登记工作区的用量账本（只读；不触发 openSession 的恢复/漂移副作用）。
+    *  按「路径 + size + mtime」缓存单文件读数——重复打开面板只重读变过的会话。 */
+   usageLedger(): Promise<UsageLedgerPayload>;
+@@ -161,6 +163,7 @@
+ 
+ /** 漂移拒绝文案（计划 Global Constraints 原文，逐字）。 */
+ const DRIFT_ERROR = "会话已被外部修改（CLI？），请刷新后重试";
++const OTHER_WORKSPACE_RUN = "同名会话被其他工作区的执行占用，请等待它结束";
+ 
+ /** 漂移快照：stat 之外还记基线行数与本端事件计数锚——见 externalDrift 的归因慢路径。 */
+ export interface DriftSnapshot {
+@@ -368,7 +371,7 @@
+   // 但它**不能跨 run 泄漏**成「下一轮的首条任务」——盒子里没被取走的插话随 run 收束一起丢弃，
+   // 不会静默变成另一个任务的指令（`steering-channel` 头注释同一条纪律）。
+   const runSteering = new Map<string, SteeringChannel>();
+-  const runControllers = new Map<string, AbortController>();
++  const runControllers = new Map<string, { controller: AbortController; workspace: string }>();
+   /** v14 用量账本的单文件缓存：跨面板开合复用，文件变了（size/mtime）才重读。 */
+   const usageCache: UsageFileCache = new Map();
+   // 每会话这一轮 run 的**起点**（毫秒）：渲染层换实例（HMR/重载）后秒表要接着真值算，
+@@ -391,7 +394,7 @@
+   // owner 表是同步 Map（open/create/run 登记过），推送点拿不到归属就原样发、不编。
+   const withWorkspace = <T extends object>(payload: T, sessionId: string | undefined): T => {
+     if (sessionId === undefined || sessionId === "") return payload;
+-    const ws = owner.get(sessionId);
++    const ws = runControllers.get(sessionId)?.workspace ?? owner.get(sessionId);
+     return ws === undefined ? payload : { ...payload, workspace: ws };
+   };
+   setAppHooks({
+@@ -514,7 +517,11 @@
+         // 非会话模式：临时日志，无归属无漂移无可取消缝；plan 覆盖仍随请求透传。
+         return handleAgentRun(req, req.planRequired !== undefined ? { planRequired: req.planRequired } : {});
+       }
+-      const ws = await resolveSessionWs(sessionId);
++      const live = runControllers.get(sessionId);
++      if (live !== undefined && req.workspace !== undefined && canonicalWorkspacePath(req.workspace) !== live.workspace) {
++        return { ok: false, error: OTHER_WORKSPACE_RUN };
++      }
++      const ws = await resolveSessionWs(sessionId, req.workspace);
+       const logPath = pathOf(wsRoot(ws), sessionId);
+       // 会话级 worktree 隔离（§3.7 · G4）：隔离会话的 run 工作区 = 它自己那棵 worktree
+       // （工具 cwd / 写面 / 验证全在里面，主 checkout 不被并行会话踩）。会话存储**不受影响**：
+@@ -524,9 +531,10 @@
+       if (await externalDrift(sessionId, logPath)) return { ok: false, error: DRIFT_ERROR };
+       // canonical controller 覆盖 run 与审计收束：旧 run 的 idle 尚未写完时不接受下一代。
+       // 否则 core 已释放日志、旧 finally 仍在写 sidecar，可能把新 run 标成空闲。
+-      if (runControllers.has(sessionId)) return { ok: false, error: "session already running or being deleted" };
++      const existing = runControllers.get(sessionId);
++      if (existing !== undefined) return { ok: false, error: existing.workspace === ws ? "session already running or being deleted" : OTHER_WORKSPACE_RUN };
+       const controller = new AbortController();
+-      runControllers.set(sessionId, controller);
++      runControllers.set(sessionId, { controller, workspace: ws });
+       runStartedAt.set(sessionId, Date.now());
+       // 插话盒随 run 建：收件箱是 per-run 的（见上方 runSteering 处注释）。
+       const steering = createSteeringChannel();
+@@ -555,7 +563,7 @@
+           onEvent: (event) => {
+             // 只有本 run 真正接收了主面用户轮才记 active；请求校验/busy 拒绝没有这拍。
+             if (!accepted && event.type === "user_message" &&
+-              (!("agent_id" in event) || event.agent_id === undefined) && runControllers.get(sessionId) === controller) {
++              (!("agent_id" in event) || event.agent_id === undefined) && runControllers.get(sessionId)?.controller === controller) {
+               accepted = true;
+               activeAudit = writeSessionAudit(sessionId, "markActive");
+             }
+@@ -565,7 +573,7 @@
+         // aborted 真值（desktop 扩展字段，不动 ipc-protocol 类型）：当且仅当本会话 controller 被 abort
+         return controller.signal.aborted ? { ...res, aborted: true } : res;
+       } finally {
+-        if (runControllers.get(sessionId) === controller) {
++        if (runControllers.get(sessionId)?.controller === controller) {
+           await activeAudit;
+           if (accepted) await writeSessionAudit(sessionId, "markIdle");
+           runControllers.delete(sessionId);
+@@ -594,7 +602,7 @@
+     // 会话级取消（M3 T2）：abort 该会话在跑 run 的 controller（经 RunOverrides.signal 全语义收束）；
+     // 不在跑 ⇒ fail-visible。M2 全局缝 handleRunCancel 不再经此出口（并发会话下它杀的是最后启动的 run）。
+     cancel: async (sessionId) => {
+-      const controller = runControllers.get(sessionId);
++      const controller = runControllers.get(sessionId)?.controller;
+       if (controller === undefined) return { ok: false, error: "会话不在运行" };
+       controller.abort();
+       return { ok: true };
+@@ -607,6 +615,17 @@
+       if (box === undefined) return { ok: false, error: "会话不在运行（插话无人接收）" };
+       box.push(text);
+       return { ok: true, queued: box.size() };
++    },
++    sessionPrefsSet: async (sessionId, prefs, workspace) => {
++      try {
++        if (typeof sessionId !== "string") return { ok: false, error: "会话 id 必须是字符串" };
++        if (workspace !== undefined && workspace !== null && typeof workspace !== "string") return { ok: false, error: "workspace 必须是字符串" };
++        const ws = await resolveSessionWs(sessionId, typeof workspace === "string" && workspace !== "" ? workspace : undefined);
++        const owners = await Promise.all(workspaces.map((candidate) => sessionExists(wsRoot(candidate), sessionId)));
++        return await handleSessionPrefsSet({ sessionId, prefs }, wsRoot(ws), { inheritLegacy: owners.filter(Boolean).length === 1 });
++      } catch (error) {
++        return { ok: false, error: error instanceof Error ? error.message : String(error) };
++      }
+     },
+     listSessions: async () => {
+       // pinned/archived/projectId 合并（第三遍真机复检勘定）：core listSessions 只在传 metadataById
+@@ -619,11 +638,16 @@
+       const records = await requireSessionMetadata().list();
+       const metadataById = new Map(records.map((record) => [record.id, record]));
+       const out: (SessionInfoPayload & { workspace: string })[] = [];
++      const scopedPrefs = new Map<SessionInfoPayload, SessionPreferences>();
+       for (const ws of workspaces) {
+         // 隔离标记读侧现算（目录存在即真）：不落 sidecar、不进事件流 ⇒ 也不会有第二份会漂的状态。
+         const isolated = new Set(await listIsolatedSessions(ws));
+-        for (const info of await listSessionsInRoot(wsRoot(ws), metadataById)) {
+-          out.push({ ...info, workspace: ws, ...(isolated.has(info.id) ? { isolated: true } : {}) });
++        const infos = await listSessionsInRoot(wsRoot(ws), metadataById);
++        const prefs = await Promise.all(infos.map((info) => readSessionPreferences(pathOf(wsRoot(ws), info.id))));
++        for (const [index, info] of infos.entries()) {
++          const row = { ...info, workspace: ws, ...(isolated.has(info.id) ? { isolated: true } : {}) };
++          out.push(row);
++          if (prefs[index] !== null && prefs[index] !== undefined) scopedPrefs.set(row, prefs[index]);
+         }
+       }
+       // 同 id 跨工作区（秒级时间戳撞名）：无法判断这份 sidecar 属于哪一边 ⇒ 两边都不套组织字段，
+@@ -631,6 +655,11 @@
+       const counts = new Map<string, number>();
+       for (const s of out) counts.set(s.id, (counts.get(s.id) ?? 0) + 1);
+       for (const s of out) {
++        if ((counts.get(s.id) ?? 0) > 1 || scopedPrefs.has(s)) {
++          delete s.model;
++          delete s.thinking;
++          Object.assign(s, scopedPrefs.get(s));
++        }
+         if ((counts.get(s.id) ?? 0) > 1) {
+           const mutable = s as unknown as Record<string, unknown>;
+           delete mutable.title;
+@@ -776,7 +805,7 @@
+       // 在跑拒绝（M4-5 fail-visible）：该组任一会话仍在 run（runControllers 有键）⇒ 拒绝缩面。
+       // 判据走归属表（owner: sid→ws，run 启动时已登记）——按 sid 逐个对组，命中即 throw。
+       for (const sid of runControllers.keys()) {
+-        if (owner.get(sid) === ws) {
++        if (runControllers.get(sid)?.workspace === ws) {
+           throw new Error(`工作区有正在运行的会话，无法移除: ${ws}`);
+         }
+       }
+@@ -848,7 +877,8 @@
+       // startedAt：这一轮 run 的起点（渲染层换实例后秒表接着真值算；不在场 = 起点未知）
+       const session = { workspace: ws, sessionId: id };
+       const view = await readSessionView(session, root);
+-      return { events, session, view, running: runControllers.has(id), startedAt: runStartedAt.get(id) };
++      const running = runControllers.get(id)?.workspace === ws;
++      return { events, session, view, running, ...(running ? { startedAt: runStartedAt.get(id) } : {}) };
+     },
+     queueGet: async (sessionId, workspace) => {
+       const ws = await resolveSessionWs(sessionId, workspace);
+--- a/apps/desktop/src/renderer/panes/WorkbenchView.tsx
++++ b/apps/desktop/src/renderer/panes/WorkbenchView.tsx
+@@ -259,6 +259,7 @@
+   injectedAttachment: { path: string; kind: "file" | "directory"; seq: number; } | undefined;
+   injectedAppend: { text: string; seq: number; } | undefined;
+   onboarded: boolean | null;
++  setOnboarded: (value: boolean | null) => void;
+   /** 首启「设置检查」的七组覆盖面（主进程给的副本；空 = 还没取到 ⇒ 整块不渲染）。 */
+   onboarding: readonly OnboardingGroup[];
+   /** 首启检查「完成，不再显示」：落 settings.onboarded=true 并立即隐藏。 */
+@@ -328,7 +329,7 @@
+   // ⌘+点击侧栏会话：右侧预览目标（可继续发送；seq 允许连续预览同一会话）。
+   const [sessionPreview, setSessionPreview] = useState<{ id: string; workspace?: string; title: string; seq: number } | null>(null);
+   const [paneTarget, setPaneTarget] = useState<{ kind: PaneKind; seq: number } | null>(null);
+-  const { activeWorkspace, projects, pickerValue, providerInfo, settingsOpen, destination, pageFilter, openDestination, setPageFilter, activeId, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, togglePane, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, sidebarCollapsed, toggleSidebar, newSession, handleOpenPalette, openPane, setSettingsSection, setSettingsOpen, sidebarWidth, runningSet, waitingIdSet, draftIds, outcomes, registryNotice, retryProjects, sessionsLoaded, sessionsLoadError, sessionsLoadErrorDetail, retrySessions, providerOk, openSession, setActiveWorkspace, activeWorkspaceRef, touchWorkspace, handleAddProject, handleCloneProject, setNewProjectOpen, handleUpdateProject, handleRelocateProject, handleRemoveProject, handleRevealProject, pinSessionById, forkSessionFromMenu, requestArchiveSession, openSessionInCli, setWtDiscard, sessionWorktreeOp, requestDeleteSession, themePref, changeTheme, usageStats, usageAll, loadUsageAll, startSidebarDrag, persistSidebarWidth, sidebarWidthRef, mainGroupRef, showEmpty, findRef, findOpen, streamEl, closeFind, lastError, clearLastError, setLogTarget, lastNotice, clearLastNotice, importDiagnosis, setImportDiagnosis, chipRef, chipOpen, openChipPopover, emptyData, chipQuery, setChipQuery, chipRecent, chipList, closeChip, setLastError, setStreamEl, stick, streamRows, rowRefs, inheritedSeqs, viewMode, runningActive, foldedRounds, flashRound, streamActions, deliveryTrailItems, deliveryExpandedFor, openPreview, exportActiveProject, lastDeliveryRound, handleRevertTurn, setDeliveryExpandedFor, outlineCurrent, jumpToRound, unfoldAllTurns, foldAllTurns, askForActive, setMode, setLastNotice, pendingClarify, pendingPlan, composerZoneRef, editCtx, events, sendQueue, setEditCtx, setDraftRemap, draftRemapSeq, refreshSessions, setQueueFor, cancelRunHeal, resumeQueueFor, sendTo, queueLoading, pendingSend, resumeQueue, skills, composerLock, mode, planRequired, onPlanRequiredChange, stopped, usage, phaseLabel, phase, elapsedSec, steps, runSteps, chosenCtx, recentRefsBySession, noteRecentRef, promptHistory, noteDraft, injectedText, injectedTextSeq, draftRemap, draftRestore, sendWithGoal, configuredProviders, thinkingBySession, pendingThinking, setPendingThinking, force, selections, refreshProviderInfo, compactNow, composerMenuSignal, onSuggestNext, injectedAttachment, injectedAppend, onboarded, onboarding, dismissOnboarding, injectText, inspectorRef, inspectorDefault, setInspectorCollapsed, inspectorSaveTimer, inspectorColRef, jumpToEvent, handleRestoreSnapshot, toggleInspector, attachFromPane, pickSignal, handlePickResult, preview, closePane, send, setPaneTabs, pluginSidebarWidth, setPluginSidebarWidthPersist, closePluginSidebar, fillPluginCommand, viewToast, cheatOpen, closeCheat, revertConfirm, setRevertConfirm, doRevertTurn, projectRemoveConfirm, setProjectRemoveConfirm, doRemoveProject, archiveConfirm, setArchiveConfirm, doArchiveSession, deleteConfirm, setDeleteConfirm, doDeleteSession, wtDiscard, paletteOpen, setPaletteOpen, focusComposer, handlePaletteAction, startBarRename, logTarget, settingsSection, refreshProviderKeys, setThemePref, setTextSize, setUiSize, setCtrlTabCycle, dragOverApp, newProjectOpen, templates, handleCreateFromDialog } = deps;
++  const { activeWorkspace, projects, pickerValue, providerInfo, settingsOpen, destination, pageFilter, openDestination, setPageFilter, activeId, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, togglePane, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, sidebarCollapsed, toggleSidebar, newSession, handleOpenPalette, openPane, setSettingsSection, setSettingsOpen, sidebarWidth, runningSet, waitingIdSet, draftIds, outcomes, registryNotice, retryProjects, sessionsLoaded, sessionsLoadError, sessionsLoadErrorDetail, retrySessions, providerOk, openSession, setActiveWorkspace, activeWorkspaceRef, touchWorkspace, handleAddProject, handleCloneProject, setNewProjectOpen, handleUpdateProject, handleRelocateProject, handleRemoveProject, handleRevealProject, pinSessionById, forkSessionFromMenu, requestArchiveSession, openSessionInCli, setWtDiscard, sessionWorktreeOp, requestDeleteSession, themePref, changeTheme, usageStats, usageAll, loadUsageAll, startSidebarDrag, persistSidebarWidth, sidebarWidthRef, mainGroupRef, showEmpty, findRef, findOpen, streamEl, closeFind, lastError, clearLastError, setLogTarget, lastNotice, clearLastNotice, importDiagnosis, setImportDiagnosis, chipRef, chipOpen, openChipPopover, emptyData, chipQuery, setChipQuery, chipRecent, chipList, closeChip, setLastError, setStreamEl, stick, streamRows, rowRefs, inheritedSeqs, viewMode, runningActive, foldedRounds, flashRound, streamActions, deliveryTrailItems, deliveryExpandedFor, openPreview, exportActiveProject, lastDeliveryRound, handleRevertTurn, setDeliveryExpandedFor, outlineCurrent, jumpToRound, unfoldAllTurns, foldAllTurns, askForActive, setMode, setLastNotice, pendingClarify, pendingPlan, composerZoneRef, editCtx, events, sendQueue, setEditCtx, setDraftRemap, draftRemapSeq, refreshSessions, setQueueFor, cancelRunHeal, resumeQueueFor, sendTo, queueLoading, pendingSend, resumeQueue, skills, composerLock, mode, planRequired, onPlanRequiredChange, stopped, usage, phaseLabel, phase, elapsedSec, steps, runSteps, chosenCtx, recentRefsBySession, noteRecentRef, promptHistory, noteDraft, injectedText, injectedTextSeq, draftRemap, draftRestore, sendWithGoal, configuredProviders, thinkingBySession, pendingThinking, setPendingThinking, force, selections, refreshProviderInfo, compactNow, composerMenuSignal, onSuggestNext, injectedAttachment, injectedAppend, onboarded, setOnboarded, onboarding, dismissOnboarding, injectText, inspectorRef, inspectorDefault, setInspectorCollapsed, inspectorSaveTimer, inspectorColRef, jumpToEvent, handleRestoreSnapshot, toggleInspector, attachFromPane, pickSignal, handlePickResult, preview, closePane, send, setPaneTabs, pluginSidebarWidth, setPluginSidebarWidthPersist, closePluginSidebar, fillPluginCommand, viewToast, cheatOpen, closeCheat, revertConfirm, setRevertConfirm, doRevertTurn, projectRemoveConfirm, setProjectRemoveConfirm, doRemoveProject, archiveConfirm, setArchiveConfirm, doArchiveSession, deleteConfirm, setDeleteConfirm, doDeleteSession, wtDiscard, paletteOpen, setPaletteOpen, focusComposer, handlePaletteAction, startBarRename, logTarget, settingsSection, refreshProviderKeys, setThemePref, setTextSize, setUiSize, setCtrlTabCycle, dragOverApp, newProjectOpen, templates, handleCreateFromDialog } = deps;
+   // 启动时轻量检查更新：有更新源才查，24h 一次，有可用版本才出 notice。
+   useUpdateNotice(setLastNotice);
+   const { inspectorCollapsed } = deps;
+@@ -906,23 +907,23 @@
+                   setLastError(`权限档保存失败：${err instanceof Error ? err.message : String(err)}`);
+                 });
+               }}
+-              thinking={composerThinking(activeId, pendingThinking, thinkingBySession.current)}
++              thinking={composerThinking(activeId, pendingThinking, thinkingBySession.current, activeWorkspace)}
+               onThinkingChange={(level) => {
+                 const change = thinkingChangeTarget(activeId, level);
+                 if (change === null) return; // 非法档位不猜、不夹紧
+                 if (change.kind === "pending") { setPendingThinking(change.level); return; }
+-                thinkingBySession.current.set(change.sessionId, change.level);
++                thinkingBySession.current.set(runKey(activeWorkspace, change.sessionId), change.level);
+                 force((n) => n + 1);
+                 // v35：会话级思考档落 sidecar（重启/切回仍生效）。
+-                void saveSessionPrefs(change.sessionId, { thinking: change.level }).catch((err: unknown) => {
++                void saveSessionPrefs(change.sessionId, { thinking: change.level }, activeWorkspace ?? undefined).catch((err: unknown) => {
+                   setLastError(`会话思考档保存失败：${err instanceof Error ? err.message : String(err)}`);
+                 });
+               }}
+               onModelChange={(registryId) => applySessionModelPick({
+-                activeId, registryId, selections, force, providerInfo, refreshProviderInfo, setLastError,
++                activeId, activeWorkspace, registryId, selections, force, providerInfo, refreshProviderInfo, setLastError,
+               })}
+               onOpenSettings={() => setSettingsOpen(true)}
+-              modelSessionOverride={activeId !== null && selections.current.has(activeId)}
++              modelSessionOverride={activeId !== null && selections.current.has(runKey(activeWorkspace, activeId))}
+               onCompact={() => { compactNow(); }}
+               menuSignal={composerMenuSignal}
+               onSuggestNext={onSuggestNext}
+@@ -1148,6 +1149,7 @@
+         <Suspense fallback={null}>
+           <SettingsPanel
+             onClose={() => setSettingsOpen(false)}
++            onShowOnboarding={() => { setOnboarded(false); void window.agent.setSettings({ onboarded: false }).catch((err: unknown) => { setLastError(`首启检查写入失败：${err instanceof Error ? err.message : String(err)}`); }); setSettingsOpen(false); }}
+             {...(settingsSection !== undefined ? { initialSection: settingsSection } : {})}
+             onSettingsSaved={() => {
+               void refreshProviderInfo();
+--- a/apps/desktop/src/renderer/state/run-queue.ts
++++ b/apps/desktop/src/renderer/state/run-queue.ts
+@@ -10,6 +10,7 @@
+ import { toast } from "../toast";
+ import { runKey } from "./session-identity";
+ import { seedNewSessionThinking } from "./thinking-selection";
++import { saveSessionPrefs } from "./session-prefs";
+ import type { ThinkingEffort } from "../../../../../src/providers/capabilities";
+ 
+ /** 预览/后台会话的发送结果：调用方据此给回执，不靠猜运行态。 */
+@@ -113,10 +114,11 @@
+       runStartBySession.current.set(sid, Date.now());
+       force((n) => n + 1);
+       try {
+-        const thinking = thinkingBySession.current.get(sid);
++        const thinking = thinkingBySession.current.get(key);
+         const planRequired = planRequiredRef?.current ?? null;
+         const res = (await window.agent.run({
+-          message: msg.text, mode: modeRef.current, sessionId: sid, model: selections.current.get(sid) ?? undefined,
++          message: msg.text, mode: modeRef.current, sessionId: sid, model: selections.current.get(key) ?? undefined,
++          ...(runWs !== null ? { workspace: runWs } : {}),
+           ...(thinking !== undefined ? { thinking: thinking as "off" | "low" | "medium" | "high" } : {}),
+           ...(msg.attachments.length > 0 ? { attachments: msg.attachments } : {}),
+           ...(planRequired !== null ? { planRequired } : {}),
+@@ -180,6 +182,7 @@
+         setQueueFor(sid, [...(sendQueue.current.get(key) ?? []), { id: ++queueSeq.current, text, attachments }], runWs);
+         return { outcome: "queued" };
+       }
++      if (res !== null && !res.ok) return { outcome: "failed", error: res.error ?? "运行被拒绝" };
+       return { outcome: "started" };
+     } catch (err) {
+       return { outcome: "failed", error: err instanceof Error ? err.message : String(err) };
+@@ -240,7 +243,11 @@
+         // 空屏首发采纳主进程实际使用的默认工作区。
+         if (activeWorkspace === null) setActiveWorkspace(created.workspace);
+         // 空屏上选的思考档必须落在**这条**新会话上；否则芯片显示「思考 强」、请求里没有 thinking。
+-        seedNewSessionThinking(newId, pendingThinking, thinkingBySession.current);
++        seedNewSessionThinking(newId, pendingThinking, thinkingBySession.current, runWorkspace);
++        if (pendingThinking !== "off") {
++          try { await saveSessionPrefs(newId, { thinking: pendingThinking }, runWorkspace ?? undefined); }
++          catch (error) { setLastError(`会话思考档保存失败：${error instanceof Error ? error.message : String(error)}`, newId); }
++        }
+         activate(newId);
+         refreshSessions();
+       }
+--- a/apps/desktop/src/renderer/state/run-readings.ts
++++ b/apps/desktop/src/renderer/state/run-readings.ts
+@@ -55,7 +55,7 @@
+   // 2026-10-20 独立评审追出 MEDIUM-HIGH——旧实现先判 `finishing`，而 `answerQuiet`
+   // （正文停了 >1.5s）**恰好是"工具在跑"的形状** ⇒ 任何超过 1.5s 的构建都被报成"收尾中"。
+   const phaseLabel = runPhaseLabel({ phase, stopped, running: runningActive, hasAnswerText, answerQuiet });
+-  const chosen = activeId !== null ? selections.current.get(activeId) : undefined;
++  const chosen = activeId !== null ? selections.current.get(runKey(activeWorkspace, activeId)) : undefined;
+   const pickerValue = chosen !== undefined ? chosen : (providerInfo?.modelId ?? null);
+ 
+   const startedAt = runStartBySession.current.get(activeId ?? "");
+--- a/apps/desktop/src/renderer/state/session-prefs.ts
++++ b/apps/desktop/src/renderer/state/session-prefs.ts
+@@ -1,10 +1,12 @@
+ // 会话级模型/思考档回读（2026-10-30 · v35）。
+-// 侧car（session-metadata）保存每会话的 model/thinking；列表带回来后灌进两张内存表。
++// 日志旁的偏好 sidecar 保存 model/thinking；列表带回来后按工作区/会话灌进两张内存表。
+ // 纪律：**只在本地还没有该会话选择时灌入**——用户刚点过、尚未落盘成功的选择不能被一次刷新打回旧值。
+ import { useEffect, type MutableRefObject } from "react";
++import { runKey } from "./session-identity";
+ 
+ export interface SessionPrefsSource {
+   id: string;
++  workspace?: string;
+   model?: string;
+   thinking?: string;
+ }
+@@ -17,12 +19,13 @@
+ ): boolean {
+   let changed = false;
+   for (const s of sessions) {
+-    if (s.model !== undefined && !selections.has(s.id)) {
+-      selections.set(s.id, s.model);
++    const key = runKey(s.workspace, s.id);
++    if (s.model !== undefined && !selections.has(key)) {
++      selections.set(key, s.model);
+       changed = true;
+     }
+-    if (s.thinking !== undefined && !thinking.has(s.id)) {
+-      thinking.set(s.id, s.thinking);
++    if (s.thinking !== undefined && !thinking.has(key)) {
++      thinking.set(key, s.thinking);
+       changed = true;
+     }
+   }
+@@ -45,8 +48,10 @@
+ export async function saveSessionPrefs(
+   sessionId: string,
+   prefs: { model?: string | null; thinking?: string | null },
++  workspace?: string,
+ ): Promise<void> {
+-  const result = await window.agent.sessionPrefsSet(sessionId, prefs);
++  const result = workspace === undefined ? await window.agent.sessionPrefsSet(sessionId, prefs)
++    : await window.agent.sessionPrefsSet(sessionId, prefs, workspace);
+   if (!result.ok) throw new Error(result.error ?? "会话偏好保存被拒绝");
+ }
+ 
+@@ -55,6 +60,7 @@
+  *  provider 不随会话存：RunRequest.model 是稳定 registry id，主进程按注册表解析 provider。 */
+ export function applySessionModelPick(input: {
+   activeId: string | null;
++  activeWorkspace?: string | null;
+   registryId: string | null;
+   selections: MutableRefObject<Map<string, string | null>>;
+   force: (updater: (n: number) => number) => void;
+@@ -63,9 +69,9 @@
+   setLastError: (message: string) => void;
+ }): void {
+   if (input.activeId !== null) {
+-    input.selections.current.set(input.activeId, input.registryId);
++    input.selections.current.set(runKey(input.activeWorkspace, input.activeId), input.registryId);
+     input.force((n) => n + 1);
+-    void saveSessionPrefs(input.activeId, { model: input.registryId }).catch((err: unknown) => {
++    void saveSessionPrefs(input.activeId, { model: input.registryId }, input.activeWorkspace ?? undefined).catch((err: unknown) => {
+       input.setLastError(`会话模型保存失败：${err instanceof Error ? err.message : String(err)}`);
+     });
+     return;
+--- a/apps/desktop/src/renderer/state/thinking-selection.ts
++++ b/apps/desktop/src/renderer/state/thinking-selection.ts
+@@ -9,6 +9,7 @@
+ // `seedNewSessionThinking` 写进按会话的 map；界面读 `composerThinking`（显式选择 > 缺省 off）。
+ // 三条规则都是纯函数，判卷不依赖 React 渲染。
+ import type { ThinkingEffort } from "../../../../../src/providers/capabilities";
++import { runKey } from "./session-identity";
+ 
+ const LEVELS: readonly ThinkingEffort[] = ["off", "low", "medium", "high"];
+ 
+@@ -21,9 +22,10 @@
+   activeId: string | null,
+   pending: ThinkingEffort,
+   bySession: ReadonlyMap<string, string>,
++  workspace?: string | null,
+ ): ThinkingEffort {
+   if (activeId === null) return pending;
+-  const stored = bySession.get(activeId);
++  const stored = bySession.get(runKey(workspace, activeId));
+   return isThinkingEffort(stored) ? stored : "off";
+ }
+ 
+@@ -44,7 +46,8 @@
+   sessionId: string,
+   pending: ThinkingEffort,
+   bySession: Map<string, string>,
++  workspace?: string | null,
+ ): void {
+   if (pending === "off") return;
+-  bySession.set(sessionId, pending);
++  bySession.set(runKey(workspace, sessionId), pending);
+ }
+--- a/apps/desktop/tests/run-queue-session.test.tsx
++++ b/apps/desktop/tests/run-queue-session.test.tsx
+@@ -18,6 +18,7 @@
+     runCancel: vi.fn(async (_sessionId: string) => ({ ok: true })),
+     setGoal: vi.fn(async (_request: unknown) => ({ ok: true })),
+     queueSet: vi.fn(async (_sessionId: string, _items: unknown, _workspace?: string) => ({ ok: true })),
++    sessionPrefsSet: vi.fn(async (_sessionId: string, _prefs: unknown, _workspace?: string) => ({ ok: true })),
+   };
+   vi.stubGlobal("window", { agent });
+   const sendQueue = ref(new Map<string, QueuedSend[]>());
+@@ -43,13 +44,28 @@
+ afterEach(() => vi.unstubAllGlobals());
+ 
+ describe("send keeps the active conversation", () => {
++  it("reports a refused background run instead of claiming it started", async () => {
++    const { agent, actions } = harness();
++    agent.run.mockResolvedValueOnce({ ok: false, error: "同名会话被其他工作区的执行占用" });
++    expect(await actions.sendTo("same", "/b", "continue B")).toEqual({ outcome: "failed", error: "同名会话被其他工作区的执行占用" });
++    expect(agent.runSteer).not.toHaveBeenCalled();
++  });
++  it("sends the addressed workspace's model and thinking for a same-id background conversation", async () => {
++    const { agent, deps, render } = harness("same");
++    deps.activeWorkspace = "/a";
++    deps.selections.current = new Map([[runKey("/a", "same"), "model-a"], [runKey("/b", "same"), "model-b"]]);
++    deps.thinkingBySession.current = new Map([[runKey("/a", "same"), "high"], [runKey("/b", "same"), "low"]]);
++    await render().sendTo("same", "/b", "continue B");
++    expect(agent.run).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "same", workspace: "/b", model: "model-b", thinking: "low" }));
++  });
++
+   it("appends consecutive idle messages using the current model and thinking selection", async () => {
+     const { actions, agent, deps } = harness();
+     await actions.send("follow up");
+     await actions.send("another follow up");
+     expect(agent.run.mock.calls.map(([request]) => request)).toEqual([
+-      { message: "follow up", mode: "default", sessionId: "current", model: "chosen-model", thinking: "high" },
+-      { message: "another follow up", mode: "default", sessionId: "current", model: "chosen-model", thinking: "high" },
++      { message: "follow up", mode: "default", sessionId: "current", workspace: "/workspace", model: "chosen-model", thinking: "high" },
++      { message: "another follow up", mode: "default", sessionId: "current", workspace: "/workspace", model: "chosen-model", thinking: "high" },
+     ]);
+     expect(agent.createSession).not.toHaveBeenCalled();
+     expect(deps.activate).not.toHaveBeenCalled();
+@@ -62,13 +78,14 @@
+     expect(agent.createSession).toHaveBeenCalledTimes(1);
+     expect(deps.setActiveWorkspace).toHaveBeenCalledWith("/workspace");
+     expect(deps.activate).toHaveBeenCalledWith("created");
++    expect(agent.sessionPrefsSet).toHaveBeenCalledWith("created", { thinking: "medium" }, "/workspace");
+     deps.activeId = deps.activeIdRef.current = "created";
+     deps.activeWorkspace = "/workspace";
+     await render().send("second");
+     expect(agent.createSession).toHaveBeenCalledTimes(1);
+     expect(agent.run.mock.calls.map(([request]) => request)).toEqual([
+-      { message: "first", mode: "default", sessionId: "created", model: undefined, thinking: "medium" },
+-      { message: "second", mode: "default", sessionId: "created", model: undefined, thinking: "medium" },
++      { message: "first", mode: "default", sessionId: "created", workspace: "/workspace", model: undefined, thinking: "medium" },
++      { message: "second", mode: "default", sessionId: "created", workspace: "/workspace", model: undefined, thinking: "medium" },
+     ]);
+   });
+ 
+--- /dev/null
++++ b/apps/desktop/tests/session-prefs-host.test.ts
+@@ -0,0 +1,66 @@
++import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { afterEach, beforeEach, expect, it } from "vitest";
++import { canonicalWorkspacePath, createKernelHost, type KernelHost } from "../src/main/kernel-host";
++import { handleSessionPrefsSet, requireSessionMetadata, setSessionRootResolver } from "../../../src/main/session-handlers";
++import { createSession } from "../../../src/main/sessions";
++
++let root = ""; let a = ""; let b = ""; let userData = ""; let host: KernelHost;
++function boot(): KernelHost {
++  return createKernelHost({ workspaces: [a, b], activeWorkspace: a, userDataDir: userData, outbox: () => undefined });
++}
++beforeEach(async () => {
++  root = await mkdtemp(join(tmpdir(), "cairn-prefs-host-"));
++  a = join(root, "a"); b = join(root, "b"); userData = join(root, "userData");
++  for (const dir of [a, b, userData]) await mkdir(dir, { recursive: true });
++  await writeFile(join(userData, "settings.json"), JSON.stringify({ provider: "demo", model: "" }));
++  for (const ws of [a, b]) await createSession(join(ws, ".agent", "sessions"), "same");
++  host = boot();
++});
++afterEach(async () => { await host.orchestrationClose(); setSessionRootResolver(null); await rm(root, { recursive: true, force: true }); });
++
++it("lists independent saved choices after a fresh host boot", async () => {
++  await handleSessionPrefsSet({ sessionId: "same", prefs: { model: "model-a", thinking: "high" } }, join(a, ".agent", "sessions"), { inheritLegacy: false });
++  await handleSessionPrefsSet({ sessionId: "same", prefs: { model: "model-b", thinking: "low" } }, join(b, ".agent", "sessions"), { inheritLegacy: false });
++  await host.orchestrationClose(); host = boot();
++  const rows = await host.listSessions();
++  expect(rows.find((s) => s.workspace === canonicalWorkspacePath(a))).toMatchObject({ model: "model-a", thinking: "high" });
++  expect(rows.find((s) => s.workspace === canonicalWorkspacePath(b))).toMatchObject({ model: "model-b", thinking: "low" });
++});
++
++it("does not assign ambiguous legacy preferences to both same-id sessions", async () => {
++  await requireSessionMetadata().setPrefs("same", { model: "unknown-owner", thinking: "high" });
++  const rows = await host.listSessions();
++  expect(rows).toHaveLength(2);
++  for (const row of rows) { expect(row.model).toBeUndefined(); expect(row.thinking).toBeUndefined(); }
++});
++
++it("saves through the host using explicit registered workspaces and rejects ambiguous addressing", async () => {
++  expect(await host.sessionPrefsSet("same", { model: "model-a", thinking: "high" }, a)).toEqual({ ok: true });
++  expect(await host.sessionPrefsSet("same", { model: "model-b", thinking: "low" }, b)).toEqual({ ok: true });
++  const rows = await host.listSessions();
++  expect(rows.find((s) => s.workspace === canonicalWorkspacePath(a))).toMatchObject({ model: "model-a", thinking: "high" });
++  expect(rows.find((s) => s.workspace === canonicalWorkspacePath(b))).toMatchObject({ model: "model-b", thinking: "low" });
++  expect((await host.sessionPrefsSet("same", { model: "wrong" })).ok).toBe(false);
++  expect((await host.sessionPrefsSet("same", { model: "wrong" }, root)).ok).toBe(false);
++});
++
++it("an explicit clear keeps masking legacy choices after the other same-id log disappears", async () => {
++  await requireSessionMetadata().setPrefs("same", { model: "legacy", thinking: "high" });
++  expect(await host.sessionPrefsSet("same", { model: null, thinking: null }, a)).toEqual({ ok: true });
++  await rm(join(b, ".agent", "sessions", "same.jsonl"));
++  await host.orchestrationClose(); host = boot();
++  const row = (await host.listSessions())[0];
++  expect(row?.model).toBeUndefined(); expect(row?.thinking).toBeUndefined();
++  expect(await requireSessionMetadata().find("same")).toMatchObject({ model: "legacy", thinking: "high" });
++});
++
++it("keeps a malformed scoped sidecar visible instead of falling back or overwriting it", async () => {
++  const path = join(a, ".agent", "sessions", "same.jsonl.prefs.json");
++  await writeFile(path, "null\n");
++  await expect(host.listSessions()).rejects.toThrow("会话偏好损坏");
++  const result = await host.sessionPrefsSet("same", { model: "model-a" }, a);
++  expect(result.ok).toBe(false); expect(result.error).toContain("会话偏好损坏");
++  expect(await readFile(path, "utf8")).toBe("null\n");
++});
+--- /dev/null
++++ b/apps/desktop/tests/session-prefs-isolation.test.ts
+@@ -0,0 +1,29 @@
++import { afterEach, expect, it, vi } from "vitest";
++import { applySessionModelPick, hydrateSessionPrefs } from "../src/renderer/state/session-prefs";
++import { composerThinking } from "../src/renderer/state/thinking-selection";
++
++afterEach(() => vi.unstubAllGlobals());
++
++it("hydrates two same-id rows into independent workspace/session keys", () => {
++  const models = new Map<string, string | null>();
++  const thinking = new Map<string, string>();
++  hydrateSessionPrefs([
++    { id: "same", workspace: "/a", model: "model-a", thinking: "high" },
++    { id: "same", workspace: "/b", model: "model-b", thinking: "low" },
++  ], models, thinking);
++  expect(models.get('["/a","same"]')).toBe("model-a");
++  expect(models.get('["/b","same"]')).toBe("model-b");
++  expect(composerThinking("same", "off", thinking, "/a")).toBe("high");
++  expect(composerThinking("same", "off", thinking, "/b")).toBe("low");
++});
++
++it("changing a model writes its scoped key and forwards workspace through IPC", () => {
++  const sessionPrefsSet = vi.fn(async () => ({ ok: true }));
++  vi.stubGlobal("window", { agent: { sessionPrefsSet } });
++  const selections = { current: new Map<string, string | null>([['["/b","same"]', "model-b"]]) };
++  applySessionModelPick({ activeId: "same", activeWorkspace: "/a", registryId: "model-a", selections,
++    force: () => undefined, providerInfo: null, refreshProviderInfo: async () => undefined, setLastError: vi.fn() });
++  expect(selections.current.get('["/a","same"]')).toBe("model-a");
++  expect(selections.current.get('["/b","same"]')).toBe("model-b");
++  expect(sessionPrefsSet).toHaveBeenCalledWith("same", { model: "model-a" }, "/a");
++});
+--- a/apps/desktop/tests/session-prefs.test.ts
++++ b/apps/desktop/tests/session-prefs.test.ts
+@@ -100,5 +100,5 @@
+     .toContain("useSessionPrefsHydration({ sessions, selections, thinking: thinkingBySession, force });");
+   const view = read("../src/renderer/panes/WorkbenchView.tsx");
+   expect(view).toContain("onModelChange={(registryId) => applySessionModelPick({");
+-  expect(view).toContain("saveSessionPrefs(change.sessionId, { thinking: change.level })");
++  expect(view).toContain("saveSessionPrefs(change.sessionId, { thinking: change.level }, activeWorkspace ?? undefined)");
+ });
+--- a/src/main/session-handlers.ts
++++ b/src/main/session-handlers.ts
+@@ -33,6 +33,7 @@
+ import { FeedbackStore, type FeedbackRating, type ResolvedFeedback } from "./feedback";
+ import { PinStore } from "./pins";
+ import { store } from "./settings-handlers";
++import { writeSessionPreferences } from "./session-preferences";
+ 
+ // ---- M1e：会话列表 IPC（会话目录由 index.ts 初始化；headless 脚本未初始化 → 未配置错误） ----
+ let sessionsDir: string | null = null;
+@@ -133,6 +134,7 @@
+ export async function handleSessionPrefsSet(
+   req: { sessionId?: unknown; prefs?: unknown },
+   sessionsRoot?: string,
++  scope?: { inheritLegacy: boolean },
+ ): Promise<{ ok: boolean; error?: string }> {
+   try {
+     const id = typeof req.sessionId === "string" ? req.sessionId : "";
+@@ -154,7 +156,15 @@
+       patch[key] = v as string | null;
+     }
+     if (patch.model === undefined && patch.thinking === undefined) return { ok: false, error: "prefs 至少要给 model 或 thinking" };
+-    await requireSessionMetadata().setPrefs(id, patch);
++    if (scope === undefined) {
++      await requireSessionMetadata().setPrefs(id, patch);
++    } else {
++      await withSessionMutation(dir, async () => {
++        if (!(await sessionExists(dir, id))) throw new Error(`会话不存在: ${id}`);
++        const legacy = scope.inheritLegacy ? await requireSessionMetadata().find(id) : undefined;
++        await writeSessionPreferences(pathOf(dir, id), patch, legacy);
++      });
++    }
+     return { ok: true };
+   } catch (err) {
+     return { ok: false, error: err instanceof Error ? err.message : String(err) };
+--- a/src/main/session-metadata.ts
++++ b/src/main/session-metadata.ts
+@@ -109,7 +109,7 @@
+ }
+ 
+ /** 会话偏好字符串（模型 id / 思考档）：非空、去首尾空白不变、无控制字符、长度受限。 */
+-function isPrefString(value: unknown, max: number): value is string {
++export function isSessionPreferenceString(value: unknown, max: number): value is string {
+   return typeof value === "string" && value.length > 0 && value.length <= max
+     && value.trim() === value && !/[\u0000-\u001f\u007f]/.test(value);
+ }
+@@ -144,8 +144,8 @@
+   if (typeof raw.pinned !== "boolean") throw new Error(`sessions.${key}.pinned 非法`);
+   if (typeof raw.archived !== "boolean") throw new Error(`sessions.${key}.archived 非法`);
+   if (raw.projectId !== undefined && !isProjectId(raw.projectId)) throw new Error(`sessions.${key}.projectId 非法`);
+-  if (raw.model !== undefined && !isPrefString(raw.model, 200)) throw new Error(`sessions.${key}.model 非法`);
+-  if (raw.thinking !== undefined && !isPrefString(raw.thinking, 40)) throw new Error(`sessions.${key}.thinking 非法`);
++  if (raw.model !== undefined && !isSessionPreferenceString(raw.model, 200)) throw new Error(`sessions.${key}.model 非法`);
++  if (raw.thinking !== undefined && !isSessionPreferenceString(raw.thinking, 40)) throw new Error(`sessions.${key}.thinking 非法`);
+   if (!isTimestamp(raw.createdAt) || !isTimestamp(raw.updatedAt)) throw new Error(`sessions.${key} 时间戳非法`);
+   // 审计字段：老记录**没有**这些字段（合法，必须原样加载且保持缺席）；有则校验。
+   if (raw.viewedAt !== undefined && !isTimestamp(raw.viewedAt)) throw new Error(`sessions.${key}.viewedAt 非法`);
+@@ -290,10 +290,10 @@
+ 
+   /** 会话级偏好（模型 / 思考档）。语义：undefined = 不改；null = 摘掉（回到跟随全局）。 */
+   async setPrefs(id: string, patch: { model?: string | null; thinking?: string | null }): Promise<SessionMetadataRecord> {
+-    if (patch.model !== undefined && patch.model !== null && !isPrefString(patch.model, 200)) {
++    if (patch.model !== undefined && patch.model !== null && !isSessionPreferenceString(patch.model, 200)) {
+       throw new Error(`会话 model 非法: ${JSON.stringify(patch.model)}`);
+     }
+-    if (patch.thinking !== undefined && patch.thinking !== null && !isPrefString(patch.thinking, 40)) {
++    if (patch.thinking !== undefined && patch.thinking !== null && !isSessionPreferenceString(patch.thinking, 40)) {
+       throw new Error(`会话 thinking 非法: ${JSON.stringify(patch.thinking)}`);
+     }
+     return await this.mutate(id, (record) => {
+--- /dev/null
++++ b/src/main/session-preferences.ts
+@@ -0,0 +1,51 @@
++import { readFile } from "node:fs/promises";
++import { writeFileAtomic } from "../atomic-write";
++import { isSessionPreferenceString } from "./session-metadata";
++
++export interface SessionPreferences { model?: string; thinking?: string }
++export interface SessionPreferencesPatch { model?: string | null; thinking?: string | null }
++
++export const sessionPreferencesPath = (logPath: string): string => `${logPath}.prefs.json`;
++
++/** null = 没有独立偏好（可按归属决定是否沿用旧记录）；{} = 明确跟随默认，不回落旧记录。 */
++export async function readSessionPreferences(logPath: string): Promise<SessionPreferences | null> {
++  const path = sessionPreferencesPath(logPath);
++  let text: string;
++  try { text = await readFile(path, "utf8"); }
++  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
++  try {
++    const raw: unknown = JSON.parse(text);
++    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Error("根对象非法");
++    const record = raw as Record<string, unknown>;
++    if (record.version !== 1 || Object.keys(record).some((key) => !["version", "model", "thinking"].includes(key))) {
++      throw new Error("version/字段非法");
++    }
++    if (record.model !== undefined && !isSessionPreferenceString(record.model, 200)) throw new Error("model 非法");
++    if (record.thinking !== undefined && !isSessionPreferenceString(record.thinking, 40)) throw new Error("thinking 非法");
++    return { ...(record.model !== undefined ? { model: record.model as string } : {}),
++      ...(record.thinking !== undefined ? { thinking: record.thinking as string } : {}) };
++  } catch (error) {
++    throw new Error(`会话偏好损坏，已拒绝覆盖: ${path}（${error instanceof Error ? error.message : String(error)}）`);
++  }
++}
++
++/** 调用方持有会话根的 mutation 锁；旧记录只在首写且归属明确时作为初值，不改旧文件。 */
++export async function writeSessionPreferences(
++  logPath: string, patch: SessionPreferencesPatch, legacy: SessionPreferences = {},
++): Promise<void> {
++  const current = await readSessionPreferences(logPath);
++  const next: SessionPreferences = current ?? {
++    ...(legacy.model !== undefined ? { model: legacy.model } : {}),
++    ...(legacy.thinking !== undefined ? { thinking: legacy.thinking } : {}),
++  };
++  for (const key of ["model", "thinking"] as const) {
++    const value = patch[key];
++    if (value === undefined) continue;
++    if (value === null) delete next[key];
++    else {
++      if (!isSessionPreferenceString(value, key === "model" ? 200 : 40)) throw new Error(`会话 ${key} 非法`);
++      next[key] = value;
++    }
++  }
++  await writeFileAtomic(sessionPreferencesPath(logPath), JSON.stringify({ version: 1, ...next }) + "\n");
++}
+--- a/src/main/sessions.ts
++++ b/src/main/sessions.ts
+@@ -12,6 +12,7 @@
+ import { isSessionLogBusy, markSessionMutating, unmarkSessionMutating } from "./session-liveness";
+ import { sessionRunLockHeld } from "./session-lock";
+ import { attachmentPrefixFor } from "../agent/prune";
++import { sessionPreferencesPath } from "./session-preferences";
+ 
+ /** 文件事实始终来自 JSONL；sidecar 字段只在确有 metadata 时合并，老会话不会被伪造成默认记录。 */
+ export interface SessionInfo extends Partial<SessionMetadataRecord> {
+@@ -367,9 +368,7 @@
+ }
+ 
+ /** 重命名会话时同步迁移队列 sidecar；源不存在 = false（幂等），目标冲突显式拒绝。 */
+-async function moveSessionQueue(root: string, fromId: string, toId: string): Promise<boolean> {
+-  const from = queuePath(root, fromId);
+-  const to = queuePath(root, toId);
++async function moveSessionSidecar(from: string, to: string, conflict: string): Promise<boolean> {
+   const sourceExists = await stat(from).then(() => true, (error: unknown) => {
+     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+     throw error;
+@@ -379,7 +378,7 @@
+     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+     throw error;
+   });
+-  if (targetExists) throw new Error(`目标会话队列已存在: ${toId}`);
++  if (targetExists) throw new Error(conflict);
+   await rename(from, to);
+   return true;
+ }
+@@ -583,15 +582,20 @@
+   await rename(from, to);
+   // 没有活着的持有者才走到这里：旧路径上的残留锁是崩溃遗留，随改名清掉（新名从干净状态开始）。
+   await rm(`${from}.lock`, { force: true }).catch(() => undefined);
+-  let queueMoved = false;
+-  try {
+-    queueMoved = await moveSessionQueue(root, oldId, newName);
++  const movedSidecars: { from: string; to: string }[] = [];
++  try {
++    for (const sidecar of [
++      { from: queuePath(root, oldId), to: queuePath(root, newName), label: "队列" },
++      { from: sessionPreferencesPath(from), to: sessionPreferencesPath(to), label: "偏好" },
++    ]) {
++      if (await moveSessionSidecar(sidecar.from, sidecar.to, `目标会话${sidecar.label}已存在: ${newName}`)) movedSidecars.push(sidecar);
++    }
+     if (metadata) await metadata.rename(oldId, newName, newName);
+   } catch (error) {
+     const rollbackErrors: unknown[] = [];
+-    if (queueMoved) {
++    for (const sidecar of movedSidecars.reverse()) {
+       try {
+-        await moveSessionQueue(root, newName, oldId);
++        await moveSessionSidecar(sidecar.to, sidecar.from, `回滚目标 sidecar 已存在: ${oldId}`);
+       } catch (rollbackError) {
+         rollbackErrors.push(rollbackError);
+       }
+@@ -653,19 +657,25 @@
+   // 走到这里说明没有活着的持有者：任何残留锁都是崩溃遗留，随会话一起清掉。
+   await rm(`${source}.lock`, { force: true }).catch(() => undefined);
+   const staged = tmpPathFor(source);
+-  const queueSource = queuePath(root, id);
+-  const queueStaged = tmpPathFor(queueSource);
++  const stagedSidecars: { source: string; staged: string }[] = [];
+   await rename(source, staged); // 先原子移出列表；清理失败可原名恢复
+-  let queueStagedExists = false;
+-  try {
+-    try {
+-      await rename(queueSource, queueStaged);
+-      queueStagedExists = true;
+-    } catch (error) {
+-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
++  try {
++    for (const sidecarSource of [queuePath(root, id), sessionPreferencesPath(source)]) {
++      const sidecarStaged = tmpPathFor(sidecarSource);
++      try {
++        await rename(sidecarSource, sidecarStaged);
++        stagedSidecars.push({ source: sidecarSource, staged: sidecarStaged });
++      } catch (error) {
++        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
++      }
+     }
+   } catch (error) {
+-    await rename(staged, source).catch(() => undefined);
++    const rollbackErrors: unknown[] = [];
++    for (const sidecar of [...stagedSidecars].reverse()) {
++      try { await rename(sidecar.staged, sidecar.source); } catch (rollbackError) { rollbackErrors.push(rollbackError); }
++    }
++    try { await rename(staged, source); } catch (rollbackError) { rollbackErrors.push(rollbackError); }
++    if (rollbackErrors.length > 0) throw new AggregateError([error, ...rollbackErrors], `删除会话失败且回滚不完整: ${id}`);
+     throw error;
+   }
+   let record: SessionMetadataRecord | undefined;
+@@ -687,9 +697,9 @@
+     } catch (rollbackError) {
+       rollbackErrors.push(rollbackError);
+     }
+-    if (queueStagedExists) {
++    for (const sidecar of [...stagedSidecars].reverse()) {
+       try {
+-        await rename(queueStaged, queueSource);
++        await rename(sidecar.staged, sidecar.source);
+       } catch (rollbackError) {
+         rollbackErrors.push(rollbackError);
+       }
+@@ -699,8 +709,8 @@
+     }
+     throw error;
+   }
+-  // JSONL 已确认删除后，队列暂存文件是纯清理面；失败不把已完成的删除反签成失败。
+-  if (queueStagedExists) await rm(queueStaged, { force: true }).catch(() => undefined);
++  // JSONL 已确认删除后，sidecar 暂存文件是纯清理面；失败不把已完成的删除反签成失败。
++  for (const sidecar of stagedSidecars) await rm(sidecar.staged, { force: true }).catch(() => undefined);
+ }
+ 
+ /** 空会话文件存在性检查。 */
+--- /dev/null
++++ b/tests/session-prefs-isolation.test.ts
+@@ -0,0 +1,106 @@
++import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { afterEach, beforeEach, expect, it } from "vitest";
++import { handleSessionPrefsSet, initSessionsDir, requireSessionMetadata, setSessionRootResolver } from "../src/main/session-handlers";
++import { createSession, deleteSession, pathOf, renameSession } from "../src/main/sessions";
++
++let root = "";
++let a = "";
++let b = "";
++beforeEach(async () => {
++  root = await mkdtemp(join(tmpdir(), "cairn-scoped-prefs-"));
++  a = join(root, "a"); b = join(root, "b");
++  initSessionsDir(a);
++  await createSession(a, "same");
++  await createSession(b, "same");
++});
++afterEach(async () => { setSessionRootResolver(null); await rm(root, { recursive: true, force: true }); });
++
++async function readPrefs(dir: string): Promise<unknown> {
++  try { return JSON.parse(await readFile(`${pathOf(dir, "same")}.prefs.json`, "utf8")); }
++  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
++}
++
++it("saves same-id preferences beside each exact session without overwriting the other root", async () => {
++  const first = await handleSessionPrefsSet({ sessionId: "same", prefs: { model: "model-a", thinking: "high" } }, a, { inheritLegacy: false });
++  const second = await handleSessionPrefsSet({ sessionId: "same", prefs: { model: "model-b", thinking: "low" } }, b, { inheritLegacy: false });
++  expect([first, second]).toEqual([{ ok: true }, { ok: true }]);
++  expect(await readPrefs(a)).toEqual({ version: 1, model: "model-a", thinking: "high" });
++  expect(await readPrefs(b)).toEqual({ version: 1, model: "model-b", thinking: "low" });
++});
++
++it("clears one scoped field while keeping its sibling and the other workspace", async () => {
++  await handleSessionPrefsSet({ sessionId: "same", prefs: { model: "model-a", thinking: "high" } }, a, { inheritLegacy: false });
++  await handleSessionPrefsSet({ sessionId: "same", prefs: { model: "model-b" } }, b, { inheritLegacy: false });
++  await handleSessionPrefsSet({ sessionId: "same", prefs: { model: null } }, a, { inheritLegacy: false });
++  expect(await readPrefs(a)).toEqual({ version: 1, thinking: "high" });
++  expect(await readPrefs(b)).toEqual({ version: 1, model: "model-b" });
++});
++
++it("inherits an unambiguous legacy choice on first save without rewriting the old metadata", async () => {
++  const metadata = requireSessionMetadata();
++  await metadata.setPrefs("same", { model: "legacy-model", thinking: "high" });
++  await handleSessionPrefsSet({ sessionId: "same", prefs: { model: "new-model" } }, a, { inheritLegacy: true });
++  expect(await readPrefs(a)).toEqual({ version: 1, model: "new-model", thinking: "high" });
++  expect(await metadata.find("same")).toMatchObject({ model: "legacy-model", thinking: "high" });
++});
++
++it("renames and deletes only the addressed session's preference file", async () => {
++  await handleSessionPrefsSet({ sessionId: "same", prefs: { model: "model-a" } }, a, { inheritLegacy: false });
++  await handleSessionPrefsSet({ sessionId: "same", prefs: { model: "model-b" } }, b, { inheritLegacy: false });
++  await renameSession(a, "same", "renamed");
++  const renamed = `${pathOf(a, "renamed")}.prefs.json`;
++  expect(await readPrefs(a)).toBeNull();
++  expect(JSON.parse(await readFile(renamed, "utf8"))).toEqual({ version: 1, model: "model-a" });
++  await deleteSession(a, "renamed");
++  await expect(readFile(renamed)).rejects.toMatchObject({ code: "ENOENT" });
++  expect(await readPrefs(b)).toEqual({ version: 1, model: "model-b" });
++});
++
++it("refuses a preference target collision and rolls the log name back", async () => {
++  await handleSessionPrefsSet({ sessionId: "same", prefs: { model: "model-a" } }, a, { inheritLegacy: false });
++  const target = `${pathOf(a, "renamed")}.prefs.json`;
++  await writeFile(target, '{"version":1,"model":"orphan"}');
++  await expect(renameSession(a, "same", "renamed")).rejects.toThrow(/偏好.*存在/);
++  expect(await readFile(pathOf(a, "same"), "utf8")).toBe("");
++  expect(JSON.parse(await readFile(target, "utf8"))).toEqual({ version: 1, model: "orphan" });
++});
++
++it("restores the preference sidecar when metadata rename fails", async () => {
++  await handleSessionPrefsSet({ sessionId: "same", prefs: { thinking: "high" } }, a, { inheritLegacy: false });
++  await expect(renameSession(a, "same", "renamed", { rename: async () => { throw new Error("metadata write failed"); } })).rejects.toThrow("metadata write failed");
++  expect(await readPrefs(a)).toEqual({ version: 1, thinking: "high" });
++  expect(await readFile(pathOf(a, "same"), "utf8")).toBe("");
++});
++
++it("restores log, metadata and preferences when deletion fails after staging", async () => {
++  const metadata = requireSessionMetadata();
++  await metadata.create("same");
++  await handleSessionPrefsSet({ sessionId: "same", prefs: { model: "model-a" } }, a, { inheritLegacy: false });
++  await expect(deleteSession(a, "same", {
++    find: (id) => metadata.find(id), restore: (record) => metadata.restore(record),
++    remove: async (id) => { await metadata.remove(id); throw new Error("metadata write failed"); },
++  })).rejects.toThrow("metadata write failed");
++  expect(await readPrefs(a)).toEqual({ version: 1, model: "model-a" });
++  expect(await metadata.find("same")).toBeDefined();
++  expect(await readFile(pathOf(a, "same"), "utf8")).toBe("");
++});
++
++it("keeps malformed preference bytes and reports the failed save", async () => {
++  const path = `${pathOf(a, "same")}.prefs.json`;
++  await writeFile(path, "null\n");
++  const result = await handleSessionPrefsSet({ sessionId: "same", prefs: { model: "model-a" } }, a, { inheritLegacy: false });
++  expect(result.ok).toBe(false);
++  expect(result.error).toContain("会话偏好损坏");
++  expect(await readFile(path, "utf8")).toBe("null\n");
++});
++
++it("serializes simultaneous model and thinking patches without losing a field", async () => {
++  const results = await Promise.all([
++    handleSessionPrefsSet({ sessionId: "same", prefs: { model: "model-a" } }, a, { inheritLegacy: false }),
++    handleSessionPrefsSet({ sessionId: "same", prefs: { thinking: "high" } }, a, { inheritLegacy: false }),
++  ]);
++  expect(results).toEqual([{ ok: true }, { ok: true }]);
++  expect(await readPrefs(a)).toEqual({ version: 1, model: "model-a", thinking: "high" });
++});
+--- /dev/null
++++ b/apps/desktop/tests/session-prefs-run-routing.test.ts
+@@ -0,0 +1,46 @@
++import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { afterEach, beforeEach, expect, it, vi } from "vitest";
++import { createSession } from "../../../src/main/sessions";
++import { canonicalWorkspacePath, createKernelHost, type KernelHost } from "../src/main/kernel-host";
++import { handleAgentRun } from "../../../src/main/agent-runner";
++
++vi.mock("../../../src/main/agent-runner", async (original) => ({
++  ...await original<typeof import("../../../src/main/agent-runner")>(), handleAgentRun: vi.fn(async () => ({ ok: true })),
++}));
++
++let root = ""; let a = ""; let b = ""; let host: KernelHost;
++beforeEach(async () => {
++  vi.mocked(handleAgentRun).mockClear();
++  root = await mkdtemp(join(tmpdir(), "cairn-prefs-run-"));
++  a = join(root, "a"); b = join(root, "b"); const userData = join(root, "userData");
++  for (const dir of [a, b, userData]) await mkdir(dir, { recursive: true });
++  await writeFile(join(userData, "settings.json"), JSON.stringify({ provider: "demo", model: "" }));
++  for (const ws of [a, b]) await createSession(join(ws, ".agent", "sessions"), "same");
++  host = createKernelHost({ workspaces: [a, b], activeWorkspace: a, userDataDir: userData, outbox: () => undefined });
++});
++afterEach(async () => { await host.orchestrationClose(); await rm(root, { recursive: true, force: true }); });
++
++it("routes an explicit same-id run to its workspace and exact log", async () => {
++  const result = await host.run({ sessionId: "same", workspace: b, message: "continue B", model: "model-b", thinking: "low", mode: "default" });
++  expect(result.ok).toBe(true);
++  expect(handleAgentRun).toHaveBeenCalledWith(expect.objectContaining({ model: "model-b", thinking: "low" }),
++    expect.objectContaining({ workspace: canonicalWorkspacePath(b), logPath: join(canonicalWorkspacePath(b), ".agent", "sessions", "same.jsonl") }));
++});
++
++it("keeps another workspace's same-id run isolated while the first execution is active", async () => {
++  let finish!: () => void;
++  vi.mocked(handleAgentRun).mockImplementationOnce(async () => { await new Promise<void>((resolve) => { finish = resolve; }); return { ok: true }; });
++  const active = host.run({ sessionId: "same", workspace: a, message: "continue A", mode: "default" });
++  void active.catch(() => undefined);
++  try {
++    await vi.waitFor(() => expect(handleAgentRun).toHaveBeenCalledTimes(1));
++    expect((await host.openSession("same", b)).running).toBe(false);
++    expect(() => host.removeWorkspace(a)).toThrow(/正在运行/);
++    const rejected = await host.run({ sessionId: "same", workspace: b, message: "continue B", mode: "default" });
++    expect(rejected.ok).toBe(false);
++    expect(rejected.error).not.toMatch(/already running|已在运行|正在运行/u);
++    expect(handleAgentRun).toHaveBeenCalledTimes(1);
++  } finally { finish?.(); await active; }
++});
+--- a/apps/desktop/tests/memory-distill.test.ts
++++ b/apps/desktop/tests/memory-distill.test.ts
+@@ -72,7 +72,8 @@
+     // push-only 的机械面：直调 deps.outbox（不经 setAppHooks.onEvent 的 ownAppends 计数链）——
+     // 「不落 JSONL」由 kernel-host.test.ts 的盘面语义断言钉住。
+     expect(hostSrc).toContain('deps.outbox("onEvent", {');
+-    expect(hostSrc).toContain("running: runControllers.has(id)");
++    expect(hostSrc).toContain("const running = runControllers.get(id)?.workspace === ws;");
++    expect(hostSrc).toContain("return { events, session, view, running,");
+   });
+ });
+ 

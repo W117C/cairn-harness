@@ -1,0 +1,112 @@
+/* 搜索与控制区固定，仅模型列表滚动。 */
+.pop.mp-pop.show {
+  display: flex;
+  flex-direction: column;
+  width: min(344px, calc(100vw - 24px));
+  min-width: 0;
+  max-width: calc(100vw - 24px);
+  padding: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-pop);
+}
+.mp-pop .mp-search {
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin: 0 4px 5px;
+  padding: 2px 6px 6px;
+  color: hsl(var(--text-300));
+  border-bottom: 1px solid var(--hairline);
+}
+.mp-pop .mp-search input {
+  min-width: 0;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: hsl(var(--text-100));
+  font-size: var(--fs-body-sm);
+}
+.mp-pop .mp-search:focus-within { border-color: hsl(var(--text-300)); }
+.mp-pop .mp-models {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.mp-pop .mp-group-label { padding: 8px 10px 3px; font-weight: var(--fw-medium); }
+.mp-pop .mp-group-label .g-dot { display: none; }
+.mp-pop .mp-group.separated { margin-top: 3px; padding-top: 2px; border-top: 0; }
+.mp-pop .menu-item { gap: 8px; min-height: 36px; padding: 7px 10px; border-radius: var(--radius-sm); }
+.mp-pop [role="option"] { font-size: var(--fs-body-sm); }
+.mp-pop [role="option"][data-highlighted="true"] { background: hsl(var(--bg-200)); }
+.mp-pop [role="option"] .mi-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-pop [role="option"] .sub { margin-left: auto; font-size: var(--fs-caption-xs); white-space: nowrap; color: hsl(var(--text-300)); }
+.mp-pop [role="option"] .check { flex: none; width: 14px; color: hsl(var(--text-100)); }
+.mp-pop .mp-controls { flex: none; min-height: 0; }
+.mp-pop .mp-controls:empty { display: none; }
+.mp-pop .mp-controls > .pop-label { display: none; }
+.mp-pop .th-row { margin: 0 5px 5px; padding: 3px; gap: 2px; border-radius: var(--radius-sm); background: hsl(var(--bg-200)); }
+.mp-pop .th-row button { min-height: 30px; padding: 4px 8px; }
+.mp-pop .th-row button[aria-pressed="true"] { box-shadow: none; }
+.mp-pop .mp-foot { margin-top: 8px; padding-top: 4px; }
+.mp-pop .mp-foot .menu-item { color: hsl(var(--text-200)); font-size: var(--fs-caption-sm); }
+.mp-pop .th-why { margin: 2px 8px 6px; }
+.mp-pop .th-why-body { max-height: 100px; overflow-y: auto; }
+.mp-pop .menu-note { font-size: var(--fs-caption-xs); }
+
+/* 思考档（2026-10-31）：标题行恢复可见——它现在承载「自定义」入口。
+   此前 `.mp-controls > .pop-label` 被整行藏掉，分段没有名字，用户只看到四格按钮。 */
+.mp-pop .th-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin: 2px 8px 4px;
+}
+.mp-pop .th-head .pop-label { display: block; margin: 0; }
+.mp-pop .th-custom {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 22px; padding: 0 6px; border-radius: var(--radius-xs);
+  color: hsl(var(--text-300)); font-size: var(--fs-caption-xs);
+  transition: background var(--t-instant), color var(--t-instant);
+}
+.mp-pop .th-custom:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); color: hsl(var(--text-000)); }
+.mp-pop .th-row button { flex: 1 1 0; min-width: 44px; border-radius: 5px; }
+.mp-pop .th-row button[aria-pressed="true"] {
+  background: hsl(var(--bg-000));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%), inset 0 0 0 1px var(--hairline-strong);
+  color: hsl(var(--text-000));
+}
+.mp-pop .th-edit {
+  margin: 0 5px 6px; padding: 9px 10px 8px;
+  border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+  background: hsl(var(--bg-100));
+}
+.mp-pop .th-edit-note { margin: 0 0 8px; color: hsl(var(--text-300)); font-size: var(--fs-caption-xs); line-height: 1.55; }
+.mp-pop .th-edit-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.mp-pop .th-edit-chip {
+  display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 9px;
+  border: 1px solid var(--hairline); border-radius: var(--radius-pill);
+  color: hsl(var(--text-300)); font-size: var(--fs-caption-sm);
+  transition: border-color var(--t-instant), background var(--t-instant), color var(--t-instant);
+}
+.mp-pop .th-edit-chip:hover { border-color: var(--hairline-strong); color: hsl(var(--text-000)); }
+.mp-pop .th-edit-chip[aria-checked="true"] {
+  border-color: hsl(var(--accent-brand) / 45%);
+  background: hsl(var(--accent-brand) / 8%);
+  color: hsl(var(--text-000));
+}
+.mp-pop .th-edit-box {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 12px; height: 12px; border-radius: 3px;
+  border: 1px solid var(--hairline-strong); font-size: 9px; line-height: 1;
+}
+.mp-pop .th-edit-chip[aria-checked="true"] .th-edit-box {
+  border-color: hsl(var(--accent-brand)); background: hsl(var(--accent-brand)); color: #fff;
+}
+.mp-pop .th-reset {
+  margin-top: 9px; padding: 0; border: 0; background: none;
+  color: hsl(var(--text-300)); font-size: var(--fs-caption-xs); text-decoration: underline;
+}
+.mp-pop .th-reset:hover { color: hsl(var(--text-000)); }

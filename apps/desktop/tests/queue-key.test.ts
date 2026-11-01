@@ -62,11 +62,15 @@ describe("发送队列键一致性 · 接线层", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("队列表的三个消费者都按 runKey 读（写与读同键）", () => {
+  it("队列表的消费者都按 runKey 读（写与读同键）", () => {
     const strip = readRendererFile("panes/WorkbenchView.tsx");
+    const dock = readRendererFile("panes/QueueDock.tsx");
     const sub = readRendererFile("state/session-subscription.ts");
-    // 渲染：条 + 两个改写点
-    expect(strip).toContain("sendQueue.current.get(runKey(activeWorkspace, activeId))");
+    // 渲染条 + 三个改写点（打断并发送 / 移出 / 编辑）都住在 QueueDock
+    expect(dock).toContain("queue.current.get(runKey(props.activeWorkspace, props.activeId))");
+    expect(dock).toContain("const key = runKey(props.activeWorkspace, sid);");
+    expect(dock).not.toContain("queue.current.get(sid)");
+    // 分叉沉淀跳过守卫
     expect(strip).toContain("sendQueue.current.get(runKey(activeWorkspace, ctx.forkId))");
     expect(strip).not.toContain("sendQueue.current.get(sid)");
     // 订阅：沉淀跳过守卫（同样按限定键读，否则那条守卫永远不触发）

@@ -1,0 +1,13 @@
+{
+  "fixtureData": false,
+  "checks": [
+    { "name": "文件菜单有「重新启动 Cairn」", "ok": true, "detail": "id=cairn.restart" },
+    { "name": "帮助菜单有「打开数据目录」与「打开日志文件夹」", "ok": true, "detail": "id=cairn.open-data / cairn.open-logs" },
+    { "name": "每个维护项都接了真动作（click 调 deps 一次）", "ok": true, "detail": "app-menu.test.ts 9 条" }
+  ],
+  "readings": {
+    "menu": "apps/desktop/outputs/maintenance-menu-804/menu-items.json",
+    "unit": "app-menu.test.ts 9 条 + quit-guard.test.ts 4 条",
+    "smoke": "未跑（重启会终止应用；菜单项由判卷钉 click 出口）"
+  }
+}

@@ -58,7 +58,17 @@ describe("通道名表完整性", () => {
     // 2026-10-23（第 698 页）：＋worktreeDiff（worker 改动预览；ref 形状闸在主进程）⇒ 101。
     // 2026-10-24 业主：＋providerCustomList（自定义供应商就地编辑的预填数据面）⇒ 105。
     // 编排平台：＋orchestrationView / orchestrationSubmit / orchestrationControl。
-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(108);
+    // v25：＋evolveReport（Evolve 只读报告）⇒ 109。
+    // v27：＋marketplaceCatalog（签名插件目录只读读数）⇒ 110。
+    // v28：＋marketplacePluginInstall / Status / Commit / Cancel / pluginSetEnabled / pluginUninstall /
+    //      pluginsInstalled（安装 job 与已装状态的后端面）⇒ 117。
+    // v29：＋marketplacePluginImport / Update / CheckUpdate / pluginPickLocalSource /
+    //      pluginConfigureInstalled（统一来源、更新检查、本地选择与已安装配置）⇒ 122。
+    // v31：＋reloadSettings（设置页「重新读取」：外部修好文件后不重启即可恢复）⇒ 123。
+    // v33：＋reportViewing（窗口在看哪个会话：完成通知的「不在看」判据）⇒ 124。
+    // v34：＋doctor（桌面「运行诊断」：复用 CLI 检查核）⇒ 125。
+    // v35：＋sessionPrefsSet（会话级模型/思考档持久化）⇒ 126。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(139);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
@@ -102,11 +112,49 @@ describe("通道名表完整性", () => {
       "getOnboarding",
       "getSettings",
       "setSettings",
+      // v33：窗口可见会话上报（通知判据）——三面同步直接接真。
+      "reportViewing",
+      // v34：桌面运行诊断（只读检查核）——三面同步直接接真。
+      "doctor",
+      // v35：会话级模型/思考档落 sidecar——三面同步直接接真。
+      "sessionPrefsSet",
+      // v31：设置重读（真重读盘，不是装饰按钮）——三面同步直接接真。
+      "reloadSettings",
       "listSessions",
       "createSession",
       "openSession",
       // v14：跨会话用量账本（只读扫描，接真有 wired 行）。
       "usageLedger",
+      // v25：Evolve 只读报告（当前窗口工作区，接真有 wired 行）。
+      "evolveReport",
+      // v44：进化冻结开关（人工治理写/删 STOP；三面同步直接接真）。
+      "evolveSetFrozen",
+      // v45：人工激活一条过门经验（写 playbook active，拒绝原因随结果返回）。
+      "evolveActivate",
+      // v46：人工把一条 active 经验转 dormant（负证据/人工裁决出口）。
+      "evolveDormant",
+      // v47：撤销一条全局经验（全局账 patch → dormant；跨 workspace 注入停用）。
+      "evolveGlobalRevoke",
+      // v48：全局经验冻结开关（写/删全局 STOP；与 workspace STOP 分开）。
+      "evolveGlobalSetFrozen",
+      // v49：恢复一条 dormant 全局经验（复核 ≥3 库证据；失败保持 dormant）。
+      "evolveGlobalActivate",
+      // v27：签名插件目录只读读数（verified cache；不暴露安装动作）。
+      "marketplaceCatalog",
+      // v28：安装 job 与已装状态后端面（PLUGIN-2 再消费）。
+      "marketplacePluginInstall",
+      "marketplacePluginInstallStatus",
+      "marketplacePluginInstallCommit",
+      "marketplacePluginInstallCancel",
+      "pluginSetEnabled",
+      "pluginUninstall",
+      "pluginsInstalled",
+      // v29：三来源统一导入、来源绑定更新、原生本地目录选择与已安装配置。
+      "marketplacePluginImport",
+      "marketplacePluginUpdate",
+      "marketplacePluginCheckUpdate",
+      "pluginPickLocalSource",
+      "pluginConfigureInstalled",
       // v15：会话日志尾部（只读；会话归属由 host 解析，接真有 wired 行）。
       "sessionLog",
       "orchestrationView",
@@ -121,6 +169,8 @@ describe("通道名表完整性", () => {
       "setSessionArchived",
       "setWorkspaceContext",
       "exportTranscript",
+      // v43：导出全部记忆（原生保存面板）。
+      "exportMemory",
       "listSkills",
       "skillBody",
       // 2026-10-20 消息置顶（销 G6）：三面同步直接接真（wired 行 + AgentApi + channels）。
@@ -224,6 +274,17 @@ describe("通道名表完整性", () => {
       "attachmentThumb",
       // v12：导入诊断（导入已有文件夹先给三态诊断——ADR 0004 §4）——三面同步直接接真。
       "projectDiagnose",
+      // v36：项目目录移动/改名后重新定位（core registry 保 id/name/createdAt）——三面同步直接接真。
+      "relocateProject",
+      // v38：导入外部签发的 license（先验签后落盘，失败不覆盖）——三面同步直接接真。
+      "importLicense",
+      // v39：导出诊断包（报告 + 主进程日志尾部）——三面同步直接接真。
+      "exportDiagnostics",
+      // v40：偏好备份导出 / 导入（只搬界面与行为偏好）——三面同步直接接真。
+      "exportPreferences",
+      "importPreferences",
+      // v41：恢复默认偏好（只动偏好键）。
+      "resetPreferences",
       // 2026-10-23：轮中插话（第 9 点）——三面同步直接接真：host.steer → agent-runner 的
       // RunOverrides.steering → loop 轮界取料。**必须接真**：它不是可选面板而是「运行中再交代一句话」，
       // 落进 fail-loud 白名单就等于让用户以为说出去了。

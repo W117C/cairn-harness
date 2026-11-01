@@ -1,0 +1,19 @@
+FAIL 读取期间缓存队列所有动作禁用
+FAIL 队列读取失败后仍锁住输入
+FAIL 队列读取失败后仍阻止缓存队列改写
+FAIL 失败原因在独立恢复提示中
+PASS light 长错误不横向溢出
+sandbox_extension_issue_file failed for /Users/ze/Downloads/Cairn/cairn/node_modules/.pnpm/electron@44.7.0_supports-color@7.2.0/node_modules/electron/dist/Electron.app/Contents/Frameworks/Electron Helper.app/Contents/Resources: 1 (Operation not permitted)
+PASS dark 长错误不横向溢出
+FAIL 提供就地重新读取入口
+PASS 队列先读完时等待正文，不提前解锁
+PASS 重读成功解除锁并移除提示
+PASS 重读保留未发送草稿与持久队列
+FAIL 正文读取失败后仍锁住输入
+FAIL 提供就地重新读取入口
+PASS 切会话后旧失败不污染新会话
+PASS 读取与恢复未改写队列、未派发任务
+PASS 无 renderer/preload 错误
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron scripts/session-open-recovery-smoke.cjs /Users/ze/Downloads/Cairn/cairn/outputs/session-open-recovery-2026-11-01/before

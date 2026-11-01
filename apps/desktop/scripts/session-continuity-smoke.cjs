@@ -65,6 +65,16 @@ async function main() {
   await waitFor(() => js('!!document.querySelector(".composer-card textarea")'), 'composer');
   await waitFor(() => js('document.querySelector(".mp-trigger")?.textContent.includes("演示")'), 'demo provider settings');
   await waitFor(() => js('!document.getElementById("boot") || getComputedStyle(document.getElementById("boot")).visibility === "hidden"'), 'startup overlay dismissed');
+  // 第 812 页：demo provider 必须在空屏与页脚都说「演示模式」，不许冒充「服务正常」。
+  check('标题栏常驻「演示模式」胶囊（说明在 title 里）', await js(`(() => {
+    const el = document.querySelector('.tb-demo');
+    if (!el) return false;
+    return el.textContent.includes('演示模式') && (el.getAttribute('title') ?? '').includes('预录剧本');
+  })()`));
+  check('页脚状态点写「演示模式」且不是绿色可用态', await js(`(() => {
+    const el = document.querySelector('.provider-dot');
+    return el?.textContent.includes('演示模式') === true && el?.getAttribute('data-ok') === 'demo';
+  })()`));
   // 2026-10-25 空屏重做把设置检查块连带删掉、10-26 恢复（见 WorkbenchView 的注释）。
   // 这条不再要求「不展示」，改为钉恢复后的形状：块在就每一格都能点（不许死行），且旧 BYOK 检查不再出现。
   check('首启首页的设置检查块每一格都可操作（无死行）', await js(`(() => {
@@ -72,6 +82,12 @@ async function main() {
     const actionable = items.every((el) => el.tagName === 'BUTTON' || el.getAttribute('role') === 'button');
     return items.length > 0 && actionable;
   })()`));
+  check('首启检查用用户语言（无 BYOK / 单价表 / license）', await js(`(() => {
+    const text = document.querySelector('.onboard')?.innerText ?? '';
+    return text.includes('连接模型') && !/BYOK|单价表|license/.test(text);
+  })()`), await js(`document.querySelector('.onboard')?.innerText ?? ''`));
+  check('首启检查每条都有可见的一句说明', await js(`[...document.querySelectorAll('.onboard-entry')].length > 0 && [...document.querySelectorAll('.onboard-entry')].every((el) => (el.textContent ?? '').trim().length > 0)`));
+  await js('new Promise((resolve) => setTimeout(resolve, 500))');
   writeFileSync(join(out, '01-home.png'), (await win.webContents.capturePage()).toPNG());
 
   async function send(text, count) {

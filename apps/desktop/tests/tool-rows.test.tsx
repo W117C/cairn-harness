@@ -26,9 +26,14 @@ describe("toolVerb（一句话摘要的动词层）", () => {
 describe("消息间距 24px（brief §二.1：消息之间间距 24px）", () => {
   const css = read("../src/renderer/styles.css");
   it("user / assistant / error 行顶距 24px（行间不叠也成节奏）", () => {
-    expect(css).toMatch(/\.row\.user\s*{[^}]*margin:\s*24px 0 0/s);
-    expect(css).toMatch(/\.row\.assistant\s*{[^}]*margin:\s*24px 0 0/s);
-    expect(css).toMatch(/\.row\.error-row\s*{[^}]*margin:\s*24px 0 0/s);
+    // 顶距 24px 这一档不许动；第 862 页把 assistant / error 两行的**右**档改成 fluid stop
+    // （一轮一条列），所以右档允许 0 或那条变量——顶/底/左三档仍逐字钉住（底 0、左 0）。
+    const top = (sel: string) => new RegExp(`${sel}\\s*{[^}]*margin:\\s*24px (?:0 0|0 0 0|var\\(--cds-assistant-message-text-stop\\) 0 0);`, "s");
+    expect(css).toMatch(top(".row\\.user"));
+    expect(css).toMatch(top(".row\\.assistant"));
+    expect(css).toMatch(top(".row\\.error-row"));
+    // 反向自证：顶距写成别的值必须红（把 24px 换掉后三条正则都不成立）。
+    expect(css).not.toMatch(/\.row\.assistant\s*{[^}]*margin:\s*23px/s);
   });
 });
 
@@ -86,9 +91,11 @@ describe("回底钮挂载竞态（阶段 2 真机复检抓到并修复）", () =
   // 根因：空态启动时 .stream 未挂载 ⇒ 旧 hook 以 ref.current=null 跑完 effect，依赖 [ref] 不变
   // 便永不再跑 ⇒ 滚动监听恒未接上、回底钮永不出现（真机实证：scrollTop=120 后 DOM 无 .jump-latest）。
   // 修复 = hook 改收元素本身（App 用 callback ref 放入 state）：元素出现 ⇒ effect 重跑 ⇒ 监听接上。
-  it("纯函数 isNearBottom：48px 贴底阈值", () => {
+  it("纯函数 isNearBottom：40px 贴底阈值（2026-10-31 对齐 open-claude-ui）", () => {
     expect(isNearBottom({ scrollTop: 0, scrollHeight: 919, clientHeight: 611 })).toBe(false);
-    expect(isNearBottom({ scrollTop: 270, scrollHeight: 919, clientHeight: 611 })).toBe(true); // 间隙 38 ≤ 48
+    expect(isNearBottom({ scrollTop: 270, scrollHeight: 919, clientHeight: 611 })).toBe(true); // 间隙 38 ≤ 40
+    expect(isNearBottom({ scrollTop: 268, scrollHeight: 919, clientHeight: 611 })).toBe(true); // 间隙 40 = 边界
+    expect(isNearBottom({ scrollTop: 267, scrollHeight: 919, clientHeight: 611 })).toBe(false); // 间隙 41 > 40
     expect(isNearBottom({ scrollTop: 308, scrollHeight: 919, clientHeight: 611 })).toBe(true); // 贴底
   });
   it("接线哨兵：hook 收元素（非 RefObject）；App 走 callback-ref state", () => {

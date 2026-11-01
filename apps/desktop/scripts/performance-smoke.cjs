@@ -14,6 +14,9 @@ const budgets={
   p95Ms:Number(process.env.CAIRN_PERF_P95_BUDGET_MS??200),
   maxMs:Number(process.env.CAIRN_PERF_MAX_BUDGET_MS??500),
   startupMs:Number(process.env.CAIRN_PERF_STARTUP_BUDGET_MS??1500),
+  // 打开会话（第 958 页补）：400 轮会话首开实测 503–657 ms（第 956/957 页五跑），此前**只量不判**——
+  // 打开慢三倍也照样 exit 0。帽取 1500 ms（约实测上限的 2.3 倍，CI 慢机可用环境变量抬）。
+  openMs:Number(process.env.CAIRN_PERF_OPEN_BUDGET_MS??1500),
 };
 const out = resolve(process.argv[2] ?? 'performance.json');
 const turns = Number(process.argv[3] ?? 400);
@@ -106,6 +109,7 @@ async function main() {
     ...(report.frameMs.p95>budgets.p95Ms?[`帧时间 p95 ${report.frameMs.p95.toFixed(1)}ms > 帽 ${budgets.p95Ms}ms`]:[]),
     ...(report.frameMs.max>budgets.maxMs?[`帧时间 max ${report.frameMs.max.toFixed(1)}ms > 帽 ${budgets.maxMs}ms`]:[]),
     ...(report.startupMs>budgets.startupMs?[`启动 ${report.startupMs.toFixed(1)}ms > 帽 ${budgets.startupMs}ms`]:[]),
+    ...(report.openMs>budgets.openMs?[`打开会话 ${report.openMs.toFixed(1)}ms > 帽 ${budgets.openMs}ms`]:[]),
   ];
   if(overBudget.length>0) console.error('[performance-smoke] 超预算：'+overBudget.join('；'));
   const completeHistory = dom.users === turns+1 && dom.assistants === turns+1 && dom.tools === turns;

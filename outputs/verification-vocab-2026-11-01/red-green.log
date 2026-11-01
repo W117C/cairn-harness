@@ -1,0 +1,16 @@
+=== 造红 A：交付卡写回自己那张表（验证未过）===
+     × 两个消费面都读同一份，且不再各自写表 7ms
+      Tests  1 failed | 1 passed (2)
+     × 固定呈现改动、验证、未验证、下一步四项，并保留文件与验证证据（展开态） 11ms
+      Tests  1 failed | 8 passed (9)
+
+=== 造红 B：stale 写回「验证过期」===
+     × 四个状态一套词；认不出的原样返回（不替事件流编词） 5ms
+AssertionError: expected '验证过期' to be '证据已过期' // Object.is equality
+      Tests  1 failed | 1 passed (2)
+
+=== 复原后 ===
+      Tests  25 passed (25)
+=== sha256 ===
+57eb7cc574ae60f95cb5d9d28e7c7f2812449a9a3a0331a1c69693a1d925ed3b
+37512362e1178782109b5462a77aef8824da2407882f85d69b44d0e254e9cd34

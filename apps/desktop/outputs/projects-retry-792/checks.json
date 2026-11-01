@@ -1,0 +1,36 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "坏档 ⇒ 侧栏 notice 点名文件与出路",
+      "ok": true,
+      "detail": "项目注册表不可用：项目注册表损坏，已拒绝覆盖: /tmp/demo-ws/.agent/sessions/projects.json (JSON.parse 失败)——修好或删除该文件后重试\n重试"
+    },
+    {
+      "name": "notice 带「重试」按钮",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "真指针点「重试」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "重试成功 ⇒ notice 消失（不用重启）",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "重试成功 ⇒ 项目真的列出来了",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

@@ -13,6 +13,18 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { runKey } from "../src/renderer/state/session-identity";
 import { ModelMenu, ModelPicker, type ModelOption } from "../src/renderer/components/ModelPicker";
 import type { ProviderInfo } from "../../../src/main/ipc-protocol";
+import { readRendererFile } from "./helpers/app-surface";
+
+describe("Agent OS shell wiring", () => {
+  it("mounts durable pages beside an inert, still-mounted chat workspace", () => {
+    const view = readRendererFile("panes/WorkbenchView.tsx");
+    expect(view).toContain("<WorkbenchSidebar");
+    expect(view).toContain("<DestinationWorkspace");
+    expect(view).toContain("destination={destination}");
+    expect(view).toContain("<AppPageBody");
+    expect(view).toContain("renderPage=");
+  });
+});
 
 function model(id: string, provider: string, name: string, tier: string, ctxWindow: number) {
   return {
@@ -57,10 +69,10 @@ describe("ModelPicker 触发条（真 HTML）", () => {
   it("是个带 aria 的可点按钮，title 就是选中项描述", () => {
     const html = renderToStaticMarkup(<ModelPicker infos={[info]} value="deepseek-chat" onChange={() => undefined} />);
     expect(html).toContain('aria-label="模型选择"');
-    expect(html).toContain('aria-haspopup="listbox"');
+    expect(html).toContain('aria-haspopup="dialog"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain("deepseek-chat"); // 短名
-    expect(html).toContain("窗口 1M"); // title 里的描述也带窗口
+    expect(html).toContain("窗口 1.0m"); // title 里的描述也带窗口
     expect(html).not.toContain('role="listbox"'); // 没打开就没有菜单
   });
 
@@ -91,8 +103,8 @@ describe("ModelMenu 菜单（真 HTML——P2-2 合并单面：搜索 + 列表 +
     expect(html).toContain(">openai<");
     expect(html).toContain(">deepseek<");
     // 档位徽标是**文字**（规范 a11y 条：不只靠颜色）
-    expect(html).toContain("标准 · 窗口 128k");
-    expect(html).toContain("便宜 · 窗口 1M");
+    expect(html).toContain("标准 · 窗口 128.0k");
+    expect(html).toContain("便宜 · 窗口 1.0m");
     expect(html).toContain('role="listbox"');
     expect(html).toContain('aria-label="模型列表"');
   });
@@ -117,7 +129,7 @@ describe("ModelMenu 菜单（真 HTML——P2-2 合并单面：搜索 + 列表 +
     // 拿当前通道的状态去灰掉别人家的模型，正好造成用户实测的"列表出来了但点不动"。
     const html = render({ keyNotice: "OpenAI 未配置 key · 去设置配置" });
     expect(html).toContain("⚠ OpenAI 未配置 key · 去设置配置");
-    expect(html).toContain("点这里去设置");
+    expect(html).not.toContain("点这里去设置"); // 提示本身已经给出「去设置配置」，不重复 CTA。
     expect(html).toContain("mp-warn");
     expect((html.match(/disabled=""/g) ?? []).length).toBe(0);
   });
@@ -209,13 +221,15 @@ function sidebarHtml(over: Partial<Parameters<typeof Sidebar>[0]> = {}): string 
   return renderToStaticMarkup(<Sidebar {...props} />);
 }
 
-describe("⑤ 左栏顶栏：＋ 新任务（⌘N）＋ 搜索（⌘K）——旧四图标工具行与行内表单整体下架", () => {
-  it("两枚钮都在，快捷键进 tooltip", () => {
+describe("⑤ 左栏顶栏：新任务 + 按需会话搜索", () => {
+  it("新任务保留快捷键，会话筛选不冒称全局命令面板", () => {
     const html = sidebarHtml();
     expect(html).toContain(">新任务<");
     expect(html).toContain("新任务（⌘N）");
-    expect(html).toContain('aria-label="搜索"');
-    expect(html).toContain("（⌘K）");
+    expect(html).toContain('aria-label="搜索会话"');
+    expect(html).toContain('title="搜索会话"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain('title="搜索会话（⌘K）"');
   });
 
   it("旧入口下架：无行内「工作区路径」表单、无绝对路径 placeholder、无「新建工作区」钮", () => {
@@ -223,6 +237,28 @@ describe("⑤ 左栏顶栏：＋ 新任务（⌘N）＋ 搜索（⌘K）——�
     expect(html).not.toContain("ws-add-row");
     expect(html).not.toContain("/绝对/路径");
     expect(html).not.toContain("新建工作区");
+  });
+});
+
+describe("⑤ 左栏视觉层级：品牌、会话状态与服务入口", () => {
+  it("品牌与主要操作分成两行，新任务保留可见快捷键", () => {
+    const html = sidebarHtml();
+    expect(html).toContain('class="side-brandline"');
+    expect(html).toContain('class="side-brand">Cairn</span>');
+    expect(html).toContain('class="side-actions"');
+    expect(html).toContain('class="side-new-label">新任务</span>');
+    expect(html).toContain('class="side-new-keys">⌘N</kbd>');
+  });
+
+  it("每个会话都有固定状态槽，置顶标记收进次级信息行", () => {
+    const html = sidebarHtml();
+    expect(html.match(/class="s-status"/g)).toHaveLength(4);
+    expect(html).toMatch(/<div class="s-meta"><svg[^>]*aria-label="已置顶"/);
+  });
+
+  it("模型服务不再只是一颗无文字圆点", () => {
+    const html = sidebarHtml({ providerOk: null });
+    expect(html).toContain('class="provider-label">服务未检</span>');
   });
 });
 
@@ -318,6 +354,7 @@ describe("⑤ 左栏筛选：只列有数据支撑的项，并把缺的那半边
 import { readFileSync } from "node:fs";
 import { Switch } from "../src/renderer/components/Switch";
 import { SettingsPanel } from "../src/renderer/components/SettingsPanel";
+import { SECTIONS } from "../src/renderer/components/settings-nav";
 
 describe("④ Switch：不是裸复选框，而是一个说人话的开关", () => {
   const render = (over: Partial<Parameters<typeof Switch>[0]> = {}): string =>
@@ -382,10 +419,10 @@ describe("插件信任开关：pluginDecide 双向（源码哨兵）", () => {
 });
 
 describe("设置页左侧导航：一处事实源，不许重复", () => {
-  it("九个分区各出现一次、顺序固定（导航只从 SECTIONS 渲染；工作台五分区并入）", () => {
+  it("设置分区各出现一次、顺序固定（导航只从 SECTIONS 渲染）", () => {
     const html = renderToStaticMarkup(<SettingsPanel onClose={() => undefined} />);
     const nav = html.slice(html.indexOf('aria-label="设置分区"'), html.indexOf('class="sp-nav-foot"'));
-    const labels = ["通用", "模型与 Provider", "权限与安全", "插件", "自动化任务", "技能中心", "记忆系统", "工作树", "关于与更新"];
+    const labels = SECTIONS.map((section) => section.label);
     for (const label of labels) {
       const n = (nav.match(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) ?? []).length;
       expect(n, `${label} 出现了 ${String(n)} 次`).toBe(1);
@@ -393,15 +430,31 @@ describe("设置页左侧导航：一处事实源，不许重复", () => {
     // 顺序也钉住（顺序错乱同样是导航不可用的形态）
     const idx = labels.map((l) => nav.indexOf(`>${l}<`));
     expect(idx).toEqual([...idx].sort((a, b) => a - b));
-    // 「工作台」分组行恰一次，且夹在「权限与安全」与「插件」之间（纯标记，不可点）
+    // 「工作台」分组行恰一次，且夹在「快捷键」与「技能中心」之间（纯标记，不可点）
     expect((nav.match(/>工作台</g) ?? []).length).toBe(1);
-    expect(nav.indexOf(">工作台<")).toBeGreaterThan(nav.indexOf(">权限与安全<"));
-    expect(nav.indexOf(">工作台<")).toBeLessThan(nav.indexOf(">插件<"));
+    expect(nav.indexOf(">工作台<")).toBeGreaterThan(nav.indexOf(">快捷键<"));
+    expect(nav.indexOf(">工作台<")).toBeLessThan(nav.indexOf(">技能中心<"));
   });
 
   it("不再出现第二个硬编码的导航渲染（回归哨兵）", () => {
     const src = readFileSync(new URL("../src/renderer/components/SettingsPanel.tsx", import.meta.url), "utf8");
     expect(src).not.toContain('{["行为与成本", "记忆与数据"].map');
+  });
+});
+
+describe("设置页信息架构：导航分组与面板标题", () => {
+  it("导航有标题，并按设置 / 工作台 / 系统三段分组，搜索仍保留", () => {
+    const html = renderToStaticMarkup(<SettingsPanel onClose={() => undefined} />);
+    expect(html).toContain('class="sp-nav-head"');
+    expect(html).toContain('class="sp-nav-title">设置</div>');
+    expect(html).toContain('aria-label="搜索设置分区"');
+    expect(html).toContain('class="sp-nav-group" data-group="settings"');
+    expect(html).toContain('class="sp-nav-group" data-group="workspace"');
+    expect(html).toContain('class="sp-nav-group" data-group="system"');
+    expect((html.match(/class="sp-nav-group"/g) ?? []).length).toBe(3);
+    expect(html.indexOf('data-group="settings"')).toBeLessThan(html.indexOf('data-group="workspace"'));
+    expect(html.indexOf('data-group="workspace"')).toBeLessThan(html.indexOf('data-group="system"'));
+    expect(html.indexOf(">关于与更新<")).toBeGreaterThan(html.indexOf('data-group="system"'));
   });
 });
 
@@ -581,11 +634,11 @@ describe("思考段合并单面（P2-2；触发条短档词族）", () => {
     expect(html).toContain('role="listbox"');
   });
 
-  it("未声明 ⇒ 整组禁用（四键 disabled）+ 注「当前模型不支持思考强度」+ 配置折叠（为什么+怎么解锁）", () => {
+  it("未声明 ⇒ 整组禁用（五键 disabled）+ 注「当前模型不支持思考强度」+ 配置折叠（为什么+怎么解锁）", () => {
     const html = menu({ thinkingSupported: false });
     expect(html).toContain("th-row"); // 按键仍在场（brief：Segmented 常摆，按能力禁用）
     expect((html.match(/aria-pressed="true"/g) ?? []).length).toBe(1); // 选中态仍是 off
-    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(4); // 四键全禁（列表本面不禁）
+    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(5); // 五键全禁（列表本面不禁）
     expect(html).toContain("当前模型不支持思考强度");
     expect(html).toContain("th-why");
     expect(html).toContain("reasoningEfforts");
@@ -665,5 +718,38 @@ describe("模型选择弹窗：全选/全不选 + 整行点选", () => {
     );
     expect(partial).toContain("已选 1 / 3");
     expect((partial.match(/aria-checked="true"/g) ?? []).length).toBe(1);
+  });
+});
+
+// 2026-10-30：项目注册表读失败时侧栏 notice 只有一行字，外部修好 projects.json 后只能重启。
+// 现在 notice 带「就地重试」；没有重试出口的调用面不摆按钮（旧行为逐字不变）。
+describe("侧栏「项目注册表不可用」的就地重试", () => {
+  it("有 onRetryNotice ⇒ notice 里出「重试」按钮；没有 ⇒ 不摆按钮", () => {
+    const message = "项目注册表不可用：项目注册表损坏，已拒绝覆盖: /tmp/demo-ws/projects.json——修好或删除该文件后重试";
+    const withRetry = sidebarHtml({ notice: message, onRetryNotice: () => undefined });
+    expect(withRetry).toContain("项目注册表不可用");
+    expect(withRetry).toContain(">重试<");
+    const without = sidebarHtml({ notice: message });
+    expect(without).not.toContain(">重试<");
+    // 没有 notice 时不摆空壳行
+    expect(sidebarHtml({})).not.toContain("side-notice");
+  });
+
+  it("接线：订阅钩子返回 retryProjects，workbench 传进模型，WorkbenchView 转给侧栏", () => {
+    expect(readRendererFile("state/session-subscription.ts")).toContain("return { retryProjects };");
+    expect(readRendererFile("state/workbench.ts")).toContain("const { retryProjects } = useSessionSubscription(");
+    expect(readRendererFile("state/workbench.ts")).toContain("    retryProjects,\n");
+    expect(readRendererFile("panes/WorkbenchView.tsx")).toContain("onRetryNotice: retryProjects");
+  });
+});
+
+// 2026-10-30：项目设置 Dialog 的回车提交（与新建项目同口径）。
+describe("项目设置：显示名输入框回车 = 保存", () => {
+  it("输入框 Enter 走同一个 submit；空名给错误、不关面板", () => {
+    const src = readRendererFile("components/Sidebar.tsx");
+    expect(src).toContain('onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); submit(); } }}');
+    expect(src).toContain("onClick={submit}");
+    expect(src).toContain("const submit = () => {");
+    expect(src).toContain("if (trimmed === \"\") { setError(STR.projectRename.empty); return; }");
   });
 });

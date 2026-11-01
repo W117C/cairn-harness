@@ -1,0 +1,8 @@
+$ node --import tsx .tmp/probe-injected.mts   # 改前：无动词、无主语
+obs_recall      ⇒ "obs_recall {\"id\":\"obs-7\",\"by\":\"lines\"}"
+impact_query    ⇒ "impact_query {\"symbol\":\"buildConfig\"}"
+impact_query    ⇒ "impact_query src/a.ts"
+search_history  ⇒ "search_history 登录重试"
+tool_search     ⇒ "tool_search sqlite 查询"
+diagnose        ⇒ "diagnose {}"
+diagnose        ⇒ "diagnose {\"face\":\"lint\"}"

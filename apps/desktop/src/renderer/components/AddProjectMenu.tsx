@@ -7,15 +7,11 @@ import { FolderOpen, FolderPlus, GitBranch, History, X } from "lucide-react";
 import type { ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import { STR } from "../strings";
 import { scheduleAfterOverlayDismissal } from "./overlay-focus";
+import { repoNameFromUrl } from "../../../../../src/git-url";
 
 /** 仓库名预览（与 main 侧 repoNameFromUrl 同判据的薄镜像，仅用于「将克隆到：」预览——
  *  真正落盘名以 main 为准；认不出就不显示预览尾巴，不编假名字）。 */
-function repoNamePreview(url: string): string | null {
-  const tail = url.replace(/\/+$/, "").split(/[/:]/).pop() ?? "";
-  if (tail === "" || /\s/.test(tail)) return null;
-  const name = tail.endsWith(".git") ? tail.slice(0, -4) : tail;
-  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) ? name : null;
-}
+
 
 export function AddProjectMenu(props: {
   onPickDirectory: () => Promise<string | null>;
@@ -166,7 +162,7 @@ export function AddProjectMenu(props: {
             <span className="sp-dim">
               {cloneParent === null
                 ? STR.addProject.cloneLocationUnset
-                : STR.addProject.clonePreview.replace("{dir}", `${cloneParent}/${repoNamePreview(cloneUrl) ?? "…"}`)}
+                : STR.addProject.clonePreview.replace("{dir}", `${cloneParent}/${repoNameFromUrl(cloneUrl) ?? "…"}`)}
             </span>
           </div>
           {cloneError !== null && <div className="form-error" role="alert">{cloneError}</div>}

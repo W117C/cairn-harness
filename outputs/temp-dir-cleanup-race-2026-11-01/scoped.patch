@@ -1,0 +1,90 @@
+--- a/apps/desktop/tests/terminal-login-shell.test.ts	2026-11-01 16:41:07
++++ b/apps/desktop/tests/terminal-login-shell.test.ts	2026-11-01 16:39:57
+@@ -7,17 +7,19 @@
+ // 这一条镜像产品的调用形状：真登录 shell ＋ **隔离 HOME**（不读用户自己的 rc ⇒ 可复跑、
+ // 不受个人 shell 配置影响）。它量的是「命令真的执行了」，不是「回显长得像输出」——
+ // 标记用八进制生成，回显冒充不了（与既有那条同一个手法）。
+-import { mkdtempSync, rmSync } from 'node:fs';
++import { mkdtempSync } from 'node:fs';
+ import { tmpdir } from 'node:os';
+ import { join } from 'node:path';
+ import { afterEach, describe, expect, it } from 'vitest';
+ import { TerminalHost, type TerminalPush } from '../src/main/terminal-host';
++import { removeTempDir } from './helpers/temp-dir';
+ 
+ const hosts: TerminalHost[] = [];
+ const dirs: string[] = [];
+ afterEach(() => {
+   for (const host of hosts.splice(0)) host.killAll();
+-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
++  // 登录 shell 退出前还会写隔离 HOME（.zcompdump 等）：清理只做尽力而为，不许把绿判据弄红（第 948 页）。
++  for (const dir of dirs.splice(0)) removeTempDir(dir);
+ });
+ 
+ const waitFor = async (test: () => boolean) => {
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:41:07
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:40:53
+@@ -4309,3 +4309,4 @@
+ 68. **长会话的投影规模有判据（第 945 页）**：流投影（`derived/stream.ts#projectStream`）是每条事件都要过的纯函数，长会话一旦退化成平方，界面会先卡在投影这一步。现读（本机 2026-11-01）：3 000 事件 ≈ 1.4ms、9 000 ≈ 4.8ms、27 000 ≈ 11.4ms（0.42–0.53µs/事件，线性）。判据不看绝对毫秒（机器快慢不同），只看规模斜率：事件 ×9 时耗时不得超过 ×25（平方会是 ×81）；另有一条「行数与该看的轮数一致」，防止靠少产出换速度。
+ 69. **worker 归属判据只有一份（第 946 页）**：「带 `agent_id` 的事件属于 worker 子流」这条判据在六处各写一遍，其中两处漏了空串判断（`main/usage-ledger.ts` 把 `agent_id: ""` 当 worker ⇒ 用量少算；`renderer/derived/session.ts` 把它当 worker ⇒ 该事件从主流里消失），另三处（`agent/context.ts`、`agent/acceptance-sampler.ts`、`scripts/replay/run-scorecard.ts`）判的是「非空才算」。收进 `src/agent/subflow.ts`（`hasWorkerId` / `isWorkerSubflowEvent`，`agent_spawned` 仍是父流事实），六处改读；判卷钉四类取值、两条消费面的行为（用量账本计数、主流行出现），以及「五个消费面都不再自己写一条」。
+ 70. **「将克隆到」的名字与落库的名字是同一份解析（第 947 页）**：`repoNameFromUrl` 在 main 侧决定**存下来的项目名**，渲染层 `AddProjectMenu` 又抄了一份 `repoNamePreview` 只有当预览用——两处各一份时，改一处就漂（预览说 `bar`、落库说 `bar-2`）。收进 `src/git-url.ts`，渲染层与 `git-ops.ts` 同读；同一轮的 `triggerLabel`（`agent/evolve/playbook.ts` vs `main/evolve/promotion.ts`）也收到一处。判卷：两个函数的取值矩阵 + 「两处都不再自己写一份」。
++71. **临时目录清理不许把绿判据弄红（第 948 页）**：`terminal-login-shell.test.ts` 用隔离 HOME 起真登录 shell，`afterEach` 裸 `rmSync` 撞上 shell 还在写 `.zcompdump`/`.zsh_history` ⇒ `ENOTEMPTY` ⇒ 一条判据由绿变红（2026-11-01 桌面套件首跑实测；单跑 10/10 绿、重跑整套绿，典型的清理竞态）。新增 `tests/helpers/temp-dir.ts#removeTempDir`：带重试地删、删不掉也咽下（留下的是系统临时目录）；该测试改用它。探针实测：同一现场下裸 `rmSync` 15/15 抛 `ENOTEMPTY`，带重试+咽下 0/15。
+--- /dev/null → apps/desktop/tests/helpers/temp-dir.ts
+--- /dev/null	2026-11-01 16:41:07
++++ b/apps/desktop/tests/helpers/temp-dir.ts	2026-11-01 16:39:57
+@@ -0,0 +1,19 @@
++import { rmSync } from "node:fs";
++
++/** 清理临时目录：**尽力而为，不抛**（第 948 页）。
++ *
++ *  为什么不能裸 `rmSync`：带隔离 HOME 的登录 shell（`$SHELL -l`）在退出前还会往那里写
++ *  `.zcompdump` / `.zsh_history` / 缓存目录。清理与写入撞上就是 `ENOTEMPTY`——
++ *  一条判据本来是绿的，却因为「清理没清干净」变红（2026-11-01 桌面套件首跑实测，
++ *  `terminal-login-shell.test.ts` 就是这样红的；单跑绿、重跑绿 ⇒ 典型的清理竞态）。
++ *
++ *  做法：带重试地删；真删不掉也咽下——留下的是系统临时目录（`/var/folders/…` 或 `/tmp`），
++ *  操作系统迟早会收，比把一条绿判据误判成红要好。
++ */
++export function removeTempDir(dir: string): void {
++  try {
++    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
++  } catch {
++    /* 尽力而为：见上。 */
++  }
++}
+--- /dev/null → apps/desktop/tests/temp-dir-cleanup.test.ts
+--- /dev/null	2026-11-01 16:41:07
++++ b/apps/desktop/tests/temp-dir-cleanup.test.ts	2026-11-01 16:39:57
+@@ -0,0 +1,32 @@
++// 第 948 页：清理临时目录不许因为「子进程还在写」把一条绿判据变红。
++// 现场：`terminal-login-shell.test.ts` 用隔离 HOME 起登录 shell，afterEach 裸 `rmSync` 撞上
++// shell 还在写 `.zcompdump` ⇒ ENOTEMPTY ⇒ 判据红（实测桌面套件首跑一次，单跑/重跑都绿）。
++import { mkdtempSync, writeFileSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { spawn } from "node:child_process";
++import { describe, expect, it } from "vitest";
++import { removeTempDir } from "./helpers/temp-dir";
++
++describe("临时目录清理（第 948 页）", () => {
++  it("子进程还在往目录里写时，清理不抛（重试 + 咽下）", async () => {
++    const dir = mkdtempSync(join(tmpdir(), "cairn-cleanup-"));
++    // 模拟登录 shell 的收尾写入：持续造文件，直到被杀。
++    const child = spawn("/bin/sh", ["-c", `i=0; while [ $i -lt 400 ]; do : > ${dir}/f$i; i=$((i+1)); done`], { stdio: "ignore" });
++    await new Promise((r) => setTimeout(r, 20));
++    expect(() => { removeTempDir(dir); }).not.toThrow();
++    child.kill("SIGKILL");
++  });
++
++  it("目录不存在也不抛（幂等）", () => {
++    expect(() => { removeTempDir(join(tmpdir(), "cairn-cleanup-not-exist-" + String(Date.now()))); }).not.toThrow();
++  });
++
++  it("正常目录会被真的删掉（不是一律不删）", async () => {
++    const { existsSync } = await import("node:fs");
++    const dir = mkdtempSync(join(tmpdir(), "cairn-cleanup-ok-"));
++    writeFileSync(join(dir, "a.txt"), "x");
++    removeTempDir(dir);
++    expect(existsSync(dir)).toBe(false);
++  });
++});

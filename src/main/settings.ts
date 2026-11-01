@@ -36,7 +36,7 @@ export type TextSizeSetting = "sm" | "md" | "lg";
 export type UiSizeSetting = "1" | "2" | "3" | "4" | "5";
 /** v2.14：界面语言（i18n 偏好）——V1 只做持久化与校验（先让偏好可存可回读），渲染层文案翻译逐段接线。 */
 export type LocaleSetting = "zh-CN" | "en-US";
-/** 主对话模型通道：demo 是冻结剧本；内置四家与 worker registry / env-key 表同源；
+/** 主对话模型通道：demo 是冻结剧本；内置家与 worker registry / env-key 表同源；
  *  自定义 provider（`.agent/providers.json` 里声明的）是**运行时**才知道的 id —— 静态枚举不出来，
  *  所以用 `(string & {})` 保留内置字面量的编辑器提示、同时允许任意 id。
  *  代价是类型不再是封闭联合 ⇒ 判据必须落在运行时那一道：`validateSettings` 里问 `isKnownProviderId`。 */
@@ -74,6 +74,8 @@ export interface AppSettings {
   updateManifestUrl: string;
   /** M4b §2.6：遥测开关（§13 默认关；V1 无上报实现 = 最强「零数据出门」保证，关于页注明）。 */
   telemetry: boolean;
+  /** 完成通知开关（缺省开 = 与既有行为一致）：窗口不在前台时，run 收束发系统通知。 */
+  notifyOnComplete: boolean;
   /** M5b §m5-proposal 步骤 9：bandit 在线学习开关（缺省 false = 零行为，不写 routing-bandit.json）。 */
   routingBandit: boolean;
   /** M5b 步骤 10 的产品侧接法（任务 #45）：pipeline 环跑完若**客观判据**（worker 事件流里的
@@ -146,6 +148,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   onboarded: false,
   updateManifestUrl: "",
   telemetry: false,
+  notifyOnComplete: true,
   routingBandit: false,
   routingCascade: false,
   provider: "demo",
@@ -175,13 +178,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   uiSize: "2",
 };
 
-const SAFE_MODES = ["off", "report", "gate"] as const;
-const THEMES = ["system", "light", "dark"] as const;
-const LOCALES = ["zh-CN", "en-US"] as const;
+export const SAFE_MODES = ["off", "report", "gate"] as const;
+export const THEMES = ["system", "light", "dark"] as const;
+export const LOCALES = ["zh-CN", "en-US"] as const;
 /** 字号三档（与 tokens.css 的 html[data-text-size=…] 选择器逐字对应——改一处必须改另一处）。 */
-const TEXT_SIZES = ["sm", "md", "lg"] as const;
+export const TEXT_SIZES = ["sm", "md", "lg"] as const;
 /** 尺寸五档（与 tokens.css 的 html[data-ui-size="…"] 选择器逐字对应——改一处必须改另一处）。 */
-const UI_SIZES = ["1", "2", "3", "4", "5"] as const;
+export const UI_SIZES = ["1", "2", "3", "4", "5"] as const;
 /** 设置面可持久化的主会话 provider 的**内置**子集：demo + 四个真实 adapter。
  *  自定义 provider 不在这个字面量里（它们是运行时才知道的），由 `isPersistableProvider` 一并放行。 */
 export const PROVIDER_KINDS = ["demo", ...ENV_KEYED_PROVIDERS] as const;
@@ -251,6 +254,8 @@ export function validateSettings(raw: unknown): AppSettings {
     onboarded: typeof r.onboarded === "boolean" ? r.onboarded : d.onboarded,
     updateManifestUrl: typeof r.updateManifestUrl === "string" ? r.updateManifestUrl : d.updateManifestUrl,
     telemetry: typeof r.telemetry === "boolean" ? r.telemetry : d.telemetry,
+    // 缺省开的键走 `d.` 回退（promptCache 同族）：老 settings.json 没有这个键时保持「发通知」。
+    notifyOnComplete: typeof r.notifyOnComplete === "boolean" ? r.notifyOnComplete : d.notifyOnComplete,
     routingBandit: typeof r.routingBandit === "boolean" ? r.routingBandit : d.routingBandit,
     routingCascade: typeof r.routingCascade === "boolean" ? r.routingCascade : d.routingCascade,
     actionFusion: r.actionFusion === true,
@@ -288,8 +293,23 @@ export function validateSettings(raw: unknown): AppSettings {
 }
 
 /** settings 存储：内存缓存 + 每次写盘（原子写），多实例（重新加载 = 新实例）读到磁盘真相。 */
+/** 首次读盘发现的问题。`missing` 不算：新档案没有文件是正常的。 */
+export interface SettingsLoadIssue {
+  kind: "invalid-json" | "unreadable";
+  message: string;
+  /** 出问题的那个文件（界面横幅/CLI 警告要能指向盘上位置）。 */
+  path: string;
+}
+
 export class SettingsStore {
   private cache: AppSettings | null = null;
+  /** 只记第一次读盘的结论；写盘成功后清空（文件已被修好）。字段级回退（宽度越界之类）不在此列。 */
+  private issue: SettingsLoadIssue | null = null;
+
+  /** 调用方（CLI 提示 / 设置页横幅）据此把「你的设置没有生效」说出来，而不是静默用缺省。 */
+  loadIssue(): SettingsLoadIssue | null {
+    return this.issue;
+  }
   /* 写队列。此前「取合并基 → 写盘 → 更新缓存」三步之间没有串行化，同窗口两笔 set 会撞两台：
      ① 临时文件名只用 pid + 毫秒（那次硬化治的是**跨进程**固定名覆写，同进程同毫秒仍是同一个名）
        ⇒ 先 rename 的把文件搬走，后 rename 的直接抛 ENOENT，用户看到「保存设置失败」而屏幕已经改了；
@@ -302,15 +322,45 @@ export class SettingsStore {
   /** 读取：首读落盘校验（坏文件回退默认），后续走缓存。 */
   async get(): Promise<AppSettings> {
     if (this.cache) return this.cache;
-    let raw: unknown = null;
-    try {
-      raw = JSON.parse(await readFile(this.filePath, "utf8")) as unknown;
-    } catch {
-      raw = null; // 文件不存在 / JSON 损坏 → 默认（验收②）
+    const read = await this.readDisk();
+    // 首读可能晚于另一笔 get/set 完成，迟到的旧结果不能覆盖已更新的缓存（也不能把已修好的文件记成坏的）。
+    if (this.cache === null) {
+      this.cache = read.settings;
+      if (read.issue !== null) this.issue = read.issue;
     }
-    // 首读可能晚于另一笔 get/set 完成，迟到的旧结果不能覆盖已更新的缓存。
-    if (this.cache === null) this.cache = validateSettings(raw);
     return this.cache;
+  }
+
+  /** 重新读盘（外部修好/改坏文件后由设置页「重新读取」触发）：丢掉缓存与旧失败结论，按盘上内容重来。
+   *  排在写队列里——不能与在写的 patch 交错，否则会把刚写的字段读回旧值。 */
+  async reload(): Promise<AppSettings> {
+    const next = this.writes.then(async () => {
+      const read = await this.readDisk();
+      this.cache = read.settings;
+      this.issue = read.issue; // 修好 ⇒ 清空；仍坏 ⇒ 换成这一次的结论
+      return this.cache;
+    });
+    this.writes = next.catch(() => undefined);
+    return next;
+  }
+
+  private async readDisk(): Promise<{ settings: AppSettings; issue: SettingsLoadIssue | null }> {
+    let raw: unknown = null;
+    let issue: SettingsLoadIssue | null = null;
+    try {
+      const text = await readFile(this.filePath, "utf8");
+      try {
+        raw = JSON.parse(text) as unknown;
+      } catch (error) {
+        issue = { kind: "invalid-json", message: `JSON 解析失败：${error instanceof Error ? error.message : String(error)}`, path: this.filePath };
+      }
+    } catch (error) {
+      // 文件不存在 = 新档案（不是问题）；其余（权限 / 路径是目录）都该被说出来。
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        issue = { kind: "unreadable", message: `读取失败：${error instanceof Error ? error.message : String(error)}`, path: this.filePath };
+      }
+    }
+    return { settings: validateSettings(raw), issue };
   }
 
   /** 部分更新：深合并 layout，其余浅合并；原子写盘后返回新值。写入按发起顺序串行。 */
@@ -351,6 +401,7 @@ export class SettingsStore {
     }
     await this.persist(persisted);
     this.cache = validated;
+    this.issue = null;
     return validated;
   }
 

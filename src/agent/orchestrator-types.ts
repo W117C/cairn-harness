@@ -278,6 +278,26 @@ export interface OrchestratorOptions {
    *  只有 harness 的自动拍会跑——这正是「给 worker 的是 autoVerify 证据拍，不是 manual verify 门」。
    *  它产出的证据由 W4b 的 `agent_result.artifacts.verified` 如实标注（含 stale/absent）。 */
   workerVerify?: (repoDir: string) => VerifyHook;
+  /** worker 的自动验证返修：与主会话 `autoVerifyRepair` 同一个设置位；只在 workerVerify 接线时
+   *  有意义。缺省 false = 今日零行为（自动红只落证据、不再要一轮）。 */
+  workerAutoVerifyRepair?: boolean;
+  /** worker 验证红时的经验提醒（宿主注入；缺省 undefined = 零行为）：读主 workspace 的 active 经验，
+   *  只在 worker 会继续修的自动红上调用；不写 assignment、不改变验证语义。 */
+  workerExperienceNudge?: (input: {
+    agentId: string;
+    task: string;
+    mode: "read" | "write";
+    toolNames: readonly string[];
+    signals: readonly string[];
+  }) => Promise<{ note: string; ids: readonly string[] }>;
+  /** worker 起点经验注记（宿主注入；缺省 undefined = 零行为）：按任务面把 active 经验
+   *  接在记忆之后、任务书之前。返回空串 = 不注入；抛错/读不动由编排器吞掉并出声，不阻塞 worker。 */
+  workerExperienceNote?: (input: {
+    agentId: string;
+    task: string;
+    mode: "read" | "write";
+    toolNames: readonly string[];
+  }) => Promise<string>;
   /** §9.10「worker 继承主会话插件启用集」：worker 的 runLoop 拿同一个钩子引擎跑
    *  PreToolUse / PostToolUse / PostToolUseFailure。
    *  **缺省 undefined = 零行为**——那正是此前的状态：worker 有 write_file / edit_file / 可写 shell，

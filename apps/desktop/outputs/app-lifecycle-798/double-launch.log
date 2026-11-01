@@ -1,0 +1,15 @@
+userData=/tmp/cairn-si-ud.EYhpaH
+workspace=/tmp/cairn-si-ws.hx2x16
+first_instance_processes_before=4
+second_instance_exit=0
+second_instance_ms=421
+first_instance_processes_after=4
+second_instance_scheduler_lines=0
+first_instance_scheduler_lines=1
+--- second stderr ---
+sandbox_extension_issue_file_to_process failed for /Users/ze/Downloads/Cairn/cairn/apps/desktop/node_modules/electron/dist/Electron.app: 1 (Operation not permitted)
+--- first tail ---
+sandbox_extension_issue_file_to_process failed for /Users/ze/Downloads/Cairn/cairn/apps/desktop/node_modules/electron/dist/Electron.app: 1 (Operation not permitted)
+[byok-inject] 启动注入：无可注入 key（未存或 env 优先）
+[scheduler] journal 保留收敛完成（当前 0 条）
+[m4a] 调度器已启动（桌面端常驻接线：快照/CRUD/触发同实例）

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { Popover } from "../src/renderer/components/Popover";
+import { menuNavIndex } from "../src/renderer/components/popover-keys";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
@@ -56,5 +57,18 @@ describe("共享化哨兵（单源约束）", () => {
     const containsAt = pop.indexOf("!ref.current.contains");
     expect(guardAt).toBeGreaterThan(-1);
     expect(containsAt).toBeGreaterThan(guardAt);
+  });
+});
+
+describe("菜单键盘导航（菜单按钮 / 项目弹层共用）", () => {
+  it("↑↓ 环形、Home/End 直达两端；焦点在触发框时 ↓ 落首项、↑ 落末项", () => {
+    expect(menuNavIndex("ArrowDown", -1, 3)).toBe(0);
+    expect(menuNavIndex("ArrowUp", -1, 3)).toBe(2);
+    expect(menuNavIndex("ArrowDown", 2, 3)).toBe(0);
+    expect(menuNavIndex("ArrowUp", 0, 3)).toBe(2);
+    expect(menuNavIndex("Home", 1, 5)).toBe(0);
+    expect(menuNavIndex("End", 1, 5)).toBe(4);
+    expect(menuNavIndex("Tab", 1, 5)).toBeNull();
+    expect(menuNavIndex("ArrowDown", 0, 0)).toBeNull();
   });
 });

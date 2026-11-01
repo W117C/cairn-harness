@@ -1,7 +1,7 @@
 // M4a 定时任务单测：任务模型校验矩阵 / 双轨存储 / next-run 计算 / 准入三闸 / catchUp 补跑 /
 // occurrenceKey 去重 / unattended 语义前置（tier 映射）/ summarizeRun 投影。
 // 时钟/抖动/执行器全部注入，禁真实 sleep 等触发（超时双闸用毫秒级真实定时器测机制本身）。
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -153,6 +153,20 @@ describe("M4a 任务模型（automations.ts）", () => {
 });
 
 describe("M4a 双轨存储", () => {
+  it("任务定义损坏 ⇒ upsert / remove 拒绝覆盖（文件字节不变，无 tmp 残留）", async () => {
+    const { s, data } = makeScheduler();
+    await mkdir(data, { recursive: true });
+    const file = join(data, "automations.json");
+    await writeFile(file, "{ 不是 JSON", "utf8");
+    const up = await s.upsert(base({ id: makeUlid() }));
+    expect(up.ok).toBe(false);
+    if (!up.ok) expect(up.errors.join()).toMatch(/调度任务文件损坏/);
+    const del = await s.remove("whatever");
+    expect(del.ok).toBe(false);
+    expect(await readFile(file, "utf8"), "被拒的写把坏档盖掉了").toBe("{ 不是 JSON");
+    expect((await readdir(data)).filter((f) => f.includes(".tmp"))).toEqual([]);
+  });
+
   it("automations.json 原子写往返 + 无 .tmp 残留", async () => {
     const file = join(dir, "automations.json");
     const v = validateAutomation(base({ id: makeUlid() }));
@@ -172,6 +186,10 @@ describe("M4a 双轨存储", () => {
     await writeFile(bad, "{ 不是 JSON", "utf8");
     const r1 = await loadAutomationsFile(bad);
     expect(r1.tasks).toHaveLength(0);
+    // 坏文件与缺文件必须分开：缺文件是空清单，坏文件要标记 corrupt（写路径据此拒绝覆盖）。
+    expect(r1.corrupt, "坏 JSON 没有标 corrupt ⇒ 下一次 upsert 会把整份任务表盖掉").toBe(true);
+    expect(r1.warnings.join()).toMatch(/调度任务文件损坏/);
+    expect((await loadAutomationsFile(join(dir, "absent.json"))).corrupt).toBe(false);
     const partial = join(dir, "partial.json");
     const good = validateAutomation(base({ id: makeUlid() }));
     if (!good.ok) throw new Error("fixture invalid");
@@ -179,6 +197,7 @@ describe("M4a 双轨存储", () => {
     const r2 = await loadAutomationsFile(partial);
     expect(r2.tasks).toHaveLength(1);
     expect(r2.warnings.join()).toContain("无效已跳过");
+    expect(r2.corrupt, "坏条目被跳过不是文件损坏：写路径仍可继续").toBe(false);
   });
 
   it("journal append-only + 坏行跳过 + occurrenceKey 去重查询", async () => {
@@ -898,5 +917,66 @@ describe("同根多实例：journal 去重与任务表合并", () => {
     expect(r2.ok).toBe(true);
     const disk = await loadAutomationsFile(join(data, "automations.json"));
     expect(disk.tasks.map((t) => t.name).sort()).toEqual(["任务 A", "任务 B"]);
+  });
+});
+
+// 2026-10-30：装载问题必须出现在**快照**里。桌面端没有控制台可看——只 `console.warn` 的后果
+// 是「automations.json 坏了 ⇒ 页面写着还没有定时任务，新建又被拒」，用户无从知道原因。
+describe("调度快照把装载问题带上屏（桌面无控制台）", () => {
+  it("坏档 ⇒ warnings 点名文件与出路、definitionsCorrupt=true、任务表空", async () => {
+    const { s, data } = makeScheduler();
+    await mkdir(data, { recursive: true });
+    const file = join(data, "automations.json");
+    await writeFile(file, "{ 不是 JSON", "utf8");
+    await s.start();
+    try {
+      const snap = await s.snapshot();
+      expect(snap.tasks).toEqual([]);
+      expect(snap.definitionsCorrupt, "坏档没有标 corrupt ⇒ 面板无从解释任务为什么空了").toBe(true);
+      expect(snap.warnings.join()).toMatch(/调度任务文件损坏/);
+      expect(snap.warnings.join()).toContain(file);
+    } finally { s.stop(); }
+  });
+
+  it("缺文件 ⇒ 快照无警告（缺席不是失败）", async () => {
+    const { s } = makeScheduler();
+    await s.start();
+    try {
+      const snap = await s.snapshot();
+      expect(snap.warnings).toEqual([]);
+      expect(snap.definitionsCorrupt).toBe(false);
+    } finally { s.stop(); }
+  });
+
+  it("坏条目被跳过 ⇒ 有警告但 definitionsCorrupt=false（写路径仍可继续）", async () => {
+    const { s, data } = makeScheduler();
+    await mkdir(data, { recursive: true });
+    const good = validateAutomation(base({ id: makeUlid() }));
+    if (!good.ok) throw new Error("fixture invalid");
+    await writeFile(join(data, "automations.json"), JSON.stringify({ version: 1, tasks: [good.value, { name: "坏条目" }] }), "utf8");
+    await s.start();
+    try {
+      const snap = await s.snapshot();
+      expect(snap.tasks).toHaveLength(1);
+      expect(snap.definitionsCorrupt).toBe(false);
+      expect(snap.warnings.join()).toContain("无效已跳过");
+    } finally { s.stop(); }
+  });
+
+  it("修好盘上坏档后 upsert 成功 ⇒ 快照警告清空（不许永远挂着旧失败）", async () => {
+    const { s, data } = makeScheduler();
+    await mkdir(data, { recursive: true });
+    const file = join(data, "automations.json");
+    await writeFile(file, "{ 不是 JSON", "utf8");
+    await s.start();
+    try {
+      expect((await s.snapshot()).definitionsCorrupt).toBe(true);
+      await writeFile(file, JSON.stringify({ version: 1, tasks: [] }), "utf8");
+      const up = await s.upsert(base({ id: makeUlid() }));
+      expect(up.ok).toBe(true);
+      const snap = await s.snapshot();
+      expect(snap.definitionsCorrupt).toBe(false);
+      expect(snap.warnings).toEqual([]);
+    } finally { s.stop(); }
   });
 });

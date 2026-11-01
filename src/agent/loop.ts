@@ -8,6 +8,7 @@ import { SubmissionLedger, submissionRequestId } from "./submission-ledger";
 import type { LegacyNextProvider, ModelOutput, Provider } from "../providers";
 import { streamFromNextSource } from "../providers";
 import { failureDigest, repeatDigestNote, verifyOutcomeCause, type VerifyHook, type VerifyOutcome } from "./verify";
+import { goalDriftFindings } from "./goal-drift";
 import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckTurn } from "./stuck";
 // M10②：无进展阶梯接进运行循环（此前 `no-progress.ts` 全树零生产消费者，只在门里跑）。
 // 取的全是纯判据：`no-progress.ts` 只做判断，出声与措辞在本文件（判据别抄第二份）。
@@ -50,6 +51,11 @@ export interface LoopOptions {
   plan?: PlanChannel;
   /** 验证门钩子：接了才支持 verify 反射循环（成功即停 / 上限耗尽即停）。 */
   verify?: VerifyHook;
+  /** verify 代码红 / 重复动作卡死时取一条有界的经验提醒（Cairn Evolve 快环）：只在失败回执里出现，
+   *  不改系统提示、不改变验证/卡死语义。返回的 ids 会随 tool_result 落盘，供 Episode 归因。
+   *  缺省缺席 = 逐字旧行为。 */
+  experienceNudge?: (signals: readonly string[]) =>
+    Promise<{ note: string; ids: readonly string[] }> | { note: string; ids: readonly string[] };
   /** 能力 5（收束闸）：本轮写过盘但模型自始至终没自调 verify 时，harness 在收束前补一拍验证，
    *  把「说了」和「验了」分开——红字落 verify_result{auto:true} 进事件流（证据拍，不改写模型上下文）。
    *  **缺省 false**：一拍 = 真跑一遍 lint/test（有成本，且 action-fusion 的「验证执行次数」记账
@@ -378,11 +384,28 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     // 开了 autoVerifyRepair 时，调用方据 "auto-red" 再要一轮模型去修（环境红不算——那是机器的账）。
     if (auto) {
       // 自动拍同样要有配对结果（无论 stop 还是 auto-red）。
+      // 返修轮会给模型再要一轮：把同一套快环经验提醒接在这条自动红上；没开返修则不读。
+      let autoNudge = "";
+      let autoNudgeIds: string[] = [];
+      if (!outcome.ok && !envBeat && opts.autoVerifyRepair === true && opts.experienceNudge !== undefined) {
+        try {
+          const nudged = await opts.experienceNudge([
+            "verify:red",
+            ...(cause === undefined ? [] : ["verify-cause:" + cause]),
+          ]);
+          autoNudge = nudged.note;
+          autoNudgeIds = [...nudged.ids];
+        } catch (err) {
+          console.warn("[evolve] 自动验证经验提醒失败（不影响返修）: "
+            + (err instanceof Error ? err.message : String(err)));
+        }
+      }
       await events.append({
         type: "tool_result",
         callId,
         ok: outcome.ok,
-        output: outcome.ok ? "[verify] 自动验证通过" : "[verify] 自动验证未通过",
+        output: redactSecrets((outcome.ok ? "[verify] 自动验证通过" : "[verify] 自动验证未通过") + autoNudge).text,
+        ...(autoNudgeIds.length > 0 ? { nudgeExperienceIds: autoNudgeIds } : {}),
       });
       return outcome.ok || envBeat ? "stop" : "auto-red";
     }
@@ -445,6 +468,23 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       ? `\n[no-progress] ${which}——同一条路再走一遍不会改变结论：换一个探针（改命令 / 换靶子 / 先 read 那个一直在报错的文件）或说明卡点。`
       : "";
     if (noProgressNote !== "") nudgedNoProgress.add(npKey);
+    // 快环经验提醒：只在**这条红会让模型继续修**时去读；环境红不读（不是代码问题），
+    // 自动拍未开返修时也不读（模型不会再有下一轮，读了是白花 IO）。失败不外抛。
+    let experienceNote = "";
+    let nudgeExperienceIds: string[] = [];
+    if (!envBeat && opts.experienceNudge !== undefined && (!auto || opts.autoVerifyRepair === true)) {
+      try {
+        const nudged = await opts.experienceNudge([
+          "verify:red",
+          ...(cause === undefined ? [] : ["verify-cause:" + cause]),
+        ]);
+        experienceNote = nudged.note;
+        nudgeExperienceIds = [...nudged.ids];
+      } catch (err) {
+        console.warn("[evolve] verify 经验提醒失败（不影响验证回流）: "
+          + (err instanceof Error ? err.message : String(err)));
+      }
+    }
     await events.append({
       type: "tool_result",
       callId,
@@ -452,7 +492,8 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       // 同一拍验证的**第二份**原文在下面这行（failureDigest 把 results 整段拼进来）。
       // verify_result 与这份 tool_result 都走同一个落盘/投影脱敏 choke-point：
       // 不会让门里掩码、门口放行。`lastVerifyDigest` 的比对仍用同一脱敏副本，口径一致。
-      output: redactSecrets(envPreface + (repeat ? repeatDigestNote(outcome, attempt) : digest) + noProgressNote).text,
+      output: redactSecrets(envPreface + (repeat ? repeatDigestNote(outcome, attempt) : digest) + noProgressNote + experienceNote).text,
+      ...(nudgeExperienceIds.length > 0 ? { nudgeExperienceIds } : {}),
     });
     return envBeat ? "environment-red" : "continue";
   };
@@ -513,6 +554,10 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
 
   /** 撞帽位（#69）：步数已尽而模型仍在调工具 ⇒ 让这一段也走一次收束闸，再落回循环外那条 throw。 */
   let capReached = false;
+  /** 当前模型回合的正文（goal-drift 检测用）：以 tool_call 断段，遇 drift 时把经验接到该回执。 */
+  let assistantTurnText = "";
+  const driftNudged = new Set<string>();
+  let pendingDriftNudge = false;
   for (let step = 0; step < maxSteps; step++) {
     // 三个出口都补落：r3/r4 实测那一趟停在 `plan_proposed`，循环内那次根本没跑到。
     // 被取消 / 验证通过或达上限 / 模型自然收束——这三条出去时承诺都还没对过账。
@@ -552,12 +597,26 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     let onlyVerifyReplays = true;
     for await (const output of streamFn(projectContext(seen))) {
       if (output.type !== "tool_call") {
+        if (output.type === "assistant_delta") assistantTurnText += output.text;
+        else if (output.type === "assistant_message") assistantTurnText += output.content;
         await events.append(output);
         // 截断是一个**收束语义**的事实，不是普通输出：记下来供收束段判「它其实没说完」。
         if (output.type === "turn_truncated") truncatedThisRun = true;
         continue;
       }
       sawToolCall = true;
+      // goal-drift：本轮正文里明说范围/目标变了 ⇒ 下一个工具回执带一条 goal-drift 经验。
+      // 每个命中只取一次（run 内去重）；同轮多次工具调用只在第一条回执带上。
+      {
+        const findings = goalDriftFindings([assistantTurnText]).filter((finding) => {
+          const key = finding.rule + "\u0000" + finding.quote;
+          if (driftNudged.has(key)) return false;
+          driftNudged.add(key);
+          return true;
+        });
+        if (findings.length > 0) pendingDriftNudge = true;
+        assistantTurnText = "";
+      }
       // 重复 id 回用原提交，参数/工具名变化也不算新调用。历史只保留原调用与回执，
       // 不能只再 append 一条 tool_call 而不配结果，下一轮模型照常读取第一次的完整回执。
       const requestId = submissionRequestId(opts.agentId ?? "main", output.id);
@@ -606,6 +665,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
 
         // ---- verify 反射循环（系统门：优先于权限门与 TOOLS，但不越过上面的工具表硬闸）----
         if (output.name === "verify") {
+          pendingDriftNudge = false; // verify 回执有独立通道；不把漂移提醒夹带到验证系统门
           if (!opts.verify) {
             await events.append({
               type: "tool_result",
@@ -787,6 +847,37 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
               : `\n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次拿到相同结果（比对取前 200 字）——再问一次不会有新信息：换一个探针或说明为何仍需重复。`;
           }
         }
+        // 卡死提醒之后同样给一条快环经验：同一个动作连续失败/同结果时，最相关的重复动作 lesson
+        // 只在**这次卡死真的被提示时**取一次；与 verify 提醒共用去重集（调用方闭包负责）。
+        let stuckExperienceNote = "";
+        let stuckNudgeIds: string[] = [];
+        if (repeatNote !== "" && opts.experienceNudge !== undefined && !opts.signal?.aborted) {
+          try {
+            const nudged = await opts.experienceNudge(["repeat-action"]);
+            stuckExperienceNote = nudged.note;
+            stuckNudgeIds = [...nudged.ids];
+          } catch (err) {
+            console.warn("[evolve] 卡死经验提醒失败（不影响主流程）: "
+              + (err instanceof Error ? err.message : String(err)));
+          }
+        }
+        // 漂移提醒：本轮正文里明说范围/目标变了 ⇒ 在这一条工具回执里给 active 的 goal-drift 经验。
+        // 去重由 driftNudged 负责；callback 缺席时只清 pending，不产生任何行为。
+        let driftExperienceNote = "";
+        let driftNudgeIds: string[] = [];
+        if (pendingDriftNudge) {
+          pendingDriftNudge = false;
+          if (opts.experienceNudge !== undefined) {
+            try {
+              const nudged = await opts.experienceNudge(["goal-drift"]);
+              driftExperienceNote = nudged.note;
+              driftNudgeIds = [...nudged.ids];
+            } catch (err) {
+              console.warn("[evolve] 目标漂移经验提醒失败（不影响主流程）: "
+                + (err instanceof Error ? err.message : String(err)));
+            }
+          }
+        }
         // M2e：PostToolUse（成功）/ PostToolUseFailure（失败）——additionalContext 回注 tool_result 尾部
         let postContext = "";
         if (opts.hooks && !opts.signal?.aborted) {
@@ -812,7 +903,10 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           // 于是缺 output 的工具落盘成字面量 `"undefined"`、对象落成 `"[object Object]"`——
           // 模型拿到一条"有回执但读不懂"的 tool_result，比明确说"这条回执没有正文"更坏。
           // （2026-10-23 实测：插件/MCP 工具是运行期才拿到的，类型上的 `output: string` 管不到它们。）
-          output: redactSecrets(readToolOutput(result.output) + postContext + repeatNote).text,
+          output: redactSecrets(readToolOutput(result.output) + postContext + repeatNote + stuckExperienceNote + driftExperienceNote).text,
+          ...([...stuckNudgeIds, ...driftNudgeIds].length > 0
+            ? { nudgeExperienceIds: [...stuckNudgeIds, ...driftNudgeIds] }
+            : {}),
           // 执行面没有这把工具：上面 `if (!tool)` 只造了 `result`，落盘在这一格 ⇒ 原因也在这里补，
           // 而不是在分支里改 `result`（那是工具的返回体，不是闸的留痕）。
           ...(tool === undefined ? { blockedBy: "unknown-tool" } : {}),

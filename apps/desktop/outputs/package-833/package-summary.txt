@@ -1,0 +1,17 @@
+packaged smoke:
+[cairn-smoke] PASS in 1420 ms
+[package] 完成（已验证打包态）：/Users/ze/Downloads/Cairn/cairn/apps/desktop/release-833/Cairn.app
+
+install smoke:
+[install-smoke] PASS：从 DMG 拖出的 Cairn.app 启动并通过打包态冒烟
+
+release contents:
+Cairn.app
+Cairn.dmg
+build-info.json
+
+app size:
+407M	apps/desktop/release-833/Cairn.app
+
+dmg:
+149M apps/desktop/release-833/Cairn.dmg

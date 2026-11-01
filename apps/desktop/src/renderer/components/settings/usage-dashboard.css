@@ -1,6 +1,7 @@
 .sp-body > .ss-page.usage-dashboard { max-width: 1040px; }
 .usage-dashboard { --ud-input: hsl(var(--accent-brand)); --ud-output: hsl(var(--text-300)); font-variant-numeric: tabular-nums; }
 .ud-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-lg); }
+.ud-header-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; flex-shrink: 0; }
 .ud-header .ss-desc { margin-bottom: 0; }
 .ud-refresh { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 0 11px; border: 1px solid var(--hairline); border-radius: var(--radius-field); color: hsl(var(--text-200)); font-size: var(--fs-body-sm); }
 .ud-refresh:hover:not(:disabled), .ud-range button:hover, .ud-sort select:hover { background: var(--alpha-2); }

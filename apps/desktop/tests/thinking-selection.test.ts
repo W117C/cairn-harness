@@ -25,9 +25,11 @@ describe("思考档位：空屏选择", () => {
   it("拨一下：空屏改 pending，会话内改该会话；非法档位 null（不猜、不夹紧）", () => {
     expect(thinkingChangeTarget(null, "high")).toEqual({ kind: "pending", level: "high" });
     expect(thinkingChangeTarget("s1", "low")).toEqual({ kind: "session", sessionId: "s1", level: "low" });
-    expect(thinkingChangeTarget(null, "max")).toBeNull();
+    expect(thinkingChangeTarget(null, "max")).toEqual({ kind: "pending", level: "max" });
+    expect(thinkingChangeTarget(null, "xhigh")).toBeNull();
     expect(thinkingChangeTarget("s1", undefined)).toBeNull();
     expect(isThinkingEffort("medium")).toBe(true);
+    expect(isThinkingEffort("max")).toBe(true);
     expect(isThinkingEffort("")).toBe(false);
   });
 
@@ -41,8 +43,8 @@ describe("思考档位：空屏选择", () => {
 
   it("接线：芯片读 composerThinking；建会话时 seed；旧的空屏直接 return 不得复活", () => {
     const surface = readAppSurface();
-    expect(surface).toContain("composerThinking(activeId, pendingThinking, thinkingBySession.current)");
-    expect(surface).toContain("seedNewSessionThinking(newId, pendingThinking, thinkingBySession.current)");
+    expect(surface).toContain("composerThinking(activeId, pendingThinking, thinkingBySession.current, activeWorkspace)");
+    expect(surface).toContain("seedNewSessionThinking(newId, pendingThinking, thinkingBySession.current, runWorkspace)");
     expect(surface).toContain("setPendingThinking(change.level)");
     expect(surface).not.toContain("activeId === null ? undefined : thinkingBySession.current.get(activeId)");
   });

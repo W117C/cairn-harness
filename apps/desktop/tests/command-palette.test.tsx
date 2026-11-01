@@ -33,6 +33,7 @@ const base = {
   onOpenSession: () => undefined,
   onSwitchWorkspace: () => undefined,
   onOpenSettings: () => undefined,
+  onOpenDestination: () => undefined,
   onAction: () => undefined,
 };
 
@@ -67,6 +68,12 @@ describe("① PaletteContent SSR（命令面板内容面）", () => {
     expect(html).toContain("cairn");
     // 设置页目的地链路在（分区入口样例）
     expect(html).toContain("模型与 Provider");
+    // 一级页面目的地独立成组，不再冒充设置分区。
+    expect(html).toContain("页面");
+    expect(html).toContain("对话");
+    expect(html).toContain("插件");
+    expect(html).toContain("记忆");
+    expect(html).toContain("自动化");
   });
 
   it("无会话无项目：操作与设置组仍在（空数据不摆空组也不空屏）", () => {
@@ -98,11 +105,12 @@ describe("② ShortcutsSection（设置页「快捷键」区）", () => {
 });
 
 describe("③ 同源哨兵（tooltip 与表同源，防漂移）", () => {
-  it("Sidebar tooltip 键位从 SHORTCUTS 取（withKeys 三处 + keysOf 内取）", () => {
+  it("Sidebar 键位 tooltip 从 SHORTCUTS 取；会话搜索不冒充命令面板", () => {
     expect(sidebarSrc).toContain('from "../shortcuts"');
     expect(sidebarSrc).toContain('withKeys(STR.sidebar.newTaskTip, "new-session")');
-    expect(sidebarSrc).toContain('withKeys(STR.sidebar.searchTip, "palette")');
     expect(sidebarSrc).toContain('withKeys(STR.footer.settingsTip, "settings")');
+    expect(sidebarSrc).toContain('title={STR.sidebar.searchTip}');
+    expect(sidebarSrc).not.toContain('withKeys(STR.sidebar.searchTip, "palette")');
     expect(sidebarSrc).toContain("keysOf(id)");
   });
 
@@ -113,10 +121,13 @@ describe("③ 同源哨兵（tooltip 与表同源，防漂移）", () => {
     expect(missing).toEqual([]);
   });
 
-  it("strings.ts 三处 tooltip 不再手写键位（新任务 / 搜索会话与命令 / 设置）", () => {
+  it("strings.ts 三处 tooltip 不再手写键位，搜索只描述会话筛选", () => {
     expect(stringsSrc).not.toContain("新任务（⌘N）");
     expect(stringsSrc).not.toContain("搜索会话与命令（⌘K）");
+    expect(stringsSrc).not.toContain("搜索会话与命令");
     expect(stringsSrc).not.toContain("设置（⌘,）");
+    expect(stringsSrc).toContain('search: "搜索会话"');
+    expect(stringsSrc).toContain('searchTip: "搜索会话"');
   });
 });
 
@@ -301,5 +312,22 @@ describe("技能去重（评审修）", () => {
       { invoke: "/p:demo", description: "skill", trust: "pending" },
       { invoke: "/other", description: "x", trust: "trusted" },
     ]);
+  });
+});
+
+describe("⑥ 面板键位提示全部走表（第 910 页：文件头自己写的契约）", () => {
+  it("cp-keys 里不许出现手写字面键位", () => {
+    // CommandPalette.tsx 第 3 行写着「键位提示从 SHORTCUTS 表取（keysOf——单一事实源，防漂移）」，
+    // 但单会话动作那行曾硬编码 <span className="cp-keys">F2</span> —— 违反的是自家契约。
+    const literals = [...paletteSrc.matchAll(/className="cp-keys">([^<{][^<]*)</g)].map((m) => m[1].trim());
+    expect(literals, "这些键位提示是手抄的，改绑定就会说谎：" + literals.join(" / ")).toEqual([]);
+  });
+
+  it("重命名动作的提示从表里取，且表里确有这一档", () => {
+    expect(paletteSrc).toContain('const renameKeys = keysOf("rename")');
+    const shortcuts = readFileSync(fileURLToPath(new URL("../src/renderer/shortcuts.ts", import.meta.url)), "utf8");
+    expect(shortcuts).toContain('{ id: "rename", keys: "F2", label: "重命名当前会话" }');
+    // 反向自证：不是把提示删掉了事——渲染分支仍在（值为 null 才不摆）。
+    expect(paletteSrc).toContain('{renameKeys !== null && <span className="cp-keys">{renameKeys}</span>}');
   });
 });

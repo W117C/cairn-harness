@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { ChevronRight, FileText, Folder } from "lucide-react";
 import type { DirEntryView } from "../../../../../src/main/workspace-fs";
+import { formatBytes } from "../derived/format-bytes";
 
 /** 快速打开的目标路径 → 需要预展开的祖先目录（不含文件本身）。
  *  纯函数，判卷可直接钉；命令面板的文件快速打开与 FilePane 的树展开共用这一把尺。 */
@@ -204,7 +205,7 @@ export function FilePane(props: {
               >
                 <FileText size={12} aria-hidden="true" />
                 <span className="fp-name">{e.name}</span>
-                {e.size !== null && <span className="fp-size num">{e.size}</span>}
+                {e.size !== null && <span className="fp-size num">{formatBytes(e.size) ?? "—"}</span>}
               </button>
             );
           })}
@@ -216,7 +217,9 @@ export function FilePane(props: {
     <div className="file-pane">
       <div className="file-tree" role="tree" aria-label="文件树" onKeyDown={onTreeKeyDown}>{renderDir("", 0)}</div>
       <div className="file-preview">
-        {preview === null && <div className="fp-note">点文件预览（只读；写入由 agent 走审批）</div>}
+        {preview === null && (
+          <div className="pane-empty">左边选一个文件，这里看内容。<br />预览只读；改文件走 agent 的审批卡。</div>
+        )}
         {preview !== null && (
           <div className="fp-preview-head">
             <div className="fp-preview-path" title={preview.path}>{preview.path}</div>

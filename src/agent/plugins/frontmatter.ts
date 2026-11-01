@@ -2,6 +2,8 @@
 // 只做 YAML 子集：key: value 标量、一层嵌套 map（metadata 等）、行内数组；解析失败返回空
 // frontmatter + 保留原文（扩展内容是数据不是代码，永不因 frontmatter 缺陷炸加载器）。
 
+import { isRecord } from "../../is-record";
+
 export interface ParsedMarkdown {
   frontmatter: Record<string, unknown>;
   body: string;
@@ -67,7 +69,7 @@ export function parseFrontmatter(text: string): ParsedMarkdown {
       const nestedKey = safeKey(nested[1]);
       if (nestedKey === null) continue;
       const cur = ownValue(fm, lastTop);
-      if (typeof cur === "object" && cur !== null && !Array.isArray(cur)) {
+      if (isRecord(cur)) {
         (cur as Record<string, unknown>)[nestedKey] = parseScalar(nested[2]);
       } else {
         const obj: Record<string, unknown> = {};

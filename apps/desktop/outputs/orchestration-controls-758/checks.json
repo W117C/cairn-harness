@@ -1,0 +1,306 @@
+{
+  "passed": 23,
+  "total": 23,
+  "checks": [
+    {
+      "name": "任务窗格里出现编排计划且阶段可读",
+      "ok": true,
+      "detail": {
+        "pane": true,
+        "goal": "计划 核对编排控制面",
+        "phase": "proposed",
+        "phaseText": "待批准",
+        "taskPhases": [
+          "running",
+          "failed",
+          "done"
+        ]
+      }
+    },
+    {
+      "name": "三个任务按夹具阶段落在面板上",
+      "ok": true,
+      "detail": [
+        "running",
+        "failed",
+        "done"
+      ]
+    },
+    {
+      "name": "待批准阶段只有批准/拒绝/取消计划",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "未批准时不摆「启用执行」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "面板不出现引擎必然拒绝的手动交付按钮",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "运行中任务只能暂停/取消，不给接管或重试",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "失败且有次数的任务只给重试",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "已交付任务在有后端回滚能力时给回滚",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "取消计划第一次点只摆确认、不发命令",
+      "ok": true,
+      "detail": {
+        "armed": "确认取消计划",
+        "commands": 0
+      }
+    },
+    {
+      "name": "确认态对读屏也改名（aria-label 跟着走）",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "返回撤回确认且仍未发命令",
+      "ok": true,
+      "detail": {
+        "commands": 0
+      }
+    },
+    {
+      "name": "批准后阶段前进，且执行仍是一步单独的操作",
+      "ok": true,
+      "detail": {
+        "phase": "approved",
+        "enable": true
+      }
+    },
+    {
+      "name": "批准命令落账",
+      "ok": true,
+      "detail": {
+        "address": {
+          "workspace": "/tmp/demo-ws",
+          "sessionId": "s1"
+        },
+        "command": {
+          "request_id": "c7a00863-c629-4096-bca2-1cef18cdd4de",
+          "plan_id": "plan-fixture",
+          "version": 1,
+          "action": "approve_plan"
+        }
+      }
+    },
+    {
+      "name": "取消任务第一次点只摆确认",
+      "ok": true,
+      "detail": {
+        "commands": 1
+      }
+    },
+    {
+      "name": "第二次点才真的取消任务并落账",
+      "ok": true,
+      "detail": {
+        "state": {
+          "phase": "cancelled",
+          "text": "已取消"
+        },
+        "last": {
+          "address": {
+            "workspace": "/tmp/demo-ws",
+            "sessionId": "s1"
+          },
+          "command": {
+            "request_id": "6da015c5-ecb6-434d-8c69-99975b7455b1",
+            "plan_id": "plan-fixture",
+            "version": 1,
+            "action": "cancel_task",
+            "task_id": "t0"
+          }
+        }
+      }
+    },
+    {
+      "name": "重试把任务放回队列并消耗一次尝试",
+      "ok": true,
+      "detail": {
+        "state": {
+          "phase": "queued",
+          "meta": "t1 · 尝试 2/2 · 证据 验证失败 · 裁决 未通过"
+        },
+        "last": {
+          "address": {
+            "workspace": "/tmp/demo-ws",
+            "sessionId": "s1"
+          },
+          "command": {
+            "request_id": "d6575328-4624-41d6-80d4-528722c2ebba",
+            "plan_id": "plan-fixture",
+            "version": 1,
+            "action": "retry_task",
+            "task_id": "t1"
+          }
+        }
+      }
+    },
+    {
+      "name": "回滚第一次点只摆确认",
+      "ok": true,
+      "detail": {
+        "commands": 3
+      }
+    },
+    {
+      "name": "第二次点才发回滚命令",
+      "ok": true,
+      "detail": {
+        "address": {
+          "workspace": "/tmp/demo-ws",
+          "sessionId": "s1"
+        },
+        "command": {
+          "request_id": "127c2af2-19a7-4da1-93f8-5590767e6498",
+          "plan_id": "plan-fixture",
+          "version": 1,
+          "action": "rollback_task",
+          "task_id": "t2"
+        }
+      }
+    },
+    {
+      "name": "暂停计划把计划停在已暂停",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "恢复计划回到已批准",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "取消计划两次后计划结束且不再摆动作",
+      "ok": true,
+      "detail": {
+        "phase": "cancelled",
+        "actions": 0
+      }
+    },
+    {
+      "name": "每条命令都带 plan/version/request_id",
+      "ok": true,
+      "detail": [
+        "approve_plan",
+        "cancel_task",
+        "retry_task",
+        "rollback_task",
+        "pause_plan",
+        "resume_plan",
+        "cancel_plan"
+      ]
+    },
+    {
+      "name": "全程无控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "commands": [
+    {
+      "address": {
+        "workspace": "/tmp/demo-ws",
+        "sessionId": "s1"
+      },
+      "command": {
+        "request_id": "c7a00863-c629-4096-bca2-1cef18cdd4de",
+        "plan_id": "plan-fixture",
+        "version": 1,
+        "action": "approve_plan"
+      }
+    },
+    {
+      "address": {
+        "workspace": "/tmp/demo-ws",
+        "sessionId": "s1"
+      },
+      "command": {
+        "request_id": "6da015c5-ecb6-434d-8c69-99975b7455b1",
+        "plan_id": "plan-fixture",
+        "version": 1,
+        "action": "cancel_task",
+        "task_id": "t0"
+      }
+    },
+    {
+      "address": {
+        "workspace": "/tmp/demo-ws",
+        "sessionId": "s1"
+      },
+      "command": {
+        "request_id": "d6575328-4624-41d6-80d4-528722c2ebba",
+        "plan_id": "plan-fixture",
+        "version": 1,
+        "action": "retry_task",
+        "task_id": "t1"
+      }
+    },
+    {
+      "address": {
+        "workspace": "/tmp/demo-ws",
+        "sessionId": "s1"
+      },
+      "command": {
+        "request_id": "127c2af2-19a7-4da1-93f8-5590767e6498",
+        "plan_id": "plan-fixture",
+        "version": 1,
+        "action": "rollback_task",
+        "task_id": "t2"
+      }
+    },
+    {
+      "address": {
+        "workspace": "/tmp/demo-ws",
+        "sessionId": "s1"
+      },
+      "command": {
+        "request_id": "e1ed6c59-96c1-4bed-9e6c-686e01fcb460",
+        "plan_id": "plan-fixture",
+        "version": 1,
+        "action": "pause_plan"
+      }
+    },
+    {
+      "address": {
+        "workspace": "/tmp/demo-ws",
+        "sessionId": "s1"
+      },
+      "command": {
+        "request_id": "8c920c0c-f034-424d-b8c9-0113584b8836",
+        "plan_id": "plan-fixture",
+        "version": 1,
+        "action": "resume_plan"
+      }
+    },
+    {
+      "address": {
+        "workspace": "/tmp/demo-ws",
+        "sessionId": "s1"
+      },
+      "command": {
+        "request_id": "9a65b9be-85de-42a3-8bea-233904695026",
+        "plan_id": "plan-fixture",
+        "version": 1,
+        "action": "cancel_plan"
+      }
+    }
+  ]
+}

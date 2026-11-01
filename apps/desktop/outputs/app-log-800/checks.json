@@ -1,0 +1,13 @@
+{
+  "fixtureData": false,
+  "checks": [
+    { "name": "真实启动后 userData/logs/main.log 存在", "ok": true, "detail": "307 B，3 行" },
+    { "name": "启动行带 ISO 时间与级别（info / warn）", "ok": true, "detail": "byok-inject 启动注入 / scheduler journal 收敛 / m4a 调度器已启动" },
+    { "name": "日志目录在 userData 下（不是仓内或 /tmp 外溢）", "ok": true, "detail": "<userData>/logs/main.log" }
+  ],
+  "readings": {
+    "unit": "apps/desktop/tests/app-log.test.ts 8/8 绿（含轮转与写失败不抛）",
+    "smoke": "apps/desktop/scripts/smoke.mjs PASS in 1435 ms",
+    "evidence": "apps/desktop/outputs/app-log-800/boot-log.txt"
+  }
+}

@@ -1127,7 +1127,7 @@ export const MUTATIONS = [
     src: "src/cli.ts",
     test: "tests/plugin-cli-face.test.ts",
     desc: "取值型旗标表漏了这两枚 ⇒ `--trust-plugin demo` 把 demo 读成任务描述，决议落错地方还报成功",
-    apply: (s) => s.replace(`    "--trust-plugin", "--decline-plugin",\n`, ""),
+    apply: (s) => s.replace(`  "--trust-plugin", "--decline-plugin",\n`, ""),
     expectFail: "批准后信任表里那条是「绝对路径@内容指纹」，再列一次就成了 trusted",
   },
   {

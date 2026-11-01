@@ -1,0 +1,66 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+ ❯ tests/run-queue-session.test.tsx (10 tests | 2 failed) 118ms
+   ❯ send keeps the active conversation (7)
+     × sends the addressed workspace's model and thinking for a same-id background conversation 8ms
+     × creates once from home, then appends the next message to that conversation 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/run-queue-session.test.tsx > send keeps the active conversation > sends the addressed workspace's model and thinking for a same-id background conversation
+AssertionError: expected "vi.fn()" to be called with arguments: [ ObjectContaining{…} ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+-   ObjectContaining {
++   {
++     "message": "continue B",
++     "mode": "default",
+      "model": "model-b",
+      "sessionId": "same",
+      "thinking": "low",
+-     "workspace": "/b",
+    },
+  ]
+
+
+Number of calls: 1
+
+ ❯ tests/run-queue-session.test.tsx:53:23
+     51|     deps.thinkingBySession.current = new Map([[runKey("/a", "same"), "…
+     52|     await render().sendTo("same", "/b", "continue B");
+     53|     expect(agent.run).toHaveBeenCalledWith(expect.objectContaining({ s…
+       |                       ^
+     54|   });
+     55|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/run-queue-session.test.tsx > send keeps the active conversation > creates once from home, then appends the next message to that conversation
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'created', …(2) ]
+
+Number of calls: 0
+
+ ❯ tests/run-queue-session.test.tsx:75:35
+     73|     expect(deps.setActiveWorkspace).toHaveBeenCalledWith("/workspace");
+     74|     expect(deps.activate).toHaveBeenCalledWith("created");
+     75|     expect(agent.sessionPrefsSet).toHaveBeenCalledWith("created", { th…
+       |                                   ^
+     76|     deps.activeId = deps.activeIdRef.current = "created";
+     77|     deps.activeWorkspace = "/workspace";
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 8 passed (10)
+   Start at  16:08:01
+   Duration  380ms (tests 38%, transform 32%, import 29%, worker 1%)
+
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run tests/run-queue-session.test.tsx '--maxWorkers=1'

@@ -1,0 +1,70 @@
+{
+  "filter": {
+    "x": 280,
+    "y": 93,
+    "w": 30,
+    "h": 30
+  },
+  "menu": {
+    "has": true,
+    "roles": [
+      {
+        "role": "menuitem",
+        "text": "上传文件…系统选择器 · 可多选",
+        "checked": null
+      },
+      {
+        "role": "menuitem",
+        "text": "添加文件夹…目录内文本按引用读取",
+        "checked": null
+      },
+      {
+        "role": "menuitem",
+        "text": "粘贴截图（⌘V）从系统剪贴板取图片",
+        "checked": null
+      },
+      {
+        "role": "menuitem",
+        "text": "引用最近文件0",
+        "checked": null
+      },
+      {
+        "role": "menuitemradio",
+        "text": "全部3",
+        "checked": "true"
+      },
+      {
+        "role": "menuitemradio",
+        "text": "运行中0",
+        "checked": "false"
+      },
+      {
+        "role": "menuitemradio",
+        "text": "已置顶0",
+        "checked": "false"
+      },
+      {
+        "role": "menuitemradio",
+        "text": "已归档0",
+        "checked": "false"
+      },
+      {
+        "role": "menuitemradio",
+        "text": "定时任务0",
+        "checked": "false"
+      },
+      {
+        "role": "menuitemcheckbox",
+        "text": "紧凑视图（28px）",
+        "checked": "false"
+      }
+    ]
+  },
+  "item": {
+    "x": 199,
+    "y": 330,
+    "text": "紧凑视图（28px）",
+    "checked": "false"
+  },
+  "errors": []
+}

@@ -34,6 +34,22 @@ describe("流底渐隐", () => {
     expect(css).toContain(".stream-fade-top");
     expect(css).toContain("position: sticky; top: 0; z-index: 2;");
     expect(hook).toContain("atTop: boolean;");
-    expect(hook).toContain("setAtTop(el.scrollTop <= 1);");
+    expect(hook).toContain("setAtTop(el.scrollTop <= AT_TOP_PX);");
+    expect(hook).toContain("const AT_TOP_PX = 2;");
+  });
+
+  it("7 档非线性 alpha（2026-10-31）：底边/顶边各 8 个 stop，贴边不透明、向内容透明", () => {
+    const css = read("styles.css");
+    for (const edge of ["stream-fade-bottom", "stream-fade-top"]) {
+      const block = css.match(new RegExp(`\\.${edge}\\s*\\{[^}]*\\}`, "s"))?.[0] ?? "";
+      expect(block).toContain("hsl(var(--bg-100) / 1)");
+      expect(block).toContain("hsl(var(--bg-100) / .85) 13%");
+      expect(block).toContain("hsl(var(--bg-100) / .70) 25%");
+      expect(block).toContain("hsl(var(--bg-100) / .50) 40%");
+      expect(block).toContain("hsl(var(--bg-100) / .30) 55%");
+      expect(block).toContain("hsl(var(--bg-100) / .15) 70%");
+      expect(block).toContain("hsl(var(--bg-100) / .05) 85%");
+      expect(block).toContain("hsl(var(--bg-100) / 0) 100%");
+    }
   });
 });

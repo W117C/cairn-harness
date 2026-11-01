@@ -1,0 +1,11 @@
+=== 造红：文件窗格退回裸字节数（{e.size}）→ 重建 dist → 跑画廊自查 ===
+[gallery] FAIL Error: 文件行大小没带单位（要 B/KB/MB）：["2140","880"]
+gallery exit=1
+
+=== 复原（sha256 与造红前逐字一致）→ 重建 → 再跑 ===
+[gallery] 文件行大小自查: ["2.1 KB","880 B"]
+EXIT=0
+
+=== sha256（复原后两处相同）===
+e88d4766f24a168a5bddd9b833486375132bd37b6e23d79738cd857c13f9840d  apps/desktop/src/renderer/components/FilePane.tsx
+e88d4766f24a168a5bddd9b833486375132bd37b6e23d79738cd857c13f9840d  ../.tmp/FilePane.final-951.tsx

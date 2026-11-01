@@ -1,13 +1,15 @@
 // 派生层·时间线面（纯投影）：事件流 → 步骤序列 / 轮次时间线。
 // I3 契约：只吃 AgentEvent[]，只吐值；不读时钟、不取随机、不做 IO、不留模块级可变态。
 import type { AgentEvent } from "../../../../../src/main/ipc-protocol";
+import { formatTokens } from "./format-tokens";
 import { summarize } from "./stream";
+import { toolVerb } from "./tool-verbs";
 import { isWorkerSubflowEvent } from "./session";
 import type { StreamRow } from "./stream";
 
 /** 步骤时间线（P3-2 检查器「时间线」Tab 的数据面）——事件日志 → 步骤序列。
  *  「只取在场字段，不编时间」：at 直接取事件 ts（缺席即不给），label 是在场文本的截断。
- *  落步口径：user_message → user 步；tool_call → tool 步（name + 摘要）；
+ *  落步口径：user_message → user 步；tool_call → tool 步（中文动词 + 摘要，未知工具回落原名）；
  *  assistant 内容在真实 provider 是 delta-only（aggregate 终稿是 mock/demo 通道的产品）⇒
  *  **每个 callId 的首个 delta** 落一个 assistant 步（后续 delta 并入——与「回放到此步」的
  *  段落开头语义一致）；assistant_message 终稿是独立一笔事件，照落（demo 通道会同时有两者，
@@ -26,11 +28,6 @@ const TIMELINE_LABEL_MAX = 60;
 const timelineLabel = (text: string): string => {
   const flat = text.replace(/\s+/g, " ").trim();
   return flat.length <= TIMELINE_LABEL_MAX ? flat : flat.slice(0, TIMELINE_LABEL_MAX) + "…";
-};
-const fmtTokens = (n: number): string => {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return String(n);
 };
 
 export function timelineItems(events: readonly AgentEvent[]): TimelineItem[] {
@@ -53,10 +50,10 @@ export function timelineItems(events: readonly AgentEvent[]): TimelineItem[] {
         out.push({ eventId, kind: "assistant", label: timelineLabel(e.content), ...(e.ts !== undefined ? { at: e.ts } : {}) });
         break;
       case "tool_call":
-        out.push({ eventId, kind: "tool", label: timelineLabel(`${e.name} ${summarize(e.args)}`), ...(e.ts !== undefined ? { at: e.ts } : {}) });
+        out.push({ eventId, kind: "tool", label: timelineLabel(`${toolVerb(e.name) ?? e.name} ${summarize(e.name, e.args)}`), ...(e.ts !== undefined ? { at: e.ts } : {}) });
         break;
       case "usage":
-        out.push({ eventId, kind: "usage", label: `输入 ${fmtTokens(e.inputTokens)} · 输出 ${fmtTokens(e.outputTokens)}`, ...(e.ts !== undefined ? { at: e.ts } : {}) });
+        out.push({ eventId, kind: "usage", label: `输入 ${formatTokens(e.inputTokens)} · 输出 ${formatTokens(e.outputTokens)}`, ...(e.ts !== undefined ? { at: e.ts } : {}) });
         break;
       default:
         break; // clarify/plan/error 等：对话面有专卡/专行，时间线不为它们立步

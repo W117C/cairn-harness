@@ -2,6 +2,7 @@
 // ESM 命名空间不可 spy（见 secrets.test.ts 同型注释）⇒ 用 mock 工厂把 open/readFile
 // 包一层真实现：行为走真的，调用面走 mock.calls，用来钉「列表到底读了多少文件」。
 import { appendFile, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   return { ...actual, open: vi.fn(actual.open), readFile: vi.fn(actual.readFile) };
@@ -18,7 +19,9 @@ import {
   deleteSession,
   deriveSessionTitle,
   isValidSessionName,
+  listSessionIds,
   listSessions,
+  sessionNameProblem,
   listSidechatSessions,
   pathOf,
   readSessionQueue,
@@ -108,6 +111,28 @@ describe("会话列表存储（M1e：JSONL 即会话）", () => {
     expect(isValidSessionName("")).toBe(false);
     await expect(createSession(root, "x/y")).rejects.toThrow();
     await expect(deleteSession(root, "不存在")).rejects.toThrow();
+  });
+
+  it("UI sidecar 保留名：新建/改名拒（同名会互相污染），老 id 仍可寻址", async () => {
+    for (const id of ["pins", "feedback"]) {
+      // 老档案里真叫 pins 的会话仍要能读/续跑 ⇒ 路径安全层放行；新建层拒绝。
+      expect(isValidSessionName(id), id + " 路径安全，老 id 不该读不了").toBe(true);
+      expect(sessionNameProblem(id)).toContain("保留名");
+      await expect(createSession(root, id)).rejects.toThrow(/保留名/);
+    }
+    const legacy = await createSession(root, "旧名");
+    await expect(renameSession(root, legacy, "pins")).rejects.toThrow(/保留名/);
+    // 不撞 .jsonl 扩展名的 sidecar（projects.json / session-metadata.json）不占名字。
+    expect(sessionNameProblem("projects")).toBeNull();
+    expect(sessionNameProblem("session-metadata")).toBeNull();
+  });
+
+  it("sidecar 文件首行坏掉也不会被列成会话（保留名按文件名挡，不靠内容判形态）", async () => {
+    await writeFile(join(root, "pins.jsonl"), "{oops\n", "utf8");
+    await writeFile(join(root, "feedback.jsonl"), "{oops\n", "utf8");
+    await createSession(root, "真会话");
+    expect((await listSessions(root)).map((s) => s.id)).toEqual(["真会话"]);
+    expect(await listSessionIds(root)).toEqual(["真会话"]);
   });
 
   it("mtime 降序（最近在上）——当前会话回退取列表首个的数据面", async () => {
@@ -225,6 +250,43 @@ describe("会话发送队列 sidecar（重启恢复的数据面）", () => {
       writeSessionQueue(root, id, [{ text: "x", attachments: [{ path: "", kind: "file", explicit: true }] }]),
     ).rejects.toThrow(/attachments/);
     expect(await readSessionQueue(root, id)).toEqual([]);
+  });
+
+  it("队列 sidecar 坏掉：读拒（带出路），写也拒绝覆盖且字节不变；删掉后可恢复", async () => {
+    const id = await createSession(root, "坏队列");
+    const p = queuePath(id);
+    await writeFile(p, "{oops", "utf8");
+    await expect(readSessionQueue(root, id)).rejects.toThrow(/修好或删除该文件后重试/);
+    await expect(writeSessionQueue(root, id, [{ text: "新消息", attachments: [] }]))
+      .rejects.toThrow(/已拒绝覆盖/);
+    expect(await readFileSpy(p, "utf8"), "坏档被覆盖 = 用户还能手工抢救的内容没了").toBe("{oops");
+
+    await rm(p, { force: true });
+    await writeSessionQueue(root, id, [{ text: "新消息", attachments: [] }]);
+    expect((await readSessionQueue(root, id))[0]?.text).toBe("新消息");
+  });
+
+  it("另一个进程持有会话锁时删除/改名被拒；陈旧锁不挡且随操作清掉", async () => {
+    const id = await createSession(root, "被占用");
+    const p = pathOf(root, id);
+    await writeFile(`${p}.lock`, JSON.stringify({ pid: process.pid, nonce: "probe", startedAt: new Date().toISOString() }) + "\n", "utf8");
+    await expect(deleteSession(root, id)).rejects.toThrow(/会话正在运行，先停止再删除/);
+    await expect(renameSession(root, id, "改名")).rejects.toThrow(/会话正在运行，先停止再重命名/);
+    expect((await listSessions(root)).map((s) => s.id), "被拒的删除/改名不许动会话").toEqual(["被占用"]);
+
+    // 陈旧锁（死 pid）不挡；删除后残留锁随会话清掉。
+    await writeFile(`${p}.lock`, JSON.stringify({ pid: 2_147_483_647, nonce: "dead", startedAt: "2026-01-01T00:00:00.000Z" }) + "\n", "utf8");
+    await deleteSession(root, id);
+    expect(await listSessions(root)).toEqual([]);
+    expect(existsSync(`${p}.lock`), "崩溃遗留的锁不该留在已删除的会话旁边").toBe(false);
+
+    // 改名同理：陈旧锁不挡，旧路径的锁随改名清掉。
+    const again = await createSession(root, "带旧锁");
+    const from = pathOf(root, again);
+    await writeFile(`${from}.lock`, JSON.stringify({ pid: 2_147_483_647, nonce: "dead", startedAt: "2026-01-01T00:00:00.000Z" }) + "\n", "utf8");
+    const renamed = await renameSession(root, again, "新名字");
+    expect(renamed).toBe("新名字");
+    expect(existsSync(`${from}.lock`)).toBe(false);
   });
 
   it("孤儿 sidecar 不被同名新会话继承（JSONL 被外部删掉后留下的队列不许易主）", async () => {

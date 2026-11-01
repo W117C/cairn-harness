@@ -21,6 +21,7 @@
 // 老 sidecar（本次改动之前写的）原样加载，新字段**保持缺席**（不补默认值）——`SCHEMA_VERSION` 不动。
 import { readFile } from "node:fs/promises";
 import { writeFileAtomic } from "../atomic-write";
+import { isRecord } from "../is-record";
 
 const SCHEMA_VERSION = 1 as const;
 const MAX_SESSION_ID_LENGTH = 80;
@@ -56,6 +57,10 @@ export interface SessionMetadataRecord extends SessionAuditFields {
   pinned: boolean;
   archived: boolean;
   projectId?: string;
+  /** 会话级模型（registry id）。**缺席 = 跟随全局设置**；清除即摘掉这一格（不存 null）。 */
+  model?: string;
+  /** 会话级思考档（provider 声明的 level）。**缺席 = 跟随全局/会话缺省**。 */
+  thinking?: string;
   /** sidecar 记录首次建立时间；老会话首次被组织时也以真实建档时间为准，不反推虚构创建时刻。 */
   createdAt: string;
   /** 本 sidecar 的最后一次写入时刻 ＝「会话平面的最后活动」的唯一真身（不另立 lastActivityAt）。 */
@@ -73,13 +78,10 @@ export interface SessionMetadataRepositoryOptions {
 
 export class SessionMetadataCorruptError extends Error {
   constructor(filePath: string, reason: string) {
-    super(`会话元数据损坏，已拒绝覆盖: ${filePath} (${reason})`);
+    // 出路跟着拒因一起给：这句话会原样上屏（会话列表的失败行），只说「损坏」用户不知道下一步。
+    super(`会话元数据损坏，已拒绝覆盖: ${filePath} (${reason})——修好或删除该文件后重试`);
     this.name = "SessionMetadataCorruptError";
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isSessionId(value: unknown): value is string {
@@ -101,6 +103,12 @@ function isProjectId(value: unknown): value is string {
     value.trim() === value &&
     !/[\\/\u0000-\u001f\u007f]/.test(value)
   );
+}
+
+/** 会话偏好字符串（模型 id / 思考档）：非空、去首尾空白不变、无控制字符、长度受限。 */
+export function isSessionPreferenceString(value: unknown, max: number): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= max
+    && value.trim() === value && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
 function isTimestamp(value: unknown): value is string {
@@ -133,6 +141,8 @@ function validateMetadata(raw: unknown, key: string): SessionMetadataRecord {
   if (typeof raw.pinned !== "boolean") throw new Error(`sessions.${key}.pinned 非法`);
   if (typeof raw.archived !== "boolean") throw new Error(`sessions.${key}.archived 非法`);
   if (raw.projectId !== undefined && !isProjectId(raw.projectId)) throw new Error(`sessions.${key}.projectId 非法`);
+  if (raw.model !== undefined && !isSessionPreferenceString(raw.model, 200)) throw new Error(`sessions.${key}.model 非法`);
+  if (raw.thinking !== undefined && !isSessionPreferenceString(raw.thinking, 40)) throw new Error(`sessions.${key}.thinking 非法`);
   if (!isTimestamp(raw.createdAt) || !isTimestamp(raw.updatedAt)) throw new Error(`sessions.${key} 时间戳非法`);
   // 审计字段：老记录**没有**这些字段（合法，必须原样加载且保持缺席）；有则校验。
   if (raw.viewedAt !== undefined && !isTimestamp(raw.viewedAt)) throw new Error(`sessions.${key}.viewedAt 非法`);
@@ -152,6 +162,8 @@ function validateMetadata(raw: unknown, key: string): SessionMetadataRecord {
     pinned: raw.pinned,
     archived: raw.archived,
     ...(raw.projectId !== undefined ? { projectId: raw.projectId } : {}),
+    ...(raw.model !== undefined ? { model: raw.model } : {}),
+    ...(raw.thinking !== undefined ? { thinking: raw.thinking } : {}),
     // 审计字段**原样保留缺席**：不补 0 / false / epoch 0（缺席的含义写在 SessionAuditFields 上）。
     ...(raw.viewedAt !== undefined ? { viewedAt: raw.viewedAt } : {}),
     ...(raw.archivedAt !== undefined ? { archivedAt: raw.archivedAt } : {}),
@@ -270,6 +282,26 @@ export class SessionMetadataRepository {
         return withoutProject;
       }
       return { ...record, projectId };
+    });
+  }
+
+  /** 会话级偏好（模型 / 思考档）。语义：undefined = 不改；null = 摘掉（回到跟随全局）。 */
+  async setPrefs(id: string, patch: { model?: string | null; thinking?: string | null }): Promise<SessionMetadataRecord> {
+    if (patch.model !== undefined && patch.model !== null && !isSessionPreferenceString(patch.model, 200)) {
+      throw new Error(`会话 model 非法: ${JSON.stringify(patch.model)}`);
+    }
+    if (patch.thinking !== undefined && patch.thinking !== null && !isSessionPreferenceString(patch.thinking, 40)) {
+      throw new Error(`会话 thinking 非法: ${JSON.stringify(patch.thinking)}`);
+    }
+    return await this.mutate(id, (record) => {
+      const next = { ...record };
+      if (patch.model !== undefined) {
+        if (patch.model === null) delete next.model; else next.model = patch.model;
+      }
+      if (patch.thinking !== undefined) {
+        if (patch.thinking === null) delete next.thinking; else next.thinking = patch.thinking;
+      }
+      return next;
     });
   }
 

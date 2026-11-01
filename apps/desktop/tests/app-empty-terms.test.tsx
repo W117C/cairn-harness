@@ -8,7 +8,7 @@ import { DIAGNOSTICS_TEXT } from "../src/renderer/components/settings-sections";
 
 const noop = (): void => undefined;
 const PLUGINS_EMPTY = { plugins: [], looseSkills: [], mcpServers: [], toolScopes: [], errors: [], warnings: [] };
-const SCHED_EMPTY = { tasks: [], history: [], running: 0, queued: 0, cap: 2, startupDone: true, tzNotes: {} };
+const SCHED_EMPTY = { tasks: [], history: [], running: 0, queued: 0, cap: 2, startupDone: true, tzNotes: {}, warnings: [], definitionsCorrupt: false };
 const MEM_EMPTY = {
   project: { path: "/w/.agent/memory", index: null, topics: [], pendingExternalRefs: [] },
   global: { path: "/u/memory", index: null, topics: [], pendingExternalRefs: [] },
@@ -56,7 +56,7 @@ describe("批 6：四页空状态（数据为 0 只显示 EmptyState，不摆统
         refresh={noop}
       />,
     );
-    expect(h).toContain("ap-head");
+    expect(h).toContain("page-frame");
     expect(h).toContain("ap-grid");
     expect(h).not.toContain("ap-stats");
     expect(h).not.toContain("还没有技能");

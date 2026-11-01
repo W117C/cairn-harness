@@ -108,7 +108,7 @@ export const MUTATIONS = [
     src: "src/agent/loop.ts",
     test: "tests/tool-result-malformed.test.ts",
     desc: "落盘回执用隐式 String() ⇒ 缺 output 落成字面量 undefined、对象落成 [object Object]：模型拿到一条『有回执但读不懂』的 tool_result",
-    apply: (s) => s.replace("          output: redactSecrets(readToolOutput(result.output) + postContext + repeatNote).text,", "          output: redactSecrets(String(result.output) + postContext + repeatNote).text,"),
+    apply: (s) => s.replace("          output: redactSecrets(readToolOutput(result.output) + postContext + repeatNote + stuckExperienceNote + driftExperienceNote).text,", "          output: redactSecrets(String(result.output) + postContext + repeatNote + stuckExperienceNote + driftExperienceNote).text,"),
     expectFail: "★ output = 对象 ⇒ **序列化出来**（不是 [object Object]）",
   },
   {
@@ -380,9 +380,10 @@ export const MUTATIONS = [
     src: "src/agent/loop.ts",
     test: "tests/loop-repeat-nudge.test.ts",
     desc: "检测照跑、提示却没落进 tool_result（模型看到的仍是裸错误 ⇒ 换路压力为零，重复照旧烧到 maxSteps）",
-    // 针脚随 f6ed0552 重指：落盘那一行改成 readToolOutput(result.output) 取料（畸形结构守卫），
-    // 变异体仍是「照旧取料但不追换路提示」——被守护的东西没变，只是取料那一半换了形态。
-    apply: (s) => s.replace("output: redactSecrets(readToolOutput(result.output) + postContext + repeatNote).text,", "output: redactSecrets(readToolOutput(result.output) + postContext).text,"),
+    // 针脚随「stuck/drift 经验提醒」与 f6ed0552 重指：落盘那一行仍是
+    // readToolOutput(result.output) 取料；变异体只丢掉 repeatNote（其余提醒照旧），
+    // 被守护的「重复提示必须挂上」没有变。
+    apply: (s) => s.replace("output: redactSecrets(readToolOutput(result.output) + postContext + repeatNote + stuckExperienceNote + driftExperienceNote).text,", "output: redactSecrets(readToolOutput(result.output) + postContext + stuckExperienceNote + driftExperienceNote).text,"),
     expectFail: "同一调用连败 3 次：提示挂在那条 tool_result 尾部，前两次一字不加",
   },
   {
@@ -822,7 +823,7 @@ export const MUTATIONS = [
     src: "src/agent/compaction.ts",
     test: "tests/hook-precompact-producer.test.ts",
     desc: "压缩不再发 PreCompact ⇒ §9.5 表里这一行整条失效，插件作者以为「压缩前备份」在跑，实际一次也没有（发点在 runCompaction 上，摘掉它三条路一起哑）",
-    apply: (s) => s.replace("  if (args.onPreCompact) {", "  if (false && args.onPreCompact) {"),
+    apply: (s) => s.replace("  if (args.onPreCompact && args.prediction !== true) {", "  if (false) {"),
     expectFail: "manual / auto / overflow 三条都发，且 trigger 按 §9.5 表映射（overflow 归 auto）",
   },
   {

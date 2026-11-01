@@ -1,0 +1,10 @@
+=== 造红：产物行退回「丢掉结果」的写法 ===
+     × 产物行接了结果：失败 toast、抛错也 toast 4ms
+AssertionError: expected 'import { useAppCommands } from "./app…' to contain 'revealInFinder(abs).then('
++   /** 关闭查找条（Esc / 面板 × / 菜单）统一出口：关掉并把焦点交回输入框。 */
+      Tests  1 failed | 1 passed (2)
+
+=== 复原后 ===
+      Tests  2 passed (2)
+=== sha256 ===
+   2 cbc2ad5ad9e08c86a19ae9e77547021f8363013a320b195579e78dc8c263b14e

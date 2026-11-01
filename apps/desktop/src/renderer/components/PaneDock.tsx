@@ -5,6 +5,7 @@
 //   本轮窗格：变更（diff 审阅，含逐 hunk 展开）/ 方案 / 任务（多 agent）。subagent 详情并入任务窗格。
 //   空态诚实：无数据即说明（不摆空壳）；价格不可知显式写"价格不可知"（不当 0）。
 // 数据面全部来自 panes.ts 纯投影 + turnDelivery（既有）+ changeDiff（v4 通道，懒加载）。
+import { isCompositionEnter } from "../ime";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 import "./pane-tabs.css";
@@ -12,6 +13,7 @@ import { AlertTriangle, Check, ChevronRight, Crosshair, ExternalLink, Loader2, M
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import type { AgentEvent } from "../../../../../src/events";
 import { turnDelivery } from "../projections";
+import { changeLabel, planActionLabel } from "../derived/change-labels";
 import { diffCount, useLazyChangeDiff } from "../change-diff-state";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { clipDiff, parseUnifiedPatch } from "../diff-patch";
@@ -21,11 +23,11 @@ import { toast } from "../toast";
 import { DiffView } from "./DiffView";
 import { FilePane } from "./FilePane";
 import { PluginSurface } from "./PluginSurface";
-import { SessionPreviewPane } from "./SessionPreviewPane";
+import { SessionPreviewPane,type PreviewSendOutcome } from "./SessionPreviewPane";
 import { SidechatPane } from "./SidechatPane";
 import { OrchestrationPane } from "./OrchestrationPane";
 import { PathMenu } from "./PathMenu";
-import { changedFileCount, composeReviewMessage, PANE_META, PANE_OPENABLE, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, workerCardAction, type PaneKind, type WorkerPaneItem } from "./panes";
+import { changedFileCount, composeReviewMessage, PANE_META, PANE_OPENABLE, paneTabTargetForKey, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, workerCardAction, type PaneKind, type WorkerPaneItem } from "./panes";
 
 // PaneKind / PANE_META 的唯一事实源在 panes.ts（独立窗口路由同用）；此处 re-export 保接口。
 export { PANE_META, PANE_OPENABLE, type PaneKind } from "./panes";
@@ -351,7 +353,7 @@ function BrowserPane(props: {
           placeholder="localhost:5173 或 https://…"
           value={urlDraft}
           onChange={(e) => setUrlDraft(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") go(activeKey, urlDraft); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) go(activeKey, urlDraft); }}
         />
         <button className="mini-btn" onClick={() => go(activeKey, urlDraft)}>打开</button>
         <button
@@ -611,9 +613,19 @@ function ChangesPane(props: {
     : "无需验证";
   const verifyCls = (status: string): string =>
     status === "verified" ? "ok" : status === "failed" ? "bad" : status === "absent" ? "warn" : "dim";
+  // 分栏审阅器的选中项：openKey 就是选中态（与懒加载守卫同源 ⇒ 只在选中后才取差异，不预取）。
+  const selected = (() => {
+    if (openKey === null) return null;
+    for (const t of turns) {
+      for (const f of t.files) {
+        if (`${String(t.round)}:${f.path}` === openKey) return { turn: t, file: f };
+      }
+    }
+    return null;
+  })();
   return (
     <div
-      className="changes-pane"
+      className="changes-pane review-split"
       onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitReview(); } }}
     >
       {comments.size > 0 && props.onReview !== undefined && (
@@ -623,89 +635,103 @@ function ChangesPane(props: {
           <button className="mini-btn" onClick={() => setComments(new Map())}>清除</button>
         </div>
       )}
-      <div className="pane-list">
-      {turns.map((t) => (
-        <section className="pane-card" key={t.round}>
-          <div className="pane-card-head">
-            <span className="pc-title">第 {String(t.round)} 轮</span>
-            <span className="chip">{String(t.files.length)} 个文件</span>
-            <span className={"chip " + verifyCls(t.verification.status)}>{verifyWord(t.verification.status)}</span>
-            <button
-              type="button"
-              className={"pane-card-toggle" + (openRound === t.round ? " on" : "")}
-              aria-expanded={openRound === t.round}
-              aria-label={openRound === t.round ? "收起这一轮的改动" : "展开这一轮的改动"}
-              onClick={() => { setOpenRound(openRound === t.round ? null : t.round); }}
-            ><ChevronRight size={11} /></button>
-          </div>
-          {openRound === t.round && (
-          <>
-          <ul className="changes-list">
-            {t.files.map((f) => {
-              const key = `${String(t.round)}:${f.path}`;
-              const open = openKey === key;
-              return (
-                <li className="change-item-wrap" key={`${f.path}:${f.change}`}>
-                  <button
-                    className={"change-item" + (open ? " open" : "")}
-                    aria-expanded={open}
-                    onClick={() => toggle(key, f.path, f.snapshotId)}
-                    onContextMenu={(e) => { e.preventDefault(); props.onPathMenu?.(f.path, "file", e.clientX, e.clientY); }}
-                  >
-                    <span className="chev" aria-hidden="true"><ChevronRight size={10} /></span>
-                    <span className={"act " + f.change}>
-                      {f.change === "created" ? "新建" : f.change === "modified" ? "修改" : "变更"}
-                    </span>
-                    <span className="path">{f.path}</span>
-                    {f.snapshotId !== undefined && (
-                      <span className="snap" title="覆盖前快照已保留（.agent/snapshots）">快照</span>
-                    )}
-                  </button>
-                  {open && (
-                    <div className="change-diff-zone">
-                      {diff.loading && <div className="pane-empty">正在读快照与当前文件…</div>}
-                      {!diff.loading && diff.payload !== null && (
-                        diff.payload.ok
-                          ? (
-                            <>
-                              <div className="change-diff-stat num">{`+${String(diffCount(diff.payload.hunks).add)} −${String(diffCount(diff.payload.hunks).del)}`}</div>
-                              <DiffView
-                                hunks={diff.payload.hunks}
-                                truncated={diff.payload.truncated}
-                                {...(props.onReview !== undefined
-                                  ? {
-                                      comment: {
-                                        comments,
-                                        keyPrefix: `${f.path}|`,
-                                        onComment: (lineKey: string, text: string) => {
-                                          setComments((prev) => {
-                                            const next = new Map(prev);
-                                            if (text === "") next.delete(lineKey); else next.set(lineKey, text);
-                                            return next;
-                                          });
-                                        },
-                                      },
-                                    }
-                                  : {})}
-                              />
-                            </>
-                          )
-                          : <div className="ap-notice err" role="alert">{diff.payload.error}</div>
-                      )}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-          {t.unverifiedFiles.length > 0 && (
-            <div className="consequence">未验证：{t.unverifiedFiles.join("、")}</div>
+      <div className="review-cols">
+        {/* 左栏：改动文件（按轮折叠的手风琴不动——它仍管「不把 23 轮全摊开」） */}
+        <div className="pane-list review-files">
+          {turns.map((t) => (
+            <section className="pane-card" key={t.round}>
+              <div className="pane-card-head">
+                <span className="pc-title">第 {String(t.round)} 轮</span>
+                <span className="chip">{String(t.files.length)} 个文件</span>
+                <span className={"chip " + verifyCls(t.verification.status)}>{verifyWord(t.verification.status)}</span>
+                <button
+                  type="button"
+                  className={"pane-card-toggle" + (openRound === t.round ? " on" : "")}
+                  aria-expanded={openRound === t.round}
+                  aria-label={openRound === t.round ? "收起这一轮的改动" : "展开这一轮的改动"}
+                  onClick={() => { setOpenRound(openRound === t.round ? null : t.round); }}
+                ><ChevronRight size={11} /></button>
+              </div>
+              {openRound === t.round && (
+              <>
+              <ul className="changes-list">
+                {t.files.map((f) => {
+                  const key = `${String(t.round)}:${f.path}`;
+                  const open = openKey === key;
+                  return (
+                    <li className="change-item-wrap" key={`${f.path}:${f.change}`}>
+                      <button
+                        className={"change-item" + (open ? " open" : "")}
+                        aria-expanded={open}
+                        onClick={() => toggle(key, f.path, f.snapshotId)}
+                        onContextMenu={(e) => { e.preventDefault(); props.onPathMenu?.(f.path, "file", e.clientX, e.clientY); }}
+                      >
+                        <span className="chev" aria-hidden="true"><ChevronRight size={10} /></span>
+                        <span className={"act " + f.change}>
+                          {changeLabel(f.change)}
+                        </span>
+                        <span className="path">{f.path}</span>
+                        {f.snapshotId !== undefined && (
+                          <span className="snap" title="覆盖前快照已保留（.agent/snapshots）">快照</span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              {t.unverifiedFiles.length > 0 && (
+                <div className="consequence">未验证：{t.unverifiedFiles.join("、")}</div>
+              )}
+              {t.nextAction !== "" && <div className="consequence">→ {t.nextAction}</div>}
+              </>
+              )}
+            </section>
+          ))}
+        </div>
+        {/* 右栏：选中文件的差异（Codex / Claude 的改审阅就是「文件列表在左、差异在右」） */}
+        <div className="review-diff">
+          {selected === null ? (
+            <div className="pane-empty">左边选一个文件，这里看它改了什么。<br />选中之前不预取差异——点开才读快照与当前文件。</div>
+          ) : (
+            <>
+              <div className="review-diff-head">
+                <span className={"act " + selected.file.change}>
+                  {changeLabel(selected.file.change)}
+                </span>
+                <span className="path">{selected.file.path}</span>
+                {!diff.loading && diff.payload !== null && diff.payload.ok && (
+                  <span className="change-diff-stat num">{`+${String(diffCount(diff.payload.hunks).add)} −${String(diffCount(diff.payload.hunks).del)}`}</span>
+                )}
+              </div>
+              {diff.loading && <div className="pane-empty">正在读快照与当前文件…</div>}
+              {!diff.loading && diff.payload !== null && (
+                diff.payload.ok
+                  ? (
+                    <DiffView
+                      hunks={diff.payload.hunks}
+                      truncated={diff.payload.truncated}
+                      {...(props.onReview !== undefined
+                        ? {
+                            comment: {
+                              comments,
+                              keyPrefix: `${selected.file.path}|`,
+                              onComment: (lineKey: string, text: string) => {
+                                setComments((prev) => {
+                                  const next = new Map(prev);
+                                  if (text === "") next.delete(lineKey); else next.set(lineKey, text);
+                                  return next;
+                                });
+                              },
+                            },
+                          }
+                        : {})}
+                    />
+                  )
+                  : <div className="ap-notice err" role="alert">{diff.payload.error}</div>
+              )}
+            </>
           )}
-          {t.nextAction !== "" && <div className="consequence">→ {t.nextAction}</div>}
-          </>
-          )}
-        </section>
-      ))}
+        </div>
       </div>
     </div>
   );
@@ -731,7 +757,7 @@ function PlanPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
             {p.files.map((f) => (
               <li className="change-item" key={`${f.action}:${f.path}`}>
                 <span className={"act " + (f.action === "delete" ? "delete" : f.action === "create" ? "created" : "modified")}>
-                  {f.action === "create" ? "新建" : f.action === "delete" ? "删除" : "修改"}
+                  {planActionLabel(f.action)}
                 </span>
                 <span className="path">{f.path}</span>
               </li>
@@ -876,10 +902,16 @@ export function PaneDock(props: {
   inPopout?: boolean;
   /** 命令面板快速打开：文件路径 + 递增序号；PaneDock 激活文件标签，FilePane 展开并预览。 */
   fileTarget?: { path: string; seq: number };
-  /** ⌘+点击侧栏会话：只读预览目标（seq 递增；新目标自动激活「会话」标签）。 */
+  /** 顶栏工具的显式导航；已挂载的目标也要切到前台，不靠 toggle 卸载重建。 */
+  paneTarget?: { kind: PaneKind; seq: number };
+  /** ⌘+点击侧栏会话：预览目标（可继续发送；seq 递增，新目标自动激活「会话」标签）。 */
   sessionPreview?: { id: string; workspace?: string; title: string; seq: number } | null;
   /** 预览头部「切到会话」：把主体会话换过去（预览窗格保留）。 */
   onSwitchSession?: (id: string, workspace?: string) => void;
+  /** 预览窗格继续发送：与主发送共用插话/队列；running = 目标会话此刻的事件态。 */
+  onSessionPreviewSend?: (text: string, running: boolean) => Promise<PreviewSendOutcome>;
+  onSessionPreviewStop?: () => void;
+  onSessionPreviewResume?: () => void;
   /** v6 预览地址：browser 窗格就绪后自动导航到这里（缺省 = 只显示手动地址栏）。 */
   browserUrl?: string;
   /** v7 当前会话 id（sidechat 窗格的父会话面；缺省 = 旁路空态提示先开会话）。 */
@@ -938,6 +970,9 @@ export function PaneDock(props: {
   }, [props.tabs, focusedPane]);
   // 命令面板快速打开：即使文件标签早已开着但不在前台，也要切过去（openPane 只保证标签存在）。
   useEffect(() => {
+    if (props.paneTarget !== undefined) setFocusedPane(props.paneTarget.kind);
+  }, [props.paneTarget]);
+  useEffect(() => {
     if (props.fileTarget !== undefined) setFocusedPane("file");
   }, [props.fileTarget]);
   // ⌘+点击侧栏会话：新目标即激活「会话」标签（即使它早已开着但不在前台）。
@@ -952,7 +987,7 @@ export function PaneDock(props: {
   if (props.tabs.length === 0) {
     return (
       <aside className="pane-dock" aria-label="窗格区">
-        <div className="pane-empty">没有打开的窗格。<br />顶栏「变更」或 ⋮ 菜单可开。</div>
+        <div className="pane-empty">没有打开的窗格。<br />从顶栏「改动」或「工具」打开。</div>
       </aside>
     );
   }
@@ -966,15 +1001,27 @@ export function PaneDock(props: {
           <span key={kind} ref={kind === active ? activeTabRef : undefined} className={"pane-tab" + (kind === active ? " on" : "")}>
             <button className="pane-nav-item" aria-label={`切换到${PANE_META[kind].label}窗格`}
               aria-pressed={kind === active}
-              title={props.onReorder !== undefined ? "⌥↑ / ⌥↓ 调整标签顺序" : undefined}
+              tabIndex={kind === active ? 0 : -1}
+              title={props.onReorder !== undefined ? "←/→ 切换；⌥↑ / ⌥↓ 调整标签顺序" : "←/→ 切换"}
               onKeyDown={(e) => {
-                if (props.onReorder === undefined || e.target !== e.currentTarget) return;
-                if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+                if (e.target !== e.currentTarget) return;
+                if (e.altKey) {
+                  if (props.onReorder === undefined || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+                  const i = props.tabs.indexOf(kind);
+                  const to = reorderTarget(i, e.key, props.tabs.length);
+                  if (to === null) return;
+                  e.preventDefault();
+                  props.onReorder?.(i, to);
+                  return;
+                }
                 const i = props.tabs.indexOf(kind);
-                const to = reorderTarget(i, e.key, props.tabs.length);
-                if (to === null) return;
+                const next = paneTabTargetForKey(e.key, i, props.tabs.length);
+                if (next === null) return;
                 e.preventDefault();
-                props.onReorder?.(i, to);
+                const nextKind = props.tabs[next];
+                if (nextKind === undefined) return;
+                setFocusedPane(nextKind);
+                navItemsRef.current?.querySelectorAll<HTMLButtonElement>(".pane-nav-item")[next]?.focus();
               }}
               onClick={() => setFocusedPane(kind)}>{PANE_META[kind].label}</button>
             {/* 临时预览窗格（session）没有独立窗口路由：弹出后 PopoutApp 拿不到预览目标，
@@ -1045,6 +1092,9 @@ export function PaneDock(props: {
                 <SessionPreviewPane
                   target={props.sessionPreview ?? null}
                   {...(props.onSwitchSession !== undefined ? { onSwitch: props.onSwitchSession } : {})}
+                  {...(props.onSessionPreviewSend !== undefined ? { onSend: props.onSessionPreviewSend } : {})}
+                  {...(props.onSessionPreviewStop !== undefined ? { onStop: props.onSessionPreviewStop } : {})}
+                  {...(props.onSessionPreviewResume !== undefined ? { onResume: props.onSessionPreviewResume } : {})}
                 />
               )}
               </RenderErrorBoundary>

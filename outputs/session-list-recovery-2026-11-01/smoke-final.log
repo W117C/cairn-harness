@@ -1,0 +1,18 @@
+PASS 首次加载不显示空列表
+PASS 重试按钮禁用且错误原因保留
+PASS 旧成功回包不覆盖新列表
+PASS 旧失败不覆盖新成功
+PASS 更新失败保留缓存并说明状态
+PASS light 错误原因可键盘聚焦
+sandbox_extension_issue_file failed for /Users/ze/Downloads/Cairn/cairn/node_modules/.pnpm/electron@44.7.0_supports-color@7.2.0/node_modules/electron/dist/Electron.app/Contents/Frameworks/Electron Helper.app/Contents/Resources: 1 (Operation not permitted)
+PASS light Enter 实际展开错误原因
+PASS light 长路径不撑宽侧栏
+PASS dark 错误原因可键盘聚焦
+PASS dark Enter 实际展开错误原因
+PASS dark 长路径不撑宽侧栏
+PASS 更新失败期间仍能打开缓存会话
+PASS 后台重试保留列表且不叠骨架
+PASS 重试成功清除错误与忙碌标记
+PASS 旧请求结束不解除新请求的忙碌态
+PASS 真实空结果正常显示空态
+PASS 无 renderer 或 preload 错误

@@ -1,0 +1,22 @@
+{
+  "thumbs": [
+    {
+      "alt": "图A",
+      "len": 294
+    },
+    {
+      "alt": "图B",
+      "len": 294
+    },
+    {
+      "alt": "图C",
+      "len": 294
+    }
+  ],
+  "closed": {
+    "open": false,
+    "focus": "预览图片",
+    "focusCls": "md-img-open"
+  },
+  "errors": []
+}

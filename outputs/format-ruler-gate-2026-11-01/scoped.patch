@@ -1,0 +1,75 @@
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 15:47:17
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 15:42:39
+@@ -4301,3 +4301,4 @@
+ 60. **上下文窗口也归同一把尺（第 937 页）**：`formatCtxWindow` 自己一套（12 000 → `12k`、1 000 000 → `1M`），而用量环 / 检查器 / 时间线 / 用量页走 `formatTokens`（`128.0k` / `1.0m`）⇒ 同一个窗口在模型菜单写「128k」、在用量浮层写「128.0k」。`formatCtxWindow` 改成 `formatTokens` 的薄包装（未知/非正仍给「—」），并加一条「必须等于 `formatTokens`」的钉子（七个值逐个比）——再有人在这里写一套 k/M，判据当场红。
+ 61. **CODE-WIKI 是一张能走通的地图（第 938 页）**：地图里的路径有两处少了 `apps/desktop/` 前缀（`tests/markdown.test.tsx`、`scripts/ui-gallery.cjs`），照抄的人按仓库根找不到；它引用的判卷字符串 `标准 · 窗口 128k` 在第 937 页改成 `128.0k` 之后也成了旧话。改指真路径与真引文，并加一把尺：地图里每条路径必须按仓库根解析得到，引用的「标准 · 窗口 …」必须逐字出现在 `render-structure.test.tsx` 里。
+ 62. **evolve 的内容指纹只有一份（第 939 页）**：`digestOf`（sha256 前 16 位）在 candidate / episode / playbook / playbook-store 四处各抄了一份，而这四处的 id（`cand_…` / `ep_…` / playbook 条目 digest / `legacyId`）都靠它派生——长度或算法只要有一处改了，跨模块 id 就静默失配（按 id 查不到，但不报错）。实现收到 `src/agent/evolve/digest.ts`，四处改成 import；判卷钉「16 位 + 空串真值 `e3b0c44298fc1c14`」与「四处 import、src 里只剩一处定义」。
++63. **token / 字节刻度只剩两处实现（第 940 页）**：这两把尺在本仓被反复手抄（用量环 vs 时间线、用量页 vs 环、模型菜单 vs 浮层、附件行 vs 日志窗），每修一处只补了一条局部判据，「下一个人再抄一份」没有机械拦截。新增 `tests/format-rulers.test.ts`：扫渲染层全部 `.ts/.tsx`，除 `derived/format-tokens.ts` 与 `derived/format-bytes.ts` 之外，出现 k/m/M 模板拼装、模板里 `${…} KB|MB`、`Intl` 紧凑记法或 `Math.round(x / 1000)` 都当场红并点名 `文件:行`；另有一条「两把尺本身还在」防止允许名单变成空保护。
+--- /dev/null → tests/format-rulers.test.ts
+--- /dev/null	2026-11-01 15:47:17
++++ b/tests/format-rulers.test.ts	2026-11-01 15:41:46
+@@ -0,0 +1,64 @@
++/** 第 940 页：token 与字节的「尺」只准有 `derived/format-tokens.ts` 与 `derived/format-bytes.ts` 两处实现。
++ *  动因：这两把尺在本仓被反复手抄——用量环 vs 时间线（k/m 两套写法）、用量页 vs 环（1.4万 vs 14.0k）、
++ *  模型菜单 vs 浮层（128k vs 128.0k）、附件行 vs 日志窗（512 vs 512 B / 1024 KB）。每修一处就补一条判据，
++ *  但「下一个人再抄一份」没有机械拦截。这一把就是那个拦截：任何组件/派生模块里出现 k/m/KB/MB 的拼装、
++ *  `Intl` 紧凑记法或 `/1000` 取整，都当场红。
++ */
++import { readdirSync, readFileSync, statSync } from "node:fs";
++import { join } from "node:path";
++import { describe, expect, it } from "vitest";
++
++const ROOT = join(import.meta.dirname, "..");
++const RENDERER = join(ROOT, "apps/desktop/src/renderer");
++
++/** 允许实现这两把尺的文件（相对 renderer 根）。 */
++const ALLOWED = new Set(["derived/format-tokens.ts", "derived/format-bytes.ts"]);
++
++/** 一条「自己拼数字刻度」的痕迹。 */
++const PATTERNS: readonly { name: string; re: RegExp }[] = [
++  { name: "token-k", re: /\$\{[^}]*toFixed\(1\)\}k/gu },
++  { name: "token-m", re: /\$\{[^}]*toFixed\(1\)\}m/gu },
++  { name: "token-M", re: /toFixed\([^)]*\)\}M/gu },
++  // 只认「模板里拼出来的数字 + 单位」：`${n} KB` 这种。错误文案里写「不能超过 1 MB」不算刻度。
++  { name: "byte-unit", re: /`[^`]*\$\{[^}]*\}[^`]*\b(?:KB|MB)\b/gu },
++  { name: "intl-compact", re: /notation:\s*"compact"/gu },
++  { name: "round-k", re: /Math\.round\([^)]*\/\s*1000\)/gu },
++];
++
++function sourceFiles(dir: string): string[] {
++  const out: string[] = [];
++  const walk = (d: string): void => {
++    for (const name of readdirSync(d)) {
++      const p = join(d, name);
++      if (statSync(p).isDirectory()) { if (name !== "node_modules" && name !== "mimosa") walk(p); continue; }
++      if (/\.(?:ts|tsx)$/u.test(name)) out.push(p);
++    }
++  };
++  walk(dir);
++  return out;
++}
++
++describe("token / 字节刻度只有两处实现（第 940 页）", () => {
++  it("组件与派生模块里没有第三把尺", () => {
++    const hits: string[] = [];
++    for (const file of sourceFiles(RENDERER)) {
++      const rel = file.slice(RENDERER.length + 1);
++      if (ALLOWED.has(rel)) continue;
++      const text = readFileSync(file, "utf8");
++      for (const { name, re } of PATTERNS) {
++        for (const m of text.matchAll(re)) {
++          const line = text.slice(0, m.index ?? 0).split("\n").length;
++          hits.push(`${rel}:${String(line)} [${name}] ${m[0].trim()}`);
++        }
++      }
++    }
++    expect(hits, "这些地方自己拼了 k/m/KB/MB 刻度（该读 derived/format-tokens 或 derived/format-bytes）：\n" + hits.join("\n")).toEqual([]);
++  });
++
++  it("两把尺本身还在（别把允许名单变成空保护）", () => {
++    const tokens = readFileSync(join(RENDERER, "derived/format-tokens.ts"), "utf8");
++    const bytes = readFileSync(join(RENDERER, "derived/format-bytes.ts"), "utf8");
++    expect(tokens).toContain("export function formatTokens");
++    expect(bytes).toContain("export function formatBytes");
++  });
++});

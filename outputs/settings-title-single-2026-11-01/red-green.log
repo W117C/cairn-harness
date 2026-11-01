@@ -1,0 +1,8 @@
+=== 造红：页头写回字面量，且跟导航叫法不同（「关于」）===
+     × 页头不再写字面量，且六个分区都走 sectionLabel 3ms
+      Tests  1 failed | 2 passed (3)
+
+=== 复原后 ===
+      Tests  3 passed (3)
+=== sha256 ===
+   2 42b923a30ee418b9ccb8fc55687bcc44f78b93decf4bae82fada773cba38dbb3

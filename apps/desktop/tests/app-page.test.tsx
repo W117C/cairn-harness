@@ -6,8 +6,9 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { AppPageBody, PAGE_META, PAGE_ORDER, buildSchedule, scheduleLabel } from "../src/renderer/components/AppPage";
+import { AppPageBody, AutomationPane, PAGE_META, PAGE_ORDER, buildSchedule, scheduleLabel } from "../src/renderer/components/AppPage";
 import { WorktreesPane } from "../src/renderer/components/WorktreesPane";
+import { readAppSurface } from "./helpers/app-surface";
 
 describe("scheduleLabel（七 kind 人话）", () => {
   it("每种 kind 一句人话，不编造字段", () => {
@@ -35,6 +36,17 @@ describe("buildSchedule（表单四 kind 映射）", () => {
 });
 
 describe("页体并入设置（v7.1 业主裁）：AppPageBody + 事实源", () => {
+  it("AppPageBody forwards the selected plugin filter without inventing another state owner", () => {
+    const source = readAppSurface();
+    expect(source).toContain("filter={activeFilter}");
+    expect(source).toContain("onFilter={setActiveFilter}");
+  });
+
+  it("page frames do not render duplicate pane pills", () => {
+    const source = readAppSurface();
+    expect(source).not.toContain("<PanePills");
+  });
+
   it("PAGE_ORDER 顺序固定、PAGE_META 标签齐备（设置页导航从这里渲染，不许各抄一份）", () => {
     expect(PAGE_ORDER).toEqual(["plugins", "automation", "skills", "memory", "worktrees"]);
     expect(PAGE_ORDER.map((p) => PAGE_META[p].label)).toEqual(["插件", "自动化任务", "技能中心", "记忆系统", "工作树"]);
@@ -53,8 +65,10 @@ describe("页体并入设置（v7.1 业主裁）：AppPageBody + 事实源", () 
   });
 
   it("SSR 首帧：页体带 aria-label 与诚实占位（快照未到时说明，不摆空壳内容）", () => {
-    const html = renderToStaticMarkup(<AppPageBody page="automation" onError={() => undefined} />);
+    const html = renderToStaticMarkup(<AppPageBody page="automation" />);
     expect(html).toContain('aria-label="自动化任务"');
+    expect(html).toContain('class="page-frame"');
+    expect(html).toContain('<h1 class="page-frame-title">自动化任务</h1>');
     expect(html).toContain("正在读取快照…");
   });
 });
@@ -128,5 +142,93 @@ describe("记忆页重做（2026-10-16 业主裁 · D/E/F · 源码哨兵）", (
     expect(sec).toContain("此主题暂无正文");               // 空正文回落不摆空壳
     // 空态文案只在空数组分支（有正文时不渲染回落句）
     expect(sec.indexOf("bodyLines(selected.body)") < sec.indexOf("此主题暂无正文")).toBe(true);
+  });
+});
+
+// 2026-10-30：自动化文件坏掉时，页面上要能读到「哪份文件、什么原因、还能不能写」。
+// 此前只 console.warn（桌面没有控制台），空态还写着「还没有定时任务」——把失败伪装成空。
+describe("自动化页：装载警告上屏（空态分支也要摆）", () => {
+  const corrupt = {
+    tasks: [], history: [], running: 0, queued: 0, cap: 2, startupDone: true, tzNotes: {},
+    warnings: [`调度任务文件损坏：/tmp/cairn/automations.json（JSON 解析失败）——修好或删除该文件后重试，本次不覆盖`],
+    definitionsCorrupt: true,
+  };
+  const clean = { ...corrupt, warnings: [], definitionsCorrupt: false };
+
+  it("坏档：横幅点名文件与原因，并说清写路径会被拒；空态仍在（不是二选一）", () => {
+    const html = renderToStaticMarkup(<AutomationPane snap={corrupt} onError={() => undefined} refresh={() => undefined} />);
+    expect(html).toContain("调度任务文件损坏");
+    expect(html).toContain("/tmp/cairn/automations.json");
+    expect(html).toContain("新建、修改、删除任务都会被拒绝");
+    expect(html, "坏档整页只剩空态 = 用户读成「本来就没有任务」").toContain("还没有定时任务");
+    expect(html).toContain("ss-banner warn");
+  });
+
+  it("缺文件 / 正常：不摆警告横幅（缺席不是失败）", () => {
+    const html = renderToStaticMarkup(<AutomationPane snap={clean} onError={() => undefined} refresh={() => undefined} />);
+    expect(html).not.toContain("调度任务文件损坏");
+    expect(html).not.toContain("ss-banner warn");
+    expect(html).toContain("还没有定时任务");
+  });
+
+  it("坏条目（文件仍可写）：横幅说「已跳过」，不说写路径会被拒", () => {
+    const partial = {
+      ...clean,
+      warnings: ["automations.json 第 2 条无效已跳过：name 缺失"],
+      definitionsCorrupt: false,
+    };
+    const html = renderToStaticMarkup(<AutomationPane snap={partial} onError={() => undefined} refresh={() => undefined} />);
+    expect(html).toContain("已跳过");
+    expect(html).toContain("name 缺失");
+    expect(html).not.toContain("新建、修改、删除任务都会被拒绝");
+  });
+});
+
+// 第 934 页：运行历史把 due_at 的原始 ISO 直接摆上屏（旁边「下次」却是 toLocaleString），
+// 且只铺 20 条却不说——25 条时标题写着 25，列表只到 20，尾部被当成整份读。
+describe("自动化页：时间口径与历史截断要说清", () => {
+  const task = {
+    id: "t1", name: "每日备份", prompt: "备份仓库", schedule: { kind: "daily", time: "03:00" },
+    timeZone: "Asia/Shanghai", permissionTier: "read-only", catchUp: "skip", enabled: true,
+    createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z",
+    nextRunAt: "2026-11-02T03:00:00.000Z",
+  };
+  const entry = (i: number) => ({
+    task_id: "t1", task_name: "每日备份", occurrence_key: `t1:${String(i)}`,
+    due_at: "2026-11-01T03:00:00.000Z", decision: "triggered", state: "triggered",
+    at: "2026-11-01T03:00:01.000Z",
+  });
+  const snap = (n: number) => ({
+    tasks: [task], history: Array.from({ length: n }, (_, i) => entry(i)),
+    running: 0, queued: 0, cap: 2, startupDone: true, tzNotes: {}, warnings: [], definitionsCorrupt: false,
+  }) as never;
+
+  it("due_at 与「下次」都按本地时间显示，不摆原始 ISO", () => {
+    const html = renderToStaticMarkup(<AutomationPane snap={snap(1)} onError={() => undefined} refresh={() => undefined} />);
+    expect(html).not.toContain("2026-11-01T03:00:00.000Z");
+    expect(html).not.toContain("2026-11-02T03:00:00.000Z");
+    expect(html).toContain("2026-11-01");
+    expect(html).toContain("2026-11-02");
+  });
+
+  it("超过 20 条：标题说清只显示最近 20 条（不把尾部冒充整份）", () => {
+    const html = renderToStaticMarkup(<AutomationPane snap={snap(25)} onError={() => undefined} refresh={() => undefined} />);
+    expect(html).toContain("运行历史（25 条 · 只显示最近 20 条）");
+  });
+
+  it("不超过 20 条：不加那句（说多了也是噪音）", () => {
+    const html = renderToStaticMarkup(<AutomationPane snap={snap(3)} onError={() => undefined} refresh={() => undefined} />);
+    expect(html).toContain("运行历史（3 条）");
+    expect(html).not.toContain("只显示最近");
+  });
+});
+
+describe("目的地错误不泄漏到对话", () => {
+  it("AppPage 的 reportError 只写本页 operationError，不再回调工作台 lastError", () => {
+    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/AppPage.tsx", import.meta.url)), "utf8");
+    expect(src).not.toContain("props.onError?.(message)");
+    const view = readFileSync(fileURLToPath(new URL("../src/renderer/panes/WorkbenchView.tsx", import.meta.url)), "utf8");
+    const pageCall = view.slice(view.indexOf("<AppPageBody"), view.indexOf("/>", view.indexOf("<AppPageBody")) + 2);
+    expect(pageCall).not.toContain("onError=");
   });
 });

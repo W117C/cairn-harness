@@ -1,0 +1,6 @@
+{
+  "file": "apps/desktop/src/main/index.ts",
+  "ownedRouting": "sessionPrefsSet: (id, prefs, workspace) => host.sessionPrefsSet(id, prefs, workspace),",
+  "sha256": "491b2404d20c604eb13e53ea64a4abe7288d805d489c6c52005ec5979ee2dc6d",
+  "concurrentUnrelatedChange": "exportTranscript/exportMemory save dialog refactor; preserved"
+}

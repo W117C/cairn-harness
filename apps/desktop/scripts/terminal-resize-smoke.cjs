@@ -58,12 +58,11 @@ async function main() {
   await win.loadFile(join(__dirname, "../dist/index.html"));
   await pause(800);
 
-  // 打开终端窗格：快捷栏「添加面板」→「终端」。
-  const addBtn = await read(`return !!document.querySelector('[aria-label="添加面板"]');`);
-  if (!addBtn) { check("渲染面就绪（存在「添加面板」入口）", false, { addBtn }); app.exit(1); return; }
-  await js(`document.querySelector('[aria-label="添加面板"]').click()`);
-  await pause();
-  await js(`[...document.querySelectorAll('[role="menuitem"]')].find(el => el.textContent.trim() === '终端').click()`);
+  // 打开终端窗格：走键盘（Ctrl+`，pane-shortcuts 表里 terminal 那一格）。第 960 页修：
+  // 旧写法先找「添加面板」——那枚按钮只在**已有窗格的 dock 里**才有；首页没有打开任何窗格时它不存在，
+  // 于是这支冒烟在「还没开过窗格就找添加按钮」的死结上直接 exit 1（与 diff-render-latency 同一种漂移）。
+  // 反引号不能直接写进模板字符串（会把模板截断）：用字符码拼。
+  await js(`window.dispatchEvent(new KeyboardEvent("keydown", { code: "Backquote", key: String.fromCharCode(96), bubbles: true, ctrlKey: true, metaKey: false, shiftKey: false, altKey: false }))`);
   await pause(1200);
 
   const paneState = await read(`const p = document.querySelector('[data-pane="terminal"]'); const h = document.querySelector('.term-host'); return { pane: !!p, host: !!h, w: h?.getBoundingClientRect().width ?? 0, h: h?.getBoundingClientRect().height ?? 0, xterm: !!document.querySelector('.term-host .xterm') };`);
@@ -75,19 +74,19 @@ async function main() {
   const before = first.length > 0 ? first[first.length - 1] : null;
   const hostBefore = await read(`const h = document.querySelector('.term-host'); const r = h.getBoundingClientRect(); return { w: r.width, h: r.height };`);
 
-  // 变宽：窗口变窄 ⇒ 终端容器变窄 ⇒ 行列应变少。
-  await win.setContentSize(760, 900);
+  // 保持检查器可见时量网格；过窄会按产品规则主动收起整列，隐藏态不能当作 fit 失败。
+  await win.setContentSize(1200, 900);
   await pause(1200);
   const narrow = await resizeCalls();
   const afterNarrow = narrow.length > 0 ? narrow[narrow.length - 1] : null;
   const hostNarrow = await read(`const h = document.querySelector('.term-host'); const r = h.getBoundingClientRect(); return { w: r.width, h: r.height };`);
   check("容器变窄 ⇒ 发给主进程的列数变少（方向一致，不是反的）",
-    afterNarrow !== null && before !== null && afterNarrow.cols < before.cols && hostNarrow.w < hostBefore.w,
+    afterNarrow !== null && before !== null && afterNarrow.cols < before.cols && hostNarrow.w > 50 && hostNarrow.w < hostBefore.w,
     { before, afterNarrow, hostBefore, hostNarrow });
   await shot("01-narrow");
 
   // 变高：窗口变矮 ⇒ 行数应变少。
-  await win.setContentSize(760, 560);
+  await win.setContentSize(1200, 560);
   await pause(1200);
   const short = await resizeCalls();
   const afterShort = short.length > 0 ? short[short.length - 1] : null;
@@ -104,6 +103,17 @@ async function main() {
   check("容器放大 ⇒ 行列跟着回去（不是单向递减）",
     afterWide !== null && afterShort !== null && afterWide.cols > afterShort.cols && afterWide.rows > afterShort.rows,
     { afterShort, afterWide });
+
+  // 真实产品最小窗宽为 880：检查器自动收起；用户重新展开时侧栏让位，终端重新拟合。
+  await win.setContentSize(880, 900);
+  await pause(1200);
+  const collapsed = await read(`const col = document.querySelector('.inspector-col'); return { inert: col.hasAttribute('inert'), width: col.getBoundingClientRect().width };`);
+  check("窄窗口主动收起检查器并移出键盘焦点", collapsed.inert && collapsed.width < 10, collapsed);
+  await js(`window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyI", key: "i", bubbles: true, metaKey: true, altKey: true }))`);
+  await pause(1200);
+  const reopened = await read(`const col = document.querySelector('.inspector-col'); const h = document.querySelector('.term-host'); return { inert: col.hasAttribute('inert'), width: h.getBoundingClientRect().width, cols: document.querySelector('.xterm-screen')?.getBoundingClientRect().width ?? 0 };`);
+  check("窄窗口可重新展开终端并恢复有效网格", !reopened.inert && reopened.width > 250 && reopened.cols > 100, reopened);
+  await shot("02-narrow-reopened");
 
   const all = await resizeCalls();
   const monotonic = all.every((c) => Number.isInteger(c.cols) && Number.isInteger(c.rows) && c.cols > 0 && c.rows > 0);

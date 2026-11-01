@@ -1,0 +1,18 @@
+=== 改前 A：注入面漏了五把动词（覆盖判据当场点名）===
+     × 行面：diagnose 的折叠行是「诊断 只跑 lint」 4ms
+     × INJECTED_TOOLS 全覆盖（运行期注入的工具也不许把实现名摆上屏，第 927 页） 1ms
+AssertionError: 注入面里没有动词、会被当成未知工具把实现名摆上屏：impact_query | obs_recall | search_history | diagnose | tool_search: expected [ 'impact_query', 'obs_recall', …(3) ] to deeply equal []
+    165|     expect(missing, "注入面里没有动词、会被当成未知工具把实现名摆上屏：" + missing.join(" | "))…
+      Tests  2 failed | 23 passed (25)
+
+=== 改前 B：三把没有主语（摘要回落 JSON）===
+     × obs_recall = 观察 id；impact_query = 符号名（file 模式仍走通用链） 3ms
+     × diagnose：缺省说「全部检查」，指定 face 说清只跑哪类 1ms
+     × 行面：diagnose 的折叠行是「诊断 只跑 lint」 2ms
+      Tests  3 failed | 22 passed (25)
+
+=== 复原后 ===
+      Tests  25 passed (25)
+=== sha256 ===
+ae8e7b28377ce92e859e32ee8f2ad0bf305ec2d8763c22614b84ea0384a4b667
+a1df868d0ba033212973b32caf473ff836f6d6045f5d21854db8da5732565e3f

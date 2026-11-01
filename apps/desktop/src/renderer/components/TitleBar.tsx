@@ -76,7 +76,7 @@ export function TitleBar(props: {
     };
   }, []);
   return (
-    <header className="titlebar">
+    <header className="titlebar" data-cds="Toolbar">
       {/* hiddenInset：红绿灯由系统绘制，这里只留 76px 避让位 */}
       <div className="tb-left" ref={leftRef}>
         <div className="traffic" aria-hidden="true"></div>

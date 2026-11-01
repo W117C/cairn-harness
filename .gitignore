@@ -135,6 +135,7 @@ GEMINI.md
 # .venv/ 861 支、.rivet/ 13 支、var/ 5 支。口径与 `.serena/`、`.qoder/` 那一族相同——
 # **只掐掉「随仓库分发」这一条通路**，文件仍在本地盘。
 apps/desktop/release/
+apps/desktop/release-*/
 apps/desktop/preview/dist/
 
 # python venv（解释器＋site-packages），`python -m venv .venv` 可重建。
@@ -156,3 +157,6 @@ var/
 #    只有它的 `dist/` 是产物（已在上方忽略）。
 #  · `agent-canon/`（1239 支 / 48M，含 INDEX.md/README.md/canon/raw/families/tools）——是**策展语料**
 #    不是产物，但从未提交、仓内也无引用。归 commit 还是归 ignore 属业主裁决，不替它决定。
+
+# Project-local evolution episodes/playbook are generated runtime state.
+/.agent/evolve/

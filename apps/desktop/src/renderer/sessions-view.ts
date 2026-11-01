@@ -8,6 +8,12 @@ import { STR } from "./strings";
 /** host.listSessions() 的 desktop 扩展形状：每条带归属工作区（T1 合并清单的归组标记）。 */
 export type WorkspaceSession = SessionInfoPayload & { workspace: string };
 
+/** 会话确认目标：running = 请求确认那一刻这条会话是否在跑（只决定文案/按钮）；
+ *  真正执行时各动作会再查一次运行旗，不把陈旧快照当事实。归档/删除同形。 */
+export type SessionConfirmTarget = WorkspaceSession & { running?: boolean };
+/** 删除确认目标（保留旧名，形状与归档一致）。 */
+export type DeleteConfirmTarget = SessionConfirmTarget;
+
 /** 按 id + workspace 定位会话。id 是分钟级时间戳，跨项目可撞名；给了 workspace 就必须
  *  两个都对上，**不退回**同名 id（退回 = 打开另一个项目的转录）。缺省 workspace 保持旧行为。 */
 export function findSessionByRef<T extends { id: string; workspace?: string }>(

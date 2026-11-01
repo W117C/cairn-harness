@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowDown, BarChart3, ChevronDown, RefreshCw } from "lucide-react";
+import { AlertCircle, ArrowDown, BarChart3, ChevronDown, ClipboardCopy, RefreshCw } from "lucide-react";
 import type { UsageLedgerPayload } from "../../../../../../src/main/ipc-protocol";
-import { sumUsageMetrics, usagePeriod, usageTokenLabel, type UsageDay, type UsageMetrics } from "./usage-dashboard-data";
+import { sumUsageMetrics, usageCsv, usagePeriod, usageTokenLabel, type UsageDay, type UsageMetrics } from "./usage-dashboard-data";
 import "./usage-dashboard.css";
 
 export { usagePeriod, usageTokenLabel } from "./usage-dashboard-data";
@@ -83,6 +83,7 @@ function ActivityHeatmap({ days }: { days: UsageDay[] }) {
 
 export function UsageDashboard({ data, refreshing, error, onRefresh }: { data: LedgerData; refreshing: boolean; error: string | null; onRefresh: () => void }) {
   const [range, setRange] = useState<7 | 30 | 90>(30);
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const [sort, setSort] = useState<"tokens" | "records">("tokens");
   const analytics = data.analytics;
   const period = useMemo(() => analytics ? usagePeriod(analytics, range) : null, [analytics, range]);
@@ -96,7 +97,10 @@ export function UsageDashboard({ data, refreshing, error, onRefresh }: { data: L
   const hasWarnings = data.skipped > 0 || data.badLines > 0 || (analytics?.sessionsWithoutUsage ?? 0) > 0 || (undated?.usageCount ?? 0) > 0 || unknownModel > 0 || missingTokens > 0;
   return <div className="ss-page usage-dashboard">
     <header className="ud-header"><div><h1 className="ss-title">用量统计</h1><p className="ss-desc">查看累计消耗，以及每天与各模型的使用情况。</p></div>
-      <button type="button" className="ud-refresh" disabled={refreshing} onClick={onRefresh} aria-label={error ? "重试用量统计" : "刷新用量统计"}><RefreshCw size={14} aria-hidden="true" />{refreshing ? "统计中…" : error ? "重试" : "刷新"}</button>
+      <div className="ud-header-actions">
+        <button type="button" className="ud-refresh" disabled={period === null} onClick={() => { if (period === null) return; void navigator.clipboard.writeText(usageCsv(period)).then(() => { setCopyMsg("CSV 已复制"); setTimeout(() => { setCopyMsg(null); }, 1800); }).catch(() => { setCopyMsg("复制失败：剪贴板不可用"); }); }} aria-label="复制用量 CSV"><ClipboardCopy size={14} aria-hidden="true" />{copyMsg ?? "复制 CSV"}</button>
+        <button type="button" className="ud-refresh" disabled={refreshing} onClick={onRefresh} aria-label={error ? "重试用量统计" : "刷新用量统计"}><RefreshCw size={14} aria-hidden="true" />{refreshing ? "统计中…" : error ? "重试" : "刷新"}</button>
+      </div>
     </header>
     {error && <p className="ud-notice ud-error" role="alert"><AlertCircle size={15} aria-hidden="true" />刷新失败：{error}。当前仍显示上次结果。</p>}
     <dl className="ud-overview">

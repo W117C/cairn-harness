@@ -21,6 +21,7 @@ import { GrantsStore } from "./grants";
 import { canonicalRelPath, parseBundleManifest, type BundleKind, type BundleManifest } from "./manifest";
 import { Installer, type InstallOutcome } from "./installer";
 import { assertActor, type BundleEntry, type ModuleRegistry } from "./registry";
+import { isRecord } from "../../is-record";
 
 /** 产出管线身份戳：submitProposal 落盘时盖在 manifest.signedBy 上，提案不自带（§4 L1）。 */
 export const EVOLUTION_PIPELINE_V1 = "evolution-plane-pipeline-v1";
@@ -70,10 +71,6 @@ export interface EvolutionPlaneOptions {
    *  （scripts / tests 侧传 GATES 的子集），src 不抄名单——与 knownGates 同款纪律。
    *  Phase 3 产线形状：desktop-panel → ["desktop-boundary-check", "desktop-test"]（§3.5）。 */
   requiredGatesByKind?: Readonly<Partial<Record<BundleKind, readonly string[]>>>;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export class EvolutionPlane {

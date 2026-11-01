@@ -1,0 +1,122 @@
+--- a/apps/desktop/src/renderer/components/DiffView.tsx	2026-11-01 13:55:29
++++ b/apps/desktop/src/renderer/components/DiffView.tsx	2026-11-01 13:55:08
+@@ -71,8 +71,13 @@
+   onComment: (lineKey: string, text: string) => void;
+ }
+ 
++/** 行键 = `<path>|<side>:<line>`（第 922 页）：del 侧取旧文件行号，其余取新文件行号。
++ *  此前只有行号 ⇒ 一次「改这一行」（del 与 add 同号）两侧共用一把键：一条评注会同时挂在删除行
++ *  与新增行上，再写一条就把前一条覆盖掉；提交消息里的「第 N 行」也说不清是改前还是改后。 */
+ function lineKeyOf(api: DiffViewCommentApi, line: DiffLineView): string {
+-  return `${api.keyPrefix}${String(line.newNo ?? line.oldNo ?? 0)}`;
++  const side = line.kind === "del" ? "old" : "new";
++  const n = side === "old" ? line.oldNo : line.newNo;
++  return `${api.keyPrefix}${side}:${String(n ?? 0)}`;
+ }
+ 
+ function CommentEditor(props: {
+@@ -180,7 +185,7 @@
+               <div className="diff-hunk-head num">{h.header}</div>
+               {h.lines.map((l, j) => {
+                 const lineNo = l.newNo ?? l.oldNo ?? 0;
+-                const key = api === undefined ? "" : `${api.keyPrefix}${String(lineNo)}`;
++                const key = api === undefined ? "" : lineKeyOf(api, l);
+                 const has = api !== undefined && api.comments.has(key);
+                 return (
+                   <div key={j}>
+--- a/apps/desktop/src/renderer/components/panes.ts	2026-11-01 13:55:29
++++ b/apps/desktop/src/renderer/components/panes.ts	2026-11-01 13:55:08
+@@ -185,15 +185,22 @@
+   return order.map((p) => byPath.get(p)!);
+ }
+ 
+-/** 行级评注集合（行键 `<path>|<line>`）→ 一次性提交的消息。 */
++/** 行级评注集合（行键 `<path>|<side>:<line>`，第 922 页；旧键 `<path>|<line>` 仍认）→ 一次性提交的
++ *  消息（蓝本 §3.6：多处评论 ⌘Enter 一次性提交）。格式稳定（判卷钉）：按文件分组、行号升序；
++ *  删除侧（`old`）必须写明「删除前」——否则 agent 会按新文件的行号去找一行已经不在的内容。
++ *  键形状不合解析的**原样保留**为兜底条目——不吞任何评论。 */
++type ReviewItem = { line: number; text: string; side?: "old" | "new"; raw?: string };
+ export function composeReviewMessage(comments: ReadonlyMap<string, string>): string {
+-  const byPath = new Map<string, { line: number; text: string; raw?: string }[]>();
++  const byPath = new Map<string, ReviewItem[]>();
+   for (const [key, text] of comments) {
+     const at = key.lastIndexOf("|");
+-    const line = at < 0 ? NaN : Number(key.slice(at + 1));
++    const tail = at < 0 ? "" : key.slice(at + 1);
+     const path = at < 0 ? key : key.slice(0, at);
++    const sided = /^(old|new):(\d+)$/u.exec(tail);
++    const bare = /^\d+$/u.test(tail) ? Number(tail) : NaN;
+     const arr = byPath.get(path) ?? [];
+-    if (Number.isFinite(line) && path !== "") arr.push({ line, text });
++    if (sided !== null && path !== "") arr.push({ line: Number(sided[2]), text, side: sided[1] as "old" | "new" });
++    else if (Number.isFinite(bare) && path !== "") arr.push({ line: bare, text });
+     else arr.push({ line: 0, text, raw: key });
+     byPath.set(path, arr);
+   }
+--- a/apps/desktop/tests/panes.test.ts	2026-11-01 13:55:29
++++ b/apps/desktop/tests/panes.test.ts	2026-11-01 13:53:03
+@@ -148,6 +148,15 @@
+     expect(msg).toContain("- 第 8 行：删掉这行");
+   });
+ 
++  it("键带侧别：删除侧写明「删除前」，新增侧不写（第 922 页）", async () => {
++    const { composeReviewMessage } = await import("../src/renderer/components/panes");
++    const msg = composeReviewMessage(new Map([
++      ["src/a.ts|old:2", "这段删掉"],
++      ["src/a.ts|new:2", "这行改名"],
++    ]));
++    expect(msg).toContain("- 第 2 行（删除前）：这段删掉");
++    expect(msg).toContain("- 第 2 行：这行改名");
++  });
+ 
+   it("形状不合解析的键原样保留为兜底条目（不吞任何评论）", async () => {
+     const { composeReviewMessage } = await import("../src/renderer/components/panes");
+--- a/apps/desktop/tests/diff-split.test.tsx	2026-11-01 13:55:29
++++ b/apps/desktop/tests/diff-split.test.tsx	2026-11-01 13:53:03
+@@ -140,3 +140,27 @@
+   });
+ });
+ 
++describe("行级评注的行键带哪一侧（第 922 页）", () => {
++  const commentHunks: DiffHunkView[] = [{
++    header: "@@ -1,3 +1,4 @@",
++    lines: [ctx("const a = 1;", 1, 1), del("let b = 2;", 2), add("let b = 3;", 2)],
++  }];
++  const render = (comments: Map<string, string>): string =>
++    renderToStaticMarkup(
++      <DiffView hunks={commentHunks} comment={{ comments, keyPrefix: "src/a.ts|", onComment: () => undefined }} />,
++    );
++  const segOf = (html: string, text: string): string =>
++    html.split('<div class="diff-line ').find((s) => s.includes(text)) ?? "";
++
++  it("删除行与新增行同号不共用一把键：old:2 只挂删除行", () => {
++    const html = render(new Map([["src/a.ts|old:2", "这段删掉"]]));
++    expect((html.match(/dl-has-comment/g) ?? []).length).toBe(1);
++    expect(segOf(html, "let b = 2;")).toContain("dl-has-comment");
++    expect(segOf(html, "let b = 3;")).not.toContain("dl-has-comment");
++  });
++
++  it("两侧各一条时两条都在（不再互相覆盖）", () => {
++    const html = render(new Map([["src/a.ts|old:2", "这段删掉"], ["src/a.ts|new:2", "这行改名"]]));
++    expect((html.match(/dl-has-comment/g) ?? []).length).toBe(2);
++  });
++});
+--- a/apps/desktop/tests/panes-structure.test.tsx	2026-11-01 13:55:29
++++ b/apps/desktop/tests/panes-structure.test.tsx	2026-11-01 13:54:43
+@@ -151,7 +151,8 @@
+       <DiffView
+         hunks={hunks}
+         comment={{
+-          comments: new Map([["src/a.ts|2", "这行保留"]]),
++          // 第 922 页：行键带侧别——这条钉的是删除行（oldNo=2）上的评注。
++          comments: new Map([["src/a.ts|old:2", "这行保留"]]),
+           keyPrefix: "src/a.ts|",
+           onComment: () => undefined,
+         }}
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 13:55:29
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 13:53:55
+@@ -4283,3 +4283,4 @@
+ 42. **编排工具行挑主语（第 917 页）**：`summarize` 只认 command / pattern / path / file / url / query，编排族与 clarify 的参数一个都不在里面 ⇒ `spawn_agent` 行是 `{"task":…,"mode":…}`、`list_agents` 是 `{}`、clarify 是一串 questions JSON——用户看到的是参数原文，不是「派了什么活」。改为 `summarize(tool, args)`：先按工具挑主语（spawn→task、send→message、wait/cancel→「N 个子任务」或「本会话全部子任务」、list→「本会话全部子任务」、resume/close→thread_id、clarify→第一个问题＋共 N 问），挑不到才回通用链/JSON 兜底；对应六个动词（发消息 / 等待 / 撤销 / 列出 / 恢复 / 关闭）一并补进 `TOOL_VERBS`。
+ 43. **时间线的工具步也用中文动词（第 918 页）**：时间线此前把 `read_file a.ts` 直接写进步骤标签——`kind` 列只给「工具」这个类别，label 里再摆一次实现名，与第 916 页确立的「流里不出现实现名」相反，同一件事两个面两套口径。词表 `TOOL_VERBS` 从 `components/Stream.tsx` 搬到 `derived/tool-verbs.ts`（派生层：组件与派生都能读，组件层不再拥有词表），`timelineItems` 的 tool 步改成「中文动词 + 摘要」；未知工具仍回落原名（宁缺不编）。
+ 44. **用量数字只有一把尺（第 921 页）**：`formatTokens` 原来只有 k 档（`components/format-tokens.ts`），而时间线的 usage 步自己抄了一份 `fmtTokens`（多一档 m）⇒ 同一个 token 数在用量环写 `1250.0k`、在时间线写 `1.3m`。实现搬到 `derived/format-tokens.ts`（派生层，用量环 / 检查器 / 时间线三个消费面都读得到），组件层那个文件改成转发出口；顺手把 `999_950…999_999` 这一档从四位数 `1000.0k` 进位成 `1.0m`。
++45. **行级评注的行键带侧别（第 922 页）**：DiffView 的评注键此前是 `<path>|<newNo ?? oldNo>`——一次「改这一行」的 del 与 add 同号，两侧共用一把键：一条评注同时挂两行（实测一条评注渲染出两个标记），再写一条就把前一条覆盖掉；提交消息里的「第 N 行」也说不清是改前还是改后。现在键是 `<path>|<side>:<line>`（del 用旧文件行号、其余用新文件行号），删除侧的提交条目写明「（删除前）」；旧键形状仍认（不吞历史评注）。

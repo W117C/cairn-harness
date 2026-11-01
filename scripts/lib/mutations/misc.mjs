@@ -181,7 +181,7 @@ export const MUTATIONS = [
     desc: "许可证有效也显示「未激活」⇒ 用户以为自己的 license 没生效，而主进程其实验过了；"
       + "四态被压成一态，设置页的「许可证」行就成了装饰",
     apply: (s) => s.replace(
-      'case "valid": return state.expiresAt === null ? "有效 · " + state.licensee : "有效 · " + state.licensee + " · 至 " + state.expiresAt;',
+      'case "valid": return state.expiresAt === null ? "有效 · " + state.licensee : "有效 · " + state.licensee + " · 至 " + licenseDate(state.expiresAt);',
       'case "valid": return "未激活";',
     ),
     expectFail: "valid / expired / invalid / inactive 各有话说，未读取不冒充未激活",
@@ -223,7 +223,7 @@ export const MUTATIONS = [
     desc: "自动化页退回整份 getState ⇒ scheduleSnapshot 又成零消费通道：主进程接得通、UI 没人调，"
       + "而人口普查守卫会把这条当场点名（第 642 页 createProject/cardAction 的同一形状）",
     apply: (s) => s.replace("window.agent.scheduleSnapshot()", "window.agent.getState()"),
-    expectFail: "100 条通道全部有消费者；例外只有带理由的 allowlist",
+    expectFail: "122 条通道全部有消费者；例外只有带理由的 allowlist",
   },
   {
     id: "worker-card-action-cardtype-drift",

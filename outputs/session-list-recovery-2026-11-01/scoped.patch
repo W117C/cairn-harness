@@ -1,0 +1,493 @@
+--- /dev/null
++++ b/apps/desktop/scripts/session-list-recovery-smoke.cjs
+@@ -0,0 +1,103 @@
++// 真实 renderer + 合成 IPC，断言首读/缓存/重试/乱序成功与失败；不调用 Provider。
++// CAIRN_RENDERER_DIST 可指向隔离构建；第一个参数是证据目录。
++const { app, BrowserWindow } = require("electron");
++const { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } = require("node:fs");
++const { join, resolve } = require("node:path");
++const { tmpdir } = require("node:os");
++const profile = mkdtempSync(join(tmpdir(), "cairn-list-recovery-profile-"));
++const out = resolve(process.argv[2] || mkdtempSync(join(tmpdir(), "cairn-list-recovery-")));
++mkdirSync(out, { recursive: true });
++app.setPath("userData", profile);
++app.on("quit", () => rmSync(profile, { recursive: true, force: true }));
++const checks = [];
++const check = (name, ok) => { checks.push({ name, ok }); console.log(`${ok ? "PASS" : "FAIL"} ${name}`); };
++const pause = () => new Promise((r) => setTimeout(r, 80));
++async function main() {
++  await app.whenReady();
++  const protocol = readFileSync(join(__dirname, "../../../src/main/ipc-protocol.ts"), "utf8");
++  const body = protocol.slice(protocol.indexOf("export interface AgentApi"));
++  const declarations = body.slice(0, body.indexOf("\n}"));
++  const starts = [...declarations.matchAll(/^\s{2}(\w+)\??\s*[(<]/gm)];
++  const members = starts.map((s, i) => ({ name: s[1], isArray: /Promise<[^>]*\[\]/.test(declarations.slice(s.index, starts[i + 1]?.index)) }));
++  const win = new BrowserWindow({ width: 1440, height: 900, show: false, webPreferences: {
++    preload: join(__dirname, "ui-gallery-preload.cjs"),
++    additionalArguments: ["--cairn-api-members=" + JSON.stringify(members), "--cairn-protocol-version=" + protocol.match(/IPC_PROTOCOL_VERSION\s*=\s*(\d+)/)[1], "--cairn-list-recovery-fixture"],
++  } });
++  const errors = [];
++  win.webContents.on("console-message", (details) => { if (details.level === "error") errors.push(details.message); });
++  win.webContents.on("preload-error", (_event, _path, error) => errors.push(error.message));
++  const js = (source) => win.webContents.executeJavaScript(source);
++  async function wait(source) {
++    for (let attempt = 0; attempt < 100; attempt++) { if (await js(source)) return; await pause(); }
++    throw new Error("等待超时: " + source);
++  }
++  const row = (id) => `document.querySelector('[data-session-id="${id}"]')`;
++  const refresh = async () => { const before = await js("window.__cairnSessionList.count()"); await js("window.__cairnSessionList.refresh()"); await wait(`window.__cairnSessionList.count() > ${before}`); return before; };
++  const succeed = async (index, id) => { await js(`window.__cairnSessionList.succeed(${index}, ${JSON.stringify(id)})`); await pause(); };
++  const fail = async (index) => { await js(`window.__cairnSessionList.fail(${index})`); await pause(); };
++  const shot = async (name) => writeFileSync(join(out, name + ".png"), (await win.webContents.capturePage()).toPNG());
++  await win.loadFile(join(process.env.CAIRN_RENDERER_DIST || join(__dirname, "../dist"), "index.html"));
++  // 原生键盘默认动作要求窗口真正聚焦；只读 DOM focus 不能证明 Enter 展开。
++  win.show();
++  win.focus();
++  await wait("window.__cairnSessionList?.count() === 1 && !!document.querySelector('.side-skeleton')");
++  check("首次加载不显示空列表", await js("!document.querySelector('.sidenav').innerText.includes('还没有任务')"));
++  await fail(0);
++  await wait("!!document.querySelector('.side-load-error')");
++  await shot("01-first-error");
++  await js("document.querySelector('.side-load-error .side-retry').click()");
++  await wait("window.__cairnSessionList.count() === 2");
++  check("重试按钮禁用且错误原因保留", await js("!!document.querySelector('.side-load-error .side-retry:disabled') && !!document.querySelector('.side-load-detail')"));
++  await succeed(1, "保留的会话");
++  await wait(`!!${row("保留的会话")}`);
++  const old = await refresh(); const latest = await refresh();
++  await succeed(latest, "最新的会话"); await succeed(old, "过期的会话");
++  check("旧成功回包不覆盖新列表", await js(`!!${row("最新的会话")} && !${row("过期的会话")}`));
++  const oldFailure = await refresh(); const newest = await refresh();
++  await succeed(newest, "保留的会话"); await fail(oldFailure);
++  check("旧失败不覆盖新成功", await js(`!!${row("保留的会话")} && !document.querySelector('.side-load-error')`));
++  await fail(await refresh());
++  check("更新失败保留缓存并说明状态", await js(`!!${row("保留的会话")} && document.querySelector('.side-load-error').innerText.includes('更新失败，仍显示上次列表')`));
++  for (const [theme, width] of [["light", 1440], ["dark", 880]]) {
++    win.setSize(width, 720);
++    await js(`document.documentElement.dataset.theme='${theme}'; document.documentElement.dataset.mode='${theme}'; document.body.toggleAttribute('data-ds-dark-theme', '${theme}' === 'dark'); true;`);
++    await pause();
++    await shot(`02-cached-error-${theme}`);
++    const summary = await js("(() => { const el=document.querySelector('.side-load-error summary'); if (!el) return false; el.focus(); return document.activeElement === el; })()");
++    check(`${theme} 错误原因可键盘聚焦`, summary);
++    if (summary) {
++      win.webContents.sendInputEvent({ type: "keyDown", keyCode: "Return" });
++      // 原生 summary 的默认激活还需要字符事件；React onKeyDown 控件没有这一要求。
++      win.webContents.sendInputEvent({ type: "char", keyCode: "\r" });
++      win.webContents.sendInputEvent({ type: "keyUp", keyCode: "Return" });
++      await pause();
++    }
++    check(`${theme} Enter 实际展开错误原因`, await js("document.querySelector('.side-load-error details')?.open === true"));
++    check(`${theme} 长路径不撑宽侧栏`, await js("(() => {const nav=document.querySelector('.sidenav'); const detail=document.querySelector('.side-load-detail'); return !!detail && nav.scrollWidth <= nav.clientWidth + 1 && document.documentElement.scrollWidth <= innerWidth;})()"));
++    await shot(`03-error-details-${theme}`);
++    await js("document.querySelector('.side-load-error details')?.removeAttribute('open'); true;");
++  }
++  await js(`${row("保留的会话")}.click(); true;`);
++  await wait(`!!document.querySelector('[data-session-id="保留的会话"][data-active="true"]') && !!document.querySelector('.row.user')`);
++  check("更新失败期间仍能打开缓存会话", await js("!document.querySelector('.side-skeleton') && !!document.querySelector('.row.assistant')"));
++  const retry = await js("window.__cairnSessionList.count()");
++  await js("document.querySelector('.side-load-error .side-retry').click()");
++  await pause();
++  check("后台重试保留列表且不叠骨架", await js(`!!${row("保留的会话")} && !document.querySelector('.side-skeleton') && !!document.querySelector('.side-retry:disabled') && document.querySelector('.sidenav').getAttribute('aria-busy') === 'true'`));
++  await succeed(retry, "恢复后的会话");
++  await wait(`!!${row("恢复后的会话")}`);
++  check("重试成功清除错误与忙碌标记", await js("!document.querySelector('.side-load-error') && document.querySelector('.sidenav').getAttribute('aria-busy') === 'false'"));
++  const superseded = await refresh(); const pending = await refresh();
++  await fail(superseded);
++  check("旧请求结束不解除新请求的忙碌态", await js("document.querySelector('.sidenav').getAttribute('aria-busy') === 'true' && !document.querySelector('.side-load-error')"));
++  await succeed(pending, "恢复后的会话");
++  await succeed(await refresh(), null);
++  check("真实空结果正常显示空态", await js("document.querySelector('.sidenav').innerText.includes('还没有任务') && !document.querySelector('.side-load-error')"));
++  check("无 renderer 或 preload 错误", errors.length === 0);
++  writeFileSync(join(out, "result.json"), JSON.stringify({ checks, errors }, null, 2));
++  win.destroy();
++  app.exit(checks.every((c) => c.ok) ? 0 : 1);
++}
++const watchdog = setTimeout(() => { console.error("smoke 超时"); app.exit(1); }, 45_000);
++watchdog.unref();
++main().catch((error) => { console.error(error); app.exit(1); });
+--- a/apps/desktop/scripts/sidebar-load-error-smoke.cjs
++++ b/apps/desktop/scripts/sidebar-load-error-smoke.cjs
+@@ -42,8 +42,10 @@
+   const checks = [];
+   const check = (name, ok, detail) => { checks.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name} ${ok ? "" : JSON.stringify(detail)}`); };
+ 
+-  await win.loadFile(join(__dirname, "../dist/index.html"));
++  await win.loadFile(join(process.env.CAIRN_RENDERER_DIST || join(__dirname, "../dist"), "index.html"));
+   await pause(600);
++  // 详情按需展开；展开后仍验证完整原句、文件路径与修复出路。
++  await js(`document.querySelector('.side-load-error summary')?.click(); true;`);
+   const row = await js(`(() => { const el = document.querySelector('.side-load-error'); return el ? { text: el.innerText, title: el.querySelector('.side-load-detail')?.getAttribute('title') ?? null, retry: !!el.querySelector('.side-retry') } : null; })()`);
+   check("会话清单失败行在", row !== null, row);
+   check("失败原因上屏：损坏文件路径 + 出路", row !== null && row.text.includes("会话元数据损坏") && row.text.includes("session-metadata.json") && row.text.includes("修好或删除该文件后重试"), row?.text);
+--- a/apps/desktop/scripts/ui-gallery-preload.cjs
++++ b/apps/desktop/scripts/ui-gallery-preload.cjs
+@@ -1286,4 +1286,18 @@
+   contextBridge.exposeInMainWorld("__cairnRepairProjects", () => { projectsHealthy = true; });
+ }
+ 
++// 可控回包顺序：会话读取/重试冒烟专用，不连接真实存储或 Provider。
++if (process.argv.includes("--cairn-list-recovery-fixture")) {
++  const requests = [];
++  stub.listSessions = () => new Promise((resolve, reject) => requests.push({ resolve, reject }));
++  contextBridge.exposeInMainWorld("__cairnSessionList", {
++    count: () => requests.length,
++    refresh: () => { for (const listener of eventListeners) listener({ type: "session_titled" }); },
++    succeed: (index, id) => requests[index].resolve(id === null ? [] : [{
++      id, title: id, workspace: "/tmp/demo-ws", mtimeMs: Date.now(), lines: 1,
++    }]),
++    fail: (index) => requests[index].reject(new Error("EACCES: permission denied, scandir '/tmp/" + "很长的项目路径/".repeat(18) + "sessions'")),
++  });
++}
++
+ contextBridge.exposeInMainWorld("agent", stub);
+--- a/apps/desktop/src/renderer/components/Sidebar.tsx
++++ b/apps/desktop/src/renderer/components/Sidebar.tsx
+@@ -495,6 +495,8 @@
+   /** 首屏会话清单仍在读（2026-10-18）：此前这段时间直接摆「还没有任务」——
+    *  一句话同时在说「你什么都没有」和「我还没看完」，读起来像丢数据。 */
+   loading?: boolean;
++  /** 后台更新保留已有列表；忙碌期间禁用重试。 */
++  refreshing?: boolean;
+   /** 会话清单读取失败（2026-10-18）：与「空」分开，给重试入口，不把失败读成没有会话。 */
+   loadError?: boolean;
+   /** 失败原句（含损坏文件的路径与出路）：有就上屏，重试解决不了时用户才知道要修什么。 */
+@@ -839,7 +841,7 @@
+           「第几项 / 共几项」，方向键也无从判断边界。listbox + option 是「一组可选项、一次选一个」
+           的正解；行内「…」按钮是 option 的子控件（listbox 允许 option 内含可聚焦后代）。
+           分组标题用 role=group 包住各自的 option，读屏能报出「哪个项目里第几项」。 */}
+-      <nav className="sidenav" role="listbox" aria-label={STR.sidebar.listAria} aria-busy={props.loading === true}>
++      <nav className="sidenav" role="listbox" aria-label={STR.sidebar.listAria} aria-busy={props.loading === true || props.refreshing === true}>
+         {/* 首屏读取中（2026-10-18）：三条骨架只占位，不摆「还没有任务」——
+             用户没有『空』这个事实，只有『还没读完』这个事实。 */}
+         {props.loading === true && (
+@@ -850,13 +852,20 @@
+         {/* 读取失败（2026-10-18）：失败与空分开，并给重试入口；否则一次 IPC 抖动会被读成
+             「所有会话都没了」，且永远停在空屏（sessionsLoaded 此前只会在成功时落真）。 */}
+         {props.loadError === true && props.loading !== true && (
+-          <div className="side-empty side-load-error" role="status">
+-            <span>{STR.sidebar.loadFailed}</span>
++          <div className="side-empty side-load-error">
++            <div className="side-load-heading">
++              <span role="status">{props.sessions.length > 0 ? STR.sidebar.refreshFailed : STR.sidebar.loadFailed}</span>
++              {props.onRetryLoad !== undefined && (
++                <button type="button" className="btn-ghost side-retry" disabled={props.refreshing === true} onClick={props.onRetryLoad}>
++                  {props.refreshing === true ? STR.common.loading : STR.sidebar.retry}
++                </button>
++              )}
++            </div>
+             {props.loadErrorDetail !== null && props.loadErrorDetail !== undefined && props.loadErrorDetail !== "" && (
+-              <span className="side-load-detail" title={props.loadErrorDetail}>{props.loadErrorDetail}</span>
+-            )}
+-            {props.onRetryLoad !== undefined && (
+-              <button className="btn-ghost side-retry" onClick={props.onRetryLoad}>{STR.sidebar.retry}</button>
++              <details className="side-load-reason">
++                <summary>{STR.sidebar.errorDetails}</summary>
++                <span className="side-load-detail" title={props.loadErrorDetail}>{props.loadErrorDetail}</span>
++              </details>
+             )}
+           </div>
+         )}
+--- a/apps/desktop/src/renderer/panes/WorkbenchView.tsx
++++ b/apps/desktop/src/renderer/panes/WorkbenchView.tsx
+@@ -125,6 +125,7 @@
+   /** 项目注册表读取失败后的就地重试（侧栏 notice 的出口）。 */
+   retryProjects: () => void;
+   sessionsLoaded: boolean;
++  sessionsRefreshing: boolean;
+   sessionsLoadError: boolean;
+   sessionsLoadErrorDetail: string | null;
+   retrySessions: () => void;
+@@ -407,6 +408,7 @@
+             notice: registryNotice,
+             onRetryNotice: retryProjects,
+             loading: !sessionsLoaded && !sessionsLoadError,
++            refreshing: deps.sessionsRefreshing,
+             loadError: sessionsLoadError,
+             loadErrorDetail: sessionsLoadErrorDetail,
+             onRetryLoad: retrySessions,
+--- /dev/null
++++ b/apps/desktop/src/renderer/state/session-list.ts
+@@ -0,0 +1,40 @@
++import { useCallback, useEffect, useRef, useState } from "react";
++import type { WorkspaceSession } from "../sessions-view";
++
++/** 清单快照与读取状态独立于活动会话；仅最新请求可发布结果。 */
++export function useSessionList() {
++  const [sessions, setSessions] = useState<WorkspaceSession[]>([]);
++  // 只有成功读取才放行启动恢复；失败不能被当成空列表清掉上次会话。
++  const [sessionsLoaded, setSessionsLoaded] = useState(false);
++  const [sessionsLoadError, setSessionsLoadError] = useState(false);
++  const [sessionsLoadErrorDetail, setSessionsLoadErrorDetail] = useState<string | null>(null);
++  const [sessionsRefreshing, setSessionsRefreshing] = useState(false);
++  const requestSeq = useRef(0);
++  useEffect(() => () => { requestSeq.current += 1; }, []);
++
++  const refreshSessions = useCallback(async (): Promise<void> => {
++    const seq = ++requestSeq.current;
++    setSessionsRefreshing(true);
++    try {
++      const list = await window.agent.listSessions() as WorkspaceSession[];
++      if (seq !== requestSeq.current) return;
++      setSessions(list);
++      setSessionsLoadError(false);
++      setSessionsLoadErrorDetail(null);
++      setSessionsLoaded(true);
++    } catch (err: unknown) {
++      if (seq !== requestSeq.current) return;
++      setSessionsLoadError(true);
++      setSessionsLoadErrorDetail(err instanceof Error ? err.message : String(err));
++    } finally {
++      if (seq === requestSeq.current) setSessionsRefreshing(false);
++    }
++  }, []);
++
++  // 保留快照与失败原因；首读骨架仍由 loading={!sessionsLoaded && !sessionsLoadError} 收口。
++  const retrySessions = useCallback(() => {
++    void refreshSessions();
++  }, [refreshSessions]);
++
++  return { sessions, sessionsLoaded, sessionsLoadError, sessionsLoadErrorDetail, sessionsRefreshing, refreshSessions, retrySessions };
++}
+--- a/apps/desktop/src/renderer/state/workbench.ts
++++ b/apps/desktop/src/renderer/state/workbench.ts
+@@ -52,6 +52,7 @@
+ import { useMessageActions } from "./message-actions";
+ import { useOnboardingGroups } from "./onboarding";
+ import { useSessionOps } from "./sessions";
++import { useSessionList } from "./session-list";
+ 
+ 
+ declare global { interface Window { agent: import("../../../../../src/main/ipc-protocol").AgentApi } }
+@@ -71,16 +72,7 @@
+ }
+ 
+ export function useWorkbenchModel() {
+-  // 会话清单带归属工作区（host.listSessions 的 desktop 扩展字段，交叉类型收窄——同 aborted 先例）。
+-  const [sessions, setSessions] = useState<WorkspaceSession[]>([]);
+-  // 会话清单是否已从盘上读过一轮（空屏建议要等它——「继续上次」的原料是最近标题，抢跑会漏）。
+-  const [sessionsLoaded, setSessionsLoaded] = useState(false);
+-  // 清单读取失败（2026-10-18）：此前失败只会让 sessionsLoaded 永远停在 false，
+-  // 侧栏分不出「还没有任务」与「没读到」；现在失败可见并可重试（空 ≠ 失败）。
+-  const [sessionsLoadError, setSessionsLoadError] = useState(false);
+-  // 失败原因（2026-10-29）：此前只置布尔 ⇒ 侧栏永远只有「没有加载成功」+ 重试；
+-  // 元数据损坏这类**重试永远不会好**的失败，用户看不到盘上哪个文件坏了、下一步该做什么。
+-  const [sessionsLoadErrorDetail, setSessionsLoadErrorDetail] = useState<string | null>(null);
++  const { sessions, sessionsLoaded, sessionsLoadError, sessionsLoadErrorDetail, sessionsRefreshing, refreshSessions, retrySessions } = useSessionList();
+   const [activeId, setActiveId] = useState<string | null>(null);
+   const [events, setEvents] = useState<AgentEvent[]>([]);
+   // 来源视图（指针分叉）：openSession 回包里的 SessionView；没分叉的会话为 null（渲染走原路径）。
+@@ -381,26 +373,6 @@
+   // 侧栏清单同步（事件驱动补刷 + refetching 闸）。
+   const knownSessionIds = useRef<ReadonlySet<string>>(new Set());
+   const refetching = useRef(false);
+-  const refreshSessions = useCallback(() => {
+-    return (window.agent.listSessions() as Promise<WorkspaceSession[]>).then((list) => {
+-      setSessions(list);
+-      setSessionsLoadError(false);
+-      setSessionsLoadErrorDetail(null);
+-      setSessionsLoaded(true);
+-    }, (err: unknown) => {
+-      // fail-visible：不把一次 IPC 失败读成「没有会话」。注意**不能**把 sessionsLoaded 置真——
+-      // 它同时是「启动恢复上次会话」的闸；失败时当空清单放行会顺手清掉 cairn.lastSession.v1。
+-      // 侧栏的骨架由 loading={!sessionsLoaded && !sessionsLoadError} 收口。
+-      setSessionsLoadError(true);
+-      // 原句上屏：损坏类失败要靠路径与原因才能修（重试按钮对它没用，这一点让用户看得见）。
+-      setSessionsLoadErrorDetail(err instanceof Error ? err.message : String(err));
+-    });
+-  }, []);
+-  const retrySessions = useCallback(() => {
+-    setSessionsLoaded(false);
+-    setSessionsLoadError(false);
+-    void refreshSessions();
+-  }, [refreshSessions]);
+ 
+   // 斜杠菜单技能清单（2026-10-18）：工作区一变、或设置页关闭时刷新（信任决议就发生在设置里，
+   // 不刷新的话菜单会一直标「待批准」）。设置打开期间不重复扫（省一次目录发现）。
+@@ -987,6 +959,7 @@
+     registryNotice,
+     retryProjects,
+     sessionsLoaded,
++    sessionsRefreshing,
+     sessionsLoadError,
+     sessionsLoadErrorDetail,
+     retrySessions,
+--- a/apps/desktop/src/renderer/strings.ts
++++ b/apps/desktop/src/renderer/strings.ts
+@@ -37,6 +37,8 @@
+     searchClear: "清空搜索",
+     listAria: "会话列表",
+     loadFailed: "会话列表没有加载成功",
++    refreshFailed: "更新失败，仍显示上次列表",
++    errorDetails: "查看原因",
+     retry: "重试",
+     tempChats: "临时对话",
+     previewHint: "（⌘+点击在侧栏预览）",
+--- a/apps/desktop/src/renderer/styles.css
++++ b/apps/desktop/src/renderer/styles.css
+@@ -284,7 +284,12 @@
+ }
+ .side-skeleton-row:nth-child(2) { width: 78%; }
+ .side-skeleton-row:nth-child(3) { width: 62%; }
+-.side-load-error { display: flex; flex-direction: column; align-items: center; gap: var(--space-sm); }
++.side-load-error { display: flex; flex-direction: column; gap: var(--space-xs); text-align: start; color: hsl(var(--text-200)); }
++.side-load-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); }
++.side-load-heading > span { min-width: 0; overflow-wrap: anywhere; }
++.side-load-heading .side-retry { flex-shrink: 0; min-height: 28px; padding-inline: var(--space-xs); }
++.side-load-reason summary { cursor: pointer; width: fit-content; min-height: 28px; display: list-item; align-content: center; }
++.side-load-detail { display: block; margin-top: var(--space-xs); overflow-wrap: anywhere; max-height: 160px; overflow-y: auto; }
+ .side-retry { font-size: var(--fs-body-sm); }
+ /* 侧栏会话搜索（2026-10-27 收口）：默认收起，点击顶栏搜索图标才展开。
+    14px 字号 + 焦点环走全局 :focus-visible 令牌。
+--- a/apps/desktop/tests/interaction-deadends.test.ts
++++ b/apps/desktop/tests/interaction-deadends.test.ts
+@@ -98,7 +98,7 @@
+   it("Sidebar 接 loading / loadError / onRetryLoad，并有骨架与重试", () => {
+     expect(sidebar).toContain("loading?: boolean;");
+     expect(sidebar).toContain("loadError?: boolean;");
+-    expect(sidebar).toContain('aria-busy={props.loading === true}');
++    expect(sidebar).toContain('aria-busy={props.loading === true || props.refreshing === true}');
+     expect(sidebar).toContain("side-skeleton-row");
+     expect(sidebar).toContain("STR.sidebar.loadFailed");
+     expect(sidebar).toContain("props.onRetryLoad");
+--- /dev/null
++++ b/apps/desktop/tests/sidebar-list-recovery.test.tsx
+@@ -0,0 +1,39 @@
++import { renderToStaticMarkup } from "react-dom/server";
++import type { ComponentProps } from "react";
++import { describe, expect, it } from "vitest";
++import { Sidebar } from "../src/renderer/components/Sidebar";
++
++const noop = () => undefined;
++function html(overrides: Partial<ComponentProps<typeof Sidebar>>) {
++  return renderToStaticMarkup(<Sidebar
++    projects={[]} sessions={[]} activeId={null} activeWorkspace={null}
++    running={new Set()} waitingIds={new Set()} outcomes={new Map()} providerOk={null}
++    theme="system" onThemeChange={noop} onOpen={noop} onNewTask={noop} onOpenPalette={noop}
++    onSwitchWorkspace={noop} onAddProject={async () => undefined} onCloneProject={async () => undefined}
++    onOpenNewProjectDialog={noop} onUpdateProject={async () => undefined} onRelocateProject={async () => undefined}
++    onRemoveProject={async () => undefined} onRevealProject={noop} onOpenSettings={noop}
++    onPickDirectory={async () => null} {...overrides}
++  />);
++}
++
++describe("侧栏会话列表恢复", () => {
++  it("后台刷新失败仍呈现已有会话，并说明这是更新失败", () => {
++    const rendered = html({ sessions: [{ id: "saved", title: "保留的会话", mtimeMs: 1, lines: 1, workspace: "/tmp/ws" }], loadError: true });
++    expect(rendered).toContain("保留的会话");
++    expect(rendered).toContain("更新失败，仍显示上次列表");
++    expect(rendered).not.toContain("还没有任务");
++  });
++  it("错误原因可按需展开，原文转义且保留完整路径", () => {
++    const rendered = html({ loadError: true, loadErrorDetail: "EACCES /tmp/<project>/sessions", onRetryLoad: noop });
++    expect(rendered).toContain("<summary");
++    expect(rendered).toContain("查看原因");
++    expect(rendered).toContain("EACCES /tmp/&lt;project&gt;/sessions");
++    expect(rendered).not.toContain("<project>");
++  });
++  it("重试中标为忙碌，防重复点击，不拿骨架盖住缓存列表", () => {
++    const rendered = html({ loadError: true, refreshing: true, onRetryLoad: noop });
++    expect(rendered).toContain('aria-busy="true"');
++    expect(rendered).toMatch(/<button[^>]*disabled=""[^>]*>读取中…<\/button>/);
++    expect(rendered).not.toContain('class="side-skeleton"');
++  });
++});
+--- /dev/null
++++ b/docs/superpowers/plans/2026-11-01-session-list-recovery.md
+@@ -0,0 +1,14 @@
++# 会话列表读取与恢复
++
++**目标：** 沿用既有工作台布局，完善用户选定的会话与工作台路径；把读取失败与空列表分开，保留已有会话，忽略过期回包。
++
++**设计选择：** 复用 React hooks、原生 details 和现有错误/骨架样式，不引入查询框架或新依赖。会话列表状态移入 `state/session-list.ts`，工作台只组合；后端完整列表和轻量 ID 扫描共用目录读取边界，仅 ENOENT 表示未创建。保留单文件竞态跳过策略，不修改 IPC、日志格式、权限和会话归属。
++
++**验证边界：** 工作树上的单测、真实 Electron renderer + 合成 IPC 与临时 profile；不声称真实 Provider、安装包或跨平台验证。共享工作区不提交或改动其他批次内容。
++
++- [x] 后端：先复现 ENOTDIR/EACCES 被吞，再统一两个扫描入口的目录读取边界；验证缺失根仍为空。
++- [x] 前端：先用 SSR 和 Electron 复现恢复状态、重试与乱序回包；提取专用 hook，保证旧成功/旧失败不覆盖新请求，卸载清理递增请求序号。
++- [x] 界面：首读与后台刷新分开，失败时保留缓存列表；错误详情按需展开，重试忙碌时禁用按钮；检查亮暗、宽窄窗口和长路径。
++- [x] 交付：运行相关 core/desktop 测试、完整两套套件、类型与边界检查；OCR delegate 只选文件和规则，当前代理审查；保存截图和实际结果。
++
++交付与未通过项见 `outputs/session-list-recovery-2026-11-01/review.md`。没有提交、发布或覆盖共享构建目录。
+--- a/src/main/sessions.ts
++++ b/src/main/sessions.ts
+@@ -383,18 +383,23 @@
+   return true;
+ }
+ 
++/** 未创建的根是空目录；权限、路径类型和 IO 故障必须交回调用方，不能伪装成零会话。 */
++async function readSessionDirectory(root: string): Promise<string[]> {
++  try {
++    return await readdir(root);
++  } catch (error) {
++    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
++    throw error;
++  }
++}
++
+ /** 扫描会话目录：mtime 降序（最近在上），行数 = 非空行数。
+  *  metadataById 只做已存在 sidecar 的合并；缺失键不会补造 pinned/archived/projectId/时间。 */
+ export async function listSessions(
+   root: string,
+   metadataById?: ReadonlyMap<string, SessionMetadataRecord>,
+ ): Promise<SessionInfo[]> {
+-  let names: string[] = [];
+-  try {
+-    names = await readdir(root);
+-  } catch {
+-    return []; // 目录不存在 = 零会话
+-  }
++  const names = await readSessionDirectory(root);
+   const out: SessionInfo[] = [];
+   for (const name of names) {
+     if (!name.endsWith(".jsonl")) continue;
+@@ -741,12 +746,7 @@
+  *  **不整份读文件数行**。用量账本/日志查看只关心有哪些真会话，不需要 listSessions 的全量投影；
+  *  侧栏的 icon/line 数仍走 listSessions。 */
+ export async function listSessionIds(root: string): Promise<string[]> {
+-  let names: string[];
+-  try {
+-    names = await readdir(root);
+-  } catch {
+-    return [];
+-  }
++  const names = await readSessionDirectory(root);
+   const out: string[] = [];
+   for (const name of names) {
+     if (!name.endsWith(".jsonl")) continue;
+--- /dev/null
++++ b/tests/session-list-errors.test.ts
+@@ -0,0 +1,35 @@
++import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++
++vi.mock("node:fs/promises", async (original) => {
++  const actual = await original<typeof import("node:fs/promises")>();
++  return { ...actual, readdir: vi.fn(actual.readdir) };
++});
++import { listSessionIds, listSessions } from "../src/main/sessions";
++
++let root: string;
++beforeEach(async () => { root = await mkdtemp(join(tmpdir(), "cairn-list-errors-")); });
++afterEach(async () => {
++  vi.mocked(readdir).mockReset().mockImplementation((await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")).readdir);
++  await rm(root, { recursive: true, force: true });
++});
++
++for (const [name, scan] of [["listSessions", listSessions], ["listSessionIds", listSessionIds]] as const) {
++  describe(name, () => {
++    it("尚未创建的会话目录返回空清单", async () => {
++      expect(await scan(join(root, "missing"))).toEqual([]);
++    });
++    it("根路径是文件时报告 ENOTDIR，不能伪装成没有会话", async () => {
++      const path = join(root, "sessions");
++      await writeFile(path, "existing data");
++      await expect(scan(path)).rejects.toMatchObject({ code: "ENOTDIR", path });
++    });
++    it("目录读取被拒时保留原始错误与路径", async () => {
++      const error = Object.assign(new Error(`EACCES: permission denied, scandir '${root}'`), { code: "EACCES", path: root });
++      vi.mocked(readdir).mockRejectedValueOnce(error);
++      await expect(scan(root)).rejects.toBe(error);
++    });
++  });
++}

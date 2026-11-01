@@ -17,7 +17,9 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parseBudgetField } from "../src/renderer/components/settings-sections";
+import { renderToStaticMarkup } from "react-dom/server";
+import { AdvancedSection, parseBudgetField, parseCapField } from "../src/renderer/components/settings-sections";
+import { DEFAULT_SETTINGS } from "../../../src/main/settings";
 import { SECTIONS } from "../src/renderer/components/settings-nav";
 
 const sectionsSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings-sections.tsx", import.meta.url)), "utf8");
@@ -52,12 +54,29 @@ describe("parseBudgetField（界面侧先拦，别让后端静默回退）", () 
 });
 
 describe("高级段的字段真的接上了", () => {
-  it("五个字段都有控件（autoMemory / impactAnalysis / promptCache / maxBudgetUsd / budgetPricePerMTok / telemetry）", () => {
-    for (const key of ["autoMemory", "impactAnalysis", "promptCache", "telemetry"]) {
+  it("各字段都有控件（记忆/成本/隐私 + 验证与子代理 + 定时并发）", () => {
+    for (const key of ["autoMemory", "impactAnalysis", "promptCache", "telemetry", "subagentTools", "autoVerify", "autoVerifyRepair"]) {
       expect(sectionsSrc, `${key} 缺控件`).toContain(`props.onSaveKey("${key}", next)`);
     }
     expect(sectionsSrc).toContain('props.onSaveKey("maxBudgetUsd", r.value)');
     expect(sectionsSrc).toContain('props.onSaveKey("budgetPricePerMTok", r.value)');
+    expect(sectionsSrc).toContain('props.onSaveKey("scheduleConcurrencyCap", r.value)');
+  });
+
+  it("高级段真的渲染出新增控件：三个开关 + 并发上限（默认值来自 settings，不另抄）", () => {
+    const html = renderToStaticMarkup(
+      <AdvancedSection settings={DEFAULT_SETTINGS} onSaveKey={() => undefined} />,
+    );
+    for (const label of ["子代理工具", "收束前补一拍验证", "验证红了自动返修一轮", "同时运行的定时会话上限"]) {
+      expect(html, `${label} 未渲染`).toContain(label);
+    }
+    expect(html).toContain('aria-label="同时运行的定时会话上限"');
+    expect(html).toContain(`value="${String(DEFAULT_SETTINGS.scheduleConcurrencyCap)}"`);
+    // 三枚开关的缺省态与 DEFAULT_SETTINGS 同源：subagentTools/autoVerify 开、autoVerifyRepair 关。
+    const sw = (label: string): string => html.match(new RegExp(`<button[^>]*aria-label="${label}"[^>]*>`))?.[0] ?? "";
+    expect(sw("子代理工具")).toContain('aria-checked="true"');
+    expect(sw("收束前补一拍验证")).toContain('aria-checked="true"');
+    expect(sw("验证红了自动返修一轮")).toContain('aria-checked="false"');
   });
 
   it("导航里有「高级」这一节（否则接好了也进不去）", () => {
@@ -68,6 +87,13 @@ describe("高级段的字段真的接上了", () => {
   it("面板真的渲染 AdvancedSection 并接 saveSettingKey", () => {
     expect(panelSrc).toContain('section === "advanced"');
     expect(panelSrc).toContain("<AdvancedSection settings={settings} onSaveKey={saveSettingKey} />");
+  });
+
+  it("关闭设置前先提交焦点输入（Esc / 返回 / 遮罩走同一条 closeSettings）", () => {
+    expect(panelSrc).toContain("const closeSettings = () =>");
+    expect(panelSrc).toMatch(/active\.closest\("\.sp-page"\) !== null\) active\.blur\(\);/);
+    expect(panelSrc).toContain("onClose={closeSettings}");
+    expect(panelSrc).toContain("onClick={closeSettings}");
   });
 
   it("走单键直调，不动 panelPatch 白名单（那份判卷钉死六键）", () => {
@@ -95,5 +121,27 @@ describe("更新源不再死胡同", () => {
 
   it("只在值真变了才写（避免每次失焦都写一笔 + 骗一次「已保存」）", () => {
     expect(sectionsSrc).toContain("if (next !== (props.updateManifestUrl ?? \"\")) props.onSaveManifest?.(next);");
+  });
+});
+
+describe("parseCapField（并发上限界面侧先拦）", () => {
+  it("1-8 的整数原样通过（含边界与空白）", () => {
+    expect(parseCapField("1")).toEqual({ ok: true, value: 1 });
+    expect(parseCapField("8")).toEqual({ ok: true, value: 8 });
+    expect(parseCapField(" 5 ")).toEqual({ ok: true, value: 5 });
+  });
+
+  it("空 / 0 / 9 / 小数 / 非数字一律拒（后端会静默回退 2，界面不许说已保存）", () => {
+    for (const bad of ["", "0", "9", "-1", "1.5", "abc"]) {
+      expect(parseCapField(bad).ok, `${bad} 应当被拒`).toBe(false);
+    }
+  });
+});
+
+describe("设置输入框：回车 = 提交（blur 触发既有校验/保存）", () => {
+  it("花费上限 / 单价 / 并发上限三个数字框都接了 Enter → blur", () => {
+    const enterBlur = 'onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); e.currentTarget.blur(); } }}';
+    const count = sectionsSrc.split(enterBlur).length - 1;
+    expect(count, "三个高级数字框 + 更新源输入框各一处").toBeGreaterThanOrEqual(4);
   });
 });

@@ -1,5 +1,5 @@
 // 侧栏（P1 主界面重做，对 brief 第二节）：
-//   顶栏「＋ 新任务」（⌘N）＋ 搜索（⌘K 命令面板入口）——旧四图标行与行内表单整体下架（brief 明裁）；
+//   顶栏「＋ 新任务」（⌘N）＋ 按需展开的会话搜索 + 筛选——旧四图标行与常驻行内表单整体下架；
 //   项目区：按项目分组（显示名不是路径，完整路径只进 tooltip），可折叠，有任务在跑/等门显小圆点；
 //   项目右键菜单（也可 hover ⋯ 打开）：Finder 显示 / 重命名显示名 / 项目设置 / 移除（不删文件，说明清楚）；
 //   会话行：状态图标（运行中/等待/完成/失败——只取本进程可见态）+ 标题（省略号，hover 全称）+ 相对时间（常驻）；
@@ -12,18 +12,22 @@
 //     同一个语义两处入口是本仓反复要治的病（批 #128 同款）。
 // 文案一律走 STR（strings.ts——源文扫描判卷钉死）；图标 = lucide（ADR 0003）；会话行菜单 = Radix。
 import { useCallback, useEffect, useRef, useState } from "react";
+import { readMotionPref, setMotionPref, type MotionPref } from "../state/motion-pref";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Archive, Check, ChevronRight, Filter, Folder, GitBranch, Loader2, MoreHorizontal, Pencil, Pin, Plus, Search, Settings2, X } from "lucide-react";
+import { Archive, Check, ChevronRight, CircleUser, Filter, Folder, GitBranch, Loader2, MoreHorizontal, Pencil, Pin, Plus, Search, X } from "lucide-react";
 import type { ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import { relativeTime } from "../projections";
-import type { UsageSummary } from "../projections";
 import { keysOf } from "../shortcuts";
+import { useAvailableUpdate } from "../state/update-notice";
 import { filterSessions, groupByWorkspace, projectLabelFor, projectMenuItems, projectSections, sessionStatus, sessionTime, splitArchived, workspaceLabel, OTHER_WORKSPACE, SESSION_FILTERS, SESSION_FILTER_NOTE, type SessionFilterId, type TimeBucket, type WorkspaceSession } from "../sessions-view";
 import { draftKeyFor } from "../drafts";
 import { sessionKeyOf } from "../state/session-identity";
+import { parseSidebarDensity, SIDEBAR_DENSITY_KEY, type SidebarDensity } from "../state/sidebar-density";
+import { usePinnedOrder } from "../state/use-pinned-order";
+import type { PinnedDragProps, PinnedRowAttrs } from "../state/use-pinned-order";
 import { STR } from "../strings";
+import { isCompositionEnter } from "../ime";
 import { CairnMark } from "./CairnMark";
-import type { UsageAllState } from "./UsagePanel";
 import { useNow } from "../useNow";
 import type { ThemePref } from "../theme";
 import { ModalSurface } from "./ModalSurface";
@@ -96,6 +100,10 @@ function SessionRow(props: {
   projectName: string | null;
   /** 可归属的项目（子菜单用；空 = 没有可选项 ⇒ 子菜单不摆）。 */
   projectOptions: readonly { id: string; name: string }[];
+  /** 置顶段拖排（2026-10-31）：属性 + pointer 处理器 + Alt+↑/↓ 键盘排序。 */
+  dragAttrs?: PinnedRowAttrs;
+  dragProps?: PinnedDragProps;
+  onReorder?: (delta: -1 | 1) => void;
   actions: {
     onPin: (pinned: boolean) => void;
     onFork: () => void;
@@ -137,6 +145,8 @@ function SessionRow(props: {
       className={"session" + (s.id === props.activeId ? " active" : "")}
       data-active={s.id === props.activeId}
       data-session-id={s.id}
+      {...props.dragAttrs}
+      {...props.dragProps}
       onClick={props.renaming ? undefined : (e) => {
         if ((e.metaKey || e.ctrlKey) && props.onPreview !== undefined) {
           e.preventDefault();
@@ -168,6 +178,11 @@ function SessionRow(props: {
       // 焦点移动不做选择——选中仍是 Enter/Space，与原生 listbox 语义一致。
       onKeyDown={(e) => {
         if (props.renaming || e.target !== e.currentTarget) return;
+        if (s.pinned === true && e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+          e.preventDefault();
+          props.onReorder?.(e.key === "ArrowUp" ? -1 : 1);
+          return;
+        }
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); props.onOpen(s.id, s.workspace); return; }
         // Shift+F10 / ContextMenu：键盘打开行菜单（右键的等价入口）。没有 actions 时让路。
         if ((e.key === "F10" && e.shiftKey) || e.key === "ContextMenu") {
@@ -197,7 +212,9 @@ function SessionRow(props: {
         next?.focus();
       }}
     >
-      <StatusIcon status={props.status} title={statusTitle} />
+      <span className="s-status">
+        <StatusIcon status={props.status} title={statusTitle} />
+      </span>
       {props.renaming ? (
         <input
           className="s-rename"
@@ -215,17 +232,17 @@ function SessionRow(props: {
           onChange={(e) => { props.onRenameValue(e.target.value); }}
           onKeyDown={(e) => {
             e.stopPropagation();
-            if (e.key === "Enter") { e.preventDefault(); props.onRenameCommit(); }
+            if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); props.onRenameCommit(); }
             else if (e.key === "Escape") { e.preventDefault(); props.onRenameCancel(); }
           }}
           onBlur={props.onRenameCommit}
         />
       ) : (
         <>
-          {s.pinned === true && <Pin size={11} className="s-pin" aria-label={STR.sidebar.pinned} />}
           <div className="s-summary">
             <span className="s-title" title={title} onDoubleClick={() => { props.onRenameStart(); }}>{title}</span>
             <div className="s-meta">
+              {s.pinned === true && <Pin size={10} className="s-pin" aria-label={STR.sidebar.pinned} />}
               {Number.isFinite(t) && <span className="s-time">{relativeTime(now, t)}</span>}
               {props.hasDraft === true && (
                 <span className="s-draft" aria-label={STR.sidebar.draftLabel} title={STR.sidebar.draftLabel}><Pencil size={9} /></span>
@@ -334,6 +351,7 @@ function ProjectContextMenu(props: {
   onReveal: () => void;
   onRename: () => void;
   onSettings: () => void;
+  onRelocate: () => void;
   onRemove: () => void;
 }): React.JSX.Element {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -366,6 +384,7 @@ function ProjectContextMenu(props: {
       {item(STR.projectMenu.reveal, STR.projectMenu.revealTip, props.onReveal)}
       {item(STR.projectMenu.rename, STR.projectMenu.renameTip, props.onRename)}
       {item(STR.projectMenu.settings, STR.projectMenu.settingsTip, props.onSettings)}
+      {item(STR.projectMenu.relocate, STR.projectMenu.relocateTip, props.onRelocate)}
       <div className="menu-sep" role="separator" />
       {item(STR.projectMenu.remove, STR.projectMenu.removeTip, props.onRemove, true)}
     </div>
@@ -385,6 +404,18 @@ export function ProjectSettingsDialog(props: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameInput = useRef<HTMLInputElement | null>(null);
+  /** 回车 = 保存（按钮同一条路）；空名给错误、不关面板。 */
+  const submit = () => {
+    if (busy) return;
+    const trimmed = name.trim();
+    if (trimmed === "") { setError(STR.projectRename.empty); return; }
+    setBusy(true);
+    setError(null);
+    void props.onSave({ name: trimmed, defaultLocation: location }).then(
+      () => { props.onClose(); },
+      (err: unknown) => { setError(err instanceof Error ? err.message : String(err)); setBusy(false); },
+    );
+  };
   return (
     <div className="modal-backdrop" role="presentation" onClick={props.onClose}>
       <ModalSurface
@@ -402,7 +433,13 @@ export function ProjectSettingsDialog(props: {
         </div>
         <label className="modal-field">
           <span>{STR.projectSettings.nameLabel}</span>
-          <input ref={nameInput} value={name} onChange={(e) => { setName(e.target.value); }} aria-label={STR.projectSettings.nameLabel} />
+          <input
+            ref={nameInput}
+            value={name}
+            onChange={(e) => { setName(e.target.value); }}
+            aria-label={STR.projectSettings.nameLabel}
+            onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); submit(); } }}
+          />
         </label>
         <div className="modal-field">
           <span>{STR.projectSettings.locationLabel}</span>
@@ -427,16 +464,7 @@ export function ProjectSettingsDialog(props: {
             className="mini-btn primary"
             title={STR.projectRename.save}
             disabled={busy}
-            onClick={() => {
-              const trimmed = name.trim();
-              if (trimmed === "") { setError(STR.projectRename.empty); return; }
-              setBusy(true);
-              setError(null);
-              void props.onSave({ name: trimmed, defaultLocation: location }).then(
-                () => { props.onClose(); },
-                (err: unknown) => { setError(err instanceof Error ? err.message : String(err)); setBusy(false); },
-              );
-            }}
+            onClick={submit}
           >
             {busy ? STR.common.creating : STR.projectRename.save}
           </button>
@@ -447,7 +475,8 @@ export function ProjectSettingsDialog(props: {
 }
 
 export interface SidebarProps {
-  projects: ProjectRecord[];
+  /** listProjects 的派生行：missing = 盘点时目录不在场（不写回 registry）。 */
+  projects: (ProjectRecord & { missing?: boolean })[];
   sessions: WorkspaceSession[];
   activeId: string | null;
   /** 当前新任务归属工作区（项目路径）；null＝host 缺省。 */
@@ -461,14 +490,22 @@ export interface SidebarProps {
   /** 本进程观察到的轮末结果（agent_status 终态记账）；重启归零是诚实行为。 */
   outcomes: ReadonlyMap<string, "ok" | "failed">;
   notice?: string | null;
+  /** notice 的就地重试（项目注册表读失败时）；缺省不摆按钮。 */
+  onRetryNotice?: () => void;
   /** 首屏会话清单仍在读（2026-10-18）：此前这段时间直接摆「还没有任务」——
    *  一句话同时在说「你什么都没有」和「我还没看完」，读起来像丢数据。 */
   loading?: boolean;
+  /** 后台更新保留已有列表；忙碌期间禁用重试。 */
+  refreshing?: boolean;
   /** 会话清单读取失败（2026-10-18）：与「空」分开，给重试入口，不把失败读成没有会话。 */
   loadError?: boolean;
+  /** 失败原句（含损坏文件的路径与出路）：有就上屏，重试解决不了时用户才知道要修什么。 */
+  loadErrorDetail?: string | null;
   onRetryLoad?: () => void;
   /** 模型服务状态点：true=可用绿 / false=不可用红 / null=未检测灰。 */
   providerOk: boolean | null;
+  /** 演示 provider：状态点写「演示模式」，不许冒充真实服务「服务正常」。 */
+  providerDemo?: boolean;
   onOpen: (id: string, workspace?: string) => void;
   /** ⌘/Ctrl+点击会话行：右侧只读预览（不切主体会话）。 */
   onPreviewSession?: (s: WorkspaceSession) => void;
@@ -480,6 +517,8 @@ export interface SidebarProps {
   onOpenNewProjectDialog: () => void;
   /** 改名 / 改默认位置合并走一次 upsert（App 侧 addProject 同路径更新语义）。 */
   onUpdateProject: (p: ProjectRecord, patch: { name?: string; defaultLocation?: string }) => Promise<void>;
+  /** v36：目录移动/改名后按同一条记录重新定位（保住 id 与会话归属）。 */
+  onRelocateProject: (p: ProjectRecord, nextPath: string) => Promise<void>;
   onRemoveProject: (p: ProjectRecord) => Promise<void>;
   onRevealProject: (p: ProjectRecord) => void;
   onRenameSession?: (id: string, name: string) => Promise<void>;
@@ -495,6 +534,8 @@ export interface SidebarProps {
   onForkSession?: (s: WorkspaceSession) => void;
   onOpenSettings: () => void;
   onOpenAbout?: () => void;
+  /** 有新版本时优先打开「关于与更新」；缺省回落到 onOpenSettings。 */
+  onOpenUpdateSettings?: () => void;
   onOpenUsage?: () => void;
   /** 状态点：直接进「模型与 Provider」分区（它就是为修模型服务而存在的入口，
    *  笼统地开设置页等于让用户自己找那一格）。 */
@@ -503,17 +544,17 @@ export interface SidebarProps {
   theme: ThemePref;
   /** 切主题（子菜单点选即生效）。 */
   onThemeChange: (t: ThemePref) => void;
-  /** 当前会话用量（头像菜单「用量统计」面板读它）；null = 没有会话。 */
-  usage: UsageSummary | null;
-  /** 全部会话账本（v14）：状态由 App 持有；缺省 = 未接（面板仍可显示当前会话）。 */
-  usageAll?: UsageAllState;
-  /** 切到「全部会话」时拉取/刷新账本；主进程按 mtime 缓存，重复打开成本低。 */
-  onLoadUsageAll?: () => void;
   /** 系统目录选择（「打开文件夹…」「选择克隆位置」「项目设置·更改」共用）。 */
   onPickDirectory: () => Promise<string | null>;
 }
 
 export function Sidebar(props: SidebarProps): React.JSX.Element {
+  // 全局可用更新：notice 随会话走，头像上的点不随会话走（第 811 页）。
+  const update = useAvailableUpdate();
+  // 置顶段拖排（2026-10-31）：顺序是视图偏好，落 localStorage，不改会话 metadata。
+  const pinnedOrder = usePinnedOrder();
+  // 减弱动效偏好（窗口级，落 localStorage；见 state/motion-pref.ts）。
+  const [motionPref, setMotionPrefState] = useState<MotionPref>(readMotionPref);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => {
     try {
       if (typeof window === "undefined") return new Set();
@@ -524,6 +565,14 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
   useEffect(() => {
     try { window.localStorage.setItem("cairn.sidebar.groups.v1", JSON.stringify([...collapsed])); } catch { /* 本窗口仍然生效 */ }
   }, [collapsed]);
+  const [density, setDensity] = useState<SidebarDensity>(() => {
+    if (typeof window === "undefined") return "comfortable";
+    try { return parseSidebarDensity(window.localStorage.getItem(SIDEBAR_DENSITY_KEY)); } catch { return "comfortable"; }
+  });
+  const changeDensity = (next: SidebarDensity): void => {
+    setDensity(next);
+    try { window.localStorage.setItem(SIDEBAR_DENSITY_KEY, next); } catch { /* 本窗口仍生效 */ }
+  };
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const [renamingProject, setRenamingProject] = useState<{ id: string; value: string } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; project: ProjectRecord } | null>(null);
@@ -531,12 +580,23 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
   // 侧栏会话搜索（2026-10-18 接通）：筛选纯函数与词表（filterSessions / SESSION_FILTERS）
   // 从 P3-3 起就在 sessions-view.ts 里、也有判卷，但一直没有调用方——侧栏顶的放大镜实际打开
   // 的是 ⌘K 命令面板（整屏模态），用户点「搜索」想收窄列表，得到的却是盖住整个应用的弹窗。
-  // 现在：列表上方常驻一行搜索框（有内容才出现，不占常态高度），命中走 filterSessions，
+  // 现在：搜索图标控制一行按需展开的输入框，命中走 filterSessions，
   // 空结果给一句明确的「没有匹配的会话」而不是闪回空列表。
   // ⌘K 仍是全局入口（搜命令/项目/设置），两者分工不冲突。
   const [sessionQuery, setSessionQuery] = useState("");
+  const [searchExpanded, setSearchExpanded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const searchToggleRef = useRef<HTMLButtonElement | null>(null);
   const searchOpen = sessionQuery.trim() !== "";
+  const showSearch = searchExpanded || searchOpen;
+  useEffect(() => {
+    if (!searchExpanded) return;
+    const frame = window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    });
+    return () => { window.cancelAnimationFrame(frame); };
+  }, [searchExpanded]);
   const [filter, setFilter] = useState<SessionFilterId>(() => {
     try {
       if (typeof window === "undefined") return "all";
@@ -591,6 +651,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
     : groupByWorkspace(visibleActive, props.projects.map((p) => p.path));
   const byPath = new Map(props.projects.map((p) => [p.path, p]));
   const now = Date.now();
+  const sectionsFor = (list: readonly WorkspaceSession[]): ReturnType<typeof projectSections> => projectSections(pinnedOrder.ordered(list), now);
   const hasRowActions =
     props.onRenameSession !== undefined || props.onPinSession !== undefined ||
     props.onArchiveSession !== undefined || props.onDeleteSession !== undefined ||
@@ -605,7 +666,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
   // 注意这是**渲染序**，不是「打开顺序」——被折叠的组其行仍在 DOM 里（高度过渡），
   // 键盘移动靠 `.session:not([inert])` 或可见性另行过滤（见 SessionRow 的 ↑↓ 处理）。
   const flatOrder: readonly WorkspaceSession[] = [
-    ...groups.flatMap((g) => projectSections(g.sessions, now).flatMap((sec) => sec.sessions)),
+    ...groups.flatMap((g) => sectionsFor(g.sessions).flatMap((sec) => sec.sessions)),
     ...visibleArchived,
   ];
 
@@ -624,6 +685,9 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                       renameValue={renaming !== null && renaming.id === s.id ? renaming.value : (s.title ?? s.id)}
                       hasDraft={props.draftIds?.has(draftKeyFor(s.workspace, s.id)) === true || props.draftIds?.has(s.id) === true}
                       projectName={projectNameOf(s)}
+                      dragAttrs={!searchOpen && filter === "all" ? pinnedOrder.rowAttrs(s) : {}}
+                      dragProps={!searchOpen && filter === "all" ? pinnedOrder.dragProps(s) : undefined}
+                      onReorder={!searchOpen && filter === "all" ? (delta) => { pinnedOrder.moveByKeyboard(s, delta); } : undefined}
                       projectOptions={projectOptions}
                       onRenameValue={(v) => { setRenaming((cur) => (cur !== null && cur.id === s.id ? { id: cur.id, value: v } : cur)); }}
                       onRenameStart={() => { setRenaming({ id: s.id, value: s.title ?? s.id }); }}
@@ -649,19 +713,39 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
   );
 
   return (
-    <aside className="side" aria-label={STR.app.brand}>
+    <aside className="side" data-density={density} aria-label={STR.app.brand}>
       {/* 顶栏 48px（brief：＋ 新任务 ⌘N + 搜索 ⌘K；旧四图标行与行内表单在此下架） */}
       <div className="side-head">
-        <CairnMark outline className="side-brand-mark" />
-        <button className="btn-primary side-new" title={withKeys(STR.sidebar.newTaskTip, "new-session")} onClick={props.onNewTask}>
-          <Plus size={13} />
-          {STR.sidebar.newTask}
-        </button>
+        <div className="side-brandline">
+          <CairnMark outline className="side-brand-mark" />
+          <span className="side-brand">{STR.app.brand}</span>
+        </div>
+        <div className="side-actions">
+          <button className="btn-primary side-new" title={withKeys(STR.sidebar.newTaskTip, "new-session")} onClick={props.onNewTask}>
+            <Plus size={13} aria-hidden="true" />
+            <span className="side-new-label">{STR.sidebar.newTask}</span>
+            {keysOf("new-session") !== null && <kbd className="side-new-keys">{keysOf("new-session")}</kbd>}
+          </button>
         {/* 2026-10-18：放大镜从「打开 ⌘K 命令面板」改为「聚焦侧栏搜索框」。
             此前它打开的是整屏模态——用户点「搜索」想收窄左侧列表，得到的却是盖住整个应用的弹窗，
             列表一屏没变。真正的列表筛选（filterSessions）自此有入口。
             ⌘K 仍是全局入口（搜命令/项目/设置），不冲突：一个收窄本栏，一个跨面跳转。 */}
-        <button className="iconbtn" aria-label={STR.sidebar.search} title={withKeys(STR.sidebar.searchTip, "palette")} onClick={() => { searchInputRef.current?.focus(); searchInputRef.current?.select(); }}>
+        <button
+          ref={searchToggleRef}
+          className="iconbtn"
+          data-sidebar-search-toggle="true"
+          aria-label={STR.sidebar.search}
+          aria-expanded={showSearch}
+          aria-controls="sidebar-session-search"
+          title={STR.sidebar.searchTip}
+          onClick={() => {
+            if (showSearch && sessionQuery.trim() === "") {
+              setSearchExpanded(false);
+              return;
+            }
+            setSearchExpanded(true);
+          }}
+        >
           <Search size={14} />
         </button>
         {/* 会话筛选：词表/纯函数早就存在，此前入口为零。菜单用 Radix RadioGroup（键盘/外点/读屏免费）。 */}
@@ -677,80 +761,111 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
             </button>
           </DropdownMenu.Trigger>
           <DropdownMenu.Portal>
-            <DropdownMenu.Content className="pop-rd side-filter-menu" align="end" sideOffset={5}>
-              <div className="pop-label">{STR.filter.title}</div>
+            <DropdownMenu.Content className="pop-rd side-filter-menu" aria-label={STR.filter.title} align="end" sideOffset={8} collisionPadding={12}>
               <DropdownMenu.RadioGroup value={filter} onValueChange={(value) => { if (isSessionFilter(value)) changeFilter(value); }}>
                 {filterCounts.map((f) => (
-                  <DropdownMenu.RadioItem key={f.id} value={f.id} data-filter={f.id} className="menu-item" aria-label={`${f.label}（${String(f.count)}）`}>
-                    <span className="side-filter-check" aria-hidden="true">{filter === f.id ? <Check size={12} /> : null}</span>
-                    <span>{f.label}</span>
+                  <DropdownMenu.RadioItem key={f.id} value={f.id} data-filter={f.id} className="menu-item" aria-label={`${f.label}（${String(f.count)}）`} title={f.id === "running" ? SESSION_FILTER_NOTE : undefined}>
+                    <span className="side-filter-label">{f.label}</span>
                     <span className="sub num">{f.count}</span>
+                    <span className="side-filter-check" aria-hidden="true"><DropdownMenu.ItemIndicator><Check size={13} /></DropdownMenu.ItemIndicator></span>
                   </DropdownMenu.RadioItem>
                 ))}
               </DropdownMenu.RadioGroup>
-              <div className="menu-note side-filter-note">{SESSION_FILTER_NOTE}</div>
+              <DropdownMenu.Separator className="menu-sep" />
+              <DropdownMenu.CheckboxItem
+                className="menu-item"
+                checked={density === "compact"}
+                onCheckedChange={(checked) => { changeDensity(checked === true ? "compact" : "comfortable"); }}
+              >
+                <span className="side-filter-label">紧凑视图（28px）</span>
+                <span className="side-filter-check" aria-hidden="true"><DropdownMenu.ItemIndicator><Check size={13} /></DropdownMenu.ItemIndicator></span>
+              </DropdownMenu.CheckboxItem>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
+        </div>
       </div>
 
-      {/* 侧栏会话搜索（2026-10-18 接通）：常驻一行，有内容才显示清空钮；Esc 两级语义——
-          有字先清空，空着才让给全局（关浮层/停本轮，见 App 的 Esc 分支）。
+      {/* 侧栏会话搜索（2026-10-27 收口）：默认只保留顶栏图标，点击展开；有内容才显示清空钮。
+          Esc 两级语义：有字先清空，空着再收起并把焦点还给入口。
           ⏎ 直接打开第一个命中（搜索的终点就是打开它）。 */}
-      <div className="side-search">
-        <Search size={12} aria-hidden="true" />
-        <input
-          ref={searchInputRef}
-          className="side-search-input"
-          type="text"
-          value={sessionQuery}
-          placeholder={STR.sidebar.searchPlaceholder}
-          aria-label={STR.sidebar.search}
-          onChange={(e) => { setSessionQuery(e.target.value); }}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              e.preventDefault();
-              e.stopPropagation();
-              if (sessionQuery !== "") { setSessionQuery(""); return; }
-              searchInputRef.current?.blur();
-              return;
-            }
-            if (e.key === "Enter") {
-              const first = visibleActive[0] ?? visibleArchived[0];
-              if (first !== undefined) { e.preventDefault(); props.onOpen(first.id, first.workspace); }
-            }
-          }}
-        />
-        {searchOpen && (
-          <button className="side-search-x" aria-label={STR.sidebar.searchClear} title={STR.sidebar.searchClear} onClick={() => { setSessionQuery(""); searchInputRef.current?.focus(); }}>
-            <X size={11} />
-          </button>
-        )}
-      </div>
+      {showSearch && (
+        <div className="side-search" id="sidebar-session-search">
+          <Search size={12} aria-hidden="true" />
+          <input
+            ref={searchInputRef}
+            className="side-search-input"
+            type="text"
+            value={sessionQuery}
+            placeholder={STR.sidebar.searchPlaceholder}
+            aria-label={STR.sidebar.search}
+            onChange={(e) => { setSessionQuery(e.target.value); }}
+            onBlur={(e) => {
+              if (sessionQuery !== "") return;
+              if (e.currentTarget.parentElement?.contains(e.relatedTarget as Node | null) === true) return;
+              setSearchExpanded(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                e.stopPropagation();
+                if (sessionQuery !== "") { setSessionQuery(""); return; }
+                setSearchExpanded(false);
+                window.requestAnimationFrame(() => { searchToggleRef.current?.focus(); });
+                return;
+              }
+              if (e.key === "Enter" && !isCompositionEnter(e, null)) {
+                const first = visibleActive[0] ?? visibleArchived[0];
+                if (first !== undefined) { e.preventDefault(); props.onOpen(first.id, first.workspace); }
+              }
+            }}
+          />
+          {searchOpen && (
+            <button className="side-search-x" aria-label={STR.sidebar.searchClear} title={STR.sidebar.searchClear} onClick={() => { setSessionQuery(""); searchInputRef.current?.focus(); }}>
+              <X size={11} />
+            </button>
+          )}
+        </div>
+      )}
 
       {props.notice !== null && props.notice !== undefined && props.notice !== "" && (
-        <div className="side-notice" role="status">{props.notice}</div>
+        <div className="side-notice" role="status">
+          <span className="side-notice-text">{props.notice}</span>
+          {props.onRetryNotice !== undefined && (
+            <button type="button" className="mini-btn" onClick={props.onRetryNotice}>重试</button>
+          )}
+        </div>
       )}
 
       {/* 会话列表的 ARIA 结构（2026-10-18 补）：此前每行是裸 role=button，读屏念不出
           「第几项 / 共几项」，方向键也无从判断边界。listbox + option 是「一组可选项、一次选一个」
           的正解；行内「…」按钮是 option 的子控件（listbox 允许 option 内含可聚焦后代）。
           分组标题用 role=group 包住各自的 option，读屏能报出「哪个项目里第几项」。 */}
-      <nav className="sidenav" role="listbox" aria-label={STR.sidebar.listAria} aria-busy={props.loading === true}>
+      <nav className="sidenav" role="listbox" aria-label={STR.sidebar.listAria} aria-busy={props.loading === true || props.refreshing === true}>
         {/* 首屏读取中（2026-10-18）：三条骨架只占位，不摆「还没有任务」——
             用户没有『空』这个事实，只有『还没读完』这个事实。 */}
         {props.loading === true && (
-          <div className="side-skeleton" role="presentation" aria-hidden="true">
-            {[0, 1, 2].map((i) => <div className="side-skeleton-row" key={i} />)}
+          <div className="side-skeleton" role="presentation" aria-hidden="true" data-cds="SkeletonGroup" data-motion="wave">
+            {[0, 1, 2].map((i) => <div className="side-skeleton-row" data-cds="Skeleton" key={i} />)}
           </div>
         )}
         {/* 读取失败（2026-10-18）：失败与空分开，并给重试入口；否则一次 IPC 抖动会被读成
             「所有会话都没了」，且永远停在空屏（sessionsLoaded 此前只会在成功时落真）。 */}
         {props.loadError === true && props.loading !== true && (
-          <div className="side-empty side-load-error" role="status">
-            <span>{STR.sidebar.loadFailed}</span>
-            {props.onRetryLoad !== undefined && (
-              <button className="btn-ghost side-retry" onClick={props.onRetryLoad}>{STR.sidebar.retry}</button>
+          <div className="side-empty side-load-error">
+            <div className="side-load-heading">
+              <span role="status">{props.sessions.length > 0 ? STR.sidebar.refreshFailed : STR.sidebar.loadFailed}</span>
+              {props.onRetryLoad !== undefined && (
+                <button type="button" className="btn-ghost side-retry" disabled={props.refreshing === true} onClick={props.onRetryLoad}>
+                  {props.refreshing === true ? STR.common.loading : STR.sidebar.retry}
+                </button>
+              )}
+            </div>
+            {props.loadErrorDetail !== null && props.loadErrorDetail !== undefined && props.loadErrorDetail !== "" && (
+              <details className="side-load-reason">
+                <summary>{STR.sidebar.errorDetails}</summary>
+                <span className="side-load-detail" title={props.loadErrorDetail}>{props.loadErrorDetail}</span>
+              </details>
             )}
           </div>
         )}
@@ -777,7 +892,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           const isCollapsed = !searchOpen && collapsed.has(key);
           const activeGroup = !isTemp && g.workspace === props.activeWorkspace;
           const busyDot = g.sessions.some((s) => props.running.has(s.id) || props.waitingIds.has(s.id));
-          const sections = projectSections(g.sessions, now);
+          const sections = sectionsFor(g.sessions);
           const isRenaming = renamingProject !== null && project !== null && renamingProject.id === project.id;
           return (
             <div key={key} className="group" data-active={activeGroup} data-collapsed={isCollapsed} data-sentinel={isTemp}>
@@ -808,7 +923,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                       onChange={(e) => { setRenamingProject({ id: project.id, value: e.target.value }); }}
                       onKeyDown={(e) => {
                         e.stopPropagation();
-                        if (e.key === "Enter") {
+                        if (e.key === "Enter" && !isCompositionEnter(e, null)) {
                           e.preventDefault();
                           const v = renamingProject.value.trim();
                           if (v !== "" && v !== project.name) void props.onUpdateProject(project, { name: v });
@@ -826,6 +941,11 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                     />
                   ) : (
                     <span className="g-name">{isTemp ? STR.sidebar.tempChats : (project?.name ?? workspaceLabel(g.workspace))}</span>
+                  )}
+                  {project?.missing === true && (
+                    <span className="g-missing" title={STR.sidebar.missingBadgeTip}>
+                      {STR.sidebar.missingBadge}
+                    </span>
                   )}
                   {busyDot && <span className="g-dot" aria-hidden="true" title={STR.sidebar.projectDotTip} />}
                   <span className="g-chev" aria-hidden="true">
@@ -927,18 +1047,25 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
       <footer className="side-foot">
         <button
           className="provider-dot"
-          data-ok={props.providerOk === null ? "unknown" : props.providerOk ? "ok" : "bad"}
-          aria-label={props.providerOk === null ? STR.footer.providerUnknown : props.providerOk ? STR.footer.providerOk : STR.footer.providerBad}
-          title={props.providerOk === null ? STR.footer.providerUnknown : props.providerOk ? STR.footer.providerOk : STR.footer.providerBad}
+          data-ok={props.providerDemo === true ? "demo" : props.providerOk === null ? "unknown" : props.providerOk ? "ok" : "bad"}
+          aria-label={props.providerDemo === true ? STR.footer.providerDemo : props.providerOk === null ? STR.footer.providerUnknown : props.providerOk ? STR.footer.providerOk : STR.footer.providerBad}
+          title={props.providerDemo === true ? STR.footer.providerDemo : props.providerOk === null ? STR.footer.providerUnknown : props.providerOk ? STR.footer.providerOk : STR.footer.providerBad}
           onClick={props.onOpenProviderSettings ?? props.onOpenSettings}
-        />
+        >
+          <span className="provider-label">
+            {props.providerDemo === true ? STR.footer.providerDemo : props.providerOk === null ? STR.footer.providerShortUnknown : props.providerOk ? STR.footer.providerShortOk : STR.footer.providerShortBad}
+          </span>
+        </button>
         <div className="foot-avatar-wrap">
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
-              <button className="avatar" aria-label={STR.footer.accountTip} title={STR.footer.accountTip}>
-                <Settings2 size={15} aria-hidden="true" />
-                <span>{STR.footer.preferences}</span>
-                <ChevronRight size={12} aria-hidden="true" />
+              <button
+                className="avatar"
+                aria-label={STR.footer.accountTip}
+                title={update !== null ? `${STR.sidebar.updateAvailableTitle} ${update.version}` : STR.footer.accountTip}
+                data-update={update !== null ? "true" : undefined}
+              >
+                <CircleUser size={17} aria-hidden="true" />
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Content
@@ -948,6 +1075,18 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
               sideOffset={6}
               collisionPadding={10}
             >
+              {update !== null && (
+                <>
+                  <DropdownMenu.Item
+                    className="menu-item"
+                    onSelect={() => { (props.onOpenUpdateSettings ?? props.onOpenSettings)(); }}
+                  >
+                    <span>{STR.sidebar.updateMenuItem} {update.version}</span>
+                    <span className="menu-dot" aria-hidden="true" />
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Separator className="menu-sep" />
+                </>
+              )}
               {/* 外观：主题三选一（子菜单，当前项打勾）。给的是快捷切换，
                   完整的外观面（主题 + 文字大小 + 界面密度）在设置页「通用」分区。 */}
               <DropdownMenu.Sub>
@@ -961,6 +1100,16 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                       {props.theme === t.id && <span className="check" aria-hidden="true">✓</span>}
                     </DropdownMenu.Item>
                   ))}
+                  {/* 减弱动效（2026-10-28 第 758 页 · 对标 Claude 的 `data-reduce-motion` 根属性）：
+                      应用内也能强制减弱动效——不只看系统设置。落位见 state/motion-pref.ts。 */}
+                  <DropdownMenu.Item
+                    className="menu-item"
+                    title={STR.footer.reduceMotionTip}
+                    onSelect={() => { setMotionPref(motionPref === "reduced" ? "system" : "reduced"); setMotionPrefState(motionPref === "reduced" ? "system" : "reduced"); }}
+                  >
+                    <span>{STR.footer.reduceMotion}</span>
+                    {motionPref === "reduced" && <span className="check" aria-hidden="true">✓</span>}
+                  </DropdownMenu.Item>
                 </DropdownMenu.SubContent>
               </DropdownMenu.Sub>
               {/* 用量入口直达设置中的完整统计页。 */}
@@ -992,6 +1141,13 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           onReveal={() => { props.onRevealProject(ctxMenu.project); }}
           onRename={() => { setRenamingProject({ id: ctxMenu.project.id, value: ctxMenu.project.name }); }}
           onSettings={() => { setSettingsFor(ctxMenu.project); }}
+          onRelocate={() => {
+            const project = ctxMenu.project;
+            void props.onPickDirectory().then((picked) => {
+              if (picked !== null) return props.onRelocateProject(project, picked);
+              return undefined;
+            });
+          }}
           onRemove={() => { void props.onRemoveProject(ctxMenu.project); }}
         />
       )}

@@ -33,6 +33,7 @@ import { SessionMetadataRepository, type SessionMetadataRecord } from "./session
 import { FeedbackStore, type FeedbackRating, type ResolvedFeedback } from "./feedback";
 import { PinStore } from "./pins";
 import { store } from "./settings-handlers";
+import { writeSessionPreferences } from "./session-preferences";
 
 // ---- M1e：会话列表 IPC（会话目录由 index.ts 初始化；headless 脚本未初始化 → 未配置错误） ----
 let sessionsDir: string | null = null;
@@ -126,6 +127,48 @@ export async function handleSessionList(): Promise<SessionInfo[]> {
 
 export async function handleSessionCreate(name?: string): Promise<{ id: string }> {
   return { id: await createSession(requireSessionsDir(), name, requireSessionMetadata()) };
+}
+
+/** v35：会话级模型/思考档落 sidecar（null = 清除）。只接受对象且只认这两键——不透传任意形状。
+ *  会话不存在先拒（不给一个不存在的 id 造 sidecar 记录）。 */
+export async function handleSessionPrefsSet(
+  req: { sessionId?: unknown; prefs?: unknown },
+  sessionsRoot?: string,
+  scope?: { inheritLegacy: boolean },
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const id = typeof req.sessionId === "string" ? req.sessionId : "";
+    if (id === "" || id.startsWith(".") || id.includes("/") || id.includes("\\")) {
+      return { ok: false, error: `会话名非法: ${JSON.stringify(req.sessionId)}` };
+    }
+    const dir = sessionsRoot ?? await resolveSessionRoot(id);
+    if (dir === null || !(await sessionExists(dir, id))) return { ok: false, error: `会话不存在: ${id}` };
+    const raw = req.prefs;
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return { ok: false, error: "prefs 必须是对象" };
+    const record = raw as Record<string, unknown>;
+    const unknown = Object.keys(record).filter((k) => k !== "model" && k !== "thinking");
+    if (unknown.length > 0) return { ok: false, error: `prefs 未知字段：${unknown.join("、")}` };
+    const patch: { model?: string | null; thinking?: string | null } = {};
+    for (const key of ["model", "thinking"] as const) {
+      const v = record[key];
+      if (v === undefined) continue;
+      if (v !== null && typeof v !== "string") return { ok: false, error: `prefs.${key} 必须是字符串或 null` };
+      patch[key] = v as string | null;
+    }
+    if (patch.model === undefined && patch.thinking === undefined) return { ok: false, error: "prefs 至少要给 model 或 thinking" };
+    if (scope === undefined) {
+      await requireSessionMetadata().setPrefs(id, patch);
+    } else {
+      await withSessionMutation(dir, async () => {
+        if (!(await sessionExists(dir, id))) throw new Error(`会话不存在: ${id}`);
+        const legacy = scope.inheritLegacy ? await requireSessionMetadata().find(id) : undefined;
+        await writeSessionPreferences(pathOf(dir, id), patch, legacy);
+      });
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /** 切换会话：settings.currentSession 落盘（重启还原）；返回该会话全部事件（重放投影）。

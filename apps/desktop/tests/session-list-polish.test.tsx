@@ -48,7 +48,6 @@ function sidebarHtml(sessions: Parameters<typeof Sidebar>[0]["sessions"]): strin
       providerOk={null}
       theme="system"
       onThemeChange={() => undefined}
-      usage={{ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, usageCount: 0, toolSteps: 0, rounds: 0 }}
       onOpen={() => undefined}
       onNewTask={() => undefined}
       onOpenPalette={() => undefined}
@@ -57,6 +56,7 @@ function sidebarHtml(sessions: Parameters<typeof Sidebar>[0]["sessions"]): strin
       onCloneProject={async () => undefined}
       onOpenNewProjectDialog={() => undefined}
       onUpdateProject={async () => undefined}
+      onRelocateProject={async () => undefined}
       onRemoveProject={async () => undefined}
       onRevealProject={() => undefined}
       onOpenSettings={() => undefined}

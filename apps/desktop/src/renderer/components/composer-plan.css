@@ -1,10 +1,10 @@
 /* Plan 模式开关（2026-10-25）：与权限档同排的 .ctl 按钮；开启态用品牌珊瑚的轻底，
    不新造第三种选中语言。关闭态完全沿用 .ctl。 */
 .plan-ctl[data-on="true"] {
-  color: hsl(var(--accent-brand));
+  color: hsl(var(--accent-brand-ink));
   background: hsl(var(--accent-brand) / 10%);
 }
 .plan-ctl[data-on="true"]:hover {
-  color: hsl(var(--accent-brand));
+  color: hsl(var(--accent-brand-ink));
   background: hsl(var(--accent-brand) / 16%);
 }

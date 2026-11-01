@@ -1,0 +1,6 @@
+packaged smoke:
+[cairn-smoke] PASS in 5140 ms
+[package] 完成（已验证打包态）：/Users/ze/Downloads/Cairn/cairn/apps/desktop/release-819/Cairn.app
+
+version init in package:
+371:initUpdateContext({ currentVersion: app.getVersion() });

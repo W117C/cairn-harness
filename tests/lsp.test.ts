@@ -1,6 +1,6 @@
 // M2a LSP 框架测试：stub server（fixtures/lsp/stub-server.mjs）+ 六操作 + 生命周期 + 诊断回流。
 // 坑：stub 用 plain node 跑（fixtures 不进 tsc），workspace 每用例独立，收尾 closeAllLspClients。
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { snapshotNote } from "../src/tools/snapshot.js";
 
 /** 剥掉「覆盖前原件已存 …」那句尾巴：它属于快照面，不是本条判卷要判的东西。
@@ -27,6 +27,8 @@ import {
   lsp,
   lspPrefetchEnabled,
   prefetchLsp,
+  SYMBOL_KIND_NAMES,
+  symbolKindValues,
 } from "../src/tools/lsp";
 import type { ToolContext } from "../src/tools";
 
@@ -193,6 +195,107 @@ describe("LSP 框架（M2a 任务 5）", () => {
   });
 });
 
+/* ---- 第 920 页：能力协商 ----
+ * 此前 initialize 发的是 `capabilities: {}`，而服务器的应答（含 `textDocumentSync` 与各 provider
+ * 声明）**整个丢掉**。三件事因此悄悄出错：真实服务器按"最保守形状"回包（我们收哪种都行，但它本可以
+ * 给更好的）；改了盘之后 didChange 的形状与服务器声明的同步方式不符（增量服务器会**沉默丢掉**这条
+ * 更新，于是六操作端回旧文本，看着像"代码没变"）；服务器没实现的那一支操作我们照样发，等 8 秒超时。
+ */
+describe("能力协商（第 920 页）", () => {
+  const stubCfg = (extra: string[]) => ({
+    lsp: { stub: { command: "node", args: [STUB, ...extra], extensions: [".ts", ".js"] } },
+  });
+
+  it("客户端把**真会用到的**能力声明出去：没声明的降级是静默的", async () => {
+    const ctx = await newCtx();
+    const capsFile = join(ws, "caps.json");
+    // 配置是每次调用现读的：先建工作区，再把带 --caps-to 的那份写进去
+    await writeFile(join(ws, ".agent", "lsp.json"), JSON.stringify(stubCfg(["--caps-to=" + capsFile])), "utf8");
+    await writeSample();
+    await lsp.run({ operation: "hover", path: "src/sample.ts", line: 3, column: 9 }, ctx);
+    const caps = JSON.parse(await readFile(capsFile, "utf8")) as Record<string, any>;
+    // 这三条各对应一种"不声明就白拿"的降级形状：
+    expect(caps.textDocument.definition.linkSupport).toBe(true); // 不声明 ⇒ 只回 Location，不回 LocationLink
+    expect(caps.textDocument.hover.contentFormat).toContain("markdown"); // 不声明 ⇒ 服务器有权只回 plaintext
+    expect(caps.textDocument.documentSymbol.hierarchicalDocumentSymbolSupport).toBe(true); // 不声明 ⇒ 平铺符号表
+    // 值集声明 = "这 26 种我都叫得出名字"，而名字就来自同一份枚举（下面那条判卷钉这个）
+    expect(caps.textDocument.documentSymbol.symbolKind.valueSet).toEqual(symbolKindValues());
+    expect(caps.textDocument.documentSymbol.symbolKind.valueSet).toHaveLength(26);
+    // 工作区符号的客户端能力键是 `workspace.symbol.symbolKind.valueSet`
+    // （`workspaceSymbol` 这一格协议里不存在——写错键 = 发一段没人听的 JSON）
+    expect(caps.workspace.symbol.symbolKind.valueSet).toEqual(symbolKindValues());
+    // **不吹**：没实现的面不许声明（声明了就把服务器引到我们根本不处理的通知上）
+    expect(caps.textDocument.completion).toBeUndefined();
+    expect(caps.workspace?.didChangeWatchedFiles).toBeUndefined();
+    expect(caps.workspace?.executeCommand).toBeUndefined();
+  });
+
+  it("服务器没声明 hoverProvider ⇒ 当场说不支持，不把协议黑话甩给模型", async () => {
+    const ctx = await newCtx(stubCfg(["--no-hover"]));
+    await writeSample();
+    const err = await lsp
+      .run({ operation: "hover", path: "src/sample.ts", line: 3, column: 9 }, ctx)
+      .catch((e: Error) => e);
+    const message = (err as Error).message;
+    expect(message).toContain("hover");
+    expect(message).toContain("未声明");
+    // 原句证人（第 915 页）：这句的用途是让模型**换路**而不是重跑，所以「能力的边界、不是一次
+    // 失败」必须真在话里。抄原句是刻意的——改措辞时这条会红，逼人重新确认那句话还对。
+    expect(message).toContain("这是该服务器的能力边界，不是这次调用失败");
+    expect(message).toContain("grep / read_file");
+    // stub 在 --no-hover 下**不注册** hover handler ⇒ 不设门控拿到的是 jsonrpc 的
+    // MethodNotFound 黑话（"Unhandled method"一类）：模型读不懂，也只能原样重跑。
+    expect(message).not.toMatch(/Unhandled method|Method not found|jsonrpc/i);
+    // 门控只拦没声明的那一支，其余五操作照旧
+    const def = await lsp.run({ operation: "definition", path: "src/sample.ts", line: 3, column: 9 }, ctx);
+    expect(def.output).toBe("src/sample.ts:2:1");
+  });
+
+  it("增量同步（change:2）：didChange 不带 range 就被服务器沉默丢掉，结果停在旧文本", async () => {
+    const ctx = await newCtx(stubCfg(["--incremental"]));
+    const abs = await writeSample();
+    const first = await lsp.run({ operation: "hover", path: "src/sample.ts", line: 3, column: 9 }, ctx);
+    expect(first.output).toBe("hover: alpha（stub）");
+    await writeFile(abs, SAMPLE.replace(/REF\(alpha\)/g, "REF(beta)"), "utf8");
+    const second = await lsp.run({ operation: "hover", path: "src/sample.ts", line: 3, column: 9 }, ctx);
+    expect(second.output).toBe("hover: beta（stub）");
+  });
+
+  it("不接受增量（change:0）：改盘后走 didClose+didOpen 重开，而不是发一条没人认的 didChange", async () => {
+    const ctx = await newCtx(stubCfg(["--sync-none"]));
+    const abs = await writeSample();
+    const first = await lsp.run({ operation: "hover", path: "src/sample.ts", line: 3, column: 9 }, ctx);
+    expect(first.output).toBe("hover: alpha（stub）");
+    await writeFile(abs, SAMPLE.replace(/REF\(alpha\)/g, "REF(beta)"), "utf8");
+    const second = await lsp.run({ operation: "hover", path: "src/sample.ts", line: 3, column: 9 }, ctx);
+    expect(second.output).toBe("hover: beta（stub）");
+  });
+
+  it("符号 kind 名派生自协议枚举：手抄那份把 25 抄成了 TypeParameter", () => {
+    // 旧表少 6 格（Object/Key/Null/EnumMember/Event/TypeParameter 一律落成 "Symbol"），
+    // 而 25 抄错 = **主动给模型一句假话**（协议里 25 是 Operator，26 才是 TypeParameter）。
+    expect(SYMBOL_KIND_NAMES[25]).toBe("Operator");
+    expect(SYMBOL_KIND_NAMES[26]).toBe("TypeParameter");
+    expect(SYMBOL_KIND_NAMES[19]).toBe("Object");
+    expect(SYMBOL_KIND_NAMES[22]).toBe("EnumMember");
+    expect(symbolKindValues()).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]);
+    for (const v of symbolKindValues()) expect(SYMBOL_KIND_NAMES[v]).toBeTruthy();
+  });
+
+  it("workspaceSymbol 允许「有名字没位置」的条目：不许一条坏形状带走整支工具", async () => {
+    const ctx = await newCtx(stubCfg(["--symbol-no-location"]));
+    await writeSample();
+    // stub 的索引来自"打开过的文档"：先把文档递进去（真服务器有自己的索引，不需要这一步）
+    await lsp.run({ operation: "documentSymbol", path: "src/sample.ts" }, ctx);
+    const res = await lsp.run({ operation: "workspaceSymbol", symbol: "alpha" }, ctx);
+    expect(res.ok).toBe(true);
+    expect(res.output).toContain("alpha");
+    expect(res.output).toContain("无位置");
+    expect(res.output).not.toContain("undefined");
+    expect(res.output).not.toMatch(/NaN|:0:0/);
+  });
+});
+
 describe("诊断回流（M2a 任务 6）", () => {
   it("只取 ERROR 级，≤20 条，附 <diagnostics> 块在输出尾部", async () => {
     const ctx = await newCtx();
@@ -218,6 +321,73 @@ describe("诊断回流（M2a 任务 6）", () => {
     await writeFile(join(ws, "src", "clean.ts"), "const a = 1;\nWARN_HERE\n", "utf8");
     const diag = await collectDiagnostics(ws, join(ws, "src", "clean.ts"));
     expect(diag).toBe("");
+  });
+
+  it("diagnostics.maxPerFile 兑现：配置 2 就只回流 2 条 ERROR", async () => {
+    await newCtx({
+      lsp: {
+        stub: {
+          command: "node", args: [STUB], extensions: [".ts"],
+          diagnostics: { enabled: true, maxPerFile: 2 },
+        },
+      },
+    });
+    await mkdir(join(ws, "src"), { recursive: true });
+    const lines = Array.from({ length: 5 }, (_, i) => "ERROR_HERE " + String(i));
+    await writeFile(join(ws, "src", "few.ts"), lines.join("\n") + "\n", "utf8");
+    const diag = await collectDiagnostics(ws, join(ws, "src", "few.ts"));
+    expect(diag.split("\n").filter((l) => l.startsWith("ERROR [")).length).toBe(2);
+  });
+
+  it("宿主 diagnostics.enabled:false 兑现：写后不回流诊断", async () => {
+    await newCtx({
+      lsp: {
+        stub: {
+          command: "node", args: [STUB], extensions: [".ts"],
+          diagnostics: { enabled: false },
+        },
+      },
+    });
+    await mkdir(join(ws, "src"), { recursive: true });
+    await writeFile(join(ws, "src", "err.ts"), "ERROR_HERE\n", "utf8");
+    expect(await collectDiagnostics(ws, join(ws, "src", "err.ts"))).toBe("");
+  });
+
+  it("startupTimeout 兑现：慢 initialize 按配置预算失败，不坠进 8s 缺省", async () => {
+    await newCtx({
+      lsp: {
+        stub: {
+          command: "node", args: [STUB, "--slow-init"], extensions: [".ts"],
+          startupTimeout: 200,
+        },
+      },
+    });
+    const cfg = loadLspConfig(ws);
+    const started = Date.now();
+    await expect(getLspClient(ws, cfg, "stub")).rejects.toThrow(/initialize 超时（200ms/);
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(isLspBroken(ws, "stub")).toBe(true);
+  });
+
+  it("restartOnCrash 兑现：首次崩溃后下一次调用惰性重启并可用", async () => {
+    await newCtx();
+    const marker = join(ws, "crash-once.marker");
+    await writeFile(join(ws, ".agent", "lsp.json"), JSON.stringify({
+      lsp: {
+        stub: {
+          command: "node", args: [STUB, "--crash-until=" + marker], extensions: [".ts"],
+          restartOnCrash: true, startupTimeout: 3000,
+        },
+      },
+    }), "utf8");
+    const cfg = loadLspConfig(ws);
+    await expect(getLspClient(ws, cfg, "stub")).rejects.toThrow();
+    expect(isLspBroken(ws, "stub")).toBe(true);
+
+    await writeFile(join(ws, "a.ts"), "function alpha() {}\n", "utf8");
+    const hover = await lsp.run({ operation: "hover", path: "a.ts", line: 1, column: 10 }, { workspace: ws });
+    expect(hover.output).toContain("hover: alpha");
+    expect(isLspBroken(ws, "stub")).toBe(false);
   });
 
   it("LSP 未配置：edit/write 输出保持不变（空串回流）", async () => {

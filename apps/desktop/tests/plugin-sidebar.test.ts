@@ -11,10 +11,12 @@ describe("mod 侧栏", () => {
     const app = readAppSurface();
     expect(app).toContain('localStorage.getItem("cairn.pluginSidebar")');
     expect(app).toContain("h.togglePluginSidebar()");
-    expect(app).toContain("{pluginSidebarOpen && <PluginSidebar width={pluginSidebarWidth} onWidth={setPluginSidebarWidthPersist} onClose={closePluginSidebar} onInvoke={fillPluginCommand} />}");
+    expect(app).toContain("{destination === \"chat\" && pluginSidebarOpen && <PluginSidebar width={pluginSidebarWidth} onWidth={setPluginSidebarWidthPersist} onClose={closePluginSidebar} onInvoke={fillPluginCommand} />}");
     expect(app).toContain('aria-label="插件侧栏"');
     expect(app).toContain('aria-controls="mod-sidebar"');
-    expect(app).toContain('aria-expanded={pluginSidebarOpen}');
+    expect(app).toContain('checked={props.pluginSidebarOpen}');
+    expect(app).toContain('onCheckedChange={props.onTogglePluginSidebar}');
+    expect(app).toContain('onTogglePluginSidebar={togglePluginSidebar}');
   });
 
   it("侧栏组件复用 PluginSurface，并有关闭按钮", () => {
@@ -30,7 +32,7 @@ describe("mod 侧栏", () => {
     expect(app).toContain("if (h.pluginSidebarOpen) { e.preventDefault(); h.closePluginSidebar(); return; }");
     expect(app).toContain('localStorage.setItem("cairn.pluginSidebar", "0")');
     expect(app).toContain('active.closest(".mod-sidebar")');
-    expect(app).toContain("document.querySelector<HTMLElement>('[aria-label=\"插件侧栏\"]')?.focus()");
+    expect(app).toContain("document.querySelector<HTMLElement>('[aria-label=\"工作台工具\"]')?.focus()");
   });
 
   it("命令行可「填入」到 Composer，不直接发送", () => {

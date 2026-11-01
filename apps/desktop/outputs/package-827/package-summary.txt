@@ -1,0 +1,10 @@
+packaged smoke:
+[cairn-smoke] PASS in 2043 ms
+[package] 完成（已验证打包态）：/Users/ze/Downloads/Cairn/cairn/apps/desktop/release-827/Cairn.app
+
+artifacts:
+255B apps/desktop/release-827/build-info.json
+149M apps/desktop/release-827/Cairn.dmg
+
+file:
+apps/desktop/release-827/Cairn.dmg: zlib compressed data

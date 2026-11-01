@@ -1,0 +1,8 @@
+$ node --import tsx .tmp/probe-skill-mcp.mts   # 改前：JSON 兜底
+skill          ⇒ "{\"name\":\"/plugin:review\",\"args\":\"src/a.ts\"}"
+refine_goal    ⇒ "{\"objective\":\"把登录页的重试做成指数退避，并在 3 次失败后给出可操作提示\"}"
+mcp_list       ⇒ "{}"
+mcp_list       ⇒ "{\"server\":\"plugin/sqlite\"}"
+mcp_activate   ⇒ "{\"server\":\"plugin/sqlite\",\"tools\":[\"query\",\"schema\"]}"
+mcp_activate   ⇒ "{\"server\":\"plugin/sqlite\"}"
+mcp_release    ⇒ "{\"server\":\"plugin/sqlite\",\"tool\":\"query\"}"

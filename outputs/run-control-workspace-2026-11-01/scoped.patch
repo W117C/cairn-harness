@@ -1,0 +1,719 @@
+--- a/tests/ipc-protocol-version.test.ts
++++ b/tests/ipc-protocol-version.test.ts
+@@ -10,7 +10,7 @@
+     expect(IPC_PROTOCOL_VERSION).toBeGreaterThanOrEqual(1);
+   });
+ 
+-  it("bump 版本必须有意为之：现钉 49——改协议形状（AgentApi 增删/字段语义变）= bump 常量 + 同步本格，desktop-panel 提案走同一流水线", () => {
++  it("bump 版本必须有意为之：现钉 50——改协议形状（AgentApi 增删/字段语义变）= bump 常量 + 同步本格，desktop-panel 提案走同一流水线", () => {
+     // v8 → v9（2026-10-16 建议批）：＋suggestNext（「Tab 想下一条」按上下文单发模型调用）。
+     // v9 → v10（2026-10-16 能力在场性批）：＋capabilities（搜索端点配没配——让「模型为什么少一把工具」上屏）。
+     // v10 → v11（2026-10-16 主界面重做批）：＋gitStatus / gitClone / workspaceSearch / touchProject /
+@@ -52,6 +52,7 @@
+     // v46 → v47：＋evolveGlobalRevoke（撤销一条全局经验）。
+     // v47 → v48：＋evolveGlobalSetFrozen（全局经验冻结开关）。
+     // v48 → v49：＋evolveGlobalActivate（恢复 dormant 全局经验）。
+-    expect(IPC_PROTOCOL_VERSION).toBe(49);
++    // v49 → v50：runCancel/runSteer 按 workspace 校验目标，拒绝不自动续发。
++    expect(IPC_PROTOCOL_VERSION).toBe(50);
+   });
+ });
+--- a/apps/desktop/tests/protocol-version.test.ts
++++ b/apps/desktop/tests/protocol-version.test.ts
+@@ -76,6 +76,7 @@
+     // v46 → v47：＋evolveGlobalRevoke（撤销一条全局经验；全局账 patch 转 dormant）。
+     // v47 → v48：＋evolveGlobalSetFrozen（全局经验冻结开关；写/删全局 STOP）。
+     // v48 → v49：＋evolveGlobalActivate（恢复 dormant 全局经验；复核 ≥3 库证据）。
+-    expect(IPC_PROTOCOL_VERSION).toBe(49);
++    // v49 → v50：runCancel/runSteer 携带 workspace，目标校验拒绝不触发自动续发。
++    expect(IPC_PROTOCOL_VERSION).toBe(50);
+   });
+ });
+--- a/apps/desktop/tests/marketplace-install-wiring.test.ts
++++ b/apps/desktop/tests/marketplace-install-wiring.test.ts
+@@ -26,8 +26,8 @@
+ } as const;
+ 
+ describe("plugin install IPC wiring", () => {
+-  it("exposes the backend install surface at protocol v49", () => {
+-    expect(IPC_PROTOCOL_VERSION).toBe(49);
++  it("exposes the backend install surface at protocol v50", () => {
++    expect(IPC_PROTOCOL_VERSION).toBe(50);
+     const channels = INVOKE_CHANNELS as Record<string, string>;
+     for (const [key, channel] of Object.entries(INSTALL_CHANNELS)) {
+       expect(channels[key]).toBe(channel);
+--- a/apps/desktop/tests/session-delete-retry.test.ts
++++ b/apps/desktop/tests/session-delete-retry.test.ts
+@@ -71,7 +71,7 @@
+     const sessions = readRendererFile("state/sessions.ts");
+     expect(sessions).toContain("runningSet.current.has(runKey(s.workspace, s.id))");
+     expect(sessions).toContain("{ ...s, running: true }");
+-    expect(sessions).toContain("window.agent.runCancel(id)");
++    expect(sessions).toContain("window.agent.runCancel(id, workspace ?? undefined)");
+     expect(sessions).toContain("deleteSessionWaitingForRun(endSessionDelete, id)");
+     expect(sessions).toContain("runningSet.current.delete(key)");
+   });
+--- a/apps/desktop/tests/run-queue-session.test.tsx
++++ b/apps/desktop/tests/run-queue-session.test.tsx
+@@ -15,7 +15,7 @@
+     createSession: vi.fn(async () => ({ id: "created", workspace: "/workspace" })),
+     run: vi.fn(async (_request: unknown): Promise<{ ok: boolean; error?: string; aborted?: boolean }> => ({ ok: true })),
+     runSteer: vi.fn(async (_sessionId: string, _text: string) => ({ ok: true })),
+-    runCancel: vi.fn(async (_sessionId: string) => ({ ok: true })),
++    runCancel: vi.fn(async (_sessionId: string): Promise<{ ok: boolean; error?: string; code?: "workspace_mismatch" }> => ({ ok: true })),
+     setGoal: vi.fn(async (_request: unknown) => ({ ok: true })),
+     queueSet: vi.fn(async (_sessionId: string, _items: unknown, _workspace?: string) => ({ ok: true })),
+     sessionPrefsSet: vi.fn(async (_sessionId: string, _prefs: unknown, _workspace?: string) => ({ ok: true })),
+@@ -155,7 +155,7 @@
+ 
+     const queued = await actions.sendTo("other", "/other-ws", "queued while running", [], { running: true });
+     expect(queued.outcome).toBe("queued");
+-    expect(agent.runSteer).toHaveBeenCalledWith("other", "queued while running");
++    expect(agent.runSteer).toHaveBeenCalledWith("other", "queued while running", "/other-ws");
+     expect(deps.sendQueue.current.get(runKey("/other-ws", "other"))).toHaveLength(1);
+     expect(deps.sendQueue.current.get(runKey("/workspace", "current"))).toBeUndefined();
+ 
+@@ -169,6 +169,27 @@
+ 
+     const result = await actions.sendTo("other", "/other-ws", "do not lose me", [], { running: false });
+     expect(result.outcome).toBe("steered");
+-    expect(agent.runSteer).toHaveBeenCalledWith("other", "do not lose me");
++    expect(agent.runSteer).toHaveBeenCalledWith("other", "do not lose me", "/other-ws");
+   });
+ });
++
++describe("workspace scoped run controls", () => {
++  it("the main composer includes its workspace when steering", async () => {
++    const { actions, agent, deps } = harness();
++    deps.runningSet.current.add(runKey("/workspace", "current"));
++    await actions.send("for this project");
++    expect(agent.runSteer).toHaveBeenCalledWith("current", "for this project", "/workspace");
++  });
++  it("a refused cancel does not dequeue or dispatch the target project's messages", async () => {
++    const { actions, agent, deps } = harness();
++    const key = runKey("/other-ws", "same");
++    const items = [{ id: 1, text: "keep this queued", attachments: [] }];
++    deps.sendQueue.current.set(key, items); deps.runningSet.current.add(key);
++    agent.runCancel.mockResolvedValueOnce({ ok: false, error: "目标工作区不匹配", code: "workspace_mismatch" });
++    actions.cancelRunHeal("same", "/other-ws");
++    await vi.waitFor(() => expect(deps.setLastError).toHaveBeenCalledWith("目标工作区不匹配", "same"));
++    expect(agent.runCancel).toHaveBeenCalledWith("same", "/other-ws");
++    expect(agent.run).not.toHaveBeenCalled(); expect(agent.queueSet).not.toHaveBeenCalled();
++    expect(deps.sendQueue.current.get(key)).toEqual(items);
++  });
++});
+--- a/apps/desktop/tests/send-queue.test.ts
++++ b/apps/desktop/tests/send-queue.test.ts
+@@ -180,10 +180,10 @@
+   it("runCancel 直呼两处：cancelRunHeal（打断/停止，含陈旧自愈）与删除前停止（不续队列、读应答摘陈旧旗）", () => {
+     expect(queueSrc).toContain("shouldHealStaleRun");
+     expect(appSrc.match(/agent\.runCancel/g)?.length).toBe(2);
+-    expect(appSrc).toContain("window.agent.runCancel(sid).then");
++    expect(appSrc).toContain("window.agent.runCancel(sid, runWs ?? undefined).then");
+     // 删除前停止不沿用 cancelRunHeal（不能把队列续进要删的会话）；但也不许 void 掉应答：
+     // 读 ok 判「主进程到底有没有活动 run」，陈旧旗当场摘。
+-    expect(appSrc).toContain("const res = await window.agent.runCancel(id).catch(() => null);");
++    expect(appSrc).toContain("const res = await window.agent.runCancel(id, workspace ?? undefined).catch(() => null);");
+     expect(appSrc).toContain("return res !== null && res.ok === true;");
+     expect(appSrc).not.toContain("void window.agent.runCancel(sid);");
+     expect(appSrc).not.toContain("void window.agent.runCancel(activeId);");
+--- a/apps/desktop/tests/marketplace-wiring.test.ts
++++ b/apps/desktop/tests/marketplace-wiring.test.ts
+@@ -7,8 +7,8 @@
+ const repo = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+ 
+ describe("plugin marketplace catalog wiring", () => {
+-  it("keeps the read-only catalog channel at protocol v49", () => {
+-    expect(IPC_PROTOCOL_VERSION).toBe(49);
++  it("keeps the read-only catalog channel at protocol v50", () => {
++    expect(IPC_PROTOCOL_VERSION).toBe(50);
+     expect(INVOKE_CHANNELS.marketplaceCatalog).toBe("agent:marketplace-catalog");
+     expect(repo("../../../src/main/ipc-protocol.ts")).toContain(
+       'marketplaceCatalog(refresh?: "never" | "auto" | "force"): Promise<MarketplaceCatalogReadout>',
+--- a/apps/desktop/tests/marketplace-import-wiring.test.ts
++++ b/apps/desktop/tests/marketplace-import-wiring.test.ts
+@@ -24,8 +24,8 @@
+ } as const;
+ 
+ describe("plugin marketplace import and update IPC wiring", () => {
+-  it("exposes the unified import, update, check, picker, and config surface at protocol v49", () => {
+-    expect(IPC_PROTOCOL_VERSION).toBe(49);
++  it("exposes the unified import, update, check, picker, and config surface at protocol v50", () => {
++    expect(IPC_PROTOCOL_VERSION).toBe(50);
+     const channels = INVOKE_CHANNELS as Record<string, string>;
+     for (const [key, channel] of Object.entries(IMPORT_CHANNELS)) {
+       expect(channels[key]).toBe(channel);
+--- a/apps/desktop/tests/plan-mode-wiring.test.ts
++++ b/apps/desktop/tests/plan-mode-wiring.test.ts
+@@ -9,8 +9,8 @@
+ 
+ const repo = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+ 
+-it("协议 v23（现 v49）：RunRequest 有 planRequired，validator 只收布尔并原样保留", () => {
+-  expect(IPC_PROTOCOL_VERSION).toBe(49);
++it("协议 v23（现 v50）：RunRequest 有 planRequired，validator 只收布尔并原样保留", () => {
++  expect(IPC_PROTOCOL_VERSION).toBe(50);
+   const protocol = repo("../../../src/main/ipc-protocol.ts");
+   expect(protocol).toContain("planRequired?: boolean;");
+   const validator = repo("../../../src/main/run-request.ts");
+--- a/apps/desktop/tests/plugin-marketplace-wiring.test.ts
++++ b/apps/desktop/tests/plugin-marketplace-wiring.test.ts
+@@ -9,8 +9,8 @@
+ }
+ 
+ describe("plugin marketplace end-to-end wiring", () => {
+-  it("keeps protocol v49 and exposes the full marketplace API", () => {
+-    expect(IPC_PROTOCOL_VERSION).toBe(49);
++  it("keeps protocol v50 and exposes the full marketplace API", () => {
++    expect(IPC_PROTOCOL_VERSION).toBe(50);
+     for (const key of [
+       "marketplaceCatalog",
+       "marketplacePluginImport",
+--- a/apps/desktop/tests/notification-open-wiring.test.ts
++++ b/apps/desktop/tests/notification-open-wiring.test.ts
+@@ -10,9 +10,9 @@
+ 
+ const repo = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+ 
+-it("推送通道与协议版本：v21 增 onNotificationOpen，当前 v49（… / v47 撤销全局经验 / v48 全局冻结开关 / v49 恢复全局经验）", () => {
++it("推送通道与协议版本：v21 增 onNotificationOpen，当前 v50（… / v47 撤销全局经验 / v48 全局冻结开关 / v49 恢复全局经验）", () => {
+   expect(PUSH_CHANNELS.onNotificationOpen).toBe("agent:notification-open");
+-  expect(IPC_PROTOCOL_VERSION).toBe(49);
++  expect(IPC_PROTOCOL_VERSION).toBe(50);
+   const protocol = repo("../../../src/main/ipc-protocol.ts");
+   expect(protocol).toContain("export interface RunNotificationPayload");
+   expect(protocol).toContain("onNotificationOpen(cb: (p: RunNotificationPayload) => void)");
+--- a/apps/desktop/scripts/ui-gallery-preload.cjs
++++ b/apps/desktop/scripts/ui-gallery-preload.cjs
+@@ -1160,12 +1160,20 @@
+     const originalOpen = stub.openSession;
+     stub.openSession = async (id, workspace) => ({ ...(await originalOpen(id, workspace)), running: workspace === WS_A });
+     const steers = [];
+-    stub.runSteer = (id, text) => new Promise((resolve) => { steers.push({ id, text, resolve }); });
++    const cancels = [];
++    stub.runSteer = (id, text, workspace) => new Promise((resolve) => { steers.push({ id, text, workspace, resolve }); });
++    if (process.argv.includes("--cairn-control-rejection-fixture")) {
++      stub.runCancel = async (id, workspace) => {
++        cancels.push({ id, workspace });
++        return { ok: false, code: "workspace_mismatch", error: "目标工作区不匹配，请重新打开会话" };
++      };
++    }
+     contextBridge.exposeInMainWorld("__cairnSteerSwitch", {
+       count: () => steers.length,
+       finish: (index) => steers[index].resolve({ ok: false, error: "本轮已收束" }),
+       queues: () => Object.fromEntries(queues),
+       runs: () => cairnRuns.length,
++      calls: () => ({ steers: steers.map(({ id, text, workspace }) => ({ id, text, workspace })), cancels }),
+     });
+   }
+   contextBridge.exposeInMainWorld("__cairnSameId", { calls: () => ({ ...calls }) });
+--- a/apps/desktop/scripts/queue-target-binding-smoke.cjs
++++ b/apps/desktop/scripts/queue-target-binding-smoke.cjs
+@@ -8,6 +8,7 @@
+ mkdirSync(out, { recursive: true }); app.setPath("userData", profile);
+ app.on("quit", () => rmSync(profile, { recursive: true, force: true }));
+ const checks = [];
++const checkControls = process.argv.includes("--check-controls");
+ const check = (name, ok) => { checks.push({ name, ok }); console.log(`${ok ? "PASS" : "FAIL"} ${name}`); };
+ const pause = () => new Promise((r) => setTimeout(r, 90));
+ async function main() {
+@@ -17,7 +18,7 @@
+   const body = tail.slice(0, tail.indexOf("\n}")); const starts = [...body.matchAll(/^\s{2}(\w+)\??\s*[(<]/gm)];
+   const members = starts.map((s, i) => ({ name: s[1], isArray: /Promise<[^>]*\[\]/.test(body.slice(s.index, starts[i + 1]?.index)) }));
+   const win = new BrowserWindow({ width: 1280, height: 820, show: false, webPreferences: {
+-    preload: join(__dirname, "ui-gallery-preload.cjs"), additionalArguments: ["--cairn-api-members=" + JSON.stringify(members), "--cairn-protocol-version=" + protocol.match(/IPC_PROTOCOL_VERSION\s*=\s*(\d+)/)[1], "--cairn-same-id-workspace-fixture", "--cairn-steer-switch-fixture"],
++    preload: join(__dirname, "ui-gallery-preload.cjs"), additionalArguments: ["--cairn-api-members=" + JSON.stringify(members), "--cairn-protocol-version=" + protocol.match(/IPC_PROTOCOL_VERSION\s*=\s*(\d+)/)[1], "--cairn-same-id-workspace-fixture", "--cairn-steer-switch-fixture", ...(checkControls ? ["--cairn-control-rejection-fixture"] : [])],
+   } });
+   const errors = [];
+   win.webContents.on("console-message", (details) => { if (details.level === "error") errors.push(details.message); });
+@@ -38,6 +39,7 @@
+   await js("(() => {const t=document.querySelector('.composer-card textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'必须留在甲的消息');t.dispatchEvent(new Event('input',{bubbles:true}));t.focus();})()");
+   win.webContents.sendInputEvent({ type: "keyDown", keyCode: "Return" }); win.webContents.sendInputEvent({ type: "char", keyCode: "\r" }); win.webContents.sendInputEvent({ type: "keyUp", keyCode: "Return" });
+   await wait("window.__cairnSteerSwitch.count() === 1");
++  if (checkControls) check("插话 IPC 显式携带原目标工作区", await js("window.__cairnSteerSwitch.calls().steers[0].workspace === '/tmp/demo-ws'"));
+   await openProject("项目乙");
+   await js("window.__cairnSteerSwitch.finish(0)");
+   await wait("window.__cairnSameId.calls().queueSet.length > 0");
+@@ -48,6 +50,14 @@
+   await openProject("项目甲");
+   check("回到甲项目能读回原队列和刚才的消息", await js("document.querySelector('.queue-strip').textContent.includes('甲项目排队的那条') && document.querySelector('.queue-strip').textContent.includes('必须留在甲的消息')"));
+   await shot("02-origin-project-a");
++  if (checkControls) {
++    await js("document.querySelector('.send-btn.stop').click();true;");
++    await wait("window.__cairnSteerSwitch.calls().cancels.length === 1 && document.body.innerText.includes('目标工作区不匹配，请重新打开会话')");
++    check("停止 IPC 显式携带目标工作区", await js("window.__cairnSteerSwitch.calls().cancels[0].workspace === '/tmp/demo-ws'"));
++    check("停止被拒绝后保留全部待发送消息且不自动出队", await js("window.__cairnSameId.calls().queueSet.length === 1 && document.querySelectorAll('.queue-strip .queue-item').length === 2 && window.__cairnSteerSwitch.runs() === 0"));
++    check("停止拒绝的原因在当前工作台可见", await js("document.body.innerText.includes('目标工作区不匹配，请重新打开会话')"));
++    await shot("03-cancel-rejected");
++  }
+   await js("document.querySelector('.sidenav .session[aria-current=\"true\"]').focus();true;");
+   const before = await js("window.__cairnSameId.calls().open.length");
+   win.webContents.sendInputEvent({ type: "keyDown", keyCode: "Tab", modifiers: ["control"] }); win.webContents.sendInputEvent({ type: "keyUp", keyCode: "Tab", modifiers: ["control"] });
+@@ -56,7 +66,7 @@
+   check("同名会话只标记一个当前项", await js("document.querySelectorAll('.sidenav .session[aria-current=\"true\"]').length === 1"));
+   check("本次验证未启动额外任务", await js("window.__cairnSteerSwitch.runs() === 0"));
+   check("无 renderer/preload 错误", errors.length === 0);
+-  writeFileSync(join(out, "result.json"), JSON.stringify({ checks, errors, calls: await js("window.__cairnSameId.calls()") }, null, 2));
++  writeFileSync(join(out, "result.json"), JSON.stringify({ checks, errors, calls: await js("window.__cairnSameId.calls()"), controls: await js("window.__cairnSteerSwitch.calls()") }, null, 2));
+   win.destroy(); app.exit(checks.every(c => c.ok) ? 0 : 1);
+ }
+ const watchdog = setTimeout(() => { console.error("smoke 超时"); app.exit(1); }, 45000); watchdog.unref();
+--- a/apps/desktop/src/main/kernel-host.ts
++++ b/apps/desktop/src/main/kernel-host.ts
+@@ -22,6 +22,7 @@
+ import type {
+   RunRequest,
+   RunResponse,
++  RunControlResponse,
+   SessionInfoPayload,
+   SessionWorktreeRequest,
+   SessionWorktreeResult,
+@@ -93,14 +94,14 @@
+    *  当且仅当该会话的 per-session controller 被 abort 时为 true——判定在包装返回处做。 */
+   run(req: RunRequest & { workspace?: string }): Promise<RunResponse & { aborted?: boolean }>;
+   decide(askId: string, approved: boolean, scope?: "once" | "session_kind" | "always"): boolean;
+-  /** 会话级取消（M3 T2 接管 T1 的缝）：只 abort 该会话在跑 run 的 AbortController；
++  /** 会话级取消（M3 T2 接管 T1 的缝）：只 abort 匹配工作区的会话在跑 run 的 AbortController；
+    *  该会话不在运行 ⇒ { ok:false, error:"会话不在运行" }。不再走 M2 全局缝 handleRunCancel
+    *  （那只认最后注册的 interactiveRunAbort——并发会话下取消的是最后启动的那场，杀错对象）。 */
+-  cancel(sessionId: string): Promise<{ ok: boolean; error?: string }>;
++  cancel(sessionId: unknown, workspace?: unknown): Promise<RunControlResponse>;
+   /** 第 9 点·轮中插话：把用户这句话递进**正在跑**的那一轮（不发新 run、不改轮次）。
+    *  会话不在跑 ⇒ `{ ok:false, error }` fail-visible：渲染层据此回落为「入队」，
+    *  而不是假装送进去了（两种结局在界面上必须分得开）。 */
+-  steer(sessionId: string, text: string): Promise<{ ok: boolean; error?: string; queued?: number }>;
++  steer(sessionId: unknown, text: unknown, workspace?: unknown): Promise<RunControlResponse>;
+   /** 会话级 worktree 隔离（§3.7 · G4）：create / merge / discard。
+    *  三条都先按会话归属解析工作区（与 run 同一张归属表），并在该会话**正在跑**时拒绝——
+    *  run 正在那棵树里写东西，此刻合并/删除等于把脚下的地板抽走。 */
+@@ -506,6 +507,36 @@
+     return activeWorkspace;
+   };
+ 
++  // 控制面不修改 owner：另一个项目的同名会话不能借打开/停止来改写运行归属。
++  // 校验中的 IO 完成后才取当前 controller，并同步执行动作，避免 await 跨过 run 的代际。
++  const controlRun = async (
++    sessionId: unknown, workspace: unknown,
++    action: (controller: AbortController, box: SteeringChannel | undefined) => RunControlResponse,
++  ): Promise<RunControlResponse> => {
++    try {
++      if (typeof sessionId !== "string" || sessionId.trim() === "") throw new Error("会话 id 必须是非空字符串");
++      let ws: string | undefined;
++      if (workspace !== undefined) {
++        if (typeof workspace !== "string" || workspace.trim() === "") throw new Error("workspace 必须是非空字符串");
++        ws = canonicalWorkspacePath(workspace);
++        if (!workspaces.includes(ws)) throw new Error(`workspace 不在 workspaces 里: ${workspace}`);
++      } else {
++        // 兼容旧调用，但同名 id 的目标不能靠「恰好谁在跑」来猜。
++        const hits = await Promise.all(workspaces.map(async (candidate) =>
++          await sessionExists(wsRoot(candidate), sessionId) ? candidate : null));
++        const matches = hits.filter((candidate): candidate is string => candidate !== null);
++        if (matches.length > 1) throw new Error("会话 id 在多个工作区同时存在，必须显式指定 workspace");
++        ws = matches[0];
++      }
++      const live = runControllers.get(sessionId);
++      if (live === undefined) return { ok: false, error: "会话不在运行" };
++      if (ws !== undefined && live.workspace !== ws) return { ok: false, code: "workspace_mismatch", error: OTHER_WORKSPACE_RUN };
++      return action(live.controller, runSteering.get(sessionId));
++    } catch (error) {
++      return { ok: false, code: "invalid_target", error: error instanceof Error ? error.message : String(error) };
++    }
++  };
++
+   return {
+     orchestrationView: address => orchestration.view(address),
+     orchestrationSubmit: request => orchestration.submit(request),
+@@ -601,20 +632,20 @@
+     decide: (askId, approved, scope) => handleAgentDecide(askId, approved, scope),
+     // 会话级取消（M3 T2）：abort 该会话在跑 run 的 controller（经 RunOverrides.signal 全语义收束）；
+     // 不在跑 ⇒ fail-visible。M2 全局缝 handleRunCancel 不再经此出口（并发会话下它杀的是最后启动的 run）。
+-    cancel: async (sessionId) => {
+-      const controller = runControllers.get(sessionId)?.controller;
+-      if (controller === undefined) return { ok: false, error: "会话不在运行" };
++    cancel: (sessionId, workspace) => controlRun(sessionId, workspace, (controller) => {
+       controller.abort();
+       return { ok: true };
+-    },
++    }),
+     // 第 9 点·轮中插话：把用户这句话递进**正在跑**的那一轮的收件盒。
+     // 不在跑 ⇒ fail-visible（渲染层据此把消息转成「入队」而不是假装送进去了）：
+     // 「送进去了但其实没人收」比明说「这一轮已经结束」坏得多。
+-    steer: async (sessionId: string, text: string) => {
+-      const box = runSteering.get(sessionId);
+-      if (box === undefined) return { ok: false, error: "会话不在运行（插话无人接收）" };
+-      box.push(text);
+-      return { ok: true, queued: box.size() };
++    steer: async (sessionId, text, workspace) => {
++      if (typeof text !== "string" || text.trim() === "") return { ok: false, code: "invalid_target", error: "插话内容必须是非空字符串" };
++      return controlRun(sessionId, workspace, (controller, box) => {
++        if (box === undefined || controller.signal.aborted) return { ok: false, error: "会话不在运行（插话无人接收）" };
++        box.push(text);
++        return { ok: true, queued: box.size() };
++      });
+     },
+     sessionPrefsSet: async (sessionId, prefs, workspace) => {
+       try {
+--- a/apps/desktop/src/main/index.ts
++++ b/apps/desktop/src/main/index.ts
+@@ -6,7 +6,7 @@
+ import { bootBackgroundFor, normalizeThemePreference, resolveBootTheme, type ThemePreference } from "./boot-theme";
+ import { windowVibrancyOptions } from "./window-vibrancy";
+ import { focusedWindowViewing, notificationClickWindow, runNotificationCopy, runNotificationTarget, shouldNotifyRunSettled } from "./run-notification";
+-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
++import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+ import { realpath, stat } from "node:fs/promises";
+ import { spawn } from "node:child_process";
+ import { isAbsolute, join, resolve } from "node:path";
+@@ -164,7 +164,9 @@
+ 
+ const here = fileURLToPath(new URL(".", import.meta.url));
+ const distElectron = join(here, "..", "..", "dist-electron");
+-const appIcon = join(here, "..", "renderer", "public", "brand", "cairn.png");
++const brandAssets = join(here, "..", "renderer", "public", "brand");
++// 开发工作树可能只有 favicon；图标资源缺失不能阻断会话与工作台启动。
++const appIcon = ["cairn.png", "favicon.png"].map((name) => join(brandAssets, name)).find(existsSync);
+ let mainWindow: BrowserWindow | null = null;
+ /** 退出流程自己的崩溃（renderer 被 kill）不该弹「界面崩溃」窗；由 before-quit 置位。 */
+ let appQuitting = false;
+@@ -653,16 +655,10 @@
+   submitClarify: (callId, answers) => handleClarifySubmit(callId as string, answers as ClarifyAnswerMap),
+   decidePlan: (approved, callId) => handlePlanDecide(approved as boolean, callId as string | undefined),
+   // channels 表（T2）钉的键是 runCancel；KernelHost 方法名是 cancel（brief 快照里写 cancel 与表不符——映射类型红线拦下）。
+-  // M3-5 接线：renderer 打断按钮真实传 sessionId（ipc-protocol runCancel(sessionId?) 可选参，preload
+-  // 程序化桥自动透传）⇒ 会话级取消（T2 per-session controller）。渲染层不传 ⇒ undefined 直进
+-  // host.cancel ⇒ {ok:false,"会话不在运行"} 的 fail-visible 语义保留（兼容无参调用）。
+-  // cast 定案（typecheck 实测 TS2345）：wired 表形参是 (...args: unknown[]) 的上下文 unknown，
+-  // host.cancel 形参必选 string ⇒ 直传必红；此洗参是 wired 表房式（同 decide/createSession），
+-  // 非 T5 遗留——传参语义已是真实可选参透传，cast 只发生在类型面。
+-  runCancel: (sessionId) => host.cancel(sessionId as string),
+-  // 第 9 点·轮中插话：host.steer 只在会话真在跑时返回 ok（否则 fail-visible，渲染层转「入队」）。
+-  // 洗参与 runCancel 同一条房式（wired 表形参上下文是 unknown；cast 只发生在类型面）。
+-  runSteer: (sessionId, text) => host.steer(sessionId as string, text as string),
++  // v50：透传未知入参，host 统一校验 sessionId/workspace；目标不匹配绝不控制其他项目的 run。
++  runCancel: (sessionId, workspace) => host.cancel(sessionId, workspace),
++  // 插话走同一工作区校验；不在运行时 renderer 将消息保留在目标队列。
++  runSteer: (sessionId, text, workspace) => host.steer(sessionId, text, workspace),
+   listSessions: async () => { await projectRehydrate; return host.listSessions(); },
+   // v14：跨会话用量账本（只读；面板点「全部会话」才调）。
+   usageLedger: () => host.usageLedger(),
+@@ -1945,7 +1941,7 @@
+   // 副进程：锁已被别的实例持有，退出即可。return 挡在一切装配之前（菜单/调度器/BYOK/建窗）。
+   if (!primaryInstance) return;
+   if (process.env.CAIRN_SMOKE === "1") console.error("[cairn-smoke] app ready");
+-  if (process.platform === "darwin") app.dock?.setIcon(appIcon);
++  if (process.platform === "darwin" && appIcon !== undefined) app.dock?.setIcon(appIcon);
+   // 主题真相在 settings.json；ready 后先同步，再建窗（createWindow 里的 bootBackground 也读同一字段）。
+   nativeTheme.themeSource = readThemePreference();
+   // 应用菜单（蓝本 §5.2 菜单树）：App → 文件 → 编辑 → 视图 → 前往 → 窗口 → 帮助。
+--- a/apps/desktop/src/renderer/state/run-queue.ts
++++ b/apps/desktop/src/renderer/state/run-queue.ts
+@@ -163,7 +163,7 @@
+     const running = options.running ?? runningSet.current.has(key);
+     if (running) {
+       if (steerRouteOf({ sessionId: sid, running: true, forceQueue: options.forceQueue === true, attachmentCount: attachments.length }) === "steer") {
+-        const steered = await window.agent.runSteer(sid, text).catch(() => ({ ok: false as const }));
++        const steered = await window.agent.runSteer(sid, text, runWs ?? undefined).catch(() => ({ ok: false as const }));
+         if (steerAccepted(steered)) return { outcome: "steered" };
+       }
+       setQueueFor(sid, [...(sendQueue.current.get(key) ?? []), { id: ++queueSeq.current, text, attachments }], runWs);
+@@ -174,7 +174,7 @@
+       // 预览的事件态可能比主进程晚一拍：主进程说「已在运行」时这句话还没送达，
+       // 与主发送同一条不丢字语义——先试插话，再入队。
+       if (res !== null && res.ok === false && /already running|已在运行|正在运行/u.test(res.error ?? "")) {
+-        const steered = await window.agent.runSteer(sid, text).catch(() => ({ ok: false as const }));
++        const steered = await window.agent.runSteer(sid, text, runWs ?? undefined).catch(() => ({ ok: false as const }));
+         if (steerAccepted(steered)) return { outcome: "steered" };
+         setQueueFor(sid, [...(sendQueue.current.get(key) ?? []), { id: ++queueSeq.current, text, attachments }], runWs);
+         return { outcome: "queued" };
+@@ -218,7 +218,7 @@
+       // 三条路的分岔在纯函数里（`steerRouteOf`），这里只执行：判据不依赖 DOM/运行态那一层，
+       // 才能被判卷钉死（第 681 页记的冒烟失败的根因就是那一层在离屏界面里立不住）。
+       if (steerRouteOf({ sessionId: sid, running: true, forceQueue, attachmentCount: attachments.length }) === "steer") {
+-        const steered = await window.agent.runSteer(sid, text).catch(() => ({ ok: false as const }));
++        const steered = await window.agent.runSteer(sid, text, sendWorkspace ?? undefined).catch(() => ({ ok: false as const }));
+         if (steerAccepted(steered)) {
+           // 回执必须说清是「已插话」还是「已排队」：两种后果差一整轮的工作。
+           setLastNotice(STR.composer.steerSent, sid);
+@@ -339,7 +339,11 @@
+     const runWs = workspace === undefined ? workspaceRef.current : workspace;
+     const key = runKey(runWs, sid);
+     const genAtClick = runGen.current.get(sid) ?? 0;
+-    void window.agent.runCancel(sid).then((res) => {
++    void window.agent.runCancel(sid, runWs ?? undefined).then((res) => {
++      if (!res.ok && res.code !== undefined) {
++        setLastError(res.error ?? "停止失败：会话目标校验未通过", sid);
++        return;
++      }
+       const heal = shouldHealStaleRun({
+         cancelOk: res.ok,
+         genAtClick,
+@@ -351,7 +355,7 @@
+       force((n) => n + 1);
+       resumeQueueFor(sid, runWs); // 无队列 ⇒ 自然 no-op
+     }).catch(() => undefined);
+-  }, [resumeQueueFor]);
++  }, [resumeQueueFor, setLastError]);
+ 
+ 
+   return { setQueueFor, send, sendTo, sendWithGoal, handleRetryLast, resumeQueue, resumeQueueFor, cancelRunHeal };
+--- a/apps/desktop/src/renderer/state/sessions.ts
++++ b/apps/desktop/src/renderer/state/sessions.ts
+@@ -18,8 +18,8 @@
+ const endSessionDelete = (id: string): Promise<SessionDeleteResult> => window.agent.deleteSession(id);
+ 
+ /** 删除前的停止：不续队列（会话都要没了）；读应答返回是否真停住——false = 本窗口运行旗陈旧。 */
+-async function stopRunForDelete(id: string): Promise<boolean> {
+-  const res = await window.agent.runCancel(id).catch(() => null);
++async function stopRunForDelete(id: string, workspace: string | null): Promise<boolean> {
++  const res = await window.agent.runCancel(id, workspace ?? undefined).catch(() => null);
+   return res !== null && res.ok === true;
+ }
+ 
+@@ -234,7 +234,7 @@
+     const workspace = target?.workspace ?? (activeIdRef.current === id ? activeWorkspaceRef.current : null);
+     const key = runKey(workspace, id);
+     let wasRunning = runningSet.current.has(key);
+-    if (wasRunning && !(await stopRunForDelete(id))) {
++    if (wasRunning && !(await stopRunForDelete(id, workspace))) {
+       runningSet.current.delete(key); // 主进程没有活动 run：陈旧旗先摘，不把「已停」当事实
+       wasRunning = false;
+     }
+--- a/src/main/ipc-protocol.ts
++++ b/src/main/ipc-protocol.ts
+@@ -120,8 +120,9 @@
+  *  v35 = 会话级偏好（model/thinking 随 sidecar 持久化＋sessionPrefsSet；列表带 model/thinking）。
+  *  v47 = 撤销全局经验（evolveGlobalRevoke；全局账 patch 转 dormant，跨 workspace 注入停用）。
+  *  v48 = 全局经验冻结开关（evolveGlobalSetFrozen；写/删全局 STOP，与 workspace STOP 分开）。
+- *  v49 = 恢复全局经验（evolveGlobalActivate；dormant → active，复核 ≥3 库证据）。 */
+-export const IPC_PROTOCOL_VERSION = 49;
++ *  v49 = 恢复全局经验（evolveGlobalActivate；dormant → active，复核 ≥3 库证据）。
++ *  v50 = 会话运行控制携带 workspace；目标校验拒绝带 code，不触发陈旧旗自动续发。 */
++export const IPC_PROTOCOL_VERSION = 50;
+ 
+ /** 密钥只允许写入；读取面只报告状态，不回传明文。端点为空时 Brave/Tavily 使用官方地址。 */
+ export interface SearchSettingsInput {
+@@ -447,6 +448,14 @@
+   global: MemoryLayerSnapshot;
+ }
+ 
++/** 目标校验失败与「会话已结束」不同：前者不能据此自动出队或恢复运行。 */
++export interface RunControlResponse {
++  ok: boolean;
++  error?: string;
++  code?: "invalid_target" | "workspace_mismatch";
++  queued?: number;
++}
++
+ /** preload 暴露给 renderer 的 API（window.agent）。 */
+ export interface AgentApi {
+   run(req: RunRequest & { sessionId?: string }): Promise<RunResponse>;
+@@ -462,8 +471,8 @@
+   setGoal(req: { sessionId?: string; objective?: string; maxTurns?: number; maxUsd?: number; clear?: boolean; pause?: boolean; resume?: boolean }): Promise<{ ok: boolean; error?: string; clamped?: string[] }>;
+   /** P3（审查）：取消当前交互 run——信号沿 runLoop 轮界/门等待/长驻工具透传。
+    *  M3-5：补可选 sessionId 走会话级取消（kernel-host cancel(sessionId)，T2 per-session controller）；
+-   *  缺省无参 = 兼容旧调用（host 侧 fail-visible：{ok:false,"会话不在运行"}）。 */
+-  runCancel(sessionId?: string): Promise<{ ok: boolean; error?: string }>;
++   *  workspace 显式指定时必须匹配执行归属；旧调用省略 workspace 时会话 id 须无歧义。 */
++  runCancel(sessionId?: string, workspace?: string): Promise<RunControlResponse>;
+   /** 第 9 点·轮中插话（steering）：把用户这一句话递进**正在跑**的那一轮。
+    *
+    *  与 `runCancel` 同一族但语义相反：cancel 收束这一轮，steer 让这一轮**继续**但多知道一件事。
+@@ -472,7 +481,7 @@
+    *
+    *  会话不在跑 ⇒ `{ok:false, error}` fail-visible：渲染层据此把这句话转成「入队」
+    *  （下一轮首发），而不是假装已经送进去了。`queued` = 盒子里当前待取条数（观测用）。 */
+-  runSteer(sessionId: string, text: string): Promise<{ ok: boolean; error?: string; queued?: number }>;
++  runSteer(sessionId: string, text: string, workspace?: string): Promise<RunControlResponse>;
+   /** M1d 手动压缩入口（M1e 起 preload 暴露：token 面板按钮）。 */
+   compact?(sessionId?: string, workspace?: string): Promise<CompactResponse>;
+   onEvent(cb: (e: AgentEvent) => void): () => void;
+--- /dev/null
++++ b/apps/desktop/tests/run-control-workspace.test.ts
+@@ -0,0 +1,104 @@
++import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { afterEach, beforeEach, expect, it, vi } from "vitest";
++import { createSession } from "../../../src/main/sessions";
++import { handleAgentRun } from "../../../src/main/agent-runner";
++import { createKernelHost, type KernelHost } from "../src/main/kernel-host";
++
++vi.mock("../../../src/main/agent-runner", async (original) => ({
++  ...await original<typeof import("../../../src/main/agent-runner")>(), handleAgentRun: vi.fn(async () => ({ ok: true })),
++}));
++
++let root: string, a: string, b: string, host: KernelHost;
++beforeEach(async () => {
++  vi.mocked(handleAgentRun).mockReset();
++  root = await mkdtemp(join(tmpdir(), "cairn-run-control-"));
++  a = join(root, "a"); b = join(root, "b"); const userData = join(root, "userData");
++  for (const dir of [a, b, userData]) await mkdir(dir, { recursive: true });
++  await writeFile(join(userData, "settings.json"), JSON.stringify({ provider: "demo", model: "" }));
++  for (const ws of [a, b]) await createSession(join(ws, ".agent", "sessions"), "same");
++  host = createKernelHost({ workspaces: [a, b], activeWorkspace: a, userDataDir: userData, outbox: () => undefined });
++});
++afterEach(async () => { await host.orchestrationClose(); await rm(root, { recursive: true, force: true }); });
++
++async function withRun(check: (over: NonNullable<Parameters<typeof handleAgentRun>[1]>) => Promise<void>, id = "same") {
++  let finish: () => void = () => undefined;
++  let overrides: Parameters<typeof handleAgentRun>[1];
++  vi.mocked(handleAgentRun).mockImplementationOnce(async (_req, over) => {
++    overrides = over;
++    await new Promise<void>((resolve) => { finish = resolve; });
++    return { ok: true };
++  });
++  const pending = host.run({ sessionId: id, workspace: a, message: "run A", mode: "default" });
++  try {
++    await vi.waitFor(() => expect(overrides?.signal).toBeDefined());
++    await check(overrides!);
++  } finally { finish(); await pending; }
++}
++
++it("another workspace cannot steer or cancel the same-id run, even after opening its own session", async () => withRun(async (over) => {
++  await host.openSession("same", b);
++  expect(await host.steer("same", "only for B", b)).toMatchObject({ ok: false, code: "workspace_mismatch" });
++  expect(await host.cancel("same", b)).toMatchObject({ ok: false, code: "workspace_mismatch" });
++  expect(over.signal?.aborted).toBe(false);
++  expect(over.steering?.take()).toBeUndefined();
++}));
++
++it("the exact workspace can steer and cancel through a canonical directory alias", async () => withRun(async (over) => {
++  const alias = join(root, "alias"); await symlink(a, alias);
++  expect(await host.steer("same", "for A", alias)).toMatchObject({ ok: true, queued: 1 });
++  expect(over.steering?.take()).toEqual(["for A"]);
++  expect(await host.cancel("same", alias)).toEqual({ ok: true });
++  expect(over.signal?.aborted).toBe(true);
++}));
++
++it("legacy controls without workspace reject ambiguous session ids", async () => withRun(async (over) => {
++  expect(await host.steer("same", "ambiguous")).toMatchObject({ ok: false, code: "invalid_target" });
++  expect(await host.cancel("same")).toMatchObject({ ok: false, code: "invalid_target" });
++  expect(over.signal?.aborted).toBe(false);
++  expect(over.steering?.take()).toBeUndefined();
++}));
++
++it("legacy controls still work for a unique session id", async () => {
++  await createSession(join(a, ".agent", "sessions"), "unique");
++  await withRun(async (over) => {
++    expect(await host.steer("unique", "unique message")).toMatchObject({ ok: true });
++    expect(over.steering?.take()).toEqual(["unique message"]);
++    expect(await host.cancel("unique")).toEqual({ ok: true });
++    expect(over.signal?.aborted).toBe(true);
++  }, "unique");
++});
++
++it("invalid or unregistered explicit targets cannot fall back to the live run", async () => withRun(async (over) => {
++  for (const workspace of [null, "", 42, join(root, "unregistered")]) {
++    expect(await host.cancel("same", workspace)).toMatchObject({ ok: false, code: "invalid_target" });
++    expect(await host.steer("same", "bad target", workspace)).toMatchObject({ ok: false, code: "invalid_target" });
++  }
++  expect(over.signal?.aborted).toBe(false);
++  expect(over.steering?.take()).toBeUndefined();
++}));
++
++it("an aborted run no longer acknowledges new steering text", async () => withRun(async (over) => {
++  await host.cancel("same", a);
++  expect((await host.steer("same", "too late", a)).ok).toBe(false);
++  expect(over.steering?.take()).toBeUndefined();
++}));
++
++it("reports no live run without creating a controller or a steering inbox", async () => {
++  expect((await host.cancel("same", a)).ok).toBe(false);
++  expect((await host.steer("same", "not received", a)).ok).toBe(false);
++  expect(host.runningCount()).toBe(0);
++});
++
++it("rejects malformed ids and steering content without changing the active run", async () => withRun(async (over) => {
++  for (const id of [undefined, null, 42, "", "  "]) {
++    expect(await host.cancel(id, a)).toMatchObject({ ok: false, code: "invalid_target" });
++    expect(await host.steer(id, "bad id", a)).toMatchObject({ ok: false, code: "invalid_target" });
++  }
++  for (const text of [null, 42, "", "  "]) {
++    expect(await host.steer("same", text, a)).toMatchObject({ ok: false, code: "invalid_target" });
++  }
++  expect(over.signal?.aborted).toBe(false);
++  expect(over.steering?.take()).toBeUndefined();
++}));
+--- /dev/null
++++ b/apps/desktop/scripts/run-control-ipc-smoke.cjs
+@@ -0,0 +1,61 @@
++// 真实 Electron preload/IPC + 真实 host/脚本模型；审批保持未决，用来观察工作区控制归属。
++// 不加载整应用，不代表应用启动通过。profile/workspaces 均隔离；不拨真实 Provider。
++const { app, BrowserWindow, ipcMain } = require("electron");
++const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = require("node:fs");
++const { tmpdir } = require("node:os");
++const { join, resolve } = require("node:path");
++const repo = resolve(__dirname, "../../..");
++const profile = mkdtempSync(join(tmpdir(), "cairn-control-ipc-"));
++const out = resolve(process.argv[2]); mkdirSync(out, { recursive: true });
++app.setPath("userData", join(profile, "profile"));
++app.on("quit", () => rmSync(profile, { recursive: true, force: true }));
++for (const key of ["M3A_AGENTS_DEMO", "M1B_GATE_FLOW", "M1C_AUTONOMY_SCRIPT", "M2A_LSP_DEMO", "M0A_PROVIDER", "CAIRN_MODEL", "M0B_WORKSPACE"]) delete process.env[key];
++process.env.M3A_MAIN_SCRIPT = join(repo, "fixtures/agents/main-approval-demo.jsonl");
++require(require.resolve("tsx/cjs", { paths: [repo] }));
++const { createKernelHost } = require("../src/main/kernel-host.ts");
++const { createSession } = require(join(repo, "src/main/sessions.ts"));
++const { INVOKE_CHANNELS } = require("../src/main/channels.ts");
++const { IPC_PROTOCOL_VERSION } = require(join(repo, "src/main/ipc-protocol.ts"));
++const checks = [];
++const check = (name, ok) => { checks.push({ name, ok }); console.log(`${ok ? "PASS" : "FAIL"} ${name}`); };
++let host;
++async function main() {
++  await app.whenReady();
++  const a = join(profile, "a"), b = join(profile, "b"), userData = join(profile, "data");
++  for (const dir of [a, b, userData]) mkdirSync(dir, { recursive: true });
++  writeFileSync(join(userData, "settings.json"), JSON.stringify({ provider: "demo", model: "" }));
++  for (const ws of [a, b]) await createSession(join(ws, ".agent", "sessions"), "same");
++  let asked = false;
++  host = createKernelHost({ workspaces: [a, b], activeWorkspace: a, userDataDir: userData, outbox: (channel) => { if (channel === "onAsk") asked = true; } });
++  ipcMain.handle(INVOKE_CHANNELS.run, (_event, request) => host.run(request));
++  ipcMain.handle(INVOKE_CHANNELS.runCancel, (_event, sid, workspace) => host.cancel(sid, workspace));
++  ipcMain.handle(INVOKE_CHANNELS.runSteer, (_event, sid, text, workspace) => host.steer(sid, text, workspace));
++  ipcMain.handle(INVOKE_CHANNELS.protocolVersion, () => IPC_PROTOCOL_VERSION);
++  const win = new BrowserWindow({ show: false, webPreferences: { preload: process.env.CAIRN_CONTROL_PRELOAD || join(__dirname, "../dist-electron/preload.cjs") } });
++  const errors = [];
++  win.webContents.on("preload-error", (_event, _path, error) => errors.push(error.message));
++  const js = (source) => win.webContents.executeJavaScript(source);
++  await win.loadURL("data:text/html,<meta http-equiv='Content-Security-Policy' content=\"default-src 'none'\"><title>Run control IPC</title>");
++  check("真实 preload 回读当前协议版本", await js("window.agent.protocolVersion()") === IPC_PROTOCOL_VERSION);
++  await js(`window.activeRun = window.agent.run(${JSON.stringify({ sessionId: "same", workspace: a, message: "hold at approval", mode: "default" })}); true;`);
++  for (let attempt = 0; !asked && attempt < 150; attempt++) await new Promise((r) => setTimeout(r, 50));
++  if (!asked) throw new Error("脚本运行未进入真实审批门");
++  check("真实运行停在审批门等待，只有一场执行", host.runningCount() === 1);
++  const wrongSteer = await js(`window.agent.runSteer('same', 'B must not reach A', ${JSON.stringify(b)})`);
++  const wrongCancel = await js(`window.agent.runCancel('same', ${JSON.stringify(b)})`);
++  check("错误工作区插话与停止均被真实 host 拒绝", !wrongSteer.ok && wrongSteer.code === "workspace_mismatch" && !wrongCancel.ok && wrongCancel.code === "workspace_mismatch" && host.runningCount() === 1);
++  const ambiguous = await js("window.agent.runCancel('same')");
++  check("旧式裸 id 控制在同名场景拒绝猜目标", !ambiguous.ok && ambiguous.code === "invalid_target");
++  const steer = await js(`window.agent.runSteer('same', 'for A', ${JSON.stringify(a)})`);
++  check("正确工作区可经真实 IPC 插话", steer.ok && steer.queued === 1);
++  const cancel = await js(`window.agent.runCancel('same', ${JSON.stringify(a)})`);
++  const result = await js("window.activeRun");
++  check("正确工作区取消穿透审批门并收束原运行", cancel.ok && result.aborted === true && host.runningCount() === 0);
++  const late = await js(`window.agent.runSteer('same', 'too late', ${JSON.stringify(a)})`);
++  check("收束后的插话明确拒绝", late.ok === false);
++  check("无 preload 错误", errors.length === 0);
++  writeFileSync(join(out, "result.json"), JSON.stringify({ checks, errors, wrongSteer, wrongCancel, ambiguous, steer, cancel, result, late }, null, 2));
++  await host.orchestrationClose(); win.destroy(); app.exit(checks.every((c) => c.ok) ? 0 : 1);
++}
++setTimeout(() => { console.error("IPC smoke 超时"); app.exit(1); }, 30000).unref();
++main().catch(async (error) => { console.error(error); if (host) await host.orchestrationClose(); app.exit(1); });
+--- /dev/null
++++ b/docs/superpowers/plans/2026-11-01-run-control-workspace.md
+@@ -0,0 +1,16 @@
++# 会话运行控制的工作区归属
++
++持续优化目标下的下一批修复，目标保持 active。
++
++事实：host 的 controller/steering 按裸 sessionId 存储；同时只允许同名 id 的一场 run。当前 cancel/steer 未核对 workspace，另一项目的同名会话可控制该 run。
++
++方案：复用现有 controller 的 workspace、canonicalWorkspacePath 与注册根。控制请求传入 workspace；host 校验后只操作匹配的当前 controller/信箱。旧调用未传 workspace 时，仅允许无歧义的会话。失败返回结构化 code，renderer 不把目标冲突当作陈旧运行旗来自动出队。协议升级，旧 host/新 renderer 失配时继续使用现有版本闸。
++
++- [x] 新增真实 host + 合成 runner 测试及真实 hook 测试，记录改前错误控制证据。
++- [x] 修复协议、主进程接线、host 目标校验、renderer 插话/取消与删除前停止调用。
++- [x] 验证正确/错误工作区、未注册与畸形参数、旧调用歧义、软链规范化和拒绝后队列保持。
++- [x] 类型、定向/完整桌面、Electron IPC、边界、文档检查；当前代理按 OCR delegate 审查。
++
++不新增依赖；不改 JSONL、冻结判卷或规则文件；保留共享工作树其他修改。队列持久化事务另行核查，不声称本批提供崩溃去重保证。
++
++验证额外发现 macOS Dock 因缺失 cairn.png 在启动时抛错：保留现有资源删除，优先完整图标、其次 favicon，均缺失时不调用 Dock 图标覆盖。改前整应用 smoke 因图标失败，改后通过。详见 `outputs/run-control-workspace-2026-11-01/review.md`。

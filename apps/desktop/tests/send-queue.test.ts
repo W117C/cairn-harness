@@ -3,7 +3,7 @@
 // 组件与 App 只消费这三个出口，不各算一份。
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { askBelongsToSession, composerLockReason, composerLocked, continueAfterRun, drainQueue, dropQueued, fromSessionQueueEntries, promoteQueued, shouldHealStaleRun, steerAccepted, steerRouteOf, takeQueued, toSessionQueueEntries, type QueuedSend } from "../src/renderer/send-queue";
+import { askBelongsToSession, composerLockReason, composerLocked, continueAfterRun, drainQueue, dropQueued, editQueued, fromSessionQueueEntries, moveQueued, promoteQueued, shouldHealStaleRun, steerAccepted, steerRouteOf, takeQueued, toSessionQueueEntries, type QueuedSend } from "../src/renderer/send-queue";
 import { readAppSurface } from "./helpers/app-surface";
 
 const item = (id: number): QueuedSend => ({ id, text: `消息${String(id)}`, attachments: [] });
@@ -30,6 +30,34 @@ describe("发送队列纯函数", () => {
     expect(promoteQueued([item(1)], -1).map((i) => i.id)).toEqual([1]);
     expect(dropQueued([item(1)], 5).map((i) => i.id)).toEqual([1]);
     expect(dropQueued([item(1)], -1).map((i) => i.id)).toEqual([1]);
+  });
+
+  it("editQueued：只换目标项正文（去首尾空白），id/引用/次序不动", () => {
+    const before = [item(1), item(2), item(3)];
+    const after = editQueued(before, 1, "  改好的第二句  ");
+    expect(after.map((i) => i.id)).toEqual([1, 2, 3]);
+    expect(after[1]?.text).toBe("改好的第二句");
+    expect(after[1]?.attachments).toBe(before[1]?.attachments);
+    expect(after[0]).toBe(before[0]);
+    expect(after[2]).toBe(before[2]);
+  });
+
+  it("moveQueued：上/下移只换位置；两端/越界原样返回", () => {
+    const before = [item(1), item(2), item(3)];
+    expect(moveQueued(before, 0, 1).map((i) => i.id)).toEqual([2, 1, 3]);
+    expect(moveQueued(before, 2, -1).map((i) => i.id)).toEqual([1, 3, 2]);
+    expect(moveQueued(before, 0, -1).map((i) => i.id)).toEqual([1, 2, 3]);
+    expect(moveQueued(before, 2, 1).map((i) => i.id)).toEqual([1, 2, 3]);
+    expect(moveQueued(before, 5, -1).map((i) => i.id)).toEqual([1, 2, 3]);
+    expect(moveQueued([item(1)], 0, 1)).toHaveLength(1);
+  });
+
+  it("editQueued：空文本/纯空白/越界原样返回（不制造空消息、不吞条目）", () => {
+    const before = [item(1), item(2)];
+    expect(editQueued(before, 0, "   ").map((i) => i.text)).toEqual(before.map((i) => i.text));
+    expect(editQueued(before, 0, "").map((i) => i.text)).toEqual(before.map((i) => i.text));
+    expect(editQueued(before, 5, "x").map((i) => i.text)).toEqual(before.map((i) => i.text));
+    expect(editQueued(before, -1, "x").map((i) => i.text)).toEqual(before.map((i) => i.text));
   });
 });
 
@@ -149,20 +177,25 @@ describe("打断接线哨兵（源码级，第十三遍）", () => {
   const appSrc = readAppSurface();
   const queueSrc = readFileSync(new URL("../src/renderer/send-queue.ts", import.meta.url), "utf8");
 
-  it("runCancel 直呼只剩 cancelRunHeal 内一处：void 掉结果的旧静默点全收编", () => {
+  it("runCancel 直呼两处：cancelRunHeal（打断/停止，含陈旧自愈）与删除前停止（不续队列、读应答摘陈旧旗）", () => {
     expect(queueSrc).toContain("shouldHealStaleRun");
-    expect(appSrc.match(/agent\.runCancel/g)?.length).toBe(1);
-    expect(appSrc).toContain("window.agent.runCancel(sid).then");
+    expect(appSrc.match(/agent\.runCancel/g)?.length).toBe(2);
+    expect(appSrc).toContain("window.agent.runCancel(sid, runWs ?? undefined).then");
+    // 删除前停止不沿用 cancelRunHeal（不能把队列续进要删的会话）；但也不许 void 掉应答：
+    // 读 ok 判「主进程到底有没有活动 run」，陈旧旗当场摘。
+    expect(appSrc).toContain("const res = await window.agent.runCancel(id, workspace ?? undefined).catch(() => null);");
+    expect(appSrc).toContain("return res !== null && res.ok === true;");
     expect(appSrc).not.toContain("void window.agent.runCancel(sid);");
     expect(appSrc).not.toContain("void window.agent.runCancel(activeId);");
+    expect(appSrc).not.toContain("void window.agent.runCancel(id)");
   });
 
   it("三处入口全走 cancelRunHeal：打断并发送 / 停止钮 / Esc 智慧停止（hotkeysRef 两联）", () => {
     // 函数定义、两次快捷键赋值、两个 UI 调用分别计数；注释和模块间传参都不算入口。
     expect(appSrc.match(/const cancelRunHeal = useCallback/g)).toHaveLength(1);
     expect(appSrc.match(/cancelRun: cancelRunHeal/g)).toHaveLength(2);
-    expect(appSrc.match(/cancelRunHeal\((?:sid|activeId)\)/g)).toHaveLength(2);
-    expect(appSrc).toContain("cancelRunHeal(sid)");
+    expect(appSrc.match(/cancelRunHeal\(activeId\)|props\.cancelRunHeal\(props\.activeId, props\.activeWorkspace\)/g)).toHaveLength(2);
+    expect(appSrc).toContain("props.cancelRunHeal(props.activeId, props.activeWorkspace)");
     expect(appSrc).toContain("cancelRunHeal(activeId)");
     expect(appSrc).toContain("cancelRun: cancelRunHeal");
   });

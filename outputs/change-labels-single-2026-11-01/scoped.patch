@@ -1,0 +1,218 @@
+--- a/apps/desktop/src/renderer/components/ChangeSummaryCard.tsx	2026-11-01 16:02:35
++++ b/apps/desktop/src/renderer/components/ChangeSummaryCard.tsx	2026-11-01 15:52:29
+@@ -5,13 +5,8 @@
+ import { useState } from "react";
+ import { Check, ChevronDown, Download, ExternalLink, History } from "lucide-react";
+ import type { TurnDelivery } from "../projections";
++import { changeLabel } from "../derived/change-labels";
+ 
+-const CHANGE_LABEL: Record<"created" | "modified" | "unknown", string> = {
+-  created: "新建",
+-  modified: "修改",
+-  unknown: "变更",
+-};
+-
+ const STATUS_LABEL: Record<TurnDelivery["verification"]["status"], string> = {
+   "not-required": "无需验证",
+   absent: "未验证",
+@@ -140,7 +135,7 @@
+               <div className="changes-list">
+                 {visible.map((f) => (
+                   <div key={f.path} className="change-item" title={f.snapshotId !== undefined ? "覆盖前快照已保留（.agent/snapshots）" : undefined}>
+-                    <span className="ci-change" data-change={f.change}>{CHANGE_LABEL[f.change]}</span>
++                    <span className="ci-change" data-change={f.change}>{changeLabel(f.change)}</span>
+                     <span className="ci-path" title={f.path}>{f.path}</span>
+                     {f.snapshotId !== undefined && (
+                       <span className="ci-stat" title={`快照：${f.snapshotId}`}>
+--- a/apps/desktop/src/renderer/components/Inspector.tsx	2026-11-01 16:02:35
++++ b/apps/desktop/src/renderer/components/Inspector.tsx	2026-11-01 15:52:29
+@@ -12,12 +12,7 @@
+ import { changedFilesOf, PANE_META, PANE_OPENABLE, projectPlans, type PaneKind } from "./panes";
+ import { usageSummary } from "../projections";
+ import { formatTokens } from "./format-tokens";
+-
+-const CHANGE_WORD: Record<"created" | "modified" | "unknown", string> = {
+-  created: "新建",
+-  modified: "修改",
+-  unknown: "变更",
+-};
++import { changeLabel } from "../derived/change-labels";
+ import { DiffView } from "./DiffView";
+ import { TimelinePane } from "./TimelinePane";
+ 
+@@ -68,7 +63,7 @@
+             <div className="isp-file">
+               <button className={"isp-file-main" + (open ? " open" : "")} aria-expanded={open} title={f.path} onClick={() => toggle(f.path, f.path, f.snapshotId)}>
+                 <span className="chev" aria-hidden="true"><ChevronRight size={10} /></span>
+-                <span className={"act " + f.change}>{CHANGE_WORD[f.change]}</span>
++                <span className={"act " + f.change}>{changeLabel(f.change)}</span>
+                 <span className="path">{f.path}</span>
+               </button>
+               {f.snapshotId !== undefined && props.onRestore !== undefined && (
+--- a/apps/desktop/src/renderer/components/PaneDock.tsx	2026-11-01 16:02:35
++++ b/apps/desktop/src/renderer/components/PaneDock.tsx	2026-11-01 15:55:31
+@@ -13,6 +13,7 @@
+ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+ import type { AgentEvent } from "../../../../../src/events";
+ import { turnDelivery } from "../projections";
++import { changeLabel, planActionLabel } from "../derived/change-labels";
+ import { diffCount, useLazyChangeDiff } from "../change-diff-state";
+ import { ConfirmDialog } from "./ConfirmDialog";
+ import { clipDiff, parseUnifiedPatch } from "../diff-patch";
+@@ -667,7 +668,7 @@
+                       >
+                         <span className="chev" aria-hidden="true"><ChevronRight size={10} /></span>
+                         <span className={"act " + f.change}>
+-                          {f.change === "created" ? "新建" : f.change === "modified" ? "修改" : "变更"}
++                          {changeLabel(f.change)}
+                         </span>
+                         <span className="path">{f.path}</span>
+                         {f.snapshotId !== undefined && (
+@@ -695,7 +696,7 @@
+             <>
+               <div className="review-diff-head">
+                 <span className={"act " + selected.file.change}>
+-                  {selected.file.change === "created" ? "新建" : selected.file.change === "modified" ? "修改" : "变更"}
++                  {changeLabel(selected.file.change)}
+                 </span>
+                 <span className="path">{selected.file.path}</span>
+                 {!diff.loading && diff.payload !== null && diff.payload.ok && (
+@@ -756,7 +757,7 @@
+             {p.files.map((f) => (
+               <li className="change-item" key={`${f.action}:${f.path}`}>
+                 <span className={"act " + (f.action === "delete" ? "delete" : f.action === "create" ? "created" : "modified")}>
+-                  {f.action === "create" ? "新建" : f.action === "delete" ? "删除" : "修改"}
++                  {planActionLabel(f.action)}
+                 </span>
+                 <span className="path">{f.path}</span>
+               </li>
+--- a/apps/desktop/src/renderer/components/PlanCard.tsx	2026-11-01 16:02:35
++++ b/apps/desktop/src/renderer/components/PlanCard.tsx	2026-11-01 15:54:37
+@@ -2,9 +2,8 @@
+ // 展开详情 = approach 段 / 文件清单（action 徽标）/ 验证面 chips / 后果行（拒绝 = 写禁维持、模型须修订）。
+ import { useState } from "react";
+ import type { PlanProposal } from "../../../../../src/events";
++import { planActionLabel } from "../derived/change-labels";
+ 
+-const ACTION_LABEL: Record<string, string> = { create: "新建", edit: "修改", delete: "删除" };
+-
+ export function PlanCard(props: {
+   callId: string;
+   plan: PlanProposal;
+@@ -36,7 +35,7 @@
+           <div className="file-list">
+             {props.plan.files.map((f, i) => (
+               <div className="file-item" key={i}>
+-                <span className={`chip ${f.action === "create" ? "ok" : f.action === "delete" ? "danger" : ""}`}>{ACTION_LABEL[f.action] ?? f.action}</span>
++                <span className={`chip ${f.action === "create" ? "ok" : f.action === "delete" ? "danger" : ""}`}>{planActionLabel(f.action)}</span>
+                 <span className="path">{f.path}</span>
+                 {"summary" in f && typeof f.summary === "string" && <span className="sum">{f.summary}</span>}
+               </div>
+--- a/apps/desktop/tests/review-split.test.ts	2026-11-01 16:02:35
++++ b/apps/desktop/tests/review-split.test.ts	2026-11-01 15:56:45
+@@ -29,7 +29,8 @@
+ 
+   it("② 文件行带动作徽标（文字，不只靠颜色）", () => {
+     expect(src).toContain('className={"act " + f.change}');
+-    expect(src).toContain('f.change === "created" ? "新建" : f.change === "modified" ? "修改" : "变更"');
++    // 第 942 页：三个词收进 derived/change-labels.ts（单一表），这里钉「徽标仍是文字」。
++    expect(src).toContain("changeLabel(f.change)");
+   });
+ 
+   it("③ 选中才取差异：不预取整会话的全部 diff", () => {
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:02:35
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 15:55:51
+@@ -4303,3 +4303,4 @@
+ 62. **evolve 的内容指纹只有一份（第 939 页）**：`digestOf`（sha256 前 16 位）在 candidate / episode / playbook / playbook-store 四处各抄了一份，而这四处的 id（`cand_…` / `ep_…` / playbook 条目 digest / `legacyId`）都靠它派生——长度或算法只要有一处改了，跨模块 id 就静默失配（按 id 查不到，但不报错）。实现收到 `src/agent/evolve/digest.ts`，四处改成 import；判卷钉「16 位 + 空串真值 `e3b0c44298fc1c14`」与「四处 import、src 里只剩一处定义」。
+ 63. **token / 字节刻度只剩两处实现（第 940 页）**：这两把尺在本仓被反复手抄（用量环 vs 时间线、用量页 vs 环、模型菜单 vs 浮层、附件行 vs 日志窗），每修一处只补了一条局部判据，「下一个人再抄一份」没有机械拦截。新增 `tests/format-rulers.test.ts`：扫渲染层全部 `.ts/.tsx`，除 `derived/format-tokens.ts` 与 `derived/format-bytes.ts` 之外，出现 k/m/M 模板拼装、模板里 `${…} KB|MB`、`Intl` 紧凑记法或 `Math.round(x / 1000)` 都当场红并点名 `文件:行`；另有一条「两把尺本身还在」防止允许名单变成空保护。
+ 64. **闸门面的人话覆盖有判据（第 941 页）**：批准卡的人话是逐轮补的（名单外工具 → 读族 → 补丁抬头），但没有一把尺把「闸门清单」与「人话清单」锁在一起：`src/main/tool-gates.ts` 的 `GatedName` 新增一把工具而 `describeAsk` 没跟上时，卡片会静默落到兜底「需要你批准 + 参数 JSON」。新增 `tests/approval-coverage.test.ts`：从源码取出 `GatedName` 的成员（并先断言清单取到了 ≥10 条），逐个要求标题不是兜底，且任意两把工具的标题不得相同。
++65. **文件改动与方案动作的词各只有一张表（第 942 页）**：文件改动的三个词（新建 / 修改 / 变更）原先三处手抄——`ChangeSummaryCard` 的 `CHANGE_LABEL`、`Inspector` 的 `CHANGE_WORD`、`PaneDock` 两处内联三元；方案动作的三个词（新建 / 修改 / 删除）两处——`PlanCard` 的 `ACTION_LABEL` 与 `PaneDock` 的内联三元。两套词都收进 `derived/change-labels.ts`（`changeLabel` / `planActionLabel`），四个消费面改读；判卷钉「认不出的 kind 一律『变更』、不猜成新建」与「四处都不再有自己的表/三元」。
+--- /dev/null → apps/desktop/src/renderer/derived/change-labels.ts
+--- /dev/null	2026-11-01 16:02:35
++++ b/apps/desktop/src/renderer/derived/change-labels.ts	2026-11-01 15:55:31
+@@ -0,0 +1,32 @@
++// 文件改动的三个词（第 942 页）：新建 / 修改 / 变更。
++// 此前三处各写一份——`ChangeSummaryCard` 的 CHANGE_LABEL、`Inspector` 的 CHANGE_WORD、
++// `PaneDock` 里两处内联三元。同一套词三份手抄，改一处就有一面开始说旧话。
++// 「变更」是缺省：change 字段缺席时（老日志/投影没给）不许猜成新建或修改。
++
++export type FileChangeKind = "created" | "modified" | "unknown";
++
++export const CHANGE_LABEL: Readonly<Record<FileChangeKind, string>> = {
++  created: "新建",
++  modified: "修改",
++  unknown: "变更",
++};
++
++/** 任意字符串 → 那三个词之一；认不出的一律「变更」（不猜）。 */
++export function changeLabel(kind: string): string {
++  return CHANGE_LABEL[kind as FileChangeKind] ?? CHANGE_LABEL.unknown;
++}
++
++/** 方案里的动作词（create / edit / delete）：`PlanCard` 的徽标与 `PaneDock` 的变更清单共用。
++ *  第 942 页并进来的第二套词——它和「文件改动」不是一回事（方案动作没有「变更」这一档）。 */
++export type PlanActionKind = "create" | "edit" | "delete";
++
++export const PLAN_ACTION_LABEL: Readonly<Record<PlanActionKind, string>> = {
++  create: "新建",
++  edit: "修改",
++  delete: "删除",
++};
++
++/** 任意字符串 → 动作词；认不出的原样返回（方案动作是模型给的，不替它编一个）。 */
++export function planActionLabel(action: string): string {
++  return PLAN_ACTION_LABEL[action as PlanActionKind] ?? action;
++}
+--- /dev/null → apps/desktop/tests/change-labels.test.ts
+--- /dev/null	2026-11-01 16:02:35
++++ b/apps/desktop/tests/change-labels.test.ts	2026-11-01 15:54:37
+@@ -0,0 +1,49 @@
++// 文件改动的三个词只有一张表（第 942 页）：此前 `ChangeSummaryCard` 的 CHANGE_LABEL、
++// `Inspector` 的 CHANGE_WORD、`PaneDock` 两处内联三元各写一份——同一套词三份手抄。
++import { readFileSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++import { describe, expect, it } from "vitest";
++import { changeLabel, planActionLabel } from "../src/renderer/derived/change-labels";
++
++const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
++
++describe("文件改动词表", () => {
++  it("三个词：新建 / 修改 / 变更；认不出的一律「变更」（不猜）", () => {
++    expect(changeLabel("created")).toBe("新建");
++    expect(changeLabel("modified")).toBe("修改");
++    expect(changeLabel("unknown")).toBe("变更");
++    expect(changeLabel("renamed")).toBe("变更");
++    expect(changeLabel("")).toBe("变更");
++  });
++
++  it("方案动作三个词：新建 / 修改 / 删除；认不出的原样返回", () => {
++    expect(planActionLabel("create")).toBe("新建");
++    expect(planActionLabel("edit")).toBe("修改");
++    expect(planActionLabel("delete")).toBe("删除");
++    expect(planActionLabel("rename")).toBe("rename");
++  });
++
++  it("三处消费面都读同一份，且不再各自内联三元", () => {
++    const card = read("../src/renderer/components/ChangeSummaryCard.tsx");
++    expect(card).toContain('from "../derived/change-labels"');
++    expect(card).toContain("changeLabel(f.change)");
++    expect(card).not.toContain("const CHANGE_LABEL");
++
++    const inspector = read("../src/renderer/components/Inspector.tsx");
++    expect(inspector).toContain('from "../derived/change-labels"');
++    expect(inspector).toContain("changeLabel(f.change)");
++    expect(inspector).not.toContain("const CHANGE_WORD");
++
++    const plan = read("../src/renderer/components/PlanCard.tsx");
++    expect(plan).toContain('from "../derived/change-labels"');
++    expect(plan).toContain("planActionLabel(f.action)");
++    expect(plan).not.toContain("const ACTION_LABEL");
++
++    const dock = read("../src/renderer/components/PaneDock.tsx");
++    expect(dock).toContain('from "../derived/change-labels"');
++    expect(dock).toContain("changeLabel(f.change)");
++    expect(dock).not.toContain('f.change === "created" ?');
++    expect(dock).not.toContain('f.action === "create" ? "新建"');
++    expect(dock).toContain("planActionLabel(f.action)");
++  });
++});

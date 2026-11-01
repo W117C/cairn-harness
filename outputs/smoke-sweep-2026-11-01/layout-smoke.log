@@ -1,0 +1,20 @@
+PASS 侧栏默认只保留会话搜索入口，不常驻搜索框 {"row":0,"toggle":true,"title":"搜索会话","ariaLabel":"搜索会话"}
+PASS 点击搜索入口后展开并自动聚焦输入框 {"row":1,"focused":true}
+PASS 空搜索再按 Esc 收起，并把焦点还给搜索入口 {"row":0,"focused":true}
+PASS 空态建议保持无编号行 {"rows":3,"numbers":0}
+PASS 首页标题、项目与输入区共用阅读起点 {"greetPx":22,"taPx":14,"loudest":{"t":"SPAN","px":22},"headingLeft":495.5,"composerLeft":495.5,"footer":"","railSettings":"设置","canvas":"rgb(252, 252, 251)","radius":"12px","upstream":true}
+PASS 设置入口只在能力轨，页脚账户位不再复制一枚 {"greetPx":22,"taPx":14,"loudest":{"t":"SPAN","px":22},"headingLeft":495.5,"composerLeft":495.5,"footer":"","railSettings":"设置","canvas":"rgb(252, 252, 251)","radius":"12px","upstream":true}
+PASS 首页问候不再以装饰大字压过输入区（≤ 24px 且 ≤ 输入正文 1.8 倍） {"greetPx":22,"taPx":14,"loudest":{"t":"SPAN","px":22},"headingLeft":495.5,"composerLeft":495.5,"footer":"","railSettings":"设置","canvas":"rgb(252, 252, 251)","radius":"12px","upstream":true}
+PASS 已加载上游 Claude 主题与输入卡样式 {"greetPx":22,"taPx":14,"loudest":{"t":"SPAN","px":22},"headingLeft":495.5,"composerLeft":495.5,"footer":"","railSettings":"设置","canvas":"rgb(252, 252, 251)","radius":"12px","upstream":true}
+PASS 1440 首次进会话保持专注两栏，插件命令不常驻 {"inspectorWidth":0,"inspectorInert":true,"pluginStrip":0,"composerWidth":750}
+PASS 检查器概览不重复顶栏会话名，只保留上下文与运行事实 {"open":true,"toolbarTitles":1,"toolbarTitle":"接 routing 开关并跑全量验证","overviewNames":0,"overviewContext":true}
+PASS 运行态 chip 的文字与它自己的淡染底过 AA 文本 4.5:1 {"present":true,"ratio":4.84,"fg":"rgb(162, 89, 5)","bg":"250,244,236","size":"10px"}
+PASS 检查器方向键切 Tab，焦点与面板语义同步，只保留一个 Tab 停点 {"selected":"改动","focused":"改动","panel":":rj:-tab-changes","rovingStops":1}
+PASS 侧栏任务名获得至少六成行宽 {"rowWidth":242.5,"titleWidth":193.5}
+PASS 一轮 = 一条列：助手行/正文/过程带/交付卡/署名条共用同一右缘，用户行仍贴列右 {"assistant":982,"prose":982,"think":982,"tools":982,"card":982,"footer":982,"user":1036,"reading":1077,"bands":[982,982,982,982,982,982]}
+PASS 窄窗输入框完整可见，页面无横向溢出 {"left":320,"right":861,"viewport":880,"overflow":false}
+PASS 暗色主题与 Markdown 链接使用上游配色 {"canvas":"rgb(21, 21, 21)","link":"rgb(138, 180, 248)"}
+PASS 设置页顶栏显示当前页面并收起任务操作 {"open":true,"title":"设置","tools":"","taskButton":false}
+PASS 渲染过程无控制台错误 []
+截图与读数：/Users/ze/Downloads/Cairn/cairn/.tmp/sweep/layout-smoke.out
+隔离测试配置：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-layout-profile-MmaQ6y

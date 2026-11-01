@@ -1,0 +1,68 @@
+$ vitest run --config tests/vitest.config.ts --maxWorkers=2
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay / --serve / --discover / --sessions 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+fatal: not a git repository (or any of the parent directories): .git
+拒跑：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-sp7DNH/repo —— 工作树有 1 项在飞
+拒跑：/Users/ze/Downloads/Cairn/cairn —— 工作树有 500 项在飞
+取料坏：2/2 棵树不合格 ⇒ 一条不跑（这不是「没有红」，是没尺）
+取料坏：--trees 里有重复路径 ⇒ 同树两个进程会互改源文件（.mutbak 会互相踩），一条不跑
+取料坏：认不出的参数 ⇒ 一条不跑：--shardz=2
+用法：node --import tsx scripts/mutate-shards.ts --trees 树1,树2[,…] [--changed-since=<rev> | id…] [--budget-ms N] [--serial-seconds N] [--lock-tag-base …] [--cost-logs 机器原文,…] [--dry-run]（带值的旗标两种写法都收）
+Preparing worktree (detached HEAD be9c0be5)
+Updating files:  76% (4821/6291)Updating files:  77% (4845/6291)Updating files:  78% (4907/6291)Updating files:  79% (4970/6291)Updating files:  80% (5033/6291)Updating files:  81% (5096/6291)Updating files:  82% (5159/6291)Updating files:  83% (5222/6291)Updating files:  84% (5285/6291)Updating files:  85% (5348/6291)Updating files:  86% (5411/6291)Updating files:  87% (5474/6291)Updating files:  88% (5537/6291)Updating files:  89% (5599/6291)Updating files:  90% (5662/6291)Updating files:  91% (5725/6291)Updating files:  92% (5788/6291)Updating files:  93% (5851/6291)Updating files:  94% (5914/6291)Updating files:  95% (5977/6291)Updating files:  96% (6040/6291)Updating files:  97% (6103/6291)Updating files:  98% (6166/6291)Updating files:  99% (6229/6291)Updating files: 100% (6291/6291)Updating files: 100% (6291/6291), done.
+取料坏：给了 1 条不在这张表上的 id ⇒ 一条不跑：this-anchor-does-not-exist
+Preparing worktree (detached HEAD be9c0be5)
+Updating files:  91% (5752/6291)Updating files:  92% (5788/6291)Updating files:  93% (5851/6291)Updating files:  94% (5914/6291)Updating files:  95% (5977/6291)Updating files:  96% (6040/6291)Updating files:  97% (6103/6291)Updating files:  98% (6166/6291)Updating files:  99% (6229/6291)Updating files: 100% (6291/6291)Updating files: 100% (6291/6291), done.
+Preparing worktree (detached HEAD be9c0be5)
+Updating files:  74% (4707/6291)Updating files:  75% (4719/6291)Updating files:  76% (4782/6291)Updating files:  77% (4845/6291)Updating files:  78% (4907/6291)Updating files:  79% (4970/6291)Updating files:  80% (5033/6291)Updating files:  81% (5096/6291)Updating files:  82% (5159/6291)Updating files:  83% (5222/6291)Updating files:  84% (5285/6291)Updating files:  85% (5348/6291)Updating files:  86% (5411/6291)Updating files:  87% (5474/6291)Updating files:  88% (5537/6291)Updating files:  89% (5599/6291)Updating files:  90% (5662/6291)Updating files:  91% (5725/6291)Updating files:  92% (5788/6291)Updating files:  93% (5851/6291)Updating files:  94% (5914/6291)Updating files:  95% (5977/6291)Updating files:  96% (6040/6291)Updating files:  97% (6103/6291)Updating files:  98% (6166/6291)Updating files:  99% (6229/6291)Updating files: 100% (6291/6291)Updating files: 100% (6291/6291), done.
+Preparing worktree (detached HEAD be9c0be5)
+取料坏：1 个判卷宿主被摊到两片以上 ⇒ 会并发真跑同一份判卷，一条不跑：tests/mutate-shards.test.ts
+Preparing worktree (detached HEAD be9c0be5)
+Updating files:  91% (5731/6291)Updating files:  92% (5788/6291)Updating files:  93% (5851/6291)Updating files:  94% (5914/6291)Updating files:  95% (5977/6291)Updating files:  96% (6040/6291)Updating files:  97% (6103/6291)Updating files:  98% (6166/6291)Updating files:  99% (6229/6291)Updating files: 100% (6291/6291)Updating files: 100% (6291/6291), done.
+Preparing worktree (detached HEAD be9c0be5)
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay / --serve / --discover / --sessions 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay / --serve / --discover / --sessions 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+node: bad option: --token
+node: bad option: --port
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay / --serve / --discover / --sessions 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+ ❯ tests/ipc-protocol-version.test.ts (2 tests | 1 failed) 12ms
+   ❯ IPC 协议版本（§3.5/§12） (2)
+     × bump 版本必须有意为之：现钉 35——改协议形状（AgentApi 增删/字段语义变）= bump 常量 + 同步本格，desktop-panel 提案走同一流水线 10ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/ipc-protocol-version.test.ts > IPC 协议版本（§3.5/§12） > bump 版本必须有意为之：现钉 35——改协议形状（AgentApi 增删/字段语义变）= bump 常量 + 同步本格，desktop-panel 提案走同一流水线
+AssertionError: expected 43 to be 42 // Object.is equality
+
+- Expected
++ Received
+
+- 42
++ 43
+
+ ❯ tests/ipc-protocol-version.test.ts:48:34
+     46|     // v40 → v41：＋resetPreferences（恢复默认偏好；身份/项目/会话/布局不动）。
+     47|     // v41 → v42：about 增可选 build（包内 build-info；开发态缺省）。
+     48|     expect(IPC_PROTOCOL_VERSION).toBe(42);
+       |                                  ^
+     49|   });
+     50| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 582 passed (583)
+      Tests  1 failed | 7427 passed (7428)
+   Start at  16:15:25
+   Duration  270.95s (tests 85%, import 12%, transform 2%)
+
+    Isolate  583 workers spawned · ~96ms startup each (spawn + environment, per file)
+             at least ~27.93s faster with isolate: false — reuses workers across files instead of one per file
+
+[ELIFECYCLE] Command failed with exit code 1.

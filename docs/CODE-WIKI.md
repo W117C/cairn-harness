@@ -123,7 +123,7 @@ worker 卡在审批上时，父 turn 已经结束，审批应答与取消必须�
 - **图标唯一事实源：`components/icons.tsx` 的 `Ic` 表**。16px 网格、stroke 1.5、currentColor；
   组件一律 `import { Ic }`，不许再内联 `<svg>` 路径或用 emoji 当图标（render-structure 判卷
   豁免的 `⚠`/`✓` 字面量除外）。`providerHue(id)` 给 provider 品牌色相（确定性哈希）。
-- **markdown 渲染：`markdown.tsx` 的 `parseBlocks`（纯函数，tests/markdown.test.tsx 判卷）+
+- **markdown 渲染：`markdown.tsx` 的 `parseBlocks`（纯函数，apps/desktop/tests/markdown.test.tsx 判卷）+
   `<Markdown>`**。零依赖、零 `dangerouslySetInnerHTML`（全部 React 文本节点转义，链接只放行
   http(s)）；未闭合围栏按"开放代码块"渲染（流式不闪烁）。样式全部前缀 `.md-*`——不许裸选
   `pre`，会漏进 `.kv pre`（工具行展开体）。
@@ -133,9 +133,9 @@ worker 卡在审批上时，父 turn 已经结束，审批应答与取消必须�
   `.toolcluster`、`data-round-anchor` 这些锚——TurnRail 的跳轮/flash 靠 DOM 查询它们。
 
 判卷雷区：`apps/desktop/tests/render-structure.test.tsx` 用 react-dom/server 钉了大量用户可见
-字符串与计数（分组头、`标准 · 窗口 128k`、`class="check">✓<`、disabled 计数、设置导航六分区
+字符串与计数（分组头、`标准 · 窗口 128.0k`、`class="check">✓<`、disabled 计数、设置导航六分区
 顺序唯一、`<Switch` 恰 3 处、CustomProviderForm 源码级 `allowLocalEndpoint: true`）。重排 UI
-先读它，别把钉子当冗余拔了。视觉自查走 `scripts/ui-gallery.cjs`（离屏 capturePage + 假
+先读它，别把钉子当冗余拔了。视觉自查走 `apps/desktop/scripts/ui-gallery.cjs`（离屏 capturePage + 假
 AgentApi，不跑真模型、不触发系统录屏权限）。
 
 ## ⑤ LSP 的 `languageId` 契约（2026-10-23，第 675 页）
@@ -149,6 +149,26 @@ AgentApi，不跑真模型、不触发系统录屏权限）。
 查表按**原样键**，不做大小写归一——静默归一会把"配错了扩展名"藏起来。
 判卷：`tests/lsp-language-id.test.ts`（探针 server 把 didOpen 的 languageId 原样交回，判的是真发出去的值）＋
 `tests/plugin-lsp-activation.test.ts` 的同名断言。**两个入口各有一条**：只钉一个入口的判据是半个判据。
+
+## ⑥ LSP 的能力协商两头都要用（2026-11-01，第 920 页）
+
+`initialize` 是本框架里唯一一次双方对齐"能说什么话"的机会，**任何一头不用都会静默降级**：
+
+- 客户端发 `capabilities: {}` ⇒ 服务器按最保守形状回包。要 `linkSupport` 才拿得到 `LocationLink`，
+  要 `contentFormat` 才保证 `MarkupContent`，要 `hierarchicalDocumentSymbolSupport` 才有嵌套符号表。
+  `CLIENT_CAPABILITIES` 只声明**真的消费了**的面——声明了却不实现（如 `didChangeWatchedFiles`）
+  等于把服务器引到一条我们不走的路，它据此认为自己的索引是新的。
+- 服务器的应答丢掉 ⇒ 看不见 `textDocumentSync` 与各 provider。`openFile` 的 `didChange` 形状必须按
+  声明走：`change:2`（增量）只认带 `range` 的编辑，**不带 range 的整篇替换会被沉默丢掉**——于是文档模型
+  停在旧文本，六操作回旧结果，看着像"代码没变"，比报错更坏；`change:0` 不接受 didChange，改盘后只能
+  didClose+didOpen 重送。`capabilities` 整个为空 = 服务器没报，这时**不门控**（把能用的一支判死更糟）。
+- 回传形状按协议允许的三种都收：`SymbolInformation`（带 location）、`DocumentSymbol`（带
+  selectionRange，可嵌套）、`WorkspaceSymbol`（**可以只有名字**）。少认第三种就是把一条合法回包
+  打成 TypeError。符号 kind 名与 `symbolKind.valueSet` 一律从协议的 `SymbolKind` 枚举派生——手抄表
+  是第二事实源，历史教训是它把 25 抄成了 `TypeParameter`（协议里 25 是 `Operator`）。
+
+判卷：`tests/lsp.test.ts` 的「能力协商」一节（含探针 `--caps-to` 落盘的真声明）；
+stub 的协商开关见 `fixtures/lsp/README.md`。
 
 ## Verification
 

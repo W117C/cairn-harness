@@ -8,7 +8,7 @@
 //   ③ 设置行的说明**独占整行**：此前被关在 220px 标题列里，中文句子折行、末行只剩一个字。
 //   ④ 错误正文**降到正文色**：失败的标记已经三重（红三角 / 「N 次失败」红字摘要 / 危险色重试钮），
 //      四行散文再整段用危险色是在阅读面里喊。
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -112,6 +112,16 @@ describe("设计面·减法", () => {
     expect(risky).not.toBe(block(".tool-output[data-failed=\"true\"] pre"));
   });
 
+  it("⑥ 过程轨与交付卡落在正文阅读列内（失败摘要限 72ch，交付卡左 --rail-gutter / 右读同一条 stop 变量）", () => {
+    // 2026-10-28 第 736 页：失败摘要原先一行铺到 990px；交付卡左缘比正文少 28px、右缘多 56px。
+    // 2026-11-01 第 862 页：交付卡与助手行原本各抄一份 clamp 字面量 ⇒ 公式一改就漂；
+    // 现在四处（助手行 / 思考带 / 工具簇 / 交付卡）统一读 `.reading` 上声明的那一条变量。
+    expect(block(".tool-group-failure")).toContain("max-width: 72ch");
+    const card = block(".changes-card");
+    expect(card).toMatch(/margin:\s*var\(--space-sm\)\s*var\(--cds-assistant-message-text-stop\)\s*var\(--space-sm\)\s*var\(--rail-gutter\)/);
+    expect(card).not.toContain("clamp(0px, (100% - 384px)");
+  });
+
   it("⑤ 这一批不许把动效纪律破了（微反馈仍是 60ms 档）", () => {
     // 缓动：规则**自己**带，或它点的那个令牌带（--t-slow 自带 var(--ease-out)——
     // 简写里**不能**再写一遍：两个缓动会让整条简写不成立，见 ②b）。
@@ -141,5 +151,39 @@ describe("设计面·减法", () => {
     // 结构靠两条横线表达：表头下一条（重一点）、行与行之间一条（轻一点）
     expect(css).toMatch(/\.md-table thead th\s*{[^}]*border-bottom:\s*1px solid var\(--hairline-strong\)/s);
     expect(css).toMatch(/\.md-table tbody tr \+ tr td\s*{[^}]*border-top:\s*1px solid var\(--hairline\)/s);
+  });
+});
+
+describe("次级说明不许替布局说话（2026-11-01 第 866 页 · 业主口径「让布局说话」）", () => {
+  /** 设置面的行/分区/页级次级说明总量（棘轮：只准调低）。 */
+  const SETTINGS_DIR = fileURLToPath(new URL("../src/renderer/components/settings", import.meta.url));
+  const SETTINGS_FILES = [
+    "../src/renderer/components/settings-sections.tsx",
+    ...readdirSync(SETTINGS_DIR).filter((f) => f.endsWith(".tsx")).sort().map((f) => `../src/renderer/components/settings/${f}`),
+  ];
+  const descs = SETTINGS_FILES
+    .map((rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8"))
+    .join("\n");
+
+  it("条数帽 36：新增一条 desc 就要先说清布局为什么说不清", () => {
+    const n = (descs.match(/\bdesc=/g) ?? []).length;
+    expect(n, `设置面次级说明 ${n} 条 > 帽 36（本批从 47 减到 36；要加回去请连理由一起改帽并写进台账）`).toBeLessThanOrEqual(36);
+  });
+
+  it("同一行里 desc 不许复述 label（复述=白占一行，且和控件的当前值打架）", () => {
+    const pairs = [...descs.matchAll(/label=\{?"([^"]{2,})"\s+desc=\{?"([^"]{2,})"/g)];
+    expect(pairs.length, "至少要真扫到成对的 label+desc，否则这条判卷是空转的").toBeGreaterThanOrEqual(8);
+    const echoes = pairs.filter(([, label, desc]) => desc.includes(label.slice(0, 4))).map(([, l, d]) => `${l} → ${d}`);
+    expect(echoes, "次级说明在复述行标签：" + echoes.join(" ｜ ")).toEqual([]);
+  });
+
+  it("被撤掉的复述句不许悄悄回来（逐句点名，改动要有台账页）", () => {
+    for (const gone of [
+      "目前只有中文界面", "也可用 ⌘⇧[ / ⌘⇧] 切换", "排查问题时对照日志使用的工程细节",
+      "连接搜索服务，让助手查找网页", "开启后，助手可在对话中请求检索网页", "连接你信任的本地搜索服务时开启",
+      "macOS 侧栏半透明；默认关", "这是默认值；", "重新显示首屏的七项设置检查", "窗口不在前台时发系统通知",
+    ]) {
+      expect(descs, `这句是布局/标签已经说过的：${gone}`).not.toContain(gone);
+    }
   });
 });

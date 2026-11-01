@@ -1,7 +1,7 @@
 /* 侧栏会话筛选（2026-10-25）：入口是顶栏漏斗按钮，菜单走 Radix RadioGroup。
    常态只占一个图标位；有筛选时用珊瑚小点提示，不铺一排标签。 */
 .side-filter-btn { position: relative; }
-.side-filter-btn[data-active="true"] { color: hsl(var(--text-000)); }
+.side-filter-btn[data-active="true"] { color: hsl(var(--accent-brand-ink)); background: hsl(var(--accent-brand) / 9%); }
 .side-filter-btn[data-active="true"]::after {
   content: "";
   position: absolute;
@@ -12,22 +12,19 @@
   border-radius: 50%;
   background: hsl(var(--accent-brand));
 }
-.side-filter-menu { min-width: 218px; }
-.side-filter-menu .menu-item { min-height: var(--h-menu-item); }
+.side-filter-menu { min-width: 192px; padding: 5px; max-height: var(--radix-dropdown-menu-content-available-height); overflow-y: auto; }
+.side-filter-menu .menu-item { min-height: 34px; padding: 7px 9px; gap: 10px; font-size: var(--fs-body-sm); border-radius: var(--radius-sm); }
+.side-filter-menu .menu-item[data-state="checked"] { color: hsl(var(--text-100)); }
+.side-filter-menu .menu-item[data-highlighted] { background: hsl(var(--bg-200)); }
+.side-filter-label { flex: 1; }
+.side-filter-menu .sub { margin-left: auto; font-variant-numeric: tabular-nums; color: hsl(var(--text-300)); }
 .side-filter-check {
   width: 14px;
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: hsl(var(--accent-brand));
-}
-.side-filter-note {
-  max-width: 238px;
-  white-space: normal;
-  padding: 6px 8px 2px;
-  line-height: 1.6;
-  font-size: var(--fs-caption-2xs);
+  color: hsl(var(--text-100));
 }
 .side-filter-empty {
   display: flex;

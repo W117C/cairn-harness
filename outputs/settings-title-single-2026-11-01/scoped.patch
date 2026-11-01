@@ -1,0 +1,118 @@
+--- a/apps/desktop/src/renderer/components/settings-nav.tsx	2026-11-01 16:45:24
++++ b/apps/desktop/src/renderer/components/settings-nav.tsx	2026-11-01 16:44:15
+@@ -38,6 +38,12 @@
+   { id: "about", label: "关于与更新", icon: <Globe size={14} /> },
+ ];
+ 
++/** 分区标题的唯一出口（第 949 页）：导航、命令面板与设置页头都从这里取。
++ *  此前设置页头把七个标题又抄了一遍字面量——导航改了名、页头还留旧话。 */
++export function sectionLabel(id: SectionId): string {
++  return SECTIONS.find((s) => s.id === id)?.label ?? id;
++}
++
+ /** 分区搜索词（2026-10-18 补设置页搜索）：只补**同义/口语**词，不进 SECTIONS 本体——
+  *  SECTIONS 的形状被壳导航与命令面板消费，加字段要连带改两处与它们的判据；
+  *  词表单独一份，改词不影响任何既有 import 面。
+--- a/apps/desktop/src/renderer/components/SettingsPanel.tsx	2026-11-01 16:45:24
++++ b/apps/desktop/src/renderer/components/SettingsPanel.tsx	2026-11-01 16:44:42
+@@ -30,7 +30,7 @@
+ import { UsageSection } from "./settings/UsageSection";
+ import { EvolveSection } from "./settings/EvolveSection";
+ import { NetworkSection } from "./settings/NetworkSection";
+-import { SETTINGS_PAGE_ORDER, SECTIONS, filterSections, type SectionId } from "./settings-nav";
++import { SETTINGS_PAGE_ORDER, SECTIONS, filterSections, sectionLabel, type SectionId } from "./settings-nav";
+ import { destinationForSection } from "../navigation";
+ import "./settings-refinement.css";
+ 
+@@ -433,7 +433,7 @@
+           {PAGE_SECTION_IDS.has(section) && <AppPageBody page={section as PageId} />}
+ 
+           {section === "general" && settings !== null && (
+-            <SettingsPage title="通用">
++            <SettingsPage title={sectionLabel("general")}>
+               <GeneralSection
+                 settings={settings}
+                 textSize={textSize}
+@@ -450,7 +450,7 @@
+           )}
+ 
+           {section === "provider" && (
+-            <SettingsPage title="模型与 Provider">
++            <SettingsPage title={sectionLabel("provider")}>
+               <ProviderSection
+                 settings={settings}
+                 status={status}
+@@ -481,13 +481,13 @@
+           {section === "evolve" && <EvolveSection />}
+ 
+           {section === "permissions" && settings !== null && (
+-            <SettingsPage title="权限与安全">
++            <SettingsPage title={sectionLabel("permissions")}>
+               <PermissionsSection settings={settings} onSave={(patch) => { void save(patch); }} />
+             </SettingsPage>
+           )}
+ 
+           {section === "shortcuts" && (
+-            <SettingsPage title="快捷键">
++            <SettingsPage title={sectionLabel("shortcuts")}>
+               <ShortcutsSection />
+             </SettingsPage>
+           )}
+@@ -496,13 +496,13 @@
+               走 saveKey 单键直写（不走 panelPatch 白名单——那份白名单与其判卷口径保持原样，
+               与 saveCtrlTab 同一条路）。 */}
+           {section === "advanced" && settings !== null && (
+-            <SettingsPage title="高级">
++            <SettingsPage title={sectionLabel("advanced")}>
+               <AdvancedSection settings={settings} onSaveKey={saveSettingKey} />
+             </SettingsPage>
+           )}
+ 
+           {section === "about" && (
+-            <SettingsPage title="关于与更新">
++            <SettingsPage title={sectionLabel("about")}>
+               <AboutSection
+                 version={about?.version ?? null}
+                 build={about?.build ?? null}
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:45:24
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:44:49
+@@ -4310,3 +4310,4 @@
+ 69. **worker 归属判据只有一份（第 946 页）**：「带 `agent_id` 的事件属于 worker 子流」这条判据在六处各写一遍，其中两处漏了空串判断（`main/usage-ledger.ts` 把 `agent_id: ""` 当 worker ⇒ 用量少算；`renderer/derived/session.ts` 把它当 worker ⇒ 该事件从主流里消失），另三处（`agent/context.ts`、`agent/acceptance-sampler.ts`、`scripts/replay/run-scorecard.ts`）判的是「非空才算」。收进 `src/agent/subflow.ts`（`hasWorkerId` / `isWorkerSubflowEvent`，`agent_spawned` 仍是父流事实），六处改读；判卷钉四类取值、两条消费面的行为（用量账本计数、主流行出现），以及「五个消费面都不再自己写一条」。
+ 70. **「将克隆到」的名字与落库的名字是同一份解析（第 947 页）**：`repoNameFromUrl` 在 main 侧决定**存下来的项目名**，渲染层 `AddProjectMenu` 又抄了一份 `repoNamePreview` 只有当预览用——两处各一份时，改一处就漂（预览说 `bar`、落库说 `bar-2`）。收进 `src/git-url.ts`，渲染层与 `git-ops.ts` 同读；同一轮的 `triggerLabel`（`agent/evolve/playbook.ts` vs `main/evolve/promotion.ts`）也收到一处。判卷：两个函数的取值矩阵 + 「两处都不再自己写一份」。
+ 71. **临时目录清理不许把绿判据弄红（第 948 页）**：`terminal-login-shell.test.ts` 用隔离 HOME 起真登录 shell，`afterEach` 裸 `rmSync` 撞上 shell 还在写 `.zcompdump`/`.zsh_history` ⇒ `ENOTEMPTY` ⇒ 一条判据由绿变红（2026-11-01 桌面套件首跑实测；单跑 10/10 绿、重跑整套绿，典型的清理竞态）。新增 `tests/helpers/temp-dir.ts#removeTempDir`：带重试地删、删不掉也咽下（留下的是系统临时目录）；该测试改用它。探针实测：同一现场下裸 `rmSync` 15/15 抛 `ENOTEMPTY`，带重试+咽下 0/15。
++72. **设置页头不许自己抄一份分区名（第 949 页）**：`settings-nav.tsx#SECTIONS` 自称「唯一事实源——导航与命令面板只许从这里取」，而 `SettingsPanel` 的七个页头各写了一遍字面量（`title="通用"`、`title="关于与更新"`…）——导航改名、页头就留旧话。新增 `sectionLabel(id)`，六个页头改读它；判卷钉「页头不再出现字面量」「六个分区都走 sectionLabel」「分区名两两不同」。
+--- /dev/null → apps/desktop/tests/settings-section-titles.test.ts
+--- /dev/null	2026-11-01 16:45:24
++++ b/apps/desktop/tests/settings-section-titles.test.ts	2026-11-01 16:44:35
+@@ -0,0 +1,31 @@
++// 第 949 页：设置页头不许自己抄一份分区名。
++// `settings-nav.tsx#SECTIONS` 自称「顺序固定，唯一事实源——导航与命令面板只许从这里取」，
++// 但 `SettingsPanel` 的七个页头各写了一遍字面量：导航改名、页头还留旧话。
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, expect, it } from "vitest";
++import { SECTIONS, sectionLabel } from "../src/renderer/components/settings-nav";
++
++const ROOT = join(import.meta.dirname, "..");
++const panel = readFileSync(join(ROOT, "src/renderer/components/SettingsPanel.tsx"), "utf8");
++
++describe("设置分区标题只有一个出口（第 949 页）", () => {
++  it("sectionLabel 对每个分区都回 SECTIONS 里的那一行", () => {
++    for (const s of SECTIONS) expect(sectionLabel(s.id)).toBe(s.label);
++    expect(sectionLabel("general")).toBe("通用");
++    expect(sectionLabel("about")).toBe("关于与更新");
++    expect(sectionLabel("nope" as never)).toBe("nope"); // 认不出的原样返回，不编
++  });
++
++  it("页头不再写字面量，且六个分区都走 sectionLabel", () => {
++    expect(panel).not.toContain('SettingsPage title="');
++    for (const id of ["general", "provider", "permissions", "shortcuts", "advanced", "about"]) {
++      expect(panel).toContain(`<SettingsPage title={sectionLabel("${id}")}>`);
++    }
++  });
++
++  it("分区名两两不同（同名两个分区，导航里读不出区别）", () => {
++    const labels = SECTIONS.map((s) => s.label);
++    expect(new Set(labels).size).toBe(labels.length);
++  });
++});

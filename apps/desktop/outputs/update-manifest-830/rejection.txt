@@ -1,0 +1,3 @@
+bad manifest CLI:
+[update-manifest] version 必须是三段 semver：0.2
+exit=2

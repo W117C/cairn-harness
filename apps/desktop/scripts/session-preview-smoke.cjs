@@ -1,6 +1,6 @@
 // 会话预览窗格（⌘+点击）真机冒烟（2026-10-25）：
-//   两场会话 → 正常打开 s1 → ⌘+点击 s2 → 右侧「会话」标签只读预览 s2（主体仍 s1）→
-//   点「切到会话」→ 主体切到 s2。只读预览不跑模型、不改事件日志。
+//   两场会话 → 正常打开 s1 → ⌘+点击 s2 → 右侧「会话」标签预览 s2（可继续发送，主体仍 s1）→
+//   点「切到会话」→ 主体切到 s2。预览冒烟不跑真实模型、不改产品用户数据。
 const { app, BrowserWindow, nativeTheme } = require("electron");
 const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
@@ -50,6 +50,16 @@ async function main() {
     win.webContents.sendInputEvent({ type: "mouseDown", ...point, button: "left", clickCount: 1, modifiers });
     win.webContents.sendInputEvent({ type: "mouseUp", ...point, button: "left", clickCount: 1, modifiers });
   };
+  const key = async (keyCode, modifiers = []) => {
+    win.webContents.sendInputEvent({ type: "keyDown", keyCode, modifiers });
+    win.webContents.sendInputEvent({ type: "keyUp", keyCode, modifiers });
+    await wait(160);
+  };
+  const setTextarea = (selector, value) => js(`(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(el, ${JSON.stringify(value)});
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  })()`);
 
   let state = await read(`return { s1: !!document.querySelector('[data-session-id="s1"]'), s2: !!document.querySelector('[data-session-id="s2"]') };`);
   check("两场会话在侧栏（预览夹具）", state.s1 && state.s2, state);
@@ -63,11 +73,104 @@ async function main() {
     preview: !!document.querySelector('.session-preview'),
     title: document.querySelector('.svp-title')?.textContent ?? null,
     rows: document.querySelectorAll('.session-preview .stream .row').length,
-    readonly: document.querySelector('.svp-readonly')?.textContent ?? null,
+    badge: document.querySelector('.svp-badge')?.textContent ?? null,
   };`);
-  check("⌘+点击只开预览：主体仍 s1、预览标签激活、标题/只读徽标/正文在位", state.main === "s1" && state.tab === "会话预览" && state.preview && state.title === "整理竞品对照册" && state.rows > 0 && state.readonly === "只读", state);
+  check("⌘+点击只开预览：主体仍 s1、预览标签激活、标题/预览徽标/正文在位", state.main === "s1" && state.tab === "会话预览" && state.preview && state.title === "整理竞品对照册" && state.rows > 0 && state.badge === "不切主会话", state);
   const img = await win.webContents.capturePage();
   writeFileSync(join(out, "01-session-preview.png"), img.toPNG());
+
+  // 窄窗（2026-10-27）：右栏会被自动收起（744 门，保正文），不横向溢出；
+  // 恢复宽度后若仍收起，⌘⌥I 必须能把预览拉回来——预览目标不能因一次缩放丢失。
+  win.setContentSize(880, 860); await wait(800);
+  const narrow = await read(`return {
+    viewport: innerWidth,
+    overflow: document.documentElement.scrollWidth > innerWidth,
+    main: Math.round(document.querySelector('.main')?.getBoundingClientRect().width ?? 0),
+    pane: Math.round(document.querySelector('.pane-panel')?.getBoundingClientRect().width ?? 0),
+    preview: Math.round(document.querySelector('.session-preview')?.getBoundingClientRect().width ?? 0),
+  };`);
+  check("880 窄窗打开预览不横向溢出", narrow.viewport === 880 && !narrow.overflow && narrow.main > 0, narrow);
+  win.setContentSize(1440, 900); await wait(800);
+  let restored = await read(`return {
+    pane: Math.round(document.querySelector('.pane-panel')?.getBoundingClientRect().width ?? 0),
+    preview: Math.round(document.querySelector('.session-preview')?.getBoundingClientRect().width ?? 0),
+    input: Math.round(document.querySelector('.svp-input')?.getBoundingClientRect().width ?? 0),
+  };`);
+  if (restored.pane <= 0) { await key("I", ["meta", "alt"]); await wait(900); }
+  restored = await read(`return {
+    pane: Math.round(document.querySelector('.pane-panel')?.getBoundingClientRect().width ?? 0),
+    preview: Math.round(document.querySelector('.session-preview')?.getBoundingClientRect().width ?? 0),
+    input: Math.round(document.querySelector('.svp-input')?.getBoundingClientRect().width ?? 0),
+  };`);
+  check("变宽或 ⌘⌥I 后预览可恢复", restored.pane > 0 && restored.preview > 0 && restored.input > 0, restored);
+
+  // 预览可继续（2026-10-27）：空闲发送 / 运行中插话 / 插话被拒入队 / 停止。
+  const composer = await read(`return {
+    input: !!document.querySelector('.session-preview .svp-input'),
+    send: !!document.querySelector('.svp-send'),
+    sendDisabled: document.querySelector('.svp-send')?.disabled === true,
+  };`);
+  check("预览窗格有输入框与发送钮", composer.input && composer.send && composer.sendDisabled, composer);
+  await js(`document.querySelector('.svp-input').focus()`);
+  await setTextarea(".svp-input", "预览里继续");
+  await key("Return");
+  await wait(700);
+  let sent = await read(`return {
+    runs: window.__cairnRuns(),
+    draft: document.querySelector('.svp-input')?.value ?? null,
+    notice: document.querySelector('.svp-composer-note')?.textContent ?? null,
+  };`);
+  check("空闲时 Enter 真的向预览会话发一轮", sent.runs.at(-1)?.sessionId === "s2" && sent.runs.at(-1)?.message === "预览里继续" && sent.draft === "" && sent.notice === "已发送", sent);
+  const mainAfterSend = await read(`return document.querySelector('.session.active')?.dataset.sessionId ?? null;`);
+  check("预览发送后主体仍停在原会话", mainAfterSend === "s1", { main: mainAfterSend });
+
+  await js(`window.__cairnPushEvent({ type: "assistant_delta", session_id: "s2", text: "运行中" })`);
+  await wait(300);
+  const live = await read(`return { live: !!document.querySelector('.svp-live'), stop: !!document.querySelector('.svp-stop') };`);
+  check("运行中显示运行标记与停止钮", live.live && live.stop, live);
+  await js(`document.querySelector('.svp-input').focus()`);
+  await setTextarea(".svp-input", "插一句话");
+  await key("Return");
+  await wait(700);
+  const steered = await read(`return {
+    steers: window.__cairnSteers(),
+    notice: document.querySelector('.svp-composer-note')?.textContent ?? null,
+    draft: document.querySelector('.svp-input')?.value ?? null,
+  };`);
+  check("运行中 Enter 走 runSteer 并回报已插话", steered.steers.some((s) => s.sessionId === "s2" && s.text === "插一句话") && steered.notice === "已插话到本轮" && steered.draft === "", steered);
+
+  await js(`window.__cairnSetSteerReject(true)`);
+  await js(`document.querySelector('.svp-input').focus()`);
+  await setTextarea(".svp-input", "排队这句");
+  await key("Return");
+  await wait(700);
+  const queued = await read(`return {
+    notice: document.querySelector('.svp-composer-note')?.textContent ?? null,
+    disabled: document.querySelector('.svp-input')?.disabled === true,
+  };`);
+  check("插话被拒绝时入队并给出回执", queued.notice === "已加入队列，本轮结束后发送" && !queued.disabled, queued);
+  await js(`window.__cairnPushEvent({ type: "agent_status", status: "done", session_id: "s2" })`);
+  await wait(400);
+  const pending = await read(`return { running: !!document.querySelector('.svp-live'), resume: !!document.querySelector('.svp-resume') };`);
+  check("本轮结束后待发送队列可见", !pending.running && pending.resume, pending);
+  if (pending.resume) { await pointer(".svp-resume"); await wait(700); }
+  const drained = await read(`return {
+    runs: window.__cairnRuns(),
+    resume: !!document.querySelector('.svp-resume'),
+    notice: document.querySelector('.svp-composer-note')?.textContent ?? null,
+  };`);
+  check("继续发送把队首交给同一会话", drained.runs.at(-1)?.sessionId === "s2" && drained.runs.at(-1)?.message === "排队这句" && !drained.resume, drained);
+
+  await js(`window.__cairnSetSteerReject(false)`);
+  await js(`window.__cairnPushEvent({ type: "assistant_delta", session_id: "s2", text: "又在跑" })`);
+  await wait(300);
+  await pointer(".svp-stop");
+  await wait(400);
+  const stopped = await read(`return {
+    cancels: window.__cairnCancels(),
+    notice: document.querySelector('.svp-composer-note')?.textContent ?? null,
+  };`);
+  check("停止钮打到预览会话", stopped.cancels.some((c) => c.sessionId === "s2") && stopped.notice === "已请求停止", stopped);
 
   await pointer(".svp-switch"); await wait(1000);
   state = await read(`return {
@@ -76,7 +179,7 @@ async function main() {
     preview: !!document.querySelector('.session-preview'),
     sessionTab: !!document.querySelector('.pane-nav-item[aria-pressed="true"]') && [...document.querySelectorAll('.pane-nav-item')].some((b) => b.textContent.trim() === "会话预览"),
   };`);
-  check("「切到会话」把主体切到 s2，并收起只读预览（不留同一场的副本）", state.main === "s2" && (state.title ?? "").includes("整理竞品对照册") && !state.preview && !state.sessionTab, state);
+  check("「切到会话」把主体切到 s2，并收起预览（不留同一场的副本）", state.main === "s2" && (state.title ?? "").includes("整理竞品对照册") && !state.preview && !state.sessionTab, state);
   await wait(200);
   const img2 = await win.webContents.capturePage();
   writeFileSync(join(out, "02-switched.png"), img2.toPNG());
@@ -94,6 +197,13 @@ async function main() {
     state = await read(`return { main: document.querySelector('.session.active')?.dataset.sessionId ?? null, preview: !!document.querySelector('.session-preview'), title: document.querySelector('.svp-title')?.textContent ?? null };`);
     check("菜单预览同样不切走主体", state.main === "s1" && state.preview && state.title === "整理竞品对照册", state);
   }
+  await pointer('[data-session-id="s2"]'); await wait(900);
+  const adopted = await read(`return {
+    main: document.querySelector('.session.active')?.dataset.sessionId ?? null,
+    preview: !!document.querySelector('.session-preview'),
+    sessionTab: [...document.querySelectorAll('.pane-nav-item')].some((b) => b.textContent.trim() === "会话预览"),
+  };`);
+  check("侧栏直接打开预览目标时预览自动收起", adopted.main === "s2" && !adopted.preview && !adopted.sessionTab, adopted);
   check("渲染过程无控制台错误", errors.length === 0, errors);
 
   writeFileSync(join(out, "checks.json"), JSON.stringify(checks, null, 2));

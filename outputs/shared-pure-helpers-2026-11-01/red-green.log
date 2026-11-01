@@ -1,0 +1,13 @@
+=== 造红 A：渲染层写回自己的仓库名解析，且判据改成只取末段（漂一点）===
+     × main 与渲染层都读同一份，且不再各自写一份 6ms
+      Tests  1 failed | 3 passed (4)
+
+=== 造红 B：promotion 写回自己那份 triggerLabel（on-signal 改说「触发了」）===
+     × 两个消费面都读同一份，且 promotion 不再自己写一份 9ms
+      Tests  1 failed | 3 passed (4)
+
+=== 复原后 ===
+      Tests  9 passed (9)
+=== sha256 ===
+563c77ab9a2da05c45ba5dc14108171f4a875d80a20a9b2a4082a31e8ebc98ca
+e61bb195087c21f6d2b9060e6f022a161d87f3173a33784552bc78d26ae08624

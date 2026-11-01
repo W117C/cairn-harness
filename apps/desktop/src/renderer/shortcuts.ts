@@ -75,6 +75,7 @@ export const SHORTCUTS: readonly ShortcutSpec[] = [
   { id: "palette", keys: "⌘K", label: "命令面板" },
   { id: "sidebar", keys: "⌘B", label: "开合侧栏" },
   { id: "find", keys: "⌘F", label: "对话内查找" },
+  { id: "rename", keys: "F2", label: "重命名当前会话" },
   { id: "inspector", keys: "⌘⌥I", label: "检查器" },
   { id: "stop", keys: "⌘.", label: "停止生成" },
   { id: "cycle-session", keys: "⌘⇧[ / ⌘⇧]", label: "切换会话" },

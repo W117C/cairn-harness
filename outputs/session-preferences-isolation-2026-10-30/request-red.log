@@ -1,0 +1,50 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+ ❯ tests/run-queue-session.test.tsx (10 tests | 1 failed) 120ms
+   ❯ send keeps the active conversation (7)
+     × sends the addressed workspace's model and thinking for a same-id background conversation 10ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/run-queue-session.test.tsx > send keeps the active conversation > sends the addressed workspace's model and thinking for a same-id background conversation
+AssertionError: expected "vi.fn()" to be called with arguments: [ ObjectContaining{…} ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+-   ObjectContaining {
++   {
++     "message": "continue B",
++     "mode": "default",
+      "model": "model-b",
+      "sessionId": "same",
+      "thinking": "low",
+-     "workspace": "/b",
+    },
+  ]
+
+
+Number of calls: 1
+
+ ❯ tests/run-queue-session.test.tsx:52:23
+     50|     deps.thinkingBySession.current = new Map([[runKey("/a", "same"), "…
+     51|     await render().sendTo("same", "/b", "continue B");
+     52|     expect(agent.run).toHaveBeenCalledWith(expect.objectContaining({ s…
+       |                       ^
+     53|   });
+     54|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+   Start at  16:07:18
+   Duration  425ms (transform 52%, tests 36%, import 11%, worker 1%)
+
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run tests/run-queue-session.test.tsx '--maxWorkers=1'

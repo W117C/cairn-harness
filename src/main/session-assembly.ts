@@ -14,6 +14,7 @@
 // 按回调注入。
 import { existsSync } from "node:fs";
 import { projectAgentPath } from "../app-data";
+import { extractTaskPaths } from "../agent/evolve/task-context";
 import { affectedFilesOf } from "../agent/impact/index.js";
 import { scanStreamEvent } from "../agent/worker-projection";
 import { Orchestrator, type OrchestratorOptions } from "../agent/orchestrator";
@@ -23,6 +24,8 @@ import { createEventLog, replay, type AgentEvent } from "../events";
 import { loadPermissionRules } from "../permissions";
 import { globalPermissionsPath } from "../permissions/rules";
 import { resolveSafeMode } from "./compact-and-report";
+import { experienceSignalNudge } from "./evolve/experience-nudge";
+import { baselineEvolutionNote } from "./evolve/runtime";
 import type { MainModelSelection } from "./provider-runtime";
 import type { RoutingFlagOverrides } from "./routing-flags";
 import { runInSandbox, type SandboxStatus } from "./sandbox";
@@ -134,6 +137,37 @@ export async function buildSessionOrchestrator(a: {
     // 两个 worker 各改各的文件（glob 不相交）但改动波及同一批调用点，合并时同样会打架。
     ...(s.impactAnalysis ? { semanticLease: (globs: string[]) => affectedFilesOf(a.workspace, globs) } : {}),
     ...(await D().orchestratorExtras(a.sandbox, a.runModel, { trustedRepo: a.trustedRepo ?? false, verifyTrust: a.verifyTrust ?? null }, a.routing ?? {})), // M3c：插件角色 / worker 压缩摘要器 / 成本闸 / W4a worker 收束闸
+    // worker 起点经验：同一工作区的 active 经验按任务面筛一遍，排在记忆之后、任务书之前。
+    // 只读、无 assignment；没有 active/读不动 ⇒ 空串（worker 提示词逐字不变）。
+    workerExperienceNote: async ({ task, toolNames }) => {
+      try {
+        return await baselineEvolutionNote({
+          workspace: a.workspace,
+          taskContent: task,
+          toolNames,
+          paths: extractTaskPaths(task, { workspace: a.workspace }),
+        });
+      } catch (err) {
+        console.warn("[evolve] worker 起点经验注记失败（不影响 worker）: "
+          + (err instanceof Error ? err.message : String(err)));
+        return "";
+      }
+    },
+    // worker 自动验证红时的快环提醒（只在开了 workerAutoVerifyRepair 时会有下一轮用到）。
+    // 读主 workspace 的 active 经验；冻结/读失败 ⇒ 空提醒；不写 assignment、不改变验证语义。
+    workerExperienceNudge: async ({ task, toolNames, signals }) => {
+      try {
+        return await experienceSignalNudge(a.workspace, signals, {
+          taskContent: task,
+          toolNames,
+          paths: extractTaskPaths(task, { workspace: a.workspace }),
+        });
+      } catch (err) {
+        console.warn("[evolve] worker 失败经验提醒失败（不影响 worker）: "
+          + (err instanceof Error ? err.message : String(err)));
+        return { note: "", ids: [] };
+      }
+    },
     ...(a.modelFor ? { modelFor: a.modelFor } : {}),
   });
 }

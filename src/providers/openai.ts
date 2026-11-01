@@ -42,7 +42,7 @@ export interface OpenAiOptions {
   fetchImpl?: typeof fetch;
   /** 停滞守卫静默窗口 ms（根因 4）；缺省 60s，<=0 关闭守卫。 */
   stallTimeoutMs?: number;
-  /** 思考档位（"low"|"medium"|"high"|"off"）：非空则写 body.reasoning_effort。
+  /** 思考档位（"low"|"medium"|"high"|"max"|"off"）：非空则写 body.reasoning_effort（max 只有上游声明时才会到达）。
    *  传的是**档位名**而不是数值——OpenAI 兼容族收的就是这个名字（DeepSeek 的 /models 自述里
    *  `effort.supported_levels` 写明的也是这些名字）。undefined = 逐字旧行为（不出现这个字段）。
    *  **例外（native DeepSeek）**：见 `deepseekNative`——那一家「不发字段」被服务端读成默认开思考，

@@ -62,14 +62,15 @@ describe("映射表", () => {
     expect(reasoningDirective("off")).toBeNull();
   });
 
-  it("三档各有预算，且单调递增", () => {
+  it("四档各有预算，且单调递增（max 是上游自述的最高档）", () => {
     expect(reasoningDirective("low")).toEqual({ effort: "low", budgetTokens: REASONING_BUDGET_TOKENS.low });
     expect(REASONING_BUDGET_TOKENS.low).toBeLessThan(REASONING_BUDGET_TOKENS.medium);
     expect(REASONING_BUDGET_TOKENS.medium).toBeLessThan(REASONING_BUDGET_TOKENS.high);
+    expect(REASONING_BUDGET_TOKENS.high).toBeLessThan(REASONING_BUDGET_TOKENS.max);
   });
 
-  it("上游档位名映射：实测 DeepSeek 的 [low,high,max] ⇒ [low,high]（max 归到高，认不出的丢掉）", () => {
-    expect(mapUpstreamEfforts(["low", "high", "max"])).toEqual(["low", "high"]);
+  it("上游档位名映射：实测 DeepSeek 的 [low,high,max] ⇒ [low,high,max]（max 原样；xhigh 保守落 high）", () => {
+    expect(mapUpstreamEfforts(["low", "high", "max"])).toEqual(["low", "high", "max"]);
     expect(mapUpstreamEfforts(["minimal", "low"])).toEqual(["low"]);
     expect(mapUpstreamEfforts(["xhigh"])).toEqual(["high"]);
     expect(mapUpstreamEfforts(["unknown-level", ""])).toEqual([]);
@@ -127,10 +128,10 @@ describe("能力表的门：有证据才开门", () => {
     // DeepSeek 内置两行走「上游自述」证据通道：官方 /models 与文档给 effort low/high/max
     const ds = capabilityForModel({ id: "deepseek-cheap", provider: "deepseek" });
     expect(ds.thinking.supported).toBe(true);
-    expect(ds.thinking.values).toEqual(["off", "low", "high"]);
+    expect(ds.thinking.values).toEqual(["off", "low", "high", "max"]);
   });
 
-  it("用户给自己的模型声明了档位 ⇒ 只有声明过的那些可选（max 被映射掉，medium 没声明就不能选）", () => {
+  it("用户给自己的模型声明了档位 ⇒ 只有声明过的那些可选（max 原样保留，medium 没声明就不能选）", () => {
     const parsed = parseCustomProviders({
       version: 1,
       providers: [
@@ -150,9 +151,10 @@ describe("能力表的门：有证据才开门", () => {
     if (custom === undefined) throw new Error("自定义档位没进表");
     const cap = capabilityForModel(custom);
     expect(cap.thinking.supported).toBe(true);
-    expect(cap.thinking.values).toEqual(["off", "low", "high"]);
+    expect(cap.thinking.values).toEqual(["off", "low", "high", "max"]);
     expect(cap.thinking.default).toBe("off"); // 声明了支持 ≠ 替你打开
     expect(validateThinkingEffort(custom, "high")).toBe("high");
+    expect(validateThinkingEffort(custom, "max")).toBe("max");
     expect(() => validateThinkingEffort(custom, "medium")).toThrow(/不支持/);
   });
 

@@ -1,0 +1,77 @@
+[
+  {
+    "name": "侧栏摆着两个同名会话（分属两个项目）",
+    "ok": true,
+    "detail": {
+      "sessions": [
+        "同名会话 · 项目甲刚刚",
+        "同名会话 · 项目乙刚刚"
+      ],
+      "groups": [
+        "demo-ws今天1同名会话 · 项目甲",
+        "demo-ws",
+        "demo-ws-other今天1同名会话",
+        "demo-ws-other"
+      ]
+    }
+  },
+  {
+    "name": "打开甲 ⇒ 主区是甲的转录",
+    "ok": true,
+    "detail": {
+      "openA": {
+        "clicked": true
+      },
+      "bodyA": "甲项目的消息\n刚刚\n\n甲项目转录\n\n刚刚"
+    }
+  },
+  {
+    "name": "甲侧只看到甲的排队消息",
+    "ok": true,
+    "detail": {
+      "queueA": "[\"甲项目排队的那条\"]"
+    }
+  },
+  {
+    "name": "切到乙 ⇒ 主区换成乙的转录（同 id 没串）",
+    "ok": true,
+    "detail": {
+      "openB": {
+        "clicked": true
+      },
+      "bodyB": "乙项目的消息\n刚刚\n\n乙项目转录\n\n刚刚"
+    }
+  },
+  {
+    "name": "乙侧只看到乙的排队消息（限定键生效，甲的没串过来）",
+    "ok": true,
+    "detail": {
+      "queueB": "[\"乙项目排队的那条\"]"
+    }
+  },
+  {
+    "name": "切回甲 ⇒ 甲的排队消息还在（没被乙覆盖）",
+    "ok": true,
+    "detail": {
+      "backA": {
+        "clicked": true
+      },
+      "queueBack": "[\"甲项目排队的那条\"]"
+    }
+  },
+  {
+    "name": "队列写回带的是限定键（workspace 随会话走，不是裸 id）",
+    "ok": true,
+    "detail": {
+      "removed": {
+        "clicked": true
+      },
+      "setCalls": "[{\"sessionId\":\"dup\",\"workspace\":\"/tmp/demo-ws\",\"items\":[]}]"
+    }
+  },
+  {
+    "name": "渲染过程无控制台错误",
+    "ok": true,
+    "detail": []
+  }
+]

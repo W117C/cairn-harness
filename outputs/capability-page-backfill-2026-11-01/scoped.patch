@@ -1,0 +1,44 @@
+--- a/src/tools/lsp.ts	2026-11-01 13:40:23
++++ b/src/tools/lsp.ts	2026-11-01 13:39:28
+@@ -314,7 +314,7 @@
+   return out;
+ }
+ 
+-/* ---- 能力协商（第 914 页）----
++/* ---- 能力协商（第 920 页）----
+  * `initialize` 是 LSP 里唯一一次双方对齐"能说什么话"的机会，此前两头都没用：
+  * ① 我们发 `capabilities: {}` ⇒ 服务器按最保守形状回包。这不是"少装点料"，而是**换形状**：
+  *   没要 `linkSupport` 就拿不到 LocationLink（目标区间与选中区间合一，跳到整块而不是标识符）、
+--- a/tests/lsp.test.ts	2026-11-01 13:40:23
++++ b/tests/lsp.test.ts	2026-11-01 13:39:28
+@@ -201,7 +201,7 @@
+  * 给更好的）；改了盘之后 didChange 的形状与服务器声明的同步方式不符（增量服务器会**沉默丢掉**这条
+  * 更新，于是六操作端回旧文本，看着像"代码没变"）；服务器没实现的那一支操作我们照样发，等 8 秒超时。
+  */
+-describe("能力协商（第 914 页）", () => {
++describe("能力协商（第 920 页）", () => {
+   const stubCfg = (extra: string[]) => ({
+     lsp: { stub: { command: "node", args: [STUB, ...extra], extensions: [".ts", ".js"] } },
+   });
+--- a/docs/CODE-WIKI.md	2026-11-01 13:40:23
++++ b/docs/CODE-WIKI.md	2026-11-01 13:39:28
+@@ -150,7 +150,7 @@
+ 判卷：`tests/lsp-language-id.test.ts`（探针 server 把 didOpen 的 languageId 原样交回，判的是真发出去的值）＋
+ `tests/plugin-lsp-activation.test.ts` 的同名断言。**两个入口各有一条**：只钉一个入口的判据是半个判据。
+ 
+-## ⑥ LSP 的能力协商两头都要用（2026-11-01，第 914 页）
++## ⑥ LSP 的能力协商两头都要用（2026-11-01，第 920 页）
+ 
+ `initialize` 是本框架里唯一一次双方对齐"能说什么话"的机会，**任何一头不用都会静默降级**：
+ 
+--- a/scripts/lib/mutations/tools.mjs	2026-11-01 13:40:23
++++ b/scripts/lib/mutations/tools.mjs	2026-11-01 13:39:28
+@@ -72,7 +72,7 @@
+     apply: (s) => s.replace("if (broken.has(key)) {", "if (false) {"),
+     expectFail: "server 启动失败进 broken 且不重试",
+   },
+-  /* 第 914 页：能力协商。这六条把「两头都没用 initialize」的旧形状钉住——旧行为不是"少装点料"，
++  /* 第 920 页：能力协商。这六条把「两头都没用 initialize」的旧形状钉住——旧行为不是"少装点料"，
+    *  而是服务器按最保守形状回包、增量同步的更新被沉默丢掉、不支持的操作回一段模型读不懂的黑话。 */
+   {
+     id: "lsp-client-caps-not-declared",

@@ -20,7 +20,7 @@ import { toast } from "../toast";
 import { relInWorkspace } from "../workspace-rel";
 import type { PermissionMode, ProviderInfo, RunAttachmentReference, SuggestNextResult } from "../../../../../src/main/ipc-protocol";
 import type { RunPhase } from "../projections";
-import { ArrowUp, ChevronDown, ChevronRight, Clock, FileText, Folder, Image as ImageIcon, ListChecks, Loader2, Plus, Puzzle, Shield, ShieldAlert, X } from "lucide-react";
+import { ArrowUp, ChevronDown, ChevronRight, Clock, FileText, Folder, Image as ImageIcon, ListChecks, Loader2, Plus, Shield, X } from "lucide-react";
 import { classifyDrop } from "../sessions-view";
 import { ModelPicker, THINKING_LEVELS } from "./ModelPicker";
 import { UsageMeter } from "./UsageMeter";
@@ -29,10 +29,12 @@ import { Popover, usePopoverDismiss, useMenuKeyboard } from "./Popover";
 import { mentionBreadcrumb, parseMentionQuery, replaceMentionToken } from "../mention";
 import { isCompositionEnter } from "../ime";
 import { useComposerOverlaySlot } from "../composer-overlays";
+import { formatBytes } from "../derived/format-bytes";
 import { STR } from "../strings";
 import { slashItems, slashMatches, type SlashSkill } from "../slash";
 import { DRAFTS_KEY, HOME_DRAFT_KEY, draftKeyFor, sessionIdOfDraftKey } from "../drafts";
 import "./composer-plan.css";
+import type { ComposerLockReason } from "../send-queue";
 
 /** @ 模糊搜索的 debounce（P2-4：输入停顿 120ms 才发通道查询）。 */
 const MENTION_DEBOUNCE_MS = 120;
@@ -62,12 +64,10 @@ export function fileIconKind(name: string): "image" | "file" {
   return ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "svg", "avif"].includes(ext) ? "image" : "file";
 }
 
-/** 附件小字大小（拿不到不显；B/KB/MB 人话刻度——纯函数）。 */
+/** 附件小字大小（拿不到不显；B/KB/MB 人话刻度——纯函数）。实现见 `derived/format-bytes.ts`
+ *  （第 924 页：与日志窗同一把尺；此前这里对 512 字节只写裸数 "512"）。 */
 export function formatSize(n: number): string {
-  if (!Number.isFinite(n) || n < 0) return STR.composer.dash;
-  if (n < 1024) return String(n);
-  if (n < 1024 * 1024) return `${String(Math.round(n / 102.4) / 10)} KB`;
-  return `${String(Math.round(n / 1024 / 102.4) / 10)} MB`;
+  return formatBytes(n) ?? STR.composer.dash;
 }
 
 /** 渲染层附件条目：RunAttachmentReference + 展示字段（size 拿不到不显；outside = 项目外挂盾牌）。
@@ -126,7 +126,7 @@ export function Composer(props: {
   disabled?: boolean;
   /** 禁用原因（2026-10-18）：占位文案必须与真实锁因一致——门未决不能写成「正在创建会话」。
    *  缺省（旧调用面）沿用 disabled+running 的旧推断。 */
-  disabledReason?: "gate" | "queue" | "creating";
+  disabledReason?: ComposerLockReason;
   mode: PermissionMode;
   /** v23 Plan 模式：默认来自设置，Composer 的「方案」开关按轮覆盖。缺省不摆按钮（旧调用面）。 */
   planRequired?: boolean;
@@ -677,29 +677,8 @@ export function Composer(props: {
     return spec?.capability.thinking.supported === true;
   })();
   const recentRefs = props.recentRefs ?? [];
-  // 插件命令带（G1 的按钮带半边，2026-10-21）：只列已信任、带命名空间的命令；
-  // 点一下填入 `/plugin:command `，不直接发送（沿用 C-24 的「填入不发送」口径）。
-  const pluginSkills = (props.skills ?? []).filter((s) => s.trust === "trusted" && s.invoke.includes(":")).slice(0, 4);
   return (
     <>
-      {pluginSkills.length > 0 && (
-        <div className="plugin-strip" aria-label={STR.composer.pluginStripAria}>
-          <span className="plugin-strip-label"><Puzzle size={11} aria-hidden="true" />{STR.composer.pluginStripLabel}</span>
-          {pluginSkills.map((s) => {
-            const invoke = s.invoke.replace(/^\/+/, "");
-            return (
-              <button
-                key={s.invoke}
-                className="plugin-chip"
-                title={s.description.trim() === "" ? invoke : s.description}
-                onClick={() => { chooseSlash({ invoke: `/${invoke}`, desc: s.description }); }}
-              >
-                {invoke}
-              </button>
-            );
-          })}
-        </div>
-      )}
       <div
         ref={cardRef}
         className="composer-card"
@@ -868,6 +847,7 @@ export function Composer(props: {
               suggesting ? STR.composer.placeholderSuggesting       // 想下一条加载态（Tab 出手中）
               : disabled && props.disabledReason === "gate" ? STR.composer.placeholderGate
               : disabled && props.disabledReason === "queue" ? STR.composer.placeholderQueue
+              : disabled && props.disabledReason === "session" ? STR.composer.placeholderSession
               : disabled && props.disabledReason === "creating" ? STR.composer.placeholderCreating
               : disabled && props.running ? STR.composer.placeholderGate
               : disabled ? STR.composer.placeholderCreating
@@ -1098,8 +1078,10 @@ export function Composer(props: {
               onClick={() => setPermOpen(menu !== "perm")}
               disabled={disabled || props.running}
             >
+              {/* 触发器只留「色点 + 档名 + 箭头」两件事：色点给一眼的严重度，档名给准确词。
+                  原先还叠一枚盾形图标，而它只有两个形（warn 与否），既不比档名更准，
+                  也不比色点更醒目 ⇒ 同一个状态三种标记（第 872 页业主「让布局说话」）。 */}
               <ModeDot mode={props.mode} />
-              {modeInfo.warn === true ? <ShieldAlert size={13} /> : <Shield size={13} />}
               <span>{modeInfo.label}</span>
               <span className="ctl-caret" aria-hidden="true"><ChevronDown size={10} /></span>
             </button>

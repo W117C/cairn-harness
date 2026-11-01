@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Copy, Loader2, RefreshCw, X } from "lucide-react";
 import type { SessionLogPayload } from "../../../../../src/main/ipc-protocol";
+import { formatBytes } from "../derived/format-bytes";
 import { STR } from "../strings";
 import { toast } from "../toast";
 import { ModalSurface } from "./ModalSurface";
@@ -11,12 +12,6 @@ export type SessionLogState =
   | { status: "loading" }
   | { status: "error"; error: string }
   | { status: "ready"; data: Extract<SessionLogPayload, { ok: true }> };
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
-}
 
 function copyText(text: string, okMessage: string): void {
   if (typeof navigator === "undefined" || navigator.clipboard === undefined) {
@@ -62,7 +57,7 @@ export function SessionLogBody(props: {
         : <pre className="session-log-pre" tabIndex={0} aria-label={STR.logViewer.logAria}>{data.text}</pre>}
       <div className="session-log-note">
         {data.truncated ? (data.lines === 1 && data.text.length > 100_000 ? STR.logViewer.singleLine : STR.logViewer.truncated) : null}
-        <span className="num">{data.lines} {STR.logViewer.lines} · {STR.logViewer.size} {formatBytes(data.bytes)}</span>
+        <span className="num">{data.lines} {STR.logViewer.lines} · {STR.logViewer.size} {formatBytes(data.bytes) ?? "—"}</span>
       </div>
     </>
   );

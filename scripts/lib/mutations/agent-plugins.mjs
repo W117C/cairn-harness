@@ -416,11 +416,11 @@ export const MUTATIONS = [
   },
   {
     id: "plugin-lsp-unhonored-fields-silent",
-    src: "src/agent/plugins/discover.ts",
+    src: "src/agent/plugins/index.ts",
     test: "tests/plugin-lsp-activation.test.ts",
-    desc: "运行时还没兑现的字段不吭声 ⇒ 作者以为配了重启策略，实际崩了就崩了（本仓规矩：不静默改语义，也不静默不兑现）",
-    apply: (s) => s.replace('        if (unhonored.length > 0) warnings.push(', '        if (false) warnings.push('),
-    expectFail: "§9.8 里运行时还没兑现的字段，装载期当场说出来（不静默收下）",
+    desc: "插件 LSP 的 startupTimeout / restartOnCrash / diagnostics.maxPerFile 不进运行时 ⇒ 运行时落回硬编码（8s / 不重启 / 20 条），作者配了也白配",
+    apply: (s) => s.replace("          ...(cfg.startupTimeout !== undefined ? { startupTimeout: cfg.startupTimeout } : {}),\n          ...(cfg.restartOnCrash !== undefined ? { restartOnCrash: cfg.restartOnCrash } : {}),\n          ...(cfg.diagnostics?.maxPerFile !== undefined ? { diagnosticsMaxPerFile: cfg.diagnostics.maxPerFile } : {}),\n", ""),
+    expectFail: "§9.8 的 startupTimeout / restartOnCrash / diagnostics.maxPerFile 已兑现到运行时；未知字段仍出声",
   },
   {
     id: "hook-exec-form-spawns-first-arg",

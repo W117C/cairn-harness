@@ -23,7 +23,7 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 describe("invoke 通道消费面：每个通道至少有一个渲染层调用点", () => {
-  it("100 条通道全部有消费者；例外只有带理由的 allowlist", () => {
+  it("122 条通道全部有消费者；例外只有带理由的 allowlist", () => {
     const text = walk(ROOT).map((p) => readFileSync(p, "utf8")).join("\n");
     const allow = new Map<string, string>([
       // 预览页的「停止」由主进程生成的页面脚本调用（apps/desktop/src/main/index.ts 里那段

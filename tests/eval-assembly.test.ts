@@ -43,7 +43,7 @@ describe("装配表：产品缺省开的键必须逐枚表态", () => {
     expect(PLAIN.length).toBeGreaterThanOrEqual(4);
     // ctrlTabCycle = v7 全量补全批新开的缺省键（纯渲染层；表里记 not-applicable）。
     expect(PLAIN.map((r) => r.key)).toEqual([
-      "autoMemory", "autoVerify", "ctrlTabCycle", "impactAnalysis", "promptCache", "subagentTools",
+      "autoMemory", "autoVerify", "ctrlTabCycle", "impactAnalysis", "notifyOnComplete", "promptCache", "subagentTools",
     ]);
   });
 

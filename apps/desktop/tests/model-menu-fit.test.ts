@@ -12,17 +12,19 @@ describe("模型菜单高度", () => {
     expect(modelMenuMaxHeight(420)).toBe(376);
   });
 
-  it("上限 560、下限 240：贴近顶部不压成一条缝，贴底不无限长", () => {
+  it("上限 560，不能用最小高度突破真实可用空间", () => {
     expect(modelMenuMaxHeight(900)).toBe(560);
-    expect(modelMenuMaxHeight(100)).toBe(240);
-    expect(modelMenuMaxHeight(0)).toBe(240);
+    expect(modelMenuMaxHeight(100)).toBe(56);
+    expect(modelMenuMaxHeight(0)).toBe(0);
   });
 
-  it("接线：打开时测量并传 style；菜单自身可滚动", () => {
+  it("接线：打开时测量可用空间，列表独立滚动，底部控制区可见", () => {
     const picker = readRendererFile("components/ModelPicker.tsx");
-    expect(picker).toContain("modelMenuMaxHeight(top)");
+    expect(picker).toContain("modelMenuLayout(rect.top, rect.bottom, window.innerHeight)");
     expect(picker).toContain("maxHeight: props.maxHeight");
-    const css = readRendererFile("styles.css");
-    expect(css).toContain(".mp-pop { min-width: 300px; max-width: 380px; max-height: min(480px, 62vh); overflow-y: auto;");
+    const css = readRendererFile("components/model-menu.css");
+    expect(css).toMatch(/\.mp-pop \.mp-models\s*\{[^}]*min-height: 0;[^}]*overflow-y: auto/s);
+    expect(css).toMatch(/\.pop\.mp-pop\.show\s*\{[^}]*overflow: hidden/s);
+    expect(css).toContain(".mp-pop .mp-controls { flex: none;");
   });
 });

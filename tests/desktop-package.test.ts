@@ -113,4 +113,24 @@ describe("desktop package command", () => {
     expect(existsSync(join(root, "src/main/service.ts"))).toBe(true);
     expect(existsSync(join(root, "node_modules/required/index.js"))).toBe(true);
   });
+  it("DMG 主路径走 diskutil（hdiutil 只回退，zip 最后兜底）", () => {
+    const pkg = readFileSync(script, "utf8");
+    expect(pkg).toContain('"diskutil"');
+    expect(pkg).toContain('"image", "create", "from"');
+    expect(pkg).toContain('"hdiutil"');
+    expect(pkg).toContain('"Cairn-macOS.zip"');
+    expect(pkg).toContain('symlinkSync("/Applications"');
+    expect(pkg).toContain('join(dmgRoot, "Applications")');
+    expect(pkg).toContain('rmSync(dmgRoot');
+    expect(pkg).toContain('install-smoke.mjs');
+  });
+
+  it("安装盘验收脚本存在：挂载 DMG、复制 app、跑 CAIRN_SMOKE", () => {
+    const install = readFileSync(resolve("apps/desktop/scripts/install-smoke.mjs"), "utf8");
+    expect(install).toContain('"diskutil", ["image", "attach"');
+    expect(install).toContain("Applications");
+    expect(install).toContain("CAIRN_SMOKE: \"1\"");
+    expect(install).toContain("[cairn-smoke] PASS");
+  });
+
 });

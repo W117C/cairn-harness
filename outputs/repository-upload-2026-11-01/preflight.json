@@ -1,0 +1,24 @@
+{
+  "scope": "all current project changes, explicitly authorized by user",
+  "baseCommit": "d004d625c2ae2652b0aba1f88bca793d7da91d51",
+  "branch": "fix/spec-summary-double-count",
+  "redactedCurrentLedgerOccurrences": 1,
+  "credentialFoundInExistingRemoteLedger": true,
+  "historyRewrite": false,
+  "installerIncludedInGit": false,
+  "additionalLedgerCopiesRedacted": {
+    "outputs/all-open-2026-10-22/baseline/PROGRESS.md": 1
+  },
+  "excludedLocalRuntimePaths": [
+    ".agent/evolve/episodes.jsonl",
+    ".agent/evolve/playbook.jsonl"
+  ],
+  "stagedKnownCredentialMatches": 0,
+  "typecheck": "passed",
+  "docsCheck": "passed",
+  "desktopBoundary": "passed",
+  "rendererLayer": "passed",
+  "evidenceTypecheck": "passed: 12/12 existing dangerous-code ceiling",
+  "runtimeStateExcluded": true,
+  "whitespace": "source whitespace corrected; preserved existing vendor/evidence bytes and valid patch context lines"
+}

@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -107,6 +107,8 @@ describe("CX-01 ProjectRegistry", () => {
     await writeFile(registryPath, "{ definitely-not-json", "utf8");
     const corrupt = new ProjectRegistry(registryPath);
     await expect(corrupt.list()).rejects.toBeInstanceOf(ProjectRegistryCorruptError);
+    // 拒因与出路同屏（桌面「项目注册表不可用：…」原样显示这句）。
+    await expect(corrupt.list()).rejects.toThrow(/修好或删除该文件后重试/);
     expect(await readFile(registryPath, "utf8")).toBe("{ definitely-not-json");
 
     await writeFile(
@@ -169,5 +171,72 @@ describe("CX-01 ProjectRegistry", () => {
 
     const activeOnly = await registry.list({ recentFirst: true });
     expect(activeOnly.map((p) => p.id)).not.toContain(pc.id);
+  });
+
+  it("relocate 保住 id/name/createdAt，只换 path；defaultLocation 在旧树里就随迁", async () => {
+    const oldRoot = join(root, "old-project");
+    const oldSub = join(oldRoot, "sub");
+    const newRoot = join(root, "new-project");
+    await mkdir(oldSub, { recursive: true });
+    const registry = new ProjectRegistry(registryPath);
+    const project = await registry.add({ name: "Moved", path: oldRoot, defaultLocation: oldSub });
+    await rename(oldRoot, newRoot);
+
+    const relocated = await registry.relocate(project.id, newRoot);
+    expect(relocated.id).toBe(project.id);
+    expect(relocated.name).toBe("Moved");
+    expect(relocated.createdAt).toBe(project.createdAt);
+    expect(relocated.path).toBe(await realpath(newRoot));
+    expect(relocated.defaultLocation).toBe(await realpath(join(newRoot, "sub")));
+    expect(Number.isFinite(Date.parse(relocated.updatedAt))).toBe(true);
+    // 持久化后重新加载仍是同一条（没有换 id、没有多出第二条）。
+    const reloaded = new ProjectRegistry(registryPath);
+    const listed = await reloaded.list();
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.id).toBe(project.id);
+    expect(listed[0]?.path).toBe(relocated.path);
+  });
+
+  it("defaultLocation 在旧树之外时原样保留（不替用户改他没动过的设置）", async () => {
+    const projectDir = join(root, "project");
+    const outside = join(root, "outside");
+    await mkdir(projectDir);
+    await mkdir(outside);
+    const registry = new ProjectRegistry(registryPath);
+    const project = await registry.add({ path: projectDir, defaultLocation: outside });
+    const movedDir = join(root, "project-moved");
+    await rename(projectDir, movedDir);
+
+    const relocated = await registry.relocate(project.id, movedDir);
+    expect(relocated.path).toBe(await realpath(movedDir));
+    expect(relocated.defaultLocation).toBe(await realpath(outside));
+  });
+
+  it("relocate 拒绝不存在/非目录/被别的项目占用（含已移除记录）/已移除项目；同路径是幂等空操作", async () => {
+    const a = join(root, "a");
+    const b = join(root, "b");
+    const file = join(root, "file.txt");
+    await mkdir(a);
+    await mkdir(b);
+    await writeFile(file, "x", "utf8");
+    const registry = new ProjectRegistry(registryPath);
+    const pa = await registry.add({ path: a });
+    const pb = await registry.add({ path: b });
+
+    await expect(registry.relocate(pa.id, join(root, "missing"))).rejects.toThrow(/ENOENT|no such file/i);
+    await expect(registry.relocate(pa.id, file)).rejects.toThrow(/不是目录/);
+    await expect(registry.relocate(pa.id, b)).rejects.toThrow(/已被另一个项目登记/);
+    await expect(registry.relocate("not-a-project", a)).rejects.toThrow(/项目不存在/);
+
+    const removed = await registry.remove(pb.id);
+    expect(removed.removedAt).toBeDefined();
+    await expect(registry.relocate(pb.id, a)).rejects.toThrow(/已移除/);
+    // 已移除记录占用的路径也不许被活动项目抢走（validateState 全量唯一）。
+    await expect(registry.relocate(pa.id, b)).rejects.toThrow(/已移除/);
+
+    // 同路径幂等：不改 updatedAt、不抛。
+    const same = await registry.relocate(pa.id, a);
+    expect(same.path).toBe(pa.path);
+    expect(same.updatedAt).toBe(pa.updatedAt);
   });
 });

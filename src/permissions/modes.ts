@@ -24,3 +24,11 @@ export function isPermissionMode(v: unknown): v is PermissionMode {
 export function permissionModeRank(mode: PermissionMode): number {
   return PERMISSION_MODES.indexOf(mode);
 }
+
+/** 「下一档」循环（命令面板 / 快捷键用）：按权威顺序走满**全部**档位；未知值从第一档开始。
+ *  这是「加一档」时唯一会叫住这些入口的地方——UI 里再抄一份顺序，第五档就会像 2026-10-30
+ *  实测那样永远轮不到（命令面板只抄了四档）。 */
+export function nextPermissionMode(current: PermissionMode): PermissionMode {
+  const i = PERMISSION_MODES.indexOf(current);
+  return PERMISSION_MODES[(i + 1) % PERMISSION_MODES.length]!;
+}

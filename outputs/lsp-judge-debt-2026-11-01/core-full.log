@@ -1,0 +1,4 @@
+$ pnpm test:capped   # --maxWorkers=2
+ Test Files  601 passed (601)
+      Tests  7532 passed (7532)
+EXIT=0

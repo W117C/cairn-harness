@@ -1,0 +1,12 @@
+=== 改前 A：运行历史摆 due_at 原始 ISO ===
+     × due_at 与「下次」都按本地时间显示，不摆原始 ISO 5ms
+      Tests  1 failed | 20 passed (21)
+
+=== 改前 B：超过 20 条不吭声 ===
+     × 超过 20 条：标题说清只显示最近 20 条（不把尾部冒充整份） 7ms
+      Tests  1 failed | 20 passed (21)
+
+=== 复原后 ===
+      Tests  21 passed (21)
+=== sha256 ===
+   2 3b0a362d9129f4afec2fedf76b2343787fef0e297601a6641e59fff4370c3675

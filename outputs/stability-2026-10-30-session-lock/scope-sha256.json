@@ -1,0 +1,12 @@
+{
+  "src/main/session-lock.ts": "5ffe67386a7dcaa2ee96c1ebced01c329a5324c1d82669ce41d3172e9bacc8a5",
+  "src/main/session-mutation-lock.ts": "c383c042100db8bffca094c8d16e0e8255ec93a0306776f4d42ec3a1600803ad",
+  "src/main/session-repository.ts": "a203d770577671749e338a5fd97b442380a1267f1468a5baf8e827ccddb74fe6",
+  "src/main/session-handlers.ts": "6b9c0fdefc1459382e105745368d582ec2ea0c224ebe50b66beda0d0f4fd9c36",
+  "apps/desktop/src/renderer/state/session-prefs.ts": "b9ab4cc4b62bdb7fb370b5d01b016b71f434848a61aa364bae8b21898ebe77fe",
+  "apps/desktop/src/renderer/panes/WorkbenchView.tsx": "6d567a82f759a4c13cacf11120ae86e7cfb055c50073c03326965b13fbacb9c6",
+  "apps/desktop/tests/session-prefs.test.ts": "cf892942db10f70f36dde8af49d451c9bfc4210097eba0ab89326cd7f8d3f687",
+  "apps/desktop/tests/session-prefs-errors.test.ts": "30c515629b1a6df071cc184b2ea520cc947269fbe270e0dfa9d707297ccaf3c9",
+  "tests/session-lock-recovery.test.ts": "c6432221bcb181f3b1119a13f0606c11602f3d2f026979d441708da130b8520b",
+  "tests/session-prefs-routing.test.ts": "79de96792f072b6e4441eec035c85d13c2a8f857ec0826caed1b69aaf47fbac6"
+}

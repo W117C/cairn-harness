@@ -1,0 +1,40 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "通用段有「任务完成时通知」开关",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "缺省开（与既有行为一致：默认就会通知）",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "name": "真指针点一下 ⇒ aria-checked=false",
+      "ok": true,
+      "detail": "false"
+    },
+    {
+      "name": "落盘补丁是 {notifyOnComplete:false}",
+      "ok": true,
+      "detail": [
+        {
+          "notifyOnComplete": false
+        }
+      ]
+    },
+    {
+      "name": "再点回来 ⇒ 恢复开",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,56 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "主页上报 sessionId=null（不是把主页当成在看某个会话）",
+      "ok": true,
+      "detail": {
+        "sessionId": null,
+        "workspace": ""
+      }
+    },
+    {
+      "name": "上报形状稳定：workspace 恒为字符串（首屏还没选项目时为空串）",
+      "ok": true,
+      "detail": {
+        "sessionId": null,
+        "workspace": ""
+      }
+    },
+    {
+      "name": "真指针打开会话 s1",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "打开会话后上报 {sessionId:'s1', workspace}",
+      "ok": true,
+      "detail": {
+        "sessionId": "s1",
+        "workspace": "/tmp/demo-ws"
+      }
+    },
+    {
+      "name": "回主页后上报 null（主进程据此恢复「不在看」）",
+      "ok": true,
+      "detail": {
+        "sessionId": null,
+        "workspace": "/tmp/demo-ws"
+      }
+    },
+    {
+      "name": "回主页后工作区仍在上报里（判据按同 workspace 比对）",
+      "ok": true,
+      "detail": {
+        "sessionId": null,
+        "workspace": "/tmp/demo-ws"
+      }
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

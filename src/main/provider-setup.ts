@@ -11,6 +11,9 @@ import { readFileSync } from "node:fs";
 import { writeFileAtomic } from "../atomic-write";
 import { loadCatalog } from "./catalog-store";
 import { customProvidersPath } from "./custom-provider-store";
+import { installCustomProviders, installedCustomProviders } from "../providers/registry";
+import { putProviderKey } from "./provider-keys";
+import { injectStoredProviderKey } from "./provider-key-inject";
 import { discoverModels, type DiscoverFailure } from "./model-discovery";
 import type { CatalogReadout } from "../providers/catalog";
 import type { DiscoveryProtocol } from "../providers/discovery";
@@ -224,6 +227,29 @@ export async function commitCustomProvider(prepared: {
   } catch (err) {
     return { ok: false, error: `写盘失败：${err instanceof Error ? err.message : String(err)}` };
   }
+}
+
+/** Desktop setup transaction: register for key validation, commit config, then activate credentials. */
+export async function commitProviderSetup(
+  prepared: Extract<PrepareCustomProviderResult, { ok: true }>,
+  providerId: string,
+  keyValue?: string,
+): Promise<SaveProviderResult> {
+  if (!prepared.derived.some(provider => provider.id === providerId)) return { ok: false, error: "provider 不在待提交配置中" };
+  const previous = installedCustomProviders();
+  installCustomProviders(prepared.derived);
+  if (keyValue !== undefined && keyValue !== "") {
+    const keyed = await putProviderKey(providerId, keyValue);
+    if (!keyed.ok) {
+      installCustomProviders(previous);
+      return { ok: false, error: keyed.error ?? "key 保存失败" };
+    }
+  }
+  const wrote = await commitCustomProvider(prepared);
+  if (!wrote.ok) { installCustomProviders(previous); return wrote; }
+  try { await injectStoredProviderKey(prepared.derived.map(provider => provider.id)); }
+  catch { return { ok: false, error: "配置已保存，但密钥激活失败；请检查安全存储后重试" }; }
+  return { ok: true, path: prepared.path, providers: prepared.file.providers.map(provider => provider.id), derived: prepared.derived, warnings: prepared.warnings };
 }
 
 /**

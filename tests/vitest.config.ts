@@ -24,6 +24,12 @@ mkdirSync(process.env.M7_IMPACT_TAGS_DIR, { recursive: true });
 // 直接给 discoverPlugins 传 foreignSources（或自己设 M2E_FOREIGN_SOURCES=1 覆盖）。
 if (!process.env.M2E_FOREIGN_SOURCES) process.env.M2E_FOREIGN_SOURCES = "off";
 
+// 全局进化账（Cairn Evolve 全局晋升）默认在用户家目录；报告会读它。
+// 判卷不能让结果取决于跑测试那台机器的 home（有全局经验时报告会多出条目），
+// 与上面 PI_SCRATCH_DIR / M7_IMPACT_TAGS_DIR 同一道隔离纪律。
+if (!process.env.CAIRN_EVOLVE_HOME) process.env.CAIRN_EVOLVE_HOME = join(tmpdir(), "dsh-evolve-home");
+mkdirSync(process.env.CAIRN_EVOLVE_HOME, { recursive: true });
+
 // 只跑根 tests/ 下的用例；fixtures/todo-app 是独立靶子，由它目录里的 pnpm test 负责。
 export default defineConfig({
   test: {

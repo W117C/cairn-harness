@@ -39,8 +39,12 @@ export interface LocalAgentRuntime extends AgentRuntime {
   /**
    * Spawn through the lifecycle registry while preserving the exact tool result
    * and raw spawn arguments needed by existing model-facing callers.
+   *
+   * `ctx.callId` is the model tool call that caused this spawn. The executor needs
+   * it to pair its terminal synthetic result with that call; dropping it leaves the
+   * worker's result orphaned in the main transcript.
    */
-  spawnWithReceipt(spec: AgentSpawnSpec, args?: SpawnArgs): Promise<SpawnWithReceiptResult>;
+  spawnWithReceipt(spec: AgentSpawnSpec, args?: SpawnArgs, ctx?: { callId?: string }): Promise<SpawnWithReceiptResult>;
 }
 
 interface ThreadState {
@@ -127,6 +131,7 @@ export function createLocalAgentRuntime(driver: LocalAgentOrchestrator): LocalAg
     state: ThreadState,
     task: string,
     fence?: string,
+    callId?: string,
   ): Promise<{ ok: true; runId: string; result: ToolResult } | { ok: false; result: ToolResult }> => {
     const result = await driver.spawn({
       ...state.spawnArgs,
@@ -134,6 +139,7 @@ export function createLocalAgentRuntime(driver: LocalAgentOrchestrator): LocalAg
       task,
     }, {
       threadId: state.record.id,
+      ...(callId !== undefined && callId !== "" ? { callId } : {}),
       ...(fence !== undefined ? { fence } : {}),
     });
     if (!result.ok) return { ok: false, result };
@@ -217,7 +223,7 @@ export function createLocalAgentRuntime(driver: LocalAgentOrchestrator): LocalAg
   };
 
   return {
-    async spawnWithReceipt(spec: AgentSpawnSpec, args?: SpawnArgs): Promise<SpawnWithReceiptResult> {
+    async spawnWithReceipt(spec: AgentSpawnSpec, args?: SpawnArgs, ctx?: { callId?: string }): Promise<SpawnWithReceiptResult> {
       const id = spec.threadId ?? randomUUID();
       if (threads.has(id)) throw new Error("agent thread already exists: " + id);
       const now = Date.now();
@@ -246,7 +252,7 @@ export function createLocalAgentRuntime(driver: LocalAgentOrchestrator): LocalAg
       };
       threads.set(id, state);
       try {
-        const started = await startRun(state, spec.task, spec.fence ?? randomUUID());
+        const started = await startRun(state, spec.task, spec.fence ?? randomUUID(), ctx?.callId);
         if (!started.ok) {
           threads.delete(id);
           return { result: started.result };

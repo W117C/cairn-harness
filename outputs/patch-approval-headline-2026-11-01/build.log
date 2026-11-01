@@ -1,0 +1,41 @@
+$ pnpm run build:preload && vite build && tsc -p tsconfig.json --noEmit
+$ esbuild src/preload/index.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs
+
+  dist-electron/preload.cjs  11.1kb
+
+⚡ Done in 8ms
+vite v7.3.6 building client environment for production...
+transforming...
+
+./vendor/dsh-claude-style/fonts/InterVariable.woff2 referenced in ./vendor/dsh-claude-style/fonts/InterVariable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+./vendor/dsh-claude-style/fonts/JetBrainsMonoVariable.ttf referenced in ./vendor/dsh-claude-style/fonts/JetBrainsMonoVariable.ttf didn't resolve at build time, it will remain unchanged to be resolved at runtime
+✓ 2196 modules transformed.
+rendering chunks...
+computing gzip size...
+../../dist/index.html                                 4.29 kB │ gzip:  2.09 kB
+../../dist/assets/NotoSerifVariable-f932DlCQ.woff2   76.55 kB
+../../dist/assets/App-Cu6RDccb.css                    5.47 kB │ gzip:  1.44 kB
+../../dist/assets/Stream-oShcH8jh.css                 6.94 kB │ gzip:  1.81 kB
+../../dist/assets/PaneDock-q-g5MkI7.css               8.55 kB │ gzip:  2.28 kB
+../../dist/assets/AppPage-DOAXZ54g.css               12.42 kB │ gzip:  2.68 kB
+../../dist/assets/SettingsPanel-BxwSfOvC.css         15.46 kB │ gzip:  3.61 kB
+../../dist/assets/index-zODhKSDP.css                294.78 kB │ gzip: 46.97 kB
+../../dist/assets/index-V6biZkaq.js                   0.09 kB │ gzip:  0.10 kB
+../../dist/assets/PopoutApp-D1xrATAu.js               1.20 kB │ gzip:  0.61 kB
+../../dist/assets/addon-fit-DX4qG4td.js               1.21 kB │ gzip:  0.51 kB
+../../dist/assets/settings-nav-BvFGPe2X.js            4.04 kB │ gzip:  2.07 kB
+../../dist/assets/navigation-DxnkIlPf.js              5.27 kB │ gzip:  2.19 kB
+../../dist/assets/markdown-Ca46F9Tz.js               14.80 kB │ gzip:  5.31 kB
+../../dist/assets/Stream-05aRiS-W.js                 23.78 kB │ gzip:  8.09 kB
+../../dist/assets/index-BmGMpJTb.js                  34.83 kB │ gzip:  9.89 kB
+../../dist/assets/CommandPalette-lku1WNAb.js         39.02 kB │ gzip: 13.41 kB
+../../dist/assets/PaneDock-B6t-g3Wu.js               59.48 kB │ gzip: 20.06 kB
+../../dist/assets/SettingsPanel-BIPUK0Ji.js          84.22 kB │ gzip: 26.34 kB
+../../dist/assets/AppPage-DcjoFPeE.js                84.91 kB │ gzip: 22.71 kB
+../../dist/assets/stream-model-JGTR0eDg.js          117.23 kB │ gzip: 40.59 kB
+../../dist/assets/index-Do3nyXMR.js                 179.31 kB │ gzip: 62.12 kB
+../../dist/assets/App-BgIg15cA.js                   313.83 kB │ gzip: 98.69 kB
+../../dist/assets/xterm-B-qIQCd3.js                 329.31 kB │ gzip: 83.04 kB
+✓ built in 1.71s
+EXIT=0

@@ -101,6 +101,35 @@ describe("SendQueueStrip（队列条）", () => {
     expect(html).toContain('aria-label="移出队列：然后把 README 改了"');
   });
 
+  it("编辑入口：给了 onEdit 才出现；没给不出现（旧用法字节不变）", () => {
+    const plain = renderToStaticMarkup(
+      <SendQueueStrip items={items} running onInterruptSend={() => undefined} onRemove={() => undefined} />,
+    );
+    expect(plain).not.toContain("编辑排队项");
+    const editable = renderToStaticMarkup(
+      <SendQueueStrip items={items} running onInterruptSend={() => undefined} onRemove={() => undefined} onEdit={() => undefined} />,
+    );
+    expect(editable).toContain('aria-label="编辑排队项：先跑一遍测试"');
+    expect(editable.match(/编辑排队项/g)?.length).toBe(2);
+  });
+
+  it("排序入口：给了 onMove 才出现；首项不能上移、末项不能下移", () => {
+    const plain = renderToStaticMarkup(
+      <SendQueueStrip items={items} running onInterruptSend={() => undefined} onRemove={() => undefined} />,
+    );
+    expect(plain).not.toContain("上移排队项");
+    const movable = renderToStaticMarkup(
+      <SendQueueStrip items={items} running onInterruptSend={() => undefined} onRemove={() => undefined} onMove={() => undefined} />,
+    );
+    expect(movable.match(/上移排队项/g)?.length).toBe(2);
+    expect(movable.match(/下移排队项/g)?.length).toBe(2);
+    expect(movable).toContain('aria-label="上移排队项：先跑一遍测试"');
+    expect(movable).toMatch(/aria-label="上移排队项：先跑一遍测试"[^>]*disabled=""/);
+    expect(movable).toMatch(/aria-label="下移排队项：然后把 README 改了"[^>]*disabled=""/);
+    expect(movable).not.toMatch(/aria-label="上移排队项：然后把 README 改了"[^>]*disabled=""/);
+    expect(movable).not.toMatch(/aria-label="下移排队项：先跑一遍测试"[^>]*disabled=""/);
+  });
+
   it("恢复态：不运行且有恢复入口时，显示「继续发送」", () => {
     const html = renderToStaticMarkup(
       <SendQueueStrip

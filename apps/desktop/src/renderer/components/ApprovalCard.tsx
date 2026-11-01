@@ -54,7 +54,10 @@ export function ApprovalCard(props: {
   return (
     <div
       className="card"
+      data-status="pending_approval"
       data-exp={expanded ? "true" : "false"}
+      role="region"
+      aria-label={`工具调用决策卡片: ${a.tool}`}
       tabIndex={0}
       onKeyDown={(e) => {
         // ⏎ = 允许一次（P3-1 Step 3）：仅当焦点在卡本体（按钮自带原生 ⏎，不抢不双发）。
@@ -97,7 +100,8 @@ export function ApprovalCard(props: {
         </div>
       )}
       <div className="card-actions">
-        <button className="btn primary" onClick={() => props.onDecide(true)}>允许 · 本次</button>
+        {/* 动作次序（2026-10-31，R1）：拒绝 / 总是允许 / 允许一次（主钮最右）。
+            与 open-claude-ui McpToolDecisionCard 的三阶决议同序；危险动作不摆在主位。 */}
         <button className="btn secondary" onClick={() => props.onDecide(false)}>拒绝</button>
         {!alwaysArmed ? (
           <button className="btn ghost" onClick={() => setAlwaysArmed(true)}>总是允许 <ChevronDown size={11} /></button>
@@ -110,6 +114,7 @@ export function ApprovalCard(props: {
         )}
         <span className="spacer" />
         <span className="consequence">Esc 不做决议</span>
+        <button className="btn primary" onClick={() => props.onDecide(true)}>允许 · 本次</button>
       </div>
     </div>
   );

@@ -29,8 +29,8 @@ describe("焦点环（裁 B：强调色域 · 2026-10-20 三层结构）", () =>
     expect(rule).toMatch(/inset\s+0\s+0\s+0\s+1px\s+hsl\(var\(--bg-100\)\)/);
     // ② 实环：1px 强调色
     expect(rule).toMatch(/0\s+0\s+0\s+1px\s+hsl\(var\(--accent-control\)/);
-    // ③ 外发光：6px 扩散
-    expect(rule).toMatch(/0\s+0\s+6px\s+1px\s+hsl\(var\(--accent-control-glow\)/);
+    // ③ 外发光：6px 扩散（第③层两主题值不同，走 --focus-ring-glow + 各自的 alpha）
+    expect(rule).toMatch(/0\s+0\s+6px\s+1px\s+hsl\(var\(--focus-ring-glow\)\s*\/\s*var\(--focus-ring-glow-alpha\)\)/);
   });
 
   it("三层顺序不能颠倒（inset 必须在前——它是最内层）", () => {
@@ -47,5 +47,12 @@ describe("焦点环（裁 B：强调色域 · 2026-10-20 三层结构）", () =>
 
   it("保留 outline 透明占位（兼容强制颜色模式 / 读屏）", () => {
     expect(focusRule()).toMatch(/outline:\s*2px solid transparent/);
+  });
+
+  it("焦点不改变控件轮廓：pill 仍是 pill、发送键仍是圆（2026-10-28 第 741 页）", () => {
+    expect(CSS).toMatch(/\.side-new:focus-visible[^{]*{[^}]*border-radius:\s*var\(--radius-pill\)/s);
+    expect(CSS).toMatch(/\.empty-chip:focus-visible[^{]*{[^}]*border-radius:\s*var\(--radius-pill\)/s);
+    expect(CSS).toMatch(/\.mp-trigger:focus-visible[^{]*{[^}]*border-radius:\s*var\(--radius-pill\)/s);
+    expect(CSS).toMatch(/\.send-btn:focus-visible\s*{[^}]*border-radius:\s*50%/s);
   });
 });

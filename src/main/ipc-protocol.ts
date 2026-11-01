@@ -8,7 +8,9 @@ import type { SandboxStatus } from "./sandbox";
 import type { AppSettings } from "./settings";
 import type { OnboardingGroup } from "./onboarding-groups";
 import type { ScheduleSnapshot } from "./scheduler";
-import type { LicenseState } from "./license";
+import type { LicenseImportOutcome, LicenseState } from "./license";
+import type { BuildInfo } from "./build-info";
+import type { PreferencePatch } from "./preferences";
 import type { UpdateCheckResult } from "./updater";
 import type { AddProjectInput, ProjectRecord } from "./project-registry";
 import type { ChangeDiffPayload } from "./change-diff";
@@ -22,12 +24,27 @@ import type { CapabilityReadout } from "./doctor";
 // v9：建议单发的结果形状事实源在 suggest-next（分类 + hint 的构造与失败面同源）；这里只转发类型。
 import type { SuggestNextResult } from "./suggest-next";
 import type { OrchestrationAddress, OrchestrationSubmitRequest, OrchestrationControlRequest, OrchestrationResponse } from "./orchestration-service";
+import type { MarketplaceCatalogReadout } from "./plugin-marketplace-store";
+import type { PluginInstallJob } from "./plugin-install-jobs";
+import type { InstalledPluginRecord, PluginInstallScope } from "./plugin-install-registry";
+import type { PluginImportRequest } from "./plugin-source";
+import type { PluginUpdateCheck } from "./plugin-update-check";
 export type { OrchestrationAddress, OrchestrationSubmitRequest, OrchestrationControlRequest, OrchestrationResponse, OrchestrationSnapshot } from "./orchestration-service";
+export type { MarketplaceCatalogReadout } from "./plugin-marketplace-store";
+export type { PluginInstallJob, PluginInstallJobState, PluginInstallReview } from "./plugin-install-jobs";
+export type { InstalledPluginRecord, PluginInstallScope } from "./plugin-install-registry";
+export type { PluginImportRequest, PluginSource } from "./plugin-source";
+export type { PluginUpdateCheck, PluginUpdateStatus } from "./plugin-update-check";
 
 export type { AgentEvent } from "../events";
 export type { PermissionMode } from "../permissions";
 export type { AppSettings } from "./settings";
 export type { AddProjectInput, ProjectRecord } from "./project-registry";
+/** 项目列表的派生行：`missing` 由 listProjects 按盘点算，不写进 registry。
+ *  侧栏据此标「目录失联」；记录本身仍可被 relocate 修好。 */
+export interface ProjectListEntry extends ProjectRecord {
+  missing?: boolean;
+}
 export type { SessionMetadataRecord } from "./session-metadata";
 export type { RunAttachmentReference } from "./run-attachments";
 export type { SessionQueueEntry } from "./sessions";
@@ -44,6 +61,17 @@ import type { DiscoveredRow } from "../providers/provider-draft";
 import type { PreviewSnapshot } from "./project-preview";
 // v12：导入诊断三态的形状事实源在 project-templates（判定与文案同源）；这里只转发类型。
 import type { ProjectDiagnosis } from "./project-templates";
+// v25：Evolve 只读报告（经验/实验/候选/预算/冻结）；main 现读工作区 .agent/evolve。
+// v44：Evolve 冻结开关（人工治理写/删 STOP；报告仍是只读快照）。
+import type { DoctorReport } from "./doctor";
+import type { EvolveReport } from "./evolve/report";
+export type { EvolveReport } from "./evolve/report";
+/** v45：人工激活一条过门经验的结果（拒绝原因可见；报告是动作后的最新快照）。 */
+export interface EvolveActivateResult {
+  ok: boolean;
+  reason?: string;
+  report: EvolveReport;
+}
 // v18：会话正文检索的结果类型（三态联合）。`import type` 编译期擦除 ⇒ 渲染层产物零运行时 import src。
 import type { SessionSearchResult } from "./session-search";
 export type { SessionSearchResult } from "./session-search";
@@ -77,8 +105,25 @@ export type { SearchProvider } from "../tools/web-search";
  *  v22 = 插件面板 MCP 激活态（PluginPanelSnapshot 增 activeMcpServers / activeMcpTools /
  *  mcpServerSummaries——设置页显示整台/按工具激活的 server）。
  *  v23 = Plan 模式一等入口（RunRequest 增可选 planRequired——按轮覆盖 settings 默认）。
- *  v24 = 显式 workspace/session 的编排预览、提交与控制。 */
-export const IPC_PROTOCOL_VERSION = 24;
+ *  v24 = 显式 workspace/session 的编排预览、提交与控制。
+ *  v25 = Evolve 只读报告（evolveReport——经验/实验/候选/预算/冻结态上屏）。
+ *  v26 = 设置首读问题上屏（StateResponse 增 settingsIssue——设置文件坏了要说出来，不静默用缺省）。
+ *  v27 = 签名插件目录只读读数（marketplaceCatalog——live / verified cache / unavailable 三态）。
+ *  v28 = 插件安装 job、已装列表、启用/禁用与卸载后端面（市场 UI 仍由 PLUGIN-2 消费）。
+ *  v29 = Git/本地统一导入、来源绑定更新、本地目录选择与已安装配置。
+ *  v30 = 调度快照带装载警告与损坏标志（ScheduleSnapshot 增 warnings / definitionsCorrupt——
+ *        自动化文件坏了要在页面上说出来，桌面没有控制台可看）。
+ *  v31 = 设置重读入口（reloadSettings——外部修好 settings.json 后不重启即可恢复）。
+ *  v32 = AppSettings 增 notifyOnComplete（完成通知开关；缺省开，行为与既有一致）。
+ *  v33 = ＋reportViewing（主进程知道窗口在看哪个会话——通知判据「不在看那个会话」）。
+ *  v34 = ＋doctor（桌面「运行诊断」：复用 CLI 的检查核，只读）。
+ *  v35 = 会话级偏好（model/thinking 随 sidecar 持久化＋sessionPrefsSet；列表带 model/thinking）。
+ *  v47 = 撤销全局经验（evolveGlobalRevoke；全局账 patch 转 dormant，跨 workspace 注入停用）。
+ *  v48 = 全局经验冻结开关（evolveGlobalSetFrozen；写/删全局 STOP，与 workspace STOP 分开）。
+ *  v49 = 恢复全局经验（evolveGlobalActivate；dormant → active，复核 ≥3 库证据）。
+ *  v50 = 会话运行控制携带 workspace；目标校验拒绝带 code，不触发陈旧旗自动续发。
+ *  v51 = RunResponse.accepted 区分未接收的请求和已接收后的执行失败，供队列安全恢复。 */
+export const IPC_PROTOCOL_VERSION = 51;
 
 /** 密钥只允许写入；读取面只报告状态，不回传明文。端点为空时 Brave/Tavily 使用官方地址。 */
 export interface SearchSettingsInput {
@@ -245,6 +290,8 @@ export interface RunRequest {
 export interface RunResponse {
   ok: boolean;
   error?: string;
+  /** 桌面会话宿主的接收回执；false 表示用户轮未进入日志，可恢复待发送消息。缺席 = 未知。 */
+  accepted?: boolean;
   /** Present only when validated references were consumed as path context. */
   attachmentCount?: number;
 }
@@ -299,6 +346,9 @@ export interface AskOutcomePayload {
   /** M4a 增 "unattended"：无人值守 fail-closed 自动拒绝（§12.2.4）。 */
   reason: "user" | "timeout" | "unattended";
 }
+/** 导入许可证的结果：取消是合法结果；ok=false 时 state 供界面解释（文件未被覆盖）。 */
+export type LicenseImportResult = { canceled: true } | ({ canceled?: false } & LicenseImportOutcome);
+
 export interface StateResponse {
   sandbox: SandboxStatus;
   /** M2d：记忆两层快照（缺省 = 尚未初始化）。 */
@@ -315,8 +365,10 @@ export interface StateResponse {
   license?: LicenseState;
   /** M4b：provider key 状态面（safeStorage 可用性 + 已存 provider 清单 + env 并存提示；不含 key 值）。 */
   providerKeys?: { available: boolean; stored: string[]; envActive: boolean; envProviders: string[] };
+  /** v26：设置文件首读失败（坏 JSON / 读不了）。缺省 = 没有文件或读得动；界面据此出横幅。 */
+  settingsIssue?: import("./settings").SettingsLoadIssue;
   /** M4b：关于信息（版本展示；关于/更新组与引导第 4 步消费）。 */
-  about?: { version: string };
+  about?: { version: string; build?: BuildInfo };
 }
 
 /** M2f sidechat 面板快照（纯投影：会话清单 + 最近消息 + 已提升记录）。
@@ -359,6 +411,10 @@ export interface SessionInfoPayload {
   pinned?: boolean;
   archived?: boolean;
   projectId?: string;
+  /** 会话级模型（registry id）。缺席 = 跟随全局设置（v35 持久化）。 */
+  model?: string;
+  /** 会话级思考档。缺席 = 跟随全局/会话缺省（v35 持久化）。 */
+  thinking?: string;
   /** 审计 sidecar 字段；缺席 = 未记录，不能补成 epoch/0。 */
   viewedAt?: string;
   archivedAt?: string;
@@ -395,6 +451,14 @@ export interface MemorySnapshot {
   global: MemoryLayerSnapshot;
 }
 
+/** 目标校验失败与「会话已结束」不同：前者不能据此自动出队或恢复运行。 */
+export interface RunControlResponse {
+  ok: boolean;
+  error?: string;
+  code?: "invalid_target" | "workspace_mismatch";
+  queued?: number;
+}
+
 /** preload 暴露给 renderer 的 API（window.agent）。 */
 export interface AgentApi {
   run(req: RunRequest & { sessionId?: string }): Promise<RunResponse>;
@@ -410,8 +474,8 @@ export interface AgentApi {
   setGoal(req: { sessionId?: string; objective?: string; maxTurns?: number; maxUsd?: number; clear?: boolean; pause?: boolean; resume?: boolean }): Promise<{ ok: boolean; error?: string; clamped?: string[] }>;
   /** P3（审查）：取消当前交互 run——信号沿 runLoop 轮界/门等待/长驻工具透传。
    *  M3-5：补可选 sessionId 走会话级取消（kernel-host cancel(sessionId)，T2 per-session controller）；
-   *  缺省无参 = 兼容旧调用（host 侧 fail-visible：{ok:false,"会话不在运行"}）。 */
-  runCancel(sessionId?: string): Promise<{ ok: boolean; error?: string }>;
+   *  workspace 显式指定时必须匹配执行归属；旧调用省略 workspace 时会话 id 须无歧义。 */
+  runCancel(sessionId?: string, workspace?: string): Promise<RunControlResponse>;
   /** 第 9 点·轮中插话（steering）：把用户这一句话递进**正在跑**的那一轮。
    *
    *  与 `runCancel` 同一族但语义相反：cancel 收束这一轮，steer 让这一轮**继续**但多知道一件事。
@@ -420,7 +484,7 @@ export interface AgentApi {
    *
    *  会话不在跑 ⇒ `{ok:false, error}` fail-visible：渲染层据此把这句话转成「入队」
    *  （下一轮首发），而不是假装已经送进去了。`queued` = 盒子里当前待取条数（观测用）。 */
-  runSteer(sessionId: string, text: string): Promise<{ ok: boolean; error?: string; queued?: number }>;
+  runSteer(sessionId: string, text: string, workspace?: string): Promise<RunControlResponse>;
   /** M1d 手动压缩入口（M1e 起 preload 暴露：token 面板按钮）。 */
   compact?(sessionId?: string, workspace?: string): Promise<CompactResponse>;
   onEvent(cb: (e: AgentEvent) => void): () => void;
@@ -441,6 +505,8 @@ export interface AgentApi {
   // ---- M1e：settings（布局 + 设置页持久化，主进程 app data）----
   getSettings(): Promise<AppSettings>;
   setSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
+  /** v31：外部修好/改坏 settings.json 后重读盘（设置页横幅的「重新读取」，不重启即可恢复）。 */
+  reloadSettings(): Promise<{ ok: boolean; error?: string }>;
   /** v20：当前调用窗口的工作区；打开设置不会发送网络请求。 */
   searchSettingsGet(): Promise<SearchSettingsSnapshot>;
   searchSettingsSave(input: SearchSettingsInput): Promise<SearchSettingsSaveResult>;
@@ -448,8 +514,28 @@ export interface AgentApi {
   searchSettingsTest(input?: SearchSettingsInput): Promise<SearchSettingsTestResult>;
   // ---- M1e：会话列表（JSONL 即会话）----
   listSessions(): Promise<SessionInfoPayload[]>;
+  /** v35：会话级模型/思考档落 sidecar（null = 清除、回到跟随全局）。 */
+  sessionPrefsSet(
+    sessionId: string,
+    prefs: { model?: string | null; thinking?: string | null },
+    workspace?: string,
+  ): Promise<{ ok: boolean; error?: string }>;
   /** v14：跨全部已登记工作区的用量账本（只读；按会话日志投影，不触发 openSession）。 */
   usageLedger(): Promise<UsageLedgerPayload>;
+  /** v25：当前窗口工作区的 Evolve 只读报告（不注入、不晋升；冻结/预算/证据态如实上屏）。 */
+  evolveReport(): Promise<EvolveReport>;
+  /** v44：人工治理开关——冻结写 STOP、解冻删 STOP；返回动作后的最新报告。 */
+  evolveSetFrozen(frozen: boolean): Promise<EvolveReport>;
+  /** v45：人工激活一条过门经验（只写 playbook active；拒绝时 reason 可见）。 */
+  evolveActivate(id: string): Promise<EvolveActivateResult>;
+  /** v46：人工把一条 active 经验转 dormant（负证据/人工裁决出口；拒绝时 reason 可见）。 */
+  evolveDormant(id: string): Promise<EvolveActivateResult>;
+  /** v47：撤销一条全局经验（全局账 patch → dormant；拒绝时 reason 可见）。 */
+  evolveGlobalRevoke(id: string): Promise<EvolveActivateResult>;
+  /** v48：全局经验冻结开关（写/删全局 STOP；返回动作后的最新报告）。 */
+  evolveGlobalSetFrozen(frozen: boolean): Promise<EvolveReport>;
+  /** v49：恢复一条 dormant 全局经验（复核 ≥3 库证据；失败保持 dormant）。 */
+  evolveGlobalActivate(id: string): Promise<EvolveActivateResult>;
   orchestrationView(address: OrchestrationAddress): Promise<OrchestrationResponse>;
   orchestrationSubmit(request: OrchestrationSubmitRequest): Promise<OrchestrationResponse>;
   orchestrationControl(request: OrchestrationControlRequest): Promise<OrchestrationResponse>;
@@ -487,6 +573,10 @@ export interface AgentApi {
    *  不再只认「最近一次 run 的工作区」——冷启动或切项目后还没跑过 run 也要能用。
    *  空串 = 清除上下文（回到旧口径）。 */
   setWorkspaceContext(path: string): Promise<{ ok: boolean; error?: string }>;
+  /** v33：当前窗口正在看哪个会话（null = 主页/无）；完成通知据此判断「你不在看那个会话」。 */
+  reportViewing(sessionId: string | null, workspace: string): Promise<{ ok: boolean }>;
+  /** v34：桌面「运行诊断」——同一套 CLI 检查核（Node/凭据/档位/沙箱/工作区/设置/会话/搜索/信任）。 */
+  doctor(): Promise<{ ok: true; report: DoctorReport } | { ok: false; error: string }>;
   workspaceListDir(relPath: string): Promise<ListDirPayload>;
   /** v5 file 窗格：读 workspace 内文本文件（单侧 512 KiB 帽；二进制拒）。 */
   workspaceReadText(relPath: string): Promise<ReadTextPayload>;
@@ -534,8 +624,10 @@ export interface AgentApi {
   // ---- CX-01：真实项目注册表 + Session-plane 组织记录（必选桥；不是 renderer-local state）----
   /** v11：options.recentFirst = 最近打开序（lastOpenedAt 优先、旧记录退回 updatedAt）；
    *  includeRemoved = 含软删除（「最近打开」菜单列历史上用过的项目，一键重加）。缺省 = 旧行为。 */
-  listProjects(options?: { includeRemoved?: boolean; recentFirst?: boolean }): Promise<ProjectRecord[]>;
+  listProjects(options?: { includeRemoved?: boolean; recentFirst?: boolean }): Promise<ProjectListEntry[]>;
   addProject(input: AddProjectInput): Promise<ProjectRecord>;
+  /** v36：项目目录被移动/改名后按同一条记录重新定位（保住 id/name/createdAt）。 */
+  relocateProject(id: string, path: string): Promise<ProjectRecord>;
   removeProject(id: string): Promise<ProjectRecord>;
   // ---- v11：主界面重做批（七通道）----
   /** v11：读某项目的 git 在场信息（分支名 + 未提交条目数）——项目 chip 与快速建议的数据面。
@@ -599,6 +691,27 @@ export interface AgentApi {
   pluginDecide(plugin: string, trusted: boolean, workspace?: string): Promise<{ ok: boolean; error?: string }>;
   /** 写插件 userConfig（敏感字段走 safeStorage；值绝不回读给渲染层）。 */
   pluginUserConfigSet(plugin: string, values: Record<string, string>): Promise<{ ok: boolean; error?: string }>;
+  /** v27：签名插件目录只读读数。没有可信 URL/公钥或 verified cache 时诚实 unavailable。 */
+  marketplaceCatalog(refresh?: "never" | "auto" | "force"): Promise<MarketplaceCatalogReadout>;
+  /** v29：目录、Git、本地目录统一进入同一套暂存、扫描、审查与发布 job。 */
+  marketplacePluginImport(request: PluginImportRequest, scope: PluginInstallScope, workspace?: string): Promise<PluginInstallJob>;
+  /** v29：更新只使用 registry 中保存的来源；renderer 不能改写来源、commit、摘要或安装目标。 */
+  marketplacePluginUpdate(entryId: string, scope: PluginInstallScope, workspace?: string): Promise<PluginInstallJob>;
+  marketplacePluginCheckUpdate(entryId: string, scope: PluginInstallScope, workspace?: string): Promise<PluginUpdateCheck>;
+  /** v29：只返回用户经原生目录选择器真实选中的 canonical 路径。 */
+  pluginPickLocalSource(): Promise<string | null>;
+  /** v29：已安装包的配置由主进程重新解析 manifest 后校验；可配置 disabled 包。 */
+  pluginConfigureInstalled(request: { entryId: string; scope: PluginInstallScope; workspace?: string; values: Record<string, string> }): Promise<{ ok: boolean; error?: string }>;
+  /** v28：按已验签目录里的 entryId 启动安装 job；renderer 不提供 URL、摘要、大小或目标路径。 */
+  marketplacePluginInstall(entryId: string, scope: PluginInstallScope, workspace?: string): Promise<PluginInstallJob>;
+  marketplacePluginInstallStatus(jobId: string): Promise<PluginInstallJob | null>;
+  marketplacePluginInstallCommit(jobId: string): Promise<{ ok: boolean; error?: string }>;
+  marketplacePluginInstallCancel(jobId: string): Promise<{ ok: boolean; error?: string }>;
+  /** v28：启用/禁用只移动 registry 拥有的包；操作从下一次 run 起生效。 */
+  pluginSetEnabled(entryId: string, scope: PluginInstallScope, enabled: boolean, workspace?: string): Promise<{ ok: boolean; error?: string }>;
+  /** v28：卸载 registry 拥有的包并清掉对应信任记录；手工目录不受影响。 */
+  pluginUninstall(entryId: string, scope: PluginInstallScope, workspace?: string): Promise<{ ok: boolean; error?: string }>;
+  pluginsInstalled(): Promise<InstalledPluginRecord[]>;
   /** M2f：辅助对话（sidechat）+ /promote。 */
   sidechatCreate(parentSessionId: string, name?: string): Promise<{ id: string }>;
   sidechatAsk(sidechatId: string, message: string, parentSessionId?: string): Promise<{ ok: boolean; error?: string; events?: AgentEvent[] }>;
@@ -635,6 +748,8 @@ export interface AgentApi {
   providerKeyDelete(provider: string): Promise<{ ok: boolean; error?: string }>;
   /** M4b §2.1：key 状态面（不含 key 值）：safeStorage 可用性 / 已存 provider / env 并存提示。 */
   providerKeyStatus(): Promise<{ available: boolean; stored: string[]; envActive: boolean; envProviders: string[] }>;
+  /** v38：导入外部签发的 license（验签通过才覆盖；取消是合法结果）。 */
+  importLicense(): Promise<LicenseImportResult>;
   // ---- S7：自定义接口（BYO 端点）——「填地址+钥匙 → 拉取模型 → 勾选 → 存盘」三段 ----
   /** 探测一个地址有哪些模型，并用本地目录补窗口/价格。**不改任何文件**（「拉取」必须零副作用）。 */
   providerDiscover(req: {
@@ -696,6 +811,16 @@ export interface AgentApi {
   /** 导出当前对话为 Markdown 文件（2026-10-18）：原生保存面板（默认 Downloads），取消 ⇒ canceled。
    *  内容由渲染层生成（transcriptMarkdown），主进程只负责选路径与落盘。 */
   exportTranscript(markdown: string, suggestedName: string): Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }>;
+  /** v43：导出全部记忆为 Markdown（项目层/全局层分节；同样只走原生保存面板）。 */
+  exportMemory(markdown: string, suggestedName: string): Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }>;
+  /** v39：导出诊断包（诊断报告 + 主进程日志尾部，一个 Markdown 文件）。 */
+  exportDiagnostics(reportMarkdown: string, suggestedName: string): Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }>;
+  /** v40：导出偏好备份（不含 provider / model / 项目路径 / 会话 / 首启标记）。 */
+  exportPreferences(): Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }>;
+  /** v40：读取偏好备份并严格校验；返回 patch 由渲染层走 setSettings 应用（沿用主题/材质热更新）。 */
+  importPreferences(): Promise<{ ok: boolean; canceled?: boolean; error?: string; patch?: PreferencePatch; ignored?: string[] }>;
+  /** v41：把偏好恢复默认（只动偏好键；provider/model/项目/会话/布局不动），返回新设置。 */
+  resetPreferences(): Promise<AppSettings>;
   /** 斜杠菜单列技能（2026-10-18）：当前工作区的 loose skills（调用名/描述/信任态）。
    *  workspace 缺省 = 当前工作区；桌面端显式传，避免切项目时的竞态。 */
   listSkills(workspace?: string): Promise<{

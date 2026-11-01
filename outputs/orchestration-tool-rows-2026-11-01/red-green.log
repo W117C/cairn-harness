@@ -1,0 +1,15 @@
+=== 改前（ownSubject 关闭）===
+     × spawn_agent 摘要 = 派了什么活（不是 {"task":…,"mode":…}） 5ms
+     × send_agent 摘要 = 追加的要求（thread id 留给展开区） 3ms
+     × wait/cancel：有点名就数个数，没点名就说全部——不摆 {} 也不摆数组原文 1ms
+     × resume/close：thread id 就是这一行唯一的事实 0ms
+     × clarify 摘要 = 第一个问题；多问补一句计数（不是 questions 的 JSON） 0ms
+     × spawn_agent ⇒「派发子任务 把 a.ts 的 XX 改掉」；wait_for_agents ⇒「等待 2 个子任务」 8ms
+      Tests  6 failed | 8 passed (14)
+=== 复原 sha256 ===
+63aff3763dcddead2f4a2250ea1cdf914ecdf2f72e9ed4e911584a7b23b3b3fa  apps/desktop/src/renderer/derived/stream.ts
+=== 改后 ===
+ ✓ tests/tool-row-summary.test.ts (14 tests) 8ms
+ ✓ tests/stream-rework.test.tsx (16 tests) 44ms
+ Test Files  2 passed (2)
+      Tests  30 passed (30)

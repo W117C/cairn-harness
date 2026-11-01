@@ -1,0 +1,10 @@
+=== 改前（时间线写实现名）===
+     × 四类步齐全：user / assistant（首 delta 落步，后续 delta 不重复）/ tool / usage；error 不成步 3ms
+     × 未知工具回落原名（宁缺不编）；已知工具不出现实现名 2ms
+     × 有数据：kind 词 + label + 跳转钮 + 相对时间位（at 在场的行） 2ms
+      Tests  3 failed | 4 passed (7)
+=== 复原 sha256 ===
+b103d0ff074250ad673ef7115366fde5044afbd7fc09c380bf8fe3cff46c4124  apps/desktop/src/renderer/derived/timeline.ts
+=== 改后 ===
+ ✓ tests/timeline-pane.test.tsx (7 tests) 5ms
+      Tests  7 passed (7)

@@ -2,8 +2,7 @@
 // 展开详情 = approach 段 / 文件清单（action 徽标）/ 验证面 chips / 后果行（拒绝 = 写禁维持、模型须修订）。
 import { useState } from "react";
 import type { PlanProposal } from "../../../../../src/events";
-
-const ACTION_LABEL: Record<string, string> = { create: "新建", edit: "修改", delete: "删除" };
+import { planActionLabel } from "../derived/change-labels";
 
 export function PlanCard(props: {
   callId: string;
@@ -36,7 +35,7 @@ export function PlanCard(props: {
           <div className="file-list">
             {props.plan.files.map((f, i) => (
               <div className="file-item" key={i}>
-                <span className={`chip ${f.action === "create" ? "ok" : f.action === "delete" ? "danger" : ""}`}>{ACTION_LABEL[f.action] ?? f.action}</span>
+                <span className={`chip ${f.action === "create" ? "ok" : f.action === "delete" ? "danger" : ""}`}>{planActionLabel(f.action)}</span>
                 <span className="path">{f.path}</span>
                 {"summary" in f && typeof f.summary === "string" && <span className="sum">{f.summary}</span>}
               </div>

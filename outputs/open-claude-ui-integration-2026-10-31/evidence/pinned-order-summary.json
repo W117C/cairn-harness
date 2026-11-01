@@ -1,0 +1,56 @@
+{
+  "before": {
+    "rows": [
+      {
+        "title": "置顶丙",
+        "key": "/private/tmp/ocu-pin-ws\u0000OCU-pin-3",
+        "y": 152,
+        "h": 52
+      },
+      {
+        "title": "置顶乙",
+        "key": "/private/tmp/ocu-pin-ws\u0000OCU-pin-2",
+        "y": 208,
+        "h": 52
+      },
+      {
+        "title": "置顶甲",
+        "key": "/private/tmp/ocu-pin-ws\u0000OCU-pin-1",
+        "y": 264,
+        "h": 52
+      }
+    ],
+    "localStorage": null
+  },
+  "afterDrag": {
+    "rows": [
+      {
+        "title": "置顶乙",
+        "key": "/private/tmp/ocu-pin-ws\u0000OCU-pin-2"
+      },
+      {
+        "title": "置顶甲",
+        "key": "/private/tmp/ocu-pin-ws\u0000OCU-pin-1"
+      },
+      {
+        "title": "置顶丙",
+        "key": "/private/tmp/ocu-pin-ws\u0000OCU-pin-3"
+      }
+    ],
+    "localStorage": "[\"/private/tmp/ocu-pin-ws\\u0000OCU-pin-2\",\"/private/tmp/ocu-pin-ws\\u0000OCU-pin-1\",\"/private/tmp/ocu-pin-ws\\u0000OCU-pin-3\"]",
+    "active": null
+  },
+  "focus": {
+    "focused": true,
+    "title": "置顶丙"
+  },
+  "afterKey": {
+    "rows": [
+      "置顶乙",
+      "置顶丙",
+      "置顶甲"
+    ],
+    "localStorage": "[\"/private/tmp/ocu-pin-ws\\u0000OCU-pin-2\",\"/private/tmp/ocu-pin-ws\\u0000OCU-pin-3\",\"/private/tmp/ocu-pin-ws\\u0000OCU-pin-1\"]"
+  },
+  "errors": []
+}

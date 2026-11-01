@@ -23,15 +23,54 @@ export OPENAI_API_KEY=<你的 key>
 ```sh
 git clone <this-repo> && cd cairn-harness
 ./scripts/install.sh        # 按 package.json 的 engines 判 Node 版本；pnpm 在则 pnpm install，否则 npm install
-./bin/cairn.mjs --doctor    # 环境自检：Node / 凭据在位 / 沙箱 / 工作区可写（不回显密钥值）
+./bin/cairn.mjs --doctor    # 环境自检：Node / 凭据在位 / 沙箱 / 工作区可写 / 设置与会话数据面（坏档点名文件；不回显密钥值）
 ./bin/cairn.mjs --version   # 打印版本（cairn <version>）
 ./bin/cairn.mjs --plugins   # 插件与 skill 的发现面：扫了哪几顶根、每支的信任状态、信任表落在哪
 ./bin/cairn.mjs --trust-plugin <名称>    # 批准其中一条（项目作用域的样本默认待信任；决议绑「绝对路径@内容指纹」）
 ./bin/cairn.mjs --decline-plugin <名称>  # 拒绝它。三条都不跑模型、不落会话、不需要 API key
+./bin/cairn.mjs --sessions  # 列出本工作区会话（id / 标题 / 行数 / 时间 / 会话级模型）；只读、不需要 API key
+./bin/cairn.mjs --serve     # 常驻调度：跑本工作区已排的定时任务（tick 60s，Ctrl-C 退出）
 ```
 
-版本与受众裁决见 `docs/adr/0002-v1-audience-b1-internal-beta.md`（B1 内测先行，交付面只做 CLI；
-B2 扩受众清单留门 `docs/b2-checklist.md`）。变更史见 `CHANGELOG.md`。
+版本与受众裁决见 `docs/adr/0002-v1-audience-b1-internal-beta.md`（B1 内测先行；v1 范围裁决当时
+只列 CLI，桌面端后作为 0.2.0 内测壳单独落地，见 ADR 0001 与 `CHANGELOG.md`；B2 扩受众清单留门
+`docs/b2-checklist.md`）。变更史见 `CHANGELOG.md`。
+
+## 桌面应用（macOS）
+
+桌面壳在 `apps/desktop/`（Electron + React + Vite），与 CLI 共用同一套 `src/main/` 服务。
+
+![Cairn 首页：项目选择、首启检查与演示模式](assets/readme/cairn-home.png)
+
+桌面端已经接上面向长任务的产品面：项目与会话、模型与权限、插件/记忆/自动化、诊断包、偏好备份与恢复默认、许可证导入、更新提醒。所有状态都落在本机；未配置的更新源、插件目录与许可证都显示为显式状态，不伪装成可用。
+
+![关于与更新：版本、构建来源、许可证与偏好备份](assets/readme/cairn-settings-about.png)
+
+```sh
+pnpm install
+pnpm --filter cairn-desktop build     # preload + renderer + typecheck
+pnpm --filter cairn-desktop smoke     # 真窗口启动冒烟（不跑模型）
+node apps/desktop/scripts/package.mjs --out apps/desktop/release-$(date +%Y%m%d)
+node apps/desktop/scripts/install-smoke.mjs apps/desktop/release-$(date +%Y%m%d)/Cairn.dmg
+```
+
+打包脚本会先 `build`，再用打包后的 `Cairn.app` 跑一次真窗口冒烟；**只有冒烟通过才产出目录**。`install-smoke.mjs` 再把 DMG 挂起来、把 app 复制到临时目录（模拟拖进 Applications）跑同一套冒烟，证明离开 release 目录也能启动。
+产物含 `Cairn.app`、`Cairn.dmg`（`hdiutil` 不可用时回退 `Cairn-macOS.zip`）、`build-info.json`
+（版本、lock 哈希、`packagedSmoke: passed`、签名方式、构建时间）。DMG 内是 `Cairn.app` +
+`Applications` 快捷方式与安装说明，打开后直接拖进去即可。当前保留 ad-hoc 封装，暂不做 Developer ID 签名或 Apple 公证；换机器的单应用隔离处置、架构要求、密钥配置与手工升级见 [macOS 内测安装说明](docs/macos-trial.md)。`build-info.json` 另记录 `sourceCommit` / `sourceDirty`，含未提交修改的包不会冒充干净提交。
+
+发布更新清单：
+
+```sh
+node --import tsx scripts/update-manifest.ts \
+  --version 0.2.0 \
+  --url https://example.com/Cairn.dmg \
+  --notes "桌面端 0.2.0：记忆/用量导出、DMG 安装盘、构建来源" \
+  --out update.json
+```
+
+清单严格为 `{ version, url, notes? }`：version 必须三段 semver、url 必须 https；生成器在发布侧就拒绝坏形状，
+不把「未知字段/坏 URL」留到用户点「检查更新」时才报错。
 
 ## 快速开始
 
@@ -330,6 +369,22 @@ worker 要联网只能回主会话发。
 
 ---
 
+## 互操作（可选）
+
+这三个入口是边界适配，不替代 CLI/桌面主路径：
+
+- `pnpm acp-server --workspace <dir> [--mode default|read-only|auto] [--trusted-repo]`：
+  ACP stdio 服务；stdout 只走 JSON-RPC，日志全在 stderr。默认 unattended，写工具 fail-closed；
+  `auto/full-access` 是显式受信任选择（当前没有 ACP 权限桥）。
+- `pnpm a2a-server --workspace <dir> [--host 127.0.0.1] [--port 0] [--trusted-repo]`：
+  A2A loopback JSON-RPC + `/.well-known/agent-card.json`；产品运行时只接受只读任务；
+  无鉴权/TLS/SSE。端口 0 的实际 URL 打到 stderr。
+- `pnpm external-bench --adapter harbor|terminal-bench --tasks <json> --dataset-version <v>
+  [--evidence <json>] [--out <jsonl>]`：外部基准任务适配与运行记录；没有证据时只核对分母，
+  缺用量/中断保留 `null`/`unknown`，不重试覆盖第一次结果。
+
+---
+
 ## 退出码
 
 | 码 | 含义 |
@@ -344,7 +399,7 @@ worker 要联网只能回主会话发。
 
 内核质量很高、**产品面刚补上**的一棵树：strict 零报错，fail-closed 是设计意图而非事后补丁，
 变异测试的判红标准很硬。桌面层曾于 2026-09-27（`69fbb0d`）整体移除，2026-10-02 起以 M1 切片
-重新入库于 `apps/desktop/`（Electron + React + Vite），此后持续接线：108 个 invoke 通道（现读
+重新入库于 `apps/desktop/`（Electron + React + Vite），此后持续接线：139 个 invoke 通道（现读
 `apps/desktop/src/main/channels.ts` 的 `INVOKE_CHANNELS`；判据在 `apps/desktop/tests/channels.test.ts`
 的表长断言，改表不改数当场红——核心套件的 `tests/readme-invoke-channel-count.test.ts` 也把
 这个数与那张表钉在一起）

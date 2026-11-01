@@ -151,7 +151,8 @@ describe("DiffView 行级评注（真 HTML）", () => {
       <DiffView
         hunks={hunks}
         comment={{
-          comments: new Map([["src/a.ts|2", "这行保留"]]),
+          // 第 922 页：行键带侧别——这条钉的是删除行（oldNo=2）上的评注。
+          comments: new Map([["src/a.ts|old:2", "这行保留"]]),
           keyPrefix: "src/a.ts|",
           onComment: () => undefined,
         }}

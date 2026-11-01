@@ -11,6 +11,7 @@ import { hasSessionWrites, workerVerificationEvidence } from "./worker-report";
 import { GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, traceGoal } from "./goal-trace";
 import { bucketsSpendUsd, priceForModel, roundUsd } from "./orchestrator-join";
 import type { GoalSpec } from "./goal-trace";
+import { isRecord } from "../is-record";
 
 // GoalSpec 与轮次帽的定义挪进了 goal-trace.ts（渲染层要用同一份 reduce 与同一份数，但不能
 // import 本文件的 worker-report 链）。在这里再导出一次：既有 importer 与验收脚本零改动。
@@ -61,9 +62,6 @@ export const EVIDENCE_TEXT: Record<WorkerEvidence, string> = {
 };
 
 const usd = (n: number): string => "$" + n.toFixed(4);
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** 边界一律 fail-visible：形状不对就整条拒收并点名，不给"半个目标"跑起来的机会。 */
 export function parseGoalSpec(raw: unknown): GoalParseResult {

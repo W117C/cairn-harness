@@ -1,0 +1,41 @@
+--- a/apps/desktop/src/renderer/components/cards.ts	2026-11-01 14:33:56
++++ b/apps/desktop/src/renderer/components/cards.ts	2026-11-01 14:33:07
+@@ -81,5 +81,7 @@
+     return { title: `写入${layer}`, subject: topic !== undefined ? `${kind}「${topic}」` : kind };
+   }
+   if (tool.startsWith("automation_")) return { title: "变更定时任务", subject: s(args.name) };
+-  return { title: "需要你批准", body: JSON.stringify(args) };
++  // 名单外（MCP scoped 工具、运行期注入的诊断/检索等）也得看见**批的是哪把工具**：
++  // 卡片原来只给「需要你批准」+ 参数 JSON，工具名只藏在 aria-label 里 ⇒ 视觉上无从判断。
++  return { title: "需要你批准", subject: s(tool), body: JSON.stringify(args) };
+ }
+--- a/apps/desktop/tests/approval-card.test.tsx	2026-11-01 14:33:56
++++ b/apps/desktop/tests/approval-card.test.tsx	2026-11-01 14:32:58
+@@ -44,7 +44,20 @@
+     const fb = describeAsk({ tool: "mystery_tool", args: { a: 1 } });
+     expect(fb.title).toBe("需要你批准");
+     expect(fb.body).toContain('"a"');
++    // 第 930 页：名单外的工具要把工具名摆出来——原来只有 aria-label 里有，看得见的是参数 JSON。
++    expect(fb.subject).toBe("mystery_tool");
++  });
++});
+ 
++describe("名单外工具的批准卡（第 930 页）", () => {
++  it("工具名可见：mcp__db__drop_table 不再是「需要你批准 + 一段 JSON」", () => {
++    const html = renderToStaticMarkup(
++      <ApprovalCard ask={ask({ tool: "mcp__db__drop_table", args: { table: "users" }, risk: "high" })} onDecide={() => undefined} />,
++    );
++    expect(html).toContain('<h3>需要你批准</h3>');
++    expect(html).toContain('class="ask-subject"');
++    expect(html).toContain("mcp__db__drop_table");
++    expect(html).toContain("&quot;table&quot;"); // 参数仍在（可诊断）
+   });
+ });
+ 
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 14:33:56
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 14:33:13
+@@ -4291,3 +4291,4 @@
+ 50. **注入面也全覆盖（第 927 页）**：静态工具面的动词判据只盯 `TOOL_NAMES`，运行期注入的五把（`tool_search` / `search_history` / `impact_query` / `obs_recall` / `diagnose`）漏在判据外——行首仍是实现名；`obs_recall` / `impact_query`（symbol 模式）/ `diagnose` 的摘要还会甩 JSON（`{}`、`{"face":"lint"}`）。补五个动词（找工具 / 搜历史 / 查波及面 / 回看 / 诊断）与三条主语（id / symbol / face），并把覆盖判据扩到 `INJECTED_TOOLS`：少一把就红，报错里当场点名。
+ 51. **插件标签一把尺（第 928 页）**：来源/作用域的词表原来有三份手抄本：安装确认卡把 local 写「本地目录」、列表页与发现页写「本地」；runtime（没有安装记录、手放进目录的那类）只有列表认「手动」；作用域一边按 `user` 判、一边按 `project` 判。词表收到 `components/plugins/labels.ts`（`sourceKindLabel` / `scopeLabelOf`），三张卡都读它；判卷钉住四种来源两种作用域，并钉「除 labels.ts 外没有第二份手抄本」。
+ 52. **页号引用不许指向不存在的页（第 929 页）**：`markdown.tsx` 的注释引「第 408 页」，而台账里 407 之后直接是 409——按号去翻只有空白；台账正文里同类断链还有几处（405 / 454 / 673 / 759 / 914 等）。台账只准追加，旧页追不回来；但**新写的引用**不该再制造断链：加一把尺，源码注释（`src` / `apps/desktop/src` / `scripts`）里落在台账区间内的 `第 N 页` 必须能在台账里找到对应页，台账正文那一面只盯「有没有新增断链」（旧账登记、只准调低，修掉一处就必须从登记里删掉）。范围只认台账区间内的号——更小的号是 `outputs/` 取证文档自己的页号，不算台账。
++53. **名单外工具的批准卡要看见工具名（第 930 页）**：`describeAsk` 的兜底只给「需要你批准」+ `JSON.stringify(args)`，工具名仅出现在卡片的 `aria-label` 里——MCP scoped 工具或运行期注入的工具弹出来时，视觉上只看到一段参数 JSON，批的是哪把工具无从判断（与「看得见自己批的是什么」相反）。兜底补 `subject: 工具名`，参数 JSON 仍保留（可诊断）。

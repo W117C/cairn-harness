@@ -1,0 +1,143 @@
+--- a/apps/desktop/src/renderer/components/ChangeSummaryCard.tsx	2026-11-01 16:16:05
++++ b/apps/desktop/src/renderer/components/ChangeSummaryCard.tsx	2026-11-01 16:15:13
+@@ -6,16 +6,11 @@
+ import { Check, ChevronDown, Download, ExternalLink, History } from "lucide-react";
+ import type { TurnDelivery } from "../projections";
+ import { changeLabel } from "../derived/change-labels";
++import { VERIFICATION_NOT_REQUIRED, verificationLabel } from "../derived/verification-labels";
+ 
+-const STATUS_LABEL: Record<TurnDelivery["verification"]["status"], string> = {
+-  "not-required": "无需验证",
+-  absent: "未验证",
+-  stale: "证据已过期",
+-  verified: "已验证",
+-  failed: "验证未过",
+-};
++const statusLabel = (status: TurnDelivery["verification"]["status"]): string =>
++  status === "not-required" ? VERIFICATION_NOT_REQUIRED : verificationLabel(status);
+ 
+-
+ const STATUS_CHIP: Record<TurnDelivery["verification"]["status"], string> = {
+   "not-required": "",
+   absent: "wait",
+@@ -112,7 +107,7 @@
+             <span className="cf-round num">第 {String(d.round)} 轮</span>
+           </span>
+         </span>
+-        <span className={`chip ${STATUS_CHIP[d.verification.status]}`}>{STATUS_LABEL[d.verification.status]}</span>
++        <span className={`chip ${STATUS_CHIP[d.verification.status]}`}>{statusLabel(d.verification.status)}</span>
+         <span className={"changes-toggle" + (open ? " on" : "")} aria-hidden="true"><ChevronDown size={13} /></span>
+       </button>
+       {open && (
+--- a/apps/desktop/src/renderer/derived/orchestration.ts	2026-11-01 16:16:05
++++ b/apps/desktop/src/renderer/derived/orchestration.ts	2026-11-01 16:14:47
+@@ -6,6 +6,7 @@
+   ScheduleAction, TaskPhase, TaskView, Verdict,
+ } from "../../../../../src/orchestration/types";
+ 
++import { verificationLabel } from "./verification-labels";
+ 
+ export interface OrchestrationControl {
+   action: ControlAction;
+@@ -94,10 +95,7 @@
+ 
+ export const planPhaseLabel = (phase: PlanPhase): string => PLAN_PHASE_LABEL[phase];
+ export const taskPhaseLabel = (phase: TaskPhase): string => TASK_PHASE_LABEL[phase];
+-const EVIDENCE_LABEL: Record<EvidenceState, string> = {
+-  verified: "已验证", failed: "验证失败", stale: "验证过期", absent: "未验证",
+-};
+-export const evidenceLabel = (evidence: EvidenceState): string => EVIDENCE_LABEL[evidence];
++export const evidenceLabel = (evidence: EvidenceState): string => verificationLabel(evidence);
+ export const verdictLabel = (verdict: Verdict | undefined): string => verdict === undefined ? "未知" : VERDICT_LABEL[verdict];
+ 
+ const LANE_LABEL: Record<FlowTask["lane"], string> = { read: "只读", write: "写入", external: "外部" };
+--- a/apps/desktop/tests/delivery-summary.test.tsx	2026-11-01 16:16:05
++++ b/apps/desktop/tests/delivery-summary.test.tsx	2026-11-01 16:15:03
+@@ -31,7 +31,7 @@
+     const html = renderToStaticMarkup(<ChangeSummaryCard delivery={failed} initialOpen />);
+     expect(html).toContain("已编辑 2 个文件");
+     expect(html).toContain("第 2 轮");
+-    expect(html).toContain("验证未过");
++    expect(html).toContain("验证失败"); // 第 944 页：与编排面同一套词
+     expect(html).toContain("改了什么");
+     expect(html).toContain("验证了什么");
+     expect(html).toContain("哪些未验证");
+--- a/apps/desktop/tests/orchestration-controls.test.ts	2026-11-01 16:16:05
++++ b/apps/desktop/tests/orchestration-controls.test.ts	2026-11-01 16:15:03
+@@ -95,7 +95,7 @@
+     expect(taskPhases.map(taskPhaseLabel)).toEqual(["待调度", "排队中", "执行中", "验证中", "交付中", "已完成", "失败", "已取消", "已暂停", "需你处理"]);
+   });
+   it("translates evidence and verdict, and leaves unknown verdict unknown", () => {
+-    expect(["verified", "failed", "stale", "absent"].map(e => evidenceLabel(e as never))).toEqual(["已验证", "验证失败", "验证过期", "未验证"]);
++    expect(["verified", "failed", "stale", "absent"].map(e => evidenceLabel(e as never))).toEqual(["已验证", "验证失败", "证据已过期", "未验证"]); // 第 944 页：stale 与交付卡同词
+     expect([verdictLabel("pass"), verdictLabel("fail"), verdictLabel("unverifiable"), verdictLabel(undefined)]).toEqual(["通过", "未通过", "无法验证", "未知"]);
+   });
+ 
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:16:05
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:15:22
+@@ -4305,3 +4305,4 @@
+ 64. **闸门面的人话覆盖有判据（第 941 页）**：批准卡的人话是逐轮补的（名单外工具 → 读族 → 补丁抬头），但没有一把尺把「闸门清单」与「人话清单」锁在一起：`src/main/tool-gates.ts` 的 `GatedName` 新增一把工具而 `describeAsk` 没跟上时，卡片会静默落到兜底「需要你批准 + 参数 JSON」。新增 `tests/approval-coverage.test.ts`：从源码取出 `GatedName` 的成员（并先断言清单取到了 ≥10 条），逐个要求标题不是兜底，且任意两把工具的标题不得相同。
+ 65. **文件改动与方案动作的词各只有一张表（第 942 页）**：文件改动的三个词（新建 / 修改 / 变更）原先三处手抄——`ChangeSummaryCard` 的 `CHANGE_LABEL`、`Inspector` 的 `CHANGE_WORD`、`PaneDock` 两处内联三元；方案动作的三个词（新建 / 修改 / 删除）两处——`PlanCard` 的 `ACTION_LABEL` 与 `PaneDock` 的内联三元。两套词都收进 `derived/change-labels.ts`（`changeLabel` / `planActionLabel`），四个消费面改读；判卷钉「认不出的 kind 一律『变更』、不猜成新建」与「四处都不再有自己的表/三元」。
+ 66. **文件窗格的大小也走字节尺（第 943 页）**：文件树里 `{e.size}` 直接摆裸字节数（`2140`、`880`），而附件行在同一版里已经写 `2.1 KB`（第 924 页统一的那把尺）——同一个文件两种写法。改成 `formatBytes(e.size) ?? "—"`；`format-rulers` 那把覆盖尺也加一条 `raw-bytes` 形状（直接渲染 `{x.size}`），再有人摆裸数就当场红。
++67. **验证状态只有一套词（第 944 页）**：同样四个状态（verified / failed / stale / absent）两处两种说法——编排面 `EVIDENCE_LABEL` 写「已验证 / 验证失败 / 验证过期 / 未验证」，交付卡 `STATUS_LABEL` 写「已验证 / 验证未过 / 证据已过期 / 未验证」。收进 `derived/verification-labels.ts`（取两处各自最准的词：failed 用「验证失败」、stale 用「证据已过期」），交付卡多出的一档「无需验证」单独常量；判卷钉四值、认不出原样返回、两个消费面都不再写表。
+--- /dev/null → apps/desktop/src/renderer/derived/verification-labels.ts
+--- /dev/null	2026-11-01 16:16:05
++++ b/apps/desktop/src/renderer/derived/verification-labels.ts	2026-11-01 16:15:14
+@@ -0,0 +1,21 @@
++// 验证状态的四个词（第 944 页）：已验证 / 验证失败 / 证据已过期 / 未验证。
++// 此前两处各一套：编排面 `EVIDENCE_LABEL` 写「验证失败、验证过期」，交付卡 `STATUS_LABEL`
++// 写「验证未过、证据已过期」——同样四个状态、两套说法。这里只留一套，取两处各自最准的那个词。
++// 交付卡多一档「无需验证」（本轮没有文件改动），单独一个常量，不塞进四值表。
++
++export type VerificationState = "verified" | "failed" | "stale" | "absent";
++
++export const VERIFICATION_LABEL: Readonly<Record<VerificationState, string>> = {
++  verified: "已验证",
++  failed: "验证失败",
++  stale: "证据已过期",
++  absent: "未验证",
++};
++
++/** 交付卡专用：本轮没有文件改动，验证不是「没做」而是「不需要」。 */
++export const VERIFICATION_NOT_REQUIRED = "无需验证";
++
++/** 任意字符串 → 那四个词之一；认不出的原样返回（状态来自事件流，不替它编词）。 */
++export function verificationLabel(state: string): string {
++  return VERIFICATION_LABEL[state as VerificationState] ?? state;
++}
+--- /dev/null → apps/desktop/tests/verification-labels.test.ts
+--- /dev/null	2026-11-01 16:16:05
++++ b/apps/desktop/tests/verification-labels.test.ts	2026-11-01 16:15:03
+@@ -0,0 +1,32 @@
++// 验证状态的四个词只有一套（第 944 页）：编排面 EVIDENCE_LABEL 与交付卡 STATUS_LABEL
++// 此前各写一份（「验证失败/验证过期」vs「验证未过/证据已过期」），同样四个状态两套说法。
++import { readFileSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++import { describe, expect, it } from "vitest";
++import { VERIFICATION_NOT_REQUIRED, verificationLabel } from "../src/renderer/derived/verification-labels";
++
++const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
++
++describe("验证状态词表", () => {
++  it("四个状态一套词；认不出的原样返回（不替事件流编词）", () => {
++    expect(verificationLabel("verified")).toBe("已验证");
++    expect(verificationLabel("failed")).toBe("验证失败");
++    expect(verificationLabel("stale")).toBe("证据已过期");
++    expect(verificationLabel("absent")).toBe("未验证");
++    expect(verificationLabel("weird")).toBe("weird");
++    expect(VERIFICATION_NOT_REQUIRED).toBe("无需验证");
++  });
++
++  it("两个消费面都读同一份，且不再各自写表", () => {
++    const orchestration = read("../src/renderer/derived/orchestration.ts");
++    expect(orchestration).toContain('from "./verification-labels"');
++    expect(orchestration).toContain("verificationLabel(evidence)");
++    expect(orchestration).not.toContain("EVIDENCE_LABEL");
++
++    const card = read("../src/renderer/components/ChangeSummaryCard.tsx");
++    expect(card).toContain('from "../derived/verification-labels"');
++    expect(card).toContain("verificationLabel(status)");
++    expect(card).not.toContain("STATUS_LABEL");
++    expect(card).not.toContain("验证未过");
++  });
++});

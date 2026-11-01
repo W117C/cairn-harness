@@ -1,0 +1,51 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "设置页已打开",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "真指针点用量统计",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "用量页读到账本",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "880 用量头部可见且无横向溢出",
+      "ok": true,
+      "detail": {
+        "viewport": 880,
+        "overflow": false,
+        "headerOverflow": false,
+        "buttons": 2
+      }
+    },
+    {
+      "name": "用量页有「复制 CSV」按钮",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "真指针点复制 CSV",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "剪贴板拿到 CSV 表头与合计",
+      "ok": true,
+      "detail": "日期,输入Token,输出Token,缓存读取Token,用量记录,输入缺测,输出缺测\n2026-10-01,0,0,0,0,0,0\n2026-10-02,0,0,0,0,0,0\n2026-10-03,0,0,0,0,0,0\n2026-10"
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

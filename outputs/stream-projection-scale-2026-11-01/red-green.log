@@ -1,0 +1,11 @@
+=== 造红：在 projectStream 里插一段平方扫描（events.indexOf 每事件一次）===
+     × 事件 ×9 ⇒ 耗时不超过 ×25（平方会是 ×81） 319ms
+ FAIL  tests/stream-projection-scale.test.ts > 流投影随事件数线性增长（第 945 页） > 事件 ×9 ⇒ 耗时不超过 ×25（平方会是 ×81）
+AssertionError: 规模化后耗时比 40.6（小 1.43ms / 大 58.00ms）: expected 40.568593162542555 to be less than 25
+     45|     expect(ratio, `规模化后耗时比 ${ratio.toFixed(1)}（小 ${tSmall.toFixed(2)}m…
+
+=== 复原后（连跑两次）===
+      Tests  2 passed (2)
+      Tests  2 passed (2)
+=== sha256 ===
+   2 ae8e7b28377ce92e859e32ee8f2ad0bf305ec2d8763c22614b84ea0384a4b667

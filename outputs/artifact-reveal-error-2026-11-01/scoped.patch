@@ -1,0 +1,55 @@
+--- a/apps/desktop/src/renderer/state/workbench.ts	2026-11-01 16:54:35
++++ b/apps/desktop/src/renderer/state/workbench.ts	2026-11-01 16:54:00
+@@ -898,8 +898,13 @@
+   const handleOpenArtifact = useCallback<NonNullable<StreamActions["onOpenArtifact"]>>((a) => {
+   if (activeWorkspace === null) return;
+   const abs = a.path.startsWith("/") ? a.path : `${activeWorkspace}/${a.path}`;
+-  if (a.kind === "html" || a.kind === "svg") void openPreview(abs);
+-  else void window.agent.revealInFinder(abs);
++  if (a.kind === "html" || a.kind === "svg") { void openPreview(abs); return; }
++  // 与「项目 → 在 Finder 中显示」（state/projects.ts 的 handleRevealProject）同口径：
++  // 揭不开要说出来——上一轮的产物常常已经被删/不在这个工作区，点了没反应最费解（第 952 页）。
++  void window.agent.revealInFinder(abs).then(
++    (r) => { if (!r.ok) toast.error(r.error ?? "无法在 Finder 中显示"); },
++    (err: unknown) => { toast.error(err instanceof Error ? err.message : String(err)); },
++  );
+   }, [activeWorkspace, openPreview]);
+   const streamActions = useMemo<StreamActions>(() => ({
+   feedback,
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:54:35
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:54:08
+@@ -4313,3 +4313,4 @@
+ 72. **设置页头不许自己抄一份分区名（第 949 页）**：`settings-nav.tsx#SECTIONS` 自称「唯一事实源——导航与命令面板只许从这里取」，而 `SettingsPanel` 的七个页头各写了一遍字面量（`title="通用"`、`title="关于与更新"`…）——导航改名、页头就留旧话。新增 `sectionLabel(id)`，六个页头改读它；判卷钉「页头不再出现字面量」「六个分区都走 sectionLabel」「分区名两两不同」。
+ 73. **设置页档位与词表逐个对上（第 950 页）**：权限档的词表 `MODE_LABEL`（芯片/菜单）与设置页的 `MODE_OPTIONS`（单选卡）是两份，互相不锁——2026-10-24 加第五档 `full-access` 时只补了词表，设置页仍列四档，用户从设置页选不到最松档、用芯片切过去后四个单选项全不选中（注释里记着这次事故）。新增 `tests/permission-modes-coverage.test.ts`：两份的 id 集合必须**恰好相等**、无重复、每项都有标题与说明，且条数 ≥5（删空了不许算通过）。
+ 74. **画廊自查：文件行大小必须带单位（第 951 页）**：第 943 页把文件窗格从裸字节数（`2140`）改成 `2.1 KB`，但那是靠人眼看截图发现的——同一类回退（有人把 `formatBytes` 换回 `{e.size}`）没有任何机器拦截。`ui-gallery.cjs` 在弹窗文件窗格截图后加一条自查：`.fp-size` 的文本必须匹配 `B/KB/MB`，裸数字当场抛错（造红实测：退回裸数字 ⇒ `文件行大小没带单位（要 B/KB/MB）：["2140","880"]`，exit 1）。
++75. **「在 Finder 中显示」失败不许静默（第 952 页）**：同一个动作两处调用点口径不一——项目列表（`state/projects.ts#handleRevealProject`）失败会 toast，产物行（`state/workbench.ts#handleOpenArtifact`）却 `void …revealInFinder(abs)` 丢掉结果。上一轮的产物常已被删或不在本工作区，用户点了没反应只能猜按钮坏了。产物行改成与项目列表同口径（失败 toast、抛错也 toast）；判卷钉住这条接线并禁止退回丢结果的写法。
+--- /dev/null → apps/desktop/tests/artifact-reveal-error.test.ts
+--- /dev/null	2026-11-01 16:54:35
++++ b/apps/desktop/tests/artifact-reveal-error.test.ts	2026-11-01 16:53:52
+@@ -0,0 +1,26 @@
++// 第 952 页：「在 Finder 中显示」失败不许静默。
++//
++// 同一个动作有两处调用点：项目列表（`state/projects.ts#handleRevealProject`）失败会 toast，
++// 产物行（`state/workbench.ts#handleOpenArtifact`）原先 `void ...revealInFinder(abs)` 丢掉结果——
++// 上一轮产物常已被删或不在本工作区，用户点了没反应，只能猜是不是按钮坏了。
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, expect, it } from "vitest";
++
++const ROOT = join(import.meta.dirname, "..");
++const workbench = readFileSync(join(ROOT, "src/renderer/state/workbench.ts"), "utf8");
++const projects = readFileSync(join(ROOT, "src/renderer/state/projects.ts"), "utf8");
++
++describe("「在 Finder 中显示」的失败要说出来（第 952 页）", () => {
++  it("产物行接了结果：失败 toast、抛错也 toast", () => {
++    expect(workbench).toContain("revealInFinder(abs).then(");
++    expect(workbench).toContain('if (!r.ok) toast.error(r.error ?? "无法在 Finder 中显示");');
++    expect(workbench).toContain("(err: unknown) => { toast.error(err instanceof Error ? err.message : String(err)); },");
++    // 不许退回「丢掉结果」的写法
++    expect(workbench).not.toContain("else void window.agent.revealInFinder(abs);");
++  });
++
++  it("两处调用点同一口径（项目列表那处本来就是这样）", () => {
++    expect(projects).toContain('if (!r.ok) toast.error(r.error ?? "无法在 Finder 中显示");');
++  });
++});

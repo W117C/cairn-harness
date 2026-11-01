@@ -1,5 +1,5 @@
-// 插件命令带（G1 的按钮带半边，2026-10-21）：composer 上方只列已信任的命名空间命令，
-// 点击填入 `/plugin:command ` 而不直接发送（C-24）。
+// 插件命令按需发现（2026-10-27）：插件不应在每次输入时占一条常驻命令带。
+// `/` 补全和 ⌘K 已覆盖发现与填入，composer 上方保持安静。
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -8,22 +8,20 @@ const composer = readFileSync(join(__dirname, "..", "src", "renderer", "componen
 const strings = readFileSync(join(__dirname, "..", "src", "renderer", "strings.ts"), "utf8");
 const css = readFileSync(join(__dirname, "..", "src", "renderer", "styles.css"), "utf8");
 
-describe("插件命令带", () => {
-  it("只取已信任、带命名空间的命令，最多四条", () => {
-    expect(composer).toContain('s.trust === "trusted" && s.invoke.includes(":")');
-    expect(composer).toContain(".slice(0, 4)");
+describe("插件命令按需发现", () => {
+  it("不再在 composer 上方常驻插件命令带", () => {
+    expect(composer).not.toContain('className="plugin-strip"');
+    expect(composer).not.toContain('className="plugin-chip"');
+    expect(composer).not.toContain("STR.composer.pluginStripAria");
+    expect(strings).not.toContain("pluginStripAria:");
+    expect(strings).not.toContain("pluginStripLabel:");
+    expect(css).not.toContain(".plugin-strip");
+    expect(css).not.toContain(".plugin-chip");
   });
 
-  it("点击走 chooseSlash 填入不发送，且带无障碍标签", () => {
-    expect(composer).toContain('className="plugin-strip" aria-label={STR.composer.pluginStripAria}');
-    expect(strings).toContain('pluginStripAria: "插件命令"');
-    expect(strings).toContain('pluginStripLabel: "插件"');
-    expect(composer).toContain("chooseSlash({ invoke: `/${invoke}`");
-  });
-
-  it("样式是低调的横向芯片带，不抢 composer", () => {
-    expect(css).toContain(".plugin-strip");
-    expect(css).toContain(".plugin-chip");
-    expect(css).toContain("overflow-x: auto");
+  it("斜杠补全仍承接插件命令的发现与填入", () => {
+    expect(composer).toContain("slashItems([");
+    expect(composer).toContain("slashMatches(s.invoke, slashQuery)");
+    expect(composer).toContain("chooseSlash(");
   });
 });

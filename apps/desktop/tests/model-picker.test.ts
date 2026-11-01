@@ -62,13 +62,17 @@ describe("档位与窗口的人话写法（规范：徽标必须有文字，不�
     expect(tierBadge(undefined)).toBe("未定档");
   });
 
-  it("formatCtxWindow：1M / 128k / 小数 / 缺省给 —（不给 0）", () => {
-    expect(formatCtxWindow(1_000_000)).toBe("1M");
-    expect(formatCtxWindow(128_000)).toBe("128k");
-    expect(formatCtxWindow(1_500_000)).toBe("1.5M");
+  it("formatCtxWindow：与 formatTokens 同一把尺（k/m）/ 小数 / 缺省给 —（不给 0）", () => {
+    expect(formatCtxWindow(1_000_000)).toBe("1.0m");
+    expect(formatCtxWindow(128_000)).toBe("128.0k");
+    expect(formatCtxWindow(1_500_000)).toBe("1.5m");
     expect(formatCtxWindow(500)).toBe("500");
     expect(formatCtxWindow(undefined)).toBe("—");
     expect(formatCtxWindow(0)).toBe("—");
+    // 第 937 页：一条「必须等于 formatTokens」的钉——再有人在这写一套 k/M，这里当场红
+    for (const n of [500, 1000, 12_000, 128_000, 999_999, 1_000_000, 1_500_000]) {
+      expect(formatCtxWindow(n)).toBe(formatTokens(n));
+    }
   });
 });
 
@@ -129,7 +133,7 @@ describe("触发条文案", () => {
   it("describeSelection：演示写明「不产生真实调用」；命中给出 provider/tier/窗口；未命中显式回落", () => {
     const options = flattenModels([info]);
     expect(describeSelection(null, options)).toContain("不产生真实调用");
-    expect(describeSelection("deepseek-chat", options)).toContain("窗口 1M");
+    expect(describeSelection("deepseek-chat", options)).toContain("窗口 1.0m");
     expect(describeSelection("deepseek-chat", options)).toContain("标准");
     expect(describeSelection("ghost", options)).toContain("不在当前目录");
   });
@@ -139,5 +143,13 @@ describe("formatTokens（相邻面板的同一把尺，顺手回归）", () => {
   it("常见量级仍正常", () => {
     expect(formatTokens(0)).toBe("0");
     expect(formatTokens(1234)).toBe("1.2k");
+  });
+
+  it("过百万进位到 m；999_950 那档不再写成四位数 1000.0k（第 921 页）", () => {
+    expect(formatTokens(1_000_000)).toBe("1.0m");
+    expect(formatTokens(1_250_000)).toBe("1.3m");
+    expect(formatTokens(999_960)).toBe("1.0m");
+    expect(formatTokens(999_949)).toBe("999.9k");
+    expect(formatTokens(400_000)).toBe("400.0k");
   });
 });

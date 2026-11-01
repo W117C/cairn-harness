@@ -1,0 +1,40 @@
+{
+  "before": {
+    "titles": [
+      "置顶D",
+      "置顶C",
+      "置顶B",
+      "置顶A"
+    ],
+    "keys": [
+      "/private/tmp/ocu-filter-ws\u0000OCU-filter-4",
+      "/private/tmp/ocu-filter-ws\u0000OCU-filter-3",
+      "/private/tmp/ocu-filter-ws\u0000OCU-filter-2",
+      "/private/tmp/ocu-filter-ws\u0000OCU-filter-1"
+    ],
+    "store": null
+  },
+  "filtered": {
+    "titles": [
+      "置顶A"
+    ],
+    "pinned": [],
+    "store": null
+  },
+  "afterDrag": {
+    "store": null,
+    "dragged": false,
+    "drop": false
+  },
+  "afterClear": {
+    "titles": [
+      "置顶D",
+      "置顶C",
+      "置顶B",
+      "置顶A"
+    ],
+    "store": null,
+    "rows": 4
+  },
+  "errors": []
+}

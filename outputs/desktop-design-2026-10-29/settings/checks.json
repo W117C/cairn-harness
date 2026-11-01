@@ -1,0 +1,335 @@
+{
+  "fixture": true,
+  "checks": [
+    {
+      "name": "general-1320:正文、控件不横向溢出",
+      "ok": true,
+      "detail": {
+        "width": 1320,
+        "page": 760,
+        "bodyScroll": 1320,
+        "font": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "bodyFont": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "fontSize": "22px",
+        "weight": "580",
+        "cardBorder": "0px",
+        "cardBackground": "rgba(0, 0, 0, 0)",
+        "groups": 2,
+        "bad": [],
+        "controlJustify": "flex-end",
+        "pvColumns": null
+      }
+    },
+    {
+      "name": "general-1320:22px无衬线标题与透明无边框分组",
+      "ok": true,
+      "detail": {
+        "width": 1320,
+        "page": 760,
+        "bodyScroll": 1320,
+        "font": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "bodyFont": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "fontSize": "22px",
+        "weight": "580",
+        "cardBorder": "0px",
+        "cardBackground": "rgba(0, 0, 0, 0)",
+        "groups": 2,
+        "bad": [],
+        "controlJustify": "flex-end",
+        "pvColumns": null
+      }
+    },
+    {
+      "name": "general-1320:两组可扫描外观和使用习惯",
+      "ok": true,
+      "detail": {
+        "width": 1320,
+        "page": 760,
+        "bodyScroll": 1320,
+        "font": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "bodyFont": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "fontSize": "22px",
+        "weight": "580",
+        "cardBorder": "0px",
+        "cardBackground": "rgba(0, 0, 0, 0)",
+        "groups": 2,
+        "bad": [],
+        "controlJustify": "flex-end",
+        "pvColumns": null
+      }
+    },
+    {
+      "name": "provider-1320:正文、控件不横向溢出",
+      "ok": true,
+      "detail": {
+        "width": 1320,
+        "page": 760,
+        "bodyScroll": 1320,
+        "font": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "bodyFont": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "fontSize": "22px",
+        "weight": "580",
+        "cardBorder": "0px",
+        "cardBackground": "rgba(0, 0, 0, 0)",
+        "groups": 2,
+        "bad": [],
+        "controlJustify": "flex-end",
+        "pvColumns": "164px 572px"
+      }
+    },
+    {
+      "name": "provider-1320:22px无衬线标题与透明无边框分组",
+      "ok": true,
+      "detail": {
+        "width": 1320,
+        "page": 760,
+        "bodyScroll": 1320,
+        "font": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "bodyFont": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "fontSize": "22px",
+        "weight": "580",
+        "cardBorder": "0px",
+        "cardBackground": "rgba(0, 0, 0, 0)",
+        "groups": 2,
+        "bad": [],
+        "controlJustify": "flex-end",
+        "pvColumns": "164px 572px"
+      }
+    },
+    {
+      "name": "provider-1320:密钥标签关联密码输入框",
+      "ok": true
+    },
+    {
+      "name": "general-880:正文、控件不横向溢出",
+      "ok": true,
+      "detail": {
+        "width": 880,
+        "page": 648,
+        "bodyScroll": 880,
+        "font": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "bodyFont": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "fontSize": "22px",
+        "weight": "580",
+        "cardBorder": "0px",
+        "cardBackground": "rgba(0, 0, 0, 0)",
+        "groups": 2,
+        "bad": [],
+        "controlJustify": "flex-end",
+        "pvColumns": null
+      }
+    },
+    {
+      "name": "general-880:22px无衬线标题与透明无边框分组",
+      "ok": true,
+      "detail": {
+        "width": 880,
+        "page": 648,
+        "bodyScroll": 880,
+        "font": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "bodyFont": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "fontSize": "22px",
+        "weight": "580",
+        "cardBorder": "0px",
+        "cardBackground": "rgba(0, 0, 0, 0)",
+        "groups": 2,
+        "bad": [],
+        "controlJustify": "flex-end",
+        "pvColumns": null
+      }
+    },
+    {
+      "name": "general-880:两组可扫描外观和使用习惯",
+      "ok": true,
+      "detail": {
+        "width": 880,
+        "page": 648,
+        "bodyScroll": 880,
+        "font": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "bodyFont": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "fontSize": "22px",
+        "weight": "580",
+        "cardBorder": "0px",
+        "cardBackground": "rgba(0, 0, 0, 0)",
+        "groups": 2,
+        "bad": [],
+        "controlJustify": "flex-end",
+        "pvColumns": null
+      }
+    },
+    {
+      "name": "provider-880:正文、控件不横向溢出",
+      "ok": true,
+      "detail": {
+        "width": 880,
+        "page": 648,
+        "bodyScroll": 880,
+        "font": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "bodyFont": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "fontSize": "22px",
+        "weight": "580",
+        "cardBorder": "0px",
+        "cardBackground": "rgba(0, 0, 0, 0)",
+        "groups": 2,
+        "bad": [],
+        "controlJustify": "flex-end",
+        "pvColumns": "164px 460px"
+      }
+    },
+    {
+      "name": "provider-880:22px无衬线标题与透明无边框分组",
+      "ok": true,
+      "detail": {
+        "width": 880,
+        "page": 648,
+        "bodyScroll": 880,
+        "font": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "bodyFont": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "fontSize": "22px",
+        "weight": "580",
+        "cardBorder": "0px",
+        "cardBackground": "rgba(0, 0, 0, 0)",
+        "groups": 2,
+        "bad": [],
+        "controlJustify": "flex-end",
+        "pvColumns": "164px 460px"
+      }
+    },
+    {
+      "name": "provider-880:密钥标签关联密码输入框",
+      "ok": true
+    },
+    {
+      "name": "general-760:正文、控件不横向溢出",
+      "ok": true,
+      "detail": {
+        "width": 760,
+        "page": 528,
+        "bodyScroll": 760,
+        "font": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "bodyFont": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "fontSize": "22px",
+        "weight": "580",
+        "cardBorder": "0px",
+        "cardBackground": "rgba(0, 0, 0, 0)",
+        "groups": 2,
+        "bad": [],
+        "controlJustify": "flex-start",
+        "pvColumns": null
+      }
+    },
+    {
+      "name": "general-760:22px无衬线标题与透明无边框分组",
+      "ok": true,
+      "detail": {
+        "width": 760,
+        "page": 528,
+        "bodyScroll": 760,
+        "font": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "bodyFont": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "fontSize": "22px",
+        "weight": "580",
+        "cardBorder": "0px",
+        "cardBackground": "rgba(0, 0, 0, 0)",
+        "groups": 2,
+        "bad": [],
+        "controlJustify": "flex-start",
+        "pvColumns": null
+      }
+    },
+    {
+      "name": "general-760:两组可扫描外观和使用习惯",
+      "ok": true,
+      "detail": {
+        "width": 760,
+        "page": 528,
+        "bodyScroll": 760,
+        "font": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "bodyFont": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "fontSize": "22px",
+        "weight": "580",
+        "cardBorder": "0px",
+        "cardBackground": "rgba(0, 0, 0, 0)",
+        "groups": 2,
+        "bad": [],
+        "controlJustify": "flex-start",
+        "pvColumns": null
+      }
+    },
+    {
+      "name": "provider-760:正文、控件不横向溢出",
+      "ok": true,
+      "detail": {
+        "width": 760,
+        "page": 528,
+        "bodyScroll": 760,
+        "font": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "bodyFont": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "fontSize": "22px",
+        "weight": "580",
+        "cardBorder": "0px",
+        "cardBackground": "rgba(0, 0, 0, 0)",
+        "groups": 2,
+        "bad": [],
+        "controlJustify": "flex-start",
+        "pvColumns": "528px"
+      }
+    },
+    {
+      "name": "provider-760:22px无衬线标题与透明无边框分组",
+      "ok": true,
+      "detail": {
+        "width": 760,
+        "page": 528,
+        "bodyScroll": 760,
+        "font": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "bodyFont": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "fontSize": "22px",
+        "weight": "580",
+        "cardBorder": "0px",
+        "cardBackground": "rgba(0, 0, 0, 0)",
+        "groups": 2,
+        "bad": [],
+        "controlJustify": "flex-start",
+        "pvColumns": "528px"
+      }
+    },
+    {
+      "name": "provider-760:密钥标签关联密码输入框",
+      "ok": true
+    },
+    {
+      "name": "文字大小单选点击后仍有唯一选中项",
+      "ok": true
+    },
+    {
+      "name": "供应商切换后选中项与详情一致",
+      "ok": true
+    },
+    {
+      "name": "760px自定义接口表单不溢出",
+      "ok": true,
+      "detail": {
+        "width": 760,
+        "page": 528,
+        "bodyScroll": 760,
+        "font": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "bodyFont": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "fontSize": "22px",
+        "weight": "580",
+        "cardBorder": "0px",
+        "cardBackground": "rgba(0, 0, 0, 0)",
+        "groups": 2,
+        "bad": [],
+        "controlJustify": "flex-start",
+        "pvColumns": "528px"
+      }
+    },
+    {
+      "name": "无渲染控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

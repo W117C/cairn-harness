@@ -1,0 +1,31 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "有更新源时启动检查并上屏新版本",
+      "ok": true,
+      "detail": "发现新版本 0.2.0——到「设置 → 关于与更新」查看"
+    },
+    {
+      "name": "提醒指向设置里的关于与更新",
+      "ok": true,
+      "detail": "发现新版本 0.2.0——到「设置 → 关于与更新」查看"
+    },
+    {
+      "name": "只有一条 notice，不重复",
+      "ok": true,
+      "detail": 1
+    },
+    {
+      "name": "设置读取成功（没有把未配置源当错误）",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

@@ -4,9 +4,10 @@ import {
   providerKeyStatus,
   putProviderKey,
 } from "./provider-keys";
-import { verifyLicenseFile, type LicenseState } from "./license";
+import { importLicenseFile, verifyLicenseFile, type LicenseImportOutcome, type LicenseState } from "./license";
+import type { BuildInfo } from "./build-info";
 import { checkUpdate, type UpdateCheckResult } from "./updater";
-import { SettingsStore, isPersistableProvider, type AppSettings, type ProviderKind } from "./settings";
+import { SettingsStore, isPersistableProvider, type AppSettings, type ProviderKind, type SettingsLoadIssue } from "./settings";
 import { effectiveModelTable, findSpecByNameOrId } from "../providers/registry";
 import { ENV_KEYED_PROVIDERS, customEnvKeyedProviders, envKeyOf } from "../providers/env-keys";
 import {
@@ -16,6 +17,7 @@ import {
   type ProviderInfo,
 } from "./provider-runtime";
 import { ONBOARDING_GROUPS, type OnboardingGroup } from "./onboarding-groups";
+import { injectStoredProviderKey, revokeInjectedProviderKey } from "./provider-key-inject";
 
 // ---- M1e：settings 存储 + 会话目录 + Provider 只读信息 ----
 // settings 文件与会话目录由 shell（index.ts）按环境初始化：M1E_SETTINGS_PATH / M1E_SESSIONS_DIR
@@ -61,6 +63,21 @@ export function store(): SettingsStore {
 
 export async function getSettings(): Promise<AppSettings> {
   return await store().get();
+}
+
+/** 首读发现的问题（必须在 `getSettings()` 之后读才可靠）：调用方据此告诉用户设置没生效。 */
+export function settingsLoadIssue(): SettingsLoadIssue | null {
+  return store().loadIssue();
+}
+
+/** IPC "agent:settings-reload"：外部修好/改坏 settings.json 后重读盘（不重启也能恢复）。 */
+export async function reloadSettings(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await store().reload();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export async function setSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
@@ -112,11 +129,15 @@ export async function providerInfo(): Promise<ProviderInfo> {
 export { injectStoredProviderKey } from "./provider-key-inject";
 
 export async function handleProviderKeySet(provider: string, key: string): Promise<{ ok: boolean; error?: string }> {
-  return await putProviderKey(provider, key);
+  const result = await putProviderKey(provider, key);
+  if (result.ok) await injectStoredProviderKey([provider]);
+  return result;
 }
 
 export async function handleProviderKeyDelete(provider: string): Promise<{ ok: boolean; error?: string }> {
-  return await deleteProviderKey(provider);
+  const result = await deleteProviderKey(provider);
+  if (result.ok) revokeInjectedProviderKey(provider);
+  return result;
 }
 
 /** 状态面（设置页徽标 + env 并存提示；不含 key 值）。 */
@@ -151,7 +172,25 @@ export async function handleLicenseStatus(): Promise<LicenseState> {
   return await verifyLicenseFile(licenseFilePath, licensePublicKey !== undefined ? { publicKey: licensePublicKey } : {});
 }
 
+/** 导入外部签发的 license：验签通过才覆盖（写盘走 atomic），失败保持原文件。 */
+export async function handleLicenseImport(sourcePath: string): Promise<LicenseImportOutcome> {
+  if (!licenseFilePath) {
+    return { ok: false, state: { state: "inactive" }, error: "许可证存储未初始化" };
+  }
+  return await importLicenseFile(sourcePath, licenseFilePath, licensePublicKey !== undefined ? { publicKey: licensePublicKey } : {});
+}
+
 let appVersion = "0.0.1";
+let buildInfo: BuildInfo | null = null;
+
+/** 装配根启动时注入包内 build-info.json；开发态/旧包为 null（关于页显示开发构建）。 */
+export function initBuildInfo(info: BuildInfo | null): void {
+  buildInfo = info;
+}
+
+export function getBuildInfo(): BuildInfo | null {
+  return buildInfo;
+}
 
 /** shell 启动时注入当前版本（app.getVersion()；headless 缺省 package.json 版本）。 */
 export function initUpdateContext(opts: { currentVersion: string }): void {

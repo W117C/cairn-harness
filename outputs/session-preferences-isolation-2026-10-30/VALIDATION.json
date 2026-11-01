@@ -1,0 +1,114 @@
+{
+  "date": "2026-10-30",
+  "repository": "/Users/ze/Downloads/Cairn/cairn",
+  "baselineHead": "be9c0be5",
+  "scope": "working tree; shared checkout; task.patch depends on pre-existing uncommitted code",
+  "committed": false,
+  "deployed": false,
+  "newRegressionTests": 20,
+  "review": {
+    "mode": "OCR delegate rules; current agent review",
+    "independentReviewer": false,
+    "rulesArtifact": "ocr-rules.md"
+  },
+  "checks": {
+    "core": {
+      "status": "passed",
+      "exitCode": 0,
+      "files": 583,
+      "tests": 7428,
+      "maxWorkers": 1,
+      "durationSeconds": 631.69,
+      "log": "core.log"
+    },
+    "desktop": {
+      "status": "passed",
+      "exitCode": 0,
+      "files": 276,
+      "tests": 1837,
+      "maxWorkers": 2,
+      "log": "desktop.log"
+    },
+    "coreFocused": {
+      "status": "passed",
+      "files": 5,
+      "tests": 58,
+      "maxWorkers": 2,
+      "log": "core-focused.log"
+    },
+    "desktopFocused": {
+      "status": "passed",
+      "files": 7,
+      "tests": 34,
+      "maxWorkers": 2,
+      "log": "desktop-focused.log"
+    },
+    "runRouting": {
+      "status": "passed",
+      "files": 4,
+      "tests": 37,
+      "maxWorkers": 2,
+      "log": "routing-green.log"
+    },
+    "hostSentinel": {
+      "status": "passed",
+      "files": 2,
+      "tests": 12,
+      "maxWorkers": 1,
+      "log": "sentinel-green.log"
+    },
+    "typecheck": {
+      "status": "passed",
+      "log": "typecheck.log"
+    },
+    "desktopBuild": {
+      "status": "passed",
+      "log": "build.log"
+    },
+    "desktopBoundary": {
+      "status": "passed",
+      "log": "boundary.log"
+    },
+    "rendererLayer": {
+      "status": "passed",
+      "log": "renderer-layer.log"
+    },
+    "docs": {
+      "status": "passed",
+      "exitCode": 0,
+      "log": "docs.log"
+    },
+    "scopedDiffWhitespace": {
+      "status": "passed",
+      "exitCode": 0
+    }
+  },
+  "earlierFullCoreRuns": [
+    {
+      "maxWorkers": 2,
+      "passed": 7427,
+      "failed": 1,
+      "reason": "concurrent IPC protocol migration expected 42 versus actual 43",
+      "log": "intermediate-core-concurrent-version-failure.log"
+    },
+    {
+      "maxWorkers": 2,
+      "passed": 7427,
+      "failed": 1,
+      "reason": "mutate-shards 15000ms timeout while another full core suite ran; timeout and assertion unchanged",
+      "log": "intermediate-core-parallel-failure.log"
+    }
+  ],
+  "finalSourceSnapshot": {
+    "files": 18,
+    "artifact": "scope-sha256.json",
+    "changesDuringFinalCore": []
+  },
+  "limits": [
+    "no actual provider call",
+    "no full Electron process restart validation",
+    "no Windows or NFS validation",
+    "no committed-HEAD certification",
+    "same-id runs across workspaces remain serialized; complete session state isolation is outside this patch"
+  ]
+}

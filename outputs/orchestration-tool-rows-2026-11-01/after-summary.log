@@ -1,0 +1,9 @@
+$ node --import tsx .tmp/probe-orchestration.mts
+spawn_agent      ⇒ "把 a.ts 的 XX 改掉并跑测试"
+send_agent       ⇒ "再看一下 b.ts"
+wait_for_agents  ⇒ "2 个子任务"
+wait_for_agents  ⇒ "本会话全部子任务"
+cancel_agents    ⇒ "本会话全部子任务"
+list_agents      ⇒ "本会话全部子任务"
+resume_agent     ⇒ "th-1"
+clarify          ⇒ "要 A 还是 B？"

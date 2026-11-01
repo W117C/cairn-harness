@@ -1,0 +1,29 @@
+{
+  "name": "open-claude-ui",
+  "repository": "https://github.com/Caho1/open-claude-ui",
+  "commit": "c1f923ae0051a871941b98a0e2e3183a545e6a85",
+  "commitDate": "2026-10-21T16:39:16+08:00",
+  "license": "MIT",
+  "usage": "reference-only; behavior ported into Cairn renderer components. No runtime import.",
+  "reference": [
+    {
+      "source": "code-examples/ReasoningAmbientGlow.tsx",
+      "vendoredAs": "ReasoningAmbientGlow.source.txt",
+      "portedTo": [
+        "src/renderer/components/Stream.tsx",
+        "src/renderer/styles.css"
+      ],
+      "port": "thinking body grid expansion + clay ambient glow; keeps Cairn loader and Normal-view fold ruling"
+    },
+    {
+      "source": "code-examples/MediaLightboxViewer.tsx",
+      "vendoredAs": "MediaLightboxViewer.source.txt",
+      "portedTo": [
+        "src/renderer/components/ImageLightbox.tsx",
+        "src/renderer/markdown.tsx",
+        "src/renderer/styles.css"
+      ],
+      "port": "cursor-anchored zoom + pan clamping + modal focus/Esc; no Tailwind or Framer runtime"
+    }
+  ]
+}

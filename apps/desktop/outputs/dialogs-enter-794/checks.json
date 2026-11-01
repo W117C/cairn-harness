@@ -1,0 +1,85 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "真指针点「项目设置…」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "显示名输入框写入草稿",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "组字中的回车不提交（面板还在、名字没发出去）",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "name": "回车提交：addProject 收到新显示名并关面板",
+      "ok": true,
+      "detail": {
+        "kind": "addProject",
+        "input": {
+          "path": "/tmp/demo-ws",
+          "name": "回车改名"
+        }
+      }
+    },
+    {
+      "name": "空名回车 ⇒ 错误留在面板内（不关、不建）",
+      "ok": true,
+      "detail": "请先起一个项目名"
+    },
+    {
+      "name": "项目名输入框写入草稿",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "组字中的回车不建项目（对话框还在、没发 createProject）",
+      "ok": true,
+      "detail": [
+        {
+          "kind": "addProject",
+          "input": {
+            "path": "/tmp/demo-ws",
+            "name": "回车改名"
+          }
+        }
+      ]
+    },
+    {
+      "name": "回车提交：createProject 收到项目名并关面板",
+      "ok": true,
+      "detail": {
+        "kind": "createProject",
+        "input": {
+          "name": "回车验收"
+        }
+      }
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": [],
+  "calls": [
+    {
+      "kind": "addProject",
+      "input": {
+        "path": "/tmp/demo-ws",
+        "name": "回车改名"
+      }
+    },
+    {
+      "kind": "createProject",
+      "input": {
+        "name": "回车验收"
+      }
+    }
+  ]
+}

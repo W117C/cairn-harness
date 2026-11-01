@@ -160,8 +160,11 @@ describe("searchCapabilityLabel（联网搜索状态行，三态文案判卷）"
 });
 
 describe("设置页模态边界（背景不可达 + 焦点环绕 + 关闭恢复）", () => {
-  it("设置页走统一 ModalSurface，由边界声明 aria-modal 并隔离背景", () => {
-    expect(panelSrc).toContain('<ModalSurface className="sp-page" label="设置" onClose={props.onClose}>');
+  it("设置页走统一 ModalSurface，由边界声明 aria-modal 并隔离背景（关闭前先提交焦点输入）", () => {
+    expect(panelSrc).toContain('<ModalSurface className="sp-page" label="设置" onClose={closeSettings}>');
+    // v33：关闭（Esc / 返回 / 遮罩）先把面板内焦点元素 blur ⇒ onBlur 保存，再卸载。
+    expect(panelSrc).toContain("const closeSettings = () => {");
+    expect(panelSrc).toMatch(/active\.closest\("\.sp-page"\) !== null\) active\.blur\(\);/);
     expect(modalSurfaceSrc).toContain('aria-modal="true"');
     expect(modalSurfaceSrc).toContain('setAttribute("inert", "")');
     expect(modalSurfaceSrc).toContain('setAttribute("aria-hidden", "true")');

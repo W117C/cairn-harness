@@ -1,0 +1,34 @@
+vite v7.3.6 building client environment for production...
+transforming...
+
+./vendor/dsh-claude-style/fonts/InterVariable.woff2 referenced in ./vendor/dsh-claude-style/fonts/InterVariable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+./vendor/dsh-claude-style/fonts/JetBrainsMonoVariable.ttf referenced in ./vendor/dsh-claude-style/fonts/JetBrainsMonoVariable.ttf didn't resolve at build time, it will remain unchanged to be resolved at runtime
+✓ 2192 modules transformed.
+rendering chunks...
+computing gzip size...
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/index.html                                 4.29 kB │ gzip:  2.09 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/NotoSerifVariable-f932DlCQ.woff2   76.55 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/App-Cu6RDccb.css                    5.47 kB │ gzip:  1.44 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/Stream-oShcH8jh.css                 6.94 kB │ gzip:  1.81 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/PaneDock-q-g5MkI7.css               8.55 kB │ gzip:  2.28 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/AppPage-DOAXZ54g.css               12.42 kB │ gzip:  2.68 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/SettingsPanel-BxwSfOvC.css         15.46 kB │ gzip:  3.61 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/index-zODhKSDP.css                294.78 kB │ gzip: 46.97 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/index-DFV9hjZv.js                   0.09 kB │ gzip:  0.10 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/PopoutApp-B_KqBtdR.js               1.20 kB │ gzip:  0.61 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/addon-fit-DX4qG4td.js               1.21 kB │ gzip:  0.51 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/settings-nav-CIbbIoal.js            4.04 kB │ gzip:  2.07 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/navigation-BrQSCiHY.js              5.27 kB │ gzip:  2.19 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/markdown-AsTUSe8N.js               14.80 kB │ gzip:  5.31 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/Stream-BT6Knntu.js                 23.78 kB │ gzip:  8.09 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/index-Cl02I_ct.js                  34.83 kB │ gzip:  9.89 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/CommandPalette-zqHOE7R3.js         39.02 kB │ gzip: 13.41 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/PaneDock-Cza3ibRA.js               59.48 kB │ gzip: 20.06 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/SettingsPanel-BQYlZMnu.js          84.22 kB │ gzip: 26.35 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/AppPage-CMOQvIqC.js                85.16 kB │ gzip: 22.73 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/stream-model-CeU_8RjZ.js          115.81 kB │ gzip: 40.02 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/index-Fsq53Jfa.js                 179.14 kB │ gzip: 62.02 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/App-Bx6bj92R.js                   303.83 kB │ gzip: 94.78 kB
+../../../../../../../../../tmp/cairn-queue-persistence-after-20261101/assets/xterm-B-qIQCd3.js                 329.31 kB │ gzip: 83.04 kB
+✓ built in 5.58s

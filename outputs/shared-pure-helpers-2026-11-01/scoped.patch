@@ -1,0 +1,181 @@
+--- a/src/main/git-ops.ts	2026-11-01 16:37:47
++++ b/src/main/git-ops.ts	2026-11-01 16:30:52
+@@ -5,6 +5,7 @@
+ import { existsSync } from "node:fs";
+ import { join } from "node:path";
+ import { promisify } from "node:util";
++import { repoNameFromUrl } from "../git-url";
+ 
+ const pexec = promisify(execFile);
+ 
+@@ -15,12 +16,8 @@
+ }
+ 
+ /** URL → 仓库目录名：剥尾斜杠与 .git。认不出合法名 = null（调用方 fail-visible）。 */
+-export function repoNameFromUrl(url: string): string | null {
+-  const tail = url.replace(/\/+$/, "").split(/[/:]/).pop() ?? "";
+-  if (tail === "" || /\s/.test(tail)) return null;
+-  const name = tail.endsWith(".git") ? tail.slice(0, -4) : tail;
+-  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) ? name : null;
+-}
++/** 仓库名解析的唯一实现在 `src/git-url.ts`（渲染层的「将克隆到」预览读同一份）。 */
++export { repoNameFromUrl } from "../git-url";
+ 
+ export type GitStatusResult = { ok: true; branch: string | null; dirtyFiles: number } | { ok: false; error: string };
+ 
+--- a/apps/desktop/src/renderer/components/AddProjectMenu.tsx	2026-11-01 16:37:47
++++ b/apps/desktop/src/renderer/components/AddProjectMenu.tsx	2026-11-01 16:31:31
+@@ -7,20 +7,12 @@
+ import type { ProjectRecord } from "../../../../../src/main/ipc-protocol";
+ import { STR } from "../strings";
+ import { scheduleAfterOverlayDismissal } from "./overlay-focus";
++import { repoNameFromUrl } from "../../../../../src/git-url";
+ 
+ /** 仓库名预览（与 main 侧 repoNameFromUrl 同判据的薄镜像，仅用于「将克隆到：」预览——
+  *  真正落盘名以 main 为准；认不出就不显示预览尾巴，不编假名字）。 */
+ 
+ 
+-/** 仓库名预览（与 main 侧 repoNameFromUrl 同判据的薄镜像，仅用于「将克隆到：」预览——
+- *  真正的落库命名在 main 侧 git-ops.ts）。 */
+-function repoNamePreview(url: string): string | null {
+-  const tail = url.replace(/\/+$/, "").split(/[/:]/).pop() ?? "";
+-  if (tail === "" || /\s/.test(tail)) return null;
+-  const name = tail.endsWith(".git") ? tail.slice(0, -4) : tail;
+-  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) ? name : null;
+-}
+-
+ export function AddProjectMenu(props: {
+   onPickDirectory: () => Promise<string | null>;
+   onAddProject: (path: string) => Promise<void>;
+@@ -170,7 +162,7 @@
+             <span className="sp-dim">
+               {cloneParent === null
+                 ? STR.addProject.cloneLocationUnset
+-                : STR.addProject.clonePreview.replace("{dir}", `${cloneParent}/${repoNamePreview(cloneUrl) ?? "…"}`)}
++                : STR.addProject.clonePreview.replace("{dir}", `${cloneParent}/${repoNameFromUrl(cloneUrl) ?? "…"}`)}
+             </span>
+           </div>
+           {cloneError !== null && <div className="form-error" role="alert">{cloneError}</div>}
+--- a/src/agent/evolve/playbook.ts	2026-11-01 16:37:47
++++ b/src/agent/evolve/playbook.ts	2026-11-01 16:30:52
+@@ -724,7 +724,8 @@
+   };
+ }
+ 
+-function triggerLabel(entry: ExperienceEntry): string {
++/** 触发条件的展示名（第 947 页）：`main/evolve/promotion.ts` 的包正文读同一份。 */
++export function triggerLabel(entry: ExperienceEntry): string {
+   switch (entry.trigger.when) {
+     case "always": return "总是适用";
+     case "on-task-class": return "任务类 " + (entry.scope.taskClass ?? "相关");
+--- a/src/main/evolve/promotion.ts	2026-11-01 16:37:47
++++ b/src/main/evolve/promotion.ts	2026-11-01 16:31:31
+@@ -5,7 +5,7 @@
+ // 没有 modules/ ⇒ 拒绝且不产生任何副作用（零行为）。
+ 
+ import type { CandidateRecord } from "../../agent/evolve/candidates";
+-import type { ExperienceEntry } from "../../agent/evolve/playbook";
++import { triggerLabel, type ExperienceEntry } from "../../agent/evolve/playbook";
+ import { openEvolutionRegistry } from "../evolution/activation-host";
+ import { EvolutionPlane, ProposalRefusedError } from "../evolution/evolution-plane";
+ import { loadPlaybook } from "./playbook-store";
+@@ -26,16 +26,6 @@
+   | { outcome: "refused"; candidate: CandidateRecord; reason: string }
+   | { outcome: "already-promoted"; candidate: CandidateRecord; reason: string };
+ 
+-function triggerLabel(entry: ExperienceEntry): string {
+-  switch (entry.trigger.when) {
+-    case "always": return "总是适用";
+-    case "on-task-class": return "任务类 " + (entry.scope.taskClass ?? "相关");
+-    case "on-signal": return "信号 " + (entry.trigger.signal ?? "未知");
+-    case "on-tool": return "工具 " + (entry.trigger.signal ?? "未知");
+-    case "on-path": return "路径 " + (entry.trigger.keywords ?? []).join("/");
+-  }
+-}
+-
+ function renderPackBody(candidate: CandidateRecord, entry: ExperienceEntry): string {
+   const evidence = candidate.evidence.length > 0
+     ? candidate.evidence.slice(0, 20).map((id) => "- " + id).join("\n")
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:37:47
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:31:44
+@@ -4308,3 +4308,4 @@
+ 67. **验证状态只有一套词（第 944 页）**：同样四个状态（verified / failed / stale / absent）两处两种说法——编排面 `EVIDENCE_LABEL` 写「已验证 / 验证失败 / 验证过期 / 未验证」，交付卡 `STATUS_LABEL` 写「已验证 / 验证未过 / 证据已过期 / 未验证」。收进 `derived/verification-labels.ts`（取两处各自最准的词：failed 用「验证失败」、stale 用「证据已过期」），交付卡多出的一档「无需验证」单独常量；判卷钉四值、认不出原样返回、两个消费面都不再写表。
+ 68. **长会话的投影规模有判据（第 945 页）**：流投影（`derived/stream.ts#projectStream`）是每条事件都要过的纯函数，长会话一旦退化成平方，界面会先卡在投影这一步。现读（本机 2026-11-01）：3 000 事件 ≈ 1.4ms、9 000 ≈ 4.8ms、27 000 ≈ 11.4ms（0.42–0.53µs/事件，线性）。判据不看绝对毫秒（机器快慢不同），只看规模斜率：事件 ×9 时耗时不得超过 ×25（平方会是 ×81）；另有一条「行数与该看的轮数一致」，防止靠少产出换速度。
+ 69. **worker 归属判据只有一份（第 946 页）**：「带 `agent_id` 的事件属于 worker 子流」这条判据在六处各写一遍，其中两处漏了空串判断（`main/usage-ledger.ts` 把 `agent_id: ""` 当 worker ⇒ 用量少算；`renderer/derived/session.ts` 把它当 worker ⇒ 该事件从主流里消失），另三处（`agent/context.ts`、`agent/acceptance-sampler.ts`、`scripts/replay/run-scorecard.ts`）判的是「非空才算」。收进 `src/agent/subflow.ts`（`hasWorkerId` / `isWorkerSubflowEvent`，`agent_spawned` 仍是父流事实），六处改读；判卷钉四类取值、两条消费面的行为（用量账本计数、主流行出现），以及「五个消费面都不再自己写一条」。
++70. **「将克隆到」的名字与落库的名字是同一份解析（第 947 页）**：`repoNameFromUrl` 在 main 侧决定**存下来的项目名**，渲染层 `AddProjectMenu` 又抄了一份 `repoNamePreview` 只有当预览用——两处各一份时，改一处就漂（预览说 `bar`、落库说 `bar-2`）。收进 `src/git-url.ts`，渲染层与 `git-ops.ts` 同读；同一轮的 `triggerLabel`（`agent/evolve/playbook.ts` vs `main/evolve/promotion.ts`）也收到一处。判卷：两个函数的取值矩阵 + 「两处都不再自己写一份」。
+--- /dev/null → src/git-url.ts
+--- /dev/null	2026-11-01 16:37:47
++++ b/src/git-url.ts	2026-11-01 16:30:52
+@@ -0,0 +1,12 @@
++/** git URL → 仓库名（`https://host/o/r.git` → `r`；`git@host:o/r` → `r`）。
++ *
++ *  第 947 页：main 侧 `git-ops.ts` 用它决定**存下来的项目名**，渲染层 `AddProjectMenu` 用它预览
++ *  「将克隆到：<父目录>/<名字>」——两处各写一份时，预览与落库就可能说两个名字（改一处就漂）。
++ *  只做纯字符串解析、不碰网络与文件系统；命名非法（空、含空白、不匹配白名单）一律 null，不猜。
++ */
++export function repoNameFromUrl(url: string): string | null {
++  const tail = url.replace(/\/+$/, "").split(/[/:]/).pop() ?? "";
++  if (tail === "" || /\s/.test(tail)) return null;
++  const name = tail.endsWith(".git") ? tail.slice(0, -4) : tail;
++  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) ? name : null;
++}
+--- /dev/null → tests/shared-pure-helpers.test.ts
+--- /dev/null	2026-11-01 16:37:47
++++ b/tests/shared-pure-helpers.test.ts	2026-11-01 16:31:22
+@@ -0,0 +1,56 @@
++/** 第 947 页：两个纯函数各被抄成两份——仓库名解析与触发条件展示名。
++ *
++ *  · `repoNameFromUrl`：main 侧决定**落库的项目名**，渲染层用它预览「将克隆到：」。两处各一份时，
++ *    改一处就漂：预览说 `bar`，落库说 `bar-2`，或者预览空、落库有名。
++ *  · `triggerLabel`：`agent/evolve/playbook.ts` 渲染经验条目，`main/evolve/promotion.ts` 生成晋升包的正文。
++ *    同一条件在两处说两个词（「信号 x」vs「工具 x」改一处就错位）。
++ */
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, expect, it } from "vitest";
++import { repoNameFromUrl } from "../src/git-url";
++import { triggerLabel } from "../src/agent/evolve/playbook";
++import type { ExperienceEntry } from "../src/agent/evolve/playbook";
++
++const ROOT = join(import.meta.dirname, "..");
++const read = (rel: string): string => readFileSync(join(ROOT, rel), "utf8");
++
++describe("仓库名解析只有一份（第 947 页）", () => {
++  it("https / scp 风格 / 尾斜杠 / .git 后缀 / 非法一律 null", () => {
++    expect(repoNameFromUrl("https://github.com/foo/bar.git")).toBe("bar");
++    expect(repoNameFromUrl("git@github.com:foo/bar")).toBe("bar");
++    expect(repoNameFromUrl("https://github.com/foo/bar/")).toBe("bar");
++    expect(repoNameFromUrl("https://github.com/foo/")).toBe("foo");
++    expect(repoNameFromUrl("git@github.com:foo/ba r")).toBe(null);
++    expect(repoNameFromUrl("https://github.com/foo/bar@baz")).toBe(null);
++  });
++
++  it("main 与渲染层都读同一份，且不再各自写一份", () => {
++    expect(read("src/main/git-ops.ts")).toMatch(/export \{ repoNameFromUrl \} from "\.\.\/git-url"/u);
++    const menu = read("apps/desktop/src/renderer/components/AddProjectMenu.tsx");
++    expect(menu).toContain('from "../../../../../src/git-url"');
++    expect(menu).not.toContain("function repoNamePreview");
++    expect(menu).toContain("repoNameFromUrl(cloneUrl)");
++  });
++});
++
++describe("触发条件展示名只有一份（第 947 页）", () => {
++  const entry = (trigger: ExperienceEntry["trigger"], scope: Partial<ExperienceEntry["scope"]> = {}): ExperienceEntry =>
++    ({ trigger, scope: { keywords: ["src/agent"], ...scope } } as unknown as ExperienceEntry);
++
++  it("五种触发各一个词，缺字段不摆 undefined", () => {
++    expect(triggerLabel(entry({ when: "always" } as never))).toBe("总是适用");
++    expect(triggerLabel(entry({ when: "on-task-class" } as never, { taskClass: "edit" }))).toBe("任务类 edit");
++    expect(triggerLabel(entry({ when: "on-task-class" } as never))).toBe("任务类 相关");
++    expect(triggerLabel(entry({ when: "on-signal", signal: "red" } as never))).toBe("信号 red");
++    expect(triggerLabel(entry({ when: "on-tool", signal: "pytest" } as never))).toBe("工具 pytest");
++    expect(triggerLabel(entry({ when: "on-path", keywords: ["src/agent"] } as never))).toBe("路径 src/agent");
++  });
++
++  it("两个消费面都读同一份，且 promotion 不再自己写一份", () => {
++    const promotion = read("src/main/evolve/promotion.ts");
++    expect(promotion).toContain('import { triggerLabel, type ExperienceEntry } from "../../agent/evolve/playbook"');
++    expect(promotion).not.toContain("function triggerLabel");
++    expect(read("src/agent/evolve/playbook.ts")).toContain("export function triggerLabel");
++  });
++});

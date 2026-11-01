@@ -4,10 +4,12 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { userMessageCopy } from "../src/renderer/transcript";
-import { readAppSurface } from "./helpers/app-surface";
+import { readAppSurface, readRendererFile } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const app = readAppSurface();
+const workbenchView = readRendererFile("panes/WorkbenchView.tsx");
+const workbenchSidebar = readRendererFile("panes/WorkbenchSidebar.tsx");
 const composer = read("../src/renderer/components/Composer.tsx");
 const picker = read("../src/renderer/components/ModelPicker.tsx");
 const sidebar = read("../src/renderer/components/Sidebar.tsx");
@@ -96,7 +98,7 @@ describe("侧栏首屏：加载 ≠ 空，失败 ≠ 空", () => {
   it("Sidebar 接 loading / loadError / onRetryLoad，并有骨架与重试", () => {
     expect(sidebar).toContain("loading?: boolean;");
     expect(sidebar).toContain("loadError?: boolean;");
-    expect(sidebar).toContain('aria-busy={props.loading === true}');
+    expect(sidebar).toContain('aria-busy={props.loading === true || props.refreshing === true}');
     expect(sidebar).toContain("side-skeleton-row");
     expect(sidebar).toContain("STR.sidebar.loadFailed");
     expect(sidebar).toContain("props.onRetryLoad");
@@ -110,8 +112,8 @@ describe("侧栏首屏：加载 ≠ 空，失败 ≠ 空", () => {
     expect(failBranch).not.toContain("setSessionsLoaded(true)");
     expect(app).toContain("loading={!sessionsLoaded && !sessionsLoadError}");
     expect(app).toContain("const retrySessions = useCallback(() => {");
-    expect(app).toContain("loadError={sessionsLoadError}");
-    expect(app).toContain("onRetryLoad={retrySessions}");
+    expect(workbenchView).toContain("loadError: sessionsLoadError,");
+    expect(workbenchView).toContain("onRetryLoad: retrySessions,");
   });
 
   it("CSS：骨架条只表示读取中（reduced-motion 由全局块停掉动画）", () => {
@@ -127,18 +129,18 @@ describe("侧栏宽度把手（键盘 / 可读名 / 复位）", () => {
     expect(app).toContain("const SIDEBAR_MIN = 200;");
     expect(app).toContain("const SIDEBAR_MAX = 320;");
     expect(app).toContain("const SIDEBAR_DEFAULT = 256;");
-    expect(app).toContain("aria-label={`调整侧栏宽度（${SIDEBAR_MIN}–${SIDEBAR_MAX}px）`}");
-    expect(app).toContain("title={`拖动调整侧栏宽度；双击回到 ${SIDEBAR_DEFAULT}px`}");
+    expect(workbenchSidebar).toContain("aria-label={`调整侧栏宽度（${SIDEBAR_MIN}–${SIDEBAR_MAX}px）`}");
+    expect(workbenchSidebar).toContain("title={`拖动调整侧栏宽度；双击回到 ${SIDEBAR_DEFAULT}px`}");
     expect(app).not.toContain("240–280px");
     expect(app).not.toContain("双击回到 240px");
-    expect(app).toContain("persistSidebarWidth(SIDEBAR_DEFAULT)");
+    expect(workbenchSidebar).toContain("props.onPersistWidth(SIDEBAR_DEFAULT)");
   });
 
   it("separator 暴露当前值与范围；左右键各步进 16px", () => {
-    expect(app).toContain("aria-valuemin={SIDEBAR_MIN}");
-    expect(app).toContain("aria-valuemax={SIDEBAR_MAX}");
-    expect(app).toContain("aria-valuenow={sidebarWidth}");
-    expect(app).toContain("sidebarWidthRef.current + (e.key === \"ArrowRight\" ? 16 : -16)");
+    expect(workbenchSidebar).toContain("aria-valuemin={SIDEBAR_MIN}");
+    expect(workbenchSidebar).toContain("aria-valuemax={SIDEBAR_MAX}");
+    expect(workbenchSidebar).toContain("aria-valuenow={props.sidebarWidth}");
+    expect(workbenchView).toContain("sidebarWidthRef.current + (e.key === \"ArrowRight\" ? 16 : -16)");
   });
 });
 

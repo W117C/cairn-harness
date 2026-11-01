@@ -1,0 +1,31 @@
+=== 造红：文件窗格摆回裸字节数 ===
+--- FilePane 判据
+     × 文件大小走共享字节尺（2.1 KB / 880 B），不摆裸字节数 25ms
++   // 双列卡片默认铺 6 张（3 行 × 2 列），其余收进「查看…另有 N 项」——参照 Codex 自定义页。
++    *  缺省不摆按钮——判卷/嵌用面没有右 Panel 可关，摆一枚点了没反应的 × 更糟。 */
++ // 旧两视图（思考面 × 换模型面）作废：一屏说全——上列表、下思考段，少一次翻面。
++   // 于是 1440×900 的空屏上（上 327 / 下 456）明明下面多出 129px 却仍向上开——
++ /** 小徽章（已存 key 等）：中性胶囊；给 onRemove 时带「×」删除钮（aria-label 由调用方给全）。 */
++         <button className="x" aria-label={props.removeLabel ?? "移除"} onClick={props.onRemove}>×</button>
++   return entries.length === 0 ? "无" : entries.map(([key, value]) => key + "×" + String(value)).join("、");
++ // 逐对实测的几何（1440×900，真实 renderer，展开后的实际矩形）：
++ //   · 模型菜单 `left 668, top 397, 300×408`
++ //   · 用量浮层 `left 919, top 496, 258×309`   → 与模型菜单**重叠**
++ //   · 附件菜单 `left 481, top 617, 270×188`   → 与模型菜单**重叠**；与用量浮层不重叠
++                     <button className="btn-ghost" aria-label="关闭提示" onClick={clearLastNotice}>×</button>
++                   <button className="btn-ghost" aria-label="关闭提示" onClick={clearLastNotice}>×</button>
++  * 依据：Claude 桌面端 2.42304.2 真机实测——1100×700 原生窗、2× 截图（2200×1400，
++   // 2026-10-20 真机还原更正：Claude 真机实测侧栏 **198.5pt**（1100×700 原生窗 2× 截图，
++   /** 关闭查找条（Esc / 面板 × / 菜单）统一出口：关掉并把焦点交回输入框。 */
+      Tests  1 failed | 8 passed (9)
+--- 刻度尺判据
+     × 组件与派生模块里没有第三把尺 23ms
+components/FilePane.tsx:208 [raw-bytes] {e.size}: expected [ Array(1) ] to deeply equal []
++   "components/FilePane.tsx:208 [raw-bytes] {e.size}",
+      Tests  1 failed | 1 passed (2)
+
+=== 复原后 ===
+      Tests  9 passed (9)
+      Tests  2 passed (2)
+=== sha256 ===
+   2 e88d4766f24a168a5bddd9b833486375132bd37b6e23d79738cd857c13f9840d

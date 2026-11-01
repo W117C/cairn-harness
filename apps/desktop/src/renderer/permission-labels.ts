@@ -1,5 +1,12 @@
 import type { PermissionMode } from "../../../../src/main/ipc-protocol";
 import { STR } from "./strings";
+// 「下一档」循环的唯一实现住在核心档位表旁：renderer 这里只转出，不另抄顺序。
+export { nextPermissionMode } from "../../../../src/permissions/modes";
+
+/** 这次档位变更是否必须先确认：自动/完全允许是危险档，且只有「真的换过去」才问。 */
+export function permissionNeedsConfirm(current: PermissionMode, next: PermissionMode): boolean {
+  return next !== current && (next === "auto" || next === "full-access");
+}
 export const MODE_LABEL: Record<PermissionMode, { label: string; desc: string; warn?: boolean }> = {
   "read-only": { label: STR.permissionModes.readOnly, desc: STR.permissionModes.readOnlyDesc },
   default: { label: STR.permissionModes.default, desc: STR.permissionModes.defaultDesc },

@@ -1,0 +1,185 @@
+[
+  {
+    "name": "两场会话在侧栏（预览夹具）",
+    "ok": true,
+    "detail": {
+      "s1": true,
+      "s2": true
+    }
+  },
+  {
+    "name": "先正常打开 s1",
+    "ok": true
+  },
+  {
+    "name": "⌘+点击只开预览：主体仍 s1、预览标签激活、标题/预览徽标/正文在位",
+    "ok": true,
+    "detail": {
+      "main": "s1",
+      "tab": "会话预览",
+      "preview": true,
+      "title": "整理竞品对照册",
+      "rows": 6,
+      "badge": "不切主会话"
+    }
+  },
+  {
+    "name": "880 窄窗打开预览不横向溢出",
+    "ok": true,
+    "detail": {
+      "viewport": 880,
+      "overflow": false,
+      "main": 621,
+      "pane": 0,
+      "preview": 0
+    }
+  },
+  {
+    "name": "变宽或 ⌘⌥I 后预览可恢复",
+    "ok": true,
+    "detail": {
+      "pane": 420,
+      "preview": 404,
+      "input": 356
+    }
+  },
+  {
+    "name": "预览窗格有输入框与发送钮",
+    "ok": true,
+    "detail": {
+      "input": true,
+      "send": true,
+      "sendDisabled": true
+    }
+  },
+  {
+    "name": "空闲时 Enter 真的向预览会话发一轮",
+    "ok": true,
+    "detail": {
+      "runs": [
+        {
+          "message": "预览里继续",
+          "sessionId": "s2"
+        }
+      ],
+      "draft": "",
+      "notice": "已发送"
+    }
+  },
+  {
+    "name": "预览发送后主体仍停在原会话",
+    "ok": true,
+    "detail": {
+      "main": "s1"
+    }
+  },
+  {
+    "name": "运行中显示运行标记与停止钮",
+    "ok": true,
+    "detail": {
+      "live": true,
+      "stop": true
+    }
+  },
+  {
+    "name": "运行中 Enter 走 runSteer 并回报已插话",
+    "ok": true,
+    "detail": {
+      "steers": [
+        {
+          "sessionId": "s2",
+          "text": "插一句话"
+        }
+      ],
+      "notice": "已插话到本轮",
+      "draft": ""
+    }
+  },
+  {
+    "name": "插话被拒绝时入队并给出回执",
+    "ok": true,
+    "detail": {
+      "notice": "已加入队列，本轮结束后发送",
+      "disabled": false
+    }
+  },
+  {
+    "name": "本轮结束后待发送队列可见",
+    "ok": true,
+    "detail": {
+      "running": false,
+      "resume": true
+    }
+  },
+  {
+    "name": "继续发送把队首交给同一会话",
+    "ok": true,
+    "detail": {
+      "runs": [
+        {
+          "message": "预览里继续",
+          "sessionId": "s2"
+        },
+        {
+          "message": "排队这句",
+          "sessionId": "s2"
+        }
+      ],
+      "resume": false,
+      "notice": "已加入队列，本轮结束后发送"
+    }
+  },
+  {
+    "name": "停止钮打到预览会话",
+    "ok": true,
+    "detail": {
+      "cancels": [
+        {
+          "sessionId": "s2"
+        }
+      ],
+      "notice": "已请求停止"
+    }
+  },
+  {
+    "name": "「切到会话」把主体切到 s2，并收起预览（不留同一场的副本）",
+    "ok": true,
+    "detail": {
+      "main": "s2",
+      "title": "整理竞品对照册",
+      "preview": false,
+      "sessionTab": false
+    }
+  },
+  {
+    "name": "行菜单里有「在侧栏预览」",
+    "ok": true,
+    "detail": {
+      "x": 335,
+      "y": 340
+    }
+  },
+  {
+    "name": "菜单预览同样不切走主体",
+    "ok": true,
+    "detail": {
+      "main": "s1",
+      "preview": true,
+      "title": "整理竞品对照册"
+    }
+  },
+  {
+    "name": "侧栏直接打开预览目标时预览自动收起",
+    "ok": true,
+    "detail": {
+      "main": "s2",
+      "preview": false,
+      "sessionTab": false
+    }
+  },
+  {
+    "name": "渲染过程无控制台错误",
+    "ok": true,
+    "detail": []
+  }
+]

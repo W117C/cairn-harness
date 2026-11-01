@@ -1,0 +1,12 @@
+=== 改前：用量页用中文紧凑记法（1.4万），用量环用 k/m（14.0k）===
+     × shows absent measurements as unknown while preserving measured zero 5ms
+      Tests  1 failed | 4 passed (5)
+
+=== 复原后 ===
+      Tests  5 passed (5)
+=== sha256 ===
+   2 c5f7532d534b3d6e0c1b4ce7c71bd723ca575e2fcbd5a6f2af1cabd017d002de
+=== 两把尺的现读 ===
+   14000 环/检查器 14.0k  ｜用量页旧写法 1.4万
+ 1250000 环/检查器 1.3m   ｜用量页旧写法 125万
+    1830 环/检查器 1.8k   ｜用量页旧写法 1830

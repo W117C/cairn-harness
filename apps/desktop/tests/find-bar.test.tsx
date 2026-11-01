@@ -6,7 +6,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { FindBar } from "../src/renderer/components/FindBar";
+import { FindBar, foldedHitSeqs } from "../src/renderer/components/FindBar";
+import type { StreamRow } from "../src/renderer/derived/stream";
 import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
@@ -43,7 +44,10 @@ describe("FindBar 面板", () => {
     expect(app).toContain("if (activeIdRef.current === null) return false;");
     expect(app).not.toContain("if (dir === -1 || activeIdRef.current === null) return false;");
     expect(app).toContain("if (h.findOpen) { e.preventDefault(); h.closeFind(); return; }");
-    expect(app).toContain("<FindBar ref={findRef} open={findOpen && !showEmpty}");
+    // 第 926 页：FindBar 多了模型行/折叠集/展开动作三个 props，JSX 从单行变成多行——
+    // 这条钉的是「面板挂在这儿、开合绑 findOpen && !showEmpty」，不是行长。
+    expect(app).toContain("<FindBar");
+    expect(app).toContain("open={findOpen && !showEmpty}");
     expect(app).toContain('case "KeyG"');
     expect(app).toContain("findRef.current?.step(dir)");
     expect(read("../src/renderer/components/FindBar.tsx")).toContain("useImperativeHandle(ref");
@@ -58,5 +62,41 @@ describe("FindBar 面板", () => {
     expect(src).toContain('{ id: "find", keys: "⌘F", label: "对话内查找" }');
     expect(src).toContain("在对话里查找");
     expect(src).toContain('{ keys: "⌘G / ⇧⌘G", what: "查找下一个 / 上一个" }');
+  });
+});
+
+describe("折叠轮次里的命中（第 926 页）", () => {
+  const rows = [
+    { kind: "user", text: "旧问题：登录重试", seq: 0, round: 1 },
+    { kind: "assistant", text: "旧回答：用指数退避", seq: 1, round: 1, eventId: 2 },
+    { kind: "tool", tool: "read_file", summary: "a.ts", seq: 2 },
+    { kind: "user", text: "新问题：设置页", seq: 3, round: 2 },
+  ] as unknown as StreamRow[];
+
+  it("只把已折叠轮次里的 user/assistant 正文算进来（工具行不参与）", () => {
+    const folded = new Set([1]);
+    expect(foldedHitSeqs(rows, folded, "登录")).toEqual([0]);
+    expect(foldedHitSeqs(rows, folded, "指数退避")).toEqual([1]);
+    expect(foldedHitSeqs(rows, folded, "新问题")).toEqual([]); // 第 2 轮没折叠 ⇒ DOM 负责
+    expect(foldedHitSeqs(rows, new Set([2]), "新问题")).toEqual([3]);
+    expect(foldedHitSeqs(rows, folded, "a.ts")).toEqual([]); // 工具行不参与（与 DOM 选择器同口径）
+  });
+
+  it("大小写与空白不影响；空查询不返回任何命中", () => {
+    const rows2 = [{ kind: "assistant", text: "Fixed Retry", seq: 5, round: 3, eventId: 6 }] as unknown as StreamRow[];
+    expect(foldedHitSeqs(rows2, new Set([3]), "fixed retry")).toEqual([5]);
+    expect(foldedHitSeqs(rows2, new Set([3]), "   ")).toEqual([]);
+  });
+
+  it("接线：FindBar 收模型行/折叠集/展开动作；命中在折叠轮里先展开再闪", () => {
+    const src = read("../src/renderer/components/FindBar.tsx");
+    expect(src).toContain("foldedHitSeqs(props.rows ?? [], props.foldedRounds ?? NO_FOLDS, value)");
+    expect(src).toContain("props.onExpandRound?.(round);");
+    expect(src).toContain("revealFolded(hit.seq, hit.round);");
+    expect(src).toContain('querySelector<HTMLElement>(`[data-event-id="${String(seq + 1)}"] .t`)');
+    const view = read("../src/renderer/panes/WorkbenchView.tsx");
+    expect(view).toContain("rows={streamRows}");
+    expect(view).toContain("foldedRounds={foldedRounds}");
+    expect(view).toContain("onExpandRound={(round) => { streamActions.onToggleFold?.(round); }}");
   });
 });

@@ -1,0 +1,87 @@
+{
+  "passed": 8,
+  "total": 10,
+  "checks": [
+    {
+      "name": "任务窗格里出现编排计划且阶段可读",
+      "ok": true,
+      "detail": {
+        "pane": true,
+        "goal": "计划 核对编排控制面",
+        "phase": "proposed",
+        "phaseText": "待批准",
+        "taskPhases": [
+          "running",
+          "failed",
+          "done"
+        ]
+      }
+    },
+    {
+      "name": "三个任务按夹具阶段落在面板上",
+      "ok": true,
+      "detail": [
+        "running",
+        "failed",
+        "done"
+      ]
+    },
+    {
+      "name": "待批准阶段只有批准/拒绝/取消计划",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "未批准时不摆「启用执行」",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "面板不出现引擎必然拒绝的手动交付按钮",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "运行中任务只能暂停/取消，不给接管或重试",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "失败且有次数的任务只给重试",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "已交付任务在有后端回滚能力时给回滚",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "取消计划第一次点只摆确认、不发命令",
+      "ok": false,
+      "detail": {
+        "armed": null,
+        "commands": 1
+      }
+    },
+    {
+      "name": "交互序列按预期走完",
+      "ok": false,
+      "detail": "Error: Script failed to execute, this normally means an error was thrown. Check the renderer console for the error."
+    }
+  ],
+  "commands": [
+    {
+      "address": {
+        "workspace": "/tmp/demo-ws",
+        "sessionId": "s1"
+      },
+      "command": {
+        "request_id": "fea3c87b-33ad-47d8-823c-3839ac656339",
+        "plan_id": "plan-fixture",
+        "version": 1,
+        "action": "cancel_plan"
+      }
+    }
+  ]
+}

@@ -1,0 +1,203 @@
+--- a/apps/desktop/src/renderer/derived/stream.ts	2026-11-01 13:23:23
++++ b/apps/desktop/src/renderer/derived/stream.ts	2026-11-01 13:23:05
+@@ -30,14 +30,41 @@
+ 
+ type ToolRow = Extract<StreamRow, { kind: "tool" }>;
+ 
+-export const summarize = (args: Record<string, unknown>): string => {
++const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() !== "" ? v : undefined);
++const idsOf = (v: unknown): string[] =>
++  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x !== "") : [];
++
++/** 按工具挑**主语**（第 917 页）：编排族与 clarify 的参数里没有一个字段在通用取值链上
++ *  （`spawn_agent` 是 task、`send_agent` 是 message、`wait/cancel_agents` 是 agent_ids、`list_agents` 空参数），
++ *  于是整行落到 JSON 兜底：用户看到的是 `{"task":"…","mode":"write"}` 或 `{}`，而不是「派了什么活」。
++ *  这里只做「挑一格/数个数」，不编内容；挑不到返回 undefined，回通用链。 */
++function ownSubject(tool: string, args: Record<string, unknown>): string | undefined {
++  if (tool === "spawn_agent") return str(args.task)?.slice(0, 80);
++  if (tool === "send_agent") return str(args.message);
++  if (tool === "resume_agent" || tool === "close_agent") return str(args.thread_id);
++  if (tool === "wait_for_agents" || tool === "cancel_agents") {
++    const n = idsOf(args.agent_ids).length;
++    return n > 0 ? `${String(n)} 个子任务` : "本会话全部子任务";
++  }
++  if (tool === "list_agents") return "本会话全部子任务";
++  if (tool === "clarify") {
++    const qs = Array.isArray(args.questions) ? args.questions : [];
++    const q = str((qs[0] as { question?: unknown } | undefined)?.question);
++    if (q === undefined) return undefined;
++    return qs.length > 1 ? `${q}（共 ${String(qs.length)} 问）` : q;
++  }
++  return undefined;
++}
++
++export const summarize = (tool: string, args: Record<string, unknown>): string => {
+   // url / query 进取值链（阶段 2 · brief §二.4 例：「抓取 api-docs.deepseek.com/news」——
+   // web_fetch/web_search 的一句话摘要就是目标本身）。
+   // **pattern 排在 path 前**（第 916 页）：grep 的 args = {pattern, path}，pattern 才是「搜什么」，
+   // path 只是范围；按 path 优先会把整行读成一个目录（现读：`{pattern:"TODO",path:"src/agent"}` ⇒
+   // 「src/agent」），而 glob 只有 pattern ⇒ 掉到 JSON 兜底、整行变成 `{"pattern":"src/**/*.ts"}`。
+   // 工具行折叠态只有这一句话，主语丢了就没地方补。
+-  const first = args.command ?? args.pattern ?? args.path ?? args.file ?? args.url ?? args.query ?? "";
++  const own = ownSubject(tool, args);
++  const first = own ?? args.command ?? args.pattern ?? args.path ?? args.file ?? args.url ?? args.query ?? "";
+   return typeof first === "string" && first ? first : JSON.stringify(args).slice(0, 80);
+ };
+ 
+@@ -158,7 +185,7 @@
+       // 勘误落地：ToolCallEvent 的工具名字段是 name（不是计划作者预期的 tool）；行面仍叫 tool。
+       case "tool_call": {
+         const row: ToolRow = {
+-          kind: "tool", tool: e.name, summary: summarize(e.args), args: rawArgs(e.args),
++          kind: "tool", tool: e.name, summary: summarize(e.name, e.args), args: rawArgs(e.args),
+           ...(typeof e.args.command === "string" && e.args.command !== "" ? { command: e.args.command } : {}),
+           pending: true, ts: e.ts, seq,
+         };
+--- a/apps/desktop/src/renderer/derived/timeline.ts	2026-11-01 13:23:23
++++ b/apps/desktop/src/renderer/derived/timeline.ts	2026-11-01 13:21:16
+@@ -53,7 +53,7 @@
+         out.push({ eventId, kind: "assistant", label: timelineLabel(e.content), ...(e.ts !== undefined ? { at: e.ts } : {}) });
+         break;
+       case "tool_call":
+-        out.push({ eventId, kind: "tool", label: timelineLabel(`${e.name} ${summarize(e.args)}`), ...(e.ts !== undefined ? { at: e.ts } : {}) });
++        out.push({ eventId, kind: "tool", label: timelineLabel(`${e.name} ${summarize(e.name, e.args)}`), ...(e.ts !== undefined ? { at: e.ts } : {}) });
+         break;
+       case "usage":
+         out.push({ eventId, kind: "usage", label: `输入 ${fmtTokens(e.inputTokens)} · 输出 ${fmtTokens(e.outputTokens)}`, ...(e.ts !== undefined ? { at: e.ts } : {}) });
+--- a/apps/desktop/src/renderer/components/Stream.tsx	2026-11-01 13:23:23
++++ b/apps/desktop/src/renderer/components/Stream.tsx	2026-11-01 13:21:21
+@@ -83,6 +83,14 @@
+   web_fetch: "抓取",
+   web_search: "搜索",
+   spawn_agent: "派发子任务",
++  // 子任务生命周期（第 917 页）：这几个工具的参数里没有 command/path 一类字段，摘要走 ownSubject
++  // （task/message/agent_ids/thread_id）。没有动词的话，行首仍会把 `wait_for_agents` 这类实现名摆上屏。
++  send_agent: "发消息",
++  wait_for_agents: "等待",
++  cancel_agents: "撤销",
++  list_agents: "列出",
++  resume_agent: "恢复",
++  close_agent: "关闭",
+   read_image: "读图",
+ };
+ export function toolVerb(tool: string): string | null {
+--- a/apps/desktop/tests/tool-row-summary.test.ts	2026-11-01 13:23:23
++++ b/apps/desktop/tests/tool-row-summary.test.ts	2026-11-01 13:21:37
+@@ -3,31 +3,100 @@
+ //      grep 只剩目录、glob 直接甩 `{"pattern":…}`）；
+ //   ② 静态工具面（`TOOL_NAMES`）每一把都有中文动词——没有动词的已知工具会被渲染层当成「未知工具」，
+ //      把实现名原样摆上屏，与「不暴露实现名」相反。
++import { createElement } from "react";
++import { renderToStaticMarkup } from "react-dom/server";
+ import { describe, expect, it } from "vitest";
+-import { summarize } from "../src/renderer/derived/stream";
++import type { AgentEvent } from "../../../src/main/ipc-protocol";
++import { projectStream, summarize } from "../src/renderer/derived/stream";
++import { Stream } from "../src/renderer/components/Stream";
+ import { TOOL_VERBS, toolVerb } from "../src/renderer/components/Stream";
+ import { INJECTED_TOOLS } from "../../../src/agent/tool-surface";
+ import { TOOL_NAMES } from "../../../src/tools/base";
+ 
+ describe("工具行摘要：主语优先于范围", () => {
+   it("grep：pattern 是主语，path 只是范围——不许只剩目录", () => {
+-    expect(summarize({ pattern: "TODO", path: "src/agent" })).toBe("TODO");
++    expect(summarize("grep", { pattern: "TODO", path: "src/agent" })).toBe("TODO");
+   });
+ 
+   it("glob：只有 pattern 时不许把 JSON 甩上屏", () => {
+-    expect(summarize({ pattern: "src/**/*.ts" })).toBe("src/**/*.ts");
++    expect(summarize("glob", { pattern: "src/**/*.ts" })).toBe("src/**/*.ts");
+   });
+ 
+   it("既有取值链不动：command / path / file / url / query 各有其主", () => {
+-    expect(summarize({ command: "pnpm test" })).toBe("pnpm test");
+-    expect(summarize({ path: "src/a.ts" })).toBe("src/a.ts");
+-    expect(summarize({ file: "a.ts" })).toBe("a.ts");
+-    expect(summarize({ url: "https://example.com/a" })).toBe("https://example.com/a");
+-    expect(summarize({ query: "cairn" })).toBe("cairn");
++    expect(summarize("run_shell", { command: "pnpm test" })).toBe("pnpm test");
++    expect(summarize("read_file", { path: "src/a.ts" })).toBe("src/a.ts");
++    expect(summarize("read_file", { file: "a.ts" })).toBe("a.ts");
++    expect(summarize("web_fetch", { url: "https://example.com/a" })).toBe("https://example.com/a");
++    expect(summarize("web_search", { query: "cairn" })).toBe("cairn");
+   });
+ 
+   it("非字符串首值仍走 JSON 兜底（不编、不抛）", () => {
+-    expect(summarize({})).toBe("{}");
+-    expect(summarize({ pattern: 42 })).toBe('{"pattern":42}');
++    expect(summarize("read_file", {})).toBe("{}");
++    expect(summarize("grep", { pattern: 42 })).toBe('{"pattern":42}');
+   });
+ });
++
++describe("编排族与 clarify：挑主语，不甩 JSON（第 917 页）", () => {
++  it("spawn_agent 摘要 = 派了什么活（不是 {\"task\":…,\"mode\":…}）", () => {
++    expect(summarize("spawn_agent", { task: "把 a.ts 的 XX 改掉并跑测试", mode: "write" })).toBe("把 a.ts 的 XX 改掉并跑测试");
++  });
++
++  it("send_agent 摘要 = 追加的要求（thread id 留给展开区）", () => {
++    expect(summarize("send_agent", { thread_id: "th-1", message: "再看一下 b.ts" })).toBe("再看一下 b.ts");
++  });
++
++  it("wait/cancel：有点名就数个数，没点名就说全部——不摆 {} 也不摆数组原文", () => {
++    expect(summarize("wait_for_agents", { agent_ids: ["a1", "a2"] })).toBe("2 个子任务");
++    expect(summarize("wait_for_agents", {})).toBe("本会话全部子任务");
++    expect(summarize("cancel_agents", { agent_ids: ["a1"] })).toBe("1 个子任务");
++    expect(summarize("cancel_agents", {})).toBe("本会话全部子任务");
++    expect(summarize("list_agents", {})).toBe("本会话全部子任务");
++  });
++
++  it("resume/close：thread id 就是这一行唯一的事实", () => {
++    expect(summarize("resume_agent", { thread_id: "th-1" })).toBe("th-1");
++    expect(summarize("close_agent", { thread_id: "th-2" })).toBe("th-2");
++  });
++
++  it("clarify 摘要 = 第一个问题；多问补一句计数（不是 questions 的 JSON）", () => {
++    expect(summarize("clarify", { questions: [{ question: "要 A 还是 B？", options: ["A", "B"] }] })).toBe("要 A 还是 B？");
++    expect(summarize("clarify", { questions: [{ question: "第一问" }, { question: "第二问" }, { question: "第三问" }] })).toBe("第一问（共 3 问）");
++  });
++
++  it("挑不到主语时仍走通用链/JSON 兜底（不假装认识所有形状）", () => {
++    expect(summarize("clarify", { questions: [{ options: ["A"] }] })).toBe('{"questions":[{"options":["A"]}]}');
++  });
++});
++
++describe("静态工具面每一把都有中文动词（实现名不上屏）", () => {
++  it("TOOL_NAMES 全覆盖", () => {
++    const missing = TOOL_NAMES.filter((n) => toolVerb(n) === null);
++    expect(missing, "没有动词、会被当成未知工具把实现名摆上屏：" + missing.join(" | ")).toEqual([]);
++  });
++
++  it("词表里不许有工具面之外的陈旧键（如已不存在的 list_dir）", () => {
++    // web_fetch 的规格在 session-provider（网络工具按配置注册），既不进 TOOLS 也不进 INJECTED_TOOLS。
++    const known = new Set<string>([...TOOL_NAMES, ...INJECTED_TOOLS.map((t) => t.name), "web_fetch"]);
++    const stale = Object.keys(TOOL_VERBS).filter((k) => !known.has(k));
++    expect(stale, "词表比工具面多的键：" + stale.join(" | ")).toEqual([]);
++  });
++
++  it("未知工具仍然是 null（宁缺不编，渲染层回落原名）", () => {
++    expect(toolVerb("mystery_tool")).toBeNull();
++  });
++});
++
++describe("行面：折叠行把主语念出来（不是 JSON）", () => {
++  it("spawn_agent ⇒「派发子任务 把 a.ts 的 XX 改掉」；wait_for_agents ⇒「等待 2 个子任务」", () => {
++    const events = [
++      { type: "tool_call", id: "s1", name: "spawn_agent", args: { task: "把 a.ts 的 XX 改掉", mode: "write" }, ts: 1 },
++      { type: "tool_result", callId: "s1", ok: true, ts: 2 },
++      { type: "tool_call", id: "w1", name: "wait_for_agents", args: { agent_ids: ["a1", "a2"] }, ts: 3 },
++      { type: "tool_result", callId: "w1", ok: true, ts: 4 },
++    ] as unknown as AgentEvent[];
++    const html = renderToStaticMarkup(createElement(Stream, { rows: projectStream(events) }));
++    expect(html).toContain("派发子任务 把 a.ts 的 XX 改掉");
++    expect(html).toContain("等待 2 个子任务");
++    expect(html).not.toContain("&quot;task&quot;");
++  });
++});
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 13:23:23
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 13:23:14
+@@ -4280,3 +4280,4 @@
+ 39. **交付卡卡头：数字只说一遍，未判定不再冒充「已编辑」（第 913 页）**：卡头此前是「已编辑 1 个文件 / 修改 1 · 第 1 轮」——单一档时副行就是标题那个数的复读；而统计只算 `created`/`modified`，`unknown`（投影明说"不猜"的那一档）不进分解 ⇒ 全未判定时副行为空、标题却断言「已编辑」，**界面替投影猜了**。改法：补 `unknown` 计数（沿用既有词表「变更」），单一档把档名直接写进标题（`修改 1 个文件` / `变更 2 个文件`），只有混合档才用「已编辑 N 个文件」+ 分解副行，分解块因此不再空挂；「变更」用中性 `--text-300`（不是好消息也不是坏消息）。判卷 +3（既有两条混合档「已编辑 2 个文件」钉一字未改仍绿）+ 画廊常驻自查（单一档却挂分解块即抛错，真机 `{"title":"修改 1 个文件","stats":[]}`）。同批否证两条：权限弹层五档结构是第 872 页明令保留的对比表语法、五句 desc 逐条皆为政策事实。
+ 40. **工具行不再暴露实现名（第 916 页）**：有中文动词的行只说人话——`run_shell` 紧跟「运行 ls」是把一件事说两遍，`Stream.tsx` 因此只在 `verb === null`（未知工具）时渲染 `.tname`；未知工具没有动词可给，原始名是它唯一的身份，必须保留（宁缺不编）。旧判卷 `stream-rework.test.tsx` 还钉着 `toContain("run_shell")`，与这条口径相反；现改钉两面：已知工具的实现名不出现、未知工具的原名保留。第 7 条「工具名之前加类型字形」的行文按本条读：字形还在，名字只在未知工具时出现。
+ 41. **工具行摘要取主语，词表跟住工具面（第 916 页）**：`summarize` 的取值链是 command → path → file → url → query，没有 pattern ⇒ `grep {pattern:"TODO", path:"src/agent"}` 折成「src/agent」、`glob {pattern:"src/**/*.ts"}` 甩成 `{"pattern":…}`；折叠行只有这一句话，主语丢了没处补。pattern 插到 path 之前（command → pattern → path → file → url → query），既有五档顺序不动。另一半是词表：静态工具面 `TOOL_NAMES` 里有七把没有动词（grep / glob / lsp / clarify / propose_plan / render_image / verify），渲染层按「未知工具」把实现名摆上屏；陈旧键 `list_dir`（工具已由 glob 取代）一并撤掉。新判卷 `tool-row-summary.test.ts` 钉两面：grep 的 pattern 优先于 path、`TOOL_NAMES` 全覆盖且词表不许有工具面之外的键。
++42. **编排工具行挑主语（第 917 页）**：`summarize` 只认 command / pattern / path / file / url / query，编排族与 clarify 的参数一个都不在里面 ⇒ `spawn_agent` 行是 `{"task":…,"mode":…}`、`list_agents` 是 `{}`、clarify 是一串 questions JSON——用户看到的是参数原文，不是「派了什么活」。改为 `summarize(tool, args)`：先按工具挑主语（spawn→task、send→message、wait/cancel→「N 个子任务」或「本会话全部子任务」、list→「本会话全部子任务」、resume/close→thread_id、clarify→第一个问题＋共 N 问），挑不到才回通用链/JSON 兜底；对应六个动词（发消息 / 等待 / 撤销 / 列出 / 恢复 / 关闭）一并补进 `TOOL_VERBS`。

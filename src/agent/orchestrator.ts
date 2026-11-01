@@ -1209,7 +1209,6 @@ export class Orchestrator {
       // §9.5 SubagentStart：matcher 字段 = agent 类型；stdout 的 additionalContext 必须进 worker 的
       // system 块——只发事件不接回执，就是本面点过多次的「收下即丢」。
       const startContext = await this.subagentHook(w, "SubagentStart");
-      const system = await buildWorkerSystemMessages(w, this.opts.workspace, startContext); // 记忆注入恒读主 checkout（裁决 2）
       // M3c：插件角色工具面裁剪（frontmatter.tools 白名单 − disallowedTools；裁剪后必须非空）
       // M7：影响面读端三处同源（规格 / 实例 / loop 白名单），开关关着时一处都不加 ⇒ 零行为。
       const impactOn = this.opts.impactAnalysis === true;
@@ -1220,6 +1219,23 @@ export class Orchestrator {
       });
       const table = filterWorkerTable(w, baseTable);
       const specs = filterWorkerSpecs(w, workerToolSpecs(w.mode, { impactAnalysis: impactOn }));
+      // Evolve 起点注记：按 worker 的任务面取 active 经验，排在记忆之后、任务书之前。
+      // 读不动/抛错只出声——worker 不能因为经验面读账失败而起不来。
+      let experienceNote = "";
+      if (this.opts.workerExperienceNote !== undefined) {
+        try {
+          experienceNote = await this.opts.workerExperienceNote({
+            agentId: w.agentId,
+            task: w.task,
+            mode: w.mode,
+            toolNames: specs.map((spec) => spec.function.name),
+          });
+        } catch (err) {
+          console.warn("[evolve] worker 经验注记失败（不影响 worker）: "
+            + (err instanceof Error ? err.message : String(err)));
+        }
+      }
+      const system = await buildWorkerSystemMessages(w, this.opts.workspace, startContext, experienceNote); // 记忆注入恒读主 checkout（裁决 2）
       const provider = createWorkerProvider({
         readEvents: () => w.events,
         system,
@@ -1266,7 +1282,24 @@ export class Orchestrator {
         signal: w.controller.signal,
         agentId: w.agentId,
         ...(workerHooks ? { hooks: workerHooks } : {}),
-        ...(workerVerify ? { verify: workerVerify, autoVerify: true } : {}),
+        ...(workerVerify
+          ? {
+              verify: workerVerify,
+              autoVerify: true,
+              ...(this.opts.workerAutoVerifyRepair === true ? { autoVerifyRepair: true } : {}),
+            }
+          : {}),
+        ...(this.opts.workerExperienceNudge !== undefined
+          ? {
+              experienceNudge: (signals: readonly string[]) => this.opts.workerExperienceNudge!({
+                agentId: w.agentId,
+                task: w.task,
+                mode: w.mode,
+                toolNames: specs.map((spec) => spec.function.name),
+                signals,
+              }),
+            }
+          : {}),
       });
       // loop 可以在取消后正常返回；终态看信号，不能只靠 catch 判断取消。
       if (w.controller.signal.aborted) {

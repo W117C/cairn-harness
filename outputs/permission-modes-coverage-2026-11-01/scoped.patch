@@ -1,0 +1,42 @@
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:48:42
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 16:47:52
+@@ -4311,3 +4311,4 @@
+ 70. **「将克隆到」的名字与落库的名字是同一份解析（第 947 页）**：`repoNameFromUrl` 在 main 侧决定**存下来的项目名**，渲染层 `AddProjectMenu` 又抄了一份 `repoNamePreview` 只有当预览用——两处各一份时，改一处就漂（预览说 `bar`、落库说 `bar-2`）。收进 `src/git-url.ts`，渲染层与 `git-ops.ts` 同读；同一轮的 `triggerLabel`（`agent/evolve/playbook.ts` vs `main/evolve/promotion.ts`）也收到一处。判卷：两个函数的取值矩阵 + 「两处都不再自己写一份」。
+ 71. **临时目录清理不许把绿判据弄红（第 948 页）**：`terminal-login-shell.test.ts` 用隔离 HOME 起真登录 shell，`afterEach` 裸 `rmSync` 撞上 shell 还在写 `.zcompdump`/`.zsh_history` ⇒ `ENOTEMPTY` ⇒ 一条判据由绿变红（2026-11-01 桌面套件首跑实测；单跑 10/10 绿、重跑整套绿，典型的清理竞态）。新增 `tests/helpers/temp-dir.ts#removeTempDir`：带重试地删、删不掉也咽下（留下的是系统临时目录）；该测试改用它。探针实测：同一现场下裸 `rmSync` 15/15 抛 `ENOTEMPTY`，带重试+咽下 0/15。
+ 72. **设置页头不许自己抄一份分区名（第 949 页）**：`settings-nav.tsx#SECTIONS` 自称「唯一事实源——导航与命令面板只许从这里取」，而 `SettingsPanel` 的七个页头各写了一遍字面量（`title="通用"`、`title="关于与更新"`…）——导航改名、页头就留旧话。新增 `sectionLabel(id)`，六个页头改读它；判卷钉「页头不再出现字面量」「六个分区都走 sectionLabel」「分区名两两不同」。
++73. **设置页档位与词表逐个对上（第 950 页）**：权限档的词表 `MODE_LABEL`（芯片/菜单）与设置页的 `MODE_OPTIONS`（单选卡）是两份，互相不锁——2026-10-24 加第五档 `full-access` 时只补了词表，设置页仍列四档，用户从设置页选不到最松档、用芯片切过去后四个单选项全不选中（注释里记着这次事故）。新增 `tests/permission-modes-coverage.test.ts`：两份的 id 集合必须**恰好相等**、无重复、每项都有标题与说明，且条数 ≥5（删空了不许算通过）。
+--- /dev/null → apps/desktop/tests/permission-modes-coverage.test.ts
+--- /dev/null	2026-11-01 16:48:42
++++ b/apps/desktop/tests/permission-modes-coverage.test.ts	2026-11-01 16:47:35
+@@ -0,0 +1,31 @@
++// 第 950 页：设置页的五个档位必须与词表逐个对上。
++//
++// 这里出过一次真事故（写在 `settings-sections.tsx#MODE_OPTIONS` 的注释里）：2026-10-24 加了第五档
++// `full-access`，只补进了芯片/菜单的词表 `MODE_LABEL`，设置页仍只列四档 ⇒ 用户从设置页永远选不到
++// 最松档，而且用芯片切过去之后四个单选项**全不选中**（看起来像"没生效"）。词表两份、互相不锁。
++//
++// 判据：`MODE_OPTIONS` 的 id 集合必须**恰好等于** `MODE_LABEL` 的键集合（不多不少、不重复）。
++import { describe, expect, it } from "vitest";
++import { MODE_LABEL } from "../src/renderer/permission-labels";
++import { MODE_OPTIONS } from "../src/renderer/components/settings-sections";
++
++describe("设置页档位与词表逐个对上（第 950 页）", () => {
++  it("不多不少：id 集合相等", () => {
++    const listed = MODE_OPTIONS.map((m) => m.id).sort();
++    const vocab = (Object.keys(MODE_LABEL) as string[]).sort();
++    expect(listed).toEqual(vocab);
++  });
++
++  it("不重复：每个档位在设置页只出现一次", () => {
++    const ids = MODE_OPTIONS.map((m) => m.id);
++    expect(new Set(ids).size).toBe(ids.length);
++    expect(ids.length).toBeGreaterThanOrEqual(5); // 少于五档说明表被删空了，不是"通过"
++  });
++
++  it("每一项都有人话标题与说明（空串不许混过去）", () => {
++    for (const m of MODE_OPTIONS) {
++      expect(m.label.trim(), m.id).not.toBe("");
++      expect(m.desc.trim(), m.id).not.toBe("");
++    }
++  });
++});

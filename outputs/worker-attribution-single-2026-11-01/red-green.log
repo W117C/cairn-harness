@@ -1,0 +1,15 @@
+=== 造红 A：用量账本写回「漏空串」那条 ===
+     × 用量账本把空串 agent_id 的事件算作主会话（第 946 页的行为修正） 3ms
+AssertionError: expected 1 to be 2 // Object.is equality
+      Tests  1 failed | 3 passed (4)
+
+=== 造红 B：渲染面写回自己那份（漏空串）===
+     × 空串 agent_id 的事件照样进主流行（渲染面同一条判据） 14ms
+     × 五个消费面都读同一份，且都不再自己写一条 1ms
+      Tests  2 failed | 2 passed (4)
+
+=== 复原后 ===
+      Tests  4 passed (4)
+=== sha256 ===
+e539ea2579622fc96486c956459c55ceaeec925633c6ab56170762b78f98b585
+d625278cf2ba372cbca5d75b360f3b02a03a70fdea761b15d276713494e15ce3

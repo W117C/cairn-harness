@@ -1,0 +1,19 @@
+=== 改前 A：源码注释重新引一个不存在的页（408）===
+     × 源码注释里没有断链的台账页号 46ms
+apps/desktop/src/renderer/markdown.tsx:5 → 第 408 页: expected [ Array(1) ] to deeply equal []
++   "apps/desktop/src/renderer/markdown.tsx:5 → 第 408 页",
+      Tests  1 failed | 1 passed (2)
+
+=== 改前 B：台账正文新写一条指向不存在页的引用（582，未登记）===
+     × 台账正文里没有**新增**的断链页号（旧账登记，只准调低） 37ms
+AssertionError: 新出现的断链页号（台账里没有那一页）：582: expected [ 582 ] to deeply equal []
+     99|     expect(added, "新出现的断链页号（台账里没有那一页）：" + added.join(" | ")).toEqual([…
+      Tests  1 failed | 1 passed (2)
+
+=== 复原后 ===
+      Tests  2 passed (2)
+=== sha256 ===
+   1 df960df341faf7bc33ddfe4850c76d684d610e803fef7b021e0eb3173ca40883
+   1 98d6d27a00b09b3f05eb1e5e5f01e91d76d76bddb6f87f48e5e9a15904f3a598
+   1 df960df341faf7bc33ddfe4850c76d684d610e803fef7b021e0eb3173ca40883
+   1 98d6d27a00b09b3f05eb1e5e5f01e91d76d76bddb6f87f48e5e9a15904f3a598

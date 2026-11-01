@@ -1,0 +1,28 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/session-lock-recovery.test.ts (12 tests | 1 failed) 30493ms
+   ❯ session run lock recovery (12)
+     × does not reclaim a run lock while another process owns the root mutation lock 30012ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/session-lock-recovery.test.ts > session run lock recovery > does not reclaim a run lock while another process owns the root mutation lock
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/session-lock-recovery.test.ts:36:3
+     34|   );
+     35|
+     36|   it("does not reclaim a run lock while another process owns the root …
+       |   ^
+     37|     const root = await tempRoot();
+     38|     const path = join(root, "s.jsonl");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 3 passed (4)
+      Tests  1 failed | 24 passed (25)
+   Start at  15:33:27
+   Duration  31.31s (tests 99%, transform 1%)
+

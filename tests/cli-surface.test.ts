@@ -7,11 +7,12 @@
 // 这里钉的是「没人能用」这个缺陷本身：没有 bin、没有 README、没有可执行的产品面。
 import { spawnSync } from "node:child_process";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { renderEvent } from "../src/cli";
+import { makeUlid, validateAutomation } from "../src/main/automations";
 import type { AgentEvent } from "../src/events";
 
 const ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
@@ -106,6 +107,378 @@ describe("cairn CLI：退出码 0 / 1 / 2（照 scripts/gym-run.ts 的口径）"
     expect(r.status).toBe(2);
     expect(r.out).toContain("位置参数最多两个");
   });
+});
+
+describe("cairn CLI：打错的旗标不许静默变成位置参数", () => {
+  it("未知 -- 选项 ⇒ exit 2 且点名；不会被读成「工作区 + 任务」", () => {
+    const r = runCli(["--sessoin", "s1", "做点事"]);
+    expect(r.status).toBe(2);
+    expect(r.out).toContain("未知选项：--sessoin");
+    expect(r.out).not.toContain("位置参数最多两个");
+    expect(r.out).not.toContain("事件日志：");
+  }, 15_000);
+
+  it("取值型旗标缺值 ⇒ 点名那枚旗标（--session 不再被误报成缺任务描述）", () => {
+    const r = runCli(["--session"]);
+    expect(r.status).toBe(2);
+    expect(r.out).toContain("--session 需要一个值");
+  }, 15_000);
+
+  it("只在探测面生效的旗标脱离 --discover ⇒ 拒，不静默忽略", () => {
+    const r = runCli(["--label", "x", "做点事"]);
+    expect(r.status).toBe(2);
+    expect(r.out).toContain("--label 只配合 --discover 用");
+    // 那句「单独给会被拒绝」的边界由这一格判：不是只摆一句文案，是真退 2。
+    expect(r.out).toContain("单独给会被拒绝");
+  }, 15_000);
+
+  it("工作区路径上挡着普通文件 ⇒ 归因为工作区不可用，不是 providers.json 配置错", () => {
+    const dir = mkdtempSync(join(tmpdir(), "cairn-cli-ws-"));
+    const blocker = join(dir, "blocker");
+    writeFileSync(blocker, "not a directory", "utf8");
+    const r = runCli(["--provider", "demo", "--workspace", join(blocker, "sub"), "做点事"]);
+    rmSync(dir, { recursive: true, force: true });
+    expect(r.status).toBe(2);
+    expect(r.out).toContain("工作区路径不可用");
+    expect(r.out).not.toContain("providers.json 配置有问题");
+  }, 20_000);
+
+  it("工作区直接指向普通文件 ⇒ 同一句话，且不抛原始堆栈", () => {
+    const dir = mkdtempSync(join(tmpdir(), "cairn-cli-ws-"));
+    const file = join(dir, "a-file");
+    writeFileSync(file, "x", "utf8");
+    const r = runCli(["--provider", "demo", "--workspace", file, "做点事"]);
+    rmSync(dir, { recursive: true, force: true });
+    expect(r.status).toBe(2);
+    expect(r.out).toContain("不是目录");
+    expect(r.out).not.toContain("at async main");
+  }, 20_000);
+});
+
+describe("cairn CLI：设置文件坏了不许静默用缺省", () => {
+  it("坏 settings.json ⇒ 明说「设置文件未生效」并给出路，仍按缺省跑完整性检查", () => {
+    const ws = mkdtempSync(join(tmpdir(), "cairn-bad-settings-"));
+    mkdirSync(join(ws, ".agent"), { recursive: true });
+    writeFileSync(join(ws, ".agent", "settings.json"), "{ 不是 JSON", "utf8");
+    try {
+      const r = runCli(["--workspace", ws, "--provider", "demo", "--mode", "auto", "做点事"], { timeout: 60_000 });
+      expect(r.out).toContain("设置文件未生效");
+      expect(r.out).toContain("按缺省设置继续");
+      expect(r.out).toContain("JSON 解析失败");
+      // 不是拒跑：缺省档是 fail-closed 的安全侧，照常跑完。
+      expect(r.out).toContain("我先读一下 src/todo.ts");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("设置文件不存在或正常 ⇒ 没有这句警告", () => {
+    const ws = mkdtempSync(join(tmpdir(), "cairn-good-settings-"));
+    mkdirSync(join(ws, ".agent"), { recursive: true });
+    writeFileSync(join(ws, ".agent", "settings.json"), JSON.stringify({ theme: "dark" }), "utf8");
+    try {
+      const r = runCli(["--workspace", ws, "--provider", "demo", "--mode", "auto", "做点事"], { timeout: 60_000 });
+      expect(r.out).not.toContain("设置文件未生效");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
+
+describe("cairn CLI：`--` 之后的 token 一律按位置参数（任务以破折号开头时）", () => {
+  const firstUserMessage = (ws: string): string | null => {
+    const dir = join(ws, ".agent", "sessions");
+    const file = readdirSync(dir).find((f) => f.endsWith(".jsonl"));
+    if (file === undefined) return null;
+    const first = JSON.parse(readFileSync(join(dir, file), "utf8").split("\n")[0] ?? "{}") as { type?: string; content?: unknown };
+    return first.type === "user_message" && typeof first.content === "string" ? first.content : null;
+  };
+
+  it("`--` 后的破折号任务真的作为任务正文落进会话", () => {
+    const ws = mkdtempSync(join(tmpdir(), "cairn-dash-task-"));
+    try {
+      const task = "--以两个破折号开头的任务";
+      const r = runCli(["--workspace", ws, "--provider", "demo", "--mode", "auto", "--", task], { timeout: 60_000 });
+      expect(r.out, "破折号任务被当成了旗标/用法错：" + r.out).not.toContain("未知选项");
+      expect(r.status).not.toBe(2);
+      expect(firstUserMessage(ws), "任务正文没有原样落进会话").toBe(task);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("`--` 后的 --help 是任务文本，不是帮助命令", () => {
+    const ws = mkdtempSync(join(tmpdir(), "cairn-dash-help-"));
+    try {
+      const r = runCli(["--workspace", ws, "--provider", "demo", "--mode", "auto", "--", "--help"], { timeout: 60_000 });
+      expect(r.out).not.toContain("用法：cairn <任务描述>");
+      expect(firstUserMessage(ws)).toBe("--help");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("分隔符之前的未知旗标照样拒（`--` 不是绕过闸的后门）", () => {
+    const r = runCli(["--nonsense", "--", "做点事"]);
+    expect(r.status).toBe(2);
+    expect(r.out).toContain("未知选项：--nonsense");
+  }, 15_000);
+
+  it("帮助里写明分隔符的用法（没进 help 的规则等于不存在）", () => {
+    expect(runCli(["--help"]).out).toContain("之后的 token 一律按位置参数");
+  }, 15_000);
+});
+
+describe("cairn CLI：--serve 常驻调度（不需任务描述）", () => {
+  it("--serve 不带任务即可启动；坏 automations.json 的警告会上屏", () => {
+    const ws = mkdtempSync(join(tmpdir(), "cairn-serve-"));
+    mkdirSync(join(ws, ".agent", "schedules"), { recursive: true });
+    writeFileSync(join(ws, ".agent", "schedules", "automations.json"), "{oops", "utf8");
+    try {
+      const r = runCli(["--provider", "demo", "--workspace", ws, "--serve"], { timeout: 8000 });
+      expect(r.out, "serve 被任务描述闸拦住：" + r.out).not.toContain("需要一个任务描述");
+      expect(r.out).toContain("调度器已启动");
+      expect(r.out, "坏档警告没有上屏（onWarn 没接）").toMatch(/调度任务文件损坏/);
+      expect(r.out).toMatch(/修好或删除该文件后重试/);
+      expect(r.out).toContain("已装载 0 个任务");
+      expect(r.out).toContain("本工作区还没有定时任务");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("--serve 启动行报出已装载任务数（有任务时不再是「还没有」）", () => {
+    const ws = mkdtempSync(join(tmpdir(), "cairn-serve-count-"));
+    mkdirSync(join(ws, ".agent", "schedules"), { recursive: true });
+    const def = validateAutomation({
+      id: makeUlid(), name: "每日报表", prompt: "汇总今日变更", schedule: { kind: "daily", time: "09:30" },
+      timeZone: "Asia/Shanghai", permissionTier: "read-only", createdAt: new Date().toISOString(),
+    });
+    if (!def.ok) throw new Error("fixture invalid: " + def.errors.join("；"));
+    writeFileSync(join(ws, ".agent", "schedules", "automations.json"), JSON.stringify({ version: 1, tasks: [def.value] }), "utf8");
+    try {
+      const r = runCli(["--provider", "demo", "--workspace", ws, "--serve"], { timeout: 8000 });
+      expect(r.out).toContain("已装载 1 个任务");
+      expect(r.out).not.toContain("本工作区还没有定时任务");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("--serve 带任务描述仍按互斥拒绝（豁免没把互斥表吞掉）", () => {
+    const r = runCli(["--provider", "demo", "--serve", "做点事"], { timeout: 15_000 });
+    expect(r.status).toBe(2);
+    expect(r.out).toContain("--serve 是常驻调度模式");
+  }, 20_000);
+});
+
+describe("cairn CLI：会话目录不可写", () => {
+  /** 只读目录夹具：先建好再 0500。finally 里 chmod 回 0700 才删得掉。 */
+  function sessionsFixture(): { ws: string; sessions: string } {
+    const ws = mkdtempSync(join(tmpdir(), "cairn-ro-sessions-"));
+    const sessions = join(ws, ".agent", "sessions");
+    mkdirSync(sessions, { recursive: true });
+    return { ws, sessions };
+  }
+
+  it("运行：exit 2 且给产品话，不是一条裸 EACCES … .lock", () => {
+    const { ws, sessions } = sessionsFixture();
+    chmodSync(sessions, 0o500);
+    try {
+      const r = runCli(["--workspace", ws, "--provider", "demo", "--mode", "auto", "做点事"], { timeout: 60_000 });
+      expect(r.status, "输出：" + r.out).toBe(2);
+      expect(r.out).toMatch(/会话目录不可写/);
+      expect(r.out).toContain(sessions);
+      expect(r.out).not.toContain(".jsonl.lock");
+    } finally {
+      chmodSync(sessions, 0o700);
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("--compact 同样在写锁之前就被拦下", () => {
+    const { ws, sessions } = sessionsFixture();
+    writeFileSync(join(sessions, "ro.jsonl"), JSON.stringify({ type: "user_message", content: "hi" }) + "\n", "utf8");
+    chmodSync(sessions, 0o500);
+    try {
+      const r = runCli(["--workspace", ws, "--provider", "demo", "--session", "ro", "--compact"], { timeout: 60_000 });
+      expect(r.status).toBe(2);
+      expect(r.out).toMatch(/会话目录不可写/);
+    } finally {
+      chmodSync(sessions, 0o700);
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("--replay 是只读面：会话目录不可写也照常回放（不许一刀切拒读）", () => {
+    const { ws, sessions } = sessionsFixture();
+    writeFileSync(join(sessions, "ro.jsonl"), JSON.stringify({ type: "user_message", content: "只读回放" }) + "\n", "utf8");
+    chmodSync(sessions, 0o500);
+    try {
+      const r = runCli(["--workspace", ws, "--replay", "ro"], { timeout: 60_000 });
+      expect(r.status, "输出：" + r.out).toBe(0);
+      expect(r.out).toContain("只读回放");
+      expect(r.out).not.toContain("会话目录不可写");
+    } finally {
+      chmodSync(sessions, 0o700);
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
+
+describe("cairn CLI：`--flag=value` 等号形式（值可带前导破折号）", () => {
+  it("等号形式照常解析（--provider=demo --mode=auto --workspace=…）", () => {
+    const ws = mkdtempSync(join(tmpdir(), "cairn-eq-"));
+    try {
+      const r = runCli([`--provider=demo`, `--mode=auto`, `--workspace=${ws}`, "做点事"], { timeout: 60_000 });
+      expect(r.out, "等号形式被当成了未知选项：" + r.out).not.toContain("未知选项");
+      expect(r.status).not.toBe(2);
+      expect(readdirSync(join(ws, ".agent", "sessions")).filter((f) => f.endsWith(".jsonl")).length).toBe(1);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("--message=--差量：等号值允许前导破折号，原样落进会话", () => {
+    const ws = mkdtempSync(join(tmpdir(), "cairn-eq-msg-"));
+    try {
+      const task = "--以破折号开头的任务";
+      const r = runCli([`--provider=demo`, `--mode=auto`, `--workspace=${ws}`, `--message=${task}`], { timeout: 60_000 });
+      expect(r.status).not.toBe(2);
+      const dir = join(ws, ".agent", "sessions");
+      const file = readdirSync(dir).find((f) => f.endsWith(".jsonl"));
+      expect(file).toBeDefined();
+      const first = JSON.parse(readFileSync(join(dir, file!), "utf8").split("\n")[0] ?? "{}") as { type?: string; content?: unknown };
+      expect(first).toMatchObject({ type: "user_message", content: task });
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("等号形式的未知旗标照样点名（--bogus=x ⇒ --bogus）", () => {
+    const r = runCli(["--bogus=x", "做点事"]);
+    expect(r.status).toBe(2);
+    expect(r.out).toContain("未知选项：--bogus");
+  }, 15_000);
+
+  it("帮助里写明等号形式", () => {
+    expect(runCli(["--help"]).out).toContain("--flag=value");
+  }, 15_000);
+});
+
+describe("cairn CLI：同一会话的并发 run 被会话锁挡住", () => {
+  it("另一个活进程持有会话锁 ⇒ 拒跑并点名 pid，日志一个字节不增", () => {
+    const ws = mkdtempSync(join(tmpdir(), "cairn-session-busy-"));
+    const sessions = join(ws, ".agent", "sessions");
+    mkdirSync(sessions, { recursive: true });
+    const log = join(sessions, "busy.jsonl");
+    writeFileSync(log, JSON.stringify({ type: "user_message", content: "已有一条" }) + "\n", "utf8");
+    writeFileSync(`${log}.lock`, JSON.stringify({ pid: process.pid, nonce: "probe", startedAt: new Date().toISOString() }) + "\n", "utf8");
+    const before = readFileSync(log, "utf8");
+    try {
+      const r = runCli(["--workspace", ws, "--provider", "demo", "--mode", "auto", "--session", "busy", "继续"], { timeout: 60_000 });
+      expect(r.status, "run 输出：" + r.out).toBe(1);
+      expect(r.out).toContain("正被另一个进程运行");
+      expect(r.out).toContain(String(process.pid));
+      expect(readFileSync(log, "utf8"), "被拒的 run 不许往别人的转录里追加事件").toBe(before);
+      // 别人的锁不许被我们删掉。
+      expect(existsSync(`${log}.lock`)).toBe(true);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("会话被占用时 --goal 也不许先写 goal_set（整轮在锁内，不是只锁 run）", () => {
+    const ws = mkdtempSync(join(tmpdir(), "cairn-goal-busy-"));
+    const sessions = join(ws, ".agent", "sessions");
+    mkdirSync(sessions, { recursive: true });
+    const log = join(sessions, "goal-busy.jsonl");
+    writeFileSync(log, JSON.stringify({ type: "user_message", content: "已有一条" }) + "\n", "utf8");
+    writeFileSync(`${log}.lock`, JSON.stringify({ pid: process.pid, nonce: "probe", startedAt: new Date().toISOString() }) + "\n", "utf8");
+    const before = readFileSync(log, "utf8");
+    try {
+      const r = runCli(["--workspace", ws, "--provider", "demo", "--mode", "auto", "--session", "goal-busy", "--goal", "把测试修绿", "继续"], { timeout: 60_000 });
+      expect(r.status, "run 输出：" + r.out).toBe(1);
+      expect(r.out).toContain("正被另一个进程运行");
+      expect(r.out, "锁没拿到却先说目标已设 = goal_set 已在锁外落盘").not.toContain("目标已设");
+      expect(readFileSync(log, "utf8"), "被拒的这轮不许写 goal_set").toBe(before);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("--compact 撞上活动 run 的锁 ⇒ 拒，不往会话里写 compaction", () => {
+    const ws = mkdtempSync(join(tmpdir(), "cairn-session-compact-busy-"));
+    const sessions = join(ws, ".agent", "sessions");
+    mkdirSync(sessions, { recursive: true });
+    const log = join(sessions, "compacting.jsonl");
+    writeFileSync(log, JSON.stringify({ type: "user_message", content: "待压缩" }) + "\n" + JSON.stringify({ type: "assistant_message", content: "回了一条很长的话。".repeat(200) }) + "\n", "utf8");
+    writeFileSync(`${log}.lock`, JSON.stringify({ pid: process.pid, nonce: "probe", startedAt: new Date().toISOString() }) + "\n", "utf8");
+    const before = readFileSync(log, "utf8");
+    try {
+      const r = runCli(["--workspace", ws, "--session", "compacting", "--compact"], {
+        noKeys: false, env: { OPENAI_API_KEY: "cairn-unused-placeholder", M1D_COMPACTION_DEMO: "1" },
+      });
+      expect(r.status, "输出：" + r.out).toBe(1);
+      expect(r.out).toContain("正被另一个进程运行");
+      expect(readFileSync(log, "utf8"), "被拒的压缩不许写事件").toBe(before);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("崩溃遗留的死 pid 锁 ⇒ 自动清理并照常跑完，跑完释放锁", () => {
+    const ws = mkdtempSync(join(tmpdir(), "cairn-session-stale-"));
+    const sessions = join(ws, ".agent", "sessions");
+    mkdirSync(sessions, { recursive: true });
+    const log = join(sessions, "stale.jsonl");
+    writeFileSync(log, JSON.stringify({ type: "user_message", content: "旧的一轮" }) + "\n", "utf8");
+    writeFileSync(`${log}.lock`, JSON.stringify({ pid: 999_999_999, nonce: "dead", startedAt: "2026-01-01T00:00:00.000Z" }) + "\n", "utf8");
+    try {
+      const r = runCli(["--workspace", ws, "--provider", "demo", "--mode", "auto", "--session", "stale", "继续"], { timeout: 60_000 });
+      expect(r.out, "死锁没被清理：" + r.out).not.toContain("正被另一个进程运行");
+      expect(existsSync(join(ws, "src", "todo.ts")), "清理后应照常跑完").toBe(true);
+      expect(existsSync(`${log}.lock`), "跑完应释放锁").toBe(false);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
+
+describe("cairn CLI：坏会话日志不让这一轮先产生副作用", () => {
+  it("--session 指到有非尾部坏行的日志 ⇒ 开跑前就拒，一个字节都不写", () => {
+    const ws = mkdtempSync(join(tmpdir(), "cairn-corrupt-session-"));
+    const sessions = join(ws, ".agent", "sessions");
+    mkdirSync(sessions, { recursive: true });
+    writeFileSync(join(sessions, "mid.jsonl"),
+      JSON.stringify({ type: "user_message", content: "a" }) + "\nBAD\n" + JSON.stringify({ type: "assistant_message", content: "b" }) + "\n",
+      "utf8");
+    try {
+      const r = runCli(["--workspace", ws, "--provider", "demo", "--mode", "auto", "--session", "mid", "继续"], { timeout: 60_000 });
+      expect(r.status, "run 输出：" + r.out).toBe(1);
+      expect(r.out).toContain("无法续跑这条会话");
+      expect(r.out).toContain("非尾部坏行");
+      // demo 剧本第一拍就写 src/todo.ts；开跑前拒掉 ⇒ 工作区里不该有它。
+      expect(existsSync(join(ws, "src", "todo.ts")), "坏日志下这一轮居然先产生了副作用").toBe(false);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("尾部坏行仍按降级容错放行（不许把容忍的那半也拒掉）", () => {
+    const ws = mkdtempSync(join(tmpdir(), "cairn-tail-bad-"));
+    const sessions = join(ws, ".agent", "sessions");
+    mkdirSync(sessions, { recursive: true });
+    writeFileSync(join(sessions, "tail.jsonl"),
+      JSON.stringify({ type: "user_message", content: "a" }) + "\nBAD-TAIL\n", "utf8");
+    try {
+      const r = runCli(["--workspace", ws, "--provider", "demo", "--mode", "auto", "--session", "tail", "继续"], { timeout: 60_000 });
+      expect(r.out, "尾部坏行被整条拒了 ⇒ 降级容错没了：" + r.out).not.toContain("无法续跑这条会话");
+      expect(existsSync(join(ws, "src", "todo.ts")), "尾部坏行应放行到真跑").toBe(true);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
 
 describe("cairn CLI：--model 自由档位", () => {

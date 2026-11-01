@@ -20,6 +20,8 @@ export interface PluginSecretBackend {
   isAvailable(): boolean;
   set(key: string, plaintext: string): Promise<void>;
   get(key: string): Promise<string | null>;
+  delete?(key: string): Promise<void>;
+  deleteMany?(keys: readonly string[]): Promise<void>;
 }
 
 /** safeStorage 落盘占位符：出现在明文配置文件里，绝不含真实值。 */
@@ -49,6 +51,22 @@ export function installSafeStorageBackend(io: SafeStorageIo, storePath: string):
       } catch {
         return null; // 解密失败（换机器/换钥匙）→ null，不抛明文
       }
+    },
+    async delete(key) {
+      const store = await readStore(storePath);
+      if (!(key in store)) return;
+      delete store[key];
+      await writeStore(storePath, store);
+    },
+    async deleteMany(keys) {
+      const store = await readStore(storePath);
+      let changed = false;
+      for (const key of keys) {
+        if (!(key in store)) continue;
+        delete store[key];
+        changed = true;
+      }
+      if (changed) await writeStore(storePath, store);
     },
   };
   return true;
@@ -99,6 +117,28 @@ export async function putPluginSecret(
 export async function getPluginSecret(plugin: string, key: string): Promise<string | null> {
   if (!backend) return null;
   return await backend.get(secretKey(plugin, key));
+}
+
+export async function readPluginSecretKeys(dir: string, plugin: string): Promise<readonly string[]> {
+  try {
+    const parsed = JSON.parse(await readFile(pluginUserConfigFile(dir), "utf8")) as {
+      plugin?: unknown;
+      secretKeys?: unknown;
+    };
+    if (parsed.plugin !== plugin || !Array.isArray(parsed.secretKeys)) return [];
+    return parsed.secretKeys.filter((key): key is string => typeof key === "string");
+  } catch {
+    return [];
+  }
+}
+
+export async function deletePluginSecrets(plugin: string, keys: readonly string[]): Promise<void> {
+  if (keys.length === 0) return;
+  if (backend === null) throw new Error(`${NO_BACKEND_ERROR}: cannot delete plugin secrets`);
+  if (backend.deleteMany === undefined) {
+    throw new Error("secure storage backend does not support atomic delete");
+  }
+  await backend.deleteMany(keys.map((key) => secretKey(plugin, key)));
 }
 
 /** userConfig 的落盘文件名（读写两侧共用，别各拼一遍）。 */

@@ -1,0 +1,82 @@
+--- a/apps/desktop/src/renderer/derived/stream.ts	2026-11-01 14:15:25
++++ b/apps/desktop/src/renderer/derived/stream.ts	2026-11-01 14:14:31
+@@ -47,6 +47,13 @@
+     return n > 0 ? `${String(n)} 个子任务` : "本会话全部子任务";
+   }
+   if (tool === "list_agents") return "本会话全部子任务";
++  if (tool === "obs_recall") return str(args.id);
++  if (tool === "impact_query") return str(args.symbol);
++  if (tool === "diagnose") {
++    const face = str(args.face);
++    if (face === undefined) return "全部检查";
++    return face === "lint" ? "只跑 lint" : "只跑 test";
++  }
+   if (tool === "skill") return str(args.name);
+   if (tool === "refine_goal") return str(args.objective)?.slice(0, 80);
+   if (tool === "mcp_list") return str(args.server) ?? "全部 MCP 服务器";
+--- a/apps/desktop/src/renderer/derived/tool-verbs.ts	2026-11-01 14:15:25
++++ b/apps/desktop/src/renderer/derived/tool-verbs.ts	2026-11-01 14:14:31
+@@ -46,6 +46,12 @@
+   mcp_list: "列 MCP",
+   mcp_activate: "启用 MCP",
+   mcp_release: "停用 MCP",
++  // 采集/检索/诊断四把（第 927 页）：摘要分别走 ownSubject（id / symbol / face）或通用链（query）。
++  tool_search: "找工具",
++  search_history: "搜历史",
++  impact_query: "查波及面",
++  obs_recall: "回看",
++  diagnose: "诊断",
+   read_image: "读图",
+ };
+ export function toolVerb(tool: string): string | null {
+--- a/apps/desktop/tests/tool-row-summary.test.ts	2026-11-01 14:15:25
++++ b/apps/desktop/tests/tool-row-summary.test.ts	2026-11-01 14:14:12
+@@ -130,12 +130,41 @@
+   });
+ });
+ 
++describe("采集/检索/诊断的行摘要（第 927 页）", () => {
++  it("obs_recall = 观察 id；impact_query = 符号名（file 模式仍走通用链）", () => {
++    expect(summarize("obs_recall", { id: "obs-7", by: "lines" })).toBe("obs-7");
++    expect(summarize("impact_query", { symbol: "buildConfig" })).toBe("buildConfig");
++    expect(summarize("impact_query", { file: "src/a.ts", deps: true })).toBe("src/a.ts");
++  });
++
++  it("diagnose：缺省说「全部检查」，指定 face 说清只跑哪类", () => {
++    expect(summarize("diagnose", {})).toBe("全部检查");
++    expect(summarize("diagnose", { face: "lint" })).toBe("只跑 lint");
++    expect(summarize("diagnose", { face: "test" })).toBe("只跑 test");
++  });
++
++  it("行面：diagnose 的折叠行是「诊断 只跑 lint」", () => {
++    const events = [
++      { type: "tool_call", id: "d1", name: "diagnose", args: { face: "lint" }, ts: 1 },
++      { type: "tool_result", callId: "d1", ok: true, ts: 2 },
++    ] as unknown as AgentEvent[];
++    const html = renderToStaticMarkup(createElement(Stream, { rows: projectStream(events) }));
++    expect(html).toContain("诊断 只跑 lint");
++    expect(html).not.toContain("&quot;face&quot;");
++  });
++});
++
+ describe("静态工具面每一把都有中文动词（实现名不上屏）", () => {
+   it("TOOL_NAMES 全覆盖", () => {
+     const missing = TOOL_NAMES.filter((n) => toolVerb(n) === null);
+     expect(missing, "没有动词、会被当成未知工具把实现名摆上屏：" + missing.join(" | ")).toEqual([]);
+   });
+ 
++  it("INJECTED_TOOLS 全覆盖（运行期注入的工具也不许把实现名摆上屏，第 927 页）", () => {
++    const missing = INJECTED_TOOLS.map((t) => t.name).filter((n) => toolVerb(n) === null);
++    expect(missing, "注入面里没有动词、会被当成未知工具把实现名摆上屏：" + missing.join(" | ")).toEqual([]);
++  });
++
+   it("词表里不许有工具面之外的陈旧键（如已不存在的 list_dir）", () => {
+     // web_fetch 的规格在 session-provider（网络工具按配置注册），既不进 TOOLS 也不进 INJECTED_TOOLS。
+     const known = new Set<string>([...TOOL_NAMES, ...INJECTED_TOOLS.map((t) => t.name), "web_fetch"]);
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 14:15:25
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 14:14:36
+@@ -4288,3 +4288,4 @@
+ 47. **字节刻度只有一把尺（第 924 页）**：附件行 `formatSize` 与日志窗的局部 `formatBytes` 各写一份——2048 字节一处写「2 KB」、一处写「2.0 KB」；512 字节在附件行是没单位的裸数「512」；两边在 1 MB 门口都写出四位数（「1024 KB」/「1024.0 KB」）。实现收到 `derived/format-bytes.ts`（B/KB/MB 一位小数、`1024.0 KB` 进位成 `1.0 MB`、非法与负数返回 null），两个组件都读它；附件行「拿不到就破折号」的口径留在调用点。
+ 48. **技能 / 目标 / MCP 元工具的行摘要（第 925 页）**：`skill` / `refine_goal` / `mcp_list` / `mcp_activate` / `mcp_release` 的参数同样没有 command/path，摘要此前落到 JSON 兜底（`{"name":"/plugin:review","args":…}`、`{}`）。`ownSubject` 补这五族：skill→调用名、refine_goal→目标原文（截 80）、mcp_list→server 或「全部 MCP 服务器」、mcp_activate→`server（N 把）`或`（整台）`、mcp_release→`server` 或 `server / 工具名`；`TOOL_VERBS` 补五个动词（用技能 / 改目标 / 列 · 启用 · 停用 MCP）。
+ 49. **⌘F 在折叠轮次里也能搜到（第 926 页）**：折叠轮次的分支只渲染「第 N 轮 + 摘要」，正文不在 DOM ⇒ 查找条原来只查 DOM，自己折起来的那些轮一律搜不到（计数 0，也没有提示）。现在 FindBar 同时读模型行：可见部分仍按 DOM 命中，折叠轮次里的 user/assistant 正文按模型补进来（按行序去重）；步进到折叠轮次里的命中时先展开那一轮，下一拍再滚到行锚并闪一下。工具行与元信息仍不参与（与 DOM 选择器同口径）。
++50. **注入面也全覆盖（第 927 页）**：静态工具面的动词判据只盯 `TOOL_NAMES`，运行期注入的五把（`tool_search` / `search_history` / `impact_query` / `obs_recall` / `diagnose`）漏在判据外——行首仍是实现名；`obs_recall` / `impact_query`（symbol 模式）/ `diagnose` 的摘要还会甩 JSON（`{}`、`{"face":"lint"}`）。补五个动词（找工具 / 搜历史 / 查波及面 / 回看 / 诊断）与三条主语（id / symbol / face），并把覆盖判据扩到 `INJECTED_TOOLS`：少一把就红，报错里当场点名。

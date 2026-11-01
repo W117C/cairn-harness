@@ -1,0 +1,179 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+ ❯ tests/run-queue-session.test.tsx (19 tests | 5 failed) 427ms
+   ❯ queue persistence before dispatch (6)
+     × does not execute before the dequeue save is acknowledged; failure keeps the head 55ms
+     × preserves a failed head together with messages appended during its save 54ms
+     × stops automatic draining after a save failure and retries only on explicit resume 1ms
+     × repeated resume during a pending save reserves only one drain 51ms
+     × restores a queue message only when the host explicitly did not accept it 52ms
+ ❯ tests/session-prefs-run-routing.test.ts (3 tests | 1 failed) 98ms
+   × distinguishes admission rejection from failure after a user message was accepted 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/run-queue-session.test.tsx > queue persistence before dispatch > does not execute before the dequeue save is acknowledged; failure keeps the head
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      Object {
+        "message": "queued 1",
+        "mode": "default",
+        "model": "chosen-model",
+        "sessionId": "current",
+        "thinking": "high",
+        "workspace": "/workspace",
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ tests/run-queue-session.test.tsx:217:29
+    215|       actions.resumeQueue();
+    216|       await vi.waitFor(() => expect(agent.queueSet).toHaveBeenCalledTi…
+    217|       expect(agent.run).not.toHaveBeenCalled();
+       |                             ^
+    218|     } finally { save.resolve({ ok: false, error: "disk full" }); await…
+    219|     expect(deps.sendQueue.current.get(key)).toEqual([head]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  tests/run-queue-session.test.tsx > queue persistence before dispatch > preserves a failed head together with messages appended during its save
+AssertionError: expected [ { id: 3, text: 'queued 3', …(1) } ] to deeply equal [ …(3) ]
+
+- Expected
++ Received
+
+  [
+    {
+      "attachments": [],
+-     "id": 1,
+-     "text": "queued 1",
+-   },
+-   {
+-     "attachments": [],
+-     "id": 2,
+-     "text": "queued 2",
+-   },
+-   {
+-     "attachments": [],
+      "id": 3,
+      "text": "queued 3",
+    },
+  ]
+
+ ❯ tests/run-queue-session.test.tsx:233:45
+    231|     actions.setQueueFor("current", [...(deps.sendQueue.current.get(key…
+    232|     save.resolve({ ok: false, error: "disk full" }); await writesDone(…
+    233|     expect(deps.sendQueue.current.get(key)).toEqual([head, tail, added…
+       |                                             ^
+    234|     expect(agent.queueSet).toHaveBeenLastCalledWith("current", [head, …
+    235|     expect(agent.run).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  tests/run-queue-session.test.tsx > queue persistence before dispatch > stops automatic draining after a save failure and retries only on explicit resume
+AssertionError: expected "vi.fn()" to be called 1 times, but got 2 times
+ ❯ tests/run-queue-session.test.tsx:247:23
+    245|     actions.setQueueFor("current", [head], "/workspace"); await writes…
+    246|     firstRun.resolve({ ok: true }); await sending;
+    247|     expect(agent.run).toHaveBeenCalledTimes(1);
+       |                       ^
+    248|     expect(deps.sendQueue.current.get(key)).toEqual([head]);
+    249|     actions.resumeQueue();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/run-queue-session.test.tsx > queue persistence before dispatch > repeated resume during a pending save reserves only one drain
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      Object {
+        "message": "queued 1",
+        "mode": "default",
+        "model": "chosen-model",
+        "sessionId": "current",
+        "thinking": "high",
+        "workspace": "/workspace",
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ tests/run-queue-session.test.tsx:262:33
+    260|     actions.resumeQueue(); actions.resumeQueue();
+    261|     await vi.waitFor(() => expect(agent.queueSet).toHaveBeenCalledTime…
+    262|     try { expect(agent.run).not.toHaveBeenCalled(); }
+       |                                 ^
+    263|     finally { save.resolve({ ok: true }); }
+    264|     await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(1));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tests/run-queue-session.test.tsx > queue persistence before dispatch > restores a queue message only when the host explicitly did not accept it
+AssertionError: expected [] to deeply equal [ { id: 1, text: 'queued 1', …(1) } ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "attachments": [],
+-     "id": 1,
+-     "text": "queued 1",
+-   },
+- ]
++ []
+
+ ❯ tests/run-queue-session.test.tsx:277:45
+    275|     actions.resumeQueue();
+    276|     await vi.waitFor(() => expect(deps.setLastError).toHaveBeenCalledW…
+    277|     expect(deps.sendQueue.current.get(key)).toEqual([head]);
+       |                                             ^
+    278|     expect(agent.queueSet).toHaveBeenLastCalledWith("current", [{ text…
+    279|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  tests/session-prefs-run-routing.test.ts > distinguishes admission rejection from failure after a user message was accepted
+AssertionError: expected { ok: false, …(1) } to match object { ok: false, accepted: false }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "accepted": false,
+    "ok": false,
+  }
+
+ ❯ tests/session-prefs-run-routing.test.ts:51:35
+     49|   const request = { sessionId: "same", workspace: a, message: "queue m…
+     50|   vi.mocked(handleAgentRun).mockResolvedValueOnce({ ok: false, error: …
+     51|   expect(await host.run(request)).toMatchObject({ ok: false, accepted:…
+       |                                   ^
+     52|   vi.mocked(handleAgentRun).mockImplementationOnce(async (_req, overri…
+     53|     overrides?.onEvent?.({ type: "user_message", content: "queue messa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  6 failed | 16 passed (22)
+   Start at  13:29:08
+   Duration  1.58s (transform 58%, tests 25%, import 16%)
+
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts tests/run-queue-session.test.tsx tests/session-prefs-run-routing.test.ts '--maxWorkers=2'

@@ -1,0 +1,526 @@
+--- /dev/null
++++ b/apps/desktop/scripts/session-open-recovery-smoke.cjs
+@@ -0,0 +1,104 @@
++// 会话正文/队列读回失败：真实 renderer + 可控 IPC，禁止未读完整时发消息或改队列。
++const { app, BrowserWindow } = require("electron");
++const { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } = require("node:fs");
++const { tmpdir } = require("node:os");
++const { join, resolve } = require("node:path");
++const profile = mkdtempSync(join(tmpdir(), "cairn-open-recovery-profile-"));
++const out = resolve(process.argv[2] || mkdtempSync(join(tmpdir(), "cairn-open-recovery-")));
++mkdirSync(out, { recursive: true });
++app.setPath("userData", profile);
++app.on("quit", () => rmSync(profile, { recursive: true, force: true }));
++const checks = [];
++const check = (name, ok) => { checks.push({ name, ok }); console.log(`${ok ? "PASS" : "FAIL"} ${name}`); };
++const pause = () => new Promise((r) => setTimeout(r, 90));
++async function main() {
++  await app.whenReady();
++  const protocol = readFileSync(join(__dirname, "../../../src/main/ipc-protocol.ts"), "utf8");
++  const tail = protocol.slice(protocol.indexOf("export interface AgentApi"));
++  const body = tail.slice(0, tail.indexOf("\n}"));
++  const starts = [...body.matchAll(/^\s{2}(\w+)\??\s*[(<]/gm)];
++  const members = starts.map((s, i) => ({ name: s[1], isArray: /Promise<[^>]*\[\]/.test(body.slice(s.index, starts[i + 1]?.index)) }));
++  const win = new BrowserWindow({ width: 1440, height: 900, show: false, webPreferences: {
++    preload: join(__dirname, "ui-gallery-preload.cjs"),
++    additionalArguments: ["--cairn-api-members=" + JSON.stringify(members), "--cairn-protocol-version=" + protocol.match(/IPC_PROTOCOL_VERSION\s*=\s*(\d+)/)[1], "--cairn-open-recovery-fixture"],
++  } });
++  const errors = [];
++  win.webContents.on("console-message", (details) => { if (details.level === "error") errors.push(details.message); });
++  win.webContents.on("preload-error", (_event, _path, error) => errors.push(error.message));
++  const js = (source) => win.webContents.executeJavaScript(source);
++  const counts = () => js("window.__cairnOpenRecovery.counts()");
++  async function wait(source) { for (let i = 0; i < 80; i++) { if (await js(source)) return; await pause(); } throw new Error("等待超时: " + source); }
++  const control = async (name, index) => { await js(`window.__cairnOpenRecovery.${name}(${index})`); await pause(); };
++  const click = async (id) => {
++    const before = await counts(); await js(`document.querySelector('[data-session-id="${id}"]').click(); true;`);
++    await wait(`window.__cairnOpenRecovery.counts().opens === ${before.opens + 1}`);
++    return before;
++  };
++  const retry = async () => {
++    const before = await counts();
++    const present = await js("!!document.querySelector('[data-session-retry]')");
++    check("提供就地重新读取入口", present);
++    if (present) {
++      await js("document.querySelector('[data-session-retry]').focus(); true;");
++      win.webContents.sendInputEvent({ type: "keyDown", keyCode: "Return" });
++      win.webContents.sendInputEvent({ type: "char", keyCode: "\r" });
++      win.webContents.sendInputEvent({ type: "keyUp", keyCode: "Return" });
++    }
++    else await click("s1"); // 改前基线仍跑完后续断言；缺入口已经记为失败。
++    await wait(`window.__cairnOpenRecovery.counts().opens === ${before.opens + 1}`);
++    return before;
++  };
++  const disabledQueue = "(() => { const buttons=[...document.querySelectorAll('.queue-strip button')]; return buttons.length > 0 && buttons.every(b => b.disabled); })()";
++  const shot = async (name) => writeFileSync(join(out, name + ".png"), (await win.webContents.capturePage()).toPNG());
++  await win.loadFile(join(process.env.CAIRN_RENDERER_DIST || join(__dirname, "../dist"), "index.html"));
++  win.show(); win.focus();
++  await wait("!!document.querySelector('[data-session-id=\"s1\"]')");
++  let request = await click("s1");
++  await control("resolveOpen", request.opens); await control("resolveQueue", request.queues);
++  await wait("!document.querySelector('.composer-card textarea').disabled && !!document.querySelector('.queue-strip')");
++  await js("(() => {const t=document.querySelector('.composer-card textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'不要丢失的草稿'); t.dispatchEvent(new Event('input',{bubbles:true}));})()");
++  request = await click("s1");
++  check("读取期间缓存队列所有动作禁用", await js(disabledQueue));
++  await control("resolveOpen", request.opens); await control("rejectQueue", request.queues);
++  check("队列读取失败后仍锁住输入", await js("document.querySelector('.composer-card textarea').disabled"));
++  check("队列读取失败后仍阻止缓存队列改写", await js(disabledQueue));
++  check("失败原因在独立恢复提示中", await js("document.querySelector('.session-load-notice')?.textContent.includes('发送队列损坏') === true"));
++  for (const [theme, width] of [["light", 1440], ["dark", 880]]) {
++    win.setSize(width, 720);
++    await js(`(() => {document.documentElement.dataset.theme='${theme}';document.documentElement.dataset.mode='${theme}';document.body.toggleAttribute('data-ds-dark-theme','${theme}'==='dark');const details=document.querySelector('.session-load-notice details');if(details)details.open=true;return true;})()`);
++    await pause();
++    check(`${theme} 长错误不横向溢出`, await js("document.documentElement.scrollWidth <= innerWidth"));
++    check(`${theme} 长错误实际展开`, await js("document.querySelector('.session-load-notice details')?.open === true"));
++    const contrast = await js(`(() => {
++      const el=document.querySelector('[data-session-retry]'); if(!el)return 0;
++      const color=getComputedStyle(el).color; let node=el, bg='rgb(255,255,255)';
++      while(node){const value=getComputedStyle(node).backgroundColor;if(value!=='rgba(0, 0, 0, 0)'&&value!=='transparent'){bg=value;break;}node=node.parentElement;}
++      const canvas=document.createElement('canvas');canvas.width=canvas.height=1;const ctx=canvas.getContext('2d');
++      const lum=(value)=>{ctx.fillStyle=value;ctx.fillRect(0,0,1,1);const rgb=[...ctx.getImageData(0,0,1,1).data].slice(0,3).map(v=>{v/=255;return v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4;});return rgb[0]*0.2126+rgb[1]*0.7152+rgb[2]*0.0722;};
++      const a=lum(color),b=lum(bg);return (Math.max(a,b)+0.05)/(Math.min(a,b)+0.05);
++    })()`);
++    check(`${theme} 重读按钮文字对比度至少 4.5`, contrast >= 4.5);
++    console.log(`contrast ${theme}: ${contrast.toFixed(2)}`);
++    await shot(`01-queue-error-${theme}`);
++  }
++  request = await retry();
++  await control("resolveQueue", request.queues);
++  check("队列先读完时等待正文，不提前解锁", await js("document.querySelector('.composer-card textarea').disabled"));
++  await control("resolveOpen", request.opens);
++  check("重读成功解除锁并移除提示", await js("!document.querySelector('.composer-card textarea').disabled && !document.querySelector('.session-load-notice')"));
++  check("重读保留未发送草稿与持久队列", await js("document.querySelector('.composer-card textarea').value === '不要丢失的草稿' && document.querySelector('.queue-strip').textContent.includes('s1 持久队列')"));
++  request = await click("s1");
++  await control("rejectOpen", request.opens); await control("resolveQueue", request.queues);
++  check("正文读取失败后仍锁住输入", await js("document.querySelector('.composer-card textarea').disabled"));
++  const old = await retry(); const next = await click("s2");
++  await control("resolveOpen", next.opens); await control("resolveQueue", next.queues);
++  await control("rejectOpen", old.opens); await control("rejectQueue", old.queues);
++  check("切会话后旧失败不污染新会话", await js("document.querySelector('.sidenav .session.active')?.dataset.sessionId === 's2' && !document.querySelector('.composer-card textarea').disabled && !document.querySelector('.session-load-notice') && document.querySelector('.row.user')?.textContent.includes('s2 正文')"));
++  const final = await counts();
++  check("读取与恢复未改写队列、未派发任务", final.writes === 0 && final.runs === 0);
++  check("无 renderer/preload 错误", errors.length === 0);
++  writeFileSync(join(out, "result.json"), JSON.stringify({ checks, errors }, null, 2));
++  win.destroy(); app.exit(checks.every((c) => c.ok) ? 0 : 1);
++}
++const watchdog = setTimeout(() => { console.error("smoke 超时"); app.exit(1); }, 45000); watchdog.unref();
++main().catch((error) => { console.error(error); app.exit(1); });
+--- a/apps/desktop/scripts/ui-gallery-preload.cjs
++++ b/apps/desktop/scripts/ui-gallery-preload.cjs
+@@ -1300,4 +1300,20 @@
+   });
+ }
+ 
++if (process.argv.includes("--cairn-open-recovery-fixture")) {
++  const opens = [], queues = [], writes = [];
++  const sessions = ["s1", "s2"].map((id) => ({ id, title: id, workspace: "/tmp/demo-ws", mtimeMs: Date.now(), lines: 1 }));
++  stub.listSessions = reply(sessions);
++  stub.openSession = (id, workspace) => new Promise((resolve, reject) => opens.push({ id, workspace, resolve, reject }));
++  stub.queueGet = (id, workspace) => new Promise((resolve, reject) => queues.push({ id, workspace, resolve, reject }));
++  stub.queueSet = async (id, items, workspace) => { writes.push({ id, items, workspace }); return { ok: true }; };
++  contextBridge.exposeInMainWorld("__cairnOpenRecovery", {
++    counts: () => ({ opens: opens.length, queues: queues.length, writes: writes.length, runs: cairnRuns.length }),
++    resolveOpen: (index) => opens[index].resolve({ events: [{ type: "user_message", content: opens[index].id + " 正文", ts: Date.now() }], running: false }),
++    resolveQueue: (index) => queues[index].resolve({ items: [{ text: queues[index].id + " 持久队列", attachments: [] }] }),
++    rejectOpen: (index) => opens[index].reject(new Error("EIO: 无法读取会话正文 /tmp/demo-ws/.agent/sessions/" + opens[index].id + ".jsonl")),
++    rejectQueue: (index) => queues[index].reject(new Error("发送队列损坏：/tmp/" + "很长的项目目录/".repeat(16) + "queue.json")),
++  });
++}
++
+ contextBridge.exposeInMainWorld("agent", stub);
+--- a/apps/desktop/src/renderer/components/Composer.tsx
++++ b/apps/desktop/src/renderer/components/Composer.tsx
+@@ -33,6 +33,7 @@
+ import { slashItems, slashMatches, type SlashSkill } from "../slash";
+ import { DRAFTS_KEY, HOME_DRAFT_KEY, draftKeyFor, sessionIdOfDraftKey } from "../drafts";
+ import "./composer-plan.css";
++import type { ComposerLockReason } from "../send-queue";
+ 
+ /** @ 模糊搜索的 debounce（P2-4：输入停顿 120ms 才发通道查询）。 */
+ const MENTION_DEBOUNCE_MS = 120;
+@@ -126,7 +127,7 @@
+   disabled?: boolean;
+   /** 禁用原因（2026-10-18）：占位文案必须与真实锁因一致——门未决不能写成「正在创建会话」。
+    *  缺省（旧调用面）沿用 disabled+running 的旧推断。 */
+-  disabledReason?: "gate" | "queue" | "creating";
++  disabledReason?: ComposerLockReason;
+   mode: PermissionMode;
+   /** v23 Plan 模式：默认来自设置，Composer 的「方案」开关按轮覆盖。缺省不摆按钮（旧调用面）。 */
+   planRequired?: boolean;
+@@ -847,6 +848,7 @@
+               suggesting ? STR.composer.placeholderSuggesting       // 想下一条加载态（Tab 出手中）
+               : disabled && props.disabledReason === "gate" ? STR.composer.placeholderGate
+               : disabled && props.disabledReason === "queue" ? STR.composer.placeholderQueue
++              : disabled && props.disabledReason === "session" ? STR.composer.placeholderSession
+               : disabled && props.disabledReason === "creating" ? STR.composer.placeholderCreating
+               : disabled && props.running ? STR.composer.placeholderGate
+               : disabled ? STR.composer.placeholderCreating
+--- a/apps/desktop/src/renderer/components/SendQueueStrip.tsx
++++ b/apps/desktop/src/renderer/components/SendQueueStrip.tsx
+@@ -8,6 +8,8 @@
+   items: readonly QueuedSend[];
+   /** 运行中才有「打断并发送」（不运行时队列自行出队，没有可打断的对象）。 */
+   running: boolean;
++  /** 缓存可查看，但读取未完成前不能改写或派发。 */
++  disabled?: boolean;
+   onInterruptSend: (index: number) => void;
+   onRemove: (index: number) => void;
+   /** 改一条排队消息的正文；缺席 = 不提供编辑入口（旧用法字节不变）。 */
+@@ -24,6 +26,7 @@
+   const skipBlurRef = useRef(false);
+   if (props.items.length === 0) return null;
+   const commit = (id: number): void => {
++    if (props.disabled) return;
+     const index = props.items.findIndex((item) => item.id === id);
+     const text = draft.trim();
+     if (index >= 0 && text !== "") props.onEdit?.(index, text);
+@@ -39,9 +42,10 @@
+     <div className="queue-strip" data-cds="ChatComposerQueuedMessages" role="list" aria-label="待发送队列">
+       <span className="queue-head">
+         <Clock size={11} />
+-        {props.running ? "排队中 · 本轮结束后自动发送" : "排队中 · 等待恢复发送"}
++        {props.disabled && "会话未读取完成，队列暂不可修改"}
++        {!props.disabled && (props.running ? "排队中 · 本轮结束后自动发送" : "排队中 · 等待恢复发送")}
+         {!props.running && props.onResume !== undefined && (
+-          <button className="btn-ghost queue-resume" aria-label="继续发送队列" onClick={props.onResume}>
++          <button className="btn-ghost queue-resume" aria-label="继续发送队列" disabled={props.disabled} onClick={props.onResume}>
+             继续发送
+           </button>
+         )}
+@@ -54,6 +58,7 @@
+               data-esc-owns="true"
+               aria-label={`编辑排队消息：${item.text}`}
+               value={draft}
++              disabled={props.disabled}
+               autoFocus
+               onFocus={(e) => { e.currentTarget.select(); }}
+               onChange={(e) => { setDraft(e.target.value); }}
+@@ -82,14 +87,14 @@
+                 className="btn-ghost"
+                 aria-label={`上移排队项：${item.text}`}
+                 title="上移"
+-                disabled={index === 0}
++                disabled={props.disabled || index === 0}
+                 onClick={() => { props.onMove?.(index, -1); }}
+               ><ChevronUp size={10} /></button>
+               <button
+                 className="btn-ghost"
+                 aria-label={`下移排队项：${item.text}`}
+                 title="下移"
+-                disabled={index === props.items.length - 1}
++                disabled={props.disabled || index === props.items.length - 1}
+                 onClick={() => { props.onMove?.(index, 1); }}
+               ><ChevronDown size={10} /></button>
+             </>
+@@ -99,15 +104,17 @@
+               className="btn-ghost"
+               aria-label={`编辑排队项：${item.text}`}
+               title="编辑这条排队消息"
++              disabled={props.disabled}
+               onClick={() => { skipBlurRef.current = false; setDraft(item.text); setEditingId(item.id); }}
+             ><Pencil size={10} /></button>
+           )}
+           {props.running && (
+-            <button className="btn-ghost" onClick={() => { props.onInterruptSend(index); }}>打断并发送</button>
++            <button className="btn-ghost" disabled={props.disabled} onClick={() => { props.onInterruptSend(index); }}>打断并发送</button>
+           )}
+           <button
+             className="btn-ghost"
+             aria-label={`移出队列：${item.text}`}
++            disabled={props.disabled}
+             onClick={() => { props.onRemove(index); }}
+           ><X size={10} /></button>
+         </div>
+--- /dev/null
++++ b/apps/desktop/src/renderer/components/SessionLoadNotice.tsx
+@@ -0,0 +1,24 @@
++import { STR } from "../strings";
++
++/** 正文与队列未读完整时的恢复出口；不会清除用户草稿。 */
++export function SessionLoadNotice(props: { loading: boolean; error: string | null; onRetry: () => void }) {
++  if (!props.loading && props.error === null) return null;
++  return (
++    <div className="session-load-notice" role={props.error === null ? "status" : "alert"} aria-busy={props.loading}>
++      <div className="session-load-heading">
++        <span>{props.loading ? STR.sessionLoad.loading : STR.sessionLoad.failed}</span>
++        {props.error !== null && (
++          <button type="button" className="btn-ghost" data-session-retry disabled={props.loading} onClick={props.onRetry}>
++            {STR.sessionLoad.retry}
++          </button>
++        )}
++      </div>
++      {props.error !== null && (
++        <details>
++          <summary>{STR.sidebar.errorDetails}</summary>
++          <pre tabIndex={0}>{props.error}</pre>
++        </details>
++      )}
++    </div>
++  );
++}
+--- a/apps/desktop/src/renderer/panes/QueueDock.tsx
++++ b/apps/desktop/src/renderer/panes/QueueDock.tsx
+@@ -26,7 +26,7 @@
+   // 打断并发送 / 移出 / 编辑：都按目标会话的限定键读当前表，再交给纯函数改一条。
+   const editAt = (index: number, change: (list: QueuedSend[]) => QueuedSend[]): void => {
+     const sid = props.activeIdRef.current;
+-    if (sid === null) return;
++    if (sid === null || props.queueLoading) return;
+     const key = runKey(props.activeWorkspace, sid);
+     props.setQueueFor(sid, change(props.queue.current.get(key) ?? []));
+   };
+@@ -34,7 +34,9 @@
+     <SendQueueStrip
+       items={props.queue.current.get(runKey(props.activeWorkspace, props.activeId)) ?? []}
+       running={props.running}
++      disabled={props.queueLoading}
+       onInterruptSend={(index) => {
++        if (props.queueLoading) return;
+         /** 「打断并发送」：先把它提到队首，再打断本轮——收束在轮界，runOn 随即先派它。
+          *  打断走 cancelRunHeal：陈旧旗（main 无在跑）时摘旗并把这条当场派出去，不再是死点。 */
+         editAt(index, (list) => promoteQueued(list, index));
+--- a/apps/desktop/src/renderer/panes/WorkbenchView.tsx
++++ b/apps/desktop/src/renderer/panes/WorkbenchView.tsx
+@@ -28,6 +28,7 @@
+ import type { PaletteAction } from "../components/CommandPalette";
+ import { Composer } from "../components/Composer";
+ import { ErrorStrip } from "../components/ErrorStrip";
++import { SessionLoadNotice } from "../components/SessionLoadNotice";
+ import { FindBar,type FindBarHandle } from "../components/FindBar";
+ import { ImportDiagnosisCard } from "../components/ImportDiagnosisCard";
+ import { Inspector } from "../components/Inspector";
+@@ -218,6 +219,8 @@
+   /** 预览/后台会话发送：与主发送共用插话与队列；`running` 由预览按目标会话事件态传入。 */
+   sendTo: (sid: string, workspace: string | null, text: string, attachments?: RunAttachmentReference[], options?: { forceQueue?: boolean; running?: boolean }) => Promise<SendOutcome>;
+   queueLoading: boolean;
++  sessionLoadError: string | null;
++  retrySessionOpen: () => void;
+   pendingSend: boolean;
+   resumeQueue: () => void;
+   skills: readonly SlashSkill[];
+@@ -825,10 +828,11 @@
+             {activeId !== null && (
+               <QueueDock
+                 activeId={activeId} activeIdRef={activeIdRef} activeWorkspace={activeWorkspace} queue={sendQueue} running={runningActive}
+-                queueLoading={queueLoading} pendingSend={pendingSend} pendingClarify={pendingClarify} pendingPlan={pendingPlan}
++                queueLoading={queueLoading || deps.sessionLoadError !== null} pendingSend={pendingSend} pendingClarify={pendingClarify} pendingPlan={pendingPlan}
+                 setQueueFor={setQueueFor} cancelRunHeal={cancelRunHeal} resumeQueue={resumeQueue}
+               />
+             )}
++            {activeId !== null && <SessionLoadNotice loading={queueLoading} error={deps.sessionLoadError} onRetry={deps.retrySessionOpen} />}
+             <Composer
+               skills={skills}
+               disabled={composerLock !== null}
+--- a/apps/desktop/src/renderer/send-queue.ts
++++ b/apps/desktop/src/renderer/send-queue.ts
+@@ -148,17 +148,20 @@
+ 
+ /** Composer 锁因（2026-10-18 收口）：同一个 disabled 布尔此前被 Composer 拿去猜占位文案，
+  *  于是「澄清/方案门未决」被写成「正在创建会话…」——禁用是真的，原因说错了。
+- *  优先级 = 用户越需要处理的越靠前：门（要你做决定）> 队列读回（一闪而过的加载）> 创建会话。
++ *  会话读取失败先要求恢复；其余优先级 = 门（要你做决定）> 队列读回 > 创建会话。
+  *  **运行中不在这里**——运行中输入可用（回车排队、⌘↩ 打断并发送）。
+  *  ask（审批）门不进 gateActive：卡在场时输入保持可用（v2.17 口径，v2.18 沿用）。 */
+-export type ComposerLockReason = "gate" | "queue" | "creating";
++export type ComposerLockReason = "gate" | "queue" | "creating" | "session";
+ 
+ export function composerLockReason(input: {
+   /** 读回发送队列的瞬时加载（App 侧原本以 disabled 的第三项独立 OR 进来）。 */
+   queueLoading?: boolean;
++  /** 正文或队列读取失败；请求结束不等于会话已就绪。 */
++  sessionLoadFailed?: boolean;
+   creating: boolean;
+   gateActive: boolean;
+ }): ComposerLockReason | null {
++  if (input.sessionLoadFailed === true) return "session";
+   if (input.gateActive) return "gate";
+   if (input.queueLoading === true) return "queue";
+   if (input.creating) return "creating";
+--- a/apps/desktop/src/renderer/state/app-commands.ts
++++ b/apps/desktop/src/renderer/state/app-commands.ts
+@@ -32,7 +32,7 @@
+   toggleCheat: () => void;
+   closeCheat: () => void;
+   ctrlTabCycle: boolean;
+-  composerMenuBlock: "暂不可切换：正在载入排队消息…" | "暂不可切换：正在创建会话…" | "暂不可切换：先处理上方的决定卡…" | null;
++  composerMenuBlock: "暂不可切换：正在载入排队消息…" | "暂不可切换：正在创建会话…" | "暂不可切换：先处理上方的决定卡…" | "暂不可切换：会话读取失败，请先重试" | null;
+   askForActive: AskPayload | null;
+   pendingClarify: { callId: string; questions: ClarifyQuestion[]; } | null;
+   pendingPlan: { callId: string; plan: PlanProposal; } | null;
+--- a/apps/desktop/src/renderer/state/workbench.ts
++++ b/apps/desktop/src/renderer/state/workbench.ts
+@@ -108,6 +108,7 @@
+   }, []);
+   // 打开会话时 sidecar 读回未完成前先锁输入，避免“先发新消息、后读回旧队列”互相覆盖。
+   const [queueLoading, setQueueLoading] = useState(false);
++  const [sessionLoadIssue, setSessionLoadIssue] = useState<{ seq: number; message: string } | null>(null);
+   // M2-4 模型选择：per-session 内存态（Map<sessionId, registryId|null>），M4 才落 settings。
+   const selections = useRef(new Map<string, string | null>());
+   const [providerInfo, setProviderInfo] = useState<ProviderInfo | null>(null);
+@@ -483,6 +484,8 @@
+     if (sessionWs !== null) setActiveWorkspace(sessionWs);
+     void applyWorkspaceContext(sessionWs);
+     const seq = ++openSeq.current;
++    const failures: string[] = [];
++    setSessionLoadIssue(null);
+     // 立刻清掉上一会话的转录/门卡数据面：此前要等 openSession 回包才整体替换，窗口内
+     // B 的标题下仍挂着 A 的转录、A 的澄清/方案门与行内「重试/还原」——用户可操作且会发错会话。
+     // 读盘期间到达的 B 增量进 openPending，回包时合并（不丢流式文本）。
+@@ -515,18 +518,27 @@
+       }
+     }).catch((err: unknown) => {
+       if (openPending.current === pending) openPending.current = null;
+-      if (seq === openSeq.current) setLastError(`会话打开失败：${err instanceof Error ? err.message : String(err)}`, id);
++      failures.push(`会话打开失败：${err instanceof Error ? err.message : String(err)}`);
+     });
+     const queued = window.agent.queueGet(id, sessionWs ?? undefined).then(({ items }) => {
+       if (seq !== openSeq.current) return;
+       setQueueLocal(runKey(sessionWs ?? activeWorkspace, id), fromSessionQueueEntries(items, () => ++queueSeq.current));
+     }).catch((err: unknown) => {
+-      if (seq === openSeq.current) setLastError(`发送队列读取失败：${err instanceof Error ? err.message : String(err)}`, id);
++      failures.push(`发送队列读取失败：${err instanceof Error ? err.message : String(err)}`);
+     });
+     void Promise.allSettled([opened, queued]).finally(() => {
+-      if (seq === openSeq.current) setQueueLoading(false);
++      if (seq !== openSeq.current) return;
++      setSessionLoadIssue(failures.length === 0 ? null : { seq, message: failures.join("\n") });
++      setQueueLoading(false);
+     });
+   }, [activate, setLastError, setQueueLocal, touchWorkspace]);
++
++  const sessionLoadError = activeId !== null && sessionLoadIssue?.seq === openSeq.current
++    ? sessionLoadIssue.message : null;
++  const retrySessionOpen = useCallback(() => {
++    const id = activeIdRef.current;
++    if (id !== null && !queueLoading) openSession(id, activeWorkspaceRef.current ?? undefined);
++  }, [openSession, queueLoading]);
+ 
+   // 完成通知点击（v21）：主进程已把窗口拉到前台，这里只负责打开目标会话。
+   // 同会话不重载（避免把正在看的流重置）；workspace 只接受字符串，跨项目同名 id 由 main 带上。
+@@ -828,12 +840,15 @@
+   // 不再各推各的（真机实证：门未决时占位写成「正在创建会话…」）。理由只在这里排优先级。
+   const composerLock = composerLockReason({
+     queueLoading,
++    sessionLoadFailed: sessionLoadError !== null,
+     creating: pendingSend && activeId === null,
+     gateActive: pendingClarify !== null || pendingPlan !== null,
+   });
+   // 锁定时 ⌘⇧I/M/E 的可见回执；未锁 = null（正常开菜单）。
+   const composerMenuBlock = composerLock === "queue"
+     ? STR.shortcut.menuLockedQueue
++    : composerLock === "session"
++      ? STR.shortcut.menuLockedSession
+     : composerLock === "creating"
+       ? STR.shortcut.menuLockedCreating
+       : composerLock === "gate"
+@@ -1048,6 +1063,8 @@
+     setQueueFor,
+     cancelRunHeal,
+     queueLoading,
++    sessionLoadError,
++    retrySessionOpen,
+     pendingSend,
+     resumeQueue,
+     resumeQueueFor,
+--- a/apps/desktop/src/renderer/strings.ts
++++ b/apps/desktop/src/renderer/strings.ts
+@@ -3,6 +3,11 @@
+ // 判卷 strings.test.ts 钉三件事：值非空无占位、无开发者禁词、重做面组件源文里字面量无 CJK。
+ // 未重做面（设置页等）暂不迁移（P3 汇报注明）。
+ export const STR = {
++  sessionLoad: {
++    loading: "正在读取会话…",
++    failed: "会话未能完整读取",
++    retry: "重新读取",
++  },
+   app: {
+     brand: "Cairn",
+   },
+@@ -314,6 +319,7 @@
+     placeholderSuggesting: "正在想下一条…",
+     placeholderGate: "等待你的决定…",
+     placeholderQueue: "正在载入排队消息…",
++    placeholderSession: "会话未读取完成，请先重试",
+     placeholderCreating: "正在创建会话…",
+     placeholderStopped: "已停止 · 可继续派活",
+     workspaceAria: "当前工作区",
+@@ -500,6 +506,7 @@
+     alreadyHome: "已经在主页——按 ⌘N 新建会话",
+     leftRunning: "已回到主页；这一轮仍在后台运行，左侧会话行可继续查看",
+     menuLockedQueue: "暂不可切换：正在载入排队消息…",
++    menuLockedSession: "暂不可切换：会话读取失败，请先重试",
+     menuLockedCreating: "暂不可切换：正在创建会话…",
+     menuLockedGate: "暂不可切换：先处理上方的决定卡…",
+   },
+--- a/apps/desktop/src/renderer/styles.css
++++ b/apps/desktop/src/renderer/styles.css
+@@ -1164,6 +1164,12 @@
+ }
+ 
+ /* ── 错误条 / 提示条 ── */
++.session-load-notice { margin-bottom: var(--space-sm); padding: var(--space-xs) var(--space-sm); color: hsl(var(--text-200)); font-size: var(--fs-body-sm); }
++.session-load-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); flex-wrap: wrap; }
++.session-load-heading button, .session-load-notice summary { min-height: 28px; }
++.session-load-heading button { color: inherit; }
++.session-load-notice summary { cursor: pointer; width: fit-content; align-content: center; }
++.session-load-notice pre { margin: var(--space-xs) 0 0; max-height: 120px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+ .error-strip {
+   display: flex; align-items: center; gap: var(--space-xs);
+   max-width: min(var(--reading), 100%); margin: var(--space-sm) auto 0;
+--- /dev/null
++++ b/apps/desktop/tests/session-open-recovery.test.tsx
+@@ -0,0 +1,37 @@
++import { renderToStaticMarkup } from "react-dom/server";
++import { describe, expect, it } from "vitest";
++import { composerLockReason } from "../src/renderer/send-queue";
++import { Composer } from "../src/renderer/components/Composer";
++import { QueueDock } from "../src/renderer/panes/QueueDock";
++
++const noop = () => undefined;
++describe("会话尚未完整读取时的写入保护", () => {
++  it("读取失败继续锁住输入，不依赖请求是否仍在进行", () => {
++    expect(composerLockReason({ creating: false, gateActive: false, sessionLoadFailed: true })).toBe("session");
++    expect(composerLockReason({ creating: false, gateActive: false, sessionLoadFailed: false })).toBeNull();
++  });
++  it("输入框说明读取失败需要重试，不冒充仍在加载", () => {
++    const html = renderToStaticMarkup(<Composer
++      disabled disabledReason="session" mode="default" activeId="s1" providerInfo={null} pickerValue={null}
++      usage={{ inputTokens: 0, outputTokens: 0, usageCount: 0, cacheReadTokens: 0, lastInputTokens: 0 }}
++      phaseLabel="" phase="idle" elapsedSec={0} steps={0} running={false} stopped={false}
++      onSend={noop} onCancel={noop} onModeChange={noop} onModelChange={noop} onCompact={noop}
++    />);
++    const textarea = html.match(/<textarea[^>]*>/)?.[0] ?? "";
++    expect(textarea).toContain("disabled");
++    expect(textarea).toContain("会话未读取完成，请先重试");
++  });
++  it("读取期间缓存队列仍可见，但所有改写和派发按钮禁用", () => {
++    const html = renderToStaticMarkup(<QueueDock
++      activeId="s1" activeIdRef={{ current: "s1" }} activeWorkspace="/tmp/ws"
++      queue={{ current: new Map([['["/tmp/ws","s1"]', [{ id: 1, text: "保留的排队消息", attachments: [] }]]]) }}
++      running queueLoading pendingSend={false} pendingClarify={null} pendingPlan={null}
++      setQueueFor={noop} cancelRunHeal={noop} resumeQueue={noop}
++    />);
++    expect(html).toContain("保留的排队消息");
++    const buttons = html.match(/<button[^>]*>/g) ?? [];
++    expect(buttons.length).toBeGreaterThan(0);
++    expect(buttons.every((button) => button.includes("disabled"))).toBe(true);
++    expect(html).toContain("会话未读取完成，队列暂不可修改");
++  });
++});
+--- /dev/null
++++ b/docs/superpowers/plans/2026-11-01-session-open-recovery.md
+@@ -0,0 +1,14 @@
++# 会话打开失败恢复
++
++目标：延续用户选定的会话与工作台方向。修复正文或发送队列读取失败后仍允许发送、编辑缓存队列的缺陷。
++
++方案：保留现有并行读取和会话序号守卫；将读取失败与瞬时加载分开记账。两个读取均成功才恢复输入。失败提示提供原生详情和就地重读，重读保持草稿。队列在未读完整时只读，锁因沿用现有唯一判据。保持现有布局、权限、IPC 与日志格式，不加依赖。
++
++- [x] 用单测和真实 renderer + 合成 IPC 复现正文/队列错误后的输入解锁、队列按钮可写和缺少重试。
++- [x] 修正会话读取失败状态与恢复出口；旧请求仍不得污染新会话。
++- [x] 输入框、快捷键回执与队列操作使用一致锁因；读取中或失败时不写缓存队列。
++- [x] 检查亮暗/宽窄与长错误；运行聚焦测试、完整桌面、类型和边界检查，当前代理按 OCR delegate 规则审查。
++
++结果与边界：`outputs/session-open-recovery-2026-11-01/review.md`。
++
++共享工作树不重置、暂存或混合提交。上一轮两项既有全量失败单独记录，不为通过检查修改帽或移除行为断言。

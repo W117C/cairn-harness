@@ -1,0 +1,122 @@
+[
+  {
+    "menu": "文件",
+    "id": "cairn.cmd.new-session",
+    "label": "新任务"
+  },
+  {
+    "menu": "文件",
+    "id": "cairn.cmd.open-folder",
+    "label": "打开文件夹…"
+  },
+  {
+    "menu": "文件",
+    "id": "cairn.cmd.close-session",
+    "label": "关闭会话"
+  },
+  {
+    "menu": "文件",
+    "id": "cairn.cmd.export-transcript",
+    "label": "导出整段对话…"
+  },
+  {
+    "menu": "文件",
+    "id": "cairn.cmd.compact",
+    "label": "压缩当前会话历史"
+  },
+  {
+    "menu": "文件",
+    "id": "cairn.restart",
+    "label": "重新启动 Cairn"
+  },
+  {
+    "menu": "编辑",
+    "id": "cairn.cmd.copy-transcript",
+    "label": "复制整段对话"
+  },
+  {
+    "menu": "编辑",
+    "id": "cairn.cmd.find",
+    "label": "查找…"
+  },
+  {
+    "menu": "编辑",
+    "id": "cairn.cmd.find-next",
+    "label": "查找下一个"
+  },
+  {
+    "menu": "编辑",
+    "id": "cairn.cmd.find-prev",
+    "label": "查找上一个"
+  },
+  {
+    "menu": "视图",
+    "id": "cairn.cmd.palette",
+    "label": "命令面板…"
+  },
+  {
+    "menu": "视图",
+    "id": "cairn.cmd.toggle-sidebar",
+    "label": "开合侧栏"
+  },
+  {
+    "menu": "视图",
+    "id": "cairn.cmd.toggle-inspector",
+    "label": "开合检查器"
+  },
+  {
+    "menu": "视图",
+    "id": "cairn.cmd.toggle-theme",
+    "label": "切换主题"
+  },
+  {
+    "menu": "视图",
+    "id": "cairn.cmd.cycle-perm",
+    "label": "切换权限档"
+  },
+  {
+    "menu": "前往",
+    "id": "cairn.cmd.prev-session",
+    "label": "上一个会话"
+  },
+  {
+    "menu": "前往",
+    "id": "cairn.cmd.next-session",
+    "label": "下一个会话"
+  },
+  {
+    "menu": "前往",
+    "id": "cairn.cmd.jump-top",
+    "label": "回到顶部"
+  },
+  {
+    "menu": "前往",
+    "id": "cairn.cmd.jump-bottom",
+    "label": "回到底部"
+  },
+  {
+    "menu": "帮助",
+    "id": "cairn.cmd.cheat-sheet",
+    "label": "键盘快捷键"
+  },
+  {
+    "menu": "帮助",
+    "id": "cairn.cmd.settings",
+    "label": "设置…"
+  },
+  {
+    "menu": "帮助",
+    "id": "cairn.cmd.about",
+    "label": "关于 Cairn"
+  },
+  {
+    "menu": "帮助",
+    "id": "cairn.open-data",
+    "label": "打开数据目录"
+  },
+  {
+    "menu": "帮助",
+    "id": "cairn.open-logs",
+    "label": "打开日志文件夹"
+  }
+]

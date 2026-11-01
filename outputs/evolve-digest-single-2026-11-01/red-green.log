@@ -1,0 +1,15 @@
+=== 改前 A：playbook 又抄回自己那份 digestOf ===
+     × 四个消费面都 import 同一份，且 src/ 里只剩一处定义 4ms
+      Tests  1 failed | 1 passed (2)
+
+=== 改前 B：指纹长度改成 12 位 ===
+     × 16 位小写十六进制，且空串是真值 e3b0c44298fc1c14（sha256 前 16） 3ms
+     × 四个消费面都 import 同一份，且 src/ 里只剩一处定义 2ms
+AssertionError: expected 'e3b0c44298fc' to be 'e3b0c44298fc1c14' // Object.is equality
+AssertionError: expected 'import { createHash } from "node:cryp…' to contain 'slice(0, 16)'
+
+=== 复原后 ===
+      Tests  2 passed (2)
+=== sha256 ===
+d8f451bde76a7998e689b6f7aa2b7b33e568c0a926ff39082f3be650163d0841
+ca9ec2c0709bdfa1fd4f3d088ed622cd7d954ec873bd62a5e438e577c7ba68a0

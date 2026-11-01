@@ -9,8 +9,9 @@
 // `seedNewSessionThinking` 写进按会话的 map；界面读 `composerThinking`（显式选择 > 缺省 off）。
 // 三条规则都是纯函数，判卷不依赖 React 渲染。
 import type { ThinkingEffort } from "../../../../../src/providers/capabilities";
+import { runKey } from "./session-identity";
 
-const LEVELS: readonly ThinkingEffort[] = ["off", "low", "medium", "high"];
+const LEVELS: readonly ThinkingEffort[] = ["off", "low", "medium", "high", "max"];
 
 export function isThinkingEffort(value: unknown): value is ThinkingEffort {
   return typeof value === "string" && (LEVELS as readonly string[]).includes(value);
@@ -21,9 +22,10 @@ export function composerThinking(
   activeId: string | null,
   pending: ThinkingEffort,
   bySession: ReadonlyMap<string, string>,
+  workspace?: string | null,
 ): ThinkingEffort {
   if (activeId === null) return pending;
-  const stored = bySession.get(activeId);
+  const stored = bySession.get(runKey(workspace, activeId));
   return isThinkingEffort(stored) ? stored : "off";
 }
 
@@ -44,7 +46,8 @@ export function seedNewSessionThinking(
   sessionId: string,
   pending: ThinkingEffort,
   bySession: Map<string, string>,
+  workspace?: string | null,
 ): void {
   if (pending === "off") return;
-  bySession.set(sessionId, pending);
+  bySession.set(runKey(workspace, sessionId), pending);
 }

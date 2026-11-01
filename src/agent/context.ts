@@ -11,6 +11,7 @@ import { failureDigest } from "./verify";
 import { clampTailToTokenBudget } from "./text-budget";
 import { escapeControlTags } from "./control-tags";
 import { DELIVERY_GUARD_CALL_ID } from "./delivery-guard";
+import { hasWorkerId } from "./subflow";
 
 /** OpenAI 兼容消息（投影产物；system 由调用方按需前置）。 */
 export interface ContextMessage {
@@ -44,7 +45,7 @@ export function isCompaction(e: AgentEvent): e is CompactionEvent {
  *  其 compressed_event_ids 是 worker 内存态事件序，对主流照搬会错误摘除主事件/注入 worker 摘要。
  *  worker 自身投影不受影响：worker 内存态里的压缩事件不带 agent_id（落主流时才加 agent_id 归因）。 */
 export function isWorkerCompaction(e: AgentEvent): boolean {
-  return isCompaction(e) && typeof e.agent_id === "string" && e.agent_id !== "";
+  return isCompaction(e) && hasWorkerId(e);
 }
 
 /** 全部 compaction 事件声明的摘除 id 并集（滚动合并：多次压缩的排除集累加）。
@@ -63,7 +64,7 @@ export function excludedIds(events: AgentEvent[]): Set<number> {
  *  抽成一份判定是因为自动验证拍的投影也要走同一条闸——两份「谁算子流」的写法迟早漂移。
  *  导出给读数投影（tool-choice）等外部消费者，别再各写一份 `typeof e.agent_id === "string"`。 */
 export function hasWorkerAttribution(e: AgentEvent): boolean {
-  return "agent_id" in e && typeof e.agent_id === "string" && e.agent_id !== "";
+  return hasWorkerId(e);
 }
 
 /** 自动验证拍（能力 5 收束闸）验出的红：harness 补拍没有配对的 tool_call，裸 tool_result 会让

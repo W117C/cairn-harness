@@ -1,0 +1,15 @@
+=== 改前：模型菜单自己一套 k/M（128k、1M）===
+     × formatCtxWindow：与 formatTokens 同一把尺（k/m）/ 小数 / 缺省给 —（不给 0） 3ms
+     × describeSelection：演示写明「不产生真实调用」；命中给出 provider/tier/窗口；未命中显式回落 1ms
+AssertionError: expected '1M' to be '1.0m' // Object.is equality
+AssertionError: expected '模型：deepseek-chat · deepseek · 标准 · 窗口…' to contain '窗口 1.0m'
+      Tests  2 failed | 12 passed (14)
+
+=== 复原后 ===
+      Tests  14 passed (14)
+=== sha256 ===
+   2 cee5b9c5c8bc0d678e3cfc8df69afe34785dd732063f0bda79e97fc13f36d790
+=== 两处现读 ===
+  128000 菜单旧写法 128k   ｜环/用量页 128.0k
+ 1000000 菜单旧写法 1M     ｜环/用量页 1.0m
+ 1500000 菜单旧写法 1.5M   ｜环/用量页 1.5m

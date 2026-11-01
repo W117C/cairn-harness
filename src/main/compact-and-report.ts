@@ -11,6 +11,7 @@ import { createSessionSummarizer } from "../agent/session-provider";
 import type { HookEngine } from "../agent/plugins/hooks";
 import { buildSecurityReport } from "../agent/security/scan";
 import { store } from "./settings-handlers";
+import { acquireSessionRunLock } from "./session-lock";
 
 // ---- M1d：/compact 手动入口（压缩必出卡，走 BUILTIN_PROMPTS 内置模板）----
 // 摘要器：CAIRN_API_KEY 在场 → GLM 暗卷；缺 key 且 M1D_COMPACTION_DEMO=1 → 冻结 mock（演示通道，
@@ -54,6 +55,21 @@ export async function firePreCompactHook(hooks: HookEngine | undefined, trigger:
 /** 对一份会话日志执行手动压缩（trigger=manual, reason=user_request）。
  *  emit = 会话管线（落盘+推送同路，M1b 坑十八口径）；缺省直接落盘（headless/脚本）。 */
 export async function compactSessionLog(
+  logPath: string,
+  emit?: (e: AgentEvent) => Promise<void>,
+  hooks?: HookEngine,
+): Promise<{ ok: boolean; error?: string; event?: AgentEvent; cardPayload?: Record<string, unknown> }> {
+  // 压缩也要写同一份日志：与正在跑的 run 并发会交错（同 handleAgentRun 的那把锁）。
+  const lock = await acquireSessionRunLock(logPath);
+  if (!lock.ok) return { ok: false, error: lock.error };
+  try {
+    return await compactSessionLogLocked(logPath, emit, hooks);
+  } finally {
+    await lock.lock.release();
+  }
+}
+
+async function compactSessionLogLocked(
   logPath: string,
   emit?: (e: AgentEvent) => Promise<void>,
   hooks?: HookEngine,

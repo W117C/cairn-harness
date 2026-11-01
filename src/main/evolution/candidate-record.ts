@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { writeFileAtomic } from "../../atomic-write";
 import { isBundleId, isBundleVersion } from "./manifest";
+import { isRecord } from "../../is-record";
 
 export const CANDIDATE_RECORD_SCHEMA = 1 as const;
 
@@ -59,10 +60,6 @@ const RECORD_FIELDS = new Set([
   "schema", "id", "version", "parentVersion", "contentDigest", "generator",
   "taskSet", "env", "runs", "evaluation", "approvals", "rollbackTo", "createdAt",
 ]);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function nonEmpty(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;

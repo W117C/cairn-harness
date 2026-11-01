@@ -1,0 +1,19 @@
+{
+  "before": [
+    "src/agent/plugins/hooks.ts#run｜",
+    "src/agent/sequencer.ts#resolvePluginRole｜",
+    "src/main/agent-runner.ts#handleAgentRun｜",
+    "src/main/scheduler.ts#scheduleTimeZoneNotes｜",
+    "src/providers/provider-config.ts#deriveCustomProviders｜",
+    "src/tools/lsp.ts#requireProvider｜"
+  ],
+  "after": [
+    "src/agent/plugins/hooks.ts#run｜",
+    "src/agent/sequencer.ts#resolvePluginRole｜",
+    "src/main/agent-runner.ts#handleAgentRun｜",
+    "src/main/scheduler.ts#scheduleTimeZoneNotes｜",
+    "src/providers/provider-config.ts#deriveCustomProviders｜",
+    "src/tools/lsp.ts#requireProvider｜"
+  ],
+  "unchanged": true
+}

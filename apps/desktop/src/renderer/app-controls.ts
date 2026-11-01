@@ -8,4 +8,8 @@ export interface FindBarHandle {
 
 export type PageId = "plugins" | "automation" | "skills" | "memory" | "worktrees";
 
-export type SectionId = "general" | "provider" | "network" | "usage" | "permissions" | "advanced" | "shortcuts" | PageId | "about";
+export type AppDestination = "chat" | "plugins" | "memory" | "automation";
+
+export type AppPageDestination = Exclude<AppDestination, "chat">;
+
+export type SectionId = "general" | "provider" | "network" | "usage" | "evolve" | "permissions" | "advanced" | "shortcuts" | PageId | "about";

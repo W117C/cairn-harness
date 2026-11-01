@@ -1,0 +1,56 @@
+--- a/apps/desktop/src/renderer/components/settings-sections.tsx	2026-11-01 17:04:14
++++ b/apps/desktop/src/renderer/components/settings-sections.tsx	2026-11-01 17:03:33
+@@ -998,7 +998,7 @@
+   };
+   const doctorRowsView = doctor.status === "ready" ? doctorRows(doctor.report, doctor.keys) : [];
+   return (
+-    <SettingsSection title="关于与更新">
++    <SettingsSection title="版本与更新">
+       <SettingsRow label="版本">
+         <div className="ss-inline">
+           <span className="sp-tag">{props.version ?? "—"}</span>
+@@ -1145,7 +1145,7 @@
+  *  完整速查（含窗格/视图键）按 ⌘/ 弹层。 */
+ export function ShortcutsSection(): React.JSX.Element {
+   return (
+-    <SettingsSection title="快捷键" hint="完整速查表按 ⌘/ 随时调出">
++    <SettingsSection title="按键一览" hint="完整速查表按 ⌘/ 随时调出">
+       <div className="kx-list">
+         {SHORTCUTS.map((s) => (
+           <div className="kx-row" key={s.id}>
+--- a/apps/desktop/tests/settings-sections.test.tsx	2026-11-01 17:04:14
++++ b/apps/desktop/tests/settings-sections.test.tsx	2026-11-01 17:03:09
+@@ -393,7 +393,7 @@
+     const h = renderToStaticMarkup(
+       <AboutSection version="0.1.0" updateMsg={null} onCheckUpdate={noop} diagnostics="调度器：serveScheduler 常驻；journal 投影正常。" />,
+     );
+-    expect(h).toContain("关于与更新");
++    expect(h).toContain("版本与更新"); // 第 954 页：页头已经叫「关于与更新」，段标题不再同名
+     expect(h).toContain("0.1.0");
+     expect(h).toContain("检查更新");
+     expect(h).toContain("运行诊断");
+--- a/apps/desktop/tests/settings-section-titles.test.ts	2026-11-01 17:04:14
++++ b/apps/desktop/tests/settings-section-titles.test.ts	2026-11-01 17:03:25
+@@ -24,6 +24,15 @@
+     }
+   });
+ 
++  it("分区内部的段标题不许与分区名同名（页头下再顶一行同名标题）", () => {
++    const sections = readFileSync(join(ROOT, "src/renderer/components/settings-sections.tsx"), "utf8");
++    const titles = [...sections.matchAll(/<SettingsSection title="([^"]+)"/gu)].map((m) => m[1]!);
++    expect(titles.length).toBeGreaterThanOrEqual(8); // 取不到标题说明正则坏了，不许空跑成绿
++    const nav = new Set(SECTIONS.map((s) => s.label));
++    const dup = titles.filter((t) => nav.has(t));
++    expect(dup, "这些段标题与分区名同名：" + dup.join(" | ")).toEqual([]);
++  });
++
+   it("分区名两两不同（同名两个分区，导航里读不出区别）", () => {
+     const labels = SECTIONS.map((s) => s.label);
+     expect(new Set(labels).size).toBe(labels.length);
+--- a/apps/desktop/design/desktop-design-spec.md	2026-11-01 17:04:14
++++ b/apps/desktop/design/desktop-design-spec.md	2026-11-01 17:03:40
+@@ -4315,3 +4315,4 @@
+ 74. **画廊自查：文件行大小必须带单位（第 951 页）**：第 943 页把文件窗格从裸字节数（`2140`）改成 `2.1 KB`，但那是靠人眼看截图发现的——同一类回退（有人把 `formatBytes` 换回 `{e.size}`）没有任何机器拦截。`ui-gallery.cjs` 在弹窗文件窗格截图后加一条自查：`.fp-size` 的文本必须匹配 `B/KB/MB`，裸数字当场抛错（造红实测：退回裸数字 ⇒ `文件行大小没带单位（要 B/KB/MB）：["2140","880"]`，exit 1）。
+ 75. **「在 Finder 中显示」失败不许静默（第 952 页）**：同一个动作两处调用点口径不一——项目列表（`state/projects.ts#handleRevealProject`）失败会 toast，产物行（`state/workbench.ts#handleOpenArtifact`）却 `void …revealInFinder(abs)` 丢掉结果。上一轮的产物常已被删或不在本工作区，用户点了没反应只能猜按钮坏了。产物行改成与项目列表同口径（失败 toast、抛错也 toast）；判卷钉住这条接线并禁止退回丢结果的写法。
+ 76. **「现读」必须带日期（第 953 页）**：`docs/REPOSITORY-STATUS.md` 自称「只写现态」，但 10-27 那批读数一直以「现读」的口吻留在表里：大入口行数写 `index.ts` 1434（工作树实为 2104，+670）、App chunk 写 268.40 kB（实为 305.89 kB / gzip 95.52）。已按当前工作树重重一遍并逐行标 `2026-11-01 复核`（脚本 `outputs/status-doc-refresh-2026-11-01/measure.sh`），延迟类读数（首开/复开 ms、流式帧）本轮没重量、依赖它们的结论一条没动。判卷 `tests/status-readings-dated.test.ts`：每个标「现读」的表格行必须带 `YYYY-MM-DD`。
++77. **段标题不许与分区名同名（第 954 页）**：「关于与更新」与「快捷键」两页里，页头（`sectionLabel(id)`）和第一个段标题写着同一个词——渲染出来是「关于与更新」大字下面再顶一行同名小标题，读起来像重复渲染。段标题改成「版本与更新」「按键一览」；判卷加一条：`settings-sections.tsx` 里任何 `<SettingsSection title="…">` 都不得等于 `SECTIONS` 里的分区名（取不到 ≥8 个标题先红，防止正则坏了空跑成绿）。

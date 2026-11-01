@@ -59,9 +59,19 @@ describe("③ 工具卡折叠行：图标 + 摘要 + 耗时（有 then 显示）
     // 仅 t1 有 then（3300-2100=1.2s）；t2 pending 无耗时
     expect(html.match(/class="tdur"/g)?.length).toBe(1);
     expect(html).toContain(">1.2s<");
-    // 状态符与摘要仍在（折叠行三件套不丢）
-    expect(html).toContain("run_shell");
+    // 状态符与摘要仍在（折叠行三件套不丢）。但**实现名不再上屏**（2026-10-31 R1：
+    // 有中文动词的行只说人话——`run_shell` 紧跟「运行 ls」是把一件事说两遍）。
+    expect(html).not.toContain("run_shell");
     expect(html).toContain("运行 ls");
+    // 反面必须同时钉住：未知工具没有动词可给，原始名就是它唯一的身份，那时必须保留
+    // （`Stream.tsx` 的 `verb === null && <span className="tname">`，宁缺不编）。
+    const unknownTool = renderToStaticMarkup(
+      <Stream rows={projectStream([
+        { type: "tool_call", id: "u1", name: "mystery_tool", args: { q: "x" }, ts: 5000 },
+        { type: "tool_result", callId: "u1", ok: true, ts: 5100 },
+      ] as unknown as AgentEvent[])} />,
+    );
+    expect(unknownTool).toContain("mystery_tool");
   });
 });
 
@@ -197,7 +207,7 @@ describe("⑨ 工具卡行内 diff（写文件类）", () => {
   });
 
   it("懒加载源文哨兵：changeDiff({ path: diffPath }) 调既有通道 + DiffView 复用 + 失败原文上屏", () => {
-    expect(streamSrc).toContain(".changeDiff({ path: diffPath })");
+    expect(streamSrc).toContain(".changeDiff({ path: diffPath, ...(r.snapshotId !== undefined ? { snapshotId: r.snapshotId } : {}) })");
     expect(streamSrc).toContain("<DiffView hunks=");
     expect(streamSrc).toContain("正在读快照与当前文件…");
     expect(streamSrc).toContain("通道无应答（主进程未返回差异数据）");

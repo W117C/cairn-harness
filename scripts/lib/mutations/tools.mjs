@@ -40,7 +40,8 @@ export const MUTATIONS = [
     src: "src/tools/lsp.ts",
     test: "tests/lsp.test.ts",
     desc: "去掉 ERROR 级过滤（警告也回流，污染 edit/write 输出）",
-    apply: (s) => s.replace("diags.filter((d) => d.severity === DiagnosticSeverity.Error)", "diags"),
+    // 第 915 页：实现搬成链式两行后改指现值（原针脚 `diags.filter(...)` 已不在源文件里）。
+    apply: (s) => s.replace(".filter((d) => d.severity === DiagnosticSeverity.Error)", ".filter(() => true)"),
     expectFail: "无错误（仅 WARN 或干净文件）→ 空串（输出不变）",
   },
   {
@@ -48,7 +49,8 @@ export const MUTATIONS = [
     src: "src/tools/lsp.ts",
     test: "tests/lsp.test.ts",
     desc: "去掉 ≤20 条上限（诊断洪水灌满工具输出，挤掉真正信息）",
-    apply: (s) => s.replace(".slice(0, MAX_DIAGNOSTICS)", ""),
+    // 第 915 页：每文件帽改成按 server 配置取（lspDiagnosticsMaxPerFile），针脚跟着搬。
+    apply: (s) => s.replace(".slice(0, lspDiagnosticsMaxPerFile(server))", ""),
     expectFail: "只取 ERROR 级，≤20 条，附 <diagnostics> 块在输出尾部",
   },
   {
@@ -69,6 +71,67 @@ export const MUTATIONS = [
     desc: "broken 服务器仍重试（已知坏的服务器每次调用都重新 spawn/挂起）",
     apply: (s) => s.replace("if (broken.has(key)) {", "if (false) {"),
     expectFail: "server 启动失败进 broken 且不重试",
+  },
+  /* 第 920 页：能力协商。这六条把「两头都没用 initialize」的旧形状钉住——旧行为不是"少装点料"，
+   *  而是服务器按最保守形状回包、增量同步的更新被沉默丢掉、不支持的操作回一段模型读不懂的黑话。 */
+  {
+    id: "lsp-client-caps-not-declared",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "initialize 仍发 capabilities:{} ⇒ 服务器按最保守形状回包（拿不到 LocationLink / markdown / 层级符号），降级是静默的",
+    apply: (s) => s.replace("capabilities: CLIENT_CAPABILITIES,", "capabilities: {},"),
+    expectFail: "客户端把**真会用到的**能力声明出去：没声明的降级是静默的",
+  },
+  {
+    id: "lsp-server-caps-dropped",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "服务器的 InitializeResult 收下即丢 ⇒ 它声明的同步方式与不支持的操作一律看不见",
+    apply: (s) => s.replace("client.adoptServerCapabilities(initiated?.capabilities ?? {});", "client.adoptServerCapabilities({});"),
+    expectFail: "增量同步（change:2）：didChange 不带 range 就被服务器沉默丢掉，结果停在旧文本",
+  },
+  {
+    id: "lsp-provider-gate-inert",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "不按服务器声明门控 ⇒ 没实现的那一支照发请求，模型拿到 jsonrpc 黑话或一次白等",
+    apply: (s) => s.replace("if (client.providerDeclared(operation)) return;", "if (client.providerDeclared(operation) || true) return;"),
+    expectFail: "服务器没声明 hoverProvider ⇒ 当场说不支持，不把协议黑话甩给模型",
+  },
+  {
+    id: "lsp-incremental-range-dropped",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "增量同步仍发不带 range 的整篇替换 ⇒ 服务器丢掉这次更新，六操作回旧文本（看着像「代码没变」）",
+    apply: (s) => s.replace("? [{ text: content, range: wholeDocumentRange(known.text) }]", "? [{ text: content }]"),
+    expectFail: "增量同步（change:2）：didChange 不带 range 就被服务器沉默丢掉，结果停在旧文本",
+  },
+  {
+    id: "lsp-sync-none-still-changes",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "change:0 的服务器照发 didChange（它按协商不理）⇒ 盘上改了内容永远送不进去",
+    apply: (s) => s.replace('if (change === 0) return "none";', 'if (change === 0) return "full";'),
+    expectFail: "不接受增量（change:0）：改盘后走 didClose+didOpen 重开，而不是发一条没人认的 didChange",
+  },
+  {
+    id: "lsp-symbol-kind-hand-copied",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "符号 kind 名回到手抄表（少抄最后两格）⇒ 声明的 valueSet 与实际叫得出的名字分家",
+    apply: (s) => s.replace(
+      '    .map(([name, value]) => [Number(value), name] as [number, string])\n    .filter(([n]) => Number.isFinite(n) && n >= 1),',
+      '    .map(([name, value]) => [Number(value), name] as [number, string])\n    .filter(([n]) => Number.isFinite(n) && n >= 1 && n <= 24),',
+    ),
+    expectFail: "符号 kind 名派生自协议枚举：手抄那份把 25 抄成了 TypeParameter",
+  },
+  {
+    id: "lsp-symbol-shape-second-source",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "workspaceSymbol 另抄一个只认 location 的 mapper ⇒ 合法的空 location 把整支工具打成崩溃",
+    apply: (s) => s.replace('      out.push(indent + s.name + " " + kindName + "（无位置）");', '      out.push(indent + s.name + " " + kindName + " " + formatLocation(root, (s as unknown as SymbolInformation).location));'),
+    expectFail: "workspaceSymbol 允许「有名字没位置」的条目：不许一条坏形状带走整支工具",
   },
   {
     id: "process-env-sanitize",
@@ -632,7 +695,8 @@ export const MUTATIONS = [
     src: "src/tools/lsp.ts",
     test: "tests/plugin-lsp-activation.test.ts",
     desc: "diagnostics.enabled=false 照样回流 ⇒ 作者关掉的噪声（或某个乱报诊断的 server）关不掉，配置只是装饰",
-    apply: (s) => s.replace("    if (cfg.servers[picked]?.diagnosticsEnabled === false) return \"\";", "    if (false) return \"\";"),
+    // 第 915 页：开关判断搬进 `server` 局部量（不再回表查 cfg.servers[picked]），针脚跟着搬。
+    apply: (s) => s.replace('    if (server?.diagnosticsEnabled === false) return "";', '    if (false) return "";'),
     expectFail: "§9.8 的 diagnostics 开关真兑现：开 ⇒ 插件服务器推的 ERROR 回流；关 ⇒ 一个字都不回",
   },
   {
