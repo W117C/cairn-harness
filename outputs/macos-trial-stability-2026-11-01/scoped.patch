@@ -1,0 +1,547 @@
+--- a/apps/desktop/scripts/package.mjs
++++ b/apps/desktop/scripts/package.mjs
+@@ -20,6 +20,24 @@
+     main: "apps/desktop/src/main/entry.cjs",
+     dependencies: { ...source.dependencies },
+   };
++}
++
++export function readSourceProvenance(root) {
++  const git = (args) => {
++    const result = spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
++    if (result.error || result.signal || result.status !== 0) throw new Error("无法读取构建来源：需要可读的 Git 工作树");
++    return result.stdout.trim();
++  };
++  return {
++    sourceCommit: git(["rev-parse", "--verify", "HEAD"]),
++    sourceDirty: git(["status", "--porcelain", "--untracked-files=normal"]) !== "",
++  };
++}
++
++export function preparePackageStaging(root, out) {
++  const sourceProvenance = readSourceProvenance(root);
++  mkdirSync(dirname(out), { recursive: true });
++  return { sourceProvenance, staging: mkdtempSync(join(dirname(out), ".cairn-package-")) };
+ }
+ 
+ export function codeSigningTargets(appDir) {
+@@ -104,8 +122,7 @@
+   const source = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+   if (!source.dependencies?.tsx) throw new Error("tsx 是运行期 loader，必须声明在 dependencies 中");
+   run("pnpm", ["--filter", "cairn-desktop", "build"], { cwd: repoRoot });
+-  mkdirSync(dirname(options.out), { recursive: true });
+-  const staging = mkdtempSync(join(dirname(options.out), ".cairn-package-"));
++  const { sourceProvenance, staging } = preparePackageStaging(repoRoot, options.out);
+   try {
+     const appDir = join(staging, "Cairn.app");
+     // ditto preserves framework-relative symlinks; Node's default cp rewrites them.
+@@ -133,6 +150,7 @@
+     // 关于页读这一份：构建时间、签名方式、lock 哈希与打包冒烟凭据都随包走。
+     const buildInfo = {
+       version: source.version, platform: process.platform, arch: process.arch,
++      ...sourceProvenance,
+       sourceLockSha256: createHash("sha256").update(readFileSync(join(repoRoot, "pnpm-lock.yaml"))).digest("hex"),
+       packagedSmoke: "passed", signature: "ad-hoc", createdAt: new Date().toISOString(),
+     };
+@@ -167,6 +185,7 @@
+       const dmgRoot = join(staging, "dmg");
+       mkdirSync(dmgRoot, { recursive: true });
+       cpSync(appDir, join(dmgRoot, "Cairn.app"), { recursive: true, verbatimSymlinks: true, preserveTimestamps: true });
++      cpSync(join(repoRoot, "docs/macos-trial.md"), join(dmgRoot, "安装说明.md"));
+       symlinkSync("/Applications", join(dmgRoot, "Applications"));
+       let dmg = spawnSync("diskutil", ["image", "create", "from", "--format", "UDZO", "--volumeName", "Cairn", dmgRoot, dmgPath], { encoding: "utf8" });
+       if (dmg.status !== 0) {
+@@ -174,7 +193,7 @@
+       }
+       if (dmg.status !== 0) {
+         console.warn(`[package] DMG 创建失败（diskutil/hdiutil），回退 Cairn-macOS.zip：${String(dmg.stderr ?? "").trim()}`);
+-        run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appDir, join(staging, "Cairn-macOS.zip")]);
++        run("ditto", ["-c", "-k", "--sequesterRsrc", dmgRoot, join(staging, "Cairn-macOS.zip")]);
+       }
+       // 包自己跑安装验收：挂 DMG -> 复制 app -> CAIRN_SMOKE；失败就不产出（不留「能打包但不能装」的包）。
+       if (dmg.status === 0 && existsSync(dmgPath)) {
+@@ -183,6 +202,7 @@
+       // dmgRoot 是 staging 里的 568MB 克隆；不删就会随 rename 一起混进 release（实测 release-829 多出 dmg/）。
+       rmSync(dmgRoot, { recursive: true, force: true });
+     }
++    cpSync(join(repoRoot, "docs/macos-trial.md"), join(staging, "安装说明.md"));
+     writeFileSync(join(staging, "build-info.json"), JSON.stringify(buildInfo, null, 2) + "\n");
+     if (occupied(options.out)) throw new Error(`目标已存在：${options.out}；保留已有产物`);
+     renameSync(staging, options.out);
+--- a/apps/desktop/scripts/install-smoke.mjs
++++ b/apps/desktop/scripts/install-smoke.mjs
+@@ -5,6 +5,7 @@
+ import { existsSync, mkdtempSync, rmSync } from "node:fs";
+ import { tmpdir } from "node:os";
+ import { join, resolve } from "node:path";
++import { PACKAGED_SMOKE_ARGS, packagedSmokePassed } from "./package.mjs";
+ 
+ const dmg = resolve(process.argv[2] ?? "");
+ if (!existsSync(dmg)) {
+@@ -29,10 +30,10 @@
+   if (copy.status !== 0) throw new Error(`复制 Cairn.app 失败：${copy.stderr.trim()}`);
+   const env = { ...process.env, CAIRN_SMOKE: "1", CAIRN_DESKTOP_WORKSPACE: workspace };
+   for (const key of ["ELECTRON_RUN_AS_NODE", "NODE_PATH", "VITE_DEV_SERVER_URL", "M0A_PROVIDER", "M3A_MAIN_SCRIPT"]) delete env[key];
+-  const smoke = spawnSync(join(copied, "Contents/MacOS/Cairn"), [], { cwd: workspace, env, encoding: "utf8", timeout: 45_000 });
+-  const passed = smoke.status === 0 && String(smoke.stdout).includes("[cairn-smoke] PASS");
++  const smoke = spawnSync(join(copied, "Contents/MacOS/Cairn"), PACKAGED_SMOKE_ARGS, { cwd: workspace, env, encoding: "utf8", timeout: 45_000, killSignal: "SIGKILL" });
++  const passed = packagedSmokePassed(smoke);
+   if (!passed) {
+-    console.error(`安装后冒烟失败（status=${String(smoke.status)}）\n${String(smoke.stdout).slice(-2000)}\n${String(smoke.stderr).slice(-2000)}`);
++    console.error(`安装后冒烟失败（需要 [cairn-smoke] PASS 凭据，status=${String(smoke.status)}）\n${String(smoke.stdout).slice(-2000)}\n${String(smoke.stderr).slice(-2000)}`);
+     process.exitCode = 1;
+   } else {
+     console.log("[install-smoke] PASS：从 DMG 拖出的 Cairn.app 启动并通过打包态冒烟");
+@@ -41,7 +42,16 @@
+   console.error(`[install-smoke] ${err instanceof Error ? err.message : String(err)}`);
+   process.exitCode = 1;
+ } finally {
+-  if (mountPoint !== null) spawnSync("hdiutil", ["detach", mountPoint], { encoding: "utf8" });
++  if (mountPoint !== null) {
++    const detached = spawnSync("diskutil", ["eject", mountPoint], { encoding: "utf8" });
++    if (detached.status !== 0) {
++      const fallback = spawnSync("hdiutil", ["detach", mountPoint], { encoding: "utf8" });
++      if (fallback.status !== 0) {
++        console.error(`[install-smoke] 无法卸载本轮安装盘：${mountPoint}`);
++        process.exitCode = 1;
++      }
++    }
++  }
+   rmSync(mounted, { recursive: true, force: true });
+   rmSync(workspace, { recursive: true, force: true });
+ }
+--- a/apps/desktop/scripts/terminal-resize-smoke.cjs
++++ b/apps/desktop/scripts/terminal-resize-smoke.cjs
+@@ -74,19 +74,19 @@
+   const before = first.length > 0 ? first[first.length - 1] : null;
+   const hostBefore = await read(`const h = document.querySelector('.term-host'); const r = h.getBoundingClientRect(); return { w: r.width, h: r.height };`);
+ 
+-  // 变宽：窗口变窄 ⇒ 终端容器变窄 ⇒ 行列应变少。
+-  await win.setContentSize(760, 900);
++  // 保持检查器可见时量网格；过窄会按产品规则主动收起整列，隐藏态不能当作 fit 失败。
++  await win.setContentSize(1200, 900);
+   await pause(1200);
+   const narrow = await resizeCalls();
+   const afterNarrow = narrow.length > 0 ? narrow[narrow.length - 1] : null;
+   const hostNarrow = await read(`const h = document.querySelector('.term-host'); const r = h.getBoundingClientRect(); return { w: r.width, h: r.height };`);
+   check("容器变窄 ⇒ 发给主进程的列数变少（方向一致，不是反的）",
+-    afterNarrow !== null && before !== null && afterNarrow.cols < before.cols && hostNarrow.w < hostBefore.w,
++    afterNarrow !== null && before !== null && afterNarrow.cols < before.cols && hostNarrow.w > 50 && hostNarrow.w < hostBefore.w,
+     { before, afterNarrow, hostBefore, hostNarrow });
+   await shot("01-narrow");
+ 
+   // 变高：窗口变矮 ⇒ 行数应变少。
+-  await win.setContentSize(760, 560);
++  await win.setContentSize(1200, 560);
+   await pause(1200);
+   const short = await resizeCalls();
+   const afterShort = short.length > 0 ? short[short.length - 1] : null;
+@@ -104,6 +104,17 @@
+     afterWide !== null && afterShort !== null && afterWide.cols > afterShort.cols && afterWide.rows > afterShort.rows,
+     { afterShort, afterWide });
+ 
++  // 真实产品最小窗宽为 880：检查器自动收起；用户重新展开时侧栏让位，终端重新拟合。
++  await win.setContentSize(880, 900);
++  await pause(1200);
++  const collapsed = await read(`const col = document.querySelector('.inspector-col'); return { inert: col.hasAttribute('inert'), width: col.getBoundingClientRect().width };`);
++  check("窄窗口主动收起检查器并移出键盘焦点", collapsed.inert && collapsed.width < 10, collapsed);
++  await js(`window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyI", key: "i", bubbles: true, metaKey: true, altKey: true }))`);
++  await pause(1200);
++  const reopened = await read(`const col = document.querySelector('.inspector-col'); const h = document.querySelector('.term-host'); return { inert: col.hasAttribute('inert'), width: h.getBoundingClientRect().width, cols: document.querySelector('.xterm-screen')?.getBoundingClientRect().width ?? 0 };`);
++  check("窄窗口可重新展开终端并恢复有效网格", !reopened.inert && reopened.width > 250 && reopened.cols > 100, reopened);
++  await shot("02-narrow-reopened");
++
+   const all = await resizeCalls();
+   const monotonic = all.every((c) => Number.isInteger(c.cols) && Number.isInteger(c.rows) && c.cols > 0 && c.rows > 0);
+   check("每一次同步都是正整数行列（0 尺寸不外发）", monotonic, { count: all.length, last: all[all.length - 1] ?? null });
+--- a/apps/desktop/scripts/settings-process-smoke.cjs
++++ b/apps/desktop/scripts/settings-process-smoke.cjs
+@@ -77,7 +77,7 @@
+   win.webContents.on('console-message', (details) => { if (details.level === 'error') errors.push(details.message); });
+   const js = (source) => win.webContents.executeJavaScript(source, true);
+   const click = (selector) => js(`document.querySelector(${JSON.stringify(selector)}).click()`);
+-  const fill = (selector, value) => js(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(el.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); })()`);
++  const fill = (selector, value) => js(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) throw new Error('找不到控件：' + ${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(el.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); })()`);
+   const shot = async (name) => { await pause(300); writeFileSync(join(out, name + '.png'), (await win.webContents.capturePage()).toPNG()); };
+   const nav = async (name) => { await js(`[...document.querySelectorAll('.sp-nav-item')].find(el => el.textContent.trim() === ${JSON.stringify(name)}).click()`); };
+   const key = async (keyCode) => {
+@@ -131,7 +131,7 @@
+   await nav('联网搜索');
+   await waitFor(() => js('!!document.querySelector(".network-settings")'), 'search form');
+   const countBefore = requests.length;
+-  await fill('select[aria-label="搜索服务"]', 'custom');
++  await fill('select[aria-label="服务商"]', 'custom');
+   await waitFor(() => js('!!document.querySelector(".network-settings input[type=url]")'), 'custom endpoint field');
+   await fill('input[aria-label="搜索服务地址"]', `http://127.0.0.1:${server.address().port}/search`);
+   await click('input[aria-label="启用联网搜索"]');
+--- a/scripts/renderer-layer-check.ts
++++ b/scripts/renderer-layer-check.ts
+@@ -30,7 +30,7 @@
+ export const APP_TSX_LINE_CAP = 900;
+ 
+ /** 派生层允许的**运行时**依赖（纯模块白名单；type-only 导入不进这张表）。 */
+-const DERIVED_RUNTIME_ALLOWLIST = new Set(["src/main/usage-ledger.ts"]);
++const DERIVED_RUNTIME_ALLOWLIST = new Set(["src/main/usage-ledger.ts", "src/agent/subflow.ts"]);
+ 
+ const ROOT = fileURLToPath(new URL("..", import.meta.url));
+ /** 渲染层相对仓根的路径（判卷在临时目录里造样本时也用同一套相对路径）。 */
+@@ -188,6 +188,8 @@
+ /** I3：derived/** 必须是纯投影。 */
+ export function checkI3(files: string[], root: string = ROOT): Violation[] {
+   const out: Violation[] = [];
++  const pending = files.filter((file) => relOf(file, root).startsWith("apps/desktop/src/renderer/derived/"));
++  const visited = new Set<string>();
+   const banned: { re: RegExp; why: string }[] = [
+     { re: /\bDate\s*\.\s*now\b/, why: "不读时钟（Date.now）" },
+     { re: /\bnew\s+Date\b/, why: "不构造日期（new Date）" },
+@@ -196,9 +198,10 @@
+     { re: /\bawait\b/, why: "不同步等待（await）" },
+     { re: /\basync\b/, why: "不写异步函数（async）" },
+   ];
+-  for (const file of files) {
+-    const rel = relOf(file, root);
+-    if (!rel.startsWith("apps/desktop/src/renderer/derived/")) continue;
++  for (const file of pending) {
++    if (visited.has(file)) continue;
++    visited.add(file);
++    const rel = relOf(file, root);
+     const raw = readFileSync(file, "utf8");
+     const code = stripCommentsAndStrings(raw);
+     const codeLines = code.split("\n");
+@@ -224,8 +227,11 @@
+       }
+       const target = resolveSpecifier(file, imp.specifier, root);
+       if (target === null) continue;
+-      if (target.startsWith("apps/desktop/src/renderer/derived/")) continue;
+-      if (DERIVED_RUNTIME_ALLOWLIST.has(target)) continue;
++      if (target.startsWith("apps/desktop/src/renderer/derived/") || DERIVED_RUNTIME_ALLOWLIST.has(target)) {
++        // 登记只允许复用，不豁免纯度：传递依赖也跑同一套检查。
++        pending.push(join(root, target));
++        continue;
++      }
+       out.push({ rule: "I3", file: rel, line: imp.line, message: `派生层只许吃纯模块（未登记：${target}）` });
+     }
+   }
+--- a/README.md
++++ b/README.md
+@@ -57,7 +57,7 @@
+ 打包脚本会先 `build`，再用打包后的 `Cairn.app` 跑一次真窗口冒烟；**只有冒烟通过才产出目录**。`install-smoke.mjs` 再把 DMG 挂起来、把 app 复制到临时目录（模拟拖进 Applications）跑同一套冒烟，证明离开 release 目录也能启动。
+ 产物含 `Cairn.app`、`Cairn.dmg`（`hdiutil` 不可用时回退 `Cairn-macOS.zip`）、`build-info.json`
+ （版本、lock 哈希、`packagedSmoke: passed`、签名方式、构建时间）。DMG 内是 `Cairn.app` +
+-`Applications` 快捷方式，打开后直接拖进去即可。当前是 ad-hoc 签名、未做 Apple 公证；换机器首次打开可能被 Gatekeeper 拦，内测按「右键 → 打开」放行。
++`Applications` 快捷方式与安装说明，打开后直接拖进去即可。当前保留 ad-hoc 封装，暂不做 Developer ID 签名或 Apple 公证；换机器的单应用隔离处置、架构要求、密钥配置与手工升级见 [macOS 内测安装说明](docs/macos-trial.md)。`build-info.json` 另记录 `sourceCommit` / `sourceDirty`，含未提交修改的包不会冒充干净提交。
+ 
+ 发布更新清单：
+ 
+--- a/PROGRESS.md
++++ b/PROGRESS.md
+@@ -34559,3 +34559,21 @@
+ - 条件选择器写在 `cds-components.css` 而不是 `styles.css`：必须继承同一组 (0,4,1) 前缀才压得过那条 `opacity: 0`。
+ - 只影响 claude 风格；默认风格下 `styles.css` 那条本来就生效——这也是它一直没被看见的原因。
+ - 未跑 `gates` / `head-cert` / `mutate-verify`（量 HEAD，本批未提交）；未提交。
++
++## 2026-11-01 · 第 962 页：受邀 macOS 内测包与两轮真实 hy3 验收
++
++用户决定暂不做 Apple Developer ID / 公证；本批在共享工作树修复，不混合提交其他批次。HEAD 仍为 `be9c0be5b6545d41ebdb891fc676b1e9a912f309`，以下全部为工作树或本机构建证据。
++
++- 共享子流判据精确纳入派生层允许依赖，并递归检查纯度；六项临时仓用例先红后绿，没有豁免传递依赖。
++- 恢复原有品牌/字体资源；设置冒烟修复改名后的选择器；终端冒烟保持网格断言，补测窄窗自动收起与重新展开。
++- 安装冒烟复用 mock-keychain 与严格成功凭据、强制超时，并在本机用 `diskutil eject` 正常清理挂载；不将其当作真实钥匙串认证。
++- 构建来源写入基线 commit 与 dirty 状态，兼容旧包。独立审查指出 staging 污染 dirty 读数；已以真实临时仓 RED→GREEN 修正捕获时序。
++- 最终 core：`pnpm exec vitest run --config tests/vitest.config.ts --maxWorkers=1`，**612 文件 / 7573 条全绿，exit 0，333.98 秒**。
++- Desktop：`pnpm --filter cairn-desktop exec vitest run --config vitest.config.ts --maxWorkers=1`，**310 文件 / 2085 条全绿，exit 0**。根 typecheck 0；docs / desktop-boundary / renderer-layer 全绿。
++- 真实 Electron：设置 **16/16**、终端 **9/9**。打包态和 DMG 复制到源码树外启动通过；单应用 quarantine 属性演练通过，未改系统安全设置。
++- 真实本地 hy3：首次修复 30.35 秒、独立复验 **3/3**；同一会话续跑添加功能 17.36 秒、独立复验 **7/7**；两轮 agent 均 exit 0，测试文件字节不变。不当作真实任务成功率基准，美元成本未知。
++- 产物 `apps/desktop/release-trial-20261101/`：macOS arm64、0.2.0、`sourceDirty:true`；随包附安装说明与校验和。DMG SHA-256 `e01af0120ef1fc27a52fb61c74e6a60c1e666f4cb815e8a14c9df34138065cde`。
++
++取料：`outputs/macos-trial-stability-2026-11-01/REPORT.md`、`core-final.log`、`desktop.log`、`provenance-final.log`、`quarantine-check.json`、`real-agent.json`、`real-resume.json`、`scoped.patch`。首轮 core 两项失败及打包超时也保留，未用定向绿冒充全量绿。
++
++未验：另一台 Mac、真实钥匙串首启/升级、桌面真实模型交互、Intel/Windows/Linux、当前提交 HEAD 认证与全表变异认证；未发布，产品修复未提交，验证证据单独入库。内测允许单应用解除隔离，详见 `docs/macos-trial.md`。
+--- a/src/main/build-info.ts
++++ b/src/main/build-info.ts
+@@ -16,6 +16,9 @@
+   packagedSmoke: string;
+   signature: string;
+   createdAt: string;
++  /** 旧包缺省；dirty=true 时 commit 仅代表工作树基线。 */
++  sourceCommit?: string;
++  sourceDirty?: boolean;
+ }
+ 
+ function field(raw: Record<string, unknown>, key: keyof BuildInfo): string | null {
+@@ -37,6 +40,11 @@
+     createdAt: field(r, "createdAt"),
+   };
+   for (const value of Object.values(values)) if (value === null) return null;
++  if ("sourceCommit" in r || "sourceDirty" in r) {
++    if (typeof r.sourceCommit !== "string" || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(r.sourceCommit)
++      || typeof r.sourceDirty !== "boolean") return null;
++    return { ...values, sourceCommit: r.sourceCommit, sourceDirty: r.sourceDirty } as BuildInfo;
++  }
+   return values as BuildInfo;
+ }
+ 
+--- a/apps/desktop/src/renderer/components/settings-sections.tsx
++++ b/apps/desktop/src/renderer/components/settings-sections.tsx
+@@ -1005,6 +1005,7 @@
+           {props.build !== undefined && props.build !== null && (
+             <span className="sp-dim" role="status">
+               构建于 {props.build.createdAt.slice(0, 10)} · {props.build.signature} · 冒烟 {props.build.packagedSmoke === "passed" ? "已过" : props.build.packagedSmoke}
++              {props.build.sourceCommit !== undefined && <> · {props.build.sourceCommit.slice(0, 8)}{props.build.sourceDirty ? "（含未提交修改）" : ""}</>}
+             </span>
+           )}
+         </div>
+--- /dev/null
++++ b/tests/renderer-layer-pure-deps.test.ts
+@@ -0,0 +1,54 @@
++import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { dirname, join } from "node:path";
++import { afterEach, describe, expect, it } from "vitest";
++import { checkI3 } from "../scripts/renderer-layer-check";
++
++const roots: string[] = [];
++afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
++
++function fixture(shared: string, throughLedger = false): { root: string; entry: string } {
++  const root = mkdtempSync(join(tmpdir(), "cairn-pure-deps-"));
++  roots.push(root);
++  const write = (file: string, text: string): string => {
++    const full = join(root, file);
++    mkdirSync(dirname(full), { recursive: true });
++    writeFileSync(full, text);
++    return full;
++  };
++  write("src/agent/subflow.ts", shared);
++  write("src/main/usage-ledger.ts", 'export { isWorker } from "../agent/subflow";');
++  const target = throughLedger ? "main/usage-ledger" : "agent/subflow";
++  const entry = write("apps/desktop/src/renderer/derived/session.ts", `export { isWorker } from "../../../../../src/${target}";`);
++  return { root, entry };
++}
++
++describe("派生层共享纯依赖", () => {
++  it("共享判据直接或经用量账本引用均可，且循环依赖不会无限递归", () => {
++    for (const viaLedger of [false, true]) {
++      const { root, entry } = fixture('import { isWorker as shared } from "../main/usage-ledger";\nexport const isWorker = (id: unknown) => typeof id === "string" && id !== "";', viaLedger);
++      expect(checkI3([entry], root)).toEqual([]);
++    }
++  });
++
++  it.each([
++    ['时钟', 'export const isWorker = () => Date.now();'],
++    ['随机', 'export const isWorker = () => Math.random();'],
++    ['可变态', 'let counter = 0;\nexport const isWorker = () => ++counter;'],
++    ['IO', 'import { readFileSync } from "node:fs";\nexport const isWorker = readFileSync;'],
++  ])("经已登记账本间接引入%s仍拒绝并指出真正来源", (_name, source) => {
++    const { root, entry } = fixture(source, true);
++    const violations = checkI3([entry], root);
++    expect(violations).toEqual(expect.arrayContaining([
++      expect.objectContaining({ rule: "I3", file: "src/agent/subflow.ts" }),
++    ]));
++  });
++
++  it("登记一个纯模块不会放开整个 agent 目录", () => {
++    const { root, entry } = fixture('export { isWorker } from "./runtime";');
++    writeFileSync(join(root, "src/agent/runtime.ts"), "export const isWorker = 1;");
++    expect(checkI3([entry], root)).toEqual(expect.arrayContaining([
++      expect.objectContaining({ rule: "I3", file: "src/agent/subflow.ts", message: expect.stringContaining("src/agent/runtime.ts") }),
++    ]));
++  });
++});
+--- /dev/null
++++ b/tests/desktop-build-provenance.test.ts
+@@ -0,0 +1,82 @@
++import { spawnSync } from "node:child_process";
++import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join, resolve } from "node:path";
++import { pathToFileURL } from "node:url";
++import { afterEach, describe, expect, it } from "vitest";
++import { parseBuildInfo } from "../src/main/build-info";
++
++const dirs: string[] = [];
++afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
++const script = pathToFileURL(resolve("apps/desktop/scripts/package.mjs")).href;
++function runGit(dir: string, ...args: string[]): string {
++  const r = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
++  if (r.status !== 0) throw new Error(r.stderr);
++  return r.stdout.trim();
++}
++function repository(): string {
++  const dir = mkdtempSync(join(tmpdir(), "cairn-build-source-"));
++  dirs.push(dir);
++  runGit(dir, "init", "-q");
++  writeFileSync(join(dir, "entry.txt"), "original\n");
++  runGit(dir, "add", "entry.txt");
++  runGit(dir, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", "commit", "-qm", "fixture");
++  return dir;
++}
++function provenance(dir: string) {
++  return spawnSync(process.execPath, ["--input-type=module", "-e", `import { readSourceProvenance } from ${JSON.stringify(script)}; console.log(JSON.stringify(readSourceProvenance(process.argv[1])));`, dir], { encoding: "utf8" });
++}
++
++describe("打包来源", () => {
++  it("先记录干净源码，再创建仓内暂存目录，构建产物不污染来源", () => {
++    const dir = repository();
++    const code = `import { preparePackageStaging, readSourceProvenance } from ${JSON.stringify(script)}; import { writeFileSync } from 'node:fs'; import { join } from 'node:path'; const prepared = preparePackageStaging(process.argv[1], join(process.argv[1], 'apps/desktop/release')); writeFileSync(join(prepared.staging, 'artifact.txt'), 'built'); console.log(JSON.stringify({ before: prepared.sourceProvenance, after: readSourceProvenance(process.argv[1]) }));`;
++    const result = spawnSync(process.execPath, ["--input-type=module", "-e", code, dir], { encoding: "utf8" });
++    expect(result.status, result.stderr).toBe(0);
++    const data = JSON.parse(result.stdout);
++    expect(data.before).toEqual({ sourceCommit: runGit(dir, "rev-parse", "HEAD"), sourceDirty: false });
++    expect(data.after.sourceDirty).toBe(true);
++  });
++
++  it("记录完整 commit，并区分干净、已跟踪修改和未跟踪源码", () => {
++    const dir = repository();
++    const commit = runGit(dir, "rev-parse", "HEAD");
++    const clean = provenance(dir);
++    expect(clean.status, clean.stderr).toBe(0);
++    expect(JSON.parse(clean.stdout)).toEqual({ sourceCommit: commit, sourceDirty: false });
++    appendFileSync(join(dir, "entry.txt"), "changed\n");
++    expect(JSON.parse(provenance(dir).stdout)).toEqual({ sourceCommit: commit, sourceDirty: true });
++    runGit(dir, "checkout", "--", "entry.txt");
++    writeFileSync(join(dir, "new-source.txt"), "new\n");
++    expect(JSON.parse(provenance(dir).stdout)).toEqual({ sourceCommit: commit, sourceDirty: true });
++  });
++
++  it("不是 Git 仓时明确失败，不伪造来源", () => {
++    const dir = mkdtempSync(join(tmpdir(), "cairn-no-git-"));
++    dirs.push(dir);
++    const result = provenance(dir);
++    expect(result.status).not.toBe(0);
++    expect(result.stderr).toContain("无法读取构建来源");
++  });
++});
++
++const oldBuild = {
++  version: "0.2.0", platform: "darwin", arch: "arm64", sourceLockSha256: "lock",
++  packagedSmoke: "passed", signature: "ad-hoc", createdAt: "2026-11-01T00:00:00.000Z",
++};
++describe("旧包与工作树构建信息", () => {
++  it("旧包保持兼容，新包保留 commit 与 dirty 状态", () => {
++    expect(parseBuildInfo(oldBuild)).toEqual(oldBuild);
++    const current = { ...oldBuild, sourceCommit: "a".repeat(40), sourceDirty: true };
++    expect(parseBuildInfo(current)).toEqual(current);
++  });
++
++  it.each([
++    { sourceCommit: "a".repeat(40) },
++    { sourceDirty: false },
++    { sourceCommit: "not-a-commit", sourceDirty: false },
++    { sourceCommit: "a".repeat(40), sourceDirty: "false" },
++  ])("拒绝不完整或错误的来源，不误报为干净提交：%j", (source) => {
++    expect(parseBuildInfo({ ...oldBuild, ...source })).toBeNull();
++  });
++});
+--- /dev/null
++++ b/docs/macos-trial.md
+@@ -0,0 +1,30 @@
++# Cairn macOS 受邀内测安装
++
++本轮不使用 Apple Developer ID 或公证；保留应用运行所需的本地 ad-hoc 封装。仅安装发行方直接提供、且你确认来源的内测包。
++
++## 安装
++
++1. 在「关于本机」确认芯片类型与发行包的 `build-info.json` 中 `arch` 一致：`arm64` 对应 Apple Silicon，`x64` 对应 Intel。本轮实测包为 arm64，不代表 Intel 已验证。
++2. 打开 DMG，将 `Cairn.app` 拖入「应用程序」；如果收到 ZIP，先解压，再将其中的 `Cairn.app` 拖入「应用程序」。运行应用无需安装 Node 或 pnpm。
++3. 首次打开被 macOS 拦截时，到「系统设置 → 隐私与安全性」找到 Cairn，选择「仍要打开」。[Apple 官方说明](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac)
++4. 如果确认包来源后仍遇到隔离拦截，在终端执行下面这一条，再从 Finder 打开 Cairn：
++
++```sh
++xattr -dr com.apple.quarantine "/Applications/Cairn.app"
++```
++
++此命令仅移除指定 Cairn.app 的下载隔离属性，不关闭系统 Gatekeeper。若安装位置不同，替换为实际的 Cairn.app 路径；不要对整个「应用程序」、Downloads 或系统目录执行。
++
++## 首次任务
++
++打开一个可用于试验的项目，在「设置」配置模型服务并测试连接。API Key 保存在这台 Mac 的系统安全存储中，安装包不附带发行方密钥。跨机器需重新配置；更换 ad-hoc 构建后，系统可能再次询问钥匙串访问权限。
++
++先完成一个小修改，检查改动与验证结果，再决定保留或还原。内测先使用项目副本或 Git 工作树，保留原项目的恢复点。
++
++## 升级与问题反馈
++
++退出 Cairn 后用新版 Cairn.app 替换旧应用；不要同时运行两版。应用数据与项目中的 `.agent` 记录不随替换应用删除；API Key 不通过复制应用迁移。
++
++遇到问题，在「设置 → 关于与更新」记录版本及构建来源，导出诊断包。`sourceDirty: true` 表示构建含未提交修改，`sourceCommit` 只标记基线，不能读作该提交已包含全部修改。将复现步骤与诊断包交给内测维护者，不附带 API Key。
++
++另一台 Mac 的真实启动、钥匙串和模型任务需要在那台机器上验证；本机隔离目录冒烟不能替代跨机器验收。
+--- /dev/null
++++ b/docs/superpowers/specs/2026-11-01-macos-trial-stability-design.md
+@@ -0,0 +1,17 @@
++# macOS 内测试用与稳定性修复
++
++用户于 2026-11-01 授权按项目评估开始修复，并明确暂不做 Apple Developer ID 签名、公证。
++
++目标：产出可交给受邀 macOS 用户的桌面包，修复已经发现的交付与验证阻断。沿用现有 Electron、权限、会话、打包及诊断能力，不新增依赖，不改全局 Gatekeeper 设置。
++
++范围：
++
++- 保留共享工作树已有改动，定点修复；不把其他批次整体提交。
++- 共享子流判据继续只有一个实现。派生层允许使用经过纯度检查的核心纯模块，禁止宿主运行时、时钟与可变态回流。
++- 恢复已有打包图标和仍被引用的字体；沿用本地 ad-hoc 封装，不申请证书。
++- 安装说明只允许对用户已确认来源的 Cairn.app 移除 quarantine，不关闭系统保护。
++- 打包凭据注明基线 commit、工作树是否含未提交修改；旧构建信息保持可读。
++- 设置和终端冒烟修复过时的界面假设，原有行为断言保留，增加窄窗收起/重新展开覆盖。
++- 构建、打包态及移出源码树的启动都实际验证。真实模型与另一台 Mac 的结果独立记录，缺少条件时不冒充通过。
++
++验收：渲染分层、typecheck、docs、core/desktop 套件及相关真实 Electron 冒烟通过；新包能够离开源码目录启动。外部机器验收仍需外部样本。
+--- /dev/null
++++ b/docs/superpowers/plans/2026-11-01-macos-trial-stability.md
+@@ -0,0 +1,56 @@
++# macOS Trial Stability Implementation Plan
++
++> **For agentic workers:** Use superpowers:executing-plans to implement this plan task-by-task.
++
++**Goal:** 修复当前工作树的桌面试用阻断，并生成无需 Developer ID/公证的受邀内测包。
++
++**Architecture:** 复用现有 Electron 与 package/install-smoke 链。共享纯函数保持单源；机器检查递归检查获准的纯依赖。工作树内定点修改，保留其他批次。
++
++**Tech Stack:** TypeScript、React、Electron、Vitest、macOS 原生工具；零新依赖。
++
++**Spec:** `docs/superpowers/specs/2026-11-01-macos-trial-stability-design.md`
++
++## Global Constraints
++
++- 不做 Developer ID/公证，不关闭全局 Gatekeeper；原有 ad-hoc 封装保留。
++- 不 reset/stash，不修改冻结判据，不放宽现有断言，不提交其他批次。
++- 本轮工作树验证与 HEAD/外部真机验证分开记。
++
++## Review Focus
++
++- 获准的纯模块及其依赖后来引入 IO、时钟或可变态时仍须报错。
++- 旧 build-info 兼容；新包的 commit 不被误读成已提交整个工作树。
++- quarantine 操作仅作用于用户确认的 Cairn.app；安装文档随包提供。
++- 窄窗主动收起检查器时，冒烟不能把隐藏终端当成仍可见。
++- 本地重新打开与跨机器真实钥匙串行为不混为一谈。
++
++### Task 1: 共享纯依赖检查
++
++Files: `scripts/renderer-layer-check.ts`、`tests/renderer-layer-pure-deps.test.ts`。
++
++- [x] 写临时仓行为用例，证明共享子流纯函数可以复用，传递依赖中的时钟、IO、可变态会被拒绝；先运行观察失败。
++- [x] 只登记 `src/agent/subflow.ts`，对获准依赖递归运行原有纯度规则，循环依赖去重。
++- [x] 跑新增用例、原分层用例、子流归因用例及 `pnpm renderer-layer-check`。
++
++### Task 2: 设置与终端真实冒烟
++
++Files: `apps/desktop/scripts/settings-process-smoke.cjs`、`apps/desktop/scripts/terminal-resize-smoke.cjs`。
++
++- [x] 复现失败，核对设置控件当前可访问名称及检查器窄窗收起规则。
++- [x] 修正控件定位与测试前置条件；保留缩窄/变矮/放大断言，额外验证窄窗自动收起及用户重新展开。
++- [x] 同一构建上实际运行两支 Electron 冒烟，检查真实读数与截图。
++
++### Task 3: 安装包、来源与无公证安装路径
++
++Files: `apps/desktop/scripts/package.mjs`、`src/main/build-info.ts`、新增构建来源测试、`README.md`；恢复原图标及仍被引用的字体。
++
++- [x] 在临时 Git 仓测试 clean、tracked dirty、untracked dirty、非 Git 的来源信息，先观察失败。
++- [x] 最小化添加来源信息与向后兼容解析，恢复已有资源；用手工替换方式分发，避免新增自动更新系统。
++- [x] README 与随包说明提供单应用 quarantine 处置、架构要求、数据/密钥边界和手工升级路径。
++- [x] 定向测试通过后实际打包到新目录，校验包和归档校验和，再移出源码目录启动。
++
++### Task 4: 综合验证与交付
++
++- [x] 串行运行 core（`--maxWorkers=1`）及 desktop 全套、typecheck、docs、boundary、renderer-layer。
++- [x] 独立审查本轮相对临时基线的补丁，修复重要问题。
++- [x] 记录测试、包地址、未验证边界与真实模型验收条件；共享工作树改动不混合提交。

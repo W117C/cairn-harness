@@ -1,0 +1,5 @@
+{
+  "nativeZipLayoutPassed": true,
+  "consumer": "ditto extract (native macOS path, including UTF-8 guide filename)",
+  "scope": "small fixture validates flat ZIP layout and bundled guide, not a full fallback build"
+}

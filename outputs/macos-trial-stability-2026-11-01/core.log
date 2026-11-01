@@ -1,0 +1,149 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay / --serve / --discover / --sessions 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+fatal: not a git repository (or any of the parent directories): .git
+拒跑：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-68Su56/repo —— 工作树有 1 项在飞
+拒跑：/Users/ze/Downloads/Cairn/cairn —— 工作树有 825 项在飞
+取料坏：2/2 棵树不合格 ⇒ 一条不跑（这不是「没有红」，是没尺）
+取料坏：--trees 里有重复路径 ⇒ 同树两个进程会互改源文件（.mutbak 会互相踩），一条不跑
+取料坏：认不出的参数 ⇒ 一条不跑：--shardz=2
+用法：node --import tsx scripts/mutate-shards.ts --trees 树1,树2[,…] [--changed-since=<rev> | id…] [--budget-ms N] [--serial-seconds N] [--lock-tag-base …] [--cost-logs 机器原文,…] [--dry-run]（带值的旗标两种写法都收）
+Preparing worktree (detached HEAD be9c0be5)
+Updating files:  85% (5349/6291)Updating files:  86% (5411/6291)Updating files:  87% (5474/6291)Updating files:  88% (5537/6291)Updating files:  89% (5599/6291)Updating files:  90% (5662/6291)Updating files:  91% (5725/6291)Updating files:  92% (5788/6291)Updating files:  93% (5851/6291)Updating files:  94% (5914/6291)Updating files:  95% (5977/6291)Updating files:  96% (6040/6291)Updating files:  97% (6103/6291)Updating files:  98% (6166/6291)Updating files:  99% (6229/6291)Updating files: 100% (6291/6291)Updating files: 100% (6291/6291), done.
+取料坏：给了 1 条不在这张表上的 id ⇒ 一条不跑：this-anchor-does-not-exist
+Preparing worktree (detached HEAD be9c0be5)
+Preparing worktree (detached HEAD be9c0be5)
+Preparing worktree (detached HEAD be9c0be5)
+取料坏：1 个判卷宿主被摊到两片以上 ⇒ 会并发真跑同一份判卷，一条不跑：tests/mutate-shards.test.ts
+Preparing worktree (detached HEAD be9c0be5)
+Preparing worktree (detached HEAD be9c0be5)
+Updating files:  74% (4707/6291)Updating files:  75% (4719/6291)Updating files:  76% (4782/6291)Updating files:  77% (4845/6291)Updating files:  78% (4907/6291)Updating files:  79% (4970/6291)Updating files:  80% (5033/6291)Updating files:  81% (5096/6291)Updating files:  82% (5159/6291)Updating files:  83% (5222/6291)Updating files:  84% (5285/6291)Updating files:  85% (5348/6291)Updating files:  86% (5411/6291)Updating files:  87% (5474/6291)Updating files:  88% (5537/6291)Updating files:  89% (5599/6291)Updating files:  90% (5662/6291)Updating files:  91% (5725/6291)Updating files:  92% (5788/6291)Updating files:  93% (5851/6291)Updating files:  94% (5914/6291)Updating files:  95% (5977/6291)Updating files:  96% (6040/6291)Updating files:  97% (6103/6291)Updating files:  98% (6166/6291)Updating files:  99% (6229/6291)Updating files: 100% (6291/6291)Updating files: 100% (6291/6291), done.
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay / --serve / --discover / --sessions 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay / --serve / --discover / --sessions 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+ ❯ tests/desktop-package.test.ts (16 tests | 1 failed) 431ms
+   ❯ desktop package command (16)
+     × 安装盘验收脚本存在：挂载 DMG、复制 app、跑 CAIRN_SMOKE 4ms
+node: bad option: --token
+node: bad option: --port
+ ❯ tests/desktop-build-provenance.test.ts (8 tests | 1 failed) 339ms
+   ❯ 打包来源 (3)
+     × 先记录干净源码，再创建仓内暂存目录，构建产物不污染来源 80ms
+[cairn] 需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay / --serve / --discover / --sessions 不用给）
+[cairn] 用法：cairn <任务描述>（-h 看全部选项）
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/desktop-build-provenance.test.ts > 打包来源 > 先记录干净源码，再创建仓内暂存目录，构建产物不污染来源
+AssertionError: file:///Users/ze/Downloads/Cairn/cairn/[eval1]:1
+import { preparePackageStaging, readSourceProvenance } from "file:///Users/ze/Downloads/Cairn/cairn/apps/desktop/scripts/package.mjs"; import { writeFileSync } from 'node:fs'; import { join } from 'node:path'; const prepared = preparePackageStaging(process.argv[1], join(process.argv[1], 'apps/desktop/release')); writeFileSync(join(prepared.staging, 'artifact.txt'), 'built'); console.log(JSON.stringify({ before: prepared.sourceProvenance, after: readSourceProvenance(process.argv[1]) }));
+         ^^^^^^^^^^^^^^^^^^^^^
+SyntaxError: The requested module 'file:///Users/ze/Downloads/Cairn/cairn/apps/desktop/scripts/package.mjs' does not provide an export named 'preparePackageStaging'
+    at #asyncInstantiate (node:internal/modules/esm/module_job:327:21)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:431:5)
+    at async node:internal/modules/esm/loader:224:26
+    at async ModuleLoader.executeModuleJob (node:internal/modules/esm/loader:221:20)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.19.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/desktop-build-provenance.test.ts:35:42
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/desktop-package.test.ts > desktop package command > 安装盘验收脚本存在：挂载 DMG、复制 app、跑 CAIRN_SMOKE
+AssertionError: expected '// 安装盘验收（2026-10-30 · 第 831 页）：\n// 把…' to contain '[cairn-smoke] PASS'
+
+- Expected
++ Received
+
+- [cairn-smoke] PASS
++ // 安装盘验收（2026-10-30 · 第 831 页）：
++ // 把 DMG 挂起来 -> 把 Cairn.app 复制到临时目录（模拟拖进 Applications）-> 跑打包态冒烟。
++ // 证明「离开 release 目录的 app bundle」仍然能启动，而不是只在打包目录里碰巧能跑。
++ import { spawnSync } from "node:child_process";
++ import { existsSync, mkdtempSync, rmSync } from "node:fs";
++ import { tmpdir } from "node:os";
++ import { join, resolve } from "node:path";
++ import { PACKAGED_SMOKE_ARGS, packagedSmokePassed } from "./package.mjs";
++
++ const dmg = resolve(process.argv[2] ?? "");
++ if (!existsSync(dmg)) {
++   console.error("用法：node apps/desktop/scripts/install-smoke.mjs <Cairn.dmg>");
++   process.exit(2);
++ }
++ const mounted = mkdtempSync(join(tmpdir(), "cairn-install-smoke-"));
++ const workspace = mkdtempSync(join(tmpdir(), "cairn-install-workspace-"));
++ let mountPoint = null;
++ try {
++   const attach = spawnSync("diskutil", ["image", "attach", dmg], { encoding: "utf8" });
++   if (attach.status !== 0) throw new Error(`挂载失败：${attach.stderr.trim()}`);
++   const points = String(attach.stdout).match(/\/Volumes\/[^\s]+/g);
++   mountPoint = points?.[points.length - 1] ?? null;
++   if (mountPoint === null) throw new Error("挂载输出里没有 /Volumes 路径");
++   const app = join(mountPoint, "Cairn.app");
++   if (!existsSync(app)) throw new Error(`安装盘里没有 Cairn.app：${app}`);
++   if (!existsSync(join(mountPoint, "Applications"))) throw new Error("安装盘里没有 Applications 快捷方式");
++   const copied = join(mounted, "Cairn.app");
++   // 必须用 ditto：cpSync 会丢签名相关 xattr/ACL，复制出来的 app 可能起不来。
++   const copy = spawnSync("ditto", [app, copied], { encoding: "utf8" });
++   if (copy.status !== 0) throw new Error(`复制 Cairn.app 失败：${copy.stderr.trim()}`);
++   const env = { ...process.env, CAIRN_SMOKE: "1", CAIRN_DESKTOP_WORKSPACE: workspace };
++   for (const key of ["ELECTRON_RUN_AS_NODE", "NODE_PATH", "VITE_DEV_SERVER_URL", "M0A_PROVIDER", "M3A_MAIN_SCRIPT"]) delete env[key];
++   const smoke = spawnSync(join(copied, "Contents/MacOS/Cairn"), PACKAGED_SMOKE_ARGS, { cwd: workspace, env, encoding: "utf8", timeout: 45_000, killSignal: "SIGKILL" });
++   const passed = packagedSmokePassed(smoke);
++   if (!passed) {
++     console.error(`安装后冒烟失败（status=${String(smoke.status)}）\n${String(smoke.stdout).slice(-2000)}\n${String(smoke.stderr).slice(-2000)}`);
++     process.exitCode = 1;
++   } else {
++     console.log("[install-smoke] PASS：从 DMG 拖出的 Cairn.app 启动并通过打包态冒烟");
++   }
++ } catch (err) {
++   console.error(`[install-smoke] ${err instanceof Error ? err.message : String(err)}`);
++   process.exitCode = 1;
++ } finally {
++   if (mountPoint !== null) {
++     const detached = spawnSync("diskutil", ["eject", mountPoint], { encoding: "utf8" });
++     if (detached.status !== 0) {
++       const fallback = spawnSync("hdiutil", ["detach", mountPoint], { encoding: "utf8" });
++       if (fallback.status !== 0) {
++         console.error(`[install-smoke] 无法卸载本轮安装盘：${mountPoint}`);
++         process.exitCode = 1;
++       }
++     }
++   }
++   rmSync(mounted, { recursive: true, force: true });
++   rmSync(workspace, { recursive: true, force: true });
++ }
++
+
+ ❯ tests/desktop-package.test.ts:133:21
+    131|     expect(install).toContain("Applications");
+    132|     expect(install).toContain("CAIRN_SMOKE: \"1\"");
+    133|     expect(install).toContain("[cairn-smoke] PASS");
+       |                     ^
+    134|   });
+    135|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 610 passed (612)
+      Tests  2 failed | 7571 passed (7573)
+   Start at  18:19:57
+   Duration  398.72s (tests 88%, import 10%, transform 2%)
+
+    Isolate  612 workers spawned · ~57ms startup each (spawn + environment, per file)
+             at least ~34.99s faster with isolate: false — reuses workers across files instead of one per file
+

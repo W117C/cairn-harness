@@ -1,0 +1,10 @@
+{
+  "quarantinePresentBefore": true,
+  "removeExit": 0,
+  "quarantineAbsentAfter": true,
+  "launchExit": 0,
+  "smokeReceipt": true,
+  "scope": "temporary copy of this Cairn.app only; no global security setting changed",
+  "keychain": "mock; real cross-machine keychain unverified",
+  "seconds": 11.97
+}

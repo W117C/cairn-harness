@@ -1,0 +1,11 @@
+{
+  "workspace": "/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-hy3-trial-87977so0",
+  "session": "cli-1793528472946",
+  "model": "hy3",
+  "baselineExit": 1,
+  "agentExit": 0,
+  "postTestExit": 0,
+  "testsUnchanged": true,
+  "seconds": 17.36,
+  "source": "export function clampAdd(a, b, min = 0, max = 10) { return Math.max(min, Math.min(max, a + b)); }\nexport function clampSubtract(a, b, min = 0, max = 10) { return clampAdd(a, -b, min, max); }\n"
+}

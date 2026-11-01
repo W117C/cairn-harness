@@ -1,0 +1,11 @@
+{
+  "workspace": "/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-hy3-trial-87977so0",
+  "model": "hy3",
+  "endpoint": "http://127.0.0.1:7863/v1",
+  "baselineExit": 1,
+  "agentExit": 0,
+  "postTestExit": 0,
+  "testUnchanged": true,
+  "seconds": 30.35,
+  "fixedSource": "export function clampAdd(a, b, min = 0, max = 10) { return Math.max(min, Math.min(max, a + b)); }\n"
+}

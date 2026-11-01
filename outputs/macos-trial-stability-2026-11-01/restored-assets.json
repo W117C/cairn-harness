@@ -1,0 +1,32 @@
+[
+  {
+    "path": "apps/desktop/src/renderer/public/brand/cairn.icns",
+    "bytes": 1427119,
+    "sha256": "e9404981f6677c32d6b358fd48cb25598b186ade3c18ca9e2ba63bf775110e41",
+    "matchesExistingHEAD": true
+  },
+  {
+    "path": "apps/desktop/src/renderer/public/brand/cairn.png",
+    "bytes": 820285,
+    "sha256": "9c471eb28101ef7adacd3ec311bd541613f064af9cddcb8b6699acd43fc5418e",
+    "matchesExistingHEAD": true
+  },
+  {
+    "path": "apps/desktop/src/renderer/vendor/dsh-claude-style/fonts/InterVariable.woff2",
+    "bytes": 137260,
+    "sha256": "e69a6b252515c6bda69d18df94031355f8864574c1753610b75374f6f56cd460",
+    "matchesExistingHEAD": true
+  },
+  {
+    "path": "apps/desktop/src/renderer/vendor/dsh-claude-style/fonts/JetBrainsMonoVariable.ttf",
+    "bytes": 303144,
+    "sha256": "662a196d58f1183bf2d77428b6d5283fe3f45161ab021bea4036bc98e5cac016",
+    "matchesExistingHEAD": true
+  },
+  {
+    "path": "apps/desktop/src/renderer/vendor/dsh-claude-style/fonts/JetBrainsMonoItalicVariable.ttf",
+    "bytes": 308888,
+    "sha256": "f115aaa12113718c02ce72864fe6823b87241bc23d3e44cf1220155f861063f2",
+    "matchesExistingHEAD": true
+  }
+]

@@ -1,0 +1,23 @@
+复用 `clampAdd(a, -b, min, max)` 即可：a−b 等于 a+(−b)，边界钳制行为自然一致。
+  ⚙ edit_file sum.mjs
+  ✓ [auto-approved] 已替换 sum.mjs（1 处，+1 −0 行）｜覆盖前原件已存 .agent/snapshots/1793528828104--chatcmpl-tool-876378a87ec90bd1/sum.…
+  · tokens in=7644 out=566
+  ⚙ run_shell node --test 2>&1 | tail -15
+  ✓ [auto-approved] ✔ subtract lower (0.345459ms)
+  · tokens in=7914 out=31
+完成。
+
+**改动**（仅 `sum.mjs`）：新增 `clampSubtract`，直接复用 `clampAdd(a, -b, min, max)`——因为 a−b 等价 a+(−b)，边界钳制行为天然与 `clampAdd` 一致。
+
+```js
+export function clampSubtract(a, b, min = 0, max = 10) { return clampAdd(a, -b, min, max); }
+```
+
+**验证结果**：`node --test` → 7 个测试全部通过（含新增的 subtract lower / subtract upper / subtract in range / custom bounds），0 失败。
+  · tokens in=8076 out=191
+
+事件日志：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-hy3-trial-87977so0/.agent/sessions/cli-1793528472946.jsonl
+在桌面打开：cli-1793528472946
+
+[verify] 已跳过：验证命令来自仓库的 package.json / Makefile 等探测面，属于仓库自带内容，未经授权不在自动补拍里执行（自动补拍不经过 shell 威胁表与网络审批通道）。要验的话，二选一：① 自己用 run_shell 跑（那条路有审批与威胁表）；② 告诉我要用哪条命令，我把它作为宿主配置接进来。
+[cost-per-progress] 本跑不可测（no-progress-boundary）——不许折成 0 或 Infinity

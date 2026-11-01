@@ -1,0 +1,54 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "摘要默认折叠，朗读入口已移除",
+      "ok": true
+    },
+    {
+      "name": "Enter 展开思考，独立正文可读",
+      "ok": true
+    },
+    {
+      "name": "Space 收起思考",
+      "ok": true
+    },
+    {
+      "name": "复制思考不会触发折叠",
+      "ok": true
+    },
+    {
+      "name": "工具摘要可展开参数与返回，失败原因保持可见",
+      "ok": true
+    },
+    {
+      "name": "操作按钮实际为30px点击区和6px间距",
+      "ok": true,
+      "detail": {
+        "width": 30,
+        "height": 30,
+        "gap": "6px"
+      }
+    },
+    {
+      "name": "用量是设置独立页，真实日志聚合出模型与趋势",
+      "ok": true
+    },
+    {
+      "name": "90天范围可切换并保留模型明细",
+      "ok": true
+    },
+    {
+      "name": "进化分区只读报告可打开（真实 IPC）",
+      "ok": true
+    },
+    {
+      "name": "窄窗口下设置整页无横向溢出",
+      "ok": true
+    }
+  ],
+  "errors": [
+    "Uncaught TypeError: Cannot read properties of null (reading 'tagName')"
+  ],
+  "requests": []
+}

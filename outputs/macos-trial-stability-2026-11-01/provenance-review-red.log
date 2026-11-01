@@ -1,0 +1,40 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/desktop-build-provenance.test.ts (8 tests | 1 failed) 400ms
+   ❯ 打包来源 (3)
+     × 先记录干净源码，再创建仓内暂存目录，构建产物不污染来源 88ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/desktop-build-provenance.test.ts > 打包来源 > 先记录干净源码，再创建仓内暂存目录，构建产物不污染来源
+AssertionError: file:///Users/ze/Downloads/Cairn/cairn/[eval1]:1
+import { preparePackageStaging, readSourceProvenance } from "file:///Users/ze/Downloads/Cairn/cairn/apps/desktop/scripts/package.mjs"; import { writeFileSync } from 'node:fs'; import { join } from 'node:path'; const prepared = preparePackageStaging(process.argv[1], join(process.argv[1], 'apps/desktop/release')); writeFileSync(join(prepared.staging, 'artifact.txt'), 'built'); console.log(JSON.stringify({ before: prepared.sourceProvenance, after: readSourceProvenance(process.argv[1]) }));
+         ^^^^^^^^^^^^^^^^^^^^^
+SyntaxError: The requested module 'file:///Users/ze/Downloads/Cairn/cairn/apps/desktop/scripts/package.mjs' does not provide an export named 'preparePackageStaging'
+    at #asyncInstantiate (node:internal/modules/esm/module_job:327:21)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:431:5)
+    at async node:internal/modules/esm/loader:224:26
+    at async ModuleLoader.executeModuleJob (node:internal/modules/esm/loader:221:20)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.19.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/desktop-build-provenance.test.ts:35:42
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+   Start at  18:25:24
+   Duration  500ms (tests 94%, transform 4%, import 2%)
+
