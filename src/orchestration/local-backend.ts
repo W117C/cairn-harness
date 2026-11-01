@@ -14,6 +14,7 @@ import { glob } from "../tools/glob";
 import { write_file } from "../tools/write_file";
 import { edit_file } from "../tools/edit_file";
 import { contentHash, createArtifactStore } from "./artifacts";
+import { processLiveness } from "../process-liveness";
 import type { AgentSpec, ArtifactRef, ExecutionBackend, ExecutionRequest, ExecutionResult, FlowTask, VerificationResult, Verdict } from "./types";
 
 export interface LocalProviderContext { role: "producer" | "verifier"; agent_id: string; workspace: string; signal: AbortSignal; revision?: string; }
@@ -58,10 +59,6 @@ const SENSITIVE_SEGMENTS = new Set([".env", ".env.local", ".npmrc", ".git-creden
 function isSensitivePath(path: string): boolean {
   return path.split("/").some((segment) => SENSITIVE_SEGMENTS.has(segment.toLowerCase()));
 }
-function pidAlive(pid: number): boolean {
-  try { process.kill(pid, 0); return true; }
-  catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; }
-}
 /** Directory lock with crash recovery: a dead owner pid is reclaimable; a live one stays fail-closed. */
 async function withDirectoryLock<T>(path: string, operation: () => Promise<T>): Promise<T> {
   for (;;) {
@@ -72,7 +69,7 @@ async function withDirectoryLock<T>(path: string, operation: () => Promise<T>): 
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       const owner = JSON.parse(await readFile(join(path, "owner.json"), "utf8").catch(() => "{}")) as { pid?: unknown };
-      if (typeof owner.pid === "number" && !pidAlive(owner.pid)) { await rm(path, { recursive: true, force: true }); continue; }
+      if (processLiveness(owner.pid) === "dead") { await rm(path, { recursive: true, force: true }); continue; }
       throw new Error("orchestration lock held" + (typeof owner.pid === "number" ? " by pid " + String(owner.pid) : "") + ": " + path);
     }
   }

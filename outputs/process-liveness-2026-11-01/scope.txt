@@ -1,0 +1,12 @@
+src/process-liveness.ts
+src/main/session-lock.ts
+src/main/session-mutation-lock.ts
+src/main/evolution/canary.ts
+src/orchestration/local-backend.ts
+src/orchestration/store.ts
+src/permissions/rules.ts
+src/agent/plugins/mcp.ts
+scripts/lib/tool-lock.ts
+tests/process-liveness.test.ts
+PROGRESS.md
+outputs/process-liveness-2026-11-01/

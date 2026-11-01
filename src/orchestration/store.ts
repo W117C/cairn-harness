@@ -2,13 +2,9 @@ import { randomUUID, createHash } from "node:crypto";
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { createEventLog, replay, type AgentEvent, type EventLog } from "../events";
+import { processLiveness } from "../process-liveness";
 import { projectOrchestration } from "./project";
 import type { OrchestrationView } from "./types";
-
-function pidAlive(pid: number): boolean {
-  try { process.kill(pid, 0); return true; }
-  catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; }
-}
 
 /** One process owns a journal. A live or unidentifiable lock fails closed; a dead pid is reclaimable. */
 export class OrchestrationStore {
@@ -25,7 +21,7 @@ export class OrchestrationStore {
       catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
         const owner = JSON.parse(await readFile(path + ".writer.lock", "utf8").catch(() => "{}")) as { pid?: unknown };
-        if (typeof owner.pid === "number" && !pidAlive(owner.pid)) { await rm(path + ".writer.lock", { force: true }); continue; }
+        if (processLiveness(owner.pid) === "dead") { await rm(path + ".writer.lock", { force: true }); continue; }
         throw new Error("orchestration writer lock exists; close the owner or confirm it stopped before removing " + path + ".writer.lock");
       }
     }

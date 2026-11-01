@@ -34639,3 +34639,52 @@ body[data-dsh-claude-style] .row .row-actions[data-cds="MessageActions"][data-sa
 - 本批主体（共享实现、41 个消费面、scripts 两份与四处内联）已随 `c0ad6546` 入库；
   本页最后收口的 `last-session` 内联、canonical 注释与判据增补在工作树。
 - 未跑 `gates` / `head-cert` / `mutate-verify`；本页不宣称 HEAD 认证。
+
+## 2026-11-01 · 第 966 页：同一句「进程还在吗」，8 个文件各写一遍，其中一处把 EPERM 当死
+
+### 一、缺口（现读）
+
+`kill(pid, 0)` 只问存在、不发信号，回执只有三种有用结果：成功＝活着；ESRCH＝已退出（唯一
+能证明死亡的回执）；EPERM＝活着、只是发不了信号。此前 8 处各写一遍（7 处核心/主进程 +
+`scripts/lib/tool-lock.ts`），其中 `src/main/session-mutation-lock.ts` 的 `catch { return false; }`
+把 EPERM 和「进程已退出」压成同一个布尔：另一进程持有会话根锁、只是我无权 signal 它时，
+下一次 mutation 会把它误报成「崩溃遗留」，要求人工删除；orchestration 的 writer lock
+则会把「不知道」当「已死」直接回收。canary 的 `Number.parseInt` 还会把 `12abc` 截成 12
+去探活另一个进程，session-mutation 同样如此。
+
+这不是文案问题：锁的回收决定会真的抢走活人的临界区。判据需要的是三态（alive / dead /
+unknown），而不是「活着吗」一个布尔。
+
+### 二、改法
+
+- 新增 `src/process-liveness.ts`：`processLiveness(pid)` 返回三态；只有 ESRCH 判 dead，
+  EPERM 判 alive，坏 pid / 其它 errno 判 unknown。
+- 7 个核心/主进程消费面改读共享判据：session-lock、session-mutation-lock、evolution/canary、
+  orchestration/local-backend、orchestration/store、permissions/rules、agent/plugins/mcp。
+- 锁的回收面改成只在 `dead` 时动手；session-mutation 增加 `parseMutationLockPid`，只认完整
+  十进制 pid；canary 也改成严格解析，截断的 pid 不再被当成另一个进程。
+- `scripts/lib/tool-lock.ts` 故意保留一份同口径的独立适配：树闸判卷的靶子树只搬 `scripts/`
+  下的被测代码（`tests/mutate-verify-gates.test.ts`），本层 import `src/` 会在靶子树里
+  MODULE_NOT_FOUND。判据单独钉它不反向 import、且只有 ESRCH 算死。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | 共享三态 1 处；核心/主进程消费面 7 个；scripts 独立适配 1 个（有靶子树约束） |
+| 红 1 | 共享实现把 EPERM 改判 dead ⇒ **3 红 / 2 绿**（值域 / 会话根锁 / orchestration 锁） |
+| 红 2 | `permissions/rules.ts` 写回内联 `process.kill(...,0)` ⇒ **1 红**（源码唯一性，点名该文件） |
+| 绿 | 复原后定向 **6 文件 / 233 条全绿**；sha256 与造红前一致 |
+| 核心套件（同树实跑） | **614 文件 / 7582 条全绿**，exit 0 |
+| 桌面套件（同树实跑） | **309 文件 / 2071 条全绿**，exit 0（含 boundary 绿） |
+| typecheck | **0 报错** |
+| docs-check | **受检项全绿**（1011 张页标题｜新撞 0｜下一个未占用页号 967） |
+
+### 四、边界
+
+- `processLiveness` 对 `pid` 的要求是正的安全整数；坏形状返回 unknown，消费面按「可能还活着」
+  处理（fail closed），不据此回收。
+- `scripts/lib/tool-lock.ts` 是唯一保留的独立探活副本，原因是判卷靶子树只搬 `scripts/`；
+  它不是「忘了收口」，由 `tests/process-liveness.test.ts` 单独钉住口径与不反向 import。
+- 未改各锁的公开 API / 落盘格式；session-mutation 的锁文件仍写纯 pid，canary 仍写纯 pid。
+- 未跑 `gates` / `head-cert` / `mutate-verify`；本页不宣称 HEAD 认证。

@@ -28,6 +28,7 @@
 import { mkdir, open, readdir, readFile, rm, stat } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { writeFileAtomic } from "../../atomic-write";
+import { processLiveness } from "../../process-liveness";
 import { EVIDENCE_LINE_PREFIX, LESSON_MEMORY_TYPE, LESSON_TOPIC_PREFIX, SESSION_LINE_PREFIX } from "../../agent/memory/lessons";
 import { projectMemoryDir, writeTopic } from "../../agent/memory/store";
 import { Installer } from "./installer";
@@ -468,23 +469,16 @@ export class CanaryController {
         const st = await stat(lockPath).catch(() => null);
         // 锁文件被外部删掉 ⇒ 没有持锁者可言，直接重取（这一支不靠 mtime，删了就是删了）。
         if (st === null) return await open(lockPath, "wx");
-        const holder = await readFile(lockPath, "utf8").then((t) => Number.parseInt(t.trim(), 10), () => Number.NaN);
-        // 探活：`kill(pid, 0)` 只问存在。EPERM＝存在但不是我的进程 ⇒ 算活着
-        // （判错了只能是多等，不能是抢走别人的锁）。
-        let alive = false;
-        if (Number.isInteger(holder) && holder > 0) {
-          try { process.kill(holder, 0); alive = true; }
-          catch (e) { alive = (e as NodeJS.ErrnoException).code === "EPERM"; }
-        }
-        if (alive) throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
-        // 持锁者已不在 ⇒ 直接收回，**不看时钟**。这正是修的那一格：旧逻辑在这里仍要求
-        // "超过 60s"，时钟一回跳（NTP 校正 / 虚拟机恢复 / 手动改表），死进程留下的锁永远读不出
-        // 超时 ⇒ canary 从这一秒起永远 refused，而盘上没有任何东西能解开它。
-        // pid 读不出（NaN，典型是崩溃在 open 与 writeFile 之间）时不猜，退回 60s 时间兜底。
-        if (!Number.isInteger(holder) || holder <= 0) {
-          if (Date.now() - st.mtimeMs <= 60_000) {
-            throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
-          }
+        const text = await readFile(lockPath, "utf8").then((t) => t.trim(), () => "");
+        const holder = /^\d+$/u.test(text) ? Number(text) : Number.NaN;
+        // 探活三态：活人 ⇒ 拒；确认退出 ⇒ 直接收回，**不看时钟**（旧逻辑在这里仍要求
+        // "超过 60s"，时钟一回跳，死进程留下的锁永远读不出超时，canary 从这一秒起永远
+        // refused，而盘上没有任何东西能解开它）。不知道（空文件 / 非数字 / 其它 errno）
+        // ⇒ 退回 60s 时间兜底，不猜。
+        const liveness = processLiveness(holder);
+        if (liveness === "alive") throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
+        if (liveness === "unknown" && Date.now() - st.mtimeMs <= 60_000) {
+          throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
         }
         await rm(lockPath, { force: true }).catch(() => undefined);
         return await open(lockPath, "wx");

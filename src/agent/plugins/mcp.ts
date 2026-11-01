@@ -8,6 +8,7 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { withTimeout } from "../../net";
+import { processLiveness } from "../../process-liveness";
 import type { McpGrade } from "../../permissions/autonomy";
 import { expandUserConfig } from "./skills";
 import type { McpServerConfig, McpServerStatus } from "./types";
@@ -495,8 +496,8 @@ export class McpManager {
     const pid = (transport as { pid?: number } | undefined)?.pid;
     if (typeof pid !== "number" || !Number.isInteger(pid)) return;
     try {
-      process.kill(pid, 0); // 存活探测
-      process.kill(pid, "SIGKILL");
+      // 探活三态：只有确认还在才发 SIGKILL；EPERM 仍是「活着」，发信号会再抛，由 catch 收束。
+      if (processLiveness(pid) === "alive") process.kill(pid, "SIGKILL");
     } catch {
       /* 已退出 */
     }

@@ -117,10 +117,14 @@ export function shouldReleaseLock(text: string | null, selfPid: number): boolean
 }
 
 /** 真探活：`kill(pid, 0)` 只问存在。EPERM＝存在但不是我的进程 ⇒ **算活着**
- *  （按"宁可让下一次等，不可让下一次抢"，判错了只能是多等，不能是抢走别人的锁）。 */
+ *  （按"宁可让下一次等，不可让下一次抢"，判错了只能是多等，不能是抢走别人的锁）。
+ *
+ *  这一份故意不 import `src/process-liveness.ts`：`tests/mutate-verify-gates.test.ts` 的
+ *  树闸靶子只搬 `scripts/` 下的被测代码（fixture 搬不动 `src/`），本层必须能单独拷过去跑。
+ *  口径与共享实现一致：只有 ESRCH 算「确认已退出」，EPERM / 其它 errno 都按「可能还活着」。 */
 const pidAlive = (pid: number): boolean => {
   try { process.kill(pid, 0); return true; }
-  catch (e) { return (e as NodeJS.ErrnoException).code === "EPERM"; }
+  catch (e) { return (e as NodeJS.ErrnoException).code !== "ESRCH"; }
 };
 
 /** 占锁的唯一过程：读锁 → 判三态 → **占不到就 exit 2（此刻一个字节都还没改）** → 摘掉判定不能用的旧锁

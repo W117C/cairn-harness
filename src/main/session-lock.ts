@@ -13,6 +13,7 @@ import { open, readFile, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
 import { withSessionMutation } from "./session-mutation-lock";
 import { isRecord } from "../is-record";
+import { processLiveness } from "../process-liveness";
 
 async function readLock(path: string): Promise<string | null> {
   try {
@@ -43,7 +44,7 @@ export async function sessionRunLockHeld(logPath: string): Promise<boolean> {
   const raw = await readLock(`${logPath}.lock`);
   if (raw === null) return false;
   const pid = ownerPid(readOwner(raw));
-  return pid !== null && alive(pid);
+  return pid !== null && processLiveness(pid) !== "dead";
 }
 
 export interface SessionRunLock {
@@ -58,16 +59,6 @@ interface LockFile {
   pid: number;
   nonce: string;
   startedAt: string;
-}
-
-/** pid 是否还活着。EPERM = 进程在、只是不归我们管，按活着算（宁可拒，不抢写）。 */
-function alive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
 }
 
 type Attempt =
@@ -88,7 +79,7 @@ async function acquireRunLock(
 ): Promise<SessionRunLockResult> {
   const path = `${logPath}.lock`;
   const pid = opts.pid ?? process.pid;
-  const isAlive = opts.isAlive ?? alive;
+  const isAlive = opts.isAlive ?? ((holder) => processLiveness(holder) !== "dead");
   const nonce = randomUUID();
   const body = JSON.stringify({ pid, nonce, startedAt: new Date().toISOString() } satisfies LockFile) + "\n";
 

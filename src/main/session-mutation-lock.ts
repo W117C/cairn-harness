@@ -1,6 +1,7 @@
 // 会话根的短临界区：创建/删除/改名与运行锁恢复共用，避免各自检查后抢写。
 import { open, readFile, realpath, unlink, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
+import { processLiveness } from "../process-liveness";
 
 export const SESSION_MUTATION_LOCK = ".session-mutation.lock";
 
@@ -8,13 +9,12 @@ export const SESSION_MUTATION_LOCK = ".session-mutation.lock";
 const chains = new Map<string, Promise<void>>();
 const lockHandles = new Map<string, FileHandle>();
 
-function processAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
+/** 锁文件只认完整十进制 pid：`12abc` 不能被截成 12 去探活另一个进程。 */
+export function parseMutationLockPid(raw: string): number | null {
+  const text = raw.trim();
+  if (!/^\d+$/u.test(text)) return null;
+  const pid = Number(text);
+  return Number.isSafeInteger(pid) && pid > 0 ? pid : null;
 }
 
 async function acquireRootLock(root: string): Promise<void> {
@@ -30,14 +30,16 @@ async function acquireRootLock(root: string): Promise<void> {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       const raw = await readFile(lockPath, "utf8").catch(() => "");
-      const pid = Number.parseInt(raw.trim(), 10);
-      const alive = Number.isSafeInteger(pid) && pid > 0 && processAlive(pid);
-      if (!alive && raw.trim() !== "") {
+      const pid = parseMutationLockPid(raw);
+      const liveness = pid === null ? "unknown" : processLiveness(pid);
+      // 只有 ESRCH 能证明持有者已退出；EPERM / 坏内容都按「还在」等多一个截止期，
+      // 不能把「不归我管」误报成崩溃遗留，更不能据此抢走活人的临界区。
+      if (liveness === "dead") {
         throw new Error(`会话根的锁是崩溃遗留的，需人工确认后删除：${lockPath}`);
       }
       if (Date.now() >= deadline) {
         throw new Error(
-          alive
+          liveness === "alive"
             ? `会话根正被另一个进程占用（pid ${String(pid)}）：${lockPath}`
             : `会话根正被另一个进程占用：${lockPath}`,
         );

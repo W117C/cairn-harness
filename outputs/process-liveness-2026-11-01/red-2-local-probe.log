@@ -1,0 +1,36 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/process-liveness.test.ts (5 tests | 1 failed | 4 skipped) 53ms
+   ❯ 进程探活只有一份、且分得清「死了」与「不知道」（第 966 页） (5)
+     × 源码里只剩共享实现一处探活，消费面都 import 同一份 53ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/process-liveness.test.ts > 进程探活只有一份、且分得清「死了」与「不知道」（第 966 页） > 源码里只剩共享实现一处探活，消费面都 import 同一份
+AssertionError: expected [ 'src/permissions/rules.ts' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "src/permissions/rules.ts",
++ ]
+
+ ❯ tests/process-liveness.test.ts:145:23
+    143|     }
+    144|
+    145|     expect(offenders).toEqual([]);
+       |                       ^
+    146|     expect(missing).toEqual([]);
+    147|     const canonical = read(CANONICAL);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 skipped (5)
+   Start at  20:08:26
+   Duration  205ms (transform 49%, tests 38%, import 12%, worker 1%)
+
