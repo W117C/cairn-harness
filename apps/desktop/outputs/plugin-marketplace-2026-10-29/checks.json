@@ -1,11 +1,11 @@
 {
-  "protocolVersion": 29,
+  "protocolVersion": 51,
   "fixtureData": true,
   "checks": [
     {
-      "name": "protocol v29 is live",
+      "name": "protocol handshake matches source",
       "ok": true,
-      "detail": 29
+      "detail": 51
     },
     {
       "name": "discover is the default plugin view",

@@ -167,7 +167,7 @@ async function main() {
   await waitFor("!!document.querySelector('.app-rail')", "app rail");
   await openPlugins();
 
-  check("protocol v29 is live", version === 29, version);
+  check("protocol handshake matches source", await js(`window.agent?.protocolVersion()`) === version, version);
   check("discover is the default plugin view", await js(
     `document.querySelector('.plugins-workspace')?.getAttribute('data-marketplace-view') === 'discover'`,
   ));
