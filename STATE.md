@@ -1,9 +1,9 @@
 # Cairn / DSH —— 现态
 
-rev: 8e94d99b07351f6334e2551e4b7f8ccd6f28c179
+rev: c0ad65468e4ab95eea99fead7efe5be736976449
 
-本页描述 `cairn/` 当前工作树，不代表同级 staging、远端或已发布应用。
-C（互操作）批次在当前工作树**未提交**；`rev` 仍是它落笔前的基线提交。
+本页描述 `cairn/` 的源码快照，不代表同级 staging 或已发布应用。
+当前项目改动已整体提交；`rev` 指向最近的完整源码快照。上传与验证边界见 `PROGRESS.md` 第 963 页。
 任务、阻塞与待开工统一见 [仓库整理与任务清单](docs/REPOSITORY-STATUS.md)；
 逐批读数见 `PROGRESS.md`，历史证据保留在 `PROGRESS.md` 与 `outputs/`。
 本页整体重写，台账只追加。
@@ -43,7 +43,7 @@ C（互操作）批次在当前工作树**未提交**；`rev` 仍是它落笔前
 - 真实 DeepSeek 连接需要 `DEEPSEEK_API_KEY`；wire 判卷只证明请求形状。
 - 同一活跃会话的插话、取消后继续发送与跨窗口 smoke 已接通；空屏首发的 running key 由单测钉住。
 - FilePane 与设置页已有真实 renderer / 生产 preload 的键盘、失败恢复与窄窗补测。
-- `head-cert-check` 与 `mutate-verify` 的最新完整证据仍绑定历史提交；当前 A/B/C 工作树需独立验证。
+- `head-cert-check` 与 `mutate-verify` 的最新完整证据仍绑定历史提交；当前源码快照尚未取得这两项提交认证。
 
 ## 待验与待决
 

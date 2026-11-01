@@ -20,5 +20,7 @@
   "rendererLayer": "passed",
   "evidenceTypecheck": "passed: 12/12 existing dangerous-code ceiling",
   "runtimeStateExcluded": true,
-  "whitespace": "source whitespace corrected; preserved existing vendor/evidence bytes and valid patch context lines"
+  "whitespace": "source whitespace corrected; preserved existing vendor/evidence bytes and valid patch context lines",
+  "sourceSnapshotCommit": "c0ad65468e4ab95eea99fead7efe5be736976449",
+  "localSourceWorkingTreeWasCleanAfterSnapshot": true
 }
