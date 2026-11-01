@@ -180,8 +180,6 @@ export function GeneralSection(props: {
   onWindowVibrancy: (next: boolean) => void;
   /** 完成通知开关（同样走单键直调：panelPatch 白名单不动）。 */
   onNotify: (next: boolean) => void;
-  /** 重新显示首启检查（缺省 = 不摆入口）。 */
-  onShowOnboarding?: () => void;
 }): React.JSX.Element {
   return (
     <>
@@ -252,11 +250,6 @@ export function GeneralSection(props: {
         <SettingsRow label="界面语言">
           <span className="ss-static">中文（简体）</span>
         </SettingsRow>
-        {props.onShowOnboarding !== undefined && (
-          <SettingsRow label="首启检查" desc="不会重置任何其它设置。">
-            <button type="button" className="mini-btn" onClick={props.onShowOnboarding}>重新显示</button>
-          </SettingsRow>
-        )}
         <SettingsRow label="任务完成时通知" desc="点击通知回到该会话。">
           <Switch
             label="任务完成时通知"

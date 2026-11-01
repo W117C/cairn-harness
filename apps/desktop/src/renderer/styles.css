@@ -1017,55 +1017,6 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 }
 .empty-tail { flex: 2.5 1 0; min-height: var(--space-md); }
 
-/* 首启「设置检查」：四步（步号 01..04）＋ 每步的组芯片。
-   版式取「起手行」那一族（编号 + 弱化文字 + hover 才亮）——它是**附注**不是主角：
-   空屏里建议行才是主角，这块只在首启摆一次，压到一行标题 + 四行编号的样子。 */
-.onboard {
-  /* 与 .empty-below 同一个盒子（居中 ＋ 阅读列宽 ＋ 41px 左内距）——
-     否则它会贴着主区左缘，与上面的建议行不在一条基线上（真机目验时看出来的）。
-     顶上那条横线与 .starts 的那条同源：两块是同族的（都能点的行），不是两个世界。 */
-  width: 100%; max-width: min(var(--reading), 100%);
-  margin: 0 auto; padding: var(--space-sm) 41px 0;
-  border-top: 1px solid var(--hairline);
-  display: flex; flex-direction: column; gap: var(--space-xs);
-}
-/* 分组交给行距说，不给步号（步号是「说给读者听的中间标签」）。 */
-.onboard-step { display: block; }
-/* 七格排成**等宽网格**（第 894 页）：原先 `flex-wrap` + `max-width:260px` 让每格按文字
-   自伸缩 ⇒ 首启看到的是 1/2/3/1 的参差药丸堆（真机截图：连接模型独占一行、
-   定时任务+记忆+隐私与遥测挤一行、版本与更新又落单），不像「一张待办清单」。
-   现在每格同宽、行内对齐，宽度不够才换行。 */
-.onboard-items {
-  /* 每一「步」自成一行且**铺满**：列数按本步的格数走（1 格占满、2 格各半、3 格三等分），
-     而不是固定三列留下尾部空洞——步与步的格数不同（首启实测 1/2/3/1），
-     固定列会让每行右边参差缺角，看上去还是不像一张清单。 */
-  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-xs);
-}
-.onboard-item {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
-  min-width: 0; min-height: 22px; padding: 5px 9px; text-align: left;
-  border: 1px solid var(--hairline); border-radius: var(--radius-xs);
-  background: transparent; color: hsl(var(--text-300)); font-size: var(--fs-caption-sm);
-  transition: color var(--t-instant), border-color var(--t-instant), background var(--t-instant);
-}
-.onboard-item:hover {
-  color: hsl(var(--text-000)); border-color: hsl(var(--text-400));
-  background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover));
-}
-.onboard-label { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.onboard-entry { color: hsl(var(--text-400)); font-size: var(--fs-caption-xs); line-height: 1.35; white-space: normal; }
-/* 完成出口：仍是次级动作（不抢七格的主位），但**要看得出可以点**——
-   原先只有一行灰字，真机上与上面的说明文字同貌，首启用户找不到出口。
-   加描边胶囊（中性、不走色相），层级低于主按钮一档。 */
-.onboard-foot { display: flex; justify-content: flex-end; }
-.onboard-done {
-  min-height: 26px; padding: 0 var(--space-sm); border-radius: var(--radius-xs);
-  border: 1px solid var(--hairline-strong); background: transparent;
-  color: hsl(var(--text-300)); font-size: var(--fs-caption-sm);
-  transition: color var(--t-instant), border-color var(--t-instant), background var(--t-instant);
-}
-.onboard-done:hover { color: hsl(var(--text-000)); border-color: hsl(var(--text-400)); background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); }
-
 /* ── 回到底部（阶段 2 · brief §二.6）：右下角小圆形图标钮，未滚到底才出现（淡入）。 ── */
 .jump-latest {
   /* 业主 10.07 裁「放到正中间」：口径 = v3-lite「回到最新」的居中锚（旧版右下浮钮在宽窗

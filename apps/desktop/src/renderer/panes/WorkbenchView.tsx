@@ -34,7 +34,6 @@ import { ImportDiagnosisCard } from "../components/ImportDiagnosisCard";
 import { Inspector } from "../components/Inspector";
 import { ModalSurface } from "../components/ModalSurface";
 import { NewProjectDialog } from "../components/NewProjectDialog";
-import { OnboardingChecklist } from "../components/OnboardingChecklist";
 import { OutlinePanel } from "../components/Outline";
 import { MODE_LABEL } from "../components/PermissionMenu";
 import { PlanCard } from "../components/PlanCard";
@@ -47,7 +46,6 @@ import { SessionLogDialog } from "../components/SessionLogDialog";
 import type { StreamActions } from "../components/Stream";
 import { TitleBar } from "../components/TitleBar";
 import { movePane,type PaneKind } from "../components/panes";
-import type { OnboardingGroup } from "../../../../../src/main/onboarding-groups";
 import { destinationForSection,PAGE_CONTEXT_ITEMS,pageForDestination } from "../navigation";
 import { greetingFor,type QuickStartInput } from "../quick-starts";
 import type { QueuedSend } from "../send-queue";
@@ -262,12 +260,6 @@ interface WorkbenchViewDeps {
   onSuggestNext: () => Promise<SuggestNextResult>;
   injectedAttachment: { path: string; kind: "file" | "directory"; seq: number; } | undefined;
   injectedAppend: { text: string; seq: number; } | undefined;
-  onboarded: boolean | null;
-  setOnboarded: (value: boolean | null) => void;
-  /** 首启「设置检查」的七组覆盖面（主进程给的副本；空 = 还没取到 ⇒ 整块不渲染）。 */
-  onboarding: readonly OnboardingGroup[];
-  /** 首启检查「完成，不再显示」：落 settings.onboarded=true 并立即隐藏。 */
-  dismissOnboarding: () => void;
   injectText: (text: string) => void;
   inspectorRef: MutableRefObject<PanelImperativeHandle | null>;
   inspectorDefault: number;
@@ -334,7 +326,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
   // ⌘+点击侧栏会话：右侧预览目标（可继续发送；seq 允许连续预览同一会话）。
   const [sessionPreview, setSessionPreview] = useState<{ id: string; workspace?: string; title: string; seq: number } | null>(null);
   const [paneTarget, setPaneTarget] = useState<{ kind: PaneKind; seq: number } | null>(null);
-  const { activeWorkspace, projects, pickerValue, providerInfo, settingsOpen, destination, pageFilter, openDestination, setPageFilter, activeId, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, togglePane, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, sidebarCollapsed, toggleSidebar, newSession, handleOpenPalette, openPane, setSettingsSection, setSettingsOpen, sidebarWidth, runningSet, waitingIdSet, draftIds, outcomes, registryNotice, retryProjects, sessionsLoaded, sessionsLoadError, sessionsLoadErrorDetail, retrySessions, providerOk, openSession, setActiveWorkspace, activeWorkspaceRef, touchWorkspace, handleAddProject, handleCloneProject, setNewProjectOpen, handleUpdateProject, handleRelocateProject, handleRemoveProject, handleRevealProject, pinSessionById, forkSessionFromMenu, requestArchiveSession, openSessionInCli, setWtDiscard, sessionWorktreeOp, requestDeleteSession, themePref, changeTheme, usageStats, startSidebarDrag, persistSidebarWidth, sidebarWidthRef, mainGroupRef, showEmpty, findRef, findOpen, streamEl, closeFind, lastError, clearLastError, setLogTarget, lastNotice, clearLastNotice, importDiagnosis, setImportDiagnosis, chipRef, chipOpen, openChipPopover, emptyData, chipQuery, setChipQuery, chipRecent, chipList, closeChip, setLastError, setStreamEl, stick, streamRows, rowRefs, inheritedSeqs, viewMode, runningActive, foldedRounds, flashRound, streamActions, deliveryTrailItems, deliveryExpandedFor, openPreview, exportActiveProject, lastDeliveryRound, handleRevertTurn, setDeliveryExpandedFor, outlineCurrent, jumpToRound, unfoldAllTurns, foldAllTurns, askForActive, setMode, setLastNotice, pendingClarify, pendingPlan, composerZoneRef, editCtx, events, sendQueue, setEditCtx, setDraftRemap, draftRemapSeq, refreshSessions, setQueueFor, cancelRunHeal, resumeQueueFor, sendTo, queueLoading, pendingSend, skills, composerLock, mode, planRequired, onPlanRequiredChange, stopped, usage, phaseLabel, phase, elapsedSec, steps, runSteps, chosenCtx, recentRefsBySession, noteRecentRef, promptHistory, noteDraft, injectedText, injectedTextSeq, draftRemap, draftRestore, sendWithGoal, configuredProviders, thinkingBySession, pendingThinking, setPendingThinking, force, selections, refreshProviderInfo, compactNow, composerMenuSignal, onSuggestNext, injectedAttachment, injectedAppend, onboarded, setOnboarded, onboarding, dismissOnboarding, injectText, inspectorRef, inspectorDefault, setInspectorCollapsed, inspectorSaveTimer, inspectorColRef, jumpToEvent, handleRestoreSnapshot, toggleInspector, attachFromPane, pickSignal, handlePickResult, preview, closePane, send, setPaneTabs, pluginSidebarWidth, setPluginSidebarWidthPersist, closePluginSidebar, fillPluginCommand, viewToast, cheatOpen, closeCheat, revertConfirm, setRevertConfirm, doRevertTurn, permissionGuard, projectRemoveConfirm, setProjectRemoveConfirm, doRemoveProject, archiveConfirm, setArchiveConfirm, doArchiveSession, deleteConfirm, setDeleteConfirm, doDeleteSession, wtDiscard, paletteOpen, setPaletteOpen, focusComposer, handlePaletteAction, startBarRename, logTarget, settingsSection, refreshProviderKeys, setThemePref, setTextSize, setUiSize, setCtrlTabCycle, dragOverApp, newProjectOpen, templates, handleCreateFromDialog } = deps;
+  const { activeWorkspace, projects, pickerValue, providerInfo, settingsOpen, destination, pageFilter, openDestination, setPageFilter, activeId, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, togglePane, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, sidebarCollapsed, toggleSidebar, newSession, handleOpenPalette, openPane, setSettingsSection, setSettingsOpen, sidebarWidth, runningSet, waitingIdSet, draftIds, outcomes, registryNotice, retryProjects, sessionsLoaded, sessionsLoadError, sessionsLoadErrorDetail, retrySessions, providerOk, openSession, setActiveWorkspace, activeWorkspaceRef, touchWorkspace, handleAddProject, handleCloneProject, setNewProjectOpen, handleUpdateProject, handleRelocateProject, handleRemoveProject, handleRevealProject, pinSessionById, forkSessionFromMenu, requestArchiveSession, openSessionInCli, setWtDiscard, sessionWorktreeOp, requestDeleteSession, themePref, changeTheme, usageStats, startSidebarDrag, persistSidebarWidth, sidebarWidthRef, mainGroupRef, showEmpty, findRef, findOpen, streamEl, closeFind, lastError, clearLastError, setLogTarget, lastNotice, clearLastNotice, importDiagnosis, setImportDiagnosis, chipRef, chipOpen, openChipPopover, emptyData, chipQuery, setChipQuery, chipRecent, chipList, closeChip, setLastError, setStreamEl, stick, streamRows, rowRefs, inheritedSeqs, viewMode, runningActive, foldedRounds, flashRound, streamActions, deliveryTrailItems, deliveryExpandedFor, openPreview, exportActiveProject, lastDeliveryRound, handleRevertTurn, setDeliveryExpandedFor, outlineCurrent, jumpToRound, unfoldAllTurns, foldAllTurns, askForActive, setMode, setLastNotice, pendingClarify, pendingPlan, composerZoneRef, editCtx, events, sendQueue, setEditCtx, setDraftRemap, draftRemapSeq, refreshSessions, setQueueFor, cancelRunHeal, resumeQueueFor, sendTo, queueLoading, pendingSend, skills, composerLock, mode, planRequired, onPlanRequiredChange, stopped, usage, phaseLabel, phase, elapsedSec, steps, runSteps, chosenCtx, recentRefsBySession, noteRecentRef, promptHistory, noteDraft, injectedText, injectedTextSeq, draftRemap, draftRestore, sendWithGoal, configuredProviders, thinkingBySession, pendingThinking, setPendingThinking, force, selections, refreshProviderInfo, compactNow, composerMenuSignal, onSuggestNext, injectedAttachment, injectedAppend, injectText, inspectorRef, inspectorDefault, setInspectorCollapsed, inspectorSaveTimer, inspectorColRef, jumpToEvent, handleRestoreSnapshot, toggleInspector, attachFromPane, pickSignal, handlePickResult, preview, closePane, send, setPaneTabs, pluginSidebarWidth, setPluginSidebarWidthPersist, closePluginSidebar, fillPluginCommand, viewToast, cheatOpen, closeCheat, revertConfirm, setRevertConfirm, doRevertTurn, permissionGuard, projectRemoveConfirm, setProjectRemoveConfirm, doRemoveProject, archiveConfirm, setArchiveConfirm, doArchiveSession, deleteConfirm, setDeleteConfirm, doDeleteSession, wtDiscard, paletteOpen, setPaletteOpen, focusComposer, handlePaletteAction, startBarRename, logTarget, settingsSection, refreshProviderKeys, setThemePref, setTextSize, setUiSize, setCtrlTabCycle, dragOverApp, newProjectOpen, templates, handleCreateFromDialog } = deps;
   // 启动时轻量检查更新：有更新源才查，24h 一次，有可用版本才出 notice。
   useUpdateNotice(setLastNotice);
   const { inspectorCollapsed } = deps;
@@ -920,28 +912,14 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
             />
           </div>
           {showEmpty && (
-            /* 空屏下半区（P2-1）：建议行（点击=填入输入框不发送）+ 首启副标题；
+            /* 空屏下半区（P2-1）：建议行（点击=填入输入框不发送）；
                .empty-tail 是 .main 的直接弹性子女——把整组构图托到视觉中心偏上。 */
             <>
               <QuickStarts
                 items={emptyData?.quickStarts ?? []}
-                firstRunSub={onboarded === false ? STR.empty.firstRunSub : null}
+                firstRunSub={null}
                 onPick={(t) => { injectText(t); }}
               />
-              {/* 首启「设置检查」：七组覆盖面来自主进程（不抄清单）；点一格跳到对应设置分区。
-                  只在 onboarded === false 时摆——已 onboarded 的用户不必看这张清单。
-                  （2026-10-25：空屏重做时这段挂载被连带删掉，而取数仍在跑；已恢复并加判据。） */}
-              {onboarded === false && (
-                <OnboardingChecklist
-                  groups={onboarding}
-                  onOpen={(section) => {
-                    const next = destinationForSection(section);
-                    if (next !== null) openDestination(next);
-                    else { setSettingsSection(section); setSettingsOpen(true); }
-                  }}
-                  onDone={dismissOnboarding}
-                />
-              )}
               <div className="empty-tail" aria-hidden="true" />
             </>
           )}
@@ -1138,7 +1116,6 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
         <Suspense fallback={null}>
           <SettingsPanel
             onClose={() => setSettingsOpen(false)}
-            onShowOnboarding={() => { setOnboarded(false); void window.agent.setSettings({ onboarded: false }).catch((err: unknown) => { setLastError(`首启检查写入失败：${err instanceof Error ? err.message : String(err)}`); }); setSettingsOpen(false); }}
             {...(settingsSection !== undefined ? { initialSection: settingsSection } : {})}
             onSettingsSaved={() => {
               void refreshProviderInfo();

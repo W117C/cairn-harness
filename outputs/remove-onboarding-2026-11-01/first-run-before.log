@@ -1,0 +1,23 @@
+[byok-inject] 启动注入：无可注入 key（未存或 env 优先）
+[scheduler] journal 保留收敛完成（当前 0 条）
+[m4a] 调度器已启动（桌面端常驻接线：快照/CRUD/触发同实例）
+PASS 标题栏常驻「演示模式」胶囊（说明在 title 里）
+PASS 页脚状态点写「演示模式」且不是绿色可用态
+FAIL 首启直接进入工作界面，不显示设置检查、说明或开始使用按钮 undefined
+PASS 首启输入框和模型入口可直接操作
+PASS 旧的 onboarded=false 偏好无需改写即可使用
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+PASS 连续三次发送只创建一个日志，消息按顺序追加
+PASS 当前对话同时显示三条用户消息
+PASS 重载后恢复同一对话及三条历史消息
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+PASS 恢复后的续发仍追加到原日志
+[cost-per-progress] 本跑不可测（no-usage）——不许折成 0 或 Infinity
+PASS 显式新建任务后才创建第二个对话，原对话完整保留
+PASS 真实渲染过程无控制台错误
+Evidence: /tmp/cairn-remove-onboarding-before
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron scripts/session-continuity-smoke.cjs /tmp/cairn-remove-onboarding-before

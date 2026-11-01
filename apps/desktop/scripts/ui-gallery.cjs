@@ -20,8 +20,7 @@ const { mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
 const { createHash } = require("node:crypto");
 
-// 首启那一趟单独落一个目录：两趟的 01-empty 长得不一样（一边有「设置检查」、一边没有），
-// 混在一个目录里会互相覆盖 ⇒ 目验时读到的是上一次那张。
+// 首启夹具单独留证，验证旧的 onboarded=false 配置也直接进入正常工作界面。
 const FIRST_RUN = process.env.GALLERY_FIRST_RUN === "1";
 const OUT = FIRST_RUN ? "/tmp/cairn-gallery-first-run" : "/tmp/cairn-gallery";
 mkdirSync(OUT, { recursive: true });
@@ -210,24 +209,22 @@ async function main() {
 
   await shot("01-empty.png", 1200);
 
-  // 首启「设置检查」：七组覆盖面只在 onboarded === false 时摆；mount 曾被空屏重做误删。
+  // 旧的首次启动标记也直接进入正常工作界面，不再展示设置清单。
   if (FIRST_RUN) {
-    const onboard = await js(`(() => {
-      const block = document.querySelector(".onboard");
-      const r = block?.getBoundingClientRect();
-      return JSON.stringify({
-        block: !!block,
-        items: document.querySelectorAll(".onboard-item").length,
-        h: r ? Math.round(r.height) : 0,
-        bottom: r ? Math.round(r.bottom) : 0,
-        viewport: innerHeight,
-      });
-    })()`);
-    console.log("[gallery] 首启设置检查:", onboard);
-    const parsed = JSON.parse(onboard);
-    if (!parsed.block || parsed.items !== 7 || parsed.h < 20 || parsed.bottom > parsed.viewport) {
-      throw new Error("首启「设置检查」不在场或不可见：" + onboard);
+    const state = await js(`({
+      composer: !!document.querySelector('.composer-card textarea:not(:disabled)'),
+      checklist: !!document.querySelector('.onboard'),
+      firstRunCopy: !!document.querySelector('.empty-sub'),
+    })`);
+    console.log("[gallery] 首启工作界面:", state);
+    if (!state.composer || state.checklist || state.firstRunCopy) {
+      throw new Error("首启未直接进入工作界面：" + JSON.stringify(state));
     }
+    await win.setContentSize(880, 900);
+    await shot("01b-empty-narrow.png", 400);
+    const narrow = await js(`({ composer: !!document.querySelector('.composer-card textarea:not(:disabled)'), checklist: !!document.querySelector('.onboard'), overflow: document.documentElement.scrollWidth > innerWidth + 1 })`);
+    if (!narrow.composer || narrow.checklist || narrow.overflow) throw new Error("窄窗首启工作界面异常：" + JSON.stringify(narrow));
+    await win.setContentSize(1440, 900);
   }
 
   // 模型菜单（搜索 + 分组 + 徽标 + 管理入口）

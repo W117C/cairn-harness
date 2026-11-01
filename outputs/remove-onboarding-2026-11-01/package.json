@@ -1,0 +1,15 @@
+{
+  "path": "/Users/ze/Downloads/Cairn/cairn/apps/desktop/release-no-onboarding-20261101",
+  "dmgSha256": "640c2831ae095012e481528dd62f53e253a48bb9b4ba919e89315c96896d87a6",
+  "build": {
+    "version": "0.2.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "sourceCommit": "461768ca4c9e16290bac7dfec5c0fdec2ef5d281",
+    "sourceDirty": true,
+    "sourceLockSha256": "eb4c80935d19de1f4c09f969cf2e129c5bde14d4dc91fddf7aac89ac30d1a83e",
+    "packagedSmoke": "passed",
+    "signature": "ad-hoc",
+    "createdAt": "2026-11-01T11:26:38.075Z"
+  }
+}

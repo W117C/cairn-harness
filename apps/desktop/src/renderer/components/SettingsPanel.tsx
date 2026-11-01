@@ -129,8 +129,6 @@ export function SettingsPanel(props: {
   onClose: () => void;
   initialSection?: SectionId;
   onSettingsSaved?: () => void;
-  /** 重新显示首启检查（只落 onboarded=false，不重置其它设置）。 */
-  onShowOnboarding?: () => void;
 }): React.JSX.Element {
   const [section, setSection] = useState<SectionId>(() =>
     props.initialSection !== undefined && destinationForSection(props.initialSection) === null
@@ -444,7 +442,6 @@ export function SettingsPanel(props: {
                 onUiSize={(next) => { setUiSize(next); void saveSettingKey("uiSize", next); }}
                 onWindowVibrancy={(next) => { void saveSettingKey("windowVibrancy", next); }}
                 onNotify={(next) => { void saveSettingKey("notifyOnComplete", next); }}
-                onShowOnboarding={props.onShowOnboarding}
               />
             </SettingsPage>
           )}

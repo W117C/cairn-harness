@@ -1,0 +1,12 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+
+ Test Files  309 passed (309)
+      Tests  2071 passed (2071)
+   Start at  19:26:26
+   Duration  60.92s (import 48%, tests 40%, transform 10%, worker 2%)
+
+     Import  801 modules were evaluated 1242 times · 17.28s total, 48% of tracked time
+             ~6.13s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation

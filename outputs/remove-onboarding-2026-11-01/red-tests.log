@@ -1,0 +1,34 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+ ❯ tests/settings-sections.test.tsx (33 tests | 1 failed) 88ms
+   ❯ 通用设置移除首启检查 (1)
+     × 即使旧调用方带有重显回调，也不再展示该入口 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/settings-sections.test.tsx > 通用设置移除首启检查 > 即使旧调用方带有重显回调，也不再展示该入口
+AssertionError: expected '<section class="ss-sec"><div class="s…' not to contain '首启检查'
+
+Expected: "首启检查"
+Received: "<section class="ss-sec"><div class="ss-sec-head"><h2 class="ss-sec-title">外观</h2></div><div class="ss-card"><div class="ss-row"><div class="ss-row-main"><span class="ss-row-label">主题</span></div><div class="ss-row-ctl"><div class="theme-opts" role="radiogroup" aria-label="主题"><button type="button" role="radio" aria-checked="true" class="theme-opt on"><span>跟随系统</span></button><button type="button" role="radio" aria-checked="false" class="theme-opt"><span>亮</span></button><button type="button" role="radio" aria-checked="false" class="theme-opt"><span>暗</span></button></div></div></div><div class="ss-row"><div class="ss-row-main"><span class="ss-row-label">文字大小</span></div><div class="ss-row-ctl"><div class="theme-opts" role="radiogroup" aria-label="文字大小"><button type="button" role="radio" aria-checked="false" class="theme-opt"><span class="ts-thumb" data-ts="sm" aria-hidden="true">A</span><span>小</span></button><button type="button" role="radio" aria-checked="true" class="theme-opt on"><span class="ts-thumb" data-ts="md" aria-hidden="true">A</span><span>标准</span></button><button type="button" role="radio" aria-checked="false" class="theme-opt"><span class="ts-thumb" data-ts="lg" aria-hidden="true">A</span><span>大</span></button></div></div></div><div class="ss-row"><div class="ss-row-main"><span class="ss-row-label">界面密度</span></div><div class="ss-row-ctl"><div class="theme-opts" role="radiogroup" aria-label="界面密度"><button type="button" role="radio" aria-checked="false" class="theme-opt"><span>紧凑</span></button><button type="button" role="radio" aria-checked="true" class="theme-opt on"><span>标准</span></button><button type="button" role="radio" aria-checked="false" class="theme-opt"><span>宽松</span></button><button type="button" role="radio" aria-checked="false" class="theme-opt"><span>舒适</span></button><button type="button" role="radio" aria-checked="false" class="theme-opt"><span>超大</span></button></div></div></div><div class="ss-row"><div class="ss-row-main"><span class="ss-row-label">窗口材质</span><span class="ss-row-desc">改动需重启窗口。</span></div><div class="ss-row-ctl"><span class="sw-wrap"><button type="button" role="switch" aria-checked="false" aria-label="窗口材质" class="sw" title="窗口材质：关"><span class="sw-knob" aria-hidden="true"></span></button><span class="sw-state">关</span></span></div></div></div></section><section class="ss-sec"><div class="ss-sec-head"><h2 class="ss-sec-title">使用习惯</h2></div><div class="ss-card"><div class="ss-row"><div class="ss-row-main"><span class="ss-row-label">界面语言</span></div><div class="ss-row-ctl"><span class="ss-static">中文（简体）</span></div></div><div class="ss-row"><div class="ss-row-main"><span class="ss-row-label">首启检查</span><span class="ss-row-desc">不会重置任何其它设置。</span></div><div class="ss-row-ctl"><button type="button" class="mini-btn">重新显示</button></div></div><div class="ss-row"><div class="ss-row-main"><span class="ss-row-label">任务完成时通知</span><span class="ss-row-desc">点击通知回到该会话。</span></div><div class="ss-row-ctl"><span class="sw-wrap"><button type="button" role="switch" aria-checked="true" aria-label="任务完成时通知" class="sw on" title="任务完成时通知：开"><span class="sw-knob" aria-hidden="true"></span></button><span class="sw-state on">开</span></span></div></div><div class="ss-row"><div class="ss-row-main"><span class="ss-row-label">Ctrl+Tab 切会话</span></div><div class="ss-row-ctl"><span class="sw-wrap"><button type="button" role="switch" aria-checked="true" aria-label="Ctrl+Tab 切会话" class="sw on" title="Ctrl+Tab 切会话：开"><span class="sw-knob" aria-hidden="true"></span></button><span class="sw-state on">开</span></span></div></div></div></section>"
+
+ ❯ tests/settings-sections.test.tsx:462:22
+    460|     };
+    461|     const html = renderToStaticMarkup(<GeneralSection {...legacyProps}…
+    462|     expect(html).not.toContain("首启检查");
+       |                      ^
+    463|     expect(html).not.toContain("重新显示");
+    464|     expect(html).toContain("任务完成时通知");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 32 passed (33)
+   Start at  19:22:30
+   Duration  453ms (transform 51%, import 25%, tests 23%, worker 1%)
+
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts '--maxWorkers=1' tests/settings-sections.test.tsx

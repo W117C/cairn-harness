@@ -60,18 +60,6 @@ describe("接线面（防拆掉）", () => {
     expect(surface).toContain('from "./RenderErrorBoundary"');
   });
 
-  it("首启「设置检查」重新挂回空屏，且只在 onboarded === false 时摆", () => {
-    const view = readRendererFile("panes/WorkbenchView.tsx");
-    expect(view).toContain('import { OnboardingChecklist } from "../components/OnboardingChecklist";');
-    expect(view).toContain("onboarding: readonly OnboardingGroup[];");
-    expect(view).toContain("dismissOnboarding: () => void;");
-    expect(view).toContain("onboarded, setOnboarded, onboarding, dismissOnboarding, injectText");
-    expect(view).toMatch(/\{onboarded === false && \(\s*<OnboardingChecklist/);
-    expect(view).toContain("groups={onboarding}");
-    expect(view).toContain("setSettingsSection(section); setSettingsOpen(true);");
-    expect(view).toContain("onDone={dismissOnboarding}");
-  });
-
   it("窗格常驻挂载：按 tabs map 渲染 pane-chunk，而不是只渲染 active 一块", () => {
     const paneDock = readRendererFile("components/PaneDock.tsx");
     expect(paneDock).toMatch(/props\.tabs\.map\(\(kind\) => \(\s*<section/);

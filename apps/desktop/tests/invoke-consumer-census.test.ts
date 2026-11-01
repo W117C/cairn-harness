@@ -4,7 +4,7 @@
 // 「通道接得通」，不证明「有人调」。第 642 页点名的 createProject / cardAction 就是这种形状：
 // 主进程齐全、渲染层零调用点，功能在 UI 上不可达。
 // 本判卷扫渲染层源码，要求 INVOKE_CHANNELS 的每个键至少有一个 `<key>(` 调用点；
-// 例外必须写进 ALLOW 并给出理由（目前只有 previewStop：它由主进程生成的预览页脚本调用）。
+// 例外必须写进 ALLOW 并给出理由：主进程生成页面的调用，以及明确保留的旧 IPC 兼容入口。
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,12 +23,13 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 describe("invoke 通道消费面：每个通道至少有一个渲染层调用点", () => {
-  it("122 条通道全部有消费者；例外只有带理由的 allowlist", () => {
+  it("invoke 通道均有消费者或明确的兼容保留原因", () => {
     const text = walk(ROOT).map((p) => readFileSync(p, "utf8")).join("\n");
     const allow = new Map<string, string>([
       // 预览页的「停止」由主进程生成的页面脚本调用（apps/desktop/src/main/index.ts 里那段
       // window.agent.previewStop(...)），不是渲染层代码。
       ["previewStop", "主进程生成的预览页脚本调用"],
+      ["getOnboarding", "首启引导已由用户要求移除；旧 IPC 客户端兼容保留，新界面不得再调用"],
     ]);
     const missing = Object.keys(INVOKE_CHANNELS).filter((key) => {
       if (allow.has(key)) return false;

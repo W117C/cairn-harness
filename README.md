@@ -40,7 +40,7 @@ git clone <this-repo> && cd cairn-harness
 
 桌面壳在 `apps/desktop/`（Electron + React + Vite），与 CLI 共用同一套 `src/main/` 服务。
 
-![Cairn 首页：项目选择、首启检查与演示模式](assets/readme/cairn-home.png)
+![Cairn 首页：项目选择、任务输入与演示模式](assets/readme/cairn-home.png)
 
 桌面端已经接上面向长任务的产品面：项目与会话、模型与权限、插件/记忆/自动化、诊断包、偏好备份与恢复默认、许可证导入、更新提醒。所有状态都落在本机；未配置的更新源、插件目录与许可证都显示为显式状态，不伪装成可用。
 

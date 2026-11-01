@@ -451,15 +451,16 @@ describe("关于页构建信息", () => {
   });
 });
 
-describe("首启检查可重新显示", () => {
-  it("通用段有入口；点击只落 onboarded=false 并关设置，不重置其它设置", () => {
-    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings-sections.tsx", import.meta.url)), "utf8");
-    expect(src).toContain("首启检查");
-    expect(src).toContain("props.onShowOnboarding");
-    const panel = readFileSync(fileURLToPath(new URL("../src/renderer/components/SettingsPanel.tsx", import.meta.url)), "utf8");
-    expect(panel).toContain("onShowOnboarding={props.onShowOnboarding}");
-    const view = readFileSync(fileURLToPath(new URL("../src/renderer/panes/WorkbenchView.tsx", import.meta.url)), "utf8");
-    expect(view).toContain("window.agent.setSettings({ onboarded: false })");
-    expect(view).toContain("setOnboarded(false)");
+describe("通用设置移除首启检查", () => {
+  it("即使旧调用方带有重显回调，也不再展示该入口", () => {
+    const legacyProps = {
+      settings: S(), textSize: "md" as const, uiSize: "2" as const,
+      onSave: noop, onCtrlTab: noop, onTextSize: noop, onUiSize: noop,
+      onWindowVibrancy: noop, onNotify: noop, onShowOnboarding: noop,
+    };
+    const html = renderToStaticMarkup(<GeneralSection {...legacyProps} />);
+    expect(html).not.toContain("首启检查");
+    expect(html).not.toContain("重新显示");
+    expect(html).toContain("任务完成时通知");
   });
 });

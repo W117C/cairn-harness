@@ -50,7 +50,6 @@ import { useChrome } from "./chrome";
 import { useWorkbenchDestination } from "./app-destination";
 import { useComposerDrafts } from "./drafts";
 import { useMessageActions } from "./message-actions";
-import { useOnboardingGroups } from "./onboarding";
 import { useSessionOps } from "./sessions";
 import { useSessionList } from "./session-list";
 
@@ -132,9 +131,8 @@ export function useWorkbenchModel() {
   const outcomes = useRef(new Map<string, "ok" | "failed">());
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [dragOverApp, setDragOverApp] = useState(false);
-  // 空屏（对话未开：无会话且零事件）——建议装配 / 首启副标题 / 居中枢位布局都以此为准。
-  // P2-1 空屏面：首启标记（settings.onboarded）/ 建议与分支数据（按项目路径缓存）/ 项目 chip 弹层。
-  const [onboarded, setOnboarded] = useState<boolean | null>(null);
+  // 空屏（对话未开：无会话且零事件）——建议装配 / 居中枢位布局都以此为准。
+  // P2-1 空屏面：建议与分支数据（按项目路径缓存）/ 项目 chip 弹层。
   const [emptyData, setEmptyData] = useState<EmptySurface | null>(null);
   const emptyCache = useRef(new Map<string, EmptySurface>());
   const [chipOpen, setChipOpen] = useState(false);
@@ -342,7 +340,6 @@ export function useWorkbenchModel() {
       setCtrlTabCycle(s.ctrlTabCycle);
       setTextSize(s.textSize);
       setUiSize(s.uiSize);
-      setOnboarded(s.onboarded);
       setPlanDefault(s.planRequiredByDefault === true);
     }).catch(() => undefined);
   }, []);
@@ -353,8 +350,6 @@ export function useWorkbenchModel() {
       () => { setTemplates([]); },
     );
   }, []);
-  // 首启设置检查的数据面与完成出口（唯一完成路径 = 落 settings.onboarded=true）。
-  const { onboarding, dismissOnboarding } = useOnboardingGroups(onboarded, setOnboarded, setLastError);
   // 快捷键统一收口在下方 hotkeysRef 段（蓝本 §3.6 全表；此处不再各自挂监听）。
 
   // SEMA §3.5/§12：协议版本握手（失配/查询失败 fail-closed）。
@@ -1120,9 +1115,6 @@ export function useWorkbenchModel() {
     onSuggestNext,
     injectedAttachment,
     injectedAppend,
-    onboarded, setOnboarded,
-    onboarding,
-    dismissOnboarding,
     injectText,
     inspectorCollapsed,
     inspectorRef,

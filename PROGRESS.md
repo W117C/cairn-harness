@@ -34585,3 +34585,13 @@ body[data-dsh-claude-style] .row .row-actions[data-cds="MessageActions"][data-sa
 上传前发现旧台账含一处真实本地端点凭据，当前文件已将该值替换为脱敏占位符，除此不改历史叙述。该值在既有远端旧提交中已经存在，本批不重写历史；当前脱敏不等于历史已清除，凭据需由所有者更换。
 
 代码验证依据为第 962 页的最终工作树读数；本批在提交前另核类型、文档、边界、依赖分层及暂存内容，提交后检查远端分支落点。远端 CI 与本机验证分开报告。
+
+## 2026-11-01 · 第 964 页：移除首页首启设置清单
+
+业主明确不需要首页首启引导。已移除七组卡片、开始使用按钮、首启说明与设置页的重显入口，同时删除组件、数据 hook 与无用样式；旧 onboarded=false 不再触发引导，也无需写成 true。
+
+桌面全套 **309 文件 / 2071 条通过**（`--maxWorkers=1`）；核心定向 **5 文件 / 30 条通过**（`--maxWorkers=1`）；真实 Electron 首启、连续发送和重载续接 **11/11**，零 console error。根 typecheck 0、renderer-layer 与 desktop-boundary 通过。1440/880 首页和通用设置实际截图已目验。
+
+原引导专属测试与旧挂载断言随用户要求退役，替换为真实首启负向验证与设置 SSR 检查。设计检查扩到标题，原有 8 条样本下限 / 36 条说明上限未降低；旧 getOnboarding IPC 以明确兼容原因保留，禁止新 renderer 再调用。
+
+新包 `apps/desktop/release-no-onboarding-20261101/` 的打包态与 DMG 复制安装态通过。取料：`outputs/remove-onboarding-2026-11-01/REPORT.md`、`desktop-final.log`、`core-targeted.log`、`first-run-after.json`、`gallery.log`、`package.log`。本轮未重跑 core 全套或 HEAD 认证；此前远端 verify 的 full test suite 失败与本地 UI 检查分开报告。

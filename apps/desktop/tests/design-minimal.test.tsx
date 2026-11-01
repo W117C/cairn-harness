@@ -170,8 +170,8 @@ describe("次级说明不许替布局说话（2026-11-01 第 866 页 · 业主�
     expect(n, `设置面次级说明 ${n} 条 > 帽 36（本批从 47 减到 36；要加回去请连理由一起改帽并写进台账）`).toBeLessThanOrEqual(36);
   });
 
-  it("同一行里 desc 不许复述 label（复述=白占一行，且和控件的当前值打架）", () => {
-    const pairs = [...descs.matchAll(/label=\{?"([^"]{2,})"\s+desc=\{?"([^"]{2,})"/g)];
+  it("行、分区和页面的 desc 不许复述标题", () => {
+    const pairs = [...descs.matchAll(/(?:label|title)=\{?"([^"]{2,})"\s+desc=\{?"([^"]{2,})"/g)];
     expect(pairs.length, "至少要真扫到成对的 label+desc，否则这条判卷是空转的").toBeGreaterThanOrEqual(8);
     const echoes = pairs.filter(([, label, desc]) => desc.includes(label.slice(0, 4))).map(([, l, d]) => `${l} → ${d}`);
     expect(echoes, "次级说明在复述行标签：" + echoes.join(" ｜ ")).toEqual([]);

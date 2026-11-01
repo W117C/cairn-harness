@@ -1,0 +1,37 @@
+[gallery] AgentApi 成员: 148 协议版本: 51
+[gallery] root chars: 0
+[gallery] 01-empty.png
+[gallery] 首启工作界面: { composer: true, checklist: false, firstRunCopy: false }
+[gallery] 01b-empty-narrow.png
+[gallery] 02-model-menu.png
+[gallery] 模型分组裁剪自查: {"present":true,"dangling":[],"groups":[{"label":"deepseek","headSeen":true,"rowsSeen":2},{"label":"glm","headSeen":true,"rowsSeen":1}],"list":{"client":209,"scroll":209}}
+[gallery] 03-thinking.png
+[gallery] 04-composer-draft.png
+[gallery] 05-stream.png
+[gallery] 概览数字闪动自查: {"flashing":3,"animName":"isp-ov-flash","animDuration":"0.3s","flashColor":"oklab(0.783868 -0.0181537 -0.0679539)","numColor":"color(srgb 0.764706 0.760784 0.717647)"}
+[gallery] 13-overview-value-flash.png
+[gallery] 失败正文配色自查: {"chain":[{"cls":"tool-row-notice","color":"color(srgb 0.764706 0.760784 0.717647)"},{"cls":"row tool","color":"rgb(240, 239, 236)"},{"cls":"tool-group-body","color":"rgb(240, 239, 236)"},{"cls":"toolcluster","color":"rgb(240, 239, 236)"}],"markColor":"rgb(245, 181, 68)"}
+[gallery] 交付卡卡头自查: {"present":true,"title":"修改 1 个文件","stats":[],"mixed":false,"dupNumber":false,"unknownShown":true}
+[gallery] 14-popout-pane.png
+[gallery] 弹窗面板导航自查: {"nav":0,"titles":[]}
+[gallery] 文件行大小自查: ["2.1 KB","880 B"]
+[gallery] 弹窗空态几何自查: {"note":true,"cls":"pane-empty","boxH":505,"offRatio":0,"clipped":false}
+[gallery] 07-narrow.png
+[gallery] 08-long-title.png
+[gallery] 09-contrast.png
+[gallery] 高对比自查: {"mq":true,"hair":"hsl(48 33.3% 97.1% / 22%)","sideBorder":"color(srgb 1 1 1 / 0.1)"}
+[gallery] 10-avatar-menu.png
+[gallery] 用量入口落点自查: {"nav":"用量统计","title":"用量统计","pop":0}
+[gallery] 12-appearance-submenu.png
+[gallery] 15-palette.png
+[gallery] 面板输入框: true
+[gallery] 16-palette-query.png
+[gallery] 06-settings-provider.png
+[gallery] 06b-settings-network.png
+[gallery] 06c-settings-usage.png
+[gallery] 17-settings-general.png
+[gallery] 分段控件选中态自查: [{"label":"主题","n":3,"on":"跟随系统","marks":["跟随系统=true","亮=false","暗=false"],"identical":false},{"label":"文字大小","n":3,"on":"A标准","marks":["A小=false","A标准=true","A大=false"],"identical":false},{"label":"界面密度","n":5,"on":"标准","marks":["紧凑=false","标准=true","宽松=false","舒适=false","超大=false"],"identical":false}]
+[gallery] 18-side-filter.png
+[gallery] 侧栏筛选面板自查: {"open":10,"labels":["上传文件…系统选择器 · 可多选","添加文件夹…目录内文本按引用读取","粘贴截图（⌘V）从系统剪贴板取图片","引用最近文件0","全部1","运行中0","已置顶0","已归档0"],"triggerAria":"筛选会话：全部"}
+[gallery] 19-inspector-changes.png
+[gallery] done

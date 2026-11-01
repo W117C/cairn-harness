@@ -933,7 +933,7 @@ stub.protocolVersion = reply(Number(argOf("--cairn-protocol-version=", "0")));
 const galleryTheme = argOf("--cairn-theme=", "");
 if (galleryTheme === "light" || galleryTheme === "dark") settingsState.theme = galleryTheme;
 
-// 首启夹具：空态的「设置检查」要看得见才叫目验（那一块只在 onboarded === false 时摆）。
+// 旧首启配置夹具：onboarded=false 也应直接进入工作界面，不再显示设置清单。
 // 七组覆盖面由主进程从**真源**推导后交接（这里不复刻那份清单——手抄会随它漂）。
 // 更新提醒夹具：配好更新源 + 一个「有可用版本」的 checkUpdate 回包。
 if (process.argv.includes("--cairn-update-fixture")) {

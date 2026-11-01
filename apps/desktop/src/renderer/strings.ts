@@ -287,10 +287,6 @@ export const STR = {
     chip: "演示模式",
     tip: "回复来自预录剧本，不产生真实调用，也不读取你的项目。点这里连接模型。",
   },
-  onboarding: {
-    title: "设置检查",
-    done: "开始使用",
-  },
   sessionProject: {
     /** 行上的项目标签（会话已归到某个项目时才有）。 */
     tag: "归属项目",

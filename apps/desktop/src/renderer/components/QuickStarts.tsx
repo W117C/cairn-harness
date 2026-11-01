@@ -10,7 +10,7 @@ const START_ICONS = [BookOpen, Play, ListTodo, Wrench];
 export function QuickStarts(props: {
   /** 建议文本（buildQuickStarts 装配，3–4 条；空数组 = 数据未就绪，行不渲染内容）。 */
   items: readonly string[];
-  /** 首启副标题（onboarded !== true 才由 App 传入；null = 不显示）。 */
+  /** 可选补充说明；null 时不展示。 */
   firstRunSub: string | null;
   /** 点击一条建议：填入输入框不发送（由 App 注入 injectedText）。 */
   onPick: (text: string) => void;

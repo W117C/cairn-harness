@@ -75,18 +75,9 @@ async function main() {
     const el = document.querySelector('.provider-dot');
     return el?.textContent.includes('演示模式') === true && el?.getAttribute('data-ok') === 'demo';
   })()`));
-  // 2026-10-25 空屏重做把设置检查块连带删掉、10-26 恢复（见 WorkbenchView 的注释）。
-  // 这条不再要求「不展示」，改为钉恢复后的形状：块在就每一格都能点（不许死行），且旧 BYOK 检查不再出现。
-  check('首启首页的设置检查块每一格都可操作（无死行）', await js(`(() => {
-    const items = [...document.querySelectorAll('.onboard-item')];
-    const actionable = items.every((el) => el.tagName === 'BUTTON' || el.getAttribute('role') === 'button');
-    return items.length > 0 && actionable;
-  })()`));
-  check('首启检查用用户语言（无 BYOK / 单价表 / license）', await js(`(() => {
-    const text = document.querySelector('.onboard')?.innerText ?? '';
-    return text.includes('连接模型') && !/BYOK|单价表|license/.test(text);
-  })()`), await js(`document.querySelector('.onboard')?.innerText ?? ''`));
-  check('首启检查每条都有可见的一句说明', await js(`[...document.querySelectorAll('.onboard-entry')].length > 0 && [...document.querySelectorAll('.onboard-entry')].every((el) => (el.textContent ?? '').trim().length > 0)`));
+  check('首启直接进入工作界面，不显示设置检查、说明或开始使用按钮', await js(`!document.querySelector('.onboard') && !document.querySelector('.empty-sub') && ![...document.querySelectorAll('button')].some(el => el.textContent.trim() === '开始使用')`));
+  check('首启输入框和模型入口可直接操作', await js(`!!document.querySelector('.composer-card textarea:not(:disabled)') && !!document.querySelector('.mp-trigger:not(:disabled)')`));
+  check('旧的 onboarded=false 偏好无需改写即可使用', (await js('window.agent.getSettings()')).onboarded === false);
   await js('new Promise((resolve) => setTimeout(resolve, 500))');
   writeFileSync(join(out, '01-home.png'), (await win.webContents.capturePage()).toPNG());
 
