@@ -1,0 +1,15 @@
+$ vitest run --config vitest.config.ts && node --import tsx ../../scripts/desktop-boundary-check.ts
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+
+ Test Files  309 passed (309)
+      Tests  2071 passed (2071)
+   Start at  20:02:14
+   Duration  12.02s (import 41%, tests 35%, transform 22%, worker 2%)
+
+    Isolate  309 workers spawned · ~93ms startup each (spawn + environment, per file)
+             at least ~4.02s faster with isolate: false — reuses workers across files instead of one per file
+
+desktop-boundary-check: 绿（src 无反向依赖、无 UI import）
+EXIT:0

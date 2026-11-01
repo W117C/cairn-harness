@@ -34595,3 +34595,47 @@ body[data-dsh-claude-style] .row .row-actions[data-cds="MessageActions"][data-sa
 原引导专属测试与旧挂载断言随用户要求退役，替换为真实首启负向验证与设置 SSR 检查。设计检查扩到标题，原有 8 条样本下限 / 36 条说明上限未降低；旧 getOnboarding IPC 以明确兼容原因保留，禁止新 renderer 再调用。
 
 新包 `apps/desktop/release-no-onboarding-20261101/` 的打包态与 DMG 复制安装态通过。取料：`outputs/remove-onboarding-2026-11-01/REPORT.md`、`desktop-final.log`、`core-targeted.log`、`first-run-after.json`、`gallery.log`、`package.log`。本轮未重跑 core 全套或 HEAD 认证；此前远端 verify 的 full test suite 失败与本地 UI 检查分开报告。
+
+## 2026-11-01 · 第 965 页：同一条「是不是 JSON 对象」，42 个文件各写了一遍
+
+### 一、缺口（现读）
+
+`isRecord`（非 null、非数组的 object）此前在 42 个文件里各写一遍：37 份是命名副本
+（`isRecord` / `isObject` / `isPlainObject`），另有 6 处直接内联。它是 JSON sidecar、账本、
+注册表、ACP/A2A 消息与渲染层存储解析的第一道形状门。
+
+这不是打字问题：`src/agent/evidence.ts` 那一份漏了 `!Array.isArray`——数组也能通过
+`isRecord`，`validateReceipt` 会把「挂了收据字段的数组」当成合法收据（旧实现实测返回
+`{ ok: true }`）。其余各份今天恰好相同，但下一次改口径没有任何东西保证它们一起改。
+
+### 二、改法
+
+- 新增 `src/is-record.ts`，只放这一条判据；42 个消费面删掉本地副本、改 import。
+- `isObject` / `isPlainObject` 两个别名一并收口；六处内联也改成调用共享判据。
+- 判卷 `tests/is-record-single.test.ts`：值域矩阵（数组 / null / 原始值）、伪造数组收据必须
+  `schema-mismatch`、源码里只剩一处定义 / 一处内联且 ≥40 个消费面 import 同一份。
+
+### 三、判卷与读数（工作树；未提交）
+
+| 面 | 读数 |
+|---|---|
+| 现读 | 命名定义 **37 → 1**；内联 **6 → 0**；import 同一份 **42 处** |
+| 红 1 | 共享实现去掉 `!Array.isArray` ⇒ **3 红**（数组值域 / 伪造收据 / canonical 文本） |
+| 红 2 | `evidence.ts` 写回漏数组的旧副本 ⇒ **2 红**（伪造收据 / 源码唯一性，点名该文件） |
+| 绿 | 复原后 **3/3 绿**；两处 sha256 与造红前一致 |
+| 定向相关判卷 | **6 文件 / 92 条全绿**（本批 + autonomy + evolution-autonomy + project-templates + session-lock ×2） |
+| 桌面 last-session 判卷 | **2 文件 / 11 条全绿** |
+| 核心套件（同树实跑） | **613 文件 / 7577 条全绿**，exit 0 |
+| 桌面套件（同树实跑） | **309 文件 / 2071 条全绿**，exit 0（含 boundary 绿） |
+| 两端 typecheck | **0 报错 / 0 报错** |
+| docs-check | **受检项全绿**（1011 张页标题｜新撞 0｜下一个未占用页号 966） |
+
+### 四、边界
+
+- 只搬判据、不改各消费面的字段校验；`isRecord` 对 Date / 类实例的口径保持 `true`（只排除
+  null、数组与原始值），与除 `evidence.ts` 外的旧副本一致。
+- `apps/desktop/release/` 里的打包副本是构建产物，没手改；重建会随源码更新。
+- 没有批量替换所有 `typeof x === "object"`（有些是联合类型/字段探针，不是同一条值域判据）。
+- 本批主体（共享实现、41 个消费面、scripts 两份与四处内联）已随 `c0ad6546` 入库；
+  本页最后收口的 `last-session` 内联、canonical 注释与判据增补在工作树。
+- 未跑 `gates` / `head-cert` / `mutate-verify`；本页不宣称 HEAD 认证。

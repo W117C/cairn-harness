@@ -1,0 +1,60 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/is-record-single.test.ts (3 tests | 2 failed) 54ms
+   ❯ JSON 对象判定只有一份（第 965 页） (3)
+     × 数组即使挂了收据字段也不是收据（旧 evidence 实现会收下） 4ms
+     × 源码里只剩共享实现一处定义 / 一处内联，所有消费面都 import 它 49ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/is-record-single.test.ts > JSON 对象判定只有一份（第 965 页） > 数组即使挂了收据字段也不是收据（旧 evidence 实现会收下）
+AssertionError: expected { ok: true } to deeply equal { Object (ok, reason) }
+
+- Expected
++ Received
+
+  {
+-   "ok": false,
+-   "reason": "schema-mismatch",
++   "ok": true,
+  }
+
+ ❯ tests/is-record-single.test.ts:61:45
+     59|     if (receipt === null) throw new Error("fixture 应产出一份收据");
+     60|     const forged: unknown = Object.assign([], receipt);
+     61|     expect(validateReceipt(forged, source)).toEqual({ ok: false, reaso…
+       |                                             ^
+     62|   });
+     63|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/is-record-single.test.ts > JSON 对象判定只有一份（第 965 页） > 源码里只剩共享实现一处定义 / 一处内联，所有消费面都 import 它
+AssertionError: expected [ 'src/agent/evidence.ts' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "src/agent/evidence.ts",
++ ]
+
+ ❯ tests/is-record-single.test.ts:74:23
+     72|     }
+     73|
+     74|     expect(offenders).toEqual([]);
+       |                       ^
+     75|     expect(importers.length).toBeGreaterThanOrEqual(40);
+     76|     const canonical = read(CANONICAL);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  19:58:27
+   Duration  151ms (tests 64%, transform 23%, import 10%, worker 2%)
+
+EXIT:1

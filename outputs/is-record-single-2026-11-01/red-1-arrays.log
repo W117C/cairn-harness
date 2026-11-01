@@ -1,0 +1,87 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/is-record-single.test.ts (3 tests | 3 failed) 56ms
+   ❯ JSON 对象判定只有一份（第 965 页） (3)
+     × 只认非 null、非数组的 object；数组与原始值一律不是 Record 4ms
+     × 数组即使挂了收据字段也不是收据（旧 evidence 实现会收下） 2ms
+     × 源码里只剩共享实现一处定义 / 一处内联，所有消费面都 import 它 50ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/is-record-single.test.ts > JSON 对象判定只有一份（第 965 页） > 只认非 null、非数组的 object；数组与原始值一律不是 Record
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/is-record-single.test.ts:47:26
+     45|     expect(isRecord(Object.create(null) as object)).toBe(true);
+     46|
+     47|     expect(isRecord([])).toBe(false);
+       |                          ^
+     48|     expect(isRecord([1, 2])).toBe(false);
+     49|     expect(isRecord(null)).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/is-record-single.test.ts > JSON 对象判定只有一份（第 965 页） > 数组即使挂了收据字段也不是收据（旧 evidence 实现会收下）
+AssertionError: expected { ok: true } to deeply equal { Object (ok, reason) }
+
+- Expected
++ Received
+
+  {
+-   "ok": false,
+-   "reason": "schema-mismatch",
++   "ok": true,
+  }
+
+ ❯ tests/is-record-single.test.ts:61:45
+     59|     if (receipt === null) throw new Error("fixture 应产出一份收据");
+     60|     const forged: unknown = Object.assign([], receipt);
+     61|     expect(validateReceipt(forged, source)).toEqual({ ok: false, reaso…
+       |                                             ^
+     62|   });
+     63|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/is-record-single.test.ts > JSON 对象判定只有一份（第 965 页） > 源码里只剩共享实现一处定义 / 一处内联，所有消费面都 import 它
+AssertionError: expected '/** JSON 对象判定：非 null、非数组的 object。\n *…' to contain '!Array.isArray(value)'
+
+- Expected
++ Received
+
+- !Array.isArray(value)
++ /** JSON 对象判定：非 null、非数组的 object。
++  *
++  *  这条判据此前在 33 个文件里各抄一份（第 955 页）：同一件事的判定不该随文件漂移。
++  *  只回答「能不能当 Record 读」，不判断 plain object——Date / 类实例按既有口径仍是 true，
++  *  数组、null 与原始值都不是。
++  */
++ export function isRecord(value: unknown): value is Record<string, unknown> {
++   return typeof value === "object" && value !== null;
++ }
++
+
+ ❯ tests/is-record-single.test.ts:78:23
+     76|     const canonical = read(CANONICAL);
+     77|     expect(canonical).toContain("export function isRecord");
+     78|     expect(canonical).toContain("!Array.isArray(value)");
+       |                       ^
+     79|   });
+     80| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  19:58:12
+   Duration  162ms (tests 65%, transform 23%, import 10%, worker 3%)
+
+EXIT:1

@@ -12,6 +12,8 @@
  *  - 上次会话按 id + workspace 命中（旧格式且唯一）⇒ restore，调用方走 `openSession(id)`；
  *  - 找不到 / 有歧义 / 项目已移除 ⇒ clear，回主页并清 key。
  */
+import { isRecord } from "../../../../src/is-record";
+
 export interface LastSessionRef {
   id: string;
   /** null = 旧格式（只有 id）。新写入的 key 一律带工作区。 */
@@ -30,7 +32,7 @@ export function parseLastSession(raw: string | null): LastSessionRef | null {
   if (raw === null) return null;
   try {
     const parsed = JSON.parse(raw) as unknown;
-    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+    if (isRecord(parsed)) {
       const id = (parsed as { id?: unknown }).id;
       const workspace = (parsed as { workspace?: unknown }).workspace;
       if (typeof id !== "string" || id === "") return null;
