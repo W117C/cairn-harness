@@ -1,0 +1,12 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+
+ Test Files  7 passed (7)
+      Tests  85 passed (85)
+   Start at  08:28:36
+   Duration  11.72s (tests 42%, transform 31%, import 27%)
+
+  Transform  transforming modules took 3.41s · 31% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

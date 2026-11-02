@@ -1,0 +1,27 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/cairn-sdlc-skills.test.ts (3 tests | 1 failed | 2 skipped) 4ms
+   ❯ Cairn SDLC skills through the project discovery and trust path (3)
+     × cairn-verify requires trust, routes, and delivers its complete body on both invocation faces 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/cairn-sdlc-skills.test.ts > Cairn SDLC skills through the project discovery and trust path > cairn-verify requires trust, routes, and delivers its complete body on both invocation faces
+Error: ENOENT: no such file or directory, lstat '/Users/ze/Downloads/Cairn/cairn/.agent/plugins/cairn-verify'
+ ❯ fixture tests/cairn-sdlc-skills.test.ts:16:7
+     14|     await mkdir(plugins, { recursive: true });
+     15|     for (const name of selected) {
+     16|       await cp(join(process.cwd(), ".agent", "plugins", name), join(pl…
+       |       ^
+     17|     }
+     18|   } catch (error) {
+ ❯ tests/cairn-sdlc-skills.test.ts:47:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 skipped (3)
+   Start at  08:25:30
+   Duration  436ms (transform 56%, import 42%, tests 1%, worker 1%)

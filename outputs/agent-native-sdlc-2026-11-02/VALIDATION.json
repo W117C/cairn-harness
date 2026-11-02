@@ -1,0 +1,142 @@
+{
+  "date": "2026-11-02",
+  "timezone": "Asia/Shanghai",
+  "workspace": "/Users/ze/Downloads/Cairn/cairn",
+  "branch": "fix/spec-summary-double-count",
+  "head": "fc834f9e8ab7d5e53c573f32d0838534c3ad734d",
+  "evidence_scope": "working-tree inputs; skill loading/trust tested in temporary workspaces, not the real user trust database",
+  "committed": false,
+  "pushed": false,
+  "inputs_sha256": {
+    ".agent/plugins/cairn-gates/SKILL.md": "b6d59e8b5749c6a7ad228c60e42d820de044b74019f87b1a5c38466455f42162",
+    ".agent/plugins/cairn-verify/SKILL.md": "80d959588a5eb7555fe21606eee59efc2769bf38e1d2f140b980a49831c48fa1",
+    "docs/superpowers/specs/2026-11-01-agent-native-sdlc-design.md": "f37691706ca0ef8e7d5ba085ad49fe7914058857674e3b98dabaaa0aabe0fb74",
+    "tests/cairn-sdlc-skills.test.ts": "59fbf1dacfdbbd20620da7aacd8346dbb14491fabc8c3e2450a80ff6155aa872",
+    "outputs/agent-native-sdlc-2026-11-02/REPORT.md": "9671627eb9dcf822c5bf0f47dd025c520f0b4ce5c603c3d07bec31181edb316a"
+  },
+  "checks": [
+    {
+      "command": "pnpm exec vitest run --config tests/vitest.config.ts --maxWorkers=1 tests/cairn-sdlc-skills.test.ts tests/plugins-skills.test.ts tests/skill-user-invocation.test.ts tests/skill-invocation-faces.test.ts tests/skill-routing-query-wiring.test.ts tests/plugin-cli-face.test.ts tests/trust-fingerprint.test.ts",
+      "exit_code": 0,
+      "test_files": 7,
+      "tests_passed": 85,
+      "tests_failed": 0,
+      "tests_skipped": 0,
+      "max_workers": 1,
+      "log": "targeted-tests.log"
+    },
+    {
+      "command": "node --import tsx scripts/typecheck.ts",
+      "exit_code": 0,
+      "typescript_errors": 0,
+      "log": "typecheck.log"
+    },
+    {
+      "command": "pnpm docs-check",
+      "exit_code": 0,
+      "result": "受检项全绿",
+      "log": "docs-check.log"
+    },
+    {
+      "command": "python3 /Users/ze/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agent/plugins/cairn-gates",
+      "exit_code": 0,
+      "result": "Skill is valid!",
+      "coverage": "skill format only"
+    },
+    {
+      "command": "python3 /Users/ze/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agent/plugins/cairn-verify",
+      "exit_code": 0,
+      "result": "Skill is valid!",
+      "coverage": "skill format only"
+    }
+  ],
+  "whitespace_checks": [
+    {
+      "path": ".agent/plugins/cairn-gates/SKILL.md",
+      "exit_code": 1,
+      "output": "",
+      "interpretation": "differences present; no whitespace errors"
+    },
+    {
+      "path": ".agent/plugins/cairn-verify/SKILL.md",
+      "exit_code": 1,
+      "output": "",
+      "interpretation": "differences present; no whitespace errors"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-11-01-agent-native-sdlc-design.md",
+      "exit_code": 1,
+      "output": "",
+      "interpretation": "differences present; no whitespace errors"
+    },
+    {
+      "path": "tests/cairn-sdlc-skills.test.ts",
+      "exit_code": 1,
+      "output": "",
+      "interpretation": "differences present; no whitespace errors"
+    },
+    {
+      "path": "outputs/agent-native-sdlc-2026-11-02/REPORT.md",
+      "exit_code": 1,
+      "output": "",
+      "interpretation": "differences present; no whitespace errors"
+    }
+  ],
+  "red_green": {
+    "red_command": "pnpm exec vitest run --config tests/vitest.config.ts --maxWorkers=1 tests/cairn-sdlc-skills.test.ts -t 'cairn-verify requires trust'",
+    "red_exit_code": 1,
+    "red_test_failures": 1,
+    "red_filtered_skips": 2,
+    "red_reason": "cairn-verify artifact absent (ENOENT)",
+    "red_log": "skills-red.log",
+    "initial_green_exit_code": 0,
+    "initial_green_tests_passed": 3,
+    "initial_green_log": "skills-green.log",
+    "final_evidence": "targeted-tests.log"
+  },
+  "preservation": {
+    "baseline_file": "baseline-sha256.json",
+    "original_dirty_files": 97,
+    "unchanged": 97,
+    "changed": [],
+    "missing": []
+  },
+  "review": {
+    "mode": "OCR delegate preview and rule resolution, current-agent review",
+    "rule_log": "ocr-rules.log",
+    "preview_log": "ocr-preview-scoped.log",
+    "preview_limit": "default excludes all this task Markdown/log files and its test; explicit rule resolution succeeded",
+    "reviewed_paths": [
+      ".agent/plugins/cairn-gates/SKILL.md",
+      ".agent/plugins/cairn-verify/SKILL.md",
+      "docs/superpowers/specs/2026-11-01-agent-native-sdlc-design.md",
+      "tests/cairn-sdlc-skills.test.ts",
+      "outputs/agent-native-sdlc-2026-11-02/REPORT.md"
+    ],
+    "unresolved_findings": 0
+  },
+  "forward_tests": {
+    "baseline": "independent context already selected appropriate gates and trust boundaries; no observed baseline failure or measured quality improvement",
+    "cairn-gates": "independent plan for docs/skills/tests and event schema changes; clarified minimal frontmatter check entry",
+    "cairn-verify": "independent assessment of renderer/layout evidence and skills-only change; narrowed layout interaction wording",
+    "limitation": "read-only skill usability exercises, not real-provider end-to-end or statistically controlled model-performance evals"
+  },
+  "distribution": {
+    "layout": ".agent/plugins/<name>/SKILL.md",
+    "git_ignored": false,
+    "git_clone_shipped": false,
+    "npm_shipped": false,
+    "real_user_trust_granted": false
+  },
+  "not_run": [
+    "full core suite",
+    "desktop suite/build/smoke",
+    "real provider",
+    "full Electron restart",
+    "Windows/NFS/cross-machine",
+    "head-cert-check",
+    "mutate-verify",
+    "packaging/release",
+    "real new model-session selection evaluation"
+  ]
+}
