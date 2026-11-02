@@ -1,0 +1,25 @@
++ 34e7520c21ef4c6f8d34b5fb3e9799aaca1b3462 chore(repo): 补上治理面——贡献指南、行为准则、安全策略、支持说明
++ 2603daef7a8d851f0802be4fd46a0ee9887735a3 chore(ci): GitHub 协作面——Issue 表单、PR 模板、CODEOWNERS、Dependabot、CodeQL、CI 加固
++ 41f226e53f37c5809ae130ac568f90f5cb6c4336 docs(repo): README 重排为标准门面，CHANGELOG 改 Keep a Changelog
++ 43f29ab30adaefb9effe56942135eb7f303dc51e chore(repo): 整理 GitHub 任务入口、依赖配置和演示残留
++ a08c04a74d4deb2e52bf6dd16a4a0c11e3daf230 Bump electron from 44.7.0 to 44.9.1
++ e10256dbb9d36600f43a39f71b949a986da34200 fix(ci): 公开仓库接通 CodeQL 并固定测试并发
++ b937af30231d02d99cf0db3a002c4f8214ff3558 chore(ci): bump the actions group with 4 updates
++ aeb03b93ccd59bd201a61407865493b2b66fe7fe chore(repo): 移除旧动画任务绑定并同步仓库现态
++ 98fbbe30bff8b3d9b562ac2fda468eb243e0c1a0 ci: assert the installed Electron runtime version
++ b635e42a6a25c4663e46d054a9db32850912b206 fix(repo): 保留产物检查并改验 Cairn 页面入口
++ 96bd639ac22f21936b5acc108b9c48093a85cf0f chore(deps): bump the vite group across 1 directory with 3 updates
++ bba91bdb30405e8a80ab41ee55ad178b5bc7231e fix(repo): 将动画回归标本归入测试目录
++ 55c5b5bb91eba6fd226d426f130c18d9ad305965 chore(deps): 清零 MCP 运行时依赖告警
++ febbcafbc7cff448b06399d61ecd22aefe7bed28 fix(test): 避免脱敏用例触发 secret scanning
++ 49ea76863ac3282fb0c8e61d9e06ee4d41652381 fix: remediate code scanning security alerts
++ 855b5ebe5e3391c0d29a3e6af9375b041c8a6122 test: cover both realpath containment guards
++ 174031f5aabea2c6a8c9cbf313038bb58e3f171f fix(security): bind write policies and plugin trust to verified state
++ 8a64c7d2b510c9c2e4b5b5b96198e300a3b9707b fix(security): close HTML parser and git config snapshot bypasses
++ 9c697d3c66d40799d4cfb0e6b64366007299f2bd fix(security): close remaining CodeQL file races
++ 44ebd53baa4c131ec12240dc07ec1ab481e3988c fix(security): harden canary lock takeover
++ 5a56937a5b85cf81cac6012d0c8c26e61cc888e8 fix(desktop): attribute session appends before drift snapshots
++ 631f5791e037589ca0989c9b18d838aebd7f8e43 test: migrate usage attribution mutation anchors
++ 821995005addabf002635f3e555419af285613b6 fix(security): bind file reads and lock snapshots to stable handles
++ 4910ae3d2f300ebdca3a124b9489aba5f28dd164 fix(desktop): isolate drift attribution by log path
++ 89d6d1b36b6fba5acba69bbb9db1ffa1a127af68 fix(desktop): sample drift checks at a stable instant

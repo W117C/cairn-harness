@@ -1,0 +1,11 @@
+da155012797c012461a152d6b6475c4228b552ad	refs/heads/dependabot/npm_and_yarn/apps/desktop/lucide-react-1.61.0
+780f284c45d7087da47bd248cdeedff8a47ef1ea	refs/heads/dependabot/npm_and_yarn/apps/desktop/typescript-7.0.2
+ca5d5eacfe4f5d0819bed5e3d577aab1b984a1de	refs/heads/dependabot/npm_and_yarn/electron-db4558c92a
+be33a1fc3878c28bf8c9d3d6f3eceab4cb210744	refs/heads/dependabot/npm_and_yarn/lucide-react-1.61.0
+e8bbeff3e1e7926776e2235fa60c41ebcece29a3	refs/heads/dependabot/npm_and_yarn/typescript-91cac165ee
+84c00b831cfe123d09128da6804fa8dc10c9ce00	refs/heads/dependabot/npm_and_yarn/vscode-languageserver-protocol-3.18.5
+da60f0ddb006754a9bfb3544177e620514443ded	refs/heads/doc-layer-migration
+3ffcbeac3911e1d7a6d5061d4bac5e6c733d9085	refs/heads/fix/spec-summary-double-count
+014ac0e33c8879ee06031f16cfd2438caf93674e	refs/heads/integration/dev-line-with-standardization
+2e6ccd282577b1670f9caae23990fec811ef39d9	refs/heads/main
+f347479ef31b1b1251922894ea0a7d2cae14dccc	refs/heads/rescue/wip-20261025

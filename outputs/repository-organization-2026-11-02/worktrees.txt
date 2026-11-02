@@ -1,0 +1,15 @@
+worktree /Users/ze/Downloads/Cairn/cairn
+HEAD 3ffcbeac3911e1d7a6d5061d4bac5e6c733d9085
+branch refs/heads/fix/spec-summary-double-count
+
+worktree /Users/ze/Downloads/Cairn/cairn/.worktrees/code-scanning-alerts-855b5ebe
+HEAD 855b5ebe5e3391c0d29a3e6af9375b041c8a6122
+branch refs/heads/fix/code-scanning-alerts
+
+worktree /Users/ze/Downloads/Cairn/cairn/.worktrees/code-scanning-closure-82199500
+HEAD 821995005addabf002635f3e555419af285613b6
+branch refs/heads/fix/code-scanning-closure
+
+worktree /Users/ze/Downloads/Cairn/cairn/.worktrees/gate-mutate-verify
+HEAD 781fabeeed4c58b1746782fca00baae78a808726
+detached

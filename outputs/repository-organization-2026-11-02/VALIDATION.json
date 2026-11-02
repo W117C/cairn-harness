@@ -1,0 +1,113 @@
+{
+  "date": "2026-11-02",
+  "timezone": "Asia/Shanghai",
+  "workspace": "/Users/ze/Downloads/Cairn/cairn",
+  "head": "3ffcbeac3911e1d7a6d5061d4bac5e6c733d9085",
+  "branch": "fix/spec-summary-double-count",
+  "local_main": {
+    "before": "3a6d63c1db6829e1aa1bc629b1d7d9e5340b695b",
+    "after": "2e6ccd282577b1670f9caae23990fec811ef39d9",
+    "upstream": "origin/main",
+    "method": "non-force fast-forward fetch; checkout unchanged"
+  },
+  "owned_sha256": {
+    "STATE.md": "d2401a7bf62cce91e25eaec5b7088fd5016f88e80754be6495ac93a5f0256370",
+    "docs/REPOSITORY-STATUS.md": "5937e9e8e4fa2de0d53182bc82a4f1b71fc1459ce51e7c2277e0afe7924f4583",
+    "docs/README.md": "dd72bd5c22b4f995b1b50c443e91fd3534aaf8f42c6e25835792261d4ab6306c",
+    "archive/repository-status-before-2026-11-02.md": "c467625e0b97fc4ecd397e0a163151ae32de1b2fe1241a7525d2c2541d220217",
+    "outputs/repository-organization-2026-11-02/REPORT.md": "2869fa1d8ef7704169d018e13d37bfbaf2dcc5e1ad86a5e1e0059da76a1c61d2"
+  },
+  "checks": [
+    {
+      "command": "pnpm docs-check",
+      "exit_code": 0,
+      "result": "受检项全绿",
+      "log": "docs-check.log"
+    },
+    {
+      "command": "node --import tsx scripts/typecheck.ts",
+      "exit_code": 0,
+      "typescript_errors": 0,
+      "log": "typecheck.log"
+    },
+    {
+      "command": "git diff --check -- STATE.md docs/REPOSITORY-STATUS.md docs/README.md",
+      "exit_code": 0
+    },
+    {
+      "command": "git fsck --connectivity-only --no-reflogs",
+      "exit_code": 0,
+      "scope": "reachable connectivity only; dangling objects retained; not a full object hash verification"
+    },
+    {
+      "command": "git merge-tree --write-tree --name-only --no-messages origin/main HEAD",
+      "exit_code": 1,
+      "interpretation": "24 projected conflicts; no refs/index/working-tree changes",
+      "log": "merge-preview.log"
+    },
+    {
+      "check": "archive original byte identity",
+      "result": true
+    }
+  ],
+  "preexisting_work": {
+    "baseline_files": 102,
+    "unchanged": 100,
+    "changed_during_inspection": [
+      "PROGRESS.md",
+      "apps/desktop/scripts/ui-gallery.cjs"
+    ],
+    "missing": [],
+    "handling": "no writes or restores to these paths; concurrent changes retained"
+  },
+  "linked_worktrees": [
+    {
+      "path": "/Users/ze/Downloads/Cairn/cairn/.worktrees/code-scanning-alerts-855b5ebe",
+      "dirty_files_at_snapshot": 3,
+      "changed_since_snapshot": []
+    },
+    {
+      "path": "/Users/ze/Downloads/Cairn/cairn/.worktrees/code-scanning-closure-82199500",
+      "dirty_files_at_snapshot": 2,
+      "changed_since_snapshot": []
+    },
+    {
+      "path": "/Users/ze/Downloads/Cairn/cairn/.worktrees/gate-mutate-verify",
+      "dirty_files_at_snapshot": 0,
+      "changed_since_snapshot": []
+    }
+  ],
+  "review": {
+    "scope": "documentation and Git metadata only; no product code changes",
+    "completed": "current-agent review of current docs, exact historical preservation, links and scope",
+    "limitation": "does not establish correctness of uncommitted product changes or security patches"
+  },
+  "cleanup": {
+    "executed": false,
+    "pending_confirmation_local_branches": [
+      "agent/修复-todo-worker-11",
+      "agent/修复-todo-的-completedcount-worker-10",
+      "agent/修复-todo-的-completedcount-2-worker-12",
+      "agent/修复-todo-的-completedcount-worker-12",
+      "fix/codeql-finalize",
+      "fix/session-drift-snapshot"
+    ],
+    "pending_confirmation_tracking_refs": [
+      "refs/remotes/origin/fix/code-scanning-closure",
+      "refs/remotes/origin/fix/session-drift-snapshot"
+    ],
+    "actual_remote_branch_deletion": false,
+    "worktree_deletion": false,
+    "object_pruning": false
+  },
+  "docs_committed": false,
+  "docs_pushed": false,
+  "memory_modified": false,
+  "not_run": [
+    "product full suites",
+    "provider/network validation",
+    "packaging/release",
+    "head-cert-check",
+    "mutate-verify"
+  ]
+}

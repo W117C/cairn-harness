@@ -1,64 +1,33 @@
 # Cairn / DSH —— 现态
 
-rev: c0ad65468e4ab95eea99fead7efe5be736976449
+rev: 3ffcbeac3911e1d7a6d5061d4bac5e6c733d9085
 
-本页描述 `cairn/` 的源码快照，不代表同级 staging 或已发布应用。
-当前项目改动已整体提交；`rev` 指向最近的完整源码快照。上传与验证边界见 `PROGRESS.md` 第 963 页。
-任务、阻塞与待开工统一见 [仓库整理与任务清单](docs/REPOSITORY-STATUS.md)；
-逐批读数见 `PROGRESS.md`，历史证据保留在 `PROGRESS.md` 与 `outputs/`。
-本页整体重写，台账只追加。
+核对日期：2026-11-02（Asia/Shanghai）。`rev` 是已推送的开发基线，不表示共享工作树的改动已全部提交，也不表示已合入 `main` 或完成发布认证。
+仓库与分支的现役入口是[仓库状态与分支](docs/REPOSITORY-STATUS.md)；测量和历史证据放在 `outputs/`、`PROGRESS.md` 与 `archive/`，本页只写状态与下一步。
 
-## 当前实现
+## 当前工作
 
-- **core**：`src/agent/`、`src/tools/`、`src/providers/`、`src/permissions/`、`src/events/`；
-  `src/main/` 是 electron-free 的应用服务。核心不得反向依赖 `apps/desktop/`。
-- **desktop**：`apps/desktop/` 的 main / preload / renderer；渲染层分 `state/`、`derived/`、
-  `components/`、`panes/` 与组合根 `App.tsx`。IPC 契约在 `src/main/ipc-protocol.ts`。
-- **会话**：CLI 已调用 `createProductFork`；桌面 Stream 已有来源引用（`EventRef`），
-  协议与行为以 ADR 0005 与对应测试为准。
-- **本地 agent 生命周期**：逻辑 thread 与 run 分离；`send_agent`、`list_agents`、`resume_agent`、
-  `close_agent` 共用 fenced `AgentRuntime`，重复 send/close 按消息 id 幂等。spawn 路径保留模型
-  工具调用 id，worker 终态回执能与原始 `spawn_agent` 调用配对。
-- **编排**：`src/orchestration/` 已有 P0–P4 本地纵切、动态 `race` / `gather any/quorum`、
-  确定性取消与迟到结果隔离；崩溃后无活动执行器的 `running/verifying/merging` 运行转为
-  `needs_you`，重复恢复不追加状态。
-- **远程执行适配器**：已实现带能力、fence、契约摘要、deadline、heartbeat 与幂等键的
-  outbound JSON-RPC 适配器；断线投影为 `needs_you`。当前只接收只读/无副作用任务，
-  尚无受控远程交付与回滚通道，也没有经过真实外部 worker 部署认证。
-- **记忆 / provider**：历史检索、预测压缩、hybrid memory adapter 与固定配对评测已入库；
-  DeepSeek 专用适配已入库。确定性夹具读数不等于真实 provider 任务收益。
-- **互操作**：`src/interop/` 提供延迟工具检索（`tool_search`）、`AgentClientV1` SDK、
-  ACP JSON-RPC 适配器与 stdio 传输、A2A 任务桥与 loopback HTTP 传输、Harbor/Terminal-Bench
-  形态的任务适配与运行记录；`scripts/external-bench.ts` 可把外部证据落成 JSONL。
-  `src/main/interop-host.ts` 把 SDK run 接到 `handleAgentRun` 的产品装配，
-  `scripts/acp-server.ts` / `a2a-server.ts` 提供真实 stdio / loopback HTTP 服务；
-  A2A 产品运行时只接受只读任务。均只做边界映射，不绕过既有权限门。ACP stdio 并发分派请求，
-  prompt 运行中可收到 cancel；SDK 的工具表由宿主注入，缺省空表 fail-closed，不回落到静态 `TOOLS`。
-- **自进化**：账本、反思、补丁门、毕业与 Assess 已入库；运行产物不入库。
+- 当前开发分支为 `fix/spec-summary-double-count`，跟踪同名远端。它与 `origin/main` 已分叉，不能把当前开发线当作主线的快进更新。
+- 本地 `main` 已与 `origin/main` 对齐并配置跟踪；当前 checkout 仍是开发分支。
+- 共享工作树仍有 UI、会话标识、LSP、CI 引用及进化判卷等在途修改；文件名分组不代表确认了每个文件的任务归属。由原会话补齐行为验证并按批次提交，整理工作不替它们打包提交。
+- `cairn-gates` 与 `cairn-verify` 已进入开发分支，复用现有门禁和探针；项目内容信任、真实模型选择效果与发布验证仍是不同边界。
 
-## 正在收口
+## 代码入口
 
-- A/B/C 三批实现与定向判卷已落。C 的公开接口是传输中立内核 + JSON-RPC 分派，
-  不是打包好的 ACP stdio 服务或 A2A HTTP 服务；外部跑器仍需仓库外的执行面。
-- 真实 DeepSeek 连接需要 `DEEPSEEK_API_KEY`；wire 判卷只证明请求形状。
-- 同一活跃会话的插话、取消后继续发送与跨窗口 smoke 已接通；空屏首发的 running key 由单测钉住。
-- FilePane 与设置页已有真实 renderer / 生产 preload 的键盘、失败恢复与窄窗补测。
-- `head-cert-check` 与 `mutate-verify` 的最新完整证据仍绑定历史提交；当前源码快照尚未取得这两项提交认证。
+- core 在 `src/`，应用服务在 electron-free 的 `src/main/`；desktop 在 `apps/desktop/`，依赖方向与 IPC 规则见 `AGENTS.md`。
+- 符号和稳定契约见 [CODE-WIKI](docs/CODE-WIKI.md)；功能使用见 `README.md`。本次仓库整理未重新认证所有产品功能。
+- 本地编排、远程只读适配和互操作实现的设计及未证边界，见对应设计稿与各批次凭证；不能用历史本地判卷代替真实 provider、外部部署或跨机器验证。
 
-## 待验与待决
+## 下一步
 
-- 编排控制面的真实用户交互；当前只有组件/服务面判卷。
-- 远程 worker 的真实外部部署、跨机器取消、网络分区与受控写回；本地 fake server 不证明外部互操作。
-- A 的真实 provider 任务成功率、成本节省与对话质量收益。
-- C 的外部认证：真实 ACP 客户端握手与权限桥、A2A 认证/TLS/SSE、Harbor/Terminal-Bench
-  真实执行；stdio/loopback HTTP 产品服务已用 demo provider 端到端判卷，但外部客户端/网络面
-  与真实 provider 仍未认证。
-- 自进化新接线的真实收益；不能用判卷绿替代。
-- 长会话/大 diff 的跨机器长尾与 Radix 是否值得懒加载；当前本机读数不足以支持重构。
-- FilePane 已在 500 项目录下通过真机 smoke，设置页已在真实 main/preload 下通过；仍需真实用户可发现性样本。
-- 取料归档治理。
+- 在隔离工作区规划开发线与主线的集成，逐项核对安全修复、权限边界、协议与依赖版本，保留双方功能；具体冲突和证据见仓库状态页。
+- 两个旧安全工作区保留待审差分和证据。认证工作区仍被现有命令引用，按验证基础设施保留。
+- 已按用户确认清理本地冗余分支及失效远端跟踪引用；保留主线、开发线、安全修复工作区与救援快照。历史迁移和仍有开放 PR 的远端分支继续保留。
+- 整理后再评估 PR 自动审查、区域 REVIEW 与人时指标；主线上已有治理文件，先完成集成核对再决定补什么。
 
-## 验证入口
+## 验证与交付边界
 
-命令与边界见 `AGENTS.md`；逐轮读数见 `PROGRESS.md` 与 `docs/REPOSITORY-STATUS.md`。
-core 与 desktop 分开验证；`mutate-verify` / `head-cert-check` 只证明被测量的那个提交。
+本轮 Git 关系、文档检查及提交前根类型检查已完成；清理过程中出现的 LSP 判卷失败样本保留在清理凭证中。当前工作树检查不代表主线集成或提交级认证。
+近期技能定向验收见 `outputs/agent-native-sdlc-2026-11-02/`，不代表主线集成后的认证。
+完整 core/desktop、真实 provider、完整 Electron 重启、签名公证、跨平台与发布验证仍需各自证据。
+`head-cert-check` / `mutate-verify` 只证明被测提交；本次未重新运行，历史认证不转移到当前开发基线。

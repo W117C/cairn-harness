@@ -1,0 +1,6 @@
+tests/lsp.test.ts(29,3): error TS2305: Module '"../src/tools/lsp"' has no exported member 'lspServerStatus'.
+tests/lsp.test.ts(30,3): error TS2305: Module '"../src/tools/lsp"' has no exported member 'formatLspStatus'.
+tests/lsp.test.ts(602,36): error TS7006: Parameter 's' implicitly has an 'any' type.
+tests/lsp.test.ts(615,36): error TS7006: Parameter 's' implicitly has an 'any' type.
+[typecheck] 报错文件归因：HEAD 内 0／在飞改动中的 tracked 1／未跟踪草稿 0／工作树状态取不到 0（四档相加＝1，与分母 1 不等就是归因坏了）
+[typecheck] ⚠️ tracked 但工作树脏（分不清是 HEAD 缺陷还是隔壁未提交的 hunk ⇒ 要证 HEAD 请开干净 worktree；这一格只归因、不豁免）: tests/lsp.test.ts
