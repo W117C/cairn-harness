@@ -1353,6 +1353,9 @@ describe("贴帽读数：suiteRows／budgetFromTestSource／timingNearCapCell／
   it("接线：head-cert 真开了 json 出口、真算这一格、真印进汇总，而且取料在被认证的那棵树里", () => {
     const script = readFileSync(join(repoRoot, "scripts/head-cert.ts"), "utf8");
     expect(script).toMatch(/"--reporter=json"/u);
+    expect(script).toContain("const CERT_MAX_WORKERS = 2;");
+    expect(script, "并发档丢了 ⇒ 8GB 宿主又回到默认 worker 的假超时").toMatch(/`--maxWorkers=\$\{String\(CERT_MAX_WORKERS\)\}`/u);
+    expect(script, "并发档不印进汇总 ⇒ 读数没有分母").toContain("并发=maxWorkers ${String(CERT_MAX_WORKERS)}");
     expect(script).toMatch(/--outputFile\.json=\$\{join\(logDir, "suite\.json"\)\}/u);
     expect(script).toMatch(/^ {2}timingReading = timingCell\(timingNearCapCell\(suiteRows\(/mu);
     expect(script).toMatch(/^ {4}defaultBudget: defaultTimeoutFromConfig\(readFile\("tests\/vitest\.config\.ts"\)\),/mu);
