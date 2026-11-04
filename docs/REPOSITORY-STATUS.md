@@ -5,7 +5,7 @@
 
 ## 当前结论
 
-- 开发基线为 `fix/spec-summary-double-count@5f9e4433`，同名远端分支已同步。
+- 开发基线为 `fix/spec-summary-double-count`（本地 tip 含 2026-11-04 清理三笔，未推送）；远端同名分支仍在 `f2606542`。
 - 共享工作树已清空：此前多会话留下的在飞改动经一次落库提交入库，依据是当时工作树上的两套套件与根类型检查全绿，不是逐笔审阅每个改动。
 - 开发线与 `origin/main` 双向分叉。只读 merge-tree 预演给出约 30 个冲突文件，含 `pnpm-lock.yaml`、`package.json`、`.github/workflows/verify.yml` 与核心源文件；因此**不在主树上直接合并**。
 - 本轮新增：任务自带判据（`--verify`）、`env-fs` 归因、失败路径读数、`verify-census` 命令、拒单文案统一。
@@ -16,10 +16,10 @@
 | --- | --- | --- |
 | `main` | 与 `origin/main` 一致 | 保留；主线基准 |
 | `fix/spec-summary-double-count` | 活跃开发线，已推送；与 main 分叉 | 保留；等隔离集成 |
-| `fix/code-scanning-alerts` | 提交已在 main，worktree 仍有未跟踪证据 | 保留现场 |
-| `fix/code-scanning-closure` | 提交已在 main，worktree 仍有未提交源码与判卷 | 保留现场 |
+| `rescue/code-scanning-closure-wip-20261104` | 清理前从 code-scanning worktree 收编的未提交改动（1 笔） | 保留；未经判卷，未合入任何线 |
 | `rescue/wip-20261025` | 相对主线与开发线均有独有提交 | 保留；救援快照 |
 
+已删除（2026-11-04）：`fix/code-scanning-alerts`、`fix/code-scanning-closure`——两支 tip 均已是 `main` 的祖先，删除不丢提交。
 已删除并确认并入开发线：`agent/修复-todo-的-completedcount-worker-12`、`agent/修复-todo-的-completedcount-2-worker-12`、`feat/task-carried-verify`（三笔提交 + merge 已在开发线上）。
 
 ## 远端分支
@@ -35,9 +35,14 @@
 ## 工作树与在途改动
 
 - 主树：0 项。
-- `.worktrees/code-scanning-alerts-855b5ebe`：只有未跟踪的 head-cert 证据目录。
-- `.worktrees/code-scanning-closure-82199500`：`apps/desktop/tests/kernel-host.test.ts`、`src/events/log.ts` 未提交。
-- `.worktrees/gate-mutate-verify`：0 项，detached HEAD。
+- 2026-11-04 清理后 `.worktrees/` 为空。两棵 code-scanning 树已回收：未跟踪的 3 份 head-cert 凭证移入 `outputs/` 并随 `33db88d0` 入库；未提交的源码与判卷收编为 `rescue/code-scanning-closure-wip-20261104`（`a16837a1`，未经判卷）。
+- `gate-mutate-verify` 不再常驻：`pnpm mutate-verify` 缺树时自行 `worktree add`，存在时先 `checkout --detach --force` 到当前 HEAD，属于可重建的跑器目录。
+- 同日清空 `.tmp/`（scratch，门禁与测试会重建）与 `.mimosa/hook-state` 的陈旧 baseline；`git prune-packed` 回收了已入包的重复松散对象。`outputs/desktop-permission-2026-11-03/` 内的五份 Chromium profile 运行缓存已删（截图与读数保留，见 `40ddb2c6`）。
+
+## 已知的仓库底层问题
+
+- `git fsck` 报存在不可达对象缺 blob（其一为 `b8033ca8` 的父对象），`git gc` / `git prune` 会在遍历时停住；HEAD 的 `git rev-list --objects` 遍历完整、exit 0。本轮只做了 `prune-packed` 与临时包清理，未改写任何历史。
+- 要让 `git gc` 重新可用，需另案清理不可达对象；在那之前 `.git` 会保留一批无法归包的松散对象，属已知存量，不是本轮清理漏项。
 
 ## 下一步
 

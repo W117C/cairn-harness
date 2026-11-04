@@ -36823,3 +36823,40 @@ try 内同步 await，run IPC 要等它回来才收束 ⇒ 界面 spinner 被 10
 - 多窗隔离实现是并发在飞批次（BrowserHost key 改为 `win.id+tabId`）的成果；本页只把冒烟判卷从旧的全局唯一语义改到隔离语义，不放宽为「同名 id 随便复用」。
 - 页面正文的「—」口径、分段条估算、SVG `<title>` 的无障碍说明都是刻意保留的诚实边界，不算 secondary label。
 - 未跑 `gates` / `head-cert` / `mutate-verify`（工作树未提交，HEAD 认证不转移）；未提交。
+
+## 2026-11-04 · 第 1025 页：仓库清理——回收 2.0G 工作树、清空 scratch、收编清理前未提交改动
+
+### 一、业主口径
+
+「整理一下我们的仓库，不用的，废弃的，无关的，过期的全部清理掉。」
+
+### 二、处置表
+
+| 对象 | 清理前 | 处置 | 依据 |
+| --- | --- | --- | --- |
+| `.worktrees/` 三棵 | 2.0G | 全部回收 | 两棵 code-scanning 分支 tip 均已是 `main` 祖先（逐支 `merge-base --is-ancestor`）；`gate-mutate-verify` 是缺树即自建的跑器目录 |
+| alerts 树 3 份未跟踪 head-cert 凭证 | 24K | 移入 `outputs/` 随 `33db88d0` 入库 | 原件只存在于树里，删树即失 |
+| closure 树未提交的 `log.ts` / `kernel-host.test.ts` | 2 文件 | 收编为 `rescue/code-scanning-closure-wip-20261104`（`a16837a1`），未经判卷 | 他会话在飞改动只收不删 |
+| 已并入 `main` 的两条本地分支 | 2 支 | 删除 | tip 均为 `main` 祖先，提交不丢 |
+| `.tmp/` 全部 scratch | 675M | 清空 | gitignored，门禁与测试会重建 |
+| `.mimosa/hook-state` 陈旧 baseline | 55M | 删除 | 安全插件的会话快照缓存 |
+| desktop-permission 证据内 5 份 Chromium profile | 273 文件 | 删除（`40ddb2c6`，提交带「删除备案：」） | LOG/db/cache 运行缓存，不是证据；同目录截图与读数保留 |
+| `.git` 已入包的重复松散对象 | 964 支 | `git prune-packed` | 对象已在 pack 内，删除不丢历史 |
+| 根级 `.DS_Store` 与空目录 `工作区/` | — | 删除 | 机器垃圾，零文件 |
+
+### 三、读数（清理后现量）
+
+| 面 | 读数 |
+| --- | --- |
+| `.worktrees/` | 2.0G → 0（`git worktree list` 只剩主树） |
+| `.tmp/` | 675M → 0 |
+| `.mimosa/` | 58M → 3.4M |
+| `outputs/` | 246M → 212M |
+| `.git/` | 404M → 314M（`prune-packed` 后） |
+| 工作树 | `git status` 0 项（本页与状态页提交后） |
+
+### 四、边界
+
+- 未跑 `pnpm test` / `pnpm gates` / `mutate-verify` / `head-cert`：本轮没有功能源码改动；唯一源码改动是收编到 rescue 分支的未判卷快照，不在任何主线。
+- 只动 scratch、机器缓存与未跟踪物；`outputs/`、`agent-canon/`、`fixtures/` 按既有裁决保留，未删任何被台账点名的 dated 工件。
+- `git fsck` 仍报不可达对象缺 blob，`git gc` / `git prune` 会停在那里（HEAD 的 `git rev-list --objects` 遍历完整、exit 0）；该底层问题另案处理，本页不记作已修。
